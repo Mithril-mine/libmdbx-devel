@@ -409,6 +409,9 @@ Next, to build the library, it is enough to run `make all` in the directory with
 
 To run the [long stochastic test scenario](test/stochastic.sh), you will need to install the current (not outdated) version of [Bash](https://en.wikipedia.org/wiki/Bash_(Unix_shell)). Just install it as noted above.
 
+### Harmony OS
+Please use CMake with the ["toolchain file"](https://cmake.org/cmake/help/latest/variable/CMAKE_TOOLCHAIN_FILE.html) provided by HarmonyOS SDK.
+
 ### Android
 I recommend using CMake to build _libmdbx_ for Android. Please refer to the [official guide](https://developer.android.com/studio/projects/add-native-code).
 
