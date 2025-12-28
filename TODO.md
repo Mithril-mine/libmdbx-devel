@@ -2,6 +2,7 @@
 TODO
 ----
 
+ - Extended example of using the C++ API, which can also be used as a simple smoke-test.
  - Cloning read transactions.
  - Ultra-fast deletion of consecutive elements by cutting off b-tree branches.
  - Предоставление информации о размере рагруженной/кешируемой в ОЗУ части БД и её использование для управления упреждающим чтением.
