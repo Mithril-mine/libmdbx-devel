@@ -2648,11 +2648,27 @@ struct pair {
   MDBX_CXX11_CONSTEXPR operator stl_pair() const noexcept { return stl_pair(key, value); }
   pair(const pair &) noexcept = default;
   pair &operator=(const pair &) noexcept = default;
+  pair &operator=(pair &&couple) {
+    key.assign(std::move(couple.key));
+    value.assign(std::move(couple.value));
+    return *this;
+  }
   MDBX_CXX14_CONSTEXPR operator bool() const noexcept {
     assert(bool(key) == bool(value));
     return key;
   }
   MDBX_CXX14_CONSTEXPR static pair invalid() noexcept { return pair(slice::invalid(), slice::invalid()); }
+
+  pair &operator=(const stl_pair &couple) {
+    key.assign(couple.first);
+    value.assign(couple.second);
+    return *this;
+  }
+  pair &operator=(stl_pair &&couple) {
+    key.assign(std::move(couple.first));
+    value.assign(std::move(couple.second));
+    return *this;
+  }
 
   /// \brief Three-way fast non-lexicographically length-based comparison.
   MDBX_NOTHROW_PURE_FUNCTION static MDBX_CXX14_CONSTEXPR intptr_t compare_fast(const pair &a, const pair &b) noexcept;
@@ -2728,8 +2744,37 @@ template <typename ALLOCATOR, typename CAPACITY_POLICY> struct buffer_pair_spec 
 
   buffer_pair_spec(buffer_type &&key, buffer_type &&value) noexcept(buffer_type::move_assign_alloc::is_nothrow())
       : key(::std::move(key)), value(::std::move(value)) {}
+  buffer_pair_spec(const buffer_pair_spec &) = default;
   buffer_pair_spec(buffer_pair_spec &&pair) noexcept(buffer_type::move_assign_alloc::is_nothrow())
       : buffer_pair_spec(::std::move(pair.key), ::std::move(pair.value)) {}
+
+  buffer_pair_spec &operator=(const buffer_pair_spec &) = default;
+  buffer_pair_spec &operator=(buffer_pair_spec &&src) {
+    key.assign(std::move(src.key));
+    value.assign(std::move(src.value));
+    return *this;
+  }
+
+  buffer_pair_spec &operator=(const pair &src) {
+    key.assign(src.key);
+    value.assign(src.value);
+    return *this;
+  }
+  buffer_pair_spec &operator=(pair &&src) {
+    key.assign(std::move(src.key));
+    value.assign(std::move(src.value));
+    return *this;
+  }
+  buffer_pair_spec &operator=(const stl_pair &src) {
+    key.assign(src.first);
+    value.assign(src.second);
+    return *this;
+  }
+  buffer_pair_spec &operator=(stl_pair &&src) {
+    key.assign(std::move(src.first));
+    value.assign(std::move(src.second));
+    return *this;
+  }
 
   /// \brief Checks whether data chunk stored inside the buffers both, otherwise
   /// at least one of buffers just refers to data located outside.
