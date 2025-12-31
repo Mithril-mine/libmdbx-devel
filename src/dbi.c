@@ -197,7 +197,7 @@ int dbi_defer_release(MDBX_env *const env, defer_free_item_t *const chain) {
 /* Export or close DBI handles opened in this txn. */
 int dbi_update(MDBX_txn *txn, bool keep) {
   MDBX_env *const env = txn->env;
-  tASSERT(txn, !txn->parent && txn == env->basal_txn);
+  tASSERT(txn, (!txn->parent && txn == env->basal_txn) || !keep);
   bool locked = false;
   defer_free_item_t *defer_chain = nullptr;
   TXN_FOREACH_DBI_USER(txn, dbi) {

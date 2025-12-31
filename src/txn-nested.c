@@ -453,6 +453,9 @@ void txn_nested_abort(MDBX_txn *nested) {
     parent->wr.retired_pages = nested->wr.retired_pages;
   }
 
+  if (nested->flags & MDBX_TXN_DIRTY)
+    dbi_update(nested, false);
+
   tASSERT(parent, dpl_check(parent));
   tASSERT(parent, audit_ex(parent, 0, false) == 0);
   dpl_release_shadows(nested);
