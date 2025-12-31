@@ -272,11 +272,10 @@ int dbi_bind(MDBX_txn *txn, const size_t dbi, unsigned user_flags, MDBX_cmp_func
    * 4) user_flags отличаются, но table пустая и задан флаг MDBX_CREATE
    *    = предполагаем что пользователь пересоздает table;
    */
-  if ((user_flags & ~MDBX_CREATE) != (unsigned)(env->dbs_flags[dbi] & DB_PERSISTENT_FLAGS)) {
+  if ((user_flags ^ env->dbs_flags[dbi]) & DB_PERSISTENT_FLAGS) {
     /* flags are differs, check other conditions */
-    if ((!user_flags && (!keycmp || keycmp == env->kvs[dbi].clc.k.cmp) &&
-         (!datacmp || datacmp == env->kvs[dbi].clc.v.cmp)) ||
-        user_flags == MDBX_DB_ACCEDE) {
+    if (((!keycmp || keycmp == env->kvs[dbi].clc.k.cmp) && (!datacmp || datacmp == env->kvs[dbi].clc.v.cmp)) &&
+        (user_flags & MDBX_DB_ACCEDE) != 0) {
       user_flags = env->dbs_flags[dbi] & DB_PERSISTENT_FLAGS;
     } else if ((user_flags & MDBX_CREATE) == 0)
       return /* FIXME: return extended info */ MDBX_INCOMPATIBLE;
