@@ -52,7 +52,7 @@ CC      ?= gcc
 CXX     ?= g++
 CFLAGS_EXTRA ?=
 LD      ?= ld
-CMAKE	?= cmake
+CMAKE	?= "$(shell which cmake 2>&-)"
 CMAKE_OPT ?=
 CTEST	?= ctest
 CTEST_OPT ?=
@@ -142,7 +142,7 @@ MDBX_TOOLS := $(addprefix mdbx_,$(TOOLS))
 MANPAGES   := mdbx_stat.1 mdbx_copy.1 mdbx_dump.1 mdbx_load.1 mdbx_chk.1 mdbx_drop.1
 TIP        := // TIP:
 
-.PHONY: all help options lib libs tools clean install uninstall check_buildflags_tag tools-static
+.PHONY: all help options lib libs tools clean install uninstall check_buildflags_tag tools-static run-ut
 .PHONY: install-strip install-no-strip strip libmdbx mdbx show-options lib-static lib-shared cmake-build ninja
 
 boolean = $(if $(findstring $(strip $($1)),YES Yes yes y ON On on 1 true True TRUE),1,$(if $(findstring $(strip $($1)),NO No no n OFF Off off 0 false False FALSE),,$(error Wrong value `$($1)` of $1 for YES/NO option)))
@@ -192,24 +192,25 @@ help:
 	@echo "  make bench-triplet       - run ioarena-benchmark for mdbx, lmdb, sqlite3"
 	@echo "  make bench-quartet       - run ioarena-benchmark for mdbx, lmdb, rocksdb, wiredtiger"
 	@echo "  make bench-clean         - remove temp database(s) after benchmark"
+	@echo "  make test                - basic test(s)"
+	@echo "  make build-test          - build test(s) executable(s)"
+	@echo "  make test-asan           - build with AddressSanitizer and run basic test"
+	@echo "  make test-leak           - build with LeakSanitizer and run basic test"
+	@echo "  make test-ubsan          - build with UndefinedBehaviourSanitizer and run basic test"
 #> dist-cutoff-begin
 	@echo ""
+	@echo "  make build-stochastic    - build framework for stochastic test"
 	@echo "  make check               - smoke test with amalgamation and installation checking"
 	@echo "  make smoke               - fast smoke test"
 	@echo "  make smoke-memcheck      - build with Valgrind support and run smoke test under memcheck tool"
 	@echo "  make smoke-fault         - execute transaction owner failure smoke testcase"
 	@echo "  make smoke-singleprocess - execute single-process smoke test"
-	@echo "  make test                - basic test"
 	@echo "  make test-memcheck       - build with Valgrind support and run basic test under memcheck tool"
 	@echo "  make test-long           - execute long test which runs for several weeks, or until interruption"
-	@echo "  make test-asan           - build with AddressSanitizer and run basic test"
-	@echo "  make test-leak           - build with LeakSanitizer and run basic test"
-	@echo "  make test-ubsan          - build with UndefinedBehaviourSanitizer and run basic test"
 	@echo "  make test-singleprocess  - execute single-process basic test (also used by make cross-qemu)"
 	@echo "  make cross-gcc           - check cross-compilation without test execution"
 	@echo "  make cross-qemu          - run cross-compilation and execution basic test with QEMU"
 	@echo "  make gcc-analyzer        - run gcc-analyzer (mostly useless for now)"
-	@echo "  make build-test          - build test executable(s)"
 	@echo ""
 	@echo "  make dist                - build amalgamated source code"
 	@echo "  make doxygen             - build HTML documentation"
@@ -313,6 +314,43 @@ ctest: cmake-build
 	@echo "  RUN: ctest .."
 	$(QUIET)$(CTEST) --test-dir @cmake-ninja-build --parallel `(nproc | sysctl -n hw.ncpu | echo 2) 2>/dev/null` --schedule-random $(CTEST_OPT)
 
+run-ut: mdbx_example
+	$(QUIET)for UT in $^; do echo "  Running $$UT" && ./$${UT} || exit -1; done
+
+TEST_TARGETS := mdbx_example
+TEST_BUILD_TARGETS := build-test
+ifneq ($(CMAKE),"")
+TEST_TARGETS += ctest
+TEST_BUILD_TARGETS += cmake-build
+endif
+#> dist-cutoff-begin
+TEST_TARGETS += test-stochastic
+TEST_BUILD_TARGETS += build-stochastic
+#< dist-cutoff-end
+
+.PHONY: ninja-assertions ninja-debug ninja $(TEST_TARGETS) $(TEST_BUILD_TARGETS) test-ubsan test-asan test-asan test-leak test-assertion test build-test smoke check
+test: $(TEST_TARGETS)
+build-test: $(TEST_BUILD_TARGETS)
+
+test-assertion: MDBX_BUILD_OPTIONS += -DMDBX_FORCE_ASSERTIONS=1 -UNDEBUG -DMDBX_DEBUG=0
+test-assertion: smoke
+
+test-ubsan:
+	@echo '  RE-TEST with `-fsanitize=undefined` option...'
+	$(QUIET)$(MAKE) IOARENA=false CXXSTD=$(CXXSTD) CFLAGS_EXTRA="-DENABLE_UBSAN -Ofast -fsanitize=undefined -fsanitize-undefined-trap-on-error" test
+
+test-asan:
+	@echo '  RE-TEST with `-fsanitize=address` option...'
+	$(QUIET)$(MAKE) IOARENA=false CXXSTD=$(CXXSTD) CFLAGS_EXTRA="-Os -fsanitize=address" test
+
+test-leak:
+	@echo '  RE-TEST with `-fsanitize=leak` option...'
+	$(QUIET)$(MAKE) IOARENA=false CXXSTD=$(CXXSTD) CFLAGS_EXTRA="-fsanitize=leak" test
+
+mdbx_example: mdbx.h ut_and_examples/example-mdbx.c libmdbx.$(SO_SUFFIX)
+	@echo '  CC+LD $@'
+	$(QUIET)$(CC) $(CFLAGS) -I. ut_and_examples/example-mdbx.c ./libmdbx.$(SO_SUFFIX) -o $@
+
 #> dist-cutoff-begin
 ifeq ($(wildcard mdbx.c),mdbx.c)
 #< dist-cutoff-end
@@ -320,6 +358,10 @@ ifeq ($(wildcard mdbx.c),mdbx.c)
 ################################################################################
 # Amalgamated source code, i.e. distributed after `make dist`
 MAN_SRCDIR := man1/
+
+dist:
+	@echo '  Starting 2026 libmdbx is distrubuted in an amalgamated source code form.'
+	@echo '  So amalgamation is no longer required. Please update your build scripts.'
 
 config-gnumake.h: @buildflags.tag $(WAIT) mdbx.c $(lastword $(MAKEFILE_LIST)) LICENSE NOTICE COPYRIGHT
 	@echo '  MAKE $@'
@@ -360,15 +402,17 @@ mdbx_%.static-lto: mdbx_%.c config-gnumake.h mdbx.c mdbx.h
 	$(QUIET)$(CC) $(CFLAGS) -Os -flto $(MDBX_BUILD_OPTIONS) '-DLIBMDBX_API=' '-DMDBX_CONFIG_H="config-gnumake.h"' \
 		$< mdbx.c $(EXE_LDFLAGS) $(LIBS) -static -Wl,--strip-all -o $@
 
+check smoke: test
+
 #> dist-cutoff-begin
 else
 ################################################################################
-# Plain (non-amalgamated) sources with test
+# Nnon-amalgamated sources with test framework
 
-.PHONY: build-test build-test-with-valgrind check cross-gcc cross-qemu dist doxygen gcc-analyzer long-test
-.PHONY: reformat release-assets tags smoke test test-asan smoke-fault test-leak
-.PHONY: smoke-singleprocess test-singleprocess test-ubsan test-valgrind test-memcheck memcheck smoke-memcheck
-.PHONY: smoke-assertion test-assertion long-test-assertion test-ci test-ci-extra check-posix-locking
+.PHONY: build-stochastic build-test-with-valgrind check cross-gcc cross-qemu dist doxygen gcc-analyzer long-test
+.PHONY: reformat release-assets tags smoke smoke-fault
+.PHONY: smoke-singleprocess test-singleprocess test-valgrind test-memcheck memcheck smoke-memcheck
+.PHONY: smoke-assertion long-test-assertion test-ci test-ci-extra check-posix-locking
 
 test-ci-extra: test-ci cross-gcc cross-qemu
 
@@ -441,8 +485,6 @@ check: CMAKE_OPT += -Werror=dev
 check: clean | smoke-assertion ninja-assertions dist install test ctest
 smoke-assertion: MDBX_BUILD_OPTIONS += -DMDBX_FORCE_ASSERTIONS=1 -UNDEBUG -DMDBX_DEBUG=0
 smoke-assertion: smoke
-test-assertion: MDBX_BUILD_OPTIONS += -DMDBX_FORCE_ASSERTIONS=1 -UNDEBUG -DMDBX_DEBUG=0
-test-assertion: smoke
 long-test-assertion: MDBX_BUILD_OPTIONS += -DMDBX_FORCE_ASSERTIONS=1 -UNDEBUG -DMDBX_DEBUG=0
 long-test-assertion: smoke
 
@@ -458,7 +500,7 @@ check-posix-locking-2008: check
 check-posix-locking:
 	$(QUIET)for LCK in sysv 1988 2001 2008; do $(MAKE) check-posix-locking-$${LCK} || break; done;
 
-smoke: build-test
+smoke: build-stochastic
 	@echo '  SMOKE `mdbx_test basic`...'
 	$(QUIET)rm -f $(TEST_DB) $(TEST_LOG).gz && (set -o pipefail; \
 		(./mdbx_test --table=+data.integer --keygen.split=29 --datalen.min=min --datalen.max=max --progress --console=no --repeat=$(TEST_ITER) --pathname=$(TEST_DB) --dont-cleanup-after $(MDBX_SMOKE_EXTRA) basic && \
@@ -466,7 +508,7 @@ smoke: build-test
 		| tee >(gzip --stdout >$(TEST_LOG).gz) | tail -n 42) \
 	&& ./mdbx_chk -vvn $(TEST_DB) && ./mdbx_chk -vvn $(TEST_DB)-copy
 
-smoke-singleprocess: build-test
+smoke-singleprocess: build-stochastic
 	@echo '  SMOKE `mdbx_test --nested`...'
 	$(QUIET)rm -f $(TEST_DB) $(TEST_LOG).gz && (set -o pipefail; \
 		(./mdbx_test --table=+data.integer --keygen.split=29 --datalen.min=min --datalen.max=max --progress --console=no --repeat=42 --pathname=$(TEST_DB) --dont-cleanup-after $(MDBX_SMOKE_EXTRA) --hill && \
@@ -475,35 +517,35 @@ smoke-singleprocess: build-test
 		| tee >(gzip --stdout >$(TEST_LOG).gz) | tail -n 42) \
 	&& ./mdbx_chk -vvn $(TEST_DB) && ./mdbx_chk -vvn $(TEST_DB)-copy
 
-smoke-fault: build-test
+smoke-fault: build-stochastic
 	@echo '  SMOKE `mdbx_test --inject-writefault=42 basic`...'
 	$(QUIET)rm -f $(TEST_DB) $(TEST_LOG).gz && (set -o pipefail; ./mdbx_test --progress --console=no --pathname=$(TEST_DB) --inject-writefault=42 --dump-config --dont-cleanup-after $(MDBX_SMOKE_EXTRA) basic \
 		| tee >(gzip --stdout >$(TEST_LOG).gz) | tail -n 42) \
 	; ./mdbx_chk -vvnw $(TEST_DB) && ([ ! -e $(TEST_DB)-copy ] || ./mdbx_chk -vvn $(TEST_DB)-copy)
 
-test: build-test
+test-stochastic: build-stochastic
 	@echo '  RUNNING `test/stochastic.sh --loops 2`...'
 	$(QUIET)test/stochastic.sh --dont-check-ram-size --loops 2 --db-upto-mb 256 --skip-make --taillog >$(TEST_LOG) || (cat $(TEST_LOG) && false)
 
 long-test: test-long
-test-long: build-test
+test-long: build-stochastic
 	@echo '  RUNNING `test/stochastic.sh --loops 42`...'
 	$(QUIET)test/stochastic.sh --loops 42 --db-upto-mb 1024 --extra --skip-make --taillog
 
-test-singleprocess: build-test
+test-singleprocess: build-stochastic
 	@echo '  RUNNING `test/stochastic.sh --single --loops 2`...'
 	$(QUIET)test/stochastic.sh --dont-check-ram-size --single --loops 2 --db-upto-mb 256 --skip-make --taillog >$(TEST_LOG) || (cat $(TEST_LOG) && false)
 
 test-valgrind: test-memcheck
 test-memcheck: CFLAGS_EXTRA=-Ofast -DENABLE_MEMCHECK
-test-memcheck: build-test
+test-memcheck: build-stochastic
 	@echo '  RUNNING `test/stochastic.sh --with-valgrind --loops 2`...'
 	$(QUIET)test/stochastic.sh --with-valgrind --loops 2 --db-upto-mb 256 --skip-make >$(TEST_LOG) || (cat $(TEST_LOG) && false)
 
 memcheck: smoke-memcheck
 smoke-memcheck: VALGRIND=valgrind --trace-children=yes --log-file=valgrind-%p.log --leak-check=full --track-origins=yes --read-var-info=yes --error-exitcode=42 --suppressions=test/valgrind_suppress.txt
 smoke-memcheck: CFLAGS_EXTRA=-Ofast -DENABLE_MEMCHECK
-smoke-memcheck: build-test
+smoke-memcheck: build-stochastic
 	@echo "  SMOKE \`mdbx_test basic\` under Valgrind's memcheck..."
 	$(QUIET)rm -f valgrind-*.log $(TEST_DB) $(TEST_LOG).gz && (set -o pipefail; ( \
 		$(VALGRIND) ./mdbx_test --table=+data.fixed --keygen.split=29 --datalen=35 --progress --console=no --repeat=2 --pathname=$(TEST_DB) --dont-cleanup-after $(MDBX_SMOKE_EXTRA) basic && \
@@ -518,23 +560,7 @@ gcc-analyzer:
 	@echo "NOTE: There a lot of false-positive warnings at 2020-05-01 by pre-release GCC-10 (20200328, Red Hat 10.0.1-0.11)"
 	$(QUIET)$(MAKE) IOARENA=false CXXSTD=$(CXXSTD) CFLAGS_EXTRA="-Og -fanalyzer -Wno-error" build-test
 
-test-ubsan:
-	@echo '  RE-TEST with `-fsanitize=undefined` option...'
-	$(QUIET)$(MAKE) IOARENA=false CXXSTD=$(CXXSTD) CFLAGS_EXTRA="-DENABLE_UBSAN -Ofast -fsanitize=undefined -fsanitize-undefined-trap-on-error" test
-
-test-asan:
-	@echo '  RE-TEST with `-fsanitize=address` option...'
-	$(QUIET)$(MAKE) IOARENA=false CXXSTD=$(CXXSTD) CFLAGS_EXTRA="-Os -fsanitize=address" test
-
-test-leak:
-	@echo '  RE-TEST with `-fsanitize=leak` option...'
-	$(QUIET)$(MAKE) IOARENA=false CXXSTD=$(CXXSTD) CFLAGS_EXTRA="-fsanitize=leak" test
-
-mdbx_example: mdbx.h ut_and_examples/example-mdbx.c libmdbx.$(SO_SUFFIX)
-	@echo '  CC+LD $@'
-	$(QUIET)$(CC) $(CFLAGS) -I. ut_and_examples/example-mdbx.c ./libmdbx.$(SO_SUFFIX) -o $@
-
-build-test: all mdbx_example mdbx_test
+build-stochastic: all mdbx_test
 
 define test-rule
 $(patsubst %.c++,%.o,$(1)): $(1) $(TEST_INC) $(HEADERS) $(lastword $(MAKEFILE_LIST))
