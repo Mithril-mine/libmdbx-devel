@@ -239,15 +239,13 @@ else()
   project(libmdbx C)
 endif()
 
-if(MDBX_AMALGAMATED_SOURCE
-   AND DEFINED MDBX_ENABLE_TESTS
-   AND MDBX_ENABLE_TESTS)
-  message(WARNING "MDBX_ENABLE_TESTS=${MDBX_ENABLE_TESTS}: But amalgamated source code don't includes tests.")
-  set(MDBX_ENABLE_TESTS OFF)
-endif()
-
 if(NOT CMAKE_VERSION VERSION_LESS 3.8.2)
   source_group("markdown" FILES REGULAR_EXPRESSION ".*[.]md")
+endif()
+
+if(NOT MDBX_AMALGAMATED_SOURCE)
+  include(CTest)
+  option(MDBX_ENABLE_TESTS "Build MDBX tests" ${BUILD_TESTING})
 endif()
 
 # Try to find a C++ compiler unless sure that this is unnecessary.
@@ -717,18 +715,16 @@ else()
   unset(MDBX_LINK_TOOLS_NONSTATIC CACHE)
 endif()
 
+set(MDBX_CXX_AVAILABLE FALSE)
 if(CMAKE_CXX_COMPILER_LOADED
    AND MDBX_CXX_STANDARD LESS 83
    AND NOT MDBX_CXX_STANDARD LESS 11)
-  if(NOT MDBX_AMALGAMATED_SOURCE)
-    include(CTest)
-    option(MDBX_ENABLE_TESTS "Build MDBX tests" ${BUILD_TESTING})
-  endif()
   if(NOT MDBX_WITHOUT_MSVC_CRT
      AND NOT (CMAKE_COMPILER_IS_GNUCXX AND CMAKE_CXX_COMPILER_VERSION VERSION_LESS 4.8)
      AND NOT (CMAKE_COMPILER_IS_CLANG AND CMAKE_CXX_COMPILER_VERSION VERSION_LESS 3.9)
      AND NOT (MSVC AND MSVC_VERSION LESS 1900))
     option(MDBX_BUILD_CXX "Build C++ portion" ON)
+    set(MDBX_CXX_AVAILABLE TRUE)
   else()
     if(DEFINED MDBX_BUILD_CXX AND MDBX_BUILD_CXX)
       if(MDBX_WITHOUT_MSVC_CRT)
@@ -759,8 +755,8 @@ endif()
 
 # ######################################################################################################################
 
-if(MDBX_BUILD_CXX AND NOT CMAKE_CXX_COMPILER_LOADED)
-  message(FATAL_ERROR "MDBX_BUILD_CXX=${MDBX_BUILD_CXX}: The C++ compiler is required to build the C++API.")
+if(MDBX_BUILD_CXX AND NOT MDBX_CXX_AVAILABLE)
+  message(FATAL_ERROR "MDBX_BUILD_CXX=${MDBX_BUILD_CXX}: The C++ 11 compiler is required to build the C++API.")
 endif()
 
 if(MDBX_BUILD_CXX)
@@ -877,7 +873,7 @@ elseif(TRUE)
     endif()
     include_directories("${MDBX_SOURCE_DIR}")
   endif()
-  add_custom_target(doc-files SOURCES README.md TODO.md ChangeLog.md LICENSE NOTICE COPYRIGHT)
+  add_custom_target(dist-files SOURCES README.md TODO.md ChangeLog.md LICENSE NOTICE COPYRIGHT GNUmakefile Makefile conanfile.py ut_and_examples/README.md)
 #< dist-cutoff-end
 else()
   if(NOT CMAKE_CURRENT_LIST_FILE)
@@ -885,6 +881,7 @@ else()
   endif()
   message(FATAL_ERROR "This \"${CMAKE_CURRENT_LIST_FILE}\" has been trimmed and is therefore intended only for build from an amalgamated form of the source code.")
 endif(MDBX_AMALGAMATED_SOURCE)
+
 if(MDBX_BUILD_CXX)
   message(STATUS "Use C${MDBX_C_STANDARD} and C++${MDBX_CXX_STANDARD} for libmdbx")
   list(APPEND LIBMDBX_PUBLIC_HEADERS mdbx.h++)
@@ -968,8 +965,10 @@ target_setup_options(mdbx-static)
 libmdbx_setup_libs(mdbx-static INTERFACE)
 if(MDBX_BUILD_SHARED_LIBRARY)
   set_target_properties(mdbx-static PROPERTIES OUTPUT_NAME mdbx-static)
+  set(MDBX_LIBRARY mdbx)
 else()
   set_target_properties(mdbx-static PROPERTIES OUTPUT_NAME mdbx)
+  set(MDBX_LIBRARY mdbx-static)
 endif()
 target_include_directories(mdbx-static INTERFACE "${CMAKE_CURRENT_SOURCE_DIR}")
 
@@ -1274,12 +1273,15 @@ add_definitions(-DMDBX_CONFIG_H="${CMAKE_CURRENT_BINARY_DIR}/config-cmake.h")
 
 # ######################################################################################################################
 
-if(NOT MDBX_AMALGAMATED_SOURCE AND MDBX_ENABLE_TESTS)
-  if(NOT CMAKE_CXX_COMPILER_LOADED)
-    message(FATAL_ERROR "MDBX_ENABLE_TESTS=${MDBX_ENABLE_TESTS}: The C++ compiler is required to build the tests.")
-  endif()
+if(MDBX_ENABLE_TESTS)
+  add_subdirectory(ut_and_examples)
   #> dist-cutoff-begin
-  add_subdirectory(test)
+  if(NOT MDBX_AMALGAMATED_SOURCE)
+    if(NOT MDBX_CXX_AVAILABLE)
+      message(FATAL_ERROR "MDBX_ENABLE_TESTS=${MDBX_ENABLE_TESTS}: The C++ 11 compiler is required to build the tests.")
+    endif()
+    add_subdirectory(test)
+  endif()
   #< dist-cutoff-end
 endif()
 

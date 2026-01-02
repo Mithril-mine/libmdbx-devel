@@ -392,7 +392,8 @@ define uname2titer
 endef
 
 DIST_EXTRA := LICENSE NOTICE COPYRIGHT README.md CMakeLists.txt GNUmakefile Makefile ChangeLog.md VERSION.json config.h.in ntdll.def \
-	$(addprefix man1/, $(MANPAGES)) cmake/compiler.cmake cmake/profile.cmake cmake/utils.cmake .clang-format-ignore
+	$(addprefix man1/, $(MANPAGES)) cmake/compiler.cmake cmake/profile.cmake cmake/utils.cmake .clang-format-ignore \
+	ut_and_examples/CMakeLists.txt ut_and_examples/example-mdbx.c ut_and_examples/README.md
 DIST_SRC   := mdbx.h mdbx.h++ mdbx.c mdbx.c++ $(addsuffix .c, $(MDBX_TOOLS))
 
 TEST_DB    ?= $(shell [ -d /dev/shm ] && echo /dev/shm || echo /tmp)/mdbx-test.db
@@ -529,9 +530,9 @@ test-leak:
 	@echo '  RE-TEST with `-fsanitize=leak` option...'
 	$(QUIET)$(MAKE) IOARENA=false CXXSTD=$(CXXSTD) CFLAGS_EXTRA="-fsanitize=leak" test
 
-mdbx_example: mdbx.h example/example-mdbx.c libmdbx.$(SO_SUFFIX)
+mdbx_example: mdbx.h ut_and_examples/example-mdbx.c libmdbx.$(SO_SUFFIX)
 	@echo '  CC+LD $@'
-	$(QUIET)$(CC) $(CFLAGS) -I. example/example-mdbx.c ./libmdbx.$(SO_SUFFIX) -o $@
+	$(QUIET)$(CC) $(CFLAGS) -I. ut_and_examples/example-mdbx.c ./libmdbx.$(SO_SUFFIX) -o $@
 
 build-test: all mdbx_example mdbx_test
 

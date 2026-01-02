@@ -1,6 +1,9 @@
-/* MDBX usage example
+/* The example of using the libmdbx C API.
+ * However, it is strongly recommended to use the modern C++ API, which requires less effort
+ * and insures against many errors related to resource leaks.
  *
- * Do a line-by-line comparison of this and sample-bdb.txt
+ * If you have already used Berkeley DB,
+ * it will be useful to make a line-by-line comparison of this example and the sample-bdb.txt
  */
 
 /*
@@ -83,6 +86,16 @@ int main(int argc, char *argv[]) {
     fprintf(stderr, "mdbx_env_create: (%d) %s\n", rc, mdbx_strerror(rc));
     goto bailout;
   }
+
+  /* This deletion is not necessary, but it has been added here for full reproducibility of the conditions when running
+   * this example again as a simplest test. */
+  rc = mdbx_env_delete("./example-db", MDBX_ENV_JUST_DELETE);
+  if (rc != /* file was successfully deleted */ MDBX_SUCCESS &&
+      rc != /* nothing has been done because the file is missing */ MDBX_RESULT_TRUE) {
+    fprintf(stderr, "mdbx_env_delete: (%d) %s\n", rc, mdbx_strerror(rc));
+    goto bailout;
+  }
+
   rc = mdbx_env_open(env, "./example-db", MDBX_NOSUBDIR | MDBX_LIFORECLAIM, 0664);
   if (rc != MDBX_SUCCESS) {
     fprintf(stderr, "mdbx_env_open: (%d) %s\n", rc, mdbx_strerror(rc));
@@ -105,7 +118,7 @@ int main(int argc, char *argv[]) {
   data.iov_len = sizeof(sval);
   data.iov_base = sval;
 
-  sprintf(sval, "%03x %d foo bar", 32, 3141592);
+  snprintf(sval, sizeof(sval), "%03x %d foo bar", 32, 3141592);
   rc = mdbx_put(txn, dbi, &key, &data, 0);
   if (rc != MDBX_SUCCESS) {
     fprintf(stderr, "mdbx_put: (%d) %s\n", rc, mdbx_strerror(rc));
