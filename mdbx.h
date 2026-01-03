@@ -4978,7 +4978,7 @@ typedef enum MDBX_cache_status {
    *  \details There is no correct result since an error has occurred that is not related
    *  to the absence of the desired key-value pair.
    *  The given cache entry has not been changed. */
-  MDBX_CACHE_ERROR = -2,
+  MDBX_CACHE_ERROR = -3,
 
   /** \brief The result was obtained by bypassing the cache, because
    *  the transaction is too old to using the cache entry.
@@ -4986,7 +4986,18 @@ typedef enum MDBX_cache_status {
    *  an MVCC-snapshot used by current transaction.
    *  The given cache entry has not been changed.
    *  The result of getting a value is correct until the transaction end. */
-  MDBX_CACHE_BEHIND = -1,
+  MDBX_CACHE_BEHIND = -2,
+
+  /** \brief The result of getting a value is correct, but it cannot be cached since there
+   *  the ABA-like issue is in the data history, either other similar reason.
+   *  \details When a cache entry is used by different threads reading different MVCC snapshots,
+   *  there may be a situation in which the key and associated value are missing from the old
+   *  and new MVCC snapshots, but are present in one of the MVCC snapshots between ones.
+   *  In such circumstances the result from the cache may be false negative, therefore,
+   *  in order to avoid an incorrect result, a search is performed bypassing cache.
+   *  The given cache entry has not been changed.
+   *  The result of getting a value is correct until the transaction end. */
+  MDBX_CACHE_UNABLE = -1,
 
   /** \brief The result was obtained by bypassing the cache, because
    *  the given cache entry being updated by another thread.

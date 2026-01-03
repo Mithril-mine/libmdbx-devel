@@ -1,5 +1,4 @@
-/// \copyright SPDX-License-Identifier: Apache-2.0
-/// \author Леонид Юрьев aka Leonid Yuriev <leo@yuriev.ru> \date 2025
+/// \author Леонид Юрьев aka Leonid Yuriev <leo@yuriev.ru> \date 2025-2026
 
 #include "internals.h"
 
@@ -69,11 +68,30 @@ __hot static MDBX_cache_result_t cache_get(const MDBX_txn *txn, MDBX_dbi dbi, co
     return cache_fallback(txn, dbi, key, data, MDBX_CACHE_BEHIND);
 
   if (likely(txn->txnid <= entry->last_confirmed_txnid)) {
-    /* cache hit fast-path */
-    data->iov_base = entry->offset ? ptr_disp(txn->env->dxb_mmap.base, entry->offset) : 0;
-    data->iov_len = entry->length;
-    tASSERT(txn, (!entry->offset && !entry->length) || is_inside_dxb_and_commited(txn, data->iov_base));
-    return cache_result(data->iov_base ? MDBX_SUCCESS : MDBX_NOTFOUND, MDBX_CACHE_HIT);
+    if (entry->offset) {
+      /* cache hit fast-path */
+      data->iov_base = ptr_disp(txn->env->dxb_mmap.base, entry->offset);
+      data->iov_len = entry->length;
+      tASSERT(txn, (!entry->offset && !entry->length) || is_inside_dxb_and_commited(txn, data->iov_base));
+      return cache_result(MDBX_SUCCESS, MDBX_CACHE_HIT);
+    }
+
+    if (txn->txnid == entry->last_confirmed_txnid || txn->txnid == entry->trunk_txnid) {
+      data->iov_base = nullptr;
+      data->iov_len = 0;
+      tASSERT(txn, (!entry->offset && !entry->length) || is_inside_dxb_and_commited(txn, data->iov_base));
+      return cache_result(MDBX_NOTFOUND, MDBX_CACHE_HIT);
+    }
+
+    /* Здесь ABA-подобная проблема:
+     *
+     * В случае когда txn->txnid > entry->trunk_txnid и txn->txnid < entry->last_confirmed_txnid
+     * возможна ситуация, когда в истории транзакции целевой ключ (и значение) отсутствовали
+     * в версии entry->trunk_txnid и entry->last_confirmed_txnid, но присутствовали в MVCC-снимке txn->txnid.
+     *
+     * Теоретически можно подумать о том, чтобы обработать такие случаи без полного поиска. Но сначала требуется
+     * понять как часто будут возникать такие ситуации на практике и стоит-ли с этим заморачиваться. */
+    return cache_fallback(txn, dbi, key, data, MDBX_CACHE_UNABLE);
   }
 
   err = dbi_check(txn, dbi);
@@ -294,6 +312,9 @@ __hot MDBX_cache_result_t mdbx_cache_get(const MDBX_txn *txn, MDBX_dbi dbi, cons
     MDBX_cache_entry_t again;
     again.last_confirmed_txnid = safe64_read((mdbx_atomic_uint64_t *)&entry->last_confirmed_txnid);
     if (unlikely(again.last_confirmed_txnid > MAX_TXNID)) {
+#if MDBX_DEBUG
+      return cache_fallback(txn, dbi, key, data, MDBX_CACHE_RACE);
+#else
       atomic_yield();
       again.last_confirmed_txnid = safe64_read((mdbx_atomic_uint64_t *)&entry->last_confirmed_txnid);
       if (unlikely(again.last_confirmed_txnid > MAX_TXNID)) {
@@ -309,13 +330,15 @@ __hot MDBX_cache_result_t mdbx_cache_get(const MDBX_txn *txn, MDBX_dbi dbi, cons
             return cache_fallback(txn, dbi, key, data, MDBX_CACHE_RACE);
         }
       }
+#endif /* MDBX_DEBUG */
     }
 
     again.trunk_txnid = entry->trunk_txnid;
     again.offset = entry->offset;
     again.length = entry->length;
     if (likely(local.last_confirmed_txnid == again.last_confirmed_txnid && local.trunk_txnid == again.trunk_txnid &&
-               local.offset == again.offset && local.length == again.length))
+               local.offset == again.offset && local.length == again.length &&
+               local.last_confirmed_txnid == safe64_read((mdbx_atomic_uint64_t *)&entry->last_confirmed_txnid)))
       break;
 
     local = again;
