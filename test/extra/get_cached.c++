@@ -1,3 +1,4 @@
+/// \author Леонид Юрьев aka Leonid Yuriev <leo@yuriev.ru> \date 2025-2026
 #include "mdbx.h++"
 
 #include <chrono>
@@ -5,6 +6,7 @@
 #include <vector>
 #if defined(__cpp_lib_latch) && __cpp_lib_latch >= 201907L
 #include <latch>
+#include <mutex>
 #include <thread>
 #endif
 #include <array>
@@ -15,10 +17,6 @@
 #include <random>
 #include <set>
 #include <unordered_map>
-
-#if defined(__cpp_lib_latch) && __cpp_lib_latch >= 201907L
-/* TODO */
-#endif
 
 static void logger_nofmt(MDBX_log_level_t loglevel, const char *function, int line, const char *msg,
                          unsigned length) noexcept {
@@ -752,6 +750,194 @@ bool case1_stairway(mdbx::env env, prng &rnd, get_cached_t get_cached) {
 
 //--------------------------------------------------------------------------------------------
 
+static MDBX_cache_result_t cache_get_SingleThreaded_withMutex(const MDBX_txn *txn, MDBX_dbi dbi, const MDBX_val *key,
+                                                              MDBX_val *data, MDBX_cache_entry_t *entry) {
+  static std::mutex mutex;
+  mutex.lock();
+  const auto result = mdbx_cache_get_SingleThreaded(txn, dbi, key, data, entry);
+  mutex.unlock();
+  return result;
+}
+
+#if defined(__cpp_lib_latch) && __cpp_lib_latch >= 201907L
+
+using buffer = mdbx::default_buffer;
+using buffer_pair = mdbx::buffer_pair<buffer>;
+
+struct case2_context {
+  struct {
+    std::atomic<unsigned> behind = 0, unable = 0, race = 0, hit = 0, confirmed = 0, refreshed = 0, unexpected = 0;
+  } counters;
+  const get_cached_t impl;
+  const mdbx::map_handle dbi;
+  prng &rnd;
+
+  case2_context(prng &rnd, mdbx::map_handle dbi, get_cached_t impl) : impl(impl), dbi(dbi), rnd(rnd) {}
+};
+
+struct case2_entry {
+  mdbx::cache_entry cache;
+  const buffer key;
+  case2_entry(buffer &&key) : key(std::move(key)) {}
+};
+
+void case2_thread(case2_context &ctx, std::latch &latch, mdbx::txn_managed txn, case2_entry &entry) {
+  assert(entry.key.is_valid() && entry.key.length());
+  latch.arrive_and_wait();
+  auto prev_counter = &ctx.counters.unexpected;
+  unsigned thesame = 0;
+  bool enought = false;
+  do {
+    mdbx::slice value;
+    while (ctx.rnd() % 42 < 11)
+      std::this_thread::yield();
+#ifndef NDEBUG
+    auto cache_copy = entry.cache;
+#endif /* NDEBUG */
+    auto proba = ctx.impl(txn, ctx.dbi, entry.key, &value, &entry.cache);
+
+    auto counter = &ctx.counters.unexpected;
+    switch (proba.status) {
+    default:
+      failed(__LINE__);
+      enought = true;
+      break;
+    case MDBX_CACHE_BEHIND:
+      counter = &ctx.counters.behind;
+      enought = true;
+      break;
+    case MDBX_CACHE_UNABLE:
+      counter = &ctx.counters.unable;
+      enought = true;
+      break;
+    case MDBX_CACHE_ERROR:
+      failed(__LINE__);
+      enought = true;
+      break;
+    case MDBX_CACHE_DIRTY:
+      failed(__LINE__);
+      enought = true;
+      break;
+    case MDBX_CACHE_RACE:
+      counter = &ctx.counters.race;
+      break;
+    case MDBX_CACHE_HIT:
+      counter = &ctx.counters.hit;
+      break;
+    case MDBX_CACHE_CONFIRMED:
+      counter = &ctx.counters.confirmed;
+      break;
+    case MDBX_CACHE_REFRESHED:
+      counter = &ctx.counters.refreshed;
+      break;
+    }
+    counter->fetch_add(1);
+    assert(entry.key.is_valid() && entry.key.length());
+    const auto expected_value = txn.get(ctx.dbi, entry.key, mdbx::slice::null());
+    assert(entry.key.is_valid() && entry.key.length());
+    if (value != expected_value) {
+      ctx.counters.unexpected.fetch_add(1);
+      failed(__LINE__);
+#ifndef NDEBUG
+      static std::mutex lock;
+      lock.lock();
+      mdbx::slice value2;
+      const auto expected_value2 = txn.get(ctx.dbi, entry.key, mdbx::slice::null());
+      auto proba2 = ctx.impl(txn, ctx.dbi, entry.key, &value2, &cache_copy);
+      assert(proba2.errcode == proba.errcode);
+      assert(proba2.status == proba.status);
+      assert(value2 == value);
+      assert(expected_value2 == expected_value);
+      lock.unlock();
+#endif /* NDEBUG */
+    }
+    thesame += prev_counter == counter;
+    prev_counter = counter;
+  } while (!enought && thesame < 11);
+}
+
+bool case2_multithread(mdbx::env env, prng &rnd, get_cached_t get_cached) {
+  const unsigned n_threads = std::thread::hardware_concurrency() * 3 + 3;
+  const unsigned wanna_repeat = 3;
+
+  std::vector<case2_entry> entries;
+  for (size_t i = 1; i < n_threads / 2; ++i)
+    entries.emplace_back(buffer::hex(rnd.max() / (n_threads / 2 + 1) * i));
+
+  auto txn = env.start_write();
+  const auto table = txn.create_map("case2");
+  while (txn.get_map_stat(table).ms_depth < 4)
+    txn.upsert(table, buffer::hex(rnd()), buffer::base64(rnd()));
+  txn.commit();
+  std::vector<std::thread> threads;
+  threads.reserve(n_threads);
+
+  struct case2_context context(rnd, table, get_cached);
+  for (unsigned loop = 0; loop < 10 * 1000; ++loop) {
+    threads.clear();
+    std::latch latch(n_threads + 1);
+    for (auto &entry : entries) {
+      entry.cache.reset();
+      assert(entry.key.is_valid() && entry.key.length());
+    }
+
+    while (threads.size() < n_threads) {
+      txn = env.start_write();
+      auto &entry = entries[rnd() % entries.size()];
+      if (rnd() % 7 < 3) {
+        txn.erase(table, entry.key);
+      } else {
+        txn.upsert(table, entry.key, buffer::base64(rnd()));
+      }
+      txn.commit_embark_read();
+      threads.push_back(std::thread(case2_thread, std::ref(context), std::ref(latch), std::move(txn), std::ref(entry)));
+      if (0 && threads.size() < n_threads) {
+        txn = env.start_read();
+        threads.push_back(std::thread(case2_thread, std::ref(context), std::ref(latch), std::move(txn),
+                                      std::ref(entries[rnd() % entries.size()])));
+      }
+    }
+
+    latch.arrive_and_wait();
+    for (auto &t : threads)
+      t.join();
+
+    if (context.counters.unexpected)
+      return false;
+
+    if (context.counters.behind >= wanna_repeat && context.counters.confirmed >= wanna_repeat &&
+        context.counters.unable >= wanna_repeat && context.counters.hit >= wanna_repeat && context.counters.race &&
+        context.counters.refreshed >= wanna_repeat)
+      return true;
+  }
+
+  if (!context.counters.behind)
+    std::cout << __FUNCTION__ << ": unable reproduce " << "MDBX_CACHE_BEHIND" << std::endl;
+  if (!context.counters.unable)
+    std::cout << __FUNCTION__ << ": unable reproduce " << "MDBX_CACHE_UNABLE" << std::endl;
+  if (!context.counters.race)
+    std::cout << __FUNCTION__ << ": unable reproduce " << "MDBX_CACHE_RACE" << std::endl;
+  if (!context.counters.hit)
+    std::cout << __FUNCTION__ << ": unable reproduce " << "MDBX_CACHE_HIT" << std::endl;
+  if (!context.counters.confirmed)
+    std::cout << __FUNCTION__ << ": unable reproduce " << "MDBX_CACHE_CONFIRMED" << std::endl;
+  if (!context.counters.refreshed)
+    std::cout << __FUNCTION__ << ": unable reproduce " << "MDBX_CACHE_REFRESHED" << std::endl;
+
+  return true;
+}
+
+#else
+
+bool case2_multithread(mdbx::env, prng &, get_cached_t) {
+  std::cout << "skip " << __FUNCTION__ << " sice no std::latch or std::thread" << std::endl;
+  return true;
+}
+
+#endif /* __cpp_lib_latch */
+
+//--------------------------------------------------------------------------------------------
+
 int doit() {
 #if 1
   std::random_device random;
@@ -774,20 +960,28 @@ int doit() {
   create_parameters.geometry.pagesize = mdbx::env::geometry::minimal_value;
   mdbx::env_managed env(db_filename, create_parameters,
                         mdbx::env::operate_parameters(42, 0, mdbx::env::nested_transactions,
-                                                      mdbx::env::durability::robust_synchronous,
+                                                      mdbx::env::durability::whole_fragile,
                                                       mdbx::env::reclaiming_options(), options));
   if (env.get_info().mi_dxb_pagesize != 256)
     unexpected(__LINE__);
 
   bool ok = true;
+  std::cout << ">> trivia " << "SingleThreaded" << std::endl;
   ok = case0_trivia(env, mdbx_cache_get_SingleThreaded) && ok;
+  std::cout << ">> trivia " << "cache_get" << std::endl;
   ok = case0_trivia(env, (get_cached_t)mdbx_cache_get) && ok;
+  std::cout << ">> trivia " << "SingleThreaded_withMutex" << std::endl;
+  ok = case0_trivia(env, cache_get_SingleThreaded_withMutex) && ok;
 
+  std::cout << ">> stairway " << "SingleThreaded" << std::endl;
   ok = case1_stairway(env, rnd, mdbx_cache_get_SingleThreaded) && ok;
+  std::cout << ">> stairway " << "cache_get" << std::endl;
   ok = case1_stairway(env, rnd, (get_cached_t)mdbx_cache_get) && ok;
 
-  // ok = case2(env, mdbx_cache_get_SingleThreaded) && ok;
-  // ok = case2(env, mdbx_cache_get) && ok;
+  std::cout << ">> multithread " << "SingleThreaded_withMutex" << std::endl;
+  ok = case2_multithread(env, rnd, cache_get_SingleThreaded_withMutex) && ok;
+  std::cout << ">> multithread " << "cache_get" << std::endl;
+  ok = case2_multithread(env, rnd, (get_cached_t)mdbx_cache_get) && ok;
 
   if (ok) {
     std::cout << "OK\n";
