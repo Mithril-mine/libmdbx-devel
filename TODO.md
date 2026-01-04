@@ -2,9 +2,6 @@
 TODO
 ----
 
- - Extended example of using the C++ API, which can also be used as a simple smoke-test.
- - Cloning read transactions.
- - Ultra-fast deletion of consecutive elements by cutting off b-tree branches.
  - Предоставление информации о размере рагруженной/кешируемой в ОЗУ части БД и её использование для управления упреждающим чтением.
  - Optional page-get and operation statistics for cursors.
  - split ASSERT() to CHECK{0,1,2,3} and basal `assert()`.
@@ -24,12 +21,14 @@ TODO
 
 In development
 --------------
- - get-cached API.
+ - Extended example of using the C++ API, which can also be used as a simple smoke-test.
+ - Ultra-fast deletion of consecutive elements by cutting off b-tree branches.
  - digging/refactoring/optimizing page splitting and tree rebalance.
 
 Done
 ----
-
+ - get-cached API.
+ - Cloning read transactions.
  - Параллельная lto-сборка с устранением предупреждений.
  - HarmonyOS support.
  - Ранняя/не-отложенная очистка GC.
