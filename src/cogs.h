@@ -473,7 +473,7 @@ static inline int check_env(const MDBX_env *env, const bool wanna_active) {
   return MDBX_SUCCESS;
 }
 
-static __always_inline int check_txn(const MDBX_txn *txn, int bad_bits) {
+static __always_inline int check_txn_anythread(const MDBX_txn *txn, int bad_bits) {
   if (unlikely(!txn))
     return MDBX_EINVAL;
 
@@ -495,15 +495,20 @@ static __always_inline int check_txn(const MDBX_txn *txn, int bad_bits) {
 
   tASSERT(txn, (txn->flags & MDBX_TXN_FINISHED) ||
                    (txn->flags & MDBX_NOSTICKYTHREADS) == (txn->env->flags & MDBX_NOSTICKYTHREADS));
+  return MDBX_SUCCESS;
+}
+
+static __always_inline int check_txn(const MDBX_txn *txn, int bad_bits) {
+  int err = check_txn_anythread(txn, bad_bits);
 #if MDBX_TXN_CHECKOWNER
-  if ((txn->flags & (MDBX_NOSTICKYTHREADS | MDBX_TXN_FINISHED)) != MDBX_NOSTICKYTHREADS &&
+  if (err == MDBX_SUCCESS && (txn->flags & (MDBX_NOSTICKYTHREADS | MDBX_TXN_FINISHED)) != MDBX_NOSTICKYTHREADS &&
       !(bad_bits /* abort/reset/txn-break */ == 0 &&
         ((txn->flags & (MDBX_TXN_RDONLY | MDBX_TXN_FINISHED)) == (MDBX_TXN_RDONLY | MDBX_TXN_FINISHED))) &&
       unlikely(txn->owner != osal_thread_self()))
-    return txn->owner ? MDBX_THREAD_MISMATCH : MDBX_BAD_TXN;
+    err = txn->owner ? MDBX_THREAD_MISMATCH : MDBX_BAD_TXN;
 #endif /* MDBX_TXN_CHECKOWNER */
 
-  return MDBX_SUCCESS;
+  return err;
 }
 
 static inline int check_txn_rw(const MDBX_txn *txn, int bad_bits) {

@@ -3808,6 +3808,12 @@ public:
   /// \brief Renew read-only transaction.
   inline void renew_reading();
 
+  /// \brief Clone read transaction.
+  inline txn_managed clone(void *context = nullptr) const;
+
+  /// \brief Renew given read transaction into clone.
+  inline void clone(txn_managed &txn_for_renew_into_clone, void *context = nullptr) const;
+
   /// \brief Marks transaction as broken to prevent further operations.
   inline void make_broken();
 
@@ -5617,6 +5623,19 @@ inline void txn::reset_reading() { error::success_or_throw(::mdbx_txn_reset(hand
 inline void txn::make_broken() { error::success_or_throw(::mdbx_txn_break(handle_)); }
 
 inline void txn::renew_reading() { error::success_or_throw(::mdbx_txn_renew(handle_)); }
+
+inline txn_managed txn::clone(void *context) const {
+  MDBX_txn *ptr = nullptr;
+  error::success_or_throw(::mdbx_txn_clone(handle_, &ptr, context));
+  assert(ptr != nullptr);
+  return txn_managed(ptr);
+}
+
+inline void txn::clone(txn_managed &txn_for_renew_into_clone, void *context) const {
+  error::throw_on_nullptr(txn_for_renew_into_clone.handle_, MDBX_BAD_TXN);
+  error::success_or_throw(::mdbx_txn_clone(handle_, &txn_for_renew_into_clone.handle_, context));
+  assert(txn_for_renew_into_clone.handle_ != nullptr);
+}
 
 inline void txn::park_reading(bool autounpark) { error::success_or_throw(::mdbx_txn_park(handle_, autounpark)); }
 

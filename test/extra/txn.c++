@@ -31,7 +31,7 @@ int main(int argc, const char *argv[]) {
 #include <latch>
 #include <thread>
 
-bool case0(const mdbx::path &path) {
+bool case0_trivia_sticky_threads(const mdbx::path &path) {
   mdbx::env_managed::create_parameters createParameters;
   createParameters.geometry.make_dynamic(21 * mdbx::env::geometry::MiB, 84 * mdbx::env::geometry::MiB);
 
@@ -43,11 +43,20 @@ bool case0(const mdbx::path &path) {
   txn.commit();
 
   //-------------------------------------
+
+  txn = env.start_read();
+  MDBX_txn *c_txn = nullptr;
+  int err = mdbx_txn_begin(env, NULL, MDBX_TXN_RDONLY, &c_txn);
+  assert(err == MDBX_BAD_RSLOT);
+  bool ok = err == MDBX_BAD_RSLOT;
+  txn.abort();
+
+  //-------------------------------------
   txn = env.start_write();
-  MDBX_txn *c_txn = txn;
-  int err = mdbx_txn_reset(txn);
+  c_txn = txn;
+  err = mdbx_txn_reset(txn);
   assert(err == MDBX_EINVAL);
-  bool ok = err == MDBX_EINVAL;
+  ok = ok && err == MDBX_EINVAL;
 
   err = mdbx_txn_break(txn);
   assert(err == MDBX_SUCCESS);
@@ -157,7 +166,7 @@ bool case0(const mdbx::path &path) {
   return ok;
 }
 
-bool case1(const mdbx::path &path) {
+bool case1_trivia_NO_sticky_threads(const mdbx::path &path) {
   mdbx::env::operate_parameters operateParameters(100, 10);
   operateParameters.options.no_sticky_threads = true;
   operateParameters.options.nested_write_transactions = true;
@@ -290,7 +299,7 @@ bool case1(const mdbx::path &path) {
   return ok;
 }
 
-bool case2(const mdbx::path &path, bool no_sticky_threads) {
+bool case2_concurrent_read_and_abort(const mdbx::path &path, bool no_sticky_threads) {
   mdbx::env::operate_parameters operateParameters(100, 10);
   operateParameters.options.no_sticky_threads = no_sticky_threads;
   mdbx::env_managed env(path, operateParameters);
@@ -313,7 +322,7 @@ bool case2(const mdbx::path &path, bool no_sticky_threads) {
   return true;
 }
 
-bool case3(const mdbx::path &path, bool no_sticky_threads) {
+bool case3_fresh_reads(const mdbx::path &path, bool no_sticky_threads) {
   mdbx::env::remove(path);
   mdbx::env_managed::create_parameters createParameters;
   createParameters.geometry.make_dynamic(21 * mdbx::env::geometry::MiB, 84 * mdbx::env::geometry::MiB);
@@ -367,17 +376,97 @@ bool case3(const mdbx::path &path, bool no_sticky_threads) {
   return ok;
 }
 
+static bool proble_cloning(const mdbx::txn_managed &txn, const mdbx::map_handle &table, const mdbx::txn::info &txn_info,
+                           const mdbx::txn::map_stat &map_stat, const mdbx::map_handle::info &handle_info) {
+  std::vector<std::thread> threads;
+  bool ok = true;
+  for (auto i = 0; i < 1; ++i)
+    threads.push_back(std::thread([&]() {
+      auto clone = txn.clone();
+      std::thread onemore([&]() {
+        auto clone_of_clone = txn.clone();
+        auto clone_txn_info = clone_of_clone.get_info();
+        if (mdbx::memcmp(&clone_txn_info, &txn_info, sizeof(txn_info)))
+          ok = false;
+        auto clone_handle_info = clone_of_clone.get_handle_info(table);
+        if (clone_handle_info.state != MDBX_DBI_STALE ||
+            mdbx::memcmp(&clone_handle_info, &handle_info, sizeof(handle_info)) == 0)
+          ok = false;
+        clone_of_clone.renew_reading();
+        auto clone_map_stat = clone_of_clone.get_map_stat(table);
+        if (mdbx::memcmp(&clone_map_stat, &map_stat, sizeof(map_stat)))
+          ok = false;
+        clone_handle_info = clone_of_clone.get_handle_info(table);
+        if (mdbx::memcmp(&clone_handle_info, &handle_info, sizeof(handle_info)))
+          ok = false;
+        clone_of_clone.reset_reading();
+      });
+      auto clone_txn_info = clone.get_info();
+      if (mdbx::memcmp(&clone_txn_info, &txn_info, sizeof(txn_info)))
+        ok = false;
+      clone.renew_reading();
+      onemore.join();
+      auto clone_map_stat = clone.get_map_stat(table);
+      if (mdbx::memcmp(&clone_map_stat, &map_stat, sizeof(map_stat)))
+        ok = false;
+      auto clone_handle_info = clone.get_handle_info(table);
+      if (mdbx::memcmp(&clone_handle_info, &handle_info, sizeof(handle_info)))
+        ok = false;
+      clone_txn_info = clone.get_info();
+      if (mdbx::memcmp(&clone_txn_info, &txn_info, sizeof(txn_info)))
+        ok = false;
+      clone.reset_reading();
+    }));
+
+  for (auto &t : threads)
+    t.join();
+
+  return ok;
+}
+
+bool case4_clone(const mdbx::path &path, bool no_sticky_threads) {
+  mdbx::env::remove(path);
+  mdbx::env_managed::create_parameters createParameters;
+  createParameters.geometry.make_dynamic(21 * mdbx::env::geometry::MiB, 84 * mdbx::env::geometry::MiB);
+  mdbx::env::operate_parameters operateParameters(100, 10);
+  operateParameters.options.no_sticky_threads = no_sticky_threads;
+  mdbx::env_managed env(path, createParameters, operateParameters);
+
+  auto txn = env.start_write();
+  auto table = txn.create_map("case4");
+  for (auto i = 0; ++i < 9; ++i)
+    txn.insert(table, mdbx::slice::wrap(i), mdbx::default_buffer::base58(i * 42));
+  txn.commit_embark_read();
+
+  const auto txn_info = txn.get_info();
+  const auto map_stat = txn.get_map_stat(table);
+  const auto handle_info = txn.get_handle_info(table);
+
+  bool ok = proble_cloning(txn, table, txn_info, map_stat, handle_info);
+  txn.reset_reading();
+  txn = env.start_write();
+  ok = proble_cloning(txn, table, txn_info, map_stat, handle_info) && ok;
+  txn.create_map("case4+onemore");
+  MDBX_txn *clone = nullptr;
+  int err = mdbx_txn_clone(txn, &clone, nullptr);
+  ok = err == MDBX_BAD_TXN && ok;
+
+  return ok;
+}
+
 int doit() {
   mdbx::path path = "test-txn";
   mdbx::env::remove(path);
 
   bool ok = true;
-  ok = case0(path) && ok;
-  ok = case1(path) && ok;
-  ok = case2(path, false) && ok;
-  ok = case2(path, true) && ok;
-  ok = case3(path, false) && ok;
-  ok = case3(path, true) && ok;
+  ok = case0_trivia_sticky_threads(path) && ok;
+  ok = case1_trivia_NO_sticky_threads(path) && ok;
+  ok = case2_concurrent_read_and_abort(path, false) && ok;
+  ok = case2_concurrent_read_and_abort(path, true) && ok;
+  ok = case3_fresh_reads(path, false) && ok;
+  ok = case3_fresh_reads(path, true) && ok;
+  ok = case4_clone(path, false) && ok;
+  ok = case4_clone(path, true) && ok;
 
   std::cout << (ok ? "OK\n" : "FAIL\n");
   return ok ? EXIT_SUCCESS : EXIT_FAILURE;

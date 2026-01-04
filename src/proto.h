@@ -85,6 +85,7 @@ MDBX_INTERNAL int txn_ro_park(MDBX_txn *txn, bool autounpark);
 MDBX_INTERNAL int txn_ro_unpark(MDBX_txn *txn);
 MDBX_INTERNAL int txn_ro_start(MDBX_txn *txn, unsigned flags);
 MDBX_INTERNAL int txn_ro_end(MDBX_txn *txn, unsigned mode);
+MDBX_INTERNAL int txn_ro_clone(const MDBX_txn *const source, MDBX_txn *const clone);
 
 /* env.c */
 MDBX_INTERNAL int env_open(MDBX_env *env, mdbx_mode_t mode);

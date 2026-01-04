@@ -537,3 +537,84 @@ int mdbx_txn_info(const MDBX_txn *txn, MDBX_txn_info *info, bool scan_rlt) {
 
   return MDBX_SUCCESS;
 }
+
+int mdbx_txn_clone(const MDBX_txn *source, MDBX_txn **const in_out_clone, void *clone_context) {
+  if (unlikely(!in_out_clone))
+    return LOG_IFERR(MDBX_EINVAL);
+
+  MDBX_txn *clone = *in_out_clone;
+retry:
+  osal_memory_fence(mo_AcquireRelease, true);
+  int rc = check_txn_anythread(
+      source,
+      MDBX_TXN_FINISHED |
+          /* there is no difficulty, but we do not allow dirty transactions to avoid confusion */ MDBX_TXN_DIRTY);
+  if (unlikely(rc != MDBX_SUCCESS))
+    goto bailout;
+
+  if (unlikely(source->parent)) {
+    /* do not immediately jump to env->basal_txn,
+     * but check for the absence of MDBX_TXN_DIRTY in all parent transactions. */
+    source = source->parent;
+    goto retry;
+  }
+
+  MDBX_env *const env = source->env;
+  rc = check_env(env, true);
+  if (unlikely(rc != MDBX_SUCCESS))
+    goto bailout;
+
+  const txnid_t txnid = source->txnid;
+  if (clone) {
+    rc = check_txn(clone, 0);
+    if (unlikely(rc != MDBX_SUCCESS))
+      goto bailout;
+    if (unlikely((clone->flags & MDBX_TXN_RDONLY) == 0)) {
+      rc = MDBX_EINVAL;
+      goto bailout;
+    }
+
+    if (clone_context == clone)
+      clone_context = clone->userctx;
+
+    if (unlikely(clone->owner != 0 || !(clone->flags & MDBX_TXN_FINISHED))) {
+      rc = mdbx_txn_reset(clone);
+      if (unlikely(rc != MDBX_SUCCESS))
+        goto bailout;
+      goto retry;
+    }
+  } else {
+    clone = txn_alloc(MDBX_TXN_RDONLY | MDBX_TXN_FINISHED, env);
+    if (unlikely(!clone))
+      return LOG_IFERR(MDBX_ENOMEM);
+    clone->signature = txn_signature;
+    goto retry;
+  }
+
+  rc = txn_ro_clone(source, clone);
+  if (unlikely(rc != MDBX_SUCCESS))
+    goto bailout;
+
+  osal_memory_fence(mo_AcquireRelease, true);
+  rc = check_txn_anythread(source, MDBX_TXN_FINISHED | MDBX_TXN_DIRTY);
+  if (unlikely(rc != MDBX_SUCCESS))
+    goto bailout;
+
+  clone->flags &= ~MDBX_TXN_FINISHED;
+  clone->userctx = clone_context;
+  if (unlikely(txn_basis_snapshot(source) != clone->txnid || txnid != source->txnid)) {
+    rc = MDBX_PROBLEM;
+    ERROR("unexpected mvcc-tnxid (%" PRIu64 " != %" PRIu64 ") mismatch during cloning of a transaction,"
+          " seems the original transaction competitively restarted in another thread",
+          txnid, (txnid != source->txnid) ? source->txnid : clone->txnid);
+    goto bailout;
+  }
+
+  *in_out_clone = clone;
+  return MDBX_SUCCESS;
+
+bailout:
+  if (clone)
+    txn_ro_end(clone, (clone != *in_out_clone) ? TXN_END_FREE | TXN_END_SLOT | TXN_END_FAIL_BEGIN : TXN_END_FAIL_BEGIN);
+  return LOG_IFERR(rc);
+}

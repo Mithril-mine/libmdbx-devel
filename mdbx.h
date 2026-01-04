@@ -3975,6 +3975,56 @@ LIBMDBX_INLINE_API(int, mdbx_txn_begin, (MDBX_env * env, MDBX_txn *parent, MDBX_
   return mdbx_txn_begin_ex(env, parent, flags, txn, NULL);
 }
 
+/** \brief Starts a read-only clone of a given transaction.
+ * \ingroup c_transactions
+ *
+ * \note Cloning read-only transactions without \ref MDBX_NOSTICKYTHREADS mode is pointless and is not allowed.
+ *
+ * Cloning a read-only transaction generates a transaction reading the same MVCC snapshot of the database.
+ * However, cloning a read-write transaction is also explicitly allowed and generates a read transaction that
+ * reads the original MVCC-snapshot of the database without uncommitted changes. This feature is a specialized
+ * tool for implementing database compactification, data transformation, replication and other specific scenarios.
+ *
+ * In the non- \ref MDBX_NOSTICKYTHREADS operation mode, the cloned transaction becomes binded to the current thread.
+ * At the same time, it is clearly assumed that the origin transaction is linked to another thread.
+ *
+ *
+ * \warning It is required to ensure that the original transaction is not used, much less interrupted
+ *          or restarted by another thread, until this function done.
+ *
+ * When cloning read-only transactions, the parking state of original is preserved and inherited by cloned transaction.
+ * Cursors and other objects associated with the original transaction are not affected and are not copied into
+ * the cloned transaction.
+ *
+ * The function provides for both the creation of a new transaction handle
+ * and the reuse of a transaction previously stopped by \ref mdbx_txn_reset().
+ *
+ * \param [in] origin             An transaction handle returned by \ref mdbx_txn_begin_ex() or \ref mdbx_txn_begin().
+ *
+ * \param [in, out] in_out_clone  Address of the \ref MDBX_txn handle that wants to be reused, or where to store the
+ *                                handle of the new transaction. The handle passed by the pointer must be initialized
+ *                                at the input anycase. If the pointed handle at input is NULL, then a new transaction
+ *                                will be created and returned there, otherwise it must be a valid handle of read-only
+ *                                transaction for reuse.
+ *
+ * \param [in] context            A pointer to application context to be associated with started transaction and could
+ *                                be retrieved by \ref mdbx_txn_get_userctx() until transaction finished.
+ *                                Just use NULL if doubt.
+ * \returns A non-zero error value on failure and 0 on success,
+ *          some possible errors are:
+ * \retval MDBX_EINVAL        An invalid parameter was specified, i.e. the `in_out_clone` is NULL.
+ * \retval MDBX_BAD_TXN       Origin transaction is already finished or never began,
+ *                            or handle referenced by `in_out_clone` is invalid or not a read-only transaction.
+ * \retval MDBX_EBADSIGN      Origin transaction object or reference by `in_out_clone`, has invalid signature,
+ *                            e.g. transaction was already terminated or memory was corrupted.
+ * \retval MDBX_OUSTED        Cloned was outed immediately for the sake of recycling old MVCC snapshots.
+ * \retval MDBX_MVCC_RETARDED The MVCC snapshot used by origin transaction was bygone.
+ * \retval MDBX_READERS_FULL  A read-only transaction was requested and
+ *                            the reader lock table is full.
+ *                            See \ref mdbx_env_set_maxreaders().
+ * \retval MDBX_ENOMEM        Out of memory during creating new transaction. */
+LIBMDBX_API int mdbx_txn_clone(const MDBX_txn *origin, MDBX_txn **in_out_clone, void *context);
+
 /** \brief Sets application information associated (a context pointer) with the
  * transaction.
  * \ingroup c_transactions

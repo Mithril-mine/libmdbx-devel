@@ -153,8 +153,10 @@ int txn_ro_start(MDBX_txn *txn, unsigned flags) {
 bailout:
   tASSERT(txn, err != MDBX_SUCCESS);
   txn->txnid = INVALID_TXNID;
-  if (likely(txn->ro.slot))
+  if (likely(txn->ro.slot)) {
     safe64_reset(&txn->ro.slot->txnid, true);
+    atomic_store32(&txn->ro.slot->snapshot_pages_used, 0, mo_Relaxed);
+  }
   return err;
 }
 
@@ -295,4 +297,92 @@ int txn_ro_unpark(MDBX_txn *txn) {
 
   int err = txn_end(txn, TXN_END_OUSTED | TXN_END_RESET | TXN_END_UPDATE);
   return err ? err : MDBX_OUSTED;
+}
+
+int txn_ro_clone(const MDBX_txn *const origin, MDBX_txn *const clone) {
+  MDBX_env *const env = origin->env;
+
+  int err = txn_ro_rslot(clone);
+  if (unlikely(err != MDBX_SUCCESS))
+    return err;
+
+  if (unlikely(origin->txnid < MIN_TXNID || origin->txnid > MAX_TXNID)) {
+    err = MDBX_BAD_TXN;
+    goto bailout;
+  }
+
+  clone->owner = likely(clone->ro.slot) ? (uintptr_t)clone->ro.slot->tid.weak
+                                        : ((clone->flags & MDBX_NOSTICKYTHREADS) ? 0 : osal_thread_self());
+  clone->flags = (origin->flags & (MDBX_NOSTICKYTHREADS | MDBX_WRITEMAP | MDBX_TXN_AUTOUNPARK | MDBX_TXN_PARKED)) |
+                 MDBX_TXN_RDONLY | MDBX_TXN_FINISHED;
+  clone->txnid = txn_basis_snapshot(origin);
+  clone->front_txnid = clone->txnid;
+
+  if (origin->flags & MDBX_TXN_RDONLY) {
+    if ((clone->flags & MDBX_NOSTICKYTHREADS) == 0 && env->txn && unlikely(env->basal_txn->owner == clone->owner) &&
+        (globals.runtime_flags & MDBX_DBG_LEGACY_OVERLAP) == 0) {
+      err = MDBX_TXN_OVERLAPPING;
+      goto bailout;
+    }
+
+    if (likely(clone->ro.slot)) {
+      const uint32_t pages_used = origin->ro.slot ? origin->ro.slot->snapshot_pages_used.weak : 0;
+      const uint64_t pages_retired = origin->ro.slot ? origin->ro.slot->snapshot_pages_retired.weak : 0;
+      atomic_store32(&clone->ro.slot->snapshot_pages_used, pages_used, mo_Relaxed);
+      atomic_store64(&clone->ro.slot->snapshot_pages_retired, pages_retired, mo_Relaxed);
+      safe64_write(&clone->ro.slot->txnid, (clone->flags & MDBX_TXN_PARKED) ? MDBX_TID_TXN_PARKED : clone->txnid);
+    } else {
+      /* exclusive mode without lck */
+      eASSERT(env, !env->lck_mmap.lck && env->lck == lckless_stub(env));
+    }
+
+    /* Setup db info */
+    clone->geo = origin->geo;
+    clone->canary = origin->canary;
+    memcpy(clone->dbs, origin->dbs, sizeof(clone->dbs[0]) * CORE_DBS);
+    tASSERT(clone, clone->dbs[FREE_DBI].flags == MDBX_INTEGERKEY);
+    tASSERT(clone, check_table_flags(clone->dbs[MAIN_DBI].flags));
+    VALGRIND_MAKE_MEM_UNDEFINED(clone->dbi_state, env->max_dbi);
+#if MDBX_ENABLE_DBI_SPARSE
+    clone->n_dbi = CORE_DBS;
+    VALGRIND_MAKE_MEM_UNDEFINED(txn->dbi_sparse,
+                                ceil_powerof2(env->max_dbi, CHAR_BIT * sizeof(txn->dbi_sparse[0])) / CHAR_BIT);
+    clone->dbi_sparse[0] = (1u << CORE_DBS) - 1;
+#else
+    clone->n_dbi = (env->n_dbi < 8) ? env->n_dbi : 8;
+    if (clone->n_dbi > CORE_DBS)
+      memset(clone->dbi_state + CORE_DBS, 0, clone->n_dbi - CORE_DBS);
+#endif /* MDBX_ENABLE_DBI_SPARSE */
+    clone->dbi_state[FREE_DBI] = DBI_LINDO | DBI_VALID;
+    clone->dbi_state[MAIN_DBI] = DBI_LINDO | DBI_VALID;
+    clone->cursors[FREE_DBI] = nullptr;
+    clone->cursors[MAIN_DBI] = nullptr;
+    clone->dbi_seqs[FREE_DBI] = origin->dbi_seqs[FREE_DBI];
+    clone->dbi_seqs[MAIN_DBI] = origin->dbi_seqs[MAIN_DBI];
+
+    if (!(clone->flags & MDBX_TXN_PARKED)) {
+      if (likely(clone->ro.slot) && unlikely(clone->txnid != atomic_load64(&clone->ro.slot->txnid, mo_Relaxed))) {
+        err = MDBX_OUSTED;
+        goto bailout;
+      }
+      if (unlikely(clone->txnid < atomic_load64(&env->lck->cached_oldest, mo_AcquireRelease))) {
+        err = MDBX_MVCC_RETARDED;
+        goto bailout;
+      }
+    }
+    return MDBX_SUCCESS;
+  }
+
+  err = txn_ro_seize(clone);
+  if (likely(err == MDBX_SUCCESS))
+    return MDBX_SUCCESS;
+
+bailout:
+  tASSERT(origin, err != MDBX_SUCCESS);
+  clone->txnid = INVALID_TXNID;
+  if (likely(clone->ro.slot)) {
+    safe64_reset(&clone->ro.slot->txnid, true);
+    atomic_store32(&clone->ro.slot->snapshot_pages_used, 0, mo_Relaxed);
+  }
+  return err;
 }
