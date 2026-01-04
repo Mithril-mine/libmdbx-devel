@@ -3882,11 +3882,11 @@ MDBX_NOTHROW_PURE_FUNCTION LIBMDBX_API void *mdbx_env_get_userctx(const MDBX_env
  * \param [in] flags   Special options for this transaction. This parameter
  *                     must be set to 0 or by bitwise OR'ing together one
  *                     or more of the values described here:
- *                      - \ref MDBX_RDONLY   This transaction will not perform
- *                                           any write operations.
+ *                      - \ref MDBX_TXN_RDONLY This transaction will not perform
+ *                                             any write operations.
  *
- *                      - \ref MDBX_TXN_TRY  Do not block when starting
- *                                           a write transaction.
+ *                      - \ref MDBX_TXN_TRY    Do not block when starting
+ *                                             a write transaction.
  *
  *                      - \ref MDBX_SAFE_NOSYNC, \ref MDBX_NOMETASYNC.
  *                        Do not sync data to disk corresponding
@@ -3988,7 +3988,6 @@ LIBMDBX_INLINE_API(int, mdbx_txn_begin, (MDBX_env * env, MDBX_txn *parent, MDBX_
  * In the non- \ref MDBX_NOSTICKYTHREADS operation mode, the cloned transaction becomes binded to the current thread.
  * At the same time, it is clearly assumed that the origin transaction is linked to another thread.
  *
- *
  * \warning It is required to ensure that the original transaction is not used, much less interrupted
  *          or restarted by another thread, until this function done.
  *
@@ -3998,6 +3997,8 @@ LIBMDBX_INLINE_API(int, mdbx_txn_begin, (MDBX_env * env, MDBX_txn *parent, MDBX_
  *
  * The function provides for both the creation of a new transaction handle
  * and the reuse of a transaction previously stopped by \ref mdbx_txn_reset().
+ *
+ * \note Cloning of a write transactions with pending changes (aka dirtied) is prohibited to avoid confusion.
  *
  * \param [in] origin             An transaction handle returned by \ref mdbx_txn_begin_ex() or \ref mdbx_txn_begin().
  *
@@ -4015,6 +4016,8 @@ LIBMDBX_INLINE_API(int, mdbx_txn_begin, (MDBX_env * env, MDBX_txn *parent, MDBX_
  * \retval MDBX_EINVAL        An invalid parameter was specified, i.e. the `in_out_clone` is NULL.
  * \retval MDBX_BAD_TXN       Origin transaction is already finished or never began,
  *                            or handle referenced by `in_out_clone` is invalid or not a read-only transaction.
+ *                            Cloning of a write transactions with pending changes (aka dirtied) is also
+ *                            prohibited to avoid confusion.
  * \retval MDBX_EBADSIGN      Origin transaction object or reference by `in_out_clone`, has invalid signature,
  *                            e.g. transaction was already terminated or memory was corrupted.
  * \retval MDBX_OUSTED        Cloned was outed immediately for the sake of recycling old MVCC snapshots.
