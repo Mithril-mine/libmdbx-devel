@@ -321,18 +321,27 @@ namespace mdbx {
 /// \defgroup cxx_api C++ API
 /// @{
 
-// Functions whose signature depends on the `mdbx::byte` type
-// must be strictly defined as inline!
+/// \brief The byte-like type that don't presumes aliases for pointers as does the `char`.
+/// \details Essentially, to enable all kinds of an compiler optimization, we need just
+/// the `unsigned char * restrict` type in C99 terms, i.e. the non-aliasing pointer to `unsigned char`.
+/// However, C++ still doesn't have `restrict` keyword not `non-aliases` type attribute, but a char-pointers may be
+/// aliased.
+///
+/// On the other hand, while `uint8_t` is provided and `CHAR_BIT = 8` the `char8_t *` actually act the same as the C99
+/// `unsigned char * restrict`. So using `char8_t` should not be an issue, since both the `CHAR_BIT = 8` and `uint8_t
+/// `are required.
+///
+/// At the same time, the approach of using `char8_t` has several advantages:
+///  - the `restrict` attribute is defined on level of the base type and is inherited by any derived pointer type;
+///  - some compilers treat `__restrict` as an attribute of an instance of a type (i.e. a variable, a specific
+///    pointer), but not a type attribute.
+///
+/// Nonetheless, I should think about switching to the `uint8_t * __restrict__` for byte pointers.
+/// \note Functions whose signature depends on the `mdbx::byte` type must be strictly defined as inline!
 #if defined(DOXYGEN) || (defined(__cpp_char8_t) && __cpp_char8_t >= 201811)
-// To enable all kinds of an compiler optimizations we use a byte-like type
-// that don't presumes aliases for pointers as does the `char` type and its
-// derivatives/typedefs.
-// Please see https://libmdbx.dqdkfa.ru/dead-github/issues/263
-// for reasoning of the use of `char8_t` type and switching to `__restrict__`.
 using byte = char8_t;
 #else
-// Avoid `std::byte` since it doesn't add features but inconvenient
-// restrictions.
+// Avoid `std::byte` since it doesn't add features but inconvenient restrictions.
 using byte = unsigned char;
 #endif /* __cpp_char8_t >= 201811*/
 
