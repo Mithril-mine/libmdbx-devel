@@ -5008,7 +5008,7 @@ LIBMDBX_API int mdbx_get_equal_or_great(const MDBX_txn *txn, MDBX_dbi dbi, MDBX_
  * \retval MDBX_EINVAL    An invalid parameter was specified. */
 LIBMDBX_API int mdbx_put(MDBX_txn *txn, MDBX_dbi dbi, const MDBX_val *key, MDBX_val *data, MDBX_put_flags_t flags);
 
-/** \brief Replace items in a table.
+/** \brief Replaces item in a table.
  * \ingroup c_crud
  *
  * This function allows to update or delete an existing value at the same time
@@ -5048,13 +5048,70 @@ LIBMDBX_API int mdbx_put(MDBX_txn *txn, MDBX_dbi dbi, const MDBX_val *key, MDBX_
  *                           combination for selection particular item from
  *                           multi-value/duplicates.
  *
+ * \see mdbx_replace_ex()
  * \see \ref c_crud_hints "Quick reference for Insert/Update/Delete operations"
  *
  * \returns A non-zero error value on failure and 0 on success. */
 LIBMDBX_API int mdbx_replace(MDBX_txn *txn, MDBX_dbi dbi, const MDBX_val *key, MDBX_val *new_data, MDBX_val *old_data,
                              MDBX_put_flags_t flags);
 
+/** \brief A data preservation callback for using within \ref mdbx_replace_ex().
+ * \ingroup c_crud */
 typedef int (*MDBX_preserve_func)(void *context, MDBX_val *target, const void *src, size_t bytes);
+
+/** \brief Replaces item in a table using preservation callback for an original data.
+ * \ingroup c_crud
+ *
+ * This function allows to update or delete an existing value at the same time
+ * as the previous value is retrieved. If the argument new_data equal is NULL
+ * zero, the removal is performed, otherwise the update/insert.
+ *
+ * The current value may be in an already changed (aka dirty) page. In this
+ * case, the page will be overwritten during the update, and the old value will
+ * be lost. In such cases, the given preservation callback will be used to save
+ * the source data, that, at your discretion, can perform copying, other necessary
+ * actions, or return a special error code.
+ *
+ * If an original data needs to be saved then the passed preservation callback will be called
+ * with `old_data` as a `target` parameter, and `src` with `bytes` for original data.
+ * Such callback should check necessary conditions, perform appropriate action and return
+ * corresponding error code, which will be returned from function as is.
+ * For example, for behavior similar to \ref mdbx_replace(), the callback should check if there
+ * provided buffer size is enough, then either copy the data or return \ref MDBX_RESULT_TRUE.
+ *
+ * For tables with non-unique keys (i.e. with \ref MDBX_DUPSORT flag),
+ * another use case is also possible, when by old_data argument selects a
+ * specific item from multi-value/duplicates with the same key for deletion or
+ * update. To select this scenario in flags should simultaneously specify
+ * \ref MDBX_CURRENT and \ref MDBX_NOOVERWRITE. This combination is chosen
+ * because it makes no sense, and thus allows you to identify the request of
+ * such a scenario.
+ *
+ * \param [in] txn           A transaction handle returned
+ *                           by \ref mdbx_txn_begin().
+ * \param [in] dbi           A table handle returned by \ref mdbx_dbi_open().
+ * \param [in] key           The key to store in the table.
+ * \param [in] new_data      The data to store, if NULL then deletion will
+ *                           be performed.
+ * \param [in,out] old_data  The buffer for retrieve previous value as describe
+ *                           above.
+ * \param [in] flags         Special options for this operation.
+ *                           This parameter must be set to 0 or by bitwise
+ *                           OR'ing together one or more of the values
+ *                           described in \ref mdbx_put() description above,
+ *                           and additionally
+ *                           (\ref MDBX_CURRENT | \ref MDBX_NOOVERWRITE)
+ *                           combination for selection particular item from
+ *                           multi-value/duplicates.
+ * \param [in] preserver     The callback to preserve an original data in case
+ *                           it is on a dirty page and could be overwritten.
+ * \param [in] preserver_context The optional context pointer for use within the preserving callback.
+ *
+ * \see mdbx_replace_ex()
+ * \see MDBX_preserve_func
+ * \see \ref c_crud_hints "Quick reference for Insert/Update/Delete operations"
+ *
+ * \returns A non-zero error value on failure and 0 on success. */
 LIBMDBX_API int mdbx_replace_ex(MDBX_txn *txn, MDBX_dbi dbi, const MDBX_val *key, MDBX_val *new_data,
                                 MDBX_val *old_data, MDBX_put_flags_t flags, MDBX_preserve_func preserver,
                                 void *preserver_context);
