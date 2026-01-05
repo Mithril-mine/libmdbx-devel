@@ -31,6 +31,8 @@ Fixes:
 
  - Fixed non-closing of DBI descriptors for tables created in nested transactions when such transactions are aborted.
 
+ - Clarification and addition of documentation.
+
 
 --------------------------------------------------------------------------------
 
