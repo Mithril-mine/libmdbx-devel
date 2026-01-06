@@ -436,8 +436,10 @@ define uname2titer
 endef
 
 DIST_EXTRA := LICENSE NOTICE COPYRIGHT README.md CMakeLists.txt GNUmakefile Makefile ChangeLog.md VERSION.json config.h.in ntdll.def \
-	$(addprefix man1/, $(MANPAGES)) cmake/compiler.cmake cmake/profile.cmake cmake/utils.cmake .clang-format-ignore \
-	ut_and_examples/CMakeLists.txt ut_and_examples/example-mdbx.c ut_and_examples/pcrf/pcrf_simulator.c ut_and_examples/README.md
+	$(addprefix man1/, $(MANPAGES)) cmake/compiler.cmake cmake/profile.cmake cmake/utils.cmake \
+	$(addprefix ut_and_examples/, CMakeLists.txt example-mdbx.c pcrf/pcrf_simulator.c README.md) \
+	$(addprefix packages/, archlinux/PKGBUILD archlinux/.SRCINFO buildroot/0001-package-libmdbx.patch)
+
 DIST_SRC   := mdbx.h mdbx.h++ mdbx.c mdbx.c++ $(addsuffix .c, $(MDBX_TOOLS))
 
 TEST_DB    ?= $(shell [ -d /dev/shm ] && echo /dev/shm || echo /tmp)/mdbx-test.db
