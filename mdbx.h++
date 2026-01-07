@@ -131,6 +131,12 @@
 #define MDBX_INSTALL_API_TEMPLATE(API_ATTRIBUTES, API_TYPENAME) template class API_ATTRIBUTES API_TYPENAME
 #endif
 
+#if defined(_MSC_VER) && _MSC_VER >= 1900
+#define MDBX_MSVC_DECLSPEC_EMPTY_BASES __declspec(empty_bases)
+#else
+#define MDBX_MSVC_DECLSPEC_EMPTY_BASES /* nope */
+#endif                                 /* _MSC_VER >= 1900 */
+
 #if __cplusplus >= 201103L
 #include <chrono>
 #include <ratio>
@@ -393,7 +399,8 @@ using default_allocator = legacy_allocator;
 
 struct slice;
 struct default_capacity_policy;
-template <class ALLOCATOR = default_allocator, class CAPACITY_POLICY = default_capacity_policy> class buffer;
+template <class ALLOCATOR = default_allocator, class CAPACITY_POLICY = default_capacity_policy>
+class MDBX_MSVC_DECLSPEC_EMPTY_BASES buffer;
 class env;
 class env_managed;
 class txn;
@@ -1514,7 +1521,8 @@ struct LIBMDBX_API from_base64 {
 struct buffer_tag {};
 
 /// \brief The chunk of data stored inside the buffer or located outside it.
-template <class ALLOCATOR, typename CAPACITY_POLICY> class buffer : public buffer_tag, public slice {
+template <class ALLOCATOR, typename CAPACITY_POLICY>
+class MDBX_MSVC_DECLSPEC_EMPTY_BASES buffer : public slice, public buffer_tag {
 public:
   using inherited = slice;
 #if !defined(_MSC_VER) || _MSC_VER > 1900
@@ -1581,11 +1589,16 @@ private:
 #endif /* __cpp_lib_to_address */
     }
 
+#ifdef _MSC_VER
+#pragma warning(push)
+#pragma warning(disable : 4324) /* structure was padded due to alignment specifier */
+#endif                          /* _MSC_VER */
+
     union alignas(max_align_t) bin {
       struct stub_allocated_holder /* используется только для вычисления (минимального необходимого) размера,
                                       с учетом выравнивания */
       {
-        allocator_pointer ptr_;
+        allocator_pointer stub_ptr_;
         size_t stub_capacity_bytes_;
       };
 
@@ -1684,6 +1697,10 @@ private:
       }
       constexpr size_t capacity() const noexcept { return is_inplace() ? inplace_capacity() : capacity_.bytes_; }
     } bin_;
+
+#ifdef _MSC_VER
+#pragma warning(pop)
+#endif /* _MSC_VER */
 
     constexpr bool is_inplace(const void *ptr) const noexcept { return bin_.is_inplace(ptr); }
 
