@@ -23,6 +23,34 @@
 
 #if defined(_WIN32) || defined(_WIN64)
 
+/* Map a result from an NTAPI call to WIN32 error code. */
+static int osal_ntstatus2errcode(NTSTATUS status) {
+  DWORD dummy;
+  OVERLAPPED ov;
+  memset(&ov, 0, sizeof(ov));
+  ov.Internal = status;
+  /* Zap: '_Param_(1)' could be '0' */
+  MDBX_SUPPRESS_GOOFY_MSVC_ANALYZER(6387);
+  return GetOverlappedResult(nullptr, &ov, &dummy, FALSE) ? MDBX_SUCCESS : (int)GetLastError();
+}
+
+int osal_waitstatus2errcode(DWORD result) {
+  switch (result) {
+  case WAIT_OBJECT_0:
+    return MDBX_SUCCESS;
+  case WAIT_FAILED:
+    return (int)GetLastError();
+  case WAIT_ABANDONED:
+    return ERROR_ABANDONED_WAIT_0;
+  case WAIT_IO_COMPLETION:
+    return ERROR_USER_APC;
+  case WAIT_TIMEOUT:
+    return ERROR_TIMEOUT;
+  default:
+    return osal_ntstatus2errcode(result);
+  }
+}
+
 static std::unordered_map<unsigned, HANDLE> events;
 static HANDLE hBarrierSemaphore, hBarrierEvent;
 static HANDLE hProgressActiveEvent, hProgressPassiveEvent;
