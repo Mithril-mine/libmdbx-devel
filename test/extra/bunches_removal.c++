@@ -180,7 +180,7 @@ struct less {
   less(MDBX_db_flags_t table_flags) : table_flags(table_flags) {}
   less(const less &) = default;
   bool operator()(const buffer_pair &a, const buffer_pair &b) const {
-    int cmp;
+    intptr_t cmp;
     if (table_flags & MDBX_INTEGERKEY)
       cmp = (a.key.as_int64_adapt() == b.key.as_int64_adapt())  ? 0
             : (a.key.as_int64_adapt() < b.key.as_int64_adapt()) ? -1
