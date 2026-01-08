@@ -1181,10 +1181,10 @@ bool from_base64::is_erroneous() const noexcept {
 #pragma warning(disable : 4251)
 #endif /* MSVC */
 
-MDBX_INSTALL_API_TEMPLATE(LIBMDBX_API_TYPE, buffer<legacy_allocator>);
+MDBX_INSTALL_API_TEMPLATE(LIBMDBX_API_TYPE, buffer<legacy_allocator, default_capacity_policy>);
 
 #if MDBX_CXX_HAS_POLYMORPHIC_ALLOCATOR
-MDBX_INSTALL_API_TEMPLATE(LIBMDBX_API_TYPE, buffer<polymorphic_allocator>);
+MDBX_INSTALL_API_TEMPLATE(LIBMDBX_API_TYPE, buffer<polymorphic_allocator, default_capacity_policy>);
 #endif /* MDBX_CXX_HAS_POLYMORPHIC_ALLOCATOR */
 
 #if defined(_MSC_VER)

@@ -136,6 +136,9 @@ endef
 
 SO_SUFFIX  := $(shell $(uname2sosuffix))
 HEADERS    := mdbx.h mdbx.h++
+#> dist-cutoff-begin
+HEADERS	   += $(wildcard mdbx++/*.h++)
+#< dist-cutoff-end
 LIBRARIES  := libmdbx.a libmdbx.$(SO_SUFFIX)
 TOOLS      := chk copy drop dump load stat
 MDBX_TOOLS := $(addprefix mdbx_,$(TOOLS))
@@ -385,11 +388,11 @@ mdbx-static.o: config-gnumake.h mdbx.c mdbx.h $(lastword $(MAKEFILE_LIST)) LICEN
 	@echo '  CC $@'
 	$(QUIET)$(CC) $(CFLAGS) $(MDBX_BUILD_OPTIONS) '-DMDBX_CONFIG_H="config-gnumake.h"' -ULIBMDBX_EXPORTS -c mdbx.c -o $@
 
-mdbx++-dylib.o: config-gnumake.h mdbx.c++ mdbx.h mdbx.h++ $(lastword $(MAKEFILE_LIST)) LICENSE NOTICE COPYRIGHT
+mdbx++-dylib.o: config-gnumake.h mdbx.c++ $(HEADERS) $(lastword $(MAKEFILE_LIST)) LICENSE NOTICE COPYRIGHT
 	@echo '  CC $@'
 	$(QUIET)$(CXX) $(CXXFLAGS) $(MDBX_BUILD_OPTIONS) '-DMDBX_CONFIG_H="config-gnumake.h"' -DLIBMDBX_EXPORTS=1 -c mdbx.c++ -o $@
 
-mdbx++-static.o: config-gnumake.h mdbx.c++ mdbx.h mdbx.h++ $(lastword $(MAKEFILE_LIST)) LICENSE NOTICE COPYRIGHT
+mdbx++-static.o: config-gnumake.h mdbx.c++ $(HEADERS) $(lastword $(MAKEFILE_LIST)) LICENSE NOTICE COPYRIGHT
 	@echo '  CC $@'
 	$(QUIET)$(CXX) $(CXXFLAGS) $(MDBX_BUILD_OPTIONS) '-DMDBX_CONFIG_H="config-gnumake.h"' -ULIBMDBX_EXPORTS -c mdbx.c++ -o $@
 
@@ -680,19 +683,19 @@ docs/usage.md: docs/__usage.md docs/_starting.md docs/__bindings.md
 	@echo '  MAKE $@'
 	$(QUIET)echo -e "\\page usage Usage\n\\section getting Building & Embedding" | cat - $^ | $(SED) 's/^Bindings$$/Bindings {#bindings}/' >$@
 
-doxygen: docs/Doxyfile docs/overall.md docs/intro.md docs/usage.md mdbx.h mdbx.h++ src/options.h ChangeLog.md COPYRIGHT LICENSE NOTICE docs/favicon.ico docs/manifest.webmanifest docs/ld+json $(lastword $(MAKEFILE_LIST))
+doxygen: docs/Doxyfile docs/overall.md docs/intro.md docs/usage.md $(DIST_DIR)/mdbx.h $(DIST_DIR)/mdbx.h++ src/options.h ChangeLog.md COPYRIGHT LICENSE NOTICE docs/favicon.ico docs/manifest.webmanifest docs/ld+json $(lastword $(MAKEFILE_LIST))
 	@echo '  RUNNING doxygen...'
 	$(QUIET)rm -rf docs/html && \
-	cat mdbx.h | tr '\n' '\r' | $(SED) -e 's/LIBMDBX_INLINE_API\s*(\s*\([^,]\+\),\s*\([^,]\+\),\s*(\s*\([^)]\+\)\s*)\s*)\s*{/inline \1 \2(\3) {/g' | tr '\r' '\n' >docs/mdbx.h && \
-	cp mdbx.h++ src/options.h ChangeLog.md docs/ && (cd docs && doxygen Doxyfile $(HUSH)) && cp COPYRIGHT LICENSE NOTICE docs/favicon.ico docs/manifest.webmanifest docs/html/ && \
+	cat dist/mdbx.h | tr '\n' '\r' | $(SED) -e 's/LIBMDBX_INLINE_API\s*(\s*\([^,]\+\),\s*\([^,]\+\),\s*(\s*\([^)]\+\)\s*)\s*)\s*{/inline \1 \2(\3) {/g' | tr '\r' '\n' >docs/mdbx.h && \
+	cp dist/mdbx.h++ src/options.h ChangeLog.md docs/ && (cd docs && doxygen Doxyfile $(HUSH)) && cp COPYRIGHT LICENSE NOTICE docs/favicon.ico docs/manifest.webmanifest docs/html/ && \
 	$(SED) -i docs/html/index.html -e '/\/MathJax.js"><\/script>/r docs/ld+json' -e 's/<title>libmdbx: Overall<\/title>//;T;r docs/title' && \
 	$(SED) -i docs/html/sitemap.xml -e '/^\s*<\/urlset>/e cat docs/sitemap.add'
 
-mdbx++-dylib.o: src/config-gnumake.h src/mdbx.c++ mdbx.h mdbx.h++ $(lastword $(MAKEFILE_LIST))
+mdbx++-dylib.o: src/config-gnumake.h src/mdbx.c++ $(HEADERS) $(lastword $(MAKEFILE_LIST))
 	@echo '  CC $@'
 	$(QUIET)$(CXX) $(CXXFLAGS) $(MDBX_BUILD_OPTIONS) '-DMDBX_CONFIG_H="config-gnumake.h"' -DLIBMDBX_EXPORTS=1 -c src/mdbx.c++ -o $@
 
-mdbx++-static.o: src/config-gnumake.h src/mdbx.c++ mdbx.h mdbx.h++ $(lastword $(MAKEFILE_LIST))
+mdbx++-static.o: src/config-gnumake.h src/mdbx.c++ $(HEADERS) $(lastword $(MAKEFILE_LIST))
 	@echo '  CC $@'
 	$(QUIET)$(CXX) $(CXXFLAGS) $(MDBX_BUILD_OPTIONS) '-DMDBX_CONFIG_H="config-gnumake.h"' -ULIBMDBX_EXPORTS -c src/mdbx.c++ -o $@
 
@@ -801,6 +804,34 @@ $(DIST_DIR)/mdbx.c: $(DIST_DIR)/@tmp-internals.inc $(lastword $(MAKEFILE_LIST))
 	) | $(SED) -e '/#include "/d;/#pragma once/d' -e 's|@INCLUDE|#include|' \
 		-e '/ clang-format o/d;/ \*INDENT-O/d' -e '3i /* clang-format off */' | cat -s >$@
 
+$(DIST_DIR)/mdbx.h++: $(filter %h++, $(HEADERS)) $(lastword $(MAKEFILE_LIST))
+	@echo '  MAKE $@'
+	$(QUIET)cat mdbx.h++ | $(SED) \
+		-e '/#include "mdbx++\/begin.h++"/r mdbx++/begin.h++' \
+		-e '/#include "mdbx++\/decl_exceptions.h++"/r mdbx++/decl_exceptions.h++' \
+		-e '/#include "mdbx++\/decl_slice.h++"/r mdbx++/decl_slice.h++' \
+		-e '/#include "mdbx++\/decl_transcoders.h++"/r mdbx++/decl_transcoders.h++' \
+		-e '/#include "mdbx++\/decl_buffer.h++"/r mdbx++/decl_buffer.h++' \
+		-e '/#include "mdbx++\/decl_core.h++"/r mdbx++/decl_core.h++' \
+		-e '/#include "mdbx++\/decl_env.h++"/r mdbx++/decl_env.h++' \
+		-e '/#include "mdbx++\/decl_txn.h++"/r mdbx++/decl_txn.h++' \
+		-e '/#include "mdbx++\/decl_cursor.h++"/r mdbx++/decl_cursor.h++' \
+		-e '/#include "mdbx++\/impl_slice.h++"/r mdbx++/impl_slice.h++' \
+		-e '/#include "mdbx++\/impl_buffer.h++"/r mdbx++/impl_buffer.h++' \
+		-e '/#include "mdbx++\/impl_core.h++"/r mdbx++/impl_core.h++' \
+		-e '/#include "mdbx++\/impl_exceptions.h++"/r mdbx++/impl_exceptions.h++' \
+		-e '/#include "mdbx++\/impl_env.h++"/r mdbx++/impl_env.h++' \
+		-e '/#include "mdbx++\/impl_txn.h++"/r mdbx++/impl_txn.h++' \
+		-e '/#include "mdbx++\/impl_cursor.h++"/r mdbx++/impl_cursor.h++' \
+		-e '/#include "mdbx++\/end.h++"/r mdbx++/end.h++' \
+		-e '/#include "xyz"/r xyz' \
+		| $(SED) \
+		-e '/dist-cutoff-begin/,/dist-cutoff-end/d' \
+		-e 's|#include "../mdbx.h"|@INCLUDE "mdbx.h"|' \
+		| $(SED) \
+		-e '/#include "/d' -e '/ clang-format o/d;/ \*INDENT-O/d' -e 's|@INCLUDE|#include|' \
+		| cat -s >$@
+
 $(DIST_DIR)/mdbx.c++: $(DIST_DIR)/@tmp-internals.inc src/mdbx.c++ $(lastword $(MAKEFILE_LIST))
 	@echo '  MAKE $@'
 	$(QUIET)cat $(DIST_DIR)/@tmp-internals.inc src/mdbx.c++ | $(SED) \
@@ -827,10 +858,14 @@ $(foreach file,$(TOOLS),$(eval $(call dist-tool-rule,$(file))))
 define dist-extra-rule
 $(DIST_DIR)/$(1): $(1) src/version.c $(lastword $(MAKEFILE_LIST))
 	@echo '  REFINE $$@'
-	$(QUIET)mkdir -p $$(dir $$@) && $(SED) -e '/^\s*#> dist-cutoff-begin/,/^\s*#< dist-cutoff-end/d' $$< | cat -s >$$@
+	$(QUIET)mkdir -p $$(dir $$@) && $(SED) \
+		-e '/^\s*#> dist-cutoff-begin/,/^\s*#< dist-cutoff-end/d' \
+		-e '/^\s*\/\/\s*> dist-cutoff-begin/,/^\s*\/\/\s*< dist-cutoff-end/d' \
+		-e '/^\s*\/\*\s*> dist-cutoff-begin/,/^\s*\/\*\s*< dist-cutoff-end/d' \
+	$$< | cat -s >$$@
 
 endef
-$(foreach file,mdbx.h mdbx.h++ $(filter-out man1/% VERSION.json .clang-format-ignore %.in ntdll.def,$(DIST_EXTRA)),$(eval $(call dist-extra-rule,$(file))))
+$(foreach file,mdbx.h $(filter-out man1/% VERSION.json .clang-format-ignore %.in ntdll.def,$(DIST_EXTRA)),$(eval $(call dist-extra-rule,$(file))))
 
 $(DIST_DIR)/VERSION.json: src/version.c
 	@echo '  MAKE $@'

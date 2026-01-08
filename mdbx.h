@@ -193,6 +193,12 @@ typedef mode_t mdbx_mode_t;
 #pragma warning(pop)
 #endif
 
+#define MDBX_AMALGAMATED_SOURCE 1
+// > dist-cutoff-begin
+#undef MDBX_AMALGAMATED_SOURCE
+#define MDBX_AMALGAMATED_SOURCE 0
+// < dist-cutoff-end
+
 /** end of c_api @}
  *
  * \defgroup api_macros Common Macros
