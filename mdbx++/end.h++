@@ -6,7 +6,6 @@
 #include "decl_txn.h++"
 namespace mdbx {
 // < dist-cutoff-end
-//------------------------------------------------------------------------------
 
 LIBMDBX_API ::std::ostream &operator<<(::std::ostream &, const slice &);
 LIBMDBX_API ::std::ostream &operator<<(::std::ostream &, const pair &);
@@ -26,6 +25,8 @@ LIBMDBX_API ::std::ostream &operator<<(::std::ostream &, const error &);
 
 inline ::std::ostream &operator<<(::std::ostream &out, const MDBX_error_t &errcode) { return out << error(errcode); }
 
+/// end cxx_api @}
+
 } // namespace mdbx
 
 //------------------------------------------------------------------------------
@@ -33,9 +34,6 @@ inline ::std::ostream &operator<<(::std::ostream &out, const MDBX_error_t &errco
 /// \brief The `std:: namespace part of libmdbx C++ API
 /// \ingroup cxx_api
 namespace std {
-
-/// \defgroup cxx_api C++ API
-/// @{
 
 inline string to_string(const ::mdbx::slice &value) {
   ostringstream out;
@@ -147,7 +145,6 @@ template <class ALLOCATOR, typename CAPACITY_POLICY> struct hash<::mdbx::buffer<
   }
 };
 
-/// end cxx_api @}
 } // namespace std
 
 #if defined(__LCC__) && __LCC__ >= 126

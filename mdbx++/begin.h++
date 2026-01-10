@@ -341,16 +341,20 @@ static MDBX_CXX20_CONSTEXPR int memcmp(const void *a, const void *b, size_t byte
 /// but it is recommended to use \ref polymorphic_allocator.
 using legacy_allocator = ::std::string::allocator_type;
 
-#ifndef MDBX_CXX_HAS_POLYMORPHIC_ALLOCATOR
-#if defined(DOXYGEN) || (defined(__cpp_lib_memory_resource) && __cpp_lib_memory_resource >= 201603L &&                 \
-                         (!defined(_GLIBCXX_USE_CXX11_ABI) || _GLIBCXX_USE_CXX11_ABI))
+/// \brief Defined as `1` if the `mdbx::polymorphic_allocator` is available.
+/// \see The `<memory_resource>` Standard C++17 library header
+#if defined(DOXYGEN)
+#define MDBX_CXX_HAS_POLYMORPHIC_ALLOCATOR 1
+#elif !defined(MDBX_CXX_HAS_POLYMORPHIC_ALLOCATOR)
+#if defined(__cpp_lib_memory_resource) && __cpp_lib_memory_resource >= 201603L &&                                      \
+    (!defined(_GLIBCXX_USE_CXX11_ABI) || _GLIBCXX_USE_CXX11_ABI)
 #define MDBX_CXX_HAS_POLYMORPHIC_ALLOCATOR 1
 #else
 #define MDBX_CXX_HAS_POLYMORPHIC_ALLOCATOR 0
 #endif
 #endif /* MDBX_CXX_HAS_POLYMORPHIC_ALLOCATOR */
 
-#if MDBX_CXX_HAS_POLYMORPHIC_ALLOCATOR
+#if defined(DOXYGEN) || MDBX_CXX_HAS_POLYMORPHIC_ALLOCATOR
 /// \brief Default polymorphic allocator for modern code.
 using polymorphic_allocator = ::std::pmr::string::allocator_type;
 using default_allocator = polymorphic_allocator;

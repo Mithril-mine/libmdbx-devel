@@ -2493,7 +2493,8 @@ PREDEFINED             = DOXYGEN \
                          MDBX_MAYBE_UNUSED=[[maybe_unused]] \
                          MDBX_DEPRECATED=[[deprecated]] \
                          MDBX_DEPRECATED_ENUM=[[deprecated]] \
-                         "DEFINE_ENUM_FLAG_OPERATORS(ENUM)="
+                         "DEFINE_ENUM_FLAG_OPERATORS(ENUM)=" \
+			 MDBX_CXX_HAS_POLYMORPHIC_ALLOCATOR=1
 
 # If the MACRO_EXPANSION and EXPAND_ONLY_PREDEF tags are set to YES then this
 # tag can be used to specify a list of macro names that should be expanded. The

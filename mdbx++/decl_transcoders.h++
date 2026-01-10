@@ -37,20 +37,6 @@ concept SliceTranscoder = ImmutableByteProducer<T> && requires(const slice &sour
 
 #endif /* MDBX_HAVE_CXX20_CONCEPTS */
 
-template <class ALLOCATOR = default_allocator, typename CAPACITY_POLICY = default_capacity_policy,
-          MDBX_CXX20_CONCEPT(MutableByteProducer, PRODUCER)>
-inline buffer<ALLOCATOR, CAPACITY_POLICY> make_buffer(PRODUCER &producer, const ALLOCATOR &alloc = ALLOCATOR());
-
-template <class ALLOCATOR = default_allocator, typename CAPACITY_POLICY = default_capacity_policy,
-          MDBX_CXX20_CONCEPT(ImmutableByteProducer, PRODUCER)>
-inline buffer<ALLOCATOR, CAPACITY_POLICY> make_buffer(const PRODUCER &producer, const ALLOCATOR &alloc = ALLOCATOR());
-
-template <class ALLOCATOR = default_allocator, MDBX_CXX20_CONCEPT(MutableByteProducer, PRODUCER)>
-inline string<ALLOCATOR> make_string(PRODUCER &producer, const ALLOCATOR &alloc = ALLOCATOR());
-
-template <class ALLOCATOR = default_allocator, MDBX_CXX20_CONCEPT(ImmutableByteProducer, PRODUCER)>
-inline string<ALLOCATOR> make_string(const PRODUCER &producer, const ALLOCATOR &alloc = ALLOCATOR());
-
 /// \brief Hexadecimal encoder which satisfy \ref SliceTranscoder concept.
 struct LIBMDBX_API to_hex {
   const slice source;
@@ -63,15 +49,11 @@ struct LIBMDBX_API to_hex {
 
   /// \brief Returns a string with a hexadecimal dump of a passed slice.
   template <class ALLOCATOR = default_allocator>
-  string<ALLOCATOR> as_string(const ALLOCATOR &alloc = ALLOCATOR()) const {
-    return make_string<ALLOCATOR>(*this, alloc);
-  }
+  inline string<ALLOCATOR> as_string(const ALLOCATOR &alloc = ALLOCATOR()) const;
 
   /// \brief Returns a buffer with a hexadecimal dump of a passed slice.
   template <class ALLOCATOR = default_allocator, typename CAPACITY_POLICY = default_capacity_policy>
-  buffer<ALLOCATOR, CAPACITY_POLICY> as_buffer(const ALLOCATOR &alloc = ALLOCATOR()) const {
-    return make_buffer<ALLOCATOR, CAPACITY_POLICY>(*this, alloc);
-  }
+  inline buffer<ALLOCATOR, CAPACITY_POLICY> as_buffer(const ALLOCATOR &alloc = ALLOCATOR()) const;
 
   /// \brief Returns the buffer size in bytes needed for hexadecimal
   /// dump of a passed slice.
@@ -110,16 +92,12 @@ struct LIBMDBX_API to_base58 {
   /// \brief Returns a string with a
   /// [Base58](https://en.wikipedia.org/wiki/Base58) dump of a passed slice.
   template <class ALLOCATOR = default_allocator>
-  string<ALLOCATOR> as_string(const ALLOCATOR &alloc = ALLOCATOR()) const {
-    return make_string<ALLOCATOR>(*this, alloc);
-  }
+  inline string<ALLOCATOR> as_string(const ALLOCATOR &alloc = ALLOCATOR()) const;
 
   /// \brief Returns a buffer with a
   /// [Base58](https://en.wikipedia.org/wiki/Base58) dump of a passed slice.
   template <class ALLOCATOR = default_allocator, typename CAPACITY_POLICY = default_capacity_policy>
-  buffer<ALLOCATOR, CAPACITY_POLICY> as_buffer(const ALLOCATOR &alloc = ALLOCATOR()) const {
-    return make_buffer<ALLOCATOR, CAPACITY_POLICY>(*this, alloc);
-  }
+  inline buffer<ALLOCATOR, CAPACITY_POLICY> as_buffer(const ALLOCATOR &alloc = ALLOCATOR()) const;
 
   /// \brief Returns the buffer size in bytes needed for
   /// [Base58](https://en.wikipedia.org/wiki/Base58) dump of passed slice.
@@ -156,16 +134,12 @@ struct LIBMDBX_API to_base64 {
   /// \brief Returns a string with a
   /// [Base64](https://en.wikipedia.org/wiki/Base64) dump of a passed slice.
   template <class ALLOCATOR = default_allocator>
-  string<ALLOCATOR> as_string(const ALLOCATOR &alloc = ALLOCATOR()) const {
-    return make_string<ALLOCATOR>(*this, alloc);
-  }
+  inline string<ALLOCATOR> as_string(const ALLOCATOR &alloc = ALLOCATOR()) const;
 
   /// \brief Returns a buffer with a
   /// [Base64](https://en.wikipedia.org/wiki/Base64) dump of a passed slice.
   template <class ALLOCATOR = default_allocator, typename CAPACITY_POLICY = default_capacity_policy>
-  buffer<ALLOCATOR, CAPACITY_POLICY> as_buffer(const ALLOCATOR &alloc = ALLOCATOR()) const {
-    return make_buffer<ALLOCATOR, CAPACITY_POLICY>(*this, alloc);
-  }
+  inline buffer<ALLOCATOR, CAPACITY_POLICY> as_buffer(const ALLOCATOR &alloc = ALLOCATOR()) const;
 
   /// \brief Returns the buffer size in bytes needed for
   /// [Base64](https://en.wikipedia.org/wiki/Base64) dump of passed slice.
@@ -204,15 +178,11 @@ struct LIBMDBX_API from_hex {
 
   /// \brief Decodes hexadecimal dump from a passed slice to returned string.
   template <class ALLOCATOR = default_allocator>
-  string<ALLOCATOR> as_string(const ALLOCATOR &alloc = ALLOCATOR()) const {
-    return make_string<ALLOCATOR>(*this, alloc);
-  }
+  inline string<ALLOCATOR> as_string(const ALLOCATOR &alloc = ALLOCATOR()) const;
 
   /// \brief Decodes hexadecimal dump from a passed slice to returned buffer.
   template <class ALLOCATOR = default_allocator, typename CAPACITY_POLICY = default_capacity_policy>
-  buffer<ALLOCATOR, CAPACITY_POLICY> as_buffer(const ALLOCATOR &alloc = ALLOCATOR()) const {
-    return make_buffer<ALLOCATOR, CAPACITY_POLICY>(*this, alloc);
-  }
+  inline buffer<ALLOCATOR, CAPACITY_POLICY> as_buffer(const ALLOCATOR &alloc = ALLOCATOR()) const;
 
   /// \brief Returns the number of bytes needed for conversion
   /// hexadecimal dump from a passed slice to decoded data.
@@ -243,16 +213,12 @@ struct LIBMDBX_API from_base58 {
   /// \brief Decodes [Base58](https://en.wikipedia.org/wiki/Base58) dump from a
   /// passed slice to returned string.
   template <class ALLOCATOR = default_allocator>
-  string<ALLOCATOR> as_string(const ALLOCATOR &alloc = ALLOCATOR()) const {
-    return make_string<ALLOCATOR>(*this, alloc);
-  }
+  inline string<ALLOCATOR> as_string(const ALLOCATOR &alloc = ALLOCATOR()) const;
 
   /// \brief Decodes [Base58](https://en.wikipedia.org/wiki/Base58) dump from a
   /// passed slice to returned buffer.
   template <class ALLOCATOR = default_allocator, typename CAPACITY_POLICY = default_capacity_policy>
-  buffer<ALLOCATOR, CAPACITY_POLICY> as_buffer(const ALLOCATOR &alloc = ALLOCATOR()) const {
-    return make_buffer<ALLOCATOR, CAPACITY_POLICY>(*this, alloc);
-  }
+  inline buffer<ALLOCATOR, CAPACITY_POLICY> as_buffer(const ALLOCATOR &alloc = ALLOCATOR()) const;
 
   /// \brief Returns the number of bytes needed for conversion
   /// [Base58](https://en.wikipedia.org/wiki/Base58) dump from a passed slice to decoded data.
@@ -286,16 +252,12 @@ struct LIBMDBX_API from_base64 {
   /// \brief Decodes [Base64](https://en.wikipedia.org/wiki/Base64) dump from a
   /// passed slice to returned string.
   template <class ALLOCATOR = default_allocator>
-  string<ALLOCATOR> as_string(const ALLOCATOR &alloc = ALLOCATOR()) const {
-    return make_string<ALLOCATOR>(*this, alloc);
-  }
+  inline string<ALLOCATOR> as_string(const ALLOCATOR &alloc = ALLOCATOR()) const;
 
   /// \brief Decodes [Base64](https://en.wikipedia.org/wiki/Base64) dump from a
   /// passed slice to returned buffer.
   template <class ALLOCATOR = default_allocator, typename CAPACITY_POLICY = default_capacity_policy>
-  buffer<ALLOCATOR, CAPACITY_POLICY> as_buffer(const ALLOCATOR &alloc = ALLOCATOR()) const {
-    return make_buffer<ALLOCATOR, CAPACITY_POLICY>(*this, alloc);
-  }
+  inline buffer<ALLOCATOR, CAPACITY_POLICY> as_buffer(const ALLOCATOR &alloc = ALLOCATOR()) const;
 
   /// \brief Returns the number of bytes needed for conversion
   /// [Base64](https://en.wikipedia.org/wiki/Base64) dump from a passed slice to decoded data.

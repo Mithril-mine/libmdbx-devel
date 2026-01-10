@@ -20,8 +20,9 @@ MDBX_CXX20_CONSTEXPR buffer<ALLOCATOR, CAPACITY_POLICY>::buffer(const struct sli
 }
 
 template <class ALLOCATOR, typename CAPACITY_POLICY>
-inline buffer<ALLOCATOR, CAPACITY_POLICY>::buffer(const txn &txn, const struct slice &src, const allocator_type &alloc)
-    : buffer(src, !txn.is_dirty(src.data()), alloc) {}
+inline buffer<ALLOCATOR, CAPACITY_POLICY>::buffer(const txn &transaction, const struct slice &src,
+                                                  const allocator_type &alloc)
+    : buffer(src, !transaction.is_dirty(src.data()), alloc) {}
 
 template <class ALLOCATOR, typename CAPACITY_POLICY>
 inline ::std::ostream &operator<<(::std::ostream &out, const buffer<ALLOCATOR, CAPACITY_POLICY> &it) {
@@ -83,6 +84,60 @@ inline string<ALLOCATOR> make_string(const PRODUCER &producer, const ALLOCATOR &
       result.resize(producer.write_bytes(const_cast<char *>(result.data()), result.capacity()) - result.data());
     }
   return result;
+}
+
+template <class ALLOCATOR> string<ALLOCATOR> to_hex::as_string(const ALLOCATOR &alloc) const {
+  return make_string<ALLOCATOR>(*this, alloc);
+}
+
+template <class ALLOCATOR, typename CAPACITY_POLICY>
+buffer<ALLOCATOR, CAPACITY_POLICY> to_hex::as_buffer(const ALLOCATOR &alloc) const {
+  return make_buffer<ALLOCATOR, CAPACITY_POLICY>(*this, alloc);
+}
+
+template <class ALLOCATOR> string<ALLOCATOR> to_base58::as_string(const ALLOCATOR &alloc) const {
+  return make_string<ALLOCATOR>(*this, alloc);
+}
+
+template <class ALLOCATOR, typename CAPACITY_POLICY>
+buffer<ALLOCATOR, CAPACITY_POLICY> to_base58::as_buffer(const ALLOCATOR &alloc) const {
+  return make_buffer<ALLOCATOR, CAPACITY_POLICY>(*this, alloc);
+}
+
+template <class ALLOCATOR> string<ALLOCATOR> to_base64::as_string(const ALLOCATOR &alloc) const {
+  return make_string<ALLOCATOR>(*this, alloc);
+}
+
+template <class ALLOCATOR, typename CAPACITY_POLICY>
+buffer<ALLOCATOR, CAPACITY_POLICY> to_base64::as_buffer(const ALLOCATOR &alloc) const {
+  return make_buffer<ALLOCATOR, CAPACITY_POLICY>(*this, alloc);
+}
+
+template <class ALLOCATOR> string<ALLOCATOR> from_hex::as_string(const ALLOCATOR &alloc) const {
+  return make_string<ALLOCATOR>(*this, alloc);
+}
+
+template <class ALLOCATOR, typename CAPACITY_POLICY>
+buffer<ALLOCATOR, CAPACITY_POLICY> from_hex::as_buffer(const ALLOCATOR &alloc) const {
+  return make_buffer<ALLOCATOR, CAPACITY_POLICY>(*this, alloc);
+}
+
+template <class ALLOCATOR> string<ALLOCATOR> from_base58::as_string(const ALLOCATOR &alloc) const {
+  return make_string<ALLOCATOR>(*this, alloc);
+}
+
+template <class ALLOCATOR, typename CAPACITY_POLICY>
+buffer<ALLOCATOR, CAPACITY_POLICY> from_base58::as_buffer(const ALLOCATOR &alloc) const {
+  return make_buffer<ALLOCATOR, CAPACITY_POLICY>(*this, alloc);
+}
+
+template <class ALLOCATOR> string<ALLOCATOR> from_base64::as_string(const ALLOCATOR &alloc) const {
+  return make_string<ALLOCATOR>(*this, alloc);
+}
+
+template <class ALLOCATOR, typename CAPACITY_POLICY>
+buffer<ALLOCATOR, CAPACITY_POLICY> from_base64::as_buffer(const ALLOCATOR &alloc) const {
+  return make_buffer<ALLOCATOR, CAPACITY_POLICY>(*this, alloc);
 }
 
 template <class ALLOCATOR>

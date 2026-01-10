@@ -4,20 +4,6 @@
 namespace mdbx {
 // < dist-cutoff-end
 
-static MDBX_CXX14_CONSTEXPR size_t check_length(size_t bytes) {
-  if (MDBX_UNLIKELY(bytes > size_t(MDBX_MAXDATASIZE)))
-    MDBX_CXX20_UNLIKELY throw_max_length_exceeded();
-  return bytes;
-}
-
-static MDBX_CXX14_CONSTEXPR size_t check_length(size_t headroom, size_t payload) {
-  return check_length(check_length(headroom) + check_length(payload));
-}
-
-MDBX_MAYBE_UNUSED static MDBX_CXX14_CONSTEXPR size_t check_length(size_t headroom, size_t payload, size_t tailroom) {
-  return check_length(check_length(headroom, payload) + check_length(tailroom));
-}
-
 inline bool exception_thunk::is_clean() const noexcept { return !captured_; }
 
 inline void exception_thunk::capture() noexcept {

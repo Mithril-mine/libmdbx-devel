@@ -4,6 +4,21 @@
 namespace mdbx {
 // < dist-cutoff-end
 
+/// \brief Cache entry for get-cached API (initial draft).
+class cache_entry : public MDBX_cache_entry_t {
+public:
+  cache_entry() noexcept { reset(); }
+  cache_entry(const cache_entry &) noexcept = default;
+  cache_entry &operator=(const cache_entry &) noexcept = default;
+  cache_entry(cache_entry &&other) noexcept {
+    *this = other;
+    other.reset();
+  }
+  void reset() noexcept { mdbx_cache_init(this); }
+};
+
+//------------------------------------------------------------------------------
+
 /// \brief Loop control constants for readers enumeration functor and other
 /// cases. \see env::enumerate_readers()
 enum loop_control { continue_loop = 0, exit_loop = INT32_MIN };

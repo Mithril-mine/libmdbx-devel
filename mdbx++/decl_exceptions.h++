@@ -152,26 +152,22 @@ MDBX_DECLARE_EXCEPTION(mvcc_retarded);
 [[noreturn]] LIBMDBX_API void throw_allocators_mismatch();
 [[noreturn]] LIBMDBX_API void throw_bad_value_size();
 [[noreturn]] LIBMDBX_API void throw_incomparable_cursors();
-static MDBX_CXX14_CONSTEXPR size_t check_length(size_t bytes);
-static MDBX_CXX14_CONSTEXPR size_t check_length(size_t headroom, size_t payload);
-static MDBX_CXX14_CONSTEXPR size_t check_length(size_t headroom, size_t payload, size_t tailroom);
+
+static MDBX_CXX14_CONSTEXPR size_t check_length(size_t bytes) {
+  if (MDBX_UNLIKELY(bytes > size_t(MDBX_MAXDATASIZE)))
+    MDBX_CXX20_UNLIKELY throw_max_length_exceeded();
+  return bytes;
+}
+
+static MDBX_CXX14_CONSTEXPR size_t check_length(size_t headroom, size_t payload) {
+  return check_length(check_length(headroom) + check_length(payload));
+}
+
+MDBX_MAYBE_UNUSED static MDBX_CXX14_CONSTEXPR size_t check_length(size_t headroom, size_t payload, size_t tailroom) {
+  return check_length(check_length(headroom, payload) + check_length(tailroom));
+}
 
 /// end of cxx_exceptions @}
-
-//------------------------------------------------------------------------------
-
-/// \brief Cache entry for get-cached API (initial draft).
-class cache_entry : public MDBX_cache_entry_t {
-public:
-  cache_entry() noexcept { reset(); }
-  cache_entry(const cache_entry &) noexcept = default;
-  cache_entry &operator=(const cache_entry &) noexcept = default;
-  cache_entry(cache_entry &&other) noexcept {
-    *this = other;
-    other.reset();
-  }
-  void reset() noexcept { mdbx_cache_init(this); }
-};
 
 // > dist-cutoff-begin
 } // namespace mdbx
