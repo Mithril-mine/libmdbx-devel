@@ -486,8 +486,8 @@ int mdbx_txn_commit_ex(MDBX_txn *txn, MDBX_commit_latency *latency) {
       goto done;
     }
 
-    /* Preserve space for spill list to avoid parent's state corruption
-     * if allocation fails. */
+    /* Preserve space for parent->tw.repnl and spill list to avoid parent's
+     * state corruption if allocation fails. */
     const size_t parent_retired_len = (uintptr_t)parent->tw.retired_pages;
     tASSERT(txn, parent_retired_len <= MDBX_PNL_GETSIZE(txn->tw.retired_pages));
     const size_t retired_delta = MDBX_PNL_GETSIZE(txn->tw.retired_pages) - parent_retired_len;

@@ -81,7 +81,8 @@ void txn_merge(MDBX_txn *const parent, MDBX_txn *const txn, const size_t parent_
                         (parent->parent ? parent->parent->tw.dirtyroom : parent->env->options.dp_limit));
   }
 
-  /* Remove reclaimed pages from parent's dirty list */
+  /* Remove reclaimed pages from parent's dirty list.
+   * Here the nested->tw.repnl was already moved into parent->tw.repnl ans space was reserved via retired_delta. */
   const pnl_t reclaimed_list = parent->tw.repnl;
   dpl_sift(parent, reclaimed_list, false);
 
@@ -137,6 +138,7 @@ void txn_merge(MDBX_txn *const parent, MDBX_txn *const txn, const size_t parent_
 
     DEBUG("reclaim retired parent's %u -> %zu %s page %" PRIaPGNO, npages, l, kind, pgno);
     int err = pnl_insert_span(&parent->tw.repnl, pgno, l);
+    /* The space for additions to parent->tw.repnl was already reserverd via the retired_delta. */
     ENSURE(txn->env, err == MDBX_SUCCESS);
   }
   MDBX_PNL_SETSIZE(parent->tw.retired_pages, w);
