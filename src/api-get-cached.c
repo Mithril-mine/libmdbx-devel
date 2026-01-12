@@ -380,4 +380,8 @@ __hot MDBX_cache_result_t mdbx_cache_get_SingleThreaded(const MDBX_txn *txn, MDB
   return cache_get(txn, dbi, key, data, entry);
 }
 
+#ifndef LIBMDBX_NO_EXPORTS_LEGACY_API
+
 LIBMDBX_API void mdbx_cache_init(MDBX_cache_entry_t *entry) { __inline_mdbx_cache_init(entry); }
+
+#endif /* LIBMDBX_NO_EXPORTS_LEGACY_API */
