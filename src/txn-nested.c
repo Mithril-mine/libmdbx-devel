@@ -3,10 +3,10 @@
 
 #include "internals.h"
 
-/* Merge pageset of the nested txn into parent */
-static void txn_merge(MDBX_txn *const parent, MDBX_txn *const txn, const size_t parent_retired_len) {
-  tASSERT(txn, (txn->flags & MDBX_WRITEMAP) == 0);
-  dpl_t *const src = dpl_sort(txn);
+/* Merge pageset of the nested transaction into parent */
+static void nested_merge(MDBX_txn *const parent, MDBX_txn *const nested, const size_t parent_retired_len) {
+  tASSERT(nested, (nested->flags & MDBX_WRITEMAP) == 0);
+  dpl_t *const src = dpl_sort(nested);
 
   /* Remove refunded pages from parent's dirty list */
   dpl_t *const dst = dpl_sort(parent);
@@ -14,7 +14,7 @@ static void txn_merge(MDBX_txn *const parent, MDBX_txn *const txn, const size_t 
     size_t n = dst->length;
     while (n && dst->items[n].pgno >= parent->geo.first_unallocated) {
       const unsigned npages = dpl_npages(dst, n);
-      page_shadow_release(txn->env, dst->items[n].ptr, npages);
+      page_shadow_release(nested->env, dst->items[n].ptr, npages);
       --n;
     }
     parent->wr.dirtyroom += dst->sorted - n;
@@ -23,7 +23,9 @@ static void txn_merge(MDBX_txn *const parent, MDBX_txn *const txn, const size_t 
                         (parent->parent ? parent->parent->wr.dirtyroom : parent->env->options.dp_limit));
   }
 
-  /* Remove reclaimed pages from parent's dirty list */
+  /* Remove reclaimed pages from parent's dirty list.
+   * Here the nested->wr.repnl was already moved into parent->wr.repnl
+   * and space was reserved via retired_delta. */
   const pnl_t reclaimed_list = parent->wr.repnl;
   dpl_sift(parent, reclaimed_list, false);
 
@@ -78,8 +80,9 @@ static void txn_merge(MDBX_txn *const parent, MDBX_txn *const txn, const size_t 
     }
 
     DEBUG("reclaim retired parent's %u -> %zu %s page %" PRIaPGNO, npages, l, kind, pgno);
+    /* The space for additions to parent->wr.repnl was already reserverd via the retired_delta. */
     int err = pnl_insert_span(&parent->wr.repnl, pgno, l);
-    ENSURE(txn->env, err == MDBX_SUCCESS);
+    ENSURE(nested->env, err == MDBX_SUCCESS);
   }
   pnl_setsize(parent->wr.retired_pages, w);
 
@@ -111,7 +114,7 @@ static void txn_merge(MDBX_txn *const parent, MDBX_txn *const txn, const size_t 
         memmove(sl + 1, sl + 1 + i, len * sizeof(sl[0]));
 #endif
       }
-      tASSERT(txn, pnl_check_allocated(sl, (size_t)parent->geo.first_unallocated << 1));
+      tASSERT(nested, pnl_check_allocated(sl, (size_t)parent->geo.first_unallocated << 1));
 
       /* Remove reclaimed pages from parent's spill list */
       s = pnl_size(sl), r = pnl_size(reclaimed_list);
@@ -169,9 +172,9 @@ static void txn_merge(MDBX_txn *const parent, MDBX_txn *const txn, const size_t 
   }
 
   /* Remove anything in our spill list from parent's dirty list */
-  if (txn->wr.spilled.list) {
-    tASSERT(txn, pnl_check_allocated(txn->wr.spilled.list, (size_t)parent->geo.first_unallocated << 1));
-    dpl_sift(parent, txn->wr.spilled.list, true);
+  if (nested->wr.spilled.list) {
+    tASSERT(nested, pnl_check_allocated(nested->wr.spilled.list, (size_t)parent->geo.first_unallocated << 1));
+    dpl_sift(parent, nested->wr.spilled.list, true);
     tASSERT(parent, parent->wr.dirtyroom + parent->wr.dirtylist->length ==
                         (parent->parent ? parent->parent->wr.dirtyroom : parent->env->options.dp_limit));
   }
@@ -201,7 +204,7 @@ static void txn_merge(MDBX_txn *const parent, MDBX_txn *const txn, const size_t 
       ++l;
     } else {
       dst->items[d--].ptr = nullptr;
-      page_shadow_release(txn->env, dp, d_npages);
+      page_shadow_release(nested->env, dp, d_npages);
     }
   }
   assert(dst->sorted == dst->length);
@@ -303,7 +306,7 @@ static void txn_merge(MDBX_txn *const parent, MDBX_txn *const txn, const size_t 
   parent->wr.dirtyroom -= dst->sorted - dst->length;
   assert(parent->wr.dirtyroom <= parent->env->options.dp_limit);
   dpl_setlen(dst, dst->sorted);
-  parent->wr.dirtylru = txn->wr.dirtylru;
+  parent->wr.dirtylru = nested->wr.dirtylru;
 
   /* В текущем понимании выгоднее пересчитать кол-во страниц,
    * чем подмешивать лишние ветвления и вычисления в циклы выше. */
@@ -312,16 +315,16 @@ static void txn_merge(MDBX_txn *const parent, MDBX_txn *const txn, const size_t 
     dst->pages_including_loose += dpl_npages(dst, r);
 
   tASSERT(parent, dpl_check(parent));
-  dpl_free(txn);
+  dpl_free(nested);
 
-  if (txn->wr.spilled.list) {
+  if (nested->wr.spilled.list) {
     if (parent->wr.spilled.list) {
       /* Must not fail since space was preserved above. */
-      pnl_merge(parent->wr.spilled.list, txn->wr.spilled.list);
-      pnl_free(txn->wr.spilled.list);
+      pnl_merge(parent->wr.spilled.list, nested->wr.spilled.list);
+      pnl_free(nested->wr.spilled.list);
     } else {
-      parent->wr.spilled.list = txn->wr.spilled.list;
-      parent->wr.spilled.least_removed = txn->wr.spilled.least_removed;
+      parent->wr.spilled.list = nested->wr.spilled.list;
+      parent->wr.spilled.least_removed = nested->wr.spilled.least_removed;
     }
     tASSERT(parent, dpl_check(parent));
   }
@@ -573,7 +576,7 @@ int txn_nested_join(MDBX_txn *txn, struct commit_timestamp *ts) {
     ts->write = /* no write */ ts->audit;
     ts->sync = /* no sync */ ts->write;
   }
-  txn_merge(parent, txn, parent_retired_len);
+  nested_merge(parent, txn, parent_retired_len);
   tASSERT(parent, parent->flags & MDBX_TXN_HAS_CHILD);
   parent->flags -= MDBX_TXN_HAS_CHILD;
   env->txn = parent;
