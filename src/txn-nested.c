@@ -336,45 +336,34 @@ static void nested_merge(MDBX_txn *const parent, MDBX_txn *const nested, const s
   }
 }
 
-int txn_nested_create(MDBX_txn *parent, const MDBX_txn_flags_t flags) {
-  if (parent->env->options.spill_parent4child_denominator) {
-    /* Spill dirty-pages of parent to provide dirtyroom for child txn */
-    int err =
-        txn_spill(parent, nullptr, parent->wr.dirtylist->length / parent->env->options.spill_parent4child_denominator);
-    if (unlikely(err != MDBX_SUCCESS))
-      return LOG_IFERR(err);
-  }
-  tASSERT(parent, audit_ex(parent, 0, false) == 0);
-
-  MDBX_txn *const txn = txn_alloc(flags, parent->env);
-  if (unlikely(!txn))
-    return LOG_IFERR(MDBX_ENOMEM);
-
+static int nested_start(MDBX_txn *const nested, MDBX_txn *parent) {
   tASSERT(parent, dpl_check(parent));
-  txn->txnid = parent->txnid;
-  txn->front_txnid = parent->front_txnid + 1;
-  txn->canary = parent->canary;
+
+  nested->txnid = parent->txnid;
+  nested->front_txnid = parent->front_txnid + 1;
+  nested->canary = parent->canary;
   parent->flags |= MDBX_TXN_HAS_CHILD;
-  parent->nested = txn;
-  txn->parent = parent;
-  txn->env->txn = txn;
-  txn->owner = parent->owner;
-  txn->wr.troika = parent->wr.troika;
-
-#if MDBX_ENABLE_DBI_SPARSE
-  txn->dbi_sparse = parent->dbi_sparse;
-#endif /* MDBX_ENABLE_DBI_SPARSE */
-  txn->dbi_seqs = parent->dbi_seqs;
-  txn->geo = parent->geo;
-
-  int err = dpl_alloc(txn);
-  if (unlikely(err != MDBX_SUCCESS))
-    return LOG_IFERR(err);
+  parent->nested = nested;
+  nested->parent = parent;
+  nested->env->txn = nested;
+  nested->owner = parent->owner;
+  nested->wr.troika = parent->wr.troika;
 
   const size_t len = pnl_size(parent->wr.repnl) + parent->wr.loose_count;
-  txn->wr.repnl = pnl_alloc((len > MDBX_PNL_INITIAL) ? len : MDBX_PNL_INITIAL);
-  if (unlikely(!txn->wr.repnl))
+  tASSERT(nested, !nested->wr.repnl);
+  nested->wr.repnl = pnl_alloc((len > MDBX_PNL_INITIAL) ? len : MDBX_PNL_INITIAL);
+  if (unlikely(!nested->wr.repnl))
     return LOG_IFERR(MDBX_ENOMEM);
+
+#if MDBX_ENABLE_DBI_SPARSE
+  nested->dbi_sparse = parent->dbi_sparse;
+#endif /* MDBX_ENABLE_DBI_SPARSE */
+  nested->dbi_seqs = parent->dbi_seqs;
+  nested->geo = parent->geo;
+
+  int err = dpl_alloc(nested);
+  if (unlikely(err != MDBX_SUCCESS))
+    return LOG_IFERR(err);
 
   /* Move loose pages to reclaimed list */
   if (parent->wr.loose_count) {
@@ -397,47 +386,67 @@ int txn_nested_create(MDBX_txn *parent, const MDBX_txn_flags_t flags) {
     tASSERT(parent, dpl_check(parent));
   }
 #if MDBX_ENABLE_REFUND
-  txn->wr.loose_refund_wl = 0;
+  nested->wr.loose_refund_wl = 0;
 #endif /* MDBX_ENABLE_REFUND */
-  txn->wr.dirtyroom = parent->wr.dirtyroom;
-  txn->wr.dirtylru = parent->wr.dirtylru;
+  nested->wr.dirtyroom = parent->wr.dirtyroom;
+  nested->wr.dirtylru = parent->wr.dirtylru;
 
   dpl_sort(parent);
   if (parent->wr.spilled.list)
     spill_purge(parent);
 
-  tASSERT(txn, pnl_alloclen(txn->wr.repnl) >= pnl_size(parent->wr.repnl));
-  memcpy(txn->wr.repnl, parent->wr.repnl, MDBX_PNL_SIZEOF(parent->wr.repnl));
+  tASSERT(nested, pnl_alloclen(nested->wr.repnl) >= pnl_size(parent->wr.repnl));
+  memcpy(nested->wr.repnl, parent->wr.repnl, MDBX_PNL_SIZEOF(parent->wr.repnl));
   /* coverity[assignment_where_comparison_intended] */
-  tASSERT(txn, pnl_check_allocated(txn->wr.repnl, (txn->geo.first_unallocated /* LY: intentional assignment
+  tASSERT(nested, pnl_check_allocated(nested->wr.repnl, (nested->geo.first_unallocated /* LY: intentional assignment
                                                                              here, only for assertion */
-                                                   = parent->geo.first_unallocated) -
-                                                      MDBX_ENABLE_REFUND));
+                                                         = parent->geo.first_unallocated) -
+                                                            MDBX_ENABLE_REFUND));
 
-  txn->wr.gc.spent = parent->wr.gc.spent;
-  rkl_init(&txn->wr.gc.comeback);
-  err = rkl_copy(&parent->wr.gc.reclaimed, &txn->wr.gc.reclaimed);
+  nested->wr.gc.spent = parent->wr.gc.spent;
+  err = rkl_copy(&parent->wr.gc.reclaimed, &nested->wr.gc.reclaimed);
   if (unlikely(err != MDBX_SUCCESS))
     return err;
-  err = rkl_copy(&parent->wr.gc.ready4reuse, &txn->wr.gc.ready4reuse);
+  err = rkl_copy(&parent->wr.gc.ready4reuse, &nested->wr.gc.ready4reuse);
   if (unlikely(err != MDBX_SUCCESS))
     return err;
 
-  txn->wr.retired_pages = parent->wr.retired_pages;
+  nested->wr.retired_pages = parent->wr.retired_pages;
   parent->wr.retired_pages = (void *)(intptr_t)pnl_size(parent->wr.retired_pages);
 
-  txn->cursors[FREE_DBI] = nullptr;
-  txn->cursors[MAIN_DBI] = nullptr;
-  txn->dbi_state[FREE_DBI] = parent->dbi_state[FREE_DBI] & ~(DBI_FRESH | DBI_CREAT | DBI_DIRTY);
-  txn->dbi_state[MAIN_DBI] = parent->dbi_state[MAIN_DBI] & ~(DBI_FRESH | DBI_CREAT | DBI_DIRTY);
-  memset(txn->dbi_state + CORE_DBS, 0, (txn->n_dbi = parent->n_dbi) - CORE_DBS);
-  memcpy(txn->dbs, parent->dbs, sizeof(txn->dbs[0]) * CORE_DBS);
+  nested->cursors[FREE_DBI] = nullptr;
+  nested->cursors[MAIN_DBI] = nullptr;
+  nested->dbi_state[FREE_DBI] = parent->dbi_state[FREE_DBI] & ~(DBI_FRESH | DBI_CREAT | DBI_DIRTY);
+  nested->dbi_state[MAIN_DBI] = parent->dbi_state[MAIN_DBI] & ~(DBI_FRESH | DBI_CREAT | DBI_DIRTY);
+  memset(nested->dbi_state + CORE_DBS, 0, (nested->n_dbi = parent->n_dbi) - CORE_DBS);
+  memcpy(nested->dbs, parent->dbs, sizeof(nested->dbs[0]) * CORE_DBS);
 
   tASSERT(parent, parent->wr.dirtyroom + parent->wr.dirtylist->length ==
                       (parent->parent ? parent->parent->wr.dirtyroom : parent->env->options.dp_limit));
-  tASSERT(txn, txn->wr.dirtyroom + txn->wr.dirtylist->length ==
-                   (txn->parent ? txn->parent->wr.dirtyroom : txn->env->options.dp_limit));
+  tASSERT(nested, nested->wr.dirtyroom + nested->wr.dirtylist->length ==
+                      (nested->parent ? nested->parent->wr.dirtyroom : nested->env->options.dp_limit));
   return txn_shadow_cursors(parent, MAIN_DBI);
+}
+
+int txn_nested_create(MDBX_txn *parent, const MDBX_txn_flags_t flags) {
+  if (parent->env->options.spill_parent4child_denominator) {
+    /* Spill dirty-pages of parent to provide dirtyroom for child txn */
+    int err =
+        txn_spill(parent, nullptr, parent->wr.dirtylist->length / parent->env->options.spill_parent4child_denominator);
+    if (unlikely(err != MDBX_SUCCESS))
+      return LOG_IFERR(err);
+  }
+  tASSERT(parent, audit_ex(parent, 0, false) == 0);
+
+  MDBX_txn *const nested = txn_alloc(flags, parent->env);
+  if (unlikely(!nested))
+    return LOG_IFERR(MDBX_ENOMEM);
+
+  rkl_init(&nested->wr.gc.comeback);
+  int rc = nested_start(nested, parent);
+  if (unlikely(rc != MDBX_SUCCESS))
+    txn_nested_abort(nested);
+  return rc;
 }
 
 static int nested_undo(MDBX_txn *nested) {
