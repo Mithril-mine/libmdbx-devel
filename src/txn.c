@@ -74,19 +74,6 @@ int txn_abort(MDBX_txn *txn) {
   return txn_end(txn, TXN_END_ABORT | TXN_END_SLOT | TXN_END_FREE);
 }
 
-static bool txn_check_overlapped(lck_t *const lck, const uint32_t pid, const uintptr_t tid) {
-  const size_t snap_nreaders = atomic_load32(&lck->rdt_length, mo_AcquireRelease);
-  for (size_t i = 0; i < snap_nreaders; ++i) {
-    if (atomic_load32(&lck->rdt[i].pid, mo_Relaxed) == pid &&
-        unlikely(atomic_load64(&lck->rdt[i].tid, mo_Relaxed) == tid)) {
-      const txnid_t txnid = safe64_read(&lck->rdt[i].txnid);
-      if (txnid >= MIN_TXNID && txnid <= MAX_TXNID)
-        return true;
-    }
-  }
-  return false;
-}
-
 typedef struct seq_latch_result {
   int err;
   uint32_t seq;
@@ -138,35 +125,9 @@ int txn_renew(MDBX_txn *txn, unsigned flags) {
     tASSERT(txn, txn->dbs[FREE_DBI].flags == MDBX_INTEGERKEY);
     tASSERT(txn, check_table_flags(txn->dbs[MAIN_DBI].flags));
   } else {
-    eASSERT(env, (flags & ~(txn_rw_begin_flags | MDBX_TXN_SPILLS | MDBX_WRITEMAP | MDBX_NOSTICKYTHREADS)) == 0);
-    const uintptr_t tid = osal_thread_self();
-    if (unlikely(txn->owner == tid ||
-                 /* not recovery mode */ env->stuck_meta >= 0))
-      return MDBX_BUSY;
-    lck_t *const lck = env->lck_mmap.lck;
-    if (lck && !(env->flags & MDBX_NOSTICKYTHREADS) && !(globals.runtime_flags & MDBX_DBG_LEGACY_OVERLAP) &&
-        txn_check_overlapped(lck, env->pid, tid))
-      return MDBX_TXN_OVERLAPPING;
-
-    /* Not yet touching txn == env->basal_txn, it may be active */
-    jitter4testing(false);
-    rc = lck_txn_lock(env, !!(flags & MDBX_TXN_TRY));
-    if (unlikely(rc))
-      return rc;
-    if (unlikely(env->flags & ENV_FATAL_ERROR)) {
-      lck_txn_unlock(env);
-      return MDBX_PANIC;
-    }
-#if defined(_WIN32) || defined(_WIN64)
-    if (unlikely(!env->dxb_mmap.base)) {
-      lck_txn_unlock(env);
-      return MDBX_EPERM;
-    }
-#endif /* Windows */
-
     rc = txn_basal_start(txn, flags);
     if (unlikely(rc != MDBX_SUCCESS))
-      goto bailout;
+      return rc;
   }
 
   txn->front_txnid = txn->txnid + ((flags & (MDBX_WRITEMAP | MDBX_RDONLY)) == 0);
@@ -315,7 +276,6 @@ int txn_renew(MDBX_txn *txn, unsigned flags) {
     }
     eASSERT(env, txn->wr.writemap_dirty_npages == 0);
     eASSERT(env, txn->wr.writemap_spilled_npages == 0);
-
     MDBX_cursor *const gc = ptr_disp(txn, sizeof(MDBX_txn));
     rc = cursor_init(gc, txn, FREE_DBI);
     if (rc != MDBX_SUCCESS)

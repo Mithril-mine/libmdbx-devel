@@ -94,8 +94,28 @@ __cold void txn_basal_destroy(MDBX_txn *txn) {
   osal_free(txn);
 }
 
-int txn_basal_start(MDBX_txn *txn, unsigned flags) {
+static bool basal_check_overlapped(lck_t *const lck, const uint32_t pid, const uintptr_t tid) {
+  const size_t snap_nreaders = atomic_load32(&lck->rdt_length, mo_AcquireRelease);
+  for (size_t i = 0; i < snap_nreaders; ++i) {
+    if (atomic_load32(&lck->rdt[i].pid, mo_Relaxed) == pid &&
+        unlikely(atomic_load64(&lck->rdt[i].tid, mo_Relaxed) == tid)) {
+      const txnid_t txnid = safe64_read(&lck->rdt[i].txnid);
+      if (txnid >= MIN_TXNID && txnid <= MAX_TXNID)
+        return true;
+    }
+  }
+  return false;
+}
+
+static int basal_start_locked(MDBX_txn *txn, unsigned flags) {
   MDBX_env *const env = txn->env;
+  if (unlikely(env->flags & ENV_FATAL_ERROR))
+    return MDBX_PANIC;
+
+#if defined(_WIN32) || defined(_WIN64)
+  if (unlikely(!env->dxb_mmap.base))
+    return MDBX_EPERM;
+#endif /* Windows */
 
   txn->wr.troika = meta_tap(env);
   const meta_ptr_t head = meta_recent(env, &txn->wr.troika);
@@ -133,7 +153,33 @@ int txn_basal_start(MDBX_txn *txn, unsigned flags) {
   tASSERT(txn, rkl_empty(&txn->wr.gc.comeback));
   txn->env->gc.detent = 0;
   env->txn = txn;
+  return MDBX_SUCCESS;
+}
 
+int txn_basal_start(MDBX_txn *txn, unsigned flags) {
+  tASSERT(txn, (flags & ~(txn_rw_begin_flags | MDBX_TXN_SPILLS | MDBX_WRITEMAP | MDBX_NOSTICKYTHREADS)) == 0);
+  MDBX_env *const env = txn->env;
+  const uintptr_t tid = osal_thread_self();
+  if (unlikely(txn->owner == tid ||
+               /* not recovery mode */ env->stuck_meta >= 0))
+    return MDBX_BUSY;
+
+  lck_t *const lck = env->lck_mmap.lck;
+  if (lck && !(env->flags & MDBX_NOSTICKYTHREADS) && !(globals.runtime_flags & MDBX_DBG_LEGACY_OVERLAP) &&
+      basal_check_overlapped(lck, env->pid, tid))
+    return MDBX_TXN_OVERLAPPING;
+
+  /* Not yet touching txn == env->basal_txn, it may be active */
+  jitter4testing(false);
+  int err = lck_txn_lock(env, !!(flags & MDBX_TXN_TRY));
+  if (unlikely(err != MDBX_SUCCESS))
+    return err;
+
+  err = basal_start_locked(txn, flags);
+  if (unlikely(err != MDBX_SUCCESS)) {
+    lck_txn_unlock(env);
+    return err;
+  }
   return MDBX_SUCCESS;
 }
 
