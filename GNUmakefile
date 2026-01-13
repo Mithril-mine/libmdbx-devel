@@ -283,7 +283,7 @@ clean:
 	@echo '  REMOVE ...'
 	$(QUIET)rm -rf $(MDBX_TOOLS) mdbx_test @* *.[ao] *.[ls]o *.$(SO_SUFFIX) *.dSYM *~ tmp.db/* \
 		*.gcov *.log *.err src/*.o test/*.o mdbx_example dist @dist-check \
-		config-gnumake.h src/config-gnumake.h src/version.c *.tar* @buildflags.tag @dist-checked.tag \
+		config-gnumake.h src/config-gnumake.h *.tar* @buildflags.tag @dist-checked.tag \
 		mdbx_*.static mdbx_*.static-lto CMakeFiles
 
 MDBX_BUILD_FLAGS =$(strip MDBX_BUILD_CXX=$(MDBX_BUILD_CXX) $(MDBX_BUILD_OPTIONS) $(call select_by,MDBX_BUILD_CXX,$(CXXFLAGS) $(LDFLAGS) $(LIB_STDCXXFS) $(LIBS),$(CFLAGS) $(LDFLAGS) $(LIBS)))
