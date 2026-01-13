@@ -423,9 +423,11 @@ else
 
 test-ci-extra: test-ci cross-gcc cross-qemu
 
-test-ci: check \
-	smoke-singleprocess smoke-fault smoke-memcheck \
-	test-leak test-asan test-ubsan test-singleprocess test-memcheck
+test-ci:
+	$(QUIET)for T in check \
+		smoke-singleprocess smoke-fault smoke-memcheck \
+		test-leak test-asan test-ubsan test-singleprocess test-memcheck; \
+	do $(MAKE) $$T || break; done
 
 define uname2osal
   case "$(UNAME)" in
