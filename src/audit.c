@@ -51,6 +51,8 @@ __cold static int audit_ex_locked(MDBX_txn *txn, const size_t retired_stored, co
       gc += len;
     rc = outer_next(&cx.outer, &key, &data, MDBX_NEXT);
   }
+  if (rc != MDBX_NOTFOUND)
+    ERROR("unexpected gc-cursor rc %d, gc %zu", rc, gc);
   tASSERT(txn, rc == MDBX_NOTFOUND);
 
   const size_t done_bitmap_size = (txn->n_dbi + CHAR_BIT - 1) / CHAR_BIT;
@@ -100,7 +102,10 @@ __cold int audit_ex(MDBX_txn *txn, size_t retired_stored, bool dont_filter_gc) {
   MDBX_env *const env = txn->env;
   int rc = osal_fastmutex_acquire(&env->dbi_lock);
   if (likely(rc == MDBX_SUCCESS)) {
+    const unsigned preserve_txn_flags = txn->flags;
+    txn->flags &= ~MDBX_TXN_BLOCKED;
     rc = audit_ex_locked(txn, retired_stored, dont_filter_gc);
+    txn->flags = preserve_txn_flags;
     ENSURE(txn->env, osal_fastmutex_release(&env->dbi_lock) == MDBX_SUCCESS);
   }
   return rc;
