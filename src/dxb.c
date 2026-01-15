@@ -1103,9 +1103,7 @@ int dxb_sync_locked(MDBX_env *env, unsigned flags, meta_t *const pending, troika
   if (atomic_load64(&env->lck->unsynced_pages, mo_Relaxed)) {
     eASSERT(env, ((flags ^ env->flags) & MDBX_WRITEMAP) == 0);
     enum osal_syncmode_bits mode_bits = MDBX_SYNC_NONE;
-    unsigned sync_op = 0;
     if ((flags & MDBX_SAFE_NOSYNC) == 0) {
-      sync_op = 1;
       mode_bits = MDBX_SYNC_DATA;
       if (pending->geometry.first_unallocated > meta_prefer_steady(env, troika).ptr_c->geometry.now)
         mode_bits |= MDBX_SYNC_SIZE;
@@ -1115,16 +1113,12 @@ int dxb_sync_locked(MDBX_env *env, unsigned flags, meta_t *const pending, troika
       goto skip_incore_sync;
     if (flags & MDBX_WRITEMAP) {
 #if MDBX_ENABLE_PGOP_STAT
-      env->lck->pgops.msync.weak += sync_op;
-#else
-      (void)sync_op;
+      env->lck->pgops.msync.weak += (mode_bits > MDBX_SYNC_NONE);
 #endif /* MDBX_ENABLE_PGOP_STAT */
       rc = osal_msync(&env->dxb_mmap, 0, pgno_align2os_bytes(env, pending->geometry.first_unallocated), mode_bits);
     } else {
 #if MDBX_ENABLE_PGOP_STAT
-      env->lck->pgops.fsync.weak += sync_op;
-#else
-      (void)sync_op;
+      env->lck->pgops.fsync.weak += (mode_bits > MDBX_SYNC_NONE);
 #endif /* MDBX_ENABLE_PGOP_STAT */
       rc = osal_fsync(env->lazy_fd, mode_bits);
     }
