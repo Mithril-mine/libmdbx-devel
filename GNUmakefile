@@ -280,7 +280,7 @@ strip: all
 	$(TRACE )strip libmdbx.$(SO_SUFFIX) $(MDBX_TOOLS)
 
 clean:
-	@echo '  REMOVE ...'
+	@echo '  CLEANING...'
 	$(QUIET)rm -rf $(MDBX_TOOLS) mdbx_test @* *.[ao] *.[ls]o *.$(SO_SUFFIX) *.dSYM *~ tmp.db/* \
 		*.gcov *.log *.err src/*.o test/*.o mdbx_example dist @dist-check \
 		config-gnumake.h src/config-gnumake.h *.tar* @buildflags.tag @dist-checked.tag \
@@ -289,12 +289,11 @@ clean:
 MDBX_BUILD_FLAGS =$(strip MDBX_BUILD_CXX=$(MDBX_BUILD_CXX) $(MDBX_BUILD_OPTIONS) $(call select_by,MDBX_BUILD_CXX,$(CXXFLAGS) $(LDFLAGS) $(LIB_STDCXXFS) $(LIBS),$(CFLAGS) $(LDFLAGS) $(LIBS)))
 check_buildflags_tag:
 	$(QUIET)if [ "$(MDBX_BUILD_FLAGS)" != "$$(cat @buildflags.tag 2>&1)" ]; then \
-		echo -n "  CLEAN for build with specified flags..." && \
-		$(MAKE) IOARENA=false CXXSTD= -s clean >/dev/null && echo " Ok" && \
+		echo "  TOUCH @buildflags.tag to force re-build with the (new) specified flags..." && \
 		echo '$(MDBX_BUILD_FLAGS)' > @buildflags.tag; \
 	fi
 
-@buildflags.tag: check_buildflags_tag
+@buildflags.tag: check_buildflags_tag $(WAIT)
 
 lib-static libmdbx.a: mdbx-static.o $(call select_by,MDBX_BUILD_CXX,mdbx++-static.o)
 	@echo '  AR $@'
@@ -332,7 +331,7 @@ TEST_BUILD_TARGETS += build-stochastic
 #< dist-cutoff-end
 
 .PHONY: ninja-assertions ninja-debug ninja $(TEST_TARGETS) $(TEST_BUILD_TARGETS) test-ubsan test-asan test-asan test-leak test-assertion test build-test smoke check
-test: @buildflags.tag | $(TEST_TARGETS)
+test: $(TEST_TARGETS)
 build-test: $(TEST_BUILD_TARGETS)
 
 test-assertion: MDBX_BUILD_OPTIONS += -DMDBX_FORCE_ASSERTIONS=1 -UNDEBUG -DMDBX_DEBUG=0
@@ -370,7 +369,7 @@ dist:
 	@echo '  Starting 2026 libmdbx is distrubuted in an amalgamated source code form.'
 	@echo '  So amalgamation is no longer required. Please update your build scripts.'
 
-config-gnumake.h: @buildflags.tag $(WAIT) mdbx.c $(lastword $(MAKEFILE_LIST)) LICENSE NOTICE COPYRIGHT
+config-gnumake.h: @buildflags.tag mdbx.c $(lastword $(MAKEFILE_LIST)) LICENSE NOTICE COPYRIGHT
 	@echo '  MAKE $@'
 	$(QUIET)(echo '#define MDBX_BUILD_TIMESTAMP "$(MDBX_BUILD_TIMESTAMP)"' \
 	&& echo "#define MDBX_BUILD_FLAGS \"$$(cat @buildflags.tag)\"" \
@@ -627,7 +626,7 @@ src/version.c: src/version.c.in $(lastword $(MAKEFILE_LIST)) $(MDBX_GIT_DIR)/HEA
 		-e "s|@MDBX_VERSION_PURE@|$(MDBX_VERSION_PURE)|" \
 	src/version.c.in >$@
 
-src/config-gnumake.h: @buildflags.tag $(WAIT) src/version.c $(lastword $(MAKEFILE_LIST)) LICENSE NOTICE COPYRIGHT
+src/config-gnumake.h: @buildflags.tag src/version.c $(lastword $(MAKEFILE_LIST)) LICENSE NOTICE COPYRIGHT
 	@echo '  MAKE $@'
 	$(QUIET)(echo '#define MDBX_BUILD_TIMESTAMP "$(MDBX_BUILD_TIMESTAMP)"' \
 	&& echo "#define MDBX_BUILD_FLAGS \"$$(cat @buildflags.tag)\"" \
