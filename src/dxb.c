@@ -1100,7 +1100,11 @@ int dxb_sync_locked(MDBX_env *env, unsigned flags, meta_t *const pending, troika
 
   /* LY: step#1 - sync previously written/updated data-pages */
   rc = MDBX_RESULT_FALSE /* carry steady */;
-  if (atomic_load64(&env->lck->unsynced_pages, mo_Relaxed)) {
+  const uint64_t snap_unsynced_pages = atomic_load64(&env->lck->unsynced_pages, mo_Relaxed);
+  if (snap_unsynced_pages) {
+    if (snap_unsynced_pages == 1 && (flags & MDBX_NOMETASYNC))
+      goto skip_lastmeta_sync;
+
     eASSERT(env, ((flags ^ env->flags) & MDBX_WRITEMAP) == 0);
     enum osal_syncmode_bits mode_bits = MDBX_SYNC_NONE;
     if ((flags & MDBX_SAFE_NOSYNC) == 0) {
@@ -1111,6 +1115,7 @@ int dxb_sync_locked(MDBX_env *env, unsigned flags, meta_t *const pending, troika
         mode_bits |= MDBX_SYNC_IODQ;
     } else if (unlikely(env->incore))
       goto skip_incore_sync;
+
     if (flags & MDBX_WRITEMAP) {
 #if MDBX_ENABLE_PGOP_STAT
       env->lck->pgops.msync.weak += (mode_bits > MDBX_SYNC_NONE);
@@ -1141,6 +1146,7 @@ int dxb_sync_locked(MDBX_env *env, unsigned flags, meta_t *const pending, troika
     /* Может быть нулевым если unsynced_pages > 0 в результате спиллинга.
      * eASSERT(env, env->lck->eoos_timestamp.weak != 0); */
     unaligned_poke_u64(4, pending->sign, DATASIGN_WEAK);
+  skip_lastmeta_sync:;
   }
 
   const bool legal4overwrite = head.txnid == pending->unsafe_txnid &&
@@ -1275,13 +1281,17 @@ int dxb_sync_locked(MDBX_env *env, unsigned flags, meta_t *const pending, troika
     }
     osal_flush_incoherent_mmap(target, sizeof(meta_t), globals.sys_pagesize);
     /* sync meta-pages */
-    if ((flags & MDBX_NOMETASYNC) == 0 && env->fd4meta == env->lazy_fd && !env->incore) {
+    if (env->fd4meta == env->lazy_fd && !env->incore) {
+      if (flags & MDBX_NOMETASYNC)
+        env->lck->unsynced_pages.weak += 1;
+      else {
 #if MDBX_ENABLE_PGOP_STAT
-      env->lck->pgops.fsync.weak += 1;
+        env->lck->pgops.fsync.weak += 1;
 #endif /* MDBX_ENABLE_PGOP_STAT */
-      rc = osal_fsync(env->lazy_fd, MDBX_SYNC_DATA | MDBX_SYNC_IODQ);
-      if (rc != MDBX_SUCCESS)
-        goto undo;
+        rc = osal_fsync(env->lazy_fd, MDBX_SYNC_DATA | MDBX_SYNC_IODQ);
+        if (rc != MDBX_SUCCESS)
+          goto undo;
+      }
     }
   }
 
