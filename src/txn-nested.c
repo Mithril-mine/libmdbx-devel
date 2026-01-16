@@ -646,7 +646,22 @@ int txn_nested_commit(MDBX_txn *txn, struct commit_timestamp *ts) {
   int rc = nested_join(txn, ts);
   if (unlikely(rc != MDBX_SUCCESS))
     nested_undo(txn);
-
   nested_free(txn);
+  return rc;
+}
+
+int txn_nested_checkpoint(MDBX_txn *nested, struct commit_timestamp *ts) {
+  MDBX_txn *parent = nested->parent;
+  unsigned flags = nested->flags & (txn_rw_begin_flags | MDBX_NOSTICKYTHREADS | MDBX_WRITEMAP | MDBX_TXN_RDONLY);
+  int rc = nested_join(nested, ts);
+  tASSERT(nested, nested->parent->signature == txn_signature);
+  if (likely(rc == MDBX_SUCCESS)) {
+    nested->flags = flags | (parent->flags & MDBX_TXN_SPILLS);
+    nested->wr.loose_count = 0;
+    nested->wr.loose_pages = nullptr;
+    rc = nested_start(nested, parent);
+  }
+  if (unlikely(rc != MDBX_SUCCESS))
+    txn_nested_abort(nested);
   return rc;
 }

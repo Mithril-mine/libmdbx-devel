@@ -359,6 +359,41 @@ static void latency_done(const MDBX_txn *txn, MDBX_commit_latency *latency, stru
   }
 }
 
+int mdbx_txn_checkpoint(MDBX_txn *txn, MDBX_txn_flags_t weakening_durability, MDBX_commit_latency *latency) {
+  struct commit_timestamp ts;
+  latency_init(latency, &ts);
+
+  int rc = check_txn(txn, MDBX_TXN_BLOCKED - MDBX_TXN_PARKED);
+  if (unlikely(rc != MDBX_SUCCESS))
+    return LOG_IFERR(rc);
+
+  if (unlikely(weakening_durability & ~(MDBX_TXN_NOMETASYNC | MDBX_TXN_NOSYNC | MDBX_TXN_NOWEAKING)))
+    return LOG_IFERR(MDBX_EINVAL);
+
+  MDBX_env *const env = txn->env;
+  rc = check_env(env, true);
+  if (unlikely(rc != MDBX_SUCCESS))
+    return LOG_IFERR(rc);
+
+  if ((txn->flags & MDBX_TXN_DIRTY) == 0)
+    return MDBX_RESULT_TRUE;
+
+  if (txn == env->basal_txn) {
+    rc = txn_basal_checkpoint(txn, weakening_durability, latency ? &ts : nullptr);
+  } else {
+    if (unlikely(weakening_durability != MDBX_TXN_NOWEAKING))
+      return LOG_IFERR(MDBX_EINVAL);
+    if (unlikely(!txn->parent || txn->parent->nested != txn || txn->parent->env != env)) {
+      ERROR("attempt to commit %s txn %p", "strange nested", (void *)txn);
+      return MDBX_PROBLEM;
+    }
+    rc = txn_nested_checkpoint(txn, latency ? &ts : nullptr);
+  }
+
+  latency_done(txn, latency, &ts);
+  return LOG_IFERR(rc);
+}
+
 int mdbx_txn_commit_ex(MDBX_txn *txn, MDBX_commit_latency *latency) {
   STATIC_ASSERT(MDBX_TXN_FINISHED == MDBX_TXN_BLOCKED - MDBX_TXN_HAS_CHILD - MDBX_TXN_ERROR - MDBX_TXN_PARKED);
 

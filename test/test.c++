@@ -225,6 +225,39 @@ void testcase::txn_begin(bool readonly, MDBX_txn_flags_t flags) {
     txn_refresh();
 }
 
+int testcase::checkpoint() {
+  log_trace(">> txn_checkpoint");
+  assert(txn_guard);
+
+  /* CLANG/LLVM C++ library could stupidly copy std::set<> item-by-item,
+   * i.e. with insertion(s) & comparison(s), which will cause null dereference
+   * during call mdbx_cmp() with zero txn. So it is the workaround for this:
+   *  - explicitly make copies of the `speculums`;
+   *  - explicitly move relevant copy after transaction commit. */
+  SET speculum_committed_copy(ItemCompare(this)), speculum_copy(ItemCompare(this));
+  if (need_speculum_assign) {
+    speculum_committed_copy = speculum_committed;
+    speculum_copy = speculum;
+  }
+
+  MDBX_commit_latency latency;
+  int err = mdbx_txn_checkpoint(txn_guard.get(), MDBX_TXN_NOWEAKING, &latency);
+  if (unlikely(MDBX_IS_ERROR(err)) && (err != MDBX_MAP_FULL || !config.params.ignore_dbfull))
+    failure_perror("mdbx_txn_checkpoint()", err);
+
+  if (need_speculum_assign) {
+    need_speculum_assign = false;
+    if (unlikely(MDBX_IS_ERROR(err))) {
+      speculum = std::move(speculum_committed_copy);
+      txn_guard.release();
+    } else
+      speculum_committed = std::move(speculum_copy);
+  }
+
+  log_trace("<< txn_checkpoint: %s", MDBX_IS_ERROR(err) ? "failed" : (err ? "empty" : "commited"));
+  return (err == MDBX_RESULT_TRUE) ? MDBX_SUCCESS : err;
+}
+
 int testcase::breakable_commit() {
   log_trace(">> txn_commit");
   assert(txn_guard);
@@ -330,8 +363,13 @@ void testcase::cursor_renew() {
 
 int testcase::breakable_restart() {
   int rc = MDBX_SUCCESS;
-  if (txn_guard)
+  if (txn_guard) {
+    if (flipcoin_x2()) {
+      rc = checkpoint();
+      goto done;
+    }
     rc = breakable_commit();
+  }
   if (flipcoin()) {
     txn_begin(true);
     txn_probe_parking();
@@ -339,7 +377,10 @@ int testcase::breakable_restart() {
     if (unlikely(err != MDBX_SUCCESS))
       failure_perror("mdbx_txn_abort()", err);
   }
-  txn_begin(false, MDBX_TXN_READWRITE);
+
+done:
+  if (!txn_guard)
+    txn_begin(false, MDBX_TXN_READWRITE);
   if (cursor_guard)
     cursor_renew();
   return rc;

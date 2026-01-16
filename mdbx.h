@@ -1532,6 +1532,9 @@ typedef enum MDBX_txn_flags {
   /** Do not block when starting a write transaction. */
   MDBX_TXN_TRY = UINT32_C(0x10000000),
 
+  /** Do not weakening durability for a transaction but using mode of the environment. */
+  MDBX_TXN_NOWEAKING = 0,
+
   /** Exactly the same as \ref MDBX_NOMETASYNC,
    * but for this transaction only. */
   MDBX_TXN_NOMETASYNC = MDBX_NOMETASYNC,
@@ -4257,14 +4260,47 @@ struct MDBX_commit_latency {
 typedef struct MDBX_commit_latency MDBX_commit_latency;
 #endif
 
-/** \brief Commit all the operations of a transaction into the database and
- * collect latency information.
+/** \brief Commits all changes of the transaction into a database with collecting latencies information.
  * \see mdbx_txn_commit()
  * \ingroup c_transactions
  * \warning This function may be changed in future releases. */
 LIBMDBX_API int mdbx_txn_commit_ex(MDBX_txn *txn, MDBX_commit_latency *latency);
 
-/** \brief Commit all the operations of a transaction into the database.
+/** \brief Commits all the operations of the transaction and immediately starts next without releasing any locks.
+ * \see mdbx_txn_commit_ex()
+ * \ingroup c_transactions
+ *
+ * \details The function's actions are similar to the sequence of calls \ref mdbx_txn_commit_ex() and
+ * then \ref mdbx_txn_begin() if the first one is successful, but without releasing the locks,
+ * which ensures that there are no other changes after the changes are committed and the transaction begins.
+ *
+ * \see mdbx_txn_refresh()
+ * \see mdbx_txn_commit_ex()
+ * \see mdbx_txn_begin()
+ *
+ * \param [in, out] txn             A transaction handle returned by \ref mdbx_txn_begin().
+ * \param [in] weakening_durability Additional flags to weaken durability for committing changes.
+ * \param [out] latency             An optional pointer for getting information of latencies during the commit stages.
+ *
+ * \returns A non-zero error value on failure and 0 on success,
+ *          some possibilities are:
+ * \retval MDBX_RESULT_TRUE      The transaction does not contain any changes to commit,
+ *                               no actions have been performed.
+ * \retval MDBX_PANIC            A fatal error occurred earlier and
+ *                               the environment must be shut down.
+ * \retval MDBX_BAD_TXN          Unexpected or wrong transaction state.
+ * \retval MDBX_EBADSIGN         Transaction object has invalid signature,
+ *                               e.g. transaction was already terminated
+ *                               or memory was corrupted.
+ * \retval MDBX_THREAD_MISMATCH  Given transaction is not owned
+ *                               by current thread.
+ * \retval MDBX_EINVAL           Transaction handle is NULL
+ *                               or weakening_durability is invalid.
+ *
+ * \warning This function may be changed in future releases. */
+LIBMDBX_API int mdbx_txn_checkpoint(MDBX_txn *txn, MDBX_txn_flags_t weakening_durability, MDBX_commit_latency *latency);
+
+/** \brief Commits all the operations of the transaction into the database.
  * \ingroup c_transactions
  *
  * If the current thread is not eligible to manage the transaction then
@@ -4506,6 +4542,7 @@ LIBMDBX_API int mdbx_txn_renew(MDBX_txn *txn);
  * \ingroup c_transactions
  *
  * \see mdbx_txn_renew()
+ * \see mdbx_txn_checkpoint()
  *
  * \param [in] txn  A transaction handle returned by \ref mdbx_txn_begin().
  *

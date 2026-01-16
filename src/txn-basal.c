@@ -137,7 +137,7 @@ static int basal_start_locked(MDBX_txn *txn, unsigned flags) {
 
   tASSERT(txn, txn->dbs[FREE_DBI].flags == MDBX_INTEGERKEY);
   tASSERT(txn, check_table_flags(txn->dbs[MAIN_DBI].flags));
-  txn->flags = flags;
+  txn->flags = flags & ~txn_rw_checkpoint;
   txn->nested = nullptr;
   txn->wr.loose_pages = nullptr;
   txn->wr.loose_count = 0;
@@ -157,27 +157,30 @@ static int basal_start_locked(MDBX_txn *txn, unsigned flags) {
 }
 
 int txn_basal_start(MDBX_txn *txn, unsigned flags) {
-  tASSERT(txn, (flags & ~(txn_rw_begin_flags | MDBX_TXN_SPILLS | MDBX_WRITEMAP | MDBX_NOSTICKYTHREADS)) == 0);
-  MDBX_env *const env = txn->env;
-  const uintptr_t tid = osal_thread_self();
-  if (unlikely(txn->owner == tid ||
-               /* not recovery mode */ env->stuck_meta >= 0))
-    return MDBX_BUSY;
+  tASSERT(txn, (flags & ~(txn_rw_begin_flags | MDBX_TXN_SPILLS | MDBX_WRITEMAP | MDBX_NOSTICKYTHREADS |
+                          txn_rw_checkpoint)) == 0);
+  if ((flags & txn_rw_checkpoint) == 0) {
+    MDBX_env *const env = txn->env;
+    const uintptr_t tid = osal_thread_self();
+    if (unlikely(txn->owner == tid ||
+                 /* not recovery mode */ env->stuck_meta >= 0))
+      return MDBX_BUSY;
 
-  lck_t *const lck = env->lck_mmap.lck;
-  if (lck && !(env->flags & MDBX_NOSTICKYTHREADS) && !(globals.runtime_flags & MDBX_DBG_LEGACY_OVERLAP) &&
-      basal_check_overlapped(lck, env->pid, tid))
-    return MDBX_TXN_OVERLAPPING;
+    lck_t *const lck = env->lck_mmap.lck;
+    if (lck && !(env->flags & MDBX_NOSTICKYTHREADS) && !(globals.runtime_flags & MDBX_DBG_LEGACY_OVERLAP) &&
+        basal_check_overlapped(lck, env->pid, tid))
+      return MDBX_TXN_OVERLAPPING;
 
-  /* Not yet touching txn == env->basal_txn, it may be active */
-  jitter4testing(false);
-  int err = lck_txn_lock(env, !!(flags & MDBX_TXN_TRY));
-  if (unlikely(err != MDBX_SUCCESS))
-    return err;
+    /* Not yet touching txn == env->basal_txn, it may be active */
+    jitter4testing(false);
+    int err = lck_txn_lock(env, !!(flags & MDBX_TXN_TRY));
+    if (unlikely(err != MDBX_SUCCESS))
+      return err;
+  }
 
-  err = basal_start_locked(txn, flags);
+  int err = basal_start_locked(txn, flags);
   if (unlikely(err != MDBX_SUCCESS)) {
-    lck_txn_unlock(env);
+    lck_txn_unlock(txn->env);
     return err;
   }
   return MDBX_SUCCESS;
@@ -211,8 +214,10 @@ int txn_basal_end(MDBX_txn *txn, unsigned mode) {
     err = MDBX_PROBLEM;
   }
 
-  /* The writer mutex was locked in mdbx_txn_begin. */
-  lck_txn_unlock(env);
+  if (likely(mode & TXN_END_LOCK) || unlikely(err != MDBX_SUCCESS)) {
+    /* The writer mutex was locked in mdbx_txn_begin. */
+    lck_txn_unlock(env);
+  }
   return err;
 }
 
@@ -418,4 +423,17 @@ int txn_basal_commit(MDBX_txn *txn, struct commit_timestamp *ts) {
   }
 
   return MDBX_SUCCESS;
+}
+
+int txn_basal_checkpoint(MDBX_txn *txn, MDBX_txn_flags_t weakening_durability, struct commit_timestamp *ts) {
+  const unsigned preserved_flags = txn->flags & txn_rw_begin_flags;
+  txn->flags |= weakening_durability & (MDBX_TXN_NOMETASYNC | MDBX_TXN_NOSYNC | MDBX_SYNC_DURABLE);
+  int rc = txn_basal_commit(txn, ts);
+  if (likely(rc == MDBX_SUCCESS))
+    rc = txn_basal_end(txn, TXN_END_UPDATE);
+  if (likely(rc == MDBX_SUCCESS))
+    rc = txn_renew(txn, preserved_flags | txn_rw_checkpoint);
+  else
+    txn_basal_end(txn, TXN_END_ABORT | TXN_END_LOCK);
+  return rc;
 }

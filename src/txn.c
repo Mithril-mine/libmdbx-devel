@@ -84,11 +84,11 @@ int txn_commit(MDBX_txn *txn, struct commit_timestamp *ts) {
 
     if (txn == env->basal_txn) {
       rc = txn_basal_commit(txn, ts);
-      mode = TXN_END_COMMITTED | TXN_END_UPDATE;
+      mode = TXN_END_COMMITTED | TXN_END_UPDATE | TXN_END_LOCK;
       if (unlikely(rc != MDBX_SUCCESS)) {
-        mode = TXN_END_ABORT;
+        mode = TXN_END_ABORT | TXN_END_LOCK;
         if (rc == MDBX_RESULT_TRUE) {
-          mode = TXN_END_PURE_COMMIT | TXN_END_UPDATE;
+          mode = TXN_END_PURE_COMMIT | TXN_END_UPDATE | TXN_END_LOCK;
           rc = MDBX_NOSUCCESS_PURE_COMMIT ? MDBX_RESULT_TRUE : MDBX_SUCCESS;
         }
       }
@@ -135,7 +135,7 @@ int txn_abort(MDBX_txn *txn) {
   MDBX_txn *const parent = txn->parent;
   if (txn == env->basal_txn) {
     tASSERT(txn, !parent && !(txn->flags & (MDBX_TXN_RDONLY | MDBX_TXN_FINISHED)) && txn->owner);
-    return txn_basal_end(txn, TXN_END_ABORT);
+    return txn_basal_end(txn, TXN_END_ABORT | TXN_END_LOCK);
   }
 
   if (txn->parent)
