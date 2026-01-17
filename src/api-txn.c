@@ -106,6 +106,12 @@ int mdbx_txn_abort(MDBX_txn *txn) {
   }
 #endif /* MDBX_TXN_CHECKOWNER */
 
+  if (txn->nested) {
+    /* more checks for middle-point abortion case */
+    mdbx_txn_abort(txn->nested);
+    tASSERT(txn, !txn->nested);
+  }
+
   return LOG_IFERR(txn_abort(txn));
 }
 
@@ -295,42 +301,6 @@ int mdbx_txn_begin_ex(MDBX_env *env, MDBX_txn *parent, MDBX_txn_flags_t flags, M
   return MDBX_SUCCESS;
 }
 
-static void latency_gcprof(MDBX_commit_latency *latency, const MDBX_txn *txn) {
-  MDBX_env *const env = txn->env;
-  if (latency && likely(env->lck) && MDBX_ENABLE_PROFGC) {
-    pgop_stat_t *const ptr = &env->lck->pgops;
-    latency->gc_prof.work_counter = ptr->gc_prof.work.spe_counter;
-    latency->gc_prof.work_rtime_monotonic = osal_monotime_to_16dot16(ptr->gc_prof.work.rtime_monotonic);
-    latency->gc_prof.work_xtime_cpu = osal_monotime_to_16dot16(ptr->gc_prof.work.xtime_cpu);
-    latency->gc_prof.work_rsteps = ptr->gc_prof.work.rsteps;
-    latency->gc_prof.work_xpages = ptr->gc_prof.work.xpages;
-    latency->gc_prof.work_majflt = ptr->gc_prof.work.majflt;
-
-    latency->gc_prof.self_counter = ptr->gc_prof.self.spe_counter;
-    latency->gc_prof.self_rtime_monotonic = osal_monotime_to_16dot16(ptr->gc_prof.self.rtime_monotonic);
-    latency->gc_prof.self_xtime_cpu = osal_monotime_to_16dot16(ptr->gc_prof.self.xtime_cpu);
-    latency->gc_prof.self_rsteps = ptr->gc_prof.self.rsteps;
-    latency->gc_prof.self_xpages = ptr->gc_prof.self.xpages;
-    latency->gc_prof.self_majflt = ptr->gc_prof.self.majflt;
-
-    latency->gc_prof.wloops = ptr->gc_prof.wloops;
-    latency->gc_prof.coalescences = ptr->gc_prof.coalescences;
-    latency->gc_prof.wipes = ptr->gc_prof.wipes;
-    latency->gc_prof.flushes = ptr->gc_prof.flushes;
-    latency->gc_prof.kicks = ptr->gc_prof.kicks;
-
-    latency->gc_prof.pnl_merge_work.time = osal_monotime_to_16dot16(ptr->gc_prof.work.pnl_merge.time);
-    latency->gc_prof.pnl_merge_work.calls = ptr->gc_prof.work.pnl_merge.calls;
-    latency->gc_prof.pnl_merge_work.volume = ptr->gc_prof.work.pnl_merge.volume;
-    latency->gc_prof.pnl_merge_self.time = osal_monotime_to_16dot16(ptr->gc_prof.self.pnl_merge.time);
-    latency->gc_prof.pnl_merge_self.calls = ptr->gc_prof.self.pnl_merge.calls;
-    latency->gc_prof.pnl_merge_self.volume = ptr->gc_prof.self.pnl_merge.volume;
-
-    if (txn == env->basal_txn)
-      memset(&ptr->gc_prof, 0, sizeof(ptr->gc_prof));
-  }
-}
-
 static void latency_init(MDBX_commit_latency *latency, struct commit_timestamp *ts) {
   ts->start = 0;
   ts->gc_cpu = 0;
@@ -341,8 +311,42 @@ static void latency_init(MDBX_commit_latency *latency, struct commit_timestamp *
   ts->prep = ts->gc = ts->audit = ts->write = ts->sync = ts->start;
 }
 
-static void latency_done(MDBX_commit_latency *latency, struct commit_timestamp *ts) {
+static void latency_done(const MDBX_txn *txn, MDBX_commit_latency *latency, struct commit_timestamp *ts) {
   if (latency) {
+    MDBX_env *const env = txn->env;
+    if (likely(env->lck) && MDBX_ENABLE_PROFGC) {
+      pgop_stat_t *const ptr = &env->lck->pgops;
+      latency->gc_prof.work_counter = ptr->gc_prof.work.spe_counter;
+      latency->gc_prof.work_rtime_monotonic = osal_monotime_to_16dot16(ptr->gc_prof.work.rtime_monotonic);
+      latency->gc_prof.work_xtime_cpu = osal_monotime_to_16dot16(ptr->gc_prof.work.xtime_cpu);
+      latency->gc_prof.work_rsteps = ptr->gc_prof.work.rsteps;
+      latency->gc_prof.work_xpages = ptr->gc_prof.work.xpages;
+      latency->gc_prof.work_majflt = ptr->gc_prof.work.majflt;
+
+      latency->gc_prof.self_counter = ptr->gc_prof.self.spe_counter;
+      latency->gc_prof.self_rtime_monotonic = osal_monotime_to_16dot16(ptr->gc_prof.self.rtime_monotonic);
+      latency->gc_prof.self_xtime_cpu = osal_monotime_to_16dot16(ptr->gc_prof.self.xtime_cpu);
+      latency->gc_prof.self_rsteps = ptr->gc_prof.self.rsteps;
+      latency->gc_prof.self_xpages = ptr->gc_prof.self.xpages;
+      latency->gc_prof.self_majflt = ptr->gc_prof.self.majflt;
+
+      latency->gc_prof.wloops = ptr->gc_prof.wloops;
+      latency->gc_prof.coalescences = ptr->gc_prof.coalescences;
+      latency->gc_prof.wipes = ptr->gc_prof.wipes;
+      latency->gc_prof.flushes = ptr->gc_prof.flushes;
+      latency->gc_prof.kicks = ptr->gc_prof.kicks;
+
+      latency->gc_prof.pnl_merge_work.time = osal_monotime_to_16dot16(ptr->gc_prof.work.pnl_merge.time);
+      latency->gc_prof.pnl_merge_work.calls = ptr->gc_prof.work.pnl_merge.calls;
+      latency->gc_prof.pnl_merge_work.volume = ptr->gc_prof.work.pnl_merge.volume;
+      latency->gc_prof.pnl_merge_self.time = osal_monotime_to_16dot16(ptr->gc_prof.self.pnl_merge.time);
+      latency->gc_prof.pnl_merge_self.calls = ptr->gc_prof.self.pnl_merge.calls;
+      latency->gc_prof.pnl_merge_self.volume = ptr->gc_prof.self.pnl_merge.volume;
+
+      if (txn == env->basal_txn)
+        memset(&ptr->gc_prof, 0, sizeof(ptr->gc_prof));
+    }
+
     latency->preparation = (ts->prep > ts->start) ? osal_monotime_to_16dot16(ts->prep - ts->start) : 0;
     latency->gc_wallclock = (ts->gc > ts->prep) ? osal_monotime_to_16dot16(ts->gc - ts->prep) : 0;
     latency->gc_cputime = ts->gc_cpu ? osal_monotime_to_16dot16(ts->gc_cpu) : 0;
@@ -355,6 +359,41 @@ static void latency_done(MDBX_commit_latency *latency, struct commit_timestamp *
   }
 }
 
+int mdbx_txn_checkpoint(MDBX_txn *txn, MDBX_txn_flags_t weakening_durability, MDBX_commit_latency *latency) {
+  struct commit_timestamp ts;
+  latency_init(latency, &ts);
+
+  int rc = check_txn(txn, MDBX_TXN_BLOCKED - MDBX_TXN_PARKED);
+  if (unlikely(rc != MDBX_SUCCESS))
+    return LOG_IFERR(rc);
+
+  if (unlikely(weakening_durability & ~(MDBX_TXN_NOMETASYNC | MDBX_TXN_NOSYNC | MDBX_TXN_NOWEAKING)))
+    return LOG_IFERR(MDBX_EINVAL);
+
+  MDBX_env *const env = txn->env;
+  rc = check_env(env, true);
+  if (unlikely(rc != MDBX_SUCCESS))
+    return LOG_IFERR(rc);
+
+  if ((txn->flags & MDBX_TXN_DIRTY) == 0)
+    return MDBX_RESULT_TRUE;
+
+  if (txn == env->basal_txn) {
+    rc = txn_basal_checkpoint(txn, weakening_durability, latency ? &ts : nullptr);
+  } else {
+    if (unlikely(weakening_durability != MDBX_TXN_NOWEAKING))
+      return LOG_IFERR(MDBX_EINVAL);
+    if (unlikely(!txn->parent || txn->parent->nested != txn || txn->parent->env != env)) {
+      ERROR("attempt to commit %s txn %p", "strange nested", (void *)txn);
+      return MDBX_PROBLEM;
+    }
+    rc = txn_nested_checkpoint(txn, latency ? &ts : nullptr);
+  }
+
+  latency_done(txn, latency, &ts);
+  return LOG_IFERR(rc);
+}
+
 int mdbx_txn_commit_ex(MDBX_txn *txn, MDBX_commit_latency *latency) {
   STATIC_ASSERT(MDBX_TXN_FINISHED == MDBX_TXN_BLOCKED - MDBX_TXN_HAS_CHILD - MDBX_TXN_ERROR - MDBX_TXN_PARKED);
 
@@ -364,87 +403,37 @@ int mdbx_txn_commit_ex(MDBX_txn *txn, MDBX_commit_latency *latency) {
   int rc = check_txn(txn, MDBX_TXN_FINISHED);
   if (unlikely(rc != MDBX_SUCCESS)) {
     if (rc == MDBX_BAD_TXN && F_ISSET(txn->flags, MDBX_TXN_FINISHED | MDBX_TXN_RDONLY)) {
+      mdbx_txn_abort(txn);
       rc = MDBX_RESULT_TRUE;
-      goto fail;
     }
     return LOG_IFERR(rc);
   }
 
   MDBX_env *const env = txn->env;
-  if (MDBX_ENV_CHECKPID && unlikely(env->pid != osal_getpid())) {
-    env->flags |= ENV_FATAL_ERROR;
-    rc = MDBX_PANIC;
+  rc = check_env(env, true);
+  if (unlikely(rc != MDBX_SUCCESS))
     return LOG_IFERR(rc);
-  }
-
-  if (txn->flags & MDBX_TXN_RDONLY) {
-    if (unlikely(txn->parent || (txn->flags & MDBX_TXN_HAS_CHILD) || txn == env->txn || txn == env->basal_txn)) {
-      ERROR("attempt to commit %s txn %p", "strange read-only", (void *)txn);
-      return MDBX_PROBLEM;
-    }
-    latency_gcprof(latency, txn);
-    rc = (txn->flags & MDBX_TXN_ERROR) ? MDBX_RESULT_TRUE : MDBX_SUCCESS;
-    txn_end(txn, TXN_END_PURE_COMMIT | TXN_END_UPDATE | TXN_END_SLOT | TXN_END_FREE);
-    goto done;
-  }
 
 #if MDBX_TXN_CHECKOWNER
   if ((txn->flags & MDBX_NOSTICKYTHREADS) && txn == env->basal_txn && unlikely(txn->owner != osal_thread_self())) {
-    txn->flags |= MDBX_TXN_ERROR;
+    mdbx_txn_break(txn);
     rc = MDBX_THREAD_MISMATCH;
     return LOG_IFERR(rc);
   }
 #endif /* MDBX_TXN_CHECKOWNER */
 
-  if (unlikely(txn->flags & MDBX_TXN_ERROR)) {
-    rc = MDBX_RESULT_TRUE;
-  fail:
-    latency_gcprof(latency, txn);
-    int err = txn_abort(txn);
-    if (unlikely(err != MDBX_SUCCESS))
-      rc = err;
-    goto done;
-  }
-
-  if (txn->nested) {
+  if (unlikely(txn->nested)) {
+    /* more checks for middle-point committing case */
     rc = mdbx_txn_commit_ex(txn->nested, nullptr);
-    tASSERT(txn, txn->nested == nullptr);
-    if (unlikely(rc != MDBX_SUCCESS))
-      goto fail;
-  }
-
-  if (unlikely(txn != env->txn)) {
-    ERROR("attempt to commit %s txn %p", "unknown", (void *)txn);
-    return MDBX_EINVAL;
-  }
-
-  if (txn->parent) {
-    if (unlikely(txn->parent->nested != txn || txn->parent->env != env)) {
-      ERROR("attempt to commit %s txn %p", "strange nested", (void *)txn);
-      return MDBX_PROBLEM;
-    }
-
-    latency_gcprof(latency, txn);
-    rc = txn_nested_join(txn, latency ? &ts : nullptr);
-    goto done;
-  }
-
-  rc = txn_basal_commit(txn, latency ? &ts : nullptr);
-  latency_gcprof(latency, txn);
-  int end = TXN_END_COMMITTED | TXN_END_UPDATE;
-  if (unlikely(rc != MDBX_SUCCESS)) {
-    end = TXN_END_ABORT;
-    if (rc == MDBX_RESULT_TRUE) {
-      end = TXN_END_PURE_COMMIT | TXN_END_UPDATE;
-      rc = MDBX_NOSUCCESS_PURE_COMMIT ? MDBX_RESULT_TRUE : MDBX_SUCCESS;
+    tASSERT(txn, !txn->nested);
+    if (unlikely(rc != MDBX_SUCCESS)) {
+      mdbx_txn_abort(txn);
+      return LOG_IFERR(rc);
     }
   }
-  int err = txn_end(txn, end);
-  if (unlikely(err != MDBX_SUCCESS))
-    rc = err;
 
-done:
-  latency_done(latency, &ts);
+  rc = txn_commit(txn, latency ? &ts : nullptr);
+  latency_done(txn, latency, &ts);
   return LOG_IFERR(rc);
 }
 

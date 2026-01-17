@@ -566,7 +566,7 @@ __cold int mdbx_env_resurrect_after_fork(MDBX_env *env) {
     return LOG_IFERR(MDBX_EBADSIGN);
 
   if (env->txn)
-    txn_abort(env->basal_txn);
+    txn_abort_after_resurrect(env->basal_txn);
   env->registered_reader_pid = 0;
   int rc = env_close(env, true);
   env->signature.weak = env_signature;
