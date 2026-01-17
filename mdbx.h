@@ -4183,71 +4183,59 @@ struct MDBX_commit_latency {
   /** \brief User-mode CPU time spent on GC update. */
   uint32_t gc_cputime;
 
-  /** \brief Информация для профилирования работы GC.
-   * \note Статистика является общей для всех процессов работающих с одним
-   * файлом БД и хранится в LCK-файле. Данные аккумулируются при фиксации всех
-   * транзакций, но только в сборках libmdbx c установленной опцией
-   * \ref MDBX_ENABLE_PROFGC. Собранная статистика возвращаются любому процессу
-   * при использовании \ref mdbx_txn_commit_ex() и одновременно обнуляется
-   * при завершении транзакций верхнего уровня (не вложенных). */
+  /** \brief Information for GC profiling.
+   * \note This data is shared for all processes working with a given database and stored in LCK-file.
+   *
+   * Statistic is accumulated when all transactions are committed,
+   * but only in libmdbx builds with the \ref MDBX_ENABLE_PROFGC option enabled.
+   * The collected statistics are returned to any process when using \ref mdbx_txn_commit_ex()
+   * or \ref mdbx_txn_checkpoint(), and at the same time they are reset to zero when top-level
+   * transactions (not nested) are committed. */
   struct {
-    /** \brief Количество итераций обновления GC,
-     *  больше 1 если были повторы/перезапуски. */
+    /** \brief The number of GC update iterations is greater than 1 if there were repeats/restarts. */
     uint32_t wloops;
-    /** \brief Количество итераций слияния записей GC. */
+    /** \brief The number of iterations of merging GC items. */
     uint32_t coalescences;
-    /** \brief Количество уничтожений предыдущих надежных/устойчивых
-     *  точек фиксации при работе в режиме \ref MDBX_UTTERLY_NOSYNC. */
+    /** \brief The number of previous reliable/stable committed points erased
+     *  when working in \ref MDBX_UTTERLY_NOSYNC mode. */
     uint32_t wipes;
-    /** \brief Количество принудительных фиксаций на диск
-     *  во избежания приращения БД при работе вне режима
-     *  \ref MDBX_UTTERLY_NOSYNC. */
+    /** \brief The number of forced commits to disk to avoid the database growth
+     *  when working outside of \ref MDBX_UTTERLY_NOSYNC mode. */
     uint32_t flushes;
-    /** \brief Количество обращений к механизму Handle-Slow-Readers
-     *  во избежания приращения БД.
+    /** \brief The number of accesses to the Handle-Slow-Readers mechanism to avoid void the database growth.
      *  \see MDBX_hsr_func */
     uint32_t kicks;
 
-    /** \brief Счетчик выполнения по медленному пути (slow path execution count)
-     *  GC ради данных пользователя. */
+    /** \brief Number of slow/deep path GC search for the sake of placement user's data. */
     uint32_t work_counter;
-    /** \brief Время "по настенным часам" затраченное на чтение и поиск внутри
-     *  GC ради данных пользователя. */
+    /** \brief The time "by the wall clock" spent reading and searching inside the GC for the user's data. */
     uint32_t work_rtime_monotonic;
-    /** \brief Время ЦПУ в режиме пользователе затраченное
-     *   на подготовку страниц извлекаемых из GC для данных пользователя,
-     *   включая подкачку с диска. */
+    /** \brief The CPU time in user mode spent for preparing pages taken from the GC for user data,
+     *  including paging ones from disk. */
     uint32_t work_xtime_cpu;
-    /** \brief Количество итераций поиска внутри GC при выделении страниц
-     *  ради данных пользователя. */
+    /** \brief The number of search iterations inside GC when allocating pages for the sake of user's data. */
     uint32_t work_rsteps;
-    /** \brief Количество запросов на выделение последовательностей страниц
-     *  ради данных пользователя. */
+    /** \brief The number of requests to allocate page sequences for the sake of user's data. */
     uint32_t work_xpages;
-    /** \brief Количество страничных промахов (page faults) внутри GC
-     *  при выделении и подготовки страниц для данных пользователя. */
+    /** \brief The number of page faults inside the GC when allocating and preparing pages for user's data. */
     uint32_t work_majflt;
 
-    /** \brief Счетчик выполнения по медленному пути (slow path execution count)
-     *  GC для целей поддержки и обновления самой GC. */
+    /** \brief The GC's slow path execution count is for the purposes of maintaining and updating the GC itself. */
     uint32_t self_counter;
-    /** \brief Время "по настенным часам" затраченное на чтение и поиск внутри
-     *  GC для целей поддержки и обновления самой GC. */
+    /** \brief The time "by the wall clock" spent reading and searching inside the GC
+     *  for the purposes of maintaining and updating the GC itself. */
     uint32_t self_rtime_monotonic;
-    /** \brief Время ЦПУ в режиме пользователе затраченное на подготовку
-     *  страниц извлекаемых из GC для целей поддержки и обновления самой GC,
-     *  включая подкачку с диска. */
+    /** \brief The CPU time in user mode spent preparing pages taken from the GC for the purposes
+     *  of maintaining and updating the GC itself, including swapping from disk. */
     uint32_t self_xtime_cpu;
-    /** \brief Количество итераций поиска внутри GC при выделении страниц
-     *  для целей поддержки и обновления самой GC. */
+    /** \brief The number of search iterations inside the GC when allocating pages for the purposes
+     *  of maintaining and updating the GC itself. */
     uint32_t self_rsteps;
-    /** \brief Количество запросов на выделение последовательностей страниц
-     *  для самой GC. */
+    /** \brief The number of page sequences allocation requests for the GC itself. */
     uint32_t self_xpages;
-    /** \brief Количество страничных промахов (page faults) внутри GC
-     *  при выделении и подготовки страниц для самой GC. */
+    /** \brief The number of page faults within the GC when allocating and preparing pages for the GC itself. */
     uint32_t self_majflt;
-    /* Для разборок с pnl_merge() */
+    /** \brief Metrics of the amount of work and cost of merging lists of pages. */
     struct {
       uint32_t time;
       uint64_t volume;
