@@ -558,7 +558,7 @@ __cold int mdbx_env_resurrect_after_fork(MDBX_env *env) {
   if (unlikely((env->flags & ENV_ACTIVE) == 0))
     return MDBX_SUCCESS;
 
-  const uint32_t new_pid = osal_getpid();
+  const mdbx_pid_t new_pid = osal_getpid();
   if (unlikely(env->pid == new_pid))
     return MDBX_SUCCESS;
 
@@ -827,12 +827,12 @@ __must_check_result static int env_info_snap(const MDBX_env *env, const MDBX_txn
   txnid_t self_latter_reader_txnid = overall_latter_reader_txnid;
   if (env->lck_mmap.lck) {
     for (size_t i = 0; i < out->mi_numreaders; ++i) {
-      const uint32_t pid = atomic_load32(&lck->rdt[i].pid, mo_AcquireRelease);
+      const mdbx_pid_t pid = atomic_load_pid(&lck->rdt[i].pid, mo_AcquireRelease);
       if (pid) {
         const txnid_t txnid = safe64_read(&lck->rdt[i].txnid);
         if (overall_latter_reader_txnid > txnid)
           overall_latter_reader_txnid = txnid;
-        if (pid == env->pid && self_latter_reader_txnid > txnid)
+        if (pid == env->registered_reader_pid && self_latter_reader_txnid > txnid)
           self_latter_reader_txnid = txnid;
       }
     }

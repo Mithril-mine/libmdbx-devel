@@ -487,7 +487,7 @@ int mdbx_txn_info(const MDBX_txn *txn, MDBX_txn_info *info, bool scan_rlt) {
         const size_t snap_nreaders = atomic_load32(&lck->rdt_length, mo_AcquireRelease);
         for (size_t i = 0; i < snap_nreaders; ++i) {
         retry:
-          if (atomic_load32(&lck->rdt[i].pid, mo_AcquireRelease)) {
+          if (atomic_load_pid(&lck->rdt[i].pid, mo_AcquireRelease)) {
             jitter4testing(true);
             const uint64_t snap_tid = safe64_read(&lck->rdt[i].tid);
             const txnid_t snap_txnid = safe64_read(&lck->rdt[i].txnid);
@@ -532,7 +532,8 @@ int mdbx_txn_info(const MDBX_txn *txn, MDBX_txn_info *info, bool scan_rlt) {
            * читателями. */
           oldest_reading = txn->txnid;
           for (size_t i = 0; i < snap_nreaders; ++i) {
-            if (atomic_load32(&lck->rdt[i].pid, mo_Relaxed) && txn->env->gc.detent == safe64_read(&lck->rdt[i].txnid)) {
+            if (atomic_load_pid(&lck->rdt[i].pid, mo_Relaxed) &&
+                txn->env->gc.detent == safe64_read(&lck->rdt[i].txnid)) {
               oldest_reading = txn->env->gc.detent;
               break;
             }

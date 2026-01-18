@@ -551,7 +551,7 @@ int lck_init(MDBX_env *env, MDBX_env *inprocess_neighbor, int global_uniqueness_
   return MDBX_SUCCESS;
 }
 
-int lck_destroy(MDBX_env *env, MDBX_env *inprocess_neighbor, const uint32_t current_pid) {
+int lck_destroy(MDBX_env *env, MDBX_env *inprocess_neighbor, const mdbx_pid_t current_pid) {
   (void)current_pid;
   /* LY: should unmap before releasing the locks to avoid race condition and
    * STATUS_USER_MAPPED_FILE/ERROR_USER_MAPPED_FILE */

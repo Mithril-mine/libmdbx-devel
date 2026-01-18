@@ -96,6 +96,18 @@ MDBX_MAYBE_UNUSED static __always_inline uint32_t atomic_load32(const volatile m
 }
 #endif /* atomic_load32 */
 
+MDBX_MAYBE_UNUSED static __always_inline mdbx_pid_t atomic_load_pid(const volatile mdbx_atomic_uint32_t *p,
+                                                                    enum mdbx_memory_order order) {
+  STATIC_ASSERT(sizeof(mdbx_pid_t) == sizeof(uint32_t));
+  return (mdbx_pid_t)atomic_load32(p, order);
+}
+
+MDBX_MAYBE_UNUSED static __always_inline mdbx_pid_t atomic_store_pid(mdbx_atomic_uint32_t *p, const mdbx_pid_t value,
+                                                                     enum mdbx_memory_order order) {
+  STATIC_ASSERT(sizeof(mdbx_pid_t) == sizeof(uint32_t));
+  return (mdbx_pid_t)atomic_store32(p, value, order);
+}
+
 /*------------------------------------------------------------------------------
  * safe read/write volatile 64-bit fields on 32-bit architectures. */
 

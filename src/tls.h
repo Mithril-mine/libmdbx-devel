@@ -6,7 +6,7 @@
 #include "essentials.h"
 
 MDBX_INTERNAL void rthc_ctor(void);
-MDBX_INTERNAL void rthc_dtor(const uint32_t current_pid);
+MDBX_INTERNAL void rthc_dtor(const mdbx_pid_t current_pid);
 MDBX_INTERNAL void rthc_lock(void);
 MDBX_INTERNAL void rthc_unlock(void);
 

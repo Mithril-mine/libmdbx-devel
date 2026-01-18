@@ -377,7 +377,7 @@ struct MDBX_env {
   uint16_t merge_threshold;   /* pages emptier than this are candidates for merging */
   unsigned max_readers;       /* size of the reader table */
   MDBX_dbi max_dbi;           /* size of the DB table */
-  uint32_t pid;               /* process ID of this env */
+  mdbx_pid_t pid;             /* process ID of this env */
   osal_thread_key_t me_txkey; /* thread-key for readers */
   struct {                    /* path to the DB files */
     pathchar_t *lck, *dxb, *specified;
@@ -390,9 +390,9 @@ struct MDBX_env {
   mdbx_atomic_uint32_t *dbi_seqs; /* array of dbi sequence numbers */
   unsigned maxgc_large1page;      /* Number of pgno_t fit in a single large page */
   unsigned maxgc_per_branch;
-  uint32_t registered_reader_pid; /* have liveness lock in reader table */
-  void *userctx;                  /* User-settable context */
-  MDBX_hsr_func *hsr_callback;    /* Callback for kicking laggard readers */
+  mdbx_pid_t registered_reader_pid; /* have liveness lock in reader table */
+  void *userctx;                    /* User-settable context */
+  MDBX_hsr_func *hsr_callback;      /* Callback for kicking laggard readers */
   size_t madv_threshold;
 
   struct {

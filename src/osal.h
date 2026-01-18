@@ -510,7 +510,7 @@ MDBX_INTERNAL int osal_check_fs_rdonly(mdbx_filehandle_t handle, const pathchar_
 MDBX_INTERNAL int osal_check_fs_incore(mdbx_filehandle_t handle);
 MDBX_INTERNAL int osal_check_fs_local(mdbx_filehandle_t handle, int flags);
 
-MDBX_MAYBE_UNUSED static inline uint32_t osal_getpid(void) {
+MDBX_MAYBE_UNUSED static inline mdbx_pid_t osal_getpid(void) {
   STATIC_ASSERT(sizeof(mdbx_pid_t) <= sizeof(uint32_t));
 #if defined(_WIN32) || defined(_WIN64)
   return GetCurrentProcessId();

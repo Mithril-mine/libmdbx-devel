@@ -441,7 +441,7 @@ int lck_upgrade(MDBX_env *env, bool dont_wait) {
   return rc;
 }
 
-__cold int lck_destroy(MDBX_env *env, MDBX_env *inprocess_neighbor, const uint32_t current_pid) {
+__cold int lck_destroy(MDBX_env *env, MDBX_env *inprocess_neighbor, const mdbx_pid_t current_pid) {
   eASSERT(env, osal_getpid() == current_pid);
   int rc = MDBX_SUCCESS;
   struct stat lck_info;
@@ -481,7 +481,8 @@ __cold int lck_destroy(MDBX_env *env, MDBX_env *inprocess_neighbor, const uint32
 
   if (current_pid != env->pid) {
     eASSERT(env, !inprocess_neighbor);
-    NOTICE("drown env %p after-fork pid %d -> %d", __Wpedantic_format_voidptr(env), env->pid, current_pid);
+    NOTICE("drown env %p after-fork pid %zd -> %zd", __Wpedantic_format_voidptr(env), (size_t)env->pid,
+           (size_t)current_pid);
     inprocess_neighbor = nullptr;
   }
 
@@ -814,7 +815,7 @@ static int osal_ipclock_unlock(MDBX_env *env, osal_ipclock_t *ipc) {
 #endif /* MDBX_LOCKING */
   int rc = err;
   if (unlikely(rc != MDBX_SUCCESS)) {
-    const uint32_t current_pid = osal_getpid();
+    const mdbx_pid_t current_pid = osal_getpid();
     if (current_pid == env->pid || LOG_ENABLED(MDBX_LOG_NOTICE))
       debug_log((current_pid == env->pid) ? MDBX_LOG_FATAL : (rc = MDBX_SUCCESS, MDBX_LOG_NOTICE), "ipc-unlock()",
                 __LINE__, "failed: env %p, lck-%s %p, err %d\n", __Wpedantic_format_voidptr(env),

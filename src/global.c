@@ -211,11 +211,11 @@ __cold static void mdbx_init(void) {
 
 MDBX_EXCLUDE_FOR_GPROF
 __cold static void mdbx_fini(void) {
-  const uint32_t current_pid = osal_getpid();
-  TRACE(">> pid %d", current_pid);
+  const mdbx_pid_t current_pid = osal_getpid();
+  TRACE(">> pid %zd", (size_t)current_pid);
   rthc_dtor(current_pid);
   osal_dtor();
-  TRACE("<< pid %d\n", current_pid);
+  TRACE("<< pid %zd\n", (size_t)current_pid);
   ENSURE(nullptr, osal_fastmutex_destroy(&globals.debug_lock) == 0);
 }
 

@@ -7,8 +7,8 @@ static inline int txn_ro_rslot(MDBX_txn *txn) {
   reader_slot_t *slot = txn->ro.slot;
   STATIC_ASSERT(sizeof(uintptr_t) <= sizeof(slot->tid));
   if (likely(slot)) {
-    if (likely(slot->pid.weak == txn->env->pid && slot->txnid.weak >= SAFE64_INVALID_THRESHOLD)) {
-      tASSERT(txn, slot->pid.weak == osal_getpid());
+    if (likely(slot->pid.weak == (size_t)txn->env->pid && slot->txnid.weak >= SAFE64_INVALID_THRESHOLD)) {
+      tASSERT(txn, slot->pid.weak == (size_t)osal_getpid());
       tASSERT(txn, slot->tid.weak == ((txn->env->flags & MDBX_NOSTICKYTHREADS) ? 0 : osal_thread_self()));
       return MDBX_SUCCESS;
     }
@@ -23,8 +23,8 @@ static inline int txn_ro_rslot(MDBX_txn *txn) {
     eASSERT(env, !(env->flags & MDBX_NOSTICKYTHREADS));
     slot = thread_rthc_get(env->me_txkey);
     if (likely(slot)) {
-      if (likely(slot->pid.weak == env->pid && slot->txnid.weak >= SAFE64_INVALID_THRESHOLD)) {
-        tASSERT(txn, slot->pid.weak == osal_getpid());
+      if (likely(slot->pid.weak == (size_t)env->pid && slot->txnid.weak >= SAFE64_INVALID_THRESHOLD)) {
+        tASSERT(txn, slot->pid.weak == (size_t)osal_getpid());
         tASSERT(txn, slot->tid.weak == ((env->flags & MDBX_NOSTICKYTHREADS) ? 0 : osal_thread_self()));
         txn->ro.slot = slot;
         return MDBX_SUCCESS;
@@ -39,7 +39,7 @@ static inline int txn_ro_rslot(MDBX_txn *txn) {
 
   bsr_t brs = mvcc_bind_slot(env);
   if (likely(brs.err == MDBX_SUCCESS)) {
-    tASSERT(txn, brs.slot->pid.weak == osal_getpid());
+    tASSERT(txn, brs.slot->pid.weak == (size_t)osal_getpid());
     tASSERT(txn, brs.slot->tid.weak == ((env->flags & MDBX_NOSTICKYTHREADS) ? 0 : osal_thread_self()));
   }
   txn->ro.slot = brs.slot;
@@ -55,16 +55,17 @@ static inline int txn_ro_seize(MDBX_txn *txn) {
     MDBX_env *const env = txn->env;
     const meta_ptr_t head = likely(env->stuck_meta < 0) ? /* regular */ meta_recent(env, &troika)
                                                         : /* recovery mode */ meta_ptr(env, env->stuck_meta);
-    reader_slot_t *const r = txn->ro.slot;
-    if (likely(r != nullptr)) {
-      safe64_reset(&r->txnid, true);
-      atomic_store32(&r->snapshot_pages_used, head.ptr_v->geometry.first_unallocated, mo_Relaxed);
-      atomic_store64(&r->snapshot_pages_retired, unaligned_peek_u64_volatile(4, head.ptr_v->pages_retired), mo_Relaxed);
-      safe64_write(&r->txnid, head.txnid);
-      eASSERT(env, r->pid.weak == osal_getpid());
-      eASSERT(env, r->tid.weak == ((env->flags & MDBX_NOSTICKYTHREADS) ? 0 : osal_thread_self()));
-      eASSERT(env, r->txnid.weak == head.txnid ||
-                       (r->txnid.weak >= SAFE64_INVALID_THRESHOLD && head.txnid < env->lck->cached_oldest.weak));
+    reader_slot_t *const slot = txn->ro.slot;
+    if (likely(slot != nullptr)) {
+      safe64_reset(&slot->txnid, true);
+      atomic_store32(&slot->snapshot_pages_used, head.ptr_v->geometry.first_unallocated, mo_Relaxed);
+      atomic_store64(&slot->snapshot_pages_retired, unaligned_peek_u64_volatile(4, head.ptr_v->pages_retired),
+                     mo_Relaxed);
+      safe64_write(&slot->txnid, head.txnid);
+      eASSERT(env, slot->pid.weak == (size_t)osal_getpid());
+      eASSERT(env, slot->tid.weak == ((env->flags & MDBX_NOSTICKYTHREADS) ? 0 : osal_thread_self()));
+      eASSERT(env, slot->txnid.weak == head.txnid ||
+                       (slot->txnid.weak >= SAFE64_INVALID_THRESHOLD && head.txnid < env->lck->cached_oldest.weak));
       atomic_store32(&env->lck->rdt_refresh_flag, true, mo_AcquireRelease);
     } else {
       /* exclusive mode without lck */
@@ -97,7 +98,7 @@ static inline int txn_ro_seize(MDBX_txn *txn) {
       continue;
     }
 
-    if (!r || likely(txn->txnid == atomic_load64(&r->txnid, mo_Relaxed)))
+    if (!slot || likely(txn->txnid == atomic_load64(&slot->txnid, mo_Relaxed)))
       return MDBX_SUCCESS;
 
   } while (likely(++loop < 42));
@@ -117,21 +118,22 @@ int txn_ro_start(MDBX_txn *txn, unsigned flags) {
     goto bailout;
 
   STATIC_ASSERT(MDBX_TXN_RDONLY_PREPARE > MDBX_TXN_RDONLY);
-  reader_slot_t *r = txn->ro.slot;
+  reader_slot_t *slot = txn->ro.slot;
   if (flags & (MDBX_TXN_RDONLY_PREPARE - MDBX_TXN_RDONLY)) {
     eASSERT(env, txn->txnid == 0);
     eASSERT(env, txn->owner == 0);
     eASSERT(env, txn->n_dbi == 0);
-    if (likely(r)) {
-      eASSERT(env, r->snapshot_pages_used.weak == 0);
-      eASSERT(env, r->txnid.weak >= SAFE64_INVALID_THRESHOLD);
-      atomic_store32(&r->snapshot_pages_used, 0, mo_Relaxed);
+    if (likely(slot)) {
+      eASSERT(env, slot->snapshot_pages_used.weak == 0);
+      eASSERT(env, slot->txnid.weak >= SAFE64_INVALID_THRESHOLD);
+      atomic_store32(&slot->snapshot_pages_used, 0, mo_Relaxed);
     }
     txn->flags = MDBX_TXN_RDONLY | MDBX_TXN_FINISHED;
     return MDBX_SUCCESS;
   }
 
-  txn->owner = likely(r) ? (uintptr_t)r->tid.weak : ((env->flags & MDBX_NOSTICKYTHREADS) ? 0 : osal_thread_self());
+  txn->owner =
+      likely(slot) ? (uintptr_t)slot->tid.weak : ((env->flags & MDBX_NOSTICKYTHREADS) ? 0 : osal_thread_self());
   if ((env->flags & MDBX_NOSTICKYTHREADS) == 0 && env->txn && unlikely(env->basal_txn->owner == txn->owner) &&
       (globals.runtime_flags & MDBX_DBG_LEGACY_OVERLAP) == 0) {
     err = MDBX_TXN_OVERLAPPING;
@@ -179,7 +181,7 @@ int txn_ro_end(MDBX_txn *txn, unsigned mode) {
     if (unlikely(!env->lck))
       txn->ro.slot = nullptr;
     else {
-      eASSERT(env, slot->pid.weak == env->pid);
+      eASSERT(env, slot->pid.weak == (size_t)env->pid);
       if (unlikely(slot->pid.weak == 0)) {
         txn->flags = MDBX_TXN_RDONLY | MDBX_TXN_FINISHED | MDBX_TXN_OUSTED;
         txn->owner = 0;
@@ -209,12 +211,12 @@ int txn_ro_end(MDBX_txn *txn, unsigned mode) {
         safe64_reset(&slot->txnid, true);
         atomic_store32(&env->lck->rdt_refresh_flag, true, mo_Relaxed);
       } else {
-        eASSERT(env, slot->pid.weak == env->pid);
+        eASSERT(env, slot->pid.weak == (size_t)env->pid);
         eASSERT(env, slot->txnid.weak >= SAFE64_INVALID_THRESHOLD);
       }
       if (mode & TXN_END_SLOT) {
         if ((env->flags & ENV_TXKEY) == 0)
-          atomic_store32(&slot->pid, 0, mo_Relaxed);
+          atomic_store_pid(&slot->pid, 0, mo_Relaxed);
         txn->ro.slot = nullptr;
       }
     }
@@ -234,17 +236,17 @@ int txn_ro_end(MDBX_txn *txn, unsigned mode) {
 }
 
 int txn_ro_park(MDBX_txn *txn, bool autounpark) {
-  reader_slot_t *const rslot = txn->ro.slot;
+  reader_slot_t *const slot = txn->ro.slot;
   tASSERT(txn, (txn->flags & (MDBX_TXN_FINISHED | MDBX_TXN_RDONLY | MDBX_TXN_PARKED)) == MDBX_TXN_RDONLY);
   tASSERT(txn, txn->ro.slot->tid.weak < MDBX_TID_TXN_OUSTED);
   if (unlikely((txn->flags & (MDBX_TXN_FINISHED | MDBX_TXN_RDONLY | MDBX_TXN_PARKED)) != MDBX_TXN_RDONLY))
     return MDBX_BAD_TXN;
 
-  const uint32_t pid = atomic_load32(&rslot->pid, mo_Relaxed);
-  const uint64_t tid = atomic_load64(&rslot->tid, mo_Relaxed);
-  const uint64_t txnid = atomic_load64(&rslot->txnid, mo_Relaxed);
+  const mdbx_pid_t pid = atomic_load_pid(&slot->pid, mo_Relaxed);
+  const uint64_t tid = atomic_load64(&slot->tid, mo_Relaxed);
+  const txnid_t txnid = atomic_load64(&slot->txnid, mo_Relaxed);
   if (unlikely(pid != txn->env->pid)) {
-    ERROR("unexpected pid %u%s%u", pid, " != must ", txn->env->pid);
+    ERROR("unexpected pid %zu%s%zu", (size_t)pid, " != must ", (size_t)txn->env->pid);
     return MDBX_PROBLEM;
   }
   if (unlikely(tid != txn->owner || txnid != txn->txnid)) {
@@ -254,7 +256,7 @@ int txn_ro_park(MDBX_txn *txn, bool autounpark) {
     return MDBX_BAD_RSLOT;
   }
 
-  atomic_store64(&rslot->tid, MDBX_TID_TXN_PARKED, mo_AcquireRelease);
+  atomic_store64(&slot->tid, MDBX_TID_TXN_PARKED, mo_AcquireRelease);
   atomic_store32(&txn->env->lck->rdt_refresh_flag, true, mo_Relaxed);
   txn->flags += autounpark ? MDBX_TXN_PARKED | MDBX_TXN_AUTOUNPARK : MDBX_TXN_PARKED;
   return MDBX_SUCCESS;
@@ -265,12 +267,12 @@ int txn_ro_unpark(MDBX_txn *txn) {
                (MDBX_TXN_RDONLY | MDBX_TXN_PARKED)))
     return MDBX_BAD_TXN;
 
-  for (reader_slot_t *const rslot = txn->ro.slot; rslot; atomic_yield()) {
-    const uint32_t pid = atomic_load32(&rslot->pid, mo_Relaxed);
-    uint64_t tid = safe64_read(&rslot->tid);
-    uint64_t txnid = safe64_read(&rslot->txnid);
+  for (reader_slot_t *const slot = txn->ro.slot; slot; atomic_yield()) {
+    const mdbx_pid_t pid = atomic_load_pid(&slot->pid, mo_Relaxed);
+    uint64_t tid = safe64_read(&slot->tid);
+    uint64_t txnid = safe64_read(&slot->txnid);
     if (unlikely(pid != txn->env->pid)) {
-      ERROR("unexpected pid %u%s%u", pid, " != expected ", txn->env->pid);
+      ERROR("unexpected pid %zu%s%zu", (size_t)pid, " != expected ", (size_t)txn->env->pid);
       return MDBX_PROBLEM;
     }
     if (unlikely(tid == MDBX_TID_TXN_OUSTED || txnid >= SAFE64_INVALID_THRESHOLD))
@@ -284,17 +286,17 @@ int txn_ro_unpark(MDBX_txn *txn) {
       break;
 
 #if MDBX_64BIT_CAS
-    if (unlikely(!atomic_cas64(&rslot->tid, MDBX_TID_TXN_PARKED, txn->owner)))
+    if (unlikely(!atomic_cas64(&slot->tid, MDBX_TID_TXN_PARKED, txn->owner)))
       continue;
 #else
-    atomic_store32(&rslot->tid.high, (uint32_t)((uint64_t)txn->owner >> 32), mo_Relaxed);
-    if (unlikely(!atomic_cas32(&rslot->tid.low, (uint32_t)MDBX_TID_TXN_PARKED, (uint32_t)txn->owner))) {
-      atomic_store32(&rslot->tid.high, (uint32_t)(MDBX_TID_TXN_PARKED >> 32), mo_AcquireRelease);
+    atomic_store32(&slot->tid.high, (uint32_t)((uint64_t)txn->owner >> 32), mo_Relaxed);
+    if (unlikely(!atomic_cas32(&slot->tid.low, (uint32_t)MDBX_TID_TXN_PARKED, (uint32_t)txn->owner))) {
+      atomic_store32(&slot->tid.high, (uint32_t)(MDBX_TID_TXN_PARKED >> 32), mo_AcquireRelease);
       continue;
     }
 #endif
-    txnid = safe64_read(&rslot->txnid);
-    tid = safe64_read(&rslot->tid);
+    txnid = safe64_read(&slot->txnid);
+    tid = safe64_read(&slot->tid);
     if (unlikely(txnid != txn->txnid || tid != txn->owner)) {
       ERROR("unexpected thread-id 0x%" PRIx64 "%s0x%zx"
             " and/or txn-id %" PRIaTXN "%s%" PRIaTXN,

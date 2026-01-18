@@ -94,10 +94,10 @@ __cold void txn_basal_destroy(MDBX_txn *txn) {
   osal_free(txn);
 }
 
-static bool basal_check_overlapped(lck_t *const lck, const uint32_t pid, const uintptr_t tid) {
+static bool basal_check_overlapped(lck_t *const lck, const mdbx_pid_t pid, const uintptr_t tid) {
   const size_t snap_nreaders = atomic_load32(&lck->rdt_length, mo_AcquireRelease);
   for (size_t i = 0; i < snap_nreaders; ++i) {
-    if (atomic_load32(&lck->rdt[i].pid, mo_Relaxed) == pid &&
+    if (atomic_load_pid(&lck->rdt[i].pid, mo_Relaxed) == pid &&
         unlikely(atomic_load64(&lck->rdt[i].tid, mo_Relaxed) == tid)) {
       const txnid_t txnid = safe64_read(&lck->rdt[i].txnid);
       if (txnid >= MIN_TXNID && txnid <= MAX_TXNID)
