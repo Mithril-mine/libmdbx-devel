@@ -204,8 +204,8 @@ int mdbx_txn_renew(MDBX_txn *txn) {
   if (rc == MDBX_SUCCESS) {
     tASSERT(txn, txn->owner == (txn->flags & MDBX_NOSTICKYTHREADS) ? 0 : osal_thread_self());
     DEBUG("renew txn %" PRIaTXN "%c %p on env %p, root page %" PRIaPGNO "/%" PRIaPGNO, txn->txnid,
-          (txn->flags & MDBX_TXN_RDONLY) ? 'r' : 'w', (void *)txn, (void *)txn->env, txn->dbs[MAIN_DBI].root,
-          txn->dbs[FREE_DBI].root);
+          (txn->flags & MDBX_TXN_RDONLY) ? 'r' : 'w', __Wpedantic_format_voidptr(txn),
+          __Wpedantic_format_voidptr(txn->env), txn->dbs[MAIN_DBI].root, txn->dbs[FREE_DBI].root);
   }
   return LOG_IFERR(rc);
 }
@@ -296,8 +296,8 @@ int mdbx_txn_begin_ex(MDBX_env *env, MDBX_txn *parent, MDBX_txn_flags_t flags, M
   txn->userctx = context;
   *ret = txn;
   DEBUG("begin txn %" PRIaTXN "%c %p on env %p, root page %" PRIaPGNO "/%" PRIaPGNO, txn->txnid,
-        (flags & MDBX_TXN_RDONLY) ? 'r' : 'w', (void *)txn, (void *)env, txn->dbs[MAIN_DBI].root,
-        txn->dbs[FREE_DBI].root);
+        (flags & MDBX_TXN_RDONLY) ? 'r' : 'w', __Wpedantic_format_voidptr(txn), __Wpedantic_format_voidptr(env),
+        txn->dbs[MAIN_DBI].root, txn->dbs[FREE_DBI].root);
   return MDBX_SUCCESS;
 }
 
@@ -384,7 +384,7 @@ int mdbx_txn_checkpoint(MDBX_txn *txn, MDBX_txn_flags_t weakening_durability, MD
     if (unlikely(weakening_durability != MDBX_TXN_NOWEAKING))
       return LOG_IFERR(MDBX_EINVAL);
     if (unlikely(!txn->parent || txn->parent->nested != txn || txn->parent->env != env)) {
-      ERROR("attempt to commit %s txn %p", "strange nested", (void *)txn);
+      ERROR("attempt to commit %s txn %p", "strange nested", __Wpedantic_format_voidptr(txn));
       return MDBX_PROBLEM;
     }
     rc = txn_nested_checkpoint(txn, latency ? &ts : nullptr);

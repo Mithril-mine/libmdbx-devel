@@ -453,7 +453,7 @@ __cold int lck_destroy(MDBX_env *env, MDBX_env *inprocess_neighbor, const mdbx_p
       fstat(env->lck_mmap.fd, &lck_info) == 0 && lck_info.st_nlink > 0 &&
       lck_op(env->lazy_fd, op_setlk, (env->flags & MDBX_RDONLY) ? F_RDLCK : F_WRLCK, 0, OFF_T_MAX) == 0) {
 
-    VERBOSE("%p got exclusive, drown ipc-locks", (void *)env);
+    VERBOSE("%p got exclusive, drown ipc-locks", __Wpedantic_format_voidptr(env));
     eASSERT(env, current_pid == env->pid);
 #if MDBX_LOCKING == MDBX_LOCKING_SYSV
     if (env->me_sysv_ipc.semid != -1)

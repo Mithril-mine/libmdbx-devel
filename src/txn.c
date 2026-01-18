@@ -66,11 +66,11 @@ int txn_commit(MDBX_txn *txn, struct commit_timestamp *ts) {
   MDBX_env *const env = txn->env;
   if (txn != env->txn) {
     if (unlikely(txn->flags & MDBX_TXN_RDONLY) == 0) {
-      ERROR("attempt to commit %s txn %p", "unknown", (void *)txn);
+      ERROR("attempt to commit %s txn %p", "unknown", __Wpedantic_format_voidptr(txn));
       return MDBX_EINVAL;
     }
     if (unlikely(txn->parent || (txn->flags & MDBX_TXN_HAS_CHILD) || txn == env->basal_txn)) {
-      ERROR("attempt to commit %s txn %p", "strange read-only", (void *)txn);
+      ERROR("attempt to commit %s txn %p", "strange read-only", __Wpedantic_format_voidptr(txn));
       return MDBX_PROBLEM;
     }
     rc = (txn->flags & MDBX_TXN_ERROR) ? MDBX_RESULT_TRUE : MDBX_SUCCESS;
@@ -94,7 +94,7 @@ int txn_commit(MDBX_txn *txn, struct commit_timestamp *ts) {
       }
     } else {
       if (unlikely(!txn->parent || txn->parent->nested != txn || txn->parent->env != env)) {
-        ERROR("attempt to commit %s txn %p", "strange nested", (void *)txn);
+        ERROR("attempt to commit %s txn %p", "strange nested", __Wpedantic_format_voidptr(txn));
         return MDBX_PROBLEM;
       }
       rc = txn_nested_commit(txn, ts);
@@ -120,8 +120,8 @@ void txn_abort_after_resurrect(MDBX_txn *txn) {
 
 int txn_abort(MDBX_txn *txn) {
   DEBUG("txn %" PRIaTXN "%c-0x%X %p  on env %p, root page %" PRIaPGNO "/%" PRIaPGNO, txn->txnid,
-        (txn->flags & MDBX_TXN_RDONLY) ? 'r' : 'w', txn->flags, (void *)txn, (void *)txn->env, txn->dbs[MAIN_DBI].root,
-        txn->dbs[FREE_DBI].root);
+        (txn->flags & MDBX_TXN_RDONLY) ? 'r' : 'w', txn->flags, __Wpedantic_format_voidptr(txn),
+        __Wpedantic_format_voidptr(txn->env), txn->dbs[MAIN_DBI].root, txn->dbs[FREE_DBI].root);
 
   tASSERT(txn, !txn->nested);
   tASSERT(txn, (txn->flags & (MDBX_TXN_ERROR | MDBX_TXN_RDONLY)) || dpl_check(txn));
@@ -365,8 +365,8 @@ bailout:
 int txn_end(MDBX_txn *txn, unsigned mode) {
   static const char *const names[] = TXN_END_NAMES;
   DEBUG("%s txn %" PRIaTXN "%c-0x%X %p  on env %p, root page %" PRIaPGNO "/%" PRIaPGNO, names[mode & TXN_END_OPMASK],
-        txn->txnid, (txn->flags & MDBX_TXN_RDONLY) ? 'r' : 'w', txn->flags, (void *)txn, (void *)txn->env,
-        txn->dbs[MAIN_DBI].root, txn->dbs[FREE_DBI].root);
+        txn->txnid, (txn->flags & MDBX_TXN_RDONLY) ? 'r' : 'w', txn->flags, __Wpedantic_format_voidptr(txn),
+        __Wpedantic_format_voidptr(txn->env), txn->dbs[MAIN_DBI].root, txn->dbs[FREE_DBI].root);
 
   tASSERT(txn, /* txn->signature == txn_signature && */ !txn->nested && !(txn->flags & MDBX_TXN_HAS_CHILD));
   if (txn->flags & txn_may_have_cursors)
@@ -386,7 +386,8 @@ int txn_end(MDBX_txn *txn, unsigned mode) {
 
   if (unlikely(!parent || txn != env->txn || parent->signature != txn_signature || parent->nested != txn ||
                !(parent->flags & MDBX_TXN_HAS_CHILD) || txn == env->basal_txn)) {
-    ERROR("parent txn %p is invalid or mismatch for nested txn %p", (void *)parent, (void *)txn);
+    ERROR("parent txn %p is invalid or mismatch for nested txn %p", __Wpedantic_format_voidptr(parent),
+          __Wpedantic_format_voidptr(txn));
     return MDBX_PROBLEM;
   }
   tASSERT(txn, pnl_check_allocated(txn->wr.repnl, txn->geo.first_unallocated - MDBX_ENABLE_REFUND));

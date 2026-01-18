@@ -473,7 +473,7 @@ __cold int env_open(MDBX_env *env, mdbx_mode_t mode) {
     return MDBX_BUSY;
   }
 
-  DEBUG("opened dbenv %p", (void *)env);
+  DEBUG("opened dbenv %p", __Wpedantic_format_voidptr(env));
   env->flags |= ENV_ACTIVE;
   if (!lck || lck_rc == MDBX_RESULT_TRUE) {
     env->lck->envmode.weak = env->flags & mode_flags;

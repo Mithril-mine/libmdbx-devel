@@ -286,8 +286,9 @@ int txn_basal_commit(MDBX_txn *txn, struct commit_timestamp *ts) {
     return MDBX_NOSUCCESS_PURE_COMMIT ? MDBX_RESULT_TRUE : MDBX_SUCCESS;
   }
 
-  DEBUG("committing txn %" PRIaTXN " %p on env %p, root page %" PRIaPGNO "/%" PRIaPGNO, txn->txnid, (void *)txn,
-        (void *)env, txn->dbs[MAIN_DBI].root, txn->dbs[FREE_DBI].root);
+  DEBUG("committing txn %" PRIaTXN " %p on env %p, root page %" PRIaPGNO "/%" PRIaPGNO, txn->txnid,
+        __Wpedantic_format_voidptr(txn), __Wpedantic_format_voidptr(env), txn->dbs[MAIN_DBI].root,
+        txn->dbs[FREE_DBI].root);
 
   if (txn->n_dbi > CORE_DBS) {
     /* Update table root pointers */
