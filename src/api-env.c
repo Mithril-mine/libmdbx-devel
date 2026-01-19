@@ -244,11 +244,11 @@ __cold int mdbx_env_create(MDBX_env **penv) {
     goto bailout;
 
 #if defined(_WIN32) || defined(_WIN64)
-  imports.srwl_Init(&env->remap_guard);
+  imports.srwl_Init(&env->remap_lock);
   InitializeCriticalSection(&env->lck_event_cs);
   InitializeCriticalSection(&env->dxb_event_cs);
 #else
-  rc = osal_fastmutex_init(&env->remap_guard);
+  rc = osal_fastmutex_init(&env->remap_lock);
   if (unlikely(rc != MDBX_SUCCESS)) {
     osal_fastmutex_destroy(&env->dbi_lock);
     goto bailout;
@@ -259,7 +259,7 @@ __cold int mdbx_env_create(MDBX_env **penv) {
   rc = lck_ipclock_stubinit(&stub->wrt_lock);
 #endif /* MDBX_LOCKING */
   if (unlikely(rc != MDBX_SUCCESS)) {
-    osal_fastmutex_destroy(&env->remap_guard);
+    osal_fastmutex_destroy(&env->remap_lock);
     osal_fastmutex_destroy(&env->dbi_lock);
     goto bailout;
   }
@@ -638,11 +638,11 @@ __cold int mdbx_env_close_ex(MDBX_env *env, bool dont_sync) {
   rc = env_close(env, false) ? MDBX_PANIC : rc;
   ENSURE(env, osal_fastmutex_destroy(&env->dbi_lock) == MDBX_SUCCESS);
 #if defined(_WIN32) || defined(_WIN64)
-  /* remap_guard don't have destructor (Slim Reader/Writer Lock) */
+  /* remap_lock don't have destructor (Slim Reader/Writer Lock) */
   DeleteCriticalSection(&env->lck_event_cs);
   DeleteCriticalSection(&env->dxb_event_cs);
 #else
-  ENSURE(env, osal_fastmutex_destroy(&env->remap_guard) == MDBX_SUCCESS);
+  ENSURE(env, osal_fastmutex_destroy(&env->remap_lock) == MDBX_SUCCESS);
 #endif /* Windows */
 
 #if MDBX_LOCKING > MDBX_LOCKING_SYSV

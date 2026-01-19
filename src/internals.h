@@ -488,14 +488,14 @@ struct MDBX_env {
   osal_ioring_t ioring;
 
 #if defined(_WIN32) || defined(_WIN64)
-  osal_srwlock_t remap_guard;
+  osal_srwlock_t remap_lock;
   /* Workaround for LockFileEx and WriteFile multithread bug */
   CRITICAL_SECTION lck_event_cs;
   CRITICAL_SECTION dxb_event_cs;
   char *pathname_char; /* cache of multi-byte representation of pathname
                              to the DB files */
 #else
-  osal_fastmutex_t remap_guard;
+  osal_fastmutex_t remap_lock;
 #endif
 
   /* ------------------------------------------------- stub for lck-less mode */

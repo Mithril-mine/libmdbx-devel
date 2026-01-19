@@ -268,11 +268,11 @@ int txn_setup_primal(MDBX_txn *txn) {
      *  и при завершении такой транзакции файл БД остаётся не-уменьшеным из-за
      *  читающих транзакций использующих предыдущие снимки. */
 #if defined(_WIN32) || defined(_WIN64)
-    imports.srwl_AcquireShared(&env->remap_guard);
+    imports.srwl_AcquireShared(&env->remap_lock);
 #else
-    err = osal_fastmutex_acquire(&env->remap_guard);
+    err = osal_fastmutex_acquire(&env->remap_lock);
     if (unlikely(err != MDBX_SUCCESS)) {
-      ERROR("remap_guard failed, err %d", err);
+      ERROR("remap_lock failed, err %d", err);
       return err;
     }
 #endif
@@ -285,9 +285,9 @@ int txn_setup_primal(MDBX_txn *txn) {
             (env->dxb_mmap.limit < env->dxb_mmap.filesize) ? env->dxb_mmap.limit : (size_t)env->dxb_mmap.filesize;
     }
 #if defined(_WIN32) || defined(_WIN64)
-    imports.srwl_ReleaseShared(&env->remap_guard);
+    imports.srwl_ReleaseShared(&env->remap_lock);
 #else
-    ENSURE(env, osal_fastmutex_release(&env->remap_guard) == MDBX_SUCCESS);
+    ENSURE(env, osal_fastmutex_release(&env->remap_lock) == MDBX_SUCCESS);
 #endif
   }
 

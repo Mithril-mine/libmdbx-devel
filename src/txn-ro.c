@@ -252,12 +252,12 @@ int txn_ro_start(MDBX_txn *txn, bool prepare) {
   const size_t used_bytes = pgno2bytes(env, txn->geo.first_unallocated);
   if (((used_bytes > env->geo_in_bytes.lower && env->geo_in_bytes.shrink) ||
        (globals.running_under_Wine &&
-        /* under Wine acquisition of remap_guard is always required,
+        /* under Wine acquisition of remap_lock is always required,
          * since Wine don't support section extending,
          * i.e. in both cases unmap+map are required. */
         used_bytes < env->geo_in_bytes.upper && env->geo_in_bytes.grow)) &&
       /* avoid recursive use SRW */ (txn->flags & MDBX_NOSTICKYTHREADS) == 0) {
-    imports.srwl_AcquireShared(&env->remap_guard);
+    imports.srwl_AcquireShared(&env->remap_lock);
     txn->flags |= txn_shrink_allowed;
   }
 #endif /* Windows */
@@ -284,7 +284,7 @@ int txn_ro_reset(MDBX_txn *txn) {
 
 #if defined(_WIN32) || defined(_WIN64)
   if ((txn->flags & (MDBX_TXN_FINISHED | txn_shrink_allowed)) == txn_shrink_allowed)
-    imports.srwl_ReleaseShared(&txn->env->remap_guard);
+    imports.srwl_ReleaseShared(&txn->env->remap_lock);
 #endif /* Windows */
 
   int rc = ro_slot_clean(txn);

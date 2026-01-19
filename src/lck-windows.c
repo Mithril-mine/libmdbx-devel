@@ -144,7 +144,7 @@ void lck_txn_unlock(MDBX_env *env) {
 
 int lck_rdt_lock(MDBX_env *env) {
   int rc;
-  imports.srwl_AcquireShared(&env->remap_guard);
+  imports.srwl_AcquireShared(&env->remap_lock);
 
   __try {
     EnterCriticalSection(&env->lck_event_cs);
@@ -171,7 +171,7 @@ int lck_rdt_lock(MDBX_env *env) {
   }
 
 bailout:
-  imports.srwl_ReleaseShared(&env->remap_guard);
+  imports.srwl_ReleaseShared(&env->remap_lock);
   return rc;
 }
 
@@ -183,7 +183,7 @@ void lck_rdt_unlock(MDBX_env *env) {
       mdbx_panic("%s failed: err %u", __func__, err);
   }
   LeaveCriticalSection(&env->lck_event_cs);
-  imports.srwl_ReleaseShared(&env->remap_guard);
+  imports.srwl_ReleaseShared(&env->remap_lock);
 }
 
 int osal_lockfile(mdbx_filehandle_t fd, bool wait) {

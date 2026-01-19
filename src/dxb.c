@@ -132,12 +132,12 @@ __cold int dxb_resize(MDBX_env *const env, const pgno_t used_pgno, const pgno_t 
   /* Acquire guard to avoid collision between read and write txns
    * around geo_in_bytes and dxb_mmap */
 #if defined(_WIN32) || defined(_WIN64)
-  imports.srwl_AcquireExclusive(&env->remap_guard);
+  imports.srwl_AcquireExclusive(&env->remap_lock);
   int rc = MDBX_SUCCESS;
   mdbx_handle_array_t *suspended = nullptr;
   mdbx_handle_array_t array_onstack;
 #else
-  int rc = osal_fastmutex_acquire(&env->remap_guard);
+  int rc = osal_fastmutex_acquire(&env->remap_lock);
   if (unlikely(rc != MDBX_SUCCESS))
     return rc;
 #endif
@@ -346,7 +346,7 @@ bailout:
 
 #if defined(_WIN32) || defined(_WIN64)
   int err = MDBX_SUCCESS;
-  imports.srwl_ReleaseExclusive(&env->remap_guard);
+  imports.srwl_ReleaseExclusive(&env->remap_lock);
   if (suspended) {
     err = osal_resume_threads_after_remap(suspended);
     if (suspended != &array_onstack)
@@ -355,7 +355,7 @@ bailout:
 #else
   if (env->lck_mmap.lck && (mresize_flags & (MDBX_MRESIZE_MAY_UNMAP | MDBX_MRESIZE_MAY_MOVE)) != 0)
     lck_rdt_unlock(env);
-  int err = osal_fastmutex_release(&env->remap_guard);
+  int err = osal_fastmutex_release(&env->remap_lock);
 #endif /* Windows */
   if (err != MDBX_SUCCESS) {
     FATAL("failed resume-after-remap: errcode %d", err);
