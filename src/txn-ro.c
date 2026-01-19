@@ -249,6 +249,7 @@ int txn_ro_start(MDBX_txn *txn, bool prepare) {
   eASSERT(env, pgno2bytes(env, txn->geo.first_unallocated) <= env->dxb_mmap.current);
   eASSERT(env, env->dxb_mmap.limit >= env->dxb_mmap.current);
 #if defined(_WIN32) || defined(_WIN64)
+  const size_t used_bytes = pgno2bytes(env, txn->geo.first_unallocated);
   if (((used_bytes > env->geo_in_bytes.lower && env->geo_in_bytes.shrink) ||
        (globals.running_under_Wine &&
         /* under Wine acquisition of remap_guard is always required,
@@ -256,8 +257,8 @@ int txn_ro_start(MDBX_txn *txn, bool prepare) {
          * i.e. in both cases unmap+map are required. */
         used_bytes < env->geo_in_bytes.upper && env->geo_in_bytes.grow)) &&
       /* avoid recursive use SRW */ (txn->flags & MDBX_NOSTICKYTHREADS) == 0) {
-    txn->flags |= txn_shrink_allowed;
     imports.srwl_AcquireShared(&env->remap_guard);
+    txn->flags |= txn_shrink_allowed;
   }
 #endif /* Windows */
 

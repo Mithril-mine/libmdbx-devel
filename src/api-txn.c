@@ -229,11 +229,23 @@ int mdbx_txn_begin_ex(MDBX_env *env, MDBX_txn *parent, MDBX_txn_flags_t flags, M
   if (unlikely(env->flags & MDBX_RDONLY & ~flags)) /* write txn in RDONLY env */
     return LOG_IFERR(MDBX_EACCESS);
 
-  /* Reuse preallocated write txn. However, do not touch it until
-   * txn_renew() succeeds, since it currently may be active. */
   MDBX_txn *txn = nullptr;
-  if (parent) {
-    /* Nested transactions: Max 1 child, write txns only, no writemap */
+  if (!parent) {
+    if (flags & MDBX_TXN_RDONLY) {
+      txn = txn_alloc(MDBX_TXN_RDONLY, env);
+      if (unlikely(!txn))
+        return LOG_IFERR(MDBX_ENOMEM);
+      rc = txn_ro_start(txn, F_ISSET(flags, MDBX_TXN_RDONLY_PREPARE));
+      if (unlikely(rc != MDBX_SUCCESS)) {
+        txn_ro_free(txn);
+        return LOG_IFERR(rc);
+      }
+    } else {
+      rc = txn_basal_start(txn = env->basal_txn, flags);
+      if (unlikely(rc != MDBX_SUCCESS))
+        return LOG_IFERR(rc);
+    }
+  } else {
     rc = check_txn(parent, MDBX_TXN_BLOCKED - MDBX_TXN_PARKED);
     if (unlikely(rc != MDBX_SUCCESS))
       return LOG_IFERR(rc);
@@ -254,26 +266,12 @@ int mdbx_txn_begin_ex(MDBX_env *env, MDBX_txn *parent, MDBX_txn_flags_t flags, M
     txn = parent->nested;
     if (unlikely(rc != MDBX_SUCCESS))
       return LOG_IFERR(MDBX_BAD_TXN);
-    if (AUDIT_ENABLED() && ASSERT_ENABLED()) {
-      txn->signature = txn_signature;
-      tASSERT(txn, audit_ex(txn, 0, false) == 0);
-    }
-  } else {
-    txn = env->basal_txn;
-    if (flags & MDBX_TXN_RDONLY) {
-      txn = txn_alloc(flags, env);
-      if (unlikely(!txn))
-        return LOG_IFERR(MDBX_ENOMEM);
-    }
-    rc = txn_renew(txn, flags);
-    if (unlikely(rc != MDBX_SUCCESS)) {
-      if (txn != env->basal_txn)
-        osal_free(txn);
-      return LOG_IFERR(rc);
-    }
   }
 
-  if (flags & (MDBX_TXN_RDONLY_PREPARE - MDBX_TXN_RDONLY))
+  txn->signature = txn_signature;
+  txn->userctx = context;
+
+  if (F_ISSET(flags, MDBX_TXN_RDONLY_PREPARE))
     eASSERT(env, txn->flags == (MDBX_TXN_RDONLY | MDBX_TXN_FINISHED));
   else if (flags & MDBX_TXN_RDONLY)
     eASSERT(env, (txn->flags & ~(MDBX_NOSTICKYTHREADS | MDBX_TXN_RDONLY | MDBX_WRITEMAP |
@@ -282,9 +280,10 @@ int mdbx_txn_begin_ex(MDBX_env *env, MDBX_txn *parent, MDBX_txn_flags_t flags, M
     eASSERT(env, (txn->flags & ~(MDBX_NOSTICKYTHREADS | MDBX_WRITEMAP | txn_shrink_allowed | txn_may_have_cursors |
                                  MDBX_NOMETASYNC | MDBX_SAFE_NOSYNC | MDBX_TXN_SPILLS)) == 0);
     assert(!txn->wr.spilled.list && !txn->wr.spilled.least_removed);
+    if (AUDIT_ENABLED() && ASSERT_ENABLED())
+      tASSERT(txn, audit_ex(txn, 0, false) == 0);
   }
-  txn->signature = txn_signature;
-  txn->userctx = context;
+
   *ret = txn;
   DEBUG("begin txn %" PRIaTXN "%c %p on env %p, root page %" PRIaPGNO "/%" PRIaPGNO, txn->txnid,
         (flags & MDBX_TXN_RDONLY) ? 'r' : 'w', __Wpedantic_format_voidptr(txn), __Wpedantic_format_voidptr(env),

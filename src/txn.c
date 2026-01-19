@@ -294,66 +294,6 @@ int txn_setup_primal(MDBX_txn *txn) {
   return err;
 }
 
-int txn_renew(MDBX_txn *txn, unsigned flags) {
-  int rc;
-  if (flags & MDBX_TXN_RDONLY) {
-    rc = txn_ro_start(txn, F_ISSET(flags, MDBX_TXN_RDONLY_PREPARE));
-    if (unlikely(rc != MDBX_SUCCESS))
-      goto bailout;
-  } else {
-    rc = txn_basal_start(txn, flags);
-    if (unlikely(rc != MDBX_SUCCESS))
-      goto bailout;
-  }
-  return MDBX_SUCCESS;
-
-bailout:
-  tASSERT(txn, rc != MDBX_SUCCESS);
-  txn->flags |= MDBX_TXN_ERROR;
-  txn_end(txn, TXN_END_SLOT | TXN_END_FAIL_BEGIN);
-  return rc;
-}
-
-int txn_end(MDBX_txn *txn, unsigned mode) {
-  static const char *const names[] = TXN_END_NAMES;
-  DEBUG("%s txn %" PRIaTXN "%c-0x%X %p  on env %p, root page %" PRIaPGNO "/%" PRIaPGNO, names[mode & TXN_END_OPMASK],
-        txn->txnid, (txn->flags & MDBX_TXN_RDONLY) ? 'r' : 'w', txn->flags, __Wpedantic_format_voidptr(txn),
-        __Wpedantic_format_voidptr(txn->env), txn->dbs[MAIN_DBI].root, txn->dbs[FREE_DBI].root);
-
-  tASSERT(txn, /* txn->signature == txn_signature && */ !txn->nested && !(txn->flags & MDBX_TXN_HAS_CHILD));
-  if (txn->flags & txn_may_have_cursors)
-    txn_done_cursors(txn);
-
-  MDBX_env *const env = txn->env;
-  MDBX_txn *const parent = txn->parent;
-  if (txn == env->basal_txn) {
-    tASSERT(txn, !parent && !(txn->flags & (MDBX_TXN_RDONLY | MDBX_TXN_FINISHED)) && txn->owner);
-    return txn_basal_end(txn, (mode & TXN_END_LOCK) != 0);
-  }
-
-  if (txn->flags & MDBX_TXN_RDONLY) {
-    tASSERT(txn, txn != env->txn && !parent);
-    tASSERT(txn, (mode & TXN_END_UPDATE) || (mode & TXN_END_OPMASK) == TXN_END_FAIL_BEGIN);
-    tASSERT(txn, mode & TXN_END_SLOT);
-    tASSERT(txn, !(mode & TXN_END_LOCK));
-    int err = txn_ro_reset(txn);
-    if (mode & TXN_END_FREE)
-      txn_ro_free(txn);
-    return err;
-  }
-
-  if (unlikely(!parent || txn != env->txn || parent->signature != txn_signature || parent->nested != txn ||
-               !(parent->flags & MDBX_TXN_HAS_CHILD) || txn == env->basal_txn)) {
-    ERROR("parent txn %p is invalid or mismatch for nested txn %p", __Wpedantic_format_voidptr(parent),
-          __Wpedantic_format_voidptr(txn));
-    return MDBX_PROBLEM;
-  }
-  tASSERT(txn, pnl_check_allocated(txn->wr.repnl, txn->geo.first_unallocated - MDBX_ENABLE_REFUND));
-  tASSERT(txn, memcmp(&txn->wr.troika, &parent->wr.troika, sizeof(troika_t)) == 0);
-  tASSERT(txn, mode & TXN_END_FREE);
-  return txn_nested_abort(txn);
-}
-
 int txn_check_badbits_parked(const MDBX_txn *txn, int bad_bits) {
   tASSERT(txn, (bad_bits & MDBX_TXN_PARKED) && (txn->flags & bad_bits));
   /* Здесь осознано заложено отличие в поведении припаркованных транзакций:

@@ -39,26 +39,6 @@ MDBX_MAYBE_UNUSED static inline void dxb_sanitize_tail(MDBX_env *env, MDBX_txn *
 }
 #endif /* ENABLE_MEMCHECK || __SANITIZE_ADDRESS__ */
 
-/* txn.c */
-#define TXN_END_NAMES                                                                                                  \
-  {"committed", "pure-commit", "abort", "reset", "fail-begin", "fail-begin-nested", "ousted", nullptr}
-enum {
-  /* txn_end operation number, for logging */
-  TXN_END_COMMITTED /* 0 */,
-  TXN_END_PURE_COMMIT /* 1 */,
-  TXN_END_ABORT /* 2 */,
-  TXN_END_RESET /* 3 */,
-  TXN_END_FAIL_BEGIN /* 4 */,
-  TXN_END_FAIL_BEGIN_NESTED /* 5 */,
-  TXN_END_OUSTED /* 6 */,
-  TXN_END_OPMASK = 0x07 /* mask for txn_end() operation number */,
-
-  TXN_END_UPDATE = 0x10 /* update env state (DBIs) */,
-  TXN_END_FREE = 0x20 /* free txn unless it is env.basal_txn */,
-  TXN_END_SLOT = 0x40 /* release any reader slot if NOSTICKYTHREADS */,
-  TXN_END_LOCK = 0x80 /* release writer mutex */
-};
-
 struct commit_timestamp {
   uint64_t start, prep, gc, audit, write, sync, gc_cpu;
 };
@@ -72,8 +52,6 @@ MDBX_INTERNAL int txn_shadow_cursors(const MDBX_txn *parent, const size_t dbi);
 MDBX_INTERNAL MDBX_txn *txn_alloc(const MDBX_txn_flags_t flags, MDBX_env *env);
 MDBX_INTERNAL int txn_abort(MDBX_txn *txn);
 MDBX_INTERNAL int txn_commit(MDBX_txn *txn, struct commit_timestamp *);
-MDBX_INTERNAL int txn_renew(MDBX_txn *txn, unsigned flags);
-MDBX_INTERNAL int txn_end(MDBX_txn *txn, unsigned mode);
 #if !(defined(_WIN32) || defined(_WIN64))
 MDBX_INTERNAL void txn_abort_after_resurrect(MDBX_txn *txn);
 #endif /* Windows */
