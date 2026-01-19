@@ -1,7 +1,8 @@
 /// \copyright Copyright (c) 2015-2026 Леонид Юрьев aka Leonid Yuriev <leo@yuriev.ru>. All Rights Reserved.
 ///
 /// THE CONTENTS OF THIS PROJECT ARE PROPRIETARY AND CONFIDENTIAL.
-/// UNAUTHORIZED COPYING, TRANSFERRING OR REPRODUCTION OF THE CONTENTS OF THIS PROJECT, VIA ANY MEDIUM IS STRICTLY PROHIBITED.
+/// UNAUTHORIZED COPYING, TRANSFERRING OR REPRODUCTION OF THE CONTENTS OF THIS PROJECT,
+/// VIA ANY MEDIUM IS STRICTLY PROHIBITED.
 ///
 /// The receipt or possession of the source code and/or any parts thereof does not convey or imply any right to use them
 /// for any purpose other than the purpose for which they were provided to you.
@@ -12,7 +13,8 @@
 /// whether in an action of contract, tort or otherwise, arising from, out of or in connection with the software
 /// or the use or other dealings in the software.
 ///
-/// The above copyright notice and this permission notice shall be included in all copies or substantial portions of the software.
+/// The above copyright notice and this permission notice shall be included in all copies
+/// or substantial portions of the software.
 ///
 /// \author Леонид Юрьев aka Leonid Yuriev <leo@yuriev.ru>
 /// \date 2015-2026
@@ -50,7 +52,7 @@ int main(int argc, const char *argv[]) {
 #include <latch>
 #include <thread>
 
-bool case0(const mdbx::path &path) {
+bool case0_trivia_sticky_threads(const mdbx::path &path) {
   mdbx::env_managed::create_parameters createParameters;
   createParameters.geometry.make_dynamic(21 * mdbx::env::geometry::MiB, 84 * mdbx::env::geometry::MiB);
 
@@ -62,11 +64,29 @@ bool case0(const mdbx::path &path) {
   txn.commit();
 
   //-------------------------------------
+
+  txn = env.start_read();
+  MDBX_txn *c_txn = nullptr;
+  int err = mdbx_txn_begin(env, NULL, MDBX_TXN_RDONLY, &c_txn);
+  assert(err == MDBX_BAD_RSLOT);
+  bool ok = err == MDBX_BAD_RSLOT;
+  err = mdbx_txn_begin(env, NULL, MDBX_TXN_RDONLY_PREPARE, &c_txn);
+  assert(err == MDBX_BAD_RSLOT);
+  ok = err == MDBX_BAD_RSLOT && ok;
+  txn.abort();
+
+  txn = env.prepare_read();
+  err = mdbx_txn_renew(txn);
+  assert(err == MDBX_SUCCESS);
+  ok = err == MDBX_SUCCESS && ok;
+  txn.abort();
+
+  //-------------------------------------
   txn = env.start_write();
-  MDBX_txn *c_txn = txn;
-  int err = mdbx_txn_reset(txn);
+  c_txn = txn;
+  err = mdbx_txn_reset(txn);
   assert(err == MDBX_EINVAL);
-  bool ok = err == MDBX_EINVAL;
+  ok = ok && err == MDBX_EINVAL;
 
   err = mdbx_txn_break(txn);
   assert(err == MDBX_SUCCESS);
@@ -176,7 +196,7 @@ bool case0(const mdbx::path &path) {
   return ok;
 }
 
-bool case1(const mdbx::path &path) {
+bool case1_trivia_NO_sticky_threads(const mdbx::path &path) {
   mdbx::env::operate_parameters operateParameters(100, 10);
   operateParameters.options.no_sticky_threads = true;
   operateParameters.options.nested_write_transactions = true;
@@ -191,21 +211,41 @@ bool case1(const mdbx::path &path) {
 
   err = mdbx_txn_break(txn);
   assert(err == MDBX_SUCCESS);
-  ok = ok && err == MDBX_SUCCESS;
+  ok = err == MDBX_SUCCESS && ok;
 
-  err = mdbx_txn_commit(txn);
+  err = mdbx_txn_begin(env, NULL, MDBX_TXN_RDONLY_PREPARE, &c_txn);
+  assert(err == MDBX_SUCCESS);
+  ok = err == MDBX_SUCCESS && ok;
+
+  err = mdbx_txn_commit(txn /* хендл внутри mdbx::txn_managed сохраняется */);
   assert(err == MDBX_RESULT_TRUE);
-  ok = ok && err == MDBX_RESULT_TRUE;
+  ok = err == MDBX_RESULT_TRUE && ok;
+
+  err = mdbx_txn_renew(c_txn);
+  assert(err == MDBX_SUCCESS);
+  ok = err == MDBX_SUCCESS && ok;
+  err = mdbx_txn_break(c_txn);
+  assert(err == MDBX_SUCCESS);
+  ok = err == MDBX_SUCCESS && ok;
+  err = mdbx_txn_reset(c_txn);
+  assert(err == MDBX_SUCCESS);
+  ok = err == MDBX_SUCCESS && ok;
+  err = mdbx_txn_renew(c_txn);
+  assert(err == MDBX_SUCCESS);
+  ok = err == MDBX_SUCCESS && ok;
+  err = mdbx_txn_abort(c_txn);
+  assert(err == MDBX_SUCCESS);
+  ok = err == MDBX_SUCCESS && ok;
 
   //-------------------------------------
   err = mdbx_txn_begin(env, nullptr, MDBX_TXN_READWRITE, &c_txn);
   assert(err == MDBX_SUCCESS);
-  ok = ok && err == MDBX_SUCCESS;
+  ok = err == MDBX_SUCCESS && ok;
   assert(c_txn == (const MDBX_txn *)txn);
 
   err = mdbx_txn_break(txn);
   assert(err == MDBX_SUCCESS);
-  ok = ok && err == MDBX_SUCCESS;
+  ok = err == MDBX_SUCCESS && ok;
 
   err = mdbx_txn_reset(txn);
   assert(err == MDBX_EINVAL);
@@ -221,7 +261,7 @@ bool case1(const mdbx::path &path) {
   //-------------------------------------
   err = mdbx_txn_begin(env, nullptr, MDBX_TXN_READWRITE, &c_txn);
   assert(err == MDBX_SUCCESS);
-  ok = ok && err == MDBX_SUCCESS;
+  ok = err == MDBX_SUCCESS && ok;
   assert(c_txn == (const MDBX_txn *)txn);
   txn.commit();
 
@@ -309,7 +349,7 @@ bool case1(const mdbx::path &path) {
   return ok;
 }
 
-bool case2(const mdbx::path &path, bool no_sticky_threads) {
+bool case2_concurrent_read_and_abort(const mdbx::path &path, bool no_sticky_threads) {
   mdbx::env::operate_parameters operateParameters(100, 10);
   operateParameters.options.no_sticky_threads = no_sticky_threads;
   mdbx::env_managed env(path, operateParameters);
@@ -332,7 +372,7 @@ bool case2(const mdbx::path &path, bool no_sticky_threads) {
   return true;
 }
 
-bool case3(const mdbx::path &path, bool no_sticky_threads) {
+bool case3_fresh_reads(const mdbx::path &path, bool no_sticky_threads) {
   mdbx::env::remove(path);
   mdbx::env_managed::create_parameters createParameters;
   createParameters.geometry.make_dynamic(21 * mdbx::env::geometry::MiB, 84 * mdbx::env::geometry::MiB);
@@ -391,12 +431,12 @@ int doit() {
   mdbx::env::remove(path);
 
   bool ok = true;
-  ok = case0(path) && ok;
-  ok = case1(path) && ok;
-  ok = case2(path, false) && ok;
-  ok = case2(path, true) && ok;
-  ok = case3(path, false) && ok;
-  ok = case3(path, true) && ok;
+  ok = case0_trivia_sticky_threads(path) && ok;
+  ok = case1_trivia_NO_sticky_threads(path) && ok;
+  ok = case2_concurrent_read_and_abort(path, false) && ok;
+  ok = case2_concurrent_read_and_abort(path, true) && ok;
+  ok = case3_fresh_reads(path, false) && ok;
+  ok = case3_fresh_reads(path, true) && ok;
 
   std::cout << (ok ? "OK\n" : "FAIL\n");
   return ok ? EXIT_SUCCESS : EXIT_FAILURE;
