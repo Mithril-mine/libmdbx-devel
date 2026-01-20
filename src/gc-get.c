@@ -1218,8 +1218,9 @@ depleted_gc:
       eASSERT(env, ret.err != MDBX_RESULT_TRUE);
       if (unlikely(ret.err != MDBX_SUCCESS))
         goto fail;
-      eASSERT(env, prefer_steady.ptr_c != meta_prefer_steady(env, &txn->wr.troika).ptr_c);
-      goto retry_gc_refresh_detent;
+      if (prefer_steady.ptr_c != meta_prefer_steady(env, &txn->wr.troika).ptr_c)
+        goto retry_gc_refresh_detent;
+      eASSERT(env, env->incore);
     }
   }
 
