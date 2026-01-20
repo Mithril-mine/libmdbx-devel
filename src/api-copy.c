@@ -636,7 +636,7 @@ __cold static int copy2fd(MDBX_txn *txn, mdbx_filehandle_t fd, MDBX_copy_flags_t
     return MDBX_BAD_TXN;
 
   int rc = MDBX_SUCCESS;
-  if (txn->flags & MDBX_TXN_RDONLY) {
+  if (txn->flags & txn_ro_flat) {
     if (flags & MDBX_CP_THROTTLE_MVCC) {
       rc = mdbx_txn_park(txn, true);
       if (unlikely(rc != MDBX_SUCCESS))
@@ -683,7 +683,7 @@ __cold static int copy2fd(MDBX_txn *txn, mdbx_filehandle_t fd, MDBX_copy_flags_t
       rc = mdbx_txn_unpark(txn, false);
   }
 
-  if (txn->flags & MDBX_TXN_RDONLY) {
+  if (txn->flags & txn_ro_flat) {
     if (flags & MDBX_CP_THROTTLE_MVCC)
       mdbx_txn_park(txn, true);
     else if (flags & MDBX_CP_DISPOSE_TXN)

@@ -55,7 +55,7 @@ __hot int tree_search(MDBX_cursor *mc, const MDBX_val *key, int flags) {
   if (mc->top < 0 || mc->pg[0]->pgno != root) {
     txnid_t pp_txnid = mc->tree->mod_txnid;
     pp_txnid = /* tree->mod_txnid maybe zero in a legacy DB */ pp_txnid ? pp_txnid : mc->txn->txnid;
-    if ((mc->txn->flags & MDBX_TXN_RDONLY) == 0) {
+    if ((mc->txn->flags & txn_ro_flat) == 0) {
       MDBX_txn *scan = mc->txn;
       do
         if ((scan->flags & MDBX_TXN_DIRTY) && (dbi == MAIN_DBI || (scan->dbi_state[dbi] & DBI_DIRTY))) {

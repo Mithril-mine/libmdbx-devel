@@ -14,7 +14,7 @@ int mdbx_txn_straggler(const MDBX_txn *txn, int *percent) {
   if (unlikely(rc != MDBX_SUCCESS))
     return LOG_IFERR((rc > 0) ? -rc : rc);
 
-  if (unlikely((txn->flags & MDBX_TXN_RDONLY) == 0)) {
+  if (unlikely((txn->flags & txn_ro_flat) == 0)) {
     if (percent)
       *percent = (int)((txn->geo.first_unallocated * UINT64_C(100) + txn->geo.end_pgno / 2) / txn->geo.end_pgno);
     return 0;
@@ -55,7 +55,7 @@ MDBX_txn_flags_t mdbx_txn_flags(const MDBX_txn *txn) {
   assert(0 == (int)(txn->flags & MDBX_TXN_INVALID));
 
   MDBX_txn_flags_t flags = txn->flags;
-  if (F_ISSET(flags, MDBX_TXN_PARKED | MDBX_TXN_RDONLY) && txn->ro.slot &&
+  if (F_ISSET(flags, MDBX_TXN_PARKED | txn_ro_flat) && txn->ro.slot &&
       safe64_read(&txn->ro.slot->tid) == MDBX_TID_TXN_OUSTED)
     flags |= MDBX_TXN_OUSTED;
   return flags;
@@ -71,7 +71,7 @@ int mdbx_txn_reset(MDBX_txn *txn) {
     return LOG_IFERR(rc);
 
   /* This call is only valid for read-only txns */
-  if (unlikely((txn->flags & MDBX_TXN_RDONLY) == 0))
+  if (unlikely((txn->flags & txn_ro_flat) == 0))
     return LOG_IFERR(MDBX_EINVAL);
 
   return LOG_IFERR(txn_ro_reset(txn));
@@ -98,7 +98,7 @@ int mdbx_txn_abort(MDBX_txn *txn) {
     return LOG_IFERR(rc);
 
 #if MDBX_TXN_CHECKOWNER
-  if ((txn->flags & (MDBX_TXN_RDONLY | MDBX_NOSTICKYTHREADS)) == MDBX_NOSTICKYTHREADS &&
+  if ((txn->flags & (txn_ro_flat | MDBX_NOSTICKYTHREADS)) == MDBX_NOSTICKYTHREADS &&
       unlikely(txn->owner != osal_thread_self())) {
     mdbx_txn_break(txn);
     return LOG_IFERR(MDBX_THREAD_MISMATCH);
@@ -124,7 +124,7 @@ int mdbx_txn_park(MDBX_txn *txn, bool autounpark) {
   if (unlikely(rc != MDBX_SUCCESS))
     return LOG_IFERR(rc);
 
-  if (unlikely((txn->flags & MDBX_TXN_RDONLY) == 0))
+  if (unlikely((txn->flags & txn_ro_flat) == 0))
     return LOG_IFERR(MDBX_TXN_INVALID);
 
   return LOG_IFERR(txn_ro_park(txn, autounpark));
@@ -140,7 +140,7 @@ int mdbx_txn_unpark(MDBX_txn *txn, bool restart_if_ousted) {
   if (unlikely(rc != MDBX_SUCCESS))
     return LOG_IFERR(rc);
 
-  if (unlikely(!F_ISSET(txn->flags, MDBX_TXN_RDONLY | MDBX_TXN_PARKED)))
+  if (unlikely(!F_ISSET(txn->flags, txn_ro_flat | MDBX_TXN_PARKED)))
     return MDBX_SUCCESS;
 
   rc = txn_ro_unpark(txn);
@@ -161,7 +161,7 @@ int mdbx_txn_refresh(MDBX_txn *txn) {
   if (unlikely(rc != MDBX_SUCCESS))
     return LOG_IFERR(rc);
 
-  if (unlikely((txn->flags & MDBX_TXN_RDONLY) == 0))
+  if (unlikely((txn->flags & txn_ro_flat) == 0))
     return LOG_IFERR(MDBX_EINVAL);
 
   if ((txn->flags & MDBX_TXN_FINISHED) == 0) {
@@ -184,7 +184,7 @@ int mdbx_txn_renew(MDBX_txn *txn) {
   if (unlikely(rc != MDBX_SUCCESS))
     return LOG_IFERR(rc);
 
-  if (unlikely((txn->flags & MDBX_TXN_RDONLY) == 0))
+  if (unlikely((txn->flags & txn_ro_flat) == 0))
     return LOG_IFERR(MDBX_EINVAL);
 
   if (unlikely((txn->flags & MDBX_TXN_FINISHED)) == 0) {
@@ -197,8 +197,8 @@ int mdbx_txn_renew(MDBX_txn *txn) {
   if (rc == MDBX_SUCCESS) {
     tASSERT(txn, txn->owner == (txn->flags & MDBX_NOSTICKYTHREADS) ? 0 : osal_thread_self());
     DEBUG("renew txn %" PRIaTXN "%c %p on env %p, root page %" PRIaPGNO "/%" PRIaPGNO, txn->txnid,
-          (txn->flags & MDBX_TXN_RDONLY) ? 'r' : 'w', __Wpedantic_format_voidptr(txn),
-          __Wpedantic_format_voidptr(txn->env), txn->dbs[MAIN_DBI].root, txn->dbs[FREE_DBI].root);
+          (txn->flags & txn_ro_flat) ? 'r' : 'w', __Wpedantic_format_voidptr(txn), __Wpedantic_format_voidptr(txn->env),
+          txn->dbs[MAIN_DBI].root, txn->dbs[FREE_DBI].root);
   }
   return LOG_IFERR(rc);
 }
@@ -231,8 +231,8 @@ int mdbx_txn_begin_ex(MDBX_env *env, MDBX_txn *parent, MDBX_txn_flags_t flags, M
 
   MDBX_txn *txn = nullptr;
   if (!parent) {
-    if (flags & MDBX_TXN_RDONLY) {
-      txn = txn_alloc(MDBX_TXN_RDONLY, env);
+    if (flags & txn_ro_flat) {
+      txn = txn_alloc(txn_ro_flat, env);
       if (unlikely(!txn))
         return LOG_IFERR(MDBX_ENOMEM);
       rc = txn_ro_start(txn, F_ISSET(flags, MDBX_TXN_RDONLY_PREPARE));
@@ -250,9 +250,9 @@ int mdbx_txn_begin_ex(MDBX_env *env, MDBX_txn *parent, MDBX_txn_flags_t flags, M
     if (unlikely(rc != MDBX_SUCCESS))
       return LOG_IFERR(rc);
 
-    if (unlikely(parent->flags & (MDBX_TXN_RDONLY | MDBX_WRITEMAP))) {
+    if (unlikely(parent->flags & (txn_ro_flat | MDBX_WRITEMAP))) {
       rc = MDBX_BAD_TXN;
-      if ((parent->flags & MDBX_TXN_RDONLY) == 0) {
+      if ((parent->flags & txn_ro_flat) == 0) {
         ERROR("%s mode is incompatible with nested transactions", "MDBX_WRITEMAP");
         rc = MDBX_INCOMPATIBLE;
       }
@@ -272,9 +272,9 @@ int mdbx_txn_begin_ex(MDBX_env *env, MDBX_txn *parent, MDBX_txn_flags_t flags, M
   txn->userctx = context;
 
   if (F_ISSET(flags, MDBX_TXN_RDONLY_PREPARE))
-    eASSERT(env, txn->flags == (MDBX_TXN_RDONLY | MDBX_TXN_FINISHED));
-  else if (flags & MDBX_TXN_RDONLY)
-    eASSERT(env, (txn->flags & ~(MDBX_NOSTICKYTHREADS | MDBX_TXN_RDONLY | MDBX_WRITEMAP |
+    eASSERT(env, txn->flags == (txn_ro_flat | MDBX_TXN_FINISHED));
+  else if (flags & txn_ro_flat)
+    eASSERT(env, (txn->flags & ~(MDBX_NOSTICKYTHREADS | txn_ro_flat | MDBX_WRITEMAP |
                                  /* Win32: SRWL flag */ txn_shrink_allowed)) == 0);
   else {
     eASSERT(env, (txn->flags & ~(MDBX_NOSTICKYTHREADS | MDBX_WRITEMAP | txn_shrink_allowed | txn_may_have_cursors |
@@ -286,7 +286,7 @@ int mdbx_txn_begin_ex(MDBX_env *env, MDBX_txn *parent, MDBX_txn_flags_t flags, M
 
   *ret = txn;
   DEBUG("begin txn %" PRIaTXN "%c %p on env %p, root page %" PRIaPGNO "/%" PRIaPGNO, txn->txnid,
-        (flags & MDBX_TXN_RDONLY) ? 'r' : 'w', __Wpedantic_format_voidptr(txn), __Wpedantic_format_voidptr(env),
+        (flags & txn_ro_flat) ? 'r' : 'w', __Wpedantic_format_voidptr(txn), __Wpedantic_format_voidptr(env),
         txn->dbs[MAIN_DBI].root, txn->dbs[FREE_DBI].root);
   return MDBX_SUCCESS;
 }
@@ -392,7 +392,7 @@ int mdbx_txn_commit_ex(MDBX_txn *txn, MDBX_commit_latency *latency) {
 
   int rc = check_txn(txn, MDBX_TXN_FINISHED);
   if (unlikely(rc != MDBX_SUCCESS)) {
-    if (rc == MDBX_BAD_TXN && F_ISSET(txn->flags, MDBX_TXN_FINISHED | MDBX_TXN_RDONLY)) {
+    if (rc == MDBX_BAD_TXN && F_ISSET(txn->flags, MDBX_TXN_FINISHED | txn_ro_flat)) {
       mdbx_txn_abort(txn);
       rc = MDBX_RESULT_TRUE;
     }
@@ -446,7 +446,7 @@ int mdbx_txn_info(const MDBX_txn *txn, MDBX_txn_info *info, bool scan_rlt) {
   info->txn_id = txn->txnid;
   info->txn_space_used = pgno2bytes(env, txn->geo.first_unallocated);
 
-  if (txn->flags & MDBX_TXN_RDONLY) {
+  if (txn->flags & txn_ro_flat) {
     meta_ptr_t head;
     uint64_t head_retired;
     troika_t troika = meta_tap(env);
@@ -568,7 +568,7 @@ retry:
     rc = check_txn(clone, 0);
     if (unlikely(rc != MDBX_SUCCESS))
       goto bailout;
-    if (unlikely((clone->flags & MDBX_TXN_RDONLY) == 0)) {
+    if (unlikely((clone->flags & txn_ro_flat) == 0)) {
       rc = MDBX_EINVAL;
       goto bailout;
     }
@@ -583,7 +583,7 @@ retry:
       goto retry;
     }
   } else {
-    clone = txn_alloc(MDBX_TXN_RDONLY | MDBX_TXN_FINISHED, env);
+    clone = txn_alloc(txn_ro_flat | MDBX_TXN_FINISHED, env);
     if (unlikely(!clone))
       return LOG_IFERR(MDBX_ENOMEM);
     clone->signature = txn_signature;

@@ -10,7 +10,7 @@ static inline uint64_t ro_slot_tid(const reader_slot_t *slot) { return slot->tid
 static inline txnid_t ro_slot_txnid(const reader_slot_t *slot) { return slot->txnid.weak; }
 
 MDBX_MAYBE_UNUSED static inline bool is_ro_txn(MDBX_txn *txn) {
-  return (txn->flags & (MDBX_TXN_RDONLY | MDBX_TXN_DIRTY | MDBX_TXN_SPILLS | MDBX_TXN_HAS_CHILD)) == MDBX_TXN_RDONLY &&
+  return (txn->flags & (txn_ro_flat | MDBX_TXN_DIRTY | MDBX_TXN_SPILLS | MDBX_TXN_HAS_CHILD)) == txn_ro_flat &&
          !txn->parent;
 }
 
@@ -221,7 +221,7 @@ static int ro_start_continue(MDBX_txn *txn) {
 
 int txn_ro_start(MDBX_txn *txn, bool prepare) {
   MDBX_env *const env = txn->env;
-  txn->flags = MDBX_TXN_RDONLY | MDBX_TXN_FINISHED | (env->flags & (MDBX_WRITEMAP | MDBX_NOSTICKYTHREADS));
+  txn->flags = txn_ro_flat | MDBX_TXN_FINISHED | (env->flags & (MDBX_WRITEMAP | MDBX_NOSTICKYTHREADS));
   int err = ro_slot_get(txn);
   if (unlikely(err != MDBX_SUCCESS))
     return err;
@@ -236,7 +236,7 @@ int txn_ro_start(MDBX_txn *txn, bool prepare) {
       eASSERT(env, slot->txnid.weak >= SAFE64_INVALID_THRESHOLD);
       atomic_store32(&slot->snapshot_pages_used, 0, mo_Relaxed);
     }
-    txn->flags = MDBX_TXN_RDONLY | MDBX_TXN_FINISHED;
+    txn->flags = txn_ro_flat | MDBX_TXN_FINISHED;
     return MDBX_SUCCESS;
   }
 
@@ -308,9 +308,9 @@ void txn_ro_free(MDBX_txn *txn) {
 
 int txn_ro_park(MDBX_txn *txn, bool autounpark) {
   reader_slot_t *const slot = txn->ro.slot;
-  tASSERT(txn, (txn->flags & (MDBX_TXN_FINISHED | MDBX_TXN_RDONLY | MDBX_TXN_PARKED)) == MDBX_TXN_RDONLY);
+  tASSERT(txn, (txn->flags & (MDBX_TXN_FINISHED | txn_ro_flat | MDBX_TXN_PARKED)) == txn_ro_flat);
   tASSERT(txn, ro_slot_tid(slot) < MDBX_TID_TXN_OUSTED);
-  if (unlikely((txn->flags & (MDBX_TXN_FINISHED | MDBX_TXN_RDONLY | MDBX_TXN_PARKED)) != MDBX_TXN_RDONLY))
+  if (unlikely((txn->flags & (MDBX_TXN_FINISHED | txn_ro_flat | MDBX_TXN_PARKED)) != txn_ro_flat))
     return MDBX_BAD_TXN;
 
   const mdbx_pid_t pid = atomic_load_pid(&slot->pid, mo_Relaxed);
@@ -337,8 +337,8 @@ int txn_ro_park(MDBX_txn *txn, bool autounpark) {
 }
 
 int txn_ro_unpark(MDBX_txn *txn) {
-  if (unlikely((txn->flags & (MDBX_TXN_FINISHED | MDBX_TXN_HAS_CHILD | MDBX_TXN_RDONLY | MDBX_TXN_PARKED)) !=
-               (MDBX_TXN_RDONLY | MDBX_TXN_PARKED)))
+  if (unlikely((txn->flags & (MDBX_TXN_FINISHED | MDBX_TXN_HAS_CHILD | txn_ro_flat | MDBX_TXN_PARKED)) !=
+               (txn_ro_flat | MDBX_TXN_PARKED)))
     return (txn->flags & MDBX_TXN_OUSTED) ? MDBX_OUSTED : MDBX_BAD_TXN;
 
   for (reader_slot_t *const slot = txn->ro.slot; slot; atomic_yield()) {
@@ -394,14 +394,14 @@ int txn_ro_clone(const MDBX_txn *const origin, MDBX_txn *const clone) {
     return MDBX_BAD_TXN;
 
   clone->flags = (origin->flags & (MDBX_NOSTICKYTHREADS | MDBX_WRITEMAP | MDBX_TXN_AUTOUNPARK | MDBX_TXN_PARKED)) |
-                 MDBX_TXN_RDONLY | MDBX_TXN_FINISHED;
+                 txn_ro_flat | MDBX_TXN_FINISHED;
   clone->owner = likely(clone->ro.slot) ? (uintptr_t)ro_slot_tid(clone->ro.slot)
                                         : ((clone->flags & MDBX_NOSTICKYTHREADS) ? 0 : osal_thread_self());
   clone->txnid = txn_basis_snapshot(origin);
   clone->front_txnid = clone->txnid;
 
   MDBX_env *const env = origin->env;
-  if (origin->flags & MDBX_TXN_RDONLY) {
+  if (origin->flags & txn_ro_flat) {
     if ((clone->flags & MDBX_NOSTICKYTHREADS) == 0 && env->txn && unlikely(env->basal_txn->owner == clone->owner) &&
         (globals.runtime_flags & MDBX_DBG_LEGACY_OVERLAP) == 0)
       return MDBX_TXN_OVERLAPPING;

@@ -48,7 +48,7 @@ int mdbx_cursor_bind(MDBX_txn *txn, MDBX_cursor *mc, MDBX_dbi dbi) {
   if (unlikely(rc != MDBX_SUCCESS))
     return LOG_IFERR(rc);
 
-  if (unlikely(dbi == FREE_DBI && !(txn->flags & MDBX_TXN_RDONLY)))
+  if (unlikely(dbi == FREE_DBI) && ((txn->flags & txn_ro_both) == 0 || txn->parent))
     return LOG_IFERR(MDBX_EACCESS);
 
   rc = dbi_check(txn, dbi);

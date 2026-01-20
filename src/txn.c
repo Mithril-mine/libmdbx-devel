@@ -67,7 +67,7 @@ int txn_commit(MDBX_txn *txn, struct commit_timestamp *ts) {
 
   MDBX_env *const env = txn->env;
   if (txn != env->txn) {
-    if (unlikely(txn->flags & MDBX_TXN_RDONLY) == 0) {
+    if (unlikely(txn->flags & txn_ro_flat) == 0) {
       ERROR("attempt to commit %s txn %p", "unknown", __Wpedantic_format_voidptr(txn));
       return MDBX_EINVAL;
     }
@@ -111,11 +111,11 @@ void txn_abort_after_resurrect(MDBX_txn *txn) {
 
 int txn_abort(MDBX_txn *txn) {
   DEBUG("txn %" PRIaTXN "%c-0x%X %p  on env %p, root page %" PRIaPGNO "/%" PRIaPGNO, txn->txnid,
-        (txn->flags & MDBX_TXN_RDONLY) ? 'r' : 'w', txn->flags, __Wpedantic_format_voidptr(txn),
+        (txn->flags & txn_ro_flat) ? 'r' : 'w', txn->flags, __Wpedantic_format_voidptr(txn),
         __Wpedantic_format_voidptr(txn->env), txn->dbs[MAIN_DBI].root, txn->dbs[FREE_DBI].root);
 
   tASSERT(txn, /* txn->signature == txn_signature && */ !txn->nested && !(txn->flags & MDBX_TXN_HAS_CHILD));
-  tASSERT(txn, (txn->flags & (MDBX_TXN_ERROR | MDBX_TXN_RDONLY)) || dpl_check(txn));
+  tASSERT(txn, (txn->flags & (MDBX_TXN_ERROR | txn_ro_flat)) || dpl_check(txn));
   txn->flags |= /* avoid merge cursors' state */ MDBX_TXN_ERROR;
 
   if (txn->flags & txn_may_have_cursors)
@@ -133,8 +133,7 @@ int txn_abort(MDBX_txn *txn) {
   if (txn->parent)
     return txn_nested_abort(txn);
 
-  tASSERT(txn,
-          (txn->flags & (MDBX_TXN_RDONLY | MDBX_TXN_DIRTY | MDBX_TXN_SPILLS | MDBX_TXN_HAS_CHILD)) == MDBX_TXN_RDONLY);
+  tASSERT(txn, (txn->flags & (txn_ro_flat | MDBX_TXN_DIRTY | MDBX_TXN_SPILLS | MDBX_TXN_HAS_CHILD)) == txn_ro_flat);
   txn_ro_free(txn);
   return MDBX_SUCCESS;
 }
@@ -160,7 +159,7 @@ __cold static slr_t latch_maindb_locked(MDBX_txn *txn, MDBX_env *const env) {
     }
 
     NOTICE("renew MainDB for %s-txn %" PRIaTXN " since db-flags changes 0x%x -> 0x%x",
-           (txn->flags & MDBX_TXN_RDONLY) ? "ro" : "rw", txn->txnid, env->dbs_flags[MAIN_DBI] & ~DB_VALID,
+           (txn->flags & txn_ro_flat) ? "ro" : "rw", txn->txnid, env->dbs_flags[MAIN_DBI] & ~DB_VALID,
            txn->dbs[MAIN_DBI].flags);
     slr.seq = dbi_seq_next(env, MAIN_DBI);
     env->dbs_flags[MAIN_DBI] = DB_POISON;
@@ -233,7 +232,7 @@ int txn_setup_primal(MDBX_txn *txn) {
 
   const size_t size_bytes = pgno2bytes(env, txn->geo.end_pgno);
   const size_t used_bytes = pgno2bytes(env, txn->geo.first_unallocated);
-  const size_t required_bytes = (txn->flags & MDBX_TXN_RDONLY) ? used_bytes : size_bytes;
+  const size_t required_bytes = (txn->flags & txn_ro_flat) ? used_bytes : size_bytes;
   eASSERT(env, env->dxb_mmap.limit >= env->dxb_mmap.current);
   int err = MDBX_SUCCESS;
   if (unlikely(required_bytes > env->dxb_mmap.current)) {
@@ -314,7 +313,7 @@ int txn_check_badbits_parked(const MDBX_txn *txn, int bad_bits) {
   return mdbx_txn_unpark((MDBX_txn *)txn, false);
 }
 
-MDBX_txn *txn_alloc(const MDBX_txn_flags_t flags, MDBX_env *env) {
+MDBX_txn *txn_alloc(const unsigned flags, MDBX_env *env) {
   MDBX_txn *txn = nullptr;
   const intptr_t bitmap_bytes =
 #if MDBX_ENABLE_DBI_SPARSE
@@ -323,10 +322,9 @@ MDBX_txn *txn_alloc(const MDBX_txn_flags_t flags, MDBX_env *env) {
       0;
 #endif /* MDBX_ENABLE_DBI_SPARSE */
   STATIC_ASSERT(sizeof(txn->wr) > sizeof(txn->ro));
-  const size_t base =
-      (flags & MDBX_TXN_RDONLY) ? sizeof(MDBX_txn) - sizeof(txn->wr) + sizeof(txn->ro) : sizeof(MDBX_txn);
+  const size_t base = (flags & txn_ro_flat) ? sizeof(MDBX_txn) - sizeof(txn->wr) + sizeof(txn->ro) : sizeof(MDBX_txn);
   const size_t size = base +
-                      ((flags & MDBX_TXN_RDONLY) ? (size_t)bitmap_bytes + env->max_dbi * sizeof(txn->dbi_seqs[0]) : 0) +
+                      ((flags & txn_ro_flat) ? (size_t)bitmap_bytes + env->max_dbi * sizeof(txn->dbi_seqs[0]) : 0) +
                       env->max_dbi * (sizeof(txn->dbs[0]) + sizeof(txn->cursors[0]) + sizeof(txn->dbi_state[0]));
   txn = osal_malloc(size);
   if (unlikely(!txn))
@@ -343,7 +341,7 @@ MDBX_txn *txn_alloc(const MDBX_txn_flags_t flags, MDBX_env *env) {
   txn->flags = flags;
   txn->env = env;
 
-  if (flags & MDBX_TXN_RDONLY) {
+  if (flags & txn_ro_flat) {
     txn->dbi_seqs = ptr_disp(txn->cursors, env->max_dbi * sizeof(txn->cursors[0]));
 #if MDBX_ENABLE_DBI_SPARSE
     txn->dbi_sparse = ptr_disp(txn->dbi_state, -bitmap_bytes);

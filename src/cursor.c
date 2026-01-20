@@ -122,7 +122,7 @@ static int touch_dbi(MDBX_cursor *mc) {
 }
 
 __hot int cursor_touch(MDBX_cursor *const mc, const MDBX_val *key, const MDBX_val *data) {
-  cASSERT(mc, (mc->txn->flags & MDBX_TXN_RDONLY) == 0);
+  cASSERT(mc, (mc->txn->flags & txn_ro_both) == 0);
   cASSERT(mc, is_pointed(mc) || mc->tree->height == 0);
   cASSERT(mc, cursor_is_tracked(mc));
 
@@ -2346,7 +2346,7 @@ int cursor_check(const MDBX_cursor *mc, int txn_bad_bits) {
   /* проверяем что курсор в связном списке для отслеживания, исключение допускается только для read-only операций для
    * служебных/временных курсоров на стеке. */
   MDBX_MAYBE_UNUSED char stack_top[sizeof(void *)];
-  cASSERT(mc, cursor_is_tracked(mc) || (!(txn_bad_bits & MDBX_TXN_RDONLY) && stack_top < (char *)mc &&
+  cASSERT(mc, cursor_is_tracked(mc) || (!(txn_bad_bits & txn_ro_flat) && stack_top < (char *)mc &&
                                         (char *)mc - stack_top < (ptrdiff_t)globals.sys_pagesize * 4));
 
   if (txn_bad_bits) {
@@ -2359,12 +2359,12 @@ int cursor_check(const MDBX_cursor *mc, int txn_bad_bits) {
     if (likely((mc->txn->flags & MDBX_TXN_HAS_CHILD) == 0))
       return likely(!cursor_dbi_changed(mc)) ? MDBX_SUCCESS : MDBX_BAD_DBI;
 
-    cASSERT(mc, (mc->txn->flags & MDBX_TXN_RDONLY) == 0 && mc->txn != mc->txn->env->txn && mc->txn->env->txn);
+    cASSERT(mc, (mc->txn->flags & txn_ro_flat) == 0 && mc->txn != mc->txn->env->txn && mc->txn->env->txn);
     rc = dbi_check(mc->txn->env->txn, cursor_dbi(mc));
     if (unlikely(rc != MDBX_SUCCESS))
       return rc;
 
-    cASSERT(mc, (mc->txn->flags & MDBX_TXN_RDONLY) == 0 && mc->txn == mc->txn->env->txn);
+    cASSERT(mc, (mc->txn->flags & txn_ro_flat) == 0 && mc->txn == mc->txn->env->txn);
   }
 
   return MDBX_SUCCESS;
