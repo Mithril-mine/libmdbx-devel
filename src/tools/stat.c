@@ -107,6 +107,16 @@ static void logger(MDBX_log_level_t level, const char *function, int line, const
   }
 }
 
+static void print_pages_percentage(const char *caption, size_t value, size_t backed, size_t total) {
+  char buf[42];
+  printf("  %s: %" PRIuSIZE, caption, value);
+  if (value && value < backed)
+    printf(", %s%% of %s", mdbx_ratio2percents(value, backed, buf, sizeof(buf)), "backed");
+  if (value && value < total)
+    printf(", %s%% of %s", mdbx_ratio2percents(value, total, buf, sizeof(buf)), "total");
+  putchar('\n');
+}
+
 int main(int argc, char *argv[]) {
   int opt, rc;
   MDBX_env *env;
@@ -402,41 +412,29 @@ int main(int argc, char *argv[]) {
     }
 
     if (envinfo) {
-      char buffer[64];
-
       puts("Page Usage");
       const size_t total_pages = mei.mi_mapsize / mei.mi_dxb_pagesize;
-      printf("  Total: %" PRIuSIZE " 100%%\n", total_pages);
-
       const size_t backed_pages = mei.mi_geo.current / mei.mi_dxb_pagesize;
-      printf("  Backed: %" PRIuSIZE " %s%%\n", backed_pages,
-             mdbx_ratio2percents(backed_pages, total_pages, buffer, sizeof(buffer)));
+      print_pages_percentage("Total", total_pages, backed_pages, total_pages);
+      print_pages_percentage("Backed", backed_pages, backed_pages, total_pages);
 
       const size_t allocated_pages = mei.mi_last_pgno + 1;
-      printf("  Allocated: %" PRIuSIZE " %s%%\n", allocated_pages,
-             mdbx_ratio2percents(allocated_pages, total_pages, buffer, sizeof(buffer)));
+      print_pages_percentage("Allocated", allocated_pages, backed_pages, total_pages);
 
       const size_t remained_pages = total_pages - allocated_pages;
-      printf("  Remained: %" PRIuSIZE " %s%%\n", remained_pages,
-             mdbx_ratio2percents(remained_pages, total_pages, buffer, sizeof(buffer)));
+      print_pages_percentage("Remained", remained_pages, backed_pages, total_pages);
 
       const size_t used_pages = allocated_pages - gc_pages;
-      printf("  Used: %" PRIuSIZE " %s%%\n", used_pages,
-             mdbx_ratio2percents(used_pages, total_pages, buffer, sizeof(buffer)));
+      print_pages_percentage("Used", used_pages, backed_pages, total_pages);
 
-      printf("  GC: %" PRIuSIZE " %s%%\n", gc_pages,
-             mdbx_ratio2percents(gc_pages, total_pages, buffer, sizeof(buffer)));
-
-      printf("  Reclaimable: %" PRIuSIZE " %s%%\n", gc_reclaimable,
-             mdbx_ratio2percents(gc_reclaimable, total_pages, buffer, sizeof(buffer)));
+      print_pages_percentage("GC.whole", gc_pages, backed_pages, total_pages);
+      print_pages_percentage("GC.reclaimable", gc_reclaimable, backed_pages, total_pages);
 
       const size_t gc_retained = gc_pages - gc_reclaimable;
-      printf("  Retained: %" PRIuSIZE " %s%%\n", gc_retained,
-             mdbx_ratio2percents(gc_retained, total_pages, buffer, sizeof(buffer)));
+      print_pages_percentage("GC.retained", gc_retained, backed_pages, total_pages);
 
       const size_t available_pages = gc_reclaimable + remained_pages;
-      printf("  Available: %" PRIuSIZE " %s%%\n", available_pages,
-             mdbx_ratio2percents(available_pages, total_pages, buffer, sizeof(buffer)));
+      print_pages_percentage("Available", available_pages, backed_pages, total_pages);
     } else
       printf("  GC: %" PRIuSIZE " pages\n", gc_pages);
   }
