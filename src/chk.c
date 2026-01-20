@@ -506,9 +506,9 @@ static void histogram_reduce(struct MDBX_chk_histogram *p) {
   p->ranges[min_i].end = p->ranges[min_i + 1].end;
   p->ranges[min_i].amount += p->ranges[min_i + 1].amount;
   p->ranges[min_i].count += p->ranges[min_i + 1].count;
-  if (min_i < last)
+  if (min_i < last - 1)
     // перемещаем хвост
-    memmove(p->ranges + min_i, p->ranges + min_i + 1, (last - min_i) * sizeof(p->ranges[0]));
+    memmove(p->ranges + min_i + 1, p->ranges + min_i + 2, (last - min_i - 1) * sizeof(p->ranges[0]));
   // обнуляем последний элемент и продолжаем
   p->ranges[last].count = 0;
 }
