@@ -135,3 +135,25 @@ MDBX_INTERNAL int coherency_fetch_head(MDBX_txn *txn, const meta_ptr_t head, uin
 MDBX_INTERNAL int coherency_check_written(const MDBX_env *env, const txnid_t txnid, const volatile meta_t *meta,
                                           const intptr_t pgno, uint64_t *timestamp);
 MDBX_INTERNAL int coherency_timeout(uint64_t *timestamp, intptr_t pgno, const MDBX_env *env);
+
+/* histogram.c */
+MDBX_INTERNAL void histogram_acc(const size_t n, struct MDBX_chk_histogram *p);
+MDBX_INTERNAL MDBX_chk_line_t *histogram_dist(MDBX_chk_line_t *line, const struct MDBX_chk_histogram *histogram,
+                                              const char *prefix, const char *first, bool amount);
+MDBX_INTERNAL MDBX_chk_line_t *histogram_print(MDBX_chk_scope_t *scope, MDBX_chk_line_t *line,
+                                               const struct MDBX_chk_histogram *histogram, const char *prefix,
+                                               const char *first, bool amount);
+
+/* print.c */
+MDBX_INTERNAL void chk_line_end(MDBX_chk_line_t *line);
+MDBX_INTERNAL __must_check_result MDBX_chk_line_t *chk_line_begin(MDBX_chk_scope_t *const scope,
+                                                                  enum MDBX_chk_severity severity);
+MDBX_INTERNAL MDBX_chk_line_t *chk_line_feed(MDBX_chk_line_t *line);
+MDBX_INTERNAL MDBX_chk_line_t *chk_flush(MDBX_chk_line_t *line);
+MDBX_INTERNAL size_t chk_print_wanna(MDBX_chk_line_t *line, size_t need);
+MDBX_INTERNAL MDBX_chk_line_t *chk_puts(MDBX_chk_line_t *line, const char *str);
+MDBX_INTERNAL MDBX_chk_line_t *chk_print_va(MDBX_chk_line_t *line, const char *fmt, va_list args);
+MDBX_INTERNAL MDBX_chk_line_t *MDBX_PRINTF_ARGS(2, 3) chk_print(MDBX_chk_line_t *line, const char *fmt, ...);
+MDBX_INTERNAL void chk_println_va(MDBX_chk_scope_t *const scope, enum MDBX_chk_severity severity, const char *fmt,
+                                  va_list args);
+MDBX_INTERNAL void chk_println(MDBX_chk_scope_t *const scope, enum MDBX_chk_severity severity, const char *fmt, ...);

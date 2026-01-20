@@ -29,6 +29,7 @@
 #include "gc-get.c"
 #include "gc-put.c"
 #include "global.c"
+#include "histogram.c"
 #include "lck-posix.c"
 #include "lck-windows.c"
 #include "lck.c"
