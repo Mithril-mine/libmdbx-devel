@@ -3548,6 +3548,18 @@ public:
   /// Returns environment flags.
   inline MDBX_env_flags_t get_flags() const;
 
+  inline bool is_readonly() const { return (get_flags() & MDBX_RDONLY) != 0; }
+
+  inline bool is_exclusive() const { return (get_flags() & MDBX_EXCLUSIVE) != 0; }
+
+  inline bool is_cooperative() const { return !is_exclusive(); }
+
+  inline bool is_writemap() const { return (get_flags() & MDBX_WRITEMAP) != 0; }
+
+  inline bool is_readwite() const { return !is_readonly(); }
+
+  inline bool is_nested_transactions_available() const { return (get_flags() & (MDBX_WRITEMAP | MDBX_RDONLY)) == 0; }
+
   /// \brief Returns the maximum number of threads/reader slots for the environment.
   /// \see extra_runtime_option::max_readers
   inline unsigned max_readers() const;
@@ -4259,25 +4271,21 @@ public:
   /// instead of saving ones.
   void abort();
 
-  /// \brief Commit all the operations of a transaction into the database.
+  /// \brief Commits all changes of the transaction into a database with collecting latencies information.
   void commit();
 
-  /// \brief Commit all the operations of a transaction into the database
-  /// and then start read transaction.
+  /// \brief Commits all the operations of a transaction into the database and then start read transaction.
   void commit_embark_read();
 
   using commit_latency = MDBX_commit_latency;
 
-  /// \brief Commit all the operations of a transaction into the database
-  /// and collect latency information.
+  /// \brief Commits all changes of the transaction into a database with collecting latencies information.
   void commit(commit_latency *);
 
-  /// \brief Commit all the operations of a transaction into the database
-  /// and collect latency information.
+  /// \brief Commits all changes of the transaction into a database with collecting latencies information.
   void commit(commit_latency &latency) { return commit(&latency); }
 
-  /// \brief Commit all the operations of a transaction into the database
-  /// and return latency information.
+  /// \brief Commits all changes of the transaction into a database and return latency information.
   /// \returns latency information of commit stages.
   commit_latency commit_get_latency() {
     commit_latency result;
