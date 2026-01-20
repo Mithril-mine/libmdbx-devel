@@ -593,7 +593,7 @@ MDBX_MAYBE_UNUSED static void static_checks(void) {
 
 #include "page-ops.h"
 
-#include "tls.h"
+#include "rthc.h"
 
 #include "walk.h"
 

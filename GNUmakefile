@@ -788,7 +788,7 @@ $(DIST_DIR)/@tmp-internals.inc: $(DIST_DIR)/@tmp-essentials.inc src/version.c $(
 		-e '/#include "page-ops.h"/r src/page-ops.h' \
 		-e '/#include "spill.h"/r src/spill.h' \
 		-e '/#include "sort.h"/r src/sort.h' \
-		-e '/#include "tls.h"/r src/tls.h' \
+		-e '/#include "rthc.h"/r src/rthc.h' \
 		-e '/#include "walk.h"/r src/walk.h' \
 		-e '/#include "windows-import.h"/r src/windows-import.h' \
 		src/internals.h \

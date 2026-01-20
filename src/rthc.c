@@ -503,7 +503,7 @@ __cold void rthc_dtor(const mdbx_pid_t current_pid) {
 #endif
 
   for (unsigned left; (left = atomic_load32(&rthc_pending, mo_AcquireRelease)) > 0;) {
-    NOTICE("tls-cleanup: pid %zd, pending %u, wait for...", (size_t)current_pid, left);
+    NOTICE("cleanup thread-local-dtors: pid %zd, pending %u, wait for...", (size_t)current_pid, left);
     const int rc = pthread_cond_timedwait(&rthc_cond, &rthc_mutex, &abstime);
     if (rc && rc != EINTR)
       break;
