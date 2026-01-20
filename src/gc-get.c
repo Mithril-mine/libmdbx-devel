@@ -1144,7 +1144,7 @@ depleted_gc:
   const meta_ptr_t recent = meta_recent(env, &txn->tw.troika);
   const meta_ptr_t prefer_steady = meta_prefer_steady(env, &txn->tw.troika);
   if ((flags & ALLOC_UNIMPORTANT) == 0 && recent.ptr_c != prefer_steady.ptr_c && prefer_steady.is_steady &&
-      detent == prefer_steady.txnid + 1) {
+      detent == prefer_steady.txnid) {
     DEBUG("gc-kick-steady: recent %" PRIaTXN "-%s, steady %" PRIaTXN "-%s, detent %" PRIaTXN, recent.txnid,
           durable_caption(recent.ptr_c), prefer_steady.txnid, durable_caption(prefer_steady.ptr_c), detent);
     const pgno_t autosync_threshold = atomic_load32(&env->lck->autosync_threshold, mo_Relaxed);
@@ -1187,8 +1187,9 @@ depleted_gc:
       eASSERT(env, ret.err != MDBX_RESULT_TRUE);
       if (unlikely(ret.err != MDBX_SUCCESS))
         goto fail;
-      eASSERT(env, prefer_steady.ptr_c != meta_prefer_steady(env, &txn->tw.troika).ptr_c);
-      goto retry_gc_refresh_oldest;
+      if (prefer_steady.ptr_c != meta_prefer_steady(env, &txn->tw.troika).ptr_c)
+        goto retry_gc_refresh_oldest;
+      eASSERT(env, env->incore);
     }
   }
 
@@ -1215,14 +1216,11 @@ depleted_gc:
 
 no_gc:
   eASSERT(env, pgno == 0);
-#ifndef MDBX_ENABLE_BACKLOG_DEPLETED
-#define MDBX_ENABLE_BACKLOG_DEPLETED 0
-#endif /* MDBX_ENABLE_BACKLOG_DEPLETED*/
-  if (MDBX_ENABLE_BACKLOG_DEPLETED && unlikely(!(txn->flags & txn_gc_drained))) {
+  if (unlikely(!(txn->flags & txn_gc_drained))) {
     ret.err = MDBX_BACKLOG_DEPLETED;
     goto fail;
   }
-  if (flags & ALLOC_RESERVE) {
+  if (flags & (ALLOC_RESERVE | ALLOC_UNIMPORTANT)) {
     ret.err = MDBX_NOTFOUND;
     goto fail;
   }
