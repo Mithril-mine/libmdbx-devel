@@ -11,58 +11,29 @@ static bool histogram_check(const struct MDBX_chk_histogram *p, size_t adj) {
   return quantiry == p->count - adj;
 }
 
-static size_t div_8s(size_t numerator, size_t divider) {
-  assert(numerator <= (SIZE_MAX >> 8));
-  return (numerator << 8) / divider;
-}
-
-static size_t mul_8s(size_t quotient, size_t multiplier) {
-  size_t hi = multiplier * (quotient >> 8);
-  size_t lo = multiplier * (quotient & 255) + 128;
-  return hi + (lo >> 8);
-}
-
-static void histogram_reduce(struct MDBX_chk_histogram *p) {
+static void histogram_reduce_move(struct MDBX_chk_histogram *p, size_t point) {
   assert(histogram_check(p, 1));
-  const size_t size = ARRAY_LENGTH(p->ranges), last = size - 1;
-  // ищем пару для слияния с минимальной ошибкой
-  size_t min_err = SIZE_MAX, min_i = last - 1;
-  for (size_t i = 0; i < last; ++i) {
-    const size_t b1 = p->ranges[i].begin, e1 = p->ranges[i].end, s1 = p->ranges[i].amount;
-    const size_t b2 = p->ranges[i + 1].begin, e2 = p->ranges[i + 1].end, s2 = p->ranges[i + 1].amount;
-    const size_t l1 = e1 - b1, l2 = e2 - b2, lx = e2 - b1, sx = s1 + s2;
-    assert(s1 > 0 && b1 > 0 && b1 < e1);
-    assert(s2 > 0 && b2 > 0 && b2 < e2);
-    assert(e1 <= b2);
-    // за ошибку принимаем площадь изменений на гистограмме при слиянии
-    const size_t h1 = div_8s(s1, l1), h2 = div_8s(s2, l2), hx = div_8s(sx, lx);
-    const size_t d1 = mul_8s((h1 > hx) ? h1 - hx : hx - h1, l1);
-    const size_t d2 = mul_8s((h2 > hx) ? h2 - hx : hx - h2, l2);
-    const size_t dx = mul_8s(hx, b2 - e1);
-    const size_t err = d1 + d2 + dx;
-    if (min_err >= err) {
-      min_i = i;
-      min_err = err;
-    }
-  }
   // объединяем
-  p->ranges[min_i].end = p->ranges[min_i + 1].end;
-  p->ranges[min_i].amount += p->ranges[min_i + 1].amount;
-  p->ranges[min_i].count += p->ranges[min_i + 1].count;
-  if (min_i < last)
-    // перемещаем хвост
-    memmove(p->ranges + min_i + 1, p->ranges + min_i + 2, (last - min_i) * sizeof(p->ranges[0]));
+  p->ranges[point].end = p->ranges[point + 1].end;
+  p->ranges[point].amount += p->ranges[point + 1].amount;
+  p->ranges[point].count += p->ranges[point + 1].count;
+
+  // перемещаем хвост
+  while (++point < ARRAY_LENGTH(p->ranges) - 1)
+    p->ranges[point] = p->ranges[point + 1];
+
   // обнуляем последний элемент и продолжаем
-  p->ranges[last].count = 0;
+  p->ranges[ARRAY_LENGTH(p->ranges) - 1].count = 0;
   assert(histogram_check(p, 1));
 }
 
-void histogram_acc(const size_t n, struct MDBX_chk_histogram *p) {
+static __hot void histogram_put(const size_t v, struct MDBX_chk_histogram *p,
+                                intptr_t (*finder)(struct MDBX_chk_histogram *p, size_t v)) {
   STATIC_ASSERT(ARRAY_LENGTH(p->ranges) > 2);
-  p->amount += n;
+  p->amount += v;
   p->count += 1;
-  if (likely(n < 2)) {
-    p->le1_amount += n;
+  if (likely(v < 2)) {
+    p->le1_amount += v;
     p->le1_count += 1;
     return;
   }
@@ -70,10 +41,10 @@ void histogram_acc(const size_t n, struct MDBX_chk_histogram *p) {
   const size_t size = ARRAY_LENGTH(p->ranges), last = size - 1;
   for (;;) {
     size_t i = 0;
-    while (i < size && p->ranges[i].count && n >= p->ranges[i].begin) {
-      if (n < p->ranges[i].end) {
+    while (i < size && p->ranges[i].count && v >= p->ranges[i].begin) {
+      if (v < p->ranges[i].end) {
         // значение попадает в существующий интервал
-        p->ranges[i].amount += n;
+        p->ranges[i].amount += v;
         p->ranges[i].count += 1;
         return;
       }
@@ -86,16 +57,113 @@ void histogram_acc(const size_t n, struct MDBX_chk_histogram *p) {
         // раздвигаем
         memmove(p->ranges + i + 1, p->ranges + i, (last - i) * sizeof(p->ranges[0]));
       }
-      p->ranges[i].begin = n;
-      p->ranges[i].end = n + 1;
-      p->ranges[i].amount = n;
+      p->ranges[i].begin = v;
+      p->ranges[i].end = v + 1;
+      p->ranges[i].amount = v;
       p->ranges[i].count = 1;
       assert(histogram_check(p, 0));
       return;
     }
-    histogram_reduce(p);
+
+    const intptr_t point = finder(p, v);
+    if (point >= 0)
+      // ошибка меньше если слить соседние слоты и добавить новый
+      histogram_reduce_move(p, point);
+    else {
+      // ошибка меньше если расширить слот и добавить к нему
+      i = -point - 1;
+      p->ranges[i].begin = (v < p->ranges[i].begin) ? v : p->ranges[i].begin;
+      p->ranges[i].end = (v < p->ranges[i].end) ? p->ranges[i].end : v + 1;
+      p->ranges[i].amount += v;
+      p->ranges[i].count += 1;
+      return;
+    }
   }
 }
+
+//------------------------------------------------------------------------------
+
+__hot static intptr_t histogram_minimize_error(struct MDBX_chk_histogram *p, size_t v) {
+#if MDBX_HISTOGRAM_USING_128BIT
+  bin128_t best_reduce = {.l = UINT64_MAX, .h = UINT64_MAX}, best_enhance = best_reduce;
+#else
+  uint64_t best_reduce = UINT64_MAX, best_enhance = best_reduce;
+#endif /* MDBX_HISTOGRAM_USING_128BIT */
+
+  // ищем пару для слияния с минимальной ошибкой
+  intptr_t reduce = 0;
+  for (size_t i = 0; i < ARRAY_LENGTH(p->ranges) - 1; ++i) {
+    const size_t b1 = p->ranges[i].begin, e1 = p->ranges[i].end;
+    const size_t b2 = p->ranges[i + 1].begin, e2 = p->ranges[i + 1].end;
+    const uint64_t n1 = p->ranges[i].count, n2 = p->ranges[i + 1].count;
+    assert(n1 > 0 && b1 > 0 && b1 < e1);
+    assert(n2 > 0 && b2 > 0 && b2 < e2);
+    assert(e1 <= b2);
+    // за ошибку принимаем площадь изменений на гистограмме при слиянии слотов
+    // s1 = (l1 = e1 - b1) * n1; s2 = (l2 = e2 - b2) * n2
+    // sx = (lx = e2 - b1) * (nx = n1 + n2) == e2*n1 + e2*n2 - b1*n1 - b1*n2
+    // err = s1 + s2 - sx == e1*n1 - b1*n1 + e2*n2 - b2*n2 - e2*n1 - e2*n2 + b1*n1 + b1*n
+    // err = n1 * (e2 - e1) + n2 * (b2 - b1)
+#if MDBX_HISTOGRAM_USING_128BIT
+    const bin128_t err = u128_add(mul64x64_128(e2 - e1, n1), mul64x64_128(b2 - b1, n2));
+    if (u128_gt(err, best_reduce))
+      continue;
+#else
+    const uint64_t err = (e2 - e1) * n1 + (b2 - b1) * n2;
+    if (err > best_reduce)
+      continue;
+#endif /* MDBX_HISTOGRAM_USING_128BIT */
+
+    reduce = i;
+    best_reduce = err;
+  }
+
+  // ищем слот для расширения с минимальной ошибкой
+  intptr_t enhance = 0;
+  for (size_t i = 0; i < ARRAY_LENGTH(p->ranges); ++i) {
+    const size_t b = p->ranges[i].begin, e = p->ranges[i].end;
+    const uint64_t n = p->ranges[i].count;
+    const size_t ve = (v < e) ? e : v + 1;
+    assert(n > 0 && b > 0 && b < e);
+    if (i > 0 && v < p->ranges[i - 1].end)
+      // пропускаем если расширение этого слота приведёт к пересечению с предыдущим
+      continue;
+    if (i < ARRAY_LENGTH(p->ranges) - 1 && v >= p->ranges[i + 1].begin)
+      // пропускаем если расширение этого слота приведёт к пересечению со следующим
+      continue;
+
+    // за ошибку принимаем площадь изменений на гистограмме при расширении слота
+#if MDBX_HISTOGRAM_USING_128BIT
+    const bin128_t err =
+        u128_add((v < b) ? mul64x64_128(b - v, n) : u128(v - b), (ve < e) ? u128(e - ve) : mul64x64_128(ve - e, n));
+    if (u128_gt(err, best_enhance))
+      continue;
+#else
+    const uint64_t err = ((v < b) ? (b - v) * n : v - b) + ((ve < e) ? e - ve : (ve - e) * n);
+    if (err > best_enhance)
+      continue;
+#endif /* MDBX_HISTOGRAM_USING_128BIT */
+
+    enhance = i;
+    best_enhance = err;
+  }
+
+#if MDBX_HISTOGRAM_USING_128BIT
+  if (u128_gt(best_enhance, best_reduce))
+    return reduce;
+#else
+  if (best_enhance > best_reduce)
+    return reduce;
+#endif
+
+  return -(enhance + 1);
+}
+
+__hot void histogram_acc(const size_t v, struct MDBX_chk_histogram *p) {
+  histogram_put(v, p, histogram_minimize_error);
+}
+
+//------------------------------------------------------------------------------
 
 __cold MDBX_chk_line_t *histogram_dist(MDBX_chk_line_t *line, const struct MDBX_chk_histogram *histogram,
                                        const char *prefix, const char *first, bool amount) {

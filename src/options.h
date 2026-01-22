@@ -375,6 +375,16 @@
 #define MDBX_USE_FALLOCATE_CONFIG MDBX_STRINGIFY(MDBX_USE_FALLOCATE)
 #endif /* MDBX_USE_FALLOCATE */
 
+#ifndef MDBX_HISTOGRAM_USING_128BIT
+#if MDBX_WORDBITS >= 64
+#define MDBX_HISTOGRAM_USING_128BIT 1
+#else
+#define MDBX_HISTOGRAM_USING_128BIT 0
+#endif
+#elif !(MDBX_HISTOGRAM_USING_128BIT == 0 || MDBX_HISTOGRAM_USING_128BIT == 1)
+#error MDBX_HISTOGRAM_USING_128BIT must be defined as 0 or 1
+#endif /* MDBX_HISTOGRAM_USING_128BIT */
+
 //------------------------------------------------------------------------------
 
 #ifndef MDBX_CPU_WRITEBACK_INCOHERENT
