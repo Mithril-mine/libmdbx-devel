@@ -891,7 +891,7 @@ __cold static int chk_tree(MDBX_chk_scope_t *const scope) {
                                "nested tree(s): quantity %" PRIuSIZE ", subtotal pages %" PRIuSIZE ", ",
                                tbl->histogram.nested_height_or_gc_span_length.count,
                                tbl->pages.nested_branch + tbl->pages.nested_leaf);
-              if (tbl != &chk->table_gc && tbl->histogram.nested_height_or_gc_span_length.count)
+              if (tbl != &chk->table_gc)
                 line = histogram_dist(line, &tbl->histogram.nested_height_or_gc_span_length, "levels", "1", false);
             }
             line = chk_line_feed(line);
@@ -907,11 +907,10 @@ __cold static int chk_tree(MDBX_chk_scope_t *const scope) {
 
             line = histogram_dist(chk_line_feed(line), &tbl->histogram.tree_density, "pages %-density distribution",
                                   "1", false);
-            if (tbl->histogram.large_or_nested_density.count)
-              line = histogram_dist(chk_line_feed(line), &tbl->histogram.large_or_nested_density,
-                                    (tbl->flags & MDBX_DUPSORT) ? "nested %-density distribution"
-                                                                : "large pages %-density distribution",
-                                    "1", false);
+            line = histogram_dist(chk_line_feed(line), &tbl->histogram.large_or_nested_density,
+                                  (tbl->flags & MDBX_DUPSORT) ? "nested %-density distribution"
+                                                              : "large pages %-density distribution",
+                                  "1", false);
           }
           chk_line_end(line);
         }

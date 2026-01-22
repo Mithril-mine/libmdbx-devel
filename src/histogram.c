@@ -28,11 +28,11 @@ static void histogram_reduce_move(struct MDBX_chk_histogram *p, size_t point) {
 }
 
 static __hot void histogram_put(const size_t v, struct MDBX_chk_histogram *p,
-                                intptr_t (*finder)(struct MDBX_chk_histogram *p, size_t v)) {
+                                intptr_t (*finder)(struct MDBX_chk_histogram *p, size_t v), unsigned options) {
   STATIC_ASSERT(ARRAY_LENGTH(p->ranges) > 2);
   p->amount += v;
   p->count += 1;
-  if (likely(v < 2)) {
+  if (v < ((options & HISTOGRAM_LE0) ? 1u : 2u)) {
     p->le1_amount += v;
     p->le1_count += 1;
     return;
@@ -159,8 +159,8 @@ __hot static intptr_t histogram_minimize_error(struct MDBX_chk_histogram *p, siz
   return -(enhance + 1);
 }
 
-__hot void histogram_acc(const size_t v, struct MDBX_chk_histogram *p) {
-  histogram_put(v, p, histogram_minimize_error);
+__hot void histogram_acc_ex(const size_t v, struct MDBX_chk_histogram *p, unsigned options) {
+  histogram_put(v, p, histogram_minimize_error, options);
 }
 
 //------------------------------------------------------------------------------
@@ -179,24 +179,26 @@ __cold MDBX_chk_line_t *histogram_dist(MDBX_chk_line_t *line, const struct MDBX_
 #define UNICODE_MULSIGN_STR "*"
 #define UNICODE_MULSIGN_FMT "s"
 #endif
-  line = chk_print(line, "%s:", prefix);
-  const char *comma = "";
-  const size_t first_val = amount ? histogram->le1_amount : histogram->le1_count;
-  if (first_val) {
-    chk_print(line, " %s%" UNICODE_MULSIGN_FMT "%" PRIuSIZE, first, UNICODE_MULSIGN_STR, first_val);
-    comma = ",";
-  }
-  for (size_t n = 0; n < ARRAY_LENGTH(histogram->ranges); ++n)
-    if (histogram->ranges[n].count) {
-      chk_print(line, "%s %" PRIuSIZE, comma, histogram->ranges[n].begin);
-      if (histogram->ranges[n].begin != histogram->ranges[n].end - 1)
-        chk_print(line, "-%" PRIuSIZE, histogram->ranges[n].end - 1);
-      line = chk_print(line, "%" UNICODE_MULSIGN_FMT "%" PRIuSIZE, UNICODE_MULSIGN_STR,
-                       amount ? histogram->ranges[n].amount : histogram->ranges[n].count);
+  if (histogram->count) {
+    line = chk_print(line, "%s:", prefix);
+    const char *comma = "";
+    const size_t first_val = amount ? histogram->le1_amount : histogram->le1_count;
+    if (first_val) {
+      chk_print(line, " %s%" UNICODE_MULSIGN_FMT "%" PRIuSIZE, first, UNICODE_MULSIGN_STR, first_val);
       comma = ",";
     }
+    for (size_t n = 0; n < ARRAY_LENGTH(histogram->ranges); ++n)
+      if (histogram->ranges[n].count) {
+        chk_print(line, "%s %" PRIuSIZE, comma, histogram->ranges[n].begin);
+        if (histogram->ranges[n].begin != histogram->ranges[n].end - 1)
+          chk_print(line, "-%" PRIuSIZE, histogram->ranges[n].end - 1);
+        line = chk_print(line, "%" UNICODE_MULSIGN_FMT "%" PRIuSIZE, UNICODE_MULSIGN_STR,
+                         amount ? histogram->ranges[n].amount : histogram->ranges[n].count);
+        comma = ",";
+      }
 
-  ENSURE_MSG(nullptr, histogram_check(histogram, 0), "Historgam related bug, please report this");
+    ENSURE_MSG(nullptr, histogram_check(histogram, 0), "Historgam related bug, please report this");
+  }
   return line;
 }
 

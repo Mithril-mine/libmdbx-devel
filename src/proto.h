@@ -137,7 +137,11 @@ MDBX_INTERNAL int coherency_check_written(const MDBX_env *env, const txnid_t txn
 MDBX_INTERNAL int coherency_timeout(uint64_t *timestamp, intptr_t pgno, const MDBX_env *env);
 
 /* histogram.c */
-MDBX_INTERNAL void histogram_acc(const size_t n, struct MDBX_chk_histogram *p);
+#define HISTOGRAM_LE0 1
+MDBX_INTERNAL void histogram_acc_ex(const size_t value, struct MDBX_chk_histogram *histogram, unsigned options);
+MDBX_MAYBE_UNUSED static inline void histogram_acc(const size_t value, struct MDBX_chk_histogram *histogram) {
+  histogram_acc_ex(value, histogram, 0);
+}
 MDBX_INTERNAL MDBX_chk_line_t *histogram_dist(MDBX_chk_line_t *line, const struct MDBX_chk_histogram *histogram,
                                               const char *prefix, const char *first, bool amount);
 MDBX_INTERNAL MDBX_chk_line_t *histogram_print(MDBX_chk_scope_t *scope, MDBX_chk_line_t *line,
