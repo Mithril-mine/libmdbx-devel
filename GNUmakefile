@@ -859,12 +859,13 @@ CROSS_LIST = \
 	aarch64-linux-gnu-gcc \
 	arm-linux-gnueabihf-gcc \
 	hppa-linux-gnu-gcc \
-	mips64-linux-gnuabi64-gcc \
-	mips-linux-gnu-gcc \
 	powerpc64-linux-gnu-gcc\
 	riscv64-linux-gnu-gcc \
 	s390x-linux-gnu-gcc \
 	sh4-linux-gnu-gcc
+
+# Obsolete since 2026 because no supported compiler(s):
+#	mips-linux-gnu-gcc mips64-linux-gnuabi64-gcc
 
 ## On Ubuntu Noble (24.04.2) with QEMU 8.2 (8.2.2+ds-0ubuntu1.7) & GCC 13.3.0 (Ubuntu 13.3.0-6ubuntu2~24.04)
 # sparc64-linux-gnu-gcc       - fails mmap/BAD_ADDRESS (previously: qemu-coredump sice mmap-troubles, qemu fails fcntl for F_SETLK/F_GETLK)
