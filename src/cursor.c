@@ -981,8 +981,7 @@ __hot int cursor_put(MDBX_cursor *mc, const MDBX_val *key, MDBX_val *data, unsig
         /* yes, overwrite it. */
         if (!is_modifable(mc->txn, lp.page)) {
           if (is_spilled(mc->txn, lp.page)) {
-            lp = /* TODO: avoid search and get txn & spill-index from
-                     page_result */
+            lp = /* TODO: avoid search and get txn & spill-index from page_result */
                 page_unspill(mc->txn, lp.page);
             if (unlikely(lp.err))
               return lp.err;
@@ -1374,8 +1373,7 @@ insert_node:;
           if (!is_related(mc, m2) || m2->pg[mc->top] != mp)
             continue;
           if (/* пропускаем незаполненные курсоры, иначе получится что у такого
-                 курсора будет инициализирован вложенный,
-                 что антилогично и бесполезно. */
+                 курсора будет инициализирован вложенный, что антилогично и бесполезно. */
               is_filled(m2) && m2->ki[mc->top] == mc->ki[mc->top]) {
             cASSERT(m2, m2->subcur->cursor.clc == mx->cursor.clc);
             m2->subcur->nested_tree = mx->nested_tree;
@@ -1673,8 +1671,7 @@ del_key:
         goto fail;
     }
     if (/* пропускаем незаполненные курсоры, иначе получится что у такого
-           курсора будет инициализирован вложенный,
-           что антилогично и бесполезно. */
+           курсора будет инициализирован вложенный, что алогично и бесполезно. */
         is_filled(m3) && m3->subcur &&
         (m3->ki[top] >= ki ||
          /* уже переместились вправо */ m3->pg[top] != mp)) {
