@@ -485,7 +485,7 @@ static __always_inline int check_txn_anythread(const MDBX_txn *txn, int bad_bits
       return MDBX_EPERM;
 
     if (unlikely(txn->flags & bad_bits)) {
-      if ((bad_bits & MDBX_TXN_RDONLY) && unlikely(txn->flags & MDBX_TXN_RDONLY))
+      if ((bad_bits & txn_ro_both) && unlikely(txn->flags & txn_ro_both))
         return MDBX_EACCESS;
       if ((bad_bits & MDBX_TXN_PARKED) == 0)
         return MDBX_BAD_TXN;
@@ -503,7 +503,7 @@ static __always_inline int check_txn(const MDBX_txn *txn, int bad_bits) {
 #if MDBX_TXN_CHECKOWNER
   if (err == MDBX_SUCCESS && (txn->flags & (MDBX_NOSTICKYTHREADS | MDBX_TXN_FINISHED)) != MDBX_NOSTICKYTHREADS &&
       !(bad_bits /* abort/reset/txn-break */ == 0 &&
-        ((txn->flags & (MDBX_TXN_RDONLY | MDBX_TXN_FINISHED)) == (MDBX_TXN_RDONLY | MDBX_TXN_FINISHED))) &&
+        ((txn->flags & (txn_ro_flat | MDBX_TXN_FINISHED)) == (txn_ro_flat | MDBX_TXN_FINISHED))) &&
       unlikely(txn->owner != osal_thread_self()))
     err = txn->owner ? MDBX_THREAD_MISMATCH : MDBX_BAD_TXN;
 #endif /* MDBX_TXN_CHECKOWNER */
@@ -512,14 +512,14 @@ static __always_inline int check_txn(const MDBX_txn *txn, int bad_bits) {
 }
 
 static inline int check_txn_rw(const MDBX_txn *txn, int bad_bits) {
-  return check_txn(txn, (bad_bits | MDBX_TXN_RDONLY) & ~MDBX_TXN_PARKED);
+  return check_txn(txn, (bad_bits | txn_ro_both) & ~MDBX_TXN_PARKED);
 }
 
 MDBX_NOTHROW_CONST_FUNCTION static inline txnid_t txn_basis_snapshot(const MDBX_txn *txn) {
-  STATIC_ASSERT(((MDBX_TXN_RDONLY >> ((xMDBX_TXNID_STEP == 2) ? 16 : 17)) & xMDBX_TXNID_STEP) == xMDBX_TXNID_STEP);
+  STATIC_ASSERT(((txn_ro_flat >> ((xMDBX_TXNID_STEP == 2) ? 16 : 17)) & xMDBX_TXNID_STEP) == xMDBX_TXNID_STEP);
   const txnid_t committed_txnid =
       txn->txnid - xMDBX_TXNID_STEP + ((txn->flags >> ((xMDBX_TXNID_STEP == 2) ? 16 : 17)) & xMDBX_TXNID_STEP);
-  tASSERT(txn, committed_txnid == ((txn->flags & MDBX_TXN_RDONLY) ? txn->txnid : txn->txnid - xMDBX_TXNID_STEP));
+  tASSERT(txn, committed_txnid == ((txn->flags & txn_ro_flat) ? txn->txnid : txn->txnid - xMDBX_TXNID_STEP));
   return committed_txnid;
 }
 

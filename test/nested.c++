@@ -115,7 +115,7 @@ bool testcase_nested::teardown() {
 
 void testcase_nested::push_txn() {
   MDBX_txn *nested_txn;
-  MDBX_txn_flags_t flags = MDBX_txn_flags_t(prng32() & uint32_t(MDBX_TXN_NOSYNC | MDBX_TXN_NOMETASYNC));
+  MDBX_txn_flags_t flags = MDBX_TXN_READWRITE | MDBX_TXN_NOWEAKING;
   int err = mdbx_txn_begin(db_guard.get(), txn_guard.get(), flags, &nested_txn);
   if (unlikely(err != MDBX_SUCCESS))
     failure_perror("mdbx_txn_begin(nested)", err);

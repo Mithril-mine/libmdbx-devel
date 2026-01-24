@@ -662,7 +662,7 @@ status_done:
 }
 
 __hot int __must_check_result page_dirty(MDBX_txn *txn, page_t *mp, size_t npages) {
-  tASSERT(txn, (txn->flags & MDBX_TXN_RDONLY) == 0);
+  tASSERT(txn, (txn->flags & txn_ro_both) == 0);
   mp->txnid = txn->front_txnid;
   if (!txn->wr.dirtylist) {
     tASSERT(txn, (txn->flags & MDBX_WRITEMAP) != 0 && !MDBX_AVOID_MSYNC);

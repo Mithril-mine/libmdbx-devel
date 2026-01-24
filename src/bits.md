@@ -11,13 +11,13 @@ N |   MASK  | ENV       | TXN          | DB       | PUT       | DBI        | NOD
 8 |0000 0100| _MAY_MOVE |              |          |           |            |         |          | <=      |
 9 |0000 0200| _MAY_UNMAP|              |          |           |            |         |          | <=      |
 10|0000 0400|           |TXN_CURSORS   |          |           |            |         |          |         |
-11|0000 0800|           |              |          |           |            |         |          |         |
+11|0000 0800|           |TXN_RO_ACCESS |          |           |            |         |          |         |
 12|0000 1000|           |              |          |           |            |         |          |         |
 13|0000 2000|VALIDATION |              |          |           |            |         |P_SPILLED |         |
 14|0000 4000|NOSUBDIR   |              |          |           |            |         |P_LOOSE   |         |
 15|0000 8000|           |              |          |           |            |         |P_FROZEN  |         |
 16|0001 0000|SAFE_NOSYNC|TXN_NOSYNC    |          |RESERVE    |            |RESERVE  |          |         |
-17|0002 0000|RDONLY     |TXN_RDONLY    |          |APPEND     |            |APPEND   |          | <=      |
+17|0002 0000|RDONLY     |TXN_RO_FLAT   |          |APPEND     |            |APPEND   |          | <=      |
 18|0004 0000|NOMETASYNC |TXN_NOMETASYNC|CREATE    |APPENDDUP  |            |         |          |         |
 19|0008 0000|WRITEMAP   |<=            |          |MULTIPLE   |            |         |          | <=      |
 20|0010 0000|UTTERLY    |              |          |           |            |         |          | <=      |

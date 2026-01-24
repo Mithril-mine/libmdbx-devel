@@ -122,17 +122,17 @@ retry:;
         if (flags & MDBX_WRITEMAP) {
           /* Acquire guard to avoid collision with remap */
 #if defined(_WIN32) || defined(_WIN64)
-          imports.srwl_AcquireShared(&env->remap_guard);
+          imports.srwl_AcquireShared(&env->remap_lock);
 #else
-          err = osal_fastmutex_acquire(&env->remap_guard);
+          err = osal_fastmutex_acquire(&env->remap_lock);
           if (unlikely(err != MDBX_SUCCESS))
             return err;
 #endif
           err = dxb_msync(env, head.ptr_c->geometry.first_unallocated, MDBX_SYNC_DATA);
 #if defined(_WIN32) || defined(_WIN64)
-          imports.srwl_ReleaseShared(&env->remap_guard);
+          imports.srwl_ReleaseShared(&env->remap_lock);
 #else
-          int unlock_err = osal_fastmutex_release(&env->remap_guard);
+          int unlock_err = osal_fastmutex_release(&env->remap_lock);
           if (unlikely(unlock_err != MDBX_SUCCESS) && err == MDBX_SUCCESS)
             err = unlock_err;
 #endif

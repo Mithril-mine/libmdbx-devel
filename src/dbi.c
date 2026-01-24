@@ -549,7 +549,7 @@ int dbi_open(MDBX_txn *txn, const MDBX_val *const name, unsigned user_flags, MDB
   if (unlikely(rc != MDBX_SUCCESS))
     return rc;
 
-  if ((user_flags & MDBX_CREATE) && unlikely(txn->flags & MDBX_TXN_RDONLY))
+  if ((user_flags & MDBX_CREATE) && unlikely(txn->flags & txn_ro_both))
     return MDBX_EACCESS;
 
   /* main table? */

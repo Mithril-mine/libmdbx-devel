@@ -117,6 +117,23 @@ static int basal_start_locked(MDBX_txn *txn, unsigned flags) {
     return MDBX_EPERM;
 #endif /* Windows */
 
+  txn->flags = flags & ~txn_rw_checkpoint;
+  txn->nested = nullptr;
+  txn->wr.loose_pages = nullptr;
+  txn->wr.loose_count = 0;
+#if MDBX_ENABLE_REFUND
+  txn->wr.loose_refund_wl = 0;
+#endif /* MDBX_ENABLE_REFUND */
+  pnl_setsize(txn->wr.retired_pages, 0);
+  txn->wr.spilled.list = nullptr;
+  txn->wr.spilled.least_removed = 0;
+  txn->wr.gc.spent = 0;
+  tASSERT(txn, rkl_empty(&txn->wr.gc.reclaimed));
+  tASSERT(txn, rkl_empty(&txn->wr.gc.ready4reuse));
+  tASSERT(txn, rkl_empty(&txn->wr.gc.comeback));
+  txn->env->gc.detent = 0;
+  env->txn = txn;
+
   txn->wr.troika = meta_tap(env);
   const meta_ptr_t head = meta_recent(env, &txn->wr.troika);
   uint64_t timestamp = 0;
@@ -135,45 +152,60 @@ static int basal_start_locked(MDBX_txn *txn, unsigned flags) {
     return MDBX_TXN_FULL;
   }
 
-  tASSERT(txn, txn->dbs[FREE_DBI].flags == MDBX_INTEGERKEY);
-  tASSERT(txn, check_table_flags(txn->dbs[MAIN_DBI].flags));
-  txn->flags = flags & ~txn_rw_checkpoint;
-  txn->nested = nullptr;
-  txn->wr.loose_pages = nullptr;
-  txn->wr.loose_count = 0;
-#if MDBX_ENABLE_REFUND
-  txn->wr.loose_refund_wl = 0;
-#endif /* MDBX_ENABLE_REFUND */
-  pnl_setsize(txn->wr.retired_pages, 0);
-  txn->wr.spilled.list = nullptr;
-  txn->wr.spilled.least_removed = 0;
-  txn->wr.gc.spent = 0;
-  tASSERT(txn, rkl_empty(&txn->wr.gc.reclaimed));
-  tASSERT(txn, rkl_empty(&txn->wr.gc.ready4reuse));
-  tASSERT(txn, rkl_empty(&txn->wr.gc.comeback));
-  txn->env->gc.detent = 0;
-  env->txn = txn;
+  int err = txn_setup_primal(txn);
+  if (unlikely(err != MDBX_SUCCESS))
+    return err;
+
+  eASSERT(env, pgno2bytes(env, txn->geo.first_unallocated) <= env->dxb_mmap.current);
+  eASSERT(env, env->dxb_mmap.limit >= env->dxb_mmap.current);
+
+  if (env->options.need_dp_limit_adjust)
+    env_options_adjust_dp_limit(env);
+  if ((txn->flags & MDBX_WRITEMAP) == 0 || MDBX_AVOID_MSYNC) {
+    err = dpl_alloc(txn);
+    if (unlikely(err != MDBX_SUCCESS))
+      return err;
+    txn->wr.dirtyroom = txn->env->options.dp_limit;
+    txn->wr.dirtylru = MDBX_DEBUG ? UINT32_MAX / 3 - 42 : 0;
+  } else {
+    tASSERT(txn, txn->wr.dirtylist == nullptr);
+    txn->wr.dirtylist = nullptr;
+    txn->wr.dirtyroom = MAX_PAGENO;
+    txn->wr.dirtylru = 0;
+  }
+
+  eASSERT(env, txn->wr.writemap_dirty_npages == 0);
+  eASSERT(env, txn->wr.writemap_spilled_npages == 0);
+  MDBX_cursor *const gc = ptr_disp(txn, sizeof(MDBX_txn));
+  err = cursor_init(gc, txn, FREE_DBI);
+  if (err != MDBX_SUCCESS)
+    return err;
+  tASSERT(txn, txn->cursors[FREE_DBI] == nullptr);
+
+  dxb_sanitize_tail(env, txn);
   return MDBX_SUCCESS;
 }
 
 int txn_basal_start(MDBX_txn *txn, unsigned flags) {
   tASSERT(txn, (flags & ~(txn_rw_begin_flags | MDBX_TXN_SPILLS | MDBX_WRITEMAP | MDBX_NOSTICKYTHREADS |
                           txn_rw_checkpoint)) == 0);
+  MDBX_env *const env = txn->env;
+  tASSERT(txn, txn == env->basal_txn);
+  flags |= env->flags & (MDBX_NOSTICKYTHREADS | MDBX_WRITEMAP);
   if ((flags & txn_rw_checkpoint) == 0) {
-    MDBX_env *const env = txn->env;
     const uintptr_t tid = osal_thread_self();
     if (unlikely(txn->owner == tid ||
                  /* not recovery mode */ env->stuck_meta >= 0))
       return MDBX_BUSY;
 
     lck_t *const lck = env->lck_mmap.lck;
-    if (lck && !(env->flags & MDBX_NOSTICKYTHREADS) && !(globals.runtime_flags & MDBX_DBG_LEGACY_OVERLAP) &&
+    if (lck && !(flags & MDBX_NOSTICKYTHREADS) && !(globals.runtime_flags & MDBX_DBG_LEGACY_OVERLAP) &&
         basal_check_overlapped(lck, env->pid, tid))
       return MDBX_TXN_OVERLAPPING;
 
     /* Not yet touching txn == env->basal_txn, it may be active */
     jitter4testing(false);
-    int err = lck_txn_lock(env, !!(flags & MDBX_TXN_TRY));
+    int err = lck_txn_lock(env, (flags & MDBX_TXN_TRY) != 0);
     if (unlikely(err != MDBX_SUCCESS))
       return err;
   }
@@ -183,17 +215,21 @@ int txn_basal_start(MDBX_txn *txn, unsigned flags) {
     lck_txn_unlock(txn->env);
     return err;
   }
+
   return MDBX_SUCCESS;
 }
 
-int txn_basal_end(MDBX_txn *txn, unsigned mode) {
+int txn_basal_end(MDBX_txn *txn, bool unlock) {
   MDBX_env *const env = txn->env;
-  tASSERT(txn, !txn->parent && !(txn->flags & (MDBX_TXN_RDONLY | MDBX_TXN_FINISHED)) && txn->owner);
-  tASSERT(txn, (txn->flags & (MDBX_TXN_FINISHED | txn_may_have_cursors)) == 0 && txn->owner);
-  ENSURE(env, txn->txnid >= /* paranoia is appropriate here */ env->lck->cached_oldest.weak);
+  tASSERT(txn,
+          !txn->parent && !txn->nested && (txn->flags & (txn_ro_both | MDBX_TXN_HAS_CHILD | MDBX_TXN_PARKED)) == 0);
+  tASSERT(txn, (txn->flags & txn_may_have_cursors) == 0);
+  if ((txn->flags & (MDBX_TXN_ERROR | MDBX_TXN_FINISHED)) == 0)
+    ENSURE(env, txn->txnid > /* paranoia is appropriate here */ env->lck->cached_oldest.weak);
   dxb_sanitize_tail(env, nullptr);
 
-  txn->flags = MDBX_TXN_FINISHED;
+  const unsigned preserved_flags = txn->flags;
+  txn->flags = MDBX_TXN_FINISHED | (env->flags & (MDBX_WRITEMAP | MDBX_NOSTICKYTHREADS));
   env->txn = nullptr;
   pnl_free(txn->wr.spilled.list);
   txn->wr.spilled.list = nullptr;
@@ -204,17 +240,17 @@ int txn_basal_end(MDBX_txn *txn, unsigned mode) {
   eASSERT(env, txn->parent == nullptr);
   pnl_shrink(&txn->wr.retired_pages);
   pnl_shrink(&txn->wr.repnl);
-  if (!(env->flags & MDBX_WRITEMAP))
+  if ((txn->flags & MDBX_WRITEMAP) == 0)
     dpl_release_shadows(txn);
 
   /* Export or close DBI handles created in this txn */
-  int err = dbi_update(txn, (mode & TXN_END_UPDATE) != 0);
+  int err = dbi_update(txn, (preserved_flags & (MDBX_TXN_DIRTY | MDBX_TXN_ERROR)) == MDBX_TXN_DIRTY);
   if (unlikely(err != MDBX_SUCCESS)) {
     ERROR("unexpected error %d during export the state of dbi-handles to env", err);
     err = MDBX_PROBLEM;
   }
 
-  if (likely(mode & TXN_END_LOCK) || unlikely(err != MDBX_SUCCESS)) {
+  if (likely(unlock) || unlikely(err != MDBX_SUCCESS)) {
     /* The writer mutex was locked in mdbx_txn_begin. */
     lck_txn_unlock(env);
   }
@@ -430,11 +466,15 @@ int txn_basal_checkpoint(MDBX_txn *txn, MDBX_txn_flags_t weakening_durability, s
   const unsigned preserved_flags = txn->flags & txn_rw_begin_flags;
   txn->flags |= weakening_durability & (MDBX_TXN_NOMETASYNC | MDBX_TXN_NOSYNC | MDBX_SYNC_DURABLE);
   int rc = txn_basal_commit(txn, ts);
-  if (likely(rc == MDBX_SUCCESS))
-    rc = txn_basal_end(txn, TXN_END_UPDATE);
-  if (likely(rc == MDBX_SUCCESS))
-    rc = txn_renew(txn, preserved_flags | txn_rw_checkpoint);
-  else
-    txn_basal_end(txn, TXN_END_ABORT | TXN_END_LOCK);
-  return rc;
+  if (likely(rc == MDBX_SUCCESS)) {
+    rc = txn_basal_end(txn, false);
+    if (likely(rc == MDBX_SUCCESS)) {
+      rc = txn_basal_start(txn, preserved_flags | txn_rw_checkpoint);
+      if (likely(rc == MDBX_SUCCESS))
+        return MDBX_SUCCESS;
+    }
+  }
+
+  int err = txn_basal_end(txn, true);
+  return (err == MDBX_SUCCESS) ? rc : err;
 }

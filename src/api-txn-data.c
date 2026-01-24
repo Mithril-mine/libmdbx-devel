@@ -198,7 +198,7 @@ int mdbx_is_dirty(const MDBX_txn *txn, const void *ptr) {
        * распределенных страниц. Такое может случится если mdbx_is_dirty()
        * вызывается после операции, в ходе которой грязная страница была
        * возвращена в нераспределенное пространство. */
-      return (txn->flags & MDBX_TXN_RDONLY) ? LOG_IFERR(MDBX_EINVAL) : MDBX_RESULT_TRUE;
+      return (txn->flags & txn_ro_flat) ? LOG_IFERR(MDBX_EINVAL) : MDBX_RESULT_TRUE;
     }
   }
 
@@ -208,7 +208,7 @@ int mdbx_is_dirty(const MDBX_txn *txn, const void *ptr) {
    *
    * Для режима MDBX_WRITE_MAP режима страница однозначно "не грязная",
    * а для режимов без MDBX_WRITE_MAP однозначно "не чистая". */
-  return (txn->flags & (MDBX_WRITEMAP | MDBX_TXN_RDONLY)) ? LOG_IFERR(MDBX_EINVAL) : MDBX_RESULT_TRUE;
+  return (txn->flags & (MDBX_WRITEMAP | txn_ro_flat)) ? LOG_IFERR(MDBX_EINVAL) : MDBX_RESULT_TRUE;
 }
 
 int mdbx_del(MDBX_txn *txn, MDBX_dbi dbi, const MDBX_val *key, const MDBX_val *data) {

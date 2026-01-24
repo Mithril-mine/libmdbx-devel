@@ -130,7 +130,7 @@ __hot static MDBX_cache_result_t cache_get(const MDBX_txn *txn, MDBX_dbi dbi, co
   /* lookup the trunk mvcc/txn-id thru nested transactions stack. */
   if (txn->dbs[dbi].mod_txnid /* tree->mod_txnid maybe zero in a legacy DB */)
     trunk_txnid = txn->dbs[dbi].mod_txnid;
-  if ((txn->flags & MDBX_TXN_RDONLY) == 0) {
+  if ((txn->flags & txn_ro_flat) == 0) {
     const MDBX_txn *scan = txn;
     do
       if ((scan->flags & MDBX_TXN_DIRTY) && (dbi == MAIN_DBI || (scan->dbi_state[dbi] & DBI_DIRTY))) {

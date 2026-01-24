@@ -150,7 +150,7 @@ public:
     bool no_sticky_threads{false};
     /// \brief Разрешает вложенные транзакции ценой отключения
     /// \ref MDBX_WRITEMAP и увеличением накладных расходов.
-    bool nested_write_transactions{false};
+    bool nested_transactions{false};
     /// \copydoc MDBX_EXCLUSIVE
     bool exclusive{false};
     /// \copydoc MDBX_NORDAHEAD
@@ -380,6 +380,30 @@ public:
 
   /// Returns environment flags.
   inline MDBX_env_flags_t get_flags() const;
+
+  inline bool is_readonly() const {
+    return (get_flags() & MDBX_RDONLY) != 0;
+  }
+
+  inline bool is_exclusive() const {
+    return (get_flags() & MDBX_EXCLUSIVE) != 0;
+  }
+
+  inline bool is_cooperative() const {
+    return !is_exclusive();
+  }
+
+  inline bool is_writemap() const {
+    return (get_flags() & MDBX_WRITEMAP) != 0;
+  }
+
+  inline bool is_readwite() const {
+    return !is_readonly();
+  }
+
+  inline bool is_nested_transactions_available() const {
+    return (get_flags() & (MDBX_WRITEMAP | MDBX_RDONLY)) == 0;
+  }
 
   /// \brief Returns the maximum number of threads/reader slots for the environment.
   /// \see extra_runtime_option::max_readers

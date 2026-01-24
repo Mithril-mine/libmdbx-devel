@@ -102,6 +102,9 @@ public:
   /// \brief Start nested write transaction.
   txn_managed start_nested();
 
+  /// \brief Start nested transaction.
+  txn_managed start_nested(bool readonly);
+
   /// \brief Opens cursor for specified key-value map handle.
   inline cursor_managed open_cursor(map_handle map) const;
 
@@ -399,31 +402,42 @@ public:
   /// instead of saving ones.
   void abort();
 
-  /// \brief Commit all the operations of a transaction into the database.
+  /// \brief Commits all changes of the transaction into a database with collecting latencies information.
   void commit();
 
-  /// \brief Commit all the operations of a transaction into the database
-  /// and then start read transaction.
+  /// \brief Commits all the operations of a transaction into the database and then start read transaction.
   void commit_embark_read();
 
   using commit_latency = MDBX_commit_latency;
 
-  /// \brief Commit all the operations of a transaction into the database
-  /// and collect latency information.
+  /// \brief Commits all changes of the transaction into a database with collecting latencies information.
   void commit(commit_latency *);
 
-  /// \brief Commit all the operations of a transaction into the database
-  /// and collect latency information.
+  /// \brief ommits all changes of the transaction into a database with collecting latencies information.
   void commit(commit_latency &latency) { return commit(&latency); }
 
-  /// \brief Commit all the operations of a transaction into the database
-  /// and return latency information.
+  /// \brief Commits all changes of the transaction into a database and return latency information.
   /// \returns latency information of commit stages.
   commit_latency commit_get_latency() {
     commit_latency result;
     commit(&result);
     return result;
   }
+
+  /// \brief Commits all the operations of the transaction and immediately starts next without releasing any locks.
+  bool checkpoint(commit_latency *latency = nullptr);
+
+  /// \brief Commits all the operations of the transaction and immediately starts next without releasing any locks.
+  bool checkpoint(commit_latency &latency) { return checkpoint(&latency); }
+
+  /// \brief Commits all the operations of the transaction and immediately starts next without releasing any locks.
+  /// \returns latency information of commit stages.
+  std::pair<bool, commit_latency> checkpoint_get_latency() {
+    commit_latency latency;
+    bool result = checkpoint(&latency);
+    return std::make_pair(result, latency);
+  }
+
 };
 
 // > dist-cutoff-begin

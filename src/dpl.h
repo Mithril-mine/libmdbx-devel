@@ -43,7 +43,7 @@ MDBX_INTERNAL dpl_t *dpl_reserve(MDBX_txn *txn, size_t size);
 MDBX_INTERNAL __noinline dpl_t *dpl_sort_slowpath(const MDBX_txn *txn);
 
 static inline dpl_t *dpl_sort(const MDBX_txn *txn) {
-  tASSERT(txn, (txn->flags & MDBX_TXN_RDONLY) == 0);
+  tASSERT(txn, (txn->flags & txn_ro_both) == 0);
   tASSERT(txn, (txn->flags & MDBX_WRITEMAP) == 0 || MDBX_AVOID_MSYNC);
 
   dpl_t *dl = txn->wr.dirtylist;
@@ -69,7 +69,7 @@ MDBX_NOTHROW_PURE_FUNCTION static inline pgno_t dpl_endpgno(const dpl_t *dl, siz
 }
 
 MDBX_NOTHROW_PURE_FUNCTION static inline bool dpl_intersect(const MDBX_txn *txn, pgno_t pgno, size_t npages) {
-  tASSERT(txn, (txn->flags & MDBX_TXN_RDONLY) == 0);
+  tASSERT(txn, (txn->flags & txn_ro_both) == 0);
   tASSERT(txn, (txn->flags & MDBX_WRITEMAP) == 0 || MDBX_AVOID_MSYNC);
 
   dpl_t *dl = txn->wr.dirtylist;
@@ -115,7 +115,7 @@ MDBX_INTERNAL int __must_check_result dpl_append(MDBX_txn *txn, pgno_t pgno, pag
 MDBX_MAYBE_UNUSED MDBX_INTERNAL bool dpl_check(MDBX_txn *txn);
 
 MDBX_NOTHROW_PURE_FUNCTION static inline uint32_t dpl_age(const MDBX_txn *txn, size_t i) {
-  tASSERT(txn, (txn->flags & (MDBX_TXN_RDONLY | MDBX_WRITEMAP)) == 0);
+  tASSERT(txn, (txn->flags & (txn_ro_both | MDBX_WRITEMAP)) == 0);
   const dpl_t *dl = txn->wr.dirtylist;
   assert((intptr_t)i > 0 && i <= dl->length);
   size_t *const ptr = ptr_disp(dl->items[i].ptr, -(ptrdiff_t)sizeof(size_t));

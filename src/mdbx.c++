@@ -1224,7 +1224,7 @@ __cold MDBX_env_flags_t env::operate_parameters::make_flags(bool accede, bool us
     flags |= MDBX_VALIDATION;
 
   if (mode != readonly) {
-    if (options.nested_write_transactions)
+    if (options.nested_transactions)
       flags &= ~MDBX_WRITEMAP;
     if (reclaiming.coalesce)
       flags |= MDBX_COALESCE;
@@ -1271,7 +1271,7 @@ env::reclaiming_options::reclaiming_options(MDBX_env_flags_t flags) noexcept
 
 env::operate_options::operate_options(MDBX_env_flags_t flags) noexcept
     : no_sticky_threads(((flags & (MDBX_NOSTICKYTHREADS | MDBX_EXCLUSIVE)) == MDBX_NOSTICKYTHREADS) ? true : false),
-      nested_write_transactions((flags & (MDBX_WRITEMAP | MDBX_RDONLY)) ? false : true),
+      nested_transactions((flags & (MDBX_WRITEMAP | MDBX_RDONLY)) ? false : true),
       exclusive((flags & MDBX_EXCLUSIVE) ? true : false), disable_readahead((flags & MDBX_NORDAHEAD) ? true : false),
       disable_clear_memory((flags & MDBX_NOMEMINIT) ? true : false) {}
 
@@ -1393,7 +1393,7 @@ __cold env_managed::env_managed(const char *pathname, const operate_parameters &
   setup(op.max_maps, op.max_readers);
   error::success_or_throw(::mdbx_env_open(handle_, pathname, op.make_flags(accede), 0));
 
-  if (op.options.nested_write_transactions && !get_options().nested_write_transactions)
+  if (op.options.nested_transactions && !get_options().nested_transactions)
     MDBX_CXX20_UNLIKELY error::throw_exception(MDBX_INCOMPATIBLE);
 }
 
@@ -1405,7 +1405,7 @@ __cold env_managed::env_managed(const char *pathname, const env_managed::create_
   error::success_or_throw(
       ::mdbx_env_open(handle_, pathname, op.make_flags(accede, cp.use_subdirectory), cp.file_mode_bits));
 
-  if (op.options.nested_write_transactions && !get_options().nested_write_transactions)
+  if (op.options.nested_transactions && !get_options().nested_transactions)
     MDBX_CXX20_UNLIKELY error::throw_exception(MDBX_INCOMPATIBLE);
 }
 
@@ -1422,7 +1422,7 @@ __cold env_managed::env_managed(const wchar_t *pathname, const operate_parameter
   setup(op.max_maps, op.max_readers);
   error::success_or_throw(::mdbx_env_openW(handle_, pathname, op.make_flags(accede), 0));
 
-  if (op.options.nested_write_transactions && !get_options().nested_write_transactions)
+  if (op.options.nested_transactions && !get_options().nested_transactions)
     MDBX_CXX20_UNLIKELY error::throw_exception(MDBX_INCOMPATIBLE);
 }
 
@@ -1434,7 +1434,7 @@ __cold env_managed::env_managed(const wchar_t *pathname, const env_managed::crea
   error::success_or_throw(
       ::mdbx_env_openW(handle_, pathname, op.make_flags(accede, cp.use_subdirectory), cp.file_mode_bits));
 
-  if (op.options.nested_write_transactions && !get_options().nested_write_transactions)
+  if (op.options.nested_transactions && !get_options().nested_transactions)
     MDBX_CXX20_UNLIKELY error::throw_exception(MDBX_INCOMPATIBLE);
 }
 
@@ -1457,10 +1457,13 @@ __cold env_managed::env_managed(const MDBX_STD_FILESYSTEM_PATH &pathname, const 
 
 //------------------------------------------------------------------------------
 
-txn_managed txn::start_nested() {
+txn_managed txn::start_nested() { return start_nested(false); }
+
+txn_managed txn::start_nested(bool readonly) {
   MDBX_txn *nested;
   error::throw_on_nullptr(handle_, MDBX_BAD_TXN);
-  error::success_or_throw(::mdbx_txn_begin(mdbx_txn_env(handle_), handle_, MDBX_TXN_READWRITE, &nested));
+  error::success_or_throw(
+      ::mdbx_txn_begin(mdbx_txn_env(handle_), handle_, readonly ? MDBX_TXN_RDONLY : MDBX_TXN_READWRITE, &nested));
   assert(nested != nullptr);
   return txn_managed(nested);
 }
@@ -1492,6 +1495,16 @@ void txn_managed::commit(commit_latency *latency) {
     MDBX_CXX20_LIKELY handle_ = nullptr;
   if (MDBX_UNLIKELY(err.code() != MDBX_SUCCESS))
     MDBX_CXX20_UNLIKELY err.throw_exception();
+}
+
+bool txn_managed::checkpoint(commit_latency *latency) {
+  const error err = static_cast<MDBX_error_t>(::mdbx_txn_checkpoint(handle_, MDBX_TXN_NOWEAKING, latency));
+  if (MDBX_UNLIKELY(err.is_failure())) {
+    if (err.code() != MDBX_THREAD_MISMATCH && err.code() != MDBX_EINVAL)
+      handle_ = nullptr;
+    MDBX_CXX20_UNLIKELY err.throw_exception();
+  }
+  return err.is_result_true();
 }
 
 void txn_managed::commit_embark_read() {
@@ -1763,8 +1776,8 @@ __cold ::std::ostream &operator<<(::std::ostream &out, const env::operate_option
     out << delimiter << "no_sticky_threads";
     delimiter = comma;
   }
-  if (it.nested_write_transactions) {
-    out << delimiter << "nested_write_transactions";
+  if (it.nested_transactions) {
+    out << delimiter << "nested_transactions";
     delimiter = comma;
   }
   if (it.exclusive) {

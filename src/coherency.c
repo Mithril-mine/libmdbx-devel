@@ -51,9 +51,7 @@ static bool coherency_check(const MDBX_env *env, const txnid_t txnid, const vola
     ok = false;
   }
 
-  /* Проверяем отметки внутри корневых страниц только если сами страницы
-   * в пределах текущего отображения. Иначе возможны SIGSEGV до переноса
-   * вызова coherency_check_head() после dxb_resize() внутри txn_renew(). */
+  /* Проверяем отметки внутри корневых страниц только если сами страницы в пределах текущего отображения. */
   if (likely(freedb_root && freedb_mod_txnid &&
              (size_t)ptr_dist(env->dxb_mmap.base, freedb_root) < env->dxb_mmap.limit)) {
     VALGRIND_MAKE_MEM_DEFINED(freedb_root, sizeof(freedb_root->txnid));

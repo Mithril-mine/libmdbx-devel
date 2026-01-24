@@ -47,7 +47,7 @@ int mdbx_dbi_sequence(MDBX_txn *txn, MDBX_dbi dbi, uint64_t *result, uint64_t in
     *result = dbs->sequence;
 
   if (likely(increment > 0)) {
-    if (unlikely(dbi == FREE_DBI || (txn->flags & MDBX_TXN_RDONLY) != 0))
+    if (unlikely(dbi == FREE_DBI || (txn->flags & txn_ro_both) != 0))
       return MDBX_EACCESS;
 
     uint64_t new = dbs->sequence + increment;

@@ -244,11 +244,11 @@ __cold int mdbx_env_create(MDBX_env **penv) {
     goto bailout;
 
 #if defined(_WIN32) || defined(_WIN64)
-  imports.srwl_Init(&env->remap_guard);
+  imports.srwl_Init(&env->remap_lock);
   InitializeCriticalSection(&env->lck_event_cs);
   InitializeCriticalSection(&env->dxb_event_cs);
 #else
-  rc = osal_fastmutex_init(&env->remap_guard);
+  rc = osal_fastmutex_init(&env->remap_lock);
   if (unlikely(rc != MDBX_SUCCESS)) {
     osal_fastmutex_destroy(&env->dbi_lock);
     goto bailout;
@@ -259,7 +259,7 @@ __cold int mdbx_env_create(MDBX_env **penv) {
   rc = lck_ipclock_stubinit(&stub->wrt_lock);
 #endif /* MDBX_LOCKING */
   if (unlikely(rc != MDBX_SUCCESS)) {
-    osal_fastmutex_destroy(&env->remap_guard);
+    osal_fastmutex_destroy(&env->remap_lock);
     osal_fastmutex_destroy(&env->dbi_lock);
     goto bailout;
   }
@@ -638,11 +638,11 @@ __cold int mdbx_env_close_ex(MDBX_env *env, bool dont_sync) {
   rc = env_close(env, false) ? MDBX_PANIC : rc;
   ENSURE(env, osal_fastmutex_destroy(&env->dbi_lock) == MDBX_SUCCESS);
 #if defined(_WIN32) || defined(_WIN64)
-  /* remap_guard don't have destructor (Slim Reader/Writer Lock) */
+  /* remap_lock don't have destructor (Slim Reader/Writer Lock) */
   DeleteCriticalSection(&env->lck_event_cs);
   DeleteCriticalSection(&env->dxb_event_cs);
 #else
-  ENSURE(env, osal_fastmutex_destroy(&env->remap_guard) == MDBX_SUCCESS);
+  ENSURE(env, osal_fastmutex_destroy(&env->remap_lock) == MDBX_SUCCESS);
 #endif /* Windows */
 
 #if MDBX_LOCKING > MDBX_LOCKING_SYSV
@@ -751,7 +751,7 @@ __must_check_result static int env_info_snap(const MDBX_env *env, const MDBX_txn
 #endif
   }
 
-  *troika = (txn && !(txn->flags & MDBX_TXN_RDONLY)) ? txn->wr.troika : meta_tap(env);
+  *troika = (txn && !(txn->flags & txn_ro_flat)) ? txn->wr.troika : meta_tap(env);
   const meta_ptr_t head = meta_recent(env, troika);
   const meta_t *const meta0 = METAPAGE(env, 0);
   const meta_t *const meta1 = METAPAGE(env, 1);
@@ -775,7 +775,7 @@ __must_check_result static int env_info_snap(const MDBX_env *env, const MDBX_txn
     out->mi_last_pgno = txn->geo.first_unallocated - 1;
     out->mi_geo.current = pgno2bytes(env, txn->geo.end_pgno);
 
-    const txnid_t wanna_meta_txnid = (txn->flags & MDBX_TXN_RDONLY) ? txn->txnid : txn->txnid - xMDBX_TXNID_STEP;
+    const txnid_t wanna_meta_txnid = txn_basis_snapshot(txn);
     txn_meta = (out->mi_meta_txnid[0] == wanna_meta_txnid) ? meta0 : txn_meta;
     txn_meta = (out->mi_meta_txnid[1] == wanna_meta_txnid) ? meta1 : txn_meta;
     txn_meta = (out->mi_meta_txnid[2] == wanna_meta_txnid) ? meta2 : txn_meta;

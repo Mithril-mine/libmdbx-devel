@@ -159,6 +159,9 @@ enum dbi_state {
 };
 
 enum txn_flags {
+  txn_ro_flat = MDBX_TXN_RDONLY,
+  txn_ro_nested = UINT32_C(0x0800),
+  txn_ro_both = txn_ro_flat | txn_ro_nested,
   txn_ro_begin_flags = MDBX_TXN_RDONLY | MDBX_TXN_RDONLY_PREPARE,
   txn_rw_begin_flags = MDBX_TXN_NOMETASYNC | MDBX_TXN_NOSYNC | MDBX_TXN_TRY,
   txn_rw_checkpoint = MDBX_TXN_RDONLY_PREPARE & ~MDBX_TXN_RDONLY,
@@ -488,14 +491,14 @@ struct MDBX_env {
   osal_ioring_t ioring;
 
 #if defined(_WIN32) || defined(_WIN64)
-  osal_srwlock_t remap_guard;
+  osal_srwlock_t remap_lock;
   /* Workaround for LockFileEx and WriteFile multithread bug */
   CRITICAL_SECTION lck_event_cs;
   CRITICAL_SECTION dxb_event_cs;
   char *pathname_char; /* cache of multi-byte representation of pathname
                              to the DB files */
 #else
-  osal_fastmutex_t remap_guard;
+  osal_fastmutex_t remap_lock;
 #endif
 
   /* ------------------------------------------------- stub for lck-less mode */

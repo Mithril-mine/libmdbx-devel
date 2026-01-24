@@ -13,7 +13,6 @@ TODO
  - Явная и автоматическая уплотнение/дефрагментация.
  - Нелинейная обработка GC.
  - Перевести курсоры на двусвязный список вместо односвязного.
- - Внутри `txn_renew()` вынести проверку когерентности mmap за/после изменение размера.
  - [Migration guide from LMDB to MDBX](https://libmdbx.dqdkfa.ru/dead-github/issues/199).
  - [Support for RAW devices](https://libmdbx.dqdkfa.ru/dead-github/issues/124).
  - [Support MessagePack for Keys & Values](https://libmdbx.dqdkfa.ru/dead-github/issues/115).
@@ -43,6 +42,9 @@ Done
 
 Cancelled
 --------
+
+ - Внутри `txn_renew()` вынести проверку когерентности mmap за/после изменение размера.
+   Потеряло смысл в результате рефакторинга.
 
  - [Replace SRW-lock on Windows to allow shrink DB with `MDBX_NOSTICKYTHREADS` option](https://libmdbx.dqdkfa.ru/dead-github/issues/210).
    Доработка не может быть реализована, так как замена SRW-блокировки
