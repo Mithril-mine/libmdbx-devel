@@ -139,7 +139,7 @@ public:
   };
 
 protected:
-  /* fake const, i.e. for some move/get operations */
+  /* fake `const`, but for specific move/get operations */
   inline bool move(move_operation operation, MDBX_val *key, MDBX_val *value, bool throw_notfound) const;
 
   inline ptrdiff_t estimate(move_operation operation, MDBX_val *key, MDBX_val *value) const;

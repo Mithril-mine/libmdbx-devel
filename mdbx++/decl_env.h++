@@ -150,7 +150,7 @@ public:
     bool no_sticky_threads{false};
     /// \brief Разрешает вложенные транзакции ценой отключения
     /// \ref MDBX_WRITEMAP и увеличением накладных расходов.
-    bool nested_write_transactions{false};
+    bool nested_transactions{false};
     /// \copydoc MDBX_EXCLUSIVE
     bool exclusive{false};
     /// \copydoc MDBX_NORDAHEAD

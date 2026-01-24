@@ -102,6 +102,9 @@ public:
   /// \brief Start nested write transaction.
   txn_managed start_nested();
 
+  /// \brief Start nested transaction.
+  txn_managed start_nested(bool readonly);
+
   /// \brief Opens cursor for specified key-value map handle.
   inline cursor_managed open_cursor(map_handle map) const;
 
