@@ -636,8 +636,9 @@ __cold static int chk_pgvisitor(const size_t pgno, const unsigned npages, void *
 
   if (pagetype < page_sub_leaf) {
     const txnid_t basis = txn_basis_snapshot(txn);
-    const txnid_t age =
-        (page_txnid >= MIN_TXNID) ? ((page_txnid > basis) ? /* dirty */ 0 : basis - page_txnid + 1) : SIZE_MAX;
+    const txnid_t age = (page_txnid >= MIN_TXNID)
+                            ? ((page_txnid > basis) ? /* dirty */ 0 : (basis - page_txnid) / xMDBX_TXNID_STEP + 1)
+                            : SIZE_MAX;
     histogram_acc_ex((age < SIZE_MAX) ? age : SIZE_MAX - 1, &usr->result.histogram_page_age, HISTOGRAM_LE0);
     histogram_acc_ex((age < SIZE_MAX) ? age : SIZE_MAX - 1, &tbl->histogram.page_age, HISTOGRAM_LE0);
   }
