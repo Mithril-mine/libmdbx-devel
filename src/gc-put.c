@@ -477,7 +477,14 @@ static int gc_remove_rkl(MDBX_txn *txn, gcu_t *ctx, rkl_t *rkl) {
     if (ctx->gc_first == id)
       ctx->gc_first = 0;
     tASSERT(txn, id <= txn->env->lck->cached_oldest_txnid.weak);
+#ifndef _MSC_VER
     MDBX_val key = {.iov_base = &id, .iov_len = sizeof(id)};
+#else
+    /* avoid MSVC crash and/or ICE */
+    MDBX_val key;
+    key.iov_base = &id;
+    key.iov_len = sizeof(id);
+#endif
     int err = cursor_seek(&ctx->cursor, &key, nullptr, MDBX_SET).err;
     tASSERT(txn, id == rkl_edge(rkl, is_lifo(txn)));
     if (err == MDBX_NOTFOUND) {
@@ -959,7 +966,14 @@ static inline int gc_reserve4return(MDBX_txn *txn, gcu_t *ctx, const size_t chun
   if (unlikely(err != MDBX_SUCCESS))
     return err;
 
+#ifndef _MSC_VER
   MDBX_val key = {.iov_base = &reservation_id, .iov_len = sizeof(reservation_id)};
+#else
+  /* avoid MSVC crash and/or ICE */
+  MDBX_val key;
+  key.iov_base = &reservation_id;
+  key.iov_len = sizeof(reservation_id);
+#endif
   MDBX_val data = {.iov_base = nullptr, .iov_len = gc_chunk_bytes(chunk_hi)};
   TRACE("%s: reserved +%zu...+%zu [%zu...%zu), err %d", dbg_prefix(ctx), chunk_lo, chunk_hi,
         ctx->return_reserved_lo + 1, ctx->return_reserved_hi + chunk_hi + 1, err);
@@ -1268,7 +1282,14 @@ static int gc_fill_returned(MDBX_txn *txn, gcu_t *ctx) {
   if (likely(slots == 1)) {
     /* самый простой и частый случай */
     txnid_t id = rkl_lowest(&txn->wr.gc.comeback);
+#ifndef _MSC_VER
     MDBX_val key = {.iov_base = &id, .iov_len = sizeof(id)};
+#else
+    /* avoid MSVC crash and/or ICE */
+    MDBX_val key;
+    key.iov_base = &id;
+    key.iov_len = sizeof(id);
+#endif
     MDBX_val data = {.iov_base = nullptr, .iov_len = 0};
     int err = cursor_seek(&ctx->cursor, &key, &data, MDBX_SET_KEY).err;
     if (likely(err == MDBX_SUCCESS)) {
@@ -1304,7 +1325,14 @@ static int gc_fill_returned(MDBX_txn *txn, gcu_t *ctx) {
       ERROR("reserve depleted (used %zu slots, left %zu loop %u)", rkl_len(&txn->wr.gc.comeback), left, ctx->loop);
       return MDBX_PROBLEM;
     }
+#ifndef _MSC_VER
     MDBX_val key = {.iov_base = &id, .iov_len = sizeof(id)};
+#else
+    /* avoid MSVC crash and/or ICE */
+    MDBX_val key;
+    key.iov_base = &id;
+    key.iov_len = sizeof(id);
+#endif
     MDBX_val data = {.iov_base = nullptr, .iov_len = 0};
     const int err = cursor_seek(&ctx->cursor, &key, &data, MDBX_SET_KEY).err;
     if (unlikely(err != MDBX_SUCCESS))

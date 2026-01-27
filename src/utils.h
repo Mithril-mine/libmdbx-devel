@@ -83,7 +83,7 @@ typedef struct ratio2digits_buffer {
 
 MDBX_INTERNAL char *ratio2digits(const uint64_t v, const uint64_t d, ratio2digits_buffer_t *const buffer,
                                  int precision);
-MDBX_INTERNAL char *ratio2percent(const uint64_t v, const uint64_t d, ratio2digits_buffer_t *const buffer);
+MDBX_INTERNAL char *ratio2percent(uint64_t v, uint64_t d, ratio2digits_buffer_t *buffer);
 
 MDBX_INTERNAL bin128_t mul64x64_128_fallback(uint64_t x, uint64_t y);
 

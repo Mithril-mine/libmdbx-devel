@@ -29,6 +29,14 @@
 
 #if defined(__cpp_lib_int_pow2) && __cpp_lib_int_pow2 >= 202002L
 #include <bit>
+using std::bit_width;
+#else
+static size_t bit_width(size_t v) {
+  size_t r;
+  for (r = 0; v > 0; ++r)
+    v >>= 1;
+  return r;
+}
 #endif /* __cpp_lib_int_pow2 >= 202002L */
 
 #if 1 || defined(ENABLE_MEMCHECK) || defined(MDBX_CI) || MDBX_DEBUG || !defined(NDEBUG) || defined(__APPLE__) ||       \
@@ -156,7 +164,7 @@ struct case_multi : public case_kind {
   case_multi(mdbx::txn txn) noexcept : case_kind(txn, "multi", mdbx::key_mode::usual, mdbx::value_mode::multi) {}
   buffer_pair kv(size_t base) override {
     auto x = mix(base);
-    auto w = std::bit_width(base | 42);
+    auto w = bit_width(base | 42);
     auto k = chop(x, w / 2);
     auto v = chop(x >> w / 2, w - w / 2);
     return buffer_pair(buffer::base58(k), buffer::base58(v));
@@ -168,7 +176,7 @@ struct case_ordinal : public case_kind {
       : case_kind(txn, "ordinal", mdbx::key_mode::ordinal, mdbx::value_mode::multi_ordinal) {}
   buffer_pair kv(size_t base) override {
     auto x = mix(base);
-    auto w = std::bit_width(base | 42);
+    auto w = bit_width(base | 42);
     auto k = chop(x, w / 2);
     auto v = chop(x >> w / 2, w - w / 2);
     return buffer_pair(buffer::wrap(uint64_t(k)), buffer::wrap(uint64_t(v)));

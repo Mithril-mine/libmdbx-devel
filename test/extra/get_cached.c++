@@ -49,7 +49,7 @@ static void logger_nofmt(MDBX_log_level_t loglevel, const char *function, int li
 
 static char log_buffer[1024];
 
-MDBX_MAYBE_UNUSED static std::string format_va(const char *fmt, va_list ap) {
+MDBX_MAYBE_UNUSED std::string format_va(const char *fmt, va_list ap) {
   va_list ones;
   va_copy(ones, ap);
 #ifdef _MSC_VER

@@ -111,14 +111,14 @@ bool case0_trivia_sticky_threads(const mdbx::path &path, bool nested = false) {
     err = mdbx_txn_abort(c_txn);
     assert(err == MDBX_SUCCESS);
     ok = err == MDBX_SUCCESS && ok;
-    auto nested = txn.start_nested();
-    auto cursor = nested.open_cursor(map);
+    auto txn_nested = txn.start_nested();
+    auto cursor = txn_nested.open_cursor(map);
     size_t count = 0;
     cursor.fullscan([&](const mdbx::pair &) -> bool {
       count += 1;
       return /* continue scan */ false;
     });
-    nested.abort();
+    txn_nested.abort();
     assert(count == txn.get_map_stat(map).ms_entries);
     ok = count == txn.get_map_stat(map).ms_entries && ok;
   }

@@ -549,7 +549,7 @@ int mdbx_txn_info(const MDBX_txn *txn, MDBX_txn_info *info, bool scan_rlt) {
   return MDBX_SUCCESS;
 }
 
-int mdbx_txn_clone(const MDBX_txn *source, MDBX_txn **const in_out_clone, void *clone_context) {
+int mdbx_txn_clone(const MDBX_txn *source, MDBX_txn **in_out_clone, void *clone_context) {
   if (unlikely(!in_out_clone))
     return LOG_IFERR(MDBX_EINVAL);
 

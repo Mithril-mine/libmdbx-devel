@@ -949,7 +949,14 @@ next_gc:
   prof->rsteps += 1
 #endif /* MDBX_ENABLE_PROFGC */
       ;
+#ifndef _MSC_VER
   MDBX_val key = {.iov_base = &id, .iov_len = sizeof(id)};
+#else
+  /* avoid MSVC crash and/or ICE */
+  MDBX_val key;
+  key.iov_base = &id;
+  key.iov_len = sizeof(id);
+#endif
 
   /* Seek first/next GC record */
   ret.err = cursor_ops(gc, &key, nullptr, op);
