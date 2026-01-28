@@ -887,6 +887,7 @@ elseif(TRUE)
             TODO.md
             ChangeLog.md
             src/bits.md
+            src/amalgam.in
             docs/Doxyfile.in
             docs/header.html
             docs/ld+json

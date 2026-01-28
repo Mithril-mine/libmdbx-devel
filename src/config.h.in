@@ -1,4 +1,5 @@
-/* This is CMake-template for libmdbx's config.h
+/* This file is part of the libmdbx amalgamated source code (@MDBX_GIT_DESCRIBE@ at @MDBX_GIT_TIMESTAMP@),
+ * it is the template for libmdbx's config.h
  ******************************************************************************/
 
 /* *INDENT-OFF* */
