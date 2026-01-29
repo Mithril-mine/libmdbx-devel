@@ -1473,23 +1473,21 @@ txn_managed::~txn_managed() noexcept {
     MDBX_CXX20_UNLIKELY error::success_or_panic(::mdbx_txn_abort(handle_), "mdbx::~txn", "mdbx_txn_abort");
 }
 
-void txn_managed::abort() {
-  const error err = static_cast<MDBX_error_t>(::mdbx_txn_abort(handle_));
+void txn_managed::abort() { abort(nullptr); }
+
+void txn_managed::commit() { commit(nullptr); }
+
+bool txn_managed::checkpoint() { return checkpoint(nullptr); }
+
+void txn_managed::abort(finalization_latency *latency) {
+  const error err = static_cast<MDBX_error_t>(::mdbx_txn_abort_ex(handle_, latency));
   if (MDBX_LIKELY(err.code() != MDBX_THREAD_MISMATCH))
     MDBX_CXX20_LIKELY handle_ = nullptr;
   if (MDBX_UNLIKELY(err.code() != MDBX_SUCCESS))
     MDBX_CXX20_UNLIKELY err.throw_exception();
 }
 
-void txn_managed::commit() {
-  const error err = static_cast<MDBX_error_t>(::mdbx_txn_commit(handle_));
-  if (MDBX_LIKELY(err.code() != MDBX_THREAD_MISMATCH))
-    MDBX_CXX20_LIKELY handle_ = nullptr;
-  if (MDBX_UNLIKELY(err.code() != MDBX_SUCCESS))
-    MDBX_CXX20_UNLIKELY err.throw_exception();
-}
-
-void txn_managed::commit(commit_latency *latency) {
+void txn_managed::commit(finalization_latency *latency) {
   const error err = static_cast<MDBX_error_t>(::mdbx_txn_commit_ex(handle_, latency));
   if (MDBX_LIKELY(err.code() != MDBX_THREAD_MISMATCH))
     MDBX_CXX20_LIKELY handle_ = nullptr;
@@ -1497,7 +1495,7 @@ void txn_managed::commit(commit_latency *latency) {
     MDBX_CXX20_UNLIKELY err.throw_exception();
 }
 
-bool txn_managed::checkpoint(commit_latency *latency) {
+bool txn_managed::checkpoint(finalization_latency *latency) {
   const error err = static_cast<MDBX_error_t>(::mdbx_txn_checkpoint(handle_, MDBX_TXN_NOWEAKING, latency));
   if (MDBX_UNLIKELY(err.is_failure())) {
     if (err.code() != MDBX_THREAD_MISMATCH && err.code() != MDBX_EINVAL)
