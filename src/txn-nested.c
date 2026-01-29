@@ -661,6 +661,11 @@ int txn_nested_commit(MDBX_txn *nested, struct commit_timestamp *ts) {
 
 int txn_nested_checkpoint(MDBX_txn *nested, struct commit_timestamp *ts) {
   MDBX_txn *parent = nested->parent;
+  if (unlikely(!parent || parent->nested != nested || parent->env != nested->env)) {
+    ERROR("attempt to commit %s txn %p", "strange nested", __Wpedantic_format_voidptr(nested));
+    return MDBX_PROBLEM;
+  }
+
   unsigned flags = nested->flags & (txn_rw_begin_flags | MDBX_NOSTICKYTHREADS | MDBX_WRITEMAP | MDBX_TXN_RDONLY);
   int rc = nested_join(nested, ts);
   if (likely(rc == MDBX_SUCCESS)) {

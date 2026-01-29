@@ -1479,6 +1479,8 @@ void txn_managed::commit() { commit(nullptr); }
 
 bool txn_managed::checkpoint() { return checkpoint(nullptr); }
 
+void txn_managed::commit_embark_read() { commit_embark_read(nullptr); }
+
 void txn_managed::abort(finalization_latency *latency) {
   const error err = static_cast<MDBX_error_t>(::mdbx_txn_abort_ex(handle_, latency));
   if (MDBX_LIKELY(err.code() != MDBX_THREAD_MISMATCH))
@@ -1505,10 +1507,8 @@ bool txn_managed::checkpoint(finalization_latency *latency) {
   return err.is_result_true();
 }
 
-void txn_managed::commit_embark_read() {
-  auto env = handle_->env;
-  commit();
-  error::success_or_throw(::mdbx_txn_begin(env, nullptr, MDBX_TXN_RDONLY, &handle_));
+void txn_managed::commit_embark_read(finalization_latency *latency) {
+  error::success_or_throw(::mdbx_txn_commit_embark_read(&handle_, latency));
 }
 
 //------------------------------------------------------------------------------

@@ -334,6 +334,80 @@ int mdbx_txn_begin_ex(MDBX_env *env, MDBX_txn *parent, MDBX_txn_flags_t flags, M
   return MDBX_SUCCESS;
 }
 
+int mdbx_txn_commit_embark_read(MDBX_txn **ptxn, MDBX_commit_latency *latency) {
+  struct commit_timestamp ts;
+  txn_latency_init(latency, &ts);
+
+  if (unlikely(!ptxn))
+    return LOG_IFERR(MDBX_EINVAL);
+
+  MDBX_txn *wtxn = *ptxn;
+  int rc = check_txn(wtxn, MDBX_TXN_BLOCKED - MDBX_TXN_PARKED);
+  if (unlikely(rc != MDBX_SUCCESS))
+    return LOG_IFERR(rc);
+
+  MDBX_env *const env = wtxn->env;
+  rc = check_env(env, true);
+  if (unlikely(rc != MDBX_SUCCESS))
+    return LOG_IFERR(rc);
+
+#if MDBX_TXN_CHECKOWNER
+  if ((wtxn->flags & MDBX_NOSTICKYTHREADS) && wtxn == env->basal_txn && unlikely(wtxn->owner != osal_thread_self())) {
+    mdbx_txn_break(wtxn);
+    return LOG_IFERR(MDBX_THREAD_MISMATCH);
+  }
+#endif /* MDBX_TXN_CHECKOWNER */
+
+  if (unlikely(wtxn->flags & txn_ro_both))
+    goto done;
+
+  if (unlikely(wtxn->nested)) {
+    /* more checks for middle-point committing case */
+    rc = mdbx_txn_commit_ex(wtxn->nested, nullptr);
+    tASSERT(wtxn, !wtxn->nested);
+    if (unlikely(rc != MDBX_SUCCESS)) {
+      *ptxn = nullptr;
+      mdbx_txn_abort(wtxn);
+      goto done;
+    }
+  }
+
+  MDBX_txn *rtxn = nullptr;
+  if (wtxn == env->basal_txn) {
+    void *const preserved_context = wtxn->userctx;
+    rc = txn_basal_commit(wtxn, &ts);
+    if (likely(rc == MDBX_SUCCESS)) {
+      rc = txn_basal_end(wtxn, /* завершение транзакции без освобождения блокировки */ false);
+      if (likely(rc == MDBX_SUCCESS)) {
+        rtxn = txn_alloc(txn_ro_flat, env);
+        rc = likely(rtxn) ? txn_ro_start(rtxn, false) : MDBX_ENOMEM;
+      }
+    }
+
+    const int err = txn_basal_end(wtxn, /* освобождение блокировки */ true);
+    if (unlikely(err != MDBX_SUCCESS) && rc == MDBX_SUCCESS)
+      rc = err;
+    if (likely(rc == MDBX_SUCCESS)) {
+      rtxn->userctx = preserved_context;
+      rtxn->signature = txn_signature;
+    } else {
+      txn_ro_free(rtxn);
+      rtxn = nullptr;
+    }
+  } else {
+    rc = txn_nested_checkpoint(wtxn, &ts);
+    if (likely(rc == MDBX_SUCCESS)) {
+      rtxn = wtxn;
+      rtxn->flags |= txn_ro_nested;
+    }
+  }
+  *ptxn = rtxn;
+
+done:
+  txn_latency_done(latency, &ts);
+  return LOG_IFERR(rc);
+}
+
 int mdbx_txn_checkpoint(MDBX_txn *txn, MDBX_txn_flags_t weakening_durability, MDBX_commit_latency *latency) {
   struct commit_timestamp ts;
   txn_latency_init(latency, &ts);
@@ -375,10 +449,6 @@ int mdbx_txn_checkpoint(MDBX_txn *txn, MDBX_txn_flags_t weakening_durability, MD
   } else {
     if (unlikely(weakening_durability != MDBX_TXN_NOWEAKING))
       return LOG_IFERR(MDBX_EINVAL);
-    if (unlikely(!txn->parent || txn->parent->nested != txn || txn->parent->env != env)) {
-      ERROR("attempt to commit %s txn %p", "strange nested", __Wpedantic_format_voidptr(txn));
-      return MDBX_PROBLEM;
-    }
     rc = txn_nested_checkpoint(txn, latency ? &ts : nullptr);
   }
 

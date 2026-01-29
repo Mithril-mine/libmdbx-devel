@@ -260,6 +260,7 @@ int txn_basal_end(MDBX_txn *txn, bool unlock) {
 int txn_basal_commit(MDBX_txn *txn, struct commit_timestamp *ts) {
   MDBX_env *const env = txn->env;
   tASSERT(txn, txn == env->basal_txn && !txn->parent && !txn->nested);
+  tASSERT(txn, (txn->flags & MDBX_TXN_ERROR) == 0);
   if (!txn->wr.dirtylist) {
     tASSERT(txn, (txn->flags & MDBX_WRITEMAP) != 0 && !MDBX_AVOID_MSYNC);
   } else {
