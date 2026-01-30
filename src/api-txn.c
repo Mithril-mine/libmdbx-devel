@@ -350,6 +350,23 @@ int mdbx_txn_checkpoint(MDBX_txn *txn, MDBX_txn_flags_t weakening_durability, MD
   if (unlikely(rc != MDBX_SUCCESS))
     return LOG_IFERR(rc);
 
+#if MDBX_TXN_CHECKOWNER
+  if ((txn->flags & MDBX_NOSTICKYTHREADS) && txn == env->basal_txn && unlikely(txn->owner != osal_thread_self())) {
+    mdbx_txn_break(txn);
+    return LOG_IFERR(MDBX_THREAD_MISMATCH);
+  }
+#endif /* MDBX_TXN_CHECKOWNER */
+
+  if (unlikely(txn->nested)) {
+    /* more checks for middle-point committing case */
+    rc = mdbx_txn_commit_ex(txn->nested, nullptr);
+    tASSERT(txn, !txn->nested);
+    if (unlikely(rc != MDBX_SUCCESS)) {
+      mdbx_txn_abort(txn);
+      goto done;
+    }
+  }
+
   if ((txn->flags & MDBX_TXN_DIRTY) == 0)
     return MDBX_RESULT_TRUE;
 
@@ -365,6 +382,7 @@ int mdbx_txn_checkpoint(MDBX_txn *txn, MDBX_txn_flags_t weakening_durability, MD
     rc = txn_nested_checkpoint(txn, latency ? &ts : nullptr);
   }
 
+done:
   txn_latency_done(latency, &ts);
   return LOG_IFERR(rc);
 }

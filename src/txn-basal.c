@@ -464,14 +464,17 @@ int txn_basal_commit(MDBX_txn *txn, struct commit_timestamp *ts) {
 
 int txn_basal_checkpoint(MDBX_txn *txn, MDBX_txn_flags_t weakening_durability, struct commit_timestamp *ts) {
   const unsigned preserved_flags = txn->flags & txn_rw_begin_flags;
+  /* void *const preserved_context = txn->userctx; */
   txn->flags |= weakening_durability & (MDBX_TXN_NOMETASYNC | MDBX_TXN_NOSYNC | MDBX_SYNC_DURABLE);
   int rc = txn_basal_commit(txn, ts);
   if (likely(rc == MDBX_SUCCESS)) {
     rc = txn_basal_end(txn, false);
     if (likely(rc == MDBX_SUCCESS)) {
       rc = txn_basal_start(txn, preserved_flags | txn_rw_checkpoint);
-      if (likely(rc == MDBX_SUCCESS))
+      if (likely(rc == MDBX_SUCCESS)) {
+        /* txn->userctx = preserved_context; */
         return MDBX_SUCCESS;
+      }
     }
   }
 
