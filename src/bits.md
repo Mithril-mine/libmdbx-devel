@@ -7,8 +7,8 @@ N |   MASK  | ENV       | TXN          | DB       | PUT       | DBI        | NOD
 4 |0000 0010|ALLOC_FIFO |TXN_HAS_CHILD |DUPFIXED  |NOOVERWRITE|DBI_VALID   |         |P_BAD     |         |
 5 |0000 0020|           |TXN_PARKED    |INTEGERDUP|NODUPDATA  |            |         |P_DUPFIX  |         |
 6 |0000 0040|           |TXN_AUTOUNPARK|REVERSEDUP|CURRENT    |DBI_OLDEN   |         |P_SUBP    |         |
-7 |0000 0080|           |TXN_DRAINED_GC|DB_VALID  |ALLDUPS    |DBI_LINDO   |         |          |         |
-8 |0000 0100| _MAY_MOVE |              |          |           |            |         |          | <=      |
+7 |0000 0080|           |TXN_OUSTED    |DB_VALID  |ALLDUPS    |DBI_LINDO   |         |          |         |
+8 |0000 0100| _MAY_MOVE |TXN_DRAINED_GC|          |           |            |         |          | <=      |
 9 |0000 0200| _MAY_UNMAP|              |          |           |            |         |          | <=      |
 10|0000 0400|           |              |          |           |            |         |          |         |
 11|0000 0800|           |              |          |           |            |         |          |         |
