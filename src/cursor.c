@@ -2343,8 +2343,8 @@ int cursor_check(const MDBX_cursor *mc, int txn_bad_bits) {
     return (txn_bad_bits > MDBX_TXN_FINISHED) ? MDBX_EINVAL : MDBX_SUCCESS;
   }
 
-  /* проверяем что курсор в связном списке для отслеживания, исключение допускается только для read-only операций для
-   * служебных/временных курсоров на стеке. */
+  /* проверяем что курсор в связанном списке для отслеживания,
+   * исключение допускается только для read-only операций для служебных/временных курсоров на стеке. */
   MDBX_MAYBE_UNUSED char stack_top[sizeof(void *)];
   cASSERT(mc, cursor_is_tracked(mc) || (!(txn_bad_bits & txn_ro_flat) && stack_top < (char *)mc &&
                                         (char *)mc - stack_top < (ptrdiff_t)globals.sys_pagesize * 4));
@@ -2357,14 +2357,19 @@ int cursor_check(const MDBX_cursor *mc, int txn_bad_bits) {
     }
 
     if (likely((mc->txn->flags & MDBX_TXN_HAS_CHILD) == 0))
+      /* связанная с курсором транзакций не имеет дочерних, курсор не требует затенения (возможно уже затенён) */
       return likely(!cursor_dbi_changed(mc)) ? MDBX_SUCCESS : MDBX_BAD_DBI;
 
+    /* связанная с курсором транзакция имеет дочернюю, курсор необходимо затенить, либо DBI-хендл не валиден */
     cASSERT(mc, (mc->txn->flags & txn_ro_flat) == 0 && mc->txn != mc->txn->env->txn && mc->txn->env->txn);
     rc = dbi_check(mc->txn->env->txn, cursor_dbi(mc));
     if (unlikely(rc != MDBX_SUCCESS))
       return rc;
 
+    /* В результате dbi_check() курсор должен быть затенён */
     cASSERT(mc, (mc->txn->flags & txn_ro_flat) == 0 && mc->txn == mc->txn->env->txn);
+    if (unlikely(mc->txn != mc->txn->env->txn))
+      return MDBX_BAD_TXN;
   }
 
   return MDBX_SUCCESS;
