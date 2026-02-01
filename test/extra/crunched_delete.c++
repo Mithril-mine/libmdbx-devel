@@ -404,11 +404,10 @@ int doit() {
   auto txn = env.start_write();
   for (unsigned i = 0; i < testset.size(); ++i)
     create_and_fill(txn, testset[i], i);
-  txn.commit();
+  txn.checkpoint();
 
   // mdbx_setup_debug_nofmt(MDBX_LOG_TRACE, MDBX_DBG_AUDIT | MDBX_DBG_ASSERT,
   //                       logger_nofmt, log_buffer, sizeof(log_buffer));
-  txn = env.start_write();
   for (unsigned i = 0; i < testset.size(); ++i)
     chunched_delete(txn, testset[i], i);
   txn.commit();

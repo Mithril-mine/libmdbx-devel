@@ -73,9 +73,8 @@ bool case1_ordering(mdbx::env env) {
   txn.put_multiple_samelength(map, buffer::key_from_u64(14), array + 4, 5, mdbx::upsert);
   txn.put_multiple_samelength(map, buffer::key_from_u64(11), array + 1, 2, mdbx::upsert);
   txn.put_multiple_samelength(map, buffer::key_from_u64(16), array + 6, 7, mdbx::upsert);
-  txn.commit();
+  txn.commit_embark_read();
 
-  txn = env.start_read();
   cursor = txn.open_cursor(map);
   if (/* key = 7 */ cursor.to_first().value.as_uint64() != 19 ||
 
@@ -136,9 +135,8 @@ bool case1_ordering(mdbx::env env) {
   txn.put_multiple_samelength(map, buffer::key_from_u64(25), array + 5, 6, mdbx::update);
   txn.upsert(map, buffer::key_from_u64(26), buffer::key_from_u64(12));
   txn.put_multiple_samelength(map, buffer::key_from_u64(27), array + 12, 3, mdbx::update);
-  txn.commit();
+  txn.commit_embark_read();
 
-  txn = env.start_read();
   cursor = txn.open_cursor(map);
   if (/* key = 7 */
       cursor.to_first().value.as_uint64() != 4 || cursor.to_next().value.as_uint64() != 5 ||

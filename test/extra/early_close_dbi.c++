@@ -122,13 +122,11 @@ int doit() {
   auto env = mdbx::env_managed(db_filename, mdbx::env_managed::operate_parameters(2));
   auto txn = env.start_write();
   auto dbi = txn.create_map("keller-case");
-  txn.commit();
+  txn.checkpoint();
 
-  txn = env.start_write();
   txn.rename_map(dbi, "keller-case.renamed");
-  txn.commit();
+  txn.checkpoint();
 
-  txn = env.start_write();
   auto dbi2 = txn.create_map("keller-case");
   txn.drop_map(dbi);
   txn.drop_map(dbi2);

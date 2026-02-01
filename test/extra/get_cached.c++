@@ -113,9 +113,7 @@ static bool check_state_and_value(const MDBX_cache_result_t &r, const mdbx::slic
 bool case0_trivia(mdbx::env env, get_cached_t get_cached) {
   auto txn = env.start_write();
   txn.drop_map("case0");
-  txn.commit();
-
-  txn = env.start_write();
+  txn.checkpoint();
   auto table = txn.create_map("case0", mdbx::key_mode::usual, mdbx::value_mode::single);
 
   MDBX_cache_entry_t entry;
