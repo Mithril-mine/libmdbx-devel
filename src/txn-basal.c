@@ -117,7 +117,7 @@ static int basal_start_locked(MDBX_txn *txn, unsigned flags) {
     return MDBX_EPERM;
 #endif /* Windows */
 
-  txn->flags = flags & ~txn_rw_checkpoint;
+  txn->flags = flags & ~txn_rw_already_locked;
   txn->nested = nullptr;
   txn->wr.loose_pages = nullptr;
   txn->wr.loose_count = 0;
@@ -188,11 +188,11 @@ static int basal_start_locked(MDBX_txn *txn, unsigned flags) {
 
 int txn_basal_start(MDBX_txn *txn, unsigned flags) {
   tASSERT(txn, (flags & ~(txn_rw_begin_flags | MDBX_TXN_SPILLS | MDBX_WRITEMAP | MDBX_NOSTICKYTHREADS |
-                          txn_rw_checkpoint)) == 0);
+                          txn_rw_already_locked)) == 0);
   MDBX_env *const env = txn->env;
   tASSERT(txn, txn == env->basal_txn);
   flags |= env->flags & (MDBX_NOSTICKYTHREADS | MDBX_WRITEMAP);
-  if ((flags & txn_rw_checkpoint) == 0) {
+  if ((flags & txn_rw_already_locked) == 0) {
     const uintptr_t tid = osal_thread_self();
     if (unlikely(txn->owner == tid ||
                  /* not recovery mode */ env->stuck_meta >= 0))
@@ -467,7 +467,7 @@ int txn_basal_checkpoint(MDBX_txn *txn, MDBX_txn_flags_t weakening_durability, s
     rc = txn_basal_end(txn, false);
     if (likely(rc == MDBX_SUCCESS)) {
       /* txn->userctx = preserved_context; */
-      return txn_basal_start(txn, preserved_flags | txn_rw_checkpoint);
+      return txn_basal_start(txn, preserved_flags | txn_rw_already_locked);
     }
   }
 
