@@ -641,6 +641,10 @@ __cold static int chk_pgvisitor(const size_t pgno, const unsigned npages, void *
                             : SIZE_MAX;
     histogram_acc_ex((age < SIZE_MAX) ? age : SIZE_MAX - 1, &usr->result.histogram_page_age, HISTOGRAM_LE0);
     histogram_acc_ex((age < SIZE_MAX) ? age : SIZE_MAX - 1, &tbl->histogram.page_age, HISTOGRAM_LE0);
+
+    histogram_acc(pgno, &tbl->histogram.pgno);
+    if (tbl->id != FREE_DBI)
+      histogram_acc(pgno, &usr->result.histogram_pgno_payload);
   }
 
   int height = deep + 1;
@@ -924,6 +928,11 @@ __cold static int chk_tree(MDBX_chk_scope_t *const scope) {
                                   "1", false);
           }
           histogram_dist(chk_line_feed(line), &tbl->histogram.page_age, "pages age distribution", "dirty", false);
+          chk_line_end(line);
+        }
+        if (tbl->histogram.pgno.count) {
+          line = chk_line_begin(inner, (tbl->id != FREE_DBI) ? MDBX_chk_verbose : MDBX_chk_info);
+          histogram_dist(line, &tbl->histogram.pgno, "pgno distribution", "bad", false);
           chk_line_end(line);
         }
       }
@@ -1310,6 +1319,10 @@ __cold static int chk_handle_gc(MDBX_chk_scope_t *const scope, MDBX_chk_table_t 
       size_t span = 1;
       for (size_t i = 0; i < number; ++i) {
         const size_t pgno = iptr[i];
+        histogram_acc(pgno, (chk->envinfo.mi_latter_reader_txnid > txnid)
+                                ? /* account reclaimable as GC-related*/ &tbl->histogram.pgno
+                                : &usr->result.histogram_pgno_retained);
+
         if (pgno < NUM_METAS)
           chk_object_issue(scope, "entry", txnid, "wrong idl entry", "pgno %" PRIuSIZE " < meta-pages %u", pgno,
                            NUM_METAS);
@@ -1579,6 +1592,16 @@ __cold static int env_chk(MDBX_chk_scope_t *const scope) {
     if (usr->result.histogram_page_age.count) {
       line = chk_line_begin(scope, MDBX_chk_info);
       histogram_dist(line, &usr->result.histogram_page_age, "pages age distribution", "dirty", false);
+      chk_line_end(line);
+    }
+    if (usr->result.histogram_pgno_payload.count) {
+      line = chk_line_begin(scope, MDBX_chk_info);
+      histogram_dist(line, &usr->result.histogram_pgno_payload, "payload pgno distribution", "bad", false);
+      chk_line_end(line);
+    }
+    if (usr->result.histogram_pgno_retained.count) {
+      line = chk_line_begin(scope, MDBX_chk_info);
+      histogram_dist(line, &usr->result.histogram_pgno_retained, "retained pgno distribution", "bad", false);
       chk_line_end(line);
     }
     chk_scope_restore(scope, err);

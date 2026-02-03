@@ -7020,6 +7020,8 @@ typedef struct MDBX_chk_table {
     struct MDBX_chk_histogram large_or_nested_density;
     /** Histogram of pages age */
     struct MDBX_chk_histogram page_age;
+    /** Histogram of used pgno */
+    struct MDBX_chk_histogram pgno;
   } histogram;
 } MDBX_chk_table_t;
 
@@ -7040,7 +7042,11 @@ typedef struct MDBX_chk_context {
     uint64_t steady_txnid, recent_txnid;
     /** Histogram of pages age */
     struct MDBX_chk_histogram histogram_page_age;
-    /** A pointer to a `table_total` array with pointers to instances of \ref MDBX_chk_table_t structures with
+    /** Histogram of pgno retained by readers */
+    struct MDBX_chk_histogram histogram_pgno_payload;
+    /** Histogram of pgno used by all payload */
+    struct MDBX_chk_histogram histogram_pgno_retained;
+    /** A pointer to the array of `table_total` pointers to instances of \ref MDBX_chk_table_t structures with
      * information about all key-value tables, including `MainDB` and `GC`. */
     const MDBX_chk_table_t *const *tables;
   } result;
