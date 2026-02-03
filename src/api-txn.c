@@ -758,7 +758,7 @@ int mdbx_txn_amend(MDBX_txn *rtxn, MDBX_txn **ptxn, MDBX_txn_flags_t flags, void
   }
 
   if (!F_ISSET(flags, MDBX_TXN_RDONLY_PREPARE))
-      txn_ro_free(rtxn);
+    txn_ro_free(rtxn);
   env->basal_txn->userctx = context;
   *ptxn = env->basal_txn;
   return MDBX_SUCCESS;
