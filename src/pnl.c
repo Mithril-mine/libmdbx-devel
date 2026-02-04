@@ -23,7 +23,7 @@ void pnl_free(pnl_t pnl) {
     osal_free(pnl - 1);
 }
 
-pnl_t pnl_clone(const pnl_t src) {
+pnl_t pnl_clone(const const_pnl_t src) {
   pnl_t pl = pnl_alloc(pnl_alloclen(src));
   if (likely(pl))
     memcpy(pl, src, MDBX_PNL_SIZEOF(src));
@@ -186,7 +186,7 @@ static __always_inline void pnl_merge_inner(pgno_t *__restrict dst, const pgno_t
   } while (likely(src_b > src_b_detent));
 }
 
-__hot size_t pnl_merge(pnl_t dst, const pnl_t src) {
+__hot size_t pnl_merge(pnl_t dst, const const_pnl_t src) {
   assert(pnl_check_allocated(dst, MAX_PAGENO + 1));
   assert(pnl_check(src, MAX_PAGENO + 1));
   const size_t src_len = pnl_size(src);
@@ -230,7 +230,7 @@ __hot __noinline void pnl_sort_nochk(pnl_t pnl) {
 
 SEARCH_IMPL(pgno_bsearch, pgno_t, pgno_t, MDBX_PNL_ORDERED)
 
-__hot __noinline size_t pnl_search_nochk(const pnl_t pnl, pgno_t pgno) {
+__hot __noinline size_t pnl_search_nochk(const const_pnl_t pnl, pgno_t pgno) {
   const pgno_t *begin = MDBX_PNL_BEGIN(pnl);
   const pgno_t *it = pgno_bsearch(begin, pnl_size(pnl), pgno);
   const pgno_t *end = begin + pnl_size(pnl);
@@ -242,7 +242,7 @@ __hot __noinline size_t pnl_search_nochk(const pnl_t pnl, pgno_t pgno) {
   return it - begin + 1;
 }
 
-size_t pnl_maxspan(const pnl_t pnl) {
+size_t pnl_maxspan(const const_pnl_t pnl) {
   size_t len = pnl_size(pnl);
   if (len > 1) {
     size_t span = 1, left = len - span;
