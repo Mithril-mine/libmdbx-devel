@@ -1284,19 +1284,20 @@ __cold static int chk_handle_gc(MDBX_chk_scope_t *const scope, MDBX_chk_table_t 
   assert(tbl == &chk->table_gc);
   (void)tbl;
   const char *bad = "";
-  pgno_t *iptr = data->iov_base;
 
   if (key->iov_len != sizeof(txnid_t))
     chk_object_issue(scope, "entry", record_number, "wrong txn-id size", "key-size %" PRIuSIZE, key->iov_len);
   else {
-    txnid_t txnid;
-    memcpy(&txnid, key->iov_base, sizeof(txnid));
+    const txnid_t txnid = unaligned_peek_u64(4, key->iov_base);
     if (txnid < 1 || txnid > usr->txn->txnid)
       chk_object_issue(scope, "entry", record_number, "wrong txn-id", "%" PRIaTXN, txnid);
     else {
+      const const_pnl_t pnl = data->iov_base;
       if (data->iov_len < sizeof(pgno_t) || data->iov_len % sizeof(pgno_t))
-        chk_object_issue(scope, "entry", txnid, "wrong idl size", "%" PRIuPTR, data->iov_len);
-      size_t number = (data->iov_len >= sizeof(pgno_t)) ? *iptr++ : 0;
+        chk_object_issue(scope, "entry", txnid, "wrong pnl size", "%" PRIuPTR, data->iov_len);
+      if ((size_t)data->iov_base % sizeof(pgno_t))
+        chk_object_issue(scope, "entry", txnid, "invalid pnl alignment", "%" PRIuPTR, (size_t)data->iov_base);
+      size_t number = (data->iov_len >= sizeof(pgno_t) && (size_t)data->iov_base % sizeof(pgno_t) == 0) ? *pnl : 0;
       if (number > PAGELIST_LIMIT)
         chk_object_issue(scope, "entry", txnid, "wrong idl length", "%" PRIuPTR, number);
       else if ((number + 1) * sizeof(pgno_t) > data->iov_len) {
@@ -1316,9 +1317,8 @@ __cold static int chk_handle_gc(MDBX_chk_scope_t *const scope, MDBX_chk_table_t 
         usr->result.reclaimable_pages += number;
 
       size_t prev = MDBX_PNL_ASCENDING ? NUM_METAS - 1 : usr->txn->geo.first_unallocated;
-      size_t span = 1;
-      for (size_t i = 0; i < number; ++i) {
-        const size_t pgno = iptr[i];
+      for (size_t i = 1; i <= number; ++i) {
+        const size_t pgno = pnl[i];
         histogram_acc(pgno, (chk->envinfo.mi_latter_reader_txnid > txnid)
                                 ? /* account reclaimable as GC-related*/ &tbl->histogram.pgno
                                 : &usr->result.histogram_pgno_retained);
@@ -1333,7 +1333,7 @@ __cold static int chk_handle_gc(MDBX_chk_scope_t *const scope, MDBX_chk_table_t 
           chk_object_issue(scope, "entry", txnid, "wrong idl entry", "pgno %" PRIuSIZE " > alloc-pages %" PRIuSIZE,
                            pgno, usr->result.alloc_pages - 1);
         else {
-          if (MDBX_PNL_DISORDERED(prev, pgno)) {
+          if (unlikely(MDBX_PNL_DISORDERED(prev, pgno))) {
             bad = " [bad sequence]";
             chk_object_issue(scope, "entry", txnid, "bad sequence", "%" PRIuSIZE " %c [%" PRIuSIZE "].%" PRIuSIZE, prev,
                              (prev == pgno) ? '=' : (MDBX_PNL_ASCENDING ? '>' : '<'), i, pgno);
@@ -1350,20 +1350,16 @@ __cold static int chk_handle_gc(MDBX_chk_scope_t *const scope, MDBX_chk_table_t 
           }
         }
         prev = pgno;
-        while (i + span < number &&
-               iptr[i + span] == (MDBX_PNL_ASCENDING ? pgno_add(pgno, span) : pgno_sub(pgno, span)))
-          ++span;
       }
       if (tbl->cookie) {
         chk_line_end(chk_print(chk_line_begin(scope, MDBX_chk_details),
                                "transaction %" PRIaTXN ", %" PRIuSIZE " pages, maxspan %" PRIuSIZE "%s", txnid, number,
-                               span, bad));
-        for (size_t i = 0; i < number; i += span) {
-          const size_t pgno = iptr[i];
-          for (span = 1; i + span < number &&
-                         iptr[i + span] == (MDBX_PNL_ASCENDING ? pgno_add(pgno, span) : pgno_sub(pgno, span));
-               ++span)
-            ;
+                               pnl_maxspan(pnl), bad));
+        for (size_t span, i = 1; i <= number; i += span) {
+          const size_t pgno = pnl[i];
+          span = 1;
+          while (i + span <= number && MDBX_PNL_CONTIGUOUS(pgno, pnl[i + span], span))
+            ++span;
           histogram_acc(span, &tbl->histogram.nested_height_or_gc_span_length);
           MDBX_chk_line_t *line = chk_line_begin(scope, MDBX_chk_extra);
           if (line) {
