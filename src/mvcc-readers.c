@@ -73,6 +73,37 @@ bsr_t mvcc_bind_slot(MDBX_env *env) {
 
 #define NOTHING_CHANGED_SIGNATURE MDBX_STRING_TETRAD("None")
 
+MDBX_MAYBE_UNUSED __hot orsi_ro_t mvcc_shapshot_oldest_ro(const MDBX_txn *const txn,
+                                                          const bool need_thisprocess_oldest) {
+  const uint32_t nothing_changed_signature = NOTHING_CHANGED_SIGNATURE;
+  tASSERT(txn, (txn->flags & txn_ro_flat) != 0);
+  orsi_ro_t result;
+  lck_t *const lck = txn->env->lck;
+  result.nreaders = atomic_load32(&lck->rdt_length, mo_AcquireRelease);
+  result.thisprocess_oldest_txnid = result.oldest_txnid = result.recent_txnid = recent_committed_txnid(txn->env);
+
+  if (!need_thisprocess_oldest &&
+      nothing_changed_signature == atomic_load32(&lck->rdt_refresh_flag, mo_AcquireRelease)) {
+    result.oldest_txnid = atomic_load64(&lck->cached_oldest_txnid, mo_AcquireRelease);
+    if (nothing_changed_signature == atomic_load32(&lck->rdt_refresh_flag, mo_AcquireRelease))
+      return result;
+  }
+
+  for (size_t i = 0; i < result.nreaders; ++i) {
+    const mdbx_pid_t pid = atomic_load_pid(&lck->rdt[i].pid, mo_AcquireRelease);
+    if (!pid)
+      continue;
+
+    jitter4testing(true);
+    const txnid_t reader_txnid = safe64_read(&lck->rdt[i].txnid);
+    result.oldest_txnid = (result.oldest_txnid > reader_txnid) ? reader_txnid : result.oldest_txnid;
+    if (pid == txn->env->registered_reader_pid && result.thisprocess_oldest_txnid > reader_txnid)
+      result.thisprocess_oldest_txnid = reader_txnid;
+  }
+
+  return result;
+}
+
 __hot orsi_rw_t mvcc_shapshot_oldest_rw(const MDBX_txn *const txn) {
   const uint32_t nothing_changed_signature = NOTHING_CHANGED_SIGNATURE;
   tASSERT(txn, (txn->flags & txn_ro_flat) == 0);

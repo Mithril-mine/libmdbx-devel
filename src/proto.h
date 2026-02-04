@@ -22,6 +22,13 @@ typedef struct rw_oldest_readed_shapshot_into {
 } orsi_rw_t;
 MDBX_INTERNAL orsi_rw_t mvcc_shapshot_oldest_rw(const MDBX_txn *const txn);
 
+typedef struct ro_oldest_readed_shapshot_into {
+  txnid_t oldest_txnid, thisprocess_oldest_txnid;
+  txnid_t recent_txnid;
+  size_t nreaders;
+} orsi_ro_t;
+MDBX_INTERNAL orsi_ro_t mvcc_shapshot_oldest_ro(const MDBX_txn *const txn, const bool need_thisprocess_oldest);
+
 /* dxb.c */
 MDBX_INTERNAL int dxb_setup(MDBX_env *env, const int lck_rc, const mdbx_mode_t mode_bits);
 MDBX_INTERNAL int __must_check_result dxb_read_header(MDBX_env *env, meta_t *meta, const int lck_exclusive,
