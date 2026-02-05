@@ -199,6 +199,9 @@ __cold const char *mdbx_liberr2str(int errnum) {
            " of recycling old MVCC snapshots";
   case MDBX_MVCC_RETARDED:
     return "MDBX_MVCC_RETARDED: MVCC snapshot used by parked transaction was bygone";
+  case MDBX_LAGGARD_READER:
+    return "An operation cannot continue because a lagging reader is interfering with the"
+           " reclaiming of GC and old MVCC-snapshots";
   default:
     return nullptr;
   }

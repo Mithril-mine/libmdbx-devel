@@ -1987,8 +1987,12 @@ typedef enum MDBX_error {
   /** MVCC snapshot used by parked transaction was bygone. */
   MDBX_MVCC_RETARDED = -30410,
 
+  /** An operation cannot continue because a lagging reader is interfering
+   *  with the reclaiming of GC and old MVCC-snapshots. */
+  MDBX_LAGGARD_READER = -30409,
+
   /* The last of MDBX-added error codes */
-  MDBX_LAST_ADDED_ERRCODE = MDBX_MVCC_RETARDED,
+  MDBX_LAST_ADDED_ERRCODE = MDBX_LAGGARD_READER,
 
 #if defined(_WIN32) || defined(_WIN64)
   MDBX_ENODATA = ERROR_HANDLE_EOF,
