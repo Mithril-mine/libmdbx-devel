@@ -7212,7 +7212,7 @@ typedef struct MDBX_gc_info {
  * \param [in] iter_func    A custom callback function with the signature \ref MDBX_gc_iter_func,
  *                          which will be called for each span.
  *
- * \param [in] iter_ctx     A pointer to some context that will be passed to the `func()` function as it is.
+ * \param [in] iter_ctx     A pointer to some context that will be passed to the `iter_func()` function as it is.
  *
  * \returns A non-zero error value on failure and 0 on success,
  *          some possible errors are:
