@@ -375,7 +375,7 @@ int mdbx_txn_commit_embark_read(MDBX_txn **ptxn, MDBX_commit_latency *latency) {
   MDBX_txn *rtxn = nullptr;
   if (wtxn == env->basal_txn) {
     void *const preserved_context = wtxn->userctx;
-    rc = txn_basal_commit(wtxn, &ts);
+    rc = txn_basal_commit(wtxn, latency ? &ts : nullptr);
     if (likely(rc == MDBX_SUCCESS)) {
       rc = txn_basal_end(wtxn, /* завершение транзакции без освобождения блокировки */ false);
       if (likely(rc == MDBX_SUCCESS)) {
@@ -395,7 +395,7 @@ int mdbx_txn_commit_embark_read(MDBX_txn **ptxn, MDBX_commit_latency *latency) {
       rtxn = nullptr;
     }
   } else {
-    rc = txn_nested_checkpoint(wtxn, &ts);
+    rc = txn_nested_checkpoint(wtxn, latency ? &ts : nullptr);
     if (likely(rc == MDBX_SUCCESS)) {
       rtxn = wtxn;
       rtxn->flags |= txn_ro_nested;
@@ -496,7 +496,7 @@ int mdbx_txn_commit_ex(MDBX_txn *txn, MDBX_commit_latency *latency) {
     }
   }
 
-  rc = txn_commit(txn, latency, &ts);
+  rc = txn_commit(txn, latency, latency ? &ts : nullptr);
 done:
   txn_latency_done(latency, &ts);
   return LOG_IFERR(rc);
