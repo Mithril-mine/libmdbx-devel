@@ -865,6 +865,15 @@ glr_t gc_row_pnl(const MDBX_txn *const txn, const MDBX_val data) {
   return result;
 }
 
+MDBX_cursor *gc_cursor_init(MDBX_txn *txn) {
+  MDBX_cursor *gc = ptr_disp(txn->env->basal_txn, sizeof(MDBX_txn));
+  gc->txn = txn;
+  gc->tree = txn->dbs;
+  gc->dbi_state = txn->dbi_state;
+  gc->top_and_flags = z_fresh_mark;
+  return gc;
+}
+
 pgr_t gc_alloc_ex(const MDBX_cursor *const mc, const size_t num, uint8_t flags) {
   pgr_t ret;
   MDBX_txn *const txn = mc->txn;
@@ -941,12 +950,7 @@ pgr_t gc_alloc_ex(const MDBX_cursor *const mc, const size_t num, uint8_t flags) 
       txn->wr.prefault_write_activated = false;
   }
 
-  MDBX_cursor *const gc = gc_cursor(env);
-  gc->txn = txn;
-  gc->tree = txn->dbs;
-  gc->dbi_state = txn->dbi_state;
-  gc->top_and_flags = z_fresh_mark;
-
+  MDBX_cursor *const gc = gc_cursor_init(txn);
 retry_gc_refresh_detent:
   txn_gc_detent(txn);
 retry_gc_have_detent:
@@ -985,7 +989,7 @@ next_gc:
   MDBX_val key;
   key.iov_base = &id;
   key.iov_len = sizeof(id);
-#endif
+#endif /* _MSC_VER */
 
   /* Seek first/next GC record */
   ret.err = cursor_ops(gc, &key, nullptr, op);

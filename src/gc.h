@@ -79,7 +79,7 @@ static inline txnid_t txnid_min(txnid_t a, txnid_t b) { return (a < b) ? a : b; 
 
 static inline txnid_t txnid_max(txnid_t a, txnid_t b) { return (a > b) ? a : b; }
 
-static inline MDBX_cursor *gc_cursor(MDBX_env *env) { return ptr_disp(env->basal_txn, sizeof(MDBX_txn)); }
+MDBX_INTERNAL MDBX_cursor *gc_cursor_init(MDBX_txn *txn);
 
 MDBX_NOTHROW_PURE_FUNCTION MDBX_INTERNAL const char *gc_check_keylen(size_t const key_len);
 MDBX_INTERNAL const char *gc_check_rowdata(const MDBX_txn *const txn, const MDBX_val data);
