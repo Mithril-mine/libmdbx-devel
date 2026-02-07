@@ -1132,8 +1132,7 @@ next_gc:
   eASSERT(env, op == MDBX_PREV || op == MDBX_NEXT);
   rkl_t *rkl = &txn->wr.gc.reclaimed;
   const char *rkl_name = "reclaimed";
-  if (mc->dbi_state != txn->dbi_state &&
-      (MDBX_DEBUG > 0 || pnl_size(txn->wr.repnl) > (size_t)gc->tree->height + gc->tree->height + 3)) {
+  if (mc->dbi_state != txn->dbi_state && (MDBX_DEBUG > 0 || gc_may_clean_reclaimed(txn))) {
     gc->next = txn->cursors[FREE_DBI];
     txn->cursors[FREE_DBI] = gc;
     ret.err = cursor_del(gc, 0);
