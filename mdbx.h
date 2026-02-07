@@ -7185,6 +7185,8 @@ typedef struct MDBX_gc_info {
         span_histogram; /**< Histogram of the spans length of a sequence(s) adjacent reclaimable pages */
     struct MDBX_chk_histogram pgno_distribution; /**< Distribution of a reclaimable pages over the file of a database */
   } gc_reclaimable;
+  size_t max_reader_lag;
+  size_t max_retained_pages;
 } MDBX_gc_info_t;
 
 /** \brief Provides information of Garbage Collection and page usage.

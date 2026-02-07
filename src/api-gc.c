@@ -14,6 +14,17 @@ int mdbx_gc_info(MDBX_txn *txn, MDBX_gc_info_t *info, size_t bytes, MDBX_gc_iter
   info->pages_total = txn->geo.upper;
   info->pages_backed = txn->geo.end_pgno;
   info->pages_allocated = txn->geo.first_unallocated;
+
+  const volatile lck_t *const lck = txn->env->lck;
+  if (lck) {
+    do {
+      info->max_reader_lag = lck->pgops.gc_prof.max_reader_lag;
+      info->max_retained_pages = lck->pgops.gc_prof.max_retained_pages;
+      osal_memory_fence(mo_AcquireRelease, false);
+    } while (unlikely(info->max_reader_lag != lck->pgops.gc_prof.max_reader_lag ||
+                      info->max_retained_pages != lck->pgops.gc_prof.max_retained_pages));
+  }
+
   info->pages_gc += txn->dbs[FREE_DBI].branch_pages;
   info->pages_gc += txn->dbs[FREE_DBI].leaf_pages;
   info->pages_gc += txn->dbs[FREE_DBI].large_pages;

@@ -407,6 +407,10 @@ int main(int argc, char *argv[]) {
     }
     print_pages_percentage("GC|retained", gc_retained, info.pages_backed, info.pages_total);
     print_pages_percentage("Available", available_pages, info.pages_backed, info.pages_total);
+    if (info.max_retained_pages || info.max_reader_lag) {
+      printf("  max reader lag %zu\n", info.max_reader_lag);
+      printf("  max retained pages %zu\n", info.max_retained_pages);
+    }
   }
 
   rc = mdbx_dbi_open(txn, table, MDBX_DB_ACCEDE, &dbi);
