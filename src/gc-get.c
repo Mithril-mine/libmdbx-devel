@@ -954,7 +954,7 @@ pgr_t gc_alloc_ex(const MDBX_cursor *const mc, const size_t num, uint8_t flags) 
 retry_gc_refresh_detent:
   txn_gc_detent(txn);
 retry_gc_have_detent:
-  if (unlikely(txn->env->gc.detent >= txn->txnid)) {
+  if (unlikely(txn->env->gc.detent > txn_basis_snapshot(txn))) {
     FATAL("unexpected/invalid gc-detent %" PRIaTXN " for current-txnid %" PRIaTXN, txn->env->gc.detent, txn->txnid);
     ret.err = MDBX_PROBLEM;
     goto fail;
@@ -964,7 +964,7 @@ retry_gc_have_detent:
   MDBX_cursor_op op = MDBX_FIRST;
   if (flags & ALLOC_LIFO) {
     /* Begin lookup backward from oldest reader */
-    id = txn->env->gc.detent;
+    id = txn->env->gc.detent + 1;
     op = MDBX_SET_RANGE;
   } else {
     /* Continue lookup forward from last-reclaimed */
@@ -972,7 +972,7 @@ retry_gc_have_detent:
     if (id) {
       id += 1;
       op = MDBX_SET_RANGE;
-      if (id >= txn->env->gc.detent)
+      if (id > txn->env->gc.detent)
         goto depleted_gc;
     }
   }
@@ -1010,10 +1010,10 @@ next_gc:
   id = unaligned_peek_u64(4, key.iov_base);
   if (flags & ALLOC_LIFO) {
     op = MDBX_PREV;
-    if (id >= txn->env->gc.detent || gc_is_reclaimed(txn, id))
+    if (id > txn->env->gc.detent || gc_is_reclaimed(txn, id))
       goto next_gc;
   } else {
-    if (unlikely(id >= txn->env->gc.detent))
+    if (unlikely(id > txn->env->gc.detent))
       goto depleted_gc;
     op = MDBX_NEXT;
     if (gc_is_reclaimed(txn, id))
@@ -1275,7 +1275,7 @@ depleted_gc:
     goto done;
   }
 
-  if (txn->txnid - txn->env->gc.detent > xMDBX_TXNID_STEP && mvcc_kick_laggards(txn, txn->env->gc.detent))
+  if (txn_basis_snapshot(txn) > txn->env->gc.detent && mvcc_kick_laggards(txn, txn->env->gc.detent))
     goto retry_gc_refresh_detent;
 
   //---------------------------------------------------------------------------

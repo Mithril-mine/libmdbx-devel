@@ -85,13 +85,13 @@ MDBX_MAYBE_UNUSED static void dbg_dump_ids(gcu_t *ctx) {
         err = gc_peekid(&key, &id);
         if (unlikely(err == MDBX_SUCCESS)) {
           dbg_id(ctx, id);
-          if (id >= couple.outer.txn->env->gc.detent)
+          if (id > couple.outer.txn->env->gc.detent)
             break;
           err = outer_next(&couple.outer, &key, nullptr, MDBX_NEXT);
         }
       }
       dbg_id(ctx, 0);
-      DEBUG_EXTRA_PRINT("%s\n", (id >= couple.outer.txn->env->gc.detent) ? "..." : "");
+      DEBUG_EXTRA_PRINT("%s\n", (id > couple.outer.txn->env->gc.detent) ? "..." : "");
     } else
       DEBUG_EXTRA_PRINT("%s\n", " empty");
 
@@ -528,7 +528,7 @@ static inline int gc_clear_returned(MDBX_txn *txn, gcu_t *ctx) {
 }
 
 static int gc_push_sequel(MDBX_txn *txn, gcu_t *ctx, txnid_t id) {
-  tASSERT(txn, id > 0 && id < txn->env->gc.detent);
+  tASSERT(txn, id > 0 && id <= txn->env->gc.detent);
   tASSERT(txn, !rkl_contain(&txn->wr.gc.comeback, id) && !rkl_contain(&txn->wr.gc.ready4reuse, id));
   TRACE("id %" PRIaTXN ", return-left %zi", id, ctx->return_left);
   int err = rkl_push(&ctx->sequel, id);
