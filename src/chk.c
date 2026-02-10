@@ -13,11 +13,11 @@ typedef struct MDBX_chk_internal {
   bool got_break;
   bool write_locked;
   uint8_t scope_depth;
+  pgno_t last_nested_root;
 
   MDBX_chk_table_t table_gc, table_main;
   int16_t *pagemap;
   MDBX_chk_table_t *last_lookup;
-  const void *last_nested;
   MDBX_chk_scope_t scope_stack[12];
   MDBX_chk_table_t *table[MDBX_MAX_DBI + CORE_DBS];
 
@@ -659,8 +659,7 @@ __cold static int chk_pgvisitor(const size_t pgno, const unsigned npages, void *
                        chk_v2a(chk, &tbl->name), tbl->flags, deep);
       nested = nullptr;
     }
-  } else
-    chk->last_nested = nullptr;
+  }
 
   const char *pagetype_caption;
   bool branch = false;
@@ -720,9 +719,9 @@ __cold static int chk_pgvisitor(const size_t pgno, const unsigned npages, void *
       pagetype_caption = (pagetype == page_leaf) ? "nested-leaf" : "nested-leaf-dupfix";
       tbl->pages.nested_leaf += 1;
       density = &tbl->histogram.large_or_nested_density;
-      if (chk->last_nested != nested) {
+      if (chk->last_nested_root != nested->root) {
         histogram_acc(height, &tbl->histogram.nested_height_or_gc_span_length);
-        chk->last_nested = nested;
+        chk->last_nested_root = nested->root;
       }
       if (height != nested->height)
         chk_object_issue(scope, "page", pgno, "wrong nested-tree height", "actual %i != %i dupsort-node %s, parent %zu",
