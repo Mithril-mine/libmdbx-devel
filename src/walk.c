@@ -320,8 +320,9 @@ __cold int walk_pages(MDBX_txn *txn, walk_func *visitor, void *user, walk_option
 
   walk_ctx_t ctx = {.txn = txn, .userctx = user, .visitor = visitor, .options = options};
   walk_tbl_t tbl = {.name = {.iov_base = MDBX_CHK_GC}, .internal = &txn->dbs[FREE_DBI]};
-  rc = walk_tbl(&ctx, &tbl);
-  if (!MDBX_IS_ERROR(rc)) {
+  if ((options & dont_walk_GC) == 0)
+    rc = walk_tbl(&ctx, &tbl);
+  if ((options & dont_walk_MAIN) == 0 && !MDBX_IS_ERROR(rc)) {
     tbl.name.iov_base = MDBX_CHK_MAIN;
     tbl.internal = &txn->dbs[MAIN_DBI];
     rc = walk_tbl(&ctx, &tbl);
