@@ -29,4 +29,4 @@ typedef struct walk_ctx {
   MDBX_cursor *cursor;
 } walk_ctx_t;
 
-MDBX_INTERNAL int walk_tbl(walk_ctx_t *ctx, walk_tbl_t *tbl);
+MDBX_INTERNAL int walk_tbl(walk_ctx_t *ctx, walk_tbl_t *tbl, pgno_t parent_page);

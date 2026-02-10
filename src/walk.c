@@ -208,7 +208,7 @@ __cold static int walk_pgno(walk_ctx_t *ctx, walk_tbl_t *tbl, const pgno_t pgno,
         table.internal = &aligned_db;
         assert(err == MDBX_SUCCESS);
         ctx->deep += 1;
-        err = walk_tbl(ctx, &table);
+        err = walk_tbl(ctx, &table, pgno);
         ctx->deep -= 1;
       }
       break;
@@ -229,7 +229,7 @@ __cold static int walk_pgno(walk_ctx_t *ctx, walk_tbl_t *tbl, const pgno_t pgno,
           ctx->cursor = &ctx->cursor->subcur->cursor;
           ctx->deep += 1;
           tbl->nested = &aligned_db;
-          err = walk_pgno(ctx, tbl, aligned_db.root, mp->txnid, 0);
+          err = walk_pgno(ctx, tbl, aligned_db.root, mp->txnid, pgno);
           tbl->nested = nullptr;
           ctx->deep -= 1;
           subcur_t *inner_xcursor = container_of(ctx->cursor, subcur_t, cursor);
@@ -291,7 +291,7 @@ __cold static int walk_pgno(walk_ctx_t *ctx, walk_tbl_t *tbl, const pgno_t pgno,
   return MDBX_SUCCESS;
 }
 
-__cold int walk_tbl(walk_ctx_t *ctx, walk_tbl_t *tbl) {
+__cold int walk_tbl(walk_ctx_t *ctx, walk_tbl_t *tbl, pgno_t parent_page) {
   tree_t *const db = tbl->internal;
   if (unlikely(db->root == P_INVALID))
     return MDBX_SUCCESS; /* empty db */
@@ -308,7 +308,7 @@ __cold int walk_tbl(walk_ctx_t *ctx, walk_tbl_t *tbl) {
   couple.outer.next = ctx->cursor;
   couple.outer.top_and_flags = z_disable_tree_search_fastpath;
   ctx->cursor = &couple.outer;
-  rc = walk_pgno(ctx, tbl, db->root, db->mod_txnid ? db->mod_txnid : ctx->txn->txnid, 0);
+  rc = walk_pgno(ctx, tbl, db->root, db->mod_txnid ? db->mod_txnid : ctx->txn->txnid, parent_page);
   ctx->cursor = couple.outer.next;
   return rc;
 }
@@ -321,11 +321,11 @@ __cold int walk_pages(MDBX_txn *txn, walk_func *visitor, void *user, walk_option
   walk_ctx_t ctx = {.txn = txn, .userctx = user, .visitor = visitor, .options = options};
   walk_tbl_t tbl = {.name = {.iov_base = MDBX_CHK_GC}, .internal = &txn->dbs[FREE_DBI]};
   if ((options & dont_walk_GC) == 0)
-    rc = walk_tbl(&ctx, &tbl);
+    rc = walk_tbl(&ctx, &tbl, 0);
   if ((options & dont_walk_MAIN) == 0 && !MDBX_IS_ERROR(rc)) {
     tbl.name.iov_base = MDBX_CHK_MAIN;
     tbl.internal = &txn->dbs[MAIN_DBI];
-    rc = walk_tbl(&ctx, &tbl);
+    rc = walk_tbl(&ctx, &tbl, 0);
   }
   return rc;
 }
