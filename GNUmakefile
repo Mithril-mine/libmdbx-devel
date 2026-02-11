@@ -790,6 +790,7 @@ $(DIST_DIR)/@tmp-squashed.inc: $(DIST_DIR)/mdbx-internals.h $(DIST_DIR)/@tmp-ama
 		-e '/#include "cogs.h"/r src/cogs.h' \
 		-e '/#include "cursor.h"/r src/cursor.h' \
 		-e '/#include "dbi.h"/r src/dbi.h' \
+		-e '/#include "dml.h"/r src/dml.h' \
 		-e '/#include "dpl.h"/r src/dpl.h' \
 		-e '/#include "gc.h"/r src/gc.h' \
 		-e '/#include "lck.h"/r src/lck.h' \

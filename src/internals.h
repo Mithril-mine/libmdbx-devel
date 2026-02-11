@@ -587,6 +587,8 @@ MDBX_MAYBE_UNUSED static void static_checks(void) {
 
 #include "dpl.h"
 
+#include "dml.h"
+
 #include "gc.h"
 
 #include "lck.h"

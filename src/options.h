@@ -140,6 +140,12 @@
 #error MDBX_DPL_PREALLOC_FOR_RADIXSORT must be defined as 0 or 1
 #endif /* MDBX_DPL_PREALLOC_FOR_RADIXSORT */
 
+#ifndef MDBX_DML_PREALLOC_FOR_RADIXSORT
+#define MDBX_DML_PREALLOC_FOR_RADIXSORT 1
+#elif !(MDBX_DML_PREALLOC_FOR_RADIXSORT == 0 || MDBX_DML_PREALLOC_FOR_RADIXSORT == 1)
+#error MDBX_DML_PREALLOC_FOR_RADIXSORT must be defined as 0 or 1
+#endif /* MDBX_DML_PREALLOC_FOR_RADIXSORT */
+
 /** Controls dirty pages tracking, spilling and persisting in `MDBX_WRITEMAP`.
  *
  * \details In other words, disables in-memory database updating with consequent

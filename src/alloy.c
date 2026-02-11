@@ -24,6 +24,7 @@
 #include "coherency.c"
 #include "cursor.c"
 #include "dbi.c"
+#include "dml.c"
 #include "dpl.c"
 #include "dxb.c"
 #include "env.c"
