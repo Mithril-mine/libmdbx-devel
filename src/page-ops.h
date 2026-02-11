@@ -62,6 +62,8 @@ static inline int __must_check_result page_get(const MDBX_cursor *mc, const pgno
   return ret.err;
 }
 
+MDBX_INTERNAL pgr_t page_get_unchecked(MDBX_txn *const txn, const pgno_t pgno, const txnid_t front);
+
 /*----------------------------------------------------------------------------*/
 
 MDBX_INTERNAL int __must_check_result page_dirty(MDBX_txn *txn, page_t *mp, size_t npages);
