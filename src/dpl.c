@@ -34,7 +34,7 @@ void dpl_free(MDBX_txn *txn) {
   }
 }
 
-dpl_t *dpl_reserve(MDBX_txn *txn, size_t size) {
+dpl_t *dpl_resize(MDBX_txn *txn, size_t size) {
   tASSERT(txn, (txn->flags & txn_ro_flat) == 0);
   tASSERT(txn, (txn->flags & MDBX_WRITEMAP) == 0 || MDBX_AVOID_MSYNC);
 
@@ -64,7 +64,7 @@ int dpl_alloc(MDBX_txn *txn) {
     txn->wr.dirtylist->sorted = txn->wr.dirtylist->length = 0;
 #endif /* asertions enabled */
   if (unlikely(!txn->wr.dirtylist || txn->wr.dirtylist->detent < wanna || txn->wr.dirtylist->detent > wanna + wanna) &&
-      unlikely(!dpl_reserve(txn, wanna)))
+      unlikely(!dpl_resize(txn, wanna)))
     return MDBX_ENOMEM;
 
   /* LY: wr.dirtylist не может быть nullptr, так как либо уже выделен, либо будет выделен в dpl_reserve(). */
@@ -240,7 +240,7 @@ int __must_check_result dpl_append(MDBX_txn *txn, pgno_t pgno, page_t *page, siz
       return MDBX_TXN_FULL;
     }
     const size_t size = (dl->detent < MDBX_PNL_INITIAL * 42) ? dl->detent + dl->detent : dl->detent + dl->detent / 2;
-    dl = dpl_reserve(txn, size);
+    dl = dpl_resize(txn, size);
     if (unlikely(!dl))
       return MDBX_ENOMEM;
     tASSERT(txn, dl->length < dl->detent);

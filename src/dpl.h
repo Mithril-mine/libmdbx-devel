@@ -38,7 +38,7 @@ MDBX_INTERNAL int __must_check_result dpl_alloc(MDBX_txn *txn);
 
 MDBX_INTERNAL void dpl_free(MDBX_txn *txn);
 
-MDBX_INTERNAL dpl_t *dpl_reserve(MDBX_txn *txn, size_t size);
+MDBX_INTERNAL dpl_t *dpl_resize(MDBX_txn *txn, size_t size);
 
 MDBX_INTERNAL __noinline dpl_t *dpl_sort_slowpath(const MDBX_txn *txn);
 

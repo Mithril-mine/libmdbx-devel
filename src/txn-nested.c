@@ -567,7 +567,7 @@ static int nested_join(MDBX_txn *nested, struct commit_timestamp *ts) {
     }
 
     if (unlikely(nested->wr.dirtylist->length + parent->wr.dirtylist->length > parent->wr.dirtylist->detent &&
-                 !dpl_reserve(parent, nested->wr.dirtylist->length + parent->wr.dirtylist->length))) {
+                 !dpl_resize(parent, nested->wr.dirtylist->length + parent->wr.dirtylist->length))) {
       return MDBX_ENOMEM;
     }
   }
