@@ -376,7 +376,7 @@ public:
   inline filehandle get_filehandle() const;
 
   /// \brief Return the path that was used for opening the environment.
-  path get_path() const;
+  const path_char* get_path() const;
 
   /// Returns environment flags.
   inline MDBX_env_flags_t get_flags() const;

@@ -1318,18 +1318,18 @@ __cold env &env::copy(const MDBX_STD_FILESYSTEM_PATH &destination, bool compacti
 }
 #endif /* MDBX_STD_FILESYSTEM_PATH */
 
-__cold path env::get_path() const {
+__cold const mdbx::path_char *env::get_path() const {
 #if defined(_WIN32) || defined(_WIN64)
   const wchar_t *c_wstr = nullptr;
   error::success_or_throw(::mdbx_env_get_pathW(handle_, &c_wstr));
   static_assert(sizeof(path::value_type) == sizeof(wchar_t), "Oops");
-  return path(c_wstr);
+  return c_wstr;
 #else
   const char *c_str = nullptr;
   error::success_or_throw(::mdbx_env_get_path(handle_, &c_str));
   static_assert(sizeof(path::value_type) == sizeof(char), "Oops");
-  return path(c_str);
-#endif
+  return c_str;
+#endif /* Windows */
 }
 
 __cold bool env::remove(const char *pathname, const remove_mode mode) {

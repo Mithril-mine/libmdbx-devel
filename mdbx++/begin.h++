@@ -405,11 +405,15 @@ namespace filesystem = ::std::filesystem;
 
 #ifdef MDBX_STD_FILESYSTEM_PATH
 using path = MDBX_STD_FILESYSTEM_PATH;
+using path_string = MDBX_STD_FILESYSTEM_PATH::string_type;
 #elif defined(_WIN32) || defined(_WIN64)
 using path = ::std::wstring;
+using path_string = path;
 #else
 using path = ::std::string;
+using path_string = path;
 #endif /* mdbx::path */
+using path_char = path_string::value_type;
 
 #if defined(__SIZEOF_INT128__) || (defined(_INTEGRAL_MAX_BITS) && _INTEGRAL_MAX_BITS >= 128)
 #ifndef MDBX_U128_TYPE
