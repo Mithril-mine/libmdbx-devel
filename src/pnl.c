@@ -50,6 +50,11 @@ void pnl_shrink(pnl_t __restrict *__restrict ppnl) {
 }
 
 int pnl_reserve(pnl_t __restrict *__restrict ppnl, const size_t wanna) {
+  if (unlikely(!*ppnl)) {
+    *ppnl = pnl_alloc(wanna);
+    return *ppnl ? MDBX_SUCCESS : MDBX_ENOMEM;
+  }
+
   const size_t allocated = pnl_alloclen(*ppnl);
   assert(pnl_size(*ppnl) <= PAGELIST_LIMIT && pnl_alloclen(*ppnl) >= pnl_size(*ppnl));
   if (unlikely(allocated >= wanna))
