@@ -525,8 +525,6 @@ MDBX_NOTHROW_CONST_FUNCTION static inline txnid_t txn_basis_snapshot(const MDBX_
 
 /*----------------------------------------------------------------------------*/
 
-MDBX_INTERNAL void mincore_clean_cache(const MDBX_env *const env);
-
 MDBX_INTERNAL void update_mlcnt(const MDBX_env *env, const pgno_t new_aligned_mlocked_pgno,
                                 const bool lock_not_release);
 

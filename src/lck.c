@@ -169,6 +169,6 @@ __cold int lck_setup(MDBX_env *env, mdbx_mode_t mode) {
   return err;
 }
 
-void mincore_clean_cache(const MDBX_env *const env) {
+void env_clear_incore_cache(const MDBX_env *const env) {
   memset(env->lck->mincore_cache.begin, -1, sizeof(env->lck->mincore_cache.begin));
 }

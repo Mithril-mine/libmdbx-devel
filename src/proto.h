@@ -99,6 +99,8 @@ MDBX_INTERNAL int env_close(MDBX_env *env, bool resurrect_after_fork);
 MDBX_INTERNAL MDBX_txn *env_owned_wrtxn(const MDBX_env *env);
 MDBX_INTERNAL int __must_check_result env_page_auxbuffer(MDBX_env *env);
 MDBX_INTERNAL unsigned env_setup_pagesize(MDBX_env *env, const size_t pagesize);
+MDBX_INTERNAL bool env_is_page_incore(MDBX_env *const env, pgno_t pgno);
+MDBX_INTERNAL void env_clear_incore_cache(const MDBX_env *const env);
 
 /* api-opt.c */
 MDBX_INTERNAL void env_options_init(MDBX_env *env);

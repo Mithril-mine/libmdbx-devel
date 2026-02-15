@@ -230,7 +230,7 @@ __cold int dxb_resize(MDBX_env *const env, const pgno_t used_pgno, const pgno_t 
   const pgno_t aligned_munlock_pgno =
       (mresize_flags & (MDBX_MRESIZE_MAY_UNMAP | MDBX_MRESIZE_MAY_MOVE)) ? 0 : bytes2pgno(env, size_bytes);
   if (mresize_flags & (MDBX_MRESIZE_MAY_UNMAP | MDBX_MRESIZE_MAY_MOVE)) {
-    mincore_clean_cache(env);
+    env_clear_incore_cache(env);
     if ((env->flags & MDBX_WRITEMAP) && env->lck->unsynced_pages.weak) {
       rc = dxb_msync(env, used_pgno, MDBX_SYNC_KICK);
       if (unlikely(rc != MDBX_SUCCESS))
@@ -490,7 +490,7 @@ __cold int dxb_set_readahead(const MDBX_env *env, const pgno_t edge, const bool 
 #endif
     }
   } else {
-    mincore_clean_cache(env);
+    env_clear_incore_cache(env);
 #if defined(MADV_RANDOM)
     err = madvise(ptr, length, MADV_RANDOM) ? ignore_enosys_and_eagain(errno) : MDBX_SUCCESS;
     if (unlikely(MDBX_IS_ERROR(err)))
