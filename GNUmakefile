@@ -140,7 +140,7 @@ HEADERS    := mdbx.h mdbx.h++
 HEADERS	   += $(wildcard mdbx++/*.h++)
 #< dist-cutoff-end
 LIBRARIES  := libmdbx.a libmdbx.$(SO_SUFFIX)
-TOOLS      := chk copy drop dump load stat
+TOOLS      := chk copy defrag drop dump load stat
 MDBX_TOOLS := $(addprefix mdbx_,$(TOOLS))
 MANPAGES   := mdbx_stat.1 mdbx_copy.1 mdbx_dump.1 mdbx_load.1 mdbx_chk.1 mdbx_drop.1
 TIP        := // TIP:
