@@ -5,7 +5,7 @@
 
 static int txn_write(MDBX_txn *txn, iov_ctx_t *ctx) {
   tASSERT(txn, (txn->flags & MDBX_WRITEMAP) == 0 || MDBX_AVOID_MSYNC);
-  dpl_t *const dl = dpl_sort(txn);
+  dpl_t *const dl = txn_dpl_sort(txn);
   int rc = MDBX_SUCCESS;
   size_t r, w, total_npages = 0;
   for (w = 0, r = 1; r <= dl->length; ++r) {
@@ -84,7 +84,7 @@ __cold MDBX_txn *txn_basal_create(const size_t max_dbi) {
 }
 
 __cold void txn_basal_destroy(MDBX_txn *txn) {
-  dpl_free(txn);
+  txn_dpl_free(txn);
   rkl_destroy(&txn->wr.gc.reclaimed);
   rkl_destroy(&txn->wr.gc.ready4reuse);
   rkl_destroy(&txn->wr.gc.comeback);
@@ -161,7 +161,7 @@ static int basal_start_locked(MDBX_txn *txn, unsigned flags) {
   if (env->options.need_dp_limit_adjust)
     env_options_adjust_dp_limit(env);
   if ((txn->flags & MDBX_WRITEMAP) == 0 || MDBX_AVOID_MSYNC) {
-    err = dpl_alloc(txn);
+    err = txn_dpl_alloc(txn);
     if (unlikely(err != MDBX_SUCCESS))
       return err;
     txn->wr.dirtyroom = txn->env->options.dp_limit;
@@ -240,7 +240,7 @@ int txn_basal_end(MDBX_txn *txn, bool unlock) {
   eASSERT(env, txn->parent == nullptr);
   pnl_shrink(&txn->wr.retired_pages);
   pnl_shrink(&txn->wr.repnl);
-  dpl_clear_and_release_shadows(txn);
+  txn_dpl_clear(txn);
 
   /* Export or close DBI handles created in this txn */
   int rc = (preserved_flags & MDBX_TXN_DIRTY) ? dbi_update(txn, !(preserved_flags & MDBX_TXN_ERROR)) : MDBX_SUCCESS;

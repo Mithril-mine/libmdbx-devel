@@ -148,7 +148,7 @@ __hot int page_touch_modifable(MDBX_txn *txn, const page_t *const mp) {
   tASSERT(txn, !is_largepage(mp) && !is_subpage(mp));
   tASSERT(txn, (txn->flags & MDBX_WRITEMAP) == 0 || MDBX_AVOID_MSYNC);
 
-  const size_t n = dpl_search(txn, mp->pgno);
+  const size_t n = txn_dpl_search(txn, mp->pgno);
   if (MDBX_AVOID_MSYNC && unlikely(txn->wr.dirtylist->items[n].pgno != mp->pgno)) {
     tASSERT(txn, (txn->flags & MDBX_WRITEMAP));
     tASSERT(txn, n > 0 && n <= txn->wr.dirtylist->length + 1);
@@ -421,12 +421,12 @@ int page_retire_ex(MDBX_cursor *mc, const pgno_t pgno, page_t *mp /* maybe null 
       if (ASSERT_ENABLED()) {
         for (MDBX_txn *scan = txn; scan; scan = scan->parent) {
           tASSERT(txn, !txn->wr.spilled.list || !spill_search(scan, pgno));
-          tASSERT(txn, !scan->wr.dirtylist || !debug_dpl_find(scan, pgno));
+          tASSERT(txn, !scan->wr.dirtylist || !debug_txn_dpl_find(scan, pgno));
         }
       }
       goto status_done;
     } else if (pageflags && txn->wr.dirtylist) {
-      if ((di = dpl_exist(txn, pgno)) != 0) {
+      if ((di = txn_dpl_exist(txn, pgno)) != 0) {
         mp = txn->wr.dirtylist->items[di].ptr;
         tASSERT(txn, is_modifable(txn, mp));
         status = modifable;
@@ -437,7 +437,7 @@ int page_retire_ex(MDBX_cursor *mc, const pgno_t pgno, page_t *mp /* maybe null 
         goto status_done;
       }
       for (MDBX_txn *parent = txn->parent; parent; parent = parent->parent) {
-        if (dpl_exist(parent, pgno)) {
+        if (txn_dpl_exist(parent, pgno)) {
           status = shadowed;
           goto status_done;
         }
@@ -463,23 +463,23 @@ int page_retire_ex(MDBX_cursor *mc, const pgno_t pgno, page_t *mp /* maybe null 
     tASSERT(txn, !is_modifable(txn, mp));
     tASSERT(txn, !is_spilled(txn, mp));
     tASSERT(txn, !is_shadowed(txn, mp));
-    tASSERT(txn, !debug_dpl_find(txn, pgno));
+    tASSERT(txn, !debug_txn_dpl_find(txn, pgno));
     tASSERT(txn, !txn->wr.spilled.list || !spill_search(txn, pgno));
   } else if (is_modifable(txn, mp)) {
     status = modifable;
     if (txn->wr.dirtylist)
-      di = dpl_exist(txn, pgno);
+      di = txn_dpl_exist(txn, pgno);
     tASSERT(txn, (txn->flags & MDBX_WRITEMAP) || !is_spilled(txn, mp));
     tASSERT(txn, !txn->wr.spilled.list || !spill_search(txn, pgno));
   } else if (is_shadowed(txn, mp)) {
     status = shadowed;
     tASSERT(txn, !txn->wr.spilled.list || !spill_search(txn, pgno));
-    tASSERT(txn, !debug_dpl_find(txn, pgno));
+    tASSERT(txn, !debug_txn_dpl_find(txn, pgno));
   } else {
     tASSERT(txn, is_spilled(txn, mp));
     status = spilled;
     si = spill_search(txn, pgno);
-    tASSERT(txn, !debug_dpl_find(txn, pgno));
+    tASSERT(txn, !debug_txn_dpl_find(txn, pgno));
   }
 
 status_done:
@@ -508,7 +508,7 @@ status_done:
   retire:
     DEBUG("retire %zu page %" PRIaPGNO, npages, pgno);
     rc = pnl_append_span(&txn->wr.retired_pages, pgno, npages);
-    tASSERT(txn, dpl_check(txn));
+    tASSERT(txn, txn_dpl_check(txn));
     return rc;
   }
 
@@ -544,7 +544,7 @@ status_done:
             tASSERT(txn, status == spilled);
             break;
           }
-          if (mp == debug_dpl_find(parent, pgno)) {
+          if (mp == debug_txn_dpl_find(parent, pgno)) {
             kind = "parent-dirty";
             tASSERT(txn, status == shadowed);
             break;
@@ -591,7 +591,7 @@ status_done:
       for (MDBX_txn *parent = txn->parent; parent && (parent->flags & MDBX_TXN_SPILLS); parent = parent->parent) {
         if (spill_intersect(parent, pgno, npages))
           goto skip_invalidate;
-        if (dpl_intersect(parent, pgno, npages))
+        if (txn_dpl_intersect(parent, pgno, npages))
           goto skip_invalidate;
       }
 
@@ -614,7 +614,7 @@ status_done:
     DEBUG("reclaim %zu %s page %" PRIaPGNO, npages, "dirty", pgno);
     rc = pnl_insert_span(&txn->wr.repnl, pgno, npages);
     tASSERT(txn, pnl_check_allocated(txn->wr.repnl, txn->geo.first_unallocated - MDBX_ENABLE_REFUND));
-    tASSERT(txn, dpl_check(txn));
+    tASSERT(txn, txn_dpl_check(txn));
     return rc;
   }
 
@@ -627,7 +627,7 @@ status_done:
      * пролита в этой транзакции, тогда её необходимо поместить в
      * retired-список для последующей фильтрации при коммите. */
     for (MDBX_txn *parent = txn->parent; parent; parent = parent->parent) {
-      if (dpl_exist(parent, pgno))
+      if (txn_dpl_exist(parent, pgno))
         goto retire;
     }
     /* Страница точно была выделена в этой транзакции
@@ -642,7 +642,7 @@ status_done:
       /* Check parent(s)'s dirty lists. */
       for (MDBX_txn *parent = txn->parent; parent && !parent_dp; parent = parent->parent) {
         tASSERT(txn, !spill_search(parent, pgno));
-        parent_dp = debug_dpl_find(parent, pgno);
+        parent_dp = debug_txn_dpl_find(parent, pgno);
       }
       tASSERT(txn, parent_dp && (!mp || parent_dp == mp));
     }
@@ -686,9 +686,9 @@ __hot int __must_check_result page_dirty(MDBX_txn *txn, page_t *mp, size_t npage
       rc = pnl_insert_span(&txn->wr.repnl, lp->pgno, 1);
       if (unlikely(rc != MDBX_SUCCESS))
         goto bailout;
-      size_t di = dpl_search(txn, lp->pgno);
+      size_t di = txn_dpl_search(txn, lp->pgno);
       tASSERT(txn, txn->wr.dirtylist->items[di].ptr == lp);
-      dpl_remove(txn, di);
+      txn_dpl_remove(txn, di);
       MDBX_ASAN_UNPOISON_MEMORY_REGION(&page_next(lp), sizeof(page_t *));
       VALGRIND_MAKE_MEM_DEFINED(&page_next(lp), sizeof(page_t *));
       txn->wr.loose_pages = page_next(lp);
@@ -704,14 +704,14 @@ __hot int __must_check_result page_dirty(MDBX_txn *txn, page_t *mp, size_t npage
     }
   }
 
-  rc = dpl_append(txn, mp->pgno, mp, npages);
+  rc = txn_dpl_append(txn, mp->pgno, mp, npages);
   if (unlikely(rc != MDBX_SUCCESS)) {
   bailout:
     txn->flags |= MDBX_TXN_ERROR;
     return rc;
   }
   txn->wr.dirtyroom--;
-  tASSERT(txn, dpl_check(txn));
+  tASSERT(txn, txn_dpl_check(txn));
   return MDBX_SUCCESS;
 }
 

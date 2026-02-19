@@ -130,7 +130,7 @@ __hot int cursor_touch(MDBX_cursor *const mc, const MDBX_val *key, const MDBX_va
   cASSERT(mc, F_ISSET(dbi_state(mc->txn, MAIN_DBI), DBI_LINDO | DBI_VALID));
   if ((mc->flags & z_inner) == 0) {
     MDBX_txn *const txn = mc->txn;
-    dpl_lru_turn(txn);
+    txn_dpl_lru_turn(txn);
 
     if (unlikely((*cursor_dbi_state(mc) & DBI_DIRTY) == 0)) {
       int err = touch_dbi(mc);
@@ -1007,7 +1007,7 @@ __hot int cursor_put(MDBX_cursor *mc, const MDBX_val *key, MDBX_val *data, unsig
 #if MDBX_ENABLE_PGOP_STAT
             mc->txn->env->lck->pgops.clone.weak += ovpages;
 #endif /* MDBX_ENABLE_PGOP_STAT */
-            cASSERT(mc, dpl_check(mc->txn));
+            cASSERT(mc, txn_dpl_check(mc->txn));
           }
         }
         node_set_ds(node, data->iov_len);

@@ -1260,7 +1260,7 @@ static int gc_rerere(MDBX_txn *txn, gcu_t *ctx) {
 /* Заполняет зарезервированные записи номерами возвращаемых в GC страниц. */
 static int gc_fill_returned(MDBX_txn *txn, gcu_t *ctx) {
   tASSERT(txn, pnl_check_allocated(txn->wr.repnl, txn->geo.first_unallocated - MDBX_ENABLE_REFUND));
-  tASSERT(txn, dpl_check(txn));
+  tASSERT(txn, txn_dpl_check(txn));
 
   /* Уже есть набор зарезервированных записей GC, id которых собраны в txn->wr.gc.comeback. При этом текущее
    * кол-вол возвращаемых страниц (оставшихся после расходов на резервирование) точно помещается в
@@ -1406,7 +1406,7 @@ retry:
         rkl_len(&txn->wr.gc.reclaimed), txn->env->gc.detent);
 
   tASSERT(txn, pnl_check_allocated(txn->wr.repnl, txn->geo.first_unallocated - MDBX_ENABLE_REFUND));
-  tASSERT(txn, dpl_check(txn));
+  tASSERT(txn, txn_dpl_check(txn));
   if (unlikely(/* paranoia */ ctx->loop > ((MDBX_DEBUG > 0) ? 12 : 42))) {
     ERROR("txn #%" PRIaTXN " too more loops %u, bailout", txn->txnid, ctx->loop);
     err = MDBX_PROBLEM;
@@ -1434,7 +1434,7 @@ retry:
       goto bailout;
 
     tASSERT(txn, pnl_check_allocated(txn->wr.repnl, txn->geo.first_unallocated - MDBX_ENABLE_REFUND));
-    tASSERT(txn, dpl_check(txn));
+    tASSERT(txn, txn_dpl_check(txn));
     if (AUDIT_ENABLED()) {
       err = audit_ex(txn, ctx->retired_stored, false);
       if (unlikely(err != MDBX_SUCCESS))

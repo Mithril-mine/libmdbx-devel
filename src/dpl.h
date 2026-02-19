@@ -21,15 +21,15 @@ static inline size_t dpl_setlen(dpl_t *dl, size_t len) {
   return len;
 }
 
-MDBX_INTERNAL int __must_check_result dpl_alloc(MDBX_txn *txn);
+MDBX_INTERNAL int __must_check_result txn_dpl_alloc(MDBX_txn *txn);
 
-MDBX_INTERNAL void dpl_free(MDBX_txn *txn);
+MDBX_INTERNAL void txn_dpl_free(MDBX_txn *txn);
 
-MDBX_INTERNAL dpl_t *dpl_resize(MDBX_txn *txn, size_t size);
+MDBX_INTERNAL dpl_t *txn_dpl_reserve(MDBX_txn *txn, size_t size);
 
-MDBX_INTERNAL __noinline dpl_t *dpl_sort_slowpath(const MDBX_txn *txn);
+MDBX_INTERNAL __noinline dpl_t *txn_dpl_sort_slowpath(const MDBX_txn *txn);
 
-static inline dpl_t *dpl_sort(const MDBX_txn *txn) {
+static inline dpl_t *txn_dpl_sort(const MDBX_txn *txn) {
   tASSERT(txn, (txn->flags & txn_ro_both) == 0);
   tASSERT(txn, (txn->flags & MDBX_WRITEMAP) == 0 || MDBX_AVOID_MSYNC);
 
@@ -37,12 +37,12 @@ static inline dpl_t *dpl_sort(const MDBX_txn *txn) {
   tASSERT(txn, dl->length <= PAGELIST_LIMIT);
   tASSERT(txn, dl->sorted <= dl->length);
   tASSERT(txn, dl->items[0].pgno == 0 && dl->items[dl->length + 1].pgno == P_INVALID);
-  return likely(dl->sorted == dl->length) ? dl : dpl_sort_slowpath(txn);
+  return likely(dl->sorted == dl->length) ? dl : txn_dpl_sort_slowpath(txn);
 }
 
-MDBX_NOTHROW_PURE_FUNCTION MDBX_INTERNAL __noinline size_t dpl_search(const MDBX_txn *txn, pgno_t pgno);
+MDBX_NOTHROW_PURE_FUNCTION MDBX_INTERNAL __noinline size_t txn_dpl_search(const MDBX_txn *txn, pgno_t pgno);
 
-MDBX_MAYBE_UNUSED MDBX_INTERNAL const page_t *debug_dpl_find(const MDBX_txn *txn, const pgno_t pgno);
+MDBX_MAYBE_UNUSED MDBX_INTERNAL const page_t *debug_txn_dpl_find(const MDBX_txn *txn, const pgno_t pgno);
 
 MDBX_NOTHROW_PURE_FUNCTION static inline unsigned dp_npages(const dp_t *dp) {
 #if MDBX_DPL_CACHE_NPAGES
@@ -62,14 +62,14 @@ MDBX_NOTHROW_PURE_FUNCTION static inline pgno_t dpl_endpgno(const dpl_t *dl, siz
   return dpl_npages(dl, i) + dl->items[i].pgno;
 }
 
-MDBX_NOTHROW_PURE_FUNCTION static inline bool dpl_intersect(const MDBX_txn *txn, pgno_t pgno, size_t npages) {
+MDBX_NOTHROW_PURE_FUNCTION static inline bool txn_dpl_intersect(const MDBX_txn *txn, pgno_t pgno, size_t npages) {
   tASSERT(txn, (txn->flags & txn_ro_both) == 0);
   tASSERT(txn, (txn->flags & MDBX_WRITEMAP) == 0 || MDBX_AVOID_MSYNC);
 
   dpl_t *dl = txn->wr.dirtylist;
   tASSERT(txn, dl->sorted == dl->length);
   tASSERT(txn, dl->items[0].pgno == 0 && dl->items[dl->length + 1].pgno == P_INVALID);
-  size_t const n = dpl_search(txn, pgno);
+  size_t const n = txn_dpl_search(txn, pgno);
   tASSERT(txn, n >= 1 && n <= dl->length + 1);
   tASSERT(txn, pgno <= dl->items[n].pgno);
   tASSERT(txn, pgno > dl->items[n - 1].pgno);
@@ -90,25 +90,25 @@ MDBX_NOTHROW_PURE_FUNCTION static inline bool dpl_intersect(const MDBX_txn *txn,
   return rc;
 }
 
-MDBX_NOTHROW_PURE_FUNCTION static inline size_t dpl_exist(const MDBX_txn *txn, pgno_t pgno) {
+MDBX_NOTHROW_PURE_FUNCTION static inline size_t txn_dpl_exist(const MDBX_txn *txn, pgno_t pgno) {
   tASSERT(txn, (txn->flags & MDBX_WRITEMAP) == 0 || MDBX_AVOID_MSYNC);
   dpl_t *dl = txn->wr.dirtylist;
-  size_t i = dpl_search(txn, pgno);
+  size_t i = txn_dpl_search(txn, pgno);
   tASSERT(txn, (int)i > 0);
   return (dl->items[i].pgno == pgno) ? i : 0;
 }
 
-MDBX_INTERNAL void dpl_remove_ex(const MDBX_txn *txn, size_t i, size_t npages);
+MDBX_INTERNAL void txn_dpl_remove_ex(const MDBX_txn *txn, size_t i, size_t npages);
 
-static inline void dpl_remove(const MDBX_txn *txn, size_t i) {
-  dpl_remove_ex(txn, i, dpl_npages(txn->wr.dirtylist, i));
+static inline void txn_dpl_remove(const MDBX_txn *txn, size_t i) {
+  txn_dpl_remove_ex(txn, i, dpl_npages(txn->wr.dirtylist, i));
 }
 
-MDBX_INTERNAL int __must_check_result dpl_append(MDBX_txn *txn, pgno_t pgno, page_t *page, size_t npages);
+MDBX_INTERNAL int __must_check_result txn_dpl_append(MDBX_txn *txn, pgno_t pgno, page_t *page, size_t npages);
 
-MDBX_MAYBE_UNUSED MDBX_INTERNAL bool dpl_check(MDBX_txn *txn);
+MDBX_MAYBE_UNUSED MDBX_INTERNAL bool txn_dpl_check(MDBX_txn *txn);
 
-MDBX_NOTHROW_PURE_FUNCTION static inline uint32_t dpl_age(const MDBX_txn *txn, size_t i) {
+MDBX_NOTHROW_PURE_FUNCTION static inline uint32_t txn_dpl_age(const MDBX_txn *txn, size_t i) {
   tASSERT(txn, (txn->flags & (txn_ro_both | MDBX_WRITEMAP)) == 0);
   const dpl_t *dl = txn->wr.dirtylist;
   assert((intptr_t)i > 0 && i <= dl->length);
@@ -116,15 +116,15 @@ MDBX_NOTHROW_PURE_FUNCTION static inline uint32_t dpl_age(const MDBX_txn *txn, s
   return txn->wr.dirtylru - (uint32_t)*ptr;
 }
 
-MDBX_INTERNAL void dpl_lru_reduce(MDBX_txn *txn);
+MDBX_INTERNAL void txn_dpl_lru_reduce(MDBX_txn *txn);
 
-static inline uint32_t dpl_lru_turn(MDBX_txn *txn) {
+static inline uint32_t txn_dpl_lru_turn(MDBX_txn *txn) {
   txn->wr.dirtylru += 1;
   if (unlikely(txn->wr.dirtylru > UINT32_MAX / 3) && (txn->flags & MDBX_WRITEMAP) == 0)
-    dpl_lru_reduce(txn);
+    txn_dpl_lru_reduce(txn);
   return txn->wr.dirtylru;
 }
 
-MDBX_INTERNAL void dpl_sift(MDBX_txn *const txn, pnl_t pl, const bool spilled);
+MDBX_INTERNAL void txn_dpl_sift(MDBX_txn *const txn, pnl_t pl, const bool spilled);
 
-MDBX_INTERNAL void dpl_clear_and_release_shadows(MDBX_txn *txn);
+MDBX_INTERNAL void txn_dpl_clear(MDBX_txn *txn);

@@ -74,12 +74,12 @@ static size_t spill_cursor_keep(const MDBX_txn *const txn, const MDBX_cursor *mc
             __Wpedantic_format_voidptr(mp));
       tASSERT(txn, !is_subpage(mp));
       if (is_modifable(txn, mp)) {
-        size_t const n = dpl_search(txn, mp->pgno);
+        size_t const n = txn_dpl_search(txn, mp->pgno);
         if (txn->wr.dirtylist->items[n].pgno == mp->pgno &&
-            /* не считаем дважды */ dpl_age(txn, n)) {
+            /* не считаем дважды */ txn_dpl_age(txn, n)) {
           size_t *const ptr = ptr_disp(txn->wr.dirtylist->items[n].ptr, -(ptrdiff_t)sizeof(size_t));
           *ptr = txn->wr.dirtylru;
-          tASSERT(txn, dpl_age(txn, n) == 0);
+          tASSERT(txn, txn_dpl_age(txn, n) == 0);
           ++keep;
           DEBUG("keep page %" PRIaPGNO " (%p), dbi %zu, %scursor %p[%zu]", mp->pgno, __Wpedantic_format_voidptr(mp),
                 cursor_dbi(mc), is_inner(mc) ? "sub-" : "", __Wpedantic_format_voidptr(mc), i);
@@ -99,7 +99,7 @@ static size_t spill_cursor_keep(const MDBX_txn *const txn, const MDBX_cursor *mc
 
 static size_t spill_txn_keep(MDBX_txn *txn, MDBX_cursor *m0) {
   tASSERT(txn, (txn->flags & (txn_ro_both | MDBX_WRITEMAP)) == 0);
-  dpl_lru_turn(txn);
+  txn_dpl_lru_turn(txn);
   size_t keep = m0 ? spill_cursor_keep(txn, m0) : 0;
 
   TXN_FOREACH_DBI_ALL(txn, dbi) {
@@ -118,7 +118,7 @@ static size_t spill_txn_keep(MDBX_txn *txn, MDBX_cursor *m0) {
  *  > 255 = must not be spilled. */
 MDBX_NOTHROW_PURE_FUNCTION static unsigned spill_prio(const MDBX_txn *txn, const size_t i, const uint32_t reciprocal) {
   dpl_t *const dl = txn->wr.dirtylist;
-  const uint32_t age = dpl_age(txn, i);
+  const uint32_t age = txn_dpl_age(txn, i);
   const size_t npages = dpl_npages(dl, i);
   const pgno_t pgno = dl->items[i].pgno;
   if (age == 0) {
@@ -204,19 +204,19 @@ __cold int spill_slowpath(MDBX_txn *const txn, MDBX_cursor *const m0, const intp
       goto bailout;
 #if MDBX_AVOID_MSYNC
     MDBX_ANALYSIS_ASSUME(txn->wr.dirtylist != nullptr);
-    tASSERT(txn, dpl_check(txn));
+    tASSERT(txn, txn_dpl_check(txn));
     env->lck->unsynced_pages.weak += txn->wr.dirtylist->pages_including_loose - txn->wr.loose_count;
     dpl_setlen(txn->wr.dirtylist, 0);
     txn->wr.dirtyroom = env->options.dp_limit - txn->wr.loose_count;
     for (page_t *lp = txn->wr.loose_pages; lp != nullptr; lp = page_next(lp)) {
       tASSERT(txn, lp->flags == P_LOOSE);
-      rc = dpl_append(txn, lp->pgno, lp, 1);
+      rc = txn_dpl_append(txn, lp->pgno, lp, 1);
       if (unlikely(rc != MDBX_SUCCESS))
         goto bailout;
       MDBX_ASAN_UNPOISON_MEMORY_REGION(&page_next(lp), sizeof(page_t *));
       VALGRIND_MAKE_MEM_DEFINED(&page_next(lp), sizeof(page_t *));
     }
-    tASSERT(txn, dpl_check(txn));
+    tASSERT(txn, txn_dpl_check(txn));
 #else
     tASSERT(txn, txn->wr.dirtylist == nullptr);
     env->lck->unsynced_pages.weak += txn->wr.writemap_dirty_npages;
@@ -249,7 +249,7 @@ __cold int spill_slowpath(MDBX_txn *const txn, MDBX_cursor *const m0, const intp
   }
 
   /* Сортируем чтобы запись на диск была полее последовательна */
-  dpl_t *const dl = dpl_sort(txn);
+  dpl_t *const dl = txn_dpl_sort(txn);
 
   /* Preserve pages which may soon be dirtied again */
   const size_t unspillable = spill_txn_keep(txn, m0);
@@ -291,7 +291,7 @@ __cold int spill_slowpath(MDBX_txn *const txn, MDBX_cursor *const m0, const intp
   /* get min/max of LRU-labels */
   uint32_t age_max = 0;
   for (size_t i = 1; i <= dl->length; ++i) {
-    const uint32_t age = dpl_age(txn, i);
+    const uint32_t age = txn_dpl_age(txn, i);
     age_max = (age_max >= age) ? age_max : age;
   }
 
@@ -307,7 +307,7 @@ __cold int spill_slowpath(MDBX_txn *const txn, MDBX_cursor *const m0, const intp
     const unsigned prio = spill_prio(txn, i, reciprocal);
     size_t *const ptr = ptr_disp(dl->items[i].ptr, -(ptrdiff_t)sizeof(size_t));
     TRACE("page %" PRIaPGNO ", lru %zu, is_multi %c, npages %u, age %u of %u, prio %u", dl->items[i].pgno, *ptr,
-          (dpl_npages(dl, i) > 1) ? 'Y' : 'N', dpl_npages(dl, i), dpl_age(txn, i), age_max, prio);
+          (dpl_npages(dl, i) > 1) ? 'Y' : 'N', dpl_npages(dl, i), txn_dpl_age(txn, i), age_max, prio);
     if (prio < 256) {
       radix_entries[prio] += 1;
       spillable_entries += 1;
@@ -370,7 +370,7 @@ __cold int spill_slowpath(MDBX_txn *const txn, MDBX_cursor *const m0, const intp
         const unsigned npages = dpl_npages(dl, i);
         prio = spill_prio(txn, i, reciprocal);
         DEBUG("%sspill[%zu] %u page %" PRIaPGNO " (age %d, prio %u)", (prio > prio2spill) ? "co-" : "", i, npages,
-              dl->items[i].pgno, dpl_age(txn, i), prio);
+              dl->items[i].pgno, txn_dpl_age(txn, i), prio);
         tASSERT(txn, prio < 256);
         ++spilled_entries;
         spilled_npages += npages;
@@ -392,7 +392,7 @@ __cold int spill_slowpath(MDBX_txn *const txn, MDBX_cursor *const m0, const intp
     dl->sorted = dpl_setlen(dl, w);
     txn->wr.dirtyroom += spilled_entries;
     txn->wr.dirtylist->pages_including_loose -= spilled_npages;
-    tASSERT(txn, dpl_check(txn));
+    tASSERT(txn, txn_dpl_check(txn));
 
     if (!iov_empty(&ctx)) {
       tASSERT(txn, rc == MDBX_SUCCESS);
@@ -411,7 +411,7 @@ __cold int spill_slowpath(MDBX_txn *const txn, MDBX_cursor *const m0, const intp
     for (size_t i = 1; i <= dl->length; ++i) {
       page_t *dp = dl->items[i].ptr;
       VERBOSE("unspillable[%zu]: pgno %u, npages %u, flags 0x%04X, age %u, prio %u", i, dp->pgno, dpl_npages(dl, i),
-              dp->flags, dpl_age(txn, i), spill_prio(txn, i, reciprocal));
+              dp->flags, txn_dpl_age(txn, i), spill_prio(txn, i, reciprocal));
     }
   }
 

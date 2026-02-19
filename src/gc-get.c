@@ -1139,7 +1139,7 @@ next_gc:
   } else {
     eASSERT(env, pnl_check_allocated(txn->wr.repnl, txn->geo.first_unallocated));
   }
-  eASSERT(env, dpl_check(txn));
+  eASSERT(env, txn_dpl_check(txn));
 
   eASSERT(env, pnl_size(txn->wr.repnl) == 0 || MDBX_PNL_MOST(txn->wr.repnl) < txn->geo.first_unallocated);
   if (MDBX_ENABLE_REFUND && pnl_size(txn->wr.repnl) &&

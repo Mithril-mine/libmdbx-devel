@@ -44,15 +44,15 @@ static inline size_t dpl_bytes2size(const ptrdiff_t bytes) {
   return size;
 }
 
-void dpl_free(MDBX_txn *txn) {
+void txn_dpl_free(MDBX_txn *txn) {
   if (likely(txn->wr.dirtylist)) {
-    dpl_clear_and_release_shadows(txn);
+    txn_dpl_clear(txn);
     osal_free(txn->wr.dirtylist);
     txn->wr.dirtylist = nullptr;
   }
 }
 
-dpl_t *dpl_resize(MDBX_txn *txn, size_t size) {
+dpl_t *txn_dpl_reserve(MDBX_txn *txn, size_t size) {
   tASSERT(txn, (txn->flags & txn_ro_flat) == 0);
   tASSERT(txn, (txn->flags & MDBX_WRITEMAP) == 0 || MDBX_AVOID_MSYNC);
 
@@ -69,7 +69,7 @@ dpl_t *dpl_resize(MDBX_txn *txn, size_t size) {
   return dl;
 }
 
-int dpl_alloc(MDBX_txn *txn) {
+int txn_dpl_alloc(MDBX_txn *txn) {
   tASSERT(txn, (txn->flags & txn_ro_flat) == 0);
   tASSERT(txn, (txn->flags & MDBX_WRITEMAP) == 0 || MDBX_AVOID_MSYNC);
   const size_t wanna =
@@ -82,7 +82,7 @@ int dpl_alloc(MDBX_txn *txn) {
     txn->wr.dirtylist->sorted = txn->wr.dirtylist->length = 0;
 #endif /* asertions enabled */
   if (unlikely(!txn->wr.dirtylist || txn->wr.dirtylist->detent < wanna || txn->wr.dirtylist->detent > wanna + wanna) &&
-      unlikely(!dpl_resize(txn, wanna)))
+      unlikely(!txn_dpl_reserve(txn, wanna)))
     return MDBX_ENOMEM;
 
   /* LY: wr.dirtylist не может быть nullptr, так как либо уже выделен, либо будет выделен в dpl_reserve(). */
@@ -97,7 +97,7 @@ RADIXSORT_IMPL(dp, dp_t, MDBX_DPL_EXTRACT_KEY, MDBX_DPL_PREALLOC_FOR_RADIXSORT, 
 #define DP_SORT_CMP(first, last) ((first).pgno < (last).pgno)
 SORT_IMPL(dp_sort, false, dp_t, DP_SORT_CMP)
 
-__hot __noinline dpl_t *dpl_sort_slowpath(const MDBX_txn *txn) {
+__hot __noinline dpl_t *txn_dpl_sort_slowpath(const MDBX_txn *txn) {
   tASSERT(txn, (txn->flags & txn_ro_both) == 0);
   tASSERT(txn, (txn->flags & MDBX_WRITEMAP) == 0 || MDBX_AVOID_MSYNC);
 
@@ -151,7 +151,7 @@ __hot __noinline dpl_t *dpl_sort_slowpath(const MDBX_txn *txn) {
 #define DP_SEARCH_CMP(dp, id) ((dp).pgno < (id))
 SEARCH_IMPL(dp_bsearch, dp_t, pgno_t, DP_SEARCH_CMP)
 
-__hot __noinline size_t dpl_search(const MDBX_txn *txn, pgno_t pgno) {
+__hot __noinline size_t txn_dpl_search(const MDBX_txn *txn, pgno_t pgno) {
   tASSERT(txn, (txn->flags & txn_ro_both) == 0);
   tASSERT(txn, (txn->flags & MDBX_WRITEMAP) == 0 || MDBX_AVOID_MSYNC);
 
@@ -167,7 +167,7 @@ __hot __noinline size_t dpl_search(const MDBX_txn *txn, pgno_t pgno) {
   switch (dl->length - dl->sorted) {
   default:
     /* sort a whole */
-    dpl_sort_slowpath(txn);
+    txn_dpl_sort_slowpath(txn);
     break;
   case 0:
     /* whole sorted cases */
@@ -195,7 +195,7 @@ __hot __noinline size_t dpl_search(const MDBX_txn *txn, pgno_t pgno) {
   return dp_bsearch(dl->items + 1, dl->sorted, pgno) - dl->items;
 }
 
-const page_t *debug_dpl_find(const MDBX_txn *txn, const pgno_t pgno) {
+const page_t *debug_txn_dpl_find(const MDBX_txn *txn, const pgno_t pgno) {
   tASSERT(txn, (txn->flags & txn_ro_both) == 0);
   const dpl_t *dl = txn->wr.dirtylist;
   if (dl) {
@@ -216,7 +216,7 @@ const page_t *debug_dpl_find(const MDBX_txn *txn, const pgno_t pgno) {
   return nullptr;
 }
 
-void dpl_remove_ex(const MDBX_txn *txn, size_t i, size_t npages) {
+void txn_dpl_remove_ex(const MDBX_txn *txn, size_t i, size_t npages) {
   tASSERT(txn, (txn->flags & txn_ro_both) == 0);
   tASSERT(txn, (txn->flags & MDBX_WRITEMAP) == 0 || MDBX_AVOID_MSYNC);
 
@@ -230,7 +230,7 @@ void dpl_remove_ex(const MDBX_txn *txn, size_t i, size_t npages) {
   assert(dl->items[0].pgno == 0 && dl->items[dl->length + 1].pgno == P_INVALID);
 }
 
-int __must_check_result dpl_append(MDBX_txn *txn, pgno_t pgno, page_t *page, size_t npages) {
+int __must_check_result txn_dpl_append(MDBX_txn *txn, pgno_t pgno, page_t *page, size_t npages) {
   tASSERT(txn, (txn->flags & txn_ro_both) == 0);
   tASSERT(txn, (txn->flags & MDBX_WRITEMAP) == 0 || MDBX_AVOID_MSYNC);
 #if MDBX_DPL_CACHE_NPAGES
@@ -262,7 +262,7 @@ int __must_check_result dpl_append(MDBX_txn *txn, pgno_t pgno, page_t *page, siz
       return MDBX_TXN_FULL;
     }
     const size_t size = (dl->detent < MDBX_PNL_INITIAL * 42) ? dl->detent + dl->detent : dl->detent + dl->detent / 2;
-    dl = dpl_resize(txn, size);
+    dl = txn_dpl_reserve(txn, size);
     if (unlikely(!dl))
       return MDBX_ENOMEM;
     tASSERT(txn, dl->length < dl->detent);
@@ -339,7 +339,7 @@ int __must_check_result dpl_append(MDBX_txn *txn, pgno_t pgno, page_t *page, siz
   return MDBX_SUCCESS;
 }
 
-__cold bool dpl_check(MDBX_txn *txn) {
+__cold bool txn_dpl_check(MDBX_txn *txn) {
   tASSERT(txn, (txn->flags & txn_ro_flat) == 0);
   const dpl_t *const dl = txn->wr.dirtylist;
   if (!dl) {
@@ -366,7 +366,7 @@ __cold bool dpl_check(MDBX_txn *txn) {
       return false;
 
     if ((txn->flags & MDBX_WRITEMAP) == 0) {
-      const uint32_t age = dpl_age(txn, i);
+      const uint32_t age = txn_dpl_age(txn, i);
       tASSERT(txn, age < UINT32_MAX / 3);
       if (unlikely(age > UINT32_MAX / 3))
         return false;
@@ -411,7 +411,7 @@ __cold bool dpl_check(MDBX_txn *txn) {
     return false;
 
   for (size_t i = 1; i <= pnl_size(txn->wr.retired_pages); ++i) {
-    const page_t *const dp = debug_dpl_find(txn, txn->wr.retired_pages[i]);
+    const page_t *const dp = debug_txn_dpl_find(txn, txn->wr.retired_pages[i]);
     tASSERT(txn, !dp);
     if (unlikely(dp))
       return false;
@@ -422,7 +422,7 @@ __cold bool dpl_check(MDBX_txn *txn) {
 
 /*----------------------------------------------------------------------------*/
 
-__noinline void dpl_lru_reduce(MDBX_txn *txn) {
+__noinline void txn_dpl_lru_reduce(MDBX_txn *txn) {
   VERBOSE("lru-reduce %u -> %u", txn->wr.dirtylru, txn->wr.dirtylru >> 1);
   tASSERT(txn, (txn->flags & (txn_ro_both | MDBX_WRITEMAP)) == 0);
   do {
@@ -436,12 +436,12 @@ __noinline void dpl_lru_reduce(MDBX_txn *txn) {
   } while (txn);
 }
 
-void dpl_sift(MDBX_txn *const txn, pnl_t pl, const bool spilled) {
+void txn_dpl_sift(MDBX_txn *const txn, pnl_t pl, const bool spilled) {
   tASSERT(txn, (txn->flags & txn_ro_both) == 0);
   tASSERT(txn, (txn->flags & MDBX_WRITEMAP) == 0 || MDBX_AVOID_MSYNC);
   if (pnl_size(pl) && txn->wr.dirtylist->length) {
     tASSERT(txn, pnl_check_allocated(pl, (size_t)txn->geo.first_unallocated << spilled));
-    dpl_t *dl = dpl_sort(txn);
+    dpl_t *dl = txn_dpl_sort(txn);
 
     /* Scanning in ascend order */
     const intptr_t step = MDBX_PNL_ASCENDING ? 1 : -1;
@@ -449,7 +449,7 @@ void dpl_sift(MDBX_txn *const txn, pnl_t pl, const bool spilled) {
     const intptr_t end = MDBX_PNL_ASCENDING ? pnl_size(pl) + 1 : 0;
     tASSERT(txn, pl[begin] <= pl[end - step]);
 
-    size_t w, r = dpl_search(txn, pl[begin] >> spilled);
+    size_t w, r = txn_dpl_search(txn, pl[begin] >> spilled);
     tASSERT(txn, dl->sorted == dl->length);
     for (intptr_t i = begin; r <= dl->length;) { /* scan loop */
       assert(i != end);
@@ -502,7 +502,7 @@ void dpl_sift(MDBX_txn *const txn, pnl_t pl, const bool spilled) {
   }
 }
 
-void dpl_clear_and_release_shadows(MDBX_txn *txn) {
+void txn_dpl_clear(MDBX_txn *txn) {
   tASSERT(txn, (txn->flags & txn_ro_flat) == 0);
   dpl_t *const dl = txn->wr.dirtylist;
   if (dl) {

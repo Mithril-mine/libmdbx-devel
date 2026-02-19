@@ -87,7 +87,7 @@ static inline int page_touch(MDBX_cursor *mc) {
       tASSERT(txn, &mc->clc->k == &couple->outer.clc->v);
       tASSERT(txn, *couple->outer.dbi_state & DBI_DIRTY);
     }
-    tASSERT(txn, dpl_check(txn));
+    tASSERT(txn, txn_dpl_check(txn));
   }
 
   if (is_modifable(txn, mp)) {
@@ -121,7 +121,7 @@ static inline void page_wash(MDBX_txn *txn, size_t di, page_t *const mp, const s
     tASSERT(txn, (txn->flags & MDBX_WRITEMAP) == 0 || MDBX_AVOID_MSYNC);
     tASSERT(txn, MDBX_AVOID_MSYNC || (di && txn->wr.dirtylist->items[di].ptr == mp));
     if (!MDBX_AVOID_MSYNC || di) {
-      dpl_remove_ex(txn, di, npages);
+      txn_dpl_remove_ex(txn, di, npages);
       txn->wr.dirtyroom++;
       tASSERT(txn, txn->wr.dirtyroom + txn->wr.dirtylist->length ==
                        (txn->parent ? txn->parent->wr.dirtyroom : txn->env->options.dp_limit));

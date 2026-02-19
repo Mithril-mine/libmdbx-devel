@@ -6,10 +6,10 @@
 /* Merge pageset of the nested transaction into parent */
 static void nested_merge(MDBX_txn *const parent, MDBX_txn *const nested, const size_t parent_retired_len) {
   tASSERT(nested, (nested->flags & MDBX_WRITEMAP) == 0);
-  dpl_t *const src = dpl_sort(nested);
+  dpl_t *const src = txn_dpl_sort(nested);
 
   /* Remove refunded pages from parent's dirty list */
-  dpl_t *const dst = dpl_sort(parent);
+  dpl_t *const dst = txn_dpl_sort(parent);
   if (MDBX_ENABLE_REFUND) {
     size_t n = dst->length;
     while (n && dst->items[n].pgno >= parent->geo.first_unallocated) {
@@ -27,13 +27,13 @@ static void nested_merge(MDBX_txn *const parent, MDBX_txn *const nested, const s
    * Here the nested->wr.repnl was already moved into parent->wr.repnl
    * and space was reserved via retired_delta. */
   const pnl_t reclaimed_list = parent->wr.repnl;
-  dpl_sift(parent, reclaimed_list, false);
+  txn_dpl_sift(parent, reclaimed_list, false);
 
   /* Move retired pages from parent's dirty & spilled list to reclaimed */
   size_t r, w, d, s, l;
   for (r = w = parent_retired_len; ++r <= pnl_size(parent->wr.retired_pages);) {
     const pgno_t pgno = parent->wr.retired_pages[r];
-    const size_t di = dpl_exist(parent, pgno);
+    const size_t di = txn_dpl_exist(parent, pgno);
     const size_t si = !di ? spill_search(parent, pgno) : 0;
     unsigned npages;
     const char *kind;
@@ -174,7 +174,7 @@ static void nested_merge(MDBX_txn *const parent, MDBX_txn *const nested, const s
   /* Remove anything in our spill list from parent's dirty list */
   if (nested->wr.spilled.list) {
     tASSERT(nested, pnl_check_allocated(nested->wr.spilled.list, (size_t)parent->geo.first_unallocated << 1));
-    dpl_sift(parent, nested->wr.spilled.list, true);
+    txn_dpl_sift(parent, nested->wr.spilled.list, true);
     tASSERT(parent, parent->wr.dirtyroom + parent->wr.dirtylist->length ==
                         (parent->parent ? parent->parent->wr.dirtyroom : parent->env->options.dp_limit));
   }
@@ -314,9 +314,9 @@ static void nested_merge(MDBX_txn *const parent, MDBX_txn *const nested, const s
   for (r = 1; r <= dst->length; ++r)
     dst->pages_including_loose += dpl_npages(dst, r);
 
-  tASSERT(parent, dpl_check(parent));
+  tASSERT(parent, txn_dpl_check(parent));
   dpl_setlen(src, 0);
-  dpl_free(nested);
+  txn_dpl_free(nested);
 
   if (nested->wr.spilled.list) {
     if (parent->wr.spilled.list) {
@@ -327,7 +327,7 @@ static void nested_merge(MDBX_txn *const parent, MDBX_txn *const nested, const s
       parent->wr.spilled.list = nested->wr.spilled.list;
       parent->wr.spilled.least_removed = nested->wr.spilled.least_removed;
     }
-    tASSERT(parent, dpl_check(parent));
+    tASSERT(parent, txn_dpl_check(parent));
   }
 
   if (parent->wr.spilled.list) {
@@ -338,7 +338,7 @@ static void nested_merge(MDBX_txn *const parent, MDBX_txn *const nested, const s
 }
 
 static int nested_start(MDBX_txn *const nested, MDBX_txn *parent) {
-  tASSERT(parent, dpl_check(parent));
+  tASSERT(parent, txn_dpl_check(parent));
 
   nested->txnid = parent->txnid;
   nested->front_txnid = parent->front_txnid + 1;
@@ -362,7 +362,7 @@ static int nested_start(MDBX_txn *const nested, MDBX_txn *parent) {
   nested->dbi_seqs = parent->dbi_seqs;
   nested->geo = parent->geo;
 
-  int err = dpl_alloc(nested);
+  int err = txn_dpl_alloc(nested);
   if (unlikely(err != MDBX_SUCCESS))
     return LOG_IFERR(err);
 
@@ -378,13 +378,13 @@ static int nested_start(MDBX_txn *const nested, MDBX_txn *parent) {
       VALGRIND_MAKE_MEM_DEFINED(&page_next(lp), sizeof(page_t *));
       parent->wr.loose_pages = page_next(lp);
       /* Remove from dirty list */
-      page_wash(parent, dpl_exist(parent, lp->pgno), lp, 1);
+      page_wash(parent, txn_dpl_exist(parent, lp->pgno), lp, 1);
     } while (parent->wr.loose_pages);
     parent->wr.loose_count = 0;
 #if MDBX_ENABLE_REFUND
     parent->wr.loose_refund_wl = 0;
 #endif /* MDBX_ENABLE_REFUND */
-    tASSERT(parent, dpl_check(parent));
+    tASSERT(parent, txn_dpl_check(parent));
   }
 #if MDBX_ENABLE_REFUND
   nested->wr.loose_refund_wl = 0;
@@ -392,7 +392,7 @@ static int nested_start(MDBX_txn *const nested, MDBX_txn *parent) {
   nested->wr.dirtyroom = parent->wr.dirtyroom;
   nested->wr.dirtylru = parent->wr.dirtylru;
 
-  dpl_sort(parent);
+  txn_dpl_sort(parent);
   if (parent->wr.spilled.list)
     spill_purge(parent);
 
@@ -513,18 +513,18 @@ static void nested_free(MDBX_txn *nested) {
   rkl_destroy(&nested->wr.gc.reclaimed);
   rkl_destroy(&nested->wr.gc.ready4reuse);
 
-  dpl_free(nested);
+  txn_dpl_free(nested);
   pnl_free(nested->wr.repnl);
   osal_free(nested);
 
-  tASSERT(parent, dpl_check(parent));
+  tASSERT(parent, txn_dpl_check(parent));
   tASSERT(parent, audit_ex(parent, 0, false) == 0);
 }
 
 int txn_nested_abort(MDBX_txn *nested) {
   tASSERT(nested, nested != nested->env->basal_txn);
   tASSERT(nested, nested->parent->nested == nested && (nested->parent->flags & MDBX_TXN_HAS_CHILD) != 0);
-  tASSERT(nested, dpl_check(nested));
+  tASSERT(nested, txn_dpl_check(nested));
   tASSERT(nested, pnl_check_allocated(nested->wr.repnl, nested->geo.first_unallocated - MDBX_ENABLE_REFUND));
   tASSERT(nested, memcmp(&nested->wr.troika, &nested->parent->wr.troika, sizeof(troika_t)) == 0);
 
@@ -539,7 +539,7 @@ static int nested_join(MDBX_txn *nested, struct commit_timestamp *ts) {
   tASSERT(nested, audit_ex(nested, 0, false) == 0);
   eASSERT(env, nested != env->basal_txn);
   eASSERT(env, parent->nested == nested && (parent->flags & MDBX_TXN_HAS_CHILD) != 0);
-  eASSERT(env, dpl_check(nested));
+  eASSERT(env, txn_dpl_check(nested));
   tASSERT(nested, pnl_check_allocated(nested->wr.repnl, nested->geo.first_unallocated - MDBX_ENABLE_REFUND));
   tASSERT(nested, memcmp(&nested->wr.troika, &parent->wr.troika, sizeof(troika_t)) == 0);
 
@@ -566,7 +566,7 @@ static int nested_join(MDBX_txn *nested, struct commit_timestamp *ts) {
     }
 
     if (unlikely(nested->wr.dirtylist->length + parent->wr.dirtylist->length > parent->wr.dirtylist->detent &&
-                 !dpl_resize(parent, nested->wr.dirtylist->length + parent->wr.dirtylist->length))) {
+                 !txn_dpl_reserve(parent, nested->wr.dirtylist->length + parent->wr.dirtylist->length))) {
       return MDBX_ENOMEM;
     }
   }

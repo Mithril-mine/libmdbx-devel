@@ -159,7 +159,7 @@ int txn_abort(MDBX_txn *txn, MDBX_commit_latency *latency) {
         __Wpedantic_format_voidptr(txn->env), txn->dbs[MAIN_DBI].root, txn->dbs[FREE_DBI].root);
 
   tASSERT(txn, /* txn->signature == txn_signature && */ !txn->nested && !(txn->flags & MDBX_TXN_HAS_CHILD));
-  tASSERT(txn, (txn->flags & (MDBX_TXN_ERROR | txn_ro_flat)) || dpl_check(txn));
+  tASSERT(txn, (txn->flags & (MDBX_TXN_ERROR | txn_ro_flat)) || txn_dpl_check(txn));
 
   if (latency) {
     txn_latency_gcprof(txn->env, latency);

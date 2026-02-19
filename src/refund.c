@@ -122,7 +122,7 @@ static void refund_loose(MDBX_txn *txn) {
     }
   } else {
     /* Dirtylist is mostly sorted, just refund loose pages at the end. */
-    dpl_sort(txn);
+    txn_dpl_sort(txn);
     tASSERT(txn, dl->length < 2 || dl->items[1].pgno < dl->items[dl->length].pgno);
     tASSERT(txn, dl->sorted == dl->length);
 
@@ -165,7 +165,7 @@ static void refund_loose(MDBX_txn *txn) {
     }
   }
 
-  tASSERT(txn, dpl_check(txn));
+  tASSERT(txn, txn_dpl_check(txn));
   if (suitable != onstack)
     pnl_free(suitable);
   txn->wr.loose_refund_wl = txn->geo.first_unallocated;
