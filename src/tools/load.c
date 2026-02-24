@@ -386,8 +386,9 @@ __hot static int readline(MDBX_val *out, MDBX_val *buf) {
   if (c == ' ')
     return (ungetc(c, stdin) == c) ? MDBX_SUCCESS : (errno ? errno : EOF);
 
-  *(char *)buf->iov_base = c;
-  if (fgets((char *)buf->iov_base + 1, (int)buf->iov_len - 1, stdin) == nullptr)
+  ((char *)buf->iov_base)[0] = c;
+  ((char *)buf->iov_base)[1] = 0;
+  if (c != '\n' && fgets((char *)buf->iov_base + 1, (int)buf->iov_len - 1, stdin) == nullptr)
     return errno ? errno : EOF;
   lineno++;
 
