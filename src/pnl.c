@@ -302,10 +302,7 @@ __hot pgno_t pnl_get_best_sequence(const pnl_t pnl, const size_t seq, const pgno
     pgno = pnl[best_pos];
     VERBOSE("seq %zu => %u", seq, pgno);
     assert(pnl_contains_span(pnl, pgno, seq));
-    /* вырезаем с перемещением хвоста */
-    pnl_setsize(pnl, len -= seq);
-    for (size_t i = best_pos - seq + 1; i <= len; ++i)
-      pnl[i] = pnl[i + seq];
+    pnl_cut(pnl, best_pos - seq + 1, seq);
   }
 #endif /* MDBX_PNL_ASCENDING */
   return pgno;
@@ -320,9 +317,17 @@ pgno_t pnl_crop_tail_sequence(const pnl_t pnl) {
   size_t span = 1;
   while (1 + span <= pnl_size(pnl) && MDBX_PNL_CONTIGUOUS(pnl[1], pnl[1 + span], span))
     ++span;
-  pnl_setsize(pnl, len -= span);
-  for (size_t i = 1; i <= len; ++i)
-    pnl[i] = pnl[i + span];
+  pnl_cut(pnl, 1, span);
 #endif /* MDBX_PNL_ASCENDING */
   return span;
+}
+
+__hot void pnl_cut(pnl_t pnl, size_t pos, size_t span) {
+  size_t len = pnl_size(pnl);
+  assert(pos > 0 && pos <= len && pos + span <= len + 1);
+  if (likely(span > 0)) {
+    pnl_setsize(pnl, len -= span);
+    for (size_t i = pos; i <= len; ++i)
+      pnl[i] = pnl[i + span];
+  }
 }

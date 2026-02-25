@@ -196,4 +196,6 @@ MDBX_MAYBE_UNUSED MDBX_INTERNAL pgno_t pnl_get_best_sequence(const pnl_t pnl, co
                                                              const pgno_t defrag_detent);
 MDBX_MAYBE_UNUSED MDBX_INTERNAL pgno_t pnl_crop_tail_sequence(const pnl_t pnl);
 
+MDBX_MAYBE_UNUSED MDBX_INTERNAL void pnl_cut(pnl_t pnl, size_t pos, size_t len);
+
 #endif /* !__cplusplus */
