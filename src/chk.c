@@ -1312,7 +1312,7 @@ __cold static int chk_handle_gc(MDBX_chk_scope_t *const scope, MDBX_chk_table_t 
                          data->iov_len);
 
       usr->result.gc_pages += number;
-      if (chk->envinfo.mi_latter_reader_txnid > txnid)
+      if (chk->envinfo.mi_latter_reader_txnid >= txnid)
         usr->result.reclaimable_pages += number;
 
       size_t prev = MDBX_PNL_ASCENDING ? NUM_METAS - 1 : usr->txn->geo.first_unallocated;
