@@ -119,6 +119,19 @@ __hot int __must_check_result pnl_append_span(__restrict pnl_t *ppnl, pgno_t pgn
   return pnl_append_stepped(1, ppnl, pgno, n);
 }
 
+int __must_check_result pnl_append_pnl(__restrict pnl_t *pdst, const const_pnl_t src) {
+  if (likely(pnl_size(src) > 0)) {
+    const size_t size = pnl_size(*pdst) + pnl_size(src);
+    int err = pnl_reserve(pdst, size);
+    if (unlikely(err != MDBX_SUCCESS))
+      return err;
+
+    memcpy(MDBX_PNL_END(*pdst), MDBX_PNL_BEGIN(src), pnl_size(src) * sizeof(pgno_t));
+    pnl_setsize(*pdst, size);
+  }
+  return MDBX_SUCCESS;
+}
+
 __hot int __must_check_result pnl_insert_span(__restrict pnl_t *ppnl, pgno_t pgno, size_t n) {
   assert(n > 0);
   int rc = pnl_need(ppnl, n);

@@ -125,6 +125,8 @@ MDBX_INTERNAL int __must_check_result spill_append_span(__restrict pnl_t *ppnl, 
 
 MDBX_INTERNAL int __must_check_result pnl_append_span(__restrict pnl_t *ppnl, pgno_t pgno, size_t n);
 
+MDBX_INTERNAL int __must_check_result pnl_append_pnl(__restrict pnl_t *ppnl, const const_pnl_t src);
+
 MDBX_INTERNAL int __must_check_result pnl_insert_span(__restrict pnl_t *ppnl, pgno_t pgno, size_t n);
 
 MDBX_NOTHROW_PURE_FUNCTION MDBX_INTERNAL size_t pnl_search_nochk(const const_pnl_t pnl, pgno_t pgno);
