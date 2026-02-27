@@ -64,7 +64,9 @@ dm_t *dml_append(dml_t **pdml, pgno_t key) {
     dml = dml_extend(dml);
     if (unlikely(!dml))
       return nullptr;
+    *pdml = dml;
   }
+  assert(dml->length < dml->limit);
   dm_t *dm = &dml->items[dml->length++];
   dm->pgno = key;
   dm->parent = 0;
