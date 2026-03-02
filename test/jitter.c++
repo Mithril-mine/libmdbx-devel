@@ -184,14 +184,14 @@ bool testcase_jitter::run() {
       MDBX_defrag_result_t defrag_result;
       char took_buffer[42];
       jitter_delay();
-      err = mdbx_env_defrag(db_guard.get(), 0, 0, 0, 0, -1, 0, &defrag_result);
+      err = mdbx_env_defrag(db_guard.get(), 0, 0, 0, 0, -1, 0, nullptr, nullptr, &defrag_result);
       if (MDBX_IS_ERROR(err) && err != MDBX_LAGGARD_READER)
         failure_perror("mdbx_env_defrag", err);
       else
         log_notice("Defragmentation %s: shrinked %zi pages, %u passes, %zu pages moved, stopping reasons bits 0x%x,"
                    " took %s seconds\n",
-                   (err == MDBX_SUCCESS) ? "done" : "incomplete", defrag_result.shrinked_pages, defrag_result.cycles,
-                   defrag_result.moved_pages, defrag_result.stopping_reasons,
+                   (err == MDBX_SUCCESS) ? "done" : "incomplete", defrag_result.pages_shrinked, defrag_result.cycles,
+                   defrag_result.pages_moved, defrag_result.stopping_reasons,
                    mdbx_ratio2digits(defrag_result.spent_time_16dot16, 65536, 3, took_buffer, sizeof(took_buffer)));
     } else if (global::config::geometry_jitter) {
       err = mdbx_env_set_geometry(db_guard.get(), -1, -1, !coin4size ? upper_limit * 2 / 3 : upper_limit * 3 / 2, -1,

@@ -406,6 +406,7 @@ __extern_C key_t ftok(const char *, int);
 
 /* После подгрузки windows.h, чтобы избежать проблем со сборкой MINGW и т.п. */
 #include <excpt.h>
+#include <io.h>
 #include <tlhelp32.h>
 
 #else /*----------------------------------------------------------------------*/

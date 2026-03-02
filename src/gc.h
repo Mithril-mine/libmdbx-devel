@@ -110,32 +110,39 @@ typedef struct defract_context {
   dml_t *arcs;
   pnl_t lp_reserve;
   pnl_t temp;
-  pgno_t move_scheduled;
-  pgno_t retreat_edge;
-  pgno_t defrag_edge;
+  pgno_t cycle_pages_scheduled;
+  pgno_t cycle_pages_moved;
+  pgno_t stumble_pgno, stumble_span, lp_backlog;
   pgno_t remapped_edge;
-  pgno_t stumble, lp_backlog;
-  pgno_t moved_pages;
-  size_t payload_pages;
-  size_t payload_items;
-  pgno_t walk_stack[32];
-  pgno_t walk_cutoff;
+  pgno_t defrag_edge;
+  pgno_t retreat_edge;
   pgno_t move_batch_size;
+  size_t payload_items;
+  size_t progress_counter;
   uint8_t wallclock_trottle;
   uint8_t stumble_retry;
   unsigned cycle;
+  size_t total_pages_moved;
+  size_t payload_pages;
   pgno_t largepage_max, largepage_amountleft, largepage_count;
   pgno_t summary_depth;
-  volatile uint32_t *stopping_reasons;
+  volatile uint32_t stopping_reasons;
+  void *user_ctx;
+  MDBX_defrag_notify_func user_callback;
+
+  pgno_t walk_stack[32];
+  pgno_t walk_cutoff;
+  pgno_t notify_watchmask;
 
 #if MDBX_DEBUG || MDBX_FORCE_ASSERTIONS
   pnl_t repnl_clone;
 #endif /* MDBX_DEBUG || MDBX_FORCE_ASSERTIONS */
-  pgno_t defrag_atleast, defrag_enough, before_defrag, gc_retained;
+  pgno_t defrag_atleast, defrag_enough, before_defrag;
+  pgno_t gc_tree_pages, gc_retained_pages;
   uint64_t start_timestamp;
   uint64_t wallclock_atleast;
   uint64_t wallclock_detent;
-  uint64_t initial_txn_gc_score;
+  uint64_t cycle_initial_score;
 
   txnid_t stopor;
   struct gc_reclaiming_obstacle gc_obstacle;
@@ -146,5 +153,7 @@ MDBX_INTERNAL int defrag_init(dfc_t *dfc, MDBX_txn *txn, size_t defrag_atleast_p
                               size_t limit_spend_wallclock_16dot16, intptr_t preferred_move_batch_size);
 MDBX_INTERNAL void defrag_destroy(dfc_t *dfc);
 MDBX_INTERNAL int defrag_cycle(dfc_t *dfc);
-MDBX_INTERNAL bool defrag_should_continue(dfc_t *dfc);
-MDBX_INTERNAL uint64_t defrag_gc_score(const MDBX_txn *txn);
+MDBX_INTERNAL bool defrag_should_continue(dfc_t *dfc, size_t progress_increment);
+MDBX_INTERNAL uint64_t defrag_score(dfc_t *dfc, size_t allocated_pages);
+MDBX_INTERNAL uint64_t defrag_result(const dfc_t *dfc, const intptr_t pages_allocated, MDBX_defrag_result_t *out,
+                                     uint64_t now_cache);
