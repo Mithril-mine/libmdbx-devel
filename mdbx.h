@@ -1905,10 +1905,8 @@ typedef enum MDBX_error {
 
   /** Environment or table is not compatible with the requested operation
    * or the specified flags. This can mean:
-   *  - The operation expects an \ref MDBX_DUPSORT / \ref MDBX_DUPFIXED
-   *    table.
-   *  - Opening a named DB when the unnamed DB has \ref MDBX_DUPSORT /
-   *    \ref MDBX_INTEGERKEY.
+   *  - The operation expects an \ref MDBX_DUPSORT / \ref MDBX_DUPFIXED table.
+   *  - Opening a named DB when the unnamed DB has \ref MDBX_DUPSORT / \ref MDBX_INTEGERKEY.
    *  - Accessing a data record as a named table, or vice versa.
    *  - The table was dropped and recreated with different flags. */
   MDBX_INCOMPATIBLE = -30784,
@@ -4875,7 +4873,7 @@ LIBMDBX_API int mdbx_dbi_rename2(MDBX_txn *txn, MDBX_dbi dbi, const MDBX_val *na
  * \see mdbx_enumerate_tables()
  *
  * \param [in] ctx       A pointer to the context passed by a similar parameter in \ref mdbx_enumerate_tables().
- * \param [in] txn       A transaction handle returned by \ref mdbx_txn_begin().
+ * \param [in] txn       A transaction handle.
  * \param [in] name      The name of a table.
  * \param [in] flags     The \ref MDBX_db_flags_t of a table
  * \param [in] stat      Basic statistics \ref MDBX_stat of a table.
@@ -6802,16 +6800,19 @@ MDBX_NOTHROW_PURE_FUNCTION LIBMDBX_API MDBX_hsr_func mdbx_env_get_hsr(const MDBX
 
 /** \brief Acquires write-transaction lock.
  * Provided for custom and/or complex locking scenarios.
+ * \ingroup c_extra
  * \returns A non-zero error value on failure and 0 on success. */
 LIBMDBX_API int mdbx_txn_lock(MDBX_env *env, bool dont_wait);
 
 /** \brief Releases write-transaction lock.
  * Provided for custom and/or complex locking scenarios.
+ * \ingroup c_extra
  * \returns A non-zero error value on failure and 0 on success. */
 LIBMDBX_API int mdbx_txn_unlock(MDBX_env *env);
 
 /** \brief Open an environment instance using specific meta-page
  * for checking and recovery.
+ * \ingroup c_extra
  *
  * This function mostly of internal API for `mdbx_chk` utility and subject to
  * change at any time. Do not use this function to avoid shooting your own
@@ -6881,6 +6882,7 @@ LIBMDBX_API int mdbx_preopen_snapinfoW(const wchar_t *pathname, MDBX_envinfo *in
 #endif /* Windows */
 
 /** \brief Flags/options for checking the integrity of a database.
+ * \ingroup c_extra
  * \note This API has not been frozen yet, there may be improvements and changes in subsequent versions.
  * \see mdbx_env_chk() */
 typedef enum MDBX_chk_flags {
@@ -6904,6 +6906,7 @@ typedef enum MDBX_chk_flags {
 DEFINE_ENUM_FLAG_OPERATORS(MDBX_chk_flags)
 
 /** \brief Levels of logging/detailing of information supplied via callbacks during a database integrity check.
+ * \ingroup c_extra
  * \see mdbx_env_chk() */
 typedef enum MDBX_chk_severity {
   MDBX_chk_severity_prio_shift = 4,
@@ -6922,6 +6925,7 @@ typedef enum MDBX_chk_severity {
 } MDBX_chk_severity_t;
 
 /** \brief The verification stages reported via callbacks during a database integrity check.
+ * \ingroup c_extra
  * \see mdbx_env_chk() */
 typedef enum MDBX_chk_stage {
   MDBX_chk_none,
@@ -6939,6 +6943,7 @@ typedef enum MDBX_chk_stage {
 } MDBX_chk_stage_t;
 
 /** \brief A virtual row of the report generated during a database integrity check.
+ * \ingroup c_extra
  * \see mdbx_env_chk() */
 typedef struct MDBX_chk_line {
   struct MDBX_chk_context *ctx;
@@ -6947,6 +6952,7 @@ typedef struct MDBX_chk_line {
 } MDBX_chk_line_t;
 
 /** \brief An issue problem was discovered during a database integrity check.
+ * \ingroup c_extra
  * \see mdbx_env_chk() */
 typedef struct MDBX_chk_issue {
   struct MDBX_chk_issue *next;
@@ -6955,6 +6961,7 @@ typedef struct MDBX_chk_issue {
 } MDBX_chk_issue_t;
 
 /** \brief A hierarchical context during a database integrity check.
+ * \ingroup c_extra
  * \see mdbx_env_chk() */
 typedef struct MDBX_chk_scope {
   MDBX_chk_issue_t *issues;
@@ -6971,10 +6978,12 @@ typedef struct MDBX_chk_scope {
 
 /** \brief A custom type for binding additional data associated with a certain key-value table
  *   during a database integrity check.
+ * \ingroup c_extra
  * \see mdbx_env_chk() */
 typedef struct MDBX_chk_user_table_cookie MDBX_chk_user_table_cookie_t;
 
 /** \brief A histogram with some statistical information collected during a database integrity check.
+ * \ingroup c_extra
  * \see mdbx_env_chk() */
 struct MDBX_chk_histogram {
   size_t amount, count, le1_amount, le1_count;
@@ -6984,6 +6993,7 @@ struct MDBX_chk_histogram {
 };
 
 /** \brief Information about a certain key-value table during a database integrity check.
+ * \ingroup c_extra
  * \see mdbx_env_chk() */
 typedef struct MDBX_chk_table {
   MDBX_chk_user_table_cookie_t *cookie;
@@ -7030,6 +7040,7 @@ typedef struct MDBX_chk_table {
 } MDBX_chk_table_t;
 
 /** \brief The context for checking the integrity of a database.
+ * \ingroup c_extra
  * \see mdbx_env_chk() */
 typedef struct MDBX_chk_context {
   struct MDBX_chk_internal *internal;
@@ -7057,6 +7068,7 @@ typedef struct MDBX_chk_context {
 } MDBX_chk_context_t;
 
 /** \brief A set of callback functions used for checking the integrity of a database.
+ * \ingroup c_extra
  *
  * \details The callback functions are designed to organize interaction with the application code. This includes the
  * integration of application logic that verifies the integrity of a data structure above the key-value level, the
@@ -7094,6 +7106,7 @@ typedef struct MDBX_chk_callbacks {
 } MDBX_chk_callbacks_t;
 
 /** \brief Checks the integrity of a database.
+ * \ingroup c_extra
  *
  * \details Interaction with the application code is implemented through callback functions provided by the application
  * using the 'cb` parameter. During such interaction, the application can monitor the verification process, including
@@ -7121,6 +7134,7 @@ LIBMDBX_API int mdbx_env_chk(MDBX_env *env, const MDBX_chk_callbacks_t *cb, MDBX
 
 /** \brief An auxiliary function to account issues detected by an application, including those coming to an application
  * through logging.
+ * \ingroup c_extra
  *
  * \details An application should call this function to account for detected issues, or vice versa, do not make these
  * calls to ignore discovered issues.
@@ -7132,6 +7146,7 @@ LIBMDBX_API int mdbx_env_chk_encount_problem(MDBX_chk_context_t *ctx);
 
 /** \brief An auxiliary function for converting fractions to string of decimal digits without using floating-point
  * operations.
+ * \ingroup c_extra
  *
  * \note The accuracy of the conversion result is limited both by the simplicity of the algorithms and by 64-bit
  * arithmetic.
@@ -7141,6 +7156,7 @@ LIBMDBX_API const char *mdbx_ratio2digits(uint64_t numerator, uint64_t denominat
                                           size_t buffer_size);
 
 /** \brief An auxiliary function for converting fractions to percentage string without using floating-point operations.
+ * \ingroup c_extra
  *
  * \note The accuracy of the conversion result is limited both by the simplicity of the algorithms and by 64-bit
  * arithmetic.
@@ -7205,7 +7221,7 @@ typedef struct MDBX_gc_info {
  *
  * \param [in] txn          A transaction started by \ref mdbx_txn_begin().
  *
- * \param [out] info        The address of an \ref MDBX_gc_info_t structure
+ * \param [out] info        The address of a \ref MDBX_gc_info_t structure
  *                          where the information will be provided.
  *
  * \param [in] bytes        The actual size of \ref MDBX_gc_info_t,
@@ -7223,7 +7239,11 @@ typedef struct MDBX_gc_info {
 LIBMDBX_API int mdbx_gc_info(MDBX_txn *txn, MDBX_gc_info_t *info, size_t bytes, MDBX_gc_iter_func iter_func,
                              void *iter_ctx);
 
-/** \brief FIXME */
+/** \brief The returned reasons for stopping database defragmentation.
+ * \details Any number of individual values could be OR'ed together while while returning actual set of reasons.
+ * \ingroup c_extra
+ * \see MDBX_defrag_result_t
+ * \see mdbx_env_defrag() */
 typedef enum MDBX_defrag_stopping_reasons {
   MDBX_defrag_noobstacles = 0,
   MDBX_defrag_enough_theshold = 1,
@@ -7235,30 +7255,170 @@ typedef enum MDBX_defrag_stopping_reasons {
 } MDBX_defrag_stopping_reasons_t;
 DEFINE_ENUM_FLAG_OPERATORS(MDBX_defrag_stopping_reasons)
 
-/** \brief FIXME */
+/** \brief The numerical metrics of progress and result of database defragmentation.
+ * \ingroup c_extra
+ * \see mdbx_env_defrag()
+ * \see MDBX_defrag_notify_func */
 typedef struct MDBX_defrag_result {
+  /** The number of pages that the database size was shrinked by. In the worst case, this value can be negative, for
+   * instance -1, when defragmentation was stopped for some reason, or the database structure does not allow it to be
+   * defragmented by moving individual pages. */
   intptr_t pages_shrinked;
+
+  /** The total number of pages moved during defragmentation. */
   size_t pages_moved;
+
+  /** The number of pages scheduled to be moved at the next stage of the current defragmentation cycle. */
   size_t pages_scheduled;
+
+  /** The number of pages held by other processes via reading MVCC-snapshots that prevent
+   *  reclaiming and defragmentation. */
   size_t pages_retained;
+
+  /** The estimated remaining number of pages that are potentially defragmented. */
   size_t pages_left;
+
+  /** The whole number of pages in the database. */
   size_t pages_whole;
 
+  /** The number of the page where the defragmentation stumbled,
+   *  according to the reasons given in the `stopping_reasons` field. */
   size_t obstructed_pgno;
+
+  /** The length of the large/overflow-page span where the defragmentation stumbled,
+   *  according to the reasons given in the `stopping_reasons` field. */
   size_t obstructed_span;
+
+  /** The transaction number corresponds to the earliest/first MVCC-snapshot
+   *  held by reader(s) and preventing defragmentation. */
   uint64_t obstructed_txnid;
+  /** The system/native Thread ID of one of a readers holding the MVCC snapshot
+   *  that prevents defragmentation. */
   mdbx_tid_t obstructor_tid;
+  /** The system/native Process ID of one of a readers holding the MVCC snapshot
+   *  that prevents defragmentation. */
   mdbx_pid_t obstructor_pid;
+
+  /** Rough estimation a progress of the current defragmentation cycle
+   * in permilles (the 1000 means 100%). */
   unsigned rough_estimation_cycle_progress_permille;
+
+  /** The number of defragmentation cycles. */
   unsigned cycles;
+
+  /** Obstacles and reasons for stopping defragmentation in the form of
+   * a mask of OR'ed \ref MDBX_defrag_stopping_reasons_t bits. */
   unsigned stopping_reasons;
+
+  /** The time elapsed since the beginning of defragmentation in a 1/65536 second fractions. */
   unsigned spent_time_16dot16;
 } MDBX_defrag_result_t;
 
-/** \brief FIXME */
+/** \brief A callback function to notify an application about the progress of defragmentation.
+ * \ingroup c_extra
+ * \see mdbx_env_defrag()
+ * \details If provided such callback will be called time-to-time to notify about the progress of defragmentation.
+ * The rate of such notification calls is not explicitly defined, but it is guaranteed that it will be called at the
+ * beginning and end of each defragmentation cycle, as well as often will be enough to track progress in a percentages
+ * sharp.
+ *
+ * \param [in] ctx       A pointer to the context passed by a similar parameter in \ref mdbx_env_defrag().
+ *
+ * \param [in] progress  A pointer to the \ref MDBX_defrag_result_t structure filled in to reflects
+ *                       the current state of database defragmentation.
+ *
+ * \returns Any non-zero value will indicates a "user break" condition to abort defragmentation immediately. */
 typedef int (*MDBX_defrag_notify_func)(void *ctx, const MDBX_defrag_result_t *progress) MDBX_CXX17_NOEXCEPT;
 
-/** \brief FIXME */
+/** \brief Performs database defragmentation.
+ * \ingroup c_extra
+ * \see MDBX_defrag_notify_func
+ * \see MDBX_defrag_result_t
+ *
+ * \details Defragmentation is the transfer of data from pages located at the end of the database to free pages closer
+ * to the beginning. After that, the pages that have become unused at the end of the database can be cut off while
+ * reducing the size of the database file. This function performs all the described actions in comply with ACID, trying
+ * to minimize the number of operations for moving data and writing to media.
+ *
+ * The function accepts an extended set of parameters that allow you to fully control the goals and progress of
+ * defragmentation, including as to quickly get a minimum result by small steps and as to perform a fairly complete
+ * defragmentation in the least number of large cycles.
+ *
+ * \note Any parallel reading transactions do not make defragmentation impossible, but ones limit it to single cycle
+ * and will definitely disallow to be performed completely.
+ *
+ * During the movement of data in the b-tree structure, it is necessary to adjust the links in the parent pages to the
+ * new moved child pages. According to the MVCC concept, this requires creating copies of altered parent pages along the
+ * entire chain from leaves to the root of the b-tree, inclusive. In addition, to move large/overflow pages, it may be
+ * necessary to form sequences of adjacent free pages, which will require moving other pages with data and correcting
+ * links to ones. Defragmentation almost always cannot be completely completed in one pass, as there are always fewer
+ * free pages than necessary to move due to the need to copy all the parent pages. In addition, if there are not enough
+ * sequences to move large/overflow pages, an additional commit step is required and a new transaction is started to
+ * continue.
+ *
+ * Thus, defragmentation is almost always performed in several cycles, each of which ends with the transaction being
+ * committed and can be interrupted in any way while ensuring the durability of the database specified when it was
+ * opened.
+ *
+ * \param [in] env                   A pointer to an instance of environment.
+ *
+ * \param [in] defrag_atleast        The required at least number of pages by which the database
+ *                                   must be reduced as a result of defragmentation.
+ *                                   Defragmentation will not be completed and its goals will not be
+ *                                   considered achieved until the database is shrinked by the specified amount.
+ *                                   Must be less or equal to `defrag_enough`.
+ *                                   Specify zero if in doubt or not known, this will mean no lower bound.
+ *
+ * \param [in] time_atleast_16dot16  The time by a wall clock in 1/65536 unit of second that should be spent to
+ *                                   defragment more, even if the goals given via other parameters have already
+ *                                   been reached. Must be less or equal to `time_limit_16dot16`.
+ *                                   Specify zero if in doubt or not known, this will mean no lower bound.
+ *
+ * \param [in] defrag_enough         The number of pages by which it will be enough to shrink the database during
+ *                                   a defragmentation process to finish it rather than dig more.
+ *                                   Must be greater or equal to `defrag_atleast`.
+ *                                   Specify zero if in doubt or not known, this will mean no limit.
+ *
+ * \param [in] time_limit_16dot16    The time limit by a wall clock in 1/65536 unit of second that could be spent to
+ *                                   defragment. When the specified limit is reached, defragmentation will not
+ *                                   continue, but the stage of writing the moved pages that has already begun
+ *                                   will be completed. Must be greater or equal to `time_atleast_16dot16`.
+ *                                   Specify zero if in doubt or not known, this will mean no limit.
+ *
+ * \param [in] acceptable_backlash   Defragmentation stops if a next cycle will unable to shrink database by the
+ *                                   number of pages more than the specified value. This avoids the last few
+ *                                   defragmentation cycles, which do not significantly reduce the size of the database.
+ *                                   Specify `-1` if in doubt or not known, this will mean autopilot.
+ *
+ * \param [in] preferred_batch       The preferred maximum number of pages to be moved per defragmentation cycle.
+ *                                   Small batches take less time, so if necessary, defragmentation could be stopped
+ *                                   faster without losing the intermediate result. On the other hand, smaller batches
+ *                                   will require more transaction commits and more page rewrites to achieve a similar
+ *                                   result. Specify 0 if in doubt or not known, this will mean no limit.
+ *
+ * \param [in] progress_callback     An optional custom progress notification callback function with the signature
+ *                                   \ref MDBX_defrag_notify_func, which will be called time-to-time to notify about
+ *                                   the progress of defragmentation.
+ *                                   The rate of calls to the provided function is not explicitly defined,
+ *                                   but it is guaranteed that it will be called at the beginning and end of each
+ *                                   defragmentation cycle, as well as often enough to track progress.
+ *                                   Specify nullptr if in doubt or not known, this will mean unused.
+ *
+ * \param [in] ctx                   An optional pointer to some context that will be passed to the
+ *                                   `progress_callback()` function as it is.
+ *                                   Specify nullptr if in doubt or not known, this will mean unused.
+ *
+ * \param [out] result               An optional address of a \ref MDBX_defrag_result_t structure where the information
+ *                                   of defragmentation results will be provided.
+ *                                   Specify nullptr if in doubt or not known, this will mean a result is not needed.
+ *
+ * \returns A non-zero error value on failure and 0 on success, some possible errors are:
+ * \retval MDBX_EINVAL          An invalid parameter was specified.
+ * \retval MDBX_LAGGARD_READER  One or more readers use old MVCC-snapshots of data and thus
+ *                              do not allow defragmentation to be completed.
+ * \retval MDBX_RESULT_TRUE     It was not possible to complete defragmentation or achieve the goals
+ *                              specified by the parameters due to the given limits or other obstacles,
+ *                              that can be knew from the \ref MDBX_defrag_result_t structure. */
 LIBMDBX_API int mdbx_env_defrag(MDBX_env *env, size_t defrag_atleast, size_t time_atleast_16dot16, size_t defrag_enough,
                                 size_t time_limit_16dot16, intptr_t acceptable_backlash, intptr_t preferred_batch,
                                 MDBX_defrag_notify_func progress_callback, void *ctx, MDBX_defrag_result_t *result);
