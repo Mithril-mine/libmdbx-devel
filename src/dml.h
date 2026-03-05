@@ -8,7 +8,8 @@
 typedef struct defrag_arc {
   pgno_t key_or_pgno;
   pgno_t parent;
-  pgno_t mapped;
+  pgno_t mapped : 31;
+  bool engaged : 1;
   pgno_t npages : 31;
   bool gc : 1;
 } da_t;

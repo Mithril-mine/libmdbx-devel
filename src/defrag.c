@@ -643,14 +643,7 @@ __hot __noinline static unsigned defrag_move_cost(dfc_t *dfc, pgno_t pgno, pgno_
   if (!arc)
     return pnl_contains(dfc->txn->wr.repnl, pgno) ? 0 : INT_MAX;
   if (arc->mapped)
-    /* Необходимо допеределать:
-     *  - необходимо отличать страницы скопированные как родительские и перемещённые при формировании предыдущих
-     *    последовательностей в этом цикле дефрагментации;
-     *  - страницы скопированные как родительские можно и желательно использоваться для формирования
-     *    последовательностей, но при этом нельзя опираться на них дважды при формировании последовательностей.
-     *
-     * Пока просто пропускаем их. */
-    return INT_MAX;
+    return arc->engaged ? INT_MAX : 0;
 
   size_t npages = arc->npages;
   size_t cost = npages;
@@ -729,6 +722,7 @@ __hot static int defrag_provide_span(dfc_t *const dfc, const size_t npages) {
 
   /* Теперь сортируем вынутое из repnl и подготавливаем перемещение используемых страниц. */
   const size_t repnl_before = pnl_size(pnl);
+  size_t payoff = 0;
   for (pgno_t pgno = best_begin + npages; --pgno >= best_begin;) {
     if (!pnl_contains(dfc->temp, pgno)) {
       da_t *arc = dml_search_exact(dfc->arcs, pgno);
@@ -745,7 +739,11 @@ __hot static int defrag_provide_span(dfc_t *const dfc, const size_t npages) {
           pnl_sort(dfc->txn->wr.repnl, dfc->txn->geo.first_unallocated);
           return rc;
         }
+      } else {
+        assert(!arc->engaged);
+        payoff += 1;
       }
+      arc->engaged = 1;
     }
   }
 
@@ -757,8 +755,9 @@ __hot static int defrag_provide_span(dfc_t *const dfc, const size_t npages) {
   const size_t moves = repnl_before - pnl_size(pnl);
   VERBOSE("prepared lp-span %zu, at %zu, %zu moves, %zu repnl", npages, best_begin, moves, pnl_size(dfc->temp));
   assert(pnl_size(dfc->temp) <= npages);
-  assert(moves + pnl_size(dfc->temp) >= npages);
-  assert(moves || npages == pnl_size(dfc->temp));
+  assert(moves + payoff + pnl_size(dfc->temp) >= npages);
+  assert(moves + payoff || npages == pnl_size(dfc->temp));
+  (void)payoff;
   return MDBX_SUCCESS;
 }
 
@@ -860,6 +859,7 @@ int defrag_cycle(dfc_t *dfc) {
             dfc->lp_backlog = 0;
           r->key_or_pgno = r->mapped;
           r->mapped = 0;
+          r->engaged = 0;
         }
         *w = *r;
         const size_t npages = w->npages;
