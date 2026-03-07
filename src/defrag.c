@@ -5,8 +5,7 @@
 
 static uint64_t defrag_now(uint64_t now_cache) { return now_cache ? now_cache : osal_monotime(); }
 
-uint64_t defrag_result(dfc_t *dfc, MDBX_defrag_result_t *out,
-                       uint64_t now_cache) {
+uint64_t defrag_result(dfc_t *dfc, MDBX_defrag_result_t *out, uint64_t now_cache) {
   memset(out, 0, sizeof(*out));
   if (dfc->txn)
     dfc->last_allocated = dfc->txn->geo.first_unallocated;
@@ -635,7 +634,7 @@ bailout:
   return MDBX_RESULT_TRUE;
 }
 
-__hot __noinline static unsigned defrag_move_cost(dfc_t *dfc, pgno_t pgno, pgno_t span) {
+__hot __noinline static unsigned defrag_move_cost_uncached(dfc_t *dfc, pgno_t pgno, pgno_t span) {
   if (pgno < NUM_METAS || pgno >= dfc->retreat_edge)
     return INT_MAX;
 
@@ -662,6 +661,14 @@ __hot __noinline static unsigned defrag_move_cost(dfc_t *dfc, pgno_t pgno, pgno_
   return cost;
 }
 
+static inline unsigned defrag_move_cost(dfc_t *dfc, pgno_t pgno, pgno_t span) {
+  struct cache_item *cache = &dfc->cache_cost[pgno % ARRAY_LENGTH(dfc->cache_cost)];
+  if (cache->pgno == pgno)
+    return cache->cost;
+  cache->pgno = pgno;
+  return cache->cost = defrag_move_cost_uncached(dfc, pgno, span);
+}
+
 __hot static int defrag_provide_span(dfc_t *const dfc, const size_t npages) {
   assert(npages > 1);
   const pnl_t pnl = dfc->txn->wr.repnl;
@@ -670,6 +677,7 @@ __hot static int defrag_provide_span(dfc_t *const dfc, const size_t npages) {
   if (len < npages)
     return MDBX_RESULT_TRUE;
 
+  memset(dfc->cache_cost, 0, sizeof(dfc->cache_cost));
   size_t best_begin = MAX_PAGENO, best_cost = len;
 #if MDBX_PNL_ASCENDING
 #error "FIXME"

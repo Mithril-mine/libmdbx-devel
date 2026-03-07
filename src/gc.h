@@ -146,6 +146,10 @@ typedef struct defract_context {
 
   txnid_t stopor;
   struct gc_reclaiming_obstacle gc_obstacle;
+  struct cache_item {
+    pgno_t pgno;
+    unsigned cost;
+  } cache_cost[64];
 } dfc_t;
 
 MDBX_INTERNAL int defrag_init(dfc_t *dfc, MDBX_txn *txn, size_t defrag_atleast_pages,
