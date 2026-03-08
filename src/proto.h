@@ -76,6 +76,7 @@ MDBX_INTERNAL int txn_nested_create(MDBX_txn *parent, bool readonly);
 MDBX_INTERNAL int txn_nested_abort(MDBX_txn *txn);
 MDBX_INTERNAL int txn_nested_commit(MDBX_txn *txn, struct commit_timestamp *ts);
 MDBX_INTERNAL int txn_nested_checkpoint(MDBX_txn *txn, struct commit_timestamp *ts);
+MDBX_INTERNAL int txn_nested_rollback(MDBX_txn *txn);
 MDBX_INTERNAL MDBX_txn *txn_nested_fakero_begin(MDBX_txn *parent);
 MDBX_INTERNAL int txn_nested_fakero_end(MDBX_txn *txn);
 
@@ -86,6 +87,7 @@ MDBX_INTERNAL int txn_basal_commit(MDBX_txn *txn, struct commit_timestamp *ts);
 MDBX_INTERNAL int txn_basal_end(MDBX_txn *txn, bool unlock);
 MDBX_INTERNAL int txn_basal_checkpoint(MDBX_txn *txn, MDBX_txn_flags_t weakening_durability,
                                        struct commit_timestamp *ts);
+MDBX_INTERNAL int txn_basal_rollback(MDBX_txn *txn);
 MDBX_INTERNAL int txn_basal_update_tbl_roots(MDBX_txn *txn);
 
 MDBX_INTERNAL int txn_ro_park(MDBX_txn *txn, bool autounpark);

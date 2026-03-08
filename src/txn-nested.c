@@ -461,6 +461,7 @@ int txn_nested_create(MDBX_txn *parent, bool readonly) {
 
 static int nested_undo(MDBX_txn *nested) {
   tASSERT(nested, !nested->nested && !(nested->flags & MDBX_TXN_HAS_CHILD));
+  tASSERT(nested, rkl_empty(&nested->wr.gc.comeback));
   if (nested->flags & txn_may_have_cursors)
     txn_done_cursors(nested);
   if (nested->flags & MDBX_TXN_DIRTY)
@@ -542,6 +543,7 @@ static int nested_join(MDBX_txn *nested, struct commit_timestamp *ts) {
   eASSERT(env, txn_dpl_check(nested));
   tASSERT(nested, pnl_check_allocated(nested->wr.repnl, nested->geo.first_unallocated - MDBX_ENABLE_REFUND));
   tASSERT(nested, memcmp(&nested->wr.troika, &parent->wr.troika, sizeof(troika_t)) == 0);
+  tASSERT(nested, rkl_empty(&nested->wr.gc.comeback));
 
   //-------------------------------------------------------------------------
   // Preserve space for page lists in the parent transaction.
@@ -661,7 +663,7 @@ int txn_nested_commit(MDBX_txn *nested, struct commit_timestamp *ts) {
 int txn_nested_checkpoint(MDBX_txn *nested, struct commit_timestamp *ts) {
   MDBX_txn *parent = nested->parent;
   if (unlikely(!parent || parent->nested != nested || parent->env != nested->env)) {
-    ERROR("attempt to commit %s txn %p", "strange nested", __Wpedantic_format_voidptr(nested));
+    ERROR("attempt to %s %s txn %p", "commit", "strange nested", __Wpedantic_format_voidptr(nested));
     return MDBX_PROBLEM;
   }
 
@@ -695,4 +697,29 @@ int txn_nested_fakero_end(MDBX_txn *nested) {
   nested->userctx = nested->wr.preserve_parent_userctx;
   nested->flags -= txn_ro_nested;
   return MDBX_SUCCESS;
+}
+
+int txn_nested_rollback(MDBX_txn *nested) {
+  tASSERT(nested, nested->flags & txn_ro_nested);
+  tASSERT(nested, rkl_empty(&nested->wr.gc.comeback));
+  MDBX_txn *parent = nested->parent;
+  if (unlikely(!parent || parent->nested != nested || parent->env != nested->env)) {
+    ERROR("attempt to %s %s txn %p", "rollback", "strange nested", __Wpedantic_format_voidptr(nested));
+    return MDBX_PROBLEM;
+  }
+
+  if (unlikely(F_ISSET(nested->flags, txn_ro_nested | MDBX_TXN_DIRTY))) {
+    ERROR("unable to %s %s txn %p", "rollback", "dirty nested fake-readonly", __Wpedantic_format_voidptr(nested));
+    return MDBX_BAD_TXN;
+  }
+
+  const unsigned preserved_flags = nested->flags & txn_ro_nested;
+  int rc = nested_undo(nested);
+  if (likely(rc == MDBX_SUCCESS))
+    rc = nested_start(nested, parent);
+  if (likely(rc == MDBX_SUCCESS))
+    nested->flags |= preserved_flags;
+  else
+    txn_nested_abort(nested);
+  return rc;
 }

@@ -697,6 +697,28 @@ bailout:
   return LOG_IFERR(rc);
 }
 
+int mdbx_txn_rollback(MDBX_txn *txn) {
+  int rc = check_txn(txn, MDBX_TXN_BLOCKED - MDBX_TXN_ERROR - MDBX_TXN_PARKED);
+  if (unlikely(rc != MDBX_SUCCESS))
+    return LOG_IFERR(rc);
+
+  txn->flags |= /* avoid merge cursors' state */ MDBX_TXN_ERROR;
+  if (txn->flags & txn_may_have_cursors)
+    txn_done_cursors(txn);
+
+  if (likely(txn->flags & txn_ro_flat) == 0) {
+    if (!txn->parent)
+      return LOG_IFERR(txn_basal_rollback(txn));
+    else
+      return LOG_IFERR(txn_nested_rollback(txn));
+  }
+
+  rc = txn_ro_reset(txn);
+  if (unlikely(rc != MDBX_SUCCESS))
+    return LOG_IFERR(rc);
+  return LOG_IFERR(txn_ro_start(txn, false));
+}
+
 int mdbx_txn_amend(MDBX_txn *rtxn, MDBX_txn **ptxn, MDBX_txn_flags_t flags, void *context) {
   if (unlikely(!ptxn))
     return LOG_IFERR(MDBX_EINVAL);

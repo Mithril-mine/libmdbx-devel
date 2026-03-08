@@ -194,6 +194,17 @@ void testcase::db_close() {
   log_trace("<< db_close");
 }
 
+void testcase::txn_rollback() {
+  log_trace(">> txn_rollback()");
+  assert(txn_guard);
+
+  int rc = mdbx_txn_rollback(txn_guard.get());
+  if (unlikely(rc != MDBX_SUCCESS))
+    failure_perror("mdbx_txn_rollback()", rc);
+
+  log_trace("<< txn_rollback()");
+}
+
 void testcase::txn_begin(bool readonly, MDBX_txn_flags_t flags) {
   assert((flags & MDBX_TXN_RDONLY) == 0);
   log_trace(">> txn_begin(%s, 0x%04X)", readonly ? "read-only" : "read-write", flags);
@@ -223,6 +234,9 @@ void testcase::txn_begin(bool readonly, MDBX_txn_flags_t flags) {
 
   if (readonly && flipcoin_x2())
     txn_refresh();
+
+  if (!readonly && flipcoin_x2())
+    txn_rollback();
 }
 
 int testcase::checkpoint() {
@@ -634,7 +648,7 @@ void testcase::db_table_clear(MDBX_dbi handle, MDBX_txn *txn) {
 
 void testcase::db_table_close(MDBX_dbi handle) {
   log_trace(">> testcase::db_table_close, handle %u", handle);
-  assert(!txn_guard);
+  // assert(!txn_guard);
   int err = mdbx_dbi_close(db_guard.get(), handle);
   if (unlikely(err != MDBX_SUCCESS))
     failure_perror("mdbx_dbi_close()", err);

@@ -235,6 +235,7 @@ protected:
   void db_open();
   void db_close();
   virtual void txn_begin(bool readonly, MDBX_txn_flags_t flags = MDBX_TXN_READWRITE);
+  virtual void txn_rollback();
   int breakable_commit();
   virtual int checkpoint();
   virtual void txn_end(bool abort);

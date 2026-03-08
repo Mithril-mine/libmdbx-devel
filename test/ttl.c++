@@ -240,10 +240,13 @@ bool testcase_ttl::run() {
 bailout:
   if (!rc && err == MDBX_MAP_FULL && config.params.ignore_dbfull)
     rc = true;
-  txn_end(true);
+  if (flipcoin())
+    txn_rollback();
+  else
+    txn_end(true);
+
   if (dbi) {
     if (config.params.drop_table && !mode_readonly()) {
-      txn_begin(false);
       db_table_drop(dbi);
       err = breakable_commit();
       if (unlikely(err != MDBX_SUCCESS)) {

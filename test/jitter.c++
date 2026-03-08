@@ -82,10 +82,13 @@ bool testcase_jitter::run() {
       check_dbi_error(MDBX_BAD_DBI, "dropped-uncommitted");
       dbi = db_table_open(true);
       check_dbi_error(MDBX_SUCCESS, "recreated-uncommitted");
-      txn_end(true);
+      if (flipcoin()) {
+        txn_end(true);
+        // check after aborted txn
+        txn_begin(false);
+      } else
+        txn_rollback();
 
-      // check after aborted txn
-      txn_begin(false);
       v = {(void *)"v002", 4};
       err = mdbx_put(txn_guard.get(), dbi, &k, &v, MDBX_UPSERT);
       if (err != MDBX_BAD_DBI)

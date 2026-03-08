@@ -236,7 +236,10 @@ bool testcase_append::run() {
             read_checksum.value, inserted_checksum.value);
 
   cursor_close();
-  txn_end(true);
+  if (flipcoin())
+    txn_rollback();
+  else
+    txn_end(true);
   //----------------------------------------------------------------------------
 
   if (dbi) {

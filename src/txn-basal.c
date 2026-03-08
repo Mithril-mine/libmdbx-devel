@@ -479,3 +479,13 @@ int txn_basal_checkpoint(MDBX_txn *txn, MDBX_txn_flags_t weakening_durability, s
   int err = txn_basal_end(txn, true);
   return (err == MDBX_SUCCESS) ? rc : err;
 }
+
+int txn_basal_rollback(MDBX_txn *txn) {
+  const unsigned preserved_flags = txn->flags & txn_rw_begin_flags;
+  /* void *const preserved_context = txn->userctx; */
+  int rc = txn_basal_end(txn, false);
+  if (likely(rc == MDBX_SUCCESS))
+    /* txn->userctx = preserved_context; */
+    rc = txn_basal_start(txn, preserved_flags | txn_rw_already_locked);
+  return rc;
+}
