@@ -318,12 +318,14 @@ ctest: cmake-build
 run-ut: mdbx_example
 	$(QUIET)for UT in $^; do echo "  Running $$UT" && ./$${UT} || exit -1; done
 
-TEST_TARGETS := mdbx_legacy_example $(call select_by,MDBX_BUILD_CXX,mdbx_modern_example,)
-TEST_BUILD_TARGETS := build-test
+TEST_TARGETS :=
+TEST_BUILD_TARGETS :=
 ifneq ($(CMAKE),"")
 TEST_TARGETS += ctest
 TEST_BUILD_TARGETS += cmake-build
 endif
+TEST_TARGETS += mdbx_legacy_example $(call select_by,MDBX_BUILD_CXX,mdbx_modern_example,)
+TEST_BUILD_TARGETS += build-test
 #> dist-cutoff-begin
 TEST_TARGETS += test-stochastic
 TEST_BUILD_TARGETS += build-stochastic
