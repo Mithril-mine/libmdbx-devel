@@ -999,18 +999,17 @@ int page_split(MDBX_cursor *mc, const MDBX_val *const newkey, MDBX_val *const ne
 
   cASSERT(mc, !is_branch(mp) || newindx > 0);
   MDBX_val sepkey = {nullptr, 0};
-  /* It is reasonable and possible to split the page at the begin */
+  /* It is reasonable and possible to split the page at the begin? */
   if (unlikely(newindx < minkeys)) {
     split_indx = minkeys;
     if (newindx == 0 && !(naf & MDBX_SPLIT_REPLACE)) {
       split_indx = 0;
-      /* Checking for ability of splitting by the left-side insertion
-       * of a pure page with the new key */
-      for (intptr_t i = 0; i < mc->top; ++i)
+      /* Checking for ability of splitting by the left-side insertion of a pure page with the new key. */
+      for (intptr_t i = mc->top; --i >= 0;)
         if (mc->ki[i]) {
           sepkey = get_key(page_node(mc->pg[i], mc->ki[i]));
-          if (mc->clc->k.cmp(newkey, &sepkey) >= 0)
-            split_indx = minkeys;
+          eASSERT(env, mc->clc->k.cmp(newkey, &sepkey) >= 0);
+          split_indx = minkeys;
           break;
         }
       if (split_indx == 0) {
