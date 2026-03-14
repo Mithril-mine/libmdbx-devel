@@ -2303,9 +2303,9 @@ typedef enum MDBX_option {
    * the flush-to-disk.
    *
    * Basically for N chunks the latency/cost of write-through is:
-   *  latency = N * (emit + round-trip-to-storage + storage-execution);
+   *  latency = N * (emit_cost + round-trip-to-storage + storage-execution);
    * And for serie of lazy writes with flush is:
-   *  latency = N * (emit + storage-execution) + flush + round-trip-to-storage.
+   *  latency = N * (emit_cost + storage-execution) + flush_cost + round-trip-to-storage.
    *
    * So, for large N and/or noteable round-trip-to-storage the write+flush
    * approach is win. But for small N and/or near-zero NVMe-like latency
@@ -2369,7 +2369,7 @@ typedef enum MDBX_option {
    * \see MDBX_opt_merge_threshold */
   MDBX_opt_prefer_waf_insteadof_balance,
 
-  /** \brief Specifies, in % of a usual page, the maximum size of nested pages used to accommodate a small number of
+  /** \brief Specifies the maximum size of nested pages used to accommodate a small number of
    * multi-values associated with a single key.
    *
    * Using nested pages, instead of putting values on separate pages of a nested tree, allows to reduce the amount of
@@ -2379,16 +2379,18 @@ typedef enum MDBX_option {
    * increases the height of a main tree. In addition, changing data on nested pages requires additional copies, so the
    * cost may be higher in many scenarios.
    *
-   * min 12.5% (8192), max 100% (65535), default = 100% */
+   * The option value is specified in units of 1/65536 of the page size: minimal 0% (0), maximal 100% (65535),
+   * default is 100% (65355). */
   MDBX_opt_subpage_limit,
 
-  /** \brief Sets the minimum amount of free space on a leaf page in %, in the absence of which the nested pages are
+  /** \brief Sets the minimum amount of free space on a leaf page in the absence of which the nested pages are
    * placed in a separate tree.
    *
-   * min 0, max 100% (65535), default = 0 */
+   * The option value is specified in units of 1/65536 of the page size: minimal 0, maximal 100% (65535),
+   * default is 0. */
   MDBX_opt_subpage_room_threshold,
 
-  /** \brief Sets the minimum amount of free space on the main page in %, if available, to reserve space in the subpage.
+  /** \brief Sets the minimum amount of free space on the main page, if available, to reserve space in the subpage.
    *
    * If there is not enough free space on a leaf page, then the nested page will be the minimum size. In turn, if there
    * is no reserve in the nested page, each addition of elements to it will require the reform of a leaf page with
@@ -2398,12 +2400,14 @@ typedef enum MDBX_option {
    * as indexing. But it reduces the density of data placement, respectively, it increases the volume of databases and
    * I/O operations.
    *
-   * min 0, max 100% (65535), default = 42% (27525) */
+   * The option value is specified in units of 1/65536 of the page size: minimal 0, maximal 100% (65535),
+   * default is 42% (27525). */
   MDBX_opt_subpage_reserve_prereq,
 
-  /** \brief Sets, as a % of a usual page, the limit for reserving space on nested pages.
+  /** \brief Sets the limit for reserving space on nested pages.
    *
-   * min 0, max 100% (65535), default = 4.2% (2753) */
+   * The option value is specified in units of 1/65536 of the page size: minimal 0, maximal 100% (65535),
+   * default is 4.2% (2753). */
   MDBX_opt_subpage_reserve_limit
 } MDBX_option_t;
 
