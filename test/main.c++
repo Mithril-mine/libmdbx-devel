@@ -117,6 +117,7 @@ MDBX_NORETURN void usage(void) {
        "    nordahead      == MDBX_NORDAHEAD\n"
        "    nomeminit      == MDBX_NOMEMINIT\n"
        "  --random-writemap[=YES|no]    Toggle MDBX_WRITEMAP randomly\n"
+       "  --random-treeopts[=YES|no]    Choice randomly values of MDBX_options_t related to tree structure.\n"
        "Key-value space/table options:\n"
        "  --table={[+-]FLAG}[,[+-]FLAG]...\n"
        "    key.reverse  == MDBX_REVERSEKEY\n"
@@ -185,6 +186,7 @@ void actor_params::set_defaults(const std::string &tmpdir) {
   ignore_dbfull = false;
   speculum = false;
   random_writemap = true;
+  random_treeopts = true;
 
   max_readers = 42;
   max_tables = 42;
@@ -348,6 +350,8 @@ int main(int argc, char *const argv[]) {
     if (config::parse_option(argc, argv, narg, "mode", params.mode_flags, config::mode_bits))
       continue;
     if (config::parse_option(argc, argv, narg, "random-writemap", params.random_writemap))
+      continue;
+    if (config::parse_option(argc, argv, narg, "random-treeopts", params.random_treeopts))
       continue;
     if (config::parse_option(argc, argv, narg, "table", params.table_flags, config::table_bits)) {
       if ((params.table_flags & MDBX_DUPFIXED) == 0)

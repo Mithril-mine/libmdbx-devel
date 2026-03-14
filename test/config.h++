@@ -279,6 +279,7 @@ struct actor_params_pod {
   bool ignore_dbfull{false};
   bool speculum{false};
   bool random_writemap{true};
+  bool random_treeopts{true};
 
   uint64_t serial_base() const {
     // FIXME: TODO

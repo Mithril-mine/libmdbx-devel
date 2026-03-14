@@ -162,26 +162,88 @@ void testcase::db_open() {
   jitter_delay(true);
 
   MDBX_env_flags_t mode = config.params.mode_flags;
-  if (config.params.random_writemap && flipcoin())
-    mode ^= MDBX_WRITEMAP;
+  if (config.params.random_writemap) {
+    if (flipcoin())
+      mode ^= MDBX_WRITEMAP;
+    // MDBX_opt_writethrough_threshold MDBX_opt_prefault_write_enable
+  }
 
-  int rc = mdbx_env_open(db_guard.get(), config.params.pathname_db.c_str(), mode, 0640);
-  if (unlikely(rc != MDBX_SUCCESS))
-    failure_perror("mdbx_env_open()", rc);
+  int err = mdbx_env_open(db_guard.get(), config.params.pathname_db.c_str(), mode, 0640);
+  if (unlikely(err != MDBX_SUCCESS))
+    failure_perror("mdbx_env_open()", err);
 
   unsigned env_flags_proxy;
-  rc = mdbx_env_get_flags(db_guard.get(), &env_flags_proxy);
-  if (unlikely(rc != MDBX_SUCCESS))
-    failure_perror("mdbx_env_get_flags()", rc);
+  err = mdbx_env_get_flags(db_guard.get(), &env_flags_proxy);
+  if (unlikely(err != MDBX_SUCCESS))
+    failure_perror("mdbx_env_get_flags()", err);
   actual_env_mode = MDBX_env_flags_t(env_flags_proxy);
 
-  rc = mdbx_env_set_syncperiod(db_guard.get(), unsigned(0.042 * 65536));
-  if (unlikely(rc != MDBX_SUCCESS) && rc != MDBX_BUSY)
-    failure_perror("mdbx_env_set_syncperiod()", rc);
+  err = mdbx_env_set_syncperiod(db_guard.get(), unsigned(0.042 * 65536));
+  if (unlikely(err != MDBX_SUCCESS) && err != MDBX_BUSY)
+    failure_perror("mdbx_env_set_syncperiod()", err);
 
-  rc = mdbx_env_set_syncbytes(db_guard.get(), INT_MAX / 421);
-  if (unlikely(rc != MDBX_SUCCESS) && rc != MDBX_BUSY)
-    failure_perror("mdbx_env_set_syncbytes()", rc);
+  err = mdbx_env_set_syncbytes(db_guard.get(), INT_MAX / 421);
+  if (unlikely(err != MDBX_SUCCESS) && err != MDBX_BUSY)
+    failure_perror("mdbx_env_set_syncbytes()", err);
+
+
+  if (config.params.random_treeopts) {
+    bool prefer_waf_insteadof_balance = flipcoin();
+    log_verbose("prefer-waf-insteadof-balance: %s\n", prefer_waf_insteadof_balance ? "Yes" : "No");
+    err = mdbx_env_set_option(db_guard.get(), MDBX_opt_prefer_waf_insteadof_balance, prefer_waf_insteadof_balance);
+    if (unlikely(err != MDBX_SUCCESS))
+      failure_perror("mdbx_env_set_option(MDBX_opt_prefer_waf_insteadof_balance)", err);
+    if (flipcoin()) {
+      unsigned merge_threshold = prng32_range(8192, 32768 + 1);
+      log_verbose("merge-threshold: %u\n", merge_threshold);
+      err = mdbx_env_set_option(db_guard.get(), MDBX_opt_merge_threshold, merge_threshold);
+      if (unlikely(err != MDBX_SUCCESS))
+        failure_perror("mdbx_env_set_option(MDBX_opt_merge_threshold)", err);
+    }
+    if (flipcoin()) {
+      unsigned split_reserve = prng32_range(0, 32768 + 1);
+      log_verbose("split-reserve: %u\n", split_reserve);
+      err = mdbx_env_set_option(db_guard.get(), MDBX_opt_split_reserve, split_reserve);
+      if (unlikely(err != MDBX_SUCCESS))
+        failure_perror("mdbx_env_set_option(MDBX_opt_split_reserve)", err);
+    }
+
+    if (flipcoin()) {
+      unsigned subpage_limit = prng32_range(0, 65535 + 1);
+      log_verbose("subpage-limit: %u\n", subpage_limit);
+      err = mdbx_env_set_option(db_guard.get(), MDBX_opt_subpage_limit, subpage_limit);
+      if (unlikely(err != MDBX_SUCCESS))
+        failure_perror("mdbx_env_set_option(MDBX_opt_subpage_limit)", err);
+    }
+    if (flipcoin()) {
+      unsigned subpage_room_threshold = prng32_range(0, 65535 + 1);
+      log_verbose("subpage-room-threshold: %u\n", subpage_room_threshold);
+      err = mdbx_env_set_option(db_guard.get(), MDBX_opt_subpage_room_threshold, subpage_room_threshold);
+      if (unlikely(err != MDBX_SUCCESS))
+        failure_perror("mdbx_env_set_option(MDBX_opt_subpage_room_threshold)", err);
+    }
+    if (flipcoin()) {
+      unsigned subpage_reserve_prereq = prng32_range(0, 65535 + 1);
+      log_verbose("subpage-reserve-prereq: %u\n", subpage_reserve_prereq);
+      err = mdbx_env_set_option(db_guard.get(), MDBX_opt_subpage_reserve_prereq, subpage_reserve_prereq);
+      if (unlikely(err != MDBX_SUCCESS))
+        failure_perror("mdbx_env_set_option(MDBX_opt_subpage_reserve_prereq)", err);
+    }
+    if (flipcoin()) {
+      unsigned subpage_reserve_limit = prng32_range(0, 65535 + 1);
+      log_verbose("subpage-reserve-limit: %u\n", subpage_reserve_limit);
+      err = mdbx_env_set_option(db_guard.get(), MDBX_opt_subpage_reserve_limit, subpage_reserve_limit);
+      if (unlikely(err != MDBX_SUCCESS))
+        failure_perror("mdbx_env_set_option(MDBX_opt_subpage_reserve_limit)", err);
+    }
+    // if (flipcoin()) {
+    //   unsigned xxx = prng32_range(0, 65535 + 1);
+    //   log_verbose("xxx: %u\n", xxx);
+    //   err = mdbx_env_set_option(db_guard.get(), MDBX_opt_xxx, xxx);
+    //   if (unlikely(err != MDBX_SUCCESS))
+    //     failure_perror("mdbx_env_set_option(MDBX_opt_xxx)", err);
+    // }
+  }
 
   log_trace("<< db_open");
 }

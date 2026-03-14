@@ -194,6 +194,9 @@ void prng_salt(unsigned salt);
 uint32_t prng32(void);
 uint64_t prng64(void);
 void prng_fill(void *ptr, size_t bytes);
+inline uint32_t prng32_range(unsigned minimal, unsigned miximal) {
+  return (minimal < miximal) ? minimal + prng32() % (miximal - minimal) : miximal;
+}
 
 bool flipcoin();
 bool flipcoin_x2();

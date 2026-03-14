@@ -416,6 +416,7 @@ void dump(const char *title) {
 
     dump_verbs("mode", i->params.mode_flags, mode_bits);
     log_verbose("random-writemap: %s\n", i->params.random_writemap ? "Yes" : "No");
+    log_verbose("random-treeopts: %s\n", i->params.random_treeopts ? "Yes" : "No");
     dump_verbs("table", i->params.table_flags, table_bits);
 
     if (i->params.test_nops)
