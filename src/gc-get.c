@@ -48,9 +48,9 @@ static bool mincore_fetch(MDBX_env *const env, const size_t unit_begin) {
     pages = length >> globals.sys_pagesize_ln2;
   }
 
-#if MDBX_ENABLE_PGOP_STAT
-  env->lck->pgops.mincore.weak += 1;
-#endif /* MDBX_ENABLE_PGOP_STAT */
+  if (MDBX_ENABLE_PGOP_STAT)
+    env->lck->pgops.mincore.weak += 1;
+
   uint8_t *const vector = alloca(pages);
   if (unlikely(mincore(ptr_disp(env->dxb_mmap.base, offset), length, (void *)vector))) {
     NOTICE("mincore(+%zu, %zu), err %d", offset, length, errno);
@@ -792,9 +792,8 @@ static inline pgr_t page_alloc_finalize(MDBX_env *const env, MDBX_txn *const txn
       if (likely(num == 1)) {
         if (!env_is_page_incore(env, pgno)) {
           osal_pwrite(env->lazy_fd, pattern, env->ps, file_offset);
-#if MDBX_ENABLE_PGOP_STAT
-          env->lck->pgops.prefault.weak += 1;
-#endif /* MDBX_ENABLE_PGOP_STAT */
+          if (MDBX_ENABLE_PGOP_STAT)
+            env->lck->pgops.prefault.weak += 1;
           need_clean = false;
         }
       } else {
@@ -807,9 +806,8 @@ static inline pgr_t page_alloc_finalize(MDBX_env *const env, MDBX_txn *const txn
             iov[n].iov_base = pattern;
             if (unlikely(++n == MDBX_AUXILARY_IOV_MAX)) {
               osal_pwritev(env->lazy_fd, iov, MDBX_AUXILARY_IOV_MAX, file_offset);
-#if MDBX_ENABLE_PGOP_STAT
-              env->lck->pgops.prefault.weak += 1;
-#endif /* MDBX_ENABLE_PGOP_STAT */
+              if (MDBX_ENABLE_PGOP_STAT)
+                env->lck->pgops.prefault.weak += 1;
               file_offset += pgno2bytes(env, MDBX_AUXILARY_IOV_MAX);
               n = 0;
             }
@@ -817,9 +815,8 @@ static inline pgr_t page_alloc_finalize(MDBX_env *const env, MDBX_txn *const txn
         }
         if (likely(n > 0)) {
           osal_pwritev(env->lazy_fd, iov, n, file_offset);
-#if MDBX_ENABLE_PGOP_STAT
-          env->lck->pgops.prefault.weak += 1;
-#endif /* MDBX_ENABLE_PGOP_STAT */
+          if (MDBX_ENABLE_PGOP_STAT)
+            env->lck->pgops.prefault.weak += 1;
         }
         if (cleared == num)
           need_clean = false;

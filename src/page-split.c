@@ -552,9 +552,8 @@ done:
       if (!(node_flags(node) & N_BIG))
         newdata->iov_base = node_data(node);
     }
-#if MDBX_ENABLE_PGOP_STAT
-    env->lck->pgops.split.weak += 1;
-#endif /* MDBX_ENABLE_PGOP_STAT */
+    if (MDBX_ENABLE_PGOP_STAT)
+      env->lck->pgops.split.weak += 1;
   } else {
     mc->txn->flags |= MDBX_TXN_ERROR;
     be_poor(mc);

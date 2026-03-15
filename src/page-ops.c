@@ -22,10 +22,8 @@ pgr_t page_new(MDBX_cursor *mc, const unsigned flags) {
   ret.page->flags = (uint16_t)flags;
   cASSERT(mc, *cursor_dbi_state(mc) & DBI_DIRTY);
   cASSERT(mc, mc->txn->flags & MDBX_TXN_DIRTY);
-#if MDBX_ENABLE_PGOP_STAT
-  mc->txn->env->lck->pgops.newly.weak += 1;
-#endif /* MDBX_ENABLE_PGOP_STAT */
-
+  if (MDBX_ENABLE_PGOP_STAT)
+    mc->txn->env->lck->pgops.newly.weak += 1;
   STATIC_ASSERT(P_BRANCH == 1);
   const unsigned is_branch = flags & P_BRANCH;
 
@@ -50,10 +48,8 @@ pgr_t page_new_large(MDBX_cursor *mc, const size_t npages) {
   ret.page->flags = P_LARGE;
   cASSERT(mc, *cursor_dbi_state(mc) & DBI_DIRTY);
   cASSERT(mc, mc->txn->flags & MDBX_TXN_DIRTY);
-#if MDBX_ENABLE_PGOP_STAT
-  mc->txn->env->lck->pgops.newly.weak += npages;
-#endif /* MDBX_ENABLE_PGOP_STAT */
-
+  if (MDBX_ENABLE_PGOP_STAT)
+    mc->txn->env->lck->pgops.newly.weak += npages;
   mc->tree->large_pages += (pgno_t)npages;
   ret.page->pages = (pgno_t)npages;
   cASSERT(mc, !(mc->flags & z_inner));
@@ -127,9 +123,8 @@ __cold pgr_t __must_check_result page_unspill(MDBX_txn *const txn, const page_t 
     ret.err = page_dirty(txn, ret.page, npages);
     if (unlikely(ret.err != MDBX_SUCCESS))
       return ret;
-#if MDBX_ENABLE_PGOP_STAT
-    txn->env->lck->pgops.unspill.weak += npages;
-#endif /* MDBX_ENABLE_PGOP_STAT */
+    if (MDBX_ENABLE_PGOP_STAT)
+      txn->env->lck->pgops.unspill.weak += npages;
     ret.page->flags |= (scan == txn) ? 0 : P_SPILLED;
     ret.err = MDBX_SUCCESS;
     return ret;
@@ -153,9 +148,8 @@ __hot int page_touch_modifable(MDBX_txn *txn, const page_t *const mp) {
     tASSERT(txn, (txn->flags & MDBX_WRITEMAP));
     tASSERT(txn, n > 0 && n <= txn->wr.dirtylist->length + 1);
     VERBOSE("unspill page %" PRIaPGNO, mp->pgno);
-#if MDBX_ENABLE_PGOP_STAT
-    txn->env->lck->pgops.unspill.weak += 1;
-#endif /* MDBX_ENABLE_PGOP_STAT */
+    if (MDBX_ENABLE_PGOP_STAT)
+      txn->env->lck->pgops.unspill.weak += 1;
     return page_dirty(txn, (page_t *)mp, 1);
   }
 
@@ -204,9 +198,8 @@ __hot int page_touch_unmodifable(MDBX_txn *txn, MDBX_cursor *mc, const page_t *c
       mc->tree->root = pgno;
     }
 
-#if MDBX_ENABLE_PGOP_STAT
-    txn->env->lck->pgops.cow.weak += 1;
-#endif /* MDBX_ENABLE_PGOP_STAT */
+    if (MDBX_ENABLE_PGOP_STAT)
+      txn->env->lck->pgops.cow.weak += 1;
     page_copy(np, mp, txn->env->ps);
     np->pgno = pgno;
     np->txnid = txn->front_txnid;
@@ -244,9 +237,8 @@ __hot int page_touch_unmodifable(MDBX_txn *txn, MDBX_cursor *mc, const page_t *c
     if (unlikely(rc != MDBX_SUCCESS))
       goto fail;
 
-#if MDBX_ENABLE_PGOP_STAT
-    txn->env->lck->pgops.clone.weak += 1;
-#endif /* MDBX_ENABLE_PGOP_STAT */
+    if (MDBX_ENABLE_PGOP_STAT)
+      txn->env->lck->pgops.clone.weak += 1;
   }
 
 done:

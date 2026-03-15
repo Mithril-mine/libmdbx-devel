@@ -49,9 +49,8 @@ pnl_t spill_purge(MDBX_txn *txn) {
 
 static int spill_page(MDBX_txn *txn, iov_ctx_t *ctx, page_t *dp, const size_t npages) {
   tASSERT(txn, !(txn->flags & MDBX_WRITEMAP));
-#if MDBX_ENABLE_PGOP_STAT
-  txn->env->lck->pgops.spill.weak += npages;
-#endif /* MDBX_ENABLE_PGOP_STAT */
+  if (MDBX_ENABLE_PGOP_STAT)
+    txn->env->lck->pgops.spill.weak += npages;
   const pgno_t pgno = dp->pgno;
   int err = iov_page(txn, ctx, dp, npages);
   if (likely(err == MDBX_SUCCESS))

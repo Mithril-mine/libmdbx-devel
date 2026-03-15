@@ -1032,10 +1032,8 @@ __hot int cursor_put(MDBX_cursor *mc, const MDBX_val *key, MDBX_val *data, unsig
             err = page_dirty(mc->txn, lp.page = np, ovpages);
             if (unlikely(err != MDBX_SUCCESS))
               return err;
-
-#if MDBX_ENABLE_PGOP_STAT
-            mc->txn->env->lck->pgops.clone.weak += ovpages;
-#endif /* MDBX_ENABLE_PGOP_STAT */
+            if (MDBX_ENABLE_PGOP_STAT)
+              mc->txn->env->lck->pgops.clone.weak += ovpages;
             cASSERT(mc, txn_dpl_check(mc->txn));
           }
         }

@@ -131,9 +131,8 @@ static void iov_complete(iov_ctx_t *ctx) {
 int iov_write(iov_ctx_t *ctx) {
   eASSERT(ctx->env, !iov_empty(ctx));
   osal_ioring_write_result_t r = osal_ioring_write(ctx->ior, ctx->fd);
-#if MDBX_ENABLE_PGOP_STAT
-  ctx->env->lck->pgops.wops.weak += r.wops;
-#endif /* MDBX_ENABLE_PGOP_STAT */
+  if (MDBX_ENABLE_PGOP_STAT)
+    ctx->env->lck->pgops.wops.weak += r.wops;
   ctx->err = r.err;
   if (unlikely(ctx->err != MDBX_SUCCESS))
     ERROR("Write error: %s", mdbx_strerror(ctx->err));

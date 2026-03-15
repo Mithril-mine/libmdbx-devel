@@ -572,10 +572,8 @@ static int page_merge(MDBX_cursor *csrc, MDBX_cursor *cdst) {
 
   cASSERT(cdst, cdst->tree->items > 0);
   cASSERT(cdst, cdst->top + 1 <= cdst->tree->height);
-
-#if MDBX_ENABLE_PGOP_STAT
-  cdst->txn->env->lck->pgops.merge.weak += 1;
-#endif /* MDBX_ENABLE_PGOP_STAT */
+  if (MDBX_ENABLE_PGOP_STAT)
+    cdst->txn->env->lck->pgops.merge.weak += 1;
 
   if (is_leaf(cdst->pg[cdst->top])) {
     /* LY: don't touch cursor if top-page is a LEAF */

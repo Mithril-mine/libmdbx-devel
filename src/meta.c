@@ -218,9 +218,8 @@ static int meta_unsteady(MDBX_env *env, const txnid_t inclusive_upto, const pgno
     bytes = env->ps;
   }
 
-#if MDBX_ENABLE_PGOP_STAT
-  env->lck->pgops.wops.weak += 1;
-#endif /* MDBX_ENABLE_PGOP_STAT */
+  if (MDBX_ENABLE_PGOP_STAT)
+    env->lck->pgops.wops.weak += 1;
   int err = osal_pwrite(env->fd4meta, ptr, bytes, offset);
   return likely(err == MDBX_SUCCESS) ? MDBX_RESULT_TRUE : err;
 }
@@ -261,9 +260,8 @@ int meta_sync(const MDBX_env *env, const meta_ptr_t head) {
     if (!MDBX_AVOID_MSYNC)
       rc = dxb_msync(env, NUM_METAS, MDBX_SYNC_DATA | MDBX_SYNC_IODQ);
     else {
-#if MDBX_ENABLE_PGOP_STAT
-      env->lck->pgops.wops.weak += 1;
-#endif /* MDBX_ENABLE_PGOP_STAT */
+      if (MDBX_ENABLE_PGOP_STAT)
+        env->lck->pgops.wops.weak += 1;
       const page_t *page = payload2page(head.ptr_c);
       rc = osal_pwrite(env->fd4meta, page, env->ps, ptr_dist(page, env->dxb_mmap.base));
       if (likely(rc == MDBX_SUCCESS) && env->fd4meta == env->lazy_fd)
@@ -382,9 +380,8 @@ __cold int __must_check_result meta_override(MDBX_env *env, size_t target, txnid
   }
 
   if (env->flags & MDBX_WRITEMAP) {
-#if MDBX_ENABLE_PGOP_STAT
-    env->lck->pgops.msync.weak += 1;
-#endif /* MDBX_ENABLE_PGOP_STAT */
+    if (MDBX_ENABLE_PGOP_STAT)
+      env->lck->pgops.msync.weak += 1;
     rc = dxb_msync(env, model->geometry.first_unallocated, MDBX_SYNC_DATA | MDBX_SYNC_IODQ);
     if (unlikely(rc != MDBX_SUCCESS))
       return rc;
@@ -395,9 +392,8 @@ __cold int __must_check_result meta_override(MDBX_env *env, size_t target, txnid
     osal_flush_incoherent_cpu_writeback();
     rc = dxb_msync(env, target + 1, MDBX_SYNC_DATA | MDBX_SYNC_IODQ);
   } else {
-#if MDBX_ENABLE_PGOP_STAT
-    env->lck->pgops.wops.weak += 1;
-#endif /* MDBX_ENABLE_PGOP_STAT */
+    if (MDBX_ENABLE_PGOP_STAT)
+      env->lck->pgops.wops.weak += 1;
     rc = osal_pwrite(env->fd4meta, page, env->ps, pgno2bytes(env, target));
     if (rc == MDBX_SUCCESS && env->fd4meta == env->lazy_fd)
       rc = dxb_fsync(env, MDBX_SYNC_DATA | MDBX_SYNC_IODQ);

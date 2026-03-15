@@ -4,16 +4,14 @@
 #include "internals.h"
 
 int dxb_msync(const MDBX_env *env, size_t length_pages, enum osal_syncmode_bits mode_bits) {
-#if MDBX_ENABLE_PGOP_STAT
-  env->lck->pgops.msync.weak += (MDBX_MMAP_NEEDS_JOLT || mode_bits > MDBX_SYNC_NONE);
-#endif /* MDBX_ENABLE_PGOP_STAT */
+  if (MDBX_ENABLE_PGOP_STAT)
+    env->lck->pgops.msync.weak += (MDBX_MMAP_NEEDS_JOLT || mode_bits > MDBX_SYNC_NONE);
   return osal_msync(&env->dxb_mmap, pgno_ceil2sp_bytes(env, length_pages), mode_bits);
 }
 
 int dxb_fsync(const MDBX_env *env, enum osal_syncmode_bits mode_bits) {
-#if MDBX_ENABLE_PGOP_STAT
-  env->lck->pgops.fsync.weak += (mode_bits > MDBX_SYNC_NONE);
-#endif /* MDBX_ENABLE_PGOP_STAT */
+  if (MDBX_ENABLE_PGOP_STAT)
+    env->lck->pgops.fsync.weak += (mode_bits > MDBX_SYNC_NONE);
   return osal_fsync(env->lazy_fd, mode_bits);
 }
 
@@ -1246,9 +1244,8 @@ int dxb_sync_locked(MDBX_env *env, unsigned flags, meta_t *const pending, troika
         /* sync meta-pages */
         rc = dxb_msync(env, NUM_METAS, (flags & MDBX_NOMETASYNC) ? MDBX_SYNC_NONE : MDBX_SYNC_DATA | MDBX_SYNC_IODQ);
       else {
-#if MDBX_ENABLE_PGOP_STAT
-        env->lck->pgops.wops.weak += 1;
-#endif /* MDBX_ENABLE_PGOP_STAT */
+        if (MDBX_ENABLE_PGOP_STAT)
+          env->lck->pgops.wops.weak += 1;
         const page_t *page = payload2page(target);
         rc = osal_pwrite(env->fd4meta, page, env->ps, ptr_dist(page, env->dxb_mmap.base));
         if (likely(rc == MDBX_SUCCESS)) {
@@ -1261,9 +1258,8 @@ int dxb_sync_locked(MDBX_env *env, unsigned flags, meta_t *const pending, troika
         goto fail;
     }
   } else {
-#if MDBX_ENABLE_PGOP_STAT
-    env->lck->pgops.wops.weak += 1;
-#endif /* MDBX_ENABLE_PGOP_STAT */
+    if (MDBX_ENABLE_PGOP_STAT)
+      env->lck->pgops.wops.weak += 1;
     const meta_t undo_meta = *target;
     eASSERT(env, pending->trees.gc.flags == MDBX_INTEGERKEY);
     eASSERT(env, check_table_flags(pending->trees.main.flags));

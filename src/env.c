@@ -111,9 +111,7 @@ retry:;
 
   if (!txn_owned) {
     if (!should_unlock) {
-#if MDBX_ENABLE_PGOP_STAT
       unsigned wops = 0;
-#endif /* MDBX_ENABLE_PGOP_STAT */
 
       int err;
       /* pre-sync to avoid latency for writer */
@@ -142,9 +140,7 @@ retry:;
         if (unlikely(err != MDBX_SUCCESS))
           return err;
 
-#if MDBX_ENABLE_PGOP_STAT
         wops = 1;
-#endif /* MDBX_ENABLE_PGOP_STAT */
         /* pre-sync done */
         rc = MDBX_SUCCESS /* means "some data was synced" */;
       }
@@ -154,9 +150,8 @@ retry:;
         return err;
 
       should_unlock = true;
-#if MDBX_ENABLE_PGOP_STAT
-      env->lck->pgops.wops.weak += wops;
-#endif /* MDBX_ENABLE_PGOP_STAT */
+      if (MDBX_ENABLE_PGOP_STAT)
+        env->lck->pgops.wops.weak += wops;
       env->basal_txn->wr.troika = meta_tap(env);
       eASSERT(env, !env->txn && !env->basal_txn->nested);
       goto retry;

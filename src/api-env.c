@@ -806,7 +806,6 @@ __must_check_result static int env_info_snap(const MDBX_env *env, const MDBX_txn
   out->mi_bootid.current.y = globals.bootid.y;
   out->mi_mode = env->lck_mmap.lck ? lck->envmode.weak : env->flags;
 
-#if MDBX_ENABLE_PGOP_STAT
   out->mi_pgop_stat.newly = atomic_load64(&lck->pgops.newly, mo_Relaxed);
   out->mi_pgop_stat.cow = atomic_load64(&lck->pgops.cow, mo_Relaxed);
   out->mi_pgop_stat.clone = atomic_load64(&lck->pgops.clone, mo_Relaxed);
@@ -819,9 +818,6 @@ __must_check_result static int env_info_snap(const MDBX_env *env, const MDBX_txn
   out->mi_pgop_stat.mincore = atomic_load64(&lck->pgops.mincore, mo_Relaxed);
   out->mi_pgop_stat.msync = atomic_load64(&lck->pgops.msync, mo_Relaxed);
   out->mi_pgop_stat.fsync = atomic_load64(&lck->pgops.fsync, mo_Relaxed);
-#else
-  memset(&out->mi_pgop_stat, 0, sizeof(out->mi_pgop_stat));
-#endif /* MDBX_ENABLE_PGOP_STAT*/
 
   txnid_t overall_latter_reader_txnid = out->mi_recent_txnid;
   txnid_t self_latter_reader_txnid = overall_latter_reader_txnid;
