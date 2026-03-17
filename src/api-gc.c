@@ -48,8 +48,8 @@ __cold int mdbx_gc_info(MDBX_txn *txn, MDBX_gc_info_t *info, size_t bytes, MDBX_
   MDBX_val gc_key, gc_data;
   rc = outer_first(&cx.outer, &gc_key, &gc_data);
   if (rc == MDBX_SUCCESS) {
-    cx.inner.cursor.next = txn->cursors[FREE_DBI];
-    txn->cursors[FREE_DBI] = &cx.inner.cursor;
+    cx.outer.next = txn->cursors[FREE_DBI];
+    txn->cursors[FREE_DBI] = &cx.outer;
     for (;;) {
       if (unlikely(gc_check_keylen(gc_key.iov_len))) {
         ERROR("%s/%d: %s", "corrupted GC-record", rc = MDBX_CORRUPTED, gc_check_keylen(gc_key.iov_len));
