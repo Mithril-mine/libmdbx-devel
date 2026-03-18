@@ -102,7 +102,7 @@ __cold int dxb_read_header(MDBX_env *env, meta_t *dest, const int lck_exclusive,
   if (dest->pagesize == 0 ||
       (env->stuck_meta < 0 && !(meta_is_steady(dest) || meta_weak_acceptable(env, dest, lck_exclusive)))) {
     ERROR("%s", "no usable meta-pages, database is corrupted");
-    if (rc == MDBX_SUCCESS) {
+    if (!MDBX_IS_ERROR(rc)) {
       /* TODO: try to restore the database by fully checking b-tree structure
        * for the each meta page, if the corresponding option was given */
       return MDBX_CORRUPTED;
