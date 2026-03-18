@@ -79,8 +79,8 @@ bool defrag_should_continue(dfc_t *dfc, size_t progress_increment) {
   if (dfc->defrag_atleast < (dfc->txn ? dfc->txn->geo.first_unallocated : dfc->before_defrag))
     return defrag_progcess(dfc, progress_increment, now_cache);
 
-  if (dfc->defrag_enough > (dfc->txn ? dfc->txn->geo.first_unallocated : dfc->before_defrag)) {
-    if (dfc->wallclock_atleast && (now_cache = defrag_now(now_cache)) >= dfc->wallclock_atleast) {
+  if (dfc->defrag_enough >= (dfc->txn ? dfc->txn->geo.first_unallocated : dfc->before_defrag)) {
+    if (!dfc->wallclock_atleast || (now_cache = defrag_now(now_cache)) >= dfc->wallclock_atleast) {
       dfc->stopping_reasons |= MDBX_defrag_enough_theshold;
       return false;
     }
@@ -635,7 +635,7 @@ bailout:
 }
 
 __hot __noinline static unsigned defrag_move_cost_uncached(dfc_t *dfc, pgno_t pgno, pgno_t span) {
-  if (pgno < NUM_METAS || pgno >= dfc->retreat_edge)
+  if (pgno < NUM_METAS || pgno + span >= dfc->retreat_edge)
     return INT_MAX;
 
   da_t *arc = dml_search_exact(dfc->arcs, pgno);
@@ -963,7 +963,7 @@ int defrag_cycle(dfc_t *dfc) {
   }
 
   for (da_t *i = begin;
-       i != end && i->key_or_pgno > dfc->retreat_edge && dfc->cycle_pages_scheduled < dfc->move_batch_size && !lp;
+       i != end && i->key_or_pgno >= dfc->retreat_edge && dfc->cycle_pages_scheduled < dfc->move_batch_size && !lp;
        ++i) {
     if (i->key_or_pgno < dfc->remapped_edge) {
       defrag_stumble(dfc, i,
