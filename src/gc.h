@@ -110,6 +110,7 @@ typedef struct defract_context {
   dml_t *arcs;
   pnl_t lp_reserve;
   pnl_t temp;
+  pgno_t cycle_preprogress;
   pgno_t cycle_pages_scheduled;
   pgno_t cycle_pages_moved;
   pgno_t stumble_pgno, stumble_span, lp_backlog;
@@ -123,12 +124,12 @@ typedef struct defract_context {
   uint8_t stumble_retry;
   uint8_t stopping_reasons;
   unsigned cycle;
-  size_t total_pages_moved;
-  size_t payload_pages;
+  pgno_t payload_pages;
   pgno_t largepage_max, largepage_amountleft, largepage_count;
   pgno_t summary_depth;
   void *user_ctx;
   MDBX_defrag_notify_func user_callback;
+  size_t total_pages_moved;
 
   pgno_t walk_stack[32];
   pgno_t walk_cutoff;
@@ -157,6 +158,15 @@ MDBX_INTERNAL int defrag_init(dfc_t *dfc, MDBX_txn *txn, size_t defrag_atleast_p
                               size_t limit_spend_wallclock_16dot16, intptr_t preferred_move_batch_size);
 MDBX_INTERNAL void defrag_destroy(dfc_t *dfc);
 MDBX_INTERNAL int defrag_cycle(dfc_t *dfc);
-MDBX_INTERNAL bool defrag_should_continue(dfc_t *dfc, size_t progress_increment);
+MDBX_INTERNAL void defrag_milestone(dfc_t *dfc);
+
+MDBX_MAYBE_UNUSED static inline bool defrag_discontinued(const dfc_t *dfc) {
+  return dfc->stopping_reasons >= MDBX_defrag_discontinued;
+}
+
+MDBX_MAYBE_UNUSED static inline bool defrag_aborted(const dfc_t *dfc) {
+  return dfc->stopping_reasons >= MDBX_defrag_aborted;
+}
+
 MDBX_INTERNAL uint64_t defrag_score(dfc_t *dfc, size_t allocated_pages);
 MDBX_INTERNAL uint64_t defrag_result(dfc_t *dfc, MDBX_defrag_result_t *out, uint64_t now_cache);

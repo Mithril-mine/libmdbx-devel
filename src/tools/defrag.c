@@ -105,7 +105,7 @@ static void defrag_report_progress(const MDBX_defrag_result_t *progress, unsigne
       putchar('.');
     if (is_console && dots) {
       static char вертушка[] = "\\|/-\\|/-";
-      putchar(вертушка[(progress->spent_time_16dot16 >> 13) % (ARRAY_LENGTH(вертушка) - 1)]);
+      putchar(вертушка[(progress->spent_time_dot16 >> 13) % (ARRAY_LENGTH(вертушка) - 1)]);
       putchar('\b');
     }
     fflush(nullptr);
@@ -115,7 +115,7 @@ static void defrag_report_progress(const MDBX_defrag_result_t *progress, unsigne
 static const char *stop_reason(const MDBX_defrag_result_t *progress) {
   if (progress->stopping_reasons & MDBX_defrag_error)
     return "error";
-  if (progress->stopping_reasons & MDBX_defrag_user_break)
+  if (progress->stopping_reasons & (MDBX_defrag_discontinued | MDBX_defrag_aborted))
     return "user break";
   if (progress->stopping_reasons & MDBX_defrag_laggard_reader)
     return "laggard reader";
@@ -133,7 +133,7 @@ static int defrag_notify(void *ctx, const MDBX_defrag_result_t *progress) {
   if (!quiet) {
     static MDBX_defrag_result_t last_progress = {.cycles = UINT32_MAX};
     static uint32_t last_report_spenttime;
-    bool tick = progress->spent_time_16dot16 - last_report_spenttime > 65536 / 8;
+    bool tick = progress->spent_time_dot16 - last_report_spenttime > 65536 / 8;
     if (!ctx || last_progress.cycles != progress->cycles) {
       if (progress_dots) {
         if (last_progress.cycles == progress->cycles)
@@ -147,7 +147,7 @@ static int defrag_notify(void *ctx, const MDBX_defrag_result_t *progress) {
     }
 
     if (ctx && tick) {
-      last_report_spenttime = progress->spent_time_16dot16;
+      last_report_spenttime = progress->spent_time_dot16;
       defrag_report_progress(progress, progress_dots++);
     }
     last_progress = *progress;
@@ -269,7 +269,7 @@ int main(int argc, char *argv[]) {
       if (result.stopping_reasons)
         printf(", stopping reasons bits 0x%x", result.stopping_reasons);
       printf(", took %s seconds, %s\n",
-             mdbx_ratio2digits(result.spent_time_16dot16, 65536, 3, took_buffer, sizeof(took_buffer)),
+             mdbx_ratio2digits(result.spent_time_dot16, 65536, 3, took_buffer, sizeof(took_buffer)),
              stop_reason(&result));
     }
   }

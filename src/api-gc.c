@@ -96,14 +96,14 @@ __cold int mdbx_gc_info(MDBX_txn *txn, MDBX_gc_info_t *info, size_t bytes, MDBX_
   return LOG_IFERR(rc);
 }
 
-__cold int mdbx_env_defrag(MDBX_env *env, size_t defrag_atleast, size_t time_atleast_16dot16, size_t defrag_enough,
-                           size_t time_limit_16dot16, intptr_t acceptable_backlash, intptr_t preferred_batch,
+__cold int mdbx_env_defrag(MDBX_env *env, size_t defrag_atleast, size_t time_atleast_dot16, size_t defrag_enough,
+                           size_t time_limit_dot16, intptr_t acceptable_backlash, intptr_t preferred_batch,
                            MDBX_defrag_notify_func progress_callback, void *ctx, MDBX_defrag_result_t *result) {
   if (result)
     memset(result, 0, sizeof(*result));
   if (unlikely(defrag_enough < defrag_atleast) && defrag_enough)
     return LOG_IFERR(MDBX_EINVAL);
-  if (unlikely(time_limit_16dot16 < time_atleast_16dot16) && time_limit_16dot16)
+  if (unlikely(time_limit_dot16 < time_atleast_dot16) && time_limit_dot16)
     return LOG_IFERR(MDBX_EINVAL);
   if (unlikely(!progress_callback && ctx))
     return LOG_IFERR(MDBX_EINVAL);
@@ -137,17 +137,14 @@ __cold int mdbx_env_defrag(MDBX_env *env, size_t defrag_atleast, size_t time_atl
     acceptable_backlash = ((size_t)acceptable_backlash < txn->env->maxgc_large1page) ? (size_t)acceptable_backlash
                                                                                      : txn->env->maxgc_large1page;
 
-  rc = defrag_init(&dfc, txn, defrag_atleast, time_atleast_16dot16, defrag_enough, time_limit_16dot16, preferred_batch);
+  rc = defrag_init(&dfc, txn, defrag_atleast, time_atleast_dot16, defrag_enough, time_limit_dot16, preferred_batch);
   if (unlikely(rc != MDBX_SUCCESS))
     return LOG_IFERR(rc);
 
   dfc.user_ctx = ctx;
   dfc.user_callback = progress_callback;
 
-  while ((size_t)acceptable_backlash + dfc.payload_pages < txn->geo.first_unallocated) {
-    if (!defrag_should_continue(&dfc, 0))
-      goto skip;
-
+  while ((size_t)acceptable_backlash + dfc.payload_pages < txn->geo.first_unallocated && !defrag_discontinued(&dfc)) {
     const pgno_t prev_stumble = dfc.stumble_pgno;
     rc = defrag_cycle(&dfc);
 
@@ -201,8 +198,7 @@ __cold int mdbx_env_defrag(MDBX_env *env, size_t defrag_atleast, size_t time_atl
     rc = (err != MDBX_SUCCESS && !MDBX_IS_ERROR(rc)) ? err : rc;
   }
 
-  defrag_should_continue(&dfc, 0);
-skip:
+  defrag_milestone(&dfc);
 
   if (result) {
     defrag_result(&dfc, result, 0);

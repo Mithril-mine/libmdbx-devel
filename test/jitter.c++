@@ -195,7 +195,7 @@ bool testcase_jitter::run() {
                    " took %s seconds\n",
                    (err == MDBX_SUCCESS) ? "done" : "incomplete", defrag_result.pages_shrinked, defrag_result.cycles,
                    defrag_result.pages_moved, defrag_result.stopping_reasons,
-                   mdbx_ratio2digits(defrag_result.spent_time_16dot16, 65536, 3, took_buffer, sizeof(took_buffer)));
+                   mdbx_ratio2digits(defrag_result.spent_time_dot16, 65536, 3, took_buffer, sizeof(took_buffer)));
     } else if (global::config::geometry_jitter) {
       err = mdbx_env_set_geometry(db_guard.get(), -1, -1, !coin4size ? upper_limit * 2 / 3 : upper_limit * 3 / 2, -1,
                                   -1, -1);
