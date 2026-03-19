@@ -487,20 +487,20 @@ __cold int meta_validate(MDBX_env *env, meta_t *const meta, const page_t *const 
     return MDBX_CORRUPTED;
   }
 
-  const uint64_t used_bytes = meta->geometry.first_unallocated * (uint64_t)meta->pagesize;
-  if (unlikely(used_bytes > env->dxb_mmap.filesize)) {
+  const uint64_t allocated_bytes = meta->geometry.first_unallocated * (uint64_t)meta->pagesize;
+  if (unlikely(allocated_bytes > env->dxb_mmap.filesize)) {
     /* Here could be a race with DB-shrinking performed by other process */
     int err = osal_filesize(env->lazy_fd, &env->dxb_mmap.filesize);
     if (unlikely(err != MDBX_SUCCESS))
       return err;
-    if (unlikely(used_bytes > env->dxb_mmap.filesize)) {
-      WARNING("meta[%u] used-bytes (%" PRIu64 ") beyond filesize (%" PRIu64 "), skip it", meta_number, used_bytes,
-              env->dxb_mmap.filesize);
+    if (unlikely(allocated_bytes > env->dxb_mmap.filesize)) {
+      WARNING("meta[%u] allocated-bytes (%" PRIu64 ") beyond filesize (%" PRIu64 "), skip it", meta_number,
+              allocated_bytes, env->dxb_mmap.filesize);
       return MDBX_CORRUPTED;
     }
   }
-  if (unlikely(meta->geometry.first_unallocated - 1 > MAX_PAGENO || used_bytes > MAX_MAPSIZE)) {
-    WARNING("meta[%u] has too large used-space (%" PRIu64 "), skip it", meta_number, used_bytes);
+  if (unlikely(meta->geometry.first_unallocated - 1 > MAX_PAGENO || allocated_bytes > MAX_MAPSIZE)) {
+    WARNING("meta[%u] has too large allocated-space (%" PRIu64 "), skip it", meta_number, allocated_bytes);
     return MDBX_TOO_LARGE;
   }
 
@@ -511,10 +511,10 @@ __cold int meta_validate(MDBX_env *env, meta_t *const meta, const page_t *const 
   STATIC_ASSERT((uint64_t)(MAX_PAGENO + 1) * MDBX_MIN_PAGESIZE % (4ul << 20) == 0);
   if (unlikely(mapsize_min < MIN_MAPSIZE || mapsize_min > MAX_MAPSIZE)) {
     if (MAX_MAPSIZE != MAX_MAPSIZE64 && mapsize_min > MAX_MAPSIZE && mapsize_min <= MAX_MAPSIZE64) {
-      eASSERT(env, meta->geometry.first_unallocated - 1 <= MAX_PAGENO && used_bytes <= MAX_MAPSIZE);
+      eASSERT(env, meta->geometry.first_unallocated - 1 <= MAX_PAGENO && allocated_bytes <= MAX_MAPSIZE);
       WARNING("meta[%u] has too large min-mapsize (%" PRIu64 "), "
-              "but size of used space still acceptable (%" PRIu64 ")",
-              meta_number, mapsize_min, used_bytes);
+              "but size of allocated space still acceptable (%" PRIu64 ")",
+              meta_number, mapsize_min, allocated_bytes);
       geo_lower = (pgno_t)((mapsize_min = MAX_MAPSIZE) / meta->pagesize);
       if (geo_lower > MAX_PAGENO + 1) {
         geo_lower = MAX_PAGENO + 1;
@@ -540,10 +540,10 @@ __cold int meta_validate(MDBX_env *env, meta_t *const meta, const page_t *const 
       return MDBX_VERSION_MISMATCH;
     }
     /* allow to open large DB from a 32-bit environment */
-    eASSERT(env, meta->geometry.first_unallocated - 1 <= MAX_PAGENO && used_bytes <= MAX_MAPSIZE);
+    eASSERT(env, meta->geometry.first_unallocated - 1 <= MAX_PAGENO && allocated_bytes <= MAX_MAPSIZE);
     WARNING("meta[%u] has too large max-mapsize (%" PRIu64 "), "
-            "but size of used space still acceptable (%" PRIu64 ")",
-            meta_number, mapsize_max, used_bytes);
+            "but size of allocated space still acceptable (%" PRIu64 ")",
+            meta_number, mapsize_max, allocated_bytes);
     geo_upper = (pgno_t)((mapsize_max = MAX_MAPSIZE) / meta->pagesize);
     if (geo_upper > MAX_PAGENO + 1) {
       geo_upper = MAX_PAGENO + 1;

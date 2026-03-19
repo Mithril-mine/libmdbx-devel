@@ -125,7 +125,7 @@ __cold int dxb_read_header(MDBX_env *env, meta_t *dest, const int lck_exclusive,
   return MDBX_SUCCESS;
 }
 
-__cold int dxb_resize(MDBX_env *const env, const pgno_t used_pgno, const pgno_t size_pgno, pgno_t limit_pgno,
+__cold int dxb_resize(MDBX_env *const env, const pgno_t allocated_pgno, const pgno_t size_pgno, pgno_t limit_pgno,
                       const enum resize_mode mode) {
   /* Acquire guard to avoid collision between read and write txns
    * around geo_in_bytes and dxb_mmap */
@@ -144,7 +144,7 @@ __cold int dxb_resize(MDBX_env *const env, const pgno_t used_pgno, const pgno_t 
   const size_t prev_limit = env->dxb_mmap.limit;
   const pgno_t prev_limit_pgno = bytes2pgno(env, prev_limit);
   eASSERT(env, limit_pgno >= size_pgno);
-  eASSERT(env, size_pgno >= used_pgno);
+  eASSERT(env, size_pgno >= allocated_pgno);
   if (mode < explicit_resize && size_pgno <= prev_limit_pgno) {
     /* The actual mapsize may be less since the geo.upper may be changed
      * by other process. Avoids remapping until it necessary. */
@@ -230,7 +230,7 @@ __cold int dxb_resize(MDBX_env *const env, const pgno_t used_pgno, const pgno_t 
   if (mresize_flags & (MDBX_MRESIZE_MAY_UNMAP | MDBX_MRESIZE_MAY_MOVE)) {
     env_clear_incore_cache(env);
     if ((env->flags & MDBX_WRITEMAP) && env->lck->unsynced_pages.weak) {
-      rc = dxb_msync(env, used_pgno, MDBX_SYNC_KICK);
+      rc = dxb_msync(env, allocated_pgno, MDBX_SYNC_KICK);
       if (unlikely(rc != MDBX_SUCCESS))
         goto bailout;
     }
@@ -579,8 +579,8 @@ __cold int dxb_setup(MDBX_env *env, const int lck_rc, const mdbx_mode_t mode_bit
   }
 
   size_t expected_filesize = 0;
-  const size_t used_bytes = pgno2bytes(env, header.geometry.first_unallocated);
-  const size_t used_aligned2os_bytes = ceil_powerof2(used_bytes, globals.sys_allocation_granularity);
+  const size_t allocated_bytes = pgno2bytes(env, header.geometry.first_unallocated);
+  const size_t allocated_aligned2os_bytes = ceil_powerof2(allocated_bytes, globals.sys_allocation_granularity);
   if ((env->flags & MDBX_RDONLY)    /* readonly */
       || lck_rc != MDBX_RESULT_TRUE /* not exclusive */
       || /* recovery mode */ env->stuck_meta >= 0) {
@@ -595,10 +595,10 @@ __cold int dxb_setup(MDBX_env *env, const int lck_rc, const mdbx_mode_t mode_bit
     }
   } else if (env->geo_in_bytes.now) {
     /* silently growth to last used page */
-    if (env->geo_in_bytes.now < used_aligned2os_bytes)
-      env->geo_in_bytes.now = used_aligned2os_bytes;
-    if (env->geo_in_bytes.upper < used_aligned2os_bytes)
-      env->geo_in_bytes.upper = used_aligned2os_bytes;
+    if (env->geo_in_bytes.now < allocated_aligned2os_bytes)
+      env->geo_in_bytes.now = allocated_aligned2os_bytes;
+    if (env->geo_in_bytes.upper < allocated_aligned2os_bytes)
+      env->geo_in_bytes.upper = allocated_aligned2os_bytes;
 
     /* apply preconfigured params, but only if substantial changes:
      *  - upper or lower limit changes
@@ -609,9 +609,9 @@ __cold int dxb_setup(MDBX_env *env, const int lck_rc, const mdbx_mode_t mode_bit
         bytes_ceil2os_bytes(env, env->geo_in_bytes.shrink) != pgno2bytes(env, pv2pages(header.geometry.shrink_pv)) ||
         bytes_ceil2os_bytes(env, env->geo_in_bytes.grow) != pgno2bytes(env, pv2pages(header.geometry.grow_pv))) {
 
-      if (env->geo_in_bytes.shrink && env->geo_in_bytes.now > used_bytes)
+      if (env->geo_in_bytes.shrink && env->geo_in_bytes.now > allocated_bytes)
         /* pre-shrink if enabled */
-        env->geo_in_bytes.now = used_bytes + env->geo_in_bytes.shrink - used_bytes % env->geo_in_bytes.shrink;
+        env->geo_in_bytes.now = allocated_bytes + env->geo_in_bytes.shrink - allocated_bytes % env->geo_in_bytes.shrink;
 
       /* сейчас БД еще не открыта, поэтому этот вызов не изменит геометрию, но проверит и скорректирует параметры
        * с учетом реального размера страницы. */
@@ -649,7 +649,7 @@ __cold int dxb_setup(MDBX_env *env, const int lck_rc, const mdbx_mode_t mode_bit
     env->geo_in_bytes.shrink = pgno_ceil2os_bytes(env, pv2pages(header.geometry.shrink_pv));
   }
 
-  ENSURE(env, env->geo_in_bytes.now >= used_bytes);
+  ENSURE(env, env->geo_in_bytes.now >= allocated_bytes);
   if (!expected_filesize)
     expected_filesize = env->geo_in_bytes.now;
   const uint64_t filesize_before = env->dxb_mmap.filesize;
@@ -663,7 +663,7 @@ __cold int dxb_setup(MDBX_env *env, const int lck_rc, const mdbx_mode_t mode_bit
       if (filesize_before != expected_filesize)
         WARNING("filesize mismatch (expect %" PRIuSIZE "b/%" PRIaPGNO "p, have %" PRIu64 "b/%" PRIu64 "p)",
                 expected_filesize, bytes2pgno(env, expected_filesize), filesize_before, filesize_before >> env->ps2ln);
-      if (filesize_before < used_bytes) {
+      if (filesize_before < allocated_bytes) {
         ERROR("last-page beyond end-of-file (last %" PRIaPGNO ", have %" PRIaPGNO ")",
               header.geometry.first_unallocated, bytes2pgno(env, (size_t)filesize_before));
         return MDBX_CORRUPTED;
@@ -687,7 +687,7 @@ __cold int dxb_setup(MDBX_env *env, const int lck_rc, const mdbx_mode_t mode_bit
 
   /* calculate readahead hint before mmap with zero redundant pages */
   const bool readahead =
-      !(env->flags & MDBX_NORDAHEAD) && mdbx_is_readahead_reasonable(used_bytes, 0) == MDBX_RESULT_TRUE;
+      !(env->flags & MDBX_NORDAHEAD) && mdbx_is_readahead_reasonable(allocated_bytes, 0) == MDBX_RESULT_TRUE;
 
   err = osal_mmap(env->flags, &env->dxb_mmap, env->geo_in_bytes.now, env->geo_in_bytes.upper,
                   (lck_rc && env->stuck_meta < 0) ? MMAP_OPTION_SETLENGTH : 0, env->pathname.dxb);
@@ -714,11 +714,12 @@ __cold int dxb_setup(MDBX_env *env, const int lck_rc, const mdbx_mode_t mode_bit
   env->valgrind_handle = VALGRIND_CREATE_BLOCK(env->dxb_mmap.base, env->dxb_mmap.limit, "mdbx");
 #endif /* ENABLE_MEMCHECK */
 
-  eASSERT(env, used_bytes >= pgno2bytes(env, NUM_METAS) && used_bytes <= env->dxb_mmap.limit);
+  eASSERT(env, allocated_bytes >= pgno2bytes(env, NUM_METAS) && allocated_bytes <= env->dxb_mmap.limit);
 #if defined(ENABLE_MEMCHECK) || defined(__SANITIZE_ADDRESS__)
-  if (env->dxb_mmap.filesize > used_bytes && env->dxb_mmap.filesize < env->dxb_mmap.limit) {
-    VALGRIND_MAKE_MEM_NOACCESS(ptr_disp(env->dxb_mmap.base, used_bytes), env->dxb_mmap.filesize - used_bytes);
-    MDBX_ASAN_POISON_MEMORY_REGION(ptr_disp(env->dxb_mmap.base, used_bytes), env->dxb_mmap.filesize - used_bytes);
+  if (env->dxb_mmap.filesize > allocated_bytes && env->dxb_mmap.filesize < env->dxb_mmap.limit) {
+    VALGRIND_MAKE_MEM_NOACCESS(ptr_disp(env->dxb_mmap.base, allocated_bytes), env->dxb_mmap.filesize - allocated_bytes);
+    MDBX_ASAN_POISON_MEMORY_REGION(ptr_disp(env->dxb_mmap.base, allocated_bytes),
+                                   env->dxb_mmap.filesize - allocated_bytes);
   }
   env->poison_edge =
       bytes2pgno(env, (env->dxb_mmap.filesize < env->dxb_mmap.limit) ? env->dxb_mmap.filesize : env->dxb_mmap.limit);
@@ -852,7 +853,7 @@ __cold int dxb_setup(MDBX_env *env, const int lck_rc, const mdbx_mode_t mode_bit
   if (lck_rc == /* lck exclusive */ MDBX_RESULT_TRUE) {
     //-------------------------------------------------- shrink DB & update geo
     /* re-check size after mmap */
-    if (floor_powerof2(env->dxb_mmap.current, globals.sys_pagesize) < used_bytes) {
+    if (floor_powerof2(env->dxb_mmap.current, globals.sys_pagesize) < allocated_bytes) {
       ERROR("unacceptable/unexpected datafile size %" PRIuPTR, env->dxb_mmap.current);
       return MDBX_PROBLEM;
     }
@@ -906,7 +907,7 @@ __cold int dxb_setup(MDBX_env *env, const int lck_rc, const mdbx_mode_t mode_bit
       }
     }
 
-    atomic_store32(&env->lck->discarded_tail, bytes2pgno(env, used_aligned2os_bytes), mo_Relaxed);
+    atomic_store32(&env->lck->discarded_tail, bytes2pgno(env, allocated_aligned2os_bytes), mo_Relaxed);
 
     if ((env->flags & MDBX_RDONLY) == 0 && env->stuck_meta < 0 &&
         (globals.runtime_flags & MDBX_DBG_DONT_UPGRADE) == 0) {
@@ -935,14 +936,14 @@ __cold int dxb_setup(MDBX_env *env, const int lck_rc, const mdbx_mode_t mode_bit
   } /* lck exclusive, lck_rc == MDBX_RESULT_TRUE */
 
   //---------------------------------------------------- setup madvise/readahead
-  if (used_aligned2os_bytes < env->dxb_mmap.current) {
+  if (allocated_aligned2os_bytes < env->dxb_mmap.current) {
 #if defined(MADV_REMOVE)
     if (lck_rc && (env->flags & MDBX_WRITEMAP) != 0 &&
         /* not recovery mode */ env->stuck_meta < 0) {
       NOTICE("open-MADV_%s %u..%u", "REMOVE (deallocate file space)", env->lck->discarded_tail.weak,
              bytes2pgno(env, env->dxb_mmap.current));
-      err = madvise(ptr_disp(env->dxb_mmap.base, used_aligned2os_bytes), env->dxb_mmap.current - used_aligned2os_bytes,
-                    MADV_REMOVE)
+      err = madvise(ptr_disp(env->dxb_mmap.base, allocated_aligned2os_bytes),
+                    env->dxb_mmap.current - allocated_aligned2os_bytes, MADV_REMOVE)
                 ? ignore_enosys_and_eagain(errno)
                 : MDBX_SUCCESS;
       if (unlikely(MDBX_IS_ERROR(err)))
@@ -951,26 +952,26 @@ __cold int dxb_setup(MDBX_env *env, const int lck_rc, const mdbx_mode_t mode_bit
 #endif /* MADV_REMOVE */
 #if defined(MADV_DONTNEED)
     NOTICE("open-MADV_%s %u..%u", "DONTNEED", env->lck->discarded_tail.weak, bytes2pgno(env, env->dxb_mmap.current));
-    err = madvise(ptr_disp(env->dxb_mmap.base, used_aligned2os_bytes), env->dxb_mmap.current - used_aligned2os_bytes,
-                  MADV_DONTNEED)
+    err = madvise(ptr_disp(env->dxb_mmap.base, allocated_aligned2os_bytes),
+                  env->dxb_mmap.current - allocated_aligned2os_bytes, MADV_DONTNEED)
               ? ignore_enosys_and_eagain(errno)
               : MDBX_SUCCESS;
     if (unlikely(MDBX_IS_ERROR(err)))
       return err;
 #elif defined(POSIX_MADV_DONTNEED)
-    err = ignore_enosys(posix_madvise(ptr_disp(env->dxb_mmap.base, used_aligned2os_bytes),
-                                      env->dxb_mmap.current - used_aligned2os_bytes, POSIX_MADV_DONTNEED));
+    err = ignore_enosys(posix_madvise(ptr_disp(env->dxb_mmap.base, allocated_aligned2os_bytes),
+                                      env->dxb_mmap.current - allocated_aligned2os_bytes, POSIX_MADV_DONTNEED));
     if (unlikely(MDBX_IS_ERROR(err)))
       return err;
 #elif defined(POSIX_FADV_DONTNEED)
-    err = ignore_enosys(posix_fadvise(env->lazy_fd, used_aligned2os_bytes,
-                                      env->dxb_mmap.current - used_aligned2os_bytes, POSIX_FADV_DONTNEED));
+    err = ignore_enosys(posix_fadvise(env->lazy_fd, allocated_aligned2os_bytes,
+                                      env->dxb_mmap.current - allocated_aligned2os_bytes, POSIX_FADV_DONTNEED));
     if (unlikely(MDBX_IS_ERROR(err)))
       return err;
 #endif /* MADV_DONTNEED */
   }
 
-  err = dxb_set_readahead(env, bytes2pgno(env, used_bytes), readahead, true);
+  err = dxb_set_readahead(env, bytes2pgno(env, allocated_bytes), readahead, true);
   if (unlikely(err != MDBX_SUCCESS))
     return err;
 
