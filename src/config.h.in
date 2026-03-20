@@ -9,6 +9,8 @@
 #cmakedefine ENABLE_MEMCHECK
 #cmakedefine ENABLE_GPROF
 #cmakedefine ENABLE_GCOV
+#cmakedefine ENABLE_DTRACE
+#cmakedefine ENABLE_SYSTEMTAP
 #cmakedefine ENABLE_ASAN
 #cmakedefine ENABLE_UBSAN
 #cmakedefine01 MDBX_FORCE_ASSERTIONS

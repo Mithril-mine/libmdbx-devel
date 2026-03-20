@@ -883,6 +883,42 @@ __extern_C key_t ftok(const char *, int);
 #endif /* __SANITIZE_ADDRESS__ */
 
 /*----------------------------------------------------------------------------*/
+/* DTrace dynamic tracing framework */
+
+#if defined(ENABLE_DTRACE) || defined(ENABLE_SYSTEMTAP)
+#include <sys/sdt.h>
+#else
+#define DTRACE_PROBE(provider, probe) __noop
+#define DTRACE_PROBE1(provider, probe, parm1) __noop
+#define DTRACE_PROBE2(provider, probe, parm1, parm2) __noop
+#define DTRACE_PROBE3(provider, probe, parm1, parm2, parm3) __noop
+#define DTRACE_PROBE4(provider, probe, parm1, parm2, parm3, parm4) __noop
+#define DTRACE_PROBE5(provider, probe, parm1, parm2, parm3, parm4, parm5) __noop
+#define DTRACE_PROBE6(provider, probe, parm1, parm2, parm3, parm4, parm5, parm6) __noop
+#define DTRACE_PROBE7(provider, probe, parm1, parm2, parm3, parm4, parm5, parm6, parm7) __noop
+#define DTRACE_PROBE8(provider, probe, parm1, parm2, parm3, parm4, parm5, parm6, parm7, parm8) __noop
+#define DTRACE_PROBE9(provider, probe, parm1, parm2, parm3, parm4, parm5, parm6, parm7, parm8, parm9) __noop
+#endif /* ENABLE_DTRACE || ENABLE_SYSTEMTAP */
+
+#define MDBX_DTRACE_PROVIDER mdbx
+#define MDBX_DTRACE(probe) DTRACE_PROBE(MDBX_DTRACE_PROVIDER, probe)
+#define MDBX_DTRACE1(probe, parm1) DTRACE_PROBE1(MDBX_DTRACE_PROVIDER, probe, parm1)
+#define MDBX_DTRACE2(probe, parm1, parm2) DTRACE_PROBE2(MDBX_DTRACE_PROVIDER, probe, parm1, parm2)
+#define MDBX_DTRACE3(probe, parm1, parm2, parm3) DTRACE_PROBE3(MDBX_DTRACE_PROVIDER, probe, parm1, parm2, parm3)
+#define MDBX_DTRACE4(probe, parm1, parm2, parm3, parm4)                                                                \
+  DTRACE_PROBE4(MDBX_DTRACE_PROVIDER, probe, parm1, parm2, parm3, parm4)
+#define MDBX_DTRACE5(probe, parm1, parm2, parm3, parm4, parm5)                                                         \
+  DTRACE_PROBE5(MDBX_DTRACE_PROVIDER, probe, parm1, parm2, parm3, parm4, parm5)
+#define MDBX_DTRACE6(probe, parm1, parm2, parm3, parm4, parm5, parm6)                                                  \
+  DTRACE_PROBE6(MDBX_DTRACE_PROVIDER, probe, parm1, parm2, parm3, parm4, parm5, parm6)
+#define MDBX_DTRACE7(probe, parm1, parm2, parm3, parm4, parm5, parm6, parm7)                                           \
+  DTRACE_PROBE7(MDBX_DTRACE_PROVIDER, probe, parm1, parm2, parm3, parm4, parm5, parm6, parm7)
+#define MDBX_DTRACE8(probe, parm1, parm2, parm3, parm4, parm5, parm6, parm7, parm8)                                    \
+  DTRACE_PROBE8(MDBX_DTRACE_PROVIDER, probe, parm1, parm2, parm3, parm4, parm5, parm6, parm7, parm8)
+#define MDBX_DTRACE9(probe, parm1, parm2, parm3, parm4, parm5, parm6, parm7, parm8, parm9)                             \
+  DTRACE_PROBE9(MDBX_DTRACE_PROVIDER, probe, parm1, parm2, parm3, parm4, parm5, parm6, parm7, parm8, parm9)
+
+/*----------------------------------------------------------------------------*/
 
 #ifndef ARRAY_LENGTH
 #ifdef __cplusplus
