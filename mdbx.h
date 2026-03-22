@@ -1029,6 +1029,9 @@ LIBMDBX_API const char *mdbx_dump_val(const MDBX_val *key, char *const buf, cons
 /** \brief Panics with message and causes abnormal process termination. */
 MDBX_NORETURN LIBMDBX_API void mdbx_panic(const char *fmt, ...) MDBX_PRINTF_ARGS(1, 2);
 
+/** \brief Panics with message and causes abnormal process termination with some extra information. */
+MDBX_NORETURN LIBMDBX_API void mdbx_panic_ex(const void *handle, const char *fmt, ...) MDBX_PRINTF_ARGS(2, 3);
+
 /** \brief Panics with asserton failed message and causes abnormal process
  * termination. */
 #if !((defined(_WIN32) || defined(_WIN64)) && !MDBX_WITHOUT_MSVC_CRT)

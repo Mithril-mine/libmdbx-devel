@@ -163,4 +163,28 @@ MDBX_MAYBE_UNUSED static inline int log_if_error(const int err, const char *func
 
 #define LOG_IFERR(err) log_if_error((err), __func__, __LINE__)
 
+struct MDBX_panic_point {
+  const char *const function;
+  const char *const msg;
+  unsigned line;
+};
+
+MDBX_MAYBE_UNUSED MDBX_NORETURN MDBX_INTERNAL void panic_at(const struct MDBX_panic_point *const at);
+MDBX_MAYBE_UNUSED MDBX_NORETURN MDBX_INTERNAL void panic_ex_at(const struct MDBX_panic_point *const at,
+                                                               const void *ctx);
+
+#define MDBX_PANIC(msg_text)                                                                                           \
+  do {                                                                                                                 \
+    static const char panic_msg[] = msg_text;                                                                          \
+    static const struct MDBX_panic_point panic_point = {__func__, panic_msg, __LINE__};                                \
+    panic_at(&panic_point);                                                                                            \
+  } while (0)
+
+#define MDBX_PANIC_EX(msg_text, ctx)                                                                                   \
+  do {                                                                                                                 \
+    static const char panic_msg[] = msg_text;                                                                          \
+    static const struct MDBX_panic_point panic_point = {__func__, panic_msg, __LINE__};                                \
+    panic_ex_at(&panic_point, ctx);                                                                                    \
+  } while (0)
+
 #endif /* !__cplusplus */

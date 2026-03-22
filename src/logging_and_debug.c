@@ -251,3 +251,13 @@ __cold void page_list(page_t *mp) {
   VERBOSE("Total: header %u + contents %zu + unused %zu\n", is_dupfix_leaf(mp) ? PAGEHDRSZ : PAGEHDRSZ + mp->lower,
           total, page_room(mp));
 }
+
+__cold __noinline void panic_ex_at(const struct MDBX_panic_point *const at, const void *ctx) {
+  const char *const function = at->function;
+  const char *const msg = at->msg;
+  const unsigned line = at->line;
+  MDBX_DTRACE3(panic, function, line, msg);
+  mdbx_panic_ex(ctx, "%s:%u %s", function, line, msg);
+}
+
+__cold __noinline void panic_at(const struct MDBX_panic_point *const at) { panic_ex_at(at, nullptr); }

@@ -243,18 +243,23 @@ __cold void assert_fail(const char *msg, const char *func, unsigned line) {
   }
 }
 
-__cold void mdbx_panic(const char *fmt, ...) {
-  va_list ap;
-  va_start(ap, fmt);
-
+MDBX_NORETURN __cold static void panic_va_list(const void *ptr, const char *fmt, va_list ap) {
   char *message = nullptr;
   const int num = osal_vasprintf(&message, fmt, ap);
-  va_end(ap);
   const char *const const_message =
       unlikely(num < 1 || !message) ? "<troubles with panic-message preparation>" : message;
 
+  if (ptr) {
+    /* TODO:
+     * - check ptr is valid and readable;
+     * - check signature to determine a type of the object (cursor, txn, env);
+     * - try to dump useful information if debugger or logger is attached.
+     */
+  }
+
+  const char *const nl = (num > 0 && const_message[num - 1] == '\n') ? "" : "\n";
   if (globals.logger.ptr)
-    debug_log(MDBX_LOG_FATAL, "mdbx-panic", 0, "%s", const_message);
+    debug_log(MDBX_LOG_FATAL, "mdbx-panic", 0, "%s%s", const_message, nl);
 
   while (1) {
 #if defined(_WIN32) || defined(_WIN64)
@@ -263,6 +268,8 @@ __cold void mdbx_panic(const char *fmt, ...) {
 #else
     OutputDebugStringA("\r\nMDBX-PANIC: ");
     OutputDebugStringA(const_message);
+    if (*nl)
+      OutputDebugStringA("\r\n");
 #endif
     if (IsDebuggerPresent())
       DebugBreak();
@@ -272,6 +279,20 @@ __cold void mdbx_panic(const char *fmt, ...) {
     abort();
 #endif
   }
+}
+
+__cold void mdbx_panic(const char *fmt, ...) {
+  va_list ap;
+  va_start(ap, fmt);
+  panic_va_list(nullptr, fmt, ap);
+  va_end(ap);
+}
+
+__cold void mdbx_panic_ex(const void *ptr, const char *fmt, ...) {
+  va_list ap;
+  va_start(ap, fmt);
+  panic_va_list(ptr, fmt, ap);
+  va_end(ap);
 }
 
 /*----------------------------------------------------------------------------*/
