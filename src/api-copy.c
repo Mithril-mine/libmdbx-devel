@@ -157,7 +157,7 @@ __cold static int compacting_walk(ctx_t *ctx, MDBX_cursor *mc, pgno_t *const par
   if (unlikely(rc != MDBX_SUCCESS))
     return rc;
 
-  rc = tree_search_finalize(mc, nullptr, Z_FIRST);
+  rc = tree_search_continue(mc, nullptr, Z_FIRST);
   if (unlikely(rc != MDBX_SUCCESS))
     return rc;
 

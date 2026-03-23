@@ -112,7 +112,7 @@ MDBX_INTERNAL void env_options_adjust_defaults(MDBX_env *env);
 MDBX_INTERNAL void env_options_adjust_dp_limit(MDBX_env *env);
 MDBX_INTERNAL pgno_t default_dp_limit(const MDBX_env *env);
 
-MDBX_INTERNAL int __must_check_result tree_search_finalize(MDBX_cursor *mc, const MDBX_val *key, int flags);
+MDBX_INTERNAL int __must_check_result tree_search_continue(MDBX_cursor *mc, const MDBX_val *key, int flags);
 MDBX_INTERNAL int tree_search_lowest(MDBX_cursor *mc);
 MDBX_INTERNAL size_t tree_search_branch(MDBX_cursor *mc, const MDBX_val *key);
 

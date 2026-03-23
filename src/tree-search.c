@@ -5,12 +5,10 @@
 
 #include "internals.h"
 
-/* Search for the lowest key under the current branch page.
- * This just bypasses a numkeys check in the current page
- * before calling tree_search_finalize(), because the callers
- * are all in situations where the current page is known to
- * be underfilled. */
-__hot int tree_search_lowest(MDBX_cursor *mc) {
+/* Search for the lowest key under the current branch page. This just bypasses a numkeys check in the current page
+ * before calling tree_search_continue(), because the callers are all in situations where the current page is known
+ * to be underfilled. */
+__hot __noinline int tree_search_lowest(MDBX_cursor *mc) {
   cASSERT(mc, mc->top >= 0);
   page_t *mp = mc->pg[mc->top];
   cASSERT(mc, is_branch(mp));
@@ -24,7 +22,7 @@ __hot int tree_search_lowest(MDBX_cursor *mc) {
   err = cursor_push(mc, mp, 0);
   if (unlikely(err != MDBX_SUCCESS))
     return err;
-  return tree_search_finalize(mc, nullptr, Z_FIRST);
+  return tree_search_continue(mc, nullptr, Z_FIRST);
 }
 
 __hot int tree_search(MDBX_cursor *mc, const MDBX_val *key, int flags) {
@@ -83,10 +81,10 @@ __hot int tree_search(MDBX_cursor *mc, const MDBX_val *key, int flags) {
   if (flags & Z_ROOTONLY)
     return MDBX_SUCCESS;
 
-  return tree_search_finalize(mc, key, flags);
+  return tree_search_continue(mc, key, flags);
 }
 
-__hot __noinline size_t tree_search_branch(MDBX_cursor *mc, const MDBX_val *key) {
+__hot size_t tree_search_branch(MDBX_cursor *mc, const MDBX_val *key) {
   page_t *mp = mc->pg[mc->top];
   cASSERT(mc, (page_type(mp) & P_TYPE) == P_BRANCH);
   const size_t nkeys = page_numkeys(mp);
@@ -122,7 +120,7 @@ __hot __noinline size_t tree_search_branch(MDBX_cursor *mc, const MDBX_val *key)
   return lo - 1;
 }
 
-__hot __noinline int tree_search_finalize(MDBX_cursor *mc, const MDBX_val *key, int flags) {
+__hot __noinline int tree_search_continue(MDBX_cursor *mc, const MDBX_val *key, int flags) {
   cASSERT(mc, !is_poor(mc));
   DKBUF_DEBUG;
   int err;
