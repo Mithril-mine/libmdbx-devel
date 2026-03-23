@@ -148,12 +148,16 @@ MDBX_NOTHROW_PURE_FUNCTION __hot int cmp_int_align4(const MDBX_val *a, const MDB
 }
 #endif /* cmp_int_align4 */
 
+MDBX_NOTHROW_PURE_FUNCTION static __always_inline int cmp_len(size_t a, size_t b) {
+  const intptr_t diff_len = a - b;
+  assert(diff_len == (int)diff_len);
+  /* кастинг допустим, так как длина ключей проверяется и не должна превышать MAX_INT. */
+  return (int)diff_len;
+}
+
 /* Compare two items lexically */
 MDBX_NOTHROW_PURE_FUNCTION __hot int cmp_lexical(const MDBX_val *a, const MDBX_val *b) {
-  if (a->iov_len == b->iov_len)
-    return a->iov_len ? memcmp(a->iov_base, b->iov_base, a->iov_len) : 0;
-
-  const int diff_len = (a->iov_len < b->iov_len) ? -1 : 1;
+  const int diff_len = cmp_len(a->iov_len, b->iov_len);
   const size_t shortest = (a->iov_len < b->iov_len) ? a->iov_len : b->iov_len;
   int diff_data = shortest ? memcmp(a->iov_base, b->iov_base, shortest) : 0;
   return likely(diff_data) ? diff_data : diff_len;
@@ -218,12 +222,12 @@ MDBX_NOTHROW_PURE_FUNCTION __hot int cmp_reverse(const MDBX_val *a, const MDBX_v
         return (xa < xb) ? -1 : 1;
     }
   }
-  return CMP2INT(a->iov_len, b->iov_len);
+  return cmp_len(a->iov_len, b->iov_len);
 }
 
 /* Fast non-lexically comparator */
 MDBX_NOTHROW_PURE_FUNCTION __hot int cmp_lenfast(const MDBX_val *a, const MDBX_val *b) {
-  int diff = CMP2INT(a->iov_len, b->iov_len);
+  int diff = cmp_len(a->iov_len, b->iov_len);
   return (likely(diff) || a->iov_len == 0) ? diff : memcmp(a->iov_base, b->iov_base, a->iov_len);
 }
 
