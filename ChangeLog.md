@@ -24,7 +24,7 @@ BTC `bc1qzvl9uegf2ea6cwlytnanrscyv8snwsvrc0xfsu`, SOL `FTCTgbHajoLVZGr8aEFWMzx3N
  - [Stefan de Konink](https://github.com/skinkie) for fixing [Python bindings](https://github.com/wtdcode/mdbx-py) and documentation improvement.
  - [Cosmin Apreutesei](https://github.com/capr) за сообщение об ошибках и тестирование.
  - [Chloe Cano](https://github.com/Segwaz) for fuzzing, bug reporing and fixes.
- - [Weixie Cui](https://github.com/cuiweixie) for bug fixing through pull-requests.
+ - [Weixie Cui](https://github.com/cuiweixie) for bug fixing through many pull-requests.
 
 Новое:
 
@@ -117,13 +117,15 @@ BTC `bc1qzvl9uegf2ea6cwlytnanrscyv8snwsvrc0xfsu`, SOL `FTCTgbHajoLVZGr8aEFWMzx3N
 
  - В утилите `mdbx_load` устранены ошибки загрузки значений нулевой длины и обмен параметров shrink/growth в геометрии БД.
 
- - Исправлено падение `SIGSEGV` в случае, когда все мета-страницы не полностью пригодны для использования.
+ - Исправлено падение по `SIGSEGV` в случае, когда все мета-страницы не полностью пригодны для использования.
 
  - Исправлена опечатка в условии определения изменении размера БД при откате вложенной транзакции.
 
  - Исправлен сбор информации посредством `kstat()` для bootid на Solaris и родственных платформах.
 
  - Исправлена опечатка в пути обработки `ST_EXPORTED` что ломало сборку на платформах где для `fstatvfs()` определён упомянутый флаг.
+
+ - Исправлено падение по `SIGSEGV` из-за попытки очистить/перезаписать повреждённую мета-страницу при открытии БД в режиме только для чтения.
 
 Изменение поведения:
 
