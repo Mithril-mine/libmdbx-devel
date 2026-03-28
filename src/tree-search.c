@@ -198,7 +198,7 @@ static int null_comparator(const MDBX_val *a, const MDBX_val *b) {
           cASSERT(mc, ptr_disp(mp, mc->txn->env->ps) >= ptr_disp(node_key.iov_base, node_key.iov_len));                \
           cmp = LEAF_COMPARATOR(&node_key, key);                                                                       \
           TRACE("== i %zu, cmp %zi", it, cmp);                                                                         \
-          if (cmp == 0)                                                                                                \
+          if (unlikely(cmp == 0))                                                                                      \
             goto found;                                                                                                \
           BINARY_BRANCHLESS_SEARCH_CYCLE_END(it, cmp, lo, scope);                                                      \
           TRACE("== lo %zi, size %zi", lo, scope);                                                                     \
@@ -222,7 +222,7 @@ static int null_comparator(const MDBX_val *a, const MDBX_val *b) {
           cASSERT(mc, ptr_disp(mp, mc->txn->env->ps) >= ptr_disp(node_key.iov_base, node_key.iov_len));                \
           cmp = LEAF_COMPARATOR(&node_key, key);                                                                       \
           TRACE("== i %zu, cmp %zi", it, cmp);                                                                         \
-          if (cmp == 0)                                                                                                \
+          if (unlikely(cmp == 0))                                                                                      \
             goto found;                                                                                                \
           BINARY_BRANCHLESS_SEARCH_CYCLE_END(it, cmp, lo, scope);                                                      \
           TRACE("== lo %zi, size %zi", lo, scope);                                                                     \
@@ -248,7 +248,7 @@ static int null_comparator(const MDBX_val *a, const MDBX_val *b) {
       cASSERT(mc, ptr_disp(mp, mc->txn->env->ps) >= ptr_disp(node_key.iov_base, node_key.iov_len));                    \
       cmp = BRANCH_COMPARATOR(&node_key, key);                                                                         \
       TRACE("== i %zu, cmp %zi", it, cmp);                                                                             \
-      if (cmp == 0)                                                                                                    \
+      if (unlikely(cmp == 0))                                                                                          \
         goto found;                                                                                                    \
       BINARY_BRANCHLESS_SEARCH_CYCLE_END(it, cmp, lo, scope);                                                          \
       TRACE("== lo %zi, size %zi", lo, scope);                                                                         \
