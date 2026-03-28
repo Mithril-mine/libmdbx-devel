@@ -113,7 +113,7 @@ static int ro_slot_clean(MDBX_txn *txn) {
 
   if (likely((txn->flags & MDBX_TXN_FINISHED) == 0)) {
     if (likely((txn->flags & MDBX_TXN_PARKED) == 0)) {
-      ENSURE(env, txn->txnid >= /* paranoia is appropriate here */ env->lck->cached_oldest_txnid.weak);
+      ENSURE_OBJ(env, txn->txnid >= /* paranoia is appropriate here */ env->lck->cached_oldest_txnid.weak);
       eASSERT(env, txn->txnid == slot->txnid.weak && slot->txnid.weak >= env->lck->cached_oldest_txnid.weak);
     } else {
       txn->flags -= MDBX_TXN_PARKED;
@@ -130,7 +130,7 @@ static int ro_slot_clean(MDBX_txn *txn) {
     safe64_reset(&slot->txnid, true);
     atomic_store32(&env->lck->rdt_refresh_flag, true, mo_Relaxed);
   } else {
-    ENSURE(env, safe64_read(&slot->txnid) >= /* paranoia is appropriate here */ SAFE64_INVALID_THRESHOLD);
+    ENSURE_OBJ(env, safe64_read(&slot->txnid) >= /* paranoia is appropriate here */ SAFE64_INVALID_THRESHOLD);
   }
   return MDBX_SUCCESS;
 }
@@ -263,8 +263,8 @@ int txn_ro_start(MDBX_txn *txn, bool prepare_only) {
 #endif /* Windows */
 
   dxb_sanitize_tail(env, txn);
-  ENSURE(env, txn->txnid >=
-                  /* paranoia is appropriate here */ env->lck->cached_oldest_txnid.weak);
+  ENSURE_OBJ(env, txn->txnid >=
+                      /* paranoia is appropriate here */ env->lck->cached_oldest_txnid.weak);
   tASSERT(txn, txn->dbs[FREE_DBI].flags == MDBX_INTEGERKEY);
   tASSERT(txn, check_table_flags(txn->dbs[MAIN_DBI].flags));
   return MDBX_SUCCESS;

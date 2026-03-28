@@ -555,6 +555,8 @@ MDBX_MAYBE_UNUSED static inline uint32_t osal_monotime_to_16dot16_noUnderflow(ui
   return seconds_16dot16 ? seconds_16dot16 : /* fix underflow */ (monotime > 0);
 }
 
+MDBX_NORETURN MDBX_INTERNAL void osal_panic(const char *msg, const char *func, unsigned line);
+
 /*----------------------------------------------------------------------------*/
 
 MDBX_INTERNAL void osal_ctor(void);

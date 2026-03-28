@@ -161,7 +161,7 @@ MDBX_NOTHROW_PURE_FUNCTION static inline size_t branch_size(const MDBX_env *env,
   size_t node_bytes = node_size(key, nullptr);
   if (unlikely(node_bytes > env->branch_nodemax)) {
     /* put on large/overflow page, not implemented */
-    mdbx_panic("node_size(key) %zu > %u branch_nodemax", node_bytes, env->branch_nodemax);
+    panic_fmt(env, "node_size(key) %zu > %u branch_nodemax", node_bytes, env->branch_nodemax);
     node_bytes = node_size(key, nullptr) + sizeof(pgno_t);
   }
 

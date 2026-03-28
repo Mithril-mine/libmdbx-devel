@@ -507,7 +507,7 @@ static int gc_remove_rkl(MDBX_txn *txn, gcu_t *ctx, rkl_t *rkl) {
     err = cursor_del(&ctx->cursor, 0);
     if (unlikely(err != MDBX_SUCCESS))
       return err;
-    ENSURE(txn->env, id == rkl_pop(rkl, is_lifo(txn)));
+    ENSURE_OBJ(txn->env, id == rkl_pop(rkl, is_lifo(txn)));
     tASSERT(txn, id <= txn->env->lck->cached_oldest_txnid.weak);
     err = rkl_push(&txn->wr.gc.ready4reuse, id);
     if (unlikely(err != MDBX_SUCCESS))

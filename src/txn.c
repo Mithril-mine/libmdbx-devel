@@ -73,7 +73,7 @@ int txn_shadow_cursors(const MDBX_txn *parent, const size_t dbi) {
   do {
     next = cursor->next;
     if (cursor->signature != cur_signature_live) {
-      ENSURE(parent->env, cursor->signature == cur_signature_wait4eot);
+      ENSURE_OBJ(parent, cursor->signature == cur_signature_wait4eot);
       continue;
     }
     tASSERT(parent, cursor->txn == parent && dbi == cursor_dbi(cursor));
@@ -272,7 +272,7 @@ int txn_setup_primal(MDBX_txn *txn) {
     }
 
     slr_t slr = latch_maindb_locked(txn, env);
-    ENSURE(env, osal_fastmutex_release(&env->dbi_lock) == MDBX_SUCCESS);
+    ENSURE_OBJ(env, osal_fastmutex_release(&env->dbi_lock) == MDBX_SUCCESS);
     if (unlikely((err = slr.err) != MDBX_SUCCESS))
       return err;
     txn->dbi_seqs[MAIN_DBI] = slr.seq;
@@ -345,7 +345,7 @@ int txn_setup_primal(MDBX_txn *txn) {
 #if defined(_WIN32) || defined(_WIN64)
     imports.srwl_ReleaseShared(&env->remap_lock);
 #else
-    ENSURE(env, osal_fastmutex_release(&env->remap_lock) == MDBX_SUCCESS);
+    ENSURE_OBJ(env, osal_fastmutex_release(&env->remap_lock) == MDBX_SUCCESS);
 #endif
   }
 

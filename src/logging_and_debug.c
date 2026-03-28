@@ -7,7 +7,7 @@
  logging */
 
 __cold void debug_log_va(int level, const char *function, int line, const char *fmt, va_list args) {
-  ENSURE(nullptr, osal_fastmutex_acquire(&globals.debug_lock) == 0);
+  ENSURE(osal_fastmutex_acquire(&globals.debug_lock) == 0);
   if (globals.logger.ptr) {
     if (globals.logger_buffer == nullptr)
       globals.logger.fmt(level, function, line, fmt, args);
@@ -49,7 +49,7 @@ __cold void debug_log_va(int level, const char *function, int line, const char *
     fflush(stderr);
 #endif
   }
-  ENSURE(nullptr, osal_fastmutex_release(&globals.debug_lock) == 0);
+  ENSURE(osal_fastmutex_release(&globals.debug_lock) == 0);
 }
 
 __cold void debug_log(int level, const char *function, int line, const char *fmt, ...) {
@@ -115,7 +115,7 @@ __cold const char *mdbx_dump_val(const MDBX_val *val, char *const buf, const siz
 
 __cold static int setup_debug(MDBX_log_level_t level, MDBX_debug_flags_t flags, union logger_union logger, char *buffer,
                               size_t buffer_size) {
-  ENSURE(nullptr, osal_fastmutex_acquire(&globals.debug_lock) == 0);
+  ENSURE(osal_fastmutex_acquire(&globals.debug_lock) == 0);
 
   const int rc = globals.runtime_flags | (globals.loglevel << 16);
   if (level != MDBX_LOG_DONTCHANGE)
@@ -137,7 +137,7 @@ __cold static int setup_debug(MDBX_log_level_t level, MDBX_debug_flags_t flags, 
     globals.logger_buffer_size = buffer_size;
   }
 
-  ENSURE(nullptr, osal_fastmutex_release(&globals.debug_lock) == 0);
+  ENSURE(osal_fastmutex_release(&globals.debug_lock) == 0);
   return rc;
 }
 
@@ -252,12 +252,58 @@ __cold void page_list(page_t *mp) {
           total, page_room(mp));
 }
 
-__cold __noinline void panic_ex_at(const struct MDBX_panic_point *const at, const void *ctx) {
-  const char *const function = at->function;
-  const char *const msg = at->msg;
-  const unsigned line = at->line;
-  MDBX_DTRACE3(panic, function, line, msg);
-  mdbx_panic_ex(ctx, "%s:%u %s", function, line, msg);
+static bool osal_safe_read_uint32(const void *ptr, int32_t *dest) {
+  *dest = 0;
+  /* TODO: FIXME */
+  (void)ptr;
+  return false;
 }
 
-__cold __noinline void panic_at(const struct MDBX_panic_point *const at) { panic_ex_at(at, nullptr); }
+__cold const char *object2class(const void *ptr) {
+  if (!ptr)
+    return "null";
+
+  int32_t snap_signature = 0;
+  if (!osal_safe_read_uint32(ptr, &snap_signature))
+    return "bad";
+
+  switch (snap_signature) {
+  case env_signature:
+    return "env";
+  case txn_signature:
+    return "txn";
+  case cur_signature_live:
+    return "cursor.live";
+  case cur_signature_ready4dispose:
+    return "cursor.r4clo";
+  case cur_signature_wait4eot:
+    return "cursor.w4eot";
+  }
+
+  return "unknown";
+}
+
+MDBX_NORETURN static void panic_kick(const char *msg, const char *func, unsigned line, const void *obj) {
+  const char *obj_class = object2class(obj);
+  MDBX_DTRACE5(panic, func, line, msg, obj_class, obj);
+  const MDBX_panic_func panic_func = globals.panic_func;
+  if (panic_func)
+    panic_func(msg, func, line, obj, obj_class);
+  debug_log(MDBX_LOG_FATAL, func, line, "\r\nMDBX-ASSERTION: %s (%s %p)\r\n", msg, obj_class, (void *)obj);
+  osal_panic(msg, func, line);
+}
+
+__cold __noinline void panic_at_obj(const struct MDBX_panic_point *const at, const void *obj) {
+  panic_kick(at->msg, at->function, at->line, obj);
+}
+
+__cold __noinline void panic_at(const struct MDBX_panic_point *const at) { panic_at_obj(at, nullptr); }
+
+__cold __noinline void panic_at_fmt(const struct MDBX_panic_point *const at, const void *obj, ...) {
+  va_list ap;
+  va_start(ap, obj);
+  char *message = nullptr;
+  const int num = osal_vasprintf(&message, obj, ap);
+  const char *const const_message = unlikely(num < 1 || !message) ? "<vasprintf() failed>" : message;
+  panic_kick(const_message, at->function, at->line, obj);
+}

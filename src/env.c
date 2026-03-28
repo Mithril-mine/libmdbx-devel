@@ -27,16 +27,16 @@ int env_page_auxbuffer(MDBX_env *env) {
 __cold unsigned env_setup_pagesize(MDBX_env *env, const size_t pagesize) {
   STATIC_ASSERT(PTRDIFF_MAX > MAX_MAPSIZE);
   STATIC_ASSERT(MDBX_MIN_PAGESIZE > sizeof(page_t) + sizeof(meta_t));
-  ENSURE(env, is_powerof2(pagesize));
-  ENSURE(env, pagesize >= MDBX_MIN_PAGESIZE);
-  ENSURE(env, pagesize <= MDBX_MAX_PAGESIZE);
-  ENSURE(env, !env->page_auxbuf && env->ps != pagesize);
+  ENSURE_OBJ(env, is_powerof2(pagesize));
+  ENSURE_OBJ(env, pagesize >= MDBX_MIN_PAGESIZE);
+  ENSURE_OBJ(env, pagesize <= MDBX_MAX_PAGESIZE);
+  ENSURE_OBJ(env, !env->page_auxbuf && env->ps != pagesize);
   env->ps = (unsigned)pagesize;
 
   STATIC_ASSERT(MAX_GC1OVPAGE(MDBX_MIN_PAGESIZE) > 4);
   STATIC_ASSERT(MAX_GC1OVPAGE(MDBX_MAX_PAGESIZE) < PAGELIST_LIMIT);
   const intptr_t maxgc_ov1page = (pagesize - PAGEHDRSZ) / sizeof(pgno_t) - 1;
-  ENSURE(env, maxgc_ov1page > 42 && maxgc_ov1page < (intptr_t)PAGELIST_LIMIT / 4);
+  ENSURE_OBJ(env, maxgc_ov1page > 42 && maxgc_ov1page < (intptr_t)PAGELIST_LIMIT / 4);
   env->maxgc_large1page = (unsigned)maxgc_ov1page;
   env->maxgc_per_branch = (unsigned)((pagesize - PAGEHDRSZ) / (sizeof(indx_t) + sizeof(node_t) + sizeof(txnid_t)));
 
@@ -47,9 +47,9 @@ __cold unsigned env_setup_pagesize(MDBX_env *env, const size_t pagesize) {
   STATIC_ASSERT(BRANCH_NODE_MAX(MDBX_MAX_PAGESIZE) < UINT16_MAX);
   const intptr_t branch_nodemax = BRANCH_NODE_MAX(pagesize);
   const intptr_t leaf_nodemax = LEAF_NODE_MAX(pagesize);
-  ENSURE(env, branch_nodemax > (intptr_t)(NODESIZE + 42) && branch_nodemax % 2 == 0 &&
-                  leaf_nodemax > (intptr_t)(sizeof(tree_t) + NODESIZE + 42) && leaf_nodemax >= branch_nodemax &&
-                  leaf_nodemax < (int)UINT16_MAX && leaf_nodemax % 2 == 0);
+  ENSURE_OBJ(env, branch_nodemax > (intptr_t)(NODESIZE + 42) && branch_nodemax % 2 == 0 &&
+                      leaf_nodemax > (intptr_t)(sizeof(tree_t) + NODESIZE + 42) && leaf_nodemax >= branch_nodemax &&
+                      leaf_nodemax < (int)UINT16_MAX && leaf_nodemax % 2 == 0);
   env->leaf_nodemax = (uint16_t)leaf_nodemax;
   env->branch_nodemax = (uint16_t)branch_nodemax;
   env->ps2ln = (uint8_t)log2n_powerof2(pagesize);

@@ -97,7 +97,7 @@ void windows_import(void) {
     if (!globals.running_under_Wine) {
       MDBX_IMPORT(hNtdll, NtFsControlFile);
       MDBX_IMPORT(hNtdll, NtExtendSection);
-      ENSURE(nullptr, imports.NtExtendSection);
+      ENSURE(imports.NtExtendSection);
     }
   }
 

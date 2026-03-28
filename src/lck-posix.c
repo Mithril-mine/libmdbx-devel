@@ -837,7 +837,7 @@ void lck_rdt_unlock(MDBX_env *env) {
   int err = osal_ipclock_unlock(env, &env->lck->rdt_lock);
   TRACE("<< err %d", err);
   if (unlikely(err != MDBX_SUCCESS))
-    mdbx_panic("%s() failed: err %d\n", __func__, err);
+    panic_fmt(env, "%s-unlock error %d", "rdt", err);
   jitter4testing(true);
 }
 
@@ -866,7 +866,7 @@ void lck_txn_unlock(MDBX_env *env) {
   int err = osal_ipclock_unlock(env, &env->lck->wrt_lock);
   TRACE("<< err %d", err);
   if (unlikely(err != MDBX_SUCCESS))
-    mdbx_panic("%s() failed: err %d\n", __func__, err);
+    panic_fmt(env, "%s-unlock error %d", "wrt", err);
   jitter4testing(true);
 }
 

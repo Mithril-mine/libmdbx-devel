@@ -228,7 +228,7 @@ int txn_basal_end(MDBX_txn *txn, bool unlock) {
           !txn->parent && !txn->nested && (txn->flags & (txn_ro_both | MDBX_TXN_HAS_CHILD | MDBX_TXN_PARKED)) == 0);
   tASSERT(txn, (txn->flags & txn_may_have_cursors) == 0);
   if ((txn->flags & (MDBX_TXN_ERROR | MDBX_TXN_FINISHED)) == 0)
-    ENSURE(env, txn->txnid > /* paranoia is appropriate here */ env->lck->cached_oldest_txnid.weak);
+    ENSURE_OBJ(env, txn->txnid > /* paranoia is appropriate here */ env->lck->cached_oldest_txnid.weak);
   dxb_sanitize_tail(env, nullptr);
 
   const unsigned preserved_flags = txn->flags;

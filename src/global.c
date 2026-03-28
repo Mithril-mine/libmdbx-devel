@@ -199,13 +199,13 @@ __cold static void mdbx_init(void) {
                           (getenv_bool("MDBX_DBG_LEGACY_OVERLAP", false) ? MDBX_DBG_LEGACY_OVERLAP : 0) |
                           (getenv_bool("MDBX_DBG_DONT_UPGRADE", false) ? MDBX_DBG_DONT_UPGRADE : 0);
   globals.loglevel = MDBX_LOG_FATAL;
-  ENSURE(nullptr, osal_fastmutex_init(&globals.debug_lock) == 0);
+  ENSURE(osal_fastmutex_init(&globals.debug_lock) == 0);
   osal_ctor();
   assert(globals.sys_pagesize > 0 && (globals.sys_pagesize & (globals.sys_pagesize - 1)) == 0);
   rthc_ctor();
 #if MDBX_DEBUG
-  ENSURE(nullptr, troika_verify_fsm());
-  ENSURE(nullptr, pv2pages_verify());
+  ENSURE(troika_verify_fsm());
+  ENSURE(pv2pages_verify());
 #endif /* MDBX_DEBUG*/
 }
 
@@ -216,7 +216,7 @@ __cold static void mdbx_fini(void) {
   rthc_dtor(current_pid);
   osal_dtor();
   TRACE("<< pid %zd\n", (size_t)current_pid);
-  ENSURE(nullptr, osal_fastmutex_destroy(&globals.debug_lock) == 0);
+  ENSURE(osal_fastmutex_destroy(&globals.debug_lock) == 0);
 }
 
 /******************************************************************************/

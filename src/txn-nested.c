@@ -82,7 +82,7 @@ static void nested_merge(MDBX_txn *const parent, MDBX_txn *const nested, const s
     DEBUG("reclaim retired parent's %u -> %zu %s page %" PRIaPGNO, npages, l, kind, pgno);
     /* The space for additions to parent->wr.repnl was already reserverd via the retired_delta. */
     int err = pnl_insert_span(&parent->wr.repnl, pgno, l);
-    ENSURE(nested->env, err == MDBX_SUCCESS);
+    ENSURE_OBJ(nested, err == MDBX_SUCCESS);
   }
   pnl_setsize(parent->wr.retired_pages, w);
 

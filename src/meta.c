@@ -276,13 +276,13 @@ int meta_sync(const MDBX_env *env, const meta_ptr_t head) {
 }
 
 __cold static page_t *meta_model(const MDBX_env *env, page_t *model, size_t num, const bin128_t *guid) {
-  ENSURE(env, is_powerof2(env->ps));
-  ENSURE(env, env->ps >= MDBX_MIN_PAGESIZE);
-  ENSURE(env, env->ps <= MDBX_MAX_PAGESIZE);
-  ENSURE(env, env->geo_in_bytes.lower >= MIN_MAPSIZE);
-  ENSURE(env, env->geo_in_bytes.upper <= MAX_MAPSIZE);
-  ENSURE(env, env->geo_in_bytes.now >= env->geo_in_bytes.lower);
-  ENSURE(env, env->geo_in_bytes.now <= env->geo_in_bytes.upper);
+  ENSURE_OBJ(env, is_powerof2(env->ps));
+  ENSURE_OBJ(env, env->ps >= MDBX_MIN_PAGESIZE);
+  ENSURE_OBJ(env, env->ps <= MDBX_MAX_PAGESIZE);
+  ENSURE_OBJ(env, env->geo_in_bytes.lower >= MIN_MAPSIZE);
+  ENSURE_OBJ(env, env->geo_in_bytes.upper <= MAX_MAPSIZE);
+  ENSURE_OBJ(env, env->geo_in_bytes.now >= env->geo_in_bytes.lower);
+  ENSURE_OBJ(env, env->geo_in_bytes.now <= env->geo_in_bytes.upper);
 
   memset(model, 0, env->ps);
   model->pgno = (pgno_t)num;
@@ -297,14 +297,14 @@ __cold static page_t *meta_model(const MDBX_env *env, page_t *model, size_t num,
   model_meta->geometry.now = bytes2pgno(env, env->geo_in_bytes.now);
   model_meta->geometry.first_unallocated = NUM_METAS;
 
-  ENSURE(env, model_meta->geometry.lower >= MIN_PAGENO);
-  ENSURE(env, model_meta->geometry.upper <= MAX_PAGENO + 1);
-  ENSURE(env, model_meta->geometry.now >= model_meta->geometry.lower);
-  ENSURE(env, model_meta->geometry.now <= model_meta->geometry.upper);
-  ENSURE(env, model_meta->geometry.first_unallocated >= MIN_PAGENO);
-  ENSURE(env, model_meta->geometry.first_unallocated <= model_meta->geometry.now);
-  ENSURE(env, model_meta->geometry.grow_pv == pages2pv(pv2pages(model_meta->geometry.grow_pv)));
-  ENSURE(env, model_meta->geometry.shrink_pv == pages2pv(pv2pages(model_meta->geometry.shrink_pv)));
+  ENSURE_OBJ(env, model_meta->geometry.lower >= MIN_PAGENO);
+  ENSURE_OBJ(env, model_meta->geometry.upper <= MAX_PAGENO + 1);
+  ENSURE_OBJ(env, model_meta->geometry.now >= model_meta->geometry.lower);
+  ENSURE_OBJ(env, model_meta->geometry.now <= model_meta->geometry.upper);
+  ENSURE_OBJ(env, model_meta->geometry.first_unallocated >= MIN_PAGENO);
+  ENSURE_OBJ(env, model_meta->geometry.first_unallocated <= model_meta->geometry.now);
+  ENSURE_OBJ(env, model_meta->geometry.grow_pv == pages2pv(pv2pages(model_meta->geometry.grow_pv)));
+  ENSURE_OBJ(env, model_meta->geometry.shrink_pv == pages2pv(pv2pages(model_meta->geometry.shrink_pv)));
 
   model_meta->pagesize = env->ps;
   model_meta->trees.gc.flags = MDBX_INTEGERKEY;

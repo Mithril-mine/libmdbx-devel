@@ -159,7 +159,7 @@ __hot __noinline int tree_search_continue(MDBX_cursor *mc, const MDBX_val *key, 
 static int null_comparator(const MDBX_val *a, const MDBX_val *b) {
   (void)a;
   (void)b;
-  MDBX_PANIC("must not be called");
+  panic("must not be called");
   return 0;
 }
 
@@ -495,8 +495,8 @@ __hot sfr_t tree_search_foliage_configure(MDBX_cursor *mc, const MDBX_val *key) 
             old_steps);
     old_node_search((MDBX_cursor *)mc, key);
     search_foliage(mc, key);
-    mdbx_panic_ex(mc, "new %i, %c, %p, steps %zu | old %i, %c, %p, steps %zu", new_i, new.exact ? 'Y' : 'N',
-                  (void *)new.node, new_steps, old_i, old.exact ? 'Y' : 'N', (void *)old.node, old_steps);
+    panic_fmt(mc, "new %i, %c, %p, steps %zu | old %i, %c, %p, steps %zu", new_i, new.exact ? 'Y' : 'N',
+              (void *)new.node, new_steps, old_i, old.exact ? 'Y' : 'N', (void *)old.node, old_steps);
   }
   return new;
 #else
@@ -601,7 +601,7 @@ size_t tree_search_branch_configure(const MDBX_cursor *mc, const MDBX_val *key) 
             old_i, old_steps);
     old_branch_search((MDBX_cursor *)mc, key);
     search_branch(mc, key);
-    mdbx_panic_ex(mc, "new %zi, steps %zu | old %zi, steps %zu", new_i, new_steps, old_i, old_steps);
+    panic_fmt(mc, "new %zi, steps %zu | old %zi, steps %zu", new_i, new_steps, old_i, old_steps);
   }
   return new_i;
 #else

@@ -310,13 +310,13 @@ __hot pgno_t pnl_get_best_sequence(const pnl_t pnl, const size_t seq, const pgno
 }
 
 pgno_t pnl_crop_tail_sequence(const pnl_t pnl) {
-  size_t len = pnl_size(pnl);
+  const size_t len = pnl_size(pnl);
   assert(len > 0);
 #if MDBX_PNL_ASCENDING
 #error "FIXME"
 #else
   size_t span = 1;
-  while (1 + span <= pnl_size(pnl) && MDBX_PNL_CONTIGUOUS(pnl[1], pnl[1 + span], span))
+  while (1 + span <= len && MDBX_PNL_CONTIGUOUS(pnl[1], pnl[1 + span], span))
     ++span;
   pnl_cut(pnl, 1, span);
 #endif /* MDBX_PNL_ASCENDING */

@@ -5,7 +5,7 @@
 
 __cold size_t mdbx_default_pagesize(void) {
   size_t pagesize = globals.sys_pagesize;
-  ENSURE(nullptr, is_powerof2(pagesize));
+  ENSURE(is_powerof2(pagesize));
   pagesize = (pagesize >= MDBX_MIN_PAGESIZE) ? pagesize : MDBX_MIN_PAGESIZE;
   pagesize = (pagesize <= MDBX_MAX_PAGESIZE) ? pagesize : MDBX_MAX_PAGESIZE;
   return pagesize;
@@ -384,19 +384,7 @@ __cold int mdbx_env_set_userctx(MDBX_env *env, void *ctx) {
 
 __cold void *mdbx_env_get_userctx(const MDBX_env *env) { return env ? env->userctx : nullptr; }
 
-__cold int mdbx_env_set_assert(MDBX_env *env, MDBX_assert_func func) {
-  int rc = check_env(env, false);
-  if (unlikely(rc != MDBX_SUCCESS))
-    return LOG_IFERR(rc);
-
-#if MDBX_DEBUG
-  env->assert_func = func;
-  return MDBX_SUCCESS;
-#else
-  (void)func;
-  return LOG_IFERR(MDBX_ENOSYS);
-#endif
-}
+__cold void mdbx_set_panic(MDBX_panic_func func) { globals.panic_func = func; }
 
 __cold int mdbx_env_set_hsr(MDBX_env *env, MDBX_hsr_func hsr) {
   int rc = check_env(env, false);

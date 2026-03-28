@@ -115,6 +115,7 @@ struct libmdbx_globals {
   osal_fastmutex_t debug_lock;
   size_t logger_buffer_size;
   char *logger_buffer;
+  MDBX_panic_func panic_func; /*  Callback for assertion failures */
 };
 
 #ifdef __cplusplus

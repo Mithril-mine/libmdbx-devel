@@ -921,13 +921,14 @@ typedef enum MDBX_log_level {
 typedef enum MDBX_debug_flags {
   MDBX_DBG_NONE = 0,
 
-  /** Enables assertion checks.
-   * \note Always enabled for builds with `MDBX_FORCE_ASSERTIONS` option,
-   * otherwise requires build with \ref MDBX_DEBUG > 0 */
+  /** Enables costly check of debug-like assertions.
+   * \note Has effect only for debugging builds with the build option \ref MDBX_DEBUG > 0,
+   * and always enabled for builds with `MDBX_FORCE_ASSERTIONS` option. */
   MDBX_DBG_ASSERT = 1,
 
-  /** Enables pages usage audit at commit transactions.
-   * \note Requires build with \ref MDBX_DEBUG > 0 */
+  /** Enables extra costly checks and deep verification of page lists,
+   * including page usage audit at commit transactions.
+   * \note Has effect only for debugging builds with the build option \ref MDBX_DEBUG > 0 */
   MDBX_DBG_AUDIT = 2,
 
   /** Enables small random delays in critical points.
@@ -991,18 +992,22 @@ typedef void (*MDBX_debug_func_nofmt)(MDBX_log_level_t loglevel, const char *fun
 LIBMDBX_API int mdbx_setup_debug_nofmt(MDBX_log_level_t log_level, MDBX_debug_flags_t debug_flags,
                                        MDBX_debug_func_nofmt logger, char *logger_buffer, size_t logger_buffer_size);
 
-/** \brief A callback function for most MDBX assert() failures,
+/** \brief A callback function for most assertion failures,
  * called before printing the message and aborting.
  * \see mdbx_env_set_assert()
  *
- * \param [in] env       An environment handle.
  * \param [in] msg       The assertion message, not including newline.
  * \param [in] function  The function name where the assertion check failed,
  *                       may be NULL.
  * \param [in] line      The line number in the source file
- *                       where the assertion check failed, may be zero. */
-typedef void (*MDBX_assert_func)(const MDBX_env *env, const char *msg, const char *function,
-                                 unsigned line) MDBX_CXX17_NOEXCEPT;
+ *                       where the assertion check failed, may be zero.
+ * \param [in] obj       A handle of object associated with the assertion,
+ *                       it could be MDBX_env, MDBX_txn,
+ *                       MDBX_cursor or an internal page structure.
+ * \param [in] obj_class A value corresponding to the object type:
+ *                       'env', 'txn', 'cursor', etc. */
+typedef void (*MDBX_panic_func)(const char *msg, const char *function, unsigned line, const void *obj,
+                                const char *obj_class) MDBX_CXX17_NOEXCEPT;
 
 /** \brief Set or reset the assert() callback of the environment.
  *
@@ -1010,10 +1015,8 @@ typedef void (*MDBX_assert_func)(const MDBX_env *env, const char *msg, const cha
  * and will return `MDBX_ENOSYS` in such case.
  *
  * \param [in] env   An environment handle returned by mdbx_env_create().
- * \param [in] func  An MDBX_assert_func function, or 0.
- *
- * \returns A non-zero error value on failure and 0 on success. */
-LIBMDBX_API int mdbx_env_set_assert(MDBX_env *env, MDBX_assert_func func);
+ * \param [in] func  An MDBX_assert_func function, or 0. */
+LIBMDBX_API void mdbx_set_panic(MDBX_panic_func func);
 
 /** \brief Dump given MDBX_val to the buffer
  *
@@ -1026,18 +1029,6 @@ LIBMDBX_API int mdbx_env_set_assert(MDBX_env *env, MDBX_assert_func func);
  *  - otherwise pointer to given buffer. */
 LIBMDBX_API const char *mdbx_dump_val(const MDBX_val *key, char *const buf, const size_t bufsize);
 
-/** \brief Panics with message and causes abnormal process termination. */
-MDBX_NORETURN LIBMDBX_API void mdbx_panic(const char *fmt, ...) MDBX_PRINTF_ARGS(1, 2);
-
-/** \brief Panics with message and causes abnormal process termination with some extra information. */
-MDBX_NORETURN LIBMDBX_API void mdbx_panic_ex(const void *handle, const char *fmt, ...) MDBX_PRINTF_ARGS(2, 3);
-
-/** \brief Panics with asserton failed message and causes abnormal process
- * termination. */
-#if !((defined(_WIN32) || defined(_WIN64)) && !MDBX_WITHOUT_MSVC_CRT)
-MDBX_NORETURN
-#endif /* MDBX_WITHOUT_MSVC_CRT */
-LIBMDBX_API void mdbx_assert_fail(const MDBX_env *env, const char *msg, const char *func, unsigned line);
 /** end of c_debug @} */
 
 /** \brief Environment flags

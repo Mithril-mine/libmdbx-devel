@@ -491,9 +491,6 @@ struct MDBX_env {
 
   /* -------------------------------------------------------------- debugging */
 
-#if MDBX_DEBUG
-  MDBX_assert_func assert_func; /*  Callback for assertion failures */
-#endif
 #ifdef ENABLE_MEMCHECK
   int valgrind_handle;
 #endif

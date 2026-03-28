@@ -367,12 +367,6 @@ __cold std::string error::message() const {
   return std::string(msg ? msg : "unknown");
 }
 
-[[noreturn]] __cold void error::panic(const char *context, const char *func) const noexcept {
-  assert(code() != MDBX_SUCCESS);
-  ::mdbx_panic("mdbx::%s.%s(): \"%s\" (%d)", context, func, what(), code());
-  std::terminate();
-}
-
 __cold void error::throw_exception() const {
   switch (code()) {
   case MDBX_EINVAL:
@@ -1367,7 +1361,7 @@ static inline MDBX_env *create_env() {
 
 __cold env_managed::~env_managed() noexcept {
   if (MDBX_UNLIKELY(handle_))
-    MDBX_CXX20_UNLIKELY error::success_or_panic(::mdbx_env_close(handle_), "mdbx::~env()", "mdbx_env_close");
+    MDBX_CXX20_UNLIKELY error::success_or_throw(::mdbx_env_close(handle_));
 }
 
 __cold void env_managed::close(bool dont_sync) {
@@ -1472,7 +1466,7 @@ txn_managed txn::start_nested(bool readonly) {
 
 txn_managed::~txn_managed() noexcept {
   if (MDBX_UNLIKELY(handle_))
-    MDBX_CXX20_UNLIKELY error::success_or_panic(::mdbx_txn_abort(handle_), "mdbx::~txn", "mdbx_txn_abort");
+    MDBX_CXX20_UNLIKELY error::success_or_throw(::mdbx_txn_abort(handle_));
 }
 
 void txn_managed::abort() { abort(nullptr); }

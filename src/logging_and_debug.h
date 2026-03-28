@@ -12,6 +12,56 @@ MDBX_MAYBE_UNUSED static inline const void *__Wpedantic_format_voidptr(const voi
 
 #ifndef __cplusplus
 
+struct MDBX_panic_point {
+  const char *const function;
+  const char *const msg;
+  unsigned line;
+};
+
+__extern_C MDBX_NORETURN void panic_at(const struct MDBX_panic_point *const at);
+__extern_C MDBX_NORETURN void panic_at_obj(const struct MDBX_panic_point *const at, const void *obj);
+__extern_C MDBX_NORETURN void panic_at_fmt(const struct MDBX_panic_point *const at, const void *obj, ...);
+
+MDBX_PRINTF_ARGS(2, 3) static inline const void *panic_fmt_checker(const void *obj, const char *fmt, ...) {
+  (void)fmt;
+  return obj;
+}
+
+#define panic(msg_text)                                                                                                \
+  do {                                                                                                                 \
+    static const char panic_msg[] = msg_text;                                                                          \
+    static const struct MDBX_panic_point panic_point = {__func__, panic_msg, __LINE__};                                \
+    panic_at(&panic_point);                                                                                            \
+  } while (0)
+
+#define panic_obj(obj, msg_text)                                                                                       \
+  do {                                                                                                                 \
+    static const char panic_msg[] = msg_text;                                                                          \
+    static const struct MDBX_panic_point panic_point = {__func__, panic_msg, __LINE__};                                \
+    panic_at_obj(&panic_point, obj);                                                                                   \
+  } while (0)
+
+#define panic_fmt(obj, msg_text, ...)                                                                                  \
+  do {                                                                                                                 \
+    static const char panic_msg[] = msg_text;                                                                          \
+    static const struct MDBX_panic_point panic_point = {__func__, panic_msg, __LINE__};                                \
+    panic_at_fmt(&panic_point, panic_fmt_checker(obj, msg_text, __VA_ARGS__), __VA_ARGS__);                            \
+  } while (0)
+
+#define ENSURE_MSG(expr, msg)                                                                                          \
+  do {                                                                                                                 \
+    if (unlikely(!(expr)))                                                                                             \
+      panic(msg);                                                                                                      \
+  } while (0)
+
+#define ENSURE(expr) ENSURE_MSG(expr, #expr)
+
+#define ENSURE_OBJ(obj, expr)                                                                                          \
+  do {                                                                                                                 \
+    if (unlikely(!(expr)))                                                                                             \
+      panic_obj(obj, #expr);                                                                                           \
+  } while (0)
+
 MDBX_INTERNAL void MDBX_PRINTF_ARGS(4, 5) debug_log(int level, const char *function, int line, const char *fmt, ...)
     MDBX_PRINTF_ARGS(4, 5);
 MDBX_INTERNAL void debug_log_va(int level, const char *function, int line, const char *fmt, va_list args);
@@ -31,6 +81,34 @@ MDBX_INTERNAL void debug_log_va(int level, const char *function, int line, const
 #else
 #define ASSERT_ENABLED() (0)
 #endif /* ASSERT_ENABLED() */
+
+#define ASSERT(expr)                                                                                                   \
+  do {                                                                                                                 \
+    if (ASSERT_ENABLED())                                                                                              \
+      ENSURE(expr);                                                                                                    \
+  } while (0)
+
+#define ASSERT_OBJ(obj, expr)                                                                                          \
+  do {                                                                                                                 \
+    if (ASSERT_ENABLED())                                                                                              \
+      ENSURE_OBJ(obj, expr);                                                                                           \
+  } while (0)
+
+#define eASSERT(env, expr) ASSERT_OBJ(env, expr)
+#define tASSERT(txn, expr) ASSERT_OBJ(txn, expr)
+#define cASSERT(mc, expr) ASSERT_OBJ(mc, expr)
+
+#define AUDIT(expr)                                                                                                    \
+  do {                                                                                                                 \
+    if (AUDIT_ENABLED())                                                                                               \
+      ENSURE(expr);                                                                                                    \
+  } while (0)
+
+#define AUDIT_OBJ(obj, expr)                                                                                           \
+  do {                                                                                                                 \
+    if (AUDIT_ENABLED())                                                                                               \
+      ENSURE_OBJ(obj, expr);                                                                                           \
+  } while (0)
 
 #define DEBUG_EXTRA(fmt, ...)                                                                                          \
   do {                                                                                                                 \
@@ -85,46 +163,6 @@ MDBX_INTERNAL void debug_log_va(int level, const char *function, int line, const
 
 #define FATAL(fmt, ...) debug_log(MDBX_LOG_FATAL, __func__, __LINE__, fmt "\n", __VA_ARGS__);
 
-#if MDBX_DEBUG
-#define ASSERT_FAIL(env, msg, func, line) mdbx_assert_fail(env, msg, func, line)
-#else /* MDBX_DEBUG */
-#if !((defined(_WIN32) || defined(_WIN64)) && defined(_DEBUG) && !MDBX_WITHOUT_MSVC_CRT)
-MDBX_NORETURN
-#endif
-__cold void assert_fail(const char *msg, const char *func, unsigned line);
-#define ASSERT_FAIL(env, msg, func, line)                                                                              \
-  do {                                                                                                                 \
-    (void)(env);                                                                                                       \
-    assert_fail(msg, func, line);                                                                                      \
-  } while (0)
-#endif /* MDBX_DEBUG */
-
-#define ENSURE_MSG(env, expr, msg)                                                                                     \
-  do {                                                                                                                 \
-    if (unlikely(!(expr)))                                                                                             \
-      ASSERT_FAIL(env, msg, __func__, __LINE__);                                                                       \
-  } while (0)
-
-#define ENSURE(env, expr) ENSURE_MSG(env, expr, #expr)
-
-/* assert(3) variant in environment context */
-#define eASSERT(env, expr)                                                                                             \
-  do {                                                                                                                 \
-    if (ASSERT_ENABLED())                                                                                              \
-      ENSURE(env, expr);                                                                                               \
-  } while (0)
-
-/* assert(3) variant in cursor context */
-#define cASSERT(mc, expr) eASSERT((mc)->txn->env, expr)
-
-/* assert(3) variant in transaction context */
-#define tASSERT(txn, expr) eASSERT((txn)->env, expr)
-
-#ifndef xMDBX_TOOLS /* Avoid using internal eASSERT() */
-#undef assert
-#define assert(expr) eASSERT(nullptr, expr)
-#endif
-
 MDBX_MAYBE_UNUSED static inline void jitter4testing(bool tiny) {
 #if MDBX_DEBUG
   if (globals.runtime_flags & (unsigned)MDBX_DBG_JITTER)
@@ -162,29 +200,5 @@ MDBX_MAYBE_UNUSED static inline int log_if_error(const int err, const char *func
 }
 
 #define LOG_IFERR(err) log_if_error((err), __func__, __LINE__)
-
-struct MDBX_panic_point {
-  const char *const function;
-  const char *const msg;
-  unsigned line;
-};
-
-MDBX_MAYBE_UNUSED MDBX_NORETURN MDBX_INTERNAL void panic_at(const struct MDBX_panic_point *const at);
-MDBX_MAYBE_UNUSED MDBX_NORETURN MDBX_INTERNAL void panic_ex_at(const struct MDBX_panic_point *const at,
-                                                               const void *ctx);
-
-#define MDBX_PANIC(msg_text)                                                                                           \
-  do {                                                                                                                 \
-    static const char panic_msg[] = msg_text;                                                                          \
-    static const struct MDBX_panic_point panic_point = {__func__, panic_msg, __LINE__};                                \
-    panic_at(&panic_point);                                                                                            \
-  } while (0)
-
-#define MDBX_PANIC_EX(msg_text, ctx)                                                                                   \
-  do {                                                                                                                 \
-    static const char panic_msg[] = msg_text;                                                                          \
-    static const struct MDBX_panic_point panic_point = {__func__, panic_msg, __LINE__};                                \
-    panic_ex_at(&panic_point, ctx);                                                                                    \
-  } while (0)
 
 #endif /* !__cplusplus */

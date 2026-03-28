@@ -208,7 +208,7 @@ void rthc_lock(void) {
 #if defined(_WIN32) || defined(_WIN64)
   EnterCriticalSection(&rthc_critical_section);
 #else
-  ENSURE(nullptr, osal_pthread_mutex_lock(&rthc_mutex) == 0);
+  ENSURE(osal_pthread_mutex_lock(&rthc_mutex) == 0);
 #endif
 }
 
@@ -216,7 +216,7 @@ void rthc_unlock(void) {
 #if defined(_WIN32) || defined(_WIN64)
   LeaveCriticalSection(&rthc_critical_section);
 #else
-  ENSURE(nullptr, pthread_mutex_unlock(&rthc_mutex) == 0);
+  ENSURE(pthread_mutex_unlock(&rthc_mutex) == 0);
 #endif
 }
 
@@ -234,7 +234,7 @@ static inline int thread_key_create(osal_thread_key_t *key) {
 
 void thread_rthc_set(osal_thread_key_t key, const void *value) {
 #if defined(_WIN32) || defined(_WIN64)
-  ENSURE(nullptr, TlsSetValue(key, (void *)value));
+  ENSURE(TlsSetValue(key, (void *)value));
 #else
   const uint64_t sign_registered = MDBX_THREAD_RTHC_REGISTERED(&rthc_thread_state);
   const uint64_t sign_counted = MDBX_THREAD_RTHC_COUNTED(&rthc_thread_state);
@@ -242,15 +242,15 @@ void thread_rthc_set(osal_thread_key_t key, const void *value) {
     rthc_thread_state = sign_registered;
     TRACE("thread registered 0x%" PRIxPTR, osal_thread_self());
     if (rthc_atexit(rthc_thread_dtor, &rthc_thread_state, (void *)&mdbx_version /* dso_anchor */)) {
-      ENSURE(nullptr, pthread_setspecific(rthc_key, &rthc_thread_state) == 0);
+      ENSURE(pthread_setspecific(rthc_key, &rthc_thread_state) == 0);
       rthc_thread_state = sign_counted;
       const unsigned count_before = atomic_add32(&rthc_pending, 1);
-      ENSURE(nullptr, count_before < INT_MAX);
+      ENSURE(count_before < INT_MAX);
       NOTICE("fallback to pthreads' tsd, key %" PRIuPTR ", count %u", (uintptr_t)rthc_key, count_before);
       (void)count_before;
     }
   }
-  ENSURE(nullptr, pthread_setspecific(key, value) == 0);
+  ENSURE(pthread_setspecific(key, value) == 0);
 #endif
 }
 
@@ -307,7 +307,7 @@ __cold void rthc_thread_dtor(void *rthc) {
   } else if (state == sign_counted && rthc_compare_and_clean(rthc, sign_counted)) {
     TRACE("== thread 0x%" PRIxPTR ", rthc %p, pid %zd, self-status %s (0x%08" PRIx64 ")", osal_thread_self(), rthc,
           (size_t)osal_getpid(), "counted", state);
-    ENSURE(nullptr, atomic_sub32(&rthc_pending, 1) > 0);
+    ENSURE(atomic_sub32(&rthc_pending, 1) > 0);
   } else {
     WARNING("thread 0x%" PRIxPTR ", rthc %p, pid %zd, self-status %s (0x%08" PRIx64 ")", osal_thread_self(), rthc,
             (size_t)osal_getpid(), "wrong", state);
@@ -315,7 +315,7 @@ __cold void rthc_thread_dtor(void *rthc) {
 
   if (atomic_load32(&rthc_pending, mo_AcquireRelease) == 0) {
     TRACE("== thread 0x%" PRIxPTR ", rthc %p, pid %zd, wake", osal_thread_self(), rthc, (size_t)osal_getpid());
-    ENSURE(nullptr, pthread_cond_broadcast(&rthc_cond) == 0);
+    ENSURE(pthread_cond_broadcast(&rthc_cond) == 0);
   }
 
   TRACE("<< thread 0x%" PRIxPTR ", rthc %p", osal_thread_self(), rthc);
@@ -460,8 +460,8 @@ __cold void rthc_ctor(void) {
 #if defined(_WIN32) || defined(_WIN64)
   InitializeCriticalSection(&rthc_critical_section);
 #else
-  ENSURE(nullptr, pthread_atfork(nullptr, nullptr, rthc_afterfork) == 0);
-  ENSURE(nullptr, pthread_key_create(&rthc_key, rthc_thread_dtor) == 0);
+  ENSURE(pthread_atfork(nullptr, nullptr, rthc_afterfork) == 0);
+  ENSURE(pthread_key_create(&rthc_key, rthc_thread_dtor) == 0);
   TRACE("pid %d, &mdbx_rthc_key = %p, value 0x%x", osal_getpid(), __Wpedantic_format_voidptr(&rthc_key),
         (unsigned)rthc_key);
 #endif
@@ -484,7 +484,7 @@ __cold void rthc_dtor(const mdbx_pid_t current_pid) {
     } else if (state == sign_counted && rthc_compare_and_clean(rthc, sign_counted)) {
       TRACE("== thread 0x%" PRIxPTR ", rthc %p, pid %zd, self-status %s (0x%08" PRIx64 ")", osal_thread_self(),
             __Wpedantic_format_voidptr(rthc), (size_t)current_pid, "counted", state);
-      ENSURE(nullptr, atomic_sub32(&rthc_pending, 1) > 0);
+      ENSURE(atomic_sub32(&rthc_pending, 1) > 0);
     } else {
       WARNING("thread 0x%" PRIxPTR ", rthc %p, pid %zd, self-status %s (0x%08" PRIx64 ")", osal_thread_self(),
               __Wpedantic_format_voidptr(rthc), (size_t)current_pid, "wrong", state);
@@ -492,7 +492,7 @@ __cold void rthc_dtor(const mdbx_pid_t current_pid) {
   }
 
   struct timespec abstime;
-  ENSURE(nullptr, clock_gettime(CLOCK_REALTIME, &abstime) == 0);
+  ENSURE(clock_gettime(CLOCK_REALTIME, &abstime) == 0);
   abstime.tv_nsec += 1000000000l / 10;
   if (abstime.tv_nsec >= 1000000000l) {
     abstime.tv_nsec -= 1000000000l;

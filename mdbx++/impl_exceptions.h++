@@ -69,16 +69,6 @@ inline void error::success_or_throw(const exception_thunk &thunk) const {
   }
 }
 
-inline void error::panic_on_failure(const char *context_where, const char *func_who) const noexcept {
-  if (MDBX_UNLIKELY(is_failure()))
-    MDBX_CXX20_UNLIKELY panic(context_where, func_who);
-}
-
-inline void error::success_or_panic(const char *context_where, const char *func_who) const noexcept {
-  if (MDBX_UNLIKELY(!is_success()))
-    MDBX_CXX20_UNLIKELY panic(context_where, func_who);
-}
-
 inline void error::throw_on_nullptr(const void *ptr, MDBX_error_t error_code) {
   if (MDBX_UNLIKELY(ptr == nullptr))
     MDBX_CXX20_UNLIKELY error(error_code).throw_exception();
@@ -108,16 +98,6 @@ inline bool error::boolean_or_throw(int error_code) {
 inline void error::success_or_throw(int error_code, const exception_thunk &thunk) {
   error rc(static_cast<MDBX_error_t>(error_code));
   rc.success_or_throw(thunk);
-}
-
-inline void error::panic_on_failure(int error_code, const char *context_where, const char *func_who) noexcept {
-  error rc(static_cast<MDBX_error_t>(error_code));
-  rc.panic_on_failure(context_where, func_who);
-}
-
-inline void error::success_or_panic(int error_code, const char *context_where, const char *func_who) noexcept {
-  error rc(static_cast<MDBX_error_t>(error_code));
-  rc.success_or_panic(context_where, func_who);
 }
 
 inline bool error::boolean_or_throw(int error_code, const exception_thunk &thunk) {

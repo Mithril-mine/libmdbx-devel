@@ -57,14 +57,11 @@ public:
   /// \brief Returns true for MDBX's errors.
   MDBX_CXX11_CONSTEXPR bool is_mdbx_error() const noexcept;
   /// \brief Panics on unrecoverable errors inside destructors etc.
-  [[noreturn]] void panic(const char *context_where_when, const char *func_who_what) const noexcept;
   [[noreturn]] void throw_exception() const;
   [[noreturn]] static inline void throw_exception(int error_code);
   inline void throw_on_failure() const;
   inline void success_or_throw() const;
   inline void success_or_throw(const exception_thunk &) const;
-  inline void panic_on_failure(const char *context_where, const char *func_who) const noexcept;
-  inline void success_or_panic(const char *context_where, const char *func_who) const noexcept;
   static inline void throw_on_nullptr(const void *ptr, MDBX_error_t error_code);
   static inline void success_or_throw(MDBX_error_t error_code);
   static void success_or_throw(int error_code) { success_or_throw(static_cast<MDBX_error_t>(error_code)); }
@@ -72,8 +69,6 @@ public:
   static inline bool boolean_or_throw(int error_code);
   static inline void success_or_throw(int error_code, const exception_thunk &);
   static inline bool boolean_or_throw(int error_code, const exception_thunk &);
-  static inline void panic_on_failure(int error_code, const char *context_where, const char *func_who) noexcept;
-  static inline void success_or_panic(int error_code, const char *context_where, const char *func_who) noexcept;
 };
 
 /// \brief Base class for all libmdbx's exceptions that are corresponds to libmdbx errors.

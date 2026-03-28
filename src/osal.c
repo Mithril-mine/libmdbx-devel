@@ -196,103 +196,26 @@ __extern_C void __assert(const char *function, const char *file, int line, const
 
 #endif /* __assert_fail */
 
-__cold void mdbx_assert_fail(const MDBX_env *env, const char *msg, const char *func, unsigned line) {
-#if MDBX_DEBUG
-  if (env && env->assert_func)
-    env->assert_func(env, msg, func, line);
-#else
-  (void)env;
-  assert_fail(msg, func, line);
-}
-
-__cold void assert_fail(const char *msg, const char *func, unsigned line) {
-#endif /* MDBX_DEBUG */
-
-  if (globals.logger.ptr)
-    debug_log(MDBX_LOG_FATAL, func, line, "assert: %s\n", msg);
-  else {
-#if defined(_WIN32) || defined(_WIN64)
-    char *message = nullptr;
-    const int num = osal_asprintf(&message, "\r\nMDBX-ASSERTION: %s, %s:%u", msg, func ? func : "unknown", line);
-    if (num < 1 || !message)
-      message = "<troubles with assertion-message preparation>";
-    OutputDebugStringA(message);
-#else
-    __assert_fail(msg, "mdbx", line, func);
-#endif
-  }
-
+__cold void osal_panic(const char *msg, const char *func, unsigned line) {
   while (1) {
 #if defined(_WIN32) || defined(_WIN64)
 #if defined(_DEBUG) && !MDBX_WITHOUT_MSVC_CRT
-    if (_CrtDbgReport(_CRT_ASSERT, func ? func : "unknown", line, "libmdbx", "assertion failed: %s", msg) == 0)
-      return /* user chooses the "Continue" button */;
-    else {
-      /* user chooses the "Retry" button */
-      if (IsDebuggerPresent())
-        DebugBreak();
-    }
+    _CrtDbgReport(_CRT_ASSERT, func, line, "libmdbx", "assertion failed: %s", msg);
 #else
+    char *message = nullptr;
+    const int num = osal_asprintf(&message, "\r\nMDBX-ASSERTION: %s, %s:%u\r\n", msg, func, line);
+    if (num < 1 || !message)
+      message = "\r\n<asprintf() failed>\r\n";
+    OutputDebugStringA(message);
+#endif
     if (IsDebuggerPresent())
       DebugBreak();
     FatalExit(STATUS_ASSERTION_FAILURE);
-#endif
 #else
+    __assert_fail(msg, "libmdbx", line, func);
     abort();
 #endif
   }
-}
-
-MDBX_NORETURN __cold static void panic_va_list(const void *ptr, const char *fmt, va_list ap) {
-  char *message = nullptr;
-  const int num = osal_vasprintf(&message, fmt, ap);
-  const char *const const_message =
-      unlikely(num < 1 || !message) ? "<troubles with panic-message preparation>" : message;
-
-  if (ptr) {
-    /* TODO:
-     * - check ptr is valid and readable;
-     * - check signature to determine a type of the object (cursor, txn, env);
-     * - try to dump useful information if debugger or logger is attached.
-     */
-  }
-
-  const char *const nl = (num > 0 && const_message[num - 1] == '\n') ? "" : "\n";
-  if (globals.logger.ptr)
-    debug_log(MDBX_LOG_FATAL, "mdbx-panic", 0, "%s%s", const_message, nl);
-
-  while (1) {
-#if defined(_WIN32) || defined(_WIN64)
-#if defined(_DEBUG) && !MDBX_WITHOUT_MSVC_CRT
-    _CrtDbgReport(_CRT_ASSERT, "mdbx.c", 0, "libmdbx", "panic: %s", const_message);
-#else
-    OutputDebugStringA("\r\nMDBX-PANIC: ");
-    OutputDebugStringA(const_message);
-    if (*nl)
-      OutputDebugStringA("\r\n");
-#endif
-    if (IsDebuggerPresent())
-      DebugBreak();
-    FatalExit(ERROR_UNHANDLED_EXCEPTION);
-#else
-    __assert_fail(const_message, "mdbx-panic", 0, const_message);
-    abort();
-#endif
-  }
-}
-
-__cold void mdbx_panic(const char *fmt, ...) {
-  va_list ap;
-  va_start(ap, fmt);
-  panic_va_list(nullptr, fmt, ap);
-  va_end(ap);
-}
-
-__cold void mdbx_panic_ex(const void *ptr, const char *fmt, ...) {
-  va_list ap;
-  va_start(ap, fmt);
-  panic_va_list(ptr, fmt, ap);
-  va_end(ap);
 }
 
 /*----------------------------------------------------------------------------*/
@@ -3607,7 +3530,7 @@ void osal_ctor(void) {
     unsigned time_conversion_checkup = osal_monotime_to_16dot16(osal_16dot16_to_monotime(proba));
     unsigned one_more = (proba < UINT32_MAX) ? proba + 1 : proba;
     unsigned one_less = (proba > 0) ? proba - 1 : proba;
-    ENSURE(nullptr, time_conversion_checkup >= one_less && time_conversion_checkup <= one_more);
+    ENSURE(time_conversion_checkup >= one_less && time_conversion_checkup <= one_more);
     if (proba == 0)
       break;
     proba >>= 1;

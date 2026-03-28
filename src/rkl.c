@@ -429,6 +429,7 @@ rkl_iter_t rkl_iterator(const rkl_t *rkl, const bool reverse) {
     const txnid_t *it = rkl_bsearch(rkl->list, rkl->list_length, rkl->solid_begin);
     const txnid_t *const end = rkl->list + rkl->list_length;
     assert(it >= rkl->list && it <= end && (it == end || *it > rkl->solid_begin));
+    (void)end;
     iter.solid_offset = it - rkl->list;
   }
   return iter;

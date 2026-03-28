@@ -218,14 +218,14 @@ MDBX_cursor *cursor_eot(MDBX_cursor *cursor, MDBX_txn *txn) {
   MDBX_cursor *const next = cursor->next;
   const unsigned stage = cursor->signature;
   MDBX_cursor *const shadow = cursor->backup;
-  ENSURE(txn->env, stage == cur_signature_live || stage == cur_signature_wait4eot);
+  ENSURE_OBJ(txn, stage == cur_signature_live || stage == cur_signature_wait4eot);
   tASSERT(txn, cursor->txn == txn);
   if (shadow) {
     subcur_t *subcur = cursor->subcur;
     tASSERT(txn, txn->parent != nullptr && shadow->txn == txn->parent);
     /* Zap: Using uninitialized memory '*subcur->backup'. */
     MDBX_SUPPRESS_GOOFY_MSVC_ANALYZER(6001);
-    ENSURE(txn->env, shadow->signature == cur_signature_live);
+    ENSURE_OBJ(txn, shadow->signature == cur_signature_live);
     tASSERT(txn, subcur == shadow->subcur);
     if ((txn->flags & MDBX_TXN_ERROR) == 0) {
       /* Update pointers to parent txn */

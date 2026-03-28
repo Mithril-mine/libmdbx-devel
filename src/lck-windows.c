@@ -124,7 +124,7 @@ void lck_txn_unlock(MDBX_env *env) {
   if ((env->flags & MDBX_EXCLUSIVE) == 0) {
     int err = funlock(env->ioring.overlapped_fd ? env->ioring.overlapped_fd : env->lazy_fd, DXB_BODY);
     if (err != MDBX_SUCCESS)
-      mdbx_panic("%s failed: err %u", __func__, err);
+      panic_fmt(env, "lck/%s-unlock error %d", "txn", err);
   }
   if (env->basal_txn)
     env->basal_txn->owner = 0;
@@ -180,7 +180,7 @@ void lck_rdt_unlock(MDBX_env *env) {
     /* transition from S-E (locked) to S-? (used), e.g. unlock upper-part */
     int err = funlock(env->lck_mmap.fd, LCK_UPPER);
     if (err != MDBX_SUCCESS)
-      mdbx_panic("%s failed: err %u", __func__, err);
+      panic_fmt(env, "lck/%s-unlock error %d", "rdt", err);
   }
   LeaveCriticalSection(&env->lck_event_cs);
   imports.srwl_ReleaseShared(&env->remap_lock);
@@ -406,7 +406,7 @@ static int internal_seize_lck(MDBX_env *env) {
     /* 6) something went wrong, give up */
     rc = funlock(env->lck_mmap.fd, LCK_UPPER);
     if (rc != MDBX_SUCCESS)
-      mdbx_panic("%s(%s) failed: err %u", __func__, "?-E(middle) >> ?-?(free)", rc);
+      panic_fmt(env, "lck/%s-unlock error %u", "?-E(middle) >> ?-?(free)", rc);
     return rc;
   }
 
@@ -422,7 +422,7 @@ static int internal_seize_lck(MDBX_env *env) {
    *    transition to S-? (used) or ?-? (free) */
   int err = funlock(env->lck_mmap.fd, LCK_UPPER);
   if (err != MDBX_SUCCESS)
-    mdbx_panic("%s(%s) failed: err %u", __func__, "X-E(locked/middle) >> X-?(used/free)", err);
+    panic_fmt(env, "lck/%s-unlock error %u", "X-E(locked/middle) >> X-?(used/free)", err);
 
   /* 9) now on S-? (used, DONE) or ?-? (free, FAILURE) */
   return rc;
@@ -462,7 +462,7 @@ int lck_seize(MDBX_env *env) {
     jitter4testing(false);
     err = funlock(env->ioring.overlapped_fd ? env->ioring.overlapped_fd : env->lazy_fd, DXB_WHOLE);
     if (err != MDBX_SUCCESS)
-      mdbx_panic("%s(%s) failed: err %u", __func__, "unlock-against-without-lck", err);
+      panic_fmt(env, "dxb/%s-unlock error %u", "lock-against-without-lck", err);
   }
 
   return rc;
@@ -478,7 +478,7 @@ int lck_downgrade(MDBX_env *env) {
   /* 1) now at E-E (exclusive-write), transition to ?_E (middle) */
   int rc = funlock(env->lck_mmap.fd, LCK_LOWER);
   if (rc != MDBX_SUCCESS)
-    mdbx_panic("%s(%s) failed: err %u", __func__, "E-E(exclusive-write) >> ?-E(middle)", rc);
+    panic_fmt(env, "lck/%s-unlock error %u", "E-E(exclusive-write) >> ?-E(middle)", rc);
 
   /* 2) now at ?-E (middle), transition to S-E (locked) */
   rc = flock_lck(env, LCK_SHARED, LCK_LOWER, TIMEOUT_LONG_MS);
@@ -491,7 +491,7 @@ int lck_downgrade(MDBX_env *env) {
   /* 4) got S-E (locked), continue transition to S-? (used) */
   rc = funlock(env->lck_mmap.fd, LCK_UPPER);
   if (rc != MDBX_SUCCESS)
-    mdbx_panic("%s(%s) failed: err %u", __func__, "S-E(locked) >> S-?(used)", rc);
+    panic_fmt(env, "lck/%s-unlock error %u", "S-E(locked) >> S-?(used)", rc);
 
   return MDBX_SUCCESS /* 5) now at S-? (used), done */;
 }
@@ -516,7 +516,7 @@ int lck_upgrade(MDBX_env *env, bool dont_wait) {
   /* 3) now on S-E (locked), transition to ?-E (middle) */
   rc = funlock(env->lck_mmap.fd, LCK_LOWER);
   if (rc != MDBX_SUCCESS)
-    mdbx_panic("%s(%s) failed: err %u", __func__, "S-E(locked) >> ?-E(middle)", rc);
+    panic_fmt(env, "lck/%s-unlock error %u", "S-E(locked) >> ?-E(middle)", rc);
 
   /* 4) now on ?-E (middle), try E-E (exclusive-write) */
   jitter4testing(false);

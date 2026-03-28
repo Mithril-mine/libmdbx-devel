@@ -641,7 +641,7 @@ __cold int dxb_setup(MDBX_env *env, const int lck_rc, const mdbx_mode_t mode_bit
       /* fetch back 'now/current' size, since it was ignored during comparison and may differ. */
       env->geo_in_bytes.now = pgno_ceil2os_bytes(env, header.geometry.now);
     }
-    ENSURE(env, header.geometry.now >= header.geometry.first_unallocated);
+    ENSURE_OBJ(env, header.geometry.now >= header.geometry.first_unallocated);
   } else {
     /* geo-params are not pre-configured by user, get current values from the meta. */
     env->geo_in_bytes.now = pgno_ceil2os_bytes(env, header.geometry.now);
@@ -651,7 +651,7 @@ __cold int dxb_setup(MDBX_env *env, const int lck_rc, const mdbx_mode_t mode_bit
     env->geo_in_bytes.shrink = pgno_ceil2os_bytes(env, pv2pages(header.geometry.shrink_pv));
   }
 
-  ENSURE(env, env->geo_in_bytes.now >= allocated_bytes);
+  ENSURE_OBJ(env, env->geo_in_bytes.now >= allocated_bytes);
   if (!expected_filesize)
     expected_filesize = env->geo_in_bytes.now;
   const uint64_t filesize_before = env->dxb_mmap.filesize;
@@ -841,15 +841,15 @@ __cold int dxb_setup(MDBX_env *env, const int lck_rc, const mdbx_mode_t mode_bit
              "opening after an unclean shutdown", last_valid ? "" : " invalid", pgno, last_valid ? " weak" : "",
              recent.txnid);
       meta_troika_dump(env, &troika);
-      ENSURE(env, prefer_steady.is_steady);
+      ENSURE_OBJ(env, prefer_steady.is_steady);
       err = meta_override(env, pgno, 0, last_valid ? recent.ptr_c : prefer_steady.ptr_c);
       if (err) {
         ERROR("rollback: overwrite meta[%u] with txnid %" PRIaTXN ", error %d", pgno, recent.txnid, err);
         return err;
       }
       troika = meta_tap(env);
-      ENSURE(env, 0 == meta_txnid(recent.ptr_v));
-      ENSURE(env, 0 == meta_eq_mask(&troika));
+      ENSURE_OBJ(env, 0 == meta_txnid(recent.ptr_v));
+      ENSURE_OBJ(env, 0 == meta_eq_mask(&troika));
     }
 
   if (lck_rc == /* lck exclusive */ MDBX_RESULT_TRUE) {
@@ -1102,7 +1102,7 @@ int dxb_sync_locked(MDBX_env *env, unsigned flags, meta_t *const pending, troika
             if (unlikely(head.txnid == pending->unsafe_txnid)) {
               const txnid_t txnid = safe64_txnid_next(pending->unsafe_txnid);
               NOTICE("force-forward pending-txn %" PRIaTXN " -> %" PRIaTXN, pending->unsafe_txnid, txnid);
-              ENSURE(env, !env->basal_txn || !env->txn);
+              ENSURE_OBJ(env, !env->basal_txn || !env->txn);
               if (unlikely(txnid > MAX_TXNID)) {
                 rc = MDBX_TXN_FULL;
                 ERROR("txnid overflow, raise %d", rc);
@@ -1167,7 +1167,7 @@ int dxb_sync_locked(MDBX_env *env, unsigned flags, meta_t *const pending, troika
                                !memcmp(&head.ptr_c->geometry, &pending->geometry, sizeof(pending->geometry));
   meta_t *target = nullptr;
   if (head.txnid == pending->unsafe_txnid) {
-    ENSURE(env, legal4overwrite);
+    ENSURE_OBJ(env, legal4overwrite);
     if (!head.is_steady && meta_is_steady(pending))
       target = (meta_t *)head.ptr_c;
     else {
@@ -1177,7 +1177,7 @@ int dxb_sync_locked(MDBX_env *env, unsigned flags, meta_t *const pending, troika
     }
   } else {
     const unsigned troika_tail = troika->tail_and_flags & 3;
-    ENSURE(env, troika_tail < NUM_METAS && troika_tail != troika->recent && troika_tail != troika->prefer_steady);
+    ENSURE_OBJ(env, troika_tail < NUM_METAS && troika_tail != troika->recent && troika_tail != troika->prefer_steady);
     target = (meta_t *)meta_tail(env, troika).ptr_c;
   }
 
@@ -1210,7 +1210,7 @@ int dxb_sync_locked(MDBX_env *env, unsigned flags, meta_t *const pending, troika
   eASSERT(env, pending->unsafe_txnid != constmeta_txnid(meta2) || (meta_is_steady(pending) && !meta_is_steady(meta2)));
 
   eASSERT(env, ((env->flags ^ flags) & MDBX_WRITEMAP) == 0);
-  ENSURE(env, target == head.ptr_c || constmeta_txnid(target) < pending->unsafe_txnid);
+  ENSURE_OBJ(env, target == head.ptr_c || constmeta_txnid(target) < pending->unsafe_txnid);
   if (flags & MDBX_WRITEMAP) {
     jitter4testing(true);
     if (likely(target != head.ptr_c)) {

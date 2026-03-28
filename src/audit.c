@@ -106,7 +106,7 @@ __cold int audit_ex(MDBX_txn *txn, size_t retired_stored, bool dont_filter_gc) {
     txn->flags &= ~MDBX_TXN_BLOCKED;
     rc = audit_ex_locked(txn, retired_stored, dont_filter_gc);
     txn->flags = preserve_txn_flags;
-    ENSURE(txn->env, osal_fastmutex_release(&env->dbi_lock) == MDBX_SUCCESS);
+    ENSURE_OBJ(env, osal_fastmutex_release(&env->dbi_lock) == MDBX_SUCCESS);
   }
   return rc;
 }

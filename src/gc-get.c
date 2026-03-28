@@ -755,7 +755,7 @@ static inline pgr_t page_alloc_finalize(MDBX_env *const env, MDBX_txn *const txn
 #else
   (void)mc;
 #endif /* MDBX_ENABLE_PROFGC */
-  ENSURE(env, pgno >= NUM_METAS);
+  ENSURE_OBJ(env, pgno >= NUM_METAS);
 
   pgr_t ret;
   bool need_clean = (env->flags & MDBX_PAGEPERTURB) != 0;

@@ -71,7 +71,7 @@ bsr_t mvcc_bind_slot(MDBX_env *env) {
   return result;
 }
 
-#define NOTHING_CHANGED_SIGNATURE MDBX_STRING_TETRAD("None")
+#define NOTHING_CHANGED_SIGNATURE MDBX_TETRAD('N', 'o', 'n', 'e')
 
 MDBX_MAYBE_UNUSED __hot orsi_ro_t mvcc_shapshot_oldest_ro(const MDBX_txn *const txn,
                                                           const bool need_thisprocess_oldest) {

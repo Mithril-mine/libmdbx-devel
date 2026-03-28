@@ -636,13 +636,13 @@ __cold int mdbx_env_close_ex(MDBX_env *env, bool dont_sync) {
 
   eASSERT(env, env->signature.weak == 0);
   rc = env_close(env, false) ? MDBX_PANIC : rc;
-  ENSURE(env, osal_fastmutex_destroy(&env->dbi_lock) == MDBX_SUCCESS);
+  ENSURE_OBJ(env, osal_fastmutex_destroy(&env->dbi_lock) == MDBX_SUCCESS);
 #if defined(_WIN32) || defined(_WIN64)
   /* remap_lock don't have destructor (Slim Reader/Writer Lock) */
   DeleteCriticalSection(&env->lck_event_cs);
   DeleteCriticalSection(&env->dxb_event_cs);
 #else
-  ENSURE(env, osal_fastmutex_destroy(&env->remap_lock) == MDBX_SUCCESS);
+  ENSURE_OBJ(env, osal_fastmutex_destroy(&env->remap_lock) == MDBX_SUCCESS);
 #endif /* Windows */
 
 #if MDBX_LOCKING > MDBX_LOCKING_SYSV
@@ -1190,30 +1190,30 @@ __cold int mdbx_env_set_geometry(MDBX_env *env, intptr_t size_lower, intptr_t si
     env->geo_in_bytes.shrink = pgno2bytes(env, pv2pages(pages2pv(bytes2pgno(env, shrink_threshold))));
     env_options_adjust_defaults(env);
 
-    ENSURE(env, env->geo_in_bytes.lower >= MIN_MAPSIZE);
-    ENSURE(env, env->geo_in_bytes.lower / (unsigned)pagesize >= MIN_PAGENO);
-    ENSURE(env, env->geo_in_bytes.lower % (unsigned)pagesize == 0);
-    ENSURE(env, env->geo_in_bytes.lower % globals.sys_pagesize == 0);
+    ENSURE_OBJ(env, env->geo_in_bytes.lower >= MIN_MAPSIZE);
+    ENSURE_OBJ(env, env->geo_in_bytes.lower / (unsigned)pagesize >= MIN_PAGENO);
+    ENSURE_OBJ(env, env->geo_in_bytes.lower % (unsigned)pagesize == 0);
+    ENSURE_OBJ(env, env->geo_in_bytes.lower % globals.sys_pagesize == 0);
 
-    ENSURE(env, env->geo_in_bytes.upper <= MAX_MAPSIZE);
-    ENSURE(env, env->geo_in_bytes.upper / (unsigned)pagesize <= MAX_PAGENO + 1);
-    ENSURE(env, env->geo_in_bytes.upper % (unsigned)pagesize == 0);
-    ENSURE(env, env->geo_in_bytes.upper % globals.sys_pagesize == 0);
+    ENSURE_OBJ(env, env->geo_in_bytes.upper <= MAX_MAPSIZE);
+    ENSURE_OBJ(env, env->geo_in_bytes.upper / (unsigned)pagesize <= MAX_PAGENO + 1);
+    ENSURE_OBJ(env, env->geo_in_bytes.upper % (unsigned)pagesize == 0);
+    ENSURE_OBJ(env, env->geo_in_bytes.upper % globals.sys_pagesize == 0);
 
-    ENSURE(env, env->geo_in_bytes.now >= env->geo_in_bytes.lower);
-    ENSURE(env, env->geo_in_bytes.now <= env->geo_in_bytes.upper);
-    ENSURE(env, env->geo_in_bytes.now % (unsigned)pagesize == 0);
-    ENSURE(env, env->geo_in_bytes.now % globals.sys_pagesize == 0);
+    ENSURE_OBJ(env, env->geo_in_bytes.now >= env->geo_in_bytes.lower);
+    ENSURE_OBJ(env, env->geo_in_bytes.now <= env->geo_in_bytes.upper);
+    ENSURE_OBJ(env, env->geo_in_bytes.now % (unsigned)pagesize == 0);
+    ENSURE_OBJ(env, env->geo_in_bytes.now % globals.sys_pagesize == 0);
 
-    ENSURE(env, env->geo_in_bytes.grow % (unsigned)pagesize == 0);
-    ENSURE(env, env->geo_in_bytes.grow % globals.sys_pagesize == 0);
-    ENSURE(env, env->geo_in_bytes.shrink % (unsigned)pagesize == 0);
-    ENSURE(env, env->geo_in_bytes.shrink % globals.sys_pagesize == 0);
+    ENSURE_OBJ(env, env->geo_in_bytes.grow % (unsigned)pagesize == 0);
+    ENSURE_OBJ(env, env->geo_in_bytes.grow % globals.sys_pagesize == 0);
+    ENSURE_OBJ(env, env->geo_in_bytes.shrink % (unsigned)pagesize == 0);
+    ENSURE_OBJ(env, env->geo_in_bytes.shrink % globals.sys_pagesize == 0);
 
     rc = MDBX_SUCCESS;
   } else {
     /* apply new params to opened environment */
-    ENSURE(env, pagesize == (intptr_t)env->ps);
+    ENSURE_OBJ(env, pagesize == (intptr_t)env->ps);
     meta_t meta;
     memset(&meta, 0, sizeof(meta));
     if (!env->txn) {
@@ -1254,19 +1254,19 @@ __cold int mdbx_env_set_geometry(MDBX_env *env, intptr_t size_lower, intptr_t si
     new_geo.shrink_pv = pages2pv(bytes2pgno(env, shrink_threshold));
     new_geo.first_unallocated = current_geo->first_unallocated;
 
-    ENSURE(env, pgno_ceil2sp_bytes(env, new_geo.lower) == (size_t)size_lower);
-    ENSURE(env, pgno_ceil2sp_bytes(env, new_geo.upper) == (size_t)size_upper);
-    ENSURE(env, pgno_ceil2sp_bytes(env, new_geo.now) == (size_t)size_now);
-    ENSURE(env, new_geo.grow_pv == pages2pv(pv2pages(new_geo.grow_pv)));
-    ENSURE(env, new_geo.shrink_pv == pages2pv(pv2pages(new_geo.shrink_pv)));
+    ENSURE_OBJ(env, pgno_ceil2sp_bytes(env, new_geo.lower) == (size_t)size_lower);
+    ENSURE_OBJ(env, pgno_ceil2sp_bytes(env, new_geo.upper) == (size_t)size_upper);
+    ENSURE_OBJ(env, pgno_ceil2sp_bytes(env, new_geo.now) == (size_t)size_now);
+    ENSURE_OBJ(env, new_geo.grow_pv == pages2pv(pv2pages(new_geo.grow_pv)));
+    ENSURE_OBJ(env, new_geo.shrink_pv == pages2pv(pv2pages(new_geo.shrink_pv)));
 
-    ENSURE(env, (size_t)size_lower >= MIN_MAPSIZE);
-    ENSURE(env, new_geo.lower >= MIN_PAGENO);
-    ENSURE(env, (size_t)size_upper <= MAX_MAPSIZE);
-    ENSURE(env, new_geo.upper <= MAX_PAGENO + 1);
-    ENSURE(env, new_geo.now >= new_geo.first_unallocated);
-    ENSURE(env, new_geo.upper >= new_geo.now);
-    ENSURE(env, new_geo.now >= new_geo.lower);
+    ENSURE_OBJ(env, (size_t)size_lower >= MIN_MAPSIZE);
+    ENSURE_OBJ(env, new_geo.lower >= MIN_PAGENO);
+    ENSURE_OBJ(env, (size_t)size_upper <= MAX_MAPSIZE);
+    ENSURE_OBJ(env, new_geo.upper <= MAX_PAGENO + 1);
+    ENSURE_OBJ(env, new_geo.now >= new_geo.first_unallocated);
+    ENSURE_OBJ(env, new_geo.upper >= new_geo.now);
+    ENSURE_OBJ(env, new_geo.now >= new_geo.lower);
 
     if (memcmp(current_geo, &new_geo, sizeof(geo_t)) != 0) {
 #if defined(_WIN32) || defined(_WIN64)

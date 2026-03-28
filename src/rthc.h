@@ -35,9 +35,9 @@ MDBX_INTERNAL void workaround_glibc_bug21031(void);
 static inline void thread_key_delete(osal_thread_key_t key) {
   TRACE("key = %" PRIuPTR, (uintptr_t)key);
 #if defined(_WIN32) || defined(_WIN64)
-  ENSURE(nullptr, TlsFree(key));
+  ENSURE(TlsFree(key));
 #else
-  ENSURE(nullptr, pthread_key_delete(key) == 0);
+  ENSURE(pthread_key_delete(key) == 0);
   workaround_glibc_bug21031();
 #endif
 }

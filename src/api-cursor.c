@@ -112,7 +112,7 @@ int mdbx_cursor_unbind(MDBX_cursor *mc) {
     if (dbi < mc->txn->n_dbi) {
       MDBX_cursor **prev = &mc->txn->cursors[dbi];
       while (/* *prev && */ *prev != mc) {
-        ENSURE(mc->txn->env, (*prev)->signature == cur_signature_live || (*prev)->signature == cur_signature_wait4eot);
+        ENSURE_OBJ(mc, (*prev)->signature == cur_signature_live || (*prev)->signature == cur_signature_wait4eot);
         prev = &(*prev)->next;
       }
       cASSERT(mc, *prev == mc);
@@ -148,7 +148,7 @@ void mdbx_cursor_close(MDBX_cursor *cursor) {
   if (likely(cursor)) {
     int err = mdbx_cursor_close2(cursor);
     if (unlikely(err != MDBX_SUCCESS))
-      mdbx_panic("%s:%d error %d (%s) while closing cursor", __func__, __LINE__, err, mdbx_liberr2str(err));
+      panic_fmt(cursor, "error %d (%s) while closing cursor", err, mdbx_liberr2str(err));
   }
 }
 
@@ -187,7 +187,7 @@ int mdbx_cursor_close2(MDBX_cursor *mc) {
     if (likely(dbi < txn->n_dbi)) {
       MDBX_cursor **prev = &txn->cursors[dbi];
       while (/* *prev && */ *prev != mc) {
-        ENSURE(txn->env, (*prev)->signature == cur_signature_live || (*prev)->signature == cur_signature_wait4eot);
+        ENSURE_OBJ(txn, (*prev)->signature == cur_signature_live || (*prev)->signature == cur_signature_wait4eot);
         prev = &(*prev)->next;
       }
       tASSERT(txn, *prev == mc);
@@ -248,7 +248,7 @@ int mdbx_txn_release_all_cursors_ex(const MDBX_txn *txn, bool unbind, size_t *co
             mc->signature = cur_signature_wait4eot;
             cursor_drown((cursor_couple_t *)mc);
           } else
-            ENSURE(nullptr, mc->signature == cur_signature_wait4eot);
+            ENSURE(mc->signature == cur_signature_wait4eot);
           if (mc->backup) {
             MDBX_cursor *bk = mc->backup;
             mc->next = bk->next;

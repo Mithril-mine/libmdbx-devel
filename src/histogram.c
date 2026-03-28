@@ -197,7 +197,7 @@ __cold MDBX_chk_line_t *histogram_dist(MDBX_chk_line_t *line, const struct MDBX_
         comma = ",";
       }
 
-    ENSURE_MSG(nullptr, histogram_check(histogram, 0), "Historgam related bug, please report this");
+    ENSURE_MSG(histogram_check(histogram, 0), "Historgam related bug, please report this");
   }
   return line;
 }

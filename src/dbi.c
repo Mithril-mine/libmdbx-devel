@@ -183,7 +183,7 @@ int dbi_defer_release(MDBX_env *const env, defer_free_item_t *const chain) {
   obsolete_chain = chain;
 #endif /* MDBX_ENABLE_DBI_LOCKFREE */
 
-  ENSURE(env, osal_fastmutex_release(&env->dbi_lock) == MDBX_SUCCESS);
+  ENSURE_OBJ(env, osal_fastmutex_release(&env->dbi_lock) == MDBX_SUCCESS);
   if (length > 42)
     osal_yield();
   while (obsolete_chain) {
