@@ -367,18 +367,13 @@ __hot int page_split(MDBX_cursor *mc, const MDBX_val *const newkey, MDBX_val *co
   if (unlikely(pure_left | pure_right)) {
     mc->pg[mc->top] = sister;
     mc->ki[mc->top] = 0;
-    switch (page_type(sister)) {
-    case P_LEAF: {
-      cASSERT(mc, newpgno == 0 || newpgno == P_INVALID);
-      rc = node_add_leaf(mc, 0, newkey, newdata, naf);
-    } break;
-    case P_LEAF | P_DUPFIX: {
+    cASSERT(mc, newpgno == 0 || newpgno == P_INVALID);
+    if (is_dupfix_leaf(sister)) {
       cASSERT(mc, (naf & (N_BIG | N_TREE | N_DUP)) == 0);
-      cASSERT(mc, newpgno == 0 || newpgno == P_INVALID);
       rc = node_add_dupfix(mc, 0, newkey);
-    } break;
-    default:
-      rc = bad_page(sister, "wrong page-type %u\n", page_type(sister));
+    } else {
+      cASSERT(mc, is_leaf(sister));
+      rc = node_add_leaf(mc, 0, newkey, newdata, naf);
     }
     if (unlikely(rc != MDBX_SUCCESS))
       goto done;
@@ -433,24 +428,14 @@ __hot int page_split(MDBX_cursor *mc, const MDBX_val *const newkey, MDBX_val *co
         flags = node_flags(node);
       }
 
-      switch (page_type(sister)) {
-      case P_BRANCH: {
-        cASSERT(mc, 0 == (uint16_t)flags);
-        /* First branch index doesn't need key data. */
-        rc = node_add_branch(mc, n, n ? &rkey : nullptr, pgno);
-      } break;
-      case P_LEAF: {
+      if (is_leaf(sister)) {
         cASSERT(mc, pgno == 0);
         cASSERT(mc, rdata != nullptr);
         rc = node_add_leaf(mc, n, &rkey, rdata, flags);
-      } break;
-      /* case P_LEAF | P_DUPFIX: {
-        cASSERT(mc, (nflags & (N_BIG | N_TREE | N_DUP)) == 0);
-        cASSERT(mc, gno == 0);
-        rc = mdbx_node_add_dupfix(mc, n, &rkey);
-      } break; */
-      default:
-        rc = bad_page(sister, "wrong page-type %u\n", page_type(sister));
+      } else {
+        cASSERT(mc, 0 == (uint16_t)flags && is_branch(sister));
+        /* First branch index doesn't need key data. */
+        rc = node_add_branch(mc, n, n ? &rkey : nullptr, pgno);
       }
       if (unlikely(rc != MDBX_SUCCESS))
         goto done;
