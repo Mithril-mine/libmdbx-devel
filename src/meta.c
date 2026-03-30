@@ -599,7 +599,7 @@ __cold int meta_validate(MDBX_env *env, meta_t *const meta, const page_t *const 
       WARNING("meta[%u] has false-empty %s, skip it", meta_number, "GC");
       return MDBX_CORRUPTED;
     }
-  } else if (unlikely(meta->trees.gc.root >= meta->geometry.first_unallocated)) {
+  } else if (unlikely(meta->trees.gc.root >= meta->geometry.first_unallocated || meta->trees.gc.root < NUM_METAS)) {
     WARNING("meta[%u] has invalid %s-root %" PRIaPGNO ", skip it", meta_number, "GC", meta->trees.gc.root);
     return MDBX_CORRUPTED;
   }
@@ -611,7 +611,7 @@ __cold int meta_validate(MDBX_env *env, meta_t *const meta, const page_t *const 
       WARNING("meta[%u] has false-empty %s", meta_number, "MainDB");
       return MDBX_CORRUPTED;
     }
-  } else if (unlikely(meta->trees.main.root >= meta->geometry.first_unallocated)) {
+  } else if (unlikely(meta->trees.main.root >= meta->geometry.first_unallocated || meta->trees.main.root < NUM_METAS)) {
     WARNING("meta[%u] has invalid %s-root %" PRIaPGNO ", skip it", meta_number, "MainDB", meta->trees.main.root);
     return MDBX_CORRUPTED;
   }
