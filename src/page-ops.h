@@ -11,10 +11,6 @@ MDBX_INTERNAL int __must_check_result page_split(MDBX_cursor *mc, const MDBX_val
 
 /*----------------------------------------------------------------------------*/
 
-MDBX_INTERNAL int MDBX_PRINTF_ARGS(2, 3) bad_page(const page_t *mp, const char *fmt, ...);
-
-MDBX_INTERNAL void MDBX_PRINTF_ARGS(2, 3) poor_page(const page_t *mp, const char *fmt, ...);
-
 MDBX_NOTHROW_PURE_FUNCTION static inline bool is_frozen(const MDBX_txn *txn, const page_t *mp) {
   return mp->txnid < txn->txnid;
 }
