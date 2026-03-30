@@ -81,8 +81,35 @@ MDBX_INTERNAL int __must_check_result node_read_bigdata(MDBX_cursor *mc, const n
 static inline int __must_check_result node_read(MDBX_cursor *mc, const node_t *node, MDBX_val *data, const page_t *mp) {
   data->iov_len = node_ds(node);
   data->iov_base = node_data(node);
-  if (likely(node_flags(node) != N_BIG))
+  if (likely(node_flags(node) != N_BIG)) {
+#if 0
+    /* This is an example of a code that checks out-of-bounds by an incorrect/bad/crafted node.
+     * Such checks look useful, but they are unreasonable really:
+     *  - an each such check catches some damage case of the structure, apparently in one of the hot execution paths,
+     *    but LEAVES several dozen more aside;
+     *  - the overhead increases slightly,
+     *    but there is also NO CERTAINTY that all or most of the corruption cases will be solved;
+     *  - libmdbx already has a fairly complete page content validation mode by MDBX_VALIDATION, which leads
+     *    calling the page_check() for each page from all page_get_xxx() variants, excepts page_get_unchecked();
+     *  = So, the MDBX_VALIDATION must be used to work with untrusted data,
+     *    but such checks are not necessary for trusted data.
+     *
+     * Thus, libmdbx allows a user, if necessary, to enable control of the database structure at the cost of reduced
+     * performance. On the other hand, such approach allows not to lose productivity unnecessarily.
+     *
+     * Related issues:
+     *  - https://sourcecraft.dev/dqdkfa/libmdbx/issues/290
+     *  - https://github.com/Mithril-mine/libmdbx/pull/306
+     */
+    const char *data_end = ptr_disp(data->iov_base, data->iov_len);
+    const char *page_tail = (const char *)((intptr_t)mp | /* Using the OR operation to get the tail of a real page
+                                                             in case here is a dupsort nested sub-page even. */
+                                           (intptr_t)(mc->txn->env->ps - 1));
+    if (!MDBX_DISABLE_VALIDATION && unlikely(data_end > page_tail))
+      return bad_page(mp, "node-data (size %zu bytes) beyond the end of page", data->iov_len);
+#endif /* code example */
     return MDBX_SUCCESS;
+  }
   return node_read_bigdata(mc, node, data, mp);
 }
 
