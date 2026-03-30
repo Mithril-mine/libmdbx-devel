@@ -183,22 +183,6 @@
 #define MDBX_CONSTEXPR_ASSERT(expr) ((expr) ? void(0) : [] { assert(!#expr); }())
 #endif /* MDBX_CONSTEXPR_ASSERT */
 
-#ifndef MDBX_LIKELY
-#if defined(DOXYGEN) || (defined(__GNUC__) || __has_builtin(__builtin_expect)) && !defined(__COVERITY__)
-#define MDBX_LIKELY(cond) __builtin_expect(!!(cond), 1)
-#else
-#define MDBX_LIKELY(x) (x)
-#endif
-#endif /* MDBX_LIKELY */
-
-#ifndef MDBX_UNLIKELY
-#if defined(DOXYGEN) || (defined(__GNUC__) || __has_builtin(__builtin_expect)) && !defined(__COVERITY__)
-#define MDBX_UNLIKELY(cond) __builtin_expect(!!(cond), 0)
-#else
-#define MDBX_UNLIKELY(x) (x)
-#endif
-#endif /* MDBX_UNLIKELY */
-
 /** Workaround for old compilers without properly support for C++20 `if constexpr`. */
 #if defined(DOXYGEN)
 #define MDBX_IF_CONSTEXPR constexpr

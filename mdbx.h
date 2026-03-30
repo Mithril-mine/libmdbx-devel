@@ -591,6 +591,22 @@ typedef mode_t mdbx_mode_t;
 
 #endif /* DEFINE_ENUM_FLAG_OPERATORS */
 
+#ifndef MDBX_LIKELY
+#if defined(DOXYGEN) || (defined(__GNUC__) || __has_builtin(__builtin_expect)) && !defined(__COVERITY__)
+#define MDBX_LIKELY(cond) __builtin_expect(!!(cond), 1)
+#else
+#define MDBX_LIKELY(x) (x)
+#endif
+#endif /* MDBX_LIKELY */
+
+#ifndef MDBX_UNLIKELY
+#if defined(DOXYGEN) || (defined(__GNUC__) || __has_builtin(__builtin_expect)) && !defined(__COVERITY__)
+#define MDBX_UNLIKELY(cond) __builtin_expect(!!(cond), 0)
+#else
+#define MDBX_UNLIKELY(x) (x)
+#endif
+#endif /* MDBX_UNLIKELY */
+
 /** end of api_macros @} */
 
 /*----------------------------------------------------------------------------*/
