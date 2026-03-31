@@ -292,7 +292,8 @@ MDBX_NORETURN static void fuckup(const char *msg, const char *func, unsigned lin
   const MDBX_panic_func panic_func = globals.panic_func;
   if (panic_func)
     panic_func(msg, func, line, obj, obj_class);
-  debug_log(MDBX_LOG_FATAL, func, line, "\r\nMDBX-ASSERTION: %s (%s %p)\r\n", msg, obj_class, (void *)obj);
+  debug_log(MDBX_LOG_FATAL, func, line, obj ? "MDBX-ASSERTION: %s (%s %p)\n" : "MDBX-ASSERTION: %s\n", msg, obj_class,
+            (void *)obj);
   osal_panic(msg, func, line);
 }
 
