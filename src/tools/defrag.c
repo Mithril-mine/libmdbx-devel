@@ -338,12 +338,12 @@ int main(int argc, char *argv[]) {
     rc = mdbx_txn_begin(env, nullptr, MDBX_TXN_READWRITE, &txn);
 
   MDBX_envinfo info_env;
-  memset(&info_env, 0, sizeof(info_env)); /* zap `uninitialized`warning */
+  memset(&info_env, 0, sizeof(info_env)); /* zap `uninitialized` warning */
   if (rc == MDBX_SUCCESS)
     rc = mdbx_env_info_ex(env, txn, &info_env, sizeof(info_env));
 
   MDBX_gc_info_t info_gc;
-  memset(&info_gc, 0, sizeof(info_gc)); /* zap `uninitialized`warning */
+  memset(&info_gc, 0, sizeof(info_gc)); /* zap `uninitialized` warning */
   if (rc == MDBX_SUCCESS)
     rc = mdbx_gc_info(txn, &info_gc, sizeof(info_gc), nullptr, nullptr);
 
@@ -361,7 +361,8 @@ int main(int argc, char *argv[]) {
     if (!quiet) {
       printf(" - space usage in pages: %zu allocated, payload %zu, unused/GC %zu, pagesize %u\n",
              info_gc.pages_allocated, payload_pages, info_gc.pages_gc, info_env.mi_dxb_pagesize);
-      printf(" - defragmentation: target %u%% (shrink %zu pages), cycles ", wanna_defrag_percent, defrag_enough);
+      printf(" - defragmentation: target %u%% (shrink %zu pages), cycles ", wanna_defrag_percent,
+             defrag_enough ? defrag_enough : info_gc.pages_gc);
       if (cycles_limit)
         printf("limit %u", cycles_limit);
       else
