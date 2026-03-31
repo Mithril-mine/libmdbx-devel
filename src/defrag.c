@@ -682,44 +682,40 @@ __hot static int defrag_provide_span(dfc_t *const dfc, const size_t npages) {
     return MDBX_RESULT_TRUE;
 
   memset(dfc->cache_cost, 0, sizeof(dfc->cache_cost));
-  size_t best_begin = MAX_PAGENO, best_cost = len;
+  size_t best_begin = 0, best_cost = len;
 #if MDBX_PNL_ASCENDING
 #error "FIXME: Since 2026-04-01 alternatives to MDBX_PNL_ASCENDING = 0 are no longer supported."
 #else
   for (size_t span, i = len; i > 0 && pnl[i] <= dfc->defrag_enough - npages;) {
-    for (span = 1; i > span && pnl[i - span] < dfc->defrag_enough && MDBX_PNL_CONTIGUOUS(pnl[i - span], pnl[i], span);
-         ++span)
-      ;
+    span = 1;
+    while (unlikely(MDBX_PNL_CONTIGUOUS(pnl[i - span], pnl[i], span)) &&
+           likely((intptr_t)(i - span) > 0 && pnl[i - span] < dfc->defrag_enough))
+      ++span;
 
-    const pgno_t base = pnl[i];
+    pgno_t begin = pnl[i], end = begin + span;
     i -= span;
-    pgno_t begin = base, end = begin + span;
     size_t cost = 0;
     size_t cost_left = defrag_move_cost(dfc, begin - 1, npages);
     size_t cost_right = defrag_move_cost(dfc, end, npages);
     do {
       if (cost_left < cost_right) {
         cost += cost_left;
-        begin -= 1;
-        cost_left = defrag_move_cost(dfc, begin - 1, npages);
+        cost_left = defrag_move_cost(dfc, --begin - 1, npages);
       } else if (cost_right < INT_MAX) {
         cost += cost_right;
-        end += 1;
-        cost_right = defrag_move_cost(dfc, end, npages);
+        cost_right = defrag_move_cost(dfc, ++end, npages);
       } else {
-        while (!MDBX_PNL_ASCENDING && i > 0 && pnl[i] < end)
+        while (pnl[i] < end && likely(i > 0))
           --i;
-        while (MDBX_PNL_ASCENDING && i <= len && pnl[i] < end)
-          ++i;
         break;
       }
     } while (cost < best_cost && end - begin < npages);
 
-    if (end - begin == npages &&
-        (cost < best_cost || (!MDBX_PNL_ASCENDING && cost == best_cost && begin < best_begin))) {
+    if (unlikely(end - begin == npages && cost < best_cost)) {
+      ASSERT(begin > best_begin);
       best_cost = cost;
       best_begin = begin;
-      if (!MDBX_PNL_ASCENDING && !best_cost)
+      if (!best_cost)
         break;
     }
   }
@@ -837,7 +833,7 @@ int defrag_cycle(dfc_t *dfc) {
     return MDBX_RESULT_TRUE;
   }
 
-#if MDBX_CHECKING > 0
+#if MDBX_CHECKING > 1
   dfc->repnl_clone = pnl_clone(txn->wr.repnl);
 #endif /* MDBX_CHECKING > 0 */
 

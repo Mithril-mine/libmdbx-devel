@@ -284,11 +284,12 @@ __hot pgno_t pnl_get_best_sequence(const pnl_t pnl, const size_t seq, const pgno
 #else
   size_t len = pnl_size(pnl);
   for (size_t span, i = len; i >= seq && pnl[i] <= defrag_detent - seq; i -= span) {
-    for (span = 1; i - span > 0 && MDBX_PNL_CONTIGUOUS(pnl[i - span], pnl[i], span); ++span)
-      ;
-    if (span >= seq) {
+    span = 1;
+    while (unlikely(MDBX_PNL_CONTIGUOUS(pnl[i - span], pnl[i], span)) && likely((intptr_t)(i - span) > 0))
+      ++span;
+    if (unlikely(span >= seq)) {
       size_t extra = span - seq;
-      if (extra < best_extra) {
+      if (unlikely(extra < best_extra)) {
         best_pos = i;
         best_extra = extra;
         if (best_extra == 0)
