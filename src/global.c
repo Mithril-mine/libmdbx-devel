@@ -12,10 +12,10 @@ static void mdbx_fini(void);
 #if defined(_WIN32) || defined(_WIN64)
 
 #if MDBX_BUILD_SHARED_LIBRARY
-#if MDBX_WITHOUT_MSVC_CRT && defined(NDEBUG)
+#if MDBX_WITHOUT_MSVC_CRT && !defined(_DEBUG)
 /* DEBUG/CHECKED builds still require MSVC's CRT for runtime checks.
  *
- * Define dll's entry point only for Release build when NDEBUG is defined and
+ * Define dll's entry point only for Release build when _DEBUG is not defined and
  * MDBX_WITHOUT_MSVC_CRT=ON. if the entry point isn't defined then MSVC's will
  * automatically use DllMainCRTStartup() from CRT library, which also
  * automatically call DllMain() from our mdbx.dll */

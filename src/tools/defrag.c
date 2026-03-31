@@ -304,8 +304,7 @@ int main(int argc, char *argv[]) {
             mdbx_version.git.datetime, mdbx_version.git.tree, db_pathname);
     if (verbosity > MDBX_LOG_VERBOSE && MDBX_DEBUG < 1)
       printf("Verbosity level %u exposures only to"
-             " a debug/extra-logging-enabled builds (with NDEBUG undefined"
-             " or MDBX_DEBUG > 0)\n",
+             " a debug/extra-logging-enabled builds (MDBX_DEBUG > 0)\n",
              verbosity);
     mdbx_setup_debug(verbosity, MDBX_DBG_DONTCHANGE, logger);
     fflush(nullptr);

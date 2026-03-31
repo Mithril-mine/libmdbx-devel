@@ -30,7 +30,7 @@ inline cursor &cursor::operator=(cursor &&other) noexcept {
 inline cursor::cursor(cursor &&other) noexcept : handle_(other.handle_) { other.handle_ = nullptr; }
 
 inline cursor::~cursor() noexcept {
-#ifndef NDEBUG
+#if (defined(MDBX_CHECKING) && MDBX_CHECKING > 0) || (defined(MDBX_DEBUG) && MDBX_DEBUG > 0)
   handle_ = reinterpret_cast<MDBX_cursor *>(uintptr_t(0xDeadBeef));
 #endif
 }

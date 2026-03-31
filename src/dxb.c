@@ -546,11 +546,11 @@ __cold int dxb_setup(MDBX_env *env, const int lck_rc, const mdbx_mode_t mode_bit
     if (unlikely(err != MDBX_SUCCESS))
       return err;
 
-#ifndef NDEBUG /* just for checking */
+#if MDBX_CHECKING > 0 || MDBX_DEBUG > 0
     err = dxb_read_header(env, &header, lck_rc, mode_bits);
     if (unlikely(err != MDBX_SUCCESS))
       return err;
-#endif
+#endif /* MDBX_CHECKING > 0 || MDBX_DEBUG > 0 */
   }
 
   VERBOSE("header: root %" PRIaPGNO "/%" PRIaPGNO ", geo %" PRIaPGNO "/%" PRIaPGNO "-%" PRIaPGNO "/%" PRIaPGNO
@@ -1217,14 +1217,14 @@ int dxb_sync_locked(MDBX_env *env, unsigned flags, meta_t *const pending, troika
       /* LY: 'invalidate' the meta. */
       meta_update_begin(env, target, pending->unsafe_txnid);
       unaligned_poke_u64(4, target->sign, DATASIGN_WEAK);
-#ifndef NDEBUG
+#if MDBX_CHECKING > 0 || MDBX_DEBUG > 0
       /* debug: provoke failure to catch a violators, but don't touch pagesize
        * to allow readers catch actual pagesize. */
       void *provoke_begin = &target->trees.gc.root;
       void *provoke_end = &target->sign;
       memset(provoke_begin, 0xCC, ptr_dist(provoke_end, provoke_begin));
       jitter4testing(false);
-#endif
+#endif /* MDBX_CHECKING > 0 || MDBX_DEBUG > 0 */
 
       /* LY: update info */
       target->geometry = pending->geometry;

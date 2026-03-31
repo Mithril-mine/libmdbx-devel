@@ -164,7 +164,7 @@ as a duplicates or as like a multiple values corresponds to keys.
 #include <stdint.h>
 #if !defined(assert)
 #include <assert.h>
-#endif /* NDEBUG */
+#endif /* assert */
 
 #if defined(_WIN32) || defined(_WIN64)
 #include <windows.h>

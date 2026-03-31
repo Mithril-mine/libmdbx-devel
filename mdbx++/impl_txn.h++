@@ -17,7 +17,7 @@ inline txn &txn::operator=(txn &&other) noexcept {
 inline txn::txn(txn &&other) noexcept : handle_(other.handle_) { other.handle_ = nullptr; }
 
 inline txn::~txn() noexcept {
-#ifndef NDEBUG
+#if (defined(MDBX_CHECKING) && MDBX_CHECKING > 0) || (defined(MDBX_DEBUG) && MDBX_DEBUG > 0)
   handle_ = reinterpret_cast<MDBX_txn *>(uintptr_t(0xDeadBeef));
 #endif
 }

@@ -17,7 +17,7 @@ inline env &env::operator=(env &&other) noexcept {
 inline env::env(env &&other) noexcept : handle_(other.handle_) { other.handle_ = nullptr; }
 
 inline env::~env() noexcept {
-#ifndef NDEBUG
+#if (defined(MDBX_CHECKING) && MDBX_CHECKING > 0) || (defined(MDBX_DEBUG) && MDBX_DEBUG > 0)
   handle_ = reinterpret_cast<MDBX_env *>(uintptr_t(0xDeadBeef));
 #endif
 }
