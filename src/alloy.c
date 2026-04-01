@@ -51,6 +51,7 @@
 #include "rthc.c"
 #include "spill.c"
 #include "table.c"
+#include "tree-cutoff.c"
 #include "tree-ops.c"
 #include "tree-search.c"
 #include "txl.c"
