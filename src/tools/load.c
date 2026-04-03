@@ -136,10 +136,10 @@ typedef struct flagbit {
 
 #define S(s) STRLENOF(s), s
 
-flagbit dbflags[] = {{MDBX_REVERSEKEY, S("reversekey")}, {MDBX_DUPSORT, S("duplicates")},
-                     {MDBX_DUPSORT, S("dupsort")},       {MDBX_INTEGERKEY, S("integerkey")},
-                     {MDBX_DUPFIXED, S("dupfix")},       {MDBX_INTEGERDUP, S("integerdup")},
-                     {MDBX_REVERSEDUP, S("reversedup")}, {0, 0, nullptr}};
+static const flagbit dbflags[] = {{MDBX_REVERSEKEY, S("reversekey")}, {MDBX_DUPSORT, S("duplicates")},
+                                  {MDBX_DUPSORT, S("dupsort")},       {MDBX_INTEGERKEY, S("integerkey")},
+                                  {MDBX_DUPFIXED, S("dupfix")},       {MDBX_INTEGERDUP, S("integerdup")},
+                                  {MDBX_REVERSEDUP, S("reversedup")}, {0, 0, nullptr}};
 
 static int readhdr(void) {
   /* reset parameters */

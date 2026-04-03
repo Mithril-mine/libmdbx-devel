@@ -55,10 +55,10 @@ static void usage(void) {
   exit(EXIT_FAILURE);
 }
 
-MDBX_log_level_t verbosity = MDBX_LOG_WARN;
-bool quiet = false;
-bool is_console = true;
-unsigned cycles_limit;
+static MDBX_log_level_t verbosity = MDBX_LOG_WARN;
+static bool quiet = false;
+static bool is_console = true;
+static unsigned cycles_limit;
 static unsigned progress_dots;
 
 static void logger(MDBX_log_level_t level, const char *function, int line, const char *fmt, va_list args) {

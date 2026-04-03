@@ -108,8 +108,8 @@ static int gc_list_func(void *ctx, const MDBX_txn *txn, uint64_t span_txnid, siz
   return user_break ? MDBX_RESULT_TRUE : MDBX_RESULT_FALSE;
 }
 
-const char *prog;
-bool quiet = false;
+static const char *prog;
+static bool quiet = false;
 static void error(const char *func, int rc) {
   if (!quiet)
     fprintf(stderr, "%s: %s() error %d %s\n", prog, func, rc, mdbx_strerror(rc));
