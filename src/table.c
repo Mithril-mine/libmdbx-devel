@@ -143,8 +143,10 @@ int tbl_refresh(MDBX_txn *txn, size_t dbi) {
 int tbl_purge(MDBX_cursor *mc) {
   if (mc->tree->height) {
     int err = tree_drop(mc, cursor_is_main(mc) || (mc->tree->flags & MDBX_DUPSORT));
-    if (unlikely(err != MDBX_SUCCESS))
+    if (unlikely(err != MDBX_SUCCESS)) {
+      mc->txn->flags |= MDBX_TXN_ERROR;
       return err;
+    }
 
     /* reset the DB record, mark it dirty */
     *mc->dbi_state |= DBI_DIRTY;

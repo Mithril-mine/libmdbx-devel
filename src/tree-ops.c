@@ -43,7 +43,7 @@ int tree_drop(MDBX_cursor *mc, const bool may_have_tables) {
             if (unlikely(rc != MDBX_SUCCESS))
               goto bailout;
             if (!(may_have_tables | mc->tree->large_pages))
-              goto pop;
+              goto popup;
           } else if (node_flags(node) & N_TREE) {
             if (unlikely((node_flags(node) & N_DUP) == 0)) {
               rc = /* disallowing implicit table deletion */ MDBX_INCOMPATIBLE;
@@ -80,9 +80,8 @@ int tree_drop(MDBX_cursor *mc, const bool may_have_tables) {
       if (unlikely(rc != MDBX_SUCCESS)) {
         if (unlikely(rc != MDBX_NOTFOUND))
           goto bailout;
-      /* no more siblings, go back to beginning
-       * of previous level. */
-      pop:
+        /* no more siblings, go back to beginning of previous level. */
+      popup:
         cursor_pop(mc);
         mc->ki[0] = 0;
         for (intptr_t i = 1; i <= mc->top; i++) {
@@ -96,8 +95,6 @@ int tree_drop(MDBX_cursor *mc, const bool may_have_tables) {
 
 bailout:
   be_poor(mc);
-  if (unlikely(rc != MDBX_SUCCESS))
-    txn->flags |= MDBX_TXN_ERROR;
   return rc;
 }
 
