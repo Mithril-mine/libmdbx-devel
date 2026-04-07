@@ -127,8 +127,8 @@ static const char *stop_reason(const MDBX_defrag_result_t *progress) {
     return "aborted by user";
   if (progress->stopping_reasons & MDBX_defrag_discontinued)
     return "discontinued by user";
-  if (progress->stopping_reasons & MDBX_defrag_enough_theshold)
-    return "enough theshold";
+  if (progress->stopping_reasons & MDBX_defrag_enough_threshold)
+    return "enough threshold";
   if (progress->stopping_reasons & MDBX_defrag_time_limit)
     return "time limit reached";
   if (progress->stopping_reasons & MDBX_defrag_laggard_reader)
