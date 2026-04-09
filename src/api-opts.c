@@ -52,7 +52,7 @@ static bool default_prefault_write(const MDBX_env *env) {
 
 static bool default_prefer_waf_insteadof_balance(const MDBX_env *env) {
   (void)env;
-  return false;
+  return true;
 }
 
 static uint16_t default_subpage_limit(const MDBX_env *env) {

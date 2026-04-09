@@ -2380,7 +2380,7 @@ typedef enum MDBX_option {
    *  - If `MDBX_opt_prefer_waf_insteadof_balance = True`, then an already modified page will be selected, which will
    *    NOT INCREASE the number of modified pages and the amount of writing to filesystem when the current transaction
    *    is committed (aka WAF or Write Amplification Factor), but on average will INCREASE the unevenness of page
-   *    filling/density.
+   *    filling/density. This is the default behaviour since 2026-01-04.
    *
    *  - If `MDBX_opt_prefer_waf_insteadof_balance = False`, then a less populated page will be selected, which will
    *    INCREASE the number of modified pages and the amount of writing to filesystem when the current transaction is
