@@ -477,26 +477,26 @@ cursor_to_search_foliage(const MDBX_cursor *mc) {
 __hot sfr_t tree_search_foliage_configure(MDBX_cursor *mc, const MDBX_val *key) {
   MDBX_search_foliage search_foliage = cursor_to_search_foliage(mc);
 #if MDBX_DEBUG_SEARCH_DISPATCHING
-  const size_t snap_1 = MDBX_CURSOR_STC_GET(mc);
+  const unsigned snap_1 = MDBX_CURSOR_STC_GET(mc);
   sfr_t old = old_node_search(mc, key);
   int old_i = mc->ki[mc->top];
-  const size_t snap_2 = MDBX_CURSOR_STC_GET(mc);
-  const size_t old_steps = snap_2 - snap_1;
+  const unsigned snap_2 = MDBX_CURSOR_STC_GET(mc);
+  const unsigned old_steps = snap_2 - snap_1;
 
   sfr_t new = search_foliage(mc, key);
   int new_i = mc->ki[mc->top];
-  const size_t snap_3 = MDBX_CURSOR_STC_GET(mc);
-  const size_t new_steps = snap_3 - snap_2;
+  const unsigned snap_3 = MDBX_CURSOR_STC_GET(mc);
+  const unsigned new_steps = snap_3 - snap_2;
 
   if (new_i != old_i || new.exact != old.exact || new.node != old.node || new_steps > old_steps) {
     globals.loglevel = MDBX_LOG_TRACE;
-    WARNING("\nfoliage-search-issue: new %i, %c, %p, steps %zu | old %i, %c, %p, steps %zu | retry to debug...", new_i,
+    WARNING("\nfoliage-search-issue: new %i, %c, %p, steps %u | old %i, %c, %p, steps %u | retry to debug...", new_i,
             new.exact ? 'Y' : 'N', (void *)new.node, new_steps, old_i, old.exact ? 'Y' : 'N', (void *)old.node,
             old_steps);
     old_node_search((MDBX_cursor *)mc, key);
     search_foliage(mc, key);
-    panic_fmt(mc, "new %i, %c, %p, steps %zu | old %i, %c, %p, steps %zu", new_i, new.exact ? 'Y' : 'N',
-              (void *)new.node, new_steps, old_i, old.exact ? 'Y' : 'N', (void *)old.node, old_steps);
+    panic_fmt(mc, "new %i, %c, %p, steps %u | old %i, %c, %p, steps %u", new_i, new.exact ? 'Y' : 'N', (void *)new.node,
+              new_steps, old_i, old.exact ? 'Y' : 'N', (void *)old.node, old_steps);
   }
   return new;
 #else
@@ -586,22 +586,22 @@ cursor_to_search_branch(const MDBX_cursor *mc) {
 size_t tree_search_branch_configure(const MDBX_cursor *mc, const MDBX_val *key) {
   MDBX_search_branch search_branch = cursor_to_search_branch(mc);
 #if MDBX_DEBUG_SEARCH_DISPATCHING
-  const size_t snap_1 = MDBX_CURSOR_STC_GET(mc);
+  const unsigned snap_1 = MDBX_CURSOR_STC_GET(mc);
   size_t old_i = old_branch_search((MDBX_cursor *)mc, key);
-  const size_t snap_2 = MDBX_CURSOR_STC_GET(mc);
-  const size_t old_steps = snap_2 - snap_1;
+  const unsigned snap_2 = MDBX_CURSOR_STC_GET(mc);
+  const unsigned old_steps = snap_2 - snap_1;
 
   size_t new_i = search_branch(mc, key);
-  const size_t snap_3 = MDBX_CURSOR_STC_GET(mc);
-  const size_t new_steps = snap_3 - snap_2;
+  const unsigned snap_3 = MDBX_CURSOR_STC_GET(mc);
+  const unsigned new_steps = snap_3 - snap_2;
 
   if (new_i != old_i || new_steps > old_steps) {
     globals.loglevel = MDBX_LOG_TRACE;
-    WARNING("\nbranch-search-issue: new %zi, steps %zu | old %zi, steps %zu | retry to debug...", new_i, new_steps,
-            old_i, old_steps);
+    WARNING("\nbranch-search-issue: new %zi, steps %u | old %zi, steps %u | retry to debug...", new_i, new_steps, old_i,
+            old_steps);
     old_branch_search((MDBX_cursor *)mc, key);
     search_branch(mc, key);
-    panic_fmt(mc, "new %zi, steps %zu | old %zi, steps %zu", new_i, new_steps, old_i, old_steps);
+    panic_fmt(mc, "new %zi, steps %u | old %zi, steps %u", new_i, new_steps, old_i, old_steps);
   }
   return new_i;
 #else
