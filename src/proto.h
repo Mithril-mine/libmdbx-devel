@@ -150,6 +150,7 @@ MDBX_INTERNAL int __must_check_result tbl_setup(const MDBX_env *env, volatile kv
 MDBX_INTERNAL int __must_check_result tbl_refresh(MDBX_txn *txn, size_t dbi);
 MDBX_INTERNAL int __must_check_result tbl_purge(MDBX_cursor *mc);
 MDBX_INTERNAL int __must_check_result tbl_stat_summary(const MDBX_txn *txn, MDBX_stat *st);
+MDBX_NOTHROW_PURE_FUNCTION MDBX_INTERNAL txnid_t tbl_root_txnid(const MDBX_txn *txn, const size_t dbi);
 
 /* coherency.c */
 MDBX_INTERNAL bool coherency_check_meta(const MDBX_env *env, const volatile meta_t *meta, bool report);

@@ -127,20 +127,7 @@ __hot static MDBX_cache_result_t cache_get(const MDBX_txn *txn, MDBX_dbi dbi, co
     }
   }
 
-  /* lookup the trunk mvcc/txn-id thru nested transactions stack. */
-  if (txn->dbs[dbi].mod_txnid /* tree->mod_txnid maybe zero in a legacy DB */)
-    trunk_txnid = txn->dbs[dbi].mod_txnid;
-  if ((txn->flags & txn_ro_flat) == 0) {
-    const MDBX_txn *scan = txn;
-    do
-      if ((scan->flags & MDBX_TXN_DIRTY) && (dbi == MAIN_DBI || (scan->dbi_state[dbi] & DBI_DIRTY))) {
-        /* После коммита вложенных тразакций может быть mod_txnid > front */
-        trunk_txnid = scan->front_txnid;
-        break;
-      }
-    while (unlikely((scan = scan->parent) != nullptr));
-  }
-
+  trunk_txnid = tbl_root_txnid(txn, dbi);
   if (trunk_txnid <= entry->last_confirmed_txnid) {
     /* the corresponding table has not been changed since the last check. */
     cASSERT0(txn, (txn->dbi_state[dbi] & DBI_DIRTY) == 0);

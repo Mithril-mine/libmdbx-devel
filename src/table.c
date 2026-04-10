@@ -3,6 +3,19 @@
 
 #include "internals.h"
 
+__hot txnid_t tbl_root_txnid(const MDBX_txn *txn, const size_t dbi) {
+  if ((txn->flags & txn_ro_flat) == 0) {
+    const MDBX_txn *scan = txn;
+    do
+      if ((scan->flags & MDBX_TXN_DIRTY) && (dbi == MAIN_DBI || (scan->dbi_state[dbi] & DBI_DIRTY))) {
+        /* После коммита вложенных тразакций может быть mod_txnid > front */
+        return scan->front_txnid;
+      }
+    while (unlikely((scan = scan->parent) != nullptr));
+  }
+  return /* tree->mod_txnid maybe zero in a legacy DB */ txn->dbs[dbi].mod_txnid ? txn->dbs[dbi].mod_txnid : txn->txnid;
+}
+
 int tbl_setup(const MDBX_env *env, volatile kvx_t *const kvx, const tree_t *const db) {
   osal_memory_fence(mo_AcquireRelease, false);
 

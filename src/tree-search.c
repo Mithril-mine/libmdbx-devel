@@ -51,19 +51,7 @@ __hot int tree_search(MDBX_cursor *mc, const MDBX_val *key, int flags) {
 
   cASSERT0(mc, root >= NUM_METAS && root < mc->txn->geo.first_unallocated);
   if (mc->top < 0 || mc->pg[0]->pgno != root) {
-    txnid_t pp_txnid = mc->tree->mod_txnid;
-    pp_txnid = /* tree->mod_txnid maybe zero in a legacy DB */ pp_txnid ? pp_txnid : mc->txn->txnid;
-    if ((mc->txn->flags & txn_ro_flat) == 0) {
-      MDBX_txn *scan = mc->txn;
-      do
-        if ((scan->flags & MDBX_TXN_DIRTY) && (dbi == MAIN_DBI || (scan->dbi_state[dbi] & DBI_DIRTY))) {
-          /* После коммита вложенных тразакций может быть mod_txnid > front */
-          pp_txnid = scan->front_txnid;
-          break;
-        }
-      while (unlikely((scan = scan->parent) != nullptr));
-    }
-    err = page_get(mc, root, &mc->pg[0], pp_txnid);
+    err = page_get(mc, root, &mc->pg[0], tbl_root_txnid(mc->txn, cursor_dbi(mc)));
     if (unlikely(err != MDBX_SUCCESS))
       goto bailout;
   }
