@@ -43,6 +43,7 @@ static size_t bit_width(size_t v) {
     defined(_WIN32)
 #define DEEP 4
 #else
+/* Осторожно, очень долго */
 #define DEEP 5
 #endif
 
@@ -157,7 +158,10 @@ struct case_kind {
 
 struct case_usual : public case_kind {
   case_usual(mdbx::txn txn) noexcept : case_kind(txn, "usual", mdbx::key_mode::usual, mdbx::value_mode::single) {}
-  buffer_pair kv(size_t base) override { return buffer_pair(buffer::base58(base), buffer::base58(~base)); }
+  buffer_pair kv(size_t base) override {
+    return buffer_pair(buffer::base58(base).append('.').append(std::to_string(base)),
+                       buffer::base58(~base).append(".usual"));
+  }
 };
 
 struct case_multi : public case_kind {
@@ -167,7 +171,8 @@ struct case_multi : public case_kind {
     auto w = bit_width(base | 42);
     auto k = chop(x, w / 2);
     auto v = chop(x >> w / 2, w - w / 2);
-    return buffer_pair(buffer::base58(k), buffer::base58(v));
+    return buffer_pair(buffer::base58(k).append('.').append(std::to_string(k)),
+                       buffer::base58(v).append('.').append(std::to_string(v)));
   }
 };
 
@@ -210,8 +215,46 @@ struct less {
 };
 
 using verifier = std::set<buffer_pair, less>;
+using iterator = verifier::iterator;
 
-static bool turn(mdbx::txn txn, const case_kind &kvg, verifier &checker, const MDBX_bunch_action_t op) {
+static bool eq(const iterator &iter, mdbx::cursor cursor, const char *caption) {
+  try {
+    const auto pair = cursor.current();
+    if (*iter == pair)
+      return true;
+
+    std::cout << caption << ": expected" << *iter << " got " << pair << "\n";
+
+    auto check = cursor.clone();
+    int i;
+    for (i = 0; i > -5; --i)
+      if (!check.to_previous(false))
+        break;
+
+    while (i <= 5) {
+      std::cout << ((i < 0) ? "-" : (i) ? "+" : "=") << ((i < 0) ? -i : i) << ") " << check.current() << "\n";
+      if (!check.to_next(false))
+        break;
+      ++i;
+    }
+
+    return false;
+  } catch (const mdbx::no_data &e) {
+    std::cout << e.what() << "\n";
+    return false;
+  }
+}
+
+static void checker_erase(verifier &checker, iterator &target) {
+#ifndef NDEBUG
+  std::cout << "checker-erase " << *target << "\n";
+#endif /* NDEBUG */
+  checker.erase(target);
+}
+
+//------------------------------------------------------------------------------------------------------------
+
+static bool turn_bunch_delete(mdbx::txn txn, const case_kind &kvg, verifier &checker, const MDBX_bunch_action_t op) {
   const size_t size_before = checker.size();
   if (size_before != txn.get_map_stat(kvg.table).ms_entries)
     unexpected(__LINE__);
@@ -224,7 +267,6 @@ static bool turn(mdbx::txn txn, const case_kind &kvg, verifier &checker, const M
     cursor.to_next();
     ++iter;
   }
-  debug(__LINE__, "turn: size %zu, pos %zu", size_before, pos);
 
   const buffer_pair current = cursor.current();
   if (current != *iter)
@@ -259,6 +301,15 @@ static bool turn(mdbx::txn txn, const case_kind &kvg, verifier &checker, const M
     ++next_next_iter;
 
   uint64_t count = 0xDEADBEEF;
+#ifndef NDEBUG
+  static unsigned turn_counter;
+  if (turn_counter == 999999) {
+    mdbx_setup_debug_nofmt(MDBX_LOG_VERBOSE, MDBX_DBG_ASSERT | MDBX_DBG_AUDIT, logger_nofmt, log_buffer,
+                           sizeof(log_buffer));
+    debug(__LINE__, "got it (%u)", turn_counter);
+  }
+  debug(__LINE__, "turn: number %u, size %zu, pos %zu", ++turn_counter, size_before, pos);
+#endif /* NDEBUG */
   int err = mdbx_cursor_bunch_delete(cursor, op, &count);
   if (err != MDBX_SUCCESS)
     return failed(__LINE__);
@@ -285,7 +336,7 @@ static bool turn(mdbx::txn txn, const case_kind &kvg, verifier &checker, const M
         --iter;
       else
         iter = checker.end();
-      checker.erase(target);
+      checker_erase(checker, target);
     }
     break;
 
@@ -297,7 +348,7 @@ static bool turn(mdbx::txn txn, const case_kind &kvg, verifier &checker, const M
     while (iter != checker.end() && iter->key == current.key) {
       auto target = iter;
       ++iter;
-      checker.erase(target);
+      checker_erase(checker, target);
     }
     break;
 
@@ -312,7 +363,7 @@ static bool turn(mdbx::txn txn, const case_kind &kvg, verifier &checker, const M
     while (iter != checker.end() && iter->key == current.key) {
       auto target = iter;
       ++iter;
-      checker.erase(target);
+      checker_erase(checker, target);
     }
     break;
 
@@ -328,7 +379,7 @@ static bool turn(mdbx::txn txn, const case_kind &kvg, verifier &checker, const M
         --iter;
       else
         iter = checker.end();
-      checker.erase(target);
+      checker_erase(checker, target);
     }
     break;
 
@@ -340,16 +391,21 @@ static bool turn(mdbx::txn txn, const case_kind &kvg, verifier &checker, const M
     while (iter != checker.end()) {
       auto target = iter;
       ++iter;
-      checker.erase(target);
+      checker_erase(checker, target);
     }
     break;
   }
 
-  if (checker.size() != txn.get_map_stat(kvg.table).ms_entries)
+  const auto have_entries = (size_t)txn.get_map_stat(kvg.table).ms_entries;
+  if (checker.size() != have_entries) {
+    debug(__LINE__, "expected %zi != got %zi\n", checker.size(), have_entries);
     return failed(__LINE__);
+  }
 
-  if (checker.size() + count != size_before)
+  if (checker.size() + count != size_before) {
+    debug(__LINE__, "expected %zi != got %zi\n", checker.size() + count, size_before);
     return failed(__LINE__);
+  }
 
 #if defined(_MSC_VER) && _ITERATOR_DEBUG_LEVEL > 0
   std::cerr << "skips validation due to MSVC C++ STL bugs (the behavior of iterators does not conform "
@@ -362,15 +418,15 @@ static bool turn(mdbx::txn txn, const case_kind &kvg, verifier &checker, const M
 
   cursor.to_first(false);
   for (iter = checker.begin(); !skip_since_msvc_STL_bugs && iter != checker.end(); ++iter) {
-    if (iter == prev_prev_iter && *iter != prev_prev_cursor.current())
+    if (iter == prev_prev_iter && !eq(iter, prev_prev_cursor, "prev-prev"))
       return failed(__LINE__);
-    if (iter == prev_iter && *iter != prev_cursor.current())
+    if (iter == prev_iter && !eq(iter, prev_cursor, "prev"))
       return failed(__LINE__);
-    if (*iter != cursor.current())
+    if (!eq(iter, cursor, "current"))
       return failed(__LINE__);
-    if (iter == next_iter && *iter != next_cursor.current())
+    if (iter == next_iter && !eq(iter, next_cursor, "next"))
       return failed(__LINE__);
-    if (iter == next_next_iter && *iter != next_next_cursor.current())
+    if (iter == next_next_iter && !eq(iter, next_next_cursor, "next-next"))
       return failed(__LINE__);
     cursor.to_next(false);
   }
@@ -378,22 +434,24 @@ static bool turn(mdbx::txn txn, const case_kind &kvg, verifier &checker, const M
   cursor.to_last(false);
   for (iter = checker.end(); !skip_since_msvc_STL_bugs && iter != checker.begin();) {
     --iter;
-    if (iter == prev_prev_iter && *iter != prev_prev_cursor.current())
+    if (iter == prev_prev_iter && !eq(iter, prev_prev_cursor, "prev-prev"))
       return failed(__LINE__);
-    if (iter == prev_iter && *iter != prev_cursor.current())
+    if (iter == prev_iter && !eq(iter, prev_cursor, "prev"))
       return failed(__LINE__);
-    if (*iter != cursor.current())
+    if (!eq(iter, cursor, "current"))
       return failed(__LINE__);
-    if (iter == next_iter && *iter != next_cursor.current())
+    if (iter == next_iter && !eq(iter, next_cursor, "next"))
       return failed(__LINE__);
-    if (iter == next_next_iter && *iter != next_next_cursor.current())
+    if (iter == next_next_iter && !eq(iter, next_next_cursor, "next-next"))
       return failed(__LINE__);
     cursor.to_previous(false);
   }
   return true;
 }
 
-static bool probe(mdbx::env env, case_kind &kvg, unsigned deep, const MDBX_bunch_action_t op) {
+//------------------------------------------------------------------------------------------------------------
+
+static verifier probe_prepate(mdbx::env env, case_kind &kvg, unsigned deep) {
   auto txn = env.start_write();
   txn.clear_map(kvg.table);
   verifier checker(less(kvg.flags));
@@ -403,19 +461,23 @@ static bool probe(mdbx::env env, case_kind &kvg, unsigned deep, const MDBX_bunch
     checker.insert(std::move(pair));
   }
   txn.commit();
+  return checker;
+}
 
+static bool probe_bunch_delete(mdbx::env env, case_kind &kvg, unsigned deep, const MDBX_bunch_action_t op) {
+  auto checker = probe_prepate(env, kvg, deep);
   const bool is_simple =
       op == MDBX_DELETE_CURRENT_VALUE || (!kvg.is_multivalue() && op <= MDBX_DELETE_CURRENT_MULTIVAL_ALL);
 
   // выполняем удаления в одной транзакции
   if (!checker.empty()) {
-    txn = env.start_write();
+    auto txn = env.start_write();
     auto copy = checker;
     size_t n = 0, unchanged = 0;
     do {
       const auto prev_size = copy.size();
       debug(__LINE__, ">> #%zu, size %zu, deep %zu", n, prev_size, txn.get_map_stat(kvg.table).ms_depth);
-      if (!turn(txn, kvg, copy, op))
+      if (!turn_bunch_delete(txn, kvg, copy, op))
         return false;
       debug(__LINE__, "<< #%zu, size %zu, deep %zu", n, copy.size(), txn.get_map_stat(kvg.table).ms_depth);
       unchanged = (prev_size != copy.size()) ? 0 : unchanged + 1;
@@ -427,9 +489,9 @@ static bool probe(mdbx::env env, case_kind &kvg, unsigned deep, const MDBX_bunch
   size_t n = 0, unchanged = 0;
   do {
     const auto prev_size = checker.size();
-    txn = env.start_write();
+    auto txn = env.start_write();
     debug(__LINE__, ">> #%zu, size %zu, deep %zu", n, prev_size, txn.get_map_stat(kvg.table).ms_depth);
-    if (!turn(txn, kvg, checker, op))
+    if (!turn_bunch_delete(txn, kvg, checker, op))
       return false;
     debug(__LINE__, "<< #%zu, size %zu, deep %zu", n, checker.size(), txn.get_map_stat(kvg.table).ms_depth);
     txn.commit();
@@ -439,6 +501,154 @@ static bool probe(mdbx::env env, case_kind &kvg, unsigned deep, const MDBX_bunch
   return true;
 }
 
+//------------------------------------------------------------------------------------------------------------
+
+static bool turn_delete_range(mdbx::txn txn, const case_kind &kvg, verifier &checker, int begin_end_case) {
+  const size_t size_before = checker.size();
+  if (size_before != txn.get_map_stat(kvg.table).ms_entries)
+    unexpected(__LINE__);
+
+  const size_t begin_pos = (begin_end_case < 0 || !size_before) ? 0 : prng() % size_before;
+  const size_t end_pos =
+      (begin_end_case > 0 || begin_pos == size_before) ? size_before : prng() % (size_before - begin_pos);
+
+  const bool end_including = prng() & 1;
+  uint64_t count = 0xDEADBEEF;
+
+#ifndef NDEBUG
+  static unsigned turn_counter;
+  if (turn_counter == 999999) {
+    mdbx_setup_debug_nofmt(MDBX_LOG_VERBOSE, MDBX_DBG_ASSERT | MDBX_DBG_AUDIT, logger_nofmt, log_buffer,
+                           sizeof(log_buffer));
+    debug(__LINE__, "got it (%u)", turn_counter);
+  }
+  debug(__LINE__, "turn: number %u, size %zu, begin_pos %zu, end_pos %zu, end_including %c, b/e-case %i",
+        ++turn_counter, size_before, begin_pos, end_pos, end_including ? 'Y' : 'N', begin_end_case);
+#endif /* NDEBUG */
+
+  auto begin_cursor = txn.open_cursor(kvg.table);
+  auto begin_iter = checker.begin();
+  begin_cursor.to_first(false);
+  for (size_t i = 0; i < begin_pos; ++i) {
+    begin_cursor.to_next(false);
+    ++begin_iter;
+  }
+
+  auto end_cursor = begin_cursor.clone();
+  auto end_iter = checker.end();
+  if ((begin_end_case <= 0 || !end_including) && size_before) {
+    end_iter = begin_iter;
+    for (size_t i = begin_pos; i < end_pos; ++i) {
+      end_cursor.to_next(false);
+      ++end_iter;
+    }
+  } else
+    end_cursor.to_last(false);
+
+  buffer_pair current = begin_cursor.current();
+  if (current != *begin_iter)
+    unexpected(__LINE__);
+  if (end_iter != checker.end()) {
+    current = end_cursor.current();
+    if (current != *end_iter)
+      unexpected(__LINE__);
+  } else {
+    if (mdbx_cursor_on_last(end_cursor) != MDBX_RESULT_TRUE)
+      unexpected(__LINE__);
+    if (!end_including)
+      --end_iter;
+  }
+
+  while (begin_iter != end_iter) {
+    auto iter = begin_iter++;
+    checker.erase(iter);
+  }
+  if (end_including && end_iter != checker.end())
+    checker.erase(end_iter);
+
+  MDBX_cursor *null = nullptr;
+  int err = mdbx_cursor_delete_range((begin_end_case < 0) ? null : begin_cursor.handle(),
+                                     (begin_end_case > 0) ? null : end_cursor.handle(), end_including, &count);
+  if (err != MDBX_SUCCESS)
+    return failed(__LINE__);
+
+  const auto have_entries = (size_t)txn.get_map_stat(kvg.table).ms_entries;
+  if (checker.size() != have_entries) {
+    debug(__LINE__, "expected %zi != got %zi\n", checker.size(), have_entries);
+    return failed(__LINE__);
+  }
+
+  if (checker.size() + count != size_before) {
+    debug(__LINE__, "expected %zi != got %zi\n", checker.size() + count, size_before);
+    return failed(__LINE__);
+  }
+
+#if defined(_MSC_VER) && _ITERATOR_DEBUG_LEVEL > 0
+  std::cerr << "skips validation due to MSVC C++ STL bugs (the behavior of iterators does not conform "
+               "https://cppreference.com)"
+            << std::endl;
+  const bool skip_since_msvc_STL_bugs = true;
+#else
+  const bool skip_since_msvc_STL_bugs = false;
+#endif
+
+  auto cursor = txn.open_cursor(kvg.table);
+  cursor.to_first(false);
+  for (auto iter = checker.begin(); !skip_since_msvc_STL_bugs && iter != checker.end(); ++iter) {
+    if (!eq(iter, cursor, "current"))
+      return failed(__LINE__);
+    cursor.to_next(false);
+  }
+
+  cursor.to_last(false);
+  for (auto iter = checker.end(); !skip_since_msvc_STL_bugs && iter != checker.begin();) {
+    --iter;
+    if (!eq(iter, cursor, "current"))
+      return failed(__LINE__);
+    cursor.to_previous(false);
+  }
+  return true;
+}
+
+static bool probe_delete_range(mdbx::env env, case_kind &kvg, unsigned deep, int begin_end_case) {
+  auto checker = probe_prepate(env, kvg, deep);
+
+  // выполняем удаления в одной транзакции
+  if (!checker.empty()) {
+    auto txn = env.start_write();
+    auto copy = checker;
+    size_t n = 0, unchanged = 0;
+    do {
+      const auto prev_size = copy.size();
+      debug(__LINE__, ">> #%zu, size %zu, deep %zu, begin_end_case %i", n, prev_size,
+            txn.get_map_stat(kvg.table).ms_depth, begin_end_case);
+      if (!turn_delete_range(txn, kvg, copy, begin_end_case))
+        return false;
+      debug(__LINE__, "<< #%zu, size %zu, deep %zu", n, copy.size(), txn.get_map_stat(kvg.table).ms_depth);
+      unchanged = (prev_size != copy.size()) ? 0 : unchanged + 1;
+    } while (!copy.empty() && ++n < 10 && unchanged < copy.size() + 2);
+    txn.abort();
+  }
+
+  // выполняем удаления в отдельных транзакциях
+  size_t n = 0, unchanged = 0;
+  do {
+    const auto prev_size = checker.size();
+    auto txn = env.start_write();
+    debug(__LINE__, ">> #%zu, size %zu, deep %zu, begin_end_case %i", n, prev_size,
+          txn.get_map_stat(kvg.table).ms_depth, begin_end_case);
+    if (!turn_delete_range(txn, kvg, checker, begin_end_case))
+      return false;
+    debug(__LINE__, "<< #%zu, size %zu, deep %zu", n, checker.size(), txn.get_map_stat(kvg.table).ms_depth);
+    txn.commit();
+    unchanged = (prev_size != checker.size()) ? 0 : unchanged + 1;
+  } while (!checker.empty() && ++n < 10 && unchanged < checker.size() + 2);
+
+  return true;
+}
+
+//------------------------------------------------------------------------------------------------------------
+
 using case_set = std::vector<std::unique_ptr<case_kind>>;
 
 static bool test(mdbx::env env, case_set &set, unsigned deep) {
@@ -446,15 +656,22 @@ static bool test(mdbx::env env, case_set &set, unsigned deep) {
   for (size_t op = MDBX_DELETE_CURRENT_VALUE + (deep > 1); op < MDBX_DELETE_WHOLE; ++op) {
     for (auto &kvg : set) {
       std::cout << kvg->name << ": " << MDBX_bunch_action_t(op) << " deep " << deep << std::endl;
-      ok = probe(env, *kvg, deep, MDBX_bunch_action_t(op)) && ok;
+      ok = probe_bunch_delete(env, *kvg, deep, MDBX_bunch_action_t(op)) && ok;
     }
   }
-
+  for (int op = -1; op <= 1; ++op) {
+    for (auto &kvg : set) {
+      std::cout << kvg->name << ": " << " deep " << deep << std::endl;
+      ok = probe_delete_range(env, *kvg, deep, op) && ok;
+    }
+  }
   return ok;
 }
 
+//------------------------------------------------------------------------------------------------------------
+
 int doit() {
-#if 1
+#ifdef NDEBUG
   std::random_device random;
   std::seed_seq seed({random(), random(), random(), random(), random()});
 #else
@@ -500,8 +717,8 @@ int doit() {
 int main(int argc, char *argv[]) {
   (void)argc;
   (void)argv;
-  mdbx_setup_debug_nofmt(MDBX_LOG_NOTICE /* MDBX_LOG_VERBOSE */, MDBX_DBG_ASSERT, logger_nofmt, log_buffer,
-                         sizeof(log_buffer));
+  mdbx_setup_debug_nofmt(MDBX_LOG_NOTICE /* MDBX_LOG_VERBOSE */, MDBX_DBG_ASSERT | MDBX_DBG_AUDIT, logger_nofmt,
+                         log_buffer, sizeof(log_buffer));
   try {
     return doit();
   } catch (const std::exception &ex) {
