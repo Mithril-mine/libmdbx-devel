@@ -1043,11 +1043,19 @@ public:
   template <class CHAR, class T> buffer &operator=(const ::std::basic_string_view<CHAR, T> &view) noexcept {
     return assign(view.begin(), view.length());
   }
+
+  template <class CHAR, class T> buffer &append(const ::std::basic_string_view<CHAR, T> &view) {
+    return append(view.data(), view.size());
+  }
 #endif /* __cpp_lib_string_view >= 201606L */
 
   template <class CHAR, class T, class A>
   MDBX_CXX20_CONSTEXPR explicit operator ::std::basic_string<CHAR, T, A>() const {
     return as_string<CHAR, T, A>();
+  }
+
+  template <class CHAR, class T, class A> buffer &append(const ::std::basic_string<CHAR, T, A> &str) {
+    return append(str.data(), str.size());
   }
 
   /// \brief Clears the contents and storage.
