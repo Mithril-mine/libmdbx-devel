@@ -726,8 +726,15 @@ __cold int mdbx_cursor_ignord(MDBX_cursor *mc) {
 
 /*----------------------------------------------------------------------------*/
 
-/* FIXME: This naive implementation should be replaced by handling special cases
- * and dropping with entire branches inside the B+tree. */
+#if MDBX_ENABLE_BUNCHES_REMOVAL
+static MDBX_cursor *get_axe(MDBX_cursor *mc, cursor_couple_t *couple) {
+  MDBX_cursor *axe = cursor_clone_complete(mc, couple);
+  axe->next = axe->txn->cursors[cursor_dbi(axe)];
+  axe->txn->cursors[cursor_dbi(axe)] = axe;
+  return axe;
+}
+#endif /* MDBX_ENABLE_BUNCHES_REMOVAL */
+
 int mdbx_cursor_bunch_delete(MDBX_cursor *mc, MDBX_bunch_action_t action, uint64_t *number_of_affected) {
   int rc = cursor_check_rw(mc);
   if (unlikely(rc != MDBX_SUCCESS))
@@ -735,6 +742,11 @@ int mdbx_cursor_bunch_delete(MDBX_cursor *mc, MDBX_bunch_action_t action, uint64
 
   if (unlikely(action < MDBX_DELETE_CURRENT_VALUE || action > MDBX_DELETE_WHOLE))
     return LOG_IFERR(MDBX_EINVAL);
+
+#if MDBX_ENABLE_BUNCHES_REMOVAL
+  cursor_couple_t couple;
+  MDBX_cursor *axe = nullptr;
+#endif /* MDBX_ENABLE_BUNCHES_REMOVAL */
 
   const uint64_t save_items = mc->tree->items;
   switch (action) {
@@ -751,6 +763,19 @@ int mdbx_cursor_bunch_delete(MDBX_cursor *mc, MDBX_bunch_action_t action, uint64
     rc = tbl_purge(mc);
     break;
 
+#if MDBX_ENABLE_BUNCHES_REMOVAL
+  case MDBX_DELETE_CURRENT_MULTIVAL_BEFORE_EXCLUDING:
+  case MDBX_DELETE_CURRENT_MULTIVAL_BEFORE_INCLUDING:
+    axe = get_axe(mc, &couple);
+    if (inner_pointed(axe)) {
+      rc = inner_first(&axe->subcur->cursor, nullptr);
+      if (rc != MDBX_SUCCESS) {
+        rc = (rc == MDBX_NOTFOUND) ? MDBX_SUCCESS : rc;
+        break;
+      }
+    }
+    rc = tree_curoff_range(axe, mc, action == MDBX_DELETE_CURRENT_MULTIVAL_BEFORE_INCLUDING);
+#else
   case MDBX_DELETE_CURRENT_MULTIVAL_BEFORE_INCLUDING:
     rc = cursor_del(mc, 0);
     __fallthrough /* fall through */;
@@ -763,8 +788,28 @@ int mdbx_cursor_bunch_delete(MDBX_cursor *mc, MDBX_bunch_action_t action, uint64
       }
       rc = cursor_del(mc, 0);
     }
+#endif /* MDBX_ENABLE_BUNCHES_REMOVAL */
     break;
 
+#if MDBX_ENABLE_BUNCHES_REMOVAL
+  case MDBX_DELETE_CURRENT_MULTIVAL_AFTER_EXCLUDING:
+    rc = outer_next(mc, nullptr, nullptr, MDBX_NEXT_DUP);
+    if (rc != MDBX_SUCCESS) {
+      rc = (rc == MDBX_NOTFOUND) ? MDBX_SUCCESS : rc;
+      break;
+    }
+    __fallthrough /* fall through */;
+  case MDBX_DELETE_CURRENT_MULTIVAL_AFTER_INCLUDING:
+    axe = get_axe(mc, &couple);
+    if (inner_pointed(mc)) {
+      rc = inner_last(&mc->subcur->cursor, nullptr);
+      if (rc != MDBX_SUCCESS) {
+        rc = (rc == MDBX_NOTFOUND) ? MDBX_SUCCESS : rc;
+        break;
+      }
+    }
+    rc = tree_curoff_range(axe, mc, true);
+#else
   case MDBX_DELETE_CURRENT_MULTIVAL_AFTER_INCLUDING:
     rc = cursor_del(mc, 0);
     __fallthrough /* fall through */;
@@ -779,8 +824,20 @@ int mdbx_cursor_bunch_delete(MDBX_cursor *mc, MDBX_bunch_action_t action, uint64
       }
       rc = cursor_del(mc, 0);
     }
+#endif /* MDBX_ENABLE_BUNCHES_REMOVAL */
     break;
 
+#if MDBX_ENABLE_BUNCHES_REMOVAL
+  case MDBX_DELETE_BEFORE_INCLUDING:
+  case MDBX_DELETE_BEFORE_EXCLUDING:
+    axe = get_axe(mc, &couple);
+    rc = outer_first(axe, nullptr, nullptr);
+    if (rc != MDBX_SUCCESS) {
+      rc = (rc == MDBX_NOTFOUND) ? MDBX_SUCCESS : rc;
+      break;
+    }
+    rc = tree_curoff_range(axe, mc, action == MDBX_DELETE_BEFORE_INCLUDING);
+#else
   case MDBX_DELETE_BEFORE_INCLUDING:
     rc = cursor_del(mc, 0);
     __fallthrough /* fall through */;
@@ -793,8 +850,26 @@ int mdbx_cursor_bunch_delete(MDBX_cursor *mc, MDBX_bunch_action_t action, uint64
       }
       rc = cursor_del(mc, 0);
     }
+#endif /* MDBX_ENABLE_BUNCHES_REMOVAL */
     break;
 
+#if MDBX_ENABLE_BUNCHES_REMOVAL
+  case MDBX_DELETE_AFTER_EXCLUDING:
+    rc = outer_next(mc, nullptr, nullptr, MDBX_NEXT);
+    if (rc != MDBX_SUCCESS) {
+      rc = (rc == MDBX_NOTFOUND) ? MDBX_SUCCESS : rc;
+      break;
+    }
+    __fallthrough /* fall through */;
+  case MDBX_DELETE_AFTER_INCLUDING:
+    axe = get_axe(mc, &couple);
+    rc = outer_last(mc, nullptr, nullptr);
+    if (rc != MDBX_SUCCESS) {
+      rc = (rc == MDBX_NOTFOUND) ? MDBX_SUCCESS : rc;
+      break;
+    }
+    rc = tree_curoff_range(axe, mc, true);
+#else
   case MDBX_DELETE_AFTER_INCLUDING:
     rc = cursor_del(mc, 0);
     __fallthrough /* fall through */;
@@ -809,9 +884,14 @@ int mdbx_cursor_bunch_delete(MDBX_cursor *mc, MDBX_bunch_action_t action, uint64
       }
       rc = cursor_del(mc, 0);
     }
+#endif /* MDBX_ENABLE_BUNCHES_REMOVAL */
     break;
   }
 
+#if MDBX_ENABLE_BUNCHES_REMOVAL
+  if (axe)
+    axe->txn->cursors[cursor_dbi(axe)] = axe->next;
+#endif /* MDBX_ENABLE_BUNCHES_REMOVAL */
   if (number_of_affected)
     *number_of_affected = save_items - mc->tree->items;
 

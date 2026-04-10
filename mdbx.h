@@ -6323,13 +6323,11 @@ typedef enum MDBX_bunch_action {
 
 /** \brief Quickly removes bunches of neighboring items.
  * \ingroup c_crud
- * \see MDBX_bunch_action_t
  *
- * The function performs massive deletion much faster by cutting whole pages and branches
+ * Performs massive deletion much faster by cutting whole pages and branches
  * with will deleted elements from the B+tree structure.
- *
- * \note Currently, only a naive implementation of the function is available,
- *       which will be replaced with a full-fledged one when ready.
+ * \see mdbx_cursor_delete_range()
+ * \see MDBX_bunch_action_t
  *
  * \param [in] cursor  A cursor handle returned by mdbx_cursor_open().
  * \param [in] action  The requested deletion action as the one
@@ -6341,18 +6339,16 @@ typedef enum MDBX_bunch_action {
  *          some possible errors are:
  * \retval MDBX_THREAD_MISMATCH  Given transaction is not owned
  *                               by current thread.
- * \retval MDBX_MAP_FULL      The database is full,
- *                            see \ref mdbx_env_set_mapsize().
+ * \retval MDBX_ENODATA       The given cursor is not positioned to a data..
  * \retval MDBX_TXN_FULL      The transaction has too many dirty pages.
- * \retval MDBX_EACCES        An attempt was made to write in a read-only
- *                            transaction.
+ * \retval MDBX_EACCES        An attempt was made to write in a read-only transaction.
  * \retval MDBX_EINVAL        An invalid parameter was specified. */
 LIBMDBX_API int mdbx_cursor_bunch_delete(MDBX_cursor *cursor, MDBX_bunch_action_t action, uint64_t *number_of_affected);
 
 /** \brief Return count values (aka duplicates) for current key.
  * \ingroup c_crud
  *
- * \see mdbx_cursor_count_ex
+ * \see mdbx_cursor_count_ex()
  *
  * This call is valid for all tables, but reasonable only for that support
  * sorted duplicate data items \ref MDBX_DUPSORT.

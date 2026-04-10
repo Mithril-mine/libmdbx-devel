@@ -12,6 +12,9 @@ void recalculate_merge_thresholds(MDBX_env *env) {
 }
 
 int tree_drop(MDBX_cursor *mc) {
+#if MDBX_ENABLE_BUNCHES_REMOVAL
+  int rc = tree_cutoff_twig(mc, mc->tree->root, 1, tbl_root_txnid(mc->txn, cursor_dbi(mc)), true);
+#else
   const bool may_have_subtrees = !is_inner(mc) && (cursor_is_main(mc) || (mc->tree->flags & MDBX_DUPSORT));
   int rc = tree_search(mc, nullptr, Z_FIRST);
   if (likely(rc == MDBX_SUCCESS)) {
@@ -94,6 +97,7 @@ int tree_drop(MDBX_cursor *mc) {
   }
 
 bailout:
+#endif /* MDBX_ENABLE_BUNCHES_REMOVAL */
   be_poor(mc);
   return rc;
 }

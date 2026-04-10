@@ -127,6 +127,13 @@
 #error MDBX_ENABLE_BIGFOOT must be defined as 0 or 1
 #endif /* MDBX_ENABLE_BIGFOOT */
 
+/** Enables fast deletion by whole b-tree branches feature. */
+#ifndef MDBX_ENABLE_BUNCHES_REMOVAL
+#define MDBX_ENABLE_BUNCHES_REMOVAL 1
+#elif !(MDBX_ENABLE_BUNCHES_REMOVAL == 0 || MDBX_ENABLE_BUNCHES_REMOVAL == 1)
+#error MDBX_ENABLE_BUNCHES_REMOVAL must be MDBX_ENABLE_BUNCHES_REMOVAL as 0 or 1
+#endif /* MDBX_ENABLE_BUNCHES_REMOVAL */
+
 /** Disable some checks to reduce an overhead and detection probability of
  * database corruption to a values closer to the LMDB. */
 #ifndef MDBX_DISABLE_VALIDATION
