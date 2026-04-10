@@ -192,6 +192,7 @@ __hot int page_touch_unmodifable(MDBX_txn *txn, MDBX_cursor *mc, const page_t *c
     /* Update the parent page, if any, to point to the new page */
     if (likely(mc->top)) {
       page_t *parent = mc->pg[mc->top - 1];
+      cASSERT0(mc, is_modifable(mc->txn, parent));
       node_t *node = page_node(parent, mc->ki[mc->top - 1]);
       node_set_pgno(node, pgno);
     } else {
