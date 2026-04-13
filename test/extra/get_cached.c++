@@ -808,85 +808,89 @@ struct case2_entry {
 };
 
 void case2_thread(case2_context &ctx, std::latch &latch, mdbx::txn_managed txn, case2_entry &entry) {
-  assert(entry.key.is_valid() && entry.key.length());
-  latch.arrive_and_wait();
-  auto prev_counter = &ctx.counters.unexpected;
-  unsigned thesame = 0;
-  bool enought = false;
-  do {
-    mdbx::slice value;
-    while (ctx.rnd() % 42 < 11)
-      std::this_thread::yield();
+  try {
+    assert(entry.key.is_valid() && entry.key.length());
+    latch.arrive_and_wait();
+    auto prev_counter = &ctx.counters.unexpected;
+    unsigned thesame = 0;
+    bool enought = false;
+    do {
+      mdbx::slice value;
+      while (ctx.rnd() % 42 < 11)
+        std::this_thread::yield();
 #ifndef NDEBUG
-    auto cache_copy = entry.cache;
+      auto cache_copy = entry.cache;
 #endif /* NDEBUG */
-    auto proba = ctx.impl(txn, ctx.dbi, entry.key, &value, &entry.cache);
+      auto proba = ctx.impl(txn, ctx.dbi, entry.key, &value, &entry.cache);
 
-    auto counter = &ctx.counters.unexpected;
-    switch (proba.status) {
-    default:
-      failed(__LINE__);
-      enought = true;
-      break;
-    case MDBX_CACHE_BEHIND:
-      counter = &ctx.counters.behind;
-      enought = true;
-      break;
-    case MDBX_CACHE_UNABLE:
-      counter = &ctx.counters.unable;
-      enought = true;
-      break;
-    case MDBX_CACHE_ERROR:
-      failed(__LINE__, "MDBX_CACHE_ERROR");
-      enought = true;
-      break;
-    case MDBX_CACHE_DIRTY:
-      failed(__LINE__, "MDBX_CACHE_DIRTY");
-      enought = true;
-      break;
-    case MDBX_CACHE_RACE:
-      counter = &ctx.counters.race;
-      break;
-    case MDBX_CACHE_HIT:
-      counter = &ctx.counters.hit;
-      break;
-    case MDBX_CACHE_CONFIRMED:
-      counter = &ctx.counters.confirmed;
-      break;
-    case MDBX_CACHE_REFRESHED:
-      counter = &ctx.counters.refreshed;
-      break;
-    }
-    counter->fetch_add(1);
-    if (proba.status != MDBX_CACHE_ERROR) {
-      assert(entry.key.is_valid() && entry.key.length());
-      const auto expected_value = txn.get(ctx.dbi, entry.key, mdbx::slice::null());
-      assert(entry.key.is_valid() && entry.key.length());
-      if (value != expected_value) {
-        ctx.counters.unexpected.fetch_add(1);
-        failed(__LINE__, "value mismatch");
-        std::cerr << "status " << proba.status << ", expected " << expected_value << ", got " << value << std::endl;
-#ifndef NDEBUG
-        static std::mutex lock;
-        lock.lock();
-        mdbx::slice value2;
-        const auto expected_value2 = txn.get(ctx.dbi, entry.key, mdbx::slice::null());
-        auto proba2 = ctx.impl(txn, ctx.dbi, entry.key, &value2, &cache_copy);
-        assert(proba2.errcode == proba.errcode);
-        assert(proba2.status == proba.status);
-        assert(value2 == value);
-        assert(expected_value2 == expected_value);
-        lock.unlock();
-#endif /* NDEBUG */
+      auto counter = &ctx.counters.unexpected;
+      switch (proba.status) {
+      default:
+        failed(__LINE__);
+        enought = true;
+        break;
+      case MDBX_CACHE_BEHIND:
+        counter = &ctx.counters.behind;
+        enought = true;
+        break;
+      case MDBX_CACHE_UNABLE:
+        counter = &ctx.counters.unable;
+        enought = true;
+        break;
+      case MDBX_CACHE_ERROR:
+        failed(__LINE__, "MDBX_CACHE_ERROR");
+        enought = true;
+        break;
+      case MDBX_CACHE_DIRTY:
+        failed(__LINE__, "MDBX_CACHE_DIRTY");
+        enought = true;
+        break;
+      case MDBX_CACHE_RACE:
+        counter = &ctx.counters.race;
+        break;
+      case MDBX_CACHE_HIT:
+        counter = &ctx.counters.hit;
+        break;
+      case MDBX_CACHE_CONFIRMED:
+        counter = &ctx.counters.confirmed;
+        break;
+      case MDBX_CACHE_REFRESHED:
+        counter = &ctx.counters.refreshed;
+        break;
       }
-    }
-    thesame += prev_counter == counter;
-    prev_counter = counter;
-  } while (!enought && thesame < 11);
+      counter->fetch_add(1);
+      if (proba.status != MDBX_CACHE_ERROR) {
+        assert(entry.key.is_valid() && entry.key.length());
+        const auto expected_value = txn.get(ctx.dbi, entry.key, mdbx::slice::null());
+        assert(entry.key.is_valid() && entry.key.length());
+        if (value != expected_value) {
+          ctx.counters.unexpected.fetch_add(1);
+          failed(__LINE__, "value mismatch");
+          std::cerr << "status " << proba.status << ", expected " << expected_value << ", got " << value << std::endl;
+#ifndef NDEBUG
+          static std::mutex lock;
+          lock.lock();
+          mdbx::slice value2;
+          const auto expected_value2 = txn.get(ctx.dbi, entry.key, mdbx::slice::null());
+          auto proba2 = ctx.impl(txn, ctx.dbi, entry.key, &value2, &cache_copy);
+          assert(proba2.errcode == proba.errcode);
+          assert(proba2.status == proba.status);
+          assert(value2 == value);
+          assert(expected_value2 == expected_value);
+          lock.unlock();
+#endif /* NDEBUG */
+        }
+      }
+      thesame += prev_counter == counter;
+      prev_counter = counter;
+    } while (!enought && thesame < 11);
+  } catch (const std::exception &e) {
+    std::cerr << "exception: " << e.what() << std::endl;
+  }
 }
 
 bool case2_multithread(mdbx::env env, prng &rnd, get_cached_t get_cached) {
-  const unsigned n_threads = std::thread::hardware_concurrency() * 3 + 3;
+  const unsigned n_threads = std::min(env.max_readers() - 1, std::thread::hardware_concurrency() * 3 + 3);
   const unsigned wanna_repeat = 3;
 
   std::vector<case2_entry> entries;
@@ -903,33 +907,44 @@ bool case2_multithread(mdbx::env env, prng &rnd, get_cached_t get_cached) {
 
   struct case2_context context(rnd, table, get_cached);
   for (unsigned loop = 0; loop < 10 * 1000; ++loop) {
-    threads.clear();
     std::latch latch(n_threads + 1);
-    for (auto &entry : entries) {
-      entry.cache.reset();
-      assert(entry.key.is_valid() && entry.key.length());
-    }
+    try {
+      for (auto &entry : entries) {
+        entry.cache.reset();
+        assert(entry.key.is_valid() && entry.key.length());
+      }
 
-    while (threads.size() < n_threads) {
-      txn = env.start_write();
-      auto &entry = entries[rnd() % entries.size()];
-      if (rnd() % 7 < 3) {
-        txn.erase(table, entry.key);
-      } else {
-        txn.upsert(table, entry.key, buffer::base64(rnd()));
+      while (threads.size() < n_threads) {
+        txn = env.start_write();
+        auto &entry = entries[rnd() % entries.size()];
+        if (rnd() % 7 < 3) {
+          txn.erase(table, entry.key);
+        } else {
+          txn.upsert(table, entry.key, buffer::base64(rnd()));
+        }
+        txn.commit_embark_read();
+        threads.push_back(
+            std::thread(case2_thread, std::ref(context), std::ref(latch), std::move(txn), std::ref(entry)));
+        if (threads.size() < n_threads) {
+          txn = env.start_read();
+          threads.push_back(std::thread(case2_thread, std::ref(context), std::ref(latch), std::move(txn),
+                                        std::ref(entries[rnd() % entries.size()])));
+        }
       }
-      txn.commit_embark_read();
-      threads.push_back(std::thread(case2_thread, std::ref(context), std::ref(latch), std::move(txn), std::ref(entry)));
-      if (threads.size() < n_threads) {
-        txn = env.start_read();
-        threads.push_back(std::thread(case2_thread, std::ref(context), std::ref(latch), std::move(txn),
-                                      std::ref(entries[rnd() % entries.size()])));
-      }
+    } catch (const std::exception &e) {
+      std::cerr << "exception: " << e.what() << std::endl;
+      while (!latch.try_wait())
+        latch.count_down();
+      for (auto &t : threads)
+        t.join();
+      threads.clear();
+      throw;
     }
 
     latch.arrive_and_wait();
     for (auto &t : threads)
       t.join();
+    threads.clear();
 
     if (context.counters.unexpected)
       return false;
