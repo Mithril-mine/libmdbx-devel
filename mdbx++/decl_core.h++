@@ -15,6 +15,11 @@ public:
     other.reset();
   }
   void reset() noexcept { mdbx_cache_init(this); }
+  MDBX_CXX20_CONSTEXPR cache_entry(const MDBX_cache_entry_t &ce) noexcept { mdbx::memcpy(this, &ce, sizeof(*this)); }
+  MDBX_CXX20_CONSTEXPR cache_entry &operator=(const MDBX_cache_entry_t &ce) noexcept {
+    mdbx::memcpy(this, &ce, sizeof(*this));
+    return *this;
+  };
 };
 
 //------------------------------------------------------------------------------

@@ -258,15 +258,23 @@ struct generator {
   }
 };
 
-MDBX_NORETURN static void unexpected(unsigned line) {
+MDBX_NORETURN static void unexpected(unsigned line, const char *msg = nullptr) {
   std::cout.flush();
   std::cerr.flush();
-  throw std::runtime_error(std::string("unexpected at line ") + std::to_string(line));
+  if (msg)
+    throw std::runtime_error(std::string("unexpected (") + msg + std::string(") at line ") + std::to_string(line));
+  else
+    throw std::runtime_error(std::string("unexpected at line ") + std::to_string(line));
 }
 
-static bool failed(unsigned line) {
+static bool failed(unsigned line, const char *msg = nullptr) {
   std::cout.flush();
-  std::cerr << "failed ad line " << line << std::endl;
+  std::cerr.flush();
+  if (msg)
+    std::cerr << "failed (" << msg << ") at line " << line << std::endl;
+  else
+    std::cerr << "failed at line " << line << std::endl;
+  std::cerr.flush();
   std::cerr.flush();
   return false;
 }
@@ -829,11 +837,11 @@ void case2_thread(case2_context &ctx, std::latch &latch, mdbx::txn_managed txn, 
       enought = true;
       break;
     case MDBX_CACHE_ERROR:
-      failed(__LINE__);
+      failed(__LINE__, "MDBX_CACHE_ERROR");
       enought = true;
       break;
     case MDBX_CACHE_DIRTY:
-      failed(__LINE__);
+      failed(__LINE__, "MDBX_CACHE_DIRTY");
       enought = true;
       break;
     case MDBX_CACHE_RACE:
@@ -850,24 +858,27 @@ void case2_thread(case2_context &ctx, std::latch &latch, mdbx::txn_managed txn, 
       break;
     }
     counter->fetch_add(1);
-    assert(entry.key.is_valid() && entry.key.length());
-    const auto expected_value = txn.get(ctx.dbi, entry.key, mdbx::slice::null());
-    assert(entry.key.is_valid() && entry.key.length());
-    if (value != expected_value) {
-      ctx.counters.unexpected.fetch_add(1);
-      failed(__LINE__);
+    if (proba.status != MDBX_CACHE_ERROR) {
+      assert(entry.key.is_valid() && entry.key.length());
+      const auto expected_value = txn.get(ctx.dbi, entry.key, mdbx::slice::null());
+      assert(entry.key.is_valid() && entry.key.length());
+      if (value != expected_value) {
+        ctx.counters.unexpected.fetch_add(1);
+        failed(__LINE__, "value mismatch");
+        std::cerr << "status " << proba.status << ", expected " << expected_value << ", got " << value << std::endl;
 #ifndef NDEBUG
-      static std::mutex lock;
-      lock.lock();
-      mdbx::slice value2;
-      const auto expected_value2 = txn.get(ctx.dbi, entry.key, mdbx::slice::null());
-      auto proba2 = ctx.impl(txn, ctx.dbi, entry.key, &value2, &cache_copy);
-      assert(proba2.errcode == proba.errcode);
-      assert(proba2.status == proba.status);
-      assert(value2 == value);
-      assert(expected_value2 == expected_value);
-      lock.unlock();
+        static std::mutex lock;
+        lock.lock();
+        mdbx::slice value2;
+        const auto expected_value2 = txn.get(ctx.dbi, entry.key, mdbx::slice::null());
+        auto proba2 = ctx.impl(txn, ctx.dbi, entry.key, &value2, &cache_copy);
+        assert(proba2.errcode == proba.errcode);
+        assert(proba2.status == proba.status);
+        assert(value2 == value);
+        assert(expected_value2 == expected_value);
+        lock.unlock();
 #endif /* NDEBUG */
+      }
     }
     thesame += prev_counter == counter;
     prev_counter = counter;

@@ -767,7 +767,6 @@ int tree_rebalance(MDBX_cursor *mc) {
 
   const size_t ki_top = mc->ki[mc->top];
   const size_t ki_pre_top = mn->ki[pre_top];
-  const size_t nkeys = page_numkeys(mn->pg[mn->top]);
 
   const size_t left_room = left ? page_room(left) : 0;
   const size_t right_room = right ? page_room(right) : 0;
@@ -786,6 +785,47 @@ int tree_rebalance(MDBX_cursor *mc) {
    *  - при включенном minimize_waf распространение/обновление первых ключей
    *    потребуется разделение какой-либо страницы, что увеличит WAF и поэтому обесценивает дальнейшее
    *    следование minimize_waf. */
+
+  if (unlikely(numkeys == 0)) {
+    if (left) {
+      mn->pg[mn->top] = left;
+      mn->ki[mn->top - 1] = (indx_t)(ki_pre_top - 1);
+      mn->ki[mn->top] = (indx_t)(left_nkeys - 1);
+      mc->ki[mc->top] = 0;
+      const size_t new_ki = ki_top + left_nkeys;
+      mn->ki[mn->top] += mc->ki[mn->top] + 1;
+      couple.outer.next = mn->txn->cursors[cursor_dbi(mn)];
+      mn->txn->cursors[cursor_dbi(mn)] = &couple.outer;
+      rc = page_merge(mc, mn);
+      mn->txn->cursors[cursor_dbi(mn)] = couple.outer.next;
+      if (likely(rc != MDBX_RESULT_TRUE)) {
+        cursor_cpstk(mn, mc);
+        mc->ki[mc->top] = (indx_t)new_ki;
+        cASSERT0(mc, rc || page_numkeys(mc->pg[mc->top]) >= minkeys);
+        return rc;
+      }
+    }
+    cASSERT0(mc, right_nkeys >= minkeys);
+    mn->pg[mn->top] = right;
+    mn->ki[mn->top - 1] = (indx_t)(ki_pre_top + 1);
+    mn->ki[mn->top] = 0;
+    mc->ki[mc->top] = (indx_t)numkeys;
+    couple.outer.next = mn->txn->cursors[cursor_dbi(mn)];
+    mn->txn->cursors[cursor_dbi(mn)] = &couple.outer;
+    rc = page_merge(mn, mc);
+    mn->txn->cursors[cursor_dbi(mn)] = couple.outer.next;
+    if (likely(rc != MDBX_RESULT_TRUE)) {
+      mc->ki[mc->top] = (indx_t)ki_top;
+      cASSERT0(mc, rc || page_numkeys(mc->pg[mc->top]) >= minkeys);
+      return rc;
+    }
+
+  bailout:
+    ERROR("Unable to merge/rebalance %s page %" PRIaPGNO " (has %zu keys, fill %u.%u%%, used %zu, room %zu bytes)",
+          is_leaf(tp) ? "leaf" : "branch", tp->pgno, numkeys, page_fill_percentum_x10(mc->txn->env, tp) / 10,
+          page_fill_percentum_x10(mc->txn->env, tp) % 10, page_used(mc->txn->env, tp), room);
+    return MDBX_PROBLEM;
+  }
 
   bool involve = !(left && right);
 retry:
@@ -818,7 +858,7 @@ retry:
     mn->pg[mn->top] = right;
     mn->ki[mn->top - 1] = (indx_t)(ki_pre_top + 1);
     mn->ki[mn->top] = 0;
-    mc->ki[mc->top] = (indx_t)nkeys;
+    mc->ki[mc->top] = (indx_t)numkeys;
     couple.outer.next = mn->txn->cursors[cursor_dbi(mn)];
     mn->txn->cursors[cursor_dbi(mn)] = &couple.outer;
     rc = page_merge(mn, mc);
@@ -851,7 +891,7 @@ retry:
     mn->pg[mn->top] = right;
     mn->ki[mn->top - 1] = (indx_t)(ki_pre_top + 1);
     mn->ki[mn->top] = 0;
-    mc->ki[mc->top] = (indx_t)nkeys;
+    mc->ki[mc->top] = (indx_t)numkeys;
     couple.outer.next = mn->txn->cursors[cursor_dbi(mn)];
     mn->txn->cursors[cursor_dbi(mn)] = &couple.outer;
     rc = node_move(mn, mc, false);
@@ -863,7 +903,7 @@ retry:
     }
   }
 
-  if (nkeys >= minkeys) {
+  if (numkeys >= minkeys) {
     mc->ki[mc->top] = (indx_t)ki_top;
     if (CHECKS2_ENABLED())
       ENSURE_OBJ(mc, cursor_validate_updating(mc) == MDBX_SUCCESS);
@@ -888,10 +928,7 @@ retry:
     goto retry;
   }
 
-  ERROR("Unable to merge/rebalance %s page %" PRIaPGNO " (has %zu keys, fill %u.%u%%, used %zu, room %zu bytes)",
-        is_leaf(tp) ? "leaf" : "branch", tp->pgno, numkeys, page_fill_percentum_x10(mc->txn->env, tp) / 10,
-        page_fill_percentum_x10(mc->txn->env, tp) % 10, page_used(mc->txn->env, tp), room);
-  return MDBX_PROBLEM;
+  goto bailout;
 }
 
 int tree_propagate_key(MDBX_cursor *mc, const MDBX_val *key) {

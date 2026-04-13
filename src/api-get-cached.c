@@ -147,7 +147,7 @@ __hot static MDBX_cache_result_t cache_get(const MDBX_txn *txn, MDBX_dbi dbi, co
     cASSERT0(txn, trunk_txnid == entry->trunk_txnid);
   confirmed:
     cASSERT0(txn, trunk_txnid <= committed_snapshot_txnid && trunk_txnid <= entry->last_confirmed_txnid);
-    data->iov_base = entry->offset ? ptr_disp(txn->env->dxb_mmap.base, entry->offset) : 0;
+    data->iov_base = entry->offset ? ptr_disp(txn->env->dxb_mmap.base, entry->offset) : nullptr;
     data->iov_len = entry->length;
     tASSERT1(txn, (!entry->offset && !entry->length) || is_inside_dxb_and_commited(txn, data->iov_base));
     if (entry->last_confirmed_txnid == committed_snapshot_txnid)
@@ -267,13 +267,21 @@ __hot static MDBX_cache_result_t cache_get(const MDBX_txn *txn, MDBX_dbi dbi, co
     goto notfound_elevate_trunk;
   }
 
-  trunk_txnid = mp->txnid;
   sfr_t sfr = tree_search_foliage(&cx.outer, &aligned.key);
   if (!sfr.exact) {
     cASSERT0(txn, !entry->offset || trunk_txnid > entry->trunk_txnid);
+    if (sfr.node)
+      /* Обновлять метку trunk_txnid можно только если искомый ключ должен был находится на текущей листовой странице,
+       * но не в случае когда он болмьше последнего. Тогда trunk_txnid будет связан с родительской страницей и при
+       * добавлении искомого ключа этом изменение можно будет отследить. Иначе trunk_txnid будет связан с текущей
+       * листовой страницей, которая может не измениться при добавлении искомого ключа, так как он больше последнего
+       * на этой странице и может быть добавлен в следующую страницу справа. Такое несоответствие может стать причиной
+       * пропуска изменений и/или выдачи неверного результата. */
+      trunk_txnid = mp->txnid;
     goto not_found;
   }
 
+  trunk_txnid = mp->txnid;
   if (unlikely(node_flags(sfr.node) & N_DUP)) {
     /* TODO: It is possible to implement support for multivalues, but need to think through the usage scenarios. */
     err = MDBX_EMULTIVAL;
