@@ -37,7 +37,7 @@ static void signal_handler(int sig) {
 static char *prog;
 static void usage(void) {
   fprintf(stderr,
-          "usage: %s [-V] [-q] [-c] [-d] [-p] [-u|U] db_pathname\n"
+          "usage: %s [-V] [-v[v[v...]]] [-q] [-1..9] [-t seconds] [-f percent] [-r percent] [-s megabytes] [-c] [-u|U] db_pathname\n"
           "  -V\t\tprint version and exit\n"
           "  -v\t\tmore verbose, could be repeated for extra details from debug-enabled builds.\n"
           "  -q\t\tbe quiet.\n"
@@ -55,10 +55,10 @@ static void usage(void) {
   exit(EXIT_FAILURE);
 }
 
-MDBX_log_level_t verbosity = MDBX_LOG_WARN;
-bool quiet = false;
-bool is_console = true;
-unsigned cycles_limit;
+static MDBX_log_level_t verbosity = MDBX_LOG_WARN;
+static bool quiet = false;
+static bool is_console = true;
+static unsigned cycles_limit;
 static unsigned progress_dots;
 
 static void logger(MDBX_log_level_t level, const char *function, int line, const char *fmt, va_list args) {
@@ -127,8 +127,8 @@ static const char *stop_reason(const MDBX_defrag_result_t *progress) {
     return "aborted by user";
   if (progress->stopping_reasons & MDBX_defrag_discontinued)
     return "discontinued by user";
-  if (progress->stopping_reasons & MDBX_defrag_enough_theshold)
-    return "enough theshold";
+  if (progress->stopping_reasons & MDBX_defrag_enough_threshold)
+    return "enough threshold";
   if (progress->stopping_reasons & MDBX_defrag_time_limit)
     return "time limit reached";
   if (progress->stopping_reasons & MDBX_defrag_laggard_reader)

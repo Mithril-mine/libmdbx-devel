@@ -46,13 +46,13 @@ typedef struct flagbit {
   char *name;
 } flagbit;
 
-flagbit dbflags[] = {{MDBX_REVERSEKEY, "reversekey"},
-                     {MDBX_DUPSORT, "dupsort"},
-                     {MDBX_INTEGERKEY, "integerkey"},
-                     {MDBX_DUPFIXED, "dupfix"},
-                     {MDBX_INTEGERDUP, "integerdup"},
-                     {MDBX_REVERSEDUP, "reversedup"},
-                     {0, nullptr}};
+static const flagbit dbflags[] = {{MDBX_REVERSEKEY, "reversekey"},
+                                  {MDBX_DUPSORT, "dupsort"},
+                                  {MDBX_INTEGERKEY, "integerkey"},
+                                  {MDBX_DUPFIXED, "dupfix"},
+                                  {MDBX_INTEGERDUP, "integerdup"},
+                                  {MDBX_REVERSEDUP, "reversedup"},
+                                  {0, nullptr}};
 
 static void dumpval(const MDBX_val *v) {
   static const char digits[] = "0123456789abcdef";
@@ -71,8 +71,8 @@ static void dumpval(const MDBX_val *v) {
   putchar('\n');
 }
 
-bool quiet = false, rescue = false;
-const char *prog;
+static bool quiet = false, rescue = false;
+static const char *prog;
 static void error(const char *func, int rc) {
   if (!quiet)
     fprintf(stderr, "%s: %s() error %d %s\n", prog, func, rc, mdbx_strerror(rc));

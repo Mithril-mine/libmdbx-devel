@@ -18,7 +18,7 @@ static inline uint64_t double2key(const double *const ptr) {
   const int64_t i = *(const int64_t *)ptr;
   const uint64_t u = (i < 0) ? UINT64_C(0xffffFFFFffffFFFF) - i : i + UINT64_C(0x8000000000000000);
   if (CHECKS1_ENABLED()) {
-    MDBX_MAYBE_UNUSED const double f = key2double(u);
+    const double f = key2double(u);
     ENSURE(memcmp(&f, ptr, sizeof(double)) == 0);
   }
   return u;
@@ -39,7 +39,7 @@ static inline uint32_t float2key(const float *const ptr) {
   const int32_t i = *(const int32_t *)ptr;
   const uint32_t u = (i < 0) ? UINT32_C(0xffffFFFF) - i : i + UINT32_C(0x80000000);
   if (CHECKS1_ENABLED()) {
-    MDBX_MAYBE_UNUSED const float f = key2float(u);
+    const float f = key2float(u);
     ENSURE(memcmp(&f, ptr, sizeof(float)) == 0);
   }
   return u;

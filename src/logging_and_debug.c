@@ -307,7 +307,7 @@ __cold __noinline void panic_at_fmt(const struct MDBX_panic_point *const at, con
   va_list ap;
   va_start(ap, obj);
   char *message = nullptr;
-  const int num = osal_vasprintf(&message, obj, ap);
+  const int num = osal_vasprintf(&message, at->msg, ap);
   const char *const const_message = unlikely(num < 1 || !message) ? "<vasprintf() failed>" : message;
   fuckup(const_message, at->function, at->line, obj);
 }

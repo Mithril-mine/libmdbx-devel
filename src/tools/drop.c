@@ -37,7 +37,7 @@ static void signal_handler(int sig) {
 #endif /* !WINDOWS */
 
 static char *prog;
-bool quiet = false;
+static bool quiet = false;
 static void usage(void) {
   fprintf(stderr,
           "usage: %s [-V] [-q] [-d] [-s name] dbpath\n"

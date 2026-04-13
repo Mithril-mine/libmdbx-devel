@@ -3249,7 +3249,7 @@ __cold int mdbx_get_sysraminfo(intptr_t *page_size, intptr_t *total_pages, intpt
   if (unlikely(pagesize < MDBX_MIN_PAGESIZE || !is_powerof2(pagesize)))
     return LOG_IFERR(MDBX_INCOMPATIBLE);
 
-  MDBX_MAYBE_UNUSED const int log2page = log2n_powerof2(pagesize);
+  const int log2page = log2n_powerof2(pagesize);
   ASSERT(pagesize == (INT64_C(1) << log2page));
   (void)log2page;
 
