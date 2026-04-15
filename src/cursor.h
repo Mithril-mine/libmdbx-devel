@@ -324,6 +324,7 @@ MDBX_INTERNAL MDBX_cursor *cursor_eot(MDBX_cursor *cursor, MDBX_txn *txn);
 MDBX_INTERNAL int cursor_shadow(MDBX_cursor *cursor, MDBX_txn *nested, const size_t dbi);
 
 MDBX_INTERNAL MDBX_cursor *cursor_cpstk(const MDBX_cursor *csrc, MDBX_cursor *cdst);
+MDBX_INTERNAL MDBX_cursor *cursor_copy_position(const MDBX_cursor *csrc, MDBX_cursor *cdst);
 
 MDBX_INTERNAL int __must_check_result cursor_ops(MDBX_cursor *mc, MDBX_val *key, MDBX_val *data,
                                                  const MDBX_cursor_op op);
@@ -378,6 +379,18 @@ MDBX_MAYBE_UNUSED MDBX_INTERNAL MDBX_cursor *cursor_clone_complete(const MDBX_cu
 
 MDBX_NOTHROW_PURE_FUNCTION MDBX_INTERNAL int cursor_on_first(const MDBX_cursor *mc);
 MDBX_NOTHROW_PURE_FUNCTION MDBX_INTERNAL int cursor_on_last(const MDBX_cursor *mc);
+MDBX_NOTHROW_PURE_FUNCTION MDBX_INTERNAL intptr_t cursor_cmp(const MDBX_cursor *left, const MDBX_cursor *right);
+
+MDBX_INTERNAL int cursor_distribute(const MDBX_cursor *begin, const MDBX_cursor *end, MDBX_cursor **array,
+                                    size_t array_size, int level);
+MDBX_INTERNAL int cursor_scroll_forward(MDBX_cursor *mc, intptr_t amount, int level);
+MDBX_INTERNAL int cursor_scroll_backward(MDBX_cursor *mc, intptr_t amount, int level);
+
+typedef struct cursor_distance_result {
+  int err;
+  size_t distance;
+} cdr_t;
+MDBX_INTERNAL cdr_t cursor_distance(MDBX_cursor *begin, const MDBX_cursor *end, int level);
 
 /*----------------------------------------------------------------------------*/
 

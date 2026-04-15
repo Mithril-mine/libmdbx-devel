@@ -410,6 +410,19 @@ MDBX_cursor *cursor_cpstk(const MDBX_cursor *csrc, MDBX_cursor *cdst) {
   return cdst;
 }
 
+MDBX_cursor *cursor_copy_position(const MDBX_cursor *csrc, MDBX_cursor *cdst) {
+  cursor_cpstk(csrc, cdst);
+  if (cdst->subcur) {
+    cdst->subcur->cursor.tree->root = 0;
+    cdst->subcur->cursor.top_and_flags = z_inner | z_poor_mark;
+    if (is_pointed(&csrc->subcur->cursor)) {
+      cursor_cpstk(&csrc->subcur->cursor, &cdst->subcur->cursor);
+      *cdst->subcur->cursor.tree = *csrc->subcur->cursor.tree;
+    }
+  }
+  return cdst;
+}
+
 static inline void cursor_clone_half(const MDBX_cursor *csrc, MDBX_cursor *cdst) {
   cdst->next = nullptr;
   cdst->backup = nullptr;
@@ -533,6 +546,18 @@ __hot int cursor_sibling_right(MDBX_cursor *mc) {
   mc->flags = z_eof_soft | z_eof_hard | (mc->flags & z_clear_mask);
   /* не очищаем состояние вложенного курсора, а остаёмся на предыдущей позиции */
   return MDBX_NOTFOUND;
+}
+
+intptr_t cursor_cmp(const MDBX_cursor *left, const MDBX_cursor *right) {
+  ASSERT(left->top == right->top);
+  intptr_t cmp = 0;
+  for (intptr_t i = cmp; i <= left->top; ++i) {
+    ASSERT(left->pg[i] == right->pg[i]);
+    cmp = (intptr_t)left->ki[i] - (intptr_t)right->ki[i];
+    if (cmp)
+      break;
+  }
+  return cmp;
 }
 
 /*----------------------------------------------------------------------------*/
@@ -2462,4 +2487,368 @@ int cursor_on_last(const MDBX_cursor *mc) {
       return MDBX_RESULT_FALSE;
   }
   return MDBX_RESULT_TRUE;
+}
+//-------------------------------------------------------------------------------------------------
+
+static cdr_t cursor_distance_at(MDBX_cursor *iter, const MDBX_cursor *end, int level) {
+  cdr_t tdr = {.err = MDBX_SUCCESS, .distance = 0};
+  if (level < iter->top)
+    iter->top = level;
+  ASSERT(end->top >= iter->top);
+  const int iter_ki = iter->ki[iter->top] + ((iter->flags & z_eof_hard) != 0 && level + 1 == iter->tree->height);
+  const int end_ki = end->ki[iter->top] + ((end->flags & z_eof_hard) != 0 && level + 1 == iter->tree->height);
+  if (iter->pg[iter->top] == end->pg[iter->top])
+    tdr.distance = end_ki - iter_ki;
+  else {
+    tdr.distance = page_numkeys(iter->pg[iter->top]) - iter_ki;
+    while (true) {
+      tdr.err = cursor_sibling_right(iter);
+      if (likely(tdr.err != MDBX_SUCCESS))
+        return tdr;
+      if (iter->pg[iter->top] == end->pg[iter->top])
+        break;
+      tdr.distance += page_numkeys(iter->pg[iter->top]);
+    }
+    tdr.distance += end_ki + ((end->flags & z_eof_hard) != 0 && level + 1 == end->tree->height);
+  }
+  return tdr;
+}
+
+static cdr_t cursor_leaf_amount(const page_t *mp, intptr_t begin, intptr_t end) {
+  cdr_t tdr = {.err = MDBX_SUCCESS, .distance = end - begin};
+  intptr_t ki = begin;
+  do {
+    const node_t *node = page_node(mp, ki);
+    const size_t dsize = node_ds(node);
+    if (node->flags & N_TREE) {
+      if (!MDBX_DISABLE_VALIDATION && unlikely(dsize < sizeof(tree_t))) {
+        tdr.err = bad_page(mp, "invalid %s-db record size (%zu, expect %zu)\n", "nested", dsize, sizeof(tree_t));
+        return tdr;
+      }
+      tree_t subtree;
+      memcpy(&subtree, node_data(node), sizeof(tree_t));
+      tdr.distance += subtree.items - 1;
+    } else if (node->flags & N_DUP) {
+      if (!MDBX_DISABLE_VALIDATION && unlikely(node_ds(node) <= PAGEHDRSZ)) {
+        tdr.err = bad_page(mp, "invalid nested/sub-page record size (%zu, expect %u)\n", dsize, PAGEHDRSZ);
+        return tdr;
+      }
+      tdr.distance += page_numkeys(node_data(node)) - 1;
+    }
+  } while (++ki < end);
+  return tdr;
+}
+
+cdr_t cursor_distance(MDBX_cursor *iter, const MDBX_cursor *end, int level) {
+  ASSERT(iter->tree == end->tree);
+  cdr_t tdr = {.err = MDBX_SUCCESS, .distance = 0};
+  const intptr_t outer_diff_level = tree_diff_level(iter, end);
+  if (unlikely(outer_diff_level < MDBX_RESULT_TRUE)) {
+  beyond_end:
+    tdr.err = ENODATA;
+    return tdr;
+  }
+
+  if (level < outer_diff_level)
+    return tdr;
+
+  if (!iter->subcur || level < iter->tree->height)
+    return cursor_distance_at(iter, end, level);
+
+  if (outer_diff_level == MDBX_RESULT_TRUE) {
+    const int cmp = (iter->flags & z_eof_hard) - (end->flags & z_eof_hard);
+    if (unlikely(cmp > 0))
+      goto beyond_end;
+    if (cmp == 0 && inner_pointed(iter)) {
+      const intptr_t inner_diff_level = tree_diff_level(&iter->subcur->cursor, &end->subcur->cursor);
+      if (unlikely(inner_diff_level < MDBX_RESULT_TRUE))
+        goto beyond_end;
+    }
+  }
+
+  /* запрошенный уровень предполагает учет mutivalues/дубликатов */
+  while (iter->pg[iter->top] != end->pg[iter->top]) {
+    cdr_t leaf_tdr = cursor_leaf_amount(iter->pg[iter->top], iter->ki[iter->top], page_numkeys(iter->pg[iter->top]));
+    tdr.distance += leaf_tdr.distance;
+    tdr.err = leaf_tdr.err;
+    if (unlikely(tdr.err != MDBX_SUCCESS))
+      return tdr;
+    tdr.err = cursor_sibling_right(iter);
+    if (unlikely(tdr.err != MDBX_SUCCESS))
+      return tdr;
+  }
+
+  if (iter->ki[iter->top] < end->ki[iter->top]) {
+    cdr_t leaf_tdr = cursor_leaf_amount(iter->pg[iter->top], iter->ki[iter->top], end->ki[iter->top]);
+    tdr.distance += leaf_tdr.distance;
+    tdr.err = leaf_tdr.err;
+    if (unlikely(tdr.err != MDBX_SUCCESS))
+      return tdr;
+  }
+
+  if (is_pointed(&end->subcur->cursor)) {
+    iter->pg[iter->top] = end->pg[iter->top];
+    iter->ki[iter->top] = end->ki[iter->top];
+    tdr.err = cursor_dupsort_setup(iter, page_node(iter->pg[iter->top], iter->ki[iter->top]), iter->pg[iter->top]);
+    if (unlikely(tdr.err != MDBX_SUCCESS))
+      return tdr;
+    tdr.err = inner_first(&iter->subcur->cursor, nullptr);
+    if (unlikely(tdr.err != MDBX_SUCCESS))
+      return tdr;
+
+    cdr_t subtree_tdr = cursor_distance_at(&iter->subcur->cursor, &end->subcur->cursor, level - iter->tree->height);
+    tdr.distance += subtree_tdr.distance;
+    tdr.err = subtree_tdr.err;
+  }
+
+  return tdr;
+}
+
+static cdr_t cursor_forward_at(MDBX_cursor *iter, size_t amount, int level) {
+  if (level < iter->top)
+    iter->top = level;
+
+  cdr_t tdr = {.err = MDBX_SUCCESS, .distance = amount};
+  size_t step = page_numkeys(iter->pg[iter->top]) - iter->ki[iter->top];
+  while (tdr.distance >= step) {
+    tdr.distance -= step;
+    tdr.err = cursor_sibling_right(iter);
+    if (unlikely(tdr.err != MDBX_SUCCESS))
+      return tdr;
+    step = page_numkeys(iter->pg[iter->top]);
+  }
+
+  ASSERT(tdr.distance < step);
+  iter->ki[iter->top] += tdr.distance;
+  tdr.distance = 0;
+  if (iter->top + 1 < iter->tree->height) {
+    tdr.err = tree_deepen_edge(iter, Z_FIRST);
+    if (unlikely(tdr.err != MDBX_SUCCESS))
+      return tdr;
+  }
+  if (iter->subcur) {
+    iter->subcur->nested_tree.root = 0;
+    iter->subcur->cursor.top_and_flags = z_inner | z_poor_mark;
+    const node_t *node = page_node(iter->pg[iter->top], iter->ki[iter->top]);
+    if ((node_flags(node) & N_DUP)) {
+      tdr.err = cursor_dupsort_setup(iter, node, iter->pg[iter->top]);
+      if (unlikely(tdr.err != MDBX_SUCCESS))
+        return tdr;
+      tdr.err = inner_first(&iter->subcur->cursor, nullptr);
+      if (unlikely(tdr.err != MDBX_SUCCESS))
+        return tdr;
+    }
+  }
+
+  be_filled(iter);
+  return tdr;
+}
+
+static cdr_t cursor_backward_at(MDBX_cursor *iter, size_t amount, int level) {
+  if (level < iter->top)
+    iter->top = level;
+
+  cdr_t tdr = {.err = MDBX_SUCCESS, .distance = amount};
+  while (tdr.distance > iter->ki[iter->top]) {
+    tdr.distance -= iter->ki[iter->top] + 1;
+    tdr.err = cursor_sibling_left(iter);
+    if (unlikely(tdr.err != MDBX_SUCCESS))
+      return tdr;
+  }
+
+  ASSERT(tdr.distance <= iter->ki[iter->top]);
+  iter->ki[iter->top] -= tdr.distance;
+  tdr.distance = 0;
+  if (iter->top + 1 < iter->tree->height) {
+    tdr.err = tree_deepen_edge(iter, Z_LAST);
+    if (unlikely(tdr.err != MDBX_SUCCESS))
+      return tdr;
+  }
+  if (iter->subcur) {
+    iter->subcur->nested_tree.root = 0;
+    iter->subcur->cursor.top_and_flags = z_inner | z_poor_mark;
+    const node_t *node = page_node(iter->pg[iter->top], iter->ki[iter->top]);
+    if ((node_flags(node) & N_DUP)) {
+      tdr.err = cursor_dupsort_setup(iter, node, iter->pg[iter->top]);
+      if (unlikely(tdr.err != MDBX_SUCCESS))
+        return tdr;
+      tdr.err = inner_last(&iter->subcur->cursor, nullptr);
+      if (unlikely(tdr.err != MDBX_SUCCESS))
+        return tdr;
+    }
+  }
+
+  be_filled(iter);
+  return tdr;
+}
+
+int cursor_scroll_forward(MDBX_cursor *mc, intptr_t amount, int level) {
+  ASSERT(amount > 0);
+  if (level < mc->tree->height || !mc->subcur)
+    return cursor_forward_at(mc, amount, level).err;
+
+  /* запрошенный уровень предполагает учет mutivalues/дубликатов */
+  int err = MDBX_SUCCESS;
+  if (inner_pointed(mc)) {
+    cdr_t tdr = cursor_forward_at(&mc->subcur->cursor, amount, level - mc->tree->height);
+    err = tdr.err;
+    amount = tdr.distance;
+    if (unlikely(err != MDBX_NOTFOUND))
+      return err;
+    mc->subcur->nested_tree.root = 0;
+    mc->subcur->cursor.top_and_flags = z_inner | z_poor_mark;
+  }
+
+  while (true) {
+    if (++mc->ki[mc->top] >= page_numkeys(mc->pg[mc->top])) {
+      err = cursor_sibling_right(mc);
+      if (unlikely(err != MDBX_SUCCESS))
+        return err;
+    }
+
+    const node_t *node = page_node(mc->pg[mc->top], mc->ki[mc->top]);
+    if ((node->flags & N_DUP) == 0) {
+      if (unlikely(--amount == 0))
+        return tree_deepen_edge(mc, Z_FIRST);
+      continue;
+    }
+
+    err = cursor_dupsort_setup(mc, node, mc->pg[mc->top]);
+    if (unlikely(err != MDBX_SUCCESS))
+      return err;
+    if ((size_t)amount < mc->subcur->nested_tree.items) {
+      err = inner_first(&mc->subcur->cursor, nullptr);
+      if (unlikely(err != MDBX_SUCCESS))
+        return err;
+      return cursor_forward_at(&mc->subcur->cursor, amount, level - mc->tree->height).err;
+    }
+    amount -= mc->subcur->nested_tree.items;
+    mc->subcur->nested_tree.root = 0;
+    mc->subcur->cursor.top_and_flags = z_inner | z_poor_mark;
+  }
+}
+
+int cursor_scroll_backward(MDBX_cursor *mc, intptr_t amount, int level) {
+  ASSERT(amount > 0);
+  if (level < mc->tree->height || !mc->subcur)
+    return cursor_backward_at(mc, amount, level).err;
+
+  /* запрошенный уровень предполагает учет mutivalues/дубликатов */
+  int err = MDBX_SUCCESS;
+  if (inner_pointed(mc)) {
+    cdr_t tdr = cursor_backward_at(&mc->subcur->cursor, amount, level - mc->tree->height);
+    err = tdr.err;
+    amount = tdr.distance;
+    if (unlikely(err != MDBX_NOTFOUND))
+      return err;
+    mc->subcur->nested_tree.root = 0;
+    mc->subcur->cursor.top_and_flags = z_inner | z_poor_mark;
+  }
+
+  while (true) {
+    if (mc->ki[mc->top]-- < 1) {
+      err = cursor_sibling_left(mc);
+      if (unlikely(err != MDBX_SUCCESS))
+        return err;
+    }
+
+    const node_t *node = page_node(mc->pg[mc->top], mc->ki[mc->top]);
+    if ((node->flags & N_DUP) == 0) {
+      if (unlikely(--amount == 0))
+        return tree_deepen_edge(mc, Z_LAST);
+      continue;
+    }
+
+    err = cursor_dupsort_setup(mc, node, mc->pg[mc->top]);
+    if (unlikely(err != MDBX_SUCCESS))
+      return err;
+    if ((size_t)amount < mc->subcur->nested_tree.items) {
+      err = inner_last(&mc->subcur->cursor, nullptr);
+      if (unlikely(err != MDBX_SUCCESS))
+        return err;
+      return cursor_backward_at(&mc->subcur->cursor, amount, level - mc->tree->height).err;
+    }
+    amount -= mc->subcur->nested_tree.items;
+    mc->subcur->nested_tree.root = 0;
+    mc->subcur->cursor.top_and_flags = z_inner | z_poor_mark;
+  }
+}
+
+MDBX_MAYBE_UNUSED static intptr_t debug_cursor_distance(const MDBX_cursor *begin, const MDBX_cursor *end,
+                                                        unsigned deepness) {
+  intptr_t distance = 0;
+  return (mdbx_cursor_distance(begin, end, &distance, deepness) == MDBX_SUCCESS) ? distance : INTPTR_MIN;
+}
+
+int cursor_distribute(const MDBX_cursor *begin, const MDBX_cursor *end, MDBX_cursor **array, size_t array_size,
+                      int level) {
+  const intptr_t outer_diff_level = tree_diff_level(begin, end);
+  if (unlikely(outer_diff_level < MDBX_RESULT_TRUE))
+    return ENODATA;
+
+  const intptr_t inner_diff_level = (outer_diff_level > MDBX_RESULT_TRUE || !inner_pointed(begin))
+                                        ? MDBX_RESULT_TRUE
+                                        : tree_diff_level(&begin->subcur->cursor, &end->subcur->cursor);
+  if (outer_diff_level == MDBX_RESULT_TRUE && unlikely(inner_diff_level < MDBX_RESULT_TRUE))
+    return ENODATA;
+
+  if (unlikely(level < outer_diff_level))
+    return MDBX_RESULT_TRUE;
+  if (unlikely(outer_diff_level == MDBX_RESULT_TRUE && inner_diff_level == MDBX_RESULT_TRUE)) {
+    /* Курсоры begin и end совпадают */
+    return MDBX_RESULT_TRUE;
+  }
+
+  MDBX_cursor *iter = nullptr;
+  for (intptr_t i = array_size; --i >= 0;) {
+    if (array[i] != begin && array[i] != end) {
+      iter = array[i];
+      break;
+    }
+  }
+  cursor_copy_position(begin, iter);
+
+  const cdr_t tdr = cursor_distance(iter, end, level);
+  const size_t amount = tdr.distance;
+  int rc = tdr.err;
+  if (unlikely(rc != MDBX_SUCCESS))
+    return rc;
+
+  ASSERT(tdr.distance > 0);
+  cursor_copy_position(begin, iter);
+  size_t processed = 0;
+  for (size_t i = 0; i < array_size; ++i) {
+    MDBX_cursor *const mc = array[i];
+    if (unlikely(processed >= amount)) {
+      be_poor(mc);
+      rc = MDBX_RESULT_TRUE;
+    } else {
+      const size_t left_cursors = array_size - i;
+      const size_t left_amount = amount - processed;
+      const size_t chunk = (left_amount + left_cursors - 1) / left_cursors;
+      int err = cursor_scroll_forward(iter, chunk, level);
+      processed += chunk;
+      VERBOSE("cursor %zu of %zu, chunk %zu of %zu, left %zu, distance %zi, expected %zi, err %i", i, array_size, chunk,
+              amount, amount - processed, processed, debug_cursor_distance(begin, iter, level), err);
+      if (unlikely(err != MDBX_SUCCESS)) {
+        if (err != MDBX_NOTFOUND)
+          return rc = err;
+        be_poor(iter);
+        processed = tdr.distance;
+        rc = MDBX_RESULT_TRUE;
+      } else {
+        intptr_t cmp = cursor_cmp(iter, end);
+        if (cmp == 0 && inner_pointed(end))
+          cmp = cursor_cmp(&iter->subcur->cursor, &end->subcur->cursor);
+        if (cmp > 0) {
+          be_poor(iter);
+          processed = tdr.distance;
+          rc = MDBX_RESULT_TRUE;
+        }
+      }
+      if (mc != iter)
+        cursor_copy_position(iter, mc);
+    }
+  }
+  return rc;
 }

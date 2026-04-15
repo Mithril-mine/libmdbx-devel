@@ -258,19 +258,19 @@ __cold int page_check(const MDBX_cursor *const mc, const page_t *const mp) {
         break;
       case N_TREE /* sub-db */:
         if (unlikely(dsize != sizeof(tree_t))) {
-          rc = bad_page(mp, "invalid sub-db record size (%zu)\n", dsize);
+          rc = bad_page(mp, "invalid %s-db record size (%zu, expect %zu)\n", "named sub", dsize, sizeof(tree_t));
           continue;
         }
         break;
       case N_TREE | N_DUP /* dupsorted sub-tree */:
         if (unlikely(dsize != sizeof(tree_t))) {
-          rc = bad_page(mp, "invalid nested-db record size (%zu, expect %zu)\n", dsize, sizeof(tree_t));
+          rc = bad_page(mp, "invalid %s-db record size (%zu, expect %zu)\n", "nested", dsize, sizeof(tree_t));
           continue;
         }
         break;
       case N_DUP /* short sub-page */:
         if (unlikely(dsize <= PAGEHDRSZ)) {
-          rc = bad_page(mp, "invalid nested/sub-page record size (%zu)\n", dsize);
+          rc = bad_page(mp, "invalid nested/sub-page record size (%zu, expect %u)\n", dsize, PAGEHDRSZ);
           continue;
         } else {
           const page_t *const sp = (page_t *)data;

@@ -303,6 +303,49 @@ inline size_t cursor::put_multiple_samelength(const slice &key, const size_t val
   return args[1].iov_len /* done item count */;
 }
 
+inline ptrdiff_t cursor::distance_between(const cursor from, const cursor to, unsigned deepness) {
+  intptr_t distance = PTRDIFF_MIN;
+  error::success_or_throw(mdbx_cursor_distance(from, to, &distance, deepness));
+  return distance;
+}
+
+inline bool cursor::scroll(intptr_t distance, unsigned deepness, bool throw_notfound) {
+  const int err = ::mdbx_cursor_scroll(handle_, distance, deepness);
+  switch (err) {
+  case MDBX_SUCCESS:
+    MDBX_CXX20_LIKELY return true;
+  case MDBX_NOTFOUND:
+    if (!throw_notfound)
+      return false;
+    MDBX_CXX17_FALLTHROUGH /* fallthrough */;
+  default:
+    MDBX_CXX20_UNLIKELY error::throw_exception(err);
+  }
+}
+
+inline bool cursor::distribute(const cursor from, const cursor to, cursor *cursors_array, intptr_t cursors_array_size,
+                               unsigned deepness) {
+  static_assert(sizeof(cursors_array[0]) == sizeof(MDBX_cursor *));
+  const int err = ::mdbx_cursor_distribute(from, to, &cursors_array[0].handle_, cursors_array_size, deepness);
+  return error::boolean_or_throw(err);
+}
+
+inline bool cursor::distribute(const cursor from, const cursor to, const std::vector<cursor> &cursors_array,
+                               unsigned deepness) {
+  static_assert(sizeof(cursor) == sizeof(MDBX_cursor *));
+  const int err = ::mdbx_cursor_distribute(from, to, const_cast<MDBX_cursor **>(&cursors_array[0].handle_),
+                                           cursors_array.size(), deepness);
+  return error::boolean_or_throw(err);
+}
+
+inline bool cursor::distribute(const cursor from, const cursor to, const std::vector<cursor_managed> &cursors_array,
+                               unsigned deepness) {
+  static_assert(sizeof(cursor_managed) == sizeof(MDBX_cursor *));
+  const int err = ::mdbx_cursor_distribute(from, to, const_cast<MDBX_cursor **>(&cursors_array[0].handle_),
+                                           cursors_array.size(), deepness);
+  return error::boolean_or_throw(err);
+}
+
 // > dist-cutoff-begin
 } // namespace mdbx
 // < dist-cutoff-end

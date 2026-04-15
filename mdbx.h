@@ -6315,20 +6315,121 @@ LIBMDBX_API int mdbx_cursor_del(MDBX_cursor *cursor, MDBX_put_flags_t flags);
  * \param [in] end_including        The boolean flag determines whether the end of the given
  *                                  interval should be included in the range to be deleted.
  *
- * \param [out] number_of_affected  Address to store the result
- *                                  number of removed items.
+ * \param [out] number_of_affected  Address to store the result number of removed items.
  *
  * \see mdbx_cursor_bunch_delete()
+ *
  * \returns A non-zero error value on failure and 0 on success,
  *          some possible errors are:
- * \retval MDBX_THREAD_MISMATCH  Given transaction is not owned
- *                               by current thread.
- * \retval MDBX_ENODATA       One or both of the given cursor(s) is not positioned to a data.
- * \retval MDBX_TXN_FULL      The transaction has too many dirty pages.
- * \retval MDBX_EACCES        An attempt was made to write in a read-only transaction.
- * \retval MDBX_EINVAL        An invalid parameter was specified. */
+ * \retval MDBX_THREAD_MISMATCH  Given transaction is not owned by current thread.
+ * \retval MDBX_ENODATA          One or both of the given cursor(s) is not positioned to a data,
+ *                               or position of `begin` cursor is after the `end` cursor.
+ * \retval MDBX_TXN_FULL         The transaction has too many dirty pages.
+ * \retval MDBX_EACCES           An attempt was made to write in a read-only transaction.
+ * \retval MDBX_EINVAL           An invalid parameter was specified. */
 LIBMDBX_API int mdbx_cursor_delete_range(MDBX_cursor *begin, MDBX_cursor *end, bool end_including,
                                          uint64_t *number_of_affected);
+
+/** \brief Calculates the distance between the cursors at the specified B-tree level.
+ * \ingroup c_cursors
+ *
+ * The value of the `deepness` parameter has a fundamental impact on the result since it limits the level of a B-tree,
+ * at which the difference between the cursor positions is calculated, where zero corresponds to the root of a B-tree
+ * and increases to a leaves. Lower `deepness` values allows to quickly get a rough result, avoiding reading the pages
+ * of a B-tree. Large enough `deepness` values allows to find out the exact number of elements between the cursors, but
+ * this will require reading all the leaf pages between ones. In order for the returned result to match the number of
+ * keys and values, the `deepness` must be at least the height of a B-tree, adding the height of nested B-trees for any
+ * kinds of "dupsort" tables. If in doubt, use a deliberately large value such as `INT_MAX` or just the `42`.
+ *
+ * \param [in] first             Cursor pointing to the first element or NULL to using the begin of a table.
+ *                               Either the `first` or the `last` must not be NULL.
+ *
+ * \param [in] last              Cursor pointing to the end of the range or NULL to using the end of a table.
+ *                               Either the `first` or the `last` must not be NULL.
+ *
+ * \param [out] distance         The address for storing the result calculated distance.
+ *
+ * \param [in] deepness          Limits the level of a B-tree, at which the difference between the cursor positions
+ *                               is calculated, where zero corresponds to the root of a B-tree
+ *                               and increases to a leaves.
+ *
+ * \see mdbx_cursor_scroll()
+ * \see mdbx_cursor_distribute()
+ *
+ * \returns A non-zero error value on failure and 0 on success,
+ *          some possible errors are:
+ * \retval MDBX_ENODATA          One or both of the given cursor(s) is not positioned to a data.
+ * \retval MDBX_THREAD_MISMATCH  Given transaction is not owned by current thread.
+ * \retval MDBX_EINVAL           An invalid parameter was specified. */
+LIBMDBX_API int mdbx_cursor_distance(const MDBX_cursor *first, const MDBX_cursor *last, intptr_t *distance,
+                                     unsigned deepness);
+
+/** \brief Scrolls the cursor to the specified number of positions at the specified B-tree level.
+ * \ingroup c_cursors
+ *
+ * The value of the `deepness` parameter has a fundamental effect on the result, since it determines the level of the
+ * B-tree at which the cursor movement steps are performed, where zero corresponds to the root of the B-tree and
+ * increases to a leaves. In order for the performed cursor movement to match the number of keys and values, the
+ * `deepness` must be at least the height of a B-tree, adding the height of nested B-trees for any kinds of "dupsort"
+ * tables. If in doubt, use a deliberately large value such as `INT_MAX` or just the `42`.
+ *
+ * \param [in, out] cursor       The cursor handle to scroll.
+ *
+ * \param [in] amount            The number of logical steps by which the cursor will be moved at the specified
+ *                               level of a b-tree. A positive value corresponds to moving forward in the order
+ *                               of keys and values, to the end of a table, and a negative value means moving
+ *                               in the backward order.
+ *
+ * \param [in] deepness          Defines the level of a B-tree, at which the cursor movement steps are performed,
+ *                               where zero corresponds to the root of a B-tree and increases to a leaves.
+ *
+ * \see mdbx_cursor_distance()
+ * \see mdbx_cursor_distribute()
+ *
+ * \returns A non-zero error value on failure and 0 on success,
+ *          some possible errors are:
+ * \retval MDBX_ENODATA          Given cursor is not positioned to a data.
+ * \retval MDBX_NOTFOUND         The end of the data was reached before the cursor moved
+ *                               by the requested number of steps.
+ * \retval MDBX_THREAD_MISMATCH  Given transaction is not owned by current thread.
+ * \retval MDBX_EINVAL           An invalid parameter was specified. */
+LIBMDBX_API int mdbx_cursor_scroll(MDBX_cursor *cursor, intptr_t amount, unsigned deepness);
+
+/** \brief Distributes cursors for multithreaded range scanning.
+ * \ingroup c_cursors
+ *
+ * The value of the `deepness` parameter has a fundamental effect on the result, since it determines the level of the
+ * B-tree at which the cursors distribution are performed, where zero corresponds to the root of the B-tree and
+ * increases to a leaves. In order for the performed cursor movement to match the number of keys and values, the
+ * `deepness` must be at least the height of a B-tree, adding the height of nested B-trees for any kinds of "dupsort"
+ * tables. If in doubt, use a deliberately large value such as `INT_MAX` or just the `42`.
+ *
+ * \param [in] first             Cursor pointing to the first element or NULL to using the begin of a table.
+ *                               Either the `first` or the `last` must not be NULL.
+ *
+ * \param [in] last              Cursor pointing to the end of the range or NULL to using the end of a table.
+ *                               Either the `first` or the `last` must not be NULL.
+ *
+ * \param [in, out] array        The pointer to an array of cursors for distribute over a given range.
+ *
+ * \param [in] count             Number of element in the cursors array.
+ *
+ * \param [in] deepness          Defines the level of a B-tree, at which the cursors distribution is performed,
+ *                               where zero corresponds to the root of a B-tree and increases to a leaves.
+ *
+ * \see mdbx_cursor_distance()
+ * \see mdbx_cursor_scroll()
+ *
+ * \returns A non-zero error value on failure and 0 on success,
+ *          some possible errors are:
+ * \retval MDBX_ENODATA          The `first` or `last` cursor(s) is not positioned to a data.
+ * \retval MDBX_RESULT_TRUE      The available positions in the specified range were not enough to distribute
+ *                               over all the cursors, some cursors remained unset and \ref mdbx_cursor_eof()
+ *                               will return \ref MDBX_RESULT_TRUE for ones.
+ * \retval MDBX_THREAD_MISMATCH  Given transaction is not owned by current thread.
+ * \retval MDBX_EINVAL           An invalid parameter was specified. */
+LIBMDBX_API int mdbx_cursor_distribute(const MDBX_cursor *first, const MDBX_cursor *last, MDBX_cursor **array,
+                                       intptr_t count, unsigned deepness);
 
 /** \brief Modes for deleting bunches of neighboring items with self-documenting names.
  *
@@ -6369,7 +6470,7 @@ typedef enum MDBX_bunch_action {
  *          some possible errors are:
  * \retval MDBX_THREAD_MISMATCH  Given transaction is not owned
  *                               by current thread.
- * \retval MDBX_ENODATA       The given cursor is not positioned to a data..
+ * \retval MDBX_ENODATA       The given cursor is not positioned to a data.
  * \retval MDBX_TXN_FULL      The transaction has too many dirty pages.
  * \retval MDBX_EACCES        An attempt was made to write in a read-only transaction.
  * \retval MDBX_EINVAL        An invalid parameter was specified. */

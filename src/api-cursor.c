@@ -943,3 +943,156 @@ int mdbx_cursor_delete_range(MDBX_cursor *begin, MDBX_cursor *end, bool end_incl
 
   return LOG_IFERR(rc);
 }
+
+int mdbx_cursor_distribute(const MDBX_cursor *begin, const MDBX_cursor *end, MDBX_cursor **array, intptr_t array_size,
+                           unsigned deepness) {
+  if (unlikely(!begin && !end))
+    return LOG_IFERR(MDBX_EINVAL);
+  if (unlikely(!array || array_size < 1))
+    return LOG_IFERR(MDBX_EINVAL);
+
+  int rc;
+  if (begin) {
+    rc = cursor_check_ro(begin);
+    if (unlikely(rc != MDBX_SUCCESS))
+      return LOG_IFERR(rc);
+    if (unlikely(!is_pointed(begin)))
+      return LOG_IFERR(MDBX_ENODATA);
+  }
+
+  if (end) {
+    rc = cursor_check_ro(end);
+    if (unlikely(rc != MDBX_SUCCESS))
+      return LOG_IFERR(rc);
+    if (unlikely(!is_pointed(end)))
+      return LOG_IFERR(MDBX_ENODATA);
+  }
+
+  if (unlikely(begin && end && begin->txn != end->txn && begin->tree != end->tree))
+    return LOG_IFERR(MDBX_EINVAL);
+
+  const MDBX_cursor *ref = begin ? begin : end;
+  MDBX_cursor *iter = nullptr;
+  for (intptr_t i = 0; i < array_size; ++i) {
+    if (array[i] != begin && array[i] != end) {
+      rc = cursor_check_pure(iter = array[i]);
+      if (unlikely(rc != MDBX_SUCCESS))
+        return LOG_IFERR(rc);
+      if (unlikely(iter->txn != ref->txn && iter->tree != ref->tree))
+        return LOG_IFERR(MDBX_EINVAL);
+    }
+  }
+  if (unlikely(!iter))
+    return LOG_IFERR(MDBX_EINVAL);
+
+  cursor_couple_t couple;
+  if (!begin) {
+    begin = cursor_clone_complete(end, &couple);
+    rc = outer_first((MDBX_cursor *)begin, nullptr, nullptr);
+    if (unlikely(rc != MDBX_SUCCESS))
+      return LOG_IFERR(rc);
+  }
+
+  if (!end) {
+    end = cursor_clone_complete(begin, &couple);
+    rc = outer_last((MDBX_cursor *)end, nullptr, nullptr);
+    if (unlikely(rc != MDBX_SUCCESS))
+      return LOG_IFERR(rc);
+  }
+
+  rc = cursor_distribute(begin, end, array, array_size, (deepness < CURSOR_STACK_SIZE) ? deepness : CURSOR_STACK_SIZE);
+  return LOG_IFERR(rc);
+}
+
+int mdbx_cursor_scroll(MDBX_cursor *mc, intptr_t amount, unsigned deepness) {
+  int rc = cursor_check_ro(mc);
+  if (unlikely(rc != MDBX_SUCCESS))
+    return LOG_IFERR(rc);
+  if (unlikely(!is_pointed(mc)))
+    return LOG_IFERR(MDBX_ENODATA);
+
+  if (amount > 0)
+    rc = cursor_scroll_forward(mc, amount, deepness);
+  else if (amount < 0)
+    rc = cursor_scroll_backward(mc, -amount, deepness);
+
+  return LOG_IFERR(rc);
+}
+
+int mdbx_cursor_distance(const MDBX_cursor *begin, const MDBX_cursor *end, intptr_t *distance, unsigned deepness) {
+  if (unlikely(!begin && !end))
+    return LOG_IFERR(MDBX_EINVAL);
+  if (unlikely(!distance))
+    return LOG_IFERR(MDBX_EINVAL);
+
+  int rc;
+  if (begin) {
+    rc = cursor_check_ro(begin);
+    if (unlikely(rc != MDBX_SUCCESS))
+      return LOG_IFERR(rc);
+    if (unlikely(!is_pointed(begin)))
+      return LOG_IFERR(MDBX_ENODATA);
+  }
+
+  if (end) {
+    rc = cursor_check_ro(end);
+    if (unlikely(rc != MDBX_SUCCESS))
+      return LOG_IFERR(rc);
+    if (unlikely(!is_pointed(end)))
+      return LOG_IFERR(MDBX_ENODATA);
+  }
+
+  if (unlikely(begin && end && begin->txn != end->txn && begin->tree != end->tree))
+    return LOG_IFERR(MDBX_EINVAL);
+
+  cursor_couple_t couple_opposite;
+  if (!begin) {
+    begin = cursor_clone_complete(end, &couple_opposite);
+    rc = outer_first((MDBX_cursor *)begin, nullptr, nullptr);
+    if (unlikely(rc != MDBX_SUCCESS))
+      return LOG_IFERR(rc);
+  }
+
+  if (!end) {
+    end = cursor_clone_complete(begin, &couple_opposite);
+    rc = outer_last((MDBX_cursor *)end, nullptr, nullptr);
+    if (unlikely(rc != MDBX_SUCCESS))
+      return LOG_IFERR(rc);
+  }
+
+  intptr_t cmp = cursor_cmp(begin, end);
+  if (cmp == 0) {
+    cmp = (end->flags & z_eof_hard) - (begin->flags & z_eof_hard);
+    if (unlikely(cmp != 0)) {
+      *distance = (cmp > 0) ? 1 : -1;
+      return MDBX_SUCCESS;
+    }
+    if (cmp == 0 && inner_pointed(end)) {
+      ASSERT(inner_pointed(begin));
+      cmp = cursor_cmp(&begin->subcur->cursor, &end->subcur->cursor);
+      if (cmp == 0) {
+        *distance = 0;
+        return MDBX_SUCCESS;
+      }
+    }
+  }
+
+  const bool negative = cmp > 0;
+  if (negative) {
+    const MDBX_cursor *swap = begin;
+    begin = end;
+    end = swap;
+  }
+
+  cursor_couple_t couple_iter;
+  MDBX_cursor *iter = (MDBX_cursor *)begin;
+  if (iter != &couple_opposite.outer)
+    iter = cursor_clone_complete(iter, &couple_iter);
+
+  cdr_t tdr = cursor_distance(iter, end, deepness);
+  rc = tdr.err;
+  if (likely(rc == MDBX_SUCCESS))
+    *distance = (!negative) ? (intptr_t)tdr.distance : -(intptr_t)tdr.distance;
+
+  return LOG_IFERR(rc);
+}

@@ -345,6 +345,34 @@ public:
   inline estimate_result estimate(move_operation operation) const;
   inline estimate_result estimate(move_operation operation, slice &key) const;
 
+  static inline ptrdiff_t distance_between(const cursor from, const cursor to,
+                                           unsigned deepness = /* enough to cover whole tree height */ 42);
+  inline ptrdiff_t distance_from(const cursor from,
+                                 unsigned deepness = /* enough to cover whole tree height */ 42) const {
+    return distance_between(from, *this, deepness);
+  }
+  inline ptrdiff_t distance_to(const cursor to, unsigned deepness = /* enough to cover whole tree height */ 42) const {
+    return distance_between(*this, to, deepness);
+  }
+  inline ptrdiff_t distance_from_first(unsigned deepness = /* enough to cover whole tree height */ 42) const {
+    return distance_between(nullptr, *this, deepness);
+  }
+  inline ptrdiff_t distance_to_end(unsigned deepness = /* enough to cover whole tree height */ 42) const {
+    return distance_between(*this, nullptr, deepness);
+  }
+
+  inline bool scroll(intptr_t distable, unsigned deepness = /* enough to cover whole tree height */ 42,
+                     bool throw_notfound = true);
+
+  static inline bool distribute(const cursor from, const cursor to, cursor *cursors_array, intptr_t cursors_array_size,
+                                unsigned deepness = /* enough to cover whole tree height */ 42);
+
+  static inline bool distribute(const cursor from, const cursor to, const std::vector<cursor> &cursors,
+                                unsigned deepness = /* enough to cover whole tree height */ 42);
+
+  static inline bool distribute(const cursor from, const cursor to, const std::vector<cursor_managed> &cursors,
+                                unsigned deepness = /* enough to cover whole tree height */ 42);
+
   //----------------------------------------------------------------------------
 
   /// \brief Renew/bind a cursor with a new transaction and previously used key-value map handle.

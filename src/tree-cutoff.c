@@ -98,21 +98,9 @@ static int cutoff_leaf(MDBX_cursor *axe, unsigned alldups) {
   return cursor_del(axe, alldups);
 }
 
-static intptr_t tree_cmp(const MDBX_cursor *left, MDBX_cursor *right) {
-  ASSERT(left->top == right->top);
-  intptr_t cmp = 0;
-  for (intptr_t i = cmp; i <= left->top; ++i) {
-    ASSERT(left->pg[i] == right->pg[i]);
-    cmp = (intptr_t)left->ki[i] - (intptr_t)right->ki[i];
-    if (cmp)
-      break;
-  }
-  return cmp;
-}
-
 #if MDBX_ENABLE_BUNCHES_REMOVAL
 
-static intptr_t tree_diff_level(const MDBX_cursor *left, MDBX_cursor *right) {
+intptr_t tree_diff_level(const MDBX_cursor *left, const MDBX_cursor *right) {
   ASSERT(left->top == right->top);
   for (intptr_t i = 0; i <= left->top; ++i) {
     ASSERT(left->pg[i] == right->pg[i]);
@@ -554,7 +542,7 @@ int tree_curoff_range(MDBX_cursor *begin, MDBX_cursor *end, bool end_including) 
   }
 
   intptr_t cmp = -1;
-  ASSERT((cmp = tree_cmp(begin, end)) < 0 || (cmp == 0 && end_including));
+  ASSERT((cmp = cursor_cmp(begin, end)) < 0 || (cmp == 0 && end_including));
   if (begin->subcur) {
     cursor_couple_t inner_trimmer;
     if (is_pointed(&end->subcur->cursor) && (!end_including || !cursor_on_last(&end->subcur->cursor))) {
@@ -582,7 +570,7 @@ int tree_curoff_range(MDBX_cursor *begin, MDBX_cursor *end, bool end_including) 
       err = outer_prev(end, nullptr, nullptr, MDBX_PREV_NODUP);
       if (unlikely(err != MDBX_SUCCESS))
         return err;
-      cmp = tree_cmp(begin, end);
+      cmp = cursor_cmp(begin, end);
       end_including = cmp < 0;
     }
 
@@ -612,7 +600,7 @@ int tree_curoff_range(MDBX_cursor *begin, MDBX_cursor *end, bool end_including) 
       if (unlikely(err != MDBX_SUCCESS))
         return err;
       cASSERT0(begin, cursor_on_first(head));
-      cmp = tree_cmp(begin, end);
+      cmp = cursor_cmp(begin, end);
       if (cmp >= end_including)
         return MDBX_SUCCESS;
     }
