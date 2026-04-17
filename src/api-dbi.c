@@ -253,8 +253,8 @@ __cold int mdbx_dbi_stat(const MDBX_txn *txn, MDBX_dbi dbi, MDBX_stat *dest, siz
   if (unlikely(bytes != sizeof(MDBX_stat)) && bytes != size_before_modtxnid)
     return LOG_IFERR(MDBX_EINVAL);
 
-  dest->ms_psize = txn->env->ps;
   stat_get(&txn->dbs[dbi], dest, bytes);
+  dest->ms_psize = txn->env->ps;
   return MDBX_SUCCESS;
 }
 
@@ -303,6 +303,7 @@ __cold int mdbx_enumerate_tables(const MDBX_txn *txn, MDBX_table_enum_func *func
 
     MDBX_stat stat;
     stat_get(tree, &stat, sizeof(stat));
+    stat.ms_psize = txn->env->ps;
     rc = func(ctx, txn, &name, tree->flags, &stat, dbi);
     if (rc != MDBX_SUCCESS)
       goto bailout;
