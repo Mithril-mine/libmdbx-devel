@@ -217,7 +217,17 @@ struct less {
 using verifier = std::set<buffer_pair, less>;
 using iterator = verifier::iterator;
 
-static bool eq(const iterator &iter, mdbx::cursor cursor, const char *caption) {
+static std::string safe_dump_current(mdbx::cursor cursor) {
+  try {
+    std::stringstream str;
+    str << cursor.current();
+    return str.str();
+  } catch (const std::exception &e) {
+    return e.what();
+  }
+}
+
+  static bool eq(const iterator &iter, mdbx::cursor cursor, const char *caption) {
   try {
     const auto pair = cursor.current();
     if (*iter == pair)
@@ -232,14 +242,14 @@ static bool eq(const iterator &iter, mdbx::cursor cursor, const char *caption) {
         break;
 
     while (i <= 5) {
-      std::cout << ((i < 0) ? "-" : (i) ? "+" : "=") << ((i < 0) ? -i : i) << ") " << check.current() << "\n";
+      std::cout << ((i < 0) ? "-" : (i) ? "+" : "=") << ((i < 0) ? -i : i) << ") " << safe_dump_current(check) << "\n";
       if (!check.to_next(false))
         break;
       ++i;
     }
 
     return false;
-  } catch (const mdbx::no_data &e) {
+  } catch (const mdbx::exception &e) {
     std::cout << e.what() << "\n";
     return false;
   }
@@ -561,10 +571,10 @@ static bool turn_delete_range(mdbx::txn txn, const case_kind &kvg, verifier &che
 
   while (begin_iter != end_iter) {
     auto iter = begin_iter++;
-    checker.erase(iter);
+    checker_erase(checker, iter);
   }
   if (end_including && end_iter != checker.end())
-    checker.erase(end_iter);
+    checker_erase(checker, end_iter);
 
   MDBX_cursor *null = nullptr;
   int err = mdbx_cursor_delete_range((begin_end_case < 0) ? null : begin_cursor.handle(),
