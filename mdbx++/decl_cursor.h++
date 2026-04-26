@@ -27,6 +27,7 @@ public:
   inline cursor(cursor &&) noexcept;
   inline ~cursor() noexcept;
   inline cursor_managed clone(void *your_context = nullptr) const;
+  inline cursor &assign(const cursor &);
   MDBX_CXX14_CONSTEXPR operator bool() const noexcept { return handle_ != nullptr; };
   MDBX_CXX14_CONSTEXPR operator const MDBX_cursor *() const noexcept { return handle_; }
   MDBX_CXX14_CONSTEXPR operator MDBX_cursor *() noexcept { return handle_; }

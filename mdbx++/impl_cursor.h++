@@ -8,9 +8,14 @@ namespace mdbx {
 
 MDBX_CXX11_CONSTEXPR cursor::cursor(MDBX_cursor *ptr) noexcept : handle_(ptr) {}
 
+inline cursor &cursor::assign(const cursor &src) {
+  error::success_or_throw(::mdbx_cursor_copy(src.handle_, handle_));
+  return *this;
+}
+
 inline cursor_managed cursor::clone(void *your_context) const {
   cursor_managed clone(your_context);
-  error::success_or_throw(::mdbx_cursor_copy(handle_, clone.handle_));
+  clone.assign(*this);
   return clone;
 }
 
