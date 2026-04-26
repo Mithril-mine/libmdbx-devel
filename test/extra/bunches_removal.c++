@@ -451,7 +451,7 @@ static bool turn_bunch_delete(mdbx::txn txn, const case_kind &kvg, verifier &che
 
 //------------------------------------------------------------------------------------------------------------
 
-static verifier probe_prepate(mdbx::env env, case_kind &kvg, unsigned deep) {
+static verifier probe_prepare(mdbx::env env, case_kind &kvg, unsigned deep) {
   auto txn = env.start_write();
   txn.clear_map(kvg.table);
   verifier checker(less(kvg.flags));
@@ -465,7 +465,7 @@ static verifier probe_prepate(mdbx::env env, case_kind &kvg, unsigned deep) {
 }
 
 static bool probe_bunch_delete(mdbx::env env, case_kind &kvg, unsigned deep, const MDBX_bunch_action_t op) {
-  auto checker = probe_prepate(env, kvg, deep);
+  auto checker = probe_prepare(env, kvg, deep);
   const bool is_simple =
       op == MDBX_DELETE_CURRENT_VALUE || (!kvg.is_multivalue() && op <= MDBX_DELETE_CURRENT_MULTIVAL_ALL);
 
@@ -611,7 +611,7 @@ static bool turn_delete_range(mdbx::txn txn, const case_kind &kvg, verifier &che
 }
 
 static bool probe_delete_range(mdbx::env env, case_kind &kvg, unsigned deep, int begin_end_case) {
-  auto checker = probe_prepate(env, kvg, deep);
+  auto checker = probe_prepare(env, kvg, deep);
 
   // выполняем удаления в одной транзакции
   if (!checker.empty()) {
