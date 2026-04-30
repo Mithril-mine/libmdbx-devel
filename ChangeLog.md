@@ -10,16 +10,16 @@ BTC `bc1qzvl9uegf2ea6cwlytnanrscyv8snwsvrc0xfsu`, SOL `FTCTgbHajoLVZGr8aEFWMzx3N
 Всё будет хорошо!
 
 
-## v0.13.12 at a release engineering stage
+## v0.13.12 "Аврора" (Aurora) at 2026-04-30
 
 The supporting release of a stable branch with bug fixes.
 
 Appreciations:
 
  - [Erigon](https://erigon.tech/) for sponsorship.
- - [Chloe Cano](https://github.com/Segwaz) for fuzzing, bug reporing and fixes.
+ - [Chloe Cano](https://github.com/Segwaz) for fuzzing, bug reporting and fixes.
  - [Weixie Cui](https://github.com/cuiweixie) for bug fixing through pull-requests.
- - [Alexander Kelchin](https://serebrium.ru /) (Serebrium Company) for bug reporting and prototypes of exploits.
+ - [Alexander Kelchin](https://serebrium.ru/) (Serebrium Company) for bug reporting and prototypes of exploits.
 
 Fixes:
 
