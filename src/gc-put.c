@@ -848,7 +848,7 @@ static int gc_search_holes(MDBX_txn *txn, gcu_t *ctx) {
 
   dbg_dump_ids(ctx);
   const intptr_t tail_space =
-      ((ctx->gc_first > UINT16_MAX) ? UINT16_MAX : (unsigned)ctx->gc_first - 1) * ctx->goodchunk;
+      (intptr_t)(((ctx->gc_first > UINT16_MAX) ? (size_t)UINT16_MAX : (size_t)ctx->gc_first - 1) * ctx->goodchunk);
   const txnid_t reasonable_deep =
       txn->env->maxgc_per_branch +
       2 * (txn->env->gc.detent - txnid_min(rkl_lowest(&txn->wr.gc.ready4reuse), rkl_lowest(&txn->wr.gc.comeback)));
