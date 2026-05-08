@@ -390,7 +390,7 @@ int mdbx_txn_commit_embark_read(MDBX_txn **ptxn, MDBX_commit_latency *latency) {
     if (likely(rc == MDBX_SUCCESS)) {
       rtxn->userctx = preserved_context;
       rtxn->signature = txn_signature;
-    } else {
+    } else if (rtxn) {
       txn_ro_free(rtxn);
       rtxn = nullptr;
     }
