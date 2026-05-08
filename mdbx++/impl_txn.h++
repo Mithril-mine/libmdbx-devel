@@ -9,8 +9,10 @@ namespace mdbx {
 MDBX_CXX11_CONSTEXPR txn::txn(MDBX_txn *ptr) noexcept : handle_(ptr) {}
 
 inline txn &txn::operator=(txn &&other) noexcept {
-  handle_ = other.handle_;
-  other.handle_ = nullptr;
+  if (this != &other) {
+    handle_ = other.handle_;
+    other.handle_ = nullptr;
+  }
   return *this;
 }
 

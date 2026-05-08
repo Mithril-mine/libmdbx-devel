@@ -27,8 +27,10 @@ inline cursor &cursor::set_context(void *ptr) {
 }
 
 inline cursor &cursor::operator=(cursor &&other) noexcept {
-  handle_ = other.handle_;
-  other.handle_ = nullptr;
+  if (this != &other) {
+    handle_ = other.handle_;
+    other.handle_ = nullptr;
+  }
   return *this;
 }
 

@@ -938,46 +938,55 @@ public:
 
   MDBX_CXX20_CONSTEXPR buffer &assign(size_t headroom, const buffer &src, size_t tailroom) {
     const size_t whole_capacity = check_length(headroom, src.length(), tailroom);
-    invalidate();
-    if MDBX_IF_CONSTEXPR (!allocation_aware_details::template allocator_is_always_equal<allocator_type>()) {
-      if (MDBX_UNLIKELY(silo_.get_allocator() != src.silo_.get_allocator()))
-        MDBX_CXX20_UNLIKELY {
-          silo_.release();
-          allocation_aware_details::copy_assign_alloc<silo, allocator_type>::propagate(&silo_, src.silo_);
-        }
-    }
+    if (MDBX_LIKELY(this != &src)) {
+      invalidate();
+      if MDBX_IF_CONSTEXPR (!allocation_aware_details::template allocator_is_always_equal<allocator_type>()) {
+        if (MDBX_UNLIKELY(silo_.get_allocator() != src.silo_.get_allocator()))
+          MDBX_CXX20_UNLIKELY {
+            silo_.release();
+            allocation_aware_details::copy_assign_alloc<silo, allocator_type>::propagate(&silo_, src.silo_);
+          }
+      }
 
-    iov_base = silo_.template reshape<true>(whole_capacity, headroom, src.data(), src.length());
-    iov_len = src.length();
+      iov_base = silo_.template reshape<true>(whole_capacity, headroom, src.data(), src.length());
+      iov_len = src.length();
+    } else {
+      iov_base = silo_.template reshape<false>(whole_capacity, headroom, src.data(), src.length());
+    }
     return *this;
   }
 
   MDBX_CXX20_CONSTEXPR buffer &assign(const buffer &src, bool make_reference = false) {
-    invalidate();
-    if MDBX_IF_CONSTEXPR (!allocation_aware_details::template allocator_is_always_equal<allocator_type>()) {
-      if (MDBX_UNLIKELY(silo_.get_allocator() != src.silo_.get_allocator()))
-        MDBX_CXX20_UNLIKELY {
-          silo_.release();
-          allocation_aware_details::copy_assign_alloc<silo, allocator_type>::propagate(&silo_, src.silo_);
-        }
-    }
+    if (MDBX_LIKELY(this != &src)) {
+      invalidate();
+      if MDBX_IF_CONSTEXPR (!allocation_aware_details::template allocator_is_always_equal<allocator_type>()) {
+        if (MDBX_UNLIKELY(silo_.get_allocator() != src.silo_.get_allocator()))
+          MDBX_CXX20_UNLIKELY {
+            silo_.release();
+            allocation_aware_details::copy_assign_alloc<silo, allocator_type>::propagate(&silo_, src.silo_);
+          }
+      }
 
-    if (make_reference) {
-      silo_.release();
-      iov_base = src.iov_base;
-    } else {
-      iov_base = silo_.template reshape<true>(src.length(), 0, src.data(), src.length());
-    }
-    iov_len = src.length();
+      if (make_reference) {
+        silo_.release();
+        iov_base = src.iov_base;
+      } else {
+        iov_base = silo_.template reshape<true>(src.length(), 0, src.data(), src.length());
+      }
+      iov_len = src.length();
+    } else if (!make_reference && is_reference())
+      insulate();
     return *this;
   }
 
   MDBX_CXX20_CONSTEXPR buffer &
   assign(buffer &&src) noexcept(allocation_aware_details::move_assign_alloc<silo, allocator_type>::is_nothrow()) {
-    const bool is_reference = src.is_reference();
-    inherited::assign(std::move(src));
-    if (silo_.assign_move(std::move(src.silo_), is_reference))
-      fixup_import(src.silo_.bin_);
+    if (MDBX_LIKELY(this != &src)) {
+      const bool is_reference = src.is_reference();
+      inherited::assign(std::move(src));
+      if (silo_.assign_move(std::move(src.silo_), is_reference))
+        fixup_import(src.silo_.bin_);
+    }
     return *this;
   }
 

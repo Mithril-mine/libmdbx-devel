@@ -385,13 +385,15 @@ class LIBMDBX_API_TYPE txn_managed : public txn {
 public:
   MDBX_CXX11_CONSTEXPR txn_managed() noexcept = default;
   txn_managed(txn_managed &&) = default;
-  txn_managed &operator=(txn_managed &&other) noexcept {
-    if (MDBX_UNLIKELY(handle_))
-      MDBX_CXX20_UNLIKELY {
-        assert(handle_ != other.handle_);
-        abort();
-      }
-    inherited::operator=(std::move(other));
+  txn_managed &operator=(txn_managed &&other) {
+    if (this != &other) {
+      if (MDBX_UNLIKELY(handle_))
+        MDBX_CXX20_UNLIKELY {
+          assert(handle_ != other.handle_);
+          abort();
+        }
+      inherited::operator=(std::move(other));
+    }
     return *this;
   }
   txn_managed(const txn_managed &) = delete;

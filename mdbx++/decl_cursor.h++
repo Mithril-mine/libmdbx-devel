@@ -470,13 +470,15 @@ public:
   }
 
   cursor_managed(cursor_managed &&) = default;
-  cursor_managed &operator=(cursor_managed &&other) noexcept {
-    if (MDBX_UNLIKELY(handle_))
-      MDBX_CXX20_UNLIKELY {
-        assert(handle_ != other.handle_);
-        close();
-      }
-    inherited::operator=(std::move(other));
+  cursor_managed &operator=(cursor_managed &&other) {
+    if (this != &other) {
+      if (MDBX_UNLIKELY(handle_))
+        MDBX_CXX20_UNLIKELY {
+          assert(handle_ != other.handle_);
+          close();
+        }
+      inherited::operator=(std::move(other));
+    }
     return *this;
   }
 

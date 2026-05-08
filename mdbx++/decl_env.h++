@@ -722,13 +722,15 @@ public:
   void close(bool dont_sync = false);
 
   env_managed(env_managed &&) = default;
-  env_managed &operator=(env_managed &&other) noexcept {
-    if (MDBX_UNLIKELY(handle_))
-      MDBX_CXX20_UNLIKELY {
-        assert(handle_ != other.handle_);
-        close();
-      }
-    inherited::operator=(std::move(other));
+  env_managed &operator=(env_managed &&other) {
+    if (this != &other) {
+      if (MDBX_UNLIKELY(handle_))
+        MDBX_CXX20_UNLIKELY {
+          assert(handle_ != other.handle_);
+          close();
+        }
+      inherited::operator=(std::move(other));
+    }
     return *this;
   }
   env_managed(const env_managed &) = delete;
