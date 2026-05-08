@@ -332,10 +332,11 @@ int main(int argc, char *argv[]) {
     rc = MDBX_IS_ERROR(rc) ? rc : MDBX_SUCCESS;
   }
 
-  act = "preparing";
   MDBX_txn *txn = nullptr;
-  if (rc == MDBX_SUCCESS)
+  if (rc == MDBX_SUCCESS) {
+    act = "preparing";
     rc = mdbx_txn_begin(env, nullptr, MDBX_TXN_READWRITE, &txn);
+  }
 
   MDBX_envinfo info_env;
   memset(&info_env, 0, sizeof(info_env)); /* zap `uninitialized` warning */
