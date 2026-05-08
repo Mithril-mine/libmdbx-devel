@@ -139,7 +139,7 @@ static int basal_start_locked(MDBX_txn *txn, unsigned flags) {
   txn->wr.troika = meta_tap(env);
   const meta_ptr_t head = meta_recent(env, &txn->wr.troika);
   uint64_t timestamp = 0;
-  /* coverity[array_null] */
+  /* coverity[NO_EFFECT] */
   while ("workaround for https://libmdbx.dqdkfa.ru/dead-github/issues/269") {
     int err = coherency_fetch_head(txn, head, &timestamp);
     if (likely(err == MDBX_SUCCESS))
@@ -271,6 +271,7 @@ int txn_basal_update_tbl_roots(MDBX_txn *txn) {
         /* Может быть mod_txnid > front после коммита вложенных тразакций */
         db->mod_txnid = txn->txnid;
         MDBX_val data = {db, sizeof(tree_t)};
+        /* coverity[OVERRUN] */
         err = cursor_put(&cx.outer, &txn->env->kvs[i].name, &data, N_TREE);
         if (unlikely(err != MDBX_SUCCESS))
           break;

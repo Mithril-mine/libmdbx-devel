@@ -364,6 +364,7 @@ private:
       if (bin::is_suitable_for_inplace(new_capacity)) {
         MDBX_INLINE_API_ASSERT(bin_.is_allocated());
         const auto old_allocated = ::std::move(bin_.allocated_ptr_);
+        /* coverity[USE_AFTER_MOVE] */
         byte *const new_place = bin_.template make_inplace<true>() + wanna_headroom;
         if (MDBX_LIKELY(length))
           MDBX_CXX20_LIKELY memcpy(new_place, content, length);
@@ -424,7 +425,9 @@ private:
           memcpy(&bin_, &other.bin_, sizeof(bin));
           MDBX_CONSTEXPR_ASSERT(bin_.is_inplace());
         } else {
+          /* coverity[USE_AFTER_MOVE] */
           new (&bin_.allocated_ptr_) allocator_pointer(::std::move(other.bin_.allocated_ptr_));
+          /* coverity[USE_AFTER_MOVE] */
           bin_.capacity_.bytes_ = other.bin_.capacity_.bytes_;
           /* properly destroy allocator::pointer.
            *
@@ -432,7 +435,7 @@ private:
            * since in C++ (unlike Rust) an object remains initialized after a move-assignment operation; Moreover,
            * a destructor will be called for such an object (this is explicitly stated in all C++ standards, starting
            * from the 11th). */
-          /* coverity[use_after_move] */
+          /* coverity[USE_AFTER_MOVE] */
           other.bin_.allocated_ptr_.~allocator_pointer();
           other.bin_.inplace_.lastbyte_ = bin::lastbyte_inplace_signature;
           MDBX_CONSTEXPR_ASSERT(bin_.is_allocated() && other.bin_.is_inplace());
@@ -774,7 +777,7 @@ public:
      * since in C++ (unlike Rust) an object remains initialized after a move-assignment operation; Moreover,
      * a destructor will be called for such an object (this is explicitly stated in all C++ standards, starting from the
      * 11th). */
-    /* coverity[use_after_move] */
+    /* coverity[USE_AFTER_MOVE] */
     fixup_import(src.silo_.bin_);
     src.invalidate();
   }

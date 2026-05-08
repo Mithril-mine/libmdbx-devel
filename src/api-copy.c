@@ -687,6 +687,7 @@ __cold static int copy2fd(MDBX_txn *txn, mdbx_filehandle_t fd, MDBX_copy_flags_t
     if (flags & MDBX_CP_THROTTLE_MVCC)
       mdbx_txn_park(txn, true);
     else if (flags & MDBX_CP_DISPOSE_TXN)
+      /* coverity[CHECKED_RETURN] */
       mdbx_txn_reset(txn);
   }
 

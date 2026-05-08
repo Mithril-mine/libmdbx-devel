@@ -86,7 +86,7 @@ int txn_dpl_alloc(MDBX_txn *txn) {
     return MDBX_ENOMEM;
 
   /* LY: wr.dirtylist не может быть nullptr, так как либо уже выделен, либо будет выделен в dpl_reserve(). */
-  /* coverity[var_deref_model] */
+  /* coverity[FORWARD_NULL] */
   dpl_init(txn->wr.dirtylist);
   return MDBX_SUCCESS;
 }
@@ -334,6 +334,8 @@ int __must_check_result txn_dpl_append(MDBX_txn *txn, pgno_t pgno, page_t *page,
   }
 
   i[1] = dp;
+  /* LY: здесь нет выхода за границу буфера, так как items[] выделяется с соответствующим запасом. */
+  /* coverity[OVERRUN] */
   ASSERT(dl->items[0].pgno == 0 && dl->items[dl->length + 1].pgno == P_INVALID);
   ASSERT(dl->sorted <= dl->length);
   return MDBX_SUCCESS;

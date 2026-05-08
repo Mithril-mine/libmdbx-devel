@@ -222,6 +222,7 @@ __hot int mdbx_estimate_move(const MDBX_cursor *cursor, MDBX_val *key, MDBX_val 
 
   if (move_op == MDBX_LAST) {
     next.outer.flags |= z_eof_hard;
+    /* coverity[UNINIT] */
     next.inner.cursor.flags |= z_eof_hard;
   }
   return mdbx_estimate_distance(cursor, &next.outer, distance_items);

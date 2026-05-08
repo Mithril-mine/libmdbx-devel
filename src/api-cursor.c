@@ -939,6 +939,7 @@ int mdbx_cursor_delete_range(MDBX_cursor *begin, MDBX_cursor *end, bool end_incl
     *number_of_affected = save_items - begin->tree->items;
 
   if (begin->txn->cursors[cursor_dbi(begin)] == &couple.outer)
+    /* coverity[UNINIT] */
     couple.outer.txn->cursors[cursor_dbi(begin)] = couple.outer.next;
 
   return LOG_IFERR(rc);

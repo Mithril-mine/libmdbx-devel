@@ -542,6 +542,7 @@ int tree_curoff_range(MDBX_cursor *begin, MDBX_cursor *end, bool end_including) 
   }
 
   intptr_t cmp = -1;
+  /* coverity[ASSERT_SIDE_EFFECT] */
   ASSERT((cmp = cursor_cmp(begin, end)) < 0 || (cmp == 0 && end_including));
   if (begin->subcur) {
     cursor_couple_t inner_trimmer;

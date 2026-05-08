@@ -324,6 +324,7 @@ int testcase::checkpoint() {
     need_speculum_assign = false;
     if (unlikely(MDBX_IS_ERROR(err))) {
       speculum = std::move(speculum_committed_copy);
+      /* coverity[RESOURCE_LEAK] */
       txn_guard.release();
     } else
       speculum_committed = std::move(speculum_copy);
@@ -1263,6 +1264,8 @@ int testcase::insert(const keygen::buffer &akey, const keygen::buffer &adata, MD
 #endif /* SPECULUM_CURSORS */
   }
 
+  /* LY: ложные предупреждения coverity возникают из-за поддержки вставки массивов значений в режиме MDBX_MULTIPLE */
+  /* coverity[OVERRUN] */
   err = mdbx_put(txn_guard.get(), dbi, &akey->value, &adata->value, flags);
   if (err != MDBX_SUCCESS && err != MDBX_KEYEXIST)
     return err;

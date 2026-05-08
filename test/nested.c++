@@ -187,6 +187,7 @@ int testcase_nested::checkpoint() {
   if (MDBX_IS_ERROR(err)) {
     log_verbose("checkpoint-%s level#%zu txn #%" PRIu64 ", serial %" PRIu64 " <- %" PRIu64, "failed", stack.size(),
                 txnid, serial, std::get<1>(stack.top()));
+    /* coverity[RESOURCE_LEAK] */
     txn_guard.release();
     std::swap(txn_guard, std::get<0>(stack.top()));
     serial = std::get<1>(stack.top());

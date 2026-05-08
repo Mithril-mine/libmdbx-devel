@@ -401,7 +401,7 @@ static int nested_start(MDBX_txn *const nested, MDBX_txn *parent) {
 
   cASSERT0(nested, pnl_alloclen(nested->wr.repnl) >= pnl_size(parent->wr.repnl));
   memcpy(nested->wr.repnl, parent->wr.repnl, MDBX_PNL_SIZEOF(parent->wr.repnl));
-  /* coverity[assignment_where_comparison_intended] */
+  /* coverity[ASSERT_SIDE_EFFECT] */
   tASSERT1(nested, pnl_check_allocated(nested->wr.repnl, (nested->geo.first_unallocated /* LY: intentional assignment
                                                                              here, only for assertion */
                                                           = parent->geo.first_unallocated) -
