@@ -398,7 +398,7 @@ public:
   }
   txn_managed(const txn_managed &) = delete;
   txn_managed &operator=(const txn_managed &) = delete;
-  ~txn_managed() noexcept;
+  ~txn_managed();
 
   //----------------------------------------------------------------------------
   using finalization_latency = MDBX_commit_latency;

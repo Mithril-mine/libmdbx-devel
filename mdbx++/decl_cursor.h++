@@ -490,7 +490,7 @@ public:
 
   cursor_managed(const cursor_managed &) = delete;
   cursor_managed &operator=(const cursor_managed &) = delete;
-  ~cursor_managed() noexcept { ::mdbx_cursor_close(handle_); }
+  ~cursor_managed();
 };
 
 // > dist-cutoff-begin

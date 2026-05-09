@@ -735,7 +735,7 @@ public:
   }
   env_managed(const env_managed &) = delete;
   env_managed &operator=(const env_managed &) = delete;
-  virtual ~env_managed() noexcept;
+  virtual ~env_managed();
 };
 
 // > dist-cutoff-begin

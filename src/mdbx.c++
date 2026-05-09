@@ -1359,8 +1359,9 @@ static inline MDBX_env *create_env() {
   return ptr;
 }
 
-__cold env_managed::~env_managed() noexcept {
+__cold env_managed::~env_managed() {
   if (MDBX_UNLIKELY(handle_))
+    /* coverity[UNCAUGHT_EXCEPT] */
     MDBX_CXX20_UNLIKELY error::success_or_throw(::mdbx_env_close(handle_));
 }
 
@@ -1453,6 +1454,14 @@ __cold env_managed::env_managed(const MDBX_STD_FILESYSTEM_PATH &pathname, const 
 
 //------------------------------------------------------------------------------
 
+cursor_managed::~cursor_managed() {
+  if (handle_)
+    /* coverity[UNCAUGHT_EXCEPT] */
+    error::success_or_throw(::mdbx_cursor_close2(handle_));
+}
+
+//------------------------------------------------------------------------------
+
 txn_managed txn::start_nested() { return start_nested(false); }
 
 txn_managed txn::start_nested(bool readonly) {
@@ -1464,8 +1473,9 @@ txn_managed txn::start_nested(bool readonly) {
   return txn_managed(nested);
 }
 
-txn_managed::~txn_managed() noexcept {
+txn_managed::~txn_managed() {
   if (MDBX_UNLIKELY(handle_))
+    /* coverity[UNCAUGHT_EXCEPT] */
     MDBX_CXX20_UNLIKELY error::success_or_throw(::mdbx_txn_abort(handle_));
 }
 
