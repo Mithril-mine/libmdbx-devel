@@ -262,7 +262,7 @@ typedef enum node_flags {
 MDBX_MAYBE_UNUSED MDBX_NOTHROW_PURE_FUNCTION static inline uint8_t page_type(const page_t *mp) { return mp->flags; }
 
 MDBX_MAYBE_UNUSED MDBX_NOTHROW_PURE_FUNCTION static inline uint8_t page_type_compat(const page_t *mp) {
-  /* Drop legacy P_DIRTY flag for sub-pages for compatilibity,
+  /* Drop legacy P_DIRTY flag for sub-pages for compatibility,
    * for assertions only. */
   return unlikely(mp->flags & P_SUBP) ? mp->flags & ~(P_SUBP | P_LEGACY_DIRTY) : mp->flags;
 }
