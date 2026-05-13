@@ -113,8 +113,8 @@ static void defrag_report_progress(const MDBX_defrag_result_t *progress, unsigne
     for (unsigned i = 0; i < 3 || (i < dots / 8 && i < 64); ++i)
       putchar('.');
     if (is_console && dots) {
-      static char вертушка[] = "\\|/-\\|/-";
-      putchar(вертушка[(progress->spent_time_dot16 >> 13) % (ARRAY_LENGTH(вертушка) - 1)]);
+      static char twirl[] = "\\|/-\\|/-";
+      putchar(twirl[(progress->spent_time_dot16 >> 13) % (ARRAY_LENGTH(twirl) - 1)]);
       putchar('\b');
     }
     fflush(nullptr);
