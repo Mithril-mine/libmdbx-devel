@@ -454,7 +454,7 @@ define uname2titer
 endef
 
 DIST_EXTRA := LICENSE NOTICE COPYRIGHT README.md TODO.md CMakeLists.txt GNUmakefile Makefile ChangeLog.md VERSION.json config.h.in ntdll.def \
-	$(addprefix man1/, $(MANPAGES)) cmake/compiler.cmake cmake/profile.cmake cmake/utils.cmake \
+	$(addprefix man1/, $(MANPAGES)) cmake/compiler.cmake cmake/profile.cmake cmake/utils.cmake valgrind_suppress.txt \
 	$(addprefix ut_and_examples/, CMakeLists.txt example-mdbx.c++ example-mdbx.c pcrf/pcrf_simulator.c README.md)
 
 DIST_SRC   := mdbx.h mdbx.h++ mdbx.c mdbx.c++ $(addsuffix .c, $(MDBX_TOOLS)) mdbx-internals.h mdbx-wingetopt.h
@@ -906,7 +906,7 @@ $(1): $(2) src/version.c $(lastword $(MAKEFILE_LIST))
 	$$< | cat -s >$$@
 
 endef
-$(foreach file,mdbx.h $(filter-out man1/% VERSION.json .clang-format-ignore %.in ntdll.def, $(DIST_EXTRA)), $(eval $(call dist-extra-rule, $(DIST_DIR)/$(file), $(file))))
+$(foreach file,mdbx.h $(filter-out man1/% VERSION.json .clang-format-ignore %.in ntdll.def valgrind_suppress.txt, $(DIST_EXTRA)), $(eval $(call dist-extra-rule, $(DIST_DIR)/$(file), $(file))))
 
 $(DIST_DIR)/VERSION.json: src/version.c
 	@echo '  MAKE $@'
@@ -917,6 +917,10 @@ $(DIST_DIR)/.clang-format-ignore: $(lastword $(MAKEFILE_LIST))
 	$(QUIET)echo "$(filter-out %.h %h++,$(DIST_SRC))" | tr ' ' \\n > $@
 
 $(DIST_DIR)/ntdll.def: src/ntdll.def
+	@echo '  COPY $@'
+	$(QUIET)mkdir -p $(DIST_DIR)/ && cp $< $@
+
+$(DIST_DIR)/valgrind_suppress.txt: test/valgrind_suppress.txt
 	@echo '  COPY $@'
 	$(QUIET)mkdir -p $(DIST_DIR)/ && cp $< $@
 
