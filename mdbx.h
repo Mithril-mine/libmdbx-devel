@@ -2669,8 +2669,7 @@ LIBMDBX_API int mdbx_env_deleteW(const wchar_t *pathname, MDBX_env_delete_mode_t
  * \returns A non-zero error value on failure and 0 on success. */
 LIBMDBX_API int mdbx_env_copy(MDBX_env *env, const char *dest, MDBX_copy_flags_t flags);
 
-/** \brief Copy an MDBX environment by given read transaction to the specified
- * path, with options.
+/** \brief Copy an MDBX environment by given read transaction to the specified path, with options.
  * \ingroup c_extra
  *
  * This function may be used to make a backup of an existing environment.
@@ -2743,8 +2742,7 @@ LIBMDBX_API int mdbx_txn_copy2pathnameW(MDBX_txn *txn, const wchar_t *dest, MDBX
 #define mdbx_txn_copy2pathnameT(txn, dest, flags) mdbx_txn_copy2pathname(txn, dest, path)
 #endif /* Windows */
 
-/** \brief Copy an environment to the specified file descriptor, with
- * options.
+/** \brief Copy an environment to the specified file descriptor, with options.
  * \ingroup c_extra
  *
  * This function may be used to make a backup of an existing environment.
@@ -2769,8 +2767,7 @@ LIBMDBX_API int mdbx_txn_copy2pathnameW(MDBX_txn *txn, const wchar_t *dest, MDBX
  * \returns A non-zero error value on failure and 0 on success. */
 LIBMDBX_API int mdbx_env_copy2fd(MDBX_env *env, mdbx_filehandle_t fd, MDBX_copy_flags_t flags);
 
-/** \brief Copy an environment by given read transaction to the specified file
- * descriptor, with options.
+/** \brief Copy an environment by given read transaction to the specified file descriptor, with options.
  * \ingroup c_extra
  *
  * This function may be used to make a backup of an existing environment.
