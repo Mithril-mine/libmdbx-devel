@@ -1,7 +1,8 @@
 /// \copyright Copyright (c) 2015-2026 Леонид Юрьев aka Leonid Yuriev <leo@yuriev.ru>. All Rights Reserved.
 ///
 /// THE CONTENTS OF THIS PROJECT ARE PROPRIETARY AND CONFIDENTIAL.
-/// UNAUTHORIZED COPYING, TRANSFERRING OR REPRODUCTION OF THE CONTENTS OF THIS PROJECT, VIA ANY MEDIUM IS STRICTLY PROHIBITED.
+/// UNAUTHORIZED COPYING, TRANSFERRING OR REPRODUCTION OF THE CONTENTS OF THIS PROJECT,
+/// VIA ANY MEDIUM IS STRICTLY PROHIBITED.
 ///
 /// The receipt or possession of the source code and/or any parts thereof does not convey or imply any right to use them
 /// for any purpose other than the purpose for which they were provided to you.
@@ -12,7 +13,8 @@
 /// whether in an action of contract, tort or otherwise, arising from, out of or in connection with the software
 /// or the use or other dealings in the software.
 ///
-/// The above copyright notice and this permission notice shall be included in all copies or substantial portions of the software.
+/// The above copyright notice and this permission notice shall be included in all copies
+/// or substantial portions of the software.
 ///
 /// \author Леонид Юрьев aka Leonid Yuriev <leo@yuriev.ru>
 /// \date 2015-2026
@@ -79,7 +81,7 @@
 #include <vector>
 
 #define MDBX_INTERNAL
-#define xMDBX_TOOLS /* Avoid using internal eASSERT() */
+#define xMDBX_TOOLS /* Avoid using internal ASSERT() */
 #include "../mdbx.h++"
 #include "../src/osal.h"
 

@@ -224,7 +224,7 @@
 #define SORT_INNER(TYPE, CMP, begin, end, len)                                                                         \
   switch (len) {                                                                                                       \
   default:                                                                                                             \
-    assert(false);                                                                                                     \
+    ASSERT(false);                                                                                                     \
     __unreachable();                                                                                                   \
   case 0:                                                                                                              \
   case 1:                                                                                                              \
@@ -337,9 +337,9 @@
       }                                                                                                                \
     }                                                                                                                  \
                                                                                                                        \
-    if (AUDIT_ENABLED()) {                                                                                             \
+    if (CHECKS2_ENABLED()) {                                                                                           \
       for (TYPE *scan = begin + 1; scan < end; ++scan)                                                                 \
-        assert(CMP(scan[-1], scan[0]));                                                                                \
+        ASSERT(CMP(scan[-1], scan[0]));                                                                                \
     }                                                                                                                  \
   }
 
@@ -470,11 +470,11 @@
     it += length > 1 && expect_with_probability(CMP(*it, item), 0, .5);        \
     it += length > 0 && expect_with_probability(CMP(*it, item), 0, .5);        \
                                                                                \
-    if (AUDIT_ENABLED()) {                                                     \
+    if (CHECKS2_ENABLED()) {                                                   \
       for (const TYPE_LIST *scan = begin; scan < it; ++scan)                   \
-        assert(CMP(*scan, item));                                              \
+        ASSERT(CMP(*scan, item));                                              \
       for (const TYPE_LIST *scan = it; scan < end; ++scan)                     \
-        assert(!CMP(*scan, item));                                             \
+        ASSERT(!CMP(*scan, item));                                             \
       (void)begin, (void)end;                                                  \
     }                                                                          \
                                                                                \

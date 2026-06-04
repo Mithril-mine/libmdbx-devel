@@ -78,7 +78,6 @@ static inline bool meta_is_used(const troika_t *troika, unsigned n) {
 }
 
 static inline bool meta_bootid_match(const meta_t *meta) {
-
   return memcmp(&meta->bootid, &globals.bootid, 16) == 0 && (globals.bootid.x | globals.bootid.y) != 0;
 }
 
@@ -95,8 +94,8 @@ MDBX_NOTHROW_PURE_FUNCTION static inline txnid_t constmeta_txnid(const meta_t *m
 }
 
 static inline void meta_update_begin(const MDBX_env *env, meta_t *meta, txnid_t txnid) {
-  eASSERT(env, meta >= METAPAGE(env, 0) && meta < METAPAGE_END(env));
-  eASSERT(env, unaligned_peek_u64(4, meta->txnid_a) < txnid && unaligned_peek_u64(4, meta->txnid_b) < txnid);
+  eASSERT0(env, meta >= METAPAGE(env, 0) && meta < METAPAGE_END(env));
+  eASSERT0(env, unaligned_peek_u64(4, meta->txnid_a) < txnid && unaligned_peek_u64(4, meta->txnid_b) < txnid);
   (void)env;
 #if (defined(__amd64__) || defined(__e2k__)) && !defined(ENABLE_UBSAN) && MDBX_UNALIGNED_OK >= 8
   atomic_store64((mdbx_atomic_uint64_t *)&meta->txnid_b, 0, mo_AcquireRelease);
@@ -110,9 +109,9 @@ static inline void meta_update_begin(const MDBX_env *env, meta_t *meta, txnid_t 
 }
 
 static inline void meta_update_end(const MDBX_env *env, meta_t *meta, txnid_t txnid) {
-  eASSERT(env, meta >= METAPAGE(env, 0) && meta < METAPAGE_END(env));
-  eASSERT(env, unaligned_peek_u64(4, meta->txnid_a) == txnid);
-  eASSERT(env, unaligned_peek_u64(4, meta->txnid_b) < txnid);
+  eASSERT0(env, meta >= METAPAGE(env, 0) && meta < METAPAGE_END(env));
+  eASSERT0(env, unaligned_peek_u64(4, meta->txnid_a) == txnid);
+  eASSERT0(env, unaligned_peek_u64(4, meta->txnid_b) < txnid);
   (void)env;
   jitter4testing(true);
   memcpy(&meta->bootid, &globals.bootid, 16);
@@ -125,7 +124,7 @@ static inline void meta_update_end(const MDBX_env *env, meta_t *meta, txnid_t tx
 }
 
 static inline void meta_set_txnid(const MDBX_env *env, meta_t *meta, const txnid_t txnid) {
-  eASSERT(env, !env->dxb_mmap.base || meta < METAPAGE(env, 0) || meta >= METAPAGE_END(env));
+  eASSERT0(env, !env->dxb_mmap.base || meta < METAPAGE(env, 0) || meta >= METAPAGE_END(env));
   (void)env;
   /* update inconsistently since this function used ONLY for filling meta-image
    * for writing, but not the actual meta-page */
@@ -139,12 +138,12 @@ static inline uint8_t meta_cmp2int(txnid_t a, txnid_t b, uint8_t s) {
 }
 
 static inline uint8_t meta_cmp2recent(uint8_t ab_cmp2int, bool a_steady, bool b_steady) {
-  assert(ab_cmp2int < 3 /* && a_steady< 2 && b_steady < 2 */);
+  ASSERT(ab_cmp2int < 3 /* && a_steady< 2 && b_steady < 2 */);
   return ab_cmp2int > 1 || (ab_cmp2int == 1 && a_steady > b_steady);
 }
 
 static inline uint8_t meta_cmp2steady(uint8_t ab_cmp2int, bool a_steady, bool b_steady) {
-  assert(ab_cmp2int < 3 /* && a_steady< 2 && b_steady < 2 */);
+  ASSERT(ab_cmp2int < 3 /* && a_steady< 2 && b_steady < 2 */);
   return a_steady > b_steady || (a_steady == b_steady && ab_cmp2int > 1);
 }
 

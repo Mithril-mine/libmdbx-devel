@@ -1,7 +1,8 @@
 /// \copyright Copyright (c) 2015-2026 Леонид Юрьев aka Leonid Yuriev <leo@yuriev.ru>. All Rights Reserved.
 ///
 /// THE CONTENTS OF THIS PROJECT ARE PROPRIETARY AND CONFIDENTIAL.
-/// UNAUTHORIZED COPYING, TRANSFERRING OR REPRODUCTION OF THE CONTENTS OF THIS PROJECT, VIA ANY MEDIUM IS STRICTLY PROHIBITED.
+/// UNAUTHORIZED COPYING, TRANSFERRING OR REPRODUCTION OF THE CONTENTS OF THIS PROJECT,
+/// VIA ANY MEDIUM IS STRICTLY PROHIBITED.
 ///
 /// The receipt or possession of the source code and/or any parts thereof does not convey or imply any right to use them
 /// for any purpose other than the purpose for which they were provided to you.
@@ -12,11 +13,11 @@
 /// whether in an action of contract, tort or otherwise, arising from, out of or in connection with the software
 /// or the use or other dealings in the software.
 ///
-/// The above copyright notice and this permission notice shall be included in all copies or substantial portions of the software.
+/// The above copyright notice and this permission notice shall be included in all copies
+/// or substantial portions of the software.
 ///
 /// \author Леонид Юрьев aka Leonid Yuriev <leo@yuriev.ru>
 /// \date 2015-2026
-
 
 #include "mdbx.h++"
 #include <array>
@@ -96,7 +97,7 @@ static bool probe(mdbx::txn txn, mdbx::map_handle dbi, mdbx::cursor::move_operat
                              op == mdbx::cursor::multi_exactkey_value_lesser_or_equal ||
                              op == mdbx::cursor::pair_lesser_than || op == mdbx::cursor::pair_lesser_or_equal;
 
-  const bool is_multi = mdbx::is_multi(txn.get_handle_info(dbi).value_mode());
+  const bool is_multi = mdbx::is_multi(txn.get_map_flags(dbi).value_mode());
 
   auto seek_result = seeker.move(op, pair.key, pair.value, false);
   auto scan_result =
@@ -127,7 +128,7 @@ static bool probe(mdbx::txn txn, mdbx::map_handle dbi, mdbx::cursor::move_operat
 static bool probe(mdbx::txn txn, mdbx::map_handle dbi, mdbx::cursor::move_operation op, predicate cmp) {
   const auto pair = buffer_pair(random_key(), random_value());
   const bool ok = probe(txn, dbi, op, cmp, pair);
-#if MDBX_DEBUG
+#if MDBX_DEBUG > 0
   if (!ok)
     // повтор для отладки и поиска причин
     probe(txn, dbi, op, cmp, pair);

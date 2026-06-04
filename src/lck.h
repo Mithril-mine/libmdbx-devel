@@ -42,7 +42,7 @@ MDBX_INTERNAL int lck_init(MDBX_env *env, MDBX_env *inprocess_neighbor, int glob
 ///     of other instances of MDBX_env within the current process, e.g.
 ///     restore POSIX-fcntl locks after the closing of file descriptors.
 /// \return Error code (MDBX_PANIC) or zero on success.
-MDBX_INTERNAL int lck_destroy(MDBX_env *env, MDBX_env *inprocess_neighbor, const uint32_t current_pid);
+MDBX_INTERNAL int lck_destroy(MDBX_env *env, MDBX_env *inprocess_neighbor, const mdbx_pid_t current_pid);
 
 /// \brief Connects to shared interprocess locking objects and tries to acquire
 ///   the maximum lock level (shared if exclusive is not available)

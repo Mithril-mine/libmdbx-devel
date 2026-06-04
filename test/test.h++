@@ -1,7 +1,8 @@
 /// \copyright Copyright (c) 2015-2026 Леонид Юрьев aka Leonid Yuriev <leo@yuriev.ru>. All Rights Reserved.
 ///
 /// THE CONTENTS OF THIS PROJECT ARE PROPRIETARY AND CONFIDENTIAL.
-/// UNAUTHORIZED COPYING, TRANSFERRING OR REPRODUCTION OF THE CONTENTS OF THIS PROJECT, VIA ANY MEDIUM IS STRICTLY PROHIBITED.
+/// UNAUTHORIZED COPYING, TRANSFERRING OR REPRODUCTION OF THE CONTENTS OF THIS PROJECT,
+/// VIA ANY MEDIUM IS STRICTLY PROHIBITED.
 ///
 /// The receipt or possession of the source code and/or any parts thereof does not convey or imply any right to use them
 /// for any purpose other than the purpose for which they were provided to you.
@@ -12,7 +13,8 @@
 /// whether in an action of contract, tort or otherwise, arising from, out of or in connection with the software
 /// or the use or other dealings in the software.
 ///
-/// The above copyright notice and this permission notice shall be included in all copies or substantial portions of the software.
+/// The above copyright notice and this permission notice shall be included in all copies
+/// or substantial portions of the software.
 ///
 /// \author Леонид Юрьев aka Leonid Yuriev <leo@yuriev.ru>
 /// \date 2015-2026
@@ -73,6 +75,7 @@ extern bool failfast;
 extern bool progress_indicator;
 extern bool console_mode;
 extern bool geometry_jitter;
+extern bool defrag_jitter;
 } /* namespace config */
 
 } /* namespace global */
@@ -232,7 +235,9 @@ protected:
   void db_open();
   void db_close();
   virtual void txn_begin(bool readonly, MDBX_txn_flags_t flags = MDBX_TXN_READWRITE);
+  virtual void txn_rollback();
   int breakable_commit();
+  virtual int checkpoint();
   virtual void txn_end(bool abort);
   int breakable_restart();
   void txn_restart(bool abort, bool readonly, MDBX_txn_flags_t flags = MDBX_TXN_READWRITE);
@@ -242,6 +247,7 @@ protected:
   void txn_inject_writefault(void);
   void txn_inject_writefault(MDBX_txn *txn);
   bool txn_probe_parking();
+  bool txn_refresh();
 
   void fetch_canary();
   void update_canary(uint64_t increment);
@@ -279,8 +285,8 @@ public:
   }
 
   static bool review_params(actor_params &params, unsigned space_id) {
+    (void)space_id;
     // silently fix key/data length for fixed-length modes
-    params.prng_seed += bleach32(space_id);
     if ((params.table_flags & MDBX_INTEGERKEY) && params.keylen_min != params.keylen_max)
       params.keylen_min = params.keylen_max;
     if ((params.table_flags & (MDBX_INTEGERDUP | MDBX_DUPFIXED)) && params.datalen_min != params.datalen_max)

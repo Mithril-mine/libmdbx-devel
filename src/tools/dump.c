@@ -6,36 +6,17 @@
 /// mdbx_dump.c - memory-mapped database dump tool
 ///
 
-#ifdef _MSC_VER
-#if _MSC_VER > 1800
-#pragma warning(disable : 4464) /* relative include path contains '..' */
-#endif
-#pragma warning(disable : 4996) /* The POSIX name is deprecated... */
-#endif                          /* _MSC_VER (warnings) */
-
-#define xMDBX_TOOLS /* Avoid using internal eASSERT() */
+#define xMDBX_TOOLS /* Avoid using internal ASSERT(), etc */
 #include "essentials.h"
 
 #include <ctype.h>
 
-#define PRINT 1
-#define GLOBAL 2
-static int mode = GLOBAL;
-
-typedef struct flagbit {
-  int bit;
-  char *name;
-} flagbit;
-
-flagbit dbflags[] = {{MDBX_REVERSEKEY, "reversekey"},
-                     {MDBX_DUPSORT, "dupsort"},
-                     {MDBX_INTEGERKEY, "integerkey"},
-                     {MDBX_DUPFIXED, "dupfix"},
-                     {MDBX_INTEGERDUP, "integerdup"},
-                     {MDBX_REVERSEDUP, "reversedup"},
-                     {0, nullptr}};
-
 #if defined(_WIN32) || defined(_WIN64)
+
+/* Bit of madness for Windows console */
+#define mdbx_strerror mdbx_strerror_ANSI2OEM
+#define mdbx_strerror_r mdbx_strerror_r_ANSI2OEM
+
 #include "wingetopt.h"
 
 static volatile BOOL user_break;
@@ -55,44 +36,43 @@ static void signal_handler(int sig) {
 
 #endif /* !WINDOWS */
 
-static const char hexc[] = "0123456789abcdef";
+#define PRINT 1
+#define GLOBAL 2
+#define CONCISE 4
+static int mode = GLOBAL;
 
-static void dumpbyte(unsigned char c) {
-  putchar(hexc[c >> 4]);
-  putchar(hexc[c & 15]);
-}
+typedef struct flagbit {
+  int bit;
+  char *name;
+} flagbit;
 
-static void text(MDBX_val *v) {
-  unsigned char *c, *end;
+static const flagbit dbflags[] = {{MDBX_REVERSEKEY, "reversekey"},
+                                  {MDBX_DUPSORT, "dupsort"},
+                                  {MDBX_INTEGERKEY, "integerkey"},
+                                  {MDBX_DUPFIXED, "dupfix"},
+                                  {MDBX_INTEGERDUP, "integerdup"},
+                                  {MDBX_REVERSEDUP, "reversedup"},
+                                  {0, nullptr}};
 
+static void dumpval(const MDBX_val *v) {
+  static const char digits[] = "0123456789abcdef";
   putchar(' ');
-  c = v->iov_base;
-  end = c + v->iov_len;
-  while (c < end) {
-    if (isprint(*c) && *c != '\\') {
-      putchar(*c);
-    } else {
-      putchar('\\');
-      dumpbyte(*c);
+  for (const unsigned char *c = v->iov_base, *end = c + v->iov_len; c < end; ++c) {
+    if (mode & PRINT) {
+      if (isprint(*c) && *c != '\\') {
+        putchar(*c);
+        continue;
+      } else
+        putchar('\\');
     }
-    c++;
+    putchar(digits[*c >> 4]);
+    putchar(digits[*c & 15]);
   }
   putchar('\n');
 }
 
-static void dumpval(MDBX_val *v) {
-  unsigned char *c, *end;
-
-  putchar(' ');
-  c = v->iov_base;
-  end = c + v->iov_len;
-  while (c < end)
-    dumpbyte(*c++);
-  putchar('\n');
-}
-
-bool quiet = false, rescue = false;
-const char *prog;
+static bool quiet = false, rescue = false;
+static const char *prog;
 static void error(const char *func, int rc) {
   if (!quiet)
     fprintf(stderr, "%s: %s() error %d %s\n", prog, func, rc, mdbx_strerror(rc));
@@ -185,12 +165,19 @@ static int dump_tbl(MDBX_txn *txn, MDBX_dbi dbi, char *name) {
       rc = MDBX_EINTR;
       break;
     }
-    if (mode & PRINT) {
-      text(&key);
-      text(&data);
-    } else {
-      dumpval(&key);
-      dumpval(&data);
+    dumpval(&key);
+    dumpval(&data);
+    if ((flags & MDBX_DUPSORT) && (mode & CONCISE)) {
+      while ((rc = mdbx_cursor_get(cursor, &key, &data, MDBX_NEXT_DUP)) == MDBX_SUCCESS) {
+        if (user_break) {
+          rc = MDBX_EINTR;
+          break;
+        }
+        putchar(' ');
+        dumpval(&data);
+      }
+      if (rc != MDBX_NOTFOUND)
+        break;
     }
   }
   printf("DATA=END\n");
@@ -206,10 +193,12 @@ static int dump_tbl(MDBX_txn *txn, MDBX_dbi dbi, char *name) {
 static void usage(void) {
   fprintf(stderr,
           "usage: %s "
-          "[-V] [-q] [-f file] [-l] [-p] [-r] [-a|-s table] [-u|U] "
+          "[-V] [-q] [-c] [-f file] [-l] [-p] [-r] [-a|-s table] [-u|U] "
           "dbpath\n"
           "  -V\t\tprint version and exit\n"
           "  -q\t\tbe quiet\n"
+          "  -c\t\tconcise mode without repeating keys,\n"
+          "  \t\tbut incompatible with Berkeley DB and LMDB\n"
           "  -f\t\twrite to file instead of stdout\n"
           "  -l\t\tlist tables and exit\n"
           "  -p\t\tuse printable characters\n"
@@ -268,6 +257,7 @@ int main(int argc, char *argv[]) {
                      "s:"
                      "V"
                      "r"
+                     "c"
                      "q")) != EOF) {
     switch (i) {
     case 'V':
@@ -297,6 +287,9 @@ int main(int argc, char *argv[]) {
       }
       break;
     case 'n':
+      break;
+    case 'c':
+      mode |= CONCISE;
       break;
     case 'p':
       mode |= PRINT;
@@ -390,7 +383,7 @@ int main(int argc, char *argv[]) {
   }
 
   if (alldbs) {
-    assert(dbi == MAIN_DBI);
+    ASSERT(dbi == MAIN_DBI);
 
     MDBX_cursor *cursor;
     err = mdbx_cursor_open(txn, MAIN_DBI, &cursor);

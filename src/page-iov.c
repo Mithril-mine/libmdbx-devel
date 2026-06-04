@@ -10,7 +10,7 @@ int iov_init(MDBX_txn *const txn, iov_ctx_t *ctx, size_t items, size_t npages, m
   ctx->fd = fd;
   ctx->coherency_timestamp =
       (check_coherence || txn->env->lck->pgops.incoherence.weak) ? 0 : UINT64_MAX /* не выполнять сверку */;
-  ctx->err = osal_ioring_prepare(ctx->ior, items, pgno_align2os_bytes(txn->env, npages));
+  ctx->err = osal_ioring_prepare(ctx->ior, items, pgno_ceil2sp_bytes(txn->env, npages));
   if (likely(ctx->err == MDBX_SUCCESS)) {
 #if MDBX_NEED_WRITTEN_RANGE
     ctx->flush_begin = MAX_PAGENO;
@@ -23,12 +23,12 @@ int iov_init(MDBX_txn *const txn, iov_ctx_t *ctx, size_t items, size_t npages, m
 
 static void iov_callback4dirtypages(iov_ctx_t *ctx, size_t offset, void *data, size_t bytes) {
   MDBX_env *const env = ctx->env;
-  eASSERT(env, (env->flags & MDBX_WRITEMAP) == 0);
+  eASSERT0(env, (env->flags & MDBX_WRITEMAP) == 0);
 
   page_t *wp = (page_t *)data;
-  eASSERT(env, wp->pgno == bytes2pgno(env, offset));
-  eASSERT(env, bytes2pgno(env, bytes) >= (is_largepage(wp) ? wp->pages : 1u));
-  eASSERT(env, (wp->flags & P_ILL_BITS) == 0);
+  eASSERT0(env, wp->pgno == bytes2pgno(env, offset));
+  eASSERT0(env, bytes2pgno(env, bytes) >= (is_largepage(wp) ? wp->pages : 1u));
+  eASSERT0(env, (wp->flags & P_ILL_BITS) == 0);
 
   if (likely(ctx->err == MDBX_SUCCESS)) {
     const page_t *const rp = ptr_disp(env->dxb_mmap.base, offset);
@@ -108,11 +108,11 @@ static void iov_callback4dirtypages(iov_ctx_t *ctx, size_t offset, void *data, s
     page_shadow_release(env, wp, 1);
   else {
     do {
-      eASSERT(env, wp->pgno == bytes2pgno(env, offset));
-      eASSERT(env, (wp->flags & P_ILL_BITS) == 0);
+      eASSERT0(env, wp->pgno == bytes2pgno(env, offset));
+      eASSERT0(env, (wp->flags & P_ILL_BITS) == 0);
       size_t npages = is_largepage(wp) ? wp->pages : 1u;
       size_t chunk = pgno2bytes(env, npages);
-      eASSERT(env, bytes >= chunk);
+      eASSERT0(env, bytes >= chunk);
       page_t *next = ptr_disp(wp, chunk);
       page_shadow_release(env, wp, npages);
       wp = next;
@@ -129,11 +129,10 @@ static void iov_complete(iov_ctx_t *ctx) {
 }
 
 int iov_write(iov_ctx_t *ctx) {
-  eASSERT(ctx->env, !iov_empty(ctx));
+  eASSERT0(ctx->env, !iov_empty(ctx));
   osal_ioring_write_result_t r = osal_ioring_write(ctx->ior, ctx->fd);
-#if MDBX_ENABLE_PGOP_STAT
-  ctx->env->lck->pgops.wops.weak += r.wops;
-#endif /* MDBX_ENABLE_PGOP_STAT */
+  if (MDBX_ENABLE_PGOP_STAT)
+    ctx->env->lck->pgops.wops.weak += r.wops;
   ctx->err = r.err;
   if (unlikely(ctx->err != MDBX_SUCCESS))
     ERROR("Write error: %s", mdbx_strerror(ctx->err));
@@ -143,15 +142,15 @@ int iov_write(iov_ctx_t *ctx) {
 
 int iov_page(MDBX_txn *txn, iov_ctx_t *ctx, page_t *dp, size_t npages) {
   MDBX_env *const env = txn->env;
-  tASSERT(txn, ctx->err == MDBX_SUCCESS);
-  tASSERT(txn, dp->pgno >= MIN_PAGENO && dp->pgno < txn->geo.first_unallocated);
-  tASSERT(txn, is_modifable(txn, dp));
-  tASSERT(txn, !(dp->flags & ~(P_BRANCH | P_LEAF | P_DUPFIX | P_LARGE)));
+  cASSERT0(txn, ctx->err == MDBX_SUCCESS);
+  cASSERT0(txn, dp->pgno >= MIN_PAGENO && dp->pgno < txn->geo.first_unallocated);
+  cASSERT0(txn, is_modifable(txn, dp));
+  cASSERT0(txn, !(dp->flags & ~(P_BRANCH | P_LEAF | P_DUPFIX | P_LARGE)));
 
   if (is_shadowed(txn, dp)) {
-    tASSERT(txn, !(txn->flags & MDBX_WRITEMAP));
+    cASSERT0(txn, !(txn->flags & MDBX_WRITEMAP));
     dp->txnid = txn->txnid;
-    tASSERT(txn, is_spilled(txn, dp));
+    cASSERT0(txn, is_spilled(txn, dp));
 #if MDBX_AVOID_MSYNC
   doit:;
 #endif /* MDBX_AVOID_MSYNC */
@@ -163,7 +162,7 @@ int iov_page(MDBX_txn *txn, iov_ctx_t *ctx, page_t *dp, size_t npages) {
         return err;
       }
       err = iov_write(ctx);
-      tASSERT(txn, iov_empty(ctx));
+      cASSERT0(txn, iov_empty(ctx));
       if (likely(err == MDBX_SUCCESS)) {
         err = osal_ioring_add(ctx->ior, pgno2bytes(env, dp->pgno), dp, pgno2bytes(env, npages));
         if (unlikely(err != MDBX_SUCCESS)) {
@@ -171,10 +170,10 @@ int iov_page(MDBX_txn *txn, iov_ctx_t *ctx, page_t *dp, size_t npages) {
           return ctx->err = err;
         }
       }
-      tASSERT(txn, ctx->err == MDBX_SUCCESS);
+      cASSERT0(txn, ctx->err == MDBX_SUCCESS);
     }
   } else {
-    tASSERT(txn, txn->flags & MDBX_WRITEMAP);
+    cASSERT0(txn, txn->flags & MDBX_WRITEMAP);
 #if MDBX_AVOID_MSYNC
     goto doit;
 #endif /* MDBX_AVOID_MSYNC */

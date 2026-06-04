@@ -25,12 +25,12 @@
 #include <iostream>
 
 #if defined(ENABLE_MEMCHECK) || defined(MDBX_CI)
-#if MDBX_DEBUG || !defined(NDEBUG)
+#if MDBX_DEBUG > 0 || !defined(NDEBUG)
 #define RELIEF_FACTOR 16
 #else
 #define RELIEF_FACTOR 8
 #endif
-#elif MDBX_DEBUG || !defined(NDEBUG) || defined(__APPLE__) || defined(_WIN32)
+#elif MDBX_DEBUG > 0 || !defined(NDEBUG) || defined(__APPLE__) || defined(_WIN32)
 #define RELIEF_FACTOR 4
 #elif UINTPTR_MAX > 0xffffFFFFul || ULONG_MAX > 0xffffFFFFul
 #define RELIEF_FACTOR 2
@@ -52,15 +52,19 @@ int main(int argc, const char *argv[]) {
 #include <latch>
 #include <thread>
 
-bool case0_trivia_sticky_threads(const mdbx::path &path) {
+bool case0_trivia_sticky_threads(const mdbx::path &path, bool nested = false) {
   mdbx::env_managed::create_parameters createParameters;
   createParameters.geometry.make_dynamic(21 * mdbx::env::geometry::MiB, 84 * mdbx::env::geometry::MiB);
 
   mdbx::env::operate_parameters operateParameters(100, 10);
   operateParameters.options.no_sticky_threads = false;
+  operateParameters.options.nested_transactions = nested;
   mdbx::env_managed env(path, createParameters, operateParameters);
   auto txn = env.start_write(false);
-  /* mdbx::map_handle testHandle = */ txn.create_map("xyz", mdbx::key_mode::usual, mdbx::value_mode::single);
+  const auto map = txn.create_map("xyz", mdbx::key_mode::usual, mdbx::value_mode::single);
+  txn.clear_map(map);
+  for (size_t i = 0; i < 10000; ++i)
+    txn.insert(map, mdbx::slice::wrap(i * 3992619971ul % 54493), mdbx::slice::wrap(i));
   txn.commit();
 
   //-------------------------------------
@@ -73,6 +77,14 @@ bool case0_trivia_sticky_threads(const mdbx::path &path) {
   err = mdbx_txn_begin(env, NULL, MDBX_TXN_RDONLY_PREPARE, &c_txn);
   assert(err == MDBX_BAD_RSLOT);
   ok = err == MDBX_BAD_RSLOT && ok;
+  if (env.is_nested_transactions_available()) {
+    err = mdbx_txn_begin(env, txn, MDBX_TXN_RDONLY_PREPARE, &c_txn);
+    assert(err == MDBX_EINVAL);
+    ok = err == MDBX_EINVAL && ok;
+    err = mdbx_txn_begin(env, txn, MDBX_TXN_RDONLY, &c_txn);
+    assert(err == MDBX_BAD_TXN);
+    ok = err == MDBX_BAD_TXN && ok;
+  }
   txn.abort();
 
   txn = env.prepare_read();
@@ -83,6 +95,33 @@ bool case0_trivia_sticky_threads(const mdbx::path &path) {
 
   //-------------------------------------
   txn = env.start_write();
+  if (env.is_nested_transactions_available()) {
+    err = mdbx_txn_begin(env, txn, MDBX_TXN_RDONLY_PREPARE, &c_txn);
+    assert(err == MDBX_EINVAL);
+    ok = err == MDBX_EINVAL && ok;
+    err = mdbx_txn_begin(env, txn, MDBX_TXN_RDONLY, &c_txn);
+    assert(err == MDBX_SUCCESS);
+    ok = err == MDBX_SUCCESS && ok;
+    err = mdbx_txn_commit(c_txn);
+    assert(err == MDBX_SUCCESS);
+    ok = err == MDBX_SUCCESS && ok;
+    err = mdbx_txn_begin(env, txn, MDBX_TXN_RDONLY, &c_txn);
+    assert(err == MDBX_SUCCESS);
+    ok = err == MDBX_SUCCESS && ok;
+    err = mdbx_txn_abort(c_txn);
+    assert(err == MDBX_SUCCESS);
+    ok = err == MDBX_SUCCESS && ok;
+    auto txn_nested = txn.start_nested();
+    auto cursor = txn_nested.open_cursor(map);
+    size_t count = 0;
+    cursor.fullscan([&](const mdbx::pair &) -> bool {
+      count += 1;
+      return /* continue scan */ false;
+    });
+    txn_nested.abort();
+    assert(count == txn.get_map_stat(map).ms_entries);
+    ok = count == txn.get_map_stat(map).ms_entries && ok;
+  }
   c_txn = txn;
   err = mdbx_txn_reset(txn);
   assert(err == MDBX_EINVAL);
@@ -196,10 +235,10 @@ bool case0_trivia_sticky_threads(const mdbx::path &path) {
   return ok;
 }
 
-bool case1_trivia_NO_sticky_threads(const mdbx::path &path) {
+bool case1_trivia_NO_sticky_threads(const mdbx::path &path, bool nested = true) {
   mdbx::env::operate_parameters operateParameters(100, 10);
   operateParameters.options.no_sticky_threads = true;
-  operateParameters.options.nested_write_transactions = true;
+  operateParameters.options.nested_transactions = nested;
   mdbx::env_managed env(path, operateParameters);
 
   //-------------------------------------
@@ -316,25 +355,27 @@ bool case1_trivia_NO_sticky_threads(const mdbx::path &path) {
     s2.count_down();
 
     s3.wait();
-    err = mdbx_txn_begin(env, txn, MDBX_TXN_READWRITE, &c_txn);
-    assert(err == MDBX_SUCCESS);
-    ok = ok && err == MDBX_SUCCESS;
-    err = mdbx_txn_commit(c_txn);
-    assert(err == MDBX_SUCCESS);
-    ok = ok && err == MDBX_SUCCESS;
-    c_txn = txn;
-    err = mdbx_txn_commit(c_txn);
-    assert(err == MDBX_THREAD_MISMATCH);
-    ok = ok && err == MDBX_THREAD_MISMATCH;
-    err = mdbx_txn_abort(c_txn);
-    assert(err == MDBX_THREAD_MISMATCH);
-    ok = ok && err == MDBX_THREAD_MISMATCH;
-    err = mdbx_txn_break(c_txn);
-    assert(err == MDBX_SUCCESS);
-    ok = ok && err == MDBX_SUCCESS;
-    err = mdbx_txn_reset(c_txn);
-    assert(err == MDBX_EINVAL);
-    ok = ok && err == MDBX_EINVAL;
+    if (env.is_nested_transactions_available()) {
+      err = mdbx_txn_begin(env, txn, MDBX_TXN_READWRITE, &c_txn);
+      assert(err == MDBX_SUCCESS);
+      ok = ok && err == MDBX_SUCCESS;
+      err = mdbx_txn_commit(c_txn);
+      assert(err == MDBX_SUCCESS);
+      ok = ok && err == MDBX_SUCCESS;
+      c_txn = txn;
+      err = mdbx_txn_commit(c_txn);
+      assert(err == MDBX_THREAD_MISMATCH);
+      ok = ok && err == MDBX_THREAD_MISMATCH;
+      err = mdbx_txn_abort(c_txn);
+      assert(err == MDBX_THREAD_MISMATCH);
+      ok = ok && err == MDBX_THREAD_MISMATCH;
+      err = mdbx_txn_break(c_txn);
+      assert(err == MDBX_SUCCESS);
+      ok = ok && err == MDBX_SUCCESS;
+      err = mdbx_txn_reset(c_txn);
+      assert(err == MDBX_EINVAL);
+      ok = ok && err == MDBX_EINVAL;
+    }
   });
 
   s1.count_down();
@@ -426,17 +467,100 @@ bool case3_fresh_reads(const mdbx::path &path, bool no_sticky_threads) {
   return ok;
 }
 
+static bool proble_cloning(const mdbx::txn_managed &txn, const mdbx::map_handle &table, const mdbx::txn::info &txn_info,
+                           const mdbx::txn::map_stat &map_stat, const mdbx::map_handle::info &handle_info) {
+  std::vector<std::thread> threads;
+  bool ok = true;
+  for (auto i = 0; i < 1; ++i)
+    threads.push_back(std::thread([&]() {
+      auto clone = txn.clone();
+      std::thread onemore([&]() {
+        auto clone_of_clone = txn.clone();
+        auto clone_txn_info = clone_of_clone.get_info();
+        if (mdbx::memcmp(&clone_txn_info, &txn_info, sizeof(txn_info)))
+          ok = false;
+        auto clone_handle_info = clone_of_clone.get_map_flags(table);
+        if (clone_handle_info.state != MDBX_DBI_STALE ||
+            mdbx::memcmp(&clone_handle_info, &handle_info, sizeof(handle_info)) == 0)
+          ok = false;
+        clone_of_clone.renew_reading();
+        auto clone_map_stat = clone_of_clone.get_map_stat(table);
+        if (mdbx::memcmp(&clone_map_stat, &map_stat, sizeof(map_stat)))
+          ok = false;
+        clone_handle_info = clone_of_clone.get_map_flags(table);
+        if (mdbx::memcmp(&clone_handle_info, &handle_info, sizeof(handle_info)))
+          ok = false;
+        clone_of_clone.reset_reading();
+      });
+      auto clone_txn_info = clone.get_info();
+      if (mdbx::memcmp(&clone_txn_info, &txn_info, sizeof(txn_info)))
+        ok = false;
+      clone.renew_reading();
+      onemore.join();
+      auto clone_map_stat = clone.get_map_stat(table);
+      if (mdbx::memcmp(&clone_map_stat, &map_stat, sizeof(map_stat)))
+        ok = false;
+      auto clone_handle_info = clone.get_map_flags(table);
+      if (mdbx::memcmp(&clone_handle_info, &handle_info, sizeof(handle_info)))
+        ok = false;
+      clone_txn_info = clone.get_info();
+      clone_txn_info.txn_pget = txn_info.txn_pget;
+      if (mdbx::memcmp(&clone_txn_info, &txn_info, sizeof(txn_info)))
+        ok = false;
+      clone.reset_reading();
+    }));
+
+  for (auto &t : threads)
+    t.join();
+
+  return ok;
+}
+
+bool case4_clone(const mdbx::path &path, bool no_sticky_threads) {
+  mdbx::env::remove(path);
+  mdbx::env_managed::create_parameters createParameters;
+  createParameters.geometry.make_dynamic(21 * mdbx::env::geometry::MiB, 84 * mdbx::env::geometry::MiB);
+  mdbx::env::operate_parameters operateParameters(100, 10);
+  operateParameters.options.no_sticky_threads = no_sticky_threads;
+  mdbx::env_managed env(path, createParameters, operateParameters);
+
+  auto txn = env.start_write();
+  auto table = txn.create_map("case4");
+  for (auto i = 0; ++i < 9; ++i)
+    txn.insert(table, mdbx::slice::wrap(i), mdbx::default_buffer::base58(i * 42));
+  txn.commit_embark_read();
+
+  const auto txn_info = txn.get_info();
+  const auto map_stat = txn.get_map_stat(table);
+  const auto handle_info = txn.get_map_flags(table);
+
+  bool ok = proble_cloning(txn, table, txn_info, map_stat, handle_info);
+  txn.reset_reading();
+  txn = env.start_write();
+  ok = proble_cloning(txn, table, txn_info, map_stat, handle_info) && ok;
+  txn.create_map("case4+onemore");
+  MDBX_txn *clone = nullptr;
+  int err = mdbx_txn_clone(txn, &clone, nullptr);
+  ok = err == MDBX_BAD_TXN && ok;
+
+  return ok;
+}
+
 int doit() {
   mdbx::path path = "test-txn";
   mdbx::env::remove(path);
 
   bool ok = true;
-  ok = case0_trivia_sticky_threads(path) && ok;
-  ok = case1_trivia_NO_sticky_threads(path) && ok;
+  ok = case0_trivia_sticky_threads(path, false) && ok;
+  ok = case0_trivia_sticky_threads(path, true) && ok;
+  ok = case1_trivia_NO_sticky_threads(path, true) && ok;
+  ok = case1_trivia_NO_sticky_threads(path, false) && ok;
   ok = case2_concurrent_read_and_abort(path, false) && ok;
   ok = case2_concurrent_read_and_abort(path, true) && ok;
   ok = case3_fresh_reads(path, false) && ok;
   ok = case3_fresh_reads(path, true) && ok;
+  ok = case4_clone(path, false) && ok;
+  ok = case4_clone(path, true) && ok;
 
   std::cout << (ok ? "OK\n" : "FAIL\n");
   return ok ? EXIT_SUCCESS : EXIT_FAILURE;

@@ -191,14 +191,14 @@ int mdbx_is_dirty(const MDBX_txn *txn, const void *ptr) {
          * not to the beginning of a data. */
         return LOG_IFERR(MDBX_EINVAL);
       }
-      return ((txn->flags & MDBX_TXN_RDONLY) || !is_modifable(txn, page)) ? MDBX_RESULT_FALSE : MDBX_RESULT_TRUE;
+      return (page->txnid > txn_basis_snapshot(txn)) ? MDBX_RESULT_TRUE : MDBX_RESULT_FALSE;
     }
     if ((size_t)offset < env->dxb_mmap.limit) {
       /* Указатель адресует что-то в пределах mmap, но за границей
        * распределенных страниц. Такое может случится если mdbx_is_dirty()
        * вызывается после операции, в ходе которой грязная страница была
        * возвращена в нераспределенное пространство. */
-      return (txn->flags & MDBX_TXN_RDONLY) ? LOG_IFERR(MDBX_EINVAL) : MDBX_RESULT_TRUE;
+      return (txn->flags & txn_ro_flat) ? LOG_IFERR(MDBX_EINVAL) : MDBX_RESULT_TRUE;
     }
   }
 
@@ -208,7 +208,7 @@ int mdbx_is_dirty(const MDBX_txn *txn, const void *ptr) {
    *
    * Для режима MDBX_WRITE_MAP режима страница однозначно "не грязная",
    * а для режимов без MDBX_WRITE_MAP однозначно "не чистая". */
-  return (txn->flags & (MDBX_WRITEMAP | MDBX_TXN_RDONLY)) ? LOG_IFERR(MDBX_EINVAL) : MDBX_RESULT_TRUE;
+  return (txn->flags & (MDBX_WRITEMAP | txn_ro_flat)) ? LOG_IFERR(MDBX_EINVAL) : MDBX_RESULT_TRUE;
 }
 
 int mdbx_del(MDBX_txn *txn, MDBX_dbi dbi, const MDBX_val *key, const MDBX_val *data) {
@@ -289,7 +289,7 @@ int mdbx_put(MDBX_txn *txn, MDBX_dbi dbi, const MDBX_val *key, MDBX_val *data, M
       /* LY: allows update (explicit overwrite) only for unique keys */
       node_t *node = page_node(cx.outer.pg[cx.outer.top], cx.outer.ki[cx.outer.top]);
       if (node_flags(node) & N_DUP) {
-        tASSERT(txn, inner_pointed(&cx.outer) && cx.outer.subcur->nested_tree.items > 1);
+        cASSERT0(txn, inner_pointed(&cx.outer) && cx.outer.subcur->nested_tree.items > 1);
         rc = MDBX_EMULTIVAL;
         if ((flags & MDBX_NOOVERWRITE) == 0) {
           flags -= MDBX_CURRENT;
@@ -397,7 +397,7 @@ int mdbx_replace_ex(MDBX_txn *txn, MDBX_dbi dbi, const MDBX_val *key, MDBX_val *
           /* disallow update/delete for multi-values */
           node_t *node = page_node(page, cx.outer.ki[cx.outer.top]);
           if (node_flags(node) & N_DUP) {
-            tASSERT(txn, inner_pointed(&cx.outer) && cx.outer.subcur->nested_tree.items > 1);
+            cASSERT0(txn, inner_pointed(&cx.outer) && cx.outer.subcur->nested_tree.items > 1);
             if (cx.outer.subcur->nested_tree.items > 1) {
               rc = MDBX_EMULTIVAL;
               goto bailout;
@@ -411,7 +411,7 @@ int mdbx_replace_ex(MDBX_txn *txn, MDBX_dbi dbi, const MDBX_val *key, MDBX_val *
       }
 
       if (is_modifable(txn, page)) {
-        if (new_data && cmp_lenfast(&present_data, new_data) == 0) {
+        if (new_data && eq_fast(&present_data, new_data)) {
           /* если данные совпадают, то ничего делать не надо */
           *old_data = *new_data;
           goto bailout;

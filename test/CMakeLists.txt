@@ -1,7 +1,8 @@
 # Copyright (c) 2015-2026 Леонид Юрьев aka Leonid Yuriev <leo@yuriev.ru>. All Rights Reserved.
 #
 # THE CONTENTS OF THIS PROJECT ARE PROPRIETARY AND CONFIDENTIAL.
-# UNAUTHORIZED COPYING, TRANSFERRING OR REPRODUCTION OF THE CONTENTS OF THIS PROJECT, VIA ANY MEDIUM IS STRICTLY PROHIBITED.
+# UNAUTHORIZED COPYING, TRANSFERRING OR REPRODUCTION OF THE CONTENTS OF THIS PROJECT,
+# VIA ANY MEDIUM IS STRICTLY PROHIBITED.
 #
 # The receipt or possession of the source code and/or any parts thereof does not convey or imply any right to use them
 # for any purpose other than the purpose for which they were provided to you.
@@ -12,7 +13,8 @@
 # whether in an action of contract, tort or otherwise, arising from, out of or in connection with the software
 # or the use or other dealings in the software.
 #
-# The above copyright notice and this permission notice shall be included in all copies or substantial portions of the software.
+# The above copyright notice and this permission notice shall be included in all copies
+# or substantial portions of the software.
 #
 
 if(NOT CMAKE_CXX_COMPILER_LOADED)
@@ -237,24 +239,17 @@ else()
       FAIL_REGULAR_EXPRESSION "cooperative mode"
       REQUIRED_FILES smoke.db-copy)
 
-    add_test(NAME smoke_copy_asis COMMAND ${MDBX_OUTPUT_DIR}/mdbx_copy smoke.db copy_asis.db)
+    add_test(NAME smoke_copy_asis COMMAND ${MDBX_OUTPUT_DIR}/mdbx_copy -f smoke.db copy_asis.db)
     set_tests_properties(smoke_copy_asis PROPERTIES
       DEPENDS smoke
       TIMEOUT 60
       REQUIRED_FILES smoke.db)
 
-    add_test(NAME smoke_copy_compactify COMMAND ${MDBX_OUTPUT_DIR}/mdbx_copy -c smoke.db copy_compactify.db)
+    add_test(NAME smoke_copy_compactify COMMAND ${MDBX_OUTPUT_DIR}/mdbx_copy -f -c smoke.db copy_compactify.db)
     set_tests_properties(smoke_copy_compactify PROPERTIES
       DEPENDS smoke
       TIMEOUT 60
       REQUIRED_FILES smoke.db)
-  endif()
-
-  if(NOT CMAKE_VERSION VERSION_LESS 3.7)
-    add_test(NAME remove_copy_destinations COMMAND ${CMAKE_COMMAND} -E rm -f copy_compactify.db copy_asis.db)
-    set_tests_properties(remove_copy_destinations PROPERTIES FIXTURES_SETUP cleanup_copies)
-    set_tests_properties(smoke_copy_asis PROPERTIES FIXTURES_REQUIRED cleanup_copies)
-    set_tests_properties(smoke_copy_compactify PROPERTIES FIXTURES_REQUIRED cleanup_copies)
   endif()
 
   add_test(
@@ -311,6 +306,7 @@ else()
       add_extra_test(dupfix_addodd SOURCE extra/dupfix_addodd.c)
       add_extra_test(dbi_nested_txn SOURCE extra/dbi_nested_txn.c)
     endif()
+    add_extra_test(details_rkl SOURCE extra/details_rkl.c)
     add_extra_test(rename_dbi SOURCE extra/rename_dbi.c)
     if(MDBX_BUILD_CXX)
       if(NOT WIN32 OR NOT MDBX_CXX_STANDARD LESS 17)
@@ -320,10 +316,14 @@ else()
         add_extra_test(dupfix_multiple TIMEOUT 10800)
         add_extra_test(doubtless_positioning TIMEOUT 10800)
         add_extra_test(crunched_delete TIMEOUT 10800)
+        add_extra_test(distance_scroll_distribute TIMEOUT 10800)
         add_extra_test(dbi)
         add_extra_test(open)
         add_extra_test(txn)
         add_extra_test(buffers)
+        add_extra_test(bunches_removal)
+        add_extra_test(get_cached)
+        add_extra_test(reverse_insertions)
       endif()
       add_extra_test(hex_base64_base58)
     endif()

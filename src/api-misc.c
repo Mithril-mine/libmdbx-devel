@@ -37,7 +37,7 @@ int mdbx_dbi_sequence(MDBX_txn *txn, MDBX_dbi dbi, uint64_t *result, uint64_t in
     return LOG_IFERR(rc);
 
   if (unlikely(txn->dbi_state[dbi] & DBI_STALE)) {
-    rc = tbl_fetch(txn, dbi);
+    rc = tbl_refresh_absent2baddbi(txn, dbi);
     if (unlikely(rc != MDBX_SUCCESS))
       return LOG_IFERR(rc);
   }
@@ -47,14 +47,14 @@ int mdbx_dbi_sequence(MDBX_txn *txn, MDBX_dbi dbi, uint64_t *result, uint64_t in
     *result = dbs->sequence;
 
   if (likely(increment > 0)) {
-    if (unlikely(dbi == FREE_DBI || (txn->flags & MDBX_TXN_RDONLY) != 0))
+    if (unlikely(dbi == FREE_DBI || (txn->flags & txn_ro_both) != 0))
       return MDBX_EACCESS;
 
     uint64_t new = dbs->sequence + increment;
     if (unlikely(new < increment))
       return MDBX_RESULT_TRUE;
 
-    tASSERT(txn, new > dbs->sequence);
+    cASSERT0(txn, new > dbs->sequence);
     if ((txn->dbi_state[dbi] & DBI_DIRTY) == 0) {
       txn->flags |= MDBX_TXN_DIRTY;
       txn->dbi_state[dbi] |= DBI_DIRTY;
@@ -68,7 +68,7 @@ int mdbx_dbi_sequence(MDBX_txn *txn, MDBX_dbi dbi, uint64_t *result, uint64_t in
          *  - при обновлении maindb.sequence высталяется DBI_DIRTY, что приведет
          *    к обновлению meta.maindb.mod_txnid = current_txnid;
          *  - однако, если в само дерево maindb обновление не вносились и оно
-         *    не пустое, то корневая страницы останеться с прежним txnid и из-за
+         *    не пустое, то корневая страницы останется с прежним txnid и из-за
          *    этого ложно сработает coherency_check().
          *
          * Временное (текущее) решение: Принудительно обновляем корневую
@@ -103,22 +103,22 @@ int mdbx_dbi_sequence(MDBX_txn *txn, MDBX_dbi dbi, uint64_t *result, uint64_t in
 }
 
 int mdbx_cmp(const MDBX_txn *txn, MDBX_dbi dbi, const MDBX_val *a, const MDBX_val *b) {
-  eASSERT(nullptr, txn->signature == txn_signature);
-  tASSERT(txn, (dbi_state(txn, dbi) & DBI_VALID) && !dbi_changed(txn, dbi));
-  tASSERT(txn, dbi < txn->env->n_dbi && (txn->env->dbs_flags[dbi] & DB_VALID) != 0);
+  tASSERT0(txn, txn->signature == txn_signature);
+  tASSERT0(txn, (dbi_state(txn, dbi) & DBI_VALID) && !dbi_changed(txn, dbi));
+  tASSERT0(txn, dbi < txn->env->n_dbi && (txn->env->dbs_flags[dbi] & DB_VALID) != 0);
   return txn->env->kvs[dbi].clc.k.cmp(a, b);
 }
 
 int mdbx_dcmp(const MDBX_txn *txn, MDBX_dbi dbi, const MDBX_val *a, const MDBX_val *b) {
-  eASSERT(nullptr, txn->signature == txn_signature);
-  tASSERT(txn, (dbi_state(txn, dbi) & DBI_VALID) && !dbi_changed(txn, dbi));
-  tASSERT(txn, dbi < txn->env->n_dbi && (txn->env->dbs_flags[dbi] & DB_VALID));
+  tASSERT0(txn, txn->signature == txn_signature);
+  tASSERT0(txn, (dbi_state(txn, dbi) & DBI_VALID) && !dbi_changed(txn, dbi));
+  tASSERT0(txn, dbi < txn->env->n_dbi && (txn->env->dbs_flags[dbi] & DB_VALID));
   return txn->env->kvs[dbi].clc.v.cmp(a, b);
 }
 
-__cold MDBX_cmp_func *mdbx_get_keycmp(MDBX_db_flags_t flags) { return builtin_keycmp(flags); }
+__cold MDBX_cmp_func mdbx_get_keycmp(MDBX_db_flags_t flags) { return builtin_keycmp(flags); }
 
-__cold MDBX_cmp_func *mdbx_get_datacmp(MDBX_db_flags_t flags) { return builtin_datacmp(flags); }
+__cold MDBX_cmp_func mdbx_get_datacmp(MDBX_db_flags_t flags) { return builtin_datacmp(flags); }
 
 /*----------------------------------------------------------------------------*/
 
@@ -146,8 +146,7 @@ __cold const char *mdbx_liberr2str(int errnum) {
       " or Operation system not supported such operations",
       "MDBX_INCOMPATIBLE: Environment or database is not compatible"
       " with the requested operation or the specified flags",
-      "MDBX_BAD_RSLOT: Invalid reuse of reader locktable slot,"
-      " e.g. read-transaction already run for current thread",
+      "MDBX_BAD_RSLOT: Reader locktable slot was unexpectly reused or cleared by an enemy thread",
       "MDBX_BAD_TXN: Transaction is not valid for requested operation,"
       " e.g. had errored and be must aborted, has a child, or is invalid",
       "MDBX_BAD_VALSIZE: Invalid size or alignment of key or data"
@@ -200,6 +199,9 @@ __cold const char *mdbx_liberr2str(int errnum) {
            " of recycling old MVCC snapshots";
   case MDBX_MVCC_RETARDED:
     return "MDBX_MVCC_RETARDED: MVCC snapshot used by parked transaction was bygone";
+  case MDBX_LAGGARD_READER:
+    return "An operation cannot continue because a lagging reader is interfering with the"
+           " reclaiming of GC and old MVCC-snapshots";
   default:
     return nullptr;
   }

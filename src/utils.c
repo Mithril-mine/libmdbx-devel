@@ -3,9 +3,20 @@
 
 #include "internals.h"
 
+MDBX_NOTHROW_CONST_FUNCTION MDBX_MAYBE_UNUSED unsigned ceil_log2n(size_t value_uintptr) {
+  ASSERT(value_uintptr > 0 && value_uintptr < INT32_MAX);
+  value_uintptr -= 1;
+  value_uintptr |= value_uintptr >> 1;
+  value_uintptr |= value_uintptr >> 2;
+  value_uintptr |= value_uintptr >> 4;
+  value_uintptr |= value_uintptr >> 8;
+  value_uintptr |= value_uintptr >> 16;
+  return log2n_powerof2(value_uintptr + 1);
+}
+
 MDBX_MAYBE_UNUSED MDBX_NOTHROW_CONST_FUNCTION unsigned log2n_powerof2(size_t value_uintptr) {
-  assert(value_uintptr > 0 && value_uintptr < INT32_MAX && is_powerof2(value_uintptr));
-  assert((value_uintptr & -(intptr_t)value_uintptr) == value_uintptr);
+  ASSERT(value_uintptr > 0 && value_uintptr < INT32_MAX && is_powerof2(value_uintptr));
+  ASSERT((value_uintptr & -(intptr_t)value_uintptr) == value_uintptr);
   const uint32_t value_uint32 = (uint32_t)value_uintptr;
 #if __GNUC_PREREQ(4, 1) || __has_builtin(__builtin_ctz)
   STATIC_ASSERT(sizeof(value_uint32) <= sizeof(unsigned));
@@ -29,4 +40,75 @@ MDBX_NOTHROW_CONST_FUNCTION uint64_t rrxmrrxmsx_0(uint64_t v) {
   v ^= (v << 40 | v >> 24) ^ (v << 15 | v >> 49);
   v *= UINT64_C(0x9FB21C651E98DF25);
   return v ^ v >> 28;
+}
+
+__cold char *ratio2digits(const uint64_t v, const uint64_t d, ratio2digits_buffer_t *const buffer, int precision) {
+  ASSERT(d > 0 && precision < 20);
+  char *const dot = buffer->string + 21;
+  uint64_t i = v / d, f = v % d, m = d;
+
+  char *tail = dot;
+  bool carry = m - f < m / 2;
+  if (precision > 0) {
+    *tail = '.';
+    do {
+      while (unlikely(f > UINT64_MAX / 10)) {
+        f >>= 1;
+        m >>= 1;
+      }
+      f *= 10;
+      ASSERT(tail > buffer->string && tail < ARRAY_END(buffer->string) - 1);
+      *++tail = '0' + (char)(f / m);
+      f %= m;
+    } while (--precision && tail < ARRAY_END(buffer->string) - 1);
+
+    carry = m - f < m / 2;
+    for (char *scan = tail; carry && scan > dot; --scan)
+      *scan = (carry = *scan == '9') ? '0' : *scan + 1;
+  }
+  ASSERT(tail > buffer->string && tail < ARRAY_END(buffer->string) - 1);
+  *++tail = '\0';
+
+  char *head = dot;
+  i += carry;
+  while (i > 9) {
+    ASSERT(head > buffer->string && head < ARRAY_END(buffer->string));
+    *--head = '0' + (char)(i % 10);
+    i /= 10;
+  }
+  ASSERT(head > buffer->string && head < ARRAY_END(buffer->string));
+  *--head = '0' + (char)i;
+
+  return head;
+}
+
+__cold char *ratio2percent(uint64_t value, uint64_t whole, ratio2digits_buffer_t *buffer) {
+  while (unlikely(value > UINT64_MAX / 100)) {
+    value >>= 1;
+    whole >>= 1;
+  }
+  const bool rough = whole >= value && (!value || value > whole / 16);
+  return ratio2digits(value * 100, whole, buffer, rough ? 1 : 2);
+}
+
+MDBX_MAYBE_UNUSED bin128_t mul64x64_128_fallback(uint64_t x, uint64_t y) {
+  bin128_t r;
+#if MDBX_HAVE_NATIVE_U128 && MDBX_CHECKING < 1
+  r.u128 = x;
+  r.u128 *= y;
+#else
+  const uint64_t xl = x & UINT32_C(0xFFFFffff);
+  const uint64_t xh = x >> 32;
+  const uint64_t yl = y & UINT32_C(0xFFFFffff);
+  const uint64_t yh = y >> 32;
+
+  const uint64_t ll = xl * yl;
+  const uint64_t hh = xh * yh;
+  const uint64_t hl = xh * yl + (ll >> 32);
+  const uint64_t lh = xl * yh + (hl & UINT32_C(0xFFFFffff));
+
+  r.l = (lh << 32) | (ll & UINT32_C(0xFFFFffff));
+  r.h = hh + (hl >> 32) + (lh >> 32);
+#endif
+  return r;
 }

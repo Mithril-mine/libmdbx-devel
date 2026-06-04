@@ -9,6 +9,13 @@
 
 #include "essentials.h"
 
+#ifdef _MSC_VER
+#pragma warning(push, 1)
+#if _MSC_VER > 1913
+#pragma warning(disable : 5054) /* deprecated between enumerations of different types */
+#endif
+#endif /* MSVC */
+
 typedef struct dp dp_t;
 typedef struct dpl dpl_t;
 typedef struct kvx kvx_t;
@@ -34,20 +41,16 @@ typedef struct page_get_result {
   int err;
 } pgr_t;
 
-typedef struct node_search_result {
-  node_t *node;
-  bool exact;
-} nsr_t;
-
 typedef struct bind_reader_slot_result {
   int err;
-  reader_slot_t *rslot;
+  reader_slot_t *slot;
 } bsr_t;
 
 #include "atomics-ops.h"
-#include "proto.h"
+#include "rkl.h"
 #include "txl.h"
 #include "unaligned.h"
+
 #if defined(_WIN32) || defined(_WIN64)
 #include "windows-import.h"
 #endif /* Windows */
@@ -65,7 +68,10 @@ enum signatures {
 /* An dirty-page list item is an pgno/pointer pair. */
 struct dp {
   page_t *ptr;
-  pgno_t pgno, npages;
+  pgno_t pgno;
+#if MDBX_DPL_CACHE_NPAGES
+  pgno_t npages;
+#endif /* MDBX_DPL_CACHE_NPAGES */
 };
 
 enum dpl_rules {
@@ -90,10 +96,22 @@ struct dpl {
 /*----------------------------------------------------------------------------*/
 /* Internal structures */
 
+typedef struct search_foliage_result {
+  node_t *node;
+  bool exact;
+} sfr_t;
+
+typedef size_t (*MDBX_search_branch)(const MDBX_cursor *mc, const MDBX_val *key);
+typedef sfr_t (*MDBX_search_foliage)(MDBX_cursor *mc, const MDBX_val *key);
+
 /* Comparing/ordering and length constraints */
 typedef struct clc {
-  MDBX_cmp_func *cmp; /* comparator */
-  size_t lmin, lmax;  /* min/max length constraints */
+  MDBX_cmp_func cmp; /* comparator */
+  size_t lmin, lmax; /* min/max length constraints */
+  MDBX_search_branch search_branch;
+  MDBX_search_foliage search_foliage;
+  void *reserve_node_add;
+  void *reserve_node_del;
 } clc_t;
 
 /* Вспомогательная информация о table.
@@ -120,7 +138,7 @@ typedef struct clc {
  *    а clc[1] для значений, причем компаратор значений для dupsort-курсора
  *    будет попадать на MDBX_val с именем, что приведет к SIGSEGV при попытке
  *    использования такого компаратора.
- *  - размер kvx_t становится равным 8 словам.
+ *  - размер kvx_t становится равным 8 словам (16 словам после добавление функций поиска и т.п).
  *
  * Трюки и прочая экономия на спичках:
  *  - не храним dbi внутри курсора, вместо этого вычисляем его как разницу между
@@ -129,33 +147,38 @@ typedef struct clc {
  *    так как dbi требуется для последующего доступа к массивам в транзакции,
  *    т.е. при вычислении dbi разыменовывается тот-же указатель на txn
  *    и читается та же кэш-линия с указателями. */
-typedef struct clc2 {
+typedef struct clc_couple {
   clc_t k; /* для ключей */
   clc_t v; /* для значений */
-} clc2_t;
+} clc_couple_t;
 
 struct kvx {
-  clc2_t clc;
+  clc_couple_t clc;
   MDBX_val name; /* имя table */
 };
 
 /* Non-shared DBI state flags inside transaction */
 enum dbi_state {
-  DBI_DIRTY = 0x01 /* DB was written in this txn */,
-  DBI_STALE = 0x02 /* Named-DB record is older than txnID */,
-  DBI_FRESH = 0x04 /* Named-DB handle opened in this txn */,
-  DBI_CREAT = 0x08 /* Named-DB handle created in this txn */,
+  DBI_DIRTY = 0x01 /* table was written in this txn */,
+  DBI_STALE = 0x02 /* cached table record is outdated and should be reloaded/refreshed */,
+  DBI_FRESH = 0x04 /* table handle opened in this txn */,
+  DBI_CREAT = 0x08 /* table handle created in this txn */,
   DBI_VALID = 0x10 /* Handle is valid, see also DB_VALID */,
   DBI_OLDEN = 0x40 /* Handle was closed/reopened outside txn */,
   DBI_LINDO = 0x80 /* Lazy initialization done for DBI-slot */,
 };
 
 enum txn_flags {
+  txn_ro_flat = MDBX_TXN_RDONLY,
+  txn_ro_nested = UINT32_C(0x0800),
+  txn_ro_both = txn_ro_flat | txn_ro_nested,
   txn_ro_begin_flags = MDBX_TXN_RDONLY | MDBX_TXN_RDONLY_PREPARE,
   txn_rw_begin_flags = MDBX_TXN_NOMETASYNC | MDBX_TXN_NOSYNC | MDBX_TXN_TRY,
+  txn_rw_already_locked = MDBX_TXN_RDONLY_PREPARE & ~MDBX_TXN_RDONLY,
   txn_shrink_allowed = UINT32_C(0x40000000),
   txn_parked = MDBX_TXN_PARKED,
   txn_gc_drained = 0x100 /* GC was depleted up to oldest reader */,
+  txn_may_have_cursors = 0x400,
   txn_state_flags = MDBX_TXN_FINISHED | MDBX_TXN_ERROR | MDBX_TXN_DIRTY | MDBX_TXN_SPILLS | MDBX_TXN_HAS_CHILD |
                     MDBX_TXN_INVALID | txn_gc_drained
 };
@@ -203,19 +226,24 @@ struct MDBX_txn {
   /* User-settable context */
   void *userctx;
 
+#if MDBX_ENABLE_PGET_STAT
+  /* Counter of page get operations */
+  uint64_t ops_pget;
+#endif /* MDBX_ENABLE_PGET_STAT */
+
   union {
     struct {
-      /* For read txns: This thread/txn's reader table slot, or nullptr. */
-      reader_slot_t *reader;
-    } to;
+      /* For read txns: This thread/txn's slot table slot, or nullptr. */
+      reader_slot_t *slot;
+    } ro;
     struct {
       troika_t troika;
       pnl_t __restrict repnl; /* Reclaimed GC pages */
       struct {
-        /* The list of reclaimed txn-ids from GC */
-        txl_t __restrict retxl;
-        txnid_t last_reclaimed; /* ID of last used record */
-        uint64_t time_acc;
+        rkl_t reclaimed;   /* The list of reclaimed txn-ids from GC, but not cleared/deleted */
+        rkl_t ready4reuse; /* The list of reclaimed txn-ids from GC, and cleared/deleted */
+        uint64_t spent;    /* Time spent reading and searching GC */
+        rkl_t comeback;    /* The list of ids of records returned into GC during commit, etc */
       } gc;
       bool prefault_write_activated;
 #if MDBX_ENABLE_REFUND
@@ -235,7 +263,7 @@ struct MDBX_txn {
       /* The list of loose pages that became unused and may be reused
        * in this transaction, linked through `page_next()`. */
       page_t *__restrict loose_pages;
-      /* Number of loose pages (tw.loose_pages) */
+      /* Number of loose pages (wr.loose_pages) */
       size_t loose_count;
       union {
         struct {
@@ -248,8 +276,9 @@ struct MDBX_txn {
         size_t writemap_dirty_npages;
         size_t writemap_spilled_npages;
       };
+      void *preserve_parent_userctx;
       /* In write txns, next is located the array of cursors for each DB */
-    } tw;
+    } wr;
   };
 };
 
@@ -285,24 +314,40 @@ struct MDBX_cursor {
   };
   /* флаги проверки, в том числе биты для проверки типа листовых страниц. */
   uint8_t checking;
+  uint8_t pad;
 
   /* Указывает на txn->dbi_state[] для DBI этого курсора.
    * Модификатор __restrict тут полезен и безопасен в текущем понимании,
    * так как пересечение возможно только с dbi_state транзакции,
    * и происходит по-чтению до последующего изменения/записи. */
   uint8_t *__restrict dbi_state;
-  /* Связь списка отслеживания курсоров в транзакции */
+  /* Связь списка отслеживания курсоров в транзакции. */
   MDBX_txn *txn;
   /* Указывает на tree->dbs[] для DBI этого курсора. */
   tree_t *tree;
   /* Указывает на env->kvs[] для DBI этого курсора. */
-  clc2_t *clc;
+  clc_couple_t *clc;
   subcur_t *__restrict subcur;
   page_t *pg[CURSOR_STACK_SIZE]; /* stack of pushed pages */
   indx_t ki[CURSOR_STACK_SIZE];  /* stack of page indices */
   MDBX_cursor *next;
   /* Состояние на момент старта вложенной транзакции */
   MDBX_cursor *backup;
+#ifndef MDBX_DEBUG_SEARCH_DISPATCHING
+#define MDBX_DEBUG_SEARCH_DISPATCHING MDBX_DEBUG
+#endif /* MDBX_DEBUG_SEARCH_DISPATCHING */
+
+#if MDBX_DEBUG_SEARCH_DISPATCHING
+  unsigned search_step_counter;
+#define MDBX_CURSOR_STC_INC(cursor)                                                                                    \
+  do                                                                                                                   \
+    ((MDBX_cursor *)(cursor))->search_step_counter += 1;                                                               \
+  while (0)
+#define MDBX_CURSOR_STC_GET(cursor) ((cursor)->search_step_counter)
+#else
+#define MDBX_CURSOR_STC_INC(cursor) __noop
+#define MDBX_CURSOR_STC_GET(cursor) (0)
+#endif /* MDBX_DEBUG_SEARCH_DISPATCHING */
 };
 
 struct inner_cursor {
@@ -349,6 +394,7 @@ struct MDBX_env {
   mdbx_filehandle_t dsync_fd, fd4meta;
 #if defined(_WIN32) || defined(_WIN64)
   HANDLE dxb_lock_event;
+  HANDLE lck_lock_event;
 #endif                  /* Windows */
   osal_mmap_t lck_mmap; /* The lock file */
   lck_t *lck;
@@ -360,15 +406,14 @@ struct MDBX_env {
   uint16_t subpage_reserve_prereq;
   uint16_t subpage_reserve_limit;
   atomic_pgno_t mlocked_pgno;
-  uint8_t ps2ln;                                /* log2 of DB page size */
-  int8_t stuck_meta;                            /* recovery-only: target meta page or less that zero */
-  uint16_t merge_threshold, merge_threshold_gc; /* pages emptier than this are
-                                                   candidates for merging */
-  unsigned max_readers;                         /* size of the reader table */
-  MDBX_dbi max_dbi;                             /* size of the DB table */
-  uint32_t pid;                                 /* process ID of this env */
-  osal_thread_key_t me_txkey;                   /* thread-key for readers */
-  struct {                                      /* path to the DB files */
+  uint8_t ps2ln;              /* log2 of DB page size */
+  int8_t stuck_meta;          /* recovery-only: target meta page or less that zero */
+  uint16_t merge_threshold;   /* pages emptier than this are candidates for merging */
+  unsigned max_readers;       /* size of the reader table */
+  MDBX_dbi max_dbi;           /* size of the DB table */
+  mdbx_pid_t pid;             /* process ID of this env */
+  osal_thread_key_t me_txkey; /* thread-key for readers */
+  struct {                    /* path to the DB files */
     pathchar_t *lck, *dxb, *specified;
     void *buffer;
   } pathname;
@@ -379,9 +424,9 @@ struct MDBX_env {
   mdbx_atomic_uint32_t *dbi_seqs; /* array of dbi sequence numbers */
   unsigned maxgc_large1page;      /* Number of pgno_t fit in a single large page */
   unsigned maxgc_per_branch;
-  uint32_t registered_reader_pid; /* have liveness lock in reader table */
-  void *userctx;                  /* User-settable context */
-  MDBX_hsr_func *hsr_callback;    /* Callback for kicking laggard readers */
+  mdbx_pid_t registered_reader_pid; /* have liveness lock in reader table */
+  void *userctx;                    /* User-settable context */
+  MDBX_hsr_func hsr_callback;       /* Callback for kicking laggard readers */
   size_t madv_threshold;
 
   struct {
@@ -394,7 +439,8 @@ struct MDBX_env {
     uint8_t spill_max_denominator;
     uint8_t spill_min_denominator;
     uint8_t spill_parent4child_denominator;
-    unsigned merge_threshold_16dot16_percent;
+    uint16_t merge_threshold_dot16;
+    uint16_t split_reserve_dot16;
 #if !(defined(_WIN32) || defined(_WIN64))
     unsigned writethrough_threshold;
 #endif /* Windows */
@@ -445,9 +491,6 @@ struct MDBX_env {
 
   /* -------------------------------------------------------------- debugging */
 
-#if MDBX_DEBUG
-  MDBX_assert_func *assert_func; /*  Callback for assertion failures */
-#endif
 #ifdef ENABLE_MEMCHECK
   int valgrind_handle;
 #endif
@@ -465,6 +508,9 @@ struct MDBX_env {
   /* --------------------------------------------------- mostly volatile part */
 
   MDBX_txn *txn; /* current write transaction */
+  struct {
+    txnid_t detent;
+  } gc;
   osal_fastmutex_t dbi_lock;
   unsigned n_dbi; /* number of DBs opened */
 
@@ -474,13 +520,14 @@ struct MDBX_env {
   osal_ioring_t ioring;
 
 #if defined(_WIN32) || defined(_WIN64)
-  osal_srwlock_t remap_guard;
+  osal_srwlock_t remap_lock;
   /* Workaround for LockFileEx and WriteFile multithread bug */
-  CRITICAL_SECTION windowsbug_lock;
+  CRITICAL_SECTION lck_event_cs;
+  CRITICAL_SECTION dxb_event_cs;
   char *pathname_char; /* cache of multi-byte representation of pathname
                              to the DB files */
 #else
-  osal_fastmutex_t remap_guard;
+  osal_fastmutex_t remap_lock;
 #endif
 
   /* ------------------------------------------------- stub for lck-less mode */
@@ -533,28 +580,30 @@ MDBX_MAYBE_UNUSED static void static_checks(void) {
   STATIC_ASSERT(offsetof(lck_t, wrt_lock) % MDBX_CACHELINE_SIZE == 0);
   STATIC_ASSERT(offsetof(lck_t, rdt_lock) % MDBX_CACHELINE_SIZE == 0);
 #else
-  STATIC_ASSERT(offsetof(lck_t, cached_oldest) % MDBX_CACHELINE_SIZE == 0);
+  STATIC_ASSERT(offsetof(lck_t, cached_oldest_txnid) % MDBX_CACHELINE_SIZE == 0);
   STATIC_ASSERT(offsetof(lck_t, rdt_length) % MDBX_CACHELINE_SIZE == 0);
 #endif /* MDBX_LOCKING */
+#if FLEXIBLE_ARRAY_MEMBERS
   STATIC_ASSERT(offsetof(lck_t, rdt) % MDBX_CACHELINE_SIZE == 0);
+#endif /* FLEXIBLE_ARRAY_MEMBERS */
 
 #if FLEXIBLE_ARRAY_MEMBERS
   STATIC_ASSERT(NODESIZE == offsetof(node_t, payload));
   STATIC_ASSERT(PAGEHDRSZ == offsetof(page_t, entries));
 #endif /* FLEXIBLE_ARRAY_MEMBERS */
-  STATIC_ASSERT(sizeof(clc_t) == 3 * sizeof(void *));
-  STATIC_ASSERT(sizeof(kvx_t) == 8 * sizeof(void *));
+  STATIC_ASSERT(sizeof(clc_t) == 7 * sizeof(void *));
+  STATIC_ASSERT(sizeof(kvx_t) == 16 * sizeof(void *));
 
-#if MDBX_WORDBITS == 64
-#define KVX_SIZE_LN2 6
-#else
-#define KVX_SIZE_LN2 5
-#endif
+#define KVX_SIZE_LN2 (MDBX_WORDBITS_LN2 + 1)
   STATIC_ASSERT(sizeof(kvx_t) == (1u << KVX_SIZE_LN2));
 }
 #endif /* Disabled for MSVC 19.0 (VisualStudio 2015) */
 
 /******************************************************************************/
+
+#ifndef __cplusplus
+
+#include "proto.h"
 
 #include "node.h"
 
@@ -565,6 +614,8 @@ MDBX_MAYBE_UNUSED static void static_checks(void) {
 #include "cursor.h"
 
 #include "dpl.h"
+
+#include "dml.h"
 
 #include "gc.h"
 
@@ -578,8 +629,14 @@ MDBX_MAYBE_UNUSED static void static_checks(void) {
 
 #include "page-ops.h"
 
-#include "tls.h"
+#include "rthc.h"
 
 #include "walk.h"
 
 #include "sort.h"
+
+#endif /* !__cplusplus */
+
+#ifdef _MSC_VER
+#pragma warning(pop)
+#endif /* MSVC */

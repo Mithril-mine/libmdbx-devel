@@ -3,8 +3,11 @@
 
 #include "internals.h"
 
+/*------------------------------------------------------------------------------
+ logging */
+
 __cold void debug_log_va(int level, const char *function, int line, const char *fmt, va_list args) {
-  ENSURE(nullptr, osal_fastmutex_acquire(&globals.debug_lock) == 0);
+  ENSURE(osal_fastmutex_acquire(&globals.debug_lock) == 0);
   if (globals.logger.ptr) {
     if (globals.logger_buffer == nullptr)
       globals.logger.fmt(level, function, line, fmt, args);
@@ -46,7 +49,7 @@ __cold void debug_log_va(int level, const char *function, int line, const char *
     fflush(stderr);
 #endif
   }
-  ENSURE(nullptr, osal_fastmutex_release(&globals.debug_lock) == 0);
+  ENSURE(osal_fastmutex_release(&globals.debug_lock) == 0);
 }
 
 __cold void debug_log(int level, const char *function, int line, const char *fmt, ...) {
@@ -57,7 +60,7 @@ __cold void debug_log(int level, const char *function, int line, const char *fmt
 }
 
 __cold void log_error(const int err, const char *func, unsigned line) {
-  assert(err != MDBX_SUCCESS);
+  ASSERT(err != MDBX_SUCCESS);
   if (unlikely(globals.loglevel >= MDBX_LOG_DEBUG)) {
     const bool is_error = err != MDBX_RESULT_TRUE && err != MDBX_NOTFOUND;
     char buf[256];
@@ -77,7 +80,7 @@ __cold const char *mdbx_dump_val(const MDBX_val *val, char *const buf, const siz
 
   if (!val->iov_base) {
     int len = snprintf(buf, bufsize, "<nullptr.%zu>", val->iov_len);
-    assert(len > 0 && (size_t)len < bufsize);
+    ASSERT(len > 0 && (size_t)len < bufsize);
     (void)len;
     return buf;
   }
@@ -92,7 +95,7 @@ __cold const char *mdbx_dump_val(const MDBX_val *val, char *const buf, const siz
 
   if (is_ascii) {
     int len = snprintf(buf, bufsize, "%.*s", (val->iov_len > INT_MAX) ? INT_MAX : (int)val->iov_len, data);
-    assert(len > 0 && (size_t)len < bufsize);
+    ASSERT(len > 0 && (size_t)len < bufsize);
     (void)len;
   } else {
     char *const detent = buf + bufsize - 2;
@@ -110,8 +113,57 @@ __cold const char *mdbx_dump_val(const MDBX_val *val, char *const buf, const siz
   return buf;
 }
 
+__cold static int setup_debug(MDBX_log_level_t level, MDBX_debug_flags_t flags, union logger_union logger, char *buffer,
+                              size_t buffer_size) {
+  ENSURE(osal_fastmutex_acquire(&globals.debug_lock) == 0);
+
+  const int rc = globals.runtime_flags | (globals.loglevel << 16);
+  if (level != MDBX_LOG_DONTCHANGE) {
+    level = clamp_unsigned(level, MDBX_LOG_FATAL, (MDBX_DEBUG > 0) ? MDBX_LOG_EXTRA : MDBX_LOG_NOTICE);
+    globals.loglevel = (uint8_t)level;
+  }
+
+  if (flags != MDBX_DBG_DONTCHANGE) {
+    flags &= MDBX_DBG_DUMP | MDBX_DBG_LEGACY_MULTIOPEN | MDBX_DBG_LEGACY_OVERLAP | MDBX_DBG_DONT_UPGRADE
+#if MDBX_DEBUG > 0
+             | MDBX_DBG_JITTER
+#endif
+#if MDBX_CHECKING > 1
+             | MDBX_DBG_ASSERT
+#endif
+#if MDBX_CHECKING > 2
+             | MDBX_DBG_AUDIT
+#endif
+        ;
+    globals.runtime_flags = (uint8_t)flags;
+  }
+
+  ASSERT(MDBX_LOGGER_DONTCHANGE == ((MDBX_debug_func)(intptr_t)-1));
+  if (logger.ptr != (void *)((intptr_t)-1)) {
+    globals.logger.ptr = logger.ptr;
+    globals.logger_buffer = buffer;
+    globals.logger_buffer_size = buffer_size;
+  }
+
+  ENSURE(osal_fastmutex_release(&globals.debug_lock) == 0);
+  return rc;
+}
+
+__cold int mdbx_setup_debug_nofmt(MDBX_log_level_t level, MDBX_debug_flags_t flags, MDBX_debug_func_nofmt logger,
+                                  char *buffer, size_t buffer_size) {
+  union logger_union thunk;
+  thunk.nofmt = (logger && buffer && buffer_size) ? logger : MDBX_LOGGER_NOFMT_DONTCHANGE;
+  return setup_debug(level, flags, thunk, buffer, buffer_size);
+}
+
+__cold int mdbx_setup_debug(MDBX_log_level_t level, MDBX_debug_flags_t flags, MDBX_debug_func logger) {
+  union logger_union thunk;
+  thunk.fmt = logger;
+  return setup_debug(level, flags, thunk, nullptr, 0);
+}
+
 /*------------------------------------------------------------------------------
- LY: debug stuff */
+ debug stuff */
 
 __cold const char *pagetype_caption(const uint8_t type, char buf4unknown[16]) {
   switch (type) {
@@ -208,43 +260,58 @@ __cold void page_list(page_t *mp) {
           total, page_room(mp));
 }
 
-__cold static int setup_debug(MDBX_log_level_t level, MDBX_debug_flags_t flags, union logger_union logger, char *buffer,
-                              size_t buffer_size) {
-  ENSURE(nullptr, osal_fastmutex_acquire(&globals.debug_lock) == 0);
+#if MDBX_CHECKING >= 0
 
-  const int rc = globals.runtime_flags | (globals.loglevel << 16);
-  if (level != MDBX_LOG_DONTCHANGE)
-    globals.loglevel = (uint8_t)level;
+__cold const char *object2class(const void *ptr) {
+  if (!ptr)
+    return "null";
 
-  if (flags != MDBX_DBG_DONTCHANGE) {
-    flags &=
-#if MDBX_DEBUG
-        MDBX_DBG_ASSERT | MDBX_DBG_AUDIT | MDBX_DBG_JITTER |
-#endif
-        MDBX_DBG_DUMP | MDBX_DBG_LEGACY_MULTIOPEN | MDBX_DBG_LEGACY_OVERLAP | MDBX_DBG_DONT_UPGRADE;
-    globals.runtime_flags = (uint8_t)flags;
+  int32_t snap_signature = 0;
+  if (!osal_safe_peek_uint32(ptr, &snap_signature))
+    return "bad";
+
+  switch (snap_signature) {
+  case env_signature:
+    return "env";
+  case txn_signature:
+    return "txn";
+  case cur_signature_live:
+    return "cursor.live";
+  case cur_signature_ready4dispose:
+    return "cursor.r4clo";
+  case cur_signature_wait4eot:
+    return "cursor.w4eot";
   }
 
-  assert(MDBX_LOGGER_DONTCHANGE == ((MDBX_debug_func *)(intptr_t)-1));
-  if (logger.ptr != (void *)((intptr_t)-1)) {
-    globals.logger.ptr = logger.ptr;
-    globals.logger_buffer = buffer;
-    globals.logger_buffer_size = buffer_size;
-  }
-
-  ENSURE(nullptr, osal_fastmutex_release(&globals.debug_lock) == 0);
-  return rc;
+  return "unknown";
 }
 
-__cold int mdbx_setup_debug_nofmt(MDBX_log_level_t level, MDBX_debug_flags_t flags, MDBX_debug_func_nofmt *logger,
-                                  char *buffer, size_t buffer_size) {
-  union logger_union thunk;
-  thunk.nofmt = (logger && buffer && buffer_size) ? logger : MDBX_LOGGER_NOFMT_DONTCHANGE;
-  return setup_debug(level, flags, thunk, buffer, buffer_size);
+MDBX_NORETURN static void fuckup(const char *msg, const char *func, unsigned line, const void *obj) {
+  const char *obj_class = object2class(obj);
+  MDBX_DTRACE5(panic, func, line, msg, obj_class, obj);
+  const MDBX_panic_func panic_func = globals.panic_func;
+  if (panic_func)
+    panic_func(msg, func, line, obj, obj_class);
+  debug_log(MDBX_LOG_FATAL, func, line, obj ? "MDBX-ASSERTION: %s (%s %p)\n" : "MDBX-ASSERTION: %s\n", msg, obj_class,
+            (void *)obj);
+  osal_panic(msg, func, line);
 }
 
-__cold int mdbx_setup_debug(MDBX_log_level_t level, MDBX_debug_flags_t flags, MDBX_debug_func *logger) {
-  union logger_union thunk;
-  thunk.fmt = logger;
-  return setup_debug(level, flags, thunk, nullptr, 0);
+__cold __noinline void panic_at_obj(const struct MDBX_panic_point *const at, const void *obj) {
+  fuckup(at->msg, at->function, at->line, obj);
 }
+
+__cold __noinline void panic_at(const struct MDBX_panic_point *const at) { panic_at_obj(at, nullptr); }
+
+__cold __noinline void panic_at_fmt(const struct MDBX_panic_point *const at, const void *obj, ...) {
+  va_list ap;
+  va_start(ap, obj);
+  char *message = nullptr;
+  const int num = osal_vasprintf(&message, at->msg, ap);
+  const char *const const_message = unlikely(num < 1 || !message) ? "<vasprintf() failed>" : message;
+  fuckup(const_message, at->function, at->line, obj);
+}
+
+__cold void mdbx_assert_fail(const char *msg, const char *func, unsigned line) { fuckup(msg, func, line, nullptr); }
+
+#endif /* MDBX_CHECKING >= 0 */

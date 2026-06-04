@@ -98,7 +98,7 @@ opened the file across all threads. The reason for this is:
    once will remove all the locks held on it, and the other instances will be
    vulnerable to corruption from other processes.
  + For compatibility with LMDB which allows multi-opening, MDBX can be
-   configured at runtime by \ref mdbx_setup_debug() with \ref MDBX_DBG_LEGACY_MULTIOPEN` option
+   configured at runtime by \ref mdbx_setup_debug() with \ref MDBX_DBG_LEGACY_MULTIOPEN option
    prior to calling other MDBX functions. In this way MDBX will track
    databases opening, detect multi-opening cases and then recover POSIX file
    locks as necessary. However, lock recovery can cause unexpected pauses,
@@ -107,27 +107,8 @@ opened the file across all threads. The reason for this is:
    database, and so on.
 
 Do not use opened MDBX environment(s) after `fork()` in a child process(es),
-MDBX will check and prevent this at critical points. Instead, ensure there is
-no open MDBX-instance(s) during fork(), or at least close it immediately after
-`fork()` in the child process and reopen if required - for instance by using
-`pthread_atfork()`. The reason for this is:
- - For competitive consistent reading, MDBX assigns a slot in the shared
-   table for each process that interacts with the database. This slot is
-   populated with process attributes, including the PID.
- - After `fork()`, in order to remain connected to a database, the child
-   process must have its own such "slot", which can't be assigned in any
-   simple and robust way another than the regular.
- - A write transaction from a parent process cannot continue in a child
-   process for obvious reasons.
- - Moreover, in a multithreaded process at the fork() moment any number of
-   threads could run in critical and/or intermediate sections of MDBX code
-   with interaction and/or racing conditions with threads from other
-   process(es). For instance: shrinking a database or copying it to a pipe,
-   opening or closing environment, beginning or finishing a transaction,
-   and so on.
- = Therefore, any solution other than simply close database (and reopen if
-   necessary) in a child process would be both extreme complicated and so
-   fragile.
+MDBX will check and prevent this at critical points. Nonetheless, If such scenarios
+are required, be sure to use the \ref mdbx_env_resurrect_after_fork().
 
 Do not start more than one transaction for a one thread. If you think
 about this, it's really strange to do something with two data snapshots

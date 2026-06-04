@@ -92,12 +92,19 @@
 #error MDBX_ENABLE_PROFGC must be defined as 0 or 1
 #endif /* MDBX_ENABLE_PROFGC */
 
-/** Controls gathering statistics for page operations. */
+/** Controls the collection of statistics on pages modification operations. */
 #ifndef MDBX_ENABLE_PGOP_STAT
 #define MDBX_ENABLE_PGOP_STAT 1
 #elif !(MDBX_ENABLE_PGOP_STAT == 0 || MDBX_ENABLE_PGOP_STAT == 1)
 #error MDBX_ENABLE_PGOP_STAT must be defined as 0 or 1
 #endif /* MDBX_ENABLE_PGOP_STAT */
+
+/** Controls the collection of statistics on pages access operations for each transaction. */
+#ifndef MDBX_ENABLE_PGET_STAT
+#define MDBX_ENABLE_PGET_STAT 1
+#elif !(MDBX_ENABLE_PGET_STAT == 0 || MDBX_ENABLE_PGET_STAT == 1)
+#error MDBX_ENABLE_PGET_STAT must be defined as 0 or 1
+#endif /* MDBX_ENABLE_PGET_STAT */
 
 /** Controls using Unix' mincore() to determine whether DB-pages
  * are resident in memory. */
@@ -120,6 +127,13 @@
 #error MDBX_ENABLE_BIGFOOT must be defined as 0 or 1
 #endif /* MDBX_ENABLE_BIGFOOT */
 
+/** Enables fast deletion by whole b-tree branches feature. */
+#ifndef MDBX_ENABLE_BUNCHES_REMOVAL
+#define MDBX_ENABLE_BUNCHES_REMOVAL 1
+#elif !(MDBX_ENABLE_BUNCHES_REMOVAL == 0 || MDBX_ENABLE_BUNCHES_REMOVAL == 1)
+#error MDBX_ENABLE_BUNCHES_REMOVAL must be MDBX_ENABLE_BUNCHES_REMOVAL as 0 or 1
+#endif /* MDBX_ENABLE_BUNCHES_REMOVAL */
+
 /** Disable some checks to reduce an overhead and detection probability of
  * database corruption to a values closer to the LMDB. */
 #ifndef MDBX_DISABLE_VALIDATION
@@ -140,8 +154,25 @@
 #error MDBX_DPL_PREALLOC_FOR_RADIXSORT must be defined as 0 or 1
 #endif /* MDBX_DPL_PREALLOC_FOR_RADIXSORT */
 
-/** Controls dirty pages tracking, spilling and persisting in `MDBX_WRITEMAP`
- * mode, i.e. disables in-memory database updating with consequent
+#ifndef MDBX_DML_PREALLOC_FOR_RADIXSORT
+#define MDBX_DML_PREALLOC_FOR_RADIXSORT 1
+#elif !(MDBX_DML_PREALLOC_FOR_RADIXSORT == 0 || MDBX_DML_PREALLOC_FOR_RADIXSORT == 1)
+#error MDBX_DML_PREALLOC_FOR_RADIXSORT must be defined as 0 or 1
+#endif /* MDBX_DML_PREALLOC_FOR_RADIXSORT */
+
+#ifndef MDBX_DPL_CACHE_NPAGES
+#if MDBX_WORDBITS >= 64
+#define MDBX_DPL_CACHE_NPAGES 1
+#else
+#define MDBX_DPL_CACHE_NPAGES 0
+#endif
+#elif !(MDBX_DPL_CACHE_NPAGES == 0 || MDBX_DPL_CACHE_NPAGES == 1)
+#error MDBX_DPL_CACHE_NPAGES must be defined as 0 or 1
+#endif /* MDBX_DPL_CACHE_NPAGES */
+
+/** Controls dirty pages tracking, spilling and persisting in `MDBX_WRITEMAP`.
+ *
+ * \details In other words, disables in-memory database updating with consequent
  * flush-to-disk/msync syscall.
  *
  * 0/OFF = Don't track dirty pages at all, don't spill ones, and use msync() to
@@ -161,35 +192,23 @@
 #error MDBX_AVOID_MSYNC must be defined as 0 or 1
 #endif /* MDBX_AVOID_MSYNC */
 
-/** Управляет механизмом поддержки разреженных наборов DBI-хендлов для снижения
- * накладных расходов при запуске и обработке транзакций. */
+/** Controls a supporting sparse sets of DBI-handles to reduce transaction startup and processing overhead. */
 #ifndef MDBX_ENABLE_DBI_SPARSE
 #define MDBX_ENABLE_DBI_SPARSE 1
 #elif !(MDBX_ENABLE_DBI_SPARSE == 0 || MDBX_ENABLE_DBI_SPARSE == 1)
 #error MDBX_ENABLE_DBI_SPARSE must be defined as 0 or 1
 #endif /* MDBX_ENABLE_DBI_SPARSE */
 
-/** Управляет механизмом отложенного освобождения и поддержки пути быстрого
- * открытия DBI-хендлов без захвата блокировок. */
+/** Controls support of lock-free opening of DBI-handles and deferred destroying ones. */
 #ifndef MDBX_ENABLE_DBI_LOCKFREE
 #define MDBX_ENABLE_DBI_LOCKFREE 1
 #elif !(MDBX_ENABLE_DBI_LOCKFREE == 0 || MDBX_ENABLE_DBI_LOCKFREE == 1)
 #error MDBX_ENABLE_DBI_LOCKFREE must be defined as 0 or 1
 #endif /* MDBX_ENABLE_DBI_LOCKFREE */
 
-/** Controls sort order of internal page number lists.
- * This mostly experimental/advanced option with not for regular MDBX users.
- * \warning The database format depend on this option and libmdbx built with
- * different option value are incompatible. */
-#ifndef MDBX_PNL_ASCENDING
-#define MDBX_PNL_ASCENDING 0
-#elif !(MDBX_PNL_ASCENDING == 0 || MDBX_PNL_ASCENDING == 1)
-#error MDBX_PNL_ASCENDING must be defined as 0 or 1
-#endif /* MDBX_PNL_ASCENDING */
-
 /** Avoid dependence from MSVC CRT and use ntdll.dll instead. */
 #ifndef MDBX_WITHOUT_MSVC_CRT
-#if defined(MDBX_BUILD_CXX) && !MDBX_BUILD_CXX
+#if defined(MDBX_BUILD_CXX) && !MDBX_BUILD_CXX && (defined(_WIN32) || defined(_WIN64))
 #define MDBX_WITHOUT_MSVC_CRT 1
 #else
 #define MDBX_WITHOUT_MSVC_CRT 0
@@ -205,7 +224,8 @@
 #error MDBX_ENVCOPY_WRITEBUF must be defined in range 65536..1073741824 and be multiple of 65536
 #endif /* MDBX_ENVCOPY_WRITEBUF */
 
-/** Forces assertion checking. */
+/** Forces assertion checking corresponding to define \ref MDBX_CHECKING as 2.
+ * \deprecated Please use \ref MDBX_CHECKING instead. */
 #ifndef MDBX_FORCE_ASSERTIONS
 #define MDBX_FORCE_ASSERTIONS 0
 #elif !(MDBX_FORCE_ASSERTIONS == 0 || MDBX_FORCE_ASSERTIONS == 1)
@@ -257,6 +277,14 @@
 #error MDBX_HAVE_BUILTIN_CPU_SUPPORTS must be defined as 0 or 1
 #endif /* MDBX_HAVE_BUILTIN_CPU_SUPPORTS */
 
+/** if enabled then treats the commit of pure (nothing changes) transactions as special
+ * cases and return \ref MDBX_RESULT_TRUE instead of \ref MDBX_SUCCESS. */
+#ifndef MDBX_NOSUCCESS_PURE_COMMIT
+#define MDBX_NOSUCCESS_PURE_COMMIT 0
+#elif !(MDBX_NOSUCCESS_PURE_COMMIT == 0 || MDBX_NOSUCCESS_PURE_COMMIT == 1)
+#error MDBX_NOSUCCESS_PURE_COMMIT must be defined as 0 or 1
+#endif /* MDBX_NOSUCCESS_PURE_COMMIT */
+
 /** if enabled then instead of the returned error `MDBX_REMOTE`, only a warning is issued, when
  * the database being opened in non-read-only mode is located in a file system exported via NFS. */
 #ifndef MDBX_ENABLE_NON_READONLY_EXPORT
@@ -264,6 +292,28 @@
 #elif !(MDBX_ENABLE_NON_READONLY_EXPORT == 0 || MDBX_ENABLE_NON_READONLY_EXPORT == 1)
 #error MDBX_ENABLE_NON_READONLY_EXPORT must be defined as 0 or 1
 #endif /* MDBX_ENABLE_NON_READONLY_EXPORT */
+
+/** Enables fake nested read-only transactions, which are much cheaper but do not restore
+ * the state of cursors in case of transaction abortion. */
+#ifndef MDBX_ENABLE_FAKE_NESTED_READONLY_TRANSACTIONS
+#define MDBX_ENABLE_FAKE_NESTED_READONLY_TRANSACTIONS 0
+#elif !(MDBX_ENABLE_FAKE_NESTED_READONLY_TRANSACTIONS == 0 || MDBX_ENABLE_FAKE_NESTED_READONLY_TRANSACTIONS == 1)
+#error MDBX_ENABLE_FAKE_NESTED_READONLY_TRANSACTIONS must be defined as 0 or 1
+#endif /* MDBX_ENABLE_FAKE_NESTED_READONLY_TRANSACTIONS */
+
+/** Forces rounding size of memory mapped regions and files to system allocation granularity rather to system page size.
+ *
+ * \details In most operating systems, RAM is allocated in larger chunks consisting of several pages.
+ * Thus, rounding up to the size of the system page, rather than the actual size of the block used
+ * for memory allocation, does not save resources, but only hides what is really happening.
+ * On the other hand, system allocation granularity may depend not only on the type of operating system,
+ * but also on the version, settings, and amount of available resources (RAM), so increasing the rounding
+ * unit may lead to doubtful and unexpected behavior for the user. */
+#ifndef MDBX_ROUNDING_TO_ALLOCATION_GRANULARITY
+#define MDBX_ROUNDING_TO_ALLOCATION_GRANULARITY 0
+#elif !(MDBX_ROUNDING_TO_ALLOCATION_GRANULARITY == 0 || MDBX_ROUNDING_TO_ALLOCATION_GRANULARITY == 1)
+#error MDBX_ROUNDING_TO_ALLOCATION_GRANULARITY must be defined as 0 or 1
+#endif /* MDBX_ROUNDING_TO_ALLOCATION_GRANULARITY */
 
 //------------------------------------------------------------------------------
 
@@ -301,7 +351,7 @@
 #else
 #define MDBX_LOCKING MDBX_LOCKING_POSIX2001
 #endif
-#elif defined(__sun) || defined(__SVR4) || defined(__svr4__)
+#elif defined(__sun) || defined(__SVR4) || defined(__svr4__) || defined(__HAIKU__)
 #define MDBX_LOCKING MDBX_LOCKING_POSIX1988
 #else
 #define MDBX_LOCKING MDBX_LOCKING_SYSV
@@ -366,6 +416,16 @@
 #else
 #define MDBX_USE_FALLOCATE_CONFIG MDBX_STRINGIFY(MDBX_USE_FALLOCATE)
 #endif /* MDBX_USE_FALLOCATE */
+
+#ifndef MDBX_HISTOGRAM_USING_128BIT
+#if MDBX_WORDBITS >= 64
+#define MDBX_HISTOGRAM_USING_128BIT 1
+#else
+#define MDBX_HISTOGRAM_USING_128BIT 0
+#endif
+#elif !(MDBX_HISTOGRAM_USING_128BIT == 0 || MDBX_HISTOGRAM_USING_128BIT == 1)
+#error MDBX_HISTOGRAM_USING_128BIT must be defined as 0 or 1
+#endif /* MDBX_HISTOGRAM_USING_128BIT */
 
 //------------------------------------------------------------------------------
 
@@ -507,45 +567,77 @@
 #ifndef MDBX_BUILD_METADATA
 #define MDBX_BUILD_METADATA ""
 #endif /* MDBX_BUILD_METADATA */
-/** @} end of build options */
-/*******************************************************************************
- *******************************************************************************
- ******************************************************************************/
 
-#ifndef DOXYGEN
-
-/* In case the MDBX_DEBUG is undefined set it corresponding to NDEBUG */
-#ifndef MDBX_DEBUG
-#ifdef NDEBUG
-#define MDBX_DEBUG 0
-#else
-#define MDBX_DEBUG 1
-#endif
-#endif
-#if MDBX_DEBUG < 0 || MDBX_DEBUG > 2
-#error "The MDBX_DEBUG must be defined to 0, 1 or 2"
-#endif /* MDBX_DEBUG */
-
-#else
-
+#ifdef DOXYGEN
 /* !!! Actually this is a fake definitions for Doxygen !!! */
 
-/** Controls enabling of debugging features.
+/** Controls enabling of debugging features,
+ * Mostly controls logging but also assertion checking via defining default value of `MDBX_CHECKING` option.
  *
- *  - `MDBX_DEBUG = 0` (by default) Disables any debugging features at all,
+ *  - `MDBX_DEBUG = 0` (by default) Disables any debugging features,
  *                     including logging and assertion controls.
  *                     Logging level and corresponding debug flags changing
- *                     by \ref mdbx_setup_debug() will not have effect.
+ *                     by \ref mdbx_setup_debug() has no effect.
  *  - `MDBX_DEBUG > 0` Enables code for the debugging features (logging,
  *                     assertions checking and internal audit).
  *                     Simultaneously sets the default logging level
  *                     to the `MDBX_DEBUG` value.
- *                     Also enables \ref MDBX_DBG_AUDIT if `MDBX_DEBUG >= 2`.
+ *                     Also enables \ref MDBX_DBG_AUDIT if `MDBX_DEBUG >= 3`.
+ *  - `MDBX_DEBUG < 0` Disables logging and error reporting at all, including any critical cases.
  *
  * \ingroup build_option */
-#define MDBX_DEBUG 0...2
+#define MDBX_DEBUG 0...3
+
+/** Controls enabling of all kind of assertion-like checks.
+ * By default `MDBX_CHECKING` defined same as `MDBX_DEBUG`, but can be overridden just by a definition.
+ *
+ *  - `MDBX_CHECKING = 0` Disables all assertion-like checks except those enforced using ENSURE() macros.
+ *                        Debug flags \ref MDBX_DBG_ASSERT and \ref MDBX_DBG_AUDIT changing
+ *                        by \ref mdbx_setup_debug() has no effect.
+ *  - `MDBX_CHECKING = 1` Enables lite-costs checks by `CHECK0()` and `ASSERT()` macros, which are then
+ *                        always active in code and NOT controlled by the \ref MDBX_DBG_ASSERT flag,
+ *                        since the cost of such control is comparable to a checks itself.
+ *                        Debug flags \ref MDBX_DBG_ASSERT and \ref MDBX_DBG_AUDIT
+ *                        changing by \ref mdbx_setup_debug() has no effect.
+ *  - `MDBX_CHECKING = 2` Additionally to `MDBX_CHECKING=1` enables medium-costs checks by `CHECK1()`,
+ *                        which are then could be activated either disabled by the \ref MDBX_DBG_ASSERT flag.
+ *  - `MDBX_CHECKING = 3` Additionally to `MDBX_CHECKING=2` enables high-costs checks by `CHECK2()`,
+ *                        which are then could be activated either disabled by the \ref MDBX_DBG_ASSERT flag.
+ *  - `MDBX_CHECKING < 0` Explicitly disables all checks, including `ENSURE()` macros.
+ *                        Debug flags \ref MDBX_DBG_ASSERT and \ref MDBX_DBG_AUDIT changing
+ *                        by \ref mdbx_setup_debug() has no effect.
+ *
+ * \ingroup build_option */
+#define MDBX_CHECKING -1...3
 
 /** Disables using of GNU libc extensions. */
 #define MDBX_DISABLE_GNU_SOURCE 0 or 1
+
+/** @} end of build options */
+/********************************************************************************/
+#else /* DOXYGEN */
+
+#ifndef MDBX_DEBUG
+#define MDBX_DEBUG 0
+#elif MDBX_DEBUG < -1 || MDBX_DEBUG > 3
+#error "The MDBX_DEBUG must be defined to -1, 0, 1, 2 or 3"
+#endif /* MDBX_DEBUG */
+
+#ifndef MDBX_CHECKING
+#if MDBX_FORCE_ASSERTIONS && MDBX_DEBUG < 2
+#define MDBX_CHECKING 2
+#else
+#define MDBX_CHECKING MDBX_DEBUG
+#endif
+#elif MDBX_CHECKING < -1 || MDBX_DEBUG > 3
+#error "The MDBX_CHECKING must be defined to -1, 0, 1, 2 or 3"
+#endif /* MDBX_CHECKING */
+
+#if MDBX_FORCE_ASSERTIONS && MDBX_CHECKING < 2
+#error "Please use one of MDBX_CHECKING either MDBX_FORCE_ASSERTIONS build options, but not both"
+#endif
+
+/* Since 2026-04-01 alternatives to MDBX_PNL_ASCENDING = 0 are no longer supported. */
+#define MDBX_PNL_ASCENDING 0
 
 #endif /* DOXYGEN */

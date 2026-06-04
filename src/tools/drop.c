@@ -6,19 +6,17 @@
 /// mdbx_drop.c - memory-mapped database delete tool
 ///
 
-#ifdef _MSC_VER
-#if _MSC_VER > 1800
-#pragma warning(disable : 4464) /* relative include path contains '..' */
-#endif
-#pragma warning(disable : 4996) /* The POSIX name is deprecated... */
-#endif                          /* _MSC_VER (warnings) */
-
-#define xMDBX_TOOLS /* Avoid using internal eASSERT() */
+#define xMDBX_TOOLS /* Avoid using internal ASSERT(), etc */
 #include "essentials.h"
 
 #include <ctype.h>
 
 #if defined(_WIN32) || defined(_WIN64)
+
+/* Bit of madness for Windows console */
+#define mdbx_strerror mdbx_strerror_ANSI2OEM
+#define mdbx_strerror_r mdbx_strerror_r_ANSI2OEM
+
 #include "wingetopt.h"
 
 static volatile BOOL user_break;
@@ -39,7 +37,7 @@ static void signal_handler(int sig) {
 #endif /* !WINDOWS */
 
 static char *prog;
-bool quiet = false;
+static bool quiet = false;
 static void usage(void) {
   fprintf(stderr,
           "usage: %s [-V] [-q] [-d] [-s name] dbpath\n"

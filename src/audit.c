@@ -24,12 +24,11 @@ static size_t audit_db_used(const tree_t *db) {
   return db ? (size_t)db->branch_pages + (size_t)db->leaf_pages + (size_t)db->large_pages : 0;
 }
 
-__cold static int audit_ex_locked(MDBX_txn *txn, size_t retired_stored, bool dont_filter_gc) {
+__cold static int audit_ex_locked(MDBX_txn *txn, const size_t retired_stored, const bool dont_filter_gc) {
   const MDBX_env *const env = txn->env;
-  size_t pending = 0;
-  if ((txn->flags & MDBX_TXN_RDONLY) == 0)
-    pending = txn->tw.loose_count + MDBX_PNL_GETSIZE(txn->tw.repnl) +
-              (MDBX_PNL_GETSIZE(txn->tw.retired_pages) - retired_stored);
+  cASSERT0(txn, (txn->flags & txn_ro_flat) == 0);
+  const size_t pending =
+      txn->wr.loose_count + pnl_size(txn->wr.repnl) + (pnl_size(txn->wr.retired_pages) - retired_stored);
 
   cursor_couple_t cx;
   int rc = cursor_init(&cx.outer, txn, FREE_DBI);
@@ -40,26 +39,27 @@ __cold static int audit_ex_locked(MDBX_txn *txn, size_t retired_stored, bool don
   MDBX_val key, data;
   rc = outer_first(&cx.outer, &key, &data);
   while (rc == MDBX_SUCCESS) {
-    if (!dont_filter_gc) {
-      if (unlikely(key.iov_len != sizeof(txnid_t))) {
-        ERROR("%s/%d: %s %u", "MDBX_CORRUPTED", MDBX_CORRUPTED, "invalid GC-key size", (unsigned)key.iov_len);
-        return MDBX_CORRUPTED;
-      }
-      txnid_t id = unaligned_peek_u64(4, key.iov_base);
-      if (txn->tw.gc.retxl ? txl_contain(txn->tw.gc.retxl, id) : (id <= txn->tw.gc.last_reclaimed))
-        goto skip;
+    if (unlikely(key.iov_len != sizeof(txnid_t))) {
+      ERROR("%s/%d: %s %u", "MDBX_CORRUPTED", MDBX_CORRUPTED, "invalid GC-key size", (unsigned)key.iov_len);
+      return MDBX_CORRUPTED;
     }
-    gc += *(pgno_t *)data.iov_base;
-  skip:
+    const txnid_t id = unaligned_peek_u64(4, key.iov_base);
+    const size_t len = *(pgno_t *)data.iov_base;
+    const bool acc = dont_filter_gc || !gc_is_reclaimed(txn, id);
+    TRACE("%s id %" PRIaTXN " len %zu", acc ? "acc" : "skip", id, len);
+    if (acc)
+      gc += len;
     rc = outer_next(&cx.outer, &key, &data, MDBX_NEXT);
   }
-  tASSERT(txn, rc == MDBX_NOTFOUND);
+  if (rc != MDBX_NOTFOUND)
+    ERROR("unexpected gc-cursor rc %d, gc %zu", rc, gc);
+  cASSERT0(txn, rc == MDBX_NOTFOUND);
 
   const size_t done_bitmap_size = (txn->n_dbi + CHAR_BIT - 1) / CHAR_BIT;
   if (txn->parent) {
-    tASSERT(txn, txn->n_dbi == txn->parent->n_dbi && txn->n_dbi == txn->env->txn->n_dbi);
+    cASSERT0(txn, txn->n_dbi == txn->parent->n_dbi && txn->n_dbi == txn->env->txn->n_dbi);
 #if MDBX_ENABLE_DBI_SPARSE
-    tASSERT(txn, txn->dbi_sparse == txn->parent->dbi_sparse && txn->dbi_sparse == txn->env->txn->dbi_sparse);
+    cASSERT0(txn, txn->dbi_sparse == txn->parent->dbi_sparse && txn->dbi_sparse == txn->env->txn->dbi_sparse);
 #endif /* MDBX_ENABLE_DBI_SPARSE */
   }
 
@@ -69,7 +69,7 @@ __cold static int audit_ex_locked(MDBX_txn *txn, size_t retired_stored, bool don
       NUM_METAS + audit_db_used(dbi_dig(txn, FREE_DBI, nullptr)) + audit_db_used(dbi_dig(txn, MAIN_DBI, nullptr));
 
   rc = mdbx_enumerate_tables(txn, audit_dbi, &ctx);
-  tASSERT(txn, rc == MDBX_SUCCESS);
+  cASSERT0(txn, rc == MDBX_SUCCESS);
 
   for (size_t dbi = CORE_DBS; dbi < txn->n_dbi; ++dbi) {
     if (ctx.done_bitmap[dbi / CHAR_BIT] & (1 << dbi % CHAR_BIT))
@@ -86,11 +86,11 @@ __cold static int audit_ex_locked(MDBX_txn *txn, size_t retired_stored, bool don
   if (pending + gc + ctx.used == txn->geo.first_unallocated)
     return MDBX_SUCCESS;
 
-  if ((txn->flags & MDBX_TXN_RDONLY) == 0)
+  if ((txn->flags & txn_ro_flat) == 0)
     ERROR("audit @%" PRIaTXN ": %zu(pending) = %zu(loose) + "
           "%zu(reclaimed) + %zu(retired-pending) - %zu(retired-stored)",
-          txn->txnid, pending, txn->tw.loose_count, MDBX_PNL_GETSIZE(txn->tw.repnl),
-          txn->tw.retired_pages ? MDBX_PNL_GETSIZE(txn->tw.retired_pages) : 0, retired_stored);
+          txn->txnid, pending, txn->wr.loose_count, pnl_size(txn->wr.repnl),
+          txn->wr.retired_pages ? pnl_size(txn->wr.retired_pages) : 0, retired_stored);
   ERROR("audit @%" PRIaTXN ": %zu(pending) + %zu"
         "(gc) + %zu(count) = %zu(total) <> %zu"
         "(allocated)",
@@ -102,8 +102,11 @@ __cold int audit_ex(MDBX_txn *txn, size_t retired_stored, bool dont_filter_gc) {
   MDBX_env *const env = txn->env;
   int rc = osal_fastmutex_acquire(&env->dbi_lock);
   if (likely(rc == MDBX_SUCCESS)) {
+    const unsigned preserve_txn_flags = txn->flags;
+    txn->flags &= ~MDBX_TXN_BLOCKED;
     rc = audit_ex_locked(txn, retired_stored, dont_filter_gc);
-    ENSURE(txn->env, osal_fastmutex_release(&env->dbi_lock) == MDBX_SUCCESS);
+    txn->flags = preserve_txn_flags;
+    ENSURE_OBJ(env, osal_fastmutex_release(&env->dbi_lock) == MDBX_SUCCESS);
   }
   return rc;
 }

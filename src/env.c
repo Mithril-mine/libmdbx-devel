@@ -27,16 +27,16 @@ int env_page_auxbuffer(MDBX_env *env) {
 __cold unsigned env_setup_pagesize(MDBX_env *env, const size_t pagesize) {
   STATIC_ASSERT(PTRDIFF_MAX > MAX_MAPSIZE);
   STATIC_ASSERT(MDBX_MIN_PAGESIZE > sizeof(page_t) + sizeof(meta_t));
-  ENSURE(env, is_powerof2(pagesize));
-  ENSURE(env, pagesize >= MDBX_MIN_PAGESIZE);
-  ENSURE(env, pagesize <= MDBX_MAX_PAGESIZE);
-  ENSURE(env, !env->page_auxbuf && env->ps != pagesize);
+  ENSURE_OBJ(env, is_powerof2(pagesize));
+  ENSURE_OBJ(env, pagesize >= MDBX_MIN_PAGESIZE);
+  ENSURE_OBJ(env, pagesize <= MDBX_MAX_PAGESIZE);
+  ENSURE_OBJ(env, !env->page_auxbuf && env->ps != pagesize);
   env->ps = (unsigned)pagesize;
 
   STATIC_ASSERT(MAX_GC1OVPAGE(MDBX_MIN_PAGESIZE) > 4);
   STATIC_ASSERT(MAX_GC1OVPAGE(MDBX_MAX_PAGESIZE) < PAGELIST_LIMIT);
   const intptr_t maxgc_ov1page = (pagesize - PAGEHDRSZ) / sizeof(pgno_t) - 1;
-  ENSURE(env, maxgc_ov1page > 42 && maxgc_ov1page < (intptr_t)PAGELIST_LIMIT / 4);
+  ENSURE_OBJ(env, maxgc_ov1page > 42 && maxgc_ov1page < (intptr_t)PAGELIST_LIMIT / 4);
   env->maxgc_large1page = (unsigned)maxgc_ov1page;
   env->maxgc_per_branch = (unsigned)((pagesize - PAGEHDRSZ) / (sizeof(indx_t) + sizeof(node_t) + sizeof(txnid_t)));
 
@@ -47,14 +47,14 @@ __cold unsigned env_setup_pagesize(MDBX_env *env, const size_t pagesize) {
   STATIC_ASSERT(BRANCH_NODE_MAX(MDBX_MAX_PAGESIZE) < UINT16_MAX);
   const intptr_t branch_nodemax = BRANCH_NODE_MAX(pagesize);
   const intptr_t leaf_nodemax = LEAF_NODE_MAX(pagesize);
-  ENSURE(env, branch_nodemax > (intptr_t)(NODESIZE + 42) && branch_nodemax % 2 == 0 &&
-                  leaf_nodemax > (intptr_t)(sizeof(tree_t) + NODESIZE + 42) && leaf_nodemax >= branch_nodemax &&
-                  leaf_nodemax < (int)UINT16_MAX && leaf_nodemax % 2 == 0);
+  ENSURE_OBJ(env, branch_nodemax > (intptr_t)(NODESIZE + 42) && branch_nodemax % 2 == 0 &&
+                      leaf_nodemax > (intptr_t)(sizeof(tree_t) + NODESIZE + 42) && leaf_nodemax >= branch_nodemax &&
+                      leaf_nodemax < (int)UINT16_MAX && leaf_nodemax % 2 == 0);
   env->leaf_nodemax = (uint16_t)leaf_nodemax;
   env->branch_nodemax = (uint16_t)branch_nodemax;
   env->ps2ln = (uint8_t)log2n_powerof2(pagesize);
-  eASSERT(env, pgno2bytes(env, 1) == pagesize);
-  eASSERT(env, bytes2pgno(env, pagesize + pagesize) == 2);
+  eASSERT0(env, pgno2bytes(env, 1) == pagesize);
+  eASSERT0(env, bytes2pgno(env, pagesize + pagesize) == 2);
   recalculate_merge_thresholds(env);
   recalculate_subpage_thresholds(env);
   env_options_adjust_dp_limit(env);
@@ -76,7 +76,7 @@ retry:;
     goto bailout;
   }
 
-  const troika_t troika = (txn_owned || should_unlock) ? env->basal_txn->tw.troika : meta_tap(env);
+  const troika_t troika = (txn_owned || should_unlock) ? env->basal_txn->wr.troika : meta_tap(env);
   const meta_ptr_t head = meta_recent(env, &troika);
   const uint64_t unsynced_pages = atomic_load64(&env->lck->unsynced_pages, mo_Relaxed);
   if (unsynced_pages == 0) {
@@ -111,41 +111,36 @@ retry:;
 
   if (!txn_owned) {
     if (!should_unlock) {
-#if MDBX_ENABLE_PGOP_STAT
       unsigned wops = 0;
-#endif /* MDBX_ENABLE_PGOP_STAT */
 
       int err;
       /* pre-sync to avoid latency for writer */
       if (unsynced_pages > /* FIXME: define threshold */ 42 && (flags & MDBX_SAFE_NOSYNC) == 0) {
-        eASSERT(env, ((flags ^ env->flags) & MDBX_WRITEMAP) == 0);
+        eASSERT0(env, ((flags ^ env->flags) & MDBX_WRITEMAP) == 0);
         if (flags & MDBX_WRITEMAP) {
           /* Acquire guard to avoid collision with remap */
 #if defined(_WIN32) || defined(_WIN64)
-          imports.srwl_AcquireShared(&env->remap_guard);
+          imports.srwl_AcquireShared(&env->remap_lock);
 #else
-          err = osal_fastmutex_acquire(&env->remap_guard);
+          err = osal_fastmutex_acquire(&env->remap_lock);
           if (unlikely(err != MDBX_SUCCESS))
             return err;
 #endif
-          const size_t usedbytes = pgno_align2os_bytes(env, head.ptr_c->geometry.first_unallocated);
-          err = osal_msync(&env->dxb_mmap, 0, usedbytes, MDBX_SYNC_DATA);
+          err = dxb_msync(env, head.ptr_c->geometry.first_unallocated, MDBX_SYNC_DATA);
 #if defined(_WIN32) || defined(_WIN64)
-          imports.srwl_ReleaseShared(&env->remap_guard);
+          imports.srwl_ReleaseShared(&env->remap_lock);
 #else
-          int unlock_err = osal_fastmutex_release(&env->remap_guard);
+          int unlock_err = osal_fastmutex_release(&env->remap_lock);
           if (unlikely(unlock_err != MDBX_SUCCESS) && err == MDBX_SUCCESS)
             err = unlock_err;
 #endif
         } else
-          err = osal_fsync(env->lazy_fd, MDBX_SYNC_DATA);
+          err = dxb_fsync(env, MDBX_SYNC_DATA);
 
         if (unlikely(err != MDBX_SUCCESS))
           return err;
 
-#if MDBX_ENABLE_PGOP_STAT
         wops = 1;
-#endif /* MDBX_ENABLE_PGOP_STAT */
         /* pre-sync done */
         rc = MDBX_SUCCESS /* means "some data was synced" */;
       }
@@ -155,21 +150,20 @@ retry:;
         return err;
 
       should_unlock = true;
-#if MDBX_ENABLE_PGOP_STAT
-      env->lck->pgops.wops.weak += wops;
-#endif /* MDBX_ENABLE_PGOP_STAT */
-      env->basal_txn->tw.troika = meta_tap(env);
-      eASSERT(env, !env->txn && !env->basal_txn->nested);
+      if (MDBX_ENABLE_PGOP_STAT)
+        env->lck->pgops.wops.weak += wops;
+      env->basal_txn->wr.troika = meta_tap(env);
+      eASSERT0(env, !env->txn && !env->basal_txn->nested);
       goto retry;
     }
-    eASSERT(env, head.txnid == recent_committed_txnid(env));
+    eASSERT1(env, head.txnid == recent_committed_txnid(env));
     env->basal_txn->txnid = head.txnid;
-    txn_snapshot_oldest(env->basal_txn);
+    txn_gc_detent(env->basal_txn);
     flags |= txn_shrink_allowed;
   }
 
-  eASSERT(env, txn_owned || should_unlock);
-  eASSERT(env, !txn_owned || (flags & txn_shrink_allowed) == 0);
+  eASSERT0(env, txn_owned || should_unlock);
+  eASSERT0(env, !txn_owned || (flags & txn_shrink_allowed) == 0);
 
   if (!head.is_steady && unlikely(env->stuck_meta >= 0) && troika.recent != (uint8_t)env->stuck_meta) {
     NOTICE("skip %s since wagering meta-page (%u) is mispatch the recent "
@@ -179,10 +173,10 @@ retry:;
     goto bailout;
   }
   if (!head.is_steady || ((flags & MDBX_SAFE_NOSYNC) == 0 && unsynced_pages)) {
-    DEBUG("meta-head %" PRIaPGNO ", %s, sync_pending %" PRIu64, data_page(head.ptr_c)->pgno,
+    DEBUG("meta-head %" PRIaPGNO ", %s, sync_pending %" PRIu64, payload2page(head.ptr_c)->pgno,
           durable_caption(head.ptr_c), unsynced_pages);
     meta_t meta = *head.ptr_c;
-    rc = dxb_sync_locked(env, flags, &meta, &env->basal_txn->tw.troika);
+    rc = dxb_sync_locked(env, flags, &meta, &env->basal_txn->wr.troika);
     if (unlikely(rc != MDBX_SUCCESS))
       goto bailout;
   }
@@ -305,7 +299,13 @@ __cold int env_open(MDBX_env *env, mdbx_mode_t mode) {
 
   env->fd4meta = env->lazy_fd;
 #if defined(_WIN32) || defined(_WIN64)
-  eASSERT(env, env->ioring.overlapped_fd == 0);
+  env->dxb_lock_event = CreateEventW(nullptr, true, false, nullptr);
+  if (unlikely(!env->dxb_lock_event))
+    return (int)GetLastError();
+  env->lck_lock_event = CreateEventW(nullptr, true, false, nullptr);
+  if (unlikely(!env->lck_lock_event))
+    return (int)GetLastError();
+  eASSERT0(env, env->ioring.overlapped_fd == 0);
   bool ior_direct = false;
   if (!(env->flags & (MDBX_RDONLY | MDBX_SAFE_NOSYNC | MDBX_NOMETASYNC | MDBX_EXCLUSIVE))) {
     if (MDBX_AVOID_MSYNC && (env->flags & MDBX_WRITEMAP)) {
@@ -346,9 +346,6 @@ __cold int env_open(MDBX_env *env, mdbx_mode_t mode) {
                        &env->ioring.overlapped_fd, 0);
     if (unlikely(rc != MDBX_SUCCESS))
       return rc;
-    env->dxb_lock_event = CreateEventW(nullptr, true, false, nullptr);
-    if (unlikely(!env->dxb_lock_event))
-      return (int)GetLastError();
     osal_fseek(env->ioring.overlapped_fd, safe_parking_lot_offset);
   }
 #else
@@ -370,7 +367,7 @@ __cold int env_open(MDBX_env *env, mdbx_mode_t mode) {
   if (env->lck_mmap.fd != INVALID_HANDLE_VALUE)
     osal_fseek(env->lck_mmap.fd, safe_parking_lot_offset);
 
-  eASSERT(env, env->dsync_fd == INVALID_HANDLE_VALUE);
+  eASSERT0(env, env->dsync_fd == INVALID_HANDLE_VALUE);
   if (!(env->flags & (MDBX_RDONLY | MDBX_SAFE_NOSYNC | DEPRECATED_MAPASYNC
 #if defined(_WIN32) || defined(_WIN64)
                       | MDBX_EXCLUSIVE
@@ -449,7 +446,7 @@ __cold int env_open(MDBX_env *env, mdbx_mode_t mode) {
     }
   }
 
-  mincore_clean_cache(env);
+  env_clear_incore_cache(env);
   const int dxb_rc = dxb_setup(env, lck_rc, mode);
   if (MDBX_IS_ERROR(dxb_rc))
     return dxb_rc;
@@ -471,7 +468,7 @@ __cold int env_open(MDBX_env *env, mdbx_mode_t mode) {
     return MDBX_BUSY;
   }
 
-  DEBUG("opened dbenv %p", (void *)env);
+  DEBUG("opened dbenv %p", __Wpedantic_format_voidptr(env));
   env->flags |= ENV_ACTIVE;
   if (!lck || lck_rc == MDBX_RESULT_TRUE) {
     env->lck->envmode.weak = env->flags & mode_flags;
@@ -524,7 +521,7 @@ __cold int env_close(MDBX_env *env, bool resurrect_after_fork) {
   env->defer_free = nullptr;
 #endif /* MDBX_ENABLE_DBI_LOCKFREE */
 
-  if (!(env->flags & MDBX_RDONLY))
+  if ((env->flags & MDBX_RDONLY) == 0)
     osal_ioring_destroy(&env->ioring);
 
   env->lck = nullptr;
@@ -540,12 +537,16 @@ __cold int env_close(MDBX_env *env, bool resurrect_after_fork) {
   }
 
 #if defined(_WIN32) || defined(_WIN64)
-  eASSERT(env, !env->ioring.overlapped_fd || env->ioring.overlapped_fd == INVALID_HANDLE_VALUE);
+  eASSERT0(env, !env->ioring.overlapped_fd || env->ioring.overlapped_fd == INVALID_HANDLE_VALUE);
   if (env->dxb_lock_event != INVALID_HANDLE_VALUE) {
     CloseHandle(env->dxb_lock_event);
     env->dxb_lock_event = INVALID_HANDLE_VALUE;
   }
-  eASSERT(env, !resurrect_after_fork);
+  if (env->lck_lock_event != INVALID_HANDLE_VALUE) {
+    CloseHandle(env->lck_lock_event);
+    env->lck_lock_event = INVALID_HANDLE_VALUE;
+  }
+  eASSERT0(env, !resurrect_after_fork);
   if (env->pathname_char) {
     osal_free(env->pathname_char);
     env->pathname_char = nullptr;
@@ -593,12 +594,7 @@ __cold int env_close(MDBX_env *env, bool resurrect_after_fork) {
       env->pathname.buffer = nullptr;
     }
     if (env->basal_txn) {
-      dpl_free(env->basal_txn);
-      txl_free(env->basal_txn->tw.gc.retxl);
-      pnl_free(env->basal_txn->tw.retired_pages);
-      pnl_free(env->basal_txn->tw.spilled.list);
-      pnl_free(env->basal_txn->tw.repnl);
-      osal_free(env->basal_txn);
+      txn_basal_destroy(env->basal_txn);
       env->basal_txn = nullptr;
     }
   }

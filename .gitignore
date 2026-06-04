@@ -3,6 +3,7 @@
 *.[ao]
 *.autosave
 *.bak
+build/
 build.ninja
 cmake-build-*
 CMakeCache.txt
@@ -28,6 +29,7 @@ libmdbx.creator.user
 *.lo
 mdbx_chk
 mdbx_copy
+mdbx_defrag
 mdbx_drop
 mdbx_dump
 mdbx_example
@@ -68,3 +70,5 @@ version.c
 .vs/
 .vscode/
 *.zip
+mdbx_legacy_example
+mdbx_modern_example

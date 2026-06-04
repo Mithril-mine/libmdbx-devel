@@ -6,17 +6,15 @@
 /// mdbx_copy.c - memory-mapped database backup tool
 ///
 
-#ifdef _MSC_VER
-#if _MSC_VER > 1800
-#pragma warning(disable : 4464) /* relative include path contains '..' */
-#endif
-#pragma warning(disable : 4996) /* The POSIX name is deprecated... */
-#endif                          /* _MSC_VER (warnings) */
-
-#define xMDBX_TOOLS /* Avoid using internal eASSERT() */
+#define xMDBX_TOOLS /* Avoid using internal ASSERT(), etc */
 #include "essentials.h"
 
 #if defined(_WIN32) || defined(_WIN64)
+
+/* Bit of madness for Windows console */
+#define mdbx_strerror mdbx_strerror_ANSI2OEM
+#define mdbx_strerror_r mdbx_strerror_r_ANSI2OEM
+
 #include "wingetopt.h"
 
 static volatile BOOL user_break;
@@ -42,6 +40,7 @@ static void usage(const char *prog) {
           "  -V\t\tprint version and exit\n"
           "  -q\t\tbe quiet\n"
           "  -c\t\tenable compactification (skip unused pages)\n"
+          "  -f\t\tforce copying even the target file exists\n"
           "  -d\t\tenforce copy to be a dynamic size DB\n"
           "  -p\t\tusing transaction parking/ousting during copying MVCC-snapshot\n"
           "    \t\tto avoid stopping recycling and overflowing the DB\n"
@@ -87,6 +86,8 @@ int main(int argc, char *argv[]) {
       cpflags |= MDBX_CP_FORCE_DYNAMIC_SIZE;
     else if (argv[1][1] == 'p' && argv[1][2] == '\0')
       cpflags |= MDBX_CP_THROTTLE_MVCC;
+    else if (argv[1][1] == 'f' && argv[1][2] == '\0')
+      cpflags |= MDBX_CP_OVERWRITE;
     else if (argv[1][1] == 'q' && argv[1][2] == '\0')
       quiet = true;
     else if (argv[1][1] == 'u' && argv[1][2] == '\0')

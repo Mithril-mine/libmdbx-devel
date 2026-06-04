@@ -1,7 +1,8 @@
 /// \copyright Copyright (c) 2015-2026 Леонид Юрьев aka Leonid Yuriev <leo@yuriev.ru>. All Rights Reserved.
 ///
 /// THE CONTENTS OF THIS PROJECT ARE PROPRIETARY AND CONFIDENTIAL.
-/// UNAUTHORIZED COPYING, TRANSFERRING OR REPRODUCTION OF THE CONTENTS OF THIS PROJECT, VIA ANY MEDIUM IS STRICTLY PROHIBITED.
+/// UNAUTHORIZED COPYING, TRANSFERRING OR REPRODUCTION OF THE CONTENTS OF THIS PROJECT,
+/// VIA ANY MEDIUM IS STRICTLY PROHIBITED.
 ///
 /// The receipt or possession of the source code and/or any parts thereof does not convey or imply any right to use them
 /// for any purpose other than the purpose for which they were provided to you.
@@ -12,23 +13,23 @@
 /// whether in an action of contract, tort or otherwise, arising from, out of or in connection with the software
 /// or the use or other dealings in the software.
 ///
-/// The above copyright notice and this permission notice shall be included in all copies or substantial portions of the software.
+/// The above copyright notice and this permission notice shall be included in all copies
+/// or substantial portions of the software.
 ///
 /// \author Леонид Юрьев aka Leonid Yuriev <leo@yuriev.ru>
 /// \date 2015-2026
-
 
 #include "mdbx.h++"
 #include <chrono>
 #include <iostream>
 
 #if defined(ENABLE_MEMCHECK) || defined(MDBX_CI)
-#if MDBX_DEBUG || !defined(NDEBUG)
+#if MDBX_DEBUG > 0 || !defined(NDEBUG)
 #define RELIEF_FACTOR 16
 #else
 #define RELIEF_FACTOR 8
 #endif
-#elif MDBX_DEBUG || !defined(NDEBUG) || defined(__APPLE__) || defined(_WIN32)
+#elif MDBX_DEBUG > 0 || !defined(NDEBUG) || defined(__APPLE__) || defined(_WIN32)
 #define RELIEF_FACTOR 4
 #elif UINTPTR_MAX > 0xffffFFFFul || ULONG_MAX > 0xffffFFFFul
 #define RELIEF_FACTOR 2
@@ -72,9 +73,8 @@ bool case1_ordering(mdbx::env env) {
   txn.put_multiple_samelength(map, buffer::key_from_u64(14), array + 4, 5, mdbx::upsert);
   txn.put_multiple_samelength(map, buffer::key_from_u64(11), array + 1, 2, mdbx::upsert);
   txn.put_multiple_samelength(map, buffer::key_from_u64(16), array + 6, 7, mdbx::upsert);
-  txn.commit();
+  txn.commit_embark_read();
 
-  txn = env.start_read();
   cursor = txn.open_cursor(map);
   if (/* key = 7 */ cursor.to_first().value.as_uint64() != 19 ||
 
@@ -135,9 +135,8 @@ bool case1_ordering(mdbx::env env) {
   txn.put_multiple_samelength(map, buffer::key_from_u64(25), array + 5, 6, mdbx::update);
   txn.upsert(map, buffer::key_from_u64(26), buffer::key_from_u64(12));
   txn.put_multiple_samelength(map, buffer::key_from_u64(27), array + 12, 3, mdbx::update);
-  txn.commit();
+  txn.commit_embark_read();
 
-  txn = env.start_read();
   cursor = txn.open_cursor(map);
   if (/* key = 7 */
       cursor.to_first().value.as_uint64() != 4 || cursor.to_next().value.as_uint64() != 5 ||

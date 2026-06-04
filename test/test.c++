@@ -1,7 +1,8 @@
 /// \copyright Copyright (c) 2015-2026 Леонид Юрьев aka Leonid Yuriev <leo@yuriev.ru>. All Rights Reserved.
 ///
 /// THE CONTENTS OF THIS PROJECT ARE PROPRIETARY AND CONFIDENTIAL.
-/// UNAUTHORIZED COPYING, TRANSFERRING OR REPRODUCTION OF THE CONTENTS OF THIS PROJECT, VIA ANY MEDIUM IS STRICTLY PROHIBITED.
+/// UNAUTHORIZED COPYING, TRANSFERRING OR REPRODUCTION OF THE CONTENTS OF THIS PROJECT,
+/// VIA ANY MEDIUM IS STRICTLY PROHIBITED.
 ///
 /// The receipt or possession of the source code and/or any parts thereof does not convey or imply any right to use them
 /// for any purpose other than the purpose for which they were provided to you.
@@ -12,7 +13,8 @@
 /// whether in an action of contract, tort or otherwise, arising from, out of or in connection with the software
 /// or the use or other dealings in the software.
 ///
-/// The above copyright notice and this permission notice shall be included in all copies or substantial portions of the software.
+/// The above copyright notice and this permission notice shall be included in all copies
+/// or substantial portions of the software.
 ///
 /// \author Леонид Юрьев aka Leonid Yuriev <leo@yuriev.ru>
 /// \date 2015-2026
@@ -160,26 +162,87 @@ void testcase::db_open() {
   jitter_delay(true);
 
   MDBX_env_flags_t mode = config.params.mode_flags;
-  if (config.params.random_writemap && flipcoin())
-    mode ^= MDBX_WRITEMAP;
+  if (config.params.random_writemap) {
+    if (flipcoin())
+      mode ^= MDBX_WRITEMAP;
+    // MDBX_opt_writethrough_threshold MDBX_opt_prefault_write_enable
+  }
 
-  int rc = mdbx_env_open(db_guard.get(), config.params.pathname_db.c_str(), mode, 0640);
-  if (unlikely(rc != MDBX_SUCCESS))
-    failure_perror("mdbx_env_open()", rc);
+  int err = mdbx_env_open(db_guard.get(), config.params.pathname_db.c_str(), mode, 0640);
+  if (unlikely(err != MDBX_SUCCESS))
+    failure_perror("mdbx_env_open()", err);
 
   unsigned env_flags_proxy;
-  rc = mdbx_env_get_flags(db_guard.get(), &env_flags_proxy);
-  if (unlikely(rc != MDBX_SUCCESS))
-    failure_perror("mdbx_env_get_flags()", rc);
+  err = mdbx_env_get_flags(db_guard.get(), &env_flags_proxy);
+  if (unlikely(err != MDBX_SUCCESS))
+    failure_perror("mdbx_env_get_flags()", err);
   actual_env_mode = MDBX_env_flags_t(env_flags_proxy);
 
-  rc = mdbx_env_set_syncperiod(db_guard.get(), unsigned(0.042 * 65536));
-  if (unlikely(rc != MDBX_SUCCESS) && rc != MDBX_BUSY)
-    failure_perror("mdbx_env_set_syncperiod()", rc);
+  err = mdbx_env_set_syncperiod(db_guard.get(), unsigned(0.042 * 65536));
+  if (unlikely(err != MDBX_SUCCESS) && err != MDBX_BUSY)
+    failure_perror("mdbx_env_set_syncperiod()", err);
 
-  rc = mdbx_env_set_syncbytes(db_guard.get(), INT_MAX / 421);
-  if (unlikely(rc != MDBX_SUCCESS) && rc != MDBX_BUSY)
-    failure_perror("mdbx_env_set_syncbytes()", rc);
+  err = mdbx_env_set_syncbytes(db_guard.get(), INT_MAX / 421);
+  if (unlikely(err != MDBX_SUCCESS) && err != MDBX_BUSY)
+    failure_perror("mdbx_env_set_syncbytes()", err);
+
+  if (config.params.random_treeopts) {
+    bool prefer_waf_insteadof_balance = flipcoin();
+    log_verbose("prefer-waf-insteadof-balance: %s\n", prefer_waf_insteadof_balance ? "Yes" : "No");
+    err = mdbx_env_set_option(db_guard.get(), MDBX_opt_prefer_waf_insteadof_balance, prefer_waf_insteadof_balance);
+    if (unlikely(err != MDBX_SUCCESS))
+      failure_perror("mdbx_env_set_option(MDBX_opt_prefer_waf_insteadof_balance)", err);
+    if (flipcoin()) {
+      unsigned merge_threshold = prng32_range(8192, 32768 + 1);
+      log_verbose("merge-threshold: %u\n", merge_threshold);
+      err = mdbx_env_set_option(db_guard.get(), MDBX_opt_merge_threshold, merge_threshold);
+      if (unlikely(err != MDBX_SUCCESS))
+        failure_perror("mdbx_env_set_option(MDBX_opt_merge_threshold)", err);
+    }
+    if (flipcoin()) {
+      unsigned split_reserve = prng32_range(0, 32768 + 1);
+      log_verbose("split-reserve: %u\n", split_reserve);
+      err = mdbx_env_set_option(db_guard.get(), MDBX_opt_split_reserve, split_reserve);
+      if (unlikely(err != MDBX_SUCCESS))
+        failure_perror("mdbx_env_set_option(MDBX_opt_split_reserve)", err);
+    }
+
+    if (flipcoin()) {
+      unsigned subpage_limit = prng32_range(0, 65535 + 1);
+      log_verbose("subpage-limit: %u\n", subpage_limit);
+      err = mdbx_env_set_option(db_guard.get(), MDBX_opt_subpage_limit, subpage_limit);
+      if (unlikely(err != MDBX_SUCCESS))
+        failure_perror("mdbx_env_set_option(MDBX_opt_subpage_limit)", err);
+    }
+    if (flipcoin()) {
+      unsigned subpage_room_threshold = prng32_range(0, 65535 + 1);
+      log_verbose("subpage-room-threshold: %u\n", subpage_room_threshold);
+      err = mdbx_env_set_option(db_guard.get(), MDBX_opt_subpage_room_threshold, subpage_room_threshold);
+      if (unlikely(err != MDBX_SUCCESS))
+        failure_perror("mdbx_env_set_option(MDBX_opt_subpage_room_threshold)", err);
+    }
+    if (flipcoin()) {
+      unsigned subpage_reserve_prereq = prng32_range(0, 65535 + 1);
+      log_verbose("subpage-reserve-prereq: %u\n", subpage_reserve_prereq);
+      err = mdbx_env_set_option(db_guard.get(), MDBX_opt_subpage_reserve_prereq, subpage_reserve_prereq);
+      if (unlikely(err != MDBX_SUCCESS))
+        failure_perror("mdbx_env_set_option(MDBX_opt_subpage_reserve_prereq)", err);
+    }
+    if (flipcoin()) {
+      unsigned subpage_reserve_limit = prng32_range(0, 65535 + 1);
+      log_verbose("subpage-reserve-limit: %u\n", subpage_reserve_limit);
+      err = mdbx_env_set_option(db_guard.get(), MDBX_opt_subpage_reserve_limit, subpage_reserve_limit);
+      if (unlikely(err != MDBX_SUCCESS))
+        failure_perror("mdbx_env_set_option(MDBX_opt_subpage_reserve_limit)", err);
+    }
+    // if (flipcoin()) {
+    //   unsigned xxx = prng32_range(0, 65535 + 1);
+    //   log_verbose("xxx: %u\n", xxx);
+    //   err = mdbx_env_set_option(db_guard.get(), MDBX_opt_xxx, xxx);
+    //   if (unlikely(err != MDBX_SUCCESS))
+    //     failure_perror("mdbx_env_set_option(MDBX_opt_xxx)", err);
+    // }
+  }
 
   log_trace("<< db_open");
 }
@@ -190,6 +253,17 @@ void testcase::db_close() {
   txn_guard.reset();
   db_guard.reset();
   log_trace("<< db_close");
+}
+
+void testcase::txn_rollback() {
+  log_trace(">> txn_rollback()");
+  assert(txn_guard);
+
+  int rc = mdbx_txn_rollback(txn_guard.get());
+  if (unlikely(rc != MDBX_SUCCESS))
+    failure_perror("mdbx_txn_rollback()", rc);
+
+  log_trace("<< txn_rollback()");
 }
 
 void testcase::txn_begin(bool readonly, MDBX_txn_flags_t flags) {
@@ -216,8 +290,48 @@ void testcase::txn_begin(bool readonly, MDBX_txn_flags_t flags) {
     log_trace("== counter %u, env_warmup(flags %u), rc %d", counter, warmup_flags, err);
   }
 
-  if (readonly && flipcoin())
+  if (readonly && flipcoin_x2())
     txn_probe_parking();
+
+  if (readonly && flipcoin_x2())
+    txn_refresh();
+
+  if (!readonly && flipcoin_x2())
+    txn_rollback();
+}
+
+int testcase::checkpoint() {
+  log_trace(">> txn_checkpoint");
+  assert(txn_guard);
+
+  /* CLANG/LLVM C++ library could stupidly copy std::set<> item-by-item,
+   * i.e. with insertion(s) & comparison(s), which will cause null dereference
+   * during call mdbx_cmp() with zero txn. So it is the workaround for this:
+   *  - explicitly make copies of the `speculums`;
+   *  - explicitly move relevant copy after transaction commit. */
+  SET speculum_committed_copy(ItemCompare(this)), speculum_copy(ItemCompare(this));
+  if (need_speculum_assign) {
+    speculum_committed_copy = speculum_committed;
+    speculum_copy = speculum;
+  }
+
+  MDBX_commit_latency latency;
+  int err = mdbx_txn_checkpoint(txn_guard.get(), MDBX_TXN_NOWEAKING, &latency);
+  if (unlikely(MDBX_IS_ERROR(err)) && (err != MDBX_MAP_FULL || !config.params.ignore_dbfull))
+    failure_perror("mdbx_txn_checkpoint()", err);
+
+  if (need_speculum_assign) {
+    need_speculum_assign = false;
+    if (unlikely(MDBX_IS_ERROR(err))) {
+      speculum = std::move(speculum_committed_copy);
+      /* coverity[RESOURCE_LEAK] */
+      txn_guard.release();
+    } else
+      speculum_committed = std::move(speculum_copy);
+  }
+
+  log_trace("<< txn_checkpoint: %s", MDBX_IS_ERROR(err) ? "failed" : (err ? "empty" : "commited"));
+  return (err == MDBX_RESULT_TRUE) ? MDBX_SUCCESS : err;
 }
 
 int testcase::breakable_commit() {
@@ -325,8 +439,13 @@ void testcase::cursor_renew() {
 
 int testcase::breakable_restart() {
   int rc = MDBX_SUCCESS;
-  if (txn_guard)
+  if (txn_guard) {
+    if (flipcoin_x2()) {
+      rc = checkpoint();
+      goto done;
+    }
     rc = breakable_commit();
+  }
   if (flipcoin()) {
     txn_begin(true);
     txn_probe_parking();
@@ -334,7 +453,10 @@ int testcase::breakable_restart() {
     if (unlikely(err != MDBX_SUCCESS))
       failure_perror("mdbx_txn_abort()", err);
   }
-  txn_begin(false, MDBX_TXN_READWRITE);
+
+done:
+  if (!txn_guard)
+    txn_begin(false, MDBX_TXN_READWRITE);
   if (cursor_guard)
     cursor_renew();
   return rc;
@@ -588,7 +710,7 @@ void testcase::db_table_clear(MDBX_dbi handle, MDBX_txn *txn) {
 
 void testcase::db_table_close(MDBX_dbi handle) {
   log_trace(">> testcase::db_table_close, handle %u", handle);
-  assert(!txn_guard);
+  // assert(!txn_guard);
   int err = mdbx_dbi_close(db_guard.get(), handle);
   if (unlikely(err != MDBX_SUCCESS))
     failure_perror("mdbx_dbi_close()", err);
@@ -786,7 +908,7 @@ static bool execute_thunk(const actor_config *const_config, const mdbx_pid_t pid
     size_t iter = 0;
     do {
       if (iter) {
-        prng_seed(config.params.prng_seed += INT32_C(0xA4F4D37B));
+        prng_salt(iter);
         log_verbose("turn PRNG to %u", config.params.prng_seed);
       }
       iter++;
@@ -1142,6 +1264,8 @@ int testcase::insert(const keygen::buffer &akey, const keygen::buffer &adata, MD
 #endif /* SPECULUM_CURSORS */
   }
 
+  /* LY: ложные предупреждения coverity возникают из-за поддержки вставки массивов значений в режиме MDBX_MULTIPLE */
+  /* coverity[OVERRUN] */
   err = mdbx_put(txn_guard.get(), dbi, &akey->value, &adata->value, flags);
   if (err != MDBX_SUCCESS && err != MDBX_KEYEXIST)
     return err;
@@ -1532,8 +1656,7 @@ bool testcase::txn_probe_parking() {
     err = mdbx_env_info_ex(db_guard.get(), txn_guard.get(), &env_info, sizeof(env_info));
     if (!autounpark) {
       if (err != MDBX_BAD_TXN)
-        failure("mdbx_env_info_ex(autounpark=%s), flags 0x%x, unexpected err "
-                "%d, must %d",
+        failure("mdbx_env_info_ex(autounpark=%s), flags 0x%x, unexpected err %d, must %d",
                 autounpark ? "true" : "false", state, err, MDBX_BAD_TXN);
     } else if (err != MDBX_SUCCESS) {
       if (err != MDBX_OUSTED || ((state = mdbx_txn_flags(txn_guard.get())) & MDBX_TXN_OUSTED) == 0)
@@ -1564,4 +1687,36 @@ bool testcase::txn_probe_parking() {
   if (state != MDBX_TXN_RDONLY)
     failure("unexpected txn-state 0x%x", state);
   return state == MDBX_TXN_RDONLY;
+}
+
+bool testcase::txn_refresh() {
+  const MDBX_txn_flags_t state = mdbx_txn_flags(txn_guard.get());
+  if ((state & MDBX_TXN_RDONLY) == 0)
+    return false;
+
+  const auto txnid = mdbx_txn_id(txn_guard.get());
+  while (true) {
+    int err = mdbx_txn_refresh(txn_guard.get());
+    if (MDBX_IS_ERROR(err))
+      failure("mdbx_txn_refresh(), err %d", err);
+
+    if (err == MDBX_SUCCESS) {
+      const auto new_txnid = mdbx_txn_id(txn_guard.get());
+      if (mdbx_txn_id(txn_guard.get()) <= txnid)
+        failure("unexpected txnid !(%" PRIu64 " > %" PRIu64 ") after txn-refresh", txnid, new_txnid);
+      log_verbose("txn-refresh %" PRIu64 " -> %" PRIu64, txnid, new_txnid);
+
+      const auto new_state = mdbx_txn_flags(txn_guard.get());
+      const auto diff = (state ^ new_state) & (MDBX_TXN_RDONLY | MDBX_TXN_AUTOUNPARK);
+      if (diff)
+        failure("unexpected txn-state 0x%x -> 0x%x (diff 0x%x)", state, new_state, diff);
+
+      return true;
+    }
+    if (!osal_multiactor_mode() || mode_readonly() || !flipcoin())
+      break;
+    osal_udelay(4242);
+  }
+
+  return false;
 }

@@ -3,17 +3,6 @@
 
 #include "internals.h"
 
-typedef struct walk_ctx {
-  void *userctx;
-  walk_options_t options;
-  int deep;
-  walk_func *visitor;
-  MDBX_txn *txn;
-  MDBX_cursor *cursor;
-} walk_ctx_t;
-
-__cold static int walk_tbl(walk_ctx_t *ctx, walk_tbl_t *tbl);
-
 static page_type_t walk_page_type(const page_t *mp) {
   if (mp)
     switch (mp->flags & ~P_SPILLED) {
@@ -41,8 +30,9 @@ static page_type_t walk_subpage_type(const page_t *sp) {
 }
 
 /* Depth-first tree traversal. */
-__cold static int walk_pgno(walk_ctx_t *ctx, walk_tbl_t *tbl, const pgno_t pgno, txnid_t parent_txnid) {
-  assert(pgno != P_INVALID);
+__cold static int walk_pgno(walk_ctx_t *ctx, walk_tbl_t *tbl, const pgno_t pgno, txnid_t parent_txnid,
+                            const pgno_t parent_pgno) {
+  ASSERT(pgno != P_INVALID);
   page_t *mp = nullptr;
   int err = page_get(ctx->cursor, pgno, &mp, parent_txnid);
 
@@ -66,51 +56,39 @@ __cold static int walk_pgno(walk_ctx_t *ctx, walk_tbl_t *tbl, const pgno_t pgno,
     payload_size += node_key_size;
 
     if (type == page_branch) {
-      assert(i > 0 || node_ks(node) == 0);
+      ASSERT(i > 0 || node_ks(node) == 0);
       align_bytes += node_key_size & 1;
       continue;
     }
 
     const size_t node_data_size = node_ds(node);
-    assert(type == page_leaf);
+    ASSERT(type == page_leaf);
     switch (node_flags(node)) {
     case 0 /* usual node */:
       payload_size += node_data_size;
       align_bytes += (node_key_size + node_data_size) & 1;
       break;
 
-    case N_BIG /* long data on the large/overflow page */: {
-      const pgno_t large_pgno = node_largedata_pgno(node);
-      const size_t over_payload = node_data_size;
-      const size_t over_header = PAGEHDRSZ;
-
-      assert(err == MDBX_SUCCESS);
-      pgr_t lp = page_get_large(ctx->cursor, large_pgno, mp->txnid);
-      const size_t npages = ((err = lp.err) == MDBX_SUCCESS) ? lp.page->pages : 1;
-      const size_t pagesize = pgno2bytes(ctx->txn->env, npages);
-      const size_t over_unused = pagesize - over_payload - over_header;
-      const int rc = ctx->visitor(large_pgno, npages, ctx->userctx, ctx->deep, tbl, pagesize, page_large, err, 1,
-                                  over_payload, over_header, over_unused);
-      if (unlikely(rc != MDBX_SUCCESS))
-        return (rc == MDBX_RESULT_TRUE) ? MDBX_SUCCESS : rc;
+    case N_BIG /* long data on the large/overflow page */:
+      ASSERT(err == MDBX_SUCCESS);
       payload_size += sizeof(pgno_t);
       align_bytes += node_key_size & 1;
-    } break;
+      break;
 
-    case N_TREE /* sub-db */: {
+    case N_TREE /* sub-db */:
       if (unlikely(node_data_size != sizeof(tree_t))) {
         ERROR("%s/%d: %s %u", "MDBX_CORRUPTED", MDBX_CORRUPTED, "invalid table node size", (unsigned)node_data_size);
-        assert(err == MDBX_CORRUPTED);
+        ASSERT(err == MDBX_CORRUPTED);
         err = MDBX_CORRUPTED;
       }
       header_size += node_data_size;
       align_bytes += (node_key_size + node_data_size) & 1;
-    } break;
+      break;
 
     case N_TREE | N_DUP /* dupsorted sub-tree */:
       if (unlikely(node_data_size != sizeof(tree_t))) {
         ERROR("%s/%d: %s %u", "MDBX_CORRUPTED", MDBX_CORRUPTED, "invalid sub-tree node size", (unsigned)node_data_size);
-        assert(err == MDBX_CORRUPTED);
+        ASSERT(err == MDBX_CORRUPTED);
         err = MDBX_CORRUPTED;
       }
       header_size += node_data_size;
@@ -120,7 +98,7 @@ __cold static int walk_pgno(walk_ctx_t *ctx, walk_tbl_t *tbl, const pgno_t pgno,
     case N_DUP /* short sub-page */: {
       if (unlikely(node_data_size <= PAGEHDRSZ || (node_data_size & 1))) {
         ERROR("%s/%d: %s %u", "MDBX_CORRUPTED", MDBX_CORRUPTED, "invalid sub-page node size", (unsigned)node_data_size);
-        assert(err == MDBX_CORRUPTED);
+        ASSERT(err == MDBX_CORRUPTED);
         err = MDBX_CORRUPTED;
         break;
       }
@@ -130,7 +108,7 @@ __cold static int walk_pgno(walk_ctx_t *ctx, walk_tbl_t *tbl, const pgno_t pgno,
       const size_t nsubkeys = page_numkeys(sp);
       if (unlikely(subtype == page_sub_broken)) {
         ERROR("%s/%d: %s 0x%x", "MDBX_CORRUPTED", MDBX_CORRUPTED, "invalid sub-page flags", sp->flags);
-        assert(err == MDBX_CORRUPTED);
+        ASSERT(err == MDBX_CORRUPTED);
         err = MDBX_CORRUPTED;
       }
 
@@ -139,29 +117,27 @@ __cold static int walk_pgno(walk_ctx_t *ctx, walk_tbl_t *tbl, const pgno_t pgno,
       size_t subpayload_size = 0;
       size_t subalign_bytes = 0;
 
-      for (size_t ii = 0; err == MDBX_SUCCESS && ii < nsubkeys; ++ii) {
-        if (subtype == page_sub_dupfix_leaf) {
-          /* DUPFIX pages have no entries[] or node headers */
-          subpayload_size += sp->dupfix_ksize;
-        } else {
-          assert(subtype == page_sub_leaf);
-          const node_t *subnode = page_node(sp, ii);
-          const size_t subnode_size = node_ks(subnode) + node_ds(subnode);
-          subheader_size += NODESIZE;
-          subpayload_size += subnode_size;
-          subalign_bytes += subnode_size & 1;
-          if (unlikely(node_flags(subnode) != 0)) {
-            ERROR("%s/%d: %s 0x%x", "MDBX_CORRUPTED", MDBX_CORRUPTED, "unexpected sub-node flags", node_flags(subnode));
-            assert(err == MDBX_CORRUPTED);
-            err = MDBX_CORRUPTED;
+      if (err == MDBX_SUCCESS)
+        for (size_t ii = 0; ii < nsubkeys; ++ii) {
+          if (subtype == page_sub_dupfix_leaf) {
+            /* DUPFIX pages have no entries[] or node headers */
+            subpayload_size += sp->dupfix_ksize;
+          } else {
+            ASSERT(subtype == page_sub_leaf);
+            const node_t *subnode = page_node(sp, ii);
+            const size_t subnode_size = node_ks(subnode) + node_ds(subnode);
+            subheader_size += NODESIZE;
+            subpayload_size += subnode_size;
+            subalign_bytes += subnode_size & 1;
+            if (unlikely(node_flags(subnode) != 0)) {
+              ERROR("%s/%d: %s 0x%x", "MDBX_CORRUPTED", MDBX_CORRUPTED, "unexpected sub-node flags",
+                    node_flags(subnode));
+              ASSERT(err == MDBX_CORRUPTED);
+              err = MDBX_CORRUPTED;
+            }
           }
         }
-      }
 
-      const int rc = ctx->visitor(pgno, 0, ctx->userctx, ctx->deep + 1, tbl, node_data_size, subtype, err, nsubkeys,
-                                  subpayload_size, subheader_size, subunused_size + subalign_bytes);
-      if (unlikely(rc != MDBX_SUCCESS))
-        return (rc == MDBX_RESULT_TRUE) ? MDBX_SUCCESS : rc;
       header_size += subheader_size;
       unused_size += subunused_size;
       payload_size += subpayload_size;
@@ -170,15 +146,15 @@ __cold static int walk_pgno(walk_ctx_t *ctx, walk_tbl_t *tbl, const pgno_t pgno,
 
     default:
       ERROR("%s/%d: %s 0x%x", "MDBX_CORRUPTED", MDBX_CORRUPTED, "invalid node flags", node_flags(node));
-      assert(err == MDBX_CORRUPTED);
+      ASSERT(err == MDBX_CORRUPTED);
       err = MDBX_CORRUPTED;
     }
   }
 
-  const int rc = ctx->visitor(pgno, 1, ctx->userctx, ctx->deep, tbl, ctx->txn->env->ps, type, err, nentries,
-                              payload_size, header_size, unused_size + align_bytes);
+  int rc = ctx->visitor(pgno, 1, ctx->userctx, ctx->deep, tbl, ctx->txn->env->ps, type, mp->txnid, err, nentries,
+                        payload_size, header_size, unused_size + align_bytes, parent_pgno);
   if (unlikely(rc != MDBX_SUCCESS))
-    return (rc == MDBX_RESULT_TRUE) ? MDBX_SUCCESS : rc;
+    return rc;
 
   for (size_t i = 0; err == MDBX_SUCCESS && i < nentries; ++i) {
     if (type == page_dupfix_leaf)
@@ -186,72 +162,137 @@ __cold static int walk_pgno(walk_ctx_t *ctx, walk_tbl_t *tbl, const pgno_t pgno,
 
     node_t *node = page_node(mp, i);
     if (type == page_branch) {
-      assert(err == MDBX_SUCCESS);
+      ASSERT(err == MDBX_SUCCESS);
       ctx->deep += 1;
-      err = walk_pgno(ctx, tbl, node_pgno(node), mp->txnid);
+      rc = walk_pgno(ctx, tbl, node_pgno(node), mp->txnid, pgno);
       ctx->deep -= 1;
-      if (unlikely(err != MDBX_SUCCESS)) {
-        if (err == MDBX_RESULT_TRUE)
-          break;
-        return err;
-      }
+      if (unlikely(rc != MDBX_SUCCESS))
+        return rc;
       continue;
     }
 
-    assert(type == page_leaf);
+    const size_t node_data_size = node_ds(node);
+    ASSERT(type == page_leaf);
     switch (node_flags(node)) {
     default:
       continue;
 
+    case N_BIG /* long data on the large/overflow page */: {
+      const pgno_t large_pgno = node_largedata_pgno(node);
+      const size_t over_payload = node_data_size;
+      const size_t over_header = PAGEHDRSZ;
+
+      ASSERT(err == MDBX_SUCCESS);
+      pgr_t lp = page_get_large(ctx->cursor, large_pgno, mp->txnid);
+      const size_t npages = ((err = lp.err) == MDBX_SUCCESS) ? lp.page->pages : 1;
+      const size_t pagesize = pgno2bytes(ctx->txn->env, npages);
+      const size_t over_unused = pagesize - over_payload - over_header;
+      rc = ctx->visitor(large_pgno, npages, ctx->userctx, ctx->deep + 1, tbl, pagesize, page_large, lp.page->txnid, err,
+                        1, over_payload, over_header, over_unused, pgno);
+      if (unlikely(rc != MDBX_SUCCESS))
+        return rc;
+    } break;
+
     case N_TREE /* sub-db */:
-      if (unlikely(node_ds(node) != sizeof(tree_t))) {
-        ERROR("%s/%d: %s %u", "MDBX_CORRUPTED", MDBX_CORRUPTED, "invalid sub-tree node size", (unsigned)node_ds(node));
-        assert(err == MDBX_CORRUPTED);
+      if (unlikely(node_data_size != sizeof(tree_t))) {
+        ERROR("%s/%d: %s %u", "MDBX_CORRUPTED", MDBX_CORRUPTED, "invalid sub-tree node size", (unsigned)node_data_size);
+        ASSERT(err == MDBX_CORRUPTED);
         err = MDBX_CORRUPTED;
       } else {
         tree_t aligned_db;
         memcpy(&aligned_db, node_data(node), sizeof(aligned_db));
         walk_tbl_t table = {{node_key(node), node_ks(node)}, nullptr, nullptr};
         table.internal = &aligned_db;
-        assert(err == MDBX_SUCCESS);
+        ASSERT(err == MDBX_SUCCESS);
         ctx->deep += 1;
-        err = walk_tbl(ctx, &table);
+        rc = walk_tbl(ctx, &table, pgno);
         ctx->deep -= 1;
+        if (unlikely(rc != MDBX_SUCCESS))
+          return rc;
       }
       break;
 
     case N_TREE | N_DUP /* dupsorted sub-tree */:
-      if (unlikely(node_ds(node) != sizeof(tree_t))) {
+      if (unlikely(node_data_size != sizeof(tree_t))) {
         ERROR("%s/%d: %s %u", "MDBX_CORRUPTED", MDBX_CORRUPTED, "invalid dupsort sub-tree node size",
-              (unsigned)node_ds(node));
-        assert(err == MDBX_CORRUPTED);
+              (unsigned)node_data_size);
+        ASSERT(err == MDBX_CORRUPTED);
         err = MDBX_CORRUPTED;
       } else {
         tree_t aligned_db;
         memcpy(&aligned_db, node_data(node), sizeof(aligned_db));
-        assert(err == MDBX_SUCCESS);
+        ASSERT(err == MDBX_SUCCESS);
         err = cursor_dupsort_setup(ctx->cursor, node, mp);
         if (likely(err == MDBX_SUCCESS)) {
-          assert(ctx->cursor->subcur == &container_of(ctx->cursor, cursor_couple_t, outer)->inner);
+          ASSERT(ctx->cursor->subcur == &container_of(ctx->cursor, cursor_couple_t, outer)->inner);
           ctx->cursor = &ctx->cursor->subcur->cursor;
           ctx->deep += 1;
           tbl->nested = &aligned_db;
-          err = walk_pgno(ctx, tbl, aligned_db.root, mp->txnid);
+          rc = walk_pgno(ctx, tbl, aligned_db.root, mp->txnid, pgno);
           tbl->nested = nullptr;
           ctx->deep -= 1;
           subcur_t *inner_xcursor = container_of(ctx->cursor, subcur_t, cursor);
           cursor_couple_t *couple = container_of(inner_xcursor, cursor_couple_t, inner);
           ctx->cursor = &couple->outer;
+          if (unlikely(rc != MDBX_SUCCESS))
+            return rc;
         }
+      }
+      break;
+
+    case N_DUP /* short sub-page */:
+      if (unlikely(node_data_size <= PAGEHDRSZ || (node_data_size & 1))) {
+        ERROR("%s/%d: %s %u", "MDBX_CORRUPTED", MDBX_CORRUPTED, "invalid sub-page node size", (unsigned)node_data_size);
+        ASSERT(err == MDBX_CORRUPTED);
+        err = MDBX_CORRUPTED;
+      } else {
+        const page_t *const sp = node_data(node);
+        const page_type_t subtype = walk_subpage_type(sp);
+        const size_t nsubkeys = page_numkeys(sp);
+        if (unlikely(subtype == page_sub_broken)) {
+          ERROR("%s/%d: %s 0x%x", "MDBX_CORRUPTED", MDBX_CORRUPTED, "invalid sub-page flags", sp->flags);
+          ASSERT(err == MDBX_CORRUPTED);
+          err = MDBX_CORRUPTED;
+        }
+
+        size_t subheader_size = is_dupfix_leaf(sp) ? PAGEHDRSZ : PAGEHDRSZ + sp->lower;
+        size_t subunused_size = page_room(sp);
+        size_t subpayload_size = 0;
+        size_t subalign_bytes = 0;
+
+        for (size_t ii = 0; err == MDBX_SUCCESS && ii < nsubkeys; ++ii) {
+          if (subtype == page_sub_dupfix_leaf) {
+            /* DUPFIX pages have no entries[] or node headers */
+            subpayload_size += sp->dupfix_ksize;
+          } else {
+            ASSERT(subtype == page_sub_leaf);
+            const node_t *subnode = page_node(sp, ii);
+            const size_t subnode_size = node_ks(subnode) + node_ds(subnode);
+            subheader_size += NODESIZE;
+            subpayload_size += subnode_size;
+            subalign_bytes += subnode_size & 1;
+            if (unlikely(node_flags(subnode) != 0)) {
+              ERROR("%s/%d: %s 0x%x", "MDBX_CORRUPTED", MDBX_CORRUPTED, "unexpected sub-node flags",
+                    node_flags(subnode));
+              ASSERT(err == MDBX_CORRUPTED);
+              err = MDBX_CORRUPTED;
+            }
+          }
+        }
+
+        rc = ctx->visitor(pgno, 0, ctx->userctx, ctx->deep + 1, tbl, node_data_size, subtype, sp->txnid, err, nsubkeys,
+                          subpayload_size, subheader_size, subunused_size + subalign_bytes, pgno);
+        if (unlikely(rc != MDBX_SUCCESS))
+          return rc;
       }
       break;
     }
   }
 
-  return MDBX_SUCCESS;
+  return err;
 }
 
-__cold static int walk_tbl(walk_ctx_t *ctx, walk_tbl_t *tbl) {
+__cold int walk_tbl(walk_ctx_t *ctx, walk_tbl_t *tbl, pgno_t parent_page) {
   tree_t *const db = tbl->internal;
   if (unlikely(db->root == P_INVALID))
     return MDBX_SUCCESS; /* empty db */
@@ -268,7 +309,11 @@ __cold static int walk_tbl(walk_ctx_t *ctx, walk_tbl_t *tbl) {
   couple.outer.next = ctx->cursor;
   couple.outer.top_and_flags = z_disable_tree_search_fastpath;
   ctx->cursor = &couple.outer;
-  rc = walk_pgno(ctx, tbl, db->root, db->mod_txnid ? db->mod_txnid : ctx->txn->txnid);
+  txnid_t mod_txnid = db->mod_txnid;
+  if (!mod_txnid || (db == &ctx->txn->dbs[FREE_DBI] && (ctx->txn->dbi_state[FREE_DBI] & DBI_DIRTY)) ||
+      (db == &ctx->txn->dbs[MAIN_DBI] && (ctx->txn->dbi_state[MAIN_DBI] & DBI_DIRTY)))
+    mod_txnid = ctx->txn->front_txnid;
+  rc = walk_pgno(ctx, tbl, db->root, mod_txnid, parent_page);
   ctx->cursor = couple.outer.next;
   return rc;
 }
@@ -280,11 +325,12 @@ __cold int walk_pages(MDBX_txn *txn, walk_func *visitor, void *user, walk_option
 
   walk_ctx_t ctx = {.txn = txn, .userctx = user, .visitor = visitor, .options = options};
   walk_tbl_t tbl = {.name = {.iov_base = MDBX_CHK_GC}, .internal = &txn->dbs[FREE_DBI]};
-  rc = walk_tbl(&ctx, &tbl);
-  if (!MDBX_IS_ERROR(rc)) {
+  if ((options & dont_walk_GC) == 0)
+    rc = walk_tbl(&ctx, &tbl, 0);
+  if ((options & dont_walk_MAIN) == 0 && rc == MDBX_SUCCESS) {
     tbl.name.iov_base = MDBX_CHK_MAIN;
     tbl.internal = &txn->dbs[MAIN_DBI];
-    rc = walk_tbl(&ctx, &tbl);
+    rc = walk_tbl(&ctx, &tbl, 0);
   }
   return rc;
 }

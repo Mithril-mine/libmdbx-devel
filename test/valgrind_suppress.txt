@@ -17,7 +17,7 @@
    Memcheck:Param
    msync(start)
    ...
-   fun:map_resize*
+   fun:dxb_resize*
 }
 {
    msync-wipe-steady

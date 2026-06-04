@@ -11,7 +11,7 @@ MDBX_NOTHROW_CONST_FUNCTION MDBX_MAYBE_UNUSED MDBX_INTERNAL size_t dbi_bitmap_ct
                                                                                            intptr_t bmi);
 
 static inline size_t dbi_bitmap_ctz(const MDBX_txn *txn, intptr_t bmi) {
-  tASSERT(txn, bmi != 0);
+  cASSERT0(txn, bmi != 0);
   STATIC_ASSERT(sizeof(bmi) >= sizeof(txn->dbi_sparse[0]));
 #if __GNUC_PREREQ(4, 1) || __has_builtin(__builtin_ctzl)
   if (sizeof(txn->dbi_sparse[0]) <= sizeof(int))
@@ -43,30 +43,35 @@ static inline size_t dbi_bitmap_ctz(const MDBX_txn *txn, intptr_t bmi) {
   return dbi_bitmap_ctz_fallback(txn, bmi);
 }
 
+static inline bool dbi_foreach_step(const MDBX_txn *const txn, size_t *bitmap_item, size_t *dbi) {
+  const size_t bitmap_chunk = CHAR_BIT * sizeof(txn->dbi_sparse[0]);
+  if (*bitmap_item & 1) {
+    *bitmap_item >>= 1;
+    return txn->dbi_state[*dbi] != 0;
+  }
+  if (*bitmap_item) {
+    size_t bitmap_skip = dbi_bitmap_ctz(txn, *bitmap_item);
+    *bitmap_item >>= bitmap_skip;
+    *dbi += bitmap_skip - 1;
+  } else {
+    *dbi = (*dbi - 1) | (bitmap_chunk - 1);
+    *bitmap_item = txn->dbi_sparse[(1 + *dbi) / bitmap_chunk];
+    if (*bitmap_item == 0)
+      *dbi += bitmap_chunk;
+  }
+  return false;
+}
+
 /* LY: Макрос целенаправленно сделан с одним циклом, чтобы сохранить возможность
  * использования оператора break */
 #define TXN_FOREACH_DBI_FROM(TXN, I, FROM)                                                                             \
-  for (size_t bitmap_chunk = CHAR_BIT * sizeof(TXN->dbi_sparse[0]), bitmap_item = TXN->dbi_sparse[0] >> FROM,          \
-              I = FROM;                                                                                                \
-       I < TXN->n_dbi; ++I)                                                                                            \
-    if (bitmap_item == 0) {                                                                                            \
-      I = (I - 1) | (bitmap_chunk - 1);                                                                                \
-      bitmap_item = TXN->dbi_sparse[(1 + I) / bitmap_chunk];                                                           \
-      if (!bitmap_item)                                                                                                \
-        /* coverity[const_overflow] */                                                                                 \
-        I += bitmap_chunk;                                                                                             \
-      continue;                                                                                                        \
-    } else if ((bitmap_item & 1) == 0) {                                                                               \
-      size_t bitmap_skip = dbi_bitmap_ctz(txn, bitmap_item);                                                           \
-      bitmap_item >>= bitmap_skip;                                                                                     \
-      I += bitmap_skip - 1;                                                                                            \
-      continue;                                                                                                        \
-    } else if (bitmap_item >>= 1, TXN->dbi_state[I])
+  for (size_t bitmap_item = TXN->dbi_sparse[0] >> FROM, I = FROM; I < TXN->n_dbi; ++I)                                 \
+    if (dbi_foreach_step(TXN, &bitmap_item, &I))
 
 #else
 
-#define TXN_FOREACH_DBI_FROM(TXN, I, SKIP)                                                                             \
-  for (size_t I = SKIP; I < TXN->n_dbi; ++I)                                                                           \
+#define TXN_FOREACH_DBI_FROM(TXN, I, FROM)                                                                             \
+  for (size_t I = FROM; I < TXN->n_dbi; ++I)                                                                           \
     if (TXN->dbi_state[I])
 
 #endif /* MDBX_ENABLE_DBI_SPARSE */
@@ -75,6 +80,7 @@ static inline size_t dbi_bitmap_ctz(const MDBX_txn *txn, intptr_t bmi) {
 #define TXN_FOREACH_DBI_USER(TXN, I) TXN_FOREACH_DBI_FROM(TXN, I, CORE_DBS)
 
 MDBX_INTERNAL int dbi_import(MDBX_txn *txn, const size_t dbi);
+MDBX_INTERNAL int dbi_gone(MDBX_txn *txn, const size_t dbi, const int rc);
 
 struct dbi_snap_result {
   uint32_t sequence;
@@ -82,7 +88,7 @@ struct dbi_snap_result {
 };
 MDBX_INTERNAL struct dbi_snap_result dbi_snap(const MDBX_env *env, const size_t dbi);
 
-MDBX_INTERNAL int dbi_update(MDBX_txn *txn, int keep);
+MDBX_INTERNAL int dbi_update(MDBX_txn *txn, bool keep);
 
 static inline uint8_t dbi_state(const MDBX_txn *txn, const size_t dbi) {
   STATIC_ASSERT((int)DBI_DIRTY == MDBX_DBI_DIRTY && (int)DBI_STALE == MDBX_DBI_STALE &&
@@ -100,7 +106,7 @@ static inline uint8_t dbi_state(const MDBX_txn *txn, const size_t dbi) {
 
 static inline bool dbi_changed(const MDBX_txn *txn, const size_t dbi) {
   const MDBX_env *const env = txn->env;
-  eASSERT(env, dbi_state(txn, dbi) & DBI_LINDO);
+  eASSERT0(env, dbi_state(txn, dbi) & DBI_LINDO);
   const uint32_t snap_seq = atomic_load32(&env->dbi_seqs[dbi], mo_AcquireRelease);
   return unlikely(snap_seq != txn->dbi_seqs[dbi]);
 }
@@ -120,10 +126,10 @@ static inline uint32_t dbi_seq_next(const MDBX_env *const env, size_t dbi) {
 }
 
 MDBX_INTERNAL int dbi_open(MDBX_txn *txn, const MDBX_val *const name, unsigned user_flags, MDBX_dbi *dbi,
-                           MDBX_cmp_func *keycmp, MDBX_cmp_func *datacmp);
+                           MDBX_cmp_func keycmp, MDBX_cmp_func datacmp);
 
-MDBX_INTERNAL int dbi_bind(MDBX_txn *txn, const size_t dbi, unsigned user_flags, MDBX_cmp_func *keycmp,
-                           MDBX_cmp_func *datacmp);
+MDBX_INTERNAL int dbi_bind(MDBX_txn *txn, const size_t dbi, unsigned user_flags, MDBX_cmp_func keycmp,
+                           MDBX_cmp_func datacmp);
 
 typedef struct defer_free_item {
   struct defer_free_item *next;

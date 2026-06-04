@@ -7,13 +7,13 @@ int mdbx_dbi_open2(MDBX_txn *txn, const MDBX_val *name, MDBX_db_flags_t flags, M
   return LOG_IFERR(dbi_open(txn, name, flags, dbi, nullptr, nullptr));
 }
 
-int mdbx_dbi_open_ex2(MDBX_txn *txn, const MDBX_val *name, MDBX_db_flags_t flags, MDBX_dbi *dbi, MDBX_cmp_func *keycmp,
-                      MDBX_cmp_func *datacmp) {
+int mdbx_dbi_open_ex2(MDBX_txn *txn, const MDBX_val *name, MDBX_db_flags_t flags, MDBX_dbi *dbi, MDBX_cmp_func keycmp,
+                      MDBX_cmp_func datacmp) {
   return LOG_IFERR(dbi_open(txn, name, flags, dbi, keycmp, datacmp));
 }
 
 static int dbi_open_cstr(MDBX_txn *txn, const char *name_cstr, MDBX_db_flags_t flags, MDBX_dbi *dbi,
-                         MDBX_cmp_func *keycmp, MDBX_cmp_func *datacmp) {
+                         MDBX_cmp_func keycmp, MDBX_cmp_func datacmp) {
   MDBX_val thunk, *name;
   if (name_cstr == MDBX_CHK_MAIN || name_cstr == MDBX_CHK_GC || name_cstr == MDBX_CHK_META)
     name = (void *)name_cstr;
@@ -29,8 +29,8 @@ int mdbx_dbi_open(MDBX_txn *txn, const char *name, MDBX_db_flags_t flags, MDBX_d
   return LOG_IFERR(dbi_open_cstr(txn, name, flags, dbi, nullptr, nullptr));
 }
 
-int mdbx_dbi_open_ex(MDBX_txn *txn, const char *name, MDBX_db_flags_t flags, MDBX_dbi *dbi, MDBX_cmp_func *keycmp,
-                     MDBX_cmp_func *datacmp) {
+int mdbx_dbi_open_ex(MDBX_txn *txn, const char *name, MDBX_db_flags_t flags, MDBX_dbi *dbi, MDBX_cmp_func keycmp,
+                     MDBX_cmp_func datacmp) {
   return LOG_IFERR(dbi_open_cstr(txn, name, flags, dbi, keycmp, datacmp));
 }
 
@@ -44,33 +44,12 @@ __cold int mdbx_drop(MDBX_txn *txn, MDBX_dbi dbi, bool del) {
   if (unlikely(rc != MDBX_SUCCESS))
     return LOG_IFERR(rc);
 
-  if (txn->dbs[dbi].height) {
-    cx.outer.next = txn->cursors[dbi];
-    txn->cursors[dbi] = &cx.outer;
-    rc = tree_drop(&cx.outer, dbi == MAIN_DBI || (cx.outer.tree->flags & MDBX_DUPSORT));
-    txn->cursors[dbi] = cx.outer.next;
-    if (unlikely(rc != MDBX_SUCCESS))
-      return LOG_IFERR(rc);
-  }
+  rc = tbl_purge(&cx.outer);
+  if (unlikely(rc != MDBX_SUCCESS))
+    return LOG_IFERR(rc);
 
-  /* Invalidate the dropped DB's cursors */
-  for (MDBX_cursor *mc = txn->cursors[dbi]; mc; mc = mc->next)
-    be_poor(mc);
-
-  if (!del || dbi < CORE_DBS) {
-    /* reset the DB record, mark it dirty */
-    txn->dbi_state[dbi] |= DBI_DIRTY;
-    txn->dbs[dbi].height = 0;
-    txn->dbs[dbi].branch_pages = 0;
-    txn->dbs[dbi].leaf_pages = 0;
-    txn->dbs[dbi].large_pages = 0;
-    txn->dbs[dbi].items = 0;
-    txn->dbs[dbi].root = P_INVALID;
-    txn->dbs[dbi].sequence = 0;
-    /* txn->dbs[dbi].mod_txnid = txn->txnid; */
-    txn->flags |= MDBX_TXN_DIRTY;
+  if (!del || dbi < CORE_DBS)
     return MDBX_SUCCESS;
-  }
 
   MDBX_env *const env = txn->env;
   MDBX_val name = env->kvs[dbi].name;
@@ -83,8 +62,8 @@ __cold int mdbx_drop(MDBX_txn *txn, MDBX_dbi dbi, bool del) {
       rc = cursor_del(&cx.outer, N_TREE);
       txn->cursors[MAIN_DBI] = cx.outer.next;
       if (likely(rc == MDBX_SUCCESS)) {
-        tASSERT(txn, txn->dbi_state[MAIN_DBI] & DBI_DIRTY);
-        tASSERT(txn, txn->flags & MDBX_TXN_DIRTY);
+        cASSERT0(txn, txn->dbi_state[MAIN_DBI] & DBI_DIRTY);
+        cASSERT0(txn, txn->flags & MDBX_TXN_DIRTY);
         txn->dbi_state[dbi] = DBI_LINDO | DBI_OLDEN;
         rc = osal_fastmutex_acquire(&env->dbi_lock);
         if (likely(rc == MDBX_SUCCESS))
@@ -143,7 +122,7 @@ int mdbx_dbi_close(MDBX_env *env, MDBX_dbi dbi) {
   if (unlikely(dbi < CORE_DBS))
     return (dbi == MAIN_DBI) ? MDBX_SUCCESS : LOG_IFERR(MDBX_BAD_DBI);
 
-  if (unlikely(dbi >= env->max_dbi))
+  if (unlikely(dbi >= env->n_dbi))
     return LOG_IFERR(MDBX_BAD_DBI);
 
   rc = osal_fastmutex_acquire(&env->dbi_lock);
@@ -153,7 +132,7 @@ int mdbx_dbi_close(MDBX_env *env, MDBX_dbi dbi) {
   if (unlikely(dbi >= env->n_dbi)) {
     rc = MDBX_BAD_DBI;
   bailout:
-    osal_fastmutex_release(&env->dbi_lock);
+    ENSURE(osal_fastmutex_release(&env->dbi_lock) == MDBX_SUCCESS);
     return LOG_IFERR(rc);
   }
 
@@ -167,8 +146,8 @@ int mdbx_dbi_close(MDBX_env *env, MDBX_dbi dbi) {
      * в basal_txn, а уже после в env->txn. Таким образом, падение может быть
      * только при коллизии с завершением вложенной транзакции.
      *
-     * Альтернативно можно попробовать выполнять обновление/put записи в
-     * mainDb соответствующей таблице закрываемого хендла. Семантически это
+     * Альтернативно можно попробовать выполнять обновление/put строки в
+     * MainDB соответствующей таблице закрываемого хендла. Семантически это
      * верный путь, но проблема в текущем API, в котором исторически dbi-хендл
      * живет и закрывается вне транзакции. Причем проблема не только в том,
      * что нет указателя на текущую пишущую транзакцию, а в том что
@@ -241,7 +220,7 @@ __cold int mdbx_dbi_stat(const MDBX_txn *txn, MDBX_dbi dbi, MDBX_stat *dest, siz
     return LOG_IFERR(MDBX_BAD_TXN);
 
   if (unlikely(txn->dbi_state[dbi] & DBI_STALE)) {
-    rc = tbl_fetch((MDBX_txn *)txn, dbi);
+    rc = tbl_refresh((MDBX_txn *)txn, dbi);
     if (unlikely(rc != MDBX_SUCCESS))
       return LOG_IFERR(rc);
   }
@@ -258,7 +237,7 @@ __cold int mdbx_dbi_stat(const MDBX_txn *txn, MDBX_dbi dbi, MDBX_stat *dest, siz
   return MDBX_SUCCESS;
 }
 
-__cold int mdbx_enumerate_tables(const MDBX_txn *txn, MDBX_table_enum_func *func, void *ctx) {
+__cold int mdbx_enumerate_tables(const MDBX_txn *txn, MDBX_table_enum_func func, void *ctx) {
   if (unlikely(!func))
     return LOG_IFERR(MDBX_EINVAL);
 

@@ -1,7 +1,8 @@
 /// \copyright Copyright (c) 2015-2026 Леонид Юрьев aka Leonid Yuriev <leo@yuriev.ru>. All Rights Reserved.
 ///
 /// THE CONTENTS OF THIS PROJECT ARE PROPRIETARY AND CONFIDENTIAL.
-/// UNAUTHORIZED COPYING, TRANSFERRING OR REPRODUCTION OF THE CONTENTS OF THIS PROJECT, VIA ANY MEDIUM IS STRICTLY PROHIBITED.
+/// UNAUTHORIZED COPYING, TRANSFERRING OR REPRODUCTION OF THE CONTENTS OF THIS PROJECT,
+/// VIA ANY MEDIUM IS STRICTLY PROHIBITED.
 ///
 /// The receipt or possession of the source code and/or any parts thereof does not convey or imply any right to use them
 /// for any purpose other than the purpose for which they were provided to you.
@@ -12,7 +13,8 @@
 /// whether in an action of contract, tort or otherwise, arising from, out of or in connection with the software
 /// or the use or other dealings in the software.
 ///
-/// The above copyright notice and this permission notice shall be included in all copies or substantial portions of the software.
+/// The above copyright notice and this permission notice shall be included in all copies
+/// or substantial portions of the software.
 ///
 /// \author Леонид Юрьев aka Leonid Yuriev <leo@yuriev.ru>
 /// \date 2015-2026
@@ -397,7 +399,28 @@ int osal_actor_start(const actor_config &config, mdbx_pid_t &pid) {
 
 actor_status osal_actor_info(const mdbx_pid_t pid) { return children.at(pid); }
 
+static void wait_actors(unsigned timeout) {
+  for (auto &pair : children)
+    if (pair.second <= as_running) {
+      osal_yield();
+      mdbx_pid_t pid = 0;
+      osal_actor_poll(pid, timeout);
+      if (!pid)
+        return;
+    }
+}
+
 void osal_killall_actors(void) {
+  for (auto &pair : children)
+    kill(pair.first, SIGINT);
+
+  wait_actors(0);
+  for (auto &pair : children) {
+    osal_yield();
+    kill(pair.first, SIGTERM);
+  }
+
+  wait_actors(1);
   for (auto &pair : children) {
     kill(pair.first, SIGKILL);
     pair.second = as_killed;

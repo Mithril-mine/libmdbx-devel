@@ -35,7 +35,7 @@ endef
 #
 # Note that the defaults should already be correct for most platforms;
 # you should not need to change any of these. Read their descriptions
-# in README and source code (see src/options.h) if you do.
+# in the README and source code (see src/options.h) if you do.
 #
 
 # install sandbox
@@ -60,7 +60,7 @@ CTEST_OPT ?=
 DIST_DIR ?= dist
 
 # build options
-MDBX_BUILD_OPTIONS   ?=-DNDEBUG=1
+MDBX_BUILD_OPTIONS   ?=
 MDBX_BUILD_TIMESTAMP ?=$(if $(SOURCE_DATE_EPOCH),$(SOURCE_DATE_EPOCH),$(shell date +%Y-%m-%dT%H:%M:%S%z))
 MDBX_BUILD_CXX       ?=YES
 MDBX_BUILD_METADATA  ?=
@@ -120,24 +120,27 @@ endef
 define uname2libs
   case "$(UNAME)" in
     CYGWIN*|MINGW*|MSYS*|Windows*)
-      echo '-lm -lntdll -lwinmm';
+      echo '-lntdll -lwinmm';
       ;;
     *SunOS*|*Solaris*)
-      echo '-lm -lkstat -lrt';
+      echo '-lkstat -lrt';
       ;;
     *Darwin*|OpenBSD*)
-      echo '-lm';
+      echo '';
       ;;
     *)
-      echo '-lm -lrt';
+      echo '-lrt';
       ;;
   esac
 endef
 
 SO_SUFFIX  := $(shell $(uname2sosuffix))
 HEADERS    := mdbx.h mdbx.h++
+#> dist-cutoff-begin
+HEADERS	   += $(wildcard mdbx++/*.h++)
+#< dist-cutoff-end
 LIBRARIES  := libmdbx.a libmdbx.$(SO_SUFFIX)
-TOOLS      := chk copy drop dump load stat
+TOOLS      := chk copy defrag drop dump load stat
 MDBX_TOOLS := $(addprefix mdbx_,$(TOOLS))
 MANPAGES   := mdbx_stat.1 mdbx_copy.1 mdbx_dump.1 mdbx_load.1 mdbx_chk.1 mdbx_drop.1
 TIP        := // TIP:
@@ -258,11 +261,11 @@ options:
 #> dist-cutoff-begin
 ifeq ($(wildcard mdbx.c),mdbx.c)
 #< dist-cutoff-end
-	@echo "##   in README and source code (see mdbx.c) if you do."
+	@echo "##   in the README and source code (see mdbx.c) if you do."
 	@grep -h '#ifndef MDBX_' mdbx.c | grep -v BUILD | sort -u | sed 's/#ifndef /  /'
 #> dist-cutoff-begin
 else
-	@echo "##   in README and source code (see src/options.h) if you do."
+	@echo "##   in the README and source code (see src/options.h) if you do."
 	@grep -h '#ifndef MDBX_' src/*.h | grep -v BUILD | sort -u | sed 's/#ifndef /  /'
 endif
 #< dist-cutoff-end
@@ -300,7 +303,7 @@ lib-shared libmdbx.$(SO_SUFFIX): mdbx-dylib.o $(call select_by,MDBX_BUILD_CXX,md
 	@echo '  LD $@'
 	$(QUIET)$(call select_by,MDBX_BUILD_CXX,$(CXX) $(CXXFLAGS),$(CC) $(CFLAGS)) $^ -pthread -shared $(LDFLAGS) $(call select_by,MDBX_BUILD_CXX,$(LIB_STDCXXFS)) $(LIBS) -o $@
 
-ninja-assertions: CMAKE_OPT += -DMDBX_FORCE_ASSERTIONS=ON $(MDBX_BUILD_OPTIONS)
+ninja-assertions: CMAKE_OPT += -DMDBX_CHECKING=2 $(MDBX_BUILD_OPTIONS)
 ninja-assertions: cmake-build
 ninja-debug: CMAKE_OPT += -DCMAKE_BUILD_TYPE=Debug $(MDBX_BUILD_OPTIONS)
 ninja-debug: cmake-build
@@ -316,12 +319,14 @@ ctest: cmake-build
 run-ut: mdbx_example
 	$(QUIET)for UT in $^; do echo "  Running $$UT" && ./$${UT} || exit -1; done
 
-TEST_TARGETS := mdbx_legacy_example $(call select_by,MDBX_BUILD_CXX,mdbx_modern_example,)
-TEST_BUILD_TARGETS := build-test
+TEST_TARGETS :=
+TEST_BUILD_TARGETS :=
 ifneq ($(CMAKE),"")
 TEST_TARGETS += ctest
 TEST_BUILD_TARGETS += cmake-build
 endif
+TEST_TARGETS += mdbx_legacy_example $(call select_by,MDBX_BUILD_CXX,mdbx_modern_example,)
+TEST_BUILD_TARGETS += build-test
 #> dist-cutoff-begin
 TEST_TARGETS += test-stochastic
 TEST_BUILD_TARGETS += build-stochastic
@@ -331,8 +336,8 @@ TEST_BUILD_TARGETS += build-stochastic
 test: $(TEST_TARGETS)
 build-test: $(TEST_BUILD_TARGETS)
 
-test-assertion: MDBX_BUILD_OPTIONS += -DMDBX_FORCE_ASSERTIONS=1 -UNDEBUG -DMDBX_DEBUG=0
-test-assertion: CMAKE_OPT += -DMDBX_FORCE_ASSERTIONS=ON -DMDBX_DEBUG=0
+test-assertion: MDBX_BUILD_OPTIONS += -DMDBX_CHECKING=2
+test-assertion: CMAKE_OPT += -DMDBX_CHECKING=2
 test-assertion: smoke
 
 test-valgrind: test-memcheck
@@ -371,7 +376,7 @@ ifeq ($(wildcard mdbx.c),mdbx.c)
 MAN_SRCDIR := man1/
 
 dist:
-	@echo '  Starting 2026 libmdbx is distrubuted in an amalgamated source code form.'
+	@echo '  Starting 2026 libmdbx is distributed in an amalgamated source code form.'
 	@echo '  So amalgamation is no longer required. Please update your build scripts.'
 
 config-gnumake.h: @buildflags.tag mdbx.c $(lastword $(MAKEFILE_LIST)) LICENSE NOTICE COPYRIGHT
@@ -384,25 +389,25 @@ config-gnumake.h: @buildflags.tag mdbx.c $(lastword $(MAKEFILE_LIST)) LICENSE NO
 	&& echo '#define MDBX_BUILD_METADATA "$(MDBX_BUILD_METADATA)"' \
 	) >$@
 
-mdbx-dylib.o: config-gnumake.h mdbx.c mdbx.h $(lastword $(MAKEFILE_LIST)) LICENSE NOTICE COPYRIGHT
+mdbx-dylib.o: config-gnumake.h mdbx.c mdbx.h mdbx-internals.h $(lastword $(MAKEFILE_LIST)) LICENSE NOTICE COPYRIGHT
 	@echo '  CC $@'
 	$(QUIET)$(CC) $(CFLAGS) $(MDBX_BUILD_OPTIONS) '-DMDBX_CONFIG_H="config-gnumake.h"' -DLIBMDBX_EXPORTS=1 -c mdbx.c -o $@
 
-mdbx-static.o: config-gnumake.h mdbx.c mdbx.h $(lastword $(MAKEFILE_LIST)) LICENSE NOTICE COPYRIGHT
+mdbx-static.o: config-gnumake.h mdbx.c mdbx.h mdbx-internals.h $(lastword $(MAKEFILE_LIST)) LICENSE NOTICE COPYRIGHT
 	@echo '  CC $@'
 	$(QUIET)$(CC) $(CFLAGS) $(MDBX_BUILD_OPTIONS) '-DMDBX_CONFIG_H="config-gnumake.h"' -ULIBMDBX_EXPORTS -c mdbx.c -o $@
 
-mdbx++-dylib.o: config-gnumake.h mdbx.c++ $(HEADERS) $(lastword $(MAKEFILE_LIST)) LICENSE NOTICE COPYRIGHT
+mdbx++-dylib.o: config-gnumake.h mdbx.c++ $(HEADERS) mdbx-internals.h $(lastword $(MAKEFILE_LIST)) LICENSE NOTICE COPYRIGHT
 	@echo '  CC $@'
 	$(QUIET)$(CXX) $(CXXFLAGS) $(MDBX_BUILD_OPTIONS) '-DMDBX_CONFIG_H="config-gnumake.h"' -DLIBMDBX_EXPORTS=1 -c mdbx.c++ -o $@
 
-mdbx++-static.o: config-gnumake.h mdbx.c++ $(HEADERS) $(lastword $(MAKEFILE_LIST)) LICENSE NOTICE COPYRIGHT
+mdbx++-static.o: config-gnumake.h mdbx.c++ $(HEADERS) mdbx-internals.h $(lastword $(MAKEFILE_LIST)) LICENSE NOTICE COPYRIGHT
 	@echo '  CC $@'
 	$(QUIET)$(CXX) $(CXXFLAGS) $(MDBX_BUILD_OPTIONS) '-DMDBX_CONFIG_H="config-gnumake.h"' -ULIBMDBX_EXPORTS -c mdbx.c++ -o $@
 
-mdbx_%:	mdbx_%.c mdbx-static.o
+mdbx_%:	mdbx_%.c mdbx-static.o mdbx-wingetopt.h
 	@echo '  CC+LD $@'
-	$(QUIET)$(CC) $(CFLAGS) $(MDBX_BUILD_OPTIONS) '-DMDBX_CONFIG_H="config-gnumake.h"' $^ $(LDFLAGS) $(EXE_LDFLAGS) $(LIBS) -o $@
+	$(QUIET)$(CC) $(CFLAGS) $(MDBX_BUILD_OPTIONS) '-DMDBX_CONFIG_H="config-gnumake.h"' $< mdbx-static.o $(LDFLAGS) $(EXE_LDFLAGS) $(LIBS) -o $@
 
 mdbx_%.static: mdbx_%.c mdbx-static.o
 	@echo '  CC+LD $@'
@@ -448,11 +453,11 @@ define uname2titer
   esac
 endef
 
-DIST_EXTRA := LICENSE NOTICE COPYRIGHT README.md CMakeLists.txt GNUmakefile Makefile ChangeLog.md VERSION.json config.h.in ntdll.def \
-	$(addprefix man1/, $(MANPAGES)) cmake/compiler.cmake cmake/profile.cmake cmake/utils.cmake \
+DIST_EXTRA := LICENSE NOTICE COPYRIGHT README.md TODO.md CMakeLists.txt GNUmakefile Makefile ChangeLog.md VERSION.json config.h.in ntdll.def \
+	$(addprefix man1/, $(MANPAGES)) cmake/compiler.cmake cmake/profile.cmake cmake/utils.cmake valgrind_suppress.txt \
 	$(addprefix ut_and_examples/, CMakeLists.txt example-mdbx.c++ example-mdbx.c pcrf/pcrf_simulator.c README.md)
 
-DIST_SRC   := mdbx.h mdbx.h++ mdbx.c mdbx.c++ $(addsuffix .c, $(MDBX_TOOLS))
+DIST_SRC   := mdbx.h mdbx.h++ mdbx.c mdbx.c++ $(addsuffix .c, $(MDBX_TOOLS)) mdbx-internals.h mdbx-wingetopt.h
 
 TEST_DB    ?= $(shell [ -d /dev/shm ] && echo /dev/shm || echo /tmp)/mdbx-test.db
 TEST_LOG   ?= $(shell [ -d /dev/shm ] && echo /dev/shm || echo /tmp)/mdbx-test.log
@@ -471,13 +476,13 @@ CLANG_FORMAT ?= $(shell (which clang-format-19 || which clang-format) 2>/dev/nul
 reformat:
 	@echo '  RUNNING clang-format...'
 	$(QUIET)if [ -n "$(CLANG_FORMAT)" ]; then \
-		git ls-files | grep -E '\.(c|c++|h|h++)(\.in)?$$' | xargs -r $(CLANG_FORMAT) -i --style=file; \
+		git ls-files --deduplicate | grep -E '\.(c|c++|h|h++)(\.in)?$$' | xargs -r $(CLANG_FORMAT) -i --style=file; \
 	else \
 		echo "clang-format version 19 not found for 'reformat'"; \
 	fi
 
 MAN_SRCDIR := src/man1/
-ALLOY_DEPS := $(shell git ls-files src/ | grep -e /tools -e /man -v)
+ALLOY_DEPS := $(shell git ls-files --deduplicate src/ | grep -e /tools -e /man -v)
 MDBX_GIT_DIR := $(shell if [ -d .git ]; then echo .git; elif [ -s .git -a -f .git ]; then grep '^gitdir: ' .git | cut -d ':' -f 2; else echo git_directory_is_absent; fi)
 MDBX_GIT_LASTVTAG := $(shell git describe --tags --dirty=-DIRTY --abbrev=0 '--match=v[0-9]*' 2>&- || echo 'Please fetch tags and/or install non-obsolete git version')
 MDBX_GIT_3DOT := $(shell set -o pipefail; echo "$(MDBX_GIT_LASTVTAG)" | $(SED) -n 's|^v*\([0-9]\{1,\}\.[0-9]\{1,\}\.[0-9]\{1,\}\)\(.*\)|\1|p' || echo 'Please fetch tags and/or use non-obsolete git version')
@@ -497,9 +502,9 @@ MDBX_SMOKE_EXTRA ?=
 check: DESTDIR = $(shell pwd)/@check-install
 check: CMAKE_OPT += -Werror=dev
 check: clean | smoke-assertion ninja-assertions dist install test ctest
-smoke-assertion: MDBX_BUILD_OPTIONS += -DMDBX_FORCE_ASSERTIONS=1 -UNDEBUG -DMDBX_DEBUG=0
+smoke-assertion: MDBX_BUILD_OPTIONS += -DMDBX_CHECKING=2
 smoke-assertion: smoke
-long-test-assertion: MDBX_BUILD_OPTIONS += -DMDBX_FORCE_ASSERTIONS=1 -UNDEBUG -DMDBX_DEBUG=0
+long-test-assertion: MDBX_BUILD_OPTIONS += -DMDBX_CHECKING=2
 long-test-assertion: smoke
 
 .PHONY: check-posix-locking-sysv check-posix-locking-1988 check-posix-locking-2001 check-posix-locking-2008
@@ -597,7 +602,7 @@ $(foreach file,$(TOOLS),$(eval $(call tool-rule,$(file))))
 
 mdbx_test: $(TEST_OBJ) libmdbx.$(SO_SUFFIX)
 	@echo '  LD $@'
-	$(QUIET)$(CXX) $(CXXFLAGS) $(TEST_OBJ) -Wl,-rpath . -L . -l mdbx $(EXE_LDFLAGS) $(LIBS) -o $@
+	$(QUIET)$(CXX) $(CXXFLAGS) $(TEST_OBJ) -Wl,-rpath . -L . -l mdbx $(EXE_LDFLAGS) $(LIBS) -lm -o $@
 
 $(MDBX_GIT_DIR)/HEAD $(MDBX_GIT_DIR)/index $(MDBX_GIT_DIR)/refs/tags:
 	@echo '*** ' >&2
@@ -609,20 +614,27 @@ $(MDBX_GIT_DIR)/HEAD $(MDBX_GIT_DIR)/index $(MDBX_GIT_DIR)/refs/tags:
 	@echo '*** ' >&2
 	@false
 
-src/version.c: src/version.c.in $(lastword $(MAKEFILE_LIST)) $(MDBX_GIT_DIR)/HEAD $(MDBX_GIT_DIR)/index $(MDBX_GIT_DIR)/refs/tags LICENSE NOTICE COPYRIGHT
-	@echo '  MAKE $@'
-	$(QUIET)$(SED) \
-		-e "s|@MDBX_GIT_TIMESTAMP@|$(MDBX_GIT_TIMESTAMP)|" \
-		-e "s|@MDBX_GIT_TREE@|$(shell git show --no-patch --format=%T HEAD || echo 'Please install latest get version')|" \
-		-e "s|@MDBX_GIT_COMMIT@|$(shell git show --no-patch --format=%H HEAD || echo 'Please install latest get version')|" \
-		-e "s|@MDBX_GIT_DESCRIBE@|$(MDBX_GIT_DESCRIBE)|" \
-		-e "s|\$${MDBX_VERSION_MAJOR}|$(shell echo '$(MDBX_GIT_3DOT)' | cut -d . -f 1)|" \
-		-e "s|\$${MDBX_VERSION_MINOR}|$(shell echo '$(MDBX_GIT_3DOT)' | cut -d . -f 2)|" \
-		-e "s|\$${MDBX_VERSION_PATCH}|$(shell echo '$(MDBX_GIT_3DOT)' | cut -d . -f 3)|" \
-		-e "s|\$${MDBX_VERSION_TWEAK}|$(MDBX_GIT_TWEAK)|" \
-		-e "s|@MDBX_VERSION_PRERELEASE@|$(MDBX_GIT_PRERELEASE)|" \
-		-e "s|@MDBX_VERSION_PURE@|$(MDBX_VERSION_PURE)|" \
-	src/version.c.in >$@
+define version-rule
+$(1): $(2) $(lastword $(MAKEFILE_LIST)) $(MDBX_GIT_DIR)/HEAD $(MDBX_GIT_DIR)/index $(MDBX_GIT_DIR)/refs/tags LICENSE NOTICE COPYRIGHT
+	@echo '  MAKE $$@'
+	$(QUIET)$$(SED) \
+		-e "s|@MDBX_GIT_TIMESTAMP@|$$(MDBX_GIT_TIMESTAMP)|" \
+		-e "s|@MDBX_GIT_TREE@|$$(shell git show --no-patch --format=%T HEAD || echo 'Please install latest get version')|" \
+		-e "s|@MDBX_GIT_COMMIT@|$$(shell git show --no-patch --format=%H HEAD || echo 'Please install latest get version')|" \
+		-e "s|@MDBX_GIT_DESCRIBE@|$$(MDBX_GIT_DESCRIBE)|" \
+		-e "s|\$$$${MDBX_VERSION_MAJOR}|$$(shell echo '$$(MDBX_GIT_3DOT)' | cut -d . -f 1)|" \
+		-e "s|\$$$${MDBX_VERSION_MINOR}|$$(shell echo '$$(MDBX_GIT_3DOT)' | cut -d . -f 2)|" \
+		-e "s|\$$$${MDBX_VERSION_PATCH}|$$(shell echo '$$(MDBX_GIT_3DOT)' | cut -d . -f 3)|" \
+		-e "s|\$$$${MDBX_VERSION_TWEAK}|$$(MDBX_GIT_TWEAK)|" \
+		-e "s|@MDBX_VERSION_PRERELEASE@|$$(MDBX_GIT_PRERELEASE)|" \
+		-e "s|@MDBX_VERSION_PURE@|$$(MDBX_VERSION_PURE)|" \
+	$(2) >$$@
+
+endef
+
+$(eval $(call version-rule, src/version.c, src/version.c.in))
+
+$(eval $(call version-rule, $(DIST_DIR)/@tmp-amalgam.inc, src/amalgam.in))
 
 src/config-gnumake.h: @buildflags.tag src/version.c $(lastword $(MAKEFILE_LIST)) LICENSE NOTICE COPYRIGHT
 	@echo '  MAKE $@'
@@ -664,7 +676,7 @@ docs/__$(1).md: $(2) $(lastword $(MAKEFILE_LIST))
 	$(QUIET)$(SED) -n '/<!-- section-begin $(1) -->/,/<!-- section-end -->/p' $(2) >$$@ && test -s $$@
 
 endef
-$(foreach section,overview mithril characteristics improvements history usage performance bindings,$(eval $(call md-extract-section,$(section),README.md)))
+$(foreach section,overview mithril characteristics improvements history usage performance bindings,$(eval $(call md-extract-section,$(section),$(DIST_DIR)/README.md)))
 
 docs/contrib.fame: src/version.c $(lastword $(MAKEFILE_LIST))
 	@echo '  MAKE $@'
@@ -682,11 +694,13 @@ docs/usage.md: docs/__usage.md docs/_starting.md docs/__bindings.md
 	@echo '  MAKE $@'
 	$(QUIET)echo -e "\\page usage Usage\n\\section getting Building & Embedding" | cat - $^ | $(SED) 's/^Bindings$$/Bindings {#bindings}/' >$@
 
-doxygen: docs/Doxyfile docs/overall.md docs/intro.md docs/usage.md $(DIST_DIR)/mdbx.h $(DIST_DIR)/mdbx.h++ src/options.h ChangeLog.md COPYRIGHT LICENSE NOTICE $(lastword $(MAKEFILE_LIST))
+doxygen: docs/Doxyfile docs/overall.md docs/intro.md docs/usage.md $(DIST_DIR)/mdbx.h $(DIST_DIR)/mdbx.h++ src/options.h ChangeLog.md COPYRIGHT LICENSE NOTICE docs/favicon.ico docs/manifest.webmanifest docs/ld+json $(lastword $(MAKEFILE_LIST))
 	@echo '  RUNNING doxygen...'
 	$(QUIET)rm -rf docs/html && \
 	cat $(DIST_DIR)/mdbx.h | tr '\n' '\r' | $(SED) -e 's/LIBMDBX_INLINE_API\s*(\s*\([^,]\+\),\s*\([^,]\+\),\s*(\s*\([^)]\+\)\s*)\s*)\s*{/inline \1 \2(\3) {/g' | tr '\r' '\n' >docs/mdbx.h && \
-	cp $(DIST_DIR)/mdbx.h++ src/options.h ChangeLog.md docs/ && (cd docs && doxygen Doxyfile $(HUSH)) && cp COPYRIGHT LICENSE NOTICE docs/html/
+	cp $(DIST_DIR)/mdbx.h++ src/options.h ChangeLog.md docs/ && (cd docs && doxygen Doxyfile $(HUSH)) && cp COPYRIGHT LICENSE NOTICE docs/favicon.ico docs/manifest.webmanifest docs/html/ && \
+	$(SED) -i docs/html/index.html -e '/\/MathJax.js"><\/script>/r docs/ld+json' -e 's/<title>libmdbx: Overall<\/title>//;T;r docs/title' && \
+	$(SED) -i docs/html/sitemap.xml -e '/^\s*<\/urlset>/e cat docs/sitemap.add'
 
 mdbx++-dylib.o: src/config-gnumake.h src/mdbx.c++ $(HEADERS) $(lastword $(MAKEFILE_LIST))
 	@echo '  CC $@'
@@ -717,7 +731,7 @@ release-assets: libmdbx-amalgamated-$(MDBX_GIT_3DOT).zpaq \
 
 @dist-checked.tag: $(addprefix $(DIST_DIR)/, $(DIST_SRC) $(DIST_EXTRA))
 	@echo -n '  VERIFY amalgamated sources...'
-	$(QUIET)rm -rf $@ $(DIST_DIR)/@tmp-essentials.inc $(DIST_DIR)/@tmp-internals.inc \
+	$(QUIET)rm -rf $@ $(DIST_DIR)/@tmp-squashed.inc $(DIST_DIR)/@tmp-amalgam.inc \
 	&& if grep -R "define xMDBX_ALLOY" dist | grep -q MDBX_BUILD_SOURCERY; then echo "sed output is WRONG!" >&2; exit 2; fi \
 	&& rm -rf @dist-check && cp -r -p $(DIST_DIR) @dist-check && ($(MAKE) -j IOARENA=false CXXSTD=$(CXXSTD) -C @dist-check all check ninja-assertions >@dist-check.log 2>@dist-check.err || (cat @dist-check.err && exit 1)) \
 	&& touch $@ || (echo " FAILED! See @dist-check.log and @dist-check.err" >&2; exit 2) && echo " Ok"
@@ -742,7 +756,7 @@ release-assets: libmdbx-amalgamated-$(MDBX_GIT_3DOT).zpaq \
 	@echo '  CREATE $@'
 	$(QUIET)rm -rf $@ && (cd dist && zpaq a ../$@ $(DIST_SRC) $(DIST_EXTRA) -m59) &>@zpaq.log
 
-$(DIST_DIR)/@tmp-essentials.inc: src/version.c $(ALLOY_DEPS) $(lastword $(MAKEFILE_LIST))
+$(DIST_DIR)/mdbx-internals.h: src/version.c $(DIST_DIR)/@tmp-amalgam.inc $(ALLOY_DEPS) $(lastword $(MAKEFILE_LIST))
 	@echo '  ALLOYING...'
 	$(QUIET)mkdir -p dist \
 	&& (grep -v '#include ' src/alloy.c && echo '#define MDBX_BUILD_SOURCERY $(MDBX_BUILD_SOURCERY)' \
@@ -759,21 +773,25 @@ $(DIST_DIR)/@tmp-essentials.inc: src/version.c $(ALLOY_DEPS) $(lastword $(MAKEFI
 		-e '/#include "pnl.h"/r src/pnl.h' \
 		src/essentials.h \
 	| $(SED) \
-		-e '/#pragma once/d' -e '/#include "/d' \
-		-e '/ clang-format o/d' -e '/ \*INDENT-O/d' \
-		| grep -v '^/// ') >$@
+		-e '/#pragma once/d' \
+		-e '/#include "/d' \
+		-e 's|@INCLUDE|#include|' \
+		-e '/ clang-format o/d;/ \*INDENT-O/d' \
+	) \
+	| grep -v '^///' | cat -s $(DIST_DIR)/@tmp-amalgam.inc - >$@
 
-$(DIST_DIR)/@tmp-internals.inc: $(DIST_DIR)/@tmp-essentials.inc src/version.c $(ALLOY_DEPS) $(lastword $(MAKEFILE_LIST))
-	$(QUIET)(cat $(DIST_DIR)/@tmp-essentials.inc \
-	&& $(SED) \
-		-e '/#include "essentials.h"/d' \
+$(DIST_DIR)/@tmp-squashed.inc: $(DIST_DIR)/mdbx-internals.h $(DIST_DIR)/@tmp-amalgam.inc src/version.c $(ALLOY_DEPS) $(lastword $(MAKEFILE_LIST))
+	$(QUIET)($(SED) \
+		-e 's|#include "essentials.h"|@INCLUDE "mdbx-internals.h"|' \
 		-e '/#include "atomics-ops.h"/r src/atomics-ops.h' \
 		-e '/#include "proto.h"/r src/proto.h' \
+		-e '/#include "rkl.h"/r src/rkl.h' \
 		-e '/#include "txl.h"/r src/txl.h' \
 		-e '/#include "unaligned.h"/r src/unaligned.h' \
 		-e '/#include "cogs.h"/r src/cogs.h' \
 		-e '/#include "cursor.h"/r src/cursor.h' \
 		-e '/#include "dbi.h"/r src/dbi.h' \
+		-e '/#include "dml.h"/r src/dml.h' \
 		-e '/#include "dpl.h"/r src/dpl.h' \
 		-e '/#include "gc.h"/r src/gc.h' \
 		-e '/#include "lck.h"/r src/lck.h' \
@@ -783,53 +801,113 @@ $(DIST_DIR)/@tmp-internals.inc: $(DIST_DIR)/@tmp-essentials.inc src/version.c $(
 		-e '/#include "page-ops.h"/r src/page-ops.h' \
 		-e '/#include "spill.h"/r src/spill.h' \
 		-e '/#include "sort.h"/r src/sort.h' \
-		-e '/#include "tls.h"/r src/tls.h' \
+		-e '/#include "rthc.h"/r src/rthc.h' \
 		-e '/#include "walk.h"/r src/walk.h' \
 		-e '/#include "windows-import.h"/r src/windows-import.h' \
 		src/internals.h \
 	| $(SED) \
-		-e '/#pragma once/d' -e '/#include "/d' \
-		-e '/ clang-format o/d' -e '/ \*INDENT-O/d' \
-		| grep -v '^/// ') >$@
+		-e '/#pragma once/d' \
+		-e '/#include "/d' \
+		-e '/ clang-format o/d;/ \*INDENT-O/d' \
+	| grep -v '^///') >$@
 
-$(DIST_DIR)/mdbx.c: $(DIST_DIR)/@tmp-internals.inc $(lastword $(MAKEFILE_LIST))
+$(DIST_DIR)/mdbx.c: $(DIST_DIR)/@tmp-squashed.inc $(DIST_DIR)/@tmp-amalgam.inc $(lastword $(MAKEFILE_LIST))
 	@echo '  MAKE $@'
-	$(QUIET)(cat $(DIST_DIR)/@tmp-internals.inc $(shell git ls-files src/*.c | grep -v alloy) src/version.c | $(SED) \
+	$(QUIET)(cat $(DIST_DIR)/@tmp-squashed.inc $(shell git ls-files --deduplicate src/*.c | grep -v alloy) src/version.c | $(SED) \
 		-e '/#include "debug_begin.h"/r src/debug_begin.h' \
 		-e '/#include "debug_end.h"/r src/debug_end.h' \
-	) | $(SED) -e '/#include "/d;/#pragma once/d' -e 's|@INCLUDE|#include|' \
-		-e '/ clang-format o/d;/ \*INDENT-O/d' -e '3i /* clang-format off */' | cat -s >$@
-
-$(DIST_DIR)/mdbx.c++: $(DIST_DIR)/@tmp-essentials.inc src/mdbx.c++ $(lastword $(MAKEFILE_LIST))
-	@echo '  MAKE $@'
-	$(QUIET)cat $(DIST_DIR)/@tmp-essentials.inc src/mdbx.c++ | $(SED) \
-		-e '/#define xMDBX_ALLOY/d' \
+	) | $(SED) \
 		-e '/#include "/d;/#pragma once/d' \
-		-e 's|@INCLUDE|#include|;s|"mdbx.h"|"mdbx.h++"|' \
-		-e '/ clang-format o/d;/ \*INDENT-O/d' -e '3i /* clang-format off */' | cat -s >$@
+		-e 's|@INCLUDE|#include|' \
+		-e '/ clang-format o/d;/ \*INDENT-O/d' \
+	| grep -v '^///' | cat -s $(DIST_DIR)/@tmp-amalgam.inc - >$@
+
+$(DIST_DIR)/mdbx.h++: $(filter %h++, $(HEADERS)) $(lastword $(MAKEFILE_LIST))
+	@echo '  MAKE $@'
+	$(QUIET)cat mdbx.h++ | $(SED) \
+		-e '/#include "mdbx++\/begin.h++"/r mdbx++/begin.h++' \
+		-e '/#include "mdbx++\/decl_exceptions.h++"/r mdbx++/decl_exceptions.h++' \
+		-e '/#include "mdbx++\/decl_slice.h++"/r mdbx++/decl_slice.h++' \
+		-e '/#include "mdbx++\/decl_transcoders.h++"/r mdbx++/decl_transcoders.h++' \
+		-e '/#include "mdbx++\/decl_buffer.h++"/r mdbx++/decl_buffer.h++' \
+		-e '/#include "mdbx++\/decl_core.h++"/r mdbx++/decl_core.h++' \
+		-e '/#include "mdbx++\/decl_env.h++"/r mdbx++/decl_env.h++' \
+		-e '/#include "mdbx++\/decl_txn.h++"/r mdbx++/decl_txn.h++' \
+		-e '/#include "mdbx++\/decl_cursor.h++"/r mdbx++/decl_cursor.h++' \
+		-e '/#include "mdbx++\/impl_slice.h++"/r mdbx++/impl_slice.h++' \
+		-e '/#include "mdbx++\/impl_buffer.h++"/r mdbx++/impl_buffer.h++' \
+		-e '/#include "mdbx++\/impl_core.h++"/r mdbx++/impl_core.h++' \
+		-e '/#include "mdbx++\/impl_exceptions.h++"/r mdbx++/impl_exceptions.h++' \
+		-e '/#include "mdbx++\/impl_env.h++"/r mdbx++/impl_env.h++' \
+		-e '/#include "mdbx++\/impl_txn.h++"/r mdbx++/impl_txn.h++' \
+		-e '/#include "mdbx++\/impl_cursor.h++"/r mdbx++/impl_cursor.h++' \
+		-e '/#include "mdbx++\/end.h++"/r mdbx++/end.h++' \
+		-e '/#include "xyz"/r xyz' \
+	| $(SED) \
+		-e '/dist-cutoff-begin/,/dist-cutoff-end/d' \
+		-e 's|#include "../mdbx.h"|@INCLUDE "mdbx.h"|' \
+	| $(SED) \
+		-e "s|@MDBX_GIT_TIMESTAMP@|$(MDBX_GIT_TIMESTAMP)|" \
+		-e "s|@MDBX_GIT_DESCRIBE@|$(MDBX_GIT_DESCRIBE)|" \
+		-e '/#include "/d' \
+		-e '/ clang-format o/d;/ \*INDENT-O/d' \
+		-e 's|@INCLUDE|#include|' \
+	| cat -s >$@
+
+$(DIST_DIR)/mdbx.c++: $(DIST_DIR)/@tmp-squashed.inc $(DIST_DIR)/@tmp-amalgam.inc src/mdbx.c++ $(lastword $(MAKEFILE_LIST))
+	@echo '  MAKE $@'
+	$(QUIET)$(SED) -e '/#ifndef __cplusplus/,/#endif \/\* !__cplusplus \*\//d' $(DIST_DIR)/@tmp-squashed.inc | \
+	cat - src/mdbx.c++ | \
+	$(SED) \
+		-e 's|#include "../mdbx.h++"|@INCLUDE "mdbx.h++"|' \
+		-e '/#include "/d' \
+		-e 's|@INCLUDE|#include|' \
+		-e '/ clang-format o/d;/ \*INDENT-O/d' \
+	| grep -v '^///' | cat -s $(DIST_DIR)/@tmp-amalgam.inc - >$@
+
+$(DIST_DIR)/mdbx-wingetopt.h: src/tools/wingetopt.h src/tools/wingetopt.c
+	@echo '  MAKE $@'
+	$(QUIET)mkdir -p dist && cat $^ | \
+	$(SED) \
+		-e '/#include "/d' \
+		-e '/#pragma once/d' \
+		-e '/ clang-format o/d;/ \*INDENT-O/d' \
+	| grep -v '^///' | cat -s >$@
 
 define dist-tool-rule
-$(DIST_DIR)/mdbx_$(1).c: src/tools/$(1).c src/tools/wingetopt.h src/tools/wingetopt.c \
-		$(DIST_DIR)/@tmp-internals.inc $(lastword $(MAKEFILE_LIST))
+$(DIST_DIR)/mdbx_$(1).c: src/tools/$(1).c \
+		$(DIST_DIR)/mdbx-internals.h $(lastword $(MAKEFILE_LIST)) $(DIST_DIR)/@tmp-amalgam.inc
 	@echo '  MAKE $$@'
-	$(QUIET)mkdir -p dist && $(SED) \
-		-e '/#include "essentials.h"/r $(DIST_DIR)/@tmp-essentials.inc' \
-		-e '/#include "wingetopt.h"/r src/tools/wingetopt.c' \
-		-e '/ clang-format o/d' -e '/ \*INDENT-O/d' \
+	$(QUIET)mkdir -p dist && \
+	$(SED) \
+		-e 's|#include "essentials.h"|@INCLUDE "mdbx-internals.h"|' \
+		-e 's|#include "wingetopt.h"|@INCLUDE "mdbx-wingetopt.h"|' \
+		-e '/#include "/d;/#pragma once/d;/#define xMDBX_ALLOY/d' \
+		-e 's|@INCLUDE|#include|' \
 		src/tools/$(1).c \
-	| $(SED) -e '/#include "/d;/#pragma once/d;/#define xMDBX_ALLOY/d' -e 's|@INCLUDE|#include|' \
-		-e '/ clang-format o/d;/ \*INDENT-O/d' -e '9i /* clang-format off */' | cat -s >$$@
+	| $(SED) \
+		-e "s|@MDBX_GIT_TIMESTAMP@|$$(MDBX_GIT_TIMESTAMP)|" \
+		-e "s|@MDBX_GIT_DESCRIBE@|$$(MDBX_GIT_DESCRIBE)|" \
+		-e '/ clang-format o/d;/ \*INDENT-O/d' \
+	| grep -v '^///' | cat -s $(DIST_DIR)/@tmp-amalgam.inc - >$$@
 
 endef
 $(foreach file,$(TOOLS),$(eval $(call dist-tool-rule,$(file))))
 
 define dist-extra-rule
-$(DIST_DIR)/$(1): $(1) src/version.c $(lastword $(MAKEFILE_LIST))
+$(1): $(2) src/version.c $(lastword $(MAKEFILE_LIST))
 	@echo '  REFINE $$@'
-	$(QUIET)mkdir -p $$(dir $$@) && $(SED) -e '/^\s*#> dist-cutoff-begin/,/^\s*#< dist-cutoff-end/d' $$< | cat -s >$$@
+	$(QUIET)mkdir -p $$(dir $$@) && $(SED) \
+		-e '/^\s*#> dist-cutoff-begin/,/^\s*#< dist-cutoff-end/d' \
+		-e '/^\s*\/\/\s*> dist-cutoff-begin/,/^\s*\/\/\s*< dist-cutoff-end/d' \
+		-e '/^\s*\/\*\s*> dist-cutoff-begin/,/^\s*\/\*\s*< dist-cutoff-end/d' \
+		-e '/^\s*<!-- dist-cutoff-begin -->/,/^\s*<!-- dist-cutoff-end -->/d' \
+		-e "s|@MDBX_GIT_TIMESTAMP@|$$(MDBX_GIT_TIMESTAMP)|" \
+		-e "s|@MDBX_GIT_DESCRIBE@|$$(MDBX_GIT_DESCRIBE)|" \
+	$$< | cat -s >$$@
 
 endef
-$(foreach file,mdbx.h mdbx.h++ $(filter-out man1/% VERSION.json .clang-format-ignore %.in ntdll.def,$(DIST_EXTRA)),$(eval $(call dist-extra-rule,$(file))))
+$(foreach file,mdbx.h $(filter-out man1/% VERSION.json .clang-format-ignore %.in ntdll.def valgrind_suppress.txt, $(DIST_EXTRA)), $(eval $(call dist-extra-rule, $(DIST_DIR)/$(file), $(file))))
 
 $(DIST_DIR)/VERSION.json: src/version.c
 	@echo '  MAKE $@'
@@ -843,13 +921,13 @@ $(DIST_DIR)/ntdll.def: src/ntdll.def
 	@echo '  COPY $@'
 	$(QUIET)mkdir -p $(DIST_DIR)/ && cp $< $@
 
-$(DIST_DIR)/config.h.in: src/config.h.in
+$(DIST_DIR)/valgrind_suppress.txt: test/valgrind_suppress.txt
 	@echo '  COPY $@'
 	$(QUIET)mkdir -p $(DIST_DIR)/ && cp $< $@
 
-$(DIST_DIR)/man1/mdbx_%.1: src/man1/mdbx_%.1
-	@echo '  COPY $@'
-	$(QUIET)mkdir -p $(DIST_DIR)/man1/ && cp $< $@
+$(eval $(call dist-extra-rule, $(DIST_DIR)/config.h.in, src/config.h.in))
+
+$(eval $(call dist-extra-rule, $(DIST_DIR)/man1/mdbx_%.1, src/man1/mdbx_%.1))
 
 endif
 
@@ -864,9 +942,6 @@ CROSS_LIST = \
 	riscv64-linux-gnu-gcc \
 	s390x-linux-gnu-gcc \
 	sh4-linux-gnu-gcc
-
-# Obsolete since 2026 because no supported compiler(s):
-#	mips-linux-gnu-gcc mips64-linux-gnuabi64-gcc
 
 ## On Ubuntu Noble (24.04.2) with QEMU 8.2 (8.2.2+ds-0ubuntu1.7) & GCC 13.3.0 (Ubuntu 13.3.0-6ubuntu2~24.04)
 # sparc64-linux-gnu-gcc       - fails mmap/BAD_ADDRESS (previously: qemu-coredump sice mmap-troubles, qemu fails fcntl for F_SETLK/F_GETLK)

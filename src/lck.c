@@ -92,13 +92,11 @@ __cold static int lck_setup_locked(MDBX_env *env) {
     jitter4testing(false);
     lck->magic_and_version = MDBX_LOCK_MAGIC;
     lck->os_and_format = MDBX_LOCK_FORMAT;
-#if MDBX_ENABLE_PGOP_STAT
     lck->pgops.wops.weak = 1;
-#endif /* MDBX_ENABLE_PGOP_STAT */
-    err = osal_msync(&env->lck_mmap, 0, (size_t)size, MDBX_SYNC_DATA | MDBX_SYNC_SIZE);
+    err = osal_msync(&env->lck_mmap, (size_t)size, MDBX_SYNC_DATA | MDBX_SYNC_SIZE);
     if (unlikely(err != MDBX_SUCCESS)) {
       ERROR("initial-%s for lck-file failed, err %d", "msync/fsync", err);
-      eASSERT(env, MDBX_IS_ERROR(err));
+      eASSERT0(env, MDBX_IS_ERROR(err));
       return err;
     }
   } else {
@@ -118,18 +116,18 @@ __cold static int lck_setup_locked(MDBX_env *env) {
 
   err = lck_init(env, inprocess_neighbor, lck_seize_rc);
   if (unlikely(err != MDBX_SUCCESS)) {
-    eASSERT(env, MDBX_IS_ERROR(err));
+    eASSERT0(env, MDBX_IS_ERROR(err));
     return err;
   }
 
   env->lck = lck;
-  eASSERT(env, !MDBX_IS_ERROR(lck_seize_rc));
+  eASSERT0(env, !MDBX_IS_ERROR(lck_seize_rc));
   return lck_seize_rc;
 }
 
 __cold int lck_setup(MDBX_env *env, mdbx_mode_t mode) {
-  eASSERT(env, env->lazy_fd != INVALID_HANDLE_VALUE);
-  eASSERT(env, env->lck_mmap.fd == INVALID_HANDLE_VALUE);
+  eASSERT0(env, env->lazy_fd != INVALID_HANDLE_VALUE);
+  eASSERT0(env, env->lck_mmap.fd == INVALID_HANDLE_VALUE);
 
   int err = osal_openfile(MDBX_OPEN_LCK, env, env->pathname.lck, &env->lck_mmap.fd, mode);
   if (err != MDBX_SUCCESS) {
@@ -169,6 +167,6 @@ __cold int lck_setup(MDBX_env *env, mdbx_mode_t mode) {
   return err;
 }
 
-void mincore_clean_cache(const MDBX_env *const env) {
+void env_clear_incore_cache(const MDBX_env *const env) {
   memset(env->lck->mincore_cache.begin, -1, sizeof(env->lck->mincore_cache.begin));
 }

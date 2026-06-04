@@ -6,9 +6,9 @@
  * Code given out at the 1985 UNIFORUM conference in Dallas.
  */
 
-/*----------------------------------------------------------------------------*/
-/* Microsoft compiler generates a lot of warning for self includes... */
+#include "wingetopt.h"
 
+/* Microsoft compiler generates a lot of warning for self includes... */
 #ifdef _MSC_VER
 #pragma warning(push, 1)
 #pragma warning(disable : 4548) /* expression before comma has no effect;                                              \
@@ -23,13 +23,13 @@
 #endif
 #endif /* _MSC_VER (warnings) */
 
-#include "wingetopt.h"
 #include <stdio.h>
 #include <string.h>
 
 #ifdef _MSC_VER
 #pragma warning(pop)
 #endif
+
 /*----------------------------------------------------------------------------*/
 
 #ifndef NULL

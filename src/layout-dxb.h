@@ -82,11 +82,7 @@ typedef struct geo {
     pgno_t now; /* current size of datafile in pages */
     pgno_t end_pgno;
   };
-  union {
-    pgno_t first_unallocated; /* first unused page in the datafile,
-                         but actually the file may be shorter. */
-    pgno_t next_pgno;
-  };
+  pgno_t first_unallocated; /* first unused page in the datafile. */
 } geo_t;
 
 /* Meta page content.
@@ -166,6 +162,8 @@ typedef enum page_type {
   P_SPILLED = 0x2000u /* spilled in parent txn */,
   P_LOOSE = 0x4000u /* page was dirtied then freed, can be reused */,
   P_FROZEN = 0x8000u /* used for retire page with known status */,
+  P_TYPE = (P_BRANCH | P_LEAF | P_LARGE | P_META | P_DUPFIX | P_SUBP),
+  P_FLAGS = (P_BAD | P_SPILLED | P_LOOSE | P_FROZEN),
   P_ILL_BITS = (uint16_t)~(P_BRANCH | P_LEAF | P_DUPFIX | P_LARGE | P_SPILLED),
 
   page_broken = 0,

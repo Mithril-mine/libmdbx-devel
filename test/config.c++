@@ -1,7 +1,8 @@
 /// \copyright Copyright (c) 2015-2026 Леонид Юрьев aka Leonid Yuriev <leo@yuriev.ru>. All Rights Reserved.
 ///
 /// THE CONTENTS OF THIS PROJECT ARE PROPRIETARY AND CONFIDENTIAL.
-/// UNAUTHORIZED COPYING, TRANSFERRING OR REPRODUCTION OF THE CONTENTS OF THIS PROJECT, VIA ANY MEDIUM IS STRICTLY PROHIBITED.
+/// UNAUTHORIZED COPYING, TRANSFERRING OR REPRODUCTION OF THE CONTENTS OF THIS PROJECT,
+/// VIA ANY MEDIUM IS STRICTLY PROHIBITED.
 ///
 /// The receipt or possession of the source code and/or any parts thereof does not convey or imply any right to use them
 /// for any purpose other than the purpose for which they were provided to you.
@@ -12,16 +13,13 @@
 /// whether in an action of contract, tort or otherwise, arising from, out of or in connection with the software
 /// or the use or other dealings in the software.
 ///
-/// The above copyright notice and this permission notice shall be included in all copies or substantial portions of the software.
+/// The above copyright notice and this permission notice shall be included in all copies
+/// or substantial portions of the software.
 ///
 /// \author Леонид Юрьев aka Leonid Yuriev <leo@yuriev.ru>
 /// \date 2015-2026
 
 #include "test.h++"
-
-#if defined(_MSC_VER) && !defined(strcasecmp)
-#define strcasecmp(str, len) _stricmp(str, len)
-#endif /* _MSC_VER && strcasecmp() */
 
 namespace config {
 
@@ -418,6 +416,7 @@ void dump(const char *title) {
 
     dump_verbs("mode", i->params.mode_flags, mode_bits);
     log_verbose("random-writemap: %s\n", i->params.random_writemap ? "Yes" : "No");
+    log_verbose("random-treeopts: %s\n", i->params.random_treeopts ? "Yes" : "No");
     dump_verbs("table", i->params.table_flags, table_bits);
 
     if (i->params.test_nops)
@@ -472,6 +471,7 @@ void dump(const char *title) {
   log_verbose("progress indicator: %s\n", global::config::progress_indicator ? "Yes" : "No");
   log_verbose("console mode: %s\n", global::config::console_mode ? "Yes" : "No");
   log_verbose("geometry jitter: %s\n", global::config::geometry_jitter ? "Yes" : "No");
+  log_verbose("defrag jitter: %s\n", global::config::defrag_jitter ? "Yes" : "No");
 }
 
 } /* namespace config */
@@ -519,6 +519,8 @@ const std::string actor_config::serialize(const char *prefix) const {
   checksum.push(global::config::console_mode);
   result.push_back(global::config::geometry_jitter ? 'Y' : 'N');
   checksum.push(global::config::geometry_jitter);
+  result.push_back(global::config::defrag_jitter ? 'Y' : 'N');
+  checksum.push(global::config::defrag_jitter);
   result.push_back('|');
 
   result.append(osal_serialize(checksum));
@@ -595,6 +597,8 @@ bool actor_config::deserialize(const char *str, actor_config &config) {
     checksum.push(global::config::console_mode);
     global::config::geometry_jitter = str[2] != 'N';
     checksum.push(global::config::geometry_jitter);
+    global::config::defrag_jitter = str[3] != 'N';
+    checksum.push(global::config::defrag_jitter);
     str = slash + 1;
 
     slash = strchr(str, '|');

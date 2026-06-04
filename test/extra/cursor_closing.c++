@@ -1,7 +1,8 @@
 /// \copyright Copyright (c) 2015-2026 Леонид Юрьев aka Leonid Yuriev <leo@yuriev.ru>. All Rights Reserved.
 ///
 /// THE CONTENTS OF THIS PROJECT ARE PROPRIETARY AND CONFIDENTIAL.
-/// UNAUTHORIZED COPYING, TRANSFERRING OR REPRODUCTION OF THE CONTENTS OF THIS PROJECT, VIA ANY MEDIUM IS STRICTLY PROHIBITED.
+/// UNAUTHORIZED COPYING, TRANSFERRING OR REPRODUCTION OF THE CONTENTS OF THIS PROJECT,
+/// VIA ANY MEDIUM IS STRICTLY PROHIBITED.
 ///
 /// The receipt or possession of the source code and/or any parts thereof does not convey or imply any right to use them
 /// for any purpose other than the purpose for which they were provided to you.
@@ -12,7 +13,8 @@
 /// whether in an action of contract, tort or otherwise, arising from, out of or in connection with the software
 /// or the use or other dealings in the software.
 ///
-/// The above copyright notice and this permission notice shall be included in all copies or substantial portions of the software.
+/// The above copyright notice and this permission notice shall be included in all copies
+/// or substantial portions of the software.
 ///
 /// \author Леонид Юрьев aka Leonid Yuriev <leo@yuriev.ru>
 /// \date 2015-2026
@@ -29,12 +31,12 @@
 #endif
 
 #if defined(ENABLE_MEMCHECK) || defined(MDBX_CI)
-#if MDBX_DEBUG || !defined(NDEBUG)
+#if MDBX_DEBUG > 0 || !defined(NDEBUG)
 #define RELIEF_FACTOR 16
 #else
 #define RELIEF_FACTOR 8
 #endif
-#elif MDBX_DEBUG || !defined(NDEBUG) || defined(__APPLE__) || defined(_WIN32)
+#elif MDBX_DEBUG > 0 || !defined(NDEBUG) || defined(__APPLE__) || defined(_WIN32)
 #define RELIEF_FACTOR 4
 #elif UINTPTR_MAX > 0xffffFFFFul || ULONG_MAX > 0xffffFFFFul
 #define RELIEF_FACTOR 2
@@ -42,7 +44,13 @@
 #define RELIEF_FACTOR 1
 #endif
 
-#define NN (1000 / RELIEF_FACTOR)
+static const auto NN = 1000u / RELIEF_FACTOR;
+
+#if defined(__cpp_lib_latch) && __cpp_lib_latch >= 201907L
+static const auto N = std::min(17u, std::thread::hardware_concurrency());
+#else
+static const auto N = 3u;
+#endif
 
 static void logger_nofmt(MDBX_log_level_t loglevel, const char *function, int line, const char *msg,
                          unsigned length) noexcept {
@@ -55,7 +63,7 @@ static char log_buffer[1024];
 
 //--------------------------------------------------------------------------------------------
 
-bool case0(mdbx::env env) {
+bool case0_trivia(mdbx::env env) {
   auto txn = env.start_write();
   auto table = txn.create_map("case0", mdbx::key_mode::usual, mdbx::value_mode::single);
   auto cursor_1 = txn.open_cursor(table);
@@ -126,6 +134,7 @@ bool case0(mdbx::env env) {
  * 4. Ждем завершения фоновых потоков.
  * 5. Закрываем оставшиеся курсоры и закрываем БД. */
 
+size_t global_seed = size_t(std::chrono::high_resolution_clock::now().time_since_epoch().count());
 thread_local size_t salt;
 
 static size_t prng() {
@@ -281,7 +290,7 @@ void case1_write_cycle(mdbx::txn_managed txn, std::deque<mdbx::map_handle> &dbi,
       pre.unbind();
     if (!pre.txn())
       pre.bind(txn, dbi[prng(dbi.size())]);
-    for (auto i = 0; i < NN; ++i) {
+    for (auto i = 0u; i < NN; ++i) {
       auto k = mdbx::default_buffer::wrap(prng(NN));
       auto v = mdbx::default_buffer::wrap(prng(NN));
       if (pre.find_multivalue(k, v, false))
@@ -303,7 +312,16 @@ void case1_write_cycle(mdbx::txn_managed txn, std::deque<mdbx::map_handle> &dbi,
 }
 
 bool case1_thread(mdbx::env env, std::deque<mdbx::map_handle> dbi, mdbx::cursor pre) {
-  salt = size_t(std::chrono::high_resolution_clock::now().time_since_epoch().count());
+#if defined(__cpp_lib_latch) && __cpp_lib_latch >= 201907L
+  mdbx::error::success_or_throw(mdbx_txn_lock(env, false));
+  std::hash<std::thread::id> hasher;
+  salt = global_seed ^ hasher(std::this_thread::get_id());
+  std::cout << "thread " << std::this_thread::get_id() << ", salt " << salt << std::endl << std::flush;
+  mdbx_txn_unlock(env);
+#else
+  salt = global_seed;
+#endif
+
   std::vector<MDBX_cursor *> pool;
   for (auto loop = 0; loop < 333 / RELIEF_FACTOR; ++loop) {
     for (auto read = 0; read < 333 / RELIEF_FACTOR; ++read) {
@@ -330,12 +348,7 @@ bool case1(mdbx::env env) {
   bool ok = true;
   std::deque<mdbx::map_handle> dbi;
   std::vector<mdbx::cursor_managed> cursors;
-#if defined(__cpp_lib_latch) && __cpp_lib_latch >= 201907L
-  static const auto N = 10;
-#else
-  static const auto N = 3;
-#endif
-  for (auto t = 0; t < N; ++t) {
+  for (auto t = 0u; t < N; ++t) {
     auto txn = env.start_write();
     auto table = txn.create_map(std::to_string(t), mdbx::key_mode::ordinal, mdbx::value_mode::multi_samelength);
     auto cursor = txn.open_cursor(table);
@@ -350,7 +363,7 @@ bool case1(mdbx::env env) {
 #if defined(__cpp_lib_latch) && __cpp_lib_latch >= 201907L
   std::latch s(1);
   std::vector<std::thread> threads;
-  for (auto t = 1; t < N; ++t) {
+  for (auto t = 1u; t < cursors.size(); ++t) {
     case1_cycle_dbi(dbi);
     threads.push_back(std::thread([&, t]() {
       s.wait();
@@ -401,9 +414,9 @@ int doit() {
   mdbx::env::remove(db_filename);
 
   mdbx::env_managed env(db_filename, mdbx::env_managed::create_parameters(),
-                        mdbx::env::operate_parameters(42, 0, mdbx::env::nested_transactions));
+                        mdbx::env::operate_parameters(N + 2, 0, mdbx::env::nested_transactions));
 
-  bool ok = case0(env);
+  bool ok = case0_trivia(env);
   ok = case1(env) && ok;
   ok = case2(env) && ok;
 

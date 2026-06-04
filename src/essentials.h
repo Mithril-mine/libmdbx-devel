@@ -6,13 +6,20 @@
 #define LIBMDBX_INTERNALS
 #define MDBX_DEPRECATED
 
+#ifdef _MSC_VER
+#if _MSC_VER > 1800
+#pragma warning(disable : 4464) /* relative include path contains '..' */
+#endif
+#pragma warning(disable : 4996) /* The POSIX name is deprecated... */
+#endif                          /* _MSC_VER (warnings) */
+
 #ifdef MDBX_CONFIG_H
 #include MDBX_CONFIG_H
 #endif
 
 #include "preface.h"
 
-#ifdef xMDBX_ALLOY
+#if defined(xMDBX_ALLOY) && !defined(xMDBX_TOOLS)
 /* Amalgamated build */
 #define MDBX_INTERNAL static
 #else
@@ -26,6 +33,33 @@
 /* Basic constants and types */
 
 typedef struct iov_ctx iov_ctx_t;
+
+typedef union bin128 {
+  __anonymous_struct_extension__ struct {
+    uint64_t x, y;
+  };
+  __anonymous_struct_extension__ struct {
+    uint32_t a, b, c, d;
+  };
+  __anonymous_struct_extension__ struct {
+#if __BYTE_ORDER__ == __ORDER_LITTLE_ENDIAN__
+    uint64_t l, h;
+#elif __BYTE_ORDER__ == __ORDER_BIG_ENDIAN__
+    uint64_t h, l;
+#else
+#error "FIXME: Unsupported byte order"
+#endif /* __BYTE_ORDER__ */
+  };
+
+#if defined(__SIZEOF_INT128__)
+#define MDBX_HAVE_NATIVE_U128 1
+  __int128_t i128;
+  __uint128_t u128;
+#else
+#define MDBX_HAVE_NATIVE_U128 0
+#endif
+} bin128_t;
+
 #include "osal.h"
 
 #include "options.h"
@@ -58,13 +92,16 @@ typedef struct iov_ctx iov_ctx_t;
 
 union logger_union {
   void *ptr;
-  MDBX_debug_func *fmt;
-  MDBX_debug_func_nofmt *nofmt;
+  MDBX_debug_func fmt;
+  MDBX_debug_func_nofmt nofmt;
 };
 
 struct libmdbx_globals {
   bin128_t bootid;
   unsigned sys_pagesize, sys_allocation_granularity;
+#ifdef AT_UCACHEBSIZE
+  unsigned sys_unified_cache_block;
+#endif /* AT_UCACHEBSIZE */
   uint8_t sys_pagesize_ln2;
   uint8_t runtime_flags;
   uint8_t loglevel;
@@ -78,6 +115,7 @@ struct libmdbx_globals {
   osal_fastmutex_t debug_lock;
   size_t logger_buffer_size;
   char *logger_buffer;
+  MDBX_panic_func panic_func; /*  Callback for assertion failures */
 };
 
 #ifdef __cplusplus
@@ -105,21 +143,3 @@ extern LIBMDBX_API const char *const mdbx_sourcery_anchor;
 #endif
 
 #define MDBX_IS_ERROR(rc) ((rc) != MDBX_RESULT_TRUE && (rc) != MDBX_RESULT_FALSE)
-
-/*----------------------------------------------------------------------------*/
-
-MDBX_NOTHROW_CONST_FUNCTION MDBX_MAYBE_UNUSED static inline pgno_t int64pgno(int64_t i64) {
-  if (likely(i64 >= (int64_t)MIN_PAGENO && i64 <= (int64_t)MAX_PAGENO + 1))
-    return (pgno_t)i64;
-  return (i64 < (int64_t)MIN_PAGENO) ? MIN_PAGENO : MAX_PAGENO;
-}
-
-MDBX_NOTHROW_CONST_FUNCTION MDBX_MAYBE_UNUSED static inline pgno_t pgno_add(size_t base, size_t augend) {
-  assert(base <= MAX_PAGENO + 1 && augend < MAX_PAGENO);
-  return int64pgno((int64_t)base + (int64_t)augend);
-}
-
-MDBX_NOTHROW_CONST_FUNCTION MDBX_MAYBE_UNUSED static inline pgno_t pgno_sub(size_t base, size_t subtrahend) {
-  assert(base >= MIN_PAGENO && base <= MAX_PAGENO + 1 && subtrahend < MAX_PAGENO);
-  return int64pgno((int64_t)base - (int64_t)subtrahend);
-}

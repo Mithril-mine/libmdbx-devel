@@ -5,7 +5,7 @@
 
 __cold size_t mdbx_default_pagesize(void) {
   size_t pagesize = globals.sys_pagesize;
-  ENSURE(nullptr, is_powerof2(pagesize));
+  ENSURE(is_powerof2(pagesize));
   pagesize = (pagesize >= MDBX_MIN_PAGESIZE) ? pagesize : MDBX_MIN_PAGESIZE;
   pagesize = (pagesize <= MDBX_MAX_PAGESIZE) ? pagesize : MDBX_MAX_PAGESIZE;
   return pagesize;
@@ -169,7 +169,7 @@ __cold int mdbx_env_warmup(const MDBX_env *env, const MDBX_txn *txn, MDBX_warmup
     const troika_t troika = meta_tap(env);
     used_pgno = meta_recent(env, &troika).ptr_v->geometry.first_unallocated;
   }
-  const size_t used_range = pgno_align2os_bytes(env, used_pgno);
+  const size_t used_range = pgno_ceil2os_bytes(env, used_pgno);
   const pgno_t mlock_pgno = bytes2pgno(env, used_range);
 
   int rc = MDBX_SUCCESS;
@@ -384,21 +384,9 @@ __cold int mdbx_env_set_userctx(MDBX_env *env, void *ctx) {
 
 __cold void *mdbx_env_get_userctx(const MDBX_env *env) { return env ? env->userctx : nullptr; }
 
-__cold int mdbx_env_set_assert(MDBX_env *env, MDBX_assert_func *func) {
-  int rc = check_env(env, false);
-  if (unlikely(rc != MDBX_SUCCESS))
-    return LOG_IFERR(rc);
+__cold void mdbx_set_panic(MDBX_panic_func func) { globals.panic_func = func; }
 
-#if MDBX_DEBUG
-  env->assert_func = func;
-  return MDBX_SUCCESS;
-#else
-  (void)func;
-  return LOG_IFERR(MDBX_ENOSYS);
-#endif
-}
-
-__cold int mdbx_env_set_hsr(MDBX_env *env, MDBX_hsr_func *hsr) {
+__cold int mdbx_env_set_hsr(MDBX_env *env, MDBX_hsr_func hsr) {
   int rc = check_env(env, false);
   if (unlikely(rc != MDBX_SUCCESS))
     return LOG_IFERR(rc);
@@ -407,7 +395,7 @@ __cold int mdbx_env_set_hsr(MDBX_env *env, MDBX_hsr_func *hsr) {
   return MDBX_SUCCESS;
 }
 
-__cold MDBX_hsr_func *mdbx_env_get_hsr(const MDBX_env *env) {
+__cold MDBX_hsr_func mdbx_env_get_hsr(const MDBX_env *env) {
   return likely(env && env->signature.weak == env_signature) ? env->hsr_callback : nullptr;
 }
 
@@ -477,6 +465,8 @@ LIBMDBX_API int mdbx_txn_begin(MDBX_env *env, MDBX_txn *parent, MDBX_txn_flags_t
 }
 
 LIBMDBX_API int mdbx_txn_commit(MDBX_txn *txn) { return __inline_mdbx_txn_commit(txn); }
+
+LIBMDBX_API int mdbx_txn_abort(MDBX_txn *txn) { return __inline_mdbx_txn_abort(txn); }
 
 LIBMDBX_API __cold int mdbx_env_stat(const MDBX_env *env, MDBX_stat *stat, size_t bytes) {
   return __inline_mdbx_env_stat(env, stat, bytes);

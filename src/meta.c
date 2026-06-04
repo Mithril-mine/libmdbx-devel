@@ -32,7 +32,7 @@ static inline meta_snap_t meta_snap(const volatile meta_t *meta) {
 txnid_t meta_txnid(const volatile meta_t *meta) { return meta_snap(meta).txnid; }
 
 meta_ptr_t meta_ptr(const MDBX_env *env, unsigned n) {
-  eASSERT(env, n < NUM_METAS);
+  eASSERT0(env, n < NUM_METAS);
   meta_ptr_t r;
   meta_snap_t snap = meta_snap(r.ptr_v = METAPAGE(env, n));
   r.txnid = snap.txnid;
@@ -41,8 +41,8 @@ meta_ptr_t meta_ptr(const MDBX_env *env, unsigned n) {
 }
 
 static uint8_t meta_cmp2pack(uint8_t c01, uint8_t c02, uint8_t c12, bool s0, bool s1, bool s2) {
-  assert(c01 < 3 && c02 < 3 && c12 < 3);
-  /* assert(s0 < 2 && s1 < 2 && s2 < 2); */
+  ASSERT(c01 < 3 && c02 < 3 && c12 < 3);
+  /* ASSERT(s0 < 2 && s1 < 2 && s2 < 2); */
   const uint8_t recent =
       meta_cmp2recent(c01, s0, s1) ? (meta_cmp2recent(c02, s0, s2) ? 0 : 2) : (meta_cmp2recent(c12, s1, s2) ? 1 : 2);
   const uint8_t prefer_steady =
@@ -116,12 +116,12 @@ __cold bool troika_verify_fsm(void) {
 
     const bool valid_chk = c01 != 1 || s0 != s1 || c02 != 1 || s0 != s2 || c12 != 1 || s1 != s2;
     const bool strict_chk = (c01 != 1 || s0 != s1) && (c02 != 1 || s0 != s2) && (c12 != 1 || s1 != s2);
-    assert(troika.recent == recent_chk);
-    assert(troika.prefer_steady == prefer_steady_chk);
-    assert(tail == tail_chk);
-    assert(valid == valid_chk);
-    assert(strict == strict_chk);
-    assert(troika_fsm_map[troika.fsm] == packed);
+    ASSERT(troika.recent == recent_chk);
+    ASSERT(troika.prefer_steady == prefer_steady_chk);
+    ASSERT(tail == tail_chk);
+    ASSERT(valid == valid_chk);
+    ASSERT(strict == strict_chk);
+    ASSERT(troika_fsm_map[troika.fsm] == packed);
     if (troika.recent != recent_chk || troika.prefer_steady != prefer_steady_chk || tail != tail_chk ||
         valid != valid_chk || strict != strict_chk || troika_fsm_map[troika.fsm] != packed) {
       ok = false;
@@ -158,7 +158,7 @@ txnid_t recent_committed_txnid(const MDBX_env *env) {
 }
 
 static inline bool meta_eq(const troika_t *troika, size_t a, size_t b) {
-  assert(a < NUM_METAS && b < NUM_METAS);
+  ASSERT(a < NUM_METAS && b < NUM_METAS);
   return troika->txnid[a] == troika->txnid[b] && (((troika->fsm >> a) ^ (troika->fsm >> b)) & 1) == 0 &&
          troika->txnid[a];
 }
@@ -213,14 +213,13 @@ static int meta_unsteady(MDBX_env *env, const txnid_t inclusive_upto, const pgno
     osal_flush_incoherent_cpu_writeback();
     if (!MDBX_AVOID_MSYNC)
       return MDBX_RESULT_TRUE;
-    ptr = data_page(meta);
+    ptr = payload2page(meta);
     offset = ptr_dist(ptr, env->dxb_mmap.base);
     bytes = env->ps;
   }
 
-#if MDBX_ENABLE_PGOP_STAT
-  env->lck->pgops.wops.weak += 1;
-#endif /* MDBX_ENABLE_PGOP_STAT */
+  if (MDBX_ENABLE_PGOP_STAT)
+    env->lck->pgops.wops.weak += 1;
   int err = osal_pwrite(env->fd4meta, ptr, bytes, offset);
   return likely(err == MDBX_SUCCESS) ? MDBX_RESULT_TRUE : err;
 }
@@ -234,17 +233,10 @@ __cold int meta_wipe_steady(MDBX_env *env, txnid_t inclusive_upto) {
 
   if (err == MDBX_RESULT_TRUE) {
     err = MDBX_SUCCESS;
-    if (!MDBX_AVOID_MSYNC && (env->flags & MDBX_WRITEMAP)) {
-      err = osal_msync(&env->dxb_mmap, 0, pgno_align2os_bytes(env, NUM_METAS), MDBX_SYNC_DATA | MDBX_SYNC_IODQ);
-#if MDBX_ENABLE_PGOP_STAT
-      env->lck->pgops.msync.weak += 1;
-#endif /* MDBX_ENABLE_PGOP_STAT */
-    } else if (env->fd4meta == env->lazy_fd) {
-      err = osal_fsync(env->lazy_fd, MDBX_SYNC_DATA | MDBX_SYNC_IODQ);
-#if MDBX_ENABLE_PGOP_STAT
-      env->lck->pgops.fsync.weak += 1;
-#endif /* MDBX_ENABLE_PGOP_STAT */
-    }
+    if (!MDBX_AVOID_MSYNC && (env->flags & MDBX_WRITEMAP))
+      err = dxb_msync(env, NUM_METAS, MDBX_SYNC_DATA | MDBX_SYNC_IODQ);
+    else if (env->fd4meta == env->lazy_fd)
+      err = dxb_fsync(env, MDBX_SYNC_DATA | MDBX_SYNC_IODQ);
   }
 
   osal_flush_incoherent_mmap(env->dxb_mmap.base, pgno2bytes(env, NUM_METAS), globals.sys_pagesize);
@@ -252,44 +244,31 @@ __cold int meta_wipe_steady(MDBX_env *env, txnid_t inclusive_upto) {
   /* force oldest refresh */
   atomic_store32(&env->lck->rdt_refresh_flag, true, mo_Relaxed);
 
-  env->basal_txn->tw.troika = meta_tap(env);
+  env->basal_txn->wr.troika = meta_tap(env);
   for (MDBX_txn *scan = env->basal_txn->nested; scan; scan = scan->nested)
-    scan->tw.troika = env->basal_txn->tw.troika;
+    scan->wr.troika = env->basal_txn->wr.troika;
   return err;
 }
 
 int meta_sync(const MDBX_env *env, const meta_ptr_t head) {
-  eASSERT(env, atomic_load32(&env->lck->meta_sync_txnid, mo_Relaxed) != (uint32_t)head.txnid);
+  eASSERT0(env, atomic_load32(&env->lck->meta_sync_txnid, mo_Relaxed) != (uint32_t)head.txnid);
   /* Функция может вызываться (в том числе) при (env->flags & MDBX_NOMETASYNC) == 0 и env->fd4meta == env->dsync_fd,
    * например если предыдущая транзакция была выполненна с флагом MDBX_NOMETASYNC. */
 
   int rc = MDBX_RESULT_TRUE;
   if (env->flags & MDBX_WRITEMAP) {
-    if (!MDBX_AVOID_MSYNC) {
-      rc = osal_msync(&env->dxb_mmap, 0, pgno_align2os_bytes(env, NUM_METAS), MDBX_SYNC_DATA | MDBX_SYNC_IODQ);
-#if MDBX_ENABLE_PGOP_STAT
-      env->lck->pgops.msync.weak += 1;
-#endif /* MDBX_ENABLE_PGOP_STAT */
-    } else {
-#if MDBX_ENABLE_PGOP_STAT
-      env->lck->pgops.wops.weak += 1;
-#endif /* MDBX_ENABLE_PGOP_STAT */
-      const page_t *page = data_page(head.ptr_c);
+    if (!MDBX_AVOID_MSYNC)
+      rc = dxb_msync(env, NUM_METAS, MDBX_SYNC_DATA | MDBX_SYNC_IODQ);
+    else {
+      if (MDBX_ENABLE_PGOP_STAT)
+        env->lck->pgops.wops.weak += 1;
+      const page_t *page = payload2page(head.ptr_c);
       rc = osal_pwrite(env->fd4meta, page, env->ps, ptr_dist(page, env->dxb_mmap.base));
-
-      if (likely(rc == MDBX_SUCCESS) && env->fd4meta == env->lazy_fd) {
-        rc = osal_fsync(env->lazy_fd, MDBX_SYNC_DATA | MDBX_SYNC_IODQ);
-#if MDBX_ENABLE_PGOP_STAT
-        env->lck->pgops.fsync.weak += 1;
-#endif /* MDBX_ENABLE_PGOP_STAT */
-      }
+      if (likely(rc == MDBX_SUCCESS) && env->fd4meta == env->lazy_fd)
+        rc = dxb_fsync(env, MDBX_SYNC_DATA | MDBX_SYNC_IODQ);
     }
-  } else {
-    rc = osal_fsync(env->lazy_fd, MDBX_SYNC_DATA | MDBX_SYNC_IODQ);
-#if MDBX_ENABLE_PGOP_STAT
-    env->lck->pgops.fsync.weak += 1;
-#endif /* MDBX_ENABLE_PGOP_STAT */
-  }
+  } else
+    rc = dxb_fsync(env, MDBX_SYNC_DATA | MDBX_SYNC_IODQ);
 
   if (likely(rc == MDBX_SUCCESS))
     env->lck->meta_sync_txnid.weak = (uint32_t)head.txnid;
@@ -297,13 +276,13 @@ int meta_sync(const MDBX_env *env, const meta_ptr_t head) {
 }
 
 __cold static page_t *meta_model(const MDBX_env *env, page_t *model, size_t num, const bin128_t *guid) {
-  ENSURE(env, is_powerof2(env->ps));
-  ENSURE(env, env->ps >= MDBX_MIN_PAGESIZE);
-  ENSURE(env, env->ps <= MDBX_MAX_PAGESIZE);
-  ENSURE(env, env->geo_in_bytes.lower >= MIN_MAPSIZE);
-  ENSURE(env, env->geo_in_bytes.upper <= MAX_MAPSIZE);
-  ENSURE(env, env->geo_in_bytes.now >= env->geo_in_bytes.lower);
-  ENSURE(env, env->geo_in_bytes.now <= env->geo_in_bytes.upper);
+  ENSURE_OBJ(env, is_powerof2(env->ps));
+  ENSURE_OBJ(env, env->ps >= MDBX_MIN_PAGESIZE);
+  ENSURE_OBJ(env, env->ps <= MDBX_MAX_PAGESIZE);
+  ENSURE_OBJ(env, env->geo_in_bytes.lower >= MIN_MAPSIZE);
+  ENSURE_OBJ(env, env->geo_in_bytes.upper <= MAX_MAPSIZE);
+  ENSURE_OBJ(env, env->geo_in_bytes.now >= env->geo_in_bytes.lower);
+  ENSURE_OBJ(env, env->geo_in_bytes.now <= env->geo_in_bytes.upper);
 
   memset(model, 0, env->ps);
   model->pgno = (pgno_t)num;
@@ -318,14 +297,14 @@ __cold static page_t *meta_model(const MDBX_env *env, page_t *model, size_t num,
   model_meta->geometry.now = bytes2pgno(env, env->geo_in_bytes.now);
   model_meta->geometry.first_unallocated = NUM_METAS;
 
-  ENSURE(env, model_meta->geometry.lower >= MIN_PAGENO);
-  ENSURE(env, model_meta->geometry.upper <= MAX_PAGENO + 1);
-  ENSURE(env, model_meta->geometry.now >= model_meta->geometry.lower);
-  ENSURE(env, model_meta->geometry.now <= model_meta->geometry.upper);
-  ENSURE(env, model_meta->geometry.first_unallocated >= MIN_PAGENO);
-  ENSURE(env, model_meta->geometry.first_unallocated <= model_meta->geometry.now);
-  ENSURE(env, model_meta->geometry.grow_pv == pages2pv(pv2pages(model_meta->geometry.grow_pv)));
-  ENSURE(env, model_meta->geometry.shrink_pv == pages2pv(pv2pages(model_meta->geometry.shrink_pv)));
+  ENSURE_OBJ(env, model_meta->geometry.lower >= MIN_PAGENO);
+  ENSURE_OBJ(env, model_meta->geometry.upper <= MAX_PAGENO + 1);
+  ENSURE_OBJ(env, model_meta->geometry.now >= model_meta->geometry.lower);
+  ENSURE_OBJ(env, model_meta->geometry.now <= model_meta->geometry.upper);
+  ENSURE_OBJ(env, model_meta->geometry.first_unallocated >= MIN_PAGENO);
+  ENSURE_OBJ(env, model_meta->geometry.first_unallocated <= model_meta->geometry.now);
+  ENSURE_OBJ(env, model_meta->geometry.grow_pv == pages2pv(pv2pages(model_meta->geometry.grow_pv)));
+  ENSURE_OBJ(env, model_meta->geometry.shrink_pv == pages2pv(pv2pages(model_meta->geometry.shrink_pv)));
 
   model_meta->pagesize = env->ps;
   model_meta->trees.gc.flags = MDBX_INTEGERKEY;
@@ -334,7 +313,7 @@ __cold static page_t *meta_model(const MDBX_env *env, page_t *model, size_t num,
   memcpy(&model_meta->dxbid, guid, sizeof(model_meta->dxbid));
   meta_set_txnid(env, model_meta, MIN_TXNID + num);
   unaligned_poke_u64(4, model_meta->sign, meta_sign_calculate(model_meta));
-  eASSERT(env, coherency_check_meta(env, model_meta, true));
+  eASSERT1(env, coherency_check_meta(env, model_meta, true));
   return ptr_disp(model, env->ps);
 }
 
@@ -353,7 +332,7 @@ __cold int __must_check_result meta_override(MDBX_env *env, size_t target, txnid
   meta_t *const model = page_meta(page);
   meta_set_txnid(env, model, txnid);
   if (txnid)
-    eASSERT(env, coherency_check_meta(env, model, true));
+    eASSERT1(env, coherency_check_meta(env, model, true));
   if (shape) {
     if (txnid && unlikely(!coherency_check_meta(env, shape, false))) {
       ERROR("bailout overriding meta-%zu since model failed "
@@ -401,11 +380,9 @@ __cold int __must_check_result meta_override(MDBX_env *env, size_t target, txnid
   }
 
   if (env->flags & MDBX_WRITEMAP) {
-#if MDBX_ENABLE_PGOP_STAT
-    env->lck->pgops.msync.weak += 1;
-#endif /* MDBX_ENABLE_PGOP_STAT */
-    rc = osal_msync(&env->dxb_mmap, 0, pgno_align2os_bytes(env, model->geometry.first_unallocated),
-                    MDBX_SYNC_DATA | MDBX_SYNC_IODQ);
+    if (MDBX_ENABLE_PGOP_STAT)
+      env->lck->pgops.msync.weak += 1;
+    rc = dxb_msync(env, model->geometry.first_unallocated, MDBX_SYNC_DATA | MDBX_SYNC_IODQ);
     if (unlikely(rc != MDBX_SUCCESS))
       return rc;
     /* meta_override() called only while current process have exclusive
@@ -413,25 +390,18 @@ __cold int __must_check_result meta_override(MDBX_env *env, size_t target, txnid
      * clearing consistency flag by mdbx_meta_update_begin() */
     memcpy(pgno2page(env, target), page, env->ps);
     osal_flush_incoherent_cpu_writeback();
-#if MDBX_ENABLE_PGOP_STAT
-    env->lck->pgops.msync.weak += 1;
-#endif /* MDBX_ENABLE_PGOP_STAT */
-    rc = osal_msync(&env->dxb_mmap, 0, pgno_align2os_bytes(env, target + 1), MDBX_SYNC_DATA | MDBX_SYNC_IODQ);
+    rc = dxb_msync(env, target + 1, MDBX_SYNC_DATA | MDBX_SYNC_IODQ);
   } else {
-#if MDBX_ENABLE_PGOP_STAT
-    env->lck->pgops.wops.weak += 1;
-#endif /* MDBX_ENABLE_PGOP_STAT */
+    if (MDBX_ENABLE_PGOP_STAT)
+      env->lck->pgops.wops.weak += 1;
     rc = osal_pwrite(env->fd4meta, page, env->ps, pgno2bytes(env, target));
-    if (rc == MDBX_SUCCESS && env->fd4meta == env->lazy_fd) {
-#if MDBX_ENABLE_PGOP_STAT
-      env->lck->pgops.fsync.weak += 1;
-#endif /* MDBX_ENABLE_PGOP_STAT */
-      rc = osal_fsync(env->lazy_fd, MDBX_SYNC_DATA | MDBX_SYNC_IODQ);
-    }
+    if (rc == MDBX_SUCCESS && env->fd4meta == env->lazy_fd)
+      rc = dxb_fsync(env, MDBX_SYNC_DATA | MDBX_SYNC_IODQ);
     osal_flush_incoherent_mmap(env->dxb_mmap.base, pgno2bytes(env, NUM_METAS), globals.sys_pagesize);
   }
-  eASSERT(env, (!env->txn && (env->flags & ENV_ACTIVE) == 0) ||
-                   (env->stuck_meta == (int)target && (env->flags & (MDBX_EXCLUSIVE | MDBX_RDONLY)) == MDBX_EXCLUSIVE));
+  eASSERT0(env,
+           (!env->txn && (env->flags & ENV_ACTIVE) == 0) ||
+               (env->stuck_meta == (int)target && (env->flags & (MDBX_EXCLUSIVE | MDBX_RDONLY)) == MDBX_EXCLUSIVE));
   return rc;
 }
 
@@ -518,21 +488,21 @@ __cold int meta_validate(MDBX_env *env, meta_t *const meta, const page_t *const 
     return MDBX_CORRUPTED;
   }
 
-  const uint64_t used_bytes = meta->geometry.first_unallocated * (uint64_t)meta->pagesize;
+  const uint64_t allocated_bytes = meta->geometry.first_unallocated * (uint64_t)meta->pagesize;
   const uint64_t dxbsize_pages = env->dxb_mmap.filesize / (uint64_t)meta->pagesize;
-  if (unlikely(used_bytes > env->dxb_mmap.filesize)) {
+  if (unlikely(allocated_bytes > env->dxb_mmap.filesize)) {
     /* Here could be a race with DB-shrinking performed by other process */
     int err = osal_filesize(env->lazy_fd, &env->dxb_mmap.filesize);
     if (unlikely(err != MDBX_SUCCESS))
       return err;
-    if (unlikely(used_bytes > env->dxb_mmap.filesize)) {
-      WARNING("meta[%u] used-bytes (%" PRIu64 ") beyond filesize (%" PRIu64 "), skip it", meta_number, used_bytes,
-              env->dxb_mmap.filesize);
+    if (unlikely(allocated_bytes > env->dxb_mmap.filesize)) {
+      WARNING("meta[%u] allocated-bytes (%" PRIu64 ") beyond filesize (%" PRIu64 "), skip it", meta_number,
+              allocated_bytes, env->dxb_mmap.filesize);
       return MDBX_CORRUPTED;
     }
   }
-  if (unlikely(meta->geometry.first_unallocated - 1 > MAX_PAGENO || used_bytes > MAX_MAPSIZE)) {
-    WARNING("meta[%u] has too large used-space (%" PRIu64 "), skip it", meta_number, used_bytes);
+  if (unlikely(meta->geometry.first_unallocated - 1 > MAX_PAGENO || allocated_bytes > MAX_MAPSIZE)) {
+    WARNING("meta[%u] has too large allocated-space (%" PRIu64 "), skip it", meta_number, allocated_bytes);
     return MDBX_TOO_LARGE;
   }
 
@@ -543,10 +513,10 @@ __cold int meta_validate(MDBX_env *env, meta_t *const meta, const page_t *const 
   STATIC_ASSERT((uint64_t)(MAX_PAGENO + 1) * MDBX_MIN_PAGESIZE % (4ul << 20) == 0);
   if (unlikely(mapsize_min < MIN_MAPSIZE || mapsize_min > MAX_MAPSIZE)) {
     if (MAX_MAPSIZE != MAX_MAPSIZE64 && mapsize_min > MAX_MAPSIZE && mapsize_min <= MAX_MAPSIZE64) {
-      eASSERT(env, meta->geometry.first_unallocated - 1 <= MAX_PAGENO && used_bytes <= MAX_MAPSIZE);
+      eASSERT0(env, meta->geometry.first_unallocated - 1 <= MAX_PAGENO && allocated_bytes <= MAX_MAPSIZE);
       WARNING("meta[%u] has too large min-mapsize (%" PRIu64 "), "
-              "but size of used space still acceptable (%" PRIu64 ")",
-              meta_number, mapsize_min, used_bytes);
+              "but size of allocated space still acceptable (%" PRIu64 ")",
+              meta_number, mapsize_min, allocated_bytes);
       geo_lower = (pgno_t)((mapsize_min = MAX_MAPSIZE) / meta->pagesize);
       if (geo_lower > MAX_PAGENO + 1) {
         geo_lower = MAX_PAGENO + 1;
@@ -577,10 +547,10 @@ __cold int meta_validate(MDBX_env *env, meta_t *const meta, const page_t *const 
       return MDBX_VERSION_MISMATCH;
     }
     /* allow to open large DB from a 32-bit environment */
-    eASSERT(env, meta->geometry.first_unallocated - 1 <= MAX_PAGENO && used_bytes <= MAX_MAPSIZE);
+    eASSERT0(env, meta->geometry.first_unallocated - 1 <= MAX_PAGENO && allocated_bytes <= MAX_MAPSIZE);
     WARNING("meta[%u] has too large max-mapsize (%" PRIu64 "), "
-            "but size of used space still acceptable (%" PRIu64 ")",
-            meta_number, mapsize_max, used_bytes);
+            "but size of allocated space still acceptable (%" PRIu64 ")",
+            meta_number, mapsize_max, allocated_bytes);
     geo_upper = (pgno_t)((mapsize_max = MAX_MAPSIZE) / meta->pagesize);
     if (geo_upper > MAX_PAGENO + 1)
       geo_upper = MAX_PAGENO + 1;
@@ -589,7 +559,7 @@ __cold int meta_validate(MDBX_env *env, meta_t *const meta, const page_t *const 
   if (geo_upper < meta->geometry.first_unallocated) {
     WARNING("meta[%u] has too less max-mapsize (%" PRIu64 "), "
             "but size of allocated space still acceptable (%" PRIu64 ")",
-            meta_number, mapsize_max, used_bytes);
+            meta_number, mapsize_max, allocated_bytes);
     geo_upper = meta->geometry.first_unallocated;
   }
   if (meta->geometry.upper != geo_upper) {
@@ -667,5 +637,5 @@ __cold int meta_validate(MDBX_env *env, meta_t *const meta, const page_t *const 
 
 __cold int meta_validate_copy(MDBX_env *env, const meta_t *meta, meta_t *dest) {
   *dest = *meta;
-  return meta_validate(env, dest, data_page(meta), bytes2pgno(env, ptr_dist(meta, env->dxb_mmap.base)), nullptr);
+  return meta_validate(env, dest, payload2page(meta), bytes2pgno(env, ptr_dist(meta, env->dxb_mmap.base)), nullptr);
 }

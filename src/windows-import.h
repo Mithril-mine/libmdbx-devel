@@ -125,4 +125,6 @@ struct libmdbx_imports {
   MDBX_CoCreateGuid CoCreateGuid;
 };
 
+#ifndef __cplusplus
 MDBX_INTERNAL void windows_import(void);
+#endif /* !__cplusplus */

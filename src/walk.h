@@ -10,11 +10,23 @@ typedef struct walk_tbl {
   tree_t *internal, *nested;
 } walk_tbl_t;
 
-typedef int walk_func(const size_t pgno, const unsigned number, void *const ctx, const int deep,
+typedef int walk_func(const size_t pgno, const unsigned number, void *const ctx, const unsigned deep,
                       const walk_tbl_t *table, const size_t page_size, const page_type_t page_type,
-                      const MDBX_error_t err, const size_t nentries, const size_t payload_bytes,
-                      const size_t header_bytes, const size_t unused_bytes);
+                      const txnid_t page_txnid, const MDBX_error_t err, const size_t nentries,
+                      const size_t payload_bytes, const size_t header_bytes, const size_t unused_bytes,
+                      const size_t parent_pgno);
 
-typedef enum walk_options { dont_check_keys_ordering = 1 } walk_options_t;
+typedef enum walk_options { dont_check_keys_ordering = 1, dont_walk_GC = 2, dont_walk_MAIN = 4 } walk_options_t;
 
 MDBX_INTERNAL int walk_pages(MDBX_txn *txn, walk_func *visitor, void *user, walk_options_t options);
+
+typedef struct walk_ctx {
+  void *userctx;
+  walk_options_t options;
+  unsigned deep;
+  walk_func *visitor;
+  MDBX_txn *txn;
+  MDBX_cursor *cursor;
+} walk_ctx_t;
+
+MDBX_INTERNAL int walk_tbl(walk_ctx_t *ctx, walk_tbl_t *tbl, pgno_t parent_page);

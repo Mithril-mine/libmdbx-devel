@@ -12,10 +12,10 @@ static void mdbx_fini(void);
 #if defined(_WIN32) || defined(_WIN64)
 
 #if MDBX_BUILD_SHARED_LIBRARY
-#if MDBX_WITHOUT_MSVC_CRT && defined(NDEBUG)
+#if MDBX_WITHOUT_MSVC_CRT && !defined(_DEBUG)
 /* DEBUG/CHECKED builds still require MSVC's CRT for runtime checks.
  *
- * Define dll's entry point only for Release build when NDEBUG is defined and
+ * Define dll's entry point only for Release build when _DEBUG is not defined and
  * MDBX_WITHOUT_MSVC_CRT=ON. if the entry point isn't defined then MSVC's will
  * automatically use DllMainCRTStartup() from CRT library, which also
  * automatically call DllMain() from our mdbx.dll */
@@ -175,27 +175,48 @@ __cold static __attribute__((__destructor__)) void mdbx_global_destructor(void) 
 
 struct libmdbx_globals globals;
 
+static bool getenv_bool(const char *name, bool default_value) {
+  const char *value = osal_getenv(name, false);
+  if (value) {
+    if (*value == 0 /* implied ON */)
+      return true;
+    if (strcasecmp(value, "yes") == 0 || strcasecmp(value, "on") == 0 || strcasecmp(value, "true") == 0 ||
+        strcasecmp(value, "1") == 0)
+      return true;
+    if (strcasecmp(value, "no") == 0 || strcasecmp(value, "off") == 0 || strcasecmp(value, "false") == 0 ||
+        strcasecmp(value, "0") == 0)
+      return false;
+  }
+  return default_value;
+}
+
 __cold static void mdbx_init(void) {
-  globals.runtime_flags = ((MDBX_DEBUG) > 0) * MDBX_DBG_ASSERT + ((MDBX_DEBUG) > 1) * MDBX_DBG_AUDIT;
-  globals.loglevel = MDBX_LOG_FATAL;
-  ENSURE(nullptr, osal_fastmutex_init(&globals.debug_lock) == 0);
+  globals.runtime_flags = (getenv_bool("MDBX_DBG_ASSERT", (MDBX_CHECKING) > 1) ? MDBX_DBG_ASSERT : 0) |
+                          (getenv_bool("MDBX_DBG_AUDIT", (MDBX_CHECKING) > 2) ? MDBX_DBG_AUDIT : 0) |
+                          (getenv_bool("MDBX_DBG_JITTER", false) ? MDBX_DBG_JITTER : 0) |
+                          (getenv_bool("MDBX_DBG_DUMP", false) ? MDBX_DBG_DUMP : 0) |
+                          (getenv_bool("MDBX_DBG_LEGACY_MULTIOPEN", false) ? MDBX_DBG_LEGACY_MULTIOPEN : 0) |
+                          (getenv_bool("MDBX_DBG_LEGACY_OVERLAP", false) ? MDBX_DBG_LEGACY_OVERLAP : 0) |
+                          (getenv_bool("MDBX_DBG_DONT_UPGRADE", false) ? MDBX_DBG_DONT_UPGRADE : 0);
+  globals.loglevel = MDBX_LOG_NOTICE;
+  ENSURE(osal_fastmutex_init(&globals.debug_lock) == 0);
   osal_ctor();
-  assert(globals.sys_pagesize > 0 && (globals.sys_pagesize & (globals.sys_pagesize - 1)) == 0);
+  ASSERT(globals.sys_pagesize > 0 && (globals.sys_pagesize & (globals.sys_pagesize - 1)) == 0);
   rthc_ctor();
-#if MDBX_DEBUG
-  ENSURE(nullptr, troika_verify_fsm());
-  ENSURE(nullptr, pv2pages_verify());
-#endif /* MDBX_DEBUG*/
+#if MDBX_CHECKING > 0
+  ENSURE(troika_verify_fsm());
+  ENSURE(pv2pages_verify());
+#endif /* MDBX_CHECKING > 0 */
 }
 
 MDBX_EXCLUDE_FOR_GPROF
 __cold static void mdbx_fini(void) {
-  const uint32_t current_pid = osal_getpid();
-  TRACE(">> pid %d", current_pid);
+  const mdbx_pid_t current_pid = osal_getpid();
+  TRACE(">> pid %zd", (size_t)current_pid);
   rthc_dtor(current_pid);
   osal_dtor();
-  TRACE("<< pid %d\n", current_pid);
-  ENSURE(nullptr, osal_fastmutex_destroy(&globals.debug_lock) == 0);
+  TRACE("<< pid %zd\n", (size_t)current_pid);
+  ENSURE(osal_fastmutex_destroy(&globals.debug_lock) == 0);
 }
 
 /******************************************************************************/
@@ -330,42 +351,46 @@ __dll_export
     "-" MDBX_BUILD_TYPE
 #endif /* MDBX_BUILD_TYPE */
     ,
-    "MDBX_DEBUG=" MDBX_STRINGIFY(MDBX_DEBUG)
+    "DEBUG=" MDBX_STRINGIFY(MDBX_DEBUG)
+    " CHECKING=" MDBX_STRINGIFY(MDBX_CHECKING)
 #ifdef ENABLE_GPROF
     " ENABLE_GPROF"
 #endif /* ENABLE_GPROF */
-    " MDBX_WORDBITS=" MDBX_STRINGIFY(MDBX_WORDBITS)
+    " WORDBITS=" MDBX_STRINGIFY(MDBX_WORDBITS)
     " BYTE_ORDER="
 #if __BYTE_ORDER__ == __ORDER_LITTLE_ENDIAN__
-    "LITTLE_ENDIAN"
+    "LE"
 #elif __BYTE_ORDER__ == __ORDER_BIG_ENDIAN__
-    "BIG_ENDIAN"
+    "BE"
 #else
     #error "FIXME: Unsupported byte order"
 #endif /* __BYTE_ORDER__ */
-    " MDBX_ENABLE_BIGFOOT=" MDBX_STRINGIFY(MDBX_ENABLE_BIGFOOT)
-    " MDBX_ENV_CHECKPID=" MDBX_ENV_CHECKPID_CONFIG
-    " MDBX_TXN_CHECKOWNER=" MDBX_TXN_CHECKOWNER_CONFIG
-    " MDBX_64BIT_ATOMIC=" MDBX_64BIT_ATOMIC_CONFIG
-    " MDBX_64BIT_CAS=" MDBX_64BIT_CAS_CONFIG
-    " MDBX_TRUST_RTC=" MDBX_TRUST_RTC_CONFIG
-    " MDBX_AVOID_MSYNC=" MDBX_STRINGIFY(MDBX_AVOID_MSYNC)
-    " MDBX_ENABLE_REFUND=" MDBX_STRINGIFY(MDBX_ENABLE_REFUND)
-    " MDBX_USE_MINCORE=" MDBX_STRINGIFY(MDBX_USE_MINCORE)
-    " MDBX_ENABLE_PGOP_STAT=" MDBX_STRINGIFY(MDBX_ENABLE_PGOP_STAT)
-    " MDBX_ENABLE_PROFGC=" MDBX_STRINGIFY(MDBX_ENABLE_PROFGC)
+    " BIGFOOT=" MDBX_STRINGIFY(MDBX_ENABLE_BIGFOOT)
+    " ENV_CHECKPID=" MDBX_ENV_CHECKPID_CONFIG
+    " TXN_CHECKOWNER=" MDBX_TXN_CHECKOWNER_CONFIG
+    " 64BIT_ATOMIC=" MDBX_64BIT_ATOMIC_CONFIG
+    " 64BIT_CAS=" MDBX_64BIT_CAS_CONFIG
+    " TRUST_RTC=" MDBX_TRUST_RTC_CONFIG
+    " AVOID_MSYNC=" MDBX_STRINGIFY(MDBX_AVOID_MSYNC)
+    " REFUND=" MDBX_STRINGIFY(MDBX_ENABLE_REFUND)
+    " MINCORE=" MDBX_STRINGIFY(MDBX_USE_MINCORE)
+    " PGOP_STAT=" MDBX_STRINGIFY(MDBX_ENABLE_PGOP_STAT)
+    " PROFGC=" MDBX_STRINGIFY(MDBX_ENABLE_PROFGC)
+    " PGET_STAT=" MDBX_STRINGIFY(MDBX_ENABLE_PGET_STAT)
 #if MDBX_DISABLE_VALIDATION
-    " MDBX_DISABLE_VALIDATION=YES"
+    " DISABLE_VALIDATION=YES"
 #endif /* MDBX_DISABLE_VALIDATION */
 #ifdef __SANITIZE_ADDRESS__
     " SANITIZE_ADDRESS=YES"
 #endif /* __SANITIZE_ADDRESS__ */
 #ifdef ENABLE_MEMCHECK
-    " ENABLE_MEMCHECK=YES"
+    " MEMCHECK=YES"
 #endif /* ENABLE_MEMCHECK */
-#if MDBX_FORCE_ASSERTIONS
-    " MDBX_FORCE_ASSERTIONS=YES"
-#endif /* MDBX_FORCE_ASSERTIONS */
+#ifdef ENABLE_SYSTEMTAP
+    " SYSTEMTAP=YES"
+#elif defined(ENABLE_DTRACE)
+    " DTRACE=YES"
+#endif /* ENABLE_DTRACE || ENABLE_SYSTEMTAP */
 #ifdef _GNU_SOURCE
     " _GNU_SOURCE=YES"
 #else
@@ -375,23 +400,25 @@ __dll_export
     " MDBX_APPLE_SPEED_INSTEADOF_DURABILITY=" MDBX_STRINGIFY(MDBX_APPLE_SPEED_INSTEADOF_DURABILITY)
 #endif /* MacOS */
 #if defined(_WIN32) || defined(_WIN64)
-    " MDBX_WITHOUT_MSVC_CRT=" MDBX_STRINGIFY(MDBX_WITHOUT_MSVC_CRT)
-    " MDBX_BUILD_SHARED_LIBRARY=" MDBX_STRINGIFY(MDBX_BUILD_SHARED_LIBRARY)
+    " WITHOUT_MSVC_CRT=" MDBX_STRINGIFY(MDBX_WITHOUT_MSVC_CRT)
+    " BUILD_SHARED_LIBRARY=" MDBX_STRINGIFY(MDBX_BUILD_SHARED_LIBRARY)
 #if !MDBX_BUILD_SHARED_LIBRARY
-    " MDBX_MANUAL_MODULE_HANDLER=" MDBX_STRINGIFY(MDBX_MANUAL_MODULE_HANDLER)
+    " MANUAL_MODULE_HANDLER=" MDBX_STRINGIFY(MDBX_MANUAL_MODULE_HANDLER)
 #endif
     " WINVER=" MDBX_STRINGIFY(WINVER)
 #else /* Windows */
-    " MDBX_LOCKING=" MDBX_LOCKING_CONFIG
-    " MDBX_USE_OFDLOCKS=" MDBX_USE_OFDLOCKS_CONFIG
-    " MDBX_USE_FALLOCATE=" MDBX_USE_FALLOCATE_CONFIG
+    " LOCKING=" MDBX_LOCKING_CONFIG
+    " OFDLOCKS=" MDBX_USE_OFDLOCKS_CONFIG
+    " FALLOCATE=" MDBX_USE_FALLOCATE_CONFIG
 #endif /* !Windows */
-    " MDBX_CACHELINE_SIZE=" MDBX_STRINGIFY(MDBX_CACHELINE_SIZE)
-    " MDBX_CPU_WRITEBACK_INCOHERENT=" MDBX_STRINGIFY(MDBX_CPU_WRITEBACK_INCOHERENT)
-    " MDBX_MMAP_INCOHERENT_CPU_CACHE=" MDBX_STRINGIFY(MDBX_MMAP_INCOHERENT_CPU_CACHE)
-    " MDBX_MMAP_INCOHERENT_FILE_WRITE=" MDBX_STRINGIFY(MDBX_MMAP_INCOHERENT_FILE_WRITE)
-    " MDBX_UNALIGNED_OK=" MDBX_STRINGIFY(MDBX_UNALIGNED_OK)
-    " MDBX_PNL_ASCENDING=" MDBX_STRINGIFY(MDBX_PNL_ASCENDING)
+    " CACHELINE_SIZE=" MDBX_STRINGIFY(MDBX_CACHELINE_SIZE)
+    " CPU_WRITEBACK_INCOHERENT=" MDBX_STRINGIFY(MDBX_CPU_WRITEBACK_INCOHERENT)
+    " MMAP_INCOHERENT_CPU_CACHE=" MDBX_STRINGIFY(MDBX_MMAP_INCOHERENT_CPU_CACHE)
+    " MMAP_INCOHERENT_FILE_WRITE=" MDBX_STRINGIFY(MDBX_MMAP_INCOHERENT_FILE_WRITE)
+    " UNALIGNED_OK=" MDBX_STRINGIFY(MDBX_UNALIGNED_OK)
+#if MDBX_PNL_ASCENDING
+    " PNL_ASCENDING=" MDBX_STRINGIFY(MDBX_PNL_ASCENDING)
+#endif /* MDBX_PNL_ASCENDING */
     ,
 #ifdef MDBX_BUILD_COMPILER
     MDBX_BUILD_COMPILER
@@ -453,7 +480,7 @@ LIBMDBX_API __attribute__((__weak__))
 #endif
 const char *__asan_default_options(void) {
   return "symbolize=1:allow_addr2line=1:"
-#if MDBX_DEBUG
+#if MDBX_DEBUG > 0
          "debug=1:"
          "verbosity=2:"
 #endif /* MDBX_DEBUG */

@@ -133,6 +133,14 @@ static inline void osal_free(void *ptr) { HeapFree(GetProcessHeap(), 0, ptr); }
 #define vsnprintf _vsnprintf /* ntdll */
 #endif
 
+#ifndef strcasecmp
+#define strcasecmp _stricmp /* ntdll */
+#endif
+
+#ifndef strncasecmp
+#define strncasecmp _strnicmp /* ntdll */
+#endif
+
 #else /*----------------------------------------------------------------------*/
 
 typedef pthread_t osal_thread_t;
@@ -159,6 +167,10 @@ typedef pthread_mutex_t osal_fastmutex_t;
 #elif defined(_MSC_VER) && !MDBX_WITHOUT_MSVC_CRT
 #define osal_malloc_usable_size(ptr) _msize(ptr)
 #endif /* osal_malloc_usable_size */
+
+#ifndef osal_strdup
+LIBMDBX_API char *osal_strdup(const char *str);
+#endif
 
 /*----------------------------------------------------------------------------*/
 /* OS abstraction layer stuff */
@@ -197,8 +209,6 @@ typedef struct osal_mmap {
 #if defined(_WIN32) || defined(_WIN64)
 
 #define MDBX_HAVE_PWRITEV 0
-
-MDBX_INTERNAL int osal_waitstatus2errcode(DWORD result);
 
 #elif defined(__ANDROID_API__)
 
@@ -283,6 +293,29 @@ typedef struct osal_ioring {
   ior_item_t *pool;
   char *boundary;
 } osal_ioring_t;
+
+MDBX_MAYBE_UNUSED static inline mdbx_pid_t osal_getpid(void) {
+  STATIC_ASSERT(sizeof(mdbx_pid_t) <= sizeof(uint32_t));
+#if defined(_WIN32) || defined(_WIN64)
+  return GetCurrentProcessId();
+#else
+  STATIC_ASSERT(sizeof(pid_t) <= sizeof(uint32_t));
+  return getpid();
+#endif
+}
+
+MDBX_MAYBE_UNUSED static inline uintptr_t osal_thread_self(void) {
+  mdbx_tid_t thunk;
+  STATIC_ASSERT(sizeof(uintptr_t) >= sizeof(thunk));
+#if defined(_WIN32) || defined(_WIN64)
+  thunk = GetCurrentThreadId();
+#else
+  thunk = pthread_self();
+#endif
+  return (uintptr_t)thunk;
+}
+
+#ifndef __cplusplus
 
 /* Actually this is not ioring for now, but on the way. */
 MDBX_INTERNAL int osal_ioring_create(osal_ioring_t *
@@ -393,10 +426,6 @@ MDBX_MAYBE_UNUSED MDBX_INTERNAL void osal_jitter(bool tiny);
 
 #endif /* !Windows */
 
-#ifndef osal_strdup
-LIBMDBX_API char *osal_strdup(const char *str);
-#endif
-
 MDBX_MAYBE_UNUSED static inline int osal_get_errno(void) {
 #if defined(_WIN32) || defined(_WIN64)
   DWORD rc = GetLastError();
@@ -456,8 +485,9 @@ enum osal_openfile_purpose {
   MDBX_OPEN_DXB_OVERLAPPED_DIRECT,
 #endif /* Windows */
   MDBX_OPEN_LCK,
-  MDBX_OPEN_COPY,
-  MDBX_OPEN_DELETE
+  MDBX_OPEN_DELETE,
+  MDBX_OPEN_COPY_EXCL,
+  MDBX_OPEN_COPY_OVERWRITE,
 };
 
 MDBX_MAYBE_UNUSED static inline bool osal_isdirsep(pathchar_t c) {
@@ -468,6 +498,7 @@ MDBX_MAYBE_UNUSED static inline bool osal_isdirsep(pathchar_t c) {
       c == '/';
 }
 
+MDBX_INTERNAL const char *osal_getenv(const char *name, bool secure);
 MDBX_INTERNAL bool osal_pathequal(const pathchar_t *l, const pathchar_t *r, size_t len);
 MDBX_INTERNAL pathchar_t *osal_fileext(const pathchar_t *pathname, size_t len);
 MDBX_INTERNAL int osal_fileexists(const pathchar_t *pathname);
@@ -494,32 +525,12 @@ typedef struct {
 } mdbx_handle_array_t;
 MDBX_INTERNAL int osal_suspend_threads_before_remap(MDBX_env *env, mdbx_handle_array_t **array);
 MDBX_INTERNAL int osal_resume_threads_after_remap(mdbx_handle_array_t *array);
+MDBX_INTERNAL int osal_waitstatus2errcode(DWORD result);
 #endif /* Windows */
-MDBX_INTERNAL int osal_msync(const osal_mmap_t *map, size_t offset, size_t length, enum osal_syncmode_bits mode_bits);
+MDBX_INTERNAL int osal_msync(const osal_mmap_t *map, size_t length, enum osal_syncmode_bits mode_bits);
 MDBX_INTERNAL int osal_check_fs_rdonly(mdbx_filehandle_t handle, const pathchar_t *pathname, int err);
 MDBX_INTERNAL int osal_check_fs_incore(mdbx_filehandle_t handle);
 MDBX_INTERNAL int osal_check_fs_local(mdbx_filehandle_t handle, int flags);
-
-MDBX_MAYBE_UNUSED static inline uint32_t osal_getpid(void) {
-  STATIC_ASSERT(sizeof(mdbx_pid_t) <= sizeof(uint32_t));
-#if defined(_WIN32) || defined(_WIN64)
-  return GetCurrentProcessId();
-#else
-  STATIC_ASSERT(sizeof(pid_t) <= sizeof(uint32_t));
-  return getpid();
-#endif
-}
-
-MDBX_MAYBE_UNUSED static inline uintptr_t osal_thread_self(void) {
-  mdbx_tid_t thunk;
-  STATIC_ASSERT(sizeof(uintptr_t) >= sizeof(thunk));
-#if defined(_WIN32) || defined(_WIN64)
-  thunk = GetCurrentThreadId();
-#else
-  thunk = pthread_self();
-#endif
-  return (uintptr_t)thunk;
-}
 
 #if !defined(_WIN32) && !defined(_WIN64)
 #if defined(__ANDROID_API__) || defined(ANDROID) || defined(BIONIC)
@@ -544,6 +555,8 @@ MDBX_MAYBE_UNUSED static inline uint32_t osal_monotime_to_16dot16_noUnderflow(ui
   return seconds_16dot16 ? seconds_16dot16 : /* fix underflow */ (monotime > 0);
 }
 
+MDBX_NORETURN MDBX_INTERNAL void osal_panic(const char *msg, const char *func, unsigned line);
+
 /*----------------------------------------------------------------------------*/
 
 MDBX_INTERNAL void osal_ctor(void);
@@ -553,16 +566,9 @@ MDBX_INTERNAL void osal_dtor(void);
 MDBX_INTERNAL int osal_mb2w(const char *const src, wchar_t **const pdst);
 #endif /* Windows */
 
-typedef union bin128 {
-  __anonymous_struct_extension__ struct {
-    uint64_t x, y;
-  };
-  __anonymous_struct_extension__ struct {
-    uint32_t a, b, c, d;
-  };
-} bin128_t;
-
 MDBX_INTERNAL bin128_t osal_guid(const MDBX_env *);
+
+MDBX_INTERNAL bool osal_safe_peek_uint32(const void *ptr, int32_t *dest);
 
 /*----------------------------------------------------------------------------*/
 
@@ -595,3 +601,5 @@ MDBX_MAYBE_UNUSED MDBX_NOTHROW_PURE_FUNCTION static inline uint32_t osal_bswap32
   return v << 24 | v >> 24 | ((v << 8) & UINT32_C(0x00ff0000)) | ((v >> 8) & UINT32_C(0x0000ff00));
 #endif
 }
+
+#endif /* !__cplusplus */

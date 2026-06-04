@@ -1,0 +1,495 @@
+/// \copyright SPDX-License-Identifier: Apache-2.0
+/// \author Леонид Юрьев aka Leonid Yuriev <leo@yuriev.ru> \date 2015-2026
+
+#include "internals.h"
+
+static int txn_write(MDBX_txn *txn, iov_ctx_t *ctx) {
+  cASSERT0(txn, (txn->flags & MDBX_WRITEMAP) == 0 || MDBX_AVOID_MSYNC);
+  dpl_t *const dl = txn_dpl_sort(txn);
+  int rc = MDBX_SUCCESS;
+  size_t r, w, total_npages = 0;
+  for (w = 0, r = 1; r <= dl->length; ++r) {
+    page_t *dp = dl->items[r].ptr;
+    if (dp->flags & P_LOOSE) {
+      dl->items[++w] = dl->items[r];
+      continue;
+    }
+    unsigned npages = dpl_npages(dl, r);
+    total_npages += npages;
+    rc = iov_page(txn, ctx, dp, npages);
+    if (unlikely(rc != MDBX_SUCCESS))
+      return rc;
+  }
+
+  if (!iov_empty(ctx)) {
+    cASSERT0(txn, rc == MDBX_SUCCESS);
+    rc = iov_write(ctx);
+  }
+
+  if (likely(rc == MDBX_SUCCESS) && ctx->fd == txn->env->lazy_fd) {
+    txn->env->lck->unsynced_pages.weak += total_npages;
+    if (!txn->env->lck->eoos_timestamp.weak)
+      txn->env->lck->eoos_timestamp.weak = osal_monotime();
+  }
+
+  txn->wr.dirtylist->pages_including_loose -= total_npages;
+  while (r <= dl->length)
+    dl->items[++w] = dl->items[r++];
+
+  dl->sorted = dpl_setlen(dl, w);
+  txn->wr.dirtyroom += r - 1 - w;
+  cASSERT0(txn, txn->wr.dirtyroom + txn->wr.dirtylist->length ==
+                    (txn->parent ? txn->parent->wr.dirtyroom : txn->env->options.dp_limit));
+  cASSERT0(txn, txn->wr.dirtylist->length == txn->wr.loose_count);
+  cASSERT0(txn, txn->wr.dirtylist->pages_including_loose == txn->wr.loose_count);
+  return rc;
+}
+
+__cold MDBX_txn *txn_basal_create(const size_t max_dbi) {
+  MDBX_txn *txn = nullptr;
+  const intptr_t bitmap_bytes =
+#if MDBX_ENABLE_DBI_SPARSE
+      ceil_powerof2(max_dbi, CHAR_BIT * sizeof(txn->dbi_sparse[0])) / CHAR_BIT;
+#else
+      0;
+#endif /* MDBX_ENABLE_DBI_SPARSE */
+  const size_t base = sizeof(MDBX_txn) + /* GC cursor */ sizeof(cursor_couple_t);
+  const size_t size =
+      base + bitmap_bytes +
+      max_dbi * (sizeof(txn->dbs[0]) + sizeof(txn->cursors[0]) + sizeof(txn->dbi_seqs[0]) + sizeof(txn->dbi_state[0]));
+
+  txn = osal_calloc(1, size);
+  if (unlikely(!txn))
+    return txn;
+
+  rkl_init(&txn->wr.gc.reclaimed);
+  rkl_init(&txn->wr.gc.ready4reuse);
+  rkl_init(&txn->wr.gc.comeback);
+  txn->dbs = ptr_disp(txn, base);
+  txn->cursors = ptr_disp(txn->dbs, max_dbi * sizeof(txn->dbs[0]));
+  txn->dbi_seqs = ptr_disp(txn->cursors, max_dbi * sizeof(txn->cursors[0]));
+  txn->dbi_state = ptr_disp(txn, size - max_dbi * sizeof(txn->dbi_state[0]));
+#if MDBX_ENABLE_DBI_SPARSE
+  txn->dbi_sparse = ptr_disp(txn->dbi_state, -bitmap_bytes);
+#endif /* MDBX_ENABLE_DBI_SPARSE */
+  txn->flags = MDBX_TXN_FINISHED;
+  txn->wr.retired_pages = pnl_alloc(MDBX_PNL_INITIAL);
+  txn->wr.repnl = pnl_alloc(MDBX_PNL_INITIAL);
+  if (unlikely(!txn->wr.retired_pages || !txn->wr.repnl)) {
+    txn_basal_destroy(txn);
+    txn = nullptr;
+  }
+
+  return txn;
+}
+
+__cold void txn_basal_destroy(MDBX_txn *txn) {
+  txn_dpl_free(txn);
+  rkl_destroy(&txn->wr.gc.reclaimed);
+  rkl_destroy(&txn->wr.gc.ready4reuse);
+  rkl_destroy(&txn->wr.gc.comeback);
+  pnl_free(txn->wr.retired_pages);
+  pnl_free(txn->wr.spilled.list);
+  pnl_free(txn->wr.repnl);
+  osal_free(txn);
+}
+
+static bool basal_check_overlapped(lck_t *const lck, const mdbx_pid_t pid, const uintptr_t tid) {
+  const size_t snap_nreaders = atomic_load32(&lck->rdt_length, mo_AcquireRelease);
+  for (size_t i = 0; i < snap_nreaders; ++i) {
+    if (atomic_load_pid(&lck->rdt[i].pid, mo_Relaxed) == pid &&
+        unlikely(atomic_load64(&lck->rdt[i].tid, mo_Relaxed) == tid)) {
+      const txnid_t txnid = safe64_read(&lck->rdt[i].txnid);
+      if (txnid >= MIN_TXNID && txnid <= MAX_TXNID)
+        return true;
+    }
+  }
+  return false;
+}
+
+static int basal_start_locked(MDBX_txn *txn, unsigned flags) {
+  MDBX_env *const env = txn->env;
+  if (unlikely(env->flags & ENV_FATAL_ERROR))
+    return MDBX_PANIC;
+
+#if defined(_WIN32) || defined(_WIN64)
+  if (unlikely(!env->dxb_mmap.base))
+    return MDBX_EPERM;
+#endif /* Windows */
+
+  txn->flags = flags & ~txn_rw_already_locked;
+  txn->nested = nullptr;
+  txn->wr.loose_pages = nullptr;
+  txn->wr.loose_count = 0;
+#if MDBX_ENABLE_REFUND
+  txn->wr.loose_refund_wl = 0;
+#endif /* MDBX_ENABLE_REFUND */
+  pnl_setsize(txn->wr.retired_pages, 0);
+  txn->wr.spilled.list = nullptr;
+  txn->wr.spilled.least_removed = 0;
+  txn->wr.gc.spent = 0;
+  cASSERT0(txn, rkl_empty(&txn->wr.gc.reclaimed));
+  cASSERT0(txn, rkl_empty(&txn->wr.gc.ready4reuse));
+  cASSERT0(txn, rkl_empty(&txn->wr.gc.comeback));
+  txn->env->gc.detent = 0;
+#if MDBX_ENABLE_PGET_STAT
+  txn->ops_pget = 0;
+#endif /* MDBX_ENABLE_PGET_STAT */
+
+  txn->wr.troika = meta_tap(env);
+  const meta_ptr_t head = meta_recent(env, &txn->wr.troika);
+  uint64_t timestamp = 0;
+  /* coverity[NO_EFFECT] */
+  while ("workaround for https://libmdbx.dqdkfa.ru/dead-github/issues/269") {
+    int err = coherency_fetch_head(txn, head, &timestamp);
+    if (likely(err == MDBX_SUCCESS))
+      break;
+    if (unlikely(err != MDBX_RESULT_TRUE))
+      return err;
+  }
+  eASSERT1(env, meta_txnid(head.ptr_v) == txn->txnid);
+  txn->txnid = safe64_txnid_next(txn->txnid);
+  if (unlikely(txn->txnid > MAX_TXNID)) {
+    ERROR("txnid overflow, raise %d", MDBX_TXN_FULL);
+    return MDBX_TXN_FULL;
+  }
+
+  int err = txn_setup_primal(txn);
+  if (unlikely(err != MDBX_SUCCESS))
+    return err;
+
+  eASSERT0(env, pgno2bytes(env, txn->geo.first_unallocated) <= env->dxb_mmap.current);
+  eASSERT0(env, env->dxb_mmap.limit >= env->dxb_mmap.current);
+
+  if (env->options.need_dp_limit_adjust)
+    env_options_adjust_dp_limit(env);
+  if ((txn->flags & MDBX_WRITEMAP) == 0 || MDBX_AVOID_MSYNC) {
+    err = txn_dpl_alloc(txn);
+    if (unlikely(err != MDBX_SUCCESS))
+      return err;
+    txn->wr.dirtyroom = txn->env->options.dp_limit;
+    txn->wr.dirtylru = (MDBX_DEBUG > 0) ? UINT32_MAX / 3 - 42 : 0;
+  } else {
+    cASSERT0(txn, txn->wr.dirtylist == nullptr);
+    txn->wr.dirtylist = nullptr;
+    txn->wr.dirtyroom = MAX_PAGENO;
+    txn->wr.dirtylru = 0;
+  }
+
+  eASSERT0(env, txn->wr.writemap_dirty_npages == 0);
+  eASSERT0(env, txn->wr.writemap_spilled_npages == 0);
+  MDBX_cursor *const gc = ptr_disp(txn, sizeof(MDBX_txn));
+  err = cursor_init(gc, txn, FREE_DBI);
+  if (err != MDBX_SUCCESS)
+    return err;
+  cASSERT0(txn, txn->cursors[FREE_DBI] == nullptr);
+
+  dxb_sanitize_tail(env, txn);
+  env->txn = txn;
+  return MDBX_SUCCESS;
+}
+
+int txn_basal_start(MDBX_txn *txn, unsigned flags) {
+  cASSERT0(txn, (flags & ~(txn_rw_begin_flags | MDBX_TXN_SPILLS | MDBX_WRITEMAP | MDBX_NOSTICKYTHREADS |
+                           txn_rw_already_locked)) == 0);
+  MDBX_env *const env = txn->env;
+  cASSERT0(txn, txn == env->basal_txn);
+  flags |= env->flags & (MDBX_NOSTICKYTHREADS | MDBX_WRITEMAP);
+  if ((flags & txn_rw_already_locked) == 0) {
+    const uintptr_t tid = osal_thread_self();
+    if (unlikely(txn->owner == tid ||
+                 /* not recovery mode */ env->stuck_meta >= 0))
+      return MDBX_BUSY;
+
+    lck_t *const lck = env->lck_mmap.lck;
+    if (lck && !(flags & MDBX_NOSTICKYTHREADS) && !(globals.runtime_flags & MDBX_DBG_LEGACY_OVERLAP) &&
+        basal_check_overlapped(lck, env->pid, tid))
+      return MDBX_TXN_OVERLAPPING;
+
+    /* Not yet touching txn == env->basal_txn, it may be active */
+    jitter4testing(false);
+    int err = lck_txn_lock(env, (flags & MDBX_TXN_TRY) != 0);
+    if (unlikely(err != MDBX_SUCCESS))
+      return err;
+  }
+
+  int err = basal_start_locked(txn, flags);
+  if (unlikely(err != MDBX_SUCCESS)) {
+    txn_basal_end(txn, true);
+    return err;
+  }
+
+  return MDBX_SUCCESS;
+}
+
+int txn_basal_end(MDBX_txn *txn, bool unlock) {
+  MDBX_env *const env = txn->env;
+  cASSERT0(txn,
+           !txn->parent && !txn->nested && (txn->flags & (txn_ro_both | MDBX_TXN_HAS_CHILD | MDBX_TXN_PARKED)) == 0);
+  cASSERT0(txn, (txn->flags & txn_may_have_cursors) == 0);
+  if ((txn->flags & (MDBX_TXN_ERROR | MDBX_TXN_FINISHED)) == 0)
+    ENSURE_OBJ(env, txn->txnid > /* paranoia is appropriate here */ env->lck->cached_oldest_txnid.weak);
+  dxb_sanitize_tail(env, nullptr);
+
+  const unsigned preserved_flags = txn->flags;
+  txn->flags = MDBX_TXN_FINISHED | (env->flags & (MDBX_WRITEMAP | MDBX_NOSTICKYTHREADS));
+  env->txn = nullptr;
+  pnl_free(txn->wr.spilled.list);
+  txn->wr.spilled.list = nullptr;
+  rkl_clear_and_shrink(&txn->wr.gc.reclaimed);
+  rkl_clear_and_shrink(&txn->wr.gc.ready4reuse);
+  rkl_clear_and_shrink(&txn->wr.gc.comeback);
+
+  eASSERT0(env, txn->parent == nullptr);
+  pnl_shrink(&txn->wr.retired_pages);
+  pnl_shrink(&txn->wr.repnl);
+  txn_dpl_clear(txn);
+
+  /* Export or close DBI handles created in this txn */
+  int rc = (preserved_flags & MDBX_TXN_DIRTY) ? dbi_update(txn, !(preserved_flags & MDBX_TXN_ERROR)) : MDBX_SUCCESS;
+  if (likely(unlock) || unlikely(rc != MDBX_SUCCESS)) {
+    /* The writer mutex was locked in mdbx_txn_begin. */
+    lck_txn_unlock(env);
+  }
+  return rc;
+}
+
+/* Update table root pointers */
+int txn_basal_update_tbl_roots(MDBX_txn *txn) {
+  cursor_couple_t cx;
+  int err = MDBX_SUCCESS;
+  if (txn->n_dbi > CORE_DBS) {
+    err = cursor_init(&cx.outer, txn, MAIN_DBI);
+    if (likely(err == MDBX_SUCCESS)) {
+      cx.outer.next = txn->cursors[MAIN_DBI];
+      txn->cursors[MAIN_DBI] = &cx.outer;
+      TXN_FOREACH_DBI_USER(txn, i) {
+        if ((txn->dbi_state[i] & DBI_DIRTY) == 0)
+          continue;
+        tree_t *const db = &txn->dbs[i];
+        DEBUG("update main's entry for sub-db %zu, mod_txnid %" PRIaTXN " -> %" PRIaTXN, i, db->mod_txnid, txn->txnid);
+        /* Может быть mod_txnid > front после коммита вложенных тразакций */
+        db->mod_txnid = txn->txnid;
+        MDBX_val data = {db, sizeof(tree_t)};
+        /* coverity[OVERRUN] */
+        err = cursor_put(&cx.outer, &txn->env->kvs[i].name, &data, N_TREE);
+        if (unlikely(err != MDBX_SUCCESS))
+          break;
+      }
+      txn->cursors[MAIN_DBI] = cx.outer.next;
+    }
+  }
+  return err;
+}
+
+int txn_basal_commit(MDBX_txn *txn, struct commit_timestamp *ts) {
+  MDBX_env *const env = txn->env;
+  cASSERT0(txn, txn == env->basal_txn && !txn->parent && !txn->nested);
+  cASSERT0(txn, (txn->flags & MDBX_TXN_ERROR) == 0);
+  if (!txn->wr.dirtylist) {
+    cASSERT0(txn, (txn->flags & MDBX_WRITEMAP) != 0 && !MDBX_AVOID_MSYNC);
+  } else {
+    cASSERT0(txn, (txn->flags & MDBX_WRITEMAP) == 0 || MDBX_AVOID_MSYNC);
+    cASSERT0(txn, txn->wr.dirtyroom + txn->wr.dirtylist->length == env->options.dp_limit);
+  }
+
+  if (txn->flags & txn_may_have_cursors)
+    txn_done_cursors(txn);
+
+  bool need_flush_for_nometasync = false;
+  const meta_ptr_t head = meta_recent(env, &txn->wr.troika);
+  const uint32_t meta_sync_txnid = atomic_load32(&env->lck->meta_sync_txnid, mo_Relaxed);
+  /* sync prev meta */
+  if (head.is_steady && meta_sync_txnid != (uint32_t)head.txnid) {
+    /* Исправление унаследованного от LMDB недочета:
+     *
+     * Всё хорошо, если все процессы работающие с БД не используют WRITEMAP.
+     * Тогда мета-страница (обновленная, но не сброшенная на диск) будет
+     * сохранена в результате fdatasync() при записи данных этой транзакции.
+     *
+     * Всё хорошо, если все процессы работающие с БД используют WRITEMAP
+     * без MDBX_AVOID_MSYNC.
+     * Тогда мета-страница (обновленная, но не сброшенная на диск) будет
+     * сохранена в результате msync() при записи данных этой транзакции.
+     *
+     * Если же в процессах работающих с БД используется оба метода, как sync()
+     * в режиме MDBX_WRITEMAP, так и записи через файловый дескриптор, то
+     * становится невозможным обеспечить фиксацию на диске мета-страницы
+     * предыдущей транзакции и данных текущей транзакции, за счет одной
+     * sync-операцией выполняемой после записи данных текущей транзакции.
+     * Соответственно, требуется явно обновлять мета-страницу, что полностью
+     * уничтожает выгоду от NOMETASYNC. */
+    const uint32_t txnid_dist = ((txn->flags & MDBX_WRITEMAP) == 0 || MDBX_AVOID_MSYNC) ? MDBX_NOMETASYNC_LAZY_FD
+                                                                                        : MDBX_NOMETASYNC_LAZY_WRITEMAP;
+    /* Смысл "магии" в том, чтобы избежать отдельного вызова fdatasync()
+     * или msync() для гарантированной фиксации на диске мета-страницы,
+     * которая была "лениво" отправлена на запись в предыдущей транзакции,
+     * но не сброшена на диск из-за активного режима MDBX_NOMETASYNC. */
+    if (
+#if defined(_WIN32) || defined(_WIN64)
+        !env->ioring.overlapped_fd &&
+#endif
+        meta_sync_txnid == (uint32_t)head.txnid - txnid_dist)
+      need_flush_for_nometasync = true;
+    else {
+      int err = meta_sync(env, head);
+      if (unlikely(err != MDBX_SUCCESS)) {
+        ERROR("txn-%s: error %d", "presync-meta", err);
+        return err;
+      }
+    }
+  }
+
+  if ((!txn->wr.dirtylist || txn->wr.dirtylist->length == 0) &&
+      (txn->flags & (MDBX_TXN_DIRTY | MDBX_TXN_SPILLS | MDBX_TXN_NOSYNC | MDBX_TXN_NOMETASYNC)) == 0 &&
+      !need_flush_for_nometasync && !head.is_steady && !CHECKS2_ENABLED()) {
+    TXN_FOREACH_DBI_ALL(txn, i) { cASSERT0(txn, !(txn->dbi_state[i] & DBI_DIRTY)); }
+    /* fast completion of pure transaction */
+    return MDBX_NOSUCCESS_PURE_COMMIT ? MDBX_RESULT_TRUE : MDBX_SUCCESS;
+  }
+
+  DEBUG("committing txn %" PRIaTXN " %p on env %p, root page %" PRIaPGNO "/%" PRIaPGNO, txn->txnid,
+        __Wpedantic_format_voidptr(txn), __Wpedantic_format_voidptr(env), txn->dbs[MAIN_DBI].root,
+        txn->dbs[FREE_DBI].root);
+
+  int rc = txn_basal_update_tbl_roots(txn);
+  if (unlikely(rc != MDBX_SUCCESS))
+    return rc;
+
+  if (ts) {
+    ts->prep = osal_monotime();
+    ts->gc_cpu = osal_cputime(nullptr);
+  }
+
+  gcu_t gcu_ctx;
+  rc = gc_put_init(txn, &gcu_ctx);
+  if (likely(rc == MDBX_SUCCESS))
+    rc = gc_update(txn, &gcu_ctx);
+
+  const txnid_t commit_txnid =
+#if MDBX_ENABLE_BIGFOOT
+      gcu_ctx.bigfoot;
+#else
+      txn->txnid;
+#endif /* MDBX_ENABLE_BIGFOOT */
+  if (commit_txnid > txn->txnid)
+    VERBOSE("use @%" PRIaTXN " (+%zu) for committing bigfoot-txn", commit_txnid, (size_t)(commit_txnid - txn->txnid));
+  else
+    VERBOSE("committing @%" PRIaTXN " txn", commit_txnid);
+  gc_put_destroy(&gcu_ctx);
+
+  if (ts)
+    ts->gc_cpu = osal_cputime(nullptr) - ts->gc_cpu;
+  if (unlikely(rc != MDBX_SUCCESS))
+    return rc;
+
+  cASSERT0(txn, txn->wr.loose_count == 0);
+  txn->dbs[FREE_DBI].mod_txnid = (txn->dbi_state[FREE_DBI] & DBI_DIRTY) ? txn->txnid : txn->dbs[FREE_DBI].mod_txnid;
+  txn->dbs[MAIN_DBI].mod_txnid = (txn->dbi_state[MAIN_DBI] & DBI_DIRTY) ? txn->txnid : txn->dbs[MAIN_DBI].mod_txnid;
+
+  if (ts) {
+    ts->gc = osal_monotime();
+    ts->audit = ts->gc;
+  }
+  if (CHECKS2_ENABLED()) {
+    rc = audit_ex(txn, pnl_size(txn->wr.retired_pages), true);
+    if (ts)
+      ts->audit = osal_monotime();
+    if (unlikely(rc != MDBX_SUCCESS))
+      return rc;
+  }
+
+  if (txn->wr.dirtylist) {
+    cASSERT0(txn, (txn->flags & MDBX_WRITEMAP) == 0 || MDBX_AVOID_MSYNC);
+    cASSERT0(txn, txn->wr.loose_count == 0);
+
+    mdbx_filehandle_t fd =
+#if defined(_WIN32) || defined(_WIN64)
+        env->ioring.overlapped_fd ? env->ioring.overlapped_fd : env->lazy_fd;
+    (void)need_flush_for_nometasync;
+#else
+        (need_flush_for_nometasync || env->dsync_fd == INVALID_HANDLE_VALUE ||
+         txn->wr.dirtylist->length > env->options.writethrough_threshold ||
+         atomic_load64(&env->lck->unsynced_pages, mo_Relaxed))
+            ? env->lazy_fd
+            : env->dsync_fd;
+#endif /* Windows */
+
+    iov_ctx_t write_ctx;
+    rc = iov_init(txn, &write_ctx, txn->wr.dirtylist->length, txn->wr.dirtylist->pages_including_loose, fd, false);
+    if (unlikely(rc != MDBX_SUCCESS)) {
+      ERROR("txn-%s: error %d", "iov-init", rc);
+      return rc;
+    }
+
+    rc = txn_write(txn, &write_ctx);
+    if (unlikely(rc != MDBX_SUCCESS)) {
+      ERROR("txn-%s: error %d", "write", rc);
+      return rc;
+    }
+  } else {
+    cASSERT0(txn, (txn->flags & MDBX_WRITEMAP) != 0 && !MDBX_AVOID_MSYNC);
+    env->lck->unsynced_pages.weak += txn->wr.writemap_dirty_npages;
+    if (!env->lck->eoos_timestamp.weak)
+      env->lck->eoos_timestamp.weak = osal_monotime();
+  }
+
+  /* TODO: use ctx.flush_begin & ctx.flush_end for range-sync */
+  if (ts)
+    ts->write = osal_monotime();
+
+  meta_t meta;
+  memcpy(meta.magic_and_version, head.ptr_c->magic_and_version, 8);
+  meta.reserve16 = head.ptr_c->reserve16;
+  meta.validator_id = head.ptr_c->validator_id;
+  meta.extra_pagehdr = head.ptr_c->extra_pagehdr;
+  unaligned_poke_u64(4, meta.pages_retired,
+                     unaligned_peek_u64(4, head.ptr_c->pages_retired) + pnl_size(txn->wr.retired_pages));
+  meta.geometry = txn->geo;
+  meta.trees.gc = txn->dbs[FREE_DBI];
+  meta.trees.main = txn->dbs[MAIN_DBI];
+  meta.canary = txn->canary;
+  memcpy(&meta.dxbid, &head.ptr_c->dxbid, sizeof(meta.dxbid));
+
+  meta.unsafe_sign = DATASIGN_NONE;
+  meta_set_txnid(env, &meta, commit_txnid);
+
+  rc = dxb_sync_locked(env, env->flags | txn->flags | txn_shrink_allowed, &meta, &txn->wr.troika);
+
+  if (ts)
+    ts->sync = osal_monotime();
+  if (unlikely(rc != MDBX_SUCCESS)) {
+    env->flags |= ENV_FATAL_ERROR;
+    ERROR("txn-%s: error %d", "sync", rc);
+    return rc;
+  }
+
+  return MDBX_SUCCESS;
+}
+
+int txn_basal_checkpoint(MDBX_txn *txn, MDBX_txn_flags_t weakening_durability, struct commit_timestamp *ts) {
+  const unsigned preserved_flags = txn->flags & txn_rw_begin_flags;
+  /* void *const preserved_context = txn->userctx; */
+  txn->flags |= weakening_durability & (MDBX_TXN_NOMETASYNC | MDBX_TXN_NOSYNC | MDBX_SYNC_DURABLE);
+  int rc = txn_basal_commit(txn, ts);
+  if (likely(rc == MDBX_SUCCESS)) {
+    rc = txn_basal_end(txn, false);
+    if (likely(rc == MDBX_SUCCESS)) {
+      /* txn->userctx = preserved_context; */
+      return txn_basal_start(txn, preserved_flags | txn_rw_already_locked);
+    }
+  }
+
+  int err = txn_basal_end(txn, true);
+  return (err == MDBX_SUCCESS) ? rc : err;
+}
+
+int txn_basal_rollback(MDBX_txn *txn) {
+  const unsigned preserved_flags = txn->flags & txn_rw_begin_flags;
+  /* void *const preserved_context = txn->userctx; */
+  int rc = txn_basal_end(txn, false);
+  if (likely(rc == MDBX_SUCCESS))
+    /* txn->userctx = preserved_context; */
+    rc = txn_basal_start(txn, preserved_flags | txn_rw_already_locked);
+  return rc;
+}

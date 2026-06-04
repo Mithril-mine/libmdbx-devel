@@ -1,7 +1,8 @@
 /// \copyright Copyright (c) 2015-2026 Леонид Юрьев aka Leonid Yuriev <leo@yuriev.ru>. All Rights Reserved.
 ///
 /// THE CONTENTS OF THIS PROJECT ARE PROPRIETARY AND CONFIDENTIAL.
-/// UNAUTHORIZED COPYING, TRANSFERRING OR REPRODUCTION OF THE CONTENTS OF THIS PROJECT, VIA ANY MEDIUM IS STRICTLY PROHIBITED.
+/// UNAUTHORIZED COPYING, TRANSFERRING OR REPRODUCTION OF THE CONTENTS OF THIS PROJECT,
+/// VIA ANY MEDIUM IS STRICTLY PROHIBITED.
 ///
 /// The receipt or possession of the source code and/or any parts thereof does not convey or imply any right to use them
 /// for any purpose other than the purpose for which they were provided to you.
@@ -12,7 +13,8 @@
 /// whether in an action of contract, tort or otherwise, arising from, out of or in connection with the software
 /// or the use or other dealings in the software.
 ///
-/// The above copyright notice and this permission notice shall be included in all copies or substantial portions of the software.
+/// The above copyright notice and this permission notice shall be included in all copies
+/// or substantial portions of the software.
 ///
 /// \author Леонид Юрьев aka Leonid Yuriev <leo@yuriev.ru>
 /// \date 2015-2026
@@ -28,14 +30,14 @@ MDBX_NORETURN void usage(void) {
   puts("usage:\n"
        "  --help or -h              Show this text\n"
        "Common parameters:\n"
-       "  --loglevel=[0-7]|[fatal..extra]s"
+       "  --loglevel=[0-7]|[fatal..extra]\n"
        "  --pathname=...            Path and/or name of database files\n"
        "  --repeat=N                Set repeat counter\n"
        "  --threads=N               Number of thread (unsupported for now)\n"
        "  --timeout=N[s|m|h|d]      Set timeout in seconds/minutes/hours/days\n"
-       "  --failfast[=YES/no]       Lill all actors on first failure/error\n"
+       "  --failfast[=YES/no]       Kill all actors on first failure/error\n"
        "  --max-readers=N           See mdbx_env_set_maxreaders() description\n"
-       "  --max-tables=N            Se mdbx_env_set_maxdbs() description\n"
+       "  --max-tables=N            See mdbx_env_set_maxdbs() description\n"
        "  --dump-config[=YES/no]    Dump entire test config before run\n"
        "  --progress[=YES/no]       Enable/disable progress `canary`\n"
        "  --console[=yes/no]        Enable/disable console-like output\n"
@@ -84,6 +86,7 @@ MDBX_NORETURN void usage(void) {
        "  --speculum[=yes|NO]           Use internal `speculum` to check "
        "dataset\n"
        "  --geometry-jitter[=YES|no]    Use jitter for geometry upper-limit\n"
+       "  --defrag-jitter[=YES|no]      Use jitter for defrag\n"
        "Keys and Value:\n"
        "  --keylen.min=N                Minimal keys length\n"
        "  --keylen.max=N                Miximal keys length\n"
@@ -114,6 +117,7 @@ MDBX_NORETURN void usage(void) {
        "    nordahead      == MDBX_NORDAHEAD\n"
        "    nomeminit      == MDBX_NOMEMINIT\n"
        "  --random-writemap[=YES|no]    Toggle MDBX_WRITEMAP randomly\n"
+       "  --random-treeopts[=YES|no]    Choice randomly values of MDBX_options_t related to tree structure.\n"
        "Key-value space/table options:\n"
        "  --table={[+-]FLAG}[,[+-]FLAG]...\n"
        "    key.reverse  == MDBX_REVERSEKEY\n"
@@ -182,6 +186,7 @@ void actor_params::set_defaults(const std::string &tmpdir) {
   ignore_dbfull = false;
   speculum = false;
   random_writemap = true;
+  random_treeopts = true;
 
   max_readers = 42;
   max_tables = 42;
@@ -194,6 +199,7 @@ void actor_params::set_defaults(const std::string &tmpdir) {
   global::config::progress_indicator = true;
   global::config::console_mode = osal_istty(STDERR_FILENO);
   global::config::geometry_jitter = true;
+  global::config::defrag_jitter = true;
 }
 
 namespace global {
@@ -216,6 +222,7 @@ bool failfast;
 bool progress_indicator;
 bool console_mode;
 bool geometry_jitter;
+bool defrag_jitter;
 } /* namespace config */
 
 } /* namespace global */
@@ -319,6 +326,8 @@ int main(int argc, char *const argv[]) {
       continue;
     if (config::parse_option(argc, argv, narg, "geometry-jitter", global::config::geometry_jitter))
       continue;
+    if (config::parse_option(argc, argv, narg, "defrag-jitter", global::config::defrag_jitter))
+      continue;
     if (config::parse_option(argc, argv, narg, "timeout", global::config::timeout_duration_seconds, config::duration,
                              1))
       continue;
@@ -341,6 +350,8 @@ int main(int argc, char *const argv[]) {
     if (config::parse_option(argc, argv, narg, "mode", params.mode_flags, config::mode_bits))
       continue;
     if (config::parse_option(argc, argv, narg, "random-writemap", params.random_writemap))
+      continue;
+    if (config::parse_option(argc, argv, narg, "random-treeopts", params.random_treeopts))
       continue;
     if (config::parse_option(argc, argv, narg, "table", params.table_flags, config::table_bits)) {
       if ((params.table_flags & MDBX_DUPFIXED) == 0)
@@ -476,9 +487,9 @@ int main(int argc, char *const argv[]) {
       params.datalen_max = params.datalen_min;
       continue;
     }
-    if (config::parse_option(argc, argv, narg, "batch.read", params.batch_read, config::no_scale, 1))
+    if (config::parse_option(argc, argv, narg, "batch.read", params.batch_read, config::decimal, 1))
       continue;
-    if (config::parse_option(argc, argv, narg, "batch.write", params.batch_write, config::no_scale, 1))
+    if (config::parse_option(argc, argv, narg, "batch.write", params.batch_write, config::decimal, 1))
       continue;
     if (config::parse_option(argc, argv, narg, "delay", params.delaystart, config::duration))
       continue;

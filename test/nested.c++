@@ -1,7 +1,8 @@
 /// \copyright Copyright (c) 2015-2026 Леонид Юрьев aka Leonid Yuriev <leo@yuriev.ru>. All Rights Reserved.
 ///
 /// THE CONTENTS OF THIS PROJECT ARE PROPRIETARY AND CONFIDENTIAL.
-/// UNAUTHORIZED COPYING, TRANSFERRING OR REPRODUCTION OF THE CONTENTS OF THIS PROJECT, VIA ANY MEDIUM IS STRICTLY PROHIBITED.
+/// UNAUTHORIZED COPYING, TRANSFERRING OR REPRODUCTION OF THE CONTENTS OF THIS PROJECT,
+/// VIA ANY MEDIUM IS STRICTLY PROHIBITED.
 ///
 /// The receipt or possession of the source code and/or any parts thereof does not convey or imply any right to use them
 /// for any purpose other than the purpose for which they were provided to you.
@@ -12,7 +13,8 @@
 /// whether in an action of contract, tort or otherwise, arising from, out of or in connection with the software
 /// or the use or other dealings in the software.
 ///
-/// The above copyright notice and this permission notice shall be included in all copies or substantial portions of the software.
+/// The above copyright notice and this permission notice shall be included in all copies
+/// or substantial portions of the software.
 ///
 /// \author Леонид Юрьев aka Leonid Yuriev <leo@yuriev.ru>
 /// \date 2015-2026
@@ -57,6 +59,7 @@ class testcase_nested : public testcase_ttl {
   bool pop_txn() { return pop_txn(inherited::is_nested_txn_available() ? flipcoin_x3() : flipcoin_x2()); }
   void push_txn();
   bool stochastic_breakable_restart_with_nested(bool force_restart = false);
+  int checkpoint() override;
 
 public:
   testcase_nested(const actor_config &config, const mdbx_pid_t pid) : inherited(config, pid) {}
@@ -112,7 +115,7 @@ bool testcase_nested::teardown() {
 
 void testcase_nested::push_txn() {
   MDBX_txn *nested_txn;
-  MDBX_txn_flags_t flags = MDBX_txn_flags_t(prng32() & uint32_t(MDBX_TXN_NOSYNC | MDBX_TXN_NOMETASYNC));
+  MDBX_txn_flags_t flags = MDBX_TXN_READWRITE | MDBX_TXN_NOWEAKING;
   int err = mdbx_txn_begin(db_guard.get(), txn_guard.get(), flags, &nested_txn);
   if (unlikely(err != MDBX_SUCCESS))
     failure_perror("mdbx_txn_begin(nested)", err);
@@ -171,6 +174,38 @@ bool testcase_nested::pop_txn(bool abort) {
   return should_continue;
 }
 
+int testcase_nested::checkpoint() {
+  log_trace(">> txn_checkpoint");
+
+  assert(txn_guard && !stack.empty());
+  const auto txnid = mdbx_txn_id(txn_guard.get());
+  MDBX_commit_latency latency;
+  int err = mdbx_txn_checkpoint(txn_guard.get(), MDBX_TXN_NOWEAKING, &latency);
+  if (unlikely(MDBX_IS_ERROR(err)) && (err != MDBX_MAP_FULL || !config.params.ignore_dbfull))
+    failure_perror("mdbx_txn_checkpoint()", err);
+
+  if (MDBX_IS_ERROR(err)) {
+    log_verbose("checkpoint-%s level#%zu txn #%" PRIu64 ", serial %" PRIu64 " <- %" PRIu64, "failed", stack.size(),
+                txnid, serial, std::get<1>(stack.top()));
+    /* coverity[RESOURCE_LEAK] */
+    txn_guard.release();
+    std::swap(txn_guard, std::get<0>(stack.top()));
+    serial = std::get<1>(stack.top());
+    std::swap(fifo, std::get<2>(stack.top()));
+    std::swap(speculum, std::get<3>(stack.top()));
+    stack.pop();
+  } else {
+    log_verbose("checkpoint-%s level#%zu txn #%" PRIu64 ", serial %" PRIu64 " -> %" PRIu64, "done", stack.size(), txnid,
+                serial, std::get<1>(stack.top()));
+    std::get<1>(stack.top()) = serial;
+    std::get<2>(stack.top()) = fifo;
+    std::get<3>(stack.top()) = speculum;
+  }
+
+  log_trace("<< txn_checkpoint: %s", MDBX_IS_ERROR(err) ? "failed" : (err ? "empty" : "commited"));
+  return (err == MDBX_RESULT_TRUE) ? MDBX_SUCCESS : err;
+}
+
 bool testcase_nested::stochastic_breakable_restart_with_nested(bool force_restart) {
   log_trace(">> stochastic_breakable_restart_with_nested%s", force_restart ? ": force_restart" : "");
 
@@ -201,6 +236,9 @@ bool testcase_nested::stochastic_breakable_restart_with_nested(bool force_restar
     if (unlikely(err != MDBX_SUCCESS) && err != MDBX_BUSY)
       failure_perror("mdbx_env_set_syncbytes()", err);
   }
+
+  if (!stack.empty() && flipcoin_x3())
+    checkpoint();
 
   if (should_continue)
     while (stack.empty() || (is_nested_txn_available() && flipcoin() && stack.size() < 5))

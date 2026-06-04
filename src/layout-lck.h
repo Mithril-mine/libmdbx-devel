@@ -8,7 +8,7 @@
 #include "essentials.h"
 
 /* The version number for a database's lockfile format. */
-#define MDBX_LOCK_VERSION 6
+#define MDBX_LOCK_VERSION 7
 
 #if MDBX_LOCKING == MDBX_LOCKING_WIN32FILES
 
@@ -88,8 +88,7 @@ typedef struct pgops {
     gc_prof_stat_t work;
     /* Затраты на поддержку и обновления самой GC */
     gc_prof_stat_t self;
-    /* Итераций обновления GC,
-     * больше 1 если были повторы/перезапуски */
+    /* Итераций обновления GC, больше 1 если были повторы/перезапуски */
     uint32_t wloops;
     /* Итерации слияния записей GC */
     uint32_t coalescences;
@@ -99,6 +98,10 @@ typedef struct pgops {
     uint32_t flushes;
     /* Попытки пнуть тормозящих читателей */
     uint32_t kicks;
+    /* Максимальная замеченная разница между последним и самым старым читаемым MVCC-снимками */
+    uint32_t max_reader_lag;
+    /* Максимальное замеченное количество страниц удерживаемых от переработки из-за чтения старых MVCC-снимков */
+    uint32_t max_retained_pages;
   } gc_prof;
 } pgop_stat_t;
 
@@ -186,7 +189,7 @@ typedef struct reader_slot {
 /* The header for the reader table (a memory-mapped lock file). */
 typedef struct shared_lck {
   /* Stamp identifying this as an MDBX file.
-   * It must be set to MDBX_MAGIC with with MDBX_LOCK_VERSION. */
+   * It must be set to MDBX_MAGIC with MDBX_LOCK_VERSION. */
   uint64_t magic_and_version;
 
   /* Format of this lock file. Must be set to MDBX_LOCK_FORMAT. */
@@ -234,7 +237,8 @@ typedef struct shared_lck {
   osal_ipclock_t wrt_lock;
 #endif /* MDBX_LOCKING > 0 */
 
-  atomic_txnid_t cached_oldest;
+  atomic_txnid_t cached_oldest_txnid;
+  mdbx_atomic_uint64_t cached_oldest_retired;
 
   /* Timestamp of entering an out-of-sync state. Value is represented in a
    * suitable system-dependent form, for example clock_gettime(CLOCK_BOOTTIME)
@@ -279,8 +283,9 @@ typedef struct shared_lck {
 /* Lockfile format signature: version, features and field layout */
 #define MDBX_LOCK_FORMAT                                                                                               \
   (MDBX_LCK_SIGN * 27733 + (unsigned)sizeof(reader_slot_t) * 13 +                                                      \
-   (unsigned)offsetof(reader_slot_t, snapshot_pages_used) * 251 + (unsigned)offsetof(lck_t, cached_oldest) * 83 +      \
-   (unsigned)offsetof(lck_t, rdt_length) * 37 + (unsigned)offsetof(lck_t, rdt) * 29)
+   (unsigned)offsetof(reader_slot_t, snapshot_pages_used) * 251 +                                                      \
+   (unsigned)offsetof(lck_t, cached_oldest_txnid) * 83 + (unsigned)offsetof(lck_t, rdt_length) * 37 +                  \
+   (unsigned)offsetof(lck_t, rdt) * 29)
 #endif /* FLEXIBLE_ARRAY_MEMBERS */
 } lck_t;
 

@@ -6,17 +6,17 @@
 /// mdbx_stat.c - memory-mapped database status tool
 ///
 
-#ifdef _MSC_VER
-#if _MSC_VER > 1800
-#pragma warning(disable : 4464) /* relative include path contains '..' */
-#endif
-#pragma warning(disable : 4996) /* The POSIX name is deprecated... */
-#endif                          /* _MSC_VER (warnings) */
-
-#define xMDBX_TOOLS /* Avoid using internal eASSERT() */
+#define xMDBX_TOOLS /* Avoid using internal ASSERT(), etc */
 #include "essentials.h"
 
+enum { MDBX_STAT_MAXDBS = 2 };
+
 #if defined(_WIN32) || defined(_WIN64)
+
+/* Bit of madness for Windows console */
+#define mdbx_strerror mdbx_strerror_ANSI2OEM
+#define mdbx_strerror_r mdbx_strerror_r_ANSI2OEM
+
 #include "wingetopt.h"
 
 static volatile BOOL user_break;
@@ -36,12 +36,12 @@ static void signal_handler(int sig) {
 
 #endif /* !WINDOWS */
 
-static void print_stat(MDBX_stat *ms) {
+static void print_stat(const MDBX_stat *ms) {
   printf("  Pagesize: %u\n", ms->ms_psize);
   printf("  Tree depth: %u\n", ms->ms_depth);
   printf("  Branch pages: %" PRIu64 "\n", ms->ms_branch_pages);
   printf("  Leaf pages: %" PRIu64 "\n", ms->ms_leaf_pages);
-  printf("  Overflow pages: %" PRIu64 "\n", ms->ms_overflow_pages);
+  printf("  Large/Overflow pages: %" PRIu64 "\n", ms->ms_overflow_pages);
   printf("  Entries: %" PRIu64 "\n", ms->ms_entries);
 }
 
@@ -66,15 +66,18 @@ static int reader_list_func(void *ctx, int num, int slot, mdbx_pid_t pid, mdbx_t
   (void)ctx;
   if (num == 1)
     printf("Reader Table\n"
-           "   #\tslot\t%6s %*s %20s %10s %13s %13s\n",
+           "   #\tslot\t%10s %*s %20s %10s %13s %13s\n",
            "pid", (int)sizeof(size_t) * 2, "thread", "txnid", "lag", "used", "retained");
 
-  if (thread < (mdbx_tid_t)((intptr_t)MDBX_TID_TXN_OUSTED))
-    printf(" %3d)\t[%d]\t%6" PRIdSIZE " %*" PRIxPTR, num, slot, (size_t)pid, (int)sizeof(size_t) * 2,
-           (uintptr_t)thread);
+  char thread_buf[32], *thread_str;
+  if (thread == (mdbx_tid_t)((uintptr_t)MDBX_TID_TXN_OUSTED))
+    thread_str = "ousted";
+  else if (thread == (mdbx_tid_t)((uintptr_t)MDBX_TID_TXN_PARKED))
+    thread_str = "parked";
   else
-    printf(" %3d)\t[%d]\t%6" PRIdSIZE " %sed", num, slot, (size_t)pid,
-           (thread == (mdbx_tid_t)((uintptr_t)MDBX_TID_TXN_PARKED)) ? "park" : "oust");
+    snprintf(thread_str = thread_buf, sizeof(thread_buf), "%" PRIxPTR, (uintptr_t)thread);
+
+  printf(" %3d)\t[%d]\t%10" PRIdSIZE " %*s", num, slot, (size_t)pid, (int)sizeof(size_t) * 2, thread_str);
 
   if (txnid)
     printf(" %20" PRIu64 " %10" PRIu64 " %12.1fM %12.1fM\n", txnid, lag, bytes_used / 1048576.0,
@@ -85,8 +88,30 @@ static int reader_list_func(void *ctx, int num, int slot, mdbx_pid_t pid, mdbx_t
   return user_break ? MDBX_RESULT_TRUE : MDBX_RESULT_FALSE;
 }
 
-const char *prog;
-bool quiet = false;
+static int table_enum_func(void *ctx, const MDBX_txn *txn, const MDBX_val *name, MDBX_db_flags_t db_flags,
+                           const struct MDBX_stat *stat, MDBX_dbi dbi) {
+  (void)ctx;
+  (void)txn;
+  (void)db_flags;
+  (void)dbi;
+  printf("Status of %.*s\n", (int)name->iov_len, (const char *)name->iov_base);
+  print_stat(stat);
+  return user_break ? MDBX_RESULT_TRUE : MDBX_RESULT_FALSE;
+}
+
+static int gc_list_func(void *ctx, const MDBX_txn *txn, uint64_t span_txnid, size_t span_pgno, size_t span_length,
+                        bool span_is_reclaimable) {
+  (void)ctx;
+  (void)txn;
+  (void)span_txnid;
+  (void)span_pgno;
+  (void)span_length;
+  (void)span_is_reclaimable;
+  return user_break ? MDBX_RESULT_TRUE : MDBX_RESULT_FALSE;
+}
+
+static const char *prog;
+static bool quiet = false;
 static void error(const char *func, int rc) {
   if (!quiet)
     fprintf(stderr, "%s: %s() error %d %s\n", prog, func, rc, mdbx_strerror(rc));
@@ -107,6 +132,21 @@ static void logger(MDBX_log_level_t level, const char *function, int line, const
   }
 }
 
+static void print_pages_percentage(const char *caption, size_t value, size_t backed, size_t total) {
+  char buf[42];
+  const char *suffix = " pages";
+  printf("  %s: %" PRIuSIZE, caption, value);
+  if (value && value < backed) {
+    printf(", %s%% of %s", mdbx_ratio2percents(value, backed, buf, sizeof(buf)), "backed");
+    suffix = "";
+  }
+  if (value && value < total) {
+    printf(", %s%% of %s", mdbx_ratio2percents(value, total, buf, sizeof(buf)), "total");
+    suffix = "";
+  }
+  puts(suffix);
+}
+
 int main(int argc, char *argv[]) {
   int opt, rc;
   MDBX_env *env;
@@ -116,8 +156,8 @@ int main(int argc, char *argv[]) {
   prog = argv[0];
   char *envname;
   char *table = nullptr;
-  bool alldbs = false, envinfo = false, pgop = false;
-  int freinfo = 0, rdrinfo = 0;
+  bool alltbl = false, show_env_info = false, show_page_ops = false;
+  short show_gc = 0, show_readers = 0;
 
   if (argc < 2)
     usage(prog);
@@ -148,26 +188,26 @@ int main(int argc, char *argv[]) {
       quiet = true;
       break;
     case 'p':
-      pgop = true;
+      show_page_ops = true;
       break;
     case 'a':
       if (table)
         usage(prog);
-      alldbs = true;
+      alltbl = true;
       break;
     case 'e':
-      envinfo = true;
+      show_env_info = true;
       break;
     case 'f':
-      freinfo += 1;
+      show_gc += 1;
       break;
     case 'n':
       break;
     case 'r':
-      rdrinfo += 1;
+      show_readers += 1;
       break;
     case 's':
-      if (alldbs)
+      if (alltbl)
         usage(prog);
       table = optarg;
       break;
@@ -206,8 +246,8 @@ int main(int argc, char *argv[]) {
     return EXIT_FAILURE;
   }
 
-  if (alldbs || table) {
-    rc = mdbx_env_set_maxdbs(env, 2);
+  if (alltbl || table) {
+    rc = mdbx_env_set_maxdbs(env, MDBX_STAT_MAXDBS);
     if (unlikely(rc != MDBX_SUCCESS)) {
       error("mdbx_env_set_maxdbs", rc);
       goto env_close;
@@ -226,7 +266,7 @@ int main(int argc, char *argv[]) {
     goto txn_abort;
   }
 
-  if (envinfo || freinfo || pgop) {
+  if (show_env_info || show_gc || show_page_ops) {
     rc = mdbx_env_info_ex(env, txn, &mei, sizeof(mei));
     if (unlikely(rc != MDBX_SUCCESS)) {
       error("mdbx_env_info_ex", rc);
@@ -237,7 +277,7 @@ int main(int argc, char *argv[]) {
     memset(&mei, 0, sizeof(mei));
   }
 
-  if (pgop) {
+  if (show_page_ops) {
     printf("Page Operations (for current session):\n");
     printf("      New: %8" PRIu64 "\t// quantity of a new pages added\n", mei.mi_pgop_stat.newly);
     printf("      CoW: %8" PRIu64 "\t// quantity of pages copied for altering\n", mei.mi_pgop_stat.cow);
@@ -263,7 +303,7 @@ int main(int argc, char *argv[]) {
            mei.mi_pgop_stat.fsync);
   }
 
-  if (envinfo) {
+  if (show_env_info) {
     printf("Environment Info\n");
     printf("  Pagesize: %u\n", mei.mi_dxb_pagesize);
     if (mei.mi_geo.lower != mei.mi_geo.upper) {
@@ -295,7 +335,7 @@ int main(int argc, char *argv[]) {
     printf("  Number of reader slots uses: %u\n", mei.mi_numreaders);
   }
 
-  if (rdrinfo) {
+  if (show_readers) {
     rc = mdbx_reader_list(env, reader_list_func, nullptr);
     if (MDBX_IS_ERROR(rc)) {
       error("mdbx_reader_list", rc);
@@ -303,7 +343,7 @@ int main(int argc, char *argv[]) {
     }
     if (rc == MDBX_RESULT_TRUE)
       printf("Reader Table is absent\n");
-    else if (rc == MDBX_SUCCESS && rdrinfo > 1) {
+    else if (rc == MDBX_SUCCESS && show_readers > 1) {
       int dead;
       rc = mdbx_reader_check(env, &dead);
       if (MDBX_IS_ERROR(rc)) {
@@ -318,119 +358,63 @@ int main(int argc, char *argv[]) {
       } else
         printf("  No stale readers.\n");
     }
-    if (!(table || alldbs || freinfo))
+    if (!(table || alltbl || show_gc))
       goto txn_abort;
   }
 
-  if (freinfo) {
-    printf("Garbage Collection\n");
-    dbi = 0;
-    MDBX_cursor *cursor;
-    rc = mdbx_cursor_open(txn, dbi, &cursor);
-    if (unlikely(rc != MDBX_SUCCESS)) {
-      error("mdbx_cursor_open", rc);
-      goto txn_abort;
-    }
-
-    MDBX_stat mst;
-    rc = mdbx_dbi_stat(txn, dbi, &mst, sizeof(mst));
-    if (unlikely(rc != MDBX_SUCCESS)) {
-      error("mdbx_dbi_stat", rc);
-      goto txn_abort;
-    }
-    print_stat(&mst);
-
-    pgno_t pages = 0, *iptr;
-    pgno_t reclaimable = 0;
-    MDBX_val key, data;
-    while (MDBX_SUCCESS == (rc = mdbx_cursor_get(cursor, &key, &data, MDBX_NEXT))) {
-      if (user_break) {
-        rc = MDBX_EINTR;
-        break;
-      }
-      iptr = data.iov_base;
-      const pgno_t number = *iptr++;
-
-      pages += number;
-      if (envinfo && mei.mi_latter_reader_txnid > *(txnid_t *)key.iov_base)
-        reclaimable += number;
-
-      if (freinfo > 1) {
-        char *bad = "";
-        pgno_t prev = MDBX_PNL_ASCENDING ? NUM_METAS - 1 : (pgno_t)mei.mi_last_pgno + 1;
-        pgno_t span = 1;
-        for (unsigned i = 0; i < number; ++i) {
-          pgno_t pg = iptr[i];
-          if (MDBX_PNL_DISORDERED(prev, pg))
-            bad = " [bad sequence]";
-          prev = pg;
-          while (i + span < number && iptr[i + span] == (MDBX_PNL_ASCENDING ? pgno_add(pg, span) : pgno_sub(pg, span)))
-            ++span;
-        }
-        printf("    Transaction %" PRIaTXN ", %" PRIaPGNO " pages, maxspan %" PRIaPGNO "%s\n", *(txnid_t *)key.iov_base,
-               number, span, bad);
-        if (freinfo > 2) {
-          for (unsigned i = 0; i < number; i += span) {
-            const pgno_t pg = iptr[i];
-            for (span = 1;
-                 i + span < number && iptr[i + span] == (MDBX_PNL_ASCENDING ? pgno_add(pg, span) : pgno_sub(pg, span));
-                 ++span)
-              ;
-            if (span > 1)
-              printf("     %9" PRIaPGNO "[%" PRIaPGNO "]\n", pg, span);
-            else
-              printf("     %9" PRIaPGNO "\n", pg);
-          }
-        }
-      }
-    }
-    mdbx_cursor_close(cursor);
-    cursor = nullptr;
+  if (show_gc) {
+    printf("Page Usage & Garbage Collection%s\n",
+           (show_gc > 1) ? " (please use `mdbx_chk` tool for detailed GC information instead)" : "");
+    MDBX_gc_info_t info;
+    rc = mdbx_gc_info(txn, &info, sizeof(info), gc_list_func, nullptr);
 
     switch (rc) {
     case MDBX_SUCCESS:
-    case MDBX_NOTFOUND:
       break;
     case MDBX_EINTR:
       if (!quiet)
         fprintf(stderr, "Interrupted by signal/user\n");
       goto txn_abort;
     default:
-      error("mdbx_cursor_get", rc);
+      error("mdbx_gc_info", rc);
       goto txn_abort;
     }
 
-    if (envinfo) {
-      uint64_t value = mei.mi_mapsize / mei.mi_dxb_pagesize;
-      double percent = value / 100.0;
-      printf("Page Usage\n");
-      printf("  Total: %" PRIu64 " 100%%\n", value);
-
-      value = mei.mi_geo.current / mei.mi_dxb_pagesize;
-      printf("  Backed: %" PRIu64 " %.1f%%\n", value, value / percent);
-
-      value = mei.mi_last_pgno + 1;
-      printf("  Allocated: %" PRIu64 " %.1f%%\n", value, value / percent);
-
-      value = mei.mi_mapsize / mei.mi_dxb_pagesize - (mei.mi_last_pgno + 1);
-      printf("  Remained: %" PRIu64 " %.1f%%\n", value, value / percent);
-
-      value = mei.mi_last_pgno + 1 - pages;
-      printf("  Used: %" PRIu64 " %.1f%%\n", value, value / percent);
-
-      value = pages;
-      printf("  GC: %" PRIu64 " %.1f%%\n", value, value / percent);
-
-      value = pages - reclaimable;
-      printf("  Retained: %" PRIu64 " %.1f%%\n", value, value / percent);
-
-      value = reclaimable;
-      printf("  Reclaimable: %" PRIu64 " %.1f%%\n", value, value / percent);
-
-      value = mei.mi_mapsize / mei.mi_dxb_pagesize - (mei.mi_last_pgno + 1) + reclaimable;
-      printf("  Available: %" PRIu64 " %.1f%%\n", value, value / percent);
-    } else
-      printf("  GC: %" PRIaPGNO " pages\n", pages);
+    const size_t remained_pages = info.pages_total - info.pages_allocated;
+    const size_t used_pages = info.pages_allocated - info.pages_gc;
+    const size_t gc_retained = info.pages_gc - info.gc_reclaimable.pages;
+    const size_t available_pages = info.gc_reclaimable.pages + remained_pages;
+    print_pages_percentage("Total", info.pages_total, info.pages_backed, info.pages_total);
+    print_pages_percentage("Backed", info.pages_backed, info.pages_backed, info.pages_total);
+    print_pages_percentage("Allocated", info.pages_allocated, info.pages_backed, info.pages_total);
+    print_pages_percentage("Remained", remained_pages, info.pages_backed, info.pages_total);
+    print_pages_percentage("Used", used_pages, info.pages_backed, info.pages_total);
+    print_pages_percentage("GC|whole", info.pages_gc, info.pages_backed, info.pages_total);
+    print_pages_percentage("GC|reclaimable", info.gc_reclaimable.pages, info.pages_backed, info.pages_total);
+    if (show_gc > 1) {
+      printf("  %s: ", "GC|reclaimable span-length distribution");
+      const char *suffix = "empty";
+      if (info.gc_reclaimable.span_histogram.amount) {
+        printf("single %zu", info.gc_reclaimable.span_histogram.le1_count);
+        for (size_t i = 0; i < ARRAY_LENGTH(info.gc_reclaimable.span_histogram.ranges); ++i) {
+          if (info.gc_reclaimable.span_histogram.ranges[i].count) {
+            printf(", %zu", info.gc_reclaimable.span_histogram.ranges[i].begin);
+            if (info.gc_reclaimable.span_histogram.ranges[i].end !=
+                info.gc_reclaimable.span_histogram.ranges[i].begin + 1)
+              printf("-%zu", info.gc_reclaimable.span_histogram.ranges[i].end);
+            printf("x%zu", info.gc_reclaimable.span_histogram.ranges[i].count);
+          }
+        }
+        suffix = " pages";
+      }
+      puts(suffix);
+    }
+    print_pages_percentage("GC|retained", gc_retained, info.pages_backed, info.pages_total);
+    print_pages_percentage("Available", available_pages, info.pages_backed, info.pages_total);
+    if (info.max_retained_pages || info.max_reader_lag) {
+      printf("  max reader lag %zu\n", info.max_reader_lag);
+      printf("  max retained pages %zu\n", info.max_retained_pages);
+    }
   }
 
   rc = mdbx_dbi_open(txn, table, MDBX_DB_ACCEDE, &dbi);
@@ -447,65 +431,24 @@ int main(int argc, char *argv[]) {
   }
   printf("Status of %s\n", table ? table : "Main DB");
   print_stat(&mst);
-
-  if (alldbs) {
-    MDBX_cursor *cursor;
-    rc = mdbx_cursor_open(txn, dbi, &cursor);
-    if (unlikely(rc != MDBX_SUCCESS)) {
-      error("mdbx_cursor_open", rc);
-      goto txn_abort;
-    }
-
-    MDBX_val key;
-    while (MDBX_SUCCESS == (rc = mdbx_cursor_get(cursor, &key, nullptr, MDBX_NEXT_NODUP))) {
-      MDBX_dbi xdbi;
-      if (memchr(key.iov_base, '\0', key.iov_len))
-        continue;
-      table = osal_malloc(key.iov_len + 1);
-      memcpy(table, key.iov_base, key.iov_len);
-      table[key.iov_len] = '\0';
-      rc = mdbx_dbi_open(txn, table, MDBX_DB_ACCEDE, &xdbi);
-      if (rc == MDBX_SUCCESS)
-        printf("Status of %s\n", table);
-      osal_free(table);
-      if (unlikely(rc != MDBX_SUCCESS)) {
-        if (rc == MDBX_INCOMPATIBLE)
-          continue;
-        error("mdbx_dbi_open", rc);
-        goto txn_abort;
-      }
-
-      rc = mdbx_dbi_stat(txn, xdbi, &mst, sizeof(mst));
-      if (unlikely(rc != MDBX_SUCCESS)) {
-        error("mdbx_dbi_stat", rc);
-        goto txn_abort;
-      }
-      print_stat(&mst);
-
-      rc = mdbx_dbi_close(env, xdbi);
-      if (unlikely(rc != MDBX_SUCCESS)) {
-        error("mdbx_dbi_close", rc);
-        goto txn_abort;
-      }
-    }
-    mdbx_cursor_close(cursor);
-    cursor = nullptr;
-  }
-
-  switch (rc) {
-  case MDBX_SUCCESS:
-  case MDBX_NOTFOUND:
-    break;
-  case MDBX_EINTR:
-    if (!quiet)
-      fprintf(stderr, "Interrupted by signal/user\n");
-    break;
-  default:
-    if (unlikely(rc != MDBX_SUCCESS))
-      error("mdbx_cursor_get", rc);
-  }
-
   mdbx_dbi_close(env, dbi);
+
+  if (alltbl) {
+    rc = mdbx_enumerate_tables(txn, table_enum_func, nullptr);
+    switch (rc) {
+    case MDBX_SUCCESS:
+    case MDBX_NOTFOUND:
+      break;
+    case MDBX_EINTR:
+      if (!quiet)
+        fprintf(stderr, "Interrupted by signal/user\n");
+      break;
+    default:
+      if (unlikely(rc != MDBX_SUCCESS))
+        error("mdbx_enumerate_tables", rc);
+    }
+  }
+
 txn_abort:
   mdbx_txn_abort(txn);
 env_close:

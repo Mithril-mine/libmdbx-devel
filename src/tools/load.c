@@ -6,19 +6,17 @@
 /// mdbx_load.c - memory-mapped database load tool
 ///
 
-#ifdef _MSC_VER
-#if _MSC_VER > 1800
-#pragma warning(disable : 4464) /* relative include path contains '..' */
-#endif
-#pragma warning(disable : 4996) /* The POSIX name is deprecated... */
-#endif                          /* _MSC_VER (warnings) */
-
-#define xMDBX_TOOLS /* Avoid using internal eASSERT() */
+#define xMDBX_TOOLS /* Avoid using internal ASSERT(), etc */
 #include "essentials.h"
 
 #include <ctype.h>
 
 #if defined(_WIN32) || defined(_WIN64)
+
+/* Bit of madness for Windows console */
+#define mdbx_strerror mdbx_strerror_ANSI2OEM
+#define mdbx_strerror_r mdbx_strerror_r_ANSI2OEM
+
 #include "wingetopt.h"
 
 static volatile BOOL user_break;
@@ -116,12 +114,11 @@ static bool valbool(char *line, const char *item, bool *value) {
 
 static char *subname = nullptr;
 static int dbi_flags;
-static txnid_t txnid;
 static uint64_t sequence;
 static MDBX_canary canary;
 static MDBX_envinfo envinfo;
 
-#define PRINT 1
+#define PLAINTEXT 1
 #define NOHDR 2
 #define GLOBAL 4
 static int mode = GLOBAL;
@@ -138,10 +135,10 @@ typedef struct flagbit {
 
 #define S(s) STRLENOF(s), s
 
-flagbit dbflags[] = {{MDBX_REVERSEKEY, S("reversekey")}, {MDBX_DUPSORT, S("duplicates")},
-                     {MDBX_DUPSORT, S("dupsort")},       {MDBX_INTEGERKEY, S("integerkey")},
-                     {MDBX_DUPFIXED, S("dupfix")},       {MDBX_INTEGERDUP, S("integerdup")},
-                     {MDBX_REVERSEDUP, S("reversedup")}, {0, 0, nullptr}};
+static const flagbit dbflags[] = {{MDBX_REVERSEKEY, S("reversekey")}, {MDBX_DUPSORT, S("duplicates")},
+                                  {MDBX_DUPSORT, S("dupsort")},       {MDBX_INTEGERKEY, S("integerkey")},
+                                  {MDBX_DUPFIXED, S("dupfix")},       {MDBX_INTEGERDUP, S("integerdup")},
+                                  {MDBX_REVERSEDUP, S("reversedup")}, {0, 0, nullptr}};
 
 static int readhdr(void) {
   /* reset parameters */
@@ -150,7 +147,6 @@ static int readhdr(void) {
     subname = nullptr;
   }
   dbi_flags = 0;
-  txnid = 0;
   sequence = 0;
 
   while (true) {
@@ -190,11 +186,11 @@ static int readhdr(void) {
     char *str = valstr(dbuf.iov_base, "format");
     if (str) {
       if (strcmp(str, "print") == 0) {
-        mode |= PRINT;
+        mode |= PLAINTEXT;
         continue;
       }
       if (strcmp(str, "bytevalue") == 0) {
-        mode &= ~PRINT;
+        mode &= ~PLAINTEXT;
         continue;
       }
       if (!quiet)
@@ -269,8 +265,7 @@ static int readhdr(void) {
         if (!quiet)
           fprintf(stderr, "%s: line %" PRIiSIZE ": ignore unsupported value 0x%" PRIx64 " for %s\n", prog, lineno, u64,
                   "txnid");
-      } else
-        txnid = u64;
+      }
       continue;
     }
 
@@ -383,7 +378,17 @@ __hot static int readline(MDBX_val *out, MDBX_val *buf) {
       return badend();
     }
   }
-  if (fgets(buf->iov_base, (int)buf->iov_len, stdin) == nullptr)
+
+  /* modern concise mode, where space in second position mean the same (previously) value */
+  c = fgetc(stdin);
+  if (c == EOF)
+    return errno ? errno : EOF;
+  if (c == ' ')
+    return (ungetc(c, stdin) == c) ? MDBX_SUCCESS : (errno ? errno : EOF);
+
+  ((char *)buf->iov_base)[0] = c;
+  ((char *)buf->iov_base)[1] = 0;
+  if (c != '\n' && fgets((char *)buf->iov_base + 1, (int)buf->iov_len - 1, stdin) == nullptr)
     return errno ? errno : EOF;
   lineno++;
 
@@ -413,7 +418,7 @@ __hot static int readline(MDBX_val *out, MDBX_val *buf) {
   c1[--len] = '\0';
   end = c1 + len;
 
-  if (mode & PRINT) {
+  if (mode & PLAINTEXT) {
     while (c2 < end) {
       if (unlikely(*c2 == '\\')) {
         if (c2[1] == '\\') {
@@ -450,19 +455,27 @@ static void usage(void) {
   fprintf(stderr,
           "usage: %s "
           "[-V] [-q] [-a] [-f file] [-s name] [-N] [-p] [-T] [-r] [-n] dbpath\n"
-          "  -V\t\tprint version and exit\n"
-          "  -q\t\tbe quiet\n"
-          "  -a\t\tappend records in input order (required for custom "
-          "comparators)\n"
-          "  -f file\tread from file instead of stdin\n"
-          "  -s name\tload into specified named table\n"
-          "  -N\t\tdon't overwrite existing records when loading, just skip "
-          "ones\n"
-          "  -p\t\tpurge table before loading\n"
-          "  -T\t\tread plaintext\n"
-          "  -r\t\trescue mode (ignore errors to load corrupted DB dump)\n"
-          "  -n\t\tdon't use subdirectory for newly created database "
-          "(MDBX_NOSUBDIR)\n",
+          "  -V\t\tprint version and exit.\n"
+          "  -q\t\tbe quiet.\n"
+          "  -a\t\tappend records in input order (required for custom comparators).\n"
+          "  -b number\tinsertion batch size as number of items (100K by default).\n"
+          "  -L megabytes\tlimits the amount of transactions in megabytes.\n"
+          "  -d percent\tdesired pages filling density in percent between 50 and 100 (100 by default).\n"
+          "  -G geometry\toverride database geometry in the form of five numbers L:U:G:S:P delimited by a colon,\n"
+          "\t\twhere:\n"
+          "\t\t  L - lower/minimal database size in bytes;\n"
+          "\t\t  U - upper/maximal database size in bytes;\n"
+          "\t\t  G - growth step in bytes;\n"
+          "\t\t  S - shrink threshold in bytes;\n"
+          "\t\t  P - page size in bytes;\n"
+          "\t\tsee description of mdbx_env_set_geometry() for more information.\n"
+          "  -f file\tread from file instead of stdin.\n"
+          "  -s name\tload into specified named table.\n"
+          "  -N\t\tdon't overwrite existing records when loading, just skip ones.\n"
+          "  -p\t\tpurge target table(s) before loading.\n"
+          "  -T\t\tread plaintext.\n"
+          "  -r\t\trescue mode (ignore errors to load corrupted DB dump).\n"
+          "  -n\t\tdon't use subdirectory for newly created database (MDBX_NOSUBDIR).\n",
           prog);
   exit(EXIT_FAILURE);
 }
@@ -481,6 +494,15 @@ int main(int argc, char *argv[]) {
   int envflags = MDBX_SAFE_NOSYNC | MDBX_ACCEDE, putflags = MDBX_UPSERT;
   bool rescue = false;
   bool purge = false;
+  unsigned density_percent = 100;
+  bool override_geometry = false;
+  intptr_t geometry_pagesize = -1;
+  intptr_t geometry_lower = -1;
+  intptr_t geometry_upper = -1;
+  intptr_t geometry_growth = -1;
+  intptr_t geometry_shrink = -1;
+  size_t batch_items = 100000;
+  size_t dirty_limit = 0;
 
   prog = argv[0];
   if (argc < 2)
@@ -488,6 +510,10 @@ int main(int argc, char *argv[]) {
 
   while ((i = getopt(argc, argv,
                      "a"
+                     "b:"
+                     "L:"
+                     "d:"
+                     "G:"
                      "f:"
                      "n"
                      "s:"
@@ -516,7 +542,7 @@ int main(int argc, char *argv[]) {
       if (freopen(optarg, "r", stdin) == nullptr) {
         if (!quiet)
           fprintf(stderr, "%s: %s: open: %s\n", prog, optarg, mdbx_strerror(errno));
-        exit(EXIT_FAILURE);
+        return EXIT_FAILURE;
       }
       break;
     case 'n':
@@ -532,13 +558,45 @@ int main(int argc, char *argv[]) {
       purge = true;
       break;
     case 'T':
-      mode |= NOHDR | PRINT;
+      mode |= NOHDR | PLAINTEXT;
       break;
     case 'q':
       quiet = true;
       break;
     case 'r':
       rescue = true;
+      break;
+    case 'b':
+      if (sscanf(optarg, "%zu", &batch_items) != 1) {
+        if (!quiet)
+          fprintf(stderr, "%s: %s option: expecting %s, but got '%s'\n", prog, "-b", "unsigned integer value", optarg);
+        return EXIT_FAILURE;
+      }
+      break;
+    case 'L':
+      if (sscanf(optarg, "%zu", &dirty_limit) != 1) {
+        if (!quiet)
+          fprintf(stderr, "%s: %s option: expecting %s, but got '%s'\n", prog, "-L", "unsigned integer value", optarg);
+        return EXIT_FAILURE;
+      }
+      break;
+    case 'd':
+      if (sscanf(optarg, "%u", &density_percent) != 1 || density_percent < 50 || density_percent > 100) {
+        if (!quiet)
+          fprintf(stderr, "%s: %s option: expecting %s, but got '%s'\n", prog, "-d",
+                  "unsigned integer value in range between 50 and 100", optarg);
+        return EXIT_FAILURE;
+      }
+      break;
+    case 'G':
+      if (sscanf(optarg, "%zi:%zi:%zi:%zi:%zi", &geometry_lower, &geometry_upper, &geometry_growth, &geometry_shrink,
+                 &geometry_pagesize) != 5) {
+        if (!quiet)
+          fprintf(stderr, "%s: %s option: expecting %s, but got '%s'\n", prog, "-G",
+                  "five numbers delimited by a colon", optarg);
+        return EXIT_FAILURE;
+      }
+      override_geometry = true;
       break;
     default:
       usage();
@@ -608,23 +666,29 @@ int main(int argc, char *argv[]) {
     }
   }
 
-  err = MDBX_SUCCESS;
-  if (envinfo.mi_geo.lower | envinfo.mi_geo.upper | envinfo.mi_geo.shrink | envinfo.mi_geo.grow) {
-    err = mdbx_env_set_geometry(env, (intptr_t)envinfo.mi_geo.lower, (intptr_t)envinfo.mi_geo.current,
-                                (intptr_t)envinfo.mi_geo.upper, (intptr_t)envinfo.mi_geo.grow,
-                                (intptr_t)envinfo.mi_geo.shrink,
-                                envinfo.mi_dxb_pagesize ? (intptr_t)envinfo.mi_dxb_pagesize : -1);
-  } else if (envinfo.mi_mapsize) {
-    if (envinfo.mi_mapsize > MAX_MAPSIZE) {
-      if (!quiet)
-        fprintf(stderr,
-                "Database size is too large for current system (mapsize=%" PRIu64 " is great than system-limit %zu)\n",
-                envinfo.mi_mapsize, (size_t)MAX_MAPSIZE);
-      goto bailout;
+  if (override_geometry) {
+    err = mdbx_env_set_geometry(env, geometry_lower, -1, geometry_upper, geometry_growth, geometry_shrink,
+                                geometry_pagesize);
+  } else {
+    err = MDBX_SUCCESS;
+    if (envinfo.mi_geo.lower | envinfo.mi_geo.upper | envinfo.mi_geo.shrink | envinfo.mi_geo.grow) {
+      err = mdbx_env_set_geometry(env, (intptr_t)envinfo.mi_geo.lower, (intptr_t)envinfo.mi_geo.current,
+                                  (intptr_t)envinfo.mi_geo.upper, (intptr_t)envinfo.mi_geo.grow,
+                                  (intptr_t)envinfo.mi_geo.shrink,
+                                  envinfo.mi_dxb_pagesize ? (intptr_t)envinfo.mi_dxb_pagesize : -1);
+    } else if (envinfo.mi_mapsize) {
+      if (envinfo.mi_mapsize > MAX_MAPSIZE) {
+        if (!quiet)
+          fprintf(stderr,
+                  "Database size is too large for current system (mapsize=%" PRIu64
+                  " is greater than system-limit %zu)\n",
+                  envinfo.mi_mapsize, (size_t)MAX_MAPSIZE);
+        goto bailout;
+      }
+      err = mdbx_env_set_geometry(env, (intptr_t)envinfo.mi_mapsize, (intptr_t)envinfo.mi_mapsize,
+                                  (intptr_t)envinfo.mi_mapsize, 0, 0,
+                                  envinfo.mi_dxb_pagesize ? (intptr_t)envinfo.mi_dxb_pagesize : -1);
     }
-    err = mdbx_env_set_geometry(env, (intptr_t)envinfo.mi_mapsize, (intptr_t)envinfo.mi_mapsize,
-                                (intptr_t)envinfo.mi_mapsize, 0, 0,
-                                envinfo.mi_dxb_pagesize ? (intptr_t)envinfo.mi_dxb_pagesize : -1);
   }
   if (unlikely(err != MDBX_SUCCESS)) {
     error("mdbx_env_set_geometry", err);
@@ -637,10 +701,16 @@ int main(int argc, char *argv[]) {
     goto bailout;
   }
 
+  err = mdbx_env_set_option(env, MDBX_opt_split_reserve, 65536u * (100u - density_percent) / 100u);
+  if (unlikely(err != MDBX_SUCCESS)) {
+    error("mdbx_env_set_option.split_reserve", err);
+    goto bailout;
+  }
+
   kbuf.iov_len = mdbx_env_get_maxvalsize_ex(env, 0) + (size_t)1;
   if (kbuf.iov_len >= INTPTR_MAX / 2) {
     if (!quiet)
-      fprintf(stderr, "mdbx_env_get_maxkeysize() failed, returns %zu\n", kbuf.iov_len);
+      fprintf(stderr, "mdbx_env_get_maxvalsize_ex() failed, returns %zu\n", kbuf.iov_len);
     goto bailout;
   }
 
@@ -651,6 +721,7 @@ int main(int argc, char *argv[]) {
     goto bailout;
   }
 
+  dirty_limit = (dirty_limit > SIZE_MAX >> 20) ? /* unlimited */ 0 : dirty_limit << /* megabytes to bytes */ 20;
   while (err == MDBX_SUCCESS) {
     if (user_break) {
       err = MDBX_EINTR;
@@ -721,9 +792,9 @@ int main(int argc, char *argv[]) {
       goto bailout;
     }
 
-    int batch = 0;
+    size_t count = 0;
+    MDBX_val key = {.iov_base = nullptr, .iov_len = 0}, data = {.iov_base = nullptr, .iov_len = 0};
     while (err == MDBX_SUCCESS) {
-      MDBX_val key, data;
       err = readline(&key, &kbuf);
       if (err == EOF)
         break;
@@ -748,28 +819,28 @@ int main(int argc, char *argv[]) {
         error("mdbx_cursor_put", err);
         goto bailout;
       }
-      batch++;
+      count++;
 
-      MDBX_txn_info txn_info;
-      err = mdbx_txn_info(txn, &txn_info, false);
-      if (unlikely(err != MDBX_SUCCESS)) {
-        error("mdbx_txn_info", err);
-        goto bailout;
+      bool should_checkpoint = batch_items && count >= batch_items;
+      if (!should_checkpoint && (dirty_limit || (count % 256) == 0)) {
+        MDBX_txn_info txn_info;
+        err = mdbx_txn_info(txn, &txn_info, false);
+        if (unlikely(err != MDBX_SUCCESS)) {
+          error("mdbx_txn_info", err);
+          goto bailout;
+        }
+        should_checkpoint =
+            (dirty_limit && txn_info.txn_space_dirty >= dirty_limit) || txn_info.txn_space_leftover < 42 * MEGABYTE;
       }
 
-      if (batch == 10000 || txn_info.txn_space_dirty > MEGABYTE * 256) {
-        err = mdbx_txn_commit(txn);
+      if (should_checkpoint) {
+        err = mdbx_txn_checkpoint(txn, MDBX_TXN_NOMETASYNC, nullptr);
         if (unlikely(err != MDBX_SUCCESS)) {
-          error("mdbx_txn_commit", err);
+          error("mdbx_txn_checkpoint", err);
           goto bailout;
         }
-        batch = 0;
+        count = 0;
 
-        err = mdbx_txn_begin(env, nullptr, 0, &txn);
-        if (unlikely(err != MDBX_SUCCESS)) {
-          error("mdbx_txn_begin", err);
-          goto bailout;
-        }
         err = mdbx_cursor_bind(txn, mc, dbi);
         if (unlikely(err != MDBX_SUCCESS)) {
           error("mdbx_cursor_bind", err);
@@ -787,14 +858,14 @@ int main(int argc, char *argv[]) {
       goto bailout;
     }
     if (subname) {
-      assert(dbi != MAIN_DBI);
+      ASSERT(dbi != MAIN_DBI);
       err = mdbx_dbi_close(env, dbi);
       if (unlikely(err != MDBX_SUCCESS)) {
         error("mdbx_dbi_close", err);
         goto bailout;
       }
     } else {
-      assert(dbi == MAIN_DBI);
+      ASSERT(dbi == MAIN_DBI);
     }
 
     /* try read next header */

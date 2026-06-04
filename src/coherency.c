@@ -51,9 +51,7 @@ static bool coherency_check(const MDBX_env *env, const txnid_t txnid, const vola
     ok = false;
   }
 
-  /* Проверяем отметки внутри корневых страниц только если сами страницы
-   * в пределах текущего отображения. Иначе возможны SIGSEGV до переноса
-   * вызова coherency_check_head() после dxb_resize() внутри txn_renew(). */
+  /* Проверяем отметки внутри корневых страниц только если сами страницы в пределах текущего отображения. */
   if (likely(freedb_root && freedb_mod_txnid &&
              (size_t)ptr_dist(env->dxb_mmap.base, freedb_root) < env->dxb_mmap.limit)) {
     VALGRIND_MAKE_MEM_DEFINED(freedb_root, sizeof(freedb_root->txnid));
@@ -130,8 +128,8 @@ __hot int coherency_fetch_head(MDBX_txn *txn, const meta_ptr_t head, uint64_t *t
     }
     txn->dbs[FREE_DBI].flags &= DB_PERSISTENT_FLAGS;
   }
-  tASSERT(txn, txn->dbs[FREE_DBI].flags == MDBX_INTEGERKEY);
-  tASSERT(txn, check_table_flags(txn->dbs[MAIN_DBI].flags));
+  cASSERT0(txn, txn->dbs[FREE_DBI].flags == MDBX_INTEGERKEY);
+  tASSERT1(txn, check_table_flags(txn->dbs[MAIN_DBI].flags));
   return MDBX_SUCCESS;
 }
 
@@ -141,8 +139,8 @@ int coherency_check_written(const MDBX_env *env, const txnid_t txnid, const vola
   const txnid_t head_txnid = meta_txnid(meta);
   if (likely(head_txnid >= MIN_TXNID && head_txnid >= txnid)) {
     if (likely(coherency_check(env, head_txnid, &meta->trees.gc, meta, report))) {
-      eASSERT(env, meta->trees.gc.flags == MDBX_INTEGERKEY);
-      eASSERT(env, check_table_flags(meta->trees.main.flags));
+      eASSERT0(env, meta->trees.gc.flags == MDBX_INTEGERKEY);
+      eASSERT1(env, check_table_flags(meta->trees.main.flags));
       return MDBX_SUCCESS;
     }
   } else if (report) {

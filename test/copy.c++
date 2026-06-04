@@ -1,7 +1,8 @@
 /// \copyright Copyright (c) 2015-2026 Леонид Юрьев aka Leonid Yuriev <leo@yuriev.ru>. All Rights Reserved.
 ///
 /// THE CONTENTS OF THIS PROJECT ARE PROPRIETARY AND CONFIDENTIAL.
-/// UNAUTHORIZED COPYING, TRANSFERRING OR REPRODUCTION OF THE CONTENTS OF THIS PROJECT, VIA ANY MEDIUM IS STRICTLY PROHIBITED.
+/// UNAUTHORIZED COPYING, TRANSFERRING OR REPRODUCTION OF THE CONTENTS OF THIS PROJECT,
+/// VIA ANY MEDIUM IS STRICTLY PROHIBITED.
 ///
 /// The receipt or possession of the source code and/or any parts thereof does not convey or imply any right to use them
 /// for any purpose other than the purpose for which they were provided to you.
@@ -12,7 +13,8 @@
 /// whether in an action of contract, tort or otherwise, arising from, out of or in connection with the software
 /// or the use or other dealings in the software.
 ///
-/// The above copyright notice and this permission notice shall be included in all copies or substantial portions of the software.
+/// The above copyright notice and this permission notice shall be included in all copies
+/// or substantial portions of the software.
 ///
 /// \author Леонид Юрьев aka Leonid Yuriev <leo@yuriev.ru>
 /// \date 2015-2026
@@ -31,12 +33,18 @@ public:
 REGISTER_TESTCASE(copy);
 
 void testcase_copy::copy_db(const bool with_compaction) {
-  int err = mdbx_env_delete(copy_pathname.c_str(), MDBX_ENV_JUST_DELETE);
-  if (err != MDBX_SUCCESS && err != MDBX_RESULT_TRUE)
-    failure_perror("osal_removefile()", err);
+  int err;
+  const bool overwrite = flipcoin();
+  if (!overwrite) {
+    err = mdbx_env_delete(copy_pathname.c_str(), MDBX_ENV_JUST_DELETE);
+    if (err != MDBX_SUCCESS && err != MDBX_RESULT_TRUE)
+      failure_perror("osal_removefile()", err);
+  }
 
   if (flipcoin()) {
-    err = mdbx_env_copy(db_guard.get(), copy_pathname.c_str(), with_compaction ? MDBX_CP_COMPACT : MDBX_CP_DEFAULTS);
+    err = mdbx_env_copy(db_guard.get(), copy_pathname.c_str(),
+                        (with_compaction ? MDBX_CP_COMPACT : MDBX_CP_DEFAULTS) |
+                            (overwrite ? MDBX_CP_OVERWRITE : MDBX_CP_DEFAULTS));
     log_verbose("mdbx_env_copy(%s), err %d", with_compaction ? "true" : "false", err);
     if (unlikely(err != MDBX_SUCCESS))
       failure_perror(with_compaction ? "mdbx_env_copy(MDBX_CP_COMPACT)" : "mdbx_env_copy(MDBX_CP_ASIS)", err);
@@ -47,11 +55,11 @@ void testcase_copy::copy_db(const bool with_compaction) {
       const bool dynsize = flipcoin();
       const bool flush = flipcoin();
       const bool enable_renew = flipcoin();
-      const MDBX_copy_flags_t flags = (with_compaction ? MDBX_CP_COMPACT : MDBX_CP_DEFAULTS) |
-                                      (dynsize ? MDBX_CP_FORCE_DYNAMIC_SIZE : MDBX_CP_DEFAULTS) |
-                                      (throttle ? MDBX_CP_THROTTLE_MVCC : MDBX_CP_DEFAULTS) |
-                                      (flush ? MDBX_CP_DEFAULTS : MDBX_CP_DONT_FLUSH) |
-                                      (enable_renew ? MDBX_CP_RENEW_TXN : MDBX_CP_DEFAULTS);
+      const MDBX_copy_flags_t flags =
+          (with_compaction ? MDBX_CP_COMPACT : MDBX_CP_DEFAULTS) |
+          (dynsize ? MDBX_CP_FORCE_DYNAMIC_SIZE : MDBX_CP_DEFAULTS) |
+          (throttle ? MDBX_CP_THROTTLE_MVCC : MDBX_CP_DEFAULTS) | (flush ? MDBX_CP_DEFAULTS : MDBX_CP_DONT_FLUSH) |
+          (enable_renew ? MDBX_CP_RENEW_TXN : MDBX_CP_DEFAULTS) | (overwrite ? MDBX_CP_OVERWRITE : MDBX_CP_DEFAULTS);
       txn_begin(ro);
       err = mdbx_txn_copy2pathname(txn_guard.get(), copy_pathname.c_str(), flags);
       log_verbose("mdbx_txn_copy2pathname(flags=0x%X), err %d", flags, err);

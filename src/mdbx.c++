@@ -27,6 +27,8 @@
 #include <cctype> // for isxdigit(), etc
 #include <system_error>
 
+#include "internals.h"
+
 namespace {
 
 #if 0 /* Unused for now */
@@ -141,13 +143,13 @@ __cold std::string format_va(const char *fmt, va_list ap) {
 #else
   int needed = vsnprintf(nullptr, 0, fmt, ap);
 #endif
-  assert(needed >= 0);
+  ASSERT(needed >= 0);
   std::string result;
   result.reserve(size_t(needed + 1));
   result.resize(size_t(needed), '\0');
-  assert(int(result.capacity()) > needed);
+  ASSERT(int(result.capacity()) > needed);
   int actual = vsnprintf(const_cast<char *>(result.data()), result.capacity(), fmt, ones);
-  assert(actual == needed);
+  ASSERT(actual == needed);
   (void)actual;
   va_end(ones);
   return result;
@@ -330,6 +332,7 @@ DEFINE_EXCEPTION(duplicated_lck_file)
 DEFINE_EXCEPTION(dangling_map_id)
 DEFINE_EXCEPTION(transaction_ousted)
 DEFINE_EXCEPTION(mvcc_retarded)
+DEFINE_EXCEPTION(laggard_reader)
 #undef DEFINE_EXCEPTION
 
 __cold const char *error::what() const noexcept {
@@ -362,12 +365,6 @@ __cold std::string error::message() const {
   char buf[1024];
   const char *msg = ::mdbx_strerror_r(code(), buf, sizeof(buf));
   return std::string(msg ? msg : "unknown");
-}
-
-[[noreturn]] __cold void error::panic(const char *context, const char *func) const noexcept {
-  assert(code() != MDBX_SUCCESS);
-  ::mdbx_panic("mdbx::%s.%s(): \"%s\" (%d)", context, func, what(), code());
-  std::terminate();
 }
 
 __cold void error::throw_exception() const {
@@ -420,6 +417,7 @@ __cold void error::throw_exception() const {
     CASE_EXCEPTION(dangling_map_id, MDBX_DANGLING_DBI);
     CASE_EXCEPTION(transaction_ousted, MDBX_OUSTED);
     CASE_EXCEPTION(mvcc_retarded, MDBX_MVCC_RETARDED);
+    CASE_EXCEPTION(laggard_reader, MDBX_LAGGARD_READER);
 #undef CASE_EXCEPTION
   default:
     if (is_mdbx_error())
@@ -660,7 +658,7 @@ char *to_hex::write_bytes(char *__restrict const dest, size_t dest_size) const {
     ptr[0] = char('0' + hi + (((9 - hi) >> 7) & alpha_shift));
     ptr[1] = char('0' + lo + (((9 - lo) >> 7) & alpha_shift));
     ptr += 2;
-    assert(ptr <= dest + dest_size);
+    ASSERT(ptr <= dest + dest_size);
   }
   return ptr;
 }
@@ -716,7 +714,7 @@ char *from_hex::write_bytes(char *__restrict const dest, size_t dest_size) const
     *ptr++ = hi << 4 | lo;
     src += 2;
     left -= 2;
-    assert(ptr <= dest + dest_size);
+    ASSERT(ptr <= dest + dest_size);
   }
   return ptr;
 }
@@ -790,7 +788,7 @@ static slice b58_encode(b58_buffer &buf, const byte *begin, const byte *end) {
     b58_uint carry = *begin++;
     auto ptr = buf.end();
     do {
-      assert(ptr > buf.area);
+      ASSERT(ptr > buf.area);
       carry += *--ptr << CHAR_BIT;
       *ptr = carry % modulo;
       carry /= modulo;
@@ -803,7 +801,7 @@ static slice b58_encode(b58_buffer &buf, const byte *begin, const byte *end) {
   for (auto porous = high; porous < buf.end();) {
     auto chunk = *porous++;
     static_assert(sizeof(chunk) == 4 || sizeof(chunk) == 8, "WTF?");
-    assert(chunk < modulo);
+    ASSERT(chunk < modulo);
     if (sizeof(chunk) > 4) {
       ptr[8] = b58_8to11(chunk);
       ptr[7] = b58_8to11(chunk);
@@ -822,7 +820,7 @@ static slice b58_encode(b58_buffer &buf, const byte *begin, const byte *end) {
       ptr[0] = b58_8to11(chunk);
       ptr += 4;
     }
-    assert(static_cast<void *>(ptr) < static_cast<void *>(porous));
+    ASSERT(static_cast<void *>(ptr) < static_cast<void *>(porous));
   }
 
   while (output < ptr && *output == '1')
@@ -839,7 +837,7 @@ char *to_base58::write_bytes(char *__restrict const dest, size_t dest_size) cons
   line_wrapper wrapper(dest);
   while (MDBX_LIKELY(begin < end) && *begin == 0) {
     wrapper.put('1', wrap_width);
-    assert(wrapper.ptr <= dest + dest_size);
+    ASSERT(wrapper.ptr <= dest + dest_size);
     ++begin;
   }
 
@@ -909,7 +907,7 @@ static slice b58_decode(b58_buffer &buf, const byte *begin, const byte *end, boo
       b58_uint carry = c;
       auto ptr = buf.end();
       do {
-        assert(ptr > buf.area);
+        ASSERT(ptr > buf.area);
         carry += *--ptr * 58;
         *ptr = carry & (~b58_uint(0) >> CHAR_BIT);
         carry >>= CHAR_BIT * (sizeof(carry) - 1);
@@ -925,7 +923,7 @@ static slice b58_decode(b58_buffer &buf, const byte *begin, const byte *end, boo
   for (auto porous = high; porous < buf.end(); ++porous) {
     auto chunk = *porous;
     static_assert(sizeof(chunk) == 4 || sizeof(chunk) == 8, "WTF?");
-    assert(chunk <= (~b58_uint(0) >> CHAR_BIT));
+    ASSERT(chunk <= (~b58_uint(0) >> CHAR_BIT));
     if (sizeof(chunk) > 4) {
       *ptr++ = byte(uint_fast64_t(chunk) >> CHAR_BIT * 6);
       *ptr++ = byte(uint_fast64_t(chunk) >> CHAR_BIT * 5);
@@ -1007,17 +1005,17 @@ char *to_base64::write_bytes(char *__restrict const dest, size_t dest_size) cons
         *ptr = '\n';
         line = ++ptr;
       }
-      assert(ptr <= dest + dest_size);
+      ASSERT(ptr <= dest + dest_size);
       continue;
     case 2:
       b64_3to4(src[0], src[1], 0, ptr);
       ptr[3] = '=';
-      assert(ptr + 4 <= dest + dest_size);
+      ASSERT(ptr + 4 <= dest + dest_size);
       return ptr + 4;
     case 1:
       b64_3to4(src[0], 0, 0, ptr);
       ptr[2] = ptr[3] = '=';
-      assert(ptr + 4 <= dest + dest_size);
+      ASSERT(ptr + 4 <= dest + dest_size);
       return ptr + 4;
     case 0:
       return ptr;
@@ -1114,11 +1112,11 @@ char *from_base64::write_bytes(char *__restrict const dest, size_t dest_size) co
     if (MDBX_UNLIKELY(b64_4to3(a, b, c, d, ptr) < 0)) {
       if (left == 4 && (a | b) >= 0 && d == EQ) {
         if (c >= 0) {
-          assert(ptr + 2 <= dest + dest_size);
+          ASSERT(ptr + 2 <= dest + dest_size);
           return ptr + 2;
         }
         if (c == d) {
-          assert(ptr + 1 <= dest + dest_size);
+          ASSERT(ptr + 1 <= dest + dest_size);
           return ptr + 1;
         }
       }
@@ -1127,7 +1125,7 @@ char *from_base64::write_bytes(char *__restrict const dest, size_t dest_size) co
     src += 4;
     left -= 4;
     ptr += 3;
-    assert(ptr <= dest + dest_size);
+    ASSERT(ptr <= dest + dest_size);
   }
   return ptr;
 }
@@ -1222,7 +1220,7 @@ __cold MDBX_env_flags_t env::operate_parameters::make_flags(bool accede, bool us
     flags |= MDBX_VALIDATION;
 
   if (mode != readonly) {
-    if (options.nested_write_transactions)
+    if (options.nested_transactions)
       flags &= ~MDBX_WRITEMAP;
     if (reclaiming.coalesce)
       flags |= MDBX_COALESCE;
@@ -1269,7 +1267,7 @@ env::reclaiming_options::reclaiming_options(MDBX_env_flags_t flags) noexcept
 
 env::operate_options::operate_options(MDBX_env_flags_t flags) noexcept
     : no_sticky_threads(((flags & (MDBX_NOSTICKYTHREADS | MDBX_EXCLUSIVE)) == MDBX_NOSTICKYTHREADS) ? true : false),
-      nested_write_transactions((flags & (MDBX_WRITEMAP | MDBX_RDONLY)) ? false : true),
+      nested_transactions((flags & (MDBX_WRITEMAP | MDBX_RDONLY)) ? false : true),
       exclusive((flags & MDBX_EXCLUSIVE) ? true : false), disable_readahead((flags & MDBX_NORDAHEAD) ? true : false),
       disable_clear_memory((flags & MDBX_NOMEMINIT) ? true : false) {}
 
@@ -1314,18 +1312,18 @@ __cold env &env::copy(const MDBX_STD_FILESYSTEM_PATH &destination, bool compacti
 }
 #endif /* MDBX_STD_FILESYSTEM_PATH */
 
-__cold path env::get_path() const {
+__cold const mdbx::path_char *env::get_path() const {
 #if defined(_WIN32) || defined(_WIN64)
   const wchar_t *c_wstr = nullptr;
   error::success_or_throw(::mdbx_env_get_pathW(handle_, &c_wstr));
   static_assert(sizeof(path::value_type) == sizeof(wchar_t), "Oops");
-  return path(c_wstr);
+  return c_wstr;
 #else
   const char *c_str = nullptr;
   error::success_or_throw(::mdbx_env_get_path(handle_, &c_str));
   static_assert(sizeof(path::value_type) == sizeof(char), "Oops");
-  return path(c_str);
-#endif
+  return c_str;
+#endif /* Windows */
 }
 
 __cold bool env::remove(const char *pathname, const remove_mode mode) {
@@ -1357,13 +1355,26 @@ __cold bool env::remove(const MDBX_STD_FILESYSTEM_PATH &pathname, const remove_m
 static inline MDBX_env *create_env() {
   MDBX_env *ptr;
   error::success_or_throw(::mdbx_env_create(&ptr));
-  assert(ptr != nullptr);
+  ASSERT(ptr != nullptr);
   return ptr;
 }
 
-__cold env_managed::~env_managed() noexcept {
+env_managed &env_managed::operator=(env_managed &&other) {
+  if (this != &other) {
+    if (MDBX_UNLIKELY(handle_))
+      MDBX_CXX20_UNLIKELY {
+        assert(handle_ != other.handle_);
+        close();
+      }
+    inherited::operator=(std::move(other));
+  }
+  return *this;
+}
+
+__cold env_managed::~env_managed() {
   if (MDBX_UNLIKELY(handle_))
-    MDBX_CXX20_UNLIKELY error::success_or_panic(::mdbx_env_close(handle_), "mdbx::~env()", "mdbx_env_close");
+    /* coverity[UNCAUGHT_EXCEPT] */
+    MDBX_CXX20_UNLIKELY error::success_or_throw(::mdbx_env_close(handle_));
 }
 
 __cold void env_managed::close(bool dont_sync) {
@@ -1391,7 +1402,7 @@ __cold env_managed::env_managed(const char *pathname, const operate_parameters &
   setup(op.max_maps, op.max_readers);
   error::success_or_throw(::mdbx_env_open(handle_, pathname, op.make_flags(accede), 0));
 
-  if (op.options.nested_write_transactions && !get_options().nested_write_transactions)
+  if (op.options.nested_transactions && !get_options().nested_transactions)
     MDBX_CXX20_UNLIKELY error::throw_exception(MDBX_INCOMPATIBLE);
 }
 
@@ -1403,7 +1414,7 @@ __cold env_managed::env_managed(const char *pathname, const env_managed::create_
   error::success_or_throw(
       ::mdbx_env_open(handle_, pathname, op.make_flags(accede, cp.use_subdirectory), cp.file_mode_bits));
 
-  if (op.options.nested_write_transactions && !get_options().nested_write_transactions)
+  if (op.options.nested_transactions && !get_options().nested_transactions)
     MDBX_CXX20_UNLIKELY error::throw_exception(MDBX_INCOMPATIBLE);
 }
 
@@ -1420,7 +1431,7 @@ __cold env_managed::env_managed(const wchar_t *pathname, const operate_parameter
   setup(op.max_maps, op.max_readers);
   error::success_or_throw(::mdbx_env_openW(handle_, pathname, op.make_flags(accede), 0));
 
-  if (op.options.nested_write_transactions && !get_options().nested_write_transactions)
+  if (op.options.nested_transactions && !get_options().nested_transactions)
     MDBX_CXX20_UNLIKELY error::throw_exception(MDBX_INCOMPATIBLE);
 }
 
@@ -1432,7 +1443,7 @@ __cold env_managed::env_managed(const wchar_t *pathname, const env_managed::crea
   error::success_or_throw(
       ::mdbx_env_openW(handle_, pathname, op.make_flags(accede, cp.use_subdirectory), cp.file_mode_bits));
 
-  if (op.options.nested_write_transactions && !get_options().nested_write_transactions)
+  if (op.options.nested_transactions && !get_options().nested_transactions)
     MDBX_CXX20_UNLIKELY error::throw_exception(MDBX_INCOMPATIBLE);
 }
 
@@ -1455,36 +1466,83 @@ __cold env_managed::env_managed(const MDBX_STD_FILESYSTEM_PATH &pathname, const 
 
 //------------------------------------------------------------------------------
 
-txn_managed txn::start_nested() {
+void cursor_managed::close() {
+  error::success_or_throw(::mdbx_cursor_close2(handle_));
+  handle_ = nullptr;
+}
+
+cursor_managed cursor::clone(void *your_context) const {
+  cursor_managed clone(your_context);
+  clone.assign(*this);
+  return clone;
+}
+
+cursor_managed &cursor_managed::operator=(cursor_managed &&other) {
+  if (this != &other) {
+    if (MDBX_UNLIKELY(handle_))
+      MDBX_CXX20_UNLIKELY {
+        assert(handle_ != other.handle_);
+        close();
+      }
+    inherited::operator=(std::move(other));
+  }
+  return *this;
+}
+
+cursor_managed::~cursor_managed() {
+  if (handle_)
+    /* coverity[UNCAUGHT_EXCEPT] */
+    error::success_or_throw(::mdbx_cursor_close2(handle_));
+}
+
+//------------------------------------------------------------------------------
+
+txn_managed txn::start_nested() { return start_nested(false); }
+
+txn_managed txn::start_nested(bool readonly) {
   MDBX_txn *nested;
   error::throw_on_nullptr(handle_, MDBX_BAD_TXN);
-  error::success_or_throw(::mdbx_txn_begin(mdbx_txn_env(handle_), handle_, MDBX_TXN_READWRITE, &nested));
-  assert(nested != nullptr);
+  error::success_or_throw(
+      ::mdbx_txn_begin(mdbx_txn_env(handle_), handle_, readonly ? MDBX_TXN_RDONLY : MDBX_TXN_READWRITE, &nested));
+  ASSERT(nested != nullptr);
   return txn_managed(nested);
 }
 
-txn_managed::~txn_managed() noexcept {
+txn_managed &txn_managed::operator=(txn_managed &&other) {
+  if (this != &other) {
+    if (MDBX_UNLIKELY(handle_))
+      MDBX_CXX20_UNLIKELY {
+        assert(handle_ != other.handle_);
+        abort();
+      }
+    inherited::operator=(std::move(other));
+  }
+  return *this;
+}
+
+txn_managed::~txn_managed() {
   if (MDBX_UNLIKELY(handle_))
-    MDBX_CXX20_UNLIKELY error::success_or_panic(::mdbx_txn_abort(handle_), "mdbx::~txn", "mdbx_txn_abort");
+    /* coverity[UNCAUGHT_EXCEPT] */
+    MDBX_CXX20_UNLIKELY error::success_or_throw(::mdbx_txn_abort(handle_));
 }
 
-void txn_managed::abort() {
-  const error err = static_cast<MDBX_error_t>(::mdbx_txn_abort(handle_));
+void txn_managed::abort() { abort(nullptr); }
+
+void txn_managed::commit() { commit(nullptr); }
+
+bool txn_managed::checkpoint() { return checkpoint(nullptr); }
+
+void txn_managed::commit_embark_read() { commit_embark_read(nullptr); }
+
+void txn_managed::abort(finalization_latency *latency) {
+  const error err = static_cast<MDBX_error_t>(::mdbx_txn_abort_ex(handle_, latency));
   if (MDBX_LIKELY(err.code() != MDBX_THREAD_MISMATCH))
     MDBX_CXX20_LIKELY handle_ = nullptr;
   if (MDBX_UNLIKELY(err.code() != MDBX_SUCCESS))
     MDBX_CXX20_UNLIKELY err.throw_exception();
 }
 
-void txn_managed::commit() {
-  const error err = static_cast<MDBX_error_t>(::mdbx_txn_commit(handle_));
-  if (MDBX_LIKELY(err.code() != MDBX_THREAD_MISMATCH))
-    MDBX_CXX20_LIKELY handle_ = nullptr;
-  if (MDBX_UNLIKELY(err.code() != MDBX_SUCCESS))
-    MDBX_CXX20_UNLIKELY err.throw_exception();
-}
-
-void txn_managed::commit(commit_latency *latency) {
+void txn_managed::commit(finalization_latency *latency) {
   const error err = static_cast<MDBX_error_t>(::mdbx_txn_commit_ex(handle_, latency));
   if (MDBX_LIKELY(err.code() != MDBX_THREAD_MISMATCH))
     MDBX_CXX20_LIKELY handle_ = nullptr;
@@ -1492,10 +1550,23 @@ void txn_managed::commit(commit_latency *latency) {
     MDBX_CXX20_UNLIKELY err.throw_exception();
 }
 
-void txn_managed::commit_embark_read() {
-  auto env = this->env();
-  commit();
-  error::success_or_throw(::mdbx_txn_begin(env, nullptr, MDBX_TXN_RDONLY, &handle_));
+bool txn_managed::checkpoint(finalization_latency *latency) {
+  const error err = static_cast<MDBX_error_t>(::mdbx_txn_checkpoint(handle_, MDBX_TXN_NOWEAKING, latency));
+  if (MDBX_UNLIKELY(err.is_failure())) {
+    if (err.code() != MDBX_THREAD_MISMATCH && err.code() != MDBX_EINVAL)
+      handle_ = nullptr;
+    MDBX_CXX20_UNLIKELY err.throw_exception();
+  }
+  return err.is_result_true();
+}
+
+void txn_managed::commit_embark_read(finalization_latency *latency) {
+  error::success_or_throw(::mdbx_txn_commit_embark_read(&handle_, latency));
+}
+
+bool txn_managed::amend(bool dont_wait) {
+  return !error::boolean_or_throw(::mdbx_txn_amend(
+      handle_, &handle_, dont_wait ? MDBX_TXN_READWRITE | MDBX_TXN_TRY : MDBX_TXN_READWRITE, handle_->userctx));
 }
 
 //------------------------------------------------------------------------------
@@ -1608,6 +1679,26 @@ __cold bool txn::rename_map(const ::std::string &old_name, const ::std::string &
 
 //------------------------------------------------------------------------------
 
+void cursor::update_current(const slice &value) {
+  default_buffer holder;
+  auto key = current().key;
+  if (error::boolean_or_throw(mdbx_is_dirty(handle_->txn, key.iov_base)))
+    key = holder.assign(key);
+
+  update(key, value);
+}
+
+slice cursor::reverse_current(size_t value_length) {
+  default_buffer holder;
+  auto key = current().key;
+  if (error::boolean_or_throw(mdbx_is_dirty(handle_->txn, key.iov_base)))
+    key = holder.assign(key);
+
+  return update_reserve(key, value_length);
+}
+
+//------------------------------------------------------------------------------
+
 __cold ::std::ostream &operator<<(::std::ostream &out, const slice &it) {
   out << "{";
   if (!it.is_valid())
@@ -1672,7 +1763,7 @@ __cold ::std::ostream &operator<<(::std::ostream &out, const ::mdbx::env::geomet
     if (bytes % i.one == 0)
       return out << bytes / i.one << i.suffix;
 
-  assert(false);
+  ASSERT(false);
   __unreachable();
   return out;
 }
@@ -1741,8 +1832,8 @@ __cold ::std::ostream &operator<<(::std::ostream &out, const env::operate_option
     out << delimiter << "no_sticky_threads";
     delimiter = comma;
   }
-  if (it.nested_write_transactions) {
-    out << delimiter << "nested_write_transactions";
+  if (it.nested_transactions) {
+    out << delimiter << "nested_transactions";
     delimiter = comma;
   }
   if (it.exclusive) {

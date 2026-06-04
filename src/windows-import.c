@@ -13,7 +13,7 @@ static void WINAPI stub_srwlock_Init(osal_srwlock_t *srwl) { srwl->readerCount =
 
 static void WINAPI stub_srwlock_AcquireShared(osal_srwlock_t *srwl) {
   while (true) {
-    assert(srwl->writerCount >= 0 && srwl->readerCount >= 0);
+    ASSERT(srwl->writerCount >= 0 && srwl->readerCount >= 0);
 
     //  If there's a writer already, spin without unnecessarily
     //  interlocking the CPUs
@@ -37,13 +37,13 @@ static void WINAPI stub_srwlock_AcquireShared(osal_srwlock_t *srwl) {
 }
 
 static void WINAPI stub_srwlock_ReleaseShared(osal_srwlock_t *srwl) {
-  assert(srwl->readerCount > 0);
+  ASSERT(srwl->readerCount > 0);
   _InterlockedDecrement(&srwl->readerCount);
 }
 
 static void WINAPI stub_srwlock_AcquireExclusive(osal_srwlock_t *srwl) {
   while (true) {
-    assert(srwl->writerCount >= 0 && srwl->readerCount >= 0);
+    ASSERT(srwl->writerCount >= 0 && srwl->readerCount >= 0);
 
     //  If there's a writer already, spin without unnecessarily
     //  interlocking the CPUs
@@ -62,13 +62,13 @@ static void WINAPI stub_srwlock_AcquireExclusive(osal_srwlock_t *srwl) {
   // Spin until there aren't any more; new readers will wait now
   // that we're the writer.
   while (srwl->readerCount != 0) {
-    assert(srwl->writerCount >= 0 && srwl->readerCount >= 0);
+    ASSERT(srwl->writerCount >= 0 && srwl->readerCount >= 0);
     SwitchToThread();
   }
 }
 
 static void WINAPI stub_srwlock_ReleaseExclusive(osal_srwlock_t *srwl) {
-  assert(srwl->writerCount == 1 && srwl->readerCount >= 0);
+  ASSERT(srwl->writerCount == 1 && srwl->readerCount >= 0);
   srwl->writerCount = 0;
 }
 
@@ -97,7 +97,7 @@ void windows_import(void) {
     if (!globals.running_under_Wine) {
       MDBX_IMPORT(hNtdll, NtFsControlFile);
       MDBX_IMPORT(hNtdll, NtExtendSection);
-      ENSURE(nullptr, imports.NtExtendSection);
+      ENSURE(imports.NtExtendSection);
     }
   }
 

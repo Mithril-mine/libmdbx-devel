@@ -7,20 +7,20 @@
  * Pack/Unpack 16-bit values for Grow step & Shrink threshold */
 
 MDBX_NOTHROW_CONST_FUNCTION static inline pgno_t me2v(size_t m, size_t e) {
-  assert(m < 2048 && e < 8);
+  ASSERT(m < 2048 && e < 8);
   return (pgno_t)(32768 + ((m + 1) << (e + 8)));
 }
 
 MDBX_NOTHROW_CONST_FUNCTION static inline uint16_t v2me(size_t v, size_t e) {
-  assert(v > (e ? me2v(2047, e - 1) : 32768));
-  assert(v <= me2v(2047, e));
+  ASSERT(v > (e ? me2v(2047, e - 1) : 32768));
+  ASSERT(v <= me2v(2047, e));
   size_t m = (v - 32768 + ((size_t)1 << (e + 8)) - 1) >> (e + 8);
   m -= m > 0;
-  assert(m < 2048 && e < 8);
+  ASSERT(m < 2048 && e < 8);
   // f e d c b a 9 8 7 6 5 4 3 2 1 0
   // 1 e e e m m m m m m m m m m m 1
   const uint16_t pv = (uint16_t)(0x8001 + (e << 12) + (m << 1));
-  assert(pv != 65535);
+  ASSERT(pv != 65535);
   return pv;
 }
 
@@ -74,62 +74,123 @@ __cold bool pv2pages_verify(void) {
 
 /*----------------------------------------------------------------------------*/
 
-MDBX_NOTHROW_PURE_FUNCTION size_t bytes_align2os_bytes(const MDBX_env *env, size_t bytes) {
+MDBX_NOTHROW_PURE_FUNCTION size_t bytes_ceil2sp_bytes(const MDBX_env *env, size_t bytes) {
   return ceil_powerof2(bytes, (env->ps > globals.sys_pagesize) ? env->ps : globals.sys_pagesize);
 }
 
-MDBX_NOTHROW_PURE_FUNCTION size_t pgno_align2os_bytes(const MDBX_env *env, size_t pgno) {
+MDBX_MAYBE_UNUSED MDBX_NOTHROW_PURE_FUNCTION size_t bytes_ceil2sp_pgno(const MDBX_env *env, size_t bytes) {
+  return bytes2pgno(env, bytes_ceil2sp_bytes(env, bytes));
+}
+
+MDBX_NOTHROW_PURE_FUNCTION size_t pgno_ceil2sp_bytes(const MDBX_env *env, size_t pgno) {
   return ceil_powerof2(pgno2bytes(env, pgno), globals.sys_pagesize);
 }
 
-MDBX_NOTHROW_PURE_FUNCTION pgno_t pgno_align2os_pgno(const MDBX_env *env, size_t pgno) {
-  return bytes2pgno(env, pgno_align2os_bytes(env, pgno));
+MDBX_NOTHROW_PURE_FUNCTION pgno_t pgno_ceil2sp_pgno(const MDBX_env *env, size_t pgno) {
+  return bytes2pgno(env, pgno_ceil2sp_bytes(env, pgno));
+}
+
+MDBX_MAYBE_UNUSED MDBX_NOTHROW_PURE_FUNCTION size_t bytes_ceil2os_bytes(const MDBX_env *env, size_t bytes) {
+  const size_t sys_unit =
+      MDBX_ROUNDING_TO_ALLOCATION_GRANULARITY ? globals.sys_allocation_granularity : globals.sys_pagesize;
+  return ceil_powerof2(bytes, (env->ps > sys_unit) ? env->ps : sys_unit);
+}
+
+MDBX_MAYBE_UNUSED MDBX_NOTHROW_PURE_FUNCTION size_t bytes_ceil2os_pgno(const MDBX_env *env, size_t bytes) {
+  return bytes2pgno(env, bytes_ceil2os_bytes(env, bytes));
+}
+
+MDBX_MAYBE_UNUSED MDBX_NOTHROW_PURE_FUNCTION size_t pgno_ceil2os_bytes(const MDBX_env *env, size_t pgno) {
+  const size_t sys_unit =
+      MDBX_ROUNDING_TO_ALLOCATION_GRANULARITY ? globals.sys_allocation_granularity : globals.sys_pagesize;
+  return ceil_powerof2(pgno2bytes(env, pgno), sys_unit);
+}
+
+MDBX_MAYBE_UNUSED MDBX_NOTHROW_PURE_FUNCTION pgno_t pgno_ceil2os_pgno(const MDBX_env *env, size_t pgno) {
+  return bytes2pgno(env, pgno_ceil2os_bytes(env, pgno));
 }
 
 /*----------------------------------------------------------------------------*/
 
-MDBX_NOTHROW_PURE_FUNCTION static __always_inline int cmp_int_inline(const size_t expected_alignment, const MDBX_val *a,
-                                                                     const MDBX_val *b) {
+MDBX_NOTHROW_PURE_FUNCTION static __always_inline int cmp_uint_inline(const size_t expected_alignment,
+                                                                      const MDBX_val *a, const MDBX_val *b) {
   if (likely(a->iov_len == b->iov_len)) {
     if (sizeof(size_t) > 7 && likely(a->iov_len == 8))
-      return CMP2INT(unaligned_peek_u64(expected_alignment, a->iov_base),
-                     unaligned_peek_u64(expected_alignment, b->iov_base));
+      return cmp_uint64_unchecked(expected_alignment, a, b);
     if (likely(a->iov_len == 4))
-      return CMP2INT(unaligned_peek_u32(expected_alignment, a->iov_base),
-                     unaligned_peek_u32(expected_alignment, b->iov_base));
+      return cmp_uint32_unchecked(expected_alignment, a, b);
     if (sizeof(size_t) < 8 && likely(a->iov_len == 8))
-      return CMP2INT(unaligned_peek_u64(expected_alignment, a->iov_base),
-                     unaligned_peek_u64(expected_alignment, b->iov_base));
+      return cmp_uint64_unchecked(expected_alignment, a, b);
   }
   ERROR("mismatch and/or invalid size %p.%zu/%p.%zu for INTEGERKEY/INTEGERDUP", a->iov_base, a->iov_len, b->iov_base,
         b->iov_len);
   return 0;
 }
 
-MDBX_NOTHROW_PURE_FUNCTION __hot int cmp_int_unaligned(const MDBX_val *a, const MDBX_val *b) {
-  return cmp_int_inline(1, a, b);
+MDBX_NOTHROW_PURE_FUNCTION static __always_inline int cmp_uint32_inline(const size_t expected_alignment,
+                                                                        const MDBX_val *a, const MDBX_val *b) {
+  if (likely(a->iov_len == b->iov_len && a->iov_len == 4))
+    return cmp_uint32_unchecked(expected_alignment, a, b);
+  ERROR("mismatch and/or invalid size %p.%zu/%p.%zu for INTEGERKEY/INTEGERDUP", a->iov_base, a->iov_len, b->iov_base,
+        b->iov_len);
+  return 0;
 }
 
-#ifndef cmp_int_align2
+MDBX_NOTHROW_PURE_FUNCTION static __always_inline int cmp_uint64_inline(const size_t expected_alignment,
+                                                                        const MDBX_val *a, const MDBX_val *b) {
+  if (likely(a->iov_len == b->iov_len && a->iov_len == 8))
+    return cmp_uint64_unchecked(expected_alignment, a, b);
+  ERROR("mismatch and/or invalid size %p.%zu/%p.%zu for INTEGERKEY/INTEGERDUP", a->iov_base, a->iov_len, b->iov_base,
+        b->iov_len);
+  return 0;
+}
+
+MDBX_MAYBE_UNUSED MDBX_NOTHROW_PURE_FUNCTION __hot int cmp_uint_unaligned(const MDBX_val *a, const MDBX_val *b) {
+  return cmp_uint_inline(1, a, b);
+}
+MDBX_MAYBE_UNUSED MDBX_NOTHROW_PURE_FUNCTION __hot int cmp_uint32_unaligned(const MDBX_val *a, const MDBX_val *b) {
+  return cmp_uint32_inline(1, a, b);
+}
+MDBX_MAYBE_UNUSED MDBX_NOTHROW_PURE_FUNCTION __hot int cmp_uint64_unaligned(const MDBX_val *a, const MDBX_val *b) {
+  return cmp_uint64_inline(1, a, b);
+}
+
+#ifndef cmp_uint_align2
 /* Compare two items pointing at 2-byte aligned unsigned int's. */
-MDBX_NOTHROW_PURE_FUNCTION __hot int cmp_int_align2(const MDBX_val *a, const MDBX_val *b) {
-  return cmp_int_inline(2, a, b);
+MDBX_MAYBE_UNUSED MDBX_NOTHROW_PURE_FUNCTION __hot int cmp_uint_align2(const MDBX_val *a, const MDBX_val *b) {
+  return cmp_uint_inline(2, a, b);
 }
-#endif /* cmp_int_align2 */
+MDBX_MAYBE_UNUSED MDBX_NOTHROW_PURE_FUNCTION __hot int cmp_uint32_align2(const MDBX_val *a, const MDBX_val *b) {
+  return cmp_uint32_inline(2, a, b);
+}
+MDBX_MAYBE_UNUSED MDBX_NOTHROW_PURE_FUNCTION __hot int cmp_uint64_align2(const MDBX_val *a, const MDBX_val *b) {
+  return cmp_uint64_inline(2, a, b);
+}
+#endif /* cmp_uint_align2 */
 
-#ifndef cmp_int_align4
+#ifndef cmp_uint_align4
 /* Compare two items pointing at 4-byte aligned unsigned int's. */
-MDBX_NOTHROW_PURE_FUNCTION __hot int cmp_int_align4(const MDBX_val *a, const MDBX_val *b) {
-  return cmp_int_inline(4, a, b);
+MDBX_MAYBE_UNUSED MDBX_NOTHROW_PURE_FUNCTION __hot int cmp_uint_align4(const MDBX_val *a, const MDBX_val *b) {
+  return cmp_uint_inline(4, a, b);
 }
-#endif /* cmp_int_align4 */
+MDBX_MAYBE_UNUSED MDBX_NOTHROW_PURE_FUNCTION __hot int cmp_uint32_align4(const MDBX_val *a, const MDBX_val *b) {
+  return cmp_uint32_inline(4, a, b);
+}
+MDBX_MAYBE_UNUSED MDBX_NOTHROW_PURE_FUNCTION __hot int cmp_uint64_align4(const MDBX_val *a, const MDBX_val *b) {
+  return cmp_uint64_inline(4, a, b);
+}
+#endif /* cmp_uint_align4 */
+
+MDBX_NOTHROW_PURE_FUNCTION static __always_inline int cmp_len(size_t a, size_t b) {
+  const intptr_t diff_len = a - b;
+  ASSERT(diff_len == (int)diff_len);
+  /* кастинг допустим, так как длина ключей проверяется и не должна превышать MAX_INT. */
+  return (int)diff_len;
+}
 
 /* Compare two items lexically */
 MDBX_NOTHROW_PURE_FUNCTION __hot int cmp_lexical(const MDBX_val *a, const MDBX_val *b) {
-  if (a->iov_len == b->iov_len)
-    return a->iov_len ? memcmp(a->iov_base, b->iov_base, a->iov_len) : 0;
-
-  const int diff_len = (a->iov_len < b->iov_len) ? -1 : 1;
+  const int diff_len = cmp_len(a->iov_len, b->iov_len);
   const size_t shortest = (a->iov_len < b->iov_len) ? a->iov_len : b->iov_len;
   int diff_data = shortest ? memcmp(a->iov_base, b->iov_base, shortest) : 0;
   return likely(diff_data) ? diff_data : diff_len;
@@ -194,12 +255,12 @@ MDBX_NOTHROW_PURE_FUNCTION __hot int cmp_reverse(const MDBX_val *a, const MDBX_v
         return (xa < xb) ? -1 : 1;
     }
   }
-  return CMP2INT(a->iov_len, b->iov_len);
+  return cmp_len(a->iov_len, b->iov_len);
 }
 
 /* Fast non-lexically comparator */
 MDBX_NOTHROW_PURE_FUNCTION __hot int cmp_lenfast(const MDBX_val *a, const MDBX_val *b) {
-  int diff = CMP2INT(a->iov_len, b->iov_len);
+  int diff = cmp_len(a->iov_len, b->iov_len);
   return (likely(diff) || a->iov_len == 0) ? diff : memcmp(a->iov_base, b->iov_base, a->iov_len);
 }
 
@@ -227,8 +288,8 @@ int cmp_equal_or_wrong(const MDBX_val *a, const MDBX_val *b) { return eq_fast(a,
 __cold void update_mlcnt(const MDBX_env *env, const pgno_t new_aligned_mlocked_pgno, const bool lock_not_release) {
   for (;;) {
     const pgno_t mlock_pgno_before = atomic_load32(&env->mlocked_pgno, mo_AcquireRelease);
-    eASSERT(env, pgno_align2os_pgno(env, mlock_pgno_before) == mlock_pgno_before);
-    eASSERT(env, pgno_align2os_pgno(env, new_aligned_mlocked_pgno) == new_aligned_mlocked_pgno);
+    eASSERT0(env, pgno_ceil2sp_pgno(env, mlock_pgno_before) == mlock_pgno_before);
+    eASSERT0(env, pgno_ceil2sp_pgno(env, new_aligned_mlocked_pgno) == new_aligned_mlocked_pgno);
     if (lock_not_release ? (mlock_pgno_before >= new_aligned_mlocked_pgno)
                          : (mlock_pgno_before <= new_aligned_mlocked_pgno))
       break;
@@ -238,12 +299,12 @@ __cold void update_mlcnt(const MDBX_env *env, const pgno_t new_aligned_mlocked_p
         const int32_t snap_locked = atomic_load32(mlcnt + 0, mo_Relaxed);
         const int32_t snap_unlocked = atomic_load32(mlcnt + 1, mo_Relaxed);
         if (mlock_pgno_before == 0 && (snap_locked - snap_unlocked) < INT_MAX) {
-          eASSERT(env, lock_not_release);
+          eASSERT0(env, lock_not_release);
           if (unlikely(!atomic_cas32(mlcnt + 0, snap_locked, snap_locked + 1)))
             continue;
         }
         if (new_aligned_mlocked_pgno == 0 && (snap_locked - snap_unlocked) > 0) {
-          eASSERT(env, !lock_not_release);
+          eASSERT0(env, !lock_not_release);
           if (unlikely(!atomic_cas32(mlcnt + 1, snap_unlocked, snap_unlocked + 1)))
             continue;
         }
@@ -261,8 +322,8 @@ __cold void munlock_after(const MDBX_env *env, const pgno_t aligned_pgno, const 
     int err = MDBX_ENOSYS;
     const size_t munlock_begin = pgno2bytes(env, aligned_pgno);
     const size_t munlock_size = end_bytes - munlock_begin;
-    eASSERT(env, end_bytes % globals.sys_pagesize == 0 && munlock_begin % globals.sys_pagesize == 0 &&
-                     munlock_size % globals.sys_pagesize == 0);
+    eASSERT0(env, end_bytes % globals.sys_pagesize == 0 && munlock_begin % globals.sys_pagesize == 0 &&
+                      munlock_size % globals.sys_pagesize == 0);
 #if defined(_WIN32) || defined(_WIN64)
     err = VirtualUnlock(ptr_disp(env->dxb_mmap.base, munlock_begin), munlock_size) ? MDBX_SUCCESS : (int)GetLastError();
     if (err == ERROR_NOT_LOCKED)
@@ -282,9 +343,7 @@ __cold void munlock_after(const MDBX_env *env, const pgno_t aligned_pgno, const 
   }
 }
 
-__cold void munlock_all(const MDBX_env *env) {
-  munlock_after(env, 0, bytes_align2os_bytes(env, env->dxb_mmap.current));
-}
+__cold void munlock_all(const MDBX_env *env) { munlock_after(env, 0, bytes_ceil2sp_bytes(env, env->dxb_mmap.current)); }
 
 /*----------------------------------------------------------------------------*/
 
@@ -304,6 +363,6 @@ uint32_t combine_durability_flags(const uint32_t a, const uint32_t b) {
   if (r & (MDBX_SAFE_NOSYNC | MDBX_UTTERLY_NOSYNC))
     r |= MDBX_NOMETASYNC;
 
-  assert(!(F_ISSET(r, MDBX_UTTERLY_NOSYNC) && !F_ISSET(a, MDBX_UTTERLY_NOSYNC) && !F_ISSET(b, MDBX_UTTERLY_NOSYNC)));
+  ASSERT(!(F_ISSET(r, MDBX_UTTERLY_NOSYNC) && !F_ISSET(a, MDBX_UTTERLY_NOSYNC) && !F_ISSET(b, MDBX_UTTERLY_NOSYNC)));
   return r;
 }

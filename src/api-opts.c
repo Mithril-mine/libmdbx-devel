@@ -41,7 +41,7 @@ __cold static pgno_t default_rp_augment_limit(const MDBX_env *env) {
   const size_t one_third = env->geo_in_bytes.now / 3 >> env->ps2ln;
   const size_t augment_limit =
       (one_third > minimum) ? minimum + (one_third - minimum) / timeframe * remain_1sec : minimum;
-  eASSERT(env, augment_limit < PAGELIST_LIMIT);
+  eASSERT0(env, augment_limit < PAGELIST_LIMIT);
   return pnl_bytes2size(pnl_size2bytes(augment_limit));
 }
 
@@ -52,7 +52,7 @@ static bool default_prefault_write(const MDBX_env *env) {
 
 static bool default_prefer_waf_insteadof_balance(const MDBX_env *env) {
   (void)env;
-  return false;
+  return true;
 }
 
 static uint16_t default_subpage_limit(const MDBX_env *env) {
@@ -75,9 +75,9 @@ static uint16_t default_subpage_reserve_limit(const MDBX_env *env) {
   return 2753 /* 4.2% */;
 }
 
-static uint16_t default_merge_threshold_16dot16_percent(const MDBX_env *env) {
+static uint16_t default_merge_threshold_dot16(const MDBX_env *env) {
   (void)env;
-  return 65536 / 4 /* 25% */;
+  return 65536 / 3 /* 33% */;
 }
 
 static pgno_t default_dp_reserve_limit(const MDBX_env *env) {
@@ -114,12 +114,14 @@ void env_options_init(MDBX_env *env) {
   env->options.rp_augment_limit = default_rp_augment_limit(env);
   env->options.dp_reserve_limit = default_dp_reserve_limit(env);
   env->options.dp_initial = default_dp_initial(env);
-  env->options.dp_limit = default_dp_limit(env);
+  env->options.dp_limit = (/* just to avoid extra syscalls and because dp_limit will be adjusted later */ true)
+                              ? env->options.dp_initial * 42
+                              : default_dp_limit(env);
   env->options.spill_max_denominator = default_spill_max_denominator(env);
   env->options.spill_min_denominator = default_spill_min_denominator(env);
   env->options.spill_parent4child_denominator = default_spill_parent4child_denominator(env);
   env->options.dp_loose_limit = default_dp_loose_limit(env);
-  env->options.merge_threshold_16dot16_percent = default_merge_threshold_16dot16_percent(env);
+  env->options.merge_threshold_dot16 = default_merge_threshold_dot16(env);
   if (default_prefer_waf_insteadof_balance(env))
     env->options.prefer_waf_insteadof_balance = true;
 
@@ -147,6 +149,9 @@ void env_options_adjust_dp_limit(MDBX_env *env) {
     if (env->options.dp_limit < CURSOR_STACK_SIZE * 4)
       env->options.dp_limit = CURSOR_STACK_SIZE * 4;
   }
+#ifdef MDBX_DEBUG_DPL_LIMIT
+  env->options.dp_limit = MDBX_DEBUG_DPL_LIMIT;
+#endif /* MDBX_DEBUG_DPL_LIMIT */
   if (env->options.dp_initial > env->options.dp_limit && env->options.dp_initial > default_dp_initial(env))
     env->options.dp_initial = env->options.dp_limit;
   env->options.need_dp_limit_adjust = false;
@@ -170,7 +175,7 @@ void env_options_adjust_defaults(MDBX_env *env) {
                                                           : basis >> factor;
   threshold =
       (threshold < env->geo_in_bytes.shrink || !env->geo_in_bytes.shrink) ? threshold : env->geo_in_bytes.shrink;
-  env->madv_threshold = bytes2pgno(env, bytes_align2os_bytes(env, threshold));
+  env->madv_threshold = bytes_ceil2os_pgno(env, threshold);
 }
 
 //------------------------------------------------------------------------------
@@ -259,7 +264,7 @@ __cold int mdbx_env_set_option(MDBX_env *env, const MDBX_option_t option, uint64
       }
       env->options.dp_reserve_limit = (unsigned)value;
       while (env->shadow_reserve_len > env->options.dp_reserve_limit) {
-        eASSERT(env, env->shadow_reserve != nullptr);
+        eASSERT0(env, env->shadow_reserve != nullptr);
         page_t *dp = env->shadow_reserve;
         MDBX_ASAN_UNPOISON_MEMORY_REGION(dp, env->ps);
         VALGRIND_MAKE_MEM_DEFINED(&page_next(dp), sizeof(page_t *));
@@ -367,12 +372,12 @@ __cold int mdbx_env_set_option(MDBX_env *env, const MDBX_option_t option, uint64
     env->options.dp_loose_limit = (uint8_t)value;
     break;
 
-  case MDBX_opt_merge_threshold_16dot16_percent:
+  case MDBX_opt_merge_threshold:
     if (value == /* default */ UINT64_MAX)
-      value = default_merge_threshold_16dot16_percent(env);
+      value = default_merge_threshold_dot16(env);
     if (unlikely(value < 8192 || value > 32768))
       return LOG_IFERR(MDBX_EINVAL);
-    env->options.merge_threshold_16dot16_percent = (unsigned)value;
+    env->options.merge_threshold_dot16 = (unsigned)value;
     recalculate_merge_thresholds(env);
     break;
 
@@ -461,6 +466,15 @@ __cold int mdbx_env_set_option(MDBX_env *env, const MDBX_option_t option, uint64
     }
     break;
 
+  case MDBX_opt_split_reserve:
+    if (value == /* default */ UINT64_MAX)
+      env->options.split_reserve_dot16 = 0;
+    else if (value > 32768)
+      err = MDBX_EINVAL;
+    else
+      env->options.split_reserve_dot16 = (uint16_t)value;
+    break;
+
   default:
     return LOG_IFERR(MDBX_EINVAL);
   }
@@ -531,8 +545,8 @@ __cold int mdbx_env_get_option(const MDBX_env *env, const MDBX_option_t option, 
     *pvalue = env->options.dp_loose_limit;
     break;
 
-  case MDBX_opt_merge_threshold_16dot16_percent:
-    *pvalue = env->options.merge_threshold_16dot16_percent;
+  case MDBX_opt_merge_threshold:
+    *pvalue = env->options.merge_threshold_dot16;
     break;
 
   case MDBX_opt_writethrough_threshold:
@@ -565,6 +579,10 @@ __cold int mdbx_env_get_option(const MDBX_env *env, const MDBX_option_t option, 
 
   case MDBX_opt_subpage_reserve_limit:
     *pvalue = env->options.subpage.reserve_limit;
+    break;
+
+  case MDBX_opt_split_reserve:
+    *pvalue = env->options.split_reserve_dot16;
     break;
 
   default:

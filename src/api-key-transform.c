@@ -17,9 +17,9 @@ static inline uint64_t double2key(const double *const ptr) {
   STATIC_ASSERT(sizeof(double) == sizeof(int64_t));
   const int64_t i = *(const int64_t *)ptr;
   const uint64_t u = (i < 0) ? UINT64_C(0xffffFFFFffffFFFF) - i : i + UINT64_C(0x8000000000000000);
-  if (ASSERT_ENABLED()) {
+  if (CHECKS1_ENABLED()) {
     const double f = key2double(u);
-    assert(memcmp(&f, ptr, sizeof(double)) == 0);
+    ENSURE(memcmp(&f, ptr, sizeof(double)) == 0);
   }
   return u;
 }
@@ -38,9 +38,9 @@ static inline uint32_t float2key(const float *const ptr) {
   STATIC_ASSERT(sizeof(float) == sizeof(int32_t));
   const int32_t i = *(const int32_t *)ptr;
   const uint32_t u = (i < 0) ? UINT32_C(0xffffFFFF) - i : i + UINT32_C(0x80000000);
-  if (ASSERT_ENABLED()) {
+  if (CHECKS1_ENABLED()) {
     const float f = key2float(u);
-    assert(memcmp(&f, ptr, sizeof(float)) == 0);
+    ENSURE(memcmp(&f, ptr, sizeof(float)) == 0);
   }
   return u;
 }
@@ -100,7 +100,7 @@ static inline int clz64(uint64_t value) {
 }
 
 static inline uint64_t round_mantissa(const uint64_t u64, int shift) {
-  assert(shift < 0 && u64 > 0);
+  ASSERT(shift < 0 && u64 > 0);
   shift = -shift;
   const unsigned half = 1 << (shift - 1);
   const unsigned lsb = 1 & (unsigned)(u64 >> shift);
@@ -120,13 +120,13 @@ uint64_t mdbx_key_from_jsonInteger(const int64_t json_integer) {
         mantissa = round_mantissa(u64, --shift);
     }
 
-    assert(mantissa >= IEEE754_DOUBLE_IMPLICIT_LEAD && mantissa <= IEEE754_DOUBLE_MANTISSA_AMAX);
+    ASSERT(mantissa >= IEEE754_DOUBLE_IMPLICIT_LEAD && mantissa <= IEEE754_DOUBLE_MANTISSA_AMAX);
     const uint64_t exponent = (uint64_t)IEEE754_DOUBLE_EXPONENTA_BIAS + IEEE754_DOUBLE_MANTISSA_SIZE - shift;
-    assert(exponent > 0 && exponent <= IEEE754_DOUBLE_EXPONENTA_MAX);
+    ASSERT(exponent > 0 && exponent <= IEEE754_DOUBLE_EXPONENTA_MAX);
     const uint64_t key = bias + (exponent << IEEE754_DOUBLE_MANTISSA_SIZE) + (mantissa - IEEE754_DOUBLE_IMPLICIT_LEAD);
-#if !defined(_MSC_VER) || defined(_DEBUG) /* Workaround for MSVC error LNK2019: unresolved external                    \
+#if !defined(_MSC_VER) || !MDBX_WITHOUT_MSVC_CRT /* Workaround for MSVC error LNK2019: unresolved external             \
                                              symbol __except1 referenced in function __ftol3_except */
-    assert(key == mdbx_key_from_double((double)json_integer));
+    ASSERT(key == mdbx_key_from_double((double)json_integer));
 #endif /* Workaround for MSVC */
     return key;
   }
@@ -141,14 +141,14 @@ uint64_t mdbx_key_from_jsonInteger(const int64_t json_integer) {
         mantissa = round_mantissa(u64, --shift);
     }
 
-    assert(mantissa >= IEEE754_DOUBLE_IMPLICIT_LEAD && mantissa <= IEEE754_DOUBLE_MANTISSA_AMAX);
+    ASSERT(mantissa >= IEEE754_DOUBLE_IMPLICIT_LEAD && mantissa <= IEEE754_DOUBLE_MANTISSA_AMAX);
     const uint64_t exponent = (uint64_t)IEEE754_DOUBLE_EXPONENTA_BIAS + IEEE754_DOUBLE_MANTISSA_SIZE - shift;
-    assert(exponent > 0 && exponent <= IEEE754_DOUBLE_EXPONENTA_MAX);
+    ASSERT(exponent > 0 && exponent <= IEEE754_DOUBLE_EXPONENTA_MAX);
     const uint64_t key =
         bias - 1 - (exponent << IEEE754_DOUBLE_MANTISSA_SIZE) - (mantissa - IEEE754_DOUBLE_IMPLICIT_LEAD);
-#if !defined(_MSC_VER) || defined(_DEBUG) /* Workaround for MSVC error LNK2019: unresolved external                    \
+#if !defined(_MSC_VER) || !MDBX_WITHOUT_MSVC_CRT /* Workaround for MSVC error LNK2019: unresolved external             \
                                              symbol __except1 referenced in function __ftol3_except */
-    assert(key == mdbx_key_from_double((double)json_integer));
+    ASSERT(key == mdbx_key_from_double((double)json_integer));
 #endif /* Workaround for MSVC */
     return key;
   }
@@ -157,7 +157,7 @@ uint64_t mdbx_key_from_jsonInteger(const int64_t json_integer) {
 }
 
 int64_t mdbx_jsonInteger_from_key(const MDBX_val v) {
-  assert(v.iov_len == 8);
+  ASSERT(v.iov_len == 8);
   const uint64_t key = unaligned_peek_u64(2, v.iov_base);
   const uint64_t bias = UINT64_C(0x8000000000000000);
   const uint64_t covalent = (key > bias) ? key - bias : bias - key - 1;
@@ -171,27 +171,27 @@ int64_t mdbx_jsonInteger_from_key(const MDBX_val v) {
   const uint64_t unscaled = ((covalent & IEEE754_DOUBLE_MANTISSA_MASK) << (63 - IEEE754_DOUBLE_MANTISSA_SIZE)) + bias;
   const int64_t absolute = unscaled >> shift;
   const int64_t value = (key < bias) ? -absolute : absolute;
-  assert(key == mdbx_key_from_jsonInteger(value) ||
+  ASSERT(key == mdbx_key_from_jsonInteger(value) ||
          (mdbx_key_from_jsonInteger(value - 1) < key && key < mdbx_key_from_jsonInteger(value + 1)));
   return value;
 }
 
 double mdbx_double_from_key(const MDBX_val v) {
-  assert(v.iov_len == 8);
+  ASSERT(v.iov_len == 8);
   return key2double(unaligned_peek_u64(2, v.iov_base));
 }
 
 float mdbx_float_from_key(const MDBX_val v) {
-  assert(v.iov_len == 4);
+  ASSERT(v.iov_len == 4);
   return key2float(unaligned_peek_u32(2, v.iov_base));
 }
 
 int32_t mdbx_int32_from_key(const MDBX_val v) {
-  assert(v.iov_len == 4);
+  ASSERT(v.iov_len == 4);
   return (int32_t)(unaligned_peek_u32(2, v.iov_base) - UINT32_C(0x80000000));
 }
 
 int64_t mdbx_int64_from_key(const MDBX_val v) {
-  assert(v.iov_len == 8);
+  ASSERT(v.iov_len == 8);
   return (int64_t)(unaligned_peek_u64(2, v.iov_base) - UINT64_C(0x8000000000000000));
 }
