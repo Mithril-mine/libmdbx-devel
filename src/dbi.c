@@ -466,8 +466,10 @@ static int dbi_open_locked(MDBX_txn *txn, cursor_couple_t *maindb_cx, unsigned u
 
   rc = dbi_check(txn, slot);
   eASSERT0(env, rc == MDBX_BAD_DBI);
-  if (unlikely(rc != MDBX_BAD_DBI))
-    return MDBX_PROBLEM;
+  if (unlikely(rc != MDBX_BAD_DBI)) {
+    rc = MDBX_PROBLEM;
+    goto bailout;
+  }
 
   /* Find the DB info */
 #if defined(ENABLE_MEMCHECK) || defined(__SANITIZE_ADDRESS__)
@@ -479,13 +481,15 @@ static int dbi_open_locked(MDBX_txn *txn, cursor_couple_t *maindb_cx, unsigned u
 #endif /* MEMCHECK || ASAN */
   if (unlikely(rc != MDBX_SUCCESS)) {
     if (rc != MDBX_NOTFOUND || !(user_flags & MDBX_CREATE))
-      return rc;
+      goto bailout;
   }
 
   /* Done here so we cannot fail after creating a new DB */
   clone = osal_malloc(dbi_namelen(name));
-  if (unlikely(!clone))
-    return MDBX_ENOMEM;
+  if (unlikely(!clone)) {
+    rc = MDBX_ENOMEM;
+    goto bailout;
+  }
   memcpy(clone, name.iov_base, name.iov_len);
   name.iov_base = clone;
 
@@ -531,10 +535,19 @@ bailout:
   if (clone) {
     eASSERT0(env, !txn->cursors[slot] && !env->kvs[slot].name.iov_len && !env->kvs[slot].name.iov_base);
     osal_free(clone);
-    if (slot + 1 == env->n_dbi)
-      txn->n_dbi = env->n_dbi = (unsigned)slot;
-  } else {
-    eASSERT0(env, name.iov_base == env->kvs[slot].name.iov_base);
+  }
+  if (slot + 1 == env->n_dbi) {
+    env->n_dbi = (unsigned)slot;
+    do {
+      txn->n_dbi = (unsigned)slot;
+#if MDBX_ENABLE_DBI_SPARSE
+      const size_t bitmap_chunk = CHAR_BIT * sizeof(txn->dbi_sparse[0]);
+      const size_t bitmap_indx = slot / bitmap_chunk;
+      const size_t bitmap_mask = (size_t)1 << slot % bitmap_chunk;
+      txn->dbi_sparse[bitmap_indx] &= ~bitmap_mask;
+#endif /* MDBX_ENABLE_DBI_SPARSE */
+      txn = txn->parent;
+    } while (txn);
   }
   return rc;
 }
