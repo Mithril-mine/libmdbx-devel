@@ -878,6 +878,7 @@ int main(int argc, char *argv[]) {
   switch (err) {
   case EOF:
     err = MDBX_SUCCESS;
+    /* FALLTHROUGH */
   case MDBX_SUCCESS:
     break;
   case MDBX_EINTR:

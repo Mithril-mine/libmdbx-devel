@@ -150,7 +150,7 @@ static void print_pages_percentage(const char *caption, size_t value, size_t bac
 int main(int argc, char *argv[]) {
   int opt, rc;
   MDBX_env *env;
-  MDBX_txn *txn;
+  MDBX_txn *txn = nullptr;
   MDBX_dbi dbi;
   MDBX_envinfo mei;
   prog = argv[0];
