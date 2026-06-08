@@ -154,10 +154,8 @@ static int dump_tbl(MDBX_txn *txn, MDBX_dbi dbi, char *name) {
   }
   if (rescue) {
     rc = mdbx_cursor_ignord(cursor);
-    if (unlikely(rc != MDBX_SUCCESS)) {
+    if (unlikely(rc != MDBX_SUCCESS))
       error("mdbx_cursor_ignord", rc);
-      return rc;
-    }
   }
 
   while ((rc = mdbx_cursor_get(cursor, &key, &data, MDBX_NEXT)) == MDBX_SUCCESS) {
@@ -393,10 +391,8 @@ int main(int argc, char *argv[]) {
     }
     if (rescue) {
       err = mdbx_cursor_ignord(cursor);
-      if (unlikely(err != MDBX_SUCCESS)) {
+      if (unlikely(err != MDBX_SUCCESS))
         error("mdbx_cursor_ignord", err);
-        return err;
-      }
     }
 
     bool have_raw = false;
