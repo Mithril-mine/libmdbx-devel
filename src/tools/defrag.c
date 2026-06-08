@@ -265,7 +265,7 @@ int main(int argc, char *argv[]) {
       if (sscanf(optarg, "%zu", &step_size_MiB) != 1) {
         if (!quiet)
           fprintf(stderr, "%s: %s option: expecting %s, but got '%s'\n", prog, "-s",
-                  "unsigned integer value in range 1..100", optarg);
+                  "unsigned integer value in megabytes", optarg);
         return EXIT_FAILURE;
       }
       break;

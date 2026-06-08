@@ -321,7 +321,7 @@ int main(int argc, char *argv[]) {
         printf("                    WARNING: Due Windows system limitations a "
                "file couldn't\n                    be truncated while database "
                "is opened. So, the size of\n                    database file "
-               "may by large than the database itself,\n                    "
+               "may be large than the database itself,\n                    "
                "until it will be closed or reopened in read-write mode.\n");
 #endif
     } else {
