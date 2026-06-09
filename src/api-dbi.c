@@ -14,10 +14,8 @@ int mdbx_dbi_open_ex2(MDBX_txn *txn, const MDBX_val *name, MDBX_db_flags_t flags
 
 static int dbi_open_cstr(MDBX_txn *txn, const char *name_cstr, MDBX_db_flags_t flags, MDBX_dbi *dbi,
                          MDBX_cmp_func keycmp, MDBX_cmp_func datacmp) {
-  MDBX_val thunk, *name;
-  if (name_cstr == MDBX_CHK_MAIN || name_cstr == MDBX_CHK_GC || name_cstr == MDBX_CHK_META)
-    name = (void *)name_cstr;
-  else {
+  MDBX_val thunk, *name = (void *)name_cstr;
+  if (name_cstr != MDBX_CHK_MAIN && name_cstr != MDBX_CHK_GC && name_cstr != MDBX_CHK_META) {
     thunk.iov_len = strlen(name_cstr);
     thunk.iov_base = (void *)name_cstr;
     name = &thunk;
@@ -77,10 +75,8 @@ __cold int mdbx_drop(MDBX_txn *txn, MDBX_dbi dbi, bool del) {
 }
 
 __cold int mdbx_dbi_rename(MDBX_txn *txn, MDBX_dbi dbi, const char *name_cstr) {
-  MDBX_val thunk, *name;
-  if (name_cstr == MDBX_CHK_MAIN || name_cstr == MDBX_CHK_GC || name_cstr == MDBX_CHK_META)
-    name = (void *)name_cstr;
-  else {
+  MDBX_val thunk, *name = (void *)name_cstr;
+  if (name_cstr != MDBX_CHK_MAIN && name_cstr != MDBX_CHK_GC && name_cstr != MDBX_CHK_META) {
     thunk.iov_len = strlen(name_cstr);
     thunk.iov_base = (void *)name_cstr;
     name = &thunk;
