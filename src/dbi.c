@@ -39,7 +39,7 @@ int dbi_gone(MDBX_txn *txn, const size_t dbi, const int rc) {
   cASSERT0(txn, txn->n_dbi > dbi && F_ISSET(txn->dbi_state[dbi], DBI_LINDO | DBI_VALID));
   for (;;) {
     unsigned state = txn->dbi_state[dbi];
-    txn->dbi_state[dbi] = DBI_OLDEN | DBI_LINDO;
+    txn->dbi_state[dbi] = DBI_LINDO;
     if (state & (DBI_FRESH | DBI_CREAT))
       return rc;
     if (!txn->parent)
@@ -121,14 +121,14 @@ __noinline int dbi_import(MDBX_txn *txn, const size_t dbi) {
     if (unlikely(txn->cursors[dbi])) {
       /* хендл уже использовался в транзакции и остались висячие курсоры */
       txn->dbi_seqs[dbi] = env->dbi_seqs[dbi].weak;
-      txn->dbi_state[dbi] = DBI_OLDEN | DBI_LINDO;
+      txn->dbi_state[dbi] = DBI_LINDO;
       return MDBX_DANGLING_DBI;
     }
-    if (unlikely(txn->dbi_state[dbi] & (DBI_OLDEN | DBI_VALID))) {
+    if (unlikely(txn->dbi_state[dbi] & DBI_VALID)) {
       /* хендл уже использовался в транзакции, но был закрыт или переоткрыт,
        * висячих курсоров нет */
       txn->dbi_seqs[dbi] = env->dbi_seqs[dbi].weak;
-      txn->dbi_state[dbi] = DBI_OLDEN | DBI_LINDO;
+      txn->dbi_state[dbi] = DBI_LINDO;
       return MDBX_BAD_DBI;
     }
   }
@@ -402,13 +402,11 @@ static int dbi_open_locked(MDBX_txn *txn, cursor_couple_t *maindb_cx, unsigned u
     if (env->kvs[MAIN_DBI].clc.k.cmp(&name, &env->kvs[scan].name) == 0) {
       slot = scan;
       rc = dbi_check(txn, slot);
-      if (rc == MDBX_BAD_DBI &&
-          (txn->dbi_state[slot] ==
-               /* хендл использовался, стал невалидным, но теперь явно пере-открывается */ (DBI_OLDEN | DBI_LINDO) ||
-           (txn->dbi_state[slot] ==
-            /* хендл был инициализирован в дочерней транзакции, но она была прервана */ DBI_LINDO))) {
+      if (rc == MDBX_BAD_DBI && txn->dbi_state[slot] ==
+                                    /* хендл использовался, стал невалидным, но теперь явно пере-открывается,
+                                     * либо хендл был инициализирован в дочерней транзакции, но она была прервана */
+                                    DBI_LINDO) {
         eASSERT0(env, !txn->cursors[slot]);
-        txn->dbi_state[slot] = DBI_LINDO;
         txn->dbi_seqs[slot] = 0;
         rc = dbi_import(txn, slot);
       }
@@ -530,7 +528,7 @@ done:
   return MDBX_SUCCESS;
 
 bailout:
-  txn->dbi_state[slot] &= DBI_LINDO | DBI_OLDEN;
+  txn->dbi_state[slot] &= DBI_LINDO;
   env->dbs_flags[slot] = 0;
   if (clone) {
     eASSERT0(env, !txn->cursors[slot] && !env->kvs[slot].name.iov_len && !env->kvs[slot].name.iov_base);
@@ -626,11 +624,10 @@ int dbi_open(MDBX_txn *txn, const MDBX_val *const name, unsigned user_flags, MDB
       goto slowpath_locking;
 
     rc = dbi_check(txn, slot);
-    if (rc == MDBX_BAD_DBI &&
-        (txn->dbi_state[slot] ==
-             /* хендл использовался, стал невалидным, но теперь явно пере-открывается */ (DBI_OLDEN | DBI_LINDO) ||
-         (txn->dbi_state[slot] ==
-          /* хендл был инициализирован в дочерней транзакции, но она была прервана */ DBI_LINDO)))
+    if (rc == MDBX_BAD_DBI && txn->dbi_state[slot] ==
+                                  /* хендл использовался, стал невалидным, но теперь явно пере-открывается,
+                                   * либо хендл был инициализирован в дочерней транзакции, но она была прервана */
+                                  DBI_LINDO)
       goto slowpath_locking;
     if (unlikely(rc != MDBX_SUCCESS))
       return rc;
@@ -766,14 +763,12 @@ __cold const tree_t *dbi_dig(const MDBX_txn *txn, const size_t dbi, tree_t *fall
     cASSERT0(txn, txn->n_dbi == dig->n_dbi);
     const uint8_t state = dbi_state(dig, dbi);
     if (state & DBI_LINDO)
-      switch (state & (DBI_VALID | DBI_STALE | DBI_OLDEN)) {
+      switch (state & (DBI_VALID | DBI_STALE)) {
       case DBI_VALID:
-      case DBI_OLDEN:
         return dig->dbs + dbi;
       case 0:
         return fallback;
       case DBI_VALID | DBI_STALE:
-      case DBI_OLDEN | DBI_STALE:
         break;
       default:
         cASSERT0(txn, !!"unexpected dig->dbi_state[dbi]");

@@ -64,7 +64,7 @@ __cold int mdbx_drop(MDBX_txn *txn, MDBX_dbi dbi, bool del) {
       if (likely(rc == MDBX_SUCCESS)) {
         cASSERT0(txn, txn->dbi_state[MAIN_DBI] & DBI_DIRTY);
         cASSERT0(txn, txn->flags & MDBX_TXN_DIRTY);
-        txn->dbi_state[dbi] = DBI_LINDO | DBI_OLDEN;
+        txn->dbi_state[dbi] = DBI_LINDO;
         rc = osal_fastmutex_acquire(&env->dbi_lock);
         if (likely(rc == MDBX_SUCCESS))
           return LOG_IFERR(dbi_close_release(env, dbi));

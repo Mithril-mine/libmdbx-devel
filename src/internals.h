@@ -164,7 +164,6 @@ enum dbi_state {
   DBI_FRESH = 0x04 /* table handle opened in this txn */,
   DBI_CREAT = 0x08 /* table handle created in this txn */,
   DBI_VALID = 0x10 /* Handle is valid, see also DB_VALID */,
-  DBI_OLDEN = 0x40 /* Handle was closed/reopened outside txn */,
   DBI_LINDO = 0x80 /* Lazy initialization done for DBI-slot */,
 };
 
