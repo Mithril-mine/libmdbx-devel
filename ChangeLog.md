@@ -18,11 +18,22 @@ The supporting release of a stable branch with bug fixes.
 
 ### Appreciations:
 
- - [Cosmin Apreutesei](https://github.com/capr) for bug reporting.
+ - [Cosmin Apreutesei](https://github.com/capr) for bugs reporting.
+
+### Improvements:
+
+ - Deferred invalidation of the dbi-handles of dropped tables has been implemented until the corresponding transactions are committed.
+
+   Previously, libmdbx implemented the behavior historically inherited from LMDB, when handles of a dropped tables were immediately closed, regardless of the possible subsequent abortion of such transactions.
+   Now, when tables are dropped, both ones associated handles and data remain available for other transactions running in parrallel within the current process.
+
+   This improvement has been asking for a long time, but it required a lot of preparation and refactoring which are done step-by-step during a few last releases.
 
 ### Fixes:
 
  - Fixed assertions triggering in a specific scenarios of creating and renaming tables within nested transactions.
+
+ - Fixed the [issue](https://github.com/Mithril-mine/libmdbx/issues/361) of loosing a table content after abortion the nested transaction where such table was dropped.
 
 
 --------------------------------------------------------------------------------
