@@ -454,7 +454,7 @@ struct pair {
   MDBX_CXX11_CONSTEXPR operator stl_pair() const noexcept { return stl_pair(key, value); }
   pair(const pair &) noexcept = default;
   pair &operator=(const pair &) noexcept = default;
-  pair &operator=(pair &&couple) {
+  pair &operator=(pair &&couple) noexcept {
     key.assign(std::move(couple.key));
     value.assign(std::move(couple.value));
     return *this;

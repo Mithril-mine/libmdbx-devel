@@ -1359,7 +1359,7 @@ static inline MDBX_env *create_env() {
   return ptr;
 }
 
-env_managed &env_managed::operator=(env_managed &&other) {
+env_managed &env_managed::operator=(env_managed &&other) noexcept {
   if (this != &other) {
     if (MDBX_UNLIKELY(handle_))
       MDBX_CXX20_UNLIKELY {
@@ -1477,7 +1477,7 @@ cursor_managed cursor::clone(void *your_context) const {
   return clone;
 }
 
-cursor_managed &cursor_managed::operator=(cursor_managed &&other) {
+cursor_managed &cursor_managed::operator=(cursor_managed &&other) noexcept {
   if (this != &other) {
     if (MDBX_UNLIKELY(handle_))
       MDBX_CXX20_UNLIKELY {
@@ -1508,7 +1508,7 @@ txn_managed txn::start_nested(bool readonly) {
   return txn_managed(nested);
 }
 
-txn_managed &txn_managed::operator=(txn_managed &&other) {
+txn_managed &txn_managed::operator=(txn_managed &&other) noexcept {
   if (this != &other) {
     if (MDBX_UNLIKELY(handle_))
       MDBX_CXX20_UNLIKELY {
@@ -1683,7 +1683,7 @@ void cursor::update_current(const slice &value) {
   default_buffer holder;
   auto key = current().key;
   if (error::boolean_or_throw(mdbx_is_dirty(handle_->txn, key.iov_base)))
-    key = holder.assign(key);
+    key = holder.assign(key).slice();
 
   update(key, value);
 }
@@ -1692,7 +1692,7 @@ slice cursor::reverse_current(size_t value_length) {
   default_buffer holder;
   auto key = current().key;
   if (error::boolean_or_throw(mdbx_is_dirty(handle_->txn, key.iov_base)))
-    key = holder.assign(key);
+    key = holder.assign(key).slice();
 
   return update_reserve(key, value_length);
 }

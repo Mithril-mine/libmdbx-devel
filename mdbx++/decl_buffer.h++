@@ -243,7 +243,7 @@ private:
       struct inplace_flag_holder {
         byte buffer_[inplace_size - sizeof(byte)];
         byte lastbyte_;
-        MDBX_CXX11_CONSTEXPR inplace_flag_holder(byte signature) : lastbyte_(signature) {};
+        MDBX_CXX11_CONSTEXPR inplace_flag_holder(byte signature) : buffer_(), lastbyte_(signature) {}
       };
 
       allocator_pointer allocated_ptr_;
