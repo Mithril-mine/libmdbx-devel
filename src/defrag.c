@@ -297,6 +297,7 @@ static int defrag_walker(const size_t pgno, unsigned npages, void *const ctx, co
   STATIC_ASSERT(DEFRAG_TRACK_FLAG > MAX_PAGENO);
 
   ASSERT(deep == 0 || (dfc->walk_stack[deep - 1] & ~DEFRAG_TRACK_FLAG) == parent_pgno);
+  ASSERT(pgno < DEFRAG_TRACK_FLAG);
   dfc->walk_stack[deep] = pgno;
 
   if (pgno >= dfc->walk_cutoff) {
@@ -440,7 +441,7 @@ static int defrag_move(dfc_t *dfc, da_t *arc) {
   /* Нужно скопировать содержимое страницы в новое место, а также поправить ссылку на перемещённую страницу в
    * родительской. Родительская страница тоже должна быть скопирована/перемещена, вместе с её родительской и так до
    * корня дерева. Корректируемые ссылки точно отсутствуют только у небольшой части страниц, в large/overlow страницах и
-   * листьях вложенных b-tree у dupsort-таблиц
+   * листьях вложенных b-tree у dupsort-таблиц.
    *
    * Поэтому нерационально корректировать ссылки в родительских страницах при перемещении/копировании дочерних, так как
    * это потребует многократного обновления большей части родительских страниц. Напротив, корректировка ссылок внутри
@@ -453,7 +454,7 @@ static int defrag_move(dfc_t *dfc, da_t *arc) {
   const size_t di = ((txn->flags & MDBX_WRITEMAP) == 0 || MDBX_AVOID_MSYNC) ? txn_dpl_exist(txn, arc->key_or_pgno) : 0;
   if (di) {
     page_t *dst = txn->wr.dirtylist->items[di].ptr;
-    if (!MDBX_AVOID_MSYNC || (txn->flags & MDBX_WRITEMAP)) {
+    if (MDBX_AVOID_MSYNC && (txn->flags & MDBX_WRITEMAP)) {
       const page_t *const src = dst;
       dst = pgno2page(txn->env, arc->mapped);
       page_copy(dst, src, pgno2bytes(txn->env, npages));
@@ -1154,8 +1155,8 @@ int defrag_init(dfc_t *dfc, MDBX_txn *txn, size_t defrag_atleast_pages, size_t s
   if (preferred_move_batch_size < 0) {
     preferred_move_batch_size = 0;
     if (limit_spend_wallclock_dot16) {
-      /* TODO: подстроить размер (возможно динамически на каждом цикле) так, чтобы время записи порции не превышало
-       * 5-10% от таймаута. */
+      /* TODO: подстроить размер (возможно динамически на каждом цикле) так,
+               чтобы время записи порции не превышало 5-10% от таймаута. */
       preferred_move_batch_size = bytes2pgno(txn->env, 64 * MEGABYTE);
     }
   }
