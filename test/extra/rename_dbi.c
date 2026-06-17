@@ -25,21 +25,15 @@ Observed with MDBX_DEBUG=1:
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <unistd.h>
 
 static void check(int rc, const char *op) {
-  if (rc != MDBX_SUCCESS) {
+  if (rc != MDBX_SUCCESS && rc != MDBX_RESULT_TRUE) {
     fprintf(stderr, "%s: %d: %s\n", op, rc, mdbx_strerror(rc));
     exit(2);
   }
 }
 
-static void cleanup(const char *path) {
-  char lck[512];
-  snprintf(lck, sizeof(lck), "%s-lck", path);
-  unlink(path);
-  unlink(lck);
-}
+static void cleanup(const char *path) { check(mdbx_env_delete(path, MDBX_ENV_JUST_DELETE), "mdbx_env_delete"); }
 
 static MDBX_env *open_env(const char *path) {
   MDBX_env *env = NULL;

@@ -380,7 +380,11 @@ void __hot maker::mk_continue(const serial_t serial, const essentials &params, r
       out.u32 = uint32_t(serial);
   } else {
     const auto prefix = std::max(std::min(unsigned(params.minlen), 8u), length(serial));
+#ifndef _MSC_VER
     out.u64 = htobe64(serial);
+#else
+    out.u64 = _byteswap_uint64(serial);
+#endif /* MSVC */
     out.value.iov_base = out.bytes + 8 - prefix;
     if (out.value.iov_len > prefix) {
       if (params.flags & essentials::prng_fill_flag) {

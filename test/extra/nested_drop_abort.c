@@ -17,7 +17,7 @@ static int get(MDBX_txn *txn, MDBX_dbi dbi) {
 }
 
 int main() {
-  const char* dbfile = "nested_drop_abort";
+  const char *dbfile = "nested_drop_abort";
   MDBX_env *env;
   check(mdbx_env_create(&env), "env_create");
   check(mdbx_env_set_maxdbs(env, 16), "set_maxdbs");
