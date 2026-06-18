@@ -320,7 +320,7 @@ case ${UNAME} in
     mkdir -p $TESTDB_DIR && rm -f $TESTDB_DIR/*
 
     echo "FIXME: Fake support for ${UNAME}"
-    ram_avail_mb=32768
+    ram_avail_mb=$(($(powershell -Command "Get-CimInstance -ClassName Win32_OperatingSystem | Select-Object -ExpandProperty FreeVirtualMemory") / 1024))
   ;;
 
   *)
