@@ -6274,8 +6274,9 @@ LIBMDBX_API int mdbx_cursor_put(MDBX_cursor *cursor, const MDBX_val *key, MDBX_v
  * return the same record after this operation.
  *
  * \param [in] cursor  A cursor handle returned by mdbx_cursor_open().
+ *
  * \param [in] flags   Options for this operation. This parameter must be set
- * to one of the values described here.
+ *                     to one of the values described here.
  *
  *  - \ref MDBX_CURRENT Delete only single entry at current cursor position.
  *  - \ref MDBX_ALLDUPS
@@ -6339,10 +6340,10 @@ LIBMDBX_API int mdbx_cursor_delete_range(MDBX_cursor *begin, MDBX_cursor *end, b
  * kinds of "dupsort" tables. If in doubt, use a deliberately large value such as `INT_MAX` or just the `42`.
  *
  * \param [in] first             Cursor pointing to the first element or NULL to using the begin of a table.
- *                               Either the `first` or the `last` must not be NULL.
+ *                               Either the "first" or the "last" can be NULL, but not both at once.
  *
  * \param [in] last              Cursor pointing to the end of the range or NULL to using the end of a table.
- *                               Either the `first` or the `last` must not be NULL.
+ *                               Either the "first" or the "last" can be NULL, but not both at once.
  *
  * \param [out] distance         The address for storing the result calculated distance.
  *
