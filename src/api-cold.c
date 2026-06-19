@@ -184,7 +184,9 @@ __cold int mdbx_env_warmup(const MDBX_env *env, const MDBX_txn *txn, MDBX_warmup
           (MDBX_WORDBITS == 32 && ws_lower > MEGABYTE * 2048) ? ws_lower : ws_lower + MDBX_WORDBITS * MEGABYTE * 32;
       if (!SetProcessWorkingSetSize(GetCurrentProcess(), ws_lower, ws_upper)) {
         rc = (int)GetLastError();
-        WARNING("SetProcessWorkingSetSize(%zu, %zu) error %d", ws_lower, ws_upper, rc);
+        /* Explicit cast to size_t: SIZE_T (ULONG_PTR) and size_t are always the same width on Windows
+         * (32-bit on Win32, 64-bit on Win64), but Embarcadero treats them as distinct types for %zu. */
+        WARNING("SetProcessWorkingSetSize(%zu, %zu) error %d", (size_t)ws_lower, (size_t)ws_upper, rc);
       }
     }
 #endif /* Windows */

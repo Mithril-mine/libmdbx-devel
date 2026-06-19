@@ -79,7 +79,7 @@ static
 #  pragma data_seg(pop)
 #  pragma const_seg(pop)
 
-#elif defined(__GNUC__)
+#elif defined(__GNUC__) || defined(__CODEGEARC__)
 #  ifndef _M_IX86
      const
 #  endif

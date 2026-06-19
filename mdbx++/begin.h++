@@ -17,7 +17,7 @@
 #endif /* MSVC is mad and don't define __cplusplus properly */
 #endif /* __cplusplus < 201103L */
 
-#if (defined(_WIN32) || defined(_WIN64)) && MDBX_WITHOUT_MSVC_CRT
+#if (defined(_WIN32) || defined(_WIN64)) && MDBX_WITHOUT_MSVC_CRT && !defined(__CODEGEARC__)
 #error "CRT is required for C++ API, the MDBX_WITHOUT_MSVC_CRT option must be disabled"
 #endif /* Windows */
 

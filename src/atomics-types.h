@@ -20,6 +20,23 @@
     !defined(__STDC_NO_ATOMICS__) &&                                                                                   \
     (__GNUC_PREREQ(4, 9) || __CLANG_PREREQ(3, 8) || !(defined(__GNUC__) || defined(__clang__)))
 #include <stdatomic.h>
+#if defined(__CODEGEARC__)
+/* Embarcadero Clang falls back to Dinkumware stdatomic.h on x86.
+ * Fix incompatible atomic_* expansions for volatile _Atomic objects:
+ * Dinkumware macros do (pobj)->_Atom which breaks on scalar _Atomic.
+ * Use Clang __c11_atomic_* builtins directly instead. */
+#undef atomic_is_lock_free
+#define atomic_is_lock_free(obj) __c11_atomic_is_lock_free(sizeof(*(obj)))
+#undef atomic_store_explicit
+#define atomic_store_explicit(obj, val, ord) __c11_atomic_store((obj), (val), (ord))
+#undef atomic_load_explicit
+#define atomic_load_explicit(obj, ord) __c11_atomic_load((obj), (ord))
+#undef atomic_compare_exchange_strong
+#define atomic_compare_exchange_strong(obj, exp, val)                                                                  \
+  __c11_atomic_compare_exchange_strong((obj), (exp), (val), __ATOMIC_SEQ_CST, __ATOMIC_SEQ_CST)
+#undef atomic_fetch_add
+#define atomic_fetch_add(obj, val) __c11_atomic_fetch_add((obj), (val), __ATOMIC_SEQ_CST)
+#endif /* __CODEGEARC__ */
 #define MDBX_HAVE_C11ATOMICS
 #elif defined(__GNUC__) || defined(__clang__)
 #elif defined(_MSC_VER)
@@ -47,14 +64,22 @@ typedef enum mdbx_memory_order {
 typedef union {
   volatile uint32_t weak;
 #ifdef MDBX_HAVE_C11ATOMICS
+#if defined(__CODEGEARC__) && defined(__clang__)
+  volatile atomic_uint32_t c11a;
+#else
   volatile _Atomic uint32_t c11a;
+#endif
 #endif /* MDBX_HAVE_C11ATOMICS */
 } mdbx_atomic_uint32_t;
 
 typedef union {
   volatile uint64_t weak;
 #if defined(MDBX_HAVE_C11ATOMICS) && (MDBX_64BIT_CAS || MDBX_64BIT_ATOMIC)
+#if defined(__CODEGEARC__) && defined(__clang__)
+  volatile atomic_uint64_t c11a;
+#else
   volatile _Atomic uint64_t c11a;
+#endif
 #endif
 #if !defined(MDBX_HAVE_C11ATOMICS) || !MDBX_64BIT_CAS || !MDBX_64BIT_ATOMIC
   __anonymous_struct_extension__ struct {
@@ -75,6 +100,10 @@ typedef union {
 #if defined(__e2k__) && defined(__LCC__) && __LCC__ < /* FIXME */ 127
 #define MDBX_c11a_ro(type, ptr) (&(ptr)->weak)
 #define MDBX_c11a_rw(type, ptr) (&(ptr)->weak)
+#elif defined(__CODEGEARC__)
+/* Embarcadero Clang: cast to _Atomic(type)* so __c11_atomic_* builtins accept the pointer. */
+#define MDBX_c11a_ro(type, ptr) ((volatile _Atomic(type) *)&(ptr)->c11a)
+#define MDBX_c11a_rw(type, ptr) ((volatile _Atomic(type) *)&(ptr)->c11a)
 #elif defined(__clang__) && __clang__ < 8
 #define MDBX_c11a_ro(type, ptr) ((volatile _Atomic(type) *)&(ptr)->c11a)
 #define MDBX_c11a_rw(type, ptr) (&(ptr)->c11a)

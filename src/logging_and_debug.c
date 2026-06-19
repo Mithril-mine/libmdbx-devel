@@ -94,7 +94,9 @@ __cold const char *mdbx_dump_val(const MDBX_val *val, char *const buf, const siz
     }
 
   if (is_ascii) {
-    int len = snprintf(buf, bufsize, "%.*s", (val->iov_len > INT_MAX) ? INT_MAX : (int)val->iov_len, data);
+    /* Outer (int) cast: both branches of the ternary already produce int, but Embarcadero
+     * infers the expression type as long; the cast is a no-op on any conforming compiler. */
+    int len = snprintf(buf, bufsize, "%.*s", (int)((val->iov_len > INT_MAX) ? INT_MAX : (int)val->iov_len), data);
     ASSERT(len > 0 && (size_t)len < bufsize);
     (void)len;
   } else {

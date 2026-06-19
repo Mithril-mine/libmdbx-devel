@@ -399,11 +399,22 @@ __extern_C key_t ftok(const char *, int);
 #include <windows.h>
 #include <winnt.h>
 #include <winternl.h>
+#if defined(__CODEGEARC__) && defined(__cplusplus) && defined(DEFINE_ENUM_FLAG_OPERATORS)
+/* Embarcadero: Windows SDK defines DEFINE_ENUM_FLAG_OPERATORS without proper constexpr.
+ * Reset it so mdbx.h can install its own constexpr-correct version. */
+#undef DEFINE_ENUM_FLAG_OPERATORS
+#undef CONSTEXPR_ENUM_FLAGS_OPERATIONS
+#endif /* __CODEGEARC__ */
 
 /* После подгрузки windows.h, чтобы избежать проблем со сборкой MINGW и т.п. */
 #include <excpt.h>
 #include <io.h>
 #include <tlhelp32.h>
+
+#if defined(__CODEGEARC__) && defined(_WIN32) && !defined(YieldProcessor)
+/* Embarcadero intrin.h does not define YieldProcessor; provide it via inline asm */
+#define YieldProcessor() __asm__ __volatile__("pause")
+#endif /* __CODEGEARC__ */
 
 #else /*----------------------------------------------------------------------*/
 
@@ -837,7 +848,8 @@ __extern_C key_t ftok(const char *, int);
 #endif /* MDBX_GOOFY_MSVC_STATIC_ANALYZER */
 
 #ifndef FLEXIBLE_ARRAY_MEMBERS
-#if (defined(__STDC_VERSION__) && __STDC_VERSION__ >= 199901L) || (!defined(__cplusplus) && defined(_MSC_VER))
+#if (defined(__STDC_VERSION__) && __STDC_VERSION__ >= 199901L) || (!defined(__cplusplus) && defined(_MSC_VER)) ||      \
+    defined(__CODEGEARC__)
 #define FLEXIBLE_ARRAY_MEMBERS 1
 #else
 #define FLEXIBLE_ARRAY_MEMBERS 0
