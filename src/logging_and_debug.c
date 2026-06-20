@@ -288,7 +288,7 @@ __cold const char *object2class(const void *ptr) {
   return "unknown";
 }
 
-MDBX_NORETURN static void fuckup(const char *msg, const char *func, unsigned line, const void *obj) {
+MDBX_NORETURN static void panic_internal(const char *msg, const char *func, unsigned line, const void *obj) {
   const char *obj_class = object2class(obj);
   MDBX_DTRACE5(panic, func, line, msg, obj_class, obj);
   const MDBX_panic_func panic_func = globals.panic_func;
@@ -300,7 +300,7 @@ MDBX_NORETURN static void fuckup(const char *msg, const char *func, unsigned lin
 }
 
 __cold __noinline void panic_at_obj(const struct MDBX_panic_point *const at, const void *obj) {
-  fuckup(at->msg, at->function, at->line, obj);
+  panic_internal(at->msg, at->function, at->line, obj);
 }
 
 __cold __noinline void panic_at(const struct MDBX_panic_point *const at) { panic_at_obj(at, nullptr); }
@@ -311,9 +311,9 @@ __cold __noinline void panic_at_fmt(const struct MDBX_panic_point *const at, con
   char *message = nullptr;
   const int num = osal_vasprintf(&message, at->msg, ap);
   const char *const const_message = unlikely(num < 1 || !message) ? "<vasprintf() failed>" : message;
-  fuckup(const_message, at->function, at->line, obj);
+  panic_internal(const_message, at->function, at->line, obj);
 }
 
-__cold void mdbx_assert_fail(const char *msg, const char *func, unsigned line) { fuckup(msg, func, line, nullptr); }
+__cold void mdbx_assert_fail(const char *msg, const char *func, unsigned line) { panic_internal(msg, func, line, nullptr); }
 
 #endif /* MDBX_CHECKING >= 0 */
