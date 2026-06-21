@@ -3,6 +3,10 @@
 
 #include "internals.h"
 
+static bool cursor_check_samedbi(const MDBX_cursor *left, const MDBX_cursor *right) {
+  return left->txn->front_txnid == right->txn->front_txnid && cursor_dbi(left) == cursor_dbi(right);
+}
+
 MDBX_cursor *mdbx_cursor_create(void *context) {
   cursor_couple_t *couple = osal_calloc(1, sizeof(cursor_couple_t));
   if (unlikely(!couple))
@@ -969,7 +973,7 @@ int mdbx_cursor_distribute(const MDBX_cursor *begin, const MDBX_cursor *end, MDB
       return LOG_IFERR(MDBX_ENODATA);
   }
 
-  if (unlikely(begin && end && begin->txn != end->txn && begin->tree != end->tree))
+  if (begin && end && unlikely(!cursor_check_samedbi(begin, end)))
     return LOG_IFERR(MDBX_EINVAL);
 
   const MDBX_cursor *ref = begin ? begin : end;
@@ -979,7 +983,7 @@ int mdbx_cursor_distribute(const MDBX_cursor *begin, const MDBX_cursor *end, MDB
       rc = cursor_check_pure(iter = array[i]);
       if (unlikely(rc != MDBX_SUCCESS))
         return LOG_IFERR(rc);
-      if (unlikely(iter->txn != ref->txn && iter->tree != ref->tree))
+      if (unlikely(!cursor_check_samedbi(iter, ref)))
         return LOG_IFERR(MDBX_EINVAL);
     }
   }
@@ -1043,7 +1047,7 @@ int mdbx_cursor_distance(const MDBX_cursor *begin, const MDBX_cursor *end, intpt
       return LOG_IFERR(MDBX_ENODATA);
   }
 
-  if (unlikely(begin && end && begin->txn != end->txn && begin->tree != end->tree))
+  if (begin && end && unlikely(!cursor_check_samedbi(begin, end)))
     return LOG_IFERR(MDBX_EINVAL);
 
   cursor_couple_t couple_opposite;

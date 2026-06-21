@@ -6396,6 +6396,10 @@ LIBMDBX_API int mdbx_cursor_scroll(MDBX_cursor *cursor, intptr_t amount, unsigne
 /** \brief Distributes cursors for multithreaded range scanning.
  * \ingroup c_cursors
  *
+ * Places a given set of cursors as evenly as possible for subsequent scanning or parallel processing of data range by
+ * several threads. The function can accept cursors bound to different read transactions, provided that they use the
+ * same MVCC-snapshot of data.
+ *
  * The value of the `deepness` parameter has a fundamental effect on the result, since it determines the level of the
  * B-tree at which the cursors distribution are performed, where zero corresponds to the root of the B-tree and
  * increases to a leaves. In order for the performed cursor movement to match the number of keys and values, the
