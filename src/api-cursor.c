@@ -291,8 +291,8 @@ int mdbx_cursor_compare(const MDBX_cursor *l, const MDBX_cursor *r, bool ignore_
   if (unlikely(l->clc != r->clc)) {
     if (l->txn->env != r->txn->env)
       return (l->txn->env > r->txn->env) ? incomparable * 7 : -incomparable * 7;
-    if (l->txn->txnid != r->txn->txnid)
-      return (l->txn->txnid > r->txn->txnid) ? incomparable * 6 : -incomparable * 6;
+    if (l->txn->front_txnid != r->txn->front_txnid)
+      return (l->txn->front_txnid > r->txn->front_txnid) ? incomparable * 6 : -incomparable * 6;
     return (l->clc > r->clc) ? incomparable * 5 : -incomparable * 5;
   }
   assert(cursor_dbi(l) == cursor_dbi(r));
