@@ -97,8 +97,12 @@ __cold const char *mdbx_dump_val(const MDBX_val *val, char *const buf, const siz
     /* Outer (int) cast: both branches of the ternary already produce int, but Embarcadero
      * infers the expression type as long; the cast is a no-op on any conforming compiler. */
     int len = snprintf(buf, bufsize, "%.*s", (int)((val->iov_len > INT_MAX) ? INT_MAX : (int)val->iov_len), data);
-    ASSERT(len > 0 && (size_t)len < bufsize);
-    (void)len;
+    if (unlikely(len < 0))
+      buf[0] = '\0';
+    else if (unlikely((size_t)len >= bufsize))
+      buf[bufsize - 1] = '\0';
+    else
+      ASSERT(len > 0);
   } else {
     static const char hex[16] = {'0', '1', '2', '3', '4', '5', '6', '7', '8', '9', 'a', 'b', 'c', 'd', 'e', 'f'};
     char *const detent = buf + bufsize - 2;
@@ -153,8 +157,10 @@ __cold static int setup_debug(MDBX_log_level_t level, MDBX_debug_flags_t flags, 
 
 __cold int mdbx_setup_debug_nofmt(MDBX_log_level_t level, MDBX_debug_flags_t flags, MDBX_debug_func_nofmt logger,
                                   char *buffer, size_t buffer_size) {
+  if (logger && (!buffer || buffer_size == 0))
+    return MDBX_EINVAL;
   union logger_union thunk;
-  thunk.nofmt = (logger && buffer && buffer_size) ? logger : MDBX_LOGGER_NOFMT_DONTCHANGE;
+  thunk.nofmt = logger ? logger : MDBX_LOGGER_NOFMT_DONTCHANGE;
   return setup_debug(level, flags, thunk, buffer, buffer_size);
 }
 
@@ -311,8 +317,8 @@ __cold __noinline void panic_at_fmt(const struct MDBX_panic_point *const at, con
   char *message = nullptr;
   const int num = osal_vasprintf(&message, at->msg, ap);
   va_end(ap);
-  const char *const const_message = unlikely(num < 1 || !message) ? "<vasprintf() failed>" : message;
-  panic_internal(const_message, at->function, at->line, obj);
+  const char *const final_message = unlikely(num < 1 || !message) ? "<vasprintf() failed>" : message;
+  panic_internal(final_message, at->function, at->line, obj);
   __unreachable();
 }
 
