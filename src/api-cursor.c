@@ -442,7 +442,7 @@ int mdbx_cursor_get(MDBX_cursor *mc, MDBX_val *key, MDBX_val *data, MDBX_cursor_
   return LOG_IFERR(cursor_ops(mc, key, data, op));
 }
 
-__hot static int scan_confinue(MDBX_cursor *mc, MDBX_predicate_func predicate, void *context, void *arg, MDBX_val *key,
+__hot static int scan_continue(MDBX_cursor *mc, MDBX_predicate_func predicate, void *context, void *arg, MDBX_val *key,
                                MDBX_val *value, MDBX_cursor_op turn_op) {
   int rc;
   switch (turn_op) {
@@ -524,7 +524,7 @@ int mdbx_cursor_scan(MDBX_cursor *mc, MDBX_predicate_func predicate, void *conte
   int rc = mdbx_cursor_get(mc, &key, &value, start_op);
   if (unlikely(rc != MDBX_SUCCESS))
     return LOG_IFERR(rc);
-  return LOG_IFERR(scan_confinue(mc, predicate, context, arg, &key, &value, turn_op));
+  return LOG_IFERR(scan_continue(mc, predicate, context, arg, &key, &value, turn_op));
 }
 
 int mdbx_cursor_scan_from(MDBX_cursor *mc, MDBX_predicate_func predicate, void *context, MDBX_cursor_op from_op,
@@ -555,7 +555,7 @@ int mdbx_cursor_scan_from(MDBX_cursor *mc, MDBX_predicate_func predicate, void *
     if (unlikely(rc != MDBX_SUCCESS))
       return LOG_IFERR(rc);
   }
-  return LOG_IFERR(scan_confinue(mc, predicate, context, arg, key, value, turn_op));
+  return LOG_IFERR(scan_continue(mc, predicate, context, arg, key, value, turn_op));
 }
 
 int mdbx_cursor_get_batch(MDBX_cursor *mc, size_t *count, MDBX_val *pairs, size_t limit, MDBX_cursor_op op) {
