@@ -985,54 +985,83 @@ typedef enum MDBX_debug_flags {
 } MDBX_debug_flags_t;
 DEFINE_ENUM_FLAG_OPERATORS(MDBX_debug_flags)
 
-/** \brief A debug-logger callback function,
- * called before printing the message and aborting.
+/** \brief A log callback function that accepts a format string and arguments passed through the `va_list` pointer.
  * \see mdbx_setup_debug()
  *
- * \param [in] loglevel  The severity of message.
- * \param [in] function  The function name which emits message,
- *                       may be NULL.
- * \param [in] line      The source code line number which emits message,
- *                       may be zero.
- * \param [in] fmt       The printf-like format string with message.
- * \param [in] args      The variable argument list respectively for the
- *                       format-message string passed by `fmt` argument.
- *                       Maybe NULL or invalid if the format-message string
- *                       don't contain `%`-specification of arguments. */
-typedef void (*MDBX_debug_func)(MDBX_log_level_t loglevel, const char *function, int line, const char *fmt,
+ * \param [in] log_level  The severity of message.
+ * \param [in] function   The function name which emits message, may be NULL.
+ * \param [in] line       The source code line number which emits message, may be zero.
+ * \param [in] fmt        The printf-like format string with message.
+ * \param [in] args       The variable argument list respectively for the
+ *                        format-message string passed by `fmt` argument.
+ *                        Maybe NULL or invalid if the format-message string
+ *                        don't contain `%`-specification of arguments. */
+typedef void (*MDBX_debug_func)(MDBX_log_level_t log_level, const char *function, int line, const char *fmt,
                                 va_list args) MDBX_CXX17_NOEXCEPT;
 
 /** \brief The "don't change `logger`" value for mdbx_setup_debug() */
 #define MDBX_LOGGER_DONTCHANGE ((MDBX_debug_func)(intptr_t)-1)
-#define MDBX_LOGGER_NOFMT_DONTCHANGE ((MDBX_debug_func_nofmt)(intptr_t)-1)
 
-/** \brief Setup global log-level, debug options and debug logger.
- * \returns The previously `debug_flags` in the 0-15 bits
- *          and `log_level` in the 16-31 bits.
+/** \brief Setups global log-level, debug options and logger for format string and `va_list`.
+ *
+ * \param [in] log_level     New global log-level or \ref MDBX_LOG_DONTCHANGE.
+ * \param [in] debug_flags   New global debug flags or \ref MDBX_DBG_DONTCHANGE.
+ * \param [in] logger        New global logger callback function with \ref MDBX_debug_func signature
+ *                           or \ref MDBX_LOGGER_DONTCHANGE.
+ *
+ * \returns A non-negative value on success, in which the previous value `debug_flags` is in 0-15 bits,
+ *          and `log_level` is in 16-31 bits.
+ *          Otherwise, a negative value will be returned, indicating that some parameters are invalid.
  *
  * \see MDBX_log_level_t \see MDBX_debug_flags_t */
 LIBMDBX_API int mdbx_setup_debug(MDBX_log_level_t log_level, MDBX_debug_flags_t debug_flags, MDBX_debug_func logger);
 
-typedef void (*MDBX_debug_func_nofmt)(MDBX_log_level_t loglevel, const char *function, int line, const char *msg,
+/** \brief A log callback function that accepts a formatted message with length.
+ * \see mdbx_setup_debug()
+ *
+ * \param [in] log_level  The severity of message.
+ * \param [in] function   The function name which emits message, may be NULL.
+ * \param [in] line       The source code line number which emits message, may be zero.
+ * \param [in] msg        Pointer to the static buffer with formatted message for log.
+ * \param [in] length     Length of formatted message in a chars. */
+typedef void (*MDBX_debug_func_nofmt)(MDBX_log_level_t log_level, const char *function, int line, const char *msg,
                                       unsigned length) MDBX_CXX17_NOEXCEPT;
 
+/** \brief The "don't change `logger`" value for mdbx_setup_debug_nofmt() */
+#define MDBX_LOGGER_NOFMT_DONTCHANGE ((MDBX_debug_func_nofmt)(intptr_t)-1)
+
+/** \brief Setups global log-level, debug options, buffer and logger for plain preformatted messages.
+ *
+ * \param [in] log_level           New global log-level or \ref MDBX_LOG_DONTCHANGE.
+ * \param [in] debug_flags         New global debug flags or \ref MDBX_DBG_DONTCHANGE.
+ * \param [in] logger              New global logger callback function with \ref mdbx_setup_debug_nofmt signature
+ *                                 or \ref MDBX_LOGGER_NOFMT_DONTCHANGE.
+ * \param [in] logger_buffer       A pointer to a static shared buffer that libmdbx will use internally
+ *                                 to format log messages,
+ *                                 either NULL if `logger` is `MDBX_LOGGER_NOFMT_DONTCHANGE` or NULL.
+ * \param [in] logger_buffer_size  The size of passed static shared buffer,
+ *                                 either zero if `logger` is `MDBX_LOGGER_NOFMT_DONTCHANGE` or NULL.
+ *
+ * \returns A non-negative value on success, in which the previous value `debug_flags` is in 0-15 bits,
+ *          and `log_level` is in 16-31 bits.
+ *          Otherwise, a negative value will be returned, indicating that some parameters are invalid.
+ *
+ * \see MDBX_log_level_t \see MDBX_debug_flags_t */
 LIBMDBX_API int mdbx_setup_debug_nofmt(MDBX_log_level_t log_level, MDBX_debug_flags_t debug_flags,
                                        MDBX_debug_func_nofmt logger, char *logger_buffer, size_t logger_buffer_size);
 
-/** \brief A callback function for most assertion failures,
- * called before printing the message and aborting.
+/** \brief A callback function for most assertion failures, that called before printing the message and aborting.
  * \see mdbx_env_set_panic()
  *
- * \param [in] msg       The assertion message, not including newline.
- * \param [in] function  The function name where the assertion check failed,
- *                       may be NULL.
- * \param [in] line      The line number in the source file
- *                       where the assertion check failed, may be zero.
- * \param [in] obj       A handle of object associated with the assertion,
- *                       it could be MDBX_env, MDBX_txn,
- *                       MDBX_cursor or an internal page structure.
- * \param [in] obj_class A value corresponding to the object type:
- *                       `env`, `txn`, `cursor`, etc. */
+ * \param [in] msg        The assertion message, not including newline.
+ * \param [in] function   The function name where the assertion check failed,
+ *                        may be NULL.
+ * \param [in] line       The line number in the source file
+ *                        where the assertion check failed, may be zero.
+ * \param [in] obj        A handle of object associated with the assertion,
+ *                        it could be MDBX_env, MDBX_txn,
+ *                        MDBX_cursor or an internal page structure.
+ * \param [in] obj_class  A value corresponding to the object type: `env`, `txn`, `cursor`, etc. */
 typedef void (*MDBX_panic_func)(const char *msg, const char *function, unsigned line, const void *obj,
                                 const char *obj_class) MDBX_CXX17_NOEXCEPT;
 

@@ -152,13 +152,18 @@ __cold static int setup_debug(MDBX_log_level_t level, MDBX_debug_flags_t flags, 
   }
 
   ENSURE(osal_fastmutex_release(&globals.debug_lock) == 0);
+  ASSERT(rc >= 0);
   return rc;
 }
 
 __cold int mdbx_setup_debug_nofmt(MDBX_log_level_t level, MDBX_debug_flags_t flags, MDBX_debug_func_nofmt logger,
                                   char *buffer, size_t buffer_size) {
   union logger_union thunk;
-  thunk.nofmt = (logger && buffer && buffer_size) ? logger : MDBX_LOGGER_NOFMT_DONTCHANGE;
+  thunk.nofmt = logger ? logger : MDBX_LOGGER_NOFMT_DONTCHANGE;
+  const bool logger_changed = (thunk.nofmt != MDBX_LOGGER_NOFMT_DONTCHANGE);
+  const bool buffer_configured = (buffer != nullptr && buffer_size != 0);
+  if (unlikely(logger_changed != buffer_configured))
+    return -1;
   return setup_debug(level, flags, thunk, buffer, buffer_size);
 }
 
