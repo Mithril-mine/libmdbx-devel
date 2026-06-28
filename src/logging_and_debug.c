@@ -97,8 +97,12 @@ __cold const char *mdbx_dump_val(const MDBX_val *val, char *const buf, const siz
     /* Outer (int) cast: both branches of the ternary already produce int, but Embarcadero
      * infers the expression type as long; the cast is a no-op on any conforming compiler. */
     int len = snprintf(buf, bufsize, "%.*s", (int)((val->iov_len > INT_MAX) ? INT_MAX : (int)val->iov_len), data);
-    ASSERT(len > 0 && (size_t)len < bufsize);
-    (void)len;
+    if (unlikely(len < 0))
+      buf[0] = '\0';
+    else if (unlikely((size_t)len >= bufsize))
+      buf[bufsize - 1] = '\0';
+    else
+      ASSERT(len > 0);
   } else {
     static const char hex[16] = {'0', '1', '2', '3', '4', '5', '6', '7', '8', '9', 'a', 'b', 'c', 'd', 'e', 'f'};
     char *const detent = buf + bufsize - 2;
