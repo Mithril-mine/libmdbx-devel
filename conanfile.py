@@ -210,8 +210,8 @@ class libmdbx(ConanFile):
     def source(self):
         version_json_pathname = os.path.join(
             self.export_sources_folder, 'VERSION.json')
-        version_json = json.load(
-            open(os.path.join(version_json_pathname), encoding='utf-8'))['semver']
+        with open(version_json_pathname, encoding='utf-8') as version_json_file:
+            version_json = json.load(version_json_file)['semver']
         if version_json != semver_string(semver_parse(self.version)):
             self.output.error('Package/Recipe version "' + self.version +
                               '" mismatch VERSION.json "' + version_json + '"')
@@ -230,8 +230,8 @@ class libmdbx(ConanFile):
         version_json_pathname = os.path.join(
             self.recipe_folder, 'VERSION.json')
         if os.path.exists(version_json_pathname):
-            self.version = json.load(
-                open(version_json_pathname, encoding='utf-8'))['semver']
+            with open(version_json_pathname, encoding='utf-8') as version_json_file:
+                self.version = json.load(version_json_file)['semver']
             version_from = "'" + version_json_pathname + "'"
         else:
             self.version = self.fetch_versioninfo_from_git()['semver']
