@@ -185,8 +185,8 @@ class libmdbx(ConanFile):
                 '0.0.0.' + git.run('rev-list --count --remove-empty --no-merges HEAD'))
         else:
             git_describe = git.run('describe --tags --long --match=v[0-9]*')
-            git_version = '.'.join(
-                map(str, re.split('[-v.]+', git.run('describe --tags --match=v[0-9]*'))[1:5]))
+            # git_version = '.'.join(
+            #     map(str, re.split('[-v.]+', git.run('describe --tags --match=v[0-9]*'))[1:5]))
             git_semver = semver_parse(git_last_vtag)
             if git_semver['prerelease'] is None or git_semver['prerelease'] == '':
                 git_since_vtag = git.run(
