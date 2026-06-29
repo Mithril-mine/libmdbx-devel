@@ -34,6 +34,8 @@ The supporting release of a stable branch with bug fixes.
 
  - Allowed to use cursors binded to the same table/DBI, but to different read-only transaction, in an API with multiple cursors in the parameters.
 
+ - Added the missing recipe for Conan to an amalgamated source code.
+
 ### Fixes:
 
  - Fixed assertions triggering in a specific scenarios of creating and renaming tables within nested transactions.

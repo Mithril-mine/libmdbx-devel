@@ -3,7 +3,9 @@ import os
 import re
 import subprocess
 from conan.tools.files import rm
+#> dist-cutoff-begin
 from conan.tools.scm import Git
+#< dist-cutoff-end
 from conan.tools.apple import is_apple_os
 from conan.tools.cmake import CMakeToolchain, CMake, cmake_layout
 from conan import ConanFile
@@ -170,6 +172,7 @@ class libmdbx(ConanFile):
         else:
             self.options.rm_safe('mdbx.apple.speed_insteadof_durability')
 
+#> dist-cutoff-begin
     def fetch_versioninfo_from_git(self):
         git = Git(self, folder=self.recipe_folder)
         git_timestamp = git.run('show --no-patch --format=%cI HEAD')
@@ -197,14 +200,17 @@ class libmdbx(ConanFile):
         info = {'git_describe': git_describe, 'git_timestamp': git_timestamp,
                 'git_tree': git_tree, 'git_commit': git_commit, 'semver': semver_string(git_semver)}
         return info
+#< dist-cutoff-end
 
     def export_sources(self):
         subprocess.run(['make', '-C', self.recipe_folder, 'DIST_DIR=' +
                        self.export_sources_folder, '@dist-checked.tag'], check=True)
         rm(self, 'Makefile', self.export_sources_folder)
         rm(self, 'GNUmakefile', self.export_sources_folder)
+#> dist-cutoff-begin
         # json.dump(self.fetch_versioninfo_from_git(), open(os.path.join(
         #    self.export_sources_folder, 'VERSION.json'), 'w', encoding='utf-8'))
+#< dist-cutoff-end
 
     def source(self):
         version_json_pathname = os.path.join(
@@ -232,9 +238,11 @@ class libmdbx(ConanFile):
             with open(version_json_pathname, encoding='utf-8') as version_json_file:
                 self.version = json.load(version_json_file)['semver']
             version_from = "'" + version_json_pathname + "'"
+#> dist-cutoff-begin
         else:
             self.version = self.fetch_versioninfo_from_git()['semver']
             version_from = 'Git'
+#< dist-cutoff-end
         self.output.verbose('Fetch version from ' +
                             version_from + ': ' + self.version)
         if self.build_metadata != '':
