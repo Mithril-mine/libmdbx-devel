@@ -18,16 +18,16 @@ def semver_parse(s):
 def semver_string(semver):
     s = str(semver['major']) + '.' + \
         str(semver['minor']) + '.' + str(semver['patch'])
-    if not semver['tweak'] is None and semver['tweak'] != 0:
+    if semver['tweak'] is not None and semver['tweak'] != 0:
         s += '.' + str(semver['tweak'])
-    if not semver['prerelease'] is None and semver['prerelease'] != '':
+    if semver['prerelease'] is not None and semver['prerelease'] != '':
         s += '-' + semver['prerelease']
     return s
 
 
 def semver_string_with_buildmetadata(semver):
     s = semver_string(semver)
-    if not semver['buildmetadata'] is None and semver['buildmetadata'] != '':
+    if semver['buildmetadata'] is not None and semver['buildmetadata'] != '':
         s += '+' + semver['buildmetadata']
     return s
 
@@ -216,7 +216,7 @@ class libmdbx(ConanFile):
                               '" mismatch VERSION.json "' + version_json + '"')
 
     def set_version(self):
-        if self.build_metadata is None and not self.version is None:
+        if self.build_metadata is None and self.version is not None:
             self.build_metadata = self.version
             semver = semver_parse(self.build_metadata)
             if semver:
@@ -245,7 +245,7 @@ class libmdbx(ConanFile):
 
     def handle_option(self, tc, name, define=False):
         opt = self.options.get_safe(name)
-        if not opt is None:
+        if opt is not None:
             value = str(opt).lower()
             if value != 'auto' and value != 'default':
                 name = name.upper().replace('.', '_')
@@ -267,7 +267,7 @@ class libmdbx(ConanFile):
         tc = CMakeToolchain(self)
         if self.build_metadata is None:
             self.build_metadata = semver_parse(self.version)['buildmetadata']
-        if not self.build_metadata is None and self.build_metadata != '':
+        if self.build_metadata is not None and self.build_metadata != '':
             tc.variables['MDBX_BUILD_METADATA'] = self.build_metadata
             self.output.highlight('MDBX_BUILD_METADATA is ' +
                                   str(tc.variables['MDBX_BUILD_METADATA']))
@@ -299,7 +299,7 @@ class libmdbx(ConanFile):
         self.handle_option(tc, 'mdbx.use_sendfile', True)
         self.handle_option(tc, 'mdbx.without_msvc_crt')
         opt = self.options.get_safe('mdbx.locking', 'auto')
-        if not opt is None:
+        if opt is not None:
             value = str(opt).lower()
             if value != 'auto' and value != 'default':
                 map = {'windowsfilelocking': -1, 'systemv': 5, 'posix1988': 1988,
