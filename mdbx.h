@@ -30,7 +30,7 @@ The _libmdbx_ project has been completely relocated to the jurisdiction of the R
 
 \section copyright LICENSE & COPYRIGHT
 \copyright SPDX-License-Identifier: Apache-2.0
-Please refer to the COPYRIGHT file for explanations license change, credits and acknowledgments.
+Please refer to the COPYRIGHT file for explanation of license change, credits and acknowledgments.
 \author Леонид Юрьев aka Leonid Yuriev <leo@yuriev.ru> \date 2015-2026
 
 *******************************************************************************/

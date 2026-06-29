@@ -82,7 +82,7 @@
 #if _MSC_FULL_VER < 190024234
 /* Actually libmdbx was not tested with compilers older than 19.00.24234 (Visual
  * Studio 2015 Update 3). But you could remove this #error and try to continue
- * at your own risk. In such case please don't rise up an issues related ONLY to
+ * at your own risk. In such case please don't raise issues related ONLY to
  * old compilers.
  *
  * NOTE:
@@ -258,7 +258,7 @@
 #if defined(__GNUC__) && !__GNUC_PREREQ(4, 2)
 /* Actually libmdbx was not tested with compilers older than GCC 4.2.
  * But you could ignore this warning at your own risk.
- * In such case please don't rise up an issues related ONLY to old compilers.
+ * In such case please don't raise issues related ONLY to old compilers.
  */
 #warning "libmdbx required GCC >= 4.2"
 #endif
@@ -266,7 +266,7 @@
 #if defined(__clang__) && !__CLANG_PREREQ(3, 8)
 /* Actually libmdbx was not tested with CLANG older than 3.8.
  * But you could ignore this warning at your own risk.
- * In such case please don't rise up an issues related ONLY to old compilers.
+ * In such case please don't raise issues related ONLY to old compilers.
  */
 #warning "libmdbx required CLANG >= 3.8"
 #endif
@@ -274,7 +274,7 @@
 #if defined(__GLIBC__) && !__GLIBC_PREREQ(2, 12)
 /* Actually libmdbx was not tested with something older than glibc 2.12.
  * But you could ignore this warning at your own risk.
- * In such case please don't rise up an issues related ONLY to old systems.
+ * In such case please don't raise issues related ONLY to old systems.
  */
 #warning "libmdbx was only tested with GLIBC >= 2.12."
 #endif
