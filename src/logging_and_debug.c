@@ -86,9 +86,10 @@ __cold const char *mdbx_dump_val(const MDBX_val *val, char *const buf, const siz
   }
 
   bool is_ascii = true;
+  enum { ASCII_PRINTABLE_MIN = 0x20, ASCII_PRINTABLE_MAX = 0x7E };
   const uint8_t *const data = val->iov_base;
   for (size_t i = 0; i < val->iov_len; i++)
-    if (data[i] < ' ' || data[i] > '~') {
+    if (data[i] < ASCII_PRINTABLE_MIN || data[i] > ASCII_PRINTABLE_MAX) {
       is_ascii = false;
       break;
     }
