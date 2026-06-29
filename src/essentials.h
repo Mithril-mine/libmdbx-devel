@@ -27,8 +27,6 @@
 #define MDBX_INTERNAL
 #endif /* xMDBX_ALLOY */
 
-#include "../mdbx.h"
-
 /*----------------------------------------------------------------------------*/
 /* Basic constants and types */
 

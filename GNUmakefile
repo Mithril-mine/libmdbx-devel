@@ -761,7 +761,6 @@ $(DIST_DIR)/mdbx-internals.h: src/version.c $(DIST_DIR)/@tmp-amalgam.inc $(ALLOY
 	$(QUIET)mkdir -p dist \
 	&& (grep -v '#include ' src/alloy.c && echo '#define MDBX_BUILD_SOURCERY $(MDBX_BUILD_SOURCERY)' \
 	&& $(SED) \
-		-e 's|#include "../mdbx.h"|@INCLUDE "mdbx.h"|' \
 		-e '/#include "preface.h"/r src/preface.h' \
 		-e '/#include "osal.h"/r src/osal.h' \
 		-e '/#include "options.h"/r src/options.h' \
@@ -773,6 +772,7 @@ $(DIST_DIR)/mdbx-internals.h: src/version.c $(DIST_DIR)/@tmp-amalgam.inc $(ALLOY
 		-e '/#include "pnl.h"/r src/pnl.h' \
 		src/essentials.h \
 	| $(SED) \
+		-e 's|#include "../mdbx.h"|@INCLUDE "mdbx.h"|' \
 		-e '/#pragma once/d' \
 		-e '/#include "/d' \
 		-e 's|@INCLUDE|#include|' \
