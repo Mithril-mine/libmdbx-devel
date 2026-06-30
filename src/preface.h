@@ -39,7 +39,10 @@
 
 #if IS_WINDOWS
 #ifndef _WIN32_WINNT
-#define _WIN32_WINNT 0x0A00 /* Windows 10 */
+#define _WIN32_WINNT                                                                                                   \
+  0x0A00 /* 0x0A00 == _WIN32_WINNT_WIN10: Windows 10 version 1507 (RTM, build 10240) baseline;                         \
+            newer feature-update APIs must be gated separately                                                         \
+            (see Microsoft _WIN32_WINNT version mapping in SDK docs/headers). */
 #elif _WIN32_WINNT < 0x0500
 #error At least 'Windows 2000' API is required for libmdbx.
 #endif /* _WIN32_WINNT */
@@ -249,6 +252,9 @@
 /*----------------------------------------------------------------------------*/
 /* pre-requirements */
 
+/* `ULONG_MAX % 0xFFFF` must be zero for ULONG_MAX values of the form (2^n - 1),
+ * i.e. with all value bits set in conventional binary unsigned representation.
+ * This complements the integer model sanity checks above. */
 #if ((-6) & 5) != 0 || CHAR_BIT != 8 || UINT_MAX < 0xffffffff || ULONG_MAX % 0xFFFF
 #error "Sanity checking failed: Two's complement, reasonably sized integer types"
 #endif
@@ -769,7 +775,7 @@ __extern_C key_t ftok(const char *, int);
 #if (defined(__GNUC__) || __has_builtin(__builtin_expect)) && !defined(__COVERITY__)
 #define likely(cond) __builtin_expect(!!(cond), 1)
 #else
-#define likely(x) (!!(x))
+#define likely(cond) (!!(cond))
 #endif
 #endif /* likely */
 
@@ -777,7 +783,7 @@ __extern_C key_t ftok(const char *, int);
 #if (defined(__GNUC__) || __has_builtin(__builtin_expect)) && !defined(__COVERITY__)
 #define unlikely(cond) __builtin_expect(!!(cond), 0)
 #else
-#define unlikely(x) (!!(x))
+#define unlikely(cond) (!!(cond))
 #endif
 #endif /* unlikely */
 
@@ -943,8 +949,10 @@ template <typename T, size_t N> char (&__ArraySizeHelper(T (&array)[N]))[N];
 
 #define MDBX_TETRAD(a, b, c, d) ((uint32_t)(a) << 24 | (uint32_t)(b) << 16 | (uint32_t)(c) << 8 | (d))
 
+/* Build/integration contract: MDBX_STRINGIFY must be defined by prior project
+ * headers or compile-time configuration before this point. */
 #ifndef MDBX_STRINGIFY
-#error "MDBX_STRINGIFY expected to be provided/defined here."
+#error "MDBX_STRINGIFY must be defined by prior headers or build configuration before including this header."
 #endif
 #define FIXME "FIXME: " __FILE__ ", " MDBX_STRINGIFY(__LINE__)
 
