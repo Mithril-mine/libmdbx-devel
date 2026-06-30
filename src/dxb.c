@@ -395,12 +395,13 @@ void dxb_sanitize_tail(MDBX_env *env, MDBX_txn *txn) {
     if (env->pid != osal_getpid()) {
       /* resurrect after fork */
       return;
-    } else if (env_owned_wrtxn(env)) {
-      /* inside write-txn */
-      last = meta_recent(env, &env->basal_txn->wr.troika).ptr_v->geometry.first_unallocated;
-    } else if (env->flags & MDBX_RDONLY) {
+    } else if ((env->flags & MDBX_RDONLY) != 0 || !env->basal_txn) {
       /* read-only mode, no write-txn, no wlock mutex */
       last = NUM_METAS;
+    } else if ((env->flags & MDBX_NOSTICKYTHREADS) ? (env->basal_txn->owner != 0)
+                                                   : (env->basal_txn->owner == osal_thread_self())) {
+      /* inside write-txn */
+      last = meta_recent(env, &env->basal_txn->wr.troika).ptr_v->geometry.first_unallocated;
     } else if (lck_txn_lock(env, true) == MDBX_SUCCESS) {
       /* no write-txn */
       last = NUM_METAS;

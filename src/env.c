@@ -4,12 +4,8 @@
 #include "internals.h"
 
 MDBX_txn *env_owned_wrtxn(const MDBX_env *env) {
-  if (likely(env->basal_txn)) {
-    const bool is_owned = (env->flags & MDBX_NOSTICKYTHREADS) ? (env->basal_txn->owner != 0)
-                                                              : (env->basal_txn->owner == osal_thread_self());
-    if (is_owned)
-      return env->txn ? env->txn : env->basal_txn;
-  }
+  if (likely(env->basal_txn) && env->basal_txn->owner == osal_thread_self())
+    return env->txn ? env->txn : env->basal_txn;
   return nullptr;
 }
 
