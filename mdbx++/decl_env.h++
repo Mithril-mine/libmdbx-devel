@@ -137,8 +137,6 @@ public:
   struct LIBMDBX_API_TYPE reclaiming_options {
     /// \copydoc MDBX_LIFORECLAIM
     bool lifo{false};
-    /// \copydoc MDBX_COALESCE
-    bool coalesce{false};
     MDBX_CXX11_CONSTEXPR reclaiming_options() noexcept {}
     MDBX_CXX11_CONSTEXPR
     reclaiming_options(const reclaiming_options &) noexcept = default;

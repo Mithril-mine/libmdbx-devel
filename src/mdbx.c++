@@ -1222,8 +1222,6 @@ __cold MDBX_env_flags_t env::operate_parameters::make_flags(bool accede, bool us
   if (mode != readonly) {
     if (options.nested_transactions)
       flags &= ~MDBX_WRITEMAP;
-    if (reclaiming.coalesce)
-      flags |= MDBX_COALESCE;
     if (reclaiming.lifo)
       flags |= MDBX_LIFORECLAIM;
     switch (durability) {
@@ -1235,7 +1233,6 @@ __cold MDBX_env_flags_t env::operate_parameters::make_flags(bool accede, bool us
       flags |= MDBX_NOMETASYNC;
       break;
     case env::durability::lazy_weak_tail:
-      static_assert(MDBX_MAPASYNC == MDBX_SAFE_NOSYNC, "WTF? Obsolete C API?");
       flags |= MDBX_SAFE_NOSYNC;
       break;
     case env::durability::whole_fragile:
@@ -1263,7 +1260,7 @@ env::durability env::operate_parameters::durability_from_flags(MDBX_env_flags_t 
 }
 
 env::reclaiming_options::reclaiming_options(MDBX_env_flags_t flags) noexcept
-    : lifo((flags & MDBX_LIFORECLAIM) ? true : false), coalesce((flags & MDBX_COALESCE) ? true : false) {}
+    : lifo((flags & MDBX_LIFORECLAIM) ? true : false) {}
 
 env::operate_options::operate_options(MDBX_env_flags_t flags) noexcept
     : no_sticky_threads(((flags & (MDBX_NOSTICKYTHREADS | MDBX_EXCLUSIVE)) == MDBX_NOSTICKYTHREADS) ? true : false),
@@ -1818,10 +1815,7 @@ __cold ::std::ostream &operator<<(::std::ostream &out, const env::durability &it
 }
 
 __cold ::std::ostream &operator<<(::std::ostream &out, const env::reclaiming_options &it) {
-  return out << "{"                                            //
-             << "lifo: " << (it.lifo ? "yes" : "no")           //
-             << ", coalesce: " << (it.coalesce ? "yes" : "no") //
-             << "}";
+  return out << "{" << "lifo: " << (it.lifo ? "yes" : "no") << "}";
 }
 
 __cold ::std::ostream &operator<<(::std::ostream &out, const env::operate_options &it) {

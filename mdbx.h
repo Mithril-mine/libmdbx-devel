@@ -1169,7 +1169,7 @@ typedef enum MDBX_env_flags {
   /** Using database/environment which already opened by another process(es).
    *
    * The `MDBX_ACCEDE` flag is useful to avoid \ref MDBX_INCOMPATIBLE error
-   * while opening the database/environment which is already used by another
+   * while opening a database/environment which is already used by another
    * process(es) with unknown mode/flags. In such cases, if there is a
    * difference in the specified flags (\ref MDBX_NOMETASYNC,
    * \ref MDBX_SAFE_NOSYNC, \ref MDBX_UTTERLY_NOSYNC, \ref MDBX_LIFORECLAIM
@@ -1221,7 +1221,7 @@ typedef enum MDBX_env_flags {
    * Anyway, at a minimum, it is absolutely necessary to ensure that each writing transaction is finished strictly in
    * the same thread of the operating system where it was started.
    *
-   * \note Starting from version 0.13, the `MDBX_NOSTICKYTHREADS` option completely replaces the \ref MDBX_NOTLS option.
+   * \note Starting from version 0.13, the \ref MDBX_NOSTICKYTHREADS option completely replaces the `MDBX_NOTLS` option.
    *
    * When using `MDBX_NOSTICKYTHREADS`, transactions become unrelated to system threads that created ones. Therefore,
    * the API functions do not check the correspondence between the transaction and the current execution thread. Most
@@ -1234,7 +1234,7 @@ typedef enum MDBX_env_flags {
    * particular, for this reason, on Windows, reducing the database file is not possible until the database is closed by
    * the last process working with it or until the database is subsequently opened in read-write mode.
    *
-   * \warning Regardless of \ref MDBX_NOSTICKYTHREADS and \ref MDBX_NOTLS, it is not allowed to use API objects from
+   * \warning Regardless of \ref MDBX_NOSTICKYTHREADS, it is not allowed to use API objects from
    * different execution threads at the same time! It is entirely your responsibility to ensure that API objects are not
    * used simultaneously from different execution threads!
    *
@@ -1261,9 +1261,6 @@ typedef enum MDBX_env_flags {
    *
    * This flag takes effect when the environment is opened and cannot be changed after. */
   MDBX_NOSTICKYTHREADS = UINT32_C(0x200000),
-
-  /** \deprecated Please use \ref MDBX_NOSTICKYTHREADS instead. */
-  MDBX_NOTLS MDBX_DEPRECATED_ENUM = MDBX_NOSTICKYTHREADS,
 
   /** Don't do readahead.
    *
@@ -1308,19 +1305,6 @@ typedef enum MDBX_env_flags {
    *
    * This flag may be changed at any time using `mdbx_env_set_flags()`. */
   MDBX_NOMEMINIT = UINT32_C(0x1000000),
-
-  /** Aims to coalesce a Garbage Collection items.
-   * \deprecated Always enabled since v0.12 and deprecated since v0.13.
-   *
-   * With `MDBX_COALESCE` flag MDBX will aims to coalesce items while recycling
-   * a Garbage Collection. Technically, when possible short lists of pages
-   * will be combined into longer ones, but to fit on one database page. As a
-   * result, there will be fewer items in Garbage Collection and a page lists
-   * are longer, which slightly increases the likelihood of returning pages to
-   * Unallocated space and reducing the database file.
-   *
-   * This flag may be changed at any time using mdbx_env_set_flags(). */
-  MDBX_COALESCE MDBX_DEPRECATED_ENUM = UINT32_C(0x2000000),
 
   /** LIFO policy for recycling a Garbage Collection items.
    *
@@ -1471,13 +1455,6 @@ typedef enum MDBX_env_flags {
    * \ref mdbx_env_set_flags() or by passing to \ref mdbx_txn_begin() for
    * particular write transaction. */
   MDBX_SAFE_NOSYNC = UINT32_C(0x10000),
-
-  /** \deprecated Please use \ref MDBX_SAFE_NOSYNC instead of `MDBX_MAPASYNC`.
-   *
-   * Since version 0.9.x the `MDBX_MAPASYNC` is deprecated and has the same
-   * effect as \ref MDBX_SAFE_NOSYNC with \ref MDBX_WRITEMAP. This just API
-   * simplification is for convenience and clarity. */
-  MDBX_MAPASYNC = MDBX_SAFE_NOSYNC,
 
   /** Don't sync anything and wipe previous steady commits.
    *
@@ -2083,13 +2060,6 @@ typedef enum MDBX_error {
 #endif /* !Windows */
 } MDBX_error_t;
 
-/** MDBX_MAP_RESIZED
- * \ingroup c_err
- * \deprecated Please review your code to use MDBX_UNABLE_EXTEND_MAPSIZE
- * instead. */
-MDBX_DEPRECATED static __inline int MDBX_MAP_RESIZED_is_deprecated(void) { return MDBX_UNABLE_EXTEND_MAPSIZE; }
-#define MDBX_MAP_RESIZED MDBX_MAP_RESIZED_is_deprecated()
-
 /** \brief Return a string describing a given error code.
  * \ingroup c_err
  *
@@ -2533,23 +2503,27 @@ LIBMDBX_API int mdbx_env_get_option(const MDBX_env *env, const MDBX_option_t opt
  * Flags set by mdbx_env_set_flags() are also used:
  *  - \ref MDBX_ENV_DEFAULTS, \ref MDBX_NOSUBDIR, \ref MDBX_RDONLY,
  *    \ref MDBX_EXCLUSIVE, \ref MDBX_WRITEMAP, \ref MDBX_NOSTICKYTHREADS,
- *    \ref MDBX_NORDAHEAD, \ref MDBX_NOMEMINIT, \ref MDBX_COALESCE,
+ *    \ref MDBX_NORDAHEAD, \ref MDBX_NOMEMINIT,
  *    \ref MDBX_LIFORECLAIM. See \ref env_flags section.
  *
  *  - \ref MDBX_SYNC_DURABLE, \ref MDBX_NOMETASYNC, \ref MDBX_SAFE_NOSYNC,
  *    \ref MDBX_UTTERLY_NOSYNC. See \ref sync_modes section.
  *
- * \note `MDB_NOLOCK` flag don't supported by MDBX,
- *       try use \ref MDBX_EXCLUSIVE as a replacement.
+ * \note The `MDB_NOTLS` option in MDBX is superseded by \ref MDBX_NOSTICKYTHREADS.
  *
- * \note MDBX don't allow to mix processes with different \ref MDBX_SAFE_NOSYNC
- *       flags on the same environment.
- *       In such case \ref MDBX_INCOMPATIBLE will be returned.
+ * \note The `MDB_NOSYNC` mode in MDBX is splitted into \ref MDBX_UTTERLY_NOSYNC and \ref MDBX_SAFE_NOSYNC,
+ *       while `MDBX_UTTERLY_NOSYNC` acts basically the same as `MDB_NOSYNC`.
  *
- * If the database is already exist and parameters specified early by
- * \ref mdbx_env_set_geometry() are incompatible (i.e. for instance, different
- * page size) then \ref mdbx_env_open() will return \ref MDBX_INCOMPATIBLE
- * error.
+ * \note The `MDB_NOLOCK` flag don't supported by MDBX, try use \ref MDBX_EXCLUSIVE as a replacement.
+ *
+ * \note MDBX don't allow to mix processes with different \ref MDBX_SAFE_NOSYNC or \ref MDBX_UTTERLY_NOSYNC
+ *       flags on the same environment. In such case \ref MDBX_INCOMPATIBLE will be returned.
+ *       You can try to combine the \ref MDBX_ACCEDE flag to opend a database/environment which is already
+ *       used by another process(es) with unknown mode/flags.
+ *
+ * If the database is already exist and parameters specified early by \ref mdbx_env_set_geometry() are incompatible
+ * (i.e. for instance, different page size) then \ref mdbx_env_open() will return \ref MDBX_INCOMPATIBLE or \ref
+ * MDBX_TOO_LARGE error.
  *
  * \param [in] mode   The UNIX permissions to set on created files.
  *                    Zero value means to open existing, but do not create.
