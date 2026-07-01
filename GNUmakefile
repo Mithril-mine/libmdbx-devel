@@ -326,7 +326,6 @@ TEST_TARGETS += ctest
 TEST_BUILD_TARGETS += cmake-build
 endif
 TEST_TARGETS += mdbx_legacy_example $(call select_by,MDBX_BUILD_CXX,mdbx_modern_example,)
-TEST_BUILD_TARGETS += build-test
 #> dist-cutoff-begin
 TEST_TARGETS += test-stochastic
 TEST_BUILD_TARGETS += build-stochastic
