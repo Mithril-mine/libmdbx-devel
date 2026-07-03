@@ -74,7 +74,7 @@ retry:;
 
   const troika_t troika = (txn_owned || should_unlock) ? env->basal_txn->wr.troika : meta_tap(env);
   const meta_ptr_t head = meta_recent(env, &troika);
-  const uint64_t unsynced_pages = atomic_load64(&env->lck->unsynced_pages, mo_Relaxed);
+  uint64_t unsynced_pages = atomic_load64(&env->lck->unsynced_pages, mo_Relaxed);
   if (unsynced_pages == 0) {
     const uint32_t synched_meta_txnid_u32 = atomic_load32(&env->lck->meta_sync_txnid, mo_Relaxed);
     if (synched_meta_txnid_u32 == (uint32_t)head.txnid && head.is_steady)
@@ -99,6 +99,7 @@ retry:;
 
   const size_t autosync_threshold = atomic_load32(&env->lck->autosync_threshold, mo_Relaxed);
   const uint64_t autosync_period = atomic_load64(&env->lck->autosync_period, mo_Relaxed);
+  const size_t presync_threshold = /* FIXME: define threshold */ 42;
   uint64_t eoos_timestamp;
   if (force || (autosync_threshold && unsynced_pages >= autosync_threshold) ||
       (autosync_period && (eoos_timestamp = atomic_load64(&env->lck->eoos_timestamp, mo_Relaxed)) &&
@@ -107,11 +108,10 @@ retry:;
 
   if (!txn_owned) {
     if (!should_unlock) {
-      unsigned wops = 0;
-
       int err;
+    retry_presync:
       /* pre-sync to avoid latency for writer */
-      if (unsynced_pages > /* FIXME: define threshold */ 42 && (flags & ENV_UNSYNC) == 0) {
+      if (unsynced_pages > presync_threshold) {
         eASSERT0(env, ((flags ^ env->flags) & MDBX_WRITEMAP) == 0);
         if (flags & MDBX_WRITEMAP) {
           /* Acquire guard to avoid collision with remap */
@@ -136,7 +136,6 @@ retry:;
         if (unlikely(err != MDBX_SUCCESS))
           return err;
 
-        wops = 1;
         /* pre-sync done */
         rc = MDBX_SUCCESS /* means "some data was synced" */;
       }
@@ -145,9 +144,14 @@ retry:;
       if (unlikely(err != MDBX_SUCCESS))
         return err;
 
+      uint64_t unsynced_pages_retry = atomic_load64(&env->lck->unsynced_pages, mo_Relaxed);
+      if (unsynced_pages_retry > unsynced_pages + presync_threshold) {
+        unsynced_pages = unsynced_pages_retry;
+        lck_txn_unlock(env);
+        goto retry_presync;
+      }
+
       should_unlock = true;
-      if (MDBX_ENABLE_PGOP_STAT)
-        env->lck->pgops.wops.weak += wops;
       env->basal_txn->wr.troika = meta_tap(env);
       eASSERT0(env, !env->txn && !env->basal_txn->nested);
       goto retry;
