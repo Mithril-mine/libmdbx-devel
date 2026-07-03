@@ -14,6 +14,7 @@ __cold static int lck_setup_locked(MDBX_env *env) {
 
   if (env->lck_mmap.fd == INVALID_HANDLE_VALUE) {
     env->lck = lckless_stub(env);
+    lck_options_init_defaults(env, env->lck);
     env->max_readers = UINT_MAX;
     DEBUG("lck-setup:%s%s%s", " lck-less", (env->flags & MDBX_RDONLY) ? " readonly" : "",
           (lck_seize_rc == MDBX_RESULT_TRUE) ? " exclusive" : " cooperative");
@@ -92,6 +93,7 @@ __cold static int lck_setup_locked(MDBX_env *env) {
     jitter4testing(false);
     lck->magic_and_version = MDBX_LOCK_MAGIC;
     lck->os_and_format = MDBX_LOCK_FORMAT;
+    lck_options_init_defaults(env, lck);
     lck->pgops.wops.weak = 1;
     err = osal_msync(&env->lck_mmap, (size_t)size, MDBX_SYNC_DATA | MDBX_SYNC_SIZE);
     if (unlikely(err != MDBX_SUCCESS)) {

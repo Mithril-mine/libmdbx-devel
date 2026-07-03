@@ -110,6 +110,8 @@ static uint8_t default_dp_loose_limit(const MDBX_env *env) {
   return 64;
 }
 
+void lck_options_init_defaults(MDBX_env *env, lck_t *lck) { /* TODO */}
+
 void env_options_init(MDBX_env *env) {
   env->options.rp_augment_limit = default_rp_augment_limit(env);
   env->options.dp_reserve_limit = default_dp_reserve_limit(env);

@@ -113,6 +113,7 @@ MDBX_INTERNAL bool env_is_page_incore(MDBX_env *const env, pgno_t pgno);
 MDBX_INTERNAL void env_clear_incore_cache(const MDBX_env *const env);
 
 MDBX_INTERNAL void env_options_init(MDBX_env *env);
+MDBX_INTERNAL void lck_options_init_defaults(MDBX_env *env, lck_t *lck);
 MDBX_INTERNAL void env_options_adjust_defaults(MDBX_env *env);
 MDBX_INTERNAL void env_options_adjust_dp_limit(MDBX_env *env);
 MDBX_INTERNAL pgno_t default_dp_limit(const MDBX_env *env);
