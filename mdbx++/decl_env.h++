@@ -389,7 +389,7 @@ public:
 
   inline bool is_writemap() const { return (get_flags() & MDBX_WRITEMAP) != 0; }
 
-  inline bool is_readwite() const { return !is_readonly(); }
+  inline bool is_readwrite() const { return !is_readonly(); }
 
   inline bool is_nested_transactions_available() const { return (get_flags() & (MDBX_WRITEMAP | MDBX_RDONLY)) == 0; }
 
