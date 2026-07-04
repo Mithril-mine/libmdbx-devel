@@ -168,7 +168,7 @@ int txn_abort(MDBX_txn *txn, MDBX_commit_latency *latency) {
       do {
         snap = *latency;
         txn_latency_gcprof(txn->env, latency);
-      } while (unlikely(memcpy(latency, &snap, sizeof(snap))));
+      } while (unlikely(memcmp(latency, &snap, sizeof(snap))));
     }
   }
 
