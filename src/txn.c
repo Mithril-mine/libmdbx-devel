@@ -226,7 +226,7 @@ __cold static slr_t latch_maindb_locked(MDBX_txn *txn, MDBX_env *const env) {
   }
 
   slr.err = tbl_setup(env, &env->kvs[MAIN_DBI], &txn->dbs[MAIN_DBI]);
-  if (likely(slr.seq == MDBX_SUCCESS)) {
+  if (likely(slr.err == MDBX_SUCCESS)) {
     slr.seq = dbi_seq_next(env, MAIN_DBI);
     env->dbs_flags[MAIN_DBI] = DB_VALID | txn->dbs[MAIN_DBI].flags;
     atomic_store32(&env->dbi_seqs[MAIN_DBI], slr.seq, mo_AcquireRelease);
