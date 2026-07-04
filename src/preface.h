@@ -949,12 +949,11 @@ template <typename T, size_t N> char (&__ArraySizeHelper(T (&array)[N]))[N];
 
 #define MDBX_TETRAD(a, b, c, d) ((uint32_t)(a) << 24 | (uint32_t)(b) << 16 | (uint32_t)(c) << 8 | (d))
 
-/* Build/integration contract: MDBX_STRINGIFY must be defined by prior project
- * headers or compile-time configuration before this point. */
 #ifndef MDBX_STRINGIFY
-#error "MDBX_STRINGIFY must be defined by prior headers or build configuration before including this header."
-#endif
+#error "MDBX_STRINGIFY expected to be provided/defined before here."
+#else
 #define FIXME "FIXME: " __FILE__ ", " MDBX_STRINGIFY(__LINE__)
+#endif
 
 #ifndef STATIC_ASSERT_MSG
 #if defined(static_assert)
