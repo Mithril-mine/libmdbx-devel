@@ -768,7 +768,7 @@ int mdbx_cursor_bunch_delete(MDBX_cursor *mc, MDBX_bunch_action_t action, uint64
         break;
       }
     }
-    rc = tree_curoff_range(axe, mc, action == MDBX_DELETE_CURRENT_MULTIVAL_BEFORE_INCLUDING);
+    rc = tree_cutoff_range(axe, mc, action == MDBX_DELETE_CURRENT_MULTIVAL_BEFORE_INCLUDING);
 #else
   case MDBX_DELETE_CURRENT_MULTIVAL_BEFORE_INCLUDING:
     rc = cursor_del(mc, 0);
@@ -802,7 +802,7 @@ int mdbx_cursor_bunch_delete(MDBX_cursor *mc, MDBX_bunch_action_t action, uint64
         break;
       }
     }
-    rc = tree_curoff_range(axe, mc, true);
+    rc = tree_cutoff_range(axe, mc, true);
 #else
   case MDBX_DELETE_CURRENT_MULTIVAL_AFTER_INCLUDING:
     rc = cursor_del(mc, 0);
@@ -830,7 +830,7 @@ int mdbx_cursor_bunch_delete(MDBX_cursor *mc, MDBX_bunch_action_t action, uint64
       rc = (rc == MDBX_NOTFOUND) ? MDBX_SUCCESS : rc;
       break;
     }
-    rc = tree_curoff_range(axe, mc, action == MDBX_DELETE_BEFORE_INCLUDING);
+    rc = tree_cutoff_range(axe, mc, action == MDBX_DELETE_BEFORE_INCLUDING);
 #else
   case MDBX_DELETE_BEFORE_INCLUDING:
     rc = cursor_del(mc, 0);
@@ -862,7 +862,7 @@ int mdbx_cursor_bunch_delete(MDBX_cursor *mc, MDBX_bunch_action_t action, uint64
       rc = (rc == MDBX_NOTFOUND) ? MDBX_SUCCESS : rc;
       break;
     }
-    rc = tree_curoff_range(axe, mc, true);
+    rc = tree_cutoff_range(axe, mc, true);
 #else
   case MDBX_DELETE_AFTER_INCLUDING:
     rc = cursor_del(mc, 0);
@@ -938,7 +938,7 @@ int mdbx_cursor_delete_range(MDBX_cursor *begin, MDBX_cursor *end, bool end_incl
   }
 
   const uint64_t save_items = begin->tree->items;
-  rc = tree_curoff_range(begin, end, !!end_including);
+  rc = tree_cutoff_range(begin, end, !!end_including);
   if (number_of_affected)
     *number_of_affected = save_items - begin->tree->items;
 

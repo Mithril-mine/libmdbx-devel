@@ -486,7 +486,7 @@ static int cutoff_storey(MDBX_cursor *begin, MDBX_cursor *end, intptr_t level, b
 
 #endif /* MDBX_ENABLE_BUNCHES_REMOVAL */
 
-int tree_curoff_range(MDBX_cursor *begin, MDBX_cursor *end, bool end_including) {
+int tree_cutoff_range(MDBX_cursor *begin, MDBX_cursor *end, bool end_including) {
   cASSERT1(begin, cursor_is_tracked(begin));
   cASSERT1(end, cursor_is_tracked(end));
   ASSERT(begin->txn == end->txn && begin->clc == end->clc && begin->dbi_state == end->dbi_state &&

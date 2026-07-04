@@ -1724,7 +1724,7 @@ typedef enum MDBX_copy_flags {
   MDBX_CP_DISPOSE_TXN = 16u,
 
   /** Enable renew/restart read transaction in case it use outdated
-   * MVCC shapshot, otherwise the \ref MDBX_MVCC_RETARDED will be returned
+   * MVCC snapshot, otherwise the \ref MDBX_MVCC_RETARDED will be returned
    * \see mdbx_txn_copy2fd() \see mdbx_txn_copy2pathname() */
   MDBX_CP_RENEW_TXN = 32u,
 
