@@ -947,12 +947,11 @@ char *from_base58::write_bytes(char *__restrict const dest, size_t dest_size) co
   auto ptr = dest;
   auto begin = source.byte_ptr();
   auto const end = source.end_byte_ptr();
-  while (begin < end && *begin <= '1') {
+  while (begin < end && *begin <= /* '0' and other chars less are invalid here */ '1') {
     if (MDBX_LIKELY(*begin == '1'))
       MDBX_CXX20_LIKELY *ptr++ = 0;
     else if (MDBX_UNLIKELY(!ignore_spaces || !isspace(*begin)))
-      MDBX_CXX20_UNLIKELY
-    throw std::domain_error("mdbx::from_base58:: invalid base58 string");
+      MDBX_CXX20_UNLIKELY throw std::domain_error("mdbx::from_base58:: invalid base58 string");
     ++begin;
   }
 
