@@ -602,7 +602,7 @@ MDBX_I128_TYPE slice::as_int128_adapt() const {
 int64_t slice::as_int64_adapt() const {
   static_assert(sizeof(int64_t) == 8, "WTF?");
   if (size() == 8) {
-    uint64_t r;
+    int64_t r;
     memcpy(&r, data(), sizeof(r));
     return r;
   } else
