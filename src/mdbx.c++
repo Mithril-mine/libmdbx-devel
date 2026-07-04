@@ -510,7 +510,7 @@ bool slice::is_printable(bool disable_utf8) const noexcept {
       src += 2;
       continue;
     case 3:
-      if (MDBX_UNLIKELY(src + 3 >= end))
+      if (MDBX_UNLIKELY(src + 2 >= end))
         MDBX_CXX20_UNLIKELY return false;
       if (MDBX_UNLIKELY(src[1] < second_from || src[1] > second_to))
         MDBX_CXX20_UNLIKELY return false;
@@ -519,7 +519,7 @@ bool slice::is_printable(bool disable_utf8) const noexcept {
       src += 3;
       continue;
     case 4:
-      if (MDBX_UNLIKELY(src + 4 >= end))
+      if (MDBX_UNLIKELY(src + 3 >= end))
         MDBX_CXX20_UNLIKELY return false;
       if (MDBX_UNLIKELY(src[1] < second_from || src[1] > second_to))
         MDBX_CXX20_UNLIKELY return false;
