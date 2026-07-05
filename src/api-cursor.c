@@ -734,7 +734,7 @@ int mdbx_cursor_bunch_delete(MDBX_cursor *mc, MDBX_bunch_action_t action, uint64
   if (unlikely(rc != MDBX_SUCCESS))
     return LOG_IFERR(rc);
 
-  if (unlikely(action < MDBX_DELETE_CURRENT_VALUE || action > MDBX_DELETE_WHOLE))
+  if (unlikely((unsigned)action > MDBX_DELETE_WHOLE))
     return LOG_IFERR(MDBX_EINVAL);
 
 #if MDBX_ENABLE_BUNCHES_REMOVAL
