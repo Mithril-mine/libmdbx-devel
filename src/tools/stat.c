@@ -380,8 +380,8 @@ int main(int argc, char *argv[]) {
       goto txn_abort;
     }
 
-    const size_t remained_pages = info.pages_total - info.pages_allocated;
-    const size_t used_pages = info.pages_allocated - info.pages_gc;
+    const size_t remained_pages = info.pages_total - info.pages_allocated; /* the pages_allocated cannot be greater than the pages_total */
+    const size_t used_pages = info.pages_allocated - info.pages_gc; /* the pages_gc cannot be greater than the pages_allocated */
     const size_t gc_retained = info.pages_gc - info.gc_reclaimable.pages;
     const size_t available_pages = info.gc_reclaimable.pages + remained_pages;
     print_pages_percentage("Total", info.pages_total, info.pages_backed, info.pages_total);
@@ -444,8 +444,7 @@ int main(int argc, char *argv[]) {
         fprintf(stderr, "Interrupted by signal/user\n");
       break;
     default:
-      if (unlikely(rc != MDBX_SUCCESS))
-        error("mdbx_enumerate_tables", rc);
+      error("mdbx_enumerate_tables", rc);
     }
   }
 

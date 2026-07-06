@@ -798,12 +798,16 @@ int main(int argc, char *argv[]) {
       err = readline(&key, &kbuf);
       if (err == EOF)
         break;
-
-      if (err == MDBX_SUCCESS)
-        err = readline(&data, &dbuf);
       if (err) {
         if (!quiet)
-          fprintf(stderr, "%s: line %" PRIiSIZE ": failed to read key value\n", prog, lineno);
+          fprintf(stderr, "%s: line %" PRIiSIZE ": failed to read %s\n", prog, lineno, "key");
+        goto bailout;
+      }
+
+      err = readline(&data, &dbuf);
+      if (err) {
+        if (!quiet)
+          fprintf(stderr, "%s: line %" PRIiSIZE ": failed to read %s\n", prog, lineno, "value");
         goto bailout;
       }
 
@@ -812,7 +816,7 @@ int main(int argc, char *argv[]) {
         continue;
       if (err == MDBX_BAD_VALSIZE && rescue) {
         if (!quiet)
-          fprintf(stderr, "%s: skip line %" PRIiSIZE ": due %s\n", prog, lineno, mdbx_strerror(err));
+          fprintf(stderr, "%s: skip line %" PRIiSIZE ": due to %s\n", prog, lineno, mdbx_strerror(err));
         continue;
       }
       if (unlikely(err != MDBX_SUCCESS)) {
@@ -886,8 +890,7 @@ int main(int argc, char *argv[]) {
       fprintf(stderr, "Interrupted by signal/user\n");
     break;
   default:
-    if (unlikely(err != MDBX_SUCCESS))
-      error("readline", err);
+    error("readline", err);
   }
 
 bailout:
