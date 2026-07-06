@@ -397,7 +397,7 @@ __hot static int readline(MDBX_val *out, MDBX_val *buf) {
   l2 = len;
 
   /* Is buffer too short? */
-  while (c1[len - 1] != '\n') {
+  while (len == 0 || c1[len - 1] != '\n') {
     buf->iov_base = osal_realloc(buf->iov_base, buf->iov_len * 2);
     if (!buf->iov_base) {
       if (!quiet)
@@ -407,7 +407,7 @@ __hot static int readline(MDBX_val *out, MDBX_val *buf) {
     c1 = buf->iov_base;
     c1 += l2;
     errno = 0;
-    if (fgets((char *)c1, (int)buf->iov_len + 1, stdin) == nullptr)
+    if (fgets((char *)c1, (int)(buf->iov_len - l2), stdin) == nullptr)
       return errno ? errno : EOF;
     buf->iov_len *= 2;
     len = strlen((char *)c1);
