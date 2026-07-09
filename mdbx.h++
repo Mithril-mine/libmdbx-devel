@@ -1807,7 +1807,7 @@ private:
 
     MDBX_CXX17_CONSTEXPR bool assign_move(silo &&other, bool is_reference) noexcept {
       release();
-      if (!allocation_aware_details::move_assign_alloc<silo, allocator_type>::is_moveable(this, other))
+      if (allocation_aware_details::move_assign_alloc<silo, allocator_type>::is_moveable(this, other))
         allocation_aware_details::move_assign_alloc<silo, allocator_type>::propagate(this, other);
       return is_reference ? false : move(std::move(other));
     }
@@ -2362,7 +2362,8 @@ public:
   }
 
   MDBX_CXX20_CONSTEXPR buffer make_inplace_or_reference() const {
-    return buffer(slice(), !is_inplace(), allocator_traits::select_on_container_copy_construction(get_allocator()));
+    return buffer(static_cast<const struct slice &>(*this), !is_inplace(),
+                  allocator_traits::select_on_container_copy_construction(get_allocator()));
   }
 
   MDBX_CXX20_CONSTEXPR buffer &assign(size_t headroom, const buffer &src, size_t tailroom) {
@@ -4834,9 +4835,9 @@ MDBX_CXX11_CONSTEXPR bool operator!=(const error &a, const error &b) noexcept { 
 
 MDBX_CXX11_CONSTEXPR bool error::is_success() const noexcept { return code_ == MDBX_SUCCESS; }
 
-MDBX_CXX11_CONSTEXPR bool error::is_result_true() const noexcept { return code_ == MDBX_RESULT_FALSE; }
+MDBX_CXX11_CONSTEXPR bool error::is_result_true() const noexcept { return code_ == MDBX_RESULT_TRUE; }
 
-MDBX_CXX11_CONSTEXPR bool error::is_result_false() const noexcept { return code_ == MDBX_RESULT_TRUE; }
+MDBX_CXX11_CONSTEXPR bool error::is_result_false() const noexcept { return code_ == MDBX_RESULT_FALSE; }
 
 MDBX_CXX11_CONSTEXPR bool error::is_failure() const noexcept {
   return code_ != MDBX_SUCCESS && code_ != MDBX_RESULT_TRUE;

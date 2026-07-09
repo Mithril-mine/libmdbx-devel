@@ -512,7 +512,7 @@ bool slice::is_printable(bool disable_utf8) const noexcept {
       src += 2;
       continue;
     case 3:
-      if (MDBX_UNLIKELY(src + 3 >= end))
+      if (MDBX_UNLIKELY(src + 2 >= end))
         MDBX_CXX20_UNLIKELY return false;
       if (MDBX_UNLIKELY(src[1] < second_from || src[1] > second_to))
         MDBX_CXX20_UNLIKELY return false;
@@ -521,7 +521,7 @@ bool slice::is_printable(bool disable_utf8) const noexcept {
       src += 3;
       continue;
     case 4:
-      if (MDBX_UNLIKELY(src + 4 >= end))
+      if (MDBX_UNLIKELY(src + 3 >= end))
         MDBX_CXX20_UNLIKELY return false;
       if (MDBX_UNLIKELY(src[1] < second_from || src[1] > second_to))
         MDBX_CXX20_UNLIKELY return false;
@@ -1105,7 +1105,7 @@ char *from_base64::write_bytes(char *__restrict const dest, size_t dest_size) co
       continue;
     }
 
-    if (MDBX_UNLIKELY(left < 3))
+    if (MDBX_UNLIKELY(left < 4))
       MDBX_CXX20_UNLIKELY {
       bailout:
         throw std::domain_error("mdbx::from_base64:: invalid base64 string");
@@ -1145,8 +1145,8 @@ bool from_base64::is_erroneous() const noexcept {
       continue;
     }
 
-    if (MDBX_UNLIKELY(left < 3))
-      MDBX_CXX20_UNLIKELY return false;
+    if (MDBX_UNLIKELY(left < 4))
+      MDBX_CXX20_UNLIKELY return true;
     const signed char a = b64_map[src[0]], b = b64_map[src[1]], c = b64_map[src[2]], d = b64_map[src[3]];
     if (MDBX_UNLIKELY((a | b | c | d) < 0))
       MDBX_CXX20_UNLIKELY {
