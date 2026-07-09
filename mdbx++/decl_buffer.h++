@@ -113,7 +113,6 @@ struct default_capacity_policy {
 
   static MDBX_CXX11_CONSTEXPR size_t round(const size_t value) {
     static_assert((pettiness_threshold & (pettiness_threshold - 1)) == 0, "pettiness_threshold must be a power of 2");
-    static_assert(pettiness_threshold % 2 == 0, "pettiness_threshold must be even");
     static_assert(pettiness_threshold >= sizeof(uint64_t), "pettiness_threshold must be > 7");
     constexpr const auto pettiness_mask = ~size_t(pettiness_threshold - 1);
     return (value + pettiness_threshold - 1) & pettiness_mask;
@@ -466,7 +465,7 @@ private:
 
     MDBX_CXX17_CONSTEXPR bool assign_move(silo &&other, bool is_reference) noexcept {
       release();
-      if (!allocation_aware_details::move_assign_alloc<silo, allocator_type>::is_moveable(this, other))
+      if (allocation_aware_details::move_assign_alloc<silo, allocator_type>::is_moveable(this, other))
         allocation_aware_details::move_assign_alloc<silo, allocator_type>::propagate(this, other);
       return is_reference ? false : move(std::move(other));
     }
@@ -936,7 +935,8 @@ public:
   }
 
   MDBX_CXX20_CONSTEXPR buffer make_inplace_or_reference() const {
-    return buffer(slice(), !is_inplace(), allocator_traits::select_on_container_copy_construction(get_allocator()));
+    return buffer(static_cast<const struct slice &>(*this), !is_inplace(),
+                  allocator_traits::select_on_container_copy_construction(get_allocator()));
   }
 
   MDBX_CXX20_CONSTEXPR buffer &assign(size_t headroom, const buffer &src, size_t tailroom) {
@@ -1311,9 +1311,9 @@ template <typename ALLOCATOR, typename CAPACITY_POLICY> struct buffer_pair_spec 
   buffer_pair_spec(const pair &pair, bool make_reference, const allocator_type &alloc = allocator_type())
       : buffer_pair_spec(pair.key, pair.value, make_reference, alloc) {}
 
-  buffer_pair_spec(const txn &transacton, const slice &key, const slice &value,
+  buffer_pair_spec(const txn &transaction, const slice &key, const slice &value,
                    const allocator_type &alloc = allocator_type())
-      : key(transacton, key, alloc), value(transacton, value, alloc) {}
+      : key(transaction, key, alloc), value(transaction, value, alloc) {}
   buffer_pair_spec(const txn &transaction, const pair &pair, const allocator_type &alloc = allocator_type())
       : buffer_pair_spec(transaction, pair.key, pair.value, alloc) {}
 
