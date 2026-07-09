@@ -174,7 +174,7 @@ __cold const char *mdbx_ratio2digits(uint64_t numerator, uint64_t denominator, i
   if (!buffer)
     return "nullptr";
   else if (buffer_size < sizeof(ratio2digits_buffer_t))
-    return "buffer-to-small";
+    return "buffer-too-small";
   else if (!denominator)
     return numerator ? "infinity" : "undefined";
   else
@@ -185,7 +185,7 @@ __cold const char *mdbx_ratio2percents(uint64_t value, uint64_t whole, char *buf
   if (!buffer)
     return "nullptr";
   else if (buffer_size < sizeof(ratio2digits_buffer_t))
-    return "buffer-to-small";
+    return "buffer-too-small";
   else if (!whole)
     return value ? "infinity" : "undefined";
   else

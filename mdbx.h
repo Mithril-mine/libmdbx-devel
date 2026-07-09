@@ -5128,7 +5128,7 @@ LIBMDBX_INLINE_API(int, mdbx_dbi_flags, (const MDBX_txn *txn, MDBX_dbi dbi, unsi
  * any transaction(s) running by other thread(s).
  * So the `mdbx_dbi_close()` MUST NOT be called in-parallel/concurrently
  * with any transactions using the closing dbi-handle, nor during other thread
- * commit/abort a write transacton(s). The "next" version of libmdbx (\ref
+ * commit/abort a write transaction(s). The "next" version of libmdbx (\ref
  * MithrilDB) will solve this issue.
  *
  * Handles should only be closed if no other threads are going to reference

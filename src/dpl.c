@@ -374,10 +374,10 @@ __cold bool txn_dpl_check(MDBX_txn *txn) {
         return false;
     }
 
-    cASSERT0(txn, dp->flags == P_LOOSE || is_modifable(txn, dp));
+    cASSERT0(txn, dp->flags == P_LOOSE || is_modifiable(txn, dp));
     if (dp->flags == P_LOOSE) {
       loose += 1;
-    } else if (unlikely(!is_modifable(txn, dp)))
+    } else if (unlikely(!is_modifiable(txn, dp)))
       return false;
 
     const unsigned num = dpl_npages(dl, i);

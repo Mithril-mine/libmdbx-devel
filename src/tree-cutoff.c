@@ -1,6 +1,5 @@
 /// \copyright SPDX-License-Identifier: Apache-2.0
-/// \note Please refer to the COPYRIGHT file for explanation of license change,
-/// credits and acknowledgments.
+/// \note Please refer to the COPYRIGHT file for explanation of license change, credits and acknowledgments.
 /// \author Леонид Юрьев aka Leonid Yuriev <leo@yuriev.ru> \date 2015-2026
 
 #include "internals.h"
@@ -113,10 +112,10 @@ intptr_t tree_diff_level(const MDBX_cursor *left, const MDBX_cursor *right) {
 int tree_cutoff_twig(MDBX_cursor *mc, const pgno_t pgno, size_t deep, txnid_t parent_txnid, const bool whole_tree) {
   /* Пытаемся избежать чтения листовых страниц и связанных с этим page faults. */
   if (whole_tree && (mc->checking & z_pagecheck) == 0 && deep == mc->tree->height && !mc->tree->large_pages &&
-      parent_txnid < mc->txn->txnid /* is_frozen (mc->txn, pagent_page) */
+      parent_txnid < mc->txn->txnid /* is_frozen(mc->txn, parent_page) */
       && !mc->subcur && cursor_dbi(mc) != MAIN_DBI) {
     /* Если не запрошена проверка структуры страниц, и узел ссылается по последний уровень дерева,
-     * и нет large/overlow страниц, и не может быть вложенных dupsort-деревьев,
+     * и нет large/overflow страниц, и не может быть вложенных dupsort-деревьев,
      * то можно избежать обращения к листовой странице, при условии что родительская в статусе FROZEN. */
     return page_retire_ex(mc, pgno, nullptr, P_FROZEN + (mc->checking & (P_LEAF | P_DUPFIX)));
   }

@@ -1,6 +1,5 @@
 /// \copyright SPDX-License-Identifier: Apache-2.0
-/// \note Please refer to the COPYRIGHT file for explanation of license change,
-/// credits and acknowledgments.
+/// \note Please refer to the COPYRIGHT file for explanation of license change, credits and acknowledgments.
 /// \author Леонид Юрьев aka Leonid Yuriev <leo@yuriev.ru> \date 2015-2026
 ///
 /// mdbx_stat.c - memory-mapped database status tool
@@ -332,7 +331,7 @@ int main(int argc, char *argv[]) {
     printf("  Latter reader transaction ID: %" PRIu64 " (%" PRIi64 ")\n", mei.mi_latter_reader_txnid,
            mei.mi_latter_reader_txnid - mei.mi_recent_txnid);
     printf("  Max readers: %u\n", mei.mi_maxreaders);
-    printf("  Number of reader slots uses: %u\n", mei.mi_numreaders);
+    printf("  Number of reader slots in use: %u\n", mei.mi_numreaders);
   }
 
   if (show_readers) {
@@ -380,8 +379,10 @@ int main(int argc, char *argv[]) {
       goto txn_abort;
     }
 
-    const size_t remained_pages = info.pages_total - info.pages_allocated; /* the pages_allocated cannot be greater than the pages_total */
-    const size_t used_pages = info.pages_allocated - info.pages_gc; /* the pages_gc cannot be greater than the pages_allocated */
+    const size_t remained_pages =
+        info.pages_total - info.pages_allocated; /* the pages_allocated cannot be greater than the pages_total */
+    const size_t used_pages =
+        info.pages_allocated - info.pages_gc; /* the pages_gc cannot be greater than the pages_allocated */
     const size_t gc_retained = info.pages_gc - info.gc_reclaimable.pages;
     const size_t available_pages = info.gc_reclaimable.pages + remained_pages;
     print_pages_percentage("Total", info.pages_total, info.pages_backed, info.pages_total);

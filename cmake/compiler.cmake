@@ -817,7 +817,7 @@ macro(setup_compile_flags)
     # checks for /EHa or /clr options exists, i.e. is enabled structured async WinNT exceptions
     string(REGEX MATCH "^(.* )*[-/]EHc*a( .*)*$" msvc_async_eh_enabled "${CXX_FLAGS}" "${C_FLAGS}")
     string(REGEX MATCH "^(.* )*[-/]clr( .*)*$" msvc_clr_enabled "${CXX_FLAGS}" "${C_FLAGS}")
-    # remote any /EH? options
+    # remove any /EH? options
     string(REGEX REPLACE "( *[-/]-*EH[csa]+ *)+" "" CXX_FLAGS "${CXX_FLAGS}")
     string(REGEX REPLACE "( *[-/]-*EH[csa]+ *)+" "" C_FLAGS "${C_FLAGS}")
     if(msvc_clr_enabled STREQUAL "")

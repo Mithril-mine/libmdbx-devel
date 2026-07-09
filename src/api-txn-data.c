@@ -410,8 +410,8 @@ int mdbx_replace_ex(MDBX_txn *txn, MDBX_dbi dbi, const MDBX_val *key, MDBX_val *
         }
       }
 
-      if (is_modifable(txn, page)) {
-        if (new_data && eq_fast(&present_data, new_data)) {
+      if (is_modifiable(txn, page)) {
+        if (new_data && unlikely(eq_fast(&present_data, new_data))) {
           /* если данные совпадают, то ничего делать не надо */
           *old_data = *new_data;
           goto bailout;

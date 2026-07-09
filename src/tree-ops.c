@@ -1,6 +1,5 @@
 /// \copyright SPDX-License-Identifier: Apache-2.0
-/// \note Please refer to the COPYRIGHT file for explanation of license change,
-/// credits and acknowledgments.
+/// \note Please refer to the COPYRIGHT file for explanation of license change, credits and acknowledgments.
 /// \author Леонид Юрьев aka Leonid Yuriev <leo@yuriev.ru> \date 2015-2026
 
 #include "internals.h"
@@ -273,7 +272,7 @@ static int node_move(MDBX_cursor *csrc, MDBX_cursor *cdst, bool fromleft) {
     const size_t dbi = cursor_dbi(csrc);
     cASSERT0(csrc, csrc->top == cdst->top);
     if (fromleft) {
-      /* Перемещаем с левой страницы нв правую, нужно сдвинуть ki на +1 */
+      /* Перемещаем с левой страницы на правую, нужно сдвинуть ki на +1 */
       for (m2 = csrc->txn->cursors[dbi]; m2; m2 = m2->next) {
         m3 = (csrc->flags & z_inner) ? &m2->subcur->cursor : m2;
         if (!is_related(csrc, m3))
@@ -667,7 +666,7 @@ int tree_rebalance(MDBX_cursor *mc) {
   DEBUG("rebalancing %s page %" PRIaPGNO " (has %zu keys, fill %u.%u%%, used %zu, room %zu bytes)",
         is_leaf(tp) ? "leaf" : "branch", tp->pgno, numkeys, page_fill_percentum_x10(mc->txn->env, tp) / 10,
         page_fill_percentum_x10(mc->txn->env, tp) % 10, page_used(mc->txn->env, tp), room);
-  cASSERT0(mc, is_modifable(mc->txn, tp));
+  cASSERT0(mc, is_modifiable(mc->txn, tp));
 
   if (unlikely(numkeys < minkeys)) {
     DEBUG("page %" PRIaPGNO " must be merged due keys < %zu threshold", tp->pgno, minkeys);
@@ -838,8 +837,8 @@ int tree_rebalance(MDBX_cursor *mc) {
   bool involve = !(left && right);
 retry:
   cASSERT0(mc, mc->top > 0);
-  const bool consider_left = left && (involve || is_modifable(mc->txn, left));
-  const bool consider_right = right && (involve || is_modifable(mc->txn, right));
+  const bool consider_left = left && (involve || is_modifiable(mc->txn, left));
+  const bool consider_right = right && (involve || is_modifiable(mc->txn, right));
   if (consider_left && left_room > room_threshold && left_room >= right_room) {
     /* try merge with left */
     cASSERT0(mc, left_nkeys >= minkeys);

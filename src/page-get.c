@@ -92,7 +92,7 @@ __cold int page_check(const MDBX_cursor *const mc, const page_t *const mp) {
     __fallthrough;
   case P_LEAF:
     if (unlikely((mc->checking & z_dupfix) != 0))
-      rc = bad_page(mp, "unexpected leaf-page for dupfix subtree (db-lags 0x%x)\n", mc->tree->flags);
+      rc = bad_page(mp, "unexpected leaf-page for dupfix subtree (db-flags 0x%x)\n", mc->tree->flags);
     break;
   case P_LEAF | P_DUPFIX | P_SUBP:
     if (unlikely(mc->tree->height != 1))
@@ -116,7 +116,7 @@ __cold int page_check(const MDBX_cursor *const mc, const page_t *const mp) {
   STATIC_ASSERT(P_BRANCH == 1);
   if (unlikely(nkeys <= (uint8_t)(mp->flags & P_BRANCH))) {
     if ((!(mc->flags & z_inner) || mc->tree->items) &&
-        (!(mc->checking & z_updating) || !(is_modifable(mc->txn, mp) || (mp->flags & P_SUBP))))
+        (!(mc->checking & z_updating) || !(is_modifiable(mc->txn, mp) || (mp->flags & P_SUBP))))
       rc = bad_page(mp, "%s-page nkeys (%zu) < %u\n", is_branch(mp) ? "branch" : "leaf", nkeys, 1 + is_branch(mp));
   }
 

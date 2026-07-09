@@ -1,6 +1,4 @@
 /// \copyright SPDX-License-Identifier: Apache-2.0
-/// \note Please refer to the COPYRIGHT file for explanation of license change,
-/// credits and acknowledgments.
 /// \author Леонид Юрьев aka Leonid Yuriev <leo@yuriev.ru> \date 2025-2026
 ///
 /// mdbx_defrag.c - memory-mapped database defragmentation tool
@@ -398,7 +396,8 @@ int main(int argc, char *argv[]) {
       rc = MDBX_SUCCESS;
       if (!quiet) {
         printf("Defragmentation%s: shrinked %zi pages, %u passes, moved %zu pages",
-               (rc == MDBX_SUCCESS) ? "" : " incomplete", result.pages_shrinked, result.cycles, result.pages_moved);
+               (rc == MDBX_SUCCESS) ? " done" : " incomplete", result.pages_shrinked, result.cycles,
+               result.pages_moved);
         if (result.stopping_reasons)
           printf(", stopping reasons bits 0x%x", result.stopping_reasons);
         printf(", took %s seconds, %s\n",

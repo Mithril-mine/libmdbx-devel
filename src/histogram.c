@@ -4,11 +4,11 @@
 #include "internals.h"
 
 static bool histogram_check(const struct MDBX_chk_histogram *p, size_t adj) {
-  size_t quantiry = p->le1_count;
+  size_t quantity = p->le1_count;
   for (size_t i = 0; i < ARRAY_LENGTH(p->ranges); ++i)
-    quantiry += p->ranges[i].count;
+    quantity += p->ranges[i].count;
 
-  return quantiry == p->count - adj;
+  return quantity == p->count - adj;
 }
 
 static void histogram_reduce_move(struct MDBX_chk_histogram *p, size_t point) {
@@ -197,7 +197,7 @@ __cold MDBX_chk_line_t *histogram_dist(MDBX_chk_line_t *line, const struct MDBX_
         comma = ",";
       }
 
-    ENSURE_MSG(histogram_check(histogram, 0), "Historgam related bug, please report this");
+    ENSURE_MSG(histogram_check(histogram, 0), "Histogram related bug, please report this");
   }
   return line;
 }

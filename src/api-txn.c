@@ -766,7 +766,7 @@ int mdbx_txn_amend(MDBX_txn *rtxn, MDBX_txn **ptxn, MDBX_txn_flags_t flags, void
   if (unlikely(rc != MDBX_SUCCESS))
     return LOG_IFERR(rc);
 
-  /* after the lock was acuired we re-check that there were no new commits */
+  /* after the lock was acquired we re-check that there were no new commits */
   if (recent_committed_txnid(env) != rtxn->txnid) {
     lck_txn_unlock(env);
     return LOG_IFERR(MDBX_RESULT_TRUE);

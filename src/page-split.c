@@ -256,6 +256,9 @@ __hot int page_split(MDBX_cursor *mc, const MDBX_val *const newkey, MDBX_val *co
                                           ((reserve > right_space) ? reserve - right_space : 0);
             const uint64_t skew = (reserve_skew << 32) | split_skew;
             if (skew >= best_skew)
+              /* The `skew` decreases monotonously to the best split position on the page, and then increases
+               * monotonously. Therefore, we can assume that we have found the best position and end the cycle
+               * as soon as `skew` stops decreasing. */
               break;
             best_split = i;
             best_skew = skew;

@@ -28,7 +28,7 @@ static bool mincore_fetch(MDBX_env *const env, const size_t unit_begin) {
       } while (--i);
       lck->mincore_cache.begin[0] = tmp_begin;
       lck->mincore_cache.mask[0] = tmp_mask;
-      return bit_tas(lck->mincore_cache.mask, (char)dist);
+      return bit_tas(&lck->mincore_cache.mask[0], (char)dist);
     }
   }
 
@@ -68,6 +68,8 @@ static bool mincore_fetch(MDBX_env *const env, const size_t unit_begin) {
   STATIC_ASSERT(MINCORE_INCORE == 1);
 #endif
   for (size_t i = 0; i < pages; ++i) {
+    /* inverted logic is used here, to correctly handle a cases when one database page
+     * corresponds to several pages of virtual memory. */
     uint64_t bit = (vector[i] & 1) == 0;
     bit <<= i >> shift;
     mask |= bit;
@@ -182,6 +184,7 @@ MDBX_MAYBE_UNUSED static const pgno_t *scan4range_checker(const pnl_t pnl, const
 #if defined(_MSC_VER) && !defined(__builtin_clz) && !__has_builtin(__builtin_clz)
 MDBX_MAYBE_UNUSED static __always_inline size_t __builtin_clz(uint32_t value) {
   unsigned long index;
+  ASSERT(value != 0);
   _BitScanReverse(&index, value);
   return 31 - index;
 }
@@ -190,6 +193,7 @@ MDBX_MAYBE_UNUSED static __always_inline size_t __builtin_clz(uint32_t value) {
 #if defined(_MSC_VER) && !defined(__builtin_clzl) && !__has_builtin(__builtin_clzl)
 MDBX_MAYBE_UNUSED static __always_inline size_t __builtin_clzl(size_t value) {
   unsigned long index;
+  ASSERT(value != 0);
 #ifdef _WIN64
   ASSERT(sizeof(value) == 8);
   _BitScanReverse64(&index, value);
@@ -271,9 +275,12 @@ MDBX_MAYBE_UNUSED __hot MDBX_ATTRIBUTE_TARGET_SSE2 static pgno_t *scan4seq_sse2(
       mask = (uint8_t)diffcmp2mask_sse2(range - 3, offset, pattern);
       if (mask) {
 #if !defined(ENABLE_MEMCHECK) && !defined(__SANITIZE_ADDRESS__)
-      found:
+      found:;
 #endif /* !ENABLE_MEMCHECK && !__SANITIZE_ADDRESS__ */
-        return range + 28 - __builtin_clz(mask);
+        const unsigned clz_bits = (unsigned)(sizeof(unsigned) * CHAR_BIT);
+        const unsigned sse2_lanes = 4;
+        const unsigned clz_bias = clz_bits - sse2_lanes; /* 32 - 4 = 28 for 32-bit unsigned */
+        return range + clz_bias - __builtin_clz(mask);
       }
       range -= 4;
     } while (range > detent + 3);
@@ -290,7 +297,7 @@ MDBX_MAYBE_UNUSED __hot MDBX_ATTRIBUTE_TARGET_SSE2 static pgno_t *scan4seq_sse2(
   if (likely(on_page_safe_mask & (uintptr_t)(range + offset)) && !RUNNING_ON_VALGRIND) {
     const unsigned extra = (unsigned)(detent + 4 - range);
     ASSERT(extra > 0 && extra < 4);
-    mask = 0xF << extra;
+    mask = 0xFu << extra;
     mask &= diffcmp2mask_sse2(range - 3, offset, pattern);
     if (mask)
       goto found;
@@ -424,7 +431,7 @@ MDBX_MAYBE_UNUSED __hot MDBX_ATTRIBUTE_TARGET_AVX512BW static pgno_t *scan4seq_a
   if (likely(on_page_safe_mask & (uintptr_t)(range + offset)) && !RUNNING_ON_VALGRIND) {
     const unsigned extra = (unsigned)(detent + 16 - range);
     ASSERT(extra > 0 && extra < 16);
-    mask = 0xFFFF << extra;
+    mask = 0xFFFFu << extra;
     mask &= diffcmp2mask_avx512bw(range - 15, offset, pattern);
     if (mask)
       goto found;
@@ -458,7 +465,7 @@ static __always_inline size_t diffcmp2mask_neon(const pgno_t *const ptr, const p
   const uint32x4_t f = vld1q_u32(ptr);
   const uint32x4_t l = vld1q_u32(ptr + offset);
   const uint16x4_t cmp = vmovn_u32(vceqq_u32(vsubq_u32(f, l), pattern));
-  if (sizeof(size_t) > 7)
+  if (sizeof(size_t) >= 8)
     return vget_lane_u64(vreinterpret_u64_u16(cmp), 0);
   else
     return vget_lane_u32(vreinterpret_u32_u8(vmovn_u16(vcombine_u16(cmp, cmp))), 0);
@@ -482,6 +489,8 @@ __hot static pgno_t *scan4seq_neon(pgno_t *range, const size_t len, const size_t
 #if !defined(ENABLE_MEMCHECK) && !defined(__SANITIZE_ADDRESS__)
       found:
 #endif /* !ENABLE_MEMCHECK && !__SANITIZE_ADDRESS__ */
+        /* The sizeof(size_t) here is used correctly, since both the lane size, and the width and format of mask,
+         * is also depend on the platform bitness. */
         return ptr_disp(range, -(__builtin_clzl(mask) >> sizeof(size_t) / 4));
       }
       range -= 4;
@@ -675,7 +684,7 @@ __hot static pgno_t repnl_get_single(MDBX_txn *txn) {
   for (const pgno_t *const end = txn->wr.repnl + len - 1; target <= end; ++target)
     *target = target[1];
 #else
-  /* перемещать хвост не нужно, просто усекам список */
+  /* перемещать хвост не нужно, просто усекаем список */
   pnl_setsize(txn->wr.repnl, len - 1);
 #endif /* MDBX_PNL_ASCENDING */
   return pgno;

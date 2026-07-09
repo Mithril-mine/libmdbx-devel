@@ -270,16 +270,18 @@ int mdbx_txn_release_all_cursors_ex(const MDBX_txn *txn, bool unbind, size_t *co
 }
 
 int mdbx_cursor_compare(const MDBX_cursor *l, const MDBX_cursor *r, bool ignore_multival) {
-  const int incomparable = INT16_MAX + 1;
-
+  const int incomparable = 1 << 15;
+  ASSERT(incomparable == INT16_MAX + 1);
   if (unlikely(!l))
     return r ? -incomparable * 9 : 0;
   else if (unlikely(!r))
     return incomparable * 9;
 
-  if (unlikely(cursor_check_pure(l) != MDBX_SUCCESS))
-    return (cursor_check_pure(r) == MDBX_SUCCESS) ? -incomparable * 8 : 0;
-  else if (unlikely(cursor_check_pure(r) != MDBX_SUCCESS))
+  const int l_pure_rc = cursor_check_pure(l);
+  const int r_pure_rc = cursor_check_pure(r);
+  if (unlikely(l_pure_rc != MDBX_SUCCESS))
+    return (r_pure_rc == MDBX_SUCCESS) ? -incomparable * 8 : 0;
+  else if (unlikely(r_pure_rc != MDBX_SUCCESS))
     return incomparable * 8;
 
   if (unlikely(l->clc != r->clc)) {
@@ -824,6 +826,7 @@ int mdbx_cursor_bunch_delete(MDBX_cursor *mc, MDBX_bunch_action_t action, uint64
   case MDBX_DELETE_BEFORE_INCLUDING:
   case MDBX_DELETE_BEFORE_EXCLUDING:
     axe = get_axe(mc, &couple);
+    /* move mc to the begin of range for deletion */
     rc = outer_first(axe, nullptr, nullptr);
     if (rc != MDBX_SUCCESS) {
       rc = (rc == MDBX_NOTFOUND) ? MDBX_SUCCESS : rc;
@@ -856,6 +859,7 @@ int mdbx_cursor_bunch_delete(MDBX_cursor *mc, MDBX_bunch_action_t action, uint64
     __fallthrough /* fall through */;
   case MDBX_DELETE_AFTER_INCLUDING:
     axe = get_axe(mc, &couple);
+    /* move mc to the end of range for deletion */
     rc = outer_last(mc, nullptr, nullptr);
     if (rc != MDBX_SUCCESS) {
       rc = (rc == MDBX_NOTFOUND) ? MDBX_SUCCESS : rc;
@@ -942,8 +946,13 @@ int mdbx_cursor_delete_range(MDBX_cursor *begin, MDBX_cursor *end, bool end_incl
   if (number_of_affected)
     *number_of_affected = save_items - begin->tree->items;
 
-  /* No other cursors could have been inserted after couple.outer, so we can just check the head to determine if
-   * couple.outer has been added, and then just update it. */
+  /* No other cursors could have been inserted after couple.outer.
+   * So we can just check the head to determine if couple.outer has been added, and then just update it.
+   *
+   * There is no UB associated with accessing uninitialized data, since only the couple.outer address is used for
+   * comparison, and couple.outer.next is read only when there is equality, which can only happen when couple.outer has
+   * been initialized and added to the head of the linked list. However, Coverity may issue a false-positive warning,
+   * which coverity[UNINIT] has been added to suppress it. */
   if (begin->txn->cursors[cursor_dbi(begin)] == &couple.outer)
     /* coverity[UNINIT] */
     couple.outer.txn->cursors[cursor_dbi(begin)] = couple.outer.next;

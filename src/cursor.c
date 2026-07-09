@@ -1,6 +1,5 @@
 /// \copyright SPDX-License-Identifier: Apache-2.0
-/// \note Please refer to the COPYRIGHT file for explanation of license change,
-/// credits and acknowledgments.
+/// \note Please refer to the COPYRIGHT file for explanation of license change, credits and acknowledgments.
 /// \author Леонид Юрьев aka Leonid Yuriev <leo@yuriev.ru> \date 2015-2026
 
 #include "internals.h"
@@ -36,9 +35,9 @@ __cold int cursor_validate(const MDBX_cursor *mc) {
   for (intptr_t n = 0; n <= mc->top; ++n) {
     page_t *mp = mc->pg[n];
     const size_t nkeys = page_numkeys(mp);
-    const bool expect_branch = (n < mc->tree->height - 1) ? true : false;
-    const bool expect_nested_leaf = (n + 1 == mc->tree->height - 1) ? true : false;
-    const bool branch = is_branch(mp) ? true : false;
+    const bool expect_branch = n < mc->tree->height - 1;
+    const bool expect_nested_leaf = n + 1 == mc->tree->height - 1;
+    const bool branch = is_branch(mp);
     cASSERT0(mc, branch == expect_branch);
     if (unlikely(branch != expect_branch))
       return MDBX_CURSOR_FULL;
@@ -68,7 +67,7 @@ __cold int cursor_validate(const MDBX_cursor *mc) {
         cASSERT0(mc, err == MDBX_SUCCESS);
         if (unlikely(err != MDBX_SUCCESS))
           return err;
-        const bool nested_leaf = is_leaf(np) ? true : false;
+        const bool nested_leaf = is_leaf(np);
         cASSERT0(mc, nested_leaf == expect_nested_leaf);
         if (unlikely(nested_leaf != expect_nested_leaf))
           return MDBX_CURSOR_FULL;
@@ -168,7 +167,7 @@ __hot int cursor_touch(MDBX_cursor *const mc, const MDBX_val *key, const MDBX_va
       return err;
   }
 
-  if (likely(is_pointed(mc)) && ((mc->txn->flags & MDBX_TXN_SPILLS) || !is_modifable(mc->txn, mc->pg[mc->top]))) {
+  if (likely(is_pointed(mc)) && ((mc->txn->flags & MDBX_TXN_SPILLS) || !is_modifiable(mc->txn, mc->pg[mc->top]))) {
     const int8_t top = mc->top;
     mc->top = 0;
     do {
@@ -415,6 +414,7 @@ MDBX_cursor *cursor_copy_position(const MDBX_cursor *csrc, MDBX_cursor *cdst) {
   if (cdst->subcur) {
     cdst->subcur->cursor.tree->root = 0;
     cdst->subcur->cursor.top_and_flags = z_inner | z_poor_mark;
+    ASSERT(csrc->subcur);
     if (is_pointed(&csrc->subcur->cursor)) {
       cursor_cpstk(&csrc->subcur->cursor, &cdst->subcur->cursor);
       *cdst->subcur->cursor.tree = *csrc->subcur->cursor.tree;
@@ -551,7 +551,7 @@ __hot int cursor_sibling_right(MDBX_cursor *mc) {
 intptr_t cursor_cmp(const MDBX_cursor *left, const MDBX_cursor *right) {
   ASSERT(left->top == right->top);
   intptr_t cmp = 0;
-  for (intptr_t i = cmp; i <= left->top; ++i) {
+  for (intptr_t i = 0; i <= left->top; ++i) {
     ASSERT(left->pg[i] == right->pg[i]);
     cmp = (intptr_t)left->ki[i] - (intptr_t)right->ki[i];
     if (cmp)
@@ -890,6 +890,10 @@ __hot int cursor_put(MDBX_cursor *mc, const MDBX_val *key, MDBX_val *data, unsig
         }
       }
     } else {
+      /* The `const` qualifier is cast away when passing `key` to `cursor_seek`, which accepts a non-const `MDBX_val *`.
+       * This is safe in practice for `MDBX_SET` since `cursor_seek` only writes `*key` back for ops `>= MDBX_SET_KEY`.
+       * Of cause, casting away `const` is fragile solution, but we accept this risk and postpone the fix until a deep
+       * refactoring of related functions. */
       csr_t csr = cursor_seek(mc, (MDBX_val *)key, &old_data, MDBX_SET);
       rc = csr.err;
       exact = csr.exact;
@@ -1068,7 +1072,7 @@ __hot int cursor_put(MDBX_cursor *mc, const MDBX_val *key, MDBX_val *data, unsig
           (mc->tree == &mc->txn->dbs[FREE_DBI]) ? 1 : /* LY: add configurable threshold to keep reserve space */ 0;
       if (!is_frozen(mc->txn, lp.page) && ovpages >= dpages && ovpages <= dpages + extra_threshold) {
         /* yes, overwrite it. */
-        if (!is_modifable(mc->txn, lp.page)) {
+        if (!is_modifiable(mc->txn, lp.page)) {
           if (is_spilled(mc->txn, lp.page)) {
             lp = /* TODO: avoid search and get txn & spill-index from page_result */
                 page_unspill(mc->txn, lp.page);
@@ -1136,9 +1140,10 @@ __hot int cursor_put(MDBX_cursor *mc, const MDBX_val *key, MDBX_val *data, unsig
             cASSERT1(mc, cmp != 0 || eq_fast(data, &old_data));
             if (unlikely(cmp <= 0))
               return MDBX_EKEYMISMATCH;
-          } else if (eq_fast(data, &old_data)) {
+          } else if (unlikely(eq_fast(data, &old_data))) {
             cASSERT1(mc, mc->clc->v.cmp(data, &old_data) == 0);
-            cASSERT0(mc, !"Should not happen since" || batch_dupfix_done);
+            cASSERT0(mc, !"Should not happen since equal data should have been handled by batch dupfix" ||
+                             batch_dupfix_done);
             if (flags & MDBX_NODUPDATA)
               return MDBX_KEYEXIST;
             /* data is match exactly byte-to-byte, nothing to update */
@@ -1235,10 +1240,10 @@ __hot int cursor_put(MDBX_cursor *mc, const MDBX_val *key, MDBX_val *data, unsig
              *    пропорционально меньше branch-страниц. Поэтому будет выше
              *    вероятность оседания/не-вымывания страниц основного дерева из
              *    LRU-кэша, а также попадания в write-back кэш при записи.
-             *  - Наоботот, при склонности к использованию под-страниц, будут
+             *  - Наоборот, при склонности к использованию под-страниц, будут
              *    наблюдаться обратные эффекты. Плюс некоторые накладные расходы
              *    на лишнее копирование данных под-страниц в сценариях
-             *    нескольких обонвлений дубликатов одного куста в одной
+             *    нескольких обновлений дубликатов одного куста в одной
              *    транзакции.
              *
              * Суммарно наиболее рациональным представляется такая тактика:
@@ -1618,7 +1623,7 @@ __hot int cursor_del(MDBX_cursor *mc, unsigned flags) {
     return rc;
 
   page_t *mp = mc->pg[mc->top];
-  cASSERT0(mc, is_modifable(mc->txn, mp));
+  cASSERT0(mc, is_modifiable(mc->txn, mp));
   if (!MDBX_DISABLE_VALIDATION && unlikely(!check_leaf_type(mc, mp))) {
     ERROR("unexpected leaf-page #%" PRIaPGNO " type 0x%x seen by cursor", mp->pgno, mp->flags);
     return MDBX_CORRUPTED;
@@ -2203,6 +2208,9 @@ __hot int cursor_ops(MDBX_cursor *mc, MDBX_val *key, MDBX_val *data, const MDBX_
   case MDBX_NEXT:
   case MDBX_NEXT_NODUP:
     rc = outer_next(mc, key, data, op);
+    /* The z_eof_hard flag reflects internal intermediate state and must not be exposed to outer code after an next-ops.
+     * Elsewise a tree rebalance after deletion may going wrong. So just clear z_eof_hard flag in both cursors anyway.
+     */
     mc->flags &= ~z_eof_hard;
     ((cursor_couple_t *)mc)->inner.cursor.flags &= ~z_eof_hard;
     return rc;
@@ -2233,7 +2241,7 @@ __hot int cursor_ops(MDBX_cursor *mc, MDBX_val *key, MDBX_val *data, const MDBX_
       else
         return unexpected_dupsort(mc);
     }
-    break;
+    __unreachable();
 
   case MDBX_SET_UPPERBOUND:
   case MDBX_SET_LOWERBOUND:
@@ -2566,7 +2574,7 @@ cdr_t cursor_distance(MDBX_cursor *iter, const MDBX_cursor *end, int level) {
     }
   }
 
-  /* запрошенный уровень предполагает учет mutivalues/дубликатов */
+  /* запрошенный уровень предполагает учет multivalues/дубликатов */
   while (iter->pg[iter->top] != end->pg[iter->top]) {
     cdr_t leaf_tdr = cursor_leaf_amount(iter->pg[iter->top], iter->ki[iter->top], page_numkeys(iter->pg[iter->top]));
     tdr.distance += leaf_tdr.distance;
@@ -2586,6 +2594,7 @@ cdr_t cursor_distance(MDBX_cursor *iter, const MDBX_cursor *end, int level) {
       return tdr;
   }
 
+  ASSERT(end->subcur);
   if (is_pointed(&end->subcur->cursor)) {
     iter->pg[iter->top] = end->pg[iter->top];
     iter->ki[iter->top] = end->ki[iter->top];
@@ -2687,7 +2696,7 @@ int cursor_scroll_forward(MDBX_cursor *mc, intptr_t amount, int level) {
   if (level < mc->tree->height || !mc->subcur)
     return cursor_forward_at(mc, amount, level).err;
 
-  /* запрошенный уровень предполагает учет mutivalues/дубликатов */
+  /* запрошенный уровень предполагает учет multivalues/дубликатов */
   int err = MDBX_SUCCESS;
   if (inner_pointed(mc)) {
     cdr_t tdr = cursor_forward_at(&mc->subcur->cursor, amount, level - mc->tree->height);
@@ -2733,7 +2742,7 @@ int cursor_scroll_backward(MDBX_cursor *mc, intptr_t amount, int level) {
   if (level < mc->tree->height || !mc->subcur)
     return cursor_backward_at(mc, amount, level).err;
 
-  /* запрошенный уровень предполагает учет mutivalues/дубликатов */
+  /* запрошенный уровень предполагает учет multivalues/дубликатов */
   int err = MDBX_SUCCESS;
   if (inner_pointed(mc)) {
     cdr_t tdr = cursor_backward_at(&mc->subcur->cursor, amount, level - mc->tree->height);
@@ -2746,7 +2755,10 @@ int cursor_scroll_backward(MDBX_cursor *mc, intptr_t amount, int level) {
   }
 
   while (true) {
-    if (mc->ki[mc->top]-- < 1) {
+    intptr_t ki = mc->ki[mc->top] - 1;
+    /* mc->ki[mc->top] will be overwritten by cursor_sibling_left() in case ki < 0 here */
+    mc->ki[mc->top] = (indx_t)ki;
+    if (unlikely(ki < 0)) {
       err = cursor_sibling_left(mc);
       if (unlikely(err != MDBX_SUCCESS))
         return err;

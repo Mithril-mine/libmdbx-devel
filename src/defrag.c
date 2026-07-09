@@ -259,7 +259,7 @@ static int defrag_clear_reclaimed(dfc_t *dfc) {
   return rc;
 }
 
-static int defrag_puch_arc(dfc_t *const dfc, pgno_t parent, pgno_t page, unsigned npages, bool is_gc) {
+static int defrag_push_arc(dfc_t *const dfc, pgno_t parent, pgno_t page, unsigned npages, bool is_gc) {
   ASSERT(parent < MAX_PAGENO && page < MAX_PAGENO && (parent == 0 || parent >= NUM_METAS) && page >= NUM_METAS);
   dfc->payload_items += !is_gc;
   da_t *arc = dml_append(&dfc->arcs, page);
@@ -308,7 +308,7 @@ static int defrag_walker(const size_t pgno, unsigned npages, void *const ctx, co
         dfc->largepage_max = npages;
     }
     for (intptr_t i = deep; i >= 0 && dfc->walk_stack[i] < DEFRAG_TRACK_FLAG; --i) {
-      err = defrag_puch_arc(dfc, i ? dfc->walk_stack[i - 1] & ~DEFRAG_TRACK_FLAG : 0, dfc->walk_stack[i],
+      err = defrag_push_arc(dfc, i ? dfc->walk_stack[i - 1] & ~DEFRAG_TRACK_FLAG : 0, dfc->walk_stack[i],
                             (i == (intptr_t)deep) ? npages : 1, table->internal == &dfc->txn->dbs[FREE_DBI]);
       if (unlikely(err != MDBX_SUCCESS))
         return err;
@@ -402,7 +402,7 @@ static int defrag_fixup_page(dfc_t *dfc, page_t *dst, pgno_t pgno) {
       switch (node->flags) {
       default:
         return bad_page(dst, "unexpected node[%zu] flags 0x%x", i, node->flags);
-      case N_BIG /* large/overlow page */:
+      case N_BIG /* large/overflow page */:
         err = defrag_fixup_ref(dfc, node_data(node));
         if (unlikely(MDBX_IS_ERROR(err)))
           return err;
@@ -440,8 +440,8 @@ static int defrag_move(dfc_t *dfc, da_t *arc) {
 
   /* Нужно скопировать содержимое страницы в новое место, а также поправить ссылку на перемещённую страницу в
    * родительской. Родительская страница тоже должна быть скопирована/перемещена, вместе с её родительской и так до
-   * корня дерева. Корректируемые ссылки точно отсутствуют только у небольшой части страниц, в large/overlow страницах и
-   * листьях вложенных b-tree у dupsort-таблиц.
+   * корня дерева. Корректируемые ссылки точно отсутствуют только у небольшой части страниц, в large/overflow страницах
+   * и листьях вложенных b-tree у dupsort-таблиц.
    *
    * Поэтому нерационально корректировать ссылки в родительских страницах при перемещении/копировании дочерних, так как
    * это потребует многократного обновления большей части родительских страниц. Напротив, корректировка ссылок внутри
@@ -529,13 +529,13 @@ static int defrag_move(dfc_t *dfc, da_t *arc) {
           txn->env->lck->unsynced_pages.weak += 1;
       } else {
 #if MDBX_USE_COPYFILERANGE
-        const ssize_t remainted = pgno2bytes(env, arc->npages - i);
+        const ssize_t remaining = pgno2bytes(env, arc->npages - i);
         off_t off_dst_proxy = off_dst;
         off_t off_src_proxy = off_src;
         const ssize_t copied =
-            copy_file_range(env->dxb_mmap.fd, &off_src_proxy, env->dxb_mmap.fd, &off_dst_proxy, remainted, 0);
+            copy_file_range(env->dxb_mmap.fd, &off_src_proxy, env->dxb_mmap.fd, &off_dst_proxy, remaining, 0);
         err = MDBX_SUCCESS;
-        if (unlikely(copied != remainted))
+        if (unlikely(copied != remaining))
           err = (copied < 0) ? errno : MDBX_EIO;
         break;
 #else
@@ -616,7 +616,7 @@ bailout:
           npages, depth, pnl_size(dfc->txn->wr.repnl),
           pnl_size(dfc->txn->wr.repnl) ? MDBX_PNL_LEAST(dfc->txn->wr.repnl) : P_INVALID, dfc->defrag_enough);
   if (pnl_size(dfc->txn->wr.repnl) == 0)
-    defrag_stumble(dfc, arc, "are not enough reclaimable pages available in GC", 0, "");
+    defrag_stumble(dfc, arc, "are not enough reclaimable pages available in GC (count ", 0, ")");
   else if (MDBX_PNL_LEAST(dfc->txn->wr.repnl) + npages >= dfc->defrag_enough)
     defrag_stumble(dfc, arc, "the next reclaimable page ", MDBX_PNL_LEAST(dfc->txn->wr.repnl),
                    " is beyond target edge");
@@ -811,7 +811,7 @@ int defrag_cycle(dfc_t *dfc) {
   /* Проверяем сумму использованных страниц */
   const size_t gc_pages = dfc->gc_tree_pages + dfc->gc_retained_pages;
   const size_t pending_pages =
-      txn->wr.loose_count + pnl_size(txn->wr.repnl) + (pnl_size(txn->wr.retired_pages) - /* retired_stored */ 0);
+      txn->wr.loose_count + pnl_size(txn->wr.repnl) + pnl_size(txn->wr.retired_pages) /* retired_stored is 0 here */;
   if (dfc->payload_pages + gc_pages + pending_pages != txn->geo.first_unallocated) {
     ERROR("page usage mismatch (payload %u + gc %zu + pending %zu != allocated %zu), "
           "please use mdbx_chk tool to check DB integrity",
@@ -835,14 +835,14 @@ int defrag_cycle(dfc_t *dfc) {
     return defrag_gc_empty(dfc) ? MDBX_RESULT_TRUE : MDBX_LAGGARD_READER;
 
   if (!dfc->lp_backlog && (txn->dbi_state[MAIN_DBI] & DBI_DIRTY) == 0 && score < dfc->cycle_initial_score) {
-    NOTICE("bailout since the GC-score after load and clear 0x%" PRIx64 " is wort than before 0x%" PRIx64, score,
+    NOTICE("bailout since the GC-score after load and clear 0x%" PRIx64 " is worse than before 0x%" PRIx64, score,
            dfc->cycle_initial_score);
     return MDBX_RESULT_TRUE;
   }
 
 #if MDBX_CHECKING > 1
   dfc->repnl_clone = pnl_clone(txn->wr.repnl);
-#endif /* MDBX_CHECKING > 0 */
+#endif /* MDBX_CHECKING > 1 */
 
   if (dfc->payload_items) {
     /* Повторный проход. Все страницы с полезными данными по-прежнему используются, но были перемещены. Отличия могут
@@ -986,7 +986,7 @@ int defrag_cycle(dfc_t *dfc) {
         break;
       }
       if (pnl_size(txn->wr.repnl) && MDBX_PNL_LEAST(txn->wr.repnl) == tail) {
-        defrag_stumble(dfc, i, "the available reclaimed pages are beyond the defragmentation tail", 0, "");
+        defrag_stumble(dfc, i, "the available reclaimed pages are beyond the defragmentation tail (page #", tail, ")");
         break;
       }
       int err = defrag_gc_lookup_page(dfc, dfc->defrag_edge - 1, &dfc->stopor);
@@ -1184,7 +1184,7 @@ int defrag_init(dfc_t *dfc, MDBX_txn *txn, size_t defrag_atleast_pages, size_t s
 
   dfc->payload_pages =
       NUM_METAS + (size_t)stat.ms_branch_pages + (size_t)stat.ms_leaf_pages + (size_t)stat.ms_overflow_pages;
-  dfc->largepage_max = /* устанавливаем в 1 как признак наличия overload/large-страниц */ stat.ms_overflow_pages > 0;
+  dfc->largepage_max = /* устанавливаем в 1 как признак наличия overflow/large-страниц */ stat.ms_overflow_pages > 0;
   dfc->summary_depth = stat.ms_depth;
 
   /* По количеству используемых и выделенных страниц, оцениваем сколько можем дефрагментировать/освободить. */

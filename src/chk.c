@@ -86,7 +86,7 @@ __cold size_t chk_print_wanna(MDBX_chk_line_t *line, size_t need) {
     size_t have = line->end - line->out;
     ASSERT(line->begin <= line->end && line->begin <= line->out && line->out <= line->end);
     if (need > have) {
-      line = chk_flush(line);
+      chk_flush(line);
       have = line->end - line->out;
     }
     return (need < have) ? need : have;
@@ -1009,7 +1009,7 @@ __cold static int chk_db(MDBX_chk_scope_t *const scope, MDBX_dbi dbi, MDBX_chk_t
       key_mode = "usual";
       break;
     case MDBX_REVERSEKEY:
-      key_mode = "reserve";
+      key_mode = "reverse";
       break;
     case MDBX_INTEGERKEY:
       key_mode = "ordinal";
@@ -1094,7 +1094,7 @@ __cold static int chk_db(MDBX_chk_scope_t *const scope, MDBX_dbi dbi, MDBX_chk_t
         chk_scope_issue(scope, "%s pages mismatch (%" PRIaPGNO " != walked %" PRIuSIZE ")", "all-leaf", db->leaf_pages,
                         leaf_pages);
       if (db->large_pages != tbl->histogram.large_pages.amount)
-        chk_scope_issue(scope, "%s pages mismatch (%" PRIaPGNO " != walked %" PRIuSIZE ")", "large/overlow",
+        chk_scope_issue(scope, "%s pages mismatch (%" PRIaPGNO " != walked %" PRIuSIZE ")", "large/overflow",
                         db->large_pages, tbl->histogram.large_pages.amount);
     }
   }
@@ -1333,7 +1333,7 @@ __cold static int chk_handle_gc(MDBX_chk_scope_t *const scope, MDBX_chk_table_t 
           chk_object_issue(scope, "entry", txnid, "wrong idl entry", "pgno %" PRIuSIZE " < meta-pages %u", pgno,
                            NUM_METAS);
         else if (pgno >= usr->result.backed_pages)
-          chk_object_issue(scope, "entry", txnid, "wrong idl entry", "pgno %" PRIuSIZE " > backed-pages %" PRIuSIZE,
+          chk_object_issue(scope, "entry", txnid, "wrong idl entry", "pgno %" PRIuSIZE " > dxb-file-pages %" PRIuSIZE,
                            pgno, usr->result.backed_pages);
         else if (pgno >= usr->result.alloc_pages)
           chk_object_issue(scope, "entry", txnid, "wrong idl entry", "pgno %" PRIuSIZE " > alloc-pages %" PRIuSIZE,
@@ -1423,16 +1423,8 @@ __cold static int env_chk(MDBX_chk_scope_t *const scope) {
     usr->result.alloc_pages = txn->geo.first_unallocated;
     usr->result.backed_pages = bytes2pgno(env, env->dxb_mmap.current);
     if (unlikely(usr->result.backed_pages > dxbfile_pages))
-      chk_scope_issue(inner, "backed-pages %zu > file-pages %" PRIu64, usr->result.backed_pages, dxbfile_pages);
-    if (unlikely(dxbfile_pages < NUM_METAS))
-      chk_scope_issue(inner, "file-pages %" PRIu64 " < %u", dxbfile_pages, NUM_METAS);
-    if (unlikely(usr->result.backed_pages < NUM_METAS))
-      chk_scope_issue(inner, "backed-pages %zu < %u", usr->result.backed_pages, NUM_METAS);
+      chk_scope_issue(inner, "backed-pages %zu > dxb-file-pages %" PRIu64, usr->result.backed_pages, dxbfile_pages);
     if (unlikely(usr->result.backed_pages < NUM_METAS)) {
-      chk_scope_issue(inner, "backed-pages %zu < num-metas %u", usr->result.backed_pages, NUM_METAS);
-      return MDBX_CORRUPTED;
-    }
-    if (unlikely(dxbfile_pages < NUM_METAS)) {
       chk_scope_issue(inner, "backed-pages %zu < num-metas %u", usr->result.backed_pages, NUM_METAS);
       return MDBX_CORRUPTED;
     }
@@ -1443,7 +1435,7 @@ __cold static int env_chk(MDBX_chk_scope_t *const scope) {
 
     if ((env->flags & (MDBX_EXCLUSIVE | MDBX_RDONLY)) != MDBX_RDONLY) {
       if (unlikely(usr->result.backed_pages > dxbfile_pages)) {
-        chk_scope_issue(inner, "backed-pages %zu > file-pages %" PRIu64, usr->result.backed_pages, dxbfile_pages);
+        chk_scope_issue(inner, "backed-pages %zu > dxb-file-pages %" PRIu64, usr->result.backed_pages, dxbfile_pages);
         usr->result.backed_pages = (size_t)dxbfile_pages;
       }
       if (unlikely(usr->result.alloc_pages > usr->result.backed_pages)) {
@@ -1489,7 +1481,7 @@ __cold static int env_chk(MDBX_chk_scope_t *const scope) {
       line = chk_line_begin(inner, MDBX_chk_notice);
       chk_line_feed(chk_print(line, " > WARNING: Due Windows system limitations a file couldn't"));
       chk_line_feed(chk_print(line, " > be truncated while the database is opened. So, the size"));
-      chk_line_feed(chk_print(line, " > database file of may by large than the database itself,"));
+      chk_line_feed(chk_print(line, " > database file may be large than the database itself,"));
       chk_line_end(chk_print(line, " > until it will be closed or reopened in read-write mode."));
     }
 #endif /* Windows || Debug */

@@ -367,7 +367,7 @@ MDBX_INTERNAL void ior_put_event(osal_ioring_t *ior, HANDLE event);
 /*----------------------------------------------------------------------------*/
 /* libc compatibility stuff */
 
-#if (!defined(__GLIBC__) && __GLIBC_PREREQ(2, 1)) && (defined(_GNU_SOURCE) || defined(_BSD_SOURCE))
+#if (defined(__GLIBC__) && __GLIBC_PREREQ(2, 1)) && (defined(_GNU_SOURCE) || defined(_BSD_SOURCE))
 #define osal_asprintf asprintf
 #define osal_vasprintf vasprintf
 #else

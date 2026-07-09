@@ -329,7 +329,7 @@ int gc_merge_loose(MDBX_txn *txn) {
     size_t w = 0, sorted_out = 0;
     for (size_t r = w; ++r <= dl->length;) {
       page_t *dp = dl->items[r].ptr;
-      cASSERT0(txn, dp->flags == P_LOOSE || is_modifable(txn, dp));
+      cASSERT0(txn, dp->flags == P_LOOSE || is_modifiable(txn, dp));
       cASSERT0(txn, dpl_endpgno(dl, r) <= txn->geo.first_unallocated);
       if ((dp->flags & P_LOOSE) == 0) {
         if (++w != r)
@@ -970,13 +970,16 @@ static inline int gc_reserve4return(MDBX_txn *txn, gcu_t *ctx, const size_t chun
 
 #ifndef _MSC_VER
   MDBX_val key = {.iov_base = &reservation_id, .iov_len = sizeof(reservation_id)};
+  MDBX_val data = {.iov_base = nullptr, .iov_len = gc_chunk_bytes(chunk_hi)};
 #else
   /* avoid MSVC crash and/or ICE */
   MDBX_val key;
   key.iov_base = &reservation_id;
   key.iov_len = sizeof(reservation_id);
+  MDBX_val data;
+  data.iov_base = nullptr;
+  data.iov_len = gc_chunk_bytes(chunk_hi);
 #endif
-  MDBX_val data = {.iov_base = nullptr, .iov_len = gc_chunk_bytes(chunk_hi)};
   TRACE("%s: reserved +%zu...+%zu [%zu...%zu), err %d", dbg_prefix(ctx), chunk_lo, chunk_hi,
         ctx->return_reserved_lo + 1, ctx->return_reserved_hi + chunk_hi + 1, err);
   gc_prepare_stockpile4update(txn, ctx);
@@ -1409,7 +1412,7 @@ retry:
   tASSERT1(txn, pnl_check_allocated(txn->wr.repnl, txn->geo.first_unallocated));
   tASSERT1(txn, txn_dpl_check(txn));
   if (unlikely(/* paranoia */ ctx->loop > ((MDBX_DEBUG > 0) ? 12 : 42))) {
-    ERROR("txn #%" PRIaTXN " too more loops %u, bailout", txn->txnid, ctx->loop);
+    ERROR("txn #%" PRIaTXN " too many loops %u, bailout", txn->txnid, ctx->loop);
     err = MDBX_PROBLEM;
     goto bailout;
   }

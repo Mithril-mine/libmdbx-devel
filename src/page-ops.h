@@ -27,7 +27,7 @@ MDBX_MAYBE_UNUSED MDBX_NOTHROW_PURE_FUNCTION static inline bool is_correct(const
   return mp->txnid <= txn->front_txnid;
 }
 
-MDBX_NOTHROW_PURE_FUNCTION static inline bool is_modifable(const MDBX_txn *txn, const page_t *mp) {
+MDBX_NOTHROW_PURE_FUNCTION static inline bool is_modifiable(const MDBX_txn *txn, const page_t *mp) {
   return mp->txnid == txn->front_txnid;
 }
 
@@ -53,8 +53,8 @@ MDBX_INTERNAL pgr_t page_get_unchecked(MDBX_txn *const txn, const pgno_t pgno, c
 MDBX_INTERNAL int __must_check_result page_dirty(MDBX_txn *txn, page_t *mp, size_t npages);
 MDBX_INTERNAL pgr_t page_new(MDBX_cursor *mc, const unsigned flags);
 MDBX_INTERNAL pgr_t page_new_large(MDBX_cursor *mc, const size_t npages);
-MDBX_INTERNAL int page_touch_modifable(MDBX_txn *txn, const page_t *const mp);
-MDBX_INTERNAL int page_touch_unmodifable(MDBX_txn *txn, MDBX_cursor *mc, const page_t *const mp);
+MDBX_INTERNAL int page_touch_modifiable(MDBX_txn *txn, const page_t *const mp);
+MDBX_INTERNAL int page_touch_unmodifiable(MDBX_txn *txn, MDBX_cursor *mc, const page_t *const mp);
 
 static inline int page_touch(MDBX_cursor *mc) {
   page_t *const mp = mc->pg[mc->top];
@@ -74,14 +74,14 @@ static inline int page_touch(MDBX_cursor *mc) {
     tASSERT0(txn, txn_dpl_check(txn));
   }
 
-  if (is_modifable(txn, mp)) {
+  if (is_modifiable(txn, mp)) {
     if (!txn->wr.dirtylist) {
       cASSERT0(txn, (txn->flags & MDBX_WRITEMAP) && !MDBX_AVOID_MSYNC);
       return MDBX_SUCCESS;
     }
-    return is_subpage(mp) ? MDBX_SUCCESS : page_touch_modifable(txn, mp);
+    return is_subpage(mp) ? MDBX_SUCCESS : page_touch_modifiable(txn, mp);
   }
-  return page_touch_unmodifable(txn, mc, mp);
+  return page_touch_unmodifiable(txn, mc, mp);
 }
 
 MDBX_INTERNAL void page_copy(page_t *const dst, const page_t *const src, const size_t size);

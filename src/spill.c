@@ -72,7 +72,7 @@ static size_t spill_cursor_keep(const MDBX_txn *const txn, const MDBX_cursor *mc
       TRACE("dbi %zu, mc-%p[%zu], page %u %p", cursor_dbi(mc), __Wpedantic_format_voidptr(mc), i, mp->pgno,
             __Wpedantic_format_voidptr(mp));
       cASSERT0(txn, !is_subpage(mp));
-      if (is_modifable(txn, mp)) {
+      if (is_modifiable(txn, mp)) {
         size_t const n = txn_dpl_search(txn, mp->pgno);
         if (txn->wr.dirtylist->items[n].pgno == mp->pgno &&
             /* не считаем дважды */ txn_dpl_age(txn, n)) {

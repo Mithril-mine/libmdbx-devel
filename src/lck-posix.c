@@ -742,7 +742,7 @@ __cold static int osal_ipclock_failed(MDBX_env *env, osal_ipclock_t *ipc, const 
 
 #if defined(__ANDROID_API__) || defined(ANDROID) || defined(BIONIC)
 int osal_check_tid4bionic(void) {
-  /* avoid 32-bit Bionic bug/hang with 32-pit TID */
+  /* avoid 32-bit Bionic bug/hang with 32-bit TID */
   if (sizeof(pthread_mutex_t) < sizeof(pid_t) + sizeof(unsigned)) {
     pid_t tid = gettid();
     if (unlikely(tid > 0xffff)) {

@@ -2,7 +2,7 @@
 /// \author Леонид Юрьев aka Leonid Yuriev <leo@yuriev.ru> \date 2015-2026
 ///
 /// \file sort.h
-/// \brief Маркосы реализующие сортировку и двоичный поиск
+/// \brief Макросы реализующие сортировку и двоичный поиск
 
 #pragma once
 

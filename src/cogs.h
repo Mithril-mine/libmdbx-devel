@@ -162,7 +162,7 @@ MDBX_NOTHROW_PURE_FUNCTION static inline size_t branch_size(const MDBX_env *env,
   if (unlikely(node_bytes > env->branch_nodemax)) {
     /* put on large/overflow page, not implemented */
     panic_fmt(env, "node_size(key) %zu > %u branch_nodemax", node_bytes, env->branch_nodemax);
-    node_bytes = node_size(key, nullptr) + sizeof(pgno_t);
+    /* node_bytes = node_size(key, nullptr) + sizeof(pgno_t); */
   }
 
   return node_bytes + sizeof(indx_t);
@@ -232,7 +232,7 @@ MDBX_NOTHROW_PURE_FUNCTION MDBX_INTERNAL size_t bytes_ceil2sp_pgno(const MDBX_en
 MDBX_NOTHROW_PURE_FUNCTION MDBX_INTERNAL size_t pgno_ceil2sp_bytes(const MDBX_env *env, size_t pgno);
 MDBX_NOTHROW_PURE_FUNCTION MDBX_INTERNAL pgno_t pgno_ceil2sp_pgno(const MDBX_env *env, size_t pgno);
 
-/* align to system allocation granularityor page size (MDBX_ROUNDING_TO_ALLOCATION_GRANULARITY) */
+/* align to system allocation granularity or page size (MDBX_ROUNDING_TO_ALLOCATION_GRANULARITY) */
 MDBX_NOTHROW_PURE_FUNCTION MDBX_INTERNAL size_t bytes_ceil2os_bytes(const MDBX_env *env, size_t bytes);
 MDBX_NOTHROW_PURE_FUNCTION MDBX_INTERNAL size_t bytes_ceil2os_pgno(const MDBX_env *env, size_t bytes);
 MDBX_NOTHROW_PURE_FUNCTION MDBX_INTERNAL size_t pgno_ceil2os_bytes(const MDBX_env *env, size_t pgno);
@@ -427,7 +427,7 @@ MDBX_NOTHROW_PURE_FUNCTION MDBX_INTERNAL int cmp_lenfast(const MDBX_val *a, cons
 MDBX_NOTHROW_PURE_FUNCTION MDBX_INTERNAL bool eq_fast_slowpath(const uint8_t *a, const uint8_t *b, size_t l);
 
 MDBX_NOTHROW_PURE_FUNCTION static inline bool eq_fast(const MDBX_val *a, const MDBX_val *b) {
-  return unlikely(a->iov_len == b->iov_len) && eq_fast_slowpath(a->iov_base, b->iov_base, a->iov_len);
+  return a->iov_len == b->iov_len && eq_fast_slowpath(a->iov_base, b->iov_base, a->iov_len);
 }
 
 MDBX_NOTHROW_PURE_FUNCTION MDBX_INTERNAL int cmp_equal_or_greater(const MDBX_val *a, const MDBX_val *b);
