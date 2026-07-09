@@ -63,6 +63,8 @@ The supporting release of a stable branch with bug fixes.
 
  - Fixed potential buffer overread by `fgets()` in `mdbx_load` utility.
 
+ - Fixed a lot of typos and a few bugs detected by CodeQL.
+
 ### Backward compatibility breaks:
 
  - Now API functions that do not receive a transaction in arguments, but require a write lock, always checks that the current thread owns (launched) the writing transaction.
@@ -70,11 +72,11 @@ The supporting release of a stable branch with bug fixes.
    This can lead to deadlock in `MDBX_NOSTICKYTHREADS` mode!
 
    These functions include:
-    - mdbx_env_set_flags(), mdbx_env_set_option();
-    - mdbx_env_set_geometry();
-    - mdbx_env_sync_ex(), mdbx_env_sync(), mdbx_env_sync_poll();
-    - mdbx_env_stat(), mdbx_env_stat_ex(txn=nullptr);
-    - mdbx_env_defrag(), mdbx_env_close_ex(), mdbx_env_close();
+    - `mdbx_env_set_flags()`, `mdbx_env_set_option()`;
+    - `mdbx_env_set_geometry()`;
+    - `mdbx_env_sync_ex()`, `mdbx_env_sync()`, `mdbx_env_sync_poll()`;
+    - `mdbx_env_stat()`, `mdbx_env_stat_ex()` when called with `txn=nullptr`;
+    - `mdbx_env_defrag()`, `mdbx_env_close_ex()`, `mdbx_env_close()`;
 
    Deadlock in `MDBX_NOSTICKYTHREADS` mode can only occur when a writing transaction is started in one thread, and a synchronous call to one of the listed above functions is performed in the other, in a context that prevents the completion of a running writing transaction:
     - a writing transaction has been started, and an application logic of its completion is waiting for some work to be done by other threads;
