@@ -551,7 +551,7 @@ test-singleprocess: build-stochastic
 	$(QUIET)test/stochastic.sh --dont-check-ram-size --single --loops 2 --db-upto-mb 256 --skip-make --taillog >$(TEST_LOG) || (cat $(TEST_LOG) && false)
 
 memcheck: smoke-memcheck
-smoke-memcheck: VALGRIND=valgrind --trace-children=yes --log-file=valgrind-%p.log --leak-check=full --track-origins=yes --read-var-info=yes --error-exitcode=42 --suppressions=test/valgrind_suppress.txt
+smoke-memcheck: VALGRIND=valgrind --trace-children=yes --log-file=valgrind-%p.log --leak-check=full --track-origins=yes --read-var-info=yes --error-exitcode=42 --suppressions=valgrind_suppress.txt
 smoke-memcheck: CFLAGS_EXTRA=-Ofast -DENABLE_MEMCHECK
 smoke-memcheck: build-stochastic
 	@echo "  SMOKE \`mdbx_test basic\` under Valgrind's memcheck..."
