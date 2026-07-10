@@ -27,13 +27,14 @@ class testcase_copy : public testcase {
 
 public:
   testcase_copy(const actor_config &config, const mdbx_pid_t pid)
-      : testcase(config, pid), copy_pathname(config.params.pathname_db + "-copy") {}
+      : testcase(config, pid), copy_pathname(config.params.pathname_db + "-copy") { assert(!config.params.pathname_db.empty()); }
   bool run() override;
 };
 REGISTER_TESTCASE(copy);
 
 void testcase_copy::copy_db(const bool with_compaction) {
   int err;
+  assert(!copy_pathname.empty());
   const bool overwrite = flipcoin();
   if (!overwrite) {
     err = mdbx_env_delete(copy_pathname.c_str(), MDBX_ENV_JUST_DELETE);
@@ -45,7 +46,9 @@ void testcase_copy::copy_db(const bool with_compaction) {
     err = mdbx_env_copy(db_guard.get(), copy_pathname.c_str(),
                         (with_compaction ? MDBX_CP_COMPACT : MDBX_CP_DEFAULTS) |
                             (overwrite ? MDBX_CP_OVERWRITE : MDBX_CP_DEFAULTS));
-    log_verbose("mdbx_env_copy(%s), err %d", with_compaction ? "true" : "false", err);
+    log_verbose("mdbx_env_copy(%s, with_compaction=%s, overwrite=%s), err %d", copy_pathname.c_str(),
+                with_compaction ? "true" : "false",
+                overwrite ? "true" : "false", err);
     if (unlikely(err != MDBX_SUCCESS))
       failure_perror(with_compaction ? "mdbx_env_copy(MDBX_CP_COMPACT)" : "mdbx_env_copy(MDBX_CP_ASIS)", err);
   } else {
@@ -62,7 +65,7 @@ void testcase_copy::copy_db(const bool with_compaction) {
           (enable_renew ? MDBX_CP_RENEW_TXN : MDBX_CP_DEFAULTS) | (overwrite ? MDBX_CP_OVERWRITE : MDBX_CP_DEFAULTS);
       txn_begin(ro);
       err = mdbx_txn_copy2pathname(txn_guard.get(), copy_pathname.c_str(), flags);
-      log_verbose("mdbx_txn_copy2pathname(flags=0x%X), err %d", flags, err);
+      log_verbose("mdbx_txn_copy2pathname(%s, flags=0x%X), err %d", copy_pathname.c_str(), flags, err);
       txn_end(err != MDBX_SUCCESS || flipcoin());
       if (unlikely(err != MDBX_SUCCESS && !(throttle && err == MDBX_OUSTED) &&
                    !(!enable_renew && err == MDBX_MVCC_RETARDED) &&
