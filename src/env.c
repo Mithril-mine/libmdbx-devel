@@ -287,12 +287,14 @@ __cold int env_open(MDBX_env *env, mdbx_mode_t mode) {
   int rc = osal_openfile((env->flags & MDBX_RDONLY) ? MDBX_OPEN_DXB_READ : MDBX_OPEN_DXB_LAZY, env, env->pathname.dxb,
                          &env->lazy_fd, mode);
   if (unlikely(rc != MDBX_SUCCESS))
-    return rc;
+    return LOG_IFERR(rc);
 
 #if MDBX_LOCKING == MDBX_LOCKING_SYSV
   env->me_sysv_ipc.key = ftok(env->pathname.dxb, 42);
-  if (unlikely(env->me_sysv_ipc.key == -1))
-    return errno;
+  if (unlikely(env->me_sysv_ipc.key == -1)) {
+    rc = errno;
+    return LOG_IFERR(rc);
+  }
 #endif /* MDBX_LOCKING */
 
   /* Set the position in files outside of the data to avoid corruption
@@ -300,7 +302,7 @@ __cold int env_open(MDBX_env *env, mdbx_mode_t mode) {
   uint64_t safe_parking_lot_offset = UINT64_C(0x7fffFFFF80000000);
   rc = osal_fseek_shut(env->lazy_fd, &safe_parking_lot_offset);
   if (unlikely(rc != MDBX_SUCCESS))
-    return rc;
+    return LOG_IFERR(rc);
 
   env->fd4meta = env->lazy_fd;
 #if IS_WINDOWS
@@ -350,17 +352,19 @@ __cold int env_open(MDBX_env *env, mdbx_mode_t mode) {
     rc = osal_openfile(ior_direct ? MDBX_OPEN_DXB_OVERLAPPED_DIRECT : MDBX_OPEN_DXB_OVERLAPPED, env, env->pathname.dxb,
                        &env->ioring.overlapped_fd, 0);
     if (unlikely(rc != MDBX_SUCCESS))
-      return rc;
+      return LOG_IFERR(rc);
     rc = osal_fseek(env->ioring.overlapped_fd, safe_parking_lot_offset);
     if (unlikely(rc != MDBX_SUCCESS))
-      return rc;
+      return LOG_IFERR(rc);
   }
 #else
   if (mode == 0) {
     /* pickup mode for lck-file */
     struct stat st;
-    if (unlikely(fstat(env->lazy_fd, &st)))
-      return errno;
+    if (unlikely(fstat(env->lazy_fd, &st))) {
+      rc = errno;
+      return LOG_IFERR(rc);
+    }
     mode = st.st_mode;
   }
   mode = (/* inherit read permissions for group and others */ mode & (S_IRGRP | S_IWGRP | S_IROTH | S_IWOTH)) |
@@ -370,11 +374,11 @@ __cold int env_open(MDBX_env *env, mdbx_mode_t mode) {
 #endif /* !Windows */
   const int lck_rc = lck_setup(env, mode);
   if (unlikely(MDBX_IS_ERROR(lck_rc)))
-    return lck_rc;
+    return LOG_IFERR(lck_rc);
   if (env->lck_mmap.fd != INVALID_HANDLE_VALUE) {
     rc = osal_fseek(env->lck_mmap.fd, safe_parking_lot_offset);
     if (unlikely(rc != MDBX_SUCCESS))
-      return rc;
+      return LOG_IFERR(rc);
   }
 
   eASSERT0(env, env->dsync_fd == INVALID_HANDLE_VALUE);
@@ -385,13 +389,13 @@ __cold int env_open(MDBX_env *env, mdbx_mode_t mode) {
                       ))) {
     rc = osal_openfile(MDBX_OPEN_DXB_DSYNC, env, env->pathname.dxb, &env->dsync_fd, 0);
     if (unlikely(MDBX_IS_ERROR(rc)))
-      return rc;
+      return LOG_IFERR(rc);
     if (env->dsync_fd != INVALID_HANDLE_VALUE) {
       if ((env->flags & MDBX_NOMETASYNC) == 0)
         env->fd4meta = env->dsync_fd;
       rc = osal_fseek(env->dsync_fd, safe_parking_lot_offset);
       if (unlikely(rc != MDBX_SUCCESS))
-        return rc;
+        return LOG_IFERR(rc);
     }
   }
 
@@ -461,7 +465,7 @@ __cold int env_open(MDBX_env *env, mdbx_mode_t mode) {
   env_clear_incore_cache(env);
   const int dxb_rc = dxb_setup(env, lck_rc, mode);
   if (MDBX_IS_ERROR(dxb_rc))
-    return dxb_rc;
+    return LOG_IFERR(dxb_rc);
 
   rc = osal_check_fs_incore(env->lazy_fd);
   env->incore = false;
@@ -471,7 +475,7 @@ __cold int env_open(MDBX_env *env, mdbx_mode_t mode) {
     rc = MDBX_SUCCESS;
   } else if (unlikely(rc != MDBX_SUCCESS)) {
     ERROR("check_fs_incore(), err %d", rc);
-    return rc;
+    return LOG_IFERR(rc);
   }
 
   if (unlikely(/* recovery mode */ env->stuck_meta >= 0) &&
@@ -492,11 +496,11 @@ __cold int env_open(MDBX_env *env, mdbx_mode_t mode) {
       rc = lck_downgrade(env);
       DEBUG("lck-downgrade-%s: rc %i", (env->flags & MDBX_EXCLUSIVE) ? "partial" : "full", rc);
       if (rc != MDBX_SUCCESS)
-        return rc;
+        return LOG_IFERR(rc);
     } else {
       rc = mvcc_cleanup_dead(env, false, nullptr);
       if (MDBX_IS_ERROR(rc))
-        return rc;
+        return LOG_IFERR(rc);
     }
   }
 
@@ -507,7 +511,7 @@ __cold int env_open(MDBX_env *env, mdbx_mode_t mode) {
                                                        ior_direct, env->ioring.overlapped_fd
 #endif /* Windows */
                                     );
-  return rc;
+  return LOG_IFERR(rc);
 }
 
 __cold int env_close(MDBX_env *env, bool resurrect_after_fork) {

@@ -2109,19 +2109,19 @@ int osal_mmap(const int flags, osal_mmap_t *map, size_t size, const size_t limit
       ERROR("%" MDBX_PRIsPATH " is on a remote file system, the %s is required", pathname4logging, "MDBX_EXCLUSIVE");
       __fallthrough /* fall through */;
     default:
-      return err;
+      return LOG_IFERR(err);
     }
   }
 
   err = check_mmap_limit(limit);
   if (unlikely(err != MDBX_SUCCESS))
-    return err;
+    return LOG_IFERR(err);
 
   if ((flags & MDBX_RDONLY) == 0 && (options & MMAP_OPTION_SETLENGTH) != 0) {
     err = osal_fsetsize(map->fd, size);
     VERBOSE("osal_fsetsize %zu, err %d", size, err);
     if (err != MDBX_SUCCESS)
-      return err;
+      return LOG_IFERR(err);
     map->filesize = size;
 #if !IS_WINDOWS
     map->current = size;
@@ -2130,7 +2130,7 @@ int osal_mmap(const int flags, osal_mmap_t *map, size_t size, const size_t limit
     err = osal_filesize(map->fd, &map->filesize);
     VERBOSE("filesize %" PRIu64 ", err %d", map->filesize, err);
     if (err != MDBX_SUCCESS)
-      return err;
+      return LOG_IFERR(err);
 #if IS_WINDOWS
     if (map->filesize < size) {
       WARNING("file size (%zu) less than requested for mapping (%zu)", (size_t)map->filesize, size);
@@ -2212,14 +2212,18 @@ int osal_mmap(const int flags, osal_mmap_t *map, size_t size, const size_t limit
     map->limit = 0;
     map->current = 0;
     map->base = nullptr;
-    ASSERT(errno != 0);
-    return errno;
+    err = errno;
+    ASSERT(err != 0);
+    return LOG_IFERR(err);
   }
   map->limit = limit;
 
 #ifdef MADV_DONTFORK
-  if (unlikely(madvise(map->base, map->limit, MADV_DONTFORK) != 0))
-    return errno;
+  if (unlikely(madvise(map->base, map->limit, MADV_DONTFORK) != 0)) {
+    err = errno;
+    ASSERT(err != 0);
+    return LOG_IFERR(err);
+  }
 #endif /* MADV_DONTFORK */
 #ifdef MADV_NOHUGEPAGE
   (void)madvise(map->base, map->limit, MADV_NOHUGEPAGE);

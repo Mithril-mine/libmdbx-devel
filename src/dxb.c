@@ -538,7 +538,7 @@ __cold int dxb_setup(MDBX_env *env, const int lck_rc, const mdbx_mode_t mode_bit
   if (unlikely(err != MDBX_SUCCESS)) {
     if (lck_rc != /* lck exclusive */ MDBX_RESULT_TRUE || err != MDBX_ENODATA || (env->flags & MDBX_RDONLY) != 0 ||
         /* recovery mode */ env->stuck_meta >= 0)
-      return err;
+      return LOG_IFERR(err);
 
     DEBUG("%s", "create new database");
     rc = /* new database */ MDBX_RESULT_TRUE;
@@ -547,26 +547,26 @@ __cold int dxb_setup(MDBX_env *env, const int lck_rc, const mdbx_mode_t mode_bit
       /* set defaults if not configured */
       err = mdbx_env_set_geometry(env, 0, -1, -1, -1, -1, -1);
       if (unlikely(err != MDBX_SUCCESS))
-        return err;
+        return LOG_IFERR(err);
     }
 
     err = env_page_auxbuffer(env);
     if (unlikely(err != MDBX_SUCCESS))
-      return err;
+      return LOG_IFERR(err);
 
     header = *meta_init_triplet(env, env->page_auxbuf);
     err = osal_pwrite(env->lazy_fd, env->page_auxbuf, env->ps * (size_t)NUM_METAS, 0);
     if (unlikely(err != MDBX_SUCCESS))
-      return err;
+      return LOG_IFERR(err);
 
     err = osal_fsetsize(env->lazy_fd, env->dxb_mmap.filesize = env->dxb_mmap.current = env->geo_in_bytes.now);
     if (unlikely(err != MDBX_SUCCESS))
-      return err;
+      return LOG_IFERR(err);
 
 #if MDBX_CHECKING > 0 || MDBX_DEBUG > 0
     err = dxb_read_header(env, &header, lck_rc, mode_bits);
     if (unlikely(err != MDBX_SUCCESS))
-      return err;
+      return LOG_IFERR(err);
 #endif /* MDBX_CHECKING > 0 || MDBX_DEBUG > 0 */
   }
 
@@ -594,7 +594,7 @@ __cold int dxb_setup(MDBX_env *env, const int lck_rc, const mdbx_mode_t mode_bit
   if ((env->flags & MDBX_RDONLY) == 0) {
     err = env_page_auxbuffer(env);
     if (unlikely(err != MDBX_SUCCESS))
-      return err;
+      return LOG_IFERR(err);
   }
 
   size_t expected_filesize = 0;
@@ -711,13 +711,13 @@ __cold int dxb_setup(MDBX_env *env, const int lck_rc, const mdbx_mode_t mode_bit
   err = osal_mmap(env->flags, &env->dxb_mmap, env->geo_in_bytes.now, env->geo_in_bytes.upper,
                   (lck_rc && env->stuck_meta < 0) ? MMAP_OPTION_SETLENGTH : 0, env->pathname.dxb);
   if (unlikely(err != MDBX_SUCCESS))
-    return err;
+    return LOG_IFERR(err);
 
 #if defined(MADV_DONTDUMP)
   err =
       madvise(env->dxb_mmap.base, env->dxb_mmap.limit, MADV_DONTDUMP) ? ignore_enosys_and_eagain(errno) : MDBX_SUCCESS;
   if (unlikely(MDBX_IS_ERROR(err)))
-    return err;
+    return LOG_IFERR(err);
 #endif /* MADV_DONTDUMP */
 #if defined(MADV_DODUMP)
   if (globals.runtime_flags & MDBX_DBG_DUMP) {
@@ -725,7 +725,7 @@ __cold int dxb_setup(MDBX_env *env, const int lck_rc, const mdbx_mode_t mode_bit
     err = madvise(env->dxb_mmap.base, meta_length_aligned2os, MADV_DODUMP) ? ignore_enosys_and_eagain(errno)
                                                                            : MDBX_SUCCESS;
     if (unlikely(MDBX_IS_ERROR(err)))
-      return err;
+      return LOG_IFERR(err);
   }
 #endif /* MADV_DODUMP */
 
@@ -972,7 +972,7 @@ __cold int dxb_setup(MDBX_env *env, const int lck_rc, const mdbx_mode_t mode_bit
                 ? ignore_enosys_and_eagain(errno)
                 : MDBX_SUCCESS;
       if (unlikely(MDBX_IS_ERROR(err)))
-        return err;
+        return LOG_IFERR(err);
     }
 #endif /* MADV_REMOVE */
 #if defined(MADV_DONTNEED)
@@ -982,23 +982,23 @@ __cold int dxb_setup(MDBX_env *env, const int lck_rc, const mdbx_mode_t mode_bit
               ? ignore_enosys_and_eagain(errno)
               : MDBX_SUCCESS;
     if (unlikely(MDBX_IS_ERROR(err)))
-      return err;
+      return LOG_IFERR(err);
 #elif defined(POSIX_MADV_DONTNEED)
     err = ignore_enosys(posix_madvise(ptr_disp(env->dxb_mmap.base, allocated_aligned2os_bytes),
                                       env->dxb_mmap.current - allocated_aligned2os_bytes, POSIX_MADV_DONTNEED));
     if (unlikely(MDBX_IS_ERROR(err)))
-      return err;
+      return LOG_IFERR(err);
 #elif defined(POSIX_FADV_DONTNEED)
     err = ignore_enosys(posix_fadvise(env->lazy_fd, allocated_aligned2os_bytes,
                                       env->dxb_mmap.current - allocated_aligned2os_bytes, POSIX_FADV_DONTNEED));
     if (unlikely(MDBX_IS_ERROR(err)))
-      return err;
+      return LOG_IFERR(err);
 #endif /* MADV_DONTNEED */
   }
 
   err = dxb_set_readahead(env, bytes2pgno(env, allocated_bytes), readahead, true);
   if (unlikely(err != MDBX_SUCCESS))
-    return err;
+    return LOG_IFERR(err);
 
   return rc;
 }
