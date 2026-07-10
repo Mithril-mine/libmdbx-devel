@@ -260,6 +260,26 @@ if(NOT CMAKE_VERSION VERSION_LESS 3.8.2)
   source_group("markdown" FILES REGULAR_EXPRESSION ".*[.]md")
 endif()
 
+# Memcheck-options should be defined before including CTest.
+# Otherwise CTest just ignore it.
+if(NOT WIN32)
+  if(NOT MEMORYCHECK_COMMAND)
+    find_program(MEMORYCHECK_COMMAND valgrind)
+  endif()
+  if(MEMORYCHECK_COMMAND)
+    set(MEMORYCHECK_TYPE Valgrind)
+    set(MEMORYCHECK_SUPPRESSIONS_FILE
+        "${CMAKE_CURRENT_SOURCE_DIR}/valgrind_suppress.txt"
+        CACHE FILEPATH "Suppressions file for Valgrind" FORCE)
+    set(MEMORYCHECK_COMMAND_OPTIONS
+        "--trace-children=yes --leak-check=full --track-origins=yes --expensive-definedness-checks=yes --error-exitcode=42 --error-markers=@VALGRIND --errors-for-leak-kinds=definite --fair-sched=yes --suppressions=${MEMORYCHECK_SUPPRESSIONS_FILE}"
+        CACHE STRING "Valgrind options" FORCE)
+    set(MEMORYCHECK_COMMAND_OPTIONS
+        "${MEMORYCHECK_COMMAND_OPTIONS}"
+        CACHE STRING "Valgrind options" FORCE)
+  endif()
+endif()
+
 if(NOT ((DEFINED BUILD_TESTING AND NOT BUILD_TESTING) OR (DEFINED MDBX_ENABLE_TESTS AND NOT MDBX_ENABLE_TESTS)))
   include(CTest)
   option(MDBX_ENABLE_TESTS "Build MDBX tests" ${BUILD_TESTING})
@@ -454,24 +474,6 @@ else()
 
   #> dist-cutoff-begin
   if(NOT MDBX_AMALGAMATED_SOURCE)
-    if(NOT WIN32)
-      if(NOT MEMORYCHECK_COMMAND)
-        find_program(MEMORYCHECK_COMMAND valgrind)
-      endif()
-      if(MEMORYCHECK_COMMAND)
-        # (LY) cmake is ugly and nasty. Therefore memcheck-options should be defined before including ctest. Otherwise
-        # ctest may ignore it.
-        set(MEMORYCHECK_SUPPRESSIONS_FILE
-            "${CMAKE_CURRENT_SOURCE_DIR}/test/valgrind_suppress.txt"
-            CACHE FILEPATH "Suppressions file for Valgrind" FORCE)
-        set(MEMORYCHECK_COMMAND_OPTIONS
-            "--trace-children=yes --leak-check=full --track-origins=yes --expensive-definedness-checks=yes --error-exitcode=42 --error-markers=@VALGRIND --errors-for-leak-kinds=definite --fair-sched=yes --suppressions=${MEMORYCHECK_SUPPRESSIONS_FILE}"
-            CACHE STRING "Valgrind options" FORCE)
-        set(MEMORYCHECK_COMMAND_OPTIONS
-            "${MEMORYCHECK_COMMAND_OPTIONS}"
-            CACHE STRING "Valgrind options" FORCE)
-      endif()
-    endif()
 
     # Enable 'make tags' target.
     find_program(CTAGS ctags)

@@ -555,7 +555,7 @@ test-singleprocess: build-stochastic
 	$(QUIET)test/stochastic.sh --dont-check-ram-size --single --loops 2 --db-upto-mb 256 --skip-make --taillog >$(TEST_LOG) || (cat $(TEST_LOG) && false)
 
 memcheck: smoke-memcheck
-smoke-memcheck: VALGRIND=valgrind --trace-children=yes --log-file=valgrind-%p.log --leak-check=full --track-origins=yes --read-var-info=yes --error-exitcode=42 --suppressions=test/valgrind_suppress.txt
+smoke-memcheck: VALGRIND=valgrind --trace-children=yes --log-file=valgrind-%p.log --leak-check=full --track-origins=yes --read-var-info=yes --error-exitcode=42 --suppressions=valgrind_suppress.txt
 smoke-memcheck: CFLAGS_EXTRA=-Ofast -DENABLE_MEMCHECK
 smoke-memcheck: build-stochastic
 	@echo "  SMOKE \`mdbx_test basic\` under Valgrind's memcheck..."
@@ -906,7 +906,7 @@ $(1): $(2) src/version.c $(lastword $(MAKEFILE_LIST))
 	$$< | cat -s >$$@
 
 endef
-$(foreach file,mdbx.h $(filter-out man1/% VERSION.json .clang-format-ignore %.in ntdll.def valgrind_suppress.txt, $(DIST_EXTRA)), $(eval $(call dist-extra-rule, $(DIST_DIR)/$(file), $(file))))
+$(foreach file,mdbx.h $(filter-out man1/% VERSION.json .clang-format-ignore %.in ntdll.def, $(DIST_EXTRA)), $(eval $(call dist-extra-rule, $(DIST_DIR)/$(file), $(file))))
 
 $(DIST_DIR)/VERSION.json: src/version.c
 	@echo '  MAKE $@'
@@ -917,10 +917,6 @@ $(DIST_DIR)/.clang-format-ignore: $(lastword $(MAKEFILE_LIST))
 	$(QUIET)echo "$(filter-out %.h %h++,$(DIST_SRC))" | tr ' ' \\n > $@
 
 $(DIST_DIR)/ntdll.def: src/ntdll.def
-	@echo '  COPY $@'
-	$(QUIET)mkdir -p $(DIST_DIR)/ && cp $< $@
-
-$(DIST_DIR)/valgrind_suppress.txt: test/valgrind_suppress.txt
 	@echo '  COPY $@'
 	$(QUIET)mkdir -p $(DIST_DIR)/ && cp $< $@
 
