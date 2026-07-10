@@ -853,6 +853,9 @@ enum MDBX_constants {
  * \note Levels detailed than (great than) \ref MDBX_LOG_NOTICE
  * requires build libmdbx with \ref MDBX_DEBUG option. */
 typedef enum MDBX_log_level {
+  /** for \ref mdbx_setup_debug() only: Don't change current settings */
+  MDBX_LOG_DONTCHANGE = -1,
+
   /** Critical conditions, i.e. assertion failures.
    * \note libmdbx always produces such messages regardless
    * of \ref MDBX_DEBUG build option. */
@@ -896,12 +899,8 @@ typedef enum MDBX_log_level {
    * \note Requires build libmdbx with \ref MDBX_DEBUG option. */
   MDBX_LOG_EXTRA = 7,
 
-#ifdef ENABLE_UBSAN
-  MDBX_LOG_MAX = 7 /* avoid UBSAN false-positive trap by a tests */,
-#endif /* ENABLE_UBSAN */
-
-  /** for \ref mdbx_setup_debug() only: Don't change current settings */
-  MDBX_LOG_DONTCHANGE = -1
+  /** Avoids UBSAN false-positive issues/traps. */
+  MDBX_LOG_MAX = 7
 } MDBX_log_level_t;
 
 /** \brief Runtime debug flags
@@ -910,6 +909,9 @@ typedef enum MDBX_log_level {
  * effect, but `MDBX_DBG_ASSERT`, `MDBX_DBG_AUDIT` and `MDBX_DBG_JITTER` only if
  * libmdbx built with \ref MDBX_DEBUG. */
 typedef enum MDBX_debug_flags {
+  /** for mdbx_setup_debug() only: Don't change current settings */
+  MDBX_DBG_DONTCHANGE = -1,
+
   MDBX_DBG_NONE = 0,
 
   /** Enable assertion checks.
@@ -940,12 +942,8 @@ typedef enum MDBX_debug_flags {
    * the last signature regardless this flag */
   MDBX_DBG_DONT_UPGRADE = 64,
 
-#ifdef ENABLE_UBSAN
-  MDBX_DBG_MAX = ((unsigned)MDBX_LOG_MAX) << 16 | 127 /* avoid UBSAN false-positive trap by a tests */,
-#endif /* ENABLE_UBSAN */
-
-  /** for mdbx_setup_debug() only: Don't change current settings */
-  MDBX_DBG_DONTCHANGE = -1
+  /** Avoids UBSAN false-positive issues/traps. */
+  MDBX_DBG_MAX = ((unsigned)MDBX_LOG_MAX) << 16 | 127
 } MDBX_debug_flags_t;
 DEFINE_ENUM_FLAG_OPERATORS(MDBX_debug_flags)
 
