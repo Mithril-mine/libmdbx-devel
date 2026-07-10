@@ -338,6 +338,7 @@ test-assertion: smoke
 test-valgrind: test-memcheck
 test-memcheck: CFLAGS_EXTRA += -Ofast -DENABLE_MEMCHECK
 test-memcheck: CMAKE_OPT += -DENABLE_MEMCHECK=ON
+test-memcheck: CTEST_OPT += -T memcheck
 test-memcheck: build-test build-stochastic
 	@echo '  RUNNING `test/stochastic.sh --with-valgrind --loops 2`...'
 	$(QUIET)test/stochastic.sh --with-valgrind --loops 2 --db-upto-mb 256 --skip-make >$(TEST_LOG) || (cat $(TEST_LOG) && false)
@@ -550,9 +551,13 @@ test-singleprocess: build-stochastic
 	@echo '  RUNNING `test/stochastic.sh --single --loops 2`...'
 	$(QUIET)test/stochastic.sh --dont-check-ram-size --single --loops 2 --db-upto-mb 256 --skip-make --taillog >$(TEST_LOG) || (cat $(TEST_LOG) && false)
 
+
+smoke-valgrind: smoke-memcheck
 memcheck: smoke-memcheck
 smoke-memcheck: VALGRIND=valgrind --trace-children=yes --log-file=valgrind-%p.log --leak-check=full --track-origins=yes --read-var-info=yes --error-exitcode=42 --suppressions=valgrind_suppress.txt
 smoke-memcheck: CFLAGS_EXTRA=-Ofast -DENABLE_MEMCHECK
+smoke-memcheck: CMAKE_OPT += -DENABLE_MEMCHECK=ON
+smoke-memcheck: CTEST_OPT += -T memcheck
 smoke-memcheck: build-stochastic
 	@echo "  SMOKE \`mdbx_test basic\` under Valgrind's memcheck..."
 	$(QUIET)rm -f valgrind-*.log $(TEST_DB) $(TEST_LOG).gz && (set -o pipefail; ( \
