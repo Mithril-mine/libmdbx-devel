@@ -122,7 +122,7 @@ static MDBX_envinfo envinfo;
 #define GLOBAL 4
 static int mode = GLOBAL;
 
-static MDBX_val kbuf, dbuf;
+static MDBX_val key_buf, data_buf;
 
 #define STRLENOF(s) (sizeof(s) - 1)
 
@@ -150,7 +150,7 @@ static int readhdr(void) {
 
   while (true) {
     errno = 0;
-    if (fgets(dbuf.iov_base, (int)dbuf.iov_len, stdin) == nullptr)
+    if (fgets(data_buf.iov_base, (int)data_buf.iov_len, stdin) == nullptr)
       return errno ? errno : EOF;
     if (user_break)
       return MDBX_EINTR;
@@ -158,7 +158,7 @@ static int readhdr(void) {
     lineno++;
     uint64_t u64;
 
-    if (valnum(dbuf.iov_base, "VERSION", &u64)) {
+    if (valnum(data_buf.iov_base, "VERSION", &u64)) {
       if (u64 != 3) {
         if (!quiet)
           fprintf(stderr, "%s: line %" PRIiSIZE ": unsupported value %" PRIu64 " for %s\n", prog, lineno, u64,
@@ -168,7 +168,7 @@ static int readhdr(void) {
       continue;
     }
 
-    if (valnum(dbuf.iov_base, "db_pagesize", &u64)) {
+    if (valnum(data_buf.iov_base, "db_pagesize", &u64)) {
       if (!(mode & GLOBAL) && envinfo.mi_dxb_pagesize != u64) {
         if (!quiet)
           fprintf(stderr, "%s: line %" PRIiSIZE ": ignore value %" PRIu64 " for '%s' in non-global context\n", prog,
@@ -182,7 +182,7 @@ static int readhdr(void) {
       continue;
     }
 
-    char *str = valstr(dbuf.iov_base, "format");
+    char *str = valstr(data_buf.iov_base, "format");
     if (str) {
       if (strcmp(str, "print") == 0) {
         mode |= PLAINTEXT;
@@ -197,7 +197,7 @@ static int readhdr(void) {
       exit(EXIT_FAILURE);
     }
 
-    str = valstr(dbuf.iov_base, "database");
+    str = valstr(data_buf.iov_base, "database");
     if (str) {
       if (*str) {
         free(subname);
@@ -211,7 +211,7 @@ static int readhdr(void) {
       continue;
     }
 
-    str = valstr(dbuf.iov_base, "type");
+    str = valstr(data_buf.iov_base, "type");
     if (str) {
       if (strcmp(str, "btree") != 0) {
         if (!quiet)
@@ -222,7 +222,7 @@ static int readhdr(void) {
       continue;
     }
 
-    if (valnum(dbuf.iov_base, "mapaddr", &u64)) {
+    if (valnum(data_buf.iov_base, "mapaddr", &u64)) {
       if (u64) {
         if (!quiet)
           fprintf(stderr, "%s: line %" PRIiSIZE ": ignore unsupported value 0x%" PRIx64 " for %s\n", prog, lineno, u64,
@@ -231,7 +231,7 @@ static int readhdr(void) {
       continue;
     }
 
-    if (valnum(dbuf.iov_base, "mapsize", &u64)) {
+    if (valnum(data_buf.iov_base, "mapsize", &u64)) {
       if (!(mode & GLOBAL)) {
         if (!quiet)
           fprintf(stderr, "%s: line %" PRIiSIZE ": ignore value %" PRIu64 " for '%s' in non-global context\n", prog,
@@ -245,7 +245,7 @@ static int readhdr(void) {
       continue;
     }
 
-    if (valnum(dbuf.iov_base, "maxreaders", &u64)) {
+    if (valnum(data_buf.iov_base, "maxreaders", &u64)) {
       if (!(mode & GLOBAL)) {
         if (!quiet)
           fprintf(stderr, "%s: line %" PRIiSIZE ": ignore value %" PRIu64 " for '%s' in non-global context\n", prog,
@@ -259,7 +259,7 @@ static int readhdr(void) {
       continue;
     }
 
-    if (valnum(dbuf.iov_base, "txnid", &u64)) {
+    if (valnum(data_buf.iov_base, "txnid", &u64)) {
       if (u64 < MIN_TXNID || u64 > MAX_TXNID) {
         if (!quiet)
           fprintf(stderr, "%s: line %" PRIiSIZE ": ignore unsupported value 0x%" PRIx64 " for %s\n", prog, lineno, u64,
@@ -268,12 +268,12 @@ static int readhdr(void) {
       continue;
     }
 
-    if (valnum(dbuf.iov_base, "sequence", &u64)) {
+    if (valnum(data_buf.iov_base, "sequence", &u64)) {
       sequence = u64;
       continue;
     }
 
-    str = valstr(dbuf.iov_base, "geometry");
+    str = valstr(data_buf.iov_base, "geometry");
     if (str) {
       if (!(mode & GLOBAL)) {
         if (!quiet)
@@ -294,7 +294,7 @@ static int readhdr(void) {
       continue;
     }
 
-    str = valstr(dbuf.iov_base, "canary");
+    str = valstr(data_buf.iov_base, "canary");
     if (str) {
       if (!(mode & GLOBAL)) {
         if (!quiet)
@@ -313,7 +313,7 @@ static int readhdr(void) {
 
     for (int i = 0; dbflags[i].bit; i++) {
       bool value = false;
-      if (valbool(dbuf.iov_base, dbflags[i].name, &value)) {
+      if (valbool(data_buf.iov_base, dbflags[i].name, &value)) {
         if (value)
           dbi_flags |= dbflags[i].bit;
         else
@@ -322,7 +322,7 @@ static int readhdr(void) {
       }
     }
 
-    str = valstr(dbuf.iov_base, "HEADER");
+    str = valstr(data_buf.iov_base, "HEADER");
     if (str) {
       if (strcmp(str, "END") == 0)
         return MDBX_SUCCESS;
@@ -330,7 +330,7 @@ static int readhdr(void) {
 
     if (!quiet)
       fprintf(stderr, "%s: line %" PRIiSIZE ": unrecognized keyword ignored: %s\n", prog, lineno,
-              (char *)dbuf.iov_base);
+              (char *)data_buf.iov_base);
   next:;
   }
   return EOF;
@@ -342,34 +342,29 @@ static int badend(void) {
   return errno ? errno : MDBX_ENODATA;
 }
 
-static inline int unhex(unsigned char *c2) {
-  int8_t hi = c2[0];
+static inline uint8_t unhex(const char *hex) {
+  int8_t hi = hex[0];
   hi = (hi | 0x20) - 'a';
   hi += 10 + ((hi >> 7) & 39);
 
-  int8_t lo = c2[1];
+  int8_t lo = hex[1];
   lo = (lo | 0x20) - 'a';
   lo += 10 + ((lo >> 7) & 39);
 
-  return hi << 4 | lo;
+  return (uint8_t)(hi << 4 | lo);
 }
 
 __hot static int readline(MDBX_val *out, MDBX_val *buf) {
-  unsigned char *c1, *c2, *end;
-  size_t len, l2;
-  int c;
-
   if (user_break)
     return MDBX_EINTR;
 
   errno = 0;
   if (!(mode & NOHDR)) {
-    c = fgetc(stdin);
+    int c = fgetc(stdin);
     if (c == EOF)
       return errno ? errno : EOF;
     if (c != ' ') {
       lineno++;
-      errno = 0;
       if (fgets(buf->iov_base, (int)buf->iov_len, stdin)) {
         if (c == 'D' && !strncmp(buf->iov_base, "ATA=END", STRLENOF("ATA=END")))
           return EOF;
@@ -379,74 +374,75 @@ __hot static int readline(MDBX_val *out, MDBX_val *buf) {
   }
 
   /* modern concise mode, where space in second position mean the same (previously) value */
-  c = fgetc(stdin);
+  int c = fgetc(stdin);
   if (c == EOF)
     return errno ? errno : EOF;
   if (c == ' ')
     return (ungetc(c, stdin) == c) ? MDBX_SUCCESS : (errno ? errno : EOF);
 
-  ((char *)buf->iov_base)[0] = c;
-  ((char *)buf->iov_base)[1] = 0;
-  if (c != '\n' && fgets((char *)buf->iov_base + 1, (int)buf->iov_len - 1, stdin) == nullptr)
+  char *line = buf->iov_base;
+  line[0] = c;
+  line[1] = 0;
+  if (c != '\n' && fgets(line + 1, (int)buf->iov_len - 1, stdin) == nullptr)
     return errno ? errno : EOF;
   lineno++;
 
-  c1 = buf->iov_base;
-  len = strlen((char *)c1);
-  l2 = len;
+  size_t len = strlen(line);
+  if (len > 0) {
+    /* Is buffer too short? */
+    while (line[len - 1] != '\n') {
+      /* double buffer size */
+      line = osal_realloc(buf->iov_base, buf->iov_len * 2);
+      if (!line) {
+        if (!quiet)
+          fprintf(stderr, "%s: line %" PRIiSIZE ": out of memory, line too long\n", prog, lineno);
+        return MDBX_ENOMEM;
+      }
+      buf->iov_base = line;
+      buf->iov_len *= 2;
 
-  /* Is buffer too short? */
-  while (len == 0 || c1[len - 1] != '\n') {
-    buf->iov_base = osal_realloc(buf->iov_base, buf->iov_len * 2);
-    if (!buf->iov_base) {
-      if (!quiet)
-        fprintf(stderr, "%s: line %" PRIiSIZE ": out of memory, line too long\n", prog, lineno);
-      return MDBX_ENOMEM;
+      /* continue read line */
+      errno = 0;
+      if (fgets(line + len, (int)buf->iov_len - len, stdin) == nullptr)
+        return errno ? errno : EOF;
+      len += strlen(line + len);
     }
-    c1 = buf->iov_base;
-    c1 += l2;
-    errno = 0;
-    if (fgets((char *)c1, (int)(buf->iov_len - l2), stdin) == nullptr)
-      return errno ? errno : EOF;
-    buf->iov_len *= 2;
-    len = strlen((char *)c1);
-    l2 += len;
+    /* strip '\n' at the end */
+    line[--len] = '\0';
   }
-  c1 = c2 = buf->iov_base;
-  len = l2;
-  c1[--len] = '\0';
-  end = c1 + len;
 
+  char *w = line, *r = line;
+  char *const end = r + len;
   if (mode & PLAINTEXT) {
-    while (c2 < end) {
-      if (unlikely(*c2 == '\\')) {
-        if (c2[1] == '\\') {
-          *c1++ = '\\';
+    while (r < end) {
+      if (unlikely(r[0] == '\\')) {
+        if (r[1] == '\\') {
+          *w++ = '\\';
         } else {
-          if (c2 + 3 > end || !isxdigit(c2[1]) || !isxdigit(c2[2]))
+          if (r + 3 > end || !isxdigit(r[1]) || !isxdigit(r[2]))
             return badend();
-          *c1++ = (char)unhex(++c2);
+          *w++ = unhex(++r);
         }
-        c2 += 2;
+        r += 2;
       } else {
         /* copies are redundant when no escapes were used */
-        *c1++ = *c2++;
+        *w++ = *r++;
       }
     }
   } else {
     /* odd length not allowed */
     if (len & 1)
       return badend();
-    while (c2 < end) {
-      if (!isxdigit(*c2) || !isxdigit(c2[1]))
+    while (r < end) {
+      if (!isxdigit(r[0]) || !isxdigit(r[1]))
         return badend();
-      *c1++ = (char)unhex(c2);
-      c2 += 2;
+      *w++ = unhex(r);
+      r += 2;
     }
   }
-  c2 = out->iov_base = buf->iov_base;
-  out->iov_len = c1 - c2;
 
+  out->iov_base = line;
+  out->iov_len = w - line;
   return MDBX_SUCCESS;
 }
 
@@ -626,9 +622,9 @@ int main(int argc, char *argv[]) {
     mdbx_setup_debug(MDBX_LOG_NOTICE, MDBX_DBG_DONTCHANGE, logger);
   }
 
-  dbuf.iov_len = 4096;
-  dbuf.iov_base = osal_malloc(dbuf.iov_len);
-  if (!dbuf.iov_base) {
+  data_buf.iov_len = 4096;
+  data_buf.iov_base = osal_malloc(data_buf.iov_len);
+  if (!data_buf.iov_base) {
     err = MDBX_ENOMEM;
     error("value-buffer", err);
     goto bailout;
@@ -706,15 +702,15 @@ int main(int argc, char *argv[]) {
     goto bailout;
   }
 
-  kbuf.iov_len = mdbx_env_get_maxkeysize_ex(env, 0) + (size_t)1;
-  if (kbuf.iov_len >= INTPTR_MAX / 2) {
+  key_buf.iov_len = mdbx_env_get_maxkeysize_ex(env, 0) + (size_t)1;
+  if (key_buf.iov_len >= INTPTR_MAX / 2) {
     if (!quiet)
-      fprintf(stderr, "mdbx_env_get_maxvalsize_ex() failed, returns %zu\n", kbuf.iov_len);
+      fprintf(stderr, "mdbx_env_get_maxvalsize_ex() failed, returns %zu\n", key_buf.iov_len);
     goto bailout;
   }
 
-  kbuf.iov_base = malloc(kbuf.iov_len);
-  if (!kbuf.iov_base) {
+  key_buf.iov_base = malloc(key_buf.iov_len);
+  if (!key_buf.iov_base) {
     err = MDBX_ENOMEM;
     error("key-buffer", err);
     goto bailout;
@@ -794,7 +790,7 @@ int main(int argc, char *argv[]) {
     size_t count = 0;
     MDBX_val key = {.iov_base = nullptr, .iov_len = 0}, data = {.iov_base = nullptr, .iov_len = 0};
     while (err == MDBX_SUCCESS) {
-      err = readline(&key, &kbuf);
+      err = readline(&key, &key_buf);
       if (err == EOF)
         break;
       if (err) {
@@ -803,7 +799,7 @@ int main(int argc, char *argv[]) {
         goto bailout;
       }
 
-      err = readline(&data, &dbuf);
+      err = readline(&data, &data_buf);
       if (err) {
         if (!quiet)
           fprintf(stderr, "%s: line %" PRIiSIZE ": failed to read %s\n", prog, lineno, "value");
@@ -899,8 +895,8 @@ bailout:
     mdbx_txn_abort(txn);
   if (env)
     mdbx_env_close(env);
-  free(kbuf.iov_base);
-  free(dbuf.iov_base);
+  free(key_buf.iov_base);
+  free(data_buf.iov_base);
 
   return err ? EXIT_FAILURE : EXIT_SUCCESS;
 }
