@@ -85,6 +85,7 @@ typedef union bin128 {
 
 #define MDBX_GOLD_RATIO_DBL 1.6180339887498948482
 #define MEGABYTE ((size_t)1 << 20)
+#define GIGABYTE ((size_t)1 << 30)
 
 /*----------------------------------------------------------------------------*/
 
@@ -97,6 +98,7 @@ union logger_union {
 struct libmdbx_globals {
   bin128_t bootid;
   unsigned sys_pagesize, sys_allocation_granularity;
+  size_t mmap_limit;
 #ifdef AT_UCACHEBSIZE
   unsigned sys_unified_cache_block;
 #endif /* AT_UCACHEBSIZE */
@@ -107,6 +109,9 @@ struct libmdbx_globals {
   bool running_under_Wine;
 #elif defined(__linux__) || defined(__gnu_linux__)
   bool running_on_WSL1 /* Windows Subsystem 1 for Linux */;
+#ifdef ENABLE_MEMCHECK
+  uint8_t running_on_Valgrind;
+#endif /* ENABLE_MEMCHECK */
   uint32_t linux_kernel_version;
 #endif /* Linux */
   union logger_union logger;
@@ -124,6 +129,14 @@ extern struct libmdbx_globals globals;
 #if IS_WINDOWS
 extern struct libmdbx_imports imports;
 #endif /* Windows */
+
+static inline bool mdbx_running_on_Valgrind(void) {
+#ifdef ENABLE_MEMCHECK
+  return globals.running_on_Valgrind;
+#else
+  return 0;
+#endif /* ENABLE_MEMCHECK */
+}
 
 #include "logging_and_debug.h"
 

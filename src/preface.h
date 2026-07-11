@@ -887,11 +887,16 @@ __extern_C key_t ftok(const char *, int);
 #endif /* ENABLE_MEMCHECK */
 
 #ifdef __SANITIZE_ADDRESS__
+#define RUNNING_ON_ASAN (1)
 #include <sanitizer/asan_interface.h>
 #elif !defined(ASAN_POISON_MEMORY_REGION)
 #define ASAN_POISON_MEMORY_REGION(addr, size) ((void)(addr), (void)(size))
 #define ASAN_UNPOISON_MEMORY_REGION(addr, size) ((void)(addr), (void)(size))
 #endif /* __SANITIZE_ADDRESS__ */
+
+#ifndef RUNNING_ON_ASAN
+#define RUNNING_ON_ASAN (0)
+#endif
 
 /*----------------------------------------------------------------------------*/
 /* DTrace dynamic tracing framework */

@@ -4,7 +4,8 @@
 #include "internals.h"
 
 static pgno_t env_max_pgno(const MDBX_env *env) {
-  return env->ps ? bytes2pgno(env, env->geo_in_bytes.upper ? env->geo_in_bytes.upper : MAX_MAPSIZE) : PAGELIST_LIMIT;
+  return env->ps ? bytes2pgno(env, env->geo_in_bytes.upper ? env->geo_in_bytes.upper : globals.mmap_limit)
+                 : PAGELIST_LIMIT;
 }
 
 __cold pgno_t default_dp_limit(const MDBX_env *env) {

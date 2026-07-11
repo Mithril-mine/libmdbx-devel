@@ -122,7 +122,7 @@ MDBX_NOTHROW_CONST_FUNCTION static inline size_t valsize_max(size_t pagesize, MD
   STATIC_ASSERT(PAGELIST_LIMIT <= MAX_PAGENO);
   const size_t pages_limit = PAGELIST_LIMIT / 4;
   const size_t limit = (hard_pages < pages_limit) ? hard : (pages_limit << page_ln2);
-  return (limit < MAX_MAPSIZE / 2) ? limit : MAX_MAPSIZE / 2;
+  return (limit < globals.mmap_limit / 2) ? limit : globals.mmap_limit / 2;
 }
 
 MDBX_NOTHROW_CONST_FUNCTION static inline size_t env_valsize_max(const MDBX_env *env, MDBX_db_flags_t flags) {
@@ -137,7 +137,7 @@ MDBX_NOTHROW_CONST_FUNCTION static inline size_t env_valsize_max(const MDBX_env 
     STATIC_ASSERT(PAGELIST_LIMIT <= MAX_PAGENO);
     const size_t pages_limit = PAGELIST_LIMIT / 4;
     const size_t limit = (hard_pages < pages_limit) ? hard : (pages_limit << env->ps2ln);
-    size_max = (limit < MAX_MAPSIZE / 2) ? limit : MAX_MAPSIZE / 2;
+    size_max = (limit < globals.mmap_limit / 2) ? limit : globals.mmap_limit / 2;
   }
   eASSERT0(env, size_max == valsize_max(env->ps, flags));
   return size_max;

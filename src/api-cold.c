@@ -28,9 +28,8 @@ __cold intptr_t mdbx_limits_dbsize_max(intptr_t pagesize) {
                     !is_powerof2((size_t)pagesize)))
     return -1;
 
-  STATIC_ASSERT(MAX_MAPSIZE < INTPTR_MAX);
   const uint64_t limit = (1 + (uint64_t)MAX_PAGENO) * pagesize;
-  return (limit < MAX_MAPSIZE) ? (intptr_t)limit : (intptr_t)MAX_MAPSIZE;
+  return (limit < globals.mmap_limit) ? (intptr_t)limit : (intptr_t)globals.mmap_limit;
 }
 
 __cold intptr_t mdbx_limits_txnsize_max(intptr_t pagesize) {
@@ -40,9 +39,8 @@ __cold intptr_t mdbx_limits_txnsize_max(intptr_t pagesize) {
                     !is_powerof2((size_t)pagesize)))
     return -1;
 
-  STATIC_ASSERT(MAX_MAPSIZE < INTPTR_MAX);
   const uint64_t pgl_limit = pagesize * (uint64_t)(PAGELIST_LIMIT / MDBX_GOLD_RATIO_DBL);
-  const uint64_t map_limit = (uint64_t)(MAX_MAPSIZE / MDBX_GOLD_RATIO_DBL);
+  const uint64_t map_limit = (uint64_t)(globals.mmap_limit / MDBX_GOLD_RATIO_DBL);
   return (pgl_limit < map_limit) ? (intptr_t)pgl_limit : (intptr_t)map_limit;
 }
 

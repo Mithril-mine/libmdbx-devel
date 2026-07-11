@@ -3,38 +3,36 @@
 
 #include "internals.h"
 
-__cold static intptr_t reasonable_db_maxsize(void) {
-  static intptr_t cached_result;
+__cold static size_t reasonable_db_maxsize(void) {
+  static size_t cached_result;
   if (cached_result == 0) {
-    intptr_t pagesize, total_ram_pages;
-    if (unlikely(mdbx_get_sysraminfo(&pagesize, &total_ram_pages, nullptr) != MDBX_SUCCESS))
+    intptr_t total_ram_pages;
+    if (unlikely(mdbx_get_sysraminfo(nullptr, &total_ram_pages, nullptr) != MDBX_SUCCESS))
       /* the 32-bit limit is good enough for fallback */
-      return cached_result = MAX_MAPSIZE32 / 4;
+      total_ram_pages = (MAX_MAPSIZE32 / 4) >> globals.sys_pagesize_ln2;
 
-#if defined(__SANITIZE_ADDRESS__)
-    total_ram_pages >>= 4;
-#endif /* __SANITIZE_ADDRESS__ */
-    if (RUNNING_ON_VALGRIND)
+    const int log2page = globals.sys_pagesize_ln2;
+    if (RUNNING_ON_ASAN || mdbx_running_on_Valgrind())
       total_ram_pages >>= 4;
 
-    if (unlikely((size_t)total_ram_pages > MAX_MAPSIZE / (size_t)pagesize))
-      return cached_result = MAX_MAPSIZE / 2;
-    ASSERT(MAX_MAPSIZE >= (size_t)(total_ram_pages * pagesize * 2));
-
+    size_t limit = globals.mmap_limit;
     /* Suggesting should not be more than golden ratio of the size of RAM. */
-    cached_result = (intptr_t)((size_t)total_ram_pages * 207 >> 7) * pagesize;
+    cached_result = ((size_t)total_ram_pages * 207 >> 7) << log2page;
+    if (cached_result > limit / 2)
+      return cached_result = limit / 2;
 
     /* Round to the nearest human-readable granulation. */
     for (size_t unit = MEGABYTE; unit; unit <<= 5) {
       const size_t floor = floor_powerof2(cached_result, unit);
       const size_t ceil = ceil_powerof2(cached_result, unit);
       const size_t threshold = (size_t)cached_result >> 4;
-      const bool down = cached_result - floor < ceil - cached_result || ceil > MAX_MAPSIZE / 4;
+      const bool down = cached_result - floor < ceil - cached_result || ceil > limit / 4;
       if (threshold < (down ? cached_result - floor : ceil - cached_result))
         break;
       cached_result = down ? floor : ceil;
     }
   }
+  ASSERT(cached_result <= globals.mmap_limit);
   return cached_result;
 }
 
@@ -1015,7 +1013,7 @@ __cold int mdbx_env_set_geometry(MDBX_env *env, intptr_t size_lower, intptr_t si
       shrink_threshold = pgno2bytes(env, pv2pages(geo->shrink_pv));
 
     const size_t usedbytes = pgno_ceil2os_bytes(env, mvcc_snapshot_largest(env, geo->first_unallocated));
-    if ((size_t)size_upper < usedbytes) {
+    if ((size_t)size_upper < usedbytes || usedbytes > globals.mmap_limit) {
       rc = MDBX_MAP_FULL;
       goto bailout;
     }
@@ -1045,8 +1043,8 @@ __cold int mdbx_env_set_geometry(MDBX_env *env, intptr_t size_lower, intptr_t si
         top = reasonable_db_maxsize();
       else if (top == 0 /* minimal */)
         top = MIN_MAPSIZE;
-      else if (top >= (intptr_t)MAX_MAPSIZE /* maximal */)
-        top = MAX_MAPSIZE;
+      else if (top >= (intptr_t)globals.mmap_limit /* maximal */)
+        top = globals.mmap_limit;
 
       while (top > pagesize * (int64_t)(MAX_PAGENO + 1) && pagesize < MDBX_MAX_PAGESIZE)
         pagesize <<= 1;
@@ -1079,22 +1077,25 @@ __cold int mdbx_env_set_geometry(MDBX_env *env, intptr_t size_lower, intptr_t si
   if (size_upper <= 0) {
     if ((growth_step == 0 || size_upper == 0) && size_now >= size_lower)
       size_upper = size_now;
-    else if (size_now <= 0 || size_now >= reasonable_db_maxsize() / 2)
+    else if (size_now <= 0 || size_now >= (intptr_t)reasonable_db_maxsize() / 2)
       size_upper = reasonable_db_maxsize();
     else if ((size_t)size_now >= MAX_MAPSIZE32 / 2 && (size_t)size_now <= MAX_MAPSIZE32 / 4 * 3)
       size_upper = MAX_MAPSIZE32;
     else {
-      size_upper = ceil_powerof2(((size_t)size_now < MAX_MAPSIZE / 4) ? size_now + size_now : size_now + size_now / 2,
-                                 MEGABYTE * MDBX_WORDBITS * MDBX_WORDBITS / 32);
-      if ((size_t)size_upper > MAX_MAPSIZE)
-        size_upper = MAX_MAPSIZE;
+      size_upper =
+          ceil_powerof2(((size_t)size_now < globals.mmap_limit / 4) ? size_now + size_now : size_now + size_now / 2,
+                        MEGABYTE * MDBX_WORDBITS * MDBX_WORDBITS / 32);
     }
     if ((size_t)size_upper / pagesize > (MAX_PAGENO + 1))
       size_upper = pagesize * (MAX_PAGENO + 1);
+    if ((size_t)size_upper > globals.mmap_limit)
+      size_upper = globals.mmap_limit;
   } else if (size_upper >= INTPTR_MAX) {
     size_upper = reasonable_db_maxsize();
     if ((size_t)size_upper / pagesize > MAX_PAGENO + 1)
       size_upper = pagesize * (MAX_PAGENO + 1);
+    if ((size_t)size_upper > globals.mmap_limit)
+      size_upper = globals.mmap_limit;
   }
 
   if (unlikely(size_lower < (intptr_t)MIN_MAPSIZE || size_lower > size_upper)) {
@@ -1120,7 +1121,7 @@ __cold int mdbx_env_set_geometry(MDBX_env *env, intptr_t size_lower, intptr_t si
       size_now = size_lower;
   }
 
-  if (unlikely((size_t)size_upper > MAX_MAPSIZE || (uint64_t)size_upper / pagesize > MAX_PAGENO + 1)) {
+  if (unlikely((size_t)size_upper > globals.mmap_limit || (uint64_t)size_upper / pagesize > MAX_PAGENO + 1)) {
     rc = MDBX_TOO_LARGE;
     goto bailout;
   }
@@ -1137,7 +1138,7 @@ __cold int mdbx_env_set_geometry(MDBX_env *env, intptr_t size_lower, intptr_t si
   /* LY: подбираем значение size_upper:
    *  - кратное размеру unit_ag (размеру страницы БД и системному размеру выделения)
    *  - без нарушения MAX_MAPSIZE и MAX_PAGENO */
-  while (unlikely((size_t)size_upper > MAX_MAPSIZE || (uint64_t)size_upper / pagesize > MAX_PAGENO + 1)) {
+  while (unlikely((size_t)size_upper > globals.mmap_limit || (uint64_t)size_upper / pagesize > MAX_PAGENO + 1)) {
     if ((size_t)size_upper < unit_ag + MIN_MAPSIZE || (size_t)size_upper < (size_t)pagesize * (MIN_PAGENO + 1)) {
       /* паранойа на случай переполнения при невероятных значениях */
       rc = MDBX_EINVAL;

@@ -2054,28 +2054,11 @@ int osal_check_fs_local(mdbx_filehandle_t handle, int flags) {
 }
 
 static int check_mmap_limit(const size_t limit) {
-  const bool should_check =
-#if defined(__SANITIZE_ADDRESS__)
-      true;
-#else
-      RUNNING_ON_VALGRIND;
-#endif /* __SANITIZE_ADDRESS__ */
-
-  if (should_check) {
-    intptr_t pagesize, total_ram_pages, avail_ram_pages;
-    int err = mdbx_get_sysraminfo(&pagesize, &total_ram_pages, &avail_ram_pages);
-    if (unlikely(err != MDBX_SUCCESS))
-      return err;
-
-    const int log2page = log2n_powerof2(pagesize);
-    if ((limit >> (log2page + 7)) > (size_t)total_ram_pages || (limit >> (log2page + 6)) > (size_t)avail_ram_pages) {
-      ERROR("%s (%zu pages) is too large for available (%zu pages) or total "
-            "(%zu pages) system RAM",
-            "database upper size limit", limit >> log2page, avail_ram_pages, total_ram_pages);
-      return MDBX_TOO_LARGE;
-    }
+  if ((RUNNING_ON_ASAN || mdbx_running_on_Valgrind()) && limit > globals.mmap_limit) {
+    ERROR("%s (%zu bytes) is too large for %s (%zu)", "database upper size limit", limit,
+          RUNNING_ON_ASAN ? "AddressSanitizer" : "Valgrind", globals.mmap_limit);
+    return MDBX_TOO_LARGE;
   }
-
   return MDBX_SUCCESS;
 }
 
@@ -2115,7 +2098,7 @@ int osal_mmap(const int flags, osal_mmap_t *map, size_t size, const size_t limit
 
   err = check_mmap_limit(limit);
   if (unlikely(err != MDBX_SUCCESS))
-    return LOG_IFERR(err);
+    return err;
 
   if ((flags & MDBX_RDONLY) == 0 && (options & MMAP_OPTION_SETLENGTH) != 0) {
     err = osal_fsetsize(map->fd, size);
@@ -2203,20 +2186,29 @@ int osal_mmap(const int flags, osal_mmap_t *map, size_t size, const size_t limit
 #define MAP_NORESERVE 0
 #endif
 
-  map->base = mmap(nullptr, limit, (flags & MDBX_WRITEMAP) ? PROT_READ | PROT_WRITE : PROT_READ,
+  map->limit = limit;
+retry:
+  map->base = mmap(nullptr, map->limit, (flags & MDBX_WRITEMAP) ? PROT_READ | PROT_WRITE : PROT_READ,
                    MAP_SHARED | MAP_FILE | MAP_NORESERVE | (F_ISSET(flags, MDBX_UTTERLY_NOSYNC) ? MAP_NOSYNC : 0) |
                        ((options & MMAP_OPTION_SEMAPHORE) ? MAP_HASSEMAPHORE | MAP_NOSYNC : MAP_CONCEAL),
                    map->fd, 0);
 
   if (unlikely(map->base == MAP_FAILED)) {
+    err = errno;
+    ASSERT(err != 0);
+    if ((RUNNING_ON_ASAN || mdbx_running_on_Valgrind()) && err == EINVAL && map->limit - map->current > MEGABYTE) {
+      map->limit -= (map->limit - map->current) / 2;
+      map->limit = max_unsigned(size, floor_powerof2(map->limit, MEGABYTE));
+      goto retry;
+    }
     map->limit = 0;
     map->current = 0;
     map->base = nullptr;
-    err = errno;
-    ASSERT(err != 0);
     return LOG_IFERR(err);
   }
-  map->limit = limit;
+  if (unlikely(map->limit < limit) && (RUNNING_ON_ASAN || mdbx_running_on_Valgrind()))
+    NOTICE("Mapping size has been reduced from %zu to %zu for compatibility with %s", limit, map->limit,
+           RUNNING_ON_VALGRIND ? "Valgrind" : "AddressSanitizer");
 
 #ifdef MADV_DONTFORK
   if (unlikely(madvise(map->base, map->limit, MADV_DONTFORK) != 0)) {
@@ -3300,7 +3292,7 @@ __cold int mdbx_get_sysraminfo(intptr_t *page_size, intptr_t *total_pages, intpt
   if (unlikely(pagesize < MDBX_MIN_PAGESIZE || !is_powerof2(pagesize)))
     return LOG_IFERR(MDBX_INCOMPATIBLE);
 
-  const int log2page = log2n_powerof2(pagesize);
+  const int log2page = globals.sys_pagesize_ln2;
   ASSERT(pagesize == (INT64_C(1) << log2page));
   (void)log2page;
 

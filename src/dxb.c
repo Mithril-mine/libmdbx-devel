@@ -379,10 +379,8 @@ bailout:
 }
 #if defined(ENABLE_MEMCHECK) || defined(__SANITIZE_ADDRESS__)
 void dxb_sanitize_tail(MDBX_env *env, MDBX_txn *txn) {
-#if !defined(__SANITIZE_ADDRESS__)
-  if (!RUNNING_ON_VALGRIND)
+  if (!RUNNING_ON_ASAN && !mdbx_running_on_Valgrind())
     return;
-#endif
   if (txn) { /* transaction start */
     if (env->poison_edge < txn->geo.first_unallocated)
       env->poison_edge = txn->geo.first_unallocated;

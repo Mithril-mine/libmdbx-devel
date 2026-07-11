@@ -190,7 +190,39 @@ static bool getenv_bool(const char *name, bool default_value) {
   return default_value;
 }
 
+__cold static size_t mmap_limit(void) {
+  STATIC_ASSERT(MAX_MAPSIZE < INTPTR_MAX);
+  size_t limit = MAX_MAPSIZE;
+
+  const uint64_t asan_limit = UINT64_C(16384) * GIGABYTE;
+  if (RUNNING_ON_ASAN && limit > asan_limit)
+    limit = asan_limit;
+
+  const size_t valgrind_limit = (MDBX_WORDBITS < 64) ? 512 * MEGABYTE : (size_t)(32 * GIGABYTE);
+  if (mdbx_running_on_Valgrind() && limit > valgrind_limit)
+    limit = valgrind_limit;
+
+  if (RUNNING_ON_ASAN || mdbx_running_on_Valgrind()) {
+    intptr_t total_ram_pages, avail_ram_pages;
+    int err = mdbx_get_sysraminfo(nullptr, &total_ram_pages, &avail_ram_pages);
+    if (unlikely(err != MDBX_SUCCESS)) {
+      total_ram_pages = (MAX_MAPSIZE32 / 4) >> globals.sys_pagesize_ln2;
+      avail_ram_pages = total_ram_pages >> 1;
+    }
+
+    const unsigned factor = globals.sys_pagesize_ln2 + RUNNING_ON_VALGRIND * 4;
+    if ((limit >> (factor + 1)) > (size_t)total_ram_pages)
+      limit = (size_t)total_ram_pages << (factor + 1);
+    if ((limit >> factor) > (size_t)avail_ram_pages)
+      limit = (size_t)avail_ram_pages << factor;
+  }
+  return limit;
+}
+
 __cold static void mdbx_init(void) {
+#ifdef ENABLE_MEMCHECK
+  globals.running_on_Valgrind = RUNNING_ON_VALGRIND;
+#endif /* ENABLE_MEMCHECK */
   globals.runtime_flags = (getenv_bool("MDBX_DBG_ASSERT", (MDBX_CHECKING) > 1) ? MDBX_DBG_ASSERT : 0) |
                           (getenv_bool("MDBX_DBG_AUDIT", (MDBX_CHECKING) > 2) ? MDBX_DBG_AUDIT : 0) |
                           (getenv_bool("MDBX_DBG_JITTER", false) ? MDBX_DBG_JITTER : 0) |
@@ -207,6 +239,8 @@ __cold static void mdbx_init(void) {
   ENSURE(troika_verify_fsm());
   ENSURE(pv2pages_verify());
 #endif /* MDBX_CHECKING > 0 */
+
+  globals.mmap_limit = mmap_limit();
 }
 
 MDBX_EXCLUDE_FOR_GPROF

@@ -12,7 +12,7 @@ __cold int mdbx_is_readahead_reasonable(size_t volume, intptr_t redundancy) {
   if (unlikely(err != MDBX_SUCCESS))
     return LOG_IFERR(err);
 
-  const int log2page = log2n_powerof2(pagesize);
+  const int log2page = globals.sys_pagesize_ln2;
   const intptr_t volume_pages = (volume + pagesize - 1) >> log2page;
   const intptr_t redundancy_pages = (redundancy < 0) ? -(intptr_t)((-redundancy + pagesize - 1) >> log2page)
                                                      : (intptr_t)(redundancy + pagesize - 1) >> log2page;

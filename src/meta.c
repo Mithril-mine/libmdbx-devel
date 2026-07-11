@@ -501,7 +501,7 @@ __cold int meta_validate(MDBX_env *env, meta_t *const meta, const page_t *const 
       return MDBX_CORRUPTED;
     }
   }
-  if (unlikely(meta->geometry.first_unallocated - 1 > MAX_PAGENO || allocated_bytes > MAX_MAPSIZE)) {
+  if (unlikely(meta->geometry.first_unallocated - 1 > MAX_PAGENO || allocated_bytes > globals.mmap_limit)) {
     WARNING("meta[%u] has too large allocated-space (%" PRIu64 "), skip it", meta_number, allocated_bytes);
     return MDBX_TOO_LARGE;
   }

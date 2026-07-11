@@ -672,12 +672,12 @@ int main(int argc, char *argv[]) {
                                   (intptr_t)envinfo.mi_geo.shrink,
                                   envinfo.mi_dxb_pagesize ? (intptr_t)envinfo.mi_dxb_pagesize : -1);
     } else if (envinfo.mi_mapsize) {
-      if (envinfo.mi_mapsize > MAX_MAPSIZE) {
+      if (envinfo.mi_mapsize > globals.mmap_limit) {
         if (!quiet)
           fprintf(stderr,
                   "Database size is too large for current system (mapsize=%" PRIu64
                   " is greater than system-limit %zu)\n",
-                  envinfo.mi_mapsize, (size_t)MAX_MAPSIZE);
+                  envinfo.mi_mapsize, globals.mmap_limit);
         goto bailout;
       }
       err = mdbx_env_set_geometry(env, (intptr_t)envinfo.mi_mapsize, (intptr_t)envinfo.mi_mapsize,
