@@ -98,7 +98,7 @@ union logger_union {
 struct libmdbx_globals {
   bin128_t bootid;
   unsigned sys_pagesize, sys_allocation_granularity;
-  size_t mmap_limit;
+  size_t assume_ram_pages, mmap_limit, reasonable_db_maxsize;
 #ifdef AT_UCACHEBSIZE
   unsigned sys_unified_cache_block;
 #endif /* AT_UCACHEBSIZE */
@@ -130,7 +130,7 @@ extern struct libmdbx_globals globals;
 extern struct libmdbx_imports imports;
 #endif /* Windows */
 
-static inline bool mdbx_running_on_Valgrind(void) {
+static inline unsigned mdbx_running_on_Valgrind(void) {
 #ifdef ENABLE_MEMCHECK
   return globals.running_on_Valgrind;
 #else

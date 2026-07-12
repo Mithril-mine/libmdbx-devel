@@ -190,6 +190,24 @@ static bool getenv_bool(const char *name, bool default_value) {
   return default_value;
 }
 
+__cold static size_t assume_ram_pages(void) {
+  intptr_t total_ram_pages, avail_ram_pages;
+  int err = mdbx_get_sysraminfo(nullptr, &total_ram_pages, &avail_ram_pages);
+  if (unlikely(err != MDBX_SUCCESS)) {
+    /* the 32-bit limit is good enough for fallback */
+    total_ram_pages = MAX_MAPSIZE32 / 3 >> globals.sys_pagesize_ln2;
+    avail_ram_pages = total_ram_pages / 2;
+  }
+
+  size_t result = (size_t)(total_ram_pages + avail_ram_pages) / 2;
+  if (RUNNING_ON_ASAN)
+    result = avail_ram_pages >> 1;
+  if (mdbx_running_on_Valgrind())
+    result = avail_ram_pages >> 4;
+
+  return result;
+}
+
 __cold static size_t mmap_limit(void) {
   STATIC_ASSERT(MAX_MAPSIZE < INTPTR_MAX);
   size_t limit = MAX_MAPSIZE;
@@ -203,20 +221,31 @@ __cold static size_t mmap_limit(void) {
     limit = valgrind_limit;
 
   if (RUNNING_ON_ASAN || mdbx_running_on_Valgrind()) {
-    intptr_t total_ram_pages, avail_ram_pages;
-    int err = mdbx_get_sysraminfo(nullptr, &total_ram_pages, &avail_ram_pages);
-    if (unlikely(err != MDBX_SUCCESS)) {
-      total_ram_pages = (MAX_MAPSIZE32 / 4) >> globals.sys_pagesize_ln2;
-      avail_ram_pages = total_ram_pages >> 1;
-    }
-
-    const unsigned factor = globals.sys_pagesize_ln2 + RUNNING_ON_VALGRIND * 4;
-    if ((limit >> (factor + 1)) > (size_t)total_ram_pages)
-      limit = (size_t)total_ram_pages << (factor + 1);
-    if ((limit >> factor) > (size_t)avail_ram_pages)
-      limit = (size_t)avail_ram_pages << factor;
+    ASSERT(globals.assume_ram_pages > 0);
+    limit = min_unsigned(limit, globals.assume_ram_pages << globals.sys_pagesize_ln2);
   }
   return limit;
+}
+
+__cold static size_t reasonable_db_maxsize(void) {
+  ASSERT(globals.assume_ram_pages > 0 && globals.sys_pagesize_ln2 && globals.mmap_limit);
+  /* Suggesting should not be more than golden ratio of the size of RAM. */
+  size_t result = (globals.assume_ram_pages * 207 >> 7) << globals.sys_pagesize_ln2;
+  if (result > globals.mmap_limit / 2)
+    return globals.mmap_limit / 2;
+
+  /* Round to the nearest human-readable granulation. */
+  for (size_t unit = MEGABYTE; unit; unit <<= 5) {
+    const size_t floor = floor_powerof2(result, unit);
+    const size_t ceil = ceil_powerof2(result, unit);
+    const size_t threshold = (size_t)result >> 4;
+    const bool down = result - floor < ceil - result || ceil > globals.mmap_limit / 4;
+    if (threshold < (down ? result - floor : ceil - result))
+      break;
+    result = down ? floor : ceil;
+  }
+  ASSERT(result <= globals.mmap_limit);
+  return result;
 }
 
 __cold static void mdbx_init(void) {
@@ -240,7 +269,9 @@ __cold static void mdbx_init(void) {
   ENSURE(pv2pages_verify());
 #endif /* MDBX_CHECKING > 0 */
 
+  globals.assume_ram_pages = assume_ram_pages();
   globals.mmap_limit = mmap_limit();
+  globals.reasonable_db_maxsize = reasonable_db_maxsize();
 }
 
 MDBX_EXCLUDE_FOR_GPROF
