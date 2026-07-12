@@ -1327,7 +1327,7 @@ int dxb_sync_locked(MDBX_env *env, unsigned flags, meta_t *const pending, troika
     VERBOSE("shrink to %" PRIaPGNO " pages (-%" PRIaPGNO ")", pending->geometry.now, shrink);
     rc = dxb_resize(env, pending->geometry.first_unallocated, pending->geometry.now, pending->geometry.upper,
                     implicit_shrink);
-    if (rc != MDBX_SUCCESS && rc != MDBX_EPERM)
+    if (rc != MDBX_SUCCESS && rc != MDBX_EPERM && rc != MDBX_UNABLE_EXTEND_MAPSIZE)
       goto fail;
     eASSERT(env, coherency_check_meta(env, target, true));
   }
