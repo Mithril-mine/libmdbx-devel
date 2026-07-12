@@ -17,6 +17,7 @@ __cold static size_t reasonable_db_maxsize(void) {
 
     size_t limit = globals.mmap_limit;
     /* Suggesting should not be more than golden ratio of the size of RAM. */
+    /* coverity[INTEGER_OVERFLOW] */
     cached_result = ((size_t)total_ram_pages * 207 >> 7) << log2page;
     if (cached_result > limit / 2)
       return cached_result = limit / 2;
