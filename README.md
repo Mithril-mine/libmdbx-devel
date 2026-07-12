@@ -68,7 +68,7 @@ However, _MithrilDB_ will not be available for countries unfriendly to Russia (i
 
 Nonetheless, I try not to make any promises regarding _MithrilDB_ until release.
 
-Contrary to _MithrilDB_, _libmdbx_ will forever free and open source. Moreover with high-quality support whenever possible. Tu deviens responsible pour toujours de ce que tu as apprivois. So I will continue to comply with the original open license and the principles of constructive cooperation, in spite of outright Github sabotage and sanctions. I will also try to keep (not drop) Windows support, despite it is an unused obsolete technology for us.
+Contrary to _MithrilDB_, _libmdbx_ will forever free and open source. Moreover with high-quality support whenever possible. Tu deviens responsible pour toujours de ce que tu as apprivois. So I will continue to comply with the original open license and the principles of constructive cooperation, in spite of outright GitHub sabotage and sanctions. I will also try to keep (not drop) Windows support, despite it is an unused obsolete technology for us.
 
 <!-- section-end -->
 
@@ -304,7 +304,8 @@ Usage
 
 Since December 2025 _libmdbx_ is available only in an amalgamated source code form like [SQLite](https://www.sqlite.org/amalgamation.html), without additional dependencies and internal resources needed only for development of _libmdbx_ itself. Packages support for common Linux distributions is planned in the future, since release the version `1.0`.
 
-The source code is available on [SourceCraft](https://sourcecraft.dev/dqdkfa/libmdbx) and mirrors on [abf.io](https://abf.io/erthink/libmdbx), [Gitflic](https://gitflic.ru/project/erthink/libmdbx) and [Github](https://github.com/erthink/libmdbx). Please use the `stable` branch or the latest release for production environment through stagging and the `master` branch for development a derivative projects.
+The source code is available on [SourceCraft](https://sourcecraft.dev/dqdkfa/libmdbx) and mirror on [GitHub](https://github.com/Mithril-mine/libmdbx).
+Please use the `stable` branch or the latest release for production environment through staging and the `master` branch for development a derivative projects.
 
 
 ## Building and Testing
