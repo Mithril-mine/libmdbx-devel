@@ -282,7 +282,7 @@ The frontward release with new major features and internal refactoring.
 
  - The `mdbx_load` utility has fixed errors in loading zero-length values and exchanging shrink/growth parameters in the database geometry.
 
- - Fixed a crash in the `SIGSEGV` software when all meta pages are not fully usable.
+ - Fixed a `SIGSEGV` crash when all meta pages are not fully usable.
 
  - Fixed a typo in the condition for determining a change in the size of the database when rolling back a nested transaction.
 
@@ -290,7 +290,7 @@ The frontward release with new major features and internal refactoring.
 
  - Fixed a typo in the `ST_EXPORTED` processing path that broke the build on platforms where the mentioned flag is defined for `fstatvfs()`.
 
- - Fixed the crash of the `SIGSEGV` software due to an attempt to clean/overwrite a corrupted meta page when opening the database in read-only mode.
+ - Fixed a `SIGSEGV` crash due to an attempt to clean/overwrite a corrupted meta page when opening the database in read-only mode.
 
 
 --------------------------------------------------------------------------------
@@ -906,7 +906,7 @@ Other:
 
  - Дополнен тест курсоров extra/cursor-closing.
 
- - В `NOTICE` обновлена информация о Github.
+ - В `NOTICE` обновлена информация о GitHub.
 
 
 --------------------------------------------------------------------------------
@@ -1492,7 +1492,7 @@ Other:
 лет после выпуска 0.12.1.
 
 ```
-git diff' stat: 14 commits, 7 files changed, 256 insertions(+), 103 deletions(-)
+git diff --stat: 14 commits, 7 files changed, 256 insertions(+), 103 deletions(-)
 Signed-off-by: Леонид Юрьев (Leonid Yuriev) <leo@yuriev.ru>
 ```
 
@@ -1555,7 +1555,7 @@ Signed-off-by: Леонид Юрьев (Leonid Yuriev) <leo@yuriev.ru>
 рекомендуется использовать ветку `master`.
 
 ```
-git diff' stat: 6 commits, 5 files changed, 239 insertions(+), 6 deletions(-)
+git diff --stat: 6 commits, 5 files changed, 239 insertions(+), 6 deletions(-)
 Signed-off-by: Леонид Юрьев (Leonid Yuriev) <leo@yuriev.ru>
 ```
 
@@ -1599,7 +1599,7 @@ Signed-off-by: Леонид Юрьев (Leonid Yuriev) <leo@yuriev.ru>
 военных спутников США.
 
 ```
-git diff' stat: 29 commits, 14 files changed, 379 insertions(+), 151 deletions(-)
+git diff --stat: 29 commits, 14 files changed, 379 insertions(+), 151 deletions(-)
 Signed-off-by: Леонид Юрьев (Leonid Yuriev) <leo@yuriev.ru>
 ```
 
@@ -1660,7 +1660,7 @@ Signed-off-by: Леонид Юрьев (Leonid Yuriev) <leo@yuriev.ru>
 в память Героя России гвардии майора Дмитрия Семёнова с позывным "СЭМ".
 
 ```
-git diff' stat: 19 commits, 57 files changed, 751 insertions(+), 331 deletions(-)
+git diff --stat: 19 commits, 57 files changed, 751 insertions(+), 331 deletions(-)
 Signed-off-by: Леонид Юрьев (Leonid Yuriev) <leo@yuriev.ru>
 ```
 
@@ -1740,7 +1740,7 @@ Signed-off-by: Леонид Юрьев (Leonid Yuriev) <leo@yuriev.ru>
 Стабилизирующий выпуск с исправлением обнаруженных ошибок и устранением недочетов.
 
 ```
-git diff' stat: 32 commits, 8 files changed, 667 insertions(+), 401 deletions(-)
+git diff --stat: 32 commits, 8 files changed, 667 insertions(+), 401 deletions(-)
 Signed-off-by: Леонид Юрьев (Leonid Yuriev) <leo@yuriev.ru>
 ```
 
@@ -1807,7 +1807,7 @@ Signed-off-by: Леонид Юрьев (Leonid Yuriev) <leo@yuriev.ru>
 в день 100-летия со дня рождения выдающегося советского и российского ученого и конструктора [Влади́мира Фёдоровича У́ткина](https://ru.wikipedia.org/wiki/Уткин,_Владимир_Фёдорович).
 
 ```
-git diff' stat: 24 commits, 18 files changed, 624 insertions(+), 94 deletions(-)
+git diff --stat: 24 commits, 18 files changed, 624 insertions(+), 94 deletions(-)
 Signed-off-by: Леонид Юрьев (Leonid Yuriev) <leo@yuriev.ru>
 ```
 
@@ -2107,7 +2107,7 @@ Signed-off-by: Леонид Юрьев (Leonid Yuriev) <leo@yuriev.ru>
 Новое:
 
  - Использование адреса [https://libmdbx.dqdkfa.ru/dead-github](https://libmdbx.dqdkfa.ru/dead-github)
-   для отсылки к сохранённым в web.archive.org копиям ресурсов, уничтоженных администрацией Github.
+   для отсылки к сохранённым в web.archive.org копиям ресурсов, уничтоженных администрацией GitHub.
 
  - Реализована prefault-запись при выделении страниц для read-write отображений.
    Это приводит к кратному снижению системных издержек и существенному увеличению

@@ -2579,9 +2579,7 @@ retry_mapview:;
         VALGRIND_MAKE_MEM_NOACCESS(map->base, map->current);
         /* Unpoisoning is required for ASAN to avoid false-positive diagnostic
          * when this memory will re-used by malloc or another mmapping.
-         * See
-         * https://libmdbx.dqdkfa.ru/dead-github/pull/93#issuecomment-613687203
-         */
+         * See https://libmdbx.dqdkfa.ru/dead-github/pull/93#issuecomment-613687203 */
         MDBX_ASAN_UNPOISON_MEMORY_REGION(map->base, (map->current < map->limit) ? map->current : map->limit);
         map->limit = 0;
         map->current = 0;

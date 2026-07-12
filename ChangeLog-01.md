@@ -28,7 +28,7 @@ Fixes:
 Minors:
 
  - backport: Using the https://libmdbx.dqdkfa.ru/dead-github
-   for resources deleted by the Github' administration.
+   for resources deleted by the GitHub' administration.
  - backport: Fixed English typos.
  - backport: Fixed proto of `__asan_default_options()`.
  - backport: Fixed doxygen-description of C++ API, especially of C++20 concepts.
@@ -246,14 +246,14 @@ Minors:
 
 ## v0.11.7 "Resurrected Sarmat" at 2022-04-22
 
-The stable risen release after the Github's intentional malicious disaster.
+The stable risen release after the GitHub's intentional malicious disaster.
 
 #### We have migrated to a reliable trusted infrastructure
 The origin for now is at [GitFlic](https://gitflic.ru/project/erthink/libmdbx)
-since on 2022-04-15 the Github administration, without any warning nor
+since on 2022-04-15 the GitHub administration, without any warning nor
 explanation, deleted _libmdbx_ along with a lot of other projects,
 simultaneously blocking access for many developers.
-For the same reason ~~Github~~ is blacklisted forever.
+For the same reason ~~GitHub~~ is blacklisted forever.
 
 GitFlic already support Russian and English languages, plan to support more,
 including 和 中文. You are welcome!
@@ -265,7 +265,7 @@ New:
  - Support build by MinGW' make from command line without CMake.
  - Added `mdbx::filesystem` C++ API namespace that corresponds to `std::filesystem` or `std::experimental::filesystem`.
  - Created [website](https://libmdbx.dqdkfa.ru/) for online auto-generated documentation.
- - Used `https://web.archive.org/web/https://github.com/erthink/libmdbx` for dead (or temporarily lost) resources deleted by ~~Github~~.
+ - Used `https://web.archive.org/web/https://github.com/erthink/libmdbx` for dead (or temporarily lost) resources deleted by ~~GitHub~~.
  - Added `--loglevel=` command-line option to the `mdbx_test` tool.
  - Added few fast smoke-like tests into CMake builds.
 

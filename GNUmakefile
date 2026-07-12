@@ -116,7 +116,7 @@ define uname2ldflags
   esac
 endef
 
-# TIP: try add the'-Wl, --no-as-needed,-lrt' for ability to built with modern glibc, but then use with the old.
+# TIP: try adding '-Wl,--no-as-needed,-lrt' for the ability to build with modern glibc, and then use with the old.
 define uname2libs
   case "$(UNAME)" in
     CYGWIN*|MINGW*|MSYS*|Windows*)
@@ -336,7 +336,7 @@ test: $(TEST_TARGETS)
 build-test: $(TEST_BUILD_TARGETS)
 
 test-valgrind: test-memcheck
-smoke-valignd: smoke-memcheck
+smoke-valgrind: smoke-memcheck
 smoke-memcheck test-memcheck: CFLAGS_EXTRA += -Ofast -DENABLE_MEMCHECK
 smoke-memcheck test-memcheck: CMAKE_OPT += -DENABLE_UBSAN:BOOL=OFF -DENABLE_ASAN:BOOL=OFF -DENABLE_MEMCHECK:BOOL=ON
 smoke-memcheck test-memcheck: CTEST_OPT += -T memcheck
@@ -428,7 +428,7 @@ check smoke: test
 #> dist-cutoff-begin
 else
 ################################################################################
-# Nnon-amalgamated sources with test framework
+# Non-amalgamated sources with test framework
 
 .PHONY: build-stochastic build-test-with-valgrind check cross-gcc cross-qemu dist doxygen gcc-analyzer long-test
 .PHONY: reformat release-assets tags smoke smoke-fault
@@ -492,7 +492,7 @@ MDBX_GIT_DIR := $(shell if [ -d .git ]; then echo .git; elif [ -s .git -a -f .gi
 MDBX_GIT_LASTVTAG := $(shell git describe --tags --dirty=-DIRTY --abbrev=0 '--match=v[0-9]*' 2>&- || echo 'Please fetch tags and/or install non-obsolete git version')
 MDBX_GIT_3DOT := $(shell set -o pipefail; echo "$(MDBX_GIT_LASTVTAG)" | $(SED) -n 's|^v*\([0-9]\{1,\}\.[0-9]\{1,\}\.[0-9]\{1,\}\)\(.*\)|\1|p' || echo 'Please fetch tags and/or use non-obsolete git version')
 MDBX_GIT_TWEAK := $(shell set -o pipefail; git rev-list $(shell git describe --tags --abbrev=0 '--match=v[0-9]*')..HEAD --count 2>&- || echo 'Please fetch tags and/or use non-obsolete git version')
-MDBX_GIT_TIMESTAMP := $(shell git show --no-patch --format=%cI HEAD 2>&- || echo 'Please install latest get version')
+MDBX_GIT_TIMESTAMP := $(shell git show --no-patch --format=%cI HEAD 2>&- || echo 'Please install latest git version')
 MDBX_GIT_DESCRIBE := $(shell git describe --tags --long --dirty '--match=v[0-9]*' 2>&- || echo 'Please fetch tags and/or install non-obsolete git version')
 MDBX_GIT_PRERELEASE := $(shell echo "$(MDBX_GIT_LASTVTAG)" | $(SED) -n 's|^v*\([0-9]\{1,\}\.[0-9]\{1,\}\.[0-9]\{1,\}\)\(.*\)-\([-.0-1a-zA-Z]\+\)|\3|p')
 MDBX_VERSION_PURE = $(MDBX_GIT_3DOT)$(if $(filter-out 0,$(MDBX_GIT_TWEAK)),.$(MDBX_GIT_TWEAK),)$(if $(MDBX_GIT_PRERELEASE),-$(MDBX_GIT_PRERELEASE),)
@@ -611,7 +611,7 @@ mdbx_test: $(TEST_OBJ) libmdbx.$(SO_SUFFIX)
 
 $(MDBX_GIT_DIR)/HEAD $(MDBX_GIT_DIR)/index $(MDBX_GIT_DIR)/refs/tags:
 	@echo '*** ' >&2
-	@echo '*** Please don''t use tarballs nor zips which are automatically provided by Github !' >&2
+	@echo '*** Please don''t use tarballs nor zips which are automatically provided by GitHub !' >&2
 	@echo '*** These archives do not contain version information and thus are unfit to build libmdbx.' >&2
 	@echo '*** ' >&2
 	@echo '*** Instead just follow the https://libmdbx.dqdkfa.ru/usage.html' >&2
@@ -624,8 +624,8 @@ $(1): $(2) $(lastword $(MAKEFILE_LIST)) $(MDBX_GIT_DIR)/HEAD $(MDBX_GIT_DIR)/ind
 	@echo '  MAKE $$@'
 	$(QUIET)$$(SED) \
 		-e "s|@MDBX_GIT_TIMESTAMP@|$$(MDBX_GIT_TIMESTAMP)|" \
-		-e "s|@MDBX_GIT_TREE@|$$(shell git show --no-patch --format=%T HEAD || echo 'Please install latest get version')|" \
-		-e "s|@MDBX_GIT_COMMIT@|$$(shell git show --no-patch --format=%H HEAD || echo 'Please install latest get version')|" \
+		-e "s|@MDBX_GIT_TREE@|$$(shell git show --no-patch --format=%T HEAD || echo 'Please install latest git version')|" \
+		-e "s|@MDBX_GIT_COMMIT@|$$(shell git show --no-patch --format=%H HEAD || echo 'Please install latest git version')|" \
 		-e "s|@MDBX_GIT_DESCRIBE@|$$(MDBX_GIT_DESCRIBE)|" \
 		-e "s|\$$$${MDBX_VERSION_MAJOR}|$$(shell echo '$$(MDBX_GIT_3DOT)' | cut -d . -f 1)|" \
 		-e "s|\$$$${MDBX_VERSION_MINOR}|$$(shell echo '$$(MDBX_GIT_3DOT)' | cut -d . -f 2)|" \
@@ -664,8 +664,8 @@ docs/Doxyfile: docs/Doxyfile.in src/version.c $(lastword $(MAKEFILE_LIST))
 	@echo '  MAKE $@'
 	$(QUIET)$(SED) \
 		-e "s|@MDBX_GIT_TIMESTAMP@|$(MDBX_GIT_TIMESTAMP)|" \
-		-e "s|@MDBX_GIT_TREE@|$(shell git show --no-patch --format=%T HEAD || echo 'Please install latest get version')|" \
-		-e "s|@MDBX_GIT_COMMIT@|$(shell git show --no-patch --format=%H HEAD || echo 'Please install latest get version')|" \
+		-e "s|@MDBX_GIT_TREE@|$(shell git show --no-patch --format=%T HEAD || echo 'Please install latest git version')|" \
+		-e "s|@MDBX_GIT_COMMIT@|$(shell git show --no-patch --format=%H HEAD || echo 'Please install latest git version')|" \
 		-e "s|@MDBX_GIT_DESCRIBE@|$(MDBX_GIT_DESCRIBE)|" \
 		-e "s|\$${MDBX_VERSION_MAJOR}|$(shell echo '$(MDBX_GIT_3DOT)' | cut -d . -f 1)|" \
 		-e "s|\$${MDBX_VERSION_MINOR}|$(shell echo '$(MDBX_GIT_3DOT)' | cut -d . -f 2)|" \
