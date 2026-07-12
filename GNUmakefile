@@ -337,8 +337,8 @@ build-test: $(TEST_BUILD_TARGETS)
 
 test-valgrind: test-memcheck
 smoke-valgrind: smoke-memcheck
-smoke-memcheck test-memcheck: CFLAGS_EXTRA += -Ofast -DENABLE_MEMCHECK
-smoke-memcheck test-memcheck: CMAKE_OPT += -DENABLE_UBSAN:BOOL=OFF -DENABLE_ASAN:BOOL=OFF -DENABLE_MEMCHECK:BOOL=ON
+smoke-memcheck test-memcheck: CFLAGS_EXTRA += -Ofast -DENABLE_MEMCHECK -DMDBX_CHECKING=1
+smoke-memcheck test-memcheck: CMAKE_OPT += -DENABLE_UBSAN:BOOL=OFF -DENABLE_ASAN:BOOL=OFF -DENABLE_MEMCHECK:BOOL=ON -DMDBX_CHECKING=1
 smoke-memcheck test-memcheck: CTEST_OPT += -T memcheck
 test-memcheck: build-test build-stochastic ctest
 	@echo '  RUNNING `test/stochastic.sh --with-valgrind --loops 2`...'
@@ -350,13 +350,13 @@ smoke-assertion test-assertion: CMAKE_OPT += -DMDBX_CHECKING=2
 test-assertion: test
 smoke-assertion: smoke
 
-smoke-ubsan test-ubsan: CFLAGS_EXTRA += -DENABLE_UBSAN -Ofast -fsanitize=undefined -fsanitize-undefined-trap-on-error
-smoke-ubsan test-ubsan: CMAKE_OPT += -DENABLE_UBSAN:BOOL=ON -DENABLE_ASAN:BOOL=OFF -DENABLE_MEMCHECK:BOOL=OFF
+smoke-ubsan test-ubsan: CFLAGS_EXTRA += -DENABLE_UBSAN -Ofast -fsanitize=undefined -fsanitize-undefined-trap-on-error -DMDBX_CHECKING=2
+smoke-ubsan test-ubsan: CMAKE_OPT += -DENABLE_UBSAN:BOOL=ON -DENABLE_ASAN:BOOL=OFF -DENABLE_MEMCHECK:BOOL=OFF -DMDBX_CHECKING=2
 test-ubsan: test
 smoke-ubsan: smoke
 
-smoke-asan test-asan: CFLAGS_EXTRA += -Os -fsanitize=address
-smoke-asan test-asan: CMAKE_OPT += -DENABLE_UBSAN:BOOL=OFF -DENABLE_ASAN:BOOL=ON -DENABLE_MEMCHECK:BOOL=OFF
+smoke-asan test-asan: CFLAGS_EXTRA += -Os -fsanitize=address -DMDBX_CHECKING=2
+smoke-asan test-asan: CMAKE_OPT += -DENABLE_UBSAN:BOOL=OFF -DENABLE_ASAN:BOOL=ON -DENABLE_MEMCHECK:BOOL=OFF -DMDBX_CHECKING=2
 test-asan: test
 smoke-asan: smoke
 
