@@ -83,7 +83,6 @@ typedef union bin128 {
 #define PAGELIST_LIMIT (MAX_MAPSIZE32 / MDBX_MIN_PAGESIZE)
 #endif /* MDBX_WORDBITS */
 
-#define MDBX_GOLD_RATIO_DBL 1.6180339887498948482
 #define MEGABYTE ((size_t)1 << 20)
 #define GIGABYTE ((size_t)1 << 30)
 

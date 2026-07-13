@@ -39,8 +39,8 @@ __cold intptr_t mdbx_limits_txnsize_max(intptr_t pagesize) {
                     !is_powerof2((size_t)pagesize)))
     return -1;
 
-  const uint64_t pgl_limit = pagesize * (uint64_t)(PAGELIST_LIMIT / MDBX_GOLD_RATIO_DBL);
-  const uint64_t map_limit = (uint64_t)(globals.mmap_limit / MDBX_GOLD_RATIO_DBL);
+  const uint64_t pgl_limit = pagesize * (uint64_t)(PAGELIST_LIMIT / /* gold ratio */ 1.618);
+  const size_t map_limit = (globals.mmap_limit >> 10) * 633 /* gold ratio */;
   return (pgl_limit < map_limit) ? (intptr_t)pgl_limit : (intptr_t)map_limit;
 }
 
