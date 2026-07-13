@@ -5,44 +5,44 @@
 
 static inline double key2double(const int64_t key) {
   union {
-    uint64_t u;
-    double f;
+    uint64_t u64;
+    double f64;
   } casting;
-
-  casting.u = (key < 0) ? key + UINT64_C(0x8000000000000000) : UINT64_C(0xffffFFFFffffFFFF) - key;
-  return casting.f;
+  casting.u64 = (key < 0) ? key + UINT64_C(0x8000000000000000) : UINT64_C(0xffffFFFFffffFFFF) - key;
+  STATIC_ASSERT(sizeof(casting.u64) == sizeof(casting.f64));
+  return casting.f64;
 }
 
 static inline uint64_t double2key(const double *const ptr) {
   STATIC_ASSERT(sizeof(double) == sizeof(int64_t));
-  const int64_t i = *(const int64_t *)ptr;
-  const uint64_t u = (i < 0) ? UINT64_C(0xffffFFFFffffFFFF) - i : i + UINT64_C(0x8000000000000000);
+  const int64_t i64 = *(const int64_t *)ptr;
+  const uint64_t u64 = (i64 < 0) ? UINT64_C(0xffffFFFFffffFFFF) - i64 : i64 + UINT64_C(0x8000000000000000);
   if (CHECKS1_ENABLED()) {
-    const double f = key2double(u);
-    ENSURE(memcmp(&f, ptr, sizeof(double)) == 0);
+    const double f64 = key2double(u64);
+    ENSURE(memcmp(&f64, ptr, sizeof(double)) == 0);
   }
-  return u;
+  return u64;
 }
 
 static inline float key2float(const int32_t key) {
   union {
-    uint32_t u;
-    float f;
+    uint64_t u32;
+    double f32;
   } casting;
-
-  casting.u = (key < 0) ? key + UINT32_C(0x80000000) : UINT32_C(0xffffFFFF) - key;
-  return casting.f;
+  casting.u32 = (key < 0) ? key + UINT32_C(0x80000000) : UINT32_C(0xffffFFFF) - key;
+  STATIC_ASSERT(sizeof(casting.u32) == sizeof(casting.f32));
+  return casting.f32;
 }
 
 static inline uint32_t float2key(const float *const ptr) {
   STATIC_ASSERT(sizeof(float) == sizeof(int32_t));
-  const int32_t i = *(const int32_t *)ptr;
-  const uint32_t u = (i < 0) ? UINT32_C(0xffffFFFF) - i : i + UINT32_C(0x80000000);
+  const int32_t i32 = *(const int32_t *)ptr;
+  const uint32_t u32 = (i32 < 0) ? UINT32_C(0xffffFFFF) - i32 : i32 + UINT32_C(0x80000000);
   if (CHECKS1_ENABLED()) {
-    const float f = key2float(u);
-    ENSURE(memcmp(&f, ptr, sizeof(float)) == 0);
+    const float f32 = key2float(u32);
+    ENSURE(memcmp(&f32, ptr, sizeof(float)) == 0);
   }
-  return u;
+  return u32;
 }
 
 uint64_t mdbx_key_from_double(const double ieee754_64bit) { return double2key(&ieee754_64bit); }
@@ -62,12 +62,12 @@ uint32_t mdbx_key_from_ptrfloat(const float *const ieee754_32bit) { return float
 
 static inline int clz64(uint64_t value) {
 #if __GNUC_PREREQ(4, 1) || __has_builtin(__builtin_clzl)
-  if (sizeof(value) == sizeof(int))
-    return __builtin_clz(value);
-  if (sizeof(value) == sizeof(long))
-    return __builtin_clzl(value);
+  if (sizeof(value) == sizeof(unsigned int))
+    return __builtin_clz((unsigned int)value);
+  if (sizeof(value) == sizeof(unsigned long))
+    return __builtin_clzl((unsigned long)value);
 #if (defined(__SIZEOF_LONG_LONG__) && __SIZEOF_LONG_LONG__ == 8) || __has_builtin(__builtin_clzll)
-  return __builtin_clzll(value);
+  return __builtin_clzll((unsigned long long)value);
 #endif /* have(long long) && long long == uint64_t */
 #endif /* GNU C */
 
@@ -102,7 +102,7 @@ static inline int clz64(uint64_t value) {
 static inline uint64_t round_mantissa(const uint64_t u64, int shift) {
   ASSERT(shift < 0 && u64 > 0);
   shift = -shift;
-  const unsigned half = 1 << (shift - 1);
+  const uint64_t half = UINT64_C(1) << (shift - 1);
   const unsigned lsb = 1 & (unsigned)(u64 >> shift);
   const unsigned tie2even = 1 ^ lsb;
   return (u64 + half - tie2even) >> shift;
@@ -124,8 +124,8 @@ uint64_t mdbx_key_from_jsonInteger(const int64_t json_integer) {
     const uint64_t exponent = (uint64_t)IEEE754_DOUBLE_EXPONENTA_BIAS + IEEE754_DOUBLE_MANTISSA_SIZE - shift;
     ASSERT(exponent > 0 && exponent <= IEEE754_DOUBLE_EXPONENTA_MAX);
     const uint64_t key = bias + (exponent << IEEE754_DOUBLE_MANTISSA_SIZE) + (mantissa - IEEE754_DOUBLE_IMPLICIT_LEAD);
-#if !defined(_MSC_VER) || !MDBX_WITHOUT_MSVC_CRT /* Workaround for MSVC error LNK2019: unresolved external             \
-                                             symbol __except1 referenced in function __ftol3_except */
+#if !MDBX_WITHOUT_MSVC_CRT /* Workaround for MSVC error LNK2019: unresolved external symbol __except1                  \
+                               referenced in function __ftol3_except */
     ASSERT(key == mdbx_key_from_double((double)json_integer));
 #endif /* Workaround for MSVC */
     return key;
@@ -146,8 +146,8 @@ uint64_t mdbx_key_from_jsonInteger(const int64_t json_integer) {
     ASSERT(exponent > 0 && exponent <= IEEE754_DOUBLE_EXPONENTA_MAX);
     const uint64_t key =
         bias - 1 - (exponent << IEEE754_DOUBLE_MANTISSA_SIZE) - (mantissa - IEEE754_DOUBLE_IMPLICIT_LEAD);
-#if !defined(_MSC_VER) || !MDBX_WITHOUT_MSVC_CRT /* Workaround for MSVC error LNK2019: unresolved external             \
-                                             symbol __except1 referenced in function __ftol3_except */
+#if !MDBX_WITHOUT_MSVC_CRT /* Workaround for MSVC error LNK2019: unresolved external symbol __except1                  \
+                              referenced in function __ftol3_except */
     ASSERT(key == mdbx_key_from_double((double)json_integer));
 #endif /* Workaround for MSVC */
     return key;
