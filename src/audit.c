@@ -63,7 +63,11 @@ __cold static int audit_ex_locked(MDBX_txn *txn, const size_t retired_stored, co
 #endif /* MDBX_ENABLE_DBI_SPARSE */
   }
 
-  struct audit_ctx ctx = {0, alloca(done_bitmap_size)};
+  size_t onstack_bitmap_buffer[MDBX_WORDBITS];
+  struct audit_ctx ctx = {0, (done_bitmap_size > sizeof(onstack_bitmap_buffer)) ? osal_malloc(done_bitmap_size)
+                                                                                : (void *)&onstack_bitmap_buffer};
+  if (unlikely(!ctx.done_bitmap))
+    return MDBX_ENOMEM;
   memset(ctx.done_bitmap, 0, done_bitmap_size);
   ctx.used =
       NUM_METAS + audit_db_used(dbi_dig(txn, FREE_DBI, nullptr)) + audit_db_used(dbi_dig(txn, MAIN_DBI, nullptr));
@@ -82,6 +86,9 @@ __cold static int audit_ex_locked(MDBX_txn *txn, const size_t retired_stored, co
               txn->txnid, dbi, (int)env->kvs[dbi].name.iov_len, (const char *)env->kvs[dbi].name.iov_base,
               dbi_state(txn, dbi));
   }
+
+  if (ctx.done_bitmap != (void *)&onstack_bitmap_buffer)
+    osal_free(ctx.done_bitmap);
 
   if (pending + gc + ctx.used == txn->geo.first_unallocated)
     return MDBX_SUCCESS;
