@@ -51,7 +51,6 @@ typedef struct iov_ctx iov_ctx_t;
 #define PAGELIST_LIMIT (MAX_MAPSIZE32 / MDBX_MIN_PAGESIZE)
 #endif /* MDBX_WORDBITS */
 
-#define MDBX_GOLD_RATIO_DBL 1.6180339887498948482
 #define MEGABYTE ((size_t)1 << 20)
 
 /*----------------------------------------------------------------------------*/
