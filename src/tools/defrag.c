@@ -80,7 +80,7 @@ static void logger(MDBX_log_level_t level, const char *function, int line, const
         fflush(nullptr);
     }
     FILE *out = (level < MDBX_LOG_NOTICE) ? stderr : stdout;
-    if (function && line)
+    if (function && line && (size_t)level < ARRAY_LENGTH(prefixes))
       fprintf(out, "%s", prefixes[level]);
     vfprintf(out, fmt, args);
     if (level <= MDBX_LOG_NOTICE)
@@ -105,7 +105,7 @@ static void defrag_report_progress(const MDBX_defrag_result_t *progress, unsigne
       if (progress->pages_retained)
         printf(", retained %zi", progress->pages_retained);
       if (progress->pages_shrinked)
-        printf(", shrinked %zi", progress->pages_shrinked);
+        printf(", shrink %zi", progress->pages_shrinked);
       printf(", left %zi", progress->pages_left);
     }
     for (unsigned i = 0; i < 3 || (i < dots / 8 && i < 64); ++i)
@@ -394,7 +394,7 @@ int main(int argc, char *argv[]) {
 
     if (!MDBX_IS_ERROR(rc)) {
       if (!quiet) {
-        printf("Defragmentation%s: shrinked %zi pages, %u passes, moved %zu pages",
+        printf("Defragmentation%s: shrink %zi pages, %u passes, moved %zu pages",
                (rc == MDBX_SUCCESS) ? " done" : " incomplete", result.pages_shrinked, result.cycles,
                result.pages_moved);
         if (result.stopping_reasons)

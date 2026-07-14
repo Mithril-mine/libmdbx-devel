@@ -142,7 +142,7 @@ static FILE *prefix(enum MDBX_chk_severity severity) {
 }
 
 static void suffix(size_t cookie, const char *str) {
-  if (cookie == line_count && !line_struct.empty) {
+  if (cookie == line_count && !line_struct.empty && line_output) {
     fprintf(line_output, " %s", str);
     line_struct.empty = false;
     lf();
@@ -186,7 +186,8 @@ static void logger(MDBX_log_level_t level, const char *function, int line, const
   FILE *out = prefix(severity);
   if (out) {
     vfprintf(out, fmt, args);
-    const bool have_lf = fmt[strlen(fmt) - 1] == '\n';
+    const size_t fmt_len = strlen(fmt);
+    const bool have_lf = (fmt_len > 0 && fmt[fmt_len - 1] == '\n');
     if (level == MDBX_LOG_FATAL && function && line) {
       if (have_lf)
         for (size_t i = 0; i < line_struct.scope_depth; ++i)
@@ -515,7 +516,7 @@ int main(int argc, char *argv[]) {
 
   rc = MDBX_SUCCESS;
   if (stuck_meta >= 0 && (env_flags & MDBX_EXCLUSIVE) == 0) {
-    error_fmt("exclusive mode is required to using specific meta-page(%d) for "
+    error_fmt("exclusive mode is required to use specific meta-page(%d) for "
               "checking.",
               stuck_meta);
     rc = EXIT_INTERRUPTED;
@@ -531,7 +532,7 @@ int main(int argc, char *argv[]) {
       rc = EXIT_INTERRUPTED;
     }
     if (only_table.iov_base || (chk_flags & (MDBX_CHK_SKIP_BTREE_TRAVERSAL | MDBX_CHK_SKIP_KV_TRAVERSAL))) {
-      error_fmt("whole database checking with b-tree traversal are required to turn "
+      error_fmt("whole database checking with b-tree traversal is required to turn "
                 "to the specified meta-page.");
       rc = EXIT_INTERRUPTED;
     }

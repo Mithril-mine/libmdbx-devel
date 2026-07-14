@@ -56,8 +56,8 @@ static void logger(MDBX_log_level_t level, const char *function, int line, const
       "   ",        // 3 notice
       "   //",      // 4 verbose
   };
-  if (level < MDBX_LOG_DEBUG) {
-    if (function && line)
+  if (level >= 0 && level < MDBX_LOG_DEBUG) {
+    if (function && line && (size_t)level < ARRAY_LENGTH(prefixes))
       fprintf(stderr, "%s", prefixes[level]);
     vfprintf(stderr, fmt, args);
   }
@@ -705,7 +705,7 @@ int main(int argc, char *argv[]) {
   key_buf.iov_len = mdbx_env_get_maxkeysize_ex(env, 0) + (size_t)1;
   if (key_buf.iov_len >= INTPTR_MAX / 2) {
     if (!quiet)
-      fprintf(stderr, "mdbx_env_get_maxvalsize_ex() failed, returns %zu\n", key_buf.iov_len);
+      fprintf(stderr, "mdbx_env_get_maxkeysize_ex() failed, returns %zu\n", key_buf.iov_len);
     goto bailout;
   }
 

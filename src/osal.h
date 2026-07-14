@@ -505,7 +505,7 @@ MDBX_MAYBE_UNUSED static inline bool osal_isdirsep(pathchar_t c) {
       c == '/';
 }
 
-MDBX_INTERNAL const char *osal_getenv(const char *name, bool secure);
+MDBX_INTERNAL const char *osal_getenv_singlethreaded(const char *name, bool secure);
 MDBX_INTERNAL bool osal_pathequal(const pathchar_t *l, const pathchar_t *r, size_t len);
 MDBX_INTERNAL pathchar_t *osal_fileext(const pathchar_t *pathname, size_t len);
 MDBX_INTERNAL int osal_fileexists(const pathchar_t *pathname);
@@ -575,7 +575,7 @@ MDBX_INTERNAL int osal_mb2w(const char *const src, wchar_t **const pdst);
 
 MDBX_INTERNAL bin128_t osal_guid(const MDBX_env *);
 
-MDBX_INTERNAL bool osal_safe_peek_uint32(const void *ptr, int32_t *dest);
+MDBX_INTERNAL bool osal_safe_peek_int32(const void *ptr, int32_t *dest);
 
 /*----------------------------------------------------------------------------*/
 

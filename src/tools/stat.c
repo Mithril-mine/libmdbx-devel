@@ -126,8 +126,8 @@ static void logger(MDBX_log_level_t level, const char *function, int line, const
       "   ",        // 3 notice
       "   //",      // 4 verbose
   };
-  if (level < MDBX_LOG_DEBUG) {
-    if (function && line)
+  if (level >= 0 && level < MDBX_LOG_DEBUG) {
+    if (function && line && (size_t)level < ARRAY_LENGTH(prefixes))
       fprintf(stderr, "%s", prefixes[level]);
     vfprintf(stderr, fmt, args);
   }
@@ -264,7 +264,7 @@ int main(int argc, char *argv[]) {
   rc = mdbx_txn_begin(env, nullptr, MDBX_TXN_RDONLY, &txn);
   if (unlikely(rc != MDBX_SUCCESS)) {
     error("mdbx_txn_begin", rc);
-    goto txn_abort;
+    goto env_close;
   }
 
   if (show_env_info || show_gc || show_page_ops) {
@@ -440,7 +440,6 @@ int main(int argc, char *argv[]) {
     rc = mdbx_enumerate_tables(txn, table_enum_func, nullptr);
     switch (rc) {
     case MDBX_SUCCESS:
-    case MDBX_NOTFOUND:
       break;
     case MDBX_EINTR:
       if (!quiet)

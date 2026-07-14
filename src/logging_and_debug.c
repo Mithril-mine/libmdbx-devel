@@ -282,7 +282,7 @@ __cold const char *object2class(const void *ptr) {
     return "null";
 
   int32_t snap_signature = 0;
-  if (!osal_safe_peek_uint32(ptr, &snap_signature))
+  if (!osal_safe_peek_int32(ptr, &snap_signature))
     return "bad";
 
   switch (snap_signature) {

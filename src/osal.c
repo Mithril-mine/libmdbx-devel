@@ -224,10 +224,10 @@ __cold void osal_panic(const char *msg, const char *func, unsigned line) {
 
 #ifndef osal_vasprintf
 int osal_vasprintf(char **strp, const char *fmt, va_list ap) {
-  va_list ones;
-  va_copy(ones, ap);
-  const int needed = vsnprintf(nullptr, 0, fmt, ones);
-  va_end(ones);
+  va_list ap_copy;
+  va_copy(ap_copy, ap);
+  const int needed = vsnprintf(nullptr, 0, fmt, ap_copy);
+  va_end(ap_copy);
 
   if (unlikely(needed < 0 || needed >= INT_MAX)) {
     *strp = nullptr;
@@ -525,7 +525,7 @@ int osal_fastmutex_acquire(osal_fastmutex_t *fastmutex) {
 #endif
 }
 
-bool osal_safe_peek_uint32(const void *ptr, int32_t *dest) {
+bool osal_safe_peek_int32(const void *ptr, int32_t *dest) {
   bool done = false;
   *dest = 0;
 
@@ -538,25 +538,36 @@ bool osal_safe_peek_uint32(const void *ptr, int32_t *dest) {
   }
   SEH_CATCH { return false; }
 #else
-  static int nullfd = -1;
-  if (nullfd < 0) {
+  static volatile int nullfd = -1;
+  int fd = nullfd; /* we sure int read is atomic */
+  if (fd < 0) {
     static pthread_mutex_t nullfd_mutex = PTHREAD_MUTEX_INITIALIZER;
-    pthread_mutex_lock(&nullfd_mutex);
-    if (nullfd < 0) {
-      nullfd = open(dev_null, O_WRONLY
+    int rc = pthread_mutex_lock(&nullfd_mutex);
+    if (unlikely(rc != 0)) {
+      ERROR("pthread_mutex_lock(nullfd_mutex), err %d", rc);
+      return false;
+    }
+    fd = nullfd;
+    if (fd < 0) {
+      fd = open(dev_null, O_WRONLY
 #ifdef O_CLOEXEC
-                                  | O_CLOEXEC
+                              | O_CLOEXEC
 #endif /* O_CLOEXEC */
       );
-      if (unlikely(nullfd < 0)) {
-        pthread_mutex_unlock(&nullfd_mutex);
+      if (unlikely(fd < 0)) {
+        rc = pthread_mutex_unlock(&nullfd_mutex);
         ERROR("unable open(%s), err %d", dev_null, errno);
+        if (unlikely(rc != 0))
+          ERROR("pthread_mutex_unlock(nullfd_mutex), err %d", rc);
         return false;
       }
+      nullfd = fd; /* we sure int write is atomic */
     }
-    pthread_mutex_unlock(&nullfd_mutex);
+    rc = pthread_mutex_unlock(&nullfd_mutex);
+    if (unlikely(rc != 0))
+      ERROR("pthread_mutex_unlock(nullfd_mutex), err %d", rc);
   }
-  if (write(nullfd, ptr, 4) == 4) {
+  if (write(fd, ptr, 4) == 4) {
     memcpy(dest, ptr, 4);
     done = true;
   }
@@ -782,12 +793,18 @@ int osal_ioring_add(osal_ioring_t *ior, const size_t offset, void *data, const s
   item->ov.OffsetHigh = HIGH_DWORD(offset);
   item->ov.hEvent = 0;
   if (!use_gather || ((bytes | (uintptr_t)(data)) & ior_alignment_mask) != 0 || segments > OSAL_IOV_MAX) {
-    /* WriteFile() */
+    /* WriteFile()
+     * Encoding contract for later decoding in osal_ioring_walk()/osal_ioring_write():
+     *   single.iov_len = payload_bytes + ior_WriteFile_flag.
+     * The low bit marks "single-buffer WriteFile item". */
     item->single.iov_base = data;
     item->single.iov_len = bytes + ior_WriteFile_flag;
     ASSERT((item->single.iov_len & ior_WriteFile_flag) != 0);
   } else {
-    /* WriteFileGather() */
+    /* WriteFileGather()
+     * Deliberately leave single.iov_len == 0 (item is zero-initialized).
+     * Decoders subtract ior_WriteFile_flag from iov_len and test the low bit:
+     *   0 - 1 => SIZE_MAX, low bit set, therefore recognized as gather item. */
     ASSERT(ior->overlapped_fd);
     item->sgv[0].Buffer = PtrToPtr64(data);
     for (size_t i = 1; i < segments; ++i) {
@@ -821,6 +838,11 @@ void osal_ioring_walk(osal_ioring_t *ior, iov_ctx_t *ctx,
 #if IS_WINDOWS
     size_t offset = ior_offset(item);
     char *data = item->single.iov_base;
+    /* Decode counterpart of enqueue-time encoding:
+     *   WriteFile item:      iov_len = payload + flag, so bytes = payload.
+     *   WriteFileGather item iov_len = 0, so bytes = (size_t)-1 (intentional underflow).
+     * We use only the low-bit test below to detect gather items, then overwrite bytes
+     * before any callback/use, so the transient SIZE_MAX value is safe. */
     size_t bytes = item->single.iov_len - ior_WriteFile_flag;
     size_t i = 1;
     if (bytes & ior_WriteFile_flag) {
@@ -1165,7 +1187,7 @@ int osal_ioring_resize(osal_ioring_t *ior, size_t items) {
       if (imports.SetFileIoOverlappedRange(ior->overlapped_fd, ptr, (ULONG)bytes))
         ior->state += IOR_STATE_LOCKED;
       else
-        return GetLastError();
+        return (int)GetLastError();
     }
 #endif /* Windows */
   }
@@ -1375,18 +1397,32 @@ int osal_openfile(const enum osal_openfile_purpose purpose, const MDBX_env *env,
 
   /* Safeguard for https://libmdbx.dqdkfa.ru/dead-github/issues/144 */
 #if STDIN_FILENO == 0 && STDOUT_FILENO == 1 && STDERR_FILENO == 2
-  int stub_fd0 = -1, stub_fd1 = -1, stub_fd2 = -1;
+  /* When opening a database in the switched daemon mode program, the standard file descriptors can be closed, and the
+   * newly opened here file descriptor can get one of the those values. In this cases, using such a descriptor to
+   * interact with the database is extremely dangerous, since in a complex application using many libraries with
+   * dependencies, it cannot be guaranteed that no one component continued to use the standard value of the descriptor
+   * and thus will perform unexpected input/output to the database file and damage it.
+   *
+   * To prevent the described situation, several safety measures are being taken here:
+   *  1. If any of the descriptors 0-2 is closed, an attempt will be made to open it for /dev/null.
+   *     This ensures that the subsequent dup() returns a handle greater than 2.
+   *  2. If the descriptor open to the database is less than or equal to 2,
+   *     it will be duplicated using dup() so that the total value is greater than 2.
+   *  3. All temporarily open descriptors are closed,
+   *     including those open to the database if its value is less than or equal to 2.
+   */
+  int hazardous_fd0 = -1, hazardous_fd1 = -1, hazardous_fd2 = -1;
   if (!is_valid_fd(STDIN_FILENO)) {
     WARNING("STD%s_FILENO/%d is invalid, open %s for temporary stub", "IN", STDIN_FILENO, dev_null);
-    stub_fd0 = open(dev_null, O_RDONLY | O_NOCTTY);
+    hazardous_fd0 = open(dev_null, O_RDONLY | O_NOCTTY);
   }
   if (!is_valid_fd(STDOUT_FILENO)) {
     WARNING("STD%s_FILENO/%d is invalid, open %s for temporary stub", "OUT", STDOUT_FILENO, dev_null);
-    stub_fd1 = open(dev_null, O_WRONLY | O_NOCTTY);
+    hazardous_fd1 = open(dev_null, O_WRONLY | O_NOCTTY);
   }
   if (!is_valid_fd(STDERR_FILENO)) {
     WARNING("STD%s_FILENO/%d is invalid, open %s for temporary stub", "ERR", STDERR_FILENO, dev_null);
-    stub_fd2 = open(dev_null, O_WRONLY | O_NOCTTY);
+    hazardous_fd2 = open(dev_null, O_WRONLY | O_NOCTTY);
   }
 #else
 #error "Unexpected or unsupported UNIX or POSIX system"
@@ -1410,26 +1446,26 @@ int osal_openfile(const enum osal_openfile_purpose purpose, const MDBX_env *env,
 #if STDIN_FILENO == 0 && STDOUT_FILENO == 1 && STDERR_FILENO == 2
   if (*fd == STDIN_FILENO) {
     WARNING("Got STD%s_FILENO/%d, avoid using it by dup(fd)", "IN", STDIN_FILENO);
-    ASSERT(stub_fd0 == -1);
-    *fd = dup(stub_fd0 = *fd);
+    ASSERT(hazardous_fd0 == -1);
+    *fd = dup(hazardous_fd0 = STDIN_FILENO);
   }
   if (*fd == STDOUT_FILENO) {
     WARNING("Got STD%s_FILENO/%d, avoid using it by dup(fd)", "OUT", STDOUT_FILENO);
-    ASSERT(stub_fd1 == -1);
-    *fd = dup(stub_fd1 = *fd);
+    ASSERT(hazardous_fd1 == -1);
+    *fd = dup(hazardous_fd1 = STDOUT_FILENO);
   }
   if (*fd == STDERR_FILENO) {
     WARNING("Got STD%s_FILENO/%d, avoid using it by dup(fd)", "ERR", STDERR_FILENO);
-    ASSERT(stub_fd2 == -1);
-    *fd = dup(stub_fd2 = *fd);
+    ASSERT(hazardous_fd2 == -1);
+    *fd = dup(hazardous_fd2 = STDERR_FILENO);
   }
   const int err = errno;
-  if (stub_fd0 != -1)
-    close(stub_fd0);
-  if (stub_fd1 != -1)
-    close(stub_fd1);
-  if (stub_fd2 != -1)
-    close(stub_fd2);
+  if (hazardous_fd0 != -1)
+    close(hazardous_fd0);
+  if (hazardous_fd1 != -1)
+    close(hazardous_fd1);
+  if (hazardous_fd2 != -1)
+    close(hazardous_fd2);
   if (*fd >= STDIN_FILENO && *fd <= STDERR_FILENO) {
     ERROR("Rejecting the use of a FD in the range "
           "STDIN_FILENO/%d..STDERR_FILENO/%d to prevent database corruption",
@@ -1661,7 +1697,7 @@ int osal_filesize(mdbx_filehandle_t fd, uint64_t *length) {
 #else
   struct stat st;
 
-  STATIC_ASSERT_MSG(sizeof(off_t) <= sizeof(uint64_t), "libmdbx requires 64-bit file I/O on 64-bit systems");
+  STATIC_ASSERT_MSG(sizeof(off_t) <= sizeof(uint64_t), "off_t is expected to be no wider than 64 bits");
   if (fstat(fd, &st))
     return errno;
 
@@ -3609,9 +3645,10 @@ bin128_t osal_guid(const MDBX_env *env) {
   return uuid;
 }
 
-const char *osal_getenv(const char *name, bool secure) {
+const char *osal_getenv_singlethreaded(const char *name, bool secure) {
   (void)secure;
 #if IS_WINDOWS
+  /* We sure this function never calls in a multithreaded cases, since used at initialization stage only. */
   static char buf[42];
   SetLastError(ERROR_OUT_OF_PAPER);
   const size_t len = GetEnvironmentVariableA(name, buf, sizeof(buf));

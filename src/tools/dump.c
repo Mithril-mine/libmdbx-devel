@@ -219,8 +219,8 @@ static void logger(MDBX_log_level_t level, const char *function, int line, const
       "   ",        // 3 notice
       "   //",      // 4 verbose
   };
-  if (level < MDBX_LOG_DEBUG) {
-    if (function && line)
+  if (level >= 0 && level < MDBX_LOG_DEBUG) {
+    if (function && line && (size_t)level < ARRAY_LENGTH(prefixes))
       fprintf(stderr, "%s", prefixes[level]);
     vfprintf(stderr, fmt, args);
   }

@@ -191,7 +191,7 @@ __cold static __attribute__((__destructor__)) void mdbx_global_destructor(void) 
 struct libmdbx_globals globals;
 
 static bool getenv_bool(const char *name, bool default_value) {
-  const char *value = osal_getenv(name, false);
+  const char *value = osal_getenv_singlethreaded(name, false);
   if (value) {
     if (*value == 0 /* implied ON */)
       return true;
