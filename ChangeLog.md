@@ -74,7 +74,7 @@ The supporting release of a stable branch with bug fixes.
 
  - Fixed assertions triggering in a specific scenarios of creating and renaming tables within nested transactions.
 
- - Fixed the [issue](https://github.com/Mithril-mine/libmdbx/issues/361) of loosing a table content after abortion the nested transaction where such table was dropped.
+ - Fixed the [issue](https://github.com/Mithril-mine/libmdbx/issues/361) of losing a table content after abortion the nested transaction where such table was dropped.
 
  - Fixed `ERROR_LOCK_VIOLATION` during defrag on Windows in operation modes using overlapped I/O.
 
@@ -100,6 +100,10 @@ The supporting release of a stable branch with bug fixes.
  - Fixed running `ctest -T memcheck` by adding workaround of CTest/CMake bugs for Valgrind parameters.
 
  - Fixed/removed leftover usage of float point in `mdbx_stat` utility.
+
+ - Fixed `mach_port_t` leak inside `mdbx_get_sysraminfo()`.
+
+ - Fixed Windows section handle leak inside `osal_mresize()` in unsuccessful case.
 
 
 --------------------------------------------------------------------------------
