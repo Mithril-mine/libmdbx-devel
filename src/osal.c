@@ -461,7 +461,10 @@ _Function_class_(EXCEPTION_ROUTINE)
   if (pExceptionRecord->ExceptionCode) {
     NT_TIB *const TIB = (NT_TIB *)NtCurrentTeb();
     seh_ctx_t *seh = (seh_ctx_t *)TIB->ExceptionList;
-    do {
+#ifndef EXCEPTION_CHAIN_END
+#define EXCEPTION_CHAIN_END ((PEXCEPTION_REGISTRATION_RECORD) - 1)
+#endif
+    while (seh && seh != (seh_ctx_t *)EXCEPTION_CHAIN_END) {
       if (seh->Registration.Handler == mdbx_simple_SEH &&
           (seh->filter == pExceptionRecord->ExceptionCode ||
            (seh->filter == EXCEPTION_ACCESS_VIOLATION && pExceptionRecord->ExceptionCode == EXCEPTION_IN_PAGE_ERROR))) {
@@ -474,7 +477,7 @@ _Function_class_(EXCEPTION_ROUTINE)
         return ExceptionContinueExecution;
       }
       seh = (seh_ctx_t *)seh->Registration.Next;
-    } while (seh);
+    }
   }
   return ExceptionContinueSearch;
 }
