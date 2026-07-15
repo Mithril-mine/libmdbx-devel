@@ -1315,35 +1315,44 @@ int osal_openfile(const enum osal_openfile_purpose purpose, const MDBX_env *env,
   *fd = open(pathname, flags, unix_mode_bits);
 #if defined(O_DIRECT)
   if (*fd < 0 && (flags & O_DIRECT) && (errno == EINVAL || errno == EAFNOSUPPORT)) {
-    flags &= ~(O_DIRECT | O_EXCL);
+    flags &= ~O_DIRECT;
     *fd = open(pathname, flags, unix_mode_bits);
   }
 #endif /* O_DIRECT */
 
-  if (*fd < 0 && errno == EACCES && purpose == MDBX_OPEN_LCK) {
-    struct stat unused;
-    if (stat(pathname, &unused) == 0 || errno != ENOENT)
-      errno = EACCES /* restore errno if file exists */;
+  int err = MDBX_SUCCESS;
+  if (*fd < 0) {
+    err = errno;
+    if (err == EACCES && purpose == MDBX_OPEN_LCK) {
+      struct stat unused;
+      if (stat(pathname, &unused) == 0 || (err = errno) != ENOENT)
+        err = EACCES /* restore error if file exists */;
+    }
   }
 
   /* Safeguard for https://libmdbx.dqdkfa.ru/dead-github/issues/144 */
 #if STDIN_FILENO == 0 && STDOUT_FILENO == 1 && STDERR_FILENO == 2
-  if (*fd == STDIN_FILENO) {
+  else if (*fd == STDIN_FILENO) {
     WARNING("Got STD%s_FILENO/%d, avoid using it by dup(fd)", "IN", STDIN_FILENO);
     assert(stub_fd0 == -1);
     *fd = dup(stub_fd0 = *fd);
+    if (*fd < 0)
+      err = errno;
   }
-  if (*fd == STDOUT_FILENO) {
+  else if (*fd == STDOUT_FILENO) {
     WARNING("Got STD%s_FILENO/%d, avoid using it by dup(fd)", "OUT", STDOUT_FILENO);
     assert(stub_fd1 == -1);
     *fd = dup(stub_fd1 = *fd);
+    if (*fd < 0)
+      err = errno;
   }
-  if (*fd == STDERR_FILENO) {
+  else if (*fd == STDERR_FILENO) {
     WARNING("Got STD%s_FILENO/%d, avoid using it by dup(fd)", "ERR", STDERR_FILENO);
     assert(stub_fd2 == -1);
     *fd = dup(stub_fd2 = *fd);
+    if (*fd < 0)
+      err = errno;
   }
-  const int err = errno;
   if (stub_fd0 != -1)
     close(stub_fd0);
   if (stub_fd1 != -1)
@@ -1361,8 +1370,11 @@ int osal_openfile(const enum osal_openfile_purpose purpose, const MDBX_env *env,
 #error "Unexpected or unsupported UNIX or POSIX system"
 #endif /* STDIN_FILENO == 0 && STDERR_FILENO == 2 */
 
-  if (*fd < 0)
+  if (unlikely(err != 0)) {
+    if (*fd >= 0)
+      close(*fd);
     return err;
+  }
 
 #if defined(FD_CLOEXEC) && !defined(O_CLOEXEC)
   const int fd_flags = fcntl(*fd, F_GETFD);
