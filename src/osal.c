@@ -2326,6 +2326,7 @@ int osal_mresize(const int flags, osal_mmap_t *map, size_t size, size_t limit) {
   status = NtUnmapViewOfSection(GetCurrentProcess(), map->base);
   if (!NT_SUCCESS(status))
     return osal_ntstatus2errcode(status);
+  /* close and zeroed old section handle */
   status = NtClose(map->section);
   map->section = nullptr;
   PVOID ReservedAddress = nullptr;
@@ -2336,6 +2337,10 @@ int osal_mresize(const int flags, osal_mmap_t *map, size_t size, size_t limit) {
     err = osal_ntstatus2errcode(status);
     map->base = nullptr;
     map->current = map->limit = 0;
+    if (map->section) {
+      NtClose(map->section);
+      map->section = nullptr;
+    }
     if (ReservedAddress) {
       ReservedSize = 0;
       status = NtFreeVirtualMemory(GetCurrentProcess(), &ReservedAddress, &ReservedSize, MEM_RELEASE);
