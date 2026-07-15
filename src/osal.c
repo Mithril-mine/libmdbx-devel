@@ -3375,7 +3375,7 @@ __cold int mdbx_get_sysraminfo(intptr_t *page_size, intptr_t *total_pages, intpt
     mach_msg_type_number_t count = HOST_VM_INFO_COUNT;
     vm_statistics_data_t vmstat;
     mach_port_t mport = mach_host_self();
-    kern_return_t kerr = host_statistics(mach_host_self(), HOST_VM_INFO, (host_info_t)&vmstat, &count);
+    kern_return_t kerr = host_statistics(mport, HOST_VM_INFO, (host_info_t)&vmstat, &count);
     mach_port_deallocate(mach_task_self(), mport);
     if (unlikely(kerr != KERN_SUCCESS))
       return LOG_IFERR(MDBX_ENOSYS);
