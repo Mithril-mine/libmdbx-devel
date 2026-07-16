@@ -376,29 +376,32 @@ MDBX_NOTHROW_PURE_FUNCTION MDBX_INTERNAL int cmp_uint64_unaligned(const MDBX_val
 #if MDBX_UNALIGNED_OK < 2 || MDBX_CHECKING > 0
 /* Compare two items pointing at 2-byte aligned unsigned int's. */
 MDBX_NOTHROW_PURE_FUNCTION MDBX_INTERNAL int cmp_uint_align2(const MDBX_val *a, const MDBX_val *b);
-MDBX_NOTHROW_PURE_FUNCTION MDBX_INTERNAL int cmp_uint32_align2(const MDBX_val *a, const MDBX_val *b);
-MDBX_NOTHROW_PURE_FUNCTION MDBX_INTERNAL int cmp_uint64_align2(const MDBX_val *a, const MDBX_val *b);
-MDBX_MAYBE_UNUSED MDBX_NOTHROW_PURE_FUNCTION static __always_inline int cmp_uint32_align2_unchecked(const MDBX_val *a,
-                                                                                                    const MDBX_val *b) {
-  return cmp_uint32_unchecked(2, a, b);
-}
-MDBX_MAYBE_UNUSED MDBX_NOTHROW_PURE_FUNCTION static __always_inline int cmp_uint64_align2_unchecked(const MDBX_val *a,
-                                                                                                    const MDBX_val *b) {
-  return cmp_uint64_unchecked(2, a, b);
-}
+/* Currently unused
+  MDBX_NOTHROW_PURE_FUNCTION MDBX_INTERNAL int cmp_uint32_align2(const MDBX_val *a, const MDBX_val *b);
+  MDBX_NOTHROW_PURE_FUNCTION MDBX_INTERNAL int cmp_uint64_align2(const MDBX_val *a, const MDBX_val *b);
+  MDBX_MAYBE_UNUSED MDBX_NOTHROW_PURE_FUNCTION static __always_inline int cmp_uint32_align2_unchecked(const MDBX_val *a,
+                                                                                                      const MDBX_val *b)
+  { return cmp_uint32_unchecked(2, a, b);
+  }
+  MDBX_MAYBE_UNUSED MDBX_NOTHROW_PURE_FUNCTION static __always_inline int cmp_uint64_align2_unchecked(const MDBX_val *a,
+                                                                                                      const MDBX_val *b)
+  { return cmp_uint64_unchecked(2, a, b);
+  } */
 #else
 #define cmp_uint_align2 cmp_uint_unaligned
+/* Currently unused
 #define cmp_uint32_align2 cmp_uint32_unaligned
 #define cmp_uint64_align2 cmp_uint64_unaligned
 #define cmp_uint32_align2_unchecked cmp_uint32_unaligned_unchecked
-#define cmp_uint64_align2_unchecked cmp_uint64_unaligned_unchecked
+#define cmp_uint64_align2_unchecked cmp_uint64_unaligned_unchecked */
 #endif /* !MDBX_UNALIGNED_OK || debug */
 
 #if MDBX_UNALIGNED_OK < 4 || MDBX_CHECKING > 0
 /* Compare two items pointing at 4-byte aligned unsigned int's. */
 MDBX_NOTHROW_PURE_FUNCTION MDBX_INTERNAL int cmp_uint_align4(const MDBX_val *a, const MDBX_val *b);
-MDBX_NOTHROW_PURE_FUNCTION MDBX_INTERNAL int cmp_uint32_align4(const MDBX_val *a, const MDBX_val *b);
-MDBX_NOTHROW_PURE_FUNCTION MDBX_INTERNAL int cmp_uint64_align4(const MDBX_val *a, const MDBX_val *b);
+/* Currently unused
+  MDBX_NOTHROW_PURE_FUNCTION MDBX_INTERNAL int cmp_uint32_align4(const MDBX_val *a, const MDBX_val *b);
+  MDBX_NOTHROW_PURE_FUNCTION MDBX_INTERNAL int cmp_uint64_align4(const MDBX_val *a, const MDBX_val *b); */
 MDBX_MAYBE_UNUSED MDBX_NOTHROW_PURE_FUNCTION static __always_inline int cmp_uint32_align4_unchecked(const MDBX_val *a,
                                                                                                     const MDBX_val *b) {
   return cmp_uint32_unchecked(4, a, b);
@@ -409,8 +412,9 @@ MDBX_MAYBE_UNUSED MDBX_NOTHROW_PURE_FUNCTION static __always_inline int cmp_uint
 }
 #else
 #define cmp_uint_align4 cmp_uint_unaligned
-#define cmp_uint32_align4 cmp_uint32_unaligned
-#define cmp_uint64_align4 cmp_uint64_unaligned
+/* Currently unused
+  #define cmp_uint32_align4 cmp_uint32_unaligned
+  #define cmp_uint64_align4 cmp_uint64_unaligned */
 #define cmp_uint32_align4_unchecked cmp_uint32_unaligned_unchecked
 #define cmp_uint64_align4_unchecked cmp_uint64_unaligned_unchecked
 #endif /* !MDBX_UNALIGNED_OK || debug */
@@ -435,14 +439,17 @@ MDBX_NOTHROW_PURE_FUNCTION MDBX_INTERNAL int cmp_equal_or_greater(const MDBX_val
 MDBX_NOTHROW_PURE_FUNCTION MDBX_INTERNAL int cmp_equal_or_wrong(const MDBX_val *a, const MDBX_val *b);
 
 static inline MDBX_cmp_func builtin_keycmp(MDBX_db_flags_t flags) {
-  return (flags & MDBX_REVERSEKEY) ? cmp_reverse : (flags & MDBX_INTEGERKEY) ? cmp_uint_align2 : cmp_lexical;
+  return (flags & MDBX_INTEGERKEY) ? cmp_uint_align2 : (flags & MDBX_REVERSEKEY) ? cmp_reverse : cmp_lexical;
 }
 
 static inline MDBX_cmp_func builtin_datacmp(MDBX_db_flags_t flags) {
-  return !(flags & MDBX_DUPSORT)
-             ? cmp_lenfast
-             : ((flags & MDBX_INTEGERDUP) ? cmp_uint_unaligned
-                                          : ((flags & MDBX_REVERSEDUP) ? cmp_reverse : cmp_lexical));
+  if (flags & MDBX_DUPSORT) {
+    if (flags & MDBX_INTEGERDUP)
+      return (flags & MDBX_INTEGERKEY) ? /* aligned since keys length are aligned */ cmp_uint_align4
+                                       : /* may be unaligned since key length may vary */ cmp_uint_unaligned;
+    return (flags & MDBX_REVERSEDUP) ? cmp_reverse : cmp_lexical;
+  }
+  return cmp_lenfast;
 }
 
 static inline void clc_reset_methods(volatile clc_t *clc) {
