@@ -1838,7 +1838,7 @@ __hot csr_t cursor_seek(MDBX_cursor *mc, MDBX_val *key, MDBX_val *data, MDBX_cur
       /* при создании первой листовой страницы */
       cASSERT0(mc, mc->top == 0 && mc->tree->height == 1 && mc->tree->branch_pages == 0 && mc->tree->leaf_pages == 1 &&
                        mc->ki[0] == 0);
-      /* Логически верно, но нет смысла, ибо это мимолетная/временная
+      /* Логически верно, но нет смысла менять флаги, ибо это мимолетная/временная
        * ситуация до добавления элемента выше по стеку вызовов:
          mc->flags |= z_eof_soft | z_hollow; */
       ret.err = MDBX_NOTFOUND;
@@ -1863,7 +1863,7 @@ __hot csr_t cursor_seek(MDBX_cursor *mc, MDBX_val *key, MDBX_val *data, MDBX_cur
 
     if (cmp > 0) {
       /* Искомый ключ больше первого на этой странице,
-       * целевая позиция на этой странице либо правее (ближе к концу). */
+       * целевая позиция на этой странице, либо на последующих (ближе к концу). */
       if (likely(nkeys > 1)) {
         if (is_dupfix_leaf(mp)) {
           nodekey.iov_base = page_dupfix_ptr(mp, nkeys - 1, nodekey.iov_len);
@@ -1884,7 +1884,7 @@ __hot csr_t cursor_seek(MDBX_cursor *mc, MDBX_val *key, MDBX_val *data, MDBX_cur
            * странице. */
           /* Сравниваем с текущей позицией, ибо частным сценарием является такое
            * совпадение, но не делаем проверку если текущая позиция является
-           * первой/последний и соответственно такое сравнение было выше. */
+           * первой/последней и соответственно такое сравнение было выше. */
           if (mc->ki[mc->top] > 0 && mc->ki[mc->top] < nkeys - 1) {
             if (is_dupfix_leaf(mp)) {
               nodekey.iov_base = page_dupfix_ptr(mp, mc->ki[mc->top], nodekey.iov_len);
@@ -1893,7 +1893,7 @@ __hot csr_t cursor_seek(MDBX_cursor *mc, MDBX_val *key, MDBX_val *data, MDBX_cur
               nodekey = get_key(node);
             }
             cmp = mc->clc->k.cmp(&aligned.key, &nodekey);
-            if (cmp == 0) {
+            if (unlikely(cmp == 0)) {
               /* current node was the one we wanted */
               ret.exact = true;
               goto got_node;

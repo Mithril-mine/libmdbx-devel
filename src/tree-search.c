@@ -193,82 +193,82 @@ static int null_comparator(const MDBX_val *a, const MDBX_val *b) {
     intptr_t scope = nkeys - lo, cmp, it;                                                                              \
     node_t *node = (node_t *)(intptr_t)-1;                                                                             \
     MDBX_val node_key;                                                                                                 \
-    if ((BOOL_DIFFERENT_COMPARATORS | BOOL_DUPFIXED) && lo == 0) {                                                     \
-      ASSERT(is_leaf(mp));                                                                                             \
-      if (BOOL_DUPFIXED) {                                                                                             \
-        cASSERT0(mc, is_dupfix_leaf(mp));                                                                              \
-        cASSERT0(mc, mp->dupfix_ksize == mc->tree->dupfix_size);                                                       \
-        node_key.iov_len = mp->dupfix_ksize;                                                                           \
-        TRACE(">> %s lo %zu, size %zu, nkeys %zu", "leaf-dupfix", lo, scope, nkeys);                                   \
-        do {                                                                                                           \
-          MDBX_CURSOR_STC_INC(mc);                                                                                     \
-          BINARY_BRANCHLESS_SEARCH_CYCLE_BEGIN(it, cmp, lo, scope);                                                    \
-          node_key.iov_base = page_dupfix_ptr(mp, it, node_key.iov_len);                                               \
-          cASSERT0(mc, ptr_disp(mp, mc->txn->env->ps) >= ptr_disp(node_key.iov_base, node_key.iov_len));               \
-          cmp = LEAF_COMPARATOR(&node_key, key);                                                                       \
-          TRACE("== i %zu, cmp %zi", it, cmp);                                                                         \
-          if (unlikely(cmp == 0))                                                                                      \
-            goto found;                                                                                                \
-          BINARY_BRANCHLESS_SEARCH_CYCLE_END(it, cmp, lo, scope);                                                      \
-          TRACE("== lo %zi, size %zi", lo, scope);                                                                     \
-        } while (scope > 0);                                                                                           \
+    if (likely(lo > 0) || !(BOOL_DIFFERENT_COMPARATORS | BOOL_DUPFIXED)) {                                             \
+      TRACE(">> %s lo %zu, size %zu, nkeys %zu", "branch", lo, scope, nkeys);                                          \
+      ASSERT(!is_dupfix_leaf(mp));                                                                                     \
+      ASSERT(is_branch(mp) || !(BOOL_DIFFERENT_COMPARATORS | BOOL_DUPFIXED));                                          \
+      do {                                                                                                             \
+        MDBX_CURSOR_STC_INC(mc);                                                                                       \
+        BINARY_BRANCHLESS_SEARCH_CYCLE_BEGIN(it, cmp, lo, scope);                                                      \
+        node = page_node(mp, it);                                                                                      \
+        node_key = get_key(node);                                                                                      \
+        cASSERT0(mc, ptr_disp(mp, mc->txn->env->ps) >= ptr_disp(node_key.iov_base, node_key.iov_len));                 \
+        cmp = BRANCH_COMPARATOR(&node_key, key);                                                                       \
+        TRACE("== i %zu, cmp %zi", it, cmp);                                                                           \
+        if (unlikely(cmp == 0))                                                                                        \
+          goto found;                                                                                                  \
+        BINARY_BRANCHLESS_SEARCH_CYCLE_END(it, cmp, lo, scope);                                                        \
+        TRACE("== lo %zi, size %zi", lo, scope);                                                                       \
+      } while (likely(scope > 0));                                                                                     \
                                                                                                                        \
-        it += cmp & 1;                                                                                                 \
-        /* store the key index */                                                                                      \
-        mc->ki[mc->top] = (indx_t)it;                                                                                  \
-        ret.node =                                                                                                     \
-            (it < nkeys) ? /* fake for DUPFIX */ node : /* There is no entry larger or equal to the key. */ nullptr;   \
-        TRACE("<< lo %zu, size %zu, nkeys %zu, i %zu, %c", lo, scope, nkeys, it, 'N');                                 \
-        return ret;                                                                                                    \
-      } else {                                                                                                         \
-        cASSERT0(mc, !is_dupfix_leaf(mp));                                                                             \
-        TRACE(">> %s lo %zu, size %zu, nkeys %zu", "leaf", lo, scope, nkeys);                                          \
-        do {                                                                                                           \
-          MDBX_CURSOR_STC_INC(mc);                                                                                     \
-          BINARY_BRANCHLESS_SEARCH_CYCLE_BEGIN(it, cmp, lo, scope);                                                    \
-          node = page_node(mp, it);                                                                                    \
-          node_key = get_key(node);                                                                                    \
-          cASSERT0(mc, ptr_disp(mp, mc->txn->env->ps) >= ptr_disp(node_key.iov_base, node_key.iov_len));               \
-          cmp = LEAF_COMPARATOR(&node_key, key);                                                                       \
-          TRACE("== i %zu, cmp %zi", it, cmp);                                                                         \
-          if (unlikely(cmp == 0))                                                                                      \
-            goto found;                                                                                                \
-          BINARY_BRANCHLESS_SEARCH_CYCLE_END(it, cmp, lo, scope);                                                      \
-          TRACE("== lo %zi, size %zi", lo, scope);                                                                     \
-        } while (scope > 0);                                                                                           \
-                                                                                                                       \
-        it += cmp & 1;                                                                                                 \
-        /* store the key index */                                                                                      \
-        mc->ki[mc->top] = (indx_t)it;                                                                                  \
-        ret.node = (it < nkeys) ? page_node(mp, it) : /* There is no entry larger or equal to the key. */ nullptr;     \
-        TRACE("<< lo %zu, size %zu, nkeys %zu, i %zu, %c", lo, scope, nkeys, it, 'N');                                 \
-        return ret;                                                                                                    \
-      }                                                                                                                \
+      it += cmp & 1;                                                                                                   \
+      /* store the key index */                                                                                        \
+      mc->ki[mc->top] = (indx_t)it;                                                                                    \
+      ret.node = (it < nkeys) ? page_node(mp, it) : /* There is no entry larger or equal to the key. */ nullptr;       \
+      TRACE("<< lo %zu, size %zu, nkeys %zu, i %zu, %c", lo, scope, nkeys, it, 'N');                                   \
+      return ret;                                                                                                      \
     }                                                                                                                  \
                                                                                                                        \
-    TRACE(">> %s lo %zu, size %zu, nkeys %zu", "branch", lo, scope, nkeys);                                            \
-    ASSERT(!is_dupfix_leaf(mp));                                                                                       \
-    ASSERT(is_branch(mp) || !(BOOL_DIFFERENT_COMPARATORS | BOOL_DUPFIXED));                                            \
-    do {                                                                                                               \
-      MDBX_CURSOR_STC_INC(mc);                                                                                         \
-      BINARY_BRANCHLESS_SEARCH_CYCLE_BEGIN(it, cmp, lo, scope);                                                        \
-      node = page_node(mp, it);                                                                                        \
-      node_key = get_key(node);                                                                                        \
-      cASSERT0(mc, ptr_disp(mp, mc->txn->env->ps) >= ptr_disp(node_key.iov_base, node_key.iov_len));                   \
-      cmp = BRANCH_COMPARATOR(&node_key, key);                                                                         \
-      TRACE("== i %zu, cmp %zi", it, cmp);                                                                             \
-      if (unlikely(cmp == 0))                                                                                          \
-        goto found;                                                                                                    \
-      BINARY_BRANCHLESS_SEARCH_CYCLE_END(it, cmp, lo, scope);                                                          \
-      TRACE("== lo %zi, size %zi", lo, scope);                                                                         \
-    } while (scope > 0);                                                                                               \
+    ASSERT(is_leaf(mp) && (BOOL_DIFFERENT_COMPARATORS | BOOL_DUPFIXED));                                               \
+    if (BOOL_DUPFIXED) {                                                                                               \
+      cASSERT0(mc, is_dupfix_leaf(mp));                                                                                \
+      cASSERT0(mc, mp->dupfix_ksize == mc->tree->dupfix_size);                                                         \
+      node_key.iov_len = mp->dupfix_ksize;                                                                             \
+      TRACE(">> %s lo %zu, size %zu, nkeys %zu", "leaf-dupfix", lo, scope, nkeys);                                     \
+      do {                                                                                                             \
+        MDBX_CURSOR_STC_INC(mc);                                                                                       \
+        BINARY_BRANCHLESS_SEARCH_CYCLE_BEGIN(it, cmp, lo, scope);                                                      \
+        node_key.iov_base = page_dupfix_ptr(mp, it, node_key.iov_len);                                                 \
+        cASSERT0(mc, ptr_disp(mp, mc->txn->env->ps) >= ptr_disp(node_key.iov_base, node_key.iov_len));                 \
+        cmp = LEAF_COMPARATOR(&node_key, key);                                                                         \
+        TRACE("== i %zu, cmp %zi", it, cmp);                                                                           \
+        if (unlikely(cmp == 0))                                                                                        \
+          goto found;                                                                                                  \
+        BINARY_BRANCHLESS_SEARCH_CYCLE_END(it, cmp, lo, scope);                                                        \
+        TRACE("== lo %zi, size %zi", lo, scope);                                                                       \
+      } while (likely(scope > 0));                                                                                     \
                                                                                                                        \
-    it += cmp & 1;                                                                                                     \
-    /* store the key index */                                                                                          \
-    mc->ki[mc->top] = (indx_t)it;                                                                                      \
-    ret.node = (it < nkeys) ? page_node(mp, it) : /* There is no entry larger or equal to the key. */ nullptr;         \
-    TRACE("<< lo %zu, size %zu, nkeys %zu, i %zu, %c", lo, scope, nkeys, it, 'N');                                     \
-    return ret;                                                                                                        \
+      it += cmp & 1;                                                                                                   \
+      /* store the key index */                                                                                        \
+      mc->ki[mc->top] = (indx_t)it;                                                                                    \
+      ret.node =                                                                                                       \
+          (it < nkeys) ? /* fake for DUPFIX */ node : /* There is no entry larger or equal to the key. */ nullptr;     \
+      TRACE("<< lo %zu, size %zu, nkeys %zu, i %zu, %c", lo, scope, nkeys, it, 'N');                                   \
+      return ret;                                                                                                      \
+    } else {                                                                                                           \
+      cASSERT0(mc, !is_dupfix_leaf(mp));                                                                               \
+      TRACE(">> %s lo %zu, size %zu, nkeys %zu", "leaf", lo, scope, nkeys);                                            \
+      do {                                                                                                             \
+        MDBX_CURSOR_STC_INC(mc);                                                                                       \
+        BINARY_BRANCHLESS_SEARCH_CYCLE_BEGIN(it, cmp, lo, scope);                                                      \
+        node = page_node(mp, it);                                                                                      \
+        node_key = get_key(node);                                                                                      \
+        cASSERT0(mc, ptr_disp(mp, mc->txn->env->ps) >= ptr_disp(node_key.iov_base, node_key.iov_len));                 \
+        cmp = LEAF_COMPARATOR(&node_key, key);                                                                         \
+        TRACE("== i %zu, cmp %zi", it, cmp);                                                                           \
+        if (unlikely(cmp == 0))                                                                                        \
+          goto found;                                                                                                  \
+        BINARY_BRANCHLESS_SEARCH_CYCLE_END(it, cmp, lo, scope);                                                        \
+        TRACE("== lo %zi, size %zi", lo, scope);                                                                       \
+      } while (scope > 0);                                                                                             \
+                                                                                                                       \
+      it += cmp & 1;                                                                                                   \
+      /* store the key index */                                                                                        \
+      mc->ki[mc->top] = (indx_t)it;                                                                                    \
+      ret.node = (it < nkeys) ? page_node(mp, it) : /* There is no entry larger or equal to the key. */ nullptr;       \
+      TRACE("<< lo %zu, size %zu, nkeys %zu, i %zu, %c", lo, scope, nkeys, it, 'N');                                   \
+      return ret;                                                                                                      \
+    }                                                                                                                  \
                                                                                                                        \
   found:                                                                                                               \
     TRACE("<< lo %zu, size %zu, nkeys %zu, i %zu, %c", lo, scope, nkeys, it, 'Y');                                     \
