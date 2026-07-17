@@ -1851,17 +1851,17 @@ __hot csr_t cursor_seek(MDBX_cursor *mc, MDBX_val *key, MDBX_val *data, MDBX_cur
     else {
       node = page_node(mp, 0);
       nodekey = get_key(node);
-      inner_gone(mc);
+      if (mc->subcur)
+        mc->subcur->cursor.top_and_flags = z_inner | z_hollow;
     }
     int cmp = mc->clc->k.cmp(&aligned.key, &nodekey);
-    if (unlikely(cmp == 0)) {
-      /* Probably happens rarely, but first node on the page was the one we wanted. */
-      mc->ki[mc->top] = 0;
-      ret.exact = true;
-      goto got_node;
-    }
-
-    if (cmp > 0) {
+    if (cmp >= 0) {
+      if (unlikely(cmp == 0)) {
+        /* Probably happens rarely, but first node on the page was the one we wanted. */
+        mc->ki[mc->top] = 0;
+        ret.exact = true;
+        goto got_node;
+      }
       /* Искомый ключ больше первого на этой странице,
        * целевая позиция на этой странице, либо на последующих (ближе к концу). */
       if (likely(nkeys > 1)) {
@@ -1872,13 +1872,13 @@ __hot csr_t cursor_seek(MDBX_cursor *mc, MDBX_val *key, MDBX_val *data, MDBX_cur
           nodekey = get_key(node);
         }
         cmp = mc->clc->k.cmp(&aligned.key, &nodekey);
-        if (cmp == 0) {
-          /* last node was the one we wanted */
-          mc->ki[mc->top] = (indx_t)(nkeys - 1);
-          ret.exact = true;
-          goto got_node;
-        }
-        if (cmp < 0) {
+        if (cmp <= 0) {
+          if (unlikely(cmp == 0)) {
+            /* last node was the one we wanted */
+            mc->ki[mc->top] = (indx_t)(nkeys - 1);
+            ret.exact = true;
+            goto got_node;
+          }
           /* Искомый ключ между первым и последним на этой страницы,
            * поэтому пропускаем поиск по дереву и продолжаем только на текущей
            * странице. */
@@ -1919,7 +1919,7 @@ __hot csr_t cursor_seek(MDBX_cursor *mc, MDBX_val *key, MDBX_val *data, MDBX_cur
          * top, что позволяет работать fastpath при последующем поиске по дереву
          * страниц. */
         mc->flags |= z_hollow;
-        if (inner_pointed(mc))
+        if (mc->subcur)
           mc->subcur->cursor.flags |= z_hollow;
         ret.err = MDBX_NOTFOUND;
         return ret;
