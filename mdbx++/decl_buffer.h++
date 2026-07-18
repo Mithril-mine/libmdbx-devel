@@ -28,7 +28,7 @@ template <typename T, typename A> struct move_assign_alloc<T, A, false> {
     else
       return target->get_allocator() == source.get_allocator();
   }
-  static MDBX_CXX20_CONSTEXPR void propagate(T *, T &) noexcept {}
+  static MDBX_CXX20_CONSTEXPR void propagate(T *target, T &) noexcept { target->release(); }
 };
 
 template <typename T, typename A> struct move_assign_alloc<T, A, true> {
@@ -36,6 +36,7 @@ template <typename T, typename A> struct move_assign_alloc<T, A, true> {
   static constexpr bool is_nothrow() noexcept { return ::std::is_nothrow_move_assignable<A>::value; }
   static constexpr bool is_moveable(T *, T &) noexcept { return true; }
   static MDBX_CXX20_CONSTEXPR void propagate(T *target, T &source) noexcept {
+    target->release();
     target->get_allocator() = ::std::move(source.get_allocator());
   }
 };
@@ -57,8 +58,10 @@ template <typename T, typename A> struct copy_assign_alloc<T, A, true> {
   }
   static MDBX_CXX20_CONSTEXPR void propagate(T *target, const T &source) noexcept(is_nothrow()) {
     if MDBX_IF_CONSTEXPR (!is_always_equal()) {
-      if (MDBX_UNLIKELY(target->get_allocator() != source.get_allocator()))
+      if (MDBX_UNLIKELY(target->get_allocator() != source.get_allocator())) {
+        target->release();
         MDBX_CXX20_UNLIKELY target->get_allocator() = source.get_allocator();
+      }
     } else {
       /* gag for buggy compilers */
       (void)target;
@@ -951,14 +954,7 @@ public:
     if (MDBX_LIKELY(this != &src))
       MDBX_CXX20_LIKELY {
         invalidate();
-        if MDBX_IF_CONSTEXPR (!copy_assign_alloc::is_always_equal()) {
-          if (MDBX_UNLIKELY(silo_.get_allocator() != src.silo_.get_allocator()))
-            MDBX_CXX20_UNLIKELY {
-              silo_.release();
-              copy_assign_alloc::propagate(&silo_, src.silo_);
-            }
-        }
-
+        copy_assign_alloc::propagate(&silo_, src.silo_);
         iov_base = silo_.template reshape<true>(whole_capacity, headroom, src.data(), src.length());
         iov_len = src.length();
       }
@@ -972,14 +968,7 @@ public:
     if (MDBX_LIKELY(this != &src))
       MDBX_CXX20_LIKELY {
         invalidate();
-        if MDBX_IF_CONSTEXPR (!copy_assign_alloc::is_always_equal()) {
-          if (MDBX_UNLIKELY(silo_.get_allocator() != src.silo_.get_allocator()))
-            MDBX_CXX20_UNLIKELY {
-              silo_.release();
-              copy_assign_alloc::propagate(&silo_, src.silo_);
-            }
-        }
-
+        copy_assign_alloc::propagate(&silo_, src.silo_);
         if (make_reference) {
           silo_.release();
           iov_base = src.iov_base;
@@ -1002,7 +991,6 @@ public:
           iov_base = silo_.template reshape<true>(src.silo_.capacity(), src.headroom(), src.data(), src.length());
           return *this;
         }
-        silo_.release();
         move_assign_alloc::propagate(&silo_, src.silo_);
         if (silo_.move_content(src.silo_, kind))
           fixup_imported_inplace(src.silo_.bin_);
