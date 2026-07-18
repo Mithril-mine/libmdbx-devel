@@ -373,8 +373,7 @@ private:
 
       if (bin::is_suitable_for_inplace(new_capacity)) {
         MDBX_INLINE_API_ASSERT(bin_.is_allocated());
-        const auto old_allocated = ::std::move(bin_.allocated_ptr_);
-        /* coverity[USE_AFTER_MOVE] */
+        const auto old_allocated = bin_.allocated_ptr_;
         byte *const new_place = bin_.template make_inplace<true>() + wanna_headroom;
         if (MDBX_LIKELY(length))
           MDBX_CXX20_LIKELY memcpy(new_place, content, length);
@@ -392,16 +391,13 @@ private:
         return new_place;
       }
 
-      const auto old_allocated = ::std::move(bin_.allocated_ptr_);
-      if (external_content)
-        deallocate_storage(old_allocated, old_capacity);
-      const auto pair = allocate_storage(new_capacity);
-      MDBX_INLINE_API_ASSERT(pair.second >= new_capacity);
-      byte *const new_place = bin_.template make_allocated<false>(pair) + wanna_headroom;
+      auto pair = allocate_storage(new_capacity);
+      std::swap(bin_.allocated_ptr_, pair.first);
+      bin_.capacity_.bytes_ = pair.second;
+      auto new_place = bin_.address() + wanna_headroom;
       if (MDBX_LIKELY(length))
         MDBX_CXX20_LIKELY memcpy(new_place, content, length);
-      if (!external_content)
-        deallocate_storage(old_allocated, old_capacity);
+      deallocate_storage(pair.first, old_capacity);
       return new_place;
     }
 
