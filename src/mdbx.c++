@@ -1536,6 +1536,7 @@ void txn_managed::commit_embark_read() { commit_embark_read(nullptr); }
 void txn_managed::abort(finalization_latency *latency) {
   const error err = static_cast<MDBX_error_t>(::mdbx_txn_abort_ex(handle_, latency));
   if (MDBX_LIKELY(err.code() != MDBX_THREAD_MISMATCH))
+    /* do not reset the handle in case of errors that do not change the transaction state. */
     MDBX_CXX20_LIKELY handle_ = nullptr;
   if (MDBX_UNLIKELY(err.code() != MDBX_SUCCESS))
     MDBX_CXX20_UNLIKELY err.throw_exception();
@@ -1544,6 +1545,7 @@ void txn_managed::abort(finalization_latency *latency) {
 void txn_managed::commit(finalization_latency *latency) {
   const error err = static_cast<MDBX_error_t>(::mdbx_txn_commit_ex(handle_, latency));
   if (MDBX_LIKELY(err.code() != MDBX_THREAD_MISMATCH))
+    /* do not reset the handle in case of errors that do not change the transaction state. */
     MDBX_CXX20_LIKELY handle_ = nullptr;
   if (MDBX_UNLIKELY(err.code() != MDBX_SUCCESS))
     MDBX_CXX20_UNLIKELY err.throw_exception();
@@ -1553,6 +1555,8 @@ bool txn_managed::checkpoint(finalization_latency *latency) {
   const error err = static_cast<MDBX_error_t>(::mdbx_txn_checkpoint(handle_, MDBX_TXN_NOWEAKING, latency));
   if (MDBX_UNLIKELY(err.is_failure())) {
     if (err.code() != MDBX_THREAD_MISMATCH && err.code() != MDBX_EINVAL)
+      /* do not reset the handle in case of errors that do not change the transaction state,
+       * including MDBX_EINVAL here. */
       handle_ = nullptr;
     MDBX_CXX20_UNLIKELY err.throw_exception();
   }
