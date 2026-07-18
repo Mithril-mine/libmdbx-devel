@@ -2121,7 +2121,7 @@ public:
 
   buffer(size_t head_room, size_t tail_room, const allocator_type &allocator = allocator_type())
       : silo_(check_length(head_room, tail_room), allocator) {
-    slice_.iov_base = silo_.get();
+    slice_.iov_base = silo_.get(head_room);
     assert(slice_.iov_len == 0);
   }
 
@@ -2134,7 +2134,7 @@ public:
   buffer(size_t head_room, const struct slice &src, size_t tail_room,
          const allocator_type &allocator = allocator_type())
       : silo_(check_length(head_room, src.length(), tail_room), allocator) {
-    slice_.iov_base = silo_.get();
+    slice_.iov_base = silo_.get(head_room);
     slice_.iov_len = src.length();
     memcpy(slice_.iov_base, src.data(), src.length());
   }
