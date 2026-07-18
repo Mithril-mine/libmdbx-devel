@@ -612,8 +612,8 @@ public:
   /// \brief Checks whether the buffer just refers to data located outside the buffer, rather than stores it.
   MDBX_NOTHROW_PURE_FUNCTION MDBX_CXX20_CONSTEXPR bool is_reference() const noexcept { return !is_freestanding(); }
 
-  /// \brief Returns current data storage modality.
-  MDBX_NOTHROW_PURE_FUNCTION MDBX_CXX20_CONSTEXPR modality asset() const noexcept {
+  /// \brief Returns current modality of buffer content.
+  MDBX_NOTHROW_PURE_FUNCTION MDBX_CXX20_CONSTEXPR modality content_modality() const noexcept {
     return is_freestanding() ? (is_inplace() ? modality::inplace : modality::allocated) : modality::reference;
   }
 
@@ -932,7 +932,7 @@ public:
   }
 
   MDBX_CXX20_CONSTEXPR void swap(buffer &other) noexcept(swap_alloc::is_nothrow()) {
-    const auto pair = silo::exchange(silo_, asset(), other.silo_, other.asset());
+    const auto pair = silo::exchange(silo_, content_modality(), other.silo_, other.content_modality());
     inherited::swap(other);
     if (pair.first)
       fixup_imported_inplace(other.silo_.bin_);
@@ -989,7 +989,7 @@ public:
   MDBX_CXX20_CONSTEXPR buffer &assign(buffer &&src) noexcept(move_assign_alloc::is_nothrow()) {
     if (MDBX_LIKELY(this != &src))
       MDBX_CXX20_LIKELY {
-        const auto kind = src.asset();
+        const auto kind = src.content_modality();
         inherited::assign(std::move(src));
         if (!move_assign_alloc::is_moveable(&silo_, src.silo_) && kind == modality::allocated) {
           iov_base = silo_.template reshape<true>(src.silo_.capacity(), src.headroom(), src.data(), src.length());
