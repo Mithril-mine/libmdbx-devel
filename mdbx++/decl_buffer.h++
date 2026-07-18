@@ -485,6 +485,10 @@ private:
       swap_alloc::propagate(left, right);
       bool left_need_fixup = false, right_need_fixup = false;
       if (left_modality == modality::reference || right_modality == modality::reference) {
+        /* It is Ok here to call move_content for the left and right side in any order,
+         * since the move_content() does nothing when modality == reference.
+         * Thus, the actual move action will perform no more than one call of move_content(),
+         * so the order doesn't matter here. */
         left_need_fixup = left.move_content(right, right_modality);
         right_need_fixup = right.move_content(left, left_modality);
       } else {
