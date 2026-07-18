@@ -5171,12 +5171,11 @@ MDBX_NOTHROW_PURE_FUNCTION MDBX_CXX14_CONSTEXPR bool operator!=(const slice &a, 
 }
 
 #if defined(__cpp_impl_three_way_comparison) && __cpp_impl_three_way_comparison >= 201907L
-MDBX_NOTHROW_PURE_FUNCTION MDBX_CXX14_CONSTEXPR auto operator<=>(const slice &a,
-                                                                 const slice &b) noexcept {
+MDBX_NOTHROW_PURE_FUNCTION MDBX_CXX14_CONSTEXPR auto operator<=>(const slice &a, const slice &b) noexcept {
   const auto cmp = slice::compare_lexicographically(a, b);
-  return (cmp < 0)  ? std::strong_ordering::less
-        : (cmp > 0) ? std::strong_ordering::greater
-                    : std::strong_ordering::equal;
+  return (cmp < 0)   ? std::strong_ordering::less
+         : (cmp > 0) ? std::strong_ordering::greater
+                     : std::strong_ordering::equal;
 }
 #endif /* __cpp_impl_three_way_comparison */
 
