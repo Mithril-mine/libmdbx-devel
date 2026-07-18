@@ -605,7 +605,7 @@ public:
   /// \brief Checks whether the buffer just refers to data located outside the buffer, rather than stores it.
   MDBX_NOTHROW_PURE_FUNCTION MDBX_CXX20_CONSTEXPR bool is_reference() const noexcept { return !is_freestanding(); }
 
-         /// \brief Returns current data storage modality.
+  /// \brief Returns current data storage modality.
   MDBX_NOTHROW_PURE_FUNCTION MDBX_CXX20_CONSTEXPR modality asset() const noexcept {
     return is_freestanding() ? (is_inplace() ? modality::inplace : modality::allocated) : modality::reference;
   }
