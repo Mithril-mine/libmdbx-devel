@@ -20,9 +20,10 @@ template <typename T, typename A = typename T::allocator_type,
 struct move_assign_alloc;
 
 template <typename T, typename A> struct move_assign_alloc<T, A, false> {
-  static constexpr bool is_nothrow() noexcept { return allocator_is_always_equal<A>(); }
+  static constexpr bool is_always_equal() noexcept { return allocator_is_always_equal<A>(); }
+  static constexpr bool is_nothrow() noexcept { return is_always_equal(); }
   static MDBX_CXX20_CONSTEXPR bool is_moveable(T *target, T &source) noexcept {
-    if MDBX_IF_CONSTEXPR (allocator_is_always_equal<A>())
+    if MDBX_IF_CONSTEXPR (is_always_equal())
       return true;
     else
       return target->get_allocator() == source.get_allocator();
@@ -31,6 +32,7 @@ template <typename T, typename A> struct move_assign_alloc<T, A, false> {
 };
 
 template <typename T, typename A> struct move_assign_alloc<T, A, true> {
+  static constexpr bool is_always_equal() noexcept { return allocator_is_always_equal<A>(); }
   static constexpr bool is_nothrow() noexcept { return ::std::is_nothrow_move_assignable<A>::value; }
   static constexpr bool is_moveable(T *, T &) noexcept { return true; }
   static MDBX_CXX20_CONSTEXPR void propagate(T *target, T &source) noexcept {
@@ -43,16 +45,18 @@ template <typename T, typename A = typename T::allocator_type,
 struct copy_assign_alloc;
 
 template <typename T, typename A> struct copy_assign_alloc<T, A, false> {
+  static constexpr bool is_always_equal() noexcept { return allocator_is_always_equal<A>(); }
   static constexpr bool is_nothrow() noexcept { return false; }
   static MDBX_CXX20_CONSTEXPR void propagate(T *, const T &) noexcept {}
 };
 
 template <typename T, typename A> struct copy_assign_alloc<T, A, true> {
+  static constexpr bool is_always_equal() noexcept { return allocator_is_always_equal<A>(); }
   static constexpr bool is_nothrow() noexcept {
-    return allocator_is_always_equal<A>() || ::std::is_nothrow_copy_assignable<A>::value;
+    return is_always_equal() || ::std::is_nothrow_copy_assignable<A>::value;
   }
   static MDBX_CXX20_CONSTEXPR void propagate(T *target, const T &source) noexcept(is_nothrow()) {
-    if MDBX_IF_CONSTEXPR (!allocator_is_always_equal<A>()) {
+    if MDBX_IF_CONSTEXPR (!is_always_equal()) {
       if (MDBX_UNLIKELY(target->get_allocator() != source.get_allocator()))
         MDBX_CXX20_UNLIKELY target->get_allocator() =
             ::std::allocator_traits<A>::select_on_container_copy_construction(source.get_allocator());
@@ -69,9 +73,10 @@ template <typename T, typename A = typename T::allocator_type,
 struct swap_alloc;
 
 template <typename T, typename A> struct swap_alloc<T, A, false> {
-  static constexpr bool is_nothrow() noexcept { return allocator_is_always_equal<A>(); }
+  static constexpr bool is_always_equal() noexcept { return allocator_is_always_equal<A>(); }
+  static constexpr bool is_nothrow() noexcept { return is_always_equal(); }
   static MDBX_CXX20_CONSTEXPR void propagate(T &left, T &right) noexcept(is_nothrow()) {
-    if MDBX_IF_CONSTEXPR (!allocator_is_always_equal<A>()) {
+    if MDBX_IF_CONSTEXPR (!is_always_equal()) {
       if (MDBX_UNLIKELY(left.get_allocator() != right.get_allocator()))
         MDBX_CXX20_UNLIKELY throw_allocators_mismatch();
     } else {
@@ -83,15 +88,16 @@ template <typename T, typename A> struct swap_alloc<T, A, false> {
 };
 
 template <typename T, typename A> struct swap_alloc<T, A, true> {
+  static constexpr bool is_always_equal() noexcept { return allocator_is_always_equal<A>(); }
   static constexpr bool is_nothrow() noexcept {
-    return allocator_is_always_equal<A>() ||
+    return is_always_equal() ||
 #if defined(__cpp_lib_is_swappable) && __cpp_lib_is_swappable >= 201603L
            ::std::is_nothrow_swappable<A>() ||
 #endif /* __cpp_lib_is_swappable >= 201603L */
            (::std::is_nothrow_move_constructible<A>::value && ::std::is_nothrow_move_assignable<A>::value);
   }
   static MDBX_CXX20_CONSTEXPR void propagate(T &left, T &right) noexcept(is_nothrow()) {
-    if MDBX_IF_CONSTEXPR (!allocator_is_always_equal<A>())
+    if MDBX_IF_CONSTEXPR (!is_always_equal())
       MDBX_CXX20_UNLIKELY ::std::swap(left.get_allocator(), right.get_allocator());
     else {
       /* gag for buggy compilers */
