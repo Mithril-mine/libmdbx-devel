@@ -216,9 +216,9 @@ __cold static size_t assume_ram_pages(void) {
 
   size_t result = (size_t)(total_ram_pages + avail_ram_pages) / 2;
   if (RUNNING_ON_ASAN)
-    result = avail_ram_pages >> 1;
+    result >>= 1;
   if (mdbx_running_on_Valgrind())
-    result = avail_ram_pages >> 4;
+    result >>= 3;
 
   return result;
 }
@@ -247,7 +247,7 @@ __cold static size_t reasonable_db_maxsize(void) {
   /* Suggesting should not be more than golden ratio of the size of RAM. */
   size_t result = (globals.assume_ram_pages * 207 >> 7) << globals.sys_pagesize_ln2;
   if (result > globals.mmap_limit / 2)
-    return globals.mmap_limit / 2;
+    result = globals.mmap_limit / 2;
 
   /* Round to the nearest human-readable granulation. */
   for (size_t unit = MEGABYTE; unit; unit <<= 5) {
