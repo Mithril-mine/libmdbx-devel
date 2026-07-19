@@ -38,7 +38,7 @@
 #define RELIEF_FACTOR 1
 #endif
 
-#if !defined(__cpp_lib_latch) && __cpp_lib_latch < 201907L
+#if !defined(__cpp_lib_latch) || __cpp_lib_latch < 201907L
 
 int main(int argc, const char *argv[]) {
   (void)argc;

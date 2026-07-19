@@ -23,7 +23,7 @@
 
 #include <iostream>
 
-#if !defined(__cpp_lib_latch) && __cpp_lib_latch < 201907L
+#if !defined(__cpp_lib_latch) || __cpp_lib_latch < 201907L
 
 int main(int argc, const char *argv[]) {
   (void)argc;
