@@ -88,7 +88,7 @@ static bool check_state(const MDBX_cache_result_t &r, const MDBX_error_t wanna_e
                         const MDBX_cache_status_t wanna_status, unsigned line) {
   if (r.errcode == wanna_errcode && r.status == wanna_status)
     return true;
-  std::cerr << "unecpected (at " << line
+  std::cerr << "unexpected (at " << line
             << "): "
                "err "
             << r.errcode << " (wanna " << wanna_errcode
@@ -274,7 +274,7 @@ static bool failed(unsigned line, const char *msg = nullptr) {
     std::cerr << "failed (" << msg << ") at line " << line << std::endl;
   else
     std::cerr << "failed at line " << line << std::endl;
-  std::cerr.flush();
+  std::cout.flush();
   std::cerr.flush();
   return false;
 }
@@ -985,7 +985,7 @@ bool case2_multithread(mdbx::env env, prng &rnd, get_cached_t get_cached) {
 #else
 
 bool case2_multithread(mdbx::env, prng &, get_cached_t) {
-  std::cout << "skip " << __FUNCTION__ << " sice no std::latch or std::thread" << std::endl;
+  std::cout << "skip " << __FUNCTION__ << " since no std::latch or std::thread" << std::endl;
   return true;
 }
 

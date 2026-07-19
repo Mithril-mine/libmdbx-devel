@@ -467,8 +467,8 @@ bool case3_fresh_reads(const mdbx::path &path, bool no_sticky_threads) {
   return ok;
 }
 
-static bool proble_cloning(const mdbx::txn_managed &txn, const mdbx::map_handle &table, const mdbx::txn::info &txn_info,
-                           const mdbx::txn::map_stat &map_stat, const mdbx::map_handle::info &handle_info) {
+static bool probe_cloning(const mdbx::txn_managed &txn, const mdbx::map_handle &table, const mdbx::txn::info &txn_info,
+                          const mdbx::txn::map_stat &map_stat, const mdbx::map_handle::info &handle_info) {
   std::vector<std::thread> threads;
   bool ok = true;
   for (auto i = 0; i < 1; ++i)
@@ -526,7 +526,7 @@ bool case4_clone(const mdbx::path &path, bool no_sticky_threads) {
 
   auto txn = env.start_write();
   auto table = txn.create_map("case4");
-  for (auto i = 0; ++i < 9; ++i)
+  for (auto i = 1; i < 9; ++i)
     txn.insert(table, mdbx::slice::wrap(i), mdbx::default_buffer::base58(i * 42));
   txn.commit_embark_read();
 
@@ -534,10 +534,10 @@ bool case4_clone(const mdbx::path &path, bool no_sticky_threads) {
   const auto map_stat = txn.get_map_stat(table);
   const auto handle_info = txn.get_map_flags(table);
 
-  bool ok = proble_cloning(txn, table, txn_info, map_stat, handle_info);
+  bool ok = probe_cloning(txn, table, txn_info, map_stat, handle_info);
   txn.reset_reading();
   txn = env.start_write();
-  ok = proble_cloning(txn, table, txn_info, map_stat, handle_info) && ok;
+  ok = probe_cloning(txn, table, txn_info, map_stat, handle_info) && ok;
   txn.create_map("case4+onemore");
   MDBX_txn *clone = nullptr;
   int err = mdbx_txn_clone(txn, &clone, nullptr);
