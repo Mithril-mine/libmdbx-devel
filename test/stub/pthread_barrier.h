@@ -45,10 +45,15 @@ extern "C" {
 #define PTHREAD_PROCESS_SHARED (43)
 #endif
 
+/* Using the stub_ prefix avoids errors in a modern Android SDKs, where pthread_barrierattr_t and pthread_barrier_t
+ * are always declared independently of __ANDROID_API__, but there may be no corresponding API functions. */
+#define pthread_barrierattr_t stub_pthread_barrierattr_t
+#define pthread_barrier_t stub_pthread_barrier_t
+
 typedef struct {
   pthread_mutexattr_t mattr;
   pthread_condattr_t cattr;
-} pthread_barrierattr_t;
+} stub_pthread_barrierattr_t;
 
 typedef struct {
   pthread_mutex_t mutex;
@@ -56,7 +61,7 @@ typedef struct {
   unsigned int limit;
   unsigned int count;
   unsigned int phase;
-} pthread_barrier_t;
+} stub_pthread_barrier_t;
 
 int pthread_barrierattr_init(pthread_barrierattr_t *attr);
 int pthread_barrierattr_destroy(pthread_barrierattr_t *attr);
