@@ -202,7 +202,7 @@ void jitter_delay(bool extra) {
     log_trace(">> jitter.delay: dice %u", dice);
     do {
       cpu_relax();
-      memory_barrier();
+      atomic_thread_fence(std::memory_order_seq_cst);
       cpu_relax();
       if (dice > 1) {
         osal_yield();

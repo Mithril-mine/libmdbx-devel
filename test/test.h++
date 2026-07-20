@@ -19,6 +19,10 @@
 
 #pragma once
 
+#if __cplusplus < 201103L
+#error "C++11 is required"
+#endif
+
 #include "base.h++"
 #include "chrono.h++"
 #include "config.h++"
@@ -31,6 +35,7 @@
 #include <set>
 #include <stack>
 #include <tuple>
+#include <atomic>
 
 #ifndef HAVE_cxx17_std_string_view
 #if __cplusplus >= 201703L && __has_include(<string_view>)

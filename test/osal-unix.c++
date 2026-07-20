@@ -21,15 +21,12 @@
 
 #if !(defined(_WIN32) || defined(_WIN64))
 
-#include <atomic>
 #include <pthread.h>
 #include <signal.h>
 #include <sys/mman.h>
 #include <sys/types.h>
 #include <sys/wait.h>
 #include <unistd.h>
-
-#include <atomic>
 
 #ifndef MDBX_LOCKING
 #error "Oops, MDBX_LOCKING is undefined!"
@@ -51,24 +48,7 @@
 
 #if MDBX_LOCKING == MDBX_LOCKING_POSIX1988
 #include <semaphore.h>
-
-#if __cplusplus >= 201103L
-#include <atomic>
 MDBX_MAYBE_UNUSED static inline int atomic_decrement(std::atomic_int *p) { return std::atomic_fetch_sub(p, 1) - 1; }
-#else
-MDBX_MAYBE_UNUSED static inline int atomic_decrement(volatile int *p) {
-#if defined(__GNUC__) || defined(__clang__)
-  return __sync_sub_and_fetch(p, 1);
-#elif defined(_MSC_VER)
-  STATIC_ASSERT(sizeof(volatile long) == sizeof(volatile int));
-  return _InterlockedDecrement((volatile long *)p);
-#elif defined(__APPLE__)
-  return OSAtomicDecrement32Barrier((volatile int *)p);
-#else
-#error FIXME: Unsupported compiler
-#endif
-}
-#endif /* C++11 */
 #endif /* MDBX_LOCKING == MDBX_LOCKING_POSIX1988 */
 
 #if MDBX_LOCKING == MDBX_LOCKING_SYSV
@@ -88,11 +68,7 @@ struct shared_t {
   pthread_cond_t events[1];
 #elif MDBX_LOCKING == MDBX_LOCKING_POSIX1988
   struct {
-#if __cplusplus >= 201103L
     std::atomic_int countdown;
-#else
-    volatile int countdown;
-#endif /* C++11 */
     sem_t sema;
   } barrier;
   size_t count;
@@ -509,9 +485,9 @@ const char *signal_name(const int sig) {
 }
 
 int osal_actor_poll(mdbx_pid_t &pid, unsigned timeout) {
-  static sig_atomic_t sigalarm_tail;
+  static std::atomic_int sigalarm_tail;
   alarm(0) /* cancel prev timeout */;
-  sigalarm_tail = sigalarm_head /* reset timeout flag */;
+  sigalarm_tail.store(sigalarm_head.load()) /* reset timeout flag */;
 
   int options = WNOHANG;
   if (timeout && !sigbreak) {
@@ -565,15 +541,15 @@ int osal_actor_poll(mdbx_pid_t &pid, unsigned timeout) {
       return 0;
     }
 
-    static sig_atomic_t sigusr1_tail, sigusr2_tail;
+    static std::atomic_int sigusr1_tail, sigusr2_tail;
     if (sigusr1_tail != sigusr1_head) {
-      sigusr1_tail = sigusr1_head;
+      sigusr1_tail.store(sigusr1_head.load());
       logging::progress_canary(true);
       if (pid < 0 && err == EINTR)
         continue;
     }
     if (sigusr2_tail != sigusr2_head) {
-      sigusr2_tail = sigusr2_head;
+      sigusr2_tail.store(sigusr2_head.load());
       logging::progress_canary(false);
       if (pid < 0 && err == EINTR)
         continue;
