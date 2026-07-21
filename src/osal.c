@@ -3699,7 +3699,7 @@ void osal_ctor(void) {
   osal_iov_max = IOV_MAX;
 #endif /* _SC_IOV_MAX */
   if (RUNNING_ON_VALGRIND && osal_iov_max > 64)
-    /* чтобы не описывать все 1024 исключения в valgrind_suppress.supp */
+    /* чтобы не описывать все 1024 исключения в valgrind.supp */
     osal_iov_max = 64;
 #endif /* MDBX_HAVE_PWRITEV */
 

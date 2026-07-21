@@ -203,7 +203,7 @@ elseif(
   AND EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/src/walk.h"
   AND EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/src/windows-import.c"
   AND EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/src/windows-import.h"
-  AND EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/test/CMakeLists.txt")
+  AND EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/tests/CMakeLists.txt")
   set(MDBX_AMALGAMATED_SOURCE FALSE)
   find_program(GIT git)
   if(NOT GIT)
@@ -269,7 +269,7 @@ if(NOT WIN32)
   if(MEMORYCHECK_COMMAND)
     set(MEMORYCHECK_TYPE Valgrind)
     set(MEMORYCHECK_SUPPRESSIONS_FILE
-        "${CMAKE_CURRENT_SOURCE_DIR}/valgrind_suppress.supp"
+        "${CMAKE_CURRENT_SOURCE_DIR}/valgrind.supp"
         CACHE FILEPATH "Suppressions file for Valgrind" FORCE)
     set(MEMORYCHECK_COMMAND_OPTIONS
         "--trace-children=yes --leak-check=full --track-origins=yes --expensive-definedness-checks=yes --error-exitcode=42 --error-markers=@VALGRIND --errors-for-leak-kinds=definite --fair-sched=yes --suppressions=${MEMORYCHECK_SUPPRESSIONS_FILE}"
@@ -796,6 +796,7 @@ endif()
 set(MDBX_CXX_AVAILABLE FALSE)
 if(CMAKE_CXX_COMPILER_LOADED AND NOT MDBX_CXX_STANDARD LESS 11)
   if(NOT MDBX_WITHOUT_MSVC_CRT
+     AND NOT (CMAKE_COMPILER_IS_ELBRUSCXX AND CMAKE_CXX_COMPILER_VERSION VERSION_LESS 1.23)
      AND NOT (CMAKE_COMPILER_IS_GNUCXX AND CMAKE_CXX_COMPILER_VERSION VERSION_LESS 4.8)
      AND NOT (CMAKE_COMPILER_IS_CLANG AND CMAKE_CXX_COMPILER_VERSION VERSION_LESS 3.9)
      AND NOT (MSVC AND MSVC_VERSION LESS 1900))
@@ -977,7 +978,7 @@ elseif(TRUE)
             GNUmakefile
             Makefile
             conanfile.py
-            ut_and_examples/README.md)
+            examples/README.md)
 #< dist-cutoff-end
 else()
   if(NOT CMAKE_CURRENT_LIST_FILE)
@@ -1447,14 +1448,15 @@ add_definitions(-DMDBX_CONFIG_H="${CMAKE_CURRENT_BINARY_DIR}/config-cmake.h")
 
 # ######################################################################################################################
 
-  add_subdirectory(ut_and_examples)
 if(MDBX_ENABLE_TESTS)
+  add_subdirectory(examples)
   #> dist-cutoff-begin
   if(NOT MDBX_AMALGAMATED_SOURCE AND NOT_SUBPROJECT)
-    if(NOT MDBX_CXX_AVAILABLE)
-      message(FATAL_ERROR "MDBX_ENABLE_TESTS=${MDBX_ENABLE_TESTS}: The C++ 11 compiler is required to build the tests.")
+    if(MDBX_CXX_AVAILABLE)
+      add_subdirectory(tests)
+    else()
+      message(WARNING "The C++ compiler with C++11 standard enabled is required to build the tests.")
     endif()
-    add_subdirectory(test)
   endif()
   #< dist-cutoff-end
 endif()

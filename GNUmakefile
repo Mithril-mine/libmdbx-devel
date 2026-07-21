@@ -282,7 +282,7 @@ strip: all
 clean:
 	@echo '  CLEANING...'
 	$(QUIET)rm -rf $(MDBX_TOOLS) mdbx_test @* *.[ao] *.[ls]o *.$(SO_SUFFIX) *.dSYM *~ tmp.db/* \
-		*.gcov *.log *.err src/*.o test/*.o mdbx_example dist @dist-check \
+		*.gcov *.log *.err src/*.o tests/*.o mdbx_example dist @dist-check \
 		config-gnumake.h src/config-gnumake.h *.tar* @buildflags.tag @dist-checked.tag \
 		mdbx_*.static mdbx_*.static-lto CMakeFiles
 
@@ -341,8 +341,8 @@ smoke-memcheck test-memcheck: CFLAGS_EXTRA += -Ofast -DENABLE_MEMCHECK -DMDBX_CH
 smoke-memcheck test-memcheck: CMAKE_OPT += -DENABLE_UBSAN:BOOL=OFF -DENABLE_ASAN:BOOL=OFF -DENABLE_MEMCHECK:BOOL=ON -DMDBX_CHECKING=1
 smoke-memcheck test-memcheck: CTEST_OPT += -T memcheck
 test-memcheck: build-test build-stochastic ctest
-	@echo '  RUNNING `test/stochastic.sh --with-valgrind --loops 2`...'
-	$(QUIET)test/stochastic.sh --with-valgrind --loops 2 --db-upto-mb 256 --skip-make >$(TEST_LOG) || (cat $(TEST_LOG) && false)
+	@echo '  RUNNING `tests/stochastic.sh --with-valgrind --loops 2`...'
+	$(QUIET)tests/stochastic.sh --with-valgrind --loops 2 --db-upto-mb 256 --skip-make >$(TEST_LOG) || (cat $(TEST_LOG) && false)
 smoke-memcheck: smoke
 
 smoke-assertion test-assertion: MDBX_BUILD_OPTIONS += -DMDBX_CHECKING=2
@@ -364,13 +364,13 @@ test-leak:
 	@echo '  RE-TEST with `-fsanitize=leak` option...'
 	$(QUIET)$(MAKE) IOARENA=false CXXSTD=$(CXXSTD) CFLAGS_EXTRA="-fsanitize=leak" test-stochastic
 
-mdbx_legacy_example: mdbx.h ut_and_examples/example-mdbx.c libmdbx.$(SO_SUFFIX)
+mdbx_legacy_example: mdbx.h examples/example-mdbx.c libmdbx.$(SO_SUFFIX)
 	@echo '  CC+LD $@'
-	$(QUIET)$(CC) $(CFLAGS) -I. ut_and_examples/example-mdbx.c ./libmdbx.$(SO_SUFFIX) -o $@
+	$(QUIET)$(CC) $(CFLAGS) -I. examples/example-mdbx.c ./libmdbx.$(SO_SUFFIX) -o $@
 
-mdbx_modern_example: mdbx.h ut_and_examples/example-mdbx.c++ libmdbx.$(SO_SUFFIX)
+mdbx_modern_example: mdbx.h examples/example-mdbx.c++ libmdbx.$(SO_SUFFIX)
 	@echo '  CC+LD $@'
-	$(QUIET)$(CXX) $(CXXFLAGS) -I. ut_and_examples/example-mdbx.c++ ./libmdbx.$(SO_SUFFIX) -o $@
+	$(QUIET)$(CXX) $(CXXFLAGS) -I. examples/example-mdbx.c++ ./libmdbx.$(SO_SUFFIX) -o $@
 
 #> dist-cutoff-begin
 ifeq ($(wildcard mdbx.c),mdbx.c)
@@ -459,8 +459,8 @@ define uname2titer
 endef
 
 DIST_EXTRA := LICENSE NOTICE COPYRIGHT README.md TODO.md CMakeLists.txt GNUmakefile Makefile ChangeLog.md VERSION.json config.h.in ntdll.def \
-	$(addprefix man1/, $(MANPAGES)) cmake/compiler.cmake cmake/profile.cmake cmake/utils.cmake windows-safeseh.asm valgrind_suppress.supp conanfile.py \
-	$(addprefix ut_and_examples/, CMakeLists.txt example-mdbx.c++ example-mdbx.c pcrf/pcrf_simulator.c README.md)
+	$(addprefix man1/, $(MANPAGES)) cmake/compiler.cmake cmake/profile.cmake cmake/utils.cmake windows-safeseh.asm valgrind.supp conanfile.py \
+	$(addprefix examples/, CMakeLists.txt example-mdbx.c++ example-mdbx.c pcrf/pcrf_simulator.c README.md)
 
 DIST_SRC   := mdbx.h mdbx.h++ mdbx.c mdbx.c++ $(addsuffix .c, $(MDBX_TOOLS)) mdbx-internals.h mdbx-wingetopt.h
 
@@ -468,8 +468,8 @@ TEST_DB    ?= $(shell [ -d /dev/shm ] && echo /dev/shm || echo /tmp)/mdbx-test.d
 TEST_LOG   ?= $(shell [ -d /dev/shm ] && echo /dev/shm || echo /tmp)/mdbx-test.log
 TEST_OSAL  := $(shell $(uname2osal))
 TEST_ITER  := $(shell $(uname2titer))
-TEST_SRC   := test/osal-$(TEST_OSAL).c++ $(filter-out $(wildcard test/osal-*.c++),$(wildcard test/*.c++)) $(call select_by,MDBX_BUILD_CXX,,src/mdbx.c++)
-TEST_INC   := $(wildcard test/*.h++)
+TEST_SRC   := tests/framework/osal-$(TEST_OSAL).c++ $(filter-out $(wildcard tests/framework/osal-*.c++),$(wildcard tests/framework/*.c++)) $(call select_by,MDBX_BUILD_CXX,,src/mdbx.c++)
+TEST_INC   := $(wildcard tests/framework/*.h++)
 TEST_OBJ   := $(patsubst %.c++,%.o,$(TEST_SRC))
 ifndef SED
 SED        := $(shell which gnu-sed 2>&- || echo sed)
@@ -548,20 +548,20 @@ smoke-fault: build-stochastic
 	; ./mdbx_chk -vvnw $(TEST_DB) && ([ ! -e $(TEST_DB)-copy ] || ./mdbx_chk -vvn $(TEST_DB)-copy || echo "May fault due invalid-database-signature")
 
 test-stochastic: build-stochastic
-	@echo '  RUNNING `test/stochastic.sh --loops 2`...'
-	$(QUIET)test/stochastic.sh --dont-check-ram-size --loops 2 --db-upto-mb 256 --skip-make --taillog >$(TEST_LOG) || (cat $(TEST_LOG) && false)
+	@echo '  RUNNING `tests/stochastic.sh --loops 2`...'
+	$(QUIET)tests/stochastic.sh --dont-check-ram-size --loops 2 --db-upto-mb 256 --skip-make --taillog >$(TEST_LOG) || (cat $(TEST_LOG) && false)
 
 long-test: test-long
 test-long: build-stochastic
-	@echo '  RUNNING `test/stochastic.sh --loops 42`...'
-	$(QUIET)test/stochastic.sh --loops 42 --db-upto-mb 1024 --extra --skip-make --taillog
+	@echo '  RUNNING `tests/stochastic.sh --loops 42`...'
+	$(QUIET)tests/stochastic.sh --loops 42 --db-upto-mb 1024 --extra --skip-make --taillog
 
 test-singleprocess: build-stochastic
-	@echo '  RUNNING `test/stochastic.sh --single --loops 2`...'
-	$(QUIET)test/stochastic.sh --dont-check-ram-size --single --loops 2 --db-upto-mb 256 --skip-make --taillog >$(TEST_LOG) || (cat $(TEST_LOG) && false)
+	@echo '  RUNNING `tests/stochastic.sh --single --loops 2`...'
+	$(QUIET)tests/stochastic.sh --dont-check-ram-size --single --loops 2 --db-upto-mb 256 --skip-make --taillog >$(TEST_LOG) || (cat $(TEST_LOG) && false)
 
 memcheck: smoke-memcheck
-smoke-memcheck: VALGRIND=valgrind --trace-children=yes --log-file=valgrind-%p.log --leak-check=full --track-origins=yes --read-var-info=yes --error-exitcode=42 --suppressions=valgrind_suppress.supp
+smoke-memcheck: VALGRIND=valgrind --trace-children=yes --log-file=valgrind-%p.log --leak-check=full --track-origins=yes --read-var-info=yes --error-exitcode=42 --suppressions=valgrind.supp
 smoke-memcheck: CFLAGS_EXTRA=-Ofast -DENABLE_MEMCHECK
 smoke-memcheck: build-stochastic
 	@echo "  SMOKE \`mdbx_test basic\` under Valgrind's memcheck..."
