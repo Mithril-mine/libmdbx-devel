@@ -116,10 +116,18 @@ static mdbx::map_handle create_and_fill(mdbx::txn txn, const acase &thecase, con
 
   if (txn.get_map_stat(map).ms_entries < NN) {
     mdbx::default_buffer k, v;
-    for (auto i = 0u; i < NN; i++) {
-      mk_key(k, thecase);
-      for (auto ii = thecase.dupmax_log2 ? 1u + (rnd() & ((2u << thecase.dupmax_log2) - 1u)) : 1u; ii > 0; --ii)
-        txn.upsert(map, k, mk_val(v, thecase));
+    try {
+      for (auto i = 0u; i < NN; i++) {
+        mk_key(k, thecase);
+        for (auto ii = thecase.dupmax_log2 ? 1u + (rnd() & ((2u << thecase.dupmax_log2) - 1u)) : 1u; ii > 0; --ii) {
+          txn.upsert(map, k, mk_val(v, thecase));
+          const auto info = txn.get_info();
+          if (info.txn_space_limit_hard - info.txn_space_used < 1024 * 1024)
+            return map;
+        }
+      }
+    } catch (const mdbx::db_full &) {
+      /* nope */
     }
   }
   return map;
