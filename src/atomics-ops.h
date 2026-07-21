@@ -5,6 +5,14 @@
 
 #include "essentials.h"
 
+#ifndef MDBX_64BIT_ATOMIC
+#error "The MDBX_64BIT_ATOMIC must be defined before"
+#endif /* MDBX_64BIT_ATOMIC */
+
+#ifndef MDBX_64BIT_CAS
+#error "The MDBX_64BIT_CAS must be defined before"
+#endif /* MDBX_64BIT_CAS */
+
 #ifndef __cplusplus
 
 MDBX_MAYBE_UNUSED static __always_inline void atomic_yield(void) {
@@ -67,7 +75,6 @@ MDBX_MAYBE_UNUSED static __always_inline uint32_t atomic_store32(mdbx_atomic_uin
                                                                  enum mdbx_memory_order order) {
   STATIC_ASSERT(sizeof(mdbx_atomic_uint32_t) == 4);
 #ifdef MDBX_HAVE_C11ATOMICS
-  ASSERT(atomic_is_lock_free(MDBX_c11a_rw(uint32_t, p)));
   atomic_store_explicit(MDBX_c11a_rw(uint32_t, p), value, mo_c11_store(order));
 #else  /* MDBX_HAVE_C11ATOMICS */
   if (order != mo_Relaxed)
@@ -84,7 +91,6 @@ MDBX_MAYBE_UNUSED static __always_inline uint32_t atomic_load32(const volatile m
                                                                 enum mdbx_memory_order order) {
   STATIC_ASSERT(sizeof(mdbx_atomic_uint32_t) == 4);
 #ifdef MDBX_HAVE_C11ATOMICS
-  ASSERT(atomic_is_lock_free(MDBX_c11a_ro(uint32_t, p)));
   return atomic_load_explicit(MDBX_c11a_ro(uint32_t, p), mo_c11_load(order));
 #else  /* MDBX_HAVE_C11ATOMICS */
   osal_memory_fence(order, false);
@@ -125,19 +131,16 @@ MDBX_MAYBE_UNUSED static __always_inline mdbx_pid_t atomic_store_pid(mdbx_atomic
 MDBX_MAYBE_UNUSED static __always_inline uint64_t atomic_store64(mdbx_atomic_uint64_t *p, const uint64_t value,
                                                                  enum mdbx_memory_order order) {
   STATIC_ASSERT(sizeof(mdbx_atomic_uint64_t) == 8);
-#if MDBX_64BIT_ATOMIC
 #if __GNUC_PREREQ(11, 0)
-  STATIC_ASSERT(__alignof__(mdbx_atomic_uint64_t) >= sizeof(uint64_t));
+  STATIC_ASSERT(__alignof__(mdbx_atomic_uint64_t) >= __alignof__(uint64_t));
 #endif /* GNU C >= 11 */
 #ifdef MDBX_HAVE_C11ATOMICS
-  ASSERT(atomic_is_lock_free(MDBX_c11a_rw(uint64_t, p)));
   atomic_store_explicit(MDBX_c11a_rw(uint64_t, p), value, mo_c11_store(order));
-#else  /* MDBX_HAVE_C11ATOMICS */
+#elif MDBX_64BIT_ATOMIC
   if (order != mo_Relaxed)
     osal_compiler_barrier();
   p->weak = value;
   osal_memory_fence(order, true);
-#endif /* MDBX_HAVE_C11ATOMICS */
 #else  /* !MDBX_64BIT_ATOMIC */
   osal_compiler_barrier();
   atomic_store32(&p->low, (uint32_t)value, mo_Relaxed);
@@ -155,18 +158,14 @@ MDBX_MAYBE_UNUSED static
     __always_inline
 #endif /* MDBX_64BIT_ATOMIC */
         uint64_t atomic_load64(const volatile mdbx_atomic_uint64_t *p, enum mdbx_memory_order order) {
-  STATIC_ASSERT(sizeof(mdbx_atomic_uint64_t) == 8);
-#if MDBX_64BIT_ATOMIC
 #ifdef MDBX_HAVE_C11ATOMICS
-  ASSERT(atomic_is_lock_free(MDBX_c11a_ro(uint64_t, p)));
   return atomic_load_explicit(MDBX_c11a_ro(uint64_t, p), mo_c11_load(order));
-#else  /* MDBX_HAVE_C11ATOMICS */
+#elif MDBX_64BIT_ATOMIC
   osal_memory_fence(order, false);
   const uint64_t value = p->weak;
   if (order != mo_Relaxed)
     osal_compiler_barrier();
   return value;
-#endif /* MDBX_HAVE_C11ATOMICS */
 #else  /* !MDBX_64BIT_ATOMIC */
   osal_compiler_barrier();
   uint64_t value = (uint64_t)atomic_load32(&p->high, order) << 32;
@@ -192,7 +191,6 @@ MDBX_MAYBE_UNUSED static
 MDBX_MAYBE_UNUSED static __always_inline bool atomic_cas64(mdbx_atomic_uint64_t *p, uint64_t c, uint64_t v) {
 #ifdef MDBX_HAVE_C11ATOMICS
   STATIC_ASSERT(sizeof(long long) >= sizeof(uint64_t));
-  ASSERT(atomic_is_lock_free(MDBX_c11a_rw(uint64_t, p)));
   return atomic_compare_exchange_strong(MDBX_c11a_rw(uint64_t, p), &c, v);
 #elif defined(__GNUC__) || defined(__clang__)
   return __sync_bool_compare_and_swap(&p->weak, c, v);
@@ -209,7 +207,6 @@ MDBX_MAYBE_UNUSED static __always_inline bool atomic_cas64(mdbx_atomic_uint64_t 
 MDBX_MAYBE_UNUSED static __always_inline bool atomic_cas32(mdbx_atomic_uint32_t *p, uint32_t c, uint32_t v) {
 #ifdef MDBX_HAVE_C11ATOMICS
   STATIC_ASSERT(sizeof(int) >= sizeof(uint32_t));
-  ASSERT(atomic_is_lock_free(MDBX_c11a_rw(uint32_t, p)));
   return atomic_compare_exchange_strong(MDBX_c11a_rw(uint32_t, p), &c, v);
 #elif defined(__GNUC__) || defined(__clang__)
   return __sync_bool_compare_and_swap(&p->weak, c, v);
@@ -226,7 +223,6 @@ MDBX_MAYBE_UNUSED static __always_inline bool atomic_cas32(mdbx_atomic_uint32_t 
 MDBX_MAYBE_UNUSED static __always_inline uint32_t atomic_add32(mdbx_atomic_uint32_t *p, uint32_t v) {
 #ifdef MDBX_HAVE_C11ATOMICS
   STATIC_ASSERT(sizeof(int) >= sizeof(uint32_t));
-  ASSERT(atomic_is_lock_free(MDBX_c11a_rw(uint32_t, p)));
   return atomic_fetch_add(MDBX_c11a_rw(uint32_t, p), v);
 #elif defined(__GNUC__) || defined(__clang__)
   return __sync_fetch_and_add(&p->weak, v);
@@ -254,7 +250,7 @@ MDBX_MAYBE_UNUSED static __always_inline uint64_t safe64_txnid_next(uint64_t txn
 /* Atomically make target value >= SAFE64_INVALID_THRESHOLD */
 MDBX_MAYBE_UNUSED static __always_inline void safe64_reset(mdbx_atomic_uint64_t *p, bool single_writer) {
   if (single_writer) {
-#if MDBX_64BIT_ATOMIC && MDBX_WORDBITS >= 64
+#if MDBX_64BIT_ATOMIC
     atomic_store64(p, UINT64_MAX, mo_AcquireRelease);
 #else
     atomic_store32(&p->high, UINT32_MAX, mo_AcquireRelease);
