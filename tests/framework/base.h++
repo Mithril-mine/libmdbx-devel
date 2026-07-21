@@ -65,7 +65,7 @@
 #include <unistd.h>
 #endif
 
-#ifdef _BSD_SOURCE
+#if defined(_BSD_SOURCE) || __has_include(<endian.h>)
 #include <endian.h>
 #endif
 

@@ -1,7 +1,8 @@
 /// \copyright SPDX-License-Identifier: Apache-2.0
 /// \author Леонид Юрьев aka Leonid Yuriev <leo@yuriev.ru> \date 2015-2026
 
-#if !IS_WINDOWS
+#if !(defined(_WIN32) || defined(_WIN64) || defined(_WINDOWS))
+
 /*----------------------------------------------------------------------------*
  * POSIX/non-Windows LCK-implementation */
 
