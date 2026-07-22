@@ -73,7 +73,7 @@ enum class value_mode {
                              ///< lexicographic comparison like `std::memcmp()`.
                              ///< In terms of keys, they are not unique, i.e. has
                              ///< duplicates which are sorted by associated data values.
-#if CONSTEXPR_ENUM_FLAGS_OPERATIONS || defined(DOXYGEN)
+#if MDBX_CONSTEXPR_ENUM_FLAGS_OPERATIONS || defined(DOXYGEN)
   multi_reverse = MDBX_DUPSORT | MDBX_REVERSEDUP,  ///< A more than one data value could be associated with
                                                    ///< each key. Internally each key is stored once, and
                                                    ///< the corresponding data values are sorted by

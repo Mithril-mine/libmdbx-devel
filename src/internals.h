@@ -560,7 +560,7 @@ enum db_flags {
   DB_INTERNAL_FLAGS = DB_VALID
 };
 
-#if !defined(__cplusplus) || CONSTEXPR_ENUM_FLAGS_OPERATIONS
+#if !defined(__cplusplus) || MDBX_CONSTEXPR_ENUM_FLAGS_OPERATIONS
 MDBX_MAYBE_UNUSED static void static_checks(void) {
   STATIC_ASSERT(MDBX_WORDBITS == sizeof(void *) * CHAR_BIT);
   STATIC_ASSERT(UINT64_C(0x80000000) == (uint32_t)ENV_FATAL_ERROR);

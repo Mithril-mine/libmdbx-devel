@@ -185,6 +185,9 @@ private:
 
     using allocator_pointer = typename allocator_traits::pointer;
     using allocator_const_pointer = typename allocator_traits::const_pointer;
+    using move_assign_alloc = allocation_aware_details::move_assign_alloc<silo, allocator_type>;
+    using copy_assign_alloc = allocation_aware_details::copy_assign_alloc<silo, allocator_type>;
+    using swap_alloc = allocation_aware_details::swap_alloc<silo, allocator_type>;
 
     MDBX_CXX20_CONSTEXPR ::std::pair<allocator_pointer, size_t> allocate_storage(size_t bytes) {
       MDBX_INLINE_API_ASSERT(bytes >= sizeof(bin));
@@ -574,10 +577,9 @@ public:
   /// \todo buffer& operator<<(buffer&, ...) for writing
   /// \todo template<class X> key(X) for encoding keys while writing
 
-  using move_assign_alloc = allocation_aware_details::move_assign_alloc<silo, allocator_type>;
-  using copy_assign_alloc = allocation_aware_details::copy_assign_alloc<silo, allocator_type>;
-  using swap_alloc = allocation_aware_details::swap_alloc<struct silo, allocator_type>;
-
+  using move_assign_alloc = typename silo::move_assign_alloc;
+  using copy_assign_alloc = typename silo::copy_assign_alloc;
+  using swap_alloc = typename silo::swap_alloc;
   static constexpr bool is_swap_nothrow() noexcept { return swap_alloc::is_nothrow(); }
 
   /// \brief Returns the associated allocator.

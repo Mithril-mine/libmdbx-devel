@@ -104,7 +104,7 @@ bool testcase_append::run() {
         switch (int(flags)) {
         default:
           abort();
-#if CONSTEXPR_ENUM_FLAGS_OPERATIONS
+#if MDBX_CONSTEXPR_ENUM_FLAGS_OPERATIONS
         case MDBX_APPEND | MDBX_APPENDDUP:
 #else
         case int(MDBX_APPEND) | int(MDBX_APPENDDUP):
@@ -125,7 +125,7 @@ bool testcase_append::run() {
         default:
           abort();
         case MDBX_APPENDDUP:
-#if CONSTEXPR_ENUM_FLAGS_OPERATIONS
+#if MDBX_CONSTEXPR_ENUM_FLAGS_OPERATIONS
         case MDBX_APPEND | MDBX_APPENDDUP:
 #else
         case int(MDBX_APPEND) | int(MDBX_APPENDDUP):

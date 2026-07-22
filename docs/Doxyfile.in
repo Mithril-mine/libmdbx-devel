@@ -1091,8 +1091,8 @@ EXCLUDE_SYMBOLS        = NOMINMAX \
                          MDBX_NOSANITIZE_ENUM \
                          MDBX_PRINTF_ARGS \
                          MDBX_HAVE_CXX20_CONCEPTS \
-                         CONSTEXPR_ENUM_FLAGS_OPERATIONS \
-                         DEFINE_ENUM_FLAG_OPERATORS \
+                         MDBX_CONSTEXPR_ENUM_FLAGS_OPERATIONS \
+                         MDBX_DEFINE_ENUM_FLAG_OPERATORS \
                          MDBX_DEPRECATED_ENUM \
                          bool \
                          false \
@@ -2493,7 +2493,7 @@ PREDEFINED             = DOXYGEN \
                          MDBX_MAYBE_UNUSED=[[maybe_unused]] \
                          MDBX_DEPRECATED=[[deprecated]] \
                          MDBX_DEPRECATED_ENUM=[[deprecated]] \
-                         "DEFINE_ENUM_FLAG_OPERATORS(ENUM)=" \
+                         "MDBX_DEFINE_ENUM_FLAG_OPERATORS(ENUM)=" \
 			 MDBX_CXX_HAS_POLYMORPHIC_ALLOCATOR=1
 
 # If the MACRO_EXPANSION and EXPAND_ONLY_PREDEF tags are set to YES then this
