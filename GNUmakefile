@@ -53,14 +53,16 @@ CXX     ?= g++
 CFLAGS_EXTRA ?=
 LD      ?= ld
 CMAKE	?= "$(shell which cmake 2>&-)"
-CMAKE_OPT ?=
+CMAKE_OPT ?= $(filter-out -UNDEBUG -DNDEBUG=1,$(MDBX_BUILD_OPTIONS))
 CTEST	?= ctest
 CTEST_OPT ?=
 # target directory for `make dist`
 DIST_DIR ?= dist
 
 # build options
-MDBX_BUILD_OPTIONS   ?=-DNDEBUG=1
+MDBX_DEBUG           ?=
+MDBX_FORCE_ASSERTIONS?=
+MDBX_BUILD_OPTIONS   ?=$(if $(MDBX_DEBUG),-DMDBX_DEBUG=$(MDBX_DEBUG) ,)$(if $(MDBX_FORCE_ASSERTIONS),-DMDBX_FORCE_ASSERTIONS=$(MDBX_FORCE_ASSERTIONS) $(call select_by,MDBX_FORCE_ASSERTIONS,-UNDEBUG,-DNDEBUG=1),-DNDEBUG=1 )
 MDBX_BUILD_TIMESTAMP ?=$(if $(SOURCE_DATE_EPOCH),$(SOURCE_DATE_EPOCH),$(shell date +%Y-%m-%dT%H:%M:%S%z))
 MDBX_BUILD_CXX       ?=YES
 MDBX_BUILD_METADATA  ?=
@@ -300,9 +302,9 @@ lib-shared libmdbx.$(SO_SUFFIX): mdbx-dylib.o $(call select_by,MDBX_BUILD_CXX,md
 	@echo '  LD $@'
 	$(QUIET)$(call select_by,MDBX_BUILD_CXX,$(CXX) $(CXXFLAGS),$(CC) $(CFLAGS)) $^ -pthread -shared $(LDFLAGS) $(call select_by,MDBX_BUILD_CXX,$(LIB_STDCXXFS)) $(LIBS) -o $@
 
-ninja-assertions: CMAKE_OPT += -DMDBX_FORCE_ASSERTIONS=ON $(MDBX_BUILD_OPTIONS)
+ninja-assertions: MDBX_FORCE_ASSERTIONS=1
 ninja-assertions: cmake-build
-ninja-debug: CMAKE_OPT += -DCMAKE_BUILD_TYPE=Debug $(MDBX_BUILD_OPTIONS)
+ninja-debug: CMAKE_OPT += -DCMAKE_BUILD_TYPE=Debug
 ninja-debug: cmake-build
 ninja: cmake-build
 cmake-build:
@@ -329,27 +331,33 @@ TEST_BUILD_TARGETS += build-stochastic
 
 .PHONY: ninja-assertions ninja-debug ninja $(TEST_TARGETS) $(TEST_BUILD_TARGETS) test-ubsan test-asan test-memcheck test-leak test-assertion test build-test smoke check
 test: $(TEST_TARGETS)
-build-test: $(TEST_BUILD_TARGETS)
+build-test: show-options $(TEST_BUILD_TARGETS)
 
-test-assertion: MDBX_BUILD_OPTIONS += -DMDBX_FORCE_ASSERTIONS=1 -UNDEBUG -DMDBX_DEBUG=0
-test-assertion: CMAKE_OPT += -DMDBX_FORCE_ASSERTIONS=ON -DMDBX_DEBUG=0
-test-assertion: smoke
+smoke-valgrind: smoke-memcheck
+smoke-memcheck test-memcheck: CFLAGS_EXTRA += -Ofast -DENABLE_MEMCHECK
+smoke-memcheck test-memcheck: MDBX_FORCE_ASSERTIONS=1
+smoke-memcheck test-memcheck: CMAKE_OPT += -DENABLE_UBSAN:BOOL=OFF -DENABLE_ASAN:BOOL=OFF -DENABLE_MEMCHECK:BOOL=ON
+smoke-memcheck test-memcheck: CTEST_OPT += -T memcheck
+test-memcheck: build-test build-stochastic ctest
+	@echo '  RUNNING `tests/stochastic.sh --with-valgrind --loops 2`...'
+	$(QUIET)tests/stochastic.sh --with-valgrind --loops 2 --db-upto-mb 256 --skip-make >$(TEST_LOG) || (cat $(TEST_LOG) && false)
+smoke-memcheck: smoke
 
-test-valgrind: test-memcheck
-test-memcheck: CFLAGS_EXTRA += -Ofast -DENABLE_MEMCHECK
-test-memcheck: CMAKE_OPT += -DENABLE_MEMCHECK=ON
-test-memcheck: CTEST_OPT += -T memcheck
-test-memcheck: build-test build-stochastic
-	@echo '  RUNNING `test/stochastic.sh --with-valgrind --loops 2`...'
-	$(QUIET)test/stochastic.sh --with-valgrind --loops 2 --db-upto-mb 256 --skip-make >$(TEST_LOG) || (cat $(TEST_LOG) && false)
+smoke-assertion test-assertion: MDBX_FORCE_ASSERTIONS=1
+test-assertion: test
+smoke-assertion: smoke
 
-test-ubsan:
-	@echo '  RE-TEST with `-fsanitize=undefined` option...'
-	$(QUIET)$(MAKE) IOARENA=false CXXSTD=$(CXXSTD) CMAKE_OPT="-DENABLE_UBSAN=ON" CFLAGS_EXTRA="-DENABLE_UBSAN -Ofast -fsanitize=undefined -fsanitize-undefined-trap-on-error" build-test test-stochastic
+smoke-ubsan test-ubsan: CFLAGS_EXTRA += -DENABLE_UBSAN -Ofast -fsanitize=undefined -fsanitize-undefined-trap-on-error
+smoke-ubsan test-ubsan: CMAKE_OPT += -DENABLE_UBSAN:BOOL=ON -DENABLE_ASAN:BOOL=OFF -DENABLE_MEMCHECK:BOOL=OFF
+smoke-ubsan test-ubsan: MDBX_FORCE_ASSERTIONS=1
+test-ubsan: test
+smoke-ubsan: smoke
 
-test-asan:
-	@echo '  RE-TEST with `-fsanitize=address` option...'
-	$(QUIET)$(MAKE) IOARENA=false CXXSTD=$(CXXSTD) CMAKE_OPT="-DENABLE_ASAN=ON" CFLAGS_EXTRA="-Os -fsanitize=address" build-test test-stochastic
+smoke-asan test-asan: CFLAGS_EXTRA += -Os -fsanitize=address
+smoke-asan test-asan: CMAKE_OPT += -DENABLE_UBSAN:BOOL=OFF -DENABLE_ASAN:BOOL=ON -DENABLE_MEMCHECK:BOOL=OFF
+smoke-asan test-asan: MDBX_FORCE_ASSERTIONS=1
+test-asan: test
+smoke-asan: smoke
 
 test-leak:
 	@echo '  RE-TEST with `-fsanitize=leak` option...'
@@ -498,9 +506,9 @@ MDBX_SMOKE_EXTRA ?=
 check: DESTDIR = $(shell pwd)/@check-install
 check: CMAKE_OPT += -Werror=dev
 check: clean | smoke-assertion ninja-assertions dist install test ctest
-smoke-assertion: MDBX_BUILD_OPTIONS += -DMDBX_FORCE_ASSERTIONS=1 -UNDEBUG -DMDBX_DEBUG=0
+smoke-assertion: MDBX_FORCE_ASSERTIONS=1
 smoke-assertion: smoke
-long-test-assertion: MDBX_BUILD_OPTIONS += -DMDBX_FORCE_ASSERTIONS=1 -UNDEBUG -DMDBX_DEBUG=0
+long-test-assertion: MDBX_FORCE_ASSERTIONS=1
 long-test-assertion: smoke
 
 .PHONY: check-posix-locking-sysv check-posix-locking-1988 check-posix-locking-2001 check-posix-locking-2008
