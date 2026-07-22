@@ -39,4 +39,4 @@ jobs:
         export CI_MAKE_TARGET=$(if [ "$(uname)" = 'Linux' ]; then echo 'check'; elif [ "${{ matrix.build-type }}" != 'Debug' ]; then echo 'test'; else echo 'smoke'; fi) && \
         export MDBX_BUILD_OPTIONS=$(if [ "${{ matrix.build-type }}" = 'Debug' ]; then echo '-DMDBX_CHECKING=2 -DMDBX_DEBUG=1'; else echo '-DMDBX_CHECKING=0 -DMDBX_DEBUG=0'; fi) && \
         export MDBX_BUILD_CXX=$(if [ "${{ matrix.cxx }}" = 'ON' ]; then echo 'YES'; else echo 'NO'; fi) && \
-        . ci/ci.sh "-DCMAKE_BUILD_TYPE=${{ matrix.build-type }}|-DMDBX_BUILD_CXX:BOOL=${{ matrix.cxx }}"
+        . tests/ci/ci.sh "-DCMAKE_BUILD_TYPE=${{ matrix.build-type }}|-DMDBX_BUILD_CXX:BOOL=${{ matrix.cxx }}"

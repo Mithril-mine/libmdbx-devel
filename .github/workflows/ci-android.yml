@@ -48,4 +48,4 @@ jobs:
         CI_MAKE_TARGET: ""
       shell: bash
       run: |
-        . ci/ci.sh "-DANDROID_ABI=${{ matrix.target }}|-DCMAKE_TOOLCHAIN_FILE:PATH=${{ steps.setup-ndk.outputs.ndk-path }}/build/cmake/android.toolchain.cmake|-DCMAKE_BUILD_TYPE=${{ matrix.build-type }}"
+        . tests/ci/ci.sh "-DANDROID_ABI=${{ matrix.target }}|-DCMAKE_TOOLCHAIN_FILE:PATH=${{ steps.setup-ndk.outputs.ndk-path }}/build/cmake/android.toolchain.cmake|-DCMAKE_BUILD_TYPE=${{ matrix.build-type }}"

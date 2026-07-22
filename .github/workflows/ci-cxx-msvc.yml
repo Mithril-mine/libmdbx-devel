@@ -53,5 +53,5 @@ jobs:
         CXXSTD: "-std=gnu++${{ matrix.cxx }}"
       shell: bash
       run: |
-        . ci/ci.sh "-A|${{ matrix.target }}|-T|${{ matrix.toolset }}|-DCMAKE_BUILD_TYPE=${{ matrix.build-type }}|-DCMAKE_CXX_STANDARD=${{ matrix.cxx }}" \
+        . tests/ci/ci.sh "-A|${{ matrix.target }}|-T|${{ matrix.toolset }}|-DCMAKE_BUILD_TYPE=${{ matrix.build-type }}|-DCMAKE_CXX_STANDARD=${{ matrix.cxx }}" \
           "--config|${{ matrix.build-type }}" "--build-config|${{ matrix.build-type }}"

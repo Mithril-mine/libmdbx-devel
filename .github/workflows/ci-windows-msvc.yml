@@ -46,5 +46,5 @@ jobs:
         CI_MAKE_TARGET: ""
       shell: bash
       run: |
-        . ci/ci.sh "-A|${{ matrix.target }}|-T|${{ matrix.toolset }}|-DCMAKE_BUILD_TYPE=${{ matrix.build-type }}|-DMDBX_BUILD_SHARED_LIBRARY:BOOL=${{ matrix.dll }}|-DMDBX_WITHOUT_MSVC_CRT:BOOL=${{ matrix.without_crt }}" \
+        . tests/ci/ci.sh "-A|${{ matrix.target }}|-T|${{ matrix.toolset }}|-DCMAKE_BUILD_TYPE=${{ matrix.build-type }}|-DMDBX_BUILD_SHARED_LIBRARY:BOOL=${{ matrix.dll }}|-DMDBX_WITHOUT_MSVC_CRT:BOOL=${{ matrix.without_crt }}" \
           "--config|${{ matrix.build-type }}" "--build-config|${{ matrix.build-type }}"

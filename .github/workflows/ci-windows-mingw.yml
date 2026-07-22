@@ -50,4 +50,4 @@ jobs:
         export "PATH=/c/mingw64/bin:/c/programdata/mingw64/mingw64/bin:$PATH" && \
         export MDBX_BUILD_OPTIONS=$(if [ "${{ matrix.build-type }}" = 'Debug' ]; then echo '-DMDBX_CHECKING=2 -DMDBX_DEBUG=1'; else echo '-DMDBX_CHECKING=0 -DMDBX_DEBUG=0'; fi) && \
         export MDBX_BUILD_CXX=$(if [ "${{ matrix.without_crt }}" = 'OFF' ]; then echo 'YES'; else echo 'NO'; fi) && \
-        . ci/ci.sh "-G|MinGW Makefiles|-DCMAKE_BUILD_TYPE=${{ matrix.build-type }}|-DMDBX_BUILD_SHARED_LIBRARY:BOOL=${{ matrix.dll }}|-DMDBX_WITHOUT_MSVC_CRT:BOOL=${{ matrix.without_crt }}"
+        . tests/ci/ci.sh "-G|MinGW Makefiles|-DCMAKE_BUILD_TYPE=${{ matrix.build-type }}|-DMDBX_BUILD_SHARED_LIBRARY:BOOL=${{ matrix.dll }}|-DMDBX_WITHOUT_MSVC_CRT:BOOL=${{ matrix.without_crt }}"
