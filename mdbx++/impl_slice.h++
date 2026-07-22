@@ -188,7 +188,7 @@ MDBX_CXX14_CONSTEXPR slice slice::safe_tail(size_t n) const {
 MDBX_CXX14_CONSTEXPR slice slice::safe_middle(size_t from, size_t n) const {
   if (MDBX_UNLIKELY(n > max_length))
     MDBX_CXX20_UNLIKELY throw_max_length_exceeded();
-  if (MDBX_UNLIKELY(from + n /* no overflow possible here, since size() < max_length */ > size()))
+  if (MDBX_UNLIKELY(from > max_length || from + n > size()))
     MDBX_CXX20_UNLIKELY throw_out_range();
   return middle(from, n);
 }
