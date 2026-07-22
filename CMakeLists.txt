@@ -1280,9 +1280,6 @@ if(MDBX_ENABLE_TESTS)
   add_subdirectory(ut_and_examples)
   #> dist-cutoff-begin
   if(NOT MDBX_AMALGAMATED_SOURCE AND NOT_SUBPROJECT)
-    if(NOT MDBX_CXX_AVAILABLE)
-      message(FATAL_ERROR "MDBX_ENABLE_TESTS=${MDBX_ENABLE_TESTS}: The C++ 11 compiler is required to build the tests.")
-    endif()
     add_subdirectory(test)
   endif()
   #< dist-cutoff-end
