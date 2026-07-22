@@ -131,7 +131,7 @@ define uname2libs
       echo '-lm';
       ;;
     *)
-      echo '-lm -lrt';
+      echo '-lm -lrt -latomic';
       ;;
   esac
 endef
