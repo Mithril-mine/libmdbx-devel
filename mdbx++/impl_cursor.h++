@@ -329,16 +329,20 @@ inline bool cursor::distribute(const cursor from, const cursor to, cursor *curso
 inline bool cursor::distribute(const cursor from, const cursor to, const std::vector<cursor> &cursors_array,
                                unsigned deepness) {
   static_assert(sizeof(cursor) == sizeof(MDBX_cursor *), "oops");
-  const int err = ::mdbx_cursor_distribute(from, to, const_cast<MDBX_cursor **>(&cursors_array[0].handle_),
-                                           cursors_array.size(), deepness);
+  const int err = MDBX_LIKELY(!cursors_array.empty())
+                      ? ::mdbx_cursor_distribute(from, to, const_cast<MDBX_cursor **>(&cursors_array[0].handle_),
+                                                 cursors_array.size(), deepness)
+                      : MDBX_EINVAL;
   return error::boolean_or_throw(err);
 }
 
 inline bool cursor::distribute(const cursor from, const cursor to, const std::vector<cursor_managed> &cursors_array,
                                unsigned deepness) {
   static_assert(sizeof(cursor_managed) == sizeof(MDBX_cursor *), "oops");
-  const int err = ::mdbx_cursor_distribute(from, to, const_cast<MDBX_cursor **>(&cursors_array[0].handle_),
-                                           cursors_array.size(), deepness);
+  const int err = MDBX_LIKELY(!cursors_array.empty())
+                      ? ::mdbx_cursor_distribute(from, to, const_cast<MDBX_cursor **>(&cursors_array[0].handle_),
+                                                 cursors_array.size(), deepness)
+                      : MDBX_EINVAL;
   return error::boolean_or_throw(err);
 }
 
