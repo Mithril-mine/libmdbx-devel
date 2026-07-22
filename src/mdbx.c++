@@ -1265,7 +1265,8 @@ env::operate_options::operate_options(MDBX_env_flags_t flags) noexcept
     : no_sticky_threads(((flags & (MDBX_NOSTICKYTHREADS | MDBX_EXCLUSIVE)) == MDBX_NOSTICKYTHREADS) ? true : false),
       nested_transactions((flags & (MDBX_WRITEMAP | MDBX_RDONLY)) ? false : true),
       exclusive((flags & MDBX_EXCLUSIVE) ? true : false), disable_readahead((flags & MDBX_NORDAHEAD) ? true : false),
-      disable_clear_memory((flags & MDBX_NOMEMINIT) ? true : false) {}
+      disable_clear_memory((flags & MDBX_NOMEMINIT) ? true : false),
+      enable_validation((flags & MDBX_VALIDATION) ? true : false) {}
 
 bool env::is_pristine() const { return get_stat().ms_mod_txnid == 0 && get_info().mi_recent_txnid == INITIAL_TXNID; }
 
