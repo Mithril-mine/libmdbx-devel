@@ -91,8 +91,10 @@ endif
 ifneq ($(make_ge_4_4),1)
 .NOTPARALLEL:
 WAIT         =
+STOCHASTIC   = echo "Skip running stochastic script since Bash service < 4.4"
 else
 WAIT         = .WAIT
+STOCHASTIC   = ./test/stochastic.sh
 endif
 
 ################################################################################
@@ -341,7 +343,7 @@ smoke-memcheck test-memcheck: CMAKE_OPT += -DENABLE_UBSAN:BOOL=OFF -DENABLE_ASAN
 smoke-memcheck test-memcheck: CTEST_OPT += -T memcheck
 test-memcheck: build-test build-stochastic ctest
 	@echo '  RUNNING `tests/stochastic.sh --with-valgrind --loops 2`...'
-	$(QUIET)tests/stochastic.sh --with-valgrind --loops 2 --db-upto-mb 256 --skip-make >$(TEST_LOG) || (cat $(TEST_LOG) && false)
+	$(QUIET)$(STOCHASTIC) --with-valgrind --loops 2 --db-upto-mb 256 --skip-make >$(TEST_LOG) || (cat $(TEST_LOG) && false)
 smoke-memcheck: smoke
 
 smoke-assertion test-assertion: MDBX_FORCE_ASSERTIONS=1
@@ -549,16 +551,16 @@ smoke-fault: build-stochastic
 
 test-stochastic: build-stochastic
 	@echo '  RUNNING `test/stochastic.sh --loops 2`...'
-	$(QUIET)test/stochastic.sh --dont-check-ram-size --loops 2 --db-upto-mb 256 --skip-make --taillog >$(TEST_LOG) || (cat $(TEST_LOG) && false)
+	$(QUIET)$(STOCHASTIC) --dont-check-ram-size --loops 2 --db-upto-mb 256 --skip-make --taillog >$(TEST_LOG) || (cat $(TEST_LOG) && false)
 
 long-test: test-long
 test-long: build-stochastic
 	@echo '  RUNNING `test/stochastic.sh --loops 42`...'
-	$(QUIET)test/stochastic.sh --loops 42 --db-upto-mb 1024 --extra --skip-make --taillog
+	$(QUIET)$(STOCHASTIC) --loops 42 --db-upto-mb 1024 --extra --skip-make --taillog
 
 test-singleprocess: build-stochastic
 	@echo '  RUNNING `test/stochastic.sh --single --loops 2`...'
-	$(QUIET)test/stochastic.sh --dont-check-ram-size --single --loops 2 --db-upto-mb 256 --skip-make --taillog >$(TEST_LOG) || (cat $(TEST_LOG) && false)
+	$(QUIET)$(STOCHASTIC) --dont-check-ram-size --single --loops 2 --db-upto-mb 256 --skip-make --taillog >$(TEST_LOG) || (cat $(TEST_LOG) && false)
 
 
 smoke-valgrind: smoke-memcheck
