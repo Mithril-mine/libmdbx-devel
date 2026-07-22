@@ -402,12 +402,6 @@ __extern_C key_t ftok(const char *, int);
 #include <windows.h>
 #include <winnt.h>
 #include <winternl.h>
-#if defined(__CODEGEARC__) && defined(__cplusplus) && defined(DEFINE_ENUM_FLAG_OPERATORS)
-/* Embarcadero: Windows SDK defines DEFINE_ENUM_FLAG_OPERATORS without proper constexpr.
- * Reset it so mdbx.h can install its own constexpr-correct version. */
-#undef DEFINE_ENUM_FLAG_OPERATORS
-#undef MDBX_CONSTEXPR_ENUM_FLAGS_OPERATIONS
-#endif /* __CODEGEARC__ */
 
 /* After including windows.h, to avoid issues with MinGW builds and similar toolchains. */
 #include <excpt.h>

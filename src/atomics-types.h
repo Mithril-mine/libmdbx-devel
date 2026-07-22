@@ -13,13 +13,24 @@
 #error "The MDBX_64BIT_CAS must be defined before"
 #endif /* MDBX_64BIT_CAS */
 
-#if defined(__cplusplus) && !defined(__STDC_NO_ATOMICS__) && __has_include(<cstdatomic>)
-#include <cstdatomic>
+#if defined(__cplusplus)
 #define MDBX_HAVE_C11ATOMICS
-#elif !defined(__cplusplus) && (__STDC_VERSION__ >= 201112L || __has_extension(c_atomic)) &&                           \
-    !defined(__STDC_NO_ATOMICS__) &&                                                                                   \
-    (__GNUC_PREREQ(4, 9) || __CLANG_PREREQ(3, 8) || !(defined(__GNUC__) || defined(__clang__)))
+#include <atomic>
+#if defined(__CODEGEARC__)
+/* Embarcadero: Clang falls back to a broken Dinkumware <stdatomic.h>/<cstdatomic>
+ * when pulled into a C++ TU (undeclared _Atomic_flag_t/_Bool/memory_order/_Uint1_t).
+ * The bare (non-std::) C11 atomic_* names are never used from C++ in this codebase
+ * (only under "#ifndef __cplusplus" below), so skip the include; std::atomic suffices. */
+#elif !defined(__STDC_NO_ATOMICS__)
+#if defined(__cpp_lib_stdatomic_h)
 #include <stdatomic.h>
+#elif __has_include(<cstdatomic>)
+#include <cstdatomic>
+#endif
+#endif /* ! __STDC_NO_ATOMICS__*/
+
+#else /* __cplusplus */
+
 #if defined(__CODEGEARC__)
 /* Embarcadero Clang falls back to Dinkumware stdatomic.h on x86.
  * Fix incompatible atomic_* expansions for volatile _Atomic objects:
@@ -36,8 +47,16 @@
   __c11_atomic_compare_exchange_strong((obj), (exp), (val), __ATOMIC_SEQ_CST, __ATOMIC_SEQ_CST)
 #undef atomic_fetch_add
 #define atomic_fetch_add(obj, val) __c11_atomic_fetch_add((obj), (val), __ATOMIC_SEQ_CST)
-#endif /* __CODEGEARC__ */
 #define MDBX_HAVE_C11ATOMICS
+/* #endif __CODEGEARC__ */
+
+#elif defined(__STDC_VERSION__) && (__STDC_VERSION__ >= 201112L || __has_extension(c_atomic)) &&                       \
+    !defined(__STDC_NO_ATOMICS__) &&                                                                                   \
+    (__GNUC_PREREQ(4, 9) || __CLANG_PREREQ(3, 8) || !(defined(__GNUC__) || defined(__clang__)))
+#include <stdatomic.h>
+#define MDBX_HAVE_C11ATOMICS
+/* endif C11 atomics */
+
 #elif defined(__GNUC__) || defined(__clang__)
 #elif defined(_MSC_VER)
 #pragma warning(disable : 4163) /* 'xyz': not available as an intrinsic */
@@ -49,11 +68,17 @@
                                    'long', possible loss of data */
 #pragma intrinsic(_InterlockedExchangeAdd, _InterlockedCompareExchange)
 #pragma intrinsic(_InterlockedExchangeAdd64, _InterlockedCompareExchange64)
+/* #endif _MSC_VER */
+
 #elif defined(__APPLE__)
 #include <libkern/OSAtomic.h>
+/* #endif __APPLE__ */
+
 #else
 #error FIXME atomic-ops
 #endif
+
+#endif /* !__cplusplus */
 
 typedef enum mdbx_memory_order {
   mo_Relaxed,
@@ -63,25 +88,22 @@ typedef enum mdbx_memory_order {
 
 typedef union {
   volatile uint32_t weak;
-#ifdef MDBX_HAVE_C11ATOMICS
-#if defined(__CODEGEARC__) && defined(__clang__)
-  volatile atomic_uint32_t c11a;
-#else
+#if defined(__cplusplus)
+  std::atomic<uint32_t> c11a;
+#elif defined(MDBX_HAVE_C11ATOMICS)
   volatile _Atomic uint32_t c11a;
-#endif
 #endif /* MDBX_HAVE_C11ATOMICS */
 } mdbx_atomic_uint32_t;
 
 typedef union {
-  volatile uint64_t weak;
-#if defined(MDBX_HAVE_C11ATOMICS) && (MDBX_64BIT_CAS || MDBX_64BIT_ATOMIC)
-#if defined(__CODEGEARC__) && defined(__clang__)
-  volatile atomic_uint64_t c11a;
+  MDBX_ALIGNAS(8) volatile uint64_t weak;
+#if defined(__cplusplus)
+  std::atomic<uint64_t> c11a;
 #else
+#if defined(MDBX_HAVE_C11ATOMICS)
   volatile _Atomic uint64_t c11a;
-#endif
-#endif
-#if !defined(MDBX_HAVE_C11ATOMICS) || !MDBX_64BIT_CAS || !MDBX_64BIT_ATOMIC
+#endif                                    /* MDBX_HAVE_C11ATOMICS */
+#if !MDBX_64BIT_CAS || !MDBX_64BIT_ATOMIC /* || MDBX_WORDBITS < 64 */
   __anonymous_struct_extension__ struct {
 #if __BYTE_ORDER__ == __ORDER_LITTLE_ENDIAN__
     mdbx_atomic_uint32_t low, high;
@@ -91,7 +113,8 @@ typedef union {
 #error "FIXME: Unsupported byte order"
 #endif /* __BYTE_ORDER__ */
   };
-#endif
+#endif /* !MDBX_64BIT_CAS || !MDBX_64BIT_ATOMIC */
+#endif /* __cplusplus */
 } mdbx_atomic_uint64_t;
 
 #ifdef MDBX_HAVE_C11ATOMICS
