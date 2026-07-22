@@ -140,6 +140,9 @@ endef
 
 SO_SUFFIX  := $(shell $(uname2sosuffix))
 HEADERS    := mdbx.h mdbx.h++
+#> dist-cutoff-begin
+HEADERS	   += $(wildcard src/*.h)
+#< dist-cutoff-end
 LIBRARIES  := libmdbx.a libmdbx.$(SO_SUFFIX)
 TOOLS      := chk copy drop dump load stat
 MDBX_TOOLS := $(addprefix mdbx_,$(TOOLS))
@@ -611,9 +614,15 @@ mdbx_$(1).static-lto: src/tools/$(1).c src/config-gnumake.h src/version.c src/al
 endef
 $(foreach file,$(TOOLS),$(eval $(call tool-rule,$(file))))
 
-mdbx_test: $(TEST_OBJ) libmdbx.$(SO_SUFFIX)
+tests/mdbx.c++.o: src/mdbx.c++ $(HEADERS) $(lastword $(MAKEFILE_LIST))
+	@echo '  CC $@'
+	$(QUIET)$(CXX) $(CXXFLAGS) $(MDBX_BUILD_OPTIONS) -DMDBX_BUILD_CXX=1 -DMDBX_WITHOUT_MSVC_CRT=0 -c src/mdbx.c++ -o $@
+
+comma:= ,
+
+mdbx_test: $(TEST_OBJ) $(call select_by,MDBX_BUILD_CXX,libmdbx.$(SO_SUFFIX),libmdbx.a)
 	@echo '  LD $@'
-	$(QUIET)$(CXX) $(CXXFLAGS) $(TEST_OBJ) -Wl,-rpath . -L . -l mdbx $(EXE_LDFLAGS) $(LIBS) -o $@
+	$(QUIET)$(CXX) $(CXXFLAGS) $(TEST_OBJ) -Wl,-rpath . -L . $(call select_by,MDBX_BUILD_CXX,-l mdbx,-Wl$(comma)--push-state$(comma)-Bstatic -l mdbx -Wl$(comma)--pop-state) $(EXE_LDFLAGS) $(LIBS) -lm -o $@
 
 $(MDBX_GIT_DIR)/HEAD $(MDBX_GIT_DIR)/index $(MDBX_GIT_DIR)/refs/tags:
 	@echo '*** ' >&2
