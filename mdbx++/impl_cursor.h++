@@ -147,6 +147,10 @@ inline cursor::estimate_result cursor::estimate(move_operation operation) const 
   return estimate_result(*this, operation);
 }
 
+inline cursor::estimate_result cursor::estimate(move_operation operation, const slice &key) const {
+  return estimate_result(*this, operation, key);
+}
+
 inline void cursor::renew(::mdbx::txn &txn) { error::success_or_throw(::mdbx_cursor_renew(txn, handle_)); }
 
 inline void cursor::bind(::mdbx::txn &txn, ::mdbx::map_handle map_handle) {

@@ -343,7 +343,7 @@ public:
   inline estimate_result estimate(const slice &key, const slice &value) const;
   inline estimate_result estimate(const slice &key) const;
   inline estimate_result estimate(move_operation operation) const;
-  inline estimate_result estimate(move_operation operation, slice &key) const;
+  inline estimate_result estimate(move_operation operation, const slice &key) const;
 
   static inline ptrdiff_t distance_between(const cursor from, const cursor to,
                                            unsigned deepness = /* enough to cover whole tree height */ 42);
