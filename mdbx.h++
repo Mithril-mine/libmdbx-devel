@@ -4622,7 +4622,7 @@ public:
   inline estimate_result estimate(const slice &key, const slice &value) const;
   inline estimate_result estimate(const slice &key) const;
   inline estimate_result estimate(move_operation operation) const;
-  inline estimate_result estimate(move_operation operation, slice &key) const;
+  inline estimate_result estimate(move_operation operation, const slice &key) const;
 
   //----------------------------------------------------------------------------
 
@@ -6294,6 +6294,10 @@ inline ptrdiff_t estimate(const cursor &from, const cursor &to) {
   ptrdiff_t result;
   error::success_or_throw(mdbx_estimate_distance(from, to, &result));
   return result;
+}
+
+inline cursor::estimate_result cursor::estimate(move_operation operation, const slice &key) const {
+  return estimate_result(*this, operation, key);
 }
 
 inline cursor::move_result cursor::find(const slice &key, bool throw_notfound) {
