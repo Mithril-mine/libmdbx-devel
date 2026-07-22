@@ -776,7 +776,7 @@ public:
 
   inline buffer(const txn &transaction, const slice &src, const allocator_type &alloc = allocator_type());
 
-  buffer(buffer &&src) noexcept(noexcept(::std::is_nothrow_move_constructible<allocator_type>::value))
+  buffer(buffer &&src) noexcept(::std::is_nothrow_move_constructible<allocator_type>::value)
       : inherited(/* no move here */ src), silo_(::std::move(src.silo_), src.is_reference()) {
     /* CoverityScan issues an erroneous warning here about using an uninitialized object. Which is not true,
      * since in C++ (unlike Rust) an object remains initialized after a move-assignment operation; Moreover,
