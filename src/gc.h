@@ -61,7 +61,9 @@ MDBX_INTERNAL void gc_put_destroy(gcu_t *ctx);
 #define ALLOC_COALESCE 4    /* внутреннее состояние/флажок */
 #define ALLOC_SHOULD_SCAN 8 /* внутреннее состояние/флажок */
 #define ALLOC_LIFO 16       /* внутреннее состояние/флажок */
+#if 0                       /* currently unused */
 #define ALLOC_EXACTLY 32
+#endif
 
 MDBX_INTERNAL pgr_t gc_alloc_ex(const MDBX_cursor *const mc, const size_t num, uint8_t flags);
 

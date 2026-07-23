@@ -701,15 +701,16 @@ static pgno_t gc_repnl_scan_sequence_reserve(const MDBX_txn *txn, const size_t n
   ASSERT(len >= num && num > 1);
   ASSERT((flags & ALLOC_RESERVE) != 0);
   const size_t seq = num - 1;
-#if !MDBX_PNL_ASCENDING
+#if defined(ALLOC_EXACTLY) && !MDBX_PNL_ASCENDING
   if (edge[-(ptrdiff_t)seq] - *edge == seq &&
       (likely((flags & ALLOC_EXACTLY) == 0) || len == num || edge[-(ptrdiff_t)num] - *edge != num)) {
     return *edge;
   }
-#endif /* !MDBX_PNL_ASCENDING */
+#endif /* defined(ALLOC_EXACTLY) && !MDBX_PNL_ASCENDING */
   pgno_t *target = scan4seq_impl(edge, len, seq);
   ASSERT(target == scan4range_checker(txn->wr.repnl, seq));
   while (target) {
+#if defined(ALLOC_EXACTLY)
     if (unlikely(flags & ALLOC_EXACTLY) && len > num) {
       const ptrdiff_t step = MDBX_PNL_ASCENDING ? -1 : 1;
       if (target[step] - target[0] == 1) {
@@ -728,6 +729,7 @@ static pgno_t gc_repnl_scan_sequence_reserve(const MDBX_txn *txn, const size_t n
       }
       /* найденная последовательность ровно необходимой длины */
     }
+#endif /* defined(ALLOC_EXACTLY) */
     const pgno_t pgno = *target;
     return pgno;
   }
@@ -743,7 +745,7 @@ __hot pgno_t gc_repnl_get_sequence(MDBX_txn *txn, const size_t num, uint8_t flag
   ASSERT(len >= num && num > 1);
   ASSERT((flags & ALLOC_RESERVE) == 0);
   const size_t seq = num - 1;
-#if !MDBX_PNL_ASCENDING
+#if defined(ALLOC_EXACTLY) && !MDBX_PNL_ASCENDING
   if (edge[-(ptrdiff_t)seq] - *edge == seq &&
       (likely((flags & ALLOC_EXACTLY) == 0) || len == num || edge[-(ptrdiff_t)num] - *edge != num)) {
     ASSERT(edge == scan4range_checker(txn->wr.repnl, seq));
@@ -751,10 +753,11 @@ __hot pgno_t gc_repnl_get_sequence(MDBX_txn *txn, const size_t num, uint8_t flag
     pnl_setsize(txn->wr.repnl, len - num);
     return *edge;
   }
-#endif /* !MDBX_PNL_ASCENDING */
+#endif /* defined(ALLOC_EXACTLY) && !MDBX_PNL_ASCENDING */
   pgno_t *target = scan4seq_impl(edge, len, seq);
   ASSERT(target == scan4range_checker(txn->wr.repnl, seq));
   while (target) {
+#if defined(ALLOC_EXACTLY)
     if (unlikely(flags & ALLOC_EXACTLY) && len > num) {
       const ptrdiff_t step = MDBX_PNL_ASCENDING ? -1 : 1;
       if (target[step] - target[0] == 1) {
@@ -773,6 +776,7 @@ __hot pgno_t gc_repnl_get_sequence(MDBX_txn *txn, const size_t num, uint8_t flag
       }
       /* найденная последовательность ровно необходимой длины */
     }
+#endif /* defined(ALLOC_EXACTLY) */
     const pgno_t pgno = *target;
     /* вырезаем найденную последовательность с перемещением хвоста */
     pnl_setsize(txn->wr.repnl, len - num);
