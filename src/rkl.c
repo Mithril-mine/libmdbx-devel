@@ -28,6 +28,15 @@ void rkl_clear(rkl_t *rkl) {
   rkl->list_length = 0;
 }
 
+void rkl_clear_and_shrink(rkl_t *rkl) {
+  if (rkl->list != rkl->inplace) {
+    osal_free(rkl->list);
+    rkl->list_limit = ARRAY_LENGTH(rkl->inplace);
+    rkl->list = rkl->inplace;
+  }
+  rkl_clear(rkl);
+}
+
 void rkl_destroy(rkl_t *rkl) {
   void *ptr = rkl->list;
   rkl->list = nullptr;
