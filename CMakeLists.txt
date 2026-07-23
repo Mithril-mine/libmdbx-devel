@@ -639,6 +639,72 @@ if(WIN32 AND EXISTS "${MDBX_SOURCE_DIR}/ntdll.def")
   endif()
 endif()
 
+# Checking needs of linking with `libatomic` for C11 atomics,
+# with ability to override/predefine by CMake command line option.
+if(NOT DEFINED MDBX_NEED_LIBATOMIC)
+  if(MSVC)
+    set(MDBX_NEED_LIBATOMIC OFF)
+  else()
+    include(CheckCSourceCompiles)
+    include(CMakePushCheckState)
+    function(check_working_c11_atomics varname)
+      cmake_push_check_state()
+      set(CMAKE_REQUIRED_FLAGS "-std=c11")
+      check_c_source_compiles("
+        #include <stdint.h>
+        #include <stdatomic.h>
+        volatile _Atomic uint32_t a32;
+        volatile _Atomic uint64_t a64;
+        int main() {
+        atomic_store_explicit(&a32, __LINE__, memory_order_relaxed);
+        atomic_thread_fence(memory_order_release);
+        atomic_store_explicit(&a64, __LINE__, memory_order_relaxed);
+        atomic_thread_fence(memory_order_acquire);
+        atomic_store_explicit(&a32, __LINE__, memory_order_release);
+        atomic_thread_fence(memory_order_seq_cst);
+        atomic_store_explicit(&a64, __LINE__, memory_order_release);
+        atomic_thread_fence(memory_order_acq_rel);
+        atomic_store_explicit(&a32, __LINE__, memory_order_seq_cst);
+        atomic_thread_fence(memory_order_relaxed);
+        atomic_store_explicit(&a64, __LINE__, memory_order_seq_cst);
+
+        uint64_t load =
+        atomic_load_explicit(&a32, memory_order_relaxed) + atomic_load_explicit(&a64, memory_order_relaxed) +
+        atomic_load_explicit(&a32, memory_order_acquire) + atomic_load_explicit(&a64, memory_order_acquire) +
+        atomic_load_explicit(&a32, memory_order_consume) + atomic_load_explicit(&a64, memory_order_consume) +
+        atomic_load_explicit(&a32, memory_order_seq_cst) + atomic_load_explicit(&a64, memory_order_seq_cst);
+
+        uint32_t u32 = __LINE__;
+        uint64_t u64 = __LINE__;
+        _Bool compare_exchange =
+        atomic_compare_exchange_strong(&a32, &u32, __LINE__) ^ atomic_compare_exchange_strong(&a64, &u64, __LINE__);
+
+        uint64_t fetch_add = atomic_fetch_add(&a32, __LINE__) + atomic_fetch_add(&a64, __LINE__);
+        return (load + compare_exchange + fetch_add) % 37;
+        }
+        " ${varname})
+      cmake_pop_check_state()
+    endfunction(check_working_c11_atomics)
+
+    check_working_c11_atomics(c11_atomics_without_libatomic)
+    if (c11_atomics_without_libatomic)
+      set(MDBX_NEED_LIBATOMIC OFF)
+      message(STATUS "No linking with additional library needed for C11 atomics")
+    else()
+      cmake_push_check_state()
+      list(APPEND CMAKE_REQUIRED_LIBRARIES "atomic")
+      check_working_c11_atomics(c11_atomics_with_libatomic)
+      cmake_pop_check_state()
+      if (c11_atomics_with_libatomic)
+        set(MDBX_NEED_LIBATOMIC ON)
+        message(STATUS "Linking with libatomics is required for C11 atomics")
+      else()
+        message(STATUS "C11 atomics is unusable")
+      endif()
+    endif()
+  endif()
+endif()
+
 # ######################################################################################################################
 # ~~~
 #
@@ -1069,6 +1135,9 @@ macro(libmdbx_setup_libs TARGET MODE)
     target_link_libraries(${TARGET} ${MODE} ${CMAKE_THREAD_LIBS_INIT})
   else()
     target_link_libraries(${TARGET} ${MODE} Threads::Threads)
+  endif()
+  if (MDBX_NEED_LIBATOMIC)
+    target_link_libraries(${TARGET} PUBLIC "atomic")
   endif()
   if(WIN32)
     target_link_libraries(
