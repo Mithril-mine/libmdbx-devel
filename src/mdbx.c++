@@ -1841,6 +1841,10 @@ __cold ::std::ostream &operator<<(::std::ostream &out, const env::operate_option
     out << delimiter << "exclusive";
     delimiter = comma;
   }
+  if (it.enable_validation) {
+    out << delimiter << "enable_validation";
+    delimiter = comma;
+  }
   if (it.disable_readahead) {
     out << delimiter << "disable_readahead";
     delimiter = comma;
