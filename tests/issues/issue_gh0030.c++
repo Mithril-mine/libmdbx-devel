@@ -1,5 +1,10 @@
 #include "mdbx.h++"
 #include <cstdio>
+
+#ifdef _MSC_VER
+#pragma warning(disable : 4702) /* unreachable code */
+#endif
+
 int main(int, char **) {
   const mdbx::path testdb = "testdb";
   mdbx::env::remove(testdb);

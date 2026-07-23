@@ -1,6 +1,11 @@
 #include "mdbx.h++"
 #include <cstdio>
 #include <vector>
+
+#ifdef _MSC_VER
+#pragma warning(disable : 4702) /* unreachable code */
+#endif
+
 int main() {
   std::vector<mdbx::cursor> empty;
   mdbx::cursor from, to;
