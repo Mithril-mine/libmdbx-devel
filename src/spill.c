@@ -85,12 +85,13 @@ static size_t spill_cursor_keep(const MDBX_txn *const txn, const MDBX_cursor *mc
       }
     } while (++i <= mc->top);
 
-    tASSERT(txn, is_leaf(mp));
-    if (!mc->subcur || mc->ki[mc->top] >= page_numkeys(mp))
+    if (!inner_pointed(mc) || mc->ki[mc->top] >= page_numkeys(mp))
       break;
     if (!(node_flags(page_node(mp, mc->ki[mc->top])) & N_TREE))
       break;
     mc = &mc->subcur->cursor;
+    if (is_subpage(mc->pg[0]))
+      break;
   }
   return keep;
 }
