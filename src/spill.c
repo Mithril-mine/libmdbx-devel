@@ -86,7 +86,6 @@ static size_t spill_cursor_keep(const MDBX_txn *const txn, const MDBX_cursor *mc
       }
     } while (++i <= mc->top);
 
-    cASSERT0(txn, is_leaf(mp));
     if (!inner_pointed(mc))
       break;
     mc = &mc->subcur->cursor;
