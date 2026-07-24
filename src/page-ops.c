@@ -114,6 +114,7 @@ __cold pgr_t __must_check_result page_unspill(MDBX_txn *const txn, const page_t 
     ret.err = page_dirty(txn, ret.page, npages);
     if (unlikely(ret.err != MDBX_SUCCESS))
       return ret;
+    tASSERT0(txn, !is_spilled(txn, ret.page));
     if (MDBX_ENABLE_PGOP_STAT)
       txn->env->lck->pgops.unspill.weak += npages;
     ret.page->flags |= (scan == txn) ? 0 : P_SPILLED;

@@ -406,7 +406,7 @@ static int gc_store_retired(MDBX_txn *txn, gcu_t *ctx) {
 
 #if MDBX_DEBUG && (defined(ENABLE_MEMCHECK) || defined(__SANITIZE_ADDRESS__))
       /* Для предотвращения предупреждения Valgrind из mdbx_dump_val() вызванное через макрос DVAL_DEBUG() на выходе из
-       * cursor_seek(MDBX_SET_KEY), которая вызывается как выше в цикле очистки, так и ниже в цикле заполнения
+       * cursor_seek(MDBX_SET), которая вызывается как выше в цикле очистки, так и ниже в цикле заполнения
        * зарезервированных элементов. */
       memset(data.iov_base, 0xBB, data.iov_len);
 #endif /* MDBX_DEBUG && (ENABLE_MEMCHECK || __SANITIZE_ADDRESS__) */
@@ -450,7 +450,7 @@ static int gc_store_retired(MDBX_txn *txn, gcu_t *ctx) {
 #if MDBX_DEBUG && (defined(ENABLE_MEMCHECK) || defined(__SANITIZE_ADDRESS__))
     /* Для предотвращения предупреждения Valgrind из mdbx_dump_val()
      * вызванное через макрос DVAL_DEBUG() на выходе
-     * из cursor_seek(MDBX_SET_KEY), которая вызывается как выше в цикле
+     * из cursor_seek(MDBX_SET), которая вызывается как выше в цикле
      * очистки, так и ниже в цикле заполнения зарезервированных элементов. */
     memset(data.iov_base, 0xBB, data.iov_len);
 #endif /* MDBX_DEBUG && (ENABLE_MEMCHECK || __SANITIZE_ADDRESS__) */
@@ -1266,6 +1266,32 @@ static int gc_rerere(MDBX_txn *txn, gcu_t *ctx) {
   return gc_reserve4return(txn, ctx, chunk_lo, chunk_hi);
 }
 
+static int gc_enforce_not_spilled(MDBX_txn *txn, gcu_t *ctx, MDBX_val *key, MDBX_val *data) {
+  while (true) {
+    const size_t offset = ptr_dist(data->iov_base, txn->env->dxb_mmap.base);
+    if (offset < pgno2bytes(txn->env, txn->geo.first_unallocated)) {
+      const page_t *mp = ptr2page(txn->env, data->iov_base);
+      tASSERT0(txn, !is_frozen(txn, mp));
+      if (likely(!is_spilled(txn, mp))) {
+        tASSERT0(txn, is_modifiable(txn, mp));
+        break;
+      }
+      int err = is_largepage(mp) ? page_unspill(txn, mp).err : page_touch_unmodifiable(txn, &ctx->cursor, mp);
+      tASSERT0(txn, err == MDBX_SUCCESS);
+      if (unlikely(err != MDBX_SUCCESS))
+        return err;
+      err = cursor_seek(&ctx->cursor, key, data, MDBX_SET).err;
+      if (unlikely(err != MDBX_SUCCESS))
+        return err;
+    } else {
+      tASSERT0(txn, (txn->flags & MDBX_WRITEMAP) == 0);
+      /* we assume that the target data is located on a shadowed page in RAM */
+      break;
+    }
+  }
+  return MDBX_SUCCESS;
+}
+
 /* Заполняет зарезервированные записи номерами возвращаемых в GC страниц. */
 static int gc_fill_returned(MDBX_txn *txn, gcu_t *ctx) {
   tASSERT1(txn, pnl_check_allocated(txn->wr.repnl, txn->geo.first_unallocated - MDBX_ENABLE_REFUND));
@@ -1300,8 +1326,13 @@ static int gc_fill_returned(MDBX_txn *txn, gcu_t *ctx) {
     key.iov_len = sizeof(id);
 #endif
     MDBX_val data = {.iov_base = nullptr, .iov_len = 0};
-    int err = cursor_seek(&ctx->cursor, &key, &data, MDBX_SET_KEY).err;
+    int err = cursor_seek(&ctx->cursor, &key, &data, MDBX_SET).err;
     if (likely(err == MDBX_SUCCESS)) {
+      if (unlikely(txn->flags & MDBX_TXN_SPILLS)) {
+        err = gc_enforce_not_spilled(txn, ctx, &key, &data);
+        if (unlikely(err != MDBX_SUCCESS))
+          return err;
+      }
       pgno_t *const from = MDBX_PNL_BEGIN(txn->wr.repnl), *const to = MDBX_PNL_END(txn->wr.repnl);
       TRACE("%s: fill %zu [ %zu:%" PRIaPGNO "...%zu:%" PRIaPGNO "] @%" PRIaTXN " (%s)", dbg_prefix(ctx),
             pnl_size(txn->wr.repnl), from - txn->wr.repnl, from[0], to - txn->wr.repnl, to[-1], id, "at-once");
@@ -1343,9 +1374,15 @@ static int gc_fill_returned(MDBX_txn *txn, gcu_t *ctx) {
     key.iov_len = sizeof(id);
 #endif
     MDBX_val data = {.iov_base = nullptr, .iov_len = 0};
-    const int err = cursor_seek(&ctx->cursor, &key, &data, MDBX_SET_KEY).err;
+    int err = cursor_seek(&ctx->cursor, &key, &data, MDBX_SET).err;
     if (unlikely(err != MDBX_SUCCESS))
       return err;
+
+    if (unlikely(txn->flags & MDBX_TXN_SPILLS)) {
+      err = gc_enforce_not_spilled(txn, ctx, &key, &data);
+      if (unlikely(err != MDBX_SUCCESS))
+        return err;
+    }
 
     cASSERT0(txn, data.iov_len >= sizeof(pgno_t) * 2);
     const size_t chunk_hi = data.iov_len / sizeof(pgno_t) - 1;
