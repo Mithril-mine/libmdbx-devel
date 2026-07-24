@@ -54,7 +54,7 @@ int mdbx_dbi_sequence(MDBX_txn *txn, MDBX_dbi dbi, uint64_t *result, uint64_t in
     if (unlikely(new < increment))
       return MDBX_RESULT_TRUE;
 
-    cASSERT0(txn, new > dbs->sequence);
+    tASSERT0(txn, new > dbs->sequence);
     if ((txn->dbi_state[dbi] & DBI_DIRTY) == 0) {
       txn->flags |= MDBX_TXN_DIRTY;
       txn->dbi_state[dbi] |= DBI_DIRTY;

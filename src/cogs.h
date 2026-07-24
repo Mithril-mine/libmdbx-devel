@@ -552,7 +552,7 @@ static __always_inline int check_txn_anythread(const MDBX_txn *txn, int bad_bits
     }
   }
 
-  cASSERT0(txn, (txn->flags & MDBX_TXN_FINISHED) ||
+  tASSERT0(txn, (txn->flags & MDBX_TXN_FINISHED) ||
                     (txn->flags & MDBX_NOSTICKYTHREADS) == (txn->env->flags & MDBX_NOSTICKYTHREADS));
   return MDBX_SUCCESS;
 }
@@ -578,7 +578,7 @@ MDBX_NOTHROW_CONST_FUNCTION static inline txnid_t txn_basis_snapshot(const MDBX_
   STATIC_ASSERT(((txn_ro_flat >> ((xMDBX_TXNID_STEP == 2) ? 16 : 17)) & xMDBX_TXNID_STEP) == xMDBX_TXNID_STEP);
   const txnid_t committed_txnid =
       txn->txnid - xMDBX_TXNID_STEP + ((txn->flags >> ((xMDBX_TXNID_STEP == 2) ? 16 : 17)) & xMDBX_TXNID_STEP);
-  cASSERT0(txn, committed_txnid == ((txn->flags & txn_ro_flat) ? txn->txnid : txn->txnid - xMDBX_TXNID_STEP));
+  tASSERT0(txn, committed_txnid == ((txn->flags & txn_ro_flat) ? txn->txnid : txn->txnid - xMDBX_TXNID_STEP));
   return committed_txnid;
 }
 

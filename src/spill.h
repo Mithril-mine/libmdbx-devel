@@ -12,7 +12,7 @@ MDBX_INTERNAL int spill_slowpath(MDBX_txn *const txn, MDBX_cursor *const m0, con
 /*----------------------------------------------------------------------------*/
 
 static inline size_t spill_search(const MDBX_txn *txn, pgno_t pgno) {
-  cASSERT0(txn, (txn->flags & MDBX_WRITEMAP) == 0 || MDBX_AVOID_MSYNC);
+  tASSERT0(txn, (txn->flags & MDBX_WRITEMAP) == 0 || MDBX_AVOID_MSYNC);
   const pnl_t pnl = txn->wr.spilled.list;
   if (likely(!pnl))
     return 0;
@@ -36,24 +36,24 @@ static inline bool spill_intersect(const MDBX_txn *txn, pgno_t pgno, size_t npag
   const pgno_t spilled_range_last = ((pgno + (pgno_t)npages) << 1) - 1;
 #if MDBX_PNL_ASCENDING
   const size_t n = pnl_search(pnl, spilled_range_begin, (size_t)(MAX_PAGENO + 1) << 1);
-  cASSERT0(txn, n && (n == pnl_size(pnl) + 1 || spilled_range_begin <= pnl[n]));
+  tASSERT0(txn, n && (n == pnl_size(pnl) + 1 || spilled_range_begin <= pnl[n]));
   const bool rc = n <= pnl_size(pnl) && pnl[n] <= spilled_range_last;
 #else
   const size_t n = pnl_search(pnl, spilled_range_last, (size_t)MAX_PAGENO + MAX_PAGENO + 1);
-  cASSERT0(txn, n && (n == pnl_size(pnl) + 1 || spilled_range_last >= pnl[n]));
+  tASSERT0(txn, n && (n == pnl_size(pnl) + 1 || spilled_range_last >= pnl[n]));
   const bool rc = n <= pnl_size(pnl) && pnl[n] >= spilled_range_begin;
 #endif
   if (CHECKS1_ENABLED()) {
     bool check = false;
     for (size_t i = 0; i < npages; ++i)
       check |= spill_search(txn, (pgno_t)(pgno + i)) != 0;
-    cASSERT0(txn, check == rc);
+    tASSERT0(txn, check == rc);
   }
   return rc;
 }
 
 static inline int txn_spill(MDBX_txn *const txn, MDBX_cursor *const m0, const size_t need) {
-  cASSERT0(txn, (txn->flags & txn_ro_both) == 0);
+  tASSERT0(txn, (txn->flags & txn_ro_both) == 0);
   tASSERT1(txn, !m0 || cursor_is_tracked(m0));
 
   const intptr_t wanna_spill_entries = txn->wr.dirtylist ? (need - txn->wr.dirtyroom - txn->wr.loose_count) : 0;

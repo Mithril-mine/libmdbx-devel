@@ -5,7 +5,7 @@
 
 /* Merge pageset of the nested transaction into parent */
 static void nested_merge(MDBX_txn *const parent, MDBX_txn *const nested, const size_t parent_retired_len) {
-  cASSERT0(nested, (nested->flags & MDBX_WRITEMAP) == 0);
+  tASSERT0(nested, (nested->flags & MDBX_WRITEMAP) == 0);
   dpl_t *const src = txn_dpl_sort(nested);
 
   /* Remove refunded pages from parent's dirty list */
@@ -19,7 +19,7 @@ static void nested_merge(MDBX_txn *const parent, MDBX_txn *const nested, const s
     }
     parent->wr.dirtyroom += dst->sorted - n;
     dst->sorted = dpl_setlen(dst, n);
-    cASSERT0(parent, parent->wr.dirtyroom + parent->wr.dirtylist->length ==
+    tASSERT0(parent, parent->wr.dirtyroom + parent->wr.dirtylist->length ==
                          (parent->parent ? parent->parent->wr.dirtyroom : parent->env->options.dp_limit));
   }
 
@@ -39,7 +39,7 @@ static void nested_merge(MDBX_txn *const parent, MDBX_txn *const nested, const s
     const char *kind;
     if (di) {
       page_t *dp = dst->items[di].ptr;
-      cASSERT0(parent, (dp->flags & ~(P_LEAF | P_DUPFIX | P_BRANCH | P_LARGE | P_SPILLED)) == 0);
+      tASSERT0(parent, (dp->flags & ~(P_LEAF | P_DUPFIX | P_BRANCH | P_LARGE | P_SPILLED)) == 0);
       npages = dpl_npages(dst, di);
       page_wash(parent, di, dp, npages);
       kind = "dirty";
@@ -175,7 +175,7 @@ static void nested_merge(MDBX_txn *const parent, MDBX_txn *const nested, const s
   if (nested->wr.spilled.list) {
     tASSERT1(nested, pnl_check_allocated(nested->wr.spilled.list, (size_t)parent->geo.first_unallocated << 1));
     txn_dpl_sift(parent, nested->wr.spilled.list, true);
-    cASSERT0(parent, parent->wr.dirtyroom + parent->wr.dirtylist->length ==
+    tASSERT0(parent, parent->wr.dirtyroom + parent->wr.dirtylist->length ==
                          (parent->parent ? parent->parent->wr.dirtyroom : parent->env->options.dp_limit));
   }
 
@@ -183,12 +183,12 @@ static void nested_merge(MDBX_txn *const parent, MDBX_txn *const nested, const s
    * filter-out pages */
   for (l = 0, d = dst->length, s = src->length; d > 0 && s > 0;) {
     page_t *sp = src->items[s].ptr;
-    cASSERT0(parent, (sp->flags & ~(P_LEAF | P_DUPFIX | P_BRANCH | P_LARGE | P_LOOSE | P_SPILLED)) == 0);
+    tASSERT0(parent, (sp->flags & ~(P_LEAF | P_DUPFIX | P_BRANCH | P_LARGE | P_LOOSE | P_SPILLED)) == 0);
     const unsigned s_npages = dpl_npages(src, s);
     const pgno_t s_pgno = src->items[s].pgno;
 
     page_t *dp = dst->items[d].ptr;
-    cASSERT0(parent, (dp->flags & ~(P_LEAF | P_DUPFIX | P_BRANCH | P_LARGE | P_SPILLED)) == 0);
+    tASSERT0(parent, (dp->flags & ~(P_LEAF | P_DUPFIX | P_BRANCH | P_LARGE | P_SPILLED)) == 0);
     const unsigned d_npages = dpl_npages(dst, d);
     const pgno_t d_pgno = dst->items[d].pgno;
 
@@ -208,12 +208,12 @@ static void nested_merge(MDBX_txn *const parent, MDBX_txn *const nested, const s
     }
   }
   ASSERT(dst->sorted == dst->length);
-  cASSERT0(parent, dst->detent >= l + d + s);
+  tASSERT0(parent, dst->detent >= l + d + s);
   dst->sorted = l + d + s; /* the merged length */
 
   while (s > 0) {
     page_t *sp = src->items[s].ptr;
-    cASSERT0(parent, (sp->flags & ~(P_LEAF | P_DUPFIX | P_BRANCH | P_LARGE | P_LOOSE | P_SPILLED)) == 0);
+    tASSERT0(parent, (sp->flags & ~(P_LEAF | P_DUPFIX | P_BRANCH | P_LARGE | P_LOOSE | P_SPILLED)) == 0);
     if (sp->flags != P_LOOSE) {
       sp->txnid = parent->front_txnid;
       sp->flags &= ~P_SPILLED;
@@ -351,7 +351,7 @@ static int nested_start(MDBX_txn *const nested, MDBX_txn *parent) {
   nested->wr.troika = parent->wr.troika;
 
   const size_t len = pnl_size(parent->wr.repnl) + parent->wr.loose_count;
-  cASSERT0(nested, !nested->wr.repnl);
+  tASSERT0(nested, !nested->wr.repnl);
   nested->wr.repnl = pnl_alloc((len > MDBX_PNL_INITIAL) ? len : MDBX_PNL_INITIAL);
   if (unlikely(!nested->wr.repnl))
     return LOG_IFERR(MDBX_ENOMEM);
@@ -370,7 +370,7 @@ static int nested_start(MDBX_txn *const nested, MDBX_txn *parent) {
   if (parent->wr.loose_count) {
     do {
       page_t *lp = parent->wr.loose_pages;
-      cASSERT0(parent, lp->flags == P_LOOSE);
+      tASSERT0(parent, lp->flags == P_LOOSE);
       err = pnl_insert_span(&parent->wr.repnl, lp->pgno, 1);
       if (unlikely(err != MDBX_SUCCESS))
         return LOG_IFERR(err);
@@ -399,7 +399,7 @@ static int nested_start(MDBX_txn *const nested, MDBX_txn *parent) {
   if (parent->wr.spilled.list)
     spill_purge(parent);
 
-  cASSERT0(nested, pnl_alloclen(nested->wr.repnl) >= pnl_size(parent->wr.repnl));
+  tASSERT0(nested, pnl_alloclen(nested->wr.repnl) >= pnl_size(parent->wr.repnl));
   memcpy(nested->wr.repnl, parent->wr.repnl, MDBX_PNL_SIZEOF(parent->wr.repnl));
   /* coverity[ASSERT_SIDE_EFFECT] */
   tASSERT1(nested, pnl_check_allocated(nested->wr.repnl, (nested->geo.first_unallocated /* LY: intentional assignment
@@ -425,9 +425,9 @@ static int nested_start(MDBX_txn *const nested, MDBX_txn *parent) {
   if ((nested->n_dbi = parent->n_dbi) > CORE_DBS)
     memset(nested->dbi_state + CORE_DBS, 0, nested->n_dbi - CORE_DBS);
 
-  cASSERT0(parent, parent->wr.dirtyroom + parent->wr.dirtylist->length ==
+  tASSERT0(parent, parent->wr.dirtyroom + parent->wr.dirtylist->length ==
                        (parent->parent ? parent->parent->wr.dirtyroom : parent->env->options.dp_limit));
-  cASSERT0(nested, nested->wr.dirtyroom + nested->wr.dirtylist->length ==
+  tASSERT0(nested, nested->wr.dirtyroom + nested->wr.dirtylist->length ==
                        (nested->parent ? nested->parent->wr.dirtyroom : nested->env->options.dp_limit));
   return txn_shadow_cursors(parent, MAIN_DBI);
 }
@@ -463,8 +463,8 @@ int txn_nested_create(MDBX_txn *parent, bool readonly) {
 }
 
 static int nested_undo(MDBX_txn *nested) {
-  cASSERT0(nested, !nested->nested && !(nested->flags & MDBX_TXN_HAS_CHILD));
-  cASSERT0(nested, rkl_empty(&nested->wr.gc.comeback));
+  tASSERT0(nested, !nested->nested && !(nested->flags & MDBX_TXN_HAS_CHILD));
+  tASSERT0(nested, rkl_empty(&nested->wr.gc.comeback));
   if (nested->flags & txn_may_have_cursors)
     txn_done_cursors(nested);
   if (nested->flags & MDBX_TXN_DIRTY)
@@ -472,7 +472,7 @@ static int nested_undo(MDBX_txn *nested) {
 
   MDBX_txn *const parent = nested->parent;
   if (nested->wr.retired_pages) {
-    cASSERT0(parent, pnl_size(nested->wr.retired_pages) >= (uintptr_t)parent->wr.retired_pages);
+    tASSERT0(parent, pnl_size(nested->wr.retired_pages) >= (uintptr_t)parent->wr.retired_pages);
     pnl_setsize(nested->wr.retired_pages, (uintptr_t)parent->wr.retired_pages);
     parent->wr.retired_pages = nested->wr.retired_pages;
   }
@@ -503,17 +503,17 @@ static int nested_undo(MDBX_txn *nested) {
 }
 
 static void nested_free(MDBX_txn *nested) {
-  cASSERT0(nested, !(nested->flags & txn_may_have_cursors));
+  tASSERT0(nested, !(nested->flags & txn_may_have_cursors));
   MDBX_env *const env = nested->env;
   MDBX_txn *const parent = nested->parent;
-  cASSERT0(parent, parent->flags & MDBX_TXN_HAS_CHILD);
+  tASSERT0(parent, parent->flags & MDBX_TXN_HAS_CHILD);
   env->txn = parent;
   parent->nested = nullptr;
   parent->flags -= MDBX_TXN_HAS_CHILD;
   nested->signature = 0;
   nested->owner = 0;
 
-  cASSERT0(nested, rkl_empty(&nested->wr.gc.comeback));
+  tASSERT0(nested, rkl_empty(&nested->wr.gc.comeback));
   rkl_destroy(&nested->wr.gc.reclaimed);
   rkl_destroy(&nested->wr.gc.ready4reuse);
 
@@ -646,8 +646,8 @@ static int nested_join(MDBX_txn *nested, struct commit_timestamp *ts) {
 
     tASSERT1(nested, memcmp(&parent->geo, &nested->geo, sizeof(parent->geo)) == 0);
     tASSERT1(nested, memcmp(&parent->canary, &nested->canary, sizeof(parent->canary)) == 0);
-    cASSERT0(nested, !nested->wr.spilled.list || pnl_size(nested->wr.spilled.list) == 0);
-    cASSERT0(nested, nested->wr.loose_count == 0);
+    tASSERT0(nested, !nested->wr.spilled.list || pnl_size(nested->wr.spilled.list) == 0);
+    tASSERT0(nested, nested->wr.loose_count == 0);
   }
 
   nested->flags = MDBX_TXN_FINISHED;
@@ -677,7 +677,7 @@ int txn_nested_checkpoint(MDBX_txn *nested, struct commit_timestamp *ts) {
     nested->wr.loose_count = 0;
     nested->wr.loose_pages = nullptr;
     rc = nested_start(nested, parent);
-    cASSERT0(nested, nested->env->txn == nested);
+    tASSERT0(nested, nested->env->txn == nested);
   }
   if (unlikely(rc != MDBX_SUCCESS))
     txn_nested_abort(nested);
@@ -685,7 +685,7 @@ int txn_nested_checkpoint(MDBX_txn *nested, struct commit_timestamp *ts) {
 }
 
 MDBX_txn *txn_nested_fakero_begin(MDBX_txn *parent) {
-  cASSERT0(parent, (parent->flags & (txn_ro_nested | MDBX_TXN_FINISHED | MDBX_TXN_HAS_CHILD)) == 0);
+  tASSERT0(parent, (parent->flags & (txn_ro_nested | MDBX_TXN_FINISHED | MDBX_TXN_HAS_CHILD)) == 0);
   if (!MDBX_ENABLE_FAKE_NESTED_READONLY_TRANSACTIONS)
     return nullptr;
   parent->wr.preserve_parent_userctx = parent->userctx;
@@ -694,7 +694,7 @@ MDBX_txn *txn_nested_fakero_begin(MDBX_txn *parent) {
 }
 
 int txn_nested_fakero_end(MDBX_txn *nested) {
-  cASSERT0(nested, nested->flags & txn_ro_nested);
+  tASSERT0(nested, nested->flags & txn_ro_nested);
   if (!MDBX_ENABLE_FAKE_NESTED_READONLY_TRANSACTIONS)
     return MDBX_BAD_TXN;
   nested->userctx = nested->wr.preserve_parent_userctx;
@@ -703,8 +703,8 @@ int txn_nested_fakero_end(MDBX_txn *nested) {
 }
 
 int txn_nested_rollback(MDBX_txn *nested) {
-  cASSERT0(nested, nested->flags & txn_ro_nested);
-  cASSERT0(nested, rkl_empty(&nested->wr.gc.comeback));
+  tASSERT0(nested, nested->flags & txn_ro_nested);
+  tASSERT0(nested, rkl_empty(&nested->wr.gc.comeback));
   MDBX_txn *parent = nested->parent;
   if (unlikely(!parent || parent->nested != nested || parent->env != nested->env)) {
     ERROR("attempt to %s %s txn %p", "rollback", "strange nested", __Wpedantic_format_voidptr(nested));

@@ -107,7 +107,7 @@ int tbl_fetch(MDBX_txn *txn, MDBX_cursor *mc, size_t dbi, const MDBX_val *name, 
   memcpy(db, data.iov_base, sizeof(tree_t));
 #if !MDBX_DISABLE_VALIDATION
   const txnid_t maindb_leafpage_txnid = mc->pg[mc->top]->txnid;
-  cASSERT0(txn, txn->front_txnid >= maindb_leafpage_txnid);
+  tASSERT0(txn, txn->front_txnid >= maindb_leafpage_txnid);
   if (unlikely(db->mod_txnid > maindb_leafpage_txnid)) {
     ERROR("db.mod_txnid (%" PRIaTXN ") > page-txnid (%" PRIaTXN ")", db->mod_txnid, maindb_leafpage_txnid);
     return MDBX_CORRUPTED;
@@ -118,7 +118,7 @@ int tbl_fetch(MDBX_txn *txn, MDBX_cursor *mc, size_t dbi, const MDBX_val *name, 
 }
 
 int tbl_create(MDBX_txn *txn, MDBX_cursor *mc, size_t slot, const MDBX_val *name, unsigned db_flags) {
-  cASSERT0(txn, db_flags & MDBX_CREATE);
+  tASSERT0(txn, db_flags & MDBX_CREATE);
   MDBX_val body;
   body.iov_base = memset(&txn->dbs[slot], 0, body.iov_len = sizeof(tree_t));
   txn->dbs[slot].root = P_INVALID;
@@ -130,7 +130,7 @@ int tbl_create(MDBX_txn *txn, MDBX_cursor *mc, size_t slot, const MDBX_val *name
   txn->cursors[MAIN_DBI] = mc->next;
   if (likely(err == MDBX_SUCCESS)) {
     txn->flags |= MDBX_TXN_DIRTY;
-    cASSERT0(txn, (txn->dbi_state[MAIN_DBI] & DBI_DIRTY) != 0);
+    tASSERT0(txn, (txn->dbi_state[MAIN_DBI] & DBI_DIRTY) != 0);
   }
   return err;
 }

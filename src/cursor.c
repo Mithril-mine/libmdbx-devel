@@ -218,14 +218,14 @@ MDBX_cursor *cursor_eot(MDBX_cursor *cursor, MDBX_txn *txn) {
   const unsigned stage = cursor->signature;
   MDBX_cursor *const shadow = cursor->backup;
   ENSURE_OBJ(txn, stage == cur_signature_live || stage == cur_signature_wait4eot);
-  cASSERT0(txn, cursor->txn == txn);
+  tASSERT0(txn, cursor->txn == txn);
   if (shadow) {
     subcur_t *subcur = cursor->subcur;
-    cASSERT0(txn, txn->parent != nullptr && shadow->txn == txn->parent);
+    tASSERT0(txn, txn->parent != nullptr && shadow->txn == txn->parent);
     /* Zap: Using uninitialized memory '*subcur->backup'. */
     MDBX_SUPPRESS_GOOFY_MSVC_ANALYZER(6001);
     ENSURE_OBJ(txn, shadow->signature == cur_signature_live);
-    cASSERT0(txn, subcur == shadow->subcur);
+    tASSERT0(txn, subcur == shadow->subcur);
     if ((txn->flags & MDBX_TXN_ERROR) == 0) {
       /* Update pointers to parent txn */
       cursor->next = shadow->next;
@@ -264,7 +264,7 @@ static __always_inline int couple_init(cursor_couple_t *couple, const MDBX_txn *
                                        kvx_t *const kvx, uint8_t *const dbi_state) {
 
   VALGRIND_MAKE_MEM_UNDEFINED(couple, sizeof(cursor_couple_t));
-  cASSERT0(txn, F_ISSET(*dbi_state, DBI_VALID | DBI_LINDO));
+  tASSERT0(txn, F_ISSET(*dbi_state, DBI_VALID | DBI_LINDO));
 
   couple->outer.signature = cur_signature_live;
   couple->outer.next = &couple->outer;
@@ -290,7 +290,7 @@ static __always_inline int couple_init(cursor_couple_t *couple, const MDBX_txn *
     mx->cursor.txn = (MDBX_txn *)txn;
     mx->cursor.tree = &mx->nested_tree;
     mx->cursor.clc = ptr_disp(couple->outer.clc, sizeof(clc_t));
-    cASSERT0(txn, &mx->cursor.clc->k == &kvx->clc.v);
+    tASSERT0(txn, &mx->cursor.clc->k == &kvx->clc.v);
     mx->cursor.dbi_state = dbi_state;
     mx->cursor.top_and_flags = z_fresh_mark | z_inner;
     STATIC_ASSERT(MDBX_DUPFIXED * 2 == P_DUPFIX);

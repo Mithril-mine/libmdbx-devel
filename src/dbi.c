@@ -7,7 +7,7 @@ static defer_free_item_t *dbi_close_locked(MDBX_env *env, MDBX_dbi dbi);
 
 #if MDBX_ENABLE_DBI_SPARSE
 size_t dbi_bitmap_ctz_fallback(const MDBX_txn *txn, intptr_t bmi) {
-  cASSERT0(txn, bmi != 0);
+  tASSERT0(txn, bmi != 0);
   bmi &= -bmi;
   if (sizeof(txn->dbi_sparse[0]) > 4) {
     static const uint8_t debruijn_ctz64[64] = {0,  1,  2,  53, 3,  7,  54, 27, 4,  38, 41, 8,  34, 55, 48, 28,
@@ -36,7 +36,7 @@ struct dbi_snap_result dbi_snap(const MDBX_env *env, const size_t dbi) {
 }
 
 int dbi_gone(MDBX_txn *txn, const size_t dbi, const int rc) {
-  cASSERT0(txn, txn->n_dbi > dbi && F_ISSET(txn->dbi_state[dbi], DBI_LINDO | DBI_VALID));
+  tASSERT0(txn, txn->n_dbi > dbi && F_ISSET(txn->dbi_state[dbi], DBI_LINDO | DBI_VALID));
   for (;;) {
     unsigned state = txn->dbi_state[dbi];
     txn->dbi_state[dbi] = (txn->dbi_state[dbi] & DBI_SLAIN) | DBI_OLDEN | DBI_LINDO;
@@ -198,7 +198,7 @@ int dbi_defer_release(MDBX_env *const env, defer_free_item_t *const chain) {
 /* Export or close DBI handles opened in this txn. */
 int dbi_update(MDBX_txn *txn, bool commit) {
   MDBX_env *const env = txn->env;
-  cASSERT0(txn, (!txn->parent && txn == env->basal_txn) || !commit);
+  tASSERT0(txn, (!txn->parent && txn == env->basal_txn) || !commit);
   bool locked = false;
   defer_free_item_t *defer_chain = nullptr;
   TXN_FOREACH_DBI_USER(txn, dbi) {
@@ -213,7 +213,7 @@ int dbi_update(MDBX_txn *txn, bool commit) {
         /* хендл был закрыт из другого потока пока захватывали блокировку */
         continue;
     }
-    cASSERT0(txn, dbi < env->n_dbi);
+    tASSERT0(txn, dbi < env->n_dbi);
     if (dbi_changed(txn, dbi))
       continue;
     if (commit && !(txn->dbi_state[dbi] & DBI_SLAIN)) {
@@ -368,7 +368,7 @@ static int dbi_open_locked(MDBX_txn *txn, cursor_couple_t *maindb_cx, unsigned u
   int rc;
 
   /* Cannot mix named table(s) with DUPSORT flags */
-  cASSERT0(txn, (txn->dbi_state[MAIN_DBI] & (DBI_LINDO | DBI_VALID | DBI_STALE)) == (DBI_LINDO | DBI_VALID));
+  tASSERT0(txn, (txn->dbi_state[MAIN_DBI] & (DBI_LINDO | DBI_VALID | DBI_STALE)) == (DBI_LINDO | DBI_VALID));
   if (unlikely(txn->dbs[MAIN_DBI].flags & MDBX_DUPSORT)) {
     if (unlikely((user_flags & MDBX_CREATE) == 0))
       return MDBX_NOTFOUND;
@@ -377,7 +377,7 @@ static int dbi_open_locked(MDBX_txn *txn, cursor_couple_t *maindb_cx, unsigned u
       return MDBX_INCOMPATIBLE;
 
     /* Пересоздаём MainDB когда там пусто. */
-    cASSERT0(txn,
+    tASSERT0(txn,
              txn->dbs[MAIN_DBI].height == 0 && txn->dbs[MAIN_DBI].items == 0 && txn->dbs[MAIN_DBI].root == P_INVALID);
     if (unlikely(txn->cursors[MAIN_DBI]))
       return MDBX_DANGLING_DBI;
@@ -403,7 +403,7 @@ static int dbi_open_locked(MDBX_txn *txn, cursor_couple_t *maindb_cx, unsigned u
     txn->flags |= MDBX_TXN_DIRTY;
   }
 
-  cASSERT0(txn, env->kvs[MAIN_DBI].clc.k.cmp);
+  tASSERT0(txn, env->kvs[MAIN_DBI].clc.k.cmp);
 
   /* Is the DB already open? */
   defer_free_item_t *clone = nullptr;
@@ -519,7 +519,7 @@ static int dbi_open_locked(MDBX_txn *txn, cursor_couple_t *maindb_cx, unsigned u
   name.iov_base = clone;
 
 create:
-  cASSERT0(txn, rc == MDBX_SUCCESS || rc == MDBX_NOTFOUND);
+  tASSERT0(txn, rc == MDBX_SUCCESS || rc == MDBX_NOTFOUND);
   uint8_t dbi_state = DBI_LINDO | DBI_VALID | DBI_FRESH;
   if (unlikely(rc != MDBX_SUCCESS)) {
     rc = tbl_create(txn, &maindb_cx->outer, slot, &name, user_flags);
@@ -683,7 +683,7 @@ int dbi_open(MDBX_txn *txn, const MDBX_val *const name, unsigned user_flags, MDB
     if (unlikely(rc != MDBX_SUCCESS))
       return rc;
 
-    cASSERT0(txn, F_ISSET(txn->dbi_state[slot], DBI_LINDO | DBI_VALID));
+    tASSERT0(txn, F_ISSET(txn->dbi_state[slot], DBI_LINDO | DBI_VALID));
     if (txn->dbi_state[slot] & DBI_STALE) {
       rc = tbl_fetch(txn, &cx.outer, fastpath_slot = slot, name, user_flags);
       if (unlikely(rc != MDBX_SUCCESS)) {
@@ -800,7 +800,7 @@ static defer_free_item_t *dbi_close_locked(MDBX_env *env, MDBX_dbi dbi) {
 __cold const tree_t *dbi_dig(const MDBX_txn *txn, const size_t dbi, tree_t *fallback) {
   const MDBX_txn *dig = txn;
   do {
-    cASSERT0(txn, txn->n_dbi == dig->n_dbi);
+    tASSERT0(txn, txn->n_dbi == dig->n_dbi);
     const uint8_t state = dbi_state(dig, dbi);
     if (state & DBI_LINDO)
       switch (state & (DBI_VALID | DBI_STALE | DBI_OLDEN | DBI_SLAIN)) {
@@ -814,7 +814,7 @@ __cold const tree_t *dbi_dig(const MDBX_txn *txn, const size_t dbi, tree_t *fall
       case DBI_OLDEN | DBI_STALE:
         break;
       default:
-        cASSERT0(txn, !!"unexpected dig->dbi_state[dbi]");
+        tASSERT0(txn, !!"unexpected dig->dbi_state[dbi]");
       }
     dig = dig->parent;
   } while (dig);

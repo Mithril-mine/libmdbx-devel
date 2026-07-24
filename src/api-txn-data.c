@@ -289,7 +289,7 @@ int mdbx_put(MDBX_txn *txn, MDBX_dbi dbi, const MDBX_val *key, MDBX_val *data, M
       /* LY: allows update (explicit overwrite) only for unique keys */
       node_t *node = page_node(cx.outer.pg[cx.outer.top], cx.outer.ki[cx.outer.top]);
       if (node_flags(node) & N_DUP) {
-        cASSERT0(txn, inner_pointed(&cx.outer) && cx.outer.subcur->nested_tree.items > 1);
+        tASSERT0(txn, inner_pointed(&cx.outer) && cx.outer.subcur->nested_tree.items > 1);
         rc = MDBX_EMULTIVAL;
         if ((flags & MDBX_NOOVERWRITE) == 0) {
           flags -= MDBX_CURRENT;
@@ -397,7 +397,7 @@ int mdbx_replace_ex(MDBX_txn *txn, MDBX_dbi dbi, const MDBX_val *key, MDBX_val *
           /* disallow update/delete for multi-values */
           node_t *node = page_node(page, cx.outer.ki[cx.outer.top]);
           if (node_flags(node) & N_DUP) {
-            cASSERT0(txn, inner_pointed(&cx.outer) && cx.outer.subcur->nested_tree.items > 1);
+            tASSERT0(txn, inner_pointed(&cx.outer) && cx.outer.subcur->nested_tree.items > 1);
             if (cx.outer.subcur->nested_tree.items > 1) {
               rc = MDBX_EMULTIVAL;
               goto bailout;

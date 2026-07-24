@@ -139,16 +139,20 @@ __extern_C MDBX_NORETURN void panic_at_fmt(const struct MDBX_panic_point *const 
       ENSURE_OBJ(obj, expr);                                                                                           \
   } while (0)
 
+MDBX_MAYBE_UNUSED static inline const void *txn2obj(const MDBX_txn *txn) { return txn; }
+MDBX_MAYBE_UNUSED static inline const void *cursor2obj(const MDBX_cursor *mc) { return mc; }
+MDBX_MAYBE_UNUSED static inline const void *env2obj(const MDBX_env *env) { return env; }
+
 #define ASSERT(expr) CHECK0(expr)
-#define eASSERT0(env, expr) CHECK0_OBJ(env, expr)
-#define eASSERT1(env, expr) CHECK1_OBJ(env, expr)
-#define eASSERT2(env, expr) CHECK2_OBJ(env, expr)
-#define tASSERT0(txn, expr) CHECK0_OBJ(txn, expr)
-#define tASSERT1(txn, expr) CHECK1_OBJ(txn, expr)
-#define tASSERT2(txn, expr) CHECK2_OBJ(txn, expr)
-#define cASSERT0(mc, expr) CHECK0_OBJ(mc, expr)
-#define cASSERT1(mc, expr) CHECK1_OBJ(mc, expr)
-#define cASSERT2(mc, expr) CHECK2_OBJ(mc, expr)
+#define eASSERT0(env, expr) CHECK0_OBJ(env2obj(env), expr)
+#define eASSERT1(env, expr) CHECK1_OBJ(env2obj(env), expr)
+#define eASSERT2(env, expr) CHECK2_OBJ(env2obj(env), expr)
+#define tASSERT0(txn, expr) CHECK0_OBJ(txn2obj(txn), expr)
+#define tASSERT1(txn, expr) CHECK1_OBJ(txn2obj(txn), expr)
+#define tASSERT2(txn, expr) CHECK2_OBJ(txn2obj(txn), expr)
+#define cASSERT0(mc, expr) CHECK0_OBJ(cursor2obj(mc), expr)
+#define cASSERT1(mc, expr) CHECK1_OBJ(cursor2obj(mc), expr)
+#define cASSERT2(mc, expr) CHECK2_OBJ(cursor2obj(mc), expr)
 
 /* --------------------------------------------------------------------------------------------------------------- */
 

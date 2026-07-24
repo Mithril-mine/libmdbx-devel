@@ -691,7 +691,7 @@ __hot static pgno_t repnl_get_single(MDBX_txn *txn) {
 }
 
 __hot pgno_t gc_repnl_get_single(MDBX_txn *txn) {
-  cASSERT0(txn, (txn->flags & txn_ro_both) == 0);
+  tASSERT0(txn, (txn->flags & txn_ro_both) == 0);
   return pnl_size(txn->wr.repnl) ? repnl_get_single(txn) : 0;
 }
 
@@ -1473,8 +1473,8 @@ done:
 
 __hot pgr_t gc_alloc_single(const MDBX_cursor *const mc) {
   MDBX_txn *const txn = mc->txn;
-  cASSERT0(txn, mc->txn->flags & MDBX_TXN_DIRTY);
-  cASSERT0(txn, F_ISSET(*cursor_dbi_state(mc), DBI_LINDO | DBI_VALID | DBI_DIRTY));
+  tASSERT0(txn, mc->txn->flags & MDBX_TXN_DIRTY);
+  tASSERT0(txn, F_ISSET(*cursor_dbi_state(mc), DBI_LINDO | DBI_VALID | DBI_DIRTY));
 
   /* If there are any loose pages, just use them */
   while (likely(txn->wr.loose_pages)) {
@@ -1492,8 +1492,8 @@ __hot pgr_t gc_alloc_single(const MDBX_cursor *const mc) {
     txn->wr.loose_pages = page_next(lp);
     txn->wr.loose_count--;
     DEBUG_EXTRA("db %d use loose page %" PRIaPGNO, cursor_dbi_dbg(mc), lp->pgno);
-    cASSERT0(txn, lp->pgno < txn->geo.first_unallocated);
-    cASSERT0(txn, lp->pgno >= NUM_METAS);
+    tASSERT0(txn, lp->pgno < txn->geo.first_unallocated);
+    tASSERT0(txn, lp->pgno >= NUM_METAS);
     VALGRIND_MAKE_MEM_UNDEFINED(page2payload(lp), page_space(txn->env));
     lp->txnid = txn->front_txnid;
     pgr_t ret = {lp, MDBX_SUCCESS};

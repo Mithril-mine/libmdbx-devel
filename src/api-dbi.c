@@ -60,8 +60,8 @@ __cold int mdbx_drop(MDBX_txn *txn, MDBX_dbi dbi, bool del) {
       rc = cursor_del(&cx.outer, N_TREE);
       txn->cursors[MAIN_DBI] = cx.outer.next;
       if (likely(rc == MDBX_SUCCESS)) {
-        cASSERT0(txn, txn->dbi_state[MAIN_DBI] & DBI_DIRTY);
-        cASSERT0(txn, txn->flags & MDBX_TXN_DIRTY);
+        tASSERT0(txn, txn->dbi_state[MAIN_DBI] & DBI_DIRTY);
+        tASSERT0(txn, txn->flags & MDBX_TXN_DIRTY);
         if ((txn->dbi_state[dbi] & (DBI_CREAT | DBI_FRESH)) == 0) {
           /* postpone closing until txn commit */
           txn->dbi_state[dbi] = DBI_SLAIN | DBI_LINDO;

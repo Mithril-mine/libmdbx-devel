@@ -128,7 +128,7 @@ __hot int coherency_fetch_head(MDBX_txn *txn, const meta_ptr_t head, uint64_t *t
     }
     txn->dbs[FREE_DBI].flags &= DB_PERSISTENT_FLAGS;
   }
-  cASSERT0(txn, txn->dbs[FREE_DBI].flags == MDBX_INTEGERKEY);
+  tASSERT0(txn, txn->dbs[FREE_DBI].flags == MDBX_INTEGERKEY);
   tASSERT1(txn, check_table_flags(txn->dbs[MAIN_DBI].flags));
   return MDBX_SUCCESS;
 }
