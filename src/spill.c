@@ -3,8 +3,17 @@
 
 #include "internals.h"
 
+MDBX_MAYBE_UNUSED static bool spill_check_odd(const MDBX_txn *txn) {
+  for (size_t e = min_unsigned(txn->wr.spilled.least_removed - 1, pnl_size(txn->wr.spilled.list)), i = 1; i <= e; ++i)
+    if (txn->wr.spilled.list[i] & 1)
+      return false;
+  return true;
+}
+
 void spill_remove(MDBX_txn *txn, size_t idx, size_t npages) {
   tASSERT0(txn, idx > 0 && idx <= pnl_size(txn->wr.spilled.list) && txn->wr.spilled.least_removed > 0);
+  tASSERT0(txn, spill_check_odd(txn));
+
   txn->wr.spilled.least_removed = (idx < txn->wr.spilled.least_removed) ? idx : txn->wr.spilled.least_removed;
   txn->wr.spilled.list[idx] |= 1;
   pnl_setsize(txn->wr.spilled.list, pnl_size(txn->wr.spilled.list) - (idx == pnl_size(txn->wr.spilled.list)));
@@ -13,20 +22,24 @@ void spill_remove(MDBX_txn *txn, size_t idx, size_t npages) {
     const pgno_t pgno = (txn->wr.spilled.list[idx] >> 1) + 1;
     if (MDBX_PNL_ASCENDING) {
       if (++idx > pnl_size(txn->wr.spilled.list) || (txn->wr.spilled.list[idx] >> 1) != pgno)
-        return;
+        break;
     } else {
       if (--idx < 1 || (txn->wr.spilled.list[idx] >> 1) != pgno)
-        return;
+        break;
       txn->wr.spilled.least_removed = (idx < txn->wr.spilled.least_removed) ? idx : txn->wr.spilled.least_removed;
     }
     txn->wr.spilled.list[idx] |= 1;
     pnl_setsize(txn->wr.spilled.list, pnl_size(txn->wr.spilled.list) - (idx == pnl_size(txn->wr.spilled.list)));
     --npages;
   }
+
+  tASSERT0(txn, spill_check_odd(txn));
 }
 
 pnl_t spill_purge(MDBX_txn *txn) {
   tASSERT0(txn, txn->wr.spilled.least_removed > 0);
+  tASSERT0(txn, spill_check_odd(txn));
+
   const pnl_t sl = txn->wr.spilled.list;
   if (txn->wr.spilled.least_removed != INT_MAX) {
     size_t len = pnl_size(sl), r, w;
