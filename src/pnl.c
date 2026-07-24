@@ -80,8 +80,8 @@ int pnl_reserve(pnl_t __restrict *__restrict ppnl, const size_t wanna) {
   return MDBX_ENOMEM;
 }
 
-static __always_inline int __must_check_result pnl_append_stepped(unsigned step, __restrict pnl_t *ppnl, pgno_t pgno,
-                                                                  size_t n) {
+static __always_inline int __must_check_result pnl_append_stepped(const unsigned step, __restrict pnl_t *ppnl,
+                                                                  pgno_t pgno, size_t n) {
   ASSERT(n > 0);
   int rc = pnl_need(ppnl, n);
   if (unlikely(rc != MDBX_SUCCESS))
