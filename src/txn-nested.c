@@ -613,7 +613,7 @@ static int nested_join(MDBX_txn *nested, struct commit_timestamp *ts) {
   if (ts)
     ts->prep = osal_monotime();
 
-  if (nested->flags & MDBX_TXN_DIRTY) {
+  if ((nested->flags & MDBX_TXN_DIRTY) || (nested->wr.spilled.list && pnl_size(nested->wr.spilled.list))) {
     parent->geo = nested->geo;
     parent->canary = nested->canary;
     parent->flags |= MDBX_TXN_DIRTY;
