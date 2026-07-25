@@ -328,6 +328,7 @@ static void nested_merge(MDBX_txn *const parent, MDBX_txn *const nested, const s
       parent->wr.spilled.least_removed = nested->wr.spilled.least_removed;
     }
     tASSERT1(parent, txn_dpl_check(parent));
+    nested->wr.spilled.list = nullptr;
   }
 
   if (parent->wr.spilled.list) {
@@ -519,6 +520,7 @@ static void nested_free(MDBX_txn *nested) {
 
   txn_dpl_free(nested);
   pnl_free(nested->wr.repnl);
+  pnl_free(nested->wr.spilled.list);
   osal_free(nested);
 
   tASSERT1(parent, txn_dpl_check(parent));
@@ -562,12 +564,12 @@ static int nested_join(MDBX_txn *nested, struct commit_timestamp *ts) {
     }
 
     if (nested->wr.spilled.list) {
+      spill_purge(nested);
       if (parent->wr.spilled.list) {
         int err = pnl_need(&parent->wr.spilled.list, pnl_size(nested->wr.spilled.list));
         if (unlikely(err != MDBX_SUCCESS))
           return err;
       }
-      spill_purge(nested);
     }
 
     if (unlikely(nested->wr.dirtylist->length + parent->wr.dirtylist->length > parent->wr.dirtylist->detent &&
