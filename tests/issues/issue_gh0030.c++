@@ -6,7 +6,7 @@
 #endif
 
 int main(int, char **) {
-  const mdbx::path testdb = "testdb";
+  const mdbx::path testdb = "issue30";
   mdbx::env::remove(testdb);
   mdbx::env::operate_parameters op(4);
   op.options.enable_validation = true;
