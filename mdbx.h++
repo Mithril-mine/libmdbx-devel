@@ -3275,6 +3275,7 @@ public:
     MDBX_CXX11_CONSTEXPR geometry() noexcept {}
     MDBX_CXX11_CONSTEXPR
     geometry(const geometry &) noexcept = default;
+    MDBX_CXX14_CONSTEXPR geometry &operator=(const geometry &) noexcept = default;
     MDBX_CXX11_CONSTEXPR geometry(intptr_t size_lower, intptr_t size_now = default_value,
                                   intptr_t size_upper = default_value, intptr_t growth_step = default_value,
                                   intptr_t shrink_threshold = default_value, intptr_t pagesize = default_value) noexcept
