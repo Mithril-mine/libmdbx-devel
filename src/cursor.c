@@ -120,6 +120,42 @@ static int touch_dbi(MDBX_cursor *mc) {
   return MDBX_SUCCESS;
 }
 
+MDBX_MAYBE_UNUSED static inline void cursor_stack(const MDBX_cursor *const mc, const char *func, unsigned line,
+                                                  const char *prefix) {
+  MDBX_log_level_t lvl = MDBX_LOG_VERBOSE - 1;
+  if (LOG_ENABLED(lvl)) {
+    debug_log(lvl, func, line, "cursor_stack%s[%i, flags 0x%X]", prefix, mc->top, (uint8_t)mc->flags);
+    for (int i = 0; i <= mc->top; ++i) {
+      char page_flags[16], *pf = page_flags;
+      const page_t *mp = mc->pg[i];
+      if (is_branch(mp))
+        *pf++ = 'B';
+      if (is_leaf(mp))
+        *pf++ = 'L';
+      if (is_dupfix_leaf(mp))
+        *pf++ = 'F';
+      if (is_subpage(mp))
+        *pf++ = 'S';
+      *pf++ = '_';
+
+      if (!is_correct(mc->txn, mp) || page_check(mc, mp) != MDBX_SUCCESS)
+        *pf++ = '!';
+      if (is_frozen(mc->txn, mp))
+        *pf++ = 'f';
+      if (is_shadowed(mc->txn, mp))
+        *pf++ = 'h';
+      if (is_spilled(mc->txn, mp))
+        *pf++ = 's';
+      if (is_modifiable(mc->txn, mp))
+        *pf++ = 'm';
+      *pf = 0;
+      debug_log(lvl, nullptr, 0, "%s%u->%u.%p%s:%u", i ? "," : "", i, mp->pgno, __Wpedantic_format_voidptr(mp),
+                page_flags, mc->ki[i]);
+    }
+    debug_log(lvl, nullptr, 0, "\n");
+  }
+}
+
 __hot int cursor_touch(MDBX_cursor *const mc, const MDBX_val *key, const MDBX_val *data) {
   cASSERT0(mc, (mc->txn->flags & txn_ro_both) == 0);
   cASSERT0(mc, is_pointed(mc) || mc->tree->height == 0);
