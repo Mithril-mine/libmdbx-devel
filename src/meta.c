@@ -227,12 +227,15 @@ static int meta_unsteady(MDBX_env *env, const txnid_t inclusive_upto, const pgno
 
 __cold int meta_wipe_steady(MDBX_env *env, txnid_t inclusive_upto) {
   int err = meta_unsteady(env, inclusive_upto, 0);
+  bool wiped = (err == MDBX_RESULT_TRUE);
   if (likely(!MDBX_IS_ERROR(err)))
     err = meta_unsteady(env, inclusive_upto, 1);
-  if (likely(!MDBX_IS_ERROR(err)))
+  if (likely(!MDBX_IS_ERROR(err))) {
+    wiped |= (err == MDBX_RESULT_TRUE);
     err = meta_unsteady(env, inclusive_upto, 2);
+  }
 
-  if (err == MDBX_RESULT_TRUE) {
+  if (err == MDBX_RESULT_TRUE || wiped) {
     err = MDBX_SUCCESS;
     if (!MDBX_AVOID_MSYNC && (env->flags & MDBX_WRITEMAP)) {
       err = osal_msync(&env->dxb_mmap, 0, pgno_align2os_bytes(env, NUM_METAS), MDBX_SYNC_DATA | MDBX_SYNC_IODQ);
