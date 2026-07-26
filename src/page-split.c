@@ -11,6 +11,8 @@ __hot int page_split(MDBX_cursor *mc, const MDBX_val *const newkey, MDBX_val *co
   DKBUF;
 
   page_t *const mp = mc->pg[mc->top];
+  cASSERT0(mc, !(mp->flags & P_STICKED));
+  mp->flags |= P_STICKED;
   cASSERT0(mc, (mp->flags & P_ILL_BITS) == 0);
 
   DEBUG(">> splitting %s-page %" PRIaPGNO " and adding %zu+%zu [%s] at %i, nkeys %zi", is_leaf(mp) ? "leaf" : "branch",
@@ -25,7 +27,7 @@ __hot int page_split(MDBX_cursor *mc, const MDBX_val *const newkey, MDBX_val *co
     pgr_t npr = page_new(mc, P_BRANCH);
     rc = npr.err;
     if (unlikely(rc != MDBX_SUCCESS))
-      goto done;
+      goto bailout;
     /* shift current top to make room for new parent */
     cASSERT0(mc, mc->tree->height > 0);
 #if MDBX_DEBUG > 0
@@ -45,7 +47,7 @@ __hot int page_split(MDBX_cursor *mc, const MDBX_val *const newkey, MDBX_val *co
     /* Add left (implicit) pointer. */
     rc = node_add_branch(mc, 0, nullptr, mp->pgno);
     if (unlikely(rc != MDBX_SUCCESS))
-      goto done;
+      goto bailout;
 
     mc->top = 1;
   } else {
@@ -104,9 +106,10 @@ __hot int page_split(MDBX_cursor *mc, const MDBX_val *const newkey, MDBX_val *co
   pgr_t npr = page_new(mc, mp->flags);
   rc = npr.err;
   if (unlikely(rc != MDBX_SUCCESS))
-    goto done;
+    goto bailout;
   page_t *const sister = npr.page;
   sister->dupfix_ksize = mp->dupfix_ksize;
+  sister->flags |= P_STICKED;
   DEBUG("new sibling: page %" PRIaPGNO, sister->pgno);
   cursor_couple_t couple;
   MDBX_cursor *const mn = cursor_clone_slightly(mc, &couple);
@@ -195,7 +198,7 @@ __hot int page_split(MDBX_cursor *mc, const MDBX_val *const newkey, MDBX_val *co
       tmp_ki_copy = page_shadow_alloc(mc->txn, 1);
       if (unlikely(!tmp_ki_copy)) {
         rc = MDBX_ENOMEM;
-        goto done;
+        goto bailout;
       }
 
       /* prepare to insert */
@@ -293,7 +296,7 @@ __hot int page_split(MDBX_cursor *mc, const MDBX_val *const newkey, MDBX_val *co
     rc = page_split(mn, &sepkey, nullptr, sister->pgno, 0);
     mn->txn->cursors[cursor_dbi(mn)] = couple.outer.next;
     if (unlikely(rc != MDBX_SUCCESS))
-      goto done;
+      goto bailout;
     cASSERT0(mc, mc->top - top == mc->tree->height - height);
     if (CHECKS2_ENABLED())
       ENSURE_OBJ(mc, cursor_validate_updating(mc) == MDBX_SUCCESS);
@@ -321,7 +324,7 @@ __hot int page_split(MDBX_cursor *mc, const MDBX_val *const newkey, MDBX_val *co
             ERROR("unexpected %i error going left sibling", rc);
             rc = MDBX_PROBLEM;
           }
-          goto done;
+          goto bailout;
         }
       }
     }
@@ -351,7 +354,7 @@ __hot int page_split(MDBX_cursor *mc, const MDBX_val *const newkey, MDBX_val *co
 
     mc->top++;
     if (unlikely(rc != MDBX_SUCCESS))
-      goto done;
+      goto bailout;
 
     node_t *node = page_node(mc->pg[prev_top], mc->ki[prev_top] + (size_t)1);
     cASSERT0(mc, node_pgno(node) == mp->pgno && mc->pg[prev_top] == ptop_page);
@@ -361,7 +364,7 @@ __hot int page_split(MDBX_cursor *mc, const MDBX_val *const newkey, MDBX_val *co
     rc = node_add_branch(mn, mn->ki[prev_top], &sepkey, sister->pgno);
     mn->top += 1;
     if (unlikely(rc != MDBX_SUCCESS))
-      goto done;
+      goto bailout;
   }
 
   if (unlikely(pure_left | pure_right)) {
@@ -376,7 +379,7 @@ __hot int page_split(MDBX_cursor *mc, const MDBX_val *const newkey, MDBX_val *co
       rc = node_add_leaf(mc, 0, newkey, newdata, naf);
     }
     if (unlikely(rc != MDBX_SUCCESS))
-      goto done;
+      goto bailout;
 
     if (pure_right) {
       for (intptr_t i = 0; i < mc->top; i++)
@@ -392,7 +395,7 @@ __hot int page_split(MDBX_cursor *mc, const MDBX_val *const newkey, MDBX_val *co
             rc = tree_propagate_key(mc, newkey);
             mc->top += (int8_t)i;
             if (unlikely(rc != MDBX_SUCCESS))
-              goto done;
+              goto bailout;
           }
           break;
         }
@@ -438,7 +441,7 @@ __hot int page_split(MDBX_cursor *mc, const MDBX_val *const newkey, MDBX_val *co
         rc = node_add_branch(mc, n, n ? &rkey : nullptr, pgno);
       }
       if (unlikely(rc != MDBX_SUCCESS))
-        goto done;
+        goto bailout;
 
       ++n;
       if (++ii > nkeys) {
@@ -523,27 +526,33 @@ __hot int page_split(MDBX_cursor *mc, const MDBX_val *const newkey, MDBX_val *co
     if (inner_pointed(m3) && is_leaf(mp))
       cursor_inner_refresh(m3, m3->pg[mc->top], m3->ki[mc->top]);
   }
+
+  cASSERT0(mc, sister->flags & P_STICKED);
+  sister->flags -= P_STICKED;
   TRACE("mp #%u left: %zd, sister #%u left: %zd", mp->pgno, page_room(mp), sister->pgno, page_room(sister));
 
-done:
+  cASSERT0(mc, rc == MDBX_SUCCESS);
+  if (CHECKS2_ENABLED())
+    ENSURE_OBJ(mc, cursor_validate_updating(mc) == MDBX_SUCCESS);
+  if (unlikely(naf & MDBX_RESERVE)) {
+    node_t *node = page_node(mc->pg[mc->top], mc->ki[mc->top]);
+    if (!(node_flags(node) & N_BIG))
+      newdata->iov_base = node_data(node);
+  }
+  if (MDBX_ENABLE_PGOP_STAT)
+    env->lck->pgops.split.weak += 1;
+
+exit:
+  cASSERT0(mc, mp->flags & P_STICKED);
+  mp->flags -= P_STICKED;
   if (tmp_ki_copy)
     page_shadow_release(env, tmp_ki_copy, 1);
 
-  if (likely(rc == MDBX_SUCCESS)) {
-    if (CHECKS2_ENABLED())
-      ENSURE_OBJ(mc, cursor_validate_updating(mc) == MDBX_SUCCESS);
-    if (unlikely(naf & MDBX_RESERVE)) {
-      node_t *node = page_node(mc->pg[mc->top], mc->ki[mc->top]);
-      if (!(node_flags(node) & N_BIG))
-        newdata->iov_base = node_data(node);
-    }
-    if (MDBX_ENABLE_PGOP_STAT)
-      env->lck->pgops.split.weak += 1;
-  } else {
-    mc->txn->flags |= MDBX_TXN_ERROR;
-    be_poor(mc);
-  }
-
   DEBUG("<< mp #%u, rc %d", mp->pgno, rc);
   return rc;
+
+bailout:
+  mc->txn->flags |= MDBX_TXN_ERROR;
+  be_poor(mc);
+  goto exit;
 }
