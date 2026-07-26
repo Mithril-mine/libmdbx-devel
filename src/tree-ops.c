@@ -4,6 +4,11 @@
 
 #include "internals.h"
 
+MDBX_NOTHROW_PURE_FUNCTION static inline MDBX_cursor *cursor_outer(MDBX_cursor *mc) {
+  cASSERT(mc, mc->flags & z_inner);
+  return &container_of(mc, cursor_couple_t, inner.cursor)->outer;
+}
+
 static MDBX_cursor *cursor_clone(const MDBX_cursor *csrc, cursor_couple_t *couple) {
   cASSERT(csrc, csrc->txn->txnid >= csrc->txn->env->lck->cached_oldest.weak);
   couple->outer.next = nullptr;
@@ -18,6 +23,13 @@ static MDBX_cursor *cursor_clone(const MDBX_cursor *csrc, cursor_couple_t *coupl
 
   MDBX_cursor *cdst = &couple->outer;
   if (is_inner(csrc)) {
+    /* для spill_cursor_keep() нужно чтобы outer-курсор не был poor, иначе клонированный вложенный будет пропущен вместе
+     * с ним и его страницы могут быть вытеснены, что поломает последующие операции на стеке клонированного курсора.
+     * Поэтому должно быть couple->outer.top >= 0, но при этом в стеке курсора должа быть хотя-бы одна страница. */
+    couple->outer.pg[0] = cursor_outer((MDBX_cursor *)csrc)->pg[0];
+    couple->outer.ki[0] = UINT16_MAX;
+    couple->outer.top_and_flags = z_eof_hard | z_disable_tree_search_fastpath;
+
     couple->inner.cursor.next = nullptr;
     couple->inner.cursor.backup = nullptr;
     couple->inner.cursor.subcur = nullptr;
