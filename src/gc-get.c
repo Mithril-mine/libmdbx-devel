@@ -1475,6 +1475,7 @@ __hot pgr_t gc_alloc_single(const MDBX_cursor *const mc) {
   MDBX_txn *const txn = mc->txn;
   tASSERT0(txn, mc->txn->flags & MDBX_TXN_DIRTY);
   tASSERT0(txn, F_ISSET(*cursor_dbi_state(mc), DBI_LINDO | DBI_VALID | DBI_DIRTY));
+  cASSERT0(mc, /* нужно для spill_txn_keep() */ cursor_is_tracked(mc));
 
   /* If there are any loose pages, just use them */
   while (likely(txn->wr.loose_pages)) {

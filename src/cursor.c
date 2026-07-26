@@ -113,7 +113,10 @@ static int touch_dbi(MDBX_cursor *mc) {
     if (unlikely(rc != MDBX_SUCCESS))
       return rc;
     mc->txn->dbi_state[MAIN_DBI] |= DBI_DIRTY;
+    cx.outer.next = mc->txn->cursors[MAIN_DBI];
+    mc->txn->cursors[MAIN_DBI] = &cx.outer;
     rc = tree_search(&cx.outer, &container_of(mc->clc, kvx_t, clc)->name, Z_MODIFY);
+    mc->txn->cursors[MAIN_DBI] = cx.outer.next;
     if (unlikely(rc != MDBX_SUCCESS))
       return rc;
   }

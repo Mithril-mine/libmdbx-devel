@@ -91,7 +91,11 @@ int mdbx_dbi_sequence(MDBX_txn *txn, MDBX_dbi dbi, uint64_t *result, uint64_t in
         rc = cursor_init(&cx.outer, txn, MAIN_DBI);
         if (unlikely(rc != MDBX_SUCCESS))
           return LOG_IFERR(rc);
+
+        cx.outer.next = txn->cursors[MAIN_DBI];
+        txn->cursors[MAIN_DBI] = &cx.outer;
         rc = tree_search(&cx.outer, nullptr, Z_MODIFY | Z_ROOTONLY);
+        txn->cursors[MAIN_DBI] = cx.outer.next;
         if (unlikely(rc != MDBX_SUCCESS))
           return LOG_IFERR(rc);
       }
