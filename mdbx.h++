@@ -1044,9 +1044,9 @@ struct LIBMDBX_API_TYPE slice : public ::MDBX_val {
                   "Must be a standard layout type!");
     if (MDBX_LIKELY(size() == sizeof(POD)))
       MDBX_CXX20_LIKELY {
-        POD r;
-        memcpy(&r, data(), sizeof(r));
-        return r;
+        POD _as_pod_local;
+        memcpy(&_as_pod_local, data(), sizeof(_as_pod_local));
+        return _as_pod_local;
       }
     throw_bad_value_size();
   }
