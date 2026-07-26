@@ -227,7 +227,7 @@ int mdbx_txn_renew(MDBX_txn *txn) {
 
   rc = txn_ro_start(txn, false);
   if (rc == MDBX_SUCCESS) {
-    tASSERT1(txn, txn->owner == (txn->flags & MDBX_NOSTICKYTHREADS) ? 0 : osal_thread_self());
+    tASSERT1(txn, txn->owner == ((txn->flags & MDBX_NOSTICKYTHREADS) ? 0 : osal_thread_self()));
     DEBUG("renew txn %" PRIaTXN "%c %p on env %p, root page %" PRIaPGNO "/%" PRIaPGNO, txn->txnid,
           (txn->flags & txn_ro_flat) ? 'r' : 'w', __Wpedantic_format_voidptr(txn), __Wpedantic_format_voidptr(txn->env),
           txn->dbs[MAIN_DBI].root, txn->dbs[FREE_DBI].root);
