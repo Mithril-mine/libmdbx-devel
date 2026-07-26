@@ -123,6 +123,7 @@ __cold int dxb_resize(MDBX_env *const env, const pgno_t used_pgno, const pgno_t 
   mdbx_handle_array_t *suspended = nullptr;
   mdbx_handle_array_t array_onstack;
 #else
+  bool should_unlock_rdt = false;
   int rc = osal_fastmutex_acquire(&env->remap_guard);
   if (unlikely(rc != MDBX_SUCCESS))
     return rc;
@@ -194,6 +195,7 @@ __cold int dxb_resize(MDBX_env *const env, const pgno_t used_pgno, const pgno_t 
           rc = err;
           goto bailout;
         }
+        should_unlock_rdt = true;
 
         /* looking for readers from this process */
         const size_t snap_nreaders = atomic_load32(&lck->rdt_length, mo_AcquireRelease);
@@ -203,6 +205,7 @@ __cold int dxb_resize(MDBX_env *const env, const pgno_t used_pgno, const pgno_t 
             /* the base address of the mapping can't be changed since
              * the other reader thread from this process exists. */
             lck_rdt_unlock(env);
+            should_unlock_rdt = false;
             mresize_flags &= ~(MDBX_MRESIZE_MAY_UNMAP | MDBX_MRESIZE_MAY_MOVE);
             break;
           }
@@ -333,15 +336,15 @@ bailout:
   }
 
 #if defined(_WIN32) || defined(_WIN64)
-  int err = MDBX_SUCCESS;
   imports.srwl_ReleaseExclusive(&env->remap_guard);
+  int err = MDBX_SUCCESS;
   if (suspended) {
     err = osal_resume_threads_after_remap(suspended);
     if (suspended != &array_onstack)
       osal_free(suspended);
   }
 #else
-  if (env->lck_mmap.lck && (mresize_flags & (MDBX_MRESIZE_MAY_UNMAP | MDBX_MRESIZE_MAY_MOVE)) != 0)
+  if (should_unlock_rdt)
     lck_rdt_unlock(env);
   int err = osal_fastmutex_release(&env->remap_guard);
 #endif /* Windows */
@@ -351,6 +354,7 @@ bailout:
   }
   return rc;
 }
+
 #if defined(ENABLE_MEMCHECK) || defined(__SANITIZE_ADDRESS__)
 void dxb_sanitize_tail(MDBX_env *env, MDBX_txn *txn) {
 #if !defined(__SANITIZE_ADDRESS__)
