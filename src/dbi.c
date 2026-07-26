@@ -35,7 +35,7 @@ struct dbi_snap_result dbi_snap(const MDBX_env *env, const size_t dbi) {
   return r;
 }
 
-int dbi_gone(MDBX_txn *txn, const size_t dbi, const int rc) {
+__cold int dbi_gone(MDBX_txn *txn, const size_t dbi, const int rc) {
   tASSERT0(txn, txn->n_dbi > dbi && F_ISSET(txn->dbi_state[dbi], DBI_LINDO | DBI_VALID));
   for (;;) {
     unsigned state = txn->dbi_state[dbi];
@@ -404,10 +404,10 @@ static int dbi_open_locked(MDBX_txn *txn, cursor_couple_t *maindb_cx, unsigned u
   }
 
   tASSERT0(txn, env->kvs[MAIN_DBI].clc.k.cmp);
-
-  /* Is the DB already open? */
   defer_free_item_t *clone = nullptr;
+
   size_t slot = env->n_dbi;
+  /* Is the DB already open? */
   for (size_t scan = CORE_DBS; scan < env->n_dbi; ++scan) {
     if ((env->dbs_flags[scan] & DB_VALID) == 0) {
       /* Remember this free slot */
@@ -525,27 +525,34 @@ create:
     rc = tbl_create(txn, &maindb_cx->outer, slot, &name, user_flags);
     if (unlikely(rc != MDBX_SUCCESS))
       goto bailout;
-    dbi_state |= DBI_DIRTY | DBI_CREAT;
+    if (clone)
+      dbi_state |= DBI_DIRTY | DBI_CREAT;
   }
 
   /* Got info, register DBI in this txn */
   const uint32_t seq = dbi_seq_next(env, slot);
-  eASSERT0(env, !txn->cursors[slot]);
-  if (clone) {
+  if (clone)
     eASSERT0(env, env->dbs_flags[slot] == DB_POISON && (txn->dbi_state[slot] & (DBI_LINDO | DBI_VALID)) == DBI_LINDO);
-    txn->dbi_state[slot] = dbi_state;
+  else
+    eASSERT0(env, env->dbs_flags[slot] == (DB_VALID | (user_flags & DB_PERSISTENT_FLAGS)) &&
+                      env->dbs_flags[slot] == (DB_VALID | txn->dbs[slot].flags) &&
+                      txn->dbi_state[slot] == (DBI_LINDO | DBI_VALID | DBI_STALE));
+  eASSERT0(env, !txn->cursors[slot]);
+  txn->dbi_state[slot] = dbi_state;
+  if (clone) {
     env->dbs_flags[slot] = txn->dbs[slot].flags;
     rc = dbi_bind(txn, slot, user_flags, keycmp, datacmp);
     if (unlikely(rc != MDBX_SUCCESS))
       goto bailout;
-
     env->kvs[slot].name = name;
-    env->dbs_flags[slot] = txn->dbs[slot].flags | DB_VALID;
-    txn->dbi_seqs[slot] = atomic_store32(&env->dbi_seqs[slot], seq, mo_AcquireRelease);
   } else {
-    eASSERT0(env, env->dbs_flags[slot] == (DB_VALID | (user_flags & DB_PERSISTENT_FLAGS)) &&
-                      env->dbs_flags[slot] == (DB_VALID | txn->dbs[slot].flags) &&
-                      txn->dbi_state[slot] == (DBI_LINDO | DBI_VALID | DBI_STALE));
+    /* Только в случае повторного создания таблицы после её удаления в рамках одной транзакции.
+Поэтому в env состояние хэндла обновлять не нужно, а в txn необходимое уже сделано выше, в том числе был вызван
+dbi_bind(). */
+  }
+  if (env->dbs_flags[slot] != (txn->dbs[slot].flags | DB_VALID)) {
+    txn->dbi_seqs[slot] = atomic_store32(&env->dbi_seqs[slot], seq, mo_AcquireRelease);
+    env->dbs_flags[slot] = txn->dbs[slot].flags | DB_VALID;
   }
 
 done:
@@ -559,21 +566,9 @@ bailout:
   env->dbs_flags[slot] = 0;
   if (clone) {
     eASSERT0(env, !txn->cursors[slot] && !env->kvs[slot].name.iov_len && !env->kvs[slot].name.iov_base);
-    osal_free(clone);
+    env->kvs[slot].name = name;
   }
-  if (slot + 1 == env->n_dbi) {
-    env->n_dbi = (unsigned)slot;
-    do {
-      txn->n_dbi = (unsigned)slot;
-#if MDBX_ENABLE_DBI_SPARSE
-      const size_t bitmap_chunk = CHAR_BIT * sizeof(txn->dbi_sparse[0]);
-      const size_t bitmap_indx = slot / bitmap_chunk;
-      const size_t bitmap_mask = (size_t)1 << slot % bitmap_chunk;
-      txn->dbi_sparse[bitmap_indx] &= ~bitmap_mask;
-#endif /* MDBX_ENABLE_DBI_SPARSE */
-      txn = txn->parent;
-    } while (txn);
-  }
+  *defer_chain = dbi_close_locked(env, slot);
   return rc;
 }
 
