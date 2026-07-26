@@ -162,7 +162,7 @@ int mdbx_txn_renew(MDBX_txn *txn) {
 
   int rc = txn_renew(txn, MDBX_TXN_RDONLY);
   if (rc == MDBX_SUCCESS) {
-    tASSERT(txn, txn->owner == (txn->flags & MDBX_NOSTICKYTHREADS) ? 0 : osal_thread_self());
+    tASSERT(txn, txn->owner == ((txn->flags & MDBX_NOSTICKYTHREADS) ? 0 : osal_thread_self()));
     DEBUG("renew txn %" PRIaTXN "%c %p on env %p, root page %" PRIaPGNO "/%" PRIaPGNO, txn->txnid,
           (txn->flags & MDBX_TXN_RDONLY) ? 'r' : 'w', (void *)txn, (void *)txn->env, txn->dbs[MAIN_DBI].root,
           txn->dbs[FREE_DBI].root);
