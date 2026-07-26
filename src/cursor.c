@@ -454,10 +454,16 @@ MDBX_cursor *cursor_clone_slightly(const MDBX_cursor *csrc, cursor_couple_t *cou
   couple->outer.dbi_state = csrc->dbi_state;
   couple->outer.checking = z_pagecheck;
   couple->outer.tree = nullptr;
-  couple->outer.top_and_flags = 0;
 
   MDBX_cursor *cdst = &couple->outer;
   if (is_inner(csrc)) {
+    /* для spill_cursor_keep() нужно чтобы outer-курсор не был poor, иначе клонированный вложенный будет пропущен вместе
+     * с ним и его страницы могут быть вытеснены, что поломает последующие операции на стеке клонированного курсора.
+     * Поэтому должно быть couple->outer.top >= 0, но при этом в стеке курсора должа быть хотя-бы одна страница. */
+    couple->outer.pg[0] = cursor_outer((MDBX_cursor *)csrc)->pg[0];
+    couple->outer.ki[0] = UINT16_MAX;
+    couple->outer.top_and_flags = z_eof_hard | z_disable_tree_search_fastpath;
+
     couple->inner.cursor.next = nullptr;
     couple->inner.cursor.backup = nullptr;
     couple->inner.cursor.subcur = nullptr;
