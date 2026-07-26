@@ -3,6 +3,7 @@ macro(add_issue_test)
 endmacro(add_issue_test)
 
 add_issue_test(gh0010)
+add_issue_test(gh0011)
 add_issue_test(gh0028)
 add_issue_test(gh0030)
 add_issue_test(gh0033)
