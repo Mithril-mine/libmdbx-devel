@@ -11,12 +11,14 @@
 $(info // The GNU Make $(MAKE_VERSION))
 SHELL         := $(shell env bash -c 'echo $$BASH')
 MAKE_VERx3    := $(shell printf "%3s%3s%3s" $(subst ., ,$(MAKE_VERSION)))
+BASH_VERx2    := $(shell printf "%3s%3s" $$(echo $${BASH_VERSION} | cut -d . -f 1,2 | tr . ' '))
 make_lt_3_81  := $(shell expr "$(MAKE_VERx3)" "<" "  3 81")
 ifneq ($(make_lt_3_81),0)
 $(error Please use GNU Make 3.81 or above)
 endif
 make_ge_4_1   := $(shell expr "$(MAKE_VERx3)" ">=" "  4  1")
 make_ge_4_4   := $(shell expr "$(MAKE_VERx3)" ">=" "  4  4")
+bash_ge_4_3   := $(shell expr "$(BASH_VERx2)" ">=" "  4  3")
 SRC_PROBE_C   := $(shell [ -f mdbx.c ] && echo mdbx.c || echo src/osal.c)
 SRC_PROBE_CXX := $(shell [ -f mdbx.c++ ] && echo mdbx.c++ || echo src/mdbx.c++)
 UNAME         := $(shell uname -s 2>/dev/null || echo Unknown)
@@ -91,10 +93,14 @@ endif
 ifneq ($(make_ge_4_4),1)
 .NOTPARALLEL:
 WAIT         =
-STOCHASTIC   = echo "Skip running stochastic script since Bash service < 4.4"
 else
 WAIT         = .WAIT
+endif
+
+ifeq ($(bash_ge_4_3),1)
 STOCHASTIC   = ./test/stochastic.sh
+else
+STOCHASTIC   = echo "Skip running stochastic script since Bash < 4.3"
 endif
 
 ################################################################################
@@ -345,7 +351,7 @@ smoke-memcheck test-memcheck: MDBX_FORCE_ASSERTIONS=1
 smoke-memcheck test-memcheck: CMAKE_OPT += -DENABLE_UBSAN:BOOL=OFF -DENABLE_ASAN:BOOL=OFF -DENABLE_MEMCHECK:BOOL=ON
 smoke-memcheck test-memcheck: CTEST_OPT += -T memcheck
 test-memcheck: build-test build-stochastic ctest
-	@echo '  RUNNING `tests/stochastic.sh --with-valgrind --loops 2`...'
+	@echo '  RUNNING `test/stochastic.sh --with-valgrind --loops 2`...'
 	$(QUIET)$(STOCHASTIC) --with-valgrind --loops 2 --db-upto-mb 256 --skip-make >$(TEST_LOG) || (cat $(TEST_LOG) && false)
 smoke-memcheck: smoke
 
