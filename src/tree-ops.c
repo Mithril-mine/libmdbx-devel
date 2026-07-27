@@ -939,37 +939,31 @@ retry:
 }
 
 int tree_propagate_key(MDBX_cursor *mc, const MDBX_val *key) {
-  page_t *mp;
-  node_t *node;
-  size_t len;
-  ptrdiff_t delta, ksize, oksize;
-  intptr_t ptr, i, nkeys, indx;
-  DKBUF_DEBUG;
-
   cASSERT0(mc, cursor_is_tracked(mc));
-  indx = mc->ki[mc->top];
-  mp = mc->pg[mc->top];
-  node = page_node(mp, indx);
-  ptr = mp->entries[indx];
+  const intptr_t indx = mc->ki[mc->top];
+  page_t *const mp = mc->pg[mc->top];
+  node_t *node = page_node(mp, indx);
+  const intptr_t offset = mp->entries[indx];
 #if MDBX_DEBUG > 0
+  DKBUF_DEBUG;
   MDBX_val k2;
   k2.iov_base = node_key(node);
   k2.iov_len = node_ks(node);
-  DEBUG("update key %zi (offset %zu) [%s] to [%s] on page %" PRIaPGNO, indx, ptr, DVAL_DEBUG(&k2), DKEY_DEBUG(key),
+  DEBUG("update key %zi (offset %zu) [%s] to [%s] on page %" PRIaPGNO, indx, offset, DVAL_DEBUG(&k2), DKEY_DEBUG(key),
         mp->pgno);
 #endif /* MDBX_DEBUG */
 
   /* Sizes must be 2-byte aligned. */
-  ksize = EVEN_CEIL(key->iov_len);
-  oksize = EVEN_CEIL(node_ks(node));
-  delta = ksize - oksize;
+  const size_t new_ksize = EVEN_CEIL(key->iov_len);
+  const size_t old_ksize = EVEN_CEIL(node_ks(node));
+  const ptrdiff_t delta = new_ksize - old_ksize;
 
   /* Shift node contents if EVEN_CEIL(key length) changed. */
   if (delta) {
-    if (delta > (int)page_room(mp)) {
+    if (unlikely(delta > (ptrdiff_t)page_room(mp))) {
       /* not enough space left, do a delete and split */
       DEBUG("Not enough room, delta = %zd, splitting...", delta);
-      pgno_t pgno = node_pgno(node);
+      const pgno_t pgno = node_pgno(node);
       node_del(mc, 0);
       int err = page_split(mc, key, nullptr, pgno, MDBX_SPLIT_REPLACE);
       if (err == MDBX_SUCCESS && CHECKS2_ENABLED())
@@ -977,24 +971,24 @@ int tree_propagate_key(MDBX_cursor *mc, const MDBX_val *key) {
       return err;
     }
 
-    nkeys = page_numkeys(mp);
-    for (i = 0; i < nkeys; i++) {
-      if (mp->entries[i] <= ptr) {
+    const size_t nkeys = page_numkeys(mp);
+    for (size_t i = 0; i < nkeys; i++) {
+      if (mp->entries[i] <= offset) {
         cASSERT0(mc, mp->entries[i] >= delta);
         mp->entries[i] -= (indx_t)delta;
       }
     }
 
     void *const base = ptr_disp(mp, mp->upper + PAGEHDRSZ);
-    len = ptr - mp->upper + NODESIZE;
-    memmove(ptr_disp(base, -delta), base, len);
+    const size_t bottom_half = offset - mp->upper + NODESIZE;
+    memmove(ptr_disp(base, -delta), base, bottom_half);
     cASSERT0(mc, mp->upper >= delta);
     mp->upper -= (indx_t)delta;
 
     node = page_node(mp, indx);
   }
 
-  /* But even if no shift was needed, update ksize */
+  /* But even if no shift was needed, update key size */
   node_set_ks(node, key->iov_len);
 
   if (likely(key->iov_len /* to avoid UBSAN traps*/ != 0))
