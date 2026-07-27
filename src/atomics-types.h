@@ -35,7 +35,8 @@
 /* Embarcadero Clang falls back to Dinkumware stdatomic.h on x86.
  * Fix incompatible atomic_* expansions for volatile _Atomic objects:
  * Dinkumware macros do (pobj)->_Atom which breaks on scalar _Atomic.
- * Use Clang __c11_atomic_* builtins directly instead. */
+ * Use Clang __c11_atomic_* builtins directly instead.
+ * Provide missing fence and memory-order macros for C mode. */
 #undef atomic_is_lock_free
 #define atomic_is_lock_free(obj) __c11_atomic_is_lock_free(sizeof(*(obj)))
 #undef atomic_store_explicit
@@ -47,6 +48,14 @@
   __c11_atomic_compare_exchange_strong((obj), (exp), (val), __ATOMIC_SEQ_CST, __ATOMIC_SEQ_CST)
 #undef atomic_fetch_add
 #define atomic_fetch_add(obj, val) __c11_atomic_fetch_add((obj), (val), __ATOMIC_SEQ_CST)
+#undef atomic_thread_fence
+#define atomic_thread_fence(ord) __c11_atomic_thread_fence(ord)
+#ifndef memory_order_relaxed
+#define memory_order_relaxed __ATOMIC_RELAXED
+#define memory_order_acquire __ATOMIC_ACQUIRE
+#define memory_order_release __ATOMIC_RELEASE
+#define memory_order_seq_cst __ATOMIC_SEQ_CST
+#endif
 #define MDBX_HAVE_C11ATOMICS
 /* #endif __CODEGEARC__ */
 
