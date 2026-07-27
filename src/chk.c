@@ -994,11 +994,11 @@ __cold static int chk_db(MDBX_chk_scope_t *const scope, MDBX_dbi dbi, MDBX_chk_t
                    (chk->flags & MDBX_CHK_IGNORE_ORDER) ? cmp_equal_or_greater : nullptr,
                    (chk->flags & MDBX_CHK_IGNORE_ORDER) ? cmp_equal_or_greater : nullptr);
     if (unlikely(err)) {
-      cASSERT0(txn, dbi >= txn->env->n_dbi || (txn->env->dbs_flags[dbi] & DB_VALID) == 0);
+      tASSERT0(txn, dbi >= txn->env->n_dbi || (txn->env->dbs_flags[dbi] & DB_VALID) == 0);
       chk_error_rc(scope, err, "mdbx_dbi_open");
       goto bailout;
     }
-    cASSERT0(txn, dbi < txn->env->n_dbi && (txn->env->dbs_flags[dbi] & DB_VALID) != 0);
+    tASSERT0(txn, dbi < txn->env->n_dbi && (txn->env->dbs_flags[dbi] & DB_VALID) != 0);
   }
 
   const tree_t *const db = txn->dbs + dbi;
@@ -1474,7 +1474,7 @@ __cold static int env_chk(MDBX_chk_scope_t *const scope) {
       line = chk_line_feed(chk_print_size(line, "-", chk->envinfo.mi_geo.shrink, nullptr));
       line = chk_print_size(line, "current datafile: ", chk->envinfo.mi_geo.current, nullptr);
     }
-    cASSERT0(txn, txn->geo.now == chk->envinfo.mi_geo.current / chk->envinfo.mi_dxb_pagesize);
+    tASSERT0(txn, txn->geo.now == chk->envinfo.mi_geo.current / chk->envinfo.mi_dxb_pagesize);
     chk_line_end(chk_print(line, ", %u pages", txn->geo.now));
 #if IS_WINDOWS || MDBX_DEBUG > 0
     if (txn->geo.shrink_pv && txn->geo.now != txn->geo.upper && scope->verbosity >= MDBX_chk_verbose) {

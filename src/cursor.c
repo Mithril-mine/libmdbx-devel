@@ -113,11 +113,50 @@ static int touch_dbi(MDBX_cursor *mc) {
     if (unlikely(rc != MDBX_SUCCESS))
       return rc;
     mc->txn->dbi_state[MAIN_DBI] |= DBI_DIRTY;
+    cx.outer.next = mc->txn->cursors[MAIN_DBI];
+    mc->txn->cursors[MAIN_DBI] = &cx.outer;
     rc = tree_search(&cx.outer, &container_of(mc->clc, kvx_t, clc)->name, Z_MODIFY);
+    mc->txn->cursors[MAIN_DBI] = cx.outer.next;
     if (unlikely(rc != MDBX_SUCCESS))
       return rc;
   }
   return MDBX_SUCCESS;
+}
+
+MDBX_MAYBE_UNUSED static inline void cursor_stack(const MDBX_cursor *const mc, const char *func, unsigned line,
+                                                  const char *prefix) {
+  MDBX_log_level_t lvl = MDBX_LOG_VERBOSE - 1;
+  if (LOG_ENABLED(lvl)) {
+    debug_log(lvl, func, line, "cursor_stack%s[%i, flags 0x%X]", prefix, mc->top, (uint8_t)mc->flags);
+    for (int i = 0; i <= mc->top; ++i) {
+      char page_flags[16], *pf = page_flags;
+      const page_t *mp = mc->pg[i];
+      if (is_branch(mp))
+        *pf++ = 'B';
+      if (is_leaf(mp))
+        *pf++ = 'L';
+      if (is_dupfix_leaf(mp))
+        *pf++ = 'F';
+      if (is_subpage(mp))
+        *pf++ = 'S';
+      *pf++ = '_';
+
+      if (!is_correct(mc->txn, mp) || page_check(mc, mp) != MDBX_SUCCESS)
+        *pf++ = '!';
+      if (is_frozen(mc->txn, mp))
+        *pf++ = 'f';
+      if (is_shadowed(mc->txn, mp))
+        *pf++ = 'h';
+      if (is_spilled(mc->txn, mp))
+        *pf++ = 's';
+      if (is_modifiable(mc->txn, mp))
+        *pf++ = 'm';
+      *pf = 0;
+      debug_log(lvl, nullptr, 0, "%s%u->%u.%p%s:%u", i ? "," : "", i, mp->pgno, __Wpedantic_format_voidptr(mp),
+                page_flags, mc->ki[i]);
+    }
+    debug_log(lvl, nullptr, 0, "\n");
+  }
 }
 
 __hot int cursor_touch(MDBX_cursor *const mc, const MDBX_val *key, const MDBX_val *data) {
@@ -218,14 +257,14 @@ MDBX_cursor *cursor_eot(MDBX_cursor *cursor, MDBX_txn *txn) {
   const unsigned stage = cursor->signature;
   MDBX_cursor *const shadow = cursor->backup;
   ENSURE_OBJ(txn, stage == cur_signature_live || stage == cur_signature_wait4eot);
-  cASSERT0(txn, cursor->txn == txn);
+  tASSERT0(txn, cursor->txn == txn);
   if (shadow) {
     subcur_t *subcur = cursor->subcur;
-    cASSERT0(txn, txn->parent != nullptr && shadow->txn == txn->parent);
+    tASSERT0(txn, txn->parent != nullptr && shadow->txn == txn->parent);
     /* Zap: Using uninitialized memory '*subcur->backup'. */
     MDBX_SUPPRESS_GOOFY_MSVC_ANALYZER(6001);
     ENSURE_OBJ(txn, shadow->signature == cur_signature_live);
-    cASSERT0(txn, subcur == shadow->subcur);
+    tASSERT0(txn, subcur == shadow->subcur);
     if ((txn->flags & MDBX_TXN_ERROR) == 0) {
       /* Update pointers to parent txn */
       cursor->next = shadow->next;
@@ -264,7 +303,7 @@ static __always_inline int couple_init(cursor_couple_t *couple, const MDBX_txn *
                                        kvx_t *const kvx, uint8_t *const dbi_state) {
 
   VALGRIND_MAKE_MEM_UNDEFINED(couple, sizeof(cursor_couple_t));
-  cASSERT0(txn, F_ISSET(*dbi_state, DBI_VALID | DBI_LINDO));
+  tASSERT0(txn, F_ISSET(*dbi_state, DBI_VALID | DBI_LINDO));
 
   couple->outer.signature = cur_signature_live;
   couple->outer.next = &couple->outer;
@@ -290,7 +329,7 @@ static __always_inline int couple_init(cursor_couple_t *couple, const MDBX_txn *
     mx->cursor.txn = (MDBX_txn *)txn;
     mx->cursor.tree = &mx->nested_tree;
     mx->cursor.clc = ptr_disp(couple->outer.clc, sizeof(clc_t));
-    cASSERT0(txn, &mx->cursor.clc->k == &kvx->clc.v);
+    tASSERT0(txn, &mx->cursor.clc->k == &kvx->clc.v);
     mx->cursor.dbi_state = dbi_state;
     mx->cursor.top_and_flags = z_fresh_mark | z_inner;
     STATIC_ASSERT(MDBX_DUPFIXED * 2 == P_DUPFIX);
@@ -454,10 +493,16 @@ MDBX_cursor *cursor_clone_slightly(const MDBX_cursor *csrc, cursor_couple_t *cou
   couple->outer.dbi_state = csrc->dbi_state;
   couple->outer.checking = z_pagecheck;
   couple->outer.tree = nullptr;
-  couple->outer.top_and_flags = 0;
 
   MDBX_cursor *cdst = &couple->outer;
   if (is_inner(csrc)) {
+    /* для spill_cursor_keep() нужно чтобы outer-курсор не был poor, иначе клонированный вложенный будет пропущен вместе
+     * с ним и его страницы могут быть вытеснены, что поломает последующие операции на стеке клонированного курсора.
+     * Поэтому должно быть couple->outer.top >= 0, но при этом в стеке курсора должа быть хотя-бы одна страница. */
+    couple->outer.pg[0] = cursor_outer((MDBX_cursor *)csrc)->pg[0];
+    couple->outer.ki[0] = UINT16_MAX;
+    couple->outer.top_and_flags = z_eof_hard | z_disable_tree_search_fastpath;
+
     couple->inner.cursor.next = nullptr;
     couple->inner.cursor.backup = nullptr;
     couple->inner.cursor.subcur = nullptr;
@@ -1328,6 +1373,8 @@ __hot int cursor_put(MDBX_cursor *mc, const MDBX_val *key, MDBX_val *data, unsig
           nested_dupdb.sequence = 0;
           nested_dupdb.mod_txnid = mc->txn->txnid;
           sub_root = mp;
+          fp_flags |= P_STICKED;
+          DEBUG("convert_to_subtree: new-root %p.%u flags 0x%x", __Wpedantic_format_voidptr(mp), mp->pgno, fp_flags);
         }
         if (mp != fp) {
           mp->flags = fp_flags;
@@ -1454,6 +1501,8 @@ insert_node:;
         mx->cursor.top = 0;
         mx->cursor.pg[0] = sub_root;
         mx->cursor.ki[0] = 0;
+        cASSERT0(mc, sub_root->flags & P_STICKED);
+        sub_root->flags -= P_STICKED;
       }
       if (old_singledup.iov_base) {
         /* converted, write the original data first */

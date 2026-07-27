@@ -138,7 +138,7 @@ int mdbx_txn_abort_ex(MDBX_txn *txn, MDBX_commit_latency *latency) {
   if (txn->nested) {
     /* more checks for middle-point abortion case */
     mdbx_txn_abort(txn->nested);
-    cASSERT0(txn, !txn->nested);
+    tASSERT0(txn, !txn->nested);
   }
 
   rc = txn_abort(txn, latency);
@@ -179,7 +179,7 @@ int mdbx_txn_unpark(MDBX_txn *txn, bool restart_if_ousted) {
   if (likely(rc != MDBX_OUSTED) || !restart_if_ousted)
     return LOG_IFERR(rc);
 
-  cASSERT0(txn, txn->flags & MDBX_TXN_FINISHED);
+  tASSERT0(txn, txn->flags & MDBX_TXN_FINISHED);
   rc = txn_ro_start(txn, false);
   return (rc == MDBX_SUCCESS) ? MDBX_RESULT_TRUE : LOG_IFERR(rc);
 }
@@ -227,7 +227,7 @@ int mdbx_txn_renew(MDBX_txn *txn) {
 
   rc = txn_ro_start(txn, false);
   if (rc == MDBX_SUCCESS) {
-    tASSERT1(txn, txn->owner == (txn->flags & MDBX_NOSTICKYTHREADS) ? 0 : osal_thread_self());
+    tASSERT1(txn, txn->owner == ((txn->flags & MDBX_NOSTICKYTHREADS) ? 0 : osal_thread_self()));
     DEBUG("renew txn %" PRIaTXN "%c %p on env %p, root page %" PRIaPGNO "/%" PRIaPGNO, txn->txnid,
           (txn->flags & txn_ro_flat) ? 'r' : 'w', __Wpedantic_format_voidptr(txn), __Wpedantic_format_voidptr(txn->env),
           txn->dbs[MAIN_DBI].root, txn->dbs[FREE_DBI].root);
@@ -364,7 +364,7 @@ int mdbx_txn_commit_embark_read(MDBX_txn **ptxn, MDBX_commit_latency *latency) {
   if (unlikely(wtxn->nested)) {
     /* more checks for middle-point committing case */
     rc = mdbx_txn_commit_ex(wtxn->nested, nullptr);
-    cASSERT0(wtxn, !wtxn->nested);
+    tASSERT0(wtxn, !wtxn->nested);
     if (unlikely(rc != MDBX_SUCCESS)) {
       *ptxn = nullptr;
       mdbx_txn_abort(wtxn);
@@ -399,7 +399,7 @@ int mdbx_txn_commit_embark_read(MDBX_txn **ptxn, MDBX_commit_latency *latency) {
     if (likely(rc == MDBX_SUCCESS)) {
       rtxn = wtxn;
       rtxn->flags |= txn_ro_nested;
-      cASSERT0(rtxn, rtxn->env->txn == rtxn);
+      tASSERT0(rtxn, rtxn->env->txn == rtxn);
     }
   }
   *ptxn = rtxn;
@@ -435,7 +435,7 @@ int mdbx_txn_checkpoint(MDBX_txn *txn, MDBX_txn_flags_t weakening_durability, MD
   if (unlikely(txn->nested)) {
     /* more checks for middle-point committing case */
     rc = mdbx_txn_commit_ex(txn->nested, nullptr);
-    cASSERT0(txn, !txn->nested);
+    tASSERT0(txn, !txn->nested);
     if (unlikely(rc != MDBX_SUCCESS)) {
       mdbx_txn_abort(txn);
       goto done;
@@ -489,7 +489,7 @@ int mdbx_txn_commit_ex(MDBX_txn *txn, MDBX_commit_latency *latency) {
   if (unlikely(txn->nested)) {
     /* more checks for middle-point committing case */
     rc = mdbx_txn_commit_ex(txn->nested, nullptr);
-    cASSERT0(txn, !txn->nested);
+    tASSERT0(txn, !txn->nested);
     if (unlikely(rc != MDBX_SUCCESS)) {
       mdbx_txn_abort(txn);
       goto done;

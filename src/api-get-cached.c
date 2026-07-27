@@ -12,7 +12,7 @@ static inline bool is_outside_dxb(const MDBX_txn *txn, const void *ptr) {
 }
 
 static inline bool is_not_commited(const MDBX_txn *txn, const page_t *mp) {
-  cASSERT0(txn, mp >= (const page_t *)txn->env->dxb_mmap.base &&
+  tASSERT0(txn, mp >= (const page_t *)txn->env->dxb_mmap.base &&
                     mp < (const page_t *)(ptr_disp(txn->env->dxb_mmap.base,
                                                    pgno2bytes(txn->env, txn->geo.first_unallocated))));
   return mp->txnid > txn_basis_snapshot(txn);
@@ -61,8 +61,8 @@ __hot static MDBX_cache_result_t cache_get(const MDBX_txn *txn, MDBX_dbi dbi, co
   if (unlikely(err != MDBX_SUCCESS))
     return cache_error(LOG_IFERR(err));
 
-  cASSERT0(txn, entry->offset || entry->length == 0);
-  cASSERT0(txn, entry->last_confirmed_txnid <= MAX_TXNID);
+  tASSERT0(txn, entry->offset || entry->length == 0);
+  tASSERT0(txn, entry->last_confirmed_txnid <= MAX_TXNID);
   if (unlikely(txn->txnid < entry->trunk_txnid))
     /* the used/read MVCC-snapshot is behind the accessible MVCC-range */
     return cache_fallback(txn, dbi, key, data, MDBX_CACHE_BEHIND);
@@ -105,7 +105,7 @@ __hot static MDBX_cache_result_t cache_get(const MDBX_txn *txn, MDBX_dbi dbi, co
     if (unlikely(err != MDBX_SUCCESS)) {
       if (err == MDBX_NOTFOUND) {
         /* the corresponding table has been deleted */
-        cASSERT0(txn, !entry->offset || trunk_txnid > entry->trunk_txnid);
+        tASSERT0(txn, !entry->offset || trunk_txnid > entry->trunk_txnid);
       not_found:
         data->iov_base = nullptr;
         data->iov_len = 0;
@@ -114,7 +114,7 @@ __hot static MDBX_cache_result_t cache_get(const MDBX_txn *txn, MDBX_dbi dbi, co
           status = MDBX_CACHE_CONFIRMED;
           if (entry->offset || !entry->trunk_txnid) {
             status = MDBX_CACHE_REFRESHED;
-            cASSERT0(txn, (!entry->offset && !entry->trunk_txnid) || trunk_txnid > entry->trunk_txnid);
+            tASSERT0(txn, (!entry->offset && !entry->trunk_txnid) || trunk_txnid > entry->trunk_txnid);
             entry->offset = 0;
             entry->length = 0;
             entry->trunk_txnid = trunk_txnid;
@@ -130,10 +130,10 @@ __hot static MDBX_cache_result_t cache_get(const MDBX_txn *txn, MDBX_dbi dbi, co
   trunk_txnid = tbl_root_txnid(txn, dbi);
   if (trunk_txnid <= entry->last_confirmed_txnid) {
     /* the corresponding table has not been changed since the last check. */
-    cASSERT0(txn, (txn->dbi_state[dbi] & DBI_DIRTY) == 0);
-    cASSERT0(txn, trunk_txnid == entry->trunk_txnid);
+    tASSERT0(txn, (txn->dbi_state[dbi] & DBI_DIRTY) == 0);
+    tASSERT0(txn, trunk_txnid == entry->trunk_txnid);
   confirmed:
-    cASSERT0(txn, trunk_txnid <= committed_snapshot_txnid && trunk_txnid <= entry->last_confirmed_txnid);
+    tASSERT0(txn, trunk_txnid <= committed_snapshot_txnid && trunk_txnid <= entry->last_confirmed_txnid);
     data->iov_base = entry->offset ? ptr_disp(txn->env->dxb_mmap.base, entry->offset) : nullptr;
     data->iov_len = entry->length;
     tASSERT1(txn, (!entry->offset && !entry->length) || is_inside_dxb_and_commited(txn, data->iov_base));
@@ -145,7 +145,7 @@ __hot static MDBX_cache_result_t cache_get(const MDBX_txn *txn, MDBX_dbi dbi, co
 
   if (unlikely(txn->dbs[dbi].root == P_INVALID)) {
     /* the corresponding table is empty now */
-    cASSERT0(txn, !entry->offset || trunk_txnid > entry->trunk_txnid);
+    tASSERT0(txn, !entry->offset || trunk_txnid > entry->trunk_txnid);
     goto not_found;
   }
 
@@ -181,7 +181,7 @@ __hot static MDBX_cache_result_t cache_get(const MDBX_txn *txn, MDBX_dbi dbi, co
             goto not_found;
         }
         trunk_txnid = txn->dbs[dbi].mod_txnid ? txn->dbs[dbi].mod_txnid : txn->front_txnid;
-        cASSERT0(txn, trunk_txnid > entry->trunk_txnid);
+        tASSERT0(txn, trunk_txnid > entry->trunk_txnid);
         goto not_found;
       }
       if (mp->txnid < entry->trunk_txnid) {
@@ -256,7 +256,7 @@ __hot static MDBX_cache_result_t cache_get(const MDBX_txn *txn, MDBX_dbi dbi, co
 
   sfr_t sfr = tree_search_foliage(&cx.outer, &aligned.key);
   if (!sfr.exact) {
-    cASSERT0(txn, !entry->offset || trunk_txnid > entry->trunk_txnid);
+    tASSERT0(txn, !entry->offset || trunk_txnid > entry->trunk_txnid);
     if (sfr.node)
       /* Обновлять метку trunk_txnid можно только если искомый ключ должен был находится на текущей листовой странице,
        * но не в случае когда он болмьше последнего. Тогда trunk_txnid будет связан с родительской страницей и при
@@ -280,12 +280,12 @@ __hot static MDBX_cache_result_t cache_get(const MDBX_txn *txn, MDBX_dbi dbi, co
     return cache_error(LOG_IFERR(err));
 
   if (trunk_txnid > committed_snapshot_txnid) {
-    cASSERT0(txn, trunk_txnid > entry->last_confirmed_txnid && trunk_txnid > entry->trunk_txnid);
+    tASSERT0(txn, trunk_txnid > entry->last_confirmed_txnid && trunk_txnid > entry->trunk_txnid);
     return cache_result(MDBX_SUCCESS, MDBX_CACHE_DIRTY);
   }
 
   tASSERT0(txn, is_inside_dxb_and_commited(txn, data->iov_base));
-  cASSERT0(txn, trunk_txnid <= committed_snapshot_txnid && trunk_txnid > entry->last_confirmed_txnid &&
+  tASSERT0(txn, trunk_txnid <= committed_snapshot_txnid && trunk_txnid > entry->last_confirmed_txnid &&
                     trunk_txnid > entry->trunk_txnid);
   entry->offset = ptr_dist(data->iov_base, txn->env->dxb_mmap.base);
   entry->length = (uint32_t)data->iov_len;
@@ -342,7 +342,7 @@ __hot MDBX_cache_result_t mdbx_cache_get(const MDBX_txn *txn, MDBX_dbi dbi, cons
 
   MDBX_cache_result_t result = cache_get(txn, dbi, key, data, &local);
   if (result.status > MDBX_CACHE_HIT) {
-    cASSERT0(txn, local.last_confirmed_txnid < MAX_TXNID && local.trunk_txnid <= local.last_confirmed_txnid &&
+    tASSERT0(txn, local.last_confirmed_txnid < MAX_TXNID && local.trunk_txnid <= local.last_confirmed_txnid &&
                       local.trunk_txnid > 0);
     while (true) {
       const txnid_t snap = safe64_read((mdbx_atomic_uint64_t *)&entry->last_confirmed_txnid);

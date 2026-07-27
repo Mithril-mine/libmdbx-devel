@@ -110,6 +110,7 @@ public:
     MDBX_CXX11_CONSTEXPR geometry() noexcept {}
     MDBX_CXX11_CONSTEXPR
     geometry(const geometry &) noexcept = default;
+    MDBX_CXX14_CONSTEXPR geometry &operator=(const geometry &) noexcept = default;
     MDBX_CXX11_CONSTEXPR geometry(intptr_t size_lower, intptr_t size_now = default_value,
                                   intptr_t size_upper = default_value, intptr_t growth_step = default_value,
                                   intptr_t shrink_threshold = default_value, intptr_t pagesize = default_value) noexcept
@@ -526,8 +527,10 @@ public:
     subpage_reserve_prereq = MDBX_opt_subpage_reserve_prereq,
     /// \copydoc MDBX_opt_subpage_reserve_limit
     subpage_reserve_limit = MDBX_opt_subpage_reserve_limit,
-    /// \copydoc MDBX_opt_split_reserve
-    split_reserve = MDBX_opt_split_reserve
+    /// \copydoc MDBX_opt_split_reserve,
+    split_reserve = MDBX_opt_split_reserve,
+    /// \copydoc MDBX_opt_presync_threshold
+    presync_threshold = MDBX_opt_presync_threshold
   };
 
   /// \copybrief mdbx_env_set_option()

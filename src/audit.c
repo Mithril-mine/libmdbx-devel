@@ -26,7 +26,7 @@ static size_t audit_db_used(const tree_t *db) {
 
 __cold static int audit_ex_locked(MDBX_txn *txn, const size_t retired_stored, const bool dont_filter_gc) {
   const MDBX_env *const env = txn->env;
-  cASSERT0(txn, (txn->flags & txn_ro_flat) == 0);
+  tASSERT0(txn, (txn->flags & txn_ro_flat) == 0);
   const size_t pending =
       txn->wr.loose_count + pnl_size(txn->wr.repnl) + (pnl_size(txn->wr.retired_pages) - retired_stored);
 
@@ -53,13 +53,13 @@ __cold static int audit_ex_locked(MDBX_txn *txn, const size_t retired_stored, co
   }
   if (rc != MDBX_NOTFOUND)
     ERROR("unexpected gc-cursor rc %d, gc %zu", rc, gc);
-  cASSERT0(txn, rc == MDBX_NOTFOUND);
+  tASSERT0(txn, rc == MDBX_NOTFOUND);
 
   const size_t done_bitmap_size = (txn->n_dbi + CHAR_BIT - 1) / CHAR_BIT;
   if (txn->parent) {
-    cASSERT0(txn, txn->n_dbi == txn->parent->n_dbi && txn->n_dbi == txn->env->txn->n_dbi);
+    tASSERT0(txn, txn->n_dbi == txn->parent->n_dbi && txn->n_dbi == txn->env->txn->n_dbi);
 #if MDBX_ENABLE_DBI_SPARSE
-    cASSERT0(txn, txn->dbi_sparse == txn->parent->dbi_sparse && txn->dbi_sparse == txn->env->txn->dbi_sparse);
+    tASSERT0(txn, txn->dbi_sparse == txn->parent->dbi_sparse && txn->dbi_sparse == txn->env->txn->dbi_sparse);
 #endif /* MDBX_ENABLE_DBI_SPARSE */
   }
 
@@ -73,7 +73,7 @@ __cold static int audit_ex_locked(MDBX_txn *txn, const size_t retired_stored, co
       NUM_METAS + audit_db_used(dbi_dig(txn, FREE_DBI, nullptr)) + audit_db_used(dbi_dig(txn, MAIN_DBI, nullptr));
 
   rc = mdbx_enumerate_tables(txn, audit_dbi, &ctx);
-  cASSERT0(txn, rc == MDBX_SUCCESS);
+  tASSERT0(txn, rc == MDBX_SUCCESS);
 
   for (size_t dbi = CORE_DBS; dbi < txn->n_dbi; ++dbi) {
     if (ctx.done_bitmap[dbi / CHAR_BIT] & (1 << dbi % CHAR_BIT))

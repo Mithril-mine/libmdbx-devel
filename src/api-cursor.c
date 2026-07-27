@@ -193,7 +193,7 @@ int mdbx_cursor_close2(MDBX_cursor *mc) {
         ENSURE_OBJ(txn, (*prev)->signature == cur_signature_live || (*prev)->signature == cur_signature_wait4eot);
         prev = &(*prev)->next;
       }
-      cASSERT0(txn, *prev == mc);
+      tASSERT0(txn, *prev == mc);
       *prev = mc->next;
     }
     mc->next = mc;

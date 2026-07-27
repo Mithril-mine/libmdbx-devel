@@ -135,7 +135,7 @@ int tree_cutoff_twig(MDBX_cursor *mc, const pgno_t pgno, size_t deep, txnid_t pa
         return err;
     }
   } else {
-    tASSERT0(mc, is_leaf(pgr.page));
+    cASSERT0(mc, is_leaf(pgr.page));
     if (!whole_tree) {
 #ifndef NDEBUG
       MDBX_val key;
@@ -155,7 +155,7 @@ int tree_cutoff_twig(MDBX_cursor *mc, const pgno_t pgno, size_t deep, txnid_t pa
       mc->tree->items -= page_numkeys(pgr.page);
     }
     if (mc->tree->large_pages || mc->subcur) {
-      tASSERT0(mc, !is_dupfix_leaf(pgr.page));
+      cASSERT0(mc, !is_dupfix_leaf(pgr.page));
       const size_t leaf_nkeys = page_numkeys(pgr.page);
       for (size_t i = 0; i < leaf_nkeys; ++i) {
         const node_t *const leaf_node = page_node(pgr.page, i);

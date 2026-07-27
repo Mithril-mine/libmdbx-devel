@@ -442,7 +442,7 @@ __hot pgr_t page_get_unchecked(MDBX_txn *const txn, const pgno_t pgno, const txn
 
       if (spiller->flags & MDBX_TXN_DIRTY) {
         const size_t i = txn_dpl_search(spiller, pgno);
-        cASSERT0(txn, (intptr_t)i > 0);
+        tASSERT0(txn, (intptr_t)i > 0);
         if (spiller->wr.dirtylist->items[i].pgno == pgno) {
           r.page = spiller->wr.dirtylist->items[i].ptr;
           break;
@@ -464,7 +464,7 @@ __hot pgr_t page_get_unchecked(MDBX_txn *const txn, const pgno_t pgno, const txn
 static __always_inline pgr_t page_get_inline(const uint16_t ILL, const MDBX_cursor *const mc, const pgno_t pgno,
                                              const txnid_t front) {
   MDBX_txn *const txn = mc->txn;
-  cASSERT0(txn, front <= txn->front_txnid);
+  tASSERT0(txn, front <= txn->front_txnid);
 
   pgr_t r = page_get_unchecked(mc->txn, pgno, front);
   if (likely(r.err == MDBX_SUCCESS)) {

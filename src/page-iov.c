@@ -142,15 +142,15 @@ int iov_write(iov_ctx_t *ctx) {
 
 int iov_page(MDBX_txn *txn, iov_ctx_t *ctx, page_t *dp, size_t npages) {
   MDBX_env *const env = txn->env;
-  cASSERT0(txn, ctx->err == MDBX_SUCCESS);
-  cASSERT0(txn, dp->pgno >= MIN_PAGENO && dp->pgno < txn->geo.first_unallocated);
-  cASSERT0(txn, is_modifiable(txn, dp));
-  cASSERT0(txn, !(dp->flags & ~(P_BRANCH | P_LEAF | P_DUPFIX | P_LARGE)));
+  tASSERT0(txn, ctx->err == MDBX_SUCCESS);
+  tASSERT0(txn, dp->pgno >= MIN_PAGENO && dp->pgno < txn->geo.first_unallocated);
+  tASSERT0(txn, is_modifiable(txn, dp));
+  tASSERT0(txn, !(dp->flags & ~(P_BRANCH | P_LEAF | P_DUPFIX | P_LARGE)));
 
   if (is_shadowed(txn, dp)) {
-    cASSERT0(txn, !(txn->flags & MDBX_WRITEMAP));
+    tASSERT0(txn, !(txn->flags & MDBX_WRITEMAP));
     dp->txnid = txn->txnid;
-    cASSERT0(txn, is_spilled(txn, dp));
+    tASSERT0(txn, is_spilled(txn, dp));
 #if MDBX_AVOID_MSYNC
   doit:;
 #endif /* MDBX_AVOID_MSYNC */
@@ -162,7 +162,7 @@ int iov_page(MDBX_txn *txn, iov_ctx_t *ctx, page_t *dp, size_t npages) {
         return err;
       }
       err = iov_write(ctx);
-      cASSERT0(txn, iov_empty(ctx));
+      tASSERT0(txn, iov_empty(ctx));
       if (likely(err == MDBX_SUCCESS)) {
         err = osal_ioring_add(ctx->ior, pgno2bytes(env, dp->pgno), dp, pgno2bytes(env, npages));
         if (unlikely(err != MDBX_SUCCESS)) {
@@ -170,10 +170,10 @@ int iov_page(MDBX_txn *txn, iov_ctx_t *ctx, page_t *dp, size_t npages) {
           return ctx->err = err;
         }
       }
-      cASSERT0(txn, ctx->err == MDBX_SUCCESS);
+      tASSERT0(txn, ctx->err == MDBX_SUCCESS);
     }
   } else {
-    cASSERT0(txn, txn->flags & MDBX_WRITEMAP);
+    tASSERT0(txn, txn->flags & MDBX_WRITEMAP);
 #if MDBX_AVOID_MSYNC
     goto doit;
 #endif /* MDBX_AVOID_MSYNC */
