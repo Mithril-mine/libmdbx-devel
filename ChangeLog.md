@@ -116,6 +116,21 @@ The supporting release of a stable branch with bug fixes.
 
  - Fixed extra assertion/check inside atomic `safe64_write()`.
 
+ - Fixed assertion parentheses in `mdbx_txn_renew()`.
+
+ - Fixed extra rdt-unlock in the failure path of `dxb_resize()`.
+
+ - Fixed handling a returned intermediate error codes in `meta_wipe_steady()`.
+
+ - Spilling fixed:
+   - Fixed spurious assertion inside `spill_cursor_keep()`.
+   - Fixed committing a pure nested transaction has a spilled pages.
+   - Fixed a case when a prepared GC-slots are spilled-out during `gc_update()`.
+   - Fixed a leak of spilled pages list on a nested transaction abort.
+   - Fixed `cursor_clone_slightly()` so that the clone is compatible with a pages tracking before spilling, in the case when the source is inner.
+   - Introduce `P_STICKED` to marks an unattached pages to a tree to avoid spill-out until finish.
+   - Fixed cursor tracking for all change/touch operations, as the spill could now be triggered by `page_alloc()`.
+
  - C++ API fixes:
     - Fixed ODR-violations warnings from modern GCC while both LTO and UBSAN are enabled.
     - Fixed UTF-8 U+100000..U+10FFFF range checking/decoding inside `mdbx::slice::is_printable()`.
@@ -123,8 +138,9 @@ The supporting release of a stable branch with bug fixes.
     - Fixed missing `enable_validation(flags & MDBX_VALIDATION)` inside `mdbx::env::operate_options::operate_options()`.
     - Fixed off-by-one bugs in the `mdbx::from_base64` and `mdbx::slice::is_printable()`.
     - Fixed possibility of overflow in `mdbx::slice::safe_middle()`.
-    - Added missing implementation `mdbx::cursor::estimate(move_operation operation, const slice &key)`.
     - Fixed UB in case empty array passed to `mdbx::cursor::distribute()`.
+    - Fixed  `enable_validation` in the `std::ostream &operator<<(::std::ostream &, const env::operate_options &)`.
+    - Added missing `mdbx::cursor::estimate(move_operation operation, const slice &key)`, `mdbx::env::extra_runtime_option::presync_threshold` and `mdbx::env::geometry::&operator=()`.
 
 
 --------------------------------------------------------------------------------
