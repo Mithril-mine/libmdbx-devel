@@ -527,7 +527,7 @@ public:
     subpage_reserve_prereq = MDBX_opt_subpage_reserve_prereq,
     /// \copydoc MDBX_opt_subpage_reserve_limit
     subpage_reserve_limit = MDBX_opt_subpage_reserve_limit,
-    /// \copydoc MDBX_opt_split_reserve,
+    /// \copydoc MDBX_opt_split_reserve
     split_reserve = MDBX_opt_split_reserve,
     /// \copydoc MDBX_opt_presync_threshold
     presync_threshold = MDBX_opt_presync_threshold
