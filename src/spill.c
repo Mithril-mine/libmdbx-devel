@@ -73,6 +73,8 @@ static size_t spill_cursor_keep(const MDBX_txn *const txn, const MDBX_cursor *mc
     do {
       mp = mc->pg[i];
       tASSERT(txn, !is_subpage(mp));
+      if (is_frozen(txn, mp))
+        break;
       if (is_modifiable(txn, mp)) {
         size_t const n = dpl_search(txn, mp->pgno);
         if (txn->tw.dirtylist->items[n].pgno == mp->pgno &&
@@ -225,7 +227,7 @@ __cold int spill_slowpath(MDBX_txn *const txn, MDBX_cursor *const m0, const intp
     goto done;
   }
 
-  NOTICE("%s-spilling %zu dirty-entries, %zu dirty-npages", "write", need_spill_entries, need_spill_npages);
+  NOTICE("%s-spilling %zu dirty-entries, %zu dirty-npages", "prepare", need_spill_entries, need_spill_npages);
   MDBX_ANALYSIS_ASSUME(txn->tw.dirtylist != nullptr);
   tASSERT(txn, txn->tw.dirtylist->length - txn->tw.loose_count >= 1);
   tASSERT(txn, txn->tw.dirtylist->pages_including_loose - txn->tw.loose_count >= need_spill_npages);
