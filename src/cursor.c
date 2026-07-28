@@ -1076,23 +1076,32 @@ __hot int cursor_put(MDBX_cursor *mc, const MDBX_val *key, MDBX_val *data, unsig
       void *ptr = page_dupfix_ptr(mc->pg[mc->top], mc->ki[mc->top], ksize);
       memcpy(ptr, key->iov_base, ksize);
     fix_parent:
-      /* if overwriting slot 0 of leaf, need to
-       * update branch key if there is a parent page */
+      /* if overwriting slot 0 of leaf, need to update branch key if there is a parent page */
       if (mc->top && !mc->ki[mc->top]) {
-        size_t dtop = 1;
-        mc->top--;
-        /* slot 0 is always an empty key, find real slot */
-        while (mc->top && !mc->ki[mc->top]) {
-          mc->top--;
-          dtop++;
-        }
+        page_t *save_top_pages[CURSOR_STACK_SIZE];
+        size_t save_count = 0;
+        do
+          save_top_pages[save_count++] = mc->pg[mc->top--];
+        while (mc->top && !mc->ki[mc->top]);
+
         err = MDBX_SUCCESS;
-        if (mc->ki[mc->top])
+        if (mc->ki[mc->top]) {
           err = tree_propagate_key(mc, key);
-        cASSERT0(mc, mc->top + dtop < UINT16_MAX);
-        mc->top += (uint8_t)dtop;
-        if (unlikely(err != MDBX_SUCCESS))
-          return err;
+          if (unlikely(err != MDBX_SUCCESS))
+            return err;
+        }
+
+        if (unlikely(mc->top + save_count >= CURSOR_STACK_SIZE)) {
+          be_poor(mc);
+          return MDBX_CURSOR_FULL;
+        }
+
+        do
+          if (mc->pg[mc->top] != save_top_pages[--save_count]) {
+            mc->pg[++mc->top] = save_top_pages[save_count];
+            mc->ki[mc->top] = 0;
+          }
+        while (save_count);
       }
 
       if (CHECKS2_ENABLED()) {
