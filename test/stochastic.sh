@@ -486,6 +486,8 @@ trap "echo 'SIGPIPE(ignored)'" SIGPIPE
 if [ -z "${TEE4PIPE:-}" ]; then
   TEE4PIPE=$(tee --help | grep -q ' -p' && echo "tee -i -p" || echo "tee -i")
 fi
+export ASAN_OPTIONS="log_path=${TESTDB_DIR}/asan.log:poison_history_size=42"
+export UBSAN_OPTIONS="log_path=${TESTDB_DIR}/ubsan.log:print_stacktrace=1"
 
 function failed {
   set +euo pipefail
