@@ -460,8 +460,7 @@ MDBX_cursor *cursor_cpstk(const MDBX_cursor *csrc, MDBX_cursor *cdst) {
 MDBX_cursor *cursor_copy_position(const MDBX_cursor *csrc, MDBX_cursor *cdst) {
   cursor_cpstk(csrc, cdst);
   if (cdst->subcur) {
-    cdst->subcur->cursor.tree->root = 0;
-    cdst->subcur->cursor.top_and_flags = z_inner | z_poor_mark;
+    inner_gone_unconditional(cdst);
     ASSERT(csrc->subcur);
     if (is_pointed(&csrc->subcur->cursor)) {
       cursor_cpstk(&csrc->subcur->cursor, &cdst->subcur->cursor);
@@ -1726,8 +1725,7 @@ __hot int cursor_del(MDBX_cursor *mc, unsigned flags) {
             const node_t *inner = node;
             if (unlikely(m2->ki[mc->top] >= page_numkeys(mp))) {
               m2->flags |= z_eof_hard | z_eof_soft | z_after_delete;
-              m2->subcur->nested_tree.root = 0;
-              m2->subcur->cursor.top_and_flags = z_inner | z_poor_mark;
+              inner_gone_unconditional(m2);
               continue;
             }
             if (m2->ki[mc->top] != mc->ki[mc->top]) {
@@ -1909,8 +1907,7 @@ __hot csr_t cursor_seek(MDBX_cursor *mc, MDBX_val *key, MDBX_val *data, MDBX_cur
     else {
       node = page_node(mp, 0);
       nodekey = get_key(node);
-      if (mc->subcur)
-        mc->subcur->cursor.top_and_flags = z_inner | z_hollow;
+      inner_gone(mc);
     }
     int cmp = mc->clc->k.cmp(&aligned.key, &nodekey);
     if (cmp >= 0) {
@@ -2695,8 +2692,7 @@ static cdr_t cursor_forward_at(MDBX_cursor *iter, size_t amount, int level) {
       return tdr;
   }
   if (iter->subcur) {
-    iter->subcur->nested_tree.root = 0;
-    iter->subcur->cursor.top_and_flags = z_inner | z_poor_mark;
+    inner_gone_unconditional(iter);
     const node_t *node = page_node(iter->pg[iter->top], iter->ki[iter->top]);
     if ((node_flags(node) & N_DUP)) {
       tdr.err = cursor_dupsort_setup(iter, node, iter->pg[iter->top]);
@@ -2733,8 +2729,7 @@ static cdr_t cursor_backward_at(MDBX_cursor *iter, size_t amount, int level) {
       return tdr;
   }
   if (iter->subcur) {
-    iter->subcur->nested_tree.root = 0;
-    iter->subcur->cursor.top_and_flags = z_inner | z_poor_mark;
+    inner_gone_unconditional(iter);
     const node_t *node = page_node(iter->pg[iter->top], iter->ki[iter->top]);
     if ((node_flags(node) & N_DUP)) {
       tdr.err = cursor_dupsort_setup(iter, node, iter->pg[iter->top]);
@@ -2763,8 +2758,7 @@ int cursor_scroll_forward(MDBX_cursor *mc, intptr_t amount, int level) {
     amount = tdr.distance;
     if (unlikely(err != MDBX_NOTFOUND))
       return err;
-    mc->subcur->nested_tree.root = 0;
-    mc->subcur->cursor.top_and_flags = z_inner | z_poor_mark;
+    inner_gone_unconditional(mc);
   }
 
   while (true) {
@@ -2791,8 +2785,7 @@ int cursor_scroll_forward(MDBX_cursor *mc, intptr_t amount, int level) {
       return cursor_forward_at(&mc->subcur->cursor, amount, level - mc->tree->height).err;
     }
     amount -= mc->subcur->nested_tree.items;
-    mc->subcur->nested_tree.root = 0;
-    mc->subcur->cursor.top_and_flags = z_inner | z_poor_mark;
+    inner_gone_unconditional(mc);
   }
 }
 
@@ -2809,8 +2802,7 @@ int cursor_scroll_backward(MDBX_cursor *mc, intptr_t amount, int level) {
     amount = tdr.distance;
     if (unlikely(err != MDBX_NOTFOUND))
       return err;
-    mc->subcur->nested_tree.root = 0;
-    mc->subcur->cursor.top_and_flags = z_inner | z_poor_mark;
+    inner_gone_unconditional(mc);
   }
 
   while (true) {
@@ -2840,8 +2832,7 @@ int cursor_scroll_backward(MDBX_cursor *mc, intptr_t amount, int level) {
       return cursor_backward_at(&mc->subcur->cursor, amount, level - mc->tree->height).err;
     }
     amount -= mc->subcur->nested_tree.items;
-    mc->subcur->nested_tree.root = 0;
-    mc->subcur->cursor.top_and_flags = z_inner | z_poor_mark;
+    inner_gone_unconditional(mc);
   }
 }
 

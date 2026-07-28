@@ -186,6 +186,12 @@ MDBX_MAYBE_UNUSED MDBX_NOTHROW_PURE_FUNCTION static inline bool inner_hollow(con
   return r;
 }
 
+MDBX_MAYBE_UNUSED static inline void inner_gone_unconditional(MDBX_cursor *mc) {
+  TRACE("reset inner cursor %p", __Wpedantic_format_voidptr(&mc->subcur->cursor));
+  mc->subcur->nested_tree.root = 0;
+  mc->subcur->cursor.top_and_flags = z_inner | z_poor_mark;
+}
+
 MDBX_MAYBE_UNUSED static inline void inner_gone(MDBX_cursor *mc) {
   if (mc->subcur) {
     TRACE("reset inner cursor %p", __Wpedantic_format_voidptr(&mc->subcur->cursor));
