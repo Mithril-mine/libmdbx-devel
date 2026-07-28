@@ -234,15 +234,17 @@ static int node_move(MDBX_cursor *csrc, MDBX_cursor *cdst, bool fromleft) {
       if (unlikely(needed > have))
         return MDBX_RESULT_TRUE;
 
-      if (unlikely((rc = page_touch(csrc)) || (rc = page_touch(cdst))))
-        return rc;
-      psrc = csrc->pg[csrc->top];
-      pdst = cdst->pg[cdst->top];
-
       couple.outer.next = mn->txn->cursors[cursor_dbi(mn)];
       mn->txn->cursors[cursor_dbi(mn)] = &couple.outer;
-      rc = tree_propagate_key(mn, &key);
-      mn->txn->cursors[cursor_dbi(mn)] = couple.outer.next;
+      rc = page_touch(csrc);
+      if (likely(rc == MDBX_SUCCESS))
+        rc = page_touch(cdst);
+      if (likely(rc == MDBX_SUCCESS)) {
+        psrc = csrc->pg[csrc->top];
+        pdst = cdst->pg[cdst->top];
+        rc = tree_propagate_key(mn, &key);
+        mn->txn->cursors[cursor_dbi(mn)] = couple.outer.next;
+      }
       if (unlikely(rc != MDBX_SUCCESS))
         return rc;
     } else {
