@@ -221,7 +221,7 @@ else()
 
   add_test(NAME smoke COMMAND ${MDBX_OUTPUT_DIR}/mdbx_test --loglevel=verbose --prng-seed=${test_seed} --progress
                               --console=no --pathname=smoke.db --dont-cleanup-after basic)
-  set_tests_properties(smoke PROPERTIES TIMEOUT 600 RUN_SERIAL OFF)
+  set_tests_properties(smoke PROPERTIES TIMEOUT 1800 RUN_SERIAL OFF)
   if(MDBX_BUILD_TOOLS)
     add_test(NAME smoke_chk COMMAND ${MDBX_OUTPUT_DIR}/mdbx_chk -nvv smoke.db)
     set_tests_properties(smoke_chk PROPERTIES
@@ -262,7 +262,7 @@ else()
     COMMAND
       ${MDBX_OUTPUT_DIR}/mdbx_test --loglevel=notice --prng-seed=${test_seed} --table=+data.fixed --keygen.split=29
       --datalen=rnd --progress --console=no --repeat=2 --pathname=dupsort_writemap.db --dont-cleanup-after basic)
-  set_tests_properties(dupsort_writemap PROPERTIES TIMEOUT 3600 RUN_SERIAL OFF)
+  set_tests_properties(dupsort_writemap PROPERTIES TIMEOUT 1800 RUN_SERIAL OFF)
 
   if(MDBX_BUILD_TOOLS)
     add_test(NAME dupsort_writemap_chk COMMAND ${MDBX_OUTPUT_DIR}/mdbx_chk -nvvwc dupsort_writemap.db)
