@@ -145,7 +145,7 @@ static int node_move(MDBX_cursor *csrc, MDBX_cursor *cdst, bool fromleft) {
         key4move.iov_base = node_key(lowest_node);
       }
 
-      /* restore cursor after mdbx_page_search_lowest() */
+      /* restore cursor after tree_deepen_lowest() */
       csrc->top = top;
       csrc->ki[csrc->top] = 0;
 
@@ -179,7 +179,7 @@ static int node_move(MDBX_cursor *csrc, MDBX_cursor *cdst, bool fromleft) {
         key.iov_base = node_key(lowest_node);
       }
 
-      /* restore cursor after mdbx_page_search_lowest() */
+      /* restore cursor after tree_deepen_lowest() */
       mn->top = top;
       mn->ki[mn->top] = 0;
 
