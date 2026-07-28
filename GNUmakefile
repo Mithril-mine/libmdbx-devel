@@ -11,13 +11,14 @@
 $(info // The GNU Make $(MAKE_VERSION))
 SHELL         := $(shell env bash -c 'echo $$BASH')
 MAKE_VERx3    := $(shell printf "%3s%3s%3s" $(subst ., ,$(MAKE_VERSION)))
+BASH_VERx2    := $(shell printf "%3s%3s" $$(echo $${BASH_VERSION} | cut -d . -f 1,2 | tr . ' '))
 make_lt_3_81  := $(shell expr "$(MAKE_VERx3)" "<" "  3 81")
 ifneq ($(make_lt_3_81),0)
 $(error Please use GNU Make 3.81 or above)
 endif
 make_ge_4_1   := $(shell expr "$(MAKE_VERx3)" ">=" "  4  1")
 make_ge_4_4   := $(shell expr "$(MAKE_VERx3)" ">=" "  4  4")
-bash_lt_4.3   := $(shell expr "$${BASH_VERSION}" \< "4.3")
+bash_ge_4_3   := $(shell expr "$(BASH_VERx2)" ">=" "  4  3")
 SRC_PROBE_C   := $(shell [ -f mdbx.c ] && echo mdbx.c || echo src/osal.c)
 SRC_PROBE_CXX := $(shell [ -f mdbx.c++ ] && echo mdbx.c++ || echo src/mdbx.c++)
 UNAME         := $(shell uname -s 2>/dev/null || echo Unknown)
@@ -96,10 +97,10 @@ else
 WAIT         = .WAIT
 endif
 
-ifneq ($(bash_lt_4_3),0)
-STOCHASTIC   = echo "Skip running stochastic script since Bash < 4.3"
-else
+ifeq ($(bash_ge_4_3),1)
 STOCHASTIC   = ./tests/stochastic.sh
+else
+STOCHASTIC   = echo "Skip running stochastic script since Bash < 4.3"
 endif
 
 ################################################################################
