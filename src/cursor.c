@@ -1374,7 +1374,6 @@ __hot int cursor_put(MDBX_cursor *mc, const MDBX_val *key, MDBX_val *data, unsig
           nested_dupdb.sequence = 0;
           nested_dupdb.mod_txnid = mc->txn->txnid;
           sub_root = mp;
-          fp_flags |= P_STICKED;
           DEBUG("convert_to_subtree: new-root %p.%u flags 0x%x", __Wpedantic_format_voidptr(mp), mp->pgno, fp_flags);
         }
         if (mp != fp) {
@@ -1502,8 +1501,6 @@ insert_node:;
         mx->cursor.top = 0;
         mx->cursor.pg[0] = sub_root;
         mx->cursor.ki[0] = 0;
-        cASSERT0(mc, sub_root->flags & P_STICKED);
-        sub_root->flags -= P_STICKED;
       }
       if (old_singledup.iov_base) {
         /* converted, write the original data first */

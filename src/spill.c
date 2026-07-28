@@ -140,12 +140,8 @@ MDBX_NOTHROW_PURE_FUNCTION static unsigned spill_prio(const MDBX_txn *txn, const
   }
 
   page_t *const dp = dl->items[i].ptr;
-  if (dp->flags & (P_LOOSE | P_SPILLED | P_STICKED)) {
-    DEBUG("skip %s %zu page %" PRIaPGNO,
-          (dp->flags & P_LOOSE)     ? "loose"
-          : (dp->flags & P_STICKED) ? "sticked"
-                                    : "parent-spilled",
-          npages, pgno);
+  if (dp->flags & (P_LOOSE | P_SPILLED)) {
+    DEBUG("skip %s %zu page %" PRIaPGNO, (dp->flags & P_LOOSE) ? "loose" : "parent-spilled", npages, pgno);
     return 256;
   }
 
