@@ -1205,10 +1205,13 @@ next_gc:
   rkl_t *rkl = &txn->wr.gc.reclaimed;
   const char *rkl_name = "reclaimed";
   if (mc->dbi_state != txn->dbi_state && (MDBX_DEBUG > 0 || gc_may_clean_reclaimed(txn))) {
+    tASSERT0(txn, (txn->flags & txn_nipped) == 0);
     gc->next = txn->cursors[FREE_DBI];
+    txn->flags += txn_nipped;
     txn->cursors[FREE_DBI] = gc;
     ret.err = cursor_del(gc, 0);
     txn->cursors[FREE_DBI] = gc->next;
+    txn->flags -= txn_nipped;
     if (likely(ret.err == MDBX_SUCCESS)) {
       if (unlikely(txn->dbs[FREE_DBI].items == 0)) {
         flags &= ~ALLOC_COALESCE;

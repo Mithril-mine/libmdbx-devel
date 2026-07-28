@@ -12,7 +12,7 @@ N |   MASK  | ENV       | TXN          | DB       | PUT       | DBI        | NOD
 9 |0000 0200| _MAY_UNMAP|              |          |           |            |         |          | <=      |
 10|0000 0400|           |TXN_CURSORS   |          |           |            |         |          |         |
 11|0000 0800|           |TXN_RO_ACCESS |          |           |            |         |          |         |
-12|0000 1000|           |              |          |           |            |         |          |         |
+12|0000 1000|           |TXN_NIPPED    |          |           |            |         |          |         |
 13|0000 2000|VALIDATION |              |          |           |            |         |P_SPILLED |         |
 14|0000 4000|NOSUBDIR   |              |          |           |            |         |P_LOOSE   |         |
 15|0000 8000|           |              |          |           |            |         |P_FROZEN  |         |

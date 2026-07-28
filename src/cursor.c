@@ -166,7 +166,7 @@ __hot int cursor_touch(MDBX_cursor *const mc, const MDBX_val *key, const MDBX_va
 
   cASSERT0(mc, F_ISSET(dbi_state(mc->txn, FREE_DBI), DBI_LINDO | DBI_VALID));
   cASSERT0(mc, F_ISSET(dbi_state(mc->txn, MAIN_DBI), DBI_LINDO | DBI_VALID));
-  if ((mc->flags & z_inner) == 0) {
+  if (!is_inner(mc)) {
     MDBX_txn *const txn = mc->txn;
     txn_dpl_lru_turn(txn);
 
@@ -176,34 +176,36 @@ __hot int cursor_touch(MDBX_cursor *const mc, const MDBX_val *key, const MDBX_va
         return err;
     }
 
-    /* Estimate how much space this operation will take: */
-    /* 1) Max b-tree height, reasonable enough with including dups' sub-tree */
-    size_t need = CURSOR_STACK_SIZE + 3;
-    /* 2) GC/FreeDB for any payload */
-    if (!cursor_is_gc(mc)) {
-      need += txn->dbs[FREE_DBI].height + (size_t)3;
-      /* 3) Named DBs also dirty the main DB */
-      if (!cursor_is_main(mc))
-        need += txn->dbs[MAIN_DBI].height + (size_t)3;
-    }
+    if ((mc->txn->flags & txn_nipped) == 0) {
+      /* Estimate how much space this operation will take: */
+      /* 1) Max b-tree height, reasonable enough with including dups' sub-tree */
+      size_t need = CURSOR_STACK_SIZE + 3;
+      /* 2) GC/FreeDB for any payload */
+      if (!cursor_is_gc(mc)) {
+        need += txn->dbs[FREE_DBI].height + (size_t)3;
+        /* 3) Named DBs also dirty the main DB */
+        if (!cursor_is_main(mc))
+          need += txn->dbs[MAIN_DBI].height + (size_t)3;
+      }
 #if xMDBX_DEBUG_SPILLING != 2
-    /* production mode */
-    /* 4) Double the page chain estimation
-     * for extensively splitting, rebalance and merging */
-    need += need;
-    /* 5) Factor the key+data which to be put in */
-    need += bytes2pgno(txn->env, node_size(key, data)) + (size_t)1;
+      /* production mode */
+      /* 4) Double the page chain estimation
+       * for extensively splitting, rebalance and merging */
+      need += need;
+      /* 5) Factor the key+data which to be put in */
+      need += bytes2pgno(txn->env, node_size(key, data)) + (size_t)1;
 #else
-    /* debug mode */
-    (void)key;
-    (void)data;
-    txn->env->debug_dirtied_est = ++need;
-    txn->env->debug_dirtied_act = 0;
+      /* debug mode */
+      (void)key;
+      (void)data;
+      txn->env->debug_dirtied_est = ++need;
+      txn->env->debug_dirtied_act = 0;
 #endif /* xMDBX_DEBUG_SPILLING == 2 */
 
-    int err = txn_spill(txn, mc, need);
-    if (unlikely(err != MDBX_SUCCESS))
-      return err;
+      int err = txn_spill(txn, mc, need);
+      if (unlikely(err != MDBX_SUCCESS))
+        return err;
+    }
   }
 
   if (likely(is_pointed(mc)) && ((mc->txn->flags & MDBX_TXN_SPILLS) || !is_modifiable(mc->txn, mc->pg[mc->top]))) {
