@@ -217,11 +217,11 @@
 #define __has_builtin(x) (0)
 #endif
 
-#if __has_feature(thread_sanitizer)
+#if __has_feature(thread_sanitizer) && !defined(__SANITIZE_THREAD__)
 #define __SANITIZE_THREAD__ 1
 #endif
 
-#if __has_feature(address_sanitizer)
+#if __has_feature(address_sanitizer) && !defined(__SANITIZE_ADDRESS__)
 #define __SANITIZE_ADDRESS__ 1
 #endif
 
