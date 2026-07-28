@@ -252,7 +252,7 @@ static bool eq(const iterator &iter, mdbx::cursor cursor, const char *caption) {
 
     return false;
   } catch (const mdbx::exception &e) {
-    std::cout << e.what() << "\n";
+    std::cout << "Exception: " << e.what() << "\n";
     return false;
   }
 }
@@ -490,7 +490,7 @@ static bool probe_bunch_delete(mdbx::env env, case_kind &kvg, unsigned deep, con
       const auto prev_size = copy.size();
       // debug(__LINE__, ">> #%zu, size %zu, deep %zu", n, prev_size, txn.get_map_stat(kvg.table).ms_depth);
       if (!turn_bunch_delete(txn, kvg, copy, op))
-        return false;
+        return failed(__LINE__);
       // debug(__LINE__, "<< #%zu, size %zu, deep %zu", n, copy.size(), txn.get_map_stat(kvg.table).ms_depth);
       unchanged = (prev_size != copy.size()) ? 0 : unchanged + 1;
     } while (!copy.empty() && (++n < 10 || !is_simple) && unchanged < copy.size() + 2);
@@ -504,7 +504,7 @@ static bool probe_bunch_delete(mdbx::env env, case_kind &kvg, unsigned deep, con
     auto txn = env.start_write();
     // debug(__LINE__, ">> #%zu, size %zu, deep %zu", n, prev_size, txn.get_map_stat(kvg.table).ms_depth);
     if (!turn_bunch_delete(txn, kvg, checker, op))
-      return false;
+      return failed(__LINE__);
     // debug(__LINE__, "<< #%zu, size %zu, deep %zu", n, checker.size(), txn.get_map_stat(kvg.table).ms_depth);
     txn.commit();
     unchanged = (prev_size != checker.size()) ? 0 : unchanged + 1;
@@ -683,19 +683,15 @@ static bool test(mdbx::env env, case_set &set, unsigned deep) {
 //------------------------------------------------------------------------------------------------------------
 
 int doit() {
-#ifdef NDEBUG
   std::random_device random;
   std::seed_seq seed({random(), random(), random(), random(), random()});
-#else
-  std::seed_seq seed({42});
-#endif
 
   std::cout << "seed ";
-  seed.param(std::ostream_iterator<size_t>(std::cout, ", "));
+  seed.param(std::ostream_iterator<size_t>(std::cout, "l, "));
   std::cout << std::endl;
   prng.seed(seed);
 
-  mdbx::path db_filename = "test-buches-removal";
+  mdbx::path db_filename = "test-bunches-removal";
   mdbx::env_managed::remove(db_filename);
 
   mdbx::env_managed::create_parameters create_parameters;
