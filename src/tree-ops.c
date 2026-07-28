@@ -517,10 +517,8 @@ static int page_merge(MDBX_cursor *csrc, MDBX_cursor *cdst) {
     const MDBX_val nullkey = {0, 0};
     rc = tree_propagate_key(csrc, &nullkey);
     cASSERT0(csrc, rc != MDBX_RESULT_TRUE);
-    if (unlikely(rc != MDBX_SUCCESS)) {
-      csrc->top += 1;
+    if (unlikely(rc != MDBX_SUCCESS))
       return rc;
-    }
   }
   csrc->top += 1;
 
