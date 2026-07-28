@@ -483,6 +483,9 @@ function bits2options {
 
 LFD=0
 trap "echo 'SIGPIPE(ignored)'" SIGPIPE
+if [ -z "${TEE4PIPE:-}" ]; then
+  TEE4PIPE=$(tee --help | grep -q ' -p' && echo "tee -i -p" || echo "tee -i")
+fi
 
 function failed {
   set +euo pipefail
@@ -521,16 +524,13 @@ function probe {
   do
     echo "${speculum} --random-writemap=no --ignore-dbfull --repeat=${REPEAT} --pathname=${TESTDB_DIR}/long.db --cleanup-after=no --geometry-jitter=${GEOMETRY_JITTER} $@ $case"
     if [[ ${REPORT_DEPTH} = "yes" && ($case = "basic" || $case = "--hill") ]]; then
-      if [ -z "${TEE4PIPE:-}" ]; then
-        TEE4PIPE=$(tee --help | grep -q ' -p' && echo "tee -i -p" || echo "tee -i")
-      fi
       exec {LFD}> >(${TEE4PIPE} >(logger) | grep -e reach -e achieve)
     else
       exec {LFD}> >(logger)
     fi
     ${NUMABIND} ${MONITOR} ./mdbx_test ${speculum} --random-writemap=no --ignore-dbfull --repeat=${REPEAT} --pathname=${TESTDB_DIR}/long.db --cleanup-after=no --geometry-jitter=${GEOMETRY_JITTER} "$@" $case >&${LFD} \
-      && ${NUMABIND} ${MONITOR} ./mdbx_chk ${TESTDB_DIR}/long.db | tee ${TESTDB_DIR}/long-chk.log \
-      && ([ ! -e ${TESTDB_DIR}/long.db-copy ] || ${NUMABIND} ${MONITOR} ./mdbx_chk ${TESTDB_DIR}/long.db-copy | tee ${TESTDB_DIR}/long-chk-copy.log) \
+      && ${NUMABIND} ${MONITOR} ./mdbx_chk ${TESTDB_DIR}/long.db | ${TEE4PIPE} ${TESTDB_DIR}/long-chk.log \
+      && ([ ! -e ${TESTDB_DIR}/long.db-copy ] || ${NUMABIND} ${MONITOR} ./mdbx_chk ${TESTDB_DIR}/long.db-copy | ${TEE4PIPE} ${TESTDB_DIR}/long-chk-copy.log) \
       || failed
     if [ ${LFD} -ne 0 ]; then
       echo "@@@ END-OF-LOG/ITERATION" >&${LFD}
