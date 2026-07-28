@@ -49,7 +49,7 @@ int __must_check_result node_add_branch(MDBX_cursor *mc, size_t indx, const MDBX
         is_subpage(mp) ? "sub-" : "", mp->pgno, indx, pgno, key ? key->iov_len : 0, DKEY_DEBUG(key));
 
   cASSERT0(mc, page_type(mp) == P_BRANCH);
-  cASSERT0(mc, mp->txnid >= mc->txn->front_txnid);
+  cASSERT0(mc, is_modifiable_relaxed(mc->txn, mp));
   STATIC_ASSERT(NODESIZE % 2 == 0);
 
   /* Adjust free space offsets. */
@@ -118,7 +118,7 @@ __hot int __must_check_result node_add_leaf(MDBX_cursor *mc, size_t indx, const 
     if (unlikely(npr.err != MDBX_SUCCESS))
       return npr.err;
     largepage = npr.page;
-    DEBUG("allocated %u large/overflow page(s) %" PRIaPGNO "for %" PRIuPTR " data bytes", largepage->pages,
+    DEBUG("allocated %u large/overflow page(s) %" PRIaPGNO " for %" PRIuPTR " data bytes", largepage->pages,
           largepage->pgno, data->iov_len);
     flags |= N_BIG;
     node_bytes = node_size_len(key->iov_len, 0) + sizeof(pgno_t) + sizeof(indx_t);

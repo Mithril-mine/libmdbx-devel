@@ -31,6 +31,10 @@ MDBX_NOTHROW_PURE_FUNCTION static inline bool is_modifiable(const MDBX_txn *txn,
   return mp->txnid == txn->front_txnid;
 }
 
+MDBX_NOTHROW_PURE_FUNCTION static inline bool is_modifiable_relaxed(const MDBX_txn *txn, const page_t *mp) {
+  return mp->txnid >= txn->front_txnid;
+}
+
 MDBX_INTERNAL int __must_check_result page_check(const MDBX_cursor *const mc, const page_t *const mp);
 
 MDBX_INTERNAL pgr_t page_get_any(const MDBX_cursor *const mc, const pgno_t pgno, const txnid_t front);
