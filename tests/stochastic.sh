@@ -376,12 +376,12 @@ echo "=== use ${db_size_mb}M for DB"
 case ${UNAME} in
   Linux)
     ulimit -c unlimited
-    if [ "$(cat /proc/sys/kernel/core_pattern)" != "core.%p" ]; then
-      echo "core.%p > /proc/sys/kernel/core_pattern" >&2
+    if [ "$(cat /proc/sys/kernel/core_pattern)" != "core.%E.%s.%p" ]; then
+      echo "core.%E.%s.%p > /proc/sys/kernel/core_pattern" >&2
       if [ $(id -u) -ne 0 -a -n "$(which sudo 2>/dev/null)" ]; then
-        echo "core.%p" | sudo tee /proc/sys/kernel/core_pattern || true
+        echo "core.%E.%s.%p" | sudo tee /proc/sys/kernel/core_pattern || true
       else
-        (echo "core.%p" > /proc/sys/kernel/core_pattern) || true
+        (echo "core.%E.%s.%p" > /proc/sys/kernel/core_pattern) || true
       fi
     fi
   ;;
