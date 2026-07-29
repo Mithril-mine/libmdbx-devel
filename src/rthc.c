@@ -268,6 +268,8 @@ __cold void rthc_thread_dtor(void *rthc) {
     MDBX_env *const env = rthc_table[i].env;
     if (env->pid != current_pid)
       continue;
+    if (!env->lck_mmap.lck)
+      continue;
     if (!(env->flags & ENV_TXKEY))
       continue;
     reader_slot_t *const slot = thread_rthc_get(env->me_txkey);
