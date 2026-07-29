@@ -807,9 +807,8 @@ struct case2_context : public timeout_context {
   } counters;
   const get_cached_t impl;
   const mdbx::map_handle dbi;
-  prng &rnd;
 
-  case2_context(prng &rnd, mdbx::map_handle dbi, get_cached_t impl) : impl(impl), dbi(dbi), rnd(rnd) {}
+  case2_context(mdbx::map_handle dbi, get_cached_t impl) : impl(impl), dbi(dbi) {}
 };
 
 struct case2_entry {
@@ -818,7 +817,8 @@ struct case2_entry {
   case2_entry(buffer &&key) : key(std::move(key)) {}
 };
 
-void case2_thread(case2_context &ctx, std::latch &latch, mdbx::txn_managed txn, case2_entry &entry) {
+void case2_thread(std::unique_ptr<prng> ptr_rnd, case2_context &ctx, std::latch &latch, mdbx::txn_managed txn,
+                  case2_entry &entry) {
   try {
     assert(entry.key.is_valid() && entry.key.length());
     latch.arrive_and_wait();
@@ -827,7 +827,7 @@ void case2_thread(case2_context &ctx, std::latch &latch, mdbx::txn_managed txn, 
     bool enought = false;
     do {
       mdbx::slice value;
-      while (ctx.rnd() % 42 < 11)
+      while ((*ptr_rnd.get())() % 42 < 11)
         std::this_thread::yield();
 #ifndef NDEBUG
       auto cache_copy = entry.cache;
@@ -916,7 +916,7 @@ bool case2_multithread(mdbx::env env, prng &rnd, get_cached_t get_cached) {
   std::vector<std::thread> threads;
   threads.reserve(n_threads);
 
-  struct case2_context context(rnd, table, get_cached);
+  struct case2_context context(table, get_cached);
   for (unsigned loop = 0; loop < 10 * 1000 && !context.is_timeouted(); ++loop) {
     std::latch latch(n_threads + 1);
     try {
@@ -934,12 +934,12 @@ bool case2_multithread(mdbx::env env, prng &rnd, get_cached_t get_cached) {
           txn.upsert(table, entry.key, buffer::base64(rnd()));
         }
         txn.commit_embark_read();
-        threads.push_back(
-            std::thread(case2_thread, std::ref(context), std::ref(latch), std::move(txn), std::ref(entry)));
+        threads.push_back(std::thread(case2_thread, std::unique_ptr<prng>(new prng(rnd())), std::ref(context),
+                                      std::ref(latch), std::move(txn), std::ref(entry)));
         if (threads.size() < n_threads) {
           txn = env.start_read();
-          threads.push_back(std::thread(case2_thread, std::ref(context), std::ref(latch), std::move(txn),
-                                        std::ref(entries[rnd() % entries.size()])));
+          threads.push_back(std::thread(case2_thread, std::unique_ptr<prng>(new prng(rnd())), std::ref(context),
+                                        std::ref(latch), std::move(txn), std::ref(entries[rnd() % entries.size()])));
         }
       }
     } catch (const std::exception &e) {
