@@ -19,6 +19,10 @@ __cold int cursor_validate(const MDBX_cursor *mc) {
 
   if (is_pointed(mc) && (mc->checking & z_updating) == 0) {
     const page_t *mp = mc->pg[mc->top];
+    int err = page_check(mc, mp);
+    if (unlikely(err != MDBX_SUCCESS))
+      return err;
+
     const size_t nkeys = page_numkeys(mp);
     if (!is_hollow(mc)) {
       cASSERT0(mc, mc->ki[mc->top] < nkeys);
@@ -34,6 +38,10 @@ __cold int cursor_validate(const MDBX_cursor *mc) {
 
   for (intptr_t n = 0; n <= mc->top; ++n) {
     page_t *mp = mc->pg[n];
+    int err = page_check(mc, mp);
+    if (unlikely(err != MDBX_SUCCESS))
+      return err;
+
     const size_t nkeys = page_numkeys(mp);
     const bool expect_branch = n < mc->tree->height - 1;
     const bool expect_nested_leaf = n + 1 == mc->tree->height - 1;
@@ -50,10 +58,6 @@ __cold int cursor_validate(const MDBX_cursor *mc) {
       if (unlikely(nkeys + 1 < mc->ki[n]))
         return MDBX_CURSOR_FULL;
     }
-
-    int err = page_check(mc, mp);
-    if (unlikely(err != MDBX_SUCCESS))
-      return err;
 
     for (size_t i = 0; i < nkeys; ++i) {
       if (branch) {
