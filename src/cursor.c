@@ -476,7 +476,7 @@ MDBX_cursor *cursor_copy_position(const MDBX_cursor *csrc, MDBX_cursor *cdst) {
   return cdst;
 }
 
-static inline void cursor_clone_half(const MDBX_cursor *csrc, MDBX_cursor *cdst) {
+static inline void cursor_copy_half(const MDBX_cursor *csrc, MDBX_cursor *cdst) {
   cdst->next = nullptr;
   cdst->backup = nullptr;
   cdst->subcur = nullptr;
@@ -488,54 +488,42 @@ static inline void cursor_clone_half(const MDBX_cursor *csrc, MDBX_cursor *cdst)
   cursor_cpstk(csrc, cdst);
 }
 
-MDBX_cursor *cursor_clone_slightly(const MDBX_cursor *csrc, cursor_couple_t *couple) {
-  cASSERT0(csrc, csrc->txn->txnid >= csrc->txn->env->lck->cached_oldest_txnid.weak);
-  couple->outer.next = nullptr;
-  couple->outer.backup = nullptr;
-  couple->outer.subcur = nullptr;
-  couple->outer.clc = nullptr;
-  couple->outer.txn = csrc->txn;
-  couple->outer.dbi_state = csrc->dbi_state;
-  couple->outer.checking = z_pagecheck;
-  couple->outer.tree = nullptr;
-
-  MDBX_cursor *cdst = &couple->outer;
+static inline MDBX_cursor *cursor_clone(bool clone_inner_tree, const MDBX_cursor *csrc, cursor_couple_t *couple) {
+  MDBX_cursor *ret = &couple->outer;
   if (is_inner(csrc)) {
-    /* для spill_cursor_keep() нужно чтобы outer-курсор не был poor, иначе клонированный вложенный будет пропущен вместе
-     * с ним и его страницы могут быть вытеснены, что поломает последующие операции на стеке клонированного курсора.
-     * Поэтому должно быть couple->outer.top >= 0, но при этом в стеке курсора должа быть хотя-бы одна страница. */
-    couple->outer.pg[0] = cursor_outer((MDBX_cursor *)csrc)->pg[0];
-    couple->outer.ki[0] = UINT16_MAX;
-    couple->outer.top_and_flags = z_eof_hard | z_disable_tree_search_fastpath;
-
-    couple->inner.cursor.next = nullptr;
-    couple->inner.cursor.backup = nullptr;
-    couple->inner.cursor.subcur = nullptr;
-    couple->inner.cursor.txn = csrc->txn;
-    couple->inner.cursor.dbi_state = csrc->dbi_state;
-    couple->outer.subcur = &couple->inner;
-    cdst = &couple->inner.cursor;
+    ret = &couple->inner.cursor;
+    csrc = cursor_outer((MDBX_cursor *)csrc);
   }
 
-  cdst->checking = csrc->checking;
-  cdst->tree = csrc->tree;
-  cdst->clc = csrc->clc;
+  cursor_copy_half(csrc, &couple->outer);
+  if (csrc->subcur) {
+    couple->outer.subcur = &couple->inner;
+    cursor_copy_half(&csrc->subcur->cursor, &couple->inner.cursor);
+    if (clone_inner_tree) {
+      couple->inner.nested_tree = *couple->inner.cursor.tree;
+      couple->inner.cursor.tree = &couple->inner.nested_tree;
+    }
+  }
 
-  return cursor_cpstk(csrc, cdst);
+  return ret;
+}
+
+MDBX_cursor *cursor_clone_share_inner_tree(const MDBX_cursor *csrc, cursor_couple_t *couple) {
+  if (is_inner(csrc)) {
+    /* Подход копирования только внутреннего курсора не состоятелен (untenable), так как привносит ряд проблем:
+     *  - в outer-части курсора в любом случае требуется инициализировать большинство полей,
+     *    а экономия получается только на копировании стека;
+     *  - для обхода курсоров при подготовке к спиллингу (подсчёта и пометки страниц на которые ссылаются стеки),
+     *    требуется обеспечивать не-пустую outer-часть;
+     *  - при отслеживании и корректировке состояния курсоров, не-заполненная outer-часть не позволяет во всех случаях
+     *    корректно отфильтровать курсоры и обновлять/инвалидировать inner-части.
+     */
+  }
+  return cursor_clone(false, csrc, couple);
 }
 
 MDBX_cursor *cursor_clone_complete(const MDBX_cursor *csrc, cursor_couple_t *couple) {
-  if (unlikely(is_inner(csrc)))
-    return cursor_clone_slightly(csrc, couple);
-
-  cursor_clone_half(csrc, &couple->outer);
-  if (csrc->subcur) {
-    couple->outer.subcur = &couple->inner;
-    cursor_clone_half(&csrc->subcur->cursor, &couple->inner.cursor);
-    couple->inner.nested_tree = *couple->inner.cursor.tree;
-    couple->inner.cursor.tree = &couple->inner.nested_tree;
-  }
-  return &couple->outer;
+  return cursor_clone(true, csrc, couple);
 }
 
 static __always_inline int sibling(MDBX_cursor *mc, bool right) {
