@@ -359,7 +359,7 @@ smoke-assertion test-assertion: MDBX_FORCE_ASSERTIONS=1
 test-assertion: test
 smoke-assertion: smoke
 
-smoke-ubsan test-ubsan: CFLAGS_EXTRA += -DENABLE_UBSAN -Ofast -fsanitize=undefined -fsanitize-undefined-trap-on-error
+smoke-ubsan test-ubsan: CFLAGS_EXTRA += -DENABLE_UBSAN -Ofast -fsanitize=undefined -fsanitize-undefined-trap-on-error -fno-sanitize-recover=all
 smoke-ubsan test-ubsan: CMAKE_OPT += -DENABLE_UBSAN:BOOL=ON -DENABLE_ASAN:BOOL=OFF -DENABLE_MEMCHECK:BOOL=OFF
 smoke-ubsan test-ubsan: MDBX_FORCE_ASSERTIONS=1
 test-ubsan: test
