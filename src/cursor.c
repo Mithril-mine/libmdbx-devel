@@ -1678,48 +1678,51 @@ del_key:
     if (m3->ki[top] >= nkeys) {
       rc = cursor_sibling_right(m3);
       if (rc == MDBX_NOTFOUND) {
+        inner_gone(m3);
         rc = MDBX_SUCCESS;
         continue;
       }
       if (unlikely(rc != MDBX_SUCCESS))
         goto fail;
     }
-    if (/* пропускаем незаполненные курсоры, иначе получится что у такого
-           курсора будет инициализирован вложенный,
-           что антилогично и бесполезно. */
-        is_filled(m3) && m3->subcur &&
-        (m3->ki[top] >= ki ||
-         /* уже переместились вправо */ m3->pg[top] != mp)) {
+    if (!m3->subcur)
+      continue;
+    if (!is_filled(m3)) {
+      inner_gone(m3);
+      continue;
+    }
+    if (m3->ki[top] >= ki || /* уже переместились вправо */ m3->pg[top] != mp) {
       node = page_node(m3->pg[m3->top], m3->ki[m3->top]);
-      /* Если это dupsort-узел, то должен быть валидный вложенный курсор. */
-      if (node_flags(node) & N_DUP) {
-        /* Тут три варианта событий:
-         * 1) Вложенный курсор уже инициализирован, у узла есть флаг N_TREE,
-         *    соответственно дубликаты вынесены в отдельное дерево с корнем
-         *    в отдельной странице = ничего корректировать не требуется.
-         * 2) Вложенный курсор уже инициализирован, у узла нет флага N_TREE,
-         *    соответственно дубликаты размещены на вложенной sub-странице.
-         * 3) Курсор стоял на удалённом элементе, который имел одно значение,
-         *    а после удаления переместился на следующий элемент с дубликатами.
-         *    В этом случае вложенный курсор не инициализирован и тепеь его
-         *    нужно установить на первый дубликат. */
-        if (is_pointed(&m3->subcur->cursor)) {
-          if ((node_flags(node) & N_TREE) == 0) {
-            cASSERT(m3, m3->subcur->cursor.top == 0 && m3->subcur->nested_tree.height == 1);
-            m3->subcur->cursor.pg[0] = node_data(node);
-          }
-        } else {
-          rc = cursor_dupsort_setup(m3, node, m3->pg[m3->top]);
+      if ((node_flags(node) & N_DUP) == 0) {
+        inner_gone(m3);
+        continue;
+      }
+      /* Тут три варианта событий:
+       * 1) Вложенный курсор уже инициализирован, у узла есть флаг N_TREE,
+       *    соответственно дубликаты вынесены в отдельное дерево с корнем
+       *    в отдельной странице = ничего корректировать не требуется.
+       * 2) Вложенный курсор уже инициализирован, у узла нет флага N_TREE,
+       *    соответственно дубликаты размещены на вложенной sub-странице.
+       * 3) Курсор стоял на удалённом элементе, который имел одно значение,
+       *    а после удаления переместился на следующий элемент с дубликатами.
+       *    В этом случае вложенный курсор не инициализирован и теперь его
+       *    нужно установить на первый дубликат. */
+      if (is_pointed(&m3->subcur->cursor)) {
+        if ((node_flags(node) & N_TREE) == 0) {
+          cASSERT(m3, m3->subcur->cursor.top == 0 && m3->subcur->nested_tree.height == 1);
+          m3->subcur->cursor.pg[0] = node_data(node);
+        }
+      } else {
+        rc = cursor_dupsort_setup(m3, node, m3->pg[m3->top]);
+        if (unlikely(rc != MDBX_SUCCESS))
+          goto fail;
+        if (node_flags(node) & N_TREE) {
+          rc = inner_first(&m3->subcur->cursor, nullptr);
           if (unlikely(rc != MDBX_SUCCESS))
             goto fail;
-          if (node_flags(node) & N_TREE) {
-            rc = inner_first(&m3->subcur->cursor, nullptr);
-            if (unlikely(rc != MDBX_SUCCESS))
-              goto fail;
-          }
         }
-      } else
-        inner_gone(m3);
+        m3->flags |= z_after_delete;
+      }
     }
   }
 
