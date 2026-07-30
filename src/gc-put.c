@@ -1266,8 +1266,25 @@ static int gc_rerere(MDBX_txn *txn, gcu_t *ctx) {
   return gc_reserve4return(txn, ctx, chunk_lo, chunk_hi);
 }
 
-static int gc_enforce_not_spilled(MDBX_txn *txn, gcu_t *ctx, MDBX_val *key, MDBX_val *data) {
+static int gc_enforce_not_spilled(MDBX_txn *txn, gcu_t *ctx, txnid_t id, MDBX_val *data) {
   while (true) {
+#ifndef _MSC_VER
+    MDBX_val key = {.iov_base = &id, .iov_len = sizeof(id)};
+#else
+    /* avoid MSVC crash and/or ICE */
+    MDBX_val key;
+    key.iov_base = &id;
+    key.iov_len = sizeof(id);
+#endif
+
+    data->iov_base = nullptr;
+    data->iov_len = 0;
+    int err = cursor_seek(&ctx->cursor, &key, data, MDBX_SET).err;
+    if (unlikely(err != MDBX_SUCCESS))
+      return err;
+    if (likely((txn->flags & MDBX_TXN_SPILLS)) == 0)
+      break;
+
     const size_t offset = ptr_dist(data->iov_base, txn->env->dxb_mmap.base);
     if (offset < pgno2bytes(txn->env, txn->geo.first_unallocated)) {
       const page_t *mp = ptr2page(txn->env, data->iov_base);
@@ -1276,11 +1293,8 @@ static int gc_enforce_not_spilled(MDBX_txn *txn, gcu_t *ctx, MDBX_val *key, MDBX
         tASSERT0(txn, is_modifiable(txn, mp));
         break;
       }
-      int err = is_largepage(mp) ? page_unspill(txn, mp).err : page_touch_unmodifiable(txn, &ctx->cursor, mp);
+      err = is_largepage(mp) ? page_unspill(txn, mp).err : page_touch_unmodifiable(txn, &ctx->cursor, mp);
       tASSERT0(txn, err == MDBX_SUCCESS);
-      if (unlikely(err != MDBX_SUCCESS))
-        return err;
-      err = cursor_seek(&ctx->cursor, key, data, MDBX_SET).err;
       if (unlikely(err != MDBX_SUCCESS))
         return err;
     } else {
@@ -1296,6 +1310,7 @@ static int gc_enforce_not_spilled(MDBX_txn *txn, gcu_t *ctx, MDBX_val *key, MDBX
 static int gc_fill_returned(MDBX_txn *txn, gcu_t *ctx) {
   tASSERT1(txn, pnl_check_allocated(txn->wr.repnl, txn->geo.first_unallocated - MDBX_ENABLE_REFUND));
   tASSERT1(txn, txn_dpl_check(txn));
+  MDBX_val data;
 
   /* Уже есть набор зарезервированных записей GC, id которых собраны в txn->wr.gc.comeback. При этом текущее
    * кол-вол возвращаемых страниц (оставшихся после расходов на резервирование) точно помещается в
@@ -1317,22 +1332,8 @@ static int gc_fill_returned(MDBX_txn *txn, gcu_t *ctx) {
   if (likely(slots == 1)) {
     /* самый простой и частый случай */
     txnid_t id = rkl_lowest(&txn->wr.gc.comeback);
-#ifndef _MSC_VER
-    MDBX_val key = {.iov_base = &id, .iov_len = sizeof(id)};
-#else
-    /* avoid MSVC crash and/or ICE */
-    MDBX_val key;
-    key.iov_base = &id;
-    key.iov_len = sizeof(id);
-#endif
-    MDBX_val data = {.iov_base = nullptr, .iov_len = 0};
-    int err = cursor_seek(&ctx->cursor, &key, &data, MDBX_SET).err;
+    int err = gc_enforce_not_spilled(txn, ctx, id, &data);
     if (likely(err == MDBX_SUCCESS)) {
-      if (unlikely(txn->flags & MDBX_TXN_SPILLS)) {
-        err = gc_enforce_not_spilled(txn, ctx, &key, &data);
-        if (unlikely(err != MDBX_SUCCESS))
-          return err;
-      }
       pgno_t *const from = MDBX_PNL_BEGIN(txn->wr.repnl), *const to = MDBX_PNL_END(txn->wr.repnl);
       TRACE("%s: fill %zu [ %zu:%" PRIaPGNO "...%zu:%" PRIaPGNO "] @%" PRIaTXN " (%s)", dbg_prefix(ctx),
             pnl_size(txn->wr.repnl), from - txn->wr.repnl, from[0], to - txn->wr.repnl, to[-1], id, "at-once");
@@ -1365,24 +1366,9 @@ static int gc_fill_returned(MDBX_txn *txn, gcu_t *ctx) {
       ERROR("reserve depleted (used %zu slots, left %zu loop %u)", rkl_len(&txn->wr.gc.comeback), left, ctx->loop);
       return MDBX_PROBLEM;
     }
-#ifndef _MSC_VER
-    MDBX_val key = {.iov_base = &id, .iov_len = sizeof(id)};
-#else
-    /* avoid MSVC crash and/or ICE */
-    MDBX_val key;
-    key.iov_base = &id;
-    key.iov_len = sizeof(id);
-#endif
-    MDBX_val data = {.iov_base = nullptr, .iov_len = 0};
-    int err = cursor_seek(&ctx->cursor, &key, &data, MDBX_SET).err;
+    int err = gc_enforce_not_spilled(txn, ctx, id, &data);
     if (unlikely(err != MDBX_SUCCESS))
       return err;
-
-    if (unlikely(txn->flags & MDBX_TXN_SPILLS)) {
-      err = gc_enforce_not_spilled(txn, ctx, &key, &data);
-      if (unlikely(err != MDBX_SUCCESS))
-        return err;
-    }
 
     tASSERT0(txn, data.iov_len >= sizeof(pgno_t) * 2);
     const size_t chunk_hi = data.iov_len / sizeof(pgno_t) - 1;
