@@ -1129,6 +1129,8 @@ int defrag_cycle(dfc_t *dfc) {
           txn->dbi_state[dbi] |= DBI_DIRTY;
           txn->flags |= MDBX_TXN_DIRTY;
         }
+        for (MDBX_cursor *mc = txn->cursors[dbi]; mc; mc = mc->next)
+          be_poor(mc);
       }
     }
   } else {
