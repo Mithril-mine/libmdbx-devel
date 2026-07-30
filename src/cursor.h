@@ -240,6 +240,9 @@ enum cursor_checking {
 };
 
 MDBX_INTERNAL int __must_check_result cursor_validate(const MDBX_cursor *mc);
+MDBX_INTERNAL int __must_check_result cursor_validate_updating(MDBX_cursor *mc);
+MDBX_MAYBE_UNUSED MDBX_INTERNAL void cursor_stack(const MDBX_cursor *const mc, const char *func, unsigned line,
+                                                  const char *prefix);
 
 MDBX_MAYBE_UNUSED MDBX_NOTHROW_PURE_FUNCTION static inline size_t cursor_dbi(const MDBX_cursor *mc) {
   cASSERT0(mc, mc->txn->signature == txn_signature);
@@ -342,8 +345,6 @@ MDBX_INTERNAL int __must_check_result cursor_put_checklen(MDBX_cursor *mc, const
                                                           unsigned flags);
 
 MDBX_INTERNAL int __must_check_result cursor_put(MDBX_cursor *mc, const MDBX_val *key, MDBX_val *data, unsigned flags);
-
-MDBX_INTERNAL int __must_check_result cursor_validate_updating(MDBX_cursor *mc);
 
 MDBX_INTERNAL int __must_check_result cursor_del(MDBX_cursor *mc, unsigned flags);
 

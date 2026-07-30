@@ -127,11 +127,11 @@ static int touch_dbi(MDBX_cursor *mc) {
   return MDBX_SUCCESS;
 }
 
-MDBX_MAYBE_UNUSED static inline void cursor_stack(const MDBX_cursor *const mc, const char *func, unsigned line,
-                                                  const char *prefix) {
-  MDBX_log_level_t lvl = MDBX_LOG_VERBOSE - 1;
+MDBX_ATTRIBUTE_NO_SANITIZE_ADDRESS(MDBX_NOTHING)
+void cursor_stack(const MDBX_cursor *const mc, const char *func, unsigned line, const char *prefix) {
+  MDBX_log_level_t lvl = MDBX_LOG_VERBOSE;
   if (LOG_ENABLED(lvl)) {
-    debug_log(lvl, func, line, "cursor_stack%s[%i, flags 0x%X]", prefix, mc->top, (uint8_t)mc->flags);
+    debug_log(lvl, func, line, "cursor%s-stack[%i, flags 0x%X]", prefix, mc->top, (uint8_t)mc->flags);
     for (int i = 0; i <= mc->top; ++i) {
       char page_flags[16], *pf = page_flags;
       const page_t *mp = mc->pg[i];
@@ -145,7 +145,14 @@ MDBX_MAYBE_UNUSED static inline void cursor_stack(const MDBX_cursor *const mc, c
         *pf++ = 'S';
       *pf++ = '_';
 
-      if (!is_correct(mc->txn, mp) || page_check(mc, mp) != MDBX_SUCCESS)
+      if (mp->pgno < NUM_METAS || mp->pgno > mc->txn->geo.first_unallocated || mp->flags == 0 ||
+          (mp->flags & P_ILL_BITS) != 0)
+        *pf++ = '#';
+#ifndef __SANITIZE_ADDRESS__
+      else if (page_check(mc, mp) != MDBX_SUCCESS)
+        *pf++ = '#';
+#endif
+      if (!is_correct(mc->txn, mp))
         *pf++ = '!';
       if (is_frozen(mc->txn, mp))
         *pf++ = 'f';
@@ -440,7 +447,7 @@ int cursor_dupsort_setup(MDBX_cursor *mc, const node_t *node, const page_t *mp) 
     cASSERT0(mc, mc->clc->v.lmax >= mc->clc->v.lmin);
   }
 
-  DEBUG("Sub-db dbi -%zu root page %" PRIaPGNO, cursor_dbi(&mx->cursor), mx->nested_tree.root);
+  DEBUG("Sub-db dbi %zu root page %" PRIaPGNO, cursor_dbi(&mx->cursor), mx->nested_tree.root);
   return MDBX_SUCCESS;
 
 bailout:

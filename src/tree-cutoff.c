@@ -5,8 +5,10 @@
 #include "internals.h"
 
 #if !defined(NDEBUG)
-MDBX_MAYBE_UNUSED static char *cursor_dump_stack(const MDBX_cursor *mc, const char *caption, bool print_subcursor,
-                                                 bool print_pageptr) {
+MDBX_MAYBE_UNUSED MDBX_ATTRIBUTE_NO_SANITIZE_ADDRESS(MDBX_NOTHING) static char *cursor_dump_stack(const MDBX_cursor *mc,
+                                                                                                  const char *caption,
+                                                                                                  bool print_subcursor,
+                                                                                                  bool print_pageptr) {
   static char buf[1024];
   char *const end = buf + sizeof(buf) - 1;
   char *tail = buf;
