@@ -433,9 +433,7 @@ static int cutoff_storey(MDBX_cursor *begin, MDBX_cursor *end, intptr_t level, b
         return err;
     }
   } else {
-#ifndef MDBX_EVENBUG20260405_FIX
     end->pg[0] = begin->pg[0];
-#endif /* !MDBX_EVENBUG20260405_FIX */
   }
   ASSERT(memcmp(begin->tree, end->tree, sizeof(tree_t)) == 0);
 

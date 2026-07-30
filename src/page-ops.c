@@ -237,7 +237,6 @@ __hot int page_touch_unmodifiable(MDBX_txn *txn, MDBX_cursor *mc, const page_t *
 done:
   /* Adjust cursors pointing to mp */
   mc->pg[mc->top] = np;
-#ifdef MDBX_EVENBUG20260405_FIX
   if (is_leaf(np) && inner_pointed(mc))
     /* 2026-04-05: Нашёлся занятный баг, унаследованный от LMDB -- Отсутствовало обновление вложенного dupsort-курсора.
      *
@@ -257,7 +256,6 @@ done:
      * По совокупности плюсов/минусов решено добавить это пояснение и оставить исправление под #ifdef, а обнаруженную
      * специфику учитывать при последующей разработке. */
     cursor_inner_refresh(mc, np, mc->ki[mc->top]);
-#endif /* MDBX_EVENBUG20260405_FIX */
   MDBX_cursor *m2 = txn->cursors[cursor_dbi(mc)];
   if (mc->flags & z_inner) {
     for (; m2; m2 = m2->next) {
