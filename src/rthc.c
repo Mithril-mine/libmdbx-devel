@@ -124,16 +124,16 @@ static __thread uint64_t rthc_thread_state
 #endif
     ;
 
-#if defined(__APPLE__) && defined(__SANITIZE_ADDRESS__) && !defined(MDBX_ATTRIBUTE_NO_SANITIZE_ADDRESS)
+#if defined(__APPLE__)
 /* Avoid ASAN-trap due the target TLS-variable feed by Darwin's tlv_free() */
-#define MDBX_ATTRIBUTE_NO_SANITIZE_ADDRESS __attribute__((__no_sanitize_address__, __noinline__))
+#define RTHC_ATTRIBUTE_NO_SANITIZE_ADDRESS MDBX_ATTRIBUTE_NO_SANITIZE_ADDRESS(inline)
 #else
-#define MDBX_ATTRIBUTE_NO_SANITIZE_ADDRESS inline
+#define RTHC_ATTRIBUTE_NO_SANITIZE_ADDRESS inline
 #endif
 
-MDBX_ATTRIBUTE_NO_SANITIZE_ADDRESS static uint64_t rthc_read(const void *rthc) { return *(volatile uint64_t *)rthc; }
+RTHC_ATTRIBUTE_NO_SANITIZE_ADDRESS static uint64_t rthc_read(const void *rthc) { return *(volatile uint64_t *)rthc; }
 
-MDBX_ATTRIBUTE_NO_SANITIZE_ADDRESS static uint64_t rthc_compare_and_clean(const void *rthc, const uint64_t signature) {
+RTHC_ATTRIBUTE_NO_SANITIZE_ADDRESS static uint64_t rthc_compare_and_clean(const void *rthc, const uint64_t signature) {
 #if MDBX_64BIT_CAS
   return atomic_cas64((mdbx_atomic_uint64_t *)rthc, signature, 0);
 #elif __BYTE_ORDER__ == __ORDER_LITTLE_ENDIAN__
