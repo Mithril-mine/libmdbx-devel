@@ -79,6 +79,8 @@ The supporting release of a stable branch with bug fixes.
 
  - Refined handling `MDBX_BUILD_OPTIONS` in the `GNUmakefile` to avoid redefinitions/overriding.
 
+ - On Windows provided `mdbx_env_deleteA()` and define `mdbx_env_deleteT()` depend on the `UNICODE`.
+
 ### Fixes:
 
  - Fixed assertions triggering in specific scenarios of creating and renaming tables within nested transactions.
@@ -122,14 +124,24 @@ The supporting release of a stable branch with bug fixes.
 
  - Fixed handling a returned intermediate error codes in `meta_wipe_steady()`.
 
+ - Fixed a leak of the table name in the failure path of `dbi_open_locked()` in a specific cases.
+
+ - Fixed UBSAN issue inside thread-local storage destructor callback when DB opened in a without-lck (exclusive readonly) mode.
+
+ - Fixed NULL dereference in `walk_pgno()` when operating on a corrpted DB, which also affects `mdbx_chk` utility.
+
+ - Fixed minor leaks/non-cleanup when `defrag_init()` failed.
+
  - Spilling fixed:
    - Fixed spurious assertion inside `spill_cursor_keep()`.
    - Fixed committing a pure nested transaction has a spilled pages.
    - Fixed a case when a prepared GC-slots are spilled-out during `gc_update()`.
    - Fixed a leak of spilled pages list on a nested transaction abort.
-   - Fixed `cursor_clone_slightly()` so that the clone is compatible with a pages tracking before spilling, in the case when the source is inner.
-   - Introduce `P_STICKED` to marks an unattached pages to a tree to avoid spill-out until finish.
-   - Fixed cursor tracking for all change/touch operations, as the spill could now be triggered by `page_alloc()`.
+   - Reworked internal cursors cloning to be compatible with subsequent pages tracking before spilling.
+   - Introduced the internal `TXN_NIPPED` flag to suspend spilling during GC processing.
+   - Fixed tracking and invalidation of the inner part of the sibling cursors inside `cursor_del()`.
+   - Fixed sibling cursors tracking/invalidation in `cutoff_zikkurat()`.
+   - Fixed cursors tracking in `node_move()`.
 
  - C++ API fixes:
     - Fixed ODR-violations warnings from modern GCC while both LTO and UBSAN are enabled.
