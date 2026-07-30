@@ -160,7 +160,7 @@ else()
     ALPHABET "1234567890" test_seed)
   message(STATUS "The ${test_seed} will be used for seeding tests. Re-run cmake to re-seed it.")
 
-  add_test(NAME smoke COMMAND ${MDBX_OUTPUT_DIR}/mdbx_test --duration=5m --loglevel=verbose --prng-seed=${test_seed}
+  add_test(NAME smoke COMMAND ${MDBX_OUTPUT_DIR}/mdbx_test --duration=5m --loglevel=notice --prng-seed=${test_seed}
                                --progress --console=no --pathname=smoke.db --dont-cleanup-after basic)
   set_tests_properties(smoke PROPERTIES TIMEOUT 1800 RUN_SERIAL OFF)
   if(MDBX_BUILD_TOOLS)
