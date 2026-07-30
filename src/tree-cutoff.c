@@ -315,7 +315,7 @@ static int cutoff_zikkurat(MDBX_cursor *begin, MDBX_cursor *end, intptr_t level,
             if (node->flags & N_DUP) {
               err = cursor_dupsort_setup(m3, node, m3->pg[m3->top]);
               if (unlikely(err != MDBX_SUCCESS))
-                return err;
+                goto bailout;
             }
           }
           m3->flags |= z_after_delete;
