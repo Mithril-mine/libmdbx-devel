@@ -506,11 +506,9 @@ int main(int argc, char *const argv[]) {
       continue;
     }
     if (config::parse_option(argc, argv, narg, "duration", params.test_duration, config::duration, 1)) {
-      params.test_nops = 0;
       continue;
     }
     if (config::parse_option(argc, argv, narg, "nops", params.test_nops, config::decimal, 1)) {
-      params.test_duration = 0;
       continue;
     }
     if (config::parse_option(argc, argv, narg, "hill", &value, "auto")) {
