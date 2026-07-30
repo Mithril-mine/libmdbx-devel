@@ -577,6 +577,7 @@ const char *__asan_default_options(void) {
 #ifndef LTO_ENABLED
          "check_initialization_order=1:"
 #endif
+         "poison_history_size=42:"
          "detect_stack_use_after_return=1:"
          "intercept_tls_get_addr=1:"
          "decorate_proc_maps=1:"

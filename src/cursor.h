@@ -186,6 +186,12 @@ MDBX_MAYBE_UNUSED MDBX_NOTHROW_PURE_FUNCTION static inline bool inner_hollow(con
   return r;
 }
 
+MDBX_MAYBE_UNUSED static inline void inner_gone_unconditional(MDBX_cursor *mc) {
+  TRACE("reset inner cursor %p", __Wpedantic_format_voidptr(&mc->subcur->cursor));
+  mc->subcur->nested_tree.root = 0;
+  mc->subcur->cursor.top_and_flags = z_inner | z_poor_mark;
+}
+
 MDBX_MAYBE_UNUSED static inline void inner_gone(MDBX_cursor *mc) {
   if (mc->subcur) {
     TRACE("reset inner cursor %p", __Wpedantic_format_voidptr(&mc->subcur->cursor));
@@ -234,6 +240,9 @@ enum cursor_checking {
 };
 
 MDBX_INTERNAL int __must_check_result cursor_validate(const MDBX_cursor *mc);
+MDBX_INTERNAL int __must_check_result cursor_validate_updating(MDBX_cursor *mc);
+MDBX_MAYBE_UNUSED MDBX_INTERNAL void cursor_stack(const MDBX_cursor *const mc, const char *func, unsigned line,
+                                                  const char *prefix);
 
 MDBX_MAYBE_UNUSED MDBX_NOTHROW_PURE_FUNCTION static inline size_t cursor_dbi(const MDBX_cursor *mc) {
   cASSERT0(mc, mc->txn->signature == txn_signature);
@@ -337,8 +346,6 @@ MDBX_INTERNAL int __must_check_result cursor_put_checklen(MDBX_cursor *mc, const
 
 MDBX_INTERNAL int __must_check_result cursor_put(MDBX_cursor *mc, const MDBX_val *key, MDBX_val *data, unsigned flags);
 
-MDBX_INTERNAL int __must_check_result cursor_validate_updating(MDBX_cursor *mc);
-
 MDBX_INTERNAL int __must_check_result cursor_del(MDBX_cursor *mc, unsigned flags);
 
 MDBX_INTERNAL int __must_check_result cursor_sibling_left(MDBX_cursor *mc);
@@ -374,7 +381,7 @@ MDBX_INTERNAL int __must_check_result cursor_dupsort_setup(MDBX_cursor *mc, cons
 
 MDBX_INTERNAL int __must_check_result cursor_touch(MDBX_cursor *const mc, const MDBX_val *key, const MDBX_val *data);
 
-MDBX_INTERNAL MDBX_cursor *cursor_clone_slightly(const MDBX_cursor *csrc, cursor_couple_t *couple);
+MDBX_INTERNAL MDBX_cursor *cursor_clone_share_inner_tree(const MDBX_cursor *csrc, cursor_couple_t *couple);
 MDBX_MAYBE_UNUSED MDBX_INTERNAL MDBX_cursor *cursor_clone_complete(const MDBX_cursor *csrc, cursor_couple_t *couple);
 
 MDBX_NOTHROW_PURE_FUNCTION MDBX_INTERNAL int cursor_on_first(const MDBX_cursor *mc);

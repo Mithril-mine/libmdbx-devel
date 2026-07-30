@@ -318,10 +318,9 @@ page_t *page_shadow_alloc(MDBX_txn *txn, size_t num) {
   }
 #if MDBX_CHECKING > 0
   np->pgno = 0;
+  np->flags = P_BAD;
 #endif
   VALGRIND_MAKE_MEM_UNDEFINED(np, size);
-  np->flags = 0;
-  np->pages = (pgno_t)num;
   return np;
 }
 

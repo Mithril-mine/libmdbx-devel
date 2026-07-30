@@ -19,6 +19,10 @@ __cold int cursor_validate(const MDBX_cursor *mc) {
 
   if (is_pointed(mc) && (mc->checking & z_updating) == 0) {
     const page_t *mp = mc->pg[mc->top];
+    int err = page_check(mc, mp);
+    if (unlikely(err != MDBX_SUCCESS))
+      return err;
+
     const size_t nkeys = page_numkeys(mp);
     if (!is_hollow(mc)) {
       cASSERT0(mc, mc->ki[mc->top] < nkeys);
@@ -34,6 +38,10 @@ __cold int cursor_validate(const MDBX_cursor *mc) {
 
   for (intptr_t n = 0; n <= mc->top; ++n) {
     page_t *mp = mc->pg[n];
+    int err = page_check(mc, mp);
+    if (unlikely(err != MDBX_SUCCESS))
+      return err;
+
     const size_t nkeys = page_numkeys(mp);
     const bool expect_branch = n < mc->tree->height - 1;
     const bool expect_nested_leaf = n + 1 == mc->tree->height - 1;
@@ -50,10 +58,6 @@ __cold int cursor_validate(const MDBX_cursor *mc) {
       if (unlikely(nkeys + 1 < mc->ki[n]))
         return MDBX_CURSOR_FULL;
     }
-
-    int err = page_check(mc, mp);
-    if (unlikely(err != MDBX_SUCCESS))
-      return err;
 
     for (size_t i = 0; i < nkeys; ++i) {
       if (branch) {
@@ -123,11 +127,11 @@ static int touch_dbi(MDBX_cursor *mc) {
   return MDBX_SUCCESS;
 }
 
-MDBX_MAYBE_UNUSED static inline void cursor_stack(const MDBX_cursor *const mc, const char *func, unsigned line,
-                                                  const char *prefix) {
-  MDBX_log_level_t lvl = MDBX_LOG_VERBOSE - 1;
+MDBX_ATTRIBUTE_NO_SANITIZE_ADDRESS(MDBX_NOTHING)
+void cursor_stack(const MDBX_cursor *const mc, const char *func, unsigned line, const char *prefix) {
+  MDBX_log_level_t lvl = MDBX_LOG_VERBOSE;
   if (LOG_ENABLED(lvl)) {
-    debug_log(lvl, func, line, "cursor_stack%s[%i, flags 0x%X]", prefix, mc->top, (uint8_t)mc->flags);
+    debug_log(lvl, func, line, "cursor%s-stack[%i, flags 0x%X]", prefix, mc->top, (uint8_t)mc->flags);
     for (int i = 0; i <= mc->top; ++i) {
       char page_flags[16], *pf = page_flags;
       const page_t *mp = mc->pg[i];
@@ -141,7 +145,14 @@ MDBX_MAYBE_UNUSED static inline void cursor_stack(const MDBX_cursor *const mc, c
         *pf++ = 'S';
       *pf++ = '_';
 
-      if (!is_correct(mc->txn, mp) || page_check(mc, mp) != MDBX_SUCCESS)
+      if (mp->pgno < NUM_METAS || mp->pgno > mc->txn->geo.first_unallocated || mp->flags == 0 ||
+          (mp->flags & P_ILL_BITS) != 0)
+        *pf++ = '#';
+#ifndef __SANITIZE_ADDRESS__
+      else if (page_check(mc, mp) != MDBX_SUCCESS)
+        *pf++ = '#';
+#endif
+      if (!is_correct(mc->txn, mp))
         *pf++ = '!';
       if (is_frozen(mc->txn, mp))
         *pf++ = 'f';
@@ -166,7 +177,7 @@ __hot int cursor_touch(MDBX_cursor *const mc, const MDBX_val *key, const MDBX_va
 
   cASSERT0(mc, F_ISSET(dbi_state(mc->txn, FREE_DBI), DBI_LINDO | DBI_VALID));
   cASSERT0(mc, F_ISSET(dbi_state(mc->txn, MAIN_DBI), DBI_LINDO | DBI_VALID));
-  if ((mc->flags & z_inner) == 0) {
+  if (!is_inner(mc)) {
     MDBX_txn *const txn = mc->txn;
     txn_dpl_lru_turn(txn);
 
@@ -176,34 +187,36 @@ __hot int cursor_touch(MDBX_cursor *const mc, const MDBX_val *key, const MDBX_va
         return err;
     }
 
-    /* Estimate how much space this operation will take: */
-    /* 1) Max b-tree height, reasonable enough with including dups' sub-tree */
-    size_t need = CURSOR_STACK_SIZE + 3;
-    /* 2) GC/FreeDB for any payload */
-    if (!cursor_is_gc(mc)) {
-      need += txn->dbs[FREE_DBI].height + (size_t)3;
-      /* 3) Named DBs also dirty the main DB */
-      if (!cursor_is_main(mc))
-        need += txn->dbs[MAIN_DBI].height + (size_t)3;
-    }
+    if ((mc->txn->flags & txn_nipped) == 0) {
+      /* Estimate how much space this operation will take: */
+      /* 1) Max b-tree height, reasonable enough with including dups' sub-tree */
+      size_t need = CURSOR_STACK_SIZE + 3;
+      /* 2) GC/FreeDB for any payload */
+      if (!cursor_is_gc(mc)) {
+        need += txn->dbs[FREE_DBI].height + (size_t)3;
+        /* 3) Named DBs also dirty the main DB */
+        if (!cursor_is_main(mc))
+          need += txn->dbs[MAIN_DBI].height + (size_t)3;
+      }
 #if xMDBX_DEBUG_SPILLING != 2
-    /* production mode */
-    /* 4) Double the page chain estimation
-     * for extensively splitting, rebalance and merging */
-    need += need;
-    /* 5) Factor the key+data which to be put in */
-    need += bytes2pgno(txn->env, node_size(key, data)) + (size_t)1;
+      /* production mode */
+      /* 4) Double the page chain estimation
+       * for extensively splitting, rebalance and merging */
+      need += need;
+      /* 5) Factor the key+data which to be put in */
+      need += bytes2pgno(txn->env, node_size(key, data)) + (size_t)1;
 #else
-    /* debug mode */
-    (void)key;
-    (void)data;
-    txn->env->debug_dirtied_est = ++need;
-    txn->env->debug_dirtied_act = 0;
+      /* debug mode */
+      (void)key;
+      (void)data;
+      txn->env->debug_dirtied_est = ++need;
+      txn->env->debug_dirtied_act = 0;
 #endif /* xMDBX_DEBUG_SPILLING == 2 */
 
-    int err = txn_spill(txn, mc, need);
-    if (unlikely(err != MDBX_SUCCESS))
-      return err;
+      int err = txn_spill(txn, mc, need);
+      if (unlikely(err != MDBX_SUCCESS))
+        return err;
+    }
   }
 
   if (likely(is_pointed(mc)) && ((mc->txn->flags & MDBX_TXN_SPILLS) || !is_modifiable(mc->txn, mc->pg[mc->top]))) {
@@ -434,7 +447,7 @@ int cursor_dupsort_setup(MDBX_cursor *mc, const node_t *node, const page_t *mp) 
     cASSERT0(mc, mc->clc->v.lmax >= mc->clc->v.lmin);
   }
 
-  DEBUG("Sub-db dbi -%zu root page %" PRIaPGNO, cursor_dbi(&mx->cursor), mx->nested_tree.root);
+  DEBUG("Sub-db dbi %zu root page %" PRIaPGNO, cursor_dbi(&mx->cursor), mx->nested_tree.root);
   return MDBX_SUCCESS;
 
 bailout:
@@ -460,8 +473,7 @@ MDBX_cursor *cursor_cpstk(const MDBX_cursor *csrc, MDBX_cursor *cdst) {
 MDBX_cursor *cursor_copy_position(const MDBX_cursor *csrc, MDBX_cursor *cdst) {
   cursor_cpstk(csrc, cdst);
   if (cdst->subcur) {
-    cdst->subcur->cursor.tree->root = 0;
-    cdst->subcur->cursor.top_and_flags = z_inner | z_poor_mark;
+    inner_gone_unconditional(cdst);
     ASSERT(csrc->subcur);
     if (is_pointed(&csrc->subcur->cursor)) {
       cursor_cpstk(&csrc->subcur->cursor, &cdst->subcur->cursor);
@@ -471,7 +483,7 @@ MDBX_cursor *cursor_copy_position(const MDBX_cursor *csrc, MDBX_cursor *cdst) {
   return cdst;
 }
 
-static inline void cursor_clone_half(const MDBX_cursor *csrc, MDBX_cursor *cdst) {
+static inline void cursor_copy_half(const MDBX_cursor *csrc, MDBX_cursor *cdst) {
   cdst->next = nullptr;
   cdst->backup = nullptr;
   cdst->subcur = nullptr;
@@ -483,54 +495,42 @@ static inline void cursor_clone_half(const MDBX_cursor *csrc, MDBX_cursor *cdst)
   cursor_cpstk(csrc, cdst);
 }
 
-MDBX_cursor *cursor_clone_slightly(const MDBX_cursor *csrc, cursor_couple_t *couple) {
-  cASSERT0(csrc, csrc->txn->txnid >= csrc->txn->env->lck->cached_oldest_txnid.weak);
-  couple->outer.next = nullptr;
-  couple->outer.backup = nullptr;
-  couple->outer.subcur = nullptr;
-  couple->outer.clc = nullptr;
-  couple->outer.txn = csrc->txn;
-  couple->outer.dbi_state = csrc->dbi_state;
-  couple->outer.checking = z_pagecheck;
-  couple->outer.tree = nullptr;
-
-  MDBX_cursor *cdst = &couple->outer;
+static inline MDBX_cursor *cursor_clone(bool clone_inner_tree, const MDBX_cursor *csrc, cursor_couple_t *couple) {
+  MDBX_cursor *ret = &couple->outer;
   if (is_inner(csrc)) {
-    /* для spill_cursor_keep() нужно чтобы outer-курсор не был poor, иначе клонированный вложенный будет пропущен вместе
-     * с ним и его страницы могут быть вытеснены, что поломает последующие операции на стеке клонированного курсора.
-     * Поэтому должно быть couple->outer.top >= 0, но при этом в стеке курсора должа быть хотя-бы одна страница. */
-    couple->outer.pg[0] = cursor_outer((MDBX_cursor *)csrc)->pg[0];
-    couple->outer.ki[0] = UINT16_MAX;
-    couple->outer.top_and_flags = z_eof_hard | z_disable_tree_search_fastpath;
-
-    couple->inner.cursor.next = nullptr;
-    couple->inner.cursor.backup = nullptr;
-    couple->inner.cursor.subcur = nullptr;
-    couple->inner.cursor.txn = csrc->txn;
-    couple->inner.cursor.dbi_state = csrc->dbi_state;
-    couple->outer.subcur = &couple->inner;
-    cdst = &couple->inner.cursor;
+    ret = &couple->inner.cursor;
+    csrc = cursor_outer((MDBX_cursor *)csrc);
   }
 
-  cdst->checking = csrc->checking;
-  cdst->tree = csrc->tree;
-  cdst->clc = csrc->clc;
+  cursor_copy_half(csrc, &couple->outer);
+  if (csrc->subcur) {
+    couple->outer.subcur = &couple->inner;
+    cursor_copy_half(&csrc->subcur->cursor, &couple->inner.cursor);
+    if (clone_inner_tree) {
+      couple->inner.nested_tree = *couple->inner.cursor.tree;
+      couple->inner.cursor.tree = &couple->inner.nested_tree;
+    }
+  }
 
-  return cursor_cpstk(csrc, cdst);
+  return ret;
+}
+
+MDBX_cursor *cursor_clone_share_inner_tree(const MDBX_cursor *csrc, cursor_couple_t *couple) {
+  if (is_inner(csrc)) {
+    /* Подход копирования только внутреннего курсора не состоятелен (untenable), так как привносит ряд проблем:
+     *  - в outer-части курсора в любом случае требуется инициализировать большинство полей,
+     *    а экономия получается только на копировании стека;
+     *  - для обхода курсоров при подготовке к спиллингу (подсчёта и пометки страниц на которые ссылаются стеки),
+     *    требуется обеспечивать не-пустую outer-часть;
+     *  - при отслеживании и корректировке состояния курсоров, не-заполненная outer-часть не позволяет во всех случаях
+     *    корректно отфильтровать курсоры и обновлять/инвалидировать inner-части.
+     */
+  }
+  return cursor_clone(false, csrc, couple);
 }
 
 MDBX_cursor *cursor_clone_complete(const MDBX_cursor *csrc, cursor_couple_t *couple) {
-  if (unlikely(is_inner(csrc)))
-    return cursor_clone_slightly(csrc, couple);
-
-  cursor_clone_half(csrc, &couple->outer);
-  if (csrc->subcur) {
-    couple->outer.subcur = &couple->inner;
-    cursor_clone_half(&csrc->subcur->cursor, &couple->inner.cursor);
-    couple->inner.nested_tree = *couple->inner.cursor.tree;
-    couple->inner.cursor.tree = &couple->inner.nested_tree;
-  }
-  return &couple->outer;
+  return cursor_clone(true, csrc, couple);
 }
 
 static __always_inline int sibling(MDBX_cursor *mc, bool right) {
@@ -1075,23 +1075,32 @@ __hot int cursor_put(MDBX_cursor *mc, const MDBX_val *key, MDBX_val *data, unsig
       void *ptr = page_dupfix_ptr(mc->pg[mc->top], mc->ki[mc->top], ksize);
       memcpy(ptr, key->iov_base, ksize);
     fix_parent:
-      /* if overwriting slot 0 of leaf, need to
-       * update branch key if there is a parent page */
+      /* if overwriting slot 0 of leaf, need to update branch key if there is a parent page */
       if (mc->top && !mc->ki[mc->top]) {
-        size_t dtop = 1;
-        mc->top--;
-        /* slot 0 is always an empty key, find real slot */
-        while (mc->top && !mc->ki[mc->top]) {
-          mc->top--;
-          dtop++;
-        }
+        page_t *save_top_pages[CURSOR_STACK_SIZE];
+        size_t save_count = 0;
+        do
+          save_top_pages[save_count++] = mc->pg[mc->top--];
+        while (mc->top && !mc->ki[mc->top]);
+
         err = MDBX_SUCCESS;
-        if (mc->ki[mc->top])
+        if (mc->ki[mc->top]) {
           err = tree_propagate_key(mc, key);
-        cASSERT0(mc, mc->top + dtop < UINT16_MAX);
-        mc->top += (uint8_t)dtop;
-        if (unlikely(err != MDBX_SUCCESS))
-          return err;
+          if (unlikely(err != MDBX_SUCCESS))
+            return err;
+        }
+
+        if (unlikely(mc->top + save_count >= CURSOR_STACK_SIZE)) {
+          be_poor(mc);
+          return MDBX_CURSOR_FULL;
+        }
+
+        do
+          if (mc->pg[mc->top] != save_top_pages[--save_count]) {
+            mc->pg[++mc->top] = save_top_pages[save_count];
+            mc->ki[mc->top] = 0;
+          }
+        while (save_count);
       }
 
       if (CHECKS2_ENABLED()) {
@@ -1373,7 +1382,6 @@ __hot int cursor_put(MDBX_cursor *mc, const MDBX_val *key, MDBX_val *data, unsig
           nested_dupdb.sequence = 0;
           nested_dupdb.mod_txnid = mc->txn->txnid;
           sub_root = mp;
-          fp_flags |= P_STICKED;
           DEBUG("convert_to_subtree: new-root %p.%u flags 0x%x", __Wpedantic_format_voidptr(mp), mp->pgno, fp_flags);
         }
         if (mp != fp) {
@@ -1501,8 +1509,6 @@ insert_node:;
         mx->cursor.top = 0;
         mx->cursor.pg[0] = sub_root;
         mx->cursor.ki[0] = 0;
-        cASSERT0(mc, sub_root->flags & P_STICKED);
-        sub_root->flags -= P_STICKED;
       }
       if (old_singledup.iov_base) {
         /* converted, write the original data first */
@@ -1726,8 +1732,7 @@ __hot int cursor_del(MDBX_cursor *mc, unsigned flags) {
             const node_t *inner = node;
             if (unlikely(m2->ki[mc->top] >= page_numkeys(mp))) {
               m2->flags |= z_eof_hard | z_eof_soft | z_after_delete;
-              m2->subcur->nested_tree.root = 0;
-              m2->subcur->cursor.top_and_flags = z_inner | z_poor_mark;
+              inner_gone_unconditional(m2);
               continue;
             }
             if (m2->ki[mc->top] != mc->ki[mc->top]) {
@@ -1821,47 +1826,51 @@ del_key:
     if (m3->ki[top] >= nkeys) {
       rc = cursor_sibling_right(m3);
       if (rc == MDBX_NOTFOUND) {
+        inner_gone(m3);
         rc = MDBX_SUCCESS;
         continue;
       }
       if (unlikely(rc != MDBX_SUCCESS))
         goto fail;
     }
-    if (/* пропускаем незаполненные курсоры, иначе получится что у такого
-           курсора будет инициализирован вложенный, что алогично и бесполезно. */
-        is_filled(m3) && m3->subcur &&
-        (m3->ki[top] >= ki ||
-         /* уже переместились вправо */ m3->pg[top] != mp)) {
+    if (!m3->subcur)
+      continue;
+    if (!is_filled(m3)) {
+      inner_gone_unconditional(m3);
+      continue;
+    }
+    if (m3->ki[top] >= ki || /* уже переместились вправо */ m3->pg[top] != mp) {
       node = page_node(m3->pg[m3->top], m3->ki[m3->top]);
-      /* Если это dupsort-узел, то должен быть валидный вложенный курсор. */
-      if (node_flags(node) & N_DUP) {
-        /* Тут три варианта событий:
-         * 1) Вложенный курсор уже инициализирован, у узла есть флаг N_TREE,
-         *    соответственно дубликаты вынесены в отдельное дерево с корнем
-         *    в отдельной странице = ничего корректировать не требуется.
-         * 2) Вложенный курсор уже инициализирован, у узла нет флага N_TREE,
-         *    соответственно дубликаты размещены на вложенной sub-странице.
-         * 3) Курсор стоял на удалённом элементе, который имел одно значение,
-         *    а после удаления переместился на следующий элемент с дубликатами.
-         *    В этом случае вложенный курсор не инициализирован и теперь его
-         *    нужно установить на первый дубликат. */
-        if (is_pointed(&m3->subcur->cursor)) {
-          if ((node_flags(node) & N_TREE) == 0) {
-            cASSERT0(m3, m3->subcur->cursor.top == 0 && m3->subcur->nested_tree.height == 1);
-            m3->subcur->cursor.pg[0] = node_data(node);
-          }
-        } else {
-          rc = cursor_dupsort_setup(m3, node, m3->pg[m3->top]);
+      if ((node_flags(node) & N_DUP) == 0) {
+        inner_gone_unconditional(m3);
+        continue;
+      }
+      /* Тут три варианта событий:
+       * 1) Вложенный курсор уже инициализирован, у узла есть флаг N_TREE,
+       *    соответственно дубликаты вынесены в отдельное дерево с корнем
+       *    в отдельной странице = ничего корректировать не требуется.
+       * 2) Вложенный курсор уже инициализирован, у узла нет флага N_TREE,
+       *    соответственно дубликаты размещены на вложенной sub-странице.
+       * 3) Курсор стоял на удалённом элементе, который имел одно значение,
+       *    а после удаления переместился на следующий элемент с дубликатами.
+       *    В этом случае вложенный курсор не инициализирован и теперь его
+       *    нужно установить на первый дубликат. */
+      if (is_pointed(&m3->subcur->cursor)) {
+        if ((node_flags(node) & N_TREE) == 0) {
+          cASSERT0(m3, m3->subcur->cursor.top == 0 && m3->subcur->nested_tree.height == 1);
+          m3->subcur->cursor.pg[0] = node_data(node);
+        }
+      } else {
+        rc = cursor_dupsort_setup(m3, node, m3->pg[m3->top]);
+        if (unlikely(rc != MDBX_SUCCESS))
+          goto fail;
+        if (node_flags(node) & N_TREE) {
+          rc = inner_first(&m3->subcur->cursor, nullptr);
           if (unlikely(rc != MDBX_SUCCESS))
             goto fail;
-          if (node_flags(node) & N_TREE) {
-            rc = inner_first(&m3->subcur->cursor, nullptr);
-            if (unlikely(rc != MDBX_SUCCESS))
-              goto fail;
-          }
         }
-      } else
-        inner_gone(m3);
+        m3->flags |= z_after_delete;
+      }
     }
   }
 
@@ -1909,8 +1918,7 @@ __hot csr_t cursor_seek(MDBX_cursor *mc, MDBX_val *key, MDBX_val *data, MDBX_cur
     else {
       node = page_node(mp, 0);
       nodekey = get_key(node);
-      if (mc->subcur)
-        mc->subcur->cursor.top_and_flags = z_inner | z_hollow;
+      inner_gone(mc);
     }
     int cmp = mc->clc->k.cmp(&aligned.key, &nodekey);
     if (cmp >= 0) {
@@ -2695,8 +2703,7 @@ static cdr_t cursor_forward_at(MDBX_cursor *iter, size_t amount, int level) {
       return tdr;
   }
   if (iter->subcur) {
-    iter->subcur->nested_tree.root = 0;
-    iter->subcur->cursor.top_and_flags = z_inner | z_poor_mark;
+    inner_gone_unconditional(iter);
     const node_t *node = page_node(iter->pg[iter->top], iter->ki[iter->top]);
     if ((node_flags(node) & N_DUP)) {
       tdr.err = cursor_dupsort_setup(iter, node, iter->pg[iter->top]);
@@ -2733,8 +2740,7 @@ static cdr_t cursor_backward_at(MDBX_cursor *iter, size_t amount, int level) {
       return tdr;
   }
   if (iter->subcur) {
-    iter->subcur->nested_tree.root = 0;
-    iter->subcur->cursor.top_and_flags = z_inner | z_poor_mark;
+    inner_gone_unconditional(iter);
     const node_t *node = page_node(iter->pg[iter->top], iter->ki[iter->top]);
     if ((node_flags(node) & N_DUP)) {
       tdr.err = cursor_dupsort_setup(iter, node, iter->pg[iter->top]);
@@ -2763,8 +2769,7 @@ int cursor_scroll_forward(MDBX_cursor *mc, intptr_t amount, int level) {
     amount = tdr.distance;
     if (unlikely(err != MDBX_NOTFOUND))
       return err;
-    mc->subcur->nested_tree.root = 0;
-    mc->subcur->cursor.top_and_flags = z_inner | z_poor_mark;
+    inner_gone_unconditional(mc);
   }
 
   while (true) {
@@ -2791,8 +2796,7 @@ int cursor_scroll_forward(MDBX_cursor *mc, intptr_t amount, int level) {
       return cursor_forward_at(&mc->subcur->cursor, amount, level - mc->tree->height).err;
     }
     amount -= mc->subcur->nested_tree.items;
-    mc->subcur->nested_tree.root = 0;
-    mc->subcur->cursor.top_and_flags = z_inner | z_poor_mark;
+    inner_gone_unconditional(mc);
   }
 }
 
@@ -2809,8 +2813,7 @@ int cursor_scroll_backward(MDBX_cursor *mc, intptr_t amount, int level) {
     amount = tdr.distance;
     if (unlikely(err != MDBX_NOTFOUND))
       return err;
-    mc->subcur->nested_tree.root = 0;
-    mc->subcur->cursor.top_and_flags = z_inner | z_poor_mark;
+    inner_gone_unconditional(mc);
   }
 
   while (true) {
@@ -2840,8 +2843,7 @@ int cursor_scroll_backward(MDBX_cursor *mc, intptr_t amount, int level) {
       return cursor_backward_at(&mc->subcur->cursor, amount, level - mc->tree->height).err;
     }
     amount -= mc->subcur->nested_tree.items;
-    mc->subcur->nested_tree.root = 0;
-    mc->subcur->cursor.top_and_flags = z_inner | z_poor_mark;
+    inner_gone_unconditional(mc);
   }
 }
 

@@ -5,8 +5,10 @@
 #include "internals.h"
 
 #if !defined(NDEBUG)
-MDBX_MAYBE_UNUSED static char *cursor_dump_stack(const MDBX_cursor *mc, const char *caption, bool print_subcursor,
-                                                 bool print_pageptr) {
+MDBX_MAYBE_UNUSED MDBX_ATTRIBUTE_NO_SANITIZE_ADDRESS(MDBX_NOTHING) static char *cursor_dump_stack(const MDBX_cursor *mc,
+                                                                                                  const char *caption,
+                                                                                                  bool print_subcursor,
+                                                                                                  bool print_pageptr) {
   static char buf[1024];
   char *const end = buf + sizeof(buf) - 1;
   char *tail = buf;
@@ -245,6 +247,7 @@ static int cutoff_zikkurat(MDBX_cursor *begin, MDBX_cursor *end, intptr_t level,
       VERBOSE(">= %s", cursor_dump_stack(end, end_including ? "end-including" : "end-excluding", false, false));
 #endif /* NDEBUG */
 
+      cASSERT0(mc, mc->top == level);
       page_t *mp = mc->pg[level];
       const indx_t nkeys = page_numkeys(mp);
       if (nkeys < 3)
@@ -262,8 +265,9 @@ static int cutoff_zikkurat(MDBX_cursor *begin, MDBX_cursor *end, intptr_t level,
       err = cursor_touch(mc, nullptr, nullptr);
       if (unlikely(err != MDBX_SUCCESS))
         goto bailout;
-      mp = mc->pg[mc->top];
+      mp = mc->pg[level];
       mc->ki[level] = ki_end;
+
       do {
         node_t *const node = page_node(mp, mc->ki[level] -= 1);
         cASSERT0(mc, is_branch(mp) && node_flags(node) == 0);
@@ -282,8 +286,9 @@ static int cutoff_zikkurat(MDBX_cursor *begin, MDBX_cursor *end, intptr_t level,
         if (m3->top < level || m3->pg[level] != mp || m3->ki[level] < mc->ki[level])
           continue;
         if (m3->ki[level] >= ki_end) {
+          ASSERT(level != m3->top && m3->ki[level] >= dropped);
           m3->ki[level] -= dropped;
-          ASSERT(level != m3->top);
+          ASSERT(m3->ki[level] < page_numkeys(mp));
           /* if (level == m3->top && inner_pointed(m3))
             cursor_inner_refresh(m3, mp, m3->ki[level]); */
         } else {
@@ -291,20 +296,32 @@ static int cutoff_zikkurat(MDBX_cursor *begin, MDBX_cursor *end, intptr_t level,
           ASSERT(m3 != end || end_including);
           end_including &= m3 != end;
           m3->top = level;
-          if (mc->ki[level] < page_numkeys(mp))
-            m3->ki[level] = mc->ki[level];
-          else
+          m3->ki[level] = mc->ki[level];
+          err = MDBX_SUCCESS;
+          if (m3->ki[level] >= page_numkeys(mp)) {
             err = cursor_sibling_right(m3);
-          if (unlikely(err != MDBX_SUCCESS) && err != MDBX_NOTFOUND)
-            goto bailout;
+            if (unlikely(err != MDBX_SUCCESS)) {
+              if (err != MDBX_NOTFOUND)
+                goto bailout;
+              m3->ki[level] = page_numkeys(mp) - 1;
+            }
+          }
           err = tree_deepen_edge(m3, (err == MDBX_NOTFOUND) ? Z_LAST : Z_FIRST);
           if (unlikely(err != MDBX_SUCCESS))
             goto bailout;
-          if (inner_pointed(m3))
-            cursor_inner_refresh(m3, m3->pg[m3->top], m3->ki[m3->top]);
+          if (m3->subcur) {
+            inner_gone_unconditional(m3);
+            const node_t *const node = page_node(m3->pg[m3->top], m3->ki[m3->top]);
+            if (node->flags & N_DUP) {
+              err = cursor_dupsort_setup(m3, node, m3->pg[m3->top]);
+              if (unlikely(err != MDBX_SUCCESS))
+                return err;
+            }
+          }
           m3->flags |= z_after_delete;
         }
       }
+      inner_gone(mc);
 
 #ifndef NDEBUG
       VERBOSE("<= %s", cursor_dump_stack(begin, "begin", false, false));

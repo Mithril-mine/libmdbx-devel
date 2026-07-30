@@ -376,12 +376,12 @@ echo "=== use ${db_size_mb}M for DB"
 case ${UNAME} in
   Linux)
     ulimit -c unlimited
-    if [ "$(cat /proc/sys/kernel/core_pattern)" != "core.%p" ]; then
-      echo "core.%p > /proc/sys/kernel/core_pattern" >&2
+    if [ "$(cat /proc/sys/kernel/core_pattern)" != "core.%E.%s.%p" ]; then
+      echo "core.%E.%s.%p > /proc/sys/kernel/core_pattern" >&2
       if [ $(id -u) -ne 0 -a -n "$(which sudo 2>/dev/null)" ]; then
-        echo "core.%p" | sudo tee /proc/sys/kernel/core_pattern || true
+        echo "core.%E.%s.%p" | sudo tee /proc/sys/kernel/core_pattern || true
       else
-        (echo "core.%p" > /proc/sys/kernel/core_pattern) || true
+        (echo "core.%E.%s.%p" > /proc/sys/kernel/core_pattern) || true
       fi
     fi
   ;;
@@ -485,6 +485,11 @@ function bits2options {
 
 LFD=0
 trap "echo 'SIGPIPE(ignored)'" SIGPIPE
+if [ -z "${TEE4PIPE:-}" ]; then
+  TEE4PIPE=$(tee --help | grep -q ' -p' && echo "tee -i -p" || echo "tee -i")
+fi
+export ASAN_OPTIONS="log_path=${TESTDB_DIR}/asan.log:poison_history_size=42"
+export UBSAN_OPTIONS="log_path=${TESTDB_DIR}/ubsan.log:print_stacktrace=1"
 
 function failed {
   set +euo pipefail
@@ -523,16 +528,13 @@ function probe {
   do
     echo "${speculum} --random-writemap=no --ignore-dbfull --repeat=${REPEAT} --pathname=${TESTDB_DIR}/long.db --cleanup-after=no --geometry-jitter=${GEOMETRY_JITTER} $@ $case"
     if [[ ${REPORT_DEPTH} = "yes" && ($case = "basic" || $case = "--hill") ]]; then
-      if [ -z "${TEE4PIPE:-}" ]; then
-        TEE4PIPE=$(tee --help | grep -q ' -p' && echo "tee -i -p" || echo "tee -i")
-      fi
       exec {LFD}> >(${TEE4PIPE} >(logger) | grep -e reach -e achieve)
     else
       exec {LFD}> >(logger)
     fi
     ${NUMABIND} ${MONITOR} ./mdbx_test ${speculum} --random-writemap=no --ignore-dbfull --repeat=${REPEAT} --pathname=${TESTDB_DIR}/long.db --cleanup-after=no --geometry-jitter=${GEOMETRY_JITTER} "$@" $case >&${LFD} \
-      && ${NUMABIND} ${MONITOR} ./mdbx_chk ${TESTDB_DIR}/long.db | tee ${TESTDB_DIR}/long-chk.log \
-      && ([ ! -e ${TESTDB_DIR}/long.db-copy ] || ${NUMABIND} ${MONITOR} ./mdbx_chk ${TESTDB_DIR}/long.db-copy | tee ${TESTDB_DIR}/long-chk-copy.log) \
+      && ${NUMABIND} ${MONITOR} ./mdbx_chk ${TESTDB_DIR}/long.db | ${TEE4PIPE} ${TESTDB_DIR}/long-chk.log \
+      && ([ ! -e ${TESTDB_DIR}/long.db-copy ] || ${NUMABIND} ${MONITOR} ./mdbx_chk ${TESTDB_DIR}/long.db-copy | ${TEE4PIPE} ${TESTDB_DIR}/long-chk-copy.log) \
       || failed
     if [ ${LFD} -ne 0 ]; then
       echo "@@@ END-OF-LOG/ITERATION" >&${LFD}

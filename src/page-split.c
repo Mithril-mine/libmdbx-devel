@@ -11,8 +11,6 @@ __hot int page_split(MDBX_cursor *mc, const MDBX_val *const newkey, MDBX_val *co
   DKBUF;
 
   page_t *const mp = mc->pg[mc->top];
-  cASSERT0(mc, !(mp->flags & P_STICKED));
-  mp->flags |= P_STICKED;
   cASSERT0(mc, (mp->flags & P_ILL_BITS) == 0);
 
   DEBUG(">> splitting %s-page %" PRIaPGNO " and adding %zu+%zu [%s] at %i, nkeys %zi", is_leaf(mp) ? "leaf" : "branch",
@@ -109,10 +107,9 @@ __hot int page_split(MDBX_cursor *mc, const MDBX_val *const newkey, MDBX_val *co
     goto bailout;
   page_t *const sister = npr.page;
   sister->dupfix_ksize = mp->dupfix_ksize;
-  sister->flags |= P_STICKED;
   DEBUG("new sibling: page %" PRIaPGNO, sister->pgno);
   cursor_couple_t couple;
-  MDBX_cursor *const mn = cursor_clone_slightly(mc, &couple);
+  MDBX_cursor *const mn = cursor_clone_share_inner_tree(mc, &couple);
   mn->pg[mn->top] = sister;
   mn->ki[mn->top] = 0;
   intptr_t prev_top = mc->top - 1;
@@ -527,8 +524,6 @@ __hot int page_split(MDBX_cursor *mc, const MDBX_val *const newkey, MDBX_val *co
       cursor_inner_refresh(m3, m3->pg[mc->top], m3->ki[mc->top]);
   }
 
-  cASSERT0(mc, sister->flags & P_STICKED);
-  sister->flags -= P_STICKED;
   TRACE("mp #%u left: %zd, sister #%u left: %zd", mp->pgno, page_room(mp), sister->pgno, page_room(sister));
 
   cASSERT0(mc, rc == MDBX_SUCCESS);
@@ -543,8 +538,6 @@ __hot int page_split(MDBX_cursor *mc, const MDBX_val *const newkey, MDBX_val *co
     env->lck->pgops.split.weak += 1;
 
 exit:
-  cASSERT0(mc, mp->flags & P_STICKED);
-  mp->flags -= P_STICKED;
   if (tmp_ki_copy)
     page_shadow_release(env, tmp_ki_copy, 1);
 

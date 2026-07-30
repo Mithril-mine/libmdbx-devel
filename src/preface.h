@@ -217,11 +217,11 @@
 #define __has_builtin(x) (0)
 #endif
 
-#if __has_feature(thread_sanitizer)
+#if __has_feature(thread_sanitizer) && !defined(__SANITIZE_THREAD__)
 #define __SANITIZE_THREAD__ 1
 #endif
 
-#if __has_feature(address_sanitizer)
+#if __has_feature(address_sanitizer) && !defined(__SANITIZE_ADDRESS__)
 #define __SANITIZE_ADDRESS__ 1
 #endif
 
@@ -890,6 +890,15 @@ __extern_C key_t ftok(const char *, int);
 
 #ifndef RUNNING_ON_ASAN
 #define RUNNING_ON_ASAN (0)
+#endif
+
+#define MDBX_NOTHING /* just nothung */
+
+#if defined(__SANITIZE_ADDRESS__) && !defined(MDBX_ATTRIBUTE_NO_SANITIZE_ADDRESS)
+/* Avoid ASAN-trap due the target TLS-variable feed by Darwin's tlv_free() */
+#define MDBX_ATTRIBUTE_NO_SANITIZE_ADDRESS(ELSEWISE) __attribute__((__no_sanitize_address__, __noinline__))
+#else
+#define MDBX_ATTRIBUTE_NO_SANITIZE_ADDRESS(ELSEWISE) ELSEWISE
 #endif
 
 /*----------------------------------------------------------------------------*/

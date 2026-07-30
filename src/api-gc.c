@@ -138,11 +138,10 @@ __cold int mdbx_env_defrag(MDBX_env *env, size_t defrag_atleast, size_t time_atl
                                                                                      : txn->env->maxgc_large1page;
 
   rc = defrag_init(&dfc, txn, defrag_atleast, time_atleast_dot16, defrag_enough, time_limit_dot16, preferred_batch);
-  if (unlikely(rc != MDBX_SUCCESS))
-    return LOG_IFERR(rc);
-
   dfc.user_ctx = ctx;
   dfc.user_callback = progress_callback;
+  if (unlikely(rc != MDBX_SUCCESS))
+    goto bailout;
 
   while ((size_t)acceptable_backlash + dfc.payload_pages < txn->geo.first_unallocated && !defrag_discontinued(&dfc)) {
     const pgno_t prev_stumble = dfc.stumble_pgno;
@@ -193,19 +192,22 @@ __cold int mdbx_env_defrag(MDBX_env *env, size_t defrag_atleast, size_t time_atl
         dfc.last_allocated = txn->geo.first_unallocated;
       }
     }
-    dfc.txn = nullptr;
     int err = txn_basal_end(txn, true);
+    dfc.txn = txn = nullptr;
     rc = (err != MDBX_SUCCESS && !MDBX_IS_ERROR(rc)) ? err : rc;
   }
 
   defrag_milestone(&dfc);
 
+bailout:
   if (result) {
     defrag_result(&dfc, result, 0);
     result->pages_moved = dfc.total_pages_moved;
   }
 
   defrag_destroy(&dfc);
+  if (txn && txn->userctx == &dfc)
+    txn_basal_end(txn, true);
 
   if (!MDBX_IS_ERROR(rc)) {
     if (dfc.stopping_reasons)

@@ -151,9 +151,9 @@ __cold static int walk_pgno(walk_ctx_t *ctx, walk_tbl_t *tbl, const pgno_t pgno,
     }
   }
 
-  int rc = ctx->visitor(pgno, 1, ctx->userctx, ctx->deep, tbl, ctx->txn->env->ps, type, mp->txnid, err, nentries,
-                        payload_size, header_size, unused_size + align_bytes, parent_pgno);
-  if (unlikely(rc != MDBX_SUCCESS))
+  int rc = ctx->visitor(pgno, 1, ctx->userctx, ctx->deep, tbl, ctx->txn->env->ps, type, mp ? mp->txnid : 0, err,
+                        nentries, payload_size, header_size, unused_size + align_bytes, parent_pgno);
+  if (unlikely(rc != MDBX_SUCCESS || !mp))
     return rc;
 
   for (size_t i = 0; err == MDBX_SUCCESS && i < nentries; ++i) {
@@ -184,11 +184,11 @@ __cold static int walk_pgno(walk_ctx_t *ctx, walk_tbl_t *tbl, const pgno_t pgno,
 
       ASSERT(err == MDBX_SUCCESS);
       pgr_t lp = page_get_large(ctx->cursor, large_pgno, mp->txnid);
-      const size_t npages = ((err = lp.err) == MDBX_SUCCESS) ? lp.page->pages : 1;
+      const size_t npages = lp.page ? lp.page->pages : 1;
       const size_t pagesize = pgno2bytes(ctx->txn->env, npages);
       const size_t over_unused = pagesize - over_payload - over_header;
-      rc = ctx->visitor(large_pgno, npages, ctx->userctx, ctx->deep + 1, tbl, pagesize, page_large, lp.page->txnid, err,
-                        1, over_payload, over_header, over_unused, pgno);
+      rc = ctx->visitor(large_pgno, npages, ctx->userctx, ctx->deep + 1, tbl, pagesize, page_large,
+                        lp.page ? lp.page->txnid : 0, err, 1, over_payload, over_header, over_unused, pgno);
       if (unlikely(rc != MDBX_SUCCESS))
         return rc;
     } break;

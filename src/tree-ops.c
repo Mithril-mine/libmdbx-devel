@@ -145,7 +145,7 @@ static int node_move(MDBX_cursor *csrc, MDBX_cursor *cdst, bool fromleft) {
         key4move.iov_base = node_key(lowest_node);
       }
 
-      /* restore cursor after mdbx_page_search_lowest() */
+      /* restore cursor after tree_deepen_lowest() */
       csrc->top = top;
       csrc->ki[csrc->top] = 0;
 
@@ -158,7 +158,7 @@ static int node_move(MDBX_cursor *csrc, MDBX_cursor *cdst, bool fromleft) {
 
     if (cdst->ki[cdst->top] == 0) {
       cursor_couple_t couple;
-      MDBX_cursor *const mn = cursor_clone_slightly(cdst, &couple);
+      MDBX_cursor *const mn = cursor_clone_share_inner_tree(cdst, &couple);
       const int8_t top = cdst->top;
       cASSERT0(csrc, top >= 0);
 
@@ -179,7 +179,7 @@ static int node_move(MDBX_cursor *csrc, MDBX_cursor *cdst, bool fromleft) {
         key.iov_base = node_key(lowest_node);
       }
 
-      /* restore cursor after mdbx_page_search_lowest() */
+      /* restore cursor after tree_deepen_lowest() */
       mn->top = top;
       mn->ki[mn->top] = 0;
 
@@ -189,15 +189,17 @@ static int node_move(MDBX_cursor *csrc, MDBX_cursor *cdst, bool fromleft) {
       if (unlikely(needed > have))
         return MDBX_RESULT_TRUE;
 
-      if (unlikely((rc = page_touch(csrc)) || (rc = page_touch(cdst))))
-        return rc;
-      psrc = csrc->pg[csrc->top];
-      pdst = cdst->pg[cdst->top];
-
       couple.outer.next = mn->txn->cursors[cursor_dbi(mn)];
       mn->txn->cursors[cursor_dbi(mn)] = &couple.outer;
-      rc = tree_propagate_key(mn, &key);
-      mn->txn->cursors[cursor_dbi(mn)] = couple.outer.next;
+      rc = page_touch(csrc);
+      if (likely(rc == MDBX_SUCCESS))
+        rc = page_touch(cdst);
+      if (likely(rc == MDBX_SUCCESS)) {
+        psrc = csrc->pg[csrc->top];
+        pdst = cdst->pg[cdst->top];
+        rc = tree_propagate_key(mn, &key);
+        mn->txn->cursors[cursor_dbi(mn)] = couple.outer.next;
+      }
       if (unlikely(rc != MDBX_SUCCESS))
         return rc;
     } else {
@@ -337,7 +339,7 @@ static int node_move(MDBX_cursor *csrc, MDBX_cursor *cdst, bool fromleft) {
       DEBUG("update separator for source page %" PRIaPGNO " to [%s]", psrc->pgno, DKEY_DEBUG(&key));
 
       cursor_couple_t couple;
-      MDBX_cursor *const mn = cursor_clone_slightly(csrc, &couple);
+      MDBX_cursor *const mn = cursor_clone_share_inner_tree(csrc, &couple);
       cASSERT0(csrc, mn->top > 0);
       mn->top -= 1;
 
@@ -371,7 +373,7 @@ static int node_move(MDBX_cursor *csrc, MDBX_cursor *cdst, bool fromleft) {
       }
       DEBUG("update separator for destination page %" PRIaPGNO " to [%s]", pdst->pgno, DKEY_DEBUG(&key));
       cursor_couple_t couple;
-      MDBX_cursor *const mn = cursor_clone_slightly(cdst, &couple);
+      MDBX_cursor *const mn = cursor_clone_share_inner_tree(cdst, &couple);
       cASSERT0(cdst, mn->top > 0);
       mn->top -= 1;
 
@@ -445,7 +447,7 @@ static int page_merge(MDBX_cursor *csrc, MDBX_cursor *cdst) {
       key.iov_base = node_key(srcnode);
       if (pagetype & P_BRANCH) {
         cursor_couple_t couple;
-        MDBX_cursor *const mn = cursor_clone_slightly(csrc, &couple);
+        MDBX_cursor *const mn = cursor_clone_share_inner_tree(csrc, &couple);
 
         /* must find the lowest key below src */
         rc = tree_deepen_lowest(mn);
@@ -517,10 +519,8 @@ static int page_merge(MDBX_cursor *csrc, MDBX_cursor *cdst) {
     const MDBX_val nullkey = {0, 0};
     rc = tree_propagate_key(csrc, &nullkey);
     cASSERT0(csrc, rc != MDBX_RESULT_TRUE);
-    if (unlikely(rc != MDBX_SUCCESS)) {
-      csrc->top += 1;
+    if (unlikely(rc != MDBX_SUCCESS))
       return rc;
-    }
   }
   csrc->top += 1;
 
@@ -754,7 +754,7 @@ int tree_rebalance(MDBX_cursor *mc) {
 
   /* Find neighbors. */
   cursor_couple_t couple;
-  MDBX_cursor *const mn = cursor_clone_slightly(mc, &couple);
+  MDBX_cursor *const mn = cursor_clone_share_inner_tree(mc, &couple);
 
   page_t *left = nullptr, *right = nullptr;
   if (mn->ki[pre_top] > 0) {
@@ -939,37 +939,31 @@ retry:
 }
 
 int tree_propagate_key(MDBX_cursor *mc, const MDBX_val *key) {
-  page_t *mp;
-  node_t *node;
-  size_t len;
-  ptrdiff_t delta, ksize, oksize;
-  intptr_t ptr, i, nkeys, indx;
-  DKBUF_DEBUG;
-
   cASSERT0(mc, cursor_is_tracked(mc));
-  indx = mc->ki[mc->top];
-  mp = mc->pg[mc->top];
-  node = page_node(mp, indx);
-  ptr = mp->entries[indx];
+  const intptr_t indx = mc->ki[mc->top];
+  page_t *const mp = mc->pg[mc->top];
+  node_t *node = page_node(mp, indx);
+  const intptr_t offset = mp->entries[indx];
 #if MDBX_DEBUG > 0
+  DKBUF_DEBUG;
   MDBX_val k2;
   k2.iov_base = node_key(node);
   k2.iov_len = node_ks(node);
-  DEBUG("update key %zi (offset %zu) [%s] to [%s] on page %" PRIaPGNO, indx, ptr, DVAL_DEBUG(&k2), DKEY_DEBUG(key),
+  DEBUG("update key %zi (offset %zu) [%s] to [%s] on page %" PRIaPGNO, indx, offset, DVAL_DEBUG(&k2), DKEY_DEBUG(key),
         mp->pgno);
 #endif /* MDBX_DEBUG */
 
   /* Sizes must be 2-byte aligned. */
-  ksize = EVEN_CEIL(key->iov_len);
-  oksize = EVEN_CEIL(node_ks(node));
-  delta = ksize - oksize;
+  const size_t new_ksize = EVEN_CEIL(key->iov_len);
+  const size_t old_ksize = EVEN_CEIL(node_ks(node));
+  const ptrdiff_t delta = new_ksize - old_ksize;
 
   /* Shift node contents if EVEN_CEIL(key length) changed. */
   if (delta) {
-    if (delta > (int)page_room(mp)) {
+    if (unlikely(delta > (ptrdiff_t)page_room(mp))) {
       /* not enough space left, do a delete and split */
       DEBUG("Not enough room, delta = %zd, splitting...", delta);
-      pgno_t pgno = node_pgno(node);
+      const pgno_t pgno = node_pgno(node);
       node_del(mc, 0);
       int err = page_split(mc, key, nullptr, pgno, MDBX_SPLIT_REPLACE);
       if (err == MDBX_SUCCESS && CHECKS2_ENABLED())
@@ -977,24 +971,24 @@ int tree_propagate_key(MDBX_cursor *mc, const MDBX_val *key) {
       return err;
     }
 
-    nkeys = page_numkeys(mp);
-    for (i = 0; i < nkeys; i++) {
-      if (mp->entries[i] <= ptr) {
+    const size_t nkeys = page_numkeys(mp);
+    for (size_t i = 0; i < nkeys; i++) {
+      if (mp->entries[i] <= offset) {
         cASSERT0(mc, mp->entries[i] >= delta);
         mp->entries[i] -= (indx_t)delta;
       }
     }
 
     void *const base = ptr_disp(mp, mp->upper + PAGEHDRSZ);
-    len = ptr - mp->upper + NODESIZE;
-    memmove(ptr_disp(base, -delta), base, len);
+    const size_t bottom_half = offset - mp->upper + NODESIZE;
+    memmove(ptr_disp(base, -delta), base, bottom_half);
     cASSERT0(mc, mp->upper >= delta);
     mp->upper -= (indx_t)delta;
 
     node = page_node(mp, indx);
   }
 
-  /* But even if no shift was needed, update ksize */
+  /* But even if no shift was needed, update key size */
   node_set_ks(node, key->iov_len);
 
   if (likely(key->iov_len /* to avoid UBSAN traps*/ != 0))

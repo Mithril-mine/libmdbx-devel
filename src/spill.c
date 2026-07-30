@@ -85,10 +85,12 @@ static size_t spill_cursor_keep(const MDBX_txn *const txn, const MDBX_cursor *mc
       TRACE("dbi %zu, mc-%p[%zu], page %u %p", cursor_dbi(mc), __Wpedantic_format_voidptr(mc), i, mp->pgno,
             __Wpedantic_format_voidptr(mp));
       tASSERT0(txn, !is_subpage(mp));
-      if (is_modifiable(txn, mp)) {
+      if (is_frozen(txn, mp))
+        break;
+      if (is_modifiable_relaxed(txn, mp)) {
         size_t const n = txn_dpl_search(txn, mp->pgno);
         if (txn->wr.dirtylist->items[n].pgno == mp->pgno &&
-            /* не считаем дважды */ txn_dpl_age(txn, n)) {
+            /* не считаем дважды */ txn_dpl_age(txn, n) > 0) {
           size_t *const ptr = ptr_disp(txn->wr.dirtylist->items[n].ptr, -(ptrdiff_t)sizeof(size_t));
           *ptr = txn->wr.dirtylru;
           tASSERT0(txn, txn_dpl_age(txn, n) == 0);
@@ -138,12 +140,8 @@ MDBX_NOTHROW_PURE_FUNCTION static unsigned spill_prio(const MDBX_txn *txn, const
   }
 
   page_t *const dp = dl->items[i].ptr;
-  if (dp->flags & (P_LOOSE | P_SPILLED | P_STICKED)) {
-    DEBUG("skip %s %zu page %" PRIaPGNO,
-          (dp->flags & P_LOOSE)     ? "loose"
-          : (dp->flags & P_STICKED) ? "sticked"
-                                    : "parent-spilled",
-          npages, pgno);
+  if (dp->flags & (P_LOOSE | P_SPILLED)) {
+    DEBUG("skip %s %zu page %" PRIaPGNO, (dp->flags & P_LOOSE) ? "loose" : "parent-spilled", npages, pgno);
     return 256;
   }
 
@@ -241,7 +239,7 @@ __cold int spill_slowpath(MDBX_txn *const txn, MDBX_cursor *const m0, const intp
     goto done;
   }
 
-  NOTICE("%s-spilling %zu dirty-entries, %zu dirty-npages", "write", need_spill_entries, need_spill_npages);
+  NOTICE("%s-spilling %zu dirty-entries, %zu dirty-npages", "prepare", need_spill_entries, need_spill_npages);
   MDBX_ANALYSIS_ASSUME(txn->wr.dirtylist != nullptr);
   tASSERT0(txn, txn->wr.dirtylist->length - txn->wr.loose_count >= 1);
   tASSERT0(txn, txn->wr.dirtylist->pages_including_loose - txn->wr.loose_count >= need_spill_npages);

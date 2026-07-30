@@ -4,10 +4,6 @@
 #include "internals.h"
 
 __cold static int lck_setup_locked(MDBX_env *env) {
-  int err = rthc_register(env);
-  if (unlikely(err != MDBX_SUCCESS))
-    return err;
-
   int lck_seize_rc = lck_seize(env);
   if (unlikely(MDBX_IS_ERROR(lck_seize_rc)))
     return lck_seize_rc;
@@ -23,6 +19,10 @@ __cold static int lck_setup_locked(MDBX_env *env) {
 
   DEBUG("lck-setup:%s%s%s", " with-lck", (env->flags & MDBX_RDONLY) ? " readonly" : "",
         (lck_seize_rc == MDBX_RESULT_TRUE) ? " exclusive" : " cooperative");
+
+  int err = rthc_register(env);
+  if (unlikely(err != MDBX_SUCCESS))
+    return err;
 
   MDBX_env *inprocess_neighbor = nullptr;
   err = rthc_uniq_check(&env->lck_mmap, &inprocess_neighbor);

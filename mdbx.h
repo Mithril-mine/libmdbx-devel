@@ -2628,7 +2628,12 @@ LIBMDBX_API int mdbx_env_delete(const char *pathname, MDBX_env_delete_mode_t mod
  * \note Available only on Windows.
  * \see mdbx_env_delete() */
 LIBMDBX_API int mdbx_env_deleteW(const wchar_t *pathname, MDBX_env_delete_mode_t mode);
+#define mdbx_env_deleteA(pathname, mode) mdbx_env_delete(pathname, mode)
+#ifdef UNICODE
 #define mdbx_env_deleteT(pathname, mode) mdbx_env_deleteW(pathname, mode)
+#else
+#define mdbx_env_deleteT(pathname, mode) mdbx_env_deleteA(pathname, mode)
+#endif /* UNICODE */
 #else
 #define mdbx_env_deleteT(pathname, mode) mdbx_env_delete(pathname, mode)
 #endif /* Windows */

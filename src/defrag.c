@@ -1129,6 +1129,8 @@ int defrag_cycle(dfc_t *dfc) {
           txn->dbi_state[dbi] |= DBI_DIRTY;
           txn->flags |= MDBX_TXN_DIRTY;
         }
+        for (MDBX_cursor *mc = txn->cursors[dbi]; mc; mc = mc->next)
+          be_poor(mc);
       }
     }
   } else {
@@ -1247,5 +1249,5 @@ int defrag_init(dfc_t *dfc, MDBX_txn *txn, size_t defrag_atleast_pages, size_t s
   while (dfc->notify_watchmask < (hi >> 10) && dfc->notify_watchmask < (lo >> 7) && dfc->notify_watchmask < 500)
     dfc->notify_watchmask += dfc->notify_watchmask + 1;
 
-  return defrag_should_continue(dfc, 0) ? MDBX_SUCCESS : MDBX_RESULT_TRUE;
+  return MDBX_SUCCESS;
 }
