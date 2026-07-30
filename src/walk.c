@@ -175,10 +175,10 @@ __cold static int walk_pgno(walk_ctx_t *ctx, walk_tbl_t *tbl, const pgno_t pgno,
     }
   }
 
-  const int rc = ctx->visitor(pgno, 1, ctx->userctx, ctx->deep, tbl, ctx->txn->env->ps, type, err, nentries,
+  int rc = ctx->visitor(pgno, 1, ctx->userctx, ctx->deep, tbl, ctx->txn->env->ps, type, err, nentries,
                               payload_size, header_size, unused_size + align_bytes);
-  if (unlikely(rc != MDBX_SUCCESS))
-    return (rc == MDBX_RESULT_TRUE) ? MDBX_SUCCESS : rc;
+  if (unlikely(rc != MDBX_SUCCESS || !mp))
+    return rc;
 
   for (size_t i = 0; err == MDBX_SUCCESS && i < nentries; ++i) {
     if (type == page_dupfix_leaf)
