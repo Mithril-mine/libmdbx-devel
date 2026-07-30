@@ -243,8 +243,8 @@ static int node_move(MDBX_cursor *csrc, MDBX_cursor *cdst, bool fromleft) {
         psrc = csrc->pg[csrc->top];
         pdst = cdst->pg[cdst->top];
         rc = tree_propagate_key(mn, &key);
-        mn->txn->cursors[cursor_dbi(mn)] = couple.outer.next;
       }
+      mn->txn->cursors[cursor_dbi(mn)] = couple.outer.next;
       if (unlikely(rc != MDBX_SUCCESS))
         return rc;
     } else {
