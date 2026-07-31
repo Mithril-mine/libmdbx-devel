@@ -672,12 +672,15 @@ int main(int argc, char *argv[]) {
                                   (intptr_t)envinfo.mi_geo.shrink,
                                   envinfo.mi_dxb_pagesize ? (intptr_t)envinfo.mi_dxb_pagesize : -1);
     } else if (envinfo.mi_mapsize) {
-      if (envinfo.mi_mapsize > globals.mmap_limit) {
+      const size_t mmap_limit =
+          mdbx_limits_dbsize_max(envinfo.mi_dxb_pagesize ? (intptr_t)envinfo.mi_dxb_pagesize : -1);
+      if (envinfo.mi_mapsize > mmap_limit) {
+        err = MDBX_TOO_LARGE;
         if (!quiet)
           fprintf(stderr,
                   "Database size is too large for current system (mapsize=%" PRIu64
-                  " is greater than system-limit %zu)\n",
-                  envinfo.mi_mapsize, globals.mmap_limit);
+                  " is greater than current system-limit %zu)\n",
+                  envinfo.mi_mapsize, mmap_limit);
         goto bailout;
       }
       err = mdbx_env_set_geometry(env, (intptr_t)envinfo.mi_mapsize, (intptr_t)envinfo.mi_mapsize,
@@ -704,6 +707,7 @@ int main(int argc, char *argv[]) {
 
   key_buf.iov_len = mdbx_env_get_maxkeysize_ex(env, 0) + (size_t)1;
   if (key_buf.iov_len >= INTPTR_MAX / 2) {
+    err = MDBX_PROBLEM;
     if (!quiet)
       fprintf(stderr, "mdbx_env_get_maxkeysize_ex() failed, returns %zu\n", key_buf.iov_len);
     goto bailout;
