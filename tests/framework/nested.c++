@@ -66,6 +66,7 @@ public:
   bool setup() override;
   bool run() override;
   bool teardown() override;
+  ~testcase_nested() override;
 };
 REGISTER_TESTCASE(nested);
 
@@ -87,6 +88,11 @@ bool testcase_nested::setup() {
   assert(stack.empty());
   stack.emplace(nullptr, serial, fifo, speculum);
   return true;
+}
+
+testcase_nested::~testcase_nested() {
+  while (txn_guard)
+    pop_txn(true);
 }
 
 bool testcase_nested::teardown() {
