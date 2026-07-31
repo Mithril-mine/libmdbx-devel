@@ -1276,9 +1276,9 @@ bailout:
     }
 
     mdbx_cursor_close(cursor);
-    if (!txn->cursors[dbi] && (txn->dbi_state[dbi] & DBI_FRESH))
-      mdbx_dbi_close(env, dbi);
   }
+  if (!txn->cursors[dbi] && (txn->dbi_state[dbi] & DBI_FRESH))
+    mdbx_dbi_close(env, dbi);
 
   return err;
 }
