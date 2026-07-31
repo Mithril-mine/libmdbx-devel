@@ -638,6 +638,7 @@ int main(int argc, char *argv[]) {
 
   kbuf.iov_len = mdbx_env_get_maxkeysize_ex(env, 0) + (size_t)1;
   if (kbuf.iov_len >= INTPTR_MAX / 2) {
+    err = MDBX_PROBLEM;
     if (!quiet)
       fprintf(stderr, "mdbx_env_get_maxkeysize() failed, returns %zu\n", kbuf.iov_len);
     goto bailout;
