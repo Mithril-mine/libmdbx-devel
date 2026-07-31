@@ -1089,10 +1089,13 @@ public:
   void shrink_to_fit() { silo_.resize(length(), 0, *this); }
 
   buffer &append(const void *src, size_t bytes) {
-    if (MDBX_UNLIKELY(tailroom() < check_length(bytes)))
-      MDBX_CXX20_UNLIKELY reserve_tailroom(bytes);
-    memcpy(end_byte_ptr(), src, bytes);
-    iov_len += bytes;
+    if (MDBX_LIKELY(bytes))
+      MDBX_CXX20_LIKELY {
+        if (MDBX_UNLIKELY(tailroom() < check_length(bytes)))
+          MDBX_CXX20_UNLIKELY reserve_tailroom(bytes);
+        memcpy(end_byte_ptr(), src, bytes);
+        iov_len += bytes;
+      }
     return *this;
   }
 
@@ -1107,10 +1110,13 @@ public:
   buffer &append(const struct slice &chunk) { return append(chunk.data(), chunk.size()); }
 
   buffer &add_header(const void *src, size_t bytes) {
-    if (MDBX_UNLIKELY(headroom() < check_length(bytes)))
-      MDBX_CXX20_UNLIKELY reserve_headroom(bytes);
-    iov_base = memcpy(byte_ptr() - bytes, src, bytes);
-    iov_len += bytes;
+    if (MDBX_LIKELY(bytes))
+      MDBX_CXX20_LIKELY {
+        if (MDBX_UNLIKELY(headroom() < check_length(bytes)))
+          MDBX_CXX20_UNLIKELY reserve_headroom(bytes);
+        iov_base = memcpy(byte_ptr() - bytes, src, bytes);
+        iov_len += bytes;
+      }
     return *this;
   }
 
@@ -1118,16 +1124,24 @@ public:
 
   template <MDBX_CXX20_CONCEPT(MutableByteProducer, PRODUCER)> buffer &append_producer(PRODUCER &producer) {
     const size_t wanna_bytes = producer.envisage_result_length();
-    if (MDBX_UNLIKELY(tailroom() < check_length(wanna_bytes)))
-      MDBX_CXX20_UNLIKELY reserve_tailroom(wanna_bytes);
-    return set_end(producer.write_bytes(end_char_ptr(), tailroom()));
+    if (MDBX_LIKELY(wanna_bytes))
+      MDBX_CXX20_LIKELY {
+        if (MDBX_UNLIKELY(tailroom() < check_length(wanna_bytes)))
+          MDBX_CXX20_UNLIKELY reserve_tailroom(wanna_bytes);
+        return set_end(producer.write_bytes(end_char_ptr(), tailroom()));
+      }
+    return *this;
   }
 
   template <MDBX_CXX20_CONCEPT(ImmutableByteProducer, PRODUCER)> buffer &append_producer(const PRODUCER &producer) {
     const size_t wanna_bytes = producer.envisage_result_length();
-    if (MDBX_UNLIKELY(tailroom() < check_length(wanna_bytes)))
-      MDBX_CXX20_UNLIKELY reserve_tailroom(wanna_bytes);
-    return set_end(producer.write_bytes(end_char_ptr(), tailroom()));
+    if (MDBX_LIKELY(wanna_bytes))
+      MDBX_CXX20_LIKELY {
+        if (MDBX_UNLIKELY(tailroom() < check_length(wanna_bytes)))
+          MDBX_CXX20_UNLIKELY reserve_tailroom(wanna_bytes);
+        return set_end(producer.write_bytes(end_char_ptr(), tailroom()));
+      }
+    return *this;
   }
 
   buffer &append_hex(const struct slice &data, bool uppercase = false, unsigned wrap_width = 0) {
