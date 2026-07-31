@@ -295,7 +295,7 @@ strip: all
 clean:
 	@echo '  CLEANING...'
 	$(QUIET)rm -rf $(MDBX_TOOLS) mdbx_test @* *.[ao] *.[ls]o *.$(SO_SUFFIX) *.dSYM *~ tmp.db/* \
-		*.gcov *.log *.err src/*.o test/*.o mdbx_example dist @dist-check \
+		*.gcov *.log *.err src/*.o test/*.o mdbx_legacy_example mdbx_modern_example dist @dist-check \
 		config-gnumake.h src/config-gnumake.h *.tar* @buildflags.tag @dist-checked.tag \
 		mdbx_*.static mdbx_*.static-lto CMakeFiles
 
@@ -329,7 +329,7 @@ ctest: cmake-build
 	@echo "  RUN: ctest .."
 	$(QUIET)ASAN_OPTIONS=$(ASAN_OPTIONS) UBSAN_OPTIONS=$(UBSAN_OPTIONS) $(CTEST) --test-dir @cmake-ninja-build --parallel `(nproc | sysctl -n hw.ncpu | echo 2) 2>/dev/null` --schedule-random $(CTEST_OPT)
 
-run-ut: mdbx_example
+run-ut: mdbx_legacy_example $(call select_by,MDBX_BUILD_CXX,mdbx_modern_example,)
 	$(QUIET)for UT in $^; do echo "  Running $$UT" && ASAN_OPTIONS=$(ASAN_OPTIONS) UBSAN_OPTIONS=$(UBSAN_OPTIONS) ./$${UT} || exit -1; done
 
 TEST_TARGETS :=
