@@ -299,8 +299,10 @@ int main(int argc, char *const argv[]) {
   if (argc < 2)
     failure("No parameters given. Try --help\n");
 
-  if (argc == 2 && strncmp(argv[1], global::thunk_param_prefix, strlen(global::thunk_param_prefix)) == 0)
-    return test_execute(actor_config(argv[1] + strlen(global::thunk_param_prefix))) ? EXIT_SUCCESS : EXIT_FAILURE;
+  const size_t thunk_prefix_len = strlen(global::thunk_param_prefix);
+  if (argc == 2 && strlen(argv[1]) > thunk_prefix_len &&
+      strncmp(argv[1], global::thunk_param_prefix, thunk_prefix_len) == 0)
+    return test_execute(actor_config(argv[1] + thunk_prefix_len)) ? EXIT_SUCCESS : EXIT_FAILURE;
 
   if (argc == 2 && (strcmp(argv[1], "--help") == 0 || strcmp(argv[1], "-h") == 0))
     usage();
