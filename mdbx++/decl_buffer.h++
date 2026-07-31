@@ -516,10 +516,6 @@ private:
       return reshape<false>(whole_capacity, headroom, nullptr, 0);
     }
 
-    MDBX_CXX20_CONSTEXPR void resize(size_t capacity, size_t headroom, slice &content) {
-      content.iov_base = reshape<false>(capacity, headroom, content.iov_base, content.iov_len);
-    }
-
     MDBX_NOTHROW_PURE_FUNCTION MDBX_CXX11_CONSTEXPR size_t capacity() const noexcept { return bin_.capacity(); }
     MDBX_NOTHROW_PURE_FUNCTION MDBX_CXX11_CONSTEXPR const void *data(size_t offset = 0) const noexcept {
       return get(offset);
@@ -904,7 +900,12 @@ public:
         ::std::max(tailroom(), wanna_tailroom),
         (wanna_tailroom < max_length - pettiness_threshold) ? wanna_tailroom + pettiness_threshold : wanna_tailroom);
     const size_t wanna_capacity = check_length(wanna_headroom, length(), wanna_tailroom);
-    silo_.resize(wanna_capacity, wanna_headroom, *this);
+
+    if (is_freestanding())
+      iov_base = silo_.template reshape<false>(wanna_capacity, wanna_headroom, iov_base, iov_len);
+    else if (wanna_capacity > iov_len)
+      iov_base = silo_.template reshape<true>(wanna_capacity, wanna_headroom, iov_base, iov_len);
+
     MDBX_INLINE_API_ASSERT(headroom() >= wanna_headroom && headroom() <= wanna_headroom + pettiness_threshold);
     MDBX_INLINE_API_ASSERT(tailroom() >= wanna_tailroom && tailroom() <= wanna_tailroom + pettiness_threshold);
   }
@@ -949,17 +950,16 @@ public:
   }
 
   MDBX_CXX20_CONSTEXPR buffer &assign(size_t headroom, const buffer &src, size_t tailroom) {
-    const size_t whole_capacity = check_length(headroom, src.length(), tailroom);
     if (MDBX_LIKELY(this != &src))
       MDBX_CXX20_LIKELY {
+        const size_t whole_capacity = check_length(headroom, src.length(), tailroom);
         invalidate();
         copy_assign_alloc::propagate(&silo_, src.silo_);
         iov_base = silo_.template reshape<true>(whole_capacity, headroom, src.data(), src.length());
         iov_len = src.length();
       }
-    else {
-      iov_base = silo_.template reshape<false>(whole_capacity, headroom, src.data(), src.length());
-    }
+    else
+      reserve(headroom, tailroom);
     return *this;
   }
 
@@ -1086,7 +1086,10 @@ public:
   }
 
   /// \brief Reduces memory usage by freeing unused storage space.
-  void shrink_to_fit() { silo_.resize(length(), 0, *this); }
+  void shrink_to_fit() {
+    if (is_freestanding())
+      iov_base = silo_.template reshape<false>(iov_len, 0, iov_base, iov_len);
+  }
 
   buffer &append(const void *src, size_t bytes) {
     if (MDBX_LIKELY(bytes))
