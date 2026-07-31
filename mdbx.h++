@@ -732,7 +732,8 @@ struct LIBMDBX_API_TYPE slice : public ::MDBX_val {
 #if defined(DOXYGEN) || (defined(__cpp_lib_string_view) && __cpp_lib_string_view >= 201606L)
   /// \brief Create a slice that refers to the same contents as "string_view"
   template <class CHAR, class T>
-  MDBX_CXX14_CONSTEXPR slice(const ::std::basic_string_view<CHAR, T> &sv) : slice(sv.data(), sv.data() + sv.length()) {}
+  MDBX_CXX14_CONSTEXPR slice(const ::std::basic_string_view<CHAR, T> &sv)
+      : slice(sv.data(), sv.size() * sizeof(CHAR)) {}
 
   template <class CHAR, class T> slice(::std::basic_string_view<CHAR, T> &&sv) : slice(sv) { sv = {}; }
 #endif /* __cpp_lib_string_view >= 201606L */
@@ -757,7 +758,7 @@ struct LIBMDBX_API_TYPE slice : public ::MDBX_val {
   inline slice &assign(const char *c_str);
 #if defined(DOXYGEN) || (defined(__cpp_lib_string_view) && __cpp_lib_string_view >= 201606L)
   template <class CHAR, class T> slice &assign(const ::std::basic_string_view<CHAR, T> &view) {
-    return assign(view.begin(), view.end());
+    return assign(view.data(), view.size() * sizeof(CHAR));
   }
   template <class CHAR, class T> slice &assign(::std::basic_string_view<CHAR, T> &&view) {
     assign(view);
@@ -2450,7 +2451,7 @@ public:
 
   template <class CHAR, class T, class A>
   buffer &assign(const ::std::basic_string<CHAR, T, A> &str, bool make_reference = false) {
-    return assign(str.data(), str.length(), make_reference);
+    return assign(str.data(), str.length() * sizeof(CHAR), make_reference);
   }
 
   buffer &assign(const char *c_str, bool make_reference = false) {
@@ -2460,11 +2461,11 @@ public:
 #if defined(__cpp_lib_string_view) && __cpp_lib_string_view >= 201606L
   template <class CHAR, class T>
   buffer &assign(const ::std::basic_string_view<CHAR, T> &view, bool make_reference = false) {
-    return assign(view.data(), view.length(), make_reference);
+    return assign(slice(view), make_reference);
   }
 
   template <class CHAR, class T> buffer &assign(::std::basic_string_view<CHAR, T> &&view, bool make_reference = false) {
-    assign(view.data(), view.length(), make_reference);
+    assign(slice(view), make_reference);
     view = {};
     return *this;
   }
@@ -2483,6 +2484,10 @@ public:
     return assign(view);
   }
 
+  template <class CHAR, class T> buffer &append(const ::std::basic_string_view<CHAR, T> &view) {
+    return append(view.begin(), view.end());
+  }
+
   /// \brief Return a string_view that references the data of this buffer.
   template <class CHAR = char, class T = ::std::char_traits<CHAR>>
   ::std::basic_string_view<CHAR, T> string_view() const noexcept {
@@ -2492,6 +2497,10 @@ public:
   /// \brief Return a string_view that references the data of this buffer.
   template <class CHAR, class T> operator ::std::basic_string_view<CHAR, T>() const noexcept {
     return string_view<CHAR, T>();
+  }
+
+  template <class CHAR, class T, class A> buffer &append(const ::std::basic_string<CHAR, T, A> &str) {
+    return append(slice(str));
   }
 #endif /* __cpp_lib_string_view >= 201606L */
 
