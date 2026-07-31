@@ -3,7 +3,7 @@
 #include <string>
 
 int main() {
-  std::u16string s(u"abcd"); // 4 chars = 8 bytes
+  std::u16string s(u"abcd1234"); // 8 chars = 16 bytes
   bool ok = true;
 
   mdbx::default_buffer bf_str_ctor(s), bf_str_asg;
