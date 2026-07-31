@@ -413,7 +413,7 @@ int mdbx_replace_ex(MDBX_txn *txn, MDBX_dbi dbi, const MDBX_val *key, MDBX_val *
       if (is_modifiable(txn, page)) {
         if (new_data && cmp_lenfast(&present_data, new_data) == 0) {
           /* если данные совпадают, то ничего делать не надо */
-          *old_data = *new_data;
+          *old_data = present_data;
           goto bailout;
         }
         rc = preserver ? preserver(preserver_context, old_data, present_data.iov_base, present_data.iov_len)
