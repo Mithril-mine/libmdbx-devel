@@ -78,7 +78,8 @@ struct LIBMDBX_API_TYPE slice : public ::MDBX_val {
 #if defined(DOXYGEN) || (defined(__cpp_lib_string_view) && __cpp_lib_string_view >= 201606L)
   /// \brief Create a slice that refers to the same contents as "string_view"
   template <class CHAR, class T>
-  MDBX_CXX14_CONSTEXPR slice(const ::std::basic_string_view<CHAR, T> &sv) : slice(sv.data(), sv.data() + sv.length()) {}
+  MDBX_CXX14_CONSTEXPR slice(const ::std::basic_string_view<CHAR, T> &sv)
+      : slice(sv.data(), sv.size() * sizeof(CHAR)) {}
 
   template <class CHAR, class T> slice(::std::basic_string_view<CHAR, T> &&sv) : slice(sv) { sv = {}; }
 #endif /* __cpp_lib_string_view >= 201606L */
@@ -98,12 +99,12 @@ struct LIBMDBX_API_TYPE slice : public ::MDBX_val {
   inline slice &assign(::MDBX_val &&src);
   inline slice &assign(const void *begin, const void *end);
   template <class CHAR, class T, class ALLOCATOR> slice &assign(const ::std::basic_string<CHAR, T, ALLOCATOR> &str) {
-    return assign(str.data(), str.length() * sizeof(CHAR));
+    return assign(str.data(), str.size() * sizeof(CHAR));
   }
   inline slice &assign(const char *c_str);
 #if defined(DOXYGEN) || (defined(__cpp_lib_string_view) && __cpp_lib_string_view >= 201606L)
   template <class CHAR, class T> slice &assign(const ::std::basic_string_view<CHAR, T> &view) {
-    return assign(view.begin(), view.end());
+    return assign(view.data(), view.size() * sizeof(CHAR));
   }
   template <class CHAR, class T> slice &assign(::std::basic_string_view<CHAR, T> &&view) {
     assign(view);

@@ -1030,7 +1030,7 @@ public:
 
   template <class CHAR, class T, class A>
   buffer &assign(const ::std::basic_string<CHAR, T, A> &str, bool make_reference = false) {
-    return assign(str.data(), str.length(), make_reference);
+    return assign(str.data(), str.length() * sizeof(CHAR), make_reference);
   }
 
   buffer &assign(const char *c_str, bool make_reference = false) {
@@ -1040,11 +1040,11 @@ public:
 #if defined(__cpp_lib_string_view) && __cpp_lib_string_view >= 201606L
   template <class CHAR, class T>
   buffer &assign(const ::std::basic_string_view<CHAR, T> &view, bool make_reference = false) {
-    return assign(view.data(), view.length(), make_reference);
+    return assign(slice(view), make_reference);
   }
 
   template <class CHAR, class T> buffer &assign(::std::basic_string_view<CHAR, T> &&view, bool make_reference = false) {
-    assign(view.data(), view.length(), make_reference);
+    assign(slice(view.begin(), make_reference);
     view = {};
     return *this;
   }
@@ -1060,11 +1060,11 @@ public:
 
 #if defined(DOXYGEN) || (defined(__cpp_lib_string_view) && __cpp_lib_string_view >= 201606L)
   template <class CHAR, class T> buffer &operator=(const ::std::basic_string_view<CHAR, T> &view) noexcept {
-    return assign(view.begin(), view.length());
+    return assign(slice(view));
   }
 
   template <class CHAR, class T> buffer &append(const ::std::basic_string_view<CHAR, T> &view) {
-    return append(view.data(), view.size());
+    return append(view.begin(), view.end());
   }
 #endif /* __cpp_lib_string_view >= 201606L */
 
@@ -1074,7 +1074,7 @@ public:
   }
 
   template <class CHAR, class T, class A> buffer &append(const ::std::basic_string<CHAR, T, A> &str) {
-    return append(str.data(), str.size());
+    return append(slice(str));
   }
 
   /// \brief Clears the contents and storage.
