@@ -717,9 +717,6 @@ public:
   buffer(const void *ptr, size_t bytes, bool make_reference, const allocator_type &alloc = allocator_type())
       : buffer(inherited(ptr, bytes), make_reference, alloc) {}
 
-  template <class CHAR, class T, class A> buffer(const ::std::basic_string<CHAR, T, A> &) = delete;
-  template <class CHAR, class T, class A> buffer(const ::std::basic_string<CHAR, T, A> &&) = delete;
-
   buffer(const char *c_str, bool make_reference, const allocator_type &alloc = allocator_type())
       : buffer(inherited(c_str), make_reference, alloc) {}
 
@@ -735,7 +732,7 @@ public:
       : buffer(src, src.empty() || src.is_null(), alloc) {}
 
   MDBX_CXX20_CONSTEXPR
-  buffer(const buffer &src)
+  explicit buffer(const buffer &src)
       : buffer(src, allocator_traits::select_on_container_copy_construction(src.get_allocator())) {}
 
   MDBX_CXX20_CONSTEXPR
@@ -743,9 +740,21 @@ public:
       : buffer(inherited(ptr, bytes), alloc) {}
 
   template <class CHAR, class T, class A>
-  MDBX_CXX20_CONSTEXPR buffer(const ::std::basic_string<CHAR, T, A> &str,
-                              const allocator_type &alloc = allocator_type())
-      : buffer(inherited(str), alloc) {}
+  explicit MDBX_CXX20_CONSTEXPR buffer(const ::std::basic_string<CHAR, T, A> &str,
+                                       const allocator_type &alloc = allocator_type())
+      : buffer(inherited(str), false, alloc) {}
+
+  template <class CHAR, class T, class A>
+  explicit MDBX_CXX20_CONSTEXPR buffer(const ::std::basic_string<CHAR, T, A> &str, bool make_reference,
+                                       const allocator_type &alloc = allocator_type())
+      : buffer(inherited(str), make_reference, alloc) {}
+
+  template <class CHAR, class T, class A>
+  explicit MDBX_CXX20_CONSTEXPR buffer(const ::std::basic_string<CHAR, T, A> &&str,
+                                       const allocator_type &alloc = allocator_type())
+      : buffer(inherited(str), false, alloc) {
+    str.clear();
+  }
 
   MDBX_CXX20_CONSTEXPR
   buffer(const char *c_str, const allocator_type &alloc = allocator_type()) : buffer(inherited(c_str), alloc) {}
@@ -1040,11 +1049,11 @@ public:
 #if defined(__cpp_lib_string_view) && __cpp_lib_string_view >= 201606L
   template <class CHAR, class T>
   buffer &assign(const ::std::basic_string_view<CHAR, T> &view, bool make_reference = false) {
-    return assign(slice(view), make_reference);
+    return assign(inherited(view), make_reference);
   }
 
   template <class CHAR, class T> buffer &assign(::std::basic_string_view<CHAR, T> &&view, bool make_reference = false) {
-    assign(slice(view.begin(), make_reference);
+    assign(inherited(view), make_reference);
     view = {};
     return *this;
   }
@@ -1060,7 +1069,7 @@ public:
 
 #if defined(DOXYGEN) || (defined(__cpp_lib_string_view) && __cpp_lib_string_view >= 201606L)
   template <class CHAR, class T> buffer &operator=(const ::std::basic_string_view<CHAR, T> &view) noexcept {
-    return assign(slice(view));
+    return assign(inherited(view));
   }
 
   template <class CHAR, class T> buffer &append(const ::std::basic_string_view<CHAR, T> &view) {
@@ -1074,7 +1083,7 @@ public:
   }
 
   template <class CHAR, class T, class A> buffer &append(const ::std::basic_string<CHAR, T, A> &str) {
-    return append(slice(str));
+    return append(inherited(str));
   }
 
   /// \brief Clears the contents and storage.
