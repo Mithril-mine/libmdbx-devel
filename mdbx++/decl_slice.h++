@@ -446,7 +446,7 @@ struct value_result {
   value_result(const value_result &) noexcept = default;
   value_result &operator=(const value_result &) noexcept = default;
   MDBX_CXX14_CONSTEXPR operator bool() const noexcept {
-    MDBX_INLINE_API_ASSERT(!done || bool(value));
+    MDBX_INLINE_API_ASSERT(!done || value.is_valid());
     return done;
   }
 };
