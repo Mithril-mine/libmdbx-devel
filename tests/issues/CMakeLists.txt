@@ -1,3 +1,5 @@
+add_definitions(-DMDBX_DEBUG=1 -DMDBX_CHECKING=2)
+
 macro(add_issue_test)
   add_simple_test(${ARGV} SOURCE_PREFIX "issue_" TARGET_PREFIX "test_issue_")
 endmacro(add_issue_test)
@@ -8,6 +10,7 @@ if(NOT WIN32)
   add_issue_test(gh0016 SOURCE "issue_gh0016.c")
 endif()
 add_issue_test(gh0017 SOURCE "issue_gh0017.c")
+add_issue_test(gh0023)
 add_issue_test(gh0028)
 add_issue_test(gh0030)
 add_issue_test(gh0033)
