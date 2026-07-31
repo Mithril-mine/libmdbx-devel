@@ -1090,7 +1090,7 @@ public:
   void clear() noexcept { inherited::assign(silo_.clear(), size_t(0)); }
 
   /// \brief Clears the contents and reserve storage.
-  void clear_and_reserve(size_t whole_capacity, size_t headroom = 0) noexcept {
+  void clear_and_reserve(size_t whole_capacity, size_t headroom = 0) {
     inherited::assign(silo_.clear_and_reserve(whole_capacity, headroom), size_t(0));
   }
 
