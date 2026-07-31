@@ -661,10 +661,16 @@ public:
   }
 
   /// \brief Return a const pointer to the beginning of the referenced data.
-  MDBX_CXX11_CONSTEXPR const void *data() const noexcept { return inherited::data(); }
+  MDBX_CXX11_CONSTEXPR const void *data() const noexcept { return const_data(); }
 
   /// \brief Return a const pointer to the end of the referenced data.
-  MDBX_CXX11_CONSTEXPR const void *end() const noexcept { return inherited::end(); }
+  MDBX_CXX11_CONSTEXPR const void *end() const noexcept { return const_end(); }
+
+  /// \brief Return a const pointer to the beginning of the referenced data.
+  MDBX_CXX11_CONSTEXPR const void *const_data() const noexcept { return inherited::data(); }
+
+  /// \brief Return a const pointer to the end of the referenced data.
+  MDBX_CXX11_CONSTEXPR const void *const_end() const noexcept { return inherited::end(); }
 
   /// \brief Return a pointer to the beginning of the referenced data.
   /// \pre REQUIRES: The buffer should store data chunk, but not referenced to an external one.
@@ -980,7 +986,7 @@ public:
       MDBX_CXX20_LIKELY {
         const auto kind = src.content_modality();
         const auto src_headroom = src.headroom();
-        const auto src_data = src.data();
+        const auto src_data = src.const_data();
         const auto src_length = src.length();
         inherited::assign(std::move(src));
         if (!move_assign_alloc::is_moveable(&silo_, src.silo_) && kind == modality::allocated) {
