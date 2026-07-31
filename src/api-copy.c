@@ -459,8 +459,8 @@ __cold static int copy_with_compacting(MDBX_env *env, MDBX_txn *txn, mdbx_fileha
       compacting_toggle_write_buffers(&ctx);
       thread_err = osal_thread_join(thread);
       eASSERT(env, (ctx.tail == ctx.head && ctx.write_len[ctx.head & 1] == 0) || ctx.error);
-      osal_condpair_destroy(&ctx.condpair);
     }
+    osal_condpair_destroy(&ctx.condpair);
     if (unlikely(thread_err != MDBX_SUCCESS))
       return thread_err;
     if (unlikely(rc != MDBX_SUCCESS))
