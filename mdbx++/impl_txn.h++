@@ -440,41 +440,38 @@ inline bool txn::erase(map_handle map, const slice &key, const slice &value) {
   }
 }
 
-inline void txn::replace(map_handle map, const slice &key, slice old_value, const slice &new_value) {
+inline void txn::replace(map_handle map, const slice &key, slice &old_value, const slice &new_value) {
   error::success_or_throw(::mdbx_replace_ex(handle_, map.dbi, &key, const_cast<slice *>(&new_value), &old_value,
                                             MDBX_CURRENT | MDBX_NOOVERWRITE, nullptr, nullptr));
 }
 
-template <class ALLOCATOR, typename CAPACITY_POLICY>
-inline buffer<ALLOCATOR, CAPACITY_POLICY>
-txn::extract(map_handle map, const slice &key,
-             const typename buffer<ALLOCATOR, CAPACITY_POLICY>::allocator_type &alloc) {
-  typename buffer<ALLOCATOR, CAPACITY_POLICY>::data_preserver result(alloc);
+template <class BUFFER, typename ALLOCATOR>
+inline BUFFER txn::extract(map_handle map, const slice &key, const ALLOCATOR &alloc) {
+  typename BUFFER::data_preserver result(alloc);
   error::success_or_throw(
-      ::mdbx_replace_ex(handle_, map.dbi, &key, nullptr, &result.slice_, MDBX_CURRENT, result, &result), result);
-  return result;
+      ::mdbx_replace_ex(handle_, map.dbi, &key, nullptr, &result.data, MDBX_CURRENT, result, &result), result);
+  return result.data;
 }
 
-template <class ALLOCATOR, typename CAPACITY_POLICY>
-inline buffer<ALLOCATOR, CAPACITY_POLICY>
-txn::replace(map_handle map, const slice &key, const slice &new_value,
-             const typename buffer<ALLOCATOR, CAPACITY_POLICY>::allocator_type &alloc) {
-  typename buffer<ALLOCATOR, CAPACITY_POLICY>::data_preserver result(alloc);
-  error::success_or_throw(::mdbx_replace_ex(handle_, map.dbi, &key, const_cast<slice *>(&new_value), &result.slice_,
+template <class BUFFER, typename ALLOCATOR>
+inline BUFFER txn::replace(map_handle map, const slice &key, const slice &new_value, const ALLOCATOR &alloc) {
+  typename BUFFER::data_preserver result(alloc);
+  error::success_or_throw(::mdbx_replace_ex(handle_, map.dbi, &key, const_cast<slice *>(&new_value), &result.data,
                                             MDBX_CURRENT, result, &result),
                           result);
-  return result;
+  return result.data;
 }
 
-template <class ALLOCATOR, typename CAPACITY_POLICY>
-inline buffer<ALLOCATOR, CAPACITY_POLICY>
-txn::replace_reserve(map_handle map, const slice &key, slice &new_value,
-                     const typename buffer<ALLOCATOR, CAPACITY_POLICY>::allocator_type &alloc) {
-  typename buffer<ALLOCATOR, CAPACITY_POLICY>::data_preserver result(alloc);
-  error::success_or_throw(::mdbx_replace_ex(handle_, map.dbi, &key, &new_value, &result.slice_,
+template <class BUFFER, typename ALLOCATOR>
+inline BUFFER txn::replace_reserve(map_handle map, const slice &key, size_t length, slice &new_value_reservation,
+                                   const ALLOCATOR &alloc) {
+  new_value_reservation.iov_base = nullptr;
+  new_value_reservation.iov_len = length;
+  typename BUFFER::data_preserver result(alloc);
+  error::success_or_throw(::mdbx_replace_ex(handle_, map.dbi, &key, &new_value_reservation, &result.data,
                                             MDBX_CURRENT | MDBX_RESERVE, result, &result),
                           result);
-  return result;
+  return result.data;
 }
 
 inline void txn::append(map_handle map, const slice &key, const slice &value, bool multivalue_order_preserved) {

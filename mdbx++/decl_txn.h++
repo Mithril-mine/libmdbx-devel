@@ -302,27 +302,19 @@ public:
   inline bool erase(map_handle map, const slice &key, const slice &value);
 
   /// \brief Replaces the particular multi-value of the key with a new value.
-  inline void replace(map_handle map, const slice &key, slice old_value, const slice &new_value);
+  inline void replace(map_handle map, const slice &key, slice &old_value, const slice &new_value);
 
   /// \brief Removes and return a value of the key.
-  template <class ALLOCATOR, typename CAPACITY_POLICY>
-  inline buffer<ALLOCATOR, CAPACITY_POLICY>
-  extract(map_handle map, const slice &key,
-          const typename buffer<ALLOCATOR, CAPACITY_POLICY>::allocator_type &alloc =
-              buffer<ALLOCATOR, CAPACITY_POLICY>::allocator_type());
+  template <class BUFFER, class ALLOCATOR = typename BUFFER::allocator_type>
+  inline BUFFER extract(map_handle map, const slice &key, const ALLOCATOR &alloc = ALLOCATOR());
 
   /// \brief Replaces and returns a value of the key with new one.
-  template <class ALLOCATOR, typename CAPACITY_POLICY>
-  inline buffer<ALLOCATOR, CAPACITY_POLICY>
-  replace(map_handle map, const slice &key, const slice &new_value,
-          const typename buffer<ALLOCATOR, CAPACITY_POLICY>::allocator_type &alloc =
-              buffer<ALLOCATOR, CAPACITY_POLICY>::allocator_type());
+  template <class BUFFER, class ALLOCATOR = typename BUFFER::allocator_type>
+  inline BUFFER replace(map_handle map, const slice &key, const slice &new_value, const ALLOCATOR &alloc = ALLOCATOR());
 
-  template <class ALLOCATOR, typename CAPACITY_POLICY>
-  inline buffer<ALLOCATOR, CAPACITY_POLICY>
-  replace_reserve(map_handle map, const slice &key, slice &new_value,
-                  const typename buffer<ALLOCATOR, CAPACITY_POLICY>::allocator_type &alloc =
-                      buffer<ALLOCATOR, CAPACITY_POLICY>::allocator_type());
+  template <class BUFFER, class ALLOCATOR = typename BUFFER::allocator_type>
+  inline BUFFER replace_reserve(map_handle map, const slice &key, size_t length, slice &new_value_reservation,
+                                const ALLOCATOR &alloc = ALLOCATOR());
 
   /// \brief Adding a key-value pair, provided that ascending order of the keys
   /// and (optionally) values are preserved.

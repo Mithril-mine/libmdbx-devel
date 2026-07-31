@@ -554,7 +554,7 @@ private:
 
   struct data_preserver : public exception_thunk {
     buffer data;
-    data_preserver(allocator_type &alloc) : data(alloc) {}
+    data_preserver(const allocator_type &alloc) : data(alloc) {}
     static int callback(void *context, MDBX_val *target, const void *src, size_t bytes) noexcept {
       auto self = static_cast<data_preserver *>(context);
       assert(self->is_clean());
@@ -569,8 +569,6 @@ private:
       }
     }
     MDBX_CXX11_CONSTEXPR operator MDBX_preserve_func() const noexcept { return callback; }
-    MDBX_CXX11_CONSTEXPR operator const buffer &() const noexcept { return data; }
-    MDBX_CXX11_CONSTEXPR operator buffer &() noexcept { return data; }
   };
 
 public:
