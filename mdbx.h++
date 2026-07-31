@@ -1860,10 +1860,6 @@ private:
       return reshape<false>(whole_capacity, headroom, nullptr, 0);
     }
 
-    MDBX_CXX20_CONSTEXPR void resize(size_t capacity, size_t headroom, slice &content) {
-      content.iov_base = reshape<false>(capacity, headroom, content.iov_base, content.iov_len);
-    }
-
     MDBX_NOTHROW_PURE_FUNCTION MDBX_CXX11_CONSTEXPR size_t capacity() const noexcept { return bin_.capacity(); }
     MDBX_NOTHROW_PURE_FUNCTION MDBX_CXX11_CONSTEXPR const void *data(size_t offset = 0) const noexcept {
       return get(offset);
@@ -2326,7 +2322,12 @@ public:
         ::std::max(tailroom(), wanna_tailroom),
         (wanna_tailroom < max_length - pettiness_threshold) ? wanna_tailroom + pettiness_threshold : wanna_tailroom);
     const size_t wanna_capacity = check_length(wanna_headroom, slice_.length(), wanna_tailroom);
-    silo_.resize(wanna_capacity, wanna_headroom, slice_);
+
+    if (is_freestanding())
+      slice_.iov_base = silo_.template reshape<false>(wanna_capacity, wanna_headroom, slice_.iov_base, slice_.iov_len);
+    else if (wanna_capacity > slice_.iov_len)
+      slice_.iov_base = silo_.template reshape<true>(wanna_capacity, wanna_headroom, slice_.iov_base, slice_.iov_len);
+
     assert(headroom() >= wanna_headroom && headroom() <= wanna_headroom + pettiness_threshold);
     assert(tailroom() >= wanna_tailroom && tailroom() <= wanna_tailroom + pettiness_threshold);
   }
@@ -2371,18 +2372,23 @@ public:
   }
 
   MDBX_CXX20_CONSTEXPR buffer &assign(size_t headroom, const buffer &src, size_t tailroom) {
-    const size_t whole_capacity = check_length(headroom, src.length(), tailroom);
-    slice_.invalidate();
-    if MDBX_IF_CONSTEXPR (!copy_assign_alloc::is_always_equal()) {
-      if (MDBX_UNLIKELY(silo_.get_allocator() != src.silo_.get_allocator()))
-        MDBX_CXX20_UNLIKELY {
-          silo_.release();
-          copy_assign_alloc::propagate(&silo_, src.silo_);
+    if (MDBX_LIKELY(this != &src))
+      MDBX_CXX20_LIKELY {
+        const size_t whole_capacity = check_length(headroom, src.length(), tailroom);
+        slice_.invalidate();
+        if MDBX_IF_CONSTEXPR (!copy_assign_alloc::is_always_equal()) {
+          if (MDBX_UNLIKELY(silo_.get_allocator() != src.silo_.get_allocator()))
+            MDBX_CXX20_UNLIKELY {
+              silo_.release();
+              copy_assign_alloc::propagate(&silo_, src.silo_);
+            }
         }
-    }
 
-    slice_.iov_base = silo_.template reshape<true>(whole_capacity, headroom, src.data(), src.length());
-    slice_.iov_len = src.length();
+        slice_.iov_base = silo_.template reshape<true>(whole_capacity, headroom, src.data(), src.length());
+        slice_.iov_len = src.length();
+      }
+    else
+      reserve(headroom, tailroom);
     return *this;
   }
 
@@ -2533,7 +2539,10 @@ public:
   }
 
   /// \brief Reduces memory usage by freeing unused storage space.
-  void shrink_to_fit() { silo_.resize(length(), 0, slice_); }
+  void shrink_to_fit() {
+    if (is_freestanding())
+      slice_.iov_base = silo_.template reshape<false>(slice_.iov_len, 0, slice_.iov_base, slice_.iov_len);
+  }
 
   /// \brief Drops the first "n" bytes from the data chunk.
   /// \pre REQUIRES: `n <= size()`
