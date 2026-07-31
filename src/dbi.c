@@ -520,13 +520,13 @@ static int dbi_open_locked(MDBX_txn *txn, cursor_couple_t *maindb_cx, unsigned u
 
 create:
   tASSERT0(txn, rc == MDBX_SUCCESS || rc == MDBX_NOTFOUND);
-  uint8_t dbi_state = DBI_LINDO | DBI_VALID | DBI_FRESH;
+  uint8_t dbi_state =
+      clone ? DBI_LINDO | DBI_VALID | DBI_FRESH : /* re-opened after uncommitted close */ DBI_LINDO | DBI_VALID;
   if (unlikely(rc != MDBX_SUCCESS)) {
     rc = tbl_create(txn, &maindb_cx->outer, slot, &name, user_flags);
     if (unlikely(rc != MDBX_SUCCESS))
       goto bailout;
-    if (clone)
-      dbi_state |= DBI_DIRTY | DBI_CREAT;
+    dbi_state |= clone ? DBI_CREAT | DBI_DIRTY : /* re-created after uncommitted removal */ DBI_DIRTY;
   }
 
   /* Got info, register DBI in this txn */
