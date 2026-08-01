@@ -28,6 +28,7 @@ LIST=basic
 FROM=1
 UPTO=9999999
 MONITOR=
+GDB=no
 LOOPS=
 SKIP_MAKE=no
 GEOMETRY_JITTER=yes
@@ -44,6 +45,7 @@ REPEAT=11
 ROUNDS=1
 SMALL=no
 NUMABIND=
+SCRIPT_DIR=$(dirname "$0")
 
 while [ -n "$1" ]
 do
@@ -56,6 +58,7 @@ do
     echo "--append               Execute only 'append' testcase"
     echo "--ttl                  Execute only 'ttl' testcase"
     echo "--with-valgrind        Run tests under Valgrind's memcheck tool"
+    echo "--with-gdb             Run tests under GDB"
     echo "--skip-make            Don't (re)build libmdbx and test's executable"
     echo "--from NN              Start iterating from the NN ops per test case"
     echo "--upto NN              Don't run tests with more than NN ops per test case"
@@ -106,6 +109,10 @@ do
     echo "       and after this process 'A' read such region, etc."
     MONITOR="valgrind --trace-children=yes --log-file=valgrind-%p.log --leak-check=full --track-origins=yes --read-var-info=yes --error-exitcode=42 --suppressions=valgrind.supp"
     rm -f valgrind-*.log
+  ;;
+  --with-gdb)
+     MONITOR="gdb --init-command=${SCRIPT_DIR}/.gdbinit --command=${SCRIPT_DIR}/with.gdb --return-child-result"
+     GDB=yes
   ;;
   --skip-make)
     SKIP_MAKE=yes
@@ -527,15 +534,24 @@ function probe {
   for case in $LIST
   do
     echo "${speculum} --random-writemap=no --ignore-dbfull --repeat=${REPEAT} --pathname=${TESTDB_DIR}/long.db --cleanup-after=no --geometry-jitter=${GEOMETRY_JITTER} $@ $case"
-    if [[ ${REPORT_DEPTH} = "yes" && ($case = "basic" || $case = "--hill") ]]; then
-      exec {LFD}> >(${TEE4PIPE} >(logger) | grep -e reach -e achieve)
+    if [[ ${GDB} = "yes" ]]; then
+        touch ${TESTDB_DIR}/test.log \
+          && ${NUMABIND} ${MONITOR} --tty=${TESTDB_DIR}/test.log --args ./mdbx_test ${speculum} --random-writemap=no --ignore-dbfull --repeat=${REPEAT} --pathname=${TESTDB_DIR}/long.db --cleanup-after=no --geometry-jitter=${GEOMETRY_JITTER} "$@" $case \
+        && touch ${TESTDB_DIR}/chk-db.log \
+          && ${NUMABIND} ${MONITOR} --tty=${TESTDB_DIR}/chk-db.log --args ./mdbx_chk ${TESTDB_DIR}/long.db \
+        && ([ ! -e ${TESTDB_DIR}/long.db-copy ] || (touch ${TESTDB_DIR}/chk-db-copy.log && ${NUMABIND} ${MONITOR} --tty=${TESTDB_DIR}/chk-db-copy.log --args ./mdbx_chk ${TESTDB_DIR}/long.db-copy)) \
+        || failed
     else
-      exec {LFD}> >(logger)
+      if [[ ${REPORT_DEPTH} = "yes" && ($case = "basic" || $case = "--hill") ]]; then
+        exec {LFD}> >(${TEE4PIPE} >(logger) | grep -e reach -e achieve)
+      else
+        exec {LFD}> >(logger)
+      fi
+      ${NUMABIND} ${MONITOR} ./mdbx_test ${speculum} --random-writemap=no --ignore-dbfull --repeat=${REPEAT} --pathname=${TESTDB_DIR}/long.db --cleanup-after=no --geometry-jitter=${GEOMETRY_JITTER} "$@" $case >&${LFD} \
+        && ${NUMABIND} ${MONITOR} ./mdbx_chk ${TESTDB_DIR}/long.db | ${TEE4PIPE} ${TESTDB_DIR}/long-chk.log \
+        && ([ ! -e ${TESTDB_DIR}/long.db-copy ] || ${NUMABIND} ${MONITOR} ./mdbx_chk ${TESTDB_DIR}/long.db-copy | ${TEE4PIPE} ${TESTDB_DIR}/long-chk-copy.log) \
+        || failed
     fi
-    ${NUMABIND} ${MONITOR} ./mdbx_test ${speculum} --random-writemap=no --ignore-dbfull --repeat=${REPEAT} --pathname=${TESTDB_DIR}/long.db --cleanup-after=no --geometry-jitter=${GEOMETRY_JITTER} "$@" $case >&${LFD} \
-      && ${NUMABIND} ${MONITOR} ./mdbx_chk ${TESTDB_DIR}/long.db | ${TEE4PIPE} ${TESTDB_DIR}/long-chk.log \
-      && ([ ! -e ${TESTDB_DIR}/long.db-copy ] || ${NUMABIND} ${MONITOR} ./mdbx_chk ${TESTDB_DIR}/long.db-copy | ${TEE4PIPE} ${TESTDB_DIR}/long-chk-copy.log) \
-      || failed
     if [ ${LFD} -ne 0 ]; then
       echo "@@@ END-OF-LOG/ITERATION" >&${LFD}
       exec {LFD}>&-
