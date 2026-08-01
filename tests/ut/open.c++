@@ -46,7 +46,10 @@ static void logger_nofmt(MDBX_log_level_t loglevel, const char *function, int li
   (void)length;
   (void)loglevel;
   std::cout.flush();
-  fprintf(stdout, "%s:%u %s", function, line, msg);
+  if (function)
+    fprintf(stdout, "%s:%u %s", function, line, msg);
+  else
+    fputs(msg, stdout);
   fflush(stdout);
 }
 

@@ -234,7 +234,12 @@ static void logger_nofmt(MDBX_log_level_t loglevel, const char *function, int li
                          unsigned length) noexcept {
   (void)length;
   (void)loglevel;
-  fprintf(stdout, "%s:%u %s", function, line, msg);
+  std::cout.flush();
+  if (function)
+    fprintf(stdout, "%s:%u %s", function, line, msg);
+  else
+    fputs(msg, stdout);
+  fflush(stdout);
 }
 
 int main(int argc, char *argv[]) {
