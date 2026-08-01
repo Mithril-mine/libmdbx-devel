@@ -1570,7 +1570,7 @@ __hot int cursor_del(MDBX_cursor *mc, unsigned flags) {
           /* fix other sub-DB cursors pointed at the same sub-tree */
           for (MDBX_cursor *m2 = mc->txn->cursors[cursor_dbi(mc)]; m2; m2 = m2->next) {
             if (is_related(mc, m2) && m2->pg[mc->top] == mp && m2->ki[mc->top] == mc->ki[mc->top])
-              m2->subcur->nested_tree = mc->subcur->nested_tree;
+              *m2->subcur->cursor.tree = mc->subcur->nested_tree;
           }
         } else {
           /* shrink sub-page */
@@ -1609,7 +1609,12 @@ __hot int cursor_del(MDBX_cursor *mc, unsigned flags) {
       if (unlikely(rc != MDBX_SUCCESS))
         goto fail;
     }
-    inner_gone(mc);
+    if (mc->subcur) {
+      for (MDBX_cursor *m2 = mc->txn->cursors[cursor_dbi(mc)]; m2; m2 = m2->next) {
+        if (mc->top <= m2->top && m2->pg[mc->top] == mp && m2->ki[mc->top] == mc->ki[mc->top])
+          inner_gone(m2);
+      }
+    }
   } else {
     cASSERT(mc, !inner_pointed(mc));
     /* MDBX passes N_TREE in 'flags' to delete a DB record */
@@ -1646,13 +1651,13 @@ del_key:
         cursor_inner_refresh(m3, m3->pg[mc->top], m3->ki[mc->top]);
     }
   }
+  inner_gone(mc);
 
   rc = tree_rebalance(mc);
   if (unlikely(rc != MDBX_SUCCESS))
     goto fail;
 
   mc->flags |= z_after_delete;
-  inner_gone(mc);
   if (unlikely(mc->top < 0)) {
     /* DB is totally empty now, just bail out.
      * Other cursors adjustments were already done
