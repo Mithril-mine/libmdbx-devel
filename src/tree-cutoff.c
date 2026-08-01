@@ -5,10 +5,8 @@
 #include "internals.h"
 
 #if !defined(NDEBUG)
-MDBX_MAYBE_UNUSED MDBX_ATTRIBUTE_NO_SANITIZE_ADDRESS(MDBX_NOTHING) static char *cursor_dump_stack(const MDBX_cursor *mc,
-                                                                                                  const char *caption,
-                                                                                                  bool print_subcursor,
-                                                                                                  bool print_pageptr) {
+MDBX_MAYBE_UNUSED MDBX_ATTRIBUTE_NO_SANITIZE_ADDRESS(MDBX_NOTHING) static char *cursor_dump_position(
+    const MDBX_cursor *mc, const char *caption, bool print_subcursor, bool print_pageptr) {
   static char buf[1024];
   char *const end = buf + sizeof(buf) - 1;
   char *tail = buf;
@@ -94,7 +92,7 @@ static int cutoff_leaf(MDBX_cursor *axe, unsigned alldups) {
   (void)v;
   (void)sk;
   (void)sv;
-  VERBOSE("cut %s => \"%s\".\"%s\"", cursor_dump_stack(axe, s, true, false), sk, sv);
+  VERBOSE("cut %s => \"%s\".\"%s\"", cursor_dump_position(axe, s, true, false), sk, sv);
 #endif /* !NDEBUG */
   return cursor_del(axe, alldups);
 }
@@ -225,8 +223,8 @@ static int cutoff_zikkurat(MDBX_cursor *begin, MDBX_cursor *end, intptr_t level,
   }
 
 #ifndef NDEBUG
-  VERBOSE(">> %s", cursor_dump_stack(begin, "begin", false, false));
-  VERBOSE(">> %s", cursor_dump_stack(end, end_including ? "end-including" : "end-excluding", false, false));
+  VERBOSE(">> %s", cursor_dump_position(begin, "begin", false, false));
+  VERBOSE(">> %s", cursor_dump_position(end, end_including ? "end-including" : "end-excluding", false, false));
 #endif /* NDEBUG */
 
   cursor_couple_t dozer;
@@ -243,8 +241,8 @@ static int cutoff_zikkurat(MDBX_cursor *begin, MDBX_cursor *end, intptr_t level,
         goto bailout;
 
 #ifndef NDEBUG
-      VERBOSE(">= %s", cursor_dump_stack(begin, "begin", false, false));
-      VERBOSE(">= %s", cursor_dump_stack(end, end_including ? "end-including" : "end-excluding", false, false));
+      VERBOSE(">= %s", cursor_dump_position(begin, "begin", false, false));
+      VERBOSE(">= %s", cursor_dump_position(end, end_including ? "end-including" : "end-excluding", false, false));
 #endif /* NDEBUG */
 
       cASSERT0(mc, mc->top == level);
@@ -272,7 +270,7 @@ static int cutoff_zikkurat(MDBX_cursor *begin, MDBX_cursor *end, intptr_t level,
         node_t *const node = page_node(mp, mc->ki[level] -= 1);
         cASSERT0(mc, is_branch(mp) && node_flags(node) == 0);
 #ifndef NDEBUG
-        VERBOSE("== %s", cursor_dump_stack(mc, "del-tree-node", false, false));
+        VERBOSE("== %s", cursor_dump_position(mc, "del-tree-node", false, false));
 #endif /* NDEBUG */
         err = tree_cutoff_twig(mc, node_pgno(node), level + 1, mp->txnid, false);
         if (unlikely(err != MDBX_SUCCESS))
@@ -324,8 +322,8 @@ static int cutoff_zikkurat(MDBX_cursor *begin, MDBX_cursor *end, intptr_t level,
       inner_gone(mc);
 
 #ifndef NDEBUG
-      VERBOSE("<= %s", cursor_dump_stack(begin, "begin", false, false));
-      VERBOSE("<= %s", cursor_dump_stack(end, end_including ? "end-including" : "end-excluding", false, false));
+      VERBOSE("<= %s", cursor_dump_position(begin, "begin", false, false));
+      VERBOSE("<= %s", cursor_dump_position(end, end_including ? "end-including" : "end-excluding", false, false));
 #endif /* NDEBUG */
 
     next:
@@ -343,8 +341,8 @@ static int cutoff_zikkurat(MDBX_cursor *begin, MDBX_cursor *end, intptr_t level,
 
 bailout:
 #ifndef NDEBUG
-  VERBOSE(">> %s", cursor_dump_stack(begin, "begin", false, false));
-  VERBOSE(">> %s", cursor_dump_stack(end, end_including ? "end-including" : "end-excluding", false, false));
+  VERBOSE(">> %s", cursor_dump_position(begin, "begin", false, false));
+  VERBOSE(">> %s", cursor_dump_position(end, end_including ? "end-including" : "end-excluding", false, false));
 #endif /* NDEBUG */
   mc->txn->cursors[cursor_dbi(mc)] = dozer.outer.next;
   if (is_inner(mc)) {
@@ -514,8 +512,8 @@ int tree_cutoff_range(MDBX_cursor *begin, MDBX_cursor *end, bool end_including) 
     return MDBX_PROBLEM;
 
 #ifndef NDEBUG
-  VERBOSE(">> %s", cursor_dump_stack(begin, "begin", true, false));
-  VERBOSE(">> %s", cursor_dump_stack(end, end_including ? "end-including" : "end-excluding", true, false));
+  VERBOSE(">> %s", cursor_dump_position(begin, "begin", true, false));
+  VERBOSE(">> %s", cursor_dump_position(end, end_including ? "end-including" : "end-excluding", true, false));
 #endif /* NDEBUG */
 
 #if MDBX_ENABLE_BUNCHES_REMOVAL
