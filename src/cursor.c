@@ -1055,6 +1055,7 @@ __hot int cursor_put(MDBX_cursor *mc, const MDBX_val *key, MDBX_val *data, unsig
         while (save_count);
       }
 
+      PROBE_AGAINST_DANGLING_DBI(mc);
       if (CHECKS2_ENABLED()) {
         err = cursor_validate(mc);
         if (unlikely(err != MDBX_SUCCESS))
@@ -1064,6 +1065,7 @@ __hot int cursor_put(MDBX_cursor *mc, const MDBX_val *key, MDBX_val *data, unsig
     }
 
   more:
+    PROBE_AGAINST_DANGLING_DBI(mc);
     if (CHECKS2_ENABLED()) {
       err = cursor_validate(mc);
       if (unlikely(err != MDBX_SUCCESS))
@@ -1122,6 +1124,7 @@ __hot int cursor_put(MDBX_cursor *mc, const MDBX_val *key, MDBX_val *data, unsig
         else
           memcpy(page2payload(lp.page), data->iov_base, data->iov_len);
 
+        PROBE_AGAINST_DANGLING_DBI(mc);
         if (CHECKS2_ENABLED()) {
           err = cursor_validate(mc);
           if (unlikely(err != MDBX_SUCCESS))
@@ -1130,6 +1133,7 @@ __hot int cursor_put(MDBX_cursor *mc, const MDBX_val *key, MDBX_val *data, unsig
         return MDBX_SUCCESS;
       }
 
+      PROBE_AGAINST_DANGLING_DBI(mc);
       if ((err = page_retire(mc, lp.page)) != MDBX_SUCCESS)
         return err;
     } else {
@@ -1396,6 +1400,7 @@ __hot int cursor_put(MDBX_cursor *mc, const MDBX_val *key, MDBX_val *data, unsig
           if (unlikely(err != MDBX_SUCCESS))
             return err;
         }
+        PROBE_AGAINST_DANGLING_DBI(mc);
         return MDBX_SUCCESS;
       }
     }
@@ -1498,6 +1503,7 @@ insert_node:;
       cASSERT0(mc, mc->subcur->nested_tree.items < PTRDIFF_MAX);
       const size_t probe = (size_t)mc->subcur->nested_tree.items;
 #define SHIFT_MDBX_APPENDDUP_TO_MDBX_APPEND 1
+      PROBE_AGAINST_DANGLING_DBI(mc);
       STATIC_ASSERT((MDBX_APPENDDUP >> SHIFT_MDBX_APPENDDUP_TO_MDBX_APPEND) == MDBX_APPEND);
       inner_flags |= (flags & MDBX_APPENDDUP) >> SHIFT_MDBX_APPENDDUP_TO_MDBX_APPEND;
       rc = cursor_put(&mc->subcur->cursor, data, &empty, inner_flags);
@@ -1519,6 +1525,7 @@ insert_node:;
       be_filled(mc);
     }
     if (likely(rc == MDBX_SUCCESS)) {
+      PROBE_AGAINST_DANGLING_DBI(mc);
       cASSERT0(mc, is_filled(mc));
       if (unlikely(batch_dupfix_done)) {
       batch_dupfix_continue:
@@ -1652,6 +1659,7 @@ __hot int cursor_del(MDBX_cursor *mc, unsigned flags) {
     if (flags & (MDBX_ALLDUPS | /* for compatibility */ MDBX_NODUPDATA)) {
       /* will subtract the final entry later */
       mc->tree->items -= mc->subcur->nested_tree.items - 1;
+      PROBE_AGAINST_DANGLING_DBI(mc);
     } else {
       if ((node_flags(node) & N_TREE) == 0) {
         page_t *sp = node_data(node);
@@ -1662,6 +1670,7 @@ __hot int cursor_del(MDBX_cursor *mc, unsigned flags) {
       rc = cursor_del(&mc->subcur->cursor, 0);
       if (unlikely(rc != MDBX_SUCCESS))
         return rc;
+      PROBE_AGAINST_DANGLING_DBI(mc);
       /* If sub-DB still has entries, we're done */
       if (mc->subcur->nested_tree.items) {
         if (node_flags(node) & N_TREE) {
@@ -1698,6 +1707,7 @@ __hot int cursor_del(MDBX_cursor *mc, unsigned flags) {
         }
         mc->tree->items -= 1;
         cASSERT0(mc, mc->tree->items > 0 && mc->tree->height > 0 && mc->tree->root != P_INVALID);
+        PROBE_AGAINST_DANGLING_DBI(mc);
         return rc;
       }
       /* otherwise fall thru and delete the sub-DB */
@@ -1715,6 +1725,7 @@ __hot int cursor_del(MDBX_cursor *mc, unsigned flags) {
           inner_gone_unconditional(m2);
       }
     }
+    PROBE_AGAINST_DANGLING_DBI(mc);
   } else {
     cASSERT0(mc, !inner_pointed(mc));
     /* MDBX passes N_TREE in 'flags' to delete a DB record */
@@ -1752,6 +1763,7 @@ del_key:
     }
   }
   inner_gone(mc);
+  PROBE_AGAINST_DANGLING_DBI(mc);
 
   rc = tree_rebalance(mc);
   if (unlikely(rc != MDBX_SUCCESS))
@@ -1831,6 +1843,7 @@ del_key:
     }
   }
 
+  PROBE_AGAINST_DANGLING_DBI(mc);
   cASSERT0(mc, rc == MDBX_SUCCESS);
   if (CHECKS2_ENABLED())
     rc = cursor_validate(mc);

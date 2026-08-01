@@ -63,6 +63,14 @@ struct commit_timestamp {
 };
 MDBX_INTERNAL pgop_stat_t *txn_latency_gcprof(const MDBX_env *env, MDBX_commit_latency *latency);
 
+#if xMDBX_DEBUG_SPILLING > 0
+MDBX_INTERNAL void txn_probe_dbi_cursors_stacks(const MDBX_txn *txn, size_t dbi, const char *func, unsigned line);
+#define PROBE_AGAINST_DANGLING_DBI(cursor)                                                                             \
+  txn_probe_dbi_cursors_stacks((cursor)->txn, cursor_dbi(cursor), __func__, __LINE__)
+#else
+#define PROBE_AGAINST_DANGLING_DBI(cursor) ((void)(cursor))
+#endif /* xMDBX_DEBUG_SPILLING */
+
 MDBX_INTERNAL bool txn_refund(MDBX_txn *txn);
 MDBX_INTERNAL bool txn_gc_detent(const MDBX_txn *const txn);
 MDBX_INTERNAL int txn_check_badbits_parked(const MDBX_txn *txn, int bad_bits);
