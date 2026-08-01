@@ -222,9 +222,13 @@ MDBX_MAYBE_UNUSED static inline void be_filled(MDBX_cursor *mc) {
   cASSERT0(mc, inner == is_inner(mc));
 }
 
-MDBX_MAYBE_UNUSED static inline bool is_related(const MDBX_cursor *base, const MDBX_cursor *scan) {
+MDBX_MAYBE_UNUSED static inline bool is_related_include(const MDBX_cursor *base, const MDBX_cursor *scan) {
   cASSERT0(base, base->top >= 0);
-  return base->top <= scan->top && base != scan;
+  return base->top <= scan->top;
+}
+
+MDBX_MAYBE_UNUSED static inline bool is_related(const MDBX_cursor *base, const MDBX_cursor *scan) {
+  return is_related_include(base, scan) && base != scan;
 }
 
 /* Флаги контроля/проверки курсора. */
