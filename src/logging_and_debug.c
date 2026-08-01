@@ -13,29 +13,29 @@ __cold void debug_log_va(int level, const char *function, int line, const char *
       if (len > 0)
         globals.logger.nofmt(level, function, line, globals.logger_buffer, len);
     }
-  } else {
 #if defined(_WIN32) || defined(_WIN64)
-    if (IsDebuggerPresent()) {
-      int prefix_len = 0;
-      char *prefix = nullptr;
-      if (function && line > 0)
-        prefix_len = osal_asprintf(&prefix, "%s:%d ", function, line);
-      else if (function)
-        prefix_len = osal_asprintf(&prefix, "%s: ", function);
-      else if (line > 0)
-        prefix_len = osal_asprintf(&prefix, "%d: ", line);
-      if (prefix_len > 0 && prefix) {
-        OutputDebugStringA(prefix);
-        osal_free(prefix);
-      }
-      char *msg = nullptr;
-      int msg_len = osal_vasprintf(&msg, fmt, args);
-      if (msg_len > 0 && msg) {
-        OutputDebugStringA(msg);
-        osal_free(msg);
-      }
+  } else if (IsDebuggerPresent()) {
+    int prefix_len = 0;
+    char *prefix = nullptr;
+    if (function && line > 0)
+      prefix_len = osal_asprintf(&prefix, "%s:%d ", function, line);
+    else if (function)
+      prefix_len = osal_asprintf(&prefix, "%s: ", function);
+    else if (line > 0)
+      prefix_len = osal_asprintf(&prefix, "%d: ", line);
+    if (prefix_len > 0 && prefix) {
+      OutputDebugStringA(prefix);
+      osal_free(prefix);
     }
-#else
+    char *msg = nullptr;
+    int msg_len = osal_vasprintf(&msg, fmt, args);
+    if (msg_len > 0 && msg) {
+      OutputDebugStringA(msg);
+      osal_free(msg);
+    }
+#endif /* WINDOWS */
+  } else {
+#if !(defined(_WIN32) || defined(_WIN64)) || !MDBX_WITHOUT_MSVC_CRT
     if (function && line > 0)
       fprintf(stderr, "%s:%d ", function, line);
     else if (function)
@@ -44,7 +44,7 @@ __cold void debug_log_va(int level, const char *function, int line, const char *
       fprintf(stderr, "%d: ", line);
     vfprintf(stderr, fmt, args);
     fflush(stderr);
-#endif
+#endif /* !WINDOWS || !MDBX_WITHOUT_MSVC_CRT */
   }
   ENSURE(nullptr, osal_fastmutex_release(&globals.debug_lock) == 0);
 }
