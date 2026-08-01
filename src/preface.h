@@ -883,9 +883,13 @@ __extern_C key_t ftok(const char *, int);
 #ifdef __SANITIZE_ADDRESS__
 #define RUNNING_ON_ASAN (1)
 #include <sanitizer/asan_interface.h>
+#define ASAN_REGISON_IS_POISONED(addr, size) __asan_region_is_poisoned((void *)(addr), size)
+#define ASAN_DESCRIBE_ADDRESS(addr) __asan_describe_address((void *)(addr))
 #elif !defined(ASAN_POISON_MEMORY_REGION)
 #define ASAN_POISON_MEMORY_REGION(addr, size) ((void)(addr), (void)(size))
 #define ASAN_UNPOISON_MEMORY_REGION(addr, size) ((void)(addr), (void)(size))
+#define ASAN_REGISON_IS_POISONED(addr, size) ((void)(addr), (void)(size), 0)
+#define ASAN_DESCRIBE_ADDRESS(addr) ((void)addr)
 #endif /* __SANITIZE_ADDRESS__ */
 
 #ifndef RUNNING_ON_ASAN
