@@ -334,3 +334,118 @@ __cold void mdbx_assert_fail(const char *msg, const char *func, unsigned line) {
 }
 
 #endif /* MDBX_CHECKING >= 0 */
+
+/*----------------------------------------------------------------------------*/
+
+static inline char sanitizer_probe_page(const MDBX_txn *txn, const page_t *mp, bool allow_subpage) {
+  if (!mp)
+    return '0';
+  const char sanitizer_probe = sanitizer_kind_of_poison(mp, sizeof(*mp));
+  if (sanitizer_probe)
+    return sanitizer_probe;
+  if (mp->pgno < NUM_METAS || (mp->pgno >= txn->geo.first_unallocated && !(mp->flags & P_SUBP)) || mp->flags == 0 ||
+      ((mp->flags & P_ILL_BITS) != 0 &&
+       !(allow_subpage && (mp->flags == (P_SUBP | P_LEAF) || mp->flags == (P_SUBP | P_LEAF | P_DUPFIX)))))
+    return '%';
+  return 0;
+}
+
+__cold MDBX_ATTRIBUTE_NO_SANITIZE_ADDRESS(MDBX_NOTHING) void cursor_stack(const MDBX_cursor *const mc, const char *func,
+                                                                          unsigned line, const char *prefix) {
+  MDBX_log_level_t lvl = MDBX_LOG_VERBOSE - 1;
+  if (LOG_ENABLED(lvl)) {
+    debug_log(lvl, func, line, "cursor%s-%p[%i, flags 0x%X]", prefix, __Wpedantic_format_voidptr(mc), mc->top,
+              (uint8_t)mc->flags);
+    for (int i = 0; i <= mc->top; ++i) {
+      char page_flags[16], *pf = page_flags;
+      const page_t *mp = mc->pg[i];
+      const char sanitizer_probe = sanitizer_probe_page(mc->txn, mp, i == 0 && is_inner(mc));
+      if (sanitizer_probe) {
+        *pf++ = sanitizer_probe;
+        *pf++ = '>';
+        VALGRIND_DISABLE_ADDR_ERROR_REPORTING_IN_RANGE(mp, sizeof(*mp));
+      }
+      if (!sanitizer_probe || sanitizer_probe == '%') {
+        if (is_branch(mp))
+          *pf++ = 'B';
+        if (is_leaf(mp))
+          *pf++ = 'L';
+        if (is_dupfix_leaf(mp))
+          *pf++ = 'F';
+        if (is_subpage(mp))
+          *pf++ = 'S';
+        *pf++ = '_';
+
+        if (page_check(mc, mp) != MDBX_SUCCESS)
+          *pf++ = '%';
+        if (!is_correct(mc->txn, mp))
+          *pf++ = '!';
+        if (is_frozen(mc->txn, mp))
+          *pf++ = 'f';
+        if (is_shadowed(mc->txn, mp))
+          *pf++ = 'h';
+        if (is_spilled(mc->txn, mp))
+          *pf++ = 's';
+        if (is_modifiable(mc->txn, mp))
+          *pf++ = 'm';
+      }
+      *pf = 0;
+      debug_log(lvl, nullptr, 0, "%s%u->%u.%p_%s:%u%s", i ? ", " : "", i,
+                (sanitizer_probe && sanitizer_probe != '%') ? 0 : mp->pgno, __Wpedantic_format_voidptr(mp), page_flags,
+                mc->ki[i], sanitizer_probe ? "\n" : "");
+      if (sanitizer_probe) {
+#if !IS_WINDOWS || !MDBX_WITHOUT_MSVC_CRT
+        fflush(nullptr);
+#endif
+        ASAN_DESCRIBE_ADDRESS(mp);
+        VALGRIND_ENABLE_ADDR_ERROR_REPORTING_IN_RANGE(mp, sizeof(*mp));
+      }
+    }
+    debug_log(lvl, nullptr, 0, "\n");
+  }
+}
+
+__hot void txn_probe_dbi_cursors_stacks(const MDBX_txn *txn, size_t dbi, const char *func, unsigned line) {
+  for (const MDBX_cursor *mc = txn->cursors[dbi]; mc; mc = mc->next) {
+    const MDBX_cursor *mx = mc;
+    while (!is_poor(mx)) {
+      for (intptr_t i = 0; i <= mx->top; ++i) {
+        page_t *mp = mx->pg[i];
+        const char sanitizer_probe = sanitizer_probe_page(txn, mp, i == 0 && is_inner(mx));
+        if (unlikely(sanitizer_probe)) {
+          cursor_stack(mc, func, line, ".outer");
+          if (mx != mc)
+            cursor_stack(mx, func, line, ".inner");
+          cASSERT0(mc, mp && page_check(mx, mp) == MDBX_SUCCESS);
+          const char *cause = "unknown";
+          switch (sanitizer_probe) {
+          case '0':
+            cause = "null-address";
+            break;
+          case 'P':
+            cause = "ASAN.poisoned";
+            break;
+          case 'A':
+            cause = "MEMCHECK.non-addressable";
+            break;
+          case 'U':
+            cause = "MEMCHECK.undefined";
+            break;
+          case '%':
+            cause = "HEADER.sanity-check";
+            break;
+          }
+
+          panic_fmt(mc,
+                    "Dangling reference from the cursor's stack to a freed page is detected: %s-cursor %p dbi %zu, "
+                    "top %i, at level %zi, page %p, cause %s",
+                    is_inner(mx) ? "inner" : "outer", __Wpedantic_format_voidptr(mx), cursor_dbi(mx), mx->top, i,
+                    __Wpedantic_format_voidptr(mp), cause);
+        }
+      }
+      if (!inner_pointed(mx))
+        break;
+      mx = &mx->subcur->cursor;
+    }
+  }
+}
