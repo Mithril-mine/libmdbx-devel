@@ -289,10 +289,10 @@ MDBX_NOTHROW_PURE_FUNCTION static inline const page_t *payload2page(const void *
 
 MDBX_NOTHROW_PURE_FUNCTION MDBX_MAYBE_UNUSED static inline const page_t *ptr2page(const MDBX_env *env,
                                                                                   const void *ptr) {
-  eASSERT0(env,
-           ptr_dist(ptr, env->dxb_mmap.base) >= 0 && (size_t)ptr_dist(ptr, env->dxb_mmap.base) < env->dxb_mmap.limit);
-  const uintptr_t mask = env->ps - 1;
-  return (page_t *)((uintptr_t)ptr & ~mask);
+  const size_t offset = ptr_dist(ptr, env->dxb_mmap.base);
+  eASSERT0(env, offset < env->dxb_mmap.limit);
+  const size_t mask = env->ps - 1;
+  return (const page_t *)ptr_disp(env->dxb_mmap.base, offset & ~mask);
 }
 
 MDBX_NOTHROW_PURE_FUNCTION static inline meta_t *page_meta(page_t *mp) { return (meta_t *)page2payload(mp); }
