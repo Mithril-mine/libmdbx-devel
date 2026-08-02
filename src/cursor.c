@@ -1485,17 +1485,16 @@ insert_node:;
         for (MDBX_cursor *m2 = mc->txn->cursors[dbi]; m2; m2 = m2->next) {
           if (!is_related(mc, m2) || m2->pg[mc->top] != mp)
             continue;
-          if (/* пропускаем незаполненные курсоры, иначе получится что у такого
-                 курсора будет инициализирован вложенный, что антилогично и бесполезно. */
-              is_filled(m2) && m2->ki[mc->top] == mc->ki[mc->top]) {
-            cASSERT0(m2, m2->subcur->cursor.clc == mx->cursor.clc);
-            m2->subcur->nested_tree = mx->nested_tree;
-            m2->subcur->cursor.pg[0] = mx->cursor.pg[0];
+          if (m2->ki[mc->top] == mc->ki[mc->top]) {
+            cursor_couple_t *cx = container_of(m2, cursor_couple_t, outer);
+            cASSERT0(m2, cx->inner.cursor.clc == mx->cursor.clc);
+            cx->inner.nested_tree = mx->nested_tree;
+            cx->inner.cursor.pg[0] = mx->cursor.pg[0];
             if (old_singledup.iov_base) {
-              m2->subcur->cursor.top_and_flags = z_inner;
-              m2->subcur->cursor.ki[0] = 0;
+              cx->inner.cursor.combo_state = z_inner;
+              cx->inner.cursor.ki[0] = 0;
             }
-            DEBUG("Sub-dbi -%zu root page %" PRIaPGNO, cursor_dbi(&m2->subcur->cursor), m2->subcur->nested_tree.root);
+            DEBUG("Sub-dbi -%zu root page %" PRIaPGNO, cursor_dbi(m2), cx->inner.nested_tree.root);
           } else if (!insert_key && m2->ki[mc->top] < nkeys)
             cursor_inner_refresh(m2, mp, m2->ki[mc->top]);
         }
