@@ -78,6 +78,7 @@ static inline int page_touch(MDBX_cursor *mc) {
     tASSERT0(txn, txn_dpl_check(txn));
   }
   cASSERT0(mc, /* нужно для spill_txn_keep() */ cursor_is_tracked(mc));
+  PROBE_AGAINST_DANGLING_TXN(txn);
 
   if (is_modifiable(txn, mp)) {
     if (!txn->wr.dirtylist) {

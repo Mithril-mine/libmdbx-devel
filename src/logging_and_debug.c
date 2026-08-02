@@ -449,3 +449,7 @@ __hot void txn_probe_dbi_cursors_stacks(const MDBX_txn *txn, size_t dbi, const c
     }
   }
 }
+
+__hot void txn_probe_all_cursors_against_dangling(MDBX_txn *txn, const char *func, unsigned line) {
+  TXN_FOREACH_DBI_ALL(txn, dbi) { txn_probe_dbi_cursors_stacks(txn, dbi, func, line); }
+}

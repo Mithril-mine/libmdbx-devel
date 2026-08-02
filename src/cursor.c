@@ -107,6 +107,7 @@ static int touch_dbi(MDBX_cursor *mc) {
   *cursor_dbi_state(mc) |= DBI_DIRTY;
   mc->txn->flags |= MDBX_TXN_DIRTY;
 
+  PROBE_AGAINST_DANGLING_TXN(mc->txn);
   if (!cursor_is_core(mc)) {
     /* Touch DB record of named DB */
     cursor_couple_t cx;
@@ -135,6 +136,7 @@ __hot int cursor_touch(MDBX_cursor *const mc, const MDBX_val *key, const MDBX_va
 
   cASSERT0(mc, F_ISSET(dbi_state(mc->txn, FREE_DBI), DBI_LINDO | DBI_VALID));
   cASSERT0(mc, F_ISSET(dbi_state(mc->txn, MAIN_DBI), DBI_LINDO | DBI_VALID));
+  PROBE_AGAINST_DANGLING_TXN(mc->txn);
   if (!is_inner(mc)) {
     MDBX_txn *const txn = mc->txn;
     txn_dpl_lru_turn(txn);

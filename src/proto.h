@@ -67,8 +67,11 @@ MDBX_INTERNAL pgop_stat_t *txn_latency_gcprof(const MDBX_env *env, MDBX_commit_l
 MDBX_INTERNAL void txn_probe_dbi_cursors_stacks(const MDBX_txn *txn, size_t dbi, const char *func, unsigned line);
 #define PROBE_AGAINST_DANGLING_DBI(cursor)                                                                             \
   txn_probe_dbi_cursors_stacks((cursor)->txn, cursor_dbi(cursor), __func__, __LINE__)
+MDBX_INTERNAL void txn_probe_all_cursors_against_dangling(MDBX_txn *txn, const char *func, unsigned line);
+#define PROBE_AGAINST_DANGLING_TXN(txn) txn_probe_all_cursors_against_dangling((txn), __func__, __LINE__)
 #else
 #define PROBE_AGAINST_DANGLING_DBI(cursor) ((void)(cursor))
+#define PROBE_AGAINST_DANGLING_TXN(txn) ((void)(txn))
 #endif /* xMDBX_DEBUG_SPILLING */
 
 MDBX_INTERNAL bool txn_refund(MDBX_txn *txn);
