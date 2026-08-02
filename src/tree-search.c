@@ -55,7 +55,7 @@ __hot int tree_search(MDBX_cursor *mc, const MDBX_val *key, int flags) {
       goto bailout;
   }
 
-  mc->top = 0;
+  mc->top_and_stash = 0;
   mc->ki[0] = (flags & Z_LAST) ? page_numkeys(mc->pg[0]) - 1 : 0;
   DEBUG("db %d root page %" PRIaPGNO " has flags 0x%X", cursor_dbi_dbg(mc), root, mc->pg[0]->flags);
 

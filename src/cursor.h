@@ -44,7 +44,7 @@
  *
  * Изменения состояния.
  *
- *  - Сбрасывается состояние курсора посредством top_and_flags |= z_poor_mark,
+ *  - Сбрасывается состояние курсора посредством combo_state |= z_poor_mark,
  *    что равносильно top = -1 вместе с flags |= z_poor_mark;
  *  - При позиционировании курсора сначала устанавливается top, а flags
  *    только в самом конце при отсутстви ошибок.
@@ -125,22 +125,24 @@ enum cursor_state {
   z_fresh_mark = z_poor_mark | z_fresh
 };
 
+MDBX_MAYBE_UNUSED static inline bool has_inner(const MDBX_cursor *mc) { return mc->subcur != nullptr; }
+
 MDBX_MAYBE_UNUSED MDBX_NOTHROW_PURE_FUNCTION static inline bool is_inner(const MDBX_cursor *mc) {
   return (mc->flags & z_inner) != 0;
 }
 
 MDBX_MAYBE_UNUSED MDBX_NOTHROW_PURE_FUNCTION static inline bool is_poor(const MDBX_cursor *mc) {
   const bool r = mc->top < 0;
-  cASSERT0(mc, r == (mc->top_and_flags < 0));
-  if (r && mc->subcur)
+  cASSERT0(mc, r == (mc->combo_state < 0));
+  if (r && has_inner(mc))
     cASSERT0(mc, mc->subcur->cursor.flags < 0 && mc->subcur->cursor.top < 0);
   return r;
 }
 
 MDBX_MAYBE_UNUSED MDBX_NOTHROW_PURE_FUNCTION static inline bool is_pointed(const MDBX_cursor *mc) {
   const bool r = mc->top >= 0;
-  cASSERT0(mc, r == (mc->top_and_flags >= 0));
-  if (!r && mc->subcur)
+  cASSERT0(mc, r == (mc->combo_state >= 0));
+  if (!r && has_inner(mc))
     cASSERT0(mc, is_poor(&mc->subcur->cursor));
   return r;
 }
@@ -150,7 +152,7 @@ MDBX_MAYBE_UNUSED MDBX_NOTHROW_PURE_FUNCTION static inline bool is_hollow(const 
   if (!r) {
     cASSERT0(mc, mc->top >= 0);
     cASSERT0(mc, (mc->flags & z_eof_hard) || mc->ki[mc->top] < page_numkeys(mc->pg[mc->top]));
-  } else if (mc->subcur)
+  } else if (has_inner(mc))
     cASSERT0(mc, is_poor(&mc->subcur->cursor) || (is_pointed(mc) && mc->subcur->cursor.flags < 0));
   return r;
 }
@@ -166,15 +168,15 @@ MDBX_MAYBE_UNUSED MDBX_NOTHROW_PURE_FUNCTION static inline bool is_filled(const 
 }
 
 MDBX_MAYBE_UNUSED MDBX_NOTHROW_PURE_FUNCTION static inline bool inner_filled(const MDBX_cursor *mc) {
-  return mc->subcur && is_filled(&mc->subcur->cursor);
+  return has_inner(mc) && is_filled(&mc->subcur->cursor);
 }
 
 MDBX_MAYBE_UNUSED MDBX_NOTHROW_PURE_FUNCTION static inline bool inner_pointed(const MDBX_cursor *mc) {
-  return mc->subcur && is_pointed(&mc->subcur->cursor);
+  return has_inner(mc) && is_pointed(&mc->subcur->cursor);
 }
 
 MDBX_MAYBE_UNUSED MDBX_NOTHROW_PURE_FUNCTION static inline bool inner_hollow(const MDBX_cursor *mc) {
-  const bool r = !mc->subcur || is_hollow(&mc->subcur->cursor);
+  const bool r = !has_inner(mc) || is_hollow(&mc->subcur->cursor);
 #if MDBX_CHECKING > 0
   if (!r) {
     cASSERT0(mc, is_filled(mc));
@@ -188,15 +190,18 @@ MDBX_MAYBE_UNUSED MDBX_NOTHROW_PURE_FUNCTION static inline bool inner_hollow(con
 
 MDBX_MAYBE_UNUSED static inline void inner_gone_unconditional(MDBX_cursor *mc) {
   TRACE("reset inner cursor %p", __Wpedantic_format_voidptr(&mc->subcur->cursor));
-  mc->subcur->nested_tree.root = 0;
-  mc->subcur->cursor.top_and_flags = z_inner | z_poor_mark;
+  cASSERT0(mc, !is_inner(mc));
+  cursor_couple_t *couple = container_of(mc, cursor_couple_t, outer);
+  couple->inner.nested_tree.root = 0;
+  couple->inner.cursor.combo_state = z_inner | z_poor_mark;
 }
 
 MDBX_MAYBE_UNUSED static inline void inner_gone(MDBX_cursor *mc) {
-  if (mc->subcur) {
+  if (has_inner(mc)) {
     TRACE("reset inner cursor %p", __Wpedantic_format_voidptr(&mc->subcur->cursor));
-    mc->subcur->nested_tree.root = 0;
-    mc->subcur->cursor.top_and_flags = z_inner | z_poor_mark;
+    cursor_couple_t *couple = container_of(mc, cursor_couple_t, outer);
+    couple->inner.nested_tree.root = 0;
+    couple->inner.cursor.combo_state = z_inner | z_poor_mark;
   }
 }
 
@@ -204,17 +209,17 @@ MDBX_MAYBE_UNUSED static inline void be_poor(MDBX_cursor *mc) {
   const bool inner = is_inner(mc);
   if (inner) {
     mc->tree->root = 0;
-    mc->top_and_flags = z_inner | z_poor_mark;
+    mc->combo_state = z_inner | z_poor_mark;
   } else {
-    mc->top_and_flags |= z_poor_mark;
-    inner_gone(mc);
+    mc->combo_state |= z_poor_mark;
+    inner_gone_unconditional(mc);
   }
   cASSERT0(mc, is_poor(mc) && !is_pointed(mc) && !is_filled(mc));
   cASSERT0(mc, inner == is_inner(mc));
 }
 
 MDBX_MAYBE_UNUSED static inline void be_filled(MDBX_cursor *mc) {
-  cASSERT0(mc, mc->top >= 0);
+  cASSERT0(mc, mc->top >= 0 && mc->stash == 0);
   cASSERT0(mc, mc->ki[mc->top] < page_numkeys(mc->pg[mc->top]));
   const bool inner = is_inner(mc);
   mc->flags &= z_clear_mask;
@@ -296,22 +301,44 @@ MDBX_MAYBE_UNUSED static inline int cursor_dbi_dbg(const MDBX_cursor *mc) {
 
 MDBX_MAYBE_UNUSED static inline int __must_check_result cursor_push(MDBX_cursor *mc, page_t *mp, indx_t ki) {
   TRACE("pushing page %" PRIaPGNO " on db %d cursor %p", mp->pgno, cursor_dbi_dbg(mc), __Wpedantic_format_voidptr(mc));
-  if (unlikely(mc->top >= CURSOR_STACK_SIZE - 1)) {
+  cASSERT0(mc, mc->top >= -1);
+  size_t new_top = mc->top + 1;
+  if (unlikely(new_top >= CURSOR_STACK_SIZE)) {
     be_poor(mc);
     mc->txn->flags |= MDBX_TXN_ERROR;
     return MDBX_CURSOR_FULL;
   }
-  mc->top += 1;
-  mc->pg[mc->top] = mp;
-  mc->ki[mc->top] = ki;
+  mc->top_and_stash = (int16_t)new_top;
+  cASSERT0(mc, mc->top == (int)new_top && mc->stash == 0);
+  mc->pg[new_top] = mp;
+  mc->ki[new_top] = ki;
   return MDBX_SUCCESS;
 }
 
-MDBX_MAYBE_UNUSED static inline void cursor_pop(MDBX_cursor *mc) {
-  TRACE("popped page %" PRIaPGNO " off db %d cursor %p", mc->pg[mc->top]->pgno, cursor_dbi_dbg(mc),
+MDBX_MAYBE_UNUSED static inline void cursor_eject(MDBX_cursor *mc) {
+  TRACE("eject page %" PRIaPGNO " off db %d cursor %p", mc->pg[mc->top]->pgno, cursor_dbi_dbg(mc),
         __Wpedantic_format_voidptr(mc));
-  cASSERT0(mc, mc->top >= 0);
-  mc->top -= 1;
+  cASSERT0(mc, mc->top >= 0 && mc->stash == 0);
+  mc->top_and_stash = mc->top - 1;
+}
+
+MDBX_MAYBE_UNUSED static inline void cursor_enroot(MDBX_cursor *mc, int step) {
+  TRACE("cursor %p (dbi %i) enroot %+i to %i, pgno %u", __Wpedantic_format_voidptr(mc), cursor_dbi_dbg(mc), step,
+        mc->top - step, (mc->top >= step) ? mc->pg[mc->top - step]->pgno : 0);
+  cASSERT0(mc, mc->top >= step && mc->stash >= 0);
+  const int prev_stash = mc->stash, prev_top = mc->top;
+  int16_t delta = (step << CHAR_BIT) - step;
+  mc->top_and_stash += delta;
+  ASSERT(mc->top >= 0 && mc->top == prev_top - step && mc->stash > 0 && mc->stash == prev_stash + step);
+}
+
+MDBX_MAYBE_UNUSED static inline void cursor_undo_enroot(MDBX_cursor *mc, int step) {
+  TRACE("cursor %p (dbi %i) undo %+i, to %i, pgno %u", __Wpedantic_format_voidptr(mc), cursor_dbi_dbg(mc), step,
+        mc->top + step, mc->pg[mc->top + step]->pgno);
+  const int prev_stash = mc->stash, prev_top = mc->top;
+  int16_t delta = (step << CHAR_BIT) - step;
+  mc->top_and_stash -= delta;
+  ASSERT(mc->top > 0 && mc->top == prev_top + step && mc->stash >= 0 && mc->stash == prev_stash - step);
 }
 
 MDBX_NOTHROW_PURE_FUNCTION static inline bool check_leaf_type(const MDBX_cursor *mc, const page_t *mp) {
@@ -415,16 +442,30 @@ MDBX_MAYBE_UNUSED static inline void cursor_inner_refresh(const MDBX_cursor *mc,
     mc->subcur->cursor.pg[0] = node_data(node);
 }
 
+MDBX_MAYBE_UNUSED MDBX_NOTHROW_PURE_FUNCTION static inline bool
+outer_on_duptree_and_inner_pointed(const MDBX_cursor *mc) {
+  if (inner_pointed(mc)) {
+    size_t whole = mc->top + mc->stash;
+    cASSERT0(mc, mc->top >= 0 && mc->stash >= 0 && whole < CURSOR_STACK_SIZE && whole < mc->tree->height);
+    const page_t *mp = mc->pg[whole];
+    if (mp && is_leaf(mp) && mc->ki[whole] < page_numkeys(mp))
+      return F_ISSET(page_node(mp, mc->ki[whole])->flags, N_DUP | N_TREE);
+  }
+  return false;
+}
+
 MDBX_MAYBE_UNUSED MDBX_INTERNAL bool cursor_is_tracked(const MDBX_cursor *mc);
 
 static inline void cursor_reset(cursor_couple_t *couple) {
-  couple->outer.top_and_flags = z_fresh_mark;
-  couple->inner.cursor.top_and_flags = z_fresh_mark | z_inner;
+  couple->outer.combo_state = z_fresh_mark;
+  couple->inner.cursor.combo_state = z_fresh_mark | z_inner;
+  couple->inner.nested_tree.root = 0;
 }
 
 static inline void cursor_drown(cursor_couple_t *couple) {
-  couple->outer.top_and_flags = z_poor_mark;
-  couple->inner.cursor.top_and_flags = z_poor_mark | z_inner;
+  couple->outer.combo_state = z_poor_mark;
+  couple->inner.cursor.combo_state = z_poor_mark | z_inner;
+  couple->inner.nested_tree.root = 0;
   couple->outer.txn = nullptr;
   couple->inner.cursor.txn = nullptr;
   couple->outer.tree = nullptr;

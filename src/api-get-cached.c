@@ -164,7 +164,7 @@ __hot static MDBX_cache_result_t cache_get(const MDBX_txn *txn, MDBX_dbi dbi, co
   if (unlikely(err != MDBX_SUCCESS))
     return cache_error(LOG_IFERR(err));
 
-  cx.outer.pg[cx.outer.top = 0] = mp;
+  cx.outer.pg[cx.outer.top_and_stash = 0] = mp;
   /* walking along the branches of the tree to the leaves */
   while (is_branch(mp)) {
     if (mp->txnid <= entry->last_confirmed_txnid) {

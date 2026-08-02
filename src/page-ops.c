@@ -260,14 +260,14 @@ done:
   if (mc->flags & z_inner) {
     for (; m2; m2 = m2->next) {
       MDBX_cursor *m3 = &m2->subcur->cursor;
-      if (m3->top < mc->top)
+      if (m3->top + m3->stash < mc->top)
         continue;
       if (m3->pg[mc->top] == mp)
         m3->pg[mc->top] = np;
     }
   } else {
     for (; m2; m2 = m2->next) {
-      if (m2->top < mc->top)
+      if (m2->top + m2->stash < mc->top)
         continue;
       if (m2->pg[mc->top] == mp) {
         m2->pg[mc->top] = np;

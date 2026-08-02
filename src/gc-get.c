@@ -942,7 +942,7 @@ MDBX_cursor *gc_cursor_init(MDBX_txn *txn) {
   gc->txn = txn;
   gc->tree = txn->dbs;
   gc->dbi_state = txn->dbi_state;
-  gc->top_and_flags = z_fresh_mark;
+  gc->combo_state = z_fresh_mark;
   return gc;
 }
 

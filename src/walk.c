@@ -307,7 +307,7 @@ __cold int walk_tbl(walk_ctx_t *ctx, walk_tbl_t *tbl, pgno_t parent_page) {
   couple.outer.checking |= cursor_checking;
   couple.inner.cursor.checking |= cursor_checking;
   couple.outer.next = ctx->cursor;
-  couple.outer.top_and_flags = z_disable_tree_search_fastpath;
+  couple.outer.combo_state = z_disable_tree_search_fastpath;
   ctx->cursor = &couple.outer;
   txnid_t mod_txnid = db->mod_txnid;
   if (!mod_txnid || (db == &ctx->txn->dbs[FREE_DBI] && (ctx->txn->dbi_state[FREE_DBI] & DBI_DIRTY)) ||

@@ -77,9 +77,8 @@ static size_t spill_cursor_keep(const MDBX_txn *const txn, const MDBX_cursor *mc
   tASSERT0(txn, (txn->flags & (txn_ro_both | MDBX_WRITEMAP)) == 0);
   size_t keep = 0;
   while (!is_poor(mc)) {
-    tASSERT0(txn, mc->top >= 0);
     const page_t *mp;
-    intptr_t i = 0;
+    intptr_t i = 0, last = mc->top + mc->stash;
     do {
       mp = mc->pg[i];
       TRACE("dbi %zu, mc-%p[%zu], page %u %p", cursor_dbi(mc), __Wpedantic_format_voidptr(mc), i, mp->pgno,
@@ -99,9 +98,9 @@ static size_t spill_cursor_keep(const MDBX_txn *const txn, const MDBX_cursor *mc
                 cursor_dbi(mc), is_inner(mc) ? "sub-" : "", __Wpedantic_format_voidptr(mc), i);
         }
       }
-    } while (++i <= mc->top);
+    } while (++i <= last);
 
-    if (!inner_pointed(mc))
+    if (!outer_on_duptree_and_inner_pointed(mc))
       break;
     mc = &mc->subcur->cursor;
     if (is_subpage(mc->pg[0]))

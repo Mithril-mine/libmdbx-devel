@@ -188,7 +188,7 @@ int tree_cutoff_twig(MDBX_cursor *mc, const pgno_t pgno, size_t deep, txnid_t pa
             if (unlikely(err != MDBX_SUCCESS))
               return err;
           }
-          cursor_pop(mc);
+          cursor_eject(mc);
         } else if (leaf_node->flags & N_BIG) {
           err = page_retire_ex(mc, node_largedata_pgno(leaf_node), nullptr, 0);
           if (unlikely(err != MDBX_SUCCESS))
@@ -234,7 +234,7 @@ static int cutoff_zikkurat(MDBX_cursor *begin, MDBX_cursor *end, intptr_t level,
   int err = MDBX_SUCCESS;
   do {
     cursor_cpstk(end, mc);
-    mc->top = level;
+    mc->top_and_stash = level;
 
     while (true) {
       if (mc->tree->items < 4)
@@ -287,13 +287,13 @@ static int cutoff_zikkurat(MDBX_cursor *begin, MDBX_cursor *end, intptr_t level,
           ASSERT(level != m3->top && m3->ki[level] >= dropped);
           m3->ki[level] -= dropped;
           ASSERT(m3->ki[level] < page_numkeys(mp));
-          /* if (level == m3->top && inner_pointed(m3))
+          /* if (is_leaf(mp) && inner_pointed(m3))
             cursor_inner_refresh(m3, mp, m3->ki[level]); */
         } else {
           ASSERT(m3 != begin);
           ASSERT(m3 != end || end_including);
           end_including &= m3 != end;
-          m3->top = level;
+          m3->top_and_stash = level;
           m3->ki[level] = mc->ki[level];
           err = MDBX_SUCCESS;
           if (m3->ki[level] >= page_numkeys(mp)) {
@@ -307,7 +307,7 @@ static int cutoff_zikkurat(MDBX_cursor *begin, MDBX_cursor *end, intptr_t level,
           err = tree_deepen_edge(m3, (err == MDBX_NOTFOUND) ? Z_LAST : Z_FIRST);
           if (unlikely(err != MDBX_SUCCESS))
             goto bailout;
-          if (m3->subcur) {
+          if (has_inner(m3)) {
             inner_gone_unconditional(m3);
             const node_t *const node = page_node(m3->pg[m3->top], m3->ki[m3->top]);
             if (node->flags & N_DUP) {

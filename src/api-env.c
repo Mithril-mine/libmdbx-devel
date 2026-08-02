@@ -172,6 +172,14 @@ __cold int mdbx_env_create(MDBX_env **penv) {
     return LOG_IFERR(MDBX_INCOMPATIBLE);
   }
 
+  cursor_couple_t couple;
+  couple.outer.combo_state = 0x12345678;
+  if (unlikely(couple.outer.stash != 0x12 || couple.outer.top != 0x34 || couple.outer.flags != 0x5678 ||
+               couple.outer.top_and_stash != 0x1234)) {
+    ERROR("%s sanity check failed", "cursor combo-state");
+    return LOG_IFERR(MDBX_PROBLEM);
+  }
+
 #if defined(__linux__) || defined(__gnu_linux__)
   if (unlikely(globals.linux_kernel_version < 0x03100000)) {
     /* 2025-08-05: Ядро 3.16 выпущено 11 лет назад и было самым долго поддерживаемым из 3.x до июля 2020.

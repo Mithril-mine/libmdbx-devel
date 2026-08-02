@@ -356,7 +356,7 @@ __cold MDBX_ATTRIBUTE_NO_SANITIZE_ADDRESS(MDBX_NOTHING) void cursor_stack(const 
   if (LOG_ENABLED(lvl)) {
     debug_log(lvl, func, line, "cursor%s-%p[%i, flags 0x%X]", prefix, __Wpedantic_format_voidptr(mc), mc->top,
               (uint8_t)mc->flags);
-    for (int i = 0; i <= mc->top; ++i) {
+    for (intptr_t i = 0, last = mc->top + mc->stash; i <= last; ++i) {
       char page_flags[16], *pf = page_flags;
       const page_t *mp = mc->pg[i];
       const char sanitizer_probe = sanitizer_probe_page(mc->txn, mp, i == 0 && is_inner(mc));
@@ -390,7 +390,7 @@ __cold MDBX_ATTRIBUTE_NO_SANITIZE_ADDRESS(MDBX_NOTHING) void cursor_stack(const 
           *pf++ = 'm';
       }
       *pf = 0;
-      debug_log(lvl, nullptr, 0, "%s%u->%u.%p_%s:%u%s", i ? ", " : "", i,
+      debug_log(lvl, nullptr, 0, "%s%zu->%u.%p_%s:%u%s", i ? ", " : "", i,
                 (sanitizer_probe && sanitizer_probe != '%') ? 0 : mp->pgno, __Wpedantic_format_voidptr(mp), page_flags,
                 mc->ki[i], sanitizer_probe ? "\n" : "");
       if (sanitizer_probe) {
@@ -409,7 +409,7 @@ __hot void txn_probe_dbi_cursors_stacks(const MDBX_txn *txn, size_t dbi, const c
   for (const MDBX_cursor *mc = txn->cursors[dbi]; mc; mc = mc->next) {
     const MDBX_cursor *mx = mc;
     while (!is_poor(mx)) {
-      for (intptr_t i = 0; i <= mx->top; ++i) {
+      for (intptr_t i = 0, last = mx->top + mx->stash; i <= last; ++i) {
         page_t *mp = mx->pg[i];
         const char sanitizer_probe = sanitizer_probe_page(txn, mp, i == 0 && is_inner(mx));
         if (unlikely(sanitizer_probe)) {
@@ -438,12 +438,12 @@ __hot void txn_probe_dbi_cursors_stacks(const MDBX_txn *txn, size_t dbi, const c
 
           panic_fmt(mc,
                     "Dangling reference from the cursor's stack to a freed page is detected: %s-cursor %p dbi %zu, "
-                    "top %i, at level %zi, page %p, cause %s",
-                    is_inner(mx) ? "inner" : "outer", __Wpedantic_format_voidptr(mx), cursor_dbi(mx), mx->top, i,
-                    __Wpedantic_format_voidptr(mp), cause);
+                    "top %i, stash %i, at level %zi, page %p, cause %s",
+                    is_inner(mx) ? "inner" : "outer", __Wpedantic_format_voidptr(mx), cursor_dbi(mx), mx->top,
+                    mx->stash, i, __Wpedantic_format_voidptr(mp), cause);
         }
       }
-      if (!inner_pointed(mx))
+      if (!outer_on_duptree_and_inner_pointed(mx))
         break;
       mx = &mx->subcur->cursor;
     }

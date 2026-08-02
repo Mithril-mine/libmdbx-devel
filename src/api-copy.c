@@ -150,7 +150,7 @@ static int compacting_put_page(ctx_t *ctx, const page_t *mp, const size_t head_b
 }
 
 __cold static int compacting_walk(ctx_t *ctx, MDBX_cursor *mc, pgno_t *const parent_pgno, txnid_t parent_txnid) {
-  mc->top = 0;
+  mc->top_and_stash = 0;
   mc->ki[0] = 0;
   int rc = page_get(mc, *parent_pgno, &mc->pg[0], parent_txnid);
   if (unlikely(rc != MDBX_SUCCESS))
@@ -244,7 +244,7 @@ __cold static int compacting_walk(ctx_t *ctx, MDBX_cursor *mc, pgno_t *const par
           rc = page_get(mc, node_pgno(node), &mp, mp->txnid);
           if (unlikely(rc != MDBX_SUCCESS))
             goto bailout;
-          mc->top += 1;
+          mc->top_and_stash = mc->top + 1;
           if (unlikely(mc->top >= deep_limit)) {
             rc = MDBX_CURSOR_FULL;
             goto bailout;
@@ -274,7 +274,7 @@ __cold static int compacting_walk(ctx_t *ctx, MDBX_cursor *mc, pgno_t *const par
     if (mc->top) {
       /* Update parent if there is one */
       node_set_pgno(page_node(mc->pg[mc->top - 1], mc->ki[mc->top - 1]), pgno);
-      cursor_pop(mc);
+      cursor_eject(mc);
     } else {
       /* Otherwise we're done */
       *parent_pgno = pgno;

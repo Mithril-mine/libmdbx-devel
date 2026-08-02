@@ -131,6 +131,7 @@ __hot int cursor_touch(MDBX_cursor *const mc, const MDBX_val *key, const MDBX_va
   cASSERT0(mc, (mc->txn->flags & txn_ro_both) == 0);
   cASSERT0(mc, is_pointed(mc) || mc->tree->height == 0);
   cASSERT1(mc, cursor_is_tracked(mc));
+  cASSERT0(mc, mc->stash < 1);
 
   cASSERT0(mc, F_ISSET(dbi_state(mc->txn, FREE_DBI), DBI_LINDO | DBI_VALID));
   cASSERT0(mc, F_ISSET(dbi_state(mc->txn, MAIN_DBI), DBI_LINDO | DBI_VALID));
@@ -177,15 +178,15 @@ __hot int cursor_touch(MDBX_cursor *const mc, const MDBX_val *key, const MDBX_va
   }
 
   if (likely(is_pointed(mc)) && ((mc->txn->flags & MDBX_TXN_SPILLS) || !is_modifiable(mc->txn, mc->pg[mc->top]))) {
-    const int8_t top = mc->top;
-    mc->top = 0;
+    int i = mc->top << CHAR_BIT; /* mc->stash = mc->top; mc->top = 0; */
     do {
+      mc->top_and_stash = i;
       int err = page_touch(mc);
       if (unlikely(err != MDBX_SUCCESS))
         return err;
-      mc->top += 1;
-    } while (mc->top <= top);
-    mc->top = top;
+      i += 1 - (1 << CHAR_BIT); /* i.top += 1; i.stash -= 1; */
+    } while (i > 0);
+    ASSERT(mc->top >= 0 && mc->top < CURSOR_STACK_SIZE && mc->stash == 0);
   }
   return MDBX_SUCCESS;
 }
@@ -282,7 +283,7 @@ static __always_inline int couple_init(cursor_couple_t *couple, const MDBX_txn *
   couple->outer.tree = tree;
   couple->outer.clc = &kvx->clc;
   couple->outer.dbi_state = dbi_state;
-  couple->outer.top_and_flags = z_fresh_mark;
+  couple->outer.combo_state = z_fresh_mark;
   STATIC_ASSERT((int)z_branch == P_BRANCH && (int)z_leaf == P_LEAF && (int)z_largepage == P_LARGE &&
                 (int)z_dupfix == P_DUPFIX);
   couple->outer.checking = (CHECKS2_ENABLED() || (txn->env->flags & MDBX_VALIDATION)) ? z_pagecheck | z_leaf : z_leaf;
@@ -291,9 +292,12 @@ static __always_inline int couple_init(cursor_couple_t *couple, const MDBX_txn *
   couple->outer.search_step_counter = 42;
 #endif
 
+  subcur_t *const mx = &couple->inner;
+  mx->cursor.combo_state = z_fresh_mark | z_inner;
+  mx->nested_tree.root = 0;
   if (tree->flags & MDBX_DUPSORT) {
-    couple->inner.cursor.signature = cur_signature_live;
-    subcur_t *const mx = couple->outer.subcur = &couple->inner;
+    mx->cursor.signature = cur_signature_live;
+    couple->outer.subcur = mx;
     mx->cursor.subcur = nullptr;
     mx->cursor.next = &mx->cursor;
     mx->cursor.txn = (MDBX_txn *)txn;
@@ -301,7 +305,6 @@ static __always_inline int couple_init(cursor_couple_t *couple, const MDBX_txn *
     mx->cursor.clc = ptr_disp(couple->outer.clc, sizeof(clc_t));
     tASSERT0(txn, &mx->cursor.clc->k == &kvx->clc.v);
     mx->cursor.dbi_state = dbi_state;
-    mx->cursor.top_and_flags = z_fresh_mark | z_inner;
     STATIC_ASSERT(MDBX_DUPFIXED * 2 == P_DUPFIX);
     mx->cursor.checking = couple->outer.checking + ((tree->flags & MDBX_DUPFIXED) << 1);
 #if MDBX_DEBUG_SEARCH_DISPATCHING
@@ -357,7 +360,7 @@ int cursor_dupsort_setup(MDBX_cursor *mc, const node_t *node, const page_t *mp) 
       ERROR("nested-db.mod_txnid (%" PRIaTXN ") > page-txnid (%" PRIaTXN ")", mx->nested_tree.mod_txnid, pp_txnid);
       goto bailout;
     }
-    mx->cursor.top_and_flags = z_fresh_mark | z_inner;
+    mx->cursor.combo_state = z_fresh_mark | z_inner;
     break;
   case N_DUP:
     if (!MDBX_DISABLE_VALIDATION && unlikely(node_ds(node) <= PAGEHDRSZ)) {
@@ -375,7 +378,7 @@ int cursor_dupsort_setup(MDBX_cursor *mc, const node_t *node, const page_t *mp) 
     mx->nested_tree.sequence = 0;
     mx->nested_tree.items = page_numkeys(sp);
     mx->nested_tree.mod_txnid = mp->txnid;
-    mx->cursor.top_and_flags = z_inner;
+    mx->cursor.combo_state = z_inner;
     mx->cursor.pg[0] = sp;
     mx->cursor.ki[0] = 0;
     mx->nested_tree.flags = flags_db2sub(mc->tree->flags);
@@ -408,7 +411,7 @@ int cursor_dupsort_setup(MDBX_cursor *mc, const node_t *node, const page_t *mp) 
   return MDBX_SUCCESS;
 
 bailout:
-  mx->cursor.top_and_flags = z_poor_mark | z_inner;
+  mx->cursor.combo_state = z_poor_mark | z_inner;
   return MDBX_CORRUPTED;
 }
 
@@ -418,9 +421,9 @@ MDBX_cursor *cursor_cpstk(const MDBX_cursor *csrc, MDBX_cursor *cdst) {
   cASSERT0(cdst, cdst->txn == csrc->txn);
   cASSERT0(cdst, cdst->clc == csrc->clc);
   cASSERT0(cdst, cdst->dbi_state == csrc->dbi_state);
-  cdst->top_and_flags = csrc->top_and_flags;
+  cdst->combo_state = csrc->combo_state;
 
-  for (intptr_t i = 0; i <= csrc->top; i++) {
+  for (intptr_t i = 0, last = csrc->top + csrc->stash; i <= last; i++) {
     cdst->pg[i] = csrc->pg[i];
     cdst->ki[i] = csrc->ki[i];
   }
@@ -460,11 +463,11 @@ static inline MDBX_cursor *cursor_clone(bool clone_inner_tree, const MDBX_cursor
   }
 
   cursor_copy_half(csrc, &couple->outer);
-  if (csrc->subcur) {
+  if (has_inner(csrc)) {
     couple->outer.subcur = &couple->inner;
     cursor_copy_half(&csrc->subcur->cursor, &couple->inner.cursor);
     if (clone_inner_tree) {
-      couple->inner.nested_tree = *couple->inner.cursor.tree;
+      couple->inner.nested_tree = *container_of(csrc, cursor_couple_t, outer)->inner.cursor.tree;
       couple->inner.cursor.tree = &couple->inner.nested_tree;
     }
   }
@@ -496,7 +499,7 @@ static __always_inline int sibling(MDBX_cursor *mc, bool right) {
     return MDBX_NOTFOUND;
   }
 
-  cursor_pop(mc);
+  cursor_enroot(mc, 1);
   DEBUG("parent page is page %" PRIaPGNO ", index %u", mc->pg[mc->top]->pgno, mc->ki[mc->top]);
 
   int err;
@@ -505,8 +508,7 @@ static __always_inline int sibling(MDBX_cursor *mc, bool right) {
     err = right ? cursor_sibling_right(mc) : cursor_sibling_left(mc);
     if (unlikely(err != MDBX_SUCCESS)) {
       if (likely(err == MDBX_NOTFOUND)) {
-        /* undo cursor_pop() before returning */
-        mc->top += 1;
+        cursor_undo_enroot(mc, 1);
         return err;
       }
       goto bailout;
@@ -811,6 +813,7 @@ __hot int cursor_put(MDBX_cursor *mc, const MDBX_val *key, MDBX_val *data, unsig
   DEBUG("==> put db %d key [%s], size %" PRIuPTR ", data [%s] size %" PRIuPTR, cursor_dbi_dbg(mc), DKEY_DEBUG(key),
         key->iov_len, DVAL_DEBUG(data), data->iov_len);
 
+  cASSERT0(mc, mc->stash < 1);
   if ((flags & MDBX_CURRENT) != 0 && (mc->flags & z_inner) == 0) {
     if (unlikely(flags & (MDBX_APPEND | MDBX_NOOVERWRITE)))
       return MDBX_EINVAL;
@@ -1029,11 +1032,11 @@ __hot int cursor_put(MDBX_cursor *mc, const MDBX_val *key, MDBX_val *data, unsig
     fix_parent:
       /* if overwriting slot 0 of leaf, need to update branch key if there is a parent page */
       if (mc->top && !mc->ki[mc->top]) {
-        page_t *save_top_pages[CURSOR_STACK_SIZE];
-        size_t save_count = 0;
-        do
-          save_top_pages[save_count++] = mc->pg[mc->top--];
-        while (mc->top && !mc->ki[mc->top]);
+        int shift = 0;
+        do {
+          cursor_enroot(mc, 1);
+          ++shift;
+        } while (mc->top && !mc->ki[mc->top]);
 
         err = MDBX_SUCCESS;
         if (mc->ki[mc->top]) {
@@ -1042,19 +1045,16 @@ __hot int cursor_put(MDBX_cursor *mc, const MDBX_val *key, MDBX_val *data, unsig
             return err;
         }
 
-        if (unlikely(mc->top + save_count >= CURSOR_STACK_SIZE)) {
-          be_poor(mc);
-          return MDBX_CURSOR_FULL;
-        }
-
-        do
-          if (mc->pg[mc->top] != save_top_pages[--save_count]) {
-            mc->pg[++mc->top] = save_top_pages[save_count];
-            mc->ki[mc->top] = 0;
+        if (likely(mc->stash >= shift)) {
+          if (unlikely(mc->top + mc->stash + shift >= CURSOR_STACK_SIZE)) {
+            be_poor(mc);
+            return MDBX_CURSOR_FULL;
           }
-        while (save_count);
+          cursor_undo_enroot(mc, shift);
+        }
       }
 
+      cASSERT0(mc, mc->stash == 0);
       PROBE_AGAINST_DANGLING_DBI(mc);
       if (CHECKS2_ENABLED()) {
         err = cursor_validate(mc);
@@ -1065,6 +1065,7 @@ __hot int cursor_put(MDBX_cursor *mc, const MDBX_val *key, MDBX_val *data, unsig
     }
 
   more:
+    cASSERT0(mc, mc->stash == 0);
     PROBE_AGAINST_DANGLING_DBI(mc);
     if (CHECKS2_ENABLED()) {
       err = cursor_validate(mc);
@@ -1124,6 +1125,7 @@ __hot int cursor_put(MDBX_cursor *mc, const MDBX_val *key, MDBX_val *data, unsig
         else
           memcpy(page2payload(lp.page), data->iov_base, data->iov_len);
 
+        cASSERT0(mc, mc->stash == 0);
         PROBE_AGAINST_DANGLING_DBI(mc);
         if (CHECKS2_ENABLED()) {
           err = cursor_validate(mc);
@@ -1133,6 +1135,7 @@ __hot int cursor_put(MDBX_cursor *mc, const MDBX_val *key, MDBX_val *data, unsig
         return MDBX_SUCCESS;
       }
 
+      cASSERT0(mc, mc->stash == 0);
       PROBE_AGAINST_DANGLING_DBI(mc);
       if ((err = page_retire(mc, lp.page)) != MDBX_SUCCESS)
         return err;
@@ -1169,6 +1172,7 @@ __hot int cursor_put(MDBX_cursor *mc, const MDBX_val *key, MDBX_val *data, unsig
             rc = MDBX_SUCCESS;
             if (unlikely(batch_dupfix_done))
               goto batch_dupfix_continue;
+            cASSERT0(mc, mc->stash == 0);
             return rc;
           }
 
@@ -1395,6 +1399,7 @@ __hot int cursor_put(MDBX_cursor *mc, const MDBX_val *key, MDBX_val *data, unsig
           goto fix_parent;
         }
 
+        cASSERT0(mc, mc->stash == 0);
         if (CHECKS2_ENABLED()) {
           err = cursor_validate(mc);
           if (unlikely(err != MDBX_SUCCESS))
@@ -1416,6 +1421,7 @@ insert_node:;
     rc = page_split(mc, key, ref_data, P_INVALID, insert_key ? naf : naf | MDBX_SPLIT_REPLACE);
     if (rc == MDBX_SUCCESS && CHECKS2_ENABLED())
       rc = insert_key ? cursor_validate(mc) : cursor_validate_updating(mc);
+    cASSERT0(mc, rc || mc->stash == 0);
   } else {
     /* There is room already in this leaf page. */
     if (is_dupfix_leaf(mc->pg[mc->top])) {
@@ -1423,7 +1429,7 @@ insert_node:;
       rc = node_add_dupfix(mc, mc->ki[mc->top], key);
     } else
       rc = node_add_leaf(mc, mc->ki[mc->top], key, ref_data, naf);
-    if (likely(rc == 0)) {
+    if (likely(rc == MDBX_SUCCESS)) {
       /* Adjust other cursors pointing to mp */
       page_t *const mp = mc->pg[mc->top];
       const size_t dbi = cursor_dbi(mc);
@@ -1436,6 +1442,7 @@ insert_node:;
         if (inner_pointed(m3))
           cursor_inner_refresh(m3, mp, m3->ki[mc->top]);
       }
+      cASSERT0(mc, mc->stash == 0);
     }
   }
 
@@ -1462,8 +1469,7 @@ insert_node:;
       subcur_t *const mx = mc->subcur;
       if (sub_root) {
         cASSERT0(mc, mx->nested_tree.height == 1 && mx->nested_tree.root == sub_root->pgno);
-        mx->cursor.flags = z_inner;
-        mx->cursor.top = 0;
+        mx->cursor.combo_state = z_inner;
         mx->cursor.pg[0] = sub_root;
         mx->cursor.ki[0] = 0;
       }
@@ -1524,6 +1530,7 @@ insert_node:;
       be_filled(mc);
     }
     if (likely(rc == MDBX_SUCCESS)) {
+      cASSERT0(mc, mc->stash == 0);
       PROBE_AGAINST_DANGLING_DBI(mc);
       cASSERT0(mc, is_filled(mc));
       if (unlikely(batch_dupfix_done)) {
@@ -1706,6 +1713,7 @@ __hot int cursor_del(MDBX_cursor *mc, unsigned flags) {
         }
         mc->tree->items -= 1;
         cASSERT0(mc, mc->tree->items > 0 && mc->tree->height > 0 && mc->tree->root != P_INVALID);
+        cASSERT0(mc, mc->stash < 1);
         PROBE_AGAINST_DANGLING_DBI(mc);
         return rc;
       }
@@ -1724,6 +1732,7 @@ __hot int cursor_del(MDBX_cursor *mc, unsigned flags) {
           inner_gone_unconditional(m2);
       }
     }
+    cASSERT0(mc, mc->stash < 1);
     PROBE_AGAINST_DANGLING_DBI(mc);
   } else {
     cASSERT0(mc, !inner_pointed(mc));
@@ -1762,12 +1771,14 @@ del_key:
     }
   }
   inner_gone(mc);
+  cASSERT0(mc, mc->stash == 0);
   PROBE_AGAINST_DANGLING_DBI(mc);
 
   rc = tree_rebalance(mc);
   if (unlikely(rc != MDBX_SUCCESS))
     goto fail;
 
+  cASSERT0(mc, mc->stash < 1);
   mc->flags |= z_after_delete;
   if (unlikely(mc->top < 0)) {
     /* DB is totally empty now, just bail out.
@@ -1842,6 +1853,7 @@ del_key:
     }
   }
 
+  cASSERT0(mc, mc->stash < 1);
   PROBE_AGAINST_DANGLING_DBI(mc);
   cASSERT0(mc, rc == MDBX_SUCCESS);
   if (CHECKS2_ENABLED())
@@ -2115,6 +2127,7 @@ __hot int cursor_ops(MDBX_cursor *mc, MDBX_val *key, MDBX_val *data, const MDBX_
           __Wpedantic_format_voidptr(key), __Wpedantic_format_voidptr(data));
   int rc;
 
+  cASSERT0(mc, mc->stash < 1);
   switch (op) {
   case MDBX_GET_CURRENT:
     cASSERT0(mc, (mc->flags & z_inner) == 0);
@@ -2536,7 +2549,7 @@ int cursor_on_last(const MDBX_cursor *mc) {
 static cdr_t cursor_distance_at(MDBX_cursor *iter, const MDBX_cursor *end, int level) {
   cdr_t tdr = {.err = MDBX_SUCCESS, .distance = 0};
   if (level < iter->top)
-    iter->top = level;
+    iter->top_and_stash = level;
   ASSERT(end->top >= iter->top);
   ASSERT(end->tree == iter->tree || memcmp(end->tree, iter->tree, sizeof(tree_t)) == 0);
   const int iter_ki = iter->ki[iter->top] + ((iter->flags & z_eof_hard) != 0 && level + 1 == iter->tree->height);
@@ -2651,7 +2664,7 @@ cdr_t cursor_distance(MDBX_cursor *iter, const MDBX_cursor *end, int level) {
 
 static cdr_t cursor_forward_at(MDBX_cursor *iter, size_t amount, int level) {
   if (level < iter->top)
-    iter->top = level;
+    iter->top_and_stash = level;
 
   cdr_t tdr = {.err = MDBX_SUCCESS, .distance = amount};
   size_t step = page_numkeys(iter->pg[iter->top]) - iter->ki[iter->top];
@@ -2690,7 +2703,7 @@ static cdr_t cursor_forward_at(MDBX_cursor *iter, size_t amount, int level) {
 
 static cdr_t cursor_backward_at(MDBX_cursor *iter, size_t amount, int level) {
   if (level < iter->top)
-    iter->top = level;
+    iter->top_and_stash = level;
 
   cdr_t tdr = {.err = MDBX_SUCCESS, .distance = amount};
   while (tdr.distance > iter->ki[iter->top]) {

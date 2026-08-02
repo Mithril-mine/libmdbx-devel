@@ -26,14 +26,14 @@ __hot int page_split(MDBX_cursor *mc, const MDBX_val *const newkey, MDBX_val *co
     rc = npr.err;
     if (unlikely(rc != MDBX_SUCCESS))
       goto bailout;
-    /* shift current top to make room for new parent */
     cASSERT0(mc, mc->tree->height > 0);
-#if MDBX_DEBUG > 0
-    memset(mc->pg + 3, 0, sizeof(mc->pg) - sizeof(mc->pg[0]) * 3);
-    memset(mc->ki + 3, -1, sizeof(mc->ki) - sizeof(mc->ki[0]) * 3);
-#endif
-    mc->pg[2] = mc->pg[1];
-    mc->ki[2] = mc->ki[1];
+
+    /* вставляем новый корень в вершину стека */
+    intptr_t i = mc->stash;
+    do {
+      mc->pg[i + 1] = mc->pg[i];
+      mc->ki[i + 1] = mc->ki[i];
+    } while (--i >= 0);
     mc->pg[1] = mc->pg[0];
     mc->ki[1] = mc->ki[0];
     mc->pg[0] = npr.page;
@@ -47,7 +47,7 @@ __hot int page_split(MDBX_cursor *mc, const MDBX_val *const newkey, MDBX_val *co
     if (unlikely(rc != MDBX_SUCCESS))
       goto bailout;
 
-    mc->top = 1;
+    mc->top = 1; /* не меняем stash тут, так как страницы за вершиной стека сохранены */
   } else {
     DEBUG("parent branch page is %" PRIaPGNO, mc->pg[mc->top - 1]->pgno);
   }
@@ -286,7 +286,7 @@ __hot int page_split(MDBX_cursor *mc, const MDBX_val *const newkey, MDBX_val *co
     cASSERT0(mc, !pure_left);
     const int top = mc->top;
     const int height = mc->tree->height;
-    mn->top -= 1;
+    cursor_enroot(mn, 1);
     did_split_parent = true;
     couple.outer.next = mn->txn->cursors[cursor_dbi(mn)];
     mn->txn->cursors[cursor_dbi(mn)] = &couple.outer;
@@ -294,6 +294,7 @@ __hot int page_split(MDBX_cursor *mc, const MDBX_val *const newkey, MDBX_val *co
     mn->txn->cursors[cursor_dbi(mn)] = couple.outer.next;
     if (unlikely(rc != MDBX_SUCCESS))
       goto bailout;
+    cursor_undo_enroot(mn, 1);
     cASSERT0(mc, mc->top - top == mc->tree->height - height);
     if (CHECKS2_ENABLED())
       ENSURE_OBJ(mc, cursor_validate_updating(mc) == MDBX_SUCCESS);
@@ -302,8 +303,7 @@ __hot int page_split(MDBX_cursor *mc, const MDBX_val *const newkey, MDBX_val *co
     prev_top += mc->top - top;
     cASSERT0(mn, prev_top <= mn->top && prev_top <= mc->top);
 
-    /* Right page might now have changed parent.
-     * Check if left page also changed parent. */
+    /* Right page might now have changed parent. Check if left page also changed parent. */
     if (mn->pg[prev_top] != mc->pg[prev_top] && mc->ki[prev_top] >= page_numkeys(mc->pg[prev_top])) {
       for (intptr_t i = 0; i < prev_top; i++) {
         mc->pg[i] = mn->pg[i];
@@ -327,11 +327,10 @@ __hot int page_split(MDBX_cursor *mc, const MDBX_val *const newkey, MDBX_val *co
     }
   } else if (unlikely(pure_left)) {
     page_t *ptop_page = mc->pg[prev_top];
-    TRACE("pure-left: adding to parent page %u node[%u] left-child page #%u key "
-          "%s",
-          ptop_page->pgno, mc->ki[prev_top], sister->pgno, DKEY(mc->ki[prev_top] ? newkey : nullptr));
+    TRACE("pure-left: adding to parent page %u node[%u] left-child page #%u key %s", ptop_page->pgno, mc->ki[prev_top],
+          sister->pgno, DKEY(mc->ki[prev_top] ? newkey : nullptr));
     ASSERT(mc->top == prev_top + 1);
-    mc->top = (uint8_t)prev_top;
+    cursor_enroot(mc, 1);
     rc = node_add_branch(mc, mc->ki[prev_top], mc->ki[prev_top] ? newkey : nullptr, sister->pgno);
     cASSERT0(mc, mp == mc->pg[prev_top + 1] && newindx == mc->ki[prev_top + 1] && prev_top == mc->top);
 
@@ -349,17 +348,17 @@ __hot int page_split(MDBX_cursor *mc, const MDBX_val *const newkey, MDBX_val *co
       TRACE("pure-left: no-need-update prev-first key on parent %s", DKEY(&sepkey));
     }
 
-    mc->top++;
+    cursor_undo_enroot(mc, 1);
     if (unlikely(rc != MDBX_SUCCESS))
       goto bailout;
 
     node_t *node = page_node(mc->pg[prev_top], mc->ki[prev_top] + (size_t)1);
     cASSERT0(mc, node_pgno(node) == mp->pgno && mc->pg[prev_top] == ptop_page);
   } else {
-    mn->top -= 1;
+    cursor_enroot(mn, 1);
     TRACE("add-to-parent the right-entry[%u] for new sibling-page", mn->ki[prev_top]);
     rc = node_add_branch(mn, mn->ki[prev_top], &sepkey, sister->pgno);
-    mn->top += 1;
+    cursor_undo_enroot(mn, 1);
     if (unlikely(rc != MDBX_SUCCESS))
       goto bailout;
   }
@@ -386,11 +385,11 @@ __hot int page_split(MDBX_cursor *mc, const MDBX_val *const newkey, MDBX_val *co
         if (mc->ki[mc->top - i]) {
           sepkey = get_key(page_node(mc->pg[mc->top - i], mc->ki[mc->top - i]));
           if (mc->clc->k.cmp(newkey, &sepkey) < 0) {
-            mc->top -= (int8_t)i;
+            cursor_enroot(mc, i);
             DEBUG("pure-left: update new-first on parent [%i] page %u key %s", mc->ki[mc->top], mc->pg[mc->top]->pgno,
                   DKEY(newkey));
             rc = tree_propagate_key(mc, newkey);
-            mc->top += (int8_t)i;
+            cursor_undo_enroot(mc, i);
             if (unlikely(rc != MDBX_SUCCESS))
               goto bailout;
           }
@@ -520,7 +519,7 @@ __hot int page_split(MDBX_cursor *mc, const MDBX_val *const newkey, MDBX_val *co
                m3->ki[prev_top] >= mc->ki[prev_top]) {
       m3->ki[prev_top]++; /* also for the `pure-left` case */
     }
-    if (inner_pointed(m3) && is_leaf(mp))
+    if (is_leaf(mp) && inner_pointed(m3))
       cursor_inner_refresh(m3, m3->pg[mc->top], m3->ki[mc->top]);
   }
 
