@@ -197,6 +197,7 @@ __hot int page_split(MDBX_cursor *mc, const MDBX_val *const newkey, MDBX_val *co
         rc = MDBX_ENOMEM;
         goto bailout;
       }
+      CURSOR_TRACING_TMPPAGE_PUSH(mc, tmp_ki_copy);
 
       /* prepare to insert */
       size_t i = 0;
@@ -537,8 +538,10 @@ __hot int page_split(MDBX_cursor *mc, const MDBX_val *const newkey, MDBX_val *co
     env->lck->pgops.split.weak += 1;
 
 exit:
-  if (tmp_ki_copy)
+  if (tmp_ki_copy) {
+    CURSOR_TRACING_TMPPAGE_POP(mc, tmp_ki_copy);
     page_shadow_release(env, tmp_ki_copy, 1);
+  }
 
   DEBUG("<< mp #%u, rc %d", mp->pgno, rc);
   return rc;

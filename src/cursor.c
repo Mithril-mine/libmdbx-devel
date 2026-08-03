@@ -294,6 +294,11 @@ static __always_inline int couple_init(cursor_couple_t *couple, const MDBX_txn *
   couple->outer.search_step_counter = 42;
 #endif
 
+#if xMDBX_DEBUG_SPILLING > 0
+  couple->outer.tmp_split_top = 0;
+  couple->inner.cursor.tmp_split_top = 0;
+#endif /* xMDBX_DEBUG_SPILLING */
+
   subcur_t *const mx = &couple->inner;
   mx->cursor.combo_state = z_fresh_mark | z_inner;
   mx->nested_tree.root = 0;
@@ -345,6 +350,10 @@ int cursor_dupsort_setup(MDBX_cursor *mc, const node_t *node, const page_t *mp) 
   subcur_t *mx = mc->subcur;
   if (!MDBX_DISABLE_VALIDATION && unlikely(mx == nullptr))
     return unexpected_dupsort(mc);
+
+#if xMDBX_DEBUG_SPILLING > 0
+  mx->cursor.tmp_split_top = 0;
+#endif /* xMDBX_DEBUG_SPILLING */
 
   const uint8_t flags = node_flags(node);
   switch (flags) {
@@ -424,6 +433,9 @@ MDBX_cursor *cursor_cpstk(const MDBX_cursor *csrc, MDBX_cursor *cdst) {
   cASSERT0(cdst, cdst->clc == csrc->clc);
   cASSERT0(cdst, cdst->dbi_state == csrc->dbi_state);
   cdst->combo_state = csrc->combo_state;
+#if xMDBX_DEBUG_SPILLING > 0
+  cdst->tmp_split_top = 0;
+#endif /* xMDBX_DEBUG_SPILLING */
 
   for (intptr_t i = 0, last = csrc->top + csrc->stash; i <= last; i++) {
     cdst->pg[i] = csrc->pg[i];

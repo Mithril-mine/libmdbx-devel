@@ -337,7 +337,8 @@ __cold void mdbx_assert_fail(const char *msg, const char *func, unsigned line) {
 
 /*----------------------------------------------------------------------------*/
 
-static inline const char *sanitizer_probe_page(const MDBX_txn *txn, const page_t *mp, bool allow_subpage) {
+static inline const char *sanitizer_probe_page(const MDBX_txn *txn, const MDBX_cursor *const mc, const page_t *mp,
+                                               bool allow_subpage) {
   if (!mp)
     return "null-address";
   const char poison = sanitizer_kind_of_poison(mp, sizeof(*mp));
@@ -364,6 +365,15 @@ static inline const char *sanitizer_probe_page(const MDBX_txn *txn, const page_t
       return "unexpected-suppage";
     return nullptr;
   }
+
+#if xMDBX_DEBUG_SPILLING > 0
+  for (unsigned i = 0; i < mc->tmp_split_top; ++i)
+    if (mc->tmp_split[i] == mp)
+      return nullptr;
+#else
+  (void)mc;
+#endif /* xMDBX_DEBUG_SPILLING */
+
   if ((txn->flags & MDBX_WRITEMAP) != 0 || !txn->wr.dirtylist)
     return "MMAP.outside-mmap-region";
 
@@ -378,6 +388,7 @@ static inline const char *sanitizer_probe_page(const MDBX_txn *txn, const page_t
     }
     txn = txn->parent;
   } while (txn);
+
   return "TXN.outside-dirty-pages";
 }
 
@@ -390,7 +401,7 @@ __cold MDBX_ATTRIBUTE_NO_SANITIZE_ADDRESS(MDBX_NOTHING) void cursor_stack(const 
     for (intptr_t i = 0, last = mc->top + mc->stash; i <= last; ++i) {
       char page_flags[16], *pf = page_flags;
       const page_t *mp = mc->pg[i];
-      const char *sanitizer_probe = sanitizer_probe_page(mc->txn, mp, i == 0 && is_inner(mc));
+      const char *sanitizer_probe = sanitizer_probe_page(mc->txn, mc, mp, i == 0 && is_inner(mc));
       if (sanitizer_probe) {
         *pf++ = '#';
         *pf++ = '>';
@@ -440,7 +451,7 @@ __hot void txn_probe_dbi_cursors_stacks(const MDBX_txn *txn, size_t dbi, const c
     while (!is_poor(mx)) {
       for (intptr_t i = 0, last = mx->top + mx->stash; i <= last; ++i) {
         page_t *mp = mx->pg[i];
-        const char *cause = sanitizer_probe_page(txn, mp, i == 0 && is_inner(mx));
+        const char *cause = sanitizer_probe_page(txn, mx, mp, i == 0 && is_inner(mx));
         if (unlikely(cause)) {
           cursor_stack(mc, func, line, ".outer");
           if (mx != mc)
