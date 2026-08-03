@@ -1608,11 +1608,9 @@ __hot int cursor_del(MDBX_cursor *mc, unsigned flags) {
       if (unlikely(rc != MDBX_SUCCESS))
         goto fail;
     }
-    if (mc->subcur) {
-      for (MDBX_cursor *m2 = mc->txn->cursors[cursor_dbi(mc)]; m2; m2 = m2->next) {
-        if (mc->top <= m2->top && m2->pg[mc->top] == mp && m2->ki[mc->top] == mc->ki[mc->top])
-          inner_gone(m2);
-      }
+    for (MDBX_cursor *m2 = mc->txn->cursors[cursor_dbi(mc)]; m2; m2 = m2->next) {
+      if (mc->top <= m2->top && m2->pg[mc->top] == mp && m2->ki[mc->top] == mc->ki[mc->top])
+        inner_gone(m2);
     }
   } else {
     cASSERT(mc, !inner_pointed(mc));
