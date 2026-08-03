@@ -420,7 +420,7 @@ esac
 # 4. build the test executables
 
 if [ "$SKIP_MAKE" != "yes" ]; then
-  ${MAKE} -j$(which nproc  >/dev/null 2>/dev/null && nproc || echo 2) build-test
+  ${MAKE} -j$(which nproc  >/dev/null 2>/dev/null && nproc || echo 2) mdbx_test mdbx_chk
 fi
 
 ###############################################################################
