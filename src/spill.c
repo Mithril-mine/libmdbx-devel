@@ -207,8 +207,9 @@ __cold int spill_slowpath(MDBX_txn *const txn, MDBX_cursor *const m0, const intp
     MDBX_ANALYSIS_ASSUME(txn->tw.dirtylist != nullptr);
     tASSERT(txn, dpl_check(txn));
     env->lck->unsynced_pages.weak += txn->tw.dirtylist->pages_including_loose - txn->tw.loose_count;
-    dpl_clear(txn->tw.dirtylist);
+    txn->tw.dirtylist->sorted = dpl_setlen(txn->tw.dirtylist, 0);
     txn->tw.dirtyroom = env->options.dp_limit - txn->tw.loose_count;
+    txn->tw.dirtylist->pages_including_loose = txn->tw.loose_count;
     for (page_t *lp = txn->tw.loose_pages; lp != nullptr; lp = page_next(lp)) {
       tASSERT(txn, lp->flags == P_LOOSE);
       rc = dpl_append(txn, lp->pgno, lp, 1);
