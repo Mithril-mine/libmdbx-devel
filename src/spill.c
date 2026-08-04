@@ -86,7 +86,7 @@ static size_t spill_cursor_keep(const MDBX_txn *const txn, const MDBX_cursor *mc
       tASSERT0(txn, !is_subpage(mp));
       if (is_frozen(txn, mp))
         break;
-      if (is_modifiable_relaxed(txn, mp)) {
+      if (is_modifiable_or_tmp(txn, mp)) {
         size_t const n = txn_dpl_search(txn, mp->pgno);
         if (txn->wr.dirtylist->items[n].pgno == mp->pgno &&
             /* не считаем дважды */ txn_dpl_age(txn, n) > 0) {

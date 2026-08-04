@@ -210,7 +210,7 @@ __hot int page_split(MDBX_cursor *mc, const MDBX_val *const newkey, MDBX_val *co
         tmp_ki_copy->entries[i] = mp->entries[i - 1];
       tmp_ki_copy->pgno = mp->pgno;
       tmp_ki_copy->flags = mp->flags;
-      tmp_ki_copy->txnid = INVALID_TXNID;
+      tmp_ki_copy->txnid = page_tmp_txnid_signature(tmp_ki_copy);
       tmp_ki_copy->lower = 0;
       const size_t max_space = page_space(env);
       tmp_ki_copy->upper = (indx_t)max_space;

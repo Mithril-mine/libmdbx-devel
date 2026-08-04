@@ -448,7 +448,7 @@ outer_on_duptree_and_inner_pointed(const MDBX_cursor *mc) {
     size_t whole = mc->top + mc->stash;
     cASSERT0(mc, mc->top >= 0 && mc->stash >= 0 && whole < CURSOR_STACK_SIZE && whole < mc->tree->height);
     const page_t *mp = mc->pg[whole];
-    if (mp && is_leaf(mp) && mc->ki[whole] < page_numkeys(mp))
+    if (is_leaf(mp) && mc->ki[whole] < page_numkeys(mp))
       return F_ISSET(page_node(mp, mc->ki[whole])->flags, N_DUP | N_TREE);
   }
   return false;
