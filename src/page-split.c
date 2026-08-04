@@ -398,9 +398,17 @@ __hot int page_split(MDBX_cursor *mc, const MDBX_val *const newkey, MDBX_val *co
         }
     }
   } else if (tmp_ki_copy) { /* !is_dupfix_leaf(mp) */
+    /* push source page to the stash to avoid it spill-out */
+    mc->stash += 1;
+    if (unlikely(mc->top + mc->stash >= CURSOR_STACK_SIZE)) {
+      rc = MDBX_CURSOR_FULL;
+      goto bailout;
+    }
+    mc->pg[mc->top + mc->stash] = mp;
+
     /* Move nodes */
-    mc->pg[mc->top] = sister;
     size_t n = 0, ii = split_indx;
+    mc->pg[mc->top] = sister;
     do {
       TRACE("i %zu, nkeys %zu => n %zu, rp #%u", ii, nkeys, n, sister->pgno);
       pgno_t pgno = 0;
@@ -437,15 +445,17 @@ __hot int page_split(MDBX_cursor *mc, const MDBX_val *const newkey, MDBX_val *co
         /* First branch index doesn't need key data. */
         rc = node_add_branch(mc, n, n ? &rkey : nullptr, pgno);
       }
-      if (unlikely(rc != MDBX_SUCCESS))
+      if (unlikely(rc != MDBX_SUCCESS)) {
+        /* source page still in the stash, but it doesn't matter */
         goto bailout;
+      }
 
       ++n;
       if (++ii > nkeys) {
         ii = 0;
         n = 0;
         mc->pg[mc->top] = tmp_ki_copy;
-        TRACE("switch to mp #%u", tmp_ki_copy->pgno);
+        TRACE("switch to mp-tmp-copy #%u", tmp_ki_copy->pgno);
       }
     } while (ii != split_indx);
 
@@ -457,6 +467,9 @@ __hot int page_split(MDBX_cursor *mc, const MDBX_val *const newkey, MDBX_val *co
     mp->lower = tmp_ki_copy->lower;
     mp->upper = tmp_ki_copy->upper;
     memcpy(page_node(mp, n - 1), page_node(tmp_ki_copy, n - 1), env->ps - tmp_ki_copy->upper - PAGEHDRSZ);
+
+    /* remove source page from the stash */
+    mc->stash -= 1;
 
     /* reset back to original page */
     if (newindx < split_indx) {
