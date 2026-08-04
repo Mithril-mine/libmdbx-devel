@@ -1227,7 +1227,7 @@ if(NOT DEFINED MDBX_BUILD_TIMESTAMP)
 endif()
 set(MDBX_BUILD_FLAGS ${CMAKE_C_FLAGS})
 if(MDBX_BUILD_CXX)
-  set(MDBX_BUILD_FLAGS ${CMAKE_CXX_FLAGS})
+  list(APPEND MDBX_BUILD_FLAGS ${CMAKE_CXX_FLAGS})
 endif()
 
 # append cmake's build-type flags and defines
@@ -1251,12 +1251,17 @@ if(defs_list)
   list(APPEND MDBX_BUILD_FLAGS ${defs_list})
 endif()
 
-# get target compile options
+# get target compile options & flags
 get_target_property(options_list ${target4fetch} COMPILE_OPTIONS)
 if(options_list)
   list(APPEND MDBX_BUILD_FLAGS ${options_list})
 endif()
+get_target_property(options_list ${target4fetch} COMPILE_FLAGS)
+if(options_list)
+  list(APPEND MDBX_BUILD_FLAGS ${options_list})
+endif()
 
+separate_arguments(MDBX_BUILD_FLAGS)
 list(REMOVE_DUPLICATES MDBX_BUILD_FLAGS)
 string(REPLACE ";" " " MDBX_BUILD_FLAGS "${MDBX_BUILD_FLAGS}")
 if(CMAKE_CONFIGURATION_TYPES)
