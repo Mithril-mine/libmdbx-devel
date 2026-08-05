@@ -248,7 +248,7 @@ else()
     endif()
     add_extra_test(details_rkl SOURCE ut/details_rkl.c)
     if(MSVC_C11_MAD_ATOMICS)
-      target_compile_options(test_extra_details_rkl PRIVATE "$<$<COMPILE_LANGUAGE:C>:/std:clatest;/experimental:c11atomics>")
+      target_compile_options(test_extra_details_rkl PRIVATE "$<$<COMPILE_LANGUAGE:CXX,C>:/std:clatest;/experimental:c11atomics>")
     endif()
 
     add_extra_test(rename_dbi SOURCE ut/rename_dbi.c)
