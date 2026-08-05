@@ -290,7 +290,7 @@ static __always_inline int couple_init(cursor_couple_t *couple, const MDBX_txn *
                 (int)z_dupfix == P_DUPFIX);
   couple->outer.checking = (CHECKS2_ENABLED() || (txn->env->flags & MDBX_VALIDATION)) ? z_pagecheck | z_leaf : z_leaf;
   couple->outer.subcur = nullptr;
-#if MDBX_DEBUG_SEARCH_DISPATCHING
+#if MDBX_DEBUG_SEARCH_BRANCHLESS
   couple->outer.search_step_counter = 42;
 #endif
 
@@ -314,7 +314,7 @@ static __always_inline int couple_init(cursor_couple_t *couple, const MDBX_txn *
     mx->cursor.dbi_state = dbi_state;
     STATIC_ASSERT(MDBX_DUPFIXED * 2 == P_DUPFIX);
     mx->cursor.checking = couple->outer.checking + ((tree->flags & MDBX_DUPFIXED) << 1);
-#if MDBX_DEBUG_SEARCH_DISPATCHING
+#if MDBX_DEBUG_SEARCH_BRANCHLESS
     mx->cursor.search_step_counter = 421;
 #endif
   }
