@@ -31,8 +31,25 @@ MDBX_NOTHROW_PURE_FUNCTION static inline bool is_modifiable(const MDBX_txn *txn,
   return mp->txnid == txn->front_txnid;
 }
 
-MDBX_NOTHROW_PURE_FUNCTION static inline bool is_modifiable_relaxed(const MDBX_txn *txn, const page_t *mp) {
-  return mp->txnid >= txn->front_txnid;
+MDBX_NOTHROW_PURE_FUNCTION static inline txnid_t page_tmp_txnid_signature(const page_t *mp) {
+  ASSERT(mp->pgno >= MIN_PAGENO && mp->pgno <= MAX_PAGENO);
+#if MDBX_CHECKING > 0
+  const uint32_t x = (uint32_t)mp->pgno, y = (uint32_t)((uintptr_t)mp);
+  const uint32_t potion = (x + (30319 - y) * 52009) ^ (y - x * 65479); /* never zeroed */
+#else
+  const uint32_t potion = mp->pgno << 4 | mp->pgno >> 28;
+#endif
+  return SAFE64_INVALID_THRESHOLD + potion;
+}
+
+MDBX_NOTHROW_PURE_FUNCTION static inline bool is_tmp(const page_t *mp) {
+  return mp->txnid == page_tmp_txnid_signature(mp);
+}
+
+MDBX_MAYBE_UNUSED static inline void page_mark_as_tmp(page_t *mp) { mp->txnid = page_tmp_txnid_signature(mp); }
+
+MDBX_NOTHROW_PURE_FUNCTION static inline bool is_modifiable_or_tmp(const MDBX_txn *txn, const page_t *mp) {
+  return mp->txnid == txn->front_txnid || is_tmp(mp);
 }
 
 MDBX_INTERNAL int __must_check_result page_check(const MDBX_cursor *const mc, const page_t *const mp);

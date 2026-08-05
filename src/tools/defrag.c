@@ -158,7 +158,7 @@ static int defrag_notify(void *ctx, const MDBX_defrag_result_t *progress) {
     }
 
     if (ctx && tick) {
-      last_report_spenttime = progress->spent_time_dot16;
+      last_report_spenttime = (uint32_t)progress->spent_time_dot16;
       defrag_report_progress(progress, progress_dots++);
     }
     last_progress = *progress;

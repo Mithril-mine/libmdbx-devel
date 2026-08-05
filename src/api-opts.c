@@ -117,7 +117,7 @@ static size_t default_presync_threshold_bytes(const MDBX_env *env) {
 }
 
 void lck_options_init_defaults(MDBX_env *env, lck_t *lck) {
-  lck->presync_threshold.weak = bytes_ceil2os_pgno(env, default_presync_threshold_bytes(env));
+  lck->presync_threshold.weak = (pgno_t)bytes_ceil2os_pgno(env, default_presync_threshold_bytes(env));
 }
 
 void env_options_init(MDBX_env *env) {
@@ -387,7 +387,7 @@ __cold int mdbx_env_set_option(MDBX_env *env, const MDBX_option_t option, uint64
       value = default_merge_threshold_dot16(env);
     if (unlikely(value < 8192 || value > 32768))
       return LOG_IFERR(MDBX_EINVAL);
-    env->options.merge_threshold_dot16 = (unsigned)value;
+    env->options.merge_threshold_dot16 = (uint16_t)value;
     recalculate_merge_thresholds(env);
     break;
 
@@ -489,11 +489,11 @@ __cold int mdbx_env_set_option(MDBX_env *env, const MDBX_option_t option, uint64
     if (!env->lck)
       err = MDBX_EPERM;
     else if (value == /* default */ UINT64_MAX)
-      env->lck->presync_threshold.weak = bytes_ceil2os_pgno(env, default_presync_threshold_bytes(env));
+      env->lck->presync_threshold.weak = (uint32_t)bytes_ceil2os_pgno(env, default_presync_threshold_bytes(env));
     else if (value > UINT32_C(0x80000000))
       err = MDBX_EINVAL;
     else
-      env->lck->presync_threshold.weak = max_unsigned(bytes_ceil2os_pgno(env, (size_t)value), 1);
+      env->lck->presync_threshold.weak = (uint32_t)max_unsigned(bytes_ceil2os_pgno(env, (size_t)value), 1);
     break;
 
   default:

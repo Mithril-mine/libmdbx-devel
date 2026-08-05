@@ -197,6 +197,7 @@ __hot int page_split(MDBX_cursor *mc, const MDBX_val *const newkey, MDBX_val *co
         rc = MDBX_ENOMEM;
         goto bailout;
       }
+      CURSOR_TRACING_TMPPAGE_PUSH(mc, tmp_ki_copy);
 
       /* prepare to insert */
       size_t i = 0;
@@ -209,7 +210,7 @@ __hot int page_split(MDBX_cursor *mc, const MDBX_val *const newkey, MDBX_val *co
         tmp_ki_copy->entries[i] = mp->entries[i - 1];
       tmp_ki_copy->pgno = mp->pgno;
       tmp_ki_copy->flags = mp->flags;
-      tmp_ki_copy->txnid = INVALID_TXNID;
+      tmp_ki_copy->txnid = page_tmp_txnid_signature(tmp_ki_copy);
       tmp_ki_copy->lower = 0;
       const size_t max_space = page_space(env);
       tmp_ki_copy->upper = (indx_t)max_space;
@@ -385,11 +386,11 @@ __hot int page_split(MDBX_cursor *mc, const MDBX_val *const newkey, MDBX_val *co
         if (mc->ki[mc->top - i]) {
           sepkey = get_key(page_node(mc->pg[mc->top - i], mc->ki[mc->top - i]));
           if (mc->clc->k.cmp(newkey, &sepkey) < 0) {
-            cursor_enroot(mc, i);
+            cursor_enroot(mc, (int)i);
             DEBUG("pure-left: update new-first on parent [%i] page %u key %s", mc->ki[mc->top], mc->pg[mc->top]->pgno,
                   DKEY(newkey));
             rc = tree_propagate_key(mc, newkey);
-            cursor_undo_enroot(mc, i);
+            cursor_undo_enroot(mc, (int)i);
             if (unlikely(rc != MDBX_SUCCESS))
               goto bailout;
           }
@@ -397,9 +398,17 @@ __hot int page_split(MDBX_cursor *mc, const MDBX_val *const newkey, MDBX_val *co
         }
     }
   } else if (tmp_ki_copy) { /* !is_dupfix_leaf(mp) */
+    /* push source page to the stash to avoid it spill-out */
+    mc->stash += 1;
+    if (unlikely(mc->top + mc->stash >= CURSOR_STACK_SIZE)) {
+      rc = MDBX_CURSOR_FULL;
+      goto bailout;
+    }
+    mc->pg[mc->top + mc->stash] = mp;
+
     /* Move nodes */
-    mc->pg[mc->top] = sister;
     size_t n = 0, ii = split_indx;
+    mc->pg[mc->top] = sister;
     do {
       TRACE("i %zu, nkeys %zu => n %zu, rp #%u", ii, nkeys, n, sister->pgno);
       pgno_t pgno = 0;
@@ -436,15 +445,17 @@ __hot int page_split(MDBX_cursor *mc, const MDBX_val *const newkey, MDBX_val *co
         /* First branch index doesn't need key data. */
         rc = node_add_branch(mc, n, n ? &rkey : nullptr, pgno);
       }
-      if (unlikely(rc != MDBX_SUCCESS))
+      if (unlikely(rc != MDBX_SUCCESS)) {
+        /* source page still in the stash, but it doesn't matter */
         goto bailout;
+      }
 
       ++n;
       if (++ii > nkeys) {
         ii = 0;
         n = 0;
         mc->pg[mc->top] = tmp_ki_copy;
-        TRACE("switch to mp #%u", tmp_ki_copy->pgno);
+        TRACE("switch to mp-tmp-copy #%u", tmp_ki_copy->pgno);
       }
     } while (ii != split_indx);
 
@@ -456,6 +467,9 @@ __hot int page_split(MDBX_cursor *mc, const MDBX_val *const newkey, MDBX_val *co
     mp->lower = tmp_ki_copy->lower;
     mp->upper = tmp_ki_copy->upper;
     memcpy(page_node(mp, n - 1), page_node(tmp_ki_copy, n - 1), env->ps - tmp_ki_copy->upper - PAGEHDRSZ);
+
+    /* remove source page from the stash */
+    mc->stash -= 1;
 
     /* reset back to original page */
     if (newindx < split_indx) {
@@ -537,8 +551,10 @@ __hot int page_split(MDBX_cursor *mc, const MDBX_val *const newkey, MDBX_val *co
     env->lck->pgops.split.weak += 1;
 
 exit:
-  if (tmp_ki_copy)
+  if (tmp_ki_copy) {
+    CURSOR_TRACING_TMPPAGE_POP(mc, tmp_ki_copy);
     page_shadow_release(env, tmp_ki_copy, 1);
+  }
 
   DEBUG("<< mp #%u, rc %d", mp->pgno, rc);
   return rc;

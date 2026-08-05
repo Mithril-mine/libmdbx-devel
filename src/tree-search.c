@@ -56,7 +56,7 @@ __hot int tree_search(MDBX_cursor *mc, const MDBX_val *key, int flags) {
   }
 
   mc->top_and_stash = 0;
-  mc->ki[0] = (flags & Z_LAST) ? page_numkeys(mc->pg[0]) - 1 : 0;
+  mc->ki[0] = (flags & Z_LAST) ? (indx_t)page_numkeys(mc->pg[0]) - 1 : 0;
   DEBUG("db %d root page %" PRIaPGNO " has flags 0x%X", cursor_dbi_dbg(mc), root, mc->pg[0]->flags);
 
   if (flags & Z_MODIFY) {
@@ -120,7 +120,7 @@ __hot __noinline int tree_deepen_edge(MDBX_cursor *mc, int flags) {
     if (unlikely(err != MDBX_SUCCESS))
       goto bailout;
 
-    err = cursor_push(mc, mp, (flags & Z_FIRST) ? 0 : page_numkeys(mp) - 1);
+    err = cursor_push(mc, mp, (flags & Z_FIRST) ? 0 : (indx_t)page_numkeys(mp) - 1);
     if (unlikely(err != MDBX_SUCCESS))
       goto bailout;
 

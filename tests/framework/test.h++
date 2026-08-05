@@ -33,11 +33,11 @@
 #include "osal.h++"
 #include "utils.h++"
 
+#include <atomic>
 #include <deque>
 #include <set>
 #include <stack>
 #include <tuple>
-#include <atomic>
 
 #ifndef HAVE_cxx17_std_string_view
 #if __cplusplus >= 201703L && __has_include(<string_view>)

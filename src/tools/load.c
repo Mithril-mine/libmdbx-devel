@@ -381,7 +381,7 @@ __hot static int readline(MDBX_val *out, MDBX_val *buf) {
     return (ungetc(c, stdin) == c) ? MDBX_SUCCESS : (errno ? errno : EOF);
 
   char *line = buf->iov_base;
-  line[0] = c;
+  line[0] = (char)c;
   line[1] = 0;
   if (c != '\n' && fgets(line + 1, (int)buf->iov_len - 1, stdin) == nullptr)
     return errno ? errno : EOF;
@@ -403,7 +403,7 @@ __hot static int readline(MDBX_val *out, MDBX_val *buf) {
 
       /* continue read line */
       errno = 0;
-      if (fgets(line + len, (int)buf->iov_len - len, stdin) == nullptr)
+      if (fgets(line + len, (int)(buf->iov_len - len), stdin) == nullptr)
         return errno ? errno : EOF;
       len += strlen(line + len);
     }

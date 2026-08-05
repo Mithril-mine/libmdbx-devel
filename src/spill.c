@@ -86,7 +86,7 @@ static size_t spill_cursor_keep(const MDBX_txn *const txn, const MDBX_cursor *mc
       tASSERT0(txn, !is_subpage(mp));
       if (is_frozen(txn, mp))
         break;
-      if (is_modifiable_relaxed(txn, mp)) {
+      if (is_modifiable_or_tmp(txn, mp)) {
         size_t const n = txn_dpl_search(txn, mp->pgno);
         if (txn->wr.dirtylist->items[n].pgno == mp->pgno &&
             /* не считаем дважды */ txn_dpl_age(txn, n) > 0) {
@@ -218,8 +218,9 @@ __cold int spill_slowpath(MDBX_txn *const txn, MDBX_cursor *const m0, const intp
     MDBX_ANALYSIS_ASSUME(txn->wr.dirtylist != nullptr);
     tASSERT1(txn, txn_dpl_check(txn));
     env->lck->unsynced_pages.weak += txn->wr.dirtylist->pages_including_loose - txn->wr.loose_count;
-    dpl_setlen(txn->wr.dirtylist, 0);
+    txn->wr.dirtylist->sorted = dpl_setlen(txn->wr.dirtylist, 0);
     txn->wr.dirtyroom = env->options.dp_limit - txn->wr.loose_count;
+    txn->wr.dirtylist->pages_including_loose = txn->wr.loose_count;
     for (page_t *lp = txn->wr.loose_pages; lp != nullptr; lp = page_next(lp)) {
       tASSERT0(txn, lp->flags == P_LOOSE);
       rc = txn_dpl_append(txn, lp->pgno, lp, 1);

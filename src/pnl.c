@@ -302,7 +302,7 @@ __hot pgno_t pnl_get_best_sequence(const pnl_t pnl, const size_t seq, const pgno
   if (best_pos) {
     pgno = pnl[best_pos];
     VERBOSE("seq %zu => %u", seq, pgno);
-    ASSERT(pnl_contains_span(pnl, pgno, seq));
+    ASSERT(pnl_contains_span(pnl, pgno, (pgno_t)seq));
     ASSERT(pgno + seq <= defrag_detent);
     pnl_cut(pnl, best_pos - seq + 1, seq);
   }
@@ -321,7 +321,7 @@ pgno_t pnl_crop_tail_sequence(const pnl_t pnl) {
     ++span;
   pnl_cut(pnl, 1, span);
 #endif /* MDBX_PNL_ASCENDING */
-  return span;
+  return (pgno_t)span;
 }
 
 __hot void pnl_cut(pnl_t pnl, size_t pos, size_t span) {

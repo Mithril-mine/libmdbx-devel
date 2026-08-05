@@ -513,6 +513,6 @@ void txn_dpl_clear(MDBX_txn *txn) {
       for (size_t i = 1; i <= dl->length; i++)
         page_shadow_release(env, dl->items[i].ptr, dpl_npages(dl, i));
     }
-    dpl_setlen(dl, 0);
+    dl->sorted = dpl_setlen(dl, 0);
   }
 }

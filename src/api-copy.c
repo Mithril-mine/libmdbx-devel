@@ -380,7 +380,7 @@ __cold static int copy_with_compacting(MDBX_env *env, MDBX_txn *txn, mdbx_fileha
     int rc = cursor_init(&couple.outer, txn, FREE_DBI);
     if (unlikely(rc != MDBX_SUCCESS))
       return rc;
-    pgno_t gc_npages = txn->dbs[FREE_DBI].branch_pages + txn->dbs[FREE_DBI].leaf_pages + txn->dbs[FREE_DBI].large_pages;
+    size_t gc_npages = txn->dbs[FREE_DBI].branch_pages + txn->dbs[FREE_DBI].leaf_pages + txn->dbs[FREE_DBI].large_pages;
     MDBX_val key, data;
     rc = outer_first(&couple.outer, &key, &data);
     while (rc == MDBX_SUCCESS) {
@@ -399,7 +399,7 @@ __cold static int copy_with_compacting(MDBX_env *env, MDBX_txn *txn, mdbx_fileha
     if (unlikely(rc != MDBX_NOTFOUND))
       return rc;
 
-    meta->geometry.first_unallocated = txn->geo.first_unallocated - gc_npages;
+    meta->geometry.first_unallocated = txn->geo.first_unallocated - (pgno_t)gc_npages;
     meta->trees.main = txn->dbs[MAIN_DBI];
 
     ctx_t ctx;

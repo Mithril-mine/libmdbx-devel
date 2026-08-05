@@ -315,7 +315,7 @@ static void nested_merge(MDBX_txn *const parent, MDBX_txn *const nested, const s
     dst->pages_including_loose += dpl_npages(dst, r);
 
   tASSERT1(parent, txn_dpl_check(parent));
-  dpl_setlen(src, 0);
+  src->sorted = dpl_setlen(src, 0);
   txn_dpl_free(nested);
 
   if (nested->wr.spilled.list) {

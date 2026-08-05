@@ -337,17 +337,62 @@ __cold void mdbx_assert_fail(const char *msg, const char *func, unsigned line) {
 
 /*----------------------------------------------------------------------------*/
 
-static inline char sanitizer_probe_page(const MDBX_txn *txn, const page_t *mp, bool allow_subpage) {
+static inline const char *sanitizer_probe_page_dangling(const MDBX_txn *txn, const MDBX_cursor *const mc,
+                                                        const page_t *mp, bool allow_subpage) {
+  /* Checking the page structure or header fields is generally inappropriate here, since the function can be called
+   * during modification of the b-tree structure, when there may be temporary and incomplete pages on the cursor stacks.
+   */
   if (!mp)
-    return '0';
-  const char sanitizer_probe = sanitizer_kind_of_poison(mp, sizeof(*mp));
-  if (sanitizer_probe)
-    return sanitizer_probe;
-  if (mp->pgno < NUM_METAS || (mp->pgno >= txn->geo.first_unallocated && !(mp->flags & P_SUBP)) || mp->flags == 0 ||
-      ((mp->flags & P_ILL_BITS) != 0 &&
-       !(allow_subpage && (mp->flags == (P_SUBP | P_LEAF) || mp->flags == (P_SUBP | P_LEAF | P_DUPFIX)))))
-    return '%';
-  return 0;
+    return "null-address";
+  const char poison = sanitizer_kind_of_poison(mp, PAGEHDRSZ);
+  switch (poison) {
+  case 'P':
+    return "ASAN.poisoned";
+  case 'N':
+    return "MEMCHECK.non-addressable";
+  case 'U':
+    return "MEMCHECK.undefined";
+  default:
+    return "SANITIZER.other-poison";
+  case 0:
+    break;
+  }
+
+  const size_t mmap_offset = ptr_dist(mp, txn->env->dxb_mmap.base);
+  if (mmap_offset < txn->env->dxb_mmap.limit) {
+    /* mp in the mapped region */
+    size_t pgno = bytes2pgno(txn->env, mmap_offset);
+    if (pgno < NUM_METAS || pgno >= txn->geo.first_unallocated)
+      return "MMAP.outside-allocation-range";
+    if (!allow_subpage && (mmap_offset & (txn->env->ps - 1)) != 0)
+      return "unexpected-suppage";
+    return nullptr;
+  }
+
+#if xMDBX_DEBUG_SPILLING > 0
+  for (unsigned i = 0; i < mc->tmp_split_top; ++i)
+    if (mc->tmp_split[i] == mp)
+      return nullptr;
+#else
+  (void)mc;
+#endif /* xMDBX_DEBUG_SPILLING */
+
+  if ((txn->flags & MDBX_WRITEMAP) != 0 || !txn->wr.dirtylist)
+    return "MMAP.outside-mmap-region";
+
+  do {
+    for (size_t i = 1; i <= txn->wr.dirtylist->length; ++i) {
+      const size_t dirty_offset = ptr_dist(mp, txn->wr.dirtylist->items[i].ptr);
+      if (dirty_offset >= txn->env->ps)
+        continue;
+      if (dirty_offset && !allow_subpage)
+        return "unexpected-suppage";
+      return nullptr;
+    }
+    txn = txn->parent;
+  } while (txn);
+
+  return "TXN.outside-dirty-pages";
 }
 
 __cold MDBX_ATTRIBUTE_NO_SANITIZE_ADDRESS(MDBX_NOTHING) void cursor_stack(const MDBX_cursor *const mc, const char *func,
@@ -359,13 +404,12 @@ __cold MDBX_ATTRIBUTE_NO_SANITIZE_ADDRESS(MDBX_NOTHING) void cursor_stack(const 
     for (intptr_t i = 0, last = mc->top + mc->stash; i <= last; ++i) {
       char page_flags[16], *pf = page_flags;
       const page_t *mp = mc->pg[i];
-      const char sanitizer_probe = sanitizer_probe_page(mc->txn, mp, i == 0 && is_inner(mc));
+      const char *sanitizer_probe = sanitizer_probe_page_dangling(mc->txn, mc, mp, i == 0 && is_inner(mc));
       if (sanitizer_probe) {
-        *pf++ = sanitizer_probe;
+        *pf++ = '#';
         *pf++ = '>';
         VALGRIND_DISABLE_ADDR_ERROR_REPORTING_IN_RANGE(mp, sizeof(*mp));
-      }
-      if (!sanitizer_probe || sanitizer_probe == '%') {
+      } else {
         if (is_branch(mp))
           *pf++ = 'B';
         if (is_leaf(mp))
@@ -390,9 +434,8 @@ __cold MDBX_ATTRIBUTE_NO_SANITIZE_ADDRESS(MDBX_NOTHING) void cursor_stack(const 
           *pf++ = 'm';
       }
       *pf = 0;
-      debug_log(lvl, nullptr, 0, "%s%zu->%u.%p_%s:%u%s", i ? ", " : "", i,
-                (sanitizer_probe && sanitizer_probe != '%') ? 0 : mp->pgno, __Wpedantic_format_voidptr(mp), page_flags,
-                mc->ki[i], sanitizer_probe ? "\n" : "");
+      debug_log(lvl, nullptr, 0, "%s%zu->%u.%p_%s:%u%s", i ? ", " : "", i, sanitizer_probe ? 0 : mp->pgno,
+                __Wpedantic_format_voidptr(mp), page_flags, mc->ki[i], sanitizer_probe ? "\n" : "");
       if (sanitizer_probe) {
 #if !IS_WINDOWS || !MDBX_WITHOUT_MSVC_CRT
         fflush(nullptr);
@@ -411,30 +454,14 @@ __hot void txn_probe_dbi_cursors_stacks(const MDBX_txn *txn, size_t dbi, const c
     while (!is_poor(mx)) {
       for (intptr_t i = 0, last = mx->top + mx->stash; i <= last; ++i) {
         page_t *mp = mx->pg[i];
-        const char sanitizer_probe = sanitizer_probe_page(txn, mp, i == 0 && is_inner(mx));
-        if (unlikely(sanitizer_probe)) {
+        const char *cause = sanitizer_probe_page_dangling(txn, mx, mp, i == 0 && is_inner(mx));
+        if (unlikely(cause)) {
           cursor_stack(mc, func, line, ".outer");
           if (mx != mc)
             cursor_stack(mx, func, line, ".inner");
+          /* Using the page_check() is mostly invalid here, since the page is known to be dangling,
+           * but hope this could help debugging. */
           cASSERT0(mc, mp && page_check(mx, mp) == MDBX_SUCCESS);
-          const char *cause = "unknown";
-          switch (sanitizer_probe) {
-          case '0':
-            cause = "null-address";
-            break;
-          case 'P':
-            cause = "ASAN.poisoned";
-            break;
-          case 'A':
-            cause = "MEMCHECK.non-addressable";
-            break;
-          case 'U':
-            cause = "MEMCHECK.undefined";
-            break;
-          case '%':
-            cause = "HEADER.sanity-check";
-            break;
-          }
 
           panic_fmt(mc,
                     "Dangling reference from the cursor's stack to a freed page is detected: %s-cursor %p dbi %zu, "
