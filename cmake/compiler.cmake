@@ -354,7 +354,6 @@ endif()
 
 if(MSVC)
   check_compiler_flag("/WX" CC_HAS_WERROR)
-  check_compiler_flag("/Oy" CC_HAS_Oy_Omit_Frame_Pointers)
   check_compiler_flag("/fsanitize=address" CC_HAS_ASAN)
   check_compiler_flag("/fsanitize=undefined" CC_HAS_UBSAN)
   check_compiler_flag("/forceInterlockedFunctions" CC_HAS_FORCE_INTERLOCKED_CALL)
