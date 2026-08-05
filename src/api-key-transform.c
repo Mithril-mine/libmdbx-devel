@@ -26,8 +26,8 @@ static inline uint64_t double2key(const double *const ptr) {
 
 static inline float key2float(const int32_t key) {
   union {
-    uint64_t u32;
-    double f32;
+    uint32_t u32;
+    float f32;
   } casting;
   casting.u32 = (key < 0) ? key + UINT32_C(0x80000000) : UINT32_C(0xffffFFFF) - key;
   STATIC_ASSERT(sizeof(casting.u32) == sizeof(casting.f32));
