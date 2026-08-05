@@ -433,6 +433,9 @@ if(CMAKE_C_COMPILER_LOADED)
       endif()
     endif()
   endif()
+  if(MSVC)
+    check_c_compiler_flag("/experimental:c11atomics" MSVC_C11_MAD_ATOMICS)
+  endif()
 endif()
 
 # Check for LTO support by GCC
