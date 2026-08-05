@@ -337,8 +337,11 @@ __cold void mdbx_assert_fail(const char *msg, const char *func, unsigned line) {
 
 /*----------------------------------------------------------------------------*/
 
-static inline const char *sanitizer_probe_page(const MDBX_txn *txn, const MDBX_cursor *const mc, const page_t *mp,
-                                               bool allow_subpage) {
+static inline const char *sanitizer_probe_page_dangling(const MDBX_txn *txn, const MDBX_cursor *const mc,
+                                                        const page_t *mp, bool allow_subpage) {
+  /* Checking the page structure or header fields is generally inappropriate here, since the function can be called
+   * during modification of the b-tree structure, when there may be temporary and incomplete pages on the cursor stacks.
+   */
   if (!mp)
     return "null-address";
   const char poison = sanitizer_kind_of_poison(mp, PAGEHDRSZ);
@@ -401,7 +404,7 @@ __cold MDBX_ATTRIBUTE_NO_SANITIZE_ADDRESS(MDBX_NOTHING) void cursor_stack(const 
     for (intptr_t i = 0, last = mc->top + mc->stash; i <= last; ++i) {
       char page_flags[16], *pf = page_flags;
       const page_t *mp = mc->pg[i];
-      const char *sanitizer_probe = sanitizer_probe_page(mc->txn, mc, mp, i == 0 && is_inner(mc));
+      const char *sanitizer_probe = sanitizer_probe_page_dangling(mc->txn, mc, mp, i == 0 && is_inner(mc));
       if (sanitizer_probe) {
         *pf++ = '#';
         *pf++ = '>';
@@ -451,11 +454,13 @@ __hot void txn_probe_dbi_cursors_stacks(const MDBX_txn *txn, size_t dbi, const c
     while (!is_poor(mx)) {
       for (intptr_t i = 0, last = mx->top + mx->stash; i <= last; ++i) {
         page_t *mp = mx->pg[i];
-        const char *cause = sanitizer_probe_page(txn, mx, mp, i == 0 && is_inner(mx));
+        const char *cause = sanitizer_probe_page_dangling(txn, mx, mp, i == 0 && is_inner(mx));
         if (unlikely(cause)) {
           cursor_stack(mc, func, line, ".outer");
           if (mx != mc)
             cursor_stack(mx, func, line, ".inner");
+          /* Using the page_check() is mostly invalid here, since the page is known to be dangling,
+           * but hope this could help debugging. */
           cASSERT0(mc, mp && page_check(mx, mp) == MDBX_SUCCESS);
 
           panic_fmt(mc,
