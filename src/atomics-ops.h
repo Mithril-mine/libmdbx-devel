@@ -7,6 +7,10 @@
 
 #ifndef __cplusplus
 
+#if !defined(MDBX_HAVE_C11ATOMICS) && defined(_MSC_VER) && !__ia32__
+#error "Something wrong: C11 atomics are required with MSVC for non-x86 platform/target. Please use CMake with Ninja."
+#endif /* MDBX_HAVE_C11ATOMICS */
+
 #ifdef MDBX_HAVE_C11ATOMICS
 #define osal_memory_fence(order, write) atomic_thread_fence((write) ? mo_c11_store(order) : mo_c11_load(order))
 #else /* MDBX_HAVE_C11ATOMICS */
