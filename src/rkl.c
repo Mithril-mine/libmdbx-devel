@@ -102,7 +102,7 @@ static int rkl_resize(rkl_t *rkl, size_t wanna_size) {
 #ifdef osal_malloc_usable_size
     bytes = osal_malloc_usable_size(ptr);
 #endif /* osal_malloc_usable_size */
-    rkl->list_limit = rkl_bytes2size(bytes);
+    rkl->list_limit = (unsigned)rkl_bytes2size(bytes);
     if (rkl->list == rkl->inplace)
       memcpy(ptr, rkl->inplace, sizeof(rkl->inplace));
     rkl->list = ptr;
@@ -131,7 +131,9 @@ int rkl_copy(const rkl_t *src, rkl_t *dst) {
   return MDBX_SUCCESS;
 }
 
-size_t rkl_len(const rkl_t *rkl) { return rkl_empty(rkl) ? 0 : rkl->solid_end - rkl->solid_begin + rkl->list_length; }
+size_t rkl_len(const rkl_t *rkl) {
+  return rkl_empty(rkl) ? 0 : (size_t)(rkl->solid_end - rkl->solid_begin) + rkl->list_length;
+}
 
 __hot bool rkl_contain(const rkl_t *rkl, txnid_t id) {
   ASSERT(rkl_check(rkl));
@@ -219,7 +221,7 @@ static int extend_solid(rkl_t *rkl, txnid_t solid_begin, txnid_t solid_end, cons
       t += 1;
     }
     if (f < t) {
-      rkl->list_length -= t - f;
+      rkl->list_length -= (unsigned)(t - f);
       while (t < end)
         *f++ = *t++;
     }
@@ -315,7 +317,7 @@ int rkl_push(rkl_t *rkl, const txnid_t id) {
 
     const size_t new_solid_len = to - from;
     if (new_solid_len > 3) {
-      const size_t old_solid_len = rkl->solid_end - rkl->solid_begin;
+      const size_t old_solid_len = (size_t)(rkl->solid_end - rkl->solid_begin);
       if (new_solid_len > old_solid_len) {
         /* Новая непрерывная последовательность длиннее текущей.
          * Считаем обмен выгодным, если он дешевле пути развития событий с добавлением следующего элемента в список. */
@@ -364,7 +366,7 @@ int rkl_push(rkl_t *rkl, const txnid_t id) {
           while (to < rkl->list_length)
             rkl->list[moved + from++] = rkl->list[to++];
 
-          rkl->list_length = rkl->list_length - new_solid_len + old_solid_len;
+          rkl->list_length = (unsigned)(rkl->list_length - new_solid_len + old_solid_len);
           rkl->solid_begin = new_solid_begin;
           rkl->solid_end = new_solid_end;
           ASSERT(rkl_check(rkl));
@@ -433,13 +435,13 @@ int rkl_destructive_merge(rkl_t *src, rkl_t *dst, bool ignore_duplicates) {
 }
 
 rkl_iter_t rkl_iterator(const rkl_t *rkl, const bool reverse) {
-  rkl_iter_t iter = {.rkl = rkl, .pos = reverse ? rkl_len(rkl) : 0, .solid_offset = 0};
+  rkl_iter_t iter = {.rkl = rkl, .pos = reverse ? (unsigned)rkl_len(rkl) : 0, .solid_offset = 0};
   if (!solid_empty(rkl) && rkl->list_length) {
     const txnid_t *it = rkl_bsearch(rkl->list, rkl->list_length, rkl->solid_begin);
     const txnid_t *const end = rkl->list + rkl->list_length;
     ASSERT(it >= rkl->list && it <= end && (it == end || *it > rkl->solid_begin));
     (void)end;
-    iter.solid_offset = it - rkl->list;
+    iter.solid_offset = (unsigned)(it - rkl->list);
   }
   return iter;
 }
@@ -450,10 +452,10 @@ txnid_t rkl_turn(rkl_iter_t *iter, const bool reverse) {
   if (unlikely(pos >= rkl_len(iter->rkl)))
     return 0;
 
-  iter->pos = pos + !reverse;
+  iter->pos = (unsigned)pos + !reverse;
   ASSERT(iter->pos <= rkl_len(iter->rkl));
 
-  const size_t solid_len = iter->rkl->solid_end - iter->rkl->solid_begin;
+  const size_t solid_len = (size_t)(iter->rkl->solid_end - iter->rkl->solid_begin);
   if (iter->rkl->list_length) {
     if (pos < iter->solid_offset)
       return iter->rkl->list[pos];
@@ -513,13 +515,13 @@ rkl_hole_t rkl_hole(rkl_iter_t *iter, const bool reverse) {
     } else {
       hole.begin = MAX_TXNID /* rkl_highest(iter->rkl) + 1 */;
       hole.end = MAX_TXNID;
-      iter->pos = len;
+      iter->pos = (unsigned)len;
       DEBUG_HOLE(hole);
       return hole;
     }
   }
 
-  const size_t solid_len = iter->rkl->solid_end - iter->rkl->solid_begin;
+  const size_t solid_len = (size_t)(iter->rkl->solid_end - iter->rkl->solid_begin);
   if (iter->rkl->list_length) {
     /* список элементов не пуст */
     txnid_t here, there;
@@ -536,7 +538,7 @@ rkl_hole_t rkl_hole(rkl_iter_t *iter, const bool reverse) {
           next += solid_len;
           ASSERT(hole.begin < hole.end /* зазор обязан быть, иначе это ошибка не-слияния */);
           /* зазор между элементом списка перед сплошным интервалом и началом интервала */
-          iter->pos = next - 1;
+          iter->pos = (unsigned)next - 1;
           DEBUG_HOLE(hole);
           return hole;
         }
@@ -559,7 +561,7 @@ rkl_hole_t rkl_hole(rkl_iter_t *iter, const bool reverse) {
           pos = iter->solid_offset;
           ASSERT(hole.begin < hole.end /* зазор обязан быть, иначе это ошибка не-слияния */);
           /* зазор между элементом списка после сплошного интервала и концом интервала */
-          iter->pos = pos;
+          iter->pos = (unsigned)pos;
           DEBUG_HOLE(hole);
           return hole;
         }
@@ -589,7 +591,7 @@ rkl_hole_t rkl_hole(rkl_iter_t *iter, const bool reverse) {
       hole.end = reverse ? here : there;
       if (hole.begin < hole.end) {
         /* есть зазор между текущей и следующей позицией */
-        iter->pos = next;
+        iter->pos = (unsigned)next;
         DEBUG_HOLE(hole);
         return hole;
       }
@@ -605,14 +607,14 @@ rkl_hole_t rkl_hole(rkl_iter_t *iter, const bool reverse) {
       /* уперлись в конец rkl, возвращаем зазор после конца rkl */
       hole.begin = here + 1;
       hole.end = MAX_TXNID;
-      iter->pos = len;
+      iter->pos = (unsigned)len;
       DEBUG_HOLE(hole);
     }
     return hole;
   }
 
   /* список элементов пуст, но есть непрерывный интервал */
-  iter->pos = reverse ? 0 : len;
+  iter->pos = reverse ? 0 : (unsigned)len;
   if (reverse && pos < len) {
     /* возвращаем зазор перед непрерывным интервалом */
     hole.begin = 1;

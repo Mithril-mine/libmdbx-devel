@@ -3730,7 +3730,7 @@ void osal_ctor(void) {
   ASSERT(globals.sys_pagesize > 0 && (globals.sys_pagesize & (globals.sys_pagesize - 1)) == 0);
   ASSERT(globals.sys_allocation_granularity >= globals.sys_pagesize &&
          globals.sys_allocation_granularity % globals.sys_pagesize == 0);
-  globals.sys_pagesize_ln2 = log2n_powerof2(globals.sys_pagesize);
+  globals.sys_pagesize_ln2 = (uint8_t)log2n_powerof2(globals.sys_pagesize);
 
 #if defined(__linux__) || defined(__gnu_linux__)
   posix_clockid = choice_monoclock();

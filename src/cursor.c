@@ -182,7 +182,7 @@ __hot int cursor_touch(MDBX_cursor *const mc, const MDBX_val *key, const MDBX_va
   if (likely(is_pointed(mc)) && ((mc->txn->flags & MDBX_TXN_SPILLS) || !is_modifiable(mc->txn, mc->pg[mc->top]))) {
     int i = mc->top << CHAR_BIT; /* mc->stash = mc->top; mc->top = 0; */
     do {
-      mc->top_and_stash = i;
+      mc->top_and_stash = (uint16_t)i;
       int err = page_touch(mc);
       if (unlikely(err != MDBX_SUCCESS))
         return err;
@@ -673,7 +673,7 @@ static __always_inline int cursor_brim(const bool inner, const bool tend2first, 
   }
   const size_t nkeys = page_numkeys(mc->pg[mc->top]);
   cASSERT0(mc, nkeys > 0);
-  mc->ki[mc->top] = tend2first ? 0 : nkeys - 1;
+  mc->ki[mc->top] = tend2first ? 0 : (indx_t)nkeys - 1;
   return cursor_bring(inner, tend2first, mc, key, data, !tend2first);
 }
 
@@ -1762,7 +1762,7 @@ __hot int cursor_del(MDBX_cursor *mc, unsigned flags) {
 
 del_key:
   mc->tree->items -= 1;
-  const MDBX_dbi dbi = cursor_dbi(mc);
+  const MDBX_dbi dbi = (MDBX_dbi)cursor_dbi(mc);
   indx_t ki = mc->ki[mc->top];
   mp = mc->pg[mc->top];
   cASSERT0(mc, is_leaf(mp));
@@ -2561,7 +2561,7 @@ int cursor_on_last(const MDBX_cursor *mc) {
 static cdr_t cursor_distance_at(MDBX_cursor *iter, const MDBX_cursor *end, int level) {
   cdr_t tdr = {.err = MDBX_SUCCESS, .distance = 0};
   if (level < iter->top)
-    iter->top_and_stash = level;
+    iter->top_and_stash = (uint16_t)level;
   ASSERT(end->top >= iter->top);
   ASSERT(end->tree == iter->tree || memcmp(end->tree, iter->tree, sizeof(tree_t)) == 0);
   const int iter_ki = iter->ki[iter->top] + ((iter->flags & z_eof_hard) != 0 && level + 1 == iter->tree->height);
@@ -2596,7 +2596,7 @@ static cdr_t cursor_leaf_amount(const page_t *mp, intptr_t begin, intptr_t end) 
       }
       tree_t subtree;
       memcpy(&subtree, node_data(node), sizeof(tree_t));
-      tdr.distance += subtree.items - 1;
+      tdr.distance += (size_t)subtree.items - 1;
     } else if (node->flags & N_DUP) {
       if (!MDBX_DISABLE_VALIDATION && unlikely(node_ds(node) <= PAGEHDRSZ)) {
         tdr.err = bad_page(mp, "invalid nested/sub-page record size (%zu, expect %u)\n", dsize, PAGEHDRSZ);
@@ -2676,7 +2676,7 @@ cdr_t cursor_distance(MDBX_cursor *iter, const MDBX_cursor *end, int level) {
 
 static cdr_t cursor_forward_at(MDBX_cursor *iter, size_t amount, int level) {
   if (level < iter->top)
-    iter->top_and_stash = level;
+    iter->top_and_stash = (uint16_t)level;
 
   cdr_t tdr = {.err = MDBX_SUCCESS, .distance = amount};
   size_t step = page_numkeys(iter->pg[iter->top]) - iter->ki[iter->top];
@@ -2689,7 +2689,7 @@ static cdr_t cursor_forward_at(MDBX_cursor *iter, size_t amount, int level) {
   }
 
   ASSERT(tdr.distance < step);
-  iter->ki[iter->top] += tdr.distance;
+  iter->ki[iter->top] += (indx_t)tdr.distance;
   tdr.distance = 0;
   if (iter->top + 1 < iter->tree->height) {
     tdr.err = tree_deepen_edge(iter, Z_FIRST);
@@ -2715,7 +2715,7 @@ static cdr_t cursor_forward_at(MDBX_cursor *iter, size_t amount, int level) {
 
 static cdr_t cursor_backward_at(MDBX_cursor *iter, size_t amount, int level) {
   if (level < iter->top)
-    iter->top_and_stash = level;
+    iter->top_and_stash = (uint16_t)level;
 
   cdr_t tdr = {.err = MDBX_SUCCESS, .distance = amount};
   while (tdr.distance > iter->ki[iter->top]) {
@@ -2726,7 +2726,7 @@ static cdr_t cursor_backward_at(MDBX_cursor *iter, size_t amount, int level) {
   }
 
   ASSERT(tdr.distance <= iter->ki[iter->top]);
-  iter->ki[iter->top] -= tdr.distance;
+  iter->ki[iter->top] -= (indx_t)tdr.distance;
   tdr.distance = 0;
   if (iter->top + 1 < iter->tree->height) {
     tdr.err = tree_deepen_edge(iter, Z_LAST);
@@ -2789,7 +2789,7 @@ int cursor_scroll_forward(MDBX_cursor *mc, intptr_t amount, int level) {
         return err;
       return cursor_forward_at(&mc->subcur->cursor, amount, level - mc->tree->height).err;
     }
-    amount -= mc->subcur->nested_tree.items;
+    amount -= (size_t)mc->subcur->nested_tree.items;
     inner_gone_unconditional(mc);
   }
 }
@@ -2836,7 +2836,7 @@ int cursor_scroll_backward(MDBX_cursor *mc, intptr_t amount, int level) {
         return err;
       return cursor_backward_at(&mc->subcur->cursor, amount, level - mc->tree->height).err;
     }
-    amount -= mc->subcur->nested_tree.items;
+    amount -= (size_t)mc->subcur->nested_tree.items;
     inner_gone_unconditional(mc);
   }
 }

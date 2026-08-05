@@ -604,8 +604,8 @@ static void gc_dense_hist(MDBX_txn *txn, gcu_t *ctx) {
  *  - V = объем/количество не помещающихся номеров страниц. */
 
 typedef struct sr_state {
-  unsigned left_slots;
-  pgno_t left_volume;
+  size_t left_slots;
+  size_t left_volume;
   gc_dense_histogram_t hist;
 } sr_state_t;
 
@@ -655,7 +655,7 @@ static bool consume_remaining(const sr_context_t *const ct, sr_state_t *const st
         st->hist.array[st->hist.end - len - 1] += 1;
       st->hist.array[st->hist.end - 1] -= 1;
       st->left_slots -= 1;
-      st->left_volume -= per_chunk;
+      st->left_volume -= (pgno_t)per_chunk;
       if (0 >= (int)st->left_volume) {
       done:
         while (--len)
@@ -680,7 +680,7 @@ static bool solve_recursive(const sr_context_t *const ct, sr_state_t *const st, 
   ASSERT(st->left_slots >= 1);
   size_t per_chunk = ct->first_page + ct->other_pages * (len - 1);
   if (len > ct->factor && st->left_slots > 1 && st->left_volume > per_chunk) {
-    unsigned lo = 0, hi = st->left_slots - 1, n = lo;
+    size_t lo = 0, hi = st->left_slots - 1, n = lo;
     do {
       sr_state_t local = *st;
       if (n) {
@@ -691,14 +691,14 @@ static bool solve_recursive(const sr_context_t *const ct, sr_state_t *const st, 
         }
         ASSERT(local.left_slots > n);
         local.left_slots -= n;
-        local.left_volume = (local.left_volume > n * per_chunk) ? local.left_volume - n * per_chunk : 0;
+        local.left_volume = (pgno_t)(local.left_volume > n * per_chunk) ? local.left_volume - n * per_chunk : 0;
       }
       if (!solve_recursive(ct, &local, len - 1)) {
         lo = n + 1;
       } else if (n > lo && n < hi) {
         hi = n;
       } else {
-        ct->solution->array[len - 1] = n;
+        ct->solution->array[len - 1] = (pgno_t)n;
         *st = local;
         return true;
       }
@@ -719,7 +719,7 @@ static int gc_dense_solve(MDBX_txn *txn, gcu_t *ctx, gc_dense_histogram_t *const
     return MDBX_PROBLEM;
   }
 
-  const sr_context_t ct = {.factor = gc_chunk_pages(txn, (st.left_volume + st.left_slots - 1) / st.left_slots),
+  const sr_context_t ct = {.factor = (pgno_t)gc_chunk_pages(txn, (st.left_volume + st.left_slots - 1) / st.left_slots),
                            .first_page = /* на первой странице */ txn->env->maxgc_large1page +
                                          /* сама страница также будет израсходована */ 1,
                            .other_pages = /* на второй и последующих страницах */ txn->env->ps / sizeof(pgno_t) +

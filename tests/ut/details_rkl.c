@@ -323,11 +323,11 @@ static bool check_hole(const size_t set, const rkl_hole_t hole, size_t *acc) {
   ++tst_iterations;
 
   if (hole.begin > 1)
-    CHECK_EQ(bit(set, hole.begin - 1), 1);
+    CHECK_EQ(bit(set, (size_t)hole.begin - 1), 1);
   if (hole.end < CHAR_BIT * sizeof(set))
-    CHECK_EQ(bit(set, hole.end), 1);
+    CHECK_EQ(bit(set, (size_t)hole.end), 1);
 
-  for (size_t n = hole.begin; n < hole.end && n < CHAR_BIT * sizeof(set); n++) {
+  for (size_t n = (size_t)hole.begin; n < hole.end && n < CHAR_BIT * sizeof(set); n++) {
     CHECK_EQ(bit(set, n), 0);
     *acc += 1;
   }

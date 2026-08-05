@@ -645,9 +645,9 @@ __cold int dxb_setup(MDBX_env *env, const int lck_rc, const mdbx_mode_t mode_bit
 
       /* altering fields to match geometry given from user */
       expected_filesize = pgno_ceil2os_bytes(env, header.geometry.now);
-      header.geometry.now = bytes_ceil2os_pgno(env, env->geo_in_bytes.now);
-      header.geometry.lower = bytes_ceil2os_pgno(env, env->geo_in_bytes.lower);
-      header.geometry.upper = bytes_ceil2os_pgno(env, env->geo_in_bytes.upper);
+      header.geometry.now = (pgno_t)bytes_ceil2os_pgno(env, env->geo_in_bytes.now);
+      header.geometry.lower = (pgno_t)bytes_ceil2os_pgno(env, env->geo_in_bytes.lower);
+      header.geometry.upper = (pgno_t)bytes_ceil2os_pgno(env, env->geo_in_bytes.upper);
       header.geometry.grow_pv = pages2pv(bytes_ceil2os_pgno(env, env->geo_in_bytes.grow));
       header.geometry.shrink_pv = pages2pv(bytes_ceil2os_pgno(env, env->geo_in_bytes.shrink));
 

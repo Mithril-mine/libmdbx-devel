@@ -234,7 +234,7 @@ static int cutoff_zikkurat(MDBX_cursor *begin, MDBX_cursor *end, intptr_t level,
   int err = MDBX_SUCCESS;
   do {
     cursor_cpstk(end, mc);
-    mc->top_and_stash = level;
+    mc->top_and_stash = (uint16_t)level;
 
     while (true) {
       if (mc->tree->items < 4)
@@ -247,7 +247,7 @@ static int cutoff_zikkurat(MDBX_cursor *begin, MDBX_cursor *end, intptr_t level,
 
       cASSERT0(mc, mc->top == level);
       page_t *mp = mc->pg[level];
-      const indx_t nkeys = page_numkeys(mp);
+      const indx_t nkeys = (indx_t)page_numkeys(mp);
       if (nkeys < 3)
         /* пропускаем, чтобы избежать слияния страниц, так как при этом
          * может сильно изменится конфигурация дерева, что потребует перезапуска процедуры быстрого удаления */
@@ -264,7 +264,7 @@ static int cutoff_zikkurat(MDBX_cursor *begin, MDBX_cursor *end, intptr_t level,
       if (unlikely(err != MDBX_SUCCESS))
         goto bailout;
       mp = mc->pg[level];
-      mc->ki[level] = ki_end;
+      mc->ki[level] = (indx_t)ki_end;
 
       do {
         node_t *const node = page_node(mp, mc->ki[level] -= 1);
@@ -278,7 +278,7 @@ static int cutoff_zikkurat(MDBX_cursor *begin, MDBX_cursor *end, intptr_t level,
         node_del(mc, 0);
       } while (page_numkeys(mp) > 2 && mc->ki[level] > ki_begin);
 
-      const indx_t dropped = nkeys - page_numkeys(mp);
+      const indx_t dropped = nkeys - (indx_t)page_numkeys(mp);
       for (MDBX_cursor *m2 = dozer.outer.next; m2; m2 = m2->next) {
         MDBX_cursor *m3 = (mc->flags & z_inner) ? &m2->subcur->cursor : m2;
         if (m3->top < level || m3->pg[level] != mp || m3->ki[level] < mc->ki[level])
@@ -293,7 +293,7 @@ static int cutoff_zikkurat(MDBX_cursor *begin, MDBX_cursor *end, intptr_t level,
           ASSERT(m3 != begin);
           ASSERT(m3 != end || end_including);
           end_including &= m3 != end;
-          m3->top_and_stash = level;
+          m3->top_and_stash = (uint16_t)level;
           m3->ki[level] = mc->ki[level];
           err = MDBX_SUCCESS;
           if (m3->ki[level] >= page_numkeys(mp)) {
@@ -301,7 +301,7 @@ static int cutoff_zikkurat(MDBX_cursor *begin, MDBX_cursor *end, intptr_t level,
             if (unlikely(err != MDBX_SUCCESS)) {
               if (err != MDBX_NOTFOUND)
                 goto bailout;
-              m3->ki[level] = page_numkeys(mp) - 1;
+              m3->ki[level] = (indx_t)page_numkeys(mp) - 1;
             }
           }
           err = tree_deepen_edge(m3, (err == MDBX_NOTFOUND) ? Z_LAST : Z_FIRST);

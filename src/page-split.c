@@ -386,11 +386,11 @@ __hot int page_split(MDBX_cursor *mc, const MDBX_val *const newkey, MDBX_val *co
         if (mc->ki[mc->top - i]) {
           sepkey = get_key(page_node(mc->pg[mc->top - i], mc->ki[mc->top - i]));
           if (mc->clc->k.cmp(newkey, &sepkey) < 0) {
-            cursor_enroot(mc, i);
+            cursor_enroot(mc, (int)i);
             DEBUG("pure-left: update new-first on parent [%i] page %u key %s", mc->ki[mc->top], mc->pg[mc->top]->pgno,
                   DKEY(newkey));
             rc = tree_propagate_key(mc, newkey);
-            cursor_undo_enroot(mc, i);
+            cursor_undo_enroot(mc, (int)i);
             if (unlikely(rc != MDBX_SUCCESS))
               goto bailout;
           }

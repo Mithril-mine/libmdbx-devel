@@ -588,7 +588,7 @@ static int page_merge(MDBX_cursor *csrc, MDBX_cursor *cdst) {
   }
 
   int delta = save_height - cdst->tree->height;
-  cdst->top_and_stash = save_top - delta;
+  cdst->top_and_stash = (uint16_t)(save_top - delta);
   cASSERT0(cdst, cdst->top >= 0 && cdst->top < cdst->tree->height && cdst->top < CURSOR_STACK_SIZE);
   return MDBX_SUCCESS;
 }

@@ -127,7 +127,7 @@ typedef struct defract_context {
   uint8_t stumble_retry;
   uint8_t stopping_reasons;
   unsigned cycle;
-  pgno_t payload_pages;
+  size_t payload_pages;
   pgno_t largepage_max, largepage_amountleft, largepage_count;
   pgno_t summary_depth;
   void *user_ctx;

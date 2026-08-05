@@ -72,7 +72,7 @@ static inline int __must_check_result txl_need(txl_t __restrict *__restrict ptxl
 
 static inline void txl_append_prereserved(txl_t __restrict txl, txnid_t id) {
   ASSERT(txl_size(txl) < txl_alloclen(txl));
-  size_t end = txl[0] += 1;
+  size_t end = (size_t)(txl[0] += 1);
   txl[end] = id;
 }
 
