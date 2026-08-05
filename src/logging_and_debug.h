@@ -258,12 +258,12 @@ MDBX_MAYBE_UNUSED static inline int log_if_error(const int err, const char *func
 /* --------------------------------------------------------------------------------------------------------------- */
 
 MDBX_MAYBE_UNUSED static inline char sanitizer_kind_of_poison(const void *addr, size_t size) {
-  if (ASAN_REGISON_IS_POISONED(addr, sizeof(size)))
+  if (ASAN_REGISON_IS_POISONED(addr, size))
     return 'P';
   if (mdbx_running_on_Valgrind()) {
-    if (!VALGRIND_CHECK_MEM_IS_ADDRESSABLE(addr, sizeof(size)))
+    if (VALGRIND_CHECK_MEM_IS_ADDRESSABLE(addr, size))
       return 'N';
-    if (!VALGRIND_CHECK_MEM_IS_DEFINED(addr, sizeof(size)))
+    if (VALGRIND_CHECK_MEM_IS_DEFINED(addr, size))
       return 'U';
   }
   return 0;

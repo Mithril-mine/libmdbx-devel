@@ -341,11 +341,11 @@ static inline const char *sanitizer_probe_page(const MDBX_txn *txn, const MDBX_c
                                                bool allow_subpage) {
   if (!mp)
     return "null-address";
-  const char poison = sanitizer_kind_of_poison(mp, sizeof(*mp));
+  const char poison = sanitizer_kind_of_poison(mp, PAGEHDRSZ);
   switch (poison) {
   case 'P':
     return "ASAN.poisoned";
-  case 'A':
+  case 'N':
     return "MEMCHECK.non-addressable";
   case 'U':
     return "MEMCHECK.undefined";
