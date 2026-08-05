@@ -299,13 +299,28 @@ int main(int argc, char *const argv[]) {
   if (argc < 2)
     failure("No parameters given. Try --help\n");
 
-  const size_t thunk_prefix_len = strlen(global::thunk_param_prefix);
-  if (argc == 2 && strlen(argv[1]) > thunk_prefix_len &&
-      strncmp(argv[1], global::thunk_param_prefix, thunk_prefix_len) == 0)
-    return test_execute(actor_config(argv[1] + thunk_prefix_len)) ? EXIT_SUCCESS : EXIT_FAILURE;
+  if (argc == 2) {
+    const char *const arg1 = argv[1];
+    if (strcmp(arg1, "--help") == 0 || strcmp(arg1, "-h") == 0)
+      usage();
 
-  if (argc == 2 && (strcmp(argv[1], "--help") == 0 || strcmp(argv[1], "-h") == 0))
-    usage();
+    const size_t thunk_prefix_len = strlen(global::thunk_param_prefix);
+    const size_t arg1_params_len = strlen(arg1);
+    if (arg1_params_len >= thunk_prefix_len && strncmp(arg1, global::thunk_param_prefix, thunk_prefix_len) == 0) {
+      size_t params_len = arg1_params_len - thunk_prefix_len;
+      if (params_len < 42 || params_len > 10000)
+        failure("Wrong %s of param-string for `%s` (%s)\n", "length", global::thunk_param_prefix,
+                arg1 + thunk_prefix_len);
+      for (size_t i = 0; i < arg1_params_len; ++i)
+        if (arg1[i] < ' ' || arg1[i] >= 127)
+          failure("Wrong %s of param-string for `%s` (%s)\n", "content", global::thunk_param_prefix,
+                  arg1 + thunk_prefix_len);
+#ifdef __COVERITY__
+      __coverity_tainted_data_sanitize__(arg1, arg1_params_len);
+#endif /* __COVERITY__ */
+      return test_execute(actor_config(arg1 + thunk_prefix_len)) ? EXIT_SUCCESS : EXIT_FAILURE;
+    }
+  }
 
   actor_params params;
   params.set_defaults(osal_tempdir());
