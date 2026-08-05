@@ -1083,10 +1083,6 @@ else()
   message(STATUS "Use C${MDBX_C_STANDARD} for libmdbx but C++ portion is disabled")
 endif()
 
-if(MSVC)
-  add_compile_options("$<$<COMPILE_LANGUAGE:CXX,C>:/utf-8>")
-endif()
-
 if(WIN32 AND CMAKE_SYSTEM_ARCH STREQUAL "x86" AND NOT MDBX_NATIVE_SEH)
   enable_language(ASM_MASM)
   add_library(mdbx_safeseh OBJECT "${MDBX_SOURCE_DIR}/windows-safeseh.asm")
