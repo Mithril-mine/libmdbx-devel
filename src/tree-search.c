@@ -165,7 +165,7 @@ __hot __noinline int tree_deepen_edge(MDBX_cursor *mc, int flags) {
   LOWER += (half + 1) & CMP;                                                                                           \
   SIZE = half + (CMP & adjust)
 
-static int null_comparator(const MDBX_val *a, const MDBX_val *b) {
+static intptr_t null_comparator(const MDBX_val *a, const MDBX_val *b) {
   (void)a;
   (void)b;
   panic("must not be called");
@@ -419,11 +419,11 @@ cursor_to_search_foliage(const MDBX_cursor *mc) {
 
   if ((mc->tree->flags & MDBX_DUPFIXED) && is_inner(mc)) {
 
-    if (comparator == cmp_lexical)
+    if (comparator == ncmp_lexical)
       return search_foliage_lexical_dupfix;
-    if (comparator == cmp_reverse)
+    if (comparator == ncmp_reverse)
       return search_foliage_reverse_dupfix;
-    if (comparator == cmp_lenfast)
+    if (comparator == ncmp_lenfast)
       return search_foliage_lenfast_dupfix;
 
     if (mc->tree->flags & MDBX_INTEGERKEY) {
@@ -435,14 +435,14 @@ cursor_to_search_foliage(const MDBX_cursor *mc) {
       }
       size_t ordinal = 0;
 #ifndef cmp_uint_align2
-      if (comparator == cmp_uint_align2)
+      if (comparator == ncmp_uint_align2)
         ordinal = keylen;
 #endif /* cmp_uint_align2 */
 #ifndef cmp_uint_align4
-      if (comparator == cmp_uint_align4)
+      if (comparator == ncmp_uint_align4)
         ordinal = keylen;
 #endif /* cmp_uint_align4 */
-      if (comparator == cmp_uint_unaligned)
+      if (comparator == ncmp_uint_unaligned)
         ordinal = keylen;
       if (ordinal) {
         if ((mc->txn->env->flags & MDBX_VALIDATION) == 0 && ordinal == mc->clc->k.lmin && ordinal == mc->clc->k.lmax) {
@@ -458,11 +458,11 @@ cursor_to_search_foliage(const MDBX_cursor *mc) {
     return search_foliage_custom_dupfix;
   }
 
-  if (comparator == cmp_lexical)
+  if (comparator == ncmp_lexical)
     return search_foliage_lexical_usual;
-  if (comparator == cmp_reverse)
+  if (comparator == ncmp_reverse)
     return search_foliage_reverse_usual;
-  if (comparator == cmp_lenfast)
+  if (comparator == ncmp_lenfast)
     return search_foliage_lenfast_usual;
 
   if (mc->tree->flags & MDBX_INTEGERKEY) {
@@ -473,14 +473,14 @@ cursor_to_search_foliage(const MDBX_cursor *mc) {
     cASSERT0(mc, keylen >= mc->clc->k.lmin && keylen <= mc->clc->k.lmax && (keylen == 4 || keylen == 8));
     size_t ordinal = 0;
 #ifndef cmp_uint_align2
-    if (comparator == cmp_uint_align2)
+    if (comparator == ncmp_uint_align2)
       ordinal = keylen;
 #endif /* cmp_uint_align2 */
 #ifndef cmp_uint_align4
-    if (comparator == cmp_uint_align4)
+    if (comparator == ncmp_uint_align4)
       ordinal = keylen;
 #endif /* cmp_uint_align4 */
-    if (comparator == cmp_uint_unaligned)
+    if (comparator == ncmp_uint_unaligned)
       ordinal = keylen;
     if (ordinal) {
       if ((mc->txn->env->flags & MDBX_VALIDATION) == 0 && ordinal == mc->clc->k.lmin && ordinal == mc->clc->k.lmax) {
@@ -578,11 +578,11 @@ cursor_to_search_branch(const MDBX_cursor *mc) {
   MDBX_cmp_func comparator = mc->clc->k.cmp;
   ASSERT(comparator != nullptr);
 
-  if (comparator == cmp_lexical)
+  if (comparator == ncmp_lexical)
     return search_branch_lexical;
-  if (comparator == cmp_reverse)
+  if (comparator == ncmp_reverse)
     return search_branch_reverse;
-  if (comparator == cmp_lenfast)
+  if (comparator == ncmp_lenfast)
     return search_branch_lenfast;
 
   if (mc->tree->flags & MDBX_INTEGERKEY) {
@@ -594,14 +594,14 @@ cursor_to_search_branch(const MDBX_cursor *mc) {
     cASSERT0(mc, keylen >= mc->clc->k.lmin && keylen <= mc->clc->k.lmax && (keylen == 4 || keylen == 8));
     size_t ordinal = 0;
 #ifndef cmp_uint_align2
-    if (comparator == cmp_uint_align2)
+    if (comparator == ncmp_uint_align2)
       ordinal = keylen;
 #endif /* cmp_uint_align2 */
 #ifndef cmp_uint_align4
-    if (comparator == cmp_uint_align4)
+    if (comparator == ncmp_uint_align4)
       ordinal = keylen;
 #endif /* cmp_uint_align4 */
-    if (comparator == cmp_uint_unaligned)
+    if (comparator == ncmp_uint_unaligned)
       ordinal = keylen;
     if (ordinal) {
       if ((mc->txn->env->flags & MDBX_VALIDATION) == 0 && ordinal == mc->clc->k.lmin && ordinal == mc->clc->k.lmax) {
@@ -665,12 +665,12 @@ MDBX_MAYBE_UNUSED static const char *search_branch2name(MDBX_search_branch);
   return #name
 
 static const char *cmp2name(MDBX_cmp_func fn) {
-  CASE(cmp_lexical);
-  CASE(cmp_reverse);
-  CASE(cmp_lenfast);
-  CASE(cmp_uint_align2);
-  CASE(cmp_uint_align4);
-  CASE(cmp_uint_unaligned);
+  CASE(ncmp_lexical);
+  CASE(ncmp_reverse);
+  CASE(ncmp_lenfast);
+  CASE(ncmp_uint_align2);
+  CASE(ncmp_uint_align4);
+  CASE(ncmp_uint_unaligned);
   return "unknown";
 }
 

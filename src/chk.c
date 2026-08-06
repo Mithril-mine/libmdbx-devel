@@ -991,8 +991,8 @@ __cold static int chk_db(MDBX_chk_scope_t *const scope, MDBX_dbi dbi, MDBX_chk_t
 
   if (0 > (int)dbi) {
     err = dbi_open(txn, &tbl->name, MDBX_DB_ACCEDE, &dbi,
-                   (chk->flags & MDBX_CHK_IGNORE_ORDER) ? cmp_equal_or_greater : nullptr,
-                   (chk->flags & MDBX_CHK_IGNORE_ORDER) ? cmp_equal_or_greater : nullptr);
+                   (chk->flags & MDBX_CHK_IGNORE_ORDER) ? ncmp_equal_or_greater : nullptr,
+                   (chk->flags & MDBX_CHK_IGNORE_ORDER) ? ncmp_equal_or_greater : nullptr);
     if (unlikely(err)) {
       tASSERT0(txn, dbi >= txn->env->n_dbi || (txn->env->dbs_flags[dbi] & DB_VALID) == 0);
       chk_error_rc(scope, err, "mdbx_dbi_open");

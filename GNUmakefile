@@ -815,6 +815,7 @@ $(DIST_DIR)/@tmp-squashed.inc: $(DIST_DIR)/mdbx-internals.h $(DIST_DIR)/@tmp-ama
 		-e '/#include "rkl.h"/r src/rkl.h' \
 		-e '/#include "txl.h"/r src/txl.h' \
 		-e '/#include "unaligned.h"/r src/unaligned.h' \
+		-e '/#include "comparators.h"/r src/comparators.h' \
 		-e '/#include "cogs.h"/r src/cogs.h' \
 		-e '/#include "cursor.h"/r src/cursor.h' \
 		-e '/#include "dbi.h"/r src/dbi.h' \

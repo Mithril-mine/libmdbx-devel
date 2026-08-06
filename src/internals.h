@@ -653,6 +653,8 @@ MDBX_MAYBE_UNUSED static void static_checks(void) {
 
 #include "proto.h"
 
+#include "comparators.h"
+
 #include "node.h"
 
 #include "dbi.h"
