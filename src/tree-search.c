@@ -471,10 +471,6 @@ cursor_to_search_foliage(const MDBX_cursor *mc) {
     cASSERT0(mc, !is_dupfix_leaf(mp) && page_numkeys(mp) > 0);
     const size_t keylen = node_ks(page_node(mp, 0));
     cASSERT0(mc, keylen >= mc->clc->k.lmin && keylen <= mc->clc->k.lmax && (keylen == 4 || keylen == 8));
-    if (/* paranoia */ keylen >= mc->clc->k.lmin && keylen <= mc->clc->k.lmax && (keylen == 4 || keylen == 8)) {
-      mc->clc->k.lmin = keylen;
-      mc->clc->k.lmax = keylen;
-    }
     size_t ordinal = 0;
 #ifndef cmp_uint_align2
     if (comparator == cmp_uint_align2)
@@ -596,10 +592,6 @@ cursor_to_search_branch(const MDBX_cursor *mc) {
     STATIC_ASSERT(P_BRANCH == 1);
     const size_t keylen = is_dupfix_leaf(mp) ? mp->dupfix_ksize : node_ks(page_node(mp, mp->flags & P_BRANCH));
     cASSERT0(mc, keylen >= mc->clc->k.lmin && keylen <= mc->clc->k.lmax && (keylen == 4 || keylen == 8));
-    if (/* paranoia */ keylen >= mc->clc->k.lmin && keylen <= mc->clc->k.lmax && (keylen == 4 || keylen == 8)) {
-      mc->clc->k.lmin = keylen;
-      mc->clc->k.lmax = keylen;
-    }
     size_t ordinal = 0;
 #ifndef cmp_uint_align2
     if (comparator == cmp_uint_align2)
