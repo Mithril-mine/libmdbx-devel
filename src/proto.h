@@ -157,6 +157,12 @@ MDBX_INTERNAL int tree_cutoff_range(MDBX_cursor *begin, MDBX_cursor *end, bool e
 MDBX_INTERNAL int tree_drop(MDBX_cursor *mc);
 MDBX_INTERNAL int __must_check_result tree_rebalance(MDBX_cursor *mc);
 MDBX_INTERNAL int __must_check_result tree_propagate_key(MDBX_cursor *mc, const MDBX_val *key);
+static inline int __must_check_result tree_propagate_nullkey(MDBX_cursor *mc) {
+  MDBX_val nullkey;
+  nullkey.iov_base = &nullkey;
+  nullkey.iov_len = 0;
+  return tree_propagate_key(mc, &nullkey);
+}
 MDBX_INTERNAL void recalculate_merge_thresholds(MDBX_env *env);
 MDBX_INTERNAL void recalculate_subpage_thresholds(MDBX_env *env);
 
