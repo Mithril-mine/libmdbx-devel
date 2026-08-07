@@ -549,7 +549,7 @@ smoke: build-stochastic
 smoke-singleprocess: build-stochastic
 	@echo '  SMOKE `mdbx_test --nested`...'
 	$(QUIET)rm -f $(TEST_DB) $(TEST_DB)-copy $(TEST_LOG).gz && (set -o pipefail; export ASAN_OPTIONS=$(ASAN_OPTIONS) UBSAN_OPTIONS=$(UBSAN_OPTIONS); \
-		(./mdbx_test --duration 100  --table=+data.integer --keygen.split=29 --datalen.min=min --datalen.max=max --progress --console=no --repeat=42 --pathname=$(TEST_DB) --dont-cleanup-after $(MDBX_SMOKE_EXTRA) --hill && \
+		(./mdbx_test --duration 100 --table=+data.integer --keygen.split=29 --datalen.min=min --datalen.max=max --progress --console=no --repeat=42 --pathname=$(TEST_DB) --dont-cleanup-after $(MDBX_SMOKE_EXTRA) --hill && \
 		./mdbx_test --duration 100 --progress --console=no --repeat=2 --pathname=$(TEST_DB) --dont-cleanup-before --dont-cleanup-after --copy && \
 		./mdbx_test --duration 100 --mode=-writemap,-nosync-safe,-lifo --progress --console=no --repeat=42 --pathname=$(TEST_DB) --dont-cleanup-after $(MDBX_SMOKE_EXTRA) --nested) \
 		| tee >(gzip --stdout >$(TEST_LOG).gz) | tail -n 42) \
@@ -558,13 +558,13 @@ smoke-singleprocess: build-stochastic
 smoke-fault: build-stochastic
 	@echo '  SMOKE `mdbx_test --inject-writefault=42 basic`...'
 	$(QUIET)rm -f $(TEST_DB) $(TEST_DB)-copy $(TEST_LOG).gz && (set -o pipefail; export ASAN_OPTIONS=$(ASAN_OPTIONS) UBSAN_OPTIONS=$(UBSAN_OPTIONS); \
-		./mdbx_test --duration 300  --progress --console=no --pathname=$(TEST_DB) --inject-writefault=42 --dump-config --dont-cleanup-after $(MDBX_SMOKE_EXTRA) basic \
+		./mdbx_test --duration 300 --progress --console=no --pathname=$(TEST_DB) --inject-writefault=42 --dump-config --dont-cleanup-after $(MDBX_SMOKE_EXTRA) basic \
 		| tee >(gzip --stdout >$(TEST_LOG).gz) | tail -n 42) || echo "Expect fault" \
 	; ./mdbx_chk -vvnw $(TEST_DB) && ([ ! -e $(TEST_DB)-copy ] || ./mdbx_chk -vvn $(TEST_DB)-copy || echo "May fault due invalid-database-signature")
 
 test-stochastic: build-stochastic
 	@echo '  RUNNING `test/stochastic.sh --loops 2`...'
-	$(QUIET)$(STOCHASTIC) --whole-duration 300 --dont-check-ram-size --loops 2 --db-upto-mb 256 --skip-make --taillog >$(TEST_LOG) || (cat $(TEST_LOG) && false)
+	$(QUIET)$(STOCHASTIC) --whole-duration 600 --probe-duration 60 --dont-check-ram-size --loops 2 --db-upto-mb 256 --skip-make --taillog >$(TEST_LOG) || (cat $(TEST_LOG) && false)
 
 long-test: test-long
 test-long: build-stochastic
@@ -573,8 +573,8 @@ test-long: build-stochastic
 
 test-singleprocess: build-stochastic
 	@echo '  RUNNING `test/stochastic.sh --single --loops 2`...'
-	$(QUIET)$(STOCHASTIC) --whole-duration 300 --dont-check-ram-size --single --loops 2 --db-upto-mb 256 --skip-make --taillog >$(TEST_LOG) || (cat $(TEST_LOG) && false)
-
+	@echo '  RUNNING `tests/stochastic.sh --single --loops 2`...'
+	$(QUIET)$(STOCHASTIC) --whole-duration 600 --probe-duration 60 --dont-check-ram-size --single --loops 2 --db-upto-mb 256 --skip-make --taillog >$(TEST_LOG) || (cat $(TEST_LOG) && false)
 
 smoke-valgrind: smoke-memcheck
 memcheck: smoke-memcheck
