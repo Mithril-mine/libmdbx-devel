@@ -43,10 +43,13 @@ DELAY=0
 REPORT_DEPTH=no
 REPEAT=11
 ROUNDS=1
+DURATION_PROBE=
+DURATION_WHOLE=
 SMALL=no
 NUMABIND=
 SCRIPT_DIR=$(dirname "$0")
 
+shopt -s extglob
 while [ -n "$1" ]
 do
   case "$1" in
@@ -65,6 +68,8 @@ do
     echo "--repeat NN            Repeat each testcase NN times within test run"
     echo "--rounds NN            Cycle each n-ops/wbatch case NN times"
     echo "--loops NN             Stop after the NN loops"
+    echo "--probe-duration NN    Limit duration of each probe"
+    echo "--whole-duration NN    Limit duration of whole running"
     echo "--dir PATH             Specifies directory for test DB and other files (it will be cleared)"
     echo "--db-upto-mb NN        Limits upper size of test DB to the NN megabytes"
     echo "--db-upto-gb NN        --''--''--''--''--''--''--''--''--  NN gigabytes"
@@ -215,6 +220,62 @@ do
         exit -2
       ;;
     esac
+    shift
+  ;;
+  --probe-duration)
+    case "$2" in
+      +([0-9]))
+        DURATION_PROBE=$(($2))
+      ;;
+      +([0-9])s)
+        DURATION_PROBE=$((${2::-1}))
+      ;;
+      +([0-9])m)
+        DURATION_PROBE=$((${2::-1}*60))
+      ;;
+      +([0-9])h)
+        DURATION_PROBE=$((${2::-1}*3600))
+      ;;
+      *)
+        DURATION_PROBE=$((2))
+        echo "Invalid value '$2' for --probe-duration option"
+        exit -2
+      ;;
+    esac
+    if [ -z "$DURATION_PROBE" -o "$DURATION_PROBE" -lt 1 -o "$DURATION_PROBE" -gt 999999 ]; then
+      echo "Invalid value '$2' for --probe-duration option"
+      exit -2
+    fi
+    shift
+    probe_duration="--duration=${DURATION_PROBE}s"
+  ;;
+  --whole-duration)
+    case "$2" in
+      +([0-9]))
+        DURATION_WHOLE=$(($2))
+      ;;
+      +([0-9])s)
+        DURATION_WHOLE=$((${2::-1}))
+      ;;
+      +([0-9])m)
+        DURATION_WHOLE=$((${2::-1}*60))
+      ;;
+      +([0-9])h)
+        DURATION_WHOLE=$((${2::-1}*3600))
+      ;;
+      +([0-9])d)
+        DURATION_WHOLE=$((${2::-1}*3600*24))
+      ;;
+      *)
+        DURATION_WHOLE=$((2))
+        echo "Invalid value '$2' for --whole-duration option"
+        exit -2
+      ;;
+    esac
+    if [ -z "$DURATION_WHOLE" -o "$DURATION_WHOLE" -lt 1 -o "$DURATION_WHOLE" -gt 999999 ]; then
+      echo "Invalid value '$2' for --whole-duration option"
+      exit -2
+    fi
     shift
   ;;
   --dont-check-ram-size)
@@ -536,7 +597,7 @@ function probe {
     echo "${speculum} --random-writemap=no --ignore-dbfull --repeat=${REPEAT} --pathname=${TESTDB_DIR}/long.db --cleanup-after=no --geometry-jitter=${GEOMETRY_JITTER} $@ $case"
     if [[ ${GDB} = "yes" ]]; then
         touch ${TESTDB_DIR}/test.log \
-          && ${NUMABIND} ${MONITOR} --tty=${TESTDB_DIR}/test.log --args ./mdbx_test ${speculum} --random-writemap=no --ignore-dbfull --repeat=${REPEAT} --pathname=${TESTDB_DIR}/long.db --cleanup-after=no --geometry-jitter=${GEOMETRY_JITTER} "$@" $case \
+          && ${NUMABIND} ${MONITOR} --tty=${TESTDB_DIR}/test.log --args ./mdbx_test ${probe_duration} ${speculum} --random-writemap=no --ignore-dbfull --repeat=${REPEAT} --pathname=${TESTDB_DIR}/long.db --cleanup-after=no --geometry-jitter=${GEOMETRY_JITTER} "$@" $case \
         && touch ${TESTDB_DIR}/chk-db.log \
           && ${NUMABIND} ${MONITOR} --tty=${TESTDB_DIR}/chk-db.log --args ./mdbx_chk ${TESTDB_DIR}/long.db \
         && ([ ! -e ${TESTDB_DIR}/long.db-copy ] || (touch ${TESTDB_DIR}/chk-db-copy.log && ${NUMABIND} ${MONITOR} --tty=${TESTDB_DIR}/chk-db-copy.log --args ./mdbx_chk ${TESTDB_DIR}/long.db-copy)) \
@@ -547,7 +608,7 @@ function probe {
       else
         exec {LFD}> >(logger)
       fi
-      ${NUMABIND} ${MONITOR} ./mdbx_test ${speculum} --random-writemap=no --ignore-dbfull --repeat=${REPEAT} --pathname=${TESTDB_DIR}/long.db --cleanup-after=no --geometry-jitter=${GEOMETRY_JITTER} "$@" $case >&${LFD} \
+      ${NUMABIND} ${MONITOR} ./mdbx_test ${probe_duration} ${speculum} --random-writemap=no --ignore-dbfull --repeat=${REPEAT} --pathname=${TESTDB_DIR}/long.db --cleanup-after=no --geometry-jitter=${GEOMETRY_JITTER} "$@" $case >&${LFD} \
         && ${NUMABIND} ${MONITOR} ./mdbx_chk ${TESTDB_DIR}/long.db | ${TEE4PIPE} ${TESTDB_DIR}/long-chk.log \
         && ([ ! -e ${TESTDB_DIR}/long.db-copy ] || ${NUMABIND} ${MONITOR} ./mdbx_chk ${TESTDB_DIR}/long.db-copy | ${TEE4PIPE} ${TESTDB_DIR}/long-chk-copy.log) \
         || failed
@@ -683,12 +744,25 @@ function pass {
     for id in $(seq 1 ${cases} | shuf); do
       caption="$((++count)) ${caseset_id2caption[${id}]}, case $((++subcase))/${id} of ${cases}" probe \
         --prng-seed=${seed} --pagesize=$PAGESIZE --size-upper-upto=${db_size_mb}M ${caseset_id2args[${id}]} --nops=$nops --batch.write=$wbatch
+      if [[ ${whole_timeout} != "" && $(date +%s) > ${whole_timeout} ]]; then
+        echo "=== WHOLE DURATION LIMIT ========== $(date)"
+	exit 0
+      fi
     done
   done
 }
 
 if [ "$DELAY" != "0" ]; then
   sleep $DELAY
+fi
+
+whole_timeout=
+if [[ $DURATION_WHOLE != "" && $DURATION_WHOLE > 0 ]]; then
+  whole_timeout=$(($(date +%s) + ${DURATION_WHOLE}))
+fi
+probe_duration=
+if [[ $DURATION_PROBE != "" && $DURATION_PROBE > 0 ]]; then
+  probe_duration="--duration=${DURATION_PROBE}s"
 fi
 
 count=0
