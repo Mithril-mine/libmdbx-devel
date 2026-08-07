@@ -1,47 +1,47 @@
 on:
   push:
-    - workflows: [ci-linux-debug-cxx-on, ci-linux-debug-cxx-off, ci-linux-release]
+    - workflows: [ci-linux-debug-gcc, ci-linux-debug-clang, ci-linux-release-spilling]
+  pull_request:
+    - workflows: [ci-linux-debug-gcc, ci-linux-debug-clang, ci-linux-release-spilling]
   schedule:
-    - workflows: [ci-linux-debug-cxx-on, ci-linux-debug-cxx-off, ci-linux-release]
+    - workflows: [ci-linux-debug-gcc, ci-linux-debug-clang, ci-linux-release-spilling]
       cron: "42 3 * * *"
       description: "Ежедневный запуск CI Linux в 03:42 (по умолчанию UTC)"
 
 workflows:
-  ci-linux-debug-cxx-on:
+  ci-linux-debug-gcc:
     env:
       CI: SourceCraft
       CI_MAKE_TARGET: smoke
       MDBX_BUILD_OPTIONS: "-DMDBX_CHECKING=2 -DMDBX_DEBUG=1"
-      MDBX_BUILD_CXX: "YES"
     tasks:
-      - name: ci-linux-debug-cxx-on-task
+      - name: ci-linux-debug-gcc-task
         cubes:
           - name: ci-step
-            image: docker.io/library/ubuntu
+            image: dh-mirror.gitverse.ru/jakoch/cpp-devbox:forky-latest
             script:
-              - . tests/ci/ci.sh "-DCMAKE_BUILD_TYPE=Debug|-DMDBX_BUILD_CXX:BOOL=ON"
-  ci-linux-debug-cxx-off:
+              - CC=gcc CXX=g++ tests/ci/ci.sh "-DCMAKE_BUILD_TYPE=Debug|-DMDBX_BUILD_CXX:BOOL=ON"
+  ci-linux-debug-clang:
     env:
       CI: SourceCraft
       CI_MAKE_TARGET: smoke
       MDBX_BUILD_OPTIONS: "-DMDBX_CHECKING=2 -DMDBX_DEBUG=1"
-      MDBX_BUILD_CXX: "NO"
     tasks:
-      - name: ci-linux-debug-cxx-off-task
+      - name: ci-linux-debug-clang-task
         cubes:
           - name: ci-step
-            image: docker.io/library/ubuntu
+            image: dh-mirror.gitverse.ru/jakoch/cpp-devbox:forky-latest
             script:
-              - . tests/ci/ci.sh "-DCMAKE_BUILD_TYPE=Debug|-DMDBX_BUILD_CXX:BOOL=OFF"
-  ci-linux-release:
+              - CC=clang CXX=clang++ tests/ci/ci.sh "-DCMAKE_BUILD_TYPE=Debug|-DMDBX_BUILD_CXX:BOOL=OFF"
+  ci-linux-release-spilling:
     env:
       CI: SourceCraft
       CI_MAKE_TARGET: test
       MDBX_BUILD_OPTIONS: "-DMDBX_CHECKING=0 -DMDBX_DEBUG=0 -DxMDBX_DEBUG_SPILLING=1"
     tasks:
-      - name: ci-linux-release-cxx-on-task
+      - name: ci-linux-release-spilling-task
         cubes:
           - name: ci-step
-            image: docker.io/library/ubuntu
+            image: dh-mirror.gitverse.ru/jakoch/cpp-devbox:forky-latest
             script:
-              - . tests/ci/ci.sh "-DCMAKE_BUILD_TYPE=Release"
+              - tests/ci/ci.sh "-DCMAKE_BUILD_TYPE=Release"
