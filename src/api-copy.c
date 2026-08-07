@@ -523,12 +523,10 @@ __cold static int copy_asis(MDBX_env *env, MDBX_txn *txn, mdbx_filehandle_t fd, 
   }
 
   jitter4testing(false);
-  size_t offset = meta_bytes;
   if (dest_is_pipe) {
     rc = osal_write(fd, buffer, meta_bytes);
     if (unlikely(rc != MDBX_SUCCESS))
       return rc;
-    offset = 0;
   }
 
 #if MDBX_USE_COPYFILERANGE
@@ -549,6 +547,7 @@ __cold static int copy_asis(MDBX_env *env, MDBX_txn *txn, mdbx_filehandle_t fd, 
   /* Copy the data */
   const size_t whole_size = pgno_ceil2os_bytes(env, txn->geo.end_pgno);
   const size_t used_size = pgno2bytes(env, txn->geo.first_unallocated);
+  size_t offset = meta_bytes;
   while (rc == MDBX_SUCCESS && offset < used_size) {
     if (flags & MDBX_CP_THROTTLE_MVCC) {
       rc = mdbx_txn_unpark(txn, false);
