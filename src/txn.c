@@ -1042,7 +1042,8 @@ int txn_park(MDBX_txn *txn, bool autounpark) {
 int txn_unpark(MDBX_txn *txn) {
   if (unlikely((txn->flags & (MDBX_TXN_FINISHED | MDBX_TXN_HAS_CHILD | MDBX_TXN_RDONLY | MDBX_TXN_PARKED)) !=
                (MDBX_TXN_RDONLY | MDBX_TXN_PARKED)))
-    return MDBX_BAD_TXN;
+    return ((txn->flags & (MDBX_TXN_FINISHED | MDBX_TXN_OUSTED | MDBX_TXN_ERROR)) == MDBX_TXN_OUSTED) ? MDBX_OUSTED
+                                                                                                      : MDBX_BAD_TXN;
 
   for (reader_slot_t *const rslot = txn->to.reader; rslot; atomic_yield()) {
     const uint32_t pid = atomic_load32(&rslot->pid, mo_Relaxed);
