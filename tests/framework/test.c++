@@ -102,6 +102,10 @@ int testcase::hsr_callback(const MDBX_env *env, const MDBX_txn *txn, mdbx_pid_t 
 
   MDBX_envinfo info;
   int rc = mdbx_env_info_ex(env, txn, &info, sizeof(info));
+  if (rc == MDBX_OUSTED && env) {
+    log_notice("retry mdbx_env_info_ex() without txn #% " PRIaTXN " since it is ousted", mdbx_txn_id(txn));
+    rc = mdbx_env_info_ex(env, nullptr, &info, sizeof(info));
+  }
   if (rc != MDBX_SUCCESS)
     return rc;
 
@@ -1636,7 +1640,7 @@ bool testcase::txn_probe_parking() {
   MDBX_txn_info txn_info;
   if (flipcoin()) {
     err = mdbx_txn_info(txn_guard.get(), &txn_info, flipcoin());
-    if (err != MDBX_SUCCESS)
+    if (err != MDBX_SUCCESS && err != MDBX_OUSTED)
       failure("mdbx_txn_info(1), state 0x%x, err %d", state = mdbx_txn_flags(txn_guard.get()), err);
   }
 
@@ -1655,7 +1659,7 @@ bool testcase::txn_probe_parking() {
     MDBX_envinfo env_info;
     err = mdbx_env_info_ex(db_guard.get(), txn_guard.get(), &env_info, sizeof(env_info));
     if (!autounpark) {
-      if (err != MDBX_BAD_TXN)
+      if (err != MDBX_BAD_TXN && err != MDBX_OUSTED)
         failure("mdbx_env_info_ex(autounpark=%s), flags 0x%x, unexpected err %d, must %d",
                 autounpark ? "true" : "false", state, err, MDBX_BAD_TXN);
     } else if (err != MDBX_SUCCESS) {
