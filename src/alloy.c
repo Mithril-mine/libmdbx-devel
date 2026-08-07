@@ -22,6 +22,7 @@
 #include "chk.c"
 #include "cogs.c"
 #include "coherency.c"
+#include "comparators.c"
 #include "cursor.c"
 #include "dbi.c"
 #include "defrag.c"

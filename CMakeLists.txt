@@ -945,6 +945,8 @@ elseif(TRUE)
       "${MDBX_SOURCE_DIR}/chk.c"
       "${MDBX_SOURCE_DIR}/cogs.c"
       "${MDBX_SOURCE_DIR}/cogs.h"
+      "${MDBX_SOURCE_DIR}/comparators.c"
+      "${MDBX_SOURCE_DIR}/comparators.h"
       "${MDBX_SOURCE_DIR}/coherency.c"
       "${MDBX_SOURCE_DIR}/cursor.c"
       "${MDBX_SOURCE_DIR}/cursor.h"

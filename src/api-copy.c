@@ -501,16 +501,19 @@ __cold static int copy_asis(MDBX_env *env, MDBX_txn *txn, mdbx_filehandle_t fd, 
   const size_t meta_bytes = pgno2bytes(env, NUM_METAS);
   uint8_t *const data_buffer = buffer + ceil_powerof2(meta_bytes, globals.sys_pagesize);
   meta_t *const meta = meta_init_triplet(env, buffer);
-  meta_set_txnid(env, meta, txn->txnid);
 
+  /* copy last/fresh meta-data from the txn */
+  meta->geometry = txn->geo;
+  meta->trees.gc = txn->dbs[FREE_DBI];
+  meta->trees.main = txn->dbs[MAIN_DBI];
   if (flags & MDBX_CP_FORCE_DYNAMIC_SIZE)
     meta_make_sizeable(meta);
-
-  /* copy canary sequences if present */
   if (txn->canary.v) {
+    /* copy canary sequences if present */
     meta->canary = txn->canary;
     meta->canary.v = constmeta_txnid(meta);
   }
+  meta_set_txnid(env, meta, txn->txnid);
 
   int rc = MDBX_SUCCESS;
   if (flags & MDBX_CP_THROTTLE_MVCC) {

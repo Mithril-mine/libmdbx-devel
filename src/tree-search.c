@@ -165,7 +165,7 @@ __hot __noinline int tree_deepen_edge(MDBX_cursor *mc, int flags) {
   LOWER += (half + 1) & CMP;                                                                                           \
   SIZE = half + (CMP & adjust)
 
-static int null_comparator(const MDBX_val *a, const MDBX_val *b) {
+static intptr_t null_comparator(const MDBX_val *a, const MDBX_val *b) {
   (void)a;
   (void)b;
   panic("must not be called");
@@ -310,7 +310,11 @@ SEARCH_FOLIAGE(ordinal_dupfix, cmp_uint_align4, cmp_uint_unaligned, true, true)
 SEARCH_FOLIAGE(uint32_dupfix, cmp_uint32_align4_unchecked, cmp_uint32_unaligned_unchecked, true, true)
 SEARCH_FOLIAGE(uint64_dupfix, cmp_uint64_align4_unchecked, cmp_uint64_unaligned_unchecked, true, true)
 
-#if MDBX_DEBUG_SEARCH_DISPATCHING
+MDBX_MAYBE_UNUSED static const char *cmp2name(MDBX_cmp_func);
+MDBX_MAYBE_UNUSED static const char *search_foliage2name(MDBX_search_foliage);
+MDBX_MAYBE_UNUSED static const char *search_branch2name(MDBX_search_branch);
+
+#if MDBX_DEBUG_SEARCH_BRANCHLESS
 
 MDBX_MAYBE_UNUSED __cold static sfr_t old_node_search(MDBX_cursor *mc, const MDBX_val *key) {
   page_t *mp = mc->pg[mc->top];
@@ -406,7 +410,7 @@ MDBX_MAYBE_UNUSED __cold static size_t old_branch_search(MDBX_cursor *mc, const 
   return indx;
 }
 
-#endif /* MDBX_DEBUG_SEARCH_DISPATCHING */
+#endif /* MDBX_DEBUG_SEARCH_BRANCHLESS */
 
 MDBX_MAYBE_UNUSED MDBX_NOTHROW_PURE_FUNCTION __hot static MDBX_search_foliage
 cursor_to_search_foliage(const MDBX_cursor *mc) {
@@ -415,11 +419,11 @@ cursor_to_search_foliage(const MDBX_cursor *mc) {
 
   if ((mc->tree->flags & MDBX_DUPFIXED) && is_inner(mc)) {
 
-    if (comparator == cmp_lexical)
+    if (comparator == ncmp_lexical)
       return search_foliage_lexical_dupfix;
-    if (comparator == cmp_reverse)
+    if (comparator == ncmp_reverse)
       return search_foliage_reverse_dupfix;
-    if (comparator == cmp_lenfast)
+    if (comparator == ncmp_lenfast)
       return search_foliage_lenfast_dupfix;
 
     if (mc->tree->flags & MDBX_INTEGERKEY) {
@@ -431,14 +435,14 @@ cursor_to_search_foliage(const MDBX_cursor *mc) {
       }
       size_t ordinal = 0;
 #ifndef cmp_uint_align2
-      if (comparator == cmp_uint_align2)
+      if (comparator == ncmp_uint_align2)
         ordinal = keylen;
 #endif /* cmp_uint_align2 */
 #ifndef cmp_uint_align4
-      if (comparator == cmp_uint_align4)
+      if (comparator == ncmp_uint_align4)
         ordinal = keylen;
 #endif /* cmp_uint_align4 */
-      if (comparator == cmp_uint_unaligned)
+      if (comparator == ncmp_uint_unaligned)
         ordinal = keylen;
       if (ordinal) {
         if ((mc->txn->env->flags & MDBX_VALIDATION) == 0 && ordinal == mc->clc->k.lmin && ordinal == mc->clc->k.lmax) {
@@ -454,11 +458,11 @@ cursor_to_search_foliage(const MDBX_cursor *mc) {
     return search_foliage_custom_dupfix;
   }
 
-  if (comparator == cmp_lexical)
+  if (comparator == ncmp_lexical)
     return search_foliage_lexical_usual;
-  if (comparator == cmp_reverse)
+  if (comparator == ncmp_reverse)
     return search_foliage_reverse_usual;
-  if (comparator == cmp_lenfast)
+  if (comparator == ncmp_lenfast)
     return search_foliage_lenfast_usual;
 
   if (mc->tree->flags & MDBX_INTEGERKEY) {
@@ -467,20 +471,16 @@ cursor_to_search_foliage(const MDBX_cursor *mc) {
     cASSERT0(mc, !is_dupfix_leaf(mp) && page_numkeys(mp) > 0);
     const size_t keylen = node_ks(page_node(mp, 0));
     cASSERT0(mc, keylen >= mc->clc->k.lmin && keylen <= mc->clc->k.lmax && (keylen == 4 || keylen == 8));
-    if (/* paranoia */ keylen >= mc->clc->k.lmin && keylen <= mc->clc->k.lmax && (keylen == 4 || keylen == 8)) {
-      mc->clc->k.lmin = keylen;
-      mc->clc->k.lmax = keylen;
-    }
     size_t ordinal = 0;
 #ifndef cmp_uint_align2
-    if (comparator == cmp_uint_align2)
+    if (comparator == ncmp_uint_align2)
       ordinal = keylen;
 #endif /* cmp_uint_align2 */
 #ifndef cmp_uint_align4
-    if (comparator == cmp_uint_align4)
+    if (comparator == ncmp_uint_align4)
       ordinal = keylen;
 #endif /* cmp_uint_align4 */
-    if (comparator == cmp_uint_unaligned)
+    if (comparator == ncmp_uint_unaligned)
       ordinal = keylen;
     if (ordinal) {
       if ((mc->txn->env->flags & MDBX_VALIDATION) == 0 && ordinal == mc->clc->k.lmin && ordinal == mc->clc->k.lmax) {
@@ -498,7 +498,13 @@ cursor_to_search_foliage(const MDBX_cursor *mc) {
 
 __hot sfr_t tree_search_foliage_configure(MDBX_cursor *mc, const MDBX_val *key) {
   MDBX_search_foliage search_foliage = cursor_to_search_foliage(mc);
+
 #if MDBX_DEBUG_SEARCH_DISPATCHING
+  NOTICE("dispatch-%s: dbi %zu, %s %s => %s", "search_foligage", cursor_dbi(mc), cmp2name(mc->clc->k.cmp),
+         cmp2name(mc->clc->v.cmp), search_foliage2name(search_foliage));
+#endif /* MDBX_DEBUG_SEARCH_DISPATCHING */
+
+#if MDBX_DEBUG_SEARCH_BRANCHLESS
   const unsigned snap_1 = MDBX_CURSOR_STC_GET(mc);
   sfr_t old = old_node_search(mc, key);
   int old_i = mc->ki[mc->top];
@@ -524,7 +530,7 @@ __hot sfr_t tree_search_foliage_configure(MDBX_cursor *mc, const MDBX_val *key) 
 #else
   mc->clc->k.search_foliage = search_foliage;
   return search_foliage(mc, key);
-#endif /* MDBX_DEBUG_SEARCH_DISPATCHING */
+#endif /* MDBX_DEBUG_SEARCH_BRANCHLESS */
 }
 
 /* ---------------------------------------------------------------------------------------------------- */
@@ -572,11 +578,11 @@ cursor_to_search_branch(const MDBX_cursor *mc) {
   MDBX_cmp_func comparator = mc->clc->k.cmp;
   ASSERT(comparator != nullptr);
 
-  if (comparator == cmp_lexical)
+  if (comparator == ncmp_lexical)
     return search_branch_lexical;
-  if (comparator == cmp_reverse)
+  if (comparator == ncmp_reverse)
     return search_branch_reverse;
-  if (comparator == cmp_lenfast)
+  if (comparator == ncmp_lenfast)
     return search_branch_lenfast;
 
   if (mc->tree->flags & MDBX_INTEGERKEY) {
@@ -586,20 +592,16 @@ cursor_to_search_branch(const MDBX_cursor *mc) {
     STATIC_ASSERT(P_BRANCH == 1);
     const size_t keylen = is_dupfix_leaf(mp) ? mp->dupfix_ksize : node_ks(page_node(mp, mp->flags & P_BRANCH));
     cASSERT0(mc, keylen >= mc->clc->k.lmin && keylen <= mc->clc->k.lmax && (keylen == 4 || keylen == 8));
-    if (/* paranoia */ keylen >= mc->clc->k.lmin && keylen <= mc->clc->k.lmax && (keylen == 4 || keylen == 8)) {
-      mc->clc->k.lmin = keylen;
-      mc->clc->k.lmax = keylen;
-    }
     size_t ordinal = 0;
 #ifndef cmp_uint_align2
-    if (comparator == cmp_uint_align2)
+    if (comparator == ncmp_uint_align2)
       ordinal = keylen;
 #endif /* cmp_uint_align2 */
 #ifndef cmp_uint_align4
-    if (comparator == cmp_uint_align4)
+    if (comparator == ncmp_uint_align4)
       ordinal = keylen;
 #endif /* cmp_uint_align4 */
-    if (comparator == cmp_uint_unaligned)
+    if (comparator == ncmp_uint_unaligned)
       ordinal = keylen;
     if (ordinal) {
       if ((mc->txn->env->flags & MDBX_VALIDATION) == 0 && ordinal == mc->clc->k.lmin && ordinal == mc->clc->k.lmax) {
@@ -617,7 +619,13 @@ cursor_to_search_branch(const MDBX_cursor *mc) {
 
 size_t tree_search_branch_configure(const MDBX_cursor *mc, const MDBX_val *key) {
   MDBX_search_branch search_branch = cursor_to_search_branch(mc);
+
 #if MDBX_DEBUG_SEARCH_DISPATCHING
+  NOTICE("dispatch-%s: dbi %zu, %s %s => %s", "search_branch", cursor_dbi(mc), cmp2name(mc->clc->k.cmp),
+         cmp2name(mc->clc->v.cmp), search_branch2name(search_branch));
+#endif /* MDBX_DEBUG_SEARCH_DISPATCHING */
+
+#if MDBX_DEBUG_SEARCH_BRANCHLESS
   const unsigned snap_1 = MDBX_CURSOR_STC_GET(mc);
   size_t old_i = old_branch_search((MDBX_cursor *)mc, key);
   const unsigned snap_2 = MDBX_CURSOR_STC_GET(mc);
@@ -639,7 +647,7 @@ size_t tree_search_branch_configure(const MDBX_cursor *mc, const MDBX_val *key) 
 #else
   mc->clc->k.search_branch = search_branch;
   return search_branch(mc, key);
-#endif /* MDBX_DEBUG_SEARCH_DISPATCHING */
+#endif /* MDBX_DEBUG_SEARCH_BRANCHLESS */
 }
 
 #undef CLEAR_VALUE_PROPAGATION
@@ -647,3 +655,51 @@ size_t tree_search_branch_configure(const MDBX_cursor *mc, const MDBX_val *key) 
 #undef BINARY_BRANCHLESS_SEARCH_CYCLE_END
 #undef SEARCH_BRANCH
 #undef SEARCH_FOLIAGE
+
+MDBX_MAYBE_UNUSED static const char *cmp2name(MDBX_cmp_func);
+MDBX_MAYBE_UNUSED static const char *search_foliage2name(MDBX_search_foliage);
+MDBX_MAYBE_UNUSED static const char *search_branch2name(MDBX_search_branch);
+
+#define CASE(name)                                                                                                     \
+  if (fn == name)                                                                                                      \
+  return #name
+
+static const char *cmp2name(MDBX_cmp_func fn) {
+  CASE(ncmp_lexical);
+  CASE(ncmp_reverse);
+  CASE(ncmp_lenfast);
+  CASE(ncmp_uint_align2);
+  CASE(ncmp_uint_align4);
+  CASE(ncmp_uint_unaligned);
+  return "unknown";
+}
+
+static const char *search_foliage2name(MDBX_search_foliage fn) {
+  CASE(search_foliage_lexical_usual);
+  CASE(search_foliage_reverse_usual);
+  CASE(search_foliage_lenfast_usual);
+  CASE(search_foliage_custom_usual);
+  CASE(search_foliage_ordinal_usual);
+  CASE(search_foliage_uint32_usual);
+  CASE(search_foliage_uint64_usual);
+
+  CASE(search_foliage_lexical_dupfix);
+  CASE(search_foliage_reverse_dupfix);
+  CASE(search_foliage_lenfast_dupfix);
+  CASE(search_foliage_custom_dupfix);
+  CASE(search_foliage_ordinal_dupfix);
+  CASE(search_foliage_uint32_dupfix);
+  CASE(search_foliage_uint64_dupfix);
+  return "unknown";
+}
+
+static const char *search_branch2name(MDBX_search_branch fn) {
+  CASE(search_branch_ordinal);
+  CASE(search_branch_uint32);
+  CASE(search_branch_uint64);
+  CASE(search_branch_lexical);
+  CASE(search_branch_reverse);
+  CASE(search_branch_lenfast);
+  CASE(search_branch_custom);
+  return "unknown";
+}

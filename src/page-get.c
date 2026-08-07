@@ -42,7 +42,7 @@ MDBX_CONST_FUNCTION static clc_t value_clc(const MDBX_cursor *mc) {
   if (likely((mc->flags & z_inner) == 0))
     return mc->clc->v;
   else {
-    clc_t stub = {.cmp = cmp_equal_or_wrong, .lmin = 0, .lmax = 0};
+    clc_t stub = {.cmp = ncmp_equal_or_wrong, .lmin = 0, .lmax = 0};
     return stub;
   }
 }

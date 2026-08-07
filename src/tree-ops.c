@@ -355,10 +355,9 @@ static int node_move(MDBX_cursor *csrc, MDBX_cursor *cdst, bool fromleft) {
         return rc;
     }
     if (is_branch(psrc)) {
-      const MDBX_val nullkey = {0, 0};
       const indx_t ix = csrc->ki[csrc->top];
       csrc->ki[csrc->top] = 0;
-      rc = tree_propagate_key(csrc, &nullkey);
+      rc = tree_propagate_nullkey(csrc);
       csrc->ki[csrc->top] = ix;
       cASSERT0(csrc, rc == MDBX_SUCCESS);
     }
@@ -389,10 +388,9 @@ static int node_move(MDBX_cursor *csrc, MDBX_cursor *cdst, bool fromleft) {
         return rc;
     }
     if (is_branch(pdst)) {
-      const MDBX_val nullkey = {0, 0};
       const indx_t ix = cdst->ki[cdst->top];
       cdst->ki[cdst->top] = 0;
-      rc = tree_propagate_key(cdst, &nullkey);
+      rc = tree_propagate_nullkey(cdst);
       cdst->ki[cdst->top] = ix;
       cASSERT0(cdst, rc == MDBX_SUCCESS);
     }
@@ -520,8 +518,7 @@ static int page_merge(MDBX_cursor *csrc, MDBX_cursor *cdst) {
   cursor_enroot(csrc, 1);
   node_del(csrc, 0);
   if (csrc->ki[csrc->top] == 0) {
-    const MDBX_val nullkey = {0, 0};
-    rc = tree_propagate_key(csrc, &nullkey);
+    rc = tree_propagate_nullkey(csrc);
     cASSERT0(csrc, rc != MDBX_RESULT_TRUE);
     if (unlikely(rc != MDBX_SUCCESS)) {
       /* cursor_undo_enroot(csrc, 1); don't needed on failure */
@@ -948,8 +945,6 @@ int tree_propagate_key(MDBX_cursor *mc, const MDBX_val *key) {
 
   /* But even if no shift was needed, update key size */
   node_set_ks(node, key->iov_len);
-
-  if (likely(key->iov_len /* to avoid UBSAN traps*/ != 0))
-    memcpy(node_key(node), key->iov_base, key->iov_len);
+  memcpy(node_key(node), key->iov_base, key->iov_len);
   return MDBX_SUCCESS;
 }
