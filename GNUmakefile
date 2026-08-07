@@ -541,7 +541,7 @@ check-posix-locking:
 
 smoke: build-stochastic
 	@echo '  SMOKE `mdbx_test basic`...'
-	$(QUIET)rm -f $(TEST_DB) $(TEST_LOG).gz && (set -o pipefail; export ASAN_OPTIONS=$(ASAN_OPTIONS) UBSAN_OPTIONS=$(UBSAN_OPTIONS); \
+	$(QUIET)rm -f $(TEST_DB) $(TEST_DB)-copy $(TEST_LOG).gz && (set -o pipefail; export ASAN_OPTIONS=$(ASAN_OPTIONS) UBSAN_OPTIONS=$(UBSAN_OPTIONS); \
 		(./mdbx_test --duration 100 --table=+data.integer --keygen.split=29 --datalen.min=min --datalen.max=max --progress --console=no --repeat=$(TEST_ITER) --pathname=$(TEST_DB) --dont-cleanup-after $(MDBX_SMOKE_EXTRA) basic && \
 		./mdbx_test --duration 100 --mode=-writemap,-nosync-safe,-lifo --progress --console=no --repeat=$(TEST_ITER) --pathname=$(TEST_DB) --dont-cleanup-after $(MDBX_SMOKE_EXTRA) basic) \
 		| tee >(gzip --stdout >$(TEST_LOG).gz) | tail -n 42) \
@@ -549,7 +549,7 @@ smoke: build-stochastic
 
 smoke-singleprocess: build-stochastic
 	@echo '  SMOKE `mdbx_test --nested`...'
-	$(QUIET)rm -f $(TEST_DB) $(TEST_LOG).gz && (set -o pipefail; export ASAN_OPTIONS=$(ASAN_OPTIONS) UBSAN_OPTIONS=$(UBSAN_OPTIONS); \
+	$(QUIET)rm -f $(TEST_DB) $(TEST_DB)-copy $(TEST_LOG).gz && (set -o pipefail; export ASAN_OPTIONS=$(ASAN_OPTIONS) UBSAN_OPTIONS=$(UBSAN_OPTIONS); \
 		(./mdbx_test --duration 100  --table=+data.integer --keygen.split=29 --datalen.min=min --datalen.max=max --progress --console=no --repeat=42 --pathname=$(TEST_DB) --dont-cleanup-after $(MDBX_SMOKE_EXTRA) --hill && \
 		./mdbx_test --duration 100 --progress --console=no --repeat=2 --pathname=$(TEST_DB) --dont-cleanup-before --dont-cleanup-after --copy && \
 		./mdbx_test --duration 100 --mode=-writemap,-nosync-safe,-lifo --progress --console=no --repeat=42 --pathname=$(TEST_DB) --dont-cleanup-after $(MDBX_SMOKE_EXTRA) --nested) \
@@ -558,7 +558,7 @@ smoke-singleprocess: build-stochastic
 
 smoke-fault: build-stochastic
 	@echo '  SMOKE `mdbx_test --inject-writefault=42 basic`...'
-	$(QUIET)rm -f $(TEST_DB) $(TEST_LOG).gz && (set -o pipefail; export ASAN_OPTIONS=$(ASAN_OPTIONS) UBSAN_OPTIONS=$(UBSAN_OPTIONS); \
+	$(QUIET)rm -f $(TEST_DB) $(TEST_DB)-copy $(TEST_LOG).gz && (set -o pipefail; export ASAN_OPTIONS=$(ASAN_OPTIONS) UBSAN_OPTIONS=$(UBSAN_OPTIONS); \
 		./mdbx_test --duration 300  --progress --console=no --pathname=$(TEST_DB) --inject-writefault=42 --dump-config --dont-cleanup-after $(MDBX_SMOKE_EXTRA) basic \
 		| tee >(gzip --stdout >$(TEST_LOG).gz) | tail -n 42) || echo "Expect fault" \
 	; ./mdbx_chk -vvnw $(TEST_DB) && ([ ! -e $(TEST_DB)-copy ] || ./mdbx_chk -vvn $(TEST_DB)-copy || echo "May fault due invalid-database-signature")
@@ -581,7 +581,7 @@ smoke-memcheck: VALGRIND=valgrind --trace-children=yes --log-file=valgrind-%p.lo
 smoke-memcheck: CFLAGS_EXTRA=-Ofast -DENABLE_MEMCHECK
 smoke-memcheck: build-stochastic
 	@echo "  SMOKE \`mdbx_test basic\` under Valgrind's memcheck..."
-	$(QUIET)rm -f valgrind-*.log $(TEST_DB) $(TEST_LOG).gz && (set -o pipefail; export ASAN_OPTIONS=$(ASAN_OPTIONS) UBSAN_OPTIONS=$(UBSAN_OPTIONS); ( \
+	$(QUIET)rm -f valgrind-*.log $(TEST_DB) $(TEST_DB)-copy $(TEST_LOG).gz && (set -o pipefail; export ASAN_OPTIONS=$(ASAN_OPTIONS) UBSAN_OPTIONS=$(UBSAN_OPTIONS); ( \
 		$(VALGRIND) ./mdbx_test --duration 100 --table=+data.fixed --keygen.split=29 --datalen=35 --progress --console=no --repeat=2 --pathname=$(TEST_DB) --dont-cleanup-after $(MDBX_SMOKE_EXTRA) basic && \
 		$(VALGRIND) ./mdbx_test --duration 100 --progress --console=no --pathname=$(TEST_DB) --dont-cleanup-before --dont-cleanup-after --copy && \
 		$(VALGRIND) ./mdbx_test --duration 100 --mode=-writemap,-nosync-safe,-lifo --progress --console=no --repeat=4 --pathname=$(TEST_DB) --dont-cleanup-after $(MDBX_SMOKE_EXTRA) basic && \
