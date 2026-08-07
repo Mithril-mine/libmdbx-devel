@@ -10,6 +10,8 @@ on:
 
 workflows:
   ci-linux-debug-gcc:
+    settings:
+      max_cube_duration: 30m # Минимум необходимый для сборки в режиме LTO (make + cmake) и выполнения тестов тестов
     env:
       CI: SourceCraft
       CI_MAKE_TARGET: smoke
@@ -22,6 +24,8 @@ workflows:
             script:
               - CC=gcc CXX=g++ tests/ci/ci.sh "-DCMAKE_BUILD_TYPE=Debug|-DMDBX_BUILD_CXX:BOOL=ON"
   ci-linux-debug-clang:
+    settings:
+      max_cube_duration: 30m # Минимум необходимый для сборки в режиме LTO (make + cmake) и выполнения тестов тестов
     env:
       CI: SourceCraft
       CI_MAKE_TARGET: smoke
@@ -34,6 +38,8 @@ workflows:
             script:
               - CC=clang CXX=clang++ tests/ci/ci.sh "-DCMAKE_BUILD_TYPE=Debug|-DMDBX_BUILD_CXX:BOOL=OFF"
   ci-linux-release-spilling:
+    settings:
+      max_cube_duration: 30m # Минимум необходимый для сборки в режиме LTO (make + cmake) и выполнения тестов тестов
     env:
       CI: SourceCraft
       CI_MAKE_TARGET: test
