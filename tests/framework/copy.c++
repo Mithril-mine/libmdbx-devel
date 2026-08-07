@@ -41,17 +41,21 @@ void testcase_copy::copy_db(const bool with_compaction) {
   if (!overwrite) {
     err = mdbx_env_delete(copy_pathname.c_str(), MDBX_ENV_JUST_DELETE);
     if (err != MDBX_SUCCESS && err != MDBX_RESULT_TRUE)
-      failure_perror("osal_removefile()", err);
+      failure_perror("mdbx_env_delete()", err);
   }
 
   if (flipcoin()) {
-    err = mdbx_env_copy(db_guard.get(), copy_pathname.c_str(),
-                        (with_compaction ? MDBX_CP_COMPACT : MDBX_CP_DEFAULTS) |
-                            (overwrite ? MDBX_CP_OVERWRITE : MDBX_CP_DEFAULTS));
-    log_verbose("mdbx_env_copy(%s, with_compaction=%s, overwrite=%s), err %d", copy_pathname.c_str(),
-                with_compaction ? "true" : "false", overwrite ? "true" : "false", err);
-    if (unlikely(err != MDBX_SUCCESS))
+    const MDBX_copy_flags_t copy_flags =
+        (with_compaction ? MDBX_CP_COMPACT : MDBX_CP_DEFAULTS) | (overwrite ? MDBX_CP_OVERWRITE : MDBX_CP_DEFAULTS);
+    err = mdbx_env_copy(db_guard.get(), copy_pathname.c_str(), copy_flags);
+    if (unlikely(err != MDBX_SUCCESS) && !(!overwrite && err == MDBX_EEXIST)) {
+      log_error("mdbx_env_copy(%s, flags=0x%X, with_compaction=%s, overwrite=%s), err %d\n", copy_pathname.c_str(),
+                copy_flags, with_compaction ? "true" : "false", overwrite ? "true" : "false", err);
       failure_perror(with_compaction ? "mdbx_env_copy(MDBX_CP_COMPACT)" : "mdbx_env_copy(MDBX_CP_ASIS)", err);
+    } else {
+      log_verbose("mdbx_env_copy(%s, flags=0x%X, with_compaction=%s, overwrite=%s), err %d\n", copy_pathname.c_str(),
+                  copy_flags, with_compaction ? "true" : "false", overwrite ? "true" : "false", err);
+    }
   } else {
     do {
       const bool ro = mode_readonly() || flipcoin();
@@ -59,20 +63,22 @@ void testcase_copy::copy_db(const bool with_compaction) {
       const bool dynsize = flipcoin();
       const bool flush = flipcoin();
       const bool enable_renew = flipcoin();
-      const MDBX_copy_flags_t flags =
+      const MDBX_copy_flags_t copy_flags =
           (with_compaction ? MDBX_CP_COMPACT : MDBX_CP_DEFAULTS) |
           (dynsize ? MDBX_CP_FORCE_DYNAMIC_SIZE : MDBX_CP_DEFAULTS) |
           (throttle ? MDBX_CP_THROTTLE_MVCC : MDBX_CP_DEFAULTS) | (flush ? MDBX_CP_DEFAULTS : MDBX_CP_DONT_FLUSH) |
           (enable_renew ? MDBX_CP_RENEW_TXN : MDBX_CP_DEFAULTS) | (overwrite ? MDBX_CP_OVERWRITE : MDBX_CP_DEFAULTS);
       txn_begin(ro);
-      err = mdbx_txn_copy2pathname(txn_guard.get(), copy_pathname.c_str(), flags);
-      log_verbose("mdbx_txn_copy2pathname(%s, flags=0x%X), err %d", copy_pathname.c_str(), flags, err);
+      err = mdbx_txn_copy2pathname(txn_guard.get(), copy_pathname.c_str(), copy_flags);
       txn_end(err != MDBX_SUCCESS || flipcoin());
-      if (unlikely(err != MDBX_SUCCESS && !(throttle && err == MDBX_OUSTED) &&
+      if (unlikely(err != MDBX_SUCCESS && !(throttle && err == MDBX_OUSTED) && !(!overwrite && err == MDBX_EEXIST) &&
                    !(!enable_renew && err == MDBX_MVCC_RETARDED) &&
-                   !(err == MDBX_EINVAL && !ro && (flags & (MDBX_CP_THROTTLE_MVCC | MDBX_CP_RENEW_TXN)) != 0)))
+                   !(err == MDBX_EINVAL && !ro && (copy_flags & (MDBX_CP_THROTTLE_MVCC | MDBX_CP_RENEW_TXN)) != 0))) {
+        log_error("mdbx_txn_copy2pathname(%s, flags=0x%X), err %d\n", copy_pathname.c_str(), copy_flags, err);
         failure_perror(
             with_compaction ? "mdbx_txn_copy2pathname(MDBX_CP_COMPACT)" : "mdbx_txn_copy2pathname(MDBX_CP_ASIS)", err);
+      } else
+        log_verbose("mdbx_txn_copy2pathname(%s, flags=0x%X), err %d\n", copy_pathname.c_str(), copy_flags, err);
     } while (err != MDBX_SUCCESS);
   }
 }
