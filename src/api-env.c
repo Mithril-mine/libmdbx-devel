@@ -154,6 +154,13 @@ __cold int mdbx_env_create(MDBX_env **penv) {
     return LOG_IFERR(MDBX_EINVAL);
   *penv = nullptr;
 
+#if IS_WINDOWS
+  if (!imports.srwl_Init) {
+    FATAL("The mdbx_init() was not called by the system module loader.");
+    return LOG_IFERR(MDBX_PANIC);
+  }
+#endif /* IS_WINDOWS */
+
 #ifdef MDBX_HAVE_C11ATOMICS
   if (unlikely(!atomic_is_lock_free((const volatile uint32_t *)penv))) {
     ERROR("lock-free atomic ops for %u-bit types is required", 32);
@@ -167,7 +174,8 @@ __cold int mdbx_env_create(MDBX_env **penv) {
 #endif /* MDBX_64BIT_ATOMIC */
 #endif /* MDBX_HAVE_C11ATOMICS */
 
-  if (unlikely(!is_powerof2(globals.sys_pagesize) || globals.sys_pagesize < MDBX_MIN_PAGESIZE)) {
+  if (unlikely(!is_powerof2(globals.sys_pagesize) || globals.sys_pagesize < MDBX_MIN_PAGESIZE ||
+               globals.sys_pagesize > 16 * MEGABYTE)) {
     ERROR("unsuitable system pagesize %u", globals.sys_pagesize);
     return LOG_IFERR(MDBX_INCOMPATIBLE);
   }
