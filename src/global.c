@@ -11,6 +11,8 @@ static void mdbx_fini(void);
 
 #if defined(_WIN32) || defined(_WIN64)
 
+extern const IMAGE_TLS_DIRECTORY _tls_used;
+
 #if MDBX_BUILD_SHARED_LIBRARY
 #if MDBX_WITHOUT_MSVC_CRT && defined(NDEBUG)
 /* DEBUG/CHECKED builds still require MSVC's CRT for runtime checks.
@@ -31,6 +33,13 @@ static
 #endif /* MDBX_BUILD_SHARED_LIBRARY */
 {
   (void)reserved;
+
+#if defined(__MINGW64__) || defined(__MINGW32__) || defined(__MINGW__)
+  /* A .CRT$XL* callback requires MinGW's PE TLS directory.
+   * Keep its _tls_used definition linked, including with GNU ld --gc-sections. */
+  __asm__ __volatile__("" : : "r"(&_tls_used));
+#endif /* MinGW */
+
   switch (reason) {
   case DLL_PROCESS_ATTACH:
     windows_import();
