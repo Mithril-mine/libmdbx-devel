@@ -57,6 +57,7 @@ void testcase_copy::copy_db(const bool with_compaction) {
                   copy_flags, with_compaction ? "true" : "false", overwrite ? "true" : "false", err);
     }
   } else {
+    unsigned loop = 0;
     do {
       const bool ro = mode_readonly() || flipcoin();
       const bool throttle = ro && flipcoin();
@@ -79,7 +80,13 @@ void testcase_copy::copy_db(const bool with_compaction) {
             with_compaction ? "mdbx_txn_copy2pathname(MDBX_CP_COMPACT)" : "mdbx_txn_copy2pathname(MDBX_CP_ASIS)", err);
       } else
         log_verbose("mdbx_txn_copy2pathname(%s, flags=0x%X), err %d\n", copy_pathname.c_str(), copy_flags, err);
-    } while (err != MDBX_SUCCESS);
+
+      if (err == MDBX_EEXIST) {
+        int err2 = mdbx_env_delete(copy_pathname.c_str(), MDBX_ENV_JUST_DELETE);
+        if (err2 != MDBX_SUCCESS && err2 != MDBX_RESULT_TRUE)
+          failure_perror("mdbx_env_delete()", err2);
+      }
+    } while (err != MDBX_SUCCESS && ++loop < 42);
   }
 }
 
