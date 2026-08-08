@@ -15,39 +15,39 @@ workflows:
     env:
       CI: SourceCraft
       CI_MAKE_TARGET: smoke
-      MDBX_BUILD_OPTIONS: -DMDBX_CHECKING=2
+      MDBX_BUILD_OPTIONS: -DMDBX_CHECKING=2 -DMDBX_DEBUG=0
     tasks:
       - name: ci-linux-debug-gcc-task
         cubes:
           - name: ci-step
             image: dh-mirror.gitverse.ru/jakoch/cpp-devbox:forky-latest
             script:
-              - rm -rf /dev/shm/* && CC=gcc CXX=g++ tests/ci/ci.sh "-DCMAKE_BUILD_TYPE=MinSizeRel|-DMDBX_BUILD_CXX:BOOL=ON"
+              - CC=gcc CXX=g++ tests/ci/ci.sh "-DCMAKE_BUILD_TYPE=MinSizeRel|-DMDBX_BUILD_CXX:BOOL=OFF"
   ci-linux-debug-clang:
     settings:
       max_cube_duration: 30m # Минимум необходимый для сборки в режиме LTO (make + cmake) и выполнения тестов тестов
     env:
       CI: SourceCraft
       CI_MAKE_TARGET: smoke
-      MDBX_BUILD_OPTIONS: -DMDBX_CHECKING=2
+      MDBX_BUILD_OPTIONS: -DMDBX_CHECKING=2 -DMDBX_DEBUG=0
     tasks:
       - name: ci-linux-debug-clang-task
         cubes:
           - name: ci-step
             image: dh-mirror.gitverse.ru/jakoch/cpp-devbox:forky-latest
             script:
-              - rm -rf /dev/shm/* && CC=clang CXX=clang++ tests/ci/ci.sh "-DCMAKE_BUILD_TYPE=MinSizeRel|-DMDBX_BUILD_CXX:BOOL=OFF"
+              - CC=clang CXX=clang++ tests/ci/ci.sh "-DCMAKE_BUILD_TYPE=MinSizeRel|-DMDBX_BUILD_CXX:BOOL=ON"
   ci-linux-release-spilling:
     settings:
       max_cube_duration: 30m # Минимум необходимый для сборки в режиме LTO (make + cmake) и выполнения тестов тестов
     env:
       CI: SourceCraft
       CI_MAKE_TARGET: test
-      MDBX_BUILD_OPTIONS: "-DMDBX_CHECKING=0 -DMDBX_DEBUG_SPILLING=1"
+      MDBX_BUILD_OPTIONS: "-DMDBX_CHECKING=2 -DMDBX_DEBUG=0 -DMDBX_DEBUG_SPILLING=1"
     tasks:
       - name: ci-linux-release-spilling-task
         cubes:
           - name: ci-step
             image: dh-mirror.gitverse.ru/jakoch/cpp-devbox:forky-latest
             script:
-              - rm -rf /dev/shm/* && tests/ci/ci.sh "-DCMAKE_BUILD_TYPE=RelWithDebInfo"
+              - tests/ci/ci.sh "-DCMAKE_BUILD_TYPE=RelWithDebInfo"
