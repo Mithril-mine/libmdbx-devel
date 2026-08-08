@@ -653,6 +653,21 @@
 #error "Please use one of MDBX_CHECKING either MDBX_FORCE_ASSERTIONS build options, but not both"
 #endif
 
+/********************************************************************************
+ * Internal debugging options */
+
+#ifndef xMDBX_DEBUG_SPILLING
+#define xMDBX_DEBUG_SPILLING 0
+#endif /* xMDBX_DEBUG_SPILLING */
+
+#ifndef MDBX_DEBUG_SEARCH_DISPATCHING
+#define MDBX_DEBUG_SEARCH_DISPATCHING MDBX_DEBUG
+#endif /* MDBX_DEBUG_SEARCH_DISPATCHING */
+
+#ifndef MDBX_DEBUG_SEARCH_BRANCHLESS
+#define MDBX_DEBUG_SEARCH_BRANCHLESS 0
+#endif /* MDBX_DEBUG_SEARCH_BRANCHLESS */
+
 /* Since 2026-04-01 alternatives to MDBX_PNL_ASCENDING = 0 are no longer supported. */
 #define MDBX_PNL_ASCENDING 0
 
