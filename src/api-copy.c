@@ -724,8 +724,19 @@ __cold static int copy2pathname(MDBX_txn *txn, const pathchar_t *dest_path, MDBX
                          S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP
 #endif
   );
-  if (unlikely(rc != MDBX_SUCCESS))
+  if (unlikely(rc != MDBX_SUCCESS)) {
+    if (rc != MDBX_EEXIST) {
+#if IS_WINDOWS
+      if (rc == ERROR_PATH_NOT_FOUND || rc == ERROR_INVALID_DRIVE || rc == ERROR_BAD_NETPATH ||
+          rc == ERROR_BAD_PATHNAME)
+        return rc;
+#endif
+      int err = osal_removefile(dest_path);
+      if (err != MDBX_SUCCESS && err != MDBX_ENOFILE)
+        ERROR("unable remove incomplete copy destination `%" MDBX_PRIsPATH "`, error %d", dest_path, err);
+    }
     return rc;
+  }
 
 #if IS_WINDOWS
   /* no locking required since the file opened with ShareMode == 0 */
@@ -790,12 +801,13 @@ __cold static int copy2pathname(MDBX_txn *txn, const pathchar_t *dest_path, MDBX
   if (rc == MDBX_SUCCESS)
     rc = copy2fd(txn, newfd, flags);
 
-  if (newfd != INVALID_HANDLE_VALUE) {
-    int err = osal_closefile(newfd);
-    if (rc == MDBX_SUCCESS && err != rc)
-      rc = err;
-    if (rc != MDBX_SUCCESS)
-      (void)osal_removefile(dest_path);
+  int err = osal_closefile(newfd);
+  if (rc == MDBX_SUCCESS && err != rc)
+    rc = err;
+  if (rc != MDBX_SUCCESS) {
+    err = osal_removefile(dest_path);
+    if (err != MDBX_SUCCESS && err != MDBX_ENOFILE)
+      ERROR("unable remove incomplete copy destination `%" MDBX_PRIsPATH "`, error %d", dest_path, err);
   }
   return rc;
 }
