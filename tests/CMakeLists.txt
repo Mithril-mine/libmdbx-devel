@@ -24,7 +24,7 @@ endif()
 
 function(add_simple_test name)
   set(options DISABLED)
-  set(oneValueArgs TIMEOUT SOURCE_PREFIX TARGET_PREFIX)
+  set(oneValueArgs TIMEOUT SOURCE_PREFIX TARGET_PREFIX MDBX_LIB)
   set(multiValueArgs SOURCE LIBRARY DEPEND DLLPATH)
   cmake_parse_arguments(params "${options}" "${oneValueArgs}" "${multiValueArgs}" ${ARGN})
 
@@ -44,10 +44,14 @@ function(add_simple_test name)
     set(params_SOURCE "${params_SOURCE_PREFIX}${name}.c++")
   endif()
 
+  if (NOT params_MDBX_LIB)
+    set(params_MDBX_LIB ${TOOL_MDBX_LIB})
+  endif()
+
   set(target "${params_TARGET_PREFIX}${name}")
   add_executable(${target} ${params_SOURCE})
   target_include_directories(${target} PRIVATE "${PROJECT_SOURCE_DIR}")
-  target_link_libraries(${target} ${TOOL_MDBX_LIB})
+  target_link_libraries(${target} ${params_MDBX_LIB})
   set_target_properties(${target} PROPERTIES SKIP_BUILD_RPATH FALSE BUILD_WITH_INSTALL_RPATH FALSE)
 
   if(MDBX_BUILD_CXX AND MDBX_CXX_STANDARD)
@@ -250,6 +254,8 @@ else()
     if(MSVC_C11_MAD_ATOMICS)
       target_compile_options(test_extra_details_rkl PRIVATE "$<$<COMPILE_LANGUAGE:CXX,C>:/std:clatest;/experimental:c11atomics>")
     endif()
+
+    add_extra_test(global_init SOURCE ut/global_init.c MDBX_LIB mdbx-static)
 
     add_extra_test(rename_dbi SOURCE ut/rename_dbi.c)
     add_extra_test(nested_drop_abort SOURCE ut/nested_drop_abort.c)
