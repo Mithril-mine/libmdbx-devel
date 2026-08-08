@@ -156,7 +156,7 @@ __cold int mdbx_env_create(MDBX_env **penv) {
 
 #if IS_WINDOWS
   if (!imports.srwl_Init) {
-    FATAL("The mdbx_init() was not called by the system module loader.");
+    FATAL("The %s() was not called by the system module loader.", "mdbx_init");
     return LOG_IFERR(MDBX_PANIC);
   }
 #endif /* IS_WINDOWS */
