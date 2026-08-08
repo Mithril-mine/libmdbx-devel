@@ -57,8 +57,7 @@ void testcase_copy::copy_db(const bool with_compaction) {
                   copy_flags, with_compaction ? "true" : "false", overwrite ? "true" : "false", err);
     }
   } else {
-    unsigned loop = 0;
-    do {
+    for (unsigned loop = 0;; ++loop) {
       const bool ro = mode_readonly() || flipcoin();
       const bool throttle = ro && flipcoin();
       const bool dynsize = flipcoin();
@@ -72,21 +71,31 @@ void testcase_copy::copy_db(const bool with_compaction) {
       txn_begin(ro);
       err = mdbx_txn_copy2pathname(txn_guard.get(), copy_pathname.c_str(), copy_flags);
       txn_end(err != MDBX_SUCCESS || flipcoin());
-      if (unlikely(err != MDBX_SUCCESS && !(throttle && err == MDBX_OUSTED) && !(!overwrite && err == MDBX_EEXIST) &&
-                   !(!enable_renew && err == MDBX_MVCC_RETARDED) &&
-                   !(err == MDBX_EINVAL && !ro && (copy_flags & (MDBX_CP_THROTTLE_MVCC | MDBX_CP_RENEW_TXN)) != 0))) {
-        log_error("mdbx_txn_copy2pathname(%s, flags=0x%X), err %d\n", copy_pathname.c_str(), copy_flags, err);
+
+      bool fail = true;
+      switch (err) {
+      case MDBX_SUCCESS:
+        return;
+      case MDBX_OUSTED:
+        fail = !throttle;
+        break;
+      case MDBX_MVCC_RETARDED:
+        fail = enable_renew;
+        break;
+      case MDBX_EINVAL:
+        fail = ro || (copy_flags & (MDBX_CP_THROTTLE_MVCC | MDBX_CP_RENEW_TXN)) == 0;
+        break;
+      }
+
+      if (fail) {
+        log_error("mdbx_txn_copy2pathname(%s, flags=0x%X), loop %u, err %d\n", copy_pathname.c_str(), copy_flags, loop,
+                  err);
         failure_perror(
             with_compaction ? "mdbx_txn_copy2pathname(MDBX_CP_COMPACT)" : "mdbx_txn_copy2pathname(MDBX_CP_ASIS)", err);
-      } else
-        log_verbose("mdbx_txn_copy2pathname(%s, flags=0x%X), err %d\n", copy_pathname.c_str(), copy_flags, err);
-
-      if (err == MDBX_EEXIST) {
-        int err2 = mdbx_env_delete(copy_pathname.c_str(), MDBX_ENV_JUST_DELETE);
-        if (err2 != MDBX_SUCCESS && err2 != MDBX_RESULT_TRUE)
-          failure_perror("mdbx_env_delete()", err2);
       }
-    } while (err != MDBX_SUCCESS && ++loop < 42);
+      log_verbose("mdbx_txn_copy2pathname(%s, flags=0x%X), loop %u, err %d\n", copy_pathname.c_str(), copy_flags, loop,
+                  err);
+    }
   }
 }
 
