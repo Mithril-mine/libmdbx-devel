@@ -267,10 +267,10 @@ __cold int spill_slowpath(MDBX_txn *const txn, MDBX_cursor *const m0, const intp
   /* Preserve pages which may soon be dirtied again */
   const size_t unspillable = spill_txn_keep(txn, m0);
   if (unspillable + txn->wr.loose_count >= dl->length) {
-#if xMDBX_DEBUG_SPILLING == 1 /* avoid false failure in debug mode  */
+#if MDBX_DEBUG_SPILLING == 1 /* avoid false failure in debug mode  */
     if (likely(txn->wr.dirtyroom + txn->wr.loose_count >= need))
       return MDBX_SUCCESS;
-#endif /* xMDBX_DEBUG_SPILLING */
+#endif /* MDBX_DEBUG_SPILLING */
     ERROR("all %zu dirty pages are unspillable since referenced "
           "by a cursor(s), use fewer cursors or increase "
           "MDBX_opt_txn_dp_limit",
@@ -428,7 +428,7 @@ __cold int spill_slowpath(MDBX_txn *const txn, MDBX_cursor *const m0, const intp
     }
   }
 
-#if xMDBX_DEBUG_SPILLING == 2
+#if MDBX_DEBUG_SPILLING == 2
   if (txn->wr.loose_count + txn->wr.dirtyroom <= need / 2 + 1)
     ERROR("dirty-list length: before %zu, after %zu, parent %zi, loose %zu; "
           "needed %zu, spillable %zu; "
@@ -437,7 +437,7 @@ __cold int spill_slowpath(MDBX_txn *const txn, MDBX_cursor *const m0, const intp
           (txn->parent && txn->parent->wr.dirtylist) ? (intptr_t)txn->parent->wr.dirtylist->length : -1,
           txn->wr.loose_count, need, spillable_entries, spilled_entries, txn->wr.dirtyroom);
   ENSURE(txn->env, txn->wr.loose_count + txn->wr.dirtyroom > need / 2);
-#endif /* xMDBX_DEBUG_SPILLING */
+#endif /* MDBX_DEBUG_SPILLING */
 
 done:
   return likely(txn->wr.dirtyroom + txn->wr.loose_count > min_unsigned(need, CURSOR_STACK_SIZE)) ? MDBX_SUCCESS

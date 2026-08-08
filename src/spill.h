@@ -63,8 +63,8 @@ static inline int txn_spill(MDBX_txn *const txn, MDBX_cursor *const m0, const si
 
   /* production mode */
   if (likely(wanna_spill_npages < 1 && wanna_spill_entries < 1)
-#if xMDBX_DEBUG_SPILLING == 1
-      /* debug mode: always try to spill if xMDBX_DEBUG_SPILLING == 1 */
+#if MDBX_DEBUG_SPILLING == 1
+      /* debug mode: always try to spill if MDBX_DEBUG_SPILLING == 1 */
       && txn->txnid % 23 > 11
 #endif
   )

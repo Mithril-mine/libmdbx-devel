@@ -656,9 +656,9 @@
 /********************************************************************************
  * Internal debugging options */
 
-#ifndef xMDBX_DEBUG_SPILLING
-#define xMDBX_DEBUG_SPILLING 0
-#endif /* xMDBX_DEBUG_SPILLING */
+#ifndef MDBX_DEBUG_SPILLING
+#define MDBX_DEBUG_SPILLING 0
+#endif /* MDBX_DEBUG_SPILLING */
 
 #ifndef MDBX_DEBUG_SEARCH_DISPATCHING
 #define MDBX_DEBUG_SEARCH_DISPATCHING MDBX_DEBUG

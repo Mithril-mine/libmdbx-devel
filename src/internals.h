@@ -353,7 +353,7 @@ struct MDBX_cursor {
   /* флаги проверки, в том числе биты для проверки типа листовых страниц. */
   uint8_t checking;
 
-#if xMDBX_DEBUG_SPILLING > 0
+#if MDBX_DEBUG_SPILLING > 0
   uint8_t tmp_split_top;
   page_t *tmp_split[CURSOR_STACK_SIZE];
 #define CURSOR_TRACING_TMPPAGE_PUSH(mc, mp)                                                                            \
@@ -371,7 +371,7 @@ struct MDBX_cursor {
 #else
 #define CURSOR_TRACING_TMPPAGE_PUSH(mc, mp) ((void)(mc), (void)(mp))
 #define CURSOR_TRACING_TMPPAGE_POP(mc, mp) ((void)(mc), (void)(mp))
-#endif /* xMDBX_DEBUG_SPILLING */
+#endif /* MDBX_DEBUG_SPILLING */
 
 #if MDBX_DEBUG_SEARCH_BRANCHLESS
   unsigned search_step_counter;
@@ -537,9 +537,9 @@ struct MDBX_env {
   pgno_t poison_edge;
 #endif /* ENABLE_MEMCHECK || __SANITIZE_ADDRESS__ */
 
-#if xMDBX_DEBUG_SPILLING == 2
+#if MDBX_DEBUG_SPILLING == 2
   size_t debug_dirtied_est, debug_dirtied_act;
-#endif /* xMDBX_DEBUG_SPILLING */
+#endif /* MDBX_DEBUG_SPILLING */
 
   /* --------------------------------------------------- mostly volatile part */
 

@@ -682,11 +682,11 @@ __hot int __must_check_result page_dirty(MDBX_txn *txn, page_t *mp, size_t npage
   }
   tASSERT0(txn, (txn->flags & MDBX_WRITEMAP) == 0 || MDBX_AVOID_MSYNC);
 
-#if xMDBX_DEBUG_SPILLING == 2
+#if MDBX_DEBUG_SPILLING == 2
   txn->env->debug_dirtied_act += 1;
   ENSURE(txn->env, txn->env->debug_dirtied_act < txn->env->debug_dirtied_est);
   ENSURE(txn->env, txn->wr.dirtyroom + txn->wr.loose_count > 0);
-#endif /* xMDBX_DEBUG_SPILLING == 2 */
+#endif /* MDBX_DEBUG_SPILLING == 2 */
 
   int rc;
   if (unlikely(txn->wr.dirtyroom == 0)) {

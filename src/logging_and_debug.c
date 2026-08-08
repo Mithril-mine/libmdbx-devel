@@ -369,13 +369,13 @@ static inline const char *sanitizer_probe_page_dangling(const MDBX_txn *txn, con
     return nullptr;
   }
 
-#if xMDBX_DEBUG_SPILLING > 0
+#if MDBX_DEBUG_SPILLING > 0
   for (unsigned i = 0; i < mc->tmp_split_top; ++i)
     if (mc->tmp_split[i] == mp)
       return nullptr;
 #else
   (void)mc;
-#endif /* xMDBX_DEBUG_SPILLING */
+#endif /* MDBX_DEBUG_SPILLING */
 
   if ((txn->flags & MDBX_WRITEMAP) != 0 || !txn->wr.dirtylist)
     return "MMAP.outside-mmap-region";
