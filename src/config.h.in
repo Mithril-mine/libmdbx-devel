@@ -14,6 +14,11 @@
 #cmakedefine ENABLE_ASAN
 #cmakedefine ENABLE_UBSAN
 
+/* Internal debugging */
+#cmakedefine01 MDBX_DEBUG_SPILLING
+#cmakedefine01 MDBX_DEBUG_SEARCH_DISPATCHING
+#cmakedefine01 MDBX_DEBUG_SEARCH_BRANCHLESS
+
 /* allowing override MDBX_BUILD_CXX=OFF to build the C++ API in "private" mode only for tests */
 #if !defined(MDBX_BUILD_TEST) && !defined(MDBX_BUILD_CXX)
 #cmakedefine01 MDBX_BUILD_CXX /* using MDBX_BUILD_CXX CMake's option */
