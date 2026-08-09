@@ -479,8 +479,8 @@ DIST_EXTRA := LICENSE NOTICE COPYRIGHT README.md TODO.md CMakeLists.txt GNUmakef
 
 DIST_SRC   := mdbx.h mdbx.h++ mdbx.c mdbx.c++ $(addsuffix .c, $(MDBX_TOOLS)) mdbx-internals.h mdbx-wingetopt.h
 
-TEST_DB    ?= $(shell [ -d /dev/shm ] && echo /dev/shm || echo /tmp)/mdbx-test.db
-TEST_LOG   ?= $(shell [ -d /dev/shm ] && echo /dev/shm || echo /tmp)/mdbx-test.log
+TEST_DB    ?= $(shell if [ -n "$CI" ]; then pwd; else [ -d /dev/shm ] && echo /dev/shm || echo /tmp; fi)/mdbx-test.db
+TEST_LOG   ?= $(shell if [ -n "$CI" ]; then pwd; else [ -d /dev/shm ] && echo /dev/shm || echo /tmp; fi)/mdbx-test.log
 TEST_OSAL  := $(shell $(uname2osal))
 TEST_ITER  := $(shell $(uname2titer))
 TEST_SRC   := tests/framework/osal-$(TEST_OSAL).c++ $(filter-out $(wildcard tests/framework/osal-*.c++),$(wildcard tests/framework/*.c++))
