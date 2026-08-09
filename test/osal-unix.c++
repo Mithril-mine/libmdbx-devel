@@ -613,6 +613,10 @@ void osal_udelay(size_t us) {
 bool osal_istty(int fd) { return isatty(fd) == 1; }
 
 std::string osal_tempdir(void) {
+  if (getenv("CI"))
+    /* don't use tmpfs on CI to avoid lack of space and `/dev/shm` to avoid interference */
+    return "./";
+
   const char *tempdir = getenv("TMPDIR");
   if (!tempdir)
     tempdir = getenv("TMP");

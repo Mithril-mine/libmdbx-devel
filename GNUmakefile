@@ -478,8 +478,8 @@ DIST_EXTRA := LICENSE NOTICE COPYRIGHT README.md CMakeLists.txt GNUmakefile Make
 
 DIST_SRC   := mdbx.h mdbx.h++ mdbx.c mdbx.c++ $(addsuffix .c, $(MDBX_TOOLS))
 
-TEST_DB    ?= $(shell [ -d /dev/shm ] && echo /dev/shm || echo /tmp)/mdbx-test.db
-TEST_LOG   ?= $(shell [ -d /dev/shm ] && echo /dev/shm || echo /tmp)/mdbx-test.log
+TEST_DB    ?= $(shell if [ -n "$CI" ]; then pwd; else [ -d /dev/shm ] && echo /dev/shm || echo /tmp; fi)/mdbx-test.db
+TEST_LOG   ?= $(shell if [ -n "$CI" ]; then pwd; else [ -d /dev/shm ] && echo /dev/shm || echo /tmp; fi)/mdbx-test.log
 TEST_OSAL  := $(shell $(uname2osal))
 TEST_ITER  := $(shell $(uname2titer))
 TEST_SRC   := test/osal-$(TEST_OSAL).c++ $(filter-out $(wildcard test/osal-*.c++),$(wildcard test/*.c++)) $(call select_by,MDBX_BUILD_CXX,,src/mdbx.c++)
