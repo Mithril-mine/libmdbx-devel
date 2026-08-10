@@ -403,7 +403,7 @@ public:
   void commit();
   /// \brief Commits all changes of the transaction into a database with collecting latencies information.
   void commit(finalization_latency *);
-  /// \brief ommits all changes of the transaction into a database with collecting latencies information.
+  /// \brief Commits all changes of the transaction into a database with collecting latencies information.
   void commit(finalization_latency &latency) { return commit(&latency); }
   /// \brief Commits all changes of the transaction into a database and return latency information.
   /// \returns latency information of commit stages.
