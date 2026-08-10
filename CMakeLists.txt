@@ -799,12 +799,14 @@ add_option(MDBX ENABLE_FAKE_NESTED_READONLY_TRANSACTIONS "Enables fake nested re
 mark_as_advanced(MDBX_ENABLE_FAKE_NESTED_READONLY_TRANSACTIONS)
 
 # Internal debugging
-add_option( MDBX DEBUG_SPILLING "Kind of internal debugging" OFF)
-add_option( MDBX DEBUG_SEARCH_DISPATCHING "Kind of internal debugging" OFF)
-add_option( MDBX DEBUG_SEARCH_BRANCHLESS "Kind of internal debugging" OFF)
+add_option(MDBX DEBUG_SPILLING "Kind of internal debugging" OFF)
+add_option(MDBX DEBUG_SEARCH_DISPATCHING "Kind of internal debugging" OFF)
+add_option(MDBX DEBUG_SEARCH_BRANCHLESS "Kind of internal debugging" OFF)
+add_option(MDBX DEBUG_GCU "Kind of internal debugging" OFF)
 mark_as_advanced(MDBX_DEBUG_SPILLING)
 mark_as_advanced(MDBX_DEBUG_SEARCH_DISPATCHING)
 mark_as_advanced(MDBX_DEBUG_SEARCH_BRANCHLESS)
+mark_as_advanced(MDBX_DEBUG_GCU)
 
 if(DEFINED MDBX_FORCE_ASSERTIONS)
   message(WARNING "The `MDBX_FORCE_ASSERTIONS` is obsolete, please use `MDBX_CHECKING=2` instead")
