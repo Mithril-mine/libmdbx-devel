@@ -32,9 +32,6 @@ typedef struct gc_update_context {
   size_t return_reserved_lo, return_reserved_hi;
   txnid_t gc_first;
   intptr_t return_left;
-#ifndef MDBX_DEBUG_GCU
-#define MDBX_DEBUG_GCU 0
-#endif
 #if MDBX_DEBUG_GCU
   struct {
     txnid_t prev;

@@ -668,6 +668,10 @@
 #define MDBX_DEBUG_SEARCH_BRANCHLESS 0
 #endif /* MDBX_DEBUG_SEARCH_BRANCHLESS */
 
+#ifndef MDBX_DEBUG_GCU
+#define MDBX_DEBUG_GCU 0
+#endif /* MDBX_DEBUG_GCU */
+
 /* Since 2026-04-01 alternatives to MDBX_PNL_ASCENDING = 0 are no longer supported. */
 #define MDBX_PNL_ASCENDING 0
 
