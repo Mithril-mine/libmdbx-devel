@@ -226,7 +226,7 @@ static int defrag_clear_reclaimed(dfc_t *dfc) {
         }
 
         if (txn->wr.loose_count > 0) {
-          rc = gc_merge_loose(txn);
+          rc = gc_merge_loose(txn, nullptr);
           if (unlikely(rc != MDBX_SUCCESS))
             break;
           txn_refund(txn);
@@ -251,7 +251,7 @@ static int defrag_clear_reclaimed(dfc_t *dfc) {
 
   if (likely(rc == MDBX_SUCCESS)) {
     if (txn->wr.loose_count > 0)
-      rc = gc_merge_loose(txn);
+      rc = gc_merge_loose(txn, nullptr);
     if (likely(rc == MDBX_SUCCESS))
       txn_refund(txn);
   }
@@ -801,7 +801,7 @@ int defrag_cycle(dfc_t *dfc) {
     return rc;
 
   if (txn->wr.loose_count > 0) {
-    rc = gc_merge_loose(txn);
+    rc = gc_merge_loose(txn, nullptr);
     if (unlikely(rc != MDBX_SUCCESS))
       return rc;
   }

@@ -33,7 +33,7 @@ static int gc_peekid(const MDBX_val *key, txnid_t *id) {
 #pragma push_macro("LOG_ENABLED")
 #undef LOG_ENABLED
 #define LOG_ENABLED(LVL)                                                                                               \
-  unlikely(MDBX_DEBUG_GCU > 2 || (ctx->loop > 1 && (MDBX_DEBUG_GCU > 1 || LVL < MDBX_LOG_EXTRA)) ||                    \
+  unlikely(MDBX_DEBUG_GCU > 2 || (ctx && ctx->loop > 1 && (MDBX_DEBUG_GCU > 1 || LVL < MDBX_LOG_EXTRA)) ||             \
            LVL <= globals.loglevel)
 #endif /* MDBX_DEBUG_GCU */
 
@@ -286,7 +286,8 @@ static int gc_prepare_stockpile4retired(MDBX_txn *txn, gcu_t *ctx) {
   return gc_prepare_stockpile(txn, ctx, for_retired);
 }
 
-int gc_merge_loose(MDBX_txn *txn) {
+int gc_merge_loose(MDBX_txn *txn, gcu_t *ctx) {
+  (void)ctx;
   tASSERT0(txn, txn->wr.loose_count > 0);
   /* Return loose page numbers to wr.repnl, though usually none are left at this point.
    * The pages themselves remain in dirtylist. */
@@ -1469,7 +1470,7 @@ retry:
 
     if (txn->wr.loose_pages) {
       /* merge loose pages into the reclaimed- either retired-list */
-      err = gc_merge_loose(txn);
+      err = gc_merge_loose(txn, ctx);
       if (unlikely(err != MDBX_SUCCESS)) {
         if (err == MDBX_RESULT_TRUE)
           continue;
