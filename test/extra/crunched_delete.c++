@@ -1,7 +1,8 @@
 /// \copyright Copyright (c) 2015-2026 Леонид Юрьев aka Leonid Yuriev <leo@yuriev.ru>. All Rights Reserved.
 ///
 /// THE CONTENTS OF THIS PROJECT ARE PROPRIETARY AND CONFIDENTIAL.
-/// UNAUTHORIZED COPYING, TRANSFERRING OR REPRODUCTION OF THE CONTENTS OF THIS PROJECT, VIA ANY MEDIUM IS STRICTLY PROHIBITED.
+/// UNAUTHORIZED COPYING, TRANSFERRING OR REPRODUCTION OF THE CONTENTS OF THIS PROJECT,
+/// VIA ANY MEDIUM IS STRICTLY PROHIBITED.
 ///
 /// The receipt or possession of the source code and/or any parts thereof does not convey or imply any right to use them
 /// for any purpose other than the purpose for which they were provided to you.
@@ -12,7 +13,8 @@
 /// whether in an action of contract, tort or otherwise, arising from, out of or in connection with the software
 /// or the use or other dealings in the software.
 ///
-/// The above copyright notice and this permission notice shall be included in all copies or substantial portions of the software.
+/// The above copyright notice and this permission notice shall be included in all copies
+/// or substantial portions of the software.
 ///
 /// \author Леонид Юрьев aka Leonid Yuriev <leo@yuriev.ru>
 /// \date 2015-2026
@@ -25,12 +27,12 @@
 #include <vector>
 
 #if defined(ENABLE_MEMCHECK) || defined(MDBX_CI)
-#if MDBX_DEBUG || !defined(NDEBUG)
+#if MDBX_DEBUG > 0 || !defined(NDEBUG)
 #define RELIEF_FACTOR 16
 #else
 #define RELIEF_FACTOR 8
 #endif
-#elif MDBX_DEBUG || !defined(NDEBUG) || defined(__APPLE__) || defined(_WIN32)
+#elif MDBX_DEBUG > 0 || !defined(NDEBUG) || defined(__APPLE__) || defined(_WIN32)
 #define RELIEF_FACTOR 4
 #elif UINTPTR_MAX > 0xffffFFFFul || ULONG_MAX > 0xffffFFFFul
 #define RELIEF_FACTOR 2
@@ -114,10 +116,18 @@ static mdbx::map_handle create_and_fill(mdbx::txn txn, const acase &thecase, con
 
   if (txn.get_map_stat(map).ms_entries < NN) {
     mdbx::default_buffer k, v;
-    for (auto i = 0u; i < NN; i++) {
-      mk_key(k, thecase);
-      for (auto ii = thecase.dupmax_log2 ? 1u + (rnd() & ((2u << thecase.dupmax_log2) - 1u)) : 1u; ii > 0; --ii)
-        txn.upsert(map, k, mk_val(v, thecase));
+    try {
+      for (auto i = 0u; i < NN; i++) {
+        mk_key(k, thecase);
+        for (auto ii = thecase.dupmax_log2 ? 1u + (rnd() & ((2u << thecase.dupmax_log2) - 1u)) : 1u; ii > 0; --ii) {
+          txn.upsert(map, k, mk_val(v, thecase));
+          const auto info = txn.get_info();
+          if (info.txn_space_limit_hard - info.txn_space_used < 1024 * 1024)
+            return map;
+        }
+      }
+    } catch (const mdbx::db_full &) {
+      /* nope */
     }
   }
   return map;
@@ -191,7 +201,12 @@ static void logger_nofmt(MDBX_log_level_t loglevel, const char *function, int li
                          unsigned length) noexcept {
   (void)length;
   (void)loglevel;
-  fprintf(stdout, "%s:%u %s", function, line, msg);
+  std::cout.flush();
+  if (function)
+    fprintf(stdout, "%s:%u %s", function, line, msg);
+  else
+    fputs(msg, stdout);
+  fflush(stdout);
 }
 
 bool outofrange_prev(mdbx::env env) {
@@ -404,9 +419,9 @@ int doit() {
     create_and_fill(txn, testset[i], i);
   txn.commit();
 
+  txn = env.start_write();
   // mdbx_setup_debug_nofmt(MDBX_LOG_TRACE, MDBX_DBG_AUDIT | MDBX_DBG_ASSERT,
   //                       logger_nofmt, log_buffer, sizeof(log_buffer));
-  txn = env.start_write();
   for (unsigned i = 0; i < testset.size(); ++i)
     chunched_delete(txn, testset[i], i);
   txn.commit();

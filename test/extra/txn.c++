@@ -25,12 +25,12 @@
 #include <iostream>
 
 #if defined(ENABLE_MEMCHECK) || defined(MDBX_CI)
-#if MDBX_DEBUG || !defined(NDEBUG)
+#if MDBX_DEBUG > 0 || !defined(NDEBUG)
 #define RELIEF_FACTOR 16
 #else
 #define RELIEF_FACTOR 8
 #endif
-#elif MDBX_DEBUG || !defined(NDEBUG) || defined(__APPLE__) || defined(_WIN32)
+#elif MDBX_DEBUG > 0 || !defined(NDEBUG) || defined(__APPLE__) || defined(_WIN32)
 #define RELIEF_FACTOR 4
 #elif UINTPTR_MAX > 0xffffFFFFul || ULONG_MAX > 0xffffFFFFul
 #define RELIEF_FACTOR 2
@@ -38,7 +38,7 @@
 #define RELIEF_FACTOR 1
 #endif
 
-#if !defined(__cpp_lib_latch) && __cpp_lib_latch < 201907L
+#if !defined(__cpp_lib_latch) || __cpp_lib_latch < 201907L
 
 int main(int argc, const char *argv[]) {
   (void)argc;
@@ -52,15 +52,19 @@ int main(int argc, const char *argv[]) {
 #include <latch>
 #include <thread>
 
-bool case0_trivia_sticky_threads(const mdbx::path &path) {
+bool case0_trivia_sticky_threads(const mdbx::path &path, bool nested = false) {
   mdbx::env_managed::create_parameters createParameters;
   createParameters.geometry.make_dynamic(21 * mdbx::env::geometry::MiB, 84 * mdbx::env::geometry::MiB);
 
   mdbx::env::operate_parameters operateParameters(100, 10);
   operateParameters.options.no_sticky_threads = false;
+  operateParameters.options.nested_write_transactions = nested;
   mdbx::env_managed env(path, createParameters, operateParameters);
   auto txn = env.start_write(false);
-  /* mdbx::map_handle testHandle = */ txn.create_map("xyz", mdbx::key_mode::usual, mdbx::value_mode::single);
+  const auto map = txn.create_map("xyz", mdbx::key_mode::usual, mdbx::value_mode::single);
+  txn.clear_map(map);
+  for (size_t i = 0; i < 10000; ++i)
+    txn.insert(map, mdbx::slice::wrap(i * 3992619971ul % 54493), mdbx::slice::wrap(i));
   txn.commit();
 
   //-------------------------------------
@@ -73,6 +77,14 @@ bool case0_trivia_sticky_threads(const mdbx::path &path) {
   err = mdbx_txn_begin(env, NULL, MDBX_TXN_RDONLY_PREPARE, &c_txn);
   assert(err == MDBX_BAD_RSLOT);
   ok = err == MDBX_BAD_RSLOT && ok;
+  if (env.is_nested_transactions_available()) {
+    err = mdbx_txn_begin(env, txn, MDBX_TXN_RDONLY_PREPARE, &c_txn);
+    assert(err == MDBX_EINVAL);
+    ok = err == MDBX_EINVAL && ok;
+    err = mdbx_txn_begin(env, txn, MDBX_TXN_RDONLY, &c_txn);
+    assert(err == MDBX_EINVAL);
+    ok = err == MDBX_EINVAL && ok;
+  }
   txn.abort();
 
   txn = env.prepare_read();
@@ -83,6 +95,24 @@ bool case0_trivia_sticky_threads(const mdbx::path &path) {
 
   //-------------------------------------
   txn = env.start_write();
+  if (env.is_nested_transactions_available()) {
+    err = mdbx_txn_begin(env, txn, MDBX_TXN_RDONLY_PREPARE, &c_txn);
+    assert(err == MDBX_EINVAL);
+    ok = err == MDBX_EINVAL && ok;
+    err = mdbx_txn_begin(env, txn, MDBX_TXN_RDONLY, &c_txn);
+    assert(err == MDBX_EINVAL);
+    ok = err == MDBX_EINVAL && ok;
+    auto txn_nested = txn.start_nested();
+    auto cursor = txn_nested.open_cursor(map);
+    size_t count = 0;
+    cursor.fullscan([&](const mdbx::pair &) -> bool {
+      count += 1;
+      return /* continue scan */ false;
+    });
+    txn_nested.abort();
+    assert(count == txn.get_map_stat(map).ms_entries);
+    ok = count == txn.get_map_stat(map).ms_entries && ok;
+  }
   c_txn = txn;
   err = mdbx_txn_reset(txn);
   assert(err == MDBX_EINVAL);
@@ -166,28 +196,31 @@ bool case0_trivia_sticky_threads(const mdbx::path &path) {
   std::thread t([&]() {
     s.wait();
 #if MDBX_TXN_CHECKOWNER
-    err = mdbx_txn_reset(c_txn);
-    assert(err == MDBX_THREAD_MISMATCH);
-    ok = ok && err == MDBX_THREAD_MISMATCH;
-    err = mdbx_txn_break(c_txn);
-    assert(err == MDBX_THREAD_MISMATCH);
-    ok = ok && err == MDBX_THREAD_MISMATCH;
-    err = mdbx_txn_commit(c_txn);
-    assert(err == MDBX_THREAD_MISMATCH);
-    ok = ok && err == MDBX_THREAD_MISMATCH;
-    err = mdbx_txn_abort(c_txn);
-    assert(err == MDBX_THREAD_MISMATCH);
-    ok = ok && err == MDBX_THREAD_MISMATCH;
+    bool local_ok = true;
+    int local_err = mdbx_txn_reset(c_txn);
+    assert(local_err == MDBX_THREAD_MISMATCH);
+    local_ok = local_ok && local_err == MDBX_THREAD_MISMATCH;
+    local_err = mdbx_txn_break(c_txn);
+    assert(local_err == MDBX_THREAD_MISMATCH);
+    local_ok = local_ok && local_err == MDBX_THREAD_MISMATCH;
+    local_err = mdbx_txn_commit(c_txn);
+    assert(local_err == MDBX_THREAD_MISMATCH);
+    local_ok = local_ok && local_err == MDBX_THREAD_MISMATCH;
+    local_err = mdbx_txn_abort(c_txn);
+    assert(local_err == MDBX_THREAD_MISMATCH);
+    local_ok = local_ok && local_err == MDBX_THREAD_MISMATCH;
 #endif /* MDBX_TXN_CHECKOWNER */
 
-    err = mdbx_txn_begin(env, txn, MDBX_TXN_READWRITE, &c_txn);
+    local_err = mdbx_txn_begin(env, txn, MDBX_TXN_READWRITE, &c_txn);
 #if MDBX_TXN_CHECKOWNER
-    assert(err == MDBX_THREAD_MISMATCH);
-    ok = ok && err == MDBX_THREAD_MISMATCH;
+    assert(local_err == MDBX_THREAD_MISMATCH);
+    local_ok = local_ok && local_err == MDBX_THREAD_MISMATCH;
 #else
-    assert(err == MDBX_BAD_TXN);
-    ok = ok && err == MDBX_BAD_TXN;
+    assert(local_err == MDBX_BAD_TXN);
+    local_ok = local_ok && local_err == MDBX_BAD_TXN;
 #endif /* MDBX_TXN_CHECKOWNER */
+    if (!local_ok)
+      ok = false;
   });
 
   s.count_down();
@@ -196,10 +229,10 @@ bool case0_trivia_sticky_threads(const mdbx::path &path) {
   return ok;
 }
 
-bool case1_trivia_NO_sticky_threads(const mdbx::path &path) {
+bool case1_trivia_NO_sticky_threads(const mdbx::path &path, bool nested = true) {
   mdbx::env::operate_parameters operateParameters(100, 10);
   operateParameters.options.no_sticky_threads = true;
-  operateParameters.options.nested_write_transactions = true;
+  operateParameters.options.nested_write_transactions = nested;
   mdbx::env_managed env(path, operateParameters);
 
   //-------------------------------------
@@ -306,35 +339,40 @@ bool case1_trivia_NO_sticky_threads(const mdbx::path &path) {
 
   std::thread t([&]() {
     s1.wait();
-    err = mdbx_txn_break(c_txn);
-    assert(err == MDBX_SUCCESS);
-    ok = ok && err == MDBX_SUCCESS;
-    err = mdbx_txn_reset(c_txn);
-    assert(err == MDBX_SUCCESS);
-    ok = ok && err == MDBX_SUCCESS;
+    int local_err = mdbx_txn_break(c_txn);
+    bool local_ok = true;
+    assert(local_err == MDBX_SUCCESS);
+    local_ok = local_ok && local_err == MDBX_SUCCESS;
+    local_err = mdbx_txn_reset(c_txn);
+    assert(local_err == MDBX_SUCCESS);
+    local_ok = local_ok && local_err == MDBX_SUCCESS;
     txn.renew_reading();
     s2.count_down();
 
     s3.wait();
-    err = mdbx_txn_begin(env, txn, MDBX_TXN_READWRITE, &c_txn);
-    assert(err == MDBX_SUCCESS);
-    ok = ok && err == MDBX_SUCCESS;
-    err = mdbx_txn_commit(c_txn);
-    assert(err == MDBX_SUCCESS);
-    ok = ok && err == MDBX_SUCCESS;
-    c_txn = txn;
-    err = mdbx_txn_commit(c_txn);
-    assert(err == MDBX_THREAD_MISMATCH);
-    ok = ok && err == MDBX_THREAD_MISMATCH;
-    err = mdbx_txn_abort(c_txn);
-    assert(err == MDBX_THREAD_MISMATCH);
-    ok = ok && err == MDBX_THREAD_MISMATCH;
-    err = mdbx_txn_break(c_txn);
-    assert(err == MDBX_SUCCESS);
-    ok = ok && err == MDBX_SUCCESS;
-    err = mdbx_txn_reset(c_txn);
-    assert(err == MDBX_EINVAL);
-    ok = ok && err == MDBX_EINVAL;
+    if (env.is_nested_transactions_available()) {
+      local_err = mdbx_txn_begin(env, txn, MDBX_TXN_READWRITE, &c_txn);
+      assert(local_err == MDBX_SUCCESS);
+      local_ok = local_ok && local_err == MDBX_SUCCESS;
+      local_err = mdbx_txn_commit(c_txn);
+      assert(local_err == MDBX_SUCCESS);
+      local_ok = local_ok && local_err == MDBX_SUCCESS;
+      c_txn = txn;
+      local_err = mdbx_txn_commit(c_txn);
+      assert(local_err == MDBX_THREAD_MISMATCH);
+      local_ok = local_ok && local_err == MDBX_THREAD_MISMATCH;
+      local_err = mdbx_txn_abort(c_txn);
+      assert(local_err == MDBX_THREAD_MISMATCH);
+      local_ok = local_ok && local_err == MDBX_THREAD_MISMATCH;
+      local_err = mdbx_txn_break(c_txn);
+      assert(local_err == MDBX_SUCCESS);
+      local_ok = local_ok && local_err == MDBX_SUCCESS;
+      local_err = mdbx_txn_reset(c_txn);
+      assert(local_err == MDBX_EINVAL);
+      local_ok = local_ok && local_err == MDBX_EINVAL;
+    }
+    if (!local_ok)
+      ok = false;
   });
 
   s1.count_down();
@@ -385,9 +423,10 @@ bool case3_fresh_reads(const mdbx::path &path, bool no_sticky_threads) {
   std::latch s0(N + 1), s1(N + 1), s2(N + 1);
   std::vector<std::thread> l;
 
-  volatile bool ok = true;
+  bool ok = true;
   for (size_t n = 0; n < N; ++n)
     l.push_back(std::thread([&]() {
+      bool local_ok = true;
       try {
         s0.arrive_and_wait();
         {
@@ -395,7 +434,7 @@ bool case3_fresh_reads(const mdbx::path &path, bool no_sticky_threads) {
           mdbx::slice value;
           int err = mdbx_get(txn, 1, pair.key, &value);
           if (err != MDBX_NOTFOUND) {
-            ok = false;
+            local_ok = false;
             std::cerr << "Unexpected error " << err << "\n";
           }
         }
@@ -405,12 +444,14 @@ bool case3_fresh_reads(const mdbx::path &path, bool no_sticky_threads) {
         {
           auto txn = env.start_read();
           if (txn.get(1, pair.key) != pair.value)
-            ok = false;
+            local_ok = false;
         }
       } catch (const std::exception &ex) {
         std::cerr << "Exception: " << ex.what() << "\n";
-        ok = false;
+        local_ok = false;
       }
+      if (!local_ok)
+        ok = false;
     }));
 
   s0.arrive_and_wait();
@@ -431,8 +472,10 @@ int doit() {
   mdbx::env::remove(path);
 
   bool ok = true;
-  ok = case0_trivia_sticky_threads(path) && ok;
-  ok = case1_trivia_NO_sticky_threads(path) && ok;
+  ok = case0_trivia_sticky_threads(path, false) && ok;
+  ok = case0_trivia_sticky_threads(path, true) && ok;
+  ok = case1_trivia_NO_sticky_threads(path, true) && ok;
+  ok = case1_trivia_NO_sticky_threads(path, false) && ok;
   ok = case2_concurrent_read_and_abort(path, false) && ok;
   ok = case2_concurrent_read_and_abort(path, true) && ok;
   ok = case3_fresh_reads(path, false) && ok;
@@ -448,7 +491,12 @@ static void logger_nofmt(MDBX_log_level_t loglevel, const char *function, int li
                          unsigned length) noexcept {
   (void)length;
   (void)loglevel;
-  fprintf(stdout, "%s:%u %s", function, line, msg);
+  std::cout.flush();
+  if (function)
+    fprintf(stdout, "%s:%u %s", function, line, msg);
+  else
+    fputs(msg, stdout);
+  fflush(stdout);
 }
 
 int main(int argc, char *argv[]) {
