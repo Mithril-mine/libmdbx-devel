@@ -490,6 +490,9 @@ int main(int argc, const char *argv[]) {
   (void)argc;
   (void)argv;
 
+  printf("auxilary info: cursor/couple size is %zu for %s = %u\n", sizeof(cursor_couple_t), "MDBX_WORDBITS",
+         MDBX_WORDBITS);
+
 #ifndef NDEBUG
   // tst_target = 281870;
 #endif
