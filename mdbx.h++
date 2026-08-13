@@ -46,7 +46,7 @@
 
 //------------------------------------------------------------------------------
 
-/// \defgroup cxx_data slices and buffers
+/// \defgroup cxx_data Slices and Buffers
 /// @{
 
 #include "mdbx++/decl_slice.h++"
@@ -57,6 +57,9 @@
 
 /// end of cxx_data @}
 
+/// \defgroup cxx_core Environment, Transactions, Cursors, Key-value tables and map handles
+/// @{
+
 #include "mdbx++/decl_core.h++"
 
 #include "mdbx++/decl_env.h++"
@@ -64,6 +67,8 @@
 #include "mdbx++/decl_txn.h++"
 
 #include "mdbx++/decl_cursor.h++"
+
+/// end of cxx_core @}
 
 //==============================================================================
 //

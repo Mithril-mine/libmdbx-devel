@@ -4,7 +4,7 @@
 namespace mdbx {
 // < dist-cutoff-end
 
-/// \defgroup cxx_exceptions exceptions and errors
+/// \defgroup cxx_exceptions Exceptions and Errors
 /// @{
 
 /// \brief Transfers C++ exceptions thru C callbacks.
