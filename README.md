@@ -448,7 +448,7 @@ Here showed sum of performance metrics in 3 benchmarks:
 
   1. It doesn't make sense as it has to be done with DB engines, oriented for keeping data in memory e.g. [Tarantool](https://tarantool.io/), [Redis](https://redis.io/)), etc.
 
-  2. Performance gap is too high to compare in any meaningful way.
+  2. Performance gap is too high in favor of libmdbx for meaningful comparison.
 
 ![Comparison #1: Integral Performance](https://libmdbx.dqdkfa.ru/img/perf-slide-1.png)
 
