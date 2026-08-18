@@ -5,8 +5,8 @@
   "itemListElement": [{
     "@type": "ListItem",
     "position": 1,
-    "name": "Группа в Telegram",
-    "url": "https://t.me/libmdbx"
+    "name": "Homesite",
+    "url": "https://libmdbx.dqdkfa.ru/"
   },{
     "@type": "ListItem",
     "position": 2,
@@ -15,16 +15,21 @@
   },{
     "@type": "ListItem",
     "position": 3,
-    "name": "Homesite",
-    "url": "https://libmdbx.dqdkfa.ru/"
+    "name": "Documentation",
+    "url": "https://libmdbx.dqdkfa.ru/doxygen"
   },{
     "@type": "ListItem",
     "position": 4,
+    "name": "Группа в Telegram",
+    "url": "https://t.me/libmdbx"
+  },{
+    "@type": "ListItem",
+    "position": 5,
     "name": "Mirror on GitHub",
     "url": "https://github.com/Mithril-mine/libmdbx"
   },{
     "@type": "ListItem",
-    "position": 5,
+    "position": 6,
     "name": "Чат в MAКС",
     "url": "https://max.ru/join/dKckvyuARxp1vRK-wnPur8zYCEkbR3OUOmpPWkWxp78"
   }]

@@ -1045,7 +1045,6 @@ elseif(TRUE)
             docs/Doxyfile.in
             docs/header.html
             docs/ld+json
-            docs/manifest.webmanifest
             docs/_preface.md
             docs/_restrictions.md
             docs/sitemap.add
