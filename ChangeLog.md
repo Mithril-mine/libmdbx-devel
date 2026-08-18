@@ -10,6 +10,14 @@ Please use the `stable` branch or the latest release for production environment 
 
 The supporting release of a stable branch with bug fixes.
 
+### Important:
+
+ The project website (libmdbx.dqdkfa.ru)[https://libmdbx.dqdkfa.ru/] has been re-created:
+   - The advice, explanations, questions and answers, from correspondence, forums and other sources have been compiled.
+   - All information has been aggregated into a knowledge base, and the corresponding sections have been compiled on the website.
+   - The documentation generated via Doxgygen has been moved to /doxygen, with old links redirection.
+   - A lot of work has been done using AI.
+
 ### Improvements:
 
  - The "crash" meaning clarified in the documentation.
