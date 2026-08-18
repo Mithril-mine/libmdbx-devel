@@ -20,7 +20,6 @@ each of which is divided into several sections.
   - \ref characteristics
   - \ref improvements
   - \ref restrictions
-  - \ref performance
 2. \ref usage
   - \ref getting
   - \ref starting
