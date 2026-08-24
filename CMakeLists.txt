@@ -1049,6 +1049,9 @@ else()
   set(MDBX_LIBRARY mdbx-static)
 endif()
 target_include_directories(mdbx-static INTERFACE "${CMAKE_CURRENT_SOURCE_DIR}")
+if(MDBX_CLANG_BUILTINS_LIB)
+  target_link_libraries(mdbx-static INTERFACE "${MDBX_CLANG_BUILTINS_LIB}")
+endif()
 
 # ######################################################################################################################
 
@@ -1074,6 +1077,9 @@ if(MDBX_BUILD_SHARED_LIBRARY)
   endif()
   list(APPEND MDBX_BUILD_FLAGS ${CMAKE_SHARED_LINKER_FLAGS})
   target_include_directories(mdbx INTERFACE "${CMAKE_CURRENT_SOURCE_DIR}")
+  if(MDBX_CLANG_BUILTINS_LIB)
+    target_link_libraries(mdbx PRIVATE "${MDBX_CLANG_BUILTINS_LIB}")
+  endif()
 endif()
 
 if(MDBX_BUILD_SHARED_LIBRARY AND MDBX_LINK_TOOLS_NONSTATIC)
