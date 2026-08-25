@@ -84,7 +84,7 @@
 #include <span>
 #endif
 
-#if !defined(_MSC_VER) || defined(__clang__)
+#if !defined(_MSC_VER)
 #define MDBX_EXTERN_API_TEMPLATE(API_ATTRIBUTES, ...) extern template class API_ATTRIBUTES __VA_ARGS__
 #define MDBX_INSTALL_API_TEMPLATE(API_ATTRIBUTES, ...) template class __VA_ARGS__
 #else
