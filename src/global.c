@@ -434,7 +434,7 @@ __dll_export
 #endif /* MDBX_BUILD_TARGET */
 
 #ifdef MDBX_BUILD_TYPE
-# if defined(_MSC_VER)
+# if defined(_MSC_VER) && !defined(__clang__)
 #   pragma message("Configuration-depended MDBX_BUILD_TYPE: " MDBX_BUILD_TYPE)
 # endif
     "-" MDBX_BUILD_TYPE
