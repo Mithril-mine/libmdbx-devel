@@ -670,6 +670,7 @@ __hot static pgno_t repnl_get_single(MDBX_txn *txn) {
         pnl_setsize(txn->wr.repnl, len - 1);
         while (++scan <= target)
           scan[-1] = *scan;
+        ASSERT(pgno >= NUM_METAS);
         return pgno;
 #endif
       }
@@ -687,6 +688,7 @@ __hot static pgno_t repnl_get_single(MDBX_txn *txn) {
   /* перемещать хвост не нужно, просто усекаем список */
   pnl_setsize(txn->wr.repnl, len - 1);
 #endif /* MDBX_PNL_ASCENDING */
+  ASSERT(pgno >= NUM_METAS);
   return pgno;
 }
 
@@ -725,6 +727,7 @@ static pgno_t gc_repnl_scan_sequence_reserve(const MDBX_txn *txn, const size_t n
         } while (target[step] - target[0] == 1);
         /* продолжаем поиск дальше */
         target = scan4seq_impl(target, left, seq);
+        ASSERT(target == scan4range_checker(txn->wr.repnl, seq));
         continue;
       }
       /* найденная последовательность ровно необходимой длины */
@@ -772,6 +775,7 @@ __hot pgno_t gc_repnl_get_sequence(MDBX_txn *txn, const size_t num, uint8_t flag
         } while (target[step] - target[0] == 1);
         /* продолжаем поиск дальше */
         target = scan4seq_impl(target, left, seq);
+        ASSERT(target == scan4range_checker(txn->wr.repnl, seq));
         continue;
       }
       /* найденная последовательность ровно необходимой длины */
