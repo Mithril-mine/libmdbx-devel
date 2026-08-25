@@ -607,20 +607,25 @@ if(WIN32 AND EXISTS "${MDBX_SOURCE_DIR}/ntdll.def")
     else()
       message(WARNING "MSVC's lib.exe not found")
     endif()
-  elseif(MINGW OR MINGW64)
-    if(NOT MINGW_DLLTOOL_EXE)
+  else()
+    if(NOT DLLTOOL_EXE AND (MINGW OR MINGW64))
       # Find dlltool.exe
       get_filename_component(CC_DIR ${CMAKE_C_COMPILER} DIRECTORY)
-      find_program(MINGW_DLLTOOL_EXE "dlltool.exe" HINTS ${CC_DIR})
+      find_program(DLLTOOL_EXE "dlltool.exe" HINTS ${CC_DIR})
     endif()
-    if(MINGW_DLLTOOL_EXE)
-      message(STATUS "Found MINGW's dlltool: ${MINGW_DLLTOOL_EXE}")
+    if(NOT DLLTOOL_EXE AND CMAKE_COMPILER_IS_CLANG)
+      # Find dlltool.exe
+      get_filename_component(CC_DIR ${CMAKE_C_COMPILER} DIRECTORY)
+      find_program(DLLTOOL_EXE "llvm-dlltool.exe" HINTS ${CC_DIR})
+    endif()
+    if(DLLTOOL_EXE)
+      message(STATUS "Found MINGW or LLVM dlltool: ${DLLTOOL_EXE}")
       set(MDBX_NTDLL_EXTRA_IMPLIB "${CMAKE_CURRENT_BINARY_DIR}/mdbx_ntdll_extra.a")
       add_custom_command(
         OUTPUT "${MDBX_NTDLL_EXTRA_IMPLIB}"
         COMMENT "Create extra-import-library for ntdll.dll"
         MAIN_DEPENDENCY "${MDBX_SOURCE_DIR}/ntdll.def"
-        COMMAND ${MINGW_DLLTOOL_EXE} -d "${MDBX_SOURCE_DIR}/ntdll.def" -l "${MDBX_NTDLL_EXTRA_IMPLIB}")
+        COMMAND ${DLLTOOL_EXE} -d "${MDBX_SOURCE_DIR}/ntdll.def" -l "${MDBX_NTDLL_EXTRA_IMPLIB}")
     else()
       message(WARNING "MINGW's dlltool.exe not found")
     endif()
