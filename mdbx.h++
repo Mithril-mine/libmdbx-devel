@@ -1141,9 +1141,13 @@ template <typename T, typename A> struct copy_assign_alloc<T, A, true> {
   }
   static constexpr bool is_always_equal() noexcept { return allocator_is_always_equal<A>(); }
   static MDBX_CXX20_CONSTEXPR void propagate(T *target, const T &source) noexcept(is_nothrow()) {
-    if MDBX_IF_CONSTEXPR (!is_always_equal()) {
-      MDBX_CXX20_UNLIKELY target->get_allocator() = source.get_allocator();
-    } else {
+    if MDBX_IF_CONSTEXPR (!is_always_equal())
+#if !defined(__cpp_if_constexpr) || __cpp_if_constexpr < 201606L
+      /* Workaround of ms-clang (clang corrupted by microsoft) */
+      MDBX_CXX20_UNLIKELY
+#endif
+    target->get_allocator() = source.get_allocator();
+    else {
       /* gag for buggy compilers */
       (void)target;
       (void)source;
@@ -1181,7 +1185,11 @@ template <typename T, typename A> struct swap_alloc<T, A, true> {
   static constexpr bool is_always_equal() noexcept { return allocator_is_always_equal<A>(); }
   static MDBX_CXX20_CONSTEXPR void propagate(T &left, T &right) noexcept(is_nothrow()) {
     if MDBX_IF_CONSTEXPR (!is_always_equal())
-      ::std::swap(left.get_allocator(), right.get_allocator());
+#if !defined(__cpp_if_constexpr) || __cpp_if_constexpr < 201606L
+      /* Workaround of ms-clang (clang corrupted by microsoft) */
+      MDBX_CXX20_UNLIKELY
+#endif
+    ::std::swap(left.get_allocator(), right.get_allocator());
     else {
       /* gag for buggy compilers */
       (void)left;
