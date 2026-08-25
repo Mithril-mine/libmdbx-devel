@@ -563,6 +563,10 @@ __extern_C key_t ftok(const char *, int);
 /*----------------------------------------------------------------------------*/
 /* Compiler's includes for builtins/intrinsics */
 
+#ifdef __ARM_NEON
+#include <arm_neon.h>
+#endif
+
 #if defined(_MSC_VER) || defined(__INTEL_COMPILER)
 #include <intrin.h>
 #elif __GNUC_PREREQ(4, 4) || defined(__clang__)
@@ -570,13 +574,12 @@ __extern_C key_t ftok(const char *, int);
 #include <e2kintrin.h>
 #include <x86intrin.h>
 #endif /* __e2k__ */
+
 #if defined(__ia32__)
 #include <cpuid.h>
 #include <x86intrin.h>
 #endif /* __ia32__ */
-#ifdef __ARM_NEON
-#include <arm_neon.h>
-#endif
+
 #elif defined(__SUNPRO_C) || defined(__sun) || defined(sun)
 #include <mbarrier.h>
 #elif (defined(_HPUX_SOURCE) || defined(__hpux) || defined(__HP_aCC)) && (defined(HP_IA64) || defined(__ia64))
