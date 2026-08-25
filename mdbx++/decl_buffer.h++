@@ -101,10 +101,10 @@ template <typename T, typename A> struct swap_alloc<T, A, true> {
   static MDBX_CXX20_CONSTEXPR void propagate(T &left, T &right) noexcept(is_nothrow()) {
     if MDBX_IF_CONSTEXPR (!is_always_equal())
 #if !defined(__cpp_if_constexpr) || __cpp_if_constexpr < 201606L
-    /* Workaround of ms-clang (clang corrupted by microsoft) */
+      /* Workaround of ms-clang (clang corrupted by microsoft) */
       MDBX_CXX20_UNLIKELY
 #endif
-       ::std::swap(left.get_allocator(), right.get_allocator());
+    ::std::swap(left.get_allocator(), right.get_allocator());
     else {
       /* gag for buggy compilers */
       (void)left;

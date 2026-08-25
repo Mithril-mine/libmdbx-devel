@@ -121,15 +121,14 @@ macro(semver_parse str)
       set(_semver_ok TRUE)
     else()
       set(_semver_err
-          # "Поля prerelease и/или buildmetadata (подстрока `-foo+bar` в составе `0.0.0[.0][-foo][+bar]`) не соответствуют SemVer-спецификации"
+          # "Поля prerelease и/или buildmetadata (подстрока `-foo+bar` в составе `0.0.0[.0][-foo][+bar]`) не
+          # соответствуют SemVer-спецификации"
           "The prerelease and/or buildmetadata fields (substring `-foo+bar` as part of `0.0.0[.0][-foo][+bar]`) do not comply with the SemVer specification"
       )
     endif()
   else()
-    set(_semver_err
-      # "Версионная отметка в целом не соответствует шаблону `0.0.0[.0][-foo][+bar]` SemVer-спецификации"
-      "The version mark as a whole does not match the pattern `0.0.0[.0][-foo][+bar]` of the SemVer specification"
-    )
+    set(_semver_err # "Версионная отметка в целом не соответствует шаблону `0.0.0[.0][-foo][+bar]` SemVer-спецификации"
+        "The version mark as a whole does not match the pattern `0.0.0[.0][-foo][+bar]` of the SemVer specification")
   endif()
 endmacro(semver_parse)
 
@@ -387,7 +386,8 @@ macro(semver_provide name source_root_directory build_directory_for_json_output 
       if(_source_root STREQUAL _git_root AND EXISTS "${_git_root}/VERSION.json")
         message(
           FATAL_ERROR
-            # "Несколько источников информации о версии, допустим только один из: репозиторий git, либо файл `VERSION.json`"
+            # "Несколько источников информации о версии, допустим только один из: репозиторий git,
+            # либо файл `VERSION.json`"
             "There are several sources of version information, but must be the single of ones: the git repository, or the `VERSION.json` file"
         )
       endif()
@@ -399,10 +399,8 @@ macro(semver_provide name source_root_directory build_directory_for_json_output 
     set(_version_from "${source_root_directory}/VERSION.json")
 
     if(CMAKE_VERSION VERSION_LESS 3.19)
-      message(FATAL_ERROR
-        # "Требуется CMake версии >= 3.19 для чтения VERSION.json"
-        "Requires CMake version >= 3.19 to parse VERSION.json"
-      )
+      message(FATAL_ERROR # "Требуется CMake версии >= 3.19 для чтения VERSION.json"
+                          "Requires CMake version >= 3.19 to parse VERSION.json")
     endif()
     file(
       STRINGS "${_version_from}" _versioninfo_json NEWLINE_CONSUME
@@ -436,15 +434,14 @@ macro(semver_provide name source_root_directory build_directory_for_json_output 
   elseif(GIT)
     message(
       FATAL_ERROR
-        # "Нет источника информации о версии (${source_root_directory}), требуется один из: репозиторий git, либо `VERSION.json`"
+        # "Нет источника информации о версии (${source_root_directory}), требуется один из: репозиторий git, либо
+        # `VERSION.json`"
         "There is no source of version information (${source_root_directory}), one of the following is required: git repository, or `VERSION.json`"
     )
   #< dist-cutoff-end
   else()
-    message(FATAL_ERROR
-      # "Отсутствует `VERSION.json` с информацией о версии"
-      "The `VERSION.json` with version information is missing"
-    )
+    message(FATAL_ERROR # "Отсутствует `VERSION.json` с информацией о версии"
+                        "The `VERSION.json` with version information is missing")
   endif()
 
   if(NOT _git_describe

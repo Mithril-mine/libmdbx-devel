@@ -1771,7 +1771,8 @@ int osal_fsetsize(mdbx_filehandle_t fd, const uint64_t length) {
   const uint64_t allocated = UINT64_C(512) * info.st_blocks;
   if (length > allocated) {
 #if defined(FALLOC_FL_ALLOCATE_RANGE) && defined(FALLOC_FL_KEEP_SIZE)
-    /* prefer a low-level non-portable function to avoid glibc emulation if the file system does not support the operation. */
+    /* prefer a low-level non-portable function to avoid glibc emulation
+     * if the file system does not support the operation. */
     int err = fallocate(fd, FALLOC_FL_ALLOCATE_RANGE | FALLOC_FL_KEEP_SIZE, 0, length);
 #elif defined(__APPLE__)
     fstore_t store = {

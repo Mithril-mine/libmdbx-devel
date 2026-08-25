@@ -44,7 +44,7 @@ function(add_simple_test name)
     set(params_SOURCE "${params_SOURCE_PREFIX}${name}.c++")
   endif()
 
-  if (NOT params_MDBX_LIB)
+  if(NOT params_MDBX_LIB)
     set(params_MDBX_LIB ${TOOL_MDBX_LIB})
   endif()
 
@@ -165,7 +165,7 @@ else()
   message(STATUS "The ${test_seed} will be used for seeding tests. Re-run cmake to re-seed it.")
 
   add_test(NAME smoke COMMAND ${MDBX_OUTPUT_DIR}/mdbx_test --duration=5m --loglevel=notice --prng-seed=${test_seed}
-                               --progress --console=no --pathname=smoke.db --dont-cleanup-after basic)
+                              --progress --console=no --pathname=smoke.db --dont-cleanup-after basic)
   set_tests_properties(smoke PROPERTIES TIMEOUT 1800 RUN_SERIAL OFF)
   if(MDBX_BUILD_TOOLS)
     add_test(NAME smoke_chk COMMAND ${MDBX_OUTPUT_DIR}/mdbx_chk -nvv smoke.db)
@@ -198,9 +198,9 @@ else()
   add_test(
     NAME dupsort_writemap
     COMMAND
-      ${MDBX_OUTPUT_DIR}/mdbx_test --duration=5m --loglevel=notice --prng-seed=${test_seed}
-      --mode=+writemap --table=+data.fixed --keygen.split=29
-      --datalen=rnd --progress --console=no --repeat=2 --pathname=dupsort_writemap.db --dont-cleanup-after basic)
+      ${MDBX_OUTPUT_DIR}/mdbx_test --duration=5m --loglevel=notice --prng-seed=${test_seed} --mode=+writemap
+      --table=+data.fixed --keygen.split=29 --datalen=rnd --progress --console=no --repeat=2
+      --pathname=dupsort_writemap.db --dont-cleanup-after basic)
   set_tests_properties(dupsort_writemap PROPERTIES TIMEOUT 1800 RUN_SERIAL OFF)
 
   if(MDBX_BUILD_TOOLS)
@@ -252,7 +252,8 @@ else()
     endif()
     add_extra_test(details_rkl SOURCE ut/details_rkl.c)
     if(MSVC_C11_MAD_ATOMICS)
-      target_compile_options(test_extra_details_rkl PRIVATE "$<$<COMPILE_LANGUAGE:CXX,C>:/std:clatest;/experimental:c11atomics>")
+      target_compile_options(test_extra_details_rkl
+                             PRIVATE "$<$<COMPILE_LANGUAGE:CXX,C>:/std:clatest;/experimental:c11atomics>")
     endif()
 
     add_extra_test(global_init SOURCE ut/global_init.c MDBX_LIB mdbx-static)
