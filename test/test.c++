@@ -764,10 +764,10 @@ static LONG seh_filter(struct _EXCEPTION_POINTERS *ExInfo, FILE *out) {
   PVOID CodeAdress = ExInfo->ExceptionRecord->ExceptionAddress;
   fprintf(out, "****************************************************\n");
   fprintf(out, "*** A Program Fault occurred:\n");
-  fprintf(out, "*** Error code %08X: %s\n", ExInfo->ExceptionRecord->ExceptionCode, caption);
+  fprintf(out, "*** Error code %08zX: %s\n", (size_t)ExInfo->ExceptionRecord->ExceptionCode, caption);
   fprintf(out, "****************************************************\n");
   fprintf(out, "***   Address: %08zX\n", (intptr_t)CodeAdress);
-  fprintf(out, "***     Flags: %08X\n", ExInfo->ExceptionRecord->ExceptionFlags);
+  fprintf(out, "***     Flags: %08zX\n", (size_t)ExInfo->ExceptionRecord->ExceptionFlags);
   dump_stack(ExInfo->ContextRecord, out);
   return EXCEPTION_EXECUTE_HANDLER;
 }
