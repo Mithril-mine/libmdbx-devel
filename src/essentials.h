@@ -22,6 +22,11 @@
 
 #include "../mdbx.h"
 
+#if MDBX_WITHOUT_MSVC_CRT && !defined(_DEBUG) && defined(_MSC_VER) && !defined(__clang__)
+#pragma check_stack(off)
+#pragma runtime_checks("scu", off)
+#endif /* MDBX_WITHOUT_MSVC_CRT && !_DEBUG */
+
 /*----------------------------------------------------------------------------*/
 /* Basic constants and types */
 
