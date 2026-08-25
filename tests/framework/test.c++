@@ -749,7 +749,6 @@ static void dump_stack(CONTEXT *ctx, FILE *out) {
   HANDLE thread;
   HMODULE hModule;
   STACKFRAME64 stack;
-  ULONG frame;
   DWORD64 displacement;
   DWORD disp;
 
@@ -777,7 +776,7 @@ static void dump_stack(CONTEXT *ctx, FILE *out) {
 
   SymInitialize(process, NULL, TRUE);
 
-  for (frame = 0;; frame++) {
+  while (true) {
     // get next call from stack
     result = StackWalk64(
 #if defined(_M_AMD64)
