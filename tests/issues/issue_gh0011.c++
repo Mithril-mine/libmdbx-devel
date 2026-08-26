@@ -2,6 +2,7 @@
  * mixed commit/abort at each level, plus RO reset/renew/park/unpark cycles.
  * Non-writemap so nested txns are allowed. */
 #include "mdbx.h++"
+#include <chrono>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
@@ -42,7 +43,8 @@ static void nest(mdbx::txn parent, int depth, char *vbuf) {
 int main(int argc, char **argv) {
   const mdbx::path testdb = (argc > 1) ? argv[1] : "issue11";
   mdbx::env::remove(testdb);
-  unsigned long seed = (argc > 2) ? strtoul(argv[2], 0, 0) : 1;
+  size_t seed = (argc > 2) ? size_t(strtoul(argv[2], 0, 0))
+                           : size_t(std::chrono::high_resolution_clock::now().time_since_epoch().count());
   r = (unsigned)seed * 2654435761u + 1;
 
   bool ok = true;
@@ -106,7 +108,7 @@ int main(int argc, char **argv) {
     ok = false;
   }
 
-  fprintf(stderr, "%s seed=%lu\n", ok ? "Succeded" : "Failed", seed);
+  fprintf(stderr, "%s seed=%zu\n", ok ? "Succeded" : "Failed", seed);
 
   return ok ? EXIT_SUCCESS : EXIT_FAILURE;
 }
