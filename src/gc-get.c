@@ -466,7 +466,7 @@ __hot static pgno_t *scan4seq_neon(pgno_t *range, const size_t len, const size_t
 #endif /* !ENABLE_MEMCHECK && !__SANITIZE_ADDRESS__ */
         /* The sizeof(size_t) here is used correctly, since both the lane size, and the width and format of mask,
          * is also depend on the platform bitness. */
-        return ptr_disp(range, -(__builtin_clzl(mask) >> sizeof(size_t) / 4));
+        return ptr_disp(range, -(clz_uintptr(mask) >> sizeof(size_t) / 4));
       }
       range -= 4;
     } while (range > detent + 3);
