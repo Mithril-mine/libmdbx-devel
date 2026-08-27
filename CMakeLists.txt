@@ -1117,11 +1117,24 @@ else()
 endif()
 
 if(WIN32
-   AND CMAKE_SYSTEM_ARCH STREQUAL "x86"
-   AND NOT MDBX_NATIVE_SEH)
-  enable_language(ASM_MASM)
-  add_library(mdbx_safeseh OBJECT "${MDBX_SOURCE_DIR}/windows-safeseh.asm")
-  set_target_properties(mdbx_safeseh PROPERTIES COMPILE_OPTIONS "/safeseh")
+    AND CMAKE_SYSTEM_ARCH STREQUAL "x86"
+    AND NOT MDBX_NATIVE_SEH)
+  if(MSVC)
+    enable_language(ASM_MASM)
+    add_library(mdbx_safeseh OBJECT "${MDBX_SOURCE_DIR}/windows-safeseh-masm.asm")
+    set_target_properties(mdbx_safeseh PROPERTIES COMPILE_OPTIONS "/safeseh")
+  else()
+    find_program(YASM_EXE NAMES yasm)
+    if(YASM_EXE)
+      add_custom_command(
+        OUTPUT "${CMAKE_CURRENT_BINARY_DIR}/windows-safeseh.obj"
+        COMMAND ${YASM_EXE} -f win32 -o "${CMAKE_CURRENT_BINARY_DIR}/windows-safeseh.obj" "${MDBX_SOURCE_DIR}/windows-safeseh-yasm.asm"
+        DEPENDS "${MDBX_SOURCE_DIR}/windows-safeseh-yasm.asm")
+      add_library(mdbx_safeseh OBJECT "${CMAKE_CURRENT_BINARY_DIR}/windows-safeseh.obj")
+    else()
+      add_library(mdbx_safeseh OBJECT "${MDBX_SOURCE_DIR}/windows-safeseh.obj")
+    endif()
+  endif()
 endif()
 
 macro(target_setup_options TARGET)

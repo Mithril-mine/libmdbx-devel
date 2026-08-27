@@ -475,7 +475,8 @@ define uname2titer
 endef
 
 DIST_EXTRA := LICENSE NOTICE COPYRIGHT README.md TODO.md CMakeLists.txt GNUmakefile Makefile ChangeLog.md VERSION.json config.h.in ntdll.def \
-	$(addprefix man1/, $(MANPAGES)) cmake/compiler.cmake cmake/profile.cmake cmake/utils.cmake windows-safeseh.asm valgrind.supp conanfile.py \
+	$(addprefix man1/, $(MANPAGES)) cmake/compiler.cmake cmake/profile.cmake cmake/utils.cmake windows-safeseh-masm.asm windows-safeseh-yasm.asm \
+	windows-safeseh.obj valgrind.supp conanfile.py \
 	$(addprefix examples/, CMakeLists.txt example-mdbx.c++ example-mdbx.c pcrf/pcrf_simulator.c README.md)
 
 DIST_SRC   := mdbx.h mdbx.h++ mdbx.c mdbx.c++ $(addsuffix .c, $(MDBX_TOOLS)) mdbx-internals.h mdbx-wingetopt.h
@@ -936,7 +937,7 @@ $(1): $(2) src/version.c $(lastword $(MAKEFILE_LIST))
 	$$< | cat -s >$$@
 
 endef
-$(foreach file,mdbx.h $(filter-out man1/% VERSION.json .clang-format-ignore %.in ntdll.def windows-safeseh.asm, $(DIST_EXTRA)), $(eval $(call dist-extra-rule, $(DIST_DIR)/$(file), $(file))))
+$(foreach file,mdbx.h $(filter-out man1/% VERSION.json .clang-format-ignore %.in ntdll.def windows-safeseh%, $(DIST_EXTRA)), $(eval $(call dist-extra-rule, $(DIST_DIR)/$(file), $(file))))
 
 $(DIST_DIR)/VERSION.json: src/version.c
 	@echo '  MAKE $@'
@@ -946,13 +947,13 @@ $(DIST_DIR)/.clang-format-ignore: $(lastword $(MAKEFILE_LIST))
 	@echo '  MAKE $@'
 	$(QUIET)echo "$(filter-out %.h %h++,$(DIST_SRC))" | tr ' ' \\n > $@
 
-$(DIST_DIR)/ntdll.def: src/ntdll.def
-	@echo '  COPY $@'
-	$(QUIET)mkdir -p $(DIST_DIR)/ && cp $< $@
+define dist-copy-rule
+$(DIST_DIR)/$(1): $(2) $(lastword $(MAKEFILE_LIST))
+	@echo '  COPY $$@'
+	$(QUIET)mkdir -p $(DIST_DIR)/ && cp $$< $$@
 
-$(DIST_DIR)/windows-safeseh.asm: src/windows-safeseh.asm
-	@echo '  COPY $@'
-	$(QUIET)mkdir -p $(DIST_DIR)/ && cp $< $@
+endef
+$(foreach file,$(addprefix src/,ntdll.def windows-safeseh-masm.asm windows-safeseh-yasm.asm windows-safeseh.obj), $(eval $(call dist-copy-rule,$(notdir $(file)),$(file))))
 
 $(eval $(call dist-extra-rule, $(DIST_DIR)/config.h.in, src/config.h.in))
 
