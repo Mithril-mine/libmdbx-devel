@@ -40,7 +40,7 @@ __cold static pgno_t default_rp_augment_limit(const MDBX_env *env) {
   const size_t minimum = (env->maxgc_large1page * 2 > MDBX_PNL_INITIAL) ? env->maxgc_large1page * 2 : MDBX_PNL_INITIAL;
   const size_t one_third = env->geo_in_bytes.now / 3 >> env->ps2ln;
   const size_t augment_limit =
-      (one_third > minimum) ? minimum + (one_third - minimum) / timeframe * remain_1sec : minimum;
+      (one_third > minimum) ? minimum + (size_t)((uint64_t)(one_third - minimum) * remain_1sec / timeframe) : minimum;
   eASSERT(env, augment_limit < PAGELIST_LIMIT);
   return pnl_bytes2size(pnl_size2bytes(augment_limit));
 }
