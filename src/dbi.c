@@ -5,24 +5,6 @@
 
 static defer_free_item_t *dbi_close_locked(MDBX_env *env, size_t dbi);
 
-#if MDBX_ENABLE_DBI_SPARSE
-size_t dbi_bitmap_ctz_fallback(const MDBX_txn *txn, intptr_t bmi) {
-  tASSERT0(txn, bmi != 0);
-  bmi &= -bmi;
-  if (sizeof(txn->dbi_sparse[0]) > 4) {
-    static const uint8_t debruijn_ctz64[64] = {0,  1,  2,  53, 3,  7,  54, 27, 4,  38, 41, 8,  34, 55, 48, 28,
-                                               62, 5,  39, 46, 44, 42, 22, 9,  24, 35, 59, 56, 49, 18, 29, 11,
-                                               63, 52, 6,  26, 37, 40, 33, 47, 61, 45, 43, 21, 23, 58, 17, 10,
-                                               51, 25, 36, 32, 60, 20, 57, 16, 50, 31, 19, 15, 30, 14, 13, 12};
-    return debruijn_ctz64[(UINT64_C(0x022FDD63CC95386D) * (uint64_t)bmi) >> 58];
-  } else {
-    static const uint8_t debruijn_ctz32[32] = {0,  1,  28, 2,  29, 14, 24, 3, 30, 22, 20, 15, 25, 17, 4,  8,
-                                               31, 27, 13, 23, 21, 19, 16, 7, 26, 12, 18, 6,  11, 5,  10, 9};
-    return debruijn_ctz32[(UINT32_C(0x077CB531) * (uint32_t)bmi) >> 27];
-  }
-}
-#endif /* MDBX_ENABLE_DBI_SPARSE */
-
 struct dbi_snap_result dbi_snap(const MDBX_env *env, const size_t dbi) {
   eASSERT0(env, dbi < env->n_dbi);
   struct dbi_snap_result r;

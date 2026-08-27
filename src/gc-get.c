@@ -181,31 +181,6 @@ MDBX_MAYBE_UNUSED static const pgno_t *scan4range_checker(const pnl_t pnl, const
   return nullptr;
 }
 
-#if defined(_MSC_VER) && !defined(__builtin_clz) && !__has_builtin(__builtin_clz)
-MDBX_MAYBE_UNUSED static __always_inline size_t __builtin_clz(uint32_t value) {
-  unsigned long index;
-  ASSERT(value != 0);
-  _BitScanReverse(&index, value);
-  return 31 - index;
-}
-#endif /* _MSC_VER */
-
-#if defined(_MSC_VER) && !defined(__builtin_clzl) && !__has_builtin(__builtin_clzl)
-MDBX_MAYBE_UNUSED static __always_inline size_t __builtin_clzl(size_t value) {
-  unsigned long index;
-  ASSERT(value != 0);
-#ifdef _WIN64
-  ASSERT(sizeof(value) == 8);
-  _BitScanReverse64(&index, value);
-  return 63 - index;
-#else
-  ASSERT(sizeof(value) == 4);
-  _BitScanReverse(&index, value);
-  return 31 - index;
-#endif
-}
-#endif /* _MSC_VER */
-
 #if !MDBX_PNL_ASCENDING
 
 #if !defined(MDBX_ATTRIBUTE_TARGET) && (__has_attribute(__target__) || __GNUC_PREREQ(5, 0))
@@ -280,7 +255,7 @@ MDBX_MAYBE_UNUSED __hot MDBX_ATTRIBUTE_TARGET_SSE2 static pgno_t *scan4seq_sse2(
         const unsigned clz_bits = (unsigned)(sizeof(unsigned) * CHAR_BIT);
         const unsigned sse2_lanes = 4;
         const unsigned clz_bias = clz_bits - sse2_lanes; /* 32 - 4 = 28 for 32-bit unsigned */
-        return range + clz_bias - __builtin_clz(mask);
+        return range + clz_bias - clz32(mask);
       }
       range -= 4;
     } while (range > detent + 3);
@@ -348,7 +323,7 @@ MDBX_MAYBE_UNUSED __hot MDBX_ATTRIBUTE_TARGET_AVX2 static pgno_t *scan4seq_avx2(
 #if !defined(ENABLE_MEMCHECK) && !defined(__SANITIZE_ADDRESS__)
       found:
 #endif /* !ENABLE_MEMCHECK && !__SANITIZE_ADDRESS__ */
-        return range + 24 - __builtin_clz(mask);
+        return range + 24 - clz32(mask);
       }
       range -= 8;
     } while (range > detent + 7);
@@ -375,7 +350,7 @@ MDBX_MAYBE_UNUSED __hot MDBX_ATTRIBUTE_TARGET_AVX2 static pgno_t *scan4seq_avx2(
   if (range - 3 > detent) {
     mask = diffcmp2mask_sse2avx(range - 3, offset, *(const __m128i *)&pattern);
     if (mask)
-      return range + 28 - __builtin_clz(mask);
+      return range + 28 - clz32(mask);
     range -= 4;
   }
   while (range > detent) {
@@ -414,7 +389,7 @@ MDBX_MAYBE_UNUSED __hot MDBX_ATTRIBUTE_TARGET_AVX512BW static pgno_t *scan4seq_a
 #if !defined(ENABLE_MEMCHECK) && !defined(__SANITIZE_ADDRESS__)
       found:
 #endif /* !ENABLE_MEMCHECK && !__SANITIZE_ADDRESS__ */
-        return range + 16 - __builtin_clz(mask);
+        return range + 16 - clz32(mask);
       }
       range -= 16;
     } while (range > detent + 15);
@@ -441,13 +416,13 @@ MDBX_MAYBE_UNUSED __hot MDBX_ATTRIBUTE_TARGET_AVX512BW static pgno_t *scan4seq_a
   if (range - 7 > detent) {
     mask = diffcmp2mask_avx2(range - 7, offset, *(const __m256i *)&pattern);
     if (mask)
-      return range + 24 - __builtin_clz(mask);
+      return range + 24 - clz32(mask);
     range -= 8;
   }
   if (range - 3 > detent) {
     mask = diffcmp2mask_sse2avx(range - 3, offset, *(const __m128i *)&pattern);
     if (mask)
-      return range + 28 - __builtin_clz(mask);
+      return range + 28 - clz32(mask);
     range -= 4;
   }
   while (range > detent) {

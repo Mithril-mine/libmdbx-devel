@@ -39,55 +39,53 @@
     ASAN_UNPOISON_MEMORY_REGION(addr, size);                                                                           \
   } while (0)
 
-MDBX_NOTHROW_CONST_FUNCTION MDBX_MAYBE_UNUSED static inline size_t branchless_abs(intptr_t value) {
+MDBX_MAYBE_UNUSED MDBX_NOTHROW_CONST_FUNCTION static inline size_t branchless_abs(intptr_t value) {
   ASSERT(value > INT_MIN);
   const size_t expanded_sign = (size_t)(value >> (sizeof(value) * CHAR_BIT - 1));
   return ((size_t)value + expanded_sign) ^ expanded_sign;
 }
 
-MDBX_NOTHROW_CONST_FUNCTION MDBX_MAYBE_UNUSED static inline intptr_t max_signed(intptr_t a, intptr_t b) {
+MDBX_MAYBE_UNUSED MDBX_NOTHROW_CONST_FUNCTION static inline intptr_t max_signed(intptr_t a, intptr_t b) {
   return (a > b) ? a : b;
 }
 
-MDBX_NOTHROW_CONST_FUNCTION MDBX_MAYBE_UNUSED static inline intptr_t min_signed(intptr_t a, intptr_t b) {
+MDBX_MAYBE_UNUSED MDBX_NOTHROW_CONST_FUNCTION static inline intptr_t min_signed(intptr_t a, intptr_t b) {
   return (a < b) ? a : b;
 }
 
-MDBX_NOTHROW_CONST_FUNCTION MDBX_MAYBE_UNUSED static inline intptr_t clamp_signed(intptr_t v, intptr_t min,
+MDBX_MAYBE_UNUSED MDBX_NOTHROW_CONST_FUNCTION static inline intptr_t clamp_signed(intptr_t v, intptr_t min,
                                                                                   intptr_t max) {
   ASSERT(min <= max);
   return min_signed(max_signed(v, min), max);
 }
 
-MDBX_NOTHROW_CONST_FUNCTION MDBX_MAYBE_UNUSED static inline size_t max_unsigned(size_t a, size_t b) {
+MDBX_MAYBE_UNUSED MDBX_NOTHROW_CONST_FUNCTION static inline size_t max_unsigned(size_t a, size_t b) {
   return (a > b) ? a : b;
 }
 
-MDBX_NOTHROW_CONST_FUNCTION MDBX_MAYBE_UNUSED static inline size_t min_unsigned(size_t a, size_t b) {
+MDBX_MAYBE_UNUSED MDBX_NOTHROW_CONST_FUNCTION static inline size_t min_unsigned(size_t a, size_t b) {
   return (a < b) ? a : b;
 }
 
-MDBX_NOTHROW_CONST_FUNCTION MDBX_MAYBE_UNUSED static inline size_t clamp_unsigned(size_t v, size_t min, size_t max) {
+MDBX_MAYBE_UNUSED MDBX_NOTHROW_CONST_FUNCTION static inline size_t clamp_unsigned(size_t v, size_t min, size_t max) {
   ASSERT(min <= max);
   return min_unsigned(max_unsigned(v, min), max);
 }
 
-MDBX_NOTHROW_CONST_FUNCTION MDBX_MAYBE_UNUSED static inline bool is_powerof2(size_t x) { return (x & (x - 1)) == 0; }
+MDBX_MAYBE_UNUSED MDBX_NOTHROW_CONST_FUNCTION static inline bool is_powerof2(size_t x) { return (x & (x - 1)) == 0; }
 
-MDBX_NOTHROW_CONST_FUNCTION MDBX_MAYBE_UNUSED static inline size_t floor_powerof2(size_t value, size_t granularity) {
+MDBX_MAYBE_UNUSED MDBX_NOTHROW_CONST_FUNCTION static inline size_t floor_powerof2(size_t value, size_t granularity) {
   ASSERT(is_powerof2(granularity));
   return value & ~(granularity - 1);
 }
 
-MDBX_NOTHROW_CONST_FUNCTION MDBX_MAYBE_UNUSED static inline size_t ceil_powerof2(size_t value, size_t granularity) {
+MDBX_MAYBE_UNUSED MDBX_NOTHROW_CONST_FUNCTION static inline size_t ceil_powerof2(size_t value, size_t granularity) {
   return floor_powerof2(value + granularity - 1, granularity);
 }
 
 #ifndef __cplusplus
 
-MDBX_NOTHROW_CONST_FUNCTION MDBX_MAYBE_UNUSED MDBX_INTERNAL unsigned log2n_powerof2(size_t value_uintptr);
-
-MDBX_NOTHROW_CONST_FUNCTION MDBX_MAYBE_UNUSED MDBX_INTERNAL unsigned ceil_log2n(size_t value_uintptr);
+MDBX_MAYBE_UNUSED MDBX_NOTHROW_CONST_FUNCTION MDBX_INTERNAL size_t ceil_log2n(size_t value_uintptr);
 
 MDBX_NOTHROW_CONST_FUNCTION MDBX_INTERNAL uint64_t rrxmrrxmsx_0(uint64_t v);
 
@@ -215,6 +213,115 @@ MDBX_MAYBE_UNUSED static inline bin128_t u128(uint64_t v) {
 MDBX_MAYBE_UNUSED static inline bin128_t u128_max(void) {
   bin128_t r = {.l = UINT64_MAX, .h = UINT64_MAX};
   return r;
+}
+
+//------------------------------------------------------------------------------
+
+MDBX_INTERNAL size_t clz64_fallback(uint64_t value);
+MDBX_INTERNAL size_t clz32_fallback(uint32_t value);
+MDBX_INTERNAL size_t ctz64_fallback(uint64_t value);
+MDBX_INTERNAL size_t ctz32_fallback(uint32_t value);
+
+MDBX_NOTHROW_CONST_FUNCTION static inline size_t clz64(uint64_t value) {
+#if __GNUC_PREREQ(4, 1) || __has_builtin(__builtin_clzl)
+  if (sizeof(value) == sizeof(unsigned int))
+    return __builtin_clz((unsigned int)value);
+  if (sizeof(value) == sizeof(unsigned long))
+    return __builtin_clzl((unsigned long)value);
+#if (defined(__SIZEOF_LONG_LONG__) && __SIZEOF_LONG_LONG__ == 8) || __has_builtin(__builtin_clzll)
+  return __builtin_clzll((unsigned long long)value);
+#endif /* have(long long) && long long == uint64_t */
+#endif /* GNU C */
+
+#if defined(_MSC_VER)
+  unsigned long index;
+#if defined(_M_AMD64) || defined(_M_ARM64) || defined(_M_X64)
+  _BitScanReverse64(&index, value);
+  return 63 - index;
+#else
+  if (value <= UINT32_MAX) {
+    _BitScanReverse(&index, (uint32_t)value);
+    return 63 - index;
+  }
+  _BitScanReverse(&index, (uint32_t)(value >> 32));
+  return 31 - index;
+#endif
+#endif /* MSVC */
+  return clz64_fallback(value);
+}
+
+MDBX_NOTHROW_CONST_FUNCTION static inline size_t clz32(uint32_t value) {
+#if __GNUC_PREREQ(4, 1) || __has_builtin(__builtin_clzl)
+  if (sizeof(value) == sizeof(unsigned int))
+    return __builtin_clz((unsigned int)value);
+  if (sizeof(value) == sizeof(unsigned long))
+    return __builtin_clzl((unsigned long)value);
+#endif /* GNU C */
+#if defined(_MSC_VER)
+  unsigned long index;
+  ASSERT(value != 0);
+  _BitScanReverse(&index, value);
+  return 31 - index;
+#endif /* MSVC */
+  return clz32_fallback(value);
+}
+
+MDBX_MAYBE_UNUSED static inline size_t clz_uintptr(uintptr_t value) {
+  return (sizeof(value) > 4) ? clz64((uint64_t)value) : clz32((uint32_t)value);
+}
+
+MDBX_NOTHROW_CONST_FUNCTION static inline size_t ctz64(uint64_t value) {
+#if __GNUC_PREREQ(4, 1) || __has_builtin(__builtin_ctzl)
+  if (sizeof(value) == sizeof(unsigned int))
+    return __builtin_ctz((unsigned int)value);
+  if (sizeof(value) == sizeof(unsigned long))
+    return __builtin_ctzl((unsigned long)value);
+#if (defined(__SIZEOF_LONG_LONG__) && __SIZEOF_LONG_LONG__ == 8) || __has_builtin(__builtin_ctzll)
+  return __builtin_ctzll((unsigned long long)value);
+#endif /* have(long long) && long long == uint64_t */
+#endif /* GNU C */
+
+#if defined(_MSC_VER)
+  unsigned long index;
+#if defined(_M_AMD64) || defined(_M_ARM64) || defined(_M_X64)
+  _BitScanForward64(&index, value);
+  return index;
+#else
+  if (value & UINT32_MAX) {
+    _BitScanForward(&index, (uint32_t)value);
+    return index;
+  }
+  _BitScanForward(&index, (uint32_t)(value >> 32));
+  return 32 + index;
+#endif
+#endif /* MSVC */
+  return ctz64_fallback(value);
+}
+
+MDBX_NOTHROW_CONST_FUNCTION static inline size_t ctz32(uint32_t value) {
+#if __GNUC_PREREQ(4, 1) || __has_builtin(__builtin_ctzl)
+  if (sizeof(value) == sizeof(unsigned int))
+    return __builtin_ctz((unsigned int)value);
+  if (sizeof(value) == sizeof(unsigned long))
+    return __builtin_ctzl((unsigned long)value);
+#endif /* GNU C */
+#if defined(_MSC_VER)
+  unsigned long index;
+  ASSERT(value != 0);
+  _BitScanForward(&index, value);
+  return index;
+#endif /* MSVC */
+  return ctz32_fallback(value);
+}
+
+MDBX_MAYBE_UNUSED static inline size_t ctz_uintptr(uintptr_t value) {
+  return (sizeof(value) > 4) ? ctz64((uint64_t)value) : ctz32((uint32_t)value);
+}
+
+MDBX_MAYBE_UNUSED MDBX_NOTHROW_CONST_FUNCTION static inline size_t log2n_powerof2(size_t value_uintptr) {
+  ASSERT(value_uintptr > 0 && value_uintptr < INT32_MAX && is_powerof2(value_uintptr));
+  ASSERT((value_uintptr & -(intptr_t)value_uintptr) == value_uintptr);
+  return ctz_uintptr(value_uintptr);
 }
 
 #endif /* !__cplusplus */

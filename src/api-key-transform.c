@@ -60,45 +60,6 @@ uint32_t mdbx_key_from_ptrfloat(const float *const ieee754_32bit) { return float
 #define IEEE754_DOUBLE_MANTISSA_MASK UINT64_C(0x000FFFFFFFFFFFFF)
 #define IEEE754_DOUBLE_MANTISSA_AMAX UINT64_C(0x001FFFFFFFFFFFFF)
 
-static inline int clz64(uint64_t value) {
-#if __GNUC_PREREQ(4, 1) || __has_builtin(__builtin_clzl)
-  if (sizeof(value) == sizeof(unsigned int))
-    return __builtin_clz((unsigned int)value);
-  if (sizeof(value) == sizeof(unsigned long))
-    return __builtin_clzl((unsigned long)value);
-#if (defined(__SIZEOF_LONG_LONG__) && __SIZEOF_LONG_LONG__ == 8) || __has_builtin(__builtin_clzll)
-  return __builtin_clzll((unsigned long long)value);
-#endif /* have(long long) && long long == uint64_t */
-#endif /* GNU C */
-
-#if defined(_MSC_VER)
-  unsigned long index;
-#if defined(_M_AMD64) || defined(_M_ARM64) || defined(_M_X64)
-  _BitScanReverse64(&index, value);
-  return 63 - index;
-#else
-  if (value > UINT32_MAX) {
-    _BitScanReverse(&index, (uint32_t)(value >> 32));
-    return 31 - index;
-  }
-  _BitScanReverse(&index, (uint32_t)value);
-  return 63 - index;
-#endif
-#endif /* MSVC */
-
-  value |= value >> 1;
-  value |= value >> 2;
-  value |= value >> 4;
-  value |= value >> 8;
-  value |= value >> 16;
-  value |= value >> 32;
-  static const uint8_t debruijn_clz64[64] = {63, 16, 62, 7,  15, 36, 61, 3,  6,  14, 22, 26, 35, 47, 60, 2,
-                                             9,  5,  28, 11, 13, 21, 42, 19, 25, 31, 34, 40, 46, 52, 59, 1,
-                                             17, 8,  37, 4,  23, 27, 48, 10, 29, 12, 43, 20, 32, 41, 53, 18,
-                                             38, 24, 49, 30, 44, 33, 54, 39, 50, 45, 55, 51, 56, 57, 58, 0};
-  return debruijn_clz64[value * UINT64_C(0x03F79D71B4CB0A89) >> 58];
-}
-
 static inline uint64_t round_mantissa(const uint64_t u64, int shift) {
   ASSERT(shift < 0 && u64 > 0);
   shift = -shift;
@@ -112,7 +73,7 @@ uint64_t mdbx_key_from_jsonInteger(const int64_t json_integer) {
   const uint64_t bias = UINT64_C(0x8000000000000000);
   if (json_integer > 0) {
     const uint64_t u64 = json_integer;
-    int shift = clz64(u64) - (64 - IEEE754_DOUBLE_MANTISSA_SIZE - 1);
+    int shift = (int)clz64(u64) - (64 - IEEE754_DOUBLE_MANTISSA_SIZE - 1);
     uint64_t mantissa = u64 << shift;
     if (unlikely(shift < 0)) {
       mantissa = round_mantissa(u64, shift);
@@ -133,7 +94,7 @@ uint64_t mdbx_key_from_jsonInteger(const int64_t json_integer) {
 
   if (json_integer < 0) {
     const uint64_t u64 = -json_integer;
-    int shift = clz64(u64) - (64 - IEEE754_DOUBLE_MANTISSA_SIZE - 1);
+    int shift = (int)clz64(u64) - (64 - IEEE754_DOUBLE_MANTISSA_SIZE - 1);
     uint64_t mantissa = u64 << shift;
     if (unlikely(shift < 0)) {
       mantissa = round_mantissa(u64, shift);

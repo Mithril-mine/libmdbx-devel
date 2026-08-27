@@ -3,7 +3,48 @@
 
 #include "internals.h"
 
-MDBX_NOTHROW_CONST_FUNCTION MDBX_MAYBE_UNUSED unsigned ceil_log2n(size_t value_uintptr) {
+size_t clz64_fallback(uint64_t value) {
+  value |= value >> 1;
+  value |= value >> 2;
+  value |= value >> 4;
+  value |= value >> 8;
+  value |= value >> 16;
+  value |= value >> 32;
+  static const uint8_t deBruijn_clz64[64] = {63, 16, 62, 7,  15, 36, 61, 3,  6,  14, 22, 26, 35, 47, 60, 2,
+                                             9,  5,  28, 11, 13, 21, 42, 19, 25, 31, 34, 40, 46, 52, 59, 1,
+                                             17, 8,  37, 4,  23, 27, 48, 10, 29, 12, 43, 20, 32, 41, 53, 18,
+                                             38, 24, 49, 30, 44, 33, 54, 39, 50, 45, 55, 51, 56, 57, 58, 0};
+  return deBruijn_clz64[value * UINT64_C(0x03F79D71B4CB0A89) >> 58];
+}
+
+size_t clz32_fallback(uint32_t value) {
+  value |= value >> 1;
+  value |= value >> 2;
+  value |= value >> 4;
+  value |= value >> 8;
+  value |= value >> 16;
+  static const uint8_t deBruijn_clz32[32] = {31, 22, 30, 21, 18, 10, 29, 2,  20, 17, 15, 13, 9, 6,  28, 1,
+                                             23, 19, 11, 3,  16, 14, 7,  24, 12, 4,  8,  25, 5, 26, 27, 0};
+  return deBruijn_clz32[value * UINT32_C(0x07C4ACDD) >> 27];
+}
+
+size_t ctz64_fallback(uint64_t value) {
+  static const uint8_t deBruijn_ctz64[64] = {0,  1,  2,  53, 3,  7,  54, 27, 4,  38, 41, 8,  34, 55, 48, 28,
+                                             62, 5,  39, 46, 44, 42, 22, 9,  24, 35, 59, 56, 49, 18, 29, 11,
+                                             63, 52, 6,  26, 37, 40, 33, 47, 61, 45, 43, 21, 23, 58, 17, 10,
+                                             51, 25, 36, 32, 60, 20, 57, 16, 50, 31, 19, 15, 30, 14, 13, 12};
+  return deBruijn_ctz64[(UINT64_C(0x022FDD63CC95386D) * value) >> 58];
+}
+
+size_t ctz32_fallback(uint32_t value) {
+  static const uint8_t deBruijn_ctz32[32] = {0,  1,  28, 2,  29, 14, 24, 3, 30, 22, 20, 15, 25, 17, 4,  8,
+                                             31, 27, 13, 23, 21, 19, 16, 7, 26, 12, 18, 6,  11, 5,  10, 9};
+  return deBruijn_ctz32[(UINT32_C(0x077CB531) * value) >> 27];
+}
+
+//------------------------------------------------------------------------------
+
+size_t ceil_log2n(size_t value_uintptr) {
   ASSERT(value_uintptr > 0 && value_uintptr < INT32_MAX);
   value_uintptr -= 1;
   value_uintptr |= value_uintptr >> 1;
@@ -14,26 +55,7 @@ MDBX_NOTHROW_CONST_FUNCTION MDBX_MAYBE_UNUSED unsigned ceil_log2n(size_t value_u
   return log2n_powerof2(value_uintptr + 1);
 }
 
-MDBX_MAYBE_UNUSED MDBX_NOTHROW_CONST_FUNCTION unsigned log2n_powerof2(size_t value_uintptr) {
-  ASSERT(value_uintptr > 0 && value_uintptr < INT32_MAX && is_powerof2(value_uintptr));
-  ASSERT((value_uintptr & -(intptr_t)value_uintptr) == value_uintptr);
-  const uint32_t value_uint32 = (uint32_t)value_uintptr;
-#if __GNUC_PREREQ(4, 1) || __has_builtin(__builtin_ctz)
-  STATIC_ASSERT(sizeof(value_uint32) <= sizeof(unsigned));
-  return __builtin_ctz(value_uint32);
-#elif defined(_MSC_VER)
-  unsigned long index;
-  STATIC_ASSERT(sizeof(value_uint32) <= sizeof(long));
-  _BitScanForward(&index, value_uint32);
-  return index;
-#else
-  static const uint8_t debruijn_ctz32[32] = {0,  1,  28, 2,  29, 14, 24, 3, 30, 22, 20, 15, 25, 17, 4,  8,
-                                             31, 27, 13, 23, 21, 19, 16, 7, 26, 12, 18, 6,  11, 5,  10, 9};
-  return debruijn_ctz32[(uint32_t)(value_uint32 * 0x077CB531ul) >> 27];
-#endif
-}
-
-MDBX_NOTHROW_CONST_FUNCTION uint64_t rrxmrrxmsx_0(uint64_t v) {
+uint64_t rrxmrrxmsx_0(uint64_t v) {
   /* Pelle Evensen's mixer, https://bit.ly/2HOfynt */
   v ^= (v << 39 | v >> 25) ^ (v << 14 | v >> 50);
   v *= UINT64_C(0xA24BAED4963EE407);

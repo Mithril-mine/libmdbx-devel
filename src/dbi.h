@@ -7,40 +7,10 @@
 
 #if MDBX_ENABLE_DBI_SPARSE
 
-MDBX_NOTHROW_CONST_FUNCTION MDBX_MAYBE_UNUSED MDBX_INTERNAL size_t dbi_bitmap_ctz_fallback(const MDBX_txn *txn,
-                                                                                           intptr_t bmi);
-
 static inline size_t dbi_bitmap_ctz(const MDBX_txn *txn, intptr_t bmi) {
   tASSERT0(txn, bmi != 0);
   STATIC_ASSERT(sizeof(bmi) >= sizeof(txn->dbi_sparse[0]));
-#if __GNUC_PREREQ(4, 1) || __has_builtin(__builtin_ctzl)
-  if (sizeof(txn->dbi_sparse[0]) <= sizeof(int))
-    return __builtin_ctz((int)bmi);
-  if (sizeof(txn->dbi_sparse[0]) == sizeof(long))
-    return __builtin_ctzl((long)bmi);
-#if (defined(__SIZEOF_LONG_LONG__) && __SIZEOF_LONG_LONG__ == 8) || __has_builtin(__builtin_ctzll)
-  return __builtin_ctzll(bmi);
-#endif /* have(long long) && long long == uint64_t */
-#endif /* GNU C */
-
-#if defined(_MSC_VER)
-  unsigned long index;
-  if (sizeof(txn->dbi_sparse[0]) > 4) {
-#if defined(_M_AMD64) || defined(_M_ARM64) || defined(_M_X64)
-    _BitScanForward64(&index, bmi);
-    return index;
-#else
-    if (bmi > UINT32_MAX) {
-      _BitScanForward(&index, (uint32_t)((uint64_t)bmi >> 32));
-      return index;
-    }
-#endif
-  }
-  _BitScanForward(&index, (uint32_t)bmi);
-  return index;
-#endif /* MSVC */
-
-  return dbi_bitmap_ctz_fallback(txn, bmi);
+  return (sizeof(txn->dbi_sparse[0]) > 4) ? ctz64((uint64_t)bmi) : ctz32((uint32_t)bmi);
 }
 
 static inline bool dbi_foreach_step(const MDBX_txn *const txn, size_t *bitmap_item, size_t *dbi) {

@@ -116,7 +116,7 @@ MDBX_NOTHROW_CONST_FUNCTION static inline size_t valsize_max(size_t pagesize, MD
   if (flags & (MDBX_DUPSORT | MDBX_DUPFIXED | MDBX_REVERSEDUP))
     return keysize_max(pagesize, 0);
 
-  const unsigned page_ln2 = log2n_powerof2(pagesize);
+  const size_t page_ln2 = log2n_powerof2(pagesize);
   const size_t hard = 0x7FF00000ul;
   const size_t hard_pages = hard >> page_ln2;
   STATIC_ASSERT(PAGELIST_LIMIT <= MAX_PAGENO);
