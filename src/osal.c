@@ -1440,30 +1440,30 @@ int osal_openfile(const enum osal_openfile_purpose purpose, const MDBX_env *env,
 #endif /* O_DIRECT */
 
   int err = MDBX_SUCCESS;
-  if (*fd < 0) {
+  if (unlikely(*fd < 0)) {
     err = errno;
     if (err == EACCES && purpose == MDBX_OPEN_LCK) {
       struct stat unused;
       if (stat(pathname, &unused) == 0 || (err = errno) != ENOENT)
-        err = EACCES /* restore errno if file exists */;
+        err = EACCES /* restore error if file exists */;
     }
   }
 
   /* Safeguard for https://libmdbx.dqdkfa.ru/dead-github/issues/144 */
 #if STDIN_FILENO == 0 && STDOUT_FILENO == 1 && STDERR_FILENO == 2
-  else if (*fd == STDIN_FILENO) {
+  else if (unlikely(*fd == STDIN_FILENO)) {
     WARNING("Got STD%s_FILENO/%d, avoid using it by dup(fd)", "IN", STDIN_FILENO);
     ASSERT(hazardous_fd0 == -1);
     *fd = dup(hazardous_fd0 = STDIN_FILENO);
     if (*fd < 0)
       err = errno;
-  } else if (*fd == STDOUT_FILENO) {
+  } else if (unlikely(*fd == STDOUT_FILENO)) {
     WARNING("Got STD%s_FILENO/%d, avoid using it by dup(fd)", "OUT", STDOUT_FILENO);
     ASSERT(hazardous_fd1 == -1);
     *fd = dup(hazardous_fd1 = STDOUT_FILENO);
     if (*fd < 0)
       err = errno;
-  } else if (*fd == STDERR_FILENO) {
+  } else if (unlikely(*fd == STDERR_FILENO)) {
     WARNING("Got STD%s_FILENO/%d, avoid using it by dup(fd)", "ERR", STDERR_FILENO);
     ASSERT(hazardous_fd2 == -1);
     *fd = dup(hazardous_fd2 = STDERR_FILENO);
@@ -1487,8 +1487,11 @@ int osal_openfile(const enum osal_openfile_purpose purpose, const MDBX_env *env,
 #error "Unexpected or unsupported UNIX or POSIX system"
 #endif /* STDIN_FILENO == 0 && STDERR_FILENO == 2 */
 
-  if (err != 0)
+  if (unlikely(err != 0)) {
+    if (*fd >= 0)
+      close(*fd);
     return err;
+  }
 
 #if defined(FD_CLOEXEC) && !defined(O_CLOEXEC)
   const int fd_flags = fcntl(*fd, F_GETFD);
