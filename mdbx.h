@@ -2205,9 +2205,9 @@ typedef enum MDBX_option {
    * On the other hand, too small threshold will lead to unreasonable database
    * growth, or/and to the inability of put long values.
    *
-   * The `MDBX_opt_rp_augment_limit` controls described limit for the current
-   * process. By default this limit adjusted dynamically to 1/3 of current
-   * quantity of DB pages, which is usually enough for most cases. */
+   * The `MDBX_opt_rp_augment_limit` controls described limit for the current process.
+   * By default, this limit is dynamically adjusted to 1/3 of the number of pages corresponding
+   * to the current size of a database, which is usually sufficient for most cases. */
   MDBX_opt_rp_augment_limit,
 
   /** \brief Controls the in-process limit to grow a cache of dirty
