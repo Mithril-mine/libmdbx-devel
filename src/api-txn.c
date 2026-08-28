@@ -276,6 +276,7 @@ int mdbx_txn_begin_ex(MDBX_env *env, MDBX_txn *parent, MDBX_txn_flags_t flags, M
     nested_failed:
       pnl_free(txn->tw.repnl);
       dpl_free(txn);
+      pnl_free(txn->tw.spilled.list);
       osal_free(txn);
       return LOG_IFERR(rc);
     }
@@ -498,12 +499,12 @@ int mdbx_txn_commit_ex(MDBX_txn *txn, MDBX_commit_latency *latency) {
     }
 
     if (txn->tw.spilled.list) {
+      spill_purge(txn);
       if (parent->tw.spilled.list) {
         rc = pnl_need(&parent->tw.spilled.list, MDBX_PNL_GETSIZE(txn->tw.spilled.list));
         if (unlikely(rc != MDBX_SUCCESS))
           goto fail;
       }
-      spill_purge(txn);
     }
 
     if (unlikely(txn->tw.dirtylist->length + parent->tw.dirtylist->length > parent->tw.dirtylist->detent &&

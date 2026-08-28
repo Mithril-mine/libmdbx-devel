@@ -384,6 +384,7 @@ void txn_merge(MDBX_txn *const parent, MDBX_txn *const txn, const size_t parent_
       parent->tw.spilled.least_removed = txn->tw.spilled.least_removed;
     }
     tASSERT(parent, dpl_check(parent));
+    txn->tw.spilled.list = nullptr;
   }
 
   parent->flags &= ~MDBX_TXN_HAS_CHILD;
