@@ -68,3 +68,5 @@ version.c
 .vs/
 .vscode/
 *.zip
+mdbx_legacy_example
+mdbx_modern_example
