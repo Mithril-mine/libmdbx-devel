@@ -72,6 +72,9 @@ if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/VERSION.json"
    AND EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/mdbx_drop.c"
    AND EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/mdbx_defrag.c"
    AND EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/ntdll.def"
+   AND EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/windows-safeseh-masm.asm"
+   AND EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/windows-safeseh-yasm.asm"
+   AND EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/windows-safeseh.obj"
    AND EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/config.h.in")
   set(MDBX_AMALGAMATED_SOURCE TRUE)
   set(MDBX_SOURCE_DIR "${CMAKE_CURRENT_SOURCE_DIR}")
@@ -90,6 +93,9 @@ elseif(
   AND EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/mdbx++/decl_transcoders.h++"
   AND EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/mdbx++/decl_buffer.h++"
   AND EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/mdbx++/impl_buffer.h++"
+  AND EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/src/windows-safeseh-masm.asm"
+  AND EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/src/windows-safeseh-yasm.asm"
+  AND EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/src/windows-safeseh.obj"
   AND EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/src/alloy.c"
   AND EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/src/api-cold.c"
   AND EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/src/api-copy.c"
