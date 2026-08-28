@@ -32,6 +32,10 @@ jobs:
         exclude:
           - os: windows-11-vs2026-arm
             toolset: v143
+          - os: windows-11-vs2026-arm
+            target: Win32
+          - os: windows-11-vs2026-arm
+            target: x64
           - os: windows-latest
             target: ARM64
     runs-on: ${{ matrix.os }}
