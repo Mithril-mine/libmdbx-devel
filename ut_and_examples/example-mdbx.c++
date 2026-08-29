@@ -59,10 +59,10 @@ static bool doit(const mdbx::path &database_pathname) {
   txn.insert(map, mdbx::slice::wrap(uint64_t(0xaBad1dea)), buffer::base58("aBad1dea"));
 
   mdbx::slice reserve;
-  /* [[may_unused]] */auto value = txn.replace_reserve<buffer>(map, mdbx::slice::wrap(zero), 100, reserve);
+  /* [[may_unused]] */ auto value = txn.replace_reserve<buffer>(map, mdbx::slice::wrap(zero), 100, reserve);
   memset(reserve.data(), 'Z', reserve.size());
-  /* [[may_unused]] */value = txn.replace<buffer>(map, mdbx::slice::wrap(zero), "1");
-  /* [[may_unused]] */value = txn.extract<buffer>(map, mdbx::slice::wrap(zero));
+  /* [[may_unused]] */ value = txn.replace<buffer>(map, mdbx::slice::wrap(zero), "1");
+  /* [[may_unused]] */ value = txn.extract<buffer>(map, mdbx::slice::wrap(zero));
 
   auto cursor = txn.open_cursor(map);
   cursor.to_first();

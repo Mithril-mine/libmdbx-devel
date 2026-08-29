@@ -379,7 +379,7 @@ void __hot maker::mk_continue(const serial_t serial, const essentials &params, r
   } else {
     const auto prefix = std::max(std::min(unsigned(params.minlen), 8u), length(serial));
 #ifdef htobe64
-  out.u64 = htobe64(serial);
+    out.u64 = htobe64(serial);
 #elif defined(_MSC_VER)
     out.u64 = _byteswap_uint64(serial);
 #elif __BYTE_ORDER__ == __ORDER_LITTLE_ENDIAN__
