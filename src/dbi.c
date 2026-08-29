@@ -202,7 +202,7 @@ int dbi_update(MDBX_txn *txn, int keep) {
     }
     tASSERT(txn, dbi < env->n_dbi);
     if (keep) {
-      env->dbs_flags[dbi] = txn->dbs[dbi].flags | DB_VALID;
+      env->dbs_flags[dbi] = (uint8_t)txn->dbs[dbi].flags | DB_VALID;
     } else {
       uint32_t seq = dbi_seq_next(env, dbi);
       defer_free_item_t *item = env->kvs[dbi].name.iov_base;
@@ -299,7 +299,7 @@ int dbi_bind(MDBX_txn *txn, const size_t dbi, unsigned user_flags, MDBX_cmp_func
         return MDBX_PROBLEM;
       }
 
-      env->dbs_flags[dbi] = db_flags | DB_VALID;
+      env->dbs_flags[dbi] = (uint8_t)db_flags | DB_VALID;
       atomic_store32(&env->dbi_seqs[dbi], seq, mo_AcquireRelease);
       txn->dbi_seqs[dbi] = seq;
       txn->dbi_state[dbi] = DBI_LINDO | DBI_VALID | DBI_CREAT | DBI_DIRTY;
@@ -364,7 +364,7 @@ static int dbi_open_locked(MDBX_txn *txn, unsigned user_flags, MDBX_dbi *dbi, MD
       env->flags |= ENV_FATAL_ERROR;
       return err;
     }
-    env->dbs_flags[MAIN_DBI] = main_flags | DB_VALID;
+    env->dbs_flags[MAIN_DBI] = (uint8_t)main_flags | DB_VALID;
     txn->dbi_seqs[MAIN_DBI] = atomic_store32(&env->dbi_seqs[MAIN_DBI], seq, mo_AcquireRelease);
     txn->dbi_state[MAIN_DBI] |= DBI_DIRTY;
     txn->flags |= MDBX_TXN_DIRTY;
@@ -482,13 +482,13 @@ static int dbi_open_locked(MDBX_txn *txn, unsigned user_flags, MDBX_dbi *dbi, MD
                    (txn->dbi_state[slot] & (DBI_LINDO | DBI_VALID)) == DBI_LINDO);
   txn->dbi_state[slot] = dbi_state;
   memcpy(&txn->dbs[slot], body.iov_base, sizeof(txn->dbs[slot]));
-  env->dbs_flags[slot] = txn->dbs[slot].flags;
+  env->dbs_flags[slot] = (uint8_t)txn->dbs[slot].flags;
   rc = dbi_bind(txn, slot, user_flags, keycmp, datacmp);
   if (unlikely(rc != MDBX_SUCCESS))
     goto bailout;
 
   env->kvs[slot].name = name;
-  env->dbs_flags[slot] = txn->dbs[slot].flags | DB_VALID;
+  env->dbs_flags[slot] = (uint8_t)txn->dbs[slot].flags | DB_VALID;
   txn->dbi_seqs[slot] = atomic_store32(&env->dbi_seqs[slot], seq, mo_AcquireRelease);
 
 done:

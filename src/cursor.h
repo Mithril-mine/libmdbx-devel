@@ -264,7 +264,7 @@ MDBX_MAYBE_UNUSED MDBX_NOTHROW_PURE_FUNCTION static inline bool cursor_is_core(c
 
 MDBX_MAYBE_UNUSED static inline int cursor_dbi_dbg(const MDBX_cursor *mc) {
   /* Debugging output value of a cursor's DBI: Negative for a sub-cursor. */
-  const int dbi = cursor_dbi(mc);
+  const int dbi = (int)cursor_dbi(mc);
   return (mc->flags & z_inner) ? -dbi : dbi;
 }
 

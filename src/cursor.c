@@ -572,7 +572,7 @@ static __always_inline int cursor_brim(const bool inner, const bool tend2first, 
   }
   const size_t nkeys = page_numkeys(mc->pg[mc->top]);
   cASSERT(mc, nkeys > 0);
-  mc->ki[mc->top] = tend2first ? 0 : nkeys - 1;
+  mc->ki[mc->top] = tend2first ? 0 : (indx_t)nkeys - 1;
   return cursor_bring(inner, tend2first, mc, key, data, !tend2first);
 }
 
@@ -1628,7 +1628,7 @@ __hot int cursor_del(MDBX_cursor *mc, unsigned flags) {
 
 del_key:
   mc->tree->items -= 1;
-  const MDBX_dbi dbi = cursor_dbi(mc);
+  const size_t dbi = cursor_dbi(mc);
   indx_t ki = mc->ki[mc->top];
   mp = mc->pg[mc->top];
   cASSERT(mc, is_leaf(mp));
