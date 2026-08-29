@@ -15,7 +15,7 @@ workflows:
     env:
       CI: SourceCraft
       CI_MAKE_TARGET: smoke
-      MDBX_BUILD_OPTIONS: -DMDBX_CHECKING=2 -DMDBX_DEBUG=0
+      MDBX_BUILD_OPTIONS: -DMDBX_FORCE_ASSERTIONS=1 -DMDBX_DEBUG=0
     tasks:
       - name: ci-linux-debug-gcc-task
         cubes:
@@ -29,7 +29,7 @@ workflows:
     env:
       CI: SourceCraft
       CI_MAKE_TARGET: smoke
-      MDBX_BUILD_OPTIONS: -DMDBX_CHECKING=2 -DMDBX_DEBUG=0
+      MDBX_BUILD_OPTIONS: -DMDBX_FORCE_ASSERTIONS=1 -DMDBX_DEBUG=0
     tasks:
       - name: ci-linux-debug-clang-task
         cubes:
@@ -43,7 +43,7 @@ workflows:
     env:
       CI: SourceCraft
       CI_MAKE_TARGET: test
-      MDBX_BUILD_OPTIONS: "-DMDBX_CHECKING=2 -DMDBX_DEBUG=0 -DMDBX_DEBUG_SPILLING=1"
+      MDBX_BUILD_OPTIONS: "-DMDBX_FORCE_ASSERTIONS=1 -DMDBX_DEBUG=0 -DxMDBX_DEBUG_SPILLING=1"
     tasks:
       - name: ci-linux-release-spilling-task
         cubes:
