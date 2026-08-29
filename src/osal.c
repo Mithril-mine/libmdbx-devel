@@ -482,11 +482,10 @@ int osal_fastmutex_destroy(osal_fastmutex_t *fastmutex) {
 
 int osal_fastmutex_acquire(osal_fastmutex_t *fastmutex) {
 #if defined(_WIN32) || defined(_WIN64)
-  __try {
-    EnterCriticalSection(fastmutex);
-  } __except ((GetExceptionCode() == 0xC0000194 /* STATUS_POSSIBLE_DEADLOCK / EXCEPTION_POSSIBLE_DEADLOCK */)
-                  ? EXCEPTION_EXECUTE_HANDLER
-                  : EXCEPTION_CONTINUE_SEARCH) {
+  SEH_TRY { EnterCriticalSection(fastmutex); }
+  SEH_EXCEPT((GetExceptionCode() == 0xC0000194 /* STATUS_POSSIBLE_DEADLOCK / EXCEPTION_POSSIBLE_DEADLOCK */)
+                 ? EXCEPTION_EXECUTE_HANDLER
+                 : EXCEPTION_CONTINUE_SEARCH) {
     return MDBX_EDEADLK;
   }
   return MDBX_SUCCESS;

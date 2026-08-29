@@ -187,7 +187,7 @@
 #error MDBX_PNL_ASCENDING must be defined as 0 or 1
 #endif /* MDBX_PNL_ASCENDING */
 
-/** Avoid dependence from MSVC CRT and use ntdll.dll instead. */
+/** Windows: Avoids dependence from MSVC CRT or other libraries provided by compiler, but use ntdll.dll instead. */
 #ifndef MDBX_WITHOUT_MSVC_CRT
 #if defined(MDBX_BUILD_CXX) && !MDBX_BUILD_CXX
 #define MDBX_WITHOUT_MSVC_CRT 1

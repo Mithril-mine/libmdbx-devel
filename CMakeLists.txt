@@ -1064,7 +1064,7 @@ if(MDBX_BUILD_SHARED_LIBRARY)
   libmdbx_setup_libs(mdbx PRIVATE)
   if(MSVC)
     if(MDBX_NTDLL_EXTRA_IMPLIB AND MDBX_WITHOUT_MSVC_CRT)
-      set_property(TARGET mdbx PROPERTY LINKER_FLAGS "/NODEFAULTLIB")
+      set_property(TARGET mdbx PROPERTY LINK_OPTIONS "$<IF:$<CONFIG:Debug>,,/NODEFAULTLIB>")
     else()
       set_property(TARGET mdbx PROPERTY MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>DLL")
     endif()
@@ -1360,8 +1360,8 @@ add_definitions(-DMDBX_CONFIG_H="${CMAKE_CURRENT_BINARY_DIR}/config-cmake.h")
 
 # ######################################################################################################################
 
-if(MDBX_ENABLE_TESTS)
   add_subdirectory(ut_and_examples)
+if(MDBX_ENABLE_TESTS)
   #> dist-cutoff-begin
   if(NOT MDBX_AMALGAMATED_SOURCE AND NOT_SUBPROJECT)
     add_subdirectory(test)

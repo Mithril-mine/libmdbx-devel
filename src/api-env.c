@@ -375,7 +375,7 @@ __cold int mdbx_env_deleteW(const wchar_t *pathname, MDBX_env_delete_mode_t mode
   }
 
 #ifdef __e2k__ /* https://bugs.mcst.ru/bugzilla/show_bug.cgi?id=6011 */
-  MDBX_env *const dummy_env = alloca(sizeof(MDBX_env));
+  MDBX_env *const dummy_env = osal_alloca(sizeof(MDBX_env));
 #else
   MDBX_env dummy_env_silo, *const dummy_env = &dummy_env_silo;
 #endif

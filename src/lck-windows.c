@@ -78,11 +78,10 @@ int lck_txn_lock(MDBX_env *env, bool dontwait) {
     if (!TryEnterCriticalSection(&env->windowsbug_lock))
       return MDBX_BUSY;
   } else {
-    __try {
-      EnterCriticalSection(&env->windowsbug_lock);
-    } __except ((GetExceptionCode() == 0xC0000194 /* STATUS_POSSIBLE_DEADLOCK / EXCEPTION_POSSIBLE_DEADLOCK */)
-                    ? EXCEPTION_EXECUTE_HANDLER
-                    : EXCEPTION_CONTINUE_SEARCH) {
+    SEH_TRY { EnterCriticalSection(&env->windowsbug_lock); }
+    SEH_EXCEPT((GetExceptionCode() == 0xC0000194 /* STATUS_POSSIBLE_DEADLOCK / EXCEPTION_POSSIBLE_DEADLOCK */)
+                   ? EXCEPTION_EXECUTE_HANDLER
+                   : EXCEPTION_CONTINUE_SEARCH) {
       return MDBX_EDEADLK;
     }
   }
