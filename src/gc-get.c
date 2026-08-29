@@ -492,7 +492,12 @@ __hot static pgno_t *scan4seq_neon(pgno_t *range, const size_t len, const size_t
 #endif /* !ENABLE_MEMCHECK && !__SANITIZE_ADDRESS__ */
         /* The sizeof(size_t) here is used correctly, since both the lane size, and the width and format of mask,
          * is also depend on the platform bitness. */
-        return ptr_disp(range, -(__builtin_clzl(mask) >> sizeof(size_t) / 4));
+        if (sizeof(unsigned) >= sizeof(size_t))
+          return ptr_disp(range, -(__builtin_clz(mask) >> sizeof(size_t) / 4));
+        else if (sizeof(long) >= sizeof(size_t))
+          return ptr_disp(range, -(__builtin_clzl(mask) >> sizeof(size_t) / 4));
+        else
+          return ptr_disp(range, -(__builtin_clzll(mask) >> sizeof(size_t) / 4));
       }
       range -= 4;
     } while (range > detent + 3);
@@ -533,6 +538,7 @@ __hot static pgno_t *scan4seq_neon(pgno_t *range, const size_t len, const size_t
 #define scan4seq_default scan4seq_sse2
 #elif (defined(__ARM_NEON) || defined(__ARM_NEON__)) && (__BYTE_ORDER__ == __ORDER_LITTLE_ENDIAN__)
 #define scan4seq_default scan4seq_neon
+#define scan4seq_impl scan4seq_neon
 /* Choosing of another variants should be added here. */
 #endif /* scan4seq_default */
 
