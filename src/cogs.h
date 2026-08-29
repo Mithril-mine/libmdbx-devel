@@ -451,7 +451,8 @@ static __always_inline int check_txn(const MDBX_txn *txn, int bad_bits) {
         ((txn->flags & (txn_ro_flat | MDBX_TXN_FINISHED)) == (txn_ro_flat | MDBX_TXN_FINISHED))) &&
       unlikely(txn->owner != osal_thread_self()))
     err = txn->owner ? MDBX_THREAD_MISMATCH
-          : ((txn->flags & (MDBX_TXN_FINISHED | MDBX_TXN_OUSTED | MDBX_TXN_ERROR | txn_ro_flat)) == MDBX_TXN_OUSTED)
+          : ((txn->flags & (MDBX_TXN_FINISHED | MDBX_TXN_OUSTED | MDBX_TXN_ERROR | txn_ro_flat)) ==
+             (txn_ro_flat | MDBX_TXN_OUSTED))
               ? MDBX_OUSTED
               : MDBX_BAD_TXN;
 #endif /* MDBX_TXN_CHECKOWNER */
