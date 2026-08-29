@@ -614,7 +614,7 @@ __cold int meta_validate(MDBX_env *env, meta_t *const meta, const page_t *const 
   if (geo_now < geo_lower)
     geo_now = geo_lower;
   if (geo_now < dxbsize_pages)
-    geo_now = dxbsize_pages;
+    geo_now = (pgno_t)dxbsize_pages;
   if (geo_now > geo_upper)
     geo_now = geo_upper;
 

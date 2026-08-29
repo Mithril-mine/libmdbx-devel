@@ -59,9 +59,9 @@ uint16_t pages2pv(size_t pages) {
 __cold bool pv2pages_verify(void) {
   bool ok = true, dump_translation = false;
   for (size_t i = 0; i < 65536; ++i) {
-    size_t pages = pv2pages(i);
+    size_t pages = pv2pages((uint16_t)i);
     size_t x = pages2pv(pages);
-    size_t xp = pv2pages(x);
+    size_t xp = pv2pages((uint16_t)x);
     if (pages != xp) {
       ERROR("%zu => %zu => %zu => %zu\n", i, pages, x, xp);
       ok = false;

@@ -707,7 +707,7 @@ int txn_renew(MDBX_txn *txn, unsigned flags) {
           rc = tbl_setup(env, &env->kvs[MAIN_DBI], &txn->dbs[MAIN_DBI]);
           if (likely(rc == MDBX_SUCCESS)) {
             seq = dbi_seq_next(env, MAIN_DBI);
-            env->dbs_flags[MAIN_DBI] = DB_VALID | txn->dbs[MAIN_DBI].flags;
+            env->dbs_flags[MAIN_DBI] = DB_VALID | (uint8_t)txn->dbs[MAIN_DBI].flags;
             atomic_store32(&env->dbi_seqs[MAIN_DBI], seq, mo_AcquireRelease);
           }
         } else {
