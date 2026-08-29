@@ -84,11 +84,15 @@ typedef struct {
 } osal_condpair_t;
 typedef CRITICAL_SECTION osal_fastmutex_t;
 
-#if !defined(_MSC_VER) && !defined(__try)
+#if (defined(_MSC_VER) && !defined(_clang__) && (!MDBX_WITHOUT_MSVC_CRT || !defined(_M_IX86))) ||                      \
+    (defined(__try) && defined(__except))
 /* *INDENT-OFF* */
 /* clang-format off */
-#define __try
-#define __except(COND) if (/* (void)(COND), */ false)
+#define SEH_TRY __try
+#define SEH_EXCEPT(COND) __except(COND)
+#else
+#define SEH_TRY
+#define SEH_EXCEPT(COND) if (/* (void)(COND), */ false)
 /* *INDENT-ON* */
 /* clang-format on */
 #endif /* stub for MSVC's __try/__except */
@@ -114,6 +118,8 @@ static inline void *osal_realloc(void *ptr, size_t bytes) {
 #ifndef osal_free
 static inline void osal_free(void *ptr) { HeapFree(GetProcessHeap(), 0, ptr); }
 #endif /* osal_free */
+
+#define osal_alloca(size) _alloca(size)
 
 #else /* MDBX_WITHOUT_MSVC_CRT */
 
@@ -159,6 +165,14 @@ typedef pthread_mutex_t osal_fastmutex_t;
 #elif defined(_MSC_VER) && !MDBX_WITHOUT_MSVC_CRT
 #define osal_malloc_usable_size(ptr) _msize(ptr)
 #endif /* osal_malloc_usable_size */
+
+#ifndef osal_strdup
+LIBMDBX_API char *osal_strdup(const char *str);
+#endif
+
+#ifndef osal_alloca
+#define osal_alloca(size) alloca(size)
+#endif /* osal_alloca */
 
 /*----------------------------------------------------------------------------*/
 /* OS abstraction layer stuff */
@@ -392,10 +406,6 @@ MDBX_MAYBE_UNUSED MDBX_INTERNAL void osal_jitter(bool tiny);
 #endif /* MDBX_F_OFD_SETLK64, MDBX_F_OFD_SETLKW64, MDBX_F_OFD_GETLK64 */
 
 #endif /* !Windows */
-
-#ifndef osal_strdup
-LIBMDBX_API char *osal_strdup(const char *str);
-#endif
 
 MDBX_MAYBE_UNUSED static inline int osal_get_errno(void) {
 #if defined(_WIN32) || defined(_WIN64)

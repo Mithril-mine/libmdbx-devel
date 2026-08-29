@@ -51,7 +51,8 @@ static bool mincore_fetch(MDBX_env *const env, const size_t unit_begin) {
 #if MDBX_ENABLE_PGOP_STAT
   env->lck->pgops.mincore.weak += 1;
 #endif /* MDBX_ENABLE_PGOP_STAT */
-  uint8_t *const vector = alloca(pages);
+  uint8_t *const vector = osal_alloca(pages);
+
   if (unlikely(mincore(ptr_disp(env->dxb_mmap.base, offset), length, (void *)vector))) {
     NOTICE("mincore(+%zu, %zu), err %d", offset, length, errno);
     return false;
