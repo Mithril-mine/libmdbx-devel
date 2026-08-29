@@ -1059,7 +1059,7 @@ __hot int cursor_put(MDBX_cursor *mc, const MDBX_val *key, MDBX_val *data, unsig
           } else if (eq_fast(data, &old_data)) {
             cASSERT(mc, mc->clc->v.cmp(data, &old_data) == 0);
             cASSERT(mc, !"Should not happen since equal data should have been handled by batch dupfix" ||
-                           batch_dupfix_done);
+                            batch_dupfix_done);
             if (flags & MDBX_NODUPDATA)
               return MDBX_KEYEXIST;
             /* data is match exactly byte-to-byte, nothing to update */
