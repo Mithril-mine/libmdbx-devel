@@ -13,20 +13,66 @@ BTC `bc1qzvl9uegf2ea6cwlytnanrscyv8snwsvrc0xfsu`, SOL `FTCTgbHajoLVZGr8aEFWMzx3N
 
 A long-term support phase with periodic releases as fixes accumulate.
 
-Appreciations:
+### Important:
+
+ - Starting from v0.14.3 released at 2026-08-09, the 0.14.x branch gets stable status and will only receive bug fixes, but other improvements only in exceptional cases.
+   Please plan the migration from 0.13.x to 0.14.x.
+
+ - The project website [libmdbx.dqdkfa.ru](https://libmdbx.dqdkfa.ru/) has been re-created:
+    - The advice, explanations, questions and answers, from correspondence, forums and other sources have been compiled.
+    - All information has been aggregated into a knowledge base, and the corresponding sections have been compiled on the website.
+    - The documentation generated via Doxgygen has been moved to /doxygen, with old links redirection.
+    - A lot of work has been done using AI.
+
+### Appreciations:
 
  - [Erigon](https://erigon.tech/) for sponsorship.
  - [Weixie Cui](https://github.com/cuiweixie) for bug fixing through many pull-requests.
  - https://github.com/box4wangjing for typos fixing.
+ - [Andrea Lanfranchi](https://github.com/AndreaLanfranchi) for bugs reporting and assistant fix ones.
 
-Fixes:
+### Fixes:
 
+ - Fixed using `[[maybe_unused]] const` as workaround for MSVC bug (backport).
  - Fixed minor copy&paste mistakes and other typos across codebase (backport).
- - Fixed `mdbx::from_hex` remainder check before reading a hex digit pair (backport).
+ - Fixed a lot of typos and a few minor bugs detected by CodeQL (backport).
  - Fixed Windows `writethrough_threshold` option rejecting `UINT64_MAX` default (backport).
- - Fixed assertions triggering in a specific scenarios of creating and renaming tables within nested transactions (backport).
+ - Fixed typo in handling `NOMETASYNC` while emit `SYNC_IODQ` (backport).
+ - Fixed `env_owned_wrtxn()` to avoid by-pass locking in the `MDBX_NOSTICKYTHREADS` mode (backport).
+ - Fixed unreasonably high memory 2GB consumption in `mdbx_load` utility due to leftover debug changes (backport).
+ - Fixed loss of `mincore()` cache due erase/overwrite on insert (backport).
+ - Fixed `entry point _except_handler4 not found in mdbx.dll` in 32-bit build with `MDBX_WITHOUT_MSVC_CRT=ON` (backport).
+ - Fixed building by CLANG/LLVM on Windows, including Microsoft Clang from Visual Studio (backport).
+ - Fixed `scan4seq_neon()` for LLP4/ARM64-Windows (backport).
+ - Fixed division truncation/underflow in the `default_rp_augment_limit()` which lead to too low and "stepwise" default `MDBX_opt_rp_augment_limit` (backport).
 
-Other:
+ - Rare or specific conditions:
+    - Fixed assertions triggering in a specific scenarios of creating and renaming tables within nested transactions (backport).
+    - Fixed fix `mdbx_cursor_compare()` for a case when cursors binded with the same DBI and same MVCC-snapshot, but different ro-txns (backport).
+    - Fixed extra rdt-unlock in the failure path of `dxb_resize()` (backport).
+    - Fixed NULL deference in `walk_pgno()` when operating on a corrupted DB, which also affects `mdbx_chk` utility (backport).
+    - Fixed loosing of global init and thread-local-storage destructors in static library build by MinGW toolchain in particular cases (backport).
+
+ - Resource leaks:
+    - Fixed `mach_port_t` leak inside `mdbx_get_sysraminfo()` (backport).
+    - Fixed Windows section handle leak inside `osal_mresize()` in unsuccessful case (backport).
+    - Fixed `cond_pair` leak in the failure path of `copy_with_compacting()` (backport).
+
+ - Spilling:
+    - Fixed spurious assertion inside `spill_cursor_keep()` (backport).
+    - Fixed a leak of spilled pages list on a nested transaction abort (backport).
+    - Fixed tracking and invalidation of the inner part of the sibling cursors (backport).
+    - Fixed spilling/accounting for `MDBX_AVOID_MSYNC=ON` (backport).
+
+ - C++ API:
+    - Fixed `mdbx::from_hex` remainder check before reading a hex digit pair (backport).
+    - Fixed ODR violations warnings from modern GCC while both LTO and UBSAN are enabled (backport).
+    - Fixed UTF-8 U+100000..U+10FFFF range checking/decoding inside `mdbx::slice::is_printable()` (backport).
+    - Fixed off-by-one bugs in the `mdbx::from_base64` and `mdbx::slice::is_printable()` (backport).
+    - Fixed possibility of overflow in `mdbx::slice::safe_middle()` (backport).
+    - Fixed using wide characher count instead of bytes in `mdbx::slice` and `mdbx::buffer<>` methods (backport).
+
+### Other:
 
  - add link to new .NET bindings (backport).
 
