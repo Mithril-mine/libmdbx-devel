@@ -217,7 +217,7 @@ The full \ref c_api documentation lists further details below, like how to:
 - Optimize (bulk) loading speed: \ref MDBX_MULTIPLE, \ref MDBX_APPEND.
 - Reduce (temporarily) robustness to gain even more speed: \ref sync_modes.
 - Gather statistics about the database: \ref c_statinfo.
-- Sstimate size of range query result: \ref c_rqest.
+- Estimate size of range query result: \ref c_rqest.
 - Double performance by LIFO reclaiming on storages with write-back: \ref MDBX_LIFORECLAIM.
 - Use sequences and canary markers: \ref mdbx_dbi_sequence(), \ref MDBX_canary.
 - Use Handle-Slow-Readers callback to resolve a database full/overflow issues
