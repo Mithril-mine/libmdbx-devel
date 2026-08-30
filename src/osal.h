@@ -100,23 +100,23 @@ typedef CRITICAL_SECTION osal_fastmutex_t;
 #if MDBX_WITHOUT_MSVC_CRT
 
 #ifndef osal_malloc
-static inline void *osal_malloc(size_t bytes) { return HeapAlloc(GetProcessHeap(), 0, bytes); }
+MDBX_MAYBE_UNUSED static inline void *osal_malloc(size_t bytes) { return HeapAlloc(GetProcessHeap(), 0, bytes); }
 #endif /* osal_malloc */
 
 #ifndef osal_calloc
-static inline void *osal_calloc(size_t nelem, size_t size) {
+MDBX_MAYBE_UNUSED static inline void *osal_calloc(size_t nelem, size_t size) {
   return HeapAlloc(GetProcessHeap(), HEAP_ZERO_MEMORY, nelem * size);
 }
 #endif /* osal_calloc */
 
 #ifndef osal_realloc
-static inline void *osal_realloc(void *ptr, size_t bytes) {
+MDBX_MAYBE_UNUSED static inline void *osal_realloc(void *ptr, size_t bytes) {
   return ptr ? HeapReAlloc(GetProcessHeap(), 0, ptr, bytes) : HeapAlloc(GetProcessHeap(), 0, bytes);
 }
 #endif /* osal_realloc */
 
 #ifndef osal_free
-static inline void osal_free(void *ptr) { HeapFree(GetProcessHeap(), 0, ptr); }
+MDBX_MAYBE_UNUSED static inline void osal_free(void *ptr) { HeapFree(GetProcessHeap(), 0, ptr); }
 #endif /* osal_free */
 
 #define osal_alloca(size) _alloca(size)
