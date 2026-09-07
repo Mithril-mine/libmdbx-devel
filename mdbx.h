@@ -1048,7 +1048,7 @@ LIBMDBX_API int mdbx_setup_debug_nofmt(MDBX_log_level_t log_level, MDBX_debug_fl
                                        MDBX_debug_func_nofmt logger, char *logger_buffer, size_t logger_buffer_size);
 
 /** \brief A callback function for most assertion failures, that called before printing the message and aborting.
- * \see mdbx_env_set_panic()
+ * \see mdbx_set_panic()
  *
  * \param [in] msg        The assertion message, not including newline.
  * \param [in] function   The function name where the assertion check failed,
