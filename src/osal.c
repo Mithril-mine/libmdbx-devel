@@ -3563,7 +3563,7 @@ __cold int mdbx_get_sysraminfo(intptr_t *page_size, intptr_t *total_pages, intpt
       return LOG_IFERR(errno);
     if (len != sizeof(info))
       return LOG_IFERR(MDBX_ENOSYS);
-    const intptr_t avail_ram_pages = info.t_free;
+    const intptr_t avail_ram_pages = info.t_free + info.t_inact / 2;
 #else
 #error "FIXME: Get Available RAM"
 #endif
