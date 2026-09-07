@@ -5,6 +5,10 @@
 
 #include "internals.h"
 
+#if defined(__linux__) || defined(__gnu_linux__)
+#include <sys/sysinfo.h>
+#endif /* Linux */
+
 #if defined(__APPLE__) || defined(__MACH__)
 #include <mach/mach_time.h>
 #include <mach/vm_statistics.h>
@@ -3480,6 +3484,17 @@ __cold int mdbx_get_sysraminfo(intptr_t *page_size, intptr_t *total_pages, intpt
   const int log2page = globals.sys_pagesize_ln2;
   ASSERT(pagesize == (INT64_C(1) << log2page));
   (void)log2page;
+
+#if defined(__linux__) || defined(__gnu_linux__)
+  struct sysinfo si;
+  if (sysinfo(&si) == 0) {
+    if (total_pages)
+      *total_pages = si.totalram >> log2page;
+    if (avail_pages)
+      *avail_pages = si.freeram >> log2page;
+    return MDBX_SUCCESS;
+  }
+#endif /* Linux */
 
 #if IS_WINDOWS
   MEMORYSTATUSEX info;
