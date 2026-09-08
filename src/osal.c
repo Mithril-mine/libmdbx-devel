@@ -3467,6 +3467,36 @@ __cold static bin128_t osal_bootid(void) {
   return uuid;
 }
 
+#if defined(__linux__) || defined(__gnu_linux__)
+static intptr_t proc_meminfo_availpages(void) {
+  intptr_t availpages = -1;
+  FILE *const proc_meminfo = fopen("/proc/meminfo", "r");
+  if (!proc_meminfo)
+    return availpages;
+
+  char buf[64], *line;
+  while ((line = fgets(buf, sizeof(buf), proc_meminfo)) != nullptr) {
+    if (strncmp("MemAvailable:", line, 13))
+      continue;
+    size_t value = 0;
+    buf[0] = 0;
+    if (sscanf(line + 13, "%zu %s", &value, buf) < 1)
+      availpages = -1;
+    else {
+      if (!buf[0] || strcasecmp(buf, "b") == 0 || strcasecmp(buf, "bytes") == 0)
+        availpages = value >> globals.sys_pagesize_ln2;
+      else if (strcasecmp(buf, "kb") == 0 || strcasecmp(buf, "kbytes") == 0)
+        availpages = (value << 10) >> globals.sys_pagesize_ln2;
+      else if (strcasecmp(buf, "mb") == 0 || strcasecmp(buf, "mbytes") == 0)
+        availpages = (value << 20) >> globals.sys_pagesize_ln2;
+    }
+    break;
+  }
+  fclose(proc_meminfo);
+  return availpages;
+}
+#endif /* Linux */
+
 __cold int mdbx_get_sysraminfo(intptr_t *page_size, intptr_t *total_pages, intptr_t *avail_pages) {
   if (!page_size && !total_pages && !avail_pages)
     return LOG_IFERR(MDBX_EINVAL);
@@ -3490,8 +3520,11 @@ __cold int mdbx_get_sysraminfo(intptr_t *page_size, intptr_t *total_pages, intpt
   if (sysinfo(&si) == 0) {
     if (total_pages)
       *total_pages = si.totalram >> log2page;
-    if (avail_pages)
-      *avail_pages = si.freeram >> log2page;
+    if (avail_pages) {
+      *avail_pages = proc_meminfo_availpages();
+      if (*avail_pages < 0)
+        *avail_pages = si.freeram >> log2page;
+    }
     return MDBX_SUCCESS;
   }
 #endif /* Linux */
