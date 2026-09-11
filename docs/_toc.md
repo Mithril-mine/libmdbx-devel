@@ -4,7 +4,7 @@ BTC `bc1qzvl9uegf2ea6cwlytnanrscyv8snwsvrc0xfsu`, SOL `FTCTgbHajoLVZGr8aEFWMzx3N
 Please use the `stable` branch or the latest release for production environment through staging, but the `master` branch for development a derivative projects.
 Всё будет хорошо!
 
-> Questions, feedback and suggestions are welcome to the [![Чат в МАКС](https://libmdbx.dqdkfa.ru/img/MAX-24x24.png)](https://max.ru/join/dKckvyuARxp1vRK-wnPur8zYCEkbR3OUOmpPWkWxp78) and [Telegram' group](https://t.me/libmdbx).
+> Questions, feedback and suggestions are welcome to the [Telegram' group](https://t.me/libmdbx), а также [Чат в МАКС](https://max.ru/join/dKckvyuARxp1vRK-wnPur8zYCEkbR3OUOmpPWkWxp78) для разработчиков и пользователей из России.
 > See the [ChangeLog](https://sourcecraft.dev/dqdkfa/libmdbx/browse/ChangeLog.md) for `NEWS` and latest updates.
 
 \section toc Table of Contents
