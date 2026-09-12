@@ -200,10 +200,9 @@ __cold int mdbx_env_defrag(MDBX_env *env, size_t defrag_atleast, size_t time_atl
   defrag_milestone(&dfc);
 
 bailout:
-  if (result) {
-    defrag_result(&dfc, result, 0);
+  defrag_result(&dfc, result, 0);
+  if (result)
     result->pages_moved = dfc.total_pages_moved;
-  }
 
   defrag_destroy(&dfc);
   if (txn && txn->userctx == &dfc)
