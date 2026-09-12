@@ -1997,14 +1997,31 @@ int osal_check_fs_local(mdbx_filehandle_t handle, int flags) {
   if (GetFileType(handle) != FILE_TYPE_DISK)
     return ERROR_FILE_OFFLINE;
 
+  static const char msg_note[] = "To avoid DB corruption, data loss please, performance degradation, BSOD or resources "
+                                 "leaks in the OS avoid use database on a";
   if (imports.GetFileInformationByHandleEx) {
     FILE_REMOTE_PROTOCOL_INFO RemoteProtocolInfo;
     if (imports.GetFileInformationByHandleEx(handle, FileRemoteProtocolInfo, &RemoteProtocolInfo,
                                              sizeof(RemoteProtocolInfo))) {
-      if ((RemoteProtocolInfo.Flags & REMOTE_PROTOCOL_INFO_FLAG_OFFLINE) && !(flags & MDBX_RDONLY))
+      if ((RemoteProtocolInfo.Flags & REMOTE_PROTOCOL_INFO_FLAG_OFFLINE) && !(flags & MDBX_RDONLY)) {
+        ERROR("%s remote or shared volumes: remote protocol id 0x%08lX, version %u.%u.%u, flags 0x%lx", msg_note,
+              RemoteProtocolInfo.Protocol, RemoteProtocolInfo.ProtocolMajorVersion,
+              RemoteProtocolInfo.ProtocolMajorVersion, RemoteProtocolInfo.ProtocolRevision,
+              (unsigned long)RemoteProtocolInfo.Flags);
         return ERROR_FILE_OFFLINE;
-      if (!(RemoteProtocolInfo.Flags & REMOTE_PROTOCOL_INFO_FLAG_LOOPBACK) && !(flags & MDBX_EXCLUSIVE))
+      }
+      if (!(RemoteProtocolInfo.Flags & REMOTE_PROTOCOL_INFO_FLAG_LOOPBACK) ||
+          !(F_ISSET(flags, MDBX_EXCLUSIVE | MDBX_RDONLY) || F_ISSET(flags, MDBX_EXCLUSIVE | MDBX_UTTERLY_NOSYNC))) {
+        ERROR("%s remote or shared volumes: remote protocol id 0x%08lX, version %u.%u.%u, flags 0x%lx", msg_note,
+              RemoteProtocolInfo.Protocol, RemoteProtocolInfo.ProtocolMajorVersion,
+              RemoteProtocolInfo.ProtocolMajorVersion, RemoteProtocolInfo.ProtocolRevision,
+              (unsigned long)RemoteProtocolInfo.Flags);
         return MDBX_EREMOTE;
+      }
+      WARNING("%s remote or shared volumes: remote protocol id 0x%08lX, version %u.%u.%u, flags 0x%lx", msg_note,
+              RemoteProtocolInfo.Protocol, RemoteProtocolInfo.ProtocolMajorVersion,
+              RemoteProtocolInfo.ProtocolMajorVersion, RemoteProtocolInfo.ProtocolRevision,
+              (unsigned long)RemoteProtocolInfo.Flags);
     }
   }
 
@@ -2022,8 +2039,15 @@ int osal_check_fs_local(mdbx_filehandle_t handle, int flags) {
     rc = imports.NtFsControlFile(handle, nullptr, nullptr, nullptr, &StatusBlock, FSCTL_GET_EXTERNAL_BACKING, nullptr,
                                  0, &GetExternalBacking_OutputBuffer, sizeof(GetExternalBacking_OutputBuffer));
     if (NT_SUCCESS(rc)) {
-      if (!(flags & MDBX_EXCLUSIVE))
+      if (!F_ISSET(flags, MDBX_EXCLUSIVE | MDBX_RDONLY) && !F_ISSET(flags, MDBX_EXCLUSIVE | MDBX_UTTERLY_NOSYNC)) {
+        ERROR("%s compressed/WOF-enabled or layered volumes: WOF-version %lu, provider %lu", msg_note,
+              (unsigned long)GetExternalBacking_OutputBuffer.wof_info.Version,
+              (unsigned long)GetExternalBacking_OutputBuffer.wof_info.Provider);
         return MDBX_EREMOTE;
+      }
+      WARNING("%s compressed/WOF-enabled or layered volumes: WOF-version %lu, provider %lu", msg_note,
+              (unsigned long)GetExternalBacking_OutputBuffer.wof_info.Version,
+              (unsigned long)GetExternalBacking_OutputBuffer.wof_info.Provider);
     } else if (rc != STATUS_OBJECT_NOT_EXTERNALLY_BACKED && rc != STATUS_INVALID_DEVICE_REQUEST &&
                rc != STATUS_NOT_SUPPORTED)
       return osal_ntstatus2errcode(rc);
