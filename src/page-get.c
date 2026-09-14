@@ -285,9 +285,16 @@ __cold int page_check(const MDBX_cursor *const mc, const page_t *const mp) {
           }
 
           const char *const end_of_subpage = data + dsize;
+          const char *const sp_type = is_dupfix_leaf(sp) ? "leaf2-sub" : "leaf-sub";
+          if (unlikely(sp->upper < sp->lower || (sp->lower & 1) || PAGEHDRSZ + sp->upper > dsize)) {
+            rc = bad_page(sp, "invalid %s-page' lower(%u)/upper(%u) with limit %zu\n", sp_type, sp->lower, sp->upper,
+                          dsize - PAGEHDRSZ);
+            continue;
+          }
+
           const intptr_t nsubkeys = page_numkeys(sp);
           if (unlikely(nsubkeys == 0) && !(mc->checking & z_updating) && mc->tree->items)
-            rc = bad_page(mp, "no keys on a %s-page\n", is_dupfix_leaf(sp) ? "leaf2-sub" : "leaf-sub");
+            rc = bad_page(mp, "no keys on a %s-page\n", sp_type);
 
           MDBX_val sub_here, sub_prev = {0, 0};
           for (int ii = 0; ii < nsubkeys; ii++) {
