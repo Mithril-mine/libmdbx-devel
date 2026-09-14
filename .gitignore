@@ -72,3 +72,4 @@ version.c
 *.zip
 mdbx_legacy_example
 mdbx_modern_example
+mdbx-test.*
