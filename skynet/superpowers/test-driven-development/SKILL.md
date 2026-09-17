@@ -56,8 +56,11 @@ Test quality rules (adapted):
 - One behavior per test; a clear name describing the expected behavior.
 - Assert on **real behavior**, not mocks. For libmdbx: use real DBs in `--pathname` dirs,
   real CRUD via the public API, then validate with `mdbx_chk`.
-- Prefer testing through the public API (`mdbx.h`/`mdbx.h++`); only use internal symbols
-  (`MDBX_INTERNAL`, e.g. `tests/ut/details_rkl.c`) when the behavior is genuinely internal.
+- Prefer testing through the public API (`mdbx.h`/`mdbx.h++`); for genuinely internal data
+  structures use the white-box pattern: include the module source directly
+  (e.g. `tests/ut/details_rkl.c` does `#include "../../src/rkl.c"` + `txl.c`), or include an
+  internal header (like `tests/issues/issue_gh0017.c` uses `essentials.h` for the ABI-layout
+  check). See `skynet/test-coverage.md` for the coverage map.
 
 ### Verify RED — watch it fail
 
