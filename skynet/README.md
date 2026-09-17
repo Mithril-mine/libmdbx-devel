@@ -74,8 +74,12 @@ Author: Leonid Yuriev \<leo@yuriev.ru\>. Home site: <https://libmdbx.dqdkfa.ru>.
 | Document | Contents |
 | --- | --- |
 | [`structure.md`](structure.md) | Full file-by-file map of the repository, classification of `src/` modules into subsystems |
+| [`module-interfaces.md`](module-interfaces.md) | Cross-module interface map: exports per module (proto.h), include backbone, verified call sites, dependency cycles |
+| [`cxx-api.md`](cxx-api.md) | C++ API layer in depth: header topology, class inventory, decl/impl split, C↔C++ bridge, build/amalgamation, compiler matrix |
 | [`build.md`](build.md) | Build systems (CMake, GNU Make, Conan), key options, CI matrix, testing commands |
 | [`architecture.md`](architecture.md) | Internal architecture: layers, module relationships, data flow, amalgamation |
+| [`test-coverage.md`](test-coverage.md) | Tests → modules coverage map: which test guards which module/feature, coverage gaps |
+| [`techdebt.md`](techdebt.md) | Tech-debt inventory from source scan: 86 TODO/FIXME/workaround markers by category with file:line refs |
 | [`workflows.md`](workflows.md) | Git branching, PR/review flow, CI triggers, release & amalgamation process |
 | [`superpowers/README.md`](superpowers/README.md) | Integrated agent methodology (Superpowers): what was taken, why, and how to use it |
 | [`sourcecraft/README.md`](sourcecraft/README.md) | SourceCraft-specific: CI cubes/workflows, MCP tooling, PR automation |
@@ -86,7 +90,11 @@ Depending on the task, start from:
 
 - **Build / configure / test commands** → [`build.md`](build.md)
 - **Where is module X / what does file Y do** → [`structure.md`](structure.md)
+- **Who calls what / module interfaces** → [`module-interfaces.md`](module-interfaces.md)
 - **How the engine works internally, invariants** → [`architecture.md`](architecture.md)
+- **C++ API / classes / wrappers** → [`cxx-api.md`](cxx-api.md)
+- **What tests guard a module / coverage gaps** → [`test-coverage.md`](test-coverage.md)
+- **What to refactor first / known debt** → [`techdebt.md`](techdebt.md)
 - **How to contribute / open PR / run CI** → [`workflows.md`](workflows.md), [`sourcecraft/README.md`](sourcecraft/README.md)
 - **Feature design, planning, TDD, debugging** → [`superpowers/README.md`](superpowers/README.md)
 
