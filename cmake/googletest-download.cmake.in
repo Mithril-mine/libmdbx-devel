@@ -1,0 +1,22 @@
+if(CMAKE_VERSION VERSION_LESS 3.8.2)
+  cmake_minimum_required(VERSION 3.0.2)
+elseif(CMAKE_VERSION VERSION_LESS 3.12)
+  cmake_minimum_required(VERSION 3.8.2)
+else()
+  cmake_minimum_required(VERSION 3.12)
+endif()
+
+project(googletest-download NONE)
+
+include(ExternalProject)
+
+ExternalProject_Add(googletest
+  GIT_REPOSITORY    "${GTEST_CLONE_URL}"
+  GIT_TAG           "${GTEST_CLONE_TAG}"
+  SOURCE_DIR        "${CMAKE_BINARY_DIR}/googletest-src"
+  BINARY_DIR        "${CMAKE_BINARY_DIR}/googletest-build"
+  CONFIGURE_COMMAND ""
+  BUILD_COMMAND     ""
+  INSTALL_COMMAND   ""
+  TEST_COMMAND      ""
+)
