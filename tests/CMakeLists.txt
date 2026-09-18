@@ -174,33 +174,33 @@ else()
   endif()
 
   add_test(NAME smoke_long COMMAND $<TARGET_FILE:mdbx_test> --duration=5m --loglevel=notice --prng-seed=${test_seed}
-                                   --progress --console=no --pathname=smoke.db --dont-cleanup-after basic)
+                                   --progress --console=no --pathname=smoke-long.db --dont-cleanup-after basic)
   set_tests_properties(smoke_long PROPERTIES LABELS "smoke-long" TIMEOUT 1800 RUN_SERIAL OFF)
   if(MDBX_BUILD_TOOLS)
-    add_test(NAME smoke_long_chk COMMAND $<TARGET_FILE:mdbx_chk> -nvv smoke.db)
+    add_test(NAME smoke_long_chk COMMAND $<TARGET_FILE:mdbx_chk> -nvv smoke-long.db)
     set_tests_properties(smoke_long_chk PROPERTIES
       LABELS "smoke-long"
       DEPENDS smoke_long
       TIMEOUT 60
       FAIL_REGULAR_EXPRESSION "cooperative mode"
-      REQUIRED_FILES smoke.db)
+      REQUIRED_FILES smoke-long.db)
 
-    add_test(NAME smoke_long_chk_copy COMMAND $<TARGET_FILE:mdbx_chk> -nvv smoke.db-copy)
+    add_test(NAME smoke_long_chk_copy COMMAND $<TARGET_FILE:mdbx_chk> -nvv smoke-long.db-copy)
     set_tests_properties(smoke_long_chk_copy PROPERTIES
       LABELS "smoke-long"
       DEPENDS smoke_long
       TIMEOUT 60
       FAIL_REGULAR_EXPRESSION "cooperative mode"
-      REQUIRED_FILES smoke.db-copy)
+      REQUIRED_FILES smoke-long.db-copy)
 
-    add_test(NAME smoke_long_copy_asis COMMAND $<TARGET_FILE:mdbx_copy> -f smoke.db copy_asis.db)
+    add_test(NAME smoke_long_copy_asis COMMAND $<TARGET_FILE:mdbx_copy> -f smoke-long.db copy_asis.db)
     set_tests_properties(smoke_long_copy_asis PROPERTIES
       LABELS "smoke-long"
       DEPENDS smoke_long
       TIMEOUT 60
-      REQUIRED_FILES smoke.db)
+      REQUIRED_FILES smoke-long.db)
 
-    add_test(NAME smoke_long_copy_compactify COMMAND $<TARGET_FILE:mdbx_copy> -f -c smoke.db copy_compactify.db)
+    add_test(NAME smoke_long_copy_compactify COMMAND $<TARGET_FILE:mdbx_copy> -f -c smoke-long.db copy_compactify.db)
     set_tests_properties(smoke_long_copy_compactify PROPERTIES
       LABELS "smoke-long"
       DEPENDS smoke_long
@@ -256,9 +256,9 @@ else()
   endif()
 
   if(WIN32 AND MDBX_BUILD_TOOLS)
-    set_tests_properties(smoke_long_chk PROPERTIES RESOURCE_LOCK smoke.db)
-    set_tests_properties(smoke_long_copy_asis PROPERTIES RESOURCE_LOCK smoke.db)
-    set_tests_properties(smoke_long_copy_compactify PROPERTIES RESOURCE_LOCK smoke.db)
+    set_tests_properties(smoke_long_chk PROPERTIES RESOURCE_LOCK smoke-long.db)
+    set_tests_properties(smoke_long_copy_asis PROPERTIES RESOURCE_LOCK smoke-long.db)
+    set_tests_properties(smoke_long_copy_compactify PROPERTIES RESOURCE_LOCK smoke-long.db)
   endif()
 
   # Quick smoke scenarios (a-la `make smoke`).
@@ -362,7 +362,8 @@ else()
       LABELS "stochastic"
       TIMEOUT 10800
       RUN_SERIAL ON
-      WORKING_DIRECTORY ${MDBX_OUTPUT_DIR})
+      WORKING_DIRECTORY ${MDBX_OUTPUT_DIR}
+      RESOURCE_LOCK stochastic)
 
     add_test(NAME stochastic_single COMMAND ${CMAKE_CURRENT_SOURCE_DIR}/stochastic.sh --whole-duration 600
                                      --probe-duration 60 --dont-check-ram-size --single --loops 2 --db-upto-mb 256
@@ -371,7 +372,8 @@ else()
       LABELS "stochastic-single"
       TIMEOUT 10800
       RUN_SERIAL ON
-      WORKING_DIRECTORY ${MDBX_OUTPUT_DIR})
+      WORKING_DIRECTORY ${MDBX_OUTPUT_DIR}
+      RESOURCE_LOCK stochastic)
 
     add_test(NAME stochastic_long COMMAND ${CMAKE_CURRENT_SOURCE_DIR}/stochastic.sh --loops 42 --db-upto-mb 1024
                                     --extra --skip-make --taillog)
@@ -379,7 +381,8 @@ else()
       LABELS "stochastic-long"
       TIMEOUT 0
       RUN_SERIAL ON
-      WORKING_DIRECTORY ${MDBX_OUTPUT_DIR})
+      WORKING_DIRECTORY ${MDBX_OUTPUT_DIR}
+      RESOURCE_LOCK stochastic)
   endif()
 
   if(NOT SUBPROJECT)
