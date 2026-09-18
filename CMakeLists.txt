@@ -1598,6 +1598,7 @@ if(MDBX_ENABLE_TESTS)
   add_subdirectory(examples)
   #> dist-cutoff-begin
   if(NOT MDBX_AMALGAMATED_SOURCE AND NOT_SUBPROJECT)
+    include("${CMAKE_CURRENT_SOURCE_DIR}/cmake/testing.cmake")
     add_subdirectory(tests)
   endif()
   #< dist-cutoff-end
