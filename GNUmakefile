@@ -100,12 +100,6 @@ else
 WAIT         = .WAIT
 endif
 
-ifeq ($(bash_ge_4_3),1)
-STOCHASTIC   = ./tests/stochastic.sh
-else
-STOCHASTIC   = echo "Skip running stochastic script since Bash < 4.3"
-endif
-
 ################################################################################
 
 define uname2sosuffix
@@ -317,68 +311,98 @@ lib-shared libmdbx.$(SO_SUFFIX): mdbx-dylib.o $(call select_by,MDBX_BUILD_CXX,md
 	@echo '  LD $@'
 	$(QUIET)$(call select_by,MDBX_BUILD_CXX,$(CXX) $(CXXFLAGS),$(CC) $(CFLAGS)) $^ -pthread -shared $(LDFLAGS) $(call select_by,MDBX_BUILD_CXX,$(LIB_STDCXXFS)) $(LIBS) -o $@
 
-ninja-assertions: MDBX_CHECKING=2
-ninja-assertions: cmake-build
+# #####################################################################################################################
+# CMake-based scenarios. Each scenario uses its own build directory to keep the configuration clean.
+#
+# $(1) = build directory, $(2) = extra CMake configure options, $(3) = extra CMake build arguments
+define cmake-configure-build
+	mkdir -p $(1) && ASAN_OPTIONS=$(ASAN_OPTIONS) UBSAN_OPTIONS=$(UBSAN_OPTIONS) \
+		$(CMAKE) $(CMAKE_OPT) $(2) $(if $(MDBX_SMOKE_EXTRA),-DMDBX_SMOKE_EXTRA="$(MDBX_SMOKE_EXTRA)",) -G Ninja -S . -B $(1) && \
+		$(CMAKE) --build $(1) $(3)
+endef
+
+# $(1) = build directory, $(2) = ctest label regular expression, $(3) = extra ctest options
+define ctest-scenario-run
+	@echo '  RUN: ctest --label-regex $(2) in $(1)'
+	$(QUIET)ASAN_OPTIONS=$(ASAN_OPTIONS) UBSAN_OPTIONS=$(UBSAN_OPTIONS) $(CTEST) --test-dir $(1) \
+		--label-regex '$(2)' --output-on-failure --parallel `(nproc | sysctl -n hw.ncpu | echo 2) 2>/dev/null` $(3) $(CTEST_OPT)
+endef
+
+cmake-build:
+	@echo '  RUN: cmake -G Ninja && cmake --build @cmake-build'
+	$(QUIET)$(call cmake-configure-build,@cmake-build,,)
+
+cmake-assertions-build:
+	@echo '  RUN: cmake -G Ninja -DMDBX_CHECKING=2 && cmake --build @cmake-assertions-build'
+	$(QUIET)$(call cmake-configure-build,@cmake-assertions-build,-DMDBX_CHECKING=2,)
+
+cmake-asan-build:
+	@echo '  RUN: cmake -G Ninja -DENABLE_ASAN=ON && cmake --build @cmake-asan-build'
+	$(QUIET)$(call cmake-configure-build,@cmake-asan-build,-DENABLE_ASAN:BOOL=ON -DENABLE_UBSAN:BOOL=OFF -DENABLE_MEMCHECK:BOOL=OFF -DMDBX_CHECKING=2,)
+
+cmake-ubsan-build:
+	@echo '  RUN: cmake -G Ninja -DENABLE_UBSAN=ON && cmake --build @cmake-ubsan-build'
+	$(QUIET)$(call cmake-configure-build,@cmake-ubsan-build,-DENABLE_UBSAN:BOOL=ON -DENABLE_ASAN:BOOL=OFF -DENABLE_MEMCHECK:BOOL=OFF -DMDBX_CHECKING=2,)
+
+cmake-memcheck-build:
+	@echo '  RUN: cmake -G Ninja -DENABLE_MEMCHECK=ON && cmake --build @cmake-memcheck-build'
+	$(QUIET)$(call cmake-configure-build,@cmake-memcheck-build,-DENABLE_MEMCHECK:BOOL=ON -DENABLE_ASAN:BOOL=OFF -DENABLE_UBSAN:BOOL=OFF -DMDBX_CHECKING=1 -DCMAKE_BUILD_TYPE=RelWithDebInfo,)
+
+cmake-leak-build:
+	@echo '  RUN: cmake -G Ninja -fsanitize=leak && cmake --build @cmake-leak-build'
+	$(QUIET)$(call cmake-configure-build,@cmake-leak-build,-DCMAKE_C_FLAGS=-fsanitize=leak -DCMAKE_CXX_FLAGS=-fsanitize=leak -DCMAKE_EXE_LINKER_FLAGS=-fsanitize=leak -DCMAKE_SHARED_LINKER_FLAGS=-fsanitize=leak -DMDBX_CHECKING=2 -DMDBX_ENABLE_LONG_TESTS=ON,)
+
+cmake-stochastic-build:
+	@echo '  RUN: cmake -G Ninja -DMDBX_ENABLE_LONG_TESTS=ON && cmake --build @cmake-stochastic-build'
+	$(QUIET)$(call cmake-configure-build,@cmake-stochastic-build,-DMDBX_ENABLE_LONG_TESTS=ON,)
+
+ninja-assertions: cmake-assertions-build
 ninja-debug: CMAKE_OPT += -DCMAKE_BUILD_TYPE=Debug
 ninja-debug: cmake-build
 ninja: cmake-build
-cmake-build:
-	@echo "  RUN: cmake -G Ninja && cmake --build"
-	$(QUIET)mkdir -p @cmake-ninja-build && ASAN_OPTIONS=$(ASAN_OPTIONS) UBSAN_OPTIONS=$(UBSAN_OPTIONS) $(CMAKE) $(CMAKE_OPT) -G Ninja -S . -B @cmake-ninja-build && $(CMAKE) --build @cmake-ninja-build
 
 ctest: cmake-build
-	@echo "  RUN: ctest .."
-	$(QUIET)ASAN_OPTIONS=$(ASAN_OPTIONS) UBSAN_OPTIONS=$(UBSAN_OPTIONS) $(CTEST) --test-dir @cmake-ninja-build --parallel `(nproc | sysctl -n hw.ncpu | echo 2) 2>/dev/null` --schedule-random $(CTEST_OPT)
+	@echo '  RUN: ctest ..'
+	$(QUIET)ASAN_OPTIONS=$(ASAN_OPTIONS) UBSAN_OPTIONS=$(UBSAN_OPTIONS) $(CTEST) --test-dir @cmake-build --parallel `(nproc | sysctl -n hw.ncpu | echo 2) 2>/dev/null` --schedule-random $(CTEST_OPT)
 
 run-ut: mdbx_legacy_example $(call select_by,MDBX_BUILD_CXX,mdbx_modern_example,)
 	$(QUIET)for UT in $^; do echo "  Running $$UT" && ASAN_OPTIONS=$(ASAN_OPTIONS) UBSAN_OPTIONS=$(UBSAN_OPTIONS) ./$${UT} || exit -1; done
 
-TEST_TARGETS :=
+TEST_TARGETS := mdbx_legacy_example $(call select_by,MDBX_BUILD_CXX,mdbx_modern_example,)
 TEST_BUILD_TARGETS :=
 ifneq ($(CMAKE),"")
 TEST_TARGETS += ctest
 TEST_BUILD_TARGETS += cmake-build
 endif
-TEST_TARGETS += mdbx_legacy_example $(call select_by,MDBX_BUILD_CXX,mdbx_modern_example,)
-#> dist-cutoff-begin
-TEST_TARGETS += test-stochastic
-TEST_BUILD_TARGETS += build-stochastic
-#< dist-cutoff-end
 
+.PHONY: cmake-build cmake-assertions-build cmake-asan-build cmake-ubsan-build cmake-memcheck-build cmake-leak-build cmake-stochastic-build
 .PHONY: ninja-assertions ninja-debug ninja $(TEST_TARGETS) $(TEST_BUILD_TARGETS) test-ubsan test-asan test-memcheck test-leak test-assertion test build-test smoke check
 test: $(TEST_TARGETS)
 build-test: $(TEST_BUILD_TARGETS)
 
 test-valgrind: test-memcheck
 smoke-valgrind: smoke-memcheck
-smoke-memcheck test-memcheck: CFLAGS_EXTRA += -Ofast -DENABLE_MEMCHECK
-smoke-memcheck test-memcheck: MDBX_CHECKING=1
-smoke-memcheck test-memcheck: CMAKE_OPT += -DENABLE_UBSAN:BOOL=OFF -DENABLE_ASAN:BOOL=OFF -DENABLE_MEMCHECK:BOOL=ON
-smoke-memcheck test-memcheck: CTEST_OPT += -T memcheck
-test-memcheck: build-test build-stochastic ctest
-	@echo '  RUNNING `tests/stochastic.sh --with-valgrind --loops 2`...'
-	$(QUIET)$(STOCHASTIC) --with-valgrind --loops 2 --db-upto-mb 256 --skip-make >$(TEST_LOG) || (cat $(TEST_LOG) && false)
-smoke-memcheck: smoke
-
-smoke-assertion test-assertion: MDBX_CHECKING=2
-test-assertion: test
-smoke-assertion: smoke
-
-smoke-ubsan test-ubsan: CFLAGS_EXTRA += -DENABLE_UBSAN -Ofast -fsanitize=undefined -fsanitize-undefined-trap-on-error -fno-sanitize-recover=all
-smoke-ubsan test-ubsan: CMAKE_OPT += -DENABLE_UBSAN:BOOL=ON -DENABLE_ASAN:BOOL=OFF -DENABLE_MEMCHECK:BOOL=OFF
-smoke-ubsan test-ubsan: MDBX_CHECKING=2
-test-ubsan: test
-smoke-ubsan: smoke
-
-smoke-asan test-asan: CFLAGS_EXTRA += -Os -fsanitize=address
-smoke-asan test-asan: CMAKE_OPT += -DENABLE_UBSAN:BOOL=OFF -DENABLE_ASAN:BOOL=ON -DENABLE_MEMCHECK:BOOL=OFF
-smoke-asan test-asan: MDBX_CHECKING=2
-test-asan: test
-smoke-asan: smoke
-
-test-leak:
-	@echo '  RE-TEST with `-fsanitize=leak` option...'
-	$(QUIET)$(MAKE) IOARENA=false CXXSTD=$(CXXSTD) CFLAGS_EXTRA="-fsanitize=leak" test-stochastic
+test-assertion: cmake-assertions-build
+	$(call ctest-scenario-run,@cmake-assertions-build,.*,)
+smoke-assertion: cmake-assertions-build
+	$(call ctest-scenario-run,@cmake-assertions-build,^smoke$$,)
+test-ubsan: cmake-ubsan-build
+	$(call ctest-scenario-run,@cmake-ubsan-build,.*,)
+smoke-ubsan: cmake-ubsan-build
+	$(call ctest-scenario-run,@cmake-ubsan-build,^smoke$$,)
+test-asan: cmake-asan-build
+	$(call ctest-scenario-run,@cmake-asan-build,.*,)
+smoke-asan: cmake-asan-build
+	$(call ctest-scenario-run,@cmake-asan-build,^smoke$$,)
+test-memcheck: cmake-memcheck-build
+	@echo '  RUN: ctest -T memcheck @cmake-memcheck-build'
+	$(QUIET)ASAN_OPTIONS=$(ASAN_OPTIONS) UBSAN_OPTIONS=$(UBSAN_OPTIONS) $(CTEST) --test-dir @cmake-memcheck-build -T memcheck $(CTEST_OPT)
+smoke-memcheck: cmake-memcheck-build
+	@echo '  RUN: ctest -T memcheck (smoke) @cmake-memcheck-build'
+	$(QUIET)ASAN_OPTIONS=$(ASAN_OPTIONS) UBSAN_OPTIONS=$(UBSAN_OPTIONS) $(CTEST) --test-dir @cmake-memcheck-build --label-regex '^smoke$$' -T memcheck $(CTEST_OPT)
+memcheck: smoke-memcheck
+test-leak: cmake-leak-build
+	$(call ctest-scenario-run,@cmake-leak-build,^stochastic$$,)
 
 mdbx_legacy_example: mdbx.h examples/example-mdbx.c libmdbx.$(SO_SUFFIX)
 	@echo '  CC+LD $@'
@@ -448,8 +472,8 @@ else
 
 .PHONY: build-stochastic build-test-with-valgrind check cross-gcc cross-qemu dist doxygen gcc-analyzer long-test
 .PHONY: reformat release-assets tags smoke smoke-fault
-.PHONY: smoke-singleprocess test-singleprocess test-valgrind test-memcheck memcheck smoke-memcheck
-.PHONY: smoke-assertion long-test-assertion test-ci test-ci-extra check-posix-locking
+.PHONY: smoke-singleprocess test-singleprocess test-stochastic test-long test-valgrind test-memcheck memcheck smoke-memcheck
+.PHONY: smoke-assertion long-test-assertion test-ci test-ci-extra check-posix-locking check-posix-locking-run
 
 test-ci-extra: test-ci cross-gcc cross-qemu
 
@@ -459,21 +483,6 @@ test-ci:
 		test-leak test-asan test-ubsan test-singleprocess test-memcheck; \
 	do $(MAKE) $$T || break; done
 
-define uname2osal
-  case "$(UNAME)" in
-    CYGWIN*|MINGW*|MSYS*|Windows*) echo windows;;
-    *) echo unix;;
-  esac
-endef
-
-define uname2titer
-  case "$(UNAME)" in
-    CYGWIN*|MINGW*|MSYS*|Windows*) echo 2;;
-    Darwin*|Mach*) echo 2;;
-    *) if [ -z "${CI}" ]; then echo 7; else echo 3; fi;;
-  esac
-endef
-
 DIST_EXTRA := LICENSE NOTICE COPYRIGHT README.md TODO.md CMakeLists.txt GNUmakefile Makefile ChangeLog.md VERSION.json config.h.in ntdll.def \
 	$(addprefix man1/, $(MANPAGES)) cmake/compiler.cmake cmake/profile.cmake cmake/utils.cmake windows-safeseh-masm.asm windows-safeseh-yasm.asm \
 	windows-safeseh.obj valgrind.supp conanfile.py \
@@ -481,13 +490,6 @@ DIST_EXTRA := LICENSE NOTICE COPYRIGHT README.md TODO.md CMakeLists.txt GNUmakef
 
 DIST_SRC   := mdbx.h mdbx.h++ mdbx.c mdbx.c++ $(addsuffix .c, $(MDBX_TOOLS)) mdbx-internals.h mdbx-wingetopt.h
 
-TEST_DB    ?= $(shell if [ -n "$CI" ]; then pwd; else [ -d /dev/shm ] && echo /dev/shm || echo /tmp; fi)/mdbx-test.db
-TEST_LOG   ?= $(shell if [ -n "$CI" ]; then pwd; else [ -d /dev/shm ] && echo /dev/shm || echo /tmp; fi)/mdbx-test.log
-TEST_OSAL  := $(shell $(uname2osal))
-TEST_ITER  := $(shell $(uname2titer))
-TEST_SRC   := tests/framework/osal-$(TEST_OSAL).c++ $(filter-out $(wildcard tests/framework/osal-*.c++),$(wildcard tests/framework/*.c++))
-TEST_INC   := $(wildcard tests/framework/*.h++)
-TEST_OBJ   := $(patsubst %.c++,%.o,$(TEST_SRC)) $(call select_by,MDBX_BUILD_CXX,,tests/mdbx.c++.o)
 ifndef SED
 SED        := $(shell which gnu-sed 2>&- || echo sed)
 endif
@@ -524,87 +526,48 @@ MDBX_SMOKE_EXTRA ?=
 check: DESTDIR = $(shell pwd)/@check-install
 check: CMAKE_OPT += -Werror=dev
 check: clean | smoke-assertion ninja-assertions dist install test ctest
-smoke-assertion: MDBX_CHECKING=2
-smoke-assertion: smoke
-long-test-assertion: MDBX_CHECKING=2
-long-test-assertion: smoke
+long-test-assertion: smoke-assertion
 
 .PHONY: check-posix-locking-sysv check-posix-locking-1988 check-posix-locking-2001 check-posix-locking-2008
-check-posix-locking-sysv: MDBX_BUILD_OPTIONS += -DMDBX_LOCKING=5
-check-posix-locking-1988: MDBX_BUILD_OPTIONS += -DMDBX_LOCKING=1988
-check-posix-locking-2001: MDBX_BUILD_OPTIONS += -DMDBX_LOCKING=2001
-check-posix-locking-2008: MDBX_BUILD_OPTIONS += -DMDBX_LOCKING=2008
-check-posix-locking-sysv: check
-check-posix-locking-1988: check
-check-posix-locking-2001: check
-check-posix-locking-2008: check
+check-posix-locking-sysv: MDBX_LOCKING_OPT = -DMDBX_LOCKING=5
+check-posix-locking-1988: MDBX_LOCKING_OPT = -DMDBX_LOCKING=1988
+check-posix-locking-2001: MDBX_LOCKING_OPT = -DMDBX_LOCKING=2001
+check-posix-locking-2008: MDBX_LOCKING_OPT = -DMDBX_LOCKING=2008
+check-posix-locking-sysv: check-posix-locking-run
+check-posix-locking-1988: check-posix-locking-run
+check-posix-locking-2001: check-posix-locking-run
+check-posix-locking-2008: check-posix-locking-run
+check-posix-locking-run:
+	$(QUIET)$(call cmake-configure-build,@cmake-locking-build,$(MDBX_LOCKING_OPT) -DMDBX_CHECKING=2,) && \
+		ASAN_OPTIONS=$(ASAN_OPTIONS) UBSAN_OPTIONS=$(UBSAN_OPTIONS) $(CTEST) --test-dir @cmake-locking-build --output-on-failure $(CTEST_OPT)
 check-posix-locking:
 	$(QUIET)for LCK in sysv 1988 2001 2008; do $(MAKE) check-posix-locking-$${LCK} || break; done;
 
-smoke: build-stochastic
-	@echo '  SMOKE `mdbx_test basic`...'
-	$(QUIET)rm -f $(TEST_DB) $(TEST_DB)-copy $(TEST_LOG).gz && (set -o pipefail; export ASAN_OPTIONS=$(ASAN_OPTIONS) UBSAN_OPTIONS=$(UBSAN_OPTIONS); \
-		(./mdbx_test --duration 100 --table=+data.integer --keygen.split=29 --datalen.min=min --datalen.max=max --progress --console=no --repeat=$(TEST_ITER) --pathname=$(TEST_DB) --dont-cleanup-after $(MDBX_SMOKE_EXTRA) basic && \
-		./mdbx_test --duration 100 --mode=-writemap,-nosync-safe,-lifo --progress --console=no --repeat=$(TEST_ITER) --pathname=$(TEST_DB) --dont-cleanup-after $(MDBX_SMOKE_EXTRA) basic) \
-		| tee >(gzip --stdout >$(TEST_LOG).gz) | tail -n 99) \
-	&& ./mdbx_chk -vvn $(TEST_DB) && ./mdbx_chk -vvn $(TEST_DB)-copy
+smoke: cmake-build
+	$(call ctest-scenario-run,@cmake-build,^smoke$$,)
 
-smoke-singleprocess: build-stochastic
-	@echo '  SMOKE `mdbx_test --nested`...'
-	$(QUIET)rm -f $(TEST_DB) $(TEST_DB)-copy $(TEST_LOG).gz && (set -o pipefail; export ASAN_OPTIONS=$(ASAN_OPTIONS) UBSAN_OPTIONS=$(UBSAN_OPTIONS); \
-		(./mdbx_test --duration 100 --table=+data.integer --keygen.split=29 --datalen.min=min --datalen.max=max --progress --console=no --repeat=42 --pathname=$(TEST_DB) --dont-cleanup-after $(MDBX_SMOKE_EXTRA) --hill && \
-		./mdbx_test --duration 100 --progress --console=no --repeat=2 --pathname=$(TEST_DB) --dont-cleanup-before --dont-cleanup-after --copy && \
-		./mdbx_test --duration 100 --mode=-writemap,-nosync-safe,-lifo --progress --console=no --repeat=42 --pathname=$(TEST_DB) --dont-cleanup-after $(MDBX_SMOKE_EXTRA) --nested) \
-		| tee >(gzip --stdout >$(TEST_LOG).gz) | tail -n 99) \
-	&& ./mdbx_chk -vvn $(TEST_DB) && ./mdbx_chk -vvn $(TEST_DB)-copy
+smoke-singleprocess: cmake-build
+	$(call ctest-scenario-run,@cmake-build,^smoke-singleprocess$$,)
 
-smoke-fault: build-stochastic
-	@echo '  SMOKE `mdbx_test --inject-writefault=42 basic`...'
-	$(QUIET)rm -f $(TEST_DB) $(TEST_DB)-copy $(TEST_LOG).gz && (set -o pipefail; export ASAN_OPTIONS=$(ASAN_OPTIONS) UBSAN_OPTIONS=$(UBSAN_OPTIONS); \
-		./mdbx_test --duration 300 --progress --console=no --pathname=$(TEST_DB) --inject-writefault=42 --dump-config --dont-cleanup-after $(MDBX_SMOKE_EXTRA) basic \
-		| tee >(gzip --stdout >$(TEST_LOG).gz) | tail -n 99) || echo "Expect fault" \
-	; ./mdbx_chk -vvnw $(TEST_DB) && ([ ! -e $(TEST_DB)-copy ] || ./mdbx_chk -vvn $(TEST_DB)-copy || echo "May fault due invalid-database-signature")
+smoke-fault: cmake-build
+	$(call ctest-scenario-run,@cmake-build,^smoke-fault$$,)
 
-test-stochastic: build-stochastic
-	@echo '  RUNNING `tests/stochastic.sh --loops 2`...'
-	$(QUIET)$(STOCHASTIC) --whole-duration 600 --probe-duration 60 --dont-check-ram-size --loops 2 --db-upto-mb 256 --skip-make --taillog >$(TEST_LOG) || (cat $(TEST_LOG) && false)
+test-stochastic: cmake-stochastic-build
+	$(call ctest-scenario-run,@cmake-stochastic-build,^stochastic$$,)
 
 long-test: test-long
-test-long: build-stochastic
-	@echo '  RUNNING `tests/stochastic.sh --loops 42`...'
-	$(QUIET)$(STOCHASTIC) --loops 42 --db-upto-mb 1024 --extra --skip-make --taillog
+test-long: cmake-stochastic-build
+	$(call ctest-scenario-run,@cmake-stochastic-build,^stochastic-long$$,)
 
-test-singleprocess: build-stochastic
-	@echo '  RUNNING `tests/stochastic.sh --single --loops 2`...'
-	$(QUIET)$(STOCHASTIC) --whole-duration 600 --probe-duration 60 --dont-check-ram-size --single --loops 2 --db-upto-mb 256 --skip-make --taillog >$(TEST_LOG) || (cat $(TEST_LOG) && false)
-
-memcheck: smoke-memcheck
-smoke-memcheck: VALGRIND=valgrind --trace-children=yes --log-file=valgrind-%p.log --leak-check=full --track-origins=yes --read-var-info=yes --error-exitcode=42 --suppressions=valgrind.supp
-smoke-memcheck: CFLAGS_EXTRA=-Ofast -DENABLE_MEMCHECK
-smoke-memcheck: build-stochastic
-	@echo "  SMOKE \`mdbx_test basic\` under Valgrind's memcheck..."
-	$(QUIET)rm -f valgrind-*.log $(TEST_DB) $(TEST_DB)-copy $(TEST_LOG).gz && (set -o pipefail; export ASAN_OPTIONS=$(ASAN_OPTIONS) UBSAN_OPTIONS=$(UBSAN_OPTIONS); ( \
-		$(VALGRIND) ./mdbx_test --duration 100 --table=+data.fixed --keygen.split=29 --datalen=35 --progress --console=no --repeat=2 --pathname=$(TEST_DB) --dont-cleanup-after $(MDBX_SMOKE_EXTRA) basic && \
-		$(VALGRIND) ./mdbx_test --duration 100 --progress --console=no --pathname=$(TEST_DB) --dont-cleanup-before --dont-cleanup-after --copy && \
-		$(VALGRIND) ./mdbx_test --duration 100 --mode=-writemap,-nosync-safe,-lifo --progress --console=no --repeat=4 --pathname=$(TEST_DB) --dont-cleanup-after $(MDBX_SMOKE_EXTRA) basic && \
-		$(VALGRIND) ./mdbx_chk -vvn $(TEST_DB) && \
-		$(VALGRIND) ./mdbx_chk -vvn $(TEST_DB)-copy \
-	) | tee >(gzip --stdout >$(TEST_LOG).gz) | tail -n 99)
+test-singleprocess: cmake-stochastic-build
+	$(call ctest-scenario-run,@cmake-stochastic-build,^stochastic-single$$,)
 
 gcc-analyzer:
 	@echo '  RE-BUILD with `-fanalyzer` option...'
 	@echo "NOTE: There a lot of false-positive warnings at 2020-05-01 by pre-release GCC-10 (20200328, Red Hat 10.0.1-0.11)"
-	$(QUIET)$(MAKE) IOARENA=false CXXSTD=$(CXXSTD) CFLAGS_EXTRA="-Og -fanalyzer -Wno-error" build-test
+	$(QUIET)$(call cmake-configure-build,@cmake-analyzer-build,'-DCMAKE_C_FLAGS=-Og -fanalyzer -Wno-error' '-DCMAKE_CXX_FLAGS=-Og -fanalyzer -Wno-error',)
 
-build-stochastic: all mdbx_test
-
-define test-rule
-$(patsubst %.c++,%.o,$(1)): $(1) $(TEST_INC) $(HEADERS) $(lastword $(MAKEFILE_LIST))
-	@echo '  CC $$@'
-	$(QUIET)$$(CXX) $$(CXXFLAGS) $$(MDBX_BUILD_OPTIONS) -DMDBX_BUILD_CXX=1 -DMDBX_WITHOUT_MSVC_CRT=0 -c $(1) -o $$@
-
-endef
-$(foreach file,$(TEST_SRC),$(eval $(call test-rule,$(file))))
+build-stochastic: cmake-build
 
 define tool-rule
 mdbx_$(1):	src/tools/$(1).c libmdbx.a
@@ -622,16 +585,6 @@ mdbx_$(1).static-lto: src/tools/$(1).c src/config-gnumake.h src/version.c src/al
 
 endef
 $(foreach file,$(TOOLS),$(eval $(call tool-rule,$(file))))
-
-tests/mdbx.c++.o: src/mdbx.c++ $(HEADERS) $(lastword $(MAKEFILE_LIST))
-	@echo '  CC $@'
-	$(QUIET)$(CXX) $(CXXFLAGS) $(MDBX_BUILD_OPTIONS) -DMDBX_BUILD_CXX=1 -DMDBX_WITHOUT_MSVC_CRT=0 -c src/mdbx.c++ -o $@
-
-comma:= ,
-
-mdbx_test: $(TEST_OBJ) $(call select_by,MDBX_BUILD_CXX,libmdbx.$(SO_SUFFIX),libmdbx.a)
-	@echo '  LD $@'
-	$(QUIET)$(CXX) $(CXXFLAGS) $(TEST_OBJ) -Wl,-rpath . -L . $(call select_by,MDBX_BUILD_CXX,-l mdbx,-Wl$(comma)--push-state$(comma)-Bstatic -l mdbx -Wl$(comma)--pop-state) $(EXE_LDFLAGS) $(LIBS) -lm -o $@
 
 $(MDBX_GIT_DIR)/HEAD $(MDBX_GIT_DIR)/index $(MDBX_GIT_DIR)/refs/tags:
 	@echo '*** ' >&2
@@ -986,7 +939,11 @@ cross-gcc:
 	@echo "FOR INSTANCE: sudo apt install \$$(apt list 'g++-*' | grep 'g++-[a-z0-9]\+-linux-gnu/' | cut -f 1 -d / | sort -u)"
 	$(QUIET)for CC in $(CROSS_LIST_NOQEMU) $(CROSS_LIST); do \
 		echo "===================== $$CC"; \
-		$(MAKE) IOARENA=false CXXSTD= clean && CC=$$CC CXX=$$(echo $$CC | $(SED) 's/-gcc/-g++/') EXE_LDFLAGS=-static $(MAKE) IOARENA=false all || exit $$?; \
+		BD=@cmake-cross-$$(echo $$CC | tr -c 'a-zA-Z0-9' _); \
+		rm -rf $$BD; \
+		$(CMAKE) -S . -B $$BD -DCMAKE_C_COMPILER=$$CC -DCMAKE_CXX_COMPILER=$$(echo $$CC | $(SED) 's/-gcc/-g++/') \
+			-DCMAKE_EXE_LINKER_FLAGS=-static -DMDBX_ENABLE_TESTS=OFF || exit $$?; \
+		$(CMAKE) --build $$BD || exit $$?; \
 	done
 
 # Unfortunately qemu don't provide robust support for futexes.
@@ -999,9 +956,15 @@ cross-qemu:
 	@echo "	2) sudo apt install binfmt-support qemu-user-static qemu-user \$$(apt list 'qemu-system-*' | grep 'qemu-system-[a-z0-9]\+/' | cut -f 1 -d / | sort -u)"
 	$(QUIET)for CC in $(CROSS_LIST); do \
 		echo "===================== $$CC + qemu"; \
-		$(MAKE) IOARENA=false CXXSTD= clean && \
-			CC=$$CC CXX=$$(echo $$CC | $(SED) 's/-gcc/-g++/') EXE_LDFLAGS=-static MDBX_BUILD_OPTIONS="-DMDBX_LOCKING=5 -DMDBX_SAFE4QEMU $(MDBX_BUILD_OPTIONS)" \
-			$(MAKE) IOARENA=false smoke-singleprocess test-singleprocess || exit $$?; \
+		BD=@cmake-cross-$$(echo $$CC | tr -c 'a-zA-Z0-9' _); \
+		rm -rf $$BD; \
+		$(CMAKE) -S . -B $$BD -DCMAKE_C_COMPILER=$$CC -DCMAKE_CXX_COMPILER=$$(echo $$CC | $(SED) 's/-gcc/-g++/') \
+			-DCMAKE_EXE_LINKER_FLAGS=-static -DMDBX_LOCKING=5 \
+			-DCMAKE_C_FLAGS=-DMDBX_SAFE4QEMU -DCMAKE_CXX_FLAGS=-DMDBX_SAFE4QEMU -DMDBX_ENABLE_TESTS=ON \
+			-DMDBX_ENABLE_LONG_TESTS=ON || exit $$?; \
+		$(CMAKE) --build $$BD || exit $$?; \
+		ASAN_OPTIONS=$(ASAN_OPTIONS) UBSAN_OPTIONS=$(UBSAN_OPTIONS) $(CTEST) --test-dir $$BD \
+			--label-regex '^smoke-singleprocess$$|^stochastic-single$$' --output-on-failure || exit $$?; \
 	done
 
 #< dist-cutoff-end
