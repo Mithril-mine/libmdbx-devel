@@ -68,12 +68,18 @@ TEST(ut_stat_info, gc_info) {
   {
     auto txn = env.start_write();
     auto table = txn.create_map("table-1");
+    const std::string chunk(2048, 'x');
     for (int i = 0; i < 256; ++i) {
       auto key = std::to_string(i);
-      txn.upsert(table, mdbx::slice(key), mdbx::slice("value-value-value"));
+      txn.upsert(table, mdbx::slice(key), mdbx::slice(chunk));
     }
-    for (int i = 0; i < 256; i += 2)
-      txn.erase(table, mdbx::slice(std::to_string(i)));
+    // Overwrite with larger values to force page splits and retire the
+    // old pages to the GC.
+    const std::string bigger(8192, 'y');
+    for (int i = 0; i < 256; ++i) {
+      auto key = std::to_string(i);
+      txn.upsert(table, mdbx::slice(key), mdbx::slice(bigger));
+    }
     txn.commit();
   }
 
