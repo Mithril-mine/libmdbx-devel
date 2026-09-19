@@ -205,10 +205,10 @@ if(BUILD_TESTING)
           ON
           CACHE BOOL "" FORCE)
 
-      # With `MDBX_WITHOUT_MSVC_CRT` the libmdbx does not depend on the C runtime.
-      # Linking the shared googletest DLLs against such a library hangs on MinGW
-      # at process startup, so build a static googletest in this configuration.
-      if(DEFINED MDBX_WITHOUT_MSVC_CRT AND MDBX_WITHOUT_MSVC_CRT)
+      # The shared googletest DLLs hang at process startup on Windows when linked
+      # against libmdbx (observed with MinGW and clang-cl, in Debug and Release,
+      # with and without the C runtime), so build a static googletest there.
+      if(WIN32)
         set(gtest_saved_build_shared_libs "${BUILD_SHARED_LIBS}")
         set(gtest_force_static_googletest TRUE)
         set(BUILD_SHARED_LIBS OFF)
