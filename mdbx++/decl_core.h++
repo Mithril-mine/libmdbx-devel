@@ -4,7 +4,17 @@
 namespace mdbx {
 // < dist-cutoff-end
 
-/// \brief Cache entry for get-cached API (initial draft).
+/// \brief Cache entry for the transparent read-your-writes caching, see
+/// txn::get_cached() and ::mdbx_cache_get().
+///
+/// \details A value type wrapping \ref MDBX_cache_entry_t. Each entry is
+/// associated with a key and holds a lightweight "version stamp" plus the
+/// offset of the cached value inside the memory-mapped database file, so
+/// subsequent lookups stop as soon as they reach an unmodified page.
+///
+/// An entry must be initialized (\ref reset()) before the first use. Entries
+/// may be placed in shared memory and used by multiple processes, though
+/// libmdbx does not provide such interaction management yet.
 class cache_entry : public MDBX_cache_entry_t {
 public:
   cache_entry() noexcept { reset(); }
@@ -14,12 +24,35 @@ public:
     *this = other;
     other.reset();
   }
+
+  /// \brief Initializes the cache entry to the "no cached info" state.
   void reset() noexcept { mdbx_cache_init(this); }
+
+  /// \brief Returns `true` if the entry carries a confirmed result of a
+  /// previous lookup, i.e. either a cached value or a cached "not found".
+  MDBX_CXX14_CONSTEXPR operator bool() const noexcept { return last_confirmed_txnid != 0; }
+  /// \brief Returns `true` if the entry caches the "key not found" state.
+  MDBX_CXX14_CONSTEXPR bool notfound() const noexcept { return offset == 0; }
+  /// \brief Returns the transaction/MVCC-snapshot ID of the internal
+  /// structure that holds the cached data.
+  MDBX_CXX14_CONSTEXPR uint64_t transaction_id() const noexcept { return trunk_txnid; }
+  /// \brief Returns the recent transaction/MVCC-snapshot ID wherein the
+  /// entry was checked and confirmed.
+  MDBX_CXX14_CONSTEXPR uint64_t last_confirmed() const noexcept { return last_confirmed_txnid; }
+
   MDBX_CXX20_CONSTEXPR cache_entry(const MDBX_cache_entry_t &ce) noexcept { mdbx::memcpy(this, &ce, sizeof(*this)); }
   MDBX_CXX20_CONSTEXPR cache_entry &operator=(const MDBX_cache_entry_t &ce) noexcept {
     mdbx::memcpy(this, &ce, sizeof(*this));
     return *this;
   };
+
+  friend MDBX_CXX14_CONSTEXPR bool operator==(const cache_entry &a, const cache_entry &b) noexcept {
+    return a.trunk_txnid == b.trunk_txnid && a.last_confirmed_txnid == b.last_confirmed_txnid &&
+           a.offset == b.offset && a.length == b.length;
+  }
+  friend MDBX_CXX14_CONSTEXPR bool operator!=(const cache_entry &a, const cache_entry &b) noexcept {
+    return !(a == b);
+  }
 };
 
 //------------------------------------------------------------------------------

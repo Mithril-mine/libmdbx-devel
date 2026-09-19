@@ -294,6 +294,44 @@ public:
 
   /// \brief Get value by key from a key-value map (aka table).
   inline slice get(map_handle map, const slice &key) const;
+
+  using cache_status = ::MDBX_cache_status_t;
+  using cache_result = ::MDBX_cache_result_t;
+
+  /// \brief Gets a value by key using the transparent read-your-writes cache.
+  ///
+  /// \details Uses the cached information to check as quickly as possible
+  /// whether the data has changed or not, with early exit when searching
+  /// through the DB. Supports multithreaded cases and resolves collisions
+  /// in a lockfree way; the \ref MDBX_NOSTICKYTHREADS mode is required to use
+  /// it from different threads.
+  ///
+  /// \param [in] map    The table handle.
+  /// \param [in] key    The key to search for.
+  /// \param [out] data  The resulting value; points into database-owned
+  ///                    memory and remains valid until the transaction end.
+  /// \param [in,out] entry  The cache entry corresponding to the key, must be
+  ///                    initialized (\ref cache_entry::reset()) before use.
+  ///
+  /// \returns The \ref cache_result with the pair of error code and cache
+  /// status. The caller inspects `errcode` and `status` explicitly.
+  /// \see ::mdbx_cache_get()
+  MDBX_NODISCARD inline cache_result get_cached(map_handle map, const slice &key, slice *data,
+                                                cache_entry &entry) const;
+
+  /// \brief Gets a value by key using the transparent read-your-writes cache,
+  /// throwing exceptions on errors.
+  ///
+  /// \param [in] map    The table handle.
+  /// \param [in] key    The key to search for.
+  /// \param [in,out] entry  The cache entry corresponding to the key.
+  /// \param [out] status  Optional address to receive the \ref cache_status.
+  ///
+  /// \returns The resulting value, or throws \ref mdbx::not_found if the key
+  /// is absent (like \ref get()).
+  /// \see ::mdbx_cache_get()
+  MDBX_NODISCARD inline slice get_cached(map_handle map, const slice &key, cache_entry &entry,
+                                         cache_status *status = nullptr) const;
   /// \brief Get first of multi-value and values count by key from a key-value multimap (aka table).
   inline slice get(map_handle map, slice key, size_t &values_count) const;
   /// \brief Get value by key from a key-value map (aka table).

@@ -632,6 +632,10 @@ inline int env::warmup(MDBX_warmup_flags_t flags, unsigned timeout_seconds_16dot
 
 inline void env::resurrect_after_fork() { error::success_or_throw(::mdbx_env_resurrect_after_fork(handle_)); }
 
+inline void env::turn_for_recovery(unsigned target_meta) {
+  error::success_or_throw(::mdbx_env_turn_for_recovery(handle_, target_meta));
+}
+
 inline env &env::set_HandleSlowReaders(MDBX_hsr_func cb) {
   error::success_or_throw(::mdbx_env_set_hsr(handle_, cb));
   return *this;
