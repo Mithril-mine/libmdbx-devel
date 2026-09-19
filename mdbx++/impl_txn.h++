@@ -225,6 +225,41 @@ template <typename VISITOR> inline int txn::enumerate_tables(VISITOR &visitor) c
   return rc;
 }
 
+template <typename VISITOR> inline txn::gc_info txn::get_gc_info(VISITOR &visitor) const {
+  struct gc_iter_thunk : public exception_thunk {
+    VISITOR &visitor_;
+    static int cb(void *ctx, const MDBX_txn *, uint64_t span_txnid, size_t span_pgno, size_t span_length,
+                  bool span_is_reclaimable) noexcept {
+      gc_iter_thunk *thunk = static_cast<gc_iter_thunk *>(ctx);
+      assert(thunk->is_clean());
+      try {
+        return loop_control(thunk->visitor_(span_txnid, span_pgno, span_length, span_is_reclaimable));
+      } catch (... /* capture any exception to rethrow it over C code */) {
+        thunk->capture();
+        return loop_control::exit_loop;
+      }
+    }
+    MDBX_CXX11_CONSTEXPR gc_iter_thunk(VISITOR &visitor) noexcept : visitor_(visitor) {}
+  };
+  gc_iter_thunk thunk(visitor);
+  gc_info info;
+  const auto rc = ::mdbx_gc_info(handle_, &info, sizeof(info), thunk.cb, &thunk);
+  thunk.rethrow_captured();
+  if (rc == MDBX_NOTFOUND) {
+    memset(&info, 0, sizeof(info));
+    return info;
+  }
+  error::success_or_throw(rc);
+  return info;
+}
+
+inline txn::gc_info txn::get_gc_info() const {
+  struct noop_visitor {
+    int operator()(uint64_t, size_t, size_t, bool) { return loop_control::continue_loop; }
+  } visitor;
+  return get_gc_info(visitor);
+}
+
 inline txn &txn::put_canary(const txn::canary &canary) {
   error::success_or_throw(::mdbx_canary_put(handle_, &canary));
   return *this;
