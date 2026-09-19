@@ -31,14 +31,16 @@ TEST(ut_buffer_extra, modality_transitions) {
   EXPECT_TRUE(empty.is_reference());
   EXPECT_EQ(empty.content_modality(), buffer::modality::reference);
 
-  buffer small(mdbx::slice("abc"), /*make_reference=*/false);
+  const mdbx::slice abc_payload("abc");
+  buffer small(abc_payload, /*make_reference=*/false);
   EXPECT_TRUE(small.is_freestanding());
   EXPECT_TRUE(small.is_inplace());
   EXPECT_FALSE(small.is_reference());
   EXPECT_EQ(small.content_modality(), buffer::modality::inplace);
   EXPECT_EQ(small.size(), 3u);
 
-  buffer ref(mdbx::slice("xyz"), /*make_reference=*/true);
+  const mdbx::slice xyz_payload("xyz");
+  buffer ref(xyz_payload, /*make_reference=*/true);
   EXPECT_FALSE(ref.is_freestanding());
   EXPECT_TRUE(ref.is_reference());
   EXPECT_EQ(ref.content_modality(), buffer::modality::reference);
@@ -80,7 +82,8 @@ TEST(ut_buffer_extra, stl_members) {
 }
 
 TEST(ut_buffer_extra, self_append_and_add_header) {
-  mdbx::buffer<> buf(mdbx::slice("abc"), /*make_reference=*/false);
+  const mdbx::slice abc_payload("abc");
+  mdbx::buffer<> buf(abc_payload, /*make_reference=*/false);
   const mdbx::slice view = buf;
   buf.append(view);
   EXPECT_TRUE(buf == mdbx::slice("abcabc"));
@@ -88,7 +91,8 @@ TEST(ut_buffer_extra, self_append_and_add_header) {
   buf.append(view2);
   EXPECT_TRUE(buf == mdbx::slice("abcabcabcabc"));
 
-  mdbx::buffer<> hdr(mdbx::slice("world"), /*make_reference=*/false);
+  const mdbx::slice world_payload("world");
+  mdbx::buffer<> hdr(world_payload, /*make_reference=*/false);
   const mdbx::slice hview = hdr;
   hdr.add_header(hview);
   EXPECT_TRUE(hdr == mdbx::slice("worldworld"));
