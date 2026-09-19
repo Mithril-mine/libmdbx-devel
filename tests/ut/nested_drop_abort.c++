@@ -12,7 +12,7 @@ static void check(int rc, const char *op) {
 }
 
 static int get(MDBX_txn *txn, MDBX_dbi dbi) {
-  MDBX_val key = {.iov_base = (void *)"k", .iov_len = 1};
+  MDBX_val key = {(void *)"k", 1};
   MDBX_val val;
   return mdbx_get(txn, dbi, &key, &val);
 }
@@ -30,8 +30,8 @@ TEST(ut_nested_drop_abort, all) {
 
   MDBX_dbi dbi;
   check(mdbx_dbi_open(parent, "t", MDBX_CREATE, &dbi), "create t");
-  MDBX_val key = {.iov_base = (void *)"k", .iov_len = 1};
-  MDBX_val val = {.iov_base = (void *)"v", .iov_len = 1};
+  MDBX_val key = {(void *)"k", 1};
+  MDBX_val val = {(void *)"v", 1};
   check(mdbx_put(parent, dbi, &key, &val, (MDBX_put_flags_t)0), "put");
   check(get(parent, dbi), "get before child");
 

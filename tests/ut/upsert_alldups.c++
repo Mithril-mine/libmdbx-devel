@@ -40,8 +40,8 @@ static int clear(MDBX_cursor *cur) {
 }
 
 static int put(MDBX_txn *txn, MDBX_dbi dbi, const char *k, const char *v, MDBX_put_flags_t flags) {
-  MDBX_val key = {.iov_base = (void *)k, .iov_len = strlen(k)};
-  MDBX_val data = {.iov_base = (void *)v, .iov_len = strlen(v)};
+  MDBX_val key = {(void *)k, strlen(k)};
+  MDBX_val data = {(void *)v, strlen(v)};
   return mdbx_put(txn, dbi, &key, &data, flags);
 }
 

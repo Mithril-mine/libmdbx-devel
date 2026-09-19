@@ -306,11 +306,11 @@ template <typename VISITOR> inline txn::gc_info txn::get_gc_info(VISITOR &visito
   gc_info info;
   const auto rc = ::mdbx_gc_info(handle_, &info, sizeof(info), thunk.cb, &thunk);
   thunk.rethrow_captured();
-  if (rc == MDBX_NOTFOUND) {
-    memset(&info, 0, sizeof(info));
-    return info;
-  }
-  error::success_or_throw(rc);
+  /* The MDBX_NOTFOUND just means the GC is empty, while the C function
+   * still fills the geometry-related fields (pages_total, pages_allocated,
+   * etc.), which must be preserved. */
+  if (rc != MDBX_NOTFOUND)
+    error::success_or_throw(rc);
   return info;
 }
 
