@@ -22,8 +22,12 @@
 #include "mdbx.h++"
 #include <gtest/gtest.h>
 
+#if defined(_WIN32) || defined(_WIN64)
+#include <windows.h>
+#else
 #include <fcntl.h>
 #include <unistd.h>
+#endif
 
 #include <string>
 
@@ -115,11 +119,20 @@ TEST(ut_transforms, txn_copy_fd) {
     txn.upsert(table, mdbx::slice("key"), mdbx::slice("value"));
     txn.commit();
 
+    #if defined(_WIN32) || defined(_WIN64)
+    const HANDLE fd = ::CreateFileW(copydb.c_str(), GENERIC_WRITE, 0, nullptr, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL,
+                                    nullptr);
+    ASSERT_NE(fd, INVALID_HANDLE_VALUE);
+    auto reader = env.start_read();
+    reader.copy(mdbx::filehandle(fd), /*compactify=*/false);
+    ::CloseHandle(fd);
+#else
     const int fd = ::open(copydb.c_str(), O_CREAT | O_TRUNC | O_RDWR, 0644);
     ASSERT_GE(fd, 0);
     auto reader = env.start_read();
     reader.copy(fd, /*compactify=*/false);
     ::close(fd);
+#endif
   }
   {
     mdbx::env_managed copyenv(copydb.c_str(), mdbx::create_parameters(), mdbx::operate_parameters().set_max_maps(8));

@@ -516,6 +516,16 @@ public:
   /// \see ::mdbx_preopen_snapinfo()
   MDBX_NODISCARD static inline info get_preopen_snapinfo(const ::std::string &pathname);
   MDBX_NODISCARD static inline info get_preopen_snapinfo(const char *pathname);
+#ifdef MDBX_STD_FILESYSTEM_PATH
+  /// \copydoc get_preopen_snapinfo(const char *)
+  MDBX_NODISCARD static inline info get_preopen_snapinfo(const MDBX_STD_FILESYSTEM_PATH &pathname);
+#endif /* MDBX_STD_FILESYSTEM_PATH */
+#if defined(_WIN32) || defined(_WIN64) || defined(DOXYGEN)
+  /// \copydoc get_preopen_snapinfo(const char *)
+  MDBX_NODISCARD static inline info get_preopen_snapinfo(const ::std::wstring &pathname);
+  /// \copydoc get_preopen_snapinfo(const char *)
+  MDBX_NODISCARD static inline info get_preopen_snapinfo(const wchar_t *pathname);
+#endif /* Windows */
 
   /// \brief Returns snapshot statistics about the MDBX environment.
   inline stat get_stat() const;
@@ -789,7 +799,9 @@ public:
 
   /// \brief Restores the environment after `fork()`, dropping all read-write
   /// locks and reader slots of the parent process.
+#if !defined(_WIN32) && !defined(_WIN64) || defined(DOXYGEN)
   inline void resurrect_after_fork();
+#endif /* !Windows */
 
   /// \brief Turns the database to the specified meta-page.
   ///

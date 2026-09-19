@@ -622,6 +622,24 @@ inline env::info env::get_preopen_snapinfo(const char *pathname) {
   return result;
 }
 
+#ifdef MDBX_STD_FILESYSTEM_PATH
+inline env::info env::get_preopen_snapinfo(const MDBX_STD_FILESYSTEM_PATH &pathname) {
+  return get_preopen_snapinfo(pathname.native().c_str());
+}
+#endif /* MDBX_STD_FILESYSTEM_PATH */
+
+#if defined(_WIN32) || defined(_WIN64)
+inline env::info env::get_preopen_snapinfo(const ::std::wstring &pathname) {
+  return get_preopen_snapinfo(pathname.c_str());
+}
+
+inline env::info env::get_preopen_snapinfo(const wchar_t *pathname) {
+  env::info result;
+  error::success_or_throw(::mdbx_preopen_snapinfoW(pathname, &result, sizeof(result)));
+  return result;
+}
+#endif /* Windows */
+
 inline void env::thread_register() { error::success_or_throw(::mdbx_thread_register(handle_)); }
 
 inline void env::thread_unregister() { error::success_or_throw(::mdbx_thread_unregister(handle_)); }
@@ -630,7 +648,9 @@ inline int env::warmup(MDBX_warmup_flags_t flags, unsigned timeout_seconds_16dot
   return ::mdbx_env_warmup(handle_, txn, flags, timeout_seconds_16dot16);
 }
 
+#if !defined(_WIN32) && !defined(_WIN64)
 inline void env::resurrect_after_fork() { error::success_or_throw(::mdbx_env_resurrect_after_fork(handle_)); }
+#endif /* !Windows */
 
 inline void env::turn_for_recovery(unsigned target_meta) {
   error::success_or_throw(::mdbx_env_turn_for_recovery(handle_, target_meta));

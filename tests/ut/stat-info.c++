@@ -54,7 +54,7 @@ TEST(ut_stat_info, preopen_snapinfo) {
     txn.commit();
   }
 
-  const mdbx::env::info snap = mdbx::env::get_preopen_snapinfo(testdb.c_str());
+  const mdbx::env::info snap = mdbx::env::get_preopen_snapinfo(testdb);
   EXPECT_GT(snap.mi_dxb_pagesize, uint32_t(0));
   EXPECT_NE(snap.mi_recent_txnid, uint64_t(0));
 
@@ -108,7 +108,9 @@ TEST(ut_stat_info, debug_and_threads) {
   mdbx::env_managed env(testdb, mdbx::create_parameters(), mdbx::operate_parameters().set_max_maps(8));
   EXPECT_NO_THROW(env.thread_register());
   EXPECT_NO_THROW(env.thread_unregister());
+#if !defined(_WIN32) && !defined(_WIN64)
   EXPECT_NO_THROW(env.resurrect_after_fork());
+#endif
   const int warmup_rc = env.warmup(MDBX_warmup_default, 0);
   EXPECT_TRUE(warmup_rc == MDBX_SUCCESS || warmup_rc == MDBX_RESULT_TRUE);
   env.close();
