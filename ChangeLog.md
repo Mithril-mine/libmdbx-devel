@@ -35,7 +35,8 @@ Recommended for use in production.
  - Prefer to use non-portable `fallocate()` to avoid emulation in glibc.
  - More CI workflows: CLANG-ARM64 on Windows, MingGW both 32- and 64- bitness, etc.
  - Refined `mdbx_get_sysraminfo()` internals for better `avail_pages` estimation.
- - Clariied `mdbx_env_defrag()` to eliminate doubts about the non‑impact of `result=nullptr` on the returned code.
+ - Clarified `mdbx_env_defrag()` to eliminate doubts about the non‑impact of `result=nullptr` on the returned code.
+
 ### Fixes:
 
  - Fixed `entry point _except_handler4 not found in mdbx.dll` in 32-bit build with `MDBX_WITHOUT_MSVC_CRT=ON`.
@@ -48,7 +49,7 @@ Recommended for use in production.
  - Fixed missing sub-page header check inside `page_check()` what could be causing `SIGSEGV` during checking a corrupted database.
 
 ### Misc:
-  - The title of the "MAC chat" link has been changed and the icon has been removed.
+ - The title of the "MAC chat" link has been changed and the icon has been removed.
 
 
 --------------------------------------------------------------------------------
