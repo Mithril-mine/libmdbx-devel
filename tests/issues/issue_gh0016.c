@@ -1,6 +1,7 @@
 /* rthc_lckless.c — rthc_thread_dtor() dereferences a null lck_mmap.lck for any
  * lck-less environment registered in the same process. */
 #include "mdbx.h"
+#include <gtest/gtest.h>
 #include <pthread.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -21,13 +22,13 @@ static void *reader_thread(void *arg) {
   (void)arg;
   MDBX_txn *txn = NULL;
   /* binds a reader slot -> thread_rthc_set() -> dtor will run at thread exit */
-  CHK(mdbx_txn_begin(arg, NULL, MDBX_TXN_RDONLY, &txn));
+  CHK(mdbx_txn_begin((MDBX_env *)arg, NULL, MDBX_TXN_RDONLY, &txn));
   mdbx_txn_abort(txn);
   return NULL;
 }
 
-int main(int argc, char **argv) {
-  const char *dir = (argc > 1) ? argv[1] : "issue_gh16";
+TEST(issue_gh0016, all) {
+  const char *dir = "issue_gh16";
   char rodb[512], normdb[512], buf[600];
   snprintf(rodb, sizeof(rodb), "%s/ro.db", dir);
   snprintf(normdb, sizeof(normdb), "%s.norm.db", dir);
@@ -44,7 +45,8 @@ int main(int argc, char **argv) {
   unlink(buf);
   if (mkdir(dir, 0755) && access(dir, F_OK)) {
     perror("mkdir");
-    return 2;
+    FAIL();
+    return;
   }
 
   /* 1. create the soon-to-be read-only DB normally, then close it */
@@ -53,7 +55,7 @@ int main(int argc, char **argv) {
     CHK(mdbx_env_create(&env));
     CHK(mdbx_env_open(env, rodb, MDBX_NOSUBDIR, 0664));
     MDBX_txn *txn = NULL;
-    CHK(mdbx_txn_begin(env, NULL, 0, &txn));
+    CHK(mdbx_txn_begin(env, NULL, (MDBX_txn_flags_t)0, &txn));
     CHK(mdbx_txn_commit(txn));
     mdbx_env_close(env);
   }
@@ -63,7 +65,8 @@ int main(int argc, char **argv) {
   snprintf(buf, sizeof(buf), "%s/ro.db-lck", dir);
   if (chmod(buf, 0444)) {
     perror("chmod lck");
-    return 2;
+    FAIL();
+    return;
   }
 
   /* 2. a normal env, whose reader thread will trigger the dtor */
@@ -81,17 +84,22 @@ int main(int argc, char **argv) {
     mdbx_env_close(lckless);
     mdbx_env_close(normal_env);
     chmod(buf, 0644);
-    return 3;
+    FAIL() << "could not force lck-less mode";
+    return;
   }
 
   /* 4. thread takes a read txn on the normal env and exits ->
    *    rthc_thread_dtor() walks BOTH envs, including the lck-less one */
   pthread_t th;
-  if (pthread_create(&th, NULL, reader_thread, normal_env))
-    return 2;
+  if (pthread_create(&th, NULL, reader_thread, normal_env)) {
+    FAIL();
+    return;
+  }
   pthread_join(th, NULL);
-  if (pthread_create(&th, NULL, reader_thread, lckless))
-    return 2;
+  if (pthread_create(&th, NULL, reader_thread, lckless)) {
+    FAIL();
+    return;
+  }
   pthread_join(th, NULL);
   printf("reader thread joined (rthc_thread_dtor has run)\n");
 
@@ -99,5 +107,4 @@ int main(int argc, char **argv) {
   mdbx_env_close(normal_env);
   chmod(buf, 0644);
   printf("RESULT: done\n");
-  return 0;
 }

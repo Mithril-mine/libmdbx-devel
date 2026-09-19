@@ -6,6 +6,7 @@
 //
 
 #include "mdbx.h"
+#include <gtest/gtest.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -44,9 +45,7 @@ static int put(MDBX_txn *txn, MDBX_dbi dbi, const char *k, const char *v, MDBX_p
   return mdbx_put(txn, dbi, &key, &data, flags);
 }
 
-int main(int argc, const char *argv[]) {
-  (void)argc;
-  (void)argv;
+TEST(ut_upsert_alldups, all) {
   char *errmsg = NULL;
   MDBX_env *env = NULL;
   MDBX_txn *txn = NULL;
@@ -65,7 +64,7 @@ int main(int argc, const char *argv[]) {
     errmsg = "failed to mdbx_env_open: %s\n";
     goto Fail;
   }
-  if ((rc = mdbx_txn_begin(env, NULL, 0, &txn))) {
+  if ((rc = mdbx_txn_begin(env, NULL, (MDBX_txn_flags_t)0, &txn))) {
     errmsg = "failed to mdbx_txn_begin: %s\n";
     goto Fail;
   }
@@ -185,9 +184,9 @@ int main(int argc, const char *argv[]) {
     errmsg = "failed to mdbx_env_close: %s\n";
     goto Fail;
   }
-  return 0;
+  return;
 
 Fail:
   printf(errmsg, mdbx_strerror(rc));
-  return EXIT_FAILURE;
+  FAIL();
 }

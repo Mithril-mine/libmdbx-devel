@@ -1,8 +1,9 @@
 #include "mdbx.h++"
+#include <gtest/gtest.h>
 #include <cstdio>
 #include <string>
 
-int main() {
+TEST(issue_gh0026, all) {
   std::u16string s(u"abcd1234"); // 8 chars = 16 bytes
   bool ok = true;
 
@@ -43,5 +44,5 @@ int main() {
 #endif /* __cpp_lib_string_view*/
 
   std::printf("\nresult: %s\n", ok ? "SUCCESS" : "FAILURE");
-  return ok ? EXIT_SUCCESS : EXIT_FAILURE;
+  EXPECT_TRUE(ok);
 }

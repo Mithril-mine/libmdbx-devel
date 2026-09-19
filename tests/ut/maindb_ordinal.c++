@@ -20,6 +20,7 @@
 /// \date 2015-2026
 
 #include "mdbx.h++"
+#include <gtest/gtest.h>
 #include <iostream>
 
 static int doit() {
@@ -67,13 +68,11 @@ static int doit() {
 #endif /* __cpp_lib_string_view >= 201606L */
 }
 
-int main(int argc, char *argv[]) {
-  (void)argc;
-  (void)argv;
+TEST(ut_maindb_ordinal, all) {
   try {
-    return doit();
+    ASSERT_EQ(EXIT_SUCCESS, doit());
   } catch (const std::exception &ex) {
     std::cerr << "Exception: " << ex.what() << "\n";
-    return EXIT_FAILURE;
+    FAIL();
   }
 }

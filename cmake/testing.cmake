@@ -329,7 +329,7 @@ if(BUILD_TESTING)
   function(add_gtest name)
     set(options DISABLED)
     set(oneValueArgs TIMEOUT PREFIX)
-    set(multiValueArgs SOURCE LIBRARY INCLUDE_DIRECTORY DEPEND DLLPATH)
+    set(multiValueArgs SOURCE LIBRARY INCLUDE_DIRECTORY DEPEND DLLPATH LABELS)
     cmake_parse_arguments(params "${options}" "${oneValueArgs}" "${multiValueArgs}" ${ARGN})
 
     if(params_UNPARSED_ARGUMENTS)
@@ -342,10 +342,20 @@ if(BUILD_TESTING)
       endmacro()
 
       if(NOT params_SOURCE)
-        set(params_SOURCE ${name}.cpp)
+        if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/${name}.c++")
+          set(params_SOURCE ${name}.c++)
+        else()
+          set(params_SOURCE ${name}.cpp)
+        endif()
       endif()
 
       set(target "${params_PREFIX}${name}")
+      foreach(source IN LISTS params_SOURCE)
+        get_filename_component(source_ext "${source}" EXT)
+        if(source_ext STREQUAL ".c")
+          set_source_files_properties(${source} PROPERTIES LANGUAGE CXX)
+        endif()
+      endforeach()
       add_executable(${target} ${params_SOURCE})
       set_target_properties(${target} PROPERTIES SKIP_BUILD_RPATH FALSE BUILD_WITH_INSTALL_RPATH FALSE)
 
@@ -355,8 +365,16 @@ if(BUILD_TESTING)
 
       target_link_libraries(${target} ${UT_LIBRARIES})
 
+      if(NOT params_LIBRARY AND DEFINED TOOL_MDBX_LIB)
+        set(params_LIBRARY ${TOOL_MDBX_LIB})
+      endif()
+
       if(params_LIBRARY)
         target_link_libraries(${target} ${params_LIBRARY})
+      endif()
+
+      if(MDBX_BUILD_CXX AND MDBX_CXX_STANDARD)
+        set_target_properties(${target} PROPERTIES CXX_STANDARD ${MDBX_CXX_STANDARD} CXX_STANDARD_REQUIRED ON)
       endif()
 
       if(params_INCLUDE_DIRECTORY)
@@ -416,7 +434,10 @@ if(BUILD_TESTING)
       endif(UT_NEED_DLLCRUTCH)
 
       if(NOT params_DISABLED AND NOT (CMAKE_CROSSCOMPILING AND NOT CMAKE_CROSSCOMPILING_EMULATOR))
-        add_test(${name} ${target})
+        add_test(NAME ${name} COMMAND $<TARGET_FILE:${target}>)
+        if(params_LABELS)
+          set_tests_properties(${name} PROPERTIES LABELS "${params_LABELS}")
+        endif()
         if(params_TIMEOUT)
           if(MEMORYCHECK_COMMAND OR CMAKE_MEMORYCHECK_COMMAND)
             # FIXME: unless there are any other ideas how to fix the timeouts problem when testing under Valgrind.
@@ -445,7 +466,7 @@ if(BUILD_TESTING)
   endfunction(add_gtest)
 
   function(add_ut name)
-    add_gtest(${name} PREFIX "ut_" ${ARGN})
+    add_gtest(${name} PREFIX "ut_" LABELS "ut" ${ARGN})
   endfunction(add_ut)
 
   function(add_long_test name)

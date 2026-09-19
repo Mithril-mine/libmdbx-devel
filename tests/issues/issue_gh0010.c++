@@ -1,11 +1,12 @@
 /* nested child spills, then is aborted -> spilled.list leaks. */
 #include "mdbx.h++"
+#include <gtest/gtest.h>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
 
-int main(int argc, char **argv) {
-  const mdbx::path testdb = (argc > 1) ? argv[1] : "issue10";
+TEST(issue_gh0010, all) {
+  const mdbx::path testdb = "issue10";
   mdbx::env::remove(testdb);
   mdbx::env_managed::create_parameters cp;
   cp.geometry = mdbx::env::geometry(mdbx::env::geometry::minimal_value, mdbx::env::geometry::default_value,
@@ -29,5 +30,4 @@ int main(int argc, char **argv) {
     c.put(d, K, V, mdbx::upsert);
   }
   c.abort();
-  return 0;
 }
