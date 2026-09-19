@@ -54,7 +54,7 @@ TEST(issue_gh0011, all) {
                                       mdbx::env::geometry::default_value, mdbx::env::geometry::default_value,
                                       mdbx::env::geometry::default_value, mdbx::env::geometry::minimal_value);
     mdbx::env_managed::operate_parameters op;
-    op.mode = mdbx::env_managed::nested_transactions;
+    op.mode = mdbx::env_managed::mode::nested_transactions;
     op.options.no_sticky_threads = true;
     op.reclaiming.lifo = true;
     op.max_maps = 42;

@@ -29,7 +29,7 @@ mdbx::path db_filename = "test-dbi";
 bool case1() {
   mdbx::env::remove(db_filename);
 
-  mdbx::env::operate_parameters operateParameters(100, 10, mdbx::env::nested_transactions);
+  mdbx::env::operate_parameters operateParameters(100, 10, mdbx::env::mode::nested_transactions);
   mdbx::env_managed::create_parameters createParameters;
   {
     mdbx::env_managed env(db_filename, createParameters, operateParameters);
@@ -85,7 +85,7 @@ bool case2() {
   mdbx::env_managed::create_parameters createParameters;
   mdbx::env::remove(db_filename);
   {
-    mdbx::env::operate_parameters operateParameters(0, 10, mdbx::env::nested_transactions);
+    mdbx::env::operate_parameters operateParameters(0, 10, mdbx::env::mode::nested_transactions);
     mdbx::env_managed env(db_filename, createParameters, operateParameters);
     {
       mdbx::txn_managed txn = env.start_write();
@@ -108,7 +108,7 @@ bool case2() {
   }
 
   {
-    mdbx::env::operate_parameters operateParameters(1, 10, mdbx::env::nested_transactions);
+    mdbx::env::operate_parameters operateParameters(1, 10, mdbx::env::mode::nested_transactions);
     mdbx::env_managed env(db_filename, createParameters, operateParameters);
     {
       mdbx::txn_managed txn = env.start_write();
@@ -125,7 +125,7 @@ bool case2() {
   }
 
   {
-    mdbx::env::operate_parameters operateParameters(0, 10, mdbx::env::nested_transactions);
+    mdbx::env::operate_parameters operateParameters(0, 10, mdbx::env::mode::nested_transactions);
     mdbx::env_managed env(db_filename, createParameters, operateParameters);
     {
       mdbx::txn_managed txn = env.start_read();
@@ -154,7 +154,7 @@ bool case2() {
 
   {
     {
-      mdbx::env::operate_parameters operateParameters(1, 10, mdbx::env::nested_transactions);
+      mdbx::env::operate_parameters operateParameters(1, 10, mdbx::env::mode::nested_transactions);
       mdbx::env_managed env(db_filename, createParameters, operateParameters);
       {
         mdbx::txn_managed txn = env.start_read();
@@ -189,7 +189,7 @@ bool case3() {
   mdbx::env_managed::create_parameters createParameters;
   mdbx::env::remove(db_filename);
   {
-    mdbx::env::operate_parameters operateParameters(1, 10, mdbx::env::nested_transactions);
+    mdbx::env::operate_parameters operateParameters(1, 10, mdbx::env::mode::nested_transactions);
     mdbx::env_managed env(db_filename, createParameters, operateParameters);
     {
       mdbx::txn_managed txn = env.start_write();

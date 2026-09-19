@@ -213,6 +213,15 @@
 #endif
 #endif /* MDBX_CXX20_UNLIKELY */
 
+/** Workaround for old compilers without `[[nodiscard]]` support */
+#ifndef MDBX_NODISCARD
+#if defined(DOXYGEN) || __cplusplus >= 201703L
+#define MDBX_NODISCARD [[nodiscard]]
+#else
+#define MDBX_NODISCARD /* nope */
+#endif
+#endif /* MDBX_NODISCARD */
+
 #ifndef MDBX_HAVE_CXX20_CONCEPTS
 #if defined(__cpp_concepts) && __cpp_concepts >= 202002L && defined(__cpp_lib_concepts) && __cpp_lib_concepts >= 202002L
 #include <concepts>

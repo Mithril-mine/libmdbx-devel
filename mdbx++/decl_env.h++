@@ -105,8 +105,22 @@ public:
     /// and \ref MDBX_MAX_PAGESIZE.
     intptr_t pagesize{default_value};
 
-    inline geometry &make_fixed(intptr_t size) noexcept;
-    inline geometry &make_dynamic(intptr_t lower = default_value, intptr_t upper = default_value) noexcept;
+    MDBX_CXX14_CONSTEXPR geometry &make_fixed(intptr_t size) noexcept;
+    MDBX_CXX14_CONSTEXPR geometry &make_dynamic(intptr_t lower = default_value, intptr_t upper = default_value) noexcept;
+
+    /// \brief Sets the lower bound of database size in bytes.
+    MDBX_CXX14_CONSTEXPR geometry &set_size_lower(intptr_t size) noexcept;
+    /// \brief Sets the size in bytes to setup the database size for now.
+    MDBX_CXX14_CONSTEXPR geometry &set_size_now(intptr_t size) noexcept;
+    /// \brief Sets the upper bound of database size in bytes.
+    MDBX_CXX14_CONSTEXPR geometry &set_size_upper(intptr_t size) noexcept;
+    /// \brief Sets the growth step in bytes.
+    MDBX_CXX14_CONSTEXPR geometry &set_growth_step(intptr_t step) noexcept;
+    /// \brief Sets the shrink threshold in bytes.
+    MDBX_CXX14_CONSTEXPR geometry &set_shrink_threshold(intptr_t threshold) noexcept;
+    /// \brief Sets the database page size for new database creation.
+    MDBX_CXX14_CONSTEXPR geometry &set_pagesize(intptr_t size) noexcept;
+
     MDBX_CXX11_CONSTEXPR geometry() noexcept {}
     MDBX_CXX11_CONSTEXPR
     geometry(const geometry &) noexcept = default;
@@ -116,10 +130,33 @@ public:
                                   intptr_t shrink_threshold = default_value, intptr_t pagesize = default_value) noexcept
         : size_lower(size_lower), size_now(size_now), size_upper(size_upper), growth_step(growth_step),
           shrink_threshold(shrink_threshold), pagesize(pagesize) {}
+
+    /// \brief Creates a fixed-size geometry, i.e. with disabled growing and shrinking.
+    static MDBX_CXX14_CONSTEXPR geometry fixed(intptr_t size) noexcept {
+      geometry result;
+      return result.make_fixed(size);
+    }
+    /// \brief Creates a dynamic-size geometry with the given bounds.
+    static MDBX_CXX14_CONSTEXPR geometry dynamic(intptr_t lower = default_value,
+                                                 intptr_t upper = default_value) noexcept {
+      geometry result;
+      return result.make_dynamic(lower, upper);
+    }
+
+#if defined(__cpp_impl_three_way_comparison) && __cpp_impl_three_way_comparison >= 201907L
+    friend auto operator<=>(const geometry &a, const geometry &b) = default;
+#else
+    MDBX_CXX14_CONSTEXPR bool operator==(const geometry &other) const noexcept {
+      return size_lower == other.size_lower && size_now == other.size_now && size_upper == other.size_upper &&
+             growth_step == other.growth_step && shrink_threshold == other.shrink_threshold &&
+             pagesize == other.pagesize;
+    }
+    MDBX_CXX14_CONSTEXPR bool operator!=(const geometry &other) const noexcept { return !(*this == other); }
+#endif
   };
 
   /// \brief Operation mode.
-  enum mode {
+  enum class mode : unsigned {
     readonly,        ///< \copydoc MDBX_RDONLY
     write_file_io,   // don't available on OpenBSD
     write_mapped_io, ///< \copydoc MDBX_WRITEMAP
@@ -127,7 +164,7 @@ public:
   };
 
   /// \brief Durability level.
-  enum durability {
+  enum class durability : unsigned {
     robust_synchronous,         ///< \copydoc MDBX_SYNC_DURABLE
     half_synchronous_weak_last, ///< \copydoc MDBX_NOMETASYNC
     lazy_weak_tail,             ///< \copydoc MDBX_SAFE_NOSYNC
@@ -142,6 +179,18 @@ public:
     MDBX_CXX11_CONSTEXPR
     reclaiming_options(const reclaiming_options &) noexcept = default;
     MDBX_CXX14_CONSTEXPR reclaiming_options &operator=(const reclaiming_options &) noexcept = default;
+    /// \brief Sets the LIFO reclaiming mode.
+    MDBX_CXX14_CONSTEXPR reclaiming_options &set_lifo(bool value = true) noexcept;
+
+#if defined(__cpp_impl_three_way_comparison) && __cpp_impl_three_way_comparison >= 201907L
+    friend auto operator<=>(const reclaiming_options &a, const reclaiming_options &b) = default;
+#else
+    MDBX_CXX14_CONSTEXPR bool operator==(const reclaiming_options &other) const noexcept {
+      return lifo == other.lifo;
+    }
+    MDBX_CXX14_CONSTEXPR bool operator!=(const reclaiming_options &other) const noexcept { return !(*this == other); }
+#endif
+
     reclaiming_options(MDBX_env_flags_t) noexcept;
   };
 
@@ -164,6 +213,31 @@ public:
     MDBX_CXX11_CONSTEXPR
     operate_options(const operate_options &) noexcept = default;
     MDBX_CXX14_CONSTEXPR operate_options &operator=(const operate_options &) noexcept = default;
+
+    /// \brief Sets the "no sticky threads" mode.
+    MDBX_CXX14_CONSTEXPR operate_options &set_no_sticky_threads(bool value = true) noexcept;
+    /// \brief Sets the nested transactions mode.
+    MDBX_CXX14_CONSTEXPR operate_options &set_nested_transactions(bool value = true) noexcept;
+    /// \brief Sets the exclusive mode.
+    MDBX_CXX14_CONSTEXPR operate_options &set_exclusive(bool value = true) noexcept;
+    /// \brief Sets the readahead disable mode.
+    MDBX_CXX14_CONSTEXPR operate_options &set_disable_readahead(bool value = true) noexcept;
+    /// \brief Sets the clear-memory disable mode.
+    MDBX_CXX14_CONSTEXPR operate_options &set_disable_clear_memory(bool value = true) noexcept;
+    /// \brief Sets the validation enable mode.
+    MDBX_CXX14_CONSTEXPR operate_options &set_enable_validation(bool value = true) noexcept;
+
+#if defined(__cpp_impl_three_way_comparison) && __cpp_impl_three_way_comparison >= 201907L
+    friend auto operator<=>(const operate_options &a, const operate_options &b) = default;
+#else
+    MDBX_CXX14_CONSTEXPR bool operator==(const operate_options &other) const noexcept {
+      return no_sticky_threads == other.no_sticky_threads && nested_transactions == other.nested_transactions &&
+             exclusive == other.exclusive && disable_readahead == other.disable_readahead &&
+             disable_clear_memory == other.disable_clear_memory && enable_validation == other.enable_validation;
+    }
+    MDBX_CXX14_CONSTEXPR bool operator!=(const operate_options &other) const noexcept { return !(*this == other); }
+#endif
+
     operate_options(MDBX_env_flags_t) noexcept;
   };
 
@@ -175,8 +249,8 @@ public:
     /// \brief The maximum number of threads/reader slots for the environment.
     /// Zero means default value.
     unsigned max_readers{0};
-    env::mode mode{write_mapped_io};
-    env::durability durability{robust_synchronous};
+    env::mode mode{env::mode::write_mapped_io};
+    env::durability durability{env::durability::robust_synchronous};
     env::reclaiming_options reclaiming;
     env::operate_options options;
 
@@ -192,27 +266,94 @@ public:
     MDBX_CXX11_CONSTEXPR
     operate_parameters(const operate_parameters &) noexcept = default;
     MDBX_CXX14_CONSTEXPR operate_parameters &operator=(const operate_parameters &) noexcept = default;
-    MDBX_env_flags_t make_flags(bool accede = true,           ///< Allows accepting incompatible operating options
-                                                              ///< in case the database is already being used by
-                                                              ///< another process(es) \see MDBX_ACCEDE
-                                bool use_subdirectory = false ///< use subdirectory to place the DB files
+
+    /// \brief Sets the maximum number of named tables/maps for the environment.
+    /// Zero means default value.
+    MDBX_CXX14_CONSTEXPR operate_parameters &set_max_maps(unsigned value) noexcept;
+    /// \brief Sets the maximum number of threads/reader slots for the environment.
+    /// Zero means default value.
+    MDBX_CXX14_CONSTEXPR operate_parameters &set_max_readers(unsigned value) noexcept;
+    /// \brief Sets the operation mode.
+    MDBX_CXX14_CONSTEXPR operate_parameters &set_mode(env::mode value) noexcept;
+    /// \brief Sets the durability level.
+    MDBX_CXX14_CONSTEXPR operate_parameters &set_durability(env::durability value) noexcept;
+    /// \brief Sets the garbage reclaiming options.
+    MDBX_CXX14_CONSTEXPR operate_parameters &set_reclaiming(const env::reclaiming_options &value) noexcept;
+    /// \brief Sets the operate options.
+    MDBX_CXX14_CONSTEXPR operate_parameters &set_options(const env::operate_options &value) noexcept;
+
+    /// \brief Sets the operation mode to \ref env::mode::readonly.
+    MDBX_CXX14_CONSTEXPR operate_parameters &readonly() noexcept;
+    /// \brief Sets the operation mode to \ref env::mode::write_file_io.
+    MDBX_CXX14_CONSTEXPR operate_parameters &write_file_io() noexcept;
+    /// \brief Sets the operation mode to \ref env::mode::write_mapped_io.
+    MDBX_CXX14_CONSTEXPR operate_parameters &write_mapped_io() noexcept;
+    /// \brief Sets the durability level to \ref env::durability::robust_synchronous.
+    MDBX_CXX14_CONSTEXPR operate_parameters &robust_synchronous() noexcept;
+    /// \brief Sets the durability level to \ref env::durability::half_synchronous_weak_last.
+    MDBX_CXX14_CONSTEXPR operate_parameters &half_synchronous_weak_last() noexcept;
+    /// \brief Sets the durability level to \ref env::durability::lazy_weak_tail.
+    MDBX_CXX14_CONSTEXPR operate_parameters &lazy_weak_tail() noexcept;
+    /// \brief Sets the durability level to \ref env::durability::whole_fragile.
+    MDBX_CXX14_CONSTEXPR operate_parameters &whole_fragile() noexcept;
+    /// \brief Sets the nested transactions mode, i.e. \ref operate_options::nested_transactions.
+    MDBX_CXX14_CONSTEXPR operate_parameters &nested_transactions(bool value = true) noexcept;
+    /// \brief Sets the LIFO reclaiming mode, i.e. \ref reclaiming_options::lifo.
+    MDBX_CXX14_CONSTEXPR operate_parameters &lifo(bool value = true) noexcept;
+    /// \brief Sets the "no sticky threads" mode, i.e. \ref operate_options::no_sticky_threads.
+    MDBX_CXX14_CONSTEXPR operate_parameters &no_sticky_threads(bool value = true) noexcept;
+    /// \brief Sets the exclusive mode, i.e. \ref operate_options::exclusive.
+    MDBX_CXX14_CONSTEXPR operate_parameters &exclusive(bool value = true) noexcept;
+    /// \brief Sets the readahead disable mode, i.e. \ref operate_options::disable_readahead.
+    MDBX_CXX14_CONSTEXPR operate_parameters &disable_readahead(bool value = true) noexcept;
+    /// \brief Sets the clear-memory disable mode, i.e. \ref operate_options::disable_clear_memory.
+    MDBX_CXX14_CONSTEXPR operate_parameters &disable_clear_memory(bool value = true) noexcept;
+    /// \brief Sets the validation enable mode, i.e. \ref operate_options::enable_validation.
+    MDBX_CXX14_CONSTEXPR operate_parameters &enable_validation(bool value = true) noexcept;
+
+    /// \brief Constructs parameters for a read-only environment.
+    static MDBX_CXX14_CONSTEXPR operate_parameters read_only() noexcept;
+    /// \brief Constructs parameters for a writable environment with
+    /// \ref env::durability::robust_synchronous durability and \ref env::mode::write_mapped_io.
+    static MDBX_CXX14_CONSTEXPR operate_parameters safe_write() noexcept;
+    /// \brief Constructs parameters for a writable environment with
+    /// \ref env::durability::lazy_weak_tail durability and \ref env::mode::write_mapped_io.
+    static MDBX_CXX14_CONSTEXPR operate_parameters lazy_write() noexcept;
+    /// \brief Constructs parameters for a writable environment with
+    /// \ref env::durability::whole_fragile durability and \ref env::mode::write_mapped_io.
+    static MDBX_CXX14_CONSTEXPR operate_parameters fragile_write() noexcept;
+
+#if defined(__cpp_impl_three_way_comparison) && __cpp_impl_three_way_comparison >= 201907L
+    friend auto operator<=>(const operate_parameters &a, const operate_parameters &b) = default;
+#else
+    MDBX_CXX14_CONSTEXPR bool operator==(const operate_parameters &other) const noexcept {
+      return max_maps == other.max_maps && max_readers == other.max_readers && mode == other.mode &&
+             durability == other.durability && reclaiming == other.reclaiming && options == other.options;
+    }
+    MDBX_CXX14_CONSTEXPR bool operator!=(const operate_parameters &other) const noexcept { return !(*this == other); }
+#endif
+
+    MDBX_NODISCARD MDBX_env_flags_t make_flags(bool accede = true, ///< Allows accepting incompatible operating options
+                                                               ///< in case the database is already being used by
+                                                               ///< another process(es) \see MDBX_ACCEDE
+                                               bool use_subdirectory = false ///< use subdirectory to place the DB files
     ) const;
-    static env::mode mode_from_flags(MDBX_env_flags_t) noexcept;
-    static env::durability durability_from_flags(MDBX_env_flags_t) noexcept;
-    inline static env::reclaiming_options reclaiming_from_flags(MDBX_env_flags_t flags) noexcept;
-    inline static env::operate_options options_from_flags(MDBX_env_flags_t flags) noexcept;
+    MDBX_NODISCARD static env::mode mode_from_flags(MDBX_env_flags_t) noexcept;
+    MDBX_NODISCARD static env::durability durability_from_flags(MDBX_env_flags_t) noexcept;
+    MDBX_NODISCARD inline static env::reclaiming_options reclaiming_from_flags(MDBX_env_flags_t flags) noexcept;
+    MDBX_NODISCARD inline static env::operate_options options_from_flags(MDBX_env_flags_t flags) noexcept;
   };
 
   /// \brief Returns current operation parameters.
-  inline env::operate_parameters get_operation_parameters() const;
+  MDBX_NODISCARD inline env::operate_parameters get_operation_parameters() const;
   /// \brief Returns current operation mode.
-  inline env::mode get_mode() const;
+  MDBX_NODISCARD inline env::mode get_mode() const;
   /// \brief Returns current durability mode.
-  inline env::durability get_durability() const;
+  MDBX_NODISCARD inline env::durability get_durability() const;
   /// \brief Returns current reclaiming options.
-  inline env::reclaiming_options get_reclaiming() const;
+  MDBX_NODISCARD inline env::reclaiming_options get_reclaiming() const;
   /// \brief Returns current operate options.
-  inline env::operate_options get_options() const;
+  MDBX_NODISCARD inline env::operate_options get_options() const;
 
   /// \brief Returns `true` for a freshly created database,
   /// but `false` if at least one transaction was committed.
@@ -691,6 +832,23 @@ public:
     bool use_subdirectory{false};
     MDBX_CXX11_CONSTEXPR create_parameters() noexcept = default;
     create_parameters(const create_parameters &) noexcept = default;
+
+    /// \brief Sets the database geometry for size management.
+    MDBX_CXX14_CONSTEXPR create_parameters &set_geometry(const env::geometry &value) noexcept;
+    /// \brief Sets the file mode bits used for creation of the DB files.
+    MDBX_CXX14_CONSTEXPR create_parameters &set_file_mode_bits(mdbx_mode_t value) noexcept;
+    /// \brief Sets whether to use a subdirectory to place the DB files.
+    MDBX_CXX14_CONSTEXPR create_parameters &set_use_subdirectory(bool value = true) noexcept;
+
+#if defined(__cpp_impl_three_way_comparison) && __cpp_impl_three_way_comparison >= 201907L
+    friend auto operator<=>(const create_parameters &a, const create_parameters &b) = default;
+#else
+    MDBX_CXX14_CONSTEXPR bool operator==(const create_parameters &other) const noexcept {
+      return geometry == other.geometry && file_mode_bits == other.file_mode_bits &&
+             use_subdirectory == other.use_subdirectory;
+    }
+    MDBX_CXX14_CONSTEXPR bool operator!=(const create_parameters &other) const noexcept { return !(*this == other); }
+#endif
   };
 
   /// \brief Create new or open existing database.
@@ -728,6 +886,17 @@ public:
   env_managed &operator=(const env_managed &) = delete;
   virtual ~env_managed();
 };
+
+/// \brief Shorthand for \ref env::geometry.
+using geometry = env::geometry;
+/// \brief Shorthand for \ref env::reclaiming_options.
+using reclaiming_options = env::reclaiming_options;
+/// \brief Shorthand for \ref env::operate_options.
+using operate_options = env::operate_options;
+/// \brief Shorthand for \ref env::operate_parameters.
+using operate_parameters = env::operate_parameters;
+/// \brief Shorthand for \ref env_managed::create_parameters.
+using create_parameters = env_managed::create_parameters;
 
 // > dist-cutoff-begin
 } // namespace mdbx

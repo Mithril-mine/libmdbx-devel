@@ -111,7 +111,7 @@ bool case2() {
   mdbx::env_managed::create_parameters create_parameters;
   create_parameters.geometry.pagesize = mdbx::env::geometry::minimal_value;
   mdbx::env_managed env(db_pathname, create_parameters,
-                        mdbx::env::operate_parameters(42, 0, mdbx::env::/* write_mapped_io */ nested_transactions,
+                        mdbx::env::operate_parameters(42, 0, mdbx::env::mode::nested_transactions,
                                                       mdbx::env::durability::robust_synchronous,
                                                       mdbx::env::reclaiming_options(), options));
   auto txn = env.start_write();
