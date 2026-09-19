@@ -74,7 +74,8 @@ Author: Leonid Yuriev \<leo@yuriev.ru\>. Home site: <https://libmdbx.dqdkfa.ru>.
 | Document | Contents |
 | --- | --- |
 | [`structure.md`](structure.md) | Full file-by-file map of the repository, classification of `src/` modules into subsystems |
-| [`functional-architecture.md`](functional-architecture.md) | **How libmdbx works** (RU): functional architecture — subsystems, mechanisms, API entities and their interplay, top-down, without file/module binding; includes control Q&A (big values vs GC, long readers vs DB growth, lazy-search cache, WAF) |
+| [`functional-architecture.md`](functional-architecture.md) | **How libmdbx works** (RU): functional architecture — subsystems, mechanisms, API entities and their interplay, top-down, without file/module binding; includes a reader Q&A section (big values vs GC, long readers vs DB growth, lazy-search cache, WAF) and a deep-dive part (LIFO, BigFoot, dupsort, DBI handles, bunch delete, range estimation, cursor tracking, nested txns, parking, on-the-fly resize, auto-compaction, defrag) |
+| [`functional-architecture.en.md`](functional-architecture.en.md) | The same document in English (EN translation of the RU original) |
 | [`module-interfaces.md`](module-interfaces.md) | Cross-module interface map: exports per module (proto.h), include backbone, verified call sites, dependency cycles |
 | [`cxx-api.md`](cxx-api.md) | C++ API layer in depth: header topology, class inventory, decl/impl split, C↔C++ bridge, build/amalgamation, compiler matrix |
 | [`build.md`](build.md) | Build systems (CMake, GNU Make, Conan), key options, CI matrix, testing commands |
@@ -95,7 +96,7 @@ Depending on the task, start from:
 - **Where is module X / what does file Y do** → [`structure.md`](structure.md)
 - **Who calls what / module interfaces** → [`module-interfaces.md`](module-interfaces.md)
 - **How the engine works internally, invariants** → [`architecture.md`](architecture.md)
-- **How libmdbx works (functional view, RU, control Q&A)** → [`functional-architecture.md`](functional-architecture.md)
+- **How libmdbx works (functional view, RU, reader Q&A + deep dives)** → [`functional-architecture.md`](functional-architecture.md)
 - **C++ API / classes / wrappers** → [`cxx-api.md`](cxx-api.md)
 - **What tests guard a module / coverage gaps** → [`test-coverage.md`](test-coverage.md)
 - **What to refactor first / known debt** → [`techdebt.md`](techdebt.md)
