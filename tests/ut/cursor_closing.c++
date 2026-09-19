@@ -420,7 +420,7 @@ int doit() {
   mdbx::env::remove(db_filename);
 
   mdbx::env_managed env(db_filename, mdbx::env_managed::create_parameters(),
-                        mdbx::env::operate_parameters(N + 2, 0, mdbx::env::nested_transactions));
+                        mdbx::env::operate_parameters(N + 2, 0, mdbx::env::mode::nested_transactions));
 
   bool ok = case0_trivia(env);
   ok = case1(env) && ok;

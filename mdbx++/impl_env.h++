@@ -24,16 +24,54 @@ inline env::~env() noexcept {
 #endif
 }
 
-inline env::geometry &env::geometry::make_fixed(intptr_t size) noexcept {
+MDBX_CXX14_CONSTEXPR
+env::geometry &env::geometry::make_fixed(intptr_t size) noexcept {
   size_lower = size_now = size_upper = size;
   growth_step = shrink_threshold = 0;
   return *this;
 }
 
-inline env::geometry &env::geometry::make_dynamic(intptr_t lower, intptr_t upper) noexcept {
+MDBX_CXX14_CONSTEXPR
+env::geometry &env::geometry::make_dynamic(intptr_t lower, intptr_t upper) noexcept {
   size_now = size_lower = lower;
   size_upper = upper;
   growth_step = shrink_threshold = default_value;
+  return *this;
+}
+
+MDBX_CXX14_CONSTEXPR
+env::geometry &env::geometry::set_size_lower(intptr_t size) noexcept {
+  size_lower = size;
+  return *this;
+}
+
+MDBX_CXX14_CONSTEXPR
+env::geometry &env::geometry::set_size_now(intptr_t size) noexcept {
+  size_now = size;
+  return *this;
+}
+
+MDBX_CXX14_CONSTEXPR
+env::geometry &env::geometry::set_size_upper(intptr_t size) noexcept {
+  size_upper = size;
+  return *this;
+}
+
+MDBX_CXX14_CONSTEXPR
+env::geometry &env::geometry::set_growth_step(intptr_t step) noexcept {
+  growth_step = step;
+  return *this;
+}
+
+MDBX_CXX14_CONSTEXPR
+env::geometry &env::geometry::set_shrink_threshold(intptr_t threshold) noexcept {
+  shrink_threshold = threshold;
+  return *this;
+}
+
+MDBX_CXX14_CONSTEXPR
+env::geometry &env::geometry::set_pagesize(intptr_t size) noexcept {
+  pagesize = size;
   return *this;
 }
 
@@ -43,6 +81,215 @@ inline env::reclaiming_options env::operate_parameters::reclaiming_from_flags(MD
 
 inline env::operate_options env::operate_parameters::options_from_flags(MDBX_env_flags_t flags) noexcept {
   return operate_options(flags);
+}
+
+MDBX_CXX14_CONSTEXPR
+env_managed::create_parameters &env_managed::create_parameters::set_geometry(const env::geometry &value) noexcept {
+  geometry = value;
+  return *this;
+}
+
+MDBX_CXX14_CONSTEXPR
+env_managed::create_parameters &
+env_managed::create_parameters::set_file_mode_bits(mdbx_mode_t value) noexcept {
+  file_mode_bits = value;
+  return *this;
+}
+
+MDBX_CXX14_CONSTEXPR
+env_managed::create_parameters &env_managed::create_parameters::set_use_subdirectory(bool value) noexcept {
+  use_subdirectory = value;
+  return *this;
+}
+
+MDBX_CXX14_CONSTEXPR
+env::operate_parameters &env::operate_parameters::set_max_maps(unsigned value) noexcept {
+  max_maps = value;
+  return *this;
+}
+
+MDBX_CXX14_CONSTEXPR
+env::operate_parameters &env::operate_parameters::set_max_readers(unsigned value) noexcept {
+  max_readers = value;
+  return *this;
+}
+
+MDBX_CXX14_CONSTEXPR
+env::operate_parameters &env::operate_parameters::set_mode(env::mode value) noexcept {
+  mode = value;
+  return *this;
+}
+
+MDBX_CXX14_CONSTEXPR
+env::operate_parameters &env::operate_parameters::set_durability(env::durability value) noexcept {
+  durability = value;
+  return *this;
+}
+
+MDBX_CXX14_CONSTEXPR
+env::operate_parameters &env::operate_parameters::set_reclaiming(const env::reclaiming_options &value) noexcept {
+  reclaiming = value;
+  return *this;
+}
+
+MDBX_CXX14_CONSTEXPR
+env::operate_parameters &env::operate_parameters::set_options(const env::operate_options &value) noexcept {
+  options = value;
+  return *this;
+}
+
+MDBX_CXX14_CONSTEXPR
+env::operate_parameters &env::operate_parameters::readonly() noexcept {
+  mode = env::mode::readonly;
+  return *this;
+}
+
+MDBX_CXX14_CONSTEXPR
+env::operate_parameters &env::operate_parameters::write_file_io() noexcept {
+  mode = env::mode::write_file_io;
+  return *this;
+}
+
+MDBX_CXX14_CONSTEXPR
+env::operate_parameters &env::operate_parameters::write_mapped_io() noexcept {
+  mode = env::mode::write_mapped_io;
+  return *this;
+}
+
+MDBX_CXX14_CONSTEXPR
+env::operate_parameters &env::operate_parameters::robust_synchronous() noexcept {
+  durability = env::durability::robust_synchronous;
+  return *this;
+}
+
+MDBX_CXX14_CONSTEXPR
+env::operate_parameters &env::operate_parameters::half_synchronous_weak_last() noexcept {
+  durability = env::durability::half_synchronous_weak_last;
+  return *this;
+}
+
+MDBX_CXX14_CONSTEXPR
+env::operate_parameters &env::operate_parameters::lazy_weak_tail() noexcept {
+  durability = env::durability::lazy_weak_tail;
+  return *this;
+}
+
+MDBX_CXX14_CONSTEXPR
+env::operate_parameters &env::operate_parameters::whole_fragile() noexcept {
+  durability = env::durability::whole_fragile;
+  return *this;
+}
+
+MDBX_CXX14_CONSTEXPR
+env::operate_parameters &env::operate_parameters::nested_transactions(bool value) noexcept {
+  options.nested_transactions = value;
+  return *this;
+}
+
+MDBX_CXX14_CONSTEXPR
+env::operate_parameters &env::operate_parameters::lifo(bool value) noexcept {
+  reclaiming.lifo = value;
+  return *this;
+}
+
+MDBX_CXX14_CONSTEXPR
+env::operate_parameters &env::operate_parameters::no_sticky_threads(bool value) noexcept {
+  options.no_sticky_threads = value;
+  return *this;
+}
+
+MDBX_CXX14_CONSTEXPR
+env::operate_parameters &env::operate_parameters::exclusive(bool value) noexcept {
+  options.exclusive = value;
+  return *this;
+}
+
+MDBX_CXX14_CONSTEXPR
+env::operate_parameters &env::operate_parameters::disable_readahead(bool value) noexcept {
+  options.disable_readahead = value;
+  return *this;
+}
+
+MDBX_CXX14_CONSTEXPR
+env::operate_parameters &env::operate_parameters::disable_clear_memory(bool value) noexcept {
+  options.disable_clear_memory = value;
+  return *this;
+}
+
+MDBX_CXX14_CONSTEXPR
+env::operate_parameters &env::operate_parameters::enable_validation(bool value) noexcept {
+  options.enable_validation = value;
+  return *this;
+}
+
+MDBX_CXX14_CONSTEXPR
+env::operate_parameters env::operate_parameters::read_only() noexcept {
+  operate_parameters op;
+  op.set_mode(env::mode::readonly);
+  return op;
+}
+
+MDBX_CXX14_CONSTEXPR
+env::operate_parameters env::operate_parameters::safe_write() noexcept {
+  operate_parameters op;
+  op.write_mapped_io().robust_synchronous();
+  return op;
+}
+
+MDBX_CXX14_CONSTEXPR
+env::operate_parameters env::operate_parameters::lazy_write() noexcept {
+  operate_parameters op;
+  op.write_mapped_io().lazy_weak_tail();
+  return op;
+}
+
+MDBX_CXX14_CONSTEXPR
+env::operate_parameters env::operate_parameters::fragile_write() noexcept {
+  operate_parameters op;
+  op.write_mapped_io().whole_fragile();
+  return op;
+}
+
+MDBX_CXX14_CONSTEXPR
+env::reclaiming_options &env::reclaiming_options::set_lifo(bool value) noexcept {
+  lifo = value;
+  return *this;
+}
+
+MDBX_CXX14_CONSTEXPR
+env::operate_options &env::operate_options::set_no_sticky_threads(bool value) noexcept {
+  no_sticky_threads = value;
+  return *this;
+}
+
+MDBX_CXX14_CONSTEXPR
+env::operate_options &env::operate_options::set_nested_transactions(bool value) noexcept {
+  nested_transactions = value;
+  return *this;
+}
+
+MDBX_CXX14_CONSTEXPR
+env::operate_options &env::operate_options::set_exclusive(bool value) noexcept {
+  exclusive = value;
+  return *this;
+}
+
+MDBX_CXX14_CONSTEXPR
+env::operate_options &env::operate_options::set_disable_readahead(bool value) noexcept {
+  disable_readahead = value;
+  return *this;
+}
+
+MDBX_CXX14_CONSTEXPR
+env::operate_options &env::operate_options::set_disable_clear_memory(bool value) noexcept {
+  disable_clear_memory = value;
+  return *this;
+}
+
+MDBX_CXX14_CONSTEXPR
+env::operate_options &env::operate_options::set_enable_validation(bool value) noexcept {
+  enable_validation = value;
+  return *this;
 }
 
 inline size_t env::limits::pagesize_min() noexcept { return MDBX_MIN_PAGESIZE; }

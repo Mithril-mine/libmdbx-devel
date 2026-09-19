@@ -1218,7 +1218,7 @@ __cold MDBX_env_flags_t env::operate_parameters::make_flags(bool accede, bool us
   if (options.enable_validation)
     flags |= MDBX_VALIDATION;
 
-  if (mode != readonly) {
+  if (mode != env::mode::readonly) {
     if (options.nested_transactions)
       flags &= ~MDBX_WRITEMAP;
     if (reclaiming.lifo)

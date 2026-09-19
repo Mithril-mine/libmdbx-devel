@@ -13,7 +13,7 @@ TEST(issue_gh0010, all) {
                                     mdbx::env::geometry::default_value, mdbx::env::geometry::default_value,
                                     mdbx::env::geometry::default_value, mdbx::env::geometry::minimal_value);
   mdbx::env_managed::operate_parameters op;
-  op.mode = mdbx::env_managed::nested_transactions;
+  op.mode = mdbx::env_managed::mode::nested_transactions;
   op.max_maps = 42;
   mdbx::env_managed env(testdb, cp, op);
 

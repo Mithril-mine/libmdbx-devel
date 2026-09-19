@@ -701,7 +701,7 @@ int doit() {
   mdbx::env_managed::create_parameters create_parameters;
   create_parameters.geometry.pagesize = mdbx::env::geometry::minimal_value;
   mdbx::env_managed env(db_filename, create_parameters,
-                        mdbx::env::operate_parameters(3, 0, mdbx::env::nested_transactions,
+                        mdbx::env::operate_parameters(3, 0, mdbx::env::mode::nested_transactions,
                                                       mdbx::env::durability::whole_fragile,
                                                       mdbx::env::reclaiming_options()));
   if (env.get_info().mi_dxb_pagesize != 256)
