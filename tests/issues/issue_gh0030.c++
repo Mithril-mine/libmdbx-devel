@@ -1,11 +1,12 @@
 #include "mdbx.h++"
+#include <gtest/gtest.h>
 #include <cstdio>
 
 #ifdef _MSC_VER
 #pragma warning(disable : 4702) /* unreachable code */
 #endif
 
-int main(int, char **) {
+TEST(issue_gh0030, all) {
   const mdbx::path testdb = "issue30";
   mdbx::env::remove(testdb);
   mdbx::env::operate_parameters op(4);
@@ -15,5 +16,6 @@ int main(int, char **) {
   mdbx_env_get_flags(env, &raw);
   std::printf("raw MDBX_VALIDATION set: %d\n", (raw & MDBX_VALIDATION) != 0);
   std::printf("get_options().enable_validation: %d\n", env.get_options().enable_validation);
-  return ((raw & MDBX_VALIDATION) != 0 && env.get_options().enable_validation) ? EXIT_SUCCESS : EXIT_FAILURE;
+  EXPECT_NE(0u, raw & MDBX_VALIDATION);
+  EXPECT_TRUE(env.get_options().enable_validation);
 }

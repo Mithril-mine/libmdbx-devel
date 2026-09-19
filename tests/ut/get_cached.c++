@@ -20,6 +20,7 @@
 /// \date 2015-2026
 
 #include "mdbx.h++"
+#include <gtest/gtest.h>
 
 #include <chrono>
 #include <iostream>
@@ -1050,15 +1051,13 @@ int doit() {
   }
 }
 
-int main(int argc, char *argv[]) {
-  (void)argc;
-  (void)argv;
+TEST(ut_get_cached, all) {
   mdbx_setup_debug_nofmt(MDBX_LOG_VERBOSE, MDBX_DBG_ASSERT | MDBX_DBG_LEGACY_MULTIOPEN | MDBX_DBG_LEGACY_OVERLAP,
                          logger_nofmt, log_buffer, sizeof(log_buffer));
   try {
-    return doit();
+    ASSERT_EQ(EXIT_SUCCESS, doit());
   } catch (const std::exception &ex) {
     std::cerr << "Exception: " << ex.what() << "\n";
-    return EXIT_FAILURE;
+    FAIL();
   }
 }

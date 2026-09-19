@@ -20,6 +20,7 @@
 /// \date 2015-2026
 
 #include <mdbx.h>
+#include <gtest/gtest.h>
 #include <stdio.h>
 #include <stdlib.h>
 
@@ -34,7 +35,7 @@
 
 #define check(rc) check_is(MDBX_SUCCESS, rc)
 
-int main() {
+TEST(ut_dbi_nested_txn, all) {
   const char *db_filename = "./test-dbi-nested-txn";
   int err = mdbx_env_delete(db_filename, MDBX_ENV_JUST_DELETE);
   if (err)
@@ -52,13 +53,12 @@ int main() {
   MDBX_dbi dbi;
   check(mdbx_dbi_open(txn_nested, "test", MDBX_CREATE, &dbi));
   check(mdbx_txn_abort(txn_nested));
-  check_is(MDBX_NOTFOUND, mdbx_dbi_open(txn, "test", 0, &dbi));
+  check_is(MDBX_NOTFOUND, mdbx_dbi_open(txn, "test", (MDBX_db_flags_t)0, &dbi));
   check(mdbx_txn_abort(txn));
 
   check(mdbx_txn_begin(env, NULL, MDBX_TXN_READWRITE, &txn));
-  check_is(MDBX_NOTFOUND, mdbx_dbi_open(txn, "test", 0, &dbi));
+  check_is(MDBX_NOTFOUND, mdbx_dbi_open(txn, "test", (MDBX_db_flags_t)0, &dbi));
   check(mdbx_txn_abort(txn));
 
   check(mdbx_env_close(env));
-  return EXIT_SUCCESS;
 }

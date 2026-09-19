@@ -2,6 +2,7 @@
 #include <stdlib.h>
 
 #include "mdbx.h"
+#include <gtest/gtest.h>
 
 static void check(int rc, const char *op) {
   if (rc != MDBX_SUCCESS) {
@@ -16,7 +17,7 @@ static int get(MDBX_txn *txn, MDBX_dbi dbi) {
   return mdbx_get(txn, dbi, &key, &val);
 }
 
-int main() {
+TEST(ut_nested_drop_abort, all) {
   const char *dbfile = "nested_drop_abort";
   MDBX_env *env;
   mdbx_env_delete(dbfile, MDBX_ENV_JUST_DELETE);
@@ -25,23 +26,23 @@ int main() {
   check(mdbx_env_open(env, dbfile, MDBX_NOSUBDIR, 0660), "env_open");
 
   MDBX_txn *parent;
-  check(mdbx_txn_begin(env, NULL, 0, &parent), "begin parent");
+  check(mdbx_txn_begin(env, NULL, (MDBX_txn_flags_t)0, &parent), "begin parent");
 
   MDBX_dbi dbi;
   check(mdbx_dbi_open(parent, "t", MDBX_CREATE, &dbi), "create t");
   MDBX_val key = {.iov_base = (void *)"k", .iov_len = 1};
   MDBX_val val = {.iov_base = (void *)"v", .iov_len = 1};
-  check(mdbx_put(parent, dbi, &key, &val, 0), "put");
+  check(mdbx_put(parent, dbi, &key, &val, (MDBX_put_flags_t)0), "put");
   check(get(parent, dbi), "get before child");
 
   MDBX_txn *child;
-  check(mdbx_txn_begin(env, parent, 0, &child), "begin child");
+  check(mdbx_txn_begin(env, parent, (MDBX_txn_flags_t)0, &child), "begin child");
   check(mdbx_drop(child, dbi, true), "drop in child");
   check(mdbx_txn_abort(child), "abort child");
 
   int old_rc = get(parent, dbi);
   MDBX_dbi reopened;
-  int open_rc = mdbx_dbi_open(parent, "t", 0, &reopened);
+  int open_rc = mdbx_dbi_open(parent, "t", (MDBX_db_flags_t)0, &reopened);
   int get_rc = open_rc == MDBX_SUCCESS ? get(parent, reopened) : open_rc;
 
   printf("libmdbx %u.%u.%u.%u (%s)\n", mdbx_version.major, mdbx_version.minor, mdbx_version.patch, mdbx_version.tweak,
@@ -52,5 +53,4 @@ int main() {
 
   check(mdbx_txn_abort(parent), "abort parent");
   check(mdbx_env_close(env), "env_close");
-  return 0;
 }

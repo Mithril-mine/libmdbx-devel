@@ -9,6 +9,7 @@
 #include <sys/time.h>
 
 #include "mdbx.h"
+#include <gtest/gtest.h>
 #include <assert.h>
 #include <inttypes.h>
 #include <limits.h>
@@ -18,7 +19,7 @@
 #include <stdlib.h>
 #include <string.h>
 
-int main() {
+TEST(ut_dupfix_addodd, all) {
   int rc;
   MDBX_env *env = NULL;
   MDBX_dbi dbi = 0;
@@ -46,7 +47,7 @@ int main() {
     exit(EXIT_FAILURE);
   }
 
-  rc = mdbx_txn_begin(env, NULL, 0, &txn);
+  rc = mdbx_txn_begin(env, NULL, (MDBX_txn_flags_t)0, &txn);
   if (rc != MDBX_SUCCESS) {
     fprintf(stderr, "mdbx_txn_begin: (%d) %s\n", rc, mdbx_strerror(rc));
     exit(EXIT_FAILURE);
@@ -68,7 +69,7 @@ int main() {
     char data_bytes[15] = {idx};
     data.iov_len = 15;
     data.iov_base = data_bytes;
-    rc = mdbx_put(txn, dbi, &key, &data, 0);
+    rc = mdbx_put(txn, dbi, &key, &data, (MDBX_put_flags_t)0);
     if (rc != MDBX_SUCCESS) {
       fprintf(stderr, "mdbx_put: (%d) %s\n", rc, mdbx_strerror(rc));
       exit(EXIT_FAILURE);
@@ -79,7 +80,7 @@ int main() {
   char data_bytes[15] = {idx};
   data.iov_len = 15;
   data.iov_base = data_bytes;
-  rc = mdbx_put(txn, dbi, &key, &data, 0);
+  rc = mdbx_put(txn, dbi, &key, &data, (MDBX_put_flags_t)0);
   if (rc != MDBX_SUCCESS) {
     fprintf(stderr, "mdbx_put: (%d) %s\n", rc, mdbx_strerror(rc));
     fprintf(stderr, "expected failure\n");
@@ -93,5 +94,4 @@ int main() {
   }
 
   mdbx_env_close(env);
-  return EXIT_SUCCESS;
 }

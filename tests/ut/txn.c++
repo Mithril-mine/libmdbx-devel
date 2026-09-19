@@ -20,6 +20,7 @@
 /// \date 2015-2026
 
 #include "mdbx.h++"
+#include <gtest/gtest.h>
 #include MDBX_CONFIG_H
 
 #include <iostream>
@@ -40,11 +41,8 @@
 
 #if !defined(__cpp_lib_latch) || __cpp_lib_latch < 201907L
 
-int main(int argc, const char *argv[]) {
-  (void)argc;
-  (void)argv;
-  std::cout << "FAKE-OK (since no C++20 std::thread and/or std::latch)\n";
-  return EXIT_SUCCESS;
+TEST(ut_txn, all) {
+  GTEST_SKIP() << "no C++20 std::thread and/or std::latch";
 }
 
 #else
@@ -592,15 +590,13 @@ static void logger_nofmt(MDBX_log_level_t loglevel, const char *function, int li
   fflush(stdout);
 }
 
-int main(int argc, char *argv[]) {
-  (void)argc;
-  (void)argv;
+TEST(ut_txn, all) {
   mdbx_setup_debug_nofmt(MDBX_LOG_VERBOSE, MDBX_DBG_ASSERT, logger_nofmt, log_buffer, sizeof(log_buffer));
   try {
-    return doit();
+    ASSERT_EQ(EXIT_SUCCESS, doit());
   } catch (const std::exception &ex) {
     std::cerr << "Exception: " << ex.what() << "\n";
-    return EXIT_FAILURE;
+    FAIL();
   }
 }
 

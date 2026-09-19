@@ -21,6 +21,7 @@ Observed with MDBX_DEBUG=1:
 */
 
 #include "mdbx.h"
+#include <gtest/gtest.h>
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -47,18 +48,18 @@ static MDBX_dbi create_put_rename(MDBX_txn *txn) {
   MDBX_dbi dbi = 0;
   MDBX_val key = {(void *)"k", 1};
   MDBX_val val = {(void *)"v", 1};
-  int rc = mdbx_dbi_open(txn, "t", 0, &dbi);
+  int rc = mdbx_dbi_open(txn, "t", (MDBX_db_flags_t)0, &dbi);
   if (rc != MDBX_NOTFOUND)
     check(rc, "mdbx_dbi_open t without MDBX_CREATE");
   check(mdbx_dbi_open(txn, "t", MDBX_CREATE, &dbi), "mdbx_dbi_open t with MDBX_CREATE");
-  check(mdbx_put(txn, dbi, &key, &val, 0), "mdbx_put t/k");
+  check(mdbx_put(txn, dbi, &key, &val, (MDBX_put_flags_t)0), "mdbx_put t/k");
   check(mdbx_dbi_rename(txn, dbi, "u"), "mdbx_dbi_rename t -> u");
   return dbi;
 }
 
 static void reopen_old_name(MDBX_txn *txn) {
   MDBX_dbi dbi = 0;
-  int rc = mdbx_dbi_open(txn, "t", 0, &dbi);
+  int rc = mdbx_dbi_open(txn, "t", (MDBX_db_flags_t)0, &dbi);
   if (rc == MDBX_NOTFOUND)
     puts("reopen old name: MDBX_NOTFOUND");
   else
@@ -67,7 +68,7 @@ static void reopen_old_name(MDBX_txn *txn) {
 
 static void run_top(MDBX_env *env) {
   MDBX_txn *txn = NULL;
-  check(mdbx_txn_begin(env, NULL, 0, &txn), "mdbx_txn_begin top");
+  check(mdbx_txn_begin(env, NULL, (MDBX_txn_flags_t)0, &txn), "mdbx_txn_begin top");
   (void)create_put_rename(txn);
   reopen_old_name(txn);
   puts("top: rename succeeded; committing");
@@ -79,8 +80,8 @@ static void run_top(MDBX_env *env) {
 static void run_nested(MDBX_env *env) {
   MDBX_txn *parent = NULL;
   MDBX_txn *child = NULL;
-  check(mdbx_txn_begin(env, NULL, 0, &parent), "mdbx_txn_begin parent");
-  check(mdbx_txn_begin(env, parent, 0, &child), "mdbx_txn_begin child");
+  check(mdbx_txn_begin(env, NULL, (MDBX_txn_flags_t)0, &parent), "mdbx_txn_begin parent");
+  check(mdbx_txn_begin(env, parent, (MDBX_txn_flags_t)0, &child), "mdbx_txn_begin child");
   (void)create_put_rename(child);
   reopen_old_name(child);
   puts("nested: rename succeeded; committing child");
@@ -92,8 +93,8 @@ static void run_nested(MDBX_env *env) {
   puts("nested: parent commit succeeded");
 }
 
-int main(int argc, char **argv) {
-  const char *path = argc > 1 ? argv[1] : "rename_repro";
+TEST(ut_rename_dbi, all) {
+  const char *path = "rename_repro";
   cleanup(path);
 
   MDBX_env *env = open_env(path);
@@ -105,6 +106,4 @@ int main(int argc, char **argv) {
   run_nested(env);
   check(mdbx_env_close(env), "mdbx_env_close");
   cleanup(path);
-
-  return 0;
 }

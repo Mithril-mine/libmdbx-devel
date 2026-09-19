@@ -20,6 +20,7 @@
 /// \date 2015-2026
 
 #include "mdbx.h++"
+#include <gtest/gtest.h>
 
 #include <array>
 #include <iostream>
@@ -429,14 +430,12 @@ int doit() {
   return EXIT_SUCCESS;
 }
 
-int main(int argc, char *argv[]) {
-  (void)argc;
-  (void)argv;
+TEST(ut_crunched_delete, all) {
   mdbx_setup_debug_nofmt(MDBX_LOG_NOTICE, MDBX_DBG_ASSERT, logger_nofmt, log_buffer, sizeof(log_buffer));
   try {
-    return doit();
+    ASSERT_EQ(EXIT_SUCCESS, doit());
   } catch (const std::exception &ex) {
     std::cerr << "Exception: " << ex.what() << "\n";
-    return EXIT_FAILURE;
+    FAIL();
   }
 }
