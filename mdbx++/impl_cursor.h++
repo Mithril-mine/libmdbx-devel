@@ -125,6 +125,33 @@ inline size_t cursor::count_multivalue() const {
   return result;
 }
 
+inline ::std::vector<pair> cursor::get_batch(size_t max_pairs, move_operation op, bool *is_last) const {
+  if (is_last)
+    *is_last = false;
+  ::std::vector<pair> result;
+  if (!max_pairs)
+    return result;
+
+  const size_t limit = max_pairs * 2;
+  ::std::vector<MDBX_val> pairs(limit);
+  size_t count = 0;
+  int rc = ::mdbx_cursor_get_batch(handle_, &count, pairs.data(), limit, MDBX_cursor_op(op));
+  if (rc == MDBX_RESULT_TRUE) {
+    if (is_last)
+      *is_last = true;
+    rc = MDBX_SUCCESS;
+  }
+  error::success_or_throw(rc);
+
+  MDBX_INLINE_API_ASSERT(count % 2 == 0 && count <= limit);
+  result.reserve(count / 2);
+  for (size_t i = 0; i + 1 < count; i += 2)
+    result.emplace_back(slice(pairs[i]), slice(pairs[i + 1]));
+  return result;
+}
+
+inline void cursor::ignore_key_order() { error::success_or_throw(::mdbx_cursor_ignord(handle_)); }
+
 inline bool cursor::eof() const { return error::boolean_or_throw(::mdbx_cursor_eof(*this)); }
 
 inline bool cursor::on_first() const { return error::boolean_or_throw(::mdbx_cursor_on_first(*this)); }
