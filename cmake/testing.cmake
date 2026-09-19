@@ -350,12 +350,6 @@ if(BUILD_TESTING)
       endif()
 
       set(target "${params_PREFIX}${name}")
-      foreach(source IN LISTS params_SOURCE)
-        get_filename_component(source_ext "${source}" EXT)
-        if(source_ext STREQUAL ".c")
-          set_source_files_properties(${source} PROPERTIES LANGUAGE CXX)
-        endif()
-      endforeach()
       add_executable(${target} ${params_SOURCE})
       set_target_properties(${target} PROPERTIES SKIP_BUILD_RPATH FALSE BUILD_WITH_INSTALL_RPATH FALSE)
 

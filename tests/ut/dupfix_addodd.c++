@@ -66,7 +66,7 @@ TEST(ut_dupfix_addodd, all) {
   // Another put after this will fail.
   unsigned char idx;
   for (idx = 0; idx < 129; idx++) {
-    char data_bytes[15] = {idx};
+    unsigned char data_bytes[15] = {idx};
     data.iov_len = 15;
     data.iov_base = data_bytes;
     rc = mdbx_put(txn, dbi, &key, &data, (MDBX_put_flags_t)0);
@@ -77,7 +77,7 @@ TEST(ut_dupfix_addodd, all) {
   }
 
   // This will fail and exit.
-  char data_bytes[15] = {idx};
+  unsigned char data_bytes[15] = {idx};
   data.iov_len = 15;
   data.iov_base = data_bytes;
   rc = mdbx_put(txn, dbi, &key, &data, (MDBX_put_flags_t)0);
