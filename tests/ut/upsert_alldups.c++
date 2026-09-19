@@ -46,7 +46,7 @@ static int put(MDBX_txn *txn, MDBX_dbi dbi, const char *k, const char *v, MDBX_p
 }
 
 TEST(ut_upsert_alldups, all) {
-  char *errmsg = NULL;
+  const char *errmsg = NULL;
   MDBX_env *env = NULL;
   MDBX_txn *txn = NULL;
   MDBX_cursor *cur = NULL;
