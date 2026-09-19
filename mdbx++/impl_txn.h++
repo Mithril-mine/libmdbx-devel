@@ -305,6 +305,19 @@ inline slice txn::get(map_handle map, const slice &key) const {
   return result;
 }
 
+inline txn::cache_result txn::get_cached(map_handle map, const slice &key, slice *data, cache_entry &entry) const {
+  return ::mdbx_cache_get(handle_, map.dbi, &key, data, &entry);
+}
+
+inline slice txn::get_cached(map_handle map, const slice &key, cache_entry &entry, cache_status *status) const {
+  slice value;
+  const auto result = get_cached(map, key, &value, entry);
+  if (status)
+    *status = result.status;
+  error::success_or_throw(result.errcode);
+  return value;
+}
+
 inline slice txn::get(map_handle map, slice key, size_t &values_count) const {
   slice result;
   error::success_or_throw(::mdbx_get_ex(handle_, map.dbi, &key, &result, &values_count));

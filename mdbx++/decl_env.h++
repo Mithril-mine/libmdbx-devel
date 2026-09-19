@@ -791,6 +791,14 @@ public:
   /// locks and reader slots of the parent process.
   inline void resurrect_after_fork();
 
+  /// \brief Turns the database to the specified meta-page.
+  ///
+  /// \details Mostly an internal API for the `mdbx_chk` utility and subject to
+  /// change; use only when you know what you are doing. See
+  /// \ref env_managed::open_for_recovery().
+  /// \see ::mdbx_env_turn_for_recovery()
+  inline void turn_for_recovery(unsigned target_meta);
+
   /// \brief Checks the integrity of the environment (database).
   ///
   /// \details Performs a full consistency check of the database with
@@ -929,6 +937,39 @@ public:
 #endif /* Windows */
   env_managed(const ::std::string &pathname, const create_parameters &, const operate_parameters &, bool accede = true);
   explicit env_managed(const char *pathname, const create_parameters &, const operate_parameters &, bool accede = true);
+
+  /// \brief Opens an environment instance using a specific meta-page
+  /// for checking and recovery.
+  ///
+  /// \details Creates a new environment and opens it in the recovery mode,
+  /// bypassing the regular consistency checks. Mostly an internal API for the
+  /// `mdbx_chk` utility and subject to change; use only when you know what you
+  /// are doing. The opened environment may be used e.g. with \ref env::chk()
+  /// and \ref env::turn_for_recovery().
+  ///
+  /// \param [in] pathname    The path to the database file.
+  /// \param [in] target_meta The number of the meta-page to use (0..2), or
+  ///                         any value for the default behavior.
+  /// \param [in] writeable   Whether to open in read-write mode.
+  /// \param [in] max_maps    The maximum number of named tables/maps, must be
+  ///                         set before opening; zero means the library
+  ///                         default. The recovery tooling uses 2 (MainDB+GC).
+  ///
+  /// \see ::mdbx_env_open_for_recovery()
+  static env_managed open_for_recovery(const char *pathname, unsigned target_meta, bool writeable,
+                                       unsigned max_maps = 2);
+  static env_managed open_for_recovery(const ::std::string &pathname, unsigned target_meta, bool writeable,
+                                       unsigned max_maps = 2);
+#ifdef MDBX_STD_FILESYSTEM_PATH
+  static env_managed open_for_recovery(const MDBX_STD_FILESYSTEM_PATH &pathname, unsigned target_meta, bool writeable,
+                                       unsigned max_maps = 2);
+#endif /* MDBX_STD_FILESYSTEM_PATH */
+#if defined(_WIN32) || defined(_WIN64) || defined(DOXYGEN)
+  static env_managed open_for_recovery(const wchar_t *pathname, unsigned target_meta, bool writeable,
+                                       unsigned max_maps = 2);
+  static env_managed open_for_recovery(const ::std::wstring &pathname, unsigned target_meta, bool writeable,
+                                       unsigned max_maps = 2);
+#endif /* Windows */
 
   /// \brief Explicitly closes the environment and release the memory map.
   ///
