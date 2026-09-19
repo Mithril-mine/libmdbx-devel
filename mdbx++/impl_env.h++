@@ -622,6 +622,16 @@ inline env::info env::get_preopen_snapinfo(const char *pathname) {
   return result;
 }
 
+inline void env::thread_register() { error::success_or_throw(::mdbx_thread_register(handle_)); }
+
+inline void env::thread_unregister() { error::success_or_throw(::mdbx_thread_unregister(handle_)); }
+
+inline int env::warmup(MDBX_warmup_flags_t flags, unsigned timeout_seconds_16dot16, const MDBX_txn *txn) const {
+  return ::mdbx_env_warmup(handle_, txn, flags, timeout_seconds_16dot16);
+}
+
+inline void env::resurrect_after_fork() { error::success_or_throw(::mdbx_env_resurrect_after_fork(handle_)); }
+
 inline env &env::set_HandleSlowReaders(MDBX_hsr_func cb) {
   error::success_or_throw(::mdbx_env_set_hsr(handle_, cb));
   return *this;

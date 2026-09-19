@@ -99,3 +99,18 @@ TEST(ut_stat_info, gc_info) {
   env.close();
   mdbx::env::remove(testdb);
 }
+TEST(ut_stat_info, debug_and_threads) {
+  EXPECT_GE(mdbx::setup_debug(), 0); // read current settings, keep them
+  mdbx::set_panic(nullptr);
+
+  const mdbx::path testdb = "test-stat-info";
+  mdbx::env::remove(testdb);
+  mdbx::env_managed env(testdb, mdbx::create_parameters(), mdbx::operate_parameters().set_max_maps(8));
+  EXPECT_NO_THROW(env.thread_register());
+  EXPECT_NO_THROW(env.thread_unregister());
+  EXPECT_NO_THROW(env.resurrect_after_fork());
+  const int warmup_rc = env.warmup(MDBX_warmup_default, 0);
+  EXPECT_TRUE(warmup_rc == MDBX_SUCCESS || warmup_rc == MDBX_RESULT_TRUE);
+  env.close();
+  mdbx::env::remove(testdb);
+}

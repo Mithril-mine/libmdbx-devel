@@ -772,6 +772,25 @@ public:
   /// return number of cleared slots.
   inline unsigned check_readers();
 
+  /// \brief Registers the current thread as a reader for the environment,
+  /// i.e. assigns a reader slot.
+  inline void thread_register();
+  /// \brief Unregisters the current thread, i.e. releases its reader slot.
+  inline void thread_unregister();
+
+  /// \brief Loads into memory the given pages of the database and their
+  /// on-disk neighbours in advance.
+  ///
+  /// \returns `MDBX_RESULT_TRUE` if the specified timeout is reached during
+  /// loading data into memory, `MDBX_SUCCESS` on success.
+  /// \see ::mdbx_env_warmup()
+  MDBX_NODISCARD inline int warmup(MDBX_warmup_flags_t flags, unsigned timeout_seconds_16dot16,
+                                   const MDBX_txn *txn = nullptr) const;
+
+  /// \brief Restores the environment after `fork()`, dropping all read-write
+  /// locks and reader slots of the parent process.
+  inline void resurrect_after_fork();
+
   /// \brief Checks the integrity of the environment (database).
   ///
   /// \details Performs a full consistency check of the database with
@@ -963,6 +982,29 @@ inline ::std::string ratio2percents(uint64_t value, uint64_t whole) {
 inline bool is_readahead_reasonable(size_t volume, intptr_t redundancy) {
   return ::mdbx_is_readahead_reasonable(volume, redundancy) != 0;
 }
+
+/// \brief Sets up the global log-level, debug options and logger.
+/// \returns A non-negative value on success (previous settings packed into
+/// the low 16 bits and high 16 bits), or a negative error.
+/// \see ::mdbx_setup_debug()
+inline int setup_debug(MDBX_log_level_t log_level = MDBX_LOG_DONTCHANGE,
+                       MDBX_debug_flags_t debug_flags = MDBX_DBG_DONTCHANGE,
+                       MDBX_debug_func logger = nullptr) {
+  return ::mdbx_setup_debug(log_level, debug_flags, logger);
+}
+
+/// \brief Sets up the global log-level, debug options and a logger for plain
+/// preformatted messages.
+/// \returns A non-negative value on success, or a negative error.
+/// \see ::mdbx_setup_debug_nofmt()
+inline int setup_debug_nofmt(MDBX_log_level_t log_level, MDBX_debug_flags_t debug_flags,
+                             MDBX_debug_func_nofmt logger, char *logger_buffer, size_t logger_buffer_size) {
+  return ::mdbx_setup_debug_nofmt(log_level, debug_flags, logger, logger_buffer, logger_buffer_size);
+}
+
+/// \brief Sets a callback for assertion failures, called before printing the
+/// message and aborting. \see ::mdbx_set_panic()
+inline void set_panic(MDBX_panic_func func) { ::mdbx_set_panic(func); }
 
 // > dist-cutoff-begin
 } // namespace mdbx
