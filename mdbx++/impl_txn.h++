@@ -63,6 +63,18 @@ inline void txn::make_broken() { error::success_or_throw(::mdbx_txn_break(handle
 
 inline void txn::renew_reading() { error::success_or_throw(::mdbx_txn_renew(handle_)); }
 
+inline bool txn::refresh() {
+  const int err = ::mdbx_txn_refresh(handle_);
+  switch (err) {
+  case MDBX_SUCCESS:
+    return false;
+  case MDBX_RESULT_TRUE:
+    return true;
+  default:
+    MDBX_CXX20_UNLIKELY error::throw_exception(err);
+  }
+}
+
 inline void txn::copy(const char *destination, bool compactify, bool force_dynamic_size) {
   error::success_or_throw(::mdbx_txn_copy2pathname(
       handle_, destination,

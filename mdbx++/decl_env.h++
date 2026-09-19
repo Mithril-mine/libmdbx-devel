@@ -866,6 +866,80 @@ public:
 
   /// \brief Tries to start write (read-write) transaction without blocking.
   inline txn_managed try_start_write();
+
+  /// \brief Acquires write-transaction lock.
+  ///
+  /// \details Provided for custom and/or complex locking scenarios, see
+  /// \ref ::mdbx_txn_lock(). Callers MUST NOT hold any write transaction while
+  /// holding the lock.
+  ///
+  /// \param [in] dont_wait  If true, does not block and returns `false`
+  /// immediately when the lock is held by another thread or process.
+  /// \returns `True` if the lock was acquired, `false` otherwise.
+  /// \see txn_unlock() \see ::mdbx_txn_lock()
+  inline bool txn_lock(bool dont_wait = false);
+
+  /// \brief Releases write-transaction lock acquired by \ref txn_lock().
+  /// \see txn_lock() \see ::mdbx_txn_unlock()
+  inline void txn_unlock();
+
+  /// \brief The result of database defragmentation, see \ref ::MDBX_defrag_result_t().
+  using defrag_result = ::MDBX_defrag_result_t;
+
+  /// \brief Control values returned by the defragmentation progress visitor.
+  /// \see defrag()
+  enum class defrag_control : int {
+    proceed = 0,     ///< Continue defragmentation.
+    abort = -1,      ///< Abort defragmentation immediately.
+    discontinue = 1, ///< Discontinue with completion of scheduled operations.
+  };
+
+  /// \brief Performs database defragmentation.
+  ///
+  /// \details Defragmentation is the transfer of data from pages located at
+  /// the end of the database to free pages closer to the beginning, so the
+  /// freed tail can be cut off while reducing the size of the database file,
+  /// see \ref ::mdbx_env_defrag(). It is almost always performed in several
+  /// cycles, each of which ends with committing an internal transaction.
+  ///
+  /// \note No transactions nor cursors must be open while defragmenting.
+  ///
+  /// The `visitor` functor (if provided) is called time-to-time with a
+  /// reference to the current \ref defrag_result and must return
+  /// \ref defrag_control::proceed to continue, \ref defrag_control::abort to
+  /// abort immediately, or \ref defrag_control::discontinue to stop after
+  /// completing scheduled operations.
+  ///
+  /// \returns The final \ref defrag_result. Stopping reasons are reported via
+  /// its `stopping_reasons` field and are not treated as errors (the same for
+  /// \ref MDBX_RESULT_TRUE and \ref MDBX_LAGGARD_READER).
+  ///
+  /// \param [in,out] visitor  An optional functor with the signature
+  /// `defrag_control visitor(const defrag_result &progress)`.
+  /// \param [in] defrag_atleast  The required at least number of pages by
+  /// which the database must be reduced, zero means no lower bound.
+  /// \param [in] time_atleast_dot16  The minimum time in 1/65536 fractions of
+  /// a second that should be spent to defragment more even if goals reached,
+  /// zero means no lower bound.
+  /// \param [in] defrag_enough  The number of pages by which it will be enough
+  /// to shrink the database to finish, zero means no limit.
+  /// \param [in] time_limit_dot16  The time limit in 1/65536 fractions of a
+  /// second that could be spent to defragment, zero means no limit.
+  /// \param [in] acceptable_backlash  Stop if a next cycle will unable to
+  /// shrink database by more pages than this value, -1 means autopilot.
+  /// \param [in] preferred_batch  The preferred maximum number of pages to be
+  /// moved per defragmentation cycle, zero means no limit.
+  ///
+  /// \throws mdbx::error on failure (other than stopping reasons above).
+  /// \see ::mdbx_env_defrag()
+  template <typename VISITOR>
+  inline defrag_result defrag(VISITOR &visitor, size_t defrag_atleast = 0, size_t time_atleast_dot16 = 0,
+                              size_t defrag_enough = 0, size_t time_limit_dot16 = 0,
+                              intptr_t acceptable_backlash = -1, intptr_t preferred_batch = 0);
+  /// \copydoc defrag(VISITOR &, size_t, size_t, size_t, size_t, intptr_t, intptr_t)
+  inline defrag_result defrag(size_t defrag_atleast = 0, size_t time_atleast_dot16 = 0, size_t defrag_enough = 0,
+                              size_t time_limit_dot16 = 0, intptr_t acceptable_backlash = -1,
+                              intptr_t preferred_batch = 0);
 };
 
 /// \brief Managed database environment.
@@ -1023,6 +1097,11 @@ inline ::std::string ratio2percents(uint64_t value, uint64_t whole) {
 inline bool is_readahead_reasonable(size_t volume, intptr_t redundancy) {
   return ::mdbx_is_readahead_reasonable(volume, redundancy) != 0;
 }
+
+/// \brief Returns the built-in data (value) comparator for the given table
+/// flags, which is useful as a fallback when implementing custom comparators.
+/// \see ::mdbx_get_datacmp()
+inline MDBX_cmp_func get_datacmp(MDBX_db_flags_t flags) { return ::mdbx_get_datacmp(flags); }
 
 /// \brief Sets up the global log-level, debug options and logger.
 /// \returns A non-negative value on success (previous settings packed into

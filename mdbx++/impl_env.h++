@@ -674,6 +674,58 @@ inline txn_managed env::start_write(txn &parent) {
 
 inline txn_managed env::try_start_write() { return start_write(true); }
 
+inline bool env::txn_lock(bool dont_wait) {
+  const int err = ::mdbx_txn_lock(handle_, dont_wait);
+  switch (err) {
+  case MDBX_SUCCESS:
+    MDBX_CXX20_LIKELY return true;
+  case MDBX_BUSY:
+    return false;
+  default:
+    MDBX_CXX20_UNLIKELY error::throw_exception(err);
+  }
+}
+
+inline void env::txn_unlock() { error::success_or_throw(::mdbx_txn_unlock(handle_)); }
+
+template <typename VISITOR>
+inline env::defrag_result env::defrag(VISITOR &visitor, size_t defrag_atleast, size_t time_atleast_dot16,
+                                      size_t defrag_enough, size_t time_limit_dot16, intptr_t acceptable_backlash,
+                                      intptr_t preferred_batch) {
+  struct defrag_thunk : public exception_thunk {
+    VISITOR &visitor_;
+    static int cb(void *ctx, const MDBX_defrag_result_t *progress) noexcept {
+      defrag_thunk *thunk = static_cast<defrag_thunk *>(ctx);
+      assert(thunk->is_clean());
+      try {
+        return static_cast<int>(thunk->visitor_(*progress));
+      } catch (... /* capture any exception to rethrow it over C code */) {
+        thunk->capture();
+        return static_cast<int>(defrag_control::abort);
+      }
+    }
+    MDBX_CXX11_CONSTEXPR defrag_thunk(VISITOR &visitor) noexcept : visitor_(visitor) {}
+  };
+  defrag_thunk thunk(visitor);
+  defrag_result result;
+  const int rc =
+      ::mdbx_env_defrag(handle_, defrag_atleast, time_atleast_dot16, defrag_enough, time_limit_dot16,
+                        acceptable_backlash, preferred_batch, thunk.cb, &thunk, &result);
+  thunk.rethrow_captured();
+  if (rc != MDBX_SUCCESS && rc != MDBX_RESULT_TRUE)
+    error::success_or_throw(rc);
+  return result;
+}
+
+inline env::defrag_result env::defrag(size_t defrag_atleast, size_t time_atleast_dot16, size_t defrag_enough,
+                                      size_t time_limit_dot16, intptr_t acceptable_backlash, intptr_t preferred_batch) {
+  struct noop_visitor {
+    defrag_control operator()(const defrag_result &) { return defrag_control::proceed; }
+  } visitor;
+  return defrag(visitor, defrag_atleast, time_atleast_dot16, defrag_enough, time_limit_dot16, acceptable_backlash,
+                preferred_batch);
+}
+
 // > dist-cutoff-begin
 } // namespace mdbx
 // < dist-cutoff-end

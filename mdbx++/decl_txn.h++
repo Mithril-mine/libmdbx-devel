@@ -85,6 +85,17 @@ public:
   /// \brief Renew read-only transaction.
   inline void renew_reading();
 
+  /// \brief Refresh the read-only transaction to the most recent snapshot.
+  ///
+  /// \details Replaces the MVCC-snapshot of the given read-only transaction
+  /// with the most recent committed one, see \ref ::mdbx_txn_refresh().
+  ///
+  /// \returns `True` if the transaction was already reading the most recent
+  /// version and no actions were performed, or `false` if it was refreshed
+  /// (i.e. advanced to a newer snapshot).
+  /// \see reset_reading() \see renew_reading()
+  inline bool refresh();
+
   /// \brief Clone read transaction.
   inline txn_managed clone(void *context = nullptr) const;
 
