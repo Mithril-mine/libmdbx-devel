@@ -218,6 +218,12 @@ inline map_handle txn::open_map(const ::std::string &name, const ::mdbx::key_mod
 
 inline map_handle txn::open_map_accede(const ::std::string &name) const { return open_map_accede(slice(name)); }
 
+#if defined(__cpp_lib_string_view) && __cpp_lib_string_view >= 201606L
+inline map_handle txn::open_map_accede(const ::std::string_view &name) const {
+  return open_map_accede(slice(name));
+}
+#endif /* __cpp_lib_string_view >= 201606L */
+
 inline map_handle txn::create_map(const ::std::string &name, const ::mdbx::key_mode key_mode,
                                   const ::mdbx::value_mode value_mode) {
   return create_map(slice(name), key_mode, value_mode);
@@ -232,6 +238,12 @@ inline bool txn::clear_map(const ::std::string &name, bool throw_if_absent) {
 }
 
 inline void txn::rename_map(map_handle map, const ::std::string &new_name) { return rename_map(map, slice(new_name)); }
+
+#if defined(__cpp_lib_string_view) && __cpp_lib_string_view >= 201606L
+inline void txn::rename_map(map_handle map, const ::std::string_view &new_name) {
+  return rename_map(map, slice(new_name));
+}
+#endif /* __cpp_lib_string_view >= 201606L */
 
 inline txn::map_stat txn::get_map_stat(map_handle map) const {
   txn::map_stat r;

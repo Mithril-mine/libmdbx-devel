@@ -71,7 +71,7 @@ public:
   /// volume of dirty pages) in bytes.
   size_t size_max() const { return env().transaction_size_max(); }
 
-  /// \brief Returns current write transaction size (i.e.summary volume of dirty pages) in bytes.
+  /// \brief Returns current write transaction size (i.e. summary volume of dirty pages) in bytes.
   size_t size_current() const {
     assert(is_readwrite());
     return size_t(get_info().txn_space_dirty);
@@ -309,7 +309,7 @@ public:
   using canary = ::MDBX_canary;
   /// \brief Set integers markers (aka "canary") associated with the environment.
   inline txn &put_canary(const canary &);
-  /// \brief Returns fours integers markers (aka "canary") associated with the environment.
+  /// \brief Returns the four integer markers (aka "canary") associated with the environment.
   inline canary get_canary() const;
 
   /// Reads sequence generator associated with a key-value map (aka table).
@@ -372,11 +372,11 @@ public:
   inline slice get(map_handle map, const slice &key, const slice &value_at_absence) const;
   /// \brief Get first of multi-value and values count by key from a key-value multimap (aka table).
   inline slice get(map_handle map, slice key, size_t &values_count, const slice &value_at_absence) const;
-  /// \brief Get value for equal or great key from a table.
+  /// \brief Gets the value for an equal or greater key from a table.
   /// \return Bundle of key-value pair and boolean flag,
   /// which will be `true` if the exact key was found and `false` otherwise.
   inline pair_result get_equal_or_great(map_handle map, const slice &key) const;
-  /// \brief Get value for equal or great key from a table.
+  /// \brief Gets the value for an equal or greater key from a table.
   /// \return Bundle of key-value pair and boolean flag,
   /// which will be `true` if the exact key was found and `false` otherwise.
   inline pair_result get_equal_or_great(map_handle map, const slice &key, const slice &value_at_absence) const;

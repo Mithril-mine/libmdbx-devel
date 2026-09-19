@@ -1731,7 +1731,7 @@ void cursor::update_current(const slice &value) {
   update(key, value);
 }
 
-slice cursor::reverse_current(size_t value_length) {
+slice cursor::reserve_current(size_t value_length) {
   default_buffer holder;
   auto key = current().key;
   if (error::boolean_or_throw(mdbx_is_dirty(handle_->txn, key.iov_base)))

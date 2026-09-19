@@ -16,7 +16,7 @@ struct LIBMDBX_API_TYPE slice : public ::MDBX_val {
   /// \todo key-to-value (parse/unpack) functions
   /// \todo template<class X> key(X); for decoding keys while reading
 
-  enum : size_t { max_length = MDBX_MAXDATASIZE };
+  enum : size_t { max_length = MDBX_MAXDATASIZE, npos = size_t(-1) };
 
   /// \brief Create an empty slice.
   MDBX_CXX11_CONSTEXPR slice() noexcept;
@@ -162,7 +162,7 @@ struct LIBMDBX_API_TYPE slice : public ::MDBX_val {
   inline string<ALLOCATOR> as_base58_string(unsigned wrap_width = 0, const ALLOCATOR &alloc = ALLOCATOR()) const;
 
   /// \brief Returns a string with a
-  /// [Base58](https://en.wikipedia.org/wiki/Base64) dump of the slice content.
+  /// [Base64](https://en.wikipedia.org/wiki/Base64) dump of the slice content.
   template <class ALLOCATOR = default_allocator>
   inline string<ALLOCATOR> as_base64_string(unsigned wrap_width = 0, const ALLOCATOR &alloc = ALLOCATOR()) const;
 
@@ -262,9 +262,11 @@ struct LIBMDBX_API_TYPE slice : public ::MDBX_val {
   MDBX_CXX11_CONSTEXPR const void *data() const noexcept;
   MDBX_CXX11_CONSTEXPR void *data() noexcept;
 
-  /// \brief Return a pointer to the ending of the referenced data.
-  MDBX_CXX11_CONSTEXPR const void *end() const noexcept;
-  MDBX_CXX11_CONSTEXPR void *end() noexcept;
+  /// \brief Return a pointer to the end of the referenced data.
+  /// \details An iterator-style pointer (one past the last byte).
+  MDBX_CXX11_CONSTEXPR const byte *end() const noexcept;
+  /// \copydoc end() const
+  MDBX_CXX11_CONSTEXPR byte *end() noexcept;
 
   /// \brief Returns the number of bytes.
   MDBX_CXX11_CONSTEXPR size_t length() const noexcept;
@@ -335,16 +337,87 @@ struct LIBMDBX_API_TYPE slice : public ::MDBX_val {
   /// \pre REQUIRES: `from + n <= size()`
   MDBX_CXX14_CONSTEXPR slice middle(size_t from, size_t n) const noexcept;
 
+  /// \brief Returns an iterator to the beginning of the referenced data.
+  MDBX_CXX11_CONSTEXPR const byte *begin() const noexcept;
+  /// \copydoc begin() const
+  MDBX_CXX11_CONSTEXPR byte *begin() noexcept;
+
+  /// \brief Returns the first byte of the referenced data.
+  /// \pre REQUIRES: `!empty()`
+  MDBX_CXX11_CONSTEXPR byte front() const noexcept { return byte_ptr()[0]; }
+
+  /// \brief Returns the last byte of the referenced data.
+  /// \pre REQUIRES: `!empty()`
+  MDBX_CXX11_CONSTEXPR byte back() const noexcept { return byte_ptr()[size() - 1]; }
+
+  /// \brief Returns a sub-slice of [pos, pos+count) clamped to the end.
+  /// \throws std::out_of_range if `pos > size()`.
+  MDBX_CXX14_CONSTEXPR slice substr(size_t pos, size_t count = npos) const {
+    if (MDBX_UNLIKELY(pos > size()))
+      MDBX_CXX20_UNLIKELY throw_out_range();
+    return middle(pos, (::std::min)(count, size() - pos));
+  }
+
+  /// \brief Finds the first occurrence of `needle` starting at `pos`.
+  /// \returns The position of the first match or \ref npos.
+  MDBX_NOTHROW_PURE_FUNCTION MDBX_CXX14_CONSTEXPR size_t find(const slice &needle, size_t pos = 0) const noexcept;
+  /// \copydoc find(const slice &, size_t)
+  MDBX_NOTHROW_PURE_FUNCTION MDBX_CXX14_CONSTEXPR size_t find(byte c, size_t pos = 0) const noexcept;
+
+  /// \brief Finds the last occurrence of `needle` not after `pos`.
+  /// \returns The position of the last match or \ref npos.
+  MDBX_NOTHROW_PURE_FUNCTION MDBX_CXX14_CONSTEXPR size_t rfind(const slice &needle, size_t pos = npos) const noexcept;
+  /// \copydoc rfind(const slice &, size_t)
+  MDBX_NOTHROW_PURE_FUNCTION MDBX_CXX14_CONSTEXPR size_t rfind(byte c, size_t pos = npos) const noexcept;
+
+  /// \brief Finds the first byte matching any byte of `chars` starting at `pos`.
+  /// \returns The position of the first match or \ref npos.
+  MDBX_NOTHROW_PURE_FUNCTION MDBX_CXX14_CONSTEXPR size_t find_first_of(const slice &chars,
+                                                                       size_t pos = 0) const noexcept;
+  /// \copydoc find_first_of(const slice &, size_t)
+  MDBX_NOTHROW_PURE_FUNCTION MDBX_CXX14_CONSTEXPR size_t find_first_of(byte c, size_t pos = 0) const noexcept;
+
+  /// \brief Finds the last byte matching any byte of `chars` not after `pos`.
+  /// \returns The position of the last match or \ref npos.
+  MDBX_NOTHROW_PURE_FUNCTION MDBX_CXX14_CONSTEXPR size_t find_last_of(const slice &chars,
+                                                                      size_t pos = npos) const noexcept;
+  /// \copydoc find_last_of(const slice &, size_t)
+  MDBX_NOTHROW_PURE_FUNCTION MDBX_CXX14_CONSTEXPR size_t find_last_of(byte c, size_t pos = npos) const noexcept;
+
+  /// \brief Finds the first byte not matching any byte of `chars` starting at `pos`.
+  /// \returns The position of the first match or \ref npos.
+  MDBX_NOTHROW_PURE_FUNCTION MDBX_CXX14_CONSTEXPR size_t find_first_not_of(const slice &chars,
+                                                                           size_t pos = 0) const noexcept;
+  /// \copydoc find_first_not_of(const slice &, size_t)
+  MDBX_NOTHROW_PURE_FUNCTION MDBX_CXX14_CONSTEXPR size_t find_first_not_of(byte c, size_t pos = 0) const noexcept;
+
+  /// \brief Finds the last byte not matching any byte of `chars` not after `pos`.
+  /// \returns The position of the last match or \ref npos.
+  MDBX_NOTHROW_PURE_FUNCTION MDBX_CXX14_CONSTEXPR size_t find_last_not_of(const slice &chars,
+                                                                          size_t pos = npos) const noexcept;
+  /// \copydoc find_last_not_of(const slice &, size_t)
+  MDBX_NOTHROW_PURE_FUNCTION MDBX_CXX14_CONSTEXPR size_t find_last_not_of(byte c, size_t pos = npos) const noexcept;
+
+  /// \brief Checks whether the referenced data contains `needle` as a sub-slice.
+  MDBX_NOTHROW_PURE_FUNCTION MDBX_CXX14_CONSTEXPR bool contains(const slice &needle) const noexcept {
+    return find(needle) != npos;
+  }
+
+  /// \brief Lexicographical three-way comparison with another slice.
+  MDBX_NOTHROW_PURE_FUNCTION MDBX_CXX14_CONSTEXPR intptr_t compare(const slice &other) const noexcept {
+    return compare_lexicographically(*this, other);
+  }
+
   /// \brief Returns the first "n" bytes of the slice.
-  /// \throws std::out_of_range if `n >= size()`
+  /// \throws std::out_of_range if `n > size()`
   MDBX_CXX14_CONSTEXPR slice safe_head(size_t n) const;
 
   /// \brief Returns the last "n" bytes of the slice.
-  /// \throws std::out_of_range if `n >= size()`
+  /// \throws std::out_of_range if `n > size()`
   MDBX_CXX14_CONSTEXPR slice safe_tail(size_t n) const;
 
   /// \brief Returns the middle "n" bytes of the slice.
-  /// \throws std::out_of_range if `from + n >= size()`
+  /// \throws std::out_of_range if `from + n > size()`
   MDBX_CXX14_CONSTEXPR slice safe_middle(size_t from, size_t n) const;
 
   /// \brief Returns the hash value of referenced data.

@@ -233,7 +233,7 @@ inline comparator default_comparator(key_mode mode) noexcept {
   return ::mdbx_get_keycmp(static_cast<MDBX_db_flags_t>(mode));
 }
 inline comparator default_comparator(value_mode mode) noexcept {
-  return ::mdbx_get_keycmp(static_cast<MDBX_db_flags_t>(mode));
+  return ::mdbx_get_datacmp(static_cast<MDBX_db_flags_t>(mode));
 }
 
 /// \brief Key-value pairs put mode.

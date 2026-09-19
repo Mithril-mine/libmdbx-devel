@@ -431,8 +431,10 @@ public:
 
   /// \brief Updates value associated with a key at the current cursor position.
   void update_current(const slice &value);
-  /// \brief Reserves and returns the space to storing a value associated with a key at the current cursor position.
-  slice reverse_current(size_t value_length);
+  /// \brief Reserves and returns the space for storing a value associated with a key at the current cursor position.
+  slice reserve_current(size_t value_length);
+  /// \brief Deprecated misspelling of \ref reserve_current().
+  slice reverse_current(size_t value_length) { return reserve_current(value_length); }
 
   inline void update(const slice &key, const slice &value);
   inline bool try_update(const slice &key, const slice &value);

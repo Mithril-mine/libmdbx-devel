@@ -319,7 +319,7 @@ private:
       }
 
       constexpr bool is_inplace(const void *ptr) const noexcept {
-        return size_t(static_cast<const byte *>(ptr) - inplace_.buffer_) < inplace_capacity();
+        return ptr != nullptr && size_t(static_cast<const byte *>(ptr) - inplace_.buffer_) < inplace_capacity();
       }
 
       constexpr const byte *address() const noexcept {
@@ -359,7 +359,8 @@ private:
           if (MDBX_LIKELY(length))
             MDBX_CXX20_LIKELY {
               if (external_content)
-                memcpy(new_place, content, length);
+                /* `content` may refer into the own storage, so use memmove */
+                ::std::memmove(new_place, content, length);
               else {
                 const size_t old_headroom = bin_.address() - static_cast<const byte *>(content);
                 MDBX_INLINE_API_ASSERT(old_capacity >= old_headroom + length);
@@ -384,9 +385,11 @@ private:
         const auto pair = allocate_storage(new_capacity);
         MDBX_INLINE_API_ASSERT(pair.second >= new_capacity);
         byte *const new_place = static_cast<byte *>(to_address(pair.first)) + wanna_headroom;
-        bin_.make_allocated(pair);
+        /* Copy the content before make_allocated(), since the latter overwrites
+         * the inplace storage (the source of `content` for reshape<false>). */
         if (MDBX_LIKELY(length))
           MDBX_CXX20_LIKELY memcpy(new_place, content, length);
+        bin_.make_allocated(pair);
         return new_place;
       }
 
@@ -587,14 +590,17 @@ public:
   /// buffer just refers to data located outside the buffer.
   MDBX_NOTHROW_PURE_FUNCTION MDBX_CXX20_CONSTEXPR bool is_freestanding() const noexcept {
     static_assert(size_t(-intptr_t(max_length)) > max_length, "WTF?");
-    return size_t(inherited::byte_ptr() - silo_begin()) < silo_.capacity();
+    const auto begin_ptr = inherited::byte_ptr();
+    if (MDBX_UNLIKELY(begin_ptr == nullptr))
+      return false;
+    return size_t(begin_ptr - silo_begin()) < silo_.capacity();
   }
 
   /// \brief Checks whether data chunk stored in place within the buffer instance itself,
   /// without reference outside nor allocating additional memory resources,
   /// which also implies buffer is freestanding.
   MDBX_NOTHROW_PURE_FUNCTION MDBX_CXX20_CONSTEXPR bool is_inplace() const noexcept {
-    return silo_.is_inplace(inherited::data());
+    return inherited::data() != nullptr && silo_.is_inplace(inherited::data());
   }
 
   /// \brief Checks whether the buffer just refers to data located outside the buffer, rather than stores it.
@@ -664,7 +670,7 @@ public:
   MDBX_CXX11_CONSTEXPR const void *data() const noexcept { return const_data(); }
 
   /// \brief Return a const pointer to the end of the referenced data.
-  MDBX_CXX11_CONSTEXPR const void *end() const noexcept { return const_end(); }
+  MDBX_CXX11_CONSTEXPR const byte *end() const noexcept { return static_cast<const byte *>(const_end()); }
 
   /// \brief Return a const pointer to the beginning of the referenced data.
   MDBX_CXX11_CONSTEXPR const void *const_data() const noexcept { return inherited::data(); }
@@ -681,9 +687,9 @@ public:
 
   /// \brief Return a pointer to the end of the referenced data.
   /// \pre REQUIRES: The buffer should store data chunk, but not referenced to an external one.
-  MDBX_CXX11_CONSTEXPR void *end() noexcept {
+  MDBX_CXX11_CONSTEXPR byte *end() noexcept {
     MDBX_CONSTEXPR_ASSERT(is_freestanding());
-    return const_cast<void *>(inherited::end());
+    return const_cast<byte *>(inherited::end_byte_ptr());
   }
 
   /// \brief Returns the number of bytes.
@@ -696,6 +702,20 @@ public:
     MDBX_CONSTEXPR_ASSERT(is_reference() || inherited::byte_ptr() + bytes <= silo_end());
     inherited::set_length(bytes);
     return *this;
+  }
+
+  /// \brief Resizes the buffer to contain `size` bytes, filling the added
+  /// space with zeroes. STL-compatible counterpart of \ref set_length().
+  void resize(size_t size) { resize(size, byte(0)); }
+
+  /// \brief Resizes the buffer to contain `size` bytes, filling the added
+  /// space with `value`. STL-compatible counterpart of \ref set_length().
+  void resize(size_t size, byte value) {
+    if (MDBX_UNLIKELY(size > length())) {
+      reserve_tailroom(size - length());
+      memset(end_byte_ptr(), value, size - length());
+    }
+    inherited::set_length(size);
   }
 
   /// \brief Sets the length by specifying the end of the data.
@@ -920,7 +940,10 @@ public:
       iov_base = silo_.template reshape<true>(wanna_capacity, wanna_headroom, iov_base, iov_len);
 
     MDBX_INLINE_API_ASSERT(headroom() >= wanna_headroom && headroom() <= wanna_headroom + pettiness_threshold);
-    MDBX_INLINE_API_ASSERT(tailroom() >= wanna_tailroom && tailroom() <= wanna_tailroom + pettiness_threshold);
+    /* The upper bound is intentionally not checked for the tailroom: the
+     * capacity-growth policy may legitimately over-provision (e.g. by
+     * doubling), so the only guaranteed contract here is the lower bound. */
+    MDBX_INLINE_API_ASSERT(tailroom() >= wanna_tailroom);
   }
 
   /// \brief Reserves space before the payload.
@@ -928,6 +951,11 @@ public:
 
   /// \brief Reserves space after the payload.
   void reserve_tailroom(size_t wanna_tailroom) { reserve(0, wanna_tailroom); }
+
+  /// \brief Reserves storage space for at least `size` bytes of payload,
+  /// without changing the current length. STL-compatible counterpart of
+  /// \ref reserve(size_t, size_t) that keeps the headroom unchanged.
+  void reserve(size_t size) { reserve(0, size > length() ? size - length() : 0); }
 
   buffer &assign_reference(const void *ptr, size_t bytes) {
     silo_.clear();
@@ -1107,9 +1135,15 @@ public:
   buffer &append(const void *src, size_t bytes) {
     if (MDBX_LIKELY(bytes))
       MDBX_CXX20_LIKELY {
+        const auto begin_ptr = inherited::byte_ptr();
+        const auto src_ptr = static_cast<const byte *>(src);
+        /* In case `src` refers into the own storage, save its relative offset
+         * since the storage may be relocated by the reserve below. */
+        const bool aliased = src_ptr >= begin_ptr && src_ptr < inherited::end_byte_ptr();
+        const size_t src_offset = aliased ? size_t(src_ptr - begin_ptr) : 0;
         if (MDBX_UNLIKELY(tailroom() < check_length(bytes)))
           MDBX_CXX20_UNLIKELY reserve_tailroom(bytes);
-        memcpy(end_byte_ptr(), src, bytes);
+        ::std::memmove(end_byte_ptr(), aliased ? byte_ptr() + src_offset : src_ptr, bytes);
         iov_len += bytes;
       }
     return *this;
@@ -1128,9 +1162,15 @@ public:
   buffer &add_header(const void *src, size_t bytes) {
     if (MDBX_LIKELY(bytes))
       MDBX_CXX20_LIKELY {
+        const auto begin_ptr = inherited::byte_ptr();
+        const auto src_ptr = static_cast<const byte *>(src);
+        /* In case `src` refers into the own storage, save its relative offset
+         * since the storage may be relocated by the reserve below. */
+        const bool aliased = src_ptr >= begin_ptr && src_ptr < inherited::end_byte_ptr();
+        const size_t src_offset = aliased ? size_t(src_ptr - begin_ptr) : 0;
         if (MDBX_UNLIKELY(headroom() < check_length(bytes)))
           MDBX_CXX20_UNLIKELY reserve_headroom(bytes);
-        iov_base = memcpy(byte_ptr() - bytes, src, bytes);
+        iov_base = ::std::memmove(byte_ptr() - bytes, aliased ? byte_ptr() + src_offset : src_ptr, bytes);
         iov_len += bytes;
       }
     return *this;

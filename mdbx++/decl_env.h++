@@ -407,11 +407,11 @@ public:
     static inline size_t value_max(intptr_t pagesize, value_mode);
     /// \brief Returns the maximal value size in bytes for given environment and table flags.
     static inline size_t value_max(const env &, MDBX_db_flags_t flags);
-    /// \brief Returns the maximal value size in bytes for specified page size and values mode.
+    /// \brief Returns the maximal value size in bytes for given environment and values mode.
     static inline size_t value_max(const env &, value_mode);
 
     /// \brief Returns maximal size of key-value pair to fit in a single page
-    /// for specified size and table flags.
+    /// for specified page size and table flags.
     static inline size_t pairsize4page_max(intptr_t pagesize, MDBX_db_flags_t flags);
     /// \brief Returns maximal size of key-value pair to fit in a single page
     /// for specified page size and values mode.
@@ -420,7 +420,7 @@ public:
     /// for given environment and table flags.
     static inline size_t pairsize4page_max(const env &, MDBX_db_flags_t flags);
     /// \brief Returns maximal size of key-value pair to fit in a single page
-    /// for specified page size and values mode.
+    /// for given environment and values mode.
     static inline size_t pairsize4page_max(const env &, value_mode);
 
     /// \brief Returns maximal data size in bytes to fit in a leaf-page or
@@ -433,7 +433,7 @@ public:
     /// single large/overflow-page for given environment and table flags.
     static inline size_t valsize4page_max(const env &, MDBX_db_flags_t flags);
     /// \brief Returns maximal data size in bytes to fit in a leaf-page or
-    /// single large/overflow-page for specified page size and values mode.
+    /// single large/overflow-page for given environment and values mode.
     static inline size_t valsize4page_max(const env &, value_mode);
 
     /// \brief Returns the maximal write transaction size (i.e. limit for
@@ -771,7 +771,7 @@ public:
 
   /// \brief Enumerate readers.
   ///
-  /// The VISITOR class must have `int operator(const reader_info&, int serial)`
+  /// The VISITOR class must have `int operator()(const reader_info&, int serial)`
   /// which should return \ref continue_loop (zero) to continue enumeration,
   /// or any non-zero value to exit.
   ///
