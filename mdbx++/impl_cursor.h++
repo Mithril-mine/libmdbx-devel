@@ -125,6 +125,12 @@ inline size_t cursor::count_multivalue() const {
   return result;
 }
 
+inline size_t cursor::count_multivalue(MDBX_stat *stat) const {
+  size_t result;
+  error::success_or_throw(::mdbx_cursor_count_ex(*this, &result, stat, sizeof(*stat)));
+  return result;
+}
+
 inline ::std::vector<pair> cursor::get_batch(size_t max_pairs, move_operation op, bool *is_last) const {
   if (is_last)
     *is_last = false;

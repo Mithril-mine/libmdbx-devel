@@ -91,6 +91,29 @@ public:
   /// \brief Renew given read transaction into clone.
   inline void clone(txn_managed &txn_for_renew_into_clone, void *context = nullptr) const;
 
+  /// \brief Copy an MVCC-snapshot of the database to the destination path.
+  ///
+  /// \details Copies the consistent state as seen by this transaction,
+  /// see \ref ::mdbx_txn_copy2pathname().
+  /// \see env::copy()
+  inline void copy(const char *destination, bool compactify, bool force_dynamic_size = false);
+  /// \copydoc copy(const char *, bool, bool)
+  inline void copy(const ::std::string &destination, bool compactify, bool force_dynamic_size = false);
+#ifdef MDBX_STD_FILESYSTEM_PATH
+  /// \copydoc copy(const char *, bool, bool)
+  inline void copy(const MDBX_STD_FILESYSTEM_PATH &destination, bool compactify, bool force_dynamic_size = false);
+#endif /* MDBX_STD_FILESYSTEM_PATH */
+#if defined(_WIN32) || defined(_WIN64) || defined(DOXYGEN)
+  /// \copydoc copy(const char *, bool, bool)
+  inline void copy(const wchar_t *destination, bool compactify, bool force_dynamic_size = false);
+  /// \copydoc copy(const char *, bool, bool)
+  inline void copy(const ::std::wstring &destination, bool compactify, bool force_dynamic_size = false);
+#endif /* Windows */
+
+  /// \brief Copy an MVCC-snapshot of the database to the given file handle.
+  /// \see ::mdbx_txn_copy2fd()
+  inline void copy(filehandle fd, bool compactify, bool force_dynamic_size = false);
+
   /// \brief Marks transaction as broken to prevent further operations.
   inline void make_broken();
 
