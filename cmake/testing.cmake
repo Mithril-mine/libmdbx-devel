@@ -205,8 +205,20 @@ if(BUILD_TESTING)
           ON
           CACHE BOOL "" FORCE)
 
+      # With `MDBX_WITHOUT_MSVC_CRT` the libmdbx does not depend on the C runtime.
+      # Linking the shared googletest DLLs against such a library hangs on MinGW
+      # at process startup, so build a static googletest in this configuration.
+      if(DEFINED MDBX_WITHOUT_MSVC_CRT AND MDBX_WITHOUT_MSVC_CRT)
+        set(gtest_saved_build_shared_libs "${BUILD_SHARED_LIBS}")
+        set(gtest_force_static_googletest TRUE)
+        set(BUILD_SHARED_LIBS OFF)
+      endif()
+
       # Add googletest directly to our build. This defines the gtest and gtest_main targets.
       add_subdirectory(${gtest_root} ${CMAKE_BINARY_DIR}/googletest-build EXCLUDE_FROM_ALL)
+      if(gtest_force_static_googletest)
+        set(BUILD_SHARED_LIBS "${gtest_saved_build_shared_libs}")
+      endif()
       if(CMAKE_INTERPROCEDURAL_OPTIMIZATION AND NOT CMAKE_VERSION VERSION_LESS 3.9)
         file(READ ${gtest_root}/CMakeLists.txt variable gtest_cmake_content)
         string(TOLOWER "${gtest_cmake_content}" gtest_cmake_content)
