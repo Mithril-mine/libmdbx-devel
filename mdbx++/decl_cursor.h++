@@ -315,6 +315,31 @@ public:
   /// \brief Return count of duplicates for current key.
   inline size_t count_multivalue() const;
 
+  /// \brief Reads a batch of key-value pairs.
+  ///
+  /// \details Fetches up to `max_pairs` key-value pairs starting from the
+  /// current cursor position, advancing the cursor. The returned slices
+  /// reference database-owned memory and remain valid while the transaction
+  /// and cursor are alive.
+  ///
+  /// \param [in] max_pairs  The maximum number of key-value pairs to fetch.
+  /// \param [in] op         The positioning operation, either
+  ///                        \ref move_operation::first or \ref move_operation::next.
+  /// \param [out] is_last   Optional flag set to `true` when the returned chunk
+  ///                        is the last one (no pairs left after it).
+  ///
+  /// \returns The vector of fetched key-value pairs.
+  /// \see ::mdbx_cursor_get_batch()
+  inline ::std::vector<pair> get_batch(size_t max_pairs, move_operation op, bool *is_last = nullptr) const;
+
+  /// \brief Disables the control of the order of keys when reading database
+  /// pages for this cursor.
+  ///
+  /// \details Useful when reading a database whose user-defined comparison
+  /// functions are unavailable, otherwise such reads return \ref MDBX_CORRUPTED.
+  /// \see ::mdbx_cursor_ignord()
+  inline void ignore_key_order();
+
   inline move_result find_multivalue(const slice &key, const slice &value, bool throw_notfound = true);
   inline move_result lower_bound_multivalue(const slice &key, const slice &value, bool throw_notfound = false);
   inline move_result upper_bound_multivalue(const slice &key, const slice &value, bool throw_notfound = false);
