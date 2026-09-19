@@ -754,6 +754,34 @@ public:
   /// return number of cleared slots.
   inline unsigned check_readers();
 
+  /// \brief Checks the integrity of the environment (database).
+  ///
+  /// \details Performs a full consistency check of the database with
+  /// interactive callbacks, see \ref ::mdbx_env_chk(). The caller provides an
+  /// \ref MDBX_chk_context_t context where the results of the check are
+  /// generated (`ctx.result`), and optionally a set of callbacks (`cb`,
+  /// all fields may be `nullptr`).
+  ///
+  /// \note The API is not frozen yet and may be improved in future versions.
+  ///
+  /// \param [in,out] ctx  A zero-initialized context of the check, where the
+  ///   results are generated. Pointers in `ctx.result` (e.g. `tables`) remain
+  ///   valid until the next check or close of the environment.
+  /// \param [in] cb   A set of callback functions, all optional. `nullptr`
+  ///   means no callbacks.
+  /// \param [in] flags  Flags/options of the check, \ref MDBX_chk_flags_t.
+  /// \param [in] verbosity  The required detail level of progress and results.
+  /// \param [in] timeout_seconds_16dot16  Duration limit of the check in
+  ///   1/65536 fractions of a second, zero means no limit.
+  ///
+  /// \returns The reference to the `ctx` for chaining.
+  /// \throws mdbx::error on failure.
+  /// \see ::mdbx_env_chk()
+  MDBX_NODISCARD inline MDBX_chk_context_t &chk(MDBX_chk_context_t &ctx, const MDBX_chk_callbacks_t *cb = nullptr,
+                                                MDBX_chk_flags_t flags = MDBX_CHK_DEFAULTS,
+                                                MDBX_chk_severity_t verbosity = MDBX_chk_info,
+                                                unsigned timeout_seconds_16dot16 = 0) const;
+
   /// \brief Sets a Handle-Slow-Readers callback to resolve database
   /// full/overflow issue due to a reader(s) which prevents the old data from
   /// being recycled.

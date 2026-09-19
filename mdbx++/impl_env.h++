@@ -595,6 +595,17 @@ inline unsigned env::check_readers() {
   return static_cast<unsigned>(dead_count);
 }
 
+/** Zeroed set of check callbacks for a "silent" integrity check. */
+static const MDBX_chk_callbacks_t silent_chk_callbacks = {};
+
+inline MDBX_chk_context_t &env::chk(MDBX_chk_context_t &ctx, const MDBX_chk_callbacks_t *cb, MDBX_chk_flags_t flags,
+                                    MDBX_chk_severity_t verbosity, unsigned timeout_seconds_16dot16) const {
+  if (!cb)
+    cb = &silent_chk_callbacks;
+  error::success_or_throw(::mdbx_env_chk(handle_, cb, &ctx, flags, verbosity, timeout_seconds_16dot16));
+  return ctx;
+}
+
 inline env &env::set_HandleSlowReaders(MDBX_hsr_func cb) {
   error::success_or_throw(::mdbx_env_set_hsr(handle_, cb));
   return *this;

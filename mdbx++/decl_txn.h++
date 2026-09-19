@@ -238,6 +238,20 @@ public:
   /// \brief Returns information about key-value map (aka table) handle.
   inline map_handle::info get_map_flags(map_handle map) const;
 
+  /// \brief Enumerates user's named tables in a database.
+  ///
+  /// \details Calls the `visitor` functor for each user-created named table
+  /// until the named tables are exhausted, or until the visitor returns
+  /// \ref exit_loop (which will be returned as a result).
+  ///
+  /// \param [in,out] visitor  A functor with the signature
+  /// `int visitor(const slice &name, MDBX_db_flags_t flags, const MDBX_stat &stat, MDBX_dbi dbi)`,
+  /// which will be called for each table.
+  ///
+  /// \returns The last value returned by the visitor's functor.
+  /// \see ::mdbx_enumerate_tables()
+  template <typename VISITOR> inline int enumerate_tables(VISITOR &visitor) const;
+
   using canary = ::MDBX_canary;
   /// \brief Set integers markers (aka "canary") associated with the environment.
   inline txn &put_canary(const canary &);

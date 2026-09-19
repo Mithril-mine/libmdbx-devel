@@ -202,6 +202,29 @@ inline map_handle::info txn::get_map_flags(map_handle map) const {
   return map_handle::info(MDBX_db_flags_t(flags), MDBX_dbi_state_t(state));
 }
 
+template <typename VISITOR> inline int txn::enumerate_tables(VISITOR &visitor) const {
+  struct tables_enum_thunk : public exception_thunk {
+    VISITOR &visitor_;
+    static int cb(void *ctx, const MDBX_txn *, const MDBX_val *name, MDBX_db_flags_t flags,
+                  const MDBX_stat *stat, MDBX_dbi dbi) noexcept {
+      tables_enum_thunk *thunk = static_cast<tables_enum_thunk *>(ctx);
+      assert(thunk->is_clean());
+      try {
+        const slice table_name(*name);
+        return loop_control(thunk->visitor_(table_name, flags, *stat, dbi));
+      } catch (... /* capture any exception to rethrow it over C code */) {
+        thunk->capture();
+        return loop_control::exit_loop;
+      }
+    }
+    MDBX_CXX11_CONSTEXPR tables_enum_thunk(VISITOR &visitor) noexcept : visitor_(visitor) {}
+  };
+  tables_enum_thunk thunk(visitor);
+  const auto rc = ::mdbx_enumerate_tables(handle_, thunk.cb, &thunk);
+  thunk.rethrow_captured();
+  return rc;
+}
+
 inline txn &txn::put_canary(const txn::canary &canary) {
   error::success_or_throw(::mdbx_canary_put(handle_, &canary));
   return *this;
