@@ -318,6 +318,20 @@ inline bool cursor::erase(const slice &key, const slice &value) {
   return data.done && erase();
 }
 
+inline size_t cursor::erase_bunch(bunch_delete action) {
+  uint64_t affected;
+  error::success_or_throw(::mdbx_cursor_bunch_delete(handle_, MDBX_bunch_action_t(action), &affected));
+  return size_t(affected);
+}
+
+inline size_t cursor::erase_range(const cursor &end, bool end_including) {
+  uint64_t affected;
+  error::success_or_throw(::mdbx_cursor_delete_range(handle_, end.handle_, end_including, &affected));
+  return size_t(affected);
+}
+
+inline void cursor::reset() { error::success_or_throw(::mdbx_cursor_reset(handle_)); }
+
 inline size_t cursor::put_multiple_samelength(const slice &key, const size_t value_length, const void *values_array,
                                               size_t values_count, put_mode mode, bool allow_partial) {
   MDBX_val args[2] = {{const_cast<void *>(values_array), value_length}, {nullptr, values_count}};

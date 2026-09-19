@@ -455,6 +455,50 @@ public:
   /// \return `True` if the given key-value pair is found and removed.
   inline bool erase(const slice &key, const slice &value);
 
+  /// \brief Modes for deleting bunches of neighboring items, see
+  /// \ref ::MDBX_bunch_action_t(). The EXCLUDING and INCLUDING suffixes mean
+  /// correspondingly excluding and including deletion items in the current
+  /// cursor position.
+  enum bunch_delete {
+    delete_current_value = MDBX_DELETE_CURRENT_VALUE,
+    delete_current_multival_before_excluding = MDBX_DELETE_CURRENT_MULTIVAL_BEFORE_EXCLUDING,
+    delete_current_multival_before_including = MDBX_DELETE_CURRENT_MULTIVAL_BEFORE_INCLUDING,
+    delete_current_multival_after_including = MDBX_DELETE_CURRENT_MULTIVAL_AFTER_INCLUDING,
+    delete_current_multival_after_excluding = MDBX_DELETE_CURRENT_MULTIVAL_AFTER_EXCLUDING,
+    delete_current_multival_all = MDBX_DELETE_CURRENT_MULTIVAL_ALL,
+    delete_before_excluding = MDBX_DELETE_BEFORE_EXCLUDING,
+    delete_before_including = MDBX_DELETE_BEFORE_INCLUDING,
+    delete_after_including = MDBX_DELETE_AFTER_INCLUDING,
+    delete_after_excluding = MDBX_DELETE_AFTER_EXCLUDING,
+    delete_whole = MDBX_DELETE_WHOLE,
+  };
+
+  /// \brief Quickly removes bunches of neighboring items much faster by
+  /// cutting out entire pages and branches from the B+ tree structure.
+  ///
+  /// \returns The number of removed items.
+  /// \see erase_range() \see ::mdbx_cursor_bunch_delete()
+  inline size_t erase_bunch(bunch_delete action);
+
+  /// \brief Quickly removes a range of items between the current cursor
+  /// position and the position of `end` much faster by cutting out entire
+  /// pages and branches from the B+ tree structure.
+  ///
+  /// \param [in] end  A positioned cursor defining the end of the range.
+  /// \param [in] end_including  Whether the `end` position itself should be
+  /// included in the range to be deleted.
+  /// \returns The number of removed items.
+  /// \see erase_bunch() \see ::mdbx_cursor_delete_range()
+  inline size_t erase_range(const cursor &end, bool end_including);
+
+  /// \brief Resets the cursor state.
+  ///
+  /// \details As a result of the reset, the cursor becomes unpositioned and
+  /// does not allow relative positioning operations, getting or changing data
+  /// until the cursor is set to a position independent of the current one.
+  /// \see ::mdbx_cursor_reset()
+  inline void reset();
+
   inline size_t put_multiple_samelength(const slice &key, const size_t value_length, const void *values_array,
                                         size_t values_count, put_mode mode, bool allow_partial = false);
   template <typename VALUE>
