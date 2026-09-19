@@ -606,6 +606,22 @@ inline MDBX_chk_context_t &env::chk(MDBX_chk_context_t &ctx, const MDBX_chk_call
   return ctx;
 }
 
+inline env::sysraminfo env::get_sysraminfo() {
+  sysraminfo result;
+  error::success_or_throw(::mdbx_get_sysraminfo(&result.page_size, &result.total_pages, &result.avail_pages));
+  return result;
+}
+
+inline env::info env::get_preopen_snapinfo(const ::std::string &pathname) {
+  return get_preopen_snapinfo(pathname.c_str());
+}
+
+inline env::info env::get_preopen_snapinfo(const char *pathname) {
+  env::info result;
+  error::success_or_throw(::mdbx_preopen_snapinfo(pathname, &result, sizeof(result)));
+  return result;
+}
+
 inline env &env::set_HandleSlowReaders(MDBX_hsr_func cb) {
   error::success_or_throw(::mdbx_env_set_hsr(handle_, cb));
   return *this;

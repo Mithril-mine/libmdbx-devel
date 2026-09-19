@@ -365,6 +365,15 @@ public:
   /// \brief Returns default page size for current system/platform.
   static size_t default_pagesize() noexcept { return ::mdbx_default_pagesize(); }
 
+  /// \brief Information about the system RAM, see \ref ::mdbx_get_sysraminfo().
+  struct sysraminfo {
+    intptr_t page_size{0};   ///< The size of a memory page in bytes.
+    intptr_t total_pages{0}; ///< The number of all pages in the system.
+    intptr_t avail_pages{0}; ///< The number of currently available pages.
+  };
+  /// \brief Returns information about the system RAM.
+  MDBX_NODISCARD static inline sysraminfo get_sysraminfo();
+
   struct limits {
     limits() = delete;
     /// \brief Returns the minimal database page size in bytes.
@@ -498,6 +507,15 @@ public:
 
   /// \brief Information about the environment.
   using info = ::MDBX_envinfo;
+
+  /// \brief Provides information about a database, including meta-page and
+  /// geometry, without opening it.
+  ///
+  /// \returns The \ref info of the database. Errors are thrown as
+  /// \ref mdbx::error.
+  /// \see ::mdbx_preopen_snapinfo()
+  MDBX_NODISCARD static inline info get_preopen_snapinfo(const ::std::string &pathname);
+  MDBX_NODISCARD static inline info get_preopen_snapinfo(const char *pathname);
 
   /// \brief Returns snapshot statistics about the MDBX environment.
   inline stat get_stat() const;
@@ -925,6 +943,26 @@ using operate_options = env::operate_options;
 using operate_parameters = env::operate_parameters;
 /// \brief Shorthand for \ref env_managed::create_parameters.
 using create_parameters = env_managed::create_parameters;
+
+/// \brief Converts a fraction to a string of decimal digits without using
+/// floating-point operations. \see ::mdbx_ratio2digits()
+inline ::std::string ratio2digits(uint64_t numerator, uint64_t denominator, int precision) {
+  char buffer[64];
+  return ::mdbx_ratio2digits(numerator, denominator, precision, buffer, sizeof(buffer));
+}
+
+/// \brief Converts a fraction to a percentage string without using
+/// floating-point operations. \see ::mdbx_ratio2percents()
+inline ::std::string ratio2percents(uint64_t value, uint64_t whole) {
+  char buffer[64];
+  return ::mdbx_ratio2percents(value, whole, buffer, sizeof(buffer));
+}
+
+/// \brief Quickly finds out whether readahead is reasonable for the given
+/// data volume and redundancy. \see ::mdbx_is_readahead_reasonable()
+inline bool is_readahead_reasonable(size_t volume, intptr_t redundancy) {
+  return ::mdbx_is_readahead_reasonable(volume, redundancy) != 0;
+}
 
 // > dist-cutoff-begin
 } // namespace mdbx

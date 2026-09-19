@@ -252,6 +252,26 @@ public:
   /// \see ::mdbx_enumerate_tables()
   template <typename VISITOR> inline int enumerate_tables(VISITOR &visitor) const;
 
+  using gc_info = ::MDBX_gc_info_t;
+  /// \brief Provides information of Garbage Collection and page usage.
+  ///
+  /// \details Scans the whole GC to summarise the GC state and page usage for
+  /// the given transaction, optionally iterating GC entries by calling the
+  /// `visitor` functor for each span of pages inside GC (excepting the pages
+  /// forming the B-tree structure of GC itself).
+  ///
+  /// \param [in,out] visitor  An optional functor with the signature
+  /// `int visitor(uint64_t span_txnid, size_t span_pgno, size_t span_length,
+  /// bool span_is_reclaimable)` returning \ref continue_loop to proceed or
+  /// any other value to stop enumeration.
+  ///
+  /// \returns The \ref gc_info of the database. An empty (zeroed) info is
+  /// returned when the GC is empty (\ref MDBX_NOTFOUND).
+  /// \note This API has not been frozen yet.
+  /// \see ::mdbx_gc_info()
+  template <typename VISITOR> inline gc_info get_gc_info(VISITOR &visitor) const;
+  inline gc_info get_gc_info() const;
+
   using canary = ::MDBX_canary;
   /// \brief Set integers markers (aka "canary") associated with the environment.
   inline txn &put_canary(const canary &);
