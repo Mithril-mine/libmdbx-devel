@@ -63,6 +63,43 @@ inline void txn::make_broken() { error::success_or_throw(::mdbx_txn_break(handle
 
 inline void txn::renew_reading() { error::success_or_throw(::mdbx_txn_renew(handle_)); }
 
+inline void txn::copy(const char *destination, bool compactify, bool force_dynamic_size) {
+  error::success_or_throw(::mdbx_txn_copy2pathname(
+      handle_, destination,
+      MDBX_copy_flags_t((compactify ? MDBX_CP_COMPACT : MDBX_CP_DEFAULTS) |
+                        (force_dynamic_size ? MDBX_CP_FORCE_DYNAMIC_SIZE : MDBX_CP_DEFAULTS))));
+}
+
+inline void txn::copy(const ::std::string &destination, bool compactify, bool force_dynamic_size) {
+  copy(destination.c_str(), compactify, force_dynamic_size);
+}
+
+#if defined(_WIN32) || defined(_WIN64)
+inline void txn::copy(const wchar_t *destination, bool compactify, bool force_dynamic_size) {
+  error::success_or_throw(::mdbx_txn_copy2pathnameW(
+      handle_, destination,
+      MDBX_copy_flags_t((compactify ? MDBX_CP_COMPACT : MDBX_CP_DEFAULTS) |
+                        (force_dynamic_size ? MDBX_CP_FORCE_DYNAMIC_SIZE : MDBX_CP_DEFAULTS))));
+}
+
+inline void txn::copy(const ::std::wstring &destination, bool compactify, bool force_dynamic_size) {
+  copy(destination.c_str(), compactify, force_dynamic_size);
+}
+#endif /* Windows */
+
+#ifdef MDBX_STD_FILESYSTEM_PATH
+inline void txn::copy(const MDBX_STD_FILESYSTEM_PATH &destination, bool compactify, bool force_dynamic_size) {
+  copy(destination.native(), compactify, force_dynamic_size);
+}
+#endif /* MDBX_STD_FILESYSTEM_PATH */
+
+inline void txn::copy(filehandle fd, bool compactify, bool force_dynamic_size) {
+  error::success_or_throw(::mdbx_txn_copy2fd(
+      handle_, fd,
+      MDBX_copy_flags_t((compactify ? MDBX_CP_COMPACT : MDBX_CP_DEFAULTS) |
+                        (force_dynamic_size ? MDBX_CP_FORCE_DYNAMIC_SIZE : MDBX_CP_DEFAULTS))));
+}
+
 inline txn_managed txn::clone(void *context) const {
   MDBX_txn *ptr = nullptr;
   error::success_or_throw(::mdbx_txn_clone(handle_, &ptr, context));

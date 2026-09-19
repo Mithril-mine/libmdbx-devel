@@ -314,6 +314,9 @@ public:
 
   /// \brief Return count of duplicates for current key.
   inline size_t count_multivalue() const;
+  /// \brief Return count of duplicates for current key, along with basic
+  /// statistics of the table. \see ::mdbx_cursor_count_ex()
+  inline size_t count_multivalue(MDBX_stat *stat) const;
 
   /// \brief Reads a batch of key-value pairs.
   ///

@@ -515,6 +515,60 @@ struct pair_result : public pair {
   }
 };
 
+/// \brief Value-to-Key functions to avoid using custom comparators.
+///
+/// \details These build keys which are comparable without a custom comparator,
+/// see \ref ::mdbx_key_from_double() and the `value2key` group. The returned
+/// integers should be stored with \ref key_mode::ordinal.
+/// \see ::mdbx_key_from_jsonInteger()
+inline uint64_t key_from_jsonInteger(int64_t json_integer) noexcept {
+  return ::mdbx_key_from_jsonInteger(json_integer);
+}
+/// \see ::mdbx_key_from_double()
+inline uint64_t key_from_double(double ieee754_64bit) noexcept { return ::mdbx_key_from_double(ieee754_64bit); }
+/// \see ::mdbx_key_from_ptrdouble()
+inline uint64_t key_from_ptrdouble(const double *const ieee754_64bit) noexcept {
+  return ::mdbx_key_from_ptrdouble(ieee754_64bit);
+}
+/// \see ::mdbx_key_from_float()
+inline uint32_t key_from_float(float ieee754_32bit) noexcept { return ::mdbx_key_from_float(ieee754_32bit); }
+/// \see ::mdbx_key_from_ptrfloat()
+inline uint32_t key_from_ptrfloat(const float *const ieee754_32bit) noexcept {
+  return ::mdbx_key_from_ptrfloat(ieee754_32bit);
+}
+/// \see ::mdbx_key_from_int64()
+inline uint64_t key_from_int64(int64_t i64) noexcept { return ::mdbx_key_from_int64(i64); }
+/// \see ::mdbx_key_from_int32()
+inline uint32_t key_from_int32(int32_t i32) noexcept { return ::mdbx_key_from_int32(i32); }
+
+/// \brief Key-to-Value functions to avoid using custom comparators.
+/// \see ::mdbx_double_from_key()
+inline double double_from_key(const slice &key) noexcept { return ::mdbx_double_from_key(key); }
+/// \see ::mdbx_float_from_key()
+inline float float_from_key(const slice &key) noexcept { return ::mdbx_float_from_key(key); }
+/// \see ::mdbx_int32_from_key()
+inline int32_t int32_from_key(const slice &key) noexcept { return ::mdbx_int32_from_key(key); }
+/// \see ::mdbx_int64_from_key()
+inline int64_t int64_from_key(const slice &key) noexcept { return ::mdbx_int64_from_key(key); }
+/// \see ::mdbx_jsonInteger_from_key()
+inline int64_t jsonInteger_from_key(const slice &key) noexcept { return ::mdbx_jsonInteger_from_key(key); }
+
+/// \brief Dumps the given value to a string: as-is when printable (all bytes
+/// in the range 0x20..0x7E), otherwise as a hexadecimal dump.
+/// \returns `<empty>` for an empty value, `<nullptr.N>` for a non-empty value
+/// with a null data pointer.
+/// \see ::mdbx_dump_val()
+inline ::std::string dump_val(const slice &value) {
+  if (value.empty())
+    return "<empty>";
+  ::std::string result(value.length() * 2 + 4, '\0');
+  const char *const ptr = ::mdbx_dump_val(&value, &result[0], result.size());
+  if (!ptr)
+    return result;
+  result.assign(ptr);
+  return result;
+}
+
 // > dist-cutoff-begin
 } // namespace mdbx
 // < dist-cutoff-end
