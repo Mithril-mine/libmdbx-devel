@@ -20,3 +20,6 @@
    `skynet/superpowers/verification-before-completion/SKILL.md`.
  - Keep build-file changes out of the amalgamated `dist/` (dist-cutoff markers), see
    `skynet/build.md` section on amalgamation.
+ - Maintain the codebase knowledge graph (memory-MCP) per `skynet/memory-codex.md`:
+   verify observations against code before acting (Gemba), refresh entities after
+   significant work, record invariants/naming traps with provenance.
