@@ -52,6 +52,7 @@ A long-term support phase with periodic releases as fixes accumulate.
     - Fixed extra rdt-unlock in the failure path of `dxb_resize()` (backport).
     - Fixed NULL deference in `walk_pgno()` when operating on a corrupted DB, which also affects `mdbx_chk` utility (backport).
     - Fixed loosing of global init and thread-local-storage destructors in static library build by MinGW toolchain in particular cases (backport).
+    - Fixed missing sub-page header check inside `page_check()` what could be causing `SIGSEGV` during checking a corrupted database.
 
  - Resource leaks:
     - Fixed `mach_port_t` leak inside `mdbx_get_sysraminfo()` (backport).
