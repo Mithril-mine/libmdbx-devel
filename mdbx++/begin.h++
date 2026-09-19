@@ -55,26 +55,29 @@
 #include <string_view>
 #endif
 
-#ifndef MDBX_USING_CXX_EXPERIMETAL_FILESYSTEM
-#ifdef INCLUDE_STD_FILESYSTEM_EXPERIMENTAL
-#define MDBX_USING_CXX_EXPERIMETAL_FILESYSTEM 1
+#ifndef MDBX_USING_CXX_EXPERIMENTAL_FILESYSTEM
+#ifdef MDBX_USING_CXX_EXPERIMETAL_FILESYSTEM
+/* backward compatibility with the old misspelled name */
+#define MDBX_USING_CXX_EXPERIMENTAL_FILESYSTEM MDBX_USING_CXX_EXPERIMETAL_FILESYSTEM
+#elif defined(INCLUDE_STD_FILESYSTEM_EXPERIMENTAL)
+#define MDBX_USING_CXX_EXPERIMENTAL_FILESYSTEM 1
 #elif defined(__cpp_lib_filesystem) && __cpp_lib_filesystem >= 201703L && __cplusplus >= 201703L
-#define MDBX_USING_CXX_EXPERIMETAL_FILESYSTEM 0
+#define MDBX_USING_CXX_EXPERIMENTAL_FILESYSTEM 0
 #elif (!defined(_MSC_VER) || __cplusplus >= 201403L ||                                                                 \
        (defined(_MSC_VER) && defined(_SILENCE_EXPERIMENTAL_FILESYSTEM_DEPRECATION_WARNING) && __cplusplus >= 201403L))
 #if defined(__cpp_lib_experimental_filesystem) && __cpp_lib_experimental_filesystem >= 201406L
-#define MDBX_USING_CXX_EXPERIMETAL_FILESYSTEM 1
+#define MDBX_USING_CXX_EXPERIMENTAL_FILESYSTEM 1
 #elif defined(__cpp_lib_string_view) && __cpp_lib_string_view >= 201606L && __has_include(<experimental/filesystem>)
-#define MDBX_USING_CXX_EXPERIMETAL_FILESYSTEM 1
+#define MDBX_USING_CXX_EXPERIMENTAL_FILESYSTEM 1
 #else
-#define MDBX_USING_CXX_EXPERIMETAL_FILESYSTEM 0
+#define MDBX_USING_CXX_EXPERIMENTAL_FILESYSTEM 0
 #endif
 #else
-#define MDBX_USING_CXX_EXPERIMETAL_FILESYSTEM 0
+#define MDBX_USING_CXX_EXPERIMENTAL_FILESYSTEM 0
 #endif
-#endif /* MDBX_USING_CXX_EXPERIMETAL_FILESYSTEM */
+#endif /* MDBX_USING_CXX_EXPERIMENTAL_FILESYSTEM */
 
-#if MDBX_USING_CXX_EXPERIMETAL_FILESYSTEM
+#if MDBX_USING_CXX_EXPERIMENTAL_FILESYSTEM
 #include <experimental/filesystem>
 #elif defined(__cpp_lib_filesystem) && __cpp_lib_filesystem >= 201703L
 #include <filesystem>
