@@ -26,12 +26,32 @@
 #include <cstdio>
 #include <cstring>
 #include <string>
+#if defined(__MACH__)
+#include <mach/mach.h>
+#endif
 #if !defined(_WIN32) && !defined(_WIN64)
 #include <unistd.h>
 #endif
 
 TEST(ut_stat_info, sysraminfo) {
   /* TEMPORARY diagnostics for the macOS ENOTSUP investigation */
+#if defined(__MACH__)
+  mach_msg_type_number_t count = HOST_VM_INFO_COUNT;
+  struct vm_statistics64 vmstat{};
+  mach_port_t mport = mach_host_self();
+  kern_return_t kerr = host_statistics64(mport, HOST_VM_INFO64, (host_info64_t)&vmstat, &count);
+  std::printf("diag: host_statistics64(HOST_VM_INFO_COUNT) kerr=%d count=%u free=%llu purge=%llu\n",
+              (int)kerr, count, (unsigned long long)vmstat.free_count,
+              (unsigned long long)vmstat.purgeable_count);
+  count = HOST_VM_INFO64_COUNT;
+  memset(&vmstat, 0, sizeof(vmstat));
+  kerr = host_statistics64(mport, HOST_VM_INFO64, (host_info64_t)&vmstat, &count);
+  std::printf("diag: host_statistics64(HOST_VM_INFO64_COUNT) kerr=%d count=%u free=%llu purge=%llu\n",
+              (int)kerr, count, (unsigned long long)vmstat.free_count,
+              (unsigned long long)vmstat.purgeable_count);
+  mach_port_deallocate(mach_task_self(), mport);
+  std::fflush(stdout);
+#endif
 #if !defined(_WIN32) && !defined(_WIN64)
   errno = 0;
   std::printf("diag: _SC_PHYS_PAGES=%ld sysconf=%ld errno=%d (%s)\n", (long)_SC_PHYS_PAGES,
