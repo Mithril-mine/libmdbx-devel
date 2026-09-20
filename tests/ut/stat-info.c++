@@ -22,9 +22,33 @@
 #include "mdbx.h++"
 #include <gtest/gtest.h>
 
+#include <cerrno>
+#include <cstdio>
+#include <cstring>
 #include <string>
+#if !defined(_WIN32) && !defined(_WIN64)
+#include <unistd.h>
+#endif
 
 TEST(ut_stat_info, sysraminfo) {
+  /* TEMPORARY diagnostics for the macOS ENOTSUP investigation */
+#if !defined(_WIN32) && !defined(_WIN64)
+  errno = 0;
+  std::printf("diag: _SC_PHYS_PAGES=%ld sysconf=%ld errno=%d (%s)\n", (long)_SC_PHYS_PAGES,
+              sysconf(_SC_PHYS_PAGES), errno, errno ? std::strerror(errno) : "none");
+  errno = 0;
+#ifdef _SC_AVPHYS_PAGES
+  std::printf("diag: _SC_AVPHYS_PAGES=%ld sysconf=%ld errno=%d (%s)\n", (long)_SC_AVPHYS_PAGES,
+              sysconf(_SC_AVPHYS_PAGES), errno, errno ? std::strerror(errno) : "none");
+#else
+  std::printf("diag: _SC_AVPHYS_PAGES is NOT defined\n");
+#endif
+  intptr_t ps = 0, tot = 0, av = 0;
+  const int rc = ::mdbx_get_sysraminfo(&ps, &tot, &av);
+  std::printf("diag: mdbx_get_sysraminfo(ps,tot,av) rc=%d ps=%ld tot=%ld av=%ld errno=%d (%s)\n",
+              rc, (long)ps, (long)tot, (long)av, errno, errno ? std::strerror(errno) : "none");
+  std::fflush(stdout);
+#endif
   const mdbx::env::sysraminfo info = mdbx::env::get_sysraminfo();
   EXPECT_GT(info.page_size, intptr_t(0));
   EXPECT_LT(info.page_size, intptr_t(1 << 20));
