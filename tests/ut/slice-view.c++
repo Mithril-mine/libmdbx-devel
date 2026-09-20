@@ -86,7 +86,9 @@ TEST(ut_slice_view, remove_prefix_suffix_and_at) {
   EXPECT_EQ(s, mdbx::slice("world"));
   EXPECT_EQ(s.at(0), mdbx::byte('w'));
   EXPECT_EQ(s.at(4), mdbx::byte('d'));
-  EXPECT_EQ(s[2], mdbx::byte('r'));
+  // Explicit member call: on 32-bit MSVC `s[2]` is ambiguous between the
+  // member operator[] and the built-in subscript via `operator MDBX_val *()`.
+  EXPECT_EQ(s.operator[](2), mdbx::byte('r'));
   EXPECT_THROW(s.at(s.size()), std::out_of_range);
   EXPECT_THROW(s.safe_remove_prefix(s.size() + 1), std::out_of_range);
   EXPECT_THROW(s.safe_remove_suffix(s.size() + 1), std::out_of_range);
