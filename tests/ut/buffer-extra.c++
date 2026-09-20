@@ -32,12 +32,12 @@ TEST(ut_buffer_extra, modality_transitions) {
   EXPECT_EQ(empty.content_modality(), buffer::modality::reference);
 
   const mdbx::slice abc_payload("abc");
-  buffer small(abc_payload, /*make_reference=*/false);
-  EXPECT_TRUE(small.is_freestanding());
-  EXPECT_TRUE(small.is_inplace());
-  EXPECT_FALSE(small.is_reference());
-  EXPECT_EQ(small.content_modality(), buffer::modality::inplace);
-  EXPECT_EQ(small.size(), 3u);
+  buffer small_buf(abc_payload, /*make_reference=*/false);
+  EXPECT_TRUE(small_buf.is_freestanding());
+  EXPECT_TRUE(small_buf.is_inplace());
+  EXPECT_FALSE(small_buf.is_reference());
+  EXPECT_EQ(small_buf.content_modality(), buffer::modality::inplace);
+  EXPECT_EQ(small_buf.size(), 3u);
 
   const mdbx::slice xyz_payload("xyz");
   buffer ref(xyz_payload, /*make_reference=*/true);
