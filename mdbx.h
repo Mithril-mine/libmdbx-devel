@@ -732,6 +732,17 @@ extern LIBMDBX_VERINFO_API const struct MDBX_build_info {
 /* As described above mdbx_module_handler() IS REQUIRED for Windows versions
  * prior to Windows Vista. */
 #define MDBX_MANUAL_MODULE_HANDLER 1
+/** \brief Windows DLL entry-point handler for pre-Vista Windows.
+ *
+ * Required only on Windows versions prior to Windows Vista (see
+ * \ref MDBX_MANUAL_MODULE_HANDLER): the library must be notified about thread
+ * attach/detach events to correctly manage thread-local storage destructors.
+ * On modern Windows this function is not declared.
+ *
+ * \param [in] module    The module handle passed by the system.
+ * \param [in] reason    A DLL_PROCESS_ATTACH / DLL_THREAD_ATTACH /
+ *                       DLL_THREAD_DETACH / DLL_PROCESS_DETACH reason code.
+ * \param [in] reserved  Reserved by the system, unused. */
 void LIBMDBX_API NTAPI mdbx_module_handler(PVOID module, DWORD reason, PVOID reserved);
 #endif
 
@@ -5033,18 +5044,73 @@ LIBMDBX_API int mdbx_enumerate_tables(const MDBX_txn *txn, MDBX_table_enum_func 
  * 2^{53}-1]\f$. See bottom of page 6 at https://tools.ietf.org/html/rfc7159 */
 MDBX_NOTHROW_CONST_FUNCTION LIBMDBX_API uint64_t mdbx_key_from_jsonInteger(const int64_t json_integer);
 
+/** \brief Build a key for an IEEE754 double value with natural ordering.
+ * \ingroup value2key
+ *
+ * The resulting 8-byte integer key preserves the ordering of finite double
+ * values when compared as unsigned integers, so the table may use the default
+ * (lexicographic/ordinal) ordering without a custom comparator. The mapping is
+ * invertible via \ref mdbx_double_from_key().
+ *
+ * \param [in] ieee754_64bit   A double value to encode.
+ * \returns A 64-bit key suitable as a fixed-length (8 bytes) table key.
+ * \sa mdbx_key_from_ptrdouble(), mdbx_key_from_float() */
 MDBX_NOTHROW_CONST_FUNCTION LIBMDBX_API uint64_t mdbx_key_from_double(const double ieee754_64bit);
 
+/** \brief Build a key for an IEEE754 double value via pointer.
+ * \ingroup value2key
+ *
+ * Same as \ref mdbx_key_from_double() but takes the value by pointer, which is
+ * convenient when the value is already stored (e.g. in an array or struct).
+ *
+ * \param [in] ieee754_64bit   Pointer to a double value to encode.
+ * \returns A 64-bit key suitable as a fixed-length (8 bytes) table key.
+ * \sa mdbx_key_from_double() */
 MDBX_NOTHROW_PURE_FUNCTION LIBMDBX_API uint64_t mdbx_key_from_ptrdouble(const double *const ieee754_64bit);
 
+/** \brief Build a key for an IEEE754 float value with natural ordering.
+ * \ingroup value2key
+ *
+ * The 32-bit analog of \ref mdbx_key_from_double(): the resulting integer key
+ * preserves the ordering of finite float values as unsigned integers and is
+ * invertible via \ref mdbx_float_from_key().
+ *
+ * \param [in] ieee754_32bit   A float value to encode.
+ * \returns A 32-bit key suitable as a fixed-length (4 bytes) table key.
+ * \sa mdbx_key_from_ptrfloat(), mdbx_key_from_double() */
 MDBX_NOTHROW_CONST_FUNCTION LIBMDBX_API uint32_t mdbx_key_from_float(const float ieee754_32bit);
 
+/** \brief Build a key for an IEEE754 float value via pointer.
+ * \ingroup value2key
+ *
+ * Same as \ref mdbx_key_from_float() but takes the value by pointer.
+ *
+ * \param [in] ieee754_32bit   Pointer to a float value to encode.
+ * \returns A 32-bit key suitable as a fixed-length (4 bytes) table key.
+ * \sa mdbx_key_from_float() */
 MDBX_NOTHROW_PURE_FUNCTION LIBMDBX_API uint32_t mdbx_key_from_ptrfloat(const float *const ieee754_32bit);
 
+/** \brief Build a key for a signed 64-bit integer with natural ordering.
+ * \ingroup value2key
+ *
+ * Uses offset-binary (biased) encoding: adding a bias of \f$2^{63}\f$ maps the
+ * signed range onto the unsigned range monotonically, so keys compare correctly
+ * with the default unsigned ordering. Invertible via \ref mdbx_int64_from_key().
+ *
+ * \param [in] i64   An int64 value to encode.
+ * \returns A 64-bit key suitable as a fixed-length (8 bytes) table key. */
 MDBX_NOTHROW_CONST_FUNCTION LIBMDBX_INLINE_API(uint64_t, mdbx_key_from_int64, (const int64_t i64)) {
   return UINT64_C(0x8000000000000000) + i64;
 }
 
+/** \brief Build a key for a signed 32-bit integer with natural ordering.
+ * \ingroup value2key
+ *
+ * The 32-bit analog of \ref mdbx_key_from_int64(): offset-binary encoding with
+ * a bias of \f$2^{31}\f$. Invertible via \ref mdbx_int32_from_key().
+ *
+ * \param [in] i32   An int32 value to encode.
+ * \returns A 32-bit key suitable as a fixed-length (4 bytes) table key. */
 MDBX_NOTHROW_CONST_FUNCTION LIBMDBX_INLINE_API(uint32_t, mdbx_key_from_int32, (const int32_t i32)) {
   return UINT32_C(0x80000000) + i32;
 }
@@ -5055,16 +5121,54 @@ MDBX_NOTHROW_CONST_FUNCTION LIBMDBX_INLINE_API(uint32_t, mdbx_key_from_int32, (c
  * \ref avoid_custom_comparators "avoid using custom comparators"
  * \see value2key
  * @{ */
+
+/** \brief Decode a JSON-number key back to an int64 value.
+ * \ingroup key2value
+ *
+ * Inverse of \ref mdbx_key_from_jsonInteger() for 8-byte keys. Values outside
+ * the JSON-safe integer range \f$[-2^{53}+1, 2^{53}-1]\f$ are clamped to the
+ * nearest representable int64.
+ *
+ * \param [in] v   An 8-byte key produced by \ref mdbx_key_from_jsonInteger().
+ * \returns The decoded int64 value. */
 MDBX_NOTHROW_PURE_FUNCTION LIBMDBX_API int64_t mdbx_jsonInteger_from_key(const MDBX_val);
 
+/** \brief Decode a key back to an IEEE754 double value.
+ * \ingroup key2value
+ *
+ * Inverse of \ref mdbx_key_from_double() for 8-byte keys.
+ *
+ * \param [in] v   An 8-byte key produced by \ref mdbx_key_from_double().
+ * \returns The decoded double value. */
 MDBX_NOTHROW_PURE_FUNCTION LIBMDBX_API double mdbx_double_from_key(const MDBX_val);
 
+/** \brief Decode a key back to an IEEE754 float value.
+ * \ingroup key2value
+ *
+ * Inverse of \ref mdbx_key_from_float() for 4-byte keys.
+ *
+ * \param [in] v   A 4-byte key produced by \ref mdbx_key_from_float().
+ * \returns The decoded float value. */
 MDBX_NOTHROW_PURE_FUNCTION LIBMDBX_API float mdbx_float_from_key(const MDBX_val);
 
+/** \brief Decode a key back to a signed 32-bit integer.
+ * \ingroup key2value
+ *
+ * Inverse of \ref mdbx_key_from_int32() for 4-byte keys.
+ *
+ * \param [in] v   A 4-byte key produced by \ref mdbx_key_from_int32().
+ * \returns The decoded int32 value. */
 MDBX_NOTHROW_PURE_FUNCTION LIBMDBX_API int32_t mdbx_int32_from_key(const MDBX_val);
 
+/** \brief Decode a key back to a signed 64-bit integer.
+ * \ingroup key2value
+ *
+ * Inverse of \ref mdbx_key_from_int64() for 8-byte keys.
+ *
+ * \param [in] v   An 8-byte key produced by \ref mdbx_key_from_int64().
+ * \returns The decoded int64 value. */
 MDBX_NOTHROW_PURE_FUNCTION LIBMDBX_API int64_t mdbx_int64_from_key(const MDBX_val);
-/** end of value2key @} */
+/** end of key2value @} */
 
 /** \brief Retrieve statistics for a table.
  * \ingroup c_statinfo
