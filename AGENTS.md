@@ -6,6 +6,17 @@
 ## Code style
  - use LLVM codestyle
 
+## Workspace & git-flow (internal dev machine)
+ - The dev machine hosts a shared bare `origin` at `/sourcecraft/workspace/local-origin`
+   and one working clone ("nook") per agent: `/sourcecraft/workspace/nook-<slug>`.
+   Full description: `/sourcecraft/workspace/AGENT-WORKSPACE.md` (outside any repo).
+ - Model: `working` → `devel` → `master` → `stable` → `lts`. Agents branch from
+   `devel`, push feature branches to the local origin, merge into `devel` after
+   review, and only publish outward (SourceCraft `upstream`, GitHub mirror) per
+   the rules in that document.
+ - In every nook: `origin` = local origin, `upstream` = SourceCraft, `github` =
+   GitHub mirror. Keep the local origin in sync with `upstream` before publishing.
+
 ## Project index & agent practices
  - Start from the project index: `skynet/README.md` (repo map, build, architecture, workflows,
    testing infrastructure, amalgamation).
