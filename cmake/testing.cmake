@@ -335,7 +335,7 @@ if(BUILD_TESTING)
         NAME ut_copy_dlls
         COMMAND ${CMAKE_COMMAND} -Ddest_dir=${MDBX_OUTPUT_DIR} -Dsrc_dirs=${gtest_rt_dir}
                 -P "${CMAKE_CURRENT_LIST_DIR}/copy-test-dlls.cmake")
-      set_tests_properties(ut_copy_dlls PROPERTIES LABELS "ut;ut-api" TIMEOUT 60)
+      set_tests_properties(ut_copy_dlls PROPERTIES LABELS "ut;ut.api" TIMEOUT 60 FIXTURES_SETUP ut-dlls)
       set(UT_DLL_COPY_TEST ut_copy_dlls)
     endif()
   else()
@@ -414,15 +414,18 @@ if(BUILD_TESTING)
               if(filename)
                 get_filename_component(dir ${filename} DIRECTORY)
               else(filename)
-                get_target_property(dir ${dep} LIBRARY_OUTPUT_DIRECTORY_${CMAKE_BUILD_TYPE_UPPERCASE})
+                # For a shared library on Windows the DLL itself is placed into
+                # RUNTIME_OUTPUT_DIRECTORY, while LIBRARY_OUTPUT_DIRECTORY holds
+                # only the import library (lib/), so query the runtime dir first.
+                get_target_property(dir ${dep} RUNTIME_OUTPUT_DIRECTORY_${CMAKE_BUILD_TYPE_UPPERCASE})
                 if(NOT dir)
-                  get_target_property(dir ${dep} RUNTIME_OUTPUT_DIRECTORY_${CMAKE_BUILD_TYPE_UPPERCASE})
+                  get_target_property(dir ${dep} RUNTIME_OUTPUT_DIRECTORY)
+                endif()
+                if(NOT dir)
+                  get_target_property(dir ${dep} LIBRARY_OUTPUT_DIRECTORY_${CMAKE_BUILD_TYPE_UPPERCASE})
                 endif()
                 if(NOT dir)
                   get_target_property(dir ${dep} LIBRARY_OUTPUT_DIRECTORY)
-                endif()
-                if(NOT dir)
-                  get_target_property(dir ${dep} RUNTIME_OUTPUT_DIRECTORY)
                 endif()
               endif(filename)
             endif(CMAKE_CONFIGURATION_TYPES)
@@ -452,8 +455,9 @@ if(BUILD_TESTING)
         endif()
         if(UT_DLL_COPY_TEST)
           # The `ut_copy_dlls` pseudo-test copies the shared libraries required at
-          # runtime (e.g. googletest DLLs) next to the executables; run it first.
-          set_tests_properties(${name} PROPERTIES DEPENDS "${UT_DLL_COPY_TEST}")
+          # runtime (e.g. googletest DLLs) next to the executables; run it first
+          # via a ctest fixture so it is honored even with -R/-L test selection.
+          set_tests_properties(${name} PROPERTIES FIXTURES_REQUIRED ut-dlls)
         endif()
         if(params_TIMEOUT)
           if(MEMORYCHECK_COMMAND OR CMAKE_MEMORYCHECK_COMMAND)
