@@ -535,9 +535,15 @@ wait=<slug>: <предмет> | state=pending_review|awaiting_answer|in_progress
 прочитает письмо сама; её возобновляет **оркестратор**:
 
 - При наличии непрочитанных писем у агента оркестратор выполняет
-  `.skynet/wakeup-headless.sh <slug>`: внутри `nook-<slug>` запускается
-  `src code -- run -c "обработай почту..."` (headless, с таймаутом).
+  `.skynet/wakeup-headless.sh <slug> [ses_id]`: внутри `nook-<slug>` запускается
+  `src code -- run --dangerously-skip-permissions [-s <ses_id>] "обработай почту..."`.
   Агент просыпается, читает ящик, отвечает координатору, продолжает задачи.
+- Сессии агентов: реальные opencode `ses_...` смотрятся через
+  `src code -- session list`; маппинг slug→ses_id ведётся в
+  `.skynet/sessions.json` (обновляет координатор). Без ses_id — свежая сессия
+  в nook. НЕ использовать голый `-c` (он продолжает глобально последнюю сессию).
+- Флаг `--dangerously-skip-permissions` обязателен для headless (иначе агент
+  «auto-rejects» инструменты и падает); v1.4.x не имеет `--auto`.
 - Cooldown: не чаще раза в 10 минут на агента (state-файл), чтобы не спамить.
 - `main_architect` (интерактивная сессия координатора/владельца) НЕ будится
   headless автоматически — во избежание конфликтов двух координаторов.
