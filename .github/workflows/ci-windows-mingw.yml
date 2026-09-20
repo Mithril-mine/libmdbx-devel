@@ -46,6 +46,10 @@ jobs:
       shell: bash
       env:
         CI_MAKE_TARGET: smoke
+        # Run only the essential tests on Windows: googletest-based ones that
+        # exercise DLL loading and the DBI-API repros. The `smoke` phase of the
+        # GNUmakefile still runs the full smoke suite separately.
+        CI_CTEST_REGEX: '^(global_init|rename_dbi|nested_drop_abort)$'
       run: |
         if [ "${{ matrix.bitness }}" = '32' ]; then export CC=x86_64-w64-mingw32-gcc CXX=x86_64-w64-mingw32-g++; fi && \
         echo "initial-PATH=$PATH" && \

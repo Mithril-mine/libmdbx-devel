@@ -61,6 +61,7 @@ function provide_toolchain {
 function default_cmake_test {
 	GTEST_SHUFFLE=1 GTEST_RUNTIME_LIMIT=99 MALLOC_CHECK_=7 MALLOC_PERTURB_=42 \
 	ctest --output-on-failure --parallel 3 --schedule-random --no-tests=error \
+	${CI_CTEST_REGEX:+-R "$CI_CTEST_REGEX"} \
 	"${test_args[@]+"${test_args[@]}"}"
 }
 
