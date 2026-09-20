@@ -85,6 +85,7 @@ Author: Leonid Yuriev \<leo@yuriev.ru\>. Home site: <https://libmdbx.dqdkfa.ru>.
 | [`techdebt.md`](techdebt.md) | Tech-debt inventory from source scan: 86 TODO/FIXME/workaround markers by category with file:line refs |
 | [`workflows.md`](workflows.md) | Git branching, PR/review flow, CI triggers, release & amalgamation process |
 | [`superpowers/README.md`](superpowers/README.md) | Integrated agent methodology (Superpowers): what was taken, why, and how to use it |
+| [`skynet-protocol.md`](skynet-protocol.md) | **Agent coordination protocol v1**: ranks/roles/specialization, registry + heartbeat + session-id reconciliation in MCP-memory, mailboxes (message format, TASK/REPORT/ACK flow), recovery procedure, protocol evolution |
 | [`sourcecraft/README.md`](sourcecraft/README.md) | SourceCraft-specific: CI cubes/workflows, MCP tooling, PR automation |
 | [`.codeassistant/skills/refactor/`](../.codeassistant/skills/refactor/SKILL.md) | Agent skill: safe, behavior-preserving refactoring (Fowler catalog, smells, safety, test-gated steps); adapted from [`MuhiminOsim/code-refactoring-skill`](https://github.com/MuhiminOsim/code-refactoring-skill) (MIT) |
 | [`.codeassistant/skills/modern-cpp-en/`](../.codeassistant/skills/modern-cpp-en/SKILL.md) | Agent skill: Modern C++ (C++20/23/26) engineering guide (API design, error handling, concurrency, build acceleration, clang-tidy); adapted from [`huxint/cpp-standing-skill`](https://github.com/huxint/cpp-standing-skill) (MIT) |
@@ -105,6 +106,7 @@ Depending on the task, start from:
 - **Writing or reviewing C++ (API layer)** → [`.codeassistant/skills/modern-cpp-en/`](../.codeassistant/skills/modern-cpp-en/SKILL.md)
 - **How to contribute / open PR / run CI** → [`workflows.md`](workflows.md), [`sourcecraft/README.md`](sourcecraft/README.md)
 - **Feature design, planning, TDD, debugging** → [`superpowers/README.md`](superpowers/README.md)
+- **Agent coordination (mailboxes, ranks, heartbeat, recovery)** → [`skynet-protocol.md`](skynet-protocol.md)
 
 Common entry points in the code:
 
