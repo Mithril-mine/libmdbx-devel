@@ -74,11 +74,24 @@ TEST(ut_stat_info, gc_info) {
       txn.upsert(table, mdbx::slice(key), mdbx::slice(chunk));
     }
     // Overwrite with larger values to force page splits and retire the
-    // old pages to the GC.
+    // old pages to the GC (where they are not reused in this transaction).
     const std::string bigger(8192, 'y');
     for (int i = 0; i < 256; ++i) {
       auto key = std::to_string(i);
       txn.upsert(table, mdbx::slice(key), mdbx::slice(bigger));
+    }
+    txn.commit();
+  }
+  {
+    // Erase in a separate txn: none of the freed pages can be reused by an
+    // allocation in this txn, so the GC is deterministically populated even
+    // on platforms with a large system page size (e.g. 16KiB on arm64 macOS)
+    // where the overwrite above may recycle every retired page in-place.
+    auto txn = env.start_write();
+    auto table = txn.open_map("table-1");
+    for (int i = 0; i < 256; ++i) {
+      auto key = std::to_string(i);
+      txn.erase(table, mdbx::slice(key));
     }
     txn.commit();
   }
