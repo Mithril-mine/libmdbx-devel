@@ -3612,14 +3612,16 @@ __cold int mdbx_get_sysraminfo(intptr_t *page_size, intptr_t *total_pages, intpt
     if (avail_ram_pages == -1)
       return LOG_IFERR(errno);
 #elif defined(__MACH__)
-    mach_msg_type_number_t count = HOST_VM_INFO_COUNT;
+    mach_msg_type_number_t count;
     mach_port_t mport = mach_host_self();
 #if defined(__ENVIRONMENT_MAC_OS_X_VERSION_MIN_REQUIRED__) && __ENVIRONMENT_MAC_OS_X_VERSION_MIN_REQUIRED__ >= 100600
     struct vm_statistics64 vmstat;
+    count = HOST_VM_INFO64_COUNT;
     kern_return_t kerr = host_statistics64(mport, HOST_VM_INFO64, (host_info64_t)&vmstat, &count);
     const intptr_t avail_ram_pages = vmstat.free_count + vmstat.purgeable_count;
 #else
     vm_statistics_data_t vmstat;
+    count = HOST_VM_INFO_COUNT;
     kern_return_t kerr = host_statistics(mport, HOST_VM_INFO, (host_info_t)&vmstat, &count);
     const intptr_t avail_ram_pages = vmstat.free_count;
 #endif
