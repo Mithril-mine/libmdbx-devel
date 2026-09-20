@@ -66,6 +66,30 @@ TEST(ut_transforms, key_value_transforms) {
   EXPECT_EQ(mdbx::jsonInteger_from_key(mdbx::slice(&j, sizeof(j))), 42);
 }
 
+TEST(ut_transforms, numeric_slice_adapters) {
+  const uint64_t u64 = 0x0102030405060708ull;
+  EXPECT_EQ(mdbx::slice::wrap(u64).as_uint64_adapt(), u64);
+
+  const uint32_t u32 = 0xDEADBEEFu;
+  EXPECT_EQ(mdbx::slice::wrap(u32).as_uint32_adapt(), u32);
+  EXPECT_EQ(mdbx::slice::wrap(u32).as_uint64_adapt(), uint64_t(u32)) << "wider adapter reads shorter payload";
+
+  const int64_t s64 = INT64_MIN;
+  EXPECT_EQ(mdbx::slice::wrap(s64).as_int64_adapt(), s64);
+  const int32_t s32 = -1234567;
+  EXPECT_EQ(mdbx::slice::wrap(s32).as_int32_adapt(), s32);
+  EXPECT_EQ(mdbx::slice::wrap(s32).as_int64_adapt(), int64_t(s32));
+
+  EXPECT_EQ(mdbx::slice().as_uint8_adapt(), 0u) << "empty slice adapts to zero";
+  EXPECT_EQ(mdbx::slice::wrap(uint8_t(0xAB)).as_uint8_adapt(), 0xABu);
+
+  EXPECT_THROW((void)mdbx::slice("abc").as_uint64_adapt(), mdbx::bad_value_size);
+  EXPECT_THROW((void)mdbx::slice("0123456789").as_uint64_adapt(), mdbx::bad_value_size);
+  EXPECT_THROW((void)mdbx::slice("abc").as_uint8_adapt(), mdbx::bad_value_size);
+  EXPECT_THROW((void)mdbx::slice::wrap(u64).as_uint32_adapt(), mdbx::bad_value_size)
+      << "narrower adapter refuses a longer payload";
+}
+
 TEST(ut_transforms, dump_val) {
   EXPECT_EQ(mdbx::dump_val(mdbx::slice("hello")), "hello");
   EXPECT_EQ(mdbx::dump_val(mdbx::slice()), "<empty>");
