@@ -885,6 +885,15 @@ __hot int cursor_put(MDBX_cursor *mc, const MDBX_val *key, MDBX_val *data, unsig
   skip_check_samedata:;
   }
 
+  size_t *batch_dupfix_done = nullptr, batch_dupfix_given = 0;
+  if (unlikely(flags & MDBX_MULTIPLE)) {
+    batch_dupfix_given = data[1].iov_len;
+    if (unlikely(data[1].iov_len == 0))
+      return /* nothing todo */ MDBX_SUCCESS;
+    batch_dupfix_done = &data[1].iov_len;
+    *batch_dupfix_done = 0;
+  }
+
   int rc = MDBX_SUCCESS;
   if (mc->tree->height == 0) {
     /* new database, cursor has nothing to point to */
@@ -970,14 +979,6 @@ __hot int cursor_put(MDBX_cursor *mc, const MDBX_val *key, MDBX_val *data, unsig
 
   mc->flags &= ~z_after_delete;
   MDBX_val xdata, *ref_data = data;
-  size_t *batch_dupfix_done = nullptr, batch_dupfix_given = 0;
-  if (unlikely(flags & MDBX_MULTIPLE)) {
-    batch_dupfix_given = data[1].iov_len;
-    if (unlikely(data[1].iov_len == 0))
-      return /* nothing todo */ MDBX_SUCCESS;
-    batch_dupfix_done = &data[1].iov_len;
-    *batch_dupfix_done = 0;
-  }
 
   /* Cursor is positioned, check for room in the dirty list */
   err = cursor_touch(mc, key, ref_data);
