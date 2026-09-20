@@ -737,7 +737,7 @@ extern LIBMDBX_VERINFO_API const struct MDBX_build_info {
  * Required only on Windows versions prior to Windows Vista (see
  * \ref MDBX_MANUAL_MODULE_HANDLER): the library must be notified about thread
  * attach/detach events to correctly manage thread-local storage destructors.
- * On modern Windows this function is not declared.
+ * On newer Windows this handler is not required.
  *
  * \param [in] module    The module handle passed by the system.
  * \param [in] reason    A DLL_PROCESS_ATTACH / DLL_THREAD_ATTACH /
