@@ -30,6 +30,12 @@ using operate_options = mdbx::operate_options;
 using operate_parameters = mdbx::operate_parameters;
 using create_parameters = mdbx::create_parameters;
 
+// Compute geometry units in 64-bit to avoid signed constant-overflow
+// warnings (e.g. MSVC C4307) on 32-bit targets where intptr_t is 32-bit.
+constexpr intptr_t gib(int n) noexcept {
+  return intptr_t(int64_t(n) * geometry::GiB);
+}
+
 // All fluent setters must be noexcept and chainable on the same instance.
 static_assert(noexcept(geometry().set_size_lower(1)), "set_size_lower() must be noexcept");
 static_assert(noexcept(geometry().set_size_now(1)), "set_size_now() must be noexcept");
@@ -80,15 +86,15 @@ void test_geometry_setters() {
 
   // chained per-field setters mutate in place and return *this
   geometry &ref = geo.set_size_lower(1 * geometry::GiB)
-                      .set_size_now(2 * geometry::GiB)
-                      .set_size_upper(8 * geometry::GiB)
+                      .set_size_now(gib(2))
+                      .set_size_upper(gib(8))
                       .set_growth_step(256 * geometry::MiB)
                       .set_shrink_threshold(512 * geometry::MiB)
                       .set_pagesize(4 * geometry::KiB);
   EXPECT_EQ(&ref, &geo);
   EXPECT_EQ(geo.size_lower, 1 * geometry::GiB);
-  EXPECT_EQ(geo.size_now, 2 * geometry::GiB);
-  EXPECT_EQ(geo.size_upper, 8 * geometry::GiB);
+  EXPECT_EQ(geo.size_now, gib(2));
+  EXPECT_EQ(geo.size_upper, gib(8));
   EXPECT_EQ(geo.growth_step, 256 * geometry::MiB);
   EXPECT_EQ(geo.shrink_threshold, 512 * geometry::MiB);
   EXPECT_EQ(geo.pagesize, 4 * geometry::KiB);
