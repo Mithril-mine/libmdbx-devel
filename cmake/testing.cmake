@@ -205,20 +205,8 @@ if(BUILD_TESTING)
           ON
           CACHE BOOL "" FORCE)
 
-      # The shared googletest DLLs hang at process startup on Windows when linked
-      # against libmdbx (observed with MinGW and clang-cl, in Debug and Release,
-      # with and without the C runtime), so build a static googletest there.
-      if(WIN32)
-        set(gtest_saved_build_shared_libs "${BUILD_SHARED_LIBS}")
-        set(gtest_force_static_googletest TRUE)
-        set(BUILD_SHARED_LIBS OFF)
-      endif()
-
       # Add googletest directly to our build. This defines the gtest and gtest_main targets.
       add_subdirectory(${gtest_root} ${CMAKE_BINARY_DIR}/googletest-build EXCLUDE_FROM_ALL)
-      if(gtest_force_static_googletest)
-        set(BUILD_SHARED_LIBS "${gtest_saved_build_shared_libs}")
-      endif()
       if(CMAKE_INTERPROCEDURAL_OPTIMIZATION AND NOT CMAKE_VERSION VERSION_LESS 3.9)
         file(READ ${gtest_root}/CMakeLists.txt variable gtest_cmake_content)
         string(TOLOWER "${gtest_cmake_content}" gtest_cmake_content)
@@ -332,6 +320,24 @@ if(BUILD_TESTING)
     else()
       set(UT_NEED_DLLCRUTCH FALSE)
     endif()
+
+    # The googletest DLLs are placed into ${CMAKE_BINARY_DIR}/bin while the test
+    # executables live in ${MDBX_OUTPUT_DIR}. Register a pseudo-test that copies
+    # the DLLs next to the executables and make every gtest-based test wait for it
+    # first, so the DLLs are always findable at process startup.
+    set(UT_DLL_COPY_TEST "")
+    if(UT_NEED_DLLCRUTCH AND NOT CMAKE_CROSSCOMPILING AND DEFINED MDBX_OUTPUT_DIR)
+      get_target_property(gtest_rt_dir gtest RUNTIME_OUTPUT_DIRECTORY)
+      if(NOT gtest_rt_dir)
+        set(gtest_rt_dir "${CMAKE_BINARY_DIR}/bin")
+      endif()
+      add_test(
+        NAME ut_copy_dlls
+        COMMAND ${CMAKE_COMMAND} -Ddest_dir=${MDBX_OUTPUT_DIR} -Dsrc_dirs=${gtest_rt_dir}
+                -P "${CMAKE_CURRENT_LIST_DIR}/copy-test-dlls.cmake")
+      set_tests_properties(ut_copy_dlls PROPERTIES LABELS "ut;ut-api" TIMEOUT 60)
+      set(UT_DLL_COPY_TEST ut_copy_dlls)
+    endif()
   else()
     set(UT_INCLUDE_DIRECTORIES "")
     set(UT_LIBRARIES "")
@@ -443,6 +449,11 @@ if(BUILD_TESTING)
         add_test(NAME ${name} COMMAND $<TARGET_FILE:${target}>)
         if(params_LABELS)
           set_tests_properties(${name} PROPERTIES LABELS "${params_LABELS}")
+        endif()
+        if(UT_DLL_COPY_TEST)
+          # The `ut_copy_dlls` pseudo-test copies the shared libraries required at
+          # runtime (e.g. googletest DLLs) next to the executables; run it first.
+          set_tests_properties(${name} PROPERTIES DEPENDS "${UT_DLL_COPY_TEST}")
         endif()
         if(params_TIMEOUT)
           if(MEMORYCHECK_COMMAND OR CMAKE_MEMORYCHECK_COMMAND)
