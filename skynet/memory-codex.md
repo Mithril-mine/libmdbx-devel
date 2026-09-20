@@ -79,3 +79,39 @@ After every few sessions (or when a process friction repeats), revisit this file
 - apply it, record the change, and note the expected effect.
 
 Continuous improvement applies to memory-of-code as much as to code.
+
+## Swarm operation: duty loop and command authority (2026-09-20)
+
+Operational rules for how agents communicate, per the owner's ruling. These
+belong in the codex because they govern agent behavior across sessions.
+
+### Command authority
+- **The coordinator (main_architect) is the command instance for the swarm.**
+  Agents receive tasks, decisions and reviews FROM the coordinator, not from
+  the owner. The owner does not participate in routine work and must not be
+  asked for per-task commands.
+- Owner involvement is reserved for escalation: priorities, conflicts between
+  agents, changes of specialization, or decisions explicitly flagged
+  `QUESTION escalate`. Everything else is decided by the coordinator within
+  the protocol SLOs.
+
+### Duty loop of the coordinator
+- The coordinator keeps a self-driven duty loop:
+  `waitmail main_architect` (blocks until a letter) → read and process ALL
+  pending letters (answer, review, merge, close wait= records, update board)
+  → run `waitmail main_architect` again.
+- The owner interrupts the loop (`Ctrl+C` / a message) when the coordinator
+  is needed personally. While the loop runs, the coordinator is continuously
+  responsive to agents without waiting for the owner.
+- Consequence: "check mail as the first step of every turn" is subsumed by the
+  duty loop; the loop IS the first and permanent step while on duty.
+
+### Agent side
+- Agents send all requests/reports as letters to `skynet_inbox_main_architect`
+  and wait for answers via their own `waitmail <slug>` — they do NOT wait for
+  the owner, and they do NOT block on absent coordinator answers (protocol §20.9
+  «не блокируйся» still applies to work steps).
+- If the coordinator does not answer within the SLO, the agent escalates with
+  `QUESTION escalate` — never by pinging the owner directly.
+- Tasks assigned by the coordinator are authoritative; start them immediately
+  and report via `REPORT`.
