@@ -1,0 +1,228 @@
+version: 1
+section_id: anchor-b14-improvements-vs-lmdb
+title: "Доработки и усовершенствования libmdbx в сравнении с LMDB"
+intro: |
+  Раздел систематизирует конкретные доработки и усовершенствования libmdbx относительно LMDB:
+  что именно изменено в механизмах хранения, транзакциях, синхронизации и API, и как это
+  сказывается на пользовательских сценариях. Каждая запись опирается на официальные источники
+  (документация doxygen, ChangeLog, README) и приводит точные идентификаторы API. Раздел полезен
+  при выборе движка, планировании миграции с LMDB и настройке существующих инсталляций.
+items:
+  - id: b14-geometry-growth
+    title: "Геометрия роста файла без перезапуска"
+    lmdb_baseline: "LMDB требует заранее заданного размера файла (mapsize); при исчерпании пространства необходимо закрыть окружение, переустановить размер и открыть заново."
+    libmdbx_improvement: "Размер файла управляется геометрией lower/now/upper с шагом роста и порогом сжатия и автоматически адаптируется на лету: файл растёт по мере необходимости и может сокращаться при освобождении хвоста (implicit shrink). Текущие значения доступны через env_info_ex."
+    user_benefit: "Отсутствуют простои на изменение mapsize; базу можно наполнять без предварительной оценки максимального размера, а свободное место возвращается операционной системе."
+    api: ["mdbx_env_set_geometry", "mdbx_env_info_ex"]
+    status: verified
+    sources:
+      - label: "doxygen: Opening & Closing"
+        url: "https://libmdbx.dqdkfa.ru/doxygen/group__c__opening.html"
+      - label: "ChangeLog"
+        url: "https://github.com/erthink/libmdbx/blob/master/ChangeLog.md"
+  - id: b14-gc-freelist
+    title: "Эффективный GC/freelist и переработка удалённых страниц"
+    lmdb_baseline: "В LMDB список свободных страниц обрабатывается линейно и является источником проблем при больших транзакциях и долгих читателях."
+    libmdbx_improvement: "Свободные страницы учитываются записями в GC-дереве (ключ — номер транзакции), переиспользование ограничено «детентом» (старейшим активным снапшотом). Для очень больших освобождений реализован режим BigFoot (цепочки записей на последовательных txnid); есть политики LIFO/FIFO и лимиты стоимости поиска. Состояние доступно через mdbx_gc_info()."
+    user_benefit: "Переработка страниц предсказуема и настраиваема; огромные транзакции (например, блокчейн-нагрузки) не деградируют, а занятое место возвращается в оборот, как только читатели его отпускают."
+    api: ["mdbx_gc_info"]
+    since: "0.12.1 (Big Foot)"
+    status: verified
+    sources:
+      - label: "doxygen: Statistics & Information"
+        url: "https://libmdbx.dqdkfa.ru/doxygen/group__c__statinfo.html"
+      - label: "ChangeLog"
+        url: "https://github.com/erthink/libmdbx/blob/master/ChangeLog.md"
+  - id: b14-waitfree-reads
+    title: "Wait-free чтение без блокировок"
+    lmdb_baseline: "В LMDB читатели тоже не берут блокировок, но жёсткая привязка транзакции к потоку и отсутствие контроля живости создают проблемы в пулах потоков и корутинах."
+    libmdbx_improvement: "Читатели используют общую таблицу читателей (reader lock table) с wait-free доступом и корректным учётом старейшего снапшота; поддерживается передача транзакции между потоками (NOSTICKYTHREADS) и ручное управление слотами."
+    user_benefit: "Быстрые параллельные чтения без гонок и «зависших» снапшотов; корректная работа в многопоточных и событийных архитектурах."
+    api: ["mdbx_thread_register", "mdbx_txn_begin"]
+    status: verified
+    sources:
+      - label: "doxygen: Transactions"
+        url: "https://libmdbx.dqdkfa.ru/doxygen/group__c__transactions.html"
+      - label: "README"
+        url: "https://github.com/erthink/libmdbx/blob/master/README.md"
+  - id: b14-txn-concurrency-checks
+    title: "Строгие проверки конкурентного использования транзакций"
+    lmdb_baseline: "LMDB молча допускает некорректные паттерны (использование транзакции из другого потока, пересечение read/write), что приводит к трудно диагностируемым повреждениям."
+    libmdbx_improvement: "Введены явные коды ошибок и проверки владения/пересечения транзакций: MDBX_THREAD_MISMATCH, MDBX_TXN_OVERLAPPING, MDBX_BAD_RSLOT, MDBX_BUSY; ошибки возвращаются вместо «тихого» повреждения данных."
+    user_benefit: "Ошибки конкурентности обнаруживаются на раннем этапе разработки, а не в продакшене в виде повреждённой базы."
+    api: ["MDBX_THREAD_MISMATCH", "MDBX_TXN_OVERLAPPING", "MDBX_BAD_RSLOT", "MDBX_BUSY"]
+    status: verified
+    sources:
+      - label: "doxygen: Transactions"
+        url: "https://libmdbx.dqdkfa.ru/doxygen/group__c__transactions.html"
+      - label: "README"
+        url: "https://github.com/erthink/libmdbx/blob/master/README.md"
+  - id: b14-safety-fixes
+    title: "Safety-фиксы: многолетние исправления дефектов LMDB"
+    lmdb_baseline: "Ряд дефектов LMDB (утечки страниц, некорректная статистика, повреждение в отдельных режимах, ошибки копирования на сетевых ФС) остаётся неисправленным годами."
+    libmdbx_improvement: "Накоплено более пяти лет исправлений: переработаны пути CoW и слияния страниц, DUPFIXED-обработка нечётных длин, обновление записей с изменением размера, целостность при асинхронной записи (SAFE_NOSYNC). Перечень изменений ведётся в ChangeLog."
+    user_benefit: "Меньше рисков потери данных и повреждения БД в критических режимах; поведение в краевых случаях соответствует документации."
+    api: []
+    status: verified
+    sources:
+      - label: "ChangeLog"
+        url: "https://github.com/erthink/libmdbx/blob/master/ChangeLog.md"
+      - label: "README"
+        url: "https://github.com/erthink/libmdbx/blob/master/README.md"
+  - id: b14-telemetry
+    title: "Телеметрия: статистика и диагностика состояния"
+    lmdb_baseline: "LMDB предоставляет минимальный набор статистики, недостаточный для диагностики «долгих читателей», переиспользования и нагрузки на запись."
+    libmdbx_improvement: "Доступны расширенные структуры: env_info_ex (геометрия, мета-страницы, UUID, статистика операций со страницами), txn_info (объёмы dirty/leftover/retired и лимиты), gc_info (состояние переиспользования)."
+    user_benefit: "Влияние долгих читателей, WAF и churn GC становятся измеримыми, что позволяет находить причины роста базы и просадок производительности."
+    api: ["mdbx_env_info_ex", "mdbx_txn_info", "mdbx_gc_info"]
+    status: verified
+    sources:
+      - label: "doxygen: Statistics & Information"
+        url: "https://libmdbx.dqdkfa.ru/doxygen/group__c__statinfo.html"
+  - id: b14-exclusive-open
+    title: "Режим Exclusive open для миграций"
+    lmdb_baseline: "В LMDB нет штатного способа гарантированно эксклюзивного открытия базы без внешней координации."
+    libmdbx_improvement: "Флаг MDBX_EXCLUSIVE обеспечивает эксклюзивный доступ к файлу базы, что удобно для миграции, обслуживания и восстановления без вмешательства других процессов."
+    user_benefit: "Безопасные операции обслуживания (миграция, резервное копирование, проверка) без гонок с рабочими процессами."
+    api: ["MDBX_EXCLUSIVE"]
+    status: verified
+    sources:
+      - label: "doxygen: Opening & Closing"
+        url: "https://libmdbx.dqdkfa.ru/doxygen/group__c__opening.html"
+      - label: "README"
+        url: "https://github.com/erthink/libmdbx/blob/master/README.md"
+  - id: b14-sync-modes
+    title: "Режимы синхронизации: явные уровни долговечности"
+    lmdb_baseline: "В LMDB флаг NOSYNC означает асинхронную запись с риском повреждения базы при сбое; границы между режимами размыты."
+    libmdbx_improvement: "Определены явные режимы: MDBX_SYNC_DURABLE (полный ACID), MDBX_NOMETASYNC, MDBX_SAFE_NOSYNC (без флашей, но с сохранением последнего steady-коммита — база не разрушается), MDBX_UTTERLY_NOSYNC (аналог LMDB_NOSYNC) и MDBX_WRITEMAP."
+    user_benefit: "Выбор режима осознан: производительность масштабируется до десятков раз без потери гарантии целостности после сбоя (в режиме SAFE_NOSYNC)."
+    api: ["MDBX_SYNC_DURABLE", "MDBX_NOMETASYNC", "MDBX_SAFE_NOSYNC", "MDBX_UTTERLY_NOSYNC", "MDBX_WRITEMAP", "mdbx_env_sync"]
+    status: verified
+    sources:
+      - label: "doxygen: SYNC MODES"
+        url: "https://libmdbx.dqdkfa.ru/doxygen/group__sync__modes.html"
+      - label: "ChangeLog"
+        url: "https://github.com/erthink/libmdbx/blob/master/ChangeLog.md"
+  - id: b14-dosed-sync
+    title: "Дозированная (автоматическая) синхронизация"
+    lmdb_baseline: "В LMDB синхронизация выполняется либо явно, либо по умолчанию на каждую транзакцию — без промежуточных настроек."
+    libmdbx_improvement: "Добавлены порог по объёму (syncbytes) и интервал (syncperiod), а также асинхронный mdbx_env_sync_poll() с дешёвой проверкой необходимости; steady-точки формируются автоматически."
+    user_benefit: "Пропускная способность записи регулируется «пакетами» коммитов без ручного управления, а задержка durability-гарантии остаётся ограниченной."
+    api: ["mdbx_env_set_syncbytes", "mdbx_env_set_syncperiod", "mdbx_env_sync_poll"]
+    status: verified
+    sources:
+      - label: "doxygen: Extra operations"
+        url: "https://libmdbx.dqdkfa.ru/doxygen/group__c__extra.html"
+      - label: "doxygen: Settings"
+        url: "https://libmdbx.dqdkfa.ru/doxygen/group__c__settings.html"
+  - id: b14-crash-recovery-bootid
+    title: "Crash-восстановление с учётом boot-id"
+    lmdb_baseline: "Решение о валидности «слабых» мета-страниц после сбоя в LMDB принимается упрощённо и может давать ложные результаты, в том числе внутри контейнеров."
+    libmdbx_improvement: "Библиотека учитывает идентификатор загрузки системы (boot-id) при откате слабых мета-страниц и корректно работает внутри LXC; восстановление выбирает последнюю цельную мета-страницу."
+    user_benefit: "Надёжное восстановление после падения системы и в контейнерах: база откатывается к последнему согласованному состоянию, а не повреждается."
+    api: ["mdbx_env_open"]
+    status: verified
+    sources:
+      - label: "ChangeLog"
+        url: "https://github.com/erthink/libmdbx/blob/master/ChangeLog.md"
+      - label: "doxygen: Opening & Closing"
+        url: "https://libmdbx.dqdkfa.ru/doxygen/group__c__opening.html"
+  - id: b14-multivalue-dupsort
+    title: "Мультизначения: DUPSORT, DUPFIXED, INTEGERKEY"
+    lmdb_baseline: "LMDB поддерживает базовые dupsort-таблицы, но с ограничениями на вложенность и плотность упаковки значений."
+    libmdbx_improvement: "Развита модель мультизначений: DUPSORT (упорядоченные множества), DUPFIXED (плотная упаковка фиксированной длины), INTEGERKEY/INTEGERDUP/REVERSEDUP; доступны глубина вложенности (dupsort_depthmask) и расширенный подсчёт (count_ex)."
+    user_benefit: "Компактное представление связей «один ко многим» (индексы, корзины, временные ряды) без отдельных таблиц-связок и кастомных компараторов."
+    api: ["MDBX_DUPSORT", "MDBX_DUPFIXED", "MDBX_INTEGERKEY", "MDBX_INTEGERDUP", "MDBX_REVERSEDUP", "mdbx_dbi_dupsort_depthmask", "mdbx_cursor_count_ex"]
+    status: verified
+    sources:
+      - label: "doxygen: Tables"
+        url: "https://libmdbx.dqdkfa.ru/doxygen/group__c__dbi.html"
+      - label: "doxygen: CRUD"
+        url: "https://libmdbx.dqdkfa.ru/doxygen/group__c__crud.html"
+  - id: b14-troika-meta
+    title: "Три мета-страницы и надёжное двухфазное обновление"
+    lmdb_baseline: "LMDB использует две мета-страницы, обновление которых содержит тонкие гонки и не всегда даёт атомарный снапшот."
+    libmdbx_improvement: "Применены три мета-страницы («Troika»): два устойчивых снапшота плюс хвостовой слот для перезаписи с минимумом барьеров памяти; двухфазное обновление исключает «полузаписанную» мету."
+    user_benefit: "Атомарные снапшоты и устойчивое восстановление при минимальных накладных расходах на коммит."
+    api: ["mdbx_env_info_ex"]
+    since: "0.12.1"
+    status: verified
+    sources:
+      - label: "ChangeLog"
+        url: "https://github.com/erthink/libmdbx/blob/master/ChangeLog.md"
+      - label: "doxygen: Opening & Closing"
+        url: "https://libmdbx.dqdkfa.ru/doxygen/group__c__opening.html"
+  - id: b14-waf
+    title: "Управление амплификацией записи (WAF)"
+    lmdb_baseline: "В LMDB амплификация записи (WAF) определяется только стратегией слияния страниц и не настраивается."
+    libmdbx_improvement: "Добавлены опции управления WAF: предпочтение уже изменённой страницы при слиянии (prefer_waf_insteadof_balance), порог слияния (merge_threshold), лимиты грязных страниц и спилла, loose-страницы и refund."
+    user_benefit: "Массовые удаления и обновления записывают меньше страниц (до ~50% экономии), а поведение памяти/диска настраивается под сценарий."
+    api: ["MDBX_opt_prefer_waf_insteadof_balance", "MDBX_opt_merge_threshold", "MDBX_opt_spill_max_denominator", "MDBX_opt_txn_dp_limit"]
+    status: verified
+    sources:
+      - label: "doxygen: Settings"
+        url: "https://libmdbx.dqdkfa.ru/doxygen/group__c__settings.html"
+      - label: "ChangeLog"
+        url: "https://github.com/erthink/libmdbx/blob/master/ChangeLog.md"
+  - id: b14-recompaction-defrag
+    title: "Рекомпактификация и дефрагментация"
+    lmdb_baseline: "LMDB не предоставляет средств онлайн-дефрагментации; файл может оставаться раздутым после интенсивных обновлений."
+    libmdbx_improvement: "Освобождённый хвост возвращается в оборот автоматически (refund/implicit shrink), а явная дефрагментация (mdbx_env_defrag) переносит живые страницы к началу файла по циклам с контролем целей и времени."
+    user_benefit: "Файл остаётся компактным без остановки работы: пространство возвращается, локальность и плотность размещения улучшаются."
+    api: ["mdbx_env_defrag", "mdbx_env_set_geometry"]
+    since: "0.14.x"
+    status: verified
+    sources:
+      - label: "doxygen: Extra operations"
+        url: "https://libmdbx.dqdkfa.ru/doxygen/group__c__extra.html"
+      - label: "ChangeLog"
+        url: "https://github.com/erthink/libmdbx/blob/master/ChangeLog.md"
+  - id: b14-lazy-search-cache
+    title: "Ленивый кэш поиска повторяющихся ключей"
+    lmdb_baseline: "В LMDB каждый get выполняет полный спуск по B+tree даже для горячих ключей."
+    libmdbx_improvement: "Добавлен кэш повторных чтений (mdbx_cache_get): адрес значения сохраняется вместе с версионными метками, и повторный поиск завершается раньше, как только встречается неизменённая страница; статусы HIT/CONFIRMED/REFRESHED/DIRTY/BEHIND/UNABLE/RACE обеспечивают корректность."
+    user_benefit: "Повторные чтения «горячих» ключей ускоряются на порядки, особенно при большой высоте дерева."
+    api: ["mdbx_cache_get", "mdbx_cache_get_SingleThreaded"]
+    since: "0.14.x"
+    status: verified
+    sources:
+      - label: "doxygen: CRUD"
+        url: "https://libmdbx.dqdkfa.ru/doxygen/group__c__crud.html"
+      - label: "ChangeLog"
+        url: "https://github.com/erthink/libmdbx/blob/master/ChangeLog.md"
+  - id: b14-range-estimation
+    title: "Оценка объёма диапазонных запросов"
+    lmdb_baseline: "Для оценки числа элементов между ключами в LMDB требуется сканирование или внешние счётчики."
+    libmdbx_improvement: "Добавлены эвристические оценки расстояния и объёма диапазона по общим страницам стеков курсоров (estimate_range/distance/move) с маркером открытых диапазонов MDBX_EPSILON."
+    user_benefit: "Планировщики запросов и пагинация получают оценку селективности без сканирования данных."
+    api: ["mdbx_estimate_range", "mdbx_estimate_distance", "mdbx_estimate_move", "MDBX_EPSILON"]
+    status: verified
+    sources:
+      - label: "doxygen: Range query estimation"
+        url: "https://libmdbx.dqdkfa.ru/doxygen/group__c__rqest.html"
+  - id: b14-parking-hsr
+    title: "Парковка читателей и обработка «долгих читателей» (HSR)"
+    lmdb_baseline: "В LMDB долгоживущая read-транзакция блокирует переиспользование страниц, и штатного механизма её разрешения нет."
+    libmdbx_improvement: "Читательскую транзакцию можно припарковать (освободить слот, mdbx_txn_park/unpark); при нехватке места вызывается колбэк Handle-Slow-Readers (mdbx_env_set_hsr), который управляет выселением припаркованных читателей или согласием на рост файла."
+    user_benefit: "Долгие логические чтения (коннекторы, обработчики) не «морозят» GC; конфликт читатель/писатель разрешается осознанно, а не ошибкой записи."
+    api: ["mdbx_txn_park", "mdbx_txn_unpark", "mdbx_env_set_hsr"]
+    since: "0.13.x"
+    status: verified
+    sources:
+      - label: "doxygen: Transactions"
+        url: "https://libmdbx.dqdkfa.ru/doxygen/group__c__transactions.html"
+      - label: "doxygen: Extra operations"
+        url: "https://libmdbx.dqdkfa.ru/doxygen/group__c__extra.html"
+  - id: b14-platform-support
+    title: "Поддержка платформ и переносимость формата"
+    lmdb_baseline: "LMDB нацелена преимущественно на классические POSIX-платформы; ряд проверок конкурентности зависит от конкретной ОС."
+    libmdbx_improvement: "Поддерживаются Linux, Windows, macOS/iOS, Android, Harmony OS, Haiku, BSD-семейство, Solaris и другие системы; формат БД одинаков для 32- и 64-битных сборок и зависит только от endianness; слабые модели памяти обрабатываются аккуратными атомиками."
+    user_benefit: "Одна и та же база и код переносятся между платформами и разрядностями без конвертации и пересборки формата."
+    api: []
+    status: verified
+    sources:
+      - label: "README"
+        url: "https://github.com/erthink/libmdbx/blob/master/README.md"
+      - label: "doxygen: Opening & Closing"
+        url: "https://libmdbx.dqdkfa.ru/doxygen/group__c__opening.html"
+unverified: []
