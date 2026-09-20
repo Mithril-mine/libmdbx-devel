@@ -182,6 +182,25 @@ TEST(ut_put_flags, put_multiple_samelength_modes) {
   mdbx::env::remove("test-put-flags");
 }
 
+TEST(ut_put_flags, put_multiple_samelength_iovlen_on_keyexist) {
+  auto env = make_env("test-put-flags");
+  auto txn = env.start_write();
+  auto table = txn.create_map("table", mdbx::key_mode::usual, mdbx::value_mode::multi_samelength);
+
+  const uint32_t data[4] = {21, 22, 23, 24};
+  const uint32_t extra[3] = {25, 26, 27};
+  EXPECT_EQ(txn.put_multiple_samelength(table, "k1", data, 4, mdbx::insert_unique), 4u);
+
+  EXPECT_EQ(txn.put_multiple_samelength(table, "k1", extra, 3, mdbx::insert_unique, /*allow_partial=*/true), 0u)
+      << "MDBX_NOOVERWRITE|MDBX_MULTIPLE on an existing key must report ZERO written items, "
+         "not the input count";
+  EXPECT_EQ(txn.get_map_stat(table).ms_entries, 4u) << "no item may be added to the existing key";
+
+  txn.commit();
+  env.close();
+  mdbx::env::remove("test-put-flags");
+}
+
 TEST(ut_put_flags, put_multiple_samelength_strict_failure) {
   auto env = make_env("test-put-flags");
   auto txn = env.start_write();

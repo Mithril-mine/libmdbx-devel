@@ -19,21 +19,20 @@
 /// \author Леонид Юрьев aka Leonid Yuriev <leo@yuriev.ru>
 /// \date 2015-2026
 
-/* KNOWN-BUG REPRODUCER (WIP, not wired into CTest yet).
+/* REGRESSION REPRODUCER (standalone diagnostic, not wired into CTest).
  *
- * Minimal plain-C reproducer of the MDBX_MULTIPLE batch-insert defect:
+ * Plain-C reproducer of the fixed MDBX_MULTIPLE batch-insert defect:
  * when mdbx_put(MDBX_NOOVERWRITE | MDBX_MULTIPLE) hits an already existing
- * key, it returns MDBX_KEYEXIST (correct), but does NOT reset
- * `data[1].iov_len`, so the caller sees the *input* count instead of the
- * number of items actually stored (zero).
+ * key it returns MDBX_KEYEXIST and MUST report zero written items in
+ * `data[1].iov_len`.
  *
- * Expected: done == 0 on MDBX_KEYEXIST.
- * Actual:   done == input count (e.g. 3).
+ * Fixed by initializing the MULTIPLE batch bookkeeping before ALL early-exit
+ * paths of cursor_put() (the previous `return MDBX_KEYEXIST` on a duplicate
+ * key preceded `*batch_dupfix_done = 0`, leaving the input count behind).
  *
- * Root cause hypothesis: early `return MDBX_KEYEXIST` in cursor_put()
- * (src/cursor.c, "duplicate key" branch under `if (exact)`) happens BEFORE
- * the MULTIPLE bookkeeping `*batch_dupfix_done = 0` is set up later in the
- * same function, so `data[1].iov_len` is left at its input value.
+ * Expected: rc == MDBX_KEYEXIST and done == 0.
+ * Regression: run with the fixed tree -> both hold; the buggy tree reports
+ * done == input count (e.g. 3).
  *
  * Build:  gcc -I. tests/probe-mdbx-multiple-iovlen.c -o /tmp/probe \
  *         -L<build> -lmdbx-static -lpthread
@@ -89,10 +88,5 @@ int main(void) {
     fprintf(stderr, "unexpected rc: %s\n", mdbx_strerror(rc));
     return 1;
   }
-  if (rc == MDBX_KEYEXIST) {
-    fprintf(stderr, "BUG CONFIRMED if done!=0; expected done==0, got input count\n");
-    return (0);
-  }
-  (void)0;
-  return 0;
+  return (0);
 }
