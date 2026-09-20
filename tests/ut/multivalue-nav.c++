@@ -31,11 +31,11 @@ mdbx::env_managed make_env(const char *name) {
 
 void seed_multi(mdbx::txn_managed &txn, mdbx::map_handle map) {
   for (int key = 0; key < 3; ++key) {
-    char k[8];
+    char k[16];
     snprintf(k, sizeof(k), "k%d", key);
     const int nvals = 3 - key; /* k0 -> 3 values, k1 -> 2 values, k2 -> 1 value */
     for (int v = 0; v < nvals; ++v) {
-      char val[8];
+      char val[16];
       snprintf(val, sizeof(val), "v%d", v);
       txn.upsert(map, mdbx::slice(k, strlen(k)), mdbx::slice(val, strlen(val)));
     }

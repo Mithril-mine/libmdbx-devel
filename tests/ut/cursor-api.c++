@@ -25,7 +25,7 @@
 namespace {
 void fill(mdbx::txn_managed &txn, mdbx::map_handle map, size_t count = 1000) {
   for (size_t i = 0; i < count; ++i) {
-    char key[16], val[16];
+    char key[32], val[32];
     snprintf(key, sizeof(key), "%08zu", i);
     snprintf(val, sizeof(val), "v%06zu", i);
     txn.upsert(map, mdbx::slice(key, strlen(key)), mdbx::slice(val, strlen(val)));
