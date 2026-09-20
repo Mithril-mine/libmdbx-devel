@@ -1,0 +1,27 @@
+name: debug-sysraminfo
+
+# TEMPORARY workflow for debugging the macOS sysraminfo ENOTSUP issue.
+# Builds only the diagnostic test and runs it directly so its output
+# reaches the workflow log. To be removed after the root cause is fixed.
+
+on:
+  workflow_dispatch:
+
+jobs:
+  diag:
+    runs-on: macos-15
+    steps:
+    - uses: actions/checkout@v7
+      with:
+        fetch-depth: 0
+        fetch-tags: true
+    - name: build-diag
+      shell: bash
+      run: |
+        cmake -S . -B @diag-build -DCMAKE_BUILD_TYPE=Release -DMDBX_BUILD_CXX:BOOL=ON \
+          -DMDBX_ENABLE_TESTS=ON
+        cmake --build @diag-build --target ut_sysraminfo-diag -j2
+    - name: run-diag
+      shell: bash
+      run: |
+        ./@diag-build/ut_sysraminfo-diag --gtest_filter=ut_sysraminfo_diag.probe
