@@ -630,12 +630,197 @@ mdbx::<подсистема>::<фаза>::<событие>
 
 ---
 
+## 3.6. Партия 3: CRUD и курсоры
+
+> База для SC-27/SC-32 — таблица «Quick Reference» семантики put/del в `mdbx.h`
+> (строки ~100–150): матрицу нужно превратить в табличный тест, а не в набор «случайных» кейсов.
+
+### SC-27. Семантика put/del по матрице (single vs multi-value)
+
+**Область:** c_crud. Дыра: тестов матрицы нет; есть точечные (upsert_alldups, dupfix_multiple).
+
+**Сценарий:**
+1. Для обычной таблицы пройти всю матрицу put: `MDBX_NOOVERWRITE` (вставка / `MDBX_KEYEXIST`
+   с возвратом старого значения), `MDBX_UPSERT` (вставка/обновление), `MDBX_CURRENT`
+   (обновление существующего / `MDBX_NOTFOUND` если нет).
+2. Для dupsort-таблицы добавить ветки: `MDBX_UPSERT` добавляет значение;
+   `MDBX_UPSERT|MDBX_ALLDUPS` заменяет все значения одним;
+   `MDBX_CURRENT` при нескольких значениях → `MDBX_EMULTIVAL`.
+3. `mdbx_del`: удаление по значению (нет ключа → `MDBX_NOTFOUND`; нет пары → `MDBX_NOTFOUND`);
+   `MDBX_ALLDUPS` удаляет все значения; `MDBX_NODUPDATA` — отдельное значение.
+4. Сверка результата каждого шага с «эталонной» моделью (независимый справочник).
+
+**Ожидания:** каждое правило матрицы выполняется буквально; ошибки — с точными кодами.
+
+**Пробники:**
+- `mdbx::crud::put` (flags, key_present, n_dups, rc).
+- `mdbx::crud::del` (mode=by_key|by_value|alldups, rc).
+- `mdbx::crud::emultival` (попадание в неоднозначную ветку).
+
+### SC-28. mdbx_replace: получить/обновить/удалить/извлечь
+
+**Область:** c_crud (replace). Дыра: прямых тестов replace нет.
+
+**Сценарий:**
+1. `mdbx_replace(txn, dbi, key, new_data=NULL, old_value=NULL, flags=0)` — «извлечь» (прочитать и
+   удалить): значение возвращается, ключ удаляется.
+2. Обновление с получением предыдущего значения (`old_value` заполняется).
+3. Обновление конкретного мультизначения: `MDBX_CURRENT|MDBX_NOOVERWRITE` + `old_value` задаёт
+   искомую пару; не найдено → `MDBX_NOTFOUND`.
+4. Удаление конкретного мультизначения через `new_data=NULL` (см. Quick Reference).
+
+**Ожидания:** replace консистентен с матрицей put/del; возврат предыдущего значения корректен
+(в т.ч. для больших значений — без лишних копий).
+
+**Пробники:**
+- `mdbx::crud::replace` (mode=get|update|delete|extract, old_size, rc).
+
+### SC-29. reserve, append, samelength
+
+**Область:** c_crud (reserve, append fast-path). Частично покрыто (reverse_insertions, batch).
+
+**Сценарий:**
+1. `MDBX_RESERVE` + `mdbx_put`: вернуть указатель на зарезервированные данные, заполнить,
+   закоммитить → значение читается целиком; без финализации резерв не фиксируется.
+2. `MDBX_APPEND` для предсортированных ключей: fast-path вставки, `MDBX_KEYEXIST` при нарушении
+   порядка; `MDBX_APPENDDUP` для мультизначений.
+3. put/seek `samelength`: проверка веток «та же длина» (dupfix-путь).
+
+**Ожидания:** append не ломает порядок; резерв не «течёт» (нет частичных значений);
+производительность path — без лишних CoW (наблюдаемо через page-op статистику).
+
+**Пробники:**
+- `mdbx::crud::append` (fast_path, sorted?, rc).
+- `mdbx::crud::reserve` (n, ptr) — выделение буфера резерва.
+
+### SC-30. get_ex и get_equal_or_great
+
+**Область:** c_crud (чтение). Дыра: точечные тесты есть только частично.
+
+**Сценарий:**
+1. `mdbx_get_ex`: `values_count` для dupsort-таблиц (число значений под ключом), корректность для
+   обычных таблиц; `MDBX_NOTFOUND` для отсутствующего ключа.
+2. `mdbx_get_equal_or_great`: точное совпадение возвращает его; иначе — следующий больший;
+   после последнего ключа — `MDBX_NOTFOUND`.
+3. Взаимодействие со снапшотом: читатель видит стабильную картину при параллельных коммитах.
+
+**Ожидания:** семантика «equal or great» и счётчиков значений соответствуют документации.
+
+**Пробники:**
+- `mdbx::crud::get_ex` (n_vals, mode=exact|ge).
+
+### SC-31. MDBX_MULTIPLE: пакетная работа с dupfix
+
+**Область:** c_crud (MULTIPLE). Частично покрыто dupfix_multiple.c++; расширить.
+
+**Сценарий:**
+1. Вставить пакет фиксированных значений через `MDBX_MULTIPLE` (datalen кратен размеру).
+2. Прочитать пакет `MDBX_GET_MULTIPLE`/`MDBX_SEEK_AND_GET_MULTIPLE`; итерация по пакету,
+   границы (неполный хвост, пустой пакет).
+3. `put_multiple_samelength`: ошибки при несоответствии длин (`MDBX_EINVAL`).
+
+**Ожидания:** пакеты читаются/пишутся без потерь; length-контракт строгий.
+
+**Пробники:**
+- `mdbx::crud::multiple` (op=put|get|seek, n_items, bytes).
+
+### SC-32. Матрица move_operation против полного скана
+
+**Область:** c_cursors (все move-операции). Частично покрыто doubtful_positioning; расширить
+на dupfix и пары ключ-значение.
+
+**Сценарий:**
+1. Для каждой `MDBX_cursor_op` (FIRST/LAST/NEXT/PREV/SET/SET_KEY/SET_RANGE/SET_LOWERBOUND/
+   SET_UPPERBOUND/GET_CURRENT/GET_BOTH/GET_BOTH_RANGE/PREV_NODUP/NEXT_NODUP/...,
+   включая PAIR-версии <,<=,==,>=,>) — сверка позиции с независимым эталоном (полный скан).
+2. Отдельно для dupsort (вложенные значения) и dupfix (фиксированная длина).
+3. eof-семантика: `MDBX_ENODATA` после последнего; soft/hard eof (последняя запись vs за концом).
+
+**Ожидания:** результаты совпадают с эталоном для всех опций; никакая op не «молчит».
+
+**Пробники:**
+- `mdbx::cursor::move` (op, rc, position_kind).
+- `mdbx::cursor::eof` (soft|hard).
+
+### SC-33. Навигация по мультизначениям и count_ex
+
+**Область:** c_cursors (dupsort). Частично покрыто multivalue-nav; расширить глубину.
+
+**Сценарий:**
+1. `mdbx_cursor_count_ex` (значения + статистика вложенного дерева) для суб-страницы и вложенного
+   дерева; `count_ex` для обычной таблицы.
+2. `on_first_dup`/`on_last_dup`, `seek_exact` по паре; навигация внутри вложенного дерева
+   (PREV_DUP/NEXT_DUP), выход за границы.
+3. `mdbx_dbi_dupsort_depthmask`: глубина вложенности для ключа (mask) согласована с фактическим
+   деревом.
+
+**Ожидания:** число значений и навигация согласованы; depthmask корректен.
+
+**Пробники:**
+- `mdbx::cursor::dup::count` (n, mode=subpage|tree).
+- `mdbx::cursor::dup::depth` (mask).
+
+### SC-34. put/del через курсор в мультизначениях
+
+**Область:** c_cursors (cursor_put/cursor_del). Частично покрыто; расширить EMULTIVAL-пути.
+
+**Сценарий:**
+1. `mdbx_cursor_put` с `MDBX_CURRENT` в мультизначении — обновление текущей записи.
+2. `mdbx_cursor_put` с `MDBX_NODUPDATA` — вставка уникального значения, `MDBX_KEYEXIST` при
+   дубликате.
+3. `mdbx_cursor_del` с `MDBX_CURRENT` — только текущее значение; `MDBX_ALLDUPS` — все значения
+   ключа (с пересчётом `count_ex`).
+4. Курсор на вложенном дереве после удаления — позиция корректна.
+
+**Ожидания:** позиция и счётчики согласованы после каждой операции.
+
+**Пробники:**
+- `mdbx::cursor::put` (flags, n_dups_before/after).
+- `mdbx::cursor::del` (mode=current|alldups).
+
+### SC-35. bind/unbind и повторное использование курсоров
+
+**Область:** c_cursors (жизненный цикл). Частично cursor_closing.c++; расширить.
+
+**Сценарий:**
+1. `mdbx_cursor_create/bind/unbind`: привязка к таблице в транзакции, перепривязка,
+   unbind и безопасный повторный bind; невалидные сочетания → коды ошибок.
+2. Один курсор на таблицу в двух разных read-транзакциях (multi-cursor) — независимость позиций.
+3. Неявное закрытие при завершении транзакции; «воскресшие» (использованные после close) —
+   `MDBX_BAD_TXN`/`MDBX_EINVAL`.
+
+**Ожидания:** никаких UAF; перепривязка не портит позиции других курсоров.
+
+**Пробники:**
+- `mdbx::cursor::bind` (dbi, txn, state).
+- `mdbx::cursor::reuse` (поколение).
+
+### SC-36. scan, distribute, scroll: крайние случаи
+
+**Область:** c_cursors (scan/distribute/scroll). Частично covered distance_scroll_distribute;
+расширить пустыми таблицами и eof.
+
+**Сценарий:**
+1. `mdbx_cursor_scan[_from]` на пустой таблице / после последней записи / с фильтром-колбэком
+   (stop/continue/abort).
+2. `mdbx_cursor_distribute` с пустым вектором (issue_gh0033 — уже есть), большим числом
+   курсоров-«доноров», пересекающимися диапазонами.
+3. `scroll`/`distance` при hard-eof, между разными таблицами (ошибка), одинаковые позиции.
+
+**Ожидания:** пустые/граничные случаи не падают; результаты согласованы с эталоном.
+
+**Пробники:**
+- `mdbx::cursor::scan` (filter_rc, n_matched).
+- `mdbx::cursor::distribute` (n_donors, n_moved).
+
+---
+
 ## 4. Следующие партии (план)
 
 | Партия | Области |
 | --- | --- |
 | 2 | ✅ dbi (SC-17..21), settings (SC-22..23), debug (SC-24), rqest (SC-25), extra reader-диагностика (SC-26) |
-| 3 | `c_crud` полный (reserve, append, upsert семантика, NOOVERWRITE/ALLDUPS, MDBX_MULTIPLE), `c_cursors` (все move_operation + count_ex + dupsort navigation) |
+| 3 | ✅ crud (SC-27..31), cursors (SC-32..36) |
 | 4 | `c_extra` (warmup, dbi_sequence edges), C++ API (исключения «код→класс», fluent-параметры, managed-семантика, cache_get C++ обёртки) |
 | 5 | value2key/key2value (числа, float/double, JSON-integer; ord/rev), deferred-инвалидация, воскрешение после fork |
 | 6 | Платформенные ветки (lck-бэкенды: POSIX/SysV/semaphore, Windows LockFileEx; WRITEMAP; MAPASYNC legacy; WSL1 ENOLCK) |
