@@ -117,7 +117,7 @@ static int basal_start_locked(MDBX_txn *txn, unsigned flags) {
     return MDBX_EPERM;
 #endif /* Windows */
 
-  txn->flags = flags & ~txn_rw_already_locked;
+  txn->flags = flags & ~(txn_rw_already_locked | MDBX_TXN_TRY);
   txn->nested = nullptr;
   txn->wr.loose_pages = nullptr;
   txn->wr.loose_count = 0;
