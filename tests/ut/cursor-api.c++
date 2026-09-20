@@ -75,9 +75,8 @@ TEST(ut_cursor_api, count_multivalue) {
   auto txn = env.start_write();
   auto map = txn.create_map("multi", mdbx::key_mode::usual, mdbx::value_mode::multi);
   for (int i = 0; i < 5; ++i) {
-    char val[8];
-    snprintf(val, sizeof(val), "v%d", i);
-    txn.upsert(map, "key", val);
+    const std::string value = "v" + std::to_string(i);
+    txn.upsert(map, "key", mdbx::slice(value));
   }
   auto cur = txn.open_cursor(map);
   cur.to_first();
