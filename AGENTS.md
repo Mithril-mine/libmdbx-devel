@@ -14,16 +14,20 @@
    obra/superpowers, MIT): brainstorming, writing-plans, executing-plans, TDD,
    systematic-debugging, code-review skills.
  - Segmented test execution (choose by change area and risk; do NOT run the whole
-   corpus for superficial changes). Unit tests are labeled by area: `ut-api`,
-   `ut-dbi`, `ut-cursor`, `ut-txn`, `ut-env`, `ut-gc`, and slow stress tests carry
-   the extra label `ut-heavy`:
+   corpus for superficial changes). Unit tests use a hierarchical label tree:
+   every test carries the root `ut` label plus area labels `ut.api`, `ut.cxx`,
+   `ut.env`, `ut.dbi`, `ut.txn`, `ut.cursor`, `ut.gc`, `ut.issues` (a test may
+   belong to several branches and runs once), and slow stress tests carry the
+   orthogonal attribute `ut.heavy`:
 
    - P0 targeted:  `ctest -R '^<test>$'` (seconds) — for the specific change.
-   - P1 fast ut:   `ctest -L '^ut$' -LE '^ut-heavy$'` (~1.5 min) — default for
+   - P1 fast ut:   `ctest -L 'ut\.' -LE 'ut\.heavy'` (~1.5 min) — default for
      routine changes; run on both compilers when headers are touched.
-   - P2 full ut:   `ctest -L '^ut$'` (~3.5 min) — when changing ut-covered areas.
-   - P3 full local:`ctest` (+ smoke, ~10+ min) — only when touching the core (src/).
-   - P4 milestone: asan/ubsan/stochastic + GitHub CI — by explicit approval.
+   - P2 full ut:   `ctest -L 'ut\.'` (~3.5 min) — when changing ut-covered areas.
+   - P3 domain:    `ctest -L 'ut\.dbi'` / `ut\.cxx` / `ut\.cursor` ... — for a
+     specific area, including all its subtree branches.
+   - P4 full local:`ctest` (+ smoke, ~10+ min) — only when touching the core (src/).
+   - P5 milestone: asan/ubsan/stochastic + GitHub CI — by explicit approval.
    See `skynet/superpowers/verification-before-completion/SKILL.md`.
  - CI policy: SourceCraft CI quota is exhausted. GitHub CI is slow and expensive —
    trigger it only at milestones (agent proposal + user confirmation / explicit
