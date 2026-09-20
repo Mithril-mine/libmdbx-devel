@@ -99,6 +99,28 @@ TEST(ut_estimate, range_sign_and_monotonicity) {
   mdbx::env::remove("test-estimate");
 }
 
+TEST(ut_estimate, dupsort_range_with_values) {
+  auto env = make_env("test-estimate");
+  auto txn = env.start_write();
+  auto multi = txn.create_map("multi", mdbx::key_mode::usual, mdbx::value_mode::multi);
+  txn.upsert(multi, "k05", "v1");
+  txn.upsert(multi, "k05", "v2");
+  txn.upsert(multi, "k05", "v3");
+  txn.upsert(multi, "k07", "v5");
+  txn.upsert(multi, "k07", "v6");
+
+  const mdbx::pair across_from("k05", "v1");
+  const mdbx::pair across_to("k07", "v6");
+  EXPECT_GT(txn.estimate(multi, across_from, across_to), 0)
+      << "pair-based estimate across keys counts the whole range";
+  EXPECT_LT(txn.estimate(multi, across_to, across_from), 0)
+      << "reversed pair range gives a negative estimate";
+
+  txn.commit();
+  env.close();
+  mdbx::env::remove("test-estimate");
+}
+
 TEST(ut_estimate, cursor_move_estimates) {
   auto env = make_env("test-estimate");
   auto txn = env.start_write();
