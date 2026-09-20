@@ -182,6 +182,48 @@ TEST(ut_put_flags, put_multiple_samelength_modes) {
   mdbx::env::remove("test-put-flags");
 }
 
+TEST(ut_put_flags, replace_and_get_equal_or_great) {
+  auto env = make_env("test-put-flags");
+  auto txn = env.start_write();
+  auto map = txn.create_map("table");
+
+  txn.insert(map, "k1", "old-value");
+  txn.insert(map, "k3", "three");
+
+  {
+    const auto old = txn.replace<mdbx::buffer<>>(map, "k1", "new-value");
+    EXPECT_EQ(old, mdbx::slice("old-value"));
+    EXPECT_EQ(txn.get(map, "k1"), mdbx::slice("new-value"));
+  }
+
+  {
+    mdbx::slice reservation;
+    const auto prev = txn.replace_reserve<mdbx::buffer<>>(map, "k1", 3, reservation);
+    EXPECT_EQ(prev, mdbx::slice("new-value"));
+    ASSERT_EQ(reservation.size(), 3u);
+    memcpy(reservation.byte_ptr(), "XYZ", 3);
+    EXPECT_EQ(txn.get(map, "k1"), mdbx::slice("XYZ"));
+  }
+
+  {
+    const auto exact = txn.get_equal_or_great(map, "k1");
+    EXPECT_TRUE(exact.done);
+    EXPECT_EQ(exact.key, mdbx::slice("k1"));
+    EXPECT_EQ(exact.value, mdbx::slice("XYZ"));
+
+    const auto nearest = txn.get_equal_or_great(map, "k0");
+    EXPECT_FALSE(nearest.done) << "k0 is absent, lower bound lands on the next key";
+    EXPECT_EQ(nearest.key, mdbx::slice("k1"));
+
+    EXPECT_THROW((void)txn.get_equal_or_great(map, "k9"), mdbx::not_found)
+        << "no equal-or-greater key after the last one";
+  }
+
+  txn.commit();
+  env.close();
+  mdbx::env::remove("test-put-flags");
+}
+
 TEST(ut_put_flags, put_multiple_samelength_iovlen_on_keyexist) {
   auto env = make_env("test-put-flags");
   auto txn = env.start_write();
