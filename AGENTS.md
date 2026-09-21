@@ -43,6 +43,22 @@
    - P4 full local:`ctest` (+ smoke, ~10+ min) — only when touching the core (src/).
    - P5 milestone: asan/ubsan/stochastic + GitHub CI — by explicit approval.
    See `skynet/superpowers/verification-before-completion/SKILL.md`.
+ - Impact-based selection: instead of hand-picking the level, map changed paths
+   to the affected labels with `tests/select-tests.sh` (build dir: run the
+   printed `ctest -L ... -LE 'ut\.heavy'`, or `--run` to execute). Sources under
+   `tests/ut/<area>/` map to their `ut.<area>` label; core (`src/`, `mdbx.h`,
+   `mdbx++/`) pulls in `ut\.|smoke-t1|smoke-t2`; build files (`cmake/`,
+   `CMakeLists.txt`, `GNUmakefile`) pull in smoke + full ut.
+ - mdbx_test (`tests/framework/`) is STOCHASTIC — a fixed `--prng-seed` gives a
+   reproducible per-actor operation sequence (multi-process interleaving is not).
+   Use bounded `--nops` and fixed seeds for fast profiles; attach the seed to any
+   bug report. Details: `tests/mdbx-test-options.md`.
+ - Tiered smoke via CTest labels and GNUmakefile targets (`make smoke-t1/t2/t3`):
+   - T1 `smoke-t1` — fast deterministic smoke, seconds, fixed seeds (`--nops`,
+     `+nosync-safe`), never long iterations.
+   - T2 `smoke-t2` — medium smoke (the quick-smoke family).
+   - T3 `smoke-t3` — long/full stochastic runs (milestone/nightly; needs
+     `cmake-stochastic-build`/`MDBX_ENABLE_LONG_TESTS`).
  - CI policy: SourceCraft CI quota is exhausted. GitHub CI is slow and expensive —
    trigger it only at milestones (agent proposal + user confirmation / explicit
    instruction), not for routine commits.
