@@ -1,0 +1,133 @@
+{
+  "mcpServers": {
+    "sourcecraft": {
+      "type": "streamable-http",
+      "url": "https://api.sourcecraft.tech/mcp",
+      "disabled": false,
+      "headers": {},
+      "disabledTools": [],
+      "timeout": 60,
+      "alwaysAllow": [],
+      "enabledTools": [
+        "ListIssuesAssignedToAuthenticatedUser",
+        "ListRepositoryIssues",
+        "CreateIssue",
+        "GetIssue",
+        "DeleteIssue",
+        "UpdateIssue",
+        "CreateIssueComment",
+        "GetIssueComment",
+        "DeleteIssueComment",
+        "UpdateIssueComment",
+        "CreateLabel",
+        "DeleteLabel",
+        "GetLabels",
+        "RemoveLabels",
+        "AddLinkedPRs",
+        "GetLinkedPRs",
+        "RemoveLinkedPRs",
+        "ListMyPullRequests",
+        "ListRepositoryPullRequests",
+        "CreatePullRequest",
+        "GetPullRequest",
+        "UpdatePullRequest",
+        "DiscardPullRequest",
+        "PublishPullRequest",
+        "SetDecision",
+        "MergePullRequest",
+        "GetMergeChecks",
+        "ListPullRequestComments",
+        "ListPullRequestFiles",
+        "CreatePullRequestComment",
+        "GetPullRequestComment",
+        "DeletePullRequestComment",
+        "UpdatePullRequestComment",
+        "RunWorkflows",
+        "ListRuns",
+        "GetRun",
+        "GetWorkflow",
+        "GetCubeArtifacts",
+        "GetCubeLogs"
+      ]
+    },
+    "filesystem": {
+      "type": "stdio",
+      "command": "docker",
+      "args": [
+        "run",
+        "-i",
+        "--rm",
+        "--mount",
+        "type=bind,src=/,dst=/projects",
+        "mcp/filesystem",
+        "/projects"
+      ],
+      "disabledTools": [],
+      "alwaysAllow": [
+        "read_file",
+        "read_multiple_files",
+        "write_file",
+        "edit_file",
+        "create_directory",
+        "list_directory",
+        "directory_tree",
+        "move_file",
+        "search_files",
+        "get_file_info",
+        "list_allowed_directories"
+      ]
+    },
+    "sequentialthinking": {
+      "type": "stdio",
+      "command": "docker",
+      "args": [
+        "run",
+        "--rm",
+        "-i",
+        "mcp/sequentialthinking"
+      ],
+      "disabledTools": [],
+      "alwaysAllow": [
+        "sequentialthinking"
+      ]
+    },
+    "memory": {
+      "type": "stdio",
+      "command": "docker",
+      "args": [
+        "run",
+        "-i",
+        "-v",
+        "mcp-memory:/app/dist",
+        "--rm",
+        "mcp/memory"
+      ],
+      "disabledTools": [],
+      "alwaysAllow": [
+        "create_entities",
+        "create_relations",
+        "add_observations",
+        "delete_entities",
+        "delete_observations",
+        "delete_relations",
+        "read_graph",
+        "search_nodes",
+        "open_nodes"
+      ]
+    },
+    "fetch": {
+      "type": "stdio",
+      "command": "docker",
+      "args": [
+        "run",
+        "-i",
+        "--rm",
+        "mcp/fetch"
+      ],
+      "disabledTools": [],
+      "alwaysAllow": [
+        "fetch"
+      ]
+    }
+  }
+}
