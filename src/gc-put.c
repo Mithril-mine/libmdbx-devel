@@ -1416,6 +1416,8 @@ static int gc_fill_returned(MDBX_txn *txn, gcu_t *ctx) {
 
 int gc_update(MDBX_txn *txn, gcu_t *ctx) {
   TRACE("\n>>> @%" PRIaTXN, txn->txnid);
+  /* USDT mdbx:commit__gc_update__begin (txnid, loop): see skynet/probes.md */
+  MDBX_DTRACE2(commit__gc_update__begin, (uint64_t)txn->txnid, (uint32_t)ctx->loop);
   MDBX_env *const env = txn->env;
   ctx->cursor.next = txn->cursors[FREE_DBI];
   txn->cursors[FREE_DBI] = &ctx->cursor;
@@ -1548,6 +1550,8 @@ bailout:
   env->lck->pgops.gc_prof.wloops += (uint32_t)ctx->loop;
 #endif /* MDBX_ENABLE_PROFGC */
   TRACE("<<< %u loops, rc = %d\n", ctx->loop, err);
+  /* USDT mdbx:commit__gc_update__end (txnid, rc): see skynet/probes.md */
+  MDBX_DTRACE2(commit__gc_update__end, (uint64_t)txn->txnid, (int32_t)err);
   return err;
 }
 

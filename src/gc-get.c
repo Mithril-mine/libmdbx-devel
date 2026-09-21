@@ -946,6 +946,7 @@ pgr_t gc_alloc_ex(const MDBX_cursor *const mc, const size_t num, uint8_t flags) 
   eASSERT1(env, pnl_check_allocated(txn->wr.repnl, txn->geo.first_unallocated));
 
   size_t newnext;
+  MDBX_MAYBE_UNUSED bool grew = false;
   const uint64_t monotime_begin = (MDBX_ENABLE_PROFGC || (num > 1 && env->options.gc_time_limit)) ? osal_monotime() : 0;
   struct monotime_cache now_cache;
   now_cache.expire_countdown = 1 /* старт с 1 позволяет избавиться как от лишних системных вызовов когда
@@ -1381,12 +1382,19 @@ no_gc:
   }
   env->txn->geo.end_pgno = (pgno_t)aligned;
   eASSERT0(env, pgno == 0);
+  grew = true;
 
   //---------------------------------------------------------------------------
 
 done:
   ret.err = MDBX_SUCCESS;
   if (likely((flags & ALLOC_RESERVE) == 0)) {
+    /* USDT mdbx:alloc__source (pgno, mode): report page-allocation source,
+     * mode: 0=gc-reclaimed, 1=tail-of-unallocated, 2=grow-datafile.
+     * See skynet/probes.md. */
+    MDBX_DTRACE2(alloc__source,
+                 (uint64_t)(pgno ? pgno : txn->geo.first_unallocated),
+                 (uint32_t)(pgno ? 0 : (grew ? 2 : 1)));
     if (pgno) {
       eASSERT0(env, pgno + num <= txn->geo.first_unallocated && pgno >= NUM_METAS);
       eASSERT1(env, pnl_check_allocated(txn->wr.repnl, txn->geo.first_unallocated - MDBX_ENABLE_REFUND));

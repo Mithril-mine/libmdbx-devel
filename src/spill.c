@@ -207,6 +207,9 @@ __cold int spill_slowpath(MDBX_txn *const txn, MDBX_cursor *const m0, const intp
   if (!need_spill)
     goto done;
 
+  /* USDT mdbx:spill__trigger (need_spill, dirty_entries, dirty_npages): see skynet/probes.md */
+  MDBX_DTRACE3(spill__trigger, (size_t)need_spill, (size_t)dirty_entries, (size_t)dirty_npages);
+
   if (txn->flags & MDBX_WRITEMAP) {
     NOTICE("%s-spilling %zu dirty-entries, %zu dirty-npages", "msync", dirty_entries, dirty_npages);
     const MDBX_env *env = txn->env;
