@@ -60,6 +60,10 @@ but never skip the levels your change deserves.
 6. **Prefer fast tests**: when the only coverage for a behavior would be a slow (level-6)
    scenario, invest in a fast unit test instead — expanding the fast deterministic suite is a
    near-term project goal.
+7. **Evidence contract (Kaizen)**: the completion message MUST carry the validation matrix
+   (`VALIDATED: <toolchain> <level> N/N` + commands). The coordinator trusts it and will not
+   re-run your checks; a missing/thin matrix invites re-verification (waste). Only run what your
+   change actually affects (P0–P3 by area); never duplicate another agent's verification.
 
 ## Completion checklist
 

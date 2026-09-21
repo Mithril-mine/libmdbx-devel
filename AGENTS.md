@@ -48,3 +48,13 @@
  - Maintain the codebase knowledge graph (memory-MCP) per `skynet/memory-codex.md`:
    verify observations against code before acting (Gemba), refresh entities after
    significant work, record invariants/naming traps with provenance.
+ - Delivery contract (§27 protocol): deliver only locally validated results; every
+   REPORT/merge request MUST carry a validation matrix (`VALIDATED: <toolchain> <level> N/N`)
+   — the coordinator does NOT re-run your builds/tests; cross-platform risks are
+   absorbed by CI. Do not duplicate others' verification (Kaizen).
+ - Domain reviewers (§28): branches are routed to specialized reviewers
+   (`review-cmake`, `review-cpp`, `review-win`, `review-macos`) via `REV:<domain>`
+   letters; address their verdicts before requesting merge.
+ - Build-deps hygiene (§29): everything read/written during build & tests must be
+   declared in CMake/Ninja dependencies; periodic strace audit keeps nothing
+   "out of control".
