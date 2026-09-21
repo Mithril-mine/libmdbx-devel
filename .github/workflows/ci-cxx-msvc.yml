@@ -53,3 +53,14 @@ jobs:
       run: |
         . tests/ci/ci.sh "-A|${{ matrix.target }}|-T|${{ matrix.toolset }}|-DCMAKE_BUILD_TYPE=${{ matrix.build-type }}|-DCMAKE_CXX_STANDARD=${{ matrix.cxx }}" \
           "--config|${{ matrix.build-type }}" "--build-config|${{ matrix.build-type }}"
+
+    - name: upload artifacts on failure
+      if: failure()
+      uses: actions/upload-artifact@v4
+      with:
+        name: ci-${{ matrix.os }}-${{ matrix.build-type }}-cxx${{ matrix.cxx }}
+        if-no-files-found: ignore
+        path: |
+          @ci-cmake-build/Testing/Temporary/LastTest.log
+          @cmake-build/Testing/Temporary/LastTest.log
+          **/fault.db*
