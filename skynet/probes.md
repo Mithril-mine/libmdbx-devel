@@ -40,7 +40,12 @@ mdbx::<подсистема>::<фаза>::<событие>
 
 - CMake: `cmake -DENABLE_SYSTEMTAP=ON` (требует `sys/sdt.h`; проверка в
   `cmake/profile.cmake`). Опция `ENABLE_DTRACE=ON` эквивалентна на платформах
-  с `<sys/sdt.h>` (Linux, macOS, *BSD, Solaris).
+  с `<sys/sdt.h>`.
+- **Статус валидации платформ:** провалидирован только **Linux** — сборка
+  с маркерами и их проверка (`readelf -n`, секция `.note.stapsdt`) выполнены
+  на Linux/ELF. macOS/*BSD/Solaris-варианты имеют собственный инструментарий
+  DTrace и **не** производят ELF-секцию `.note.stapsdt`; они не проверялись
+  и пока считаются «по замыслу» (см. §6).
 - GNUmakefile: цель `cmake-probes-build` собирает с `-DENABLE_SYSTEMTAP=ON` и
   выводит число маркеров.
 - Без опций пробники компилируются в `__noop` (ноль-стоимость, без `.note.stapsdt`).
@@ -76,8 +81,12 @@ probe process("/path/to/libmdbx.so").mark("alloc__source") {
 ## 6. Проверка без рантайма SystemTap
 
 - `readelf -n <libmdbx.so>` показывает секцию `.note.stapsdt` со всеми маркерами.
+  Внимание: секция `.note.stapsdt` — **ELF/Linux-only**; на macOS/*BSD/Solaris
+  используется нативный инструментарий DTrace (`dtrace -l` и т.п.), проверка
+  через `readelf` там неприменима.
 - `tests/probes-check.sh <elffile>` — проверяет наличие ожидаемого набора
-  маркеров, пригоден для CI (не требует root и `stap`).
+  маркеров, пригоден для CI (не требует root и `stap`). Скрипт использует
+  `readelf`, поэтому тоже ограничен Linux/ELF-сборками.
 
 ## 7. Кандидаты следующих партий (test-scenarios §2.4)
 
