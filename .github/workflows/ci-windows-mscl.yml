@@ -51,3 +51,14 @@ jobs:
         export CC="${STUDIO_CLANG_DIR}/clang.exe" CXX="${STUDIO_CLANG_DIR}/clang++.exe" && \
         . tests/ci/ci.sh "-DCMAKE_BUILD_TYPE=${{ matrix.build-type }}|-DMDBX_BUILD_SHARED_LIBRARY:BOOL=${{ matrix.dll }}|-DMDBX_WITHOUT_MSVC_CRT:BOOL=${{ matrix.without_crt }}" \
           "--config|${{ matrix.build-type }}" "--build-config|${{ matrix.build-type }}"
+
+    - name: upload artifacts on failure
+      if: failure()
+      uses: actions/upload-artifact@v4
+      with:
+        name: ci-${{ matrix.os }}-${{ matrix.build-type }}-cxx${{ matrix.cxx }}
+        if-no-files-found: ignore
+        path: |
+          @ci-cmake-build/Testing/Temporary/LastTest.log
+          @cmake-build/Testing/Temporary/LastTest.log
+          **/fault.db*
