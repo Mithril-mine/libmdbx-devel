@@ -50,8 +50,16 @@ jobs:
         CI_MAKE_TARGET: ""
       shell: bash
       run: |
+        TEST_ARGS=""
+        # B14: skip the long stochastic single-process scenarios
+        # (smoke_sp_hill/nested, GNUmakefile-heritage --duration 100 --repeat 42)
+        # on the ARM64 beta-runner, which is ~13x slower than Linux and exceeds
+        # the 600s CTest timeout there (see ci-windows-mscl.yml). They are NOT
+        # true smoke; they stay on x64/Win32/Linux. Revisit when probes (B6) or
+        # T1/T2/T3 profiles (TASK-22) land.
+        if [ "${{ matrix.target }}" = 'ARM64' ]; then TEST_ARGS="-E|smoke_sp_[hn]"; fi
         . tests/ci/ci.sh "-A|${{ matrix.target }}|-T|${{ matrix.toolset }}|-DCMAKE_BUILD_TYPE=${{ matrix.build-type }}|-DMDBX_BUILD_SHARED_LIBRARY:BOOL=${{ matrix.dll }}|-DMDBX_WITHOUT_MSVC_CRT:BOOL=${{ matrix.without_crt }}" \
-          "--config|${{ matrix.build-type }}" "--build-config|${{ matrix.build-type }}"
+          "--config|${{ matrix.build-type }}" "--build-config|${{ matrix.build-type }}" "${TEST_ARGS}"
 
     - name: upload artifacts on failure
       if: failure()
