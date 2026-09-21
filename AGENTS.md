@@ -2,6 +2,9 @@
 ## Testing instructions
  - use CMake for build and CTest for testing
  - use at least Linux and Windows both environments for build and testing
+ - launch local builds with `nice 5` and tests with `nice 10` (share the host
+   fairly; agents run concurrently on one machine)
+ - roles & skills registry: `skynet/skills-roles.md`
 
 ## Code style
  - use LLVM codestyle
