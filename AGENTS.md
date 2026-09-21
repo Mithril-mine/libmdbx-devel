@@ -61,7 +61,14 @@
  - Build-deps hygiene (§29): everything read/written during build & tests must be
    declared in CMake/Ninja dependencies; periodic strace audit keeps nothing
    "out of control".
- - Backport policy (§30): bugfixes found on devel are backported to stable
-   branches (master, lts/0.13, later v0.15.x) per the targeted-API-test criterion:
-   test passes → skip; builds-but-fails → backport/fix separately; doesn't-build →
-   investigate, ask the owner if the API predates or deeper issues exist.
+- Backport policy (§30): bugfixes found on devel are backported to stable
+    branches (master, lts/0.13, later v0.15.x) per the targeted-API-test criterion:
+    test passes → skip; builds-but-fails → backport/fix separately; doesn't-build →
+    investigate, ask the owner if the API predates or deeper issues exist.
+  - Session model (§25a/25b protocol): the host runs a hard pool of at most 3
+    concurrent busy headless instances (+1 interactive coordinator). Each role
+    has ONE canonical opencode session (`ses_...`) recorded in `.skynet/sessions.json`;
+    orchestrator resumes it via `-s` and auto-captures new ids after a fresh boot.
+    Agents mirror their real id as `opencode_session_id=ses_...` in their entity.
+    Never run bare `-c`. Do not create ad-hoc extra instances of a role while its
+    first instance is busy.
