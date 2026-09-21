@@ -306,7 +306,8 @@ else()
   endif()
 
   add_test(NAME smoke_fault COMMAND $<TARGET_FILE:mdbx_test> --duration 300 --progress --console=no --pathname=fault.db
-                                   --inject-writefault=42 --dump-config --dont-cleanup-after ${MDBX_SMOKE_EXTRA} basic)
+                                     --inject-writefault=42 --dump-config --dont-cleanup-after --loglevel=debug
+                                     ${MDBX_SMOKE_EXTRA} basic)
   set_tests_properties(smoke_fault PROPERTIES
     LABELS "smoke-fault"
     TIMEOUT 1800
