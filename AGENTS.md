@@ -66,9 +66,11 @@
     test passes → skip; builds-but-fails → backport/fix separately; doesn't-build →
     investigate, ask the owner if the API predates or deeper issues exist.
   - Session model (§25a/25b protocol): the host runs a hard pool of at most 3
-    concurrent busy headless instances (+1 interactive coordinator). Each role
-    has ONE canonical opencode session (`ses_...`) recorded in `.skynet/sessions.json`;
-    orchestrator resumes it via `-s` and auto-captures new ids after a fresh boot.
+    concurrent busy headless instances (+1 interactive coordinator). Work
+    happens in a shared pool of 5 sandboxes `nook-pool-1..5` (roles are mapped
+    dynamically, not per-nook). Each role has ONE canonical opencode session
+    (`ses_...`) recorded in `.skynet/sessions.json`; orchestrator resumes it via
+    `-s` in the assigned pool nook and auto-captures new ids after a fresh boot.
     Agents mirror their real id as `opencode_session_id=ses_...` in their entity.
     Never run bare `-c`. Do not create ad-hoc extra instances of a role while its
     first instance is busy.
