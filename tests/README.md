@@ -46,5 +46,23 @@ Smoke scenarios are also wired into `make smoke` (see the root
 [GNUmakefile](../GNUmakefile)) and the stochastic scenario is available via
 [`stochastic.sh`](stochastic.sh).
 
+## Tiered smoke profiles (T1/T2/T3)
+
+`mdbx_test` is stochastic, so the tiered profiles use **fixed `--prng-seed`**
+and bounded `--nops` to keep runs reproducible and fast. Address them via CTest
+labels or GNUmakefile targets:
+
+```sh
+ctest -L 'smoke-t1'    # or: make smoke-t1   T1 fast deterministic smoke (seconds)
+ctest -L 'smoke-t2'    # or: make smoke-t2   T2 medium smoke (quick-smoke family)
+ctest -L 'smoke-t3'    # or: make smoke-t3   T3 long/full stochastic (milestone/nightly)
+```
+
+- **T1** never runs long iterations: bounded `--nops`, `--repeat=1`, and
+  `+nosync-safe` mode when durability is not the point.
+- **T3** needs `cmake-stochastic-build` / `MDBX_ENABLE_LONG_TESTS=ON`.
+- See [`mdbx-test-options.md`](mdbx-test-options.md) for the full option
+  reference, and `select-tests.sh` for impact-based selection.
+
 See the "Testing instructions" in the root [AGENTS.md](../AGENTS.md) for the
 full segmented-test-execution policy.

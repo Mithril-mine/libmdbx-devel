@@ -184,11 +184,11 @@ else()
 
   add_test(NAME smoke_long COMMAND $<TARGET_FILE:mdbx_test> --duration=5m --loglevel=notice --prng-seed=${test_seed}
                                    --progress --console=no --pathname=smoke-long.db --dont-cleanup-after basic)
-  set_tests_properties(smoke_long PROPERTIES LABELS "smoke-long" TIMEOUT 1800 RUN_SERIAL OFF)
+  set_tests_properties(smoke_long PROPERTIES LABELS "smoke-long;smoke-t3" TIMEOUT 1800 RUN_SERIAL OFF)
   if(MDBX_BUILD_TOOLS)
     add_test(NAME smoke_long_chk COMMAND $<TARGET_FILE:mdbx_chk> -nvv smoke-long.db)
     set_tests_properties(smoke_long_chk PROPERTIES
-      LABELS "smoke-long"
+      LABELS "smoke-long;smoke-t3"
       DEPENDS smoke_long
       TIMEOUT 60
       FAIL_REGULAR_EXPRESSION "cooperative mode"
@@ -196,7 +196,7 @@ else()
 
     add_test(NAME smoke_long_chk_copy COMMAND $<TARGET_FILE:mdbx_chk> -nvv smoke-long.db-copy)
     set_tests_properties(smoke_long_chk_copy PROPERTIES
-      LABELS "smoke-long"
+      LABELS "smoke-long;smoke-t3"
       DEPENDS smoke_long
       TIMEOUT 60
       FAIL_REGULAR_EXPRESSION "cooperative mode"
@@ -204,14 +204,14 @@ else()
 
     add_test(NAME smoke_long_copy_asis COMMAND $<TARGET_FILE:mdbx_copy> -f smoke-long.db copy_asis.db)
     set_tests_properties(smoke_long_copy_asis PROPERTIES
-      LABELS "smoke-long"
+      LABELS "smoke-long;smoke-t3"
       DEPENDS smoke_long
       TIMEOUT 60
       REQUIRED_FILES smoke-long.db)
 
     add_test(NAME smoke_long_copy_compactify COMMAND $<TARGET_FILE:mdbx_copy> -f -c smoke-long.db copy_compactify.db)
     set_tests_properties(smoke_long_copy_compactify PROPERTIES
-      LABELS "smoke-long"
+      LABELS "smoke-long;smoke-t3"
       DEPENDS smoke_long
       TIMEOUT 60
       REQUIRED_FILES smoke.db)
@@ -223,19 +223,19 @@ else()
       $<TARGET_FILE:mdbx_test> --duration=5m --loglevel=notice --prng-seed=${test_seed} --mode=+writemap
       --table=+data.fixed --keygen.split=29 --datalen=rnd --progress --console=no --repeat=2
       --pathname=dupsort_writemap.db --dont-cleanup-after basic)
-  set_tests_properties(dupsort_writemap PROPERTIES LABELS "smoke-long" TIMEOUT 1800 RUN_SERIAL OFF)
+  set_tests_properties(dupsort_writemap PROPERTIES LABELS "smoke-long;smoke-t3" TIMEOUT 1800 RUN_SERIAL OFF)
 
   if(MDBX_BUILD_TOOLS)
     add_test(NAME dupsort_writemap_chk COMMAND $<TARGET_FILE:mdbx_chk> -nvvwc dupsort_writemap.db)
     set_tests_properties(dupsort_writemap_chk PROPERTIES
-      LABELS "smoke-long"
+      LABELS "smoke-long;smoke-t3"
       DEPENDS dupsort_writemap
       TIMEOUT 60
       REQUIRED_FILES dupsort_writemap.db)
 
     add_test(NAME dupsort_writemap_chk_copy COMMAND $<TARGET_FILE:mdbx_chk> -nvvc dupsort_writemap.db-copy)
     set_tests_properties(dupsort_writemap_chk_copy PROPERTIES
-      LABELS "smoke-long"
+      LABELS "smoke-long;smoke-t3"
       DEPENDS dupsort_writemap
       TIMEOUT 60
       FAIL_REGULAR_EXPRESSION "monopolistic mode"
@@ -245,11 +245,11 @@ else()
   add_test(NAME uniq_nested
            COMMAND $<TARGET_FILE:mdbx_test> --duration=5m --loglevel=notice --mode=-writemap,-nosync-safe,-lifo
                    --progress --console=no --repeat=2 --pathname=uniq_nested.db --dont-cleanup-after basic)
-  set_tests_properties(uniq_nested PROPERTIES LABELS "smoke-long" TIMEOUT 1800 RUN_SERIAL OFF)
+  set_tests_properties(uniq_nested PROPERTIES LABELS "smoke-long;smoke-t3" TIMEOUT 1800 RUN_SERIAL OFF)
   if(MDBX_BUILD_TOOLS)
     add_test(NAME uniq_nested_chk COMMAND $<TARGET_FILE:mdbx_chk> -nvvw uniq_nested.db)
     set_tests_properties(uniq_nested_chk PROPERTIES
-      LABELS "smoke-long"
+      LABELS "smoke-long;smoke-t3"
       DEPENDS uniq_nested
       TIMEOUT 60
       FAIL_REGULAR_EXPRESSION "cooperative mode"
@@ -257,7 +257,7 @@ else()
 
     add_test(NAME uniq_nested_chk_copy COMMAND $<TARGET_FILE:mdbx_chk> -nvv uniq_nested.db-copy)
     set_tests_properties(uniq_nested_chk_copy PROPERTIES
-      LABELS "smoke-long"
+      LABELS "smoke-long;smoke-t3"
       DEPENDS uniq_nested
       TIMEOUT 60
       FAIL_REGULAR_EXPRESSION "cooperative mode"
@@ -277,24 +277,24 @@ else()
                                    --keygen.split=29 --datalen.min=min --datalen.max=max --progress --console=no
                                    --repeat=${MDBX_TEST_ITER} --pathname=smoke.db --dont-cleanup-after
                                    ${MDBX_SMOKE_EXTRA} basic)
-  set_tests_properties(smoke_basic PROPERTIES LABELS "smoke" TIMEOUT 600 RUN_SERIAL OFF)
+  set_tests_properties(smoke_basic PROPERTIES LABELS "smoke;smoke-t2" TIMEOUT 600 RUN_SERIAL OFF)
 
   add_test(NAME smoke_writemap COMMAND $<TARGET_FILE:mdbx_test> --duration 100 --mode=-writemap,-nosync-safe,-lifo
                                     --progress --console=no --repeat=${MDBX_TEST_ITER} --pathname=smoke.db
                                     --dont-cleanup-after ${MDBX_SMOKE_EXTRA} basic)
-  set_tests_properties(smoke_writemap PROPERTIES LABELS "smoke" TIMEOUT 600 DEPENDS smoke_basic RUN_SERIAL OFF)
+  set_tests_properties(smoke_writemap PROPERTIES LABELS "smoke;smoke-t2" TIMEOUT 600 DEPENDS smoke_basic RUN_SERIAL OFF)
 
   if(MDBX_BUILD_TOOLS)
     add_test(NAME smoke_chk COMMAND $<TARGET_FILE:mdbx_chk> -vvn smoke.db)
     set_tests_properties(smoke_chk PROPERTIES
-      LABELS "smoke"
+      LABELS "smoke;smoke-t2"
       DEPENDS smoke_writemap
       TIMEOUT 60
       FAIL_REGULAR_EXPRESSION "cooperative mode"
       REQUIRED_FILES smoke.db)
     add_test(NAME smoke_chk_copy COMMAND $<TARGET_FILE:mdbx_chk> -vvn smoke.db-copy)
     set_tests_properties(smoke_chk_copy PROPERTIES
-      LABELS "smoke"
+      LABELS "smoke;smoke-t2"
       DEPENDS smoke_writemap
       TIMEOUT 60
       FAIL_REGULAR_EXPRESSION "cooperative mode"
@@ -308,14 +308,14 @@ else()
   add_test(NAME smoke_fault COMMAND $<TARGET_FILE:mdbx_test> --duration 300 --progress --console=no --pathname=fault.db
                                    --inject-writefault=42 --dump-config --dont-cleanup-after ${MDBX_SMOKE_EXTRA} basic)
   set_tests_properties(smoke_fault PROPERTIES
-    LABELS "smoke-fault"
+    LABELS "smoke-fault;smoke-t2"
     TIMEOUT 1800
     RUN_SERIAL OFF
     WILL_FAIL TRUE)
   if(MDBX_BUILD_TOOLS)
     add_test(NAME smoke_fault_chk COMMAND $<TARGET_FILE:mdbx_chk> -vvnw fault.db)
     set_tests_properties(smoke_fault_chk PROPERTIES
-      LABELS "smoke-fault"
+      LABELS "smoke-fault;smoke-t2"
       DEPENDS smoke_fault
       TIMEOUT 60
       REQUIRED_FILES fault.db)
@@ -325,13 +325,13 @@ else()
                                   --datalen.min=min --datalen.max=max --progress --console=no --repeat=42
                                   --pathname=singleprocess.db --dont-cleanup-after ${MDBX_SMOKE_EXTRA} --hill)
   set_tests_properties(smoke_sp_hill PROPERTIES
-    LABELS "smoke-singleprocess"
+    LABELS "smoke-singleprocess;smoke-t2"
     TIMEOUT 600
     RUN_SERIAL OFF)
   add_test(NAME smoke_sp_copy COMMAND $<TARGET_FILE:mdbx_test> --duration 100 --progress --console=no --repeat=2
                                  --pathname=singleprocess.db --dont-cleanup-before --dont-cleanup-after ${MDBX_SMOKE_EXTRA} --copy)
   set_tests_properties(smoke_sp_copy PROPERTIES
-    LABELS "smoke-singleprocess"
+    LABELS "smoke-singleprocess;smoke-t2"
     DEPENDS smoke_sp_hill
     TIMEOUT 600
     RUN_SERIAL OFF)
@@ -339,20 +339,20 @@ else()
                                    --progress --console=no --repeat=42 --pathname=singleprocess.db --dont-cleanup-before
                                    --dont-cleanup-after ${MDBX_SMOKE_EXTRA} --nested)
   set_tests_properties(smoke_sp_nested PROPERTIES
-    LABELS "smoke-singleprocess"
+    LABELS "smoke-singleprocess;smoke-t2"
     DEPENDS smoke_sp_copy
     TIMEOUT 600
     RUN_SERIAL OFF)
   if(MDBX_BUILD_TOOLS)
     add_test(NAME smoke_sp_chk COMMAND $<TARGET_FILE:mdbx_chk> -vvn singleprocess.db)
     set_tests_properties(smoke_sp_chk PROPERTIES
-      LABELS "smoke-singleprocess"
+      LABELS "smoke-singleprocess;smoke-t2"
       DEPENDS smoke_sp_nested
       TIMEOUT 60
       REQUIRED_FILES singleprocess.db)
     add_test(NAME smoke_sp_chk_copy COMMAND $<TARGET_FILE:mdbx_chk> -vvn singleprocess.db-copy)
     set_tests_properties(smoke_sp_chk_copy PROPERTIES
-      LABELS "smoke-singleprocess"
+      LABELS "smoke-singleprocess;smoke-t2"
       DEPENDS smoke_sp_nested
       TIMEOUT 60
       REQUIRED_FILES singleprocess.db-copy)
@@ -362,13 +362,55 @@ else()
     set_tests_properties(smoke_sp_hill smoke_sp_copy smoke_sp_nested PROPERTIES RESOURCE_LOCK singleprocess.db)
   endif()
 
+  # ------------------------------------------------------------------
+  # Tiered smoke profiles (TASK-22, BACKLOG B21-B33).
+  #
+  # mdbx_test is STOCHASTIC: the pseudo-random sequence derives from
+  # --prng-seed, so a FIXED seed reproduces the same per-actor operation
+  # sequence (single-process actors fully deterministic, multi-process
+  # interleaving is not). Tiered runs are addressable via CTest labels:
+  #
+  #   ctest -L 'smoke-t1'   T1 fast deterministic smoke, seconds, fixed seeds
+  #   ctest -L 'smoke-t2'   T2 medium smoke (quick-smoke family above)
+  #   ctest -L 'smoke-t3'   T3 full/long stochastic runs (milestone/nightly)
+  #
+  # GNUmakefile convenience targets: make smoke-t1 / smoke-t2 / smoke-t3.
+  #
+  # T1 must complete in seconds and never run long iterations: bound with
+  # --nops (bounded work) instead of --timeout, keep --repeat=1 and use the
+  # fast +nosync-safe mode when durability is not the point.
+  set(MDBX_T1_SEED_HILL 20260921)
+  set(MDBX_T1_SEED_NESTED 20260922)
+  set(MDBX_T1_SEED_COPY 20260923)
+
+  # NOTE: mdbx_test copies actor params when it parses the scenario selector
+  # (--hill/--nested/--copy/...), so ALL tuning options must precede the
+  # selector, mirroring the existing smoke_sp_* registrations above.
+  add_test(NAME smoke_t1_hill
+           COMMAND $<TARGET_FILE:mdbx_test> --nops=1K --prng-seed=${MDBX_T1_SEED_HILL}
+                   --mode=+nosync-safe --progress --console=no --repeat=1 --pathname=t1-hill.db
+                   --cleanup-before --dont-cleanup-after ${MDBX_SMOKE_EXTRA} --hill)
+  set_tests_properties(smoke_t1_hill PROPERTIES LABELS "smoke;smoke-t1" TIMEOUT 60 RUN_SERIAL OFF)
+
+  add_test(NAME smoke_t1_nested
+           COMMAND $<TARGET_FILE:mdbx_test> --nops=1K --prng-seed=${MDBX_T1_SEED_NESTED}
+                   --mode=-writemap,-nosync-safe,-lifo --progress --console=no --repeat=1
+                   --pathname=t1-nested.db --cleanup-before --dont-cleanup-after ${MDBX_SMOKE_EXTRA} --nested)
+  set_tests_properties(smoke_t1_nested PROPERTIES LABELS "smoke;smoke-t1" TIMEOUT 60 RUN_SERIAL OFF)
+
+  add_test(NAME smoke_t1_copy
+           COMMAND $<TARGET_FILE:mdbx_test> --nops=256 --prng-seed=${MDBX_T1_SEED_COPY}
+                   --mode=+nosync-safe --progress --console=no --repeat=1 --pathname=t1-copy.db
+                   --cleanup-before --dont-cleanup-after ${MDBX_SMOKE_EXTRA} --copy)
+  set_tests_properties(smoke_t1_copy PROPERTIES LABELS "smoke;smoke-t1" TIMEOUT 60 RUN_SERIAL OFF)
+
   option(MDBX_ENABLE_LONG_TESTS
          "Register long-running test scenarios (stochastic, etc.) as CTest entries" OFF)
   if(UNIX AND MDBX_ENABLE_LONG_TESTS)
     add_test(NAME stochastic COMMAND ${CMAKE_CURRENT_SOURCE_DIR}/stochastic.sh --whole-duration 600 --probe-duration 60
                                     --dont-check-ram-size --loops 2 --db-upto-mb 256 --skip-make --taillog)
     set_tests_properties(stochastic PROPERTIES
-      LABELS "stochastic"
+      LABELS "stochastic;smoke-t3"
       TIMEOUT 10800
       RUN_SERIAL ON
       WORKING_DIRECTORY ${MDBX_OUTPUT_DIR}
@@ -378,7 +420,7 @@ else()
                                      --probe-duration 60 --dont-check-ram-size --single --loops 2 --db-upto-mb 256
                                      --skip-make --taillog)
     set_tests_properties(stochastic_single PROPERTIES
-      LABELS "stochastic-single"
+      LABELS "stochastic-single;smoke-t3"
       TIMEOUT 10800
       RUN_SERIAL ON
       WORKING_DIRECTORY ${MDBX_OUTPUT_DIR}
@@ -387,7 +429,7 @@ else()
     add_test(NAME stochastic_long COMMAND ${CMAKE_CURRENT_SOURCE_DIR}/stochastic.sh --loops 42 --db-upto-mb 1024
                                     --extra --skip-make --taillog)
     set_tests_properties(stochastic_long PROPERTIES
-      LABELS "stochastic-long"
+      LABELS "stochastic-long;smoke-t3"
       TIMEOUT 0
       RUN_SERIAL ON
       WORKING_DIRECTORY ${MDBX_OUTPUT_DIR}
