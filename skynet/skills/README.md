@@ -7,33 +7,74 @@
 
 ## Уровни
 
-| Level | Назначение | Файлы | Кто грузит |
-|---|---|---|---|
-| **L0** Project Reference | справочник проекта (не SKILL) | `functional-architecture.md` | по ссылке, НЕ целиком в контекст |
-| **L1** Superpowers Core | 14 поведенческих навыков (общие) | `skynet/superpowers/` | все агенты |
-| **L2** Shared Domain | проект-специфичные, общие для ролей | `skills/shared/` | все роли |
-| **L3** Role-Specific | по одному на роль | `skills/roles/` | только нужная роль |
-| **L4** Orchestrator | только оркестратор | `skills/orchestrator/` | main_architect |
+| Level | Назначение | Каталог | Формат | Кто грузит |
+|---|---|---|---|---|
+| **L0** Project Reference | справочник проекта (не SKILL) | `shared/references/functional-architecture.md` | один файл | по ссылке, НЕ целиком в контекст |
+| **L1** Superpowers Core | поведенческие навыки (общие) | `superpowers/` | `<name>/SKILL.md` | все агенты |
+| **L2** Shared Domain | проект-специфичные, общие для ролей | `shared/` | `<name>/SKILL.md` | все роли |
+| **L3** Role-Specific | по одному на роль | `roles/` | `<name>/SKILL.md` | только нужная роль |
+| **L4** Orchestrator | только оркестратор | `orchestrator/` | `<name>/SKILL.md` | main_architect |
 
-## L2 Shared (4 файла)
+```
+skills/
+  superpowers/                    # Level 1 — содержимое как у obra/superpowers
+    test-driven-development/SKILL.md
+    systematic-debugging/SKILL.md
+    ...
+  shared/                         # Level 2
+    libmdbx-invariants/SKILL.md
+    test-durability-strategy/SKILL.md
+    kaizen-principles/SKILL.md
+    memory-hygiene/SKILL.md
+    references/
+      functional-architecture.md  # исходный файл (копия skynet/functional-architecture.md)
+      subsystem-map.md            # карта подсистем S1–S14 с risk levels
+      module-lock-matrix.md       # матрица конфликтов модулей
+  roles/                          # Level 3
+    test-engineer/SKILL.md
+    code-reviewer/SKILL.md
+    refactoring-engineer/SKILL.md
+    feature-developer/SKILL.md
+    platform-build-engineer/SKILL.md
+    documentation-scribe/SKILL.md
+  orchestrator/                   # Level 4
+    scrum-ceremonies/SKILL.md
+    swarm-management/SKILL.md
+    kaizen-engine/SKILL.md
+    phase-management/SKILL.md
+    self-monitoring/SKILL.md
+```
 
-- `libmdbx-invariants.md` — подсистемы S1–S14, 6 инвариантов, ABI, модульные риски.
-- `test-durability-strategy.md` — режимы долговечности, транспорты, Quick/Full.
-- `kaizen-principles.md` — принципы улучшения (одно за ретроспективу, измеримость, обратимость).
-- `memory-hygiene.md` — MCP-memory как шпаргалка, документация как истина, knowledge-harvest.
+## L1 Superpowers Core (14 навыков, не трогаем)
 
-## L3 Roles (6 файлов)
+Каталог `superpowers/` — адаптация obra/superpowers (MIT). Каждый навык — подкаталог
+`<name>/SKILL.md`. Манифест: `superpowers/README.md`. Два навыка сознательно отложены
+(defer, зафиксировано в `superpowers/README.md`): `subagent-driven-development`,
+`dispatching-parallel-agents`.
 
-`test-engineer.md`, `code-reviewer.md`, `refactoring-engineer.md`,
-`feature-developer.md`, `platform-build-engineer.md`, `documentation-scribe.md`.
+## L2 Shared (4 SKILL + 3 references)
 
+- `libmdbx-invariants/SKILL.md` — подсистемы S1–S14, 6 инвариантов, ABI, модульные риски.
+- `test-durability-strategy/SKILL.md` — режимы долговечности, транспорты, Quick/Full.
+- `kaizen-principles/SKILL.md` — принципы улучшения (одно за ретроспективу, измеримость, обратимость).
+- `memory-hygiene/SKILL.md` — MCP-memory как шпаргалка, документация как истина, knowledge-harvest.
+- `references/` — справочные материалы:
+  - `functional-architecture.md` — L0 Project Reference (копия).
+  - `subsystem-map.md` — карта подсистем S1–S14 с уровнями риска (🔴/🟠/🟡).
+  - `module-lock-matrix.md` — матрица конфликтов модулей (HIGH/MED/LOW) для module-locks.
+
+## L3 Roles (6 SKILL)
+
+`test-engineer`, `code-reviewer`, `refactoring-engineer`, `feature-developer`,
+`platform-build-engineer`, `documentation-scribe` — по одному каталогу `<name>/SKILL.md`.
 Маппинг на агентов — в `skills-roles.md` (TE→tests_worker/tests_writer,
 CR→review-cpp/win/macos/cmake, PB→review-cmake/win, DS→docs; RE/FD — gap-эталоны).
 
-## L4 Orchestrator (5 файлов)
+## L4 Orchestrator (5 SKILL)
 
-`scrum-ceremonies.md`, `swarm-management.md`, `kaizen-engine.md`,
-`phase-management.md`, `self-monitoring.md`. Указатель — `orchestrator-kaizen.md`.
+`scrum-ceremonies`, `swarm-management`, `kaizen-engine`, `phase-management`,
+`self-monitoring` — по одному каталогу `<name>/SKILL.md`. Указатель —
+`orchestrator-kaizen.md`.
 
 ## Правила активации
 

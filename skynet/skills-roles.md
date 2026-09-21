@@ -12,10 +12,10 @@
 |---|---|---|---|
 | Координатор / лид проекта | целостность архитектуры, синхронизация потоков работ, приоритизация, зависимости, CI/CD, метрики | L4 `skills/orchestrator/*` (указатель `orchestrator-kaizen.md`) | main_architect |
 | Разработчик C++ API / обёрток | расширение C++ API, RAII-обёртки, интеграция с C API, обработка ошибок | (gap — закрывают tests_writer/tests_worker + review-cpp) | — |
-| Инженер тестов и стабильности | покрытие тестами, edge-case, stress/fuzz, восстановление после сбоев | `skills/roles/test-engineer.md` | tests_worker, tests_writer |
-| Технический писатель / документатор | документация, примеры, диаграммы, версионирование, API-референс, doxygen | `skills/roles/documentation-scribe.md` | docs |
-| Ревьюер кода (доменные) | код-ревью по областям: стиль/безопасность/производительность/архитектура | `skills/roles/code-reviewer.md` (+`platform-build-engineer.md` для cmake) | review-cmake, review-cpp, review-win, review-macos |
-| Пробщик/инструментарий (специфика роя) | USDT/SystemTap-пробники, перф-инструменты, каталог probes.md | `skills/roles/platform-build-engineer.md` (base) | sysprobe |
+| Инженер тестов и стабильности | покрытие тестами, edge-case, stress/fuzz, восстановление после сбоев | `skills/roles/test-engineer/SKILL.md` | tests_worker, tests_writer |
+| Технический писатель / документатор | документация, примеры, диаграммы, версионирование, API-референс, doxygen | `skills/roles/documentation-scribe/SKILL.md` | docs |
+| Ревьюер кода (доменные) | код-ревью по областям: стиль/безопасность/производительность/архитектура | `skills/roles/code-reviewer/SKILL.md` (+`platform-build-engineer/SKILL.md` для cmake) | review-cmake, review-cpp, review-win, review-macos |
+| Пробщик/инструментарий (специфика роя) | USDT/SystemTap-пробники, перф-инструменты, каталог probes.md | `skills/roles/platform-build-engineer/SKILL.md` (base) | sysprobe |
 
 ## Коллективные SKILLS (для всей команды)
 
