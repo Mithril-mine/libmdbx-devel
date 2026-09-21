@@ -378,6 +378,11 @@ if(BUILD_TESTING)
         # generator expression: that form was observed to silently no-op for
         # subdirectory targets under the Visual Studio generator), exactly as the
         # library does in target_setup_options() of the root CMakeLists.txt.
+        # C_STANDARD is required too: without /std:c11+ cl.exe keeps
+        # __STDC_VERSION__ at 199901L, so atomics-types.h does not define
+        # MDBX_HAVE_C11ATOMICS and atomics-ops.h:46 aborts with C1189 on
+        # non-x86 targets even when /experimental:c11atomics is passed (TASK-17).
+        set_target_properties(${target} PROPERTIES C_STANDARD ${MDBX_C_STANDARD} C_STANDARD_REQUIRED ON)
         target_compile_options(${target} PRIVATE /experimental:c11atomics)
       endif()
 

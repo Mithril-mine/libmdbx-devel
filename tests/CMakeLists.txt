@@ -60,6 +60,11 @@ function(add_simple_test name)
     # non-x86 targets. Use the plain flag, not a COMPILE_LANGUAGE generator
     # expression: the latter was observed to silently no-op for these subdirectory
     # targets under the Visual Studio generator (see TASK-17).
+    # C_STANDARD is required too: without /std:c11+ cl.exe keeps __STDC_VERSION__
+    # at 199901L, so atomics-types.h does not define MDBX_HAVE_C11ATOMICS and
+    # atomics-ops.h:46 aborts with C1189 on non-x86 targets even when
+    # /experimental:c11atomics is passed (TASK-17 incomplete for msvc ARM64).
+    set_target_properties(${target} PROPERTIES C_STANDARD ${MDBX_C_STANDARD} C_STANDARD_REQUIRED ON)
     target_compile_options(${target} PRIVATE /experimental:c11atomics)
   endif()
 
