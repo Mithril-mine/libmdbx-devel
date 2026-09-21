@@ -13,9 +13,10 @@
 | `phase-management.md` | Phase 0–4 + Phase 1.5 (ABI gate), баланс рефактор/девелоп |
 | `self-monitoring.md` | антипаттерны, sequential-thinking, эскалация, rollback, self-check |
 
-Принципы (общие, L2): `skills/shared/kaizen-principles.md`,
-`skills/shared/memory-hygiene.md`, `skills/shared/libmdbx-invariants.md`,
-`skills/shared/test-durability-strategy.md`.
+Принципы (общие, L2): `skills/shared/kaizen-principles/SKILL.md`,
+`skills/shared/memory-hygiene/SKILL.md`, `skills/shared/libmdbx-invariants/SKILL.md`,
+`skills/shared/test-durability-strategy/SKILL.md`. References:
+`skills/shared/references/` (functional-architecture, subsystem-map, module-lock-matrix).
 
 ## Связь с протоколом (§15 в skynet-protocol.md)
 

@@ -114,7 +114,7 @@
 
 - Перед изменением модуля X: прогнать его прямые тесты (колонка «прямое покрытие») на
   уровнях 1–2, затем полный `ctest` (level 2) и `make smoke` (level 3) — см.
-  [`superpowers/verification-before-completion/SKILL.md`](superpowers/verification-before-completion/SKILL.md).
+  [`skills/superpowers/verification-before-completion/SKILL.md`](skills/superpowers/verification-before-completion/SKILL.md).
 - Для модулей без прямого покрытия (chk, defrag, lck-бэкенды, coherency) — сначала добавить
   быстрый юнит-тест (это одна из целей проекта), затем рефакторить.
 - White-box паттерн для структур данных: как `details_rkl.c` — включить `src/<mod>.c`

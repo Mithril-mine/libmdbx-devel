@@ -36,12 +36,12 @@ flowchart LR
 - Issues: created/updated via SourceCraft MCP (`CreateIssue`, `UpdateIssue`, labels,
   linked PRs) — see [`sourcecraft/README.md`](sourcecraft/README.md).
 - Worktrees: the repo supports parallel worktrees; the Superpowers `using-git-worktrees`
-  skill describes the discipline (see [`superpowers/`](superpowers/README.md)).
+  skill describes the discipline (see [`skills/superpowers/`](skills/superpowers/README.md)).
 
 ## 3. Local validation before pushing (checklist)
 
 Escalate per the **verification levels** defined in
-[`superpowers/verification-before-completion/SKILL.md`](superpowers/verification-before-completion/SKILL.md)
+[`skills/superpowers/verification-before-completion/SKILL.md`](skills/superpowers/verification-before-completion/SKILL.md)
 (L1 specific test → L1-x sanitizer rebuild → L2 all `ctest` → L3 `make check` →
 L4 sanitizer sweeps → L5 memcheck → L6 `stochastic.sh` → L7 human-controlled soak).
 

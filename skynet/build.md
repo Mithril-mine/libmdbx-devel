@@ -142,7 +142,7 @@ Cube image `dh-mirror.gitverse.ru/jakoch/cpp-devbox:forky-latest`, max 30m, scri
 ## 6. Testing — in depth
 
 > **Verification levels**: for day-to-day work use the 7-level escalation model defined in
-> [`superpowers/verification-before-completion/SKILL.md`](superpowers/verification-before-completion/SKILL.md):
+> [`skills/superpowers/verification-before-completion/SKILL.md`](skills/superpowers/verification-before-completion/SKILL.md):
 > L1 = the specific test; L1-x = that test rebuilt under ASAN/UBSAN/MEMCHECK; L2 = full `ctest`
 > (3–7 min); L3 = `make check` (5–10 min, incl. amalgamation); L4 = + `test-ubsan`/`test-asan`
 > (10–30 min); L5 = + `test-memcheck` (30–90 min); L6 = `stochastic.sh` with a context-chosen

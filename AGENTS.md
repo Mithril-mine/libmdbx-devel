@@ -24,9 +24,9 @@
  - Start from the project index: `skynet/README.md` (repo map, build, architecture, workflows,
    testing infrastructure, amalgamation).
  - Platform specifics (SourceCraft CI/MCP/PR flow): `skynet/sourcecraft/README.md`.
- - Follow the integrated agent methodology in `skynet/superpowers/README.md` (adapted from
-   obra/superpowers, MIT): brainstorming, writing-plans, executing-plans, TDD,
-   systematic-debugging, code-review skills.
+ - Follow the integrated agent methodology in `skynet/skills/superpowers/README.md`
+   (adapted from obra/superpowers, MIT): brainstorming, writing-plans, executing-plans,
+   TDD, systematic-debugging, code-review skills.
  - Segmented test execution (choose by change area and risk; do NOT run the whole
    corpus for superficial changes). Unit tests use a hierarchical label tree:
    every test carries the root `ut` label plus area labels `ut.api`, `ut.cxx`,
@@ -42,7 +42,7 @@
      specific area, including all its subtree branches.
    - P4 full local:`ctest` (+ smoke, ~10+ min) — only when touching the core (src/).
    - P5 milestone: asan/ubsan/stochastic + GitHub CI — by explicit approval.
-   See `skynet/superpowers/verification-before-completion/SKILL.md`.
+   See `skynet/skills/superpowers/verification-before-completion/SKILL.md`.
  - CI policy: SourceCraft CI quota is exhausted. GitHub CI is slow and expensive —
    trigger it only at milestones (agent proposal + user confirmation / explicit
    instruction), not for routine commits.
