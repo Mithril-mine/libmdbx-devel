@@ -1,4 +1,4 @@
-# skynet — протокол координации агентов (v2.12)
+# skynet — протокол координации агентов (v2.13)
 
 > Внутренний протокол взаимодействия агентов, работающих над **libmdbx-devel**
 > на одной машине. Реализуется поверх общего хранилища **MCP-memory**
@@ -578,7 +578,11 @@ wait=<slug>: <предмет> | state=pending_review|awaiting_answer|in_progress
 
 Модель: **роль → инстанции → канонический ses_id** (кратность K≤3):
 
-- У каждой роли есть рабочий nook `nook-<slug>` (для K>1: `nook-<slug>-<i>`).
+- Рабочие песочницы — **пул из 5 общих nook** `nook-pool-1..5` (owner-approved
+  2026-09-21). Роль НЕ привязана к фиксированному каталогу: оркестратор
+  назначает свободный nook из пула (`nook_map` в state-файле) и переключает его
+  на ветку роли (`prepare_pool_nook`) перед wake. См. `orchestrator-kaizen.md`
+  §swarm-management. Дисковая экономия — hardlink-шеринг `.git`.
 - Канонический ses_id роли хранится в `.skynet/sessions.json`
   (`{ "<slug>": "ses_..." }`). Пишет его только планировщик/координатор
   (с файловой атомарной заменой), агенты напрямую не правят этот файл.
@@ -674,6 +678,11 @@ wait=<slug>: <предмет> | state=pending_review|awaiting_answer|in_progress
 
 ## Changelog
 
+- **v2.13** (2026-09-21): консолидация рабочих каталогов — пул из 5 общих
+  `nook-pool-1..5` вместо per-role nook (§25b); динамический маппинг роль→nook
+  в оркестраторе (`nook_map`, `prepare_pool_nook`, `agent_branch`);
+  `wakeup-headless.sh` принимает `POOL_NOOK`; авто-захват ses_id ищет по всем
+  пул-дирам. Утверждено владельцем (эксперимент resume в новом каталоге успешен).
 - **v2.12** (2026-09-21): SKILL оркестратора (§13, `skynet/orchestrator-kaizen.md`) —
   Scrum-каркас + Kaizen-двигатель: context-packages, module-locks, DoD,
   rollback-протокол, самомониторинг/антипаттерны; правило «координатор не
