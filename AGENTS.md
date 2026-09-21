@@ -58,3 +58,7 @@
  - Build-deps hygiene (§29): everything read/written during build & tests must be
    declared in CMake/Ninja dependencies; periodic strace audit keeps nothing
    "out of control".
+ - Backport policy (§30): bugfixes found on devel are backported to stable
+   branches (master, lts/0.13, later v0.15.x) per the targeted-API-test criterion:
+   test passes → skip; builds-but-fails → backport/fix separately; doesn't-build →
+   investigate, ask the owner if the API predates or deeper issues exist.
