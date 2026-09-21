@@ -186,6 +186,8 @@ static int basal_start_locked(MDBX_txn *txn, unsigned flags) {
 
   dxb_sanitize_tail(env, txn);
   env->txn = txn;
+  /* USDT mdbx:txn__write_started (txnid, front_txnid): see skynet/probes.md */
+  MDBX_DTRACE2(txn__write_started, (uint64_t)txn->txnid, (uint64_t)txn->front_txnid);
   return MDBX_SUCCESS;
 }
 
