@@ -115,3 +115,41 @@ belong in the codex because they govern agent behavior across sessions.
   `QUESTION escalate` — never by pinging the owner directly.
 - Tasks assigned by the coordinator are authoritative; start them immediately
   and report via `REPORT`.
+
+## Memory infrastructure & traps (2026-09-21)
+
+**The canonical store is a FILE.** The whole swarm (orchestrator, mailwatch,
+headless agents, coordinator) reads/writes ONE JSONL file:
+
+```
+~/.npm/_npx/<hash>/node_modules/@modelcontextprotocol/server-memory/dist/memory.jsonl
+```
+
+Find the current path (hash changes on package update):
+
+```sh
+ls -t ~/.npm/_npx/*/node_modules/@modelcontextprotocol/server-memory/dist/memory.jsonl | head -1
+```
+
+### Trap 1: a second (docker) memory server exists but is NOT shared
+
+`.codeassistant/mcp.json` defines `memory` as a **docker container**
+(`mcp/memory`, volume `mcp-memory:/app/dist`). That stack is isolated and its
+writes are invisible to the swarm. Everyone uses the global
+`~/.config/opencode/opencode.json` → npx `server-memory`. If a write "succeeds"
+but does not appear in the canonical file, you likely hit the docker stack.
+
+### Trap 2: verify every critical write against the FILE
+
+`memory_add_observations` can return success yet not land in the canonical file
+(observed 2026-09-21 with TASK-28 letter `mail-48`; a retry succeeded). Rule:
+after writing a letter / task-board record / registry update, `grep` the
+canonical file for a unique marker. If missing, retry the call.
+
+### Provenance note
+
+This is the 3rd iteration of debugging "why doesn't the swarm see my memory
+write" — always check the FILE first (Gemba on the infrastructure, not the API).
+
+[Full workspace doc: `/sourcecraft/workspace/AGENT-WORKSPACE.md` → «Общая память
+агентов (memory-MCP)»]
