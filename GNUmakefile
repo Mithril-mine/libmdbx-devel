@@ -399,6 +399,12 @@ cmake-stochastic-build:
 	@echo '  RUN: cmake -G Ninja -DMDBX_ENABLE_LONG_TESTS=ON && cmake --build @cmake-stochastic-build'
 	$(QUIET)$(call cmake-configure-build,@cmake-stochastic-build,-DMDBX_ENABLE_LONG_TESTS=ON,)
 
+cmake-probes-build:
+	@echo '  RUN: cmake -G Ninja -DENABLE_SYSTEMTAP=ON && cmake --build @cmake-probes-build'
+	$(QUIET)$(call cmake-configure-build,@cmake-probes-build,-DENABLE_SYSTEMTAP:BOOL=ON,) && \
+		readelf -n @cmake-probes-build/libmdbx.so | grep -c 'Provider: mdbx' | \
+		sed 's/^/  USDT probes in libmdbx.so: /'
+
 ninja-assertions: cmake-assertions-build
 ninja-debug: CMAKE_OPT += -DCMAKE_BUILD_TYPE=Debug
 ninja-debug: cmake-build
