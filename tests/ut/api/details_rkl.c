@@ -21,8 +21,8 @@
 
 #define debug_log debug_log_sub
 
-#include "../../src/rkl.c"
-#include "../../src/txl.c"
+#include "../../../src/rkl.c"
+#include "../../../src/txl.c"
 
 MDBX_MAYBE_UNUSED __cold void debug_log_sub(int level, const char *function, int line, const char *fmt, ...) {
   (void)level;
