@@ -103,9 +103,9 @@ classify() {
 	tests/ut/*) echo 'ut\.' ;;
 	tests/issues/*) echo 'ut\.issues' ;;
 	tests/framework/*) echo $'smoke-t1\nsmoke-t2\nsmoke-t3\nstochastic' ;;
-	tests/*.sh | tests/*.py | tests/CMakeLists.txt) echo $'smoke-t1\nsmoke-t2\nsmoke-t3' ;;
+	tests/*.sh | tests/*.py | tests/**/*.sh | tests/**/*.py | tests/CMakeLists.txt) echo $'smoke-t1\nsmoke-t2\nsmoke-t3' ;;
 	cmake/* | CMakeLists.txt | GNUmakefile | Makefile | cmake/CMakeLists.txt) echo $'smoke-t1\nsmoke-t2\nut\.' ;;
-	mdbx.h | mdbx.h++ | mdbx++/*) echo $'ut\.\nsmoke-t1' ;;
+	mdbx.h | mdbx.h++ | mdbx++/*) echo $'ut\.\nsmoke-t1\nsmoke-t2' ;;
 	src/*.c | src/*.h | src/alloy.c) echo $'ut\.\nsmoke-t1\nsmoke-t2' ;;
 	docs/* | skynet/* | .github/* | .gitignore) echo '' ;;
 	*.md) echo '' ;;
@@ -144,7 +144,26 @@ CMD="ctest -L '${LABELS}' -LE 'ut\.heavy'"
 echo "$CMD"
 
 if [ "$MODE" = run ]; then
-	echo "select-tests: running: $CMD (from build dir)" >&2
+	# The ctest invocation needs a configured build dir. If the current
+	# directory is not one (e.g. running from the repo root), look for the
+	# canonical/local build dirs that carry CTestTestfile.cmake.
+	if [ ! -f ./CTestTestfile.cmake ]; then
+		BUILD_DIR=""
+		for d in "@ci-cmake-build" "@cmake-build" "@cmake-stochastic-build" build cmake-build-* p1-gcc p1-clang; do
+			if [ -f "$d/CTestTestfile.cmake" ]; then
+				BUILD_DIR="$d"
+				break
+			fi
+		done
+		if [ -n "$BUILD_DIR" ]; then
+			CMD="ctest --test-dir \"$BUILD_DIR\" -L '${LABELS}' -LE 'ut\.heavy'"
+			echo "select-tests: using build dir '$BUILD_DIR'" >&2
+		else
+			echo "select-tests: no CTestTestfile.cmake here and no build dir found — run from your build dir (or pass --test-dir)" >&2
+			exit 2
+		fi
+	fi
+	echo "select-tests: running: $CMD" >&2
 	# shellcheck disable=SC2086
 	eval "$CMD"
 fi

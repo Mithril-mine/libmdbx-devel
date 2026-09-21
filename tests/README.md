@@ -64,5 +64,16 @@ ctest -L 'smoke-t3'    # or: make smoke-t3   T3 long/full stochastic (milestone/
 - See [`mdbx-test-options.md`](mdbx-test-options.md) for the full option
   reference, and `select-tests.sh` for impact-based selection.
 
+Notes for CI consumers:
+
+- The three T1 tests also carry the plain `smoke` label, so any `ctest -L smoke`
+  run includes them (~seconds each). This is intended: T1 is the fastest tier
+  and doubles as a quick sanity check.
+- Wall-clock budgets on a typical dev host: T1 ~ seconds; T2 (quick-smoke
+  family incl. `smoke_fault` up to 1800 s timeout and the `smoke_sp_*` chain)
+  ~ a few minutes on fast hosts but can grow on slow ones; T3 (stochastic
+  suites) ~ tens of minutes to hours. Choose the tier that matches the change
+  and the host load (`nice 10`), not a full corpus.
+
 See the "Testing instructions" in the root [AGENTS.md](../AGENTS.md) for the
 full segmented-test-execution policy.
