@@ -393,9 +393,9 @@ namespace filesystem = ::std::experimental::filesystem;
 namespace filesystem = ::std::filesystem;
 /// \brief Defined if `mdbx::filesystem::path` is available.
 /// \details If defined, it is always `mdbx::filesystem::path`,
-/// which in turn can be refs to `std::filesystem::path` or `std::experimental::filesystem::path`.
-/// Nonetheless `MDBX_STD_FILESYSTEM_PATH` not defined if the `::mdbx::path`
-/// is fallbacked to c `std::string` or `std::wstring`.
+/// which in turn can refer to `std::filesystem::path` or `std::experimental::filesystem::path`.
+/// Nonetheless `MDBX_STD_FILESYSTEM_PATH` is not defined if the `::mdbx::path`
+/// falls back to a plain `std::string` or `std::wstring`.
 #define MDBX_STD_FILESYSTEM_PATH ::mdbx::filesystem::path
 #endif /* MDBX_STD_FILESYSTEM_PATH */
 

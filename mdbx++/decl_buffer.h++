@@ -823,7 +823,8 @@ public:
   /// \brief Build a null buffer which zero length and refers to null address.
   MDBX_CXX14_CONSTEXPR static buffer null() noexcept { return buffer(inherited::null()); }
 
-  /// \brief Build an invalid buffer which non-zero length and refers to null address.
+  /// \brief Builds an invalid buffer that has a non-zero length and refers to
+  /// a null address.
   MDBX_CXX14_CONSTEXPR static buffer invalid() noexcept { return buffer(inherited::invalid()); }
 
   template <typename POD>
