@@ -71,7 +71,7 @@ public:
   static inline bool boolean_or_throw(int error_code, const exception_thunk &);
 };
 
-/// \brief Base class for all libmdbx's exceptions that are corresponds to libmdbx errors.
+/// \brief Base class for all libmdbx's exceptions that correspond to libmdbx errors.
 /// \see MDBX_error_t
 class LIBMDBX_API_TYPE exception : public ::std::runtime_error {
   using base = ::std::runtime_error;
@@ -87,7 +87,7 @@ public:
   const ::mdbx::error error() const noexcept { return error_; }
 };
 
-/// \brief Fatal exception that lead termination anyway in dangerous unrecoverable cases.
+/// \brief Fatal exception that leads to termination anyway in dangerous unrecoverable cases.
 class LIBMDBX_API_TYPE fatal : public exception {
   using base = exception;
 
