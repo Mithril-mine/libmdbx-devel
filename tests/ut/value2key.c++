@@ -31,6 +31,16 @@ mdbx::env_managed make_env(const char *name) {
   return mdbx::env_managed(testdb, mdbx::create_parameters(), mdbx::operate_parameters().set_max_maps(8));
 }
 
+static inline uint64_t bswap64_be(uint64_t key) {
+#if defined(_MSC_VER)
+  return _byteswap_uint64(key);
+#elif defined(__BYTE_ORDER__) && __BYTE_ORDER__ == __ORDER_LITTLE_ENDIAN__
+  return __builtin_bswap64(key);
+#else
+  return key;
+#endif
+}
+
 } // namespace
 
 TEST(ut_value2key, json_integer_roundtrip) {
@@ -80,11 +90,11 @@ TEST(ut_value2key, json_integer_mixed_ordering) {
   const int64_t ints[] = {INT64_C(-3), INT64_C(-1), INT64_C(2), INT64_C(7)};
   const double dbls[] = {-2.5, 0.5, 3.25, 100.0};
   for (auto v : ints) {
-    const uint64_t ibe = __builtin_bswap64(::mdbx_key_from_jsonInteger(v));
+    const uint64_t ibe = bswap64_be(::mdbx_key_from_jsonInteger(v));
     txn.insert(table, mdbx::slice(&ibe, sizeof(ibe)), mdbx::slice("i"));
   }
   for (auto d : dbls) {
-    const uint64_t dbe = __builtin_bswap64(::mdbx_key_from_double(d));
+    const uint64_t dbe = bswap64_be(::mdbx_key_from_double(d));
     txn.insert(table, mdbx::slice(&dbe, sizeof(dbe)), mdbx::slice("d"));
   }
 
@@ -94,7 +104,7 @@ TEST(ut_value2key, json_integer_mixed_ordering) {
   do {
     const auto key_be = cursor.current().key;
     ASSERT_EQ(key_be.size(), sizeof(uint64_t));
-    const auto key = __builtin_bswap64(key_be.as_uint64());
+    const auto key = bswap64_be(key_be.as_uint64());
     MDBX_val kv{const_cast<uint64_t *>(&key), sizeof(key)};
     const double decoded = ::mdbx_double_from_key(kv);
     EXPECT_GE(decoded, previous) << "v2k keys scan in ascending numeric order";
@@ -119,7 +129,7 @@ TEST(ut_value2key, equivalent_to_ordinal) {
   const int64_t values[] = {INT64_C(-1000), INT64_C(-1), INT64_C(0), INT64_C(1), INT64_C(12345), INT64_C(999999999)};
   for (auto v : values) {
     txn.insert(v2k_ordinal, mdbx::slice::wrap(::mdbx_key_from_int64(v)), mdbx::slice("x"));
-    const uint64_t be = __builtin_bswap64(::mdbx_key_from_int64(v));
+    const uint64_t be = bswap64_be(::mdbx_key_from_int64(v));
     txn.insert(be_bytes, mdbx::slice(&be, sizeof(be)), mdbx::slice("x"));
   }
 
@@ -139,13 +149,13 @@ TEST(ut_value2key, equivalent_to_ordinal) {
     do {
       const auto current = cursor.current();
       ASSERT_EQ(current.key.size(), sizeof(uint64_t));
-      out.push_back(int64_t(__builtin_bswap64(current.key.as_uint64()) - UINT64_C(0x8000000000000000)));
+      out.push_back(int64_t(bswap64_be(current.key.as_uint64()) - UINT64_C(0x8000000000000000)));
     } while (cursor.to_next(false));
   };
   collect_v2k(txn, v2k_ordinal, from_v2k);
   collect_be(txn, be_bytes, from_be);
 
-  ASSERT_EQ(from_v2k.size(), values[0] ? 6u : 6u);
+  ASSERT_EQ(from_v2k.size(), 6u);
   ASSERT_EQ(from_be.size(), from_v2k.size());
   for (size_t i = 0; i < from_v2k.size(); ++i) {
     EXPECT_EQ(from_v2k[i], from_be[i]) << "both representations scan in the same order";
@@ -166,7 +176,7 @@ TEST(ut_value2key, in_dupsort) {
 
   const int64_t values[] = {INT64_C(5), INT64_C(-3), INT64_C(5), INT64_C(1)};
   for (auto v : values) {
-    const uint64_t be = __builtin_bswap64(::mdbx_key_from_int64(v));
+    const uint64_t be = bswap64_be(::mdbx_key_from_int64(v));
     txn.upsert(multi, mdbx::slice("k"), mdbx::slice(&be, sizeof(be)));
   }
 
@@ -177,7 +187,7 @@ TEST(ut_value2key, in_dupsort) {
   do {
     const auto value = cursor.current().value;
     ASSERT_EQ(value.size(), sizeof(uint64_t));
-    const auto decoded = int64_t(__builtin_bswap64(value.as_uint64()) - UINT64_C(0x8000000000000000));
+    const auto decoded = int64_t(bswap64_be(value.as_uint64()) - UINT64_C(0x8000000000000000));
     EXPECT_GT(decoded, previous) << "dups of one key are sorted by numeric value";
     previous = decoded;
     ++seen;
