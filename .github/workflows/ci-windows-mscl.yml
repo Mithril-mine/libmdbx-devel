@@ -56,7 +56,7 @@ jobs:
         export STUDIO_CLANG_DIR="/c/Program Files/Microsoft Visual Studio/${{ matrix.studio }}/Enterprise/VC/Tools/Llvm/${TARGET_BIN}"
         export CC="${STUDIO_CLANG_DIR}/clang.exe" CXX="${STUDIO_CLANG_DIR}/clang++.exe"
         . tests/ci/ci.sh "-DCMAKE_BUILD_TYPE=${{ matrix.build-type }}|-DMDBX_BUILD_SHARED_LIBRARY:BOOL=${{ matrix.dll }}|-DMDBX_WITHOUT_MSVC_CRT:BOOL=${{ matrix.without_crt }}" \
-          "--config|${{ matrix.build-type }}" "--build-config|${{ matrix.build-type }}" "${TEST_ARGS}"
+          "--config|${{ matrix.build-type }}" "--build-config|${{ matrix.build-type }}|${TEST_ARGS}"
 
     - name: upload artifacts on failure
       if: failure()
