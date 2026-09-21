@@ -5,6 +5,27 @@ The source code is available on [SourceCraft](https://sourcecraft.dev/dqdkfa/lib
 Please use the `stable` branch or the latest release for production environments through staging, and the `master` branch for development of derivative projects.
 Всё будет хорошо!
 
+## v0.14.5 at a release engineering stage
+
+The supporting release of a stable branch with bug fixes.
+
+### Important:
+
+The development of subsequent releases in the v0.14.x version line will continue in the `stable` branch.
+In the `master` branch, development of version v0.15 will begin, with the technical version tag set to v0.15.0.
+
+### Improvements:
+
+ - Minor clarification/refining README and doxygen API descriptons.
+
+### Fixes:
+
+ - Fixed typos in the ChangeLog.
+ - Fixed `MDBX_TXN_TRY` leakage into a transaction state flags.
+
+
+--------------------------------------------------------------------------------
+
 
 ## v0.14.4 "Skynet Eve" (Накануне Skynet) at 2026-09-18
 
