@@ -57,7 +57,7 @@ jobs:
         # the 600s CTest timeout there (see ci-windows-mscl.yml). They are NOT
         # true smoke; they stay on x64/Win32/Linux. Revisit when probes (B6) or
         # T1/T2/T3 profiles (TASK-22) land.
-        if [ "${{ matrix.target }}" = 'ARM64' ]; then TEST_ARGS="-E|smoke_sp_[hn]"; fi
+        if [ "${{ matrix.target }}" = 'ARM64' ]; then TEST_ARGS="-E|smoke_sp_"; fi
         . tests/ci/ci.sh "-A|${{ matrix.target }}|-T|${{ matrix.toolset }}|-DCMAKE_BUILD_TYPE=${{ matrix.build-type }}|-DMDBX_BUILD_SHARED_LIBRARY:BOOL=${{ matrix.dll }}|-DMDBX_WITHOUT_MSVC_CRT:BOOL=${{ matrix.without_crt }}" \
           "--config|${{ matrix.build-type }}" "--build-config|${{ matrix.build-type }}|${TEST_ARGS}"
 
