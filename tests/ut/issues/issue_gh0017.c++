@@ -1,5 +1,5 @@
 /* offsetof(tree_t, root) == 8: u16 flags, u16 height, u32 dupfix_size, then pgno_t root */
-#include "../../src/essentials.h"
+#include "../../../src/essentials.h"
 #include <gtest/gtest.h>
 #include <stdint.h>
 #include <stdio.h>
