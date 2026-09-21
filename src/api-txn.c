@@ -157,7 +157,7 @@ int mdbx_txn_park(MDBX_txn *txn, bool autounpark) {
     return LOG_IFERR(rc);
 
   if (unlikely((txn->flags & txn_ro_flat) == 0))
-    return LOG_IFERR(MDBX_TXN_INVALID);
+    return LOG_IFERR(MDBX_EINVAL);
 
   return LOG_IFERR(txn_ro_park(txn, autounpark));
 }

@@ -88,6 +88,11 @@ static void debug(int line, const char *msg, ...) {
 typedef MDBX_cache_result_t (*get_cached_t)(const MDBX_txn *txn, MDBX_dbi dbi, const MDBX_val *key, MDBX_val *data,
                                             MDBX_cache_entry_t *entry);
 
+static MDBX_cache_result_t cache_get_multithreaded(const MDBX_txn *txn, MDBX_dbi dbi, const MDBX_val *key,
+                                                   MDBX_val *data, MDBX_cache_entry_t *entry) {
+  return mdbx_cache_get(txn, dbi, key, data, entry);
+}
+
 static bool check_state(const MDBX_cache_result_t &r, const MDBX_error_t wanna_errcode,
                         const MDBX_cache_status_t wanna_status, unsigned line) {
   if (r.errcode == wanna_errcode && r.status == wanna_status)
@@ -1028,19 +1033,19 @@ int doit() {
   std::cout << ">> trivia " << "SingleThreaded" << std::endl;
   ok = case0_trivia(env, mdbx_cache_get_SingleThreaded) && ok;
   std::cout << ">> trivia " << "cache_get" << std::endl;
-  ok = case0_trivia(env, (get_cached_t)mdbx_cache_get) && ok;
+  ok = case0_trivia(env, cache_get_multithreaded) && ok;
   std::cout << ">> trivia " << "SingleThreaded_withMutex" << std::endl;
   ok = case0_trivia(env, cache_get_SingleThreaded_withMutex) && ok;
 
   std::cout << ">> stairway " << "SingleThreaded" << std::endl;
   ok = case1_stairway(env, rnd, mdbx_cache_get_SingleThreaded) && ok;
   std::cout << ">> stairway " << "cache_get" << std::endl;
-  ok = case1_stairway(env, rnd, (get_cached_t)mdbx_cache_get) && ok;
+  ok = case1_stairway(env, rnd, cache_get_multithreaded) && ok;
 
   std::cout << ">> multithread " << "SingleThreaded_withMutex" << std::endl;
   ok = case2_multithread(env, rnd, cache_get_SingleThreaded_withMutex) && ok;
   std::cout << ">> multithread " << "cache_get" << std::endl;
-  ok = case2_multithread(env, rnd, (get_cached_t)mdbx_cache_get) && ok;
+  ok = case2_multithread(env, rnd, cache_get_multithreaded) && ok;
 
   if (ok) {
     std::cout << "OK\n";

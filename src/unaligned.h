@@ -40,7 +40,7 @@ MDBX_MAYBE_UNUSED static inline void *bcopy_4(void *const __restrict dst, const 
 
 MDBX_MAYBE_UNUSED static inline void *bcopy_8(void *const __restrict dst, const void *const __restrict src) {
   uint8_t *__restrict d = (uint8_t *)dst;
-  const uint8_t *__restrict s = (uint8_t *)src;
+  const uint8_t *__restrict s = (const uint8_t *)src;
   d[0] = s[0];
   d[1] = s[1];
   d[2] = s[2];
@@ -50,6 +50,11 @@ MDBX_MAYBE_UNUSED static inline void *bcopy_8(void *const __restrict dst, const 
   d[6] = s[6];
   d[7] = s[7];
   return d;
+}
+
+MDBX_MAYBE_UNUSED static inline void *bcopy_16(void *const __restrict dst, const void *const __restrict src) {
+  bcopy_8(dst, src);
+  return bcopy_8((uint8_t *)dst + 8, (const uint8_t *)src + 8);
 }
 
 MDBX_NOTHROW_PURE_FUNCTION MDBX_MAYBE_UNUSED static inline uint16_t unaligned_peek_u16(const size_t expected_alignment,
