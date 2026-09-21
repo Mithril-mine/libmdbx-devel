@@ -85,7 +85,7 @@ TEST(ut_txn_park, autounpark) {
 TEST(ut_txn_park, write_txn_cannot_park) {
   auto env = make_env("test-txn-park");
   auto w = env.start_write();
-  EXPECT_ANY_THROW(w.park_reading());
+  EXPECT_THROW(w.park_reading(), std::invalid_argument) << "parking a write txn must report MDBX_EINVAL";
   w.abort();
   env.close();
   mdbx::env::remove("test-txn-park");
