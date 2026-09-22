@@ -66,7 +66,8 @@ python3 ... --self-test                                        # проверк�
 
 ## Статус
 
-- Клиент `tools/alice-consult.py` готов, self-test без ключа → rc=2 с пояснением.
-- Ключ (`YANDEX_CLOUD_FOLDER`, `YANDEX_CLOUD_API_KEY`) предоставит владелец;
-  после этого выполнить `--self-test` и убедиться в доступе.
+- Клиент `tools/alice-consult.py` готов; **ключ подключён 2026-09-22** —
+  `--self-test` OK; реальные запросы через маршрутизацию работают.
+- Ключ хранится в `.skynet/secrets/yandex.env` (chmod 600, вне git); инструмент
+  подхватывает файл автоматически.
 - Связано: TASK-34 (Vision) — Алиса как движок дивергенции; approach-bank A10/A11.
