@@ -10,14 +10,20 @@
 
 ## Роли и исполнители
 
+> Именование агентов: **роль + квалификатор** (решение владельца 2026-09-22).
+> Старые slug-и: main_architect→coordinator, tests_worker/test_writer→test-engineer-1/2,
+> docs→scribe, review_*→reviewer-*, sysprobe→toolsmith, mailman (служебный).
+
 | Роль (владельческий набор) | Зона ответственности | SKILL (L3) | Агенты |
 |---|---|---|---|
-| Координатор / лид проекта | целостность архитектуры, синхронизация потоков работ, приоритизация, зависимости, CI/CD, метрики | L4 `skills/orchestrator/*` (указатель `orchestrator-kaizen.md`) | main_architect |
-| Разработчик C++ API / обёрток | расширение C++ API, RAII-обёртки, интеграция с C API, обработка ошибок | (gap — закрывают tests_writer/tests_worker + review-cpp) | — |
-| Инженер тестов и стабильности | покрытие тестами, edge-case, stress/fuzz, восстановление после сбоев | `skills/roles/test-engineer/SKILL.md` | tests_worker, tests_writer |
-| Технический писатель / документатор | документация, примеры, диаграммы, версионирование, API-референс, doxygen | `skills/roles/documentation-scribe/SKILL.md` | docs |
-| Ревьюер кода (доменные) | код-ревью по областям: стиль/безопасность/производительность/архитектура | `skills/roles/code-reviewer/SKILL.md` (+`platform-build-engineer/SKILL.md` для cmake) | review-cmake, review-cpp, review-win, review-macos |
-| Пробщик/инструментарий (специфика роя) | USDT/SystemTap-пробники, перф-инструменты, каталог probes.md | `skills/roles/platform-build-engineer/SKILL.md` (base) | sysprobe |
+| Координатор / лид проекта | целостность архитектуры, синхронизация потоков работ, приоритизация, зависимости, CI/CD, метрики | L4 `skills/orchestrator/*` (указатель `orchestrator-kaizen.md`) | coordinator (бывш. main_architect) |
+| Визионер (эпизодическая) | генерация идей, дивергентное исследование пространства альтернатив; вызывается по запросу, не конкурент рабочих задач | `skills/roles/vision/SKILL.md` (TASK-34) | vision |
+| Разработчик C++ API / обёрток | расширение C++ API, RAII-обёртки, интеграция с C API, обработка ошибок | (gap — закрывают test-engineer-1/2 + reviewer-cpp) | — |
+| Инженер тестов и стабильности | покрытие тестами, edge-case, stress/fuzz, восстановление после сбоев | `skills/roles/test-engineer/SKILL.md` | test-engineer-1 (бывш. tests_worker), test-engineer-2 (бывш. tests_writer) |
+| Технический писатель / документатор | документация, примеры, диаграммы, версионирование, API-референс, doxygen | `skills/roles/documentation-scribe/SKILL.md` | scribe (бывш. docs) |
+| Ревьюер кода (доменные) | код-ревью по областям: стиль/безопасность/производительность/архитектура | `skills/roles/code-reviewer/SKILL.md` (+`platform-build-engineer/SKILL.md` для cmake) | reviewer-cmake, reviewer-cpp, reviewer-win, reviewer-macos (бывш. review_*) |
+| Пробщик/инструментарий (специфика роя) | USDT/SystemTap-пробники, перф-инструменты, каталог probes.md | `skills/roles/platform-build-engineer/SKILL.md` (base) | toolsmith (бывш. sysprobe) |
+| Почтальон (служебный механизм) | доставка писем через waitmail/fifo/MCP-память; НЕ агент, компонент оркестратора | — | mailman (не переименовывается) |
 
 ## Коллективные SKILLS (для всей команды)
 
