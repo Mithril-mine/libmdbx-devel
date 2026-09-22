@@ -5,8 +5,7 @@
 
 ## Пул ролей и паттерны активации
 
-- Реестр ролей — `skynet_registry` (10 агентов: tests_worker/tests_writer,
-  review-cpp/win/macos/cmake, docs, sysprobe, mailman[decommissioned], main_architect).
+- Реестр ролей — `skynet_registry` (? агентов: ?, docs, vision, mailman[decommissioned], main).
 - Одновременно активны **busy ≤ 3**; спящие роли хранят канонический ses_id и
   не плодят сессии.
 - Активация/деактивация: switch-in = восстановить сессию (`-s`), синхронизировать

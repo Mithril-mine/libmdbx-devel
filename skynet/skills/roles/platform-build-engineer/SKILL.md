@@ -11,13 +11,6 @@
 Linux/Windows/macOS/Android сборка; amalgamation-gate; CI: SourceCraft (primary),
 GitHub Actions (mirror).
 
-## Специализации
-
-| Агент | Фокус | Платформы |
-|-------|-------|-----------|
-| PB-Desktop | CI/CD, сборка, amalgamation | Linux, Windows, macOS |
-| PB-Mobile | кросс-компиляция, NDK | Android |
-
 ## Task Protocols
 
 ### Настройка CI-gate
