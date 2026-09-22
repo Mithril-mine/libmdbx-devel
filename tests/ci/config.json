@@ -488,9 +488,9 @@
         "-DMDBX_WITHOUT_MSVC_CRT:BOOL=ON"
       ],
       "ctest": {
-        "exclude": "smoke_sp_"
+        "exclude": "smoke_(sp|t1)_"
       },
-      "note": "ci-windows-msvc toolset=v145 target=ARM64 Debug dll=ON crt=ON; ARM64 beta-runner smoke_sp_ excluded (B14/TASK-27)"
+      "note": "ci-windows-msvc toolset=v145 target=ARM64 Debug dll=ON crt=ON; ARM64 beta-runner smoke_(sp|t1)_ excluded (B14/TASK-27 + TASK-30)"
     },
     {
       "id": "win-msvc-v145-arm64-release-dll-on-crt-on",
@@ -503,9 +503,9 @@
         "-DMDBX_WITHOUT_MSVC_CRT:BOOL=ON"
       ],
       "ctest": {
-        "exclude": "smoke_sp_"
+        "exclude": "smoke_(sp|t1)_"
       },
-      "note": "ci-windows-msvc toolset=v145 target=ARM64 Release dll=ON crt=ON; ARM64 beta-runner smoke_sp_ excluded (B14/TASK-27)"
+      "note": "ci-windows-msvc toolset=v145 target=ARM64 Release dll=ON crt=ON; ARM64 beta-runner smoke_(sp|t1)_ excluded (B14/TASK-27 + TASK-30)"
     },
     {
       "id": "win-msvc-v145-x64-debug-dll-on-crt-off",
@@ -570,9 +570,9 @@
         "-DMDBX_WITHOUT_MSVC_CRT:BOOL=OFF"
       ],
       "ctest": {
-        "exclude": "smoke_sp_"
+        "exclude": "smoke_(sp|t1)_"
       },
-      "note": "ci-windows-msvc toolset=v145 target=ARM64 Debug dll=ON crt=OFF; ARM64 beta-runner smoke_sp_ excluded (B14/TASK-27)"
+      "note": "ci-windows-msvc toolset=v145 target=ARM64 Debug dll=ON crt=OFF; ARM64 beta-runner smoke_(sp|t1)_ excluded (B14/TASK-27 + TASK-30)"
     },
     {
       "id": "win-msvc-v145-arm64-release-dll-on-crt-off",
@@ -585,9 +585,9 @@
         "-DMDBX_WITHOUT_MSVC_CRT:BOOL=OFF"
       ],
       "ctest": {
-        "exclude": "smoke_sp_"
+        "exclude": "smoke_(sp|t1)_"
       },
-      "note": "ci-windows-msvc toolset=v145 target=ARM64 Release dll=ON crt=OFF; ARM64 beta-runner smoke_sp_ excluded (B14/TASK-27)"
+      "note": "ci-windows-msvc toolset=v145 target=ARM64 Release dll=ON crt=OFF; ARM64 beta-runner smoke_(sp|t1)_ excluded (B14/TASK-27 + TASK-30)"
     },
     {
       "id": "win-msvc-v145-x64-debug-dll-off-crt-on",
@@ -652,9 +652,9 @@
         "-DMDBX_WITHOUT_MSVC_CRT:BOOL=ON"
       ],
       "ctest": {
-        "exclude": "smoke_sp_"
+        "exclude": "smoke_(sp|t1)_"
       },
-      "note": "ci-windows-msvc toolset=v145 target=ARM64 Debug dll=OFF crt=ON; ARM64 beta-runner smoke_sp_ excluded (B14/TASK-27)"
+      "note": "ci-windows-msvc toolset=v145 target=ARM64 Debug dll=OFF crt=ON; ARM64 beta-runner smoke_(sp|t1)_ excluded (B14/TASK-27 + TASK-30)"
     },
     {
       "id": "win-msvc-v145-arm64-release-dll-off-crt-on",
@@ -667,9 +667,9 @@
         "-DMDBX_WITHOUT_MSVC_CRT:BOOL=ON"
       ],
       "ctest": {
-        "exclude": "smoke_sp_"
+        "exclude": "smoke_(sp|t1)_"
       },
-      "note": "ci-windows-msvc toolset=v145 target=ARM64 Release dll=OFF crt=ON; ARM64 beta-runner smoke_sp_ excluded (B14/TASK-27)"
+      "note": "ci-windows-msvc toolset=v145 target=ARM64 Release dll=OFF crt=ON; ARM64 beta-runner smoke_(sp|t1)_ excluded (B14/TASK-27 + TASK-30)"
     },
     {
       "id": "win-msvc-v145-x64-debug-dll-off-crt-off",
@@ -734,9 +734,9 @@
         "-DMDBX_WITHOUT_MSVC_CRT:BOOL=OFF"
       ],
       "ctest": {
-        "exclude": "smoke_sp_"
+        "exclude": "smoke_(sp|t1)_"
       },
-      "note": "ci-windows-msvc toolset=v145 target=ARM64 Debug dll=OFF crt=OFF; ARM64 beta-runner smoke_sp_ excluded (B14/TASK-27)"
+      "note": "ci-windows-msvc toolset=v145 target=ARM64 Debug dll=OFF crt=OFF; ARM64 beta-runner smoke_(sp|t1)_ excluded (B14/TASK-27 + TASK-30)"
     },
     {
       "id": "win-msvc-v145-arm64-release-dll-off-crt-off",
@@ -749,9 +749,9 @@
         "-DMDBX_WITHOUT_MSVC_CRT:BOOL=OFF"
       ],
       "ctest": {
-        "exclude": "smoke_sp_"
+        "exclude": "smoke_(sp|t1)_"
       },
-      "note": "ci-windows-msvc toolset=v145 target=ARM64 Release dll=OFF crt=OFF; ARM64 beta-runner smoke_sp_ excluded (B14/TASK-27)"
+      "note": "ci-windows-msvc toolset=v145 target=ARM64 Release dll=OFF crt=OFF; ARM64 beta-runner smoke_(sp|t1)_ excluded (B14/TASK-27 + TASK-30)"
     },
     {
       "id": "win-mscl-x64-debug-dll-on-crt-on",
@@ -799,9 +799,9 @@
         "-DMDBX_WITHOUT_MSVC_CRT:BOOL=ON"
       ],
       "ctest": {
-        "exclude": "smoke_sp_"
+        "exclude": "smoke_(sp|t1)_"
       },
-      "note": "ci-windows-mscl studio=18 target=ARM64 Debug dll=ON crt=ON; ARM64 beta-runner smoke_sp_ excluded (B14/TASK-27)"
+      "note": "ci-windows-mscl studio=18 target=ARM64 Debug dll=ON crt=ON; ARM64 beta-runner smoke_(sp|t1)_ excluded (B14/TASK-27 + TASK-30)"
     },
     {
       "id": "win-mscl-arm64-release-dll-on-crt-on",
@@ -817,9 +817,9 @@
         "-DMDBX_WITHOUT_MSVC_CRT:BOOL=ON"
       ],
       "ctest": {
-        "exclude": "smoke_sp_"
+        "exclude": "smoke_(sp|t1)_"
       },
-      "note": "ci-windows-mscl studio=18 target=ARM64 Release dll=ON crt=ON; ARM64 beta-runner smoke_sp_ excluded (B14/TASK-27)"
+      "note": "ci-windows-mscl studio=18 target=ARM64 Release dll=ON crt=ON; ARM64 beta-runner smoke_(sp|t1)_ excluded (B14/TASK-27 + TASK-30)"
     },
     {
       "id": "win-mscl-x64-debug-dll-on-crt-off",
@@ -867,9 +867,9 @@
         "-DMDBX_WITHOUT_MSVC_CRT:BOOL=OFF"
       ],
       "ctest": {
-        "exclude": "smoke_sp_"
+        "exclude": "smoke_(sp|t1)_"
       },
-      "note": "ci-windows-mscl studio=18 target=ARM64 Debug dll=ON crt=OFF; ARM64 beta-runner smoke_sp_ excluded (B14/TASK-27)"
+      "note": "ci-windows-mscl studio=18 target=ARM64 Debug dll=ON crt=OFF; ARM64 beta-runner smoke_(sp|t1)_ excluded (B14/TASK-27 + TASK-30)"
     },
     {
       "id": "win-mscl-arm64-release-dll-on-crt-off",
@@ -885,9 +885,9 @@
         "-DMDBX_WITHOUT_MSVC_CRT:BOOL=OFF"
       ],
       "ctest": {
-        "exclude": "smoke_sp_"
+        "exclude": "smoke_(sp|t1)_"
       },
-      "note": "ci-windows-mscl studio=18 target=ARM64 Release dll=ON crt=OFF; ARM64 beta-runner smoke_sp_ excluded (B14/TASK-27)"
+      "note": "ci-windows-mscl studio=18 target=ARM64 Release dll=ON crt=OFF; ARM64 beta-runner smoke_(sp|t1)_ excluded (B14/TASK-27 + TASK-30)"
     },
     {
       "id": "win-mscl-x64-debug-dll-off-crt-on",
@@ -935,9 +935,9 @@
         "-DMDBX_WITHOUT_MSVC_CRT:BOOL=ON"
       ],
       "ctest": {
-        "exclude": "smoke_sp_"
+        "exclude": "smoke_(sp|t1)_"
       },
-      "note": "ci-windows-mscl studio=18 target=ARM64 Debug dll=OFF crt=ON; ARM64 beta-runner smoke_sp_ excluded (B14/TASK-27)"
+      "note": "ci-windows-mscl studio=18 target=ARM64 Debug dll=OFF crt=ON; ARM64 beta-runner smoke_(sp|t1)_ excluded (B14/TASK-27 + TASK-30)"
     },
     {
       "id": "win-mscl-arm64-release-dll-off-crt-on",
@@ -953,9 +953,9 @@
         "-DMDBX_WITHOUT_MSVC_CRT:BOOL=ON"
       ],
       "ctest": {
-        "exclude": "smoke_sp_"
+        "exclude": "smoke_(sp|t1)_"
       },
-      "note": "ci-windows-mscl studio=18 target=ARM64 Release dll=OFF crt=ON; ARM64 beta-runner smoke_sp_ excluded (B14/TASK-27)"
+      "note": "ci-windows-mscl studio=18 target=ARM64 Release dll=OFF crt=ON; ARM64 beta-runner smoke_(sp|t1)_ excluded (B14/TASK-27 + TASK-30)"
     },
     {
       "id": "win-mscl-x64-debug-dll-off-crt-off",
@@ -1003,9 +1003,9 @@
         "-DMDBX_WITHOUT_MSVC_CRT:BOOL=OFF"
       ],
       "ctest": {
-        "exclude": "smoke_sp_"
+        "exclude": "smoke_(sp|t1)_"
       },
-      "note": "ci-windows-mscl studio=18 target=ARM64 Debug dll=OFF crt=OFF; ARM64 beta-runner smoke_sp_ excluded (B14/TASK-27)"
+      "note": "ci-windows-mscl studio=18 target=ARM64 Debug dll=OFF crt=OFF; ARM64 beta-runner smoke_(sp|t1)_ excluded (B14/TASK-27 + TASK-30)"
     },
     {
       "id": "win-mscl-arm64-release-dll-off-crt-off",
@@ -1021,9 +1021,9 @@
         "-DMDBX_WITHOUT_MSVC_CRT:BOOL=OFF"
       ],
       "ctest": {
-        "exclude": "smoke_sp_"
+        "exclude": "smoke_(sp|t1)_"
       },
-      "note": "ci-windows-mscl studio=18 target=ARM64 Release dll=OFF crt=OFF; ARM64 beta-runner smoke_sp_ excluded (B14/TASK-27)"
+      "note": "ci-windows-mscl studio=18 target=ARM64 Release dll=OFF crt=OFF; ARM64 beta-runner smoke_(sp|t1)_ excluded (B14/TASK-27 + TASK-30)"
     },
     {
       "id": "win-mingw-64-debug-dll-on-crt-on",
