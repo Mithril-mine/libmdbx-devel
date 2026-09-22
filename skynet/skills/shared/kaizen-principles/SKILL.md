@@ -15,8 +15,8 @@
 ## Копилка подходов
 
 Проверенные паттерны мышления (дивергенция, baseline-reset, асимметрия
-доступа, dogfooding, декомпозиция потока) — `references/approach-bank.md`
-(A1–A8). Использовать в brainstorming и при выборе решения.
+доступа, dogfooding, декомпозиция потока) — `../references/approach-bank.md`
+(A1–A12). Использовать в brainstorming и при выборе решения.
 
 ## Источники данных
 
