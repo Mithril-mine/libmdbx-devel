@@ -116,40 +116,54 @@ belong in the codex because they govern agent behavior across sessions.
 - Tasks assigned by the coordinator are authoritative; start them immediately
   and report via `REPORT`.
 
-## Memory infrastructure & traps (2026-09-21)
+## Memory infrastructure & traps (2026-09-21 → 2026-09-22)
 
-**The canonical store is a FILE.** The whole swarm (orchestrator, mailwatch,
-headless agents, coordinator) reads/writes ONE JSONL file:
+**The canonical store is now a libmdbx database, not a JSONL file.** The
+JSONL-backed `@modelcontextprotocol/server-memory` was replaced by
+`memory-mdbx-server.py` (ACID, inter-process safe via the engine's lock file).
+This eliminated the lost-update race of the old read-modify-write JSONL store.
 
 ```
-~/.npm/_npx/<hash>/node_modules/@modelcontextprotocol/server-memory/dist/memory.jsonl
+DB (canonical): ~/.local/share/libmdbx-memory/graph.mdbx   (+ -lck)
+Server:         ~/.local/share/libmdbx-memory/memory-mdbx-server.py
+Library:        ~/.local/share/libmdbx-memory/build/libmdbx.so   (master e77297e0)
+Legacy JSONL:   ~/.local/share/libmdbx-memory/memory.jsonl       (archive; old sessions)
+Reader bridge:  /sourcecraft/workspace/.skynet/memory_reader.py  (merge mdbx+legacy)
+MCP config:     ~/.config/opencode/opencode.json -> mcp.memory
 ```
 
-Find the current path (hash changes on package update):
-
-```sh
-ls -t ~/.npm/_npx/*/node_modules/@modelcontextprotocol/server-memory/dist/memory.jsonl | head -1
-```
+- **Schema**: 4 subdbs, dupsort = `key -> sorted_set_of_values`. `E` (meta,
+  name → JSON), `O` (name → observations, DUP), `R` (from → `to\0type`, DUP),
+  `RV` (to → `from\0type`, DUP). Limits @4K pagesize: key/dup-value ≤ 2022 bytes.
+- **Tools** read via `memory_reader.py` (merges mdbx + legacy during transition);
+  new sessions write to mdbx, sessions started before the switch keep appending
+  to legacy JSONL until restarted.
+- **Verify after critical writes**: `python3 memory-mdbx-server.py --dump-jsonl
+  | grep <marker>` (the old npx-JSONL write could return success without landing).
 
 ### Trap 1: a second (docker) memory server exists but is NOT shared
 
 `.codeassistant/mcp.json` defines `memory` as a **docker container**
 (`mcp/memory`, volume `mcp-memory:/app/dist`). That stack is isolated and its
 writes are invisible to the swarm. Everyone uses the global
-`~/.config/opencode/opencode.json` → npx `server-memory`. If a write "succeeds"
-but does not appear in the canonical file, you likely hit the docker stack.
+`~/.config/opencode/opencode.json` → `memory-mdbx-server.py`. If a write "succeeds"
+but does not appear in the DB, you likely hit the docker stack.
 
-### Trap 2: verify every critical write against the FILE
+### Trap 2: old sessions still write to legacy JSONL
 
-`memory_add_observations` can return success yet not land in the canonical file
-(observed 2026-09-21 with TASK-28 letter `mail-48`; a retry succeeded). Rule:
-after writing a letter / task-board record / registry update, `grep` the
-canonical file for a unique marker. If missing, retry the call.
+Until every opencode session is restarted, some agents write to the old
+`memory.jsonl`. Always go through `memory_reader.py` so both sources merge.
+After a full restart only `graph.mdbx` is live.
+
+### Trap 3: never copy a live store with `cp`
+
+Use `/sourcecraft/workspace/.skynet/migrate-memory.py` (parse+repair+validate).
 
 ### Provenance note
 
-This is the 3rd iteration of debugging "why doesn't the swarm see my memory
-write" — always check the FILE first (Gemba on the infrastructure, not the API).
+This is the 3rd+ iteration of debugging "why doesn't the swarm see my memory
+write". Root cause: non-transactional JSONL + multiple writers → lost updates.
+Fixed by switching the backend to libmdbx (owner decision 2026-09-22).
 
 [Full workspace doc: `/sourcecraft/workspace/AGENT-WORKSPACE.md` → «Общая память
 агентов (memory-MCP)»]
