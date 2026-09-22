@@ -41,6 +41,13 @@ Present 2–4 options with trade-offs. Do not hide the ugly ones. For example, w
 tests: extend `mdbx_test` framework vs add standalone CTest tests vs integrate GoogleTest —
 each has cost/benefit for the stochastic vs deterministic split.
 
+**Divergent seed (Step 0):** before converging on the "standard" solution, consult the
+[`approach-bank`](../../shared/references/approach-bank.md) (A1–A8) and generate at least one
+non-obvious alternative — e.g. a different network path (A5), dogfooding the project's own
+tech (A6), or eliminating an absorbing queue state (A7). If a persistent, interactive
+Q&A round-trip is impossible (headless swarm), record the alternatives in the design doc
+instead of skipping divergence.
+
 ### 3. Present the design in digestible sections
 
 Show the design incrementally (overview → data structures → flow → edge cases → testing), and
