@@ -3,6 +3,7 @@
 *.[ao]
 *.autosave
 *.bak
+.skynet/
 build/
 build.ninja
 cmake-build-*
