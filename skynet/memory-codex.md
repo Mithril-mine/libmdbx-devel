@@ -143,11 +143,15 @@ MCP config:     ~/.config/opencode/opencode.json -> mcp.memory
 
 ### Trap 1: a second (docker) memory server exists but is NOT shared
 
-`.codeassistant/mcp.json` defines `memory` as a **docker container**
-(`mcp/memory`, volume `mcp-memory:/app/dist`). That stack is isolated and its
-writes are invisible to the swarm. Everyone uses the global
-`~/.config/opencode/opencode.json` → `memory-mdbx-server.py`. If a write "succeeds"
-but does not appear in the DB, you likely hit the docker stack.
+Legacy: `.codeassistant/mcp.json` once defined `memory` as a **docker container**
+(`mcp/memory`, volume `mcp-memory:/app/dist`) and the SourceCraft opencode MCP
+bundle (`~/.config/sourcecraft/opencode/mcp/`) pinned `@modelcontextprotocol/server-memory`.
+That stack was isolated and its writes invisible to the swarm. Everyone uses the
+global `~/.config/opencode/opencode.json` → `memory-mdbx-server.py`.
+**Cleaned up 2026-09-22 (A13):** the docker container and `mcp-memory` volume were
+removed, `server-memory` dependency dropped from the bundle, the corrupted npx
+JSONL deleted. If a write "succeeds" but does not appear in the DB again —
+check for a resurrected legacy server first.
 
 ### Trap 2: old sessions still write to legacy JSONL
 
