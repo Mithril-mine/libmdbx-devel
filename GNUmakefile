@@ -251,6 +251,10 @@ help:
 	@echo "    make smoke-valgrind        - alias for smoke-memcheck"
 	@echo "    make smoke-fault           - run the transaction-owner-failure smoke testcase"
 	@echo "    make smoke-singleprocess   - run the single-process smoke test"
+	@echo "    make smoke-t1              - T1 fast deterministic smoke (seconds, fixed seeds)"
+	@echo "    make smoke-t2              - T2 medium smoke (quick-smoke family)"
+	@echo "    make smoke-t3              - T3 long/full stochastic runs (milestone/nightly)"
+	@echo "    make select-tests          - show CTest labels affected by changed paths (impact selection)"
 	@echo ""
 	@echo "  Benchmarking:"
 	@echo "    make bench                 - run the ioarena benchmark"
@@ -522,6 +526,7 @@ else
 .PHONY: build-stochastic check cross-gcc cross-qemu dist doxygen gcc-analyzer long-test
 .PHONY: reformat release-assets tags smoke smoke-fault
 .PHONY: smoke-singleprocess test-singleprocess test-stochastic test-long test-valgrind test-memcheck memcheck smoke-memcheck
+.PHONY: smoke-t1 smoke-t2 smoke-t3 select-tests
 .PHONY: smoke-assertion long-test-assertion test-ci test-ci-extra check-posix-locking check-posix-locking-run
 
 test-ci-extra: test-ci cross-gcc cross-qemu
@@ -600,6 +605,18 @@ smoke-singleprocess: cmake-build
 
 smoke-fault: cmake-build
 	$(call ctest-scenario-run,@cmake-build,^smoke-fault$$,)
+
+smoke-t1: cmake-build
+	$(call ctest-scenario-run,@cmake-build,^smoke-t1$$,)
+
+smoke-t2: cmake-build
+	$(call ctest-scenario-run,@cmake-build,^smoke-t2$$,)
+
+smoke-t3: cmake-stochastic-build
+	$(call ctest-scenario-run,@cmake-stochastic-build,^smoke-t3$$,)
+
+select-tests:
+	$(QUIET)tests/select-tests.sh $(SELECT_TESTS_ARGS)
 
 test-stochastic: cmake-stochastic-build
 	$(call ctest-scenario-run,@cmake-stochastic-build,^stochastic$$,)
