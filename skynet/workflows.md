@@ -57,9 +57,11 @@ L4 sanitizer sweeps → L5 memcheck → L6 `stochastic.sh` → L7 human-controll
 | L7 | `tests/battery-tmux.sh`, `make test-long` | human-supervised extended soak (hours/days) |
 | +style | `make reformat` | `clang-format` (LLVM, `.clang-format`); must be idempotent |
 | +locking | `make check-posix-locking` | SYSV/1988/2001/2008 variants |
+| +doxygen | `make doxygen` | **always run when changing doxygen comments**; keep fixable warnings at zero (parity with master). Config-option warnings of a non-latest doxygen are not "fixes" — do NOT touch `docs/Doxyfile` |
 
 Note: sanitizer targets rebuild with their own `CFLAGS_EXTRA`/`CMAKE_OPT` and `MDBX_CHECKING`
-(see [`build.md`](build.md) §6.4) — always run them after touching `src/`.
+(see [`build.md`](build.md) §6.4) — always run them after touching `src/`. A local-only
+CI check for fixable doxygen warnings is welcome; it must NOT be added to GitHub/SourceCraft CI.
 
 ## 4. CI gates
 
@@ -79,6 +81,31 @@ Note: sanitizer targets rebuild with their own `CFLAGS_EXTRA`/`CMAKE_OPT` and `M
   (`SetDecision`); `GetMergeChecks` shows approval/CI/conflict status.
 - Merge: `MergePullRequest` (squash/rebase options, `delete_branch`).
 - See [`sourcecraft/README.md`](sourcecraft/README.md) for exact tool mapping.
+
+### 5a. Порядок merge/rebase при переписанной базе (Kaizen, 2026-09-22)
+
+**Класс операции:** перенос готовых веток на изменённую/переписанную базу
+(напр. rebase `devel` на переписанный `master` при старте новой минорной
+линии `v0.15.x`).
+
+**Правило (рассмотреть два пути, взвесить):**
+
+- **Путь A — «сначала влить, потом rebase» (обычно оптимальный):** все
+  одобренные и готовые feature-ветки сначала `git merge` в `devel` (решая
+  конфликты один раз на текущей базе), а затем **один** rebase всего `devel`
+  на новую базу. Итог: один rebase покрывает сразу всё; нет дублей коммитов
+  в истории; не рвётся связь с версионными тэгами (describe от новой базы,
+  а не перескок через старый тэг).
+- **Путь B — «сначала rebase, потом вливать по одной»:** уместен только когда
+  веток мало (1–2), они независимы и готовы rebase самостоятельно, либо база
+  ещё не стабилизирована и конфликты повторяются. Иначе каждая ветка требует
+  отдельного rebase → копии коммитов и риск потери связи с новым тэгом.
+
+**Когда выбирать:** если есть ≥2 готовых веток И база будет переписана —
+по умолчанию путь A; путь B только по явному соображению (независимость,
+нестабильность базы). После rebase обязательно проверить
+`git merge-base <devel> <new-master> == <new-master>` (т.е. devel = master +
+наши коммиты) и отсутствие дублированных пар `(hash, message)`.
 
 ## 6. Release process
 
