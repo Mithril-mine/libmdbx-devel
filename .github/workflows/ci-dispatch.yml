@@ -1,0 +1,146 @@
+name: ci-dispatch
+
+# Testing-infra-v2 orchestrator (TASK-28 stage 12).
+# Resolves a request (push / workflow_dispatch / repository_dispatch / schedule)
+# into a cell list from tests/ci/config.json and fans each cell out to the
+# reusable runner ci-run.yml. Old legacy workflows stay untouched as fallback.
+
+on:
+  push:
+    branches: [devel, master]
+  workflow_dispatch:
+    inputs:
+      profile:
+        description: named profile from tests/ci/config.json
+        type: choice
+        required: false
+        default: push-quick
+        options:
+          - push-quick
+          - linux-full
+          - win-full
+          - mac-full
+          - android-build
+          - full
+      cell:
+        description: single cell id (overrides profile)
+        type: string
+        required: false
+      ref:
+        description: branch or SHA to test
+        type: string
+        required: false
+        default: devel
+  repository_dispatch:
+    types: [dispatch-event]
+  schedule:
+    - cron: "30 0 * * *"
+
+permissions:
+  contents: read
+
+jobs:
+  resolve:
+    runs-on: ubuntu-latest
+    outputs:
+      cells: ${{ steps.resolve.outputs.cells }}
+      ref: ${{ steps.resolve.outputs.ref }}
+      requested: ${{ steps.resolve.outputs.requested }}
+    steps:
+      - name: checkout
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+          fetch-tags: true
+          submodules: true
+
+      - name: resolve
+        id: resolve
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          REF: ${{ github.ref_name }}
+          DISPATCH_PROFILE: ${{ inputs.profile || github.event.client_payload.profile || '' }}
+          DISPATCH_CELL: ${{ inputs.cell || github.event.client_payload.cell || '' }}
+          DISPATCH_REF: ${{ inputs.ref || github.event.client_payload.ref || '' }}
+          SHA: ${{ github.sha }}
+        shell: bash
+        run: |
+          set -euxo pipefail
+          python3 - >"$GITHUB_OUTPUT" <<'PY'
+          import json, os
+          cfg = json.load(open('tests/ci/config.json'))
+          event = os.environ['EVENT_NAME']
+          profile = ''
+          cell = ''
+          ref = ''
+          if event == 'push':
+              profile, ref = 'push-quick', os.environ['REF']
+          elif event == 'workflow_dispatch':
+              cell = os.environ['DISPATCH_CELL']
+              profile = '' if cell else os.environ['DISPATCH_PROFILE']
+              ref = os.environ['DISPATCH_REF'] or os.environ['SHA']
+          elif event == 'repository_dispatch':
+              cell = os.environ['DISPATCH_CELL']
+              profile = '' if cell else os.environ['DISPATCH_PROFILE']
+              ref = os.environ['DISPATCH_REF']
+              if not ref:
+                  raise SystemExit('repository_dispatch requires client_payload.ref')
+          elif event == 'schedule':
+              profile, ref = 'full', 'master'
+          else:
+              raise SystemExit(f'unhandled event: {event}')
+
+          cells = {c['id']: c for c in cfg['cells']}
+          if cell:
+              if cell not in cells:
+                  raise SystemExit(f'unknown cell id: {cell}')
+              ids = [cell]
+              kind = f'cell={cell}'
+          else:
+              if profile not in cfg['profiles']:
+                  raise SystemExit(f'unknown profile: {profile}')
+              ids = cfg['profiles'][profile]
+              kind = f'profile={profile}'
+
+          out = []
+          for cid in ids:
+              c = cells[cid]
+              bt = ''
+              for a in c['cmake']:
+                  if 'CMAKE_BUILD_TYPE=' in a:
+                      bt = a.split('=')[-1].strip()
+              out.append({
+                  'id': c['id'],
+                  'runs-on': c['runs-on'],
+                  'cell-env': '\n'.join(f'{k}={v}' for k, v in (c.get('env') or {}).items()),
+                  'cell-cmake': ' '.join(a.replace('|', ' ') for a in c['cmake']),
+                  'cell-build-config': bt,
+                  'cell-ctest-regex': (c.get('ctest') or {}).get('regex', ''),
+                  'cell-ctest-exclude': (c.get('ctest') or {}).get('exclude', ''),
+                  'cell-build-only': 'true' if c.get('build_only') else 'false',
+              })
+          print(f'cells={json.dumps(out)}')
+          print(f'ref={ref}')
+          print(f'requested={kind} ref={ref} -> {len(out)} cells')
+          PY
+
+  run:
+    name: ${{ matrix['id'] }}
+    needs: resolve
+    runs-on: ${{ matrix['runs-on'] }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include: ${{ fromJson(needs.resolve.outputs.cells) }}
+    steps:
+      - uses: ./.github/workflows/ci-run.yml
+        with:
+          runs-on: ${{ matrix['runs-on'] }}
+          cell-id: ${{ matrix['id'] }}
+          cell-env: ${{ matrix['cell-env'] }}
+          cell-cmake: ${{ matrix['cell-cmake'] }}
+          cell-build-config: ${{ matrix['cell-build-config'] }}
+          cell-ctest-regex: ${{ matrix['cell-ctest-regex'] }}
+          cell-ctest-exclude: ${{ matrix['cell-ctest-exclude'] }}
+          cell-build-only: ${{ matrix['cell-build-only'] == 'true' }}
+          ref: ${{ needs.resolve.outputs.ref }}
