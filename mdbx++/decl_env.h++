@@ -895,7 +895,7 @@ public:
   /// \see txn_lock() \see ::mdbx_txn_unlock()
   inline void txn_unlock();
 
-  /// \brief The result of database defragmentation, see \ref ::MDBX_defrag_result_t().
+  /// \brief The result of database defragmentation, see \ref ::MDBX_defrag_result_t.
   using defrag_result = ::MDBX_defrag_result_t;
 
   /// \brief Control values returned by the defragmentation progress visitor.
@@ -906,6 +906,7 @@ public:
     discontinue = 1, ///< Discontinue with completion of scheduled operations.
   };
 
+  template <typename VISITOR>
   /// \brief Performs database defragmentation.
   ///
   /// \details Defragmentation is the transfer of data from pages located at
@@ -944,11 +945,30 @@ public:
   ///
   /// \throws mdbx::error on failure (other than stopping reasons above).
   /// \see ::mdbx_env_defrag()
-  template <typename VISITOR>
   inline defrag_result defrag(VISITOR &visitor, size_t defrag_atleast = 0, size_t time_atleast_dot16 = 0,
                               size_t defrag_enough = 0, size_t time_limit_dot16 = 0,
                               intptr_t acceptable_backlash = -1, intptr_t preferred_batch = 0);
-  /// \copydoc defrag(VISITOR &, size_t, size_t, size_t, size_t, intptr_t, intptr_t)
+  /// \brief Performs database defragmentation without a progress visitor.
+  ///
+  /// \details The same defragmentation as in the overload accepting a
+  /// `visitor` functor, but without progress callbacks.
+  ///
+  /// \param [in] defrag_atleast  The required at least number of pages by
+  /// which the database must be reduced, zero means no lower bound.
+  /// \param [in] time_atleast_dot16  The minimum time in 1/65536 fractions of
+  /// a second that should be spent to defragment more even if goals reached,
+  /// zero means no lower bound.
+  /// \param [in] defrag_enough  The number of pages by which it will be enough
+  /// to shrink the database to finish, zero means no limit.
+  /// \param [in] time_limit_dot16  The time limit in 1/65536 fractions of a
+  /// second that could be spent to defragment, zero means no limit.
+  /// \param [in] acceptable_backlash  Stop if the next cycle will be unable to
+  /// shrink the database by more pages than this value, -1 means autopilot.
+  /// \param [in] preferred_batch  The preferred maximum number of pages to be
+  /// moved per defragmentation cycle, zero means no limit.
+  ///
+  /// \throws mdbx::error on failure (other than stopping reasons above).
+  /// \see ::mdbx_env_defrag()
   inline defrag_result defrag(size_t defrag_atleast = 0, size_t time_atleast_dot16 = 0, size_t defrag_enough = 0,
                               size_t time_limit_dot16 = 0, intptr_t acceptable_backlash = -1,
                               intptr_t preferred_batch = 0);

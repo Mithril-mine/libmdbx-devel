@@ -5129,7 +5129,6 @@ MDBX_NOTHROW_CONST_FUNCTION LIBMDBX_INLINE_API(uint32_t, mdbx_key_from_int32, (c
  * the JSON-safe integer range \f$[-2^{53}+1, 2^{53}-1]\f$ are clamped to the
  * nearest representable int64.
  *
- * \param [in] v   An 8-byte key produced by \ref mdbx_key_from_jsonInteger().
  * \returns The decoded int64 value. */
 MDBX_NOTHROW_PURE_FUNCTION LIBMDBX_API int64_t mdbx_jsonInteger_from_key(const MDBX_val);
 
@@ -5138,7 +5137,6 @@ MDBX_NOTHROW_PURE_FUNCTION LIBMDBX_API int64_t mdbx_jsonInteger_from_key(const M
  *
  * Inverse of \ref mdbx_key_from_double() for 8-byte keys.
  *
- * \param [in] v   An 8-byte key produced by \ref mdbx_key_from_double().
  * \returns The decoded double value. */
 MDBX_NOTHROW_PURE_FUNCTION LIBMDBX_API double mdbx_double_from_key(const MDBX_val);
 
@@ -5147,7 +5145,6 @@ MDBX_NOTHROW_PURE_FUNCTION LIBMDBX_API double mdbx_double_from_key(const MDBX_va
  *
  * Inverse of \ref mdbx_key_from_float() for 4-byte keys.
  *
- * \param [in] v   A 4-byte key produced by \ref mdbx_key_from_float().
  * \returns The decoded float value. */
 MDBX_NOTHROW_PURE_FUNCTION LIBMDBX_API float mdbx_float_from_key(const MDBX_val);
 
@@ -5156,7 +5153,6 @@ MDBX_NOTHROW_PURE_FUNCTION LIBMDBX_API float mdbx_float_from_key(const MDBX_val)
  *
  * Inverse of \ref mdbx_key_from_int32() for 4-byte keys.
  *
- * \param [in] v   A 4-byte key produced by \ref mdbx_key_from_int32().
  * \returns The decoded int32 value. */
 MDBX_NOTHROW_PURE_FUNCTION LIBMDBX_API int32_t mdbx_int32_from_key(const MDBX_val);
 
@@ -5165,7 +5161,6 @@ MDBX_NOTHROW_PURE_FUNCTION LIBMDBX_API int32_t mdbx_int32_from_key(const MDBX_va
  *
  * Inverse of \ref mdbx_key_from_int64() for 8-byte keys.
  *
- * \param [in] v   An 8-byte key produced by \ref mdbx_key_from_int64().
  * \returns The decoded int64 value. */
 MDBX_NOTHROW_PURE_FUNCTION LIBMDBX_API int64_t mdbx_int64_from_key(const MDBX_val);
 /** end of key2value @} */

@@ -363,41 +363,41 @@ struct LIBMDBX_API_TYPE slice : public ::MDBX_val {
   /// \brief Finds the first occurrence of `needle` starting at `pos`.
   /// \returns The position of the first match or \ref npos.
   MDBX_NOTHROW_PURE_FUNCTION MDBX_CXX14_CONSTEXPR size_t find(const slice &needle, size_t pos = 0) const noexcept;
-  /// \copydoc find(const slice &, size_t)
+  /// \copydoc find(const slice &, size_t) const
   MDBX_NOTHROW_PURE_FUNCTION MDBX_CXX14_CONSTEXPR size_t find(byte c, size_t pos = 0) const noexcept;
 
   /// \brief Finds the last occurrence of `needle` not after `pos`.
   /// \returns The position of the last match or \ref npos.
   MDBX_NOTHROW_PURE_FUNCTION MDBX_CXX14_CONSTEXPR size_t rfind(const slice &needle, size_t pos = npos) const noexcept;
-  /// \copydoc rfind(const slice &, size_t)
+  /// \copydoc rfind(const slice &, size_t) const
   MDBX_NOTHROW_PURE_FUNCTION MDBX_CXX14_CONSTEXPR size_t rfind(byte c, size_t pos = npos) const noexcept;
 
   /// \brief Finds the first byte matching any byte of `chars` starting at `pos`.
   /// \returns The position of the first match or \ref npos.
   MDBX_NOTHROW_PURE_FUNCTION MDBX_CXX14_CONSTEXPR size_t find_first_of(const slice &chars,
                                                                        size_t pos = 0) const noexcept;
-  /// \copydoc find_first_of(const slice &, size_t)
+  /// \copydoc find_first_of(const slice &, size_t) const
   MDBX_NOTHROW_PURE_FUNCTION MDBX_CXX14_CONSTEXPR size_t find_first_of(byte c, size_t pos = 0) const noexcept;
 
   /// \brief Finds the last byte matching any byte of `chars` not after `pos`.
   /// \returns The position of the last match or \ref npos.
   MDBX_NOTHROW_PURE_FUNCTION MDBX_CXX14_CONSTEXPR size_t find_last_of(const slice &chars,
                                                                       size_t pos = npos) const noexcept;
-  /// \copydoc find_last_of(const slice &, size_t)
+  /// \copydoc find_last_of(const slice &, size_t) const
   MDBX_NOTHROW_PURE_FUNCTION MDBX_CXX14_CONSTEXPR size_t find_last_of(byte c, size_t pos = npos) const noexcept;
 
   /// \brief Finds the first byte not matching any byte of `chars` starting at `pos`.
   /// \returns The position of the first match or \ref npos.
   MDBX_NOTHROW_PURE_FUNCTION MDBX_CXX14_CONSTEXPR size_t find_first_not_of(const slice &chars,
                                                                            size_t pos = 0) const noexcept;
-  /// \copydoc find_first_not_of(const slice &, size_t)
+  /// \copydoc find_first_not_of(const slice &, size_t) const
   MDBX_NOTHROW_PURE_FUNCTION MDBX_CXX14_CONSTEXPR size_t find_first_not_of(byte c, size_t pos = 0) const noexcept;
 
   /// \brief Finds the last byte not matching any byte of `chars` not after `pos`.
   /// \returns The position of the last match or \ref npos.
   MDBX_NOTHROW_PURE_FUNCTION MDBX_CXX14_CONSTEXPR size_t find_last_not_of(const slice &chars,
                                                                           size_t pos = npos) const noexcept;
-  /// \copydoc find_last_not_of(const slice &, size_t)
+  /// \copydoc find_last_not_of(const slice &, size_t) const
   MDBX_NOTHROW_PURE_FUNCTION MDBX_CXX14_CONSTEXPR size_t find_last_not_of(byte c, size_t pos = npos) const noexcept;
 
   /// \brief Checks whether the referenced data contains `needle` as a sub-slice.
