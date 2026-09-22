@@ -21,6 +21,14 @@
 The primary CI for this repo (GitHub Actions is a secondary mirror). Config file at repo root:
 `.sourcecraft/ci.yaml`.
 
+> **master-config rule (testing-infra-v2, TASK-28)**: SourceCraft reads CI configuration from
+> `master` regardless of the branch under test; GitHub `repository_dispatch` and `schedule`
+> triggers also fire only when the workflow file exists on the default branch and run against its
+> HEAD. Therefore the new orchestrator/runner (`.github/workflows/ci-dispatch.yml`,
+> `.github/workflows/ci-run.yml`) must be merged to `master` before schedule/dispatch can address
+> arbitrary refs — requested refs are passed explicitly via `workflow_dispatch`/`repository_dispatch`
+> payloads and checked out inside the runner (`ci-run.yml` step 1). See `skynet/workflows.md` §4a.
+
 ### Triggers
 
 - push → workflows: `ci-linux-debug-gcc`, `ci-linux-debug-clang`, `ci-linux-release-spilling`

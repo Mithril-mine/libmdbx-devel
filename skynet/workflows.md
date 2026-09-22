@@ -72,6 +72,44 @@ CI check for fixable doxygen warnings is welcome; it must NOT be added to GitHub
   cxx-msvc/android) — informational for the dev repo.
 - Required locally per `AGENTS.md`: Linux **and** Windows builds/tests (CMake + CTest).
 
+## 4a. Testing-infra-v2 (addressable cells, TASK-28)
+
+Parallel infrastructure built on top of the same CTest labels; the legacy 7 GitHub workflows +
+`tests/ci/ci.sh` remain the fallback until rollout completes.
+
+- **Registry** — `tests/ci/config.json`: single source of truth for every build configuration
+  ("cell"). Cell fields: `id`, `runs-on`, `env` (toolchain), `cmake[]` (args, `flag|value` form),
+  `ctest` (`regex`/`exclude`/null), `build_only` (Android), `note`. Known-flaky/slow cells are
+  flagged (`known_flaky`, e.g. macOS `smoke_fault` B13 WIP) and ARM64 Windows cells carry
+  `ctest.exclude=smoke_sp_` (B14/TASK-27).
+- **Profiles**: `push-quick` (5 cells), `linux-full` (8), `win-full` (164), `mac-full` (6),
+  `android-build` (15, build-only), `full` (193, no duplicate ids).
+- **Local runner** — `tests/ci/run-cell.sh <cell-id> [--build-dir <dir>]`: pure CMake/CTest,
+  no `ci.sh`; rc 0 = ok, 1 = build/test fail, 2 = unknown id/usage. Reproduces a failing cell
+  locally on Linux-capable cells.
+- **Orchestrator** — `.github/workflows/ci-dispatch.yml`: `push` on devel/master → `push-quick`;
+  `workflow_dispatch` → `profile`|`cell` + `ref`; `repository_dispatch` (`profile`/`cell` + `ref`,
+  ref mandatory) → addressed runs for agents; `schedule` (00:30 UTC) → `full` on master HEAD.
+  `resolve` job reads the registry from the requested ref and fails fast on unknown ids.
+- **Runner** — `.github/workflows/ci-run.yml` (`workflow_call`): checkout ref (fetch-depth 0 +
+  tags), toolchain env, configure+build (with `--config` for multi-config generators), ctest
+  per-cell regex/exclude (skipped for `build_only`), artifacts on failure.
+- **Profile table**:
+
+  | Profile | Cells | Use |
+  |---|---|---|
+  | `push-quick` | 5 | every push/merge to devel/master |
+  | `linux-full` | 8 | linux matrix |
+  | `win-full` | 164 | windows matrix (msvc+mscl+mingw+cxx-msvc) |
+  | `mac-full` | 6 | macos matrix |
+  | `android-build` | 15 | android build-only |
+  | `full` | 193 | nightly on master HEAD |
+
+- **master-config rule**: GitHub `repository_dispatch`/`schedule` fire only if the workflow file
+  exists on the default branch and run against its HEAD; SourceCraft reads CI config from
+  `master`. Requested refs are passed explicitly and checked out inside the runner. See
+  [`sourcecraft/README.md`](sourcecraft/README.md).
+
 ## 5. Code review & merge (SourceCraft)
 
 - PRs start as drafts (`CreatePullRequest`, `publish: false`), then `PublishPullRequest` →
