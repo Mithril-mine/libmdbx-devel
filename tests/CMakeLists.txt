@@ -342,7 +342,7 @@ else()
     TIMEOUT 600
     RUN_SERIAL OFF)
   add_test(NAME smoke_sp_nested COMMAND $<TARGET_FILE:mdbx_test> --duration 100 --mode=-writemap,-nosync-safe,-lifo
-                                   --progress --console=no --repeat=42 --pathname=singleprocess.db --dont-cleanup-before
+                                   --progress --console=no --repeat=42 --pathname=singleprocess.db
                                    --dont-cleanup-after ${MDBX_SMOKE_EXTRA} --nested)
   set_tests_properties(smoke_sp_nested PROPERTIES
     LABELS "smoke-singleprocess;smoke-t2"
