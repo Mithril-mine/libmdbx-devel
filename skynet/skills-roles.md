@@ -10,14 +10,41 @@
 
 ## Роли и исполнители
 
-| Роль (владельческий набор) | Зона ответственности | SKILL (L3) | Агенты |
+> **Идентификаторы агентов: `X.роль`** (схема владельца 2026-09-22).
+> `X` — стабильный уникальный код (0–9, A–Z); **не меняется при смене роли**.
+> X используется в почте/inbox, сессиях, задачах; имя роли может меняться.
+> `0` = координатор; `_` = служебный mailman (не агент); `vision` — эпизодическая
+> роль без почтового ящика.
+
+| X | Роль | Зона ответственности | SKILL (L3) |
 |---|---|---|---|
-| Координатор / лид проекта | целостность архитектуры, синхронизация потоков работ, приоритизация, зависимости, CI/CD, метрики | L4 `skills/orchestrator/*` (указатель `orchestrator-kaizen.md`) | main_architect |
-| Разработчик C++ API / обёрток | расширение C++ API, RAII-обёртки, интеграция с C API, обработка ошибок | (gap — закрывают tests_writer/tests_worker + review-cpp) | — |
-| Инженер тестов и стабильности | покрытие тестами, edge-case, stress/fuzz, восстановление после сбоев | `skills/roles/test-engineer/SKILL.md` | tests_worker, tests_writer |
-| Технический писатель / документатор | документация, примеры, диаграммы, версионирование, API-референс, doxygen | `skills/roles/documentation-scribe/SKILL.md` | docs |
-| Ревьюер кода (доменные) | код-ревью по областям: стиль/безопасность/производительность/архитектура | `skills/roles/code-reviewer/SKILL.md` (+`platform-build-engineer/SKILL.md` для cmake) | review-cmake, review-cpp, review-win, review-macos |
-| Пробщик/инструментарий (специфика роя) | USDT/SystemTap-пробники, перф-инструменты, каталог probes.md | `skills/roles/platform-build-engineer/SKILL.md` (base) | sysprobe |
+| `0` | Координатор / лид | целостность архитектуры, синхронизация, приоритизация, CI/CD, метрики | L4 `skills/orchestrator/*` |
+| `·` | Визионер (эпизодическая) | генерация идей, дивергенция; вызывается по запросу | `skills/roles/vision/SKILL.md` (TASK-34) |
+| — | Разработчик C++ API / обёрток | C++ API, RAII, интеграция с C API | (gap — test-engineer-*/reviewer-cpp) |
+| `A` | Инженер тестов и стабильности | покрытие, edge-case, stress/fuzz | `test-engineer/SKILL.md` |
+| `B` | Инженер тестов (инфраструктура) | инфраструктура тестирования, CI-реестры | `test-engineer/SKILL.md` |
+| `C` | Технический писатель / документатор | документация, doxygen, версионирование | `documentation-scribe/SKILL.md` |
+| `D` | Ревьюер (cmake/build) | ревью CMake/воркфлоу | `code-reviewer` + `platform-build-engineer` |
+| `E` | Ревьюер (cpp) | ревью C/C++ | `code-reviewer/SKILL.md` |
+| `F` | Ревьюер (windows) | ревью Windows | `code-reviewer/SKILL.md` |
+| `G` | Ревьюер (macos) | ревью macOS | `code-reviewer/SKILL.md` |
+| `H` | Пробщик/инструментарий | USDT/SystemTap, перф-инструменты | `platform-build-engineer/SKILL.md` |
+| `_` | Почтальон (служебный) | доставка писем waitmail/fifo/MCP | — |
+
+### Текущее соответствие (исторические slug)
+
+| X | Текущее имя | Бывший slug |
+|---|---|---|
+| `0` | `0.coordinator` | main_architect |
+| `A` | `A.test-engineer-1` | tests_worker |
+| `B` | `B.test-engineer-2` | tests_writer |
+| `C` | `C.scribe` | docs |
+| `D` | `D.reviewer-cmake` | review_cmake |
+| `E` | `E.reviewer-cpp` | review_cpp |
+| `F` | `F.reviewer-win` | review_win |
+| `G` | `G.reviewer-macos` | review_macos |
+| `H` | `H.toolsmith` | sysprobe |
+| `_` | `_ .mailman` | mailman |
 
 ## Коллективные SKILLS (для всей команды)
 
