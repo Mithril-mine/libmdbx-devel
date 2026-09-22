@@ -155,6 +155,23 @@ Until every opencode session is restarted, some agents write to the old
 `memory.jsonl`. Always go through `memory_reader.py` so both sources merge.
 After a full restart only `graph.mdbx` is live.
 
+### Trap 2b (2026-09-22, B42): zombie pre-migration session CORRUPTS the legacy JSONL
+
+A session started BEFORE the migration holds the old server's state IN MEMORY.
+Every write it performs dumps its stale snapshot back into the npx `memory.jsonl`,
+**overwriting newer entries** (the entity appears many times in the JSONL; the
+last occurrence was the zombie's 1-observation truncation). Meanwhile new-config
+sessions read `graph.mdbx` → they saw data only up to the migration ⇒ agents
+reported "no new letters since mail-N" for hours despite fresh mail.
+
+Fixes applied:
+1. Kill every legacy `server-memory` process AND the docker `mcp/memory` container.
+2. Merge ALL occurrences of each entity in the legacy JSONL into one snapshot
+   (`npx-merged.jsonl`) and resync into `graph.mdbx` (idempotent Store methods).
+3. After ANY storage migration: **restart ALL opencode sessions** (including the
+   coordinator's) — do not trust a session that predates the switch.
+4. Verify: `memory-mdbx-server.py --dump-jsonl | grep mail-65` must hit in mdbx.
+
 ### Trap 3: never copy a live store with `cp`
 
 Use `/sourcecraft/workspace/.skynet/migrate-memory.py` (parse+repair+validate).
