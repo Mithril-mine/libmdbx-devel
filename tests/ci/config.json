@@ -2,7 +2,7 @@
   "schema_version": 1,
   "cells": [
     {
-      "id": "linux-gcc-ubuntu-2604arm-debug-cxx-on",
+      "id": "linux-gcc-ubuntu26-arm-debug-cxx-on",
       "runs-on": "ubuntu-26.04-arm",
       "env": {
         "CC": "gcc",
@@ -17,7 +17,7 @@
       "note": "ci-linux ubuntu-26.04-arm Debug cxx=ON"
     },
     {
-      "id": "linux-gcc-ubuntu-2604arm-debug-cxx-off",
+      "id": "linux-gcc-ubuntu26-arm-debug-cxx-off",
       "runs-on": "ubuntu-26.04-arm",
       "env": {
         "CC": "gcc",
@@ -32,7 +32,7 @@
       "note": "ci-linux ubuntu-26.04-arm Debug cxx=OFF"
     },
     {
-      "id": "linux-gcc-ubuntu-2604arm-release-cxx-on",
+      "id": "linux-gcc-ubuntu26-arm-release-cxx-on",
       "runs-on": "ubuntu-26.04-arm",
       "env": {
         "CC": "gcc",
@@ -47,7 +47,7 @@
       "note": "ci-linux ubuntu-26.04-arm Release cxx=ON"
     },
     {
-      "id": "linux-gcc-ubuntu-2604arm-release-cxx-off",
+      "id": "linux-gcc-ubuntu26-arm-release-cxx-off",
       "runs-on": "ubuntu-26.04-arm",
       "env": {
         "CC": "gcc",
@@ -62,7 +62,7 @@
       "note": "ci-linux ubuntu-26.04-arm Release cxx=OFF"
     },
     {
-      "id": "linux-gcc-ubuntu-2404-debug-cxx-on",
+      "id": "linux-gcc-ubuntu24-debug-cxx-on",
       "runs-on": "ubuntu-24.04",
       "env": {
         "CC": "gcc",
@@ -77,7 +77,7 @@
       "note": "ci-linux ubuntu-24.04 Debug cxx=ON"
     },
     {
-      "id": "linux-gcc-ubuntu-2404-debug-cxx-off",
+      "id": "linux-gcc-ubuntu24-debug-cxx-off",
       "runs-on": "ubuntu-24.04",
       "env": {
         "CC": "gcc",
@@ -92,7 +92,7 @@
       "note": "ci-linux ubuntu-24.04 Debug cxx=OFF"
     },
     {
-      "id": "linux-gcc-ubuntu-2404-release-cxx-on",
+      "id": "linux-gcc-ubuntu24-release-cxx-on",
       "runs-on": "ubuntu-24.04",
       "env": {
         "CC": "gcc",
@@ -107,7 +107,7 @@
       "note": "ci-linux ubuntu-24.04 Release cxx=ON"
     },
     {
-      "id": "linux-gcc-ubuntu-2404-release-cxx-off",
+      "id": "linux-gcc-ubuntu24-release-cxx-off",
       "runs-on": "ubuntu-24.04",
       "env": {
         "CC": "gcc",
@@ -122,7 +122,7 @@
       "note": "ci-linux ubuntu-24.04 Release cxx=OFF"
     },
     {
-      "id": "macos-macos-15-debug",
+      "id": "macos-macos15-debug",
       "runs-on": "macos-15",
       "env": {
         "MDBX_BUILD_OPTIONS": "-DMDBX_CHECKING=2 -DMDBX_DEBUG=1"
@@ -138,7 +138,7 @@
       "note": "ci-macos macos-15 Debug; known flake smoke_fault (B13 WIP)"
     },
     {
-      "id": "macos-macos-15-release",
+      "id": "macos-macos15-release",
       "runs-on": "macos-15",
       "env": {
         "MDBX_BUILD_OPTIONS": "-DMDBX_CHECKING=0 -DMDBX_DEBUG=0"
@@ -154,7 +154,7 @@
       "note": "ci-macos macos-15 Release; known flake smoke_fault (B13 WIP)"
     },
     {
-      "id": "macos-xcode-27-debug",
+      "id": "macos-xcode27-debug",
       "runs-on": "xcode-27",
       "env": {
         "MDBX_BUILD_OPTIONS": "-DMDBX_CHECKING=2 -DMDBX_DEBUG=1"
@@ -170,7 +170,7 @@
       "note": "ci-macos xcode-27 Debug; known flake smoke_fault (B13 WIP)"
     },
     {
-      "id": "macos-xcode-27-release",
+      "id": "macos-xcode27-release",
       "runs-on": "xcode-27",
       "env": {
         "MDBX_BUILD_OPTIONS": "-DMDBX_CHECKING=0 -DMDBX_DEBUG=0"
@@ -186,7 +186,7 @@
       "note": "ci-macos xcode-27 Release; known flake smoke_fault (B13 WIP)"
     },
     {
-      "id": "macos-macos-26-intel-debug",
+      "id": "macos-macos26-intel-debug",
       "runs-on": "macos-26-intel",
       "env": {
         "MDBX_BUILD_OPTIONS": "-DMDBX_CHECKING=2 -DMDBX_DEBUG=1"
@@ -202,7 +202,7 @@
       "note": "ci-macos macos-26-intel Debug; known flake smoke_fault (B13 WIP)"
     },
     {
-      "id": "macos-macos-26-intel-release",
+      "id": "macos-macos26-intel-release",
       "runs-on": "macos-26-intel",
       "env": {
         "MDBX_BUILD_OPTIONS": "-DMDBX_CHECKING=0 -DMDBX_DEBUG=0"
@@ -2892,14 +2892,14 @@
       "win-mingw-64-release-dll-on-crt-off"
     ],
     "linux-full": [
-      "linux-gcc-ubuntu-2404-debug-cxx-off",
-      "linux-gcc-ubuntu-2404-debug-cxx-on",
-      "linux-gcc-ubuntu-2404-release-cxx-off",
-      "linux-gcc-ubuntu-2404-release-cxx-on",
-      "linux-gcc-ubuntu-2604arm-debug-cxx-off",
-      "linux-gcc-ubuntu-2604arm-debug-cxx-on",
-      "linux-gcc-ubuntu-2604arm-release-cxx-off",
-      "linux-gcc-ubuntu-2604arm-release-cxx-on"
+      "linux-gcc-ubuntu24-debug-cxx-off",
+      "linux-gcc-ubuntu24-debug-cxx-on",
+      "linux-gcc-ubuntu24-release-cxx-off",
+      "linux-gcc-ubuntu24-release-cxx-on",
+      "linux-gcc-ubuntu26-arm-debug-cxx-off",
+      "linux-gcc-ubuntu26-arm-debug-cxx-on",
+      "linux-gcc-ubuntu26-arm-release-cxx-off",
+      "linux-gcc-ubuntu26-arm-release-cxx-on"
     ],
     "win-full": [
       "win-cxx-v142-win2022-win32-debug-std11",
@@ -3068,12 +3068,12 @@
       "win-msvc-v145-x64-release-dll-on-crt-on"
     ],
     "mac-full": [
-      "macos-macos-15-debug",
-      "macos-macos-15-release",
-      "macos-macos-26-intel-debug",
-      "macos-macos-26-intel-release",
-      "macos-xcode-27-debug",
-      "macos-xcode-27-release"
+      "macos-macos15-debug",
+      "macos-macos15-release",
+      "macos-macos26-intel-debug",
+      "macos-macos26-intel-release",
+      "macos-xcode27-debug",
+      "macos-xcode27-release"
     ],
     "android-build": [
       "android-r26d-arm64-v8a-release",
@@ -3093,14 +3093,14 @@
       "android-r29-x86-64-release"
     ],
     "full": [
-      "linux-gcc-ubuntu-2404-debug-cxx-off",
-      "linux-gcc-ubuntu-2404-debug-cxx-on",
-      "linux-gcc-ubuntu-2404-release-cxx-off",
-      "linux-gcc-ubuntu-2404-release-cxx-on",
-      "linux-gcc-ubuntu-2604arm-debug-cxx-off",
-      "linux-gcc-ubuntu-2604arm-debug-cxx-on",
-      "linux-gcc-ubuntu-2604arm-release-cxx-off",
-      "linux-gcc-ubuntu-2604arm-release-cxx-on",
+      "linux-gcc-ubuntu24-debug-cxx-off",
+      "linux-gcc-ubuntu24-debug-cxx-on",
+      "linux-gcc-ubuntu24-release-cxx-off",
+      "linux-gcc-ubuntu24-release-cxx-on",
+      "linux-gcc-ubuntu26-arm-debug-cxx-off",
+      "linux-gcc-ubuntu26-arm-debug-cxx-on",
+      "linux-gcc-ubuntu26-arm-release-cxx-off",
+      "linux-gcc-ubuntu26-arm-release-cxx-on",
       "win-cxx-v142-win2022-win32-debug-std11",
       "win-cxx-v142-win2022-win32-debug-std14",
       "win-cxx-v142-win2022-win32-debug-std17",
@@ -3265,12 +3265,12 @@
       "win-msvc-v145-x64-release-dll-off-crt-on",
       "win-msvc-v145-x64-release-dll-on-crt-off",
       "win-msvc-v145-x64-release-dll-on-crt-on",
-      "macos-macos-15-debug",
-      "macos-macos-15-release",
-      "macos-macos-26-intel-debug",
-      "macos-macos-26-intel-release",
-      "macos-xcode-27-debug",
-      "macos-xcode-27-release",
+      "macos-macos15-debug",
+      "macos-macos15-release",
+      "macos-macos26-intel-debug",
+      "macos-macos26-intel-release",
+      "macos-xcode27-debug",
+      "macos-xcode27-release",
       "android-r26d-arm64-v8a-release",
       "android-r26d-armeabi-v7a-with-neon-release",
       "android-r26d-x86-64-release",
