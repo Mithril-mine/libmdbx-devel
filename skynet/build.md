@@ -278,6 +278,31 @@ Sanitizer env defaults: `ASAN_OPTIONS=log_path=asan.log:poison_history_size=42`,
 - Build with CMake, test with CTest.
 - Build and test at least on **Linux and Windows**.
 
+### 6.7 Test-time budget rules (owner strategy, Kaizen 2026-09-21/22)
+
+Tests and CI dominate the schedule (>90% of wall time); every check must be as
+fast and as targeted as possible.
+
+- **LTO is forbidden in test builds unless explicitly required.** With LTO each
+  test re-optimizes the whole library separately (hours). LTO applies only to
+  the library/tools; test configurations must be built without LTO by default.
+- **Adding a unit test does not justify running long stochastic `mdbx_test`
+  iterations** — only build + launch sanity of `mdbx_test` (it is stochastic,
+  seeded from `date+%s+RANDOM`; a fixed `--prng-seed` gives a reproducible
+  per-actor sequence). Use bounded `--nops`, fixed seeds, tiered smoke
+  T1/T2/T3 (`make smoke-t1/t2/t3`): T1 seconds / deterministic, T2 medium,
+  T3 long — milestone/nightly only.
+- **Addressability** — run only the subset intersecting the change:
+  `tests/select-tests.sh` maps changed paths → CTest labels
+  (see `AGENTS.md` "Segmented test execution"); do NOT blindly run everything.
+- The full catalog of slow-build/test causes is tracked in BACKLOG B21–B33
+  (LTO, gtest network fetch, fresh build-dirs/ccache, Debug-in-routine,
+  full-length mdbx_test, mdbx_chk in every ctest, durable-sync, serial ctest,
+  no impact-selection, duplicate runs, session races, full ctest on CMakeLists
+  edits, test-artifact collisions).
+- Validation matrices in REPORTS carry wall-clock (`build 4m12s / test 38s`)
+  so duration trends stay visible.
+
 ---
 
 ## 7. Amalgamation (`make dist`) — how the "clean & flat" sources are produced
