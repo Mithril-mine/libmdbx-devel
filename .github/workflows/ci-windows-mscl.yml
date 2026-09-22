@@ -47,13 +47,15 @@ jobs:
       shell: bash
       run: |
         TEST_ARGS=""
-        # B14+TASK-30: long stochastic single-process scenarios (smoke_sp_hill/nested, GNUmakefile-heritage,
+        # B14+TASK-30+TASK-40: long stochastic single-process scenarios (smoke_sp_hill/nested, GNUmakefile-heritage,
         # --duration 100 --repeat 42) run ~13x slower on the ARM64 beta-runner and exceed the 60s CTest
         # timeout (hill ~546s, nested >600s at devel@ccc994bf). The T1 tiered-smoke twins (smoke_t1_hill/
         # smoke_t1_nested, TASK-22) also exceed it there. They are NOT true smoke; skip them on the ARM64
         # jobs until probes (B6) allow diagnosing them there. x64/Linux coverage is unaffected.
+        # NOTE: ci.sh splits args on IFS='|', so the -E regex must NOT contain '|'; smoke_[st][p1]_ matches
+        # both smoke_sp_ and smoke_t1_ (TASK-40; the old smoke_(sp|t1)_ was split into 'smoke_(sp' 't1)_').
         if [ "${{ matrix.target }}" = 'Win32' ]; then export TARGET_BIN="bin"; else export TARGET_BIN="${{ matrix.target }}/bin"; fi
-        if [ "${{ matrix.target }}" = 'ARM64' ]; then TEST_ARGS="-E|smoke_(sp|t1)_"; fi
+        if [ "${{ matrix.target }}" = 'ARM64' ]; then TEST_ARGS="-E|smoke_[st][p1]_"; fi
         export STUDIO_CLANG_DIR="/c/Program Files/Microsoft Visual Studio/${{ matrix.studio }}/Enterprise/VC/Tools/Llvm/${TARGET_BIN}"
         export CC="${STUDIO_CLANG_DIR}/clang.exe" CXX="${STUDIO_CLANG_DIR}/clang++.exe"
         . tests/ci/ci.sh "-DCMAKE_BUILD_TYPE=${{ matrix.build-type }}|-DMDBX_BUILD_SHARED_LIBRARY:BOOL=${{ matrix.dll }}|-DMDBX_WITHOUT_MSVC_CRT:BOOL=${{ matrix.without_crt }}" \
