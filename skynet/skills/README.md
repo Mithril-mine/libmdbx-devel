@@ -67,8 +67,9 @@ skills/
 
 `test-engineer`, `code-reviewer`, `refactoring-engineer`, `feature-developer`,
 `platform-build-engineer`, `documentation-scribe` — по одному каталогу `<name>/SKILL.md`.
-Маппинг на агентов — в `skills-roles.md` (TE→tests_worker/tests_writer,
-CR→review-cpp/win/macos/cmake, PB→review-cmake/win, DS→docs; RE/FD — gap-эталоны).
+Маппинг на агентов — в `skills-roles.md` (TE→A.testcase-guru/B.tester,
+CR→D.reviewer-c/E.reviewer-cxx/F.reviewer-cmake, PB→C.ci-guru, DS→S.scribe;
+RE/FD/DEV/RESEARCHER/TOOLING — свободные роли, gap-эталоны из L3 SKILLs).
 
 ## L4 Orchestrator (5 SKILL)
 

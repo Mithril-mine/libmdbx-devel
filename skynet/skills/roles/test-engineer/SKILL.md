@@ -13,13 +13,9 @@
 страниц, режимы долговечности, get-cached (7 статусов), GC edge cases.
 Пишет characterisation-тесты (Golden Master) для рефакторинга.
 
-## Специализации
-
-| Агент | Фокус |
-|-------|-------|
-| TE-Unit | декомпозиция монолита, characterisation-тесты |
-| TE-Infra | CI, fault injection, скорость тестов |
-| TE-Platform | кросс-платформенное тестирование |
+Две инстанции роли (без платформенных различий):
+- `A.testcase-guru` — декомпозиция монолитов, characterisation-тесты, сценарии;
+- `B.tester` — пишет и выполняет тесты, edge-case, stress/fuzz, восстановление.
 
 ## Task Protocols
 
