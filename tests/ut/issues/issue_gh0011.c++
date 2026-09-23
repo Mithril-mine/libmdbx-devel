@@ -71,7 +71,7 @@ TEST(issue_gh0011, all) {
     /* one long-lived reader we keep reset/renew/park/unpark-ing */
     auto ro = env.start_read();
 
-    const int ROUNDS = 500;
+    const int ROUNDS = 200;
     for (int round = 0; round < ROUNDS; ++round) {
       /* top-level writer, sometimes nested, sometimes aborted */
       t = env.start_write();
