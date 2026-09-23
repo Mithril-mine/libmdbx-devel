@@ -154,7 +154,8 @@ The testing stack has four layers:
 2. **`tests/stochastic.sh`** — orchestrator that sweeps parameters/modes and calls `mdbx_test`
    in a loop, verifying each DB with `mdbx_chk`.
 3. **`tests/battery-tmux.sh`** — parallel runner of several `stochastic.sh` instances in tmux.
-4. **Small C/C++ tests** — `tests/ut/`, `tests/issues/`, `tests/exploits/` registered in CTest,
+4. **Small C/C++ tests** — `tests/ut/` (areas: `api|cursor|cxx|dbi|env|gc|txn|issues`,
+   layout с TASK-36 C2), `tests/exploits/` registered in CTest,
    plus a few `mdbx_test` scenarios wired into CTest.
 
 ### 6.1 `mdbx_test` — the stochastic test framework
@@ -254,18 +255,21 @@ variant uses `--delay $((3+n*7))`. If multiple NUMA nodes exist, commands cycle 
 Sanitizer env defaults: `ASAN_OPTIONS=log_path=asan.log:poison_history_size=42`,
 `UBSAN_OPTIONS=log_path=ubsan.log:print_stacktrace=1`. Valgrind suppressions file: `valgrind.supp`.
 
-### 6.5 CTest integration (`tests/CMakeLists.txt`, `tests/issues/CMakeLists.txt`)
+### 6.5 CTest integration (`tests/CMakeLists.txt`, `tests/ut/issues/CMakeLists.txt`)
 
 - Helper `add_simple_test(name, SOURCE, LIBRARY, TIMEOUT, DEPEND, DLLPATH, DISABLED)` →
   `add_executable(test_extra_<name>)` + `add_test(extra_<name> ...)` (skipped when
   cross-compiling without emulator). `add_extra_test` = `add_simple_test TARGET_PREFIX test_extra_`.
-- Registered unit tests (from `tests/ut/`): `upsert_alldups`, `dupfix_addodd`,
-  `dbi_nested_txn` (UNIX), `details_rkl`, `global_init` (static lib), `rename_dbi`,
-  `nested_drop_abort`; C++ ones (when `MDBX_BUILD_CXX`): `cursor_closing`, `early_close_dbi`,
-  `maindb_ordinal`, `dupfix_multiple`, `doubtless_positioning`, `crunched_delete`,
-  `distance_scroll_distribute`, `dbi`, `open`, `txn`, `buffers`, `bunches_removal`,
-  `get_cached`, `reverse_insertions` (long ones `TIMEOUT 10800`), `hex_base64_base58`;
-  plus `issues/` subdirectory regressions (`issue_gh00XX`).
+- Registered unit tests — `tests/ut/<area>/` (areas: `api`, `cursor`, `cxx`, `dbi`,
+  `env`, `gc`, `txn`, `issues`; layout с TASK-36 C2): напр. `upsert_alldups`,
+  `dupfix_addodd`, `details_rkl`, `global_init` (api), `cursor_closing`,
+  `doubtless_positioning`, `distance_scroll_distribute` (cursor), `dbi_nested_txn`
+  (dbi, UNIX), `rename_dbi`, `nested_drop_abort`, `early_close_dbi`,
+  `maindb_ordinal`, `dupfix_multiple` (dbi), `crunched_delete`,
+  `reverse_insertions` (txn), `hex_base64_base58` (api); C++ ones (when
+  `MDBX_BUILD_CXX`) и long `TIMEOUT 10800`. Каждый тест несёт root-метку `ut` +
+  метку области (`ut.api|cxx|env|dbi|txn|cursor|gc|issues`) — выбор по
+  `tests/select-tests.sh`.
 - Framework-based CTest scenarios (mdbx_test): `smoke` (`--duration=5m --loglevel=notice
   --prng-seed=$seed --progress --console=no --pathname=smoke.db --dont-cleanup-after basic`)
   followed by `smoke_chk` (`mdbx_chk -nvv`), `smoke_chk_copy`, `smoke_copy_asis`

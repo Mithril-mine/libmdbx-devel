@@ -22,6 +22,6 @@
 ## Knowledge-harvest (сбор знаний)
 
 После крупной работы агент фиксирует «уроки»: инварианты, ловушки именования,
-связи S-подсистем (см. `libmdbx-invariants.md`) — как наблюдение в свою entity
+связи S-подсистем (см. `skills/shared/libmdbx-invariants/SKILL.md`) — как наблюдение в свою entity
 или как KAIZEN/предложение по обновлению role-SKILL. Эти записи входят в
 Weekly Codex Review (Level 4).
