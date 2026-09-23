@@ -1,6 +1,9 @@
 name: telegram-probe
 
 on:
+  push:
+    branches: [skynet-news]
+    paths: ['news/tg_probe.py', '.github/workflows/telegram-probe.yml']
   workflow_dispatch:
 
 permissions:
