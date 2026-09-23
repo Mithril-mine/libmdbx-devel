@@ -132,9 +132,13 @@ Reader bridge:  ${SKYNET_ROOT}/.skynet/memory_reader.py  (merge mdbx+legacy)
 MCP config:     ~/.config/opencode/opencode.json -> mcp.memory
 ```
 
-- **Schema**: 4 subdbs, dupsort = `key -> sorted_set_of_values`. `E` (meta,
-  name → JSON), `O` (name → observations, DUP), `R` (from → `to\0type`, DUP),
-  `RV` (to → `from\0type`, DUP). Limits @4K pagesize: key/dup-value ≤ 2022 bytes.
+- **Schema**: 5 subdbs. `E` (meta, name → JSON), `OC` (observations, chunked,
+  NON-dupsort: key = `entity\0obs_index\0chunk_no`, value = chunk ≤1000 B; длинные
+  наблюдения разбиваются на чанки, чтение собирает по порядку ключей),
+  `O` (legacy dupsort observations — только чтение/миграция, B48),
+  `R` (from → `to\0type`, DUP), `RV` (to → `from\0type`, DUP).
+  Limits @4K pagesize: key ≤ 2022 B; dupsort-value ≤ 2022 B (B48); non-dupsort
+  value до ~2 GiB через overflow-цепочку (docs/_restrictions.md).
 - **Tools** read via `memory_reader.py` (merges mdbx + legacy during transition);
   new sessions write to mdbx, sessions started before the switch keep appending
   to legacy JSONL until restarted.

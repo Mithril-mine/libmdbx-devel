@@ -50,6 +50,39 @@ sub-tables (`dbi`s). Each table is its own B+tree.
 | Database size | up to 2^31 pages (≈8 TiB at 4K, ≈128 TiB at 64K) |
 | Named tables | up to `MDBX_MAX_DBI` = 32765 |
 
+### 1.3. Long values and chunking (read carefully)
+
+Actual per-environment limits are returned by
+`mdbx_env_get_maxkeysize_ex()` / `mdbx_env_get_maxvalsize_ex()` and the
+`mdbx_limits_*()` family — **always query them instead of hardcoding**.
+
+The two limiting cases differ fundamentally:
+
+- **Non-dupsort tables**: values up to ~2 GiB are stored in a chain of
+  consecutive large/overflow pages. Read is direct and fast, but *write*
+  needs a run of free adjacent pages: fragmentation may force full GC
+  processing and DB growth, making huge writes expensive. See
+  `docs/_restrictions.md` → "Large data items".
+- **Dupsort tables** (`MDBX_DUPSORT`, multi-value keys): each value is stored
+  as a *key of an embedded b-tree*, so the maximum value size is ~½ page
+  (~2022 bytes at 4K page, ~32 KiB at 64K page) — **no overflow chain**, and a
+  longer value simply cannot be inserted.
+
+Consequently, application code that deals with potentially long records must:
+
+1. Query the real limits (`mdbx_env_get_maxvalsize_ex()`), not assume.
+2. For values that may exceed the limit, use **chunking**: split the value
+   into chunks small enough for the storage mode, store each chunk under a key
+   extended with a chunk-number suffix (`key\0chunk0`, `key\0chunk1`, …), and
+   reassemble on read by scanning the suffix in key order until the suffix
+   stops matching.
+3. Never mix chunked and plain records under one key unless you tag the format
+   (e.g. first byte) — scanning key order is only safe when chunk suffixes are
+   the sole distinguisher.
+
+> **Note:** automatic chunking inside libmdbx is planned for a future release;
+> until then, this is the application's responsibility (see TODO.md).
+
 ---
 
 ## 2. How to use correctly
