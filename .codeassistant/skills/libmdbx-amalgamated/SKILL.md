@@ -23,6 +23,9 @@ single-file form intended for embedding and packaging. The dev repository
 - Release tarball contains only the files listed under "Distribution layout"
   below. In-repo files like `tests/`, `skynet/`, `AGENTS.md` are **not** part
   of the amalgamated version.
+- **`AGENTS-GUIDE.md`** (ships in the tarball): architecture summary, correct
+  usage patterns, safe-work rules (risks/anti-patterns) and a self-contained
+  checklist for external agents — read it before doing any work on the DB.
 
 ## Distribution layout (what the user actually has)
 
