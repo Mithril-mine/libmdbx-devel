@@ -1,0 +1,6 @@
+mdbx_TOOL version VERSION
+ - source: <SOURCE>
+ - anchor: <ANCHOR>
+ - build: <BUILD>
+ - flags: <FLAGS>
+ - options: <OPTIONS>

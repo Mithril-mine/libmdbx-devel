@@ -1,0 +1,14 @@
+usage: /sourcecraft/workspace/.skynet/tmp/A.testcase-guru/task45-wt/build/mdbx_chk [-V] [-v] [-q] [-c] [-0|1|2] [-w] [-d] [-i] [-s table] [-u|U] db_pathname
+  -V		print version and exit
+  -v		more verbose, could be repeated upto 9 times for extra details
+  -q		be quiet
+  -c		force cooperative mode (don't try exclusive)
+  -w		write-mode checking
+  -d		disable page-by-page traversal of B-tree
+  -i		ignore wrong order errors (for custom comparators case)
+  -s table	process a specific subdatabase only
+  -u		warmup database before checking
+  -U		warmup and try lock database pages in memory before checking
+  -0|1|2	force using specific meta-page 0, or 2 for checking
+  -t		turn to a specified meta-page on successful check
+  -T		turn to a specified meta-page EVEN ON UNSUCCESSFUL CHECK!

@@ -1,0 +1,12 @@
+usage: /sourcecraft/workspace/.skynet/tmp/A.testcase-guru/task45-wt/build/mdbx_copy [-V] [-q] [-c] [-d] [-p] [-u|U] src_path [dest_path]
+  -V		print version and exit
+  -q		be quiet
+  -c		enable compactification (skip unused pages)
+  -f		force copying even the target file exists
+  -d		enforce copy to be a dynamic size DB
+  -p		using transaction parking/ousting during copying MVCC-snapshot
+    		to avoid stopping recycling and overflowing the DB
+  -u		warmup database before copying
+  -U		warmup and try lock database pages in memory before copying
+  src_path	source database
+  dest_path	destination (stdout if not specified)

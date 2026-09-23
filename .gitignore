@@ -21,6 +21,7 @@ docs/html/
 *.dSYM
 *.dylib
 *.err
+!tests/ut/tools/golden/*/*.err
 *.exe
 *.gcda
 *.gcno
