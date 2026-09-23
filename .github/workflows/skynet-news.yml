@@ -1,0 +1,51 @@
+name: skynet-news
+
+on:
+  push:
+    branches: [skynet-news]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: skynet-news
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: skynet-news
+          fetch-depth: 0
+
+      - name: Validate + publish ready drafts
+        id: publish
+        shell: bash
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+        run: |
+          set -euo pipefail
+          if [ -z "${TELEGRAM_BOT_TOKEN:-}" ]; then
+            echo "TELEGRAM_BOT_TOKEN secret not set — dry-run validation only."
+            python3 news/publisher.py --dry-run
+            exit 0
+          fi
+          python3 news/publisher.py
+
+      - name: Commit posted markers back to skynet-news
+        if: ${{ !cancelled() }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ -n "$(git status --porcelain news/drafts)" ]; then
+            git config user.name "skynet-news bot"
+            git config user.email "skynet@dqdkfa.ru"
+            git add news/drafts
+            git commit -m "skynet-news: mark posted drafts (TASK-32)" || true
+            git push origin skynet-news
+          else
+            echo "no draft changes to commit"
+          fi
