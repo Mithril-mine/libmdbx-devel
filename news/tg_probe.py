@@ -69,6 +69,23 @@ def main():
         print(f"   u{u['update_id']} [{ch.get('type')}] chat={ch.get('id')} "
               f"from={fr.get('id')} ({fr.get('first_name')}) :: {txt}")
 
+    # If zero (updates already confirmed by an earlier poll), try offset=-1 —
+    # Telegram returns the very last update regardless of confirmation state.
+    if not msgs:
+        try:
+            upd = api(token, "getUpdates", {"limit": 1, "timeout": 0, "offset": -1})
+            msgs = upd.get("result", [])
+            print(f"OK getUpdates(offset=-1): {len(msgs)} update(s)")
+            for u in msgs:
+                m = u.get("message") or u.get("channel_post") or {}
+                ch = m.get("chat", {})
+                fr = m.get("from", {})
+                txt = (m.get("text") or "")[:80].replace("\n", " ")
+                print(f"   u{u['update_id']} [{ch.get('type')}] chat={ch.get('id')} "
+                      f"from={fr.get('id')} ({fr.get('first_name')}) :: {txt}")
+        except RuntimeError as e:
+            print(f"WARN offset=-1 failed: {e}")
+
     # pick the newest private-chat message
     target = None
     for u in reversed(upd.get("result", [])):
