@@ -16,6 +16,7 @@
 | `0` | Оркестратор / Координатор | целостность архитектуры, синхронизация, приоритизация, зависимости, CI/CD, метрики | L4 `skills/orchestrator/*` | активен (бывш. main_architect) |
 | `A` | testcase-guru | пишет тестовые сценарии, декомпозиция монолитов, characterisation-тесты | `test-engineer/SKILL.md` | активен (бывш. tests_worker) |
 | `B` | tester | пишет и выполняет тесты, edge-case, stress/fuzz, восстановление после сбоев | `test-engineer/SKILL.md` | активен (бывш. tests_writer) |
+| `G` | tester | пишет и выполняет тесты (вторая инстанция роли, разгрузка пула) | `test-engineer/SKILL.md` | новая (2026-09-23) |
 | `C` | ci-guru | сборка, CI/CD конвейеры, amalgamation, решение проблем CI на всех платформах | `platform-build-engineer/SKILL.md` | активен (бывш. sysprobe) |
 | `D` | reviewer-c | код-ревью C-ядра: CoW, B+tree, GC, meta, курсоры, mmap | `code-reviewer/SKILL.md` | активен (бывш. review_cmake) |
 | `E` | reviewer-cxx | код-ревью C++ API: RAII, исключения, типобезопасность | `code-reviewer/SKILL.md` | активен (бывш. review_cpp) |
@@ -35,7 +36,6 @@
 
 ### Схлопнутые id (не переиспользуются)
 
-- `G` — был запасной ревьюер (не нужен; win/macos-заботы → ci-guru).
 - `K` — была CI-специалист (слита в `C.ci-guru`).
 - `Q` — был toolsmith (переименован в `T.tooling`).
 - `H` — был ci-guru (переехал на `C`).
