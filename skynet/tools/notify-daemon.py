@@ -25,6 +25,7 @@ Usage:
     --interval N период поллинга (сек), по умолчанию 60
 """
 import argparse
+import fcntl
 import importlib.util
 import json
 import os
@@ -95,33 +96,39 @@ def run(cmd, timeout=40):
 
 
 def gh_json(args, pages=False):
-    """gh api GET с опциональной пагинацией (Link header) до MAX_PAGES."""
+    """gh api GET с опциональной пагинацией до MAX_PAGES.
+
+    При ЛЮБОЙ ошибке страницы возвращает None — частичные данные НЕ
+    используются, watermark не двигается (источник «недоступен»).
+    """
     out_all = []
     page_args = list(args)
+    per_page = None
+    for a in page_args:
+        if a == "per_page" or (isinstance(a, str) and a.startswith("per_page=")):
+            per_page = a.split("=")[-1] if "=" in a else None
     for _ in range(MAX_PAGES if pages else 1):
         rc, out, err = run(["gh", "api", "--method", "GET"] + page_args)
         if rc != 0:
             log("gh api %s failed rc=%s err=%s" % (page_args[0], rc, err[:200]))
-            return None if not out_all else out_all
+            return None
         try:
             batch = json.loads(out)
         except json.JSONDecodeError:
             log("gh api %s: bad json" % page_args[0])
-            return None if not out_all else out_all
+            return None
         out_all += batch if isinstance(batch, list) else ([batch] if batch else [])
         if not pages or not isinstance(batch, list) or len(batch) == 0:
             break
-        # gh api не отдаёт Link напрямую; идём постранично через ?page=N
-        m = re.search(r"(?:^|[\?&])page=(\d+)", page_args[-1] if page_args else "")
+        if per_page and len(batch) < int(per_page):
+            break                       # последняя страница
+        m = re.search(r"page=(\d+)", page_args[-1] if page_args else "")
         cur = int(m.group(1)) if m else 1
-        page_args = [a.replace("page=%d" % cur, "page=%d" % (cur + 1))
-                     if re.match(r".*page=\d+$", a) else a for a in page_args]
-        has_page = any("page=" in a for a in page_args)
-        if not has_page:
-            page_args.append("-f")
-            page_args.append("page=2")
-        elif cur >= MAX_PAGES:
+        if cur >= MAX_PAGES:
             break
+        # чистая постраничная выборка: -f page=N (gh api добавляет в query)
+        page_args = [a for a in page_args if not re.match(r"^page=\d+$", a)]
+        page_args.append("page=%d" % (cur + 1))
     return out_all
 
 
@@ -172,9 +179,12 @@ def deliver(events, dry_run=False):
         obs_list.append({"entityName": TARGET_INBOX, "contents": [letter]})
     res = store.add_observations(obs_list)
     added = sum(len(r.get("addedObservations", [])) for r in res["results"])
+    if added != len(events):
+        raise RuntimeError(
+            "add_observations добавил %d/%d — доставка неполная, watermark НЕ тронут"
+            % (added, len(events)))
     log("delivered %d/%d наблюдений в %s" % (added, len(events), TARGET_INBOX))
-    if added:
-        signal_coordinator()
+    signal_coordinator()
     return [e["id"] for e in events]
 
 
@@ -468,12 +478,17 @@ def poll_sourcecraft(state):
                 "payload": url, "body": title,
                 "mid": mid("sc", kind + "-" + str(st), eid),
             })
-        if evs and fresh:
-            wm["last_id"] = max(e["id"] for e in evs)
-            kept = [e for e in evs if in_boot_window(e["ts"])]
-            log("%s: bootstrap окно %dh — доставляю %d, baseline last_id=%d"
-                % (key, BOOTSTRAP_HOURS, len(kept), wm["last_id"]))
-            evs = kept
+        if evs:
+            if fresh:
+                wm["last_id"] = max(e["id"] for e in evs)
+                kept = [e for e in evs if in_boot_window(e["ts"])]
+                log("%s: bootstrap окно %dh — доставляю %d, baseline last_id=%d"
+                    % (key, BOOTSTRAP_HOURS, len(kept), wm["last_id"]))
+                evs = kept
+            else:
+                # ВАЖНО: watermark двигается и на не-fresh циклах, иначе каждый
+                # элемент ре-доставляется каждые ~60с (дубли в почту).
+                wm["last_id"] = max(e["id"] for e in evs)
     return evs
 
 
@@ -520,18 +535,34 @@ def main():
     if args.debug:
         os.environ["NOTIFY_DEBUG"] = "1"
 
-    state = load_state()
-    if args.dry_run:
-        rc = one_pass(state, dry_run=True)
-        return rc
-    while True:
+    # Single-instance: эксклюзивный flock на время жизни процесса (не TOCTOU,
+    # в отличие от pidfile). Два демона = дубли писем (см. REV:cmake MAJOR2).
+    lock_fd = None
+    if not args.dry_run:
+        lock_fd = os.open(STATE_FILE + ".lock", os.O_CREAT | os.O_RDWR, 0o644)
         try:
-            one_pass(state, dry_run=False)
-        except Exception as ex:      # noqa: BLE001 — daemon не должен падать
-            log("cycle error: %s" % ex)
-        if args.once:
-            return 0
-        time.sleep(max(10, args.interval))
+            fcntl.flock(lock_fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except OSError:
+            log("another notify-daemon instance holds %s.lock — exit" % STATE_FILE)
+            os.close(lock_fd)
+            return 1
+
+    try:
+        state = load_state()
+        if args.dry_run:
+            rc = one_pass(state, dry_run=True)
+            return rc
+        while True:
+            try:
+                one_pass(state, dry_run=False)
+            except Exception as ex:      # noqa: BLE001 — daemon не должен падать
+                log("cycle error: %s" % ex)
+            if args.once:
+                return 0
+            time.sleep(max(10, args.interval))
+    finally:
+        if lock_fd is not None:
+            os.close(lock_fd)            # flock снимается автоматически
 
 
 if __name__ == "__main__":
