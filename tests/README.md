@@ -61,6 +61,15 @@ ctest -L 'smoke-t3'    # or: make smoke-t3   T3 long/full stochastic (milestone/
 - **T1** never runs long iterations: bounded `--nops`, `--repeat=1`, and
   `+nosync-safe` mode when durability is not the point.
 - **T3** needs `cmake-stochastic-build` / `MDBX_ENABLE_LONG_TESTS=ON`.
+- **Single-process / cross-qemu** (`smoke_sp_*`, label `smoke-singleprocess`)
+  is registered only with `-DMDBX_ENABLE_SINGLEPROCESS_TESTS=ON`; it is meant
+  for cross-qemu/cross-toolchain runs (`make smoke-singleprocess` or the
+  `cross-qemu` target configure it automatically) and is absent from a plain
+  build dir (`ctest -L smoke-singleprocess` yields 0 tests there). The fast
+  deterministic twins `smoke_t1_hill/nested/copy` cover the same scenarios in
+  the default corpus.
+- A plain `ctest` in a default build dir runs `ut.*` plus the T2 quick smoke
+  family and the T1 tier (no 5-minute T3 runs, no single-process chain).
 - See [`mdbx-test-options.md`](mdbx-test-options.md) for the full option
   reference, and `select-tests.sh` for impact-based selection.
 
