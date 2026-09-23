@@ -199,11 +199,11 @@ linkage; in amalgamated build (`xMDBX_ALLOY`) = `static`.
 | `tests/ut/` | Unit tests, each a standalone executable: `dbi.c++`, `txn.c++`, `open.c++`, `cursor_closing.c++`, `crunched_delete.c++`, `bunches_removal.c++`, `details_rkl.c`, `distance_scroll_distribute.c++`, `doubtless_positioning.c++`, `dupfix_addodd.c`, `dupfix_multiple.c++`, `early_close_dbi.c++`, `get_cached.c++`, `global_init.c`, `hex_base64_base58.c++`, `maindb_ordinal.c++`, `nested_drop_abort.c`, `probe.c++`, `rename_dbi.c`, `reverse_insertions.c++`, `upsert_alldups.c++`, `buffers.c++`. |
 | `tests/issues/` | Regression tests per issue: `issue_gh0010`, `gh0011`, `gh0016`, `gh0017`, `gh0023`-`gh0026`, `gh0028`, `gh0030`, `gh0033`. Registration in `tests/issues/CMakeLists.txt`. |
 | `tests/exploits/` | PoCs found by fuzzing/analysis: `poc-node_ds-oob.c`, `pos-badgeo-oos.c`. |
-| `tests/stochastic.sh` | Long stochastic scenario runner (bash >= 4.3; RAM-disk recommended). |
-| `tests/battery-tmux.sh` + `tests/tmux.conf` | Battery of scenarios in tmux panes. |
-| `tests/dump-load.sh` | Dump/load round-trip testing script. |
+| `tests/scripts/stochastic.sh` | Long stochastic scenario runner (bash >= 4.3; RAM-disk recommended). |
+| `tests/scripts/battery-tmux.sh` + `tests/scripts/tmux.conf` | Battery of scenarios in tmux panes. |
+| `tests/scripts/dump-load.sh` | Dump/load round-trip testing script. |
 | `tests/ci/ci.sh` | CI entry: builds via make/cmake and runs targets per `CI_MAKE_TARGET` (smoke/test/check). |
-| `tests/.gdbinit`, `tests/with.gdb` | Debugging helpers. |
+| `tests/scripts/.gdbinit`, `tests/scripts/with.gdb` | Debugging helpers. |
 
 ---
 

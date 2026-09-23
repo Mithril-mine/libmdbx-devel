@@ -2,6 +2,8 @@
 
 > Верифицировано на `devel@ec87f4e8` (ветка `feature/task36-structure-review`,
 > rebase 2026-09-23 по вердикту REV:c; исходный аудит — `devel@ed5fdd10`).
+> Статус исполнения: phase A merged `devel@287c59d2` (origin+upstream);
+> C1 (tests/→tests/scripts+docs) исполнен, C2/C3 — в работе.
 > Документ — результат **фазы A** аудита: карта текущей структуры,
 > находки (включая «дубли» `chk.c`/`defrag.c`), кандидаты улучшений с оценкой
 > риска/ценности и решение «трогаем / не трогаем». Фазы B (план переносов),
@@ -78,8 +80,9 @@ upstream `master`.
 | `tests/ut/issues/` | Регрессии по issues: `issue_gh0010…gh0033` (+ собственный `CMakeLists.txt`) |
 | `tests/exploits/` | PoC-и: `poc-node_ds-oob.c`, `pos-badgeo-oos.c` |
 | `tests/ci/` | CI: `ci.sh` (вход; используется `.github/workflows/*.yml` и `.sourcecraft/ci.yaml` как `test*/ci/ci.sh`), `config.json` + `run-cell.sh` (TASK-28 testing-infra-v2) |
-| `tests/*.sh` (корень) | `stochastic.sh`, `select-tests.sh`, `battery-tmux.sh`, `probes-check.sh`, `dump-load.sh` |
-| `tests/*` (корень, прочее) | `probe-mdbx-multiple-iovlen.c`, `tmux.conf`, `.gdbinit`, `with.gdb`, `README.md`, `mdbx-test-options.md`, `LICENCE`, `CMakeLists.txt` |
+| `tests/scripts/` | Скрипты + отладка (после C1): `stochastic.sh`, `select-tests.sh`, `battery-tmux.sh`, `probes-check.sh`, `dump-load.sh`, `probe-mdbx-multiple-iovlen.c`, `tmux.conf`, `.gdbinit`, `with.gdb` |
+| `tests/docs/` | Документация (после C1): `README.md`, `mdbx-test-options.md`, `LICENCE` |
+| `tests/CMakeLists.txt` | Регистрация тестов |
 
 ### 1.4 Прочее
 
@@ -130,37 +133,30 @@ TU в non-alloy-режиме и читаемую историю правок per
 
 **Решение: НЕ трогаем.**
 
-### F3. `tests/` — корень смешивает скрипты, отладку и доки
+### F3. `tests/` — корень смешивал скрипты, отладку и доки (исправлено в C1)
 
-Внутри `tests/` уже есть чистая разбивка (`ut/` по областям, `framework/`,
-`ci/`), но в корне лежат три разнородные группы:
+Исходно в корне `tests/` лежали три разнородные группы:
 
 1. **Скрипты**: `stochastic.sh`, `select-tests.sh`, `battery-tmux.sh`,
    `probes-check.sh`, `dump-load.sh`, `probe-mdbx-multiple-iovlen.c`;
 2. **Отладочные конфиги**: `.gdbinit`, `with.gdb`, `tmux.conf`;
 3. **Доки/прочее**: `README.md`, `mdbx-test-options.md`, `LICENCE`.
 
-Кандидат: `tests/scripts/` (скрипты+конфиги), `tests/docs/`
-(README.md, mdbx-test-options.md, LICENCE) — либо минимально: скрипты в
-`tests/scripts/`, остальное оставить.
+**Исполнено (C1)**: группы 1-2 → `tests/scripts/`, группа 3 → `tests/docs/`.
+Внутренние относительные ссылки сохранены: `stochastic.sh` использует
+`${SCRIPT_DIR}/.gdbinit` + `${SCRIPT_DIR}/with.gdb`, `battery-tmux.sh` —
+`${DIR}/stochastic.sh` + `${DIR}/tmux.conf`; файлы перенесены вместе, скрипты
+работают без правок тела.
 
-Точки ссылок (полный список для фазы B, проверен):
-- `GNUmakefile:623` `tests/select-tests.sh`; `GNUmakefile:636` build-stochastic
-  (см. `ctest-scenario-run`, `@cmake-stochastic-build`);
-- `tests/CMakeLists.txt:454,463,473` `${CMAKE_CURRENT_SOURCE_DIR}/stochastic.sh`;
-- `.sourcecraft/ci.yaml` — `test*/ci/ci.sh` (wildcard! перенос `tests/ci/`
-  потребует правки yaml);
-- `.github/workflows/*.yml` (7 файлов) — `tests/ci/ci.sh`;
-- `skynet/*.md` + SKILLS — ~30 ссылок на `tests/stochastic.sh`,
-  `tests/battery-tmux.sh`, `tests/select-tests.sh`, `tests/probes-check.sh`,
-  `tests/ci/ci.sh`.
-- Номера строк в build-файлах дрейфуют — на момент фазы B выполнить
-  повторный `grep -rn` по свежим путям.
+Точки ссылок, обновлённые в том же коммите C1:
+- `GNUmakefile:623` `tests/scripts/select-tests.sh`;
+- `tests/CMakeLists.txt:454,463,473` `${CMAKE_CURRENT_SOURCE_DIR}/scripts/stochastic.sh`;
+- `.sourcecraft/ci.yaml` — `test*/ci/ci.sh` (не затронут: `tests/ci/` на месте);
+- `.github/workflows/*.yml` (7 файлов) — `tests/ci/ci.sh` (не затронут);
+- корневой `README.md`, `AGENTS.md`, `skynet/*.md` + SKILLS (~30 ссылок).
 
-**Решение: ТРОГАЕМ (фаза C, один батч)** — умеренная ценность (находимость,
-чистота корня тестов), средний риск из-за числа ссылок; все ссылки обновляются
-в том же коммите (constraint #4). `tests/ci/` и `tests/ut/`, `tests/framework/`
-остаются на месте.
+**Решение: ТРОГАЕМ, исполнено батчем C1.** `tests/ci/`, `tests/ut/`,
+`tests/framework/` остались на месте.
 
 ### F4. Документ-дрейф: в доках указан несуществующий путь `tests/issues/`
 
@@ -172,13 +168,13 @@ tests/CMakeLists.txt:609; `tests/ut/issues/CMakeLists.txt`), но **16 файл�
 | --- | --- |
 | `skynet/README.md:42`, `skynet/build.md:157,257`, `skynet/cxx-api.md:99,106`, `skynet/structure.md:200` (+ устаревший список `tests/ut` в :199), `skynet/test-coverage.md:15,50`, `skynet/skynet-protocol.md:331`, `skynet/build-deps-codex.md:70`, `skynet/test-scenarios.md`, `skynet/workflows.md` | пути в доках |
 | `skynet/skills/superpowers/{README,brainstorming,requesting-code-review,systematic-debugging,test-driven-development,writing-plans}/SKILL.md` (6 ф.) | пути в SKILLS |
-| `tests/select-tests.sh:104` | **мёртвая ветка кода** `tests/issues/*) echo 'ut\.issues'` (физический каталог — `tests/ut/issues/`, строка 102 уже покрывает; ветка недостижима) |
+| `tests/scripts/select-tests.sh:104` | **мёртвая ветка кода** `tests/issues/*) echo 'ut\.issues'` (физический каталог — `tests/ut/issues/`, строка 102 уже покрывает; ветка недостижима) |
 
-**Решение: ТРОГАЕМ (фаза C, батч C2)** — правим пути в 15 текстовых файлах
-и **удаляем мёртвую ветку** из `tests/select-tests.sh` в том же батче (иначе
-фаза-D проверка «grep старых путей = 0» не пройдёт). Риск ~нулевой
-(правки текстов + удаление недостижимой ветки), ценность для онбординга
-средняя.
+**Решение: ТРОГАЕМ (батч C2)** — правим пути в 15 текстовых файлах. Мёртвая
+ветка в `tests/scripts/select-tests.sh` уже удалена ранее (в составе merge
+phase A); в C2 остаются только правки путей в доках/SKILLS (иначе фаза-D
+проверка «grep старых путей = 0» не пройдёт). Риск ~нулевой
+(правки текстов), ценность для онбординга средняя.
 
 ### F5. ChangeLog-*.md в корне — upstream-конвенция
 
@@ -249,7 +245,7 @@ non-amalgamated `src/man1/`); дистрибутивные `man1/` в `dist` г�
 
 Тесты разложены по областям (`api|cursor|cxx|dbi|env|gc|txn`), issues —
 вложенный подкаталог с собственным CMakeLists, метки `ut.*` на месте
-(основа `tests/select-tests.sh` и документа `skynet/test-coverage.md`).
+(основа `tests/scripts/select-tests.sh` и документа `skynet/test-coverage.md`).
 Единственный дрейф — устаревший список файлов в `skynet/structure.md:199`
 (покрывается F4).
 
@@ -261,8 +257,8 @@ non-amalgamated `src/man1/`); дистрибутивные `man1/` в `dist` г�
 
 | № | Кандидат | Ценность (для разработки) | Риск (merge/amalgam/upstream) | Решение |
 | --- | --- | --- | --- | --- |
-| C1 | `tests/` → `tests/scripts/` + `tests/docs/` (группировка корня) | средняя (находимость, чистота) | средний (~46 несамоссылочных ссылок в 22 файлах: GNUmakefile, tests/CMakeLists.txt, .sourcecraft/ci.yaml, .github, skynet/*, SKILLS) | **Трогаем**, батч в фазе C; все ссылки в том же коммите |
-| C2 | Пути `tests/issues/` → `tests/ut/issues/` (16 файлов: 9 доков + 6 SKILLS + правка кода `tests/select-tests.sh:104`) | средняя (онбординг, снижение ложных поисков) | нулевой (тексты + удаление недостижимой ветки) | **Трогаем** (батч C2) |
+| C1 | `tests/` → `tests/scripts/` + `tests/docs/` (группировка корня) | средняя (находимость, чистота) | средний (~46 несамоссылочных ссылок в 22 файлах) | **Исполнено (C1)** |
+| C2 | Пути `tests/issues/` → `tests/ut/issues/` (16 файлов: 9 доков + 6 SKILLS; мёртвая ветка `select-tests.sh` удалена в phase A) | средняя (онбординг, снижение ложных поисков) | нулевой (тексты) | **Трогаем** (батч C2) |
 | C3 | `.gitignore` vs `.codeassistant/` (противоречие) | низкая (гигиена) | нулевой | **Трогаем** (микро-батч) |
 | C4 | Переименование тёзок `src/chk.c`/`src/defrag.c` | низкая (устранение путаницы) | высокая (upstream-паритет, constraint #2; правки 4+ build-файлов, история) | **НЕ трогаем**; опция — ADR владельцу |
 | C5 | `src/api-*.c` гранулярность | — | — | **НЕ трогаем** (канон) |
@@ -273,21 +269,18 @@ non-amalgamated `src/man1/`); дистрибутивные `man1/` в `dist` г�
 
 ---
 
-## 4. Рекомендации для фаз B/C/D
+## 4. Рекомендации для фаз B/C/D (статус исполнения)
 
-1. **Фаза B** — детальная карта переносов только для C1–C3:
-   - C1: `git mv` скриптов в `tests/scripts/`, доков в `tests/docs/`; полный
-     список ссылок см. §F3 (проверить дополнительно `grep -rn` по всему репо
-     на момент исполнения).
-   - C2: правки путей `tests/issues/`→`tests/ut/issues/` в 15 текстовых файлах
-     (9 доков + 6 SKILLS, перечень §F4) + удаление мёртвой ветки
-     `tests/issues/*) echo 'ut\.issues'` в `tests/select-tests.sh:104`.
-   - C3: правки `.gitignore` — без `git mv`.
-2. **Порядок батчей** (в окне без параллельных задач):
-   - B1 = C2+C3 (микро, независимы; C2 включает правку `tests/select-tests.sh`);
-   - B2 = C1 (основной, требует согласования с ревьюверами REV:cmake — т.к.
-     затрагивает `.sourcecraft/ci.yaml`, `.github/workflows/*.yml`,
-     `tests/CMakeLists.txt`, `GNUmakefile`).
+1. **Фаза B** — карта переносов только для C1–C3 (ниже). Согласована
+   координатором (GO TASK-36, mail-GO36).
+2. **Порядок батчей** (окно без параллельных задач):
+   - **C1 — ИСПОЛНЕНО**: `git mv` скриптов+конфигов в `tests/scripts/`,
+     доков в `tests/docs/`; все ссылки обновлены в том же коммите
+     (README.md, AGENTS.md, GNUmakefile, tests/CMakeLists.txt, skynet/*, SKILLS).
+   - C2 — правки путей `tests/issues/`→`tests/ut/issues/` в 15 текстовых файлах
+     (9 доков + 6 SKILLS, перечень §F4). Мёртвая ветка `select-tests.sh` уже
+     удалена в phase A.
+   - C3 — правки `.gitignore` — без `git mv`.
 3. **Верификация после каждого батча (фаза D)**: Linux (gcc+clang) сборка +
    P2 `ctest -L 'ut\.' -LE 'ut\.heavy'`; затем `make dist` (зелёная амальгама);
    `grep` по старым путям = 0. Windows-риски гасит GitHub CI (по согласованию
@@ -307,7 +300,7 @@ non-amalgamated `src/man1/`); дистрибутивные `man1/` в `dist` г�
   979); артефакты `cmake-build-t41-check` (mdbx.dir/src, mdbx_chk.dir/src/tools).
 - После REV:c (D.reviewer-c, needs-work minor) исправлены: счётчики файлов
   (`.codeassistant*` = 45, `mdbx++/` = 17), инвентарь C2 расширен до 16 файлов
-  (+ мёртвая ветка в `tests/select-tests.sh:104`), ветка rebase на актуальный
+  (+ мёртвая ветка в `tests/scripts/select-tests.sh:104`), ветка rebase на актуальный
   `devel@ec87f4e8`, факты перепроверены на новой базе.
 - Итог: **дубликатов-кандидатов на удаление не найдено**; реальных кандидатов
   на перенос — 3 (C1–C3), все в нашем слое, upstream-набор не затрагивается.

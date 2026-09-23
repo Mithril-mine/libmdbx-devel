@@ -620,7 +620,7 @@ smoke-t3: cmake-stochastic-build
 	$(call ctest-scenario-run,@cmake-stochastic-build,^smoke-t3$$,)
 
 select-tests:
-	$(QUIET)tests/select-tests.sh $(SELECT_TESTS_ARGS)
+	$(QUIET)tests/scripts/select-tests.sh $(SELECT_TESTS_ARGS)
 
 test-stochastic: cmake-stochastic-build
 	$(call ctest-scenario-run,@cmake-stochastic-build,^stochastic$$,)

@@ -451,7 +451,7 @@ else()
   set_tests_properties(smoke_t1_copy PROPERTIES LABELS "smoke;smoke-t1" TIMEOUT 60 RUN_SERIAL OFF)
 
   if(UNIX AND MDBX_ENABLE_LONG_TESTS)
-    add_test(NAME stochastic COMMAND ${CMAKE_CURRENT_SOURCE_DIR}/stochastic.sh --whole-duration 600 --probe-duration 60
+    add_test(NAME stochastic COMMAND ${CMAKE_CURRENT_SOURCE_DIR}/scripts/stochastic.sh --whole-duration 600 --probe-duration 60
                                     --dont-check-ram-size --loops 2 --db-upto-mb 256 --skip-make --taillog)
     set_tests_properties(stochastic PROPERTIES
       LABELS "stochastic;smoke-t3"
@@ -460,7 +460,7 @@ else()
       WORKING_DIRECTORY ${MDBX_OUTPUT_DIR}
       RESOURCE_LOCK stochastic)
 
-    add_test(NAME stochastic_single COMMAND ${CMAKE_CURRENT_SOURCE_DIR}/stochastic.sh --whole-duration 600
+    add_test(NAME stochastic_single COMMAND ${CMAKE_CURRENT_SOURCE_DIR}/scripts/stochastic.sh --whole-duration 600
                                      --probe-duration 60 --dont-check-ram-size --single --loops 2 --db-upto-mb 256
                                      --skip-make --taillog)
     set_tests_properties(stochastic_single PROPERTIES
@@ -470,7 +470,7 @@ else()
       WORKING_DIRECTORY ${MDBX_OUTPUT_DIR}
       RESOURCE_LOCK stochastic)
 
-    add_test(NAME stochastic_long COMMAND ${CMAKE_CURRENT_SOURCE_DIR}/stochastic.sh --loops 42 --db-upto-mb 1024
+    add_test(NAME stochastic_long COMMAND ${CMAKE_CURRENT_SOURCE_DIR}/scripts/stochastic.sh --loops 42 --db-upto-mb 1024
                                     --extra --skip-make --taillog)
     set_tests_properties(stochastic_long PROPERTIES
       LABELS "stochastic-long;smoke-t3"

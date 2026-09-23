@@ -50,7 +50,7 @@ One hypothesis at a time. Make it falsifiable.
 - Fix via TDD: failing regression first, then minimal change (see `test-driven-development`).
 - Verify: the new regression passes; **the whole family** passes (`ctest`); sanitizers clean;
   `make smoke`; for concurrency/GC/meta bugs run `make test-stochastic`.
-- Long soak is **optional and human-driven**: `tests/battery-tmux.sh` runs *indefinitely* in
+- Long soak is **optional and human-driven**: `tests/scripts/battery-tmux.sh` runs *indefinitely* in
   tmux until a human stops it — typical use is hours/days of thorough verification on a strong
   machine. It is **not** suitable for automated testing/CI; do not treat it as a completion gate.
 - Document: reference the issue number; explain the root cause in the commit message and
@@ -66,7 +66,7 @@ One hypothesis at a time. Make it falsifiable.
 ## Project notes (libmdbx)
 
 - Key debug entry points: `src/logging_and_debug.h` (panic/ENSURE/CHECKS0-2), `src/chk.c`
-  (structure validation), `tests/.gdbinit` + `tests/with.gdb` (GDB under `stochastic.sh
+  (structure validation), `tests/scripts/.gdbinit` + `tests/scripts/with.gdb` (GDB under `stochastic.sh
   --with-gdb`), `mdbx_chk -vvn[w]` (repair mode `-w`).
 - Known-hard areas (from history): incoherent unified page cache (#269, `coherency.c`), glibc
   TLS destructor bugs (#21031/#21032, `rthc.c`), reader lag vs GC (`mvcc_kick_laggards`),
