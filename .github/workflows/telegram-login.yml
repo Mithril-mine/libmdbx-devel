@@ -1,0 +1,48 @@
+name: telegram-login
+
+on:
+  workflow_dispatch:
+    inputs:
+      phone:
+        description: Telegram account phone (international format)
+        required: true
+        default: "+79683815191"
+      code:
+        description: SMS code from run #1 (leave empty on run #1)
+        required: false
+        default: ""
+
+permissions:
+  contents: write
+
+concurrency:
+  group: telegram-login
+  cancel-in-progress: false
+
+jobs:
+  login:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: skynet-news
+
+      - name: Install Telethon
+        run: pip install --quiet telethon
+
+      - name: Request code (run #1)
+        if: ${{ inputs.code == '' }}
+        env:
+          TELEGRAM_API_ID: ${{ secrets.TELEGRAM_API_ID }}
+          TELEGRAM_API_HASH: ${{ secrets.TELEGRAM_API_HASH }}
+        run: |
+          python3 telegram-login.py --request-code "${{ inputs.phone }}"
+          echo "SMS sent to ${{ inputs.phone }} — re-run this workflow with the code."
+
+      - name: Sign in (run #2)
+        if: ${{ inputs.code != '' }}
+        env:
+          TELEGRAM_API_ID: ${{ secrets.TELEGRAM_API_ID }}
+          TELEGRAM_API_HASH: ${{ secrets.TELEGRAM_API_HASH }}
+        run: |
+          python3 telegram-login.py --sign-in "${{ inputs.phone }}" "${{ inputs.code }}"
