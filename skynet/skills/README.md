@@ -26,6 +26,8 @@ skills/
     test-durability-strategy/SKILL.md
     kaizen-principles/SKILL.md
     memory-hygiene/SKILL.md
+    security-boundary/SKILL.md     # внешний периметр: triage, инъекции, утечки
+    external-consult/SKILL.md
     references/
       functional-architecture.md  # исходный файл (копия skynet/functional-architecture.md)
       subsystem-map.md            # карта подсистем S1–S14 с risk levels
@@ -37,7 +39,8 @@ skills/
     feature-developer/SKILL.md
     platform-build-engineer/SKILL.md
     documentation-scribe/SKILL.md
-    vision/SKILL.md
+    vision/SKILL.md               # дивергенция идей (TASK-34)
+    comm-guard/SKILL.md           # внешнее общение (МАКС/TG), шаблонные ответы
   orchestrator/                   # Level 4
     scrum-ceremonies/SKILL.md
     swarm-management/SKILL.md
