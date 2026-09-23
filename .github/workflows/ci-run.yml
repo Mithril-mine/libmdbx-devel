@@ -44,6 +44,11 @@ on:
         required: false
         type: boolean
         default: false
+      cell-ndk:
+        description: Android NDK version for setup-ndk (empty = not an android cell)
+        required: false
+        type: string
+        default: ""
       ref:
         description: git ref (branch or SHA) to test
         required: true
@@ -74,17 +79,50 @@ jobs:
           fetch-tags: true
           submodules: true
 
+      - name: setup android ndk
+        if: inputs.cell-ndk != ''
+        uses: nttld/setup-ndk@v1
+        id: setup-ndk
+        with:
+          ndk-version: ${{ inputs.cell-ndk }}
+          add-to-path: true
+
+      - name: export ndk env
+        if: inputs.cell-ndk != ''
+        shell: bash
+        run: |
+          set -euxo pipefail
+          echo "NDK_PATH=${{ steps.setup-ndk.outputs.ndk-path }}" >> "$GITHUB_ENV"
+          echo "ANDROID_NDK_HOME=${{ steps.setup-ndk.outputs.ndk-path }}" >> "$GITHUB_ENV"
+
       - name: export toolchain env
         if: inputs.cell-env != ''
         shell: bash
         run: |
-          printf '%s\n' '${{ inputs.cell-env }}' >> "$GITHUB_ENV"
+          set -euxo pipefail
+          while IFS= read -r line; do
+            [ -z "$line" ] && continue
+            key="${line%%=*}"
+            value="${line#*=}"
+            if [ "$key" = "PATH" ]; then
+              printf '%s\n' "$value" >> "$GITHUB_PATH"
+            else
+              printf '%s=%s\n' "$key" "$value" >> "$GITHUB_ENV"
+            fi
+          done <<'ENVEOF'
+          ${{ inputs.cell-env }}
+          ENVEOF
 
       - name: configure
         shell: bash
         run: |
           set -euxo pipefail
-          if command -v ninja >/dev/null 2>&1; then GEN="-G Ninja"; else GEN=""; fi
+          if command -v ninja >/dev/null 2>&1 && \
+             ! printf '%s' '${{ inputs.cell-cmake }}' | grep -Eq '(^| )-[GTA]( |$)'; then
+            GEN="-G Ninja"
+          else
+            GEN=""
+          fi
           cmake -S "$GITHUB_WORKSPACE" -B "$GITHUB_WORKSPACE/@ci-cmake-build" $GEN ${{ inputs.cell-cmake }}
 
       - name: build
@@ -109,6 +147,9 @@ jobs:
           set -euxo pipefail
           CTEST_CMD=(ctest --test-dir "$GITHUB_WORKSPACE/@ci-cmake-build" \
             --output-on-failure --parallel 3 --schedule-random --no-tests=error)
+          if [ -n "${{ inputs.cell-build-config }}" ]; then
+            CTEST_CMD+=(-C '${{ inputs.cell-build-config }}')
+          fi
           if [ -n "${{ inputs.cell-ctest-regex }}" ]; then
             CTEST_CMD+=(-R '${{ inputs.cell-ctest-regex }}')
           fi

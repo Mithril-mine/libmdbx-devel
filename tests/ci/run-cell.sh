@@ -21,6 +21,21 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
 REGISTRY="${REPO_ROOT}/tests/ci/config.json"
 
+# Expand ${VAR} placeholders against the current environment (no command
+# substitution, no $VAR shorthand — only ${NAME}, matching the registry usage).
+expand_vars() {
+	local s="$1" out="" rest="$1" m key val
+	while [[ "$rest" =~ \$\{([A-Za-z_][A-Za-z0-9_]*)\} ]]; do
+		m="${BASH_REMATCH[0]}"
+		key="${BASH_REMATCH[1]}"
+		val="${!key:-}"
+		out+="${rest%%$m*}$val"
+		rest="${rest#*$m}"
+	done
+	out+="$rest"
+	printf '%s' "$out"
+}
+
 CELL_ID=""
 BUILD_DIR=""
 
@@ -84,18 +99,33 @@ mkdir -p "$BUILD_DIR"
 # --- toolchain env ----------------------------------------------------------
 ENV_JSON="$(python3 -c "import json,sys; c=json.loads('''${CELL_JSON}'''); json.dump(c.get('env') or {}, sys.stdout)")"
 if [ "$ENV_JSON" != "{}" ]; then
-	eval "$(python3 -c "
-import json, shlex, os
+	while IFS= read -r line; do
+		[ -z "$line" ] && continue
+		key="${line%%=*}"
+		value="${line#*=}"
+		value="$(expand_vars "$value")"
+		if [ "$key" = "PATH" ]; then
+			export PATH="$value:$PATH"
+		else
+			export "$key=$value"
+		fi
+	done < <(python3 -c "
+import json
 env = json.loads('''${ENV_JSON}''')
 for k, v in env.items():
-    print(f'export {k}={shlex.quote(str(v))}')
-")"
+    print(f'{k}={v}')
+")
 fi
 
 # --- cmake args (each registry entry is 'flag|value' or a plain '-D...' arg) -
 CMAKE_ARGS=()
+BUILD_CONFIG=""
 while IFS= read -r line; do
 	[ -z "$line" ] && continue
+	line="$(expand_vars "$line")"
+	if [[ "$line" =~ ^-DCMAKE_BUILD_TYPE=(.*)$ ]]; then
+		BUILD_CONFIG="${BASH_REMATCH[1]}"
+	fi
 	flag="${line%%|*}"
 	rest="${line#*|}"
 	if [ "$rest" != "$line" ]; then
@@ -110,8 +140,17 @@ for a in c.get('cmake') or []:
     print(a)
 ")
 
+# Deterministic generator selection: only default to Ninja when the cell does
+# not pin its own generator/platform/toolset (legacy ci.sh semantics).
 if command -v ninja >/dev/null 2>&1; then
-	GENERATOR="-G Ninja"
+	case " ${CMAKE_ARGS[*]} " in
+	*' -G '*|*' -A '*|*' -T '*)
+		GENERATOR=""
+		;;
+	*)
+		GENERATOR="-G Ninja"
+		;;
+	esac
 else
 	GENERATOR=""
 fi
@@ -119,7 +158,11 @@ fi
 echo "==> cmake configure: ${CMAKE_ARGS[*]}"
 cmake -S "$REPO_ROOT" -B "$BUILD_DIR" $GENERATOR "${CMAKE_ARGS[@]}" || exit 1
 echo "==> cmake build"
-cmake --build "$BUILD_DIR" --parallel || exit 1
+if [ -n "$BUILD_CONFIG" ]; then
+	cmake --build "$BUILD_DIR" --parallel --config "$BUILD_CONFIG" || exit 1
+else
+	cmake --build "$BUILD_DIR" --parallel || exit 1
+fi
 
 if [ "$BUILD_ONLY" = "True" ]; then
 	echo "==> build_only cell: skipping ctest (${CELL_NAME})"
@@ -147,6 +190,7 @@ print(c.get('ctest') and c['ctest'].get('exclude') or '')
 ")
 
 CTEST_CMD=(ctest --test-dir "$BUILD_DIR" --output-on-failure --parallel 3 --schedule-random --no-tests=error)
+[ -n "$BUILD_CONFIG" ] && CTEST_CMD+=(-C "$BUILD_CONFIG")
 [ -n "$CTEST_RUN" ] && CTEST_CMD+=(-R "$CTEST_RUN")
 [ -n "$CTEST_EXCL" ] && CTEST_CMD+=(-E "$CTEST_EXCL")
 echo "==> ctest: ${CTEST_CMD[*]}"

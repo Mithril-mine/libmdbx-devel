@@ -758,8 +758,8 @@
       "runs-on": "windows-latest",
       "env": {
         "STUDIO_CLANG_DIR": "C:/Program Files/Microsoft Visual Studio/18/Enterprise/VC/Tools/Llvm/x64/bin",
-        "CC": "clang.exe",
-        "CXX": "clang++.exe"
+        "CC": "C:/Program Files/Microsoft Visual Studio/18/Enterprise/VC/Tools/Llvm/x64/bin/clang.exe",
+        "CXX": "C:/Program Files/Microsoft Visual Studio/18/Enterprise/VC/Tools/Llvm/x64/bin/clang++.exe"
       },
       "cmake": [
         "-DCMAKE_BUILD_TYPE=Debug",
@@ -774,8 +774,8 @@
       "runs-on": "windows-latest",
       "env": {
         "STUDIO_CLANG_DIR": "C:/Program Files/Microsoft Visual Studio/18/Enterprise/VC/Tools/Llvm/x64/bin",
-        "CC": "clang.exe",
-        "CXX": "clang++.exe"
+        "CC": "C:/Program Files/Microsoft Visual Studio/18/Enterprise/VC/Tools/Llvm/x64/bin/clang.exe",
+        "CXX": "C:/Program Files/Microsoft Visual Studio/18/Enterprise/VC/Tools/Llvm/x64/bin/clang++.exe"
       },
       "cmake": [
         "-DCMAKE_BUILD_TYPE=Release",
@@ -790,8 +790,8 @@
       "runs-on": "windows-11-vs2026-arm",
       "env": {
         "STUDIO_CLANG_DIR": "C:/Program Files/Microsoft Visual Studio/18/Enterprise/VC/Tools/Llvm/ARM64/bin",
-        "CC": "clang.exe",
-        "CXX": "clang++.exe"
+        "CC": "C:/Program Files/Microsoft Visual Studio/18/Enterprise/VC/Tools/Llvm/ARM64/bin/clang.exe",
+        "CXX": "C:/Program Files/Microsoft Visual Studio/18/Enterprise/VC/Tools/Llvm/ARM64/bin/clang++.exe"
       },
       "cmake": [
         "-DCMAKE_BUILD_TYPE=Debug",
@@ -808,8 +808,8 @@
       "runs-on": "windows-11-vs2026-arm",
       "env": {
         "STUDIO_CLANG_DIR": "C:/Program Files/Microsoft Visual Studio/18/Enterprise/VC/Tools/Llvm/ARM64/bin",
-        "CC": "clang.exe",
-        "CXX": "clang++.exe"
+        "CC": "C:/Program Files/Microsoft Visual Studio/18/Enterprise/VC/Tools/Llvm/ARM64/bin/clang.exe",
+        "CXX": "C:/Program Files/Microsoft Visual Studio/18/Enterprise/VC/Tools/Llvm/ARM64/bin/clang++.exe"
       },
       "cmake": [
         "-DCMAKE_BUILD_TYPE=Release",
@@ -826,8 +826,8 @@
       "runs-on": "windows-latest",
       "env": {
         "STUDIO_CLANG_DIR": "C:/Program Files/Microsoft Visual Studio/18/Enterprise/VC/Tools/Llvm/x64/bin",
-        "CC": "clang.exe",
-        "CXX": "clang++.exe"
+        "CC": "C:/Program Files/Microsoft Visual Studio/18/Enterprise/VC/Tools/Llvm/x64/bin/clang.exe",
+        "CXX": "C:/Program Files/Microsoft Visual Studio/18/Enterprise/VC/Tools/Llvm/x64/bin/clang++.exe"
       },
       "cmake": [
         "-DCMAKE_BUILD_TYPE=Debug",
@@ -842,8 +842,8 @@
       "runs-on": "windows-latest",
       "env": {
         "STUDIO_CLANG_DIR": "C:/Program Files/Microsoft Visual Studio/18/Enterprise/VC/Tools/Llvm/x64/bin",
-        "CC": "clang.exe",
-        "CXX": "clang++.exe"
+        "CC": "C:/Program Files/Microsoft Visual Studio/18/Enterprise/VC/Tools/Llvm/x64/bin/clang.exe",
+        "CXX": "C:/Program Files/Microsoft Visual Studio/18/Enterprise/VC/Tools/Llvm/x64/bin/clang++.exe"
       },
       "cmake": [
         "-DCMAKE_BUILD_TYPE=Release",
@@ -858,8 +858,8 @@
       "runs-on": "windows-11-vs2026-arm",
       "env": {
         "STUDIO_CLANG_DIR": "C:/Program Files/Microsoft Visual Studio/18/Enterprise/VC/Tools/Llvm/ARM64/bin",
-        "CC": "clang.exe",
-        "CXX": "clang++.exe"
+        "CC": "C:/Program Files/Microsoft Visual Studio/18/Enterprise/VC/Tools/Llvm/ARM64/bin/clang.exe",
+        "CXX": "C:/Program Files/Microsoft Visual Studio/18/Enterprise/VC/Tools/Llvm/ARM64/bin/clang++.exe"
       },
       "cmake": [
         "-DCMAKE_BUILD_TYPE=Debug",
@@ -876,8 +876,8 @@
       "runs-on": "windows-11-vs2026-arm",
       "env": {
         "STUDIO_CLANG_DIR": "C:/Program Files/Microsoft Visual Studio/18/Enterprise/VC/Tools/Llvm/ARM64/bin",
-        "CC": "clang.exe",
-        "CXX": "clang++.exe"
+        "CC": "C:/Program Files/Microsoft Visual Studio/18/Enterprise/VC/Tools/Llvm/ARM64/bin/clang.exe",
+        "CXX": "C:/Program Files/Microsoft Visual Studio/18/Enterprise/VC/Tools/Llvm/ARM64/bin/clang++.exe"
       },
       "cmake": [
         "-DCMAKE_BUILD_TYPE=Release",
@@ -894,8 +894,8 @@
       "runs-on": "windows-latest",
       "env": {
         "STUDIO_CLANG_DIR": "C:/Program Files/Microsoft Visual Studio/18/Enterprise/VC/Tools/Llvm/x64/bin",
-        "CC": "clang.exe",
-        "CXX": "clang++.exe"
+        "CC": "C:/Program Files/Microsoft Visual Studio/18/Enterprise/VC/Tools/Llvm/x64/bin/clang.exe",
+        "CXX": "C:/Program Files/Microsoft Visual Studio/18/Enterprise/VC/Tools/Llvm/x64/bin/clang++.exe"
       },
       "cmake": [
         "-DCMAKE_BUILD_TYPE=Debug",
@@ -910,8 +910,8 @@
       "runs-on": "windows-latest",
       "env": {
         "STUDIO_CLANG_DIR": "C:/Program Files/Microsoft Visual Studio/18/Enterprise/VC/Tools/Llvm/x64/bin",
-        "CC": "clang.exe",
-        "CXX": "clang++.exe"
+        "CC": "C:/Program Files/Microsoft Visual Studio/18/Enterprise/VC/Tools/Llvm/x64/bin/clang.exe",
+        "CXX": "C:/Program Files/Microsoft Visual Studio/18/Enterprise/VC/Tools/Llvm/x64/bin/clang++.exe"
       },
       "cmake": [
         "-DCMAKE_BUILD_TYPE=Release",
@@ -926,8 +926,8 @@
       "runs-on": "windows-11-vs2026-arm",
       "env": {
         "STUDIO_CLANG_DIR": "C:/Program Files/Microsoft Visual Studio/18/Enterprise/VC/Tools/Llvm/ARM64/bin",
-        "CC": "clang.exe",
-        "CXX": "clang++.exe"
+        "CC": "C:/Program Files/Microsoft Visual Studio/18/Enterprise/VC/Tools/Llvm/ARM64/bin/clang.exe",
+        "CXX": "C:/Program Files/Microsoft Visual Studio/18/Enterprise/VC/Tools/Llvm/ARM64/bin/clang++.exe"
       },
       "cmake": [
         "-DCMAKE_BUILD_TYPE=Debug",
@@ -944,8 +944,8 @@
       "runs-on": "windows-11-vs2026-arm",
       "env": {
         "STUDIO_CLANG_DIR": "C:/Program Files/Microsoft Visual Studio/18/Enterprise/VC/Tools/Llvm/ARM64/bin",
-        "CC": "clang.exe",
-        "CXX": "clang++.exe"
+        "CC": "C:/Program Files/Microsoft Visual Studio/18/Enterprise/VC/Tools/Llvm/ARM64/bin/clang.exe",
+        "CXX": "C:/Program Files/Microsoft Visual Studio/18/Enterprise/VC/Tools/Llvm/ARM64/bin/clang++.exe"
       },
       "cmake": [
         "-DCMAKE_BUILD_TYPE=Release",
@@ -962,8 +962,8 @@
       "runs-on": "windows-latest",
       "env": {
         "STUDIO_CLANG_DIR": "C:/Program Files/Microsoft Visual Studio/18/Enterprise/VC/Tools/Llvm/x64/bin",
-        "CC": "clang.exe",
-        "CXX": "clang++.exe"
+        "CC": "C:/Program Files/Microsoft Visual Studio/18/Enterprise/VC/Tools/Llvm/x64/bin/clang.exe",
+        "CXX": "C:/Program Files/Microsoft Visual Studio/18/Enterprise/VC/Tools/Llvm/x64/bin/clang++.exe"
       },
       "cmake": [
         "-DCMAKE_BUILD_TYPE=Debug",
@@ -978,8 +978,8 @@
       "runs-on": "windows-latest",
       "env": {
         "STUDIO_CLANG_DIR": "C:/Program Files/Microsoft Visual Studio/18/Enterprise/VC/Tools/Llvm/x64/bin",
-        "CC": "clang.exe",
-        "CXX": "clang++.exe"
+        "CC": "C:/Program Files/Microsoft Visual Studio/18/Enterprise/VC/Tools/Llvm/x64/bin/clang.exe",
+        "CXX": "C:/Program Files/Microsoft Visual Studio/18/Enterprise/VC/Tools/Llvm/x64/bin/clang++.exe"
       },
       "cmake": [
         "-DCMAKE_BUILD_TYPE=Release",
@@ -994,8 +994,8 @@
       "runs-on": "windows-11-vs2026-arm",
       "env": {
         "STUDIO_CLANG_DIR": "C:/Program Files/Microsoft Visual Studio/18/Enterprise/VC/Tools/Llvm/ARM64/bin",
-        "CC": "clang.exe",
-        "CXX": "clang++.exe"
+        "CC": "C:/Program Files/Microsoft Visual Studio/18/Enterprise/VC/Tools/Llvm/ARM64/bin/clang.exe",
+        "CXX": "C:/Program Files/Microsoft Visual Studio/18/Enterprise/VC/Tools/Llvm/ARM64/bin/clang++.exe"
       },
       "cmake": [
         "-DCMAKE_BUILD_TYPE=Debug",
@@ -1012,8 +1012,8 @@
       "runs-on": "windows-11-vs2026-arm",
       "env": {
         "STUDIO_CLANG_DIR": "C:/Program Files/Microsoft Visual Studio/18/Enterprise/VC/Tools/Llvm/ARM64/bin",
-        "CC": "clang.exe",
-        "CXX": "clang++.exe"
+        "CC": "C:/Program Files/Microsoft Visual Studio/18/Enterprise/VC/Tools/Llvm/ARM64/bin/clang.exe",
+        "CXX": "C:/Program Files/Microsoft Visual Studio/18/Enterprise/VC/Tools/Llvm/ARM64/bin/clang++.exe"
       },
       "cmake": [
         "-DCMAKE_BUILD_TYPE=Release",
@@ -1028,7 +1028,11 @@
     {
       "id": "win-mingw-64-debug-dll-on-crt-on",
       "runs-on": "windows-latest",
-      "env": {},
+      "env": {
+        "MDBX_BUILD_OPTIONS": "-DMDBX_CHECKING=2 -DMDBX_DEBUG=1",
+        "MDBX_BUILD_CXX": "NO",
+        "PATH": "/c/mingw64/bin:/c/programdata/mingw64/mingw64/bin"
+      },
       "cmake": [
         "-G|MinGW Makefiles",
         "-DCMAKE_BUILD_TYPE=Debug",
@@ -1045,7 +1049,10 @@
       "runs-on": "windows-latest",
       "env": {
         "CC": "x86_64-w64-mingw32-gcc",
-        "CXX": "x86_64-w64-mingw32-g++"
+        "CXX": "x86_64-w64-mingw32-g++",
+        "MDBX_BUILD_OPTIONS": "-DMDBX_CHECKING=2 -DMDBX_DEBUG=1",
+        "MDBX_BUILD_CXX": "NO",
+        "PATH": "/c/mingw64/bin:/c/programdata/mingw64/mingw64/bin"
       },
       "cmake": [
         "-G|MinGW Makefiles",
@@ -1061,7 +1068,11 @@
     {
       "id": "win-mingw-64-debug-dll-on-crt-off",
       "runs-on": "windows-latest",
-      "env": {},
+      "env": {
+        "MDBX_BUILD_OPTIONS": "-DMDBX_CHECKING=2 -DMDBX_DEBUG=1",
+        "MDBX_BUILD_CXX": "YES",
+        "PATH": "/c/mingw64/bin:/c/programdata/mingw64/mingw64/bin"
+      },
       "cmake": [
         "-G|MinGW Makefiles",
         "-DCMAKE_BUILD_TYPE=Debug",
@@ -1078,7 +1089,10 @@
       "runs-on": "windows-latest",
       "env": {
         "CC": "x86_64-w64-mingw32-gcc",
-        "CXX": "x86_64-w64-mingw32-g++"
+        "CXX": "x86_64-w64-mingw32-g++",
+        "MDBX_BUILD_OPTIONS": "-DMDBX_CHECKING=2 -DMDBX_DEBUG=1",
+        "MDBX_BUILD_CXX": "YES",
+        "PATH": "/c/mingw64/bin:/c/programdata/mingw64/mingw64/bin"
       },
       "cmake": [
         "-G|MinGW Makefiles",
@@ -1094,7 +1108,11 @@
     {
       "id": "win-mingw-64-release-dll-on-crt-off",
       "runs-on": "windows-latest",
-      "env": {},
+      "env": {
+        "MDBX_BUILD_OPTIONS": "-DMDBX_CHECKING=0 -DMDBX_DEBUG=0",
+        "MDBX_BUILD_CXX": "YES",
+        "PATH": "/c/mingw64/bin:/c/programdata/mingw64/mingw64/bin"
+      },
       "cmake": [
         "-G|MinGW Makefiles",
         "-DCMAKE_BUILD_TYPE=Release",
@@ -1111,7 +1129,10 @@
       "runs-on": "windows-latest",
       "env": {
         "CC": "x86_64-w64-mingw32-gcc",
-        "CXX": "x86_64-w64-mingw32-g++"
+        "CXX": "x86_64-w64-mingw32-g++",
+        "MDBX_BUILD_OPTIONS": "-DMDBX_CHECKING=0 -DMDBX_DEBUG=0",
+        "MDBX_BUILD_CXX": "YES",
+        "PATH": "/c/mingw64/bin:/c/programdata/mingw64/mingw64/bin"
       },
       "cmake": [
         "-G|MinGW Makefiles",
@@ -1127,7 +1148,11 @@
     {
       "id": "win-mingw-64-release-dll-off-crt-off",
       "runs-on": "windows-latest",
-      "env": {},
+      "env": {
+        "MDBX_BUILD_OPTIONS": "-DMDBX_CHECKING=0 -DMDBX_DEBUG=0",
+        "MDBX_BUILD_CXX": "YES",
+        "PATH": "/c/mingw64/bin:/c/programdata/mingw64/mingw64/bin"
+      },
       "cmake": [
         "-G|MinGW Makefiles",
         "-DCMAKE_BUILD_TYPE=Release",
@@ -1144,7 +1169,10 @@
       "runs-on": "windows-latest",
       "env": {
         "CC": "x86_64-w64-mingw32-gcc",
-        "CXX": "x86_64-w64-mingw32-g++"
+        "CXX": "x86_64-w64-mingw32-g++",
+        "MDBX_BUILD_OPTIONS": "-DMDBX_CHECKING=0 -DMDBX_DEBUG=0",
+        "MDBX_BUILD_CXX": "YES",
+        "PATH": "/c/mingw64/bin:/c/programdata/mingw64/mingw64/bin"
       },
       "cmake": [
         "-G|MinGW Makefiles",
@@ -2660,9 +2688,7 @@
     {
       "id": "android-r26d-arm64-v8a-release",
       "runs-on": "ubuntu-latest",
-      "env": {
-        "ANDROID_NDK_HOME": "${NDK_PATH}"
-      },
+      "env": {},
       "cmake": [
         "-DANDROID_ABI=arm64-v8a",
         "-DCMAKE_TOOLCHAIN_FILE:PATH=${NDK_PATH}/build/cmake/android.toolchain.cmake",
@@ -2670,14 +2696,13 @@
       ],
       "ctest": null,
       "build_only": true,
-      "note": "ci-android ndk=r26d abi=arm64-v8a Release; build-only (no emulator)"
+      "note": "ci-android ndk=r26d abi=arm64-v8a Release; build-only (no emulator)",
+      "ndk": "r26d"
     },
     {
       "id": "android-r26d-armeabi-v7a-with-neon-release",
       "runs-on": "ubuntu-latest",
-      "env": {
-        "ANDROID_NDK_HOME": "${NDK_PATH}"
-      },
+      "env": {},
       "cmake": [
         "-DANDROID_ABI=armeabi-v7a with NEON",
         "-DCMAKE_TOOLCHAIN_FILE:PATH=${NDK_PATH}/build/cmake/android.toolchain.cmake",
@@ -2685,14 +2710,13 @@
       ],
       "ctest": null,
       "build_only": true,
-      "note": "ci-android ndk=r26d abi=armeabi-v7a with NEON Release; build-only (no emulator)"
+      "note": "ci-android ndk=r26d abi=armeabi-v7a with NEON Release; build-only (no emulator)",
+      "ndk": "r26d"
     },
     {
       "id": "android-r26d-x86-64-release",
       "runs-on": "ubuntu-latest",
-      "env": {
-        "ANDROID_NDK_HOME": "${NDK_PATH}"
-      },
+      "env": {},
       "cmake": [
         "-DANDROID_ABI=x86_64",
         "-DCMAKE_TOOLCHAIN_FILE:PATH=${NDK_PATH}/build/cmake/android.toolchain.cmake",
@@ -2700,14 +2724,13 @@
       ],
       "ctest": null,
       "build_only": true,
-      "note": "ci-android ndk=r26d abi=x86_64 Release; build-only (no emulator)"
+      "note": "ci-android ndk=r26d abi=x86_64 Release; build-only (no emulator)",
+      "ndk": "r26d"
     },
     {
       "id": "android-r27d-arm64-v8a-debug",
       "runs-on": "ubuntu-latest",
-      "env": {
-        "ANDROID_NDK_HOME": "${NDK_PATH}"
-      },
+      "env": {},
       "cmake": [
         "-DANDROID_ABI=arm64-v8a",
         "-DCMAKE_TOOLCHAIN_FILE:PATH=${NDK_PATH}/build/cmake/android.toolchain.cmake",
@@ -2715,14 +2738,13 @@
       ],
       "ctest": null,
       "build_only": true,
-      "note": "ci-android ndk=r27d abi=arm64-v8a Debug; build-only (no emulator)"
+      "note": "ci-android ndk=r27d abi=arm64-v8a Debug; build-only (no emulator)",
+      "ndk": "r27d"
     },
     {
       "id": "android-r27d-arm64-v8a-release",
       "runs-on": "ubuntu-latest",
-      "env": {
-        "ANDROID_NDK_HOME": "${NDK_PATH}"
-      },
+      "env": {},
       "cmake": [
         "-DANDROID_ABI=arm64-v8a",
         "-DCMAKE_TOOLCHAIN_FILE:PATH=${NDK_PATH}/build/cmake/android.toolchain.cmake",
@@ -2730,14 +2752,13 @@
       ],
       "ctest": null,
       "build_only": true,
-      "note": "ci-android ndk=r27d abi=arm64-v8a Release; build-only (no emulator)"
+      "note": "ci-android ndk=r27d abi=arm64-v8a Release; build-only (no emulator)",
+      "ndk": "r27d"
     },
     {
       "id": "android-r27d-armeabi-v7a-with-neon-debug",
       "runs-on": "ubuntu-latest",
-      "env": {
-        "ANDROID_NDK_HOME": "${NDK_PATH}"
-      },
+      "env": {},
       "cmake": [
         "-DANDROID_ABI=armeabi-v7a with NEON",
         "-DCMAKE_TOOLCHAIN_FILE:PATH=${NDK_PATH}/build/cmake/android.toolchain.cmake",
@@ -2745,14 +2766,13 @@
       ],
       "ctest": null,
       "build_only": true,
-      "note": "ci-android ndk=r27d abi=armeabi-v7a with NEON Debug; build-only (no emulator)"
+      "note": "ci-android ndk=r27d abi=armeabi-v7a with NEON Debug; build-only (no emulator)",
+      "ndk": "r27d"
     },
     {
       "id": "android-r27d-armeabi-v7a-with-neon-release",
       "runs-on": "ubuntu-latest",
-      "env": {
-        "ANDROID_NDK_HOME": "${NDK_PATH}"
-      },
+      "env": {},
       "cmake": [
         "-DANDROID_ABI=armeabi-v7a with NEON",
         "-DCMAKE_TOOLCHAIN_FILE:PATH=${NDK_PATH}/build/cmake/android.toolchain.cmake",
@@ -2760,14 +2780,13 @@
       ],
       "ctest": null,
       "build_only": true,
-      "note": "ci-android ndk=r27d abi=armeabi-v7a with NEON Release; build-only (no emulator)"
+      "note": "ci-android ndk=r27d abi=armeabi-v7a with NEON Release; build-only (no emulator)",
+      "ndk": "r27d"
     },
     {
       "id": "android-r27d-x86-64-debug",
       "runs-on": "ubuntu-latest",
-      "env": {
-        "ANDROID_NDK_HOME": "${NDK_PATH}"
-      },
+      "env": {},
       "cmake": [
         "-DANDROID_ABI=x86_64",
         "-DCMAKE_TOOLCHAIN_FILE:PATH=${NDK_PATH}/build/cmake/android.toolchain.cmake",
@@ -2775,14 +2794,13 @@
       ],
       "ctest": null,
       "build_only": true,
-      "note": "ci-android ndk=r27d abi=x86_64 Debug; build-only (no emulator)"
+      "note": "ci-android ndk=r27d abi=x86_64 Debug; build-only (no emulator)",
+      "ndk": "r27d"
     },
     {
       "id": "android-r27d-x86-64-release",
       "runs-on": "ubuntu-latest",
-      "env": {
-        "ANDROID_NDK_HOME": "${NDK_PATH}"
-      },
+      "env": {},
       "cmake": [
         "-DANDROID_ABI=x86_64",
         "-DCMAKE_TOOLCHAIN_FILE:PATH=${NDK_PATH}/build/cmake/android.toolchain.cmake",
@@ -2790,14 +2808,13 @@
       ],
       "ctest": null,
       "build_only": true,
-      "note": "ci-android ndk=r27d abi=x86_64 Release; build-only (no emulator)"
+      "note": "ci-android ndk=r27d abi=x86_64 Release; build-only (no emulator)",
+      "ndk": "r27d"
     },
     {
       "id": "android-r29-arm64-v8a-debug",
       "runs-on": "ubuntu-latest",
-      "env": {
-        "ANDROID_NDK_HOME": "${NDK_PATH}"
-      },
+      "env": {},
       "cmake": [
         "-DANDROID_ABI=arm64-v8a",
         "-DCMAKE_TOOLCHAIN_FILE:PATH=${NDK_PATH}/build/cmake/android.toolchain.cmake",
@@ -2805,14 +2822,13 @@
       ],
       "ctest": null,
       "build_only": true,
-      "note": "ci-android ndk=r29 abi=arm64-v8a Debug; build-only (no emulator)"
+      "note": "ci-android ndk=r29 abi=arm64-v8a Debug; build-only (no emulator)",
+      "ndk": "r29"
     },
     {
       "id": "android-r29-arm64-v8a-release",
       "runs-on": "ubuntu-latest",
-      "env": {
-        "ANDROID_NDK_HOME": "${NDK_PATH}"
-      },
+      "env": {},
       "cmake": [
         "-DANDROID_ABI=arm64-v8a",
         "-DCMAKE_TOOLCHAIN_FILE:PATH=${NDK_PATH}/build/cmake/android.toolchain.cmake",
@@ -2820,14 +2836,13 @@
       ],
       "ctest": null,
       "build_only": true,
-      "note": "ci-android ndk=r29 abi=arm64-v8a Release; build-only (no emulator)"
+      "note": "ci-android ndk=r29 abi=arm64-v8a Release; build-only (no emulator)",
+      "ndk": "r29"
     },
     {
       "id": "android-r29-armeabi-v7a-with-neon-debug",
       "runs-on": "ubuntu-latest",
-      "env": {
-        "ANDROID_NDK_HOME": "${NDK_PATH}"
-      },
+      "env": {},
       "cmake": [
         "-DANDROID_ABI=armeabi-v7a with NEON",
         "-DCMAKE_TOOLCHAIN_FILE:PATH=${NDK_PATH}/build/cmake/android.toolchain.cmake",
@@ -2835,14 +2850,13 @@
       ],
       "ctest": null,
       "build_only": true,
-      "note": "ci-android ndk=r29 abi=armeabi-v7a with NEON Debug; build-only (no emulator)"
+      "note": "ci-android ndk=r29 abi=armeabi-v7a with NEON Debug; build-only (no emulator)",
+      "ndk": "r29"
     },
     {
       "id": "android-r29-armeabi-v7a-with-neon-release",
       "runs-on": "ubuntu-latest",
-      "env": {
-        "ANDROID_NDK_HOME": "${NDK_PATH}"
-      },
+      "env": {},
       "cmake": [
         "-DANDROID_ABI=armeabi-v7a with NEON",
         "-DCMAKE_TOOLCHAIN_FILE:PATH=${NDK_PATH}/build/cmake/android.toolchain.cmake",
@@ -2850,14 +2864,13 @@
       ],
       "ctest": null,
       "build_only": true,
-      "note": "ci-android ndk=r29 abi=armeabi-v7a with NEON Release; build-only (no emulator)"
+      "note": "ci-android ndk=r29 abi=armeabi-v7a with NEON Release; build-only (no emulator)",
+      "ndk": "r29"
     },
     {
       "id": "android-r29-x86-64-debug",
       "runs-on": "ubuntu-latest",
-      "env": {
-        "ANDROID_NDK_HOME": "${NDK_PATH}"
-      },
+      "env": {},
       "cmake": [
         "-DANDROID_ABI=x86_64",
         "-DCMAKE_TOOLCHAIN_FILE:PATH=${NDK_PATH}/build/cmake/android.toolchain.cmake",
@@ -2865,14 +2878,13 @@
       ],
       "ctest": null,
       "build_only": true,
-      "note": "ci-android ndk=r29 abi=x86_64 Debug; build-only (no emulator)"
+      "note": "ci-android ndk=r29 abi=x86_64 Debug; build-only (no emulator)",
+      "ndk": "r29"
     },
     {
       "id": "android-r29-x86-64-release",
       "runs-on": "ubuntu-latest",
-      "env": {
-        "ANDROID_NDK_HOME": "${NDK_PATH}"
-      },
+      "env": {},
       "cmake": [
         "-DANDROID_ABI=x86_64",
         "-DCMAKE_TOOLCHAIN_FILE:PATH=${NDK_PATH}/build/cmake/android.toolchain.cmake",
@@ -2880,7 +2892,8 @@
       ],
       "ctest": null,
       "build_only": true,
-      "note": "ci-android ndk=r29 abi=x86_64 Release; build-only (no emulator)"
+      "note": "ci-android ndk=r29 abi=x86_64 Release; build-only (no emulator)",
+      "ndk": "r29"
     }
   ],
   "profiles": {
