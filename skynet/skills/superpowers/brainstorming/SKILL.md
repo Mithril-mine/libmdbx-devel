@@ -21,6 +21,19 @@ written. Exploration happens here, in conversation, not in the codebase.
 
 ## Process
 
+### 0. Divergent seed (Vision)
+
+Перед сходимостью к «стандартному» решению — обязательный дивергентный шаг.
+Запросить у роли **Vision** ([`../../roles/vision/SKILL.md`](../../roles/vision/SKILL.md))
+веер из 5–7 РАЗНЫХ подходов (включая «странные»), **не оценивая их на этом шаге**.
+Vision — эпизодическая роль: одноразовый prompt через `src code --dir <nook>` /
+`src do`, без почтового ящика. Сверять кандидатов с
+[`approach-bank`](../../shared/references/approach-bank.md) (A1–A13) как с семенами
+вторых путей: другой сетевой путь (A5), dogfooding технологии проекта (A6),
+устранение поглощающего состояния (A7). Если интерактивный Q&A-цикл невозможен
+(headless-рой) — зафиксировать кандидатов Vision в дизайн-документе и перейти к
+конвергенции; пропускать дивергенцию нельзя.
+
 ### 1. Understand the real goal
 
 Ask questions until the underlying problem is clear. Do not accept the first framing.
@@ -37,16 +50,10 @@ stay wait-free, TLS destructor contract, page-state machine).
 
 ### 2. Explore alternatives
 
-Present 2–4 options with trade-offs. Do not hide the ugly ones. For example, when changing
-tests: extend `mdbx_test` framework vs add standalone CTest tests vs integrate GoogleTest —
-each has cost/benefit for the stochastic vs deterministic split.
-
-**Divergent seed (Step 0):** before converging on the "standard" solution, consult the
-[`approach-bank`](../../shared/references/approach-bank.md) (A1–A8) and generate at least one
-non-obvious alternative — e.g. a different network path (A5), dogfooding the project's own
-tech (A6), or eliminating an absorbing queue state (A7). If a persistent, interactive
-Q&A round-trip is impossible (headless swarm), record the alternatives in the design doc
-instead of skipping divergence.
+Present 2–4 options with trade-offs (feed on the Step 0 candidates from Vision).
+Do not hide the ugly ones. For example, when changing tests: extend `mdbx_test`
+framework vs add standalone CTest tests vs integrate GoogleTest — each has
+cost/benefit for the stochastic vs deterministic split.
 
 ### 3. Present the design in digestible sections
 

@@ -17,6 +17,7 @@
 | Инженер тестов и стабильности | покрытие тестами, edge-case, stress/fuzz, восстановление после сбоев | `skills/roles/test-engineer/SKILL.md` | tests_worker, tests_writer |
 | Технический писатель / документатор | документация, примеры, диаграммы, версионирование, API-референс, doxygen | `skills/roles/documentation-scribe/SKILL.md` | docs |
 | Ревьюер кода (доменные) | код-ревью по областям: стиль/безопасность/производительность/архитектура | `skills/roles/code-reviewer/SKILL.md` (+`platform-build-engineer/SKILL.md` для cmake) | review-cmake, review-cpp, review-win, review-macos |
+| Исследователь-визионер (эпизодический) | дивергенция идей: 5–7 разных подходов на вопрос, анти-конвергенция (TASK-34) | `skills/roles/vision/SKILL.md` | нет постоянных агентов; одноразовый prompt (`src code --dir <nook>` / `src do`), без почтового ящика/циклов |
 | Пробщик/инструментарий (специфика роя) | USDT/SystemTap-пробники, перф-инструменты, каталог probes.md | `skills/roles/platform-build-engineer/SKILL.md` (base) | sysprobe |
 
 ## Коллективные SKILLS (для всей команды)
