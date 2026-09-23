@@ -13,11 +13,12 @@ amalgamation constraint, cursor tracking, get-cached (7 статусов), WAF.
 
 ## Специализации
 
-| Агент | Фокус |
+| Агент (REV:<domain>) | Фокус |
 |-------|-------|
-| CR-C | C-ядро: CoW, B+tree, GC, meta, курсоры, mmap |
-| CR-CXX | C++ API: RAII, исключения, типобезопасность |
-| CR-Arch | ABI, amalgamation, платформенные #ifdef, зависимости подсистем |
+| D.reviewer-c (REV:c) | C-ядро: CoW, B+tree, GC, meta, курсоры, mmap |
+| E.reviewer-cxx (REV:cxx) | C++ API: RAII, исключения, типобезопасность |
+| F.reviewer-cmake (REV:cmake) | build/CMake/CI, манифест, амальгамация (dist), deps-hygiene |
+| CR-Arch | ABI, amalgamation, платформенные #ifdef, зависимости подсистем — ревьюится в составе CR-C / CR-CMake |
 
 ## Task Protocols
 
@@ -28,7 +29,8 @@ amalgamation constraint, cursor tracking, get-cached (7 статусов), WAF.
 3. Проверить отсутствие: модификации frozen без CoW, разыменования mmap после
    парковки (§14.9), пропуска repoint, небезопасных 64-бит чтений.
 4. `-Wall -Wextra` чисто; amalgamate.py при структурных изменениях.
-5. Вердикт APPROVE | CHANGES_REQUESTED | REJECT.
+5. Вердикт `ok | needs-work | rejected` (протокол §28); детальный разбор — файл
+   замечаний в `.skynet/tmp/<slug>/`, в письме — вердикт + payload.
 
 ### Ревью C++ API (REVIEW-CXX)
 RAII без утечек; иерархия исключений ↔ коды C API; типобезопасность slice/buffer;
@@ -41,10 +43,14 @@ NDK); зависимости подсистем (S3→S4, S5→S6, S2→S11); am
 ## Output Format
 
 ```
-REVIEW-RESULT: task-id, agent, verdict, subsystems-reviewed, invariants-checked,
-  issues-found, issues[{severity BLOCKER|MAJOR|MINOR|NIT, file, line, desc,
-  invariant-violated}], observations
+REVIEW-RESULT: task-id, agent, verdict=ok|needs-work|rejected (протокол §28),
+  subsystems-reviewed, invariants-checked, issues-found,
+  issues[{severity BLOCKER|MAJOR|MINOR|NIT, file, line, desc,
+  invariant-violated}], observations, notes-file=<.skynet/tmp/<slug>/...>
 ```
+
+Полный текст замечаний — в файл `.skynet/tmp/<slug>/` (payload письма), а не
+в тело письма (§28).
 
 ## Anti-Patterns
 

@@ -17,14 +17,14 @@
 | Поле | Требование |
 |---|---|
 | `id` | уникальный `SC-N` (без дублей, порядок не важен) |
-| `area` | одна из: core/api/cxx/txn/gc/dbi/cursor/dupsort/issues/platform |
+| `area` | одна из: api/cxx/env/dbi/txn/cursor/gc/issues (метки `ut.<area>` из `tests/select-tests.sh`) |
 | `hypothesis` | что именно проверяем (одно предложение) |
 | `preconditions` | схема БД, размеры, кол-во записей, sync-mode, диск |
 | `steps` | конкретные операции с точными API (`mdbx_env_set_geometry`, …) |
 | `expectations` | измеримо: значения, счётчики, коды возврата, отсутствие падений |
 | `probe_points` | **болевые точки**: функции/переменные для интроспекции и инъекции |
 | `speed_class` | `unit` (<1с), `smoke` (<10–30с), `heavy` (>30с) — цель юнит |
-| `sync_mode` | явный: nosync/nordmsync/durable — если durability не тестируется, брать `nosync`; диск: /dev/shm (Linux) / RAM-диск (Win) для heavy |
+| `sync_mode` | явный: `nosync-safe`/`nometasync`/`durable` (реальные флаги mdbx_test, см. `tests/mdbx-test-options.md`) — если durability не тестируется, брать `nosync-safe`; диск: /dev/shm (Linux) / RAM-диск (Win) для heavy |
 | `refs` | issues/ChangeLog/doxygen для обоснования |
 
 ## Критерии ревью (чеклист)

@@ -1,7 +1,7 @@
 # SKILLS и роли коллективной работы над libmdbx (адаптация)
 
 > Адаптация владельческого набора `${SKYNET_ROOT}/nook-owner-dont-touch/libmdbx_skills_roles.md`
-> под текущий строй (протокол v2.13, §1–§30). Это рабочий реестр: роль → зона
+> под текущий строй (протокол v2.17, §1–§30). Это рабочий реестр: роль → зона
 > ответственности → SKILL (L3) → агенты-исполнители.
 > Иерархия навыков: `skynet/skills/README.md` (L0–L4).
 > Изменения — через координатора (владелец вне рутины).
@@ -13,10 +13,10 @@
 | Роль (владельческий набор) | Зона ответственности | SKILL (L3) | Агенты |
 |---|---|---|---|
 | Координатор / лид проекта | целостность архитектуры, синхронизация потоков работ, приоритизация, зависимости, CI/CD, метрики | L4 `skills/orchestrator/*` (указатель `orchestrator-kaizen.md`; event-driven loop — `skills/orchestrator/meditation/SKILL.md`) | main_architect |
-| Разработчик C++ API / обёрток | расширение C++ API, RAII-обёртки, интеграция с C API, обработка ошибок | (gap — закрывают tests_writer/tests_worker + review-cpp) | — |
-| Инженер тестов и стабильности | покрытие тестами, edge-case, stress/fuzz, восстановление после сбоев | `skills/roles/test-engineer/SKILL.md` | tests_worker, tests_writer |
-| Технический писатель / документатор | документация, примеры, диаграммы, версионирование, API-референс, doxygen | `skills/roles/documentation-scribe/SKILL.md` | docs |
-| Ревьюер кода (доменные) | код-ревью по областям: стиль/безопасность/производительность/архитектура | `skills/roles/code-reviewer/SKILL.md` (+`platform-build-engineer/SKILL.md` для cmake) | review-cmake, review-cpp, review-win, review-macos |
+| Разработчик C++ API / обёрток | расширение C++ API, RAII-обёртки, интеграция с C API, обработка ошибок | (gap — частично закрывают A.testcase-guru/B.tester + E.reviewer-cxx) | — |
+| Инженер тестов и стабильности | покрытие тестами, edge-case, stress/fuzz, восстановление после сбоев | `skills/roles/test-engineer/SKILL.md` | A.testcase-guru, B.tester |
+| Технический писатель / документатор | документация, примеры, диаграммы, версионирование, API-референс, doxygen | `skills/roles/documentation-scribe/SKILL.md` | S.scribe |
+| Ревьюер кода (доменные) | код-ревью по областям: стиль/безопасность/производительность/архитектура | `skills/roles/code-reviewer/SKILL.md` (+`platform-build-engineer/SKILL.md` для cmake) | D.reviewer-c (REV:c), E.reviewer-cxx (REV:cxx), F.reviewer-cmake (REV:cmake); review-macos retired |
 | Исследователь-визионер (эпизодический) | дивергенция идей: 5–7 разных подходов на вопрос, анти-конвергенция (TASK-34) | `skills/roles/vision/SKILL.md` | нет постоянных агентов; одноразовый prompt (`src code --dir <nook>` / `src do`), без почтового ящика/циклов |
 | Охранник внешнего периметра (эпизодический) | приём/ответы на внешние сообщения (МАКС/TG), triage allow/ignore/escalate/block, защита от инъекций и утечек | `skills/roles/comm-guard/SKILL.md` + L2 `skills/shared/security-boundary/SKILL.md` | comm-guard; отдельный nook, изолирован от внутренней памяти; long-poll/webhook через `tools/max-bridge.py` |
 | Пробщик/инструментарий (специфика роя) | USDT/SystemTap-пробники, перф-инструменты, каталог probes.md | `skills/roles/platform-build-engineer/SKILL.md` (base) | sysprobe |

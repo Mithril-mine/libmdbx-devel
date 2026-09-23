@@ -2,7 +2,7 @@
 
 > Reference (Level 2, `shared/references/`). Часть иерархии SKILLS, см.
 > `skynet/skills/README.md`. Источник: `structure.md` (§2/§7),
-> `module-interfaces.md`, `libmdbx-invariants.md` (подсистемы S1–S14).
+> `module-interfaces.md`, `skills/shared/libmdbx-invariants/SKILL.md` (подсистемы S1–S14).
 > Назначение: распределение module-locks при параллельной работе агентов.
 
 ## 1. Правила (по swarm-management)
@@ -60,4 +60,4 @@
 3. Освобождение — наблюдение `claim=<область>=<released>|<ts>` (§15 протокола).
 4. Проверять актуальность карты при изменении `structure.md` (Weekly Codex Review).
 
-> Синхронизировать с `subsystem-map.md` и `libmdbx-invariants.md` (S-таблица).
+> Синхронизировать с `subsystem-map.md` и `skills/shared/libmdbx-invariants/SKILL.md` (S-таблица).

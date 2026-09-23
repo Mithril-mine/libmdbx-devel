@@ -2,7 +2,7 @@
 
 > Reference (Level 2, `shared/references/`). Часть иерархии SKILLS, см.
 > `skynet/skills/README.md`. Исходник: `functional-architecture.md`,
-> `structure.md` (§2/§7), `module-interfaces.md`, `libmdbx-invariants.md`.
+> `structure.md` (§2/§7), `module-interfaces.md`, `skills/shared/libmdbx-invariants/SKILL.md`.
 > Назначение: единая карта S1–S14 для оценки рисков при рефакторинге,
 > планировании тестов и доменных ревью.
 
@@ -27,7 +27,7 @@
 
 ## 2. Инварианты подсистем (чек-лист)
 
-Полный список — `libmdbx-invariants.md`. Ключевое:
+Полный список — `skills/shared/libmdbx-invariants/SKILL.md`. Ключевое:
 
 1. **Диск-формат заморожен** — `MDBX_DATA_VERSION` неизменен; структурные правки запрещены.
 2. **Читатели wait-free** — никакие изменения не должны добавлять блокировок на путь чтения.

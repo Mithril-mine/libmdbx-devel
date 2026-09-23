@@ -42,7 +42,7 @@
 
 ### Fault injection (SystemTap/DTrace)
 Точки инъекции по commit pipeline (GC-обработка/refund/spill/audit/meta update/sync);
-USDT-зонд `DTRACE_PROBE(libmdbx, <name>)`; Windows/Android → `GTEST_SKIP` с причиной.
+USDT-зонд `DTRACE_PROBE(mdbx, <name>)`; Windows/Android → `GTEST_SKIP` с причиной.
 
 ### Платформенный тест
 SRWL/Native API (Win), F_FULLFSYNC/dtrace (macOS), NDK/USDT недоступен (Android);
