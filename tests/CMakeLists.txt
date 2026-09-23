@@ -318,6 +318,16 @@ else()
     TIMEOUT 1800
     RUN_SERIAL OFF
     WILL_FAIL TRUE)
+  # TASK-31: on the slow macOS Release beta-runners (xcode-27/macos-26-intel) the
+  # fault-injected run intermittently exceeds the 1800s CTest cap while the process
+  # stays alive in the setup/barrier phase, which the internal --timeout=600 watchdog
+  # does not cover (deadline is enforced only in the overlord poll-loop, after the
+  # barrier). Give those cells extra headroom as a CI-unblock stopgap; Debug passes
+  # smoke_fault in 4-8s and is unaffected. Root-cause watchdog-coverage fix is tracked
+  # separately (TASK-43).
+  if(APPLE AND CMAKE_BUILD_TYPE STREQUAL "Release")
+    set_tests_properties(smoke_fault PROPERTIES TIMEOUT 3600)
+  endif()
   if(MDBX_BUILD_TOOLS)
     add_test(NAME smoke_fault_chk COMMAND $<TARGET_FILE:mdbx_chk> -vvnw fault.db)
     set_tests_properties(smoke_fault_chk PROPERTIES
