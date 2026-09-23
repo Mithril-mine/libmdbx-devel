@@ -36,7 +36,7 @@
 `agent -uses_mailbox-> inbox`, `skynet -defines-> registry`.
 
 Соглашения об именах: slug латиницей в нижнем регистре, слова через `_`
-(`0.coordinator`, ...). Папка внешних артефактов:
+(`main_architect`, `tests_lead`, ...). Папка внешних артефактов:
 `/sourcecraft/workspace/.skynet/` (вне git).
 
 ## 3. Ранги, роли, специализация
@@ -77,7 +77,7 @@
 - Обновление — новая строка-наблюдение в `skynet_agent_<slug>` вида
   `heartbeat=<ts> status=<state> task=<TASK-n|—> [progress=<одно слово>] [ref=<branch@commit>]`.
 - Помимо записи в свою сущность, каждый агент обязан **уведомлять координатора**
-  письмом `HEARTBEAT` в `skynet_inbox_0.coordinator` (см. §19) с той же
+  письмом `HEARTBEAT` в `skynet_inbox_main_architect` (см. §19) с той же
   периодичностью и всегда при смене статуса.
 
 Сводку ведёт главный архитектор/координатор в `skynet_registry`.
@@ -103,7 +103,7 @@
   status, session_id, heartbeat, last_ref, mailbox).
 - `skynet_inbox_<slug>` (наблюдение `empty at registration <ts>`).
 - Связи: `skynet_registry -tracks-> agent`, `agent -uses_mailbox-> inbox`.
-- Сообщение в `skynet_inbox_0.coordinator`: `NOTIFY "new agent <slug> registered"`.
+- Сообщение в `skynet_inbox_main_architect`: `NOTIFY "new agent <slug> registered"`.
 
 Затем главный архитектор подтверждает регистрацию (`ACK`) и включает агента
 в roster `skynet_registry`.
@@ -244,7 +244,7 @@ unregistered ──регистрация──▶ pending ──одобрен�
 2. **Специализация**: агент **предлагает** свою специализацию (фокус:
    наполнение/поддержание SKILL и контекста по направлению). Финальное
    значение утверждает owner или главный архитектор (§3).
-3. **Заявка** — письмо координатору в `skynet_inbox_0.coordinator`:
+3. **Заявка** — письмо координатору в `skynet_inbox_main_architect`:
    ```
    [mail-1-<slug>-main_architect|ts] <slug> -> main_architect : REQUEST join
    | payload: — | rank=2 role=<role> specialization=<предложенная> motivo=<одна строка>
@@ -371,7 +371,7 @@ new ──ACK(TASK-принял)──▶ accepted ──▶ in_progress ──�
 Координатор отвечает за распределение задач, разрешение конфликтов и эскалацию.
 Чтобы он мог работать с актуальной картиной, **каждый агент обязан**:
 
-1. **HEARTBEAT письмо** в `skynet_inbox_0.coordinator` не реже:
+1. **HEARTBEAT письмо** в `skynet_inbox_main_architect` не реже:
    - каждых **5 минут** при активной работе (busy),
    - каждых **15 минут** в простое (idle),
    - всегда при смене статуса и в конце сессии.
@@ -471,7 +471,7 @@ wait=<slug>: <предмет> | state=pending_review|awaiting_answer|in_progress
   heartbeat сам при старте сессии).
 - **Сводка активности**: `last_seen=<slug>=<ts>` ведётся в
   `orchestrator-state.json` (не в памяти).
-- **Digest**: рендерит `/sourcecraft/workspace/.skynet/0.coordinator/ACTION-NEEDED.md`
+- **Digest**: рендерит `/sourcecraft/workspace/.skynet/main_architect/ACTION-NEEDED.md`
   (письма, требующие человека; просроченные `wait=`; stale-агенты), шлёт
   `notify-send`/beep при изменении.
 - **Очередь ожиданий**: отслеживает `wait=` записи и помечает просроченные
@@ -497,7 +497,7 @@ wait=<slug>: <предмет> | state=pending_review|awaiting_answer|in_progress
 - Обмен артефактами между агентами — через `/sourcecraft/workspace/.skynet/`.
 - Полное правило — `AGENT-WORKSPACE.md`, раздел «Временные файлы».
 
-## 23. Ожидание почты (waitmail, v2.5)
+## 23. Ожидание почты (waitmail, v2.5 → v2.15)
 
 Агент в рабочем цикле вместо слепого `sleep N` использует блокирующий ждун
 `/sourcecraft/workspace/.skynet/waitmail.py`:
@@ -517,20 +517,45 @@ wait=<slug>: <предмет> | state=pending_review|awaiting_answer|in_progress
 - Оркестратор шлёт сигнал при появлении новых писем (и пишет `.skynet/wakeup.txt`).
 - FIFO-сигнал — лишь ускоритель; корректность всегда обеспечивается памятью.
 
+Backend чтения (v2.15, 2026-09-23):
+
+- По умолчанию `--backend auto` — читает **каноническую память через
+  `memory_reader.py`** (merge graph.mdbx + legacy JSONL). Это обязательный режим
+  для всех агентов: письма агентов пишутся в mdbx.
+- `--backend jsonl --memory <file>` — только для тестов/diagnostics (plain
+  JSONL), НЕ для рабочего цикла.
+- **PID-файл**: пока waitmail ждёт, он пишет `.skynet/pipe/<slug>.pid`.
+  Владелец вызывает координатора извне: `kill -INT $(cat .../0.coordinator.pid)`
+  → rc=130 (OWNER-CALL). PID-файл удаляется при выходе.
+- Сельфтест: `python3 .skynet/selftest-waitmail.py` (6/6).
+
 Ожидание «без блокировки роя»: пока агент ждёт в waitmail, он не тратит токены;
 правило «не блокируйся» (§20.9) применяется к отсутствию следующего шага работы,
 а не к самому ожиданию почты в цикле.
 
-## 24. Командная инстанция и дежурный цикл координатора (v2.6)
+## 24. Командная инстанция и дежурный цикл координатора (v2.6 → v2.15)
 
 - **Команды и решения агенту даёт КООРДИНАТОР** (`main_architect`), а не
   владелец. Владелец не участвует в рутине и не даёт команды по задачам.
   Его участие — только эскалация (приоритеты, конфликты, смена специализации,
   `QUESTION escalate`).
-- Координатор держит **дежурный цикл**: `waitmail main_architect` (блок до
-  письма) → обработка всех писем (ответить, отревьюить, смёржить, закрыть
-  `wait=`, обновить доску) → снова `waitmail main_architect`. Владелец
-  прерывает цикл, когда координатор нужен лично.
+- Координатор держит **event-driven loop** (решение владельца 2026-09-23):
+  один шаг цикла = `.skynet/coordinator-step.sh`:
+
+      .skynet/coordinator-step.sh [slug] [-- WAIT]
+
+    - вызывает `waitmail.py <slug> --timeout <WAIT>` (WAIT≈540с, всегда меньше
+      таймаута внешнего tool-вызова),
+    - печатает явный статус и пишет `.skynet/<slug>/event-loop.log`,
+    - возвращает rc: **0=MAIL** (письма напечатаны), **130=OWNER-CALL**
+      (владелец прервал SIGINT, его директива — в сессии), **1=NO-MAIL**
+      (сердцебиение без писем).
+
+  Логика координатора: rc==0 → обработать всю почту (ответить, отревьюить,
+  смёржить, закрыть `wait=`, обновить доску, раздать задачи) → «в начало
+  цикла»; rc==130 → прочитать директиву владельца, ответить → «в начало»;
+  rc==1 → сразу «в начало». Владелец вызывает координатора в любой момент:
+  `kill -INT $(cat .skynet/pipe/0.coordinator.pid)` → rc=130.
 - Агенты: запросы/отчёты — письмами координатору; ожидание ответа — через
   собственный `waitmail <slug>`; при просрочке SLO — `QUESTION escalate`,
   но НЕ прямое обращение к владельцу. Назначенные задачи — авторитетны,
