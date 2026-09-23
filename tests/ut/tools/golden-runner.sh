@@ -47,6 +47,12 @@ normalize() {
     -e 's/T-[0-9a-f]{40}/T-HASH/' \
     -e 's/elapsed [0-9.]+ seconds/elapsed SECONDS/' \
     -e 's/dxb-id [0-9a-f]+-[0-9a-f]+/dxb-id <ID>/' \
+    -e 's/^mdbx_[a-z_]* version [0-9.]+$/mdbx_TOOL version VERSION/' \
+    -e 's/^ - source: .*/ - source: <SOURCE>/' \
+    -e 's/^ - anchor: .*/ - anchor: <ANCHOR>/' \
+    -e 's/^ - build: .*/ - build: <BUILD>/' \
+    -e 's#^ - flags: .*# - flags: <FLAGS>#' \
+    -e 's#^ - options: .*# - options: <OPTIONS>#' \
     -e 's#[^ ]*/(base\.db|copy\.db|bad\.db|compact\.db|out\.img|reload\.db|ver\.db|bad\.dump|exists\.db|named\.db)#/\1#g'
 }
 

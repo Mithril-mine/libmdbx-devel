@@ -40,7 +40,7 @@
  - Segmented test execution (choose by change area and risk; do NOT run the whole
    corpus for superficial changes). Unit tests use a hierarchical label tree:
    every test carries the root `ut` label plus area labels `ut.api`, `ut.cxx`,
-   `ut.env`, `ut.dbi`, `ut.txn`, `ut.cursor`, `ut.gc`, `ut.issues` (a test may
+   `ut.env`, `ut.dbi`, `ut.txn`, `ut.cursor`, `ut.gc`, `ut.issues`, `ut.tools` (a test may
    belong to several branches and runs once), and slow stress tests carry the
    orthogonal attribute `ut.heavy`:
 
