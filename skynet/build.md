@@ -296,6 +296,9 @@ fast and as targeted as possible.
   `-DCMAKE_C_COMPILER_LAUNCHER=ccache -DCMAKE_CXX_COMPILER_LAUNCHER=ccache`,
   with a SHARED cache: `export CCACHE_DIR=${SKYNET_ROOT}/.skynet/ccache`
   (all pool nooks share one cache; host: `apt-get install -y ccache`).
+  Cache policy (owner, 2026-09-23): `max_size = 5.0G` (LRU-like eviction —
+  "new displaces old" at the cap) + `max_age = 30d` in
+  `~/.config/ccache/ccache.conf`; `cache_dir` points at the shared dir.
   CI runners: install ccache + `actions/cache` keyed on compiler+flags+config.
 - **Adding a unit test does not justify running long stochastic `mdbx_test`
   iterations** — only build + launch sanity of `mdbx_test` (it is stochastic,
