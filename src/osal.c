@@ -642,6 +642,7 @@ int osal_ioring_add(osal_ioring_t *ior, const size_t offset, void *data, const s
       if (use_gather &&
           ((bytes | (uintptr_t)data | ior->last_bytes | (uintptr_t)(uint64_t)item->sgv[0].Buffer) &
            ior_alignment_mask) == 0 &&
+          (item->single.iov_len & ior_WriteFile_flag) == 0 &&
           ior->last_sgvcnt + (size_t)segments < OSAL_IOV_MAX) {
         assert(ior->overlapped_fd);
         assert((item->single.iov_len & ior_WriteFile_flag) == 0);
@@ -881,7 +882,13 @@ osal_ioring_write_result_t osal_ioring_write(osal_ioring_t *ior, mdbx_filehandle
 
   assert(ior->async_waiting > ior->async_completed && ior->async_waiting == INT_MAX);
   ior->async_waiting = async_started;
-  if (async_started > ior->async_completed && end_wait_for == wait_for) {
+  if (async_started > ior->async_completed) {
+    /* Spare slot for async_done is preallocated (end_wait_for =
+     * event_pool + allocated + 1); pushing it last keeps it among the first
+     * MAXIMUM_WAIT_OBJECTS handles. Without this, a MIXED batch that has no
+     * gather events waits on the gather events alone and returns while
+     * WriteFileEx APCs are still in flight -> STATUS_PENDING read as an error,
+     * ring reset under a live APC (issue #47 defect 2). */
     assert(wait_for > ior->event_pool + ior->event_stack);
     *--wait_for = ior->async_done;
   }
