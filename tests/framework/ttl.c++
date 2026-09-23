@@ -141,6 +141,12 @@ bool testcase_ttl::run() {
     log_debug("ttl: step #%" PRIu64 " (serial %" PRIu64 ", window %u, count %u) salt %" PRIu64, nops_completed, serial,
               window_width, head_count, salt);
 
+    if (!should_continue())
+      /* TASK-43: the --duration/--nops bound is reached — stop promptly
+       * instead of draining the whole table (the full-table drain used to
+       * overrun the deadline by several times on large tables). */
+      break;
+
     if (window_width || flipcoin()) {
       clear_stepbystep_passed += window_width == 0;
       while (fifo.size() > window_width) {

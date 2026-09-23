@@ -21,6 +21,9 @@
 
 #include "test.h++"
 
+#include <cstdlib>
+#include <thread>
+
 #if !IS_WINDOWS
 #include <sys/resource.h>
 #include <sys/time.h>
@@ -534,9 +537,11 @@ int main(int argc, char *const argv[]) {
       continue;
     }
     if (config::parse_option(argc, argv, narg, "duration", params.test_duration, config::duration, 1)) {
+      params.test_duration_explicit = true;
       continue;
     }
     if (config::parse_option(argc, argv, narg, "nops", params.test_nops, config::decimal, 1)) {
+      params.test_nops_explicit = true;
       continue;
     }
     if (config::parse_option(argc, argv, narg, "hill", &value, "auto")) {
@@ -624,6 +629,29 @@ int main(int argc, char *const argv[]) {
 
   if (global::config::cleanup_before)
     cleanup();
+
+  /* TASK-43: the --timeout deadline is enforced by the overlord poll-loop only
+   * AFTER all actors passed the barrier; an actor hanging in the setup/barrier
+   * phase (e.g. smoke_fault on slow macOS Release runners) would otherwise rely
+   * on the external CTest timeout as the only backstop. This watchdog thread
+   * enforces the deadline from the start and aborts the whole run if it fires
+   * while the main thread is still waiting in setup/barrier (or anywhere else). */
+  if (global::config::timeout_duration_seconds) {
+    std::thread([&]() {
+      while (chrono::now_monotonic().fixedpoint < global::deadline_monotonic.fixedpoint) {
+        chrono::time left;
+        left.fixedpoint = global::deadline_monotonic.fixedpoint - chrono::now_monotonic().fixedpoint;
+        osal_delay((unsigned)left.seconds() + 1);
+      }
+      fprintf(stderr, "overlord: --timeout deadline reached; killing all actors\n");
+      osal_killall_actors();
+#if IS_WINDOWS
+      _exit(EXIT_FAILURE);
+#else
+      _Exit(EXIT_FAILURE);
+#endif
+    }).detach();
+  }
 
   if (global::actors.size() == 1) {
     logging::setup("main");

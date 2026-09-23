@@ -291,7 +291,10 @@ bool testcase_hill::run() {
     }
   }
 
-  while (serial_count > 1) {
+  /* TASK-43: the downhill (descend/cleanup) phase must also respect the
+   * --duration/--nops bound; previously it always drained the whole key space
+   * after the uphill loop stopped, overrunning the deadline. */
+  while (serial_count > 1 && should_continue()) {
     if (unlikely(!keyvalue_maker.increment(serial_count, -2)))
       failure("downhill: unexpected key-space underflow");
 

@@ -191,6 +191,7 @@ protected:
 
   uint64_t nops_completed{0};
   chrono::time start_timestamp;
+  bool start_timestamp_initialized{false};
   keygen::buffer key;
   keygen::buffer data;
   keygen::maker keyvalue_maker;
@@ -288,6 +289,10 @@ public:
     start_timestamp.reset();
     memset(&last, 0, sizeof(last));
   }
+
+  /* True when the total --duration budget is consumed (across --repeat
+   * iterations); used by the outer run loop to stop iterating (TASK-43). */
+  bool budget_exhausted() const;
 
   static bool review_params(actor_params &params, unsigned space_id) {
     (void)space_id;

@@ -39,13 +39,27 @@ mdbx_test --nops=1K --prng-seed=42 --mode=+nosync-safe --hill
 Termination is decided per actor in `testcase::should_continue()`
 (`test.c++:576`):
 
-- `--duration=N[s|m|h|d]` — stop after N seconds of wall time (default `0` = off).
-- `--nops=N[K|M|G|T]` — stop after the actor completed N operations
-  (default `1000`).
-- If **both** are zero the actor runs indefinitely and must be killed by the
-  outer `--timeout` or the CTest TIMEOUT.
-- `--timeout=N[s|m|h|d]` — overall run guard (equivalent to a watchdog).
-- `--repeat=N` — repeat the whole run N times (default `1`).
+- `--duration=N[s|m|h|d]` — stop after N seconds of **total** wall time
+  (default `0` = off). When set explicitly, it **dominates** the default
+  `--nops=1000` safety bound: only an explicit `--nops` additionally limits
+  the run. The budget spans the whole run including all `--repeat` iterations.
+- `--nops=N[K|M|G|T]` — stop after the actor completed N operations.
+  Explicitly set `--nops` combines with `--duration` (whichever occurs first);
+  the implicit default (`1000`) applies only when no explicit `--duration` is
+  given, so a bare invocation still terminates.
+- If **both** are zero (or only the implicit default applies) the actor runs
+  until the default nops or until killed by the outer `--timeout` / CTest
+  TIMEOUT.
+- `--timeout=N[s|m|h|d]` — overall run guard (equivalent to a watchdog). It is
+  enforced from process start (including the setup/barrier phase, TASK-43), not
+  only during the scenario run.
+- `--repeat=N` — repeat the whole run N times (default `1`); `--duration` is
+  the total budget across all iterations, while `--nops` bounds each iteration.
+
+Stopping is prompt: actors check the bound at operation/phase boundaries, so a
+run may overrun the deadline by at most one full operation or table-drain phase
+(hill's downhill and the nested/ttl whole-table drains now stop on expiry,
+TASK-43).
 
 Keep at least one bound set. For tiered smoke use `--nops` (bounded work,
 predictable wall-clock) rather than relying on `--timeout`.
