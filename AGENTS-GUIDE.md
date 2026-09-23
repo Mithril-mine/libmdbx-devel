@@ -46,7 +46,7 @@ sub-tables (`dbi`s). Each table is its own B+tree.
 | --- | --- |
 | Page size | power of 2, 256…65536 bytes, default 4096 |
 | Key size | 0 … ≈½ page (2022 bytes at 4K) |
-| Value size | 0 … `0x7FF00000` (~2 GiB); for dupsort values ≈½ page |
+| Value size | 0 … `0x7fff0000` (~2 GiB); for dupsort values ≈½ page |
 | Database size | up to 2^31 pages (≈8 TiB at 4K, ≈128 TiB at 64K) |
 | Named tables | up to `MDBX_MAX_DBI` = 32765 |
 
@@ -133,8 +133,9 @@ read txn still count as readers (see §3).
   `MDBX_KEYEXIST`, `MDBX_BAD_VALSIZE`.
 
 Do **not** rely on errno; libmdbx uses its own mdbx-specific values even when
-they collide numerically with platform error numbers (e.g. `MDBX_ENOSYS` =
-`ENOTSUP` on some platforms). Read the *mdbx* meaning, not the errno name.
+they collide numerically with platform error numbers (`MDBX_ENOSYS`, for
+example, is `ERROR_NOT_SUPPORTED` on Windows and `ENOSYS` on POSIX). Read the
+*mdbx* meaning, not the errno name.
 
 ### 2.6. Durability modes (choose consciously)
 
@@ -159,7 +160,7 @@ wraps C return codes.
 ```c++
 #include "mdbx.h++"
 mdbx::env_managed env("/tmp/db", mdbx::env_managed::create_parameters{},
-                      mdbx::operate_parameters{}, /* accede = */ true);
+                      mdbx::env::operate_parameters{}, /* accede = */ true);
 auto txn = env.start_write();
 auto dbi = txn.open_map("hello", mdbx::key_mode::usual, mdbx::value_mode::single);
 txn.put(dbi, mdbx::slice("key"), mdbx::slice("value"), mdbx::put_mode::upsert);
@@ -225,7 +226,8 @@ Every rule is given with its **why** so an agent can reason, not just pattern-ma
   (`--pid=host` in Docker, or `--pid=container:<id>`); keep one physical copy
   of each mapped page in system memory.
 - **Anti-pattern:** multiple containers with isolated PIDs opening the same DB.
-- **Check:** `mdbx_chk -V` options strings identical across processes.
+- **Check:** the `options:` line in `mdbx_chk -V` (the build-options string)
+  must be identical across processes sharing a DB.
 
 ### 3.6. DSO/DLL unloading and TLS destructors
 
@@ -296,6 +298,7 @@ Before reporting work on libmdbx correct, verify:
 | `mdbx_stat` | statistics |
 | `mdbx_copy` | hot backup |
 | `mdbx_drop` | remove databases/tables |
+| `mdbx_defrag` | online compaction / defragmentation |
 
 ### 5.3. Examples (shipped)
 
