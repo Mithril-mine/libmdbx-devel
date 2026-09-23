@@ -36,7 +36,7 @@
 `agent -uses_mailbox-> inbox`, `skynet -defines-> registry`.
 
 Соглашения об именах: slug латиницей в нижнем регистре, слова через `_`
-(`main_architect`, `tests_lead`, ...). Папка внешних артефактов:
+(`0.coordinator`, ...). Папка внешних артефактов:
 `/sourcecraft/workspace/.skynet/` (вне git).
 
 ## 3. Ранги, роли, специализация
@@ -77,7 +77,7 @@
 - Обновление — новая строка-наблюдение в `skynet_agent_<slug>` вида
   `heartbeat=<ts> status=<state> task=<TASK-n|—> [progress=<одно слово>] [ref=<branch@commit>]`.
 - Помимо записи в свою сущность, каждый агент обязан **уведомлять координатора**
-  письмом `HEARTBEAT` в `skynet_inbox_main_architect` (см. §19) с той же
+  письмом `HEARTBEAT` в `skynet_inbox_0.coordinator` (см. §19) с той же
   периодичностью и всегда при смене статуса.
 
 Сводку ведёт главный архитектор/координатор в `skynet_registry`.
@@ -103,7 +103,7 @@
   status, session_id, heartbeat, last_ref, mailbox).
 - `skynet_inbox_<slug>` (наблюдение `empty at registration <ts>`).
 - Связи: `skynet_registry -tracks-> agent`, `agent -uses_mailbox-> inbox`.
-- Сообщение в `skynet_inbox_main_architect`: `NOTIFY "new agent <slug> registered"`.
+- Сообщение в `skynet_inbox_0.coordinator`: `NOTIFY "new agent <slug> registered"`.
 
 Затем главный архитектор подтверждает регистрацию (`ACK`) и включает агента
 в roster `skynet_registry`.
@@ -244,7 +244,7 @@ unregistered ──регистрация──▶ pending ──одобрен�
 2. **Специализация**: агент **предлагает** свою специализацию (фокус:
    наполнение/поддержание SKILL и контекста по направлению). Финальное
    значение утверждает owner или главный архитектор (§3).
-3. **Заявка** — письмо координатору в `skynet_inbox_main_architect`:
+3. **Заявка** — письмо координатору в `skynet_inbox_0.coordinator`:
    ```
    [mail-1-<slug>-main_architect|ts] <slug> -> main_architect : REQUEST join
    | payload: — | rank=2 role=<role> specialization=<предложенная> motivo=<одна строка>
@@ -371,7 +371,7 @@ new ──ACK(TASK-принял)──▶ accepted ──▶ in_progress ──�
 Координатор отвечает за распределение задач, разрешение конфликтов и эскалацию.
 Чтобы он мог работать с актуальной картиной, **каждый агент обязан**:
 
-1. **HEARTBEAT письмо** в `skynet_inbox_main_architect` не реже:
+1. **HEARTBEAT письмо** в `skynet_inbox_0.coordinator` не реже:
    - каждых **5 минут** при активной работе (busy),
    - каждых **15 минут** в простое (idle),
    - всегда при смене статуса и в конце сессии.
@@ -471,7 +471,7 @@ wait=<slug>: <предмет> | state=pending_review|awaiting_answer|in_progress
   heartbeat сам при старте сессии).
 - **Сводка активности**: `last_seen=<slug>=<ts>` ведётся в
   `orchestrator-state.json` (не в памяти).
-- **Digest**: рендерит `/sourcecraft/workspace/.skynet/main_architect/ACTION-NEEDED.md`
+- **Digest**: рендерит `/sourcecraft/workspace/.skynet/0.coordinator/ACTION-NEEDED.md`
   (письма, требующие человека; просроченные `wait=`; stale-агенты), шлёт
   `notify-send`/beep при изменении.
 - **Очередь ожиданий**: отслеживает `wait=` записи и помечает просроченные
