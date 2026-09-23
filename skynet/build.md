@@ -286,6 +286,9 @@ fast and as targeted as possible.
 - **LTO is forbidden in test builds unless explicitly required.** With LTO each
   test re-optimizes the whole library separately (hours). LTO applies only to
   the library/tools; test configurations must be built without LTO by default.
+  Configure test build dirs with `-DINTERPROCEDURAL_OPTIMIZATION=OFF`
+  (the option defaults ON for non-Debug builds); keep LTO ON only for
+  release/library/tools builds that explicitly require it.
 - **Adding a unit test does not justify running long stochastic `mdbx_test`
   iterations** — only build + launch sanity of `mdbx_test` (it is stochastic,
   seeded from `date+%s+RANDOM`; a fixed `--prng-seed` gives a reproducible

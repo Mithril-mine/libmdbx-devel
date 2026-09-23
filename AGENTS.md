@@ -5,6 +5,11 @@
  - launch local builds with `nice 5` and tests with `nice 10` (share the host
    fairly; agents run concurrently on one machine)
  - roles & skills registry: `skynet/skills-roles.md`
+ - **do NOT enable LTO in test builds**: configure test build dirs with
+   `-DINTERPROCEDURAL_OPTIMIZATION=OFF`. LTO re-optimizes the whole library per
+   target (~50x slower; we test the code, not the compiler). LTO stays ON only
+   for release/library/tools builds that explicitly require it.
+   See `skynet/build.md` §6.7.
 
 ## Code style
  - use LLVM codestyle
