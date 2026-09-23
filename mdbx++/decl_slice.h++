@@ -289,7 +289,9 @@ struct LIBMDBX_API_TYPE slice : public ::MDBX_val {
   /// \brief Returns true if slice is not empty.
   MDBX_CXX11_CONSTEXPR operator bool() const noexcept;
 
-  /// \brief Depletes content of slice and make it invalid.
+  /// \brief Invalidates the slice by nullifying the data pointer while
+  /// preserving the length; makes \ref is_valid() return `false` unless the
+  /// slice was already of zero length.
   MDBX_CXX14_CONSTEXPR void invalidate() noexcept;
 
   /// \brief Makes the slice empty and referencing to nothing.
@@ -361,41 +363,41 @@ struct LIBMDBX_API_TYPE slice : public ::MDBX_val {
   /// \brief Finds the first occurrence of `needle` starting at `pos`.
   /// \returns The position of the first match or \ref npos.
   MDBX_NOTHROW_PURE_FUNCTION MDBX_CXX14_CONSTEXPR size_t find(const slice &needle, size_t pos = 0) const noexcept;
-  /// \copydoc find(const slice &, size_t)
+  /// \copydoc find(const slice &, size_t) const
   MDBX_NOTHROW_PURE_FUNCTION MDBX_CXX14_CONSTEXPR size_t find(byte c, size_t pos = 0) const noexcept;
 
   /// \brief Finds the last occurrence of `needle` not after `pos`.
   /// \returns The position of the last match or \ref npos.
   MDBX_NOTHROW_PURE_FUNCTION MDBX_CXX14_CONSTEXPR size_t rfind(const slice &needle, size_t pos = npos) const noexcept;
-  /// \copydoc rfind(const slice &, size_t)
+  /// \copydoc rfind(const slice &, size_t) const
   MDBX_NOTHROW_PURE_FUNCTION MDBX_CXX14_CONSTEXPR size_t rfind(byte c, size_t pos = npos) const noexcept;
 
   /// \brief Finds the first byte matching any byte of `chars` starting at `pos`.
   /// \returns The position of the first match or \ref npos.
   MDBX_NOTHROW_PURE_FUNCTION MDBX_CXX14_CONSTEXPR size_t find_first_of(const slice &chars,
                                                                        size_t pos = 0) const noexcept;
-  /// \copydoc find_first_of(const slice &, size_t)
+  /// \copydoc find_first_of(const slice &, size_t) const
   MDBX_NOTHROW_PURE_FUNCTION MDBX_CXX14_CONSTEXPR size_t find_first_of(byte c, size_t pos = 0) const noexcept;
 
   /// \brief Finds the last byte matching any byte of `chars` not after `pos`.
   /// \returns The position of the last match or \ref npos.
   MDBX_NOTHROW_PURE_FUNCTION MDBX_CXX14_CONSTEXPR size_t find_last_of(const slice &chars,
                                                                       size_t pos = npos) const noexcept;
-  /// \copydoc find_last_of(const slice &, size_t)
+  /// \copydoc find_last_of(const slice &, size_t) const
   MDBX_NOTHROW_PURE_FUNCTION MDBX_CXX14_CONSTEXPR size_t find_last_of(byte c, size_t pos = npos) const noexcept;
 
   /// \brief Finds the first byte not matching any byte of `chars` starting at `pos`.
   /// \returns The position of the first match or \ref npos.
   MDBX_NOTHROW_PURE_FUNCTION MDBX_CXX14_CONSTEXPR size_t find_first_not_of(const slice &chars,
                                                                            size_t pos = 0) const noexcept;
-  /// \copydoc find_first_not_of(const slice &, size_t)
+  /// \copydoc find_first_not_of(const slice &, size_t) const
   MDBX_NOTHROW_PURE_FUNCTION MDBX_CXX14_CONSTEXPR size_t find_first_not_of(byte c, size_t pos = 0) const noexcept;
 
   /// \brief Finds the last byte not matching any byte of `chars` not after `pos`.
   /// \returns The position of the last match or \ref npos.
   MDBX_NOTHROW_PURE_FUNCTION MDBX_CXX14_CONSTEXPR size_t find_last_not_of(const slice &chars,
                                                                           size_t pos = npos) const noexcept;
-  /// \copydoc find_last_not_of(const slice &, size_t)
+  /// \copydoc find_last_not_of(const slice &, size_t) const
   MDBX_NOTHROW_PURE_FUNCTION MDBX_CXX14_CONSTEXPR size_t find_last_not_of(byte c, size_t pos = npos) const noexcept;
 
   /// \brief Checks whether the referenced data contains `needle` as a sub-slice.
@@ -421,9 +423,10 @@ struct LIBMDBX_API_TYPE slice : public ::MDBX_val {
   MDBX_CXX14_CONSTEXPR slice safe_middle(size_t from, size_t n) const;
 
   /// \brief Returns the hash value of referenced data.
-  /// \attention Function implementation and returned hash values may changed
-  /// version to version, and in future the t1ha3 will be used here. Therefore
-  /// values obtained from this function shouldn't be persisted anywhere.
+  /// \attention Function implementation and returned hash values may change
+  /// from version to version, and in future the t1ha3 will be used here.
+  /// Therefore values obtained from this function shouldn't be persisted
+  /// anywhere.
   MDBX_NOTHROW_PURE_FUNCTION MDBX_CXX14_CONSTEXPR size_t hash_value() const noexcept;
 
   /// \brief Three-way fast non-lexicographically length-based comparison.
@@ -433,14 +436,14 @@ struct LIBMDBX_API_TYPE slice : public ::MDBX_val {
   ///   `< 0` if `a` shorter than `b`,
   ///             or the same length and lexicographically less than `b`;
   ///   `> 0` if `a` longer than `b`,
-  ///             or the same length and lexicographically great than `b`.
+  ///             or the same length and lexicographically greater than `b`.
   MDBX_NOTHROW_PURE_FUNCTION static MDBX_CXX14_CONSTEXPR intptr_t compare_fast(const slice &a, const slice &b) noexcept;
 
   /// \brief Three-way lexicographically comparison.
   /// \return value:
   ///  `== 0` if `a` lexicographically equal `b`;
   ///   `< 0` if `a` lexicographically less than `b`;
-  ///   `> 0` if `a` lexicographically great than `b`.
+  ///   `> 0` if `a` lexicographically greater than `b`.
   MDBX_NOTHROW_PURE_FUNCTION static MDBX_CXX14_CONSTEXPR intptr_t compare_lexicographically(const slice &a,
                                                                                             const slice &b) noexcept;
   friend MDBX_CXX14_CONSTEXPR bool operator==(const slice &a, const slice &b) noexcept;
@@ -453,10 +456,12 @@ struct LIBMDBX_API_TYPE slice : public ::MDBX_val {
   friend MDBX_CXX14_CONSTEXPR auto operator<=>(const slice &a, const slice &b) noexcept;
 #endif /* __cpp_impl_three_way_comparison */
 
-  /// \brief Checks the slice is not refers to null address or has zero length.
+  /// \brief Checks the slice is valid: returns `false` only if it has a null
+  /// data pointer and a non-zero length.
   MDBX_CXX11_CONSTEXPR bool is_valid() const noexcept { return !(iov_base == nullptr && iov_len != 0); }
 
-  /// \brief Build an invalid slice which non-zero length and refers to null address.
+  /// \brief Builds an invalid slice that has a non-zero length and refers to
+  /// a null address.
   MDBX_CXX14_CONSTEXPR static slice invalid() noexcept {
     return slice(/* using special constructor without length checking */ ~size_t(0));
   }

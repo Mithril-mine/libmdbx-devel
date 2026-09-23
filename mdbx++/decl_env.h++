@@ -198,8 +198,8 @@ public:
   struct LIBMDBX_API_TYPE operate_options {
     /// \copydoc MDBX_NOSTICKYTHREADS
     bool no_sticky_threads{false};
-    /// \brief Разрешает вложенные транзакции ценой отключения
-    /// \ref MDBX_WRITEMAP и увеличением накладных расходов.
+    /// \brief Enables nested transactions at the cost of disabling
+    /// \ref MDBX_WRITEMAP and increasing overhead.
     bool nested_transactions{false};
     /// \copydoc MDBX_EXCLUSIVE
     bool exclusive{false};
@@ -588,8 +588,8 @@ public:
   /// the environment was opened with \ref whole_fragile, \ref lazy_weak_tail or
   /// in part \ref half_synchronous_weak_last.
   ///
-  /// The default is 0, than mean no any threshold checked, and no additional
-  /// flush will be made.
+  /// The default is 0, which means that no threshold is checked and no
+  /// additional flush will be made.
   /// \see extra_runtime_option::sync_bytes
   inline env &set_sync_threshold(size_t bytes);
 
@@ -610,14 +610,14 @@ public:
   /// txn_managed::commit() is called, but the operating system may keep it
   /// buffered. MDBX always flushes the OS buffers upon commit as well, unless
   /// the environment was opened with \ref whole_fragile, \ref lazy_weak_tail or
-  /// in part \ref half_synchronous_weak_last. Settled period don't checked
+  /// in part \ref half_synchronous_weak_last. The settled period is not checked
   /// asynchronously, but only by the \ref txn_managed::commit() and \ref
   /// env::sync_to_disk() functions. Therefore, in cases where transactions are
   /// committed infrequently and/or irregularly, polling by \ref
   /// env::poll_sync_to_disk() may be a reasonable solution to timeout
   /// enforcement.
   ///
-  /// The default is 0, than mean no any timeout checked, and no additional
+  /// The default is 0, which means that no timeout is checked and no additional
   /// flush will be made.
   /// \see extra_runtime_option::sync_period
   inline env &set_sync_period(const duration &period);
@@ -715,13 +715,13 @@ public:
   inline env &set_geometry(const geometry &size);
 
   /// \brief Flush the environment data buffers.
-  /// \return `True` if sync done or no data to sync, or `false` if the
-  /// environment is busy by other thread or none of the thresholds are reached.
+  /// \return `True` if sync done or no data to sync; `false` if the
+  /// environment is busy by another thread and `nonblock=true` is used.
   inline bool sync_to_disk(bool force = true, bool nonblock = false);
 
   /// \brief Performs non-blocking polling of sync-to-disk thresholds.
-  /// \return `True` if sync done or no data to sync, or `false` if the
-  /// environment is busy by other thread or none of the thresholds are reached.
+  /// \return `True` if sync done or no data to sync; `false` if the
+  /// environment is busy by another thread.
   bool poll_sync_to_disk() { return sync_to_disk(false, true); }
 
   /// \brief Close a key-value map (aka table) handle. Normally
@@ -895,7 +895,7 @@ public:
   /// \see txn_lock() \see ::mdbx_txn_unlock()
   inline void txn_unlock();
 
-  /// \brief The result of database defragmentation, see \ref ::MDBX_defrag_result_t().
+  /// \brief The result of database defragmentation, see \ref ::MDBX_defrag_result_t.
   using defrag_result = ::MDBX_defrag_result_t;
 
   /// \brief Control values returned by the defragmentation progress visitor.
@@ -906,6 +906,7 @@ public:
     discontinue = 1, ///< Discontinue with completion of scheduled operations.
   };
 
+  template <typename VISITOR>
   /// \brief Performs database defragmentation.
   ///
   /// \details Defragmentation is the transfer of data from pages located at
@@ -937,18 +938,37 @@ public:
   /// to shrink the database to finish, zero means no limit.
   /// \param [in] time_limit_dot16  The time limit in 1/65536 fractions of a
   /// second that could be spent to defragment, zero means no limit.
-  /// \param [in] acceptable_backlash  Stop if a next cycle will unable to
-  /// shrink database by more pages than this value, -1 means autopilot.
+  /// \param [in] acceptable_backlash  Stop if the next cycle will be unable to
+  /// shrink the database by more pages than this value, -1 means autopilot.
   /// \param [in] preferred_batch  The preferred maximum number of pages to be
   /// moved per defragmentation cycle, zero means no limit.
   ///
   /// \throws mdbx::error on failure (other than stopping reasons above).
   /// \see ::mdbx_env_defrag()
-  template <typename VISITOR>
   inline defrag_result defrag(VISITOR &visitor, size_t defrag_atleast = 0, size_t time_atleast_dot16 = 0,
                               size_t defrag_enough = 0, size_t time_limit_dot16 = 0,
                               intptr_t acceptable_backlash = -1, intptr_t preferred_batch = 0);
-  /// \copydoc defrag(VISITOR &, size_t, size_t, size_t, size_t, intptr_t, intptr_t)
+  /// \brief Performs database defragmentation without a progress visitor.
+  ///
+  /// \details The same defragmentation as in the overload accepting a
+  /// `visitor` functor, but without progress callbacks.
+  ///
+  /// \param [in] defrag_atleast  The required at least number of pages by
+  /// which the database must be reduced, zero means no lower bound.
+  /// \param [in] time_atleast_dot16  The minimum time in 1/65536 fractions of
+  /// a second that should be spent to defragment more even if goals reached,
+  /// zero means no lower bound.
+  /// \param [in] defrag_enough  The number of pages by which it will be enough
+  /// to shrink the database to finish, zero means no limit.
+  /// \param [in] time_limit_dot16  The time limit in 1/65536 fractions of a
+  /// second that could be spent to defragment, zero means no limit.
+  /// \param [in] acceptable_backlash  Stop if the next cycle will be unable to
+  /// shrink the database by more pages than this value, -1 means autopilot.
+  /// \param [in] preferred_batch  The preferred maximum number of pages to be
+  /// moved per defragmentation cycle, zero means no limit.
+  ///
+  /// \throws mdbx::error on failure (other than stopping reasons above).
+  /// \see ::mdbx_env_defrag()
   inline defrag_result defrag(size_t defrag_atleast = 0, size_t time_atleast_dot16 = 0, size_t defrag_enough = 0,
                               size_t time_limit_dot16 = 0, intptr_t acceptable_backlash = -1,
                               intptr_t preferred_batch = 0);
@@ -1065,7 +1085,7 @@ public:
   /// `SIGSEGV`. The environment handle will be freed and must not be used again
   /// after this call.
   ///
-  /// \param [in] dont_sync  A dont'sync flag, if non-zero the last checkpoint
+  /// \param [in] dont_sync  The dont_sync flag, if non-zero the last checkpoint
   /// will be kept "as is" and may be still "weak" in the \ref lazy_weak_tail
   /// or \ref whole_fragile modes. Such "weak" checkpoint will be ignored
   /// on opening next time, and transactions since the last non-weak checkpoint
