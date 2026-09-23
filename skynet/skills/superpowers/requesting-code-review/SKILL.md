@@ -50,4 +50,4 @@ On SourceCraft (see [`../../../sourcecraft/README.md`](../../../sourcecraft/READ
   must-fix issues.
 - Typical review focus: `src/proto.h`-declared interfaces, `MDBX_txn`-layout touches, GC/MVCC
   invariants ([`../../../architecture.md`](../../../architecture.md) §8), test quality and
-  placement (`tests/ut/` vs `tests/issues/`).
+  placement (`tests/ut/` vs `tests/ut/issues/`).

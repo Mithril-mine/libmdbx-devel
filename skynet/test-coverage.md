@@ -12,7 +12,7 @@
 | Способ | Факт |
 | --- | --- |
 | Публичный API | Подавляющее большинство тестов используют только `mdbx.h` / `mdbx.h++` (с 2026: `#include "mdbx.h++"` в `.c++`; C-тесты — `"mdbx.h"` / `<mdbx.h>`) |
-| White-box (включение исходников) | `tests/ut/details_rkl.c` включает `../../src/rkl.c` + `../../src/txl.c` как единицы компиляции; `tests/issues/issue_gh0017.c` включает `../../src/essentials.h` (ABI-layout тест); `tests/framework/base.h++` включает `essentials.h`, `osal.h`, `options.h` + `mdbx.h++` |
+| White-box (включение исходников) | `tests/ut/details_rkl.c` включает `../../src/rkl.c` + `../../src/txl.c` как единицы компиляции; `tests/ut/issues/issue_gh0017.c` включает `../../src/essentials.h` (ABI-layout тест); `tests/framework/base.h++` включает `essentials.h`, `osal.h`, `options.h` + `mdbx.h++` |
 | Фреймворк | `mdbx_test` (C++) гоняет сценарии поверх публичного API; внутренние проверки — через `MDBX_CHECKING`/валидацию |
 
 Итог: «серый ящик» — основная стратегия; прямой доступ к внутренностям — точечный
@@ -47,7 +47,7 @@
 | `probe.c++` | Ограничения/лимиты API (pagesize, размеры) |
 | `issue_gh0017.c` | **layout-dxb (ABI)**: `offsetof(tree_t, root) == 8` — защита раскладки on-disk структур |
 
-## 3. Регрессии `tests/issues/` → модули
+## 3. Регрессии `tests/ut/issues/` → модули
 
 | Тест | Страхуемое |
 | --- | --- |

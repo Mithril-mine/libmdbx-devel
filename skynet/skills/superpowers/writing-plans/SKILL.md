@@ -45,7 +45,7 @@ the contract between design and implementation.
 
 | Task type | Example |
 | --- | --- |
-| Add a test | `tests/issues/issue_ghNNNN.c++` reproducing the bug → `ctest -R issue_ghNNNN` |
+| Add a test | `tests/ut/issues/issue_ghNNNN.c++` reproducing the bug → `ctest -R issue_ghNNNN` |
 | Fix a function | `src/page-ops.c` `page_split()` edge case → `make test-asan && ctest` |
 | Add an option | `src/options.h` + `CMakeLists.txt` + `conanfile.py` + `GNUmakefile` → build + `mdbx_chk -V` shows it |
 | Test infra | new `tests/ut/foo.c++` + registration in `tests/CMakeLists.txt` (inside `add_extra_test`) → `ctest -R foo` |
@@ -63,6 +63,6 @@ the contract between design and implementation.
 - Baseline checks for any engine change: `make smoke`, `make test-asan`, `make test-ubsan`,
   `ctest --output-on-failure`, and for stochastic coverage `make test-stochastic`
   (see [`../../../build.md`](../../../build.md) §6).
-- Keep tests in the right bucket: deterministic regressions → `tests/ut/` or `tests/issues/`;
+- Keep tests in the right bucket: deterministic regressions → `tests/ut/` or `tests/ut/issues/`;
   behavior sweeps → `mdbx_test` scenarios (via `stochastic.sh` caseset).
 - The plan file itself may live in `skynet/plans/` or be tracked via the platform todo list.

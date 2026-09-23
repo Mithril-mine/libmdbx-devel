@@ -77,4 +77,4 @@ A concise design document + agreement on scope. **No implementation code yet.**
 - Design docs must respect the **dist-cutoff / amalgamation** rules if they touch build files
   (see [`../../../build.md`](../../../build.md) §7) and the LLVM code style.
 - New public API surface requires updating `mdbx.h`/`mdbx.h++` docs and usually a
-  `tests/issues/issue_ghNNNN.c++` regression.
+  `tests/ut/issues/issue_ghNNNN.c++` regression.

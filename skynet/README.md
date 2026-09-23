@@ -39,7 +39,7 @@ Author: Leonid Yuriev \<leo@yuriev.ru\>. Home site: <https://libmdbx.dqdkfa.ru>.
 | Languages | C11 (`-std=gnu11`), C++17..23 for the C++ API, bash for tooling |
 | Primary build | CMake (>= 3.12); legacy GNU Make (`GNUmakefile`, via `Makefile` thunk) |
 | Packaging | Conan 2 recipe (`conanfile.py`) |
-| Tests | CTest-based; unit tests in `tests/ut/`, regression in `tests/issues/`, framework in `tests/framework/` |
+| Tests | CTest-based; unit tests in `tests/ut/`, regression in `tests/ut/issues/`, framework in `tests/framework/` |
 | CI | SourceCraft `.sourcecraft/ci.yaml` (Linux gcc/clang) + GitHub Actions `.github/workflows/` (cross-platform) |
 | Code style | LLVM (`clang-format`, `.clang-format` at repo root) |
 | Platforms | Linux, Windows (MSVC/MinGW), macOS, Android, iOS, FreeBSD, DragonFly, Solaris, NetBSD, OpenBSD, HarmonyOS, POSIX.1-2008 |

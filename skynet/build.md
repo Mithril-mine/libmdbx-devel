@@ -154,7 +154,7 @@ The testing stack has four layers:
 2. **`tests/scripts/stochastic.sh`** — orchestrator that sweeps parameters/modes and calls `mdbx_test`
    in a loop, verifying each DB with `mdbx_chk`.
 3. **`tests/scripts/battery-tmux.sh`** — parallel runner of several `stochastic.sh` instances in tmux.
-4. **Small C/C++ tests** — `tests/ut/`, `tests/issues/`, `tests/exploits/` registered in CTest,
+4. **Small C/C++ tests** — `tests/ut/`, `tests/ut/issues/`, `tests/exploits/` registered in CTest,
    plus a few `mdbx_test` scenarios wired into CTest.
 
 ### 6.1 `mdbx_test` — the stochastic test framework
@@ -254,7 +254,7 @@ variant uses `--delay $((3+n*7))`. If multiple NUMA nodes exist, commands cycle 
 Sanitizer env defaults: `ASAN_OPTIONS=log_path=asan.log:poison_history_size=42`,
 `UBSAN_OPTIONS=log_path=ubsan.log:print_stacktrace=1`. Valgrind suppressions file: `valgrind.supp`.
 
-### 6.5 CTest integration (`tests/CMakeLists.txt`, `tests/issues/CMakeLists.txt`)
+### 6.5 CTest integration (`tests/CMakeLists.txt`, `tests/ut/issues/CMakeLists.txt`)
 
 - Helper `add_simple_test(name, SOURCE, LIBRARY, TIMEOUT, DEPEND, DLLPATH, DISABLED)` →
   `add_executable(test_extra_<name>)` + `add_test(extra_<name> ...)` (skipped when
