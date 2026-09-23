@@ -12,6 +12,7 @@ permissions:
 
 on:
   push:
+    branches: [devel, master, stable, lts/*]
   schedule:
     - cron: "42 3 * * *"
       timezone: "Europe/Moscow"
