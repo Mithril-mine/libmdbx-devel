@@ -93,8 +93,11 @@ See `skynet/skills/superpowers/verification-before-completion/SKILL.md`.
     branches (master, lts/0.13, later v0.15.x) per the targeted-API-test criterion:
     test passes → skip; builds-but-fails → backport/fix separately; doesn't-build →
     investigate, ask the owner if the API predates or deeper issues exist.
-  - Session model (§25a/25b protocol): the host runs a hard pool of at most 3
-    concurrent busy headless instances (+1 interactive coordinator). Work
+  - Session model (§25a/25b protocol): the host runs a hard pool of at most 4
+    concurrent busy headless instances (+1 interactive coordinator). Wake gate
+    is memory-only (load-average gate removed 2026-09-23 — slow feedback
+    oscillator that evicted agents during builds/tests; builds already run
+    under `nice`, MAX_BUSY bounds concurrency). Work
     happens in a shared pool of 5 sandboxes `nook-pool-1..5` (roles are mapped
     dynamically, not per-nook). Each role has ONE canonical opencode session
     (`ses_...`) recorded in `.skynet/sessions.json`; orchestrator resumes it via
