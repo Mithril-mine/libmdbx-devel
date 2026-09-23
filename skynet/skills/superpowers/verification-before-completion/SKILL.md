@@ -33,8 +33,8 @@ but never skip the levels your change deserves.
 | **3** | `make check` — smoke + install + **amalgamation** (`dist/`) validation | `make check` | 5–10 min |
 | **4** | Level 3 + sanitizer sweeps | `make test-ubsan` && `make test-asan` | 10–30 min |
 | **5** | + Valgrind/memcheck sweep | `make test-memcheck` | 30–90 min |
-| **6** | Stochastic run with a context-chosen option set and iteration count; if needed, the specific scenario rebuilt under ASAN/UBSAN/MEMCHECK | `tests/stochastic.sh --loops N --probe-duration ... [--pagesize ... --mode ... --extra]`; e.g. `make test-stochastic` (bounded) or targeted `stochastic.sh` invocation | 10+ min, context-dependent |
-| **7** | Human-controlled extended testing | `tests/battery-tmux.sh` (tmux soak, hours/days until a human stops it), `test-long`, NUMA machines | indefinite |
+| **6** | Stochastic run with a context-chosen option set and iteration count; if needed, the specific scenario rebuilt under ASAN/UBSAN/MEMCHECK | `tests/scripts/stochastic.sh --loops N --probe-duration ... [--pagesize ... --mode ... --extra]`; e.g. `make test-stochastic` (bounded) or targeted `stochastic.sh` invocation | 10+ min, context-dependent |
+| **7** | Human-controlled extended testing | `tests/scripts/battery-tmux.sh` (tmux soak, hours/days until a human stops it), `test-long`, NUMA machines | indefinite |
 
 ## How to choose the level
 

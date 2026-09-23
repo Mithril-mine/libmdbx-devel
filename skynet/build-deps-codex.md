@@ -17,8 +17,8 @@
 - **компиляции и линковке** (исходники, заголовки, генерируемые `config-cmake.h`
   / `version.c`, asm/nasm-объекты, импорт-библиотеки);
 - **прогоне тестов** (исполняемые тесты, googletest, скрипты
-  `tests/ci/ci.sh`, `tests/stochastic.sh`, `tests/battery-tmux.sh`,
-  `tests/probes-check.sh`, фикстуры, DLL/PDB-копирование);
+  `tests/ci/ci.sh`, `tests/scripts/stochastic.sh`, `tests/scripts/battery-tmux.sh`,
+  `tests/scripts/probes-check.sh`, фикстуры, DLL/PDB-копирование);
 - **амальгамации** (`make dist`, `dist-cutoff` маркеры) — только если меняется
   набор дистрибутивных файлов (`DIST_SRC`/`DIST_EXTRA`).
 
