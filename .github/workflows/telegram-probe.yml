@@ -1,0 +1,28 @@
+name: telegram-probe
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: skynet-news
+
+      - name: Telegram probe (getMe + getUpdates + reply owner)
+        shell: bash
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TG_OWNER_ID: "208859437"
+        run: |
+          set -euo pipefail
+          if [ -z "${TELEGRAM_BOT_TOKEN:-}" ]; then
+            echo "TELEGRAM_BOT_TOKEN secret not set."
+            exit 0
+          fi
+          python3 news/tg_probe.py --owner-id "${TG_OWNER_ID}"
