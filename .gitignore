@@ -74,4 +74,7 @@ version.c
 mdbx_legacy_example
 mdbx_modern_example
 mdbx-test.*
-.codeassistant*
+# .codeassistant/ is tracked by design (swarm skills/configs, see skynet/README.md).
+# Ignore only local ephemeral artifacts if any appear; do not blanket-ignore the dir.
+.codeassistant/tmp/
+.codeassistant/cache/
