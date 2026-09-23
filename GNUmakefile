@@ -537,7 +537,7 @@ test-ci:
 		test-leak test-asan test-ubsan test-singleprocess test-memcheck; \
 	do $(MAKE) $$T || break; done
 
-DIST_EXTRA := LICENSE NOTICE COPYRIGHT README.md TODO.md CMakeLists.txt GNUmakefile Makefile ChangeLog.md VERSION.json config.h.in ntdll.def \
+DIST_EXTRA := LICENSE NOTICE COPYRIGHT README.md AGENTS-GUIDE.md TODO.md CMakeLists.txt GNUmakefile Makefile ChangeLog.md VERSION.json config.h.in ntdll.def \
 	$(addprefix man1/, $(MANPAGES)) cmake/compiler.cmake cmake/profile.cmake cmake/utils.cmake windows-safeseh-masm.asm windows-safeseh-yasm.asm \
 	windows-safeseh.obj valgrind.supp conanfile.py \
 	$(addprefix examples/, CMakeLists.txt example-mdbx.c++ example-mdbx.c pcrf/pcrf_simulator.c README.md)
