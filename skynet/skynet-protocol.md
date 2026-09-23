@@ -1,4 +1,4 @@
-# skynet — протокол координации агентов (v2.15)
+# skynet — протокол координации агентов (v2.16)
 
 > Внутренний протокол взаимодействия агентов, работающих над **libmdbx-devel**
 > на одной машине. Реализуется поверх общего хранилища **MCP-memory**
@@ -288,28 +288,52 @@ unregistered ──регистрация──▶ pending ──одобрен�
   исполнением обычных задач — только координация, менеджмент и
   анализ процессов (принципы SKILL §1).
 
-## 14. Задачи (task-менеджмент)
+## 14. Задачи (task-менеджмент, Kanban-поток v2.16)
 
 Сущность `skynet_tasks` — доска задач (наблюдения = задачи). Формат записи:
 
 ```
-TASK-<n>: <краткое описание> | status=<new|accepted|in_progress|review|done|rejected|cancelled>
+TASK-<n>: <краткое описание> | status=<new|ready|in_progress|review|done|rejected|cancelled>
 | assignee=<slug> | priority=<P0..P5> | depends_on=<TASK-x,...> | ref=<ветка@коммит|PR>
 | issued_by=<slug> | issued_at=<ts>
+| started_at=<ts> | finished_at=<ts> | cycle_ms=<мс> | type=<bugfix|feature|refactor|docs|infra>
+| wsjf=<число> | column=<backlog|ready|in_progress|review|done>
 ```
 
-Жизненный цикл задачи:
+**Kanban-колонки и WIP-лимиты** (решение владельца 2026-09-23):
+
+| Колонка | Статусы | WIP-лимит |
+|---|---|---|
+| backlog | `new` | — |
+| ready | `ready` | — |
+| in_progress | `in_progress` | ≤ 3 (= busy, протокол §25a) |
+| review | `review` | ≤ 2 (доменные REV: очереди) |
+| done | `done` | — |
+
+**Pull-модель:** агент берёт следующую задачу из колонки `ready` при свободном
+слоте (координатор НЕ толкает каждую задачу письмом). Порядок выбора — по
+`wsjf=` (выше = раньше; при отсутствии — по приоритету P0..P5). При взятии —
+`status=in_progress` + `started_at=<ts>`.
+
+Жизненный цикл задачи (pull):
 
 ```
-new ──ACK(TASK-принял)──▶ accepted ──▶ in_progress ──▶ review ──REPORT──▶ done
-                              └──── QUESTION/escalate ─▶ (координатор решает)
+backlog ──(готово к работе)──▶ ready ──(агент взял, слот свободен)──▶ in_progress
+   in_progress ──REPORT──▶ review ──approve──▶ done
+                              └── needs-work ─▶ ready/in_progress
 ```
 
-- Координатор создаёт задачу (`TASK` письмо + запись на доске `TASK-n`).
-- Исполнитель отвечает `ACK` (принял) / `QUESTION` (уточнение), ставит
-  `status=accepted`, затем `in_progress` при начале работы.
+- Координатор создаёт задачу (`TASK` письмо + запись на доске `TASK-n`,
+  `column=backlog`); когда задача готова к выполнению (DoR выполнен:
+  критерии приёмки, приоритет, зависимости) — `status=ready`.
+- Исполнитель при свободном слоте берёт `ready`-задачу: `ACK` письмом +
+  `status=in_progress`, `started_at`, `assignee`.
 - Сдача: `REPORT` с `ref=` (ветка/коммит/PR) → `status=review` → координатор
-  ревьюит/мержит → `done` (или `rejected` с комментарием).
+  ревьюит/мержит → `done` (`finished_at`, `cycle_ms` считает оркестратор).
+- **Flow-метрики**: cycle time = finished_at − started_at (по типам работ);
+  throughput = число done за период; прогноз следующей задачи — медиана+P85
+  исторического cycle-time (SLE). Узкие места видны по заполнению колонок
+  против лимитов (очередь review/ci).
 - Незакрытые задачи (без `done`/`cancelled`) видны всем и переживают рестарт
   агентов (см. §7/§12).
 
@@ -384,7 +408,7 @@ new ──ACK(TASK-принял)──▶ accepted ──▶ in_progress ──�
 
 2. **Событийные уведомления** (`NOTIFY`/`REPORT`/`QUESTION`) во всех случаях,
    когда состояние меняется содержательно:
-   - взял задачу (`ACK TASK-n`, status=accepted),
+   - взял задачу из `ready` (`ACK TASK-n`, status=in_progress),
    - начал/завершил работу (status=busy/idle, `REPORT`),
    - блокировка, вопрос, эскалация (`QUESTION escalate`),
    - готовность к новому назначению (`NOTIFY ready`).
@@ -708,6 +732,14 @@ Backend чтения (v2.15, 2026-09-23):
 
 ## Changelog
 
+- **v2.16** (2026-09-23): Kanban-поток задач (§14) — колонки
+  backlog/ready/in_progress/review/done, WIP-лимиты (in_progress≤3, review≤2),
+  pull-модель (агент берёт из ready при свободном слоте), flow-поля
+  (started_at/finished_at/cycle_ms/type/wsjf), SLE-прогнозы по cycle-time
+  (медиана+P85). Решение владельца B43.
+- **v2.15** (2026-09-23): канон памяти — libmdbx graph.mdbx; event-driven loop
+  координатора (waitmail mdbx-backend + pidfile OWNER-CALL, §23/§24); навык
+  «медитация».
 - **v2.13** (2026-09-21): консолидация рабочих каталогов — пул из 5 общих
   `nook-pool-1..5` вместо per-role nook (§25b); динамический маппинг роль→nook
   в оркестраторе (`nook_map`, `prepare_pool_nook`, `agent_branch`);
