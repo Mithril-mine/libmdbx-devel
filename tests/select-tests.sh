@@ -84,6 +84,7 @@ declare -A AREA=(
 	[tests/ut/cursor/]='ut\.cursor'
 	[tests/ut/gc/]='ut\.gc'
 	[tests/ut/issues/]='ut\.issues'
+	[tests/ut/tools/]='ut\.tools'
 )
 
 LABELS=""
@@ -100,6 +101,7 @@ classify() {
 	tests/ut/cursor/*) echo 'ut\.cursor' ;;
 	tests/ut/gc/*) echo 'ut\.gc' ;;
 	tests/ut/issues/*) echo 'ut\.issues' ;;
+	tests/ut/tools/*) echo 'ut\.tools' ;;
 	tests/ut/*) echo 'ut\.' ;;
 	tests/framework/*) echo $'smoke-t1\nsmoke-t2\nsmoke-t3\nstochastic' ;;
 	tests/*.sh | tests/*.py | tests/**/*.sh | tests/**/*.py | tests/CMakeLists.txt) echo $'smoke-t1\nsmoke-t2\nsmoke-t3' ;;

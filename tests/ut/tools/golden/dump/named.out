@@ -1,0 +1,13 @@
+VERSION=3
+mapsize=67108864
+format=bytevalue
+database=meta
+type=btree
+db_pagesize=4096
+duplicates=0
+HEADER=END
+ 6b6579
+ 76616c7565
+ 6e756d
+ 3737
+DATA=END

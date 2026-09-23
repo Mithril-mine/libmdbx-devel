@@ -503,6 +503,7 @@ else()
     #   |- ut.cursor        - cursors (positioning, iteration, closing)
     #   |- ut.gc            - garbage collection / reclaim
     #   |- ut.issues        - regression tests for reported issues
+    #   |- ut.tools         - src/tools CLI utilities (golden characterization, TASK-45)
     #   Attribute labels (orthogonal): ut.heavy for slow/stress tests.
     if(UNIX)
       add_ut(upsert_alldups SOURCE ut/api/upsert_alldups.c++)
@@ -611,6 +612,23 @@ else()
       add_ut(hex_base64_base58 SOURCE ut/api/hex_base64_base58.c++)
       set_tests_properties(hex_base64_base58 PROPERTIES LABELS "ut;ut.api")
     endif()
+  endif()
+
+  # Golden characterization tests for the src/tools CLI utilities (TASK-45,
+  # Phase B of epic B46). Each case = (fixture setup + args) -> {stdout, stderr,
+  # exit-code} recorded as the CURRENT contract (skynet/tools-rewrite/spec-*.md,
+  # Phase A): the tools are NOT fixed here, only the behavior is locked down for
+  # the C++ rewrite validation (Phase D). Deterministic: fixtures come from the
+  # checked-in base.dump stream + fixed geometry, no stochastic runs. Runner:
+  # tests/ut/tools/golden-runner.sh; goldens are committed next to it.
+  if(UNIX AND MDBX_BUILD_TOOLS)
+    set(UT_TOOLS_RUNNER "${CMAKE_CURRENT_SOURCE_DIR}/ut/tools/golden-runner.sh")
+    foreach(UT_TOOL chk copy defrag drop dump load stat)
+      add_test(NAME ut_tools_${UT_TOOL}
+               COMMAND bash ${UT_TOOLS_RUNNER} ${UT_TOOL} $<TARGET_FILE:mdbx_${UT_TOOL}>
+                       "${MDBX_OUTPUT_DIR}/tools-golden/${UT_TOOL}")
+      set_tests_properties(ut_tools_${UT_TOOL} PROPERTIES LABELS "ut;ut.tools" TIMEOUT 300)
+    endforeach()
   endif()
 
 endif()
