@@ -132,21 +132,19 @@ jobs:
   run:
     name: ${{ matrix['id'] }}
     needs: resolve
-    runs-on: ${{ matrix['runs-on'] }}
     strategy:
       fail-fast: false
       matrix:
         include: ${{ fromJson(needs.resolve.outputs.cells) }}
-    steps:
-      - uses: ./.github/workflows/ci-run.yml
-        with:
-          runs-on: ${{ matrix['runs-on'] }}
-          cell-id: ${{ matrix['id'] }}
-          cell-env: ${{ matrix['cell-env'] }}
-          cell-cmake: ${{ matrix['cell-cmake'] }}
-          cell-build-config: ${{ matrix['cell-build-config'] }}
-          cell-ctest-regex: ${{ matrix['cell-ctest-regex'] }}
-          cell-ctest-exclude: ${{ matrix['cell-ctest-exclude'] }}
-          cell-build-only: ${{ matrix['cell-build-only'] == 'true' }}
-          cell-ndk: ${{ matrix['cell-ndk'] }}
-          ref: ${{ needs.resolve.outputs.ref }}
+    uses: ./.github/workflows/ci-run.yml
+    with:
+      runs-on: ${{ matrix['runs-on'] }}
+      cell-id: ${{ matrix['id'] }}
+      cell-env: ${{ matrix['cell-env'] }}
+      cell-cmake: ${{ matrix['cell-cmake'] }}
+      cell-build-config: ${{ matrix['cell-build-config'] }}
+      cell-ctest-regex: ${{ matrix['cell-ctest-regex'] }}
+      cell-ctest-exclude: ${{ matrix['cell-ctest-exclude'] }}
+      cell-build-only: ${{ matrix['cell-build-only'] == 'true' }}
+      cell-ndk: ${{ matrix['cell-ndk'] }}
+      ref: ${{ needs.resolve.outputs.ref }}
