@@ -48,6 +48,13 @@
    - P4 full local:`ctest` (+ smoke, ~10+ min) — only when touching the core (src/).
    - P5 milestone: asan/ubsan/stochastic + GitHub CI — by explicit approval.
 See `skynet/skills/superpowers/verification-before-completion/SKILL.md`.
+  - Integrity checks: every `mdbx_chk`-based test (`*_chk`) carries the orthogonal
+    `chk` label (B26). Routine runs exclude it (`-LE 'ut\.heavy|chk'`, as emitted by
+    `tests/select-tests.sh`); plain `ctest` (P4 full) still includes it; to run only
+    the integrity checks use `ctest -L chk`. Sync-mode policy (B27): mdbx_test
+    scenarios whose durability is not the point use `--mode=+nosync-safe` (e.g.
+    `smoke_basic`, `smoke_t1_hill/copy`); the durable variants (`smoke_writemap`,
+    `smoke_fault`, `smoke_t1_nested`, the T3/long family) keep real sync.
   - Impact-based selection: instead of hand-picking the level, map changed paths
     to the affected labels with `tests/select-tests.sh` (build dir: run the
     printed `ctest -L ... -LE 'ut\.heavy'`, or `--run` to execute). Sources under

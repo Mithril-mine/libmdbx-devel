@@ -137,9 +137,11 @@ echo "affected labels: $LABELS" >&2
 echo "changed paths:   ${paths[*]}" >&2
 
 # Fast unit set by default (skip ut.heavy); a core/build change also pulls in
-# the tiered smoke labels. The regex is applied per-label by CTest, so the
-# alternation needs no grouping.
-CMD="ctest -L '${LABELS}' -LE 'ut\.heavy'"
+# the tiered smoke labels. Integrity-only *_chk tests carry the orthogonal `chk`
+# label (B26) and are excluded from routine runs (run them with `ctest -L chk`;
+# plain `ctest` still includes them). The regex is applied per-label by CTest,
+# so the alternation needs no grouping.
+CMD="ctest -L '${LABELS}' -LE 'ut\.heavy|chk'"
 echo "$CMD"
 
 if [ "$MODE" = run ]; then
@@ -155,7 +157,7 @@ if [ "$MODE" = run ]; then
 			fi
 		done
 		if [ -n "$BUILD_DIR" ]; then
-			CMD="ctest --test-dir \"$BUILD_DIR\" -L '${LABELS}' -LE 'ut\.heavy'"
+			CMD="ctest --test-dir \"$BUILD_DIR\" -L '${LABELS}' -LE 'ut\.heavy|chk'"
 			echo "select-tests: using build dir '$BUILD_DIR'" >&2
 		else
 			echo "select-tests: no CTestTestfile.cmake here and no build dir found — run from your build dir (or pass --test-dir)" >&2
