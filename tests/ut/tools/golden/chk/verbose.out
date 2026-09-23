@@ -1,0 +1,14 @@
+mdbx_chk vVERSION (BUILD, T-HASH)
+Running for /base.db in 'read-only' mode with verbosity level 1 (of 0..9)...
+   troika: 6.s:5.w:3.s, fsm=0xd5, head=0-6.s, base=0-6.s, tail=1-5.w, valid Y, strict Y
+   open-MADV_DONTNEED 16..16384
+   readahead ON 0..10
+ - Taking lock... done
+   dxb-id <ID>
+ - Peek the meta-pages... transactions: recent 6, latter reader 6, lag 0
+ - Traversal B-Trees by txn#6... done
+ - Processing @GC by txn#6... done
+ - Page allocation: total 16384 pages, backed 16384 pages (100.0%), allocated 10 pages (0.06%), available 16377 pages (100.0%)
+ - Processing @MAIN... done
+ - Processing table(s) by txn#6... done
+No error is detected, elapsed SECONDS.

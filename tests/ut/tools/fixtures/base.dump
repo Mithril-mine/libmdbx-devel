@@ -1,0 +1,44 @@
+VERSION=3
+format=bytevalue
+type=btree
+db_pagesize=4096
+duplicates=0
+HEADER=END
+ 6161
+ 3130
+ 6262
+ 3230
+ 6363
+ 3330
+DATA=END
+VERSION=3
+format=bytevalue
+type=btree
+db_pagesize=4096
+database=meta
+duplicates=0
+HEADER=END
+ 6b6579
+ 76616c7565
+ 6e756d
+ 3737
+DATA=END
+VERSION=3
+format=bytevalue
+type=btree
+db_pagesize=4096
+database=duptbl
+duplicates=1
+dupsort=1
+HEADER=END
+ 646570742031
+ 3130
+ 646570742031
+ 3230
+ 646570742031
+ 3330
+ 646570742032
+ 3230
+ 646570742032
+ 3430
+DATA=END

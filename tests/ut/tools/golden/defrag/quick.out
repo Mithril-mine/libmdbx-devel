@@ -1,0 +1,6 @@
+mdbx_defrag vVERSION (BUILD, T-HASH)
+Running for /base.db...
+ - space usage in pages: 10 allocated, payload 6, unused/GC 4, pagesize 4096
+ - defragmentation: target 100% (shrink 4 pages), cycles limit 1, step unlimited, duration unlimited
+ - loading the b-tree structure: 0.0%... - loading the b-tree structure: 0.0%... done
+Defragmentation done: shrink 0 pages, 0 passes, moved 0 pages, took 0.000 seconds, done

@@ -1,0 +1,16 @@
+mdbx_stat vVERSION (BUILD, T-HASH)
+Running for /base.db...
+Environment Info
+  Pagesize: 4096
+  Fixed datafile: 67108864 bytes, 16384 pages
+  Last transaction ID: 6
+  Latter reader transaction ID: 6 (0)
+  Max readers: 110
+  Number of reader slots in use: 1
+Status of Main DB
+  Pagesize: 4096
+  Tree depth: 1
+  Branch pages: 0
+  Leaf pages: 1
+  Large/Overflow pages: 0
+  Entries: 5

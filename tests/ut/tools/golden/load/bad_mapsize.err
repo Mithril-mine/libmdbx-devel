@@ -1,0 +1,5 @@
+/sourcecraft/workspace/.skynet/tmp/A.testcase-guru/task45-wt/build/mdbx_load: line 4: ignore unsupported value 0xffffffffffffffff for mapsize
+   read meta: empty file (61, No data available)
+   troika: 1.s:2.s:3.s, fsm=0x07, head=2-3.s, base=2-3.s, tail=0-1.s, valid Y, strict Y
+   readahead ON 0..3
+   skip update meta0 for txn#4, since it is already steady
