@@ -79,7 +79,8 @@ def log(msg):
             f.write(line + "\n")
     except OSError:
         pass
-    print(line, file=sys.stderr)
+    if os.environ.get("NOTIFY_DEBUG"):
+        print(line, file=sys.stderr)
 
 
 def run(cmd, timeout=40):
@@ -516,6 +517,8 @@ def main():
     ap.add_argument("--interval", type=int, default=60)
     ap.add_argument("--debug", action="store_true")
     args = ap.parse_args()
+    if args.debug:
+        os.environ["NOTIFY_DEBUG"] = "1"
 
     state = load_state()
     if args.dry_run:
