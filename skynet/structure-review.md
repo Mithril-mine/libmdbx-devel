@@ -3,7 +3,8 @@
 > Верифицировано на `devel@ec87f4e8` (ветка `feature/task36-structure-review`,
 > rebase 2026-09-23 по вердикту REV:c; исходный аудит — `devel@ed5fdd10`).
 > Статус исполнения: phase A merged `devel@287c59d2` (origin+upstream);
-> C1 (tests/→tests/scripts+docs) исполнен, C2/C3 — в работе.
+> C1 (tests/→tests/scripts+docs) и C2 (пути регрессий → tests/ut/issues)
+> исполнены; C3 — в работе.
 > Документ — результат **фазы A** аудита: карта текущей структуры,
 > находки (включая «дубли» `chk.c`/`defrag.c`), кандидаты улучшений с оценкой
 > риска/ценности и решение «трогаем / не трогаем». Фазы B (план переносов),
@@ -158,23 +159,22 @@ TU в non-alloy-режиме и читаемую историю правок per
 **Решение: ТРОГАЕМ, исполнено батчем C1.** `tests/ci/`, `tests/ut/`,
 `tests/framework/` остались на месте.
 
-### F4. Документ-дрейф: в доках указан несуществующий путь `tests/issues/`
+### F4. Документ-дрейф: в доках был указан несуществующий путь (исправлено в C2)
 
 Регрессии физически лежат в **`tests/ut/issues/`** (`add_subdirectory(ut/issues)`,
 tests/CMakeLists.txt:609; `tests/ut/issues/CMakeLists.txt`), но **16 файлов**
-ссылаются на несуществующий `tests/issues/`:
+ссылались на несуществующий путь без префикса `ut/`: 9 доков
+(`skynet/README.md`, `build.md`, `cxx-api.md`, `structure.md`,
+`test-coverage.md`, `skynet-protocol.md`, `build-deps-codex.md`,
+`test-scenarios.md`, `workflows.md`), 6 SKILLS superpowers
+(`README`, `brainstorming`, `requesting-code-review`,
+`systematic-debugging`, `test-driven-development`, `writing-plans`)
+и кодовая мёртвая ветка в `tests/scripts/select-tests.sh` (удалена в phase A).
 
-| Файл | Что |
-| --- | --- |
-| `skynet/README.md:42`, `skynet/build.md:157,257`, `skynet/cxx-api.md:99,106`, `skynet/structure.md:200` (+ устаревший список `tests/ut` в :199), `skynet/test-coverage.md:15,50`, `skynet/skynet-protocol.md:331`, `skynet/build-deps-codex.md:70`, `skynet/test-scenarios.md`, `skynet/workflows.md` | пути в доках |
-| `skynet/skills/superpowers/{README,brainstorming,requesting-code-review,systematic-debugging,test-driven-development,writing-plans}/SKILL.md` (6 ф.) | пути в SKILLS |
-| `tests/scripts/select-tests.sh:104` | **мёртвая ветка кода** `tests/issues/*) echo 'ut\.issues'` (физический каталог — `tests/ut/issues/`, строка 102 уже покрывает; ветка недостижима) |
-
-**Решение: ТРОГАЕМ (батч C2)** — правим пути в 15 текстовых файлах. Мёртвая
-ветка в `tests/scripts/select-tests.sh` уже удалена ранее (в составе merge
-phase A); в C2 остаются только правки путей в доках/SKILLS (иначе фаза-D
-проверка «grep старых путей = 0» не пройдёт). Риск ~нулевой
-(правки текстов), ценность для онбординга средняя.
+**Исполнено (C2)**: пути в 15 текстовых файлах приведены к
+`tests/ut/issues/` в одном батче. Мёртвая ветка `select-tests.sh` была
+удалена ранее (merge phase A). Риск был ~нулевой (правки текстов), ценность
+для онбординга средняя.
 
 ### F5. ChangeLog-*.md в корне — upstream-конвенция
 
@@ -258,7 +258,7 @@ non-amalgamated `src/man1/`); дистрибутивные `man1/` в `dist` г�
 | № | Кандидат | Ценность (для разработки) | Риск (merge/amalgam/upstream) | Решение |
 | --- | --- | --- | --- | --- |
 | C1 | `tests/` → `tests/scripts/` + `tests/docs/` (группировка корня) | средняя (находимость, чистота) | средний (~46 несамоссылочных ссылок в 22 файлах) | **Исполнено (C1)** |
-| C2 | Пути `tests/issues/` → `tests/ut/issues/` (16 файлов: 9 доков + 6 SKILLS; мёртвая ветка `select-tests.sh` удалена в phase A) | средняя (онбординг, снижение ложных поисков) | нулевой (тексты) | **Трогаем** (батч C2) |
+| C2 | Пути регрессионных тестов приведены к `tests/ut/issues/` (15 файлов: 9 доков + 6 SKILLS; мёртвая ветка `select-tests.sh` удалена в phase A) | средняя (онбординг, снижение ложных поисков) | нулевой (тексты) | **Исполнено (C2)** |
 | C3 | `.gitignore` vs `.codeassistant/` (противоречие) | низкая (гигиена) | нулевой | **Трогаем** (микро-батч) |
 | C4 | Переименование тёзок `src/chk.c`/`src/defrag.c` | низкая (устранение путаницы) | высокая (upstream-паритет, constraint #2; правки 4+ build-файлов, история) | **НЕ трогаем**; опция — ADR владельцу |
 | C5 | `src/api-*.c` гранулярность | — | — | **НЕ трогаем** (канон) |
@@ -277,9 +277,10 @@ non-amalgamated `src/man1/`); дистрибутивные `man1/` в `dist` г�
    - **C1 — ИСПОЛНЕНО**: `git mv` скриптов+конфигов в `tests/scripts/`,
      доков в `tests/docs/`; все ссылки обновлены в том же коммите
      (README.md, AGENTS.md, GNUmakefile, tests/CMakeLists.txt, skynet/*, SKILLS).
-   - C2 — правки путей `tests/issues/`→`tests/ut/issues/` в 15 текстовых файлах
-     (9 доков + 6 SKILLS, перечень §F4). Мёртвая ветка `select-tests.sh` уже
-     удалена в phase A.
+   - **C2 — ИСПОЛНЕНО**: пути регрессионных тестов в доках приведены к
+     фактическому каталогу `tests/ut/issues/` в 15 текстовых файлах
+     (9 доков + 6 SKILLS, перечень §F4). Мёртвая ветка `select-tests.sh`
+     удалена ранее в phase A.
    - C3 — правки `.gitignore` — без `git mv`.
 3. **Верификация после каждого батча (фаза D)**: Linux (gcc+clang) сборка +
    P2 `ctest -L 'ut\.' -LE 'ut\.heavy'`; затем `make dist` (зелёная амальгама);
@@ -294,7 +295,7 @@ non-amalgamated `src/man1/`); дистрибутивные `man1/` в `dist` г�
 
 - Карта построена по `git ls-files` и `git ls-tree origin/master`
   (сверка с upstream-каноном), сверена с `skynet/structure.md` (актуален
-  по содержанию, есть дрейф путей `tests/issues/`).
+  по содержанию; дрейф путей регрессий устранён батчем C2).
 - Факты сборки подтверждены чтением `CMakeLists.txt` (строки 983, 993, 1069,
   1333-1363, 185-193, 67-73) и `GNUmakefile` (478, 566, 623, 540-545, 959,
   979); артефакты `cmake-build-t41-check` (mdbx.dir/src, mdbx_chk.dir/src/tools).

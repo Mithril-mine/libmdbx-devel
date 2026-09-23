@@ -352,7 +352,7 @@ backlog ──(готово к работе)──▶ ready ──(агент в
 - Освобождение: `claim=<область>=<released>|<ts>` при сдаче задачи.
 - Координатор может аннулировать claim (`NOTIFY` владельцу).
 
-Рекомендуемые области: `src/`, `mdbx++/`, `tests/ut/*`, `tests/issues/`,
+Рекомендуемые области: `src/`, `mdbx++/`, `tests/ut/*`, `tests/ut/issues/`,
 `tests/framework/`, `cmake/`, `.github/`, `docs/`, `skynet/`.
 
 ## 16. Конфликты и эскалация

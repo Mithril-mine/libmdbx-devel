@@ -11,7 +11,7 @@ locking, TLS); guessing wastes hours. Follow the four phases.*
 ## Phase 1 — Reproduce & characterize
 
 - Get a **minimal, deterministic reproduction** if possible:
-  - Regression test in `tests/issues/issue_ghNNNN.c++` (TDD red).
+  - Regression test in `tests/ut/issues/issue_ghNNNN.c++` (TDD red).
   - For stochastic failures: capture the `--prng-seed` (the script seeds from `date+%s+RANDOM`)
     and rerun `mdbx_test` with that seed; narrow via `--nops`, `--pagesize`, `--mode`,
     `--table`.

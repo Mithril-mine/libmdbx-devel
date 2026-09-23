@@ -170,7 +170,7 @@ Parallel infrastructure built on top of the same CTest labels; the legacy 7 GitH
 - The project relies on a **stochastic framework** (`mdbx_test`) plus deterministic regressions;
   bug fixes must first reproduce the bug (TDD red), then verify with the appropriate scenario
   (see [`build.md`](build.md) §6 and the `test-driven-development` skill).
-- Issue numbers in `tests/issues/issue_gh00XX.c++` map to SourceCraft/GitHub issue numbers;
+- Issue numbers in `tests/ut/issues/issue_gh00XX.c++` map to SourceCraft/GitHub issue numbers;
   new bug reports should add a regression there.
 - `MDBX_CHECKING=2` + `MDBX_FORCE_ASSERTIONS=1` (as CI does) surfaces internal invariant
   violations (`ENSURE`, `CHECKS0/1/2`, panic points) early.

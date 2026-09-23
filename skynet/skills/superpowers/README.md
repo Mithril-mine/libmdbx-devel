@@ -50,7 +50,7 @@ flowchart LR
   reference SourceCraft MCP tools (see [`../sourcecraft/README.md`](../sourcecraft/README.md)).
 - **Project**: each skill has a "libmdbx project notes" section with concrete commands
   (`make smoke`, `ctest`, `make test-asan/ubsan/memcheck`, `tests/scripts/stochastic.sh`, `mdbx_chk`,
-  `tests/ut/` + `tests/issues/` placement).
+  `tests/ut/` + `tests/ut/issues/` placement).
 - **Language**: skills are written in English; they may contain Russian annotations where the
   codebase itself uses Russian comments.
 
