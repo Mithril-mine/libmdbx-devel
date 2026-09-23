@@ -101,7 +101,6 @@ classify() {
 	tests/ut/gc/*) echo 'ut\.gc' ;;
 	tests/ut/issues/*) echo 'ut\.issues' ;;
 	tests/ut/*) echo 'ut\.' ;;
-	tests/issues/*) echo 'ut\.issues' ;;
 	tests/framework/*) echo $'smoke-t1\nsmoke-t2\nsmoke-t3\nstochastic' ;;
 	tests/*.sh | tests/*.py | tests/**/*.sh | tests/**/*.py | tests/CMakeLists.txt) echo $'smoke-t1\nsmoke-t2\nsmoke-t3' ;;
 	cmake/* | CMakeLists.txt | GNUmakefile | Makefile | cmake/CMakeLists.txt) echo $'smoke-t1\nsmoke-t2\nut\.' ;;
