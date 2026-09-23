@@ -42,7 +42,7 @@ Yandex AI Studio) за консультацией: анализ, рассужд�
 ## Использование
 
 ```
-python3 /sourcecraft/workspace/.skynet/tools/alice-consult.py --ask "<вопрос>"
+python3 ${SKYNET_ROOT}/.skynet/tools/alice-consult.py --ask "<вопрос>"
 python3 ... --ask "<код/анализ>" --route code
 python3 ... --ask "<черновик идей>" --route brainstorm
 python3 ... --ask "<текст>" --route classify --json-schema '{...}'

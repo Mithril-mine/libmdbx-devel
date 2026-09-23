@@ -3,7 +3,7 @@
 > Внутренний документ роя. Определяет, что и как публикуется в Telegram-канале
 > проекта libmdbx (@libmdbx): темы, форматы, источники, запреты и чек-лист.
 > Публикация выполняется мостом из TASK-32 (ветка `skynet-news`, GitHub CI).
-> Черновики живут в `/sourcecraft/workspace/.skynet/news/drafts/` (вне git);
+> Черновики живут в `${SKYNET_ROOT}/.skynet/news/drafts/` (вне git);
 > готовые к публикации драфты коммитятся в `skynet-news/drafts/`.
 
 ## 1. Цель
@@ -101,4 +101,4 @@ cta: <один из §2>     # обязателен
 
 ## 9. Актуальные драфты
 
-См. `/sourcecraft/workspace/.skynet/news/drafts/` и ветку `skynet-news/drafts/`.
+См. `${SKYNET_ROOT}/.skynet/news/drafts/` и ветку `skynet-news/drafts/`.

@@ -13,7 +13,7 @@
 и координируются **асинхронно** через «почту» в MCP-memory. Почта — только
 краткая конкретика (что, кому, когда, ссылка); весь объёмный контекст
 передаётся файлами (в репозитории — коммиты/PR, вне репозитория —
-`/sourcecraft/workspace/.skynet/`).
+`${SKYNET_ROOT}/.skynet/`).
 
 Три правила:
 
@@ -37,7 +37,7 @@
 
 Соглашения об именах: slug латиницей в нижнем регистре, слова через `_`
 (`main_architect`, `tests_lead`, ...). Папка внешних артефактов:
-`/sourcecraft/workspace/.skynet/` (вне git).
+`${SKYNET_ROOT}/.skynet/` (вне git).
 
 ## 3. Ранги, роли, специализация
 
@@ -170,7 +170,7 @@
 Объёмный контекст — в файлы:
 
 - В репозитории: ветки, коммиты, PR (указываются в `payload:`).
-- Вне репозитория: `/sourcecraft/workspace/.skynet/<msg_id>/` (например,
+- Вне репозитория: `${SKYNET_ROOT}/.skynet/<msg_id>/` (например,
   полные логи, диффы, отчёты). В git не коммитить.
 
 ## 7. Восстановление ситуации (важно)
@@ -314,7 +314,7 @@ new ──ACK(TASK-принял)──▶ accepted ──▶ in_progress ──�
   агентов (см. §7/§12).
 
 Объёмные спецификации — файлом: `<repo>/skynet/tasks/TASK-<n>.md` (если задача
-долговечная и должна попасть в историю) или `/sourcecraft/workspace/.skynet/tasks/TASK-<n>.md`
+долговечная и должна попасть в историю) или `${SKYNET_ROOT}/.skynet/tasks/TASK-<n>.md`
 (э-фемерное). Ссылка кладётся в `payload:`.
 
 ## 15. Claims (области работы)
@@ -348,7 +348,7 @@ new ──ACK(TASK-принял)──▶ accepted ──▶ in_progress ──�
 - `msg_id` уникален и используется для идемпотентности: повторно не обрабатывать
   письма с уже известным `msg_id`.
 - При большой переписке старые письма (старше недели) координатор архивирует:
-  переносит текст в файл `/sourcecraft/workspace/.skynet/mail-archive/<date>.md`
+  переносит текст в файл `${SKYNET_ROOT}/.skynet/mail-archive/<date>.md`
   и заменяет наблюдение пометкой `[archived <файл>]`.
 
 ## 18. Bootstrap-чеклист сессии
@@ -455,7 +455,7 @@ wait=<slug>: <предмет> | state=pending_review|awaiting_answer|in_progress
 
 Интерактивная сессия координатора не может «проснуться» сама (нет push).
 Чтобы рою не приходилось ждать, на машине работает **дежурный оркестратор**:
-`/sourcecraft/workspace/.skynet/orchestrator.py` (вне git).
+`${SKYNET_ROOT}/.skynet/orchestrator.py` (вне git).
 
 > **Критично (архитектура v2.15):** общая память — **libmdbx `graph.mdbx`**
 > (ACID, канон; legacy JSONL только для старых сессий, см. `memory-codex.md`).
@@ -472,7 +472,7 @@ wait=<slug>: <предмет> | state=pending_review|awaiting_answer|in_progress
   heartbeat сам при старте сессии).
 - **Сводка активности**: `last_seen=<slug>=<ts>` ведётся в
   `orchestrator-state.json` (не в памяти).
-- **Digest**: рендерит `/sourcecraft/workspace/.skynet/main_architect/ACTION-NEEDED.md`
+- **Digest**: рендерит `${SKYNET_ROOT}/.skynet/main_architect/ACTION-NEEDED.md`
   (письма, требующие человека; просроченные `wait=`; stale-агенты), шлёт
   `notify-send`/beep при изменении.
 - **Очередь ожиданий**: отслеживает `wait=` записи и помечает просроченные
@@ -490,20 +490,20 @@ wait=<slug>: <предмет> | state=pending_review|awaiting_answer|in_progress
 
 ## 22. Временные файлы и изоляция (v2.4)
 
-- **Запрет `/tmp` и любых путей вне `/sourcecraft/workspace`** для временных
+- **Запрет `/tmp` и любых путей вне `${SKYNET_ROOT}`** для временных
   файлов всех агентов: общий `/tmp` = столкновения и перезапись; активность
   вне workspace требует разрешения владельца и блокирует роёвых агентов.
-- Временные файлы агента — только в `/sourcecraft/workspace/.skynet/tmp/<slug>/`
+- Временные файлы агента — только в `${SKYNET_ROOT}/.skynet/tmp/<slug>/`
   (изолировано по агенту, вне git). Префикс имени — тема/задача.
-- Обмен артефактами между агентами — через `/sourcecraft/workspace/.skynet/`.
+- Обмен артефактами между агентами — через `${SKYNET_ROOT}/.skynet/`.
 - Полное правило — `AGENT-WORKSPACE.md`, раздел «Временные файлы».
 
 ## 23. Ожидание почты (waitmail, v2.5 → v2.15)
 
 Агент в рабочем цикле вместо слепого `sleep N` использует блокирующий ждун
-`/sourcecraft/workspace/.skynet/waitmail.py`:
+`${SKYNET_ROOT}/.skynet/waitmail.py`:
 
-    python3 /sourcecraft/workspace/.skynet/waitmail.py <slug>
+    python3 ${SKYNET_ROOT}/.skynet/waitmail.py <slug>
 
 Семантика (решение владельца):
 
@@ -748,7 +748,7 @@ Backend чтения (v2.15, 2026-09-23):
   таймаут бесконечный, прерывание владельцем `Ctrl+C`; агенты используют в
   рабочем цикле вместо `sleep`.
 - **v2.4** (2026-09-20): изоляция временных файлов (§22) — запрет `/tmp` и
-  путей вне `/sourcecraft/workspace`; per-agent tmp в `.skynet/tmp/<slug>/`;
+  путей вне `${SKYNET_ROOT}`; per-agent tmp в `.skynet/tmp/<slug>/`;
   правило в AGENT-WORKSPACE.md.
 - **v2.3** (2026-09-20): правило «не блокируйся» (§20.9) — ожидание ответа
   не останавливает работу, продолжение по последнему решению + пометка

@@ -124,11 +124,11 @@ JSONL-backed `@modelcontextprotocol/server-memory` was replaced by
 This eliminated the lost-update race of the old read-modify-write JSONL store.
 
 ```
-DB (canonical): ~/.local/share/libmdbx-memory/graph.mdbx   (+ -lck)
-Server:         ~/.local/share/libmdbx-memory/memory-mdbx-server.py
-Library:        ~/.local/share/libmdbx-memory/build/libmdbx.so   (master e77297e0)
-Legacy JSONL:   ~/.local/share/libmdbx-memory/memory.jsonl       (archive; old sessions)
-Reader bridge:  /sourcecraft/workspace/.skynet/memory_reader.py  (merge mdbx+legacy)
+DB (canonical): ${MEMORY_STORE}/graph.mdbx   (+ -lck)
+Server:         ${MEMORY_STORE}/memory-mdbx-server.py
+Library:        ${MEMORY_STORE}/build/libmdbx.so   (master e77297e0)
+Legacy JSONL:   ${MEMORY_STORE}/memory.jsonl       (archive; old sessions)
+Reader bridge:  ${SKYNET_ROOT}/.skynet/memory_reader.py  (merge mdbx+legacy)
 MCP config:     ~/.config/opencode/opencode.json -> mcp.memory
 ```
 
@@ -178,7 +178,7 @@ Fixes applied:
 
 ### Trap 3: never copy a live store with `cp`
 
-Use `/sourcecraft/workspace/.skynet/migrate-memory.py` (parse+repair+validate).
+Use `${SKYNET_ROOT}/.skynet/migrate-memory.py` (parse+repair+validate).
 
 ### Provenance note
 
@@ -186,5 +186,5 @@ This is the 3rd+ iteration of debugging "why doesn't the swarm see my memory
 write". Root cause: non-transactional JSONL + multiple writers → lost updates.
 Fixed by switching the backend to libmdbx (owner decision 2026-09-22).
 
-[Full workspace doc: `/sourcecraft/workspace/AGENT-WORKSPACE.md` → «Общая память
+[Full workspace doc: `${SKYNET_ROOT}/AGENT-WORKSPACE.md` → «Общая память
 агентов (memory-MCP)»]

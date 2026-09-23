@@ -26,7 +26,7 @@
 ## Использование
 
 ```
-python3 /sourcecraft/workspace/.skynet/tools/alice-consult.py --ask "<вопрос>" [--route analysis|code|brainstorm|...]
+python3 ${SKYNET_ROOT}/.skynet/tools/alice-consult.py --ask "<вопрос>" [--route analysis|code|brainstorm|...]
 ```
 
 Полная справка: `--help`; правила и безопасность: `../../alice-consult-codex.md`.

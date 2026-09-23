@@ -4,7 +4,7 @@
 > Название союза: **Concordia Intellectuum** («согласие интеллектов», лат.) —
 > выбрано владельцем 2026-09-22.
 > Процесс поправок: см. Приложение B («Mission Amendment»).
-> Зеркало (вне git): `/sourcecraft/workspace/.skynet/MISSION.md` — сверять при
+> Зеркало (вне git): `${SKYNET_ROOT}/.skynet/MISSION.md` — сверять при
 > каждом цикле координации.
 
 ## Принцип пилота

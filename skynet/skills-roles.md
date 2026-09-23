@@ -1,6 +1,6 @@
 # SKILLS и роли коллективной работы над libmdbx (адаптация)
 
-> Адаптация владельческого набора `/sourcecraft/workspace/nook-owner-dont-touch/libmdbx_skills_roles.md`
+> Адаптация владельческого набора `${SKYNET_ROOT}/nook-owner-dont-touch/libmdbx_skills_roles.md`
 > под текущий строй (протокол v2.13, §1–§30). Это рабочий реестр: роль → зона
 > ответственности → SKILL (L3) → агенты-исполнители.
 > Иерархия навыков: `skynet/skills/README.md` (L0–L4).
