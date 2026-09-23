@@ -133,9 +133,13 @@ MCP config:     ~/.config/opencode/opencode.json -> mcp.memory
 ```
 
 - **Schema**: 5 subdbs. `E` (meta, name → JSON), `OC` (observations, chunked,
-  NON-dupsort: key = `entity\0obs_index\0chunk_no`, value = chunk ≤1000 B; длинные
-  наблюдения разбиваются на чанки, чтение собирает по порядку ключей),
-  `O` (legacy dupsort observations — только чтение/миграция, B48),
+  NON-dupsort: key = `entity\0obs_index\0chunk_no`, value = chunk ≤ 1 page;
+  размер чанка динамический — `mdbx_env_get_valsize4page_max(env, 0)` = 4076 B
+  @4K (не жёсткие 1000 B!); длинные наблюдения разбиваются на чанки, чтение
+  собирает по порядку ключей),
+  `O` (legacy dupsort observations — только чтение/миграция, B48; chk: 3562
+  записей/888KB всё ещё дублируют OC — очистка после полного перехода всех
+  сессий на OC-write),
   `R` (from → `to\0type`, DUP), `RV` (to → `from\0type`, DUP).
   Limits @4K pagesize: key ≤ 2022 B; dupsort-value ≤ 2022 B (B48); non-dupsort
   value до ~2 GiB через overflow-цепочку (docs/_restrictions.md).
