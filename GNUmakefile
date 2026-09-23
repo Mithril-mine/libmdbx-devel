@@ -403,6 +403,10 @@ cmake-stochastic-build:
 	@echo '  RUN: cmake -G Ninja -DMDBX_ENABLE_LONG_TESTS=ON && cmake --build @cmake-stochastic-build'
 	$(QUIET)$(call cmake-configure-build,@cmake-stochastic-build,-DMDBX_ENABLE_LONG_TESTS=ON,)
 
+cmake-singleprocess-build:
+	@echo '  RUN: cmake -G Ninja -DMDBX_ENABLE_SINGLEPROCESS_TESTS=ON && cmake --build @cmake-singleprocess-build'
+	$(QUIET)$(call cmake-configure-build,@cmake-singleprocess-build,-DMDBX_ENABLE_SINGLEPROCESS_TESTS=ON,)
+
 cmake-probes-build:
 	@echo '  RUN: cmake -G Ninja -DENABLE_SYSTEMTAP=ON && cmake --build @cmake-probes-build'
 	$(QUIET)$(call cmake-configure-build,@cmake-probes-build,-DENABLE_SYSTEMTAP:BOOL=ON,) && \
@@ -428,7 +432,7 @@ TEST_TARGETS += ctest
 TEST_BUILD_TARGETS += cmake-build
 endif
 
-.PHONY: cmake-build cmake-assertions-build cmake-asan-build cmake-ubsan-build cmake-memcheck-build cmake-leak-build cmake-stochastic-build
+.PHONY: cmake-build cmake-assertions-build cmake-asan-build cmake-ubsan-build cmake-memcheck-build cmake-leak-build cmake-stochastic-build cmake-singleprocess-build
 .PHONY: ninja-assertions ninja-debug ninja $(TEST_TARGETS) $(TEST_BUILD_TARGETS) test-ubsan test-asan test-memcheck test-leak test-assertion test build-test smoke check
 test: $(TEST_TARGETS)
 build-test: $(TEST_BUILD_TARGETS)
@@ -600,8 +604,8 @@ check-posix-locking:
 smoke: cmake-build
 	$(call ctest-scenario-run,@cmake-build,^smoke$$,)
 
-smoke-singleprocess: cmake-build
-	$(call ctest-scenario-run,@cmake-build,^smoke-singleprocess$$,)
+smoke-singleprocess: cmake-singleprocess-build
+	$(call ctest-scenario-run,@cmake-singleprocess-build,^smoke-singleprocess$$,)
 
 smoke-fault: cmake-build
 	$(call ctest-scenario-run,@cmake-build,^smoke-fault$$,)
@@ -1027,7 +1031,7 @@ cross-qemu:
 		$(CMAKE) -S . -B $$BD -DCMAKE_C_COMPILER=$$CC -DCMAKE_CXX_COMPILER=$$(echo $$CC | $(SED) 's/-gcc/-g++/') \
 			-DCMAKE_EXE_LINKER_FLAGS=-static -DMDBX_LOCKING=5 \
 			-DCMAKE_C_FLAGS=-DMDBX_SAFE4QEMU -DCMAKE_CXX_FLAGS=-DMDBX_SAFE4QEMU -DMDBX_ENABLE_TESTS=ON \
-			-DMDBX_ENABLE_LONG_TESTS=ON || exit $$?; \
+			-DMDBX_ENABLE_LONG_TESTS=ON -DMDBX_ENABLE_SINGLEPROCESS_TESTS=ON || exit $$?; \
 		$(CMAKE) --build $$BD || exit $$?; \
 		ASAN_OPTIONS=$(ASAN_OPTIONS) UBSAN_OPTIONS=$(UBSAN_OPTIONS) $(CTEST) --test-dir $$BD \
 			--label-regex '^smoke-singleprocess$$|^stochastic-single$$' --output-on-failure || exit $$?; \

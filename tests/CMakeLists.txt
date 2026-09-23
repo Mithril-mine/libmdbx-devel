@@ -187,6 +187,30 @@ else()
     set(MDBX_TEST_ITER 7)
   endif()
 
+  # ------------------------------------------------------------------
+  # Tiered depth control (TASK-42).
+  #
+  # The GNUmakefile->CMake relocation merged make targets of different depth
+  # (smoke / smoke-fault / smoke-singleprocess / long stochastic) into ONE
+  # mandatory ctest corpus. Deep/special scenarios are now registered only
+  # when the corresponding profile is enabled:
+  #
+  #   MDBX_ENABLE_LONG_TESTS          -> T3/nightly: smoke_long*/dupsort_writemap*/
+  #                                     uniq_nested* + stochastic.sh scenarios.
+  #   MDBX_ENABLE_SINGLEPROCESS_TESTS -> cross-qemu single-process chain
+  #                                     smoke_sp_hill/copy/nested/chk (the fast
+  #                                     T1 twins smoke_t1_* stay in the default).
+  #
+  # Default corpus (plain `ctest`): ut.* + smoke_basic/writemap/chk + smoke_fault
+  # + smoke_t1_* — no duplicated runs at different depths.
+  option(MDBX_ENABLE_LONG_TESTS
+         "Register long-running test scenarios (T3/nightly: smoke-long, dupsort-writemap, uniq-nested, stochastic) as CTest entries"
+         OFF)
+  option(MDBX_ENABLE_SINGLEPROCESS_TESTS
+         "Register the single-process scenario chain (smoke_sp_hill/copy/nested/chk); needed for cross-qemu/cross-toolchain runs only"
+         OFF)
+
+  if(MDBX_ENABLE_LONG_TESTS)
   add_test(NAME smoke_long COMMAND $<TARGET_FILE:mdbx_test> --duration=5m --loglevel=notice --prng-seed=${test_seed}
                                    --progress --console=no --pathname=smoke-long.db --dont-cleanup-after basic)
   set_tests_properties(smoke_long PROPERTIES LABELS "smoke-long;smoke-t3" TIMEOUT 1800 RUN_SERIAL OFF)
@@ -274,6 +298,7 @@ else()
     set_tests_properties(smoke_long_copy_asis PROPERTIES RESOURCE_LOCK smoke-long.db)
     set_tests_properties(smoke_long_copy_compactify PROPERTIES RESOURCE_LOCK smoke-long.db)
   endif()
+  endif() # MDBX_ENABLE_LONG_TESTS
 
   # Quick smoke scenarios (a-la `make smoke`).
   set(MDBX_SMOKE_EXTRA "" CACHE STRING "Extra command-line arguments for the quick smoke scenarios")
@@ -337,17 +362,21 @@ else()
       REQUIRED_FILES fault.db)
   endif()
 
+  if(MDBX_ENABLE_SINGLEPROCESS_TESTS)
+  # Single-process scenario chain: only for cross-qemu/cross-toolchain runs
+  # (TASK-42); the fast deterministic twins smoke_t1_* cover this scenario in
+  # the default corpus.
   add_test(NAME smoke_sp_hill COMMAND $<TARGET_FILE:mdbx_test> --duration 100 --table=+data.integer --keygen.split=29
                                   --datalen.min=min --datalen.max=max --progress --console=no --repeat=42
                                   --pathname=singleprocess.db --dont-cleanup-after ${MDBX_SMOKE_EXTRA} --hill)
   set_tests_properties(smoke_sp_hill PROPERTIES
-    LABELS "smoke-singleprocess;smoke-t2"
+    LABELS "smoke-singleprocess"
     TIMEOUT 600
     RUN_SERIAL OFF)
   add_test(NAME smoke_sp_copy COMMAND $<TARGET_FILE:mdbx_test> --duration 100 --progress --console=no --repeat=2
                                  --pathname=singleprocess.db --dont-cleanup-before --dont-cleanup-after ${MDBX_SMOKE_EXTRA} --copy)
   set_tests_properties(smoke_sp_copy PROPERTIES
-    LABELS "smoke-singleprocess;smoke-t2"
+    LABELS "smoke-singleprocess"
     DEPENDS smoke_sp_hill
     TIMEOUT 600
     RUN_SERIAL OFF)
@@ -355,20 +384,20 @@ else()
                                    --progress --console=no --repeat=42 --pathname=singleprocess.db
                                    --dont-cleanup-after ${MDBX_SMOKE_EXTRA} --nested)
   set_tests_properties(smoke_sp_nested PROPERTIES
-    LABELS "smoke-singleprocess;smoke-t2"
+    LABELS "smoke-singleprocess"
     DEPENDS smoke_sp_copy
     TIMEOUT 600
     RUN_SERIAL OFF)
   if(MDBX_BUILD_TOOLS)
     add_test(NAME smoke_sp_chk COMMAND $<TARGET_FILE:mdbx_chk> -vvn singleprocess.db)
     set_tests_properties(smoke_sp_chk PROPERTIES
-      LABELS "smoke-singleprocess;smoke-t2"
+      LABELS "smoke-singleprocess"
       DEPENDS smoke_sp_nested
       TIMEOUT 60
       REQUIRED_FILES singleprocess.db)
     add_test(NAME smoke_sp_chk_copy COMMAND $<TARGET_FILE:mdbx_chk> -vvn singleprocess.db-copy)
     set_tests_properties(smoke_sp_chk_copy PROPERTIES
-      LABELS "smoke-singleprocess;smoke-t2"
+      LABELS "smoke-singleprocess"
       DEPENDS smoke_sp_nested
       TIMEOUT 60
       REQUIRED_FILES singleprocess.db-copy)
@@ -377,6 +406,7 @@ else()
   if(WIN32)
     set_tests_properties(smoke_sp_hill smoke_sp_copy smoke_sp_nested PROPERTIES RESOURCE_LOCK singleprocess.db)
   endif()
+  endif() # MDBX_ENABLE_SINGLEPROCESS_TESTS
 
   # ------------------------------------------------------------------
   # Tiered smoke profiles (TASK-22, BACKLOG B21-B33).
@@ -420,8 +450,6 @@ else()
                    --cleanup-before --dont-cleanup-after ${MDBX_SMOKE_EXTRA} --copy)
   set_tests_properties(smoke_t1_copy PROPERTIES LABELS "smoke;smoke-t1" TIMEOUT 60 RUN_SERIAL OFF)
 
-  option(MDBX_ENABLE_LONG_TESTS
-         "Register long-running test scenarios (stochastic, etc.) as CTest entries" OFF)
   if(UNIX AND MDBX_ENABLE_LONG_TESTS)
     add_test(NAME stochastic COMMAND ${CMAKE_CURRENT_SOURCE_DIR}/stochastic.sh --whole-duration 600 --probe-duration 60
                                     --dont-check-ram-size --loops 2 --db-upto-mb 256 --skip-make --taillog)
