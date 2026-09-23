@@ -1,7 +1,8 @@
 # Обзор структуры каталогов (аудит, фаза A, TASK-36)
 
-> Верифицировано на `devel@ed5fdd10` (ветка `feature/task36-structure-review`,
-> 2026-09-23). Документ — результат **фазы A** аудита: карта текущей структуры,
+> Верифицировано на `devel@ec87f4e8` (ветка `feature/task36-structure-review`,
+> rebase 2026-09-23 по вердикту REV:c; исходный аудит — `devel@ed5fdd10`).
+> Документ — результат **фазы A** аудита: карта текущей структуры,
 > находки (включая «дубли» `chk.c`/`defrag.c`), кандидаты улучшений с оценкой
 > риска/ценности и решение «трогаем / не трогаем». Фазы B (план переносов),
 > C (исполнение), D (верификация) выполняются отдельными батчами после
@@ -27,7 +28,7 @@
 
 | Путь | Что это | Принадлежность |
 | --- | --- | --- |
-| `mdbx.h`, `mdbx.h++`, `mdbx++/` (19 `h++`) | Публичный C/C++ API | upstream (канон) |
+| `mdbx.h`, `mdbx.h++`, `mdbx++/` (17 `h++`) | Публичный C/C++ API | upstream (канон) |
 | `src/` (119 файлов) | Ядро движка + инструменты + man | upstream (канон) |
 | `CMakeLists.txt`, `GNUmakefile`, `Makefile`, `conanfile.py`, `cmake/` | Сборка | upstream |
 | `ChangeLog.md`, `ChangeLog-0.09…0.14.md`, `ChangeLog-Old.md` (8 шт.) | Ченджлоги версий | upstream (канон, на `master`) |
@@ -36,9 +37,9 @@
 | `docs/` (13 файлов) | Doxygen: `Doxyfile.in`, `_*.md`, CSS/HTML, `ld+json`, `title`, `sitemap.add` | upstream (канон) |
 | `examples/` (5 + `pcrf/` 2) | Примеры + PCRF-симулятор | upstream |
 | `.github/workflows/` (7 yml), `.sourcecraft/ci.yaml` | CI | upstream |
-| `tests/` (110 файлов) | Тесты (framework/ut/issues/exploits/scripts/docs) | **наш слой** |
-| `skynet/` (61 файл) | Рой-доки и SKILLS | **наш слой** |
-| `.codeassistant/` (33 файла) + `.codeassistantmodes` | Конфиг/скиллы CodeAssist | **наш слой** |
+| `tests/` (112 файлов) | Тесты (framework/ut/issues/exploits/scripts/docs) | **наш слой** |
+| `skynet/` (67 файлов) | Рой-доки и SKILLS | **наш слой** |
+| `.codeassistant/` (44 файла) + `.codeassistantmodes` (итого 45) | Конфиг/скиллы CodeAssist | **наш слой** |
 
 Devel-only top-level (отличия от `master`): только `.codeassistant/`,
 `.codeassistantmodes`, `skynet/`. Всё остальное на верхнем уровне идентично
@@ -62,7 +63,7 @@ upstream `master`.
   `mdbx_*` (CMakeLists.txt:1355), в амальгаме — из корневых `mdbx_*.c`
   (генерируются `dist-extra-rule`).
 - **Man-страницы**: `src/man1/mdbx_{chk,copy,drop,dump,load,stat}.1`
-  (единственный источник; `MAN_SRCDIR := src/man1/`, GNUmakefile:562;
+  (единственный источник; `MAN_SRCDIR := src/man1/`, GNUmakefile:566;
   дистрибутивные `man1/` создаются в `dist`).
 - **Прочее**: `amalgam.in` (шапка амальгамы), `bits.md` (битовые маски,
   в т.ч. в IDE-target `non-code` CMakeLists.txt:1069), `config.h.in`,
@@ -72,11 +73,11 @@ upstream `master`.
 
 | Подкаталог / файл | Назначение |
 | --- | --- |
-| `tests/framework/` (30 ф.) | Каркас `mdbx_test` (base, config, keygen, log, chrono, fork, nested, copy, dead, hill, jitter, ttl, try, main, cases, append, test, osal-*, stub/) |
-| `tests/ut/api|cursor|cxx|dbi|env|gc|txn/` | Модульные тесты по областям (56 ф., GoogleTest) |
+| `tests/framework/` (32 ф.) | Каркас `mdbx_test` (base, config, keygen, log, chrono, fork, nested, copy, dead, hill, jitter, ttl, try, main, cases, append, test, osal-*, stub/) |
+| `tests/ut/api|cursor|cxx|dbi|env|gc|txn/` | Модульные тесты по областям (62 ф., GoogleTest) |
 | `tests/ut/issues/` | Регрессии по issues: `issue_gh0010…gh0033` (+ собственный `CMakeLists.txt`) |
 | `tests/exploits/` | PoC-и: `poc-node_ds-oob.c`, `pos-badgeo-oos.c` |
-| `tests/ci/ci.sh` | CI-вход (используется `.github/workflows/*.yml` и `.sourcecraft/ci.yaml` как `test*/ci/ci.sh`) |
+| `tests/ci/` | CI: `ci.sh` (вход; используется `.github/workflows/*.yml` и `.sourcecraft/ci.yaml` как `test*/ci/ci.sh`), `config.json` + `run-cell.sh` (TASK-28 testing-infra-v2) |
 | `tests/*.sh` (корень) | `stochastic.sh`, `select-tests.sh`, `battery-tmux.sh`, `probes-check.sh`, `dump-load.sh` |
 | `tests/*` (корень, прочее) | `probe-mdbx-multiple-iovlen.c`, `tmux.conf`, `.gdbinit`, `with.gdb`, `README.md`, `mdbx-test-options.md`, `LICENCE`, `CMakeLists.txt` |
 
@@ -144,15 +145,17 @@ TU в non-alloy-режиме и читаемую историю правок per
 `tests/scripts/`, остальное оставить.
 
 Точки ссылок (полный список для фазы B, проверен):
-- `GNUmakefile:619` `tests/select-tests.sh`; `GNUmakefile:636` build-stochastic
+- `GNUmakefile:623` `tests/select-tests.sh`; `GNUmakefile:636` build-stochastic
   (см. `ctest-scenario-run`, `@cmake-stochastic-build`);
-- `tests/CMakeLists.txt:416,425,435` `${CMAKE_CURRENT_SOURCE_DIR}/stochastic.sh`;
+- `tests/CMakeLists.txt:454,463,473` `${CMAKE_CURRENT_SOURCE_DIR}/stochastic.sh`;
 - `.sourcecraft/ci.yaml` — `test*/ci/ci.sh` (wildcard! перенос `tests/ci/`
   потребует правки yaml);
 - `.github/workflows/*.yml` (7 файлов) — `tests/ci/ci.sh`;
 - `skynet/*.md` + SKILLS — ~30 ссылок на `tests/stochastic.sh`,
   `tests/battery-tmux.sh`, `tests/select-tests.sh`, `tests/probes-check.sh`,
   `tests/ci/ci.sh`.
+- Номера строк в build-файлах дрейфуют — на момент фазы B выполнить
+  повторный `grep -rn` по свежим путям.
 
 **Решение: ТРОГАЕМ (фаза C, один батч)** — умеренная ценность (находимость,
 чистота корня тестов), средний риск из-за числа ссылок; все ссылки обновляются
@@ -162,15 +165,20 @@ TU в non-alloy-режиме и читаемую историю правок per
 ### F4. Документ-дрейф: в доках указан несуществующий путь `tests/issues/`
 
 Регрессии физически лежат в **`tests/ut/issues/`** (`add_subdirectory(ut/issues)`,
-tests/CMakeLists.txt:571; `tests/ut/issues/CMakeLists.txt`), но 8+ документов
-упоминают `tests/issues/`:
-`skynet/README.md:42`, `skynet/build.md:157,257`, `skynet/cxx-api.md:99,106`,
-`skynet/structure.md:200` (+ устаревший список `tests/ut` в :199),
-`skynet/test-coverage.md:15,50`, `skynet/skynet-protocol.md:331`,
-`skynet/build-deps-codex.md:70`.
+tests/CMakeLists.txt:609; `tests/ut/issues/CMakeLists.txt`), но **16 файлов**
+ссылаются на несуществующий `tests/issues/`:
 
-**Решение: ТРОГАЕМ (фаза C, тривиально)** — правим упоминания путей в доках;
-риск ~нулевой, ценность для онбординга средняя. Это не перенос кода.
+| Файл | Что |
+| --- | --- |
+| `skynet/README.md:42`, `skynet/build.md:157,257`, `skynet/cxx-api.md:99,106`, `skynet/structure.md:200` (+ устаревший список `tests/ut` в :199), `skynet/test-coverage.md:15,50`, `skynet/skynet-protocol.md:331`, `skynet/build-deps-codex.md:70`, `skynet/test-scenarios.md`, `skynet/workflows.md` | пути в доках |
+| `skynet/skills/superpowers/{README,brainstorming,requesting-code-review,systematic-debugging,test-driven-development,writing-plans}/SKILL.md` (6 ф.) | пути в SKILLS |
+| `tests/select-tests.sh:104` | **мёртвая ветка кода** `tests/issues/*) echo 'ut\.issues'` (физический каталог — `tests/ut/issues/`, строка 102 уже покрывает; ветка недостижима) |
+
+**Решение: ТРОГАЕМ (фаза C, батч C2)** — правим пути в 15 текстовых файлах
+и **удаляем мёртвую ветку** из `tests/select-tests.sh` в том же батче (иначе
+фаза-D проверка «grep старых путей = 0» не пройдёт). Риск ~нулевой
+(правки текстов + удаление недостижимой ветки), ценность для онбординга
+средняя.
 
 ### F5. ChangeLog-*.md в корне — upstream-конвенция
 
@@ -192,8 +200,9 @@ doxygen-target строит `docs/overall.md|intro.md|usage.md` через
 
 ### F7. `.codeassistant/` трекается вопреки `.gitignore`
 
-`.gitignore:77` игнорирует `.codeassistant*`, но 33 файла уже отслеживаются
-(добавлены ранее; tracked ≠ ignored). Каталог содержит MCP-конфиг, правила
+`.gitignore:77` игнорирует `.codeassistant*`, но 44 файла (`.codeassistant/`)
++ `.codeassistantmodes` уже отслеживаются (добавлены ранее; tracked ≠ ignored).
+Каталог содержит MCP-конфиг, правила
 `rules-skill-writer` и скиллы; на них ссылается `skynet/README.md §4` — рою
 как справочники нужны. Это противоречие (gitignore обещает, что каталога
 в репо нет, а он есть).
@@ -223,7 +232,7 @@ doxygen-target строит `docs/overall.md|intro.md|usage.md` через
 
 ### F10. Man-страницы — единственный источник в `src/man1/`
 
-`MAN_SRCDIR` переключается (GNUmakefile:474 amalgamated `man1/` vs :562
+`MAN_SRCDIR` переключается (GNUmakefile:478 amalgamated `man1/` vs :566
 non-amalgamated `src/man1/`); дистрибутивные `man1/` в `dist` генерируются
 `dist-extra-rule` (GNUmakefile:979). Дубликатов в dev-репо нет.
 
@@ -252,8 +261,8 @@ non-amalgamated `src/man1/`); дистрибутивные `man1/` в `dist` г�
 
 | № | Кандидат | Ценность (для разработки) | Риск (merge/amalgam/upstream) | Решение |
 | --- | --- | --- | --- | --- |
-| C1 | `tests/` → `tests/scripts/` + `tests/docs/` (группировка корня) | средняя (находимость, чистота) | средний (~35 ссылок: GNUmakefile, tests/CMakeLists.txt, .sourcecraft/ci.yaml, .github, skynet/*, SKILLS) | **Трогаем**, батч в фазе C; все ссылки в том же коммите |
-| C2 | Доки: `tests/issues/` → `tests/ut/issues/` (пути в 8+ файлах) | средняя (онбординг, снижение ложных поисков) | нулевой (только текст доков) | **Трогаем** (микро-батч) |
+| C1 | `tests/` → `tests/scripts/` + `tests/docs/` (группировка корня) | средняя (находимость, чистота) | средний (~46 несамоссылочных ссылок в 22 файлах: GNUmakefile, tests/CMakeLists.txt, .sourcecraft/ci.yaml, .github, skynet/*, SKILLS) | **Трогаем**, батч в фазе C; все ссылки в том же коммите |
+| C2 | Пути `tests/issues/` → `tests/ut/issues/` (16 файлов: 9 доков + 6 SKILLS + правка кода `tests/select-tests.sh:104`) | средняя (онбординг, снижение ложных поисков) | нулевой (тексты + удаление недостижимой ветки) | **Трогаем** (батч C2) |
 | C3 | `.gitignore` vs `.codeassistant/` (противоречие) | низкая (гигиена) | нулевой | **Трогаем** (микро-батч) |
 | C4 | Переименование тёзок `src/chk.c`/`src/defrag.c` | низкая (устранение путаницы) | высокая (upstream-паритет, constraint #2; правки 4+ build-файлов, история) | **НЕ трогаем**; опция — ADR владельцу |
 | C5 | `src/api-*.c` гранулярность | — | — | **НЕ трогаем** (канон) |
@@ -270,9 +279,12 @@ non-amalgamated `src/man1/`); дистрибутивные `man1/` в `dist` г�
    - C1: `git mv` скриптов в `tests/scripts/`, доков в `tests/docs/`; полный
      список ссылок см. §F3 (проверить дополнительно `grep -rn` по всему репо
      на момент исполнения).
-   - C2/C3: правки текстов доков и `.gitignore` — без `git mv`.
+   - C2: правки путей `tests/issues/`→`tests/ut/issues/` в 15 текстовых файлах
+     (9 доков + 6 SKILLS, перечень §F4) + удаление мёртвой ветки
+     `tests/issues/*) echo 'ut\.issues'` в `tests/select-tests.sh:104`.
+   - C3: правки `.gitignore` — без `git mv`.
 2. **Порядок батчей** (в окне без параллельных задач):
-   - B1 = C2+C3 (микро, независимы);
+   - B1 = C2+C3 (микро, независимы; C2 включает правку `tests/select-tests.sh`);
    - B2 = C1 (основной, требует согласования с ревьюверами REV:cmake — т.к.
      затрагивает `.sourcecraft/ci.yaml`, `.github/workflows/*.yml`,
      `tests/CMakeLists.txt`, `GNUmakefile`).
@@ -291,7 +303,11 @@ non-amalgamated `src/man1/`); дистрибутивные `man1/` в `dist` г�
   (сверка с upstream-каноном), сверена с `skynet/structure.md` (актуален
   по содержанию, есть дрейф путей `tests/issues/`).
 - Факты сборки подтверждены чтением `CMakeLists.txt` (строки 983, 993, 1069,
-  1333-1363, 185-193, 67-73) и `GNUmakefile` (462-479, 540-545, 559-562, 959,
+  1333-1363, 185-193, 67-73) и `GNUmakefile` (478, 566, 623, 540-545, 959,
   979); артефакты `cmake-build-t41-check` (mdbx.dir/src, mdbx_chk.dir/src/tools).
+- После REV:c (D.reviewer-c, needs-work minor) исправлены: счётчики файлов
+  (`.codeassistant*` = 45, `mdbx++/` = 17), инвентарь C2 расширен до 16 файлов
+  (+ мёртвая ветка в `tests/select-tests.sh:104`), ветка rebase на актуальный
+  `devel@ec87f4e8`, факты перепроверены на новой базе.
 - Итог: **дубликатов-кандидатов на удаление не найдено**; реальных кандидатов
   на перенос — 3 (C1–C3), все в нашем слое, upstream-набор не затрагивается.
