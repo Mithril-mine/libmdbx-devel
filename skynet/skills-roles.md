@@ -1,44 +1,23 @@
-# SKILLS и роли коллективной работы над libmdbx (канон)
+# SKILLS и роли коллективной работы над libmdbx (адаптация)
 
-> Реестр ролей: **`X.роль`**, где `X` — стабильный уникальный код (0–9, A–Z),
-> не меняется при смене роли; `X` используется в почте/inbox, сессиях, задачах.
-> Канон согласован с владельцем 2026-09-22 (после чистки неверной картины
-> «Desktop/Mobile / Windows/macOS как разные роли»).
-> Источники: `nook-owner-dont-touch/libmdbx_skills_roles.md` (краткий канон),
-> L3 role-SKILL-файлы (расширенное описание). `agent_roles_skill.md` —
-> УСТАРЕВШИЙ (заражён платформенными специализациями).
-> Миссия союза «Concordia Intellectuum»: `skynet/MISSION.md`.
+> Адаптация владельческого набора `/sourcecraft/workspace/nook-owner-dont-touch/libmdbx_skills_roles.md`
+> под текущий строй (протокол v2.13, §1–§30). Это рабочий реестр: роль → зона
+> ответственности → SKILL (L3) → агенты-исполнители.
+> Иерархия навыков: `skynet/skills/README.md` (L0–L4).
+> Изменения — через координатора (владелец вне рутины).
+> **Миссия союза «Concordia Intellectuum»**: `skynet/MISSION.md` (зеркало `.skynet/MISSION.md`);
+> libmdbx — пилотный проект для skynet; рой действует в рамках Миссии.
 
 ## Роли и исполнители
 
-| X | Роль | Зона ответственности | SKILL (L3) | Статус |
-|---|---|---|---|---|
-| `0` | Оркестратор / Координатор | целостность архитектуры, синхронизация, приоритизация, зависимости, CI/CD, метрики | L4 `skills/orchestrator/*` | активен (бывш. main_architect) |
-| `A` | testcase-guru | пишет тестовые сценарии, декомпозиция монолитов, characterisation-тесты | `test-engineer/SKILL.md` | активен (бывш. tests_worker) |
-| `B` | tester | пишет и выполняет тесты, edge-case, stress/fuzz, восстановление после сбоев | `test-engineer/SKILL.md` | активен (бывш. tests_writer) |
-| `G` | tester | пишет и выполняет тесты (вторая инстанция роли, разгрузка пула) | `test-engineer/SKILL.md` | новая (2026-09-23) |
-| `C` | ci-guru | сборка, CI/CD конвейеры, amalgamation, решение проблем CI на всех платформах | `platform-build-engineer/SKILL.md` | активен (бывш. sysprobe) |
-| `D` | reviewer-c | код-ревью C-ядра: CoW, B+tree, GC, meta, курсоры, mmap | `code-reviewer/SKILL.md` | активен (бывш. review_cmake) |
-| `E` | reviewer-cxx | код-ревью C++ API: RAII, исключения, типобезопасность | `code-reviewer/SKILL.md` | активен (бывш. review_cpp) |
-| `F` | reviewer-cmake | код-ревью CMake/сборки/воркфлоу CI | `code-reviewer/SKILL.md` + `platform-build-engineer/SKILL.md` | активен (бывш. review_win) |
-| `S` | scribe | документация, doxygen, ADR, версионирование, API-референс | `documentation-scribe/SKILL.md` | активен (бывш. docs) |
-| `I` | developer-cxx | расширение C++ API, RAII-обёртки, интеграция с C API | (использует `code-reviewer` базово; роль из `libmdbx_skills_roles.md`) | свободна |
-| `J` | refactoring-cxx | глубокий рефакторинг C++-слоя под защитой characterisation-тестов | `refactoring-engineer/SKILL.md` | свободна |
-| `L` | refactoring-core | рефакторинг B+tree/CoW/курсоров (S2/S3/S11) | `refactoring-engineer/SKILL.md` | свободна |
-| `M` | refactoring-gc | рефакторинг GC/детент/bigfoot (S4) | `refactoring-engineer/SKILL.md` | свободна |
-| `N` | refactoring-api | C→C++ migration, ABI (S1) | `refactoring-engineer/SKILL.md` | свободна |
-| `O` | feature-api | новые функции API, get-cached | `feature-developer/SKILL.md` | свободна |
-| `P` | feature-engine | WAF-оптимизации, GC-тюнинг | `feature-developer/SKILL.md` | свободна |
-| `R` | researcher | поиск информации, исследование архитектуры/поведения, проверенные выводы | (базовый) | свободна |
-| `T` | tooling | разработка инструментов (telegram-мост, вспомогательный инструментарий) | (базовый) | свободна |
-| `V` | vision | генерация идей, дивергенция; вызывается по запросу | `skills/roles/vision/SKILL.md` (TASK-34) | эпизодическая |
-| `_` | mailman | доставка писем waitmail/fifo/MCP; НЕ агент, компонент оркестратора | — | служебный |
-
-### Схлопнутые id (не переиспользуются)
-
-- `K` — была CI-специалист (слита в `C.ci-guru`).
-- `Q` — был toolsmith (переименован в `T.tooling`).
-- `H` — был ci-guru (переехал на `C`).
+| Роль (владельческий набор) | Зона ответственности | SKILL (L3) | Агенты |
+|---|---|---|---|
+| Координатор / лид проекта | целостность архитектуры, синхронизация потоков работ, приоритизация, зависимости, CI/CD, метрики | L4 `skills/orchestrator/*` (указатель `orchestrator-kaizen.md`; event-driven loop — `skills/orchestrator/meditation/SKILL.md`) | main_architect |
+| Разработчик C++ API / обёрток | расширение C++ API, RAII-обёртки, интеграция с C API, обработка ошибок | (gap — закрывают tests_writer/tests_worker + review-cpp) | — |
+| Инженер тестов и стабильности | покрытие тестами, edge-case, stress/fuzz, восстановление после сбоев | `skills/roles/test-engineer/SKILL.md` | tests_worker, tests_writer |
+| Технический писатель / документатор | документация, примеры, диаграммы, версионирование, API-референс, doxygen | `skills/roles/documentation-scribe/SKILL.md` | docs |
+| Ревьюер кода (доменные) | код-ревью по областям: стиль/безопасность/производительность/архитектура | `skills/roles/code-reviewer/SKILL.md` (+`platform-build-engineer/SKILL.md` для cmake) | review-cmake, review-cpp, review-win, review-macos |
+| Пробщик/инструментарий (специфика роя) | USDT/SystemTap-пробники, перф-инструменты, каталог probes.md | `skills/roles/platform-build-engineer/SKILL.md` (base) | sysprobe |
 
 ## Коллективные SKILLS (для всей команды)
 
@@ -67,9 +46,7 @@
 
 - **Рефакторинг**: декомпозиция по модулям (txn/GC/B-tree/multivalues/cursor/env),
   ответственный за модуль, координатор следит за инвариантами и совместимостью.
-- **Тесты**: testcase-guru (A) пишет сценарии, tester (B) пишет и выполняет;
-  адресное покрытие белых пятен (B17), stress/fuzz.
-- **Документация**: scribe (S), разделы по модулям, синхронизация с кодом, ADR.
-- **C++ API**: developer-cxx (I), RAII-обёртки + тесты, согласование с координатором.
-- **Ревью**: маршрутизация веток по доменам (`REV:<domain>`, §28):
-  `REV:c` → D.reviewer-c, `REV:cxx` → E.reviewer-cxx, `REV:cmake` → F.reviewer-cmake.
+- **Тесты**: адресное покрытие белых пятен (B17), stress/fuzz, инструменты диагностики.
+- **Документация**: разделы по модулям, синхронизация с кодом, диаграммы + API-референс.
+- **C++ API**: RAII-обёртки + тесты, согласование с координатором, идиоматичность.
+- **Ревью**: маршрутизация веток по доменам (`REV:<domain>`, §28), чек-лист выше.
