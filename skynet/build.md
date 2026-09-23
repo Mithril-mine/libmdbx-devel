@@ -289,6 +289,14 @@ fast and as targeted as possible.
   Configure test build dirs with `-DINTERPROCEDURAL_OPTIMIZATION=OFF`
   (the option defaults ON for non-Debug builds); keep LTO ON only for
   release/library/tools builds that explicitly require it.
+- **ccache is mandatory for test/re-iterative builds** (owner policy + TASK-23
+  research, 2026-09-23): `mdbx.c` is one giant TU, so every fresh build-dir or
+  worktree rebuild pays minutes of compilation per config. Wire the compiler
+  launcher into every test-build configure step:
+  `-DCMAKE_C_COMPILER_LAUNCHER=ccache -DCMAKE_CXX_COMPILER_LAUNCHER=ccache`,
+  with a SHARED cache: `export CCACHE_DIR=${SKYNET_ROOT}/.skynet/ccache`
+  (all pool nooks share one cache; host: `apt-get install -y ccache`).
+  CI runners: install ccache + `actions/cache` keyed on compiler+flags+config.
 - **Adding a unit test does not justify running long stochastic `mdbx_test`
   iterations** — only build + launch sanity of `mdbx_test` (it is stochastic,
   seeded from `date+%s+RANDOM`; a fixed `--prng-seed` gives a reproducible

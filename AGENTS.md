@@ -10,6 +10,11 @@
    target (~50x slower; we test the code, not the compiler). LTO stays ON only
    for release/library/tools builds that explicitly require it.
    See `skynet/build.md` §6.7.
+ - **enable ccache in test builds** (TASK-23 policy, 2026-09-23): pass
+   `-DCMAKE_C_COMPILER_LAUNCHER=ccache -DCMAKE_CXX_COMPILER_LAUNCHER=ccache`
+   on every test-build configure, with shared
+   `CCACHE_DIR=${SKYNET_ROOT}/.skynet/ccache` so all nooks share one cache.
+   See `skynet/build.md` §6.7.
 
 ## Code style
  - use LLVM codestyle
