@@ -156,6 +156,10 @@ Actor-specific options: `--batch.read=N`, `--batch.write=N`, `--delay=N`,
 
 Per the test-performance principles (BACKLOG B27), pick the sync mode per
 scenario: `+nosync-safe` (or `nosync-utterly`) when durability is not the point.
+The default-corpus quick-smoke family follows this: `smoke_basic` and the T1
+twins run with `+nosync-safe`, while the durability-relevant variants
+(`smoke_writemap`, `smoke_fault`, `smoke_t1_nested`, and the T3/long family)
+keep the real sync mode.
 
 ## Table options (`--table={[+-]FLAG},...`)
 

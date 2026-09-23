@@ -217,7 +217,7 @@ else()
   if(MDBX_BUILD_TOOLS)
     add_test(NAME smoke_long_chk COMMAND $<TARGET_FILE:mdbx_chk> -nvv smoke-long.db)
     set_tests_properties(smoke_long_chk PROPERTIES
-      LABELS "smoke-long;smoke-t3"
+      LABELS "smoke-long;smoke-t3;chk"
       DEPENDS smoke_long
       TIMEOUT 60
       FAIL_REGULAR_EXPRESSION "cooperative mode"
@@ -225,7 +225,7 @@ else()
 
     add_test(NAME smoke_long_chk_copy COMMAND $<TARGET_FILE:mdbx_chk> -nvv smoke-long.db-copy)
     set_tests_properties(smoke_long_chk_copy PROPERTIES
-      LABELS "smoke-long;smoke-t3"
+      LABELS "smoke-long;smoke-t3;chk"
       DEPENDS smoke_long
       TIMEOUT 60
       FAIL_REGULAR_EXPRESSION "cooperative mode"
@@ -257,14 +257,14 @@ else()
   if(MDBX_BUILD_TOOLS)
     add_test(NAME dupsort_writemap_chk COMMAND $<TARGET_FILE:mdbx_chk> -nvvwc dupsort_writemap.db)
     set_tests_properties(dupsort_writemap_chk PROPERTIES
-      LABELS "smoke-long;smoke-t3"
+      LABELS "smoke-long;smoke-t3;chk"
       DEPENDS dupsort_writemap
       TIMEOUT 60
       REQUIRED_FILES dupsort_writemap.db)
 
     add_test(NAME dupsort_writemap_chk_copy COMMAND $<TARGET_FILE:mdbx_chk> -nvvc dupsort_writemap.db-copy)
     set_tests_properties(dupsort_writemap_chk_copy PROPERTIES
-      LABELS "smoke-long;smoke-t3"
+      LABELS "smoke-long;smoke-t3;chk"
       DEPENDS dupsort_writemap
       TIMEOUT 60
       FAIL_REGULAR_EXPRESSION "monopolistic mode"
@@ -278,7 +278,7 @@ else()
   if(MDBX_BUILD_TOOLS)
     add_test(NAME uniq_nested_chk COMMAND $<TARGET_FILE:mdbx_chk> -nvvw uniq_nested.db)
     set_tests_properties(uniq_nested_chk PROPERTIES
-      LABELS "smoke-long;smoke-t3"
+      LABELS "smoke-long;smoke-t3;chk"
       DEPENDS uniq_nested
       TIMEOUT 60
       FAIL_REGULAR_EXPRESSION "cooperative mode"
@@ -286,7 +286,7 @@ else()
 
     add_test(NAME uniq_nested_chk_copy COMMAND $<TARGET_FILE:mdbx_chk> -nvv uniq_nested.db-copy)
     set_tests_properties(uniq_nested_chk_copy PROPERTIES
-      LABELS "smoke-long;smoke-t3"
+      LABELS "smoke-long;smoke-t3;chk"
       DEPENDS uniq_nested
       TIMEOUT 60
       FAIL_REGULAR_EXPRESSION "cooperative mode"
@@ -305,8 +305,8 @@ else()
 
   add_test(NAME smoke_basic COMMAND $<TARGET_FILE:mdbx_test> --duration 100 --table=+data.integer
                                    --keygen.split=29 --datalen.min=min --datalen.max=max --progress --console=no
-                                   --repeat=${MDBX_TEST_ITER} --pathname=smoke.db --dont-cleanup-after
-                                   ${MDBX_SMOKE_EXTRA} basic)
+                                   --mode=+nosync-safe --repeat=${MDBX_TEST_ITER} --pathname=smoke.db
+                                   --dont-cleanup-after ${MDBX_SMOKE_EXTRA} basic)
   set_tests_properties(smoke_basic PROPERTIES LABELS "smoke;smoke-t2" TIMEOUT 600 RUN_SERIAL OFF)
 
   add_test(NAME smoke_writemap COMMAND $<TARGET_FILE:mdbx_test> --duration 100 --mode=-writemap,-nosync-safe,-lifo
@@ -317,14 +317,14 @@ else()
   if(MDBX_BUILD_TOOLS)
     add_test(NAME smoke_chk COMMAND $<TARGET_FILE:mdbx_chk> -vvn smoke.db)
     set_tests_properties(smoke_chk PROPERTIES
-      LABELS "smoke;smoke-t2"
+      LABELS "smoke;smoke-t2;chk"
       DEPENDS smoke_writemap
       TIMEOUT 60
       FAIL_REGULAR_EXPRESSION "cooperative mode"
       REQUIRED_FILES smoke.db)
     add_test(NAME smoke_chk_copy COMMAND $<TARGET_FILE:mdbx_chk> -vvn smoke.db-copy)
     set_tests_properties(smoke_chk_copy PROPERTIES
-      LABELS "smoke;smoke-t2"
+      LABELS "smoke;smoke-t2;chk"
       DEPENDS smoke_writemap
       TIMEOUT 60
       FAIL_REGULAR_EXPRESSION "cooperative mode"
@@ -356,7 +356,7 @@ else()
   if(MDBX_BUILD_TOOLS)
     add_test(NAME smoke_fault_chk COMMAND $<TARGET_FILE:mdbx_chk> -vvnw fault.db)
     set_tests_properties(smoke_fault_chk PROPERTIES
-      LABELS "smoke-fault;smoke-t2"
+      LABELS "smoke-fault;smoke-t2;chk"
       DEPENDS smoke_fault
       TIMEOUT 60
       REQUIRED_FILES fault.db)
@@ -391,13 +391,13 @@ else()
   if(MDBX_BUILD_TOOLS)
     add_test(NAME smoke_sp_chk COMMAND $<TARGET_FILE:mdbx_chk> -vvn singleprocess.db)
     set_tests_properties(smoke_sp_chk PROPERTIES
-      LABELS "smoke-singleprocess"
+      LABELS "smoke-singleprocess;chk"
       DEPENDS smoke_sp_nested
       TIMEOUT 60
       REQUIRED_FILES singleprocess.db)
     add_test(NAME smoke_sp_chk_copy COMMAND $<TARGET_FILE:mdbx_chk> -vvn singleprocess.db-copy)
     set_tests_properties(smoke_sp_chk_copy PROPERTIES
-      LABELS "smoke-singleprocess"
+      LABELS "smoke-singleprocess;chk"
       DEPENDS smoke_sp_nested
       TIMEOUT 60
       REQUIRED_FILES singleprocess.db-copy)
