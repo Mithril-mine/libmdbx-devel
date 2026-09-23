@@ -582,10 +582,11 @@ Backend чтения (v2.15, 2026-09-23):
   rc==1 → сразу «в начало». Владелец вызывает координатора в любой момент:
   `kill -INT $(cat .skynet/pipe/0.coordinator.pid)` → rc=130.
 - **Живой Kanban-дашборд**: пока waitmail ждёт, каждые `COORDINATOR_BOARD_INTERVAL`
-  (default 60с) доска задач перерисовывается in-place (ANSI clear-screen +
-  `tools/tasks.py`, компактный вид с колонками/WIP). Рендер только если stdout
-  — TTY (интерактивная консоль) или `BOARD_TTY=1`; в headless/logged прогонах
-  ожидание остаётся тихим.
+  (default 60с) доска задач перерисовывается (`tools/tasks.py`, колонки/WIP +
+  кто чем занят). Рендер ВКЛЮЧЁН по умолчанию (живая консоль); выключить —
+  `BOARD_SILENT=1` (headless/logged). При TTY — in-place (ANSI), иначе — с
+  разделителями. `coordinator-step.sh` циклит: рендер → waitmail(интервал) →
+  ... до MAIL/OWNER-CALL/бюджета.
 - **Команды владельца «медитируй» / «помедитируй»** = переход в этот режим
   (event-driven loop). Координатор НЕ «ждёт промпт» — он вызывает
   `coordinator-step.sh` и блокирует в waitmail. Подробный навык:
