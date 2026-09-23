@@ -104,6 +104,9 @@ def load_drafts(draft_filter=None):
             continue  # не драфт (README и т.п.)
         if draft_filter and meta.get("id") != draft_filter:
             continue
+        if not draft_filter and meta.get("status") != "ready":
+            print("[%s] skip: status=%r (публикуются только ready)" % (meta["id"], meta.get("status")))
+            continue
         out.append({"path": path, "name": name, "meta": meta, "body": body})
     return out
 
