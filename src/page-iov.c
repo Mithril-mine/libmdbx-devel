@@ -164,12 +164,17 @@ int iov_page(MDBX_txn *txn, iov_ctx_t *ctx, page_t *dp, size_t npages) {
       }
       err = iov_write(ctx);
       tASSERT(txn, iov_empty(ctx));
-      if (likely(err == MDBX_SUCCESS)) {
-        err = osal_ioring_add(ctx->ior, pgno2bytes(env, dp->pgno), dp, pgno2bytes(env, npages));
-        if (unlikely(err != MDBX_SUCCESS)) {
-          iov_complete(ctx);
-          return ctx->err = err;
-        }
+      if (unlikely(err != MDBX_SUCCESS)) {
+        /* Propagate the mid-commit flush failure: previously dropped here,
+         * so the commit reported MDBX_SUCCESS while the dirty page was never
+         * queued for writing (issue #47 defect 3, all platforms). */
+        iov_complete(ctx);
+        return ctx->err = err;
+      }
+      err = osal_ioring_add(ctx->ior, pgno2bytes(env, dp->pgno), dp, pgno2bytes(env, npages));
+      if (unlikely(err != MDBX_SUCCESS)) {
+        iov_complete(ctx);
+        return ctx->err = err;
       }
       tASSERT(txn, ctx->err == MDBX_SUCCESS);
     }
