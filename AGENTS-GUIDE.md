@@ -79,6 +79,16 @@ Consequently, application code that deals with potentially long records must:
 3. Never mix chunked and plain records under one key unless you tag the format
    (e.g. first byte) — scanning key order is only safe when chunk suffixes are
    the sole distinguisher.
+4. **Never chunk inside a dupsort table.** In a `MDBX_DUPSORT` table a key maps
+   to a *sorted set of values*; chunking such a table as `key\0chunkN` mixes
+   the fragments of the several long values of one key into a single multi-value
+   set, so reading back reassembles a jumbled "salad". Chunking requires a
+   **non-dupsort** table, where each key holds exactly one value.
+5. **Optimal chunk size = one page** for a non-dupsort table. Query it via
+   `mdbx_env_get_valsize4page_max(env, flags)` — the largest value that fits a
+   leaf/overflow page (page_size − headers); e.g. 4076 B @4K non-dupsort vs
+   ~2022 B for a dupsort value. Using the full page bound minimizes the number
+   of keys/overhead per long value and avoids needless fragmentation.
 
 > **Note:** automatic chunking inside libmdbx is planned for a future release;
 > until then, this is the application's responsibility (see TODO.md).
