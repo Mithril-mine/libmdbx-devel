@@ -59,8 +59,18 @@ function provide_toolchain {
 }
 
 function default_cmake_test {
-	GTEST_SHUFFLE=1 GTEST_RUNTIME_LIMIT=99 MALLOC_CHECK_=7 MALLOC_PERTURB_=42 \
+	# Bound every test without an explicit per-test TIMEOUT property to a sane
+	# wall-clock limit. Evidence (B56, 2026-09-24): P1 full ut wall ~3.5 min
+	# (--parallel 3), worst single test get_cached 136s (16s after task56), txn
+	# 4.6s, gh0011 7.5s; 600s is ~4.4x the worst measured single-test time and
+	# turns hangs into failures instead of unbounded runs. Explicit per-test
+	# TIMEOUT properties still win (smoke_* 600, smoke_fault 1800/3600,
+	# ut.heavy 10800, ut_tools 300), so deliberate scenario limits are kept.
+	# GTEST_RUNTIME_LIMIT=99 was dropped: it had no consumer in this repo.
+	# Override for slow machines: CI_CTEST_TIMEOUT=<seconds>.
+	GTEST_SHUFFLE=1 MALLOC_CHECK_=7 MALLOC_PERTURB_=42 \
 	ctest --output-on-failure --parallel 3 --schedule-random --no-tests=error \
+	--timeout "${CI_CTEST_TIMEOUT:-600}" \
 	${CI_CTEST_REGEX:+-R "$CI_CTEST_REGEX"} \
 	"${test_args[@]+"${test_args[@]}"}"
 }

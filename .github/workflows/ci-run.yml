@@ -164,13 +164,17 @@ jobs:
         shell: bash
         env:
           GTEST_SHUFFLE: "1"
-          GTEST_RUNTIME_LIMIT: "99"
           MALLOC_CHECK_: "7"
           MALLOC_PERTURB_: "42"
         run: |
           set -euxo pipefail
+          # Global ctest bound for tests without an explicit TIMEOUT property
+          # (evidence B56 2026-09-24: P1 full ut ~3.5 min, worst single test
+          # get_cached 136s->16s; per-test TIMEOUT properties still win).
+          # Override for slow machines: CI_CTEST_TIMEOUT=<seconds>.
           CTEST_CMD=(ctest --test-dir "$GITHUB_WORKSPACE/@ci-cmake-build" \
-            --output-on-failure --parallel 3 --schedule-random --no-tests=error)
+            --output-on-failure --parallel 3 --schedule-random --no-tests=error \
+            --timeout "${CI_CTEST_TIMEOUT:-600}")
           if [ -n "${{ inputs.cell-build-config }}" ]; then
             CTEST_CMD+=(-C '${{ inputs.cell-build-config }}')
           fi
