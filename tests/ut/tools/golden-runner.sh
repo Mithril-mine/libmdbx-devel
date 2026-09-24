@@ -176,8 +176,10 @@ case_chk_usage() {
 case_chk_version() {
   run_case version 0 -- "$BIN" -V
 }
-# case_chk_ignore_order SKIPPED: mdbx_chk -i segfaults on any DB containing named
-# tables (assert 'tbl->cookie', chk_handle_kv():970) — see known-defects.md D1.
+case_chk_ignore_order() {
+  local d="$WORK/chk_i"; named_base "$d"
+  run_case ignore_order 0 -- "$BIN" -i "$d/named.db"
+}
 
 ############################################# mdbx_copy
 case_copy_basic() {
@@ -355,6 +357,7 @@ for f in $tool_funcs; do
     case_chk_quiet_corrupt) case_chk_quiet_corrupt;;
     case_chk_usage) case_chk_usage;;
     case_chk_version) case_chk_version;;
+    case_chk_ignore_order) case_chk_ignore_order;;
     case_copy_basic) case_copy_basic;;
     case_copy_compact) case_copy_compact;;
     case_copy_force) case_copy_force;;

@@ -11,16 +11,24 @@ the rewrite (Phase D) and the owner.
   `src/tools/chk.c:970`.
 - Scope: reproduces on both mdbx_load-created and mdbx_test-created DBs; `chk`
   without `-i` passes the same DBs.
-- The `chk/ignore_order` golden case is SKIPPED (documented in
-  `golden-runner.sh`).
+- FIXED (issue #49, C.ci-guru, devel): (a) `chk_db()` no longer passes custom
+  comparators to `dbi_open()` under `MDBX_CHK_IGNORE_ORDER` — the engine cannot
+  bind different comparators to an already-bound table via `MDBX_DB_ACCEDE`
+  (`MDBX_INCOMPATIBLE`); order-tolerance is provided by the `z_ignord` cursor
+  flag and the IGNORE_ORDER report guards. (b) `chk_handle_kv()` now skips
+  per-record user processing for tables filtered out by `table_filter()`
+  (NULL cookie) instead of asserting; this also fixed the `-s` crash (D2).
+- The `chk/ignore_order` golden case is re-enabled.
 
 ## D2 — mdbx_chk -s <table> crashes on tables created via mdbx_load
 - Repro: `mdbx_chk -s meta <db>` where `meta` was loaded with mdbx_load.
 - Observed: SIGSEGV (same `tbl->cookie` assert family).
 - On a table created by `mdbx_test --table=+data.fixed` the same command works
   (rc=0) — so the crash is specific to load-created table descriptors.
-- Worked around in the suite: the `chk/specific_table` case uses the
-  mdbx_test-created `named.db` fixture.
+- FIXED together with D1 (issue #49): `chk_handle_kv()` tolerates filtered-out
+  tables (NULL cookie); the `chk/specific_table` golden case still covers the
+  mdbx_test-created `named.db` fixture and `-s meta` on `base.dump` is verified
+  green in the fix validation matrix.
 
 ## D3 — mdbx_load fails to load from stdin
 - Repro: `mdbx_load -nf <new-or-existing-db> < fixtures/base.dump`
@@ -42,16 +50,17 @@ the rewrite (Phase D) and the owner.
   as the dbpath and stdin is used, per the documented default.
 
 ## Notes
-- Severity: D1/D2 are crashers (would benefit from an assert-guard / NULL check
-  in the rewrite); D3 breaks the documented stdin mode (man page advertises
-  `-f file` default = stdin).
-- Suggested owner escalation: fix D3 in Phase D; for D1/D2 decide between fixing
-  `chk` cookie handling vs documenting `-i`/`-s` limits.
+- Severity: D1/D2 were crashers, both FIXED (issue #49) on devel with backports
+  to master/stable/lts pending; D3 was a spec deviation (stdin-by-default) and
+  is FIXED by issue #50 (devel@a14a8816).
+- Suggested owner escalation: all three golden-suite defects are now resolved;
+  no remaining Phase D escalation.
 
 ## Status tracking (2026-09-24)
 - **D3 → FIXED** (issue #50, fix/issue50-load-stdin@6d3092cb merged devel@a14a8816;
   golden `case_load_stdin` rc 1→0; G.tester VALIDATED).
 - **D2 → FIXED-by-#49** (issue #51 closed as duplicate of #49 by owner review;
   same `tbl->cookie` assert family; `specific_table` workaround remains).
-- **D1 → IN-PROGRESS** (issue #49, BLOCKER per owner; C.ci-guru fixing in
-  fix/issue49-chk-cookie; golden `case_chk_ignore_order` to be unskipped after fix).
+- **D1 → FIXED** (issue #49, fix/issue49-chk-cookie; C.ci-guru: golden
+  `case_chk_ignore_order` re-enabled and green, `case_chk_specific_table` green,
+  bug confirmed present in stable/master/lts for backport).
