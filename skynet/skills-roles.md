@@ -12,7 +12,7 @@
 
 | Роль (владельческий набор) | Зона ответственности | SKILL (L3) | Агенты |
 |---|---|---|---|
-| Координатор / лид проекта | целостность архитектуры, синхронизация потоков работ, приоритизация, зависимости, CI/CD, метрики | L4 `skills/orchestrator/*` (указатель `orchestrator-kaizen.md`; event-driven loop — `skills/orchestrator/meditation/SKILL.md`) | main_architect |
+| Координатор / лид проекта | целостность архитектуры, синхронизация потоков работ, приоритизация, зависимости, CI/CD, метрики | L4 `skills/orchestrator/*` (указатель `orchestrator-kaizen.md`; event-driven loop — `skills/orchestrator/meditation/SKILL.md`; проактивный циклический режим — `skills/orchestrator/mantra/SKILL.md`) | main_architect |
 | Разработчик C++ API / обёрток | расширение C++ API, RAII-обёртки, интеграция с C API, обработка ошибок | (gap — частично закрывают A.testcase-guru/B.tester + E.reviewer-cxx) | — |
 | Инженер тестов и стабильности | покрытие тестами, edge-case, stress/fuzz, восстановление после сбоев | `skills/roles/test-engineer/SKILL.md` | A.testcase-guru, B.tester |
 | Технический писатель / документатор | документация, примеры, диаграммы, версионирование, API-референс, doxygen | `skills/roles/documentation-scribe/SKILL.md` | S.scribe |
