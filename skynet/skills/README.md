@@ -79,10 +79,11 @@ Vision (TASK-34): дивергентный генератор идей, комп
 без `temperature` — протокол из 3 шагов вместо параметра модели
 (см. `.skynet/tools/MODELS.md`).
 
-## L4 Orchestrator (5 SKILL)
+## L4 Orchestrator (7 SKILL)
 
 `scrum-ceremonies`, `swarm-management`, `kaizen-engine`, `phase-management`,
-`self-monitoring` — по одному каталогу `<name>/SKILL.md`. Указатель —
+`self-monitoring`, `meditation` (event-driven loop), `mantra` (проактивный
+циклический loop) — по одному каталогу `<name>/SKILL.md`. Указатель —
 `orchestrator-kaizen.md`.
 
 ## Правила активации
