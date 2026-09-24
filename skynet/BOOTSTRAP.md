@@ -21,7 +21,9 @@ memory-mapped, no WAL / без crash-recovery), потомок LMDB, Apache-2.0,
 C11 (движок) + опциональный C++ API (`mdbx.h++`). Автор — Леонид Юрьев.
 
 - Канонический origin: **SourceCraft** `dqdkfa/libmdbx-devel`;
-  GitHub (`Mithril-mine/libmdbx`) — только зеркало.
+  GitHub — зеркало полной (devel) версии: `Mithril-mine/libmdbx-devel`.
+  Отдельно есть `Mithril-mine/libmdbx` — amalgamated-версия для пользователей
+  (НЕ путать; issues/PR ведём в `libmdbx-devel`).
 - Модель веток: `working → devel → master → stable → lts`.
 - Ключевые пути: `src/` (ядро ~60 модулей), `mdbx.h`/`mdbx.h++` (публичный API),
   `tests/` (framework/ut/issues), `skynet/` (доки/SKILLs), `cmake/`, `GNUmakefile`.
@@ -29,6 +31,22 @@ C11 (движок) + опциональный C++ API (`mdbx.h++`). Автор �
   macOS/ARM — по необходимости.
 - Планируется глубокий рефакторинг C→C++ (фаза 1 — внутренности при стабильном
   C-API; фаза 2 — расширение API). Пилот — утилиты (B46).
+
+## 1a. Внешние коммуникации и бэкпорты (факты, не требующие повторных объяснений)
+
+- **Issues живут на GitHub devel-mirror** `Mithril-mine/libmdbx-devel`; наши
+  внутренние номера (в BACKLOG/отчётах) = GitHub-номера. На SourceCraft issues нет;
+  `Mithril-mine/libmdbx` (amalgamated) — пользовательский репозиторий.
+- **Как комментировать issues** (issues-pr-codex §2): от имени skynet/Concordia
+  Intellectuum, на языке пользователя; реакции 👀→🚀; финальный отчёт в треде с
+  commit/backport-ссылками; закрытие issue после merge. В bug-репортах указывать
+  файлы/номера строк (Kaizen владельца).
+- **Бэкпорт**: только в **stable** и **lts/0.13** (master — фаза разработки v0.15.0,
+  НЕ бэкпортим). Порядок: сначала полностью одна ветка → push → CI идёт, пока
+  доделываешь вторую.
+- **devel-merge НЕ пушим без команды владельца** (не занимать CI); пуш наружу —
+  только после локальных проверок и решения владельца.
+- Методика саморевью при единственном исполнителе: `.skynet/REANIMATION-PLAN.md` §2.
 
 ## 2. Хранилища знаний
 
