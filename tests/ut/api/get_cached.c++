@@ -23,6 +23,8 @@
 #include <gtest/gtest.h>
 
 #include <chrono>
+#include <climits>
+#include <cstdlib>
 #include <iostream>
 #include <vector>
 #if defined(__cpp_lib_latch) && __cpp_lib_latch >= 201907L
@@ -30,6 +32,7 @@
 #include <thread>
 #endif
 #include <array>
+#include <algorithm>
 #include <functional>
 #include <iterator>
 #include <map>
@@ -117,6 +120,17 @@ static bool check_state_and_value(const MDBX_cache_result_t &r, const mdbx::slic
     ok = false;
   }
   return ok;
+}
+
+static unsigned getenv_uint(const char *name, unsigned fallback) {
+  const char *value = std::getenv(name);
+  if (!value || !*value)
+    return fallback;
+  char *end = nullptr;
+  const unsigned long parsed = std::strtoul(value, &end, 10);
+  if (!end || *end || parsed == ULONG_MAX)
+    return fallback;
+  return (unsigned)parsed;
 }
 
 bool case0_trivia(mdbx::env env, get_cached_t get_cached) {
@@ -356,7 +370,10 @@ struct history {
 struct timeout_context {
   const std::chrono::steady_clock::time_point timeout;
   bool is_timeouted() const noexcept { return std::chrono::steady_clock::now() > timeout; }
-  timeout_context(unsigned minutes = 1) : timeout(std::chrono::steady_clock::now() + std::chrono::minutes(minutes)) {}
+  timeout_context()
+      : timeout(std::chrono::steady_clock::now() +
+                std::chrono::seconds(std::max(1u, getenv_uint("MDBX_GET_CACHED_TIMEOUT_SEC", 60)))) {}
+  explicit timeout_context(std::chrono::steady_clock::time_point deadline) : timeout(deadline) {}
 };
 
 struct track_context : public timeout_context {
@@ -675,19 +692,14 @@ template <size_t DEEP> struct deepwalk_path_generator {
   bool make() { return turn(0, 0, transition_mask()); }
 };
 
-#if defined(ENABLE_MEMCHECK) || defined(MDBX_CI) || !defined(NDEBUG)
-#define TRANSITION_DEEP 5
-#else
-#define TRANSITION_DEEP 6
-#endif
-
+template <size_t DEEP>
 bool case1_stairway_pass(track_context &ctx, mdbx::env env, prng &rnd, generator::keys_order order) {
   bool ok = true;
   ctx.rx.clear();
 
-  deepwalk_path_generator<TRANSITION_DEEP> walker(rnd);
-  std::vector<decltype(walker)::path_type> deep_paths;
-  std::vector<decltype(walker)::mask_type> deep_check_masks;
+  deepwalk_path_generator<DEEP> walker(rnd);
+  std::vector<typename decltype(walker)::path_type> deep_paths;
+  std::vector<typename decltype(walker)::mask_type> deep_check_masks;
   for (size_t n = 0; n < ctx.tables_vector.size(); ++n) {
     if (!walker.make())
       unexpected(__LINE__);
@@ -780,17 +792,42 @@ bool case1_stairway_pass(track_context &ctx, mdbx::env env, prng &rnd, generator
   return ok;
 }
 
+template <size_t DEEP>
+bool case1_stairway_run(track_context &ctx, mdbx::env env, prng &rnd) {
+  bool ok = true;
+  const auto n_orders =
+      std::min<unsigned>(getenv_uint("MDBX_GET_CACHED_ORDERS", 5),
+                         generator::keys_order::end - generator::keys_order::begin);
+  for (auto order = generator::keys_order::begin;
+       order < generator::keys_order(generator::keys_order::begin + n_orders) && !ctx.is_timeouted();
+       order = generator::keys_order(order + 1))
+    ok = case1_stairway_pass<DEEP>(ctx, env, rnd, order) && ok;
+  return ok;
+}
+
 bool case1_stairway(mdbx::env env, prng &rnd, get_cached_t get_cached) {
   bool ok = true;
 
   auto txn = env.start_write();
   track_context ctx(get_cached);
-  ctx.create_tables("case1_", txn, 4);
+  ctx.create_tables("case1_", txn, std::clamp(getenv_uint("MDBX_GET_CACHED_TABLES", 2), 1u, 8u));
   txn.commit();
 
-  for (auto order = generator::keys_order::begin; order < generator::keys_order::end && !ctx.is_timeouted();
-       order = generator::keys_order(order + 1))
-    ok = case1_stairway_pass(ctx, env, rnd, order) && ok;
+  switch (getenv_uint("MDBX_GET_CACHED_DEEP", 4)) {
+  default:
+  case 3:
+    ok = case1_stairway_run<3>(ctx, env, rnd) && ok;
+    break;
+  case 4:
+    ok = case1_stairway_run<4>(ctx, env, rnd) && ok;
+    break;
+  case 5:
+    ok = case1_stairway_run<5>(ctx, env, rnd) && ok;
+    break;
+  case 6:
+    ok = case1_stairway_run<6>(ctx, env, rnd) && ok;
+    break;
+  }
   return ok;
 }
 
@@ -817,7 +854,10 @@ struct case2_context : public timeout_context {
   const get_cached_t impl;
   const mdbx::map_handle dbi;
 
-  case2_context(mdbx::map_handle dbi, get_cached_t impl) : impl(impl), dbi(dbi) {}
+  case2_context(mdbx::map_handle dbi, get_cached_t impl)
+      : timeout_context(std::chrono::steady_clock::now() +
+                        std::chrono::seconds(std::max(1u, getenv_uint("MDBX_GET_CACHED_CASE2_TIMEOUT_SEC", 15)))),
+        impl(impl), dbi(dbi) {}
 };
 
 struct case2_entry {
@@ -910,7 +950,11 @@ void case2_thread(std::unique_ptr<prng> ptr_rnd, case2_context &ctx, std::latch 
 }
 
 bool case2_multithread(mdbx::env env, prng &rnd, get_cached_t get_cached) {
-  const unsigned n_threads = std::min(env.max_readers() - 1, std::thread::hardware_concurrency() * 3 + 3);
+  const auto auto_threads = std::min(env.max_readers() - 1, std::thread::hardware_concurrency() * 3 + 3);
+  const unsigned n_threads = [&]() {
+    const unsigned cap = getenv_uint("MDBX_GET_CACHED_THREADS", 0);
+    return cap ? std::min(cap, (unsigned)auto_threads) : (unsigned)auto_threads;
+  }();
   const unsigned wanna_repeat = 3;
 
   std::vector<case2_entry> entries;
@@ -1015,7 +1059,8 @@ int doit() {
   std::cout << std::endl;
   prng rnd(seed);
 
-  mdbx::path db_filename = "test-get-cached";
+  const char *db_name = std::getenv("MDBX_GET_CACHED_DBNAME");
+  mdbx::path db_filename = db_name && *db_name ? db_name : "test-get-cached";
   mdbx::env::remove(db_filename);
 
   mdbx::env::operate_options options;
