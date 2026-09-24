@@ -149,8 +149,6 @@ MDBX_NOTHROW_PURE_FUNCTION static inline bool eq_fast(const MDBX_val *a, const M
   return a->iov_len == b->iov_len && eq_fast_slowpath(a->iov_base, b->iov_base, a->iov_len);
 }
 
-MDBX_NOTHROW_PURE_FUNCTION MDBX_INTERNAL int ncmp_equal_or_greater(const MDBX_val *a, const MDBX_val *b);
-
 MDBX_NOTHROW_PURE_FUNCTION MDBX_INTERNAL int ncmp_equal_or_wrong(const MDBX_val *a, const MDBX_val *b);
 
 MDBX_NOTHROW_PURE_FUNCTION static __always_inline intptr_t cmp_len(size_t a, size_t b) {
