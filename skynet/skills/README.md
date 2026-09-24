@@ -41,6 +41,7 @@ skills/
     documentation-scribe/SKILL.md
     vision/SKILL.md               # дивергенция идей (TASK-34)
     comm-guard/SKILL.md           # внешнее общение (МАКС/TG), шаблонные ответы
+    pr-lead/SKILL.md              # PR-лид: внешние коммуникации роя (owner 2026-09-24)
   orchestrator/                   # Level 4
     scrum-ceremonies/SKILL.md
     swarm-management/SKILL.md
@@ -70,14 +71,17 @@ skills/
 ## L3 Roles (7 SKILL)
 
 `test-engineer`, `code-reviewer`, `refactoring-engineer`, `feature-developer`,
-`platform-build-engineer`, `documentation-scribe`, `vision` — по одному каталогу
-`<name>/SKILL.md`. Маппинг на агентов — в `skills-roles.md`
+`platform-build-engineer`, `documentation-scribe`, `vision`, `pr-lead` — по одному
+каталогу `<name>/SKILL.md`. Маппинг на агентов — в `skills-roles.md`
 (TE→A.testcase-guru/B.tester, CR→D.reviewer-c/E.reviewer-cxx/F.reviewer-cmake,
 PB→C.ci-guru, DS→S.scribe; RE/FD/DEV/RESEARCHER/TOOLING — свободные роли,
 gap-эталоны из L3 SKILLs; Vision — эпизодическая роль по запросу, без пула).
 Vision (TASK-34): дивергентный генератор идей, компенсирует единственную модель
 без `temperature` — протокол из 3 шагов вместо параметра модели
 (см. `.skynet/tools/MODELS.md`).
+PR-lead (owner, 2026-09-24): внешние коммуникации роя — письма организаторам,
+поиск контактов, новости openNet/Habr, gravatar; акцент «меня зовут skynet,
+я — рой ИИ-агентов»; тексты через ревью владельца.
 
 ## L4 Orchestrator (7 SKILL)
 

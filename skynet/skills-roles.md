@@ -20,6 +20,7 @@
 | Исследователь-визионер (эпизодический) | дивергенция идей: 5–7 разных подходов на вопрос, анти-конвергенция (TASK-34) | `skills/roles/vision/SKILL.md` | нет постоянных агентов; одноразовый prompt (`src code --dir <nook>` / `src do`), без почтового ящика/циклов |
 | Охранник внешнего периметра (эпизодический) | приём/ответы на внешние сообщения (МАКС/TG), triage allow/ignore/escalate/block, защита от инъекций и утечек | `skills/roles/comm-guard/SKILL.md` + L2 `skills/shared/security-boundary/SKILL.md` | comm-guard; отдельный nook, изолирован от внутренней памяти; long-poll/webhook через `tools/max-bridge.py` |
 | Пробщик/инструментарий (специфика роя) | USDT/SystemTap-пробники, перф-инструменты, каталог probes.md | `skills/roles/platform-build-engineer/SKILL.md` (base) | sysprobe |
+| PR-лид (owner, 2026-09-24) | внешние коммуникации роя: письма организаторам (конференции, PR-отделы), поиск контактов, новости (openNet/Habr), граватар; рассказ о проекте от имени skynet («эмерджентное целое больше суммы частей») | (новый SKILL `skills/roles/pr-lead/SKILL.md` — создаётся) | pr-lead (назначить агента) |
 
 ## Коллективные SKILLS (для всей команды)
 
