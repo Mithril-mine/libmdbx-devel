@@ -117,13 +117,22 @@ jobs:
         shell: bash
         run: |
           set -euxo pipefail
-          if command -v ninja >/dev/null 2>&1 && \
-             ! printf '%s' '${{ inputs.cell-cmake }}' | grep -Eq '(^| )-[GTA]( |$)'; then
-            GEN="-G Ninja"
-          else
-            GEN=""
+          # cell-cmake arrives as space-separated, shell-quoted arguments (see
+          # ci-dispatch resolve step): re-tokenize preserving embedded spaces,
+          # e.g. "-G MinGW Makefiles" or "-DANDROID_ABI=armeabi-v7a with NEON".
+          eval "set -- ${{ inputs.cell-cmake }}"
+          if command -v ninja >/dev/null 2>&1; then
+            have_generator=false
+            for a in "$@"; do
+              case "$a" in
+                -G*|-T*|-A*) have_generator=true ;;
+              esac
+            done
+            if [ "$have_generator" = false ]; then
+              set -- -G Ninja "$@"
+            fi
           fi
-          cmake -S "$GITHUB_WORKSPACE" -B "$GITHUB_WORKSPACE/@ci-cmake-build" $GEN ${{ inputs.cell-cmake }}
+          cmake -S "$GITHUB_WORKSPACE" -B "$GITHUB_WORKSPACE/@ci-cmake-build" "$@"
 
       - name: build
         shell: bash
@@ -134,6 +143,21 @@ jobs:
             BUILD_ARGS+=(--config '${{ inputs.cell-build-config }}')
           fi
           cmake "${BUILD_ARGS[@]}"
+
+      - name: debug env (disk/mem/limits)
+        shell: bash
+        run: |
+          set +e
+          echo '::group::env-debug'
+          echo '--- df ---'
+          df -h
+          echo '--- ulimit -a ---'
+          ulimit -a
+          echo '--- vm.overcommit_memory ---'
+          cat /proc/sys/vm/overcommit_memory 2>/dev/null || echo 'n/a'
+          echo '--- meminfo ---'
+          grep -E 'MemTotal|MemAvailable|CommitLimit|Committed_AS' /proc/meminfo 2>/dev/null || true
+          echo '::endgroup::'
 
       - name: test
         if: ${{ ! inputs.cell-build-only }}

@@ -71,7 +71,7 @@ jobs:
         run: |
           set -euxo pipefail
           python3 - >"$GITHUB_OUTPUT" <<'PY'
-          import json, os
+          import json, os, shlex
           cfg = json.load(open('tests/ci/config.json'))
           event = os.environ['EVENT_NAME']
           profile = ''
@@ -117,7 +117,7 @@ jobs:
                   'id': c['id'],
                   'runs-on': c['runs-on'],
                   'cell-env': '\n'.join(f'{k}={v}' for k, v in (c.get('env') or {}).items()),
-                  'cell-cmake': ' '.join(a.replace('|', ' ') for a in c['cmake']),
+                  'cell-cmake': ' '.join(shlex.quote(a.replace('|', ' ')) for a in c['cmake']),
                   'cell-build-config': bt,
                   'cell-ctest-regex': (c.get('ctest') or {}).get('regex', ''),
                   'cell-ctest-exclude': (c.get('ctest') or {}).get('exclude', ''),
