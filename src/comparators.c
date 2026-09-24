@@ -3,8 +3,6 @@
 
 #include "internals.h"
 
-int ncmp_equal_or_greater(const MDBX_val *a, const MDBX_val *b) { return eq_fast(a, b) ? 0 : 1; }
-
 int ncmp_equal_or_wrong(const MDBX_val *a, const MDBX_val *b) { return eq_fast(a, b) ? 0 : -1; }
 
 __hot bool eq_fast_slowpath(const uint8_t *a, const uint8_t *b, size_t l) {
