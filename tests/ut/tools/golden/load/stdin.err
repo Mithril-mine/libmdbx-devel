@@ -1,1 +1,1 @@
-/sourcecraft/workspace/.skynet/tmp/A.testcase-guru/task45-wt/build/mdbx_load: /base.db: open: No such file or directory
+mdbx_load: /base.db: open: No such file or directory

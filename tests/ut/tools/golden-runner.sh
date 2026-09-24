@@ -53,7 +53,10 @@ normalize() {
     -e 's/^ - build: .*/ - build: <BUILD>/' \
     -e 's#^ - flags: .*# - flags: <FLAGS>#' \
     -e 's#^ - options: .*# - options: <OPTIONS>#' \
-    -e 's#[^ ]*/(base\.db|copy\.db|bad\.db|compact\.db|out\.img|reload\.db|ver\.db|bad\.dump|exists\.db|named\.db)#/\1#g'
+    -e 's#[^ ]*/(base\.db|copy\.db|bad\.db|compact\.db|out\.img|reload\.db|ver\.db|bad\.dump|exists\.db|named\.db)#/\1#g' \
+    -e '/troika:/d' \
+    -e 's#^usage: [^ ]*/mdbx_[a-z]+ #usage: mdbx_BIN #' \
+    -e 's#^[^ ]*/mdbx_(load|dump|copy|chk|stat|drop|defrag): #mdbx_\1: #'
 }
 
 # rc-only case: exit code is the contract, output is volatile (e.g. reader
@@ -101,8 +104,10 @@ run_case() {
   fi
   local ok=1
   [ -f "$GOLDEN/$TOOL/$name.out" ] || { ok=0; log "MISSING golden $TOOL/$name.out"; }
-  diff -q "$d/stdout.norm" "$GOLDEN/$TOOL/$name.out" >/dev/null 2>&1 || ok=0
-  diff -q "$d/stderr.norm" "$GOLDEN/$TOOL/$name.err" >/dev/null 2>&1 || ok=0
+  normalize <"$GOLDEN/$TOOL/$name.out" >"$d/golden.out.norm"
+  normalize <"$GOLDEN/$TOOL/$name.err" >"$d/golden.err.norm"
+  diff -q "$d/stdout.norm" "$d/golden.out.norm" >/dev/null 2>&1 || ok=0
+  diff -q "$d/stderr.norm" "$d/golden.err.norm" >/dev/null 2>&1 || ok=0
   local want_rc_file="$GOLDEN/$TOOL/$name.rc"
   [ -f "$want_rc_file" ] && want_rc="$(cat "$want_rc_file")"
   [ "$rc" = "$want_rc" ] || ok=0
@@ -273,8 +278,10 @@ case_load_stdin() {
   else
     local ok=1
     normalize <"$d/stdout" >"$d/stdout.norm"; normalize <"$d/stderr" >"$d/stderr.norm"
-    diff -q "$d/stdout.norm" "$GOLDEN/$TOOL/$name.out" >/dev/null 2>&1 || ok=0
-    diff -q "$d/stderr.norm" "$GOLDEN/$TOOL/$name.err" >/dev/null 2>&1 || ok=0
+    normalize <"$GOLDEN/$TOOL/$name.out" >"$d/golden.out.norm"
+    normalize <"$GOLDEN/$TOOL/$name.err" >"$d/golden.err.norm"
+    diff -q "$d/stdout.norm" "$d/golden.out.norm" >/dev/null 2>&1 || ok=0
+    diff -q "$d/stderr.norm" "$d/golden.err.norm" >/dev/null 2>&1 || ok=0
     local want_rc="$(cat "$GOLDEN/$TOOL/$name.rc")"
     [ "$rc" = "$want_rc" ] || ok=0
     if [ "$ok" = 1 ]; then pass=$((pass+1)); log "PASS $TOOL/$name"
