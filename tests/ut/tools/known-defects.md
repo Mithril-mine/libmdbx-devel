@@ -47,3 +47,11 @@ the rewrite (Phase D) and the owner.
   `-f file` default = stdin).
 - Suggested owner escalation: fix D3 in Phase D; for D1/D2 decide between fixing
   `chk` cookie handling vs documenting `-i`/`-s` limits.
+
+## Status tracking (2026-09-24)
+- **D3 → FIXED** (issue #50, fix/issue50-load-stdin@6d3092cb merged devel@a14a8816;
+  golden `case_load_stdin` rc 1→0; G.tester VALIDATED).
+- **D2 → FIXED-by-#49** (issue #51 closed as duplicate of #49 by owner review;
+  same `tbl->cookie` assert family; `specific_table` workaround remains).
+- **D1 → IN-PROGRESS** (issue #49, BLOCKER per owner; C.ci-guru fixing in
+  fix/issue49-chk-cookie; golden `case_chk_ignore_order` to be unskipped after fix).
