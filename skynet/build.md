@@ -313,6 +313,15 @@ fast and as targeted as possible.
 - **Addressability** — run only the subset intersecting the change:
   `tests/select-tests.sh` maps changed paths → CTest labels
   (see `AGENTS.md` "Segmented test execution"); do NOT blindly run everything.
+- **Disk hygiene is part of the build/test process** (owner, 2026-09-24):
+  heavy intermediates (`golden-*`, `repro-*`, `<task>-build`, `fixNN-*`) MUST be
+  created in the scanned temp area (`.skynet/tmp`, idempotently recreated) and
+  NOT in bare `/tmp` or worktrees — `tools/tmp-gc.sh` reclaims them there
+  (idle>2h; it also sweeps `/tmp/golden-* /tmp/repro-* /*-build /tmp/fixNN-*`).
+  A full disk stalls the whole swarm (retro E6), so a build/test creating big
+  artifacts must expect later GC removal: never leave the final result only in
+  temp. `df` + `.skynet/health.json` (disk metric; emergency tmp-gc at <2GB
+  free) are part of every health report.
 - The full catalog of slow-build/test causes is tracked in BACKLOG B21–B33
   (LTO, gtest network fetch, fresh build-dirs/ccache, Debug-in-routine,
   full-length mdbx_test, mdbx_chk in every ctest, durable-sync, serial ctest,
