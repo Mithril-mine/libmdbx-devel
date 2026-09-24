@@ -1316,7 +1316,12 @@ depleted_gc:
         goto fail;
       if (prefer_steady.ptr_c != meta_prefer_steady(env, &txn->wr.troika).ptr_c)
         goto retry_gc_refresh_detent;
-      eASSERT0(env, env->incore);
+      /* The steady point was not advanced by dxb_sync_locked(), e.g. because it
+       * already covers the recent txnid, or the database is in-core and the sync
+       * was skipped. Both are legitimate: fall through to allocate from the
+       * unallocated part of the file. Do NOT assert env->incore here —
+       * osal_check_fs_incore() returns MDBX_RESULT_FALSE unconditionally on
+       * Windows, so env->incore is always false there (issue #52). */
     }
   }
 
