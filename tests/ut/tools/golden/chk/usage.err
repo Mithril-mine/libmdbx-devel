@@ -1,4 +1,4 @@
-usage: /sourcecraft/workspace/.skynet/tmp/A.testcase-guru/task45-wt/build/mdbx_chk [-V] [-v] [-q] [-c] [-0|1|2] [-w] [-d] [-i] [-s table] [-u|U] db_pathname
+usage: mdbx_BIN [-V] [-v] [-q] [-c] [-0|1|2] [-w] [-d] [-i] [-s table] [-u|U] db_pathname
   -V		print version and exit
   -v		more verbose, could be repeated upto 9 times for extra details
   -q		be quiet

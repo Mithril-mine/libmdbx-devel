@@ -1,3 +1,2 @@
-   troika: 6.s:5.w:3.s, fsm=0xd5, head=0-6.s, base=0-6.s, tail=1-5.w, valid Y, strict Y
    open-MADV_DONTNEED 16..16384
    readahead ON 0..10

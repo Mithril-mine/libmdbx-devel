@@ -1,4 +1,4 @@
-usage: /sourcecraft/workspace/.skynet/tmp/A.testcase-guru/task45-wt/build/mdbx_copy [-V] [-q] [-c] [-d] [-p] [-u|U] src_path [dest_path]
+usage: mdbx_BIN [-V] [-q] [-c] [-d] [-p] [-u|U] src_path [dest_path]
   -V		print version and exit
   -q		be quiet
   -c		enable compactification (skip unused pages)
