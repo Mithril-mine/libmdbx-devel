@@ -57,6 +57,11 @@ space; lines split key/data; DUPSORT values appended per line.
 ## Behavior notes
 
 - stdin by default; `-f file` reads a file.
+- **Issue #50 fix (2026-09-24)**: the input-file `freopen` is deferred until
+  after the dbpath is identified. If `-f` consumed the only remaining argument
+  (no positional left), that argument is treated as the dbpath and stdin is
+  used — so `mdbx_load -nf <db>` reads the dump from stdin into `<db>`,
+  matching the man-page default.
 - Batching: `-b` items per txn, `-L` MB cap; `mdbx_txn_checkpoint`/info used to
   manage durability vs speed.
 - `-p` purges the table before loading (empty/delete).

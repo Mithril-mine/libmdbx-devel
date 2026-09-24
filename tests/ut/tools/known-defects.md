@@ -29,8 +29,17 @@ the rewrite (Phase D) and the owner.
   strace shows an early `openat(<path>, O_RDONLY)` before any stdin read.
 - Loading the SAME stream via `-f fixtures/base.dump` succeeds (rc=0) — the
   `-f`/`freopen` path is fine, the bare-stdin path is broken.
-- The `load/stdin` golden case records rc=1 + message as the current contract;
-  Phase D should decide whether to fix (recommended) or keep.
+- **FIXED (issue #50, branch `fix/issue50-load-stdin`)**: root cause was the
+  arg-parsing order — `-f` consumed the dbpath as its file argument, then
+  `freopen()` opened the (nonexistent) target `O_RDONLY`. `src/tools/load.c`
+  now defers the input-file `freopen` until after the dbpath is identified and
+  recovers when `-f` consumed the only remaining argument (stdin-by-default
+  per `mdbx_load.1`). The `load/stdin` golden case now records rc=0 and also
+  asserts the loaded DB is identical to one loaded via `-f file`.
+- Root cause analysis: the golden `case_load_stdin` intentionally invoked
+  `-nf <db>` (compact combined flags); POSIX getopt binds the trailing
+  argument to `-f`, leaving no dbpath. With the fix the last positional wins
+  as the dbpath and stdin is used, per the documented default.
 
 ## Notes
 - Severity: D1/D2 are crashers (would benefit from an assert-guard / NULL check

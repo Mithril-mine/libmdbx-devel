@@ -265,28 +265,42 @@ case_load_roundtrip() {
   run_case roundtrip 0 -- "$BIN" -nf "$d/out.dump" "$d/reload.db"
 }
 case_load_stdin() {
-  local d="$WORK/load_si"; mkdir -p "$d"
+  local d="$WORK/load_si"; rm -rf "$d"; mkdir -p "$d"
   ( "$BIN" -nf "$d/base.db" ) < "$FIXTURES/base.dump" > "$d/stdout" 2> "$d/stderr"
   local rc=$?
   local name=stdin
+  # Issue #50: stdin-by-default must load the dump into the dbpath (the last
+  # positional arg), not mis-bind it to '-f'. The loaded database must be
+  # identical to one loaded from the same stream via '-f file'.
+  local data_ok=1
+  "$LOAD_BIN" -nq -f "$FIXTURES/base.dump" "$d/ref.db" 2>/dev/null
+  if "$DUMP_BIN" -q "$d/base.db" >"$d/reloaded.dump" 2>/dev/null &&
+     "$DUMP_BIN" -q "$d/ref.db" >"$d/ref.dump" 2>/dev/null; then
+    normalize <"$d/reloaded.dump" >"$d/reloaded.norm"
+    normalize <"$d/ref.dump" >"$d/ref.norm"
+    cmp -s "$d/reloaded.norm" "$d/ref.norm" || data_ok=0
+  else
+    data_ok=0
+  fi
   if [ "$UPDATE" = 1 ]; then
     mkdir -p "$GOLDEN/$TOOL"
     normalize <"$d/stdout" >"$GOLDEN/$TOOL/$name.out"
     normalize <"$d/stderr" >"$GOLDEN/$TOOL/$name.err"
     printf '%s\n' "$rc" >"$GOLDEN/$TOOL/$name.rc"
-    log "golden $TOOL/$name (rc=$rc)"
-  else
-    local ok=1
-    normalize <"$d/stdout" >"$d/stdout.norm"; normalize <"$d/stderr" >"$d/stderr.norm"
-    normalize <"$GOLDEN/$TOOL/$name.out" >"$d/golden.out.norm"
-    normalize <"$GOLDEN/$TOOL/$name.err" >"$d/golden.err.norm"
-    diff -q "$d/stdout.norm" "$d/golden.out.norm" >/dev/null 2>&1 || ok=0
-    diff -q "$d/stderr.norm" "$d/golden.err.norm" >/dev/null 2>&1 || ok=0
-    local want_rc="$(cat "$GOLDEN/$TOOL/$name.rc")"
-    [ "$rc" = "$want_rc" ] || ok=0
-    if [ "$ok" = 1 ]; then pass=$((pass+1)); log "PASS $TOOL/$name"
-    else fail=$((fail+1)); FAILED_CASES+=("$TOOL/$name"); log "FAIL $TOOL/$name (rc=$rc want=$want_rc)"; fi
+    log "golden $TOOL/$name (rc=$rc, data_ok=$data_ok)"
+    return
   fi
+  local ok=1
+  normalize <"$d/stdout" >"$d/stdout.norm"; normalize <"$d/stderr" >"$d/stderr.norm"
+  normalize <"$GOLDEN/$TOOL/$name.out" >"$d/golden.out.norm"
+  normalize <"$GOLDEN/$TOOL/$name.err" >"$d/golden.err.norm"
+  diff -q "$d/stdout.norm" "$d/golden.out.norm" >/dev/null 2>&1 || ok=0
+  diff -q "$d/stderr.norm" "$d/golden.err.norm" >/dev/null 2>&1 || ok=0
+  local want_rc="$(cat "$GOLDEN/$TOOL/$name.rc")"
+  [ "$rc" = "$want_rc" ] || ok=0
+  [ "$data_ok" = 1 ] || { ok=0; log "  $TOOL/$name: loaded data mismatch (issue #50 regression)"; }
+  if [ "$ok" = 1 ]; then pass=$((pass+1)); log "PASS $TOOL/$name"
+  else fail=$((fail+1)); FAILED_CASES+=("$TOOL/$name"); log "FAIL $TOOL/$name (rc=$rc want=$want_rc)"; fi
 }
 case_load_bad_mapsize() {
   local d="$WORK/load_bm"; fresh_base "$d"
