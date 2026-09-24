@@ -122,8 +122,27 @@ static bool check_state_and_value(const MDBX_cache_result_t &r, const mdbx::slic
   return ok;
 }
 
-static unsigned getenv_uint(const char *name, unsigned fallback) {
+static const char *getenv_cstr(const char *name) {
+#if defined(_MSC_VER)
+#pragma warning(push)
+#pragma warning(disable : 4996) /* 'getenv': This function or variable may be unsafe */
+#endif
+#if defined(__clang__)
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wdeprecated-declarations"
+#endif
   const char *value = std::getenv(name);
+#if defined(__clang__)
+#pragma clang diagnostic pop
+#endif
+#if defined(_MSC_VER)
+#pragma warning(pop)
+#endif
+  return value;
+}
+
+static unsigned getenv_uint(const char *name, unsigned fallback) {
+  const char *value = getenv_cstr(name);
   if (!value || !*value)
     return fallback;
   char *end = nullptr;
@@ -676,7 +695,7 @@ template <size_t DEEP> struct deepwalk_path_generator {
         const auto to = (i + salt) % DEEP;
         const auto turn_mask = transition_bit(from, to);
         if (left_mask & turn_mask) {
-          path[step] = uint8_t((from << 4) | to);
+          path.at(step) = uint8_t((from << 4) | to);
           if (left_mask == turn_mask) {
             assert(step == path.size() - 1);
             return true;
@@ -1059,7 +1078,7 @@ int doit() {
   std::cout << std::endl;
   prng rnd(seed);
 
-  const char *db_name = std::getenv("MDBX_GET_CACHED_DBNAME");
+  const char *db_name = getenv_cstr("MDBX_GET_CACHED_DBNAME");
   mdbx::path db_filename = db_name && *db_name ? db_name : "test-get-cached";
   mdbx::env::remove(db_filename);
 
