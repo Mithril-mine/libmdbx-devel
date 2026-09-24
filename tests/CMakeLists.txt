@@ -311,6 +311,7 @@ else()
 
   add_test(NAME smoke_writemap COMMAND $<TARGET_FILE:mdbx_test> --duration 100 --mode=-writemap,-nosync-safe,-lifo
                                     --progress --console=no --repeat=${MDBX_TEST_ITER} --pathname=smoke.db
+                                    --size-lower=64M --size=256M --size-upper=2G --geometry-jitter=no
                                     --dont-cleanup-after ${MDBX_SMOKE_EXTRA} basic)
   set_tests_properties(smoke_writemap PROPERTIES LABELS "smoke;smoke-t2" TIMEOUT 600 DEPENDS smoke_basic RUN_SERIAL OFF)
 
