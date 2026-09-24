@@ -4,6 +4,15 @@ on:
   push:
     branches: [skynet-news]
   workflow_dispatch:
+    inputs:
+      draft:
+        description: 'Publish only this draft id (default: all status:ready)'
+        required: false
+        type: string
+      chat_id:
+        description: 'Override target chat id (test runs / explicit group)'
+        required: false
+        type: string
 
 permissions:
   contents: write
@@ -28,12 +37,15 @@ jobs:
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
         run: |
           set -euo pipefail
+          ARGS=""
+          if [ -n "${{ inputs.draft }}" ]; then ARGS="$ARGS --draft ${{ inputs.draft }}"; fi
+          if [ -n "${{ inputs.chat_id }}" ]; then ARGS="$ARGS --chat-id ${{ inputs.chat_id }}"; fi
           if [ -z "${TELEGRAM_BOT_TOKEN:-}" ]; then
             echo "TELEGRAM_BOT_TOKEN secret not set — dry-run validation only."
-            python3 news/publisher.py --dry-run
+            python3 news/publisher.py --dry-run $ARGS
             exit 0
           fi
-          python3 news/publisher.py
+          python3 news/publisher.py $ARGS
 
       - name: Commit posted markers back to skynet-news
         if: ${{ !cancelled() }}

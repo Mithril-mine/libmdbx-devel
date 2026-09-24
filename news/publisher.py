@@ -41,6 +41,7 @@ ALLOWED_CTA = (
     "Поставьте реакцию, если тема полезна",
     "Предложите идею для следующего улучшения",
     "Посмотрите PR по ссылке",
+    "Follow the news",
 )
 
 
@@ -68,8 +69,9 @@ def validate(meta, body):
     """Return list of problems (empty = ready to publish)."""
     problems = []
     text = body.strip()
-    if len(text) > MAX_TEXT:
-        problems.append("длина поста %d > %d символов" % (len(text), MAX_TEXT))
+    max_text = int(meta.get("max_text", MAX_TEXT))
+    if len(text) > max_text:
+        problems.append("длина поста %d > %d символов" % (len(text), max_text))
     title = meta.get("title", "")
     if len(title) > MAX_TITLE:
         problems.append("заголовок %d > %d символов" % (len(title), MAX_TITLE))
