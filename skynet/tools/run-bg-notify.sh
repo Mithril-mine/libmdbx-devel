@@ -10,9 +10,12 @@
 #     --inbox     адресат письма (по умолчанию skynet_inbox_0.coordinator)
 #     --job ID    идентификатор задания (по умолчанию авто: bg-<time>-<pid>)
 #
+# Deploy: каноническая копия в репозитории skynet/tools/; рабочая — .skynet/tools/
+#   (синхронизируется через notify-ctl.sh deploy [REPO_TOOLS]).
+#
 # Пример:
 #   tools/run-bg-notify.sh "ctest -L 'ut\.dbi'" --nice 5
-BASE=/sourcecraft/workspace/.skynet
+BASE=${SKYNET_ROOT:-/sourcecraft/workspace/.skynet}
 TOOL=$BASE/tools/run-bg-notify.py
 
 CMD=""

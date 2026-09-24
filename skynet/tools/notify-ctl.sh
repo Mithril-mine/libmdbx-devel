@@ -53,8 +53,11 @@ case "${1:-status}" in
     mkdir -p "$BASE/tools"
     cp "$SRC/notify-daemon.py" "$TOOL"
     cp "$SRC/notify-ctl.sh" "$BASE/tools/notify-ctl.sh"
+    for f in run-bg-notify.py run-bg-notify.sh; do
+      [ -f "$SRC/$f" ] && { cp "$SRC/$f" "$BASE/tools/$f"; chmod +x "$BASE/tools/$f"; }
+    done
     chmod +x "$BASE/tools/notify-ctl.sh"
-    echo "deployed notify-daemon.py + notify-ctl.sh из $SRC"
+    echo "deployed notify-daemon.py + notify-ctl.sh + run-bg-notify.{py,sh} из $SRC"
     ;;
   *)
     echo "usage: $0 {start|stop|restart|status|deploy [REPO_TOOLS]}"; exit 2

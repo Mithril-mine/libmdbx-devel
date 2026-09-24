@@ -501,7 +501,8 @@ backlog ──(готово к работе)──▶ ready ──(агент в
   письма с уже известным `msg_id`.
 - Пространства `msg_id` инфраструктурных демонов (детерминированные, от event-id):
   `notify-<src>-<type>-<eventid>` — notify-daemon (TASK-38), события
-  GitHub/SourceCraft; `bg-<job>-<launch_ts>` — run-bg-notify (TASK-39).
+  GitHub/SourceCraft; `bg-<job>-<launch_ts>-<pid>` — run-bg-notify (TASK-39,
+  pid исключает коллизию msg_id при совпадении job+секунды).
   Парсеры/диджест учитывают их наравне с `mail-*` (идемпотентность по msg_id).
 - При большой переписке старые письма (старше недели) координатор архивирует:
   переносит текст в файл `${SKYNET_ROOT}/.skynet/mail-archive/<date>.md`

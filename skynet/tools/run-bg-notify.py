@@ -13,8 +13,11 @@ TASK-39: обёртка для фонового запуска произвол�
   [bg-<job>-<launch_ts>|<ts>] run-bg-notify -> <inbox> : NOTIFY bg:done|bg:failed
     payload: команда, exit code, длительность, путь к логу (+ хвост при ошибке)
 
-Идемпотентность: msg_id детерминирован от (job, launch_ts) — одно выполнение
+Идемпотентность: msg_id детерминирован от (job, launch_ts, pid) — одно выполнение
 ровно одно письмо. Журнал запусков: .skynet/bg-jobs.jsonl (append).
+
+Deploy: каноническая копия в репозитории skynet/tools/; рабочая — .skynet/tools/
+(синхронизируется через notify-ctl.sh deploy [REPO_TOOLS]).
 
 Usage:
   run-bg-notify.py --cmd "COMMAND" [--log FILE] [--nice N] [--inbox ENTITY] [--job ID]
@@ -28,9 +31,11 @@ import sys
 import time
 from datetime import datetime, timezone
 
-BASE = "/sourcecraft/workspace/.skynet"
+BASE = os.environ.get("SKYNET_ROOT") or "/sourcecraft/workspace/.skynet"
 JOBS_FILE = os.path.join(BASE, "bg-jobs.jsonl")
 DEFAULT_INBOX = "skynet_inbox_0.coordinator"
+DELIVER_ATTEMPTS = 3
+DELIVER_BACKOFF_S = (1, 2, 4)
 SERVER = os.environ.get("MEMORY_SERVER") or os.path.join(
     os.path.expanduser("~"), ".local", "share", "libmdbx-memory", "memory-mdbx-server.py")
 MDBX_PATH = os.environ.get("MEMORY_MDBX_PATH") or os.path.join(
@@ -43,7 +48,7 @@ def now_iso():
 
 
 def mid(job, launch_ts):
-    return "bg-%s-%s" % (job, launch_ts)
+    return "bg-%s-%s-%d" % (job, launch_ts, os.getpid())
 
 
 def journal(entry):
@@ -62,6 +67,10 @@ def _load_store():
     return srv.Store(MDBX_PATH)
 
 
+class DeliveryError(RuntimeError):
+    pass
+
+
 def deliver(inbox, msg_id, ts, body, subject, payload):
     store = _load_store()
     store.create_entities([{"name": inbox, "entityType": "mailbox"}])
@@ -69,8 +78,9 @@ def deliver(inbox, msg_id, ts, body, subject, payload):
               % (msg_id, ts, inbox, subject, payload, body))
     res = store.add_observations([{"entityName": inbox, "contents": [letter]}])
     added = sum(len(r.get("addedObservations", [])) for r in res["results"])
-    if added:
-        signal(inbox)
+    if not added:
+        raise DeliveryError("store persisted no observation (added=0)")
+    signal(inbox)
     return added
 
 
@@ -142,7 +152,24 @@ def main():
         if t:
             body += "; tail: " + " | ".join(line.strip()[:80] for line in t[-3:])
 
-    added = deliver(args.inbox, mid(job, launch_ts), ts, body, subject, payload)
+    added = 0
+    last_error = None
+    for attempt in range(DELIVER_ATTEMPTS):
+        try:
+            added = deliver(args.inbox, mid(job, launch_ts), ts, body, subject, payload)
+            break
+        except Exception as e:
+            last_error = "%s: %s" % (type(e).__name__, e)
+            if attempt < DELIVER_ATTEMPTS - 1:
+                time.sleep(DELIVER_BACKOFF_S[attempt])
+    if not added:
+        note = "delivery FAILED after %d attempts: %s" % (DELIVER_ATTEMPTS, last_error)
+        try:
+            with open(log_path, "a", encoding="utf-8") as lf:
+                lf.write("[%s] %s — bg:%s letter lost\n" % (now_iso(), note, subject))
+        except OSError:
+            pass
+        added = "FAILED:%s" % subject
     journal({
         "job": job, "launch_ts": launch_ts, "finish_ts": ts,
         "cmd": args.cmd, "rc": rc, "duration_s": round(duration, 2),
