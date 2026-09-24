@@ -46,6 +46,32 @@ Smoke scenarios are also wired into `make smoke` (see the root
 [GNUmakefile](../GNUmakefile)) and the stochastic scenario is available via
 [`stochastic.sh`](stochastic.sh).
 
+### `get_cached` resource knobs
+
+`ut_get_cached` is the heaviest unit test (a 136 s outlier in the P1 run, see
+`BACKLOG.md` B56). Its workload is tunable via environment variables; the
+defaults give a ~25 s routine run that keeps all five key orders, both
+`stairway` implementations and both multithread implementations:
+
+| Variable | Default | Meaning |
+| -------- | ------- | ------- |
+| `MDBX_GET_CACHED_TABLES` | `2` | number of `case1` tables (1..8) |
+| `MDBX_GET_CACHED_DEEP` | `4` | deep-walk transition depth (3..6) |
+| `MDBX_GET_CACHED_ORDERS` | `5` | number of key orders (1..5) |
+| `MDBX_GET_CACHED_TIMEOUT_SEC` | `60` | overall `case1` wall-clock budget |
+| `MDBX_GET_CACHED_CASE2_TIMEOUT_SEC` | `15` | `case2` multithread wall-clock budget |
+| `MDBX_GET_CACHED_THREADS` | `0` | `case2` thread cap (`0` = auto) |
+
+The full-coverage profile (deep=6, wide=8 tables, long timeouts) is registered
+in CTest as `get_cached_full` with the `ut.heavy` label, so it stays out of the
+routine `ctest -L 'ut\.' -LE 'ut\.heavy'` run but can be invoked explicitly
+(`ctest -R '^get_cached_full$'`) or by hand:
+
+```sh
+MDBX_GET_CACHED_TABLES=8 MDBX_GET_CACHED_DEEP=6 MDBX_GET_CACHED_TIMEOUT_SEC=600 \
+MDBX_GET_CACHED_CASE2_TIMEOUT_SEC=120 ./ut_get_cached
+```
+
 ## Tiered smoke profiles (T1/T2/T3)
 
 `mdbx_test` is stochastic, so the tiered profiles use **fixed `--prng-seed`**

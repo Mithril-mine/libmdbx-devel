@@ -552,6 +552,15 @@ else()
         set_tests_properties(bunches_removal PROPERTIES LABELS "ut;ut.gc")
         add_ut(get_cached SOURCE ut/api/get_cached.c++)
         set_tests_properties(get_cached PROPERTIES LABELS "ut;ut.api;ut.txn")
+        # Full-coverage get_cached profile (deep/wide, long timeouts): the
+        # routine run uses trimmed env-knob defaults (~25s); this variant
+        # restores the deep/wide workload for milestone/nightly runs (kept out
+        # of routine runs via the orthogonal ut.heavy label, see README.md).
+        add_test(NAME get_cached_full COMMAND $<TARGET_FILE:ut_get_cached>)
+        set_tests_properties(get_cached_full PROPERTIES
+            LABELS "ut;ut.api;ut.txn;ut.heavy"
+            TIMEOUT 3600
+            ENVIRONMENT "MDBX_GET_CACHED_TABLES=8;MDBX_GET_CACHED_DEEP=6;MDBX_GET_CACHED_ORDERS=5;MDBX_GET_CACHED_TIMEOUT_SEC=600;MDBX_GET_CACHED_CASE2_TIMEOUT_SEC=120;MDBX_GET_CACHED_THREADS=0")
         add_ut(reverse_insertions SOURCE ut/txn/reverse_insertions.c++)
         set_tests_properties(reverse_insertions PROPERTIES LABELS "ut;ut.txn")
         add_ut(parameters SOURCE ut/api/parameters.c++)
