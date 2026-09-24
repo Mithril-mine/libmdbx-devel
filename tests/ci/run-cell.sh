@@ -190,11 +190,18 @@ print(c.get('ctest') and c['ctest'].get('exclude') or '')
 ")
 
 CTEST_CMD=(ctest --test-dir "$BUILD_DIR" --output-on-failure --parallel 3 --schedule-random --no-tests=error)
+# Bound tests without an explicit per-test TIMEOUT property (evidence B56,
+# 2026-09-24: P1 full ut ~3.5 min, worst single test get_cached 136s->16s,
+# txn 4.6s, gh0011 7.5s). Explicit TIMEOUT properties still win, so scenario
+# limits (smoke_fault 1800/3600, ut.heavy 10800, ut_tools 300) are preserved.
+# GTEST_RUNTIME_LIMIT=99 was dropped: it had no consumer in this repo.
+# Override for slow machines: CI_CTEST_TIMEOUT=<seconds>.
+CTEST_CMD+=(--timeout "${CI_CTEST_TIMEOUT:-600}")
 [ -n "$BUILD_CONFIG" ] && CTEST_CMD+=(-C "$BUILD_CONFIG")
 [ -n "$CTEST_RUN" ] && CTEST_CMD+=(-R "$CTEST_RUN")
 [ -n "$CTEST_EXCL" ] && CTEST_CMD+=(-E "$CTEST_EXCL")
 echo "==> ctest: ${CTEST_CMD[*]}"
-GTEST_SHUFFLE=1 GTEST_RUNTIME_LIMIT=99 MALLOC_CHECK_=7 MALLOC_PERTURB_=42 "${CTEST_CMD[@]}"
+GTEST_SHUFFLE=1 MALLOC_CHECK_=7 MALLOC_PERTURB_=42 "${CTEST_CMD[@]}"
 rc=$?
 if [ "$rc" != "0" ]; then
 	echo "==> cell ${CELL_NAME} FAILED (rc=$rc); LastTest.log: ${BUILD_DIR}/Testing/Temporary/LastTest.log" >&2
