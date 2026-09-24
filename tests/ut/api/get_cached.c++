@@ -1059,7 +1059,8 @@ int doit() {
   std::cout << std::endl;
   prng rnd(seed);
 
-  mdbx::path db_filename = "test-get-cached";
+  const char *db_name = std::getenv("MDBX_GET_CACHED_DBNAME");
+  mdbx::path db_filename = db_name && *db_name ? db_name : "test-get-cached";
   mdbx::env::remove(db_filename);
 
   mdbx::env::operate_options options;

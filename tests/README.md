@@ -61,6 +61,7 @@ defaults give a ~25 s routine run that keeps all five key orders, both
 | `MDBX_GET_CACHED_TIMEOUT_SEC` | `60` | overall `case1` wall-clock budget |
 | `MDBX_GET_CACHED_CASE2_TIMEOUT_SEC` | `15` | `case2` multithread wall-clock budget |
 | `MDBX_GET_CACHED_THREADS` | `0` | `case2` thread cap (`0` = auto) |
+| `MDBX_GET_CACHED_DBNAME` | `test-get-cached` | environment file/dir name |
 
 The full-coverage profile (deep=6, wide=8 tables, long timeouts) is registered
 in CTest as `get_cached_full` with the `ut.heavy` label, so it stays out of the
