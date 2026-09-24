@@ -980,7 +980,14 @@ __cold static int chk_handle_kv(MDBX_chk_scope_t *const scope, MDBX_chk_table_t 
                                 const MDBX_val *key, const MDBX_val *data) {
   MDBX_chk_internal_t *const chk = scope->internal;
   int err = MDBX_SUCCESS;
-  assert(tbl->cookie);
+/* cookie == nullptr means the table was filtered out by the user (see the
+   * table_filter callback, e.g. `mdbx_chk -s <table>`); no per-record user
+   * processing for such tables. In particular the MAIN table always carries a
+   * cookie only when it passes the filter, so this is not an invariant to
+   * assert on (issue #49: ASSERT(tbl->cookie) crashed mdbx_chk -s on DBs
+   * whose main table holds ordinary records). */
+  if (!tbl->cookie)
+    return err;
   if (chk->cb->table_handle_kv)
     err = chk->cb->table_handle_kv(chk->usr, tbl, record_number, key, data);
   return err ? err : chk_check_break(scope);
@@ -1003,11 +1010,16 @@ __cold static int chk_db(MDBX_chk_scope_t *const scope, MDBX_dbi dbi, MDBX_chk_t
   }
 
   if (0 > (int)dbi) {
-    err = dbi_open(txn, &tbl->name, MDBX_DB_ACCEDE, &dbi,
-                   (chk->flags & MDBX_CHK_IGNORE_ORDER) ? cmp_equal_or_greater : nullptr,
-                   (chk->flags & MDBX_CHK_IGNORE_ORDER) ? cmp_equal_or_greater : nullptr);
+    /* Opening a named table with custom comparators is not possible via
+     * MDBX_DB_ACCEDE: the engine refuses to bind different comparators to an
+     * already-bound/valid table (MDBX_INCOMPATIBLE), which made `mdbx_chk -i`
+     * fail/crash on any database containing named sub-tables. Order-tolerance
+     * for MDBX_CHK_IGNORE_ORDER is provided by the z_ignord cursor flag and by
+     * the IGNORE_ORDER guards around the order-error reporting below, so no
+     * custom comparators are needed here. */
+    err = dbi_open(txn, &tbl->name, MDBX_DB_ACCEDE, &dbi, nullptr, nullptr);
     if (unlikely(err)) {
-      tASSERT(txn, dbi >= txn->env->n_dbi || (txn->env->dbs_flags[dbi] & DB_VALID) == 0);
+      chk_error_rc(scope, err, "mdbx_dbi_open");
       chk_error_rc(scope, err, "mdbx_dbi_open");
       goto bailout;
     }
