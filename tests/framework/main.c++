@@ -645,6 +645,7 @@ int main(int argc, char *const argv[]) {
       }
       fprintf(stderr, "overlord: --timeout deadline reached; killing all actors\n");
       osal_killall_actors();
+      fflush(nullptr) /* MINOR-2: _Exit/_exit don't flush stdio */;
 #if IS_WINDOWS
       _exit(EXIT_FAILURE);
 #else

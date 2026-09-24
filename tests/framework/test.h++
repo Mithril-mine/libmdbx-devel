@@ -35,6 +35,7 @@
 
 #include <atomic>
 #include <deque>
+#include <mutex>
 #include <set>
 #include <stack>
 #include <tuple>
