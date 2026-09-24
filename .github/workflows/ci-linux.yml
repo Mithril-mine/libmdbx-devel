@@ -34,6 +34,20 @@ jobs:
         fetch-depth: 0
         fetch-tags: true
         submodules: true
+    - name: debug env (disk/mem/limits)
+      shell: bash
+      run: |
+        set +e
+        echo '::group::env-debug'
+        echo '--- df ---'
+        df -h
+        echo '--- ulimit -a ---'
+        ulimit -a
+        echo '--- vm.overcommit_memory ---'
+        cat /proc/sys/vm/overcommit_memory 2>/dev/null || echo 'n/a'
+        echo '--- meminfo ---'
+        grep -E 'MemTotal|MemAvailable|CommitLimit|Committed_AS' /proc/meminfo 2>/dev/null || true
+        echo '::endgroup::'
     - name: ci-step
       shell: bash
       run: |
