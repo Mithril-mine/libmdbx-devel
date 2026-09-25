@@ -1,12 +1,15 @@
 #!/usr/bin/env python3
 """validate_map.py — валидатор генератора карты исходников.
 
-Повторно сканирует подмножество TU и сверяет счётчики с эталонным
-артефактом (golden snapshot). Назначение: поймать регрессии генератора
-(пропали символы/рёбра/блоки, разъехались макросы) при изменении кода.
+Повторно сканирует подмножество TU и сверяет счётчики со статичным
+эталоном tests/golden/map-counts.json (не с самим артефактом — иначе
+тавтология). Назначение: поймать регрессии генератора (пропали
+символы/рёбра/блоки, разъехались макросы) при изменении кода.
 
 Сверка по принципу «должно совпасть или быть строго больше»: рефакторинг
 только добавляет код, поэтому расхождение в меньшую сторону — ошибка.
+
+`--refresh-golden` обновляет эталон после осознанных изменений.
 """
 
 import argparse
@@ -19,6 +22,8 @@ sys.path.insert(0, TOOLS_DIR)
 import scan_symbols as s  # noqa: E402
 
 REPO_ROOT = s.REPO_ROOT
+GOLDEN_PATH = os.path.join(os.path.dirname(TOOLS_DIR), "tests", "golden",
+                           "map-counts.json")
 
 
 def main():
@@ -29,9 +34,23 @@ def main():
                                                  "compile_commands.json"))
     ap.add_argument("--tus", default="fixture", choices=["fixture", "full"],
                     help="fixture: только тестовые фикстуры (быстро)")
+    ap.add_argument("--refresh-golden", action="store_true",
+                    help="обновить tests/golden/map-counts.json по артефакту")
     args = ap.parse_args()
 
     with open(args.map) as f:
+        artifact = json.load(f)
+    if args.refresh_golden:
+        golden = {"platform": artifact.get("platform"),
+                  "build_config": artifact.get("build_config"),
+                  "counts": artifact["counts"],
+                  "generated_by": "scan_symbols.py + scan_regions.py"}
+        with open(GOLDEN_PATH, "w") as f:
+            json.dump(golden, f, ensure_ascii=False, indent=2)
+            f.write("\n")
+        print("golden обновлён:", GOLDEN_PATH)
+        return 0
+    with open(GOLDEN_PATH) as f:
         golden = json.load(f)
 
     if args.tus == "fixture":
@@ -79,16 +98,29 @@ def main():
             s.walk(ast, col)
             s.scan_macros(args_clang(), name, entry, col)
         s.finalize_blocks(col)
+        raw = {**col.functions, **col.types, **col.macros}
+        symbols, _ = s.canonicalize_symbols(raw)
         got = {
-            "functions": len(col.functions),
-            "types": len(col.types),
-            "macros": len(col.macros),
-            "blocks": sum(len(f["blocks"]) for f in col.functions.values()),
+            "functions": sum(1 for v in symbols.values()
+                             if v["kind"] == "function"),
+            "types": sum(1 for v in symbols.values()
+                         if v["kind"] in ("record", "cxxrecord", "enum", "typedef")),
+            "macros": sum(1 for v in symbols.values() if v["kind"] == "macro"),
+            "blocks": sum(len(v["blocks"]) for v in symbols.values()
+                         if v["kind"] == "function"),
         }
+        # регионы считаются из исходников (без clang) — точечная проверка
+        try:
+            from scan_regions import build_regions, collect_source_files
+            got["regions"] = len(build_regions(collect_source_files()))
+        except ImportError:
+            got["regions"] = None
         g = golden["counts"]
         # правило «не меньше»: рефакторинг только растёт
         checks = []
         for k in got:
+            if got[k] is None:
+                continue
             ok = got[k] >= g[k]
             checks.append(("%s: %d >= %d" % (k, got[k], g[k]), ok))
 

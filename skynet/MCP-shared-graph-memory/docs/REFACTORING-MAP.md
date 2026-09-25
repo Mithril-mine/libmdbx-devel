@@ -37,8 +37,11 @@
 | Таблица | Флаги | Ключ → Значение |
 |---|---|---|
 | `symbols` | DEFAULTS | `fq-имя символа` → JSON (ниже) |
-| `call_edges` | DUPSORT | `caller_id` → set `callee_id` (+ `kind=syntax\|semantic`) |
+| `call_edges` | DUPSORT | `caller_id` → JSON `{kind, resolved, ambiguous, callee}` |
+| `call_edges_rev` | DUPSORT | `callee_id` → `caller_id` (обратные рёбра для impact) |
 | `groups` | DUPSORT | `group:{kind}:{name}` → set member_key |
+| `sym_ids` | DEFAULTS | symbol_key → uint64 id (стабильный, не чистится) |
+| `sym_id2key` | INTEGERKEY | uint64 id → symbol_key (для links/моста) |
 | `probes` | DEFAULTS | `probe:{symbol}#{block-id}` → JSON |
 | `coverage` | DUPSORT | `test_id` → set symbol_id |
 | `ci_jobs` | DEFAULTS | `{workflow}/{job}` → JSON |
@@ -129,15 +132,35 @@ group:task:B63            → {символы, тесты, записи, док�
 ## Дорожная карта
 
 1. **Шаг 0 (готово)**: фиксация контекста (этот документ, память, BACKLOG B65).
-2. **Шаг 1 (пилот — реализован)**: `scan_symbols.py` (C + C++, функции/типы/
-   макросы/блоки/рёбра, clang ast-dump=json + `-E -dD` для макросов),
-   валидатор `validate_map.py` (сверка с golden-счётчиками), таблицы
-   symbols/call_edges/groups + батчевый загрузчик `load_map.py`.
-   Текущие счётчики артефакта (Linux x86_64, clang 18):
-   functions 2941, types 368, macros 550, blocks 29772, edges 17785
-   (unresolved 5124 — системные вызовы/`__builtin_*`).
+2. **Шаг 1 (пилот — реализован полностью)**:
+   - `scan_symbols.py`: C + C++ (функции/типы/макросы/блоки/рёбра),
+     clang ast-dump=json + `-E -dD` для макросов; **канонизация ключей**
+     `fn:{qname}` (+`#sig` перегрузки, `@module` TU-static, дедуп inline);
+   - `scan_regions.py`: **#if-дерево** (cond_regions) без компиляции +
+     классификация (platform/option/technical, inner-function/gating) +
+     визуализация `--tree`; привязка символов к регионам + фаcет `configs`;
+   - `validate_map.py`: сверка со статичным golden (`tests/golden/`);
+   - таблицы symbols/call_edges(+rev)/groups/sym_ids/sym_id2key + батчевый
+     загрузчик `load_map.py --replace` (самоизлечение дрейфа);
+   - **мост curated ↔ structural**: `link()` принимает символы
+     (`fn:`/`type:`/`macro:`), id через `mdbx_dbi_sequence`, `refresh_stale`,
+     `mdbx_canary_get/put` (magic/pоколение карты).
+   Текущие счётчики (Linux x86_64, clang 18):
+   functions 2588, types 368, macros 518, blocks 30315, edges 18439
+   (unresolved 5266 — системные вызовы/`__builtin_*`), regions 1131.
 3. **Шаг 2**: semantic-рёбра, реестр probes (из `skynet/probes.md`), коллекторы
-   coverage/test_metrics/ci_jobs, `refresh_stale`.
+   coverage/test_metrics/ci_jobs, многоконфигурационное сканирование
+   (win32/macOS — нужен кросс-компилятор или CI-прогоны).
+
+## Ограничения (зафиксированы)
+
+- **Тела функций из веток, неактивных в текущей конфигурации, отсутствуют
+  в AST** (например `lck-windows.c` на Linux): `configs`-разметка честно
+  показывает платформу, но строки/блоки таких тел недоступны без
+  win32/macOS-скана. Полнота достигается многоконфигурационным прогоном.
+- Канонические ключи зависят от `c++filt` (деманглинг Itanium ABI). На
+  платформах без него C++-методы не получат namespace-квалификацию из
+  mangledName (fallback — индекс по (имя, сигнатура)).
 
 ## Открытые вопросы
 
@@ -148,3 +171,5 @@ group:task:B63            → {символы, тесты, записи, док�
 - Статус миграции: отдельная таблица `migration_map` или поле `cpp_status`
   в symbols (пока поле).
 - `groups` наполнение: автогенерация из coverage/ci/задач + курируемо.
+- Ветки `#else` получают буквальную инверсию условия (`!A && !B`) — для
+  сложных условий полезен нормализатор/мини-оценщик в cond_regions.

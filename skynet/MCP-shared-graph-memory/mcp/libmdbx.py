@@ -94,6 +94,12 @@ ffi.cdef(
         const char *flags;
         const char *metadata;
     };
+    struct MDBX_canary {
+        uint64_t x;
+        uint64_t y;
+        uint64_t z;
+        uint64_t v;
+    };
 
     int mdbx_env_create(void **env);
     int mdbx_env_set_option(void *env, int option, uint64_t value);
@@ -106,6 +112,10 @@ ffi.cdef(
     int mdbx_txn_abort_ex(void *txn, void *latency);
     int mdbx_dbi_open(void *txn, const char *name, unsigned int flags,
                       MDBX_dbi *dbi);
+    int mdbx_dbi_sequence(void *txn, MDBX_dbi dbi, uint64_t *result,
+                          uint64_t increment);
+    int mdbx_canary_put(void *txn, struct MDBX_canary *canary);
+    int mdbx_canary_get(const void *txn, struct MDBX_canary *canary);
     int mdbx_put(void *txn, MDBX_dbi dbi, const MDBX_val *key, MDBX_val *data,
                  unsigned int flags);
     int mdbx_get(void *txn, MDBX_dbi dbi, const MDBX_val *key, MDBX_val *data);
@@ -459,6 +469,35 @@ class Txn:
     def count(self, dbi: int) -> int:
         with self.cursor(dbi) as cur:
             return cur.count_all()
+
+    def sequence(self, dbi: int, increment: int = 1) -> int:
+        """mdbx_dbi_sequence: атомарный инкремент счётчика таблицы.
+
+        Возвращает текущее значение ДО изменения (как в C API).
+        В read-only транзакции increment должен быть 0.
+        """
+        out = ffi.new("uint64_t *")
+        rc = _get_lib().mdbx_dbi_sequence(self.ptr, dbi, out, increment)
+        if rc == RC_RESULT_TRUE:
+            # переполнение
+            raise LibmdbxError(rc, "mdbx_dbi_sequence overflow")
+        check(rc, "mdbx_dbi_sequence")
+        return int(out[0])
+
+    def canary_get(self) -> dict:
+        """mdbx_canary_get: четыре uint64 маркера (x,y,z,v)."""
+        can = ffi.new("struct MDBX_canary *")
+        check(_get_lib().mdbx_canary_get(self.ptr, can), "mdbx_canary_get")
+        return {"x": int(can.x), "y": int(can.y), "z": int(can.z),
+                "v": int(can.v)}
+
+    def canary_put(self, x=None, y=None, z=None) -> None:
+        """mdbx_canary_put: обновляет x/y/z; v всегда = номер транзакции."""
+        can = ffi.new("struct MDBX_canary *")
+        can.x = x or 0
+        can.y = y or 0
+        can.z = z or 0
+        check(_get_lib().mdbx_canary_put(self.ptr, can), "mdbx_canary_put")
 
 
 class Cursor:

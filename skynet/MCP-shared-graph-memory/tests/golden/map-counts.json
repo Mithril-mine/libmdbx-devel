@@ -1,0 +1,15 @@
+{
+  "platform": "linux-x86_64",
+  "build_config": "scan",
+  "counts": {
+    "functions": 2588,
+    "types": 368,
+    "macros": 518,
+    "blocks": 30315,
+    "edges": 18439,
+    "unresolved_edges": 5266,
+    "regions": 1131
+  },
+  "generated_by": "scan_symbols.py + scan_regions.py",
+  "notes": "Эталон счётчиков карты исходников (golden). Обновлять через validate_map.py --refresh-golden после осознанных изменений."
+}

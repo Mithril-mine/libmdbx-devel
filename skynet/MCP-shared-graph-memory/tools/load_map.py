@@ -1,11 +1,14 @@
 #!/usr/bin/env python3
 """load_map.py — загрузка refactoring-map.json в структурный слой Store.
 
-Читает артефакт сканера (tools/artifacts/refactoring-map.json) и аддитивно
-наполняет таблицы:
-  - symbols:    ключ fq-имени -> JSON символа (функция/тип/макрос);
-  - call_edges: caller -> {kind}\x01{callee} (DUPSORT);
-  - groups:     group:{kind}:{name} -> member_key (фаcеты подсистем).
+Читает артефакт сканера (tools/artifacts/refactoring-map.json) и наполняет:
+  - symbols:      ключ fq-имени -> JSON символа (функция/тип/макрос);
+  - call_edges:   caller -> JSON {kind, resolved, ambiguous, callee} (DUPSORT);
+  - call_edges_rev: callee -> caller (обратные рёбра для impact-анализа);
+  - groups:       group:{kind}:{name} -> member_key (фаcеты подсистем).
+
+`--replace` очищает перегенерируемые таблицы перед загрузкой (самоизлечение
+дрейфа координат); без него — аддитивное дополнение.
 
 Паттерн исполнения — как tools/build_libmdbx.py: детерминированный прогон,
 в конце сверяет счётчики и печатает сводку.
@@ -33,6 +36,8 @@ def main():
     ap.add_argument("--map", default=os.path.join(TOOLS_DIR, "artifacts",
                                                   "refactoring-map.json"))
     ap.add_argument("--db", default=":memory:")
+    ap.add_argument("--replace", action="store_true",
+                    help="очистить структурные таблицы перед загрузкой")
     ap.add_argument("--dry-run", action="store_true",
                     help="сверка только: не писать в БД")
     args = ap.parse_args()
@@ -60,13 +65,19 @@ def main():
         groups.setdefault(gkey, set()).add(key)
 
     t0 = time.time()
-    loaded = store.map_load_batch(symbols, edges, groups)
+    loaded = store.map_load_batch(symbols, edges, groups,
+                                  replace=args.replace)
     dt = time.time() - t0
 
     n_sym = len(store.map_symbols())
+    # проверка обратных рёбер: случайное разрешённое ребро
+    n_rev = 0
+    if edges:
+        sample = next(e for e in edges if e.get("resolved"))
+        n_rev = len(store.map_callers_of(sample["callee"]))
     print("loaded: symbols=%d edges=%d groups=%d in %.1fs" % (
         loaded["symbols"], loaded["edges"], loaded["groups"], dt))
-    print("verify: symbols=%d" % n_sym)
+    print("verify: symbols=%d reverse_sample=%d" % (n_sym, n_rev))
     store.close()
 
 

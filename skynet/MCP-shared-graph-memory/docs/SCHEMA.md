@@ -4,7 +4,7 @@
 > Эволюционировала из исходной спецификации владельца; целочисленные индексы
 > — по `docs/DESIGN.md`.
 
-## 1. Таблицы (DBI) — 14
+## 1. Таблицы (DBI) — 18
 
 | DBI | Флаги | Ключ → Значение | Назначение |
 |---|---|---|---|
@@ -20,8 +20,11 @@
 | `archive` | DEFAULTS | record_key → JSON | миграция cold-записей |
 | `meta` | DEFAULTS | `next_id` → uint64 | sequence id |
 | `symbols` | DEFAULTS | fq-имя символа → JSON | карта исходников (refactoring-map) |
-| `call_edges` | DUPSORT | `caller_id` → set `kind\0callee_id` | вызовы (syntax/semantic) |
+| `call_edges` | DUPSORT | `caller_id` → JSON `{kind, resolved, ambiguous, callee}` | вызовы (syntax/semantic) |
+| `call_edges_rev` | DUPSORT | `callee_id` → `caller_id` | обратные рёбра (impact) |
 | `groups` | DUPSORT | `group:{kind}:{name}` → set member_key | фасеты (подсистемы/темы) |
+| `sym_ids` | DEFAULTS | symbol_key → uint64 id | стабильный id символа (sequence) |
+| `sym_id2key` | INTEGERKEY | uint64 id → symbol_key | обратное отображение символа |
 
 `mdbx_env_set_option(env, MDBX_opt_max_db, 32)`. Одна write-транзакция на операцию
 (в т.ч. LRU-касания — батчем, см. §8).
@@ -34,7 +37,7 @@
 рефакторинга C→C++), длительности тестов. Правила:
 - таблицы открываются один раз при старте (`open_dbi(CREATE)`) — добавлять можно
   и в рантайме (libmdbx поддерживает создание именованных DBI в любой момент);
-- под новые таблицы держать запас `maxdbs` (сейчас 32, используется 14);
+- под новые таблицы держать запас `maxdbs` (сейчас 32, используется 18);
 - кодирование существующих строк (`access`, `ids`) централизовано в
   `pack_access`/`unpack_access` — смена формата затрагивает одно место;
 - при необходимости схема может управляться через MCP (новый инструмент,
