@@ -1,6 +1,6 @@
 """Store — персистентная память роя на libmdbx.
 
-Схема (skynet/mcp-memory-design.md):
+Схема (docs/SCHEMA.md):
   records   DEFAULTS                       key=канон.строка → JSON body
   vocab     DEFAULTS                       key=module:{m} | {m}:{topic} → {}
   history   DEFAULTS                       key=_history:{key}:{ts} → JSON
@@ -13,7 +13,9 @@
   archive   DEFAULTS                       key=record_key → JSON (gc-миграция)
   meta      DEFAULTS                       key=b"next_id" → uint64
 
-Контракт: одна write-транзакция на операцию; класс ошибок см. errors.py.
+Контракт: одна write-транзакция на операцию (в т.ч. LRU-касания — батчем);
+env открыт с MDBX_SAFE_NOSYNC, фоновый тред раз в секунду шлёт sync_poll,
+пороги сброса — sync_bytes/sync_period (см. ARCHITECTURE.md §«Синхронизация»).
 """
 
 from __future__ import annotations
@@ -22,6 +24,7 @@ import json
 import math
 import os
 import sys
+import threading
 import time
 
 from . import index as idx
@@ -42,6 +45,8 @@ ACCESS_LEN = 24  # float64 score + uint64 last_access + uint64 count
 BUSY_RETRIES = 3
 GC_HOT = 0.7
 GC_WARM = 0.3
+LRU_RATE_LIMIT_SECONDS = 60
+SYNC_POLL_INTERVAL_SECONDS = 1.0
 
 
 def _pack_u64(n: int) -> bytes:
@@ -86,6 +91,30 @@ class Store:
         self._load_vocab()
         self.next_id = self._load_next_id()
         self.last_gc = None
+        self._closed = False
+        # LRU-касания: in-memory rate-limit (60с на запись, per-process)
+        # и буфер, который сбрасывается одной write-txn (см. _flush_touches).
+        self._lru_last: dict = {}
+        self._touch_ids: list = []
+        # Фоновый тред: раз в секунду mdbx_env_sync_poll (дешёвый nonblocking
+        # сброс по порогам sync_bytes/sync_period). Транзакций не создаёт.
+        self._sync_stop = threading.Event()
+        self._sync_thread = threading.Thread(
+            target=self._sync_loop, name="store-sync-poll", daemon=True)
+        self._sync_thread.start()
+
+    # --- sync ---------------------------------------------------------------
+    def _sync_loop(self) -> None:
+        while not self._sync_stop.wait(SYNC_POLL_INTERVAL_SECONDS):
+            try:
+                self.env.sync(force=False, nonblock=True)
+            except Exception:
+                pass  # опрос синка не должен ломать сервер
+
+    def _stop_sync_thread(self) -> None:
+        self._sync_stop.set()
+        if self._sync_thread is not None and self._sync_thread.is_alive():
+            self._sync_thread.join(timeout=2.0)
 
     # --- init -----------------------------------------------------------------
     def _load_vocab(self) -> None:
@@ -159,24 +188,33 @@ class Store:
         return {"touched": key}
 
     def _bump_access(self, key: str, force: bool = False) -> None:
-        """Обновление LRU при чтении (rate-limit 60с между записями)."""
+        """Отложенная регистрация касания LRU (in-memory, без записи).
+
+        Сама запись в access произойдёт одним батчем (_flush_touches).
+        Rate-limit 60с на запись — per-process, чтобы гасить повторные чтения.
+        """
+        now = time.time()
+        if not force and now - self._lru_last.get(key, 0.0) < LRU_RATE_LIMIT_SECONDS:
+            return
+        self._lru_last[key] = now
+        self._touch_ids.append(key)
+
+    def _flush_touches(self) -> None:
+        """Одна write-txn на все накопленные LRU-касания (вместо N мелких)."""
+        if not self._touch_ids:
+            return
+        pending, self._touch_ids = self._touch_ids, []
         try:
             with self._begin_write() as txn:
-                rec_dbi = self.dbi(txn, "records")
-                rc, val = txn.get(rec_dbi, key.encode())
-                if val is None:
-                    return
-                body = json.loads(val.decode())
-                acc_dbi = self._dbi["access"]
-                idb = _pack_u64(body.get("_id", 0))
-                r2, packed = txn.get(acc_dbi, idb)
-                if not force and packed and len(packed) == ACCESS_LEN:
-                    _, ts, _ = unpack_access(packed)
-                    if _now() - ts < 60:
-                        return
-                self._touch_access(txn, body.get("_id", 0), score=None, count_delta=1)
+                ids_dbi = self.dbi(txn, "ids")
+                for key in pending:
+                    _, idb = txn.get(ids_dbi, key.encode())
+                    if idb is None:
+                        continue
+                    self._touch_access(txn, _unpack_u64(idb),
+                                       score=None, count_delta=1)
         except MemoryError:
-            pass  # конкурентный сбой LRU-записи не критичен для чтения
+            pass  # сбой LRU-метаданных не критичен для чтения
 
     def get_record(self, key: str):
         """Возвращает dict тела записи или None."""
@@ -354,6 +392,7 @@ class Store:
         top = out[:limit]
         for r in top:
             self._bump_access(r["key"])
+        self._flush_touches()
         return top
 
     def keys(self, pattern: str = "", limit: int = None) -> list:
@@ -458,6 +497,7 @@ class Store:
         top = rows[:limit]
         for r in top:
             self._bump_access(r["key"])
+        self._flush_touches()
         return top
 
     # --- links -----------------------------------------------------------------
@@ -675,10 +715,11 @@ class Store:
         }
         if not dry_run and archive and cold:
             moved = 0
-            for key, rec_id, body in ids_to_cold:
-                with self._begin_write() as txn:
-                    arch_dbi = self.dbi(txn, "archive")
-                    txn.put(arch_dbi, key, json.dumps(body, ensure_ascii=False).encode())
+            with self._begin_write() as txn:
+                arch_dbi = self.dbi(txn, "archive")
+                for key, rec_id, body in ids_to_cold:
+                    txn.put(arch_dbi, key,
+                            json.dumps(body, ensure_ascii=False).encode())
                     self._delete_record(txn, key.decode(), body)
                     moved += 1
             stats["archived"] = moved
@@ -768,6 +809,19 @@ class Store:
         }
 
     def close(self) -> None:
+        if self._closed:
+            return
+        self._closed = True
+        # сбросить накопленные LRU-касания и остановить фоновый тред синка
+        try:
+            self._flush_touches()
+        except Exception:
+            pass
+        self._stop_sync_thread()
+        try:
+            self.env.sync(force=True, nonblock=False)
+        except Exception:
+            pass
         self.env.close()
 
     def __enter__(self) -> "Store":

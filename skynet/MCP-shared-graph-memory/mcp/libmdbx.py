@@ -122,6 +122,7 @@ ffi.cdef(
     const char *mdbx_strerror(int errnum);
     int mdbx_env_get_maxvalsize_ex(void *env, unsigned int flags);
     int mdbx_env_get_maxkeysize_ex(void *env, unsigned int flags);
+    int mdbx_env_sync_ex(void *env, bool force, bool nonblock);
     """
 )
 
@@ -213,8 +214,14 @@ RC_BAD_VALSIZE = -30781
 RC_BUSY = -30778
 RC_EMULTIVAL = -30421
 
-# MDBX_option_t: первый элемент enum MDBX_option (mdbx.h:2166).
+# MDBX_option_t: enum MDBX_option (mdbx.h) — значения по порядку членов.
 MDBX_OPT_MAX_DB = 0
+MDBX_OPT_SYNC_BYTES = 2
+MDBX_OPT_SYNC_PERIOD = 3
+
+# Синхронизация: SAFE_NOSYNC — нет fsync на коммите; движок сам сбрасывает
+# накопленное по порогам sync_bytes/sync_period (см. mdbx.h sync_modes).
+MDBX_SAFE_NOSYNC = 0x10000
 
 
 class LibmdbxError(RuntimeError):
@@ -317,7 +324,8 @@ def _val_bytes(val: object) -> bytes:
 class Env:
     """Обёртка над MDBX_env с автоматическим закрытием."""
 
-    def __init__(self, path: str, maxdbs: int = 32, create: bool = True):
+    def __init__(self, path: str, maxdbs: int = 32, create: bool = True,
+                 sync_bytes: int = 64 << 20, sync_period: int = 60):
         self.path = path
         out = ffi.new("void **")
         check(_get_lib().mdbx_env_create(out), "mdbx_env_create")
@@ -326,8 +334,29 @@ class Env:
               "mdbx_env_set_option(max_db)")
         # mode=0 означает "открыть существующее, не создавать" (mdbx.h env_open).
         mode = 0o644 if create else 0
-        rc = _get_lib().mdbx_env_open(self._env, path.encode(), NOSUBDIR, mode)
+        # SAFE_NOSYNC: дешёвые коммиты; фоновый тред (Store) шлёт env_sync_poll
+        # раз в секунду, а движок сбрасывает по порогам sync_bytes/sync_period.
+        flags = NOSUBDIR | MDBX_SAFE_NOSYNC
+        rc = _get_lib().mdbx_env_open(self._env, path.encode(), flags, mode)
         check(rc, "mdbx_env_open")
+        if sync_bytes:
+            check(_get_lib().mdbx_env_set_option(self._env, MDBX_OPT_SYNC_BYTES,
+                                                 sync_bytes),
+                  "mdbx_env_set_option(sync_bytes)")
+        if sync_period:
+            check(_get_lib().mdbx_env_set_option(self._env, MDBX_OPT_SYNC_PERIOD,
+                                                 sync_period),
+                  "mdbx_env_set_option(sync_period)")
+
+    def sync(self, force: bool = False, nonblock: bool = True) -> None:
+        """Сброс буферов данных на диск (mdbx_env_sync_ex).
+
+        force=True — принудительный сброс; force=False — polling: сброс только
+        если достигнут порог sync_bytes/sync_period. nonblock=True не ждёт
+        чужую write-txn (вернёт MDBX_BUSY)."""
+        rc = _get_lib().mdbx_env_sync_ex(self._env, force, nonblock)
+        if rc not in (RC_SUCCESS, RC_RESULT_TRUE, RC_BUSY):
+            check(rc, "mdbx_env_sync_ex")
 
     def begin(self, readonly: bool = False, parent: Optional[object] = None) -> "Txn":
         out = ffi.new("void **")

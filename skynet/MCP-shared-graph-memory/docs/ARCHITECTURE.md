@@ -31,6 +31,25 @@
 - `safe_store` = один write-txn: normalize → проверка существования →
   merge (old → `history`) или SimHash-дедуп (`conflict`) → `records` +
   `ids` + `id2key` + `inverted`(термы) + `simhash` + `access` + `meta.next_id`.
+- **LRU-касания батчем**: `recall`/`search` копят касания в памяти
+  (in-memory rate-limit 60 с на запись) и сбрасывают одной write-txn
+  (`_flush_touches`) — не по транзакции на запись.
+
+### 2.1 Синхронизация
+
+- **Sync-режим**: env открывается с `MDBX_SAFE_NOSYNC` (без fsync на коммите;
+  данные — в page cache). Целостность БД сохраняется при любом краше
+  (откат к последнему steady-коммиту); OS-краш может потерять коммиты,
+  сделанные после последнего сброса. Это осознанно «не надёжнее окружения».
+- **Автосброс движком**: `sync_bytes = 64 MiB`, `sync_period = 60 c`
+  (межпроцессные пороги) — движок сам делает steady-точку по объёму/времени.
+- **Фоновый тред** (`Store._sync_loop`): раз в секунду
+  `mdbx_env_sync_poll` = `mdbx_env_sync_ex(force=false, nonblock=true)`.
+  Транзакций не создаёт; на `close()` — stop+join и один финальный
+  `mdbx_env_sync_ex(force=true)`.
+- **Контракт дурабилити**: краш процесса — безопасен (page cache); OS-краш —
+  потеря ≤ ~60 с (до последней steady-точки). Критичные знания дополнительно
+  фиксируются явным `mdbx_env_sync(force=true)` при необходимости.
 
 ## 3. Контракт ошибок
 
@@ -49,7 +68,7 @@ MCP-сервер отдаёт его как **JSON-RPC protocol error (-32000)**
 | `ffi.new("void *")` запрещён | out-параметры через `ffi.new("void **")` |
 | буферы `MDBX_val.iov_base` освобождаются GC (dangling pointer → мусор в ключах) | класс `MVal` держит `_buf` живым рядом с `ptr` |
 | `ffi.new("MDBX_env *")` нельзя (opaque struct) | все handle'ы — `void*` |
-| вложенные read-txn → `MDBX_BAD_RSLOT` | не открывать txn внутри txn |
+| вложенные read-txn → `MDBX_BAD_RSLOT` | один поток = одна активная txn (TLS-слот читателя); не открывать txn внутри txn |
 
 ## 5. Индексы
 

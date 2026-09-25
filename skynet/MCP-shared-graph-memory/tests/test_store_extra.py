@@ -180,12 +180,84 @@ def test_bump_rate_limited(store):
     seed_vocab(store, [("crypto", "alignment")])
     store.safe_store("bug:crypto:alignment", "bug", "a bug", 0.5)
     store._bump_access("bug:crypto:alignment", force=True)
-    # второй вызов в пределах 60с не должен увеличить счётчик
+    # второй вызов в пределах 60с не должен попасть в буфер касаний
     store._bump_access("bug:crypto:alignment", force=False)
+    store._flush_touches()  # одна write-txn на все касания
     with store.env.begin(readonly=True) as txn:
         _, packed = txn.get(store.dbi(txn, "access"), _pack_u64(1))
         _, _, cnt = unpack_access(packed)
     assert cnt == 1
+
+
+def test_bump_batched_single_txn(store, monkeypatch):
+    """Касания нескольких записей сбрасываются одной write-txn, а не N."""
+    seed_vocab(store, [("crypto", "alignment"), ("platform", "android")])
+    store.safe_store("bug:crypto:alignment", "bug", "bug one", 0.5)
+    store.safe_store("fact:platform:android", "fact", "fact one", 0.5)
+    store._lru_last.clear()
+    writes = []
+
+    import mcp.store as store_mod
+    orig = store_mod.Store._begin_write
+
+    def counting(self):
+        writes.append(1)
+        return orig(self)
+
+    monkeypatch.setattr(store_mod.Store, "_begin_write", counting)
+    store._bump_access("bug:crypto:alignment", force=True)
+    store._bump_access("fact:platform:android", force=True)
+    store._flush_touches()
+    assert len(writes) == 1  # одна транзакция на оба касания
+    with store.env.begin(readonly=True) as txn:
+        _, p1 = txn.get(store.dbi(txn, "access"), _pack_u64(1))
+        _, p2 = txn.get(store.dbi(txn, "access"), _pack_u64(2))
+    assert unpack_access(p1)[2] == 1
+    assert unpack_access(p2)[2] == 1
+
+
+def test_recall_flushes_one_txn(store, monkeypatch):
+    """recall(limit=5) делает одну write-txn на LRU, а не по одной на запись."""
+    seed_vocab(store, [("crypto", "alignment"), ("platform", "android"),
+                       ("platform", "android-abi"), ("build", "release")])
+    store.safe_store("bug:crypto:alignment", "bug", "bug alpha", 0.7)
+    store.safe_store("fact:platform:android", "fact", "fact beta", 0.9)
+    store.safe_store("proc:build:release", "proc", "proc gamma", 0.6)
+    store._lru_last.clear()
+    writes = []
+
+    import mcp.store as store_mod
+    orig = store_mod.Store._begin_write
+
+    def counting(self):
+        writes.append(1)
+        return orig(self)
+
+    monkeypatch.setattr(store_mod.Store, "_begin_write", counting)
+    store.recall("fact:*")
+    assert len(writes) == 1
+
+
+def test_sync_poll_thread_lifecycle(store, monkeypatch):
+    """Фоновый тред шлёт sync_poll раз в секунду и останавливается на close."""
+    calls = []
+    real_sync = store.env.sync
+
+    def spy_sync(force=False, nonblock=True):
+        calls.append((force, nonblock))
+        return real_sync(force=force, nonblock=nonblock)
+
+    monkeypatch.setattr(store.env, "sync", spy_sync)
+    assert store._sync_thread.is_alive()
+
+    import time as _time
+    _time.sleep(1.4)
+    assert len(calls) >= 1
+    assert all(force is False and nonblock is True for force, nonblock in calls)
+
+    store.close()
+    assert store._closed is True
+    assert not store._sync_thread.is_alive()
 
 
 def test_remove_topic_normalizer():

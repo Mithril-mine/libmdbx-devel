@@ -82,4 +82,6 @@ nice -n 10 python3 -m coverage run -m pytest tests/ && python3 -m coverage repor
 - cffi ABI-режим: enum и `#define` не создают атрибутов `ffi.*` — только числа.
 - `ffi.new("void *")` запрещён — out-параметры через `void **`.
 - Буферы `MDBX_val.iov_base` освобождаются GC — удерживать через `MVal`.
-- Не открывать вложенные read-txn в одном потоке (`MDBX_BAD_RSLOT`) — передавать txn.
+- Один поток = одна активная транзакция: повторный read-txn переиспользует
+  TLS-слот читателя и инвалидирует первый (`MDBX_BAD_RSLOT`) — не открывать
+  txn внутри txn.
