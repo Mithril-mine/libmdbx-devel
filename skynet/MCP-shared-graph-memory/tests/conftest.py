@@ -6,7 +6,7 @@ import pytest
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from mcp_memory import Store  # noqa: E402
+from mcp import Store  # noqa: E402
 
 
 @pytest.fixture

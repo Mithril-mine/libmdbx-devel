@@ -73,21 +73,43 @@ ffi.cdef(
     #define MDBX_SET_LOWERBOUND 19
     #define MDBX_SET_UPPERBOUND 20
 
+    struct MDBX_version_info {
+        uint16_t major;
+        uint16_t minor;
+        uint16_t patch;
+        uint16_t tweak;
+        const char *semver_prerelease;
+        struct {
+            const char *datetime;
+            const char *tree;
+            const char *commit;
+            const char *describe;
+        } git;
+        const char *sourcery;
+    };
+    struct MDBX_build_info {
+        const char *datetime;
+        const char *target;
+        const char *options;
+        const char *compiler;
+        const char *flags;
+        const char *metadata;
+    };
+
     int mdbx_env_create(void **env);
-    int mdbx_env_set_maxdbs(void *env, unsigned int maxdbs);
+    int mdbx_env_set_option(void *env, int option, uint64_t value);
     int mdbx_env_open(void *env, const char *path, unsigned int flags,
                       unsigned int mode);
-    int mdbx_env_close(void *env);
-    int mdbx_txn_begin(void *env, void *parent, unsigned int flags,
-                       void **txn);
-    int mdbx_txn_commit(void *txn);
-    void mdbx_txn_abort(void *txn);
+    int mdbx_env_close_ex(void *env, bool dont_sync);
+    int mdbx_txn_begin_ex(void *env, void *parent, unsigned int flags,
+                          void **txn, void *context);
+    int mdbx_txn_commit_ex(void *txn, void *latency);
+    int mdbx_txn_abort_ex(void *txn, void *latency);
     int mdbx_dbi_open(void *txn, const char *name, unsigned int flags,
                       MDBX_dbi *dbi);
     int mdbx_dbi_close(void *env, MDBX_dbi dbi);
-    int mdbx_dbi_flags(void *txn, MDBX_dbi dbi, unsigned int *flags);
-    int mdbx_put(void *txn, MDBX_dbi dbi, const MDBX_val *key,
-                 const MDBX_val *data, unsigned int flags);
+    int mdbx_put(void *txn, MDBX_dbi dbi, const MDBX_val *key, MDBX_val *data,
+                 unsigned int flags);
     int mdbx_get(void *txn, MDBX_dbi dbi, const MDBX_val *key, MDBX_val *data);
     int mdbx_del(void *txn, MDBX_dbi dbi, const MDBX_val *key,
                  const MDBX_val *data);
@@ -95,15 +117,13 @@ ffi.cdef(
     void mdbx_cursor_close(void *cursor);
     int mdbx_cursor_get(void *cursor, MDBX_val *key, MDBX_val *data,
                         int op);
-    int mdbx_cursor_put(void *cursor, const MDBX_val *key,
-                        const MDBX_val *data, unsigned int flags);
+    int mdbx_cursor_put(void *cursor, const MDBX_val *key, MDBX_val *data,
+                        unsigned int flags);
     int mdbx_cursor_del(void *cursor, unsigned int flags);
     int mdbx_cursor_count(void *cursor, size_t *count);
-    int mdbx_cursor_eof(void *cursor);
     const char *mdbx_strerror(int errnum);
-    const char *mdbx_version_string(void);
     int mdbx_env_get_maxvalsize_ex(void *env, unsigned int flags);
-    int mdbx_env_get_maxkeysize_ex(void *env);
+    int mdbx_env_get_maxkeysize_ex(void *env, unsigned int flags);
     """
 )
 
@@ -116,7 +136,7 @@ _PACKAGE_LIB_NAMES = ("libmdbx.so", "libmdbx.dylib", "libmdbx.dll", "mdbx.dll")
 
 
 def _find_package_lib():
-    """Поиск собранной библиотеки в mcp_memory/_lib (см. tools/build_libmdbx.py)."""
+    """Поиск собранной библиотеки в mcp/_lib (см. tools/build_libmdbx.py)."""
     if not os.path.isdir(_LIB_DIR):
         return None
     for name in _PACKAGE_LIB_NAMES:
@@ -128,17 +148,22 @@ def _find_package_lib():
 
 def load_library(path: str = None) -> object:
     """Загрузка libmdbx: MDBX_SO_PATH > пакетный _lib > legacy дефолт > системная."""
+    global _loaded_path
     if path is None:
         path = (os.environ.get("MDBX_SO_PATH")
                 or _find_package_lib()
                 or os.path.expanduser(DEFAULT_SO))
     try:
-        return ffi.dlopen(path)
+        lib = ffi.dlopen(path)
     except OSError:
-        return ffi.dlopen("libmdbx.so")
+        lib = ffi.dlopen("libmdbx.so")
+        path = "libmdbx.so"
+    _loaded_path = path
+    return lib
 
 
 _lib = None
+_loaded_path = None
 
 
 def _get_lib():
@@ -190,6 +215,9 @@ RC_BAD_VALSIZE = -30781
 RC_BUSY = -30778
 RC_EMULTIVAL = -30421
 
+# MDBX_option_t: первый элемент enum MDBX_option (mdbx.h:2166).
+MDBX_OPT_MAX_DB = 0
+
 
 class LibmdbxError(RuntimeError):
     """Ошибка движка с кодом rc."""
@@ -211,11 +239,51 @@ def strerror(rc: int) -> str:
         return "unknown"
 
 
+# --- версия/сборка: mdbx_version и mdbx_build — данные-глобалы -----------------
+# cffi (ABI, dlopen) не умеет читать data-символы нецелочисленного типа,
+# поэтому структуры читаем через ctypes (импортируется вверху).
+class _GitInfo(ctypes.Structure):
+    _fields_ = [("datetime", ctypes.c_char_p), ("tree", ctypes.c_char_p),
+                ("commit", ctypes.c_char_p), ("describe", ctypes.c_char_p)]
+
+
+class _VersionInfo(ctypes.Structure):
+    _fields_ = [("major", ctypes.c_uint16), ("minor", ctypes.c_uint16),
+                ("patch", ctypes.c_uint16), ("tweak", ctypes.c_uint16),
+                ("semver_prerelease", ctypes.c_char_p), ("git", _GitInfo),
+                ("sourcery", ctypes.c_char_p)]
+
+
+class _BuildInfo(ctypes.Structure):
+    _fields_ = [("datetime", ctypes.c_char_p), ("target", ctypes.c_char_p),
+                ("options", ctypes.c_char_p), ("compiler", ctypes.c_char_p),
+                ("flags", ctypes.c_char_p), ("metadata", ctypes.c_char_p)]
+
+
+def _ctypes_lib():
+    _get_lib()  # разрешить путь (заполняет _loaded_path)
+    return ctypes.CDLL(_loaded_path or "libmdbx.so")
+
+
 def version_string() -> str:
+    """Версия из экспортируемого глобала mdbx_version (надёжно, не inline)."""
     try:
-        return ffi.string(_get_lib().mdbx_version_string()).decode()
+        v = _VersionInfo.in_dll(_ctypes_lib(), "mdbx_version")
+        git = v.git.describe or v.semver_prerelease or b""
+        return "%u.%u.%u.%u %s" % (v.major, v.minor, v.patch, v.tweak,
+                                   git.decode("utf-8", "replace"))
     except Exception:
         return "?"
+
+
+def build_string() -> str:
+    """Опции сборки из экспортируемого глобала mdbx_build."""
+    try:
+        b = _BuildInfo.in_dll(_ctypes_lib(), "mdbx_build")
+        opts = b.options or b""
+        return opts.decode("utf-8", "replace")
+    except Exception:
+        return ""
 
 
 def check(rc: int, where: str = "") -> int:
@@ -256,26 +324,26 @@ class Env:
         out = ffi.new("void **")
         check(_get_lib().mdbx_env_create(out), "mdbx_env_create")
         self._env = out[0]
-        check(_get_lib().mdbx_env_set_maxdbs(self._env, maxdbs), "mdbx_env_set_maxdbs")
-        flags = NOSUBDIR if create else NOSUBDIR
-        rc = _get_lib().mdbx_env_open(self._env, path.encode(), flags, 0o644)
-        if rc != RC_SUCCESS:
-            # Окружение может существовать, но быть несовместимым — пробуем без create
-            check(rc, "mdbx_env_open")
+        check(_get_lib().mdbx_env_set_option(self._env, MDBX_OPT_MAX_DB, maxdbs),
+              "mdbx_env_set_option(max_db)")
+        # mode=0 означает "открыть существующее, не создавать" (mdbx.h env_open).
+        mode = 0o644 if create else 0
+        rc = _get_lib().mdbx_env_open(self._env, path.encode(), NOSUBDIR, mode)
+        check(rc, "mdbx_env_open")
 
     def begin(self, readonly: bool = False, parent: Optional[object] = None) -> "Txn":
         out = ffi.new("void **")
         flags = TXN_RDONLY if readonly else TXN_READWRITE
         parent_ptr = ffi.NULL if parent is None else parent._txn
         check(
-            _get_lib().mdbx_txn_begin(self._env, parent_ptr, flags, out),
-            "mdbx_txn_begin",
+            _get_lib().mdbx_txn_begin_ex(self._env, parent_ptr, flags, out, ffi.NULL),
+            "mdbx_txn_begin_ex",
         )
         return Txn(self, out[0])
 
     def close(self) -> None:
         if self._env is not None and self._env != ffi.NULL:
-            check(_get_lib().mdbx_env_close(self._env), "mdbx_env_close")
+            check(_get_lib().mdbx_env_close_ex(self._env, False), "mdbx_env_close_ex")
             self._env = None
 
     def maxvalsize(self) -> int:
@@ -283,7 +351,7 @@ class Env:
         return rc if rc > 0 else 0
 
     def maxkeysize(self) -> int:
-        rc = _get_lib().mdbx_env_get_maxkeysize_ex(self._env)
+        rc = _get_lib().mdbx_env_get_maxkeysize_ex(self._env, DB_DEFAULTS)
         return rc if rc > 0 else 0
 
     def __enter__(self) -> "Env":
@@ -303,12 +371,14 @@ class Txn:
 
     def commit(self) -> None:
         if not self._done:
-            check(_get_lib().mdbx_txn_commit(self._txn), "mdbx_txn_commit")
+            check(_get_lib().mdbx_txn_commit_ex(self._txn, ffi.NULL),
+                  "mdbx_txn_commit_ex")
             self._done = True
 
     def abort(self) -> None:
         if not self._done:
-            _get_lib().mdbx_txn_abort(self._txn)
+            check(_get_lib().mdbx_txn_abort_ex(self._txn, ffi.NULL),
+                  "mdbx_txn_abort_ex")
             self._done = True
 
     def __enter__(self) -> "Txn":

@@ -105,18 +105,31 @@ endif()
 ```
 
 - `tools/build_libmdbx.py` собирает host-libmdbx независимо (отдельный
-  `_build-mcp-memory/`, `MDBX_BUILD_CXX=OFF`, `MDBX_ENABLE_TESTS=OFF`,
+  `_build-mcp-shared-graph-memory/`, `MDBX_BUILD_CXX=OFF`, `MDBX_ENABLE_TESTS=OFF`,
   `MDBX_BUILD_SHARED_LIBRARY=ON`, LTO=OFF, ccache) и кладёт артефакт в
-  `mcp_memory/_lib/`.
-- CTest-фикстура `mcp_memory_fixture` готовит библиотеку, тест
-  `mcp_memory_pytest` (LABELS `mcp-memory`) запускает pytest; оба выполняются
+  `mcp/_lib/`.
+- CTest-фикстура `mcp_fixture` готовит библиотеку, тест
+  `mcp_pytest` (LABELS `mcp-shared-graph-memory`) запускает pytest; оба выполняются
   только при `Python3_FOUND AND MDBX_CAN_RUN_HOST_TESTS`.
-- Рантайм-поиск библиотеки: `MDBX_SO_PATH` → `mcp_memory/_lib/` → legacy-дефолт →
+- Рантайм-поиск библиотеки: `MDBX_SO_PATH` → `mcp/_lib/` → legacy-дефолт →
   системная.
 
 ### 9.2 Установка
 
-Установлено отдельно от legacy: `~/.local/share/mcp-memory/` (launcher
-`mcp-memory-server.py`), БД по умолчанию
-`~/.local/share/mcp-memory/shared-graph-memory.mdbx`. Старый сервер
+Установлено отдельно от legacy: `~/.local/share/shared-graph-memory/` (launcher
+`server.py`), БД по умолчанию `~/.local/share/shared-graph-memory/db.mdbx`,
+имя MCP-инстанса в конфиге opencode — `shared-graph-memory.mdbx`. Старый сервер
 (`libmdbx-memory/`) остаётся нетронутым до переключения сессий.
+
+### 9.3 Соглашение об именах (аффиксы к ядру `shared-graph-memory`)
+
+| Контекст | Имя |
+|---|---|
+| Глобальный (документы/журнал; отличие от системного `mcp_memory`) | `mcp-shared-graph-memory-mdbx` |
+| Внутренняя структура и сборка (репо, CI, CMake) | `MCP-shared-graph-memory` / `mcp-shared-graph-memory` |
+| Конфиг mcp.json (имя MCP-инстанса) | `shared-graph-memory.mdbx` |
+| Каталог установки / рабочая копия | `~/.local/share/shared-graph-memory/` |
+| Файлы внутри каталога (без повтора слага) | `server.py`, `db.mdbx` |
+
+В контексте MCP-конфига префикс `mcp-` избыточен; суффикс `-mdbx` подчёркивает
+«shared граф на libmdbx» и отличает модуль от системного `mcp_memory`.

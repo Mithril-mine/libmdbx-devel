@@ -1,6 +1,6 @@
 """Тесты персистентности: переоткрытие Store сохраняет всё."""
 
-from mcp_memory import Store
+from mcp import Store
 from tests.conftest import seed_vocab
 
 

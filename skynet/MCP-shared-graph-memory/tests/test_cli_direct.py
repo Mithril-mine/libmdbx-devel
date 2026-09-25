@@ -4,13 +4,13 @@ import json
 
 import pytest
 
-from mcp_memory.cli import main
+from mcp.cli import main
 from tests.conftest import seed_vocab
 
 
 @pytest.fixture
 def seeded(store_path):
-    from mcp_memory import Store
+    from mcp import Store
     s = Store(store_path)
     seed_vocab(s, [("crypto", "alignment"), ("platform", "android"),
                    ("platform", "android-abi")])
@@ -109,7 +109,7 @@ def test_main_vocab_list(seeded, capsys):
 
 
 def test_main_default_path_env(seeded, capsys, monkeypatch):
-    monkeypatch.setenv("MEMORY_MDBX_PATH", seeded)
+    monkeypatch.setenv("SHARED_GRAPH_MEMORY_PATH", seeded)
     assert main(["stats"]) == 0
     st = json.loads(capsys.readouterr().out)
     assert st["records"] == 2

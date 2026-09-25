@@ -9,12 +9,12 @@ import pytest
 
 from tests.conftest import seed_vocab
 
-CLI = [sys.executable, "-m", "mcp_memory.cli"]
+CLI = [sys.executable, "-m", "mcp.cli"]
 
 
 @pytest.fixture
 def seeded(store_path):
-    from mcp_memory import Store
+    from mcp import Store
     s = Store(store_path)
     seed_vocab(s, [("crypto", "alignment"), ("platform", "android"),
                    ("platform", "android-abi")])
@@ -54,7 +54,7 @@ def test_cli_dump_key(seeded):
 def test_cli_graph_json(seeded):
     run(["--path", seeded, "purge"] if False else ["--path", seeded, "dump"])
     # нужна связь — создадим через Store напрямую
-    from mcp_memory import Store
+    from mcp import Store
     s = Store(seeded)
     s.link("bug:crypto:alignment", "related-to", "fact:platform:android-abi")
     s.close()
@@ -65,7 +65,7 @@ def test_cli_graph_json(seeded):
 
 
 def test_cli_graph_dot(seeded):
-    from mcp_memory import Store
+    from mcp import Store
     s = Store(seeded)
     s.link("bug:crypto:alignment", "related-to", "fact:platform:android-abi")
     s.close()

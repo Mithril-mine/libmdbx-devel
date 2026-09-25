@@ -14,21 +14,21 @@
 
 | Путь | Назначение |
 |---|---|
-| `mcp_memory/libmdbx.py` | Низкоуровневый cffi-биндинг (MVal удерживает буферы iov_base) |
-| `mcp_memory/errors.py` | Контракт ошибок `error$CODE \| CLASS \| DESC \| ACTION \| RETRY` |
-| `mcp_memory/normalize.py` | Канонизация ключей `тип:модуль:тема` + контролируемый словарь |
-| `mcp_memory/index.py` | Токенизация + SimHash (64-бит) для дедупликации |
-| `mcp_memory/store.py` | Store: 11 таблиц, все операции, одна write-txn на операцию |
-| `mcp_memory/mcp_server.py` | MCP-сервер (JSON-RPC 2.0 над stdio) |
-| `mcp_memory/cli.py` | memory-cli (dump/stats/graph/audit/gc/vocab/purge) |
+| `mcp/libmdbx.py` | Низкоуровневый cffi-биндинг (MVal удерживает буферы iov_base) |
+| `mcp/errors.py` | Контракт ошибок `error$CODE \| CLASS \| DESC \| ACTION \| RETRY` |
+| `mcp/normalize.py` | Канонизация ключей `тип:модуль:тема` + контролируемый словарь |
+| `mcp/index.py` | Токенизация + SimHash (64-бит) для дедупликации |
+| `mcp/store.py` | Store: 11 таблиц, все операции, одна write-txn на операцию |
+| `mcp/mcp_server.py` | MCP-сервер (JSON-RPC 2.0 над stdio) |
+| `mcp/cli.py` | memory-cli (dump/stats/graph/audit/gc/vocab/purge) |
 | `tests/` | 168 тестов, покрытие 99% |
 
 ## Требования
 
 - Python ≥ 3.9, `cffi`, `pytest` (для тестов).
 - `libmdbx`: собирается из master-дерева этого же репозитория через CMake
-  (см. «Сборка из master»), результат кладётся в `mcp_memory/_lib/` и находится
-  автоматически. Порядок поиска: env `MDBX_SO_PATH` → `mcp_memory/_lib/` →
+  (см. «Сборка из master»), результат кладётся в `mcp/_lib/` и находится
+  автоматически. Порядок поиска: env `MDBX_SO_PATH` → `mcp/_lib/` →
   legacy-дефолт → системная библиотека.
 
 ## Сборка из master (основной способ)
@@ -42,13 +42,13 @@
 
 ```bash
 cmake -S . -B build -DMDBX_BUILD_MCP_MEMORY=ON        # + прочие опции проекта
-ctest --test-dir build -L mcp-memory --output-on-failure
+ctest --test-dir build -L mcp-shared-graph-memory --output-on-failure
 ```
 
 - Опция `MDBX_BUILD_MCP_MEMORY` — default OFF.
-- `mcp_memory_prepare` собирает host-libmdbx в `_build-mcp-memory/` (без
-  CXX/TESTS/LTO) и кладёт артефакт в `mcp_memory/_lib/`.
-- Тесты `mcp_memory_pytest` запускаются только если Python найден **и** в
+- `mcp_prepare` собирает host-libmdbx в `_build-mcp-shared-graph-memory/` (без
+  CXX/TESTS/LTO) и кладёт артефакт в `mcp/_lib/`.
+- Тесты `mcp_pytest` запускаются только если Python найден **и** в
   окружении хоста можно выполнять тесты (`MDBX_CAN_RUN_HOST_TESTS`; на
   cross-compile без эмулятора — пропускаются).
 - Альтернатива без CMake: `python3 tools/build_libmdbx.py && python3 -m pytest tests/`.
@@ -56,18 +56,18 @@ ctest --test-dir build -L mcp-memory --output-on-failure
 ## Запуск
 
 ```bash
-MEMORY_MDBX_PATH=~/mem.mdbx python3 -m mcp_memory        # MCP-сервер (stdio)
-python3 -m mcp_memory.cli --path ~/mem.mdbx stats        # CLI
-python3 -m mcp_memory.cli --path ~/mem.mdbx gc --dry-run # тиринг hot/warm/cold
+SHARED_GRAPH_MEMORY_PATH=~/mem.mdbx python3 -m mcp        # MCP-сервер (stdio)
+python3 -m mcp.cli --path ~/mem.mdbx stats        # CLI
+python3 -m mcp.cli --path ~/mem.mdbx gc --dry-run # тиринг hot/warm/cold
 ```
 
 Интеграция с opencode (`~/.config/opencode/opencode.json`):
 
 ```json
-"mcp.memory": {
-  "command": "python3",
-  "args": ["/abs/path/to/mcp_memory/__main__.py"],
-  "env": {"MEMORY_MDBX_PATH": "/abs/path/shared-graph-memory.mdbx", "MDBX_SO_PATH": "/abs/path/libmdbx.so"}
+"shared-graph-memory.mdbx": {
+  "type": "local",
+  "command": ["python3", "/home/user/.local/share/shared-graph-memory/server.py"],
+  "environment": {"SHARED_GRAPH_MEMORY_PATH": "/home/user/.local/share/shared-graph-memory/db.mdbx"}
 }
 ```
 

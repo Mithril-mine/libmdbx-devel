@@ -2,9 +2,9 @@
 
 import pytest
 
-from mcp_memory import Store
-from mcp_memory.errors import MemoryError
-from mcp_memory.normalize import DEFAULT_MODULES
+from mcp import Store
+from mcp.errors import MemoryError
+from mcp.normalize import DEFAULT_MODULES
 
 
 def test_default_modules_present(store):

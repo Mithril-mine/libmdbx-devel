@@ -20,7 +20,7 @@
 | `archive` | DEFAULTS | record_key → JSON | миграция cold-записей |
 | `meta` | DEFAULTS | `next_id` → uint64 | sequence id |
 
-`mdbx_env_set_maxdbs(env, 32)`. Одна write-транзакция на операцию.
+`mdbx_env_set_option(env, MDBX_opt_max_db, 32)`. Одна write-транзакция на операцию.
 
 ### Ключевые решения (обоснование — в `DESIGN.md`)
 
@@ -96,7 +96,7 @@
 | `purge(keys)` | явное удаление записи + всех её индексов и связей |
 | `stats()` | количество/типы/средняя важность/top-linked/словарь |
 
-## 5. CLI-утилиты (`python -m mcp_memory.cli`)
+## 5. CLI-утилиты (`python -m mcp.cli`)
 
 ```
 dump   [--type T] [--module M] [--key K]

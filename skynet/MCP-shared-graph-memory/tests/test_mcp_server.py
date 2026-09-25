@@ -4,8 +4,8 @@ import json
 
 import pytest
 
-from mcp_memory.errors import MemoryError
-from mcp_memory.mcp_server import McpServer
+from mcp.errors import MemoryError
+from mcp.mcp_server import McpServer
 from tests.conftest import seed_vocab
 
 
@@ -25,7 +25,7 @@ def call(server, method, params=None, mid=1):
 
 def test_initialize(server):
     r = call(server, "initialize")
-    assert r["result"]["serverInfo"]["name"] == "mcp-memory"
+    assert r["result"]["serverInfo"]["name"] == "shared-graph-memory.mdbx"
     assert r["result"]["protocolVersion"]
 
 

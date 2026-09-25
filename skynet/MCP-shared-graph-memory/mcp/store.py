@@ -540,7 +540,6 @@ class Store:
                                     edges.append({"subject": node, "predicate": pred, "object": tgt})
                                     nxt.append(tgt)
                             rc, lk, lv = cur.get(mdbx.CURSOR_NEXT)
-                    nxt.extend([])
                 frontier = [n for n in nxt if n not in nodes]
                 for n in frontier:
                     nodes.add(n)

@@ -2,7 +2,7 @@
 
 import pytest
 
-from mcp_memory.errors import MemoryError
+from mcp.errors import MemoryError
 from tests.conftest import seed_vocab
 
 

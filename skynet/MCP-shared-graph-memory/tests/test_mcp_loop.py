@@ -4,7 +4,7 @@ import io
 import json
 import os
 
-from mcp_memory.mcp_server import McpServer, _default_db_path
+from mcp.mcp_server import McpServer, _default_db_path
 
 
 def test_loop_initialize_and_tools(store):
@@ -21,7 +21,7 @@ def test_loop_initialize_and_tools(store):
     lines = out.getvalue().decode().strip().splitlines()
     assert len(lines) == 2  # initialize + tools/list (notification без ответа)
     r1 = json.loads(lines[0])
-    assert r1["id"] == 1 and r1["result"]["serverInfo"]["name"] == "mcp-memory"
+    assert r1["id"] == 1 and r1["result"]["serverInfo"]["name"] == "shared-graph-memory.mdbx"
     r2 = json.loads(lines[1])
     assert r2["id"] == 2 and r2["result"]["tools"]
 
@@ -36,19 +36,19 @@ def test_loop_error_response(store):
 
 
 def test_default_db_path_env(monkeypatch):
-    monkeypatch.setenv("MEMORY_MDBX_PATH", "/tmp/x.mdbx")
+    monkeypatch.setenv("SHARED_GRAPH_MEMORY_PATH", "/tmp/x.mdbx")
     assert _default_db_path() == "/tmp/x.mdbx"
 
 
 def test_default_db_path_fallback(monkeypatch):
-    monkeypatch.delenv("MEMORY_MDBX_PATH", raising=False)
+    monkeypatch.delenv("SHARED_GRAPH_MEMORY_PATH", raising=False)
     p = _default_db_path()
-    assert p.endswith("shared-graph-memory.mdbx")
-    assert "mcp-memory" in p
+    assert p.endswith("db.mdbx")
+    assert "shared-graph-memory" in p
 
 
 def test_main_function(monkeypatch, tmp_path, store):
-    from mcp_memory.mcp_server import main
+    from mcp.mcp_server import main
 
     called = {}
 
@@ -56,7 +56,7 @@ def test_main_function(monkeypatch, tmp_path, store):
         called["loop"] = True
 
     monkeypatch.setattr(McpServer, "loop", fake_loop)
-    monkeypatch.setenv("MEMORY_MDBX_PATH", str(tmp_path / "main.mdbx"))
+    monkeypatch.setenv("SHARED_GRAPH_MEMORY_PATH", str(tmp_path / "main.mdbx"))
     rc = main([])
     assert rc == 0
     assert called.get("loop") is True

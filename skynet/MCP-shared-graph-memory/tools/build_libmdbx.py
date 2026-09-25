@@ -3,7 +3,7 @@
 
 Собирает shared-библиотеку libmdbx независимо от основного CMake-проекта
 (отдельный build-каталог, без тестов/CXX/LTO) и кладёт артефакт в
-``mcp_memory/_lib/``. Рантайм находит её автоматически (см. libmdbx.load_library).
+``mcp/_lib/``. Рантайм находит её автоматически (см. libmdbx.load_library).
 
 Использование:
     python3 tools/build_libmdbx.py [--src <корень репо libmdbx>] [--build-dir B]
@@ -25,8 +25,8 @@ import sys
 
 MODULE_ROOT = os.path.realpath(os.path.join(os.path.dirname(__file__), ".."))
 REPO_ROOT = os.path.realpath(os.path.join(MODULE_ROOT, "..", ".."))
-DEFAULT_BUILD_DIR = os.path.join(REPO_ROOT, "_build-mcp-memory")
-OUTPUT_DIR = os.path.join(MODULE_ROOT, "mcp_memory", "_lib")
+DEFAULT_BUILD_DIR = os.path.join(REPO_ROOT, "_build-mcp-shared-graph-memory")
+OUTPUT_DIR = os.path.join(MODULE_ROOT, "mcp", "_lib")
 
 ARTIFACT_PATTERNS = (
     "libmdbx.so",

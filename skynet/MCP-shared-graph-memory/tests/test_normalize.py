@@ -2,8 +2,8 @@
 
 import pytest
 
-from mcp_memory.errors import MemoryError
-from mcp_memory.normalize import Normalizer, RECORD_TYPES
+from mcp.errors import MemoryError
+from mcp.normalize import Normalizer, RECORD_TYPES
 
 
 def make_norm(**kw):

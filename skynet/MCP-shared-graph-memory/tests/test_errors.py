@@ -1,7 +1,7 @@
 """Тесты контракта ошибок."""
 
-from mcp_memory import errors
-from mcp_memory.errors import MemoryError, invalid, busy_io, internal, size_limit, parse
+from mcp import errors
+from mcp.errors import MemoryError, invalid, busy_io, internal, size_limit, parse
 
 
 def test_format():

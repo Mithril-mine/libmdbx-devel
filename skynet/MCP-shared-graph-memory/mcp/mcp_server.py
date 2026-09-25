@@ -16,11 +16,11 @@ from .store import Store
 
 
 def _default_db_path() -> str:
-    env = os.environ.get("MEMORY_MDBX_PATH")
+    env = os.environ.get("SHARED_GRAPH_MEMORY_PATH")
     if env:
         return env
     return os.path.join(os.path.expanduser("~"), ".local", "share",
-                        "mcp-memory", "shared-graph-memory.mdbx")
+                        "shared-graph-memory", "db.mdbx")
 
 
 class McpServer:
@@ -136,7 +136,7 @@ class McpServer:
             return self._resp(mid, {
                 "protocolVersion": "2024-11-05",
                 "capabilities": {"tools": {}},
-                "serverInfo": {"name": "mcp-memory", "version": "0.1.0"},
+                "serverInfo": {"name": "shared-graph-memory.mdbx", "version": "0.1.0"},
             })
         if method == "notifications/initialized":
             return None

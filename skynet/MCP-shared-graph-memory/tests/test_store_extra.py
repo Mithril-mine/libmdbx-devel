@@ -2,15 +2,17 @@
 
 import pytest
 
-from mcp_memory import Store
-from mcp_memory.errors import MemoryError
-from mcp_memory.store import ACCESS_LEN, _pack_u64, pack_access, unpack_access
+from mcp import Store
+from mcp.errors import MemoryError
+from mcp.store import ACCESS_LEN, _pack_u64, pack_access, unpack_access
 from tests.conftest import seed_vocab
 
 
 def test_size_limit_long_key(store):
     seed_vocab(store, [("crypto", "alignment")])
-    k = b"k" * 5000
+    # страница движка следует за страницей ОС (4K linux/win, 16K на arm64-mac),
+    # поэтому берём ключ гарантированно больше любого лимита (даже 64K-страницы)
+    k = b"k" * (1 << 20)
     v = b"v"
     with pytest.raises(MemoryError):
         store._check_size(k, v)
@@ -37,7 +39,7 @@ def test_pack_unpack_access_roundtrip():
 
 
 def test_unpack_access_bad_length():
-    from mcp_memory.store import unpack_access
+    from mcp.store import unpack_access
     with pytest.raises(AssertionError):
         unpack_access(b"short")
 
@@ -90,7 +92,7 @@ def test_stats_empty(store_path):
 
 
 def test_begin_write_busy_retry(store, monkeypatch):
-    from mcp_memory import libmdbx as mdbx
+    from mcp import libmdbx as mdbx
     seed_vocab(store, [("crypto", "alignment")])
     calls = []
     orig = store.env.begin
@@ -108,8 +110,8 @@ def test_begin_write_busy_retry(store, monkeypatch):
 
 
 def test_begin_write_busy_exhaust(store, monkeypatch):
-    from mcp_memory import libmdbx as mdbx
-    from mcp_memory.errors import MemoryError as ME
+    from mcp import libmdbx as mdbx
+    from mcp.errors import MemoryError as ME
 
     def fake(readonly=False, parent=None):
         raise mdbx.LibmdbxError(mdbx.RC_BUSY, "t")
@@ -187,7 +189,7 @@ def test_bump_rate_limited(store):
 
 
 def test_remove_topic_normalizer():
-    from mcp_memory.normalize import Normalizer
+    from mcp.normalize import Normalizer
     n = Normalizer()
     n.add_topic("alignment")
     assert n.remove_topic("alignment") is True
@@ -195,8 +197,8 @@ def test_remove_topic_normalizer():
 
 
 def test_begin_write_non_busy_error(store, monkeypatch):
-    from mcp_memory import libmdbx as mdbx
-    from mcp_memory.errors import MemoryError as ME
+    from mcp import libmdbx as mdbx
+    from mcp.errors import MemoryError as ME
 
     def fake(readonly=False, parent=None):
         raise mdbx.LibmdbxError(mdbx.RC_MAP_FULL, "t")
@@ -211,7 +213,7 @@ def test_bump_access_missing_record(store):
 
 
 def test_bump_access_suppresses_busy(store, monkeypatch):
-    from mcp_memory import libmdbx as mdbx
+    from mcp import libmdbx as mdbx
     seed_vocab(store, [("crypto", "alignment")])
     store.safe_store("bug:crypto:alignment", "bug", "some bug", 0.5)
 

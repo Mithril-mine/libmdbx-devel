@@ -1,6 +1,6 @@
 """Тесты токенизации и SimHash."""
 
-from mcp_memory.index import tokenize, simhash, hamming
+from mcp.index import tokenize, simhash, hamming
 
 
 def test_tokenize_basic():
@@ -46,6 +46,6 @@ def test_different_texts_far():
 
 
 def test_text_hamming_distance_helper():
-    from mcp_memory.index import text_hamming_distance
+    from mcp.index import text_hamming_distance
     assert text_hamming_distance("same text", "same text") == 0
     assert text_hamming_distance("different words here", "other words there") > 0

@@ -5,8 +5,8 @@ import tempfile
 
 import pytest
 
-from mcp_memory import libmdbx as mdbx
-from mcp_memory.store import _pack_u64, _unpack_u64
+from mcp import libmdbx as mdbx
+from mcp.store import _pack_u64, _unpack_u64
 
 
 def test_constants():
@@ -28,7 +28,22 @@ def test_constants():
 def test_strerror_and_version():
     assert isinstance(mdbx.strerror(0), str)
     assert mdbx.strerror(mdbx.RC_NOTFOUND)
-    assert mdbx.version_string()
+    v = mdbx.version_string()
+    assert not v.startswith("?"), "version_string() не прочитал mdbx_version"
+    assert v.split(".", 1)[0].isdigit()
+    assert mdbx.build_string()
+
+
+def test_env_create_flag():
+    """mode=0 открывает существующее без создания (mdbx.h env_open)."""
+    d = tempfile.mkdtemp()
+    p = os.path.join(d, "e.mdbx")
+    with pytest.raises(mdbx.LibmdbxError):
+        mdbx.Env(p, maxdbs=8, create=False)
+    env = mdbx.Env(p, maxdbs=8, create=True)
+    env.close()
+    env2 = mdbx.Env(p, maxdbs=8, create=False)
+    env2.close()
 
 
 def test_env_create_open_close():
