@@ -284,16 +284,18 @@ def test_bump_access_missing_record(store):
     store._bump_access("fact:platform:nothing")  # не должно бросать
 
 
-def test_bump_access_suppresses_busy(store, monkeypatch):
+def test_flush_touches_suppresses_busy(store, monkeypatch):
     from mcp import libmdbx as mdbx
     seed_vocab(store, [("crypto", "alignment")])
     store.safe_store("bug:crypto:alignment", "bug", "some bug", 0.5)
+    store._lru_last.clear()
+    store._bump_access("bug:crypto:alignment", force=True)
 
     def fake(readonly=False, parent=None):
         raise mdbx.LibmdbxError(mdbx.RC_BUSY, "t")
 
     monkeypatch.setattr(store.env, "begin", fake)
-    store._bump_access("bug:crypto:alignment")  # MemoryError подавляется
+    store._flush_touches()  # сбой флаша не критичен — MemoryError подавляется
 
 
 def test_store_context_manager(store_path):
@@ -307,3 +309,102 @@ def test_store_context_manager(store_path):
         assert s2.exists("bug:crypto:alignment")
     finally:
         s2.close()
+
+
+def test_search_flushes_one_txn(store, monkeypatch):
+    """search() с несколькими результатами делает одну write-txn на LRU."""
+    seed_vocab(store, [("crypto", "alignment"), ("platform", "android"),
+                       ("platform", "android-abi")])
+    store.safe_store("bug:crypto:alignment", "bug", "buffer overflow crash", 0.7)
+    store.safe_store("fact:platform:android", "fact", "android overflow fix note", 0.9)
+    store._lru_last.clear()
+    writes = []
+
+    import mcp.store as store_mod
+    orig = store_mod.Store._begin_write
+
+    def counting(self):
+        writes.append(1)
+        return orig(self)
+
+    monkeypatch.setattr(store_mod.Store, "_begin_write", counting)
+    recs = store.search("overflow", limit=10)
+    assert len(recs) == 2
+    assert len(writes) == 1
+
+
+def test_close_final_sync(store, monkeypatch):
+    """close() делает финальный force-sync (force=True, nonblock=False)."""
+    calls = []
+    real_sync = store.env.sync
+
+    def spy_sync(force=False, nonblock=True):
+        calls.append((force, nonblock))
+        return real_sync(force=force, nonblock=nonblock)
+
+    monkeypatch.setattr(store.env, "sync", spy_sync)
+    store.close()
+    assert (True, False) in calls
+
+
+def test_close_flushes_pending_touches(store_path):
+    """Отложенные касания сбрасываются при close (переживают переоткрытие)."""
+    s = Store(store_path)
+    try:
+        seed_vocab(s, [("crypto", "alignment")])
+        s.safe_store("bug:crypto:alignment", "bug", "some bug", 0.5)
+        s._lru_last.clear()
+        s._bump_access("bug:crypto:alignment", force=True)  # в буфер, без flush
+        assert s._touch_ids  # касание отложено
+    finally:
+        s.close()
+    s2 = Store(store_path)
+    try:
+        with s2.env.begin(readonly=True) as txn:
+            _, packed = txn.get(s2.dbi(txn, "access"), _pack_u64(1))
+            assert packed is not None
+            assert unpack_access(packed)[2] == 1
+    finally:
+        s2.close()
+
+
+def test_recall_all_rate_limited_zero_txn(store, monkeypatch):
+    """Если все касания уже в 60s-фильтре, recall не пишет вообще."""
+    seed_vocab(store, [("crypto", "alignment")])
+    store.safe_store("bug:crypto:alignment", "bug", "some bug", 0.5)
+    store.recall("bug:*")  # прогреваем фильтр (касание + флаш)
+    writes = []
+
+    import mcp.store as store_mod
+    orig = store_mod.Store._begin_write
+
+    def counting(self):
+        writes.append(1)
+        return orig(self)
+
+    monkeypatch.setattr(store_mod.Store, "_begin_write", counting)
+    store.recall("bug:*")  # в пределах 60с — касание проигнорировано
+    assert len(writes) == 0
+
+
+def test_double_close_idempotent(store):
+    store.close()
+    store.close()  # повторный вызов не должен падать
+
+
+def test_touch_single_txn(store, monkeypatch):
+    """touch() пишет сразу одной транзакцией."""
+    seed_vocab(store, [("crypto", "alignment")])
+    store.safe_store("bug:crypto:alignment", "bug", "some bug", 0.5)
+    writes = []
+
+    import mcp.store as store_mod
+    orig = store_mod.Store._begin_write
+
+    def counting(self):
+        writes.append(1)
+        return orig(self)
+
+    monkeypatch.setattr(store_mod.Store, "_begin_write", counting)
+    store.touch("bug:crypto:alignment")
+    assert len(writes) == 1
