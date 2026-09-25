@@ -26,8 +26,32 @@
 ## Требования
 
 - Python ≥ 3.9, `cffi`, `pytest` (для тестов).
-- `libmdbx.so`: путь через env `MDBX_SO_PATH` (иначе дефолт
-  `~/.local/share/libmdbx-memory/build/libmdbx.so`, затем системная библиотека).
+- `libmdbx`: собирается из master-дерева этого же репозитория через CMake
+  (см. «Сборка из master»), результат кладётся в `mcp_memory/_lib/` и находится
+  автоматически. Порядок поиска: env `MDBX_SO_PATH` → `mcp_memory/_lib/` →
+  legacy-дефолт → системная библиотека.
+
+## Сборка из master (основной способ)
+
+Модуль живёт внутри репозитория libmdbx (`skynet/MCP-shared-graph-memory/`),
+поэтому исходники для сборки берутся из того же дерева — дополнительных копий
+не нужно. Если модуль используется отдельно — укажите корень репо через
+`LIBMDBX_SRC_DIR` или `--src`.
+
+Интеграция с основным CMake-проектом (dev-only, не попадает в амальгамат):
+
+```bash
+cmake -S . -B build -DMDBX_BUILD_MCP_MEMORY=ON        # + прочие опции проекта
+ctest --test-dir build -L mcp-memory --output-on-failure
+```
+
+- Опция `MDBX_BUILD_MCP_MEMORY` — default OFF.
+- `mcp_memory_prepare` собирает host-libmdbx в `_build-mcp-memory/` (без
+  CXX/TESTS/LTO) и кладёт артефакт в `mcp_memory/_lib/`.
+- Тесты `mcp_memory_pytest` запускаются только если Python найден **и** в
+  окружении хоста можно выполнять тесты (`MDBX_CAN_RUN_HOST_TESTS`; на
+  cross-compile без эмулятора — пропускаются).
+- Альтернатива без CMake: `python3 tools/build_libmdbx.py && python3 -m pytest tests/`.
 
 ## Запуск
 

@@ -7,6 +7,7 @@
 from __future__ import annotations
 
 import ctypes
+import os
 from typing import Optional, Tuple
 
 from cffi import FFI
@@ -109,12 +110,28 @@ ffi.cdef(
 
 DEFAULT_SO = "/home/sourcecraft-ci-runner/.local/share/libmdbx-memory/build/libmdbx.so"
 
+_PKG_DIR = os.path.dirname(os.path.abspath(__file__))
+_LIB_DIR = os.path.join(_PKG_DIR, "_lib")
+_PACKAGE_LIB_NAMES = ("libmdbx.so", "libmdbx.dylib", "libmdbx.dll", "mdbx.dll")
+
+
+def _find_package_lib():
+    """Поиск собранной библиотеки в mcp_memory/_lib (см. tools/build_libmdbx.py)."""
+    if not os.path.isdir(_LIB_DIR):
+        return None
+    for name in _PACKAGE_LIB_NAMES:
+        path = os.path.join(_LIB_DIR, name)
+        if os.path.isfile(path):
+            return path
+    return None
+
 
 def load_library(path: str = None) -> object:
-    """Загрузка libmdbx.so. Путь: env MDBX_SO_PATH > дефолт > системная."""
-    import os as _os
+    """Загрузка libmdbx: MDBX_SO_PATH > пакетный _lib > legacy дефолт > системная."""
     if path is None:
-        path = _os.environ.get("MDBX_SO_PATH") or DEFAULT_SO
+        path = (os.environ.get("MDBX_SO_PATH")
+                or _find_package_lib()
+                or os.path.expanduser(DEFAULT_SO))
     try:
         return ffi.dlopen(path)
     except OSError:

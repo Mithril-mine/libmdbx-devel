@@ -89,7 +89,34 @@ MCP-сервер отдаёт его как **JSON-RPC protocol error (-32000)**
 
 ## 9. Развёртывание
 
+### 9.1 Сборка libmdbx (интеграция с основным CMake)
+
+Модуль живёт внутри репозитория libmdbx (`skynet/MCP-shared-graph-memory/`), поэтому
+исходники для сборки — это само master-дерево рядом (никаких копий/субмодулей).
+Интеграция выполнена в корневом `CMakeLists.txt` **строго внутри dist-cutoff-региона**
+(не попадает в амальгамат):
+
+```cmake
+option(MDBX_BUILD_MCP_MEMORY "Build shared-graph-memory Python module (dev-only)" OFF)
+# MDBX_CAN_RUN_HOST_TESTS = NOT (CMAKE_CROSSCOMPILING AND NOT CMAKE_CROSSCOMPILING_EMULATOR)
+if(MDBX_BUILD_MCP_MEMORY AND NOT MDBX_AMALGAMATED_SOURCE AND NOT_SUBPROJECT)
+  add_subdirectory(skynet/MCP-shared-graph-memory)
+endif()
+```
+
+- `tools/build_libmdbx.py` собирает host-libmdbx независимо (отдельный
+  `_build-mcp-memory/`, `MDBX_BUILD_CXX=OFF`, `MDBX_ENABLE_TESTS=OFF`,
+  `MDBX_BUILD_SHARED_LIBRARY=ON`, LTO=OFF, ccache) и кладёт артефакт в
+  `mcp_memory/_lib/`.
+- CTest-фикстура `mcp_memory_fixture` готовит библиотеку, тест
+  `mcp_memory_pytest` (LABELS `mcp-memory`) запускает pytest; оба выполняются
+  только при `Python3_FOUND AND MDBX_CAN_RUN_HOST_TESTS`.
+- Рантайм-поиск библиотеки: `MDBX_SO_PATH` → `mcp_memory/_lib/` → legacy-дефолт →
+  системная.
+
+### 9.2 Установка
+
 Установлено отдельно от legacy: `~/.local/share/mcp-memory/` (launcher
-`mcp-memory-server.py`), БД по умолчанию `~/.local/share/mcp-memory/shared-graph-memory.mdbx`,
-путь к `libmdbx.so` — `MDBX_SO_PATH`. Старый сервер (`libmdbx-memory/`) остаётся
-нетронутым до переключения сессий.
+`mcp-memory-server.py`), БД по умолчанию
+`~/.local/share/mcp-memory/shared-graph-memory.mdbx`. Старый сервер
+(`libmdbx-memory/`) остаётся нетронутым до переключения сессий.
