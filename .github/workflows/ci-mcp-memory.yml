@@ -1,0 +1,52 @@
+name: ci-mcp-memory
+
+# Lightweight single-cell matrix for the shared-graph-memory Python module
+# (skynet/MCP-shared-graph-memory). Pure CMake/CTest, no ci.sh: builds its own
+# host libmdbx via CTest fixtures and runs only the module pytest suite
+# (ctest -L mcp-memory). Not triggered on Android by design.
+
+env:
+  CI: GITHUB
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.head_ref || github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+on:
+  push:
+  schedule:
+    - cron: "42 3 * * *"
+      timezone: "Europe/Moscow"
+  repository_dispatch:
+    types: [dispatch-event]
+
+jobs:
+  ci-job:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, windows-latest, macos-15]
+    steps:
+    - uses: actions/checkout@v7
+      with:
+        fetch-depth: 0
+        fetch-tags: true
+        submodules: true
+    - uses: actions/setup-python@v5
+      with:
+        python-version: "3.11"
+    - name: deps
+      run: python3 -m pip install --quiet cffi pytest
+    - name: configure
+      shell: bash
+      run: |
+        cmake -S . -B @ci-mcp-memory -DCMAKE_BUILD_TYPE=Release \
+          -DMDBX_BUILD_CXX=OFF -DMDBX_ENABLE_TESTS=OFF \
+          -DMDBX_BUILD_MCP_MEMORY=ON -DINTERPROCEDURAL_OPTIMIZATION=OFF
+    - name: test
+      shell: bash
+      run: ctest --test-dir @ci-mcp-memory -L mcp-memory --output-on-failure
