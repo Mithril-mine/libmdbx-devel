@@ -356,6 +356,24 @@ class Store:
             self._bump_access(r["key"])
         return top
 
+    def keys(self, pattern: str = "", limit: int = None) -> list:
+        """Все ключи записей по префиксу (без cap в 10, как у recall)."""
+        prefix = pattern[:-1] if pattern.endswith("*") else pattern
+        pbytes = prefix.encode()
+        out = []
+        with self.env.begin(readonly=True) as txn:
+            rec_dbi = self.dbi(txn, "records")
+            with txn.cursor(rec_dbi) as cur:
+                rc, key, _ = cur.get(mdbx.CURSOR_SET_RANGE, pbytes)
+                while rc == mdbx.RC_SUCCESS:
+                    if not key.startswith(pbytes):
+                        break
+                    out.append(key.decode("utf-8", "replace"))
+                    if limit is not None and len(out) >= limit:
+                        break
+                    rc, key, _ = cur.get(mdbx.CURSOR_NEXT)
+        return out
+
     def _decorate(self, txn, key, body):
         incoming = self._incoming_count(txn, body.get("_id"))
         score = self._score_of(txn, body.get("_id", 0), body.get("importance", 0.0), incoming)

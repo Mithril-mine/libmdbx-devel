@@ -29,7 +29,6 @@ ffi.cdef(
     #define MDBX_BUSY -30778
     #define MDBX_EMULTIVAL -30421
     #define MDBX_THREAD_MISMATCH -30416
-    #define MDBX_EINVAL 22
 
     #define MDBX_DB_DEFAULTS 0
     #define MDBX_REVERSEKEY 0x02
@@ -107,7 +106,6 @@ ffi.cdef(
     int mdbx_txn_abort_ex(void *txn, void *latency);
     int mdbx_dbi_open(void *txn, const char *name, unsigned int flags,
                       MDBX_dbi *dbi);
-    int mdbx_dbi_close(void *env, MDBX_dbi dbi);
     int mdbx_put(void *txn, MDBX_dbi dbi, const MDBX_val *key, MDBX_val *data,
                  unsigned int flags);
     int mdbx_get(void *txn, MDBX_dbi dbi, const MDBX_val *key, MDBX_val *data);

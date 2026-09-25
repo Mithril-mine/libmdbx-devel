@@ -24,7 +24,7 @@ def cmd_dump(args) -> None:
             rec = s.get_record(args.key)
             print(json.dumps(rec, ensure_ascii=False, indent=2) if rec else "NOTFOUND")
             return
-        keys = [k for k in (r["key"] for r in s.recall("", limit=10**9))]
+        keys = s.keys("")
         if args.type:
             keys = [k for k in keys if k.startswith(args.type + ":")]
         if args.module:
@@ -64,10 +64,8 @@ def cmd_graph(args) -> None:
 def cmd_audit(args) -> None:
     s = _open(args.path)
     try:
-        orphaned = []
-        for key, _ in s._all_records():
-            pass
-        print(json.dumps({"note": "audit: см. gc --dry-run и stats"},
+        print(json.dumps({"note": "audit: см. gc --dry-run и stats",
+                          "records": len(s.keys(""))},
                          ensure_ascii=False, indent=2))
     finally:
         s.close()

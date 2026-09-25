@@ -20,6 +20,26 @@ def test_safe_store_created(store):
     assert "segfault" in body["_terms"]
 
 
+def test_keys_all_and_prefix(store):
+    """keys() отдаёт весь корпус (нет cap в 10, как у recall)."""
+    import random
+    topics = ["alpha", "bravo", "charlie", "delta", "echo", "foxtrot",
+              "golf", "hotel", "india", "juliet", "kilo", "lima"]
+    seed_vocab(store, [("platform", t) for t in topics])
+    rnd = random.Random(12345)
+    pool = ["apple", "berry", "cherry", "date", "elder", "fig", "grape"]
+    for t in topics:
+        summary = " ".join(rnd.choices(pool, k=8))
+        store.safe_store("fact:platform:%s" % t, "fact", summary, 0.5)
+    all_keys = store.keys("")
+    assert len(all_keys) >= 12  # recall вернул бы только 10
+    assert all(k.startswith("fact:platform:") for k in all_keys)
+    prefix_keys = store.keys("fact:platform:")
+    assert prefix_keys and all(k.startswith("fact:platform:") for k in prefix_keys)
+    limited = store.keys("", limit=3)
+    assert len(limited) == 3
+
+
 def test_safe_store_merged(store):
     seed_vocab(store, [("crypto", "alignment")])
     store.safe_store("bug:crypto:alignment", "bug", "First version of the bug.", 0.7)

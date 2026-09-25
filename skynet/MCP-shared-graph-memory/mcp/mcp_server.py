@@ -176,8 +176,10 @@ class McpServer:
         if name == "normalize_key":
             return {"canonical_key": s.norm.normalize(args["raw"])}
         if name == "safe_store":
+            # importance не приводим здесь: store.safe_store сам валидирует
+            # и вернёт контрактную ошибку invalid для нечислового значения
             return s.safe_store(args["key"], args["type"], args["summary"],
-                                float(args["importance"]), args.get("date", ""))
+                                args["importance"], args.get("date", ""))
         if name == "recall":
             return {"records": s.recall(args["pattern"], args.get("limit", 5))}
         if name == "search":

@@ -77,6 +77,16 @@ def test_safe_store_contract_error(server):
     assert "CLASS=" in msg and "ACTION=" in msg and "RETRY=" in msg
 
 
+def test_safe_store_non_numeric_importance(server):
+    """Нечисловая важность — контрактная ошибка invalid, а не ValueError."""
+    r = call(server, "tools/call", {"name": "safe_store", "arguments": {
+        "key": "bug:crypto:alignment", "type": "bug",
+        "summary": "text", "importance": "abc"}})
+    assert r["error"]["code"] == -32000
+    msg = r["error"]["message"]
+    assert "CLASS=invalid" in msg and "RETRY=none" in msg
+
+
 def test_recall_tool(server):
     call(server, "tools/call", {"name": "safe_store", "arguments": {
         "key": "bug:crypto:alignment", "type": "bug",
