@@ -14,11 +14,13 @@ Please use the `stable` branch or the latest release for production environments
 
 ### Fixes:
 
- - Fixed wrong `env->incore` assertion in `gc_alloc_ex()`: the asserted state (steady point not advanced by `dxb_sync_locked()`) is legitimate on any filesystem, and on Windows `osal_check_fs_incore()` always reports not-in-core, so the assertion could never hold. It is removed and allocation falls through to the unallocated part of the file (issue #52).
- - Fixed the missed propagation of a mid-commit flush error in `iov_page()` on all platforms — a failed `iov_write()` previously reported `MDBX_SUCCESS` while the dirty page was never queued for writing, with a risk of silent data loss.
- - Fixed Windows ioring corruption when committing large write-mapped durable transactions: gather segments were appended to a `WriteFileEx` single item and outstanding `WriteFileEx` writes in a mixed batch were not awaited before reading `STATUS_PENDING` as an error, which could reset the ring under a live APC and crash in `ior_wocr()` with `hEvent == NULL`.
+ - Fixed missed propagation of a mid-commit flush error in `iov_page()` — a failed write could be silently reported as success.
+ - Fixed Windows ioring corruption when committing large write-mapped durable transactions — could crash in `ior_wocr()` under a live APC.
+ - Fixed `mdbx_chk` crash when `-i`/`-s` filtering out named sub-tables (issue #49).
+ - Fixed `mdbx_load` reading a dump from standard input by default — `-f` no longer consumes the database path argument (issue #50).
+ - Fixed a wrong `env->incore` assertion in `gc_alloc_ex()` (issue #52).
+ - Fixed `MDBX_TXN_TRY` leakage into transaction state flags.
  - Fixed typos in the ChangeLog.
- - Fixed `MDBX_TXN_TRY` leakage into a transaction state flags.
 
 
 --------------------------------------------------------------------------------
