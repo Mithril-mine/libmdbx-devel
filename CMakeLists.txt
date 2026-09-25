@@ -1604,6 +1604,21 @@ if(MDBX_ENABLE_TESTS)
 endif()
 
 # ######################################################################################################################
+#> dist-cutoff-begin
+option(MDBX_BUILD_MCP_MEMORY "Build shared-graph-memory Python module (dev-only)" OFF)
+
+if(CMAKE_CROSSCOMPILING AND NOT CMAKE_CROSSCOMPILING_EMULATOR)
+  set(MDBX_CAN_RUN_HOST_TESTS FALSE CACHE INTERNAL "can run tests in the host environment" FORCE)
+else()
+  set(MDBX_CAN_RUN_HOST_TESTS TRUE CACHE INTERNAL "can run tests in the host environment" FORCE)
+endif()
+
+if(MDBX_BUILD_MCP_MEMORY AND NOT MDBX_AMALGAMATED_SOURCE AND NOT_SUBPROJECT)
+  include(CTest)
+  add_subdirectory(skynet/MCP-shared-graph-memory)
+endif()
+#< dist-cutoff-end
+# ######################################################################################################################
 
 if(NOT SUBPROJECT)
   set(PACKAGE "libmdbx")
