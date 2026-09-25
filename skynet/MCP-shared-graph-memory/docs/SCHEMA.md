@@ -4,7 +4,7 @@
 > Эволюционировала из исходной спецификации владельца; целочисленные индексы
 > — по `docs/DESIGN.md`.
 
-## 1. Таблицы (DBI) — 11
+## 1. Таблицы (DBI) — 14
 
 | DBI | Флаги | Ключ → Значение | Назначение |
 |---|---|---|---|
@@ -19,6 +19,9 @@
 | `access` | INTEGERKEY | uint64 id → 24 B: score+last_access+count | LRU/тиринг |
 | `archive` | DEFAULTS | record_key → JSON | миграция cold-записей |
 | `meta` | DEFAULTS | `next_id` → uint64 | sequence id |
+| `symbols` | DEFAULTS | fq-имя символа → JSON | карта исходников (refactoring-map) |
+| `call_edges` | DUPSORT | `caller_id` → set `kind\0callee_id` | вызовы (syntax/semantic) |
+| `groups` | DUPSORT | `group:{kind}:{name}` → set member_key | фасеты (подсистемы/темы) |
 
 `mdbx_env_set_option(env, MDBX_opt_max_db, 32)`. Одна write-транзакция на операцию
 (в т.ч. LRU-касания — батчем, см. §8).
@@ -31,11 +34,14 @@
 рефакторинга C→C++), длительности тестов. Правила:
 - таблицы открываются один раз при старте (`open_dbi(CREATE)`) — добавлять можно
   и в рантайме (libmdbx поддерживает создание именованных DBI в любой момент);
-- под новые таблицы держать запас `maxdbs` (сейчас 32, используется 11);
+- под новые таблицы держать запас `maxdbs` (сейчас 32, используется 14);
 - кодирование существующих строк (`access`, `ids`) централизовано в
   `pack_access`/`unpack_access` — смена формата затрагивает одно место;
 - при необходимости схема может управляться через MCP (новый инструмент,
   работающий поверх `open_dbi`) — единый реестр `TABLES` это уже позволяет.
+- структурный слой (symbols/call_edges/groups) заполняется автогенераторами
+  (`tools/scan_symbols.py` + `tools/load_map.py`), API — методы `map_*`
+  (`Store`), детерминированные и перегенерируемые (см. `docs/REFACTORING-MAP.md`).
 
 ### Ключевые решения (обоснование — в `DESIGN.md`)
 

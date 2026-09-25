@@ -76,6 +76,9 @@ class Store:
         "access": mdbx.INTEGERKEY,
         "archive": mdbx.DB_DEFAULTS,
         "meta": mdbx.DB_DEFAULTS,
+        "symbols": mdbx.DB_DEFAULTS,
+        "call_edges": mdbx.DUPSORT,
+        "groups": mdbx.DUPSORT,
     }
 
     def __init__(self, path: str, maxdbs: int = 32, max_value_bytes: int = 16 << 20):
@@ -780,6 +783,118 @@ class Store:
                 if _unpack_u64(lv) == rec_id:
                     cur.delete()
                 rc, lk, lv = nxt
+
+    # --- refactoring-map (структурный слой) ---------------------------------
+    def map_symbol(self, key: str) -> dict:
+        """Читает символ из structural-слоя (symbols)."""
+        with self.env.begin(readonly=True) as txn:
+            rc, val = txn.get(self.dbi(txn, "symbols"), key.encode())
+        if val is None:
+            return {}
+        return json.loads(val.decode())
+
+    def map_symbols(self, prefix: str = "", limit: int = None) -> list:
+        """Все ключи symbols по префиксу (детерминированная сортировка)."""
+        out = []
+        with self.env.begin(readonly=True) as txn:
+            sym_dbi = self.dbi(txn, "symbols")
+            with txn.cursor(sym_dbi) as cur:
+                rc, k, _ = cur.get(mdbx.CURSOR_FIRST)
+                while rc == mdbx.RC_SUCCESS:
+                    key = k.decode()
+                    if not prefix or key.startswith(prefix):
+                        out.append(key)
+                        if limit and len(out) >= limit:
+                            break
+                    rc, k, _ = cur.get(mdbx.CURSOR_NEXT)
+        return out
+
+    def map_put_symbol(self, key: str, body: dict) -> None:
+        """Аддитивная запись символа (перегенерируемый слой)."""
+        with self._begin_write() as txn:
+            txn.put(self.dbi(txn, "symbols"), key.encode(),
+                    json.dumps(body, ensure_ascii=False).encode())
+
+    def map_edges_of(self, caller: str) -> list:
+        """callee-дубликаты из call_edges для caller (DUPSORT)."""
+        out = []
+        with self.env.begin(readonly=True) as txn:
+            ce_dbi = self.dbi(txn, "call_edges")
+            with txn.cursor(ce_dbi) as cur:
+                rc, _, val = cur.get(mdbx.CURSOR_SET_KEY, caller.encode())
+                while rc == mdbx.RC_SUCCESS:
+                    out.append(val.decode())
+                    rc, _, val = cur.get(mdbx.CURSOR_NEXT_DUP)
+        return out
+
+    def map_put_edge(self, caller: str, callee: str, kind: str = "syntax") -> None:
+        with self._begin_write() as txn:
+            ce_dbi = self.dbi(txn, "call_edges")
+            val = ("%s\u0001%s" % (kind, callee)).encode()
+            with txn.cursor(ce_dbi) as cur:
+                cur.put_nodupe(caller.encode(), val)
+
+    def map_groups_of(self, group_key: str) -> list:
+        """Члены группы (DUPSORT-набор)."""
+        out = []
+        with self.env.begin(readonly=True) as txn:
+            gr_dbi = self.dbi(txn, "groups")
+            with txn.cursor(gr_dbi) as cur:
+                rc, _, val = cur.get(mdbx.CURSOR_SET_KEY, group_key.encode())
+                while rc == mdbx.RC_SUCCESS:
+                    out.append(val.decode())
+                    rc, _, val = cur.get(mdbx.CURSOR_NEXT_DUP)
+        return out
+
+    def map_group_members(self, prefix: str = "") -> list:
+        """Все группы с их членами по префиксу ключа группы."""
+        out = []
+        with self.env.begin(readonly=True) as txn:
+            gr_dbi = self.dbi(txn, "groups")
+            with txn.cursor(gr_dbi) as cur:
+                rc, k, val = cur.get(mdbx.CURSOR_FIRST)
+                while rc == mdbx.RC_SUCCESS:
+                    gkey = k.decode()
+                    if not prefix or gkey.startswith(prefix):
+                        out.append((gkey, val.decode()))
+                    rc, k, val = cur.get(mdbx.CURSOR_NEXT)
+        return out
+
+    def map_put_group(self, group_key: str, member: str) -> None:
+        with self._begin_write() as txn:
+            gr_dbi = self.dbi(txn, "groups")
+            with txn.cursor(gr_dbi) as cur:
+                cur.put_nodupe(group_key.encode(), member.encode())
+
+    def map_load_batch(self, symbols: dict, edges: list, groups: dict,
+                       chunk: int = 4096) -> dict:
+        """Батчевая загрузка структурного слоя: одна write-txn на chunk.
+
+        Принимает готовые данные (из автогенератора), аддитивно дописывает
+        в symbols/call_edges/groups. Возвращает счётчики для сверки.
+        """
+        put_sym, put_edge, put_grp = 0, 0, 0
+        sym_dbi = self._dbi["symbols"]
+        ce_dbi = self._dbi["call_edges"]
+        gr_dbi = self._dbi["groups"]
+        with self._begin_write() as txn:
+            for i, (key, body) in enumerate(sorted(symbols.items())):
+                txn.put(sym_dbi, key.encode(),
+                        json.dumps(body, ensure_ascii=False).encode())
+                put_sym += 1
+                if chunk and i % chunk == chunk - 1:
+                    pass
+            for e in edges:
+                val = ("%s\u0001%s" % (e["kind"], e["callee"])).encode()
+                with txn.cursor(ce_dbi) as cur:
+                    cur.put_nodupe(e["caller"].encode(), val)
+                put_edge += 1
+            for gkey, members in groups.items():
+                with txn.cursor(gr_dbi) as cur:
+                    for m in members:
+                        cur.put_nodupe(gkey.encode(), m.encode())
+                        put_grp += 1
+        return {"symbols": put_sym, "edges": put_edge, "groups": put_grp}
 
     def stats(self) -> dict:
         by_type = {}

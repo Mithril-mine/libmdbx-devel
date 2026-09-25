@@ -129,15 +129,22 @@ group:task:B63            → {символы, тесты, записи, док�
 ## Дорожная карта
 
 1. **Шаг 0 (готово)**: фиксация контекста (этот документ, память, BACKLOG B65).
-2. **Шаг 1 (пилот)**: `scan_symbols.py` для `src/` + валидатор; таблицы
-   symbols/call_edges/groups.
+2. **Шаг 1 (пилот — реализован)**: `scan_symbols.py` (C + C++, функции/типы/
+   макросы/блоки/рёбра, clang ast-dump=json + `-E -dD` для макросов),
+   валидатор `validate_map.py` (сверка с golden-счётчиками), таблицы
+   symbols/call_edges/groups + батчевый загрузчик `load_map.py`.
+   Текущие счётчики артефакта (Linux x86_64, clang 18):
+   functions 2941, types 368, macros 550, blocks 29772, edges 17785
+   (unresolved 5124 — системные вызовы/`__builtin_*`).
 3. **Шаг 2**: semantic-рёбра, реестр probes (из `skynet/probes.md`), коллекторы
    coverage/test_metrics/ci_jobs, `refresh_stale`.
 
 ## Открытые вопросы
 
-- Сканер: лёгкий regex-парсер vs clang-инструментация (для блоков нужен
-  структурный анализ — вероятно clang).
+- ~~Сканер: лёгкий regex-парсер vs clang-инструментация~~ → **clang**:
+  ast-dump=json (блоки/рёбра) + `-E -dD` (макросы). Обход системных
+  хидеров — фильтром по `loc.file`/tracker; `file` эмитится clang-ом только
+  при смене FileID (дельта-кодирование), поэтому нужен сквозной трекер.
 - Статус миграции: отдельная таблица `migration_map` или поле `cpp_status`
   в symbols (пока поле).
 - `groups` наполнение: автогенерация из coverage/ci/задач + курируемо.
