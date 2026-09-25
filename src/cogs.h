@@ -325,8 +325,6 @@ MDBX_NOTHROW_PURE_FUNCTION static inline bool eq_fast(const MDBX_val *a, const M
   return unlikely(a->iov_len == b->iov_len) && eq_fast_slowpath(a->iov_base, b->iov_base, a->iov_len);
 }
 
-MDBX_NOTHROW_PURE_FUNCTION MDBX_INTERNAL int cmp_equal_or_greater(const MDBX_val *a, const MDBX_val *b);
-
 MDBX_NOTHROW_PURE_FUNCTION MDBX_INTERNAL int cmp_equal_or_wrong(const MDBX_val *a, const MDBX_val *b);
 
 static inline MDBX_cmp_func *builtin_keycmp(MDBX_db_flags_t flags) {
