@@ -19,6 +19,17 @@ from .errors import MemoryError, invalid
 RECORD_TYPES = ("decision", "bug", "proc", "bottleneck", "fact", "event")
 
 DEFAULT_MODULES = (
+    # домен meta (нулевой): знания о знаниях — схема, процедуры, метрики
+    "meta",
+    # домен general: общие практики и принципы (Кайдзен, методологии)
+    "practice",
+    # домен swarm: рой и его протоколы (доки — в skynet-draft)
+    "swarm",
+    "coordination",
+    # домены неклассифицированного: ожидают разбора / устаревшее (legacy)
+    "todo",
+    "archive",
+    # домен project (libmdbx): профильные модули проекта
     "crypto",
     "network",
     "storage",
