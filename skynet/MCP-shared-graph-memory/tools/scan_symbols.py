@@ -680,21 +680,11 @@ def select_tus(cc) -> list:
     return out
 
 
-# тестовые домены: каждый элемент = (имя, релятивный путь от REPO_ROOT)
-TEST_DOMAINS = {
-    "ut": ("ut/", [os.path.join("tests", "ut", f)
-                   for f in sorted(os.listdir(os.path.join(REPO_ROOT, "tests", "ut")))
-                   if f.endswith((".c", ".c++"))]),
-    "issues": ("issues/", [os.path.join("tests", "issues", f)
-                           for f in sorted(os.listdir(
-                               os.path.join(REPO_ROOT, "tests", "issues")))
-                           if f.endswith((".c", ".c++"))]),
-    "framework": ("framework/", [os.path.join("tests", "framework", f)
-                                 for f in sorted(os.listdir(
-                                     os.path.join(REPO_ROOT, "tests", "framework")))
-                                 if f.endswith(".c++")
-                                 and os.path.basename(f) not in ("main.c++",)]),
-}
+# тестовые домены: имя → (префикс, подкаталог)
+_TEST_DOMAINS = {"ut": ("ut/", "tests/ut"),
+                 "issues": ("issues/", "tests/issues"),
+                 "framework": ("framework/", "tests/framework")}
+TEST_DOMAIN_NAMES = tuple(_TEST_DOMAINS)
 
 
 def select_test_tus(domain="ut") -> list:
@@ -702,9 +692,15 @@ def select_test_tus(domain="ut") -> list:
 
     Команда строится по образцу библиотечного TU из compile_commands
     (определения конфига/инклуды) + тестовые дефайны; clang запускается
-    как C++. Пространство команд одинаково для всех тестов.
+    как C++. Список файлов читается лениво (при вызове, не при импорте).
     """
-    prefix, files = TEST_DOMAINS[domain]
+    prefix, subdir = _TEST_DOMAINS[domain]
+    files = [os.path.join(subdir, f)
+             for f in sorted(os.listdir(os.path.join(REPO_ROOT, subdir)))
+             if f.endswith((".c", ".c++"))]
+    if domain == "framework":
+        files = [f for f in files
+                 if os.path.basename(f) not in ("main.c++",)]
     # образец команды: первый либ-TU из compile_commands
     cc_path = os.path.join(REPO_ROOT, "_build-scan", "compile_commands.json")
     base_defs, base_includes = [], []
@@ -1001,7 +997,7 @@ def main():
     ap.add_argument("--defines", default=None, help="доп. -D макросы через пробел")
     ap.add_argument("--includes", default=None, help="доп. -I каталоги через пробел")
     ap.add_argument("--extra-flags", default=None, help="доп. флаги clang")
-    ap.add_argument("--tests", choices=list(TEST_DOMAINS), default=None,
+    ap.add_argument("--tests", choices=TEST_DOMAIN_NAMES, default=None,
                     help="сканировать тестовый домен (ut/issues/framework)")
     ap.add_argument("--merge", default=None, nargs="+",
                     metavar="ARTIFACT",
