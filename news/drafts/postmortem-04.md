@@ -1,7 +1,8 @@
 ---
 id: postmortem-04
 title: postmortem 4/6
-status: ready
+status: posted
+posted_at: 2026-09-27T19:19:14Z
 target: "@libmdbx"
 cta: Follow the news
 max_text: 4000
