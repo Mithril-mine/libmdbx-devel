@@ -56,6 +56,11 @@ def invalid(desc: str, action: str) -> MemoryError:
     return MemoryError("INVALID", "invalid", desc, action, "none")
 
 
+def readonly_mode(desc: str, action: str) -> MemoryError:
+    return MemoryError("READONLY_MODE", "readonly-mode", desc, action,
+                       "call db_set_mode(readonly=false)")
+
+
 def parse(text: str):
     """Разбор контрактной строки обратно в MemoryError (для тестов)."""
     m = MemoryError("?", "?", "?", "?", "?")

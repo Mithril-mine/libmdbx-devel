@@ -125,6 +125,35 @@ class McpServer:
                  "required": ["keys"],
              }),
             ("stats", "Статистика хранилища.", [], {"type": "object"}),
+            ("db_status", "Диагностика БД по мета-страницам/bootid/txnid "
+             "(живут в файле, НЕ в LCK): preopen.recent_txnid + env.meta_txnid, "
+             "bootid. Критерий «достигли ли данные диска» и «откат к steady».", [],
+             {"type": "object"}),
+            ("db_flush", "Принудительный сброс данных на диск (sync force=true).",
+             [], {"type": "object"}),
+            ("db_readers", "Число активных читателей; check=True очищает мёртвые.",
+             [], {"type": "object",
+                  "properties": {"check": {"type": "boolean"}}}),
+            ("db_stat", "Статистика env или конкретной таблицы.", [], {
+                 "type": "object",
+                 "properties": {"table": {"type": "string"}}}),
+            ("db_set_mode", "Переключение режима БД: sync "
+             "(durable|metasync|safe_nosync) на лету; readonly true/false — "
+             "переоткрытие env. По умолчанию сервер стартует read-only; для "
+             "записи сначала переключитесь в read-write. ВНИМАНИЕ: "
+             "utterly_nosync здесь НЕдоступен — он только через отдельный "
+             "опасный инструмент db_enable_utterly_nosync.",
+             ["sync", "readonly"], {
+                 "type": "object",
+                 "properties": {"sync": {"type": "string"},
+                                "readonly": {"type": "boolean"}},
+             }),
+            ("db_enable_utterly_nosync", "ОПАСНО: полное отключение "
+             "синхронизации (MDBX_UTTERLY_NOSYNC). Только для одноразовых "
+             "кэшей/некритичных данных: после краха процесса (SIGKILL, "
+             "падение) данные последних транзакций могут быть потеряны без "
+             "возможности восстановления. Обычный сервер памяти роя НЕ "
+             "должен включать этот режим.", [], {"type": "object"}),
         ]
         return {name: {"name": name, "description": desc, "inputSchema": schema}
                 for name, desc, _args, schema in t}
@@ -209,6 +238,25 @@ class McpServer:
             return s.purge(args.get("keys") or [])
         if name == "stats":
             return s.stats()
+        if name == "db_status":
+            return s.diag()
+        if name == "db_flush":
+            return s.flush_sync()
+        if name == "db_readers":
+            return s.readers(bool(args.get("check", False)))
+        if name == "db_stat":
+            return s.db_stat(args.get("table"))
+        if name == "db_set_mode":
+            sync = args.get("sync")
+            readonly = args.get("readonly")
+            result = {}
+            if sync is not None:
+                result.update(s.set_sync_mode(sync))
+            if readonly is not None:
+                result.update(s.set_readonly(bool(readonly)))
+            return result
+        if name == "db_enable_utterly_nosync":
+            return s.enable_utterly_nosync()
         raise MemoryError("NO_SUCH_TOOL", "invalid", "неизвестный инструмент %r" % name,
                           "проверьте tools/list", "none")
 
@@ -243,8 +291,28 @@ class McpServer:
 def main(argv=None):
     argv = list(sys.argv[1:] if argv is None else argv)
     path = _default_db_path()
-    store = Store(path)
+    readonly = os.environ.get("SHARED_GRAPH_MEMORY_READONLY", "1") not in ("0", "false", "")
+    # БД ещё не существует — создаём (readonly старт бессмыслен без файла);
+    # иначе открываем в read-only и переключаемся в rw по запросу агента.
+    if readonly and not os.path.exists(path):
+        Store(path, readonly=False).close()
+    store = Store(path, readonly=readonly)
+
+    def _shutdown(signum=None, frame=None):
+        try:
+            store.flush_sync()
+        except Exception:
+            pass
+        store.close()
+        sys.exit(0)
+
     try:
+        import signal
+        for sig in (signal.SIGTERM, signal.SIGINT):
+            try:
+                signal.signal(sig, _shutdown)
+            except (ValueError, OSError):
+                pass
         server = McpServer(store)
         server.loop()
     finally:

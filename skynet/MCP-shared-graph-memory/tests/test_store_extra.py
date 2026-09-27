@@ -408,3 +408,36 @@ def test_touch_single_txn(store, monkeypatch):
     monkeypatch.setattr(store_mod.Store, "_begin_write", counting)
     store.touch("bug:crypto:alignment")
     assert len(writes) == 1
+
+
+def test_set_sync_mode_rotation(store):
+    """Безопасная ротация sync-режимов (без utterly_nosync)."""
+    for mode in ("durable", "metasync", "safe_nosync"):
+        assert store.set_sync_mode(mode)["sync_mode"] == mode
+    with pytest.raises(MemoryError) as ei:
+        store.set_sync_mode("utterly_nosync")
+    assert "durable|metasync|safe_nosync" in str(ei.value), ei.value
+
+
+def test_enable_utterly_nosync_separate(store):
+    """Utterly_nosync доступен только через отдельный опасный метод."""
+    res = store.enable_utterly_nosync()
+    assert res["sync_mode"] == "utterly_nosync"
+    assert res.get("danger") is True
+    # вернуться в безопасную ротацию можно штатным set_sync_mode
+    assert store.set_sync_mode("durable")["sync_mode"] == "durable"
+
+
+def test_set_sync_mode_readonly_rejected(store_path):
+    s0 = Store(store_path)
+    s0.close()
+    s = Store(store_path, readonly=True)
+    try:
+        with pytest.raises(MemoryError) as ei:
+            s.set_sync_mode("durable")
+        assert "read-only" in str(ei.value), ei.value
+        with pytest.raises(MemoryError) as ei:
+            s.enable_utterly_nosync()
+        assert "read-only" in str(ei.value), ei.value
+    finally:
+        s.close()

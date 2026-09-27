@@ -35,6 +35,7 @@ from .errors import (
     internal,
     invalid,
     parse,
+    readonly_mode,
     size_limit,
 )
 from .normalize import RECORD_TYPES, Normalizer
@@ -85,16 +86,26 @@ class Store:
         "sym_aliases": mdbx.DB_DEFAULTS,
     }
 
-    def __init__(self, path: str, maxdbs: int = 32, max_value_bytes: int = 16 << 20):
+    def __init__(self, path: str, maxdbs: int = 32, max_value_bytes: int = 16 << 20,
+                 sync_mode: str = "safe_nosync", readonly: bool = False,
+                 _skip_sync_thread: bool = False):
         self.path = path
         self.max_value_bytes = max_value_bytes
-        self.env = mdbx.Env(path, maxdbs=maxdbs)
+        self.sync_mode = sync_mode
+        self._readonly = readonly
+        # read-only открытие НЕ должно трогать LCK на запись: используем
+        # ACCEDE чтобы присоединиться к уже открытой БД без конфликта флагов.
+        self.env = mdbx.Env(path, maxdbs=maxdbs, readonly=readonly,
+                            accede=readonly, sync_mode=sync_mode)
         self.norm = Normalizer()
         self._dbi = {}
-        # открываем все таблицы один раз (CREATE) в первой write-txn
-        with self.env.begin(readonly=False) as txn:
+        # открываем все таблицы один раз (CREATE) в первой write-txn;
+        # в read-only режиме CREATE не нужен — dbi открываются с DEFAULTS
+        txn_flags = mdbx.TXN_RDONLY if readonly else mdbx.TXN_READWRITE
+        with self.env.begin(readonly=readonly) as txn:
             for name in self.TABLES:
-                self._dbi[name] = txn.open_dbi(name, self.TABLES[name] | mdbx.CREATE)
+                fl = self.TABLES[name] | (mdbx.CREATE if not readonly else 0)
+                self._dbi[name] = txn.open_dbi(name, fl)
         self._load_vocab()
         self.next_id = self._load_next_id()
         self.last_gc = None
@@ -105,10 +116,13 @@ class Store:
         self._touch_ids: list = []
         # Фоновый тред: раз в секунду mdbx_env_sync_poll (дешёвый nonblocking
         # сброс по порогам sync_bytes/sync_period). Транзакций не создаёт.
+        # В read-only режиме тред не запускаем (синк не нужен и может писать в LCK).
         self._sync_stop = threading.Event()
-        self._sync_thread = threading.Thread(
-            target=self._sync_loop, name="store-sync-poll", daemon=True)
-        self._sync_thread.start()
+        self._sync_thread = None
+        if not readonly and not _skip_sync_thread:
+            self._sync_thread = threading.Thread(
+                target=self._sync_loop, name="store-sync-poll", daemon=True)
+            self._sync_thread.start()
 
     # --- sync ---------------------------------------------------------------
     def _sync_loop(self) -> None:
@@ -122,6 +136,141 @@ class Store:
         self._sync_stop.set()
         if self._sync_thread is not None and self._sync_thread.is_alive():
             self._sync_thread.join(timeout=2.0)
+
+    # --- диагностика и режимы --------------------------------------------------
+    def diag(self) -> dict:
+        """Диагностика БД: мета-страницы/txnid/bootid (живут в файле, не в LCK).
+
+        Критерий «достигли ли данные диска»:
+          - env.meta_txnid — txnid всех трёх мета-страниц (всегда доступен
+            через открытый env);
+          - env.bootid_current vs bootid_meta — «разошлась» ли БД с boot`ом
+            (при отличии — при следующем открытии откат к steady);
+          - preopen.recent_txnid — последний txnid видимый БЕЗ открытия; этот
+            вызов валиден только при закрытой env или синхронизированной
+            (при живой nosync-env вернёт MDBX_CORRUPTED) — обрабатываем
+            best-effort, для живого сервера основой служит env.diag().
+        """
+        out = {}
+        try:
+            out["env"] = self.env.diag()
+        except Exception as e:  # noqa: BLE001
+            out["env"] = {"error": str(e)}
+        try:
+            out["preopen"] = mdbx.preopen_snapinfo(self.path)
+        except Exception as e:  # noqa: BLE001
+            out["preopen"] = {"error": str(e),
+                              "note": "вален при закрытой/синхронизированной env"}
+        return out
+
+    def flush_sync(self) -> dict:
+        """Принудительный сброс на диск (mdbx_env_sync force=True)."""
+        if self._readonly:
+            raise readonly_mode(
+                "хранилище открыто в read-only режиме",
+                "вызовите db_set_mode(readonly=false) для переключения")
+        self.env.sync(force=True, nonblock=False)
+        return {"flushed": True}
+
+    def set_sync_mode(self, mode: str) -> dict:
+        """Переключение sync-режима на лету (durable|metasync|safe_nosync).
+
+        UTTERLY_NOSYNC сюда НЕ входит: он снимает гарантии durable и доступен
+        только через отдельный опасный инструмент enable_utterly_nosync.
+        """
+        if mode not in mdbx.SYNC_MODES_SAFE:
+            raise invalid("неизвестный sync_mode %r" % mode,
+                          "используйте durable|metasync|safe_nosync")
+        if self._readonly:
+            raise invalid("read-only режим не позволяет менять sync_mode",
+                          "сначала переключитесь в read-write")
+        self.env.set_sync_mode(mode)
+        self.sync_mode = mode
+        return {"sync_mode": mode}
+
+    def enable_utterly_nosync(self) -> dict:
+        """ОПАСНО: полное отключение синхронизации (безопасно только для
+        одноразовых кэшей). Данные после краха процесса могут пропасть.
+
+        Вызывается ТОЛЬКО осознанно через отдельный MCP-инструмент
+        db_enable_utterly_nosync, а не через ротацию db_set_mode.
+        """
+        if self._readonly:
+            raise invalid("read-only режим не позволяет менять sync_mode",
+                          "сначала переключитесь в read-write")
+        self.env.set_sync_mode("utterly_nosync")
+        self.sync_mode = "utterly_nosync"
+        return {"sync_mode": "utterly_nosync", "danger": True,
+                "warn": "гарантии durable отключены; после краха данные "
+                        "последних транзакций могут быть потеряны"}
+
+    def set_readonly(self, readonly: bool) -> dict:
+        """Переоткрытие env в read-only/read-write режиме.
+
+        RDONLY задаётся только при mdbx_env_open, поэтому требуется закрыть
+        и заново открыть среду. Активных транзакций/курсоров быть не должно.
+        """
+        if readonly == self._readonly:
+            return {"readonly": readonly}
+        with self._guard_no_active() as _:
+            pass
+        self._reopen(readonly)
+        return {"readonly": readonly}
+
+    def db_stat(self, table: str = None) -> dict:
+        """Статистика env или одной таблицы."""
+        if table is None:
+            return self.env.stat()
+        if table not in self.TABLES:
+            raise invalid("неизвестная таблица %r" % table,
+                          "список таблиц: %s" % ", ".join(sorted(self.TABLES)))
+        with self.env.begin(readonly=True) as txn:
+            return txn.dbi_stat(self.dbi(txn, table))
+
+    def readers(self, check: bool = False) -> dict:
+        """Число активных читателей; check=True — вычистить мёртвые."""
+        dead = self.env.reader_check() if check else 0
+        try:
+            n = self.env.diag().get("numreaders", 0)
+        except Exception:  # noqa: BLE001
+            n = 0
+        return {"numreaders": n, "dead_cleared": dead}
+
+    # --- guard/reopen (внутренние) -------------------------------------------
+    def _guard_no_active(self):
+        """Контекст-менеджер: убедиться, что нет активных write-txn/курсоров.
+
+        В текущей модели все операции используют короткие `with`-транзакции
+        внутри Store, поэтому активных транзакций вне вызовов не бывает.
+        Оставлен как точка расширения для будущего stateful-режима.
+        """
+        class _G:
+            def __enter__(self): return None
+            def __exit__(self, *exc): return False
+        return _G()
+
+    def _reopen(self, readonly: bool) -> None:
+        """Закрыть и переоткрыть env (синхронно, без потери данных)."""
+        self._stop_sync_thread()
+        try:
+            self.env.sync(force=True, nonblock=False)
+        except Exception:
+            pass
+        self.env.close()
+        self._readonly = readonly
+        self.env = mdbx.Env(self.path, maxdbs=32, readonly=readonly,
+                            accede=readonly, sync_mode=self.sync_mode)
+        self._dbi = {}
+        with self.env.begin(readonly=readonly) as txn:
+            for name in self.TABLES:
+                fl = self.TABLES[name] | (mdbx.CREATE if not readonly else 0)
+                self._dbi[name] = txn.open_dbi(name, fl)
+        self._sync_stop = threading.Event()
+        self._sync_thread = None
+        if not readonly:
+            self._sync_thread = threading.Thread(
+                target=self._sync_loop, name="store-sync-poll", daemon=True)
+            self._sync_thread.start()
 
     # --- init -----------------------------------------------------------------
     def _load_vocab(self) -> None:
@@ -162,6 +311,10 @@ class Store:
 
     def _begin_write(self):
         """Write-txn с ретраями по BUSY (класс busy-io)."""
+        if self._readonly:
+            raise readonly_mode(
+                "хранилище открыто в read-only режиме",
+                "вызовите db_set_mode(readonly=false) для переключения")
         last_err = None
         for attempt in range(BUSY_RETRIES + 1):
             try:

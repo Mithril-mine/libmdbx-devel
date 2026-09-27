@@ -34,6 +34,12 @@ shared-graph-memory.mdbx — персистентная память роя на
 | `gc(dry_run=true, archive=false)` | Тиринг hot/warm/cold (не удаляет без purge) |
 | `purge(keys)` | Явное удаление записей |
 | `stats()` | Статистика хранилища (здоровье памяти) |
+| `db_status()` | Диагностика БД по мета-страницам/bootid/txnid — критерий «данные на диске» |
+| `db_flush()` | Принудительный сброс данных на диск (sync force=true) |
+| `db_readers(check=false)` | Число активных читателей; check=true чистит мёртвых |
+| `db_stat(table?)` | Статистика env или конкретной таблицы |
+| `db_set_mode(sync?, readonly?)` | Ротация sync (durable\|metasync\|safe_nosync) и/или read-only↔rw |
+| `db_enable_utterly_nosync()` | **ОПАСНО**: отключение синхронизации (см. §«Режимы БД») |
 
 ### Формат ключа
 
@@ -74,6 +80,23 @@ shared-graph-memory.mdbx — персистентная память роя на
 - Рой: `recall("fact:swarm:*")`, `recall("proc:coordination:*")`.
 - Проект: `recall("fact:{модуль}:*")`, `search("<термин>")`.
 - Неясное/отложенное: `recall("fact:todo:*")`; устаревшее: `recall("fact:archive:*")`.
+
+## Режимы БД (read-only, sync)
+
+- **Сервер стартует read-only** по умолчанию. Для ЗАПИСИ сначала вызовите
+  `db_set_mode(readonly=false)`; после работы можно вернуть read-only
+  (`readonly=true`). Это защищает память от случайных/двойных write-агентов.
+- **sync-режим** переключается на лету: `db_set_mode(sync="durable")` —
+  максимальная надёжность, `metasync`, `safe_nosync` (по умолчанию; при крахе
+  процесса данные в page cache, целостность БД гарантирована).
+- `db_flush()` — принудительный сброс на диск (после критичных записей).
+- **`db_enable_utterly_nosync` НЕ вызывать** без крайней необходимости и явного
+  указания: он снимает гарантии durability — после краха последние транзакции
+  теряются безвозвратно. Только для одноразовых кэшей. Выход из него —
+  `db_set_mode(sync="safe_nosync")`.
+- Если `db_status()` показывает unsteady меты (или открытие упало с
+  «recovery needed») — не делайте «молчаливых» операций: решите явно —
+  `mdbx_chk` или осознанное открытие read-write (движок сам сделает steady-sync).
 
 ## Когда сохранять
 
