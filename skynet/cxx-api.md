@@ -96,14 +96,14 @@ mdbx.h++            — single public C++ header (amalgamated-style even in the 
   `#include "mdbx++/..."` (см. [`build.md`](build.md) §7.5); каждый `mdbx++/*.h++` обёрнут в
   `// > dist-cutoff-begin/end` вокруг `#pragma once` и скобок `namespace mdbx {`.
 - CTest: C++-тесты регистрируются в ветках `if(MDBX_BUILD_CXX)` (`tests/CMakeLists.txt`,
-  `tests/issues/CMakeLists.txt`); `tests/framework/CMakeLists.txt` собирает `mdbx_test` из
+  `tests/ut/issues/CMakeLists.txt`); `tests/framework/CMakeLists.txt` собирает `mdbx_test` из
   C++-исходников.
 
 ## 6. Покрытие тестами C++ API
 
 - `tests/ut/*.c++` — большинство юнит-тестов написаны на C++ и используют публичный C++ API
   (`dbi.c++`, `txn.c++`, `open.c++`, `cursor_closing.c++`, `dupfix_multiple.c++`, ...).
-- `tests/issues/issue_gh00XX.c++` — C++ регрессии.
+- `tests/ut/issues/issue_gh00XX.c++` — C++ регрессии.
 - `examples/example-mdbx.c++` — «modern example» (собирается только при `MDBX_BUILD_CXX`).
 - Сам фреймворк `mdbx_test` — C++ (см. [`build.md`](build.md) §6.1).
 - ВНИМАНИЕ (пробел): явного отдельного набора тестов именно для C++-обёрток

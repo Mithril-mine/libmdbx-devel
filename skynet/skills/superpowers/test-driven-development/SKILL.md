@@ -48,7 +48,7 @@ Place it where it belongs:
 | Kind of test | Location | Registration |
 | --- | --- | --- |
 | Unit behavior | `tests/ut/<name>.c++` (or `.c`) | `add_extra_test(<name>)` in `tests/CMakeLists.txt` |
-| Issue regression | `tests/issues/issue_ghNNNN.c++` | `tests/issues/CMakeLists.txt` |
+| Issue regression | `tests/ut/issues/issue_ghNNNN.c++` | `tests/ut/issues/CMakeLists.txt` |
 | Framework scenario | extend `tests/framework/*` + `stochastic.sh` caseset | via `mdbx_test` options |
 
 Test quality rules (adapted):
@@ -59,7 +59,7 @@ Test quality rules (adapted):
 - Prefer testing through the public API (`mdbx.h`/`mdbx.h++`); for genuinely internal data
   structures use the white-box pattern: include the module source directly
   (e.g. `tests/ut/details_rkl.c` does `#include "../../src/rkl.c"` + `txl.c`), or include an
-  internal header (like `tests/issues/issue_gh0017.c` uses `essentials.h` for the ABI-layout
+  internal header (like `tests/ut/issues/issue_gh0017.c` uses `essentials.h` for the ABI-layout
   check). See `skynet/test-coverage.md` for the coverage map.
 
 ### Verify RED — watch it fail
@@ -115,7 +115,7 @@ Remove duplication, improve names, extract helpers. Keep tests green. Don't add 
 
 ## Bug fixes specifically
 
-1. Write a failing test reproducing the bug (`tests/issues/issue_ghNNNN.c++`).
+1. Write a failing test reproducing the bug (`tests/ut/issues/issue_ghNNNN.c++`).
 2. Watch it fail; confirm the failure matches the reported symptom.
 3. Fix minimally; watch it pass.
 4. Add defense: run the related test family + sanitizers + `mdbx_chk`.
@@ -135,7 +135,7 @@ Never fix a bug without a test that proves the fix and prevents regression.
 
 ## Project notes (libmdbx)
 
-- Deterministic regressions live in `tests/ut/` and `tests/issues/`; behavior sweeps belong in
+- Deterministic regressions live in `tests/ut/` and `tests/ut/issues/`; behavior sweeps belong in
   the `mdbx_test` framework (extend `stochastic.sh` caseset or add a scenario module in
   `tests/framework/`).
 - Register new tests inside the `MDBX_BUILD_CXX`/platform guards as the existing ones do —

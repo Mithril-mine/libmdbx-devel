@@ -67,7 +67,7 @@ ninja получает depfile (`-MD -MF`) и обновляет `.ninja_deps` �
    (dev-layout ветку CMakeLists.txt) и в `ALLOY_DEPS`-список автоматически
    (`git ls-files src/` — файл должен быть закоммичен до сборки через make).
 2. **Новый тест** → регистрировать через `add_gtest`/`add_ut`/`add_simple_test`
-   в `tests/CMakeLists.txt` (или `tests/issues/CMakeLists.txt`); файл теста —
+   в `tests/CMakeLists.txt` (или `tests/ut/issues/CMakeLists.txt`); файл теста —
    явно в `SOURCE`, путь от `tests/`.
 3. **Новый скрипт/фикстура для теста** → путь указать в команде `add_test`
    (абсолютным через `${CMAKE_CURRENT_SOURCE_DIR}` или `${CMAKE_CURRENT_LIST_DIR}`).
