@@ -371,13 +371,13 @@ else()
                                   --datalen.min=min --datalen.max=max --progress --console=no --repeat=42
                                   --pathname=singleprocess.db --dont-cleanup-after ${MDBX_SMOKE_EXTRA} --hill)
   set_tests_properties(smoke_sp_hill PROPERTIES
-    LABELS "smoke-singleprocess"
+    LABELS "smoke-singleprocess;smoke-t2"
     TIMEOUT 600
     RUN_SERIAL OFF)
   add_test(NAME smoke_sp_copy COMMAND $<TARGET_FILE:mdbx_test> --duration 100 --progress --console=no --repeat=2
                                  --pathname=singleprocess.db --dont-cleanup-before --dont-cleanup-after ${MDBX_SMOKE_EXTRA} --copy)
   set_tests_properties(smoke_sp_copy PROPERTIES
-    LABELS "smoke-singleprocess"
+    LABELS "smoke-singleprocess;smoke-t2"
     DEPENDS smoke_sp_hill
     TIMEOUT 600
     RUN_SERIAL OFF)
@@ -385,7 +385,7 @@ else()
                                    --progress --console=no --repeat=42 --pathname=singleprocess.db
                                    --dont-cleanup-after ${MDBX_SMOKE_EXTRA} --nested)
   set_tests_properties(smoke_sp_nested PROPERTIES
-    LABELS "smoke-singleprocess"
+    LABELS "smoke-singleprocess;smoke-t2"
     DEPENDS smoke_sp_copy
     TIMEOUT 600
     RUN_SERIAL OFF)
