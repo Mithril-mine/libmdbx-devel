@@ -17,8 +17,7 @@ the library license information.
 
 | Path | Purpose |
 | ---- | ------- |
-| [`ut/`](ut) | Unit tests written on top of [googletest](https://github.com/google/googletest), one test-case per file. Tests are tagged with a hierarchical label tree (`ut.api`, `ut.cxx`, `ut.env`, `ut.dbi`, `ut.txn`, `ut.cursor`, `ut.gc`, `ut.issues`), plus the orthogonal `ut.heavy` attribute for slow stress tests. |
-| [`issues/`](issues) | Regression tests for specific reported issues (`issue_gh*`), each being a self-contained googletest test-case tagged with `ut.issues`. |
+| [`ut/api`](ut/api), [`ut/cxx`](ut/cxx), [`ut/env`](ut/env), [`ut/dbi`](ut/dbi), [`ut/txn`](ut/txn), [`ut/cursor`](ut/cursor), [`ut/gc`](ut/gc), [`ut/issues`](ut/issues) | Unit tests written on top of [googletest](https://github.com/google/googletest), one test-case per file, placed into a subdirectory matching the primary area. Tests are tagged with a hierarchical label tree (`ut.api`, `ut.cxx`, `ut.env`, `ut.dbi`, `ut.txn`, `ut.cursor`, `ut.gc`, `ut.issues`), plus the orthogonal `ut.heavy` attribute for slow stress tests. |
 | [`framework/`](framework) | The stochastic/actor-based test framework: testcase actors (`hill`, `try`, `append`, `jitter`, `ttl`, `nested`, `fork`, `dead`, `copy`), key/value generators, OS abstraction and the `mdbx_test` entry point. Used by the smoke scenarios and the long stochastic runs. |
 | [`ci/`](ci) | CI helper scripts, primarily `ci.sh` which performs the CMake/Make build-and-test pipeline used by CI workflows. |
 | [`exploits/`](exploits) | Proof-of-concept programs for historically reported vulnerabilities, kept for reference. |
