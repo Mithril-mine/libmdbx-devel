@@ -210,6 +210,10 @@ def test_store_persistence_flush_each(tmp_path):
         stdout=subprocess.PIPE, stderr=subprocess.PIPE)
     try:
         assert _wait_for_records(db, N_RECORDS) >= 0
+        # дать writer'у выполнить финальный flush_sync() после последней записи:
+        # иначе SIGKILL может попасть в окно commit(N) -> flush(N) и меты
+        # останутся unsteady (флейк: 24.w:25.w:23.s)
+        time.sleep(0.3)
         proc.send_signal(signal.SIGKILL)
         proc.wait(timeout=10)
     finally:

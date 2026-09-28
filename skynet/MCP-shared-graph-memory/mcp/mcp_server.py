@@ -11,6 +11,7 @@ import json
 import os
 import sys
 
+from . import libmdbx as mdbx
 from .errors import MemoryError
 from .store import Store
 
@@ -154,6 +155,37 @@ class McpServer:
              "падение) данные последних транзакций могут быть потеряны без "
              "возможности восстановления. Обычный сервер памяти роя НЕ "
              "должен включать этот режим.", [], {"type": "object"}),
+            ("db_backup", "Консистентная копия БД (MVCC-снапшот, компактификация). "
+             "kind=user|manual; skip=true — ответ на PROMPT-запрос (пропустить). "
+             "Если установлен PROMPT-таймер (SHARED_GRAPH_MEMORY_PROMPT_BACKUP_SECONDS) "
+             "и агент получил notice — спросите пользователя и вызовите "
+             "db_backup kind=user (сделать) или db_backup skip=true (пропустить).",
+             [], {"type": "object",
+                  "properties": {"kind": {"type": "string"},
+                                 "dest": {"type": "string"},
+                                 "skip": {"type": "boolean"}}}),
+            ("db_backup_status", "Состояние бэкапов: каталог, таймеры AUTO/PROMPT, "
+             "счётчики по тирам (lifeline/auto/user/snapshot), кандидаты на ротацию, "
+             "лимиты.", [], {"type": "object"}),
+            ("db_backup_cleanup", "Ротация AUTO-копий: показать кандидатов "
+             "(dry_run=true, по умолчанию) или удалить (confirm=true). Удаляются "
+             "ТОЛЬКО старейшие auto-* сверх keep; тиры user/lifeline/snapshot "
+             "никогда не трогаются. Перед удалением — подтверждение пользователя.",
+             [], {"type": "object",
+                  "properties": {"dry_run": {"type": "boolean"},
+                                 "confirm": {"type": "boolean"},
+                                 "keep": {"type": "integer"}}}),
+            ("db_fileinfo", "fstat(fd) файла БД: st_nlink/st_size/inode/mtime + "
+             "признак удаления файла (предохранитель LIFELINE).", [], {"type": "object"}),
+            ("db_latency", "Commit-латентности последних write-транзакций по стадиям "
+             "(preparation/gc/write/sync/ending/whole в µs) + сводка по окну. "
+             "gc_prof заполняется только в сборках с MDBX_ENABLE_PROFGC.",
+             [], {"type": "object"}),
+            ("db_recover", "Диагностика меты для восстановления (безопасный probe; "
+             "open_for_recovery требует остановленного сервера). target_meta=0..2. "
+             "Обычно предпочтителен mdbx_chk или восстановление из db_backup.",
+             [], {"type": "object",
+                  "properties": {"target_meta": {"type": "integer"}}}),
         ]
         return {name: {"name": name, "description": desc, "inputSchema": schema}
                 for name, desc, _args, schema in t}
@@ -185,7 +217,11 @@ class McpServer:
             if tool is None:
                 return self._error(mid, -32602, "Unknown tool: %s" % tname)
             try:
+                # предохранитель: детекция удаления файла БД + таймеры бэкапов
+                notice = self.store.before_call()
                 result = self._dispatch(tname, args)
+                if notice:
+                    result.setdefault("_notice", notice)
                 text = json.dumps(result, ensure_ascii=False, default=str)
                 return self._resp(mid, {
                     "content": [{"type": "text", "text": text}],
@@ -257,6 +293,31 @@ class McpServer:
             return result
         if name == "db_enable_utterly_nosync":
             return s.enable_utterly_nosync()
+        if name == "db_backup":
+            if args.get("skip"):
+                return s.run_prompt_backup(approve=False)
+            kind = args.get("kind") or ("user" if s.backup_pending else "manual")
+            if s.backup_pending:
+                r = s.run_prompt_backup(approve=True)
+                if r.get("approved") and "error" not in r:
+                    return r
+                raise MemoryError("BACKUP_FAILED", "internal",
+                                  r.get("error", "бэкап не создан"),
+                                  "проверьте backup_dir и права на запись", "none")
+            return s.backup(kind=kind, dest=args.get("dest"))
+        if name == "db_backup_status":
+            return s.backup_status()
+        if name == "db_backup_cleanup":
+            return s.cleanup(dry_run=bool(args.get("dry_run", True)),
+                             confirm=bool(args.get("confirm", False)),
+                             keep=args.get("keep"))
+        if name == "db_fileinfo":
+            return s.fileinfo()
+        if name == "db_latency":
+            return s.commit_latency()
+        if name == "db_recover":
+            target = int(args.get("target_meta", 0))
+            return s.recover(target)
         raise MemoryError("NO_SUCH_TOOL", "invalid", "неизвестный инструмент %r" % name,
                           "проверьте tools/list", "none")
 
@@ -292,11 +353,37 @@ def main(argv=None):
     argv = list(sys.argv[1:] if argv is None else argv)
     path = _default_db_path()
     readonly = os.environ.get("SHARED_GRAPH_MEMORY_READONLY", "1") not in ("0", "false", "")
+    created = False
     # БД ещё не существует — создаём (readonly старт бессмыслен без файла);
     # иначе открываем в read-only и переключаемся в rw по запросу агента.
     if readonly and not os.path.exists(path):
         Store(path, readonly=False).close()
-    store = Store(path, readonly=readonly)
+        created = True
+    try:
+        store = Store(path, readonly=readonly)
+    except mdbx.LibmdbxError as e:
+        if e.rc in (mdbx.RC_WANNA_RECOVERY, mdbx.RC_CORRUPTED):
+            print("shared-graph-memory: DB требует recovery (аварийное "
+                  "завершение без close, меты unsteady):", file=sys.stderr)
+            print("  %s" % e, file=sys.stderr)
+            print("  Варианты:", file=sys.stderr)
+            print("    1) запустить mdbx_chk для проверки/ремонта;", file=sys.stderr)
+            print("    2) осознанно открыть read-write "
+                  "(SHARED_GRAPH_MEMORY_READONLY=0) — движок сделает steady-sync;",
+                  file=sys.stderr)
+            print("    3) восстановить из бэкапа (см. db_backup / backup_dir).",
+                  file=sys.stderr)
+            return 2
+        raise
+    try:
+        diag = store.env.diag()
+    except Exception:  # noqa: BLE001
+        diag = {}
+    print("shared-graph-memory started: path=%s readonly=%s sync_mode=%s "
+          "next_id=%s meta_txnid=%s%s" % (
+              path, readonly, store.sync_mode, store.next_id,
+              diag.get("meta_txnid"), " CREATED-NEW" if created else ""),
+          file=sys.stderr, flush=True)
 
     def _shutdown(signum=None, frame=None):
         try:

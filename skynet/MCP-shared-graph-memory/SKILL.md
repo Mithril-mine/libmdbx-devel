@@ -34,12 +34,18 @@ shared-graph-memory.mdbx — персистентная память роя на
 | `gc(dry_run=true, archive=false)` | Тиринг hot/warm/cold (не удаляет без purge) |
 | `purge(keys)` | Явное удаление записей |
 | `stats()` | Статистика хранилища (здоровье памяти) |
-| `db_status()` | Диагностика БД по мета-страницам/bootid/txnid — критерий «данные на диске» |
+| `db_status()` | Полная диагностика БД (`MDBX_envinfo`: меты/bootid/txnid/pgop/geo, sync-пороги) |
 | `db_flush()` | Принудительный сброс данных на диск (sync force=true) |
 | `db_readers(check=false)` | Число активных читателей; check=true чистит мёртвых |
 | `db_stat(table?)` | Статистика env или конкретной таблицы |
 | `db_set_mode(sync?, readonly?)` | Ротация sync (durable\|metasync\|safe_nosync) и/или read-only↔rw |
 | `db_enable_utterly_nosync()` | **ОПАСНО**: отключение синхронизации (см. §«Режимы БД») |
+| `db_backup(kind?, skip?)` | Консистентная копия БД (COMPACT); ответ на PROMPT-запрос |
+| `db_backup_status()` | Состояние бэкапов: таймеры, тиры, кандидаты ротации |
+| `db_backup_cleanup(dry_run?, confirm?)` | Показать/удалить старейшие `auto-*` (только AUTO-тир) |
+| `db_fileinfo()` | fstat(fd): st_nlink/size/inode + признак удаления файла БД |
+| `db_latency()` | Commit-латентности последних записей по стадиям (µs) |
+| `db_recover(target_meta?)` | Диагностика меты для восстановления (безопасный probe) |
 
 ### Формат ключа
 
@@ -97,6 +103,26 @@ shared-graph-memory.mdbx — персистентная память роя на
 - Если `db_status()` показывает unsteady меты (или открытие упало с
   «recovery needed») — не делайте «молчаливых» операций: решите явно —
   `mdbx_chk` или осознанное открытие read-write (движок сам сделает steady-sync).
+
+## Бэкап и защита от удаления файла БД
+
+- **LIFELINE** (`current.mdbx`, жёсткая ссылка) создаётся при старте сервера;
+  инвариант `st_nlink ≥ 2`. **EMERGENCY** (`snapshot_*`) — при детекции
+  удаления файла БД. Эти тиры НИКОГДА не удаляются автоматически.
+- **AUTO** (`auto-*`) — тихий интервал; **USER** (`user-*`) — ручной/с запросом.
+- **Получив `DB_FILE_DELETED`** — выдать пользователю ПРЕДУПРЕЖДЕНИЕ и спросить:
+  (1) восстановить файл жёсткой ссылкой из `backup_dir`
+  (например `os.link("<backup_dir>/current.mdbx", "<path>")`), (2) остановить
+  сервер для `mdbx_chk`, или (3) продолжить, осознав риск. Операции записи
+  заблокированы до решения.
+- **Получив notice `backup_pending`** — спросить пользователя: «сделать
+  резервную копию сейчас?» → да: `db_backup(kind="user")`; нет:
+  `db_backup(skip=true)`.
+- **Ротация AUTO**: `db_backup_cleanup(dry_run=true)` показывает кандидатов
+  (старейшие сверх `BACKUP_KEEP`). Удаление — ТОЛЬКО после подтверждения
+  пользователя, через `confirm=true`. Тиры user/lifeline/snapshot ротация
+  не трогает.
+- После критичных записей — `db_flush()`; плановый бэкап — `db_backup(kind="user")`.
 
 ## Когда сохранять
 

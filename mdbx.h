@@ -2881,6 +2881,10 @@ MDBX_DEPRECATED LIBMDBX_INLINE_API(int, mdbx_env_stat, (const MDBX_env *env, MDB
  * \ingroup c_statinfo
  * \see mdbx_env_info_ex() */
 struct MDBX_envinfo {
+  /* TODO: add st_nlink (filesystem link count of the database file) into
+   * MDBX_envinfo — needed to detect unlink() of the database from under a
+   * live process (used by shared-graph-memory module via mdbx_env_get_fd +
+   * fstat). */
   struct {
     uint64_t lower;   /**< Lower limit for datafile size */
     uint64_t upper;   /**< Upper limit for datafile size */
