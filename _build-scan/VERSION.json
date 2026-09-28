@@ -1,0 +1,7 @@
+{
+      "git_describe" : "v0.15.0-19-ge84e2354",
+      "git_timestamp" : "2026-09-25T19:15:56+00:00",
+      "git_tree" : "569a23fca0f34caf5f31976498fb77d872b8cfb5",
+      "git_commit" : "e84e23549e26aed5477853c999a4dafab31f75d9",
+      "semver" : "0.15.0.19"
+}

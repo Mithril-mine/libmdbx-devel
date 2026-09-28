@@ -1,0 +1,68 @@
+[
+{
+  "directory": "/sourcecraft/workspace/nook-pool-1/_build-scan",
+  "command": "/usr/bin/cc -DMDBX_BUILD_SHARED_LIBRARY=0 -DMDBX_CONFIG_H=\\\"/sourcecraft/workspace/nook-pool-1/_build-scan/config-cmake.h\\\" -D_HAS_EXCEPTIONS=1 -D__STDC_CONSTANT_MACROS=1 -D__STDC_FORMAT_MACROS=1 -D__STDC_LIMIT_MACROS=1 -I/sourcecraft/workspace/nook-pool-1/src -I/sourcecraft/workspace/nook-pool-1/_build-scan  -fexceptions -fno-semantic-interposition -fno-common -ggdb -Wno-unknown-pragmas -ffunction-sections -fdata-sections -Wall -Wextra -O3 -DNDEBUG -std=gnu2x -fPIC -ffast-math -fvisibility=hidden -o CMakeFiles/mdbx-static.dir/src/alloy.c.o -c /sourcecraft/workspace/nook-pool-1/src/alloy.c",
+  "file": "/sourcecraft/workspace/nook-pool-1/src/alloy.c",
+  "output": "CMakeFiles/mdbx-static.dir/src/alloy.c.o"
+},
+{
+  "directory": "/sourcecraft/workspace/nook-pool-1/_build-scan",
+  "command": "/usr/bin/c++ -DMDBX_BUILD_SHARED_LIBRARY=0 -DMDBX_CONFIG_H=\\\"/sourcecraft/workspace/nook-pool-1/_build-scan/config-cmake.h\\\" -D_HAS_EXCEPTIONS=1 -D__STDC_CONSTANT_MACROS=1 -D__STDC_FORMAT_MACROS=1 -D__STDC_LIMIT_MACROS=1 -I/sourcecraft/workspace/nook-pool-1/src -I/sourcecraft/workspace/nook-pool-1/_build-scan  -fexceptions -fno-semantic-interposition -fno-common -ggdb -Wno-unknown-pragmas -ffunction-sections -fdata-sections -Wall -Wextra -O3 -DNDEBUG -std=gnu++23 -fPIC -ffast-math -fvisibility=hidden -o CMakeFiles/mdbx-static.dir/src/mdbx.c++.o -c /sourcecraft/workspace/nook-pool-1/src/mdbx.c++",
+  "file": "/sourcecraft/workspace/nook-pool-1/src/mdbx.c++",
+  "output": "CMakeFiles/mdbx-static.dir/src/mdbx.c++.o"
+},
+{
+  "directory": "/sourcecraft/workspace/nook-pool-1/_build-scan",
+  "command": "/usr/bin/cc -DLIBMDBX_EXPORTS -DMDBX_BUILD_SHARED_LIBRARY=1 -DMDBX_CONFIG_H=\\\"/sourcecraft/workspace/nook-pool-1/_build-scan/config-cmake.h\\\" -D_HAS_EXCEPTIONS=1 -D__STDC_CONSTANT_MACROS=1 -D__STDC_FORMAT_MACROS=1 -D__STDC_LIMIT_MACROS=1 -Dmdbx_EXPORTS -I/sourcecraft/workspace/nook-pool-1/src -I/sourcecraft/workspace/nook-pool-1/_build-scan  -fexceptions -fno-semantic-interposition -fno-common -ggdb -Wno-unknown-pragmas -ffunction-sections -fdata-sections -Wall -Wextra -O3 -DNDEBUG -std=gnu2x -fPIC -ffast-math -fvisibility=hidden -o CMakeFiles/mdbx.dir/src/alloy.c.o -c /sourcecraft/workspace/nook-pool-1/src/alloy.c",
+  "file": "/sourcecraft/workspace/nook-pool-1/src/alloy.c",
+  "output": "CMakeFiles/mdbx.dir/src/alloy.c.o"
+},
+{
+  "directory": "/sourcecraft/workspace/nook-pool-1/_build-scan",
+  "command": "/usr/bin/c++ -DLIBMDBX_EXPORTS -DMDBX_BUILD_SHARED_LIBRARY=1 -DMDBX_CONFIG_H=\\\"/sourcecraft/workspace/nook-pool-1/_build-scan/config-cmake.h\\\" -D_HAS_EXCEPTIONS=1 -D__STDC_CONSTANT_MACROS=1 -D__STDC_FORMAT_MACROS=1 -D__STDC_LIMIT_MACROS=1 -Dmdbx_EXPORTS -I/sourcecraft/workspace/nook-pool-1/src -I/sourcecraft/workspace/nook-pool-1/_build-scan  -fexceptions -fno-semantic-interposition -fno-common -ggdb -Wno-unknown-pragmas -ffunction-sections -fdata-sections -Wall -Wextra -O3 -DNDEBUG -std=gnu++23 -fPIC -ffast-math -fvisibility=hidden -o CMakeFiles/mdbx.dir/src/mdbx.c++.o -c /sourcecraft/workspace/nook-pool-1/src/mdbx.c++",
+  "file": "/sourcecraft/workspace/nook-pool-1/src/mdbx.c++",
+  "output": "CMakeFiles/mdbx.dir/src/mdbx.c++.o"
+},
+{
+  "directory": "/sourcecraft/workspace/nook-pool-1/_build-scan",
+  "command": "/usr/bin/cc -DMDBX_CONFIG_H=\\\"/sourcecraft/workspace/nook-pool-1/_build-scan/config-cmake.h\\\" -D_HAS_EXCEPTIONS=1 -D__STDC_CONSTANT_MACROS=1 -D__STDC_FORMAT_MACROS=1 -D__STDC_LIMIT_MACROS=1 -I/sourcecraft/workspace/nook-pool-1/src -I/sourcecraft/workspace/nook-pool-1/_build-scan -I/sourcecraft/workspace/nook-pool-1  -fexceptions -fno-semantic-interposition -fno-common -ggdb -Wno-unknown-pragmas -ffunction-sections -fdata-sections -Wall -Wextra -O3 -DNDEBUG -std=gnu2x -fPIE -ffast-math -fvisibility=hidden -o CMakeFiles/mdbx_chk.dir/src/tools/chk.c.o -c /sourcecraft/workspace/nook-pool-1/src/tools/chk.c",
+  "file": "/sourcecraft/workspace/nook-pool-1/src/tools/chk.c",
+  "output": "CMakeFiles/mdbx_chk.dir/src/tools/chk.c.o"
+},
+{
+  "directory": "/sourcecraft/workspace/nook-pool-1/_build-scan",
+  "command": "/usr/bin/cc -DMDBX_CONFIG_H=\\\"/sourcecraft/workspace/nook-pool-1/_build-scan/config-cmake.h\\\" -D_HAS_EXCEPTIONS=1 -D__STDC_CONSTANT_MACROS=1 -D__STDC_FORMAT_MACROS=1 -D__STDC_LIMIT_MACROS=1 -I/sourcecraft/workspace/nook-pool-1/src -I/sourcecraft/workspace/nook-pool-1/_build-scan -I/sourcecraft/workspace/nook-pool-1  -fexceptions -fno-semantic-interposition -fno-common -ggdb -Wno-unknown-pragmas -ffunction-sections -fdata-sections -Wall -Wextra -O3 -DNDEBUG -std=gnu2x -fPIE -ffast-math -fvisibility=hidden -o CMakeFiles/mdbx_copy.dir/src/tools/copy.c.o -c /sourcecraft/workspace/nook-pool-1/src/tools/copy.c",
+  "file": "/sourcecraft/workspace/nook-pool-1/src/tools/copy.c",
+  "output": "CMakeFiles/mdbx_copy.dir/src/tools/copy.c.o"
+},
+{
+  "directory": "/sourcecraft/workspace/nook-pool-1/_build-scan",
+  "command": "/usr/bin/cc -DMDBX_CONFIG_H=\\\"/sourcecraft/workspace/nook-pool-1/_build-scan/config-cmake.h\\\" -D_HAS_EXCEPTIONS=1 -D__STDC_CONSTANT_MACROS=1 -D__STDC_FORMAT_MACROS=1 -D__STDC_LIMIT_MACROS=1 -I/sourcecraft/workspace/nook-pool-1/src -I/sourcecraft/workspace/nook-pool-1/_build-scan -I/sourcecraft/workspace/nook-pool-1  -fexceptions -fno-semantic-interposition -fno-common -ggdb -Wno-unknown-pragmas -ffunction-sections -fdata-sections -Wall -Wextra -O3 -DNDEBUG -std=gnu2x -fPIE -ffast-math -fvisibility=hidden -o CMakeFiles/mdbx_stat.dir/src/tools/stat.c.o -c /sourcecraft/workspace/nook-pool-1/src/tools/stat.c",
+  "file": "/sourcecraft/workspace/nook-pool-1/src/tools/stat.c",
+  "output": "CMakeFiles/mdbx_stat.dir/src/tools/stat.c.o"
+},
+{
+  "directory": "/sourcecraft/workspace/nook-pool-1/_build-scan",
+  "command": "/usr/bin/cc -DMDBX_CONFIG_H=\\\"/sourcecraft/workspace/nook-pool-1/_build-scan/config-cmake.h\\\" -D_HAS_EXCEPTIONS=1 -D__STDC_CONSTANT_MACROS=1 -D__STDC_FORMAT_MACROS=1 -D__STDC_LIMIT_MACROS=1 -I/sourcecraft/workspace/nook-pool-1/src -I/sourcecraft/workspace/nook-pool-1/_build-scan -I/sourcecraft/workspace/nook-pool-1  -fexceptions -fno-semantic-interposition -fno-common -ggdb -Wno-unknown-pragmas -ffunction-sections -fdata-sections -Wall -Wextra -O3 -DNDEBUG -std=gnu2x -fPIE -ffast-math -fvisibility=hidden -o CMakeFiles/mdbx_dump.dir/src/tools/dump.c.o -c /sourcecraft/workspace/nook-pool-1/src/tools/dump.c",
+  "file": "/sourcecraft/workspace/nook-pool-1/src/tools/dump.c",
+  "output": "CMakeFiles/mdbx_dump.dir/src/tools/dump.c.o"
+},
+{
+  "directory": "/sourcecraft/workspace/nook-pool-1/_build-scan",
+  "command": "/usr/bin/cc -DMDBX_CONFIG_H=\\\"/sourcecraft/workspace/nook-pool-1/_build-scan/config-cmake.h\\\" -D_HAS_EXCEPTIONS=1 -D__STDC_CONSTANT_MACROS=1 -D__STDC_FORMAT_MACROS=1 -D__STDC_LIMIT_MACROS=1 -I/sourcecraft/workspace/nook-pool-1/src -I/sourcecraft/workspace/nook-pool-1/_build-scan -I/sourcecraft/workspace/nook-pool-1  -fexceptions -fno-semantic-interposition -fno-common -ggdb -Wno-unknown-pragmas -ffunction-sections -fdata-sections -Wall -Wextra -O3 -DNDEBUG -std=gnu2x -fPIE -ffast-math -fvisibility=hidden -o CMakeFiles/mdbx_load.dir/src/tools/load.c.o -c /sourcecraft/workspace/nook-pool-1/src/tools/load.c",
+  "file": "/sourcecraft/workspace/nook-pool-1/src/tools/load.c",
+  "output": "CMakeFiles/mdbx_load.dir/src/tools/load.c.o"
+},
+{
+  "directory": "/sourcecraft/workspace/nook-pool-1/_build-scan",
+  "command": "/usr/bin/cc -DMDBX_CONFIG_H=\\\"/sourcecraft/workspace/nook-pool-1/_build-scan/config-cmake.h\\\" -D_HAS_EXCEPTIONS=1 -D__STDC_CONSTANT_MACROS=1 -D__STDC_FORMAT_MACROS=1 -D__STDC_LIMIT_MACROS=1 -I/sourcecraft/workspace/nook-pool-1/src -I/sourcecraft/workspace/nook-pool-1/_build-scan -I/sourcecraft/workspace/nook-pool-1  -fexceptions -fno-semantic-interposition -fno-common -ggdb -Wno-unknown-pragmas -ffunction-sections -fdata-sections -Wall -Wextra -O3 -DNDEBUG -std=gnu2x -fPIE -ffast-math -fvisibility=hidden -o CMakeFiles/mdbx_drop.dir/src/tools/drop.c.o -c /sourcecraft/workspace/nook-pool-1/src/tools/drop.c",
+  "file": "/sourcecraft/workspace/nook-pool-1/src/tools/drop.c",
+  "output": "CMakeFiles/mdbx_drop.dir/src/tools/drop.c.o"
+},
+{
+  "directory": "/sourcecraft/workspace/nook-pool-1/_build-scan",
+  "command": "/usr/bin/cc -DMDBX_CONFIG_H=\\\"/sourcecraft/workspace/nook-pool-1/_build-scan/config-cmake.h\\\" -D_HAS_EXCEPTIONS=1 -D__STDC_CONSTANT_MACROS=1 -D__STDC_FORMAT_MACROS=1 -D__STDC_LIMIT_MACROS=1 -I/sourcecraft/workspace/nook-pool-1/src -I/sourcecraft/workspace/nook-pool-1/_build-scan -I/sourcecraft/workspace/nook-pool-1  -fexceptions -fno-semantic-interposition -fno-common -ggdb -Wno-unknown-pragmas -ffunction-sections -fdata-sections -Wall -Wextra -O3 -DNDEBUG -std=gnu2x -fPIE -ffast-math -fvisibility=hidden -o CMakeFiles/mdbx_defrag.dir/src/tools/defrag.c.o -c /sourcecraft/workspace/nook-pool-1/src/tools/defrag.c",
+  "file": "/sourcecraft/workspace/nook-pool-1/src/tools/defrag.c",
+  "output": "CMakeFiles/mdbx_defrag.dir/src/tools/defrag.c.o"
+}
+]

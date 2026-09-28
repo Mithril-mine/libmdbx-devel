@@ -1,0 +1,51 @@
+# libmdbx test suite
+
+This directory contains the test suite and related internal development
+components of [_libmdbx_](../README.md). These components are **not** part of
+the _libmdbx_ library itself and are **not** included into the amalgamated
+distribution produced by `make dist`.
+
+## Licensing
+
+The content of this directory is distributed under a **non-free proprietary
+license**, which differs from the Apache License, Version 2.0 that governs the
+_libmdbx_ library itself. Please refer to the [LICENCE](LICENCE) file in this
+directory for the full license text, and to the root [README](../README.md) for
+the library license information.
+
+## Structure
+
+| Path | Purpose |
+| ---- | ------- |
+| [`ut/`](ut) | Unit tests written on top of [googletest](https://github.com/google/googletest), one test-case per file. Tests are tagged with a hierarchical label tree (`ut.api`, `ut.cxx`, `ut.env`, `ut.dbi`, `ut.txn`, `ut.cursor`, `ut.gc`, `ut.issues`), plus the orthogonal `ut.heavy` attribute for slow stress tests. |
+| [`issues/`](issues) | Regression tests for specific reported issues (`issue_gh*`), each being a self-contained googletest test-case tagged with `ut.issues`. |
+| [`framework/`](framework) | The stochastic/actor-based test framework: testcase actors (`hill`, `try`, `append`, `jitter`, `ttl`, `nested`, `fork`, `dead`, `copy`), key/value generators, OS abstraction and the `mdbx_test` entry point. Used by the smoke scenarios and the long stochastic runs. |
+| [`ci/`](ci) | CI helper scripts, primarily `ci.sh` which performs the CMake/Make build-and-test pipeline used by CI workflows. |
+| [`exploits/`](exploits) | Proof-of-concept programs for historically reported vulnerabilities, kept for reference. |
+| `stochastic.sh` | Driver for the long stochastic test scenario. |
+| `dump-load.sh` | Helper for dump/load round-trip testing. |
+| `battery-tmux.sh`, `tmux.conf` | Helpers for running test batteries inside `tmux`. |
+
+## Building and running
+
+The tests are registered and built via CMake/CTest. With an existing build
+directory (e.g. `@cmake-build`), the unit tests can be run selectively by their
+labels:
+
+```sh
+# fast unit tests only (default for routine changes)
+ctest -L 'ut\.' -LE 'ut\.heavy'
+
+# a specific area (e.g. the C++ API)
+ctest -L 'ut\.cxx'
+
+# a single test
+ctest -R '^txn-dataops$'
+```
+
+Smoke scenarios are also wired into `make smoke` (see the root
+[GNUmakefile](../GNUmakefile)) and the stochastic scenario is available via
+[`stochastic.sh`](stochastic.sh).
+
+See the "Testing instructions" in the root [AGENTS.md](../AGENTS.md) for the
+full segmented-test-execution policy.

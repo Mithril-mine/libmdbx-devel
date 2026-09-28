@@ -1,0 +1,7 @@
+{
+      "git_describe" : "v0.15.0-12-g2aa7b068-dirty",
+      "git_timestamp" : "2026-09-25T08:34:52+00:00",
+      "git_tree" : "31e8579eddec2a4e5349cce4378063e1fbf1b3ab",
+      "git_commit" : "DIRTY-2aa7b068cdbfedb05099d9544b38e50113d001d4",
+      "semver" : "0.15.0.12-DIRTY"
+}
