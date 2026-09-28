@@ -21,6 +21,7 @@ REGISTRY="${REPO_ROOT}/tests/ci/config.json"
 BASE=origin/devel
 MODE=diff
 PROFILE=""
+CAP=0
 ARGS=()
 
 while [ $# -gt 0 ]; do
@@ -36,8 +37,13 @@ while [ $# -gt 0 ]; do
 		MODE=profile
 		PROFILE="$1"
 		;;
+	--cap)
+		shift
+		[ $# -gt 0 ] || { echo "select-cells: --cap needs a number" >&2; exit 2; }
+		CAP="$1"
+		;;
 	-h | --help)
-		sed -n '2,13p' "$0" | sed 's/^# \?//'
+		sed -n '2,14p' "$0" | sed 's/^# \?//'
 		exit 0
 		;;
 	--)
@@ -124,6 +130,56 @@ if [ ${#result[@]} -eq 0 ]; then
 	echo "select-cells: no cells selected (docs-only change?)" >&2
 	exit 1
 fi
+
+# --cap N: shrink to N cells keeping platform diversity and push-quick priority
+# (Infra v3: a diff on src/ touches ~70 cells; the push gate must stay small).
+if [ "$CAP" -gt 0 ] && [ ${#result[@]} -gt "$CAP" ]; then
+	pushquick=()
+	while IFS= read -r cid; do
+		[ -n "$cid" ] || continue
+		pushquick+=("$cid")
+	done < <(tests/ci/select-cells.sh --profile push-quick 2>/dev/null || true)
+	capped=()
+	declare -A cap_seen
+	# 1st pass: intersection with push-quick (highest-value cells).
+	for cid in "${result[@]}"; do
+		[ ${#capped[@]} -ge "$CAP" ] && break
+		if [[ " ${pushquick[*]:-} " == *" $cid "* ]]; then
+			[ -n "${cap_seen[$cid]:-}" ] && continue
+			cap_seen[$cid]=1
+			capped+=("$cid")
+		fi
+	done
+	# 2nd pass: one cell per runs-on for diversity.
+	declare -A cap_runson
+	while IFS= read -r cid; do
+		[ ${#capped[@]} -ge "$CAP" ] && break
+		[ -n "${cap_seen[$cid]:-}" ] && continue
+		ro=$(python3 -c "
+import json
+cfg = json.load(open('${REGISTRY}'))
+for c in cfg['cells']:
+    if c['id'] == '${cid}':
+        print(c.get('runs-on', ''))
+        break
+")
+		if [ -n "$ro" ] && [ -z "${cap_runson[$ro]:-}" ]; then
+			cap_runson[$ro]=1
+			cap_seen[$cid]=1
+			capped+=("$cid")
+		fi
+	done < <(printf '%s\n' "${result[@]}")
+	# 3rd pass: fill the rest in original order.
+	for cid in "${result[@]}"; do
+		[ ${#capped[@]} -ge "$CAP" ] && break
+		[ -n "${cap_seen[$cid]:-}" ] && continue
+		cap_seen[$cid]=1
+		capped+=("$cid")
+	done
+	result=("${capped[@]}")
+	echo "select-cells: capped ${#result[@]} cells (--cap $CAP)" >&2
+fi
+
 printf '%s\n' "${result[@]}"
 echo "select-cells: selected ${#result[@]} cells for ${#paths[@]} changed paths" >&2
 exit 0
