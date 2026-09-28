@@ -309,7 +309,11 @@ case_load_stdin() {
   [ "$rc" = "$want_rc" ] || ok=0
   [ "$data_ok" = 1 ] || { ok=0; log "  $TOOL/$name: loaded data mismatch (issue #50 regression)"; diff "$d/reloaded.norm" "$d/ref.norm" 2>&1 | head -8 | sed 's/^/      /'; }
   if [ "$ok" = 1 ]; then pass=$((pass+1)); log "PASS $TOOL/$name"
-  else fail=$((fail+1)); FAILED_CASES+=("$TOOL/$name"); log "FAIL $TOOL/$name (rc=$rc want=$want_rc)"; fi
+  else
+    fail=$((fail+1)); FAILED_CASES+=("$TOOL/$name"); log "FAIL $TOOL/$name (rc=$rc want=$want_rc)"
+    log "  stdout diff:"; diff "$d/stdout.norm" "$d/golden.out.norm" 2>&1 | head -8 | sed 's/^/      /'
+    log "  stderr diff:"; diff "$d/stderr.norm" "$d/golden.err.norm" 2>&1 | head -8 | sed 's/^/      /'
+  fi
 }
 case_load_bad_mapsize() {
   local d="$WORK/load_bm"; fresh_base "$d"
