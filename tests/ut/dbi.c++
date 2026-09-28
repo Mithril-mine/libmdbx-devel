@@ -22,6 +22,7 @@
 #include "mdbx.h++"
 
 #include <iostream>
+#include <gtest/gtest.h>
 
 mdbx::path db_filename = "test-dbi";
 
@@ -212,22 +213,6 @@ bool case3() {
   return ok;
 }
 
-int doit() {
-
-  bool ok = true;
-  ok = case1() && ok;
-  ok = case2() && ok;
-  ok = case3() && ok;
-
-  if (ok) {
-    std::cout << "OK\n";
-    return EXIT_SUCCESS;
-  } else {
-    std::cerr << "FAIL\n";
-    return EXIT_FAILURE;
-  }
-}
-
 static char log_buffer[1024];
 
 static void logger_nofmt(MDBX_log_level_t loglevel, const char *function, int line, const char *msg,
@@ -242,14 +227,13 @@ static void logger_nofmt(MDBX_log_level_t loglevel, const char *function, int li
   fflush(stdout);
 }
 
-int main(int argc, char *argv[]) {
-  (void)argc;
-  (void)argv;
-  mdbx_setup_debug_nofmt(MDBX_LOG_NOTICE, MDBX_DBG_ASSERT, logger_nofmt, log_buffer, sizeof(log_buffer));
-  try {
-    return doit();
-  } catch (const std::exception &ex) {
-    std::cerr << "Exception: " << ex.what() << "\n";
-    return EXIT_FAILURE;
+class DbiTest : public ::testing::Test {
+protected:
+  static void SetUpTestSuite() {
+    mdbx_setup_debug_nofmt(MDBX_LOG_NOTICE, MDBX_DBG_ASSERT, logger_nofmt, log_buffer, sizeof(log_buffer));
   }
-}
+};
+
+TEST_F(DbiTest, case1) { EXPECT_TRUE(case1()); }
+TEST_F(DbiTest, case2) { EXPECT_TRUE(case2()); }
+TEST_F(DbiTest, case3) { EXPECT_TRUE(case3()); }
