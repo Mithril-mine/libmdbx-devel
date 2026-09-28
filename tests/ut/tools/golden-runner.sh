@@ -60,7 +60,7 @@ normalize() {
     -e '/MADV_/d' \
     -e '/^   readahead ON /d' \
     -e 's/read meta: empty file \([0-9]+, .*\)/read meta: empty file (ERRNO)/' \
-    -e 's/^   Max readers: [0-9]+$/   Max readers: <N>/' \
+    -e 's/^  Max readers: [0-9]+$/  Max readers: <N>/' \
     -e '/ignore .*local\/remote-fs check/d'
 }
 
@@ -307,7 +307,7 @@ case_load_stdin() {
   diff -q "$d/stderr.norm" "$d/golden.err.norm" >/dev/null 2>&1 || ok=0
   local want_rc="$(cat "$GOLDEN/$TOOL/$name.rc")"
   [ "$rc" = "$want_rc" ] || ok=0
-  [ "$data_ok" = 1 ] || { ok=0; log "  $TOOL/$name: loaded data mismatch (issue #50 regression)"; }
+  [ "$data_ok" = 1 ] || { ok=0; log "  $TOOL/$name: loaded data mismatch (issue #50 regression)"; diff "$d/reloaded.norm" "$d/ref.norm" 2>&1 | head -8 | sed 's/^/      /'; }
   if [ "$ok" = 1 ]; then pass=$((pass+1)); log "PASS $TOOL/$name"
   else fail=$((fail+1)); FAILED_CASES+=("$TOOL/$name"); log "FAIL $TOOL/$name (rc=$rc want=$want_rc)"; fi
 }
