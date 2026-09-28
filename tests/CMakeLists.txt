@@ -258,28 +258,80 @@ else()
 
     add_extra_test(global_init SOURCE ut/global_init.c MDBX_LIB mdbx-static)
 
-    add_extra_test(rename_dbi SOURCE ut/rename_dbi.c)
+    add_ut(rename_dbi SOURCE ut/rename_dbi.c++)
+    set_tests_properties(rename_dbi PROPERTIES LABELS "ut;ut.dbi")
     add_extra_test(nested_drop_abort SOURCE ut/nested_drop_abort.c)
     if(MDBX_BUILD_CXX)
       if(NOT WIN32 OR NOT MDBX_CXX_STANDARD LESS 17)
         add_extra_test(cursor_closing TIMEOUT 10800)
-        add_extra_test(early_close_dbi)
-        add_extra_test(maindb_ordinal)
+        add_ut(buffers SOURCE ut/buffers.c++)
+        set_tests_properties(buffers PROPERTIES LABELS "ut;ut.api")
+        add_ut(early_close_dbi SOURCE ut/early_close_dbi.c++)
+        set_tests_properties(early_close_dbi PROPERTIES LABELS "ut;ut.dbi;ut.env")
+        add_ut(maindb_ordinal SOURCE ut/maindb_ordinal.c++)
+        set_tests_properties(maindb_ordinal PROPERTIES LABELS "ut;ut.dbi")
         add_extra_test(dupfix_multiple TIMEOUT 10800)
         add_extra_test(doubtless_positioning TIMEOUT 10800)
         add_extra_test(crunched_delete TIMEOUT 10800)
         add_extra_test(distance_scroll_distribute TIMEOUT 10800)
-        add_ut(dbi SOURCE ut/dbi.c++ LABELS "ut;ut.dbi")
-        add_extra_test(open)
-        add_extra_test(txn)
-        add_extra_test(buffers)
         add_extra_test(bunches_removal)
-        add_extra_test(get_cached)
-        add_extra_test(reverse_insertions)
+        add_ut(dbi SOURCE ut/dbi.c++ LABELS "ut;ut.dbi")
+        add_ut(open SOURCE ut/open.c++)
+        set_tests_properties(open PROPERTIES LABELS "ut;ut.env;ut.txn")
+        add_ut(txn SOURCE ut/txn.c++)
+        set_tests_properties(txn PROPERTIES LABELS "ut;ut.txn")
+        add_ut(get_cached SOURCE ut/get_cached.c++)
+        set_tests_properties(get_cached PROPERTIES LABELS "ut;ut.api;ut.txn")
+        add_ut(reverse_insertions SOURCE ut/reverse_insertions.c++)
+        set_tests_properties(reverse_insertions PROPERTIES LABELS "ut;ut.txn")
         add_subdirectory(issues)
       endif()
-      add_extra_test(hex_base64_base58)
+      add_ut(hex_base64_base58 SOURCE ut/hex_base64_base58.c++)
+      set_tests_properties(hex_base64_base58 PROPERTIES LABELS "ut;ut.api")
     endif()
   endif()
+
+  # ------------------------------------------------------------------
+  # Tiered smoke profiles (TASK-22, BACKLOG B21-B33).
+  #
+  # mdbx_test is STOCHASTIC: the pseudo-random sequence derives from
+  # --prng-seed, so a FIXED seed reproduces the same per-actor operation
+  # sequence (single-process actors fully deterministic, multi-process
+  # interleaving is not). Tiered runs are addressable via CTest labels:
+  #
+  #   ctest -L 'smoke-t1'   T1 fast deterministic smoke, seconds, fixed seeds
+  #   ctest -L 'smoke-t2'   T2 medium smoke (quick-smoke family above)
+  #   ctest -L 'smoke-t3'   T3 full/long stochastic runs (milestone/nightly)
+  #
+  # GNUmakefile convenience targets: make smoke-t1 / smoke-t2 / smoke-t3.
+  #
+  # T1 must complete in seconds and never run long iterations: bound with
+  # --nops (bounded work) instead of --timeout, keep --repeat=1 and use the
+  # fast +nosync-safe mode when durability is not the point.
+  set(MDBX_SMOKE_EXTRA "" CACHE STRING "Extra command-line arguments for the quick smoke scenarios")
+  set(MDBX_T1_SEED_HILL 20260921)
+  set(MDBX_T1_SEED_NESTED 20260922)
+  set(MDBX_T1_SEED_COPY 20260923)
+
+  # NOTE: mdbx_test copies actor params when it parses the scenario selector
+  # (--hill/--nested/--copy/...), so ALL tuning options must precede the
+  # selector, mirroring the existing smoke_sp_* registrations above.
+  add_test(NAME smoke_t1_hill
+           COMMAND $<TARGET_FILE:mdbx_test> --nops=1K --prng-seed=${MDBX_T1_SEED_HILL}
+                   --mode=+nosync-safe --progress --console=no --repeat=1 --pathname=t1-hill.db
+                   --cleanup-before --dont-cleanup-after ${MDBX_SMOKE_EXTRA} --hill)
+  set_tests_properties(smoke_t1_hill PROPERTIES LABELS "smoke;smoke-t1" TIMEOUT 60 RUN_SERIAL OFF)
+
+  add_test(NAME smoke_t1_nested
+           COMMAND $<TARGET_FILE:mdbx_test> --nops=1K --prng-seed=${MDBX_T1_SEED_NESTED}
+                   --mode=-writemap,-nosync-safe,-lifo --progress --console=no --repeat=1
+                   --pathname=t1-nested.db --cleanup-before --dont-cleanup-after ${MDBX_SMOKE_EXTRA} --nested)
+  set_tests_properties(smoke_t1_nested PROPERTIES LABELS "smoke;smoke-t1" TIMEOUT 60 RUN_SERIAL OFF)
+
+  add_test(NAME smoke_t1_copy
+           COMMAND $<TARGET_FILE:mdbx_test> --nops=256 --prng-seed=${MDBX_T1_SEED_COPY}
+                   --mode=+nosync-safe --progress --console=no --repeat=1 --pathname=t1-copy.db
+                   --cleanup-before --dont-cleanup-after ${MDBX_SMOKE_EXTRA} --copy)
+  set_tests_properties(smoke_t1_copy PROPERTIES LABELS "smoke;smoke-t1" TIMEOUT 60 RUN_SERIAL OFF)
 
 endif()
