@@ -205,8 +205,11 @@ def build_regions(files) -> list:
     return out
 
 
-def collect_source_files():
-    """Список .c/.c++ файлов кодовой базы (по включаетам alloy.c)."""
+def collect_source_files(include_tests=False):
+    """Список .c/.c++ файлов кодовой базы (по включаетам alloy.c).
+
+    include_tests=True — дополнительно тестовые домены tests/{ut,issues,fwk}.
+    """
     files = []
     alloy = os.path.join(SRC_DIR, "alloy.c")
     if os.path.exists(alloy):
@@ -218,6 +221,13 @@ def collect_source_files():
                 if f.endswith((".c", ".c++")):
                     files.append(os.path.join(root, f))
     files.append(os.path.join(SRC_DIR, "mdbx.c++"))
+    if include_tests:
+        for sub in ("ut", "issues", "framework"):
+            root = os.path.join(REPO_ROOT, "tests", sub)
+            for dirpath, _, fs in os.walk(root):
+                for f in fs:
+                    if f.endswith((".c", ".c++")):
+                        files.append(os.path.join(dirpath, f))
     seen, out = set(), []
     for f in files:
         if os.path.exists(f) and f not in seen:

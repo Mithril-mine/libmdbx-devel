@@ -169,6 +169,44 @@ def clean_cxx_name(name):
     return _UNNAMED_SUFFIX.sub("", name or "").rstrip("::")
 
 
+class ScanConfig:
+    """Конфигурация сканирования (платформа/опции компиляции).
+
+    linux (по умолчанию): флаги берутся из compile_commands как есть.
+    Кросс-конфигурации (win32 и т.п.): из compile_commands сохраняются только
+    -D/-I (пути к src/_build-scan, версия/конфиг), остальное собирается из
+    --target/--defines/--includes/--extra-flags.
+    """
+
+    def __init__(self, name="linux", target=None, defines=None,
+                 includes=None, extra_flags=None, no_detailed_preprocessing=False):
+        self.name = name
+        self.target = target
+        self.defines = shlex.split(defines or "")
+        self.includes = shlex.split(includes or "")
+        self.extra_flags = shlex.split(extra_flags or "")
+        self.no_detailed_preprocessing = no_detailed_preprocessing
+        self._cross = bool(target or defines or includes or extra_flags)
+
+    def args_for(self, entry: dict, source_file: str = None) -> list:
+        base = sanitize_args(entry["command"], source_file)
+        if not self._cross:
+            return base
+        kept = [t for t in base
+                if t.startswith("-D") or t.startswith("-I")
+                or t.startswith("-Wno-") or t == "-pthread"]
+        out = []
+        if self.target:
+            out.append("--target=%s" % self.target)
+        out += kept
+        for d in self.defines:
+            out.append("-D%s" % d if not d.startswith("-D") else d)
+        for inc in self.includes:
+            out.append("-I%s" % inc)
+        out += self.extra_flags
+        return out
+
+
 class Collector:
     def __init__(self, default_file: str = None, tu_dir: str = None):
         self.default_file = default_file
@@ -223,7 +261,17 @@ class Collector:
         name = clean_cxx_name(name or node.get("name"))
         if not name:
             return
+        sig = node.get("type", {}).get("qualType", "")
+        has_body = any(c.get("kind") == "CompoundStmt" for c in node.get("inner", []))
         key = fn_key(file, name)
+        # перегрузки C++: одинаковый qname в одном файле → различить
+        # сигнатурой на уровне сырого ключа, чтобы canonicalize_symbols
+        # получил оба определения и построил корректные fn:...#sig-hash
+        if key in self.functions:
+            existing = self.functions[key]
+            if existing["signature"] != sig:
+                sig_hash = abs(hash(sig)) % 0xFFFF
+                key = "%s#%x" % (key, sig_hash)
         loc = node.get("loc", {})
         l0 = loc.get("line", 0)
         end = node.get("range", {}).get("end", {})
@@ -235,12 +283,11 @@ class Collector:
             l1 = line_index(file).line(end_off) if end_off else l0
         if l1 < l0:
             l1 = l0
-        has_body = any(c.get("kind") == "CompoundStmt" for c in node.get("inner", []))
         is_static = node.get("storageClass") == "static"
         entry = {
             "kind": "function",
             "name": name,
-            "signature": node.get("type", {}).get("qualType", ""),
+            "signature": sig,
             "file": os.path.relpath(file, REPO_ROOT),
             "module": module_of(file),
             "l0": l0, "l1": l1,
@@ -562,12 +609,13 @@ def finalize_blocks(col: Collector):
                         for _, k, l0, l1, bid in lst]
 
 
-def scan_macros(clang, tu, entry, col: Collector):
+def scan_macros(clang, tu, entry, col: Collector, cfg: ScanConfig = None):
     """Извлекает #define из репозитория через `clang -E -dD`.
     ast-dump не эмитит макросы вообще; -dD даёт их вместе с
     # <line> "file"-маркерами для привязки к файлу."""
-    cmd = [clang, "-E", "-dD"] + sanitize_args(entry["command"],
-                                               entry["file"]) + [entry["file"]]
+    cfg = cfg or ScanConfig()
+    cmd = ([clang, "-E", "-dD"]
+           + cfg.args_for(entry, entry["file"]) + [entry["file"]])
     proc = subprocess.run(cmd, cwd=entry["directory"],
                           capture_output=True, text=True)
     if proc.returncode != 0:
@@ -599,10 +647,13 @@ def scan_macros(clang, tu, entry, col: Collector):
                 }
 
 
-def run_tu(clang, tu, entry) -> tuple:
-    args = sanitize_args(entry["command"], entry["file"])
-    cmd = [clang, "-Xclang", "-ast-dump=json", "-Xclang",
-           "-detailed-preprocessing-record", "-fsyntax-only"] + args + [entry["file"]]
+def run_tu(clang, tu, entry, cfg: ScanConfig = None) -> tuple:
+    cfg = cfg or ScanConfig()
+    args = cfg.args_for(entry, entry["file"])
+    cmd = [clang, "-Xclang", "-ast-dump=json"]
+    if not cfg.no_detailed_preprocessing:
+        cmd += ["-Xclang", "-detailed-preprocessing-record"]
+    cmd += ["-fsyntax-only"] + args + [entry["file"]]
     proc = subprocess.run(cmd, cwd=entry["directory"],
                           capture_output=True, text=True)
     if proc.returncode != 0 or not proc.stdout:
@@ -629,6 +680,72 @@ def select_tus(cc) -> list:
     return out
 
 
+# тестовые домены: каждый элемент = (имя, релятивный путь от REPO_ROOT)
+TEST_DOMAINS = {
+    "ut": ("ut/", [os.path.join("tests", "ut", f)
+                   for f in sorted(os.listdir(os.path.join(REPO_ROOT, "tests", "ut")))
+                   if f.endswith((".c", ".c++"))]),
+    "issues": ("issues/", [os.path.join("tests", "issues", f)
+                           for f in sorted(os.listdir(
+                               os.path.join(REPO_ROOT, "tests", "issues")))
+                           if f.endswith((".c", ".c++"))]),
+    "framework": ("framework/", [os.path.join("tests", "framework", f)
+                                 for f in sorted(os.listdir(
+                                     os.path.join(REPO_ROOT, "tests", "framework")))
+                                 if f.endswith(".c++")
+                                 and os.path.basename(f) not in ("main.c++",)]),
+}
+
+
+def select_test_tus(domain="ut") -> list:
+    """Синтетические записи TU для тестового домена.
+
+    Команда строится по образцу библиотечного TU из compile_commands
+    (определения конфига/инклуды) + тестовые дефайны; clang запускается
+    как C++. Пространство команд одинаково для всех тестов.
+    """
+    prefix, files = TEST_DOMAINS[domain]
+    # образец команды: первый либ-TU из compile_commands
+    cc_path = os.path.join(REPO_ROOT, "_build-scan", "compile_commands.json")
+    base_defs, base_includes = [], []
+    if os.path.exists(cc_path):
+        with open(cc_path) as f:
+            cc = json.load(f)
+        model = next((e for e in cc if e["file"].endswith("mdbx.c++")), None)
+        if model:
+            toks = shlex.split(model["command"])
+            base_defs = [t for t in toks if t.startswith("-D")]
+            base_includes = [t for t in toks
+                             if t.startswith("-I")
+                             and any(d in t for d in ("_build-scan", "/src"))]
+    else:
+        # CI / отсутствие configure-only build-дира: синтетический конфиг
+        # (тот же путь, что дал бы CMake; файл может не существовать —
+        # тесты смотрят только на форму аргумента, clang не запускается).
+        cfg_h = os.path.join(REPO_ROOT, "_build-scan", "config-cmake.h")
+        base_defs = ['-DMDBX_CONFIG_H=\\"%s\\"' % cfg_h]
+    out = []
+    for rel in files:
+        abspath = os.path.join(REPO_ROOT, rel)
+        defs = []
+        for t in base_defs:
+            # кавычки теряются при двойном shlex-разборе; для -D с путём
+            # (MDBX_CONFIG_H) восстанавливаем кавычки явно
+            if t.startswith("-DMDBX_CONFIG_H="):
+                k, _, v = t.partition("=")
+                if v.startswith('"') and v.endswith('"'):
+                    t = '%s=\\"%s\\"' % (k, v.strip('"'))
+            defs.append(t)
+        command = " ".join([
+            "c++",
+            "-DMDBX_BUILD_TEST=1", "-DMDBX_BUILD_CXX=1",
+        ] + defs + base_includes + ["-I%s" % REPO_ROOT])
+        out.append((prefix.rstrip("/") or domain,
+                    {"file": abspath, "directory": REPO_ROOT,
+                     "command": command}))
+    return out
+
+
 def link_symbols_to_regions(symbols: dict, regions: list) -> dict:
     """Привязывает символы к покрывающим их #if-регионам.
 
@@ -647,27 +764,42 @@ def link_symbols_to_regions(symbols: dict, regions: list) -> dict:
 
     out = dict(symbols)
     for key, sym in symbols.items():
-        file = sym.get("file")
-        l0, l1 = sym.get("l0", 0), sym.get("l1", 0)
-        # декларации без корректного диапазона (l1==0/l1<l0) не связываем:
-        # регион им не подобрать достоверно
-        if not file or not l0 or l1 < l0:
-            continue
-        flist = by_file.get(file, [])
-        # быстрый отсев: бинарный поиск по l0
-        starts = [r["l0"] for r in flist]
-        i = bisect_right(starts, l0) - 1
-        cover = []
-        while i >= 0:
-            r = flist[i]
-            rl1 = r.get("l1") or l1
-            if r["l0"] <= l0 and (rl1 or l1) >= l1:
-                cover.append(r["id"])
-            i -= 1
-        cover.reverse()
-        if cover:
+        bodies = [sym]
+        if isinstance(sym, dict) and sym.get("implementations"):
+            bodies = sym["implementations"]
+        changed = False
+        new_bodies = []
+        for body in bodies:
+            file = body.get("file")
+            l0, l1 = body.get("l0", 0), body.get("l1", 0)
+            # декларации без корректного диапазона (l1==0/l1<l0) не связываем:
+            # регион им не подобрать достоверно
+            if not file or not l0 or l1 < l0:
+                new_bodies.append(body)
+                continue
+            flist = by_file.get(file, [])
+            # быстрый отсев: бинарный поиск по l0
+            starts = [r["l0"] for r in flist]
+            i = bisect_right(starts, l0) - 1
+            cover = []
+            while i >= 0:
+                r = flist[i]
+                rl1 = r.get("l1") or l1
+                if r["l0"] <= l0 and (rl1 or l1) >= l1:
+                    cover.append(r["id"])
+                i -= 1
+            cover.reverse()
+            if cover:
+                body = dict(body)
+                body["regions"] = cover
+                changed = True
+            new_bodies.append(body)
+        if changed:
             sym = dict(sym)
-            sym["regions"] = cover
+            if sym.get("implementations"):
+                sym["implementations"] = new_bodies
+            else:
+                sym.update(new_bodies[0])
             out[key] = sym
     return out
 
@@ -689,6 +821,21 @@ def annotate_configs(symbols: dict, regions: list) -> dict:
     """
     out = dict(symbols)
     for key, sym in symbols.items():
+        if sym.get("implementations"):
+            # многоконфигурационный символ: общий фаcет = union фаcетов
+            # тел; каждое тело уже аннотировано в link_symbols_to_regions.
+            cfg = set()
+            for impl in sym["implementations"]:
+                icfg = _configs_from_regions(impl.get("regions") or [], regions)
+                cfg |= icfg
+                if not icfg:
+                    cfg.add("all")
+            if not cfg:
+                cfg.add("all")
+            sym = dict(sym)
+            sym["configs"] = sorted(cfg)
+            out[key] = sym
+            continue
         rids = sym.get("regions")
         if not rids:
             # нет привязки к регионам → видим везде
@@ -696,32 +843,7 @@ def annotate_configs(symbols: dict, regions: list) -> dict:
             sym["configs"] = ["all"]
             out[key] = sym
             continue
-        cfg = set()
-        for rid in rids:
-            reg = next((r for r in regions if r["id"] == rid), None)
-            if not reg:
-                continue
-            cond = reg["cond"]
-            negated = cond.lstrip().startswith("!")
-            if not negated and any(t in cond for t in (
-                    "IS_WINDOWS", "_WIN32", "_WIN64", "__WINDOWS__",
-                    "_WINDOWS")):
-                cfg.add("win32")
-            if negated and any(t in cond for t in (
-                    "IS_WINDOWS", "_WIN32", "_WIN64", "__WINDOWS__",
-                    "_WINDOWS")):
-                cfg.add("linux")
-            if any(t in cond for t in ("__linux__", "__gnu_linux__")):
-                cfg.add("linux")
-            if any(t in cond for t in ("__APPLE__", "__MACH__")):
-                cfg.add("macos")
-            for m in re.finditer(r'\b(MDBX_[A-Z0-9_]+)\b', cond):
-                cfg.add("option:%s" % m.group(1))
-            for m in re.finditer(r'\bdefined\(([A-Z0-9_]+)\)', cond):
-                name = m.group(1)
-                if name not in ("IS_WINDOWS", "_WIN32", "_WIN64",
-                                "__WINDOWS__", "_WINDOWS") and not name.startswith("__"):
-                    cfg.add("option:%s" % name)
+        cfg = _configs_from_regions(rids, regions)
         if not cfg:
             cfg.add("all")
         sym = dict(sym)
@@ -730,20 +852,49 @@ def annotate_configs(symbols: dict, regions: list) -> dict:
     return out
 
 
-def main():
-    ap = argparse.ArgumentParser()
-    ap.add_argument("--cc", default=os.path.join(REPO_ROOT, "_build-scan", "compile_commands.json"))
-    ap.add_argument("--out", default=os.path.join(TOOLS_DIR, "artifacts", "refactoring-map.json"))
-    ap.add_argument("--clang", default="clang")
-    args = ap.parse_args()
+def _configs_from_regions(rids: list, regions: list) -> set:
+    """Извлекает конфигурации (win32/linux/macos/option:*) из списка регионов."""
+    cfg = set()
+    for rid in rids:
+        reg = next((r for r in regions if r["id"] == rid), None)
+        if not reg:
+            continue
+        cond = reg["cond"]
+        negated = cond.lstrip().startswith("!")
+        if not negated and any(t in cond for t in (
+                "IS_WINDOWS", "_WIN32", "_WIN64", "__WINDOWS__",
+                "_WINDOWS")):
+            cfg.add("win32")
+        if negated and any(t in cond for t in (
+                "IS_WINDOWS", "_WIN32", "_WIN64", "__WINDOWS__",
+                "_WINDOWS")):
+            cfg.add("linux")
+        if any(t in cond for t in ("__linux__", "__gnu_linux__")):
+            cfg.add("linux")
+        if any(t in cond for t in ("__APPLE__", "__MACH__")):
+            cfg.add("macos")
+        for m in re.finditer(r'\b(MDBX_[A-Z0-9_]+)\b', cond):
+            cfg.add("option:%s" % m.group(1))
+        for m in re.finditer(r'\bdefined\(([A-Z0-9_]+)\)', cond):
+            name = m.group(1)
+            if name not in ("IS_WINDOWS", "_WIN32", "_WIN64",
+                            "__WINDOWS__", "_WINDOWS") and not name.startswith("__"):
+                cfg.add("option:%s" % name)
+    return cfg
 
-    cc = json.load(open(args.cc))
-    tus = select_tus(cc)
+
+def scan_configuration(clang, cc, tus, cfg: ScanConfig,
+                       extra_symbols: dict = None) -> dict:
+    """Сканирует один конфиг: символы (канонизированные), рёбра, ошибки.
+
+    extra_symbols — внешние символы (например библиотечные), участвующие в
+    резолве callee (для тестовых доменов: тест → функция библиотеки).
+    """
     col = Collector()
     errors = {}
     t0 = time.time()
     for name, entry in tus:
-        _, ast, err = run_tu(args.clang, name, entry)
+        _, ast, err = run_tu(clang, name, entry, cfg)
         if err or ast is None:
             errors[name] = err or "empty AST"
             continue
@@ -751,30 +902,190 @@ def main():
         col.tu_dir = entry["directory"]
         col._loc_file = None
         walk(ast, col)
-        scan_macros(args.clang, name, entry, col)
+        scan_macros(clang, name, entry, col, cfg)
         print("  %-9s %s  (%ds)" % (name, os.path.relpath(entry["file"], REPO_ROOT),
                                     int(time.time() - t0)), file=sys.stderr)
 
     finalize_blocks(col)
     raw_symbols = {**col.functions, **col.types, **col.macros}
     symbols, key_map = canonicalize_symbols(raw_symbols)
-    # переименовываем caller в рёбрах и резолвим callee по каноничным ключам
     col.edges = [(key_map.get(caller, caller), name) for caller, name in col.edges]
-    edges = resolve_edges(col, symbols)
-    regions = build_regions(collect_source_files())
+    resolve_syms = dict(symbols)
+    if extra_symbols:
+        resolve_syms.update(extra_symbols)
+    edges = resolve_edges(col, resolve_syms)
+    return {"config": cfg.name, "symbols": symbols, "edges": edges,
+            "errors": errors}
+
+
+def _body_fingerprint(sym: dict) -> tuple:
+    return (sym.get("file"), sym.get("l0"), sym.get("l1"))
+
+
+def _make_impl(sym: dict, cfg_name: str) -> dict:
+    keep = ("config", "file", "module", "l0", "l1", "blocks",
+            "regions", "static", "is_definition", "configs", "extra_defs")
+    impl = {k: sym.get(k) for k in keep if k in sym}
+    impl["config"] = cfg_name
+    return impl
+
+
+def merge_configs(scans: list) -> tuple:
+    """Сливает per-config сканы в один словарь символов.
+
+    Правила (см. docs/REFACTORING-MAP.md, решение владельца + Алисы):
+      - символ, увиденный в одном конфиге, остаётся плоским;
+      - символ с телами в нескольких конфигах: общие поля наверху
+        (kind/name/signature/cpp_status) + `implementations` — список
+        [{config, file, module, l0, l1, blocks, regions, configs}];
+      - идентичное тело в нескольких конфигах (та же file+l0+l1) —
+        НЕ дублируется в implementations, помечается только `in_configs`.
+
+    Возвращает (merged_symbols, merged_edges).
+    """
+    merged = {}
+    for scan in scans:
+        cfg_name = scan["config"]
+        for key, sym in scan["symbols"].items():
+            prev = merged.get(key)
+            if prev is None:
+                s = dict(sym)
+                s["in_configs"] = [cfg_name]
+                s["_fps"] = {_body_fingerprint(sym)}
+                merged[key] = s
+                continue
+            prev["in_configs"].append(cfg_name)
+            fp = _body_fingerprint(sym)
+            if fp in prev["_fps"]:
+                continue
+            prev["_fps"].add(fp)
+            impls = prev.setdefault("implementations", [])
+            if not impls:
+                impls.append(_make_impl(prev, prev["in_configs"][0]))
+                for k in ("file", "module", "l0", "l1", "blocks",
+                          "regions", "static", "is_definition"):
+                    prev.pop(k, None)
+            impls.append(_make_impl(sym, cfg_name))
+
+    edges_seen, edges = set(), []
+    for scan in scans:
+        for e in scan["edges"]:
+            ek = (e.get("caller"), e.get("callee"), e.get("kind"),
+                  bool(e.get("resolved")))
+            if ek not in edges_seen:
+                edges_seen.add(ek)
+                edges.append(e)
+
+    out = {}
+    for key, s in merged.items():
+        s.pop("_fps", None)
+        s["in_configs"] = sorted(s["in_configs"])
+        if "implementations" in s:
+            impls = s["implementations"]
+            cfg_union = sorted({c for i in impls for c in i.get("configs", [])})
+            for i in impls:
+                i.pop("configs", None)
+            if cfg_union:
+                s["configs"] = cfg_union
+        out[key] = s
+    return out, edges
+
+
+def main():
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--cc", default=os.path.join(REPO_ROOT, "_build-scan", "compile_commands.json"))
+    ap.add_argument("--out", default=os.path.join(TOOLS_DIR, "artifacts", "refactoring-map.json"))
+    ap.add_argument("--clang", default="clang")
+    ap.add_argument("--config", default="linux", help="имя конфигурации")
+    ap.add_argument("--target", default=None, help="clang --target (кросс-конфиг)")
+    ap.add_argument("--defines", default=None, help="доп. -D макросы через пробел")
+    ap.add_argument("--includes", default=None, help="доп. -I каталоги через пробел")
+    ap.add_argument("--extra-flags", default=None, help="доп. флаги clang")
+    ap.add_argument("--tests", choices=list(TEST_DOMAINS), default=None,
+                    help="сканировать тестовый домен (ut/issues/framework)")
+    ap.add_argument("--merge", default=None, nargs="+",
+                    metavar="ARTIFACT",
+                    help="режим merge: списки per-config артефактов (JSON) -> --out")
+    args = ap.parse_args()
+
+    if args.merge:
+        scans = []
+        for path in args.merge:
+            with open(path) as f:
+                art = json.load(f)
+            scans.append({"config": art["config"], "symbols": art["symbols"],
+                          "edges": art["edges"]})
+        symbols, edges = merge_configs(scans)
+        regions = build_regions(collect_source_files())
+        counts = {
+            "functions": sum(1 for v in symbols.values() if v["kind"] == "function"),
+            "types": sum(1 for v in symbols.values()
+                         if v["kind"] in ("record", "cxxrecord", "enum", "typedef")),
+            "macros": sum(1 for v in symbols.values() if v["kind"] == "macro"),
+            "blocks": _count_blocks(symbols),
+            "edges": len(edges),
+            "unresolved_edges": sum(1 for e in edges if not e["resolved"]),
+            "regions": len(regions),
+        }
+        artifact = {
+            "platform": os.uname().sysname.lower() + "-" + os.uname().machine,
+            "configs": sorted({s["config"] for s in scans}),
+            "generated_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+            "tus": [],
+            "errors": {},
+            "counts": counts,
+            "symbols": symbols,
+            "edges": edges,
+            "regions": regions,
+        }
+        artifact["symbols"] = link_symbols_to_regions(artifact["symbols"], regions)
+        artifact["symbols"] = annotate_configs(artifact["symbols"], regions)
+        os.makedirs(os.path.dirname(args.out), exist_ok=True)
+        with open(args.out, "w") as f:
+            json.dump(artifact, f, ensure_ascii=False, indent=1)
+        print(json.dumps(artifact["counts"], indent=1))
+        print("written:", args.out)
+        return
+
+    cc = json.load(open(args.cc))
+    tus = select_tus(cc)
+    if args.tests:
+        tus = select_test_tus(args.tests)
+        cfg = ScanConfig(name="tests:%s" % args.tests,
+                         extra_flags="-Wno-implicit-function-declaration",
+                         no_detailed_preprocessing=True)
+        # библиотечные символы для резолва тест→lib (coverage seed)
+        lib_artifact = None
+        lib_path = os.path.join(TOOLS_DIR, "artifacts", "refactoring-map.json")
+        if os.path.exists(lib_path):
+            with open(lib_path) as f:
+                lib_artifact = json.load(f)
+        extra = (lib_artifact or {}).get("symbols")
+    else:
+        cfg = ScanConfig(name=args.config, target=args.target,
+                         defines=args.defines, includes=args.includes,
+                         extra_flags=args.extra_flags)
+        extra = None
+    scan = scan_configuration(args.clang, cc, tus, cfg, extra_symbols=extra)
+    if args.tests:
+        regions = build_regions(collect_source_files(include_tests=True))
+    else:
+        regions = build_regions(collect_source_files())
+    symbols = scan["symbols"]
+    edges = scan["edges"]
     artifact = {
         "platform": os.uname().sysname.lower() + "-" + os.uname().machine,
+        "config": cfg.name,
         "build_config": os.path.basename(os.path.dirname(args.cc)),
         "generated_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
         "tus": [os.path.relpath(e["file"], REPO_ROOT) for _, e in tus],
-        "errors": errors,
+        "errors": scan["errors"],
         "counts": {
             "functions": sum(1 for v in symbols.values() if v["kind"] == "function"),
             "types": sum(1 for v in symbols.values()
                          if v["kind"] in ("record", "cxxrecord", "enum", "typedef")),
             "macros": sum(1 for v in symbols.values() if v["kind"] == "macro"),
-            "blocks": sum(len(v["blocks"]) for v in symbols.values()
-                         if v["kind"] == "function"),
+            "blocks": _count_blocks(symbols),
             "edges": len(edges),
             "unresolved_edges": sum(1 for e in edges if not e["resolved"]),
             "regions": len(regions),
@@ -790,6 +1101,18 @@ def main():
         json.dump(artifact, f, ensure_ascii=False, indent=1)
     print(json.dumps(artifact["counts"], indent=1))
     print("written:", args.out)
+
+
+def _count_blocks(symbols: dict) -> int:
+    total = 0
+    for v in symbols.values():
+        if v["kind"] != "function":
+            continue
+        if "implementations" in v:
+            total += sum(len(i.get("blocks", [])) for i in v["implementations"])
+        else:
+            total += len(v.get("blocks", []))
+    return total
 
 
 if __name__ == "__main__":

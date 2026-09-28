@@ -167,6 +167,27 @@ def test_canonicalize_overloads():
     assert all(k.startswith("fn:error::error#") for k in keys)
 
 
+def test_add_function_keeps_cxx_overloads():
+    """Сборщик не теряет перегрузки: два определения одного qname в одном файле."""
+    col = s.Collector()
+    for sig, l0 in [("env &(const wchar_t *, bool, bool)", 10),
+                    ("env &(filehandle, bool, bool)", 50)]:
+        col.add_function("/x/mdbx.c++", {
+            "name": "mdbx::env::copy",
+            "type": {"qualType": sig},
+            "loc": {"line": l0},
+            "range": {"end": {"line": l0 + 5}},
+            "storageClass": None,
+            "inner": [{"kind": "CompoundStmt"}]})
+    assert len(col.functions) == 2
+    sigs = {v["signature"] for v in col.functions.values()}
+    assert sigs == {"env &(const wchar_t *, bool, bool)",
+                    "env &(filehandle, bool, bool)"}
+    # канонизация даёт оба #sig-hash ключа
+    out, _ = s.canonicalize_symbols(dict(col.functions))
+    assert len([k for k in out if k.startswith("fn:mdbx::env::copy#")]) == 2
+
+
 def test_canonicalize_inline_dedup():
     """Inline-функция хидера, видимая в 2 TU — один символ + extra_defs."""
     symbols = {
@@ -197,3 +218,117 @@ def test_canonicalize_decl_only():
     }
     out, _ = s.canonicalize_symbols(symbols)
     assert out["fn:mdbx_env_open"]["is_definition"] is False
+
+
+def _mk_sym(name, file, module, l0, l1, blocks=()):
+    return {"kind": "function", "name": name, "signature": "int (void)",
+            "file": file, "module": module, "l0": l0, "l1": l1,
+            "is_definition": True, "static": True,
+            "blocks": [{"id": b, "kind": "compoundstmt", "l0": l0, "l1": l1}
+                       for b in blocks]}
+
+
+def test_merge_configs_single_config_flat():
+    """Символ только в одном конфиге — остаётся плоским, без implementations."""
+    linux = {"config": "linux", "symbols": {
+        "fn:lck_seize": _mk_sym("lck_seize", "src/lck-posix.c", "lck-posix",
+                                1, 20, ["B1"])}, "edges": []}
+    out, edges = s.merge_configs([linux])
+    assert "fn:lck_seize" in out
+    sym = out["fn:lck_seize"]
+    assert "implementations" not in sym
+    assert sym["in_configs"] == ["linux"]
+    assert sym["file"] == "src/lck-posix.c"
+    assert sym["blocks"][0]["id"] == "B1"
+
+
+def test_merge_configs_twins_become_implementations():
+    """Одинаковое имя в разных файлах конфигов — implementations с общими полями."""
+    linux = {"config": "linux", "symbols": {
+        "fn:lck_seize": _mk_sym("lck_seize", "src/lck-posix.c", "lck-posix",
+                                1, 20, ["B1"])}, "edges": []}
+    win32 = {"config": "win32", "symbols": {
+        "fn:lck_seize": _mk_sym("lck_seize", "src/lck-windows.c", "lck-windows",
+                                30, 55, ["B1"])}, "edges": []}
+    out, _ = s.merge_configs([linux, win32])
+    sym = out["fn:lck_seize"]
+    assert sym["in_configs"] == ["linux", "win32"]
+    assert "implementations" in sym
+    impls = sym["implementations"]
+    assert len(impls) == 2
+    by_cfg = {i["config"]: i for i in impls}
+    assert by_cfg["linux"]["file"] == "src/lck-posix.c"
+    assert by_cfg["win32"]["file"] == "src/lck-windows.c"
+    assert sym["name"] == "lck_seize"          # общие поля наверху
+    assert "file" not in sym                    # тело ушло в implementations
+    assert by_cfg["linux"]["blocks"][0]["id"] == "B1"   # блоки внутри impl
+    assert by_cfg["win32"]["blocks"][0]["id"] == "B1"
+
+
+def test_merge_configs_identical_body_dedup():
+    """Одно и то же тело (файл+диапазон) в двух конфигах — без дублирования."""
+    body = _mk_sym("mdbx_env_open", "src/api-env.c", "api-env", 100, 200, ["B1"])
+    scans = [
+        {"config": "linux", "symbols": {"fn:mdbx_env_open": dict(body)}, "edges": []},
+        {"config": "win32", "symbols": {"fn:mdbx_env_open": dict(body)}, "edges": []},
+    ]
+    out, _ = s.merge_configs(scans)
+    sym = out["fn:mdbx_env_open"]
+    assert "implementations" not in sym
+    assert sym["in_configs"] == ["linux", "win32"]
+    assert sym["file"] == "src/api-env.c"
+
+
+def test_merge_configs_edges_dedup_across_configs():
+    """Идентичные рёбра из разных конфигов дедуплицируются."""
+    edge = {"caller": "fn:lck_seize", "callee": "fn:mdbx_env_open",
+            "kind": "syntax", "resolved": True, "ambiguous": False}
+    scans = [
+        {"config": "linux", "symbols": {}, "edges": [dict(edge)]},
+        {"config": "win32", "symbols": {}, "edges": [dict(edge)]},
+    ]
+    _, edges = s.merge_configs(scans)
+    assert len(edges) == 1
+
+
+def test_link_symbols_regions_with_implementations():
+    """Регионы связываются для каждого тела implementations отдельно."""
+    regs = [
+        {"id": "region:lck-posix:1", "file": "src/lck-posix.c",
+         "l0": 1, "l1": 100, "cond": "!IS_WINDOWS", "parent": None,
+         "kind": "if", "platform": "linux"},
+        {"id": "region:lck-windows:1", "file": "src/lck-windows.c",
+         "l0": 1, "l1": 100, "cond": "IS_WINDOWS", "parent": None,
+         "kind": "if", "platform": "win32"},
+    ]
+    posix = _mk_sym("lck_seize", "src/lck-posix.c", "lck-posix", 10, 20, ["B1"])
+    win = _mk_sym("lck_seize", "src/lck-windows.c", "lck-windows", 10, 20, ["B1"])
+    merged, _ = s.merge_configs([
+        {"config": "linux", "symbols": {"fn:lck_seize": posix}, "edges": []},
+        {"config": "win32", "symbols": {"fn:lck_seize": win}, "edges": []},
+    ])
+    linked = s.link_symbols_to_regions(merged, regs)
+    sym = linked["fn:lck_seize"]
+    by_cfg = {i["config"]: i for i in sym["implementations"]}
+    assert by_cfg["linux"]["regions"] == ["region:lck-posix:1"]
+    assert by_cfg["win32"]["regions"] == ["region:lck-windows:1"]
+    annotated = s.annotate_configs(linked, regs)
+    assert "win32" in annotated["fn:lck_seize"]["configs"]
+    assert "linux" in annotated["fn:lck_seize"]["configs"]
+
+
+def test_select_test_tus_domains():
+    """Тестовые домены дают синтетические TU с тестовыми дефайнами."""
+    ut = s.select_test_tus("ut")
+    assert len(ut) >= 10
+    assert ut[0][0] == "ut"
+    assert ut[0][1]["file"].endswith(".c++") or ut[0][1]["file"].endswith(".c")
+    assert "-DMDBX_BUILD_TEST=1" in ut[0][1]["command"]
+    # MDBX_CONFIG_H с путём должен пережить двойной shlex-разбор
+    cfg = s.ScanConfig()
+    args = cfg.args_for(ut[0][1], ut[0][1]["file"])
+    cfg_h = [a for a in args if a.startswith("-DMDBX_CONFIG_H=")]
+    assert cfg_h and '"' in cfg_h[0], cfg_h
+    fw = s.select_test_tus("framework")
+    assert all(f[0] == "framework" for f in fw)
+    assert not any("main.c++" in f[1]["file"] for f in fw)

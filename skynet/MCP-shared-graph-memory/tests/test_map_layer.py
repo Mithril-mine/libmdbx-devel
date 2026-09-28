@@ -133,11 +133,22 @@ def test_sym_id_stable_across_replace(store):
 
 
 def test_sym_id_roundtrip_key(store):
-    store.sym_id("fn:x:alpha")
-    store.sym_id("fn:y:beta")
-    assert store.sym_key(0) == "fn:x:alpha"
-    assert store.sym_key(1) == "fn:y:beta"
+    a = store.sym_id("fn:x:alpha")
+    b = store.sym_id("fn:y:beta")
+    assert a != b
+    assert store.sym_key(a) == "fn:x:alpha"
+    assert store.sym_key(b) == "fn:y:beta"
     assert store.sym_key(99) == ""
+
+
+def test_sym_and_record_ids_do_not_collide(store):
+    """Числовые id символов и записей не пересекаются (общий next_id)."""
+    seed_vocab(store, [("crypto", "alignment")])
+    r = store.safe_store("bug:crypto:alignment", "bug", "AES issue", 0.5)
+    sid = store.sym_id("fn:mdbx_env_open")
+    assert sid != r["id"]
+    assert store.sym_key(r["id"]) == ""
+    assert store.sym_key(sid) == "fn:mdbx_env_open"
 
 
 def test_bridge_link_record_to_symbol(store):
@@ -194,3 +205,34 @@ def test_map_refresh_stale_removes_dangling_symbol_links(store):
     g = store.graph("bug:crypto:alignment", depth=1)
     outs = [rel.get("object") for rel in g.get("edges", [])]
     assert "fn:gone" not in str(outs)
+
+
+def test_map_alias_set_and_target(store):
+    """map_alias фиксирует переименование, target разрешает цепочки."""
+    assert store.map_alias("fn:old", "fn:new")["result"] == "aliased"
+    assert store.map_alias("fn:old", "fn:new")["result"] == "exists"
+    assert store.map_alias_target("fn:old") == "fn:new"
+    assert store.map_alias_target("fn:missing") == ""
+    # цепочка old → mid → new
+    store.map_alias("fn:mid", "fn:new")
+    assert store.map_alias_target("fn:mid") == "fn:new"
+
+
+def test_map_refresh_stale_redirects_via_alias(store):
+    """Связь на исчезнувший символ с алиасом перенаправляется, не удаляется."""
+    seed_vocab(store, [("crypto", "alignment")])
+    store.safe_store("bug:crypto:alignment", "bug", "AES issue", 0.5)
+    store.map_put_symbol("fn:old_impl", {"kind": "function", "name": "old_impl"})
+    store.link("bug:crypto:alignment", "related-to", "fn:old_impl")
+    # переименование: old_impl → cpp::impl
+    store.map_alias("fn:old_impl", "fn:cpp::impl")
+    # регенерация: старый символ исчез, новый появился
+    store.map_load_batch({"fn:cpp::impl": {"kind": "function",
+                                           "name": "cpp::impl"}},
+                         [], {}, replace=True)
+    res = store.map_refresh_stale()
+    assert res["redirected_links"] >= 1
+    g = store.graph("bug:crypto:alignment", depth=1)
+    outs = [rel.get("object") for rel in g.get("edges", [])]
+    assert "fn:cpp::impl" in str(outs)
+    assert "fn:old_impl" not in str(outs)

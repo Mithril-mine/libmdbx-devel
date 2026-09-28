@@ -25,9 +25,14 @@
 | `groups` | DUPSORT | `group:{kind}:{name}` → set member_key | фасеты (подсистемы/темы) |
 | `sym_ids` | DEFAULTS | symbol_key → uint64 id | стабильный id символа (sequence) |
 | `sym_id2key` | INTEGERKEY | uint64 id → symbol_key | обратное отображение символа |
+| `sym_aliases` | DEFAULTS | old_symbol_key → new_symbol_key | переименования (жизненный цикл) |
 
 `mdbx_env_set_option(env, MDBX_opt_max_db, 32)`. Одна write-транзакция на операцию
 (в т.ч. LRU-касания — батчем, см. §8).
+
+Числовые id записей и символов выделяются из **общего** счётчика
+`meta/next_id`: links/coverage оперируют единым числовым пространством,
+пересечение диапазонов было бы неоднозначностью (`_sym_id_locked`).
 
 ### 1.1 Расширение схемы (аддитивное)
 
@@ -45,6 +50,9 @@
 - структурный слой (symbols/call_edges/groups) заполняется автогенераторами
   (`tools/scan_symbols.py` + `tools/load_map.py`), API — методы `map_*`
   (`Store`), детерминированные и перегенерируемые (см. `docs/REFACTORING-MAP.md`).
+- многоконфигурационные символы: поле `implementations` внутри значения
+  symbols (не отдельная таблица) — схема не меняется; `in_configs`/
+  `configs` фаcеты также в значении.
 
 ### Ключевые решения (обоснование — в `DESIGN.md`)
 

@@ -41,9 +41,16 @@ def main():
     with open(args.map) as f:
         artifact = json.load(f)
     if args.refresh_golden:
+        if "configs" in artifact:
+            print("golden: артефакт многоконфигурационный (configs=%s), "
+                  "эталон привязан к базовому linux-скану. "
+                  "Обновите golden от одно-конфиг артефакта (--config linux)."
+                  % artifact["configs"], file=sys.stderr)
+            return 2
         golden = {"platform": artifact.get("platform"),
                   "build_config": artifact.get("build_config"),
-                  "counts": artifact["counts"],
+                  "counts": {k: v for k, v in artifact["counts"].items()
+                             if k not in ("coverage_pct", "uncovered_lines")},
                   "generated_by": "scan_symbols.py + scan_regions.py"}
         with open(GOLDEN_PATH, "w") as f:
             json.dump(golden, f, ensure_ascii=False, indent=2)
@@ -68,7 +75,7 @@ def main():
             s.walk(ast, col)
             s.scan_macros(args_clang(), fx, {
                 "command": "", "file": os.path.abspath(path),
-                "directory": col.tu_dir}, col)
+                "directory": col.tu_dir}, col, s.ScanConfig())
         s.finalize_blocks(col)
         got = {
             "functions": len(col.functions),
@@ -85,10 +92,11 @@ def main():
     else:
         cc = json.load(open(args.cc))
         tus = s.select_tus(cc)
+        cfg = s.ScanConfig()
         col = s.Collector()
         errors = {}
         for name, entry in tus:
-            _, ast, err = s.run_tu(args_clang(), name, entry)
+            _, ast, err = s.run_tu(args_clang(), name, entry, cfg)
             if err or ast is None:
                 errors[name] = err
                 continue
@@ -96,7 +104,7 @@ def main():
             col.tu_dir = entry["directory"]
             col._loc_file = None
             s.walk(ast, col)
-            s.scan_macros(args_clang(), name, entry, col)
+            s.scan_macros(args_clang(), name, entry, col, cfg)
         s.finalize_blocks(col)
         raw = {**col.functions, **col.types, **col.macros}
         symbols, _ = s.canonicalize_symbols(raw)

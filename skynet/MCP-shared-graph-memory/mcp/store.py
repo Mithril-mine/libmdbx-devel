@@ -82,6 +82,7 @@ class Store:
         "groups": mdbx.DUPSORT,
         "sym_ids": mdbx.DB_DEFAULTS,
         "sym_id2key": mdbx.INTEGERKEY,
+        "sym_aliases": mdbx.DB_DEFAULTS,
     }
 
     def __init__(self, path: str, maxdbs: int = 32, max_value_bytes: int = 16 << 20):
@@ -532,13 +533,7 @@ class Store:
                         raise invalid(
                             "символ %r не существует" % okey,
                             "сначала загрузите карту через load_map")
-                    nid = txn.sequence(self.dbi(txn, "sym_id2key"),
-                                       increment=1)
-                    txn.put(self.dbi(txn, "sym_ids"), okey.encode(),
-                            _pack_u64(nid))
-                    txn.put(self.dbi(txn, "sym_id2key"), _pack_u64(nid),
-                            okey.encode())
-                    oid = nid
+                    oid = self._sym_id_locked(txn, okey)
                 else:
                     oid = _unpack_u64(okey2)
             else:
@@ -613,17 +608,19 @@ class Store:
                             if pred.startswith("back:"):
                                 # обратная связь: ребро object -> subject
                                 obj_id = _unpack_u64(lv)
-                                _, kobj = txn.get(id2key_dbi, _pack_u64(obj_id))
-                                if kobj is not None:
-                                    tgt = kobj.decode()
-                                    edges.append({"subject": tgt, "predicate": pred[5:], "object": node})
+                                tgt = self._graph_resolve(txn, obj_id)
+                                if tgt:
+                                    edges.append({"subject": tgt,
+                                                  "predicate": pred[5:],
+                                                  "object": node})
                                     nxt.append(tgt)
                             else:
                                 obj_id = _unpack_u64(lv)
-                                _, kobj = txn.get(id2key_dbi, _pack_u64(obj_id))
-                                if kobj is not None:
-                                    tgt = kobj.decode()
-                                    edges.append({"subject": node, "predicate": pred, "object": tgt})
+                                tgt = self._graph_resolve(txn, obj_id)
+                                if tgt:
+                                    edges.append({"subject": node,
+                                                  "predicate": pred,
+                                                  "object": tgt})
                                     nxt.append(tgt)
                             rc, lk, lv = cur.get(mdbx.CURSOR_NEXT)
                 frontier = [n for n in nxt if n not in nodes]
@@ -637,6 +634,17 @@ class Store:
                 seen.add(sig)
                 unique.append(e)
         return {"nodes": sorted(nodes), "edges": unique}
+
+    def _graph_resolve(self, txn, oid: int) -> str:
+        """Резолвит числовой id объекта в ключ: сначала запись знаний
+        (id2key), затем символ карты (sym_id2key) — мост curated↔structural."""
+        _, kobj = txn.get(self.dbi(txn, "id2key"), _pack_u64(oid))
+        if kobj is not None:
+            return kobj.decode()
+        _, kobj = txn.get(self.dbi(txn, "sym_id2key"), _pack_u64(oid))
+        if kobj is not None:
+            return kobj.decode()
+        return ""
 
     # --- vocab ------------------------------------------------------------------
     def vocab_add(self, module: str, topic: str = ""):
@@ -819,18 +827,24 @@ class Store:
         return json.loads(val.decode())
 
     def sym_id(self, key: str) -> int:
-        """Стабильный числовой id символа (mdbx_dbi_sequence).
+        """Стабильный числовой id символа.
 
-        Выдаётся один раз при первом появлении; отображения sym_ids/
-        sym_id2key НЕ чистятся при replace — числовые ссылки (links)
-        остаются стабильными между регенерациями.
+        Числовой id выделяется из ОБЩЕГО счётчика `meta/next_id` (того же,
+        что для записей знаний): links/coverage оперируют единым числовым
+        пространством, пересечение диапазонов символов и записей было бы
+        неоднозначностью. Отображения sym_ids/sym_id2key НЕ чистятся при
+        replace — числовые ссылки (links) остаются стабильными между
+        регенерациями.
         """
         with self._begin_write() as txn:
             sid_dbi = self.dbi(txn, "sym_ids")
             rc, val = txn.get(sid_dbi, key.encode())
             if val is not None and len(val) == 8:
                 return _unpack_u64(val)
-            nid = txn.sequence(self.dbi(txn, "sym_id2key"), increment=1)
+            nid = self.next_id
+            self.next_id += 1
+            txn.put(self.dbi(txn, "meta"), b"next_id",
+                    _pack_u64(self.next_id))
             txn.put(sid_dbi, key.encode(), _pack_u64(nid))
             txn.put(self.dbi(txn, "sym_id2key"), _pack_u64(nid), key.encode())
             return nid
@@ -840,6 +854,33 @@ class Store:
         with self.env.begin(readonly=True) as txn:
             rc, val = txn.get(self.dbi(txn, "sym_id2key"), _pack_u64(sid))
         return val.decode() if val else ""
+
+    def map_alias(self, old_key: str, new_key: str) -> dict:
+        """Фиксирует переименование символа карты (жизненный цикл).
+
+        Старый ключ помечается алиасом нового. При `refresh_stale` связь
+        на исчезнувший символ с алиасом перенаправляется, а не удаляется
+        безвозвратно — курируемые записи переживают рефакторинг.
+        Возвращает {"result": "aliased"} или {"result": "exists"}.
+        """
+        old_key, new_key = old_key.strip(), new_key.strip()
+        if not old_key or not new_key or old_key == new_key:
+            raise invalid("алиас требует два разных ключа символов",
+                          "old_key и new_key должны быть непустыми и разными")
+        with self._begin_write() as txn:
+            al_dbi = self.dbi(txn, "sym_aliases")
+            rc, _ = txn.get(al_dbi, old_key.encode())
+            if rc == mdbx.RC_SUCCESS:
+                return {"result": "exists"}
+            txn.put(al_dbi, old_key.encode(), new_key.encode())
+        return {"result": "aliased"}
+
+    def map_alias_target(self, old_key: str) -> str:
+        """Цель алиаса (с учётом цепочек) или пустая строка."""
+        with self.env.begin(readonly=True) as txn:
+            return self._alias_target_locked(txn,
+                                             self.dbi(txn, "sym_aliases"),
+                                             old_key.strip())
 
     def map_symbols(self, prefix: str = "", limit: int = None) -> list:
         """Все ключи symbols по префиксу (детерминированная сортировка)."""
@@ -865,13 +906,7 @@ class Store:
         with self._begin_write() as txn:
             txn.put(self.dbi(txn, "symbols"), key.encode(),
                     json.dumps(body, ensure_ascii=False).encode())
-            sid_dbi = self.dbi(txn, "sym_ids")
-            rc, val = txn.get(sid_dbi, key.encode())
-            if val is None or len(val) != 8:
-                nid = txn.sequence(self.dbi(txn, "sym_id2key"), increment=1)
-                txn.put(sid_dbi, key.encode(), _pack_u64(nid))
-                txn.put(self.dbi(txn, "sym_id2key"), _pack_u64(nid),
-                        key.encode())
+            self._sym_id_locked(txn, key)
 
     def map_edges_of(self, caller: str) -> list:
         """callee-дубликаты из call_edges для caller (DUPSORT)."""
@@ -975,7 +1010,10 @@ class Store:
                 # стабильный числовой id (НЕ чистится при replace)
                 rc, val = txn.get(sid_dbi, key.encode())
                 if val is None or len(val) != 8:
-                    nid = txn.sequence(id2key_dbi, increment=1)
+                    nid = self.next_id
+                    self.next_id += 1
+                    txn.put(self.dbi(txn, "meta"), b"next_id",
+                            _pack_u64(self.next_id))
                     txn.put(sid_dbi, key.encode(), _pack_u64(nid))
                     txn.put(id2key_dbi, _pack_u64(nid), key.encode())
             for e in edges:
@@ -1014,14 +1052,17 @@ class Store:
         """Чистит висячие ссылки моста: объекты-символы в links, чьих ключей
         больше нет в symbols (после регенерации карты).
 
-        Проходит записи графа и удаляет связи, где oid указывает на символ,
-        исчезнувший из symbols. Возвращает счётчики удалённого.
+        Ссылка на исчезнувший символ с алиасом (`map_alias`) перенаправляется
+        на цель алиаса; без алиаса — удаляется. Возвращает счётчики.
         """
-        removed = 0
+        removed, redirected = 0, 0
         with self._begin_write() as txn:
             sym_id2key_dbi = self.dbi(txn, "sym_id2key")
             syms_dbi = self.dbi(txn, "symbols")
-            # символьные id, чей ключ есть в symbols
+            al_dbi = self.dbi(txn, "sym_aliases")
+            links_dbi = self.dbi(txn, "links")
+
+            # символьные id, чей ключ есть в symbols (живые)
             alive = set()
             with txn.cursor(sym_id2key_dbi) as cur:
                 rc, k, v = cur.get(mdbx.CURSOR_FIRST)
@@ -1032,19 +1073,70 @@ class Store:
                     if rc2 == mdbx.RC_SUCCESS:
                         alive.add(sid)
                     rc, k, v = cur.get(mdbx.CURSOR_NEXT)
-            # прямые рёбра: удаляем те, где oid — символ вне alive
-            links_dbi = self.dbi(txn, "links")
+
+            # собираем прямые рёбра (sid → oid), где oid — мёртвый символ
+            fwd = []  # (fwd_key, sid, predicate, oid)
             with txn.cursor(links_dbi) as cur:
                 rc, k, v = cur.get(mdbx.CURSOR_FIRST)
                 while rc == mdbx.RC_SUCCESS:
-                    nxt = cur.get(mdbx.CURSOR_NEXT)
                     oid = _unpack_u64(v)
                     _, key = txn.get(sym_id2key_dbi, _pack_u64(oid))
                     if key is not None and oid not in alive:
-                        cur.delete()
-                        removed += 1
-                    rc, k, v = nxt
-        return {"removed_links": removed}
+                        sid = _unpack_u64(k[:8])
+                        predicate = k[9:].decode()
+                        fwd.append((k, sid, predicate, oid))
+                    rc, k, v = cur.get(mdbx.CURSOR_NEXT)
+
+            for fwd_key, sid, predicate, oid in fwd:
+                _, key = txn.get(sym_id2key_dbi, _pack_u64(oid))
+                key = key.decode() if key else ""
+                target = self._alias_target_locked(txn, al_dbi, key)
+                back_key = _pack_u64(oid) + b"\0" + b"back:" + predicate.encode()
+                if target:
+                    tid = self._sym_id_locked(txn, target)
+                    if tid is not None and tid != oid:
+                        # перецепить прямую ссылку и обратное ребро
+                        txn.delete(links_dbi, fwd_key)
+                        txn.delete(links_dbi, back_key)
+                        nk = _pack_u64(sid) + b"\0" + predicate.encode()
+                        txn.put(links_dbi, nk, _pack_u64(tid))
+                        nbk = _pack_u64(tid) + b"\0" + b"back:" + predicate.encode()
+                        txn.put(links_dbi, nbk, _pack_u64(sid))
+                        redirected += 1
+                        continue
+                txn.delete(links_dbi, fwd_key)
+                txn.delete(links_dbi, back_key)
+                removed += 1
+        return {"removed_links": removed, "redirected_links": redirected}
+
+    @staticmethod
+    def _alias_target_locked(txn, al_dbi, key):
+        """Цель алиаса (разрешение цепочек) в рамках текущей txn."""
+        seen, cur = set(), key
+        while cur and cur not in seen:
+            seen.add(cur)
+            rc, val = txn.get(al_dbi, cur.encode())
+            if rc != mdbx.RC_SUCCESS or val is None:
+                break
+            cur = val.decode()
+        return cur if cur != key else ""
+
+    def _sym_id_locked(self, txn, key):
+        """Стабильный id символа в рамках текущей txn.
+
+        Выделяется из общего счётчика next_id (как записи знаний) —
+        единое числовое пространство для links.
+        """
+        sid_dbi = self.dbi(txn, "sym_ids")
+        rc, val = txn.get(sid_dbi, key.encode())
+        if val is not None and len(val) == 8:
+            return _unpack_u64(val)
+        nid = self.next_id
+        self.next_id += 1
+        txn.put(self.dbi(txn, "meta"), b"next_id", _pack_u64(self.next_id))
+        txn.put(sid_dbi, key.encode(), _pack_u64(nid))
+        txn.put(self.dbi(txn, "sym_id2key"), _pack_u64(nid), key.encode())
+        return nid
 
     def stats(self) -> dict:
         by_type = {}

@@ -68,6 +68,44 @@
 - `cpp_status`/`cpp_eq` — статус миграции C→C++; наполняется курируемо
   (агенты помечают при работе) + стартовые эвристики из карты соответствий.
 
+#### Многоконфигурационные символы (`implementations`)
+
+Один логический символ может иметь разные тела в разных конфигурациях
+сборки (например `lck_seize`: posix в `lck-posix.c`, win32 в
+`lck-windows.c`). При слиянии per-config артефактов (`scan_symbols.py
+--merge`) такой символ получает общие поля наверху (`kind/name/signature/
+configs/in_configs`) и список тел:
+
+```json
+{
+  "kind": "function",
+  "name": "lck_seize",
+  "signature": "int (MDBX_env *)",
+  "configs": ["linux", "win32"],
+  "in_configs": ["linux", "win32"],
+  "implementations": [
+    {"config": "linux", "file": "src/lck-posix.c", "module": "lck-posix",
+     "l0": 280, "l1": 399, "blocks": [...], "regions": [...]},
+    {"config": "win32", "file": "src/lck-windows.c", "module": "lck-windows",
+     "l0": 421, "l1": 459, "blocks": [...], "regions": [...]}
+  ]
+}
+```
+
+Правила (решение владельца + консультация Алисы
+`proc:practice:alice-consult-implementations`):
+- символ в одном конфиге остаётся плоским (без `implementations`);
+- идентичное тело (та же `file+l0+l1`) в нескольких конфигах не
+  дублируется — только `in_configs` расширяется;
+- разные тела — список `implementations`; блоки переносятся внутрь
+  каждого тела (поэтому block-id неймспейсены конфигом);
+- `configs` наверху = union конфигураций тел; `regions` связываются для
+  каждого тела отдельно.
+
+Рёбра в merged-артефакте дедуплицируются до уникальных пар
+`caller→callee` (impact-анализ), поэтому `counts.edges` может быть меньше
+суммы по конфигам.
+
 ### call_edges
 
 ```json
@@ -120,7 +158,10 @@ group:task:B63            → {символы, тесты, записи, док�
 
 | Инструмент | Наполняет | Вход |
 |---|---|---|
-| `scan_symbols.py` | symbols, call_edges(syntax) | `src/` (парсер) |
+| `scan_symbols.py --config` | symbols, call_edges(syntax), per-config | `src/` (clang AST) |
+| `scan_symbols.py --merge` | merged symbols (`implementations`) | per-config артефакты |
+| `scan_symbols.py --tests` | тестовые символы, рёбра тест→lib | `tests/{ut,issues,framework}` |
+| `scan_uncovered.py` | `uncovered` + `coverage_pct` | merged артефакт + regions |
 | `collect_coverage.py` | coverage | ctest/CI-артефакты |
 | `collect_test_metrics.py` | test_metrics | ctest XML / LastTest.log / CI |
 | `map_ci_jobs.py` | ci_jobs | `.github/workflows/*.yml` |
@@ -146,21 +187,63 @@ group:task:B63            → {символы, тесты, записи, док�
      (`fn:`/`type:`/`macro:`), id через `mdbx_dbi_sequence`, `refresh_stale`,
      `mdbx_canary_get/put` (magic/pоколение карты).
    Текущие счётчики (Linux x86_64, clang 18):
-   functions 2588, types 368, macros 518, blocks 30315, edges 18439
-   (unresolved 5266 — системные вызовы/`__builtin_*`), regions 1131.
-3. **Шаг 2**: semantic-рёбра, реестр probes (из `skynet/probes.md`), коллекторы
-   coverage/test_metrics/ci_jobs, многоконфигурационное сканирование
-   (win32/macOS — нужен кросс-компилятор или CI-прогоны).
+   functions 3127, types 368, macros 518, blocks 31213, edges 19132
+   (unresolved 5390 — системные вызовы/`__builtin_*`), regions 1131.
+   (C++-перегрузки учитываются: один qname + сигнатура → `#sig-hash`.)
+4. **Шаг 1b (многоконфигурационный скан + uncovered — реализовано)**:
+   - `scan_symbols.py --config NAME [--target ... --defines ... --includes ...
+     --extra-flags ...]`: кросс-конфигурационный прогон (win32 через
+     mingw/clang `--target=x86_64-w64-windows-gnu`); из compile_commands
+     сохраняются только `-D/-I`, остальное собирается из аргументов;
+   - `--merge ARTIFACT...`: слияние per-config артефактов в один —
+     общие поля наверху + `implementations: [{config, file, module, l0,
+     l1, blocks, regions, configs}]` для символов с телами в нескольких
+     конфигурациях; идентичное тело не дублируется (`in_configs`);
+     рёбра дедуплицируются (unique caller→callee);
+   - `scan_uncovered.py`: «острова смысла» — строки кода вне union-AST
+     всех конфигов, классификация по #if-регионам, метрика `coverage_pct`;
+   - тестовые домены: `scan_symbols.py --tests {ut,issues,framework}`
+     (синтетические TU, `-DMDBX_BUILD_TEST=1`, без detailed-pp для
+     framework); рёбра тест→lib резолвятся через библиотечный артефакт
+     (coverage seed).
+   Многоконфигурационные счётчики (linux+win32 merged):
+   functions 4087, types 398, macros 580, blocks 33264, edges 11810
+   (unique pairs), unresolved 2018, coverage_pct 96.17%, uncovered 433
+   островов. Тестовые домены: ut 2870 fn / issues 1817 fn /
+   framework 2139 fn.
+5. **Шаг 2**: semantic-рёбра, реестр probes (из `skynet/probes.md`), коллекторы
+   coverage/test_metrics/ci_jobs, полноценный coverage от mdbx_test
+   (instrumented run), macOS-скан (нужен osxcross/SDK).
 
 ## Ограничения (зафиксированы)
 
 - **Тела функций из веток, неактивных в текущей конфигурации, отсутствуют
   в AST** (например `lck-windows.c` на Linux): `configs`-разметка честно
   показывает платформу, но строки/блоки таких тел недоступны без
-  win32/macOS-скана. Полнота достигается многоконфигурационным прогоном.
+  win32/macOS-скана. Полнота достигается многоконфигурационным прогоном
+  (win32 — через mingw; macOS нужен osxcross/SDK).
 - Канонические ключи зависят от `c++filt` (деманглинг Itanium ABI). На
   платформах без него C++-методы не получат namespace-квалификацию из
   mangledName (fallback — индекс по (имя, сигнатура)).
+- `scan_uncovered` покрывает только файлы `src/` (по умолчанию); тестовые
+  домены сканируются отдельно и в coverage_pct не входят.
+- Многоконфигурационный merge опирается на тело (file+l0+l1) как
+  идентичность: две конфигурации с одним и тем же диапазоном, но разными
+  телами (переключение внутри функции через #if) будут считаться одним
+  телом — редкий крайний случай, документируется в жизненном цикле.
+
+## Uncovered-острова (`scan_uncovered.py`)
+
+`coverage_pct` — доля «кодовых» строк src/, представленных хотя бы в одном
+AST-узле хотя бы одного конфига. Оставшиеся острова — это:
+- **platform**: ветки apple/bsd/solaris и прочие платформы без локального SDK;
+- **option**: выключенные опции (ENABLE_MEMCHECK, __SANITIZE_THREAD__ и т.п.);
+- **none/unknown**: код вне регионов или в неклассифицированных условиях —
+  кандидаты на ручной разбор («остатки смысла»).
+
+Для каждого острова артефакт хранит `{file, l0, l1, region, cls, cond,
+lines}` — по ним можно решить: это «живой» код (нужен ещё один конфиг/
+опция) или мёртвый (кандидат на удаление/рефакторинг).
 
 ## Открытые вопросы
 
