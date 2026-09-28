@@ -695,8 +695,9 @@ def select_test_tus(domain="ut") -> list:
     как C++. Список файлов читается лениво (при вызове, не при импорте).
     """
     prefix, subdir = _TEST_DOMAINS[domain]
-    files = [os.path.join(subdir, f)
-             for f in sorted(os.listdir(os.path.join(REPO_ROOT, subdir)))
+    files = [os.path.relpath(os.path.join(r, f), REPO_ROOT)
+             for r, _, ns in os.walk(os.path.join(REPO_ROOT, subdir))
+             for f in sorted(ns)
              if f.endswith((".c", ".c++"))]
     if domain == "framework":
         files = [f for f in files
