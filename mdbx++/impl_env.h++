@@ -24,16 +24,54 @@ inline env::~env() noexcept {
 #endif
 }
 
-inline env::geometry &env::geometry::make_fixed(intptr_t size) noexcept {
+MDBX_CXX14_CONSTEXPR
+env::geometry &env::geometry::make_fixed(intptr_t size) noexcept {
   size_lower = size_now = size_upper = size;
   growth_step = shrink_threshold = 0;
   return *this;
 }
 
-inline env::geometry &env::geometry::make_dynamic(intptr_t lower, intptr_t upper) noexcept {
+MDBX_CXX14_CONSTEXPR
+env::geometry &env::geometry::make_dynamic(intptr_t lower, intptr_t upper) noexcept {
   size_now = size_lower = lower;
   size_upper = upper;
   growth_step = shrink_threshold = default_value;
+  return *this;
+}
+
+MDBX_CXX14_CONSTEXPR
+env::geometry &env::geometry::set_size_lower(intptr_t size) noexcept {
+  size_lower = size;
+  return *this;
+}
+
+MDBX_CXX14_CONSTEXPR
+env::geometry &env::geometry::set_size_now(intptr_t size) noexcept {
+  size_now = size;
+  return *this;
+}
+
+MDBX_CXX14_CONSTEXPR
+env::geometry &env::geometry::set_size_upper(intptr_t size) noexcept {
+  size_upper = size;
+  return *this;
+}
+
+MDBX_CXX14_CONSTEXPR
+env::geometry &env::geometry::set_growth_step(intptr_t step) noexcept {
+  growth_step = step;
+  return *this;
+}
+
+MDBX_CXX14_CONSTEXPR
+env::geometry &env::geometry::set_shrink_threshold(intptr_t threshold) noexcept {
+  shrink_threshold = threshold;
+  return *this;
+}
+
+MDBX_CXX14_CONSTEXPR
+env::geometry &env::geometry::set_pagesize(intptr_t size) noexcept {
+  pagesize = size;
   return *this;
 }
 
@@ -43,6 +81,215 @@ inline env::reclaiming_options env::operate_parameters::reclaiming_from_flags(MD
 
 inline env::operate_options env::operate_parameters::options_from_flags(MDBX_env_flags_t flags) noexcept {
   return operate_options(flags);
+}
+
+MDBX_CXX14_CONSTEXPR
+env_managed::create_parameters &env_managed::create_parameters::set_geometry(const env::geometry &value) noexcept {
+  geometry = value;
+  return *this;
+}
+
+MDBX_CXX14_CONSTEXPR
+env_managed::create_parameters &
+env_managed::create_parameters::set_file_mode_bits(mdbx_mode_t value) noexcept {
+  file_mode_bits = value;
+  return *this;
+}
+
+MDBX_CXX14_CONSTEXPR
+env_managed::create_parameters &env_managed::create_parameters::set_use_subdirectory(bool value) noexcept {
+  use_subdirectory = value;
+  return *this;
+}
+
+MDBX_CXX14_CONSTEXPR
+env::operate_parameters &env::operate_parameters::set_max_maps(unsigned value) noexcept {
+  max_maps = value;
+  return *this;
+}
+
+MDBX_CXX14_CONSTEXPR
+env::operate_parameters &env::operate_parameters::set_max_readers(unsigned value) noexcept {
+  max_readers = value;
+  return *this;
+}
+
+MDBX_CXX14_CONSTEXPR
+env::operate_parameters &env::operate_parameters::set_mode(env::mode value) noexcept {
+  mode = value;
+  return *this;
+}
+
+MDBX_CXX14_CONSTEXPR
+env::operate_parameters &env::operate_parameters::set_durability(env::durability value) noexcept {
+  durability = value;
+  return *this;
+}
+
+MDBX_CXX14_CONSTEXPR
+env::operate_parameters &env::operate_parameters::set_reclaiming(const env::reclaiming_options &value) noexcept {
+  reclaiming = value;
+  return *this;
+}
+
+MDBX_CXX14_CONSTEXPR
+env::operate_parameters &env::operate_parameters::set_options(const env::operate_options &value) noexcept {
+  options = value;
+  return *this;
+}
+
+MDBX_CXX14_CONSTEXPR
+env::operate_parameters &env::operate_parameters::readonly() noexcept {
+  mode = env::mode::readonly;
+  return *this;
+}
+
+MDBX_CXX14_CONSTEXPR
+env::operate_parameters &env::operate_parameters::write_file_io() noexcept {
+  mode = env::mode::write_file_io;
+  return *this;
+}
+
+MDBX_CXX14_CONSTEXPR
+env::operate_parameters &env::operate_parameters::write_mapped_io() noexcept {
+  mode = env::mode::write_mapped_io;
+  return *this;
+}
+
+MDBX_CXX14_CONSTEXPR
+env::operate_parameters &env::operate_parameters::robust_synchronous() noexcept {
+  durability = env::durability::robust_synchronous;
+  return *this;
+}
+
+MDBX_CXX14_CONSTEXPR
+env::operate_parameters &env::operate_parameters::half_synchronous_weak_last() noexcept {
+  durability = env::durability::half_synchronous_weak_last;
+  return *this;
+}
+
+MDBX_CXX14_CONSTEXPR
+env::operate_parameters &env::operate_parameters::lazy_weak_tail() noexcept {
+  durability = env::durability::lazy_weak_tail;
+  return *this;
+}
+
+MDBX_CXX14_CONSTEXPR
+env::operate_parameters &env::operate_parameters::whole_fragile() noexcept {
+  durability = env::durability::whole_fragile;
+  return *this;
+}
+
+MDBX_CXX14_CONSTEXPR
+env::operate_parameters &env::operate_parameters::nested_transactions(bool value) noexcept {
+  options.nested_transactions = value;
+  return *this;
+}
+
+MDBX_CXX14_CONSTEXPR
+env::operate_parameters &env::operate_parameters::lifo(bool value) noexcept {
+  reclaiming.lifo = value;
+  return *this;
+}
+
+MDBX_CXX14_CONSTEXPR
+env::operate_parameters &env::operate_parameters::no_sticky_threads(bool value) noexcept {
+  options.no_sticky_threads = value;
+  return *this;
+}
+
+MDBX_CXX14_CONSTEXPR
+env::operate_parameters &env::operate_parameters::exclusive(bool value) noexcept {
+  options.exclusive = value;
+  return *this;
+}
+
+MDBX_CXX14_CONSTEXPR
+env::operate_parameters &env::operate_parameters::disable_readahead(bool value) noexcept {
+  options.disable_readahead = value;
+  return *this;
+}
+
+MDBX_CXX14_CONSTEXPR
+env::operate_parameters &env::operate_parameters::disable_clear_memory(bool value) noexcept {
+  options.disable_clear_memory = value;
+  return *this;
+}
+
+MDBX_CXX14_CONSTEXPR
+env::operate_parameters &env::operate_parameters::enable_validation(bool value) noexcept {
+  options.enable_validation = value;
+  return *this;
+}
+
+MDBX_CXX14_CONSTEXPR
+env::operate_parameters env::operate_parameters::read_only() noexcept {
+  operate_parameters op;
+  op.set_mode(env::mode::readonly);
+  return op;
+}
+
+MDBX_CXX14_CONSTEXPR
+env::operate_parameters env::operate_parameters::safe_write() noexcept {
+  operate_parameters op;
+  op.write_mapped_io().robust_synchronous();
+  return op;
+}
+
+MDBX_CXX14_CONSTEXPR
+env::operate_parameters env::operate_parameters::lazy_write() noexcept {
+  operate_parameters op;
+  op.write_mapped_io().lazy_weak_tail();
+  return op;
+}
+
+MDBX_CXX14_CONSTEXPR
+env::operate_parameters env::operate_parameters::fragile_write() noexcept {
+  operate_parameters op;
+  op.write_mapped_io().whole_fragile();
+  return op;
+}
+
+MDBX_CXX14_CONSTEXPR
+env::reclaiming_options &env::reclaiming_options::set_lifo(bool value) noexcept {
+  lifo = value;
+  return *this;
+}
+
+MDBX_CXX14_CONSTEXPR
+env::operate_options &env::operate_options::set_no_sticky_threads(bool value) noexcept {
+  no_sticky_threads = value;
+  return *this;
+}
+
+MDBX_CXX14_CONSTEXPR
+env::operate_options &env::operate_options::set_nested_transactions(bool value) noexcept {
+  nested_transactions = value;
+  return *this;
+}
+
+MDBX_CXX14_CONSTEXPR
+env::operate_options &env::operate_options::set_exclusive(bool value) noexcept {
+  exclusive = value;
+  return *this;
+}
+
+MDBX_CXX14_CONSTEXPR
+env::operate_options &env::operate_options::set_disable_readahead(bool value) noexcept {
+  disable_readahead = value;
+  return *this;
+}
+
+MDBX_CXX14_CONSTEXPR
+env::operate_options &env::operate_options::set_disable_clear_memory(bool value) noexcept {
+  disable_clear_memory = value;
+  return *this;
+}
+
+MDBX_CXX14_CONSTEXPR
+env::operate_options &env::operate_options::set_enable_validation(bool value) noexcept {
+  enable_validation = value;
+  return *this;
 }
 
 inline size_t env::limits::pagesize_min() noexcept { return MDBX_MIN_PAGESIZE; }
@@ -348,6 +595,67 @@ inline unsigned env::check_readers() {
   return static_cast<unsigned>(dead_count);
 }
 
+/** Zeroed set of check callbacks for a "silent" integrity check. */
+static const MDBX_chk_callbacks_t silent_chk_callbacks = {};
+
+inline MDBX_chk_context_t &env::chk(MDBX_chk_context_t &ctx, const MDBX_chk_callbacks_t *cb, MDBX_chk_flags_t flags,
+                                    MDBX_chk_severity_t verbosity, unsigned timeout_seconds_16dot16) const {
+  if (!cb)
+    cb = &silent_chk_callbacks;
+  error::success_or_throw(::mdbx_env_chk(handle_, cb, &ctx, flags, verbosity, timeout_seconds_16dot16));
+  return ctx;
+}
+
+inline env::sysraminfo env::get_sysraminfo() {
+  sysraminfo result;
+  error::success_or_throw(::mdbx_get_sysraminfo(&result.page_size, &result.total_pages, &result.avail_pages));
+  return result;
+}
+
+inline env::info env::get_preopen_snapinfo(const ::std::string &pathname) {
+  return get_preopen_snapinfo(pathname.c_str());
+}
+
+inline env::info env::get_preopen_snapinfo(const char *pathname) {
+  env::info result;
+  error::success_or_throw(::mdbx_preopen_snapinfo(pathname, &result, sizeof(result)));
+  return result;
+}
+
+#ifdef MDBX_STD_FILESYSTEM_PATH
+inline env::info env::get_preopen_snapinfo(const MDBX_STD_FILESYSTEM_PATH &pathname) {
+  return get_preopen_snapinfo(pathname.native().c_str());
+}
+#endif /* MDBX_STD_FILESYSTEM_PATH */
+
+#if defined(_WIN32) || defined(_WIN64)
+inline env::info env::get_preopen_snapinfo(const ::std::wstring &pathname) {
+  return get_preopen_snapinfo(pathname.c_str());
+}
+
+inline env::info env::get_preopen_snapinfo(const wchar_t *pathname) {
+  env::info result;
+  error::success_or_throw(::mdbx_preopen_snapinfoW(pathname, &result, sizeof(result)));
+  return result;
+}
+#endif /* Windows */
+
+inline void env::thread_register() { error::success_or_throw(::mdbx_thread_register(handle_)); }
+
+inline void env::thread_unregister() { error::success_or_throw(::mdbx_thread_unregister(handle_)); }
+
+inline int env::warmup(MDBX_warmup_flags_t flags, unsigned timeout_seconds_16dot16, const MDBX_txn *txn) const {
+  return ::mdbx_env_warmup(handle_, txn, flags, timeout_seconds_16dot16);
+}
+
+#if !defined(_WIN32) && !defined(_WIN64)
+inline void env::resurrect_after_fork() { error::success_or_throw(::mdbx_env_resurrect_after_fork(handle_)); }
+#endif /* !Windows */
+
+inline void env::turn_for_recovery(unsigned target_meta) {
+  error::success_or_throw(::mdbx_env_turn_for_recovery(handle_, target_meta));
+}
+
 inline env &env::set_HandleSlowReaders(MDBX_hsr_func cb) {
   error::success_or_throw(::mdbx_env_set_hsr(handle_, cb));
   return *this;
@@ -385,6 +693,58 @@ inline txn_managed env::start_write(txn &parent) {
 }
 
 inline txn_managed env::try_start_write() { return start_write(true); }
+
+inline bool env::txn_lock(bool dont_wait) {
+  const int err = ::mdbx_txn_lock(handle_, dont_wait);
+  switch (err) {
+  case MDBX_SUCCESS:
+    MDBX_CXX20_LIKELY return true;
+  case MDBX_BUSY:
+    return false;
+  default:
+    MDBX_CXX20_UNLIKELY error::throw_exception(err);
+  }
+}
+
+inline void env::txn_unlock() { error::success_or_throw(::mdbx_txn_unlock(handle_)); }
+
+template <typename VISITOR>
+inline env::defrag_result env::defrag(VISITOR &visitor, size_t defrag_atleast, size_t time_atleast_dot16,
+                                      size_t defrag_enough, size_t time_limit_dot16, intptr_t acceptable_backlash,
+                                      intptr_t preferred_batch) {
+  struct defrag_thunk : public exception_thunk {
+    VISITOR &visitor_;
+    static int cb(void *ctx, const MDBX_defrag_result_t *progress) noexcept {
+      defrag_thunk *thunk = static_cast<defrag_thunk *>(ctx);
+      assert(thunk->is_clean());
+      try {
+        return static_cast<int>(thunk->visitor_(*progress));
+      } catch (... /* capture any exception to rethrow it over C code */) {
+        thunk->capture();
+        return static_cast<int>(defrag_control::abort);
+      }
+    }
+    MDBX_CXX11_CONSTEXPR defrag_thunk(VISITOR &visitor) noexcept : visitor_(visitor) {}
+  };
+  defrag_thunk thunk(visitor);
+  defrag_result result;
+  const int rc =
+      ::mdbx_env_defrag(handle_, defrag_atleast, time_atleast_dot16, defrag_enough, time_limit_dot16,
+                        acceptable_backlash, preferred_batch, thunk.cb, &thunk, &result);
+  thunk.rethrow_captured();
+  if (rc != MDBX_SUCCESS && rc != MDBX_RESULT_TRUE)
+    error::success_or_throw(rc);
+  return result;
+}
+
+inline env::defrag_result env::defrag(size_t defrag_atleast, size_t time_atleast_dot16, size_t defrag_enough,
+                                      size_t time_limit_dot16, intptr_t acceptable_backlash, intptr_t preferred_batch) {
+  struct noop_visitor {
+    defrag_control operator()(const defrag_result &) { return defrag_control::proceed; }
+  } visitor;
+  return defrag(visitor, defrag_atleast, time_atleast_dot16, defrag_enough, time_limit_dot16, acceptable_backlash,
+                preferred_batch);
+}
 
 // > dist-cutoff-begin
 } // namespace mdbx
