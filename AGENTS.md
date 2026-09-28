@@ -61,7 +61,7 @@ See `skynet/skills/superpowers/verification-before-completion/SKILL.md`.
     `smoke_basic`, `smoke_t1_hill/copy`); the durable variants (`smoke_writemap`,
     `smoke_fault`, `smoke_t1_nested`, the T3/long family) keep real sync.
   - Impact-based selection: instead of hand-picking the level, map changed paths
-    to the affected labels with `tests/select-tests.sh` (build dir: run the
+    to the affected labels with `tests/scripts/select-tests.sh` (build dir: run the
     printed `ctest -L ... -LE 'ut\.heavy'`, or `--run` to execute). Sources under
     `tests/ut/<area>/` map to their `ut.<area>` label; core (`src/`, `mdbx.h`,
     `mdbx++/`) pulls in `ut\.|smoke-t1|smoke-t2`; build files (`cmake/`,
@@ -69,7 +69,7 @@ See `skynet/skills/superpowers/verification-before-completion/SKILL.md`.
   - mdbx_test (`tests/framework/`) is STOCHASTIC — a fixed `--prng-seed` gives a
     reproducible per-actor operation sequence (multi-process interleaving is not).
     Use bounded `--nops` and fixed seeds for fast profiles; attach the seed to any
-    bug report. Details: `tests/mdbx-test-options.md`.
+    bug report. Details: `tests/docs/mdbx-test-options.md`.
   - Tiered smoke via CTest labels and GNUmakefile targets (`make smoke-t1/t2/t3`):
     - T1 `smoke-t1` — fast deterministic smoke, seconds, fixed seeds (`--nops`,
       `+nosync-safe`), never long iterations.

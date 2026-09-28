@@ -181,5 +181,5 @@ Default is `MDBX_DUPSORT`.
   long stochastic runs when merely adding unit tests.
 - **T1 fast smoke**: bounded `--nops`, fixed `--prng-seed`, `+nosync-safe`,
   small bounded size. See `tests/CMakeLists.txt` (`smoke-t1` label) and
-  `tests/select-tests.sh`.
+  `tests/scripts/select-tests.sh`.
 - **Reproducibility**: log `--dump-config` output with any failure.

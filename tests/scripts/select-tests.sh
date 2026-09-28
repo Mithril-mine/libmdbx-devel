@@ -6,14 +6,14 @@
 # "Segmented test execution" and tests/CMakeLists.txt) so an agent runs only
 # the relevant tests instead of the whole corpus:
 #
-#   tests/select-tests.sh [--base <ref>] [path...]
-#   tests/select-tests.sh                # changed = git diff vs origin/devel
-#   tests/select-tests.sh src/cursor.c tests/ut/dbi/dbi_nested_txn.c++
+#   tests/scripts/select-tests.sh [--base <ref>] [path...]
+#   tests/scripts/select-tests.sh                # changed = git diff vs origin/devel
+#   tests/scripts/select-tests.sh src/cursor.c tests/ut/dbi/dbi_nested_txn.c++
 #
 # Output: the recommended ctest invocation on stdout, the collected labels on
 # stderr. The script itself never runs ctest; combine with the label regex:
 #
-#   ctest -L "$(tests/select-tests.sh | ...)"   # see --run suggestion
+#   ctest -L "$(tests/scripts/select-tests.sh | ...)"   # see --run suggestion
 #
 # Exit status: 0 = clean; 1 = nothing selected; 2 = usage/error.
 set -eu
@@ -104,7 +104,7 @@ classify() {
 	tests/ut/tools/*) echo 'ut\.tools' ;;
 	tests/ut/*) echo 'ut\.' ;;
 	tests/framework/*) echo $'smoke-t1\nsmoke-t2\nsmoke-t3\nstochastic' ;;
-	tests/*.sh | tests/*.py | tests/**/*.sh | tests/**/*.py | tests/CMakeLists.txt) echo $'smoke-t1\nsmoke-t2\nsmoke-t3' ;;
+	tests/scripts/* | tests/*.sh | tests/*.py | tests/**/*.sh | tests/**/*.py | tests/CMakeLists.txt) echo $'smoke-t1\nsmoke-t2\nsmoke-t3' ;;
 	cmake/* | CMakeLists.txt | GNUmakefile | Makefile | cmake/CMakeLists.txt) echo $'smoke-t1\nsmoke-t2\nut\.' ;;
 	mdbx.h | mdbx.h++ | mdbx++/*) echo $'ut\.\nsmoke-t1\nsmoke-t2' ;;
 	src/*.c | src/*.h | src/alloy.c) echo $'ut\.\nsmoke-t1\nsmoke-t2' ;;

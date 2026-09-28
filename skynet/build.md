@@ -2,8 +2,8 @@
 
 > Part of the [Skynet project index](README.md).
 > How this repository is built (CMake, GNU Make, Conan), the key options, the CI matrix,
-> the **testing infrastructure** in depth (`mdbx_test`, `tests/stochastic.sh`,
-> `tests/battery-tmux.sh`, GNUmakefile test targets, CTest) and the **amalgamation process**
+> the **testing infrastructure** in depth (`mdbx_test`, `tests/scripts/stochastic.sh`,
+> `tests/scripts/battery-tmux.sh`, GNUmakefile test targets, CTest) and the **amalgamation process**
 > (`make dist`, `dist-cutoff` markers, alloy) — both areas are central for the upcoming work
 > (test rework incl. possible GoogleTest integration, refactoring). Facts verified against sources.
 
@@ -151,7 +151,7 @@ Cube image `dh-mirror.gitverse.ru/jakoch/cpp-devbox:forky-latest`, max 30m, scri
 The testing stack has four layers:
 
 1. **`mdbx_test`** — the big stochastic test framework (CLI utility).
-2. **`tests/stochastic.sh`** — orchestrator that sweeps parameters/modes and calls `mdbx_test`
+2. **`tests/scripts/stochastic.sh`** — orchestrator that sweeps parameters/modes and calls `mdbx_test`
    in a loop, verifying each DB with `mdbx_chk`.
 3. **`tests/battery-tmux.sh`** — parallel runner of several `stochastic.sh` instances in tmux.
 4. **Small C/C++ tests** — `tests/ut/` (areas: `api|cursor|cxx|dbi|env|gc|txn|issues`,
@@ -183,7 +183,7 @@ Options (verified from `main.c++`; `--option` or `--option=value`):
 `--speculum` enables a second, independent in-memory model to cross-check CRUD results
 (used for small `--nops`/`--batch.write` runs).
 
-### 6.2 `tests/stochastic.sh` — parameter-sweep orchestrator (798 lines)
+### 6.2 `tests/scripts/stochastic.sh` — parameter-sweep orchestrator (798 lines)
 
 Flow: parse options → platform prep → RAM estimation → (optionally) `make mdbx_test mdbx_chk`
 → build caseset → iterate nops/batch ladder → run probes (each probe = `mdbx_test` + `mdbx_chk`
@@ -218,10 +218,10 @@ Details worth knowing:
   `wbatch=nops/7+1` then repeatedly `/7` while `nops/wbatch ≤ 1000`; `--speculum` when
   `nops ≤ 1000`. `--small` iterates wbatch instead. `--loops` bounds outer loops,
   `--rounds` repeats each nops/wbatch round with a fresh `--prng-seed`.
-- Under GDB: wraps `mdbx_test`/`mdbx_chk` with `gdb --init-command=tests/.gdbinit
-  --command=tests/with.gdb --return-child-result`.
+- Under GDB: wraps `mdbx_test`/`mdbx_chk` with `gdb --init-command=tests/scripts/.gdbinit
+  --command=tests/scripts/with.gdb --return-child-result`.
 
-### 6.3 `tests/battery-tmux.sh` — parallel stochastic batteries
+### 6.3 `tests/scripts/battery-tmux.sh` — parallel stochastic batteries
 
 Base command: `stochastic.sh --skip-make --db-upto-gb 32`, workdir prefix `/dev/shm/mdbxtest-`.
 Creates tmux session `mdbx` (first window `htop`), then for each `page-size ∈ {min, 4k, max}` ×
@@ -245,9 +245,9 @@ variant uses `--delay $((3+n*7))`. If multiple NUMA nodes exist, commands cycle 
 | `smoke-asan`/`test-asan` | `CFLAGS_EXTRA += -Os -fsanitize=address`, `MDBX_CHECKING=2`, ENABLE_ASAN=ON |
 | `test-leak` | re-run `test-stochastic` with `CFLAGS_EXTRA="-fsanitize=leak"` |
 | `smoke-memcheck`/`test-memcheck` | `VALGRIND=valgrind --trace-children=yes --log-file=valgrind-%p.log --leak-check=full --track-origins=yes --read-var-info=yes --error-exitcode=42 --suppressions=valgrind.supp`; `CFLAGS_EXTRA=-Ofast -DENABLE_MEMCHECK`, `MDBX_CHECKING=1`; `test-memcheck` also runs `stochastic.sh --with-valgrind --loops 2 --db-upto-mb 256 --skip-make` |
-| `test-stochastic` | `tests/stochastic.sh --whole-duration 600 --probe-duration 60 --dont-check-ram-size --loops 2 --db-upto-mb 256 --skip-make --taillog` |
-| `test-long` | `tests/stochastic.sh --loops 42 --db-upto-mb 1024 --extra --skip-make --taillog` (weeks) |
-| `test-singleprocess` | `tests/stochastic.sh --single --loops 2 --whole-duration 600 --probe-duration 60 --dont-check-ram-size --db-upto-mb 256 --skip-make --taillog` |
+| `test-stochastic` | `tests/scripts/stochastic.sh --whole-duration 600 --probe-duration 60 --dont-check-ram-size --loops 2 --db-upto-mb 256 --skip-make --taillog` |
+| `test-long` | `tests/scripts/stochastic.sh --loops 42 --db-upto-mb 1024 --extra --skip-make --taillog` (weeks) |
+| `test-singleprocess` | `tests/scripts/stochastic.sh --single --loops 2 --whole-duration 600 --probe-duration 60 --dont-check-ram-size --db-upto-mb 256 --skip-make --taillog` |
 | `test-ci` | loop: `check smoke-singleprocess smoke-fault smoke-memcheck test-leak test-asan test-ubsan test-singleprocess test-memcheck` |
 | `test-ci-extra` | `test-ci` + `cross-gcc` + `cross-qemu` |
 | `check` | `clean | smoke-assertion ninja-assertions dist install test ctest` with `DESTDIR=@check-install` |
@@ -311,7 +311,7 @@ fast and as targeted as possible.
   T1/T2/T3 (`make smoke-t1/t2/t3`): T1 seconds / deterministic, T2 medium,
   T3 long — milestone/nightly only.
 - **Addressability** — run only the subset intersecting the change:
-  `tests/select-tests.sh` maps changed paths → CTest labels
+  `tests/scripts/select-tests.sh` maps changed paths → CTest labels
   (see `AGENTS.md` "Segmented test execution"); do NOT blindly run everything.
 - **Disk hygiene is part of the build/test process** (owner, 2026-09-24):
   heavy intermediates (`golden-*`, `repro-*`, `<task>-build`, `fixNN-*`) MUST be
