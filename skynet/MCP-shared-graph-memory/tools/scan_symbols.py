@@ -682,7 +682,7 @@ def select_tus(cc) -> list:
 
 # тестовые домены: имя → (префикс, подкаталог)
 _TEST_DOMAINS = {"ut": ("ut/", "tests/ut"),
-                 "issues": ("issues/", "tests/issues"),
+                 "issues": ("issues/", "tests/ut/issues"),
                  "framework": ("framework/", "tests/framework")}
 TEST_DOMAIN_NAMES = tuple(_TEST_DOMAINS)
 
