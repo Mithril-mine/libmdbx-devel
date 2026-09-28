@@ -56,7 +56,10 @@ normalize() {
     -e 's#[^ ]*/(base\.db|copy\.db|bad\.db|compact\.db|out\.img|reload\.db|ver\.db|bad\.dump|exists\.db|named\.db)#/\1#g' \
     -e '/troika:/d' \
     -e 's#^usage: [^ ]*/mdbx_[a-z]+ #usage: mdbx_BIN #' \
-    -e 's#^[^ ]*/mdbx_(load|dump|copy|chk|stat|drop|defrag): #mdbx_\1: #'
+    -e 's#^[^ ]*/mdbx_(load|dump|copy|chk|stat|drop|defrag): #mdbx_\1: #' \
+    -e '/^   open-MADV_/d' \
+    -e '/^   readahead ON /d' \
+    -e 's/read meta: empty file \([0-9]+, .*\)/read meta: empty file (ERRNO)/'
 }
 
 # rc-only case: exit code is the contract, output is volatile (e.g. reader
@@ -115,8 +118,10 @@ run_case() {
     pass=$((pass+1)); log "PASS $TOOL/$name"
   else
     fail=$((fail+1)); FAILED_CASES+=("$TOOL/$name")
-    log "FAIL $TOOL/$name (rc=$rc, want=$want_rc); diff:"
+    log "FAIL $TOOL/$name (rc=$rc, want=$want_rc); stdout diff:"
     diff "$d/stdout.norm" "$GOLDEN/$TOOL/$name.out" 2>&1 | head -8 | sed 's/^/      /'
+    log "  stderr diff:"
+    diff "$d/stderr.norm" "$GOLDEN/$TOOL/$name.err" 2>&1 | head -8 | sed 's/^/      /'
   fi
 }
 
