@@ -18,7 +18,7 @@
 | `mcp/errors.py` | Контракт ошибок `error$CODE \| CLASS \| DESC \| ACTION \| RETRY` |
 | `mcp/normalize.py` | Канонизация ключей `тип:модуль:тема` + контролируемый словарь |
 | `mcp/index.py` | Токенизация + SimHash (64-бит) для дедупликации |
-| `mcp/store.py` | Store: 18 таблиц, все операции, одна write-txn на операцию, бэкап и защита от удаления |
+| `mcp/store.py` | Store: 20 таблиц, все операции, одна write-txn на операцию, бэкап и защита от удаления |
 | `mcp/mcp_server.py` | MCP-сервер (JSON-RPC 2.0 над stdio), db_* инструменты интроспекции |
 | `mcp/cli.py` | memory-cli (dump/stats/graph/audit/gc/vocab/purge) |
 | `tests/` | 273 теста |
@@ -100,6 +100,9 @@ python3 -m mcp.cli --path ~/mem.mdbx gc --dry-run # тиринг hot/warm/cold
 `db_stat(table?)`, `db_readers`, `db_flush`, `db_set_mode`,
 `db_enable_utterly_nosync`, `db_backup`, `db_backup_status`,
 `db_backup_cleanup`, `db_fileinfo`, `db_latency`, `db_recover`.
+Карта исходников (refactoring-map): `map_symbol(s)`, `map_edges_of`,
+`map_callers_of`, `map_group_members`, `map_regions`/`map_region`,
+`map_uncovered` (данные — `tools/load_map.py --db <живая> --replace`).
 
 ## Установка (безопасная)
 

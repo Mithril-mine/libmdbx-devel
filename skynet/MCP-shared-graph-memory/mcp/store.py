@@ -106,6 +106,8 @@ class Store:
         "sym_ids": mdbx.DB_DEFAULTS,
         "sym_id2key": mdbx.INTEGERKEY,
         "sym_aliases": mdbx.DB_DEFAULTS,
+        "regions": mdbx.DB_DEFAULTS,   # #if-дерево: region:{module}:{n} -> JSON
+        "uncovered": mdbx.DB_DEFAULTS,  # uncovered-острова: uncovered:{module}:{n}
     }
 
     def __init__(self, path: str, maxdbs: int = 32, max_value_bytes: int = 16 << 20,
@@ -658,12 +660,13 @@ class Store:
         self._readonly = readonly
         self.env = mdbx.Env(self.path, maxdbs=32, readonly=readonly,
                             accede=readonly, sync_mode=self.sync_mode)
-        self._protect_lifeline()
         self._dbi = {}
         with self.env.begin(readonly=readonly) as txn:
             for name in self.TABLES:
                 fl = self.TABLES[name] | (mdbx.CREATE if not readonly else 0)
                 self._dbi[name] = txn.open_dbi(name, fl)
+        self._protect_lifeline()
+        self._load_vocab()  # словарь мог измениться внешними процессами
         self._sync_stop = threading.Event()
         self._sync_thread = None
         if not readonly:
@@ -1664,6 +1667,93 @@ class Store:
                 txn.delete(links_dbi, back_key)
                 removed += 1
         return {"removed_links": removed, "redirected_links": redirected}
+
+    # --- regions / uncovered (refactoring-map: #if-дерево и острова смысла) ---
+    def map_regions(self, prefix: str = "", limit: int = None) -> list:
+        """Сканирование таблицы regions (region:{module}:{n})."""
+        out = []
+        with self.env.begin(readonly=True) as txn:
+            dbi = self.dbi(txn, "regions")
+            with txn.cursor(dbi) as cur:
+                rc, k, v = cur.get(mdbx.CURSOR_FIRST)
+                while rc == mdbx.RC_SUCCESS:
+                    key = k.decode()
+                    if key.startswith(prefix):
+                        out.append({"key": key,
+                                    "region": json.loads(v)})
+                        if limit and len(out) >= limit:
+                            break
+                    rc, k, v = cur.get(mdbx.CURSOR_NEXT)
+        return out
+
+    def map_region(self, key: str) -> dict:
+        """Один регион #if-дерева."""
+        with self.env.begin(readonly=True) as txn:
+            rc, v = txn.get(self.dbi(txn, "regions"), key.encode())
+            if rc != mdbx.RC_SUCCESS or v is None:
+                return {}
+            return json.loads(v)
+
+    def map_uncovered(self, prefix: str = "", limit: int = None) -> list:
+        """Сканирование uncovered-островов (uncovered:{module}:{n})."""
+        out = []
+        with self.env.begin(readonly=True) as txn:
+            dbi = self.dbi(txn, "uncovered")
+            with txn.cursor(dbi) as cur:
+                rc, k, v = cur.get(mdbx.CURSOR_FIRST)
+                while rc == mdbx.RC_SUCCESS:
+                    key = k.decode()
+                    if key.startswith("uncovered:" + prefix):
+                        out.append({"key": key,
+                                    "uncovered": json.loads(v)})
+                        if limit and len(out) >= limit:
+                            break
+                    rc, k, v = cur.get(mdbx.CURSOR_NEXT)
+        return out
+
+    @staticmethod
+    def _module_of_file(file: str) -> str:
+        """Эвристика модуля по пути: src/<mod>.c -> <mod>;
+        tests/<area>/... -> tests-<area>; иначе базовое имя без расширения."""
+        f = file.replace("\\", "/")
+        parts = [p for p in f.split("/") if p]
+        base = os.path.splitext(parts[-1])[0] if parts else "?"
+        if len(parts) >= 2 and parts[0] == "src":
+            return base
+        if len(parts) >= 3 and parts[0] == "tests":
+            return "tests-" + parts[1]
+        return base
+
+    @staticmethod
+    def _uncovered_key(file: str, idx: int) -> str:
+        return "uncovered:%s:%d" % (Store._module_of_file(file), idx)
+
+    def map_load_regions(self, regions: list, uncovered: list,
+                         replace: bool = False) -> dict:
+        """Пакетная загрузка regions + uncovered (из артефакта refactoring-map).
+
+        Ключи: region:{module}:{n} (id из артефакта) / uncovered:{module}:{n}.
+        При replace=True таблицы очищаются перед загрузкой.
+        """
+        with self._begin_write() as txn:
+            reg_dbi = self.dbi(txn, "regions")
+            unc_dbi = self.dbi(txn, "uncovered")
+            if replace:
+                for dbi in (reg_dbi, unc_dbi):
+                    with txn.cursor(dbi) as cur:
+                        rc, k, _ = cur.get(mdbx.CURSOR_FIRST)
+                        while rc == mdbx.RC_SUCCESS:
+                            nxt = cur.get(mdbx.CURSOR_NEXT)
+                            cur.delete()
+                            rc, k, _ = nxt
+            for r in regions:
+                rid = r.get("id") or ("region:%s:%d" % (
+                    self._module_of_file(r.get("file", "")), r.get("l0", 0)))
+                txn.put(reg_dbi, rid.encode(), json.dumps(r).encode())
+            for i, u in enumerate(uncovered):
+                key = self._uncovered_key(u.get("file", ""), i)
+                txn.put(unc_dbi, key.encode(), json.dumps(u).encode())
+        return {"regions": len(regions), "uncovered": len(uncovered)}
 
     @staticmethod
     def _alias_target_locked(txn, al_dbi, key):

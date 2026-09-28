@@ -4,7 +4,7 @@
 > Эволюционировала из исходной спецификации владельца; целочисленные индексы
 > — по `docs/DESIGN.md`.
 
-## 1. Таблицы (DBI) — 18
+## 1. Таблицы (DBI) — 20
 
 | DBI | Флаги | Ключ → Значение | Назначение |
 |---|---|---|---|
@@ -26,9 +26,18 @@
 | `sym_ids` | DEFAULTS | symbol_key → uint64 id | стабильный id символа (sequence) |
 | `sym_id2key` | INTEGERKEY | uint64 id → symbol_key | обратное отображение символа |
 | `sym_aliases` | DEFAULTS | old_symbol_key → new_symbol_key | переименования (жизненный цикл) |
+| `regions` | DEFAULTS | `region:{module}:{n}` → JSON | #if-дерево (1131 регионов) |
+| `uncovered` | DEFAULTS | `uncovered:{module}:{n}` → JSON | uncovered-острова смысла (433) |
+
+Зарезервировано дизайном (REFACTORING-MAP.md), данные появятся с коллекторами:
+`coverage`, `test_metrics`, `ci_jobs`, `probes` — добавляются аддитивно (§1.1).
 
 `mdbx_env_set_option(env, MDBX_opt_max_db, 32)`. Одна write-транзакция на операцию
 (в т.ч. LRU-касания — батчем, см. §8).
+
+Регионы и uncovered загружаются `load_map.py` из merged-артефакта
+(`tools/artifacts/refactoring-map.json`), читаются через MCP `map_regions`/
+`map_region`/`map_uncovered`; перегенерируемы и затираются `--replace`.
 
 Числовые id записей и символов выделяются из **общего** счётчика
 `meta/next_id`: links/coverage оперируют единым числовым пространством,

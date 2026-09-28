@@ -181,11 +181,30 @@ class McpServer:
              "(preparation/gc/write/sync/ending/whole в µs) + сводка по окну. "
              "gc_prof заполняется только в сборках с MDBX_ENABLE_PROFGC.",
              [], {"type": "object"}),
-            ("db_recover", "Диагностика меты для восстановления (безопасный probe; "
-             "open_for_recovery требует остановленного сервера). target_meta=0..2. "
-             "Обычно предпочтителен mdbx_chk или восстановление из db_backup.",
-             [], {"type": "object",
-                  "properties": {"target_meta": {"type": "integer"}}}),
+("db_recover", "Диагностика меты для восстановления (безопасный probe; "
+              "open_for_recovery требует остановленного сервера). target_meta=0..2. "
+              "Обычно предпочтителен mdbx_chk или восстановление из db_backup.",
+              [], {"type": "object",
+                   "properties": {"target_meta": {"type": "integer"}}}),
+            ("map_symbol", "Символ карты исходников по fq-ключу (fn:/type:/macro:).",
+             [], {"type": "object", "properties": {"key": {"type": "string"}}}),
+            ("map_symbols", "Префиксный список символов карты (limit).",
+             [], {"type": "object", "properties": {"prefix": {"type": "string"},
+                                                  "limit": {"type": "integer"}}}),
+            ("map_edges_of", "Исходящие вызовы символа (caller -> callee).",
+             [], {"type": "object", "properties": {"caller": {"type": "string"}}}),
+            ("map_callers_of", "Кто вызывает символ (обратные рёбра, impact).",
+             [], {"type": "object", "properties": {"callee": {"type": "string"}}}),
+            ("map_group_members", "Члены фасет-группы (group:{kind}:{name}).",
+             [], {"type": "object", "properties": {"group": {"type": "string"}}}),
+            ("map_regions", "#if-дерево: префиксный список регионов region:{module}:{n}.",
+             [], {"type": "object", "properties": {"prefix": {"type": "string"},
+                                                   "limit": {"type": "integer"}}}),
+            ("map_region", "Один регион #if-дерева по ключу.",
+             [], {"type": "object", "properties": {"key": {"type": "string"}}}),
+            ("map_uncovered", "Uncovered-острова смысла (префикс модуля, limit).",
+             [], {"type": "object", "properties": {"prefix": {"type": "string"},
+                                                   "limit": {"type": "integer"}}}),
         ]
         return {name: {"name": name, "description": desc, "inputSchema": schema}
                 for name, desc, _args, schema in t}
@@ -318,6 +337,25 @@ class McpServer:
         if name == "db_recover":
             target = int(args.get("target_meta", 0))
             return s.recover(target)
+        if name == "map_symbol":
+            return s.map_symbol(args["key"])
+        if name == "map_symbols":
+            return {"symbols": s.map_symbols(args.get("prefix", ""),
+                                             limit=args.get("limit"))}
+        if name == "map_edges_of":
+            return {"edges": s.map_edges_of(args["caller"])}
+        if name == "map_callers_of":
+            return {"callers": s.map_callers_of(args["callee"])}
+        if name == "map_group_members":
+            return {"members": s.map_group_members(args["group"])}
+        if name == "map_regions":
+            return {"regions": s.map_regions(args.get("prefix", ""),
+                                             limit=args.get("limit"))}
+        if name == "map_region":
+            return s.map_region(args["key"])
+        if name == "map_uncovered":
+            return {"uncovered": s.map_uncovered(args.get("prefix", ""),
+                                                 limit=args.get("limit"))}
         raise MemoryError("NO_SUCH_TOOL", "invalid", "неизвестный инструмент %r" % name,
                           "проверьте tools/list", "none")
 

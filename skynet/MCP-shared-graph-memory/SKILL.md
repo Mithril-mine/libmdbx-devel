@@ -46,6 +46,24 @@ shared-graph-memory.mdbx — персистентная память роя на
 | `db_fileinfo()` | fstat(fd): st_nlink/size/inode + признак удаления файла БД |
 | `db_latency()` | Commit-латентности последних записей по стадиям (µs) |
 | `db_recover(target_meta?)` | Диагностика меты для восстановления (безопасный probe) |
+| `map_symbol(key)` / `map_symbols(prefix?, limit?)` | Символ / префиксный список карты исходников |
+| `map_edges_of(caller)` / `map_callers_of(callee)` | Вызовы / обратные рёбра (impact) |
+| `map_group_members(group)` | Члены фасет-группы (`group:subsystem:{module}` и др.) |
+| `map_regions(prefix?, limit?)` / `map_region(key)` | #if-дерево (region:{module}:{n}) |
+| `map_uncovered(prefix?, limit?)` | Uncovered-острова смысла вне union-AST |
+
+### Карта исходников (refactoring-map)
+
+- Структурный слой: `symbols` (fn:/type:/macro:), `call_edges(+rev)`, `groups`,
+  `regions` (#if-дерево), `uncovered` (острова смысла вне union-AST всех конфигов).
+- Данные генерируются `tools/scan_symbols.py` (+scan_regions/uncovered),
+  загружаются `tools/load_map.py --db <живая> --replace`, сверяются
+  `tools/validate_map.py` (golden: «не меньше»).
+- Использование для рефакторинга: `map_edges_of('fn:x')` — кто вызывается;
+  `map_callers_of('fn:x')` — impact; `map_uncovered('api-copy')` — непокрытые
+  острова в модуле; `map_regions('region:chk')` — платформенные ветки.
+- Перегенерация/смена кода: ссылки на исчезнувшие символы чинятся
+  `map_refresh_stale()`.
 
 ### Формат ключа
 
