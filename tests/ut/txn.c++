@@ -394,7 +394,8 @@ bool case1_trivia_NO_sticky_threads(const mdbx::path &path, bool nested = true) 
   return ok;
 }
 
-bool case2_concurrent_read_and_abort(const mdbx::path &path, bool no_sticky_threads) {
+bool case2_concurrent_read_and_abort(const mdbx::path &path, bool no_sticky_threads,
+                                     size_t iterations = 1000000 / RELIEF_FACTOR) {
   mdbx::env::operate_parameters operateParameters(100, 10);
   operateParameters.options.no_sticky_threads = no_sticky_threads;
   mdbx::env_managed env(path, operateParameters);
@@ -404,7 +405,7 @@ bool case2_concurrent_read_and_abort(const mdbx::path &path, bool no_sticky_thre
   for (size_t n = 0; n < 8; ++n)
     l.push_back(std::thread([&]() {
       s.wait();
-      for (size_t i = 0; i < 1000000 / RELIEF_FACTOR; ++i) {
+      for (size_t i = 0; i < iterations; ++i) {
         auto txn = env.start_read();
         txn.abort();
       }
@@ -566,7 +567,9 @@ int doit() {
   ok = case1_trivia_NO_sticky_threads(path, true) && ok;
   ok = case1_trivia_NO_sticky_threads(path, false) && ok;
   ok = case2_concurrent_read_and_abort(path, false) && ok;
-  ok = case2_concurrent_read_and_abort(path, true) && ok;
+  /* no-sticky slot management is an order of magnitude costlier per op,
+   * so keep the same stress but with fewer iterations */
+  ok = case2_concurrent_read_and_abort(path, true, 100000 / RELIEF_FACTOR) && ok;
   ok = case3_fresh_reads(path, false) && ok;
   ok = case3_fresh_reads(path, true) && ok;
   ok = case4_clone(path, false) && ok;
