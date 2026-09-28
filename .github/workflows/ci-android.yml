@@ -8,7 +8,6 @@ concurrency:
   cancel-in-progress: true
 
 on:
-  push:
   schedule:
     - cron: "42 3 * * *"
       timezone: "Europe/Moscow"
