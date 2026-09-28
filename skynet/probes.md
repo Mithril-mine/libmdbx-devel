@@ -40,7 +40,12 @@ mdbx::<подсистема>::<фаза>::<событие>
 
 - CMake: `cmake -DENABLE_SYSTEMTAP=ON` (требует `sys/sdt.h`; проверка в
   `cmake/profile.cmake`). Опция `ENABLE_DTRACE=ON` эквивалентна на платформах
-  с `<sys/sdt.h>` (Linux, macOS, *BSD, Solaris).
+  с `<sys/sdt.h>`.
+- **Статус валидации платформ:** провалидирован только **Linux** — сборка
+  с маркерами и их проверка (`readelf -n`, секция `.note.stapsdt`) выполнены
+  на Linux/ELF. macOS/*BSD/Solaris-варианты имеют собственный инструментарий
+  DTrace и **не** производят ELF-секцию `.note.stapsdt`; они не проверялись
+  и пока считаются «по замыслу» (см. §6).
 - GNUmakefile: цель `cmake-probes-build` собирает с `-DENABLE_SYSTEMTAP=ON` и
   выводит число маркеров.
 - Без опций пробники компилируются в `__noop` (ноль-стоимость, без `.note.stapsdt`).
