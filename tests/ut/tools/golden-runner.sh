@@ -59,6 +59,7 @@ normalize() {
     -e 's#^[^ ]*/mdbx_(load|dump|copy|chk|stat|drop|defrag): #mdbx_\1: #' \
     -e '/MADV_/d' \
     -e '/^   readahead ON /d' \
+    -e '/try growth datafile/d' \
     -e 's/read meta: empty file \([0-9]+, .*\)/read meta: empty file (ERRNO)/' \
     -e 's/^  Max readers: [0-9]+$/  Max readers: <N>/' \
     -e '/ignore .*local\/remote-fs check/d'
