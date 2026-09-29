@@ -14,6 +14,7 @@
 | `libmdbx-improvements.en.md` | ✅ сверен (выборочно) | То же, что RU-версия. |
 | `module-interfaces.md` | ✅ сверен | Все модули/заголовки/прототипы существуют; include backbone совпадает с `essentials.h`/`internals.h`. |
 | `deep-dive.md` | ✅ создан по коду | Дополняет пробелы покрытия инструкции (LCK/RLT/HSR/fork/WRITEMAP/recovery), все факты из `master@f957a778`. |
+| `debugging-methodology.md` | ✅ создан по коду | Полный документ по §4 инструкции: инструменты (`mdbx_chk` man, PROFGC-поля из `layout-lck.h`, `MDBX_commit_latency` из `mdbx.h`, `MDBX_CHECKING/DEBUG` из `options.h`, санитайзеры из `profile.cmake`), 12 сценариев, внутренняя отладка. |
 | `structure-review.md` | ⚠️ частично | Аудит описывает полную структуру старого `devel` (ныне `poc1-failed`). На master после переноса: `.codeassistant/` отсутствует, `tests/`=79 (было 112), `skynet/`=57 (было 67), `src/`=119 (совпадает). Выводы F1–F12 и решения C1–C9 сохраняют силу. Пометка добавлена в шапку. |
 
 ## Проверенные факты (выборка, для воспроизводимости)
