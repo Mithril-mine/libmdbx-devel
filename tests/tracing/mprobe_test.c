@@ -25,6 +25,7 @@ static int g_failures = 0;
 /* Типовая операция с точками COLLECT/WATCH/FAULT. */
 static int do_save(const char *user_id) {
   int error_code = 0;
+  (void)user_id; /* noop-реализации (macOS/BSD) не используют аргумент */
   MPROBE_COLLECT(save_user_start, (long)(user_id != NULL));
   MPROBE_WATCH(save_enter, 1);
   MPROBE_FAULT(inject_io_error, error_code);
