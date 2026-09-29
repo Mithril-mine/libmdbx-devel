@@ -8,6 +8,13 @@
 >
 > Точность здесь важнее краткости, но и краткость важна: у пунктов указаны версии, начиная
 > с которых изменение стало заметным, — как ориентиры, а не как строгая историческая граница.
+>
+> **Сверено с `master@f957a778` (2026-09-29):** упомянутые API (`mdbx_opt_*`, get-cached,
+> estimate-функции, bunch_delete, dupsort_depthmask, txn_clone/checkpoint/amend/rollback/
+> embark_read/break), механизмы (BigFoot, LIFO по флагу, refund/loose, early GC cleanup,
+> implicit shrink, scan4seq-ядра) и константы (`MDBX_MAX_DBI=32765`, `MDBX_MAXDATASIZE≈2 ГБ`,
+> `merge_threshold`=33%, троика мета) присутствуют в коде; версии-ориентиры в §15 —
+> из ChangeLog, не проверялись коммитом.
 
 ---
 

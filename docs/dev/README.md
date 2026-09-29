@@ -14,12 +14,13 @@
 | [`module-interfaces.md`](module-interfaces.md) | Карта межмодульных интерфейсов: экспорт из `src/proto.h` и модульных заголовков, include backbone, циклы зависимостей. |
 | [`structure-review.md`](structure-review.md) | Аудит структуры репозитория (фаза A, TASK-36): карта каталогов, находки, исполненные кандидаты C1–C3. |
 | [`debugging-methodology.md`](debugging-methodology.md) | Методики отладки: инструменты (`mdbx_chk`, PROFGC, commit_latency, ASAN/UBSAN/TSAN), пошаговые сценарии, внутренняя отладка. |
+| [`verification.md`](verification.md) | Журнал сверки документов с кодом `master@f957a778`: подтверждённые факты с `file:line`, внесённые исправления. |
 
 ## Статус сверки
 
 Документы перенесены из ветки `poc1-failed` (`skynet/`) и проходят сверку с
 актуальным кодом `master`. Состояние каждого документа отмечается в его шапке
-(`Верифицировано на master@<commit>`).
+(`Верифицировано на master@<commit>`). Подробности — [`verification.md`](verification.md).
 
 Неперенесённые спутники (остались в `poc1-failed:skynet/`): `structure.md`,
 `build.md`, `test-coverage.md`, `cxx-api.md`, `techdebt.md`, `probes.md`,

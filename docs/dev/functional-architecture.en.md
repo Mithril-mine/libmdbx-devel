@@ -6,6 +6,12 @@
 > Companion documents: [`architecture.md`](architecture.md) (internal structure and invariants,
 > module-bound); `structure.md` (file map) and `test-coverage.md` remain in the archived
 > `poc1-failed:skynet/` tree.
+> **Verified against `master@f957a778` (2026-09-29):** sections 2–13 and deep dive (section 14)
+> cross-checked with the code — page states, two-phase meta (216 troika combinations), GC model
+> (FIFO by default / LIFO via `MDBX_LIFORECLAIM`), BigFoot, spill/refund/loose, sync modes,
+> RLT/HSR, park/ousting, get-cached statuses, `txn_space_retired/leftover`, range estimation
+> and bunch-delete all match `src/` and `mdbx.h`. Numeric references (`dp_limit ≈ 1/42 RAM`,
+> `MAX_GC1OVPAGE ≈ 1000`, `MDBX_MAX_DBI=32765`) agree.
 
 ---
 

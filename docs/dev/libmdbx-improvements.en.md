@@ -6,6 +6,13 @@
 > bug fixes and optimizations — down to micro-optimizations (SIMD, branchless search, atomics),
 > **without enumerating individual code sites or one-off edits**.
 >
+> **Verified against `master@f957a778` (2026-09-29):** mentioned API (`MDBX_opt_*`, get-cached,
+> estimate functions, bunch_delete, dupsort_depthmask, txn_clone/checkpoint/amend/rollback/
+> embark_read/break), mechanisms (BigFoot, LIFO by flag, refund/loose, early GC cleanup,
+> implicit shrink, scan4seq kernels) and constants (`MDBX_MAX_DBI=32765`,
+> `MDBX_MAXDATASIZE≈2 GB`, `merge_threshold`=33%, meta troika) are present in the code;
+> version markers in §15 come from ChangeLog and were not commit-verified.
+>
 > Sources: current and historical `README.md`, documentation in `docs/`, `ChangeLog*.md` of all
 > releases (0.09–0.14), the official website [libmdbx.dqdkfa.ru](https://libmdbx.dqdkfa.ru/),
 > and the full list of runtime options (`MDBX_opt_*`). Versions are rough "first appeared / became

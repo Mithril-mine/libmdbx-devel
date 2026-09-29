@@ -5,6 +5,10 @@
 > commit pipeline, page states, concurrency model and key invariants. Written for refactoring;
 > companion docs: `structure.md` (module map) and `build.md` (build/tests/amalgamation) remain in
 > the archived `skynet/` tree of the `poc1-failed` branch.
+> **Verified against `master@f957a778` (2026-09-29):** module set, include backbone,
+> core-structure placement, page-state predicates (`page-ops.h`), two-phase meta commit,
+> `dp_limit` auto-setup (~1/42 of RAM, `api-opts.c`), and the §8 invariants all match the code.
+> One correction applied: GC recycling is FIFO by default, LIFO only with `MDBX_LIFORECLAIM`.
 
 ---
 
@@ -126,9 +130,11 @@ extended, children clone dirty pages (`pgop_stat.clone`). The environment owns a
 
 - Free pages are stored as **GC records keyed by retiring txnid** in the FREE_DBI tree
   (`gc-put.c`); records contain PNLs of page numbers.
-- Allocation (`gc-get.c`): LIFO recycling by default (`ALLOC_LIFO`), supporting dense
-  sequences and honoring reclaiming obstacles (slow readers) — pages protected by an active
-  older snapshot must not be reused; `mvcc_kick_laggards`/Handle-Slow-Readers resolve blockage.
+- Allocation (`gc-get.c`): recycling is FIFO by default; `MDBX_LIFORECLAIM` adds `ALLOC_LIFO`
+  (see `gc-get.c`, `flags += (env->flags & MDBX_LIFORECLAIM) ? ALLOC_LIFO : 0`). Both policies
+  support dense sequences and honor reclaiming obstacles (slow readers) — pages protected by
+  an active older snapshot must not be reused; `mvcc_kick_laggards`/Handle-Slow-Readers
+  resolve blockage.
 - `rkl` keeps the set of reclaimed/comeback record ids; `gc_update` merges, coalesces and
   "bigfoot" handles large spans (`MDBX_ENABLE_BIGFOOT`).
 - `histogram.c` tracks space distribution for geometry decisions; `dxb_resize` grows/shrinks
