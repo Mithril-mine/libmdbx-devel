@@ -309,9 +309,16 @@ else()
                                    --dont-cleanup-after ${MDBX_SMOKE_EXTRA} basic)
   set_tests_properties(smoke_basic PROPERTIES LABELS "smoke;smoke-t2" TIMEOUT 600 RUN_SERIAL OFF)
 
+  set(SMOKE_WRITEMAP_SIZE_UPPER "2G")
+  if(CMAKE_SIZEOF_VOID_P EQUAL 4)
+    # 32-bit builds cap the geometry upper bound at 896 MiB (MDBX_PNL_MAX? /
+    # address-space limit); a 2G request aborts mdbx_test startup.
+    set(SMOKE_WRITEMAP_SIZE_UPPER "768M")
+  endif()
+
   add_test(NAME smoke_writemap COMMAND $<TARGET_FILE:mdbx_test> --duration 100 --mode=-writemap,-nosync-safe,-lifo
                                     --progress --console=no --repeat=${MDBX_TEST_ITER} --pathname=smoke.db
-                                    --size-lower=64M --size=256M --size-upper=2G --geometry-jitter=no
+                                    --size-lower=64M --size=256M --size-upper=${SMOKE_WRITEMAP_SIZE_UPPER} --geometry-jitter=no
                                     --dont-cleanup-after ${MDBX_SMOKE_EXTRA} basic)
   set_tests_properties(smoke_writemap PROPERTIES LABELS "smoke;smoke-t2" TIMEOUT 600 DEPENDS smoke_basic RUN_SERIAL OFF)
 
