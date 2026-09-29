@@ -77,13 +77,13 @@ int main(void) {
     LONG rc;
     DetourTransactionBegin();
     DetourUpdateThread(GetCurrentThread());
-    DetourAttach(&(PVOID &)TrueWinFaultInjectHook, HookedWinFaultInjectHook);
+    DetourAttach((void **)&TrueWinFaultInjectHook, HookedWinFaultInjectHook);
     rc = DetourTransactionCommit();
     CHECK(rc == NO_ERROR, "detours attach");
     CHECK(do_save("u4") == -5, "detours inject: error observed");
     DetourTransactionBegin();
     DetourUpdateThread(GetCurrentThread());
-    DetourDetach(&(PVOID &)TrueWinFaultInjectHook, HookedWinFaultInjectHook);
+    DetourDetach((void **)&TrueWinFaultInjectHook, HookedWinFaultInjectHook);
     rc = DetourTransactionCommit();
     CHECK(rc == NO_ERROR, "detours detach");
     CHECK(do_save("u5") == 0, "detours reset: save ok");

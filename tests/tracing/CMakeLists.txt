@@ -69,5 +69,10 @@ if(CMAKE_C_COMPILER_ID MATCHES "GNU|Clang")
   target_compile_options(mprobe_test PRIVATE -Wall -Wextra)
 endif()
 
+# Третий-сторонний detours.h не должен валить тест предупреждениями.
+if(MSVC)
+  target_compile_options(mprobe_test PRIVATE /WX-)
+endif()
+
 include(CTest)
 add_test(NAME mprobe_tracing COMMAND mprobe_test)
