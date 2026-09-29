@@ -26,12 +26,12 @@
 
 ## 2. Таблица читателей (RLT) и слота читателя
 
-Структура слота (`src/layout-lck.h:147–180`):
+Структура слота (`src/layout-lck.h:147–186`):
 
 | Поле | Смысл |
 | --- | --- |
 | `txnid` (atomic) | Номер снапшота, с которого читатель начал (или `INVALID_TXNID`) |
-| `tid` | Thread ID владельца слота; псевдо-значения: `MDBX_TID_TXN_PARKED = UINT64_MAX`, `MDBX_TID_TXN_OUSTED = UINT64_MAX-1` (`layout-lck.h:163–168`) |
+| `tid` | Thread ID владельца слота; псевдо-значения: `MDBX_TID_TXN_PARKED = UINT64_MAX`, `MDBX_TID_TXN_OUSTED = UINT64_MAX-1` (`layout-lck.h:166–169`) |
 | `pid` | Process ID владельца |
 | `snapshot_pages_used` | `first_unallocated` на момент снапшота (сколько страниц читатель «пинит») |
 | `snapshot_pages_retired` | Число retired-страниц на момент старта; разность `meta.pages_retired − reader.snapshot_pages_retired` = сколько страниц этот читатель удерживает от переиспользования |

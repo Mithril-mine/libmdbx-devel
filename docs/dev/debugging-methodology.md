@@ -60,7 +60,7 @@ top-level транзакции (`mdbx.h:4193–4280`).
 | `kicks` | Обращения к HSR | >0 = пространство исчерпано читателями |
 | `pnl_merge_*` | Время/объём/число слияний списков страниц | — |
 
-Аналог по «простой» статистике страниц — `pgops` (`src/layout-lck.h:44–80`):
+Аналог по «простой» статистике страниц — `pgops` (`src/layout-lck.h:62–105`):
 `newly`, `cow`, `clone`, `split`, `merge`, `spill`, `unspill`, `wops`, `msync`,
 `fsync`, `prefault`, `mincore`, `incoherence` (счётчик срабатываний issue #269).
 
