@@ -459,6 +459,7 @@ SystemTap/DTrace остаются внешним каналом мутации �
 - [x] Локальный прогон на Linux (USDT+LTTng+fallback-инъекция):
       `mprobe_test` PASS, `.note.stapsdt` содержит `mprobe:inject_io_error`,
       LTTng-сессия поймала 9 событий (включая `save_failed value=-5` при инъекции);
-- [ ] GitHub `ci-tracing.yml` (linux/windows/macos) — зелёный;
-- [ ] Пуш в devel (все remote);
+- [x] GitHub `ci-tracing.yml` (linux/windows/macos) — зелёный
+      (ubuntu 31s, windows 58s, macos 28s; devel@6fe73c63);
+- [x] Пуш в devel (все remote);
 - [ ] Решение по SourceCraft-интеграции (после пересмотра политики CI).
