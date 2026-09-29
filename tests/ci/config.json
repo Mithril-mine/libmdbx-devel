@@ -77,6 +77,23 @@
       "note": "ci-linux ubuntu-24.04 Debug cxx=ON"
     },
     {
+      "id": "linux-gcc-ubuntu24-debug-coverage",
+      "runs-on": "ubuntu-24.04",
+      "env": {
+        "CC": "gcc",
+        "CXX": "g++",
+        "MDBX_BUILD_OPTIONS": "-DMDBX_CHECKING=2 -DMDBX_DEBUG=1"
+      },
+      "cmake": [
+        "-DCMAKE_BUILD_TYPE=Debug",
+        "-DMDBX_BUILD_CXX:BOOL=ON",
+        "-DENABLE_GCOV:BOOL=ON"
+      ],
+      "ctest": null,
+      "note": "ci-linux ubuntu-24.04 Debug cxx=ON + gcov coverage",
+      "coverage": true
+    },
+    {
       "id": "linux-gcc-ubuntu24-debug-cxx-off",
       "runs-on": "ubuntu-24.04",
       "env": {
@@ -3307,6 +3324,9 @@
       "android-r29-armeabi-v7a-with-neon-release",
       "android-r29-x86-64-debug",
       "android-r29-x86-64-release"
+    ],
+    "coverage": [
+      "linux-gcc-ubuntu24-debug-coverage"
     ]
   },
   "notes": [

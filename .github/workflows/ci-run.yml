@@ -32,6 +32,11 @@ on:
         type: string
         required: true
         description: Runner label (resolved by the orchestrator from the registry)
+      coverage:
+        type: boolean
+        required: false
+        default: false
+        description: Build with ENABLE_GCOV and upload an lcov report
 
 permissions:
   contents: read
@@ -39,6 +44,10 @@ permissions:
 jobs:
   cell:
     runs-on: ${{ inputs.runs-on }}
+    env:
+      CCACHE_DIR: ${{ runner.temp }}/ccache
+      CCACHE_MAXSIZE: 300M
+      CI_CTEST_TIMEOUT: "600"
     steps:
       - name: checkout
         uses: actions/checkout@v7
@@ -48,19 +57,74 @@ jobs:
           submodules: true
           ref: ${{ inputs.ref || github.sha }}
 
+      - name: ensure ccache
+        shell: bash
+        run: |
+          set -euo pipefail
+          if command -v ccache >/dev/null 2>&1; then
+            echo "ccache already present: $(ccache --version | head -1)"
+          elif command -v choco >/dev/null 2>&1; then
+            choco install -y ccache
+            echo "$(cygpath -u "$(dirname "$(command -v ccache)")")" >> "$GITHUB_PATH"
+          else
+            echo "ccache not available on this runner (non-fatal, skipping)"
+          fi
+
+      - name: ccache cache
+        uses: actions/cache@v4
+        with:
+          path: ${{ runner.temp }}/ccache
+          key: ccache-${{ inputs.cell }}-${{ github.sha }}
+          restore-keys: |
+            ccache-${{ inputs.cell }}-
+
       - name: configure + build + ctest (fast/full scope)
         shell: bash
         env:
+          # LTO stays off in test builds (skynet/build.md §6.7). ccache is
+          # enabled with an actions/cache-backed CCACHE_DIR so warm hits carry
+          # across runs of the same cell (the ephemeral hosted runner discards
+          # everything between jobs otherwise). Coverage cells skip ccache:
+          # gcov's .gcno/.gcda are not restored on cache hits.
           CI_CTEST_TIMEOUT: "600"
-          # LTO stays off in test builds (skynet/build.md §6.7). ccache is NOT
-          # enabled here: GitHub hosted runners are ephemeral, so a per-run
-          # ccache would only add hashing overhead without persistence — real
-          # caching returns on Stage 2 with actions/cache-backed CCACHE_DIR.
-          RUN_CELL_EXTRA_CMAKE: "-DINTERPROCEDURAL_OPTIMIZATION=OFF"
         run: |
           set -euo pipefail
+          EXTRA="-DINTERPROCEDURAL_OPTIMIZATION=OFF"
+          if [ "${{ inputs.coverage }}" != "true" ]; then
+            EXTRA="$EXTRA -DCMAKE_C_COMPILER_LAUNCHER=ccache -DCMAKE_CXX_COMPILER_LAUNCHER=ccache"
+          fi
+          export RUN_CELL_EXTRA_CMAKE="$EXTRA"
           tests/ci/run-cell.py "${{ inputs.cell }}" --scope "${{ inputs.scope }}" \
             --build-dir @ci-cmake-build 2>&1
+
+      - name: coverage report
+        if: ${{ inputs.coverage }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          BUILD="@ci-cmake-build"
+          ROOT="$(pwd)"
+          if ! command -v lcov >/dev/null 2>&1; then
+            sudo apt-get update -qq && sudo apt-get install -y -qq lcov
+          fi
+          rm -rf coverage
+          mkdir -p coverage
+          # GCC emits negative counts and end-line mismatches for the
+          # instrumented test binaries; lcov 2.x needs explicit ignore-errors.
+          lcov --capture --directory "$BUILD" --output-file coverage/lines.info \
+            --quiet --ignore-errors negative,mismatch \
+            --include "$ROOT/src/*"
+          lcov --summary coverage/lines.info 2>&1 | tail -6
+          genhtml coverage/lines.info --output-directory coverage/html \
+            --legend --quiet --title "libmdbx devel (${{ inputs.cell }})"
+
+      - name: upload coverage report
+        if: ${{ inputs.coverage }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-${{ inputs.cell }}
+          path: coverage
+          if-no-files-found: ignore
 
       - name: upload metrics
         if: always()
