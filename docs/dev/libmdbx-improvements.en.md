@@ -448,4 +448,4 @@ Further steps:
 
 *This document is a functional description and deliberately does not reference source-code files or
 modules. For module-level mapping and refactoring invariants see [`architecture.md`](architecture.md)
-and [`structure.md`](structure.md).*
+and [`module-interfaces.md`](module-interfaces.md).*

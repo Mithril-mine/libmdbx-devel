@@ -1272,4 +1272,5 @@ regardless of how many modifications happened within it inside the transaction.
 
 *This document is a functional description and deliberately does not reference source-code files or
 modules. For module-level mapping and refactoring invariants see [`architecture.md`](architecture.md)
-and [`structure.md`](structure.md).*
+and [`module-interfaces.md`](module-interfaces.md). The file map (`structure.md`) remains in the
+archived `poc1-failed:skynet/` tree.*

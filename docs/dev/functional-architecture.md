@@ -1277,4 +1277,5 @@ overflow-страниц (раздел 7). Для них нужен **непре�
 
 *Документ является функциональным описанием и сознательно не ссылается на файлы/модули исходного кода.
 Для привязки к конкретным модулям и инвариантам рефакторинга см. [`architecture.md`](architecture.md)
-и [`structure.md`](structure.md).*
+и [`module-interfaces.md`](module-interfaces.md). Карта файлов (`structure.md`) осталась в архиве
+`poc1-failed:skynet/`.*
