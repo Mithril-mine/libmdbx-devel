@@ -45,8 +45,6 @@ jobs:
   cell:
     runs-on: ${{ inputs.runs-on }}
     env:
-      CCACHE_DIR: ${{ runner.temp }}/ccache
-      CCACHE_MAXSIZE: 300M
       CI_CTEST_TIMEOUT: "600"
     steps:
       - name: checkout
@@ -86,7 +84,8 @@ jobs:
           # across runs of the same cell (the ephemeral hosted runner discards
           # everything between jobs otherwise). Coverage cells skip ccache:
           # gcov's .gcno/.gcda are not restored on cache hits.
-          CI_CTEST_TIMEOUT: "600"
+          CCACHE_DIR: ${{ runner.temp }}/ccache
+          CCACHE_MAXSIZE: 300M
         run: |
           set -euo pipefail
           EXTRA="-DINTERPROCEDURAL_OPTIMIZATION=OFF"
