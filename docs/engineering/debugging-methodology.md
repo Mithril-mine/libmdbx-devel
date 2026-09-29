@@ -3,8 +3,7 @@
 > Часть индекса [документации разработчика](README.md).
 > Практическое руководство: какие инструменты даёт движок, как читать их вывод,
 > пошаговые сценарии отладки типовых проблем и приёмы внутренней отладки
-> разработчика. Все факты — из кода `master@f957a778` и man-страниц; источники —
-> `file:line`. Теоретическая подоплёка — в
+> разработчика. Все факты сверены с кодом на `master` и man-страницами. Теоретическая подоплёка — в
 > [`functional-architecture.md`](functional-architecture.md) и
 > [`architecture.md`](architecture.md).
 
@@ -37,12 +36,12 @@ Exit-код: `0` — ошибок нет, ненулевой — найдены 
 
 ### 1.2. `MDBX_ENABLE_PROFGC` — профилирование GC
 
-Опция сборки (`CMakeLists.txt:815`, `add_option(MDBX ENABLE_PROFGC ...) OFF`).
+Опция сборки (`CMakeLists.txt`, `add_option(MDBX ENABLE_PROFGC ...) OFF`).
 Профиль GC накапливается в LCK-файле (общий для всех процессов) и возвращается
 в `mdbx_txn_commit_ex()` / `mdbx_txn_checkpoint()`; сбрасывается при коммите
-top-level транзакции (`mdbx.h:4193–4280`).
+top-level транзакции (`mdbx.h`).
 
-Поля `gc_prof` (структура `MDBX_commit_latency.gc_prof`, `mdbx.h:4221–4276`):
+Поля `gc_prof` (структура `MDBX_commit_latency.gc_prof`, `mdbx.h`):
 
 | Поле | Что значит | Норма |
 | --- | --- | --- |
@@ -60,13 +59,13 @@ top-level транзакции (`mdbx.h:4193–4280`).
 | `kicks` | Обращения к HSR | >0 = пространство исчерпано читателями |
 | `pnl_merge_*` | Время/объём/число слияний списков страниц | — |
 
-Аналог по «простой» статистике страниц — `pgops` (`src/layout-lck.h:62–105`):
+Аналог по «простой» статистике страниц — `pgops` (`src/layout-lck.h`):
 `newly`, `cow`, `clone`, `split`, `merge`, `spill`, `unspill`, `wops`, `msync`,
 `fsync`, `prefault`, `mincore`, `incoherence` (счётчик срабатываний issue #269).
 
 ### 1.3. `MDBX_commit_latency` — стадии коммита
 
-`struct MDBX_commit_latency` (`mdbx.h:4193–4280`), заполняется `mdbx_txn_commit_ex()`
+`struct MDBX_commit_latency` (`mdbx.h`), заполняется `mdbx_txn_commit_ex()`
 и `mdbx_txn_checkpoint()`:
 
 | Поле | Стадия | Пороги/норма |
@@ -86,7 +85,7 @@ top-level транзакции (`mdbx.h:4193–4280`).
 
 ### 1.4. `MDBX_FORCE_ASSERTIONS` / `MDBX_CHECKING` / `MDBX_DEBUG`
 
-Семантика — `src/options.h:243–249,585–649`:
+Семантика — `src/options.h`:
 
 - `MDBX_DEBUG`: `0` (дефолт) — всё выключено; `>0` — включает логирование +
   ассерты + внутренний аудит; `>=3` дополнительно `MDBX_DBG_AUDIT`; `<0` — полная
@@ -99,7 +98,7 @@ top-level транзакции (`mdbx.h:4193–4280`).
   - `<0` — всё выключено, включая `ENSURE()`.
 - `MDBX_FORCE_ASSERTIONS=1` — принудительный `MDBX_CHECKING=2` (deprecated,
   используйте `MDBX_CHECKING`). Сочетание обоих — ошибка сборки
-  (`src/options.h:643–647`).
+  (`src/options.h`).
 
 Цена: `MDBX_CHECKING=2/3` существенно замедляет хот-пути; для воспроизведения
 тонких багов — включайте, для бенчмарков — выключайте.
@@ -107,20 +106,20 @@ top-level транзакции (`mdbx.h:4193–4280`).
 ### 1.5. Диагностические API
 
 - `mdbx_env_info_ex()` — геометрия, меты `meta[3]`, UUID (`mi_dxbid`), статистика
-  операций со страницами; поля авто-sync (`mdbx.h:2926,2933`).
-- `mdbx_txn_info()` — пер-транзакционная диагностика (`mdbx.h:4090–4145`):
+  операций со страницами; поля авто-sync (`mdbx.h`).
+- `mdbx_txn_info()` — пер-транзакционная диагностика (`mdbx.h`):
   `txn_id`, `txn_reader_lag`, `txn_space_used/limit_soft/limit_hard/retired/
   leftover/dirty`, page-get счётчики. Ключевые поля для диагностики долгих
   читателей — `txn_space_retired` (сколько освободится после читателя) и
   `txn_space_leftover` (порог срабатывания HSR).
 - `mdbx_gc_info()` — состояние переиспользования.
-- `mdbx_reader_list()` / `mdbx_reader_check(env, &dead)` (`mdbx.h:6880,6890`) —
+- `mdbx_reader_list()` / `mdbx_reader_check(env, &dead)` (`mdbx.h`) —
   список живых читателей и подсчёт мёртвых слотов (`dead`), которые можно очистить.
-- `mdbx_stat -p` — общая статистика операций со страницами (`src/man1/mdbx_stat.1:40–41`).
+- `mdbx_stat -p` — общая статистика операций со страницами (`src/man1/mdbx_stat.1`).
 
 ### 1.6. Логирование
 
-Макросы `TRACE/DEBUG/VERBOSE/NOTICE/WARNING/ERROR` (`src/logging_and_debug.h:177–210`).
+Макросы `TRACE/DEBUG/VERBOSE/NOTICE/WARNING/ERROR` (`src/logging_and_debug.h`).
 Настройка — `mdbx_setup_debug()` и переменные окружения; уровни
 `MDBX_LOG_DEBUG/TRACE` удобны для трассировки ошибок API. Колбэк логов без
 `vprintf` — для привязок.
@@ -129,9 +128,9 @@ top-level транзакции (`mdbx.h:4193–4280`).
 
 CMake-опции (`cmake/profile.cmake`):
 
-- `ENABLE_ASAN` (`cmake/profile.cmake:42`), `ENABLE_UBSAN` (`:44`) — Address/UB
-  санитайзеры; поддерживаются GCC/CLANG/MSVC (`cmake/compiler.cmake:357–358,956–971`).
-- `ENABLE_MEMCHECK` — интеграция valgrind/memcheck.h (`cmake/profile.cmake:48–64`);
+- `ENABLE_ASAN` (`cmake/profile.cmake`), `ENABLE_UBSAN` (`:44`) — Address/UB
+  санитайзеры; поддерживаются GCC/CLANG/MSVC (`cmake/compiler.cmake`).
+- `ENABLE_MEMCHECK` — интеграция valgrind/memcheck.h (`cmake/profile.cmake`);
   нужен установленный заголовок valgrind. Готовый `valgrind.supp` лежит в корне.
 - `ENABLE_GPROF`/`ENABLE_DTRACE` — профилирование.
 
@@ -173,7 +172,7 @@ CMake-опции (`cmake/profile.cmake`):
 Симптом: `commit` занимает заметное время, throughput падает.
 
 Шаги:
-1. `mdbx_txn_commit_ex()` → разложить `whole` на стадии (`mdbx.h:4193`).
+1. `mdbx_txn_commit_ex()` → разложить `whole` на стадии (`mdbx.h`).
 2. `sync` доминирует → проверьте режим долговечности; слишком частые fsync при
    мелких транзакциях → укрупняйте батчи или переходите на
    `MDBX_SAFE_NOSYNC`/`NOMETASYNC`.
@@ -235,7 +234,7 @@ CMake-опции (`cmake/profile.cmake`):
 3. Если повреждена одна из мет → попробуйте `mdbx_chk -1`/`-2` (другие меты) и
    `-T` для переключения на валидную.
 4. `MDBX_WANNA_RECOVERY` при read-only → откройте read-write или
-   `mdbx_env_open_for_recovery()` (`mdbx.h:7079`) для аккуратного восстановления.
+   `mdbx_env_open_for_recovery()` (`mdbx.h`) для аккуратного восстановления.
 5. Recovery-проверки (0.12.7+) не изменяют базу — безопасно запускать.
 
 ### 2.7. Утечка слотов читателей
@@ -262,15 +261,15 @@ CMake-опции (`cmake/profile.cmake`):
 1. Диагностика: PROFGC (`work_rsteps`/`work_xpages`), `mdbx_stat -p` (split/merge).
 2. Дефрагментация: `mdbx_env_defrag(defrag_atleast, time_atleast_dot16, defrag_enough,
    time_limit_dot16, acceptable_backlash, preferred_batch, cb, ctx)`
-   (`mdbx.h:7688`); код результата `MDBX_defrag_enough_threshold=16`
-   (`mdbx.h:7512`).
+   (`mdbx.h`); код результата `MDBX_defrag_enough_threshold=16`
+   (`mdbx.h`).
 3. Утилита `mdbx_defrag` — CLI-обёртка.
 
 ### 2.10. Проблема после fork
 
 Симптом: в дочернем процессе операции падают/висят (`resource temporarily unavailable`).
 
-Решение: после `fork()` вызовите `mdbx_env_resurrect_after_fork()` (`mdbx.h:3214–3252`)
+Решение: после `fork()` вызовите `mdbx_env_resurrect_after_fork()` (`mdbx.h`)
 в ребёнке; без него использование окружения невозможно. Не вызывайте в родителе
 и дважды.
 
@@ -300,7 +299,7 @@ CMake-опции (`cmake/profile.cmake`):
 ### 3.1. Добавление точки трассировки в ядро
 
 Используйте макросы `TRACE/DEBUG/VERBOSE/NOTICE/WARNING/ERROR`
-(`src/logging_and_debug.h:177–210`) — они гейтятся уровнями `MDBX_DEBUG`/
+(`src/logging_and_debug.h`) — они гейтятся уровнями `MDBX_DEBUG`/
 `MDBX_CHECKING` и не попадают в релизные сборки с `MDBX_DEBUG=0`. Для временной
 отладки добавьте уровень и уберите после; не оставляйте `printf` в хот-путях.
 
