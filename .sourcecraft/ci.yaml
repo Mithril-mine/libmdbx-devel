@@ -59,4 +59,4 @@ workflows:
           - name: ci-step
             image: dh-mirror.gitverse.ru/jakoch/cpp-devbox:forky-latest
             script:
-              - CC=clang CXX=clang++ test*/ci/ci.sh "-DCMAKE_BUILD_TYPE=MinSizeRel|-DMDBX_BUILD_CXX:BOOL=ON"
+              - CC=clang CXX=clang++ test*/ci/ci.sh "-DCMAKE_BUILD_TYPE=MinSizeRel|-DMDBX_BUILD_CXX:BOOL=ON|-DENABLE_GCOV:BOOL=ON"
