@@ -85,7 +85,7 @@ probe process("/path/to/libmdbx.so").mark("alloc__source") {
   маркеров, пригоден для CI (не требует root и `stap`).
 
 > Справка по языку SystemTap (user-space/kernel домены, statement-пробники,
-> наблюдение vs инъекция, требования/права): `skynet/systemtap-reference.md`.
+> наблюдение vs инъекция, требования/права): `docs/engineering/systemtap-reference.md`.
 
 ## 7. Кандидаты следующих партий (test-scenarios §2.4)
 
