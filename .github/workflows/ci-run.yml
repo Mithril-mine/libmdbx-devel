@@ -61,11 +61,18 @@ jobs:
           set -euo pipefail
           if command -v ccache >/dev/null 2>&1; then
             echo "ccache already present: $(ccache --version | head -1)"
+          elif command -v apt-get >/dev/null 2>&1; then
+            sudo apt-get update -qq && sudo apt-get install -y -qq ccache
+          elif command -v brew >/dev/null 2>&1; then
+            brew install ccache >/dev/null
           elif command -v choco >/dev/null 2>&1; then
             choco install -y ccache
             echo "$(cygpath -u "$(dirname "$(command -v ccache)")")" >> "$GITHUB_PATH"
+          fi
+          if command -v ccache >/dev/null 2>&1; then
+            echo "ccache ready: $(ccache --version | head -1)"
           else
-            echo "ccache not available on this runner (non-fatal, skipping)"
+            echo "ccache NOT available on this runner"
           fi
 
       - name: ccache cache
@@ -89,7 +96,7 @@ jobs:
         run: |
           set -euo pipefail
           EXTRA="-DINTERPROCEDURAL_OPTIMIZATION=OFF"
-          if [ "${{ inputs.coverage }}" != "true" ]; then
+          if [ "${{ inputs.coverage }}" != "true" ] && command -v ccache >/dev/null 2>&1; then
             EXTRA="$EXTRA -DCMAKE_C_COMPILER_LAUNCHER=ccache -DCMAKE_CXX_COMPILER_LAUNCHER=ccache"
           fi
           export RUN_CELL_EXTRA_CMAKE="$EXTRA"
