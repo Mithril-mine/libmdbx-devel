@@ -83,8 +83,10 @@ Author: Leonid Yuriev \<leo@yuriev.ru\>. Home site: <https://libmdbx.dqdkfa.ru>.
 | [`cxx-api.md`](cxx-api.md) | C++ API layer in depth: header topology, class inventory, decl/impl split, C↔C++ bridge, build/amalgamation, compiler matrix |
 | [`build.md`](build.md) | Build systems (CMake, GNU Make, Conan), key options, CI matrix, testing commands |
 | [`architecture.md`](architecture.md) | Internal architecture: layers, module relationships, data flow, amalgamation |
+| [`architecture-overview.md`](architecture-overview.md) | Compact cross-mechanism overview (for external experts): MVCC, durability/flush path, GC, file growth/geometry, mmap/memory, single-writer |
 | [`debugging-methodology.md`](debugging-methodology.md) | Debugging methodology: tools (`mdbx_chk`, PROFGC, `commit_latency`, sanitizers), step-by-step scenarios (growth, slow commit, MAP_FULL, corruption, long readers, fork, Windows, containers), internal debugging |
 | [`deep-dive.md`](deep-dive.md) | Deep dive on LCK layout/versions, RLT slots, HSR protocol, fork(), WRITEMAP/auto-sync and recovery modes |
+| [`glossary-compact.md`](glossary-compact.md) | Compact glossary of terms used in discussions/reformulations (writemap, WAF, overflow, subpage, stragglers, presync, etc.) |
 | [`test-coverage.md`](test-coverage.md) | Tests → modules coverage map: which test guards which module/feature, coverage gaps |
 | [`techdebt.md`](techdebt.md) | Tech-debt inventory from source scan: 86 TODO/FIXME/workaround markers by category with file:line refs |
 | [`workflows.md`](workflows.md) | Git branching, PR/review flow, CI triggers, release & amalgamation process |
