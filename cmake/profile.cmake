@@ -45,6 +45,9 @@ option(ENABLE_DTRACE "Enable using DTrace dynamic tracing framework" OFF)
 
 option(ENABLE_SYSTEMTAP "Enable using SystemTap USDT probes (requires <sys/sdt.h>)" OFF)
 
+option(ENABLE_LTTNG
+       "Enable LTTng-UST tracepoints for MPROBE_COLLECT/WATCH (Linux, managed-testing)" OFF)
+
 option(ENABLE_ASAN "Enable AddressSanitizer, a fast memory error detector based on compiler instrumentation" OFF)
 
 option(ENABLE_UBSAN
