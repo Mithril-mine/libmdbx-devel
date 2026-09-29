@@ -1,8 +1,8 @@
 on:
   push:
-    - workflows: [ci-linux-debug-gcc, ci-linux-debug-clang, ci-linux-release-spilling]
+    - workflows: [ci-linux-debug-gcc, ci-linux-debug-clang]
 #  pull_request:
-#    - workflows: [ci-linux-debug-gcc, ci-linux-debug-clang, ci-linux-release-spilling]
+#    - workflows: [ci-linux-debug-gcc, ci-linux-debug-clang]
   schedule:
     - workflows: [ci-linux-debug-gcc, ci-linux-debug-clang, ci-linux-release-spilling]
       cron: "42 3 * * *"
