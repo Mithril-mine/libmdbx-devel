@@ -1043,13 +1043,13 @@ writing the value itself costs proportionally to its size (CoW of the whole run)
    - scans GC records toward the detent, i.e. examines many records;
    - merges page-number lists from different records;
    - searches inside them for dense sequences (there are SIMD kernels for that).
-   
+
    Under fragmentation the number of scanned records and the merge cost grow. That is exactly why the
    limiting options exist (section 6.4):
    - `rp_augment_limit` — the accumulation limit: when sequence search becomes costlier than appending
      new pages at the file end (possibly growing the file);
    - `gc_time_limit` — the time limit for such a search within a write transaction.
-   
+
    In this sense the "depth" is the depth/volume of the GC scan, not the height of the main tree.
 
 3. **"GC processing" at commit.** Any replacement or deletion of a large value frees the whole old run
@@ -1069,7 +1069,7 @@ writing the value itself costs proportionally to its size (CoW of the whole run)
    - Allocation requires contiguity (costlier than "any page");
    - retirement requires many records (bulkier than "one record");
    - replacement is allocation + retirement at the same time.
-   
+
    Therefore "update large values" scenarios load GC much more than small records of the same total
    size, and this load is regulated by the options of section 6.4.
 
