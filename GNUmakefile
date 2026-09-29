@@ -451,7 +451,7 @@ else
 # Non-amalgamated sources with test framework
 
 .PHONY: build-stochastic build-test-with-valgrind check cross-gcc cross-qemu dist doxygen gcc-analyzer long-test
-.PHONY: reformat release-assets tags smoke smoke-fault cmake-stochastic-build
+.PHONY: reformat release-assets tags smoke smoke-fault cmake-stochastic-build cmake-probes-build
 .PHONY: smoke-singleprocess test-singleprocess test-valgrind test-memcheck memcheck smoke-memcheck
 .PHONY: smoke-t1 smoke-t2 smoke-t3 select-tests
 .PHONY: smoke-assertion long-test-assertion test-ci test-ci-extra check-posix-locking
@@ -582,6 +582,14 @@ cmake-stochastic-build:
 	$(QUIET)mkdir -p @cmake-stochastic-build && ASAN_OPTIONS=$(ASAN_OPTIONS) UBSAN_OPTIONS=$(UBSAN_OPTIONS) \
 		$(CMAKE) $(CMAKE_OPT) -DMDBX_ENABLE_LONG_TESTS=ON -G Ninja -S . -B @cmake-stochastic-build && \
 		$(CMAKE) --build @cmake-stochastic-build
+
+cmake-probes-build:
+	@echo '  RUN: cmake -G Ninja -DENABLE_SYSTEMTAP=ON && cmake --build @cmake-probes-build'
+	$(QUIET)mkdir -p @cmake-probes-build && \
+		$(CMAKE) $(CMAKE_OPT) -DENABLE_SYSTEMTAP:BOOL=ON -G Ninja -S . -B @cmake-probes-build && \
+		$(CMAKE) --build @cmake-probes-build && \
+		readelf -n @cmake-probes-build/libmdbx.so | grep -c 'Provider: mdbx' | \
+		sed 's/^/  USDT probes in libmdbx.so: /'
 
 smoke-t1: cmake-build
 	$(call ctest-scenario-run,@cmake-ninja-build,^smoke-t1$$,)
