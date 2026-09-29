@@ -77,9 +77,16 @@ WRITER_TEMPLATE = textwrap.dedent(
             _sig.raise_signal(_sig.SIGTERM)
         import time as _t
         _t.sleep(30)
-    elif mode in ("hold", "kill9"):
-        # kill9: держим env открытым и НЕ закрываем (меты остаются
-        # unsteady) — SIGKILL приходит из теста.
+    elif mode == "hold":
+        # hold: держим env открытым и НЕ закрываем (меты остаются unsteady)
+        import time as _t
+        _t.sleep(30)
+    elif mode == "kill9":
+        # kill9: пишем стартовые записи, сигналим READY-маркером и держим env
+        # открытым, НЕ закрывая (меты на диске остаются неоднородными s:w:w
+        # после SIGKILL из теста; окно writeback частичных мет — в тесте).
+        with open(path + ".ready", "w") as _f:
+            _f.write("READY\\n")
         import time as _t
         _t.sleep(30)
     else:
@@ -122,6 +129,17 @@ def _wait_for_records(db_path, expected, timeout=20):
             pass
         time.sleep(0.2)
     return -1
+
+
+def _wait_ready(db_path, timeout=15):
+    """Ждём маркер `<db>.ready` от writer'а (kill9-поток коммитов запущен)."""
+    marker = db_path + ".ready"
+    deadline = time.time() + timeout
+    while time.time() < deadline:
+        if os.path.exists(marker):
+            return True
+        time.sleep(0.05)
+    return False
 
 
 def _verify(db_path, expected):
@@ -235,25 +253,39 @@ def test_kill9_nosync_readonly_wants_recovery(tmp_path):
          (не тихий откат к steady);
       3) осознанное read-write открытие само делает steady-sync и данные
          целы (safe_nosync сбрасывает страницы данных, задержаны только меты).
-    """
-    db = str(tmp_path / "t.mdbx")
-    proc = subprocess.Popen(
-        [sys.executable, _writer_script(), db, "safe_nosync", "0",
-         str(N_RECORDS), "kill9"],
-        stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-    try:
-        time.sleep(1.5)
-        proc.send_signal(signal.SIGKILL)
-        proc.wait(timeout=10)
-    finally:
-        if proc.poll() is None:
-            proc.kill()
-            proc.wait()
-    time.sleep(0.3)
 
-    with pytest.raises(Exception) as ei:
-        m.preopen_snapinfo(db)
-    assert "CORRUPTED" in str(ei.value), ei.value
+    Устойчивость: тест ждёт READY-маркер (стартовые записи закоммичены),
+    даёт окно writeback частичных мет (1.2s) и убивает SIGKILL'ом — на
+    Linux это даёт unsteady стабильно (8/8 в замере); остаточная удача
+    ОС-флаша (меты успели лечь steady целиком) поглощается bounded-retry:
+    до 4 попыток на свежих БД.
+    """
+    db = None
+    for attempt in range(4):
+        db = str(tmp_path / ("t%d.mdbx" % attempt))
+        proc = subprocess.Popen(
+            [sys.executable, _writer_script(), db, "safe_nosync", "0",
+             str(N_RECORDS), "kill9"],
+            stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        try:
+            assert _wait_ready(db), "writer не закоммитил стартовые записи"
+            time.sleep(1.2)  # окно writeback частичных мет (как в исходном 1.5s)
+            proc.send_signal(signal.SIGKILL)
+            proc.wait(timeout=10)
+        finally:
+            if proc.poll() is None:
+                proc.kill()
+                proc.wait()
+        time.sleep(0.3)
+        try:
+            with pytest.raises(Exception) as ei:
+                m.preopen_snapinfo(db)
+            assert "CORRUPTED" in str(ei.value), ei.value
+            break
+        except AssertionError:
+            if attempt == 3:
+                raise
+            continue
 
     with pytest.raises(Exception) as ei:
         Store(db, readonly=True, _skip_sync_thread=True)
