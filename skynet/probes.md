@@ -84,6 +84,9 @@ probe process("/path/to/libmdbx.so").mark("alloc__source") {
 - `tests/scripts/probes-check.sh <elffile>` — проверяет наличие ожидаемого набора
   маркеров, пригоден для CI (не требует root и `stap`).
 
+> Справка по языку SystemTap (user-space/kernel домены, statement-пробники,
+> наблюдение vs инъекция, требования/права): `skynet/systemtap-reference.md`.
+
 ## 7. Кандидаты следующих партий (test-scenarios §2.4)
 
 - `mdbx::reader::snapshot_begin/end` (txnid, число ретраев) — снятие снапшота читателя.
