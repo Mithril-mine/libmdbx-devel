@@ -186,15 +186,29 @@ group:task:B63            → {символы, тесты, записи, док�
    - **мост curated ↔ structural**: `link()` принимает символы
      (`fn:`/`type:`/`macro:`), id через `mdbx_dbi_sequence`, `refresh_stale`,
      `mdbx_canary_get/put` (magic/pоколение карты).
-   Текущие счётчики (Linux x86_64, clang 18):
-   functions 3127, types 368, macros 518, blocks 31213, edges 19132
-   (unresolved 5390 — системные вызовы/`__builtin_*`), regions 1131.
+   Текущие счётчики (Linux x86_64, clang 18.1.3, обновлено 29.09 после
+   порта C++ API/USDT-проб): functions 3309, types 376, macros 511,
+   blocks 31860, edges 20805 (unresolved 1100 — системные вызовы/
+   `__builtin_*`), regions 1133.
    (C++-перегрузки учитываются: один qname + сигнатура → `#sig-hash`.)
+   Подготовка `_build-scan` (важно, иначе сканер молча теряет C-ядро):
+   `cmake -S . -B _build-scan -DCMAKE_BUILD_TYPE=Debug
+    -DMDBX_BUILD_CXX=ON -DMDBX_ENABLE_TESTS=ON -DMDBX_BUILD_TOOLS=ON
+    -DINTERPROCEDURAL_OPTIMIZATION=OFF -DCMAKE_EXPORT_COMPILE_COMMANDS=ON
+    -DMDBX_ALLOY_BUILD=ON -DMDBX_USE_MINCORE=OFF`
+   — `MDBX_ALLOY_BUILD=ON` обязателен: `select_tus` ждёт TU `src/alloy.c`
+     в compile_commands (в Debug по умолчанию OFF, т.к. библиотека
+     собирается из split-файлов, и C-ядро выпадает из скана: functions
+     падают ~3127→2400, blocks ~31213→4067);
+   - `MDBX_USE_MINCORE=OFF` обязателен: linux-конфиг выставляет его в 1,
+     а для win32-target mingw не объявляет `mincore()` → alloy.c не
+     компилируется под `--target=x86_64-w64-windows-gnu`.
 4. **Шаг 1b (многоконфигурационный скан + uncovered — реализовано)**:
    - `scan_symbols.py --config NAME [--target ... --defines ... --includes ...
      --extra-flags ...]`: кросс-конфигурационный прогон (win32 через
      mingw/clang `--target=x86_64-w64-windows-gnu`); из compile_commands
-     сохраняются только `-D/-I`, остальное собирается из аргументов;
+     сохраняются только `-D/-I`/`-isystem`, остальное собирается из
+     аргументов;
    - `--merge ARTIFACT...`: слияние per-config артефактов в один —
      общие поля наверху + `implementations: [{config, file, module, l0,
      l1, blocks, regions, configs}]` для символов с телами в нескольких
@@ -205,12 +219,14 @@ group:task:B63            → {символы, тесты, записи, док�
    - тестовые домены: `scan_symbols.py --tests {ut,issues,framework}`
      (синтетические TU, `-DMDBX_BUILD_TEST=1`, без detailed-pp для
      framework); рёбра тест→lib резолвятся через библиотечный артефакт
-     (coverage seed).
-   Многоконфигурационные счётчики (linux+win32 merged):
-   functions 4087, types 398, macros 580, blocks 33264, edges 11810
-   (unique pairs), unresolved 2018, coverage_pct 96.17%, uncovered 433
-   островов. Тестовые домены: ut 2870 fn / issues 1817 fn /
-   framework 2139 fn.
+     (coverage seed). googletest-include берётся из реальных тестовых TU
+     compile_commands (`-isystem .../googletest/...`), в cross-режиме
+     `-isystem` сохраняется (иначе issues-домен не находит gtest.h).
+   Многоконфигурационные счётчики (linux+win32 merged, 29.09):
+   functions 4448, types 406, macros 573, blocks 34376, edges 12110
+   (unique pairs), unresolved 1295, coverage_pct 96.09%, uncovered 443
+   островов. Тестовые домены: ut 2503 fn / issues 1936 fn /
+   framework 2302 fn.
 5. **Шаг 2**: semantic-рёбра, реестр probes (из `skynet/probes.md`), коллекторы
    coverage/test_metrics/ci_jobs, полноценный coverage от mdbx_test
    (instrumented run), macOS-скан (нужен osxcross/SDK).

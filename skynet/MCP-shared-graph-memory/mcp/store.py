@@ -1371,10 +1371,9 @@ class Store:
         with txn.cursor(links_dbi) as cur:
             rc, lk, lv = cur.get(mdbx.CURSOR_FIRST)
             while rc == mdbx.RC_SUCCESS:
-                nxt = cur.get(mdbx.CURSOR_NEXT)
                 if _unpack_u64(lv) == rec_id:
                     cur.delete()
-                rc, lk, lv = nxt
+                rc, lk, lv = cur.get(mdbx.CURSOR_NEXT)
 
     # --- refactoring-map (структурный слой) ---------------------------------
     def map_symbol(self, key: str) -> dict:
@@ -1555,11 +1554,10 @@ class Store:
             if replace:
                 for dbi in (sym_dbi, ce_dbi, rev_dbi, gr_dbi):
                     with txn.cursor(dbi) as cur:
-                        rc, k, _ = cur.get(mdbx.CURSOR_FIRST)
+                        rc, _, _ = cur.get(mdbx.CURSOR_FIRST)
                         while rc == mdbx.RC_SUCCESS:
-                            nxt = cur.get(mdbx.CURSOR_NEXT)
                             cur.delete()
-                            rc, k, _ = nxt
+                            rc, _, _ = cur.get(mdbx.CURSOR_NEXT)
             sid_dbi = self._dbi["sym_ids"]
             id2key_dbi = self._dbi["sym_id2key"]
             for i, (key, body) in enumerate(sorted(symbols.items())):
@@ -1741,11 +1739,10 @@ class Store:
             if replace:
                 for dbi in (reg_dbi, unc_dbi):
                     with txn.cursor(dbi) as cur:
-                        rc, k, _ = cur.get(mdbx.CURSOR_FIRST)
+                        rc, _, _ = cur.get(mdbx.CURSOR_FIRST)
                         while rc == mdbx.RC_SUCCESS:
-                            nxt = cur.get(mdbx.CURSOR_NEXT)
                             cur.delete()
-                            rc, k, _ = nxt
+                            rc, _, _ = cur.get(mdbx.CURSOR_NEXT)
             for r in regions:
                 rid = r.get("id") or ("region:%s:%d" % (
                     self._module_of_file(r.get("file", "")), r.get("l0", 0)))
