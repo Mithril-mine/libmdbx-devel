@@ -83,6 +83,8 @@ Author: Leonid Yuriev \<leo@yuriev.ru\>. Home site: <https://libmdbx.dqdkfa.ru>.
 | [`cxx-api.md`](cxx-api.md) | C++ API layer in depth: header topology, class inventory, decl/impl split, C↔C++ bridge, build/amalgamation, compiler matrix |
 | [`build.md`](build.md) | Build systems (CMake, GNU Make, Conan), key options, CI matrix, testing commands |
 | [`architecture.md`](architecture.md) | Internal architecture: layers, module relationships, data flow, amalgamation |
+| [`debugging-methodology.md`](debugging-methodology.md) | Debugging methodology: tools (`mdbx_chk`, PROFGC, `commit_latency`, sanitizers), step-by-step scenarios (growth, slow commit, MAP_FULL, corruption, long readers, fork, Windows, containers), internal debugging |
+| [`deep-dive.md`](deep-dive.md) | Deep dive on LCK layout/versions, RLT slots, HSR protocol, fork(), WRITEMAP/auto-sync and recovery modes |
 | [`test-coverage.md`](test-coverage.md) | Tests → modules coverage map: which test guards which module/feature, coverage gaps |
 | [`techdebt.md`](techdebt.md) | Tech-debt inventory from source scan: 86 TODO/FIXME/workaround markers by category with file:line refs |
 | [`workflows.md`](workflows.md) | Git branching, PR/review flow, CI triggers, release & amalgamation process |
@@ -101,6 +103,7 @@ Depending on the task, start from:
 - **Where is module X / what does file Y do** → [`structure.md`](structure.md)
 - **Who calls what / module interfaces** → [`module-interfaces.md`](module-interfaces.md)
 - **How the engine works internally, invariants** → [`architecture.md`](architecture.md)
+- **Debugging a slow/corrupt/growing DB, tools and scenarios** → [`debugging-methodology.md`](debugging-methodology.md)
 - **How libmdbx works (functional view, RU, reader Q&A + deep dives)** → [`functional-architecture.md`](functional-architecture.md)
 - **C++ API / classes / wrappers** → [`cxx-api.md`](cxx-api.md)
 - **What tests guard a module / coverage gaps** → [`test-coverage.md`](test-coverage.md)

@@ -5,19 +5,19 @@
 > [`architecture.md`](architecture.md) по темам, которые там даны кратко:
 > файл блокировок (LCK) и его форматы, таблица читателей (RLT), HSR-протокол,
 > поведение после `fork()`, WRITEMAP/авто-синхронизация и режимы восстановления.
-> Все факты — из кода `master@f957a778`; источники указаны как `file:line`.
+> Все факты сверены с кодом на `master`.
 
 ---
 
 ## 1. Файл блокировок (LCK): layout и версии
 
 - Отдельный от данных файл блокировок рядом с файлом БД. Расположен в общем mmap
-  (`shared_lck`, `src/layout-lck.h:189`).
+  (`shared_lck`, `src/layout-lck.h`).
 - Сигнатура/версия файла блокировок **зависит от flavour'а блокировок** (`MDBX_LOCKING`):
   `MDBX_LCK_SIGN` = `0xF10C` (WIN32FILES), `0xF18D` (SYSV), `0x8017` (POSIX2001/2008),
-  `0xFC29` (POSIX1988) — `src/layout-lck.h:12–28`. Контрольная сумма LCK включает
-  `sizeof(reader_slot_t)` — `src/layout-lck.h:288`.
-- Flavour'ы задаются в `src/options.h:337–349`: `MDBX_LOCKING_WIN32FILES=-1`,
+  `0xFC29` (POSIX1988) — `src/layout-lck.h`. Контрольная сумма LCK включает
+  `sizeof(reader_slot_t)` — `src/layout-lck.h`.
+- Flavour'ы задаются в `src/options.h`: `MDBX_LOCKING_WIN32FILES=-1`,
   `MDBX_LOCKING_SYSV=5`, `MDBX_LOCKING_POSIX1988=1988`, `MDBX_LOCKING_POSIX2001=2001`,
   `MDBX_LOCKING_POSIX2008=2008`.
 - Формат LCK **версионирован отдельно** от формата данных: изменение структуры
@@ -26,19 +26,19 @@
 
 ## 2. Таблица читателей (RLT) и слота читателя
 
-Структура слота (`src/layout-lck.h:147–186`):
+Структура слота (`src/layout-lck.h`):
 
 | Поле | Смысл |
 | --- | --- |
 | `txnid` (atomic) | Номер снапшота, с которого читатель начал (или `INVALID_TXNID`) |
-| `tid` | Thread ID владельца слота; псевдо-значения: `MDBX_TID_TXN_PARKED = UINT64_MAX`, `MDBX_TID_TXN_OUSTED = UINT64_MAX-1` (`layout-lck.h:166–169`) |
+| `tid` | Thread ID владельца слота; псевдо-значения: `MDBX_TID_TXN_PARKED = UINT64_MAX`, `MDBX_TID_TXN_OUSTED = UINT64_MAX-1` (`layout-lck.h`) |
 | `pid` | Process ID владельца |
 | `snapshot_pages_used` | `first_unallocated` на момент снапшота (сколько страниц читатель «пинит») |
 | `snapshot_pages_retired` | Число retired-страниц на момент старта; разность `meta.pages_retired − reader.snapshot_pages_retired` = сколько страниц этот читатель удерживает от переиспользования |
 
 Комментарий в коде честно отмечает: **stale-слоты сейчас не проверяются** — таблица
 переинициализируется целиком, когда известно, что мы единственный процесс,
-открывающий LCK (`src/layout-lck.h:158–162`). Очистка «мёртвых» читателей идёт
+открывающий LCK (`src/layout-lck.h`). Очистка «мёртвых» читателей идёт
 через механизмы живости (см. ниже).
 
 ## 3. Механизмы живости и повторное использование pid/tid
@@ -54,7 +54,7 @@
 
 ## 4. HSR-протокол (Handle-Slow-Readers)
 
-Полная сигнатура колбэка (`mdbx.h:7014`):
+Полная сигнатура колбэка (`mdbx.h`):
 
 ```c
 typedef int (*MDBX_hsr_func)(const MDBX_env *env, const MDBX_txn *txn,
@@ -69,7 +69,7 @@ typedef int (*MDBX_hsr_func)(const MDBX_env *env, const MDBX_txn *txn,
 - `space` — объём пространства, который освободится после завершения читателя;
 - `retry` — счётчик повторных вызовов.
 
-Возвращаемые значения (по doxygen, `mdbx.h:7001–7012`):
+Возвращаемые значения (по doxygen, `mdbx.h`):
 - `0` — колбэк решил проблему или просто подождал; libmdbx пересканирует таблицу
   читателей и повторяет попытку. Включает случай, когда проблемная транзакция
   завершилась нормально (`abort`/`reset`) — чистить слот не нужно.
@@ -77,7 +77,7 @@ typedef int (*MDBX_hsr_func)(const MDBX_env *env, const MDBX_txn *txn,
   (ни `mdbx_txn_abort()`, ни `mdbx_txn_reset()` уже вызваны не будут).
 - `2+` — процесс-читатель завершён/убит: libmdbx полностью сбрасывает его регистрацию.
 
-Установка: `mdbx_env_set_hsr()` (`mdbx.h:7035`); получение — `mdbx_env_get_hsr()`.
+Установка: `mdbx_env_set_hsr()` (`mdbx.h`); получение — `mdbx_env_get_hsr()`.
 Вызывается **только** когда база заполнена из-за читателей, блокирующих
 переиспользование страниц.
 
@@ -85,47 +85,47 @@ typedef int (*MDBX_hsr_func)(const MDBX_env *env, const MDBX_txn *txn,
 
 - После `fork()` наследник не наследует mmap- и record-блокировки. Использовать
   окружение в дочернем процессе можно только после `mdbx_env_resurrect_after_fork()`
-  (`mdbx.h:3214–3252`), которая переоткрывает/восстанавливает перенесённый экземпляр
+  (`mdbx.h`), которая переоткрывает/восстанавливает перенесённый экземпляр
   среды (PID сменился, регистрации сброшены).
 - Запрет повторного открытия одной БД в пределах процесса защищает от гонок;
-  legacy-режим — `MDBX_DBG_LEGACY_MULTIOPEN` (`mdbx.h:972`; включается также
-  переменной окружения `MDBX_DBG_LEGACY_MULTIOPEN`, `src/global.c:283`; проверка
-  в `src/lck-posix.c:73`).
+  legacy-режим — `MDBX_DBG_LEGACY_MULTIOPEN` (`mdbx.h`; включается также
+  переменной окружения `MDBX_DBG_LEGACY_MULTIOPEN`, `src/global.c`; проверка
+  в `src/lck-posix.c`).
 
 ## 6. WRITEMAP и связанные опции
 
 - `MDBX_WRITEMAP` — запись через mmap (+`msync` вместо `pwrite`).
-- **Prefault-запись**: `MDBX_opt_prefault_write_enable` (`mdbx.h:2362`) — упреждающая
+- **Prefault-запись**: `MDBX_opt_prefault_write_enable` (`mdbx.h`) — упреждающая
   запись страниц, чтобы устранить page-fault'ы и чтения с диска при первом обращении
   в WRITEMAP-режиме.
 - **mincore-отслеживание** резидентности страниц используется для предотвращения
   page-fault'ов в WRITEMAP.
-- **Writethrough-порог**: `MDBX_opt_writethrough_threshold` (`mdbx.h:2357`) — выбор
+- **Writethrough-порог**: `MDBX_opt_writethrough_threshold` (`mdbx.h`) — выбор
   между сквозной записью (`O_DSYNC`) и записью с последующим `fdatasync()`;
-  влияет только на `MDBX_SYNC_DURABLE` (`mdbx.h:2353`).
+  влияет только на `MDBX_SYNC_DURABLE` (`mdbx.h`).
 - **Некогерентность unified page cache**: защита `MDBX_FORCE_CHECK_MMAP_COHERENCY`
-  (`src/page-iov.c:54,85–87`; включение — опция сборки, дефолт 0) — workaround
+  (`src/page-iov.c`; включение — опция сборки, дефолт 0) — workaround
   issue #269, внесён в сериях 0.11.5–0.11.6.
 
 ## 7. Автоматическая синхронизация
 
-- `mdbx_env_set_syncbytes()` / `mdbx_env_set_syncperiod()` (`mdbx.h:1452,2188,2194`)
+- `mdbx_env_set_syncbytes()` / `mdbx_env_set_syncperiod()` (`mdbx.h`)
   + опции `MDBX_opt_sync_bytes` / `MDBX_opt_sync_period` — авто-sync по объёму
   записанного и/или по таймауту; текущие пороги видны в `mdbx_env_info_ex`
-  (`mdbx.h:2926,2933`).
-- `MDBX_opt_presync_threshold` (`mdbx.h:2484`) — порог предварительной
+  (`mdbx.h`).
+- `MDBX_opt_presync_threshold` (`mdbx.h`) — порог предварительной
   подготовки флаша; асинхронные `mdbx_env_sync_ex()` / `mdbx_env_sync_poll()`
-  (`mdbx.h:2469,2478–2479,3011`) с предварительной проверкой и повторной попыткой.
+  (`mdbx.h`) с предварительной проверкой и повторной попыткой.
 
 ## 8. Восстановление и диагностические коды
 
-- `mdbx_env_open_for_recovery()` (`mdbx.h:7079`; Windows-вариант `...W`:
-  `mdbx.h:7086`) — открытие БД с выбором целевой мета-страницы (`target_meta`)
+- `mdbx_env_open_for_recovery()` (`mdbx.h`; Windows-вариант `...W`:
+  `mdbx.h`) — открытие БД с выбором целевой мета-страницы (`target_meta`)
   и флагом `writeable`; начиная с 0.12.7 recovery-проверки **не изменяют базу**.
-- Код `MDBX_WANNA_RECOVERY = -30419` (`mdbx.h:1987`) возвращается, когда задан
-  `MDBX_RDONLY`, но БД требует процедуры восстановления (`mdbx.h:2583`).
-- Код `MDBX_MVCC_RETARDED = -30410` (`mdbx.h:2020`) — читатель старше актуального
-  MVCC-снапшота (см. `mdbx.h:1735`).
+- Код `MDBX_WANNA_RECOVERY = -30419` (`mdbx.h`) возвращается, когда задан
+  `MDBX_RDONLY`, но БД требует процедуры восстановления (`mdbx.h`).
+- Код `MDBX_MVCC_RETARDED = -30410` (`mdbx.h`) — читатель старше актуального
+  MVCC-снапшота (см. `mdbx.h`).
 - Управление steady-point'ами и автоматический steady при нехватке пространства —
   `functional-architecture.md` §8.
 
