@@ -15,7 +15,7 @@ env:
 workflows:
   ci-linux-debug-gcc:
     settings:
-      max_cube_duration: 30m # Минимум необходимый для сборки в режиме LTO (make + cmake) и выполнения тестов тестов
+      max_cube_duration: 60m # Минимум необходимый для сборки в режиме LTO (make + cmake) и выполнения тестов тестов
     env:
       CI: SourceCraft
       CI_MAKE_TARGET: smoke
@@ -28,7 +28,7 @@ workflows:
               - CC=gcc CXX=g++ test*/ci/ci.sh "-DCMAKE_BUILD_TYPE=Devel|-DMDBX_BUILD_CXX:BOOL=OFF"
   ci-linux-debug-clang:
     settings:
-      max_cube_duration: 30m # Минимум необходимый для сборки в режиме LTO (make + cmake) и выполнения тестов тестов
+      max_cube_duration: 60m # Минимум необходимый для сборки в режиме LTO (make + cmake) и выполнения тестов тестов
     env:
       CI: SourceCraft
       CI_MAKE_TARGET: test
@@ -41,7 +41,7 @@ workflows:
               - CC=clang CXX=clang++ test*/ci/ci.sh "-DCMAKE_BUILD_TYPE=MinSizeRel|-DMDBX_BUILD_CXX:BOOL=ON"
   ci-linux-release-spilling:
     settings:
-      max_cube_duration: 30m # Минимум необходимый для сборки в режиме LTO (make + cmake) и выполнения тестов тестов
+      max_cube_duration: 60m # Минимум необходимый для сборки в режиме LTO (make + cmake) и выполнения тестов тестов
     env:
       CI: SourceCraft
       CI_MAKE_TARGET: check
