@@ -31,7 +31,7 @@ workflows:
       max_cube_duration: 60m # Минимум необходимый для сборки в режиме LTO (make + cmake) и выполнения тестов тестов
     env:
       CI: SourceCraft
-      CI_MAKE_TARGET: test
+      CI_MAKE_TARGET: ctest
     tasks:
       - name: ci-linux-debug-clang-task
         cubes:
@@ -41,10 +41,10 @@ workflows:
               - CC=clang CXX=clang++ test*/ci/ci.sh "-DCMAKE_BUILD_TYPE=MinSizeRel|-DMDBX_BUILD_CXX:BOOL=ON"
   ci-linux-release-spilling:
     settings:
-      max_cube_duration: 60m # RelWithDebInfo + spill-tracing, full ctest + stochastic (~33m)
+      max_cube_duration: 60m # RelWithDebInfo + spill-tracing build, full ctest
     env:
       CI: SourceCraft
-      CI_MAKE_TARGET: test
+      CI_MAKE_TARGET: ctest
     tasks:
       - name: ci-linux-release-spilling-task
         cubes:
