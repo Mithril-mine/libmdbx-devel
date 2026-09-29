@@ -32,6 +32,7 @@ workflows:
     env:
       CI: SourceCraft
       CI_MAKE_TARGET: ctest
+      CTEST_OPT: "-L 'smoke-t1|ut\.' -LE 'ut\.heavy'"
     tasks:
       - name: ci-linux-debug-clang-task
         cubes:
@@ -45,6 +46,7 @@ workflows:
     env:
       CI: SourceCraft
       CI_MAKE_TARGET: ctest
+      CTEST_OPT: "-L 'smoke-t1|ut\.' -LE 'ut\.heavy'"
     tasks:
       - name: ci-linux-release-spilling-task
         cubes:
