@@ -14,6 +14,7 @@
 | [`module-interfaces.md`](module-interfaces.md) | Карта межмодульных интерфейсов: экспорт из `src/proto.h` и модульных заголовков, include backbone, циклы зависимостей. |
 | [`structure-review.md`](structure-review.md) | Аудит структуры репозитория (фаза A, TASK-36): карта каталогов, находки, исполненные кандидаты C1–C3. |
 | [`debugging-methodology.md`](debugging-methodology.md) | Методики отладки: инструменты (`mdbx_chk`, PROFGC, commit_latency, ASAN/UBSAN/TSAN), пошаговые сценарии, внутренняя отладка. |
+| [`deep-dive.md`](deep-dive.md) | Дополнения по пробелам покрытия: LCK-layout/версии, RLT-слоты, HSR-протокол, fork, WRITEMAP/авто-sync, восстановление. |
 | [`verification.md`](verification.md) | Журнал сверки документов с кодом `master@f957a778`: подтверждённые факты с `file:line`, внесённые исправления. |
 
 ## Статус сверки
