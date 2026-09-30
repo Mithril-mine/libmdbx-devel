@@ -144,4 +144,5 @@ jobs:
       "runs-on": ${{ matrix.runs-on }}
       scope: ${{ matrix.scope }}
       coverage: ${{ matrix.coverage }}
+      ndk: ${{ matrix.ndk }}
       ref: ${{ needs.resolve.outputs.ref }}

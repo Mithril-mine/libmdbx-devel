@@ -38,7 +38,8 @@ def main() -> int:
     for cid in ids:
         c = by_id[cid]
         rows.append({"cell": cid, "runs-on": c.get("runs-on", "ubuntu-24.04"),
-                     "scope": scope, "coverage": bool(c.get("coverage", False))})
+                     "scope": scope, "coverage": bool(c.get("coverage", False)),
+                     "ndk": c.get("ndk", "")})
     print(f"resolved {len(rows)} cells, scope={scope}", file=sys.stderr)
     print(json.dumps(rows))
     return 0
