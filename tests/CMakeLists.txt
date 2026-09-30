@@ -534,6 +534,12 @@ else()
       TIMEOUT 3600
       ENVIRONMENT "MDBX_RKL_EDGES=1")
 
+    if(MDBX_PROBES)
+      add_extra_test(probes SOURCE ut/api/probes.c)
+      set_tests_properties(extra_probes PROPERTIES LABELS "ut;ut.api"
+        ENVIRONMENT "MDBX_PROBES=1")
+    endif()
+
     add_ut(global_init SOURCE ut/api/global_init.c++ LIBRARY mdbx-static)
     set_tests_properties(global_init PROPERTIES LABELS "ut;ut.api;ut.env")
 

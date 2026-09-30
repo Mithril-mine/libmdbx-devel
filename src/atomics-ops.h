@@ -242,6 +242,76 @@ MDBX_MAYBE_UNUSED static __always_inline uint32_t atomic_add32(mdbx_atomic_uint3
 
 #define atomic_sub32(p, v) atomic_add32(p, 0 - (v))
 
+/* Word-size atomic helpers (mdbx_atomic_size_t): 32-bit RMW on 32-bit
+ * platforms, 64-bit on 64-bit ones. Used by the probe-bus counters. */
+MDBX_MAYBE_UNUSED static __always_inline size_t atomic_store_size(mdbx_atomic_size_t *p, const size_t value,
+                                                                  enum mdbx_memory_order order) {
+#ifdef MDBX_HAVE_C11ATOMICS
+  atomic_store_explicit(MDBX_c11a_rw(size_t, p), value, mo_c11_store(order));
+#else /* MDBX_HAVE_C11ATOMICS */
+  if (order != mo_Relaxed)
+    osal_compiler_barrier();
+  p->weak = value;
+  osal_memory_fence(order, true);
+#endif /* MDBX_HAVE_C11ATOMICS */
+  return value;
+}
+
+MDBX_MAYBE_UNUSED static __always_inline size_t atomic_load_size(const volatile mdbx_atomic_size_t *p,
+                                                                 enum mdbx_memory_order order) {
+#ifdef MDBX_HAVE_C11ATOMICS
+  return atomic_load_explicit(MDBX_c11a_ro(size_t, p), mo_c11_load(order));
+#else /* MDBX_HAVE_C11ATOMICS */
+  osal_memory_fence(order, false);
+  const size_t value = p->weak;
+  if (order != mo_Relaxed)
+    osal_compiler_barrier();
+  return value;
+#endif /* MDBX_HAVE_C11ATOMICS */
+}
+
+MDBX_MAYBE_UNUSED static __always_inline bool atomic_cas_size(mdbx_atomic_size_t *p, size_t c, size_t v) {
+#ifdef MDBX_HAVE_C11ATOMICS
+  return atomic_compare_exchange_strong(MDBX_c11a_rw(size_t, p), &c, v);
+#elif defined(__GNUC__) || defined(__clang__)
+  return __sync_bool_compare_and_swap(&p->weak, c, v);
+#elif defined(_MSC_VER)
+  if (sizeof(size_t) == sizeof(uint32_t))
+    return c == (size_t)_InterlockedCompareExchange((volatile long *)&p->weak, (long)v, (long)c);
+  STATIC_ASSERT(sizeof(size_t) == sizeof(uint64_t));
+  return c == (size_t)_InterlockedCompareExchange64((volatile __int64 *)&p->weak, (__int64)v, (__int64)c);
+#elif defined(__APPLE__)
+  if (sizeof(size_t) == sizeof(uint32_t))
+    return OSAtomicCompareAndSwap32Barrier((int32_t)c, (int32_t)v, (volatile int32_t *)&p->weak);
+  STATIC_ASSERT(sizeof(size_t) == sizeof(uint64_t));
+  return OSAtomicCompareAndSwap64Barrier((int64_t)c, (int64_t)v, (volatile int64_t *)&p->weak);
+#else
+#error FIXME: Unsupported compiler
+#endif
+}
+
+MDBX_MAYBE_UNUSED static __always_inline size_t atomic_add_size(mdbx_atomic_size_t *p, size_t v) {
+#ifdef MDBX_HAVE_C11ATOMICS
+  return atomic_fetch_add(MDBX_c11a_rw(size_t, p), v);
+#elif defined(__GNUC__) || defined(__clang__)
+  return __sync_fetch_and_add(&p->weak, v);
+#elif defined(_MSC_VER)
+  if (sizeof(size_t) == sizeof(uint32_t))
+    return (size_t)_InterlockedExchangeAdd((volatile long *)&p->weak, (long)v);
+  STATIC_ASSERT(sizeof(size_t) == sizeof(uint64_t));
+  return (size_t)_InterlockedExchangeAdd64((volatile __int64 *)&p->weak, (__int64)v);
+#elif defined(__APPLE__)
+  if (sizeof(size_t) == sizeof(uint32_t))
+    return (size_t)OSAtomicAdd32Barrier((int32_t)v, (volatile int32_t *)&p->weak);
+  STATIC_ASSERT(sizeof(size_t) == sizeof(uint64_t));
+  return (size_t)OSAtomicAdd64Barrier((int64_t)v, (volatile int64_t *)&p->weak);
+#else
+#error FIXME: Unsupported compiler
+#endif
+}
+
+#define atomic_sub_size(p, v) atomic_add_size(p, 0 - (v))
+
 MDBX_MAYBE_UNUSED static __always_inline uint64_t safe64_txnid_next(uint64_t txnid) {
   txnid += xMDBX_TXNID_STEP;
 #if !MDBX_64BIT_CAS
