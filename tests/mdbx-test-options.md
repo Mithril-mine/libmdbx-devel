@@ -34,6 +34,41 @@ mdbx_test --nops=1K --prng-seed=42 --mode=+nosync-safe --hill
   so a regression can be re-run with identical input. Attach the seed to the
   bug report together with the failing scenario.
 
+### Scope of reproducibility (important)
+
+- The seed reproduces the **operation sequence of each single test process**.
+  In most scenarios (defined by the command-line arguments) `mdbx_test` spawns
+  **several separate processes working on the same DB concurrently**, and their
+  *joint* behavior is **not** deterministic — it depends on the environment
+  (scheduling, timings, I/O). So a failure that involves interleaving of
+  multiple actors cannot be re-run bit-for-bit even with the same seed; only
+  each actor's own script is stable.
+
+### Expected vs unexpected errors
+
+`mdbx_test` performs **no high-level coordination or validation** of the
+parameters it exercises, so it may deliberately push the DB past its limits:
+
+- **`MDBX_MAP_FULL`** (DB overflow) and `MDBX_UNABLE_EXTEND_MAPSIZE` in these
+  runs are **expected** outcomes of the workload — treat them as
+  environment/geometry artifacts, not engine regressions.
+- **`MDBX_NOTFOUND`** however is an **indicator of a problem**: key-absence is
+  a strong invariant that should hold despite any overflow pressure. If a
+  scenario reports `MDBX_NOTFOUND` (e.g. `gc_alloc_ex ... err -30798`), that is
+  a signal worth investigating, not dismissing as a flake.
+
+### Strategy: reducing nondeterminism
+
+The long-term direction is to **gradually lower the level of nondeterminism**:
+
+- grow the deterministic **unit-test** layer (`tests/ut/`) for reproducible
+  coverage;
+- add **complex scenarios with several coordinated processes** (explicit
+  synchronization instead of racing children);
+- use observation/injection tools (SystemTap/LTTng probes, see
+  `docs/engineering/systemtap-reference.md` and `skynet/probes.md`) to make
+  cross-process behavior observable without changing the engine.
+
 ## Termination control
 
 Termination is decided per actor in `testcase::should_continue()`
