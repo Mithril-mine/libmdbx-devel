@@ -471,6 +471,248 @@ static size_t prng_word(void) {
   return word;
 }
 
+/*-----------------------------------------------------------------------------*/
+
+static unsigned getenv_uint(const char *name, unsigned fallback) {
+  const char *value = getenv(name);
+  if (!value || !*value)
+    return fallback;
+  char *end = nullptr;
+  const unsigned long parsed = strtoul(value, &end, 10);
+  if (!end || *end || parsed == ULONG_MAX)
+    return fallback;
+  return (unsigned)parsed;
+}
+
+/* Детерминированные edge-кейсы на ветки rkl/txl, которые стохастика
+ * подробандивает редко или вообще не задевает (rkl_merge/destructive_merge,
+ * rkl_find, rkl_reserve, resize-shrink, ENOMEM-path, rkl_check error-branches).
+ * Быстрые — выполняются всегда; полный набор — под управлением MDBX_RKL_EDGES. */
+static bool edge_cases_full(void) {
+  const size_t errors = tst_failed;
+  rkl_t a, b;
+
+  /* rkl_reserve: рост буфера из inplace во внешний */
+  rkl_init(&a);
+  CHECK_EQ((uint64_t)rkl_reserve(&a, ARRAY_LENGTH(a.inplace) + 8), (uint64_t)MDBX_SUCCESS);
+  for (txnid_t id = 1; id < 64; ++id)
+    CHECK_EQ((uint64_t)rkl_push(&a, id), (uint64_t)MDBX_SUCCESS);
+  CHECK_TRUE(rkl_check(&a));
+  CHECK_EQ(rkl_len(&a), 63);
+
+  /* rkl_find: в solid-интервале, перед/после него, в списке, отсутствует */
+  rkl_init(&b);
+  for (txnid_t id = 1; id < 6; ++id)
+    CHECK_EQ((uint64_t)rkl_push(&b, id), (uint64_t)MDBX_SUCCESS); /* solid [1..6) */
+  CHECK_EQ((uint64_t)rkl_push(&b, 10), (uint64_t)MDBX_SUCCESS);   /* список */
+  CHECK_EQ((uint64_t)rkl_push(&b, 20), (uint64_t)MDBX_SUCCESS);   /* список */
+  rkl_iter_t fi;
+  CHECK_TRUE(rkl_find(&b, 3, &fi));      /* в solid */
+  CHECK_FALSE(rkl_find(&b, 6, &fi));     /* сразу после solid, нет в списке */
+  CHECK_FALSE(rkl_find(&b, 7, &fi));     /* после solid, нет в списке */
+  CHECK_FALSE(rkl_find(&b, 0, &fi));     /* до solid, в списке нет */
+  CHECK_TRUE(rkl_find(&b, 10, &fi));     /* элемент списка */
+  CHECK_FALSE(rkl_find(&b, 11, &fi));    /* после элемента списка */
+  CHECK_TRUE(rkl_find(&b, 20, &fi));     /* хвостовой элемент списка */
+
+  /* rkl_merge: список+интервал, дубликаты с ignore_duplicates и без */
+  rkl_init(&a);
+  rkl_init(&b);
+  for (txnid_t id = 1; id < 16; ++id)
+    CHECK_EQ((uint64_t)rkl_push(&a, id * 2), (uint64_t)MDBX_SUCCESS);
+  for (txnid_t id = 1; id < 32; ++id)
+    CHECK_EQ((uint64_t)rkl_push(&b, id), (uint64_t)MDBX_SUCCESS);
+  CHECK_EQ((uint64_t)rkl_merge(&a, &b, true), (uint64_t)MDBX_SUCCESS);
+  CHECK_TRUE(rkl_check(&b));
+  CHECK_EQ(rkl_len(&b), 31);
+
+  /* rkl_destructive_merge: merge + destroy src */
+  rkl_init(&a);
+  rkl_init(&b);
+  for (txnid_t id = 1; id < 64; ++id)
+    CHECK_EQ((uint64_t)rkl_push(&a, id * 3), (uint64_t)MDBX_SUCCESS);
+  CHECK_EQ((uint64_t)rkl_destructive_merge(&a, &b, false), (uint64_t)MDBX_SUCCESS);
+  CHECK_TRUE(rkl_check(&b));
+  rkl_destroy(&a);
+  rkl_destroy(&b);
+
+  /* rkl_copy с последующим полным pop-разбором (лист+интервал) */
+  rkl_init(&a);
+  rkl_init(&b);
+  for (txnid_t id = 1; id < 32; ++id)
+    CHECK_EQ((uint64_t)rkl_push(&a, id * 7), (uint64_t)MDBX_SUCCESS);
+  CHECK_EQ((uint64_t)rkl_copy(&a, &b), (uint64_t)MDBX_SUCCESS);
+  while (!rkl_empty(&b)) {
+    const txnid_t v = rkl_pop(&b, true);
+    CHECK_TRUE(v != 0);
+  }
+  CHECK_TRUE(rkl_empty(&b));
+  rkl_destroy(&a);
+  rkl_destroy(&b);
+
+  return errors == tst_failed;
+}
+
+/* Базовый набор edge-кейсов: дёшево, выполняется всегда. */
+static bool edge_cases_basic(void) {
+  const size_t errors = tst_failed;
+  rkl_t a;
+
+  /* rkl_pop из пустого и после исчерпания */
+  rkl_init(&a);
+  CHECK_EQ((uint64_t)rkl_pop(&a, true), 0);
+  CHECK_EQ((uint64_t)rkl_pop(&a, false), 0);
+  CHECK_EQ((uint64_t)rkl_push(&a, 42), (uint64_t)MDBX_SUCCESS);
+  CHECK_EQ((uint64_t)rkl_pop(&a, true), (uint64_t)42);
+  CHECK_EQ((uint64_t)rkl_pop(&a, false), 0);
+
+  /* rkl_resize: запрос уменьшения (ошибка PROBLEM) и сохранение inplace */
+  rkl_init(&a);
+  CHECK_EQ((uint64_t)rkl_push(&a, 1), (uint64_t)MDBX_SUCCESS);
+  CHECK_EQ((uint64_t)rkl_reserve(&a, ARRAY_LENGTH(a.inplace)), (uint64_t)MDBX_SUCCESS);
+  rkl_destroy(&a);
+
+  /* rkl_clear_and_shrink: ужимка обратно в inplace */
+  rkl_init(&a);
+  for (txnid_t id = 1; id < 32; ++id)
+    CHECK_EQ((uint64_t)rkl_push(&a, id * 2), (uint64_t)MDBX_SUCCESS);
+  rkl_clear_and_shrink(&a);
+  CHECK_TRUE(rkl_empty(&a));
+  rkl_destroy(&a);
+
+  return errors == tst_failed;
+}
+
+/* Дополнительные edge-кейсы (группа B): rare paths, добивают хвостовые ветки
+ * find/merge/push/hole и destructive_move с внешним буфером. */
+static bool edge_cases_full2(void) {
+  const size_t errors = tst_failed;
+  rkl_t a, b;
+  rkl_iter_t fi;
+
+  /* rkl_destructive_move: dst с внешним буфером + копирование inplace-источника */
+  rkl_init(&a);
+  rkl_init(&b);
+  CHECK_EQ((uint64_t)rkl_reserve(&b, ARRAY_LENGTH(b.inplace) + 16), (uint64_t)MDBX_SUCCESS);
+  for (txnid_t id = 1; id < 8; ++id)
+    CHECK_EQ((uint64_t)rkl_push(&a, id), (uint64_t)MDBX_SUCCESS);
+  rkl_destructive_move(&a, &b);
+  CHECK_TRUE(rkl_check(&b));
+  CHECK_EQ(rkl_len(&b), 7);
+  rkl_destroy(&a);
+  rkl_destroy(&b);
+
+  /* rkl_find: id больше хвоста списка (it==end путь) */
+  rkl_init(&b);
+  for (txnid_t id = 1; id < 6; ++id)
+    CHECK_EQ((uint64_t)rkl_push(&b, id), (uint64_t)MDBX_SUCCESS); /* solid [1..6) */
+  CHECK_EQ((uint64_t)rkl_push(&b, 10), (uint64_t)MDBX_SUCCESS);
+  CHECK_EQ((uint64_t)rkl_push(&b, 20), (uint64_t)MDBX_SUCCESS);
+  CHECK_FALSE(rkl_find(&b, 21, &fi)); /* нет нигде -> tail (it==end) путь */
+  rkl_destroy(&b);
+
+  /* rkl_merge без ignore_duplicates на дубликате -> ошибка-путь */
+  rkl_init(&a);
+  rkl_init(&b);
+  CHECK_EQ((uint64_t)rkl_push(&a, 5), (uint64_t)MDBX_SUCCESS);
+  CHECK_EQ((uint64_t)rkl_push(&b, 5), (uint64_t)MDBX_SUCCESS);
+  CHECK_EQ((uint64_t)rkl_merge(&a, &b, false), (uint64_t)MDBX_RESULT_TRUE);
+  rkl_destroy(&a);
+  rkl_destroy(&b);
+
+  /* rkl_push: дубликат среди элементов списка (не solid) */
+  rkl_init(&a);
+  CHECK_EQ((uint64_t)rkl_push(&a, 1), (uint64_t)MDBX_SUCCESS); /* solid [1..2) */
+  CHECK_EQ((uint64_t)rkl_push(&a, 5), (uint64_t)MDBX_SUCCESS); /* список */
+  CHECK_EQ((uint64_t)rkl_push(&a, 5), (uint64_t)MDBX_RESULT_TRUE);
+  rkl_destroy(&a);
+
+  /* rkl_hole: reverse-итератор на конце rkl (rare edge-path) */
+  rkl_init(&a);
+  CHECK_EQ((uint64_t)rkl_push(&a, 42), (uint64_t)MDBX_SUCCESS);
+  {
+    rkl_iter_t rh = rkl_iterator(&a, true);
+    rkl_hole_t hh = rkl_hole(&rh, true);
+    CHECK_TRUE(hh.begin < hh.end);
+    rkl_hole_t hf = rkl_hole(&rh, false);
+    CHECK_TRUE(hf.begin < hf.end);
+  }
+  rkl_destroy(&a);
+
+  /* rkl_check: невалидные структуры -> false (error-branches) */
+  rkl_init(&a);
+  CHECK_FALSE(rkl_check(nullptr));
+  a.list_limit = ARRAY_LENGTH(a.inplace) - 1; /* list_limit < inplace */
+  CHECK_FALSE(rkl_check(&a));
+  a.list_limit = ARRAY_LENGTH(a.inplace);
+  CHECK_TRUE(rkl_check(&a));
+  if (ARRAY_LENGTH(a.inplace) > 2) {
+    /* нарушенный порядок в списке при непустом solid вне диапазона списка */
+    a.list = a.inplace;
+    a.list_length = 3;
+    a.solid_begin = 1000; /* solid вне диапазона элементов списка */
+    a.solid_end = 1001;
+    a.inplace[0] = 10;
+    a.inplace[1] = 5; /* не отсортировано */
+    a.inplace[2] = 20;
+    CHECK_FALSE(rkl_check(&a));
+    a.inplace[1] = 15;
+    CHECK_TRUE(rkl_check(&a));
+  }
+  rkl_destroy(&a);
+
+  /* Регрессия (bug:testing:rkl-push-dup): дубликат в СЕРЕДИНЕ списка после
+   * сдвигов. Раньше откат сдвигов был off-by-one и терял хвост списка:
+   * [5,10,15,20] + push(10) -> [5,10,15,15] (невалидно). */
+  rkl_init(&a);
+  CHECK_EQ((uint64_t)rkl_push(&a, 1), (uint64_t)MDBX_SUCCESS); /* solid [1..2) */
+  CHECK_EQ((uint64_t)rkl_push(&a, 5), (uint64_t)MDBX_SUCCESS);  /* список */
+  CHECK_EQ((uint64_t)rkl_push(&a, 10), (uint64_t)MDBX_SUCCESS);
+  CHECK_EQ((uint64_t)rkl_push(&a, 15), (uint64_t)MDBX_SUCCESS);
+  CHECK_EQ((uint64_t)rkl_push(&a, 20), (uint64_t)MDBX_SUCCESS);
+  CHECK_TRUE(rkl_check(&a));
+  CHECK_EQ((uint64_t)rkl_push(&a, 10), (uint64_t)MDBX_RESULT_TRUE); /* dup в середине */
+  CHECK_TRUE(rkl_check(&a));                                        /* невалидность -> баг */
+  CHECK_EQ(rkl_len(&a), 5);                                         /* элемент 20 не потерян */
+  CHECK_TRUE(rkl_contain(&a, 20));
+  rkl_destroy(&a);
+
+  /* dup в начале списка (после трёх сдвигов) */
+  rkl_init(&a);
+  CHECK_EQ((uint64_t)rkl_push(&a, 1), (uint64_t)MDBX_SUCCESS); /* solid [1..2) */
+  CHECK_EQ((uint64_t)rkl_push(&a, 5), (uint64_t)MDBX_SUCCESS);
+  CHECK_EQ((uint64_t)rkl_push(&a, 10), (uint64_t)MDBX_SUCCESS);
+  CHECK_EQ((uint64_t)rkl_push(&a, 15), (uint64_t)MDBX_SUCCESS);
+  CHECK_EQ((uint64_t)rkl_push(&a, 20), (uint64_t)MDBX_SUCCESS);
+  CHECK_EQ((uint64_t)rkl_push(&a, 5), (uint64_t)MDBX_RESULT_TRUE); /* dup в начале */
+  CHECK_TRUE(rkl_check(&a));
+  CHECK_EQ(rkl_len(&a), 5);
+  CHECK_TRUE(rkl_contain(&a, 20));
+  rkl_destroy(&a);
+
+  /* dup в конце списка (без сдвигов — контроль раннего выхода) */
+  rkl_init(&a);
+  CHECK_EQ((uint64_t)rkl_push(&a, 1), (uint64_t)MDBX_SUCCESS); /* solid [1..2) */
+  CHECK_EQ((uint64_t)rkl_push(&a, 5), (uint64_t)MDBX_SUCCESS);
+  CHECK_EQ((uint64_t)rkl_push(&a, 10), (uint64_t)MDBX_SUCCESS);
+  CHECK_EQ((uint64_t)rkl_push(&a, 15), (uint64_t)MDBX_SUCCESS);
+  CHECK_EQ((uint64_t)rkl_push(&a, 20), (uint64_t)MDBX_SUCCESS);
+  CHECK_EQ((uint64_t)rkl_push(&a, 20), (uint64_t)MDBX_RESULT_TRUE); /* dup в конце */
+  CHECK_TRUE(rkl_check(&a));
+  CHECK_EQ(rkl_len(&a), 5);
+  rkl_destroy(&a);
+
+  /* dup внутри solid-интервала — ранний выход без мутаций */
+  rkl_init(&a);
+  CHECK_EQ((uint64_t)rkl_push(&a, 1), (uint64_t)MDBX_SUCCESS); /* solid [1..2) */
+  CHECK_EQ((uint64_t)rkl_push(&a, 2), (uint64_t)MDBX_SUCCESS); /* solid [1..3) */
+  CHECK_EQ((uint64_t)rkl_push(&a, 1), (uint64_t)MDBX_RESULT_TRUE);
+  CHECK_TRUE(rkl_check(&a));
+  rkl_destroy(&a);
+
+  return errors == tst_failed;
+}
+
 static bool stochastic_hole(size_t probes) {
   for (size_t n = 0; n < probes; ++n) {
     size_t set = prng_word();
@@ -501,8 +743,21 @@ int main(int argc, const char *argv[]) {
   fflush(nullptr);
 
   trivia();
-  stochastic(42 * 42 * 42, 42);
-  stochastic_hole(24 * 24 * 24);
+  if (!edge_cases_basic())
+    return EXIT_FAILURE;
+  if (getenv_uint("MDBX_RKL_EDGES", 1) > 0 && (!edge_cases_full() || !edge_cases_full2()))
+    return EXIT_FAILURE;
+
+  /* Масштаб стохастики управляется env-переменными (по умолчанию — полный,
+   * как было: 42³ случаев + 42 петли, 24³ hole-проб).
+   * MDBX_RKL_CASES / MDBX_RKL_LOOPS / MDBX_RKL_HOLE_PROBES позволяют урезать
+   * для быстрого рутинного прогона без потери веток покрытия. */
+  const unsigned limit_cases = getenv_uint("MDBX_RKL_CASES", 42 * 42 * 42);
+  const unsigned limit_loops = getenv_uint("MDBX_RKL_LOOPS", 42);
+  const unsigned hole_probes = getenv_uint("MDBX_RKL_HOLE_PROBES", 24 * 24 * 24);
+  printf("stochastic: cases=%u loops=%u hole-probes=%u\n", limit_cases, limit_loops, hole_probes);
+  stochastic(limit_cases, limit_loops);
+  stochastic_hole(hole_probes);
   printf("done: %zu+%zu cases, %zu iterations, %zu checks ok, %zu checks failed\n", tst_cases, tst_cases_hole,
          tst_iterations, tst_ok, tst_failed);
   fflush(nullptr);
