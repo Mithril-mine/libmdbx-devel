@@ -585,8 +585,9 @@ public:
   /// will be settled. Data is always written to disk when \ref
   /// txn_managed::commit() is called, but the operating system may keep it
   /// buffered. MDBX always flushes the OS buffers upon commit as well, unless
-  /// the environment was opened with \ref whole_fragile, \ref lazy_weak_tail or
-  /// in part \ref half_synchronous_weak_last.
+  /// the environment was opened with \ref env::durability::whole_fragile,
+  /// \ref env::durability::lazy_weak_tail or in part
+  /// \ref env::durability::half_synchronous_weak_last.
   ///
   /// The default is 0, which means that no threshold is checked and no
   /// additional flush will be made.
@@ -609,8 +610,9 @@ public:
   /// value will be settled. Data is always written to disk when \ref
   /// txn_managed::commit() is called, but the operating system may keep it
   /// buffered. MDBX always flushes the OS buffers upon commit as well, unless
-  /// the environment was opened with \ref whole_fragile, \ref lazy_weak_tail or
-  /// in part \ref half_synchronous_weak_last. The settled period is not checked
+  /// the environment was opened with \ref env::durability::whole_fragile,
+  /// \ref env::durability::lazy_weak_tail or in part
+  /// \ref env::durability::half_synchronous_weak_last. The settled period is not checked
   /// asynchronously, but only by the \ref txn_managed::commit() and \ref
   /// env::sync_to_disk() functions. Therefore, in cases where transactions are
   /// committed infrequently and/or irregularly, polling by \ref
@@ -1086,8 +1088,9 @@ public:
   /// after this call.
   ///
   /// \param [in] dont_sync  The dont_sync flag, if non-zero the last checkpoint
-  /// will be kept "as is" and may be still "weak" in the \ref lazy_weak_tail
-  /// or \ref whole_fragile modes. Such "weak" checkpoint will be ignored
+  /// will be kept "as is" and may be still "weak" in the
+  /// \ref env::durability::lazy_weak_tail or
+  /// \ref env::durability::whole_fragile modes. Such "weak" checkpoint will be ignored
   /// on opening next time, and transactions since the last non-weak checkpoint
   /// (meta-page update) will rolledback for consistency guarantee.
   void close(bool dont_sync = false);
