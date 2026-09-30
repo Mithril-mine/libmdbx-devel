@@ -655,7 +655,9 @@ add_ut(reverse_insertions SOURCE ut/txn/reverse_insertions.c++)
   if(NOT CMAKE_CROSSCOMPILING OR CMAKE_CROSSCOMPILING_EMULATOR)
     if(MDBX_BUILD_TOOLS)
       add_executable(mdbx_probe_multiple_iovlen probe-mdbx-multiple-iovlen.c)
-      target_link_libraries(mdbx_probe_multiple_iovlen PRIVATE ${TOOL_MDBX_LIB})
+      # Статическая библиотека: убирает необходимость в DLL-пути на Windows
+      # (probe не использует DLL-крутч тестового фреймворка).
+      target_link_libraries(mdbx_probe_multiple_iovlen PRIVATE mdbx-static)
       target_include_directories(mdbx_probe_multiple_iovlen PRIVATE ${PROJECT_SOURCE_DIR})
       add_test(NAME probe_multiple_iovlen COMMAND $<TARGET_FILE:mdbx_probe_multiple_iovlen>)
       set_tests_properties(probe_multiple_iovlen PROPERTIES LABELS "ut;ut.api" TIMEOUT 60)

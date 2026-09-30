@@ -69,11 +69,11 @@ int main(void) {
   MDBX_env *env;
   CHECK(mdbx_env_create(&env));
   CHECK(mdbx_env_set_maxdbs(env, 8));
-  CHECK(mdbx_env_open(env, path, MDBX_CREATE | MDBX_NOSUBDIR, 0664));
+  CHECK(mdbx_env_open(env, path, MDBX_NOSUBDIR, 0664));
   MDBX_txn *txn;
   CHECK(mdbx_txn_begin(env, NULL, MDBX_TXN_READWRITE, &txn));
   MDBX_dbi dbi;
-  CHECK(mdbx_dbi_open(txn, "table", MDBX_DUPSORT | MDBX_DUPFIXED | MDBX_CREATE, &dbi));
+  CHECK(mdbx_dbi_open(txn, "table", (MDBX_db_flags_t)(MDBX_DUPSORT | MDBX_DUPFIXED | MDBX_CREATE), &dbi));
 
   const uint32_t base[4] = {11, 12, 13, 14};
   const uint32_t extra[3] = {15, 16, 17};
