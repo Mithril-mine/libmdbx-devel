@@ -634,10 +634,11 @@ add_ut(reverse_insertions SOURCE ut/txn/reverse_insertions.c++)
   # Golden characterization tests for the src/tools CLI utilities (TASK-45,
   # Phase B of epic B46). Each case = (fixture setup + args) -> {stdout, stderr,
   # exit-code} recorded as the CURRENT contract (skynet/tools-rewrite/spec-*.md,
-  # Phase A): the tools are NOT fixed here, only the behavior is locked down for
-  # the C++ rewrite validation (Phase D). Deterministic: fixtures come from the
-  # checked-in base.dump stream + fixed geometry, no stochastic runs. Runner:
-  # tests/ut/tools/golden-runner.sh; goldens are committed next to it.
+  # Phase A, kept in poc1-failed): the tools are NOT fixed here, only the
+  # behavior is locked down for the C++ rewrite validation (Phase D).
+  # Deterministic: fixtures come from the checked-in base.dump stream + fixed
+  # geometry, no stochastic runs. Runner: tests/ut/tools/golden-runner.sh;
+  # goldens are committed next to it.
   if(UNIX AND MDBX_BUILD_TOOLS)
     set(UT_TOOLS_RUNNER "${CMAKE_CURRENT_SOURCE_DIR}/ut/tools/golden-runner.sh")
     foreach(UT_TOOL chk copy defrag drop dump load stat)
@@ -646,6 +647,19 @@ add_ut(reverse_insertions SOURCE ut/txn/reverse_insertions.c++)
                        "${MDBX_OUTPUT_DIR}/tools-golden/${UT_TOOL}")
       set_tests_properties(ut_tools_${UT_TOOL} PROPERTIES LABELS "ut;ut.tools" TIMEOUT 300)
     endforeach()
+  endif()
+
+  # Regression probe for the MDBX_MULTIPLE batch-insert early-exit defect
+  # (ported from poc1-failed): MDBX_NOOVERWRITE|MDBX_MULTIPLE on an existing key
+  # must return MDBX_KEYEXIST with done==0. Plain-C, public API only.
+  if(NOT CMAKE_CROSSCOMPILING OR CMAKE_CROSSCOMPILING_EMULATOR)
+    if(MDBX_BUILD_TOOLS)
+      add_executable(mdbx_probe_multiple_iovlen probe-mdbx-multiple-iovlen.c)
+      target_link_libraries(mdbx_probe_multiple_iovlen PRIVATE ${TOOL_MDBX_LIB})
+      target_include_directories(mdbx_probe_multiple_iovlen PRIVATE ${PROJECT_SOURCE_DIR})
+      add_test(NAME probe_multiple_iovlen COMMAND $<TARGET_FILE:mdbx_probe_multiple_iovlen>)
+      set_tests_properties(probe_multiple_iovlen PROPERTIES LABELS "ut;ut.api" TIMEOUT 60)
+    endif()
   endif()
 
 endif()
