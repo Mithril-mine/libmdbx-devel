@@ -338,114 +338,92 @@ SystemTap/DTrace, eBPF/bpftrace, ETW, LTTng, Frida, Detours, strace, Lever и
 
 ## Глава 9. Конкретная реализация макросов (синтез с инструкциями владельца)
 
-Синтез абстрактного контракта (главы 0–8) с тремя инструкциями владельца даёт
-конкретный слой макросов `mprobe.h` (первая версия — `tests/tracing/`, dev-only,
-вне `src/` движка).
+Синтез абстрактного контракта (главы 0–8) с инструкциями владельца дал слой
+макросов `MPROBE_COLLECT/WATCH/FAULT`. Реализация прошла две версии:
+**v1** (`tests/tracing/`, внешние трассировщики LTTng/USDT/ETW/Detours) и
+**v2** — движковый **probe-bus** (`MDBX_PROBES`, `mprobe_*`), который
+унифицировал механизм: реестр по семантическим тегам, per-site arm/disarm,
+счётчики, детерминированная инъекция ошибок и управление из тестов
+(in-process `mprobe_ctl()` + файловое IPC). Полное описание —
+`docs/engineering/probe-bus.md`. v1 выведен из эксплуатации (удалён).
 
-### 9.1. Маппинг контракта на механизмы
+### 9.1. Маппинг контракта на механизмы (v2, probe-bus)
 
-| Канал | Linux | Windows | macOS/BSD |
-| --- | --- | --- | --- |
-| `MPROBE_COLLECT` (метрики) | **LTTng**-tracepoint (осн.) + USDT | **ETW TraceLogging** | DTrace USDT |
-| `MPROBE_WATCH` (факты/ветви) | USDT (`STAP_PROBE`) / LTTng-логи+парсинг | ETW-лог (+парсинг для эмуляции) | DTrace |
-| `MPROBE_FAULT` (инъекция) | `STAP_PROBE(&var)` + SystemTap/eBPF-запись; **tier=test fallback** (слабый символ) | **Detours**-хук noinline-заглушки `WinFaultInjectHook` | DTrace-скрипт / брейкпоинты |
+| Канал | Механизм | Управление/наблюдение |
+| --- | --- | --- |
+| `MPROBE_COLLECT` (метрики) | реестр + словоразмерные счётчики (`seen/hits/suppressed`, `value`) | `query` через `mprobe_ctl()` |
+| `MPROBE_WATCH` (факты/ветви) | реестр + счётчики, один общий DTRACE-маркер на срабатывание | `query` / `reset` |
+| `MPROBE_FAULT` (инъекция) | принудительный код возврата по тегу; аллокации — через redirect `osal_*` | `fault <tag> <code>` / `alloc-fault <N>` |
 
-Решение, снимающее «read-only»-ограничение маркеров (глава 4.3 и
-`docs/engineering/systemtap-reference.md` §6): в пробу передаётся **адрес
-переменной** (`&var`), трассировщик пишет **через указатель**
-(`user_int(addr) = X` / Detours меняет `*var_ptr`). Маркеры остаются
-наблюдением, а мутация происходит по адресу — на любой платформе.
+Решение, снимающее «read-only»-ограничение маркеров: инъекция выполняется
+**внутри процесса** (реестр + контрольный канал), поэтому не требует root и
+работает на всех платформах одинаково (Linux/Windows/macOS). Внешние
+трассировщики остаются опциональным каналом наблюдения через единый
+DTRACE-маркер.
 
-### 9.2. Структура `mprobe.h` (первая версия)
+### 9.2. Структура probe-bus (v2)
 
 ```c
-// MPROBE_COLLECT(provider, name, value) — статистика/метрики (контекст agg_scope
-//   задаётся реализацией: LTTng-сессия / ETW-сессия / USDT-аргументы).
-// MPROBE_WATCH(provider, name, args...) — наблюдаемый факт (предикат/условия —
-//   в аргументах либо фильтруются реализацией).
-// MPROBE_FAULT(provider, name, var) — инъекция: адрес var передаётся в пробу;
-//   мутация выполняется трассировщиком (SystemTap/eBPF, Detours, DTrace) или
-//   tier=test fallback'ом (mprobe_fault_hook, слабый символ, без root).
-
-#if defined(__linux__)
-  #ifdef ENABLE_LTTNG
-    #include "mprobe_lttng_provider.h"          /* lttng_ust_tracepoint(...) */
-  #endif
-  #include <sys/sdt.h>
-  #define MPROBE_FAULT(provider, name, var) do { \
-      STAP_PROBE1(provider, name, &(var));        \
-      mprobe_fault_hook(#name, &(var));           \
-  } while (0)
-#elif defined(_WIN32) || defined(_WIN64)
-  #include <TraceLoggingProvider.h>
-  #define MPROBE_FAULT(provider, name, var) do { \
-      TraceLoggingWrite(g_##provider, #name, \
-          TraceLoggingIntPtr((INT_PTR)&(var), "VarAddress")); \
-      WinFaultInjectHook(#name, &(var));          \
-  } while (0)
-#elif defined(__APPLE__) || defined(__FreeBSD__) || defined(__NetBSD__) || defined(__OpenBSD__)
-  #include <sys/sdt.h>
-  #define MPROBE_FAULT(provider, name, var) provider##_##name(&(var))
-#else
-  #define MPROBE_FAULT(provider, name, var) ((void)0)
-#endif
+// MPROBE_COLLECT(name, value) — статистика/метрики (счётчик + последнее значение);
+// MPROBE_WATCH(name, value)    — наблюдаемый факт/ветвь (seen/hits/suppressed);
+// MPROBE_FAULT(name, var)      — инъекция: при наличии правила `fault <tag> <code>`
+//                                переменная var мутируется кодом ошибки;
+// DEV_ASSERT[_T](tag, expr)    — девиантная проверка вызывающего кода на том же реестре.
+// Управление: int mprobe_ctl(const char *request, char *reply, size_t size);
+// Включение: MDBX_PROBES (build) + MDBX_PROBES=1 либо MDBX_PROBE_CTL=<dir> (runtime).
 ```
 
-Полный код и провайдеры — `tests/tracing/mprobe.h`, `mprobe_providers.c`
-(ETW `TRACELOGGING_DEFINE_PROVIDER`, LTTng `TRACEPOINT_DEFINE`).
+Реализация — в `src/logging_and_debug.{h,c}` + `src/osal.h` внутри
+dist-cutoff-маркеров; самопроверка — `tests/ut/api/probes.c` и
+`tests/ut/api/probes_ipc.c`.
 
-### 9.3. tier=test fallback для FAULT (без root)
+### 9.3. Детерминизм и изоляция
 
-Linux/macOS-инъекция через SystemTap/DTrace требует прав; в CI это недоступно.
-Fallback (глава 4.3): слабый символ `mprobe_fault_hook(name, ptr)` в
-`mprobe_providers.c`. Тестовый бинарь переопределяет его сильной реализацией —
-инъекция выполняется **внутри процесса** по имени точки. Это делает
-отказоустойчивую ось проверяемой на всех платформах без root/CI-привилегий.
-SystemTap/DTrace остаются внешним каналом мутации на dev-хосте и валидации.
+- Управление через `mprobe_ctl()` синхронно в процессе теста; файловое IPC
+  (`MDBX_PROBE_CTL=<dir>`) — барьер `sync` после записи в `<dir>/cmd`.
+- Счётчики — словоразмерные атомики (`mdbx_atomic_size_t`, 32-битные на
+  32-битных платформах), недорогие на всех таргетах.
+- Инъекция ограничена тестовыми сборками (`MDBX_PROBES`) и runtime-активацией
+  через env — в продакшн/dist не попадает (проверено: grep по dist пуст).
 
 ## Глава 10. Подключение инструментов через CMake
-
-Инструкция `for-skynet/cmake_tracing_guide.md` адаптирована под репозиторий.
 
 ### 10.1. Опции
 
 | Опция | Платформа | Назначение |
 | --- | --- | --- |
-| `ENABLE_SYSTEMTAP` | Linux | USDT-пробы (`sys/sdt.h`, systemtap-sdt-dev) — WATCH + канал инъекции |
-| `ENABLE_LTTNG` (нов.) | Linux | LTTng-UST tracepoints — первичный канал метрик (COLLECT); при рефакторинге логирование переводится на него |
-| `MDBX_BUILD_TRACING` (нов., dev-only) | все | включает `tests/tracing/` и его тесты; dist-cutoff |
+| `MDBX_PROBES` (v2, dev-only) | все | включает probe-bus (mprobe v2): реестр, управление, инъекцию ошибок; dist-cutoff, OFF по умолчанию |
 
 ### 10.2. Поиск зависимостей
 
-- `cmake/FindLTTngUST.cmake` — `find_path(LTTNG_UST_INCLUDE_DIR NAMES lttng/tracepoint.h)`
-  (учитывает multiarch: `/usr/include/<triplet>/lttng/`), `find_library(lttng-ust)`,
-  `find_library(lttng-ust-ctl)`; импортированный target `LTTng::UST`.
-- Linux: проверка `sys/sdt.h` (пакет systemtap-sdt-dev).
-- Windows: ETW — `advapi32`; Detours — `FetchContent` (GitHub, `v4.0.1`) со сборкой
-  статической библиотеки из `src/detours.cpp/disasm.cpp/modules.cpp/creatwth.cpp`
-  только для тестовых целей.
-- macOS: DTrace в SDK, дополнительных библиотек нет.
+Probe-bus не требует внешних трассировщиков/библиотек: инъекция и счётчики —
+внутри процесса, DTRACE-маркер опционален (`ENABLE_SYSTEMTAP`/`ENABLE_DTRACE`
+для внешнего наблюдения). v1-зависимости (LTTng, Detours, TraceLogging) больше
+не нужны.
 
 ### 10.3. Таргеты
 
-- `mprobe_test` — простой тест трёх макросов (см. главу 11 и `tests/tracing/mprobe_test.c`);
-  линкуется с платформенными зависимостями; CTest: `ctest -R mprobe`.
+- `extra_probes` — самопроверка in-process контроля (реестр, счётчики, arm/
+  disarm, fault, alloc-fault, mode); CTest: `ctest -R '^extra_probes$'`.
+- `extra_probes_ipc` — файловое IPC round-trip (cmd/rep); CTest:
+  `ctest -R '^extra_probes_ipc$'`.
 
 ### 10.4. CI
 
-- Локальный контур (Linux): `-DMDBX_BUILD_TRACING=ON -DENABLE_SYSTEMTAP=ON -DENABLE_LTTNG=ON`.
-- GitHub: отдельный `ci-tracing.yml` (ubuntu/windows/macos матрица, см. главу 12).
-- SourceCraft: не задействуется (Linux-only + лимит 3 workflow + master-config rule).
+- Локальный контур: `-DMDBX_PROBES=ON`; runtime-активация в тесте через
+  env `MDBX_PROBES=1`.
+- GitHub: `ci-probes.yml` (ubuntu/windows/macos матрица, сборка + два теста).
+- SourceCraft: не задействуется (Linux-only + лимит workflow + master-config rule).
 
 ## Глава 11. Матрица инструментов (заполнено)
 
 Строки — каналы; таксономия осей — глава 4.1.
 
-| Канал | Требуемая capability | Кандидаты по платформам | mutate? | Права/стоимость | Статус |
+| Канал | Требуемая capability | Механизм (v2 probe-bus) | mutate? | Права/стоимость | Статус |
 | --- | --- | --- | --- | --- | --- |
-| `COLLECT` | наблюдение (метрики) | Linux: LTTng (осн.), USDT; Win: ETW TraceLogging; macOS: DTrace | нет | LTTng: демон+сессия (dev); ETW: PerfView/wpr; DTrace: root | v1 (tests/tracing) |
-| `WATCH` | наблюдение (факт/ветвь) | Linux: USDT/LTTng-лог; Win: ETW-лог+парсинг; macOS: DTrace | нет | root для live-проб (Linux/macOS); логи+парсинг — без root | v1 |
-| `FAULT` | mutate (или tier=test fallback) | Linux: USDT+SystemTap/eBPF; Win: Detours; macOS: DTrace-скрипт; везде: `mprobe_fault_hook` | да/fallback | root для внешней мутации; fallback — без root | v1 |
+| `COLLECT` | наблюдение (метрики) | реестр + счётчики `seen/hits/value` | нет | нет (in-process) | v2 |
+| `WATCH` | наблюдение (факт/ветвь) | реестр + счётчики + DTRACE-маркер | нет | нет | v2 |
+| `FAULT` | mutate (или tier=test fallback) | принудительный код возврата + redirect `osal_*` | да | нет (in-process, детерминированно) | v2 |
 
 Правила выбора реализации — глава 4.2; результат живого внедрения отслеживается в
 главе 12.
@@ -453,13 +431,10 @@ SystemTap/DTrace остаются внешним каналом мутации �
 ## Глава 12. Статус внедрения (чек-лист)
 
 - [x] Документ-синтез (главы 9–12) — черновик;
-- [x] `tests/tracing/`: `mprobe.h`, `mprobe_providers.c`, `mprobe_lttng_provider.{h,c}`,
-      `mprobe_test.c`, `cmake/FindLTTngUST.cmake`;
-- [x] CMake: `ENABLE_LTTNG`, `MDBX_BUILD_TRACING` (dist-cutoff);
-- [x] Локальный прогон на Linux (USDT+LTTng+fallback-инъекция):
-      `mprobe_test` PASS, `.note.stapsdt` содержит `mprobe:inject_io_error`,
-      LTTng-сессия поймала 9 событий (включая `save_failed value=-5` при инъекции);
-- [x] GitHub `ci-tracing.yml` (linux/windows/macos) — зелёный
-      (ubuntu 31s, windows 58s, macos 28s; devel@6fe73c63);
-- [x] Пуш в devel (все remote);
+- [x] v1 `tests/tracing/` (LTTng/USDT/ETW/Detours) — реализован, затем
+      **унифицирован в v2 и удалён** (2026-09-30, решение владельца);
+- [x] CMake: `MDBX_PROBES` (dist-cutoff), самопроверки `probes`/`probes_ipc`;
+- [x] Локальный прогон (Linux, Debug+Release): `extra_probes` PASS,
+      `extra_probes_ipc` PASS, dist-вырезка чистая (grep по dist пуст);
+- [x] GitHub `ci-probes.yml` (linux/windows/macos) — новая клетка;
 - [ ] Решение по SourceCraft-интеграции (после пересмотра политики CI).

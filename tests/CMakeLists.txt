@@ -538,6 +538,19 @@ else()
       add_extra_test(probes SOURCE ut/api/probes.c)
       set_tests_properties(extra_probes PROPERTIES LABELS "ut;ut.api"
         ENVIRONMENT "MDBX_PROBES=1")
+
+      # File-IPC round-trip: the driver writes requests to <dir>/cmd and reads
+      # replies from <dir>/rep; WORKING_DIRECTORY isolates the IPC files.
+      add_executable(test_extra_probes_ipc ut/api/probes_ipc.c)
+      target_include_directories(test_extra_probes_ipc PRIVATE "${PROJECT_SOURCE_DIR}")
+      target_link_libraries(test_extra_probes_ipc ${TOOL_MDBX_LIB})
+      set_target_properties(test_extra_probes_ipc PROPERTIES C_STANDARD ${MDBX_C_STANDARD} C_STANDARD_REQUIRED ON)
+      set(probes_ipc_dir "${CMAKE_CURRENT_BINARY_DIR}/probes-ipc")
+      file(MAKE_DIRECTORY "${probes_ipc_dir}")
+      add_test(NAME extra_probes_ipc
+               COMMAND $<TARGET_FILE:test_extra_probes_ipc> "${probes_ipc_dir}")
+      set_tests_properties(extra_probes_ipc PROPERTIES LABELS "ut;ut.api"
+        WORKING_DIRECTORY "${probes_ipc_dir}")
     endif()
 
     add_ut(global_init SOURCE ut/api/global_init.c++ LIBRARY mdbx-static)

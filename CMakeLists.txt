@@ -1627,13 +1627,6 @@ if(MDBX_BUILD_MCP_MEMORY AND NOT MDBX_AMALGAMATED_SOURCE AND NOT_SUBPROJECT)
   include(CTest)
   add_subdirectory(skynet/MCP-shared-graph-memory)
 endif()
-
-option(MDBX_BUILD_TRACING
-       "Build managed/controlled testing instrumentation mprobe (dev-only)" OFF)
-if(MDBX_BUILD_TRACING AND NOT MDBX_AMALGAMATED_SOURCE AND NOT SUBPROJECT)
-  include(CTest)
-  add_subdirectory(tests/tracing)
-endif()
 #< dist-cutoff-end
 # ######################################################################################################################
 
