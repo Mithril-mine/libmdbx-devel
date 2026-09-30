@@ -282,7 +282,10 @@ def test_kill9_nosync_readonly_wants_recovery(tmp_path):
                 m.preopen_snapinfo(db)
             assert "CORRUPTED" in str(ei.value), ei.value
             break
-        except AssertionError:
+        except (AssertionError, pytest.fail.Exception):
+            # Меты успели лечь steady целиком (OS writeback) либо троица
+            # не s:w:w — это не провал контракта, а неудачный тайминг:
+            # переходим к следующей свежей БД.
             if attempt == 3:
                 raise
             continue
