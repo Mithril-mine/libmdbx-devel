@@ -661,6 +661,55 @@ static bool edge_cases_full2(void) {
   }
   rkl_destroy(&a);
 
+  /* Регрессия (bug:testing:rkl-push-dup): дубликат в СЕРЕДИНЕ списка после
+   * сдвигов. Раньше откат сдвигов был off-by-one и терял хвост списка:
+   * [5,10,15,20] + push(10) -> [5,10,15,15] (невалидно). */
+  rkl_init(&a);
+  CHECK_EQ((uint64_t)rkl_push(&a, 1), (uint64_t)MDBX_SUCCESS); /* solid [1..2) */
+  CHECK_EQ((uint64_t)rkl_push(&a, 5), (uint64_t)MDBX_SUCCESS);  /* список */
+  CHECK_EQ((uint64_t)rkl_push(&a, 10), (uint64_t)MDBX_SUCCESS);
+  CHECK_EQ((uint64_t)rkl_push(&a, 15), (uint64_t)MDBX_SUCCESS);
+  CHECK_EQ((uint64_t)rkl_push(&a, 20), (uint64_t)MDBX_SUCCESS);
+  CHECK_TRUE(rkl_check(&a));
+  CHECK_EQ((uint64_t)rkl_push(&a, 10), (uint64_t)MDBX_RESULT_TRUE); /* dup в середине */
+  CHECK_TRUE(rkl_check(&a));                                        /* невалидность -> баг */
+  CHECK_EQ(rkl_len(&a), 5);                                         /* элемент 20 не потерян */
+  CHECK_TRUE(rkl_contain(&a, 20));
+  rkl_destroy(&a);
+
+  /* dup в начале списка (после трёх сдвигов) */
+  rkl_init(&a);
+  CHECK_EQ((uint64_t)rkl_push(&a, 1), (uint64_t)MDBX_SUCCESS); /* solid [1..2) */
+  CHECK_EQ((uint64_t)rkl_push(&a, 5), (uint64_t)MDBX_SUCCESS);
+  CHECK_EQ((uint64_t)rkl_push(&a, 10), (uint64_t)MDBX_SUCCESS);
+  CHECK_EQ((uint64_t)rkl_push(&a, 15), (uint64_t)MDBX_SUCCESS);
+  CHECK_EQ((uint64_t)rkl_push(&a, 20), (uint64_t)MDBX_SUCCESS);
+  CHECK_EQ((uint64_t)rkl_push(&a, 5), (uint64_t)MDBX_RESULT_TRUE); /* dup в начале */
+  CHECK_TRUE(rkl_check(&a));
+  CHECK_EQ(rkl_len(&a), 5);
+  CHECK_TRUE(rkl_contain(&a, 20));
+  rkl_destroy(&a);
+
+  /* dup в конце списка (без сдвигов — контроль раннего выхода) */
+  rkl_init(&a);
+  CHECK_EQ((uint64_t)rkl_push(&a, 1), (uint64_t)MDBX_SUCCESS); /* solid [1..2) */
+  CHECK_EQ((uint64_t)rkl_push(&a, 5), (uint64_t)MDBX_SUCCESS);
+  CHECK_EQ((uint64_t)rkl_push(&a, 10), (uint64_t)MDBX_SUCCESS);
+  CHECK_EQ((uint64_t)rkl_push(&a, 15), (uint64_t)MDBX_SUCCESS);
+  CHECK_EQ((uint64_t)rkl_push(&a, 20), (uint64_t)MDBX_SUCCESS);
+  CHECK_EQ((uint64_t)rkl_push(&a, 20), (uint64_t)MDBX_RESULT_TRUE); /* dup в конце */
+  CHECK_TRUE(rkl_check(&a));
+  CHECK_EQ(rkl_len(&a), 5);
+  rkl_destroy(&a);
+
+  /* dup внутри solid-интервала — ранний выход без мутаций */
+  rkl_init(&a);
+  CHECK_EQ((uint64_t)rkl_push(&a, 1), (uint64_t)MDBX_SUCCESS); /* solid [1..2) */
+  CHECK_EQ((uint64_t)rkl_push(&a, 2), (uint64_t)MDBX_SUCCESS); /* solid [1..3) */
+  CHECK_EQ((uint64_t)rkl_push(&a, 1), (uint64_t)MDBX_RESULT_TRUE);
+  CHECK_TRUE(rkl_check(&a));
+  rkl_destroy(&a);
+
   return errors == tst_failed;
 }
 
