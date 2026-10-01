@@ -49,23 +49,22 @@ Author: Leonid Yuriev \<leo@yuriev.ru\>. Home site: <https://libmdbx.dqdkfa.ru>.
 
 | Path | Purpose |
 | --- | --- |
-| [`src/`](../src) | Core engine, split into ~60 focused modules (public API, transactions, B-tree, GC, OS abstraction, tools, man-pages) |
-| [`mdbx.h`](../mdbx.h) | Public C API (single header) |
-| [`mdbx.h++`](../mdbx.h++) | Public C++ API (single header) |
-| [`mdbx++/`](../mdbx++) | C++ API implementation/declaration headers included by `mdbx.h++` |
-| [`src/mdbx.c++`](../src/mdbx.c++) | Non-inline part of the C++ API |
-| [`tests/`](../tests) | Test framework (`framework/`), unit tests (`ut/`), issue regressions (`issues/`), exploits, stochastic/battery scripts |
-| [`examples/`](../examples) | C and C++ usage examples, PCRF simulator |
-| [`docs/`](../docs) | Doxygen configuration and custom HTML/CSS for generated docs |
-| [`cmake/`](../cmake) | CMake helper modules (`compiler.cmake`, `profile.cmake`, `utils.cmake`) |
-| [`CMakeLists.txt`](../CMakeLists.txt) | Main CMake build (1619 lines); detects amalgamated vs non-amalgamated layout |
-| [`GNUmakefile`](../GNUmakefile) | Legacy GNU Make build (1105 lines) with many targets (`check`, `smoke`, `dist`, `doxygen`, ...) |
-| [`Makefile`](../Makefile) | Thin thunk that forwards to `GNUmakefile` |
-| [`conanfile.py`](../conanfile.py) | Conan 2 recipe with dozens of `mdbx.*` options |
+| [`src/`](../../src) | Core engine, split into ~60 focused modules (public API, transactions, B-tree, GC, OS abstraction, tools, man-pages) |
+| [`mdbx.h`](../../mdbx.h) | Public C API (single header) |
+| [`mdbx.h++`](../../mdbx.h++) | Public C++ API (single header) |
+| [`mdbx++/`](../../mdbx++) | C++ API implementation/declaration headers included by `mdbx.h++` |
+| [`src/mdbx.c++`](../../src/mdbx.c++) | Non-inline part of the C++ API |
+| [`tests/`](../../tests) | Test framework (`framework/`), unit tests (`ut/`), issue regressions (`issues/`), exploits, stochastic/battery scripts |
+| [`examples/`](../../examples) | C and C++ usage examples, PCRF simulator |
+| [`docs/`](../../docs) | Doxygen configuration and custom HTML/CSS for generated docs |
+| [`cmake/`](../../cmake) | CMake helper modules (`compiler.cmake`, `profile.cmake`, `utils.cmake`) |
+| [`CMakeLists.txt`](../../CMakeLists.txt) | Main CMake build (1619 lines); detects amalgamated vs non-amalgamated layout |
+| [`GNUmakefile`](../../GNUmakefile) | Legacy GNU Make build (1105 lines) with many targets (`check`, `smoke`, `dist`, `doxygen`, ...) |
+| [`Makefile`](../../Makefile) | Thin thunk that forwards to `GNUmakefile` |
+| [`conanfile.py`](../../conanfile.py) | Conan 2 recipe with dozens of `mdbx.*` options |
 | `.sourcecraft/` | SourceCraft CI config (`ci.yaml`) |
-| `.codeassistant/` | MCP server configuration (`mcp.json`, SourceCraft API) |
 | `.github/workflows/` | GitHub Actions CI (android, linux, macos, windows-msvc/mingw/mscl, cxx-msvc) |
-| [`AGENTS.md`](../AGENTS.md) | Agent rules: CMake+CTest for build/test, Linux+Windows required, LLVM style |
+| [`AGENTS.md`](../../AGENTS.md) | Agent rules: CMake+CTest for build/test, Linux+Windows required, LLVM style |
 | `ChangeLog*.md` | Versioned changelogs (0.09 .. 0.13, Old) |
 | `COPYRIGHT`, `LICENSE`, `NOTICE` | Legal files |
 
@@ -106,8 +105,8 @@ Author: Leonid Yuriev \<leo@yuriev.ru\>. Home site: <https://libmdbx.dqdkfa.ru>.
 | [`skills/superpowers/README.md`](skills/superpowers/README.md) | Integrated agent methodology (Superpowers): what was taken, why, and how to use it |
 | [`skynet-protocol.md`](skynet-protocol.md) | **Agent coordination protocol v1**: ranks/roles/specialization, registry + heartbeat + session-id reconciliation in MCP-memory, mailboxes (message format, TASK/REPORT/ACK flow), recovery procedure, protocol evolution |
 | [`sourcecraft/README.md`](sourcecraft/README.md) | SourceCraft-specific: CI cubes/workflows, MCP tooling, PR automation |
-| [`.codeassistant/skills/refactor/`](../.codeassistant/skills/refactor/SKILL.md) | Agent skill: safe, behavior-preserving refactoring (Fowler catalog, smells, safety, test-gated steps); adapted from [`MuhiminOsim/code-refactoring-skill`](https://github.com/MuhiminOsim/code-refactoring-skill) (MIT) |
-| [`.codeassistant/skills/modern-cpp-en/`](../.codeassistant/skills/modern-cpp-en/SKILL.md) | Agent skill: Modern C++ (C++20/23/26) engineering guide (API design, error handling, concurrency, build acceleration, clang-tidy); adapted from [`huxint/cpp-standing-skill`](https://github.com/huxint/cpp-standing-skill) (MIT) |
+| [`skills/refactor/`](../../skills/refactor/SKILL.md) | Agent skill: safe, behavior-preserving refactoring (Fowler catalog, smells, safety, test-gated steps); adapted from [`MuhiminOsim/code-refactoring-skill`](https://github.com/MuhiminOsim/code-refactoring-skill) (MIT) |
+| [`skills/cpp/modern-cpp-en/`](../../skills/cpp/modern-cpp-en/SKILL.md) | Agent skill: Modern C++ (C++20/23/26) engineering guide (API design, error handling, concurrency, build acceleration, clang-tidy); adapted from [`huxint/cpp-standing-skill`](https://github.com/huxint/cpp-standing-skill) (MIT) |
 
 ## 5. Agent quick start
 
@@ -129,19 +128,19 @@ Depending on the task, start from:
 - **Subsystem conflict zones for parallel work** → [`module-lock-matrix.md`](module-lock-matrix.md)
 - **Test durability modes / speed-up transports** → [`test-durability-strategy.md`](test-durability-strategy.md)
 - **What to refactor first / known debt** → [`techdebt.md`](techdebt.md)
-- **Refactoring / smells / cleanup workflow** → [`.codeassistant/skills/refactor/`](../.codeassistant/skills/refactor/SKILL.md)
-- **Writing or reviewing C++ (API layer)** → [`.codeassistant/skills/modern-cpp-en/`](../.codeassistant/skills/modern-cpp-en/SKILL.md)
+- **Refactoring / smells / cleanup workflow** → [`skills/refactor/`](../../skills/refactor/SKILL.md)
+- **Writing or reviewing C++ (API layer)** → [`skills/cpp/modern-cpp-en/`](../../skills/cpp/modern-cpp-en/SKILL.md)
 - **How to contribute / open PR / run CI** → [`workflows.md`](workflows.md), [`sourcecraft/README.md`](sourcecraft/README.md)
 - **Feature design, planning, TDD, debugging** → [`skills/superpowers/README.md`](skills/superpowers/README.md)
 - **Agent coordination (mailboxes, ranks, heartbeat, recovery)** → [`skynet-protocol.md`](skynet-protocol.md)
 
 Common entry points in the code:
 
-- Public C API surface: [`mdbx.h`](../mdbx.h)
-- Public C++ API surface: [`mdbx.h++`](../mdbx.h++)
-- Engine internals umbrella headers: [`src/internals.h`](../src/internals.h), [`src/essentials.h`](../src/essentials.h), [`src/preface.h`](../src/preface.h), [`src/options.h`](../src/options.h)
-- Build options reference: [`src/options.h`](../src/options.h) and `make options`
-- Test registration: [`tests/CMakeLists.txt`](../tests/CMakeLists.txt)
+- Public C API surface: [`mdbx.h`](../../mdbx.h)
+- Public C++ API surface: [`mdbx.h++`](../../mdbx.h++)
+- Engine internals umbrella headers: [`src/internals.h`](../../src/internals.h), [`src/essentials.h`](../../src/essentials.h), [`src/preface.h`](../../src/preface.h), [`src/options.h`](../../src/options.h)
+- Build options reference: [`src/options.h`](../../src/options.h) and `make options`
+- Test registration: [`tests/CMakeLists.txt`](../../tests/CMakeLists.txt)
 
 ## 6. Maintenance of this index
 
