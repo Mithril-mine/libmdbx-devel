@@ -51,8 +51,27 @@ static size_t bit_width(size_t v) {
 #define DEEP 5
 #endif
 
+static const char *getenv_cstr(const char *name) {
+#if defined(_MSC_VER)
+#pragma warning(push)
+#pragma warning(disable : 4996) /* 'getenv': This function or variable may be unsafe */
+#endif
+#if defined(__clang__)
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wdeprecated-declarations"
+#endif
+  const char *value = std::getenv(name);
+#if defined(__clang__)
+#pragma clang diagnostic pop
+#endif
+#if defined(_MSC_VER)
+#pragma warning(pop)
+#endif
+  return value;
+}
+
 static unsigned bunch_deep_env(void) {
-  const char *value = getenv("MDBX_BUNCHES_DEEP");
+  const char *value = getenv_cstr("MDBX_BUNCHES_DEEP");
   if (!value || !*value)
     return DEEP;
   char *end = nullptr;
@@ -700,7 +719,7 @@ int doit() {
   /* Воспроизводимость: MDBX_BUNCHES_SEED фиксирует seed (удобно для дельты
    * покрытия по DEEP и для баг-репортов); без него — энтропия, как было. */
   std::vector<unsigned> seed_words;
-  const char *env_seed = getenv("MDBX_BUNCHES_SEED");
+  const char *env_seed = getenv_cstr("MDBX_BUNCHES_SEED");
   if (env_seed && *env_seed) {
     seed_words.push_back(unsigned(std::strtoul(env_seed, nullptr, 10)));
   } else {
