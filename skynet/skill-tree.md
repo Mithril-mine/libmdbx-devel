@@ -1,9 +1,10 @@
 # skill-tree — рабочая копия ветки для навыков (workflow)
 
 > `/sourcecraft/workspace/skill-tree` — git worktree от bare-репозитория
-> `local-origin`, закреплённый за веткой `devel` (после вливания devel→master —
-> за `master`). Назначение: стабильный файловый путь для активных навыков,
-> на который указывают глобальные симлинки `~/.config/sourcecraft/opencode/skills/*`.
+> `local-origin`, на собственной ветке `skill-tree`, отслеживающей `devel`
+> (после вливания devel→master — `master`). Назначение: стабильный файловый
+> путь для активных навыков, на который указывают глобальные симлинки
+> `~/.config/sourcecraft/opencode/skills/*`.
 
 ## Зачем нужен
 
@@ -14,11 +15,25 @@ opencode загружает навыки из `.opencode/skills/**/SKILL.md` (п
 
 ## Привязка к ветке
 
-- Сейчас: `git worktree add /sourcecraft/workspace/skill-tree devel` (ветка `devel`).
+Worktree не может чекаутить саму ветку `devel`/`master` (в bare-репозитории она
+занята HEAD). Поэтому у skill-tree **собственная ветка `skill-tree`**, которую
+обновляют из целевой ветки:
+
+- Сейчас: базируется на `origin/devel`. Пока `feature/skills-profiles` не
+  смержена в devel, worktree временно стоит на ней (иначе `.opencode/skills`
+  ещё нет в devel и глобальные симлинки были бы битыми). После merge —
+  вернуть на `origin/devel`:
+  ```sh
+  cd /sourcecraft/workspace/skill-tree
+  git checkout skill-tree
+  git fetch origin
+  git reset --hard origin/devel
+  ```
 - **После вливания devel → master** переключить на master:
   ```sh
   cd /sourcecraft/workspace/skill-tree
-  git checkout master
+  git checkout skill-tree
+  git fetch origin
   git reset --hard origin/master
   ```
 
