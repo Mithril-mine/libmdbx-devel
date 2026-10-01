@@ -726,11 +726,253 @@ static bool stochastic_hole(size_t probes) {
   return true;
 }
 
+/* -----------------------------------------------------------------------------
+ * Probe-bus driven edge-cases (пилот B68-P3): классы R/F/D/C для rkl/txl.
+ * Требует runtime-активации MDBX_PROBES=1 (устанавливается в main и через
+ * ENVIRONMENT теста). Вне probe-сборок эти кейсы не выполняются. */
+
+#if defined(MDBX_PROBES)
+static int probe_ctl_ok(const char *request) {
+  char reply[1024];
+  const int rc = mprobe_ctl(request, reply, sizeof(reply));
+  if (rc != 0 || strncmp(reply, "ok", 2) != 0) {
+    ++tst_failed;
+    fprintf(stderr, "FAIL mprobe_ctl(\"%s\") rc=%d reply=\"%s\"\n", request, rc, reply);
+    return -1;
+  }
+  return 0;
+}
+
+/* Включить runtime-активацию (если не задано окружением теста). */
+static void probe_activate(void) {
+  const char *value = getenv("MDBX_PROBES");
+  if (!value || !*value || strcmp(value, "1") != 0) {
+#ifdef _WIN32
+    _putenv_s("MDBX_PROBES", "1");
+#else
+    setenv("MDBX_PROBES", "1", 0);
+#endif
+  }
+}
+#endif /* MDBX_PROBES */
+
+/* Классы непокрытых веток rkl.c/txl.c (инвентарь: docs/engineering/
+ * coverage-pilot-inventory.md). Каждый кейс изолирован (arm/disarm/reset). */
+static bool edge_cases_probes(void) {
+#if defined(MDBX_PROBES)
+  const size_t errors = tst_failed;
+  char reply[1024];
+  rkl_t a, b;
+  txl_t l;
+
+  if (probe_ctl_ok("mode count") != 0)
+    return false;
+
+  /* --- D: rkl_resize "unable shrink" -> MDBX_PROBLEM (disarm dev-assert) --- */
+  rkl_init(&a);
+  for (txnid_t id = 1; id <= 8; ++id)
+    CHECK_EQ((uint64_t)rkl_push(&a, id * 2), (uint64_t)MDBX_SUCCESS); /* 2 в solid, 8 в списке */
+  if (probe_ctl_ok("disarm rkl:resize:wanna_gt_length") != 0)
+    return false;
+  CHECK_EQ((uint64_t)rkl_resize(&a, 4), (uint64_t)MDBX_PROBLEM);
+  if (probe_ctl_ok("arm rkl:resize:wanna_gt_length") != 0)
+    return false;
+  rkl_destroy(&a);
+
+  /* --- R: rkl_resize "too long" -> MDBX_TXN_FULL (wanna > txl_max) --- */
+  rkl_init(&a);
+  CHECK_EQ((uint64_t)rkl_reserve(&a, (size_t)txl_max + 1), (uint64_t)MDBX_TXN_FULL);
+  rkl_destroy(&a);
+
+  /* --- R: shrink внешнего буфера обратно в inplace --- */
+  rkl_init(&a);
+  CHECK_EQ((uint64_t)rkl_reserve(&a, ARRAY_LENGTH(a.inplace) + 16), (uint64_t)MDBX_SUCCESS);
+  for (txnid_t id = 1; id <= 4; ++id)
+    CHECK_EQ((uint64_t)rkl_push(&a, id), (uint64_t)MDBX_SUCCESS);
+  CHECK_TRUE(a.list != a.inplace);
+  CHECK_EQ((uint64_t)rkl_resize(&a, ARRAY_LENGTH(a.inplace)), (uint64_t)MDBX_SUCCESS);
+  CHECK_TRUE(a.list == a.inplace);
+  rkl_destroy(&a);
+
+  /* --- R: resize на уже-inplace буфере (else-ветка) --- */
+  rkl_init(&a);
+  CHECK_EQ((uint64_t)rkl_push(&a, 1), (uint64_t)MDBX_SUCCESS);
+  CHECK_EQ((uint64_t)rkl_resize(&a, ARRAY_LENGTH(a.inplace)), (uint64_t)MDBX_SUCCESS);
+  rkl_destroy(&a);
+
+  /* --- F: alloc-fault -> MDBX_ENOMEM в rkl_reserve (rkl_resize L101) --- */
+  rkl_init(&a);
+  if (probe_ctl_ok("alloc-fault 1") != 0)
+    return false;
+  CHECK_EQ((uint64_t)rkl_reserve(&a, ARRAY_LENGTH(a.inplace) + 1), (uint64_t)MDBX_ENOMEM);
+  if (probe_ctl_ok("alloc-fault none") != 0)
+    return false;
+  rkl_destroy(&a);
+
+  /* --- F+R: rkl_copy проброс ошибки роста (L124) --- */
+  rkl_init(&a);
+  CHECK_EQ((uint64_t)rkl_reserve(&a, 20), (uint64_t)MDBX_SUCCESS);
+  for (txnid_t id = 1; id <= 20; ++id)
+    CHECK_EQ((uint64_t)rkl_push(&a, id * 2), (uint64_t)MDBX_SUCCESS); /* список, без solid */
+  rkl_init(&b);
+  if (probe_ctl_ok("alloc-fault 1") != 0)
+    return false;
+  CHECK_EQ((uint64_t)rkl_copy(&a, &b), (uint64_t)MDBX_ENOMEM);
+  if (probe_ctl_ok("alloc-fault none") != 0)
+    return false;
+  rkl_destroy(&a);
+  rkl_destroy(&b);
+
+  /* --- F+R: rkl_push проброс ошибки роста буфера (L277) --- */
+  rkl_init(&a);
+  for (txnid_t id = 1; id <= ARRAY_LENGTH(a.inplace) + 1; ++id)
+    CHECK_EQ((uint64_t)rkl_push(&a, id * 2), (uint64_t)MDBX_SUCCESS); /* список до предела inplace */
+  if (probe_ctl_ok("alloc-fault 1") != 0)
+    return false;
+  CHECK_EQ((uint64_t)rkl_push(&a, 99), (uint64_t)MDBX_ENOMEM);
+  if (probe_ctl_ok("alloc-fault none") != 0)
+    return false;
+  rkl_destroy(&a);
+
+  /* --- R: rkl_merge return err из цикла по списку (L425) --- */
+  rkl_init(&a);
+  rkl_init(&b);
+  CHECK_EQ((uint64_t)rkl_push(&a, 1), (uint64_t)MDBX_SUCCESS);
+  CHECK_EQ((uint64_t)rkl_push(&a, 5), (uint64_t)MDBX_SUCCESS); /* solid[1,2), list[5] */
+  CHECK_EQ((uint64_t)rkl_push(&b, 1), (uint64_t)MDBX_SUCCESS);
+  CHECK_EQ((uint64_t)rkl_push(&b, 5), (uint64_t)MDBX_SUCCESS);
+  CHECK_EQ((uint64_t)rkl_merge(&a, &b, false), (uint64_t)MDBX_RESULT_TRUE);
+  rkl_destroy(&a);
+  rkl_destroy(&b);
+
+  /* --- C: extend_solid defensive gap_head (L214) --- */
+  rkl_init(&a);
+  a.solid_begin = 10;
+  a.solid_end = 12;
+  a.list_length = 1;
+  a.inplace[0] = 11; /* элемент не примыкает к solid_begin после сдвига влево */
+  CHECK_EQ((uint64_t)extend_solid(&a, 10, 13, 12), (uint64_t)MDBX_RESULT_TRUE);
+  rkl_destroy(&a);
+
+  /* --- C: extend_solid defensive gap_tail (L219) --- */
+  rkl_init(&a);
+  a.solid_begin = 10;
+  a.solid_end = 13;
+  a.list_length = 1;
+  a.inplace[0] = 13; /* элемент != solid_end при проверке примыкания */
+  CHECK_EQ((uint64_t)extend_solid(&a, 10, 14, 13), (uint64_t)MDBX_RESULT_TRUE);
+  rkl_destroy(&a);
+
+  /* --- R: rkl_hole reverse past-end (L518-522) --- */
+  rkl_init(&a);
+  CHECK_EQ((uint64_t)rkl_push(&a, 1), (uint64_t)MDBX_SUCCESS);
+  CHECK_EQ((uint64_t)rkl_push(&a, 2), (uint64_t)MDBX_SUCCESS); /* solid[1,3) */
+  CHECK_EQ((uint64_t)rkl_push(&a, 42), (uint64_t)MDBX_SUCCESS); /* list[42] */
+  {
+    rkl_iter_t f = rkl_iterator(&a, false);
+    CHECK_EQ(rkl_turn(&f, false), 1);
+    CHECK_EQ(rkl_turn(&f, false), 2);
+    CHECK_EQ(rkl_turn(&f, false), 42); /* pos == len */
+    CHECK_EQ(rkl_pop(&a, true), 42);   /* len стала 2, pos остался 3 */
+    rkl_hole_t hole = rkl_hole(&f, true);
+    CHECK_EQ(hole.begin, 1);
+    CHECK_EQ(hole.end, 1);
+  }
+  rkl_destroy(&a);
+
+  /* --- C: rkl_check limit_below_inplace (L646) --- */
+  rkl_init(&a);
+  CHECK_EQ((uint64_t)rkl_reserve(&a, ARRAY_LENGTH(a.inplace) + 16), (uint64_t)MDBX_SUCCESS);
+  a.list_limit = (unsigned)ARRAY_LENGTH(a.inplace) - 1; /* испорченная структура */
+  CHECK_FALSE(rkl_check(&a));
+  rkl_destroy(&a);
+
+  /* --- C: rkl_check solid_float_high (L665) --- */
+  rkl_init(&a);
+  a.solid_begin = 10;
+  a.solid_end = 13;
+  a.list_length = 1;
+  a.inplace[0] = 12;
+  CHECK_FALSE(rkl_check(&a));
+  rkl_destroy(&a);
+
+  /* --- R: txl_reserve "too long" -> MDBX_TXN_FULL --- */
+  l = txl_alloc();
+  if (!CHECK_TRUE(l))
+    return false;
+  CHECK_EQ((uint64_t)txl_reserve(&l, (size_t)txl_max + 1), (uint64_t)MDBX_TXN_FULL);
+  txl_free(l);
+
+  /* --- R: txl_contain возвращает true (дубликат) --- */
+  l = txl_alloc();
+  if (!CHECK_TRUE(l))
+    return false;
+  CHECK_EQ((uint64_t)txl_append(&l, 7), (uint64_t)MDBX_SUCCESS);
+  CHECK_TRUE(txl_contain(l, 7));
+  txl_free(l);
+
+  /* --- F+R: txl_append проброс ошибки (L87) + realloc ENOMEM (L63) --- */
+  l = txl_alloc();
+  if (!CHECK_TRUE(l))
+    return false;
+  {
+    txnid_t id = 1;
+    while (txl_size(l) < txl_alloclen(l))
+      CHECK_EQ((uint64_t)txl_append(&l, id++), (uint64_t)MDBX_SUCCESS); /* заполнили до ёмкости */
+    if (probe_ctl_ok("alloc-fault 1") != 0) {
+      txl_free(l);
+      return false;
+    }
+    CHECK_EQ((uint64_t)txl_append(&l, id), (uint64_t)MDBX_ENOMEM);
+    if (probe_ctl_ok("alloc-fault none") != 0) {
+      txl_free(l);
+      return false;
+    }
+  }
+  txl_free(l);
+
+  /* --- Аттестация: каждый ожидаемый тег обязан иметь seen > 0 --- */
+  {
+    static const char *const tags[] = {
+        "rkl:resize:wanna_gt_length", /* D: disarmed срабатывание считается в seen */
+        "rkl_extend_solid_gap_head",  "rkl_extend_solid_gap_tail",
+        "rkl_hole_past_end_reverse",  "rkl_check_limit_below_inplace",
+        "rkl_check_solid_float_high", "txl_reserve_too_long",
+    };
+    for (size_t i = 0; i < ARRAY_LENGTH(tags); ++i) {
+      char request[512];
+      snprintf(request, sizeof(request), "query %s", tags[i]);
+      const int rc = mprobe_ctl(request, reply, sizeof(reply));
+      if (rc != 0) {
+        ++tst_failed;
+        fprintf(stderr, "FAIL attestation: query \"%s\" rc=%d\n", tags[i], rc);
+        continue;
+      }
+      const char *const site = strstr(reply, "site ");
+      unsigned seen = 0;
+      if (!site || sscanf(site, "site %*s %*u %*u %u", &seen) != 1 || seen == 0) {
+        ++tst_failed;
+        fprintf(stderr, "FAIL attestation: site \"%s\" seen==%u (reply=\"%s\")\n", tags[i], seen, reply);
+      }
+    }
+  }
+
+  return errors == tst_failed;
+#else  /* !MDBX_PROBES */
+  return true;
+#endif /* MDBX_PROBES */
+}
+
 /*-----------------------------------------------------------------------------*/
 
 int main(int argc, const char *argv[]) {
   (void)argc;
   (void)argv;
+
+#if defined(MDBX_PROBES)
+  /* Runtime-активация probe-bus для аттестации и fault-инъекции. */
+  probe_activate();
+#endif /* MDBX_PROBES */
 
   printf("auxilary info: cursor/couple size is %zu for %s = %u\n", sizeof(cursor_couple_t), "MDBX_WORDBITS",
          MDBX_WORDBITS);
@@ -746,6 +988,8 @@ int main(int argc, const char *argv[]) {
   if (!edge_cases_basic())
     return EXIT_FAILURE;
   if (getenv_uint("MDBX_RKL_EDGES", 1) > 0 && (!edge_cases_full() || !edge_cases_full2()))
+    return EXIT_FAILURE;
+  if (!edge_cases_probes())
     return EXIT_FAILURE;
 
   /* Масштаб стохастики управляется env-переменными (по умолчанию — полный,

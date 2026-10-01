@@ -526,8 +526,9 @@ else()
       # Routine profile: bounded stochastic scale + deterministic edge-cases
       # covers the same rkl/txl branches as the full stress at ~1.4s vs ~30s
       # (measured 2026-09-30, Debug+gcov). Full stress lives in the
-      # ut.heavy-labelled extra_details_rkl_full target below.
-      ENVIRONMENT "MDBX_RKL_CASES=64;MDBX_RKL_LOOPS=8;MDBX_RKL_HOLE_PROBES=512;MDBX_RKL_EDGES=1")
+      # ut.heavy-labelled extra_details_rkl_full target below. MDBX_PROBES=1
+      # активирует probe-bus аттестацию покрытия (edge_cases_probes).
+      ENVIRONMENT "MDBX_RKL_CASES=64;MDBX_RKL_LOOPS=8;MDBX_RKL_HOLE_PROBES=512;MDBX_RKL_EDGES=1;MDBX_PROBES=1")
     add_test(NAME extra_details_rkl_full COMMAND $<TARGET_FILE:test_extra_details_rkl>)
     set_tests_properties(extra_details_rkl_full PROPERTIES
       LABELS "ut;ut.api;ut.gc;ut.heavy"
