@@ -33,6 +33,10 @@
 #include <stdlib.h>
 #include <string.h>
 
+#if defined(_WIN32)
+#include <windows.h>
+#endif /* _WIN32 */
+
 static unsigned failures;
 
 #define CHECK(cond)                                                                                                    \
@@ -58,10 +62,18 @@ int main(int argc, char **argv) {
   }
   const char *dir = argv[1];
 
-  /* The driver must set MDBX_PROBE_CTL before any probe fires. */
+  /* The driver must set MDBX_PROBE_CTL before any probe fires.
+   * NB: on Windows the engine reads env via GetEnvironmentVariableA (Win32
+   * process environment block), while CRT putenv() only updates the CRT table
+   * — the two diverge, so use the Win32 API here. */
+#if defined(_WIN32)
+  if (!SetEnvironmentVariableA("MDBX_PROBE_CTL", dir))
+    return EXIT_FAILURE;
+#else
   char env[1024];
   snprintf(env, sizeof(env), "MDBX_PROBE_CTL=%s", dir);
   putenv(env);
+#endif /* _WIN32 */
 
   char path[1024];
   /* Requests: append two commands, each on its own line. */
