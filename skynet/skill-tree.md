@@ -1,8 +1,8 @@
 # skill-tree — рабочая копия ветки для навыков (workflow)
 
 > `/sourcecraft/workspace/skill-tree` — git worktree от bare-репозитория
-> `local-origin`, на собственной ветке `skill-tree`, отслеживающей `devel`
-> (после вливания devel→master — `master`). Назначение: стабильный файловый
+> `local-origin`, на собственной ветке `skill-tree`, отслеживающей `master`
+> (devel→master влито 2026-10-01). Назначение: стабильный файловый
 > путь для активных навыков, на который указывают глобальные симлинки
 > `~/.config/sourcecraft/opencode/skills/*`.
 
@@ -19,39 +19,32 @@ Worktree не может чекаутить саму ветку `devel`/`master`
 занята HEAD). Поэтому у skill-tree **собственная ветка `skill-tree`**, которую
 обновляют из целевой ветки:
 
-- Сейчас: базируется на `origin/devel`. Пока `feature/skills-profiles` не
-  смержена в devel, worktree временно стоит на ней (иначе `.opencode/skills`
-  ещё нет в devel и глобальные симлинки были бы битыми). После merge —
-  вернуть на `origin/devel`:
-  ```sh
-  cd /sourcecraft/workspace/skill-tree
-  git checkout skill-tree
-  git fetch origin
-  git reset --hard origin/devel
-  ```
-- **После вливания devel → master** переключить на master:
+- Сейчас: базируется на `origin/master` (devel→master влито). Обновление:
   ```sh
   cd /sourcecraft/workspace/skill-tree
   git checkout skill-tree
   git fetch origin
   git reset --hard origin/master
   ```
+- Историческая справка: до вливания devel→master worktree временно стоял на
+  feature-ветке (пока `.opencode/skills` не попал в devel/master) — больше не
+  актуально.
 
-## Обновление skill-tree после изменений devel/master
+## Обновление skill-tree после изменений master
 
 ```sh
 cd /sourcecraft/workspace/skill-tree
 git fetch origin
-git reset --hard origin/<devel|master>
+git reset --hard origin/master
 ```
 
-Обновлять нужно ПОСЛЕ каждого merge в devel/master (или по мере необходимости —
+Обновлять нужно ПОСЛЕ каждого merge в master (или по мере необходимости —
 перед проверкой навыков).
 
 ## Синхронизация с workflow master и перезапуском сессий
 
-1. **Обновление навыков** (`skills/*` или `.opencode/skills/*`) в devel/master:
-   - после merge в целевую ветку обновить `skill-tree` (reset --hard);
+1. **Обновление навыков** (`skills/*` или `.opencode/skills/*`) в master:
+   - после merge в master обновить `skill-tree` (reset --hard);
    - **перезапустить активные opencode-сессии**, которые используют эти навыки:
      навыки загружаются при старте сессии (`Skill.available()` фиксирует список
      на момент init), поэтому текущие сессии не увидят изменения до рестарта.
@@ -59,8 +52,8 @@ git reset --hard origin/<devel|master>
    в REPORT/PR указывай флаг `SKILLS-UPDATED` + «restart sessions required».
    Координатор выполняет перезапуск канонических сессий (`ses_*` из
    `.skynet/sessions.json`) в assigned nook.
-3. **Переключение ветки skill-tree** (devel → master) выполняется координатором
-   после вливания; симлинки при этом НЕ меняются (ведут на
+3. **Ветка skill-tree привязана к master** (devel→master влито 2026-10-01);
+   симлинки при этом НЕ меняются (ведут на
    `/sourcecraft/workspace/skill-tree/.opencode/skills/*` — путь стабилен).
 
 ## Проверка активации навыков
