@@ -186,4 +186,16 @@ Every profile's mandatory context references `docs/engineering/*`
 
 General development flow — the [superpowers](skills/superpowers/README.md)
 methodology (brainstorm → plan → worktree → TDD → review → finish).
+
+### Skill updates & session restart (dev-only)
+
+Skills are loaded into opencode sessions at startup (`Skill.available()`). When
+you change `skills/*` or `.opencode/skills/*`:
+
+- sync active copies in `.opencode/skills/` (relative-link depth differs there);
+- mark the commit/PR with `SKILLS-UPDATED` and note "restart sessions required";
+- refresh the `skill-tree` worktree (`git fetch && git reset --hard origin/<branch>`);
+- the coordinator restarts canonical sessions afterwards.
+
+Full workflow: `skynet/skill-tree.md`.
 <!-- dist-cutoff-end -->
