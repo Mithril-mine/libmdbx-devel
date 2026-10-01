@@ -162,4 +162,40 @@ paths:
   force-push the branch.
 
 Full policy: `skynet/git-history-policy.md`.
+
+## Skills & profiles (dev-only)
+
+Skills live in [`skills/`](skills/README.md) and are usable through the `skill`
+tool (active copies in `.opencode/skills/`). Reference material about libmdbx
+itself is in [`docs/engineering/`](docs/engineering/README.md).
+
+**Pick a profile by task** and load it via the `skill` tool:
+
+| Task | Profile |
+|---|---|
+| New API function / WAF optimization | `developer` |
+| Deep refactoring (B+tree/CoW/GC/API) | `refactoring` |
+| Test decomposition, characterisation, CI pipeline | `testing` |
+| Code review (C/CXX/ARCH) | `code-review` |
+| Build, CI, amalgamation, NDK, LTO | `platform-build` |
+| Documentation / ADR maintenance | `documentation` |
+
+Every profile's mandatory context references `docs/engineering/*`
+(`libmdbx-invariants.md`, `subsystem-map.md`, `module-lock-matrix.md`,
+`test-durability-strategy.md`); read them by link, do not duplicate content.
+
+General development flow — the [superpowers](skills/superpowers/README.md)
+methodology (brainstorm → plan → worktree → TDD → review → finish).
+
+### Skill updates & session restart (dev-only)
+
+Skills are loaded into opencode sessions at startup (`Skill.available()`). When
+you change `skills/*` or `.opencode/skills/*`:
+
+- sync active copies in `.opencode/skills/` (relative-link depth differs there);
+- mark the commit/PR with `SKILLS-UPDATED` and note "restart sessions required";
+- refresh the `skill-tree` worktree (`git fetch && git reset --hard origin/<branch>`);
+- the coordinator restarts canonical sessions afterwards.
+
+Full workflow: `skynet/skill-tree.md`.
 <!-- dist-cutoff-end -->

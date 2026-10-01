@@ -87,6 +87,10 @@ Author: Leonid Yuriev \<leo@yuriev.ru\>. Home site: <https://libmdbx.dqdkfa.ru>.
 | [`debugging-methodology.md`](debugging-methodology.md) | Debugging methodology: tools (`mdbx_chk`, PROFGC, `commit_latency`, sanitizers), step-by-step scenarios (growth, slow commit, MAP_FULL, corruption, long readers, fork, Windows, containers), internal debugging |
 | [`deep-dive.md`](deep-dive.md) | Deep dive on LCK layout/versions, RLT slots, HSR protocol, fork(), WRITEMAP/auto-sync and recovery modes |
 | [`glossary-compact.md`](glossary-compact.md) | Compact glossary of terms used in discussions/reformulations (writemap, WAF, overflow, subpage, stragglers, presync, etc.) |
+| [`libmdbx-invariants.md`](libmdbx-invariants.md) | **Invariants checklist (RU)**: subsystems S1–S14, 6 critical invariants, C/C++ ABI boundary, module-risk matrix — used in every review/test |
+| [`subsystem-map.md`](subsystem-map.md) | Subsystem map S1–S14 with key `src/*` modules and refactoring risk levels (🔴🟠🟡) |
+| [`module-lock-matrix.md`](module-lock-matrix.md) | Pairwise subsystem conflict matrix (HIGH/MED/LOW) + high-risk `src/*` zones for parallel work planning |
+| [`test-durability-strategy.md`](test-durability-strategy.md) | Test durability strategy: `MDBX_SYNC_*` modes, speed-up transports (`/dev/shm`, RAM-disk), Quick/Full matrix |
 | [`test-coverage.md`](test-coverage.md) | Tests → modules coverage map: which test guards which module/feature, coverage gaps |
 | [`techdebt.md`](techdebt.md) | Tech-debt inventory from source scan: 86 TODO/FIXME/workaround markers by category with file:line refs |
 | [`workflows.md`](workflows.md) | Git branching, PR/review flow, CI triggers, release & amalgamation process |
@@ -109,6 +113,9 @@ Depending on the task, start from:
 - **How libmdbx works (functional view, RU, reader Q&A + deep dives)** → [`functional-architecture.md`](functional-architecture.md)
 - **C++ API / classes / wrappers** → [`cxx-api.md`](cxx-api.md)
 - **What tests guard a module / coverage gaps** → [`test-coverage.md`](test-coverage.md)
+- **Critical invariants to check in reviews/tests** → [`libmdbx-invariants.md`](libmdbx-invariants.md), [`subsystem-map.md`](subsystem-map.md)
+- **Subsystem conflict zones for parallel work** → [`module-lock-matrix.md`](module-lock-matrix.md)
+- **Test durability modes / speed-up transports** → [`test-durability-strategy.md`](test-durability-strategy.md)
 - **What to refactor first / known debt** → [`techdebt.md`](techdebt.md)
 - **Refactoring / smells / cleanup workflow** → [`.codeassistant/skills/refactor/`](../.codeassistant/skills/refactor/SKILL.md)
 - **Writing or reviewing C++ (API layer)** → [`.codeassistant/skills/modern-cpp-en/`](../.codeassistant/skills/modern-cpp-en/SKILL.md)
