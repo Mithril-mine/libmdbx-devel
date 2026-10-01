@@ -60,7 +60,7 @@ Test quality rules (adapted):
   structures use the white-box pattern: include the module source directly
   (e.g. `tests/ut/details_rkl.c` does `#include "../../src/rkl.c"` + `txl.c`), or include an
   internal header (like `tests/ut/issues/issue_gh0017.c` uses `essentials.h` for the ABI-layout
-  check). See `test-coverage.md` for the coverage map.
+  check). See `../../../docs/engineering/test-coverage.md` for the coverage map.
 
 ### Verify RED — watch it fail
 

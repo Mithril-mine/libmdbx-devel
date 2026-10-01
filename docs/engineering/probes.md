@@ -2,7 +2,7 @@
 
 > Каталог и описание статических трассировочных пробников (`USDT`/`SystemTap`/`DTrace`),
 > встроенных в движок. Наполняется в рамках **TASK-14** (`B3` бэклога).
-> Терминология и сценарии использования — в `skynet/test-scenarios.md` (§2, §3).
+> Терминология и сценарии использования — в `docs/engineering/test-scenarios.md` (§2, §3).
 
 ## 1. Зачем
 
@@ -40,7 +40,12 @@ mdbx::<подсистема>::<фаза>::<событие>
 
 - CMake: `cmake -DENABLE_SYSTEMTAP=ON` (требует `sys/sdt.h`; проверка в
   `cmake/profile.cmake`). Опция `ENABLE_DTRACE=ON` эквивалентна на платформах
-  с `<sys/sdt.h>` (Linux, macOS, *BSD, Solaris).
+  с `<sys/sdt.h>`.
+- **Статус валидации платформ:** провалидирован только **Linux** — сборка
+  с маркерами и их проверка (`readelf -n`, секция `.note.stapsdt`) выполнены
+  на Linux/ELF. macOS/*BSD/Solaris-варианты имеют собственный инструментарий
+  DTrace и **не** производят ELF-секцию `.note.stapsdt`; они не проверялись
+  и пока считаются «по замыслу» (см. §6).
 - GNUmakefile: цель `cmake-probes-build` собирает с `-DENABLE_SYSTEMTAP=ON` и
   выводит число маркеров.
 - Без опций пробники компилируются в `__noop` (ноль-стоимость, без `.note.stapsdt`).
@@ -71,13 +76,16 @@ probe process("/path/to/libmdbx.so").mark("alloc__source") {
 Полноценная эмуляция `MDBX_MAP_FULL` и других кодов — через `return`-пробники
 (точки выхода функций, где решение уже принято). Требуется рантайм SystemTap
 (`stap`), которого нет на сборочных хостах CI; для CI-проверки присутствия
-пробников используется `tests/probes-check.sh` (см. §6).
+пробников используется `tests/scripts/probes-check.sh` (см. §6).
 
 ## 6. Проверка без рантайма SystemTap
 
 - `readelf -n <libmdbx.so>` показывает секцию `.note.stapsdt` со всеми маркерами.
-- `tests/probes-check.sh <elffile>` — проверяет наличие ожидаемого набора
+- `tests/scripts/probes-check.sh <elffile>` — проверяет наличие ожидаемого набора
   маркеров, пригоден для CI (не требует root и `stap`).
+
+> Справка по языку SystemTap (user-space/kernel домены, statement-пробники,
+> наблюдение vs инъекция, требования/права): `docs/engineering/systemtap-reference.md`.
 
 ## 7. Кандидаты следующих партий (test-scenarios §2.4)
 

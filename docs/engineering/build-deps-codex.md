@@ -128,6 +128,6 @@ strace-audit.sh --build-dir <dir> [--target <T>] [--ctest <regex>] [--force]
 
 - `AGENT-WORKSPACE.md` — раздача задач по нагрузке (не запускать тяжёлые аудиты
   при высокой load1).
-- `skynet/test-scenarios-codex.md` — сценарии задают `speed_class`/`sync_mode`;
+- `docs/engineering/test-scenarios-codex.md` — сценарии задают `speed_class`/`sync_mode`;
   кодекс сборки требует, чтобы новые юнит-тесты были зарегистрированы в CTest
   с label-деревом (`ut.*`), иначе они не прогоняются сегментированно.
