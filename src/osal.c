@@ -3778,12 +3778,14 @@ const char *osal_getenv_singlethreaded(const char *name, bool secure) {
     }
   }
 #if defined(MDBX_PROBES)
+  /*> dist-cutoff-begin */
   /* NB: under MDBX_PROBES, osal_realloc is redirected to mprobe_realloc()
    * which re-enters mprobe_is_active() -> mprobe_init_activation() while
    * mprobe_reg_lock is held by the outer mprobe_init_activation() call ->
    * self-deadlock. Use the probe-bus's own raw allocator to avoid the
    * redirect (see osal.h "probe-bus allocation interception"). */
   buf = (char *)osal_realloc_raw(buf, size);
+  /*< dist-cutoff-end */
 #else
   buf = (char *)osal_realloc(buf, size);
 #endif

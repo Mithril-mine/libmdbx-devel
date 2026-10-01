@@ -1,5 +1,20 @@
 name: ci-linux
 
+# Infra v3 platform gate for Linux (migrated from the legacy `make check`
+# matrix; see .skynet/plans/testing-infra-v3-plan.md). Runs the linux-full
+# profile (8 registry cells: ubuntu-24.04 + ubuntu-26.04-arm, Debug/Release,
+# CXX on/off) with the fast ctest scope (smoke-t1 | ut.* minus ut.heavy).
+#
+# The legacy `make check` also invoked `test-stochastic` (multi-process
+# mdbx_test, 600s), which has been unstable since the TASK-43 port
+# (bad75821): with an explicit --duration the default nops=1000 bound no
+# longer truncates runs, so the DB grows into MDBX_MAP_FULL /
+# MDBX_UNABLE_EXTEND_MAPSIZE. Stochastic coverage is provided by
+# ci-dispatch nightly (full profile + full scope) instead.
+#
+# dist/amalgamation check (the former `make check` -> `dist install`) is
+# kept as a dedicated job below.
+
 env:
   CI: GITHUB
 
@@ -18,24 +33,73 @@ on:
     types: [dispatch-event]
 
 jobs:
-  ci-job:
-    runs-on: ${{ matrix.os }}
+  resolve:
+    runs-on: ubuntu-24.04
+    outputs:
+      cells: ${{ steps.resolve.outputs.cells }}
+      ref: ${{ steps.resolve.outputs.ref }}
+      scope: ${{ steps.resolve.outputs.scope }}
+    steps:
+      - name: checkout
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+          fetch-tags: true
+          submodules: true
+      - name: resolve cells
+        id: resolve
+        shell: bash
+        env:
+          EVENT_REF: ${{ github.event.client_payload.ref }}
+        run: |
+          set -euo pipefail
+          CELLS=$(tests/ci/select-cells.py --profile linux-full)
+          REF="${EVENT_REF:-master}"
+          JSON=$(tests/ci/resolve-cells.py "$CELLS" fast 2> >(sed 's/^/==> /' >&2) || { echo "resolve-cells failed" >&2; exit 1; })
+          echo "cells=${JSON}" >> "$GITHUB_OUTPUT"
+          echo "ref=${REF}" >> "$GITHUB_OUTPUT"
+          echo "scope=fast" >> "$GITHUB_OUTPUT"
+
+  run:
+    needs: resolve
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-26.04-arm, ubuntu-24.04]
-        build-type: [Debug, Release]
-        cxx: [ON, OFF]
+        include: ${{ fromJson(needs.resolve.outputs.cells) }}
+    uses: ./.github/workflows/ci-run.yml
+    with:
+      cell: ${{ matrix.cell }}
+      "runs-on": ${{ matrix.runs-on }}
+      scope: ${{ matrix.scope }}
+      coverage: ${{ matrix.coverage }}
+      ndk: ${{ matrix.ndk }}
+      ref: ${{ needs.resolve.outputs.ref }}
+
+  dist:
+    # Amalgamation gate: `make dist` must produce the tarball and the
+    # amalgamated dist/ sources with no dev-only leftovers (probe-bus,
+    # skynet/, etc.). Mirrors the former `make check` -> `dist install` leg.
+    runs-on: ubuntu-24.04
     steps:
-    - uses: actions/checkout@v7
-      with:
-        fetch-depth: 0
-        fetch-tags: true
-        submodules: true
-    - name: ci-step
-      shell: bash
-      run: |
-        export CI_MAKE_TARGET=$(if [ "$(uname)" = 'Linux' ]; then echo 'check'; elif [ "${{ matrix.build-type }}" != 'Debug' ]; then echo 'test'; else echo 'smoke'; fi) && \
-        export MDBX_BUILD_OPTIONS=$(if [ "${{ matrix.build-type }}" = 'Debug' ]; then echo '-DMDBX_CHECKING=2 -DMDBX_DEBUG=1'; else echo '-DMDBX_CHECKING=0 -DMDBX_DEBUG=0'; fi) && \
-        export MDBX_BUILD_CXX=$(if [ "${{ matrix.cxx }}" = 'ON' ]; then echo 'YES'; else echo 'NO'; fi) && \
-        . tests/ci/ci.sh "-DCMAKE_BUILD_TYPE=${{ matrix.build-type }}|-DMDBX_BUILD_CXX:BOOL=${{ matrix.cxx }}"
+      - name: checkout
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+          fetch-tags: true
+          submodules: true
+      - name: dist-amalgamation
+        shell: bash
+        run: |
+          set -euo pipefail
+          make dist V=1
+          # dist must stay free of the dev-only probe-bus implementation:
+          # real mprobe_* entry points, the MDBX_PROBES build define and any
+          # dist-cutoff markers. The no-op MPROBE_COLLECT/WATCH/FAULT fallbacks
+          # in mdbx-internals.h are intentional (keep dist compiling).
+          if grep -nE "mprobe_(ctl|fault|alloc|realloc|fire|is_active|reg_lock)|define MDBX_PROBES|dist-cutoff" \
+              dist/mdbx.c dist/mdbx.h dist/mdbx.c++ dist/mdbx.h++ dist/mdbx-internals.h; then
+            echo "ERROR: probe-bus/dev leftovers leaked into the amalgamated dist/" >&2
+            exit 1
+          fi
+          test -f libmdbx-sources-*.tar.gz
+          echo "dist OK"

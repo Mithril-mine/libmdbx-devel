@@ -135,8 +135,10 @@ Cube image `dh-mirror.gitverse.ru/jakoch/cpp-devbox:forky-latest`, max 30m, scri
 
 ### 5.2 GitHub Actions (`.github/workflows/`)
 
-`ci-linux.yml`, `ci-macos.yml`, `ci-windows-msvc.yml`, `ci-windows-mingw.yml`,
-`ci-windows-mscl.yml`, `ci-cxx-msvc.yml`, `ci-android.yml` — cross-platform matrix (informational).
+`ci-linux.yml`, `ci-macos.yml`, `ci-windows.yml`, `ci-android.yml` — platform gates
+over the Infra v3 cell registry (`tests/ci/config.json`, fast scope).
+`ci-dispatch.yml` — change-addressed push gate + nightly full profile.
+`ci-probes.yml` — probe-bus (MDBX_PROBES) runs.
 
 ---
 
