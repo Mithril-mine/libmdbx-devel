@@ -743,12 +743,15 @@ static int probe_ctl_ok(const char *request) {
   return 0;
 }
 
-/* Включить runtime-активацию (если не задано окружением теста). */
+/* Включить runtime-активацию (если не задано окружением теста).
+ * NB: на Windows движок читает env через GetEnvironmentVariableA (Win32
+ * process environment block), а CRT _putenv_s обновляет только CRT-таблицу —
+ * они расходятся, поэтому используем Win32 API. */
 static void probe_activate(void) {
   const char *value = getenv("MDBX_PROBES");
   if (!value || !*value || strcmp(value, "1") != 0) {
-#ifdef _WIN32
-    _putenv_s("MDBX_PROBES", "1");
+#if defined(_WIN32)
+    SetEnvironmentVariableA("MDBX_PROBES", "1");
 #else
     setenv("MDBX_PROBES", "1", 0);
 #endif

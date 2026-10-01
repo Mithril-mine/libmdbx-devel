@@ -276,15 +276,21 @@ MDBX_MAYBE_UNUSED static __always_inline bool atomic_cas_size(mdbx_atomic_size_t
 #elif defined(__GNUC__) || defined(__clang__)
   return __sync_bool_compare_and_swap(&p->weak, c, v);
 #elif defined(_MSC_VER)
-  if (sizeof(size_t) == sizeof(uint32_t))
-    return c == (size_t)_InterlockedCompareExchange((volatile long *)&p->weak, (long)v, (long)c);
+#if MDBX_WORDBITS == 64
   STATIC_ASSERT(sizeof(size_t) == sizeof(uint64_t));
   return c == (size_t)_InterlockedCompareExchange64((volatile __int64 *)&p->weak, (__int64)v, (__int64)c);
+#else /* 32-bit */
+  STATIC_ASSERT(sizeof(size_t) == sizeof(uint32_t));
+  return c == (size_t)_InterlockedCompareExchange((volatile long *)&p->weak, (long)v, (long)c);
+#endif
 #elif defined(__APPLE__)
-  if (sizeof(size_t) == sizeof(uint32_t))
-    return OSAtomicCompareAndSwap32Barrier((int32_t)c, (int32_t)v, (volatile int32_t *)&p->weak);
+#if MDBX_WORDBITS == 64
   STATIC_ASSERT(sizeof(size_t) == sizeof(uint64_t));
   return OSAtomicCompareAndSwap64Barrier((int64_t)c, (int64_t)v, (volatile int64_t *)&p->weak);
+#else /* 32-bit */
+  STATIC_ASSERT(sizeof(size_t) == sizeof(uint32_t));
+  return OSAtomicCompareAndSwap32Barrier((int32_t)c, (int32_t)v, (volatile int32_t *)&p->weak);
+#endif
 #else
 #error FIXME: Unsupported compiler
 #endif
@@ -296,15 +302,21 @@ MDBX_MAYBE_UNUSED static __always_inline size_t atomic_add_size(mdbx_atomic_size
 #elif defined(__GNUC__) || defined(__clang__)
   return __sync_fetch_and_add(&p->weak, v);
 #elif defined(_MSC_VER)
-  if (sizeof(size_t) == sizeof(uint32_t))
-    return (size_t)_InterlockedExchangeAdd((volatile long *)&p->weak, (long)v);
+#if MDBX_WORDBITS == 64
   STATIC_ASSERT(sizeof(size_t) == sizeof(uint64_t));
   return (size_t)_InterlockedExchangeAdd64((volatile __int64 *)&p->weak, (__int64)v);
+#else /* 32-bit */
+  STATIC_ASSERT(sizeof(size_t) == sizeof(uint32_t));
+  return (size_t)_InterlockedExchangeAdd((volatile long *)&p->weak, (long)v);
+#endif
 #elif defined(__APPLE__)
-  if (sizeof(size_t) == sizeof(uint32_t))
-    return (size_t)OSAtomicAdd32Barrier((int32_t)v, (volatile int32_t *)&p->weak);
+#if MDBX_WORDBITS == 64
   STATIC_ASSERT(sizeof(size_t) == sizeof(uint64_t));
   return (size_t)OSAtomicAdd64Barrier((int64_t)v, (volatile int64_t *)&p->weak);
+#else /* 32-bit */
+  STATIC_ASSERT(sizeof(size_t) == sizeof(uint32_t));
+  return (size_t)OSAtomicAdd32Barrier((int32_t)v, (volatile int32_t *)&p->weak);
+#endif
 #else
 #error FIXME: Unsupported compiler
 #endif

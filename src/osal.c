@@ -3761,23 +3761,37 @@ bin128_t osal_guid(const MDBX_env *env) {
 const char *osal_getenv_singlethreaded(const char *name, bool secure) {
   (void)secure;
 #if IS_WINDOWS
-  /* We sure this function never calls in a multithreaded cases, since used at initialization stage only. */
-  static char buf[42];
+  /* We sure this function never calls in a multithreaded cases, since used at initialization stage only.
+   * NB: values longer than the previous fixed 42-byte buffer (e.g. long build paths via MDBX_PROBE_CTL)
+   * were silently rejected; query the required size first and grow the static buffer accordingly. */
+  static char *buf = nullptr;
   SetLastError(ERROR_OUT_OF_PAPER);
-  const size_t len = GetEnvironmentVariableA(name, buf, sizeof(buf));
-  if (len >= sizeof(buf))
-    /* no idea how to handle */
-    return nullptr;
-  if (len != 0)
-    return buf;
-  switch (GetLastError()) {
-  case ERROR_OUT_OF_PAPER:
-    return "";
-  default:
-    /* no idea to do in case of other error */
-  case ERROR_ENVVAR_NOT_FOUND:
-    return nullptr;
+  const DWORD size = GetEnvironmentVariableA(name, nullptr, 0);
+  if (size == 0) {
+    switch (GetLastError()) {
+    case ERROR_OUT_OF_PAPER:
+      return "";
+    default:
+      /* no idea to do in case of other error */
+    case ERROR_ENVVAR_NOT_FOUND:
+      return nullptr;
+    }
   }
+#if defined(MDBX_PROBES)
+  /* NB: under MDBX_PROBES, osal_realloc is redirected to mprobe_realloc()
+   * which re-enters mprobe_is_active() -> mprobe_init_activation() while
+   * mprobe_reg_lock is held by the outer mprobe_init_activation() call ->
+   * self-deadlock. Use the probe-bus's own raw allocator to avoid the
+   * redirect (see osal.h "probe-bus allocation interception"). */
+  buf = (char *)osal_realloc_raw(buf, size);
+#else
+  buf = (char *)osal_realloc(buf, size);
+#endif
+  if (!buf)
+    return nullptr;
+  if (GetEnvironmentVariableA(name, buf, size) == 0)
+    return nullptr;
+  return buf;
 #else
 #if defined(_GNU_SOURCE) && __GLIBC_PREREQ(2, 17)
   if (secure)
