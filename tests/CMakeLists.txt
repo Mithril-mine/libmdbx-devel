@@ -165,14 +165,6 @@ endmacro(add_extra_test)
 
 add_subdirectory(framework)
 
-# Probe-bus test-side code (probe-ctl.h, case3_error_paths attestation, etc.)
-# is guarded by MDBX_PROBES, which engine sources get via config-cmake.h but
-# public C++ API headers (mdbx.h++) do not expose. Propagate the define to the
-# test targets so the guards activate in probe builds.
-if(MDBX_PROBES)
-  add_compile_definitions(MDBX_PROBES)
-endif()
-
 # ######################################################################################################################
 
 if(CMAKE_CROSSCOMPILING AND NOT CMAKE_CROSSCOMPILING_EMULATOR)
@@ -594,6 +586,9 @@ else()
         add_ut(buffers SOURCE ut/api/buffers.c++)
         set_tests_properties(buffers PROPERTIES LABELS "ut;ut.api")
         add_ut(bunches_removal SOURCE ut/gc/bunches_removal.c++)
+        if(MDBX_PROBES)
+          target_compile_definitions(ut_bunches_removal PRIVATE MDBX_PROBES)
+        endif()
         set_tests_properties(bunches_removal PROPERTIES LABELS "ut;ut.gc"
           # DEEP=1 exercises all bunch-delete paths and covers the SAME
           # gc-get/gc-put + page-split/node/tree-ops/pnl/dpl branches as
@@ -602,6 +597,12 @@ else()
           # deeper B-trees add no extra line coverage). No full variant needed.
           ENVIRONMENT "MDBX_BUNCHES_DEEP=1")
         add_ut(get_cached SOURCE ut/api/get_cached.c++)
+        if(MDBX_PROBES)
+          # C++ test TUs (public mdbx.h++) do not see the internal config-cmake.h
+          # define; propagate MDBX_PROBES for the probe-bus guards (probe-ctl.h,
+          # case3_error_paths attestation). C test TUs already get it via config.
+          target_compile_definitions(ut_get_cached PRIVATE MDBX_PROBES)
+        endif()
         set_tests_properties(get_cached PROPERTIES LABELS "ut;ut.api;ut.txn"
           # Trimmed timeouts: case1 stairway + case2 multithread reach the same
           # cache branches at ~2.7s vs ~15.6s (measured 2026-09-30); the

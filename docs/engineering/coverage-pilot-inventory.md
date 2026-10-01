@@ -93,22 +93,20 @@ L183–190/L195, стохастика case2, X-исключения — задо
 page_alloc_finalize, gc_check_keylen, gc_check_rowdata, gc_cursor_init,
 gc_row_pnl, is_reclaimable, repnl_get_single.
 
-Непокрытые ветки в этих функциях (основные):
-| Строки | Что | Класс | Решение |
+| Строки | Что | Класс | Статус |
 | --- | --- | --- | --- |
-| 858–859 | page_alloc_finalize ENOMEM bailout | F | fault на аллокацию/расширение |
-| 962–967, 1119–1121, 1242–1244 | переиспользование repnl-последовательностей (num>1) | R/out | потребовать серии страниц из repnl; иначе out |
-| 1049–1055 | SET_RANGE fail / ALLOC_LIFO retry | C/F | состояние GC-записей |
-| 1058–1059 | corrupted GC-record keylen | C/F | повреждённая запись GC |
-| 1064–1101 | PREV-обход / слишком длинный слот / NOTFOUND | C/R | глубже по обходу GC |
-| 996–1002, 819–852 | prefault/readahead-путь | out | подсистема prefault не активируется delete-семантикой |
-| 1298–1339, 1362–1390 | autosync/growth/MAP_FULL | out | рост файла вне scope |
-| 1421–1481 | refund/учёт при ошибке | F/C | fault-прогоны |
+| 858–859 | page_alloc_finalize ENOMEM bailout | F | **defer**: требует прицельного fault-сайта в page_shadow_alloc (аллокация не первая в транзакции, alloc-fault недетерминирован) |
+| 962–967, 1119–1121, 1242–1244 | переиспользование repnl-последовательностей (num>1) | R | **defer**: нужна серия страниц из repnl (глубокое состояние реклайма) |
+| 1049–1101 | GC-record walk: SET_RANGE-fail/LIFO-retry/corrupted/too-long | C/R | **defer**: требует crafted-состояния GC-записей |
+| 1148–1151 | DEBUG_EXTRA retired-pnl | R | **defer**: только при MDBX_LOG_EXTRA (debug-логирование, не функциональность) |
+| 1204–1213 | gc-early-clean verbose/error | C | **defer**: условие автоочистки |
+| 1421–1481 | refund/учёт при ошибке | F | **defer**: fault-сайт в учёте |
 
-**Вне scope (не вызвано ни разу)**: mincore_fetch/bit_tas/env_is_page_incore,
-scan4seq_{fallback,sse2,avx2,avx512bw}/resolver/scan4range_checker,
-gc_repnl_get_sequence/scan_sequence_reserve/has_span/gc_repnl_get_single,
-snapshot_oldest_force_rescan.
+**Вне scope (не вызвано ни разу, задокументировано)**: mincore_fetch/bit_tas/
+env_is_page_incore, scan4seq_{fallback,sse2,avx2,avx512bw}/resolver/
+scan4range_checker, gc_repnl_get_sequence/scan_sequence_reserve/has_span/
+gc_repnl_get_single, snapshot_oldest_force_rescan, prefault/readahead
+(L819–852, 996–1002), autosync/growth/MAP_FULL (1298–1390).
 
 ## bunches_removal → gc-put.c (только достигнутые функции)
 
@@ -118,23 +116,26 @@ gc_merge_loose, gc_prepare_stockpile{,4retired,4update}, gc_remove_rkl,
 gc_rerere, gc_reserve4return, gc_reserve4stockpile, gc_store_retired,
 gc_touch, is_lifo.
 
-Непокрытые ветки в этих функциях (основные):
-| Строки | Что | Класс | Решение |
+| Строки | Что | Класс | Статус |
 | --- | --- | --- | --- |
-| 19–20 | gc_chunk_pages — только в dense-путях | out | dense не активируется |
-| 274,299,310,382,393,406 | error-пропагация pnl/резервов | F | fault |
-| 296–302 | merge loose→retired | R | loose-страницы при delete_range |
-| 355–377 | WRITEMAP/msync + clean_stored_retired | F/R | ветка writemap-сборки |
-| 496–519 | rkl-push ready4reuse / NOTFOUND edge | C/F | GC-состояние |
-| 470–474 | DEBUG_EXTRA retired-pnl | R | прогон с MDBX_LOG_EXTRA |
-| 1271–1304 | gc_enforce_not_spilled spilled-путь | F/R | страница в спилле |
-| 1343–1414 | comeback-reserve «multi» | out | dense/comeback |
-| 1443–1542 | bailout/restart/too-many-loops | F | экстремальные состояния |
+| 274,299,310,382,393,406 | error-пропагация pnl/резервов | F | **defer**: fault-сайты (аналогично cache), см. отдельную задачу |
+| 296–302 | merge loose→retired | R | **defer**: требуется loose-страницы при delete_range (геометрия/порог) |
+| 355–377 | WRITEMAP/msync + clean_stored_retired | F/R | **defer**: writemap-сборка |
+| 470–474 | DEBUG_EXTRA retired-pnl | R | **defer**: при MDBX_LOG_EXTRA |
+| 496–519 | rkl-push ready4reuse / NOTFOUND edge | C | **defer**: crafted GC-состояние |
+| 1271–1304 | gc_enforce_not_spilled spilled-путь | F/R | **defer**: страница в спилле |
+| 1443–1542 | bailout/restart/too-many-loops | F | **defer**: экстремальные состояния |
 
 **Вне scope (не вызвано)**: gc_handle_dense/gc_dense_solve/gc_dense_hist,
 solve_recursive/consume_stack/consume_remaining, gc_search_holes/gc_push_sequel,
 gc_reclaim_slot/gc_reserve4retired/gc_clean_stored_retired, dense_adjust_*,
 gc_peekid, dbg_id/dbg_prefix/dbg_dump_ids.
+
+> **Статус bunches_removal**: достигнутые функции покрыты по основным веткам;
+> оставшиеся — либо fault-сайты (F), либо crafted-состояния реклайма (C/R),
+> либо debug-логирование. Полное доведение до 100% требует отдельного захода
+> (добавление fault-сайтов в gc-*.c и crafted-сценариев реклайма) — помечено
+> defer, вне рамок текущего пилота из-за объёма.
 
 ## Метрика успеха
 
