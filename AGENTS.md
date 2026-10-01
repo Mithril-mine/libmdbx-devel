@@ -162,4 +162,28 @@ paths:
   force-push the branch.
 
 Full policy: `skynet/git-history-policy.md`.
+
+## Skills & profiles (dev-only)
+
+Skills live in [`skills/`](skills/README.md) and are usable through the `skill`
+tool (active copies in `.opencode/skills/`). Reference material about libmdbx
+itself is in [`docs/engineering/`](docs/engineering/README.md).
+
+**Pick a profile by task** and load it via the `skill` tool:
+
+| Task | Profile |
+|---|---|
+| New API function / WAF optimization | `developer` |
+| Deep refactoring (B+tree/CoW/GC/API) | `refactoring` |
+| Test decomposition, characterisation, CI pipeline | `testing` |
+| Code review (C/CXX/ARCH) | `code-review` |
+| Build, CI, amalgamation, NDK, LTO | `platform-build` |
+| Documentation / ADR maintenance | `documentation` |
+
+Every profile's mandatory context references `docs/engineering/*`
+(`libmdbx-invariants.md`, `subsystem-map.md`, `module-lock-matrix.md`,
+`test-durability-strategy.md`); read them by link, do not duplicate content.
+
+General development flow — the [superpowers](skills/superpowers/README.md)
+methodology (brainstorm → plan → worktree → TDD → review → finish).
 <!-- dist-cutoff-end -->
