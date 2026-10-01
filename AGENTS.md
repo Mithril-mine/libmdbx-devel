@@ -143,6 +143,15 @@ namespace `mdbx` with RAII handles (`env`/`env_managed`, `txn`/`txn_managed`,
  - use CMake for build and CTest for testing
  - use at least Linux and Windows both environments for build and testing
 
+Detailed test documentation (dev-only, in `docs/engineering/`):
+
+- **Operational rules** (tiers, budgets, flaky policy, metrics): [`testing-codex.md`](docs/engineering/testing-codex.md)
+- **How to achieve full coverage** (COLLECT/WATCH/FAULT channels, probe-bus): [`testing-methodology.md`](docs/engineering/testing-methodology.md)
+- **Scenario specs for test writers** (SC-* + quality standard): [`test-scenarios.md`](docs/engineering/test-scenarios.md), [`test-scenarios-codex.md`](docs/engineering/test-scenarios-codex.md)
+- **Coverage map / gaps**: [`test-coverage.md`](docs/engineering/test-coverage.md)
+- **Durability modes & speed-up transports**: [`test-durability-strategy.md`](docs/engineering/test-durability-strategy.md)
+- **CI v2 infrastructure design**: [`testing-infra-design.md`](docs/engineering/testing-infra-design.md)
+
 ## Code style (dev-only)
  - use LLVM codestyle
 

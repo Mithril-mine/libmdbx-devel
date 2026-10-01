@@ -7,6 +7,18 @@ description: Profile for testing libmdbx — monolithic test decomposition, char
 
 > Обязательный контекст: [`docs/engineering/libmdbx-invariants.md`](../../../docs/engineering/libmdbx-invariants.md),
 > [`docs/engineering/test-durability-strategy.md`](../../../docs/engineering/test-durability-strategy.md).
+>
+> Смежные материалы: [`docs/engineering/testing-methodology.md`](../../../docs/engineering/testing-methodology.md)
+> (механизмы полноты покрытия COLLECT/WATCH/FAULT),
+> [`docs/engineering/testing-codex.md`](../../../docs/engineering/testing-codex.md)
+> (операционные правила C0–C6: тайеры, флаки, бюджеты),
+> [`docs/engineering/test-scenarios.md`](../../../docs/engineering/test-scenarios.md)
+> (ТЗ сценариев SC-*), [`docs/engineering/test-coverage.md`](../../../docs/engineering/test-coverage.md)
+> (карта «тесты → модули», дыры), [`docs/engineering/probe-bus.md`](../../../docs/engineering/probe-bus.md)
+> (движок инъекций mprobe v2), [`docs/engineering/probes.md`](../../../docs/engineering/probes.md)
+> (каталог USDT/DTrace-маркеров), [`docs/engineering/testing-infra-design.md`](../../../docs/engineering/testing-infra-design.md)
+> (дизайн CI v2), [`docs/engineering/debugging-methodology.md`](../../../docs/engineering/debugging-methodology.md)
+> (инструменты отладки и сценарии).
 
 ## Область
 
