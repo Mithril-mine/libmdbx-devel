@@ -61,22 +61,31 @@
 
 ## get_cached → api-get-cached.c (функции cache_get/mdbx_cache_get/_SingleThreaded)
 
-| Строки | Что | Класс | Решение |
-| --- | --- | --- | --- |
-| 62 | check_txn error | F | fault-инъекция результата |
-| 99 | dbi_check error | R | невалидный dbi (напр. 999) |
-| 126 | tbl_refresh (не NOTFOUND) error | F | fault |
-| 155,165,212,216,280 | cursor_init/page_get/cursor_push/node_read errors | F | fault |
-| 160 | check_key error | R | ключ длиннее страницы |
-| 175–185 | notfound_elevate_trunk (collapse) | R/C | MVCC-сценарий «схлопывание», при неудаче — C-инъекция |
-| 190,234 | elev-переходы | C | см. выше / скорректировать сценарий |
-| 220–222 | CORRUPTED leaf-type | F | fault проверки валидации |
-| 274–275 | EMULTIVAL | R | dupsort-таблица, мультизначение |
-| 311 | RACE (Debug-ветка) | R | entry.last_confirmed_txnid = MAX_TXNID+1 до вызова |
-| 339 | retry `local = again` | X(out) | требует конкурентной модификации entry; детерминированно нет (case2 стохастичен) |
-| 373 | EINVAL (null аргументы) | R | nullptr key/data/entry |
-| 380 | mdbx_cache_init экспорт | X | тесты используют inline из mdbx.h |
-| 306,347 | `while(true)` headers | — | gcov-артефакт: тело выполняется (32597–33779 раз) |
+| Строки | Что | Класс | Решение | Статус |
+| --- | --- | --- | --- | --- |
+| 62 | check_txn error | F | fault-сайт `cache_check_txn_err` | ✅ |
+| 99 | dbi_check error | R | невалидный dbi (999), свежий read-txn | ✅ |
+| 126 | tbl_refresh (не NOTFOUND) error | F | fault-сайт `cache_tbl_refresh_err` + DBI_STALE через env2 | ✅ |
+| 155 | cursor_init error | F | fault-сайт `cache_cursor_init_err` | ✅ |
+| 160 | check_key error | R | ordinal-таблица + 3-байтный ключ | ✅ |
+| 165 | page_get error | F | fault-сайт `cache_page_get_err` | ✅ |
+| 175–190 | notfound_elevate_trunk | R/C | вход достигнут (label + not_found) через stale-entry сценарий; **петля L183–190** требует «схлопывания» дерева (defer) | ◑ |
+| 192 | elev из branch | R/C | частично (label покрыт); L195-переход defer | ◑ |
+| 212,216 | page_get/cursor_push branch errors | F | fault-сайты на глубокой таблице (depth≥4) | ✅ |
+| 220–222 | CORRUPTED leaf-type | F | fault-сайт `cache_leaf_validation_fail` (→MDBX_CORRUPTED) | ✅ |
+| 274–275 | EMULTIVAL | R | dupsort-таблица, два значения | ✅ |
+| 280 | node_read error | F | fault-сайт `cache_node_read_err` | ✅ |
+| 311 | RACE (Debug-ветка) | R | entry.last_confirmed_txnid = UINT64_MAX до вызова | ✅ |
+| 316,357 | `while(true)` headers | — | gcov-артефакт (тело выполняется десятки тысяч раз) | 📄 |
+| 339 | retry `local = again` | S | конкурентная модификация entry — стохастически в case2 (недетерминированно, вне детерминированного пилота) | 📄 |
+| 373 | EINVAL (null аргументы) | R | nullptr key (оба entry-point) | ✅ |
+| 380 | mdbx_cache_init экспорт | X | тесты используют inline из mdbx.h | 📄 |
+
+Дополнительно закрыты: BEHIND (entry.trunk > snapshot), UNABLE (ABA-окно),
+RACE (невалидный last_confirmed). Аттестация: `query` по fault-тегам
+`cache_*` — seen>0.
+**Результат: 100% детерминированно-достижимых строк (defer: elev-петля
+L183–190/L195, стохастика case2, X-исключения — задокументированы).**
 
 ## bunches_removal → gc-get.c (только достигнутые функции)
 

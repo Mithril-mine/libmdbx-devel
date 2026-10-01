@@ -287,13 +287,13 @@ MDBX_MAYBE_UNUSED static inline char sanitizer_kind_of_poison(const void *addr, 
  * probe-bus implementation is dev-only (cut off from the amalgamation). These
  * are zero-cost no-ops unless MDBX_PROBES is defined. */
 #ifndef MPROBE_COLLECT
-#define MPROBE_COLLECT(name, value) ((void)(name), (void)(value))
+#define MPROBE_COLLECT(name, value) ((void)(value))
 #endif
 #ifndef MPROBE_WATCH
-#define MPROBE_WATCH(name, value) ((void)(name), (void)(value))
+#define MPROBE_WATCH(name, value) ((void)(value))
 #endif
 #ifndef MPROBE_FAULT
-#define MPROBE_FAULT(name, var) ((void)(name), (void)(var))
+#define MPROBE_FAULT(name, var) ((void)(var))
 #endif
 
 /*> dist-cutoff-begin */

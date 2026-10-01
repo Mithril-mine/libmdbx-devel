@@ -165,6 +165,14 @@ endmacro(add_extra_test)
 
 add_subdirectory(framework)
 
+# Probe-bus test-side code (probe-ctl.h, case3_error_paths attestation, etc.)
+# is guarded by MDBX_PROBES, which engine sources get via config-cmake.h but
+# public C++ API headers (mdbx.h++) do not expose. Propagate the define to the
+# test targets so the guards activate in probe builds.
+if(MDBX_PROBES)
+  add_compile_definitions(MDBX_PROBES)
+endif()
+
 # ######################################################################################################################
 
 if(CMAKE_CROSSCOMPILING AND NOT CMAKE_CROSSCOMPILING_EMULATOR)
@@ -597,8 +605,9 @@ else()
         set_tests_properties(get_cached PROPERTIES LABELS "ut;ut.api;ut.txn"
           # Trimmed timeouts: case1 stairway + case2 multithread reach the same
           # cache branches at ~2.7s vs ~15.6s (measured 2026-09-30); the
-          # extended profile is get_cached_full below.
-          ENVIRONMENT "MDBX_GET_CACHED_TIMEOUT_SEC=2;MDBX_GET_CACHED_CASE2_TIMEOUT_SEC=2")
+          # extended profile is get_cached_full below. MDBX_PROBES=1 включает
+          # fault-инъекцию и аттестацию (case3_error_paths, пилот B68-P3).
+          ENVIRONMENT "MDBX_GET_CACHED_TIMEOUT_SEC=2;MDBX_GET_CACHED_CASE2_TIMEOUT_SEC=2;MDBX_PROBES=1")
         # Full-coverage get_cached profile (deep/wide, long timeouts): the
         # routine run uses trimmed env-knob defaults (~25s); this variant
         # restores the deep/wide workload for milestone/nightly runs (kept out
