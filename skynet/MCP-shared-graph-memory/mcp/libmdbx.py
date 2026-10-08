@@ -94,6 +94,12 @@ ffi.cdef(
         const char *flags;
         const char *metadata;
     };
+    struct MDBX_canary {
+        uint64_t x;
+        uint64_t y;
+        uint64_t z;
+        uint64_t v;
+    };
 
     int mdbx_env_create(void **env);
     int mdbx_env_set_option(void *env, int option, uint64_t value);
@@ -106,6 +112,10 @@ ffi.cdef(
     int mdbx_txn_abort_ex(void *txn, void *latency);
     int mdbx_dbi_open(void *txn, const char *name, unsigned int flags,
                       MDBX_dbi *dbi);
+    int mdbx_dbi_sequence(void *txn, MDBX_dbi dbi, uint64_t *result,
+                          uint64_t increment);
+    int mdbx_canary_put(void *txn, struct MDBX_canary *canary);
+    int mdbx_canary_get(const void *txn, struct MDBX_canary *canary);
     int mdbx_put(void *txn, MDBX_dbi dbi, const MDBX_val *key, MDBX_val *data,
                  unsigned int flags);
     int mdbx_get(void *txn, MDBX_dbi dbi, const MDBX_val *key, MDBX_val *data);
@@ -122,6 +132,7 @@ ffi.cdef(
     const char *mdbx_strerror(int errnum);
     int mdbx_env_get_maxvalsize_ex(void *env, unsigned int flags);
     int mdbx_env_get_maxkeysize_ex(void *env, unsigned int flags);
+    int mdbx_env_sync_ex(void *env, bool force, bool nonblock);
     """
 )
 
@@ -213,8 +224,14 @@ RC_BAD_VALSIZE = -30781
 RC_BUSY = -30778
 RC_EMULTIVAL = -30421
 
-# MDBX_option_t: первый элемент enum MDBX_option (mdbx.h:2166).
+# MDBX_option_t: enum MDBX_option (mdbx.h) — значения по порядку членов.
 MDBX_OPT_MAX_DB = 0
+MDBX_OPT_SYNC_BYTES = 2
+MDBX_OPT_SYNC_PERIOD = 3
+
+# Синхронизация: SAFE_NOSYNC — нет fsync на коммите; движок сам сбрасывает
+# накопленное по порогам sync_bytes/sync_period (см. mdbx.h sync_modes).
+MDBX_SAFE_NOSYNC = 0x10000
 
 
 class LibmdbxError(RuntimeError):
@@ -317,7 +334,8 @@ def _val_bytes(val: object) -> bytes:
 class Env:
     """Обёртка над MDBX_env с автоматическим закрытием."""
 
-    def __init__(self, path: str, maxdbs: int = 32, create: bool = True):
+    def __init__(self, path: str, maxdbs: int = 32, create: bool = True,
+                 sync_bytes: int = 64 << 20, sync_period: int = 60):
         self.path = path
         out = ffi.new("void **")
         check(_get_lib().mdbx_env_create(out), "mdbx_env_create")
@@ -326,8 +344,29 @@ class Env:
               "mdbx_env_set_option(max_db)")
         # mode=0 означает "открыть существующее, не создавать" (mdbx.h env_open).
         mode = 0o644 if create else 0
-        rc = _get_lib().mdbx_env_open(self._env, path.encode(), NOSUBDIR, mode)
+        # SAFE_NOSYNC: дешёвые коммиты; фоновый тред (Store) шлёт env_sync_poll
+        # раз в секунду, а движок сбрасывает по порогам sync_bytes/sync_period.
+        flags = NOSUBDIR | MDBX_SAFE_NOSYNC
+        rc = _get_lib().mdbx_env_open(self._env, path.encode(), flags, mode)
         check(rc, "mdbx_env_open")
+        if sync_bytes:
+            check(_get_lib().mdbx_env_set_option(self._env, MDBX_OPT_SYNC_BYTES,
+                                                 sync_bytes),
+                  "mdbx_env_set_option(sync_bytes)")
+        if sync_period:
+            check(_get_lib().mdbx_env_set_option(self._env, MDBX_OPT_SYNC_PERIOD,
+                                                 sync_period),
+                  "mdbx_env_set_option(sync_period)")
+
+    def sync(self, force: bool = False, nonblock: bool = True) -> None:
+        """Сброс буферов данных на диск (mdbx_env_sync_ex).
+
+        force=True — принудительный сброс; force=False — polling: сброс только
+        если достигнут порог sync_bytes/sync_period. nonblock=True не ждёт
+        чужую write-txn (вернёт MDBX_BUSY)."""
+        rc = _get_lib().mdbx_env_sync_ex(self._env, force, nonblock)
+        if rc not in (RC_SUCCESS, RC_RESULT_TRUE, RC_BUSY):
+            check(rc, "mdbx_env_sync_ex")
 
     def begin(self, readonly: bool = False, parent: Optional[object] = None) -> "Txn":
         out = ffi.new("void **")
@@ -430,6 +469,35 @@ class Txn:
     def count(self, dbi: int) -> int:
         with self.cursor(dbi) as cur:
             return cur.count_all()
+
+    def sequence(self, dbi: int, increment: int = 1) -> int:
+        """mdbx_dbi_sequence: атомарный инкремент счётчика таблицы.
+
+        Возвращает текущее значение ДО изменения (как в C API).
+        В read-only транзакции increment должен быть 0.
+        """
+        out = ffi.new("uint64_t *")
+        rc = _get_lib().mdbx_dbi_sequence(self.ptr, dbi, out, increment)
+        if rc == RC_RESULT_TRUE:
+            # переполнение
+            raise LibmdbxError(rc, "mdbx_dbi_sequence overflow")
+        check(rc, "mdbx_dbi_sequence")
+        return int(out[0])
+
+    def canary_get(self) -> dict:
+        """mdbx_canary_get: четыре uint64 маркера (x,y,z,v)."""
+        can = ffi.new("struct MDBX_canary *")
+        check(_get_lib().mdbx_canary_get(self.ptr, can), "mdbx_canary_get")
+        return {"x": int(can.x), "y": int(can.y), "z": int(can.z),
+                "v": int(can.v)}
+
+    def canary_put(self, x=None, y=None, z=None) -> None:
+        """mdbx_canary_put: обновляет x/y/z; v всегда = номер транзакции."""
+        can = ffi.new("struct MDBX_canary *")
+        can.x = x or 0
+        can.y = y or 0
+        can.z = z or 0
+        check(_get_lib().mdbx_canary_put(self.ptr, can), "mdbx_canary_put")
 
 
 class Cursor:

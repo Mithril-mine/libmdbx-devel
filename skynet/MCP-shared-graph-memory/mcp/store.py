@@ -1,6 +1,6 @@
 """Store — персистентная память роя на libmdbx.
 
-Схема (skynet/mcp-memory-design.md):
+Схема (docs/SCHEMA.md):
   records   DEFAULTS                       key=канон.строка → JSON body
   vocab     DEFAULTS                       key=module:{m} | {m}:{topic} → {}
   history   DEFAULTS                       key=_history:{key}:{ts} → JSON
@@ -13,7 +13,9 @@
   archive   DEFAULTS                       key=record_key → JSON (gc-миграция)
   meta      DEFAULTS                       key=b"next_id" → uint64
 
-Контракт: одна write-транзакция на операцию; класс ошибок см. errors.py.
+Контракт: одна write-транзакция на операцию (в т.ч. LRU-касания — батчем);
+env открыт с MDBX_SAFE_NOSYNC, фоновый тред раз в секунду шлёт sync_poll,
+пороги сброса — sync_bytes/sync_period (см. ARCHITECTURE.md §«Синхронизация»).
 """
 
 from __future__ import annotations
@@ -22,6 +24,7 @@ import json
 import math
 import os
 import sys
+import threading
 import time
 
 from . import index as idx
@@ -42,6 +45,8 @@ ACCESS_LEN = 24  # float64 score + uint64 last_access + uint64 count
 BUSY_RETRIES = 3
 GC_HOT = 0.7
 GC_WARM = 0.3
+LRU_RATE_LIMIT_SECONDS = 60
+SYNC_POLL_INTERVAL_SECONDS = 1.0
 
 
 def _pack_u64(n: int) -> bytes:
@@ -71,6 +76,13 @@ class Store:
         "access": mdbx.INTEGERKEY,
         "archive": mdbx.DB_DEFAULTS,
         "meta": mdbx.DB_DEFAULTS,
+        "symbols": mdbx.DB_DEFAULTS,
+        "call_edges": mdbx.DUPSORT,
+        "call_edges_rev": mdbx.DUPSORT,
+        "groups": mdbx.DUPSORT,
+        "sym_ids": mdbx.DB_DEFAULTS,
+        "sym_id2key": mdbx.INTEGERKEY,
+        "sym_aliases": mdbx.DB_DEFAULTS,
     }
 
     def __init__(self, path: str, maxdbs: int = 32, max_value_bytes: int = 16 << 20):
@@ -86,6 +98,30 @@ class Store:
         self._load_vocab()
         self.next_id = self._load_next_id()
         self.last_gc = None
+        self._closed = False
+        # LRU-касания: in-memory rate-limit (60с на запись, per-process)
+        # и буфер, который сбрасывается одной write-txn (см. _flush_touches).
+        self._lru_last: dict = {}
+        self._touch_ids: list = []
+        # Фоновый тред: раз в секунду mdbx_env_sync_poll (дешёвый nonblocking
+        # сброс по порогам sync_bytes/sync_period). Транзакций не создаёт.
+        self._sync_stop = threading.Event()
+        self._sync_thread = threading.Thread(
+            target=self._sync_loop, name="store-sync-poll", daemon=True)
+        self._sync_thread.start()
+
+    # --- sync ---------------------------------------------------------------
+    def _sync_loop(self) -> None:
+        while not self._sync_stop.wait(SYNC_POLL_INTERVAL_SECONDS):
+            try:
+                self.env.sync(force=False, nonblock=True)
+            except Exception:
+                pass  # опрос синка не должен ломать сервер
+
+    def _stop_sync_thread(self) -> None:
+        self._sync_stop.set()
+        if self._sync_thread is not None and self._sync_thread.is_alive():
+            self._sync_thread.join(timeout=2.0)
 
     # --- init -----------------------------------------------------------------
     def _load_vocab(self) -> None:
@@ -159,24 +195,33 @@ class Store:
         return {"touched": key}
 
     def _bump_access(self, key: str, force: bool = False) -> None:
-        """Обновление LRU при чтении (rate-limit 60с между записями)."""
+        """Отложенная регистрация касания LRU (in-memory, без записи).
+
+        Сама запись в access произойдёт одним батчем (_flush_touches).
+        Rate-limit 60с на запись — per-process, чтобы гасить повторные чтения.
+        """
+        now = time.time()
+        if not force and now - self._lru_last.get(key, 0.0) < LRU_RATE_LIMIT_SECONDS:
+            return
+        self._lru_last[key] = now
+        self._touch_ids.append(key)
+
+    def _flush_touches(self) -> None:
+        """Одна write-txn на все накопленные LRU-касания (вместо N мелких)."""
+        if not self._touch_ids:
+            return
+        pending, self._touch_ids = self._touch_ids, []
         try:
             with self._begin_write() as txn:
-                rec_dbi = self.dbi(txn, "records")
-                rc, val = txn.get(rec_dbi, key.encode())
-                if val is None:
-                    return
-                body = json.loads(val.decode())
-                acc_dbi = self._dbi["access"]
-                idb = _pack_u64(body.get("_id", 0))
-                r2, packed = txn.get(acc_dbi, idb)
-                if not force and packed and len(packed) == ACCESS_LEN:
-                    _, ts, _ = unpack_access(packed)
-                    if _now() - ts < 60:
-                        return
-                self._touch_access(txn, body.get("_id", 0), score=None, count_delta=1)
+                ids_dbi = self.dbi(txn, "ids")
+                for key in pending:
+                    _, idb = txn.get(ids_dbi, key.encode())
+                    if idb is None:
+                        continue
+                    self._touch_access(txn, _unpack_u64(idb),
+                                       score=None, count_delta=1)
         except MemoryError:
-            pass  # конкурентный сбой LRU-записи не критичен для чтения
+            pass  # сбой LRU-метаданных не критичен для чтения
 
     def get_record(self, key: str):
         """Возвращает dict тела записи или None."""
@@ -354,6 +399,7 @@ class Store:
         top = out[:limit]
         for r in top:
             self._bump_access(r["key"])
+        self._flush_touches()
         return top
 
     def keys(self, pattern: str = "", limit: int = None) -> list:
@@ -458,12 +504,12 @@ class Store:
         top = rows[:limit]
         for r in top:
             self._bump_access(r["key"])
+        self._flush_touches()
         return top
 
     # --- links -----------------------------------------------------------------
     def link(self, subject: str, predicate: str, object_: str):
         skey = self.norm.normalize(subject)
-        okey = self.norm.normalize(object_)
         predicate = predicate.strip().lower()
         if not predicate or ":" in predicate or "\0" in predicate:
             raise invalid("предикат недопустим", "используйте один из: caused-by, "
@@ -471,15 +517,32 @@ class Store:
         with self._begin_write() as txn:
             rec_dbi = self.dbi(txn, "records")
             _, sv = txn.get(rec_dbi, skey.encode())
-            _, ov = txn.get(rec_dbi, okey.encode())
             if sv is None:
                 raise invalid("субъект %r не существует" % skey,
                               "сначала сохраните запись через safe_store")
-            if ov is None:
-                raise invalid("объект %r не существует" % okey,
-                              "сначала сохраните запись через safe_store")
             sid = json.loads(sv.decode()).get("_id")
-            oid = json.loads(ov.decode()).get("_id")
+            # объект может быть либо записью знаний, либо символом карты
+            # (fn:/type:/macro: из symbols — мост curated ↔ structural)
+            okey = object_.strip()
+            if okey.startswith(("fn:", "type:", "macro:")):
+                _, okey2 = txn.get(self.dbi(txn, "sym_ids"), okey.encode())
+                if okey2 is None or len(okey2) != 8:
+                    # символа ещё нет в карте, но ключ существует в symbols?
+                    rc3, _ = txn.get(self.dbi(txn, "symbols"), okey.encode())
+                    if rc3 != mdbx.RC_SUCCESS:
+                        raise invalid(
+                            "символ %r не существует" % okey,
+                            "сначала загрузите карту через load_map")
+                    oid = self._sym_id_locked(txn, okey)
+                else:
+                    oid = _unpack_u64(okey2)
+            else:
+                okey = self.norm.normalize(okey)
+                _, ov = txn.get(rec_dbi, okey.encode())
+                if ov is None:
+                    raise invalid("объект %r не существует" % okey,
+                                  "сначала сохраните запись через safe_store")
+                oid = json.loads(ov.decode()).get("_id")
             links_dbi = self.dbi(txn, "links")
             fwd = _pack_u64(sid) + b"\0" + predicate.encode()
             back = _pack_u64(oid) + b"\0" + b"back:" + predicate.encode()
@@ -545,17 +608,19 @@ class Store:
                             if pred.startswith("back:"):
                                 # обратная связь: ребро object -> subject
                                 obj_id = _unpack_u64(lv)
-                                _, kobj = txn.get(id2key_dbi, _pack_u64(obj_id))
-                                if kobj is not None:
-                                    tgt = kobj.decode()
-                                    edges.append({"subject": tgt, "predicate": pred[5:], "object": node})
+                                tgt = self._graph_resolve(txn, obj_id)
+                                if tgt:
+                                    edges.append({"subject": tgt,
+                                                  "predicate": pred[5:],
+                                                  "object": node})
                                     nxt.append(tgt)
                             else:
                                 obj_id = _unpack_u64(lv)
-                                _, kobj = txn.get(id2key_dbi, _pack_u64(obj_id))
-                                if kobj is not None:
-                                    tgt = kobj.decode()
-                                    edges.append({"subject": node, "predicate": pred, "object": tgt})
+                                tgt = self._graph_resolve(txn, obj_id)
+                                if tgt:
+                                    edges.append({"subject": node,
+                                                  "predicate": pred,
+                                                  "object": tgt})
                                     nxt.append(tgt)
                             rc, lk, lv = cur.get(mdbx.CURSOR_NEXT)
                 frontier = [n for n in nxt if n not in nodes]
@@ -569,6 +634,17 @@ class Store:
                 seen.add(sig)
                 unique.append(e)
         return {"nodes": sorted(nodes), "edges": unique}
+
+    def _graph_resolve(self, txn, oid: int) -> str:
+        """Резолвит числовой id объекта в ключ: сначала запись знаний
+        (id2key), затем символ карты (sym_id2key) — мост curated↔structural."""
+        _, kobj = txn.get(self.dbi(txn, "id2key"), _pack_u64(oid))
+        if kobj is not None:
+            return kobj.decode()
+        _, kobj = txn.get(self.dbi(txn, "sym_id2key"), _pack_u64(oid))
+        if kobj is not None:
+            return kobj.decode()
+        return ""
 
     # --- vocab ------------------------------------------------------------------
     def vocab_add(self, module: str, topic: str = ""):
@@ -675,10 +751,11 @@ class Store:
         }
         if not dry_run and archive and cold:
             moved = 0
-            for key, rec_id, body in ids_to_cold:
-                with self._begin_write() as txn:
-                    arch_dbi = self.dbi(txn, "archive")
-                    txn.put(arch_dbi, key, json.dumps(body, ensure_ascii=False).encode())
+            with self._begin_write() as txn:
+                arch_dbi = self.dbi(txn, "archive")
+                for key, rec_id, body in ids_to_cold:
+                    txn.put(arch_dbi, key,
+                            json.dumps(body, ensure_ascii=False).encode())
                     self._delete_record(txn, key.decode(), body)
                     moved += 1
             stats["archived"] = moved
@@ -740,6 +817,327 @@ class Store:
                     cur.delete()
                 rc, lk, lv = nxt
 
+    # --- refactoring-map (структурный слой) ---------------------------------
+    def map_symbol(self, key: str) -> dict:
+        """Читает символ из structural-слоя (symbols)."""
+        with self.env.begin(readonly=True) as txn:
+            rc, val = txn.get(self.dbi(txn, "symbols"), key.encode())
+        if val is None:
+            return {}
+        return json.loads(val.decode())
+
+    def sym_id(self, key: str) -> int:
+        """Стабильный числовой id символа.
+
+        Числовой id выделяется из ОБЩЕГО счётчика `meta/next_id` (того же,
+        что для записей знаний): links/coverage оперируют единым числовым
+        пространством, пересечение диапазонов символов и записей было бы
+        неоднозначностью. Отображения sym_ids/sym_id2key НЕ чистятся при
+        replace — числовые ссылки (links) остаются стабильными между
+        регенерациями.
+        """
+        with self._begin_write() as txn:
+            sid_dbi = self.dbi(txn, "sym_ids")
+            rc, val = txn.get(sid_dbi, key.encode())
+            if val is not None and len(val) == 8:
+                return _unpack_u64(val)
+            nid = self.next_id
+            self.next_id += 1
+            txn.put(self.dbi(txn, "meta"), b"next_id",
+                    _pack_u64(self.next_id))
+            txn.put(sid_dbi, key.encode(), _pack_u64(nid))
+            txn.put(self.dbi(txn, "sym_id2key"), _pack_u64(nid), key.encode())
+            return nid
+
+    def sym_key(self, sid: int) -> str:
+        """Обратное отображение id → ключ символа."""
+        with self.env.begin(readonly=True) as txn:
+            rc, val = txn.get(self.dbi(txn, "sym_id2key"), _pack_u64(sid))
+        return val.decode() if val else ""
+
+    def map_alias(self, old_key: str, new_key: str) -> dict:
+        """Фиксирует переименование символа карты (жизненный цикл).
+
+        Старый ключ помечается алиасом нового. При `refresh_stale` связь
+        на исчезнувший символ с алиасом перенаправляется, а не удаляется
+        безвозвратно — курируемые записи переживают рефакторинг.
+        Возвращает {"result": "aliased"} или {"result": "exists"}.
+        """
+        old_key, new_key = old_key.strip(), new_key.strip()
+        if not old_key or not new_key or old_key == new_key:
+            raise invalid("алиас требует два разных ключа символов",
+                          "old_key и new_key должны быть непустыми и разными")
+        with self._begin_write() as txn:
+            al_dbi = self.dbi(txn, "sym_aliases")
+            rc, _ = txn.get(al_dbi, old_key.encode())
+            if rc == mdbx.RC_SUCCESS:
+                return {"result": "exists"}
+            txn.put(al_dbi, old_key.encode(), new_key.encode())
+        return {"result": "aliased"}
+
+    def map_alias_target(self, old_key: str) -> str:
+        """Цель алиаса (с учётом цепочек) или пустая строка."""
+        with self.env.begin(readonly=True) as txn:
+            return self._alias_target_locked(txn,
+                                             self.dbi(txn, "sym_aliases"),
+                                             old_key.strip())
+
+    def map_symbols(self, prefix: str = "", limit: int = None) -> list:
+        """Все ключи symbols по префиксу (детерминированная сортировка)."""
+        out = []
+        with self.env.begin(readonly=True) as txn:
+            sym_dbi = self.dbi(txn, "symbols")
+            with txn.cursor(sym_dbi) as cur:
+                rc, k, _ = cur.get(mdbx.CURSOR_FIRST)
+                while rc == mdbx.RC_SUCCESS:
+                    key = k.decode()
+                    if not prefix or key.startswith(prefix):
+                        out.append(key)
+                        if limit and len(out) >= limit:
+                            break
+                    rc, k, _ = cur.get(mdbx.CURSOR_NEXT)
+        return out
+
+    def map_put_symbol(self, key: str, body: dict) -> None:
+        """Аддитивная запись символа (перегенерируемый слой).
+
+        Присваивает стабильный числовой id при первом появлении.
+        """
+        with self._begin_write() as txn:
+            txn.put(self.dbi(txn, "symbols"), key.encode(),
+                    json.dumps(body, ensure_ascii=False).encode())
+            self._sym_id_locked(txn, key)
+
+    def map_edges_of(self, caller: str) -> list:
+        """callee-дубликаты из call_edges для caller (DUPSORT)."""
+        out = []
+        with self.env.begin(readonly=True) as txn:
+            ce_dbi = self.dbi(txn, "call_edges")
+            with txn.cursor(ce_dbi) as cur:
+                rc, _, val = cur.get(mdbx.CURSOR_SET_KEY, caller.encode())
+                while rc == mdbx.RC_SUCCESS:
+                    out.append(val.decode())
+                    rc, _, val = cur.get(mdbx.CURSOR_NEXT_DUP)
+        return out
+
+    def map_callers_of(self, callee: str) -> list:
+        """Обратные рёбра: кто вызывает callee (DUPSORT call_edges_rev)."""
+        out = []
+        with self.env.begin(readonly=True) as txn:
+            ce_dbi = self.dbi(txn, "call_edges_rev")
+            with txn.cursor(ce_dbi) as cur:
+                rc, _, val = cur.get(mdbx.CURSOR_SET_KEY, callee.encode())
+                while rc == mdbx.RC_SUCCESS:
+                    out.append(val.decode())
+                    rc, _, val = cur.get(mdbx.CURSOR_NEXT_DUP)
+        return out
+
+    def map_put_edge(self, caller: str, callee: str, kind: str = "syntax") -> None:
+        with self._begin_write() as txn:
+            ce_dbi = self.dbi(txn, "call_edges")
+            val = json.dumps({"kind": kind, "resolved": False,
+                              "ambiguous": False, "callee": callee},
+                             ensure_ascii=False).encode()
+            with txn.cursor(ce_dbi) as cur:
+                cur.put_nodupe(caller.encode(), val)
+            rev_dbi = self.dbi(txn, "call_edges_rev")
+            with txn.cursor(rev_dbi) as cur:
+                cur.put_nodupe(callee.encode(), caller.encode())
+
+    def map_groups_of(self, group_key: str) -> list:
+        """Члены группы (DUPSORT-набор)."""
+        out = []
+        with self.env.begin(readonly=True) as txn:
+            gr_dbi = self.dbi(txn, "groups")
+            with txn.cursor(gr_dbi) as cur:
+                rc, _, val = cur.get(mdbx.CURSOR_SET_KEY, group_key.encode())
+                while rc == mdbx.RC_SUCCESS:
+                    out.append(val.decode())
+                    rc, _, val = cur.get(mdbx.CURSOR_NEXT_DUP)
+        return out
+
+    def map_group_members(self, prefix: str = "") -> list:
+        """Все группы с их членами по префиксу ключа группы."""
+        out = []
+        with self.env.begin(readonly=True) as txn:
+            gr_dbi = self.dbi(txn, "groups")
+            with txn.cursor(gr_dbi) as cur:
+                rc, k, val = cur.get(mdbx.CURSOR_FIRST)
+                while rc == mdbx.RC_SUCCESS:
+                    gkey = k.decode()
+                    if not prefix or gkey.startswith(prefix):
+                        out.append((gkey, val.decode()))
+                    rc, k, val = cur.get(mdbx.CURSOR_NEXT)
+        return out
+
+    def map_put_group(self, group_key: str, member: str) -> None:
+        with self._begin_write() as txn:
+            gr_dbi = self.dbi(txn, "groups")
+            with txn.cursor(gr_dbi) as cur:
+                cur.put_nodupe(group_key.encode(), member.encode())
+
+    def map_load_batch(self, symbols: dict, edges: list, groups: dict,
+                       chunk: int = 4096, replace: bool = False) -> dict:
+        """Батчевая загрузка структурного слоя.
+
+        Принимает готовые данные (из автогенератора) и пишет в
+        symbols/call_edges/call_edges_rev/groups.
+        При replace=True таблицы очищаются перед загрузкой (самоизлечение
+        дрейфа координат: исчезнувшие символы удаляются). Безопасно —
+        это перегенерируемый слой, курируемые tables не затрагиваются.
+        Возвращает счётчики для сверки.
+        """
+        put_sym, put_edge, put_grp = 0, 0, 0
+        sym_dbi = self._dbi["symbols"]
+        ce_dbi = self._dbi["call_edges"]
+        rev_dbi = self._dbi["call_edges_rev"]
+        gr_dbi = self._dbi["groups"]
+        with self._begin_write() as txn:
+            if replace:
+                for dbi in (sym_dbi, ce_dbi, rev_dbi, gr_dbi):
+                    with txn.cursor(dbi) as cur:
+                        rc, k, _ = cur.get(mdbx.CURSOR_FIRST)
+                        while rc == mdbx.RC_SUCCESS:
+                            nxt = cur.get(mdbx.CURSOR_NEXT)
+                            cur.delete()
+                            rc, k, _ = nxt
+            sid_dbi = self._dbi["sym_ids"]
+            id2key_dbi = self._dbi["sym_id2key"]
+            for i, (key, body) in enumerate(sorted(symbols.items())):
+                txn.put(sym_dbi, key.encode(),
+                        json.dumps(body, ensure_ascii=False).encode())
+                put_sym += 1
+                # стабильный числовой id (НЕ чистится при replace)
+                rc, val = txn.get(sid_dbi, key.encode())
+                if val is None or len(val) != 8:
+                    nid = self.next_id
+                    self.next_id += 1
+                    txn.put(self.dbi(txn, "meta"), b"next_id",
+                            _pack_u64(self.next_id))
+                    txn.put(sid_dbi, key.encode(), _pack_u64(nid))
+                    txn.put(id2key_dbi, _pack_u64(nid), key.encode())
+            for e in edges:
+                # JSON-значение: kind, resolved, ambiguous, callee
+                val = json.dumps({
+                    "kind": e.get("kind", "syntax"),
+                    "resolved": e.get("resolved", False),
+                    "ambiguous": e.get("ambiguous", False),
+                    "callee": e["callee"],
+                }, ensure_ascii=False).encode()
+                with txn.cursor(ce_dbi) as cur:
+                    cur.put_nodupe(e["caller"].encode(), val)
+                put_edge += 1
+                # обратное ребро: callee → caller
+                with txn.cursor(rev_dbi) as cur:
+                    cur.put_nodupe(e["callee"].encode(), e["caller"].encode())
+            for gkey, members in groups.items():
+                with txn.cursor(gr_dbi) as cur:
+                    for m in members:
+                        cur.put_nodupe(gkey.encode(), m.encode())
+                        put_grp += 1
+        return {"symbols": put_sym, "edges": put_edge, "groups": put_grp}
+
+    # --- canary (поколение карты / метки схемы) -------------------------
+    def map_canary_get(self) -> dict:
+        """Читает MDBX_canary env: x=magic схемы, y=поколение карты,
+        z=резерв, v=номер транзакции последнего изменения."""
+        with self.env.begin(readonly=True) as txn:
+            return txn.canary_get()
+
+    def map_canary_put(self, x: int = 0, y: int = 0, z: int = 0) -> None:
+        with self._begin_write() as txn:
+            txn.canary_put(x=x, y=y, z=z)
+
+    def map_refresh_stale(self) -> dict:
+        """Чистит висячие ссылки моста: объекты-символы в links, чьих ключей
+        больше нет в symbols (после регенерации карты).
+
+        Ссылка на исчезнувший символ с алиасом (`map_alias`) перенаправляется
+        на цель алиаса; без алиаса — удаляется. Возвращает счётчики.
+        """
+        removed, redirected = 0, 0
+        with self._begin_write() as txn:
+            sym_id2key_dbi = self.dbi(txn, "sym_id2key")
+            syms_dbi = self.dbi(txn, "symbols")
+            al_dbi = self.dbi(txn, "sym_aliases")
+            links_dbi = self.dbi(txn, "links")
+
+            # символьные id, чей ключ есть в symbols (живые)
+            alive = set()
+            with txn.cursor(sym_id2key_dbi) as cur:
+                rc, k, v = cur.get(mdbx.CURSOR_FIRST)
+                while rc == mdbx.RC_SUCCESS:
+                    sid = _unpack_u64(k)
+                    key = v.decode() if v else ""
+                    rc2, _ = txn.get(syms_dbi, key.encode())
+                    if rc2 == mdbx.RC_SUCCESS:
+                        alive.add(sid)
+                    rc, k, v = cur.get(mdbx.CURSOR_NEXT)
+
+            # собираем прямые рёбра (sid → oid), где oid — мёртвый символ
+            fwd = []  # (fwd_key, sid, predicate, oid)
+            with txn.cursor(links_dbi) as cur:
+                rc, k, v = cur.get(mdbx.CURSOR_FIRST)
+                while rc == mdbx.RC_SUCCESS:
+                    oid = _unpack_u64(v)
+                    _, key = txn.get(sym_id2key_dbi, _pack_u64(oid))
+                    if key is not None and oid not in alive:
+                        sid = _unpack_u64(k[:8])
+                        predicate = k[9:].decode()
+                        fwd.append((k, sid, predicate, oid))
+                    rc, k, v = cur.get(mdbx.CURSOR_NEXT)
+
+            for fwd_key, sid, predicate, oid in fwd:
+                _, key = txn.get(sym_id2key_dbi, _pack_u64(oid))
+                key = key.decode() if key else ""
+                target = self._alias_target_locked(txn, al_dbi, key)
+                back_key = _pack_u64(oid) + b"\0" + b"back:" + predicate.encode()
+                if target:
+                    tid = self._sym_id_locked(txn, target)
+                    if tid is not None and tid != oid:
+                        # перецепить прямую ссылку и обратное ребро
+                        txn.delete(links_dbi, fwd_key)
+                        txn.delete(links_dbi, back_key)
+                        nk = _pack_u64(sid) + b"\0" + predicate.encode()
+                        txn.put(links_dbi, nk, _pack_u64(tid))
+                        nbk = _pack_u64(tid) + b"\0" + b"back:" + predicate.encode()
+                        txn.put(links_dbi, nbk, _pack_u64(sid))
+                        redirected += 1
+                        continue
+                txn.delete(links_dbi, fwd_key)
+                txn.delete(links_dbi, back_key)
+                removed += 1
+        return {"removed_links": removed, "redirected_links": redirected}
+
+    @staticmethod
+    def _alias_target_locked(txn, al_dbi, key):
+        """Цель алиаса (разрешение цепочек) в рамках текущей txn."""
+        seen, cur = set(), key
+        while cur and cur not in seen:
+            seen.add(cur)
+            rc, val = txn.get(al_dbi, cur.encode())
+            if rc != mdbx.RC_SUCCESS or val is None:
+                break
+            cur = val.decode()
+        return cur if cur != key else ""
+
+    def _sym_id_locked(self, txn, key):
+        """Стабильный id символа в рамках текущей txn.
+
+        Выделяется из общего счётчика next_id (как записи знаний) —
+        единое числовое пространство для links.
+        """
+        sid_dbi = self.dbi(txn, "sym_ids")
+        rc, val = txn.get(sid_dbi, key.encode())
+        if val is not None and len(val) == 8:
+            return _unpack_u64(val)
+        nid = self.next_id
+        self.next_id += 1
+        txn.put(self.dbi(txn, "meta"), b"next_id", _pack_u64(self.next_id))
+        txn.put(sid_dbi, key.encode(), _pack_u64(nid))
+        txn.put(self.dbi(txn, "sym_id2key"), _pack_u64(nid), key.encode())
+        return nid
+
     def stats(self) -> dict:
         by_type = {}
         total_importance = 0.0
@@ -768,6 +1166,19 @@ class Store:
         }
 
     def close(self) -> None:
+        if self._closed:
+            return
+        self._closed = True
+        # сбросить накопленные LRU-касания и остановить фоновый тред синка
+        try:
+            self._flush_touches()
+        except Exception:
+            pass
+        self._stop_sync_thread()
+        try:
+            self.env.sync(force=True, nonblock=False)
+        except Exception:
+            pass
         self.env.close()
 
     def __enter__(self) -> "Store":
