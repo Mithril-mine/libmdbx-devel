@@ -141,7 +141,7 @@ group:task:B63            → {символы, тесты, записи, док�
   и «закладки»; привязка к механикам/подсистемам и темам тестов.
 - Ценность для C→C++: сравнение трасс до/после переписывания — поведенческая
   паритетность.
-- Источники реестра: `skynet/probes.md` (devel), контур B3/B17b.
+- Источники реестра: `docs/engineering/probes.md` (devel), контур B3/B17b.
 
 ### coverage, ci_jobs, test_metrics
 
@@ -227,7 +227,7 @@ group:task:B63            → {символы, тесты, записи, док�
    (unique pairs), unresolved 1295, coverage_pct 96.09%, uncovered 443
    островов. Тестовые домены: ut 2503 fn / issues 1936 fn /
    framework 2302 fn.
-5. **Шаг 2**: semantic-рёбра, реестр probes (из `skynet/probes.md`), коллекторы
+5. **Шаг 2**: semantic-рёбра, реестр probes (из `docs/engineering/probes.md`), коллекторы
    coverage/test_metrics/ci_jobs, полноценный coverage от mdbx_test
    (instrumented run), macOS-скан (нужен osxcross/SDK).
 
