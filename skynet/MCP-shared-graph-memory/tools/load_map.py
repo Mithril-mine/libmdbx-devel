@@ -5,10 +5,13 @@
   - symbols:      ключ fq-имени -> JSON символа (функция/тип/макрос);
   - call_edges:   caller -> JSON {kind, resolved, ambiguous, callee} (DUPSORT);
   - call_edges_rev: callee -> caller (обратные рёбра для impact-анализа);
-  - groups:       group:{kind}:{name} -> member_key (фаcеты подсистем).
+  - groups:       group:{kind}:{name} -> member_key (фаcеты подсистем);
+  - regions:      region:{module}:{n} -> JSON (#if-дерево, 1131 регионов);
+  - uncovered:    uncovered:{module}:{n} -> JSON (острова смысла вне union-AST).
 
 `--replace` очищает перегенерируемые таблицы перед загрузкой (самоизлечение
 дрейфа координат); без него — аддитивное дополнение.
+`--skip-regions` пропускает regions/uncovered (только символы+рёбра).
 
 Паттерн исполнения — как tools/build_libmdbx.py: детерминированный прогон,
 в конце сверяет счётчики и печатает сводку.
@@ -38,6 +41,8 @@ def main():
     ap.add_argument("--db", default=":memory:")
     ap.add_argument("--replace", action="store_true",
                     help="очистить структурные таблицы перед загрузкой")
+    ap.add_argument("--skip-regions", action="store_true",
+                    help="не грузить regions/uncovered")
     ap.add_argument("--dry-run", action="store_true",
                     help="сверка только: не писать в БД")
     args = ap.parse_args()
@@ -48,8 +53,11 @@ def main():
     symbols = artifact["symbols"]
     edges = artifact["edges"]
     counts = artifact["counts"]
-    print("artifact: %d symbols, %d edges, %d blocks" % (
-        len(symbols), len(edges), counts["blocks"]), file=sys.stderr)
+    regions = artifact.get("regions") or []
+    uncovered = artifact.get("uncovered") or []
+    print("artifact: %d symbols, %d edges, %d blocks, %d regions, %d uncovered" % (
+        len(symbols), len(edges), counts["blocks"], len(regions), len(uncovered)),
+        file=sys.stderr)
 
     if args.dry_run:
         return
@@ -67,17 +75,24 @@ def main():
     t0 = time.time()
     loaded = store.map_load_batch(symbols, edges, groups,
                                   replace=args.replace)
+    if not args.skip_regions and (regions or uncovered):
+        r = store.map_load_regions(regions, uncovered, replace=args.replace)
+        loaded.update(r)
     dt = time.time() - t0
 
     n_sym = len(store.map_symbols())
+    n_reg = len(store.map_regions(limit=10**9))
+    n_unc = len(store.map_uncovered(limit=10**9))
     # проверка обратных рёбер: случайное разрешённое ребро
     n_rev = 0
     if edges:
         sample = next(e for e in edges if e.get("resolved"))
         n_rev = len(store.map_callers_of(sample["callee"]))
-    print("loaded: symbols=%d edges=%d groups=%d in %.1fs" % (
-        loaded["symbols"], loaded["edges"], loaded["groups"], dt))
-    print("verify: symbols=%d reverse_sample=%d" % (n_sym, n_rev))
+    print("loaded: symbols=%d edges=%d groups=%d regions=%d uncovered=%d in %.1fs" % (
+        loaded["symbols"], loaded["edges"], loaded["groups"],
+        loaded.get("regions", 0), loaded.get("uncovered", 0), dt))
+    print("verify: symbols=%d regions=%d uncovered=%d reverse_sample=%d" % (
+        n_sym, n_reg, n_unc, n_rev))
     store.close()
 
 

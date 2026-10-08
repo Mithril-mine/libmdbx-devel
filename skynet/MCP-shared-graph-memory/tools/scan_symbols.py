@@ -194,6 +194,7 @@ class ScanConfig:
             return base
         kept = [t for t in base
                 if t.startswith("-D") or t.startswith("-I")
+                or t.startswith("-isystem")
                 or t.startswith("-Wno-") or t == "-pthread"]
         out = []
         if self.target:
@@ -715,6 +716,19 @@ def select_test_tus(domain="ut") -> list:
             base_includes = [t for t in toks
                              if t.startswith("-I")
                              and any(d in t for d in ("_build-scan", "/src"))]
+        # googletest include: реальные тестовые TU несут его как -isystem;
+        # в синтетическую команду тестового домена он нужен явно.
+        test_model = next((e for e in cc
+                           if "tests/" in e["file"].replace("\\", "/")), None)
+        if test_model:
+            ttoks = shlex.split(test_model["command"])
+            for i, t in enumerate(ttoks):
+                if t.startswith("-isystem"):
+                    val = t[len("-isystem"):] or (ttoks[i + 1]
+                                                  if i + 1 < len(ttoks) else "")
+                    if "googletest" in val and not any(
+                            "-isystem%s" % val == x for x in base_includes):
+                        base_includes.append("-isystem%s" % val)
     else:
         # CI / отсутствие configure-only build-дира: синтетический конфиг
         # (тот же путь, что дал бы CMake; файл может не существовать —

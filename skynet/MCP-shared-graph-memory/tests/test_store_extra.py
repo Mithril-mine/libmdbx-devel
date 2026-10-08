@@ -180,12 +180,84 @@ def test_bump_rate_limited(store):
     seed_vocab(store, [("crypto", "alignment")])
     store.safe_store("bug:crypto:alignment", "bug", "a bug", 0.5)
     store._bump_access("bug:crypto:alignment", force=True)
-    # второй вызов в пределах 60с не должен увеличить счётчик
+    # второй вызов в пределах 60с не должен попасть в буфер касаний
     store._bump_access("bug:crypto:alignment", force=False)
+    store._flush_touches()  # одна write-txn на все касания
     with store.env.begin(readonly=True) as txn:
         _, packed = txn.get(store.dbi(txn, "access"), _pack_u64(1))
         _, _, cnt = unpack_access(packed)
     assert cnt == 1
+
+
+def test_bump_batched_single_txn(store, monkeypatch):
+    """Касания нескольких записей сбрасываются одной write-txn, а не N."""
+    seed_vocab(store, [("crypto", "alignment"), ("platform", "android")])
+    store.safe_store("bug:crypto:alignment", "bug", "bug one", 0.5)
+    store.safe_store("fact:platform:android", "fact", "fact one", 0.5)
+    store._lru_last.clear()
+    writes = []
+
+    import mcp.store as store_mod
+    orig = store_mod.Store._begin_write
+
+    def counting(self):
+        writes.append(1)
+        return orig(self)
+
+    monkeypatch.setattr(store_mod.Store, "_begin_write", counting)
+    store._bump_access("bug:crypto:alignment", force=True)
+    store._bump_access("fact:platform:android", force=True)
+    store._flush_touches()
+    assert len(writes) == 1  # одна транзакция на оба касания
+    with store.env.begin(readonly=True) as txn:
+        _, p1 = txn.get(store.dbi(txn, "access"), _pack_u64(1))
+        _, p2 = txn.get(store.dbi(txn, "access"), _pack_u64(2))
+    assert unpack_access(p1)[2] == 1
+    assert unpack_access(p2)[2] == 1
+
+
+def test_recall_flushes_one_txn(store, monkeypatch):
+    """recall(limit=5) делает одну write-txn на LRU, а не по одной на запись."""
+    seed_vocab(store, [("crypto", "alignment"), ("platform", "android"),
+                       ("platform", "android-abi"), ("build", "release")])
+    store.safe_store("bug:crypto:alignment", "bug", "bug alpha", 0.7)
+    store.safe_store("fact:platform:android", "fact", "fact beta", 0.9)
+    store.safe_store("proc:build:release", "proc", "proc gamma", 0.6)
+    store._lru_last.clear()
+    writes = []
+
+    import mcp.store as store_mod
+    orig = store_mod.Store._begin_write
+
+    def counting(self):
+        writes.append(1)
+        return orig(self)
+
+    monkeypatch.setattr(store_mod.Store, "_begin_write", counting)
+    store.recall("fact:*")
+    assert len(writes) == 1
+
+
+def test_sync_poll_thread_lifecycle(store, monkeypatch):
+    """Фоновый тред шлёт sync_poll раз в секунду и останавливается на close."""
+    calls = []
+    real_sync = store.env.sync
+
+    def spy_sync(force=False, nonblock=True):
+        calls.append((force, nonblock))
+        return real_sync(force=force, nonblock=nonblock)
+
+    monkeypatch.setattr(store.env, "sync", spy_sync)
+    assert store._sync_thread.is_alive()
+
+    import time as _time
+    _time.sleep(1.4)
+    assert len(calls) >= 1
+    assert all(force is False and nonblock is True for force, nonblock in calls)
+
+    store.close()
+    assert store._closed is True
+    assert not store._sync_thread.is_alive()
 
 
 def test_remove_topic_normalizer():
@@ -212,16 +284,18 @@ def test_bump_access_missing_record(store):
     store._bump_access("fact:platform:nothing")  # не должно бросать
 
 
-def test_bump_access_suppresses_busy(store, monkeypatch):
+def test_flush_touches_suppresses_busy(store, monkeypatch):
     from mcp import libmdbx as mdbx
     seed_vocab(store, [("crypto", "alignment")])
     store.safe_store("bug:crypto:alignment", "bug", "some bug", 0.5)
+    store._lru_last.clear()
+    store._bump_access("bug:crypto:alignment", force=True)
 
     def fake(readonly=False, parent=None):
         raise mdbx.LibmdbxError(mdbx.RC_BUSY, "t")
 
     monkeypatch.setattr(store.env, "begin", fake)
-    store._bump_access("bug:crypto:alignment")  # MemoryError подавляется
+    store._flush_touches()  # сбой флаша не критичен — MemoryError подавляется
 
 
 def test_store_context_manager(store_path):
@@ -235,3 +309,135 @@ def test_store_context_manager(store_path):
         assert s2.exists("bug:crypto:alignment")
     finally:
         s2.close()
+
+
+def test_search_flushes_one_txn(store, monkeypatch):
+    """search() с несколькими результатами делает одну write-txn на LRU."""
+    seed_vocab(store, [("crypto", "alignment"), ("platform", "android"),
+                       ("platform", "android-abi")])
+    store.safe_store("bug:crypto:alignment", "bug", "buffer overflow crash", 0.7)
+    store.safe_store("fact:platform:android", "fact", "android overflow fix note", 0.9)
+    store._lru_last.clear()
+    writes = []
+
+    import mcp.store as store_mod
+    orig = store_mod.Store._begin_write
+
+    def counting(self):
+        writes.append(1)
+        return orig(self)
+
+    monkeypatch.setattr(store_mod.Store, "_begin_write", counting)
+    recs = store.search("overflow", limit=10)
+    assert len(recs) == 2
+    assert len(writes) == 1
+
+
+def test_close_final_sync(store, monkeypatch):
+    """close() делает финальный force-sync (force=True, nonblock=False)."""
+    calls = []
+    real_sync = store.env.sync
+
+    def spy_sync(force=False, nonblock=True):
+        calls.append((force, nonblock))
+        return real_sync(force=force, nonblock=nonblock)
+
+    monkeypatch.setattr(store.env, "sync", spy_sync)
+    store.close()
+    assert (True, False) in calls
+
+
+def test_close_flushes_pending_touches(store_path):
+    """Отложенные касания сбрасываются при close (переживают переоткрытие)."""
+    s = Store(store_path)
+    try:
+        seed_vocab(s, [("crypto", "alignment")])
+        s.safe_store("bug:crypto:alignment", "bug", "some bug", 0.5)
+        s._lru_last.clear()
+        s._bump_access("bug:crypto:alignment", force=True)  # в буфер, без flush
+        assert s._touch_ids  # касание отложено
+    finally:
+        s.close()
+    s2 = Store(store_path)
+    try:
+        with s2.env.begin(readonly=True) as txn:
+            _, packed = txn.get(s2.dbi(txn, "access"), _pack_u64(1))
+            assert packed is not None
+            assert unpack_access(packed)[2] == 1
+    finally:
+        s2.close()
+
+
+def test_recall_all_rate_limited_zero_txn(store, monkeypatch):
+    """Если все касания уже в 60s-фильтре, recall не пишет вообще."""
+    seed_vocab(store, [("crypto", "alignment")])
+    store.safe_store("bug:crypto:alignment", "bug", "some bug", 0.5)
+    store.recall("bug:*")  # прогреваем фильтр (касание + флаш)
+    writes = []
+
+    import mcp.store as store_mod
+    orig = store_mod.Store._begin_write
+
+    def counting(self):
+        writes.append(1)
+        return orig(self)
+
+    monkeypatch.setattr(store_mod.Store, "_begin_write", counting)
+    store.recall("bug:*")  # в пределах 60с — касание проигнорировано
+    assert len(writes) == 0
+
+
+def test_double_close_idempotent(store):
+    store.close()
+    store.close()  # повторный вызов не должен падать
+
+
+def test_touch_single_txn(store, monkeypatch):
+    """touch() пишет сразу одной транзакцией."""
+    seed_vocab(store, [("crypto", "alignment")])
+    store.safe_store("bug:crypto:alignment", "bug", "some bug", 0.5)
+    writes = []
+
+    import mcp.store as store_mod
+    orig = store_mod.Store._begin_write
+
+    def counting(self):
+        writes.append(1)
+        return orig(self)
+
+    monkeypatch.setattr(store_mod.Store, "_begin_write", counting)
+    store.touch("bug:crypto:alignment")
+    assert len(writes) == 1
+
+
+def test_set_sync_mode_rotation(store):
+    """Безопасная ротация sync-режимов (без utterly_nosync)."""
+    for mode in ("durable", "metasync", "safe_nosync"):
+        assert store.set_sync_mode(mode)["sync_mode"] == mode
+    with pytest.raises(MemoryError) as ei:
+        store.set_sync_mode("utterly_nosync")
+    assert "durable|metasync|safe_nosync" in str(ei.value), ei.value
+
+
+def test_enable_utterly_nosync_separate(store):
+    """Utterly_nosync доступен только через отдельный опасный метод."""
+    res = store.enable_utterly_nosync()
+    assert res["sync_mode"] == "utterly_nosync"
+    assert res.get("danger") is True
+    # вернуться в безопасную ротацию можно штатным set_sync_mode
+    assert store.set_sync_mode("durable")["sync_mode"] == "durable"
+
+
+def test_set_sync_mode_readonly_rejected(store_path):
+    s0 = Store(store_path)
+    s0.close()
+    s = Store(store_path, readonly=True)
+    try:
+        with pytest.raises(MemoryError) as ei:
+            s.set_sync_mode("durable")
+        assert "read-only" in str(ei.value), ei.value
+        with pytest.raises(MemoryError) as ei:
+            s.enable_utterly_nosync()
+        assert "read-only" in str(ei.value), ei.value
+    finally:
+        s.close()

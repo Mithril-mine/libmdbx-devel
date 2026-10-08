@@ -2,13 +2,13 @@
   "platform": "linux-x86_64",
   "build_config": "_build-scan",
   "counts": {
-    "functions": 3127,
-    "types": 368,
-    "macros": 518,
-    "blocks": 31213,
-    "edges": 19132,
-    "unresolved_edges": 5390,
-    "regions": 1131
+    "functions": 3309,
+    "types": 376,
+    "macros": 511,
+    "blocks": 31860,
+    "edges": 20805,
+    "unresolved_edges": 1100,
+    "regions": 1133
   },
   "generated_by": "scan_symbols.py + scan_regions.py"
 }

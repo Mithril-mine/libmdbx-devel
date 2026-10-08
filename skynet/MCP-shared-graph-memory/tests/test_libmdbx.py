@@ -23,6 +23,39 @@ def test_constants():
     assert mdbx.RC_KEYEXIST == -30799
     assert mdbx.CURSOR_NEXT == 8
     assert mdbx.CURSOR_SET_RANGE == 17
+    assert mdbx.MDBX_SAFE_NOSYNC == 0x10000
+    assert mdbx.MDBX_OPT_MAX_DB == 0
+    assert mdbx.MDBX_OPT_SYNC_BYTES == 2
+    assert mdbx.MDBX_OPT_SYNC_PERIOD == 3
+
+
+def test_env_sync_flags_and_options(monkeypatch):
+    """Env открывается с SAFE_NOSYNC и порогами sync_bytes/sync_period."""
+    open_flags = {}
+    options = []
+
+    def fake_open(env, path, flags, mode):
+        open_flags["flags"] = flags
+        open_flags["mode"] = mode
+        return 0
+
+    def fake_set_option(env, option, value):
+        options.append((option, value))
+        return 0
+
+    class _FakeLib:
+        def __init__(self):
+            self.mdbx_env_create = lambda out: 0
+            self.mdbx_env_set_option = fake_set_option
+            self.mdbx_env_open = fake_open
+
+    monkeypatch.setattr(mdbx, "_get_lib", lambda: _FakeLib())
+    env = mdbx.Env(os.path.join(tempfile.mkdtemp(), "t.mdbx"),
+                   sync_bytes=64 << 20, sync_period=60)
+    assert open_flags["flags"] & mdbx.MDBX_SAFE_NOSYNC
+    opts = dict(options)
+    assert opts[mdbx.MDBX_OPT_SYNC_BYTES] == 64 << 20
+    assert opts[mdbx.MDBX_OPT_SYNC_PERIOD] == 60
 
 
 def test_strerror_and_version():

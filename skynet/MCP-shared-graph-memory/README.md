@@ -18,10 +18,11 @@
 | `mcp/errors.py` | Контракт ошибок `error$CODE \| CLASS \| DESC \| ACTION \| RETRY` |
 | `mcp/normalize.py` | Канонизация ключей `тип:модуль:тема` + контролируемый словарь |
 | `mcp/index.py` | Токенизация + SimHash (64-бит) для дедупликации |
-| `mcp/store.py` | Store: 11 таблиц, все операции, одна write-txn на операцию |
-| `mcp/mcp_server.py` | MCP-сервер (JSON-RPC 2.0 над stdio) |
+| `mcp/store.py` | Store: 20 таблиц, все операции, одна write-txn на операцию, бэкап и защита от удаления |
+| `mcp/mcp_server.py` | MCP-сервер (JSON-RPC 2.0 над stdio), db_* инструменты интроспекции |
 | `mcp/cli.py` | memory-cli (dump/stats/graph/audit/gc/vocab/purge) |
-| `tests/` | 168 тестов, покрытие 99% |
+| `tests/` | 273 теста |
+| `tools/install.sh` | Безопасная установка (никогда не трогает db.mdbx/backups) |
 
 ## Требования
 
@@ -61,6 +62,59 @@ python3 -m mcp.cli --path ~/mem.mdbx stats        # CLI
 python3 -m mcp.cli --path ~/mem.mdbx gc --dry-run # тиринг hot/warm/cold
 ```
 
+**Дефолт сервера — read-only**: запись только после явного
+`db_set_mode(readonly=false)`; агент свободно переключается обратно.
+
+Переменные окружения:
+
+| Переменная | Значение | Дефолт |
+|---|---|---|
+| `SHARED_GRAPH_MEMORY_PATH` | путь к `db.mdbx` | `~/.local/share/shared-graph-memory/db.mdbx` |
+| `SHARED_GRAPH_MEMORY_READONLY` | `1` — старт read-only | `1` |
+| `SHARED_GRAPH_MEMORY_BACKUP_DIR` | каталог бэкапов (та же ФС!) | `<каталог БД>/backups` |
+| `SHARED_GRAPH_MEMORY_AUTO_BACKUP_SECONDS` | тихий интервал бэкапа | `0` (выкл) |
+| `SHARED_GRAPH_MEMORY_PROMPT_BACKUP_SECONDS` | интервал бэкапа с запросом | `0` (выкл) |
+| `SHARED_GRAPH_MEMORY_BACKUP_KEEP` | ротация AUTO-копий | `7` |
+| `SHARED_GRAPH_MEMORY_BACKUP_MAX_MB` | кап объёма каталога бэкапов | `512` |
+
+## Бэкап и защита от удаления файла БД
+
+**Тиры копий** (в `backup_dir`):
+
+| Тир | Имя | Создаёт | Удаление |
+|---|---|---|---|
+| LIFELINE | `current.mdbx` | старт сервера (жёсткая ссылка, инвариант `st_nlink≥2`) | никогда автоматически |
+| EMERGENCY | `snapshot_YYMMDD_HHMMSS_txnidN.db` | детекция удаления файла БД (жёсткая ссылка) | никогда автоматически |
+| AUTO | `auto-YYYYMMDD-HHMMSS_txnidN.mdbx` | тихий интервал (`…_AUTO_BACKUP_SECONDS`) | ротация (`…_BACKUP_KEEP`) с подтверждением |
+| USER | `user-YYYYMMDD-HHMMSS_txnidN.mdbx` | `db_backup` / PROMPT-интервал с запросом | только явное подтверждение |
+
+- **Детекция удаления** (не-Windows): `mdbx_env_get_fd` + `fstat(st_nlink)`.
+  При `st_nlink < 2` и пропаже пути — аварийная жёсткая ссылка в `backup_dir`
+  и контрактная ошибка `DB_FILE_DELETED` (предохранитель блокирует операции).
+- **PROMPT-таймер**: сервер выставляет notice «спросите пользователя»;
+  агент вызывает `db_backup kind=user` (сделать) или `db_backup skip=true`.
+- **Ротация**: `db_backup_cleanup(dry_run=true)` показывает кандидатов (только
+  `auto-*`); удаление — `confirm=true`, по подтверждению пользователя.
+
+Инструменты интроспекции: `db_status` (полный `MDBX_envinfo`),
+`db_stat(table?)`, `db_readers`, `db_flush`, `db_set_mode`,
+`db_enable_utterly_nosync`, `db_backup`, `db_backup_status`,
+`db_backup_cleanup`, `db_fileinfo`, `db_latency`, `db_recover`.
+Карта исходников (refactoring-map): `map_symbol(s)`, `map_edges_of`,
+`map_callers_of`, `map_group_members`, `map_regions`/`map_region`,
+`map_uncovered` (данные — `tools/load_map.py --db <живая> --replace`).
+
+## Установка (безопасная)
+
+```bash
+tools/install.sh            # -> ~/.local/share/shared-graph-memory
+tools/install.sh /path/dir  # -> /path/dir
+```
+
+Скрипт синхронизирует код и **никогда не трогает** `db.mdbx`,
+`db.mdbx-lck` и `backups/` — именно беззащитный `rsync --delete`
+(26.09.2026) стал причиной потери данных MCP-памяти.
+
 Интеграция с opencode (`~/.config/opencode/opencode.json`):
 
 ```json
@@ -82,4 +136,6 @@ nice -n 10 python3 -m coverage run -m pytest tests/ && python3 -m coverage repor
 - cffi ABI-режим: enum и `#define` не создают атрибутов `ffi.*` — только числа.
 - `ffi.new("void *")` запрещён — out-параметры через `void **`.
 - Буферы `MDBX_val.iov_base` освобождаются GC — удерживать через `MVal`.
-- Не открывать вложенные read-txn в одном потоке (`MDBX_BAD_RSLOT`) — передавать txn.
+- Один поток = одна активная транзакция: повторный read-txn переиспользует
+  TLS-слот читателя и инвалидирует первый (`MDBX_BAD_RSLOT`) — не открывать
+  txn внутри txn.

@@ -19,6 +19,14 @@ def test_record_types_constant():
     assert set(RECORD_TYPES) == {"decision", "bug", "proc", "bottleneck", "fact", "event"}
 
 
+def test_default_domain_modules():
+    """Доменные модули схемы знаний доступны сразу (без vocab_add)."""
+    n = Normalizer()
+    n.add_topic("knowledge-map")
+    for module in ("meta", "practice", "swarm", "coordination", "todo", "archive"):
+        assert n.normalize("fact:%s:knowledge-map" % module).startswith("fact:%s:" % module)
+
+
 def test_normalize_basic():
     n = make_norm()
     assert n.normalize("bug:crypto:alignment-arm64") == "bug:crypto:alignment"

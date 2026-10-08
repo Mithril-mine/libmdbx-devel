@@ -4,6 +4,7 @@ import json
 
 import pytest
 
+from mcp import Store
 from mcp.errors import MemoryError
 from mcp.mcp_server import McpServer
 from tests.conftest import seed_vocab
@@ -209,3 +210,58 @@ def test_tools_call_generic_exception(server):
 def test_dispatch_unknown_tool(server):
     with pytest.raises(MemoryError):
         server._dispatch("no-such-tool", {})
+
+
+def test_db_tools_readonly_contract(store_path):
+    """Read-only дефолт: db_status читается, запись/flush блокируются,
+    db_set_mode(readonly=false) открывает rw."""
+    s0 = Store(store_path)
+    seed_vocab(s0, [("practice", "durability-ro"), ("practice", "durability-rw")])
+    s0.close()
+    s = Store(store_path, readonly=True)
+    try:
+        serv = McpServer(s)
+        r = call(serv, "tools/call", {"name": "db_status", "arguments": {}})
+        assert "env" in r["result"]["structuredContent"]
+        # запись в read-only -> контрактная ошибка
+        r = call(serv, "tools/call", {"name": "safe_store", "arguments": {
+            "key": "fact:practice:durability-ro", "type": "fact",
+            "summary": "ro write attempt", "importance": 0.5}})
+        assert r["error"]["code"] == -32000
+        assert "READONLY_MODE" in r["error"]["message"], r
+        # flush в read-only -> контрактная ошибка
+        r = call(serv, "tools/call", {"name": "db_flush", "arguments": {}})
+        assert r["error"]["code"] == -32000
+        assert "READONLY_MODE" in r["error"]["message"], r
+        # переключение в rw -> запись проходит
+        r = call(serv, "tools/call", {"name": "db_set_mode", "arguments": {
+            "readonly": False}})
+        assert r["result"]["structuredContent"]["readonly"] is False
+        r = call(serv, "tools/call", {"name": "safe_store", "arguments": {
+            "key": "fact:practice:durability-rw", "type": "fact",
+            "summary": "rw write ok", "importance": 0.5}})
+        assert r["result"]["structuredContent"]["result"] == "created", r
+        # db_flush теперь работает
+        r = call(serv, "tools/call", {"name": "db_flush", "arguments": {}})
+        assert r["result"]["structuredContent"]["flushed"] is True
+    finally:
+        s.close()
+
+
+def test_db_utterly_nosync_only_via_explicit_tool(store):
+    """Utterly_nosync недоступен через db_set_mode, но доступен через
+    отдельный опасный инструмент."""
+    serv = McpServer(store)
+    r = call(serv, "tools/call", {"name": "db_set_mode", "arguments": {
+        "sync": "utterly_nosync"}})
+    assert r["error"]["code"] == -32000
+    assert "durable|metasync|safe_nosync" in r["error"]["message"], r
+    r = call(serv, "tools/call", {"name": "db_enable_utterly_nosync",
+                                  "arguments": {}})
+    sc = r["result"]["structuredContent"]
+    assert sc["sync_mode"] == "utterly_nosync"
+    assert sc.get("danger") is True
+    # возврат в безопасную ротацию
+    r = call(serv, "tools/call", {"name": "db_set_mode", "arguments": {
+        "sync": "safe_nosync"}})
+    assert r["result"]["structuredContent"]["sync_mode"] == "safe_nosync"

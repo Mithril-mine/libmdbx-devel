@@ -86,6 +86,31 @@ def test_map_load_batch_replace(store):
     assert store.map_edges_of("fn:a:foo") == []
 
 
+def test_map_load_batch_replace_dupsort(store):
+    """replace очищает DUPSORT-таблицы (call_edges/groups) без сбоя."""
+    edges = [{"caller": "fn:c:%d" % i, "callee": "fn:t:%d" % (i + j),
+              "kind": "syntax", "resolved": True}
+             for i in range(200) for j in range(3)]
+    store.map_load_batch({}, edges, {}, replace=True)
+    assert store.map_edges_of("fn:c:0")
+    store.map_load_batch({}, [], {}, replace=True)
+    assert store.map_edges_of("fn:c:0") == []
+    assert len(store.map_edges_of("fn:c:199")) == 0
+
+
+def test_map_load_regions_replace(store):
+    """replace очищает regions/uncovered (DB_DEFAULTS) перед загрузкой."""
+    regions = [{"id": "region:a:%d" % i, "file": "src/a.c", "kind": "if",
+                "cond": "#if X", "l0": i, "l1": i + 1} for i in range(5)]
+    uncovered = [{"file": "src/a.c", "l0": i, "l1": i + 1} for i in range(3)]
+    store.map_load_regions(regions, uncovered, replace=True)
+    assert len(store.map_regions(limit=10 ** 9)) == 5
+    assert len(store.map_uncovered(limit=10 ** 9)) == 3
+    store.map_load_regions([], [], replace=True)
+    assert store.map_regions(limit=10 ** 9) == []
+    assert store.map_uncovered(limit=10 ** 9) == []
+
+
 def test_map_load_batch_replace_preserves_curated(store):
     """replace трогает только структурные таблицы, не курируемый слой."""
     seed_vocab(store, [("meta", "test")])

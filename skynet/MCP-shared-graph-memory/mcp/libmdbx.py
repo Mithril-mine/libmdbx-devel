@@ -101,15 +101,122 @@ ffi.cdef(
         uint64_t v;
     };
 
+    #define MDBX_CP_DEFAULTS 0
+    #define MDBX_CP_COMPACT 1
+    #define MDBX_CP_FORCE_DYNAMIC_SIZE 2
+    #define MDBX_CP_DONT_FLUSH 4
+    #define MDBX_CP_THROTTLE_MVCC 8
+    #define MDBX_CP_DISPOSE_TXN 16
+    #define MDBX_CP_RENEW_TXN 32
+    #define MDBX_CP_OVERWRITE 64
+
+    struct MDBX_commit_latency {
+        uint32_t preparation;
+        uint32_t gc_wallclock;
+        uint32_t audit;
+        uint32_t write;
+        uint32_t sync;
+        uint32_t ending;
+        uint32_t whole;
+        uint32_t gc_cputime;
+        struct {
+            uint32_t wloops;
+            uint32_t coalescences;
+            uint32_t wipes;
+            uint32_t flushes;
+            uint32_t kicks;
+            uint32_t work_counter;
+            uint32_t work_rtime_monotonic;
+            uint32_t work_xtime_cpu;
+            uint32_t work_rsteps;
+            uint32_t work_xpages;
+            uint32_t work_majflt;
+            uint32_t self_counter;
+            uint32_t self_rtime_monotonic;
+            uint32_t self_xtime_cpu;
+            uint32_t self_rsteps;
+            uint32_t self_xpages;
+            uint32_t self_majflt;
+            struct {
+                uint32_t time;
+                uint64_t volume;
+                uint32_t calls;
+            } pnl_merge_work, pnl_merge_self;
+            uint32_t max_reader_lag;
+            uint32_t max_retained_pages;
+        } gc_prof;
+    };
+
+    struct MDBX_stat {
+        uint32_t ms_psize;
+        uint32_t ms_depth;
+        uint64_t ms_branch_pages;
+        uint64_t ms_leaf_pages;
+        uint64_t ms_overflow_pages;
+        uint64_t ms_entries;
+        uint64_t ms_mod_txnid;
+    };
+
+    struct MDBX_envinfo {
+        struct { uint64_t lower, upper, current, shrink, grow; } mi_geo;
+        uint64_t mi_mapsize;
+        uint64_t mi_dxb_fsize;
+        uint64_t mi_dxb_fallocated;
+        uint64_t mi_last_pgno;
+        uint64_t mi_recent_txnid;
+        uint64_t mi_latter_reader_txnid;
+        uint64_t mi_self_latter_reader_txnid;
+        uint64_t mi_meta_txnid[3], mi_meta_sign[3];
+        uint32_t mi_maxreaders;
+        uint32_t mi_numreaders;
+        uint32_t mi_dxb_pagesize;
+        uint32_t mi_sys_pagesize;
+        uint32_t mi_sys_upcblk;
+        uint32_t mi_sys_ioblk;
+        struct {
+            struct { uint64_t x, y; } current, meta[3];
+        } mi_bootid;
+        uint64_t mi_unsync_volume;
+        uint64_t mi_autosync_threshold;
+        uint32_t mi_since_sync_seconds16dot16;
+        uint32_t mi_autosync_period_seconds16dot16;
+        uint32_t mi_since_reader_check_seconds16dot16;
+        uint32_t mi_mode;
+        struct {
+            uint64_t newly, cow, clone, split, merge, spill, unspill;
+            uint64_t wops, prefault, mincore, msync, fsync;
+        } mi_pgop_stat;
+        struct { uint64_t x, y; } mi_dxbid;
+    };
+
     int mdbx_env_create(void **env);
     int mdbx_env_set_option(void *env, int option, uint64_t value);
+    int mdbx_env_get_option(const void *env, int option, uint64_t *pvalue);
     int mdbx_env_open(void *env, const char *path, unsigned int flags,
                       unsigned int mode);
+    int mdbx_env_openW(void *env, const wchar_t *path, unsigned int flags,
+                       unsigned int mode);
     int mdbx_env_close_ex(void *env, bool dont_sync);
+    int mdbx_env_sync_ex(void *env, bool force, bool nonblock);
+    int mdbx_env_get_flags(const void *env, unsigned int *flags);
+    int mdbx_env_set_flags(void *env, unsigned int flags, bool onoff);
+    int mdbx_env_info_ex(const void *env, const void *txn, struct MDBX_envinfo *info, size_t bytes);
+    int mdbx_env_stat_ex(const void *env, const void *txn, struct MDBX_stat *stat, size_t bytes);
+    int mdbx_dbi_stat(const void *txn, unsigned int dbi, struct MDBX_stat *stat, size_t bytes);
+    int mdbx_preopen_snapinfo(const char *pathname, struct MDBX_envinfo *info, size_t bytes);
+    int mdbx_preopen_snapinfoW(const wchar_t *pathname, struct MDBX_envinfo *info, size_t bytes);
+    int mdbx_reader_check(void *env, int *dead);
+    int mdbx_env_open_for_recovery(void *env, const char *pathname, unsigned target_meta, bool writeable);
+    int mdbx_env_open_for_recoveryW(void *env, const wchar_t *pathname, unsigned target_meta, bool writeable);
+    int mdbx_env_turn_for_recovery(void *env, unsigned target_meta);
+    int mdbx_env_get_fd(void *env, int *fd);
     int mdbx_txn_begin_ex(void *env, void *parent, unsigned int flags,
                           void **txn, void *context);
-    int mdbx_txn_commit_ex(void *txn, void *latency);
+    int mdbx_txn_commit_ex(void *txn, struct MDBX_commit_latency *latency);
     int mdbx_txn_abort_ex(void *txn, void *latency);
+    uint64_t mdbx_txn_id(const void *txn);
+    int mdbx_txn_copy2pathname(void *txn, const char *dest, unsigned int flags);
+    int mdbx_txn_copy2pathnameW(void *txn, const wchar_t *dest, unsigned int flags);
     int mdbx_dbi_open(void *txn, const char *name, unsigned int flags,
                       MDBX_dbi *dbi);
     int mdbx_dbi_sequence(void *txn, MDBX_dbi dbi, uint64_t *result,
@@ -132,7 +239,6 @@ ffi.cdef(
     const char *mdbx_strerror(int errnum);
     int mdbx_env_get_maxvalsize_ex(void *env, unsigned int flags);
     int mdbx_env_get_maxkeysize_ex(void *env, unsigned int flags);
-    int mdbx_env_sync_ex(void *env, bool force, bool nonblock);
     """
 )
 
@@ -198,6 +304,28 @@ PUT_NODUPDATA = 0x20
 PUT_CURRENT = 0x40
 PUT_ALLDUPS = 0x80
 
+# env_open flags (mdbx.h env_flags)
+ENV_RDONLY = 0x20000
+ENV_EXCLUSIVE = 0x400000
+ENV_ACCEDE = 0x40000000
+ENV_WRITEMAP = 0x80000
+# sync modes (взаимоисключающие; UTTERLY включает SAFE!)
+ENV_DURABLE = 0
+ENV_NOMETASYNC = 0x40000
+ENV_SAFE_NOSYNC = 0x10000
+ENV_UTTERLY_NOSYNC = ENV_SAFE_NOSYNC | 0x100000
+
+SYNC_MODES = {
+    "durable": ENV_DURABLE,
+    "metasync": ENV_NOMETASYNC,
+    "safe_nosync": ENV_SAFE_NOSYNC,
+    "utterly_nosync": ENV_UTTERLY_NOSYNC,
+}
+# безопасная ротация для общего переключения (db_set_mode). UTTERLY_NOSYNC
+# исключён: только через отдельный явный инструмент db_enable_utterly_nosync.
+SYNC_MODES_SAFE = ("durable", "metasync", "safe_nosync")
+_SYNC_BITS = ENV_NOMETASYNC | ENV_UTTERLY_NOSYNC  # покрывает и SAFE
+
 CURSOR_FIRST = 0
 CURSOR_FIRST_DUP = 1
 CURSOR_GET_BOTH = 2
@@ -223,15 +351,30 @@ RC_INCOMPATIBLE = -30784
 RC_BAD_VALSIZE = -30781
 RC_BUSY = -30778
 RC_EMULTIVAL = -30421
+RC_WANNA_RECOVERY = -30419
+RC_CORRUPTED = -30796
 
 # MDBX_option_t: enum MDBX_option (mdbx.h) — значения по порядку членов.
 MDBX_OPT_MAX_DB = 0
+MDBX_OPT_MAX_READERS = 1
 MDBX_OPT_SYNC_BYTES = 2
 MDBX_OPT_SYNC_PERIOD = 3
 
 # Синхронизация: SAFE_NOSYNC — нет fsync на коммите; движок сам сбрасывает
 # накопленное по порогам sync_bytes/sync_period (см. mdbx.h sync_modes).
 MDBX_SAFE_NOSYNC = 0x10000
+
+# Copy flags для mdbx_txn_copy2pathname / mdbx_env_copy (mdbx.h MDBX_copy_flags).
+CP_DEFAULTS = 0
+CP_COMPACT = 0x1
+CP_FORCE_DYNAMIC_SIZE = 0x2
+CP_DONT_FLUSH = 0x4
+CP_THROTTLE_MVCC = 0x8
+CP_DISPOSE_TXN = 0x10
+CP_RENEW_TXN = 0x20
+CP_OVERWRITE = 0x40
+# набор для «чистых» бэкапов: компактификация + перезапись существующего.
+CP_BACKUP = CP_COMPACT | CP_OVERWRITE
 
 
 class LibmdbxError(RuntimeError):
@@ -301,11 +444,87 @@ def build_string() -> str:
         return ""
 
 
+def preopen_snapinfo(path: str) -> dict:
+    """Базовая информация о БД БЕЗ открытия env (mdbx_preopen_snapinfo).
+
+    Заполняет ТОЛЬКО поля, читаемые без mmap и блокировок: pagesize,
+    геометрию, last_pgno, **последний txnid (mi_recent_txnid)** и bootid
+    текущей мета-страницы. Критично: переживает пересоздание LCK-файла.
+    На Windows используется *W-вариант.
+
+    Для полных meta_txnid[3] нужен Env.diag() после read-only открытия.
+    """
+    info = ffi.new("struct MDBX_envinfo *")
+    if os.name == "nt":
+        rc = _get_lib().mdbx_preopen_snapinfoW(
+            ctypes.c_wchar_p(path), info, ffi.sizeof("struct MDBX_envinfo"))
+    else:
+        rc = _get_lib().mdbx_preopen_snapinfo(
+            path.encode(), info, ffi.sizeof("struct MDBX_envinfo"))
+    check(rc, "mdbx_preopen_snapinfo")
+    return {
+        "geo": {"lower": int(info.mi_geo.lower),
+                "upper": int(info.mi_geo.upper),
+                "current": int(info.mi_geo.current),
+                "shrink": int(info.mi_geo.shrink),
+                "grow": int(info.mi_geo.grow)},
+        "last_pgno": int(info.mi_last_pgno),
+        "recent_txnid": int(info.mi_recent_txnid),
+        "dxb_pagesize": int(info.mi_dxb_pagesize),
+        "sys_pagesize": int(info.mi_sys_pagesize),
+        "bootid_current": {"x": int(info.mi_bootid.current.x),
+                           "y": int(info.mi_bootid.current.y)},
+        "bootid_meta": [{"x": int(m.x), "y": int(m.y)}
+                        for m in info.mi_bootid.meta],
+    }
+
+
 def check(rc: int, where: str = "") -> int:
     """Проверяет код возврата: 0 и MDBX_RESULT_TRUE(-1) — не ошибки."""
     if rc == RC_SUCCESS or rc == RC_RESULT_TRUE:
         return rc
     raise LibmdbxError(rc, where)
+
+
+def open_for_recovery_probe(path: str, target_meta: int = 0) -> dict:
+    """Read-only диагностика мета-страницы для recovery (mdbx_chk-механика).
+
+    Открывает отдельный env на конкретной мете (writeable=False), читает
+    ключевые поля и закрывает. НИЧЕГО не модифицирует — это информационный
+    probe; ремонт остаётся за mdbx_chk / восстановлением из бэкапа.
+    """
+    if not 0 <= target_meta <= 2:
+        raise ValueError("target_meta must be 0..2")
+    env = ffi.new("void **")
+    check(_get_lib().mdbx_env_create(env), "mdbx_env_create")
+    if os.name == "nt":
+        rc = _get_lib().mdbx_env_open_for_recoveryW(
+            env[0], ctypes.c_wchar_p(path), target_meta, False)
+    else:
+        rc = _get_lib().mdbx_env_open_for_recovery(
+            env[0], path.encode(), target_meta, False)
+    if rc != RC_SUCCESS:
+        _get_lib().mdbx_env_close_ex(env[0], True)
+        check(rc, "mdbx_env_open_for_recovery")
+    try:
+        info = ffi.new("struct MDBX_envinfo *")
+        rc = _get_lib().mdbx_env_info_ex(
+            env[0], ffi.NULL, info, ffi.sizeof("struct MDBX_envinfo"))
+        if rc != RC_SUCCESS:
+            return {"error": "mdbx_env_info_ex(%s): %s" % (rc, strerror(rc))}
+        return {
+            "target_meta": target_meta,
+            "meta_txnid": [int(x) for x in info.mi_meta_txnid],
+            "recent_txnid": int(info.mi_recent_txnid),
+            "geo_current": int(info.mi_geo.current),
+            "dxb_pagesize": int(info.mi_dxb_pagesize),
+            "bootid_current": {"x": int(info.mi_bootid.current.x),
+                               "y": int(info.mi_bootid.current.y)},
+            "bootid_meta": [{"x": int(m.x), "y": int(m.y)}
+                            for m in info.mi_bootid.meta],
+        }
+    finally:
+        _get_lib().mdbx_env_close_ex(env[0], True)
 
 
 # --- MDBX_val helper ------------------------------------------------------------
@@ -334,9 +553,30 @@ def _val_bytes(val: object) -> bytes:
 class Env:
     """Обёртка над MDBX_env с автоматическим закрытием."""
 
+    _IS_WINDOWS = os.name == "nt"
+
     def __init__(self, path: str, maxdbs: int = 32, create: bool = True,
-                 sync_bytes: int = 64 << 20, sync_period: int = 60):
+                 sync_bytes: int = 64 << 20, sync_period: int = 60,
+                 readonly: bool = False, exclusive: bool = False,
+                 accede: bool = False, writemap: bool = False,
+                 sync_mode: str = "safe_nosync", sync_flags: int = None):
         self.path = path
+        self.flags = NOSUBDIR
+        if readonly:
+            self.flags |= ENV_RDONLY
+        if exclusive:
+            self.flags |= ENV_EXCLUSIVE
+        if accede:
+            self.flags |= ENV_ACCEDE
+        if writemap:
+            self.flags |= ENV_WRITEMAP
+        if sync_flags is not None:
+            # явный набор sync-битов (для тестов и переключения)
+            self.flags |= sync_flags
+        elif sync_mode in SYNC_MODES:
+            self.flags |= SYNC_MODES[sync_mode]
+        else:
+            raise ValueError("unknown sync_mode %r" % sync_mode)
         out = ffi.new("void **")
         check(_get_lib().mdbx_env_create(out), "mdbx_env_create")
         self._env = out[0]
@@ -344,19 +584,163 @@ class Env:
               "mdbx_env_set_option(max_db)")
         # mode=0 означает "открыть существующее, не создавать" (mdbx.h env_open).
         mode = 0o644 if create else 0
-        # SAFE_NOSYNC: дешёвые коммиты; фоновый тред (Store) шлёт env_sync_poll
-        # раз в секунду, а движок сбрасывает по порогам sync_bytes/sync_period.
-        flags = NOSUBDIR | MDBX_SAFE_NOSYNC
-        rc = _get_lib().mdbx_env_open(self._env, path.encode(), flags, mode)
+        rc = self._env_open(path, mode)
         check(rc, "mdbx_env_open")
-        if sync_bytes:
-            check(_get_lib().mdbx_env_set_option(self._env, MDBX_OPT_SYNC_BYTES,
-                                                 sync_bytes),
-                  "mdbx_env_set_option(sync_bytes)")
-        if sync_period:
-            check(_get_lib().mdbx_env_set_option(self._env, MDBX_OPT_SYNC_PERIOD,
-                                                 sync_period),
-                  "mdbx_env_set_option(sync_period)")
+        # sync_bytes/sync_period в read-only режиме менять нельзя
+        # (движок вернёт EACCES) — пропускаем установку.
+        if not readonly:
+            if sync_bytes:
+                check(_get_lib().mdbx_env_set_option(self._env, MDBX_OPT_SYNC_BYTES,
+                                                     sync_bytes),
+                      "mdbx_env_set_option(sync_bytes)")
+            if sync_period:
+                check(_get_lib().mdbx_env_set_option(self._env, MDBX_OPT_SYNC_PERIOD,
+                                                     sync_period),
+                      "mdbx_env_set_option(sync_period)")
+
+    def _env_open(self, path: str, mode: int) -> int:
+        """Открытие env; на Windows — wchar-вариант (mdbx_env_openW)."""
+        if self._IS_WINDOWS:
+            return _get_lib().mdbx_env_openW(
+                self._env, ctypes.c_wchar_p(path), self.flags, mode)
+        return _get_lib().mdbx_env_open(self._env, path.encode(), self.flags, mode)
+
+    # --- интроспекция ----------------------------------------------------------
+    def diag(self) -> dict:
+        """Диагностика по мета-страницам и bootid (живут в файле БД, НЕ в LCK).
+
+        Возвращает txnid всех трёх мета-страниц, bootid (current+meta),
+        recent/latter txnid, геометрию и режим. Критерий «достигли ли данные
+        диска»: сравнение mi_recent_txnid с max(mi_meta_txnid) и bootid.
+        """
+        info = ffi.new("struct MDBX_envinfo *")
+        rc = _get_lib().mdbx_env_info_ex(self._env, ffi.NULL, info,
+                                         ffi.sizeof("struct MDBX_envinfo"))
+        check(rc, "mdbx_env_info_ex")
+        return {
+            "geo": {"lower": int(info.mi_geo.lower),
+                    "upper": int(info.mi_geo.upper),
+                    "current": int(info.mi_geo.current),
+                    "shrink": int(info.mi_geo.shrink),
+                    "grow": int(info.mi_geo.grow)},
+            "mapsize": int(info.mi_mapsize),
+            "dxb_fsize": int(info.mi_dxb_fsize),
+            "dxb_fallocated": int(info.mi_dxb_fallocated),
+            "last_pgno": int(info.mi_last_pgno),
+            "recent_txnid": int(info.mi_recent_txnid),
+            "latter_reader_txnid": int(info.mi_latter_reader_txnid),
+            "self_latter_reader_txnid": int(info.mi_self_latter_reader_txnid),
+            "meta_txnid": [int(x) for x in info.mi_meta_txnid],
+            "meta_sign": [int(x) for x in info.mi_meta_sign],
+            "maxreaders": int(info.mi_maxreaders),
+            "numreaders": int(info.mi_numreaders),
+            "dxb_pagesize": int(info.mi_dxb_pagesize),
+            "sys_pagesize": int(info.mi_sys_pagesize),
+            "sys_upcblk": int(info.mi_sys_upcblk),
+            "sys_ioblk": int(info.mi_sys_ioblk),
+            "bootid_current": {"x": int(info.mi_bootid.current.x),
+                               "y": int(info.mi_bootid.current.y)},
+            "bootid_meta": [{"x": int(m.x), "y": int(m.y)}
+                            for m in info.mi_bootid.meta],
+            "unsync_volume": int(info.mi_unsync_volume),
+            "autosync_threshold": int(info.mi_autosync_threshold),
+            "since_sync_16dot16": int(info.mi_since_sync_seconds16dot16),
+            "autosync_period_16dot16": int(info.mi_autosync_period_seconds16dot16),
+            "since_reader_check_16dot16": int(info.mi_since_reader_check_seconds16dot16),
+            "mode": int(info.mi_mode),
+            "dxbid": {"x": int(info.mi_dxbid.x), "y": int(info.mi_dxbid.y)},
+            "pgop_stat": {"newly": int(info.mi_pgop_stat.newly),
+                          "cow": int(info.mi_pgop_stat.cow),
+                          "clone": int(info.mi_pgop_stat.clone),
+                          "split": int(info.mi_pgop_stat.split),
+                          "merge": int(info.mi_pgop_stat.merge),
+                          "spill": int(info.mi_pgop_stat.spill),
+                          "unspill": int(info.mi_pgop_stat.unspill),
+                          "wops": int(info.mi_pgop_stat.wops),
+                          "prefault": int(info.mi_pgop_stat.prefault),
+                          "mincore": int(info.mi_pgop_stat.mincore),
+                          "msync": int(info.mi_pgop_stat.msync),
+                          "fsync": int(info.mi_pgop_stat.fsync)},
+        }
+
+    def stat(self, dbi: int = None) -> dict:
+        """Статистика env (или конкретной таблицы при dbi в активной txn)."""
+        st = ffi.new("struct MDBX_stat *")
+        rc = _get_lib().mdbx_env_stat_ex(self._env, ffi.NULL, st,
+                                         ffi.sizeof("struct MDBX_stat"))
+        check(rc, "mdbx_env_stat_ex")
+        out = {"psize": int(st.ms_psize), "depth": int(st.ms_depth),
+               "branch_pages": int(st.ms_branch_pages),
+               "leaf_pages": int(st.ms_leaf_pages),
+               "overflow_pages": int(st.ms_overflow_pages),
+               "entries": int(st.ms_entries),
+               "mod_txnid": int(st.ms_mod_txnid)}
+        return out
+
+    def get_option(self, option: int) -> int:
+        val = ffi.new("uint64_t *")
+        check(_get_lib().mdbx_env_get_option(self._env, option, val),
+              "mdbx_env_get_option(%d)" % option)
+        return int(val[0])
+
+    def get_flags(self) -> int:
+        val = ffi.new("unsigned int *")
+        check(_get_lib().mdbx_env_get_flags(self._env, val), "mdbx_env_get_flags")
+        return int(val[0])
+
+    def set_flags(self, flags: int, onoff: bool) -> None:
+        check(_get_lib().mdbx_env_set_flags(self._env, flags, bool(onoff)),
+              "mdbx_env_set_flags")
+
+    def set_sync_mode(self, mode: str) -> None:
+        """Переключение sync-режима на лету (mdbx_env_set_flags).
+
+        Снимает все sync-биты, затем ставит нужный. UTTERLY_NOSYNC включает
+        SAFE_NOSYNC внутри себя, поэтому снятие идёт полным набором.
+        """
+        if mode not in SYNC_MODES:
+            raise ValueError("unknown sync_mode %r" % mode)
+        self.set_flags(_SYNC_BITS, False)
+        bits = SYNC_MODES[mode]
+        if bits:
+            self.set_flags(bits, True)
+
+    def reader_check(self) -> int:
+        dead = ffi.new("int *")
+        rc = _get_lib().mdbx_reader_check(self._env, dead)
+        if rc not in (RC_SUCCESS, RC_RESULT_TRUE):
+            check(rc, "mdbx_reader_check")
+        return int(dead[0])
+
+    def get_fd(self) -> int:
+        """Файловый дескриптор файла БД (mdbx_env_get_fd).
+
+        Позволяет делать fstat/linkat для детекции удаления файла и
+        LIFELINE-ссылки (сторонняя процедура; движок сам по нему не пишет).
+        На Windows fd — HANDLE (механизм st_nlink там не используется).
+        """
+        fd = ffi.new("int *")
+        check(_get_lib().mdbx_env_get_fd(self._env, fd), "mdbx_env_get_fd")
+        return int(fd[0])
+
+    def file_stat(self) -> dict:
+        """fstat(fd) файла БД: nlink/size/ino/dev/mtime (+ признаки удаления).
+
+        st_nlink — ключ детекции удаления: у «живого» файла >= 1, при unlink
+        становится 0. LIFELINE-ссылка делает инвариант >= 2.
+        """
+        import stat as _stat
+
+        st = os.fstat(self.get_fd())
+        return {
+            "nlink": st.st_nlink,
+            "size": st.st_size,
+            "ino": st.st_ino,
+            "dev": st.st_dev,
+            "mtime": int(st.st_mtime),
+            "mode": _stat.S_IFMT(st.st_mode),
+            "deleted": st.st_nlink == 0,
+        }
 
     def sync(self, force: bool = False, nonblock: bool = True) -> None:
         """Сброс буферов данных на диск (mdbx_env_sync_ex).
@@ -405,12 +789,86 @@ class Txn:
         self.env = env
         self._txn = txn_ptr
         self._done = False
+        # опционально: Store-владелец для сбора commit-latency (см. _begin_write)
+        self._store = None
+        self.last_latency = None
 
-    def commit(self) -> None:
-        if not self._done:
-            check(_get_lib().mdbx_txn_commit_ex(self._txn, ffi.NULL),
-                  "mdbx_txn_commit_ex")
-            self._done = True
+    def commit(self, latency: Optional[dict] = None) -> Optional[dict]:
+        """Коммит; при latency не-None возвращает словарь MDBX_commit_latency.
+
+        Стадии (в 1/65536 с): preparation/gc_wallclock/audit/write/sync/ending/
+        whole/gc_cputime. gc_prof заполняется только в сборках
+        с MDBX_ENABLE_PROFGC — здесь он просто ноль/недоступен.
+        """
+        if self._done:
+            return None
+        lat = ffi.new("struct MDBX_commit_latency *")
+        check(_get_lib().mdbx_txn_commit_ex(self._txn, lat),
+              "mdbx_txn_commit_ex")
+        self._done = True
+        out = {
+            "preparation": int(lat.preparation),
+            "gc_wallclock": int(lat.gc_wallclock),
+            "audit": int(lat.audit),
+            "write": int(lat.write),
+            "sync": int(lat.sync),
+            "ending": int(lat.ending),
+            "whole": int(lat.whole),
+            "gc_cputime": int(lat.gc_cputime),
+        }
+        gp = lat.gc_prof
+        out["gc_prof"] = {
+            "wloops": int(gp.wloops), "coalescences": int(gp.coalescences),
+            "wipes": int(gp.wipes), "flushes": int(gp.flushes),
+            "kicks": int(gp.kicks),
+            "work_counter": int(gp.work_counter),
+            "work_rtime_monotonic": int(gp.work_rtime_monotonic),
+            "work_xtime_cpu": int(gp.work_xtime_cpu),
+            "work_rsteps": int(gp.work_rsteps),
+            "work_xpages": int(gp.work_xpages),
+            "work_majflt": int(gp.work_majflt),
+            "self_counter": int(gp.self_counter),
+            "self_rtime_monotonic": int(gp.self_rtime_monotonic),
+            "self_xtime_cpu": int(gp.self_xtime_cpu),
+            "self_rsteps": int(gp.self_rsteps),
+            "self_xpages": int(gp.self_xpages),
+            "self_majflt": int(gp.self_majflt),
+            "pnl_merge_work": {"time": int(gp.pnl_merge_work.time),
+                               "volume": int(gp.pnl_merge_work.volume),
+                               "calls": int(gp.pnl_merge_work.calls)},
+            "pnl_merge_self": {"time": int(gp.pnl_merge_self.time),
+                               "volume": int(gp.pnl_merge_self.volume),
+                               "calls": int(gp.pnl_merge_self.calls)},
+            "max_reader_lag": int(gp.max_reader_lag),
+            "max_retained_pages": int(gp.max_retained_pages),
+        }
+        self.last_latency = out
+        if self._store is not None:
+            self._store._note_commit_latency(out)
+        return out if latency is not None else None
+
+    def id(self) -> int:
+        """Идентификатор транзакции (mdbx_txn_id); 0 для неактивной."""
+        if self._done:
+            return 0
+        return int(_get_lib().mdbx_txn_id(self._txn))
+
+    def copy2pathname(self, dest: str, flags: int = CP_BACKUP) -> dict:
+        """Консистентная копия БД в файл (mdbx_txn_copy2pathname).
+
+        Копия делается из read-txn (MVCC-снапшот) — безопасна при живых
+        писателях. По умолчанию COMPACT|OVERWRITE (компактификация).
+        На Windows используется *W-вариант.
+        """
+        if self._done:
+            raise RuntimeError("txn already finished")
+        if os.name == "nt":
+            rc = _get_lib().mdbx_txn_copy2pathnameW(
+                self._txn, ctypes.c_wchar_p(dest), flags)
+        else:
+            rc = _get_lib().mdbx_txn_copy2pathname(self._txn, dest.encode(), flags)
+        check(rc, "mdbx_txn_copy2pathname")
+        return {"dest": dest, "txnid": self.id()}
 
     def abort(self) -> None:
         if not self._done:
@@ -469,6 +927,19 @@ class Txn:
     def count(self, dbi: int) -> int:
         with self.cursor(dbi) as cur:
             return cur.count_all()
+
+    def dbi_stat(self, dbi: int) -> dict:
+        """Статистика таблицы (mdbx_dbi_stat) в рамках активной txn."""
+        st = ffi.new("struct MDBX_stat *")
+        check(_get_lib().mdbx_dbi_stat(self.ptr, dbi, st,
+                                       ffi.sizeof("struct MDBX_stat")),
+              "mdbx_dbi_stat")
+        return {"psize": int(st.ms_psize), "depth": int(st.ms_depth),
+                "branch_pages": int(st.ms_branch_pages),
+                "leaf_pages": int(st.ms_leaf_pages),
+                "overflow_pages": int(st.ms_overflow_pages),
+                "entries": int(st.ms_entries),
+                "mod_txnid": int(st.ms_mod_txnid)}
 
     def sequence(self, dbi: int, increment: int = 1) -> int:
         """mdbx_dbi_sequence: атомарный инкремент счётчика таблицы.

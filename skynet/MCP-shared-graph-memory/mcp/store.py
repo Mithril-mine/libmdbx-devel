@@ -23,18 +23,22 @@ from __future__ import annotations
 import json
 import math
 import os
+import shutil
 import sys
 import threading
 import time
+from collections import deque
 
 from . import index as idx
 from . import libmdbx as mdbx
 from .errors import (
     MemoryError,
     busy_io,
+    db_file_deleted,
     internal,
     invalid,
     parse,
+    readonly_mode,
     size_limit,
 )
 from .normalize import RECORD_TYPES, Normalizer
@@ -47,6 +51,25 @@ GC_HOT = 0.7
 GC_WARM = 0.3
 LRU_RATE_LIMIT_SECONDS = 60
 SYNC_POLL_INTERVAL_SECONDS = 1.0
+
+# --- резервное копирование и защита от удаления файла БД ----------------------
+ENV_BACKUP_DIR = "SHARED_GRAPH_MEMORY_BACKUP_DIR"
+ENV_AUTO_BACKUP_SECONDS = "SHARED_GRAPH_MEMORY_AUTO_BACKUP_SECONDS"
+ENV_PROMPT_BACKUP_SECONDS = "SHARED_GRAPH_MEMORY_PROMPT_BACKUP_SECONDS"
+ENV_BACKUP_KEEP = "SHARED_GRAPH_MEMORY_BACKUP_KEEP"
+ENV_BACKUP_MAX_MB = "SHARED_GRAPH_MEMORY_BACKUP_MAX_MB"
+DEFAULT_BACKUP_KEEP = 7
+DEFAULT_BACKUP_MAX_MB = 512
+BACKUP_STATE_FILE = ".backup-state.json"
+BACKUP_LIFELINE = "current.mdbx"
+COMMIT_LATENCY_WINDOW = 16
+
+
+def _env_int(name: str, default: int) -> int:
+    try:
+        return int(os.environ.get(name, "") or default)
+    except ValueError:
+        return default
 
 
 def _pack_u64(n: int) -> bytes:
@@ -83,18 +106,30 @@ class Store:
         "sym_ids": mdbx.DB_DEFAULTS,
         "sym_id2key": mdbx.INTEGERKEY,
         "sym_aliases": mdbx.DB_DEFAULTS,
+        "regions": mdbx.DB_DEFAULTS,   # #if-дерево: region:{module}:{n} -> JSON
+        "uncovered": mdbx.DB_DEFAULTS,  # uncovered-острова: uncovered:{module}:{n}
     }
 
-    def __init__(self, path: str, maxdbs: int = 32, max_value_bytes: int = 16 << 20):
+    def __init__(self, path: str, maxdbs: int = 32, max_value_bytes: int = 16 << 20,
+                 sync_mode: str = "safe_nosync", readonly: bool = False,
+                 _skip_sync_thread: bool = False):
         self.path = path
         self.max_value_bytes = max_value_bytes
-        self.env = mdbx.Env(path, maxdbs=maxdbs)
+        self.sync_mode = sync_mode
+        self._readonly = readonly
+        # read-only открытие НЕ должно трогать LCK на запись: используем
+        # ACCEDE чтобы присоединиться к уже открытой БД без конфликта флагов.
+        self.env = mdbx.Env(path, maxdbs=maxdbs, readonly=readonly,
+                            accede=readonly, sync_mode=sync_mode)
         self.norm = Normalizer()
         self._dbi = {}
-        # открываем все таблицы один раз (CREATE) в первой write-txn
-        with self.env.begin(readonly=False) as txn:
+        # открываем все таблицы один раз (CREATE) в первой write-txn;
+        # в read-only режиме CREATE не нужен — dbi открываются с DEFAULTS
+        txn_flags = mdbx.TXN_RDONLY if readonly else mdbx.TXN_READWRITE
+        with self.env.begin(readonly=readonly) as txn:
             for name in self.TABLES:
-                self._dbi[name] = txn.open_dbi(name, self.TABLES[name] | mdbx.CREATE)
+                fl = self.TABLES[name] | (mdbx.CREATE if not readonly else 0)
+                self._dbi[name] = txn.open_dbi(name, fl)
         self._load_vocab()
         self.next_id = self._load_next_id()
         self.last_gc = None
@@ -103,17 +138,37 @@ class Store:
         # и буфер, который сбрасывается одной write-txn (см. _flush_touches).
         self._lru_last: dict = {}
         self._touch_ids: list = []
+        # commit-latency последних write-транзакций (кольцо).
+        self._latencies = deque(maxlen=COMMIT_LATENCY_WINDOW)
+        # --- резервное копирование / защита от удаления ----------------------
+        self.backup_dir = self._resolve_backup_dir(path)
+        self.auto_backup_seconds = _env_int(ENV_AUTO_BACKUP_SECONDS, 0)
+        self.prompt_backup_seconds = _env_int(ENV_PROMPT_BACKUP_SECONDS, 0)
+        self.backup_keep = max(1, _env_int(ENV_BACKUP_KEEP, DEFAULT_BACKUP_KEEP))
+        self.backup_max_bytes = max(1, _env_int(ENV_BACKUP_MAX_MB,
+                                                DEFAULT_BACKUP_MAX_MB)) << 20
+        self.db_file_deleted = False
+        self.backup_notice = None   # одноразовое уведомление агенту
+        self.backup_pending = False  # PROMPT-интервал: спросить пользователя
+        self._lifeline_error = None
+        self._lifeline_mode = None   # "link" | "copy" | None (Windows)
+        self._protect_lifeline()
         # Фоновый тред: раз в секунду mdbx_env_sync_poll (дешёвый nonblocking
-        # сброс по порогам sync_bytes/sync_period). Транзакций не создаёт.
+        # сброс по порогам sync_bytes/sync_period) + контроль st_nlink.
+        # Транзакций не создаёт. В read-only режиме тред не запускаем
+        # (синк не нужен и может писать в LCK).
         self._sync_stop = threading.Event()
-        self._sync_thread = threading.Thread(
-            target=self._sync_loop, name="store-sync-poll", daemon=True)
-        self._sync_thread.start()
+        self._sync_thread = None
+        if not readonly and not _skip_sync_thread:
+            self._sync_thread = threading.Thread(
+                target=self._sync_loop, name="store-sync-poll", daemon=True)
+            self._sync_thread.start()
 
     # --- sync ---------------------------------------------------------------
     def _sync_loop(self) -> None:
         while not self._sync_stop.wait(SYNC_POLL_INTERVAL_SECONDS):
             try:
+                self._check_deleted()
                 self.env.sync(force=False, nonblock=True)
             except Exception:
                 pass  # опрос синка не должен ломать сервер
@@ -122,6 +177,502 @@ class Store:
         self._sync_stop.set()
         if self._sync_thread is not None and self._sync_thread.is_alive():
             self._sync_thread.join(timeout=2.0)
+
+    # --- диагностика и режимы --------------------------------------------------
+    def diag(self) -> dict:
+        """Диагностика БД: мета-страницы/txnid/bootid (живут в файле, не в LCK).
+
+        Критерий «достигли ли данные диска»:
+          - env.meta_txnid — txnid всех трёх мета-страниц (всегда доступен
+            через открытый env);
+          - env.bootid_current vs bootid_meta — «разошлась» ли БД с boot`ом
+            (при отличии — при следующем открытии откат к steady);
+          - preopen.recent_txnid — последний txnid видимый БЕЗ открытия; этот
+            вызов валиден только при закрытой env или синхронизированной
+            (при живой nosync-env вернёт MDBX_CORRUPTED) — обрабатываем
+            best-effort, для живого сервера основой служит env.diag().
+        """
+        out = {}
+        try:
+            out["env"] = self.env.diag()
+        except Exception as e:  # noqa: BLE001
+            out["env"] = {"error": str(e)}
+        try:
+            out["preopen"] = mdbx.preopen_snapinfo(self.path)
+        except Exception as e:  # noqa: BLE001
+            out["preopen"] = {"error": str(e),
+                              "note": "вален при закрытой/синхронизированной env"}
+        return out
+
+    def flush_sync(self) -> dict:
+        """Принудительный сброс на диск (mdbx_env_sync force=True)."""
+        if self._readonly:
+            raise readonly_mode(
+                "хранилище открыто в read-only режиме",
+                "вызовите db_set_mode(readonly=false) для переключения")
+        self.env.sync(force=True, nonblock=False)
+        return {"flushed": True}
+
+    def set_sync_mode(self, mode: str) -> dict:
+        """Переключение sync-режима на лету (durable|metasync|safe_nosync).
+
+        UTTERLY_NOSYNC сюда НЕ входит: он снимает гарантии durable и доступен
+        только через отдельный опасный инструмент enable_utterly_nosync.
+        """
+        if mode not in mdbx.SYNC_MODES_SAFE:
+            raise invalid("неизвестный sync_mode %r" % mode,
+                          "используйте durable|metasync|safe_nosync")
+        if self._readonly:
+            raise invalid("read-only режим не позволяет менять sync_mode",
+                          "сначала переключитесь в read-write")
+        self.env.set_sync_mode(mode)
+        self.sync_mode = mode
+        return {"sync_mode": mode}
+
+    def enable_utterly_nosync(self) -> dict:
+        """ОПАСНО: полное отключение синхронизации (безопасно только для
+        одноразовых кэшей). Данные после краха процесса могут пропасть.
+
+        Вызывается ТОЛЬКО осознанно через отдельный MCP-инструмент
+        db_enable_utterly_nosync, а не через ротацию db_set_mode.
+        """
+        if self._readonly:
+            raise invalid("read-only режим не позволяет менять sync_mode",
+                          "сначала переключитесь в read-write")
+        self.env.set_sync_mode("utterly_nosync")
+        self.sync_mode = "utterly_nosync"
+        return {"sync_mode": "utterly_nosync", "danger": True,
+                "warn": "гарантии durable отключены; после краха данные "
+                        "последних транзакций могут быть потеряны"}
+
+    def set_readonly(self, readonly: bool) -> dict:
+        """Переоткрытие env в read-only/read-write режиме.
+
+        RDONLY задаётся только при mdbx_env_open, поэтому требуется закрыть
+        и заново открыть среду. Активных транзакций/курсоров быть не должно.
+        """
+        if readonly == self._readonly:
+            return {"readonly": readonly}
+        with self._guard_no_active() as _:
+            pass
+        self._reopen(readonly)
+        return {"readonly": readonly}
+
+    def db_stat(self, table: str = None) -> dict:
+        """Статистика env или одной таблицы."""
+        if table is None:
+            return self.env.stat()
+        if table not in self.TABLES:
+            raise invalid("неизвестная таблица %r" % table,
+                          "список таблиц: %s" % ", ".join(sorted(self.TABLES)))
+        with self.env.begin(readonly=True) as txn:
+            return txn.dbi_stat(self.dbi(txn, table))
+
+    def readers(self, check: bool = False) -> dict:
+        """Число активных читателей; check=True — вычистить мёртвые."""
+        dead = self.env.reader_check() if check else 0
+        try:
+            n = self.env.diag().get("numreaders", 0)
+        except Exception:  # noqa: BLE001
+            n = 0
+        return {"numreaders": n, "dead_cleared": dead}
+
+    # --- защита от удаления файла БД (не-Windows) --------------------------
+    def _resolve_backup_dir(self, path: str) -> str:
+        """Каталог бэкапов: env или `<каталог_бд>/backups` (та же ФС!)."""
+        env = os.environ.get(ENV_BACKUP_DIR)
+        if env:
+            return os.path.abspath(env)
+        return os.path.join(os.path.dirname(os.path.abspath(path)), "backups")
+
+    def _link_or_copy(self, dest: str) -> str:
+        """Защитная ссылка на файл БД; возвращает режим "link" или "copy".
+
+        Порядок попыток:
+          1. os.link(self.path, dest) — обычная жёсткая ссылка по пути
+             (работает на macOS/Linux/Windows при одной ФС);
+          2. os.link через /proc/self/fd|/dev/fd — если путь уже недоступен;
+          3. полная копия файла — на кросс-ФС (EXDEV: tmpfs vs основной диск,
+             GitHub Actions) и там, где fd-link запрещён (macOS EPERM).
+        Копия сохраняет данные и детекцию удаления (путь пропал + nlink < 2),
+        хотя и не даёт инвариант st_nlink >= 2.
+        """
+        try:
+            os.link(self.path, dest)
+            return "link"
+        except OSError:
+            pass
+        fd = self.env.get_fd()
+        for proc in ("/proc/self/fd/%d" % fd, "/dev/fd/%d" % fd):
+            try:
+                os.link(proc, dest)
+                return "link"
+            except OSError:
+                continue
+        with os.fdopen(os.dup(fd), "rb") as src, open(dest, "wb") as dst:
+            src.seek(0)  # mdbx оставляет fd-офсет где угодно — читаем с начала
+            shutil.copyfileobj(src, dst, 1024 * 1024)
+        return "copy"
+
+    def _protect_lifeline(self) -> None:
+        """Инвариант защиты: LIFELINE-ссылка `current.mdbx` в backup_dir.
+
+        Если файл БД удалят из-под процесса, останется ссылка/копия на тот же
+        контент, а nlink == 1 станет сигналом детекции (вместе с пропажей пути).
+        """
+        if os.name == "nt":
+            return
+        try:
+            os.makedirs(self.backup_dir, exist_ok=True)
+            if self.env.file_stat()["nlink"] < 2:
+                link = os.path.join(self.backup_dir, BACKUP_LIFELINE)
+                if not os.path.lexists(link):
+                    self._lifeline_mode = self._link_or_copy(link)
+            self._lifeline_error = None
+        except OSError as e:
+            self._lifeline_error = str(e)
+            self.backup_notice = "LIFELINE backup link unavailable: %s" % e
+
+    def _emergency_snapshot(self) -> "str|None":
+        """Аварийный снапшот при детекции удаления файла БД."""
+        try:
+            txnid = 0
+            try:
+                with self.env.begin(readonly=True) as txn:
+                    txnid = txn.id()
+            except Exception:  # noqa: BLE001
+                pass
+            name = "snapshot_%s_txnid%d.db" % (time.strftime("%y%m%d_%H%M%S"),
+                                               txnid)
+            dest = os.path.join(self.backup_dir, name)
+            if not os.path.lexists(dest):
+                self._link_or_copy(dest)
+            self.backup_notice = ("файл БД был удалён из-под процесса; "
+                                  "аварийный снапшот: %s" % dest)
+            return dest
+        except OSError as e:
+            self.backup_notice = "emergency snapshot failed: %s" % e
+            return None
+
+    def _check_deleted(self) -> None:
+        """fstat(fd): если путь БД пропал и nlink < 2 — файл удалён.
+
+        Тогда: аварийный снапшот (жёсткая ссылка) + флаг-предохранитель.
+        Порог 2, т.к. после _protect_lifeline у живого файла nlink >= 2;
+        дополнительно проверяется существование пути, чтобы не срабатывать
+        на здоровом файле без LIFELINE (например, кросс-ФС).
+        """
+        if os.name == "nt" or self.db_file_deleted:
+            return
+        try:
+            st = self.env.file_stat()
+            if st["nlink"] >= 2 or os.path.exists(self.path):
+                return
+        except Exception:  # noqa: BLE001
+            return  # fstat при переоткрытии — не ломаем сервер
+        self._emergency_snapshot()
+        self.db_file_deleted = True
+
+    def _raise_if_deleted(self) -> None:
+        if self.db_file_deleted:
+            raise db_file_deleted(
+                "файл БД был удалён из-под процесса; аварийный снапшот сохранён",
+                "восстановите файл из backup_dir (os.link) или остановите сервер")
+
+    def before_call(self) -> dict:
+        """Хук перед каждым вызовом инструмента: детекция удаления + таймеры.
+
+        Возвращает одноразовый notice для агента (пропуск авто-бэкапа,
+        PROMPT-запрос). При удалённом файле БД — поднимает DB_FILE_DELETED.
+        """
+        self._check_deleted()
+        self._raise_if_deleted()
+        self.maybe_run_auto_backup()
+        out = {}
+        notice = self.backup_notice
+        self.backup_notice = None
+        if self.backup_pending:
+            out["backup_pending"] = True
+            out["backup_prompt"] = (
+                "пора сделать резервную копию; спросите пользователя: "
+                "db_backup kind=user (сделать) или db_backup skip=true (пропустить)")
+        if notice:
+            out["backup_notice"] = notice
+        return out
+
+    def fileinfo(self) -> dict:
+        """fstat(fd) файла БД + признаки удаления (для db_fileinfo)."""
+        fs = self.env.file_stat()
+        fs["path"] = self.path
+        fs["path_exists"] = os.path.exists(self.path)
+        fs["db_file_deleted"] = self.db_file_deleted
+        fs["lifeline"] = os.path.join(self.backup_dir, BACKUP_LIFELINE)
+        fs["lifeline_ok"] = os.path.isfile(fs["lifeline"])
+        fs["lifeline_error"] = self._lifeline_error
+        fs["lifeline_mode"] = self._lifeline_mode
+        return fs
+
+    def commit_latency(self) -> dict:
+        """Стадии последних write-коммитов (1/65536 c → µs) + сводка."""
+        us = lambda x: round(x * 1000000.0 / 65536.0, 1)  # noqa: E731
+        last = None
+        if self._latencies:
+            last = {k: us(v) for k, v in self._latencies[-1].items()
+                    if isinstance(v, int)}
+        wholes = [lat["whole"] for lat in self._latencies
+                  if lat.get("whole") is not None]
+        mean_us = max_us = 0.0
+        if wholes:
+            scale = 1000000.0 / 65536.0
+            mean_us = round(sum(wholes) * scale / len(wholes), 1)
+            max_us = round(max(wholes) * scale, 1)
+        return {
+            "count": len(self._latencies),
+            "last_us": last,
+            "window_whole_us": {"mean": mean_us, "max": max_us},
+            "gc_prof_available": bool(self._latencies and
+                                      self._latencies[-1].get("gc_prof")),
+        }
+
+    def _note_commit_latency(self, lat: dict) -> None:
+        self._latencies.append(lat)
+
+    # --- резервное копирование ----------------------------------------------
+    def _state_path(self) -> str:
+        return os.path.join(self.backup_dir, BACKUP_STATE_FILE)
+
+    def _load_backup_state(self) -> dict:
+        try:
+            with open(self._state_path(), encoding="utf-8") as fh:
+                return json.load(fh)
+        except Exception:  # noqa: BLE001
+            return {}
+
+    def _save_backup_state(self, st: dict) -> None:
+        try:
+            os.makedirs(self.backup_dir, exist_ok=True)
+            tmp = self._state_path() + ".tmp"
+            with open(tmp, "w", encoding="utf-8") as fh:
+                json.dump(st, fh)
+            os.replace(tmp, self._state_path())
+        except OSError:
+            pass
+
+    def _list_backups(self, prefix: str = "") -> list:
+        out = []
+        try:
+            for fn in sorted(os.listdir(self.backup_dir)):
+                if (fn.startswith(prefix) and fn.endswith(".mdbx")
+                        and fn != BACKUP_LIFELINE):
+                    p = os.path.join(self.backup_dir, fn)
+                    out.append({"name": fn, "path": p,
+                                "size": os.path.getsize(p)})
+        except OSError:
+            pass
+        return out
+
+    def _backup_dir_size(self) -> int:
+        """Суммарный размер независимых копий (без жёстких ссылок)."""
+        total = 0
+        try:
+            for fn in os.listdir(self.backup_dir):
+                if fn.endswith(".mdbx") and fn != BACKUP_LIFELINE:
+                    total += os.path.getsize(os.path.join(self.backup_dir, fn))
+        except OSError:
+            pass
+        return total
+
+    def _rotation_candidates(self, keep: int = None) -> list:
+        """Старейшие AUTO-копии сверх лимита — кандидаты на удаление."""
+        keep = keep or self.backup_keep
+        files = self._list_backups("auto-")
+        if len(files) <= keep:
+            return []
+        return files[:-keep]  # sorted по имени = по времени
+
+    def backup(self, kind: str = "user", dest: str = None) -> dict:
+        """Консистентная копия БД (MVCC-снапшот) через txn_copy2pathname.
+
+        kind: 'auto' — тихий интервал; 'user' — с запросом/явно; 'manual' —
+        ручной db_backup. Имя: {kind}-YYYYMMDD-HHMMSS_txnid<N>.mdbx.
+        Флаги: COMPACT | OVERWRITE (компактификация).
+        """
+        if self.db_file_deleted:
+            self._raise_if_deleted()
+        if kind not in ("auto", "user", "manual"):
+            raise invalid("неизвестный kind бэкапа %r" % kind,
+                          "используйте auto|user|manual")
+        os.makedirs(self.backup_dir, exist_ok=True)
+        with self.env.begin(readonly=True) as txn:
+            txnid = txn.id()
+            if dest is None:
+                name = "%s-%s_txnid%d.mdbx" % (
+                    kind, time.strftime("%Y%m%d-%H%M%S"), txnid)
+                dest = os.path.join(self.backup_dir, name)
+            r = txn.copy2pathname(dest, mdbx.CP_BACKUP)
+        return {"path": r["dest"], "txnid": r["txnid"], "kind": kind,
+                "size": os.path.getsize(r["dest"])}
+
+    def maybe_run_auto_backup(self) -> None:
+        """Таймеры AUTO (тихо) и PROMPT (с запросом); 0 = выключено."""
+        if os.name == "nt" or self.db_file_deleted:
+            return
+        now = time.time()
+        st = self._load_backup_state()
+        if (self.auto_backup_seconds > 0
+                and now - st.get("last_auto", 0) >= self.auto_backup_seconds):
+            if self._backup_dir_size() > self.backup_max_bytes:
+                self.backup_notice = (
+                    "auto-backup пропущен: каталог бэкапов превышает лимит "
+                    "%d МБ" % (self.backup_max_bytes >> 20))
+            else:
+                try:
+                    self.backup(kind="auto")
+                except Exception as e:  # noqa: BLE001
+                    self.backup_notice = "auto-backup failed: %s" % e
+            st["last_auto"] = now
+            self._save_backup_state(st)
+        if (self.prompt_backup_seconds > 0 and not self.backup_pending
+                and now - st.get("last_prompt", 0) >= self.prompt_backup_seconds):
+            self.backup_pending = True
+
+    def run_prompt_backup(self, approve: bool) -> dict:
+        """Ответ агента на PROMPT-запрос: сделать/пропустить копию."""
+        if not self.backup_pending:
+            return {"pending": False}
+        self.backup_pending = False
+        st = self._load_backup_state()
+        result = {"pending": False, "approved": approve}
+        if approve:
+            try:
+                r = self.backup(kind="user")
+                result.update(r)
+            except Exception as e:  # noqa: BLE001
+                result["error"] = str(e)
+        st["last_prompt"] = time.time()
+        self._save_backup_state(st)
+        return result
+
+    def cleanup(self, dry_run: bool = True, confirm: bool = False,
+                keep: int = None) -> dict:
+        """Ротация: показать/удалить кандидатов (только тир AUTO)."""
+        cands = self._rotation_candidates(keep)
+        names = [c["name"] for c in cands]
+        total = sum(c["size"] for c in cands)
+        if dry_run or not confirm:
+            return {"dry_run": True, "removed": [], "candidates": names,
+                    "total_bytes": total, "keep": keep or self.backup_keep}
+        removed = []
+        for c in cands:
+            try:
+                os.unlink(c["path"])
+                removed.append(c["name"])
+            except OSError:
+                pass
+        return {"dry_run": False, "removed": removed, "candidates": names,
+                "total_bytes": total, "keep": keep or self.backup_keep}
+
+    def recover(self, target_meta: int = 0) -> dict:
+        """Диагностика меты для аварийного восстановления (БЕЗопасная).
+
+        open_for_recovery требует исключительного доступа, поэтому на живом
+        сервере возвращает троицу мет + рекомендацию: остановить сервер и
+        использовать mdbx_chk либо восстановить из db_backup."""
+        if not 0 <= target_meta <= 2:
+            raise invalid("target_meta вне диапазона", "используйте 0..2")
+        try:
+            probe = mdbx.open_for_recovery_probe(self.path, target_meta)
+            probe["note"] = ("мета-страница %d прочитана (эксклюзивный доступ); "
+                             "для ремонта используйте mdbx_chk или "
+                             "восстановление из db_backup" % target_meta)
+            return probe
+        except mdbx.LibmdbxError as e:
+            # ожидаемо: env уже открыт этим процессом (MDBX_BUSY)
+            diag = {}
+            try:
+                diag = self.env.diag()
+            except Exception:  # noqa: BLE001
+                pass
+            return {
+                "target_meta": target_meta,
+                "meta_txnid": diag.get("meta_txnid"),
+                "busy": "open_for_recovery требует остановленного сервера",
+                "note": ("переключение меты выполняется только при остановленном "
+                         "сервере (mdbx_chk) либо восстановлением из db_backup"),
+                "detail": str(e),
+            }
+
+    def backup_status(self) -> dict:
+        """Состояние бэкапов: каталог, таймеры, счётчики тиров, кандидаты."""
+        st = self._load_backup_state()
+        now = time.time()
+        next_auto = (st.get("last_auto", 0) + self.auto_backup_seconds
+                     if self.auto_backup_seconds else None)
+        next_prompt = (st.get("last_prompt", 0) + self.prompt_backup_seconds
+                       if self.prompt_backup_seconds else None)
+        return {
+            "backup_dir": self.backup_dir,
+            "auto_backup_seconds": self.auto_backup_seconds,
+            "prompt_backup_seconds": self.prompt_backup_seconds,
+            "backup_keep": self.backup_keep,
+            "backup_max_mb": self.backup_max_bytes >> 20,
+            "dir_size_mb": round(self._backup_dir_size() / (1 << 20), 2),
+            "last_auto": st.get("last_auto"),
+            "last_prompt": st.get("last_prompt"),
+            "next_auto": next_auto,
+            "next_prompt": next_prompt,
+            "pending": self.backup_pending,
+            "db_file_deleted": self.db_file_deleted,
+            "notice": self.backup_notice,
+            "lifeline_error": self._lifeline_error,
+            "tiers": {
+                "lifeline": os.path.isfile(os.path.join(self.backup_dir,
+                                                        BACKUP_LIFELINE)),
+                "auto": len(self._list_backups("auto-")),
+                "user": len(self._list_backups("user-")),
+                "snapshot": len([f for f in self._list_backups("snapshot_")]),
+            },
+            "rotation_candidates": [c["name"]
+                                    for c in self._rotation_candidates()],
+        }
+
+    # --- guard/reopen (внутренние) -------------------------------------------
+    def _guard_no_active(self):
+        """Контекст-менеджер: убедиться, что нет активных write-txn/курсоров.
+
+        В текущей модели все операции используют короткие `with`-транзакции
+        внутри Store, поэтому активных транзакций вне вызовов не бывает.
+        Оставлен как точка расширения для будущего stateful-режима.
+        """
+        class _G:
+            def __enter__(self): return None
+            def __exit__(self, *exc): return False
+        return _G()
+
+    def _reopen(self, readonly: bool) -> None:
+        """Закрыть и переоткрыть env (синхронно, без потери данных)."""
+        self._stop_sync_thread()
+        try:
+            self.env.sync(force=True, nonblock=False)
+        except Exception:
+            pass
+        self.env.close()
+        self._readonly = readonly
+        self.env = mdbx.Env(self.path, maxdbs=32, readonly=readonly,
+                            accede=readonly, sync_mode=self.sync_mode)
+        self._dbi = {}
+        with self.env.begin(readonly=readonly) as txn:
+            for name in self.TABLES:
+                fl = self.TABLES[name] | (mdbx.CREATE if not readonly else 0)
+                self._dbi[name] = txn.open_dbi(name, fl)
+        self._protect_lifeline()
+        self._load_vocab()  # словарь мог измениться внешними процессами
+        self._sync_stop = threading.Event()
+        self._sync_thread = None
+        if not readonly:
+            self._sync_thread = threading.Thread(
+                target=self._sync_loop, name="store-sync-poll", daemon=True)
+            self._sync_thread.start()
 
     # --- init -----------------------------------------------------------------
     def _load_vocab(self) -> None:
@@ -162,10 +713,18 @@ class Store:
 
     def _begin_write(self):
         """Write-txn с ретраями по BUSY (класс busy-io)."""
+        if self._readonly:
+            raise readonly_mode(
+                "хранилище открыто в read-only режиме",
+                "вызовите db_set_mode(readonly=false) для переключения")
+        self._check_deleted()
+        self._raise_if_deleted()
         last_err = None
         for attempt in range(BUSY_RETRIES + 1):
             try:
-                return self.env.begin(readonly=False)
+                txn = self.env.begin(readonly=False)
+                txn._store = self  # сбор commit-latency автоматически
+                return txn
             except mdbx.LibmdbxError as e:
                 if e.rc != mdbx.RC_BUSY:
                     raise
@@ -812,10 +1371,9 @@ class Store:
         with txn.cursor(links_dbi) as cur:
             rc, lk, lv = cur.get(mdbx.CURSOR_FIRST)
             while rc == mdbx.RC_SUCCESS:
-                nxt = cur.get(mdbx.CURSOR_NEXT)
                 if _unpack_u64(lv) == rec_id:
                     cur.delete()
-                rc, lk, lv = nxt
+                rc, lk, lv = cur.get(mdbx.CURSOR_NEXT)
 
     # --- refactoring-map (структурный слой) ---------------------------------
     def map_symbol(self, key: str) -> dict:
@@ -996,11 +1554,10 @@ class Store:
             if replace:
                 for dbi in (sym_dbi, ce_dbi, rev_dbi, gr_dbi):
                     with txn.cursor(dbi) as cur:
-                        rc, k, _ = cur.get(mdbx.CURSOR_FIRST)
+                        rc, _, _ = cur.get(mdbx.CURSOR_FIRST)
                         while rc == mdbx.RC_SUCCESS:
-                            nxt = cur.get(mdbx.CURSOR_NEXT)
                             cur.delete()
-                            rc, k, _ = nxt
+                            rc, _, _ = cur.get(mdbx.CURSOR_NEXT)
             sid_dbi = self._dbi["sym_ids"]
             id2key_dbi = self._dbi["sym_id2key"]
             for i, (key, body) in enumerate(sorted(symbols.items())):
@@ -1108,6 +1665,92 @@ class Store:
                 txn.delete(links_dbi, back_key)
                 removed += 1
         return {"removed_links": removed, "redirected_links": redirected}
+
+    # --- regions / uncovered (refactoring-map: #if-дерево и острова смысла) ---
+    def map_regions(self, prefix: str = "", limit: int = None) -> list:
+        """Сканирование таблицы regions (region:{module}:{n})."""
+        out = []
+        with self.env.begin(readonly=True) as txn:
+            dbi = self.dbi(txn, "regions")
+            with txn.cursor(dbi) as cur:
+                rc, k, v = cur.get(mdbx.CURSOR_FIRST)
+                while rc == mdbx.RC_SUCCESS:
+                    key = k.decode()
+                    if key.startswith(prefix):
+                        out.append({"key": key,
+                                    "region": json.loads(v)})
+                        if limit and len(out) >= limit:
+                            break
+                    rc, k, v = cur.get(mdbx.CURSOR_NEXT)
+        return out
+
+    def map_region(self, key: str) -> dict:
+        """Один регион #if-дерева."""
+        with self.env.begin(readonly=True) as txn:
+            rc, v = txn.get(self.dbi(txn, "regions"), key.encode())
+            if rc != mdbx.RC_SUCCESS or v is None:
+                return {}
+            return json.loads(v)
+
+    def map_uncovered(self, prefix: str = "", limit: int = None) -> list:
+        """Сканирование uncovered-островов (uncovered:{module}:{n})."""
+        out = []
+        with self.env.begin(readonly=True) as txn:
+            dbi = self.dbi(txn, "uncovered")
+            with txn.cursor(dbi) as cur:
+                rc, k, v = cur.get(mdbx.CURSOR_FIRST)
+                while rc == mdbx.RC_SUCCESS:
+                    key = k.decode()
+                    if key.startswith("uncovered:" + prefix):
+                        out.append({"key": key,
+                                    "uncovered": json.loads(v)})
+                        if limit and len(out) >= limit:
+                            break
+                    rc, k, v = cur.get(mdbx.CURSOR_NEXT)
+        return out
+
+    @staticmethod
+    def _module_of_file(file: str) -> str:
+        """Эвристика модуля по пути: src/<mod>.c -> <mod>;
+        tests/<area>/... -> tests-<area>; иначе базовое имя без расширения."""
+        f = file.replace("\\", "/")
+        parts = [p for p in f.split("/") if p]
+        base = os.path.splitext(parts[-1])[0] if parts else "?"
+        if len(parts) >= 2 and parts[0] == "src":
+            return base
+        if len(parts) >= 3 and parts[0] == "tests":
+            return "tests-" + parts[1]
+        return base
+
+    @staticmethod
+    def _uncovered_key(file: str, idx: int) -> str:
+        return "uncovered:%s:%d" % (Store._module_of_file(file), idx)
+
+    def map_load_regions(self, regions: list, uncovered: list,
+                         replace: bool = False) -> dict:
+        """Пакетная загрузка regions + uncovered (из артефакта refactoring-map).
+
+        Ключи: region:{module}:{n} (id из артефакта) / uncovered:{module}:{n}.
+        При replace=True таблицы очищаются перед загрузкой.
+        """
+        with self._begin_write() as txn:
+            reg_dbi = self.dbi(txn, "regions")
+            unc_dbi = self.dbi(txn, "uncovered")
+            if replace:
+                for dbi in (reg_dbi, unc_dbi):
+                    with txn.cursor(dbi) as cur:
+                        rc, _, _ = cur.get(mdbx.CURSOR_FIRST)
+                        while rc == mdbx.RC_SUCCESS:
+                            cur.delete()
+                            rc, _, _ = cur.get(mdbx.CURSOR_NEXT)
+            for r in regions:
+                rid = r.get("id") or ("region:%s:%d" % (
+                    self._module_of_file(r.get("file", "")), r.get("l0", 0)))
+                txn.put(reg_dbi, rid.encode(), json.dumps(r).encode())
+            for i, u in enumerate(uncovered):
+                key = self._uncovered_key(u.get("file", ""), i)
+                txn.put(unc_dbi, key.encode(), json.dumps(u).encode())
+        return {"regions": len(regions), "uncovered": len(uncovered)}
 
     @staticmethod
     def _alias_target_locked(txn, al_dbi, key):
