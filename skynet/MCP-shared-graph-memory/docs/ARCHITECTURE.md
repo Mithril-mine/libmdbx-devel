@@ -31,6 +31,45 @@
 - `safe_store` = один write-txn: normalize → проверка существования →
   merge (old → `history`) или SimHash-дедуп (`conflict`) → `records` +
   `ids` + `id2key` + `inverted`(термы) + `simhash` + `access` + `meta.next_id`.
+- **LRU-касания батчем**: `recall`/`search` копят касания в памяти
+  (in-memory rate-limit 60 с на запись) и сбрасывают одной write-txn
+  (`_flush_touches`) — не по транзакции на запись.
+
+### 2.1 Синхронизация
+
+- **Sync-режим (по умолчанию `safe_nosync`)**: env открывается с
+  `MDBX_SAFE_NOSYNC` (без fsync мета-страниц на коммите; страницы данных — в
+  page cache). Целостность БД сохраняется при любом краше (откат к последнему
+  steady-коммиту); OS-краш может потерять коммиты, сделанные после последнего
+  сброса. Это осознанно «не надёжнее окружения».
+- **Ротация режимов на лету** (`db_set_mode`, `set_sync_mode`): только безопасный
+  набор `durable | metasync | safe_nosync` через `mdbx_env_set_flags`.
+  **`MDBX_UTTERLY_NOSYNC` в ротацию НЕ входит** — только отдельный опасный
+  инструмент `db_enable_utterly_nosync` (одноразовые кэши; после краха данные
+  теряются).
+- **Read-only дефолт**: сервер стартует в read-only (признак
+  `SHARED_GRAPH_MEMORY_READONLY`, по умолчанию "1"); запись требует явного
+  `db_set_mode(readonly=false)`. RDONLY задаётся только при `mdbx_env_open`,
+  поэтому переключение = закрытие + переоткрытие env (без потери данных;
+  перед переоткрытием делается force-sync). В read-only режиме env открывается
+  с `MDBX_ACCEDE`, sync-тред не запускается, CREATE не передаётся.
+- **Автосброс движком**: `sync_bytes = 64 MiB`, `sync_period = 60 c`
+  (межпроцессные пороги) — движок сам делает steady-точку по объёму/времени.
+- **Фоновый тред** (`Store._sync_loop`): раз в секунду
+  `mdbx_env_sync_poll` = `mdbx_env_sync_ex(force=false, nonblock=true)`.
+  Транзакций не создаёт; на `close()` — stop+join и один финальный
+  `mdbx_env_sync_ex(force=true)`.
+- **Контракт дурабилити**:
+  - close() / SIGTERM (обработчик в `main()`): принудительный flush → всё на диске;
+  - краш процесса (SIGKILL): page cache сохраняет данные, но меты остаются
+    unsteady (троица `s:w:w`). Повторное **read-only** открытие возвращает
+    `MDBX_WANNA_RECOVERY` — защита от «молчаливого отката»: пользователь явно
+    выбирает между `mdbx_chk` и осознанным read-write открытием (rw само
+    делает steady-sync, данные при safe_nosync обычно уже на диске);
+  - `mdbx_preopen_snapinfo` на unsteady базе → `MDBX_CORRUPTED`
+    (ожидаемо — это индикатор состояния «требует решения»);
+  - OS-краш — потеря ≤ ~60 с (до последней steady-точки). Критичные знания
+    дополнительно фиксируются явным `db_flush` (`force=true`).
 
 ## 3. Контракт ошибок
 
@@ -49,7 +88,7 @@ MCP-сервер отдаёт его как **JSON-RPC protocol error (-32000)**
 | `ffi.new("void *")` запрещён | out-параметры через `ffi.new("void **")` |
 | буферы `MDBX_val.iov_base` освобождаются GC (dangling pointer → мусор в ключах) | класс `MVal` держит `_buf` живым рядом с `ptr` |
 | `ffi.new("MDBX_env *")` нельзя (opaque struct) | все handle'ы — `void*` |
-| вложенные read-txn → `MDBX_BAD_RSLOT` | не открывать txn внутри txn |
+| вложенные read-txn → `MDBX_BAD_RSLOT` | один поток = одна активная txn (TLS-слот читателя); не открывать txn внутри txn |
 
 ## 5. Индексы
 
@@ -121,7 +160,57 @@ endif()
 имя MCP-инстанса в конфиге opencode — `shared-graph-memory.mdbx`. Старый сервер
 (`libmdbx-memory/`) остаётся нетронутым до переключения сессий.
 
-### 9.3 Соглашение об именах (аффиксы к ядру `shared-graph-memory`)
+Установка выполняется **только** через `tools/install.sh` — он синхронизирует
+код и явно исключает `db.mdbx`, `db.mdbx-lck` и `backups/`.
+
+> ⚠️ Урок 26.09.2026: именно `rsync --delete` в живой каталог данных удалил
+> `db.mdbx` (данные MCP-памяти «пропали»). Это была операция развёртывания,
+> а не дефект движка/модуля. С тех пор — безопасный `tools/install.sh`.
+
+### 9.3 Резервное копирование и защита от удаления файла БД
+
+#### Тиры копий (в `backup_dir`, по умолчанию `<каталог БД>/backups`)
+
+| Тир | Имя | Создаёт | Тип | Судьба |
+|---|---|---|---|---|
+| LIFELINE | `current.mdbx` | старт (инвариант `st_nlink ≥ 2`) | жёсткая ссылка (0 места) | никогда не удаляется |
+| EMERGENCY | `snapshot_YYMMDD_HHMMSS_txnidN.db` | детекция удаления файла БД | жёсткая ссылка | никогда автоматически |
+| AUTO | `auto-YYYYMMDD-HHMMSS_txnidN.mdbx` | тихий интервал | реальная копия (`txn_copy2pathname`) | ротация с подтверждением |
+| USER | `user-YYYYMMDD-HHMMSS_txnidN.mdbx` | `db_backup` / PROMPT с запросом | реальная копия | только явное подтверждение |
+
+#### Детекция удаления (не-Windows)
+
+- `mdbx_env_get_fd` → `fstat(st_nlink)`.
+- При старте: если `st_nlink < 2` → `os.link("/proc/self/fd/N", backup_dir/current.mdbx)`
+  (жёсткая ссылка на inode живого файла; `EEXIST` игнорируется). Инвариант `≥ 2`.
+- В работе (каждый tool-call + sync-тред + начало write-txn): если
+  `st_nlink < 2` **и** путь БД исчез → аварийная жёсткая ссылка
+  `snapshot_*` → флаг-предохранитель `db_file_deleted=True` →
+  контрактная ошибка `DB_FILE_DELETED` на всех операциях до рестарта.
+  SKILL: агент предупреждает пользователя и спрашивает решение.
+- Жёсткие ссылки требуют той же ФС, что и БД (дефолт `backup_dir` — рядом).
+
+#### Интервалы и ротация
+
+- `…_AUTO_BACKUP_SECONDS` (0=выкл): тихо создаёт AUTO-копию на вызове
+  инструмента (синхронно, тестируемо); таймеры в `.backup-state.json`.
+- `…_PROMPT_BACKUP_SECONDS` (0=выкл): выставляет pending → notice «спросите
+  пользователя» → `db_backup kind=user` / `db_backup skip=true`.
+- Кап объёма `…_BACKUP_MAX_MB` (512): при превышении AUTO пропускается + notice.
+- Ротация: старейшие `auto-*` сверх `…_BACKUP_KEEP` (7) — кандидаты
+  (`db_backup_cleanup dry_run`); удаление — только с `confirm=true` по
+  подтверждению пользователя. USER/LIFELINE/EMERGENCY ротация не трогает.
+
+#### Аварийное восстановление
+
+- `db_backup` = `mdbx_txn_copy2pathname(txn, dest, CP_COMPACT|CP_OVERWRITE)`
+  на read-txn (MVCC-снапшот консистентен при живых писателях).
+- `db_recover` — информационный probe меты через `open_for_recovery`
+  (требует остановленного сервера); на живом сервере возвращает троицу мет
+  и рекомендацию: `mdbx_chk` либо восстановление из бэкапа.
+- TODO (libmdbx): добавить `st_nlink` в `MDBX_envinfo` (см. mdbx.h).
+
+### 9.4 Соглашение об именах (аффиксы к ядру `shared-graph-memory`)
 
 | Контекст | Имя |
 |---|---|

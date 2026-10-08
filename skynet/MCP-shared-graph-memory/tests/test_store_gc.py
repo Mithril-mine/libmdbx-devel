@@ -36,6 +36,25 @@ def test_gc_archive_moves_cold(store):
         assert val is not None
 
 
+def test_gc_archive_single_txn(store, monkeypatch):
+    """Архивирование всех cold-записей — одной write-txn, не поштучно."""
+    setup(store)
+    store.safe_store("fact:platform:android", "fact", "trivial cold note", 0.01)
+    writes = []
+
+    import mcp.store as store_mod
+    orig = store_mod.Store._begin_write
+
+    def counting(self):
+        writes.append(1)
+        return orig(self)
+
+    monkeypatch.setattr(store_mod.Store, "_begin_write", counting)
+    res = store.gc(dry_run=False, archive=True)
+    assert res["archived"] >= 1
+    assert len(writes) == 1
+
+
 def test_gc_dry_run_without_archive_keeps(store):
     setup(store)
     store.safe_store("fact:platform:android", "fact", "trivial", 0.01)
