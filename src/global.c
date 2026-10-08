@@ -224,6 +224,8 @@ __cold static size_t assume_ram_pages(void) {
   }
 
   size_t result = (size_t)(total_ram_pages + avail_ram_pages) / 2;
+  if (MDBX_WORDBITS < 64 && result > (SIZE_MAX >> globals.sys_pagesize_ln2))
+    result = SIZE_MAX >> globals.sys_pagesize_ln2;
   if (RUNNING_ON_ASAN)
     result >>= 1;
   if (mdbx_running_on_Valgrind())
@@ -254,9 +256,11 @@ __cold static size_t mmap_limit(void) {
 __cold static size_t reasonable_db_maxsize(void) {
   ASSERT(globals.assume_ram_pages > 0 && globals.sys_pagesize_ln2 && globals.mmap_limit);
   /* Suggesting should not be more than golden ratio of the size of RAM. */
-  size_t result = (globals.assume_ram_pages * 207 >> 7) << globals.sys_pagesize_ln2;
-  if (result > globals.mmap_limit / 2)
-    result = globals.mmap_limit / 2;
+  size_t result = globals.assume_ram_pages * 207 >> 7;
+  const size_t limit = globals.mmap_limit >> (globals.sys_pagesize_ln2 + (MDBX_WORDBITS < 64));
+  if (result > limit)
+    result = limit;
+  result <<= globals.sys_pagesize_ln2;
 
   /* Round to the nearest human-readable granulation. */
   for (size_t unit = MEGABYTE; unit; unit <<= 5) {
