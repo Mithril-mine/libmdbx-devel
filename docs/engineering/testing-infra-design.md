@@ -161,7 +161,7 @@ Unknown ids / bad refs → fail-fast in `resolve` with a clear message (no silen
 - New: `tests/ci/config.json`, `.github/workflows/ci-run.yml`,
   `.github/workflows/ci-dispatch.yml`, `tests/ci/run-cell.sh` (local runner).
 - Touched (later phase): legacy workflow files — remove `on: push` block only.
-- Docs: this design + `docs/engineering/workflows.md` note about
+- Docs: this design + `skynet/workflows.md` + `skynet/sourcecraft/README.md` note about
   master-config rule.
 
 ## 10. Open items (tracked in BACKLOG)

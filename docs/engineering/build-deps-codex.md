@@ -17,7 +17,7 @@
 - **компиляции и линковке** (исходники, заголовки, генерируемые `config-cmake.h`
   / `version.c`, asm/nasm-объекты, импорт-библиотеки);
 - **прогоне тестов** (исполняемые тесты, googletest, скрипты
-  `tests/ci/ci.sh`, `tests/scripts/stochastic.sh`, `tests/battery-tmux.sh`,
+  `tests/ci/ci.sh`, `tests/stochastic.sh`, `tests/battery-tmux.sh`,
   `tests/probes-check.sh`, фикстуры, DLL/PDB-копирование);
 - **амальгамации** (`make dist`, `dist-cutoff` маркеры) — только если меняется
   набор дистрибутивных файлов (`DIST_SRC`/`DIST_EXTRA`).
@@ -67,7 +67,7 @@ ninja получает depfile (`-MD -MF`) и обновляет `.ninja_deps` �
    (dev-layout ветку CMakeLists.txt) и в `ALLOY_DEPS`-список автоматически
    (`git ls-files src/` — файл должен быть закоммичен до сборки через make).
 2. **Новый тест** → регистрировать через `add_gtest`/`add_ut`/`add_simple_test`
-   в `tests/CMakeLists.txt` (или `tests/ut/issues/CMakeLists.txt`); файл теста —
+   в `tests/CMakeLists.txt` (или `tests/issues/CMakeLists.txt`); файл теста —
    явно в `SOURCE`, путь от `tests/`.
 3. **Новый скрипт/фикстура для теста** → путь указать в команде `add_test`
    (абсолютным через `${CMAKE_CURRENT_SOURCE_DIR}` или `${CMAKE_CURRENT_LIST_DIR}`).
@@ -128,6 +128,6 @@ strace-audit.sh --build-dir <dir> [--target <T>] [--ctest <regex>] [--force]
 
 - `AGENT-WORKSPACE.md` — раздача задач по нагрузке (не запускать тяжёлые аудиты
   при высокой load1).
-- `docs/engineering/test-scenarios-codex.md` — сценарии задают `speed_class`/`sync_mode`;
+- `skynet/test-scenarios-codex.md` — сценарии задают `speed_class`/`sync_mode`;
   кодекс сборки требует, чтобы новые юнит-тесты были зарегистрированы в CTest
   с label-деревом (`ut.*`), иначе они не прогоняются сегментированно.
