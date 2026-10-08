@@ -120,7 +120,7 @@ linkage; in amalgamated build (`xMDBX_ALLOY`) = `static`.
 | File | Role | Key symbols / notes |
 | --- | --- | --- |
 | `gc.h` | GC interface + update context. `gcu_t` carries loop state, retired accounting, `rkl_t sequel`, bigfoot, dense histogram (31 entries), embedded cursor/couple. | `gc_put_init/destroy`, `gc_alloc_ex/single`, `gc_update`, `gc_cursor_init`, `gc_merge_loose`, `gc_check_keylen`, `gc_check_rowdata`, `gc_row_pnl` (`glr_t`), `gc_stockpile`, `gc_repnl_*`, `gc_is_reclaimed`, `gc_may_clean_reclaimed`, `defract_context` (defrag state with `dml_t *arcs`). |
-| `gc-get.c` | Page allocation from GC: recycles retired pages by record order — FIFO (default) or LIFO via `ALLOC_LIFO` (`MDBX_LIFORECLAIM`); dense/contiguous sequences; obstacles from slow readers (`gc_reclaiming_obstacle`). Policy selects GC **records by txnid**, not pages directly. | `gc_alloc_*` paths, `ALLOC_*` flags (`DEFAULT`, `UNIMPORTANT`, `RESERVE`, `COALESCE`, `SHOULD_SCAN`, `LIFO`). |
+| `gc-get.c` | Page allocation from GC: LIFO (default) recycling of retired pages, dense/contiguous sequences, obstacles from slow readers (`gc_reclaiming_obstacle`). | `gc_alloc_*` paths, `ALLOC_*` flags (`DEFAULT`, `UNIMPORTANT`, `RESERVE`, `COALESCE`, `SHOULD_SCAN`, `LIFO`). |
 | `gc-put.c` | Retiring freed pages into GC records: store per-txnid records in FREE_DBI tree, merge adjacent, cutoffs, "bigfoot" handling. | `gc_put_init`, `gc_update`, `gc_merge_loose`, `gcu_t` usage; `MDBX_DEBUG_GCU` tracing. |
 | `rkl.c` / `rkl.h` | **Sorted set of `txnid_t`** = contiguous interval (`solid_begin..solid_end`) + sorted list, with cheap interval↔list exchange ("magic"). Keeps GC record ids during reclamation (`reclaimed`), ready-for-reuse ids (`ready4reuse`), and ids returned into GC at commit (`comeback`). Both LIFO and FIFO recycling supported. Exact abbreviation expansion unknown. | `rkl_init/reserve/clear/clear_and_shrink/destroy/contain/...`; `rkl_t` (solid_begin/end, list_length/limit, list, inplace[12]). |
 
@@ -197,9 +197,9 @@ linkage; in amalgamated build (`xMDBX_ALLOY`) = `static`.
 | `tests/CMakeLists.txt` | Registers tests; helper `add_simple_test(name, SOURCE, LIBRARY, TIMEOUT, DEPEND, DLLPATH, DISABLED)`; framework library target; per-test executables linked against libmdbx. |
 | `tests/framework/` | Framework lib: `base.h++` (asserts/logging), `config.c++/h++`, `keygen.c++/h++` (key generators), `log.c++/h++`, `chrono.c++/h++`, `fork.c++`, `nested.c++`, `copy.c++`, `dead.c++`, `hill.c++`, `jitter.c++`, `ttl.c++`, `try.c++`, `main.c++` (scenario driver), `cases.c++`, `append.c++`, `test.c++/h++`, osal shims (`osal-unix.c++`, `osal-windows.c++`, `osal.h++`), `stub/` (pthread_barrier for Windows, BSD-licensed stub). |
 | `tests/ut/` | Unit tests, each a standalone executable: `dbi.c++`, `txn.c++`, `open.c++`, `cursor_closing.c++`, `crunched_delete.c++`, `bunches_removal.c++`, `details_rkl.c`, `distance_scroll_distribute.c++`, `doubtless_positioning.c++`, `dupfix_addodd.c`, `dupfix_multiple.c++`, `early_close_dbi.c++`, `get_cached.c++`, `global_init.c`, `hex_base64_base58.c++`, `maindb_ordinal.c++`, `nested_drop_abort.c`, `probe.c++`, `rename_dbi.c`, `reverse_insertions.c++`, `upsert_alldups.c++`, `buffers.c++`. |
-| `tests/ut/issues/` | Regression tests per issue: `issue_gh0010`, `gh0011`, `gh0016`, `gh0017`, `gh0023`-`gh0026`, `gh0028`, `gh0030`, `gh0033`. Registration in `tests/ut/issues/CMakeLists.txt`. |
+| `tests/issues/` | Regression tests per issue: `issue_gh0010`, `gh0011`, `gh0016`, `gh0017`, `gh0023`-`gh0026`, `gh0028`, `gh0030`, `gh0033`. Registration in `tests/issues/CMakeLists.txt`. |
 | `tests/exploits/` | PoCs found by fuzzing/analysis: `poc-node_ds-oob.c`, `pos-badgeo-oos.c`. |
-| `tests/scripts/stochastic.sh` | Long stochastic scenario runner (bash >= 4.3; RAM-disk recommended). |
+| `tests/stochastic.sh` | Long stochastic scenario runner (bash >= 4.3; RAM-disk recommended). |
 | `tests/battery-tmux.sh` + `tests/tmux.conf` | Battery of scenarios in tmux panes. |
 | `tests/dump-load.sh` | Dump/load round-trip testing script. |
 | `tests/ci/ci.sh` | CI entry: builds via make/cmake and runs targets per `CI_MAKE_TARGET` (smoke/test/check). |
@@ -275,9 +275,8 @@ tree family, tbl family, coherency, histogram, chk printing).
   `distance_scroll_distribute.c++` pin this behavior.
 - Page state machine (`frozen/spilled/shadowed/modifiable/tmp`) is implemented in `page-ops.h`
   via comparisons with `txn->txnid` and `txn->front_txnid`.
-- GC allocation policy is FIFO by default; `ALLOC_LIFO` (set by `MDBX_LIFORECLAIM`) switches to
-  LIFO record order. It must not hand out pages protected by active readers
-  (`gc_reclaiming_obstacle`, `mvcc_kick_laggards`).
+- GC allocation honors `ALLOC_LIFO` (default) and must not hand out pages protected by active
+  readers (`gc_reclaiming_obstacle`, `mvcc_kick_laggards`).
 - TLS destructor correctness (incl. glibc bugs #21031/#21032) is handled in `rthc.c`; any
   refactoring of per-thread state must keep the `rthc_thread_dtor` cleanup contract.
 - Options surface (`options.h` ↔ `conanfile.py` ↔ `GNUmakefile`/CMake `-DMDBX_*`) must stay in

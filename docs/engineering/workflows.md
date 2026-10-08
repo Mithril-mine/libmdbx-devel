@@ -1,0 +1,187 @@
+# Development Workflows
+
+> Part of the [Skynet project index](README.md).
+> How work flows through this repository: branches, PRs/reviews, CI gates, release and
+> amalgamation, plus practical pre-merge checklists. Platform specifics (SourceCraft MCP tooling)
+> live in [`sourcecraft/README.md`](sourcecraft/README.md).
+
+---
+
+## 1. Repository & branches
+
+- Canonical origin: **SourceCraft** (`dqdkfa/libmdbx-devel`); GitHub is only a mirror
+  ([Mithril-mine/libmdbx](https://github.com/Mithril-mine/libmdbx)) and is explicitly not used
+  as the origin (history: repo was deleted by GitHub administration in 2022).
+- Branch policy (from README): `stable` for production/staging, `master` for development of
+  derivative projects. This dev repository tracks the development line.
+- Versioning is git-tag driven: `v<major>.<minor>.<patch>` annotated tags; `GNUmakefile`
+  computes `MDBX_GIT_DESCRIBE`, `MDBX_VERSION_PURE`, etc. from tags (`make dist`/`release-assets`
+  require fetched tags; tarball builds without `.git` are refused).
+
+## 2. Contribution flow (typical)
+
+```mermaid
+flowchart LR
+    A[Issue / idea] --> B[Brainstorm design - superpowers brainstorming]
+    B --> C[Create branch or git worktree]
+    C --> D[Implement with TDD - tests first]
+    D --> E[Run local checks]
+    E --> F[Push + create PR draft]
+    F --> G[Publish PR - CI runs on SourceCraft]
+    G --> H[Code review + fixes]
+    H --> I[Merge via SourceCraft]
+    I --> J[CI daily regression continues]
+```
+
+- Issues: created/updated via SourceCraft MCP (`CreateIssue`, `UpdateIssue`, labels,
+  linked PRs) — see [`sourcecraft/README.md`](sourcecraft/README.md).
+- Worktrees: the repo supports parallel worktrees; the Superpowers `using-git-worktrees`
+  skill describes the discipline (see [`skills/superpowers/`](skills/superpowers/README.md)).
+
+## 3. Local validation before pushing (checklist)
+
+Escalate per the **verification levels** defined in
+[`skills/superpowers/verification-before-completion/SKILL.md`](skills/superpowers/verification-before-completion/SKILL.md)
+(L1 specific test → L1-x sanitizer rebuild → L2 all `ctest` → L3 `make check` →
+L4 sanitizer sweeps → L5 memcheck → L6 `stochastic.sh` → L7 human-controlled soak).
+
+| Level | Command | Purpose |
+| --- | --- | --- |
+| L1 | `ctest -R <name>` (or run binary) | the specific test for your change |
+| L1-x | sanitizer build dir + `ctest -R <name>` | same test under ASAN/UBSAN/MEMCHECK |
+| L2 | `ctest --output-on-failure` (or `make ctest`) | all deterministic tests: `ut/` + `issues/` + few `mdbx_test` scenarios |
+| L3 | `make check` | smoke + install + amalgamation (`dist/`) validation |
+| L4 | `make test-asan` / `test-ubsan` | sanitizer sweeps (`MDBX_CHECKING=2`) |
+| L5 | `make test-memcheck` | valgrind sweep |
+| L6 | `make test-stochastic` or targeted `tests/stochastic.sh` | stochastic parameter sweep, bounded iterations |
+| L7 | `tests/battery-tmux.sh`, `make test-long` | human-supervised extended soak (hours/days) |
+| +style | `make reformat` | `clang-format` (LLVM, `.clang-format`); must be idempotent |
+| +locking | `make check-posix-locking` | SYSV/1988/2001/2008 variants |
+| +doxygen | `make doxygen` | **always run when changing doxygen comments**; keep fixable warnings at zero (parity with master). Config-option warnings of a non-latest doxygen are not "fixes" — do NOT touch `docs/Doxyfile` |
+
+Note: sanitizer targets rebuild with their own `CFLAGS_EXTRA`/`CMAKE_OPT` and `MDBX_CHECKING`
+(see [`build.md`](build.md) §6.4) — always run them after touching `src/`. A local-only
+CI check for fixable doxygen warnings is welcome; it must NOT be added to GitHub/SourceCraft CI.
+
+## 4. CI gates
+
+- **SourceCraft** (primary): `ci-linux-debug-gcc` (smoke, no C++), `ci-linux-debug-clang`
+  (test, C++ ON), `ci-linux-release-spilling` (check, incl. amalgamation & install). Runs on
+  push and daily at 03:42 UTC. Cube timeout 30m — keep smoke/test within budget.
+- **GitHub Actions** (mirror): cross-platform matrix (linux/macos/windows-msvc/mingw/mscl/
+  cxx-msvc/android) — informational for the dev repo.
+- Required locally per `AGENTS.md`: Linux **and** Windows builds/tests (CMake + CTest).
+
+## 4a. Testing-infra-v2 (addressable cells, TASK-28)
+
+Parallel infrastructure built on top of the same CTest labels; the legacy 7 GitHub workflows +
+`tests/ci/ci.sh` remain the fallback until rollout completes.
+
+- **Registry** — `tests/ci/config.json`: single source of truth for every build configuration
+  ("cell"). Cell fields: `id`, `runs-on`, `env` (toolchain), `cmake[]` (args, `flag|value` form),
+  `ctest` (`regex`/`exclude`/null), `build_only` (Android), `ndk` (Android NDK version, consumed
+  by `setup-ndk` in ci-run.yml), `note`. Known-flaky/slow cells are
+  flagged (`known_flaky`, e.g. macOS `smoke_fault` B13 WIP) and ARM64 Windows cells carry
+  `ctest.exclude=smoke_sp_` (B14/TASK-27). Generator pinning: a cell that passes `-G`/`-A`/`-T`
+  is never overridden with Ninja; cells without them default to Ninja when available.
+- **Profiles**: `push-quick` (5 cells), `linux-full` (8), `win-full` (164), `mac-full` (6),
+  `android-build` (15, build-only), `full` (193, no duplicate ids).
+- **Local runner** — `tests/ci/run-cell.sh <cell-id> [--build-dir <dir>]`: pure CMake/CTest,
+  no `ci.sh`; rc 0 = ok, 1 = build/test fail, 2 = unknown id/usage. Reproduces a failing cell
+  locally on Linux-capable cells.
+- **Orchestrator** — `.github/workflows/ci-dispatch.yml`: `push` on devel/master → `push-quick`;
+  `workflow_dispatch` → `profile`|`cell` + `ref`; `repository_dispatch` (`profile`/`cell` + `ref`,
+  ref mandatory) → addressed runs for agents; `schedule` (00:30 UTC) → `full` on master HEAD.
+  `resolve` job reads the registry from the requested ref and fails fast on unknown ids.
+- **Runner** — `.github/workflows/ci-run.yml` (`workflow_call`): checkout ref (fetch-depth 0 +
+  tags), optional `setup-ndk` (Android `ndk` field) with NDK_PATH/ANDROID_NDK_HOME export,
+  toolchain env (a registry `PATH` entry prepends to the runner PATH via `$GITHUB_PATH`),
+  configure+build (with `--config` for multi-config generators; Ninja only when the cell does
+  not pin `-G`/`-A`/`-T`), ctest per-cell regex/exclude and `-C` config (skipped for
+  `build_only`), artifacts on failure. `ci-dispatch` concurrency-cancels overlapping runs and
+  tests the exact push SHA for `push` events.
+- **Profile table**:
+
+  | Profile | Cells | Use |
+  |---|---|---|
+  | `push-quick` | 5 | every push/merge to devel/master |
+  | `linux-full` | 8 | linux matrix |
+  | `win-full` | 164 | windows matrix (msvc+mscl+mingw+cxx-msvc) |
+  | `mac-full` | 6 | macos matrix |
+  | `android-build` | 15 | android build-only |
+  | `full` | 193 | nightly on master HEAD |
+
+- **master-config rule**: GitHub `repository_dispatch`/`schedule` fire only if the workflow file
+  exists on the default branch and run against its HEAD; SourceCraft reads CI config from
+  `master`. Requested refs are passed explicitly and checked out inside the runner. See
+  [`sourcecraft/README.md`](sourcecraft/README.md).
+
+## 5. Code review & merge (SourceCraft)
+
+- PRs start as drafts (`CreatePullRequest`, `publish: false`), then `PublishPullRequest` →
+  CI triggers. Link issues via `AddLinkedPRs`.
+- Review: inline comments (`CreatePullRequestComment` with `anchor.path/position`, iteration),
+  resolve threads (`resolution_state`), set decision `approve`/`block`/`trust`/`abstain`
+  (`SetDecision`); `GetMergeChecks` shows approval/CI/conflict status.
+- Merge: `MergePullRequest` (squash/rebase options, `delete_branch`).
+- See [`sourcecraft/README.md`](sourcecraft/README.md) for exact tool mapping.
+
+### 5a. Порядок merge/rebase при переписанной базе (Kaizen, 2026-09-22)
+
+**Класс операции:** перенос готовых веток на изменённую/переписанную базу
+(напр. rebase `devel` на переписанный `master` при старте новой минорной
+линии `v0.15.x`).
+
+**Правило (рассмотреть два пути, взвесить):**
+
+- **Путь A — «сначала влить, потом rebase» (обычно оптимальный):** все
+  одобренные и готовые feature-ветки сначала `git merge` в `devel` (решая
+  конфликты один раз на текущей базе), а затем **один** rebase всего `devel`
+  на новую базу. Итог: один rebase покрывает сразу всё; нет дублей коммитов
+  в истории; не рвётся связь с версионными тэгами (describe от новой базы,
+  а не перескок через старый тэг).
+- **Путь B — «сначала rebase, потом вливать по одной»:** уместен только когда
+  веток мало (1–2), они независимы и готовы rebase самостоятельно, либо база
+  ещё не стабилизирована и конфликты повторяются. Иначе каждая ветка требует
+  отдельного rebase → копии коммитов и риск потери связи с новым тэгом.
+
+**Когда выбирать:** если есть ≥2 готовых веток И база будет переписана —
+по умолчанию путь A; путь B только по явному соображению (независимость,
+нестабильность базы). После rebase обязательно проверить
+`git merge-base <devel> <new-master> == <new-master>` (т.е. devel = master +
+наши коммиты) и отсутствие дублированных пар `(hash, message)`.
+
+## 6. Release process
+
+1. Ensure `master`/dev line is green (full `test-ci-extra` + daily CI).
+2. `git fetch --tags --force`; confirm a clean tree at the release tag
+   (`release-assets` enforces: `git describe` must equal the clean annotated `v*` tag).
+3. `make dist` → generates `dist/` (amalgamated flat sources) + verifies standalone
+   `@dist-check` build (`make all check ninja-assertions` inside the copy).
+4. `make release-assets` → tarballs (`libmdbx-amalgamated-<ver>.tar.{gz,xz,bz2}`,
+   `.zip`, `.zpaq`).
+5. Update changelogs (`ChangeLog*.md` per version file) and the version tag; publish via
+   SourceCraft. The amalgamated distribution is what downstream embeds — see
+   [`build.md`](build.md) §7 for what exactly ships (and the `dist-cutoff` rules that keep
+   tests/dev-only code out).
+
+## 7. Testing culture (important for contributions)
+
+- The project relies on a **stochastic framework** (`mdbx_test`) plus deterministic regressions;
+  bug fixes must first reproduce the bug (TDD red), then verify with the appropriate scenario
+  (see [`build.md`](build.md) §6 and the `test-driven-development` skill).
+- Issue numbers in `tests/issues/issue_gh00XX.c++` map to SourceCraft/GitHub issue numbers;
+  new bug reports should add a regression there.
+- `MDBX_CHECKING=2` + `MDBX_FORCE_ASSERTIONS=1` (as CI does) surfaces internal invariant
+  violations (`ENSURE`, `CHECKS0/1/2`, panic points) early.
+- The `mdbx_chk -vvn[w]` step after every stochastic probe validates on-disk integrity —
+  never skip it when developing engine changes.
+
+## 8. Style & format
+
+- LLVM code style; `clang-format` via `make reformat` (clang-format-19 preferred).
+- CMake files formatted per `.cmake-format.yaml`.
+- Internal API: module functions `MDBX_INTERNAL`, cross-module exports declared in
+  `src/proto.h` (see [`structure.md`](structure.md) §2.0).
+- Comments in this codebase are bilingual (Russian + English); match the surrounding language
+  when editing.

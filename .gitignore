@@ -7,7 +7,6 @@
 build/
 build.ninja
 cmake-build-*
-_build-scan/
 CMakeCache.txt
 CMakeFiles/
 cmake_install.cmake
@@ -22,7 +21,6 @@ docs/html/
 *.dSYM
 *.dylib
 *.err
-!tests/ut/tools/golden/*/*.err
 *.exe
 *.gcda
 *.gcno
@@ -72,7 +70,6 @@ valgrind.*
 version.c
 .vs/
 .vscode/
-__pycache__/
 *.zip
 mdbx_legacy_example
 mdbx_modern_example

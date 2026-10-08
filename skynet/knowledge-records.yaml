@@ -1,0 +1,351 @@
+# Экспорт проектных знаний живой MCP-памяти (генерируется).
+# Регенерация: python3 skynet/MCP-shared-graph-memory/tools/export-knowledge.py
+# generated_at: 2026-09-28 09:08 UTC
+
+vocab:
+  modules:
+    - build
+    - core
+    - memory
+    - meta
+    - practice
+    - swarm
+    - testing
+    - todo
+    - tools
+  topics:
+    - build:cmake-notes
+    - build:options-gates
+    - core:cpp-api-layer
+    - core:data-structures-pnl
+    - core:engine-invariants
+    - core:incore-assert
+    - core:meta-troika-recovery
+    - core:module-traps
+    - core:perf-mechanisms
+    - core:reader-slots-rthc
+    - core:sync-modes
+    - core:usdt-probes
+    - memory:backup-tiers-deletion
+    - memory:data-loss-rootcause
+    - memory:durability-policy
+    - memory:persistence-verdict
+    - memory:readonly-default-server
+    - memory:restore-records
+    - meta:archive-distillation
+    - meta:archive-index
+    - meta:ast-data-lifecycle
+    - meta:ci-fix-rewrite
+    - meta:context-breadcrumbs
+    - meta:devel-consolidation
+    - meta:history-rewrite-policy
+    - meta:knowledge-map
+    - meta:lru-sync-design
+    - meta:map-data-passport
+    - meta:refactor-map-phase
+    - meta:refactor-map-phases
+    - meta:refactor-map-pilot
+    - meta:refactor-map-scanner
+    - meta:schema-refactor-map
+    - meta:state
+    - practice:alice-consult-implementations
+    - practice:alice-consult-schema
+    - practice:clang-ast-dump
+    - practice:clang-test-scan
+    - practice:superpowers-integration
+    - swarm:coordination-pointers
+    - swarm:governance-rules
+    - swarm:mission-protocol
+    - testing:ci-state
+    - testing:corpus-organization
+    - testing:perf-profile
+    - todo:mcpx-diagnostics
+    - tools:load-stdin-fix
+
+records:
+- key: bug:core:incore-assert
+  type: bug
+  date: 2026-09-27
+  importance: 0.8
+  summary: "Дефект B54 (#52): incore-assert (проверка вхождения страницы в файл). Фикс: fix/b54-incore-assert@9dac859c (от devel@e7232d5e); бэкпорт master/stable/lts. Ассерт есть и на lts/0.13 (gc-get.c:1208)."
+- key: decision:memory:backup-tiers-deletion
+  type: decision
+  date: 2026-09-27
+  importance: 0.9
+  summary: "Защита БД от удаления файла и бэкап по тирам: LIFELINE current.mdbx (старт, жёсткая ссылка, инвариант st_nlink>=2), EMERGENCY snapshot_* (детекция unlink через mdbx_env_get_fd+fstat; предохранитель DB_FILE_DELETED блокирует операции до решения пользователя), AUTO auto-* (тихий интервал SHARED_GRAPH_MEMORY_AUTO_BACKUP_SECONDS, ротация BACKUP_KEEP=7 с подтверждением), USER user-* (ручной/PROMPT-интервал с запросом; удаление только явное). Копии COMPACT через mdbx_txn_copy2pathname. TODO в libmdbx: st_nlink в MDBX_envinfo. Инструменты: db_backup/db_backup_status/db_backup_cleanup/db_fileinfo/db_latency/db_recover."
+- key: decision:memory:readonly-default-server
+  type: decision
+  date: 2026-09-27
+  importance: 0.9
+  summary: "MCP-сервер памяти стартует read-only (SHARED_GRAPH_MEMORY_READONLY, дефолт 1); запись только после явного db_set_mode(readonly=false). Причина: защита от случайных/двойных write-агентов и молчаливой потери данных. Открытие БД сначала read-only; при WANNA_RECOVERY пользователь явно выбирает mdbx_chk или rw-open. Utterly_nosync исключён из ротации db_set_mode и доступен только через опасный db_enable_utterly_nosync."
+- key: decision:meta:history-rewrite-policy
+  type: decision
+  date: 2026-09-28
+  importance: 0.9
+  summary: "Правило перезаписи истории в dev-репо (libmdbx-devel), утверждено владельцем 28.09. Мы пушим в девелоперские репозитории, а не в пользовательские «амальгамированные» артефакты (make dist), поэтому ошибки и перезапись истории пользователей не затрагивают. Цель — история, где в КАЖДОЙ точке всё работает, включая CI (для git bisect без ложных путей). Вывод: при исправлениях стремимся ИСПРАВЛЯТЬ ПРЕДЫДУЩИЕ КОММИТЫ (переписывать историю, вливать фикс в коммит-первоисточник), а не класть fix-коммиты поверх. Ограничения: НЕЛЬЗЯ пересекать git-теги; глубже нескольких последних коммитов — СПРОСИТЬ владельца. Документы: AGENTS.md корня (секция Git history & CI policy, в dist-cutoff маркерах — не уходит в make dist) + skynet/git-history-policy.md (канонический текст, коммит 84bc3866). Зеркало — AGENT-WORKSPACE.md §Переписывание истории."
+- key: decision:meta:lru-sync-design
+  type: decision
+  date: 2026-09-25
+  importance: 0.9
+  summary: "Редизайн LRU и синхронизации (master 85a570ad, не запушен). Одна write-txn на батч касаний вместо N мелких; env открыт с MDBX_SAFE_NOSYNC (durability выровнена с окружением, WRITEMAP off); автосброс по sync_bytes=64MiB/sync_period=60c (межпроцессные пороги); фоновый тред раз в секунду шлёт mdbx_env_sync_ex(force=false,nonblock=true), на close — stop+join+финальный force-sync. Оценка leaf-страниц: чтение 1000 записей из графа 100k в БД 512МБ грязнит ~640 листьев (~2.6МБ). Инвариант потоков: один поток=одна активная txn (MDBX_BAD_RSLOT). Учтено: схему будем наращивать (карта исходников/функц. блоков, длительности тестов), реестр таблиц TABLES централизован, возможно управление схемой через MCP."
+- key: decision:meta:refactor-map-phase
+  type: decision
+  date: 2026-09-26
+  importance: 0.8
+  summary: "Реализован шаг 1b refactoring-map: (1) многоконфигурационное сканирование — scan_symbols.py --config/--target/--defines + --merge (win32 через clang --target=x86_64-w64-windows-gnu + mingw, инструмент найден на хосте); символы с телами в нескольких конфигах получают implementations [{config,file,module,l0,l1,blocks,regions}] (решение владельца+Алисы, proc:practice:alice-consult-implementations), общие поля наверху; рёбра дедуплицируются до unique caller→callee; (2) scan_uncovered.py — острова кода вне union-AST всех конфигов, классификация по #if-регионам (platform/option/technical), coverage_pct; (3) тестовые домены ut/issues/framework (--tests, -DMDBX_BUILD_TEST=1, без detailed-pp для framework) — рёбра тест→lib резолвятся через библиотечный артефакт (coverage seed); (4) починен баг: сборщик терял C++-перегрузки (add_function дедуплицировал по qname) — теперь сырые ключи различаются сигнатурой, канонизация даёт fn:#sig-hash для каждой перегрузки; (5) жизненный цикл AST-данных: docs/LIFECYCLE.md (альтернативы/соображения), таблица sym_aliases (map_alias), refresh_stale перенаправляет связи по алиасам вместо удаления; найден и исправлен латентный баг пересечения id символов и записей (разные sequence → коллизия в links) — теперь общий next_id. Счётчики merged: functions 4087, types 398, macros 580, blocks 33264, edges 11810, unresolved 2018, coverage_pct 96.17%, islands 433. VALIDATED pytest 246/246, validate_map full OK."
+- key: decision:meta:refactor-map-phases
+  type: decision
+  date: 2026-09-25
+  importance: 0.8
+  summary: "Реализованы фазы 1-7 refactoring-map (B65): (1) cond_regions — #if-дерево (scan_regions.py, 1131 регионов, классификация platform/option/technical, inner-function/gating, визуализация --tree); (2) канонизация ключей fn:{qname} + #sig-hash для перегрузок + @module для TU-static + inline-дедуп; (3) загрузчик replace=True (самоизлечение), обратные рёбра call_edges_rev, JSON-формат рёбер; (4) path-based block-id B1.1.2 (стабильны к вставке строк, тест подтверждает); (5) ID символов через mdbx_dbi_sequence + sym_ids/sym_id2key, мост link() к символам, refresh_stale, canary; (6) configs-разметка по регионам (детерминированно; win32-тела недоступны без кросс-компиляции — ограничение); (7) golden-снапшот, in_repo фильтр _build-*. Итог: 2588 функций, 368 типов, 518 макросов, 30315 блоков, 18439 рёбер, 1131 регион. Тесты 229 pass. Ключевое открытие: тела windows-веток (lck-windows.c) отсутствуют в AST на Linux — полнота требует многоконфигурационного сканирования."
+- key: decision:meta:refactor-map-scanner
+  type: decision
+  date: 2026-09-25
+  importance: 0.8
+  summary: "Сканер карты исходников (Шаг 1 пилота B65) реализован: scan_symbols.py (C+C++, clang -ast-dump=json + -E -dD для макросов), validate_map.py, load_map.py, таблицы symbols/call_edges/groups в Store.TABLES (теперь 14), API map_*. Ключевые открытия: clang эмитит file в loc только при смене FileID (дельта-кодирование) — нужен сквозной трекер файла; аст-дамп не эмитит макросы вовсе (только -E -dD с #line маркерами); C++ методы резолвятся по (имя, сигнатура) для out-of-line определений; член-вызовы это CXXMemberCallExpr+MemberExpr.name. Счётчики (Linux x86_64, clang 18): functions 2941, types 368, macros 550, blocks 29772, edges 17785, unresolved 5124 (системные). Тесты 208 pass."
+- key: decision:meta:schema-refactor-map
+  type: decision
+  date: 2026-09-25
+  importance: 0.9
+  summary: "Решение: аддитивный структурный слой поверх существующей памяти (SCHEMA.md §1.1) для тяжёлого рефакторинга C→C++ и реорганизации тестов/CI. Таблицы: symbols (kind, сигнатура, файл, модуль, l0-l1, блоки со структурным id symbol#block-id, cpp_status none/mapped/partial/done, cpp_eq); call_edges (DUPSORT, kind=syntax|semantic — semantic сразу); groups (DUPSORT, фасеты subsystem/domain/theme/problem/task/todo → набор ключей); probes (USDT/bookmark/injected, механизм, тема теста); coverage (тест→символ); ci_jobs; test_metrics (окно истории: last/min/max/p90 + счётчик флаков, не чистый снапшот). Мост с курируемым слоем: link(record,'related-to','fn:...'). Автогенерация детерминированная и перегенерируемая; ссылки на удалённые символы помечаются stale. Прошлая итерация провалилась из-за грубых сущностей и свободного текста — теперь структурно, точно, перегенерируемо. Черновик: docs/REFACTORING-MAP.md."
+- key: fact:build:cmake-notes
+  type: fact
+  date: 2026-09-27
+  importance: 0.8
+  summary: "CMake-особенности (архив роя): CMake 4.0 убрал CMP0026/CMP0006 OLD (LOCATION) — используется IMPORTED_LOCATION->PATH (ENVIRONMENT) + POST_BUILD копия DLL; string(TOUPPER CMAKE_BUILD_TYPE) защищён от пустого типа. Subproject footgun: include(testing.cmake) НЕ гейтится NOT_SUBPROJECT (потребитель с BUILD_TESTING=ON потянет GTest). GTest: find_package -> gtest_paths -> download (GTEST_CLONE_URL, tag). Функции testing.cmake: add_gtest/add_ut/add_long_test/add_perf_test."
+- key: fact:build:options-gates
+  type: fact
+  date: 2026-09-27
+  importance: 0.75
+  summary: "Ключевые опции сборки (архив роя): MDBX_BUILD_CXX (авто), MDBX_BUILD_TOOLS, MDBX_CHECKING (-1..3, CHECKS0/1/2), MDBX_DEBUG, MDBX_ALLOY_BUILD (ON для release, src/alloy.c единая TU), MDBX_ENABLE_PROFGC/PGOP_STAT/PGET_STAT/DBI_SPARSE/BIGFOOT/REFUND, MDBX_AVOID_MSYNC (LRU в WRITEMAP), MDBX_LOCKING, MDBX_USE_OFDLOCKS/MINCORE, MDBX_WITHOUT_MSVC_CRT. MDBX_FORCE_ASSERTIONS OBSOLETE -> MDBX_CHECKING=2. LTO: только библиотека/инструменты, тест-сборки с -DINTERPROCEDURAL_OPTIMIZATION=OFF; ccache обязателен (общий CCACHE_DIR)."
+- key: fact:core:cpp-api-layer
+  type: fact
+  date: 2026-09-27
+  importance: 0.8
+  summary: "C++ API (mdbx.h++, архив роя): RAII-обёртка env/env_managed, txn/txn_managed, cursor/cursor_managed, slice, buffer, map_handle, error; один публичный заголовок, порядок decl->impl; cold-методы в src/mdbx.c++ (1935 строк, __cold + error::success_or_throw); exception_thunk ловит exception_ptr через C-границу; параметр-структуры с fluent-сеттерами и constexpr фабриками. Ловушки: buffer self-alias (memcpy->memmove), открытие dupsort с неверным value_mode -> MDBX_INCOMPATIBLE, overlapping read+write в одном потоке -> MDBX_TXN_OVERLAPPING. Компиляторы GCC>=11.3/Clang>=14/MSVC>=19.44."
+- key: fact:core:data-structures-pnl
+  type: fact
+  date: 2026-09-27
+  importance: 0.8
+  summary: "Структуры данных (архив роя): pnl — массив pgno DESCENDING, pl[0]=count, MDBX_PNL_ASCENDING=0 зафиксирован (2026-04-01); rkl (Reclaimed Key List) — сортированный набор txnid как интервал [solid_begin,solid_end) + массив, используется для GC-потоков reclamation (rkl_push, rkl_hole для дыр); dpl — lazy-сортированный список грязных страниц txn->wr.dirtylist (radix/quicksort, границы 42/142/256)."
+- key: fact:core:engine-invariants
+  type: fact
+  date: 2026-09-27
+  importance: 0.85
+  summary: "Инварианты движка libmdbx (из архива роя, dump 25.09): MVCC+CoW (страница помечена txnid; writer клонирует page_touch), no WAL / crash-recovery-free (атомарность = двухфазная троица мет, txnid_a==txnid_b + sign), один писатель / wait-free читатели (единственная запись — слот RLT), B+tree (dpl/pnl/rkl). Лимиты: ключ ~1/2 страницы (~2КБ@4K, LEAF_NODE_MAX), значение <= 2ГБ (MDBX_MAXDATASIZE=0x7fff0000, прикладной 16MiB в модуле), DBI <= 32765, страница 256..65536, MAX_TXNID=0xFFFFFFFF00000000."
+- key: fact:core:meta-troika-recovery
+  type: fact
+  date: 2026-09-27
+  importance: 0.85
+  summary: "Троица мет-страниц (NUM_METAS=3): recent/prefer_steady/tail; коммит всегда в tail (in-place только если head weak и pending steady); валидность требует txnid_a==txnid_b. Steady vs weak: steady = страницы данных сброшены + sign (SIGN_IS_STEADY); weak — нет. bootid копируется в конце двухфазного апдейта. Аварийное восстановление: mdbx_env_open_for_recovery/turn_for_recovery (эксклюзивно, меты перезаписываются монотонно). FSM 216 комбинаций (troika_fsm_map, troika_verify_fsm)."
+- key: fact:core:module-traps
+  type: fact
+  date: 2026-09-27
+  importance: 0.85
+  summary: "Ловушки модулей (архив роя): (1) КРИТИЧНО — dml.h/dml.c это НЕ слой модификации данных, это defrag map-list (использует только defrag.c); мутация живёт в cursor.c/node.c/page-split.c/tree-ops.c. (2) любой новый экспорт обязан попасть в proto.h, иначе в alloy-сборке станет static. (3) dist-cutoff маркеры: правки сборки вне dist, иначе молча ломают амальгаму. (4) mcp-memory docker .codeassistant/mcp.json пишет «в никуда» — всегда проверять файл (Gemba)."
+- key: fact:core:perf-mechanisms
+  type: fact
+  date: 2026-09-27
+  importance: 0.8
+  summary: "Механизмы производительности (архив роя): lazy_search_cache (mdbx_cache_get: страницы несут txnid-штамп, спуск по дереву только пока страницы изменены после last_confirmed_txnid; HIT 10^2..10^3x; статусы HIT/CONFIRMED/REFRESHED/DIRTY/BEHIND/UNABLE/RACE/ERROR), spill (радикс-сорт приоритетов, iov-коалесцинг), refund/loose (txn_refund возвращает хвостовые страницы в first_unallocated, снижая WAF), prefer_waf_insteadof_balance=True (дефолт с 2026-01-04). WAF ~ (height+1) страниц на point-update; батчинг = главный рычаг WAF."
+- key: fact:core:reader-slots-rthc
+  type: fact
+  date: 2026-09-27
+  importance: 0.8
+  summary: "Слоты читателей и rthc (архив роя): reader-slot в RLT (mvcc-readers), TLS-кэш me_txkey; rthc — per-process реестр открытых env + per-thread слоты; rthc_afterfork сбрасывает lck/dxb maps (не наследуются через fork); rthc_drown при env close чистит слоты PID; workaround_glibc_bug21031 (TLS-destructor); MDBX_NOSTICKYTHREADS для многопоточности; rthc_uniq_check защищает multi-open одной пары db/lck."
+- key: fact:core:sync-modes
+  type: fact
+  date: 2026-09-27
+  importance: 0.85
+  summary: "Режимы синхронизации (архив роя): DURABLE (data flush + мета, полный ACID), NOMETASYNC (мета отложенно, ACI без D; meta_sync_txnid в LCK), SAFE_NOSYNC (нет flush, но сохраняется предыдущий steady; ~10x запись; steady действует как долгий читатель -> страницы новее steady не переиспользуются -> рост файла), UTTERLY_NOSYNC (без гарантий), WRITEMAP (запись через mmap+msync). Пороги автосброса: sync_bytes/sync_period (mdbx_env_set_syncbytes/syncperiod)."
+- key: fact:core:usdt-probes
+  type: fact
+  date: 2026-09-27
+  importance: 0.7
+  summary: "SystemTap/DTrace-пробники (архив роя): сборка гейтится -DENABLE_SYSTEMTAP (или ENABLE_DTRACE) + наличие sys/sdt.h; иначе no-op — добавление пробников безопасно."
+- key: fact:memory:data-loss-rootcause
+  type: fact
+  date: 2026-09-27
+  importance: 0.95
+  summary: "Настоящая причина потери данных MCP-памяти (26.09): rsync --delete 08:58:52 удалил живую ~/.local/share/shared-graph-memory/db.mdbx — в источнике синка не было файла данных. Операция развёртывания, НЕ дефект движка/модуля: матрица персистентности + probe движка (tests/test_persistence_crash.py, .skynet/tmp/persist-probe) подтвердили штатное поведение libmdbx (краш процесса данные не теряет при любом режиме синка; после kill9 read-only open даёт MDBX_WANNA_RECOVERY). Предотвращение: только tools/install.sh (никогда не трогает db.mdbx/backups)."
+- key: fact:memory:persistence-verdict
+  type: fact
+  date: 2026-09-27
+  importance: 0.95
+  summary: "Регресса персистентности MCP-модуля НЕТ. Матрица A2/A3 x B1/B2/B3 x C1/C2/C3 (tests/test_persistence_crash.py): durable x любой exit = все записи; safe_nosync x close/SIGTERM = все; safe_nosync x kill9 без close -> меты unsteady (троица s:w:w), read-only open возвращает MDBX_WANNA_RECOVERY (НЕ молчаливый откат), rw-open сам делает steady-sync и данные целы. Probe A1 (чистый Env без Store, .skynet/tmp/persist-probe/probe_engine.py) подтверждает: это поведение движка, не дефект модуля."
+- key: fact:meta:archive-index
+  type: fact
+  date: 2026-09-27
+  importance: 0.9
+  summary: "Инвентарь архива памяти роя (.archive/mcp-memory-dump.yaml, 25.09, 126 сущностей / 104 связи): agent 30, mailbox 28, Module 16, Concept 11, DataStructure 7, knowledge 4, letter 4, Document 3, issue 3 + реестры/статусы. Дистилляция: устойчивые технические знания -> core/build/testing; практики -> practice; миссия/правила -> swarm; остальное (ящики/письма/статусы агентов) = рабочее состояние роя, в знания НЕ переносится (урок «знания != вся память»). Карта: proc:meta:archive-distillation; хлебные крошки: proc:meta:context-breadcrumbs."
+- key: fact:meta:knowledge-map
+  type: fact
+  date: 2026-09-27
+  importance: 0.95
+  summary: "Схема знаний MCP-памяти (домен = модуль словаря). meta — нулевой обязательный раздел: знания о знаниях, карта и процедуры. practice — общие практики (Кайдзен, методологии). swarm и coordination — рой и протоколы, доки в skynet-draft/devel. Прочие модули — project (libmdbx, master). todo — неклассифицированное ждёт разбора; archive — устаревшее/legacy (хранить, не импортировать). Правила: devel НЕ правим до конца задачи, полезное извлекаем рядом в память; знания преимущественно про master; бэкпорты — по месту, каждый фикс отдельная ситуация. Рецепты выборок: recall('{тип}:{модуль-домена}:*') и search(терм). Процедуры и double-loop — SKILL.md в skynet/MCP-shared-graph-memory/. Дистилляция архива памяти роя (dump 25.09, 126/104) в домены выполнена 27.09: технические знания -> fact:core:*, сборка/тесты -> fact:build:*, fact:testing:*, практики -> proc:practice:*, рой -> fact:swarm:*, инвентарь и double-loop -> fact:meta:archive-index / proc:meta:archive-distillation (рабочее состояние роя: ящики/письма/реестры — в память НЕ переносится)."
+- key: fact:meta:map-data-passport
+  type: fact
+  date: 2026-09-27
+  importance: 0.9
+  summary: "ПАСПОРТ ДАННЫХ refactoring-map (верификация 27.09, Шаг 2): артефакты в tools/artifacts/ (6 шт., 26.09, 0 ошибок сканирования): merged refactoring-map.json (linux+win32, configs=['linux','win32']) — functions 4087, types 398, macros 580, blocks 33264, edges 11810 (unique), unresolved 2018, coverage_pct 96.17, uncovered_lines 1205; regions 1131; uncovered-острова 433; symbols 5065. Одно-конфиг артефакты: linux 3127/368/518/31213/19132/5390, win32 3143/398/552/31013/19016/1191, tests-ut/issues/framework отдельно. golden tests/golden/map-counts.json совпадает с linux-сканом. validate_map --tus full на текущем дереве: OK (functions/types/macros/blocks/regions >= golden); fixture: OK. Генератор (scan_symbols.py 26.09 09:19) и src/ не менялись после генерации (правка 27.09 — только комментарий в mdbx.h). ВЫВОД: данные достоверны и полны для проектирования схемы и загрузки (load_map)."
+- key: fact:practice:clang-ast-dump
+  type: fact
+  date: 2026-09-25
+  importance: 0.8
+  summary: "Проверенные на практике инварианты clang -Xclang -ast-dump=json (clang 18, сканер scan_symbols.py): (1) поле file в loc/range эмитится ТОЛЬКО когда FileID сменился с предыдущего узла (дельта-кодирование) — нужен сквозной трекер текущего файла по всему обходу; у узлов main-файла file часто отсутствует вовсе. (2) MacroDefinition НЕ эмитится в JSON даже с -detailed-preprocessing-record — макросы извлекаются только через `clang -E -dD` c # <line> "file"-маркерами (тела/значения макроса не сохраняются). (3) Структуры = RecordDecl, классы = CXXRecordDecl, методы = CXXMethodDecl/CXXConstructorDecl/CXXDestructorDecl; out-of-line определения методов лежат ВНЕ class-стека — квалификация через индекс (имя, сигнатура). (4) Член-вызовы = CXXMemberCallExpr, калee внутри MemberExpr.name; свободные вызовы = CallExpr→ImplicitCastExpr→DeclRefExpr.referencedDecl{FunctionDecl}; статические методы в CallExpr дают CXXMethodDecl. (5) Тела внутри макро-расширений: loc=null, начало/конец через range.begin/end.spellingLoc/expansionLoc (offset в конкретном файле), блоки без line — резолв по offset в файле. (6) Пустые блоки/структуры имеют «unnamed struct at ...» в имени — надо чистить."
+- key: fact:practice:clang-test-scan
+  type: fact
+  date: 2026-09-26
+  importance: 0.7
+  summary: "Проверенные инварианты сканирования тестовых доменов clang: (1) framework-фиксируры (tests/framework/*.c++) дают ~1ГБ ast-dump с -detailed-preprocessing-record — для тестов его надо отключать (no_detailed_preprocessing=True), макросы всё равно берутся из -E -dD; (2) MDBX_CONFIG_H с путём требует восстановления кавычек при построении синтетических команд (-DMDBX_CONFIG_H="path") — иначе двойной shlex-разбор съедает их и include MDBX_CONFIG_H падает; (3) тесты компилируются с -DMDBX_BUILD_TEST=1 -DMDBX_BUILD_CXX=1 -I<repo>; (4) C++-перегрузки: add_function терял определения при коллизии сырого ключа fn:module:qname — фикс различает сигнатурой на уровне коллектора; (5) libmdbx С++ wchar-перегрузки (env::copy(wchar_t*) и т.п.) находятся под #if IS_WINDOWS — видны только в win32-скане."
+- key: fact:testing:ci-state
+  type: fact
+  date: 2026-09-27
+  importance: 0.8
+  summary: "Состояние CI (архив роя): RED на devel@e8953aaf — ci-windows-msvc C1189 (src/atomics-ops.h:46, C11 atomics); github-ci root causes batch 028d7186 (Windows workflows env::re...); инвариант: shared googletest DLLs вешают Windows (каждый тулчейн); SourceCraft CI quota исчерпана (runs 189-191), GitHub CI только на явных вехах; локальная рутина — P0/P1 gcc+clang."
+- key: fact:testing:corpus-organization
+  type: fact
+  date: 2026-09-27
+  importance: 0.85
+  summary: "Организация тестов (архив роя): CTest-метки ut.* (api/dbi/cursor/txn/env/gc/issues) + ортогональные ut.heavy и chk; тесты регистрируются add_ut()/add_gtest(); white-box точки details_rkl (включает rkl.c+txl.c), issue_gh0017 (ABI layout-dxb); стохастический mdbx_test (--prng-seed, --nops, --speculum), stochastic.sh + battery-tmux.sh; выбор сегментов select-tests.sh (impact). Профили: P0 -R, P1 быстрый ut (без heavy, ~82с), P2 полный ut, P3 ctest, P4 asan/ubsan/stochastic + GitHub CI только на вехах."
+- key: fact:testing:perf-profile
+  type: fact
+  date: 2026-09-27
+  importance: 0.75
+  summary: "Профиль длительности тестов (kb_B56, 2026-09-23): P1 ut ctest (55 тестов, Release/LTO-OFF, nice 10) wall ~3:43 (223с) против цели 1.5 мин; топ: get_cached 136с (~66%), ut_txn 29.3с (case2_concurrent_read_and_abort, RELIEF_FACTOR), issue_gh0011 22.1с."
+- key: fact:tools:load-stdin-fix
+  type: fact
+  date: 2026-09-27
+  importance: 0.8
+  summary: "Issue #50: mdbx_load -nf <db> < dump падал ENOENT (src/tools/load.c main): getopt связывал -f с dbpath. Фикс 6d3092cb (fix/issue50-load-stdin); кандидат §30-backport origin/master, stable, lts/0.13."
+- key: proc:memory:durability-policy
+  type: proc
+  date: 2026-09-27
+  importance: 0.85
+  summary: "Критичные знания фиксировать через db_flush() сразу после safe_store (sync force=true), либо переключить режим в durable. По умолчанию safe_nosync: при краше процесса (kill9 без close) страницы данных в page cache, но меты unsteady и read-only открытие требует решения (WANNA_RECOVERY). Выход из режима без краха всегда безопасен (close/SIGTERM делают force sync)."
+- key: proc:meta:archive-distillation
+  type: proc
+  date: 2026-09-27
+  importance: 0.85
+  summary: "Double-loop по дистилляции архива роя (27.09): процедура — инвентаризация дампа (типы/назначение) -> отбор устойчивых знаний -> консолидация в записи по 4 доменам (core/build/testing/practice/swarm/meta) -> link'и. Наблюдения: (1) «знания != память роя» — майлбоксы/реестры/статусы это рабочее состояние, не знания; (2) 40+ технических сущностей консолидированы в ~20 записей без потери сути; (3) ценное из письменных отчётов (B54, #50, B56) уже частично в решениях/фактах — проверено пересечение. Следующий шаг — верификация парсера (паспорт данных), затем схема."
+- key: proc:meta:ast-data-lifecycle
+  type: proc
+  date: 2026-09-26
+  importance: 0.75
+  summary: "Дизайн жизненного цикла AST-данных refactoring-map зафиксирован в docs/LIFECYCLE.md (альтернативы/соображения, чтобы не потерять контекст). Инварианты: ссылки переживают регенерацию; переименование прослеживаемо; удаление не стирает историю (tombstone); поколение карты известно (canary y). Альтернативы по переименованию: A) sym_aliases (old→new) + mark-not-delete — РЕКОМЕНДОВАНО, реализовано; B) авто-перенаправление по сигнатуре — отклонено как автоматика (ложные срабатывания); C) tombstone-only — компромисс (tombstone всегда, алиас как ускоритель). Открытые вопросы владельцу: физически перецепить ссылку или stale+решение агента; diff поколений (map_generations) сейчас или после первого рефакторинга; fingerprint-якорь блоков после переписывания. Реализовано: sym_aliases таблица, map_alias/map_alias_target, refresh_stale перенаправляет по алиасам. Найден латентный баг: символьные id и id записей выделялись из разных sequence (символы с 0, записи с 1) → коллизия в общем links id-пространстве; исправлено единым next_id (записи и символы в одном числовом пространстве), тест test_sym_and_record_ids_do_not_collide."
+- key: proc:meta:refactor-map-pilot
+  type: proc
+  date: 2026-09-25
+  importance: 0.7
+  summary: "Двойная петля по пилоту refactoring-map (B65 шаг 1). (1) Память помогла: recall нашёл decision:meta:schema-refactor-map и proc:todo:mcpx-diagnostics, они задали контекст (аддитивные таблицы, файсеты, черновик REFACTORING-MAP.md). (2) Что было не так: clang-особенности открывались набивкой шишек, а не из памяти — 'file' в ast-dump=json эмитится ТОЛЬКО при смене FileID (дельта-кодирование), макросы не эмитятся вообще (нужен -E -dD с #line-маркерами), out-of-line C++ методы вне class-стека (резолв по (имя, сигнатура)), член-вызовы = CXXMemberCallExpr+MemberExpr.name. Первая попытка прогона дала 46007 функций — системные хидеры протекали (loc.file отсутствовал). (3) Что изменить: зафиксировать clang-инварианты как fact (память!), вести golden-счётчики артефакта в валидаторе (validate_map сверяет ≥, но эталон сейчас перегенерируется вместе со сканером — нужен отдельный стабильный снапшот); блоки внутри макро-тел без loc — резолвить через range/expansionLoc/spellingLoc."
+- key: proc:practice:alice-consult-implementations
+  type: proc
+  date: 2026-09-26
+  importance: 0.75
+  summary: "Консультация Алисы (route=design) по схеме implementations для многоконфигурационной карты исходников. Вопрос (обобщённый): как моделировать символ с платформо-зависимыми телами (posix/win32) в одном артефакте. Альтернативы: A) вложенный implementations-список (общие поля + [{config,file,module,l0,l1,blocks,regions}]); B) плоские ключи fn:@config + view-слой; C) раздельные документы с кросс-ссылками. Вердикт Алисы: A — стабильность ключей/ссылок, кверябельность, refactor/diff-дружелюбность. Edge cases: символ только в одной конфигурации; идентичные тела; разные диапазоны строк; block-id должны быть неймспейсены по config; исчезновение символа при удалении конфига. Совпадает с предпочтением владельца → принято к реализации."
+- key: proc:practice:alice-consult-schema
+  type: proc
+  date: 2026-09-25
+  importance: 0.7
+  summary: "Консультация с Алисой (Yandex AI Studio, route=design) по схеме карты исходников для C→C++ рефакторинга и реорганизации тестов/CI (2026-09-25). Вопрос обобщённый, без внутренних деталей. Выводы Алисы: 1) номера строк нестабильны — нужны устойчивые идентификаторы символов/блоков; 2) нужны семантические связи, не только синтаксические вызовы; 3) риск рассинхрона курируемого и структурного слоёв — единый API + валидация ссылок; 4) фаcеты «ключ→набор» гибки, но следить за целостностью; 5) coverage/test_metrics/ci_jobs реально полезны для реорганизации; 6) качество автогенератора критично. Принято: структурные анкоры symbol#block-id + детерминированная регенерация после коммитов (дрейф строк самоизлечивается); semantic-рёбра сразу; пометка stale при исчезновении символов; валидатор генератора. Отклонено: графовая БД/онтологии (мы на KV+links), хранение бизнес-логики (вне scope карты кода)."
+
+links:
+- subject: fact:build:cmake-notes
+  predicate: related-to
+  object: bug:core:incore-assert
+- subject: bug:core:incore-assert
+  predicate: related-to
+  object: fact:core:reader-slots-rthc
+- subject: bug:core:incore-assert
+  predicate: related-to
+  object: fact:core:usdt-probes
+- subject: bug:core:incore-assert
+  predicate: related-to
+  object: fact:testing:ci-state
+- subject: fact:core:reader-slots-rthc
+  predicate: related-to
+  object: fact:core:engine-invariants
+- subject: fact:core:sync-modes
+  predicate: related-to
+  object: decision:meta:lru-sync-design
+- subject: fact:meta:archive-index
+  predicate: related-to
+  object: decision:meta:lru-sync-design
+- subject: fact:core:module-traps
+  predicate: related-to
+  object: fact:core:sync-modes
+- subject: fact:core:sync-modes
+  predicate: related-to
+  object: fact:core:engine-invariants
+- subject: proc:meta:archive-distillation
+  predicate: part-of
+  object: fact:meta:archive-index
+- subject: fact:build:cmake-notes
+  predicate: related-to
+  object: decision:meta:refactor-map-phase
+- subject: decision:meta:refactor-map-phase
+  predicate: related-to
+  object: fact:core:reader-slots-rthc
+- subject: decision:meta:refactor-map-phase
+  predicate: related-to
+  object: fact:core:usdt-probes
+- subject: decision:meta:refactor-map-phase
+  predicate: related-to
+  object: fact:testing:ci-state
+- subject: bug:core:incore-assert
+  predicate: related-to
+  object: decision:meta:refactor-map-phases
+- subject: decision:meta:refactor-map-phases
+  predicate: related-to
+  object: fact:core:engine-invariants
+- subject: fact:core:module-traps
+  predicate: related-to
+  object: fact:core:engine-invariants
+- subject: fact:core:engine-invariants
+  predicate: related-to
+  object: fact:core:meta-troika-recovery
+- subject: fact:core:perf-mechanisms
+  predicate: related-to
+  object: decision:meta:refactor-map-scanner
+- subject: fact:core:cpp-api-layer
+  predicate: related-to
+  object: decision:meta:refactor-map-scanner
+- subject: fact:core:perf-mechanisms
+  predicate: related-to
+  object: fact:core:data-structures-pnl
+- subject: fact:core:cpp-api-layer
+  predicate: related-to
+  object: fact:core:data-structures-pnl
+- subject: fact:core:module-traps
+  predicate: related-to
+  object: decision:meta:schema-refactor-map
+- subject: decision:meta:schema-refactor-map
+  predicate: related-to
+  object: fact:core:engine-invariants
+- subject: fact:practice:clang-ast-dump
+  predicate: related-to
+  object: fact:core:data-structures-pnl
+- subject: fact:practice:clang-test-scan
+  predicate: related-to
+  object: fact:core:data-structures-pnl
+- subject: fact:tools:load-stdin-fix
+  predicate: related-to
+  object: fact:testing:corpus-organization
+- subject: fact:testing:corpus-organization
+  predicate: related-to
+  object: fact:testing:perf-profile
+- subject: proc:meta:ast-data-lifecycle
+  predicate: related-to
+  object: bug:core:incore-assert
+- subject: proc:meta:refactor-map-pilot
+  predicate: related-to
+  object: fact:core:engine-invariants
+- subject: proc:meta:refactor-map-pilot
+  predicate: related-to
+  object: fact:core:sync-modes
+- subject: bug:core:incore-assert
+  predicate: related-to
+  object: proc:practice:alice-consult-implementations
+- subject: fact:core:engine-invariants
+  predicate: related-to
+  object: proc:practice:alice-consult-schema

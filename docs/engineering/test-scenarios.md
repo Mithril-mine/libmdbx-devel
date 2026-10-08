@@ -3,15 +3,12 @@
 > Часть индекса [Skynet](README.md).
 > Спецификации сценариев для расширения тестового покрытия libmdbx: **что и как тестировать**.
 > Документ предназначен:
->   - агенту, пишущему тесты (`tests/ut/*`, `tests/ut/issues/*`) — сценарии как ТЗ;
+>   - агенту, пишущему тесты (`tests/ut/*`, `tests/issues/*`) — сценарии как ТЗ;
 >   - агенту(ам), встраивающему пробники SystemTap/DTrace — «болевые точки» с контекстом.
 >
 > Связанные документы: [`test-coverage.md`](test-coverage.md) (карта «тесты → модули» и дыры),
 > [`functional-architecture.md`](functional-architecture.md) (как работает движок, без привязки
-> к файлам), [`architecture.md`](architecture.md) (внутренняя структура по модулям),
-> [`testing-methodology.md`](testing-methodology.md) (механизмы управляемого тестирования:
-> COLLECT/WATCH/FAULT), [`probe-bus.md`](probe-bus.md) (движок инъекций mprobe v2),
-> [`probes.md`](probes.md) (каталог USDT/DTrace-маркеров для внешней трассировки).
+> к файлам), [`architecture.md`](architecture.md) (внутренняя структура по модулям).
 >
 > Статус: **первая партия** — ядро (GC, commit-конвейер, CoW, мета/восстановление, спилл,
 > долгие читатели). Партии по API-группам (`c_dbi`, `c_crud`, `c_cursors`, `c_rqest`,
