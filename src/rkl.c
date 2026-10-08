@@ -287,8 +287,16 @@ int rkl_push(rkl_t *rkl, const txnid_t id) {
       continue;
     }
     if (unlikely(id == rkl->list[i - 1])) {
-      while (++i < rkl->list_length)
-        rkl->list[i - 1] = rkl->list[i];
+      /* Откат сдвигов, сделанных при поиске места вставки: дубликат уже
+       * присутствует, вставлять не нужно. Раньше цикл начинался с ++i и
+       * недовосстанавливал один сдвинутый элемент (off-by-one), из-за чего
+       * хвост списка терялся и структура становилась невалидной
+       * (rkl_check() == false). */
+      while (i < rkl->list_length) {
+        rkl->list[i] = rkl->list[i + 1];
+        ++i;
+      }
+      ASSERT(rkl_check(rkl));
       return MDBX_RESULT_TRUE;
     }
     break;
