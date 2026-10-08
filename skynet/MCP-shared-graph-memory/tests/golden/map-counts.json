@@ -1,0 +1,14 @@
+{
+  "platform": "linux-x86_64",
+  "build_config": "_build-scan",
+  "counts": {
+    "functions": 3127,
+    "types": 368,
+    "macros": 518,
+    "blocks": 31213,
+    "edges": 19132,
+    "unresolved_edges": 5390,
+    "regions": 1131
+  },
+  "generated_by": "scan_symbols.py + scan_regions.py"
+}

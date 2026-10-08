@@ -3,4 +3,6 @@ __pycache__/
 .pytest_cache/
 .coverage
 _build-mcp-shared-graph-memory/
+_build-scan/
 mcp/_lib/
+tools/artifacts/
