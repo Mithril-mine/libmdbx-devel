@@ -105,7 +105,7 @@ classify() {
 	tests/*.sh | tests/*.py | tests/**/*.sh | tests/**/*.py | tests/CMakeLists.txt) echo $'smoke-t1\nsmoke-t2\nsmoke-t3' ;;
 	cmake/* | CMakeLists.txt | GNUmakefile | Makefile | cmake/CMakeLists.txt) echo $'smoke-t1\nsmoke-t2\nut\.' ;;
 	mdbx.h | mdbx.h++ | mdbx++/*) echo $'ut\.\nsmoke-t1\nsmoke-t2' ;;
-	src/*.c | src/*.h | src/alloy.c) echo $'ut\.\nsmoke-t1\nsmoke-t2' ;;
+	src/*.c | src/*.c++ | src/*.h | src/alloy.c) echo $'ut\.\nsmoke-t1\nsmoke-t2' ;;
 	docs/* | skynet/* | .github/* | .gitignore) echo '' ;;
 	*.md) echo '' ;;
 	*) echo '' ;;

@@ -143,4 +143,5 @@ jobs:
       cell: ${{ matrix.cell }}
       "runs-on": ${{ matrix.runs-on }}
       scope: ${{ matrix.scope }}
+      coverage: ${{ matrix.coverage }}
       ref: ${{ needs.resolve.outputs.ref }}

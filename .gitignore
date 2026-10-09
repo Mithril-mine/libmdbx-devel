@@ -71,6 +71,7 @@ valgrind.*
 version.c
 .vs/
 .vscode/
+__pycache__/
 *.zip
 mdbx_legacy_example
 mdbx_modern_example
