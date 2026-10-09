@@ -52,24 +52,27 @@ int osal_waitstatus2errcode(DWORD result) {
 }
 
 static std::unordered_map<unsigned, HANDLE> events;
-static HANDLE hBarrierSemaphore, hBarrierEvent;
+static HANDLE hBarrierShared, hBarrierEvent, hReadySemaphore;
+static volatile LONG *barrier_countdown;
 static HANDLE hProgressActiveEvent, hProgressPassiveEvent;
 
 void osal_wait4barrier(void) {
-  DWORD rc = WaitForSingleObject(hBarrierSemaphore, 0);
-  switch (rc) {
-  default:
-    failure_perror("WaitForSingleObject(BarrierSemaphore)", osal_waitstatus2errcode(rc));
-  case WAIT_OBJECT_0:
-    rc = WaitForSingleObject(hBarrierEvent, INFINITE);
-    if (rc != WAIT_OBJECT_0)
-      failure_perror("WaitForSingleObject(BarrierEvent)", osal_waitstatus2errcode(rc));
-    break;
-  case WAIT_TIMEOUT:
+  /* Real counting barrier in shared memory (mirrors the POSIX1988 flavor):
+   * each actor InterlockedDecrement()s the countdown; the LAST one to reach 0
+   * sets hBarrierEvent, everyone else waits on it (manual-reset event stays
+   * signaled, so all proceed together). */
+  if (InterlockedDecrement(barrier_countdown) > 0) {
+    if (WaitForSingleObject(hBarrierEvent, INFINITE) != WAIT_OBJECT_0)
+      failure_perror("WaitForSingleObject(BarrierEvent)", osal_waitstatus2errcode(GetLastError()));
+  } else {
     if (!SetEvent(hBarrierEvent))
       failure_perror("SetEvent(BarrierEvent)", GetLastError());
-    break;
   }
+  /* Report readiness to the overlord (which does NOT participate in the
+   * barrier anymore): every actor posts exactly once, so acquiring `need`
+   * times means "everyone is at the start line". */
+  if (!ReleaseSemaphore(hReadySemaphore, 1, nullptr))
+    failure_perror("ReleaseSemaphore(ReadySemaphore)", GetLastError());
 }
 
 static HANDLE make_inheritable(HANDLE hHandle) {
@@ -78,6 +81,26 @@ static HANDLE make_inheritable(HANDLE hHandle) {
                        DUPLICATE_CLOSE_SOURCE | DUPLICATE_SAME_ACCESS))
     failure_perror("DuplicateHandle()", GetLastError());
   return hHandle;
+}
+
+/* Wait until all `need` actors have posted the ready semaphore, bounded by the
+ * --timeout deadline (chrono::infinite() = wait forever). Returns false if the
+ * deadline passed first, true when everyone is ready. */
+bool osal_wait4ready(size_t need, uint64_t deadline_fixedpoint) {
+  for (size_t i = 0; i < need; ++i) {
+    DWORD timeout_ms = INFINITE;
+    if (deadline_fixedpoint != chrono::infinite().fixedpoint) {
+      const uint64_t now = chrono::now_monotonic().fixedpoint;
+      if (now >= deadline_fixedpoint)
+        return false;
+      const uint64_t left = deadline_fixedpoint - now;
+      const uint64_t left_ms = ((left >> 32) * 1000) + (((left & 0xffffffffu) * 1000u) >> 32);
+      timeout_ms = (left_ms >= INFINITE) ? INFINITE : (DWORD)left_ms;
+    }
+    if (WaitForSingleObject(hReadySemaphore, timeout_ms) != WAIT_OBJECT_0)
+      return false;
+  }
+  return true;
 }
 
 void osal_setup(const std::vector<actor_config> &actors) {
@@ -94,15 +117,24 @@ void osal_setup(const std::vector<actor_config> &actors) {
     events[i] = hEvent;
   }
 
-  hBarrierSemaphore = CreateSemaphoreW(NULL, 0, (LONG)actors.size(), NULL);
-  if (!hBarrierSemaphore)
-    failure_perror("CreateSemaphore(BarrierSemaphore)", GetLastError());
-  hBarrierSemaphore = make_inheritable(hBarrierSemaphore);
+  hBarrierShared = CreateFileMappingW(INVALID_HANDLE_VALUE, NULL, PAGE_READWRITE, 0, sizeof(LONG), NULL);
+  if (!hBarrierShared)
+    failure_perror("CreateFileMapping(BarrierShared)", GetLastError());
+  hBarrierShared = make_inheritable(hBarrierShared);
+  barrier_countdown = (volatile LONG *)MapViewOfFile(hBarrierShared, FILE_MAP_ALL_ACCESS, 0, 0, sizeof(LONG));
+  if (!barrier_countdown)
+    failure_perror("MapViewOfFile(BarrierShared)", GetLastError());
+  *barrier_countdown = (LONG)actors.size();
 
   hBarrierEvent = CreateEventW(NULL, TRUE, FALSE, NULL);
   if (!hBarrierEvent)
     failure_perror("CreateEvent(BarrierEvent)", GetLastError());
   hBarrierEvent = make_inheritable(hBarrierEvent);
+
+  hReadySemaphore = CreateSemaphoreW(NULL, 0, (LONG)actors.size(), NULL);
+  if (!hReadySemaphore)
+    failure_perror("CreateSemaphore(ReadySemaphore)", GetLastError());
+  hReadySemaphore = make_inheritable(hReadySemaphore);
 
   hProgressActiveEvent = CreateEventW(NULL, FALSE, FALSE, NULL);
   if (!hProgressActiveEvent)
@@ -135,8 +167,9 @@ int osal_delay(unsigned seconds) {
 //-----------------------------------------------------------------------------
 
 const std::string actor_config::osal_serialize(simple_checksum &checksum) const {
-  checksum.push(hBarrierSemaphore);
+  checksum.push(hBarrierShared);
   checksum.push(hBarrierEvent);
+  checksum.push(hReadySemaphore);
   checksum.push(hProgressActiveEvent);
   checksum.push(hProgressPassiveEvent);
 
@@ -152,8 +185,8 @@ const std::string actor_config::osal_serialize(simple_checksum &checksum) const 
     checksum.push(hSignal);
   }
 
-  return format("%p.%p.%p.%p.%p.%p", hBarrierSemaphore, hBarrierEvent, hWait, hSignal, hProgressActiveEvent,
-                hProgressPassiveEvent);
+  return format("%p.%p.%p.%p.%p.%p.%p", hBarrierShared, hBarrierEvent, hReadySemaphore, hWait, hSignal,
+                hProgressActiveEvent, hProgressPassiveEvent);
 }
 
 bool actor_config::osal_deserialize(const char *str, const char *end, simple_checksum &checksum) {
@@ -161,21 +194,28 @@ bool actor_config::osal_deserialize(const char *str, const char *end, simple_che
   std::string copy(str, end - str);
   TRACE(">> osal_deserialize(%s)\n", copy.c_str());
 
-  assert(hBarrierSemaphore == 0);
+  assert(hBarrierShared == 0);
   assert(hBarrierEvent == 0);
+  assert(hReadySemaphore == 0);
   assert(hProgressActiveEvent == 0);
   assert(hProgressPassiveEvent == 0);
   assert(events.empty());
 
   HANDLE hWait, hSignal;
-  if (sscanf_s(copy.c_str(), "%p.%p.%p.%p.%p.%p", &hBarrierSemaphore, &hBarrierEvent, &hWait, &hSignal,
-               &hProgressActiveEvent, &hProgressPassiveEvent) != 6) {
+  if (sscanf_s(copy.c_str(), "%p.%p.%p.%p.%p.%p.%p", &hBarrierShared, &hBarrierEvent, &hReadySemaphore, &hWait,
+               &hSignal, &hProgressActiveEvent, &hProgressPassiveEvent) != 7) {
     TRACE("<< osal_deserialize: failed\n");
     return false;
   }
+  barrier_countdown = (volatile LONG *)MapViewOfFile(hBarrierShared, FILE_MAP_ALL_ACCESS, 0, 0, sizeof(LONG));
+  if (!barrier_countdown) {
+    TRACE("<< osal_deserialize: MapViewOfFile(BarrierShared) failed\n");
+    return false;
+  }
 
-  checksum.push(hBarrierSemaphore);
+  checksum.push(hBarrierShared);
   checksum.push(hBarrierEvent);
+  checksum.push(hReadySemaphore);
   checksum.push(hProgressActiveEvent);
   checksum.push(hProgressPassiveEvent);
 
@@ -417,6 +457,15 @@ actor_status osal_actor_info(const mdbx_pid_t pid) {
 void osal_killall_actors(void) {
   for (const auto &pair : children_snapshot())
     TerminateProcess(pair.second.first, STATUS_CONTROL_C_EXIT);
+}
+
+void osal_killall_actors_immediate(void) { osal_killall_actors(); }
+
+std::vector<mdbx_pid_t> osal_actor_pids(void) {
+  std::vector<mdbx_pid_t> result;
+  for (const auto &pair : children_snapshot())
+    result.push_back(pair.first);
+  return result;
 }
 
 int osal_actor_poll(mdbx_pid_t &pid, unsigned timeout) {

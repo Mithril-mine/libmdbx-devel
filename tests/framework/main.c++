@@ -290,6 +290,21 @@ static void set_linebuf_append(FILE *out) {
 #endif /* !Windows */
 }
 
+/* Hard-abort a run that has passed the --timeout deadline: kill all actors
+ * (and their process groups, so deep-fork descendants die too) and terminate.
+ * The framework now uses NO worker threads, so _Exit() here only skips the
+ * regular atexit/static-destructor cleanup, which is fine for a deadlined run. */
+MDBX_NORETURN static void abort_deadline(const char *reason) {
+  log_notice("%s; killing all actors\n", reason);
+  osal_killall_actors_immediate();
+  fflush(nullptr);
+#if IS_WINDOWS
+  _exit(EXIT_FAILURE);
+#else
+  _Exit(EXIT_FAILURE);
+#endif
+}
+
 int main(int argc, char *const argv[]) {
   set_linebuf_append(stdout);
   set_linebuf_append(stderr);
@@ -630,36 +645,31 @@ int main(int argc, char *const argv[]) {
   if (global::config::cleanup_before)
     cleanup();
 
-  /* TASK-43: the --timeout deadline is enforced by the overlord poll-loop only
-   * AFTER all actors passed the barrier; an actor hanging in the setup/barrier
-   * phase (e.g. smoke_fault on slow macOS Release runners) would otherwise rely
-   * on the external CTest timeout as the only backstop. This watchdog thread
-   * enforces the deadline from the start and aborts the whole run if it fires
-   * while the main thread is still waiting in setup/barrier (or anywhere else). */
-  if (global::config::timeout_duration_seconds) {
-    std::thread([&]() {
-      while (chrono::now_monotonic().fixedpoint < global::deadline_monotonic.fixedpoint) {
-        chrono::time left;
-        left.fixedpoint = global::deadline_monotonic.fixedpoint - chrono::now_monotonic().fixedpoint;
-        osal_delay((unsigned)left.seconds() + 1);
-      }
-      fprintf(stderr, "overlord: --timeout deadline reached; killing all actors\n");
-      osal_killall_actors();
-      fflush(nullptr) /* MINOR-2: _Exit/_exit don't flush stdio */;
-#if IS_WINDOWS
-      _exit(EXIT_FAILURE);
-#else
-      _Exit(EXIT_FAILURE);
-#endif
-    }).detach();
-  }
+  /* TASK-43: the --timeout deadline is enforced by the OVERLORD main thread
+   * itself (no worker threads at all), following the overlord->child scheme.
+   * A dedicated watchdog thread was found unreliable on macOS: process-directed
+   * signals (SIGALRM from poll's alarm(), SIGCHLD, SIGUSR1/2 progress canary)
+   * get delivered to an arbitrary thread there, which both stalled the watchdog
+   * and could starve the alarm()-based waitpid() timeout in the main thread.
+   * With a single thread those signals deterministically reach the only one
+   * that owns the handlers, so the deadline now holds in every phase:
+   *
+   *  - while waiting for all actors to pass the barrier (osal_wait4ready below);
+   *  - inside the poll loop (backstop at the top of the loop);
+   *  - single-actor runs with --timeout are routed through the same
+   *    overlord->child scheme so the parent can enforce the deadline too
+   *    (plain singlemode is kept for the no-timeout case, e.g. QEMU/cross
+   *    builds that must stay in-process).
+   */
+  const bool need_overlord = global::actors.size() > 1 || global::config::timeout_duration_seconds;
 
-  if (global::actors.size() == 1) {
+  if (!need_overlord) {
     logging::setup("main");
     global::singlemode = true;
     if (!test_execute(global::actors.front()))
       failed = true;
   } else {
+    global::singlemode = false;
     logging::setup("overlord");
 
     log_trace("=== preparing...");
@@ -683,18 +693,27 @@ int main(int argc, char *const argv[]) {
 
     log_trace("=== ready to start...");
     atexit(osal_killall_actors);
-    log_trace(">> wait4barrier");
-    osal_wait4barrier();
-    log_trace("<< wait4barrier");
+    /* The actors synchronize among themselves on the barrier; each one signals
+     * readiness when it passes it. The overlord waits for ALL of them (the
+     * mandatory "everyone is at the start line" point) but bounded by the
+     * --timeout deadline, so a run stuck in setup/barrier still aborts. */
+    log_trace(">> wait4ready");
+    if (!osal_wait4ready(global::actors.size(), global::deadline_monotonic.fixedpoint))
+      abort_deadline("--timeout deadline reached before all actors passed the barrier");
+    log_trace("<< wait4ready");
 
     size_t left = global::actors.size();
     log_trace("=== polling...");
     while (left > 0) {
       unsigned timeout_seconds_left = INT_MAX;
       chrono::time now_monotonic = chrono::now_monotonic();
-      if (now_monotonic.fixedpoint >= global::deadline_monotonic.fixedpoint)
-        timeout_seconds_left = 0;
-      else {
+      if (now_monotonic.fixedpoint >= global::deadline_monotonic.fixedpoint) {
+        /* Past the --timeout deadline: hard-abort. There are no worker
+         * threads, so this is the single deterministic termination path for
+         * actors that hang or outlive the bound. */
+        abort_deadline("--timeout deadline reached; hard-aborting from the poll loop");
+      }
+      {
         chrono::time left_monotonic;
         left_monotonic.fixedpoint = global::deadline_monotonic.fixedpoint - now_monotonic.fixedpoint;
         timeout_seconds_left = left_monotonic.seconds();
@@ -702,12 +721,25 @@ int main(int argc, char *const argv[]) {
 
       mdbx_pid_t pid;
       int rc = osal_actor_poll(pid, timeout_seconds_left);
+      if (rc == ECHILD) {
+        /* All children have already been reaped (e.g. killall()'s wait_actors()
+         * raced the poll loop and stole the reaps, or a deadline hard-abort
+         * SIGKILLed everyone). Nothing is left to wait for, so stop polling. */
+        log_notice("poll: ECHILD, no more children; stopping polling\n");
+        failed = true;
+        break;
+      }
       if (rc)
         failure("Poll error: %s (%d)\n", test_strerror(rc), rc);
 
       if (pid) {
         actor_status status = osal_actor_info(pid);
-        actor_config *actor = global::pid2actor.at(pid);
+        auto it = global::pid2actor.find(pid);
+        if (it == global::pid2actor.end()) {
+          log_notice("poll: pid %ld is not a tracked actor, ignoring\n", (long)pid);
+          continue;
+        }
+        actor_config *actor = it->second;
         if (!actor)
           continue;
 
@@ -728,8 +760,8 @@ int main(int argc, char *const argv[]) {
                       status2str(status));
         }
       } else {
-        if (timeout_seconds_left == 0)
-          failure("Timeout\n");
+        /* No child reported on this poll (e.g. WNOHANG timeout within the
+         * remaining budget); loop back and re-check the deadline. */
       }
     }
     log_trace("=== done...");

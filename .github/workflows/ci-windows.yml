@@ -1,16 +1,15 @@
-name: ci-macos
+name: ci-windows
 
-# Infra v3 platform gate for macOS (migrated from the legacy `make test`
-# matrix; see .skynet/plans/testing-infra-v3-plan.md). Runs the mac-full
-# profile (6 registry cells: macos-15, xcode-27, macos-26-intel, Debug/
-# Release, CXX on) with the fast ctest scope (smoke-t1 | ut.* minus
-# ut.heavy).
+# Infra v3 platform gate for Windows (migrated from the legacy
+# ci-windows-msvc / ci-cxx-msvc / ci-windows-mscl / ci-windows-mingw
+# matrices; see .skynet/plans/testing-infra-v3-plan.md). Runs the win-full
+# profile (164 registry cells: msvc v143/v145, msvc-cxx v142-v145 std
+# 11-23, mscl clang-cl 18, mingw) with the fast ctest scope (smoke-t1 |
+# ut.* minus ut.heavy).
 #
-# The legacy `make check`/`test` also invoked `test-stochastic`
-# (multi-process mdbx_test, 600s), unstable since the TASK-43 port
-# (bad75821) — DB grows into MDBX_MAP_FULL / MDBX_UNABLE_EXTEND_MAPSIZE.
-# Stochastic coverage is provided by ci-dispatch nightly (full profile +
-# full scope) instead.
+# The legacy workflows ran the same cells through tests/ci/ci.sh without
+# make (`CI_MAKE_TARGET=""`), so no stochastic; this migration keeps the
+# coverage and adds LTO-off + ccache (skynet/build.md §6.7).
 
 env:
   CI: GITHUB
@@ -24,9 +23,10 @@ permissions:
 
 on:
   schedule:
-    - cron: "47 3"
+    - cron: "42 3 * * *"
       timezone: "Europe/Moscow"
-  workflow_dispatch:
+  repository_dispatch:
+    types: [dispatch-event]
 
 jobs:
   resolve:
@@ -49,17 +49,18 @@ jobs:
           EVENT_REF: ${{ github.event.client_payload.ref }}
         run: |
           set -euo pipefail
-          CELLS=$(tests/ci/select-cells.py --profile mac-nightly)
+          CELLS=$(tests/ci/select-cells.py --profile win-full)
           REF="${EVENT_REF:-master}"
-          JSON=$(tests/ci/resolve-cells.py "$CELLS" full 2> >(sed 's/^/==> /' >&2) || { echo "resolve-cells failed" >&2; exit 1; })
+          JSON=$(tests/ci/resolve-cells.py "$CELLS" fast 2> >(sed 's/^/==> /' >&2) || { echo "resolve-cells failed" >&2; exit 1; })
           echo "cells=${JSON}" >> "$GITHUB_OUTPUT"
           echo "ref=${REF}" >> "$GITHUB_OUTPUT"
-          echo "scope=full" >> "$GITHUB_OUTPUT"
+          echo "scope=fast" >> "$GITHUB_OUTPUT"
 
   run:
     needs: resolve
     strategy:
       fail-fast: false
+      max-parallel: 20
       matrix:
         include: ${{ fromJson(needs.resolve.outputs.cells) }}
     uses: ./.github/workflows/ci-run.yml

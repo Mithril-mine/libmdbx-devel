@@ -23,8 +23,12 @@
 
 #if !defined(_WIN32) && !defined(_WIN64)
 
+#include <signal.h>
 #include <sys/types.h>
 #include <sys/wait.h>
+#if defined(__linux__) || defined(__gnu_linux__)
+#include <sys/prctl.h>
+#endif
 
 class testcase_smoke4fork : public testcase {
   using inherited = testcase;
@@ -94,6 +98,24 @@ bool testcase_smoke4fork::run() {
   }
   const int deep = (int)history.size();
 
+  /* Die with the parent. When the overlord hard-aborts (--timeout deadline or
+   * failfast) it SIGKILLs every actor and its whole process group, but a deep
+   * fork child created at exactly that moment can miss the group kill and
+   * outlive the run as an orphaned process holding the DB lock (which stalled
+   * smoke_fault_chk after a hard-aborted smoke_fault). Make every fork-scenario
+   * process terminate on parent death: PR_SET_PDEATHSIG (SIGKILL, immediate,
+   * uncatchable) on Linux, plus a portable kill(ppid, 0) probe as a fallback
+   * for macOS/BSD. In normal flow a parent never exits while its fork children
+   * are alive (run() waits in waitpid), so this only fires on abort paths. */
+#if defined(__linux__) || defined(__gnu_linux__)
+  prctl(PR_SET_PDEATHSIG, SIGKILL);
+#endif
+  if (kill(getppid(), 0) != 0 && errno == ESRCH) {
+    log_notice("fork[deep %d, pid %d]: parent %ld died, exiting", deep, current_pid, (long)getppid());
+    log_flush();
+    exit(EXIT_SUCCESS);
+  }
+
   int err = db_open__begin__table_create_open_clean(dbi);
   if (unlikely(err != MDBX_SUCCESS)) {
     log_notice("fork[deep %d, pid %d]: bailout-prepare due '%s'", deep, current_pid, mdbx_strerror(err));
@@ -155,7 +177,14 @@ bool testcase_smoke4fork::run() {
     txn_end(false);
 
   int status = 0xdeadbeef;
-  if (waitpid(child, &status, 0) != child)
+  mdbx_pid_t waited;
+  do {
+    /* Retry on EINTR: on macOS process-directed signals interrupt waitpid()
+     * even for a specific child, and failing here would kill the whole
+     * fork-write/fork-read actor spuriously. */
+    waited = waitpid(child, &status, 0);
+  } while (waited < 0 && errno == EINTR);
+  if (waited != child)
     failure_perror("waitpid()", errno);
 
   if (WIFEXITED(status)) {
