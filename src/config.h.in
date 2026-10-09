@@ -19,6 +19,11 @@
 #cmakedefine01 MDBX_DEBUG_SEARCH_DISPATCHING
 #cmakedefine01 MDBX_DEBUG_SEARCH_BRANCHLESS
 
+/*> dist-cutoff-begin */
+/* Probe-bus (mprobe v2): managed/controlled testing instrumentation (dev-only). */
+#cmakedefine MDBX_PROBES
+/*< dist-cutoff-end */
+
 /* allowing override MDBX_BUILD_CXX=OFF to build the C++ API in "private" mode only for tests */
 #if !defined(MDBX_BUILD_TEST) && !defined(MDBX_BUILD_CXX)
 #cmakedefine01 MDBX_BUILD_CXX /* using MDBX_BUILD_CXX CMake's option */

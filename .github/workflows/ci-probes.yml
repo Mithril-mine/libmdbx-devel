@@ -1,0 +1,58 @@
+name: ci-probes
+
+# Probe-bus (mprobe v2) smoke: managed/controlled testing instrumentation
+# (COLLECT/WATCH/FAULT + deterministic fault injection). Cross-platform check
+# that MDBX_PROBES builds cleanly and the self-tests pass on Linux, Windows
+# and macOS. Lightweight: single cell, two tests.
+# Supersedes ci-tracing (mprobe v1, tests/tracing/): the engine-side
+# probe-bus unified the taxonomy with a process-wide registry, control channel
+# (in-process mprobe_ctl + file IPC) and no external tracer dependencies.
+
+on:
+  push:
+    branches: [devel, master]
+  workflow_dispatch:
+
+env:
+  CI: GITHUB
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  ci-job:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, windows-latest, macos-15]
+    steps:
+    - uses: actions/checkout@v7
+      with:
+        fetch-depth: 0
+        submodules: true
+
+    - uses: ilammy/msvc-dev-cmd@v1
+      if: runner.os == 'Windows'
+
+    - name: configure
+      shell: bash
+      run: |
+        cmake -S . -B @ci-probes -G Ninja \
+          -DCMAKE_BUILD_TYPE=Debug \
+          -DMDBX_PROBES=ON \
+          -DINTERPROCEDURAL_OPTIMIZATION=OFF
+
+    - name: build
+      shell: bash
+      run: |
+        cmake --build @ci-probes --target test_extra_probes test_extra_probes_ipc -j 4
+
+    - name: test
+      shell: bash
+      run: |
+        ctest --test-dir @ci-probes -R '^extra_probes(_ipc)?$' --output-on-failure

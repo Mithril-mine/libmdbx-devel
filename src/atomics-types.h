@@ -126,6 +126,20 @@ typedef union {
 #endif /* __cplusplus */
 } mdbx_atomic_uint64_t;
 
+/* Word-size atomic, i.e. 32-bit on 32-bit platforms and 64-bit on 64-bit ones.
+ * Derived from size_t so it naturally follows the address-space width: the
+ * probe-bus counters only need to track operations bounded by the address
+ * space / DB geometry, and avoiding a 64-bit RMW on 32-bit platforms keeps the
+ * instrumentation cheap. */
+typedef union {
+  volatile size_t weak;
+#if defined(__cplusplus)
+  std::atomic<size_t> c11a;
+#elif defined(MDBX_HAVE_C11ATOMICS)
+  volatile _Atomic size_t c11a;
+#endif /* MDBX_HAVE_C11ATOMICS */
+} mdbx_atomic_size_t;
+
 #ifdef MDBX_HAVE_C11ATOMICS
 
 /* Crutches for C11 atomic compiler's bugs */

@@ -108,6 +108,18 @@ static inline void osal_free(void *ptr) { HeapFree(GetProcessHeap(), 0, ptr); }
 
 #define osal_alloca(size) _alloca(size)
 
+/*> dist-cutoff-begin */
+#if defined(MDBX_PROBES)
+/* Concrete platform allocators used by the probe-bus itself (avoids infinite
+ * recursion through the osal_* redirect defined below). */
+#define osal_malloc_raw(bytes) HeapAlloc(GetProcessHeap(), 0, (bytes))
+#define osal_calloc_raw(nelem, size) HeapAlloc(GetProcessHeap(), HEAP_ZERO_MEMORY, (nelem) * (size))
+#define osal_realloc_raw(ptr, bytes)                                                                                    \
+  ((ptr) ? HeapReAlloc(GetProcessHeap(), 0, (ptr), (bytes)) : HeapAlloc(GetProcessHeap(), 0, (bytes)))
+#define osal_free_raw(ptr) HeapFree(GetProcessHeap(), 0, (ptr))
+#endif /* MDBX_PROBES */
+/*< dist-cutoff-end */
+
 #else /* MDBX_WITHOUT_MSVC_CRT */
 
 #define osal_malloc malloc
@@ -115,6 +127,15 @@ static inline void osal_free(void *ptr) { HeapFree(GetProcessHeap(), 0, ptr); }
 #define osal_realloc realloc
 #define osal_free free
 #define osal_strdup _strdup
+
+/*> dist-cutoff-begin */
+#if defined(MDBX_PROBES)
+#define osal_malloc_raw malloc
+#define osal_calloc_raw calloc
+#define osal_realloc_raw realloc
+#define osal_free_raw free
+#endif /* MDBX_PROBES */
+/*< dist-cutoff-end */
 
 #endif /* MDBX_WITHOUT_MSVC_CRT */
 
@@ -151,6 +172,15 @@ typedef pthread_mutex_t osal_fastmutex_t;
 #define osal_realloc realloc
 #define osal_free free
 #define osal_strdup strdup
+
+/*> dist-cutoff-begin */
+#if defined(MDBX_PROBES)
+#define osal_malloc_raw malloc
+#define osal_calloc_raw calloc
+#define osal_realloc_raw realloc
+#define osal_free_raw free
+#endif /* MDBX_PROBES */
+/*< dist-cutoff-end */
 #endif /* Platform */
 
 #if __GLIBC_PREREQ(2, 12) || defined(__FreeBSD__) || defined(malloc_usable_size)
@@ -160,6 +190,44 @@ typedef pthread_mutex_t osal_fastmutex_t;
 #elif defined(_MSC_VER) && !MDBX_WITHOUT_MSVC_CRT
 #define osal_malloc_usable_size(ptr) _msize(ptr)
 #endif /* osal_malloc_usable_size */
+
+/*> dist-cutoff-begin */
+#if defined(MDBX_PROBES)
+/* --- probe-bus allocation interception (dev-only) ---------------------------
+ * Redirect allocations through the probe-bus so tests can deterministically
+ * inject ENOMEM/allocation failures. The *_raw aliases defined above are the
+ * concrete platform allocators used by the probe-bus itself to avoid infinite
+ * recursion. See docs/engineering/probe-bus.md and the mprobe block in
+ * logging_and_debug.h. */
+#ifndef MDBX_MPROBE_CAT_
+#define MDBX_MPROBE_CAT_(a, b) a##b
+#endif
+#ifndef MDBX_MPROBE_CAT
+#define MDBX_MPROBE_CAT(a, b) MDBX_MPROBE_CAT_(a, b)
+#endif
+#ifndef MDBX_MPROBE_STR_
+#define MDBX_MPROBE_STR_(x) #x
+#endif
+#ifndef MDBX_MPROBE_STR
+#define MDBX_MPROBE_STR(x) MDBX_MPROBE_STR_(x)
+#endif
+#ifndef MDBX_MPROBE_VAR
+#define MDBX_MPROBE_VAR(base) MDBX_MPROBE_CAT(base, __LINE__)
+#endif
+#ifndef MDBX_MPROBE_AT
+#define MDBX_MPROBE_AT __FILE__ ":" MDBX_MPROBE_STR(__LINE__)
+#endif
+LIBMDBX_API void *mprobe_alloc(size_t bytes, const char *site);
+LIBMDBX_API void *mprobe_realloc(void *ptr, size_t bytes, const char *site);
+LIBMDBX_API void *mprobe_calloc(size_t nelem, size_t size, const char *site);
+#undef osal_malloc
+#undef osal_realloc
+#undef osal_calloc
+#define osal_malloc(bytes) mprobe_alloc((bytes), MDBX_MPROBE_AT)
+#define osal_realloc(ptr, bytes) mprobe_realloc((ptr), (bytes), MDBX_MPROBE_AT)
+#define osal_calloc(nelem, size) mprobe_calloc((nelem), (size), MDBX_MPROBE_AT)
+#endif /* MDBX_PROBES */
+/*< dist-cutoff-end */
 
 #ifndef osal_strdup
 LIBMDBX_API char *osal_strdup(const char *str);
