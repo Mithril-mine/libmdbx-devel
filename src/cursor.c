@@ -887,6 +887,7 @@ __hot int cursor_put(MDBX_cursor *mc, const MDBX_val *key, MDBX_val *data, unsig
 
   size_t *batch_dupfix_done = nullptr, batch_dupfix_given = 0;
   if (unlikely(flags & MDBX_MULTIPLE)) {
+    MPROBE_WATCH(cursor_multiple_put, 1);
     batch_dupfix_given = data[1].iov_len;
     if (unlikely(data[1].iov_len == 0))
       return /* nothing todo */ MDBX_SUCCESS;
@@ -2207,6 +2208,7 @@ __hot int cursor_ops(MDBX_cursor *mc, MDBX_val *key, MDBX_val *data, const MDBX_
     return rc;
 
   case MDBX_SEEK_AND_GET_MULTIPLE:
+    MPROBE_WATCH(cursor_multiple_seek, 1);
     if (unlikely(!key))
       return MDBX_EINVAL;
     rc = cursor_seek(mc, key, data, MDBX_SET).err;
@@ -2214,6 +2216,7 @@ __hot int cursor_ops(MDBX_cursor *mc, MDBX_val *key, MDBX_val *data, const MDBX_
       return rc;
     __fallthrough /* fall through */;
   case MDBX_GET_MULTIPLE:
+    MPROBE_WATCH(cursor_multiple_get, 1);
     if (unlikely(!data))
       return MDBX_EINVAL;
     if (unlikely((mc->tree->flags & MDBX_DUPFIXED) == 0))
@@ -2236,6 +2239,7 @@ __hot int cursor_ops(MDBX_cursor *mc, MDBX_val *key, MDBX_val *data, const MDBX_
     goto fetch_multiple;
 
   case MDBX_NEXT_MULTIPLE:
+    MPROBE_WATCH(cursor_multiple_next, 1);
     if (unlikely(!data))
       return MDBX_EINVAL;
     if (unlikely(mc->subcur == nullptr))
@@ -2254,6 +2258,7 @@ __hot int cursor_ops(MDBX_cursor *mc, MDBX_val *key, MDBX_val *data, const MDBX_
     }
 
   case MDBX_PREV_MULTIPLE:
+    MPROBE_WATCH(cursor_multiple_prev, 1);
     if (unlikely(!data))
       return MDBX_EINVAL;
     if (unlikely(mc->subcur == nullptr))

@@ -8,7 +8,10 @@
 >
 > Связанные документы: [`test-coverage.md`](test-coverage.md) (карта «тесты → модули» и дыры),
 > [`functional-architecture.md`](functional-architecture.md) (как работает движок, без привязки
-> к файлам), [`architecture.md`](architecture.md) (внутренняя структура по модулям).
+> к файлам), [`architecture.md`](architecture.md) (внутренняя структура по модулям),
+> [`testing-methodology.md`](testing-methodology.md) (механизмы управляемого тестирования:
+> COLLECT/WATCH/FAULT), [`probe-bus.md`](probe-bus.md) (движок инъекций mprobe v2),
+> [`probes.md`](probes.md) (каталог USDT/DTrace-маркеров для внешней трассировки).
 >
 > Статус: **первая партия** — ядро (GC, commit-конвейер, CoW, мета/восстановление, спилл,
 > долгие читатели). Партии по API-группам (`c_dbi`, `c_crud`, `c_cursors`, `c_rqest`,
@@ -716,7 +719,9 @@ mdbx::<подсистема>::<фаза>::<событие>
 
 ### SC-31. MDBX_MULTIPLE: пакетная работа с dupfix
 
-**Область:** c_crud (MULTIPLE). Частично покрыто dupfix_multiple.c++; расширить.
+**Область:** c_crud (MULTIPLE). Покрыто dupfix_multiple.c++ (расширен 2026-10: PREV_MULTIPLE,
+ENODATA/INCOMPATIBLE, allow_partial, erase-конверсия dupfix→plain, страницы 256/512/default,
+WATCH-пробники как самоутверждение покрытия); тонкости length-контракта из п.3 — частично.
 
 **Сценарий:**
 1. Вставить пакет фиксированных значений через `MDBX_MULTIPLE` (datalen кратен размеру).
@@ -768,6 +773,8 @@ mdbx::<подсистема>::<фаза>::<событие>
 ### SC-34. put/del через курсор в мультизначениях
 
 **Область:** c_cursors (cursor_put/cursor_del). Частично покрыто; расширить EMULTIVAL-пути.
+(2026-10: dupfix_multiple.c++ добавил cursor erase single/whole и конверсию dupfix→plain
+на крупных дуплистах; EMULTIVAL-пути update — частично.)
 
 **Сценарий:**
 1. `mdbx_cursor_put` с `MDBX_CURRENT` в мультизначении — обновление текущей записи.
