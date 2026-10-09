@@ -61,7 +61,7 @@ At h=4 and a 32-byte value: 20 KB / 32 B ≈ **WAF ≈ 640** (single operations!
 of 10 000 records to the same 5 000 unique pages: `5 000 × 4096 / (10 000 × 32)` ≈ **WAF ≈ 64**.
 As the batch grows further, WAF keeps decreasing.
 
-> **Numbers without context are useless:** always state the sync mode, page size,
+> **Warning:** numbers without context are useless — always state the sync mode, page size,
 > tree height and transaction size.
 
 **Fragment from [`examples/c++/28-waf-batching.c++`](examples/c++/28-waf-batching.c++)** — measuring
@@ -100,6 +100,16 @@ Full code: [28-waf-batching.c++](examples/c++/28-waf-batching.c++).
 
 1. Calculate WAF for a point-update at height 3 and a 4 KB page.
 2. How will a batch of 1 000 updates on the same 500 pages affect it?
+
+### 21.10. Chapter 21 checklist
+
+- [ ] I can compute the write for a point-update as `(height+1) × pagesize` bytes and derive the WAF from it.
+- [ ] I name all the sources of amplification: page granularity, path to the root, GC/meta, spill, merge/rebalance.
+- [ ] I can explain why a page enters the dirty list once per transaction and why batching is the main lever for reducing WAF.
+- [ ] I know that the specific WAF grows logarithmically with volume and can explain why (height ~ log_B(N)).
+- [ ] I understand the spill trade-off: `dp_limit` ≈ 1/42 of RAM, and a spilled page being written again.
+- [ ] I know the effect of `prefer_waf_insteadof_balance` and `MDBX_opt_merge_threshold`.
+- [ ] I present WAF numbers only with context: sync mode, page size, tree height, transaction size.
 
 ---
 
@@ -187,6 +197,15 @@ Full code: [29-scenario-configs.c++](examples/c++/29-scenario-configs.c++).
 1. Pick a configuration for the "analytics" scenario and justify the page size choice.
 2. What changes for "low latency" on Windows compared to Linux?
 
+### 22.9. Chapter 22 checklist
+
+- [ ] For each of the six scenarios I can justify the choice of sync mode (from `DURABLE` to `SAFE_NOSYNC`/`NOMETASYNC`).
+- [ ] I know that geometry is set with headroom and why `upper` should not be undersized.
+- [ ] I can pick a batch size matching the latency/throughput balance of a scenario.
+- [ ] I understand when `maxreaders` matters (read-heavy, multi-process reading).
+- [ ] I remember the platform traps: LockFileEx on Windows, `boot_id` in containers, page-cache coherence (#269).
+- [ ] I can explain why switching to a large page for full-scan is not a silver bullet.
+
 ---
 
 ## Chapter 23. Micro-optimizations
@@ -267,6 +286,14 @@ SIMD/CMOV give from a few percent to tens of percent on specific paths. For most
 
 1. When is enabling prefault write justified? State the condition (DB size vs RAM).
 2. Why is "optimizing without measuring" an anti-pattern?
+
+### 23.11. Chapter 23 checklist
+
+- [ ] I know which micro-optimizations are already built in (SIMD kernels, CMOV, radix-sort, C11 atomics), and that the SIMD search is influenced only via `rp_augment_limit`/`gc_time_limit`.
+- [ ] I can state the condition under which prefault write is justified: DB > RAM, frequent page evictions, `MDBX_WRITEMAP`.
+- [ ] I understand the benefit of the auto-appending split for append scenarios and of merging with an already-dirty neighbor (related to `prefer_waf_insteadof_balance`).
+- [ ] I know that hot paths minimize syscalls (bulk iovec, bulk writes in `mdbx_copy`).
+- [ ] I can explain why batching and the sync mode matter more than micro-optimizations, and why optimizing must follow measurements.
 
 ---
 
@@ -365,6 +392,15 @@ multithreaded variant is implemented; the status on the current canon — to be 
 1. Estimate: a loop of 1 000 000 reads of one key — how much will the cache save?
 2. Why is `DIRTY` not cached?
 
+### 24.9. Chapter 24 checklist
+
+- [ ] I describe the cache entry `{trunk_txnid, last_confirmed_txnid, offset, length}` and the meaning of `offset == 0`.
+- [ ] I can explain the lazy-exit mechanics: the descent stops at the first page not modified after `last_confirmed_txnid`.
+- [ ] I distinguish the statuses `HIT`/`CONFIRMED`/`REFRESHED`/`DIRTY`/`BEHIND`/`UNABLE`/`RACE`/`ERROR` and know when the search bypasses the cache.
+- [ ] I understand that `DIRTY` is valid only within the current write transaction and is not cached.
+- [ ] I can estimate when the cache gives a speedup (recurring "hot" keys) and when it does not (unique keys).
+- [ ] I know the `MDBX_NOSTICKYTHREADS` requirement for the multithreaded variant and the cheaper single-threaded variant (`mdbx_cache_get_SingleThreaded`).
+
 ---
 
 ## Chapter 25. Bulk operations
@@ -453,6 +489,15 @@ higher throughput.
 1. Compare row-by-row range deletion and `bunch_delete` on 100 000 keys.
 2. When is `estimate_range` useful before running a query?
 
+### 25.10. Chapter 25 checklist
+
+- [ ] I can explain why `bunch_delete` is cheaper than iterating over elements: whole pages and branches are cut out, the cost is proportional to the number of pages.
+- [ ] I know the symmetric bulk reads/writes: `get_batch`, `MDBX_GET_MULTIPLE`/`MDBX_PUT_MULTIPLE` (DUPFIXED tables).
+- [ ] I understand how `estimate_*` works: estimation from the common pages of the stacks of two positions, up to 4× per tree level in the worst case.
+- [ ] I can use `txn_clone` for parallel processing on a single snapshot.
+- [ ] I can name the consequences of a "maximum-size transaction": `TXN_FULL`, spill, a latency spike, blocking other writers.
+- [ ] I choose a reasonable batch size (e.g., ~10 000 operations) as a balance between WAF and latency.
+
 ---
 
 ## Chapter 26. Benchmarks and measurements
@@ -474,7 +519,8 @@ it shows write/read TPS for different engines and modes.
 
 GC profiling: collected in the LCK-file, returned in `commit_latency.gc_prof`. Key fields:
 `work_rtime_monotonic`/`work_xtime_cpu` (GC time), `work_rsteps`/`work_xpages` (fragmentation),
-`work_majflt` (page-faults), `max_reader_lag`/`max_retained_pages` (long readers), `kicks` (HSR).
+`work_majflt` (page-faults), `max_reader_lag`/`max_retained_pages` (long readers), `kicks`
+(HSR — Handle-Slow-Readers, eviction of stuck readers; see Volume V, ch. 29).
 
 **Fragment from [`examples/c++/33-profiler.c++`](examples/c++/33-profiler.c++)** — reading PROFGC fields
 from `commit_latency.gc_prof` (`wloops`, `coalescences`, `flushes`, `kicks`, `max_reader_lag`,
@@ -531,7 +577,8 @@ disappears or turns in libmdbx's favor.
 - Read: 1–3 million gets/s (short keys, warm cache); linear scaling across cores.
 - Inserts: 20K–10M/s depending on the mode and hardware.
 
-> **Always provide the context of a number:** sync mode, page size, transaction size, hardware.
+> **Warning:** always provide the context of a number — sync mode, page size, transaction size,
+> hardware.
 
 ### 26.7. Read scaling
 
@@ -553,6 +600,16 @@ is usually not the engine but the cache/memory.
 
 1. Measure `commit_latency` on your configuration and identify the dominant stage.
 2. Explain why the "one transaction per operation" comparison is incorrect for evaluating the engine.
+
+### 26.10. Chapter 26 checklist
+
+- [ ] I know what to measure: write TPS, read get/s, WAF (via page counters), commit latency by stage.
+- [ ] I can read `MDBX_commit_latency` (`preparation/gc_wallclock/audit/write/sync/ending/whole`) and identify the dominant stage.
+- [ ] I understand what the `gc_prof` fields (`max_reader_lag`, `max_retained_pages`, `kicks`) say about long readers and HSR kicks.
+- [ ] I avoid the typical mistakes: measuring a build with asserts, "small transactions + DURABLE on Windows", comparison without context.
+- [ ] I can explain why "6–7× slower than LMDB" is almost always a measurement error or the price of stricter guarantees.
+- [ ] I know the guidelines (~200 TPS durable, 1–3M gets/s) and always provide the context of a number.
+- [ ] I can explain why reads scale linearly across cores and where the real bottleneck is (memory/cache, not the engine).
 
 ---
 

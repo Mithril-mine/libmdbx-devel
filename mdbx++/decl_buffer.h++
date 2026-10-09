@@ -156,6 +156,14 @@ struct default_capacity_policy {
 struct buffer_tag {};
 
 /// \brief The chunk of data stored inside the buffer or located outside it.
+///
+/// \note Unlike the base `slice`, a buffer by default owns its content: the
+/// constructors from strings/views copy the bytes (freestanding modality), so
+/// there are no lifetime requirements on the source. The `make_reference=true`
+/// overloads switch to slice-like behavior: the buffer just refers to external
+/// data, which must outlive the buffer (the same temporary-lifetime rules as
+/// for `slice` apply). The rvalue-string constructor steals the string's
+/// storage and leaves the source empty.
 template <class ALLOCATOR, typename CAPACITY_POLICY>
 class MDBX_MSVC_DECLSPEC_EMPTY_BASES buffer : public slice, public buffer_tag {
 public:
@@ -763,16 +771,26 @@ public:
   buffer(const void *ptr, size_t bytes, const allocator_type &alloc = allocator_type())
       : buffer(inherited(ptr, bytes), alloc) {}
 
+  /// \brief Creates a buffer that stores a copy of the string's content.
+  /// The source string may be a temporary: the bytes are copied immediately,
+  /// so there are no lifetime requirements (unlike mdbx::slice).
   template <class CHAR, class T, class A>
   explicit MDBX_CXX20_CONSTEXPR buffer(const ::std::basic_string<CHAR, T, A> &str,
                                        const allocator_type &alloc = allocator_type())
       : buffer(inherited(str), false, alloc) {}
 
+  /// \brief Creates a buffer that either stores a copy of the string's content
+  /// (make_reference=false, the default choice) or just refers to it
+  /// (make_reference=true, then the string must outlive the buffer —
+  /// the same lifetime rules as for mdbx::slice).
   template <class CHAR, class T, class A>
   explicit MDBX_CXX20_CONSTEXPR buffer(const ::std::basic_string<CHAR, T, A> &str, bool make_reference,
                                        const allocator_type &alloc = allocator_type())
       : buffer(inherited(str), make_reference, alloc) {}
 
+  /// \brief Move-constructs a buffer stealing the string's storage; the source
+  /// string is left empty. Safe with temporaries (e.g. `buffer(std::to_string(k))`)
+  /// since the storage ownership is transferred within the same full-expression.
   template <class CHAR, class T, class A>
   explicit MDBX_CXX20_CONSTEXPR buffer(const ::std::basic_string<CHAR, T, A> &&str,
                                        const allocator_type &alloc = allocator_type())

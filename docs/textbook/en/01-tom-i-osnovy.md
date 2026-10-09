@@ -8,8 +8,8 @@
 > multithreading, and optimizations).
 >
 > The volume's progression: concept → practice → mechanism → nuance. The example code is complete
-> and compilable; the helper functions (`env_open`, `check_rc`, `die`) are shared across the whole
-> textbook.
+> and compilable; the helper functions (`env_open` in C++ / `ex_env_open` in C, plus `check_rc`
+> and `die`) are shared across the whole textbook (see `examples/common/`).
 
 ---
 
@@ -90,6 +90,11 @@ Three important properties follow from this:
 | **LevelDB/RocksDB**| KV, LSM                   | Optimized for writes, background compaction, poor read predictability                       |
 | **SQLite**         | Relational, embedded      | SQL, transactions; slower on KV workloads                                                   |
 
+Here **MVCC** (multi-version concurrency control) is the technique that lets readers and writers
+proceed simultaneously without blocking readers: every transaction sees an immutable snapshot of
+the data (details in chapter 5 and Volume III). **LSM** (log-structured merge-tree) is the
+alternative write-optimized architecture that trades away read predictability.
+
 Comparison at the level of properties (not benchmarks): if you need an ordered key-value store
 with transactions, lightning-fast reads, and predictable writes — choose libmdbx. If you need
 SQL — SQLite. If writes dominate reads and you can tolerate background compaction — RocksDB.
@@ -124,6 +129,21 @@ Haskell, Ruby, Scala (in detail — Volume VI).
    embedded one is preferable.
 2. What does key ordering provide beyond an ordinary dictionary?
 3. Why can reading through mmap be faster than through a database's own cache?
+
+### 1.8. Chapter 1 checklist
+
+- [ ] I can explain the difference between client-server and embedded databases and say when each is preferable;
+- [ ] I understand that libmdbx is an ordered key-value engine (B+tree), not a hash table and not SQL;
+- [ ] I can describe the role of mmap: copy-free reads, Copy-on-Write writes, page eviction handled by the kernel;
+- [ ] I know the key properties: MVCC, wait-free readers, a single writer, no WAL;
+- [ ] I remember the license (Apache-2.0 on master) and examples of libmdbx users (Erigon, Isar).
+
+### 1.9. What's next
+
+It is time to turn this understanding of "what libmdbx is" into working code. In chapter 2 we will
+build the library two ways (amalgamation and CMake), link it into a project, and run the first full
+"hello, libmdbx" example. For the end-to-end configurator project this step is mandatory: without a
+built library and a verified open → put → get cycle there is no moving forward.
 
 ---
 
@@ -335,6 +355,21 @@ remember the file pair (in detail — Volume III, chapter 19).
 2. Add a second key and read both in a single transaction.
 3. What happens if you pass `mode = 0` on the first run (when the database does not exist yet)?
 
+### 2.9. Chapter 2 checklist
+
+- [ ] I can build the library two ways: as an amalgamation (`mdbx.c` + `mdbx.h`) and from the full source with CMake;
+- [ ] I know the key build options (`MDBX_LOCKING`, `MDBX_CHECKING`, `MDBX_ENABLE_BIGFOOT`) and why production builds want `MDBX_CHECKING=0` and `NDEBUG`;
+- [ ] I can build and run the minimal example and make sure the value survives a restart;
+- [ ] I know the minimal cycle: create → open → txn_begin → dbi_open → put/get → commit → close;
+- [ ] I remember that a database is a file pair (data + `.lck`) and never delete the lock file while the database is open.
+
+### 2.10. What's next
+
+The next chapter is about what you actually write and read: the basic data model of libmdbx. We will
+cover `MDBX_val`, the main and named tables (`MDBX_dbi`), limits, integer keys, and zero-length
+keys/values. These concepts define the schema of the end-to-end configurator project: which tables
+to create and what to store in them.
+
 ---
 
 ## Chapter 3. Basic data model
@@ -357,6 +392,17 @@ Therefore:
 - the value can be read without copying;
 - but after the transaction ends the pointer may become invalid — copy the data if you intend to
   keep it longer than the transaction.
+
+> **Nuance (C++): `mdbx::slice` and `mdbx::buffer`.** In the C++ API two types play the role of
+> `MDBX_val`. `mdbx::slice` is a non-owning view (a `std::string_view`-like window over
+> `MDBX_val`): it merely references bytes owned elsewhere and never copies them. The constructor
+> from `std::string` is `explicit` for a reason: `mdbx::slice(std::to_string(k))` written inline
+> in a call argument is safe, because the temporary string lives until the end of the
+> full-expression (i.e. until the whole `insert()`/`get()` call — which copies the bytes into the
+> database — completes), whereas storing such a slice in a variable and using it later is a
+> dangling reference. `mdbx::buffer` is the opposite, an owning container: by default it
+> **copies** the content (the `make_reference=true` overloads fall back to `slice` behavior), so
+> `mdbx::buffer(std::to_string(k))` puts no lifetime requirements on the source.
 
 ### 3.2. Main table and named tables (dbi)
 
@@ -473,6 +519,21 @@ Full code: [02-data-model.c++](examples/c++/02-data-model.c++) · [C version](ex
 2. Try to read a key from a handle opened in another transaction — what does the API return?
 3. Check the behavior with an empty value: put `iov_len=0`, read it back — how do you tell an
    "empty value" from "no key"?
+
+### 3.8. Chapter 3 checklist
+
+- [ ] I understand that `MDBX_val` is a byte window `{iov_len, iov_base}` with no type or encoding;
+- [ ] I can open the main and named tables via `mdbx_dbi_open()` and know the role of `MDBX_CREATE`;
+- [ ] I understand that `MDBX_dbi` is valid only in its own transaction, and remember `MDBX_BAD_DBI` and `MDBX_DB_ACCEDE`;
+- [ ] I check limits through the `mdbx_limits_*` functions rather than hardcoded numbers;
+- [ ] I know why `MDBX_INTEGERKEY` exists (native byte order) and how to tell an empty value (`iov_len == 0`) from a missing key (`MDBX_NOTFOUND`).
+
+### 3.9. What's next
+
+Now that the data model is clear, we can operate on it. Chapter 4 covers the basic CRUD set —
+`mdbx_put`, `mdbx_get`, `mdbx_del`, `mdbx_replace` — with write flags, handling of expected codes,
+and a full example. These operations form the core of `cfg_set`/`cfg_get` in the end-to-end
+configurator.
 
 ---
 
@@ -635,7 +696,7 @@ int main(void) {
 }
 ```
 
-> **Attention:** `old_value` from `mdbx_replace` and `out` from `mdbx_get` point into mmap. Do
+> **Warning:** `old_value` from `mdbx_replace` and `out` from `mdbx_get` point into mmap. Do
 > not keep these pointers after `commit`/`abort` — the data may be reused.
 
 ### 4.7. Error handling
@@ -660,6 +721,7 @@ use it in multithreaded code (Volume II, chapter 12).
 - put/get/del/replace — basic operations; flags control behavior on conflicts.
 - `mdbx_get` — point reads; for traversal/ranges — cursors.
 - `MDBX_KEYEXIST`/`MDBX_NOTFOUND` are expected states, not errors.
+- `mdbx_replace` — atomic "read old + write new" replacement in a single call.
 - Pointers into mmap are valid only within a transaction.
 
 ### 4.9. Exercises
@@ -668,6 +730,22 @@ use it in multithreaded code (Volume II, chapter 12).
    `MDBX_KEYEXIST` without exiting the program.
 2. Write a loop that inserts 10,000 keys in a **single** transaction and measures the time.
 3. What does `mdbx_del` do with the `data` argument in an ordinary (non-DUPSORT) table?
+
+### 4.10. Chapter 4 checklist
+
+- [ ] I can perform all the basic operations: `mdbx_put`, `mdbx_get`, `mdbx_del`, and `mdbx_replace`;
+- [ ] I understand the difference between the write flags `MDBX_NOOVERWRITE`, `MDBX_UPSERT`, and `MDBX_CURRENT`, and choose them deliberately;
+- [ ] I treat `MDBX_KEYEXIST` and `MDBX_NOTFOUND` as normal states, not failures;
+- [ ] I understand that `mdbx_replace` is an atomic "compare and swap" in a single call;
+- [ ] I remember that pointers into mmap (`out`, `old_value`) must not be used after commit/abort.
+
+### 4.11. What's next
+
+You can already perform single operations, but the real power of libmdbx is in transactions.
+Chapter 5 introduces begin/commit/abort, the difference between read-only and read-write
+transactions, and the MVCC intuition — why readers never block the writer. For the configurator
+this is the foundation: atomic writes of groups of settings and safe concurrent access to the
+database.
 
 ---
 
@@ -829,7 +907,8 @@ int main(void) {
 ```
 
 > **Keep reading after commit — `mdbx_txn_commit_embark_read()`.** A commit in libmdbx
-> "seats" the transaction on a fresh snapshot (the detent); the dedicated function
+> "seats" the transaction on a fresh snapshot (the detent — a reader held on a committed
+> snapshot; the mechanism is detailed in Volume III); the dedicated function
 > `mdbx_txn_commit_embark_read()` does the same and immediately returns a **new read-only
 > transaction on the already-committed state** — with no "commit → new begin" gap. Useful for
 > read-your-writes patterns and queue processing (Volume V, chapter 32). The transaction identifier
@@ -878,6 +957,22 @@ full-fledged application with indexes and multithreading.
    how do you combine them in a single transaction?
 2. Measure: how many write transactions per second does your disk sustain (without batching)?
 3. Why is starting a read-write transaction "just in case" a bad idea (hint: the writer mutex)?
+
+### 5.10. Chapter 5 checklist
+
+- [ ] I understand the transaction properties: atomicity (all or nothing) and isolation;
+- [ ] I can start and correctly close every kind of transaction: `MDBX_TXN_READWRITE`, `MDBX_TXN_RDONLY`, `mdbx_txn_abort()`;
+- [ ] I understand why there is always a single write transaction and how MVCC lets readers proceed without blocking the writer;
+- [ ] I know the rule "one transaction — one thread" and the `MDBX_THREAD_MISMATCH` code;
+- [ ] I can demonstrate on an example that abort discards changes and that an unclosed read transaction stalls page reclamation.
+
+### 5.11. What's next
+
+Volume I is complete: you have a working configurator skeleton. Volume II turns it into a
+full-fledged application: cursors for traversal and ranges (chapter 6), DUPSORT and secondary
+indexes (chapters 7–8), environment configuration (chapter 9), durability modes (chapter 10),
+multithreading (chapter 11), and error handling (chapter 12). We start with cursors — without them
+you cannot traverse a table or search a range.
 
 ---
 

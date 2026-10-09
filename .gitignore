@@ -19,6 +19,7 @@ dist/
 *.dll
 docs/Doxyfile
 docs/html/
+docs/textbook/site/
 *.dSYM
 *.dylib
 *.err

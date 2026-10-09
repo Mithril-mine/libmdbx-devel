@@ -124,6 +124,15 @@ Integrity auditing and the database verification tool (`mdbx_chk`) are built on 
 1. Explain why `mdbx_get` on 64-bit is practically independent of the database size.
 2. What changes for a reader if the tree grows from height 3 to height 5?
 
+### 13.8. Chapter 13 checklist
+
+- [ ] I can explain why all values live in the leaves of the B+tree while branches hold only separators, and what this gives for search and range traversal.
+- [ ] I know where a value that does not fit in a leaf goes (an overflow run) and what the leaf keeps in its place.
+- [ ] I understand why libmdbx does not maintain its own buffer cache, and its consequences (copy-free reads, residency managed by the kernel, PTE growth when the DB ≫ RAM).
+- [ ] I can name the address-space limit on database size and its consequence on 32-bit platforms.
+- [ ] I know the purpose of the canary (`MDBX_canary`) and that the `v` field always holds the transaction number.
+- [ ] I can state the reachability invariant and explain what is built on it (integrity auditing, `mdbx_chk`).
+
 ---
 
 ## Chapter 14. MVCC and Snapshots
@@ -206,7 +215,7 @@ Full code: [19-readers-lag.c++](examples/c++/19-readers-lag.c++).
 
 > **Examples for this chapter:** [`examples/c++/19-readers-lag.c++`](examples/c++/19-readers-lag.c++).
 
-### 14.8. Summary of Chapter 14
+### 14.7. Summary of Chapter 14
 
 - MVCC: a page is marked with a txnid; a reader sees its own snapshot.
 - The meta trio with a two-phase update and a finite state machine of 216 states.
@@ -214,10 +223,19 @@ Full code: [19-readers-lag.c++](examples/c++/19-readers-lag.c++).
 - Wait-free reads; safe64 against torn reads.
 - One writer; front txnid hides uncommitted changes.
 
-### 14.9. Exercises
+### 14.8. Exercises
 
 1. Why exactly three meta pages, and not two?
 2. What happens if the writer crashes in the middle of a two-phase meta update?
+
+### 14.9. Chapter 14 checklist
+
+- [ ] I can explain why a reader sees a consistent picture regardless of subsequent commits (the snapshot + the `txnid` label on pages).
+- [ ] I know why exactly three meta pages are needed and which two valid snapshots they keep.
+- [ ] I can describe the two-phase meta update and explain why a reader never sees a "half-updated" meta.
+- [ ] I understand how the detent is computed by scanning the RLT and why it is the watershed for page reuse.
+- [ ] I know that reads are wait-free and take no locks, and why the `safe64` protocol is needed.
+- [ ] I can explain why the writer's uncommitted pages are invisible to readers (`front txnid`, the dirty list).
 
 ---
 
@@ -242,7 +260,8 @@ upward to the root. Cursors that referred to the old version are moved to the ne
 ### 15.2. Dirty Page List (DPL)
 
 Within one transaction a page enters the dirty list **once**, no matter how many times it is
-modified — this is the key factor holding back WAF (Volume IV, chapter 21).
+modified — this is the key factor holding back WAF (write amplification factor, the ratio of
+bytes written to bytes of useful data; detailed in Volume IV, chapter 21).
 
 ### 15.3. Spill
 
@@ -313,6 +332,15 @@ Full code: [20-commit-latency.c++](examples/c++/20-commit-latency.c++).
 
 1. Why does changing a single byte in a leaf rewrite the whole path to the root?
 2. How can `mdbx_txn_commit_ex` help see what "got stuck" — spill or sync?
+
+### 15.8. Chapter 15 checklist
+
+- [ ] Given a page's `mp->txnid` label, I can determine its state (frozen/spilled/shadowed/modifiable) and what may be done with it.
+- [ ] I can explain why CoW rewrites the path to the root and how cursors are moved to new page versions.
+- [ ] I know that a page enters the dirty list once per transaction, and why this holds back WAF.
+- [ ] I can describe when spill kicks in (`dp_limit` ≈ 1/42 of RAM), which pages it never touches, and why a re-modified spilled page is bad.
+- [ ] I distinguish loose pages (fast reuse, `loose_limit` = 64) from refund (returning tail pages to unallocated space).
+- [ ] I can reproduce the order of the commit pipeline and name the stages visible in `MDBX_commit_latency`.
 
 ---
 
@@ -433,6 +461,16 @@ Full code: [22-gc-limits.c++](examples/c++/22-gc-limits.c++).
 1. Explain why a long-lived reader "freezes" reclamation, using the concept of the detent.
 2. When does LIFO give a win, and when not?
 
+### 16.11. Chapter 16 checklist
+
+- [ ] I can explain why libmdbx has no free-list and where freed pages are accounted for persistently.
+- [ ] I describe the format of a GC record: key — the freeing txnid, value — a list of pages as ranges; the format is frozen since v11.3.
+- [ ] I can explain the reuse condition via the detent and what happens to GC records above the detent.
+- [ ] I know the difference between FIFO and LIFO and when `MDBX_LIFORECLAIM` gives a win and when it does not.
+- [ ] I understand the BigFoot mechanism: chains of records over consecutive txnids and the requirement that readers be newer than the whole chain.
+- [ ] I can explain why GC updates are recursive (the GC is itself a CoW tree) and why an operational reserve of pages is needed.
+- [ ] I know the purpose of `rp_augment_limit` and `gc_time_limit` and the rule of decreasing them together.
+
 ---
 
 ## Chapter 17. Growth, Shrinkage, and Defragmentation of the Database
@@ -455,7 +493,8 @@ indefinitely. Shrinkage requires hysteresis (shrink step > growth step), otherwi
 ### 17.3. MDBX_MAP_FULL and Resolution Mechanisms
 
 When the GC is empty/frozen and the file has hit `upper`, the following fire, when possible: a new
-steady point (detent shift) → HSR callback → eviction of parked readers → and only then
+steady point (detent shift) → the HSR callback (HSR — Handle-Slow-Readers, the mechanism for
+evicting stuck readers; detailed in Volume V, ch. 29) → eviction of parked readers → and only then
 `MDBX_MAP_FULL`.
 
 **Fragment from [`examples/c++/23-map-full.c++`](examples/c++/23-map-full.c++)** — reproduction of
@@ -541,6 +580,15 @@ path to the root, GC, and hysteresis add overhead. Estimate for the worst case o
 1. Why is "10 GB in the database, so 10 GB of data" an estimation error?
 2. Describe a scenario where auto-compaction will not work.
 
+### 17.9. Chapter 17 checklist
+
+- [ ] I name the causes of database growth: long-lived readers, `MDBX_SAFE_NOSYNC`, fragmentation, forgotten readers.
+- [ ] I understand why truncation is possible only down to the last used page and why shrink-step hysteresis is needed.
+- [ ] I can reproduce the chain that resolves `MDBX_MAP_FULL`: steady point → HSR callback → eviction of parked readers → the error.
+- [ ] I know the limitations of auto-compaction (implicit shrink) and when it will not work.
+- [ ] I can describe explicit cycle-based defragmentation and the guaranteed file-reduction paths (`mdbx_copy -c`, dump+load).
+- [ ] I can explain why dividing the file size by the item size overestimates the real capacity.
+
 ---
 
 ## Chapter 18. Nested Transactions
@@ -553,7 +601,8 @@ grouped with the ability to **partially roll back**.
 ### 18.2. Implementation
 
 A child transaction works on the same transaction number and front txnid. It inherits from the
-parent: the page space and the dirty list (with a shadow of the parent's), retired lists, GC
+parent: the page space and the dirty list (with a shadow of the parent's), retired lists (lists of
+pages already freed but still held back from reuse — see 19.4), GC
 buffers, table descriptors, and cursors (via the mechanism of "paired" cursors).
 
 ### 18.3. Commit (join) vs Abort (undo)
@@ -620,6 +669,15 @@ without losing previous changes).
    transaction.
 2. Check the fate of a table created and dropped in a nested transaction upon abort.
 
+### 18.9. Chapter 18 checklist
+
+- [ ] I can explain that a child transaction works on the same transaction number, and what it inherits from the parent.
+- [ ] I distinguish commit (join): merging the child's dirty pages into the parent, from abort (undo): full rollback and "un-retiring" pages.
+- [ ] I know the fate of tables created and dropped in a nested transaction, on commit and on abort.
+- [ ] I can demonstrate a partial rollback via `start_nested()` + `abort()`.
+- [ ] I can justify why a nested transaction "in every function" is an anti-pattern.
+- [ ] I know that nested transactions are a workaround for lack of space, and that they do not combine with `MDBX_WRITEMAP`.
+
 ---
 
 ## Chapter 19. The Lock File and Interprocess Synchronization
@@ -676,6 +734,19 @@ Build option `MDBX_LOCKING`:
 | `WIN32FILES` | Windows (`LockFileEx`)                      | `0xF10C`      |
 | `POSIX1988`  | (legacy)                                    | `0xFC29`      |
 
+> **Nuance: `POSIX2001` and `POSIX2008` share one signature — this is not a typo.** Both flavors
+> store the same kind of interprocess primitive in the LCK — a `pthread_mutex_t`, so their
+> on-disk formats are byte-identical and the signature is common. The difference lies only in the
+> API features used: robust mutexes appeared in POSIX.1-2008, while the 2001 mode works with
+> plain process-shared mutexes. Consequence: a database opened in one of these two modes can be
+> continued in the other — but not with `SYSV`, `WIN32FILES`, or `POSIX1988` (their signatures
+> differ, and an LCK of such a format is rejected).
+
+The actual compatibility check at open time uses not the raw signature but the derived
+`MDBX_LOCK_FORMAT` hash — it mixes the flavor's signature with `sizeof(reader_slot_t)` and the
+offsets of the key `lck_t` fields, so the constants above are just the per-primitive-format
+"base", while the full identity also accounts for the layout of the remaining fields.
+
 The LCK format is versioned **separately** from the data format: a structure change breaks only
 shared access to an already-open database, not the data file itself.
 
@@ -724,6 +795,15 @@ access is not needed.
 
 1. Why is deleting `.lck` while the database is open a mistake?
 2. How is `mdbx_reader_check` different from "automatic" cleanup?
+
+### 19.9. Chapter 19 checklist
+
+- [ ] I can list what lives in the lock file and why it is needed for interprocess access.
+- [ ] I know that the LCK format is versioned separately from the data format, and what that means for compatibility.
+- [ ] I can explain why `LockFileEx` was chosen on Windows, and what we pay for it in benchmarks with small transactions.
+- [ ] I describe an RLT reader slot and the fields recording how many pages the reader holds back from reuse.
+- [ ] I understand how slot liveness is checked with OS facilities and what cleans dead slots after a process crash (`mdbx_reader_check()`).
+- [ ] I know when the mode without a lock file is possible (single process, exclusive).
 
 ---
 
@@ -831,6 +911,16 @@ specific meta), `-vvvvv` (histograms). Exit code: 0 = clean.
 1. Describe what will happen to the database after kill -9 in the middle of a commit, in `DURABLE`
    mode.
 2. Why is `mdbx_chk -d` needed to find lost-unused pages?
+
+### 20.10. Chapter 20 checklist
+
+- [ ] I distinguish weak and steady snapshots and know which one survives a system failure.
+- [ ] I can explain how recovery works without a WAL: selecting the last intact and valid meta; "half-written" transactions simply do not exist.
+- [ ] I know the purpose of `mdbx_env_open_for_recovery()` with `target_meta` and why it is not recommended in application code.
+- [ ] I understand the role of `boot_id` when rolling back weak metas, and its specifics in LXC.
+- [ ] I know about the unified page cache incoherence (#269) and the `MDBX_FORCE_CHECK_MMAP_COHERENCY` protection.
+- [ ] I can pick the right `mdbx_chk` modes (`-w`, `-d`, `-i`, `-0/-1/-2`) for the task and understand why `-d` is needed.
+- [ ] For each durability mode, I can say what will survive a power failure.
 
 ---
 
