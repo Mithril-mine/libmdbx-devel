@@ -546,9 +546,13 @@ static void mprobe_init_activation(void) {
   mprobe_lock();
   if (!(atomic_load32(&mprobe_state, mo_Relaxed) & MPROBE_STATE_INIT_DONE)) {
     uint32_t state = MPROBE_STATE_INIT_DONE;
-    const char *flag = osal_getenv_singlethreaded("MDBX_PROBES", false);
+    /* NB: osal_getenv_singlethreaded() может возвращать общий статический
+     * буфер (Windows), поэтому значение MDBX_PROBES потребляем ДО чтения
+     * MDBX_PROBE_CTL. */
+    const char *const flag = osal_getenv_singlethreaded("MDBX_PROBES", false);
+    const bool flag_set = flag && flag[0] && flag[0] != '0';
     const char *dir = osal_getenv_singlethreaded("MDBX_PROBE_CTL", false);
-    if (flag && flag[0] && flag[0] != '0')
+    if (flag_set)
       state |= MPROBE_STATE_ACTIVE;
     if (dir && dir[0]) {
       mprobe_ipc_dir = osal_strdup(dir);
