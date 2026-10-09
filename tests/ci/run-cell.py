@@ -159,11 +159,15 @@ def main() -> int:
     if rc != 0:
         return 1
     print("==> cmake build")
+    # Some cells (mingw on shared Windows runners) run out of memory when the
+    # whole suite compiles in parallel; pin the build parallelism explicitly.
+    build_parallel = cell.get("build_parallel")
+    build_parallel_args = ["--parallel", str(build_parallel)] if build_parallel else ["--parallel"]
     if build_config:
-        rc = run(["cmake", "--build", ".", "--parallel", "--config", build_config],
+        rc = run(["cmake", "--build", ".", *build_parallel_args, "--config", build_config],
                  cwd=build_dir, env=env)
     else:
-        rc = run(["cmake", "--build", ".", "--parallel"], cwd=build_dir, env=env)
+        rc = run(["cmake", "--build", ".", *build_parallel_args], cwd=build_dir, env=env)
     if rc != 0:
         return 1
 

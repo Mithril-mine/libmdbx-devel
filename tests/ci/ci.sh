@@ -59,8 +59,12 @@ function provide_toolchain {
 }
 
 function default_cmake_test {
+	# CI_CTEST_SCOPE / CI_CTEST_EXCLUDE_SCOPE are optional label-regex
+	# filters (e.g. 'smoke-t1|ut\.' minus 'ut\.heavy'); the '|' separator is
+	# safe here because these come from env, not the '|'-split ci.sh args.
 	GTEST_SHUFFLE=1 GTEST_RUNTIME_LIMIT=99 MALLOC_CHECK_=7 MALLOC_PERTURB_=42 \
 	ctest --output-on-failure --parallel 3 --schedule-random --no-tests=error \
+	${CI_CTEST_SCOPE:+-L "${CI_CTEST_SCOPE}"} ${CI_CTEST_EXCLUDE_SCOPE:+-LE "${CI_CTEST_EXCLUDE_SCOPE}"} \
 	"${test_args[@]+"${test_args[@]}"}"
 }
 
@@ -71,6 +75,37 @@ function default_cmake_build {
 		cmake_use_ninja="-G Ninja"
 	fi
 	"${CMAKE}" ${cmake_use_ninja} "${config_args[@]+"${config_args[@]}"}" .. && "${CMAKE}" --build . --verbose "${build_args[@]+"${build_args[@]}"}"
+}
+
+# cmake-only CI action: configure+build+ctest via CMake (ninja) without the
+# second `make all && make <target>` round, so a SourceCraft workflow fits
+# well inside the platform's cube duration limit. ctest scope is controlled
+# by CI_CTEST_SCOPE / CI_CTEST_EXCLUDE_SCOPE env (label regexes).
+# When configured with ENABLE_GCOV, prints an lcov coverage summary.
+function sourcecraft_ci {
+	provide_toolchain
+	local ok=true
+	if [ -e CMakeLists.txt -a $CMAKE_VERSION -ge 30002 ]; then
+		mkdir @ci-cmake-build && (cd @ci-cmake-build && "${CI_CMAKE_BUILD_COMMAND=default_cmake_build}" && "${CI_CMAKE_TEST_COMMAND=default_cmake_test}" && echo "Done (cmake)") || ok=false
+	fi
+	[ "$ok" = "true" ] || return 1
+	if command -v ccache >/dev/null 2>&1; then
+		echo "== ccache stats:"; ccache -s | head -8 || true
+	fi
+	if echo " ${config_args[*]} " | grep -q 'ENABLE_GCOV'; then
+		if ! command -v lcov >/dev/null 2>&1; then
+			which apt-get >/dev/null 2>&1 && sudo apt-get update -qq && sudo apt-get install -y -qq lcov || true
+		fi
+		if command -v lcov >/dev/null 2>&1; then
+			echo "== coverage (lcov):"
+			lcov --capture --directory @ci-cmake-build --output-file @ci-cmake-build/lcov.info \
+				--quiet --ignore-errors negative,mismatch --include "$(pwd)/src/*" || true
+			lcov --summary @ci-cmake-build/lcov.info 2>&1 | tail -6 || true
+		else
+			echo "== lcov not available on this image, skipping coverage report"
+		fi
+	fi
+	return 0
 }
 
 function default_ci {
