@@ -452,7 +452,7 @@ int txn_basal_commit(MDBX_txn *txn, struct commit_timestamp *ts) {
   meta.trees.gc = txn->dbs[FREE_DBI];
   meta.trees.main = txn->dbs[MAIN_DBI];
   meta.canary = txn->canary;
-  memcpy(&meta.dxbid, &head.ptr_c->dxbid, sizeof(meta.dxbid));
+  bcopy_16(&meta.dxbid, &head.ptr_c->dxbid);
 
   meta.unsafe_sign = DATASIGN_NONE;
   meta_set_txnid(env, &meta, commit_txnid);
