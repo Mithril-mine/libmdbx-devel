@@ -234,7 +234,7 @@ Other ways to build are potentially possible but are not supported and will not 
 It should be noted that in _libmdbx_ there were efforts to avoid runtime dependencies from CRT and other MSVC libraries. For this is enough to pass the `-DMDBX_WITHOUT_MSVC_CRT:BOOL=ON` option during configure by CMake.
 
 <!-- dist-cutoff-begin -->
-To run the [long stochastic test scenario](tests/stochastic.sh), [bash](https://en.wikipedia.org/wiki/Bash_(Unix_shell)) is required, and such testing is recommended with placing the test data on the [RAM-disk](https://en.wikipedia.org/wiki/RAM_drive).
+To run the [long stochastic test scenario](tests/scripts/stochastic.sh), [bash](https://en.wikipedia.org/wiki/Bash_(Unix_shell)) is required, and such testing is recommended with placing the test data on the [RAM-disk](https://en.wikipedia.org/wiki/RAM_drive).
 <!-- dist-cutoff-end -->
 
 ### Windows Subsystem for Linux
@@ -246,7 +246,7 @@ Current [native build tools](https://en.wikipedia.org/wiki/Xcode) for MacOS incl
 Next, to build the library, it is enough to run `make all` in the directory with source code, and run `make check` to execute the base tests. If something goes wrong, it is recommended to install [Homebrew](https://brew.sh/) and try again.
 
 <!-- dist-cutoff-begin -->
-To run the [long stochastic test scenario](tests/stochastic.sh), you will need to install the current (not outdated) version of [Bash](https://en.wikipedia.org/wiki/Bash_(Unix_shell)). Just install it as noted above.
+To run the [long stochastic test scenario](tests/scripts/stochastic.sh), you will need to install the current (not outdated) version of [Bash](https://en.wikipedia.org/wiki/Bash_(Unix_shell)). Just install it as noted above.
 <!-- dist-cutoff-end -->
 
 ### Harmony OS

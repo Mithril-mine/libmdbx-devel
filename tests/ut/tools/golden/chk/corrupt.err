@@ -1,0 +1,4 @@
+    ! corrupted leaf-page #5, mod-txnid 255
+    ! invalid page' txnid (255) for parent-page' txnid (5)
+    ! page #5: invalid/corrupted (leaf-page, parent 7)
+    ! walk_pages() failed, error MDBX_CORRUPTED: Database is corrupted (-30796)

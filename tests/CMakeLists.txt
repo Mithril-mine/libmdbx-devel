@@ -54,6 +54,20 @@ function(add_simple_test name)
   target_link_libraries(${target} ${params_MDBX_LIB})
   set_target_properties(${target} PROPERTIES SKIP_BUILD_RPATH FALSE BUILD_WITH_INSTALL_RPATH FALSE)
 
+  if(MSVC AND MSVC_C11_MAD_ATOMICS)
+    # Plain-C test programs compile library sources directly (details_rkl.c pulls
+    # in src/rkl.c and src/txl.c) and therefore need C11 atomics on MSVC for
+    # non-x86 targets. Use the plain flag, not a COMPILE_LANGUAGE generator
+    # expression: the latter was observed to silently no-op for these subdirectory
+    # targets under the Visual Studio generator (see TASK-17).
+    # C_STANDARD is required too: without /std:c11+ cl.exe keeps __STDC_VERSION__
+    # at 199901L, so atomics-types.h does not define MDBX_HAVE_C11ATOMICS and
+    # atomics-ops.h:46 aborts with C1189 on non-x86 targets even when
+    # /experimental:c11atomics is passed (TASK-17 incomplete for msvc ARM64).
+    set_target_properties(${target} PROPERTIES C_STANDARD ${MDBX_C_STANDARD} C_STANDARD_REQUIRED ON)
+    target_compile_options(${target} PRIVATE /experimental:c11atomics)
+  endif()
+
   if(MDBX_BUILD_CXX AND MDBX_CXX_STANDARD)
     set_target_properties(${target} PROPERTIES CXX_STANDARD ${MDBX_CXX_STANDARD} CXX_STANDARD_REQUIRED ON)
   endif()
@@ -63,7 +77,11 @@ function(add_simple_test name)
   endif()
 
   if(TOOL_MDBX_DLLCRUTCH)
-    string(TOUPPER ${CMAKE_BUILD_TYPE} CMAKE_BUILD_TYPE_UPPERCASE)
+    if(CMAKE_BUILD_TYPE)
+      string(TOUPPER "${CMAKE_BUILD_TYPE}" CMAKE_BUILD_TYPE_UPPERCASE)
+    else()
+      set(CMAKE_BUILD_TYPE_UPPERCASE "")
+    endif()
     foreach(dep IN LISTS params_LIBRARY)
       get_target_property(type ${dep} TYPE)
       if(type STREQUAL SHARED_LIBRARY)
@@ -75,10 +93,6 @@ function(add_simple_test name)
           get_target_property(filename ${dep} IMPORTED_LOCATION_${CMAKE_BUILD_TYPE_UPPERCASE})
           if(NOT filename)
             get_target_property(filename ${dep} IMPORTED_LOCATION)
-          endif()
-          get_target_property(filename ${dep} LOCATION_${CMAKE_BUILD_TYPE_UPPERCASE})
-          if(NOT filename)
-            get_target_property(filename ${dep} LOCATION)
           endif()
           if(filename)
             get_filename_component(dir ${filename} DIRECTORY)
@@ -115,7 +129,8 @@ function(add_simple_test name)
   endif(TOOL_MDBX_DLLCRUTCH)
 
   if(NOT params_DISABLED AND NOT (CMAKE_CROSSCOMPILING AND NOT CMAKE_CROSSCOMPILING_EMULATOR))
-    add_test(extra_${name} ${MDBX_OUTPUT_DIR}/${target})
+    add_test(NAME extra_${name} COMMAND $<TARGET_FILE:${target}>)
+    set_tests_properties(extra_${name} PROPERTIES LABELS "ut")
     if(params_TIMEOUT)
       if(MEMORYCHECK_COMMAND
          OR CMAKE_MEMORYCHECK_COMMAND
@@ -164,33 +179,69 @@ else()
     ALPHABET "1234567890" test_seed)
   message(STATUS "The ${test_seed} will be used for seeding tests. Re-run cmake to re-seed it.")
 
-  add_test(NAME smoke COMMAND ${MDBX_OUTPUT_DIR}/mdbx_test --duration=5m --loglevel=notice --prng-seed=${test_seed}
-                              --progress --console=no --pathname=smoke.db --dont-cleanup-after basic)
-  set_tests_properties(smoke PROPERTIES TIMEOUT 1800 RUN_SERIAL OFF)
+  if(WIN32 OR APPLE)
+    set(MDBX_TEST_ITER 2)
+  elseif(DEFINED ENV{CI} AND NOT "$ENV{CI}" STREQUAL "")
+    set(MDBX_TEST_ITER 3)
+  else()
+    set(MDBX_TEST_ITER 7)
+  endif()
+
+  # ------------------------------------------------------------------
+  # Tiered depth control (TASK-42).
+  #
+  # The GNUmakefile->CMake relocation merged make targets of different depth
+  # (smoke / smoke-fault / smoke-singleprocess / long stochastic) into ONE
+  # mandatory ctest corpus. Deep/special scenarios are now registered only
+  # when the corresponding profile is enabled:
+  #
+  #   MDBX_ENABLE_LONG_TESTS          -> T3/nightly: smoke_long*/dupsort_writemap*/
+  #                                     uniq_nested* + stochastic.sh scenarios.
+  #   MDBX_ENABLE_SINGLEPROCESS_TESTS -> cross-qemu single-process chain
+  #                                     smoke_sp_hill/copy/nested/chk (the fast
+  #                                     T1 twins smoke_t1_* stay in the default).
+  #
+  # Default corpus (plain `ctest`): ut.* + smoke_basic/writemap/chk + smoke_fault
+  # + smoke_t1_* — no duplicated runs at different depths.
+  option(MDBX_ENABLE_LONG_TESTS
+         "Register long-running test scenarios (T3/nightly: smoke-long, dupsort-writemap, uniq-nested, stochastic) as CTest entries"
+         OFF)
+  option(MDBX_ENABLE_SINGLEPROCESS_TESTS
+         "Register the single-process scenario chain (smoke_sp_hill/copy/nested/chk); needed for cross-qemu/cross-toolchain runs only"
+         OFF)
+
+  if(MDBX_ENABLE_LONG_TESTS)
+  add_test(NAME smoke_long COMMAND $<TARGET_FILE:mdbx_test> --duration=5m --loglevel=notice --prng-seed=${test_seed}
+                                   --progress --console=no --pathname=smoke-long.db --dont-cleanup-after basic)
+  set_tests_properties(smoke_long PROPERTIES LABELS "smoke-long;smoke-t3" TIMEOUT 1800 RUN_SERIAL OFF)
   if(MDBX_BUILD_TOOLS)
-    add_test(NAME smoke_chk COMMAND ${MDBX_OUTPUT_DIR}/mdbx_chk -nvv smoke.db)
-    set_tests_properties(smoke_chk PROPERTIES
-      DEPENDS smoke
+    add_test(NAME smoke_long_chk COMMAND $<TARGET_FILE:mdbx_chk> -nvv smoke-long.db)
+    set_tests_properties(smoke_long_chk PROPERTIES
+      LABELS "smoke-long;smoke-t3;chk"
+      DEPENDS smoke_long
       TIMEOUT 60
       FAIL_REGULAR_EXPRESSION "cooperative mode"
-      REQUIRED_FILES smoke.db)
+      REQUIRED_FILES smoke-long.db)
 
-    add_test(NAME smoke_chk_copy COMMAND ${MDBX_OUTPUT_DIR}/mdbx_chk -nvv smoke.db-copy)
-    set_tests_properties(smoke_chk_copy PROPERTIES
-      DEPENDS smoke
+    add_test(NAME smoke_long_chk_copy COMMAND $<TARGET_FILE:mdbx_chk> -nvv smoke-long.db-copy)
+    set_tests_properties(smoke_long_chk_copy PROPERTIES
+      LABELS "smoke-long;smoke-t3;chk"
+      DEPENDS smoke_long
       TIMEOUT 60
       FAIL_REGULAR_EXPRESSION "cooperative mode"
-      REQUIRED_FILES smoke.db-copy)
+      REQUIRED_FILES smoke-long.db-copy)
 
-    add_test(NAME smoke_copy_asis COMMAND ${MDBX_OUTPUT_DIR}/mdbx_copy -f smoke.db copy_asis.db)
-    set_tests_properties(smoke_copy_asis PROPERTIES
-      DEPENDS smoke
+    add_test(NAME smoke_long_copy_asis COMMAND $<TARGET_FILE:mdbx_copy> -f smoke-long.db copy_asis.db)
+    set_tests_properties(smoke_long_copy_asis PROPERTIES
+      LABELS "smoke-long;smoke-t3"
+      DEPENDS smoke_long
       TIMEOUT 60
-      REQUIRED_FILES smoke.db)
+      REQUIRED_FILES smoke-long.db)
 
-    add_test(NAME smoke_copy_compactify COMMAND ${MDBX_OUTPUT_DIR}/mdbx_copy -f -c smoke.db copy_compactify.db)
-    set_tests_properties(smoke_copy_compactify PROPERTIES
-      DEPENDS smoke
+    add_test(NAME smoke_long_copy_compactify COMMAND $<TARGET_FILE:mdbx_copy> -f -c smoke-long.db copy_compactify.db)
+    set_tests_properties(smoke_long_copy_compactify PROPERTIES
+      LABELS "smoke-long;smoke-t3"
+      DEPENDS smoke_long
       TIMEOUT 60
       REQUIRED_FILES smoke.db)
   endif()
@@ -198,20 +249,22 @@ else()
   add_test(
     NAME dupsort_writemap
     COMMAND
-      ${MDBX_OUTPUT_DIR}/mdbx_test --duration=5m --loglevel=notice --prng-seed=${test_seed} --mode=+writemap
+      $<TARGET_FILE:mdbx_test> --duration=5m --loglevel=notice --prng-seed=${test_seed} --mode=+writemap
       --table=+data.fixed --keygen.split=29 --datalen=rnd --progress --console=no --repeat=2
       --pathname=dupsort_writemap.db --dont-cleanup-after basic)
-  set_tests_properties(dupsort_writemap PROPERTIES TIMEOUT 1800 RUN_SERIAL OFF)
+  set_tests_properties(dupsort_writemap PROPERTIES LABELS "smoke-long;smoke-t3" TIMEOUT 1800 RUN_SERIAL OFF)
 
   if(MDBX_BUILD_TOOLS)
-    add_test(NAME dupsort_writemap_chk COMMAND ${MDBX_OUTPUT_DIR}/mdbx_chk -nvvwc dupsort_writemap.db)
+    add_test(NAME dupsort_writemap_chk COMMAND $<TARGET_FILE:mdbx_chk> -nvvwc dupsort_writemap.db)
     set_tests_properties(dupsort_writemap_chk PROPERTIES
+      LABELS "smoke-long;smoke-t3;chk"
       DEPENDS dupsort_writemap
       TIMEOUT 60
       REQUIRED_FILES dupsort_writemap.db)
 
-    add_test(NAME dupsort_writemap_chk_copy COMMAND ${MDBX_OUTPUT_DIR}/mdbx_chk -nvvc dupsort_writemap.db-copy)
+    add_test(NAME dupsort_writemap_chk_copy COMMAND $<TARGET_FILE:mdbx_chk> -nvvc dupsort_writemap.db-copy)
     set_tests_properties(dupsort_writemap_chk_copy PROPERTIES
+      LABELS "smoke-long;smoke-t3;chk"
       DEPENDS dupsort_writemap
       TIMEOUT 60
       FAIL_REGULAR_EXPRESSION "monopolistic mode"
@@ -219,19 +272,21 @@ else()
   endif()
 
   add_test(NAME uniq_nested
-           COMMAND ${MDBX_OUTPUT_DIR}/mdbx_test --duration=5m --loglevel=notice --mode=-writemap,-nosync-safe,-lifo
+           COMMAND $<TARGET_FILE:mdbx_test> --duration=5m --loglevel=notice --mode=-writemap,-nosync-safe,-lifo
                    --progress --console=no --repeat=2 --pathname=uniq_nested.db --dont-cleanup-after basic)
-  set_tests_properties(uniq_nested PROPERTIES TIMEOUT 1800 RUN_SERIAL OFF)
+  set_tests_properties(uniq_nested PROPERTIES LABELS "smoke-long;smoke-t3" TIMEOUT 1800 RUN_SERIAL OFF)
   if(MDBX_BUILD_TOOLS)
-    add_test(NAME uniq_nested_chk COMMAND ${MDBX_OUTPUT_DIR}/mdbx_chk -nvvw uniq_nested.db)
+    add_test(NAME uniq_nested_chk COMMAND $<TARGET_FILE:mdbx_chk> -nvvw uniq_nested.db)
     set_tests_properties(uniq_nested_chk PROPERTIES
+      LABELS "smoke-long;smoke-t3;chk"
       DEPENDS uniq_nested
       TIMEOUT 60
       FAIL_REGULAR_EXPRESSION "cooperative mode"
       REQUIRED_FILES uniq_nested.db)
 
-    add_test(NAME uniq_nested_chk_copy COMMAND ${MDBX_OUTPUT_DIR}/mdbx_chk -nvv uniq_nested.db-copy)
+    add_test(NAME uniq_nested_chk_copy COMMAND $<TARGET_FILE:mdbx_chk> -nvv uniq_nested.db-copy)
     set_tests_properties(uniq_nested_chk_copy PROPERTIES
+      LABELS "smoke-long;smoke-t3;chk"
       DEPENDS uniq_nested
       TIMEOUT 60
       FAIL_REGULAR_EXPRESSION "cooperative mode"
@@ -239,47 +294,305 @@ else()
   endif()
 
   if(WIN32 AND MDBX_BUILD_TOOLS)
-    set_tests_properties(smoke_chk PROPERTIES RESOURCE_LOCK smoke.db)
-    set_tests_properties(smoke_copy_asis PROPERTIES RESOURCE_LOCK smoke.db)
-    set_tests_properties(smoke_copy_compactify PROPERTIES RESOURCE_LOCK smoke.db)
+    set_tests_properties(smoke_long_chk PROPERTIES RESOURCE_LOCK smoke-long.db)
+    set_tests_properties(smoke_long_copy_asis PROPERTIES RESOURCE_LOCK smoke-long.db)
+    set_tests_properties(smoke_long_copy_compactify PROPERTIES RESOURCE_LOCK smoke-long.db)
+  endif()
+  endif() # MDBX_ENABLE_LONG_TESTS
+
+  # Quick smoke scenarios (a-la `make smoke`).
+  set(MDBX_SMOKE_EXTRA "" CACHE STRING "Extra command-line arguments for the quick smoke scenarios")
+
+  add_test(NAME smoke_basic COMMAND $<TARGET_FILE:mdbx_test> --duration 100 --table=+data.integer
+                                   --keygen.split=29 --datalen.min=min --datalen.max=max --progress --console=no
+                                   --mode=+nosync-safe --repeat=${MDBX_TEST_ITER} --pathname=smoke.db
+                                   --dont-cleanup-after ${MDBX_SMOKE_EXTRA} basic)
+  set_tests_properties(smoke_basic PROPERTIES LABELS "smoke;smoke-t2" TIMEOUT 600 RUN_SERIAL OFF)
+
+  add_test(NAME smoke_writemap COMMAND $<TARGET_FILE:mdbx_test> --duration 100 --mode=-writemap,-nosync-safe,-lifo
+                                    --progress --console=no --repeat=${MDBX_TEST_ITER} --pathname=smoke.db
+                                    --size-lower=64M --size=256M --size-upper=2G --geometry-jitter=no
+                                    --dont-cleanup-after ${MDBX_SMOKE_EXTRA} basic)
+  set_tests_properties(smoke_writemap PROPERTIES LABELS "smoke;smoke-t2" TIMEOUT 600 DEPENDS smoke_basic RUN_SERIAL OFF)
+
+  if(MDBX_BUILD_TOOLS)
+    add_test(NAME smoke_chk COMMAND $<TARGET_FILE:mdbx_chk> -vvn smoke.db)
+    set_tests_properties(smoke_chk PROPERTIES
+      LABELS "smoke;smoke-t2;chk"
+      DEPENDS smoke_writemap
+      TIMEOUT 60
+      FAIL_REGULAR_EXPRESSION "cooperative mode"
+      REQUIRED_FILES smoke.db)
+    add_test(NAME smoke_chk_copy COMMAND $<TARGET_FILE:mdbx_chk> -vvn smoke.db-copy)
+    set_tests_properties(smoke_chk_copy PROPERTIES
+      LABELS "smoke;smoke-t2;chk"
+      DEPENDS smoke_writemap
+      TIMEOUT 60
+      FAIL_REGULAR_EXPRESSION "cooperative mode"
+      REQUIRED_FILES smoke.db-copy)
+  endif()
+
+  if(WIN32)
+    set_tests_properties(smoke_basic smoke_writemap PROPERTIES RESOURCE_LOCK smoke.db)
+  endif()
+
+  add_test(NAME smoke_fault COMMAND $<TARGET_FILE:mdbx_test> --duration 300 --timeout=600 --progress --console=no
+                                     --pathname=fault.db --inject-writefault=42 --dump-config --dont-cleanup-after
+                                     --loglevel=debug ${MDBX_SMOKE_EXTRA} basic)
+  set_tests_properties(smoke_fault PROPERTIES
+    LABELS "smoke-fault;smoke-t2"
+    TIMEOUT 1800
+    RUN_SERIAL OFF
+    WILL_FAIL TRUE)
+  # TASK-31: on the slow macOS Release beta-runners (xcode-27/macos-26-intel) the
+  # fault-injected run intermittently exceeds the 1800s CTest cap while the process
+  # stays alive in the setup/barrier phase, which the internal --timeout=600 watchdog
+  # does not cover (deadline is enforced only in the overlord poll-loop, after the
+  # barrier). Give those cells extra headroom as a CI-unblock stopgap; Debug passes
+  # smoke_fault in 4-8s and is unaffected. Root-cause watchdog-coverage fix is tracked
+  # separately (TASK-43).
+  if(APPLE AND CMAKE_BUILD_TYPE STREQUAL "Release")
+    set_tests_properties(smoke_fault PROPERTIES TIMEOUT 3600)
+  endif()
+  if(MDBX_BUILD_TOOLS)
+    add_test(NAME smoke_fault_chk COMMAND $<TARGET_FILE:mdbx_chk> -vvnw fault.db)
+    set_tests_properties(smoke_fault_chk PROPERTIES
+      LABELS "smoke-fault;smoke-t2;chk"
+      DEPENDS smoke_fault
+      TIMEOUT 60
+      REQUIRED_FILES fault.db)
+  endif()
+
+  if(MDBX_ENABLE_SINGLEPROCESS_TESTS)
+  # Single-process scenario chain: only for cross-qemu/cross-toolchain runs
+  # (TASK-42); the fast deterministic twins smoke_t1_* cover this scenario in
+  # the default corpus.
+  add_test(NAME smoke_sp_hill COMMAND $<TARGET_FILE:mdbx_test> --duration 100 --table=+data.integer --keygen.split=29
+                                  --datalen.min=min --datalen.max=max --progress --console=no --repeat=42
+                                  --pathname=singleprocess.db --dont-cleanup-after ${MDBX_SMOKE_EXTRA} --hill)
+  set_tests_properties(smoke_sp_hill PROPERTIES
+    LABELS "smoke-singleprocess;smoke-t2"
+    TIMEOUT 600
+    RUN_SERIAL OFF)
+  add_test(NAME smoke_sp_copy COMMAND $<TARGET_FILE:mdbx_test> --duration 100 --progress --console=no --repeat=2
+                                 --pathname=singleprocess.db --dont-cleanup-before --dont-cleanup-after ${MDBX_SMOKE_EXTRA} --copy)
+  set_tests_properties(smoke_sp_copy PROPERTIES
+    LABELS "smoke-singleprocess;smoke-t2"
+    DEPENDS smoke_sp_hill
+    TIMEOUT 600
+    RUN_SERIAL OFF)
+  add_test(NAME smoke_sp_nested COMMAND $<TARGET_FILE:mdbx_test> --duration 100 --mode=-writemap,-nosync-safe,-lifo
+                                   --progress --console=no --repeat=42 --pathname=singleprocess.db
+                                   --dont-cleanup-after ${MDBX_SMOKE_EXTRA} --nested)
+  set_tests_properties(smoke_sp_nested PROPERTIES
+    LABELS "smoke-singleprocess;smoke-t2"
+    DEPENDS smoke_sp_copy
+    TIMEOUT 600
+    RUN_SERIAL OFF)
+  if(MDBX_BUILD_TOOLS)
+    add_test(NAME smoke_sp_chk COMMAND $<TARGET_FILE:mdbx_chk> -vvn singleprocess.db)
+    set_tests_properties(smoke_sp_chk PROPERTIES
+      LABELS "smoke-singleprocess;chk"
+      DEPENDS smoke_sp_nested
+      TIMEOUT 60
+      REQUIRED_FILES singleprocess.db)
+    add_test(NAME smoke_sp_chk_copy COMMAND $<TARGET_FILE:mdbx_chk> -vvn singleprocess.db-copy)
+    set_tests_properties(smoke_sp_chk_copy PROPERTIES
+      LABELS "smoke-singleprocess;chk"
+      DEPENDS smoke_sp_nested
+      TIMEOUT 60
+      REQUIRED_FILES singleprocess.db-copy)
+  endif()
+
+  if(WIN32)
+    set_tests_properties(smoke_sp_hill smoke_sp_copy smoke_sp_nested PROPERTIES RESOURCE_LOCK singleprocess.db)
+  endif()
+  endif() # MDBX_ENABLE_SINGLEPROCESS_TESTS
+
+  # ------------------------------------------------------------------
+  # Tiered smoke profiles (TASK-22, BACKLOG B21-B33).
+  #
+  # mdbx_test is STOCHASTIC: the pseudo-random sequence derives from
+  # --prng-seed, so a FIXED seed reproduces the same per-actor operation
+  # sequence (single-process actors fully deterministic, multi-process
+  # interleaving is not). Tiered runs are addressable via CTest labels:
+  #
+  #   ctest -L 'smoke-t1'   T1 fast deterministic smoke, seconds, fixed seeds
+  #   ctest -L 'smoke-t2'   T2 medium smoke (quick-smoke family above)
+  #   ctest -L 'smoke-t3'   T3 full/long stochastic runs (milestone/nightly)
+  #
+  # GNUmakefile convenience targets: make smoke-t1 / smoke-t2 / smoke-t3.
+  #
+  # T1 must complete in seconds and never run long iterations: bound with
+  # --nops (bounded work) instead of --timeout, keep --repeat=1 and use the
+  # fast +nosync-safe mode when durability is not the point.
+  set(MDBX_T1_SEED_HILL 20260921)
+  set(MDBX_T1_SEED_NESTED 20260922)
+  set(MDBX_T1_SEED_COPY 20260923)
+
+  # NOTE: mdbx_test copies actor params when it parses the scenario selector
+  # (--hill/--nested/--copy/...), so ALL tuning options must precede the
+  # selector, mirroring the existing smoke_sp_* registrations above.
+  add_test(NAME smoke_t1_hill
+           COMMAND $<TARGET_FILE:mdbx_test> --nops=1K --prng-seed=${MDBX_T1_SEED_HILL}
+                   --mode=+nosync-safe --progress --console=no --repeat=1 --pathname=t1-hill.db
+                   --cleanup-before --dont-cleanup-after ${MDBX_SMOKE_EXTRA} --hill)
+  set_tests_properties(smoke_t1_hill PROPERTIES LABELS "smoke;smoke-t1" TIMEOUT 60 RUN_SERIAL OFF)
+
+  add_test(NAME smoke_t1_nested
+           COMMAND $<TARGET_FILE:mdbx_test> --nops=1K --prng-seed=${MDBX_T1_SEED_NESTED}
+                   --mode=-writemap,-nosync-safe,-lifo --progress --console=no --repeat=1
+                   --pathname=t1-nested.db --cleanup-before --dont-cleanup-after ${MDBX_SMOKE_EXTRA} --nested)
+  set_tests_properties(smoke_t1_nested PROPERTIES LABELS "smoke;smoke-t1" TIMEOUT 60 RUN_SERIAL OFF)
+
+  add_test(NAME smoke_t1_copy
+           COMMAND $<TARGET_FILE:mdbx_test> --nops=256 --prng-seed=${MDBX_T1_SEED_COPY}
+                   --mode=+nosync-safe --progress --console=no --repeat=1 --pathname=t1-copy.db
+                   --cleanup-before --dont-cleanup-after ${MDBX_SMOKE_EXTRA} --copy)
+  set_tests_properties(smoke_t1_copy PROPERTIES LABELS "smoke;smoke-t1" TIMEOUT 60 RUN_SERIAL OFF)
+
+  if(UNIX AND MDBX_ENABLE_LONG_TESTS)
+    add_test(NAME stochastic COMMAND ${CMAKE_CURRENT_SOURCE_DIR}/scripts/stochastic.sh --whole-duration 600 --probe-duration 60
+                                    --dont-check-ram-size --loops 2 --db-upto-mb 256 --skip-make --taillog)
+    set_tests_properties(stochastic PROPERTIES
+      LABELS "stochastic;smoke-t3"
+      TIMEOUT 10800
+      RUN_SERIAL ON
+      WORKING_DIRECTORY ${MDBX_OUTPUT_DIR}
+      RESOURCE_LOCK stochastic)
+
+    add_test(NAME stochastic_single COMMAND ${CMAKE_CURRENT_SOURCE_DIR}/scripts/stochastic.sh --whole-duration 600
+                                     --probe-duration 60 --dont-check-ram-size --single --loops 2 --db-upto-mb 256
+                                     --skip-make --taillog)
+    set_tests_properties(stochastic_single PROPERTIES
+      LABELS "stochastic-single;smoke-t3"
+      TIMEOUT 10800
+      RUN_SERIAL ON
+      WORKING_DIRECTORY ${MDBX_OUTPUT_DIR}
+      RESOURCE_LOCK stochastic)
+
+    add_test(NAME stochastic_long COMMAND ${CMAKE_CURRENT_SOURCE_DIR}/scripts/stochastic.sh --loops 42 --db-upto-mb 1024
+                                    --extra --skip-make --taillog)
+    set_tests_properties(stochastic_long PROPERTIES
+      LABELS "stochastic-long;smoke-t3"
+      TIMEOUT 0
+      RUN_SERIAL ON
+      WORKING_DIRECTORY ${MDBX_OUTPUT_DIR}
+      RESOURCE_LOCK stochastic)
   endif()
 
   if(NOT SUBPROJECT)
+    # Hierarchical test segmentation.
+    #
+    # Every unit test carries the root label `ut` plus one or more area labels
+    # from the tree below, so a domain can be run addressably:
+    #
+    #   ctest -L 'ut\.'             - all unit tests
+    #   ctest -L 'ut\.' -LE 'ut\.heavy' - fast unit tests (default)
+    #   ctest -L 'ut\.cxx'          - C++ API layer only
+    #   ctest -L 'ut\.dbi'          - DBI area (also covers ut.dbi.* descendants)
+    #   ctest -L 'ut\.heavy'        - slow/stress tests only
+    #
+    # Tree of areas (a test may belong to several branches). Sources are placed
+    # into tests/ut/<area>/ subdirectories matching the primary area label:
+    #   ut                  - root: all unit tests
+    #   |- ut.api           - C API surface (buffers, parameters, stat-info, ...)
+    #   |- ut.cxx           - C++ API layer (slice, buffer, txn-metadata, ...)
+    #   |- ut.env           - environment lifecycle (open/close, global init)
+    #   |- ut.dbi           - DBI lifecycle and operations
+    #   |- ut.txn           - transactions (incl. nested, cache, ordering)
+    #   |- ut.cursor        - cursors (positioning, iteration, closing)
+    #   |- ut.gc            - garbage collection / reclaim
+    #   |- ut.issues        - regression tests for reported issues
+    #   |- ut.tools         - src/tools CLI utilities (golden characterization, TASK-45)
+    #   Attribute labels (orthogonal): ut.heavy for slow/stress tests.
     if(UNIX)
-      add_extra_test(upsert_alldups SOURCE ut/upsert_alldups.c)
-      add_extra_test(dupfix_addodd SOURCE ut/dupfix_addodd.c)
-      add_extra_test(dbi_nested_txn SOURCE ut/dbi_nested_txn.c)
+      add_ut(upsert_alldups SOURCE ut/api/upsert_alldups.c++)
+      set_tests_properties(upsert_alldups PROPERTIES LABELS "ut;ut.api;ut.dbi")
+      add_ut(dupfix_addodd SOURCE ut/api/dupfix_addodd.c++)
+      set_tests_properties(dupfix_addodd PROPERTIES LABELS "ut;ut.api;ut.dbi")
+      add_ut(dbi_nested_txn SOURCE ut/dbi/dbi_nested_txn.c++)
+      set_tests_properties(dbi_nested_txn PROPERTIES LABELS "ut;ut.dbi;ut.txn")
     endif()
-    add_extra_test(details_rkl SOURCE ut/details_rkl.c)
-    if(MSVC_C11_MAD_ATOMICS)
-      target_compile_options(test_extra_details_rkl
-                             PRIVATE "$<$<COMPILE_LANGUAGE:CXX,C>:/std:clatest;/experimental:c11atomics>")
-    endif()
+    add_extra_test(details_rkl SOURCE ut/api/details_rkl.c)
+    set_tests_properties(extra_details_rkl PROPERTIES LABELS "ut;ut.api;ut.gc")
 
-    add_extra_test(global_init SOURCE ut/global_init.c MDBX_LIB mdbx-static)
+    add_ut(global_init SOURCE ut/api/global_init.c++ LIBRARY mdbx-static)
+    set_tests_properties(global_init PROPERTIES LABELS "ut;ut.api;ut.env")
 
-    add_extra_test(rename_dbi SOURCE ut/rename_dbi.c)
-    add_extra_test(nested_drop_abort SOURCE ut/nested_drop_abort.c)
+    add_ut(rename_dbi SOURCE ut/dbi/rename_dbi.c++)
+    set_tests_properties(rename_dbi PROPERTIES LABELS "ut;ut.dbi")
+    add_ut(nested_drop_abort SOURCE ut/dbi/nested_drop_abort.c++)
+    set_tests_properties(nested_drop_abort PROPERTIES LABELS "ut;ut.dbi;ut.txn")
     if(MDBX_BUILD_CXX)
       if(NOT WIN32 OR NOT MDBX_CXX_STANDARD LESS 17)
-        add_extra_test(cursor_closing TIMEOUT 10800)
-        add_extra_test(early_close_dbi)
-        add_extra_test(maindb_ordinal)
-        add_extra_test(dupfix_multiple TIMEOUT 10800)
-        add_extra_test(doubtless_positioning TIMEOUT 10800)
-        add_extra_test(crunched_delete TIMEOUT 10800)
-        add_extra_test(distance_scroll_distribute TIMEOUT 10800)
-        add_extra_test(dbi)
-        add_extra_test(open)
-        add_extra_test(txn)
-        add_extra_test(buffers)
-        add_extra_test(bunches_removal)
-        add_extra_test(get_cached)
-        add_extra_test(reverse_insertions)
-        add_subdirectory(issues)
+        add_ut(cursor_closing SOURCE ut/cursor/cursor_closing.c++ TIMEOUT 10800)
+        set_tests_properties(cursor_closing PROPERTIES LABELS "ut;ut.cursor;ut.heavy")
+        add_ut(early_close_dbi SOURCE ut/dbi/early_close_dbi.c++)
+        set_tests_properties(early_close_dbi PROPERTIES LABELS "ut;ut.dbi;ut.env")
+        add_ut(maindb_ordinal SOURCE ut/dbi/maindb_ordinal.c++)
+        set_tests_properties(maindb_ordinal PROPERTIES LABELS "ut;ut.dbi")
+        add_ut(dupfix_multiple SOURCE ut/dbi/dupfix_multiple.c++ TIMEOUT 10800)
+        set_tests_properties(dupfix_multiple PROPERTIES LABELS "ut;ut.dbi;ut.heavy")
+        add_ut(doubtless_positioning SOURCE ut/cursor/doubtless_positioning.c++ TIMEOUT 10800)
+        set_tests_properties(doubtless_positioning PROPERTIES LABELS "ut;ut.cursor;ut.heavy")
+        add_ut(crunched_delete SOURCE ut/txn/crunched_delete.c++ TIMEOUT 10800)
+        set_tests_properties(crunched_delete PROPERTIES LABELS "ut;ut.txn;ut.heavy")
+        add_ut(distance_scroll_distribute SOURCE ut/cursor/distance_scroll_distribute.c++ TIMEOUT 10800)
+        set_tests_properties(distance_scroll_distribute PROPERTIES LABELS "ut;ut.cursor;ut.heavy")
+        add_ut(dbi SOURCE ut/dbi/dbi.c++)
+        set_tests_properties(dbi PROPERTIES LABELS "ut;ut.dbi")
+        add_ut(open SOURCE ut/env/open.c++)
+        set_tests_properties(open PROPERTIES LABELS "ut;ut.env;ut.txn")
+        add_ut(txn SOURCE ut/txn/txn.c++)
+        set_tests_properties(txn PROPERTIES LABELS "ut;ut.txn")
+        add_ut(buffers SOURCE ut/api/buffers.c++)
+        set_tests_properties(buffers PROPERTIES LABELS "ut;ut.api")
+        add_ut(bunches_removal SOURCE ut/gc/bunches_removal.c++)
+        set_tests_properties(bunches_removal PROPERTIES LABELS "ut;ut.gc")
+        add_ut(get_cached SOURCE ut/api/get_cached.c++)
+        set_tests_properties(get_cached PROPERTIES LABELS "ut;ut.api;ut.txn")
+        # Full-coverage get_cached profile (deep/wide, long timeouts): the
+        # routine run uses trimmed env-knob defaults (~25s); this variant
+        # restores the deep/wide workload for milestone/nightly runs (kept out
+        # of routine runs via the orthogonal ut.heavy label, see README.md).
+        add_test(NAME get_cached_full COMMAND $<TARGET_FILE:ut_get_cached>)
+        set_tests_properties(get_cached_full PROPERTIES
+            LABELS "ut;ut.api;ut.txn;ut.heavy"
+            TIMEOUT 3600
+            ENVIRONMENT "MDBX_GET_CACHED_DBNAME=test-get-cached-full;MDBX_GET_CACHED_TABLES=8;MDBX_GET_CACHED_DEEP=6;MDBX_GET_CACHED_ORDERS=5;MDBX_GET_CACHED_TIMEOUT_SEC=600;MDBX_GET_CACHED_CASE2_TIMEOUT_SEC=120;MDBX_GET_CACHED_THREADS=0")
+add_ut(reverse_insertions SOURCE ut/txn/reverse_insertions.c++)
+        set_tests_properties(reverse_insertions PROPERTIES LABELS "ut;ut.txn")
+        # NOTE: parameters / tables-and-chk / stat-info / cursor-batch / cache-get /
+        # transforms / defrag-cursors / slice-view / buffer-extra require the
+        # C++ API surface added in poc1 (geometry, operate_parameters, warmup,
+        # enumerate_tables, get_batch, env::chk, key_from_int32/int64/double,
+        # buffer resize/front/back/begin/end) that is not present in devel yet —
+        # re-enabled together with that API on a later Stage.
+        add_ut(slice-pod SOURCE ut/cxx/slice-pod.c++)
+        set_tests_properties(slice-pod PROPERTIES LABELS "ut;ut.cxx")
+        add_subdirectory(ut/issues)
       endif()
-      add_extra_test(hex_base64_base58)
+      add_ut(hex_base64_base58 SOURCE ut/api/hex_base64_base58.c++)
+      set_tests_properties(hex_base64_base58 PROPERTIES LABELS "ut;ut.api")
     endif()
+  endif()
+
+  # Golden characterization tests for the src/tools CLI utilities (TASK-45,
+  # Phase B of epic B46). Each case = (fixture setup + args) -> {stdout, stderr,
+  # exit-code} recorded as the CURRENT contract (skynet/tools-rewrite/spec-*.md,
+  # Phase A): the tools are NOT fixed here, only the behavior is locked down for
+  # the C++ rewrite validation (Phase D). Deterministic: fixtures come from the
+  # checked-in base.dump stream + fixed geometry, no stochastic runs. Runner:
+  # tests/ut/tools/golden-runner.sh; goldens are committed next to it.
+  if(UNIX AND MDBX_BUILD_TOOLS)
+    set(UT_TOOLS_RUNNER "${CMAKE_CURRENT_SOURCE_DIR}/ut/tools/golden-runner.sh")
+    foreach(UT_TOOL chk copy defrag drop dump load stat)
+      add_test(NAME ut_tools_${UT_TOOL}
+               COMMAND bash ${UT_TOOLS_RUNNER} ${UT_TOOL} $<TARGET_FILE:mdbx_${UT_TOOL}>
+                       "${MDBX_OUTPUT_DIR}/tools-golden/${UT_TOOL}")
+      set_tests_properties(ut_tools_${UT_TOOL} PROPERTIES LABELS "ut;ut.tools" TIMEOUT 300)
+    endforeach()
   endif()
 
 endif()

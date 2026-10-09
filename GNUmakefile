@@ -101,7 +101,7 @@ WAIT         = .WAIT
 endif
 
 ifeq ($(bash_ge_4_3),1)
-STOCHASTIC   = ./tests/stochastic.sh
+STOCHASTIC   = ./tests/scripts/stochastic.sh
 else
 STOCHASTIC   = echo "Skip running stochastic script since Bash < 4.3"
 endif
@@ -219,6 +219,10 @@ help:
 	@echo "  make build-stochastic    - build framework for stochastic test"
 	@echo "  make check               - smoke test with amalgamation and installation checking"
 	@echo "  make smoke               - fast smoke test"
+	@echo "  make smoke-t1            - T1 fast deterministic smoke (seconds, fixed seeds)"
+	@echo "  make smoke-t2            - T2 medium smoke (quick-smoke family)"
+	@echo "  make smoke-t3            - T3 long/full stochastic runs (milestone/nightly)"
+	@echo "  make select-tests        - impact-based CTest selection for changed paths"
 	@echo "  make smoke-memcheck      - build with Valgrind support and run smoke test under memcheck tool"
 	@echo "  make smoke-fault         - execute transaction owner failure smoke testcase"
 	@echo "  make smoke-singleprocess - execute single-process smoke test"
@@ -447,8 +451,9 @@ else
 # Non-amalgamated sources with test framework
 
 .PHONY: build-stochastic build-test-with-valgrind check cross-gcc cross-qemu dist doxygen gcc-analyzer long-test
-.PHONY: reformat release-assets tags smoke smoke-fault
+.PHONY: reformat release-assets tags smoke smoke-fault cmake-stochastic-build
 .PHONY: smoke-singleprocess test-singleprocess test-valgrind test-memcheck memcheck smoke-memcheck
+.PHONY: smoke-t1 smoke-t2 smoke-t3 select-tests
 .PHONY: smoke-assertion long-test-assertion test-ci test-ci-extra check-posix-locking
 
 test-ci-extra: test-ci cross-gcc cross-qemu
@@ -564,6 +569,31 @@ smoke-fault: build-stochastic
 		./mdbx_test --duration 300 --progress --console=no --pathname=$(TEST_DB) --inject-writefault=42 --dump-config --dont-cleanup-after $(MDBX_SMOKE_EXTRA) basic \
 		| tee >(gzip --stdout >$(TEST_LOG).gz) | tail -n 99) || echo "Expect fault" \
 	; ./mdbx_chk -vvnw $(TEST_DB) && ([ ! -e $(TEST_DB)-copy ] || ./mdbx_chk -vvn $(TEST_DB)-copy || echo "May fault due invalid-database-signature")
+
+# $(1) = build directory, $(2) = ctest label regular expression, $(3) = extra ctest options
+define ctest-scenario-run
+	@echo '  RUN: ctest --label-regex $(2) in $(1)'
+	$(QUIET)ASAN_OPTIONS=$(ASAN_OPTIONS) UBSAN_OPTIONS=$(UBSAN_OPTIONS) $(CTEST) --test-dir $(1) \
+		--label-regex '$(2)' --output-on-failure --parallel `(nproc | sysctl -n hw.ncpu | echo 2) 2>/dev/null` $(3) $(CTEST_OPT)
+endef
+
+cmake-stochastic-build:
+	@echo '  RUN: cmake -G Ninja -DMDBX_ENABLE_LONG_TESTS=ON && cmake --build @cmake-stochastic-build'
+	$(QUIET)mkdir -p @cmake-stochastic-build && ASAN_OPTIONS=$(ASAN_OPTIONS) UBSAN_OPTIONS=$(UBSAN_OPTIONS) \
+		$(CMAKE) $(CMAKE_OPT) -DMDBX_ENABLE_LONG_TESTS=ON -G Ninja -S . -B @cmake-stochastic-build && \
+		$(CMAKE) --build @cmake-stochastic-build
+
+smoke-t1: cmake-build
+	$(call ctest-scenario-run,@cmake-ninja-build,^smoke-t1$$,)
+
+smoke-t2: cmake-build
+	$(call ctest-scenario-run,@cmake-ninja-build,^smoke-t2$$,)
+
+smoke-t3: cmake-stochastic-build
+	$(call ctest-scenario-run,@cmake-stochastic-build,^smoke-t3$$,)
+
+select-tests:
+	$(QUIET)tests/select-tests.sh $(SELECT_TESTS_ARGS)
 
 test-stochastic: build-stochastic
 	@echo '  RUNNING `tests/stochastic.sh --loops 2`...'
