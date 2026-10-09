@@ -38,7 +38,8 @@ mdbx_chk.c  mdbx_dump.c  mdbx_load.c  mdbx_stat.c        # console tools
 CMakeLists.txt  GNUmakefile  Makefile  config.h.in       # build
 README.md  ChangeLog.md  TODO.md  LICENSE  NOTICE  COPYRIGHT
 VERSION.json  valgrind.supp  conanfile.py  ntdll.def
-man1/...  cmake/*.cmake  examples/ (C and C++ examples, pcrf_simulator)
+man1/...  cmake/*.cmake  examples/ (C/C++ textbook examples, helpers, pcrf_simulator)
+docs/textbook/{en,ru}/  (both textbook localizations)
 ```
 
 There are **no tests** in the amalgamated distribution. Do not promise the
