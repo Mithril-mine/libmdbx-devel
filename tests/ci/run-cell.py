@@ -76,6 +76,100 @@ def join_path_list(value: str) -> str:
     return os.pathsep.join(components)
 
 
+def run_emulator_tests(cell, build_dir, scope) -> int:
+    """Run the cross-compiled Android test binaries on a booted emulator (B5).
+
+    Expected to be invoked from CI under reactivecircus/android-emulator-runner
+    (the device is already booted); pushes the binaries into /data/local/tmp/mdbx
+    and replays the quick-smoke scenarios through `adb shell`, recording
+    per-test metrics the same way the ctest path does.
+    """
+    import shutil
+    import time
+
+    if not shutil.which("adb"):
+        print("error: 'adb' not found in PATH (Android platform-tools required)",
+              file=sys.stderr)
+        return 2
+
+    def locate(name):
+        for sub in ("", "Release/", "Debug/"):
+            path = Path(build_dir) / (sub + name)
+            if path.is_file():
+                return path
+        return None
+
+    mdbx_test = locate("mdbx_test")
+    mdbx_chk = locate("mdbx_chk")
+    if mdbx_test is None:
+        print("error: mdbx_test binary not found in the build dir", file=sys.stderr)
+        return 1
+
+    def adb(args):
+        return run(["adb", *args])
+
+    started_ns = time.time_ns()
+    # The CI emulator action already waited for boot; this is a cheap guard
+    # against a wedged adb transport, not a substitute for boot completion.
+    for _ in range(30):
+        probe = run(["adb", "get-state"], capture=True)
+        if probe.returncode == 0 and probe.stdout.strip() == "device":
+            break
+        time.sleep(2)
+    else:
+        print("error: no Android device online (adb get-state timed out)",
+              file=sys.stderr)
+        return 1
+
+    remote_dir = "/data/local/tmp/mdbx"
+    if adb(["shell", f"mkdir -p {remote_dir}"]) != 0:
+        print("error: adb shell mkdir failed", file=sys.stderr)
+        return 1
+    binaries = [str(mdbx_test)]
+    if mdbx_chk:
+        binaries.append(str(mdbx_chk))
+    if adb(["push", *binaries, remote_dir]) != 0:
+        print("error: adb push failed", file=sys.stderr)
+        return 1
+    chmod_cmd = f"chmod 755 {remote_dir}/mdbx_test"
+    if mdbx_chk:
+        chmod_cmd += f" {remote_dir}/mdbx_chk"
+    if adb(["shell", chmod_cmd]) != 0:
+        print("error: adb chmod failed", file=sys.stderr)
+        return 1
+
+    # Quick-smoke replay (mirrors tests/CMakeLists.txt smoke_basic/smoke_chk,
+    # tuned down for the emulator: shorter duration, repeat=2, bounded timeout).
+    smoke = [
+        "./mdbx_test", "--duration=60", "--table=+data.integer", "--keygen.split=29",
+        "--datalen.min=min", "--datalen.max=max", "--progress", "--console=no",
+        "--mode=+nosync-safe", "--repeat=2", "--timeout=300",
+        "--pathname=smoke.db", "--dont-cleanup-after", "basic",
+    ]
+    scenarios = [("smoke_basic", smoke)]
+    if mdbx_chk:
+        scenarios.append(("smoke_chk", ["./mdbx_chk", "-vvn", "smoke.db"]))
+
+    per_test = []
+    rc_final = 0
+    for name, cmd in scenarios:
+        start = time.time_ns()
+        rc = adb(["shell", f"cd {remote_dir} && " + " ".join(cmd)])
+        sec = round((time.time_ns() - start) / 1e9, 3)
+        status = "Passed" if rc == 0 else "Failed"
+        per_test.append({"test": name, "status": status, "sec": sec})
+        print(f"==> {name}: {status} ({sec}s)")
+        if rc != 0:
+            rc_final = rc
+
+    elapsed_ms = (time.time_ns() - started_ns) // 1_000_000
+    write_metrics(build_dir, cell["id"], scope, rc_final, elapsed_ms, per_test)
+    if rc_final != 0:
+        print(f"==> cell {cell['id']} FAILED on emulator (rc={rc_final})",
+              file=sys.stderr)
+    return rc_final
+
+
 def run(argv, cwd=None, env=None, capture=False):
     display = " ".join(str(a) for a in argv)
     if cwd is not None:
@@ -171,6 +265,9 @@ def main() -> int:
         rc = run(["cmake", "--build", ".", *build_parallel_args], cwd=build_dir, env=env)
     if rc != 0:
         return 1
+
+    if cell.get("emulator"):
+        return run_emulator_tests(cell, build_dir, args.scope)
 
     if build_only:
         # No CTest to run: report a zero-test cell so the metrics artifact is

@@ -60,6 +60,25 @@ jobs:
           submodules: true
           ref: ${{ inputs.ref || github.sha }}
 
+      - name: detect emulator cell
+        id: detect
+        shell: bash
+        env:
+          CELL_ID: ${{ inputs.cell }}
+        run: |
+          set -euo pipefail
+          python3 - <<'EOF'
+          import json, os
+          cfg = json.load(open("tests/ci/config.json"))
+          cell = next(x for x in cfg["cells"] if x["id"] == os.environ["CELL_ID"])
+          emu = cell.get("emulator") or {}
+          with open(os.environ["GITHUB_OUTPUT"], "a") as f:
+              f.write("emulator=%s\n" % ("true" if emu else "false"))
+              if emu:
+                  f.write("api-level=%s\n" % emu.get("api-level", 30))
+                  f.write("arch=%s\n" % emu.get("arch", "x86_64"))
+          EOF
+
       - name: ensure ccache
         shell: bash
         run: |
@@ -111,6 +130,7 @@ jobs:
           command -v ninja && ninja --version || echo "ninja NOT available"
 
       - name: configure + build + ctest (fast/full scope)
+        if: ${{ steps.detect.outputs.emulator != 'true' }}
         shell: bash
         env:
           # LTO stays off in test builds (skynet/build.md §6.7). ccache is
@@ -131,6 +151,21 @@ jobs:
           export RUN_CELL_EXTRA_CMAKE="$EXTRA"
           tests/ci/run-cell.py "${{ inputs.cell }}" --scope "${{ inputs.scope }}" \
             --build-dir @ci-cmake-build 2>&1
+
+      - name: build + run tests on Android emulator (B5 pilot)
+        if: ${{ steps.detect.outputs.emulator == 'true' }}
+        uses: reactivecircus/android-emulator-runner@v2
+        timeout-minutes: 40
+        with:
+          api-level: ${{ steps.detect.outputs.api-level }}
+          arch: ${{ steps.detect.outputs.arch }}
+          target: default
+          disable-animations: true
+          # NOTE: android-emulator-runner feeds the script to /bin/sh (dash)
+          # LINE BY LINE (one `sh -c` per line), so this must stay a single
+          # logical line: no multi-line if/fi, no \-continuations, no cross-
+          # line exports (each line is a separate shell).
+          script: EXTRA="-DINTERPROCEDURAL_OPTIMIZATION=OFF"; if [ "${{ inputs.coverage }}" != "true" ] && command -v ccache >/dev/null 2>&1; then EXTRA="$EXTRA -DCMAKE_C_COMPILER_LAUNCHER=ccache -DCMAKE_CXX_COMPILER_LAUNCHER=ccache"; fi; export RUN_CELL_EXTRA_CMAKE="$EXTRA"; export CCACHE_DIR="${{ runner.temp }}/ccache" CCACHE_MAXSIZE=300M NDK_PATH="${{ steps.setup-ndk.outputs.ndk-path }}" ANDROID_NDK_HOME="${{ steps.setup-ndk.outputs.ndk-path }}"; tests/ci/run-cell.py "${{ inputs.cell }}" --scope "${{ inputs.scope }}" --build-dir @ci-cmake-build 2>&1
 
       - name: coverage report
         if: ${{ inputs.coverage }}

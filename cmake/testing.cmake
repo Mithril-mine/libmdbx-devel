@@ -325,15 +325,28 @@ if(BUILD_TESTING)
     # executables live in ${MDBX_OUTPUT_DIR}. Register a pseudo-test that copies
     # the DLLs next to the executables and make every gtest-based test wait for it
     # first (via ctest fixtures), so the DLLs are always findable at process startup.
+    # Multi-config generators (VS) append a per-config subdirectory to both the
+    # source (bin/<Config>) and the destination (MDBX_OUTPUT_DIR/<Config>); the
+    # old code copied at build time per ut_* target instead, and msbuild /m raced
+    # those copies onto the same file ("Permission denied", and on early runs the
+    # copy could fire before gtest DLLs were linked, leaving tests unable to load
+    # them). The copy now happens exactly once at ctest time, after the full build,
+    # through this config-aware fixture.
     set(UT_DLL_COPY_TEST "")
     if(UT_NEED_DLLCRUTCH AND NOT CMAKE_CROSSCOMPILING AND DEFINED MDBX_OUTPUT_DIR)
       get_target_property(gtest_rt_dir gtest RUNTIME_OUTPUT_DIRECTORY)
       if(NOT gtest_rt_dir)
         set(gtest_rt_dir "${CMAKE_BINARY_DIR}/bin")
       endif()
+      set(ut_dll_src "${gtest_rt_dir}")
+      set(ut_dll_dst "${MDBX_OUTPUT_DIR}")
+      if(CMAKE_CONFIGURATION_TYPES)
+        set(ut_dll_src "${gtest_rt_dir}/$<CONFIG>")
+        set(ut_dll_dst "${MDBX_OUTPUT_DIR}/$<CONFIG>")
+      endif()
       add_test(
         NAME ut_copy_dlls
-        COMMAND ${CMAKE_COMMAND} -Ddest_dir=${MDBX_OUTPUT_DIR} -Dsrc_dirs=${gtest_rt_dir}
+        COMMAND ${CMAKE_COMMAND} -Ddest_dir=${ut_dll_dst} -Dsrc_dirs=${ut_dll_src}
                 -P "${CMAKE_CURRENT_LIST_DIR}/copy-test-dlls.cmake")
       set_tests_properties(ut_copy_dlls PROPERTIES LABELS "ut;ut.api" TIMEOUT 60 FIXTURES_SETUP ut-dlls)
       set(UT_DLL_COPY_TEST ut_copy_dlls)
@@ -446,18 +459,12 @@ if(BUILD_TESTING)
             endif(CMAKE_CONFIGURATION_TYPES)
             if(dir)
               list(APPEND params_DLLPATH ${dir})
-            else(dir)
-              # Path is configuration-depended or not available, should copy dll
-              add_custom_command(
-                TARGET ${target}
-                POST_BUILD
-                COMMAND if exist "$<TARGET_PDB_FILE:${dep}>" ${CMAKE_COMMAND} -E copy_if_different
-                        "$<TARGET_PDB_FILE:${dep}>" "$<TARGET_FILE_DIR:${target}>")
-              add_custom_command(
-                TARGET ${target}
-                POST_BUILD
-                COMMAND ${CMAKE_COMMAND} -E copy_if_different "$<TARGET_FILE:${dep}>" "$<TARGET_FILE_DIR:${target}>"
-                COMMENT "${UT_NEED_DLLCRUTCH}: Copy shared library ${dep} for test ${target}")
+            else()
+              # Path is configuration-dependent or not available: no build-time
+              # copy is performed here. The ut_copy_dlls ctest fixture (above)
+              # copies the shared libraries next to the executables after the
+              # full build, which also removes the old per-target POST_BUILD
+              # race under msbuild /m ("Permission denied").
             endif(dir)
           endif()
         endforeach(dep)

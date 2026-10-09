@@ -1,15 +1,13 @@
 name: ci-windows
 
-# Infra v3 platform gate for Windows (migrated from the legacy
-# ci-windows-msvc / ci-cxx-msvc / ci-windows-mscl / ci-windows-mingw
-# matrices; see .skynet/plans/testing-infra-v3-plan.md). Runs the win-full
-# profile (164 registry cells: msvc v143/v145, msvc-cxx v142-v145 std
-# 11-23, mscl clang-cl 18, mingw) with the fast ctest scope (smoke-t1 |
-# ut.* minus ut.heavy).
+# Infra v3 platform nightly gate for Windows (compact matrix, see
+# tests/ci/config.json zones_notes). Runs the win-gate profile (10 registry
+# cells: msvc v142/v143/v145 x64/win32/arm64 diagonals, clang-cl (mscl),
+# mingw; build-only cells cover the toolset x std x arch x crt compile grid)
+# at the FULL ctest scope on run cells.
 #
-# The legacy workflows ran the same cells through tests/ci/ci.sh without
-# make (`CI_MAKE_TARGET=""`), so no stochastic; this migration keeps the
-# coverage and adds LTO-off + ccache (skynet/build.md §6.7).
+# NOT a duplicate: ci-dispatch handles push-quick and manual/agent profile
+# dispatches; the nightly ownership belongs to the four platform workflows.
 
 env:
   CI: GITHUB
@@ -23,10 +21,9 @@ permissions:
 
 on:
   schedule:
-    - cron: "42 3 * * *"
+    - cron: "57 3 * * *"
       timezone: "Europe/Moscow"
-  repository_dispatch:
-    types: [dispatch-event]
+  workflow_dispatch:
 
 jobs:
   resolve:
@@ -49,18 +46,18 @@ jobs:
           EVENT_REF: ${{ github.event.client_payload.ref }}
         run: |
           set -euo pipefail
-          CELLS=$(tests/ci/select-cells.py --profile win-full)
+          CELLS=$(tests/ci/select-cells.py --profile win-gate)
           REF="${EVENT_REF:-master}"
-          JSON=$(tests/ci/resolve-cells.py "$CELLS" fast 2> >(sed 's/^/==> /' >&2) || { echo "resolve-cells failed" >&2; exit 1; })
+          JSON=$(tests/ci/resolve-cells.py "$CELLS" full 2> >(sed 's/^/==> /' >&2) || { echo "resolve-cells failed" >&2; exit 1; })
           echo "cells=${JSON}" >> "$GITHUB_OUTPUT"
           echo "ref=${REF}" >> "$GITHUB_OUTPUT"
-          echo "scope=fast" >> "$GITHUB_OUTPUT"
+          echo "scope=full" >> "$GITHUB_OUTPUT"
 
   run:
     needs: resolve
     strategy:
       fail-fast: false
-      max-parallel: 20
+      max-parallel: 10
       matrix:
         include: ${{ fromJson(needs.resolve.outputs.cells) }}
     uses: ./.github/workflows/ci-run.yml
