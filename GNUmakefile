@@ -840,7 +840,6 @@ $(DIST_DIR)/mdbx-internals.h: src/version.c $(DIST_DIR)/@tmp-amalgam.inc $(ALLOY
 		src/essentials.h \
 	| $(SED) \
 		-e 's|#include "../mdbx.h"|@INCLUDE "mdbx.h"|' \
-		-e '/dist-cutoff-begin/,/dist-cutoff-end/d' \
 		-e '/#pragma once/d' \
 		-e '/#include "/d' \
 		-e 's|@INCLUDE|#include|' \
@@ -887,7 +886,6 @@ $(DIST_DIR)/mdbx.c: $(DIST_DIR)/@tmp-squashed.inc $(DIST_DIR)/@tmp-amalgam.inc $
 		-e '/#include "debug_end.h"/r src/debug_end.h' \
 	) | $(SED) \
 		-e '/#include "/d;/#pragma once/d' \
-		-e '/dist-cutoff-begin/,/dist-cutoff-end/d' \
 		-e 's|@INCLUDE|#include|' \
 		-e '/ clang-format o/d;/ \*INDENT-O/d' \
 	| grep -v '^///' | cat -s $(DIST_DIR)/@tmp-amalgam.inc - >$@
