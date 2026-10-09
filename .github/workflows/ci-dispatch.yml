@@ -6,9 +6,13 @@ name: ci-dispatch
 # Triggers:
 #   push        -> change-addressed cells (diff vs previous commit, capped to
 #                  CI_PUSH_CAP, fast scope). Branches: devel, master.
-#   schedule    -> full profile on master HEAD (nightly, slow tier).
+#   (no schedule: nightly ownership belongs to the per-platform workflows
+#   ci-linux/ci-windows/ci-macos/ci-android; this dispatcher is the push gate
+#   and the manual/agent entry point for profiles/cells.)
 #   workflow_dispatch -> single cell or named profile on any ref (owner UI).
-#   repository_dispatch -> {profile|cell, ref} for agents.
+#   repository_dispatch -> {profile|cell, ref} for agents; a bare event (no
+#                          payload) falls back to the push-quick profile so
+#                          sibling workflows sharing dispatch-event stay usable.
 #
 # Each selected cell fans out to the reusable ci-run.yml which runs the exact
 # registry entry (tests/ci/config.json) with --scope fast/full.
@@ -26,9 +30,6 @@ permissions:
 on:
   push:
     branches: [devel, master]
-  schedule:
-    - cron: "30 0 * * *"
-      timezone: "Europe/Moscow"
   workflow_dispatch:
     inputs:
       cell:
@@ -104,8 +105,12 @@ jobs:
                 echo "==> dispatch: profile $PROF @ $REF"
                 CELLS=$(tests/ci/select-cells.py --profile "$PROF")
               else
-                echo "dispatch-error: repository_dispatch needs profile or cell" >&2
-                exit 1
+                # Bare dispatches (no profile/cell payload) fall back to the
+                # push-quick gate instead of failing resolve: other workflows
+                # sharing the dispatch-event trigger (e.g. ci-windows) consume
+                # the event too, so a bare event is a legitimate signal.
+                echo "==> dispatch: no profile/cell, falling back to push-quick"
+                CELLS=$(tests/ci/select-cells.py --profile push-quick)
               fi
               ;;
             workflow_dispatch)
@@ -136,6 +141,10 @@ jobs:
     if: ${{ needs.resolve.outputs.cells != '[]' && needs.resolve.outputs.cells != '' }}
     strategy:
       fail-fast: false
+      # Throttle the number of concurrently-spawned cells: launching the whole
+      # 149-cell win-full matrix at once overwhelmed the runner queue and
+      # silently dropped jobs (empty steps, no metrics) as infra failures.
+      max-parallel: 40
       matrix:
         include: ${{ fromJson(needs.resolve.outputs.cells) }}
     uses: ./.github/workflows/ci-run.yml
@@ -144,4 +153,5 @@ jobs:
       "runs-on": ${{ matrix.runs-on }}
       scope: ${{ matrix.scope }}
       coverage: ${{ matrix.coverage }}
+      ndk: ${{ matrix.ndk }}
       ref: ${{ needs.resolve.outputs.ref }}

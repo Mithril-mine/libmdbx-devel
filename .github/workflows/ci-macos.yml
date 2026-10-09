@@ -1,5 +1,17 @@
 name: ci-macos
 
+# Infra v3 platform gate for macOS (migrated from the legacy `make test`
+# matrix; see .skynet/plans/testing-infra-v3-plan.md). Runs the mac-full
+# profile (6 registry cells: macos-15, xcode-27, macos-26-intel, Debug/
+# Release, CXX on) with the fast ctest scope (smoke-t1 | ut.* minus
+# ut.heavy).
+#
+# The legacy `make check`/`test` also invoked `test-stochastic`
+# (multi-process mdbx_test, 600s), unstable since the TASK-43 port
+# (bad75821) — DB grows into MDBX_MAP_FULL / MDBX_UNABLE_EXTEND_MAPSIZE.
+# Stochastic coverage is provided by ci-dispatch nightly (full profile +
+# full scope) instead.
+
 env:
   CI: GITHUB
 
@@ -12,30 +24,49 @@ permissions:
 
 on:
   schedule:
-    - cron: "42 3 * * *"
+    - cron: "47 3"
       timezone: "Europe/Moscow"
-  repository_dispatch:
-    types: [dispatch-event]
+  workflow_dispatch:
 
 jobs:
-  ci-job:
-    runs-on: ${{ matrix.os }}
+  resolve:
+    runs-on: ubuntu-24.04
+    outputs:
+      cells: ${{ steps.resolve.outputs.cells }}
+      ref: ${{ steps.resolve.outputs.ref }}
+      scope: ${{ steps.resolve.outputs.scope }}
+    steps:
+      - name: checkout
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+          fetch-tags: true
+          submodules: true
+      - name: resolve cells
+        id: resolve
+        shell: bash
+        env:
+          EVENT_REF: ${{ github.event.client_payload.ref }}
+        run: |
+          set -euo pipefail
+          CELLS=$(tests/ci/select-cells.py --profile mac-nightly)
+          REF="${EVENT_REF:-master}"
+          JSON=$(tests/ci/resolve-cells.py "$CELLS" full 2> >(sed 's/^/==> /' >&2) || { echo "resolve-cells failed" >&2; exit 1; })
+          echo "cells=${JSON}" >> "$GITHUB_OUTPUT"
+          echo "ref=${REF}" >> "$GITHUB_OUTPUT"
+          echo "scope=full" >> "$GITHUB_OUTPUT"
+
+  run:
+    needs: resolve
     strategy:
       fail-fast: false
       matrix:
-        os: [macos-15, xcode-27, macos-26-intel]
-        build-type: [Debug, Release]
-        cxx: [ON]
-    steps:
-    - uses: actions/checkout@v7
-      with:
-        fetch-depth: 0
-        fetch-tags: true
-        submodules: true
-    - name: ci-step
-      shell: bash
-      run: |
-        export CI_MAKE_TARGET=$(if [ "${{ matrix.build-type }}" != 'Debug' ]; then echo 'test'; else echo 'smoke'; fi) && \
-        export MDBX_BUILD_OPTIONS=$(if [ "${{ matrix.build-type }}" = 'Debug' ]; then echo '-DMDBX_CHECKING=2 -DMDBX_DEBUG=1'; else echo '-DMDBX_CHECKING=0 -DMDBX_DEBUG=0'; fi) && \
-        export MDBX_BUILD_CXX=$(if [ "${{ matrix.cxx }}" = 'ON' ]; then echo 'YES'; else echo 'NO'; fi) && \
-        . tests/ci/ci.sh "-DCMAKE_BUILD_TYPE=${{ matrix.build-type }}|-DMDBX_BUILD_CXX:BOOL=${{ matrix.cxx }}"
+        include: ${{ fromJson(needs.resolve.outputs.cells) }}
+    uses: ./.github/workflows/ci-run.yml
+    with:
+      cell: ${{ matrix.cell }}
+      "runs-on": ${{ matrix.runs-on }}
+      scope: ${{ matrix.scope }}
+      coverage: ${{ matrix.coverage }}
+      ndk: ${{ matrix.ndk }}
+      ref: ${{ needs.resolve.outputs.ref }}

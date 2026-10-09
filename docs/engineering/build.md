@@ -135,8 +135,10 @@ Cube image `dh-mirror.gitverse.ru/jakoch/cpp-devbox:forky-latest`, max 30m, scri
 
 ### 5.2 GitHub Actions (`.github/workflows/`)
 
-`ci-linux.yml`, `ci-macos.yml`, `ci-windows-msvc.yml`, `ci-windows-mingw.yml`,
-`ci-windows-mscl.yml`, `ci-cxx-msvc.yml`, `ci-android.yml` — cross-platform matrix (informational).
+`ci-linux.yml`, `ci-macos.yml`, `ci-windows.yml`, `ci-android.yml` — platform gates
+over the Infra v3 cell registry (`tests/ci/config.json`, fast scope).
+`ci-dispatch.yml` — change-addressed push gate + nightly full profile.
+`ci-probes.yml` — probe-bus (MDBX_PROBES) runs.
 
 ---
 
@@ -183,6 +185,13 @@ Options (verified from `main.c++`; `--option` or `--option=value`):
 
 `--speculum` enables a second, independent in-memory model to cross-check CRUD results
 (used for small `--nops`/`--batch.write` runs).
+
+`--timeout NN` bounds the whole run from the overlord's main thread (no worker threads,
+see `main.c++`): multi-actor runs are always overlord-driven, and a single-actor run with
+`--timeout` is routed through the same overlord->child scheme so the parent can enforce the
+deadline. A single-actor run WITHOUT `--timeout` keeps the classic in-process "singlemode"
+path (no fork), which is required for QEMU/cross-compiled runs; such runs have no internal
+deadline and rely on the outer CTest timeout only.
 
 ### 6.2 `tests/scripts/stochastic.sh` — parameter-sweep orchestrator (798 lines)
 
@@ -392,13 +401,16 @@ DIST_SRC  := mdbx.h mdbx.h++ mdbx.c mdbx.c++ mdbx_<tool>.c (chk,copy,drop,dump,l
              mdbx-internals.h mdbx-wingetopt.h
 DIST_EXTRA:= LICENSE NOTICE COPYRIGHT README.md TODO.md CMakeLists.txt GNUmakefile Makefile ChangeLog.md
              VERSION.json config.h.in ntdll.def windows-safeseh-{masm,yasm}.asm windows-safeseh.obj
-             valgrind.supp conanfile.py man1/* examples/{CMakeLists.txt,example-mdbx.c++,example-mdbx.c,
-             pcrf/pcrf_simulator.c,README.md} cmake/{compiler,profile,utils}.cmake
+             valgrind.supp conanfile.py man1/* cmake/{compiler,profile,utils}.cmake
+             examples/** (textbook examples c/, c++, common/, config-store/, c/pcrf/, example-mdbx.*,
+             sample-bdb.txt, CMakeLists.txt, README.md)
+             docs/textbook/{en,ru}/** (both textbook localizations)
 ```
 
 NOT shipped: `tests/**` (framework, ut, issues, exploits, scripts), `src/**` except the tool
-sources inlined into `mdbx_<tool>.c`, internal docs, `.github/`, `.sourcecraft/`, `.codeassistant/`,
-`skynet/`. `mdbx.h` is generated via `dist-extra-rule` (cutoff removal) — **note**: the dev
+sources inlined into `mdbx_<tool>.c`, internal docs (`docs/engineering/`, `docs/textbook` except
+the shipped `en/`+`ru/`), `.github/`, `.sourcecraft/`, `.codeassistant/`, `skynet/`.
+`mdbx.h` is generated via `dist-extra-rule` (cutoff removal) — **note**: the dev
 `mdbx.h` must stay valid after cutoff deletion, and the `MDBX_AMALGAMATED_SOURCE` value flips
 from 0 to 1 in the shipped copy (lines 196-201 of `mdbx.h`).
 

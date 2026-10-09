@@ -1,0 +1,73 @@
+name: ci-windows
+
+# Infra v3 platform gate for Windows (migrated from the legacy
+# ci-windows-msvc / ci-cxx-msvc / ci-windows-mscl / ci-windows-mingw
+# matrices; see .skynet/plans/testing-infra-v3-plan.md). Runs the win-full
+# profile (164 registry cells: msvc v143/v145, msvc-cxx v142-v145 std
+# 11-23, mscl clang-cl 18, mingw) with the fast ctest scope (smoke-t1 |
+# ut.* minus ut.heavy).
+#
+# The legacy workflows ran the same cells through tests/ci/ci.sh without
+# make (`CI_MAKE_TARGET=""`), so no stochastic; this migration keeps the
+# coverage and adds LTO-off + ccache (skynet/build.md §6.7).
+
+env:
+  CI: GITHUB
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.head_ref || github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+on:
+  schedule:
+    - cron: "42 3 * * *"
+      timezone: "Europe/Moscow"
+  repository_dispatch:
+    types: [dispatch-event]
+
+jobs:
+  resolve:
+    runs-on: ubuntu-24.04
+    outputs:
+      cells: ${{ steps.resolve.outputs.cells }}
+      ref: ${{ steps.resolve.outputs.ref }}
+      scope: ${{ steps.resolve.outputs.scope }}
+    steps:
+      - name: checkout
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+          fetch-tags: true
+          submodules: true
+      - name: resolve cells
+        id: resolve
+        shell: bash
+        env:
+          EVENT_REF: ${{ github.event.client_payload.ref }}
+        run: |
+          set -euo pipefail
+          CELLS=$(tests/ci/select-cells.py --profile win-full)
+          REF="${EVENT_REF:-master}"
+          JSON=$(tests/ci/resolve-cells.py "$CELLS" fast 2> >(sed 's/^/==> /' >&2) || { echo "resolve-cells failed" >&2; exit 1; })
+          echo "cells=${JSON}" >> "$GITHUB_OUTPUT"
+          echo "ref=${REF}" >> "$GITHUB_OUTPUT"
+          echo "scope=fast" >> "$GITHUB_OUTPUT"
+
+  run:
+    needs: resolve
+    strategy:
+      fail-fast: false
+      max-parallel: 20
+      matrix:
+        include: ${{ fromJson(needs.resolve.outputs.cells) }}
+    uses: ./.github/workflows/ci-run.yml
+    with:
+      cell: ${{ matrix.cell }}
+      "runs-on": ${{ matrix.runs-on }}
+      scope: ${{ matrix.scope }}
+      coverage: ${{ matrix.coverage }}
+      ndk: ${{ matrix.ndk }}
+      ref: ${{ needs.resolve.outputs.ref }}

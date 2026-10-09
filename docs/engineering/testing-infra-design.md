@@ -18,8 +18,8 @@ Build a **new test infrastructure in parallel** with the current ad-hoc one, tha
   set (~5 cells), not the full ~130–160-cell matrix.
 - **Nightly full**: the complete matrix runs on schedule against `master` HEAD.
 - **Honest platform coverage**: Android cells are explicitly build-only (no emulator yet);
-  cells that are known-slow/flaky (e.g. macOS `smoke_fault`) are declared per-cell so the
-  nightly full matrix doesn't burn minutes on them.
+  cells that are known-slow/flaky (e.g. ARM64 Windows beta-runner `smoke_sp_*`) are declared
+  per-cell so the nightly full matrix doesn't burn minutes on them.
 
 The old infra remains: `tests/ci/ci.sh` = fallback script; the 7 existing workflows lose their
 `on: push` trigger and become dispatch-only fallbacks.
@@ -134,7 +134,7 @@ Unknown ids / bad refs → fail-fast in `resolve` with a clear message (no silen
 
 ## 6. Known-flaky/slow cells policy
 
-- Registry keeps an explicit `flaky`/`slow` flag (e.g. macOS `smoke_fault`, ARM64 long
+- Registry keeps an explicit `flaky`/`slow` flag (e.g. ARM64 Windows beta-runner
   stochastic smoke). These are **excluded from `full` by default** but still addressable by id.
 - This replaces today's inline `TEST_ARGS`/`-E smoke_sp_` hacks scattered across workflows.
 
@@ -161,7 +161,7 @@ Unknown ids / bad refs → fail-fast in `resolve` with a clear message (no silen
 - New: `tests/ci/config.json`, `.github/workflows/ci-run.yml`,
   `.github/workflows/ci-dispatch.yml`, `tests/ci/run-cell.sh` (local runner).
 - Touched (later phase): legacy workflow files — remove `on: push` block only.
-- Docs: this design + `skynet/workflows.md` + `skynet/sourcecraft/README.md` note about
+- Docs: this design + `docs/engineering/workflows.md` note about
   master-config rule.
 
 ## 10. Open items (tracked in BACKLOG)

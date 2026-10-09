@@ -128,9 +128,10 @@
   health.json). TASK-38 расширит до событий + уведомлений.
 - Failure → диагностика: какой job, категория (compile/test/lint/infra/deps),
   связь с коммитом, история (flaky?).
-- Известные флайки: macos `smoke_fault` timeout на Release-раннерах, ARM64
-  `smoke_t1_hill`/`smoke_sp_nested` (TASK-31) — НЕ перезапускать вслепую:
-  классифицировать, исключать/чинить адресно.
+- Известные флайки: ARM64 `smoke_t1_hill`/`smoke_sp_nested` (TASK-31) — НЕ
+  перезапускать вслепую: классифицировать, исключать/чинить адресно. macOS
+  `smoke_fault` больше не в списке: watchdog-поток оверлорда покрывает фазу
+  setup/barrier (TASK-43), тест возвращён в full-scope.
 - Эскалация: main/devel красный >15 мин → координатор; 3+ падений одного теста
   за неделю → issue с меткой flaky.
 

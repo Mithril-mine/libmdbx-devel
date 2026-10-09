@@ -28,6 +28,7 @@
 #include <sys/mman.h>
 #include <sys/types.h>
 #include <sys/wait.h>
+#include <time.h>
 #include <unistd.h>
 
 #ifndef MDBX_LOCKING
@@ -67,6 +68,7 @@ struct shared_t {
   pthread_barrier_t barrier;
   pthread_mutex_t mutex;
   size_t count;
+  std::atomic<size_t> ready;
   pthread_cond_t events[1];
 #elif MDBX_LOCKING == MDBX_LOCKING_POSIX1988
   struct {
@@ -74,6 +76,7 @@ struct shared_t {
     sem_t sema;
   } barrier;
   size_t count;
+  std::atomic<size_t> ready;
   sem_t events[1];
 #else
 #error "FIXME"
@@ -109,6 +112,44 @@ void osal_wait4barrier(void) {
 #else
 #error "FIXME"
 #endif /* MDBX_LOCKING */
+
+#if MDBX_LOCKING != MDBX_LOCKING_SYSV
+  /* Report readiness to the overlord (which does NOT participate in the
+   * barrier anymore): exactly `need` actors bump this counter, one per actor,
+   * so `shared->ready == need` is the "everyone is at the start line" point. */
+  assert(shared != nullptr && shared != MAP_FAILED);
+  shared->ready.fetch_add(1, std::memory_order_release);
+#endif
+}
+
+/* Wait until all `need` actors have passed the start barrier, bounded by the
+ * --timeout deadline (chrono::infinite() = wait forever). Returns false if the
+ * deadline passed first, true when everyone is ready. */
+bool osal_wait4ready(size_t need, uint64_t deadline_fixedpoint) {
+#if MDBX_LOCKING == MDBX_LOCKING_SYSV
+  /* SysV IPC has no shared struct: the barrier semaphore (#0) is initialized
+   * to `need` and every actor decrements it (with IPC_NOWAIT) before waiting,
+   * so its value reaches exactly 0 once ALL actors have arrived. */
+  (void)need;
+  while (true) {
+    int value = semctl(ipc, 0, GETVAL);
+    if (value < 0)
+      failure_perror("semctl(GETVAL)", errno);
+    if (value == 0)
+      return true;
+    if (chrono::now_monotonic().fixedpoint >= deadline_fixedpoint)
+      return false;
+    osal_udelay(10000);
+  }
+#else
+  assert(shared != nullptr && shared != MAP_FAILED);
+  while (shared->ready.load(std::memory_order_acquire) < need) {
+    if (chrono::now_monotonic().fixedpoint >= deadline_fixedpoint)
+      return false;
+    osal_udelay(10000);
+  }
+  return true;
+#endif
 }
 
 void osal_setup(const std::vector<actor_config> &actors) {
@@ -127,7 +168,7 @@ void osal_setup(const std::vector<actor_config> &actors) {
     failure_perror("semget(IPC_PRIVATE, shared_sems)", errno);
   if (atexit(ipc_remove))
     failure_perror("atexit(ipc_remove)", errno);
-  if (semctl(ipc, 0, SETVAL, (int)(actors.size() + 1)))
+  if (semctl(ipc, 0, SETVAL, (int)actors.size()))
     failure_perror("semctl(SETVAL.0, shared_sems)", errno);
   for (size_t i = 1; i < actors.size() + 2; ++i)
     if (semctl(ipc, i, SETVAL, 1))
@@ -146,6 +187,7 @@ void osal_setup(const std::vector<actor_config> &actors) {
     failure_perror("mmap(shared)", errno);
 
   shared->count = actors.size() + 1;
+  shared->ready = 0;
 
 #if MDBX_LOCKING == MDBX_LOCKING_POSIX2001 || MDBX_LOCKING == MDBX_LOCKING_POSIX2008
   pthread_barrierattr_t barrierattr;
@@ -156,7 +198,7 @@ void osal_setup(const std::vector<actor_config> &actors) {
   if (err)
     failure_perror("pthread_barrierattr_setpshared()", err);
 
-  err = pthread_barrier_init(&shared->barrier, &barrierattr, unsigned(shared->count));
+  err = pthread_barrier_init(&shared->barrier, &barrierattr, unsigned(actors.size()));
   if (err)
     failure_perror("pthread_barrier_init(shared)", err);
   pthread_barrierattr_destroy(&barrierattr);
@@ -191,7 +233,7 @@ void osal_setup(const std::vector<actor_config> &actors) {
   pthread_condattr_destroy(&condattr);
   pthread_mutexattr_destroy(&mutexattr);
 #elif MDBX_LOCKING == MDBX_LOCKING_POSIX1988
-  shared->barrier.countdown = shared->count;
+  shared->barrier.countdown = unsigned(actors.size());
   if (sem_init(&shared->barrier.sema, true, 1))
     failure_perror("sem_init(shared.barrier)", errno);
   for (size_t i = 0; i < shared->count; ++i) {
@@ -352,7 +394,17 @@ static void handler_SIGBREAK(int signum) {
   ++sigbreak;
 }
 
-int osal_delay(unsigned seconds) { return sleep(seconds) ? errno : 0; }
+int osal_delay(unsigned seconds) {
+  /* Use nanosleep() instead of sleep(): the latter is implemented via the
+   * process-wide ITIMER_REAL/SIGALRM on macOS/BSD, which would clash with the
+   * alarm()-based blocking timeout of osal_actor_poll() and could stall the
+   * --timeout watchdog thread indefinitely. nanosleep() is per-thread and
+   * only depends on a signal being delivered to actually return early. */
+  struct timespec ts;
+  ts.tv_sec = seconds;
+  ts.tv_nsec = 0;
+  return nanosleep(&ts, &ts) ? errno : 0;
+}
 
 int osal_actor_start(const actor_config &config, mdbx_pid_t &pid) {
   static sigset_t mask;
@@ -388,6 +440,12 @@ int osal_actor_start(const actor_config &config, mdbx_pid_t &pid) {
 
   if (pid == 0) {
     sigprocmask(SIG_BLOCK, &mask, nullptr);
+    /* Put the actor into its OWN process group so that killing -pid also
+     * SIGKILLs every descendant it forks (deep fork.read/fork.write children),
+     * preventing orphaned grandchildren from outliving the run and holding the
+     * DB lock after a hard deadline/failfast abort. The overlord uses
+     * waitpid(-1), which is independent of process groups, so this is safe. */
+    setpgid(0, 0);
     overlord_pid = getppid();
     const bool result = test_execute(config);
     exit(result ? EXIT_SUCCESS : EXIT_FAILURE);
@@ -427,8 +485,34 @@ void osal_killall_actors(void) {
   wait_actors(1);
   for (auto &pair : children_snapshot()) {
     kill(pair.first, SIGKILL);
+    /* Each actor is the leader of its own process group (see
+     * osal_actor_start), so killing -pid takes down every descendant it
+     * forked, leaving no orphaned deep-fork grandchildren behind. */
+    kill(-pair.first, SIGKILL);
     children_mark_killed(pair.first);
   }
+}
+
+/* Hard-kill without the graceful INT/TERM escalation and without reaping
+ * (no children_store/rehash). Used by the --timeout watchdog: the run is
+ * already past its deadline and the graceful phases would race the main
+ * thread's own poll loop over the `children` map. */
+void osal_killall_actors_immediate(void) {
+  for (auto &pair : children_snapshot()) {
+    kill(pair.first, SIGKILL);
+    kill(-pair.first, SIGKILL);
+  }
+}
+
+/* Plain pid list (no statuses). Used by the --timeout watchdog to keep a
+ * PRIVATE copy of the actor pids refreshed BEFORE the deadline, so its
+ * post-deadline kill touches no shared static state that main() may have
+ * destroyed on exit. */
+std::vector<mdbx_pid_t> osal_actor_pids(void) {
+  std::vector<mdbx_pid_t> result;
+  for (auto &pair : children_snapshot())
+    result.push_back(pair.first);
+  return result;
 }
 
 const char *signal_name(const int sig) {
@@ -556,7 +640,7 @@ int osal_actor_poll(mdbx_pid_t &pid, unsigned timeout) {
   pid = 0;
   while (sigalarm_tail == sigalarm_head) {
     int status;
-    pid = waitpid(0, &status, options);
+    pid = waitpid(-1, &status, options);
     const int err = errno;
 
     if (pid > 0) {
@@ -612,6 +696,9 @@ int osal_actor_poll(mdbx_pid_t &pid, unsigned timeout) {
     if (err != EINTR)
       return err;
   }
+  /* waitpid() may have left a stale -1 in `pid` on EINTR when the loop exits
+   * via the alarm/sigbreak condition; never report it as a child. */
+  pid = 0;
   return sigbreak ? EINTR : 0 /* timeout */;
 }
 
@@ -649,9 +736,13 @@ void osal_udelay(size_t us) {
   do {
     if (us > threshold_us) {
       if (nanosleep(&ts, &ts)) {
-        int rc = errno;
-        /* if (rc == EINTR) { ... } ? */
-        failure_perror("usleep()", rc);
+        const int rc = errno;
+        /* EINTR is normal here: on macOS process-directed signals (SIGCHLD,
+         * SIGALRM, SIGUSR1/2 progress canary) interrupt nanosleep frequently;
+         * POSIX nanosleep() writes the REMAINING time back into ts, so just
+         * continue the loop. Any other error is real. */
+        if (rc != EINTR)
+          failure_perror("nanosleep()", rc);
       }
       us = ts.tv_sec * 1000000u + ts.tv_nsec / 1000u;
     }
