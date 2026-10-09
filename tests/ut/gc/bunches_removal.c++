@@ -23,6 +23,7 @@
 #include <gtest/gtest.h>
 #include <iostream>
 #include <iterator>
+#include <cstdlib>
 #include <memory>
 #include <random>
 #include <set>
@@ -49,6 +50,34 @@ static size_t bit_width(size_t v) {
 /* Осторожно, очень долго */
 #define DEEP 5
 #endif
+
+static const char *getenv_cstr(const char *name) {
+#if defined(_MSC_VER)
+#pragma warning(push)
+#pragma warning(disable : 4996) /* 'getenv': This function or variable may be unsafe */
+#endif
+#if defined(__clang__)
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wdeprecated-declarations"
+#endif
+  const char *value = std::getenv(name);
+#if defined(__clang__)
+#pragma clang diagnostic pop
+#endif
+#if defined(_MSC_VER)
+#pragma warning(pop)
+#endif
+  return value;
+}
+
+static unsigned bunch_deep_env(void) {
+  const char *value = getenv_cstr("MDBX_BUNCHES_DEEP");
+  if (!value || !*value)
+    return DEEP;
+  char *end = nullptr;
+  const unsigned long parsed = strtoul(value, &end, 10);
+  return (end && !*end && parsed <= 7) ? (unsigned)parsed : DEEP;
+}
 
 static ::std::ostream &operator<<(::std::ostream &out, const MDBX_bunch_action_t op) {
   static const char *const str[] = {
@@ -687,8 +716,17 @@ static bool test(mdbx::env env, case_set &set, unsigned deep) {
 //------------------------------------------------------------------------------------------------------------
 
 int doit() {
-  std::random_device random;
-  std::seed_seq seed({random(), random(), random(), random(), random()});
+  /* Воспроизводимость: MDBX_BUNCHES_SEED фиксирует seed (удобно для дельты
+   * покрытия по DEEP и для баг-репортов); без него — энтропия, как было. */
+  std::vector<unsigned> seed_words;
+  const char *env_seed = getenv_cstr("MDBX_BUNCHES_SEED");
+  if (env_seed && *env_seed) {
+    seed_words.push_back(unsigned(std::strtoul(env_seed, nullptr, 10)));
+  } else {
+    std::random_device random;
+    seed_words = {random(), random(), random(), random(), random()};
+  }
+  std::seed_seq seed(seed_words.begin(), seed_words.end());
 
   std::cout << "seed ";
   seed.param(std::ostream_iterator<size_t>(std::cout, "l, "));
@@ -715,7 +753,8 @@ int doit() {
   txn.commit();
 
   bool ok = true;
-  for (auto deep = 1; deep <= DEEP && ok; ++deep)
+  const unsigned deep_max = bunch_deep_env();
+  for (unsigned deep = 1; deep <= deep_max && ok; ++deep)
     ok = test(env, set, deep);
 
   if (!ok) {

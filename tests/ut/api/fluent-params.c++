@@ -53,8 +53,7 @@ TEST(ut_fluent_params, geometry_fluent_matches_c_api) {
     MDBX_env *raw = nullptr;
     ASSERT_EQ(mdbx_env_create(&raw), MDBX_SUCCESS);
     ASSERT_EQ(mdbx_env_set_geometry(raw, -1, two_mb, -1, -1, -1, -1), MDBX_SUCCESS);
-    ASSERT_EQ(mdbx_env_open(raw, kPathB, (MDBX_env_flags_t)(unsigned(MDBX_CREATE) | unsigned(MDBX_NOSUBDIR)), 0664),
-                   MDBX_SUCCESS);
+    ASSERT_EQ(mdbx_env_open(raw, kPathB, MDBX_NOSUBDIR, 0664), MDBX_SUCCESS);
     ASSERT_EQ(mdbx_env_close(raw), MDBX_SUCCESS);
   }
 

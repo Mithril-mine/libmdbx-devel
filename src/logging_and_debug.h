@@ -287,13 +287,16 @@ MDBX_MAYBE_UNUSED static inline char sanitizer_kind_of_poison(const void *addr, 
  * probe-bus implementation is dev-only (cut off from the amalgamation). These
  * are zero-cost no-ops unless MDBX_PROBES is defined. */
 #ifndef MPROBE_COLLECT
-#define MPROBE_COLLECT(name, value) ((void)(name), (void)(value))
+#define MPROBE_COLLECT(name, value) ((void)(value))
 #endif
 #ifndef MPROBE_WATCH
-#define MPROBE_WATCH(name, value) ((void)(name), (void)(value))
+#define MPROBE_WATCH(name, value) ((void)(value))
+#endif
+#ifndef MPROBE_WATCH_IF
+#define MPROBE_WATCH_IF(cond, name, value) do { } while (0)
 #endif
 #ifndef MPROBE_FAULT
-#define MPROBE_FAULT(name, var) ((void)(name), (void)(var))
+#define MPROBE_FAULT(name, var) ((void)(var))
 #endif
 
 /*> dist-cutoff-begin */
@@ -404,6 +407,12 @@ LIBMDBX_API void mprobe_assert_ok(struct mprobe_site *site);
         #name, __FILE__, __LINE__, mprobe_kind_watch, {0}};                        \
     mprobe_fire(&MDBX_MPROBE_VAR(mprobe_site_), (intptr_t)(value));                \
   } while (0)
+
+/* Conditional event probe: fires only when `cond` holds; the condition is
+ * evaluated solely in probe builds (zero cost otherwise). */
+#undef MPROBE_WATCH_IF
+#define MPROBE_WATCH_IF(cond, name, value)                                         \
+  if (cond) MPROBE_WATCH(name, value)
 
 /* Injection probe: when a fault rule is armed for this tag, `var` is mutated to
  * the injected error code (e.g. MDBX_TXN_FULL); otherwise a no-op that still
