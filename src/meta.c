@@ -313,7 +313,7 @@ __cold static page_t *meta_model(const MDBX_env *env, page_t *model, size_t num,
   model_meta->trees.gc.flags = MDBX_INTEGERKEY;
   model_meta->trees.gc.root = P_INVALID;
   model_meta->trees.main.root = P_INVALID;
-  memcpy(&model_meta->dxbid, guid, sizeof(model_meta->dxbid));
+  bcopy_16(&model_meta->dxbid, guid);
   meta_set_txnid(env, model_meta, MIN_TXNID + num);
   unaligned_poke_u64(4, model_meta->sign, meta_sign_calculate(model_meta));
   eASSERT1(env, coherency_check_meta(env, model_meta, true));
@@ -367,7 +367,7 @@ __cold int __must_check_result meta_override(MDBX_env *env, size_t target, txnid
 
   if (target == 0 && (model->dxbid.x | model->dxbid.y) == 0) {
     const bin128_t guid = osal_guid(env);
-    memcpy(&model->dxbid, &guid, sizeof(model->dxbid));
+    bcopy_16(&model->dxbid, &guid);
   }
 
   meta_sign_as_steady(model);

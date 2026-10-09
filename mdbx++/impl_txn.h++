@@ -63,6 +63,55 @@ inline void txn::make_broken() { error::success_or_throw(::mdbx_txn_break(handle
 
 inline void txn::renew_reading() { error::success_or_throw(::mdbx_txn_renew(handle_)); }
 
+inline bool txn::refresh() {
+  const int err = ::mdbx_txn_refresh(handle_);
+  switch (err) {
+  case MDBX_SUCCESS:
+    return false;
+  case MDBX_RESULT_TRUE:
+    return true;
+  default:
+    MDBX_CXX20_UNLIKELY error::throw_exception(err);
+  }
+}
+
+inline void txn::copy(const char *destination, bool compactify, bool force_dynamic_size) {
+  error::success_or_throw(::mdbx_txn_copy2pathname(
+      handle_, destination,
+      MDBX_copy_flags_t((compactify ? MDBX_CP_COMPACT : MDBX_CP_DEFAULTS) |
+                        (force_dynamic_size ? MDBX_CP_FORCE_DYNAMIC_SIZE : MDBX_CP_DEFAULTS))));
+}
+
+inline void txn::copy(const ::std::string &destination, bool compactify, bool force_dynamic_size) {
+  copy(destination.c_str(), compactify, force_dynamic_size);
+}
+
+#if defined(_WIN32) || defined(_WIN64)
+inline void txn::copy(const wchar_t *destination, bool compactify, bool force_dynamic_size) {
+  error::success_or_throw(::mdbx_txn_copy2pathnameW(
+      handle_, destination,
+      MDBX_copy_flags_t((compactify ? MDBX_CP_COMPACT : MDBX_CP_DEFAULTS) |
+                        (force_dynamic_size ? MDBX_CP_FORCE_DYNAMIC_SIZE : MDBX_CP_DEFAULTS))));
+}
+
+inline void txn::copy(const ::std::wstring &destination, bool compactify, bool force_dynamic_size) {
+  copy(destination.c_str(), compactify, force_dynamic_size);
+}
+#endif /* Windows */
+
+#ifdef MDBX_STD_FILESYSTEM_PATH
+inline void txn::copy(const MDBX_STD_FILESYSTEM_PATH &destination, bool compactify, bool force_dynamic_size) {
+  copy(destination.native(), compactify, force_dynamic_size);
+}
+#endif /* MDBX_STD_FILESYSTEM_PATH */
+
+inline void txn::copy(filehandle fd, bool compactify, bool force_dynamic_size) {
+  error::success_or_throw(::mdbx_txn_copy2fd(
+      handle_, fd,
+      MDBX_copy_flags_t((compactify ? MDBX_CP_COMPACT : MDBX_CP_DEFAULTS) |
+                        (force_dynamic_size ? MDBX_CP_FORCE_DYNAMIC_SIZE : MDBX_CP_DEFAULTS))));
+}
+
 inline txn_managed txn::clone(void *context) const {
   MDBX_txn *ptr = nullptr;
   error::success_or_throw(::mdbx_txn_clone(handle_, &ptr, context));
@@ -169,6 +218,12 @@ inline map_handle txn::open_map(const ::std::string &name, const ::mdbx::key_mod
 
 inline map_handle txn::open_map_accede(const ::std::string &name) const { return open_map_accede(slice(name)); }
 
+#if defined(__cpp_lib_string_view) && __cpp_lib_string_view >= 201606L
+inline map_handle txn::open_map_accede(const ::std::string_view &name) const {
+  return open_map_accede(slice(name));
+}
+#endif /* __cpp_lib_string_view >= 201606L */
+
 inline map_handle txn::create_map(const ::std::string &name, const ::mdbx::key_mode key_mode,
                                   const ::mdbx::value_mode value_mode) {
   return create_map(slice(name), key_mode, value_mode);
@@ -183,6 +238,12 @@ inline bool txn::clear_map(const ::std::string &name, bool throw_if_absent) {
 }
 
 inline void txn::rename_map(map_handle map, const ::std::string &new_name) { return rename_map(map, slice(new_name)); }
+
+#if defined(__cpp_lib_string_view) && __cpp_lib_string_view >= 201606L
+inline void txn::rename_map(map_handle map, const ::std::string_view &new_name) {
+  return rename_map(map, slice(new_name));
+}
+#endif /* __cpp_lib_string_view >= 201606L */
 
 inline txn::map_stat txn::get_map_stat(map_handle map) const {
   txn::map_stat r;
@@ -200,6 +261,64 @@ inline map_handle::info txn::get_map_flags(map_handle map) const {
   unsigned flags, state;
   error::success_or_throw(::mdbx_dbi_flags_ex(handle_, map.dbi, &flags, &state));
   return map_handle::info(MDBX_db_flags_t(flags), MDBX_dbi_state_t(state));
+}
+
+template <typename VISITOR> inline int txn::enumerate_tables(VISITOR &visitor) const {
+  struct tables_enum_thunk : public exception_thunk {
+    VISITOR &visitor_;
+    static int cb(void *ctx, const MDBX_txn *, const MDBX_val *name, MDBX_db_flags_t flags,
+                  const MDBX_stat *stat, MDBX_dbi dbi) noexcept {
+      tables_enum_thunk *thunk = static_cast<tables_enum_thunk *>(ctx);
+      assert(thunk->is_clean());
+      try {
+        const slice table_name(*name);
+        return loop_control(thunk->visitor_(table_name, flags, *stat, dbi));
+      } catch (... /* capture any exception to rethrow it over C code */) {
+        thunk->capture();
+        return loop_control::exit_loop;
+      }
+    }
+    MDBX_CXX11_CONSTEXPR tables_enum_thunk(VISITOR &visitor) noexcept : visitor_(visitor) {}
+  };
+  tables_enum_thunk thunk(visitor);
+  const auto rc = ::mdbx_enumerate_tables(handle_, thunk.cb, &thunk);
+  thunk.rethrow_captured();
+  return rc;
+}
+
+template <typename VISITOR> inline txn::gc_info txn::get_gc_info(VISITOR &visitor) const {
+  struct gc_iter_thunk : public exception_thunk {
+    VISITOR &visitor_;
+    static int cb(void *ctx, const MDBX_txn *, uint64_t span_txnid, size_t span_pgno, size_t span_length,
+                  bool span_is_reclaimable) noexcept {
+      gc_iter_thunk *thunk = static_cast<gc_iter_thunk *>(ctx);
+      assert(thunk->is_clean());
+      try {
+        return loop_control(thunk->visitor_(span_txnid, span_pgno, span_length, span_is_reclaimable));
+      } catch (... /* capture any exception to rethrow it over C code */) {
+        thunk->capture();
+        return loop_control::exit_loop;
+      }
+    }
+    MDBX_CXX11_CONSTEXPR gc_iter_thunk(VISITOR &visitor) noexcept : visitor_(visitor) {}
+  };
+  gc_iter_thunk thunk(visitor);
+  gc_info info;
+  const auto rc = ::mdbx_gc_info(handle_, &info, sizeof(info), thunk.cb, &thunk);
+  thunk.rethrow_captured();
+  /* The MDBX_NOTFOUND just means the GC is empty, while the C function
+   * still fills the geometry-related fields (pages_total, pages_allocated,
+   * etc.), which must be preserved. */
+  if (rc != MDBX_NOTFOUND)
+    error::success_or_throw(rc);
+  return info;
+}
+
+inline txn::gc_info txn::get_gc_info() const {
+  struct noop_visitor {
+    int operator()(uint64_t, size_t, size_t, bool) { return loop_control::continue_loop; }
+  } visitor;
+  return get_gc_info(visitor);
 }
 
 inline txn &txn::put_canary(const txn::canary &canary) {
@@ -245,6 +364,19 @@ inline slice txn::get(map_handle map, const slice &key) const {
   slice result;
   error::success_or_throw(::mdbx_get(handle_, map.dbi, &key, &result));
   return result;
+}
+
+inline txn::cache_result txn::get_cached(map_handle map, const slice &key, slice *data, cache_entry &entry) const {
+  return ::mdbx_cache_get(handle_, map.dbi, &key, data, &entry);
+}
+
+inline slice txn::get_cached(map_handle map, const slice &key, cache_entry &entry, cache_status *status) const {
+  slice value;
+  const auto result = get_cached(map, key, &value, entry);
+  if (status)
+    *status = result.status;
+  error::success_or_throw(result.errcode);
+  return value;
 }
 
 inline slice txn::get(map_handle map, slice key, size_t &values_count) const {

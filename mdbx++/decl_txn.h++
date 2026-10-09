@@ -71,7 +71,7 @@ public:
   /// volume of dirty pages) in bytes.
   size_t size_max() const { return env().transaction_size_max(); }
 
-  /// \brief Returns current write transaction size (i.e.summary volume of dirty pages) in bytes.
+  /// \brief Returns current write transaction size (i.e. summary volume of dirty pages) in bytes.
   size_t size_current() const {
     assert(is_readwrite());
     return size_t(get_info().txn_space_dirty);
@@ -85,11 +85,45 @@ public:
   /// \brief Renew read-only transaction.
   inline void renew_reading();
 
+  /// \brief Refresh the read-only transaction to the most recent snapshot.
+  ///
+  /// \details Replaces the MVCC-snapshot of the given read-only transaction
+  /// with the most recent committed one, see \ref ::mdbx_txn_refresh().
+  ///
+  /// \returns `True` if the transaction was already reading the most recent
+  /// version and no actions were performed, or `false` if it was refreshed
+  /// (i.e. advanced to a newer snapshot).
+  /// \see reset_reading() \see renew_reading()
+  inline bool refresh();
+
   /// \brief Clone read transaction.
   inline txn_managed clone(void *context = nullptr) const;
 
   /// \brief Renew given read transaction into clone.
   inline void clone(txn_managed &txn_for_renew_into_clone, void *context = nullptr) const;
+
+  /// \brief Copy an MVCC-snapshot of the database to the destination path.
+  ///
+  /// \details Copies the consistent state as seen by this transaction,
+  /// see \ref ::mdbx_txn_copy2pathname().
+  /// \see env::copy()
+  inline void copy(const char *destination, bool compactify, bool force_dynamic_size = false);
+  /// \copydoc copy(const char *, bool, bool)
+  inline void copy(const ::std::string &destination, bool compactify, bool force_dynamic_size = false);
+#ifdef MDBX_STD_FILESYSTEM_PATH
+  /// \copydoc copy(const char *, bool, bool)
+  inline void copy(const MDBX_STD_FILESYSTEM_PATH &destination, bool compactify, bool force_dynamic_size = false);
+#endif /* MDBX_STD_FILESYSTEM_PATH */
+#if defined(_WIN32) || defined(_WIN64) || defined(DOXYGEN)
+  /// \copydoc copy(const char *, bool, bool)
+  inline void copy(const wchar_t *destination, bool compactify, bool force_dynamic_size = false);
+  /// \copydoc copy(const char *, bool, bool)
+  inline void copy(const ::std::wstring &destination, bool compactify, bool force_dynamic_size = false);
+#endif /* Windows */
+
+  /// \brief Copy an MVCC-snapshot of the database to the given file handle.
+  /// \see ::mdbx_txn_copy2fd()
+  inline void copy(filehandle fd, bool compactify, bool force_dynamic_size = false);
 
   /// \brief Marks transaction as broken to prevent further operations.
   inline void make_broken();
@@ -238,10 +272,44 @@ public:
   /// \brief Returns information about key-value map (aka table) handle.
   inline map_handle::info get_map_flags(map_handle map) const;
 
+  /// \brief Enumerates user's named tables in a database.
+  ///
+  /// \details Calls the `visitor` functor for each user-created named table
+  /// until the named tables are exhausted, or until the visitor returns
+  /// \ref exit_loop (which will be returned as a result).
+  ///
+  /// \param [in,out] visitor  A functor with the signature
+  /// `int visitor(const slice &name, MDBX_db_flags_t flags, const MDBX_stat &stat, MDBX_dbi dbi)`,
+  /// which will be called for each table.
+  ///
+  /// \returns The last value returned by the visitor's functor.
+  /// \see ::mdbx_enumerate_tables()
+  template <typename VISITOR> inline int enumerate_tables(VISITOR &visitor) const;
+
+  using gc_info = ::MDBX_gc_info_t;
+  /// \brief Provides information of Garbage Collection and page usage.
+  ///
+  /// \details Scans the whole GC to summarise the GC state and page usage for
+  /// the given transaction, optionally iterating GC entries by calling the
+  /// `visitor` functor for each span of pages inside GC (excepting the pages
+  /// forming the B-tree structure of GC itself).
+  ///
+  /// \param [in,out] visitor  An optional functor with the signature
+  /// `int visitor(uint64_t span_txnid, size_t span_pgno, size_t span_length,
+  /// bool span_is_reclaimable)` returning \ref continue_loop to proceed or
+  /// any other value to stop enumeration.
+  ///
+  /// \returns The \ref gc_info of the database. An empty (zeroed) info is
+  /// returned when the GC is empty (\ref MDBX_NOTFOUND).
+  /// \note This API has not been frozen yet.
+  /// \see ::mdbx_gc_info()
+  template <typename VISITOR> inline gc_info get_gc_info(VISITOR &visitor) const;
+  inline gc_info get_gc_info() const;
+
   using canary = ::MDBX_canary;
   /// \brief Set integers markers (aka "canary") associated with the environment.
   inline txn &put_canary(const canary &);
-  /// \brief Returns fours integers markers (aka "canary") associated with the environment.
+  /// \brief Returns the four integer markers (aka "canary") associated with the environment.
   inline canary get_canary() const;
 
   /// Reads sequence generator associated with a key-value map (aka table).
@@ -260,17 +328,55 @@ public:
 
   /// \brief Get value by key from a key-value map (aka table).
   inline slice get(map_handle map, const slice &key) const;
+
+  using cache_status = ::MDBX_cache_status_t;
+  using cache_result = ::MDBX_cache_result_t;
+
+  /// \brief Gets a value by key using the transparent read-your-writes cache.
+  ///
+  /// \details Uses the cached information to check as quickly as possible
+  /// whether the data has changed or not, with early exit when searching
+  /// through the DB. Supports multithreaded cases and resolves collisions
+  /// in a lockfree way; the \ref MDBX_NOSTICKYTHREADS mode is required to use
+  /// it from different threads.
+  ///
+  /// \param [in] map    The table handle.
+  /// \param [in] key    The key to search for.
+  /// \param [out] data  The resulting value; points into database-owned
+  ///                    memory and remains valid until the transaction end.
+  /// \param [in,out] entry  The cache entry corresponding to the key, must be
+  ///                    initialized (\ref cache_entry::reset()) before use.
+  ///
+  /// \returns The \ref cache_result with the pair of error code and cache
+  /// status. The caller inspects `errcode` and `status` explicitly.
+  /// \see ::mdbx_cache_get()
+  MDBX_NODISCARD inline cache_result get_cached(map_handle map, const slice &key, slice *data,
+                                                cache_entry &entry) const;
+
+  /// \brief Gets a value by key using the transparent read-your-writes cache,
+  /// throwing exceptions on errors.
+  ///
+  /// \param [in] map    The table handle.
+  /// \param [in] key    The key to search for.
+  /// \param [in,out] entry  The cache entry corresponding to the key.
+  /// \param [out] status  Optional address to receive the \ref cache_status.
+  ///
+  /// \returns The resulting value, or throws \ref mdbx::not_found if the key
+  /// is absent (like \ref get()).
+  /// \see ::mdbx_cache_get()
+  MDBX_NODISCARD inline slice get_cached(map_handle map, const slice &key, cache_entry &entry,
+                                         cache_status *status = nullptr) const;
   /// \brief Get first of multi-value and values count by key from a key-value multimap (aka table).
   inline slice get(map_handle map, slice key, size_t &values_count) const;
   /// \brief Get value by key from a key-value map (aka table).
   inline slice get(map_handle map, const slice &key, const slice &value_at_absence) const;
   /// \brief Get first of multi-value and values count by key from a key-value multimap (aka table).
   inline slice get(map_handle map, slice key, size_t &values_count, const slice &value_at_absence) const;
-  /// \brief Get value for equal or great key from a table.
+  /// \brief Gets the value for an equal or greater key from a table.
   /// \return Bundle of key-value pair and boolean flag,
   /// which will be `true` if the exact key was found and `false` otherwise.
   inline pair_result get_equal_or_great(map_handle map, const slice &key) const;
-  /// \brief Get value for equal or great key from a table.
+  /// \brief Gets the value for an equal or greater key from a table.
   /// \return Bundle of key-value pair and boolean flag,
   /// which will be `true` if the exact key was found and `false` otherwise.
   inline pair_result get_equal_or_great(map_handle map, const slice &key, const slice &value_at_absence) const;

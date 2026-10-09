@@ -74,8 +74,8 @@ struct LIBMDBX_API to_hex {
   /// and therefore there will be no output bytes.
   bool is_empty() const noexcept { return source.empty(); }
 
-  /// \brief Checks whether the content of a passed slice is a valid data
-  /// and could be encoded or unexpectedly not.
+  /// \brief Checks whether the content of the passed slice could be encoded;
+  /// this encoder always returns `false`.
   bool is_erroneous() const noexcept { return false; }
 };
 
@@ -117,7 +117,8 @@ struct LIBMDBX_API to_base58 {
   /// \brief Checks whether a passed slice is empty, and therefore there will be no output bytes.
   bool is_empty() const noexcept { return source.empty(); }
 
-  /// \brief Checks whether the content of a passed slice is a valid data and could be encoded or unexpectedly not.
+  /// \brief Checks whether the content of a passed slice could be encoded;
+  /// always returns `false` for the Base58 encoder.
   bool is_erroneous() const noexcept { return false; }
 };
 
@@ -162,8 +163,8 @@ struct LIBMDBX_API to_base64 {
   /// and therefore there will be no output bytes.
   bool is_empty() const noexcept { return source.empty(); }
 
-  /// \brief Checks whether the content of a passed slice is a valid data
-  /// and could be encoded or unexpectedly not.
+  /// \brief Checks whether the content of the passed slice could be encoded;
+  /// this encoder always returns `false`.
   bool is_erroneous() const noexcept { return false; }
 };
 
@@ -196,7 +197,7 @@ struct LIBMDBX_API from_hex {
   bool is_empty() const noexcept { return source.empty(); }
 
   /// \brief Checks whether the content of a passed slice is a valid hexadecimal
-  /// dump, and therefore there could be decoded or not.
+  /// dump, and therefore can be decoded without errors.
   bool is_erroneous() const noexcept;
 };
 
@@ -235,7 +236,8 @@ struct LIBMDBX_API from_base58 {
   bool is_empty() const noexcept { return source.empty(); }
 
   /// \brief Checks whether the content of a passed slice is a valid
-  /// [Base58](https://en.wikipedia.org/wiki/Base58) dump, and therefore there could be decoded or not.
+  /// [Base58](https://en.wikipedia.org/wiki/Base58) dump, and therefore can be
+  /// decoded without errors.
   bool is_erroneous() const noexcept;
 };
 
@@ -273,8 +275,8 @@ struct LIBMDBX_API from_base64 {
   bool is_empty() const noexcept { return source.empty(); }
 
   /// \brief Checks whether the content of a passed slice is a valid
-  /// [Base64](https://en.wikipedia.org/wiki/Base64) dump, and therefore there
-  /// could be decoded or not.
+  /// [Base64](https://en.wikipedia.org/wiki/Base64) dump, and therefore can be
+  /// decoded without errors.
   bool is_erroneous() const noexcept;
 };
 

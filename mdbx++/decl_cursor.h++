@@ -314,6 +314,34 @@ public:
 
   /// \brief Return count of duplicates for current key.
   inline size_t count_multivalue() const;
+  /// \brief Return count of duplicates for current key, along with basic
+  /// statistics of the table. \see ::mdbx_cursor_count_ex()
+  inline size_t count_multivalue(MDBX_stat *stat) const;
+
+  /// \brief Reads a batch of key-value pairs.
+  ///
+  /// \details Fetches up to `max_pairs` key-value pairs starting from the
+  /// current cursor position, advancing the cursor. The returned slices
+  /// reference database-owned memory and remain valid while the transaction
+  /// and cursor are alive.
+  ///
+  /// \param [in] max_pairs  The maximum number of key-value pairs to fetch.
+  /// \param [in] op         The positioning operation, either
+  ///                        \ref move_operation::first or \ref move_operation::next.
+  /// \param [out] is_last   Optional flag set to `true` when the returned chunk
+  ///                        is the last one (no pairs left after it).
+  ///
+  /// \returns The vector of fetched key-value pairs.
+  /// \see ::mdbx_cursor_get_batch()
+  inline ::std::vector<pair> get_batch(size_t max_pairs, move_operation op, bool *is_last = nullptr) const;
+
+  /// \brief Disables the control of the order of keys when reading database
+  /// pages for this cursor.
+  ///
+  /// \details Useful when reading a database whose user-defined comparison
+  /// functions are unavailable, otherwise such reads return \ref MDBX_CORRUPTED.
+  /// \see ::mdbx_cursor_ignord()
+  inline void ignore_key_order();
 
   inline move_result find_multivalue(const slice &key, const slice &value, bool throw_notfound = true);
   inline move_result lower_bound_multivalue(const slice &key, const slice &value, bool throw_notfound = false);
@@ -403,8 +431,10 @@ public:
 
   /// \brief Updates value associated with a key at the current cursor position.
   void update_current(const slice &value);
-  /// \brief Reserves and returns the space to storing a value associated with a key at the current cursor position.
-  slice reverse_current(size_t value_length);
+  /// \brief Reserves and returns the space for storing a value associated with a key at the current cursor position.
+  slice reserve_current(size_t value_length);
+  /// \brief Deprecated misspelling of \ref reserve_current().
+  slice reverse_current(size_t value_length) { return reserve_current(value_length); }
 
   inline void update(const slice &key, const slice &value);
   inline bool try_update(const slice &key, const slice &value);
@@ -426,6 +456,50 @@ public:
   /// \brief Seeks and removes the particular multi-value entry of the key.
   /// \return `True` if the given key-value pair is found and removed.
   inline bool erase(const slice &key, const slice &value);
+
+  /// \brief Modes for deleting bunches of neighboring items, see
+  /// \ref ::MDBX_bunch_action_t(). The EXCLUDING and INCLUDING suffixes mean
+  /// correspondingly excluding and including deletion items in the current
+  /// cursor position.
+  enum bunch_delete {
+    delete_current_value = MDBX_DELETE_CURRENT_VALUE,
+    delete_current_multival_before_excluding = MDBX_DELETE_CURRENT_MULTIVAL_BEFORE_EXCLUDING,
+    delete_current_multival_before_including = MDBX_DELETE_CURRENT_MULTIVAL_BEFORE_INCLUDING,
+    delete_current_multival_after_including = MDBX_DELETE_CURRENT_MULTIVAL_AFTER_INCLUDING,
+    delete_current_multival_after_excluding = MDBX_DELETE_CURRENT_MULTIVAL_AFTER_EXCLUDING,
+    delete_current_multival_all = MDBX_DELETE_CURRENT_MULTIVAL_ALL,
+    delete_before_excluding = MDBX_DELETE_BEFORE_EXCLUDING,
+    delete_before_including = MDBX_DELETE_BEFORE_INCLUDING,
+    delete_after_including = MDBX_DELETE_AFTER_INCLUDING,
+    delete_after_excluding = MDBX_DELETE_AFTER_EXCLUDING,
+    delete_whole = MDBX_DELETE_WHOLE,
+  };
+
+  /// \brief Quickly removes bunches of neighboring items much faster by
+  /// cutting out entire pages and branches from the B+ tree structure.
+  ///
+  /// \returns The number of removed items.
+  /// \see erase_range() \see ::mdbx_cursor_bunch_delete()
+  inline size_t erase_bunch(bunch_delete action);
+
+  /// \brief Quickly removes a range of items between the current cursor
+  /// position and the position of `end` much faster by cutting out entire
+  /// pages and branches from the B+ tree structure.
+  ///
+  /// \param [in] end  A positioned cursor defining the end of the range.
+  /// \param [in] end_including  Whether the `end` position itself should be
+  /// included in the range to be deleted.
+  /// \returns The number of removed items.
+  /// \see erase_bunch() \see ::mdbx_cursor_delete_range()
+  inline size_t erase_range(const cursor &end, bool end_including);
+
+  /// \brief Resets the cursor state.
+  ///
+  /// \details As a result of the reset, the cursor becomes unpositioned and
+  /// does not allow relative positioning operations, getting or changing data
+  /// until the cursor is set to a position independent of the current one.
+  /// \see ::mdbx_cursor_reset()
+  inline void reset();
 
   inline size_t put_multiple_samelength(const slice &key, const size_t value_length, const void *values_array,
                                         size_t values_count, put_mode mode, bool allow_partial = false);

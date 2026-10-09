@@ -75,11 +75,11 @@ MDBX_CXX11_CONSTEXPR char *slice::end_char_ptr() noexcept { return char_ptr() + 
 
 MDBX_CXX11_CONSTEXPR const void *slice::data() const noexcept { return iov_base; }
 
-MDBX_CXX11_CONSTEXPR const void *slice::end() const noexcept { return static_cast<const void *>(end_byte_ptr()); }
+MDBX_CXX11_CONSTEXPR const byte *slice::end() const noexcept { return end_byte_ptr(); }
 
 MDBX_CXX11_CONSTEXPR void *slice::data() noexcept { return iov_base; }
 
-MDBX_CXX11_CONSTEXPR void *slice::end() noexcept { return static_cast<void *>(end_byte_ptr()); }
+MDBX_CXX11_CONSTEXPR byte *slice::end() noexcept { return end_byte_ptr(); }
 
 MDBX_CXX11_CONSTEXPR size_t slice::length() const noexcept { return iov_len; }
 
@@ -171,6 +171,109 @@ MDBX_CXX14_CONSTEXPR slice slice::tail(size_t n) const noexcept {
 MDBX_CXX14_CONSTEXPR slice slice::middle(size_t from, size_t n) const noexcept {
   MDBX_CONSTEXPR_ASSERT(from + n <= size());
   return slice(char_ptr() + from, n);
+}
+
+MDBX_CXX11_CONSTEXPR const byte *slice::begin() const noexcept { return byte_ptr(); }
+
+MDBX_CXX11_CONSTEXPR byte *slice::begin() noexcept { return byte_ptr(); }
+
+MDBX_NOTHROW_PURE_FUNCTION MDBX_CXX14_CONSTEXPR size_t slice::find(const slice &needle, size_t pos) const noexcept {
+  if (MDBX_UNLIKELY(needle.empty()))
+    return pos <= length() ? pos : npos;
+  if (needle.length() > length() || pos > length() - needle.length())
+    return npos;
+  for (size_t i = pos;; ++i) {
+    if (MDBX_LIKELY(memcmp(byte_ptr() + i, needle.data(), needle.length()) == 0))
+      return i;
+    if (i == length() - needle.length())
+      return npos;
+  }
+}
+
+MDBX_NOTHROW_PURE_FUNCTION MDBX_CXX14_CONSTEXPR size_t slice::find(byte c, size_t pos) const noexcept {
+  return find(slice(&c, sizeof(c)), pos);
+}
+
+MDBX_NOTHROW_PURE_FUNCTION MDBX_CXX14_CONSTEXPR size_t slice::rfind(const slice &needle, size_t pos) const noexcept {
+  if (MDBX_UNLIKELY(needle.empty())) {
+    if (pos > length())
+      return length();
+    return pos;
+  }
+  if (needle.length() > length())
+    return npos;
+  if (pos > length() - needle.length())
+    pos = length() - needle.length();
+  for (size_t i = pos + 1; i > 0; --i) {
+    if (MDBX_LIKELY(memcmp(byte_ptr() + i - 1, needle.data(), needle.length()) == 0))
+      return i - 1;
+  }
+  return npos;
+}
+
+MDBX_NOTHROW_PURE_FUNCTION MDBX_CXX14_CONSTEXPR size_t slice::rfind(byte c, size_t pos) const noexcept {
+  return rfind(slice(&c, sizeof(c)), pos);
+}
+
+MDBX_NOTHROW_PURE_FUNCTION MDBX_CXX14_CONSTEXPR size_t slice::find_first_of(const slice &chars,
+                                                                            size_t pos) const noexcept {
+  if (MDBX_UNLIKELY(chars.empty()))
+    return npos;
+  for (size_t i = pos; i < length(); ++i) {
+    if (MDBX_LIKELY(chars.find(byte_ptr()[i]) != npos))
+      return i;
+  }
+  return npos;
+}
+
+MDBX_NOTHROW_PURE_FUNCTION MDBX_CXX14_CONSTEXPR size_t slice::find_first_of(byte c, size_t pos) const noexcept {
+  return find_first_of(slice(&c, sizeof(c)), pos);
+}
+
+MDBX_NOTHROW_PURE_FUNCTION MDBX_CXX14_CONSTEXPR size_t slice::find_last_of(const slice &chars, size_t pos) const noexcept {
+  if (MDBX_UNLIKELY(chars.empty() || empty()))
+    return npos;
+  if (pos >= length())
+    pos = length() - 1;
+  for (size_t i = pos + 1; i > 0; --i) {
+    if (MDBX_LIKELY(chars.find(byte_ptr()[i - 1]) != npos))
+      return i - 1;
+  }
+  return npos;
+}
+
+MDBX_NOTHROW_PURE_FUNCTION MDBX_CXX14_CONSTEXPR size_t slice::find_last_of(byte c, size_t pos) const noexcept {
+  return find_last_of(slice(&c, sizeof(c)), pos);
+}
+
+MDBX_NOTHROW_PURE_FUNCTION MDBX_CXX14_CONSTEXPR size_t slice::find_first_not_of(const slice &chars,
+                                                                                size_t pos) const noexcept {
+  for (size_t i = pos; i < length(); ++i) {
+    if (MDBX_LIKELY(chars.find(byte_ptr()[i]) == npos))
+      return i;
+  }
+  return npos;
+}
+
+MDBX_NOTHROW_PURE_FUNCTION MDBX_CXX14_CONSTEXPR size_t slice::find_first_not_of(byte c, size_t pos) const noexcept {
+  return find_first_not_of(slice(&c, sizeof(c)), pos);
+}
+
+MDBX_NOTHROW_PURE_FUNCTION MDBX_CXX14_CONSTEXPR size_t slice::find_last_not_of(const slice &chars,
+                                                                               size_t pos) const noexcept {
+  if (MDBX_UNLIKELY(empty()))
+    return npos;
+  if (pos >= length())
+    pos = length() - 1;
+  for (size_t i = pos + 1; i > 0; --i) {
+    if (MDBX_LIKELY(chars.find(byte_ptr()[i - 1]) == npos))
+      return i - 1;
+  }
+  return npos;
+}
+
+MDBX_NOTHROW_PURE_FUNCTION MDBX_CXX14_CONSTEXPR size_t slice::find_last_not_of(byte c, size_t pos) const noexcept {
+  return find_last_not_of(slice(&c, sizeof(c)), pos);
 }
 
 MDBX_CXX14_CONSTEXPR slice slice::safe_head(size_t n) const {
