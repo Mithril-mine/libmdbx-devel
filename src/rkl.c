@@ -69,7 +69,13 @@ void rkl_destructive_move(rkl_t *src, rkl_t *dst) {
 }
 
 static int rkl_resize(rkl_t *rkl, size_t wanna_size) {
-  ASSERT(wanna_size > rkl->list_length);
+  /* Девиантное предусловие вызывающего: в probe-сборке может быть снято,
+   * чтобы достичь ветки "unable shrink" (MDBX_PROBLEM) ниже. */
+  /*> dist-cutoff-begin */
+#if defined(MDBX_PROBES)
+  DEV_ASSERT_T("rkl:resize:wanna_gt_length", wanna_size > rkl->list_length);
+#endif /* MDBX_PROBES */
+  /*< dist-cutoff-end */
   ASSERT(rkl_check(rkl));
   STATIC_ASSERT(txl_max < INT_MAX / sizeof(txnid_t));
   if (unlikely(wanna_size > txl_max)) {
@@ -210,13 +216,25 @@ static int extend_solid(rkl_t *rkl, txnid_t solid_begin, txnid_t solid_end, cons
     while (f > rkl->list && f[-1] >= solid_begin - 1) {
       f -= 1;
       solid_begin -= 1;
-      if (unlikely(*f != solid_begin))
+      if (unlikely(*f != solid_begin)) {
+        /*> dist-cutoff-begin */
+        #if defined(MDBX_PROBES)
+        MPROBE_WATCH(rkl_extend_solid_gap_head, 1);
+        #endif /* MDBX_PROBES */
+        /*< dist-cutoff-end */
         return MDBX_RESULT_TRUE;
+      }
     }
     txnid_t *t = (txnid_t *)i;
     while (t < end && *t <= solid_end) {
-      if (unlikely(*t != solid_end))
+      if (unlikely(*t != solid_end)) {
+        /*> dist-cutoff-begin */
+        #if defined(MDBX_PROBES)
+        MPROBE_WATCH(rkl_extend_solid_gap_tail, 1);
+        #endif /* MDBX_PROBES */
+        /*< dist-cutoff-end */
         return MDBX_RESULT_TRUE;
+      }
       solid_end += 1;
       t += 1;
     }
@@ -515,6 +533,11 @@ rkl_hole_t rkl_hole(rkl_iter_t *iter, const bool reverse) {
     } else if (pos == len && reverse) {
       /* шаг назад из позиции на конце rkl */
     } else if (reverse) {
+      /*> dist-cutoff-begin */
+      #if defined(MDBX_PROBES)
+      MPROBE_WATCH(rkl_hole_past_end_reverse, 1);
+      #endif /* MDBX_PROBES */
+      /*< dist-cutoff-end */
       hole.begin = 1;
       hole.end = 1 /* rkl_lowest(iter->rkl); */;
       iter->pos = 0;
@@ -638,31 +661,73 @@ rkl_hole_t rkl_hole(rkl_iter_t *iter, const bool reverse) {
 }
 
 bool rkl_check(const rkl_t *rkl) {
-  if (!rkl)
+  if (!rkl) {
+    /*> dist-cutoff-begin */
+    #if defined(MDBX_PROBES)
+    MPROBE_WATCH(rkl_check_null, 1);
+    #endif /* MDBX_PROBES */
+    /*< dist-cutoff-end */
     return false;
-  if (rkl->list == rkl->inplace && unlikely(rkl->list_limit != ARRAY_LENGTH(rkl->inplace)))
+  }
+  if (rkl->list == rkl->inplace && unlikely(rkl->list_limit != ARRAY_LENGTH(rkl->inplace))) {
+    /*> dist-cutoff-begin */
+    #if defined(MDBX_PROBES)
+    MPROBE_WATCH(rkl_check_inplace_limit_mismatch, 1);
+    #endif /* MDBX_PROBES */
+    /*< dist-cutoff-end */
     return false;
-  if (unlikely(rkl->list_limit < ARRAY_LENGTH(rkl->inplace)))
+  }
+  if (unlikely(rkl->list_limit < ARRAY_LENGTH(rkl->inplace))) {
+    /*> dist-cutoff-begin */
+    #if defined(MDBX_PROBES)
+    MPROBE_WATCH(rkl_check_limit_below_inplace, 1);
+    #endif /* MDBX_PROBES */
+    /*< dist-cutoff-end */
     return false;
+  }
 
   if (rkl_empty(rkl))
     return rkl->list_length == 0 && solid_empty(rkl);
 
   if (rkl->list_length) {
     for (size_t i = 1; i < rkl->list_length; ++i)
-      if (unlikely(!RKL_ORDERED(rkl->list[i - 1], rkl->list[i])))
+      if (unlikely(!RKL_ORDERED(rkl->list[i - 1], rkl->list[i]))) {
+        /*> dist-cutoff-begin */
+        #if defined(MDBX_PROBES)
+        MPROBE_WATCH(rkl_check_unordered, 1);
+        #endif /* MDBX_PROBES */
+        /*< dist-cutoff-end */
         return false;
+      }
     if (!solid_empty(rkl) && rkl->solid_begin - 1 <= rkl->list[rkl->list_length - 1] &&
         rkl->solid_end >= rkl->list[0]) {
       /* непрерывный интервал "плавает" внутри списка, т.е. находится между какими-то соседними значениями */
       const txnid_t *it = rkl_bsearch(rkl->list, rkl->list_length, rkl->solid_begin);
       const txnid_t *const end = rkl->list + rkl->list_length;
-      if (it < rkl->list || it > end)
+      if (it < rkl->list || it > end) {
+        /*> dist-cutoff-begin */
+        #if defined(MDBX_PROBES)
+        MPROBE_WATCH(rkl_check_bsearch_out_of_range, 1);
+        #endif /* MDBX_PROBES */
+        /*< dist-cutoff-end */
         return false;
-      if (it > rkl->list && it[-1] >= rkl->solid_begin)
+      }
+      if (it > rkl->list && it[-1] >= rkl->solid_begin) {
+        /*> dist-cutoff-begin */
+        #if defined(MDBX_PROBES)
+        MPROBE_WATCH(rkl_check_solid_float_low, 1);
+        #endif /* MDBX_PROBES */
+        /*< dist-cutoff-end */
         return false;
-      if (it < end && it[0] <= rkl->solid_end)
+      }
+      if (it < end && it[0] <= rkl->solid_end) {
+        /*> dist-cutoff-begin */
+        #if defined(MDBX_PROBES)
+        MPROBE_WATCH(rkl_check_solid_float_high, 1);
+        #endif /* MDBX_PROBES */
+        /*< dist-cutoff-end */
         return false;
+      }
     }
   }
 

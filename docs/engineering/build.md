@@ -62,6 +62,7 @@ Anything else → `FATAL_ERROR "The set of libmdbx source code files is incomple
 | `MDBX_OUTPUT_DIR` | build dir | Binary output directory |
 | `MDBX_ALLOY_BUILD` | ON for non-DEBUG | Single-object ("alloy") build of the dev tree |
 | `ENABLE_ASAN` / `ENABLE_UBSAN` / `ENABLE_MEMCHECK` | — | Sanitizer switches (used by make targets and CI) |
+| `MDBX_PROBES` | OFF | probe-bus (mprobe v2): controllable probe-sites + fault injection for tests; dev-only, code lives inside `dist-cutoff` + `#if MDBX_PROBES`. See `docs/engineering/probe-bus.md` |
 | `MDBX_NATIVE_SEH`, `MDBX_USE_MINCORE`, `MDBX_NEED_LIBATOMIC` | platform | Platform auto-setup |
 
 C/C++ standards: C11 default (C99 fallback for old MSVC, C23 if available); C++
@@ -361,6 +362,12 @@ development-layout `elseif` branch, tests/examples wiring, `MDBX_ALLOY_BUILD` bl
 `cmake/utils.cmake` (git-version machinery), `cmake/compiler.cmake`, `conanfile.py`
 (`Git` import, `fetch_versioninfo_from_git`), `mdbx.h` (`MDBX_AMALGAMATED_SOURCE` 1→0 toggle),
 `mdbx++/*.h++` (every header's `#pragma once` + `namespace mdbx {`/`}`).
+
+Strip recipes apply to every source that carries markers, including the raw-C concatenation
+recipe of `mdbx.c` (see §7.5) and `mdbx-internals.h` — so dev-only blocks such as the
+probe-bus implementation in `src/logging_and_debug.c` / `src/osal.h` never reach `dist/`.
+The only probe leftovers in `dist/` are the `DEV_ASSERT[_T] → CHECK0` fallbacks and no-op
+`MPROBE_*` macros required for the amalgamated build.
 
 ### 7.2 `dist` target chain
 

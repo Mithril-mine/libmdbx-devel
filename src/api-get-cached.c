@@ -58,6 +58,11 @@ __hot static MDBX_cache_result_t cache_get(const MDBX_txn *txn, MDBX_dbi dbi, co
     return cache_error(LOG_IFERR(MDBX_INVALID));
 
   int err = check_txn(txn, MDBX_TXN_BLOCKED);
+  /*> dist-cutoff-begin */
+  #if defined(MDBX_PROBES)
+  MPROBE_FAULT(cache_check_txn_err, err);
+  #endif /* MDBX_PROBES */
+  /*< dist-cutoff-end */
   if (unlikely(err != MDBX_SUCCESS))
     return cache_error(LOG_IFERR(err));
 
@@ -102,6 +107,11 @@ __hot static MDBX_cache_result_t cache_get(const MDBX_txn *txn, MDBX_dbi dbi, co
   txnid_t trunk_txnid = txn->front_txnid;
   if (unlikely(txn->dbi_state[dbi] & DBI_STALE)) {
     err = tbl_refresh((MDBX_txn *)txn, dbi);
+    /*> dist-cutoff-begin */
+    #if defined(MDBX_PROBES)
+    MPROBE_FAULT(cache_tbl_refresh_err, err);
+    #endif /* MDBX_PROBES */
+    /*< dist-cutoff-end */
     if (unlikely(err != MDBX_SUCCESS)) {
       if (err == MDBX_NOTFOUND) {
         /* the corresponding table has been deleted */
@@ -151,16 +161,31 @@ __hot static MDBX_cache_result_t cache_get(const MDBX_txn *txn, MDBX_dbi dbi, co
 
   cursor_couple_t cx;
   err = cursor_init(&cx.outer, txn, dbi);
+  /*> dist-cutoff-begin */
+  #if defined(MDBX_PROBES)
+  MPROBE_FAULT(cache_cursor_init_err, err);
+  #endif /* MDBX_PROBES */
+  /*< dist-cutoff-end */
   if (unlikely(err != MDBX_SUCCESS))
     return cache_error(LOG_IFERR(err));
 
   alignkey_t aligned;
   err = check_key(&cx.outer, key, &aligned);
+  /*> dist-cutoff-begin */
+  #if defined(MDBX_PROBES)
+  MPROBE_FAULT(cache_check_key_err, err);
+  #endif /* MDBX_PROBES */
+  /*< dist-cutoff-end */
   if (unlikely(err != MDBX_SUCCESS))
     return cache_error(LOG_IFERR(err));
 
   page_t *mp = nullptr;
   err = page_get(&cx.outer, txn->dbs[dbi].root, &mp, trunk_txnid);
+  /*> dist-cutoff-begin */
+  #if defined(MDBX_PROBES)
+  MPROBE_FAULT(cache_page_get_err, err);
+  #endif /* MDBX_PROBES */
+  /*< dist-cutoff-end */
   if (unlikely(err != MDBX_SUCCESS))
     return cache_error(LOG_IFERR(err));
 
@@ -208,15 +233,31 @@ __hot static MDBX_cache_result_t cache_get(const MDBX_txn *txn, MDBX_dbi dbi, co
     const size_t ki = tree_search_branch(&cx.outer, key);
     cx.outer.ki[cx.outer.top] = (indx_t)ki;
     err = page_get(&cx.outer, node_pgno(page_node(mp, ki)), &mp, trunk_txnid);
+    /*> dist-cutoff-begin */
+    #if defined(MDBX_PROBES)
+    MPROBE_FAULT(cache_page_get_branch_err, err);
+    #endif /* MDBX_PROBES */
+    /*< dist-cutoff-end */
     if (unlikely(err != MDBX_SUCCESS))
       return cache_error(LOG_IFERR(err));
 
     err = cursor_push(&cx.outer, mp, 0);
+    /*> dist-cutoff-begin */
+    #if defined(MDBX_PROBES)
+    MPROBE_FAULT(cache_cursor_push_err, err);
+    #endif /* MDBX_PROBES */
+    /*< dist-cutoff-end */
     if (unlikely(err != MDBX_SUCCESS))
       return cache_error(LOG_IFERR(err));
   }
 
-  if (!MDBX_DISABLE_VALIDATION && unlikely(!check_leaf_type(&cx.outer, mp))) {
+  int bad_leaf = (!MDBX_DISABLE_VALIDATION && !check_leaf_type(&cx.outer, mp));
+  /*> dist-cutoff-begin */
+  #if defined(MDBX_PROBES)
+  MPROBE_FAULT(cache_leaf_validation_fail, bad_leaf);
+  #endif /* MDBX_PROBES */
+  /*< dist-cutoff-end */
+  if (unlikely(bad_leaf)) {
     ERROR("unexpected leaf-page #%" PRIaPGNO " type 0x%x seen by cursor", mp->pgno, mp->flags);
     err = MDBX_CORRUPTED;
     return cache_error(LOG_IFERR(err));
@@ -276,6 +317,11 @@ __hot static MDBX_cache_result_t cache_get(const MDBX_txn *txn, MDBX_dbi dbi, co
   }
 
   err = node_read(&cx.outer, sfr.node, data, mp);
+  /*> dist-cutoff-begin */
+  #if defined(MDBX_PROBES)
+  MPROBE_FAULT(cache_node_read_err, err);
+  #endif /* MDBX_PROBES */
+  /*< dist-cutoff-end */
   if (unlikely(err != MDBX_SUCCESS))
     return cache_error(LOG_IFERR(err));
 
