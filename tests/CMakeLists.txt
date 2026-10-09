@@ -564,8 +564,16 @@ else()
         set_tests_properties(early_close_dbi PROPERTIES LABELS "ut;ut.dbi;ut.env")
         add_ut(maindb_ordinal SOURCE ut/dbi/maindb_ordinal.c++)
         set_tests_properties(maindb_ordinal PROPERTIES LABELS "ut;ut.dbi")
-        add_ut(dupfix_multiple SOURCE ut/dbi/dupfix_multiple.c++ TIMEOUT 10800)
-        set_tests_properties(dupfix_multiple PROPERTIES LABELS "ut;ut.dbi;ut.heavy")
+        add_ut(dupfix_multiple SOURCE ut/dbi/dupfix_multiple.c++ TIMEOUT 600)
+        set_tests_properties(dupfix_multiple PROPERTIES LABELS "ut;ut.dbi")
+        if(MDBX_PROBES)
+          # Same as ut_get_cached: C++ test TUs do not see the internal
+          # config-cmake.h define; propagate MDBX_PROBES for the probe-bus
+          # guards (probe_watch self-attestation), and activate the registry
+          # at runtime.
+          target_compile_definitions(ut_dupfix_multiple PRIVATE MDBX_PROBES)
+          set_tests_properties(dupfix_multiple PROPERTIES ENVIRONMENT "MDBX_PROBES=1")
+        endif()
         add_ut(doubtless_positioning SOURCE ut/cursor/doubtless_positioning.c++ TIMEOUT 10800)
         set_tests_properties(doubtless_positioning PROPERTIES LABELS "ut;ut.cursor;ut.heavy")
         add_ut(crunched_delete SOURCE ut/txn/crunched_delete.c++ TIMEOUT 10800)
