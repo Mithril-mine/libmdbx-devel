@@ -450,7 +450,7 @@ else
 ################################################################################
 # Non-amalgamated sources with test framework
 
-.PHONY: build-stochastic build-test-with-valgrind check cross-gcc cross-qemu dist doxygen gcc-analyzer long-test
+.PHONY: build-stochastic build-test-with-valgrind check cross-gcc cross-qemu dist doxygen gcc-analyzer long-test books
 .PHONY: reformat release-assets tags smoke smoke-fault cmake-stochastic-build cmake-probes-build
 .PHONY: smoke-singleprocess test-singleprocess test-valgrind test-memcheck memcheck smoke-memcheck
 .PHONY: smoke-t1 smoke-t2 smoke-t3 select-tests
@@ -768,6 +768,26 @@ doxygen: docs/Doxyfile docs/overall.md docs/intro.md docs/usage.md $(DIST_DIR)/m
 	cp $(DIST_DIR)/mdbx.h++ src/options.h ChangeLog.md docs/ && (cd docs && doxygen Doxyfile $(HUSH)) && cp COPYRIGHT LICENSE NOTICE docs/html/ && \
 	$(SED) -i docs/html/index.html -e '/\/MathJax.js"><\/script>/r docs/ld+json' -e 's/<title>libmdbx: Overall<\/title>//;T;r docs/title' && \
 	$(SED) -i docs/html/sitemap.xml -e '/^\s*<\/urlset>/e cat docs/sitemap.add'
+
+MDBX_BOOK_VERSION ?= $(MDBX_GIT_DESCRIBE)
+MDBX_BOOK_DATE ?= $(shell date +%F)
+
+# Builds both localizations of the textbook (docs/textbook/{ru,en}) as static
+# HTML sites plus PDFs via MkDocs. Output: docs/textbook/site/{ru,en}/ with a
+# per-locale libmdbx-textbook-{ru,en}.pdf next to the HTML — the layout mirrors
+# https://libmdbx.dqdkfa.ru/textbook/{ru,en}/.
+.PHONY: books
+books:
+	@command -v mkdocs >/dev/null 2>&1 || { \
+		echo '  ERROR: mkdocs is not available. Install the toolchain:'; \
+		echo '    pip install mkdocs mkdocs-material mkdocs-with-pdf'; exit 1; }
+	@echo '  BOOKS ru: MkDocs HTML + PDF...'
+	$(QUIET)MDBX_BOOK_VERSION="$(MDBX_BOOK_VERSION)" MDBX_BOOK_DATE="$(MDBX_BOOK_DATE)" \
+		mkdocs build -f docs/textbook/ru/mkdocs.yml $(HUSH)
+	@echo '  BOOKS en: MkDocs HTML + PDF...'
+	$(QUIET)MDBX_BOOK_VERSION="$(MDBX_BOOK_VERSION)" MDBX_BOOK_DATE="$(MDBX_BOOK_DATE)" \
+		mkdocs build -f docs/textbook/en/mkdocs.yml $(HUSH)
+	@echo '  BOOKS done: docs/textbook/site/{ru,en}/'
 
 mdbx++-dylib.o: src/config-gnumake.h src/mdbx.c++ $(HEADERS) $(lastword $(MAKEFILE_LIST))
 	@echo '  CC $@'

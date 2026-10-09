@@ -71,6 +71,26 @@ Full code: [34-rules-counter.c++](examples/c++/34-rules-counter.c++).
 
 > **Examples for this chapter:** [`examples/c++/34-rules-counter.c++`](examples/c++/34-rules-counter.c++).
 
+### 27.6. Summary of chapter 27
+
+- One transaction — one thread: passing a transaction between threads is UB/an error (`MDBX_THREAD_MISMATCH`), even with `NOSTICKYTHREADS` a deadlock is possible.
+- An unclosed read-transaction "freezes" page reclamation — the file grows to `MDBX_MAP_FULL`; close/park it.
+- Do not open the database twice in one process; `fork()` — only with `resurrect_after_fork` in the child; copying — only `mdbx_copy`.
+- Do not use `MDBX_UTTERLY_NOSYNC` or debug options (`MDBX_ENABLE_REFUND=0`) in production.
+- Set the geometry once before open, do not lower `upper`; for long values increase the page size (up to 64 KB) or split records.
+- Do deletions before insertions; mass deletions — `bunch_delete`/`delete_range`; DUPSORT deletion while iterating — two cursors.
+- Typical counter-examples: violating thread discipline (`BAD_RSLOT`), double opening, a forgotten reader, a debug build in production.
+
+### 27.7. Chapter 27 checklist
+
+- [ ] Ensure transactions are not passed between threads and are not used from two threads simultaneously.
+- [ ] Close/park read-transactions immediately after use.
+- [ ] Copy the database file only via `mdbx_copy`.
+- [ ] Set the geometry before open and do not lower `upper`.
+- [ ] Exclude `MDBX_UTTERLY_NOSYNC` and `MDBX_ENABLE_REFUND=0` from production configuration.
+- [ ] Perform deletions before insertions; mass deletions — via `bunch_delete`/`delete_range`.
+- [ ] For DUPSORT deletion while iterating use two cursors.
+
 ## Chapter 28. Platform-specific notes
 
 ### 28.1. Linux
@@ -87,7 +107,8 @@ Full code: [34-rules-counter.c++](examples/c++/34-rules-counter.c++).
 - `LockFileEx` is slower than named mutexes; small transactions are expensive.
 - 32-bit: address-space limits; `/LARGEADDRESSAWARE` (+1 GB to `MAX_MAPSIZE32`).
 - File compaction — only in a single-process scenario; extension via Native API;
-  geometry changes suspend threads (SRWL).
+  geometry changes suspend threads (SRWL — the Windows Slim Reader/Writer Lock,
+  Windows' fine-grained locking primitive).
 - WSL1: `ENOLCK` — operation is fundamentally impossible.
 
 ### 28.3. macOS / iOS
@@ -139,6 +160,16 @@ Full code: [35-platform-notes.c++](examples/c++/35-platform-notes.c++).
 - Platform differences concern locking, synchronization and address-space sizes.
 - LXC/boot_id and page cache — container/Linux specifics.
 - Windows LockFileEx and F_FULLFSYNC on macOS — the main platform pitfalls.
+
+### 28.8. Chapter 28 checklist
+
+- [ ] Linux: account for `boot_id` (LXC), tmpfs `ENOSPC` from fallocate, opt out of THP if needed.
+- [ ] Windows: remember expensive small transactions and 32-bit limits (`/LARGEADDRESSAWARE`).
+- [ ] macOS: consciously choose between `fcntl(F_FULLFSYNC)` and `MDBX_APPLE_SPEED_INSTEADOF_DURABILITY`.
+- [ ] Android/bionic: verify behavior on 32-bit (the historical hang when rolling back a commit — before 0.11.7).
+- [ ] Containers: LXC — boot_id, Docker — PID uniqueness; NFS/CIFS/SMB — only exclusive or cooperative read-only.
+- [ ] Wine: set a fixed sufficient database size (dynamic resizing does not work).
+- [ ] Treat `ENOSPC`/`ENOLCK` on tmpfs/WSL1/32-bit Windows as normal errors, not fatal failures.
 
 ---
 
@@ -209,6 +240,9 @@ Full code: [36-hsr.c++](examples/c++/36-hsr.c++).
 
 ### 29.6. Example implementation
 
+**Fragment (C, illustration):** the full compilable version is in
+[`examples/c++/36-hsr.c++`](examples/c++/36-hsr.c++).
+
 ```c
 static int my_hsr(const MDBX_env *env, const MDBX_txn *txn,
                   mdbx_pid_t pid, mdbx_tid_t tid,
@@ -233,6 +267,14 @@ mdbx_env_set_hsr(env, my_hsr);
 - Parameters: laggard/gap/space/retry; returns 0/1/2+.
 - Typical strategies: wait/kill/grow.
 - With SAFE_NOSYNC manage growth via auto-sync.
+
+### 29.8. Chapter 29 checklist
+
+- [ ] Install the HSR callback (`mdbx_env_set_hsr` / `set_HandleSlowReaders`).
+- [ ] Define the policy per `retry`: logging, graceful shutdown, forced kill, agreement to grow.
+- [ ] Use the `laggard`/`gap`/`space`/`retry` parameters to make the decision in the callback.
+- [ ] Remember the return semantics: 0 — wait, 1 — abort the reader, 2+ — kill the reader process.
+- [ ] Under `SAFE_NOSYNC` configure auto-sync (`syncbytes`/`syncperiod`) — HSR does not affect a steady-commit.
 
 ---
 
@@ -361,6 +403,17 @@ sync/stat/defrag/close`) from a thread not owning the writing transaction.
 - 6 step-by-step algorithms: growth, commit slowdown, MAP_FULL, deadlock, corruption, slot leak.
 - Pre-deployment checklist is mandatory.
 
+### 30.10. Chapter 30 checklist
+
+- [ ] Master `mdbx_chk` (options `-d`, `-w`, `-0/-1/-2`/`-T`) as the main integrity tool.
+- [ ] Diagnose DB growth per the algorithm in §30.2 (`mdbx_reader_list`, `mdbx_stat -r`/`-p`, PROFGC).
+- [ ] Decompose commit slowdown into `MDBX_commit_latency` stages (`mdbx_txn_commit_ex`) — §30.3.
+- [ ] On `MDBX_MAP_FULL` — abort the transaction, check readers, HSR and geometry — §30.4.
+- [ ] Deadlock/`MDBX_BUSY` — audit thread discipline and `NOSTICKYTHREADS` — §30.5.
+- [ ] DB corruption — `mdbx_chk -w -vvv`, restore from backup (`mdbx_copy`) — §30.6.
+- [ ] Check reader slot leaks via `mdbx_reader_check` — §30.7.
+- [ ] Pass the production-deployment checklist §30.8 (including kill -9 + open + `mdbx_chk`).
+
 ---
 
 ## Chapter 31. Migrating from LMDB
@@ -436,6 +489,24 @@ Full code: [38-migration.c](examples/c/38-migration.c).
 4. Run the tests under ASAN/UBSAN.
 5. Tune geometry/modes for the new engine (do not blindly port LMDB settings).
 
+### 31.7. Summary of chapter 31
+
+- The libmdbx data format is not compatible with LMDB: the triple of meta pages, two-phase commit, checksums, GC tree; LMDB files are not opened directly.
+- Migration is a data transfer (`mdbx_dump`/`mdbx_load`, `mdbx_copy`), not a file rename; libmdbx 0.11.x ↔ 0.12.x databases are mutually compatible (the format is frozen since v11.3).
+- Breaking changes: `MDBX_NOLOCK` removed, `MDBX_NOTLS` → `MDBX_NOSTICKYTHREADS`; check other renames against `mdbx.h`.
+- Function names change predictably (`mdb_env_create` → `mdbx_env_create`), but `mdb_env_set_mapsize` → `mdbx_env_set_geometry` is a different API.
+- Behavioral differences: three metas vs two, page checksums, more diagnostic codes, empty keys/values allowed.
+- Migration order: backup → read-only check with `mdbx_chk` → replace calls → tests under ASAN/UBSAN → re-tune geometry/modes.
+
+### 31.8. Chapter 31 checklist
+
+- [ ] Make a backup (`mdbx_copy -c` or dump+load) before any changes.
+- [ ] Open the database read-only and verify it with `mdbx_chk`.
+- [ ] Replace the calls per the correspondence table §31.4, including `mdb_env_set_mapsize` → `mdbx_env_set_geometry`.
+- [ ] Replace the flags: `MDBX_NOLOCK` removed, `MDBX_NOTLS` → `MDBX_NOSTICKYTHREADS`.
+- [ ] Run the tests under ASAN/UBSAN.
+- [ ] Tune geometry and modes for libmdbx from scratch, do not blindly port LMDB settings.
+
 ---
 
 
@@ -445,7 +516,10 @@ Full code: [38-migration.c](examples/c/38-migration.c).
 
 ### 32.1. Pattern 1: Key-value with auto-increment ID
 
-`mdbx_dbi_sequence()` provides monotonic IDs without a separate counter.
+There are two approaches to monotonic IDs: the built-in `mdbx_dbi_sequence()` (an atomic
+per-table counter) and the classic portable approach — a counter in a service table. The example
+below demonstrates the second variant: it works identically across all libmdbx versions and
+doesn't depend on `MDBX_LIFORECLAIM` subtleties.
 
 **Fragment from [`examples/c++/39-pattern-sequence-id.c++`](examples/c++/39-pattern-sequence-id.c++)** — auto-increment ID: the counter lives in the `meta` table and is incremented in the same writing transaction as the record insert:
 
@@ -650,6 +724,26 @@ Full code: [46-pattern-read-your-writes.c++](examples/c++/46-pattern-read-your-w
 Each pattern: problem statement → solution with code → trade-offs → alternatives (in the full version
 of the knowledge base — `knowledge-base/`).
 
+### 32.9. Summary of chapter 32
+
+- Auto-increment ID: a counter in a service table, incremented in the same write transaction as the insert; the alternative is the built-in `mdbx_dbi_sequence()`.
+- A secondary (DUPSORT) index "field → list of IDs" is updated in one transaction with the main table.
+- Composite key: fixed-width fields in big-endian (lexicographic order = numeric), range search — `SET_RANGE`.
+- Task queue: an ordinal key (monotonic number), the consumer takes the first element via a cursor and deletes it.
+- Ring buffer: fixed slots `0..N-1`, writing overwrites `counter % N`.
+- Full scan — cursor `to_first()` → `to_next()`, bulk processing — `get_batch`/`bunch_delete`.
+- Replication via per-table txnid (a version marker in the value) and read-your-writes via `mdbx_txn_clone`/`embark_read`.
+
+### 32.10. Chapter 32 checklist
+
+- [ ] For monotonic IDs choose `mdbx_dbi_sequence()` or a counter in a service table (the portable variant).
+- [ ] Update the secondary index (DUPSORT, `value_mode::multi`) in the same transaction as the main record.
+- [ ] For composite keys use big-endian/a comparator and range search via `SET_RANGE`.
+- [ ] Implement the task queue via an ordinal key and deletion of the first element by a cursor.
+- [ ] For bounded structures (ring buffer) delete the oldest records on overflow.
+- [ ] Perform bulk scans/deletions via `get_batch`/`bunch_delete`.
+- [ ] Build replication on txnid markers, the replica — on a read-only snapshot filtered by `last_seen`.
+
 ---
 
 
@@ -685,6 +779,20 @@ tracking of page usage by readable snapshots).
 - Encryption and compression at the engine level.
 - Streaming BLOBs.
 - SWIG and cross-language interop.
+
+### 33.5. Summary of chapter 33
+
+- libmdbx as of 2026 — a mature engine (0.15.x devel-canon); the DB format frozen since 2018.
+- Fundamental GC/freelist improvements are planned only in the next generation — MithrilDB: a common API for several storage formats, amalgamation simplifies distribution.
+- Replication prerequisites: change subscription, early GC cleanup (2025), non-linear GC processing (end-to-end tracking of page usage by readable snapshots).
+- Other roadmap items: engine-level encryption and compression, streaming BLOBs, SWIG and cross-language interop.
+
+### 33.6. Chapter 33 checklist
+
+- [ ] In long-term planning account for the DB format being frozen since 2018 (0.11.x ↔ 0.12.x compatibility).
+- [ ] Do not expect fundamental GC/freelist improvements in the current generation — watch MithrilDB.
+- [ ] For replication rely on the available prerequisites (change subscription, early GC cleanup).
+- [ ] Treat roadmap features (encryption, compression, streaming BLOBs, SWIG) as future, not current, capabilities.
 
 ---
 

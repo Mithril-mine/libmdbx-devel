@@ -167,6 +167,9 @@ int main(void) {
 Deleting values in a DUPSORT table with a single cursor during iteration is dangerous (known bugs in
 0.12.x, details in Volume V). The safe pattern is **two cursors**: one positions, the other deletes.
 
+**Fragment (C, illustration):** the full compilable version is below and in
+[`examples/c++/06-dupsort-delete.c++`](examples/c++/06-dupsort-delete.c++).
+
 ```c
 /* delete all values of the "target" key in a DUPSORT table */
 MDBX_cursor *it, *del;
@@ -234,6 +237,22 @@ Full code: [06-dupsort-delete.c++](examples/c++/06-dupsort-delete.c++) · [C ver
 2. Find "the key after X" in two ways: `SET_RANGE` and `SET_UPPERBOUND`.
 3. Delete every second key during a traversal and explain why the positioning must be refreshed.
 
+### 6.10. Chapter 6 checklist
+
+- [ ] I can open and close a cursor and understand that it lives no longer than its transaction;
+- [ ] I use `MDBX_FIRST`/`MDBX_LAST`/`MDBX_NEXT`/`MDBX_PREV` and `MDBX_SET_RANGE` fluently for range queries;
+- [ ] I remember that the position is undefined after `mdbx_cursor_del()` and always re-position;
+- [ ] I can apply the "two cursors" pattern for safe deletion in DUPSORT;
+- [ ] I can walk a table from end to start (`MDBX_LAST` + `MDBX_PREV`) and tell end-of-traversal (`MDBX_NOTFOUND`, `mdbx_cursor_eof()`) from an error.
+
+### 6.11. What's next
+
+The next chapter extends the data model: the `MDBX_DUPSORT` flag turns a table into a multimap
+"key → ordered set of values". We will cover the storage forms, the `MDBX_DUPFIXED`,
+`MDBX_INTEGERDUP`, `MDBX_REVERSEDUP` flags, navigation over duplicates, and the key technique —
+the inverted index "field → list of IDs". It becomes the basis of the configurator's secondary
+indexes in chapter 8.
+
 ---
 
 ## Chapter 7. Multivalues and DUPSORT
@@ -291,6 +310,9 @@ mdbx_cursor_count(cur, &count);
 
 The classic use of DUPSORT is an **inverted index**: field value → list of record identifiers.
 This is a "cheap secondary index" without a separate link table.
+
+**Fragment (C, illustration):** the full compilable version is below and in
+[`examples/c++/08-inverted-index.c++`](examples/c++/08-inverted-index.c++).
 
 ```c
 /* index "role" -> list of user_id */
@@ -411,6 +433,22 @@ int main(void) {
 1. Build an index "by age" and print all users older than 30.
 2. Explain why `MDBX_NODUPDATA` is needed when adding to a DUPSORT index.
 3. What happens on an attempt to `DUPFIXED`-insert a value of a different length?
+
+### 7.9. Chapter 7 checklist
+
+- [ ] I understand that `MDBX_DUPSORT` means "key → ordered set of values", with the value acting as a second key;
+- [ ] I know when `MDBX_DUPFIXED` (equal value lengths) and `MDBX_INTEGERDUP` are required;
+- [ ] I can locate and iterate the values of a key: `MDBX_GET_BOTH`, `MDBX_GET_BOTH_RANGE`, `MDBX_FIRST_DUP`/`NEXT_DUP`, `mdbx_cursor_count()`;
+- [ ] I add values with `MDBX_NODUPDATA` to avoid duplicates;
+- [ ] I can build an inverted index "word → list of IDs" over a DUPSORT table.
+
+### 7.10. What's next
+
+Multivalues are a half-finished product; chapter 8 assembles them into a complete technique: the
+secondary index. We will build the "main table + index tables" schema, learn to keep them
+consistent in a single transaction, compare a DUPSORT index with a separate table, and meet
+composite keys and deletion via an index. For the end-to-end project this is a step toward a
+"mini-ORM" with a users entity.
 
 ---
 
@@ -555,12 +593,31 @@ int user_add(config_store_t *cs, uint64_t id, const char *name) {
 - A secondary index is a "field → primary key" table that you maintain yourself.
 - All changes (data + indexes) go in one transaction.
 - A DUPSORT index for "one-to-many"; composite keys for several fields.
+- Delete a record together with its index entries; otherwise the index goes stale.
+- An inverted index over DUPSORT is a cheap alternative to a separate link table.
 
 ### 8.8. Exercises
 
 1. Add an index "by city" and write a lookup function.
 2. Write `user_rename`, which atomically changes the name and rebuilds `idx_name`.
 3. Why do composite keys require care with byte order?
+
+### 8.9. Chapter 8 checklist
+
+- [ ] I understand that a secondary index is a "field → primary key" table that I maintain myself;
+- [ ] I update the data and all indexes in one transaction, remembering the price of breaking this rule;
+- [ ] I choose deliberately between a DUPSORT index ("field → list of IDs") and a separate table;
+- [ ] I know why numeric fields in composite keys are packed big-endian;
+- [ ] I delete a record together with its index entries; otherwise the index goes stale;
+- [ ] I remember `MDBX_DB_ACCEDE` for the case when a table's flags are unknown in advance.
+
+### 8.10. What's next
+
+Indexes and data lead to the next question: how to configure the environment itself. Chapter 9 is
+about file geometry (`mdbx_env_set_geometry()`), the `maxreaders`/`maxdbs` limits, environment
+flags, `MDBX_opt_*` runtime options, and statistics. A configurator that grows from a test database
+to a working one needs a managed file size and predictable limits — otherwise `MDBX_MAP_FULL`
+arrives sooner or later.
 
 ---
 
@@ -737,6 +794,21 @@ Full code: [12-env-stat.c++](examples/c++/12-env-stat.c++) · [C version](exampl
 2. What does `env_open` return with an obviously excessive `upper` (e.g. 140 TB on 64-bit)? Record the error code.
 3. Create a database with a 64 KB page and compare with 4 KB when reading large values.
 
+### 9.9. Chapter 9 checklist
+
+- [ ] I set the geometry (`size_lower`/`size_now`/`size_upper`/`growth_step`/`shrink_threshold`) before `env_open`;
+- [ ] I understand that `size_upper` is a hard limit: exhausting it yields `MDBX_MAP_FULL`, while an excessive `upper` yields `TOO_LARGE`/`ENOMEM`;
+- [ ] I know where `maxreaders`, `maxdbs`, and the page size are set;
+- [ ] I distinguish the key environment flags (`MDBX_WRITEMAP`, `MDBX_SAFE_NOSYNC`, `MDBX_EXCLUSIVE`, `MDBX_ACCEDE`) and the main `MDBX_opt_*` options;
+- [ ] I can take statistics via `mdbx_env_info_ex()`/`mdbx_env_stat_ex()` and use it for diagnostics.
+
+### 9.10. What's next
+
+A configured environment is not the whole story: you must also decide what happens on commit.
+Chapter 10 covers durability modes: weak/steady meta, what `MDBX_NOMETASYNC` and `MDBX_SAFE_NOSYNC`
+risk, why auto-synchronization is needed, and how the modes differ on macOS, Linux, and Windows.
+The mode choice directly determines the configurator's speed and reliability.
+
 ---
 
 ## Chapter 10. Durability modes
@@ -819,6 +891,8 @@ And manually from a separate thread: `mdbx_env_sync_ex(env, force, nonblock)` �
 
 ### 10.6. Example: switching the mode
 
+**Fragment (C, illustration):**
+
 ```c
 MDBX_env *env;
 mdbx_env_create(&env);
@@ -843,6 +917,21 @@ mdbx_env_open(env, "./safe.mdbx", MDBX_NOSUBDIR, 0664);
 1. Compare commit speed in `DURABLE` vs `SAFE_NOSYNC` on 10,000 small transactions.
 2. Observe file growth in `SAFE_NOSYNC` without auto-sync — and after configuring `syncbytes`.
 3. Explain why `UTTERLY_NOSYNC` is "maximum risk": what exactly may not survive a crash.
+
+### 10.9. Chapter 10 checklist
+
+- [ ] I understand that a strict commit is "data to disk + meta to disk" and distinguish weak/steady meta;
+- [ ] I know the risks of each mode: `MDBX_SYNC_DURABLE`, `MDBX_NOMETASYNC`, `MDBX_SAFE_NOSYNC`, `MDBX_UTTERLY_NOSYNC`, and combinations with `MDBX_WRITEMAP`;
+- [ ] for `MDBX_SAFE_NOSYNC` I configure auto-synchronization (`syncbytes`/`syncperiod`) to keep file growth under control;
+- [ ] I can switch modes and call `mdbx_env_sync_ex()` manually;
+- [ ] I remember the platform nuances: `F_FULLFSYNC` on macOS, `boot_id` on Linux, `LockFileEx` on Windows.
+
+### 10.10. What's next
+
+Durability modes set the rules for writing; the next chapter is about working with the database
+from several threads. Chapter 11 covers sticky threads, the `MDBX_NOSTICKYTHREADS` flag and its
+pitfalls, TLS reader slots, `fork()`, transaction cloning, and parking of long-lived readers.
+A configurator with a thread pool or coroutines cannot do without this knowledge.
 
 ---
 
@@ -926,7 +1015,8 @@ Called once in the child, not in the parent.
 ### 11.5. Cloning transactions
 
 `mdbx_txn_clone()` duplicates a read-only transaction — several handlers on one snapshot
-without rescanning the RLT (useful for parallel processing).
+without rescanning the RLT (the RLT — reader lock table — is libmdbx's internal registry of
+readers; detailed in Volume III, ch. 14) — useful for parallel processing.
 
 ### 11.6. Parking and eviction
 
@@ -972,6 +1062,22 @@ snapshot, or gets `MDBX_OUSTED`.
    `NOSTICKYTHREADS` — capture the deadlock.
 3. Think of when `txn_clone` saves resources compared to several `txn_begin`.
 
+### 11.10. Chapter 11 checklist
+
+- [ ] I understand that a transaction is bound to its thread by default and recognize `MDBX_THREAD_MISMATCH`;
+- [ ] I know when `MDBX_NOSTICKYTHREADS` is justified and which write functions may deadlock with it;
+- [ ] I understand how TLS reader slots are cleaned up and how `mdbx_thread_register()`/`mdbx_thread_unregister()` help;
+- [ ] after `fork()` I call `mdbx_env_resurrect_after_fork()` in the child, not in the parent;
+- [ ] I can clone read-only transactions (`mdbx_txn_clone()`) for parallel processing of one snapshot;
+- [ ] I use `mdbx_txn_park()`/`mdbx_txn_unpark()` for long-lived readers and remember that a parked snapshot is not held.
+
+### 11.11. What's next
+
+One practical skill remains: reacting to errors. Chapter 12 systematizes the return codes: expected
+states (`MDBX_KEYEXIST`, `MDBX_NOTFOUND`), space problems (`MDBX_MAP_FULL` vs `MDBX_TXN_FULL`),
+corruption and discipline-violation errors, and retry loops for concurrent scenarios. After it, the
+configurator will withstand both crashes and contention.
+
 ---
 
 ## Chapter 12. Error handling
@@ -1001,7 +1107,8 @@ mdbx_strerror_r(rc, buf, sizeof(buf));
 1. **Abort the current write transaction** (continuing after a geometry change → `MDBX_BAD_TXN`).
 2. Check long readers (`mdbx_stat -r` retained; `mdbx_env_info_ex`).
 3. Set/raise `upper` **before creating/at open**.
-4. Install an HSR callback (Volume V, chapter 29).
+4. Install an HSR callback (HSR — Handle-Slow-Readers, the mechanism for evicting stuck
+   readers; Volume V, chapter 29).
 
 ### 12.4. MAP_FULL vs TXN_FULL
 
@@ -1035,6 +1142,8 @@ mdbx_strerror_r(rc, buf, sizeof(buf));
 ### 12.8. Retry loop strategies
 
 For concurrent scenarios ("compare-and-replace"):
+
+**Fragment (C, illustration):**
 
 ```c
 for (;;) {
@@ -1091,6 +1200,23 @@ Full code: [17-error-handling.c++](examples/c++/17-error-handling.c++) · [C ver
 1. Write a `MDBX_KEYEXIST` handler in the end-to-end project: on conflict — read and decide.
 2. Describe how `MAP_FULL` differs from `TXN_FULL`, with examples.
 3. Make a retry loop around `cfg_set` with a "read-check-write" strategy.
+
+### 12.11. Chapter 12 checklist
+
+- [ ] I read return codes correctly: 0 — success, negative — errors, `MDBX_RESULT_TRUE`/`MDBX_RESULT_FALSE` — special results;
+- [ ] in multithreaded code I use `mdbx_strerror_r()` rather than `mdbx_strerror()`;
+- [ ] I know the sequence of actions for `MDBX_MAP_FULL` (abort, check readers, raise `upper` before opening, HSR) and can tell it apart from `MDBX_TXN_FULL`;
+- [ ] I handle `MDBX_KEYEXIST` and `MDBX_NOTFOUND` with branching, not panic;
+- [ ] I treat discipline codes (`MDBX_THREAD_MISMATCH`, `MDBX_TXN_OVERLAPPING`) as signals of architectural mistakes;
+- [ ] I can write a "read-check-write" retry loop for concurrent scenarios.
+
+### 12.12. What's next
+
+Volume II provided the full practical toolkit, but many of its rules ("close read transactions",
+"geometry before open", "`SAFE_NOSYNC` grows the file") looked like demands without explanations.
+Volume III opens libmdbx's internal mechanisms: B+tree and mmap, MVCC, the commit pipeline, the
+free-page GC, geometry, and crash recovery. With them, the rules turn into an understanding of
+"why".
 
 ---
 

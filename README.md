@@ -264,6 +264,12 @@ To build _libmdbx_ for iOS, please use CMake with the ["toolchain file"](https:/
 
 Please refer to the online [_libmdbx_ API reference](https://libmdbx.dqdkfa.ru/docs) and/or see the [mdbx.h++](mdbx.h%2B%2B) and [mdbx.h](mdbx.h) headers.
 
+## Textbook
+
+A complete practical guide to libmdbx — six volumes from the first steps to expert topics and bindings — is available online in [Russian](https://libmdbx.dqdkfa.ru/textbook/ru/) and [English](https://libmdbx.dqdkfa.ru/textbook/en/); each online version links a downloadable PDF.
+
+The textbook's source (markdown, in `docs/textbook/ru` and `docs/textbook/en`) and all code examples (`examples/` — compilable C11/C++17 programs, exercised by CTest) are part of this repository. Both localizations are built into HTML + PDF with `make books` (requires `pip install mkdocs mkdocs-material mkdocs-with-pdf`).
+
 ## Contributing
 
 Contributions are welcome. The project uses [CMake](https://cmake.org/)+[CTest](https://cmake.org/cmake/help/latest/module/CTest.html) for building and testing and [LLVM](https://llvm.org/) code style; build support for at least Linux and Windows is expected for any change. Please keep the amalgamated build green (`make dist`), avoid enabling link-time optimization in test builds, and add/update tests together with your change. For the project structure, build details and workflows, see `docs/` and the [home site](https://libmdbx.dqdkfa.ru).
