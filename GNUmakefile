@@ -482,7 +482,7 @@ endef
 DIST_EXTRA := AGENTS.md LICENSE NOTICE COPYRIGHT README.md TODO.md CMakeLists.txt GNUmakefile Makefile ChangeLog.md VERSION.json config.h.in ntdll.def \
 	$(addprefix man1/, $(MANPAGES)) cmake/compiler.cmake cmake/profile.cmake cmake/utils.cmake windows-safeseh-masm.asm windows-safeseh-yasm.asm \
 	windows-safeseh.obj valgrind.supp conanfile.py \
-	$(addprefix examples/, CMakeLists.txt example-mdbx.c++ example-mdbx.c pcrf/pcrf_simulator.c README.md)
+	$(sort $(shell git ls-files examples docs/textbook/en docs/textbook/ru))
 
 DIST_SRC   := mdbx.h mdbx.h++ mdbx.c mdbx.c++ $(addsuffix .c, $(MDBX_TOOLS)) mdbx-internals.h mdbx-wingetopt.h
 
@@ -840,6 +840,7 @@ $(DIST_DIR)/mdbx-internals.h: src/version.c $(DIST_DIR)/@tmp-amalgam.inc $(ALLOY
 		src/essentials.h \
 	| $(SED) \
 		-e 's|#include "../mdbx.h"|@INCLUDE "mdbx.h"|' \
+		-e '/dist-cutoff-begin/,/dist-cutoff-end/d' \
 		-e '/#pragma once/d' \
 		-e '/#include "/d' \
 		-e 's|@INCLUDE|#include|' \
@@ -886,6 +887,7 @@ $(DIST_DIR)/mdbx.c: $(DIST_DIR)/@tmp-squashed.inc $(DIST_DIR)/@tmp-amalgam.inc $
 		-e '/#include "debug_end.h"/r src/debug_end.h' \
 	) | $(SED) \
 		-e '/#include "/d;/#pragma once/d' \
+		-e '/dist-cutoff-begin/,/dist-cutoff-end/d' \
 		-e 's|@INCLUDE|#include|' \
 		-e '/ clang-format o/d;/ \*INDENT-O/d' \
 	| grep -v '^///' | cat -s $(DIST_DIR)/@tmp-amalgam.inc - >$@

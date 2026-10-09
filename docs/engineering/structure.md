@@ -23,7 +23,7 @@
 | `ChangeLog*.md` | docs | Changelogs per version (0.09, 0.10, 0.12, 0.13, Old). |
 | `.clang-format`, `.cmake-format.yaml` | style | Formatting rules (LLVM). |
 | `docs/` | docs | Doxygen: `Doxyfile.in`, `_preface.md`, `_starting.md`, `_restrictions.md`, `_toc.md`, CSS/HTML assets, logo. |
-| `examples/` | docs/code | `example-mdbx.c`, `example-mdbx.c++`, `sample-bdb.txt`, `pcrf/` (PCRF simulator). |
+| `examples/` | docs/code | `example-mdbx.c`, `example-mdbx.c++`, `sample-bdb.txt`, `c/` (C examples + `c/pcrf/`), `c++/` (C++ examples), `common/` (shared helpers), `config-store/` (end-to-end tutorial project). |
 | `.github/workflows/` | CI | GH Actions: linux, macos, windows-msvc, windows-mingw, windows-mscl, cxx-msvc, android. |
 | `.sourcecraft/ci.yaml` | CI | SourceCraft CI: workflows `ci-linux-debug-gcc`, `ci-linux-debug-clang`, `ci-linux-release-spilling`; cubes image `dh-mirror.gitverse.ru/jakoch/cpp-devbox:forky-latest`; env `MDBX_BUILD_OPTIONS=-DMDBX_CHECKING=2 -DMDBX_DEBUG=0 -DMDBX_FORCE_ASSERTIONS=1 -DMDBX_DEBUG_SPILLING=1`; runs `tests/ci/ci.sh`; daily cron 03:42 UTC. |
 | `.codeassistant/mcp.json` | tooling | MCP config for SourceCraft API (issues/PRs/runs/labels tools). |
@@ -120,7 +120,7 @@ linkage; in amalgamated build (`xMDBX_ALLOY`) = `static`.
 | File | Role | Key symbols / notes |
 | --- | --- | --- |
 | `gc.h` | GC interface + update context. `gcu_t` carries loop state, retired accounting, `rkl_t sequel`, bigfoot, dense histogram (31 entries), embedded cursor/couple. | `gc_put_init/destroy`, `gc_alloc_ex/single`, `gc_update`, `gc_cursor_init`, `gc_merge_loose`, `gc_check_keylen`, `gc_check_rowdata`, `gc_row_pnl` (`glr_t`), `gc_stockpile`, `gc_repnl_*`, `gc_is_reclaimed`, `gc_may_clean_reclaimed`, `defract_context` (defrag state with `dml_t *arcs`). |
-| `gc-get.c` | Page allocation from GC: LIFO (default) recycling of retired pages, dense/contiguous sequences, obstacles from slow readers (`gc_reclaiming_obstacle`). | `gc_alloc_*` paths, `ALLOC_*` flags (`DEFAULT`, `UNIMPORTANT`, `RESERVE`, `COALESCE`, `SHOULD_SCAN`, `LIFO`). |
+| `gc-get.c` | Page allocation from GC: recycles retired pages by record order — FIFO (default) or LIFO via `ALLOC_LIFO` (`MDBX_LIFORECLAIM`); dense/contiguous sequences; obstacles from slow readers (`gc_reclaiming_obstacle`). Policy selects GC **records by txnid**, not pages directly. | `gc_alloc_*` paths, `ALLOC_*` flags (`DEFAULT`, `UNIMPORTANT`, `RESERVE`, `COALESCE`, `SHOULD_SCAN`, `LIFO`). |
 | `gc-put.c` | Retiring freed pages into GC records: store per-txnid records in FREE_DBI tree, merge adjacent, cutoffs, "bigfoot" handling. | `gc_put_init`, `gc_update`, `gc_merge_loose`, `gcu_t` usage; `MDBX_DEBUG_GCU` tracing. |
 | `rkl.c` / `rkl.h` | **Sorted set of `txnid_t`** = contiguous interval (`solid_begin..solid_end`) + sorted list, with cheap interval↔list exchange ("magic"). Keeps GC record ids during reclamation (`reclaimed`), ready-for-reuse ids (`ready4reuse`), and ids returned into GC at commit (`comeback`). Both LIFO and FIFO recycling supported. Exact abbreviation expansion unknown. | `rkl_init/reserve/clear/clear_and_shrink/destroy/contain/...`; `rkl_t` (solid_begin/end, list_length/limit, list, inplace[12]). |
 
@@ -214,7 +214,11 @@ linkage; in amalgamated build (`xMDBX_ALLOY`) = `static`.
 | `example-mdbx.c` | Minimal C usage example. |
 | `example-mdbx.c++` | C++ API usage example. |
 | `sample-bdb.txt` | Sample data. |
-| `pcrf/pcrf_simulator.c`, `pcrf/README.md` | PCRF charging-rule simulator stress test. |
+| `c/NN-*.c` | Textbook C examples (scenarios S01–S38). |
+| `c/pcrf/pcrf_simulator.c`, `c/pcrf/README.md` | PCRF charging-rule simulator stress test. |
+| `c++/NN-*.c++` | Textbook C++ examples (scenarios S01–S47). |
+| `common/common.c`, `common/common.h`, `common/common.h++` | Shared helpers for the examples. |
+| `config-store/config-store-*.c++`, `config-store/README.md` | End-to-end tutorial project (slices 02–12). |
 
 ---
 
@@ -275,8 +279,9 @@ tree family, tbl family, coherency, histogram, chk printing).
   `distance_scroll_distribute.c++` pin this behavior.
 - Page state machine (`frozen/spilled/shadowed/modifiable/tmp`) is implemented in `page-ops.h`
   via comparisons with `txn->txnid` and `txn->front_txnid`.
-- GC allocation honors `ALLOC_LIFO` (default) and must not hand out pages protected by active
-  readers (`gc_reclaiming_obstacle`, `mvcc_kick_laggards`).
+- GC allocation policy is FIFO by default; `ALLOC_LIFO` (set by `MDBX_LIFORECLAIM`) switches to
+  LIFO record order. It must not hand out pages protected by active readers
+  (`gc_reclaiming_obstacle`, `mvcc_kick_laggards`).
 - TLS destructor correctness (incl. glibc bugs #21031/#21032) is handled in `rthc.c`; any
   refactoring of per-thread state must keep the `rthc_thread_dtor` cleanup contract.
 - Options surface (`options.h` ↔ `conanfile.py` ↔ `GNUmakefile`/CMake `-DMDBX_*`) must stay in

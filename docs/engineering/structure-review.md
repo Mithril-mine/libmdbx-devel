@@ -35,7 +35,7 @@
 | `COPYRIGHT`, `LICENSE`, `NOTICE`, `TODO.md`, `README.md`, `AGENTS.md` | Правовые/README | upstream (AGENTS.md — на `master`) |
 | `.le.ini`, `.clang-format`, `.cmake-format.yaml`, `valgrind.supp`, `.gitignore` | Дотфайлы | upstream (`.le.ini` есть на `master`) |
 | `docs/` (13 файлов) | Doxygen: `Doxyfile.in`, `_*.md`, CSS/HTML, `ld+json`, `title`, `sitemap.add` | upstream (канон) |
-| `examples/` (5 + `pcrf/` 2) | Примеры + PCRF-симулятор | upstream |
+| `examples/` (75 исходников + READMEs, включая `c/pcrf/`) | Примеры + PCRF-симулятор | upstream |
 | `.github/workflows/` (7 yml), `.sourcecraft/ci.yaml` | CI | upstream |
 | `tests/` (112 файлов) | Тесты (framework/ut/issues/exploits/scripts/docs) | **наш слой** |
 | `skynet/` (67 файлов) | Рой-доки и SKILLS | **наш слой** |
@@ -222,11 +222,11 @@ doxygen-target строит `docs/overall.md|intro.md|usage.md` через
 
 **Решение: НЕ трогаем.**
 
-### F9. `examples/pcrf/` — самодостаточный подпроект, ок
+### F9. `examples/c/pcrf/` — самодостаточный подпроект, ок
 
-`pcrf/pcrf_simulator.c` + `pcrf/README.md`; собирается отдельным таргетом
-`pcrf_simulator` (examples/CMakeLists.txt); входит в `DIST_EXTRA`. Структура
-адекватна.
+`c/pcrf/pcrf_simulator.c` + `c/pcrf/README.md`; собирается отдельным таргетом
+`pcrf_simulator` (examples/CMakeLists.txt); входит в `DIST_EXTRA`. Пути
+обновлены после распрямления каталогов примеров. Структура адекватна.
 
 **Решение: НЕ трогаем.**
 
