@@ -20,6 +20,7 @@
 /// \date 2015-2026
 
 #include "mdbx.h++"
+#include "../probe-ctl.h"
 #include <gtest/gtest.h>
 
 #include <chrono>
@@ -1065,6 +1066,235 @@ bool case2_multithread(mdbx::env, prng &, get_cached_t) {
 
 //--------------------------------------------------------------------------------------------
 
+//--------------------------------------------------------------------------------------------
+
+#if defined(MDBX_PROBES)
+static bool probe_ctl_ok(const char *request) {
+  char reply[4096];
+  const int rc = mprobe_ctl(request, reply, sizeof(reply));
+  if (rc != 0 || strncmp(reply, "ok", 2) != 0) {
+    std::cerr << "FAIL mprobe_ctl(" << request << ") rc=" << rc << " reply=\"" << reply << "\"" << std::endl;
+    return false;
+  }
+  return true;
+}
+
+static bool probe_arm_fault(const char *tag, unsigned code) {
+  char request[512];
+  snprintf(request, sizeof(request), "fault %s %u", tag, code);
+  return probe_ctl_ok(request);
+}
+#endif /* MDBX_PROBES */
+
+/* Пилот B68-P3: error-path'и mdbx_cache_get + fault-инъекция (probe-bus).
+ * Классы R (crafted) и F (fault). Инвентарь: docs/engineering/coverage-pilot-inventory.md. */
+static bool case3_error_paths(mdbx::env env, get_cached_t get_cached) {
+  bool ok = true;
+  auto txn = env.start_write();
+  auto table = txn.create_map("case3", mdbx::key_mode::usual, mdbx::value_mode::single);
+  txn.clear_map(table);
+  txn.insert(table, "key", "value");
+  txn.commit();
+
+  MDBX_cache_entry_t entry;
+  MDBX_val data;
+  MDBX_cache_result_t r;
+
+  /* R: EINVAL для null-аргументов (оба entry-point'а) */
+  mdbx_cache_init(&entry);
+  r = mdbx_cache_get(txn, table, nullptr, &data, &entry);
+  ok = check_state(r, MDBX_EINVAL, MDBX_CACHE_ERROR, __LINE__) && ok;
+  r = mdbx_cache_get_SingleThreaded(txn, table, nullptr, &data, &entry);
+  ok = check_state(r, MDBX_EINVAL, MDBX_CACHE_ERROR, __LINE__) && ok;
+
+  /* R: невалидный dbi -> error (dbi_check) */
+  {
+    auto rt = env.start_read();
+    mdbx_cache_init(&entry);
+    r = get_cached(rt, MDBX_dbi(999), mdbx::slice("key"), &data, &entry);
+    if (!(r.status == MDBX_CACHE_ERROR && r.errcode != MDBX_SUCCESS)) {
+      std::cerr << "BADDBI-MISMATCH err=" << r.errcode << " status=" << r.status << std::endl;
+      ok = false;
+    }
+  }
+
+  /* R: слишком короткий ключ для integer-key таблицы -> error (check_key) */
+  {
+    auto wtxn = env.start_write();
+    auto ord = wtxn.create_map("case3ord", mdbx::key_mode::ordinal, mdbx::value_mode::single);
+    const uint64_t ord_key = 42;
+    wtxn.upsert(ord, mdbx::slice(&ord_key, sizeof(ord_key)), mdbx::slice("v"));
+    wtxn.commit();
+    std::string short_key(3, '\0'); /* ordinal требует ровно 8 байт */
+    auto rt = env.start_read();
+    mdbx_cache_init(&entry);
+    r = get_cached(rt, ord, mdbx::slice(short_key.data(), short_key.size()), &data, &entry);
+    if (!(r.status == MDBX_CACHE_ERROR && r.errcode != MDBX_SUCCESS)) {
+      std::cerr << "LONGKEY-MISMATCH err=" << r.errcode << " status=" << r.status << std::endl;
+      ok = false;
+    }
+  }
+
+  /* R: MDBX_EMULTIVAL для dupsort-таблицы */
+  {
+    auto wtxn = env.start_write();
+    auto dup = wtxn.create_map("case3dup", mdbx::key_mode::usual, mdbx::value_mode::multi);
+    wtxn.clear_map(dup);
+    wtxn.upsert(dup, "k", "v1");
+    wtxn.upsert(dup, "k", "v2");
+    wtxn.commit_embark_read();
+    mdbx_cache_init(&entry);
+    r = get_cached(wtxn, dup, mdbx::slice("k"), &data, &entry);
+    if (!(r.status == MDBX_CACHE_ERROR && r.errcode == MDBX_EMULTIVAL)) {
+      std::cerr << "EMULTIVAL-MISMATCH err=" << r.errcode << " status=" << r.status << std::endl;
+      ok = false;
+    }
+  }
+
+  /* R: MDBX_CACHE_BEHIND (snapshot позади entry.trunk_txnid) */
+  {
+    auto rt = env.start_read();
+    mdbx_cache_init(&entry);
+    entry.trunk_txnid = rt.id() + 5;
+    entry.last_confirmed_txnid = rt.id() + 10;
+    r = get_cached(rt, table, mdbx::slice("key"), &data, &entry);
+    if (r.status != MDBX_CACHE_BEHIND) {
+      std::cerr << "BEHIND-MISMATCH err=" << r.errcode << " status=" << r.status << std::endl;
+      ok = false;
+    }
+  }
+
+  /* R: MDBX_CACHE_UNABLE (ABA-окно: trunk < txnid < last_confirmed, offset=0) */
+  {
+    auto rt = env.start_read();
+    mdbx_cache_init(&entry);
+    entry.trunk_txnid = (rt.id() > 2) ? rt.id() - 2 : 1;
+    entry.last_confirmed_txnid = rt.id() + 5;
+    r = get_cached(rt, table, mdbx::slice("key"), &data, &entry);
+    if (r.status != MDBX_CACHE_UNABLE) {
+      std::cerr << "UNABLE-MISMATCH err=" << r.errcode << " status=" << r.status << std::endl;
+      ok = false;
+    }
+  }
+
+  /* R: MDBX_CACHE_RACE через заведомо невалидный last_confirmed (Debug-ветка
+   * в mdbx_cache_get: значение > MAX_TXNID). Проверяем только multithreaded-обёртку. */
+  {
+    auto rt = env.start_read();
+    mdbx_cache_init(&entry);
+    entry.last_confirmed_txnid = (uint64_t)-1; /* > MAX_TXNID (SAFE64_INVALID_THRESHOLD-1) */
+    r = mdbx_cache_get(rt, table, mdbx::slice("key"), &data, &entry);
+    if (r.status != MDBX_CACHE_RACE) {
+      std::cerr << "RACE-MISMATCH err=" << r.errcode << " status=" << r.status << std::endl;
+      ok = false;
+    }
+  }
+
+/* R: notfound_elevate_trunk — запись entry из старого снапшота (offset=0,
+   * lc = R0), поиск в новом снапшоте R1 после изменения ДРУГОЙ части дерева:
+   * ветка на пути к отсутствующему ключу осталась нетронутой (txnid <= lc). */
+  {
+    auto wtxn = env.start_write();
+    auto deep = wtxn.create_map("case3elev", mdbx::key_mode::usual, mdbx::value_mode::single);
+    wtxn.clear_map(deep);
+    for (unsigned seed = 0; wtxn.get_map_stat(deep).ms_depth < 4; ++seed)
+      wtxn.upsert(deep, buffer::hex(seed), buffer::base64(seed));
+    wtxn.commit();
+
+    mdbx_cache_init(&entry);
+    auto r0 = env.start_read();
+    r = get_cached(r0, deep, mdbx::slice("zzz-missing-high"), &data, &entry); /* NOTFOUND/CONFIRMED */
+    ok = (r.status == MDBX_CACHE_CONFIRMED || r.status == MDBX_CACHE_REFRESHED) && ok;
+
+    wtxn = env.start_write();
+    wtxn.upsert(deep, "aaa-low-region", "v"); /* меняем противоположный край дерева */
+    wtxn.commit();
+
+    auto r1 = env.start_read();
+    r = get_cached(r1, deep, mdbx::slice("zzz-missing-high"), &data, &entry);
+    ok = (r.errcode == MDBX_NOTFOUND) && ok; /* через notfound_elevate_trunk */
+  }
+
+#if defined(MDBX_PROBES)
+  /* F: fault-инъекция в каждый engine call-site (покрывает error-propagation).
+   * Контекст должен доходить до сайта: полный поиск существующего ключа в
+   * ГЛУБОКОЙ таблице (depth>=4) со свежим entry на каждой итерации. */
+  {
+    auto wtxn = env.start_write();
+    auto deep = wtxn.create_map("case3deep", mdbx::key_mode::usual, mdbx::value_mode::single);
+    wtxn.clear_map(deep);
+    unsigned deep_seed = 0;
+    while (wtxn.get_map_stat(deep).ms_depth < 4)
+      wtxn.upsert(deep, buffer::hex(++deep_seed), buffer::base64(deep_seed));
+    wtxn.upsert(deep, "case3-deep-key", "value");
+    wtxn.commit();
+
+    txn = env.start_read();
+
+    const char *const err_tags[] = {"cache_check_txn_err",   "cache_tbl_refresh_err",
+                                    "cache_cursor_init_err", "cache_page_get_err",
+                                    "cache_page_get_branch_err", "cache_cursor_push_err",
+                                    "cache_leaf_validation_fail", "cache_node_read_err",
+                                    "cache_check_key_err"};
+    for (size_t i = 0; i < sizeof(err_tags) / sizeof(err_tags[0]); ++i) {
+      mdbx_cache_init(&entry);
+      if (!probe_arm_fault(err_tags[i], 9999))
+        return false;
+      r = get_cached(txn, deep, mdbx::slice("case3-deep-key"), &data, &entry);
+      if (r.status != MDBX_CACHE_ERROR) {
+        std::cerr << "FAULT-MISMATCH tag=" << err_tags[i] << " err=" << r.errcode << " status=" << r.status
+                  << std::endl;
+        ok = false;
+      }
+      if (!probe_ctl_ok("fault * none"))
+        return false;
+    }
+
+    /* cache_tbl_refresh_err требует DBI_STALE: меняем таблицу из другого окружения. */
+    {
+      auto params = mdbx::env::operate_parameters(42);
+      params.options.no_sticky_threads = true;
+      mdbx::env_managed env2(env.get_path(), params);
+      auto txn2 = env2.start_write();
+      auto t2 = txn2.open_map("case3");
+      txn2.upsert(t2, "key2", "value2");
+      txn2.commit();
+    }
+    txn.renew_reading();
+    if (!probe_arm_fault("cache_tbl_refresh_err", 9999))
+      return false;
+    r = get_cached(txn, table, mdbx::slice("key"), &data, &entry);
+    ok = (r.status == MDBX_CACHE_ERROR && r.errcode == 9999) && ok;
+    if (!probe_ctl_ok("fault * none"))
+      return false;
+  }
+
+  /* Аттестация: все fault-сайты обязаны иметь seen > 0. */
+  {
+    static const char *const tags[] = {"cache_check_txn_err",   "cache_tbl_refresh_err",
+                                       "cache_cursor_init_err", "cache_page_get_err",
+                                       "cache_page_get_branch_err", "cache_cursor_push_err",
+                                       "cache_leaf_validation_fail", "cache_node_read_err",
+                                       "cache_check_key_err"};
+    char reply[4096];
+    for (size_t i = 0; i < sizeof(tags) / sizeof(tags[0]); ++i) {
+      char request[512];
+      snprintf(request, sizeof(request), "query %s", tags[i]);
+      const int rc = mprobe_ctl(request, reply, sizeof(reply));
+      const char *const site = (rc == 0) ? strstr(reply, "site ") : nullptr;
+      unsigned seen = 0;
+      if (!site || sscanf(site, "site %*s %*u %*u %u", &seen) != 1 || seen == 0) {
+        std::cerr << "FAIL attestation: site \"" << tags[i] << "\" seen==" << seen << " (reply=\"" << reply << "\")"
+                  << std::endl;
+        ok = false;
+      }
+    }
+  }
+#endif /* MDBX_PROBES */
+
+  return ok;
+}
+
 int doit() {
 #if 1
   std::random_device random;
@@ -1110,6 +1340,11 @@ int doit() {
   ok = case2_multithread(env, rnd, cache_get_SingleThreaded_withMutex) && ok;
   std::cout << ">> multithread " << "cache_get" << std::endl;
   ok = case2_multithread(env, rnd, cache_get_multithreaded) && ok;
+
+  std::cout << ">> error-paths " << "SingleThreaded" << std::endl;
+  ok = case3_error_paths(env, mdbx_cache_get_SingleThreaded) && ok;
+  std::cout << ">> error-paths " << "cache_get" << std::endl;
+  ok = case3_error_paths(env, cache_get_multithreaded) && ok;
 
   if (ok) {
     std::cout << "OK\n";

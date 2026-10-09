@@ -438,3 +438,60 @@ Probe-bus не требует внешних трассировщиков/биб
       `extra_probes_ipc` PASS, dist-вырезка чистая (grep по dist пуст);
 - [x] GitHub `ci-probes.yml` (linux/windows/macos) — новая клетка;
 - [ ] Решение по SourceCraft-интеграции (после пересмотра политики CI).
+
+## Глава 13. Пилот coverage-аттестации (B68-P3, 2026-10-01)
+
+Пилотное применение probe-bus к трём тестам (`extra_details_rkl`, `get_cached`,
+`bunches_removal`) для достижения «100% по функционалу тестов». Полный инвентарь,
+классификация и статусы: `docs/engineering/coverage-pilot-inventory.md`.
+
+### 13.1. Классификация непокрытых строк
+
+| Класс | Смысл | Как закрывается |
+| --- | --- | --- |
+| `R` | reachable crafted-сценарием | детерминированный сценарий в тесте (без правки движка) |
+| `F` | fault-injection | `alloc-fault N` (redirect osal_*) или MPROBE_FAULT-сайт + `fault <tag> <code>` |
+| `D` | disarm DEV_ASSERT-предусловия | `disarm <tag>` + crafted-вызов (ветки за ASSERT'ами вызывающего) |
+| `C` | crafted invalid-state | прямой white-box вызов static-функции с валидной/невалидной структурой (дефенсивные ветки) |
+| `X` | недостижимо/мёртвое | документируется и ИСКЛЮЧАЕТСЯ из цели (с обоснованием) |
+
+### 13.2. Паттерны fault-инъекции
+
+- **Аллокации**: `alloc-fault 1` непосредственно перед операцией, `alloc-fault none`
+  после — покрывает `MDBX_ENOMEM`-ветки без правки движка (redirect перехватывает
+  первый же `osal_malloc/realloc/calloc`). Ограничение: недетерминирован, если
+  целевая аллокация не первая в операции (тогда — MPROBE_FAULT-сайт).
+- **Error-propagation**: MPROBE_FAULT-сайт сразу после вызова
+  (`err = f(...); MPROBE_FAULT(tag, err); if (err != SUCCESS) ...`) — детерминированно
+  форсирует error-ветку любого call-site. Мутация `*(int *)var = code` (код ≠ 0).
+- **DEV_ASSERT disarm**: ветки, заблокированные ASSERT-предусловием вызывающего,
+  становятся достижимы после конверсии в `DEV_ASSERT_T` + `disarm <tag>` + `mode count`.
+  Вне probe-сборок `DEV_ASSERT* ≡ CHECK0` (dist-поведение неизменно).
+
+### 13.3. Аттестация покрытия в тесте
+
+Тест в конце опрашивает реестр: `mprobe_ctl("query <tag>")` и требует `seen > 0`
+для каждого обязательного тега (дефенсивные ветки + fault-сайты). Это делает
+покрытие САМОУТВЕРЖДАЕМЫМ в CI (без gcov) и ловит регрессии «ветка перестала
+достигаться после рефакторинга».
+
+### 13.4. Результаты пилота
+
+| Тест / модуль | Было | Стало | Примечания |
+| --- | --- | --- | --- |
+| `details_rkl` → rkl.c | 92.9% | **100% достижимых** (X: rkl_check bsearch-out-of-range, solid_float_low) | R/F/D/C закрыты |
+| `details_rkl` → txl.c | 89.3% | **100% достижимых** (X: txl_reserve early-return) | R/F закрыты |
+| `get_cached` → api-get-cached.c | 67.65% | **~100% детерминированно-достижимых** | defer: elev-петля (collapse), стохастика case2, X: legacy-экспорт |
+| `bunches_removal` → gc-get/gc-put.c | ~44% | in-scope функции основными ветками | defer: fault-сайты/реклайм-состояния — отдельная задача |
+
+### 13.5. Правила пилота (закрепляются)
+
+1. `MPROBE_WATCH/FAULT/COLLECT` и `DEV_ASSERT_T` в src/*.c — ТОЛЬКО внутри
+   `/*> dist-cutoff-begin */ #if defined(MDBX_PROBES) ... #endif /*< dist-cutoff-end */`
+   (иначе текст попадает в амальгаму; скрипт `wrap-probes.py` в `.skynet/tmp/`).
+2. Fallback-макросы MPROBE_* (вне probe-сборок) НЕ должны ссылаться на `name` как
+   на выражение — только `(void)(value)/(void)(var)`, иначе ломается не-probe сборка.
+3. `alloc-fault` в реальных БД-операциях недетерминирован — прицельные ENOMEM
+   покрывать MPROBE_FAULT-сайтами.
+4. Аттестация через `query` — обязательна для дефенсивных веток (иначе их
+   «покрытие» не воспроизводится в CI).

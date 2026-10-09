@@ -44,6 +44,7 @@ static int txl_reserve(txl_t __restrict *__restrict ptxl, const size_t wanna) {
     return MDBX_SUCCESS;
 
   if (unlikely(wanna > /* paranoia */ txl_max)) {
+    MPROBE_WATCH(txl_reserve_too_long, 1);
     ERROR("TXL too long (%zu > %zu)", wanna, (size_t)txl_max);
     return MDBX_TXN_FULL;
   }

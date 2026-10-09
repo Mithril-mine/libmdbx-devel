@@ -66,7 +66,7 @@ The long-term direction is to **gradually lower the level of nondeterminism**:
 - add **complex scenarios with several coordinated processes** (explicit
   synchronization instead of racing children);
 - use observation/injection tools (SystemTap/LTTng probes, see
-  `docs/engineering/systemtap-reference.md` and `skynet/probes.md`) to make
+  `docs/engineering/systemtap-reference.md` and `docs/engineering/probes.md`) to make
   cross-process behavior observable without changing the engine.
 
 ## Termination control
