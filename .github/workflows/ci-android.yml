@@ -1,5 +1,14 @@
 name: ci-android
 
+# Infra v3 platform nightly gate for Android (compact matrix, see
+# tests/ci/config.json zones_notes). Runs the android-nightly profile
+# (3 build-only cells: NDK r26d/r27d/r29 x oldest/newest ABI surface, plus
+# the r27d x86_64 emulator pilot running smoke_basic/smoke_chk via adb).
+#
+# NDK builds are clang by definition (Bionic toolchain); deeper ABI coverage
+# (15 legacy combinations) stays available via ci-dispatch manual profile
+# dispatch once re-added to the registry.
+
 env:
   CI: GITHUB
 
@@ -7,45 +16,55 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.head_ref || github.ref }}
   cancel-in-progress: true
 
-on:
-  push:
-  schedule:
-    - cron: "42 3 * * *"
-      timezone: "Europe/Moscow"
-  repository_dispatch:
-    types: [dispatch-event]
-
 permissions:
   contents: read
 
+on:
+  schedule:
+    - cron: "52 3 * * *"
+      timezone: "Europe/Moscow"
+  workflow_dispatch:
+
 jobs:
-  ci-job:
-    runs-on: ${{ matrix.os }}
+  resolve:
+    runs-on: ubuntu-24.04
+    outputs:
+      cells: ${{ steps.resolve.outputs.cells }}
+      ref: ${{ steps.resolve.outputs.ref }}
+      scope: ${{ steps.resolve.outputs.scope }}
+    steps:
+      - name: checkout
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+          fetch-tags: true
+          submodules: true
+      - name: resolve cells
+        id: resolve
+        shell: bash
+        env:
+          EVENT_REF: ${{ github.event.client_payload.ref }}
+        run: |
+          set -euo pipefail
+          CELLS=$(tests/ci/select-cells.py --profile android-nightly)
+          REF="${EVENT_REF:-master}"
+          JSON=$(tests/ci/resolve-cells.py "$CELLS" full 2> >(sed 's/^/==> /' >&2) || { echo "resolve-cells failed" >&2; exit 1; })
+          echo "cells=${JSON}" >> "$GITHUB_OUTPUT"
+          echo "ref=${REF}" >> "$GITHUB_OUTPUT"
+          echo "scope=full" >> "$GITHUB_OUTPUT"
+
+  run:
+    needs: resolve
     strategy:
       fail-fast: false
+      max-parallel: 4
       matrix:
-        ndk: [r26d, r27d, r29]
-        target: [arm64-v8a, "armeabi-v7a with NEON", x86_64]
-        build-type: [Debug, Release]
-        os: [ubuntu-latest]
-        exclude:
-          - ndk: r26d
-            build-type: Debug
-    steps:
-    - uses: actions/checkout@v7
-      with:
-        fetch-depth: 0
-        fetch-tags: true
-        submodules: true
-    - uses: nttld/setup-ndk@v1
-      id: setup-ndk
-      with:
-        ndk-version: ${{ matrix.ndk }}
-        add-to-path: true
-    - name: ci-step
-      env:
-        ANDROID_NDK_HOME: ${{ steps.setup-ndk.outputs.ndk-path }}
-        CI_MAKE_TARGET: ""
-      shell: bash
-      run: |
-        . tests/ci/ci.sh "-DANDROID_ABI=${{ matrix.target }}|-DCMAKE_TOOLCHAIN_FILE:PATH=${{ steps.setup-ndk.outputs.ndk-path }}/build/cmake/android.toolchain.cmake|-DCMAKE_BUILD_TYPE=${{ matrix.build-type }}"
+        include: ${{ fromJson(needs.resolve.outputs.cells) }}
+    uses: ./.github/workflows/ci-run.yml
+    with:
+      cell: ${{ matrix.cell }}
+      "runs-on": ${{ matrix.runs-on }}
+      scope: ${{ matrix.scope }}
+      coverage: ${{ matrix.coverage }}
+      ndk: ${{ matrix.ndk }}
+      ref: ${{ needs.resolve.outputs.ref }}
