@@ -30,8 +30,11 @@ int osal_waitfor(unsigned id);
 int osal_actor_start(const actor_config &config, mdbx_pid_t &pid);
 actor_status osal_actor_info(const mdbx_pid_t pid);
 void osal_killall_actors(void);
+void osal_killall_actors_immediate(void);
+std::vector<mdbx_pid_t> osal_actor_pids(void);
 int osal_actor_poll(mdbx_pid_t &pid, unsigned timeout);
 void osal_wait4barrier(void);
+bool osal_wait4ready(size_t need, uint64_t deadline_fixedpoint);
 
 bool osal_progress_push(bool active);
 bool osal_multiactor_mode(void);

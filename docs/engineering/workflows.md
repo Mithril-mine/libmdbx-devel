@@ -80,9 +80,9 @@ Parallel infrastructure built on top of the same CTest labels; the legacy 7 GitH
 - **Registry** — `tests/ci/config.json`: single source of truth for every build configuration
   ("cell"). Cell fields: `id`, `runs-on`, `env` (toolchain), `cmake[]` (args, `flag|value` form),
   `ctest` (`regex`/`exclude`/null), `build_only` (Android), `ndk` (Android NDK version, consumed
-  by `setup-ndk` in ci-run.yml), `note`. Known-flaky/slow cells are
-  flagged (`known_flaky`, e.g. macOS `smoke_fault` B13 WIP) and ARM64 Windows cells carry
-  `ctest.exclude=smoke_sp_` (B14/TASK-27). Generator pinning: a cell that passes `-G`/`-A`/`-T`
+  by `setup-ndk` in ci-run.yml), `note`. The historical ARM64 Windows
+  `ctest.exclude=smoke_sp_` (B14/TASK-27) was removed in 2026-10 after the smoke-framework
+  fixes. Generator pinning: a cell that passes `-G`/`-A`/`-T`
   is never overridden with Ninja; cells without them default to Ninja when available.
 - **Profiles**: `push-quick` (5 cells), `linux-full` (8), `win-full` (164), `mac-full` (6),
   `android-build` (15, build-only), `full` (193, no duplicate ids).
@@ -90,8 +90,9 @@ Parallel infrastructure built on top of the same CTest labels; the legacy 7 GitH
   no `ci.sh`; rc 0 = ok, 1 = build/test fail, 2 = unknown id/usage. Reproduces a failing cell
   locally on Linux-capable cells.
 - **Orchestrator** — `.github/workflows/ci-dispatch.yml`: `push` on devel/master → `push-quick`;
-  `workflow_dispatch` → `profile`|`cell` + `ref`; `repository_dispatch` (`profile`/`cell` + `ref`,
-  ref mandatory) → addressed runs for agents; `schedule` (00:30 UTC) → `full` on master HEAD.
+  `workflow_dispatch` → `profile`|`cell` + `ref`; `repository_dispatch` (`profile`/`cell` + `ref`;
+  bare event falls back to `push-quick`) → addressed runs for agents; `schedule` (00:30 UTC) →
+  `full` on master HEAD.
   `resolve` job reads the registry from the requested ref and fails fast on unknown ids.
 - **Runner** — `.github/workflows/ci-run.yml` (`workflow_call`): checkout ref (fetch-depth 0 +
   tags), optional `setup-ndk` (Android `ndk` field) with NDK_PATH/ANDROID_NDK_HOME export,

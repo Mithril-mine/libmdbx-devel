@@ -343,24 +343,19 @@ else()
     set_tests_properties(smoke_basic smoke_writemap PROPERTIES RESOURCE_LOCK smoke.db)
   endif()
 
-  add_test(NAME smoke_fault COMMAND $<TARGET_FILE:mdbx_test> --duration 300 --timeout=600 --progress --console=no
+  add_test(NAME smoke_fault COMMAND $<TARGET_FILE:mdbx_test> --duration 300 --timeout=180 --progress --console=no
                                      --pathname=fault.db --inject-writefault=42 --dump-config --dont-cleanup-after
                                      --loglevel=debug ${MDBX_SMOKE_EXTRA} basic)
   set_tests_properties(smoke_fault PROPERTIES
     LABELS "smoke-fault;smoke-t2"
-    TIMEOUT 1800
+    TIMEOUT 240
     RUN_SERIAL OFF
     WILL_FAIL TRUE)
-  # TASK-31: on the slow macOS Release beta-runners (xcode-27/macos-26-intel) the
-  # fault-injected run intermittently exceeds the 1800s CTest cap while the process
-  # stays alive in the setup/barrier phase, which the internal --timeout=600 watchdog
-  # does not cover (deadline is enforced only in the overlord poll-loop, after the
-  # barrier). Give those cells extra headroom as a CI-unblock stopgap; Debug passes
-  # smoke_fault in 4-8s and is unaffected. Root-cause watchdog-coverage fix is tracked
-  # separately (TASK-43).
-  if(APPLE AND CMAKE_BUILD_TYPE STREQUAL "Release")
-    set_tests_properties(smoke_fault PROPERTIES TIMEOUT 3600)
-  endif()
+  # TASK-43 (done): the --timeout deadline is enforced by the OVERLORD main
+  # thread (tests/framework/main.c++), with no worker threads, from the very
+  # start including the setup/barrier phase. The writefault hits at op 42 and
+  # normal runs fail in seconds, so the 180s internal bound is generous; the
+  # CTest cap of 240s is a slim safety net above it.
   if(MDBX_BUILD_TOOLS)
     add_test(NAME smoke_fault_chk COMMAND $<TARGET_FILE:mdbx_chk> -vvnw fault.db)
     set_tests_properties(smoke_fault_chk PROPERTIES
@@ -526,13 +521,33 @@ else()
       # Routine profile: bounded stochastic scale + deterministic edge-cases
       # covers the same rkl/txl branches as the full stress at ~1.4s vs ~30s
       # (measured 2026-09-30, Debug+gcov). Full stress lives in the
-      # ut.heavy-labelled extra_details_rkl_full target below.
-      ENVIRONMENT "MDBX_RKL_CASES=64;MDBX_RKL_LOOPS=8;MDBX_RKL_HOLE_PROBES=512;MDBX_RKL_EDGES=1")
+      # ut.heavy-labelled extra_details_rkl_full target below. MDBX_PROBES=1
+      # активирует probe-bus аттестацию покрытия (edge_cases_probes).
+      ENVIRONMENT "MDBX_RKL_CASES=64;MDBX_RKL_LOOPS=8;MDBX_RKL_HOLE_PROBES=512;MDBX_RKL_EDGES=1;MDBX_PROBES=1")
     add_test(NAME extra_details_rkl_full COMMAND $<TARGET_FILE:test_extra_details_rkl>)
     set_tests_properties(extra_details_rkl_full PROPERTIES
       LABELS "ut;ut.api;ut.gc;ut.heavy"
       TIMEOUT 3600
       ENVIRONMENT "MDBX_RKL_EDGES=1")
+
+    if(MDBX_PROBES)
+      add_extra_test(probes SOURCE ut/api/probes.c)
+      set_tests_properties(extra_probes PROPERTIES LABELS "ut;ut.api"
+        ENVIRONMENT "MDBX_PROBES=1")
+
+      # File-IPC round-trip: the driver writes requests to <dir>/cmd and reads
+      # replies from <dir>/rep; WORKING_DIRECTORY isolates the IPC files.
+      add_executable(test_extra_probes_ipc ut/api/probes_ipc.c)
+      target_include_directories(test_extra_probes_ipc PRIVATE "${PROJECT_SOURCE_DIR}")
+      target_link_libraries(test_extra_probes_ipc ${TOOL_MDBX_LIB})
+      set_target_properties(test_extra_probes_ipc PROPERTIES C_STANDARD ${MDBX_C_STANDARD} C_STANDARD_REQUIRED ON)
+      set(probes_ipc_dir "${CMAKE_CURRENT_BINARY_DIR}/probes-ipc")
+      file(MAKE_DIRECTORY "${probes_ipc_dir}")
+      add_test(NAME extra_probes_ipc
+               COMMAND $<TARGET_FILE:test_extra_probes_ipc> "${probes_ipc_dir}")
+      set_tests_properties(extra_probes_ipc PROPERTIES LABELS "ut;ut.api"
+        WORKING_DIRECTORY "${probes_ipc_dir}")
+    endif()
 
     add_ut(global_init SOURCE ut/api/global_init.c++ LIBRARY mdbx-static)
     set_tests_properties(global_init PROPERTIES LABELS "ut;ut.api;ut.env")
@@ -563,9 +578,14 @@ else()
         set_tests_properties(open PROPERTIES LABELS "ut;ut.env;ut.txn")
         add_ut(txn SOURCE ut/txn/txn.c++)
         set_tests_properties(txn PROPERTIES LABELS "ut;ut.txn")
+        add_ut(crash_safety SOURCE ut/txn/crash_safety.c++)
+        set_tests_properties(crash_safety PROPERTIES LABELS "ut;ut.txn")
         add_ut(buffers SOURCE ut/api/buffers.c++)
         set_tests_properties(buffers PROPERTIES LABELS "ut;ut.api")
         add_ut(bunches_removal SOURCE ut/gc/bunches_removal.c++)
+        if(MDBX_PROBES)
+          target_compile_definitions(ut_bunches_removal PRIVATE MDBX_PROBES)
+        endif()
         set_tests_properties(bunches_removal PROPERTIES LABELS "ut;ut.gc"
           # DEEP=1 exercises all bunch-delete paths and covers the SAME
           # gc-get/gc-put + page-split/node/tree-ops/pnl/dpl branches as
@@ -574,11 +594,18 @@ else()
           # deeper B-trees add no extra line coverage). No full variant needed.
           ENVIRONMENT "MDBX_BUNCHES_DEEP=1")
         add_ut(get_cached SOURCE ut/api/get_cached.c++)
+        if(MDBX_PROBES)
+          # C++ test TUs (public mdbx.h++) do not see the internal config-cmake.h
+          # define; propagate MDBX_PROBES for the probe-bus guards (probe-ctl.h,
+          # case3_error_paths attestation). C test TUs already get it via config.
+          target_compile_definitions(ut_get_cached PRIVATE MDBX_PROBES)
+        endif()
         set_tests_properties(get_cached PROPERTIES LABELS "ut;ut.api;ut.txn"
           # Trimmed timeouts: case1 stairway + case2 multithread reach the same
           # cache branches at ~2.7s vs ~15.6s (measured 2026-09-30); the
-          # extended profile is get_cached_full below.
-          ENVIRONMENT "MDBX_GET_CACHED_TIMEOUT_SEC=2;MDBX_GET_CACHED_CASE2_TIMEOUT_SEC=2")
+          # extended profile is get_cached_full below. MDBX_PROBES=1 включает
+          # fault-инъекцию и аттестацию (case3_error_paths, пилот B68-P3).
+          ENVIRONMENT "MDBX_GET_CACHED_TIMEOUT_SEC=2;MDBX_GET_CACHED_CASE2_TIMEOUT_SEC=2;MDBX_PROBES=1")
         # Full-coverage get_cached profile (deep/wide, long timeouts): the
         # routine run uses trimmed env-knob defaults (~25s); this variant
         # restores the deep/wide workload for milestone/nightly runs (kept out

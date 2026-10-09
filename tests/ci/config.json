@@ -149,10 +149,7 @@
         "-DMDBX_BUILD_CXX:BOOL=ON"
       ],
       "ctest": null,
-      "known_flaky": [
-        "smoke_fault"
-      ],
-      "note": "ci-macos macos-15 Debug; known flake smoke_fault (B13 WIP)"
+      "note": "ci-macos macos-15 Debug; crash-safety covered by ut.txn.crash_safety"
     },
     {
       "id": "macos-macos15-release",
@@ -165,10 +162,7 @@
         "-DMDBX_BUILD_CXX:BOOL=ON"
       ],
       "ctest": null,
-      "known_flaky": [
-        "smoke_fault"
-      ],
-      "note": "ci-macos macos-15 Release; known flake smoke_fault (B13 WIP)"
+      "note": "ci-macos macos-15 Release; crash-safety covered by ut.txn.crash_safety"
     },
     {
       "id": "macos-xcode27-debug",
@@ -181,10 +175,7 @@
         "-DMDBX_BUILD_CXX:BOOL=ON"
       ],
       "ctest": null,
-      "known_flaky": [
-        "smoke_fault"
-      ],
-      "note": "ci-macos xcode-27 Debug; known flake smoke_fault (B13 WIP)"
+      "note": "ci-macos xcode-27 Debug; crash-safety covered by ut.txn.crash_safety"
     },
     {
       "id": "macos-xcode27-release",
@@ -197,10 +188,7 @@
         "-DMDBX_BUILD_CXX:BOOL=ON"
       ],
       "ctest": null,
-      "known_flaky": [
-        "smoke_fault"
-      ],
-      "note": "ci-macos xcode-27 Release; known flake smoke_fault (B13 WIP)"
+      "note": "ci-macos xcode-27 Release; crash-safety covered by ut.txn.crash_safety"
     },
     {
       "id": "macos-macos26-intel-debug",
@@ -213,10 +201,7 @@
         "-DMDBX_BUILD_CXX:BOOL=ON"
       ],
       "ctest": null,
-      "known_flaky": [
-        "smoke_fault"
-      ],
-      "note": "ci-macos macos-26-intel Debug; known flake smoke_fault (B13 WIP)"
+      "note": "ci-macos macos-26-intel Debug; crash-safety covered by ut.txn.crash_safety"
     },
     {
       "id": "macos-macos26-intel-release",
@@ -229,10 +214,7 @@
         "-DMDBX_BUILD_CXX:BOOL=ON"
       ],
       "ctest": null,
-      "known_flaky": [
-        "smoke_fault"
-      ],
-      "note": "ci-macos macos-26-intel Release; known flake smoke_fault (B13 WIP)"
+      "note": "ci-macos macos-26-intel Release; crash-safety covered by ut.txn.crash_safety"
     },
     {
       "id": "win-msvc-v143-x64-debug-dll-on-crt-on",
@@ -504,9 +486,7 @@
         "-DMDBX_BUILD_SHARED_LIBRARY:BOOL=ON",
         "-DMDBX_WITHOUT_MSVC_CRT:BOOL=ON"
       ],
-      "ctest": {
-        "exclude": "smoke_(sp|t1)_"
-      },
+      "ctest": null,
       "note": "ci-windows-msvc toolset=v145 target=ARM64 Debug dll=ON crt=ON; ARM64 beta-runner smoke_(sp|t1)_ excluded (B14/TASK-27 + TASK-30)"
     },
     {
@@ -519,9 +499,7 @@
         "-DMDBX_BUILD_SHARED_LIBRARY:BOOL=ON",
         "-DMDBX_WITHOUT_MSVC_CRT:BOOL=ON"
       ],
-      "ctest": {
-        "exclude": "smoke_(sp|t1)_"
-      },
+      "ctest": null,
       "note": "ci-windows-msvc toolset=v145 target=ARM64 Release dll=ON crt=ON; ARM64 beta-runner smoke_(sp|t1)_ excluded (B14/TASK-27 + TASK-30)"
     },
     {
@@ -586,9 +564,7 @@
         "-DMDBX_BUILD_SHARED_LIBRARY:BOOL=ON",
         "-DMDBX_WITHOUT_MSVC_CRT:BOOL=OFF"
       ],
-      "ctest": {
-        "exclude": "smoke_(sp|t1)_"
-      },
+      "ctest": null,
       "note": "ci-windows-msvc toolset=v145 target=ARM64 Debug dll=ON crt=OFF; ARM64 beta-runner smoke_(sp|t1)_ excluded (B14/TASK-27 + TASK-30)"
     },
     {
@@ -601,9 +577,7 @@
         "-DMDBX_BUILD_SHARED_LIBRARY:BOOL=ON",
         "-DMDBX_WITHOUT_MSVC_CRT:BOOL=OFF"
       ],
-      "ctest": {
-        "exclude": "smoke_(sp|t1)_"
-      },
+      "ctest": null,
       "note": "ci-windows-msvc toolset=v145 target=ARM64 Release dll=ON crt=OFF; ARM64 beta-runner smoke_(sp|t1)_ excluded (B14/TASK-27 + TASK-30)"
     },
     {
@@ -668,9 +642,7 @@
         "-DMDBX_BUILD_SHARED_LIBRARY:BOOL=OFF",
         "-DMDBX_WITHOUT_MSVC_CRT:BOOL=ON"
       ],
-      "ctest": {
-        "exclude": "smoke_(sp|t1)_"
-      },
+      "ctest": null,
       "note": "ci-windows-msvc toolset=v145 target=ARM64 Debug dll=OFF crt=ON; ARM64 beta-runner smoke_(sp|t1)_ excluded (B14/TASK-27 + TASK-30)"
     },
     {
@@ -683,9 +655,7 @@
         "-DMDBX_BUILD_SHARED_LIBRARY:BOOL=OFF",
         "-DMDBX_WITHOUT_MSVC_CRT:BOOL=ON"
       ],
-      "ctest": {
-        "exclude": "smoke_(sp|t1)_"
-      },
+      "ctest": null,
       "note": "ci-windows-msvc toolset=v145 target=ARM64 Release dll=OFF crt=ON; ARM64 beta-runner smoke_(sp|t1)_ excluded (B14/TASK-27 + TASK-30)"
     },
     {
@@ -750,9 +720,7 @@
         "-DMDBX_BUILD_SHARED_LIBRARY:BOOL=OFF",
         "-DMDBX_WITHOUT_MSVC_CRT:BOOL=OFF"
       ],
-      "ctest": {
-        "exclude": "smoke_(sp|t1)_"
-      },
+      "ctest": null,
       "note": "ci-windows-msvc toolset=v145 target=ARM64 Debug dll=OFF crt=OFF; ARM64 beta-runner smoke_(sp|t1)_ excluded (B14/TASK-27 + TASK-30)"
     },
     {
@@ -765,9 +733,7 @@
         "-DMDBX_BUILD_SHARED_LIBRARY:BOOL=OFF",
         "-DMDBX_WITHOUT_MSVC_CRT:BOOL=OFF"
       ],
-      "ctest": {
-        "exclude": "smoke_(sp|t1)_"
-      },
+      "ctest": null,
       "note": "ci-windows-msvc toolset=v145 target=ARM64 Release dll=OFF crt=OFF; ARM64 beta-runner smoke_(sp|t1)_ excluded (B14/TASK-27 + TASK-30)"
     },
     {
@@ -815,9 +781,7 @@
         "-DMDBX_BUILD_SHARED_LIBRARY:BOOL=ON",
         "-DMDBX_WITHOUT_MSVC_CRT:BOOL=ON"
       ],
-      "ctest": {
-        "exclude": "smoke_(sp|t1)_"
-      },
+      "ctest": null,
       "note": "ci-windows-mscl studio=18 target=ARM64 Debug dll=ON crt=ON; ARM64 beta-runner smoke_(sp|t1)_ excluded (B14/TASK-27 + TASK-30)"
     },
     {
@@ -833,9 +797,7 @@
         "-DMDBX_BUILD_SHARED_LIBRARY:BOOL=ON",
         "-DMDBX_WITHOUT_MSVC_CRT:BOOL=ON"
       ],
-      "ctest": {
-        "exclude": "smoke_(sp|t1)_"
-      },
+      "ctest": null,
       "note": "ci-windows-mscl studio=18 target=ARM64 Release dll=ON crt=ON; ARM64 beta-runner smoke_(sp|t1)_ excluded (B14/TASK-27 + TASK-30)"
     },
     {
@@ -883,9 +845,7 @@
         "-DMDBX_BUILD_SHARED_LIBRARY:BOOL=ON",
         "-DMDBX_WITHOUT_MSVC_CRT:BOOL=OFF"
       ],
-      "ctest": {
-        "exclude": "smoke_(sp|t1)_"
-      },
+      "ctest": null,
       "note": "ci-windows-mscl studio=18 target=ARM64 Debug dll=ON crt=OFF; ARM64 beta-runner smoke_(sp|t1)_ excluded (B14/TASK-27 + TASK-30)"
     },
     {
@@ -901,9 +861,7 @@
         "-DMDBX_BUILD_SHARED_LIBRARY:BOOL=ON",
         "-DMDBX_WITHOUT_MSVC_CRT:BOOL=OFF"
       ],
-      "ctest": {
-        "exclude": "smoke_(sp|t1)_"
-      },
+      "ctest": null,
       "note": "ci-windows-mscl studio=18 target=ARM64 Release dll=ON crt=OFF; ARM64 beta-runner smoke_(sp|t1)_ excluded (B14/TASK-27 + TASK-30)"
     },
     {
@@ -951,9 +909,7 @@
         "-DMDBX_BUILD_SHARED_LIBRARY:BOOL=OFF",
         "-DMDBX_WITHOUT_MSVC_CRT:BOOL=ON"
       ],
-      "ctest": {
-        "exclude": "smoke_(sp|t1)_"
-      },
+      "ctest": null,
       "note": "ci-windows-mscl studio=18 target=ARM64 Debug dll=OFF crt=ON; ARM64 beta-runner smoke_(sp|t1)_ excluded (B14/TASK-27 + TASK-30)"
     },
     {
@@ -969,9 +925,7 @@
         "-DMDBX_BUILD_SHARED_LIBRARY:BOOL=OFF",
         "-DMDBX_WITHOUT_MSVC_CRT:BOOL=ON"
       ],
-      "ctest": {
-        "exclude": "smoke_(sp|t1)_"
-      },
+      "ctest": null,
       "note": "ci-windows-mscl studio=18 target=ARM64 Release dll=OFF crt=ON; ARM64 beta-runner smoke_(sp|t1)_ excluded (B14/TASK-27 + TASK-30)"
     },
     {
@@ -1019,9 +973,7 @@
         "-DMDBX_BUILD_SHARED_LIBRARY:BOOL=OFF",
         "-DMDBX_WITHOUT_MSVC_CRT:BOOL=OFF"
       ],
-      "ctest": {
-        "exclude": "smoke_(sp|t1)_"
-      },
+      "ctest": null,
       "note": "ci-windows-mscl studio=18 target=ARM64 Debug dll=OFF crt=OFF; ARM64 beta-runner smoke_(sp|t1)_ excluded (B14/TASK-27 + TASK-30)"
     },
     {
@@ -1037,9 +989,7 @@
         "-DMDBX_BUILD_SHARED_LIBRARY:BOOL=OFF",
         "-DMDBX_WITHOUT_MSVC_CRT:BOOL=OFF"
       ],
-      "ctest": {
-        "exclude": "smoke_(sp|t1)_"
-      },
+      "ctest": null,
       "note": "ci-windows-mscl studio=18 target=ARM64 Release dll=OFF crt=OFF; ARM64 beta-runner smoke_(sp|t1)_ excluded (B14/TASK-27 + TASK-30)"
     },
     {
@@ -1056,9 +1006,7 @@
         "-DMDBX_BUILD_SHARED_LIBRARY:BOOL=ON",
         "-DMDBX_WITHOUT_MSVC_CRT:BOOL=ON"
       ],
-      "ctest": {
-        "regex": "^(global_init|rename_dbi|nested_drop_abort)$"
-      },
+      "ctest": null,
       "note": "ci-windows-mingw Debug dll=ON crt=ON bitness=64",
       "build_parallel": 4
     },
@@ -1078,9 +1026,7 @@
         "-DMDBX_BUILD_SHARED_LIBRARY:BOOL=ON",
         "-DMDBX_WITHOUT_MSVC_CRT:BOOL=ON"
       ],
-      "ctest": {
-        "regex": "^(global_init|rename_dbi|nested_drop_abort)$"
-      },
+      "ctest": null,
       "note": "ci-windows-mingw Debug dll=ON crt=ON bitness=32",
       "build_parallel": 4
     },
@@ -1098,9 +1044,7 @@
         "-DMDBX_BUILD_SHARED_LIBRARY:BOOL=ON",
         "-DMDBX_WITHOUT_MSVC_CRT:BOOL=OFF"
       ],
-      "ctest": {
-        "regex": "^(global_init|rename_dbi|nested_drop_abort)$"
-      },
+      "ctest": null,
       "note": "ci-windows-mingw Debug dll=ON crt=OFF bitness=64",
       "build_parallel": 4
     },
@@ -1120,9 +1064,7 @@
         "-DMDBX_BUILD_SHARED_LIBRARY:BOOL=ON",
         "-DMDBX_WITHOUT_MSVC_CRT:BOOL=OFF"
       ],
-      "ctest": {
-        "regex": "^(global_init|rename_dbi|nested_drop_abort)$"
-      },
+      "ctest": null,
       "note": "ci-windows-mingw Debug dll=ON crt=OFF bitness=32",
       "build_parallel": 4
     },
@@ -1140,9 +1082,7 @@
         "-DMDBX_BUILD_SHARED_LIBRARY:BOOL=ON",
         "-DMDBX_WITHOUT_MSVC_CRT:BOOL=OFF"
       ],
-      "ctest": {
-        "regex": "^(global_init|rename_dbi|nested_drop_abort)$"
-      },
+      "ctest": null,
       "note": "ci-windows-mingw Release dll=ON crt=OFF bitness=64",
       "build_parallel": 4
     },
@@ -1162,9 +1102,7 @@
         "-DMDBX_BUILD_SHARED_LIBRARY:BOOL=ON",
         "-DMDBX_WITHOUT_MSVC_CRT:BOOL=OFF"
       ],
-      "ctest": {
-        "regex": "^(global_init|rename_dbi|nested_drop_abort)$"
-      },
+      "ctest": null,
       "note": "ci-windows-mingw Release dll=ON crt=OFF bitness=32",
       "build_parallel": 4
     },
@@ -1182,9 +1120,7 @@
         "-DMDBX_BUILD_SHARED_LIBRARY:BOOL=OFF",
         "-DMDBX_WITHOUT_MSVC_CRT:BOOL=OFF"
       ],
-      "ctest": {
-        "regex": "^(global_init|rename_dbi|nested_drop_abort)$"
-      },
+      "ctest": null,
       "note": "ci-windows-mingw Release dll=OFF crt=OFF bitness=64",
       "build_parallel": 4
     },
@@ -1204,9 +1140,7 @@
         "-DMDBX_BUILD_SHARED_LIBRARY:BOOL=OFF",
         "-DMDBX_WITHOUT_MSVC_CRT:BOOL=OFF"
       ],
-      "ctest": {
-        "regex": "^(global_init|rename_dbi|nested_drop_abort)$"
-      },
+      "ctest": null,
       "note": "ci-windows-mingw Release dll=OFF crt=OFF bitness=32",
       "build_parallel": 4
     },
@@ -1883,7 +1817,8 @@
         "-DCMAKE_CXX_STANDARD=11"
       ],
       "ctest": null,
-      "note": "ci-cxx-msvc toolset=v143 cxxstd=11 target=ARM64 Debug"
+      "build_only": true,
+      "note": "ci-cxx-msvc toolset=v143 cxxstd=11 target=ARM64 Debug; build-only (x64 runner cannot execute ARM64 binaries)"
     },
     {
       "id": "win-cxx-v143-win2022-arm64-release-std11",
@@ -1898,7 +1833,8 @@
         "-DCMAKE_CXX_STANDARD=11"
       ],
       "ctest": null,
-      "note": "ci-cxx-msvc toolset=v143 cxxstd=11 target=ARM64 Release"
+      "build_only": true,
+      "note": "ci-cxx-msvc toolset=v143 cxxstd=11 target=ARM64 Release; build-only (x64 runner cannot execute ARM64 binaries)"
     },
     {
       "id": "win-cxx-v143-winlatest-win32-debug-std14",
@@ -2033,7 +1969,8 @@
         "-DCMAKE_CXX_STANDARD=14"
       ],
       "ctest": null,
-      "note": "ci-cxx-msvc toolset=v143 cxxstd=14 target=ARM64 Debug"
+      "build_only": true,
+      "note": "ci-cxx-msvc toolset=v143 cxxstd=14 target=ARM64 Debug; build-only (x64 runner cannot execute ARM64 binaries)"
     },
     {
       "id": "win-cxx-v143-win2022-arm64-release-std14",
@@ -2048,7 +1985,8 @@
         "-DCMAKE_CXX_STANDARD=14"
       ],
       "ctest": null,
-      "note": "ci-cxx-msvc toolset=v143 cxxstd=14 target=ARM64 Release"
+      "build_only": true,
+      "note": "ci-cxx-msvc toolset=v143 cxxstd=14 target=ARM64 Release; build-only (x64 runner cannot execute ARM64 binaries)"
     },
     {
       "id": "win-cxx-v143-winlatest-win32-debug-std17",
@@ -2183,7 +2121,8 @@
         "-DCMAKE_CXX_STANDARD=17"
       ],
       "ctest": null,
-      "note": "ci-cxx-msvc toolset=v143 cxxstd=17 target=ARM64 Debug"
+      "build_only": true,
+      "note": "ci-cxx-msvc toolset=v143 cxxstd=17 target=ARM64 Debug; build-only (x64 runner cannot execute ARM64 binaries)"
     },
     {
       "id": "win-cxx-v143-win2022-arm64-release-std17",
@@ -2198,7 +2137,8 @@
         "-DCMAKE_CXX_STANDARD=17"
       ],
       "ctest": null,
-      "note": "ci-cxx-msvc toolset=v143 cxxstd=17 target=ARM64 Release"
+      "build_only": true,
+      "note": "ci-cxx-msvc toolset=v143 cxxstd=17 target=ARM64 Release; build-only (x64 runner cannot execute ARM64 binaries)"
     },
     {
       "id": "win-cxx-v143-winlatest-win32-debug-std20",
@@ -2333,7 +2273,8 @@
         "-DCMAKE_CXX_STANDARD=20"
       ],
       "ctest": null,
-      "note": "ci-cxx-msvc toolset=v143 cxxstd=20 target=ARM64 Debug"
+      "build_only": true,
+      "note": "ci-cxx-msvc toolset=v143 cxxstd=20 target=ARM64 Debug; build-only (x64 runner cannot execute ARM64 binaries)"
     },
     {
       "id": "win-cxx-v143-win2022-arm64-release-std20",
@@ -2348,7 +2289,8 @@
         "-DCMAKE_CXX_STANDARD=20"
       ],
       "ctest": null,
-      "note": "ci-cxx-msvc toolset=v143 cxxstd=20 target=ARM64 Release"
+      "build_only": true,
+      "note": "ci-cxx-msvc toolset=v143 cxxstd=20 target=ARM64 Release; build-only (x64 runner cannot execute ARM64 binaries)"
     },
     {
       "id": "win-cxx-v143-winlatest-win32-debug-std23",
@@ -2919,6 +2861,134 @@
       "build_only": true,
       "note": "ci-android ndk=r29 abi=x86_64 Release; build-only (no emulator)",
       "ndk": "r29"
+    },
+    {
+      "id": "linux-lock-sysv-gcc-debug",
+      "runs-on": "ubuntu-24.04",
+      "env": {
+        "CC": "gcc",
+        "CXX": "g++",
+        "MDBX_BUILD_OPTIONS": "-DMDBX_CHECKING=0 -DMDBX_DEBUG=0"
+      },
+      "cmake": [
+        "-DCMAKE_BUILD_TYPE=Debug",
+        "-DMDBX_LOCKING=5",
+        "-DMDBX_BUILD_CXX:BOOL=ON"
+      ],
+      "ctest": null,
+      "note": "MDBX_LOCKING matrix: sysv(5) x gcc x Debug"
+    },
+    {
+      "id": "linux-lock-sysv-clang-release",
+      "runs-on": "ubuntu-24.04",
+      "env": {
+        "CC": "clang",
+        "CXX": "clang++",
+        "MDBX_BUILD_OPTIONS": "-DMDBX_CHECKING=0 -DMDBX_DEBUG=0"
+      },
+      "cmake": [
+        "-DCMAKE_BUILD_TYPE=Release",
+        "-DMDBX_LOCKING=5",
+        "-DMDBX_BUILD_CXX:BOOL=ON"
+      ],
+      "ctest": null,
+      "note": "MDBX_LOCKING matrix: sysv(5) x clang x Release"
+    },
+    {
+      "id": "linux-lock-1988-gcc-release",
+      "runs-on": "ubuntu-24.04",
+      "env": {
+        "CC": "gcc",
+        "CXX": "g++",
+        "MDBX_BUILD_OPTIONS": "-DMDBX_CHECKING=0 -DMDBX_DEBUG=0"
+      },
+      "cmake": [
+        "-DCMAKE_BUILD_TYPE=Release",
+        "-DMDBX_LOCKING=1988",
+        "-DMDBX_BUILD_CXX:BOOL=ON"
+      ],
+      "ctest": null,
+      "note": "MDBX_LOCKING matrix: 1988(1988) x gcc x Release"
+    },
+    {
+      "id": "linux-lock-1988-clang-debug",
+      "runs-on": "ubuntu-24.04",
+      "env": {
+        "CC": "clang",
+        "CXX": "clang++",
+        "MDBX_BUILD_OPTIONS": "-DMDBX_CHECKING=0 -DMDBX_DEBUG=0"
+      },
+      "cmake": [
+        "-DCMAKE_BUILD_TYPE=Debug",
+        "-DMDBX_LOCKING=1988",
+        "-DMDBX_BUILD_CXX:BOOL=ON"
+      ],
+      "ctest": null,
+      "note": "MDBX_LOCKING matrix: 1988(1988) x clang x Debug"
+    },
+    {
+      "id": "linux-lock-2001-gcc-debug",
+      "runs-on": "ubuntu-24.04",
+      "env": {
+        "CC": "gcc",
+        "CXX": "g++",
+        "MDBX_BUILD_OPTIONS": "-DMDBX_CHECKING=0 -DMDBX_DEBUG=0"
+      },
+      "cmake": [
+        "-DCMAKE_BUILD_TYPE=Debug",
+        "-DMDBX_LOCKING=2001",
+        "-DMDBX_BUILD_CXX:BOOL=ON"
+      ],
+      "ctest": null,
+      "note": "MDBX_LOCKING matrix: 2001(2001) x gcc x Debug"
+    },
+    {
+      "id": "linux-lock-2001-clang-release",
+      "runs-on": "ubuntu-24.04",
+      "env": {
+        "CC": "clang",
+        "CXX": "clang++",
+        "MDBX_BUILD_OPTIONS": "-DMDBX_CHECKING=0 -DMDBX_DEBUG=0"
+      },
+      "cmake": [
+        "-DCMAKE_BUILD_TYPE=Release",
+        "-DMDBX_LOCKING=2001",
+        "-DMDBX_BUILD_CXX:BOOL=ON"
+      ],
+      "ctest": null,
+      "note": "MDBX_LOCKING matrix: 2001(2001) x clang x Release"
+    },
+    {
+      "id": "linux-lock-2008-gcc-release",
+      "runs-on": "ubuntu-24.04",
+      "env": {
+        "CC": "gcc",
+        "CXX": "g++",
+        "MDBX_BUILD_OPTIONS": "-DMDBX_CHECKING=0 -DMDBX_DEBUG=0"
+      },
+      "cmake": [
+        "-DCMAKE_BUILD_TYPE=Release",
+        "-DMDBX_LOCKING=2008",
+        "-DMDBX_BUILD_CXX:BOOL=ON"
+      ],
+      "ctest": null,
+      "note": "MDBX_LOCKING matrix: 2008(2008) x gcc x Release"
+    },
+    {
+      "id": "linux-lock-2008-clang-debug",
+      "runs-on": "ubuntu-24.04",
+      "env": {
+        "CC": "clang",
+        "CXX": "clang++",
+        "MDBX_BUILD_OPTIONS": "-DMDBX_CHECKING=0 -DMDBX_DEBUG=0"
+      },
+      "cmake": [
+        "-DCMAKE_BUILD_TYPE=Debug",
+        "-DMDBX_LOCKING=2008",
+        "-DMDBX_BUILD_CXX:BOOL=ON"
+      ],
+      "ctest": null,
+      "note": "MDBX_LOCKING matrix: 2008(2008) x clang x Debug"
     }
   ],
   "profiles": {
@@ -3291,17 +3361,35 @@
       "android-r29-armeabi-v7a-with-neon-debug",
       "android-r29-armeabi-v7a-with-neon-release",
       "android-r29-x86-64-debug",
-      "android-r29-x86-64-release"
+      "android-r29-x86-64-release",
+      "linux-lock-sysv-gcc-debug",
+      "linux-lock-sysv-clang-release",
+      "linux-lock-1988-gcc-release",
+      "linux-lock-1988-clang-debug",
+      "linux-lock-2001-gcc-debug",
+      "linux-lock-2001-clang-release",
+      "linux-lock-2008-gcc-release",
+      "linux-lock-2008-clang-debug"
     ],
     "coverage": [
       "linux-gcc-ubuntu24-debug-coverage"
+    ],
+    "linux-locking": [
+      "linux-lock-sysv-gcc-debug",
+      "linux-lock-sysv-clang-release",
+      "linux-lock-1988-gcc-release",
+      "linux-lock-1988-clang-debug",
+      "linux-lock-2001-gcc-debug",
+      "linux-lock-2001-clang-release",
+      "linux-lock-2008-gcc-release",
+      "linux-lock-2008-clang-debug"
     ]
   },
   "notes": [
     "TASK-28 testing-infra-v2 registry; mirrors 7 legacy workflows as-is (no matrix redesign).",
-    "cell counts: linux=8, macos=6, msvc=40, mscl=16, mingw=8, cxx-msvc=100, android=15; total=193.",
+    "cell counts: linux=17, macos=6, msvc=40, mscl=16, mingw=8, cxx-msvc=100, android=15; total=202.",
     "full = union of domain cells (no duplicate ids); known-flaky cells (macOS smoke_fault, B13 WIP) kept in full for now, flagged via known_flaky.",
-    "ARM64 Windows cells carry ctest.exclude=smoke_sp_ (B14/TASK-27); reachable by id/profile but excluded from that test family on beta-runner.",
+    "ARM64 Windows cells historically carried ctest.exclude=smoke_sp_ (B14/TASK-27); the exclusion was removed (2026-10-07) after the smoke framework fixes.",
     "Android cells are build_only (no emulator yet).",
     "push-quick profile: 2 linux + 1 win-msvc-x64 + 1 macos + 1 win-mingw = 5 cells."
   ],
@@ -3466,7 +3554,15 @@
       "macos-macos15-debug",
       "macos-macos15-release",
       "macos-macos26-intel-debug",
-      "macos-macos26-intel-release"
+      "macos-macos26-intel-release",
+      "linux-lock-sysv-gcc-debug",
+      "linux-lock-sysv-clang-release",
+      "linux-lock-1988-gcc-release",
+      "linux-lock-1988-clang-debug",
+      "linux-lock-2001-gcc-debug",
+      "linux-lock-2001-clang-release",
+      "linux-lock-2008-gcc-release",
+      "linux-lock-2008-clang-debug"
     ],
     "mdbx.h": [
       "linux-gcc-ubuntu26-arm-debug-cxx-on",
@@ -3516,7 +3612,15 @@
       "win-mingw-64-release-dll-on-crt-off",
       "win-mingw-32-release-dll-on-crt-off",
       "win-mingw-64-release-dll-off-crt-off",
-      "win-mingw-32-release-dll-off-crt-off"
+      "win-mingw-32-release-dll-off-crt-off",
+      "linux-lock-sysv-gcc-debug",
+      "linux-lock-sysv-clang-release",
+      "linux-lock-1988-gcc-release",
+      "linux-lock-1988-clang-debug",
+      "linux-lock-2001-gcc-debug",
+      "linux-lock-2001-clang-release",
+      "linux-lock-2008-gcc-release",
+      "linux-lock-2008-clang-debug"
     ],
     "mdbx.h++": [
       "linux-gcc-ubuntu26-arm-debug-cxx-on",
@@ -3674,7 +3778,15 @@
       "win-cxx-v145-winlatest-win32-debug-std23",
       "win-cxx-v145-winlatest-win32-release-std23",
       "win-cxx-v145-winlatest-x64-debug-std23",
-      "win-cxx-v145-winlatest-x64-release-std23"
+      "win-cxx-v145-winlatest-x64-release-std23",
+      "linux-lock-sysv-gcc-debug",
+      "linux-lock-sysv-clang-release",
+      "linux-lock-1988-gcc-release",
+      "linux-lock-1988-clang-debug",
+      "linux-lock-2001-gcc-debug",
+      "linux-lock-2001-clang-release",
+      "linux-lock-2008-gcc-release",
+      "linux-lock-2008-clang-debug"
     ],
     "mdbx++/": [
       "linux-gcc-ubuntu26-arm-debug-cxx-on",
@@ -3784,7 +3896,15 @@
       "win-cxx-v145-winlatest-win32-debug-std23",
       "win-cxx-v145-winlatest-win32-release-std23",
       "win-cxx-v145-winlatest-x64-debug-std23",
-      "win-cxx-v145-winlatest-x64-release-std23"
+      "win-cxx-v145-winlatest-x64-release-std23",
+      "linux-lock-sysv-gcc-debug",
+      "linux-lock-sysv-clang-release",
+      "linux-lock-1988-gcc-release",
+      "linux-lock-1988-clang-debug",
+      "linux-lock-2001-gcc-debug",
+      "linux-lock-2001-clang-release",
+      "linux-lock-2008-gcc-release",
+      "linux-lock-2008-clang-debug"
     ],
     "cmake/": [
       "linux-gcc-ubuntu26-arm-debug-cxx-on",
@@ -3946,7 +4066,15 @@
       "macos-macos15-debug",
       "macos-macos15-release",
       "macos-macos26-intel-debug",
-      "macos-macos26-intel-release"
+      "macos-macos26-intel-release",
+      "linux-lock-sysv-gcc-debug",
+      "linux-lock-sysv-clang-release",
+      "linux-lock-1988-gcc-release",
+      "linux-lock-1988-clang-debug",
+      "linux-lock-2001-gcc-debug",
+      "linux-lock-2001-clang-release",
+      "linux-lock-2008-gcc-release",
+      "linux-lock-2008-clang-debug"
     ],
     "CMakeLists.txt": [
       "linux-gcc-ubuntu26-arm-debug-cxx-on",
@@ -4108,7 +4236,15 @@
       "macos-macos15-debug",
       "macos-macos15-release",
       "macos-macos26-intel-debug",
-      "macos-macos26-intel-release"
+      "macos-macos26-intel-release",
+      "linux-lock-sysv-gcc-debug",
+      "linux-lock-sysv-clang-release",
+      "linux-lock-1988-gcc-release",
+      "linux-lock-1988-clang-debug",
+      "linux-lock-2001-gcc-debug",
+      "linux-lock-2001-clang-release",
+      "linux-lock-2008-gcc-release",
+      "linux-lock-2008-clang-debug"
     ],
     "GNUmakefile": [
       "linux-gcc-ubuntu26-arm-debug-cxx-on",
@@ -4118,7 +4254,15 @@
       "linux-gcc-ubuntu24-debug-cxx-on",
       "linux-gcc-ubuntu24-debug-cxx-off",
       "linux-gcc-ubuntu24-release-cxx-on",
-      "linux-gcc-ubuntu24-release-cxx-off"
+      "linux-gcc-ubuntu24-release-cxx-off",
+      "linux-lock-sysv-gcc-debug",
+      "linux-lock-sysv-clang-release",
+      "linux-lock-1988-gcc-release",
+      "linux-lock-1988-clang-debug",
+      "linux-lock-2001-gcc-debug",
+      "linux-lock-2001-clang-release",
+      "linux-lock-2008-gcc-release",
+      "linux-lock-2008-clang-debug"
     ],
     "tests/ut/": [
       "linux-gcc-ubuntu26-arm-debug-cxx-on",
@@ -4128,7 +4272,15 @@
       "linux-gcc-ubuntu24-debug-cxx-on",
       "linux-gcc-ubuntu24-debug-cxx-off",
       "linux-gcc-ubuntu24-release-cxx-on",
-      "linux-gcc-ubuntu24-release-cxx-off"
+      "linux-gcc-ubuntu24-release-cxx-off",
+      "linux-lock-sysv-gcc-debug",
+      "linux-lock-sysv-clang-release",
+      "linux-lock-1988-gcc-release",
+      "linux-lock-1988-clang-debug",
+      "linux-lock-2001-gcc-debug",
+      "linux-lock-2001-clang-release",
+      "linux-lock-2008-gcc-release",
+      "linux-lock-2008-clang-debug"
     ],
     "tests/framework/": [
       "linux-gcc-ubuntu26-arm-debug-cxx-on",
@@ -4290,7 +4442,15 @@
       "macos-macos15-debug",
       "macos-macos15-release",
       "macos-macos26-intel-debug",
-      "macos-macos26-intel-release"
+      "macos-macos26-intel-release",
+      "linux-lock-sysv-gcc-debug",
+      "linux-lock-sysv-clang-release",
+      "linux-lock-1988-gcc-release",
+      "linux-lock-1988-clang-debug",
+      "linux-lock-2001-gcc-debug",
+      "linux-lock-2001-clang-release",
+      "linux-lock-2008-gcc-release",
+      "linux-lock-2008-clang-debug"
     ],
     "tests/ci/": [
       "linux-gcc-ubuntu26-arm-debug-cxx-on",
@@ -4300,7 +4460,15 @@
       "linux-gcc-ubuntu24-debug-cxx-on",
       "linux-gcc-ubuntu24-debug-cxx-off",
       "linux-gcc-ubuntu24-release-cxx-on",
-      "linux-gcc-ubuntu24-release-cxx-off"
+      "linux-gcc-ubuntu24-release-cxx-off",
+      "linux-lock-sysv-gcc-debug",
+      "linux-lock-sysv-clang-release",
+      "linux-lock-1988-gcc-release",
+      "linux-lock-1988-clang-debug",
+      "linux-lock-2001-gcc-debug",
+      "linux-lock-2001-clang-release",
+      "linux-lock-2008-gcc-release",
+      "linux-lock-2008-clang-debug"
     ],
     ".github/workflows/": [
       "linux-gcc-ubuntu26-arm-debug-cxx-on",
@@ -4310,7 +4478,15 @@
       "linux-gcc-ubuntu24-debug-cxx-on",
       "linux-gcc-ubuntu24-debug-cxx-off",
       "linux-gcc-ubuntu24-release-cxx-on",
-      "linux-gcc-ubuntu24-release-cxx-off"
+      "linux-gcc-ubuntu24-release-cxx-off",
+      "linux-lock-sysv-gcc-debug",
+      "linux-lock-sysv-clang-release",
+      "linux-lock-1988-gcc-release",
+      "linux-lock-1988-clang-debug",
+      "linux-lock-2001-gcc-debug",
+      "linux-lock-2001-clang-release",
+      "linux-lock-2008-gcc-release",
+      "linux-lock-2008-clang-debug"
     ],
     "docs/": [],
     "skynet/": []

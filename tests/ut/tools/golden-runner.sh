@@ -46,6 +46,7 @@ normalize() {
     -e 's/v[0-9]+\.[0-9]+\.[0-9]+(-[0-9]+)?-g[0-9a-f]+(-dirty)? \(.*\)/vVERSION (BUILD, T-HASH)/' \
     -e 's/T-[0-9a-f]{40}/T-HASH/' \
     -e 's/elapsed [0-9.]+ seconds/elapsed SECONDS/' \
+    -e 's/took [0-9.]+ seconds/took SECONDS/' \
     -e 's/dxb-id [0-9a-f]+-[0-9a-f]+/dxb-id <ID>/' \
     -e 's/^mdbx_[a-z_]* version [0-9.]+$/mdbx_TOOL version VERSION/' \
     -e 's/^ - source: .*/ - source: <SOURCE>/' \
@@ -63,7 +64,8 @@ normalize() {
     -e '/dirty-entries/d' \
     -e 's/read meta: empty file \([0-9]+, .*\)/read meta: empty file (ERRNO)/' \
     -e 's/^  Max readers: [0-9]+$/  Max readers: <N>/' \
-    -e '/ignore .*local\/remote-fs check/d'
+    -e '/ignore .*local\/remote-fs check/d' \
+    -e '/^[a-zA-Z_][a-zA-Z0-9_]*:[0-9]+ DIAG /d'
 }
 
 # rc-only case: exit code is the contract, output is volatile (e.g. reader

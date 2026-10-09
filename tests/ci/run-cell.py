@@ -98,6 +98,7 @@ def main() -> int:
     args = parser.parse_args()
 
     cell = parse_registry(args.cell)
+    started_ns = time_ns()
 
     if args.build_dir:
         build_dir = Path(args.build_dir)
@@ -172,7 +173,12 @@ def main() -> int:
         return 1
 
     if build_only:
-        print(f"==> build_only cell: skipping ctest ({cell['id']})")
+        # No CTest to run: report a zero-test cell so the metrics artifact is
+        # still produced (ci-run.yml uploads it unconditionally) instead of
+        # warning "No files were found".
+        elapsed_ms = (time_ns() - started_ns) // 1_000_000
+        write_metrics(build_dir, cell["id"], args.scope, 0, elapsed_ms, [])
+        print(f"==> build_only cell: skipping ctest ({cell['id']}, wall_ms={elapsed_ms})")
         return 0
 
     # --- ctest --------------------------------------------------------------
@@ -180,18 +186,20 @@ def main() -> int:
     ctest_regex = cell_ctest.get("regex") or ""
     ctest_exclude = cell_ctest.get("exclude") or ""
 
-    if not ctest_regex:
-        if args.scope == "full":
-            ctest_regex = ""
-            ctest_exclude = ""
-            by_label = False
-        else:
-            # Fast tier: select by CTest labels (smoke-t1|ut.* minus ut.heavy).
-            ctest_regex = "smoke-t1|ut\\."
-            ctest_exclude = "ut\\.heavy"
-            by_label = True
-    else:
+    if ctest_regex or ctest_exclude:
+        # Cell explicitly narrows the test set (by name regex and/or exclusion);
+        # honor it as-is regardless of the scope.
         by_label = False
+    elif args.scope == "full":
+        # Full scope: plain ctest unless the cell overrides it above.
+        ctest_regex = ""
+        ctest_exclude = ""
+        by_label = False
+    else:
+        # Fast tier: select by CTest labels (smoke-t1|ut.* minus ut.heavy).
+        ctest_regex = "smoke-t1|ut\\."
+        ctest_exclude = "ut\\.heavy"
+        by_label = True
 
     ctest_cmd = ["ctest", "--output-on-failure", "--parallel", "3",
                  "--schedule-random", "--no-tests=error",
@@ -225,21 +233,25 @@ def main() -> int:
     for m in pattern.finditer(result.stdout):
         per_test.append({"test": m.group(1), "status": m.group(2),
                          "sec": round(float(m.group(3)), 3)})
-    metrics = {
-        "cell": cell["id"],
-        "scope": args.scope,
-        "rc": result.returncode,
-        "wall_ms": elapsed_ms,
-        "tests": per_test,
-    }
-    metrics_path = build_dir / "Testing" / "Temporary" / "cell-metrics.json"
-    metrics_path.parent.mkdir(parents=True, exist_ok=True)
-    metrics_path.write_text(json.dumps(metrics, indent=1), encoding="utf-8")
-    print(f"==> cell-metrics: {metrics_path} ({len(per_test)} tests, wall_ms={elapsed_ms})")
+    write_metrics(build_dir, cell["id"], args.scope, result.returncode, elapsed_ms, per_test)
 
     if result.returncode != 0:
         print(f"==> cell {cell['id']} FAILED (rc={result.returncode})", file=sys.stderr)
     return result.returncode
+
+
+def write_metrics(build_dir, cell_id, scope, rc, wall_ms, per_test):
+    metrics = {
+        "cell": cell_id,
+        "scope": scope,
+        "rc": rc,
+        "wall_ms": wall_ms,
+        "tests": per_test,
+    }
+    metrics_path = Path(build_dir) / "Testing" / "Temporary" / "cell-metrics.json"
+    metrics_path.parent.mkdir(parents=True, exist_ok=True)
+    metrics_path.write_text(json.dumps(metrics, indent=1), encoding="utf-8")
+    print(f"==> cell-metrics: {metrics_path} ({len(per_test)} tests, wall_ms={wall_ms})")
 
 
 def time_ns() -> int:
