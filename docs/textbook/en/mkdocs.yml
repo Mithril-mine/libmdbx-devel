@@ -1,0 +1,52 @@
+# MkDocs configuration for the English libmdbx textbook.
+# Build (HTML + PDF): make books   — or manually:
+#   MDBX_BOOK_VERSION=$(git describe --tags --long) MDBX_BOOK_DATE=$(date +%F) \
+#     mkdocs build -f docs/textbook/en/mkdocs.yml
+# Output: docs/textbook/site/en/
+
+site_name: libmdbx Textbook
+site_url: https://libmdbx.dqdkfa.ru/textbook/en/
+site_description: >-
+  A practical guide to the libmdbx embedded transactional database — from the
+  first steps to expert topics and bindings.
+site_dir: ../site/en
+docs_dir: .
+exclude_docs: |
+  mkdocs.yml
+  book_hooks.py
+  __pycache__
+  templates
+
+theme:
+  name: material
+  language: en
+  features:
+    - content.code.copy
+    - navigation.sections
+
+hooks:
+  - book_hooks.py
+
+plugins:
+  - search
+  - with-pdf:
+      # NOTE: the custom cover template path is set by book_hooks.on_config()
+      # (the plugin resolves custom_template_path against the process CWD, not
+      # against this config file, so an absolute path is required).
+      output_path: libmdbx-textbook-en.pdf
+      cover: true
+      cover_title: libmdbx Textbook
+      cover_subtitle: From the first steps to expert topics and bindings
+      author: The libmdbx project
+      toc_title: Table of contents
+
+nav:
+  - About the textbook: README.md
+  - Outline (skeleton): 00-karkas.md
+  - Volume I. Fundamentals: 01-tom-i-osnovy.md
+  - Volume II. Practice: 02-tom-ii-praktika.md
+  - Volume III. Mechanisms: 03-tom-iii-mehanizmy.md
+  - Volume IV. Performance: 04-tom-iv-proizvoditelnost.md
+  - Volume V. Expert topics: 05-tom-v-ekspertnye-temy.md
+  - Volume VI. Bindings: 06-tom-vi-bindings.md
+  - About the textbook: README.md

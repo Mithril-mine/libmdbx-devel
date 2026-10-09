@@ -1,0 +1,52 @@
+# MkDocs configuration for the Russian libmdbx textbook.
+# Build (HTML + PDF): make books   — or manually:
+#   MDBX_BOOK_VERSION=$(git describe --tags --long) MDBX_BOOK_DATE=$(date +%F) \
+#     mkdocs build -f docs/textbook/ru/mkdocs.yml
+# Output: docs/textbook/site/ru/
+
+site_name: Учебник по libmdbx
+site_url: https://libmdbx.dqdkfa.ru/textbook/ru/
+site_description: >-
+  Практическое руководство по встраиваемой транзакционной базе данных libmdbx —
+  от первых шагов до экспертных тем и биндингов.
+site_dir: ../site/ru
+docs_dir: .
+exclude_docs: |
+  mkdocs.yml
+  book_hooks.py
+  __pycache__
+  templates
+
+theme:
+  name: material
+  language: ru
+  features:
+    - content.code.copy
+    - navigation.sections
+
+hooks:
+  - book_hooks.py
+
+plugins:
+  - search
+  - with-pdf:
+      # NOTE: the custom cover template path is set by book_hooks.on_config()
+      # (the plugin resolves custom_template_path against the process CWD, not
+      # against this config file, so an absolute path is required).
+      output_path: libmdbx-textbook-ru.pdf
+      cover: true
+      cover_title: Учебник по libmdbx
+      cover_subtitle: От первых шагов до экспертных тем и биндингов
+      author: Проект libmdbx
+      toc_title: Содержание
+
+nav:
+  - О учебнике: README.md
+  - Оглавление (каркас): 00-karkas.md
+  - Том I. Основы: 01-tom-i-osnovy.md
+  - Том II. Практика: 02-tom-ii-praktika.md
+  - Том III. Механизмы: 03-tom-iii-mehanizmy.md
+  - Том IV. Производительность: 04-tom-iv-proizvoditelnost.md
+  - Том V. Экспертные темы: 05-tom-v-ekspertnye-temy.md
+  - Том VI. Биндинги: 06-tom-vi-bindings.md
+  - О учебнике: README.md

@@ -10,6 +10,14 @@ namespace mdbx {
 /// implements specific capabilities and manipulates with bytes but
 /// not a characters.
 ///
+/// \note A slice is non-owning: it references data allocated elsewhere and
+/// never copies or releases it. The referenced data must remain valid as long
+/// as the slice is used. Passing a temporary (e.g. a `std::string` converted
+/// inline in a call argument, like `txn.insert(map, mdbx::slice(std::to_string(k)), ...)`)
+/// is safe: a temporary lives until the end of the full-expression and libmdbx
+/// copies the bytes during the call. In contrast, storing such a slice beyond
+/// the statement leaves it dangling.
+///
 /// \copydetails MDBX_val
 struct LIBMDBX_API_TYPE slice : public ::MDBX_val {
   /// \todo slice& operator<<(slice&, ...) for reading
@@ -36,6 +44,11 @@ struct LIBMDBX_API_TYPE slice : public ::MDBX_val {
 
   /// \brief Create a slice that refers to the contents of "str".
   /// \note 'explicit' to avoid reference to the temporary std::string instance.
+  /// The slice is non-owning: it references the string's data without copying.
+  /// Passing a temporary string inline in a call argument is safe (the temporary
+  /// lives until the end of the full-expression and libmdbx copies the bytes
+  /// during the call), but storing the resulting slice beyond the statement
+  /// leaves it dangling — use mdbx::buffer to own a copy.
   template <class CHAR, class T, class A>
   explicit MDBX_CXX20_CONSTEXPR slice(const ::std::basic_string<CHAR, T, A> &str)
       : slice(str.data(), str.length() * sizeof(CHAR)) {}

@@ -5,7 +5,8 @@
 > limitations of each binding.
 > **Honesty:** facts about specific wrappers (repository, version, bugs) require analysis of their
 > repositories and issues. Architectural consequences (NoStickyThreads, Send/Sync,
-> GC/pinning, GIL) are given here; positions that need to be checked against the repository are
+> GC/pinning, GIL — the Global Interpreter Lock of Python) are given here; positions that need to
+> be checked against the repository are
 > marked explicitly.
 
 ---
@@ -34,6 +35,13 @@ C++, Dart, Nim, Java, Haskell, Ruby, Scala**. Plus unofficial ones (openresty/lu
 > **Note:** the cards for Ch. 42–46 (Nim, Java, Haskell, Ruby, Scala) are brief; repository details
 > require analysis (see the notes in each card).
 
+### 34.1. What each binding covers
+
+A typical picture: a binding wraps the **C API** (`mdbx_env_*`, `mdbx_txn_*`, `mdbx_dbi_*`,
+`mdbx_cursor_*`, `MDBX_val`) into the idiom of the language. Coverage completeness differs: the core
+(env/txn/get/put/del/cursor) is covered everywhere; advanced APIs (cache_get, defrag, clone,
+embark_read, estimate_*) — not always. Check the documentation of the specific binding.
+
 ### 34.2. Zig (brief reference)
 
 `mdbx-zig` (repository `lmdbx-zig`) is an officially tracked binding for Zig.
@@ -41,12 +49,21 @@ Known specifics: Zig is actively used for cross-compiling C/C++; `MDBX_HAVE_BUIL
 may be needed to work around toolchain bugs. No separate card is dedicated to it —
 repository and version details require analysis.
 
-### 34.1. What each binding covers
+### 34.3. Summary of chapter 34
 
-A typical picture: a binding wraps the **C API** (`mdbx_env_*`, `mdbx_txn_*`, `mdbx_dbi_*`,
-`mdbx_cursor_*`, `MDBX_val`) into the idiom of the language. Coverage completeness differs: the core
-(env/txn/get/put/del/cursor) is covered everywhere; advanced APIs (cache_get, defrag, clone,
-embark_read, estimate_*) — not always. Check the documentation of the specific binding.
+- Officially tracked bindings: Rust, Go, Node.js, Zig, Python, .NET (C#), C++, Dart, Nim, Java, Haskell, Ruby, Scala; plus unofficial ones (openresty/lua and others).
+- Each binding wraps the C API (`mdbx_env_*`, `mdbx_txn_*`, `mdbx_dbi_*`, `mdbx_cursor_*`) into the idiom of the language.
+- The core (env/txn/get/put/del/cursor) is covered everywhere; advanced APIs (cache_get, defrag, clone, embark_read, estimate_*) — not always.
+- Mature/active: mdbx.h++ (C++), mdbx-rs/mdbx-sys (Rust), mdbx-go (Go), python-lmdbx/mdbx-py, node-mdbx, libmdbx-dotnet, mdbx-dart/Isar.
+- `mdbx-zig` (lmdbx-zig) — officially tracked; `MDBX_HAVE_BUILTIN_CPU_SUPPORTS=0` may be needed to work around toolchain bugs.
+- The Nim/Java/Haskell/Ruby/Scala cards are brief; repository details require analysis.
+
+### 34.4. Chapter 34 checklist
+
+- [ ] Choose a binding per the chapter table and verify its status against the repository.
+- [ ] Check which advanced APIs (cache_get, defrag, clone, embark_read, estimate_*) the binding supports.
+- [ ] For Zig, account for `MDBX_HAVE_BUILTIN_CPU_SUPPORTS=0` in case of toolchain problems.
+- [ ] For the brief cards (Nim/Java/Haskell/Ruby/Scala), analyze the binding's repository before production.
 
 ---
 
@@ -90,6 +107,15 @@ _(Check the binding's benchmarks.)_
 
 **Gaps.** Version-dependent: cache_get, defrag, clone and others may be missing.
 
+**Card summary.** A two-layer pair: `mdbx-sys` — low-level FFI bindings to the C API, `mdbx-rs` — a safe idiomatic wrapper (installed via cargo). The main architectural consequences are sticky transactions (`!Sync`, `MDBX_NOSTICKYTHREADS` is mandatory for async runtimes) and invalid `MDBX_val` pointers after commit/abort; blocking calls in async — only via `spawn_blocking`. The overhead is minimal (FFI + ownership checks); advanced APIs (cache_get, defrag, clone) are version-dependent.
+
+**Card checklist.**
+
+- [ ] For an async runtime (tokio and others) set `MDBX_NOSTICKYTHREADS`.
+- [ ] Ensure the wrapper restricts value lifetimes to the transaction (does not hand out `&[u8]` after commit/abort).
+- [ ] Run blocking commits/writes via `spawn_blocking`.
+- [ ] Check cache_get/defrag/clone availability against the binding version.
+
 ---
 
 ## Chapter 36. Go (mdbx-go)
@@ -128,6 +154,15 @@ _(Verify the signatures against the repository.)_
 
 **Gaps.** Completeness of the advanced API — check the repository.
 
+**Card summary.** `mdbx-go` — an active CGO binding (installed via `go get`). Goroutines migrate between OS threads, so the binding always opens the environment with `MDBX_NOSTICKYTHREADS`; one transaction object cannot be used from two goroutines simultaneously. The main risks are deadlock on the environment's write functions and CGO overhead on every operation, mitigated by batching.
+
+**Card checklist.**
+
+- [ ] One transaction — one goroutine (or explicit serialization via a channel/mutex).
+- [ ] Do not call `Env.SetOption`/`Env.Sync`/`Env.Stat`/`Env.Defrag`/`Env.Close` from another goroutine while a write transaction is active.
+- [ ] Pin the goroutine via `runtime.LockOSThread` if needed.
+- [ ] For hot paths group operations into batches (the CGO boundary).
+
 ---
 
 ## Chapter 37. Python (python-lmdbx / mdbx-py)
@@ -148,6 +183,15 @@ _(Verify the signatures against the repository.)_
 
 **Gaps.** Verify against the repository (Python 3.x versions, wheels, advanced API).
 
+**Card summary.** A Python binding over the C API, status active (verification). The key point is the GIL: long read transactions and bulk writes block other Python threads; the lifetime of mmap pointers must be guaranteed explicitly — via a context manager (`with env.begin(...)`). With `multiprocessing`, `resurrect_after_fork` is mandatory in the child process; the choice of ctypes/CFFI/pybind affects overhead.
+
+**Card checklist.**
+
+- [ ] Guarantee commit/abort via a context manager (`with env.begin(...)`).
+- [ ] Release the GIL in the binding during long operations.
+- [ ] Call `resurrect_after_fork` in the child process after `fork()`.
+- [ ] For batches minimize the number of boundary calls (ctypes/CFFI/pybind).
+
 ---
 
 ## Chapter 38. Node.js (node-mdbx)
@@ -163,6 +207,15 @@ _(Verify the signatures against the repository.)_
 - **NoStickyThreads** — same as Go, if worker threads are used.
 
 **Gaps.** Verify against the repository.
+
+**Card summary.** `node-mdbx` — an active N-API binding (verification). The synchronous C API blocks the event loop — the wrapper should offer async variants (worker threads/libuv) for large operations; with worker threads `MDBX_NOSTICKYTHREADS` is needed (as in Go). A Node.js Buffer is an owning wrapper: watch its lifetime when passing it to libmdbx.
+
+**Card checklist.**
+
+- [ ] Run large operations via async variants (worker threads/libuv) without blocking the event loop.
+- [ ] Do not pass buffers whose lifetime is not guaranteed.
+- [ ] With worker threads set `MDBX_NOSTICKYTHREADS`.
+- [ ] Verify the binding's capabilities against the repository.
 
 ---
 
@@ -182,6 +235,15 @@ libmdbx! — check exactly what you are using). Status — active _(verification
 
 **Gaps.** Verify against the repository (versions, platforms, advanced API).
 
+**Card summary.** `libmdbx-dotnet` — an active .NET binding over the C API (verification); do not confuse it with LightningDB (that is not libmdbx). The main point is pinning: `MDBX_val` points into mmap, while the .NET GC may move a managed buffer (`fixed`/pinned, a marshal copy or `Span<T>`). Release via SafeHandle/finalizer in the order env → txn → cursor; dangling handles give `BAD_DBI`/`BAD_TXN`.
+
+**Card checklist.**
+
+- [ ] Pin managed buffers (`fixed`/marshal copy/`Span<T>`), do not rely on the GC.
+- [ ] Release env/txn/cursor via SafeHandle/finalizer in the correct order.
+- [ ] Do not hold long transactions across GC collections.
+- [ ] Verify that you use a libmdbx binding, not LightningDB.
+
 ---
 
 ## Chapter 40. C++ (mdbx.h++)
@@ -191,9 +253,16 @@ libmdbx! — check exactly what you are using). Status — active _(verification
 **Class hierarchy:**
 
 - `env` / `env_managed` — environment; `txn` / `txn_managed` — transactions; `cursor` /
-  `cursor_managed` — cursors; `map_handle` — table; `slice` / `buffer` — keys/values with
-  ownership.
+  `cursor_managed` — cursors; `map_handle` — table; `slice` / `buffer` — keys/values.
 - The managed variants (`*_managed`) are RAII: automatic closing on scope exit.
+
+> **Nuance: `slice` is non-owning, `buffer` is owning.** `mdbx::slice` is merely a view over
+> `MDBX_val` (a `std::string_view`-like reference): a link to bytes owned elsewhere, no copying.
+> Therefore `mdbx::slice(std::to_string(k))` inline in a call argument is safe (the temporary
+> string lives until the end of the full-expression, and `insert()` copies the bytes into the
+> database synchronously), but keeping such a slice beyond the statement is a dangling reference.
+> `mdbx::buffer` stores its own copy by default; the "reference" mode is enabled explicitly
+> (`make_reference=true`) — then the `slice` lifetime rules apply.
 
 **Typed operations.** Map-over-keys/values via type translation; parameter structs with
 fluent setters (geometry, mode, durability, reclaiming).
@@ -233,16 +302,20 @@ Full code: [47-cpp-api.c++](examples/c++/47-cpp-api.c++).
 
 **Example:**
 
+**Fragment (C++, illustration):** the full compilable version is in
+[`examples/c++/47-cpp-api.c++`](examples/c++/47-cpp-api.c++). The map-style operations (`insert`,
+`upsert`, `get`, `erase`) are methods of the transaction, not of the table.
+
 ```cpp
 #include <mdbx.h++>
 
 int main() {
-    auto env = mdbx::env_managed::create("db.mdbx",
-                 /* geometry */ {}, 1, mdbx::env_operate_param{});
+    mdbx::env_managed env("db.mdbx",
+                          mdbx::env::operate_parameters{});
     auto txn = env.start_write();
-    auto db = txn.open_map("kv", mdbx::key_mode::usual,
-                           mdbx::value_mode::single);
-    db.put(txn, "greeting", "hello, libmdbx");
+    auto db = txn.create_map("kv", mdbx::key_mode::usual,
+                             mdbx::value_mode::single);
+    txn.upsert(db, "greeting", "hello, libmdbx");
     txn.commit();
 }
 ```
@@ -258,10 +331,19 @@ _Check the exact syntax against your version of mdbx.h++._
 
 **Gaps.** `key_mode::msgpack` is declared but not implemented.
 
+**Card summary.** `mdbx.h++` — the official mature C++ API (canon v0.15.0-263): RAII classes `env_managed`/`txn_managed`/`cursor_managed`, typed operations and 35 typed exceptions via `mdbx::error`. Always specify the geometry explicitly — the engine chooses `upper` for a new database itself (~the golden section of RAM). A known gap: `key_mode::msgpack` is declared but not implemented.
+
+**Card checklist.**
+
+- [ ] Use the RAII variants (`*_managed`) for automatic closing.
+- [ ] Always specify the geometry explicitly (the engine chooses the default `upper`).
+- [ ] Pick a single error style: `mdbx::error` exceptions (caught by type) or return codes.
+- [ ] Do not use `key_mode::msgpack` (declared but not implemented).
+
 ---
 
 
-> **Examples for the chapter:** [`examples/c++/47-cpp-api.c++`](examples/c++/47-cpp-api.c++).
+> **Examples for this chapter:** [`examples/c++/47-cpp-api.c++`](examples/c++/47-cpp-api.c++).
 
 ## Chapter 41. Dart (mdbx-dart / Isar)
 
@@ -277,6 +359,15 @@ using libmdbx. Status — active.
 
 **Gaps.** Verify against the repository.
 
+**Card summary.** `mdbx-dart` — an active binding for Dart/Flutter; the popular local database Isar is built on libmdbx. Transactions do not cross isolates (sticky thread) — each isolate works with its own transactions. On mobile platforms (Android/iOS) parking long reads and low WAF (extending flash lifetime) matter.
+
+**Card checklist.**
+
+- [ ] Do not pass transactions between isolates (sticky thread).
+- [ ] On Android/iOS carefully park long reads.
+- [ ] Watch for low WAF to extend flash lifetime.
+- [ ] Verify the details against the repository.
+
 ---
 
 ## Chapter 42. Nim
@@ -285,6 +376,14 @@ using libmdbx. Status — active.
 
 **Expected nuances (from the architecture):** memory management (Nim GC does not own mmap pointers —
 manual lifetime restrictions are needed); thread affinity (sticky).
+
+**Card summary.** A Nim binding; repository and version data require analysis of the binding's repository. Expected nuances: the Nim GC does not own mmap pointers — manual lifetime restrictions are needed; transactions are bound to threads (sticky).
+
+**Card checklist.**
+
+- [ ] Manually restrict the lifetime of mmap pointers (the Nim GC does not own them).
+- [ ] Keep transactions in the thread that created them (sticky).
+- [ ] Verify the binding's repository and version.
 
 ---
 
@@ -296,6 +395,15 @@ manual lifetime restrictions are needed); thread affinity (sticky).
 or direct ByteBuffer); releasing native handles (env/txn/cursor) in the correct order;
 multithreading (each thread has its own transactions).
 
+**Card summary.** A Java binding via JNI; data requires repository analysis. Expected nuances: pinning critical buffers (JNI `GetByteArrayElements` or direct ByteBuffer), releasing native handles (env/txn/cursor) in the correct order, each thread having its own transactions.
+
+**Card checklist.**
+
+- [ ] Pin critical buffers (JNI `GetByteArrayElements`/direct ByteBuffer).
+- [ ] Release native handles (env/txn/cursor) in the correct order.
+- [ ] Do not use one transaction from several threads.
+- [ ] Verify the data against the binding's repository.
+
 ---
 
 ## Chapter 44. Haskell
@@ -305,14 +413,32 @@ multithreading (each thread has its own transactions).
 **Expected nuances (from the architecture):** purity and effects (STM vs IO); binding transactions to
 OS threads; the lifetime of pointers into mmap.
 
+**Card summary.** A Haskell binding via FFI; data requires repository analysis. Expected nuances: reconciling purity and effects (STM vs IO), binding transactions to OS threads, the lifetime of pointers into mmap.
+
+**Card checklist.**
+
+- [ ] Reconcile transaction purity/effects (STM vs IO).
+- [ ] Account for transactions being bound to OS threads.
+- [ ] Restrict the lifetime of pointers into mmap.
+- [ ] Verify the data against the binding's repository.
+
 ---
 
 ## Chapter 45. Ruby
 
 **Overview.** Ruby binding. _(Data requires repository analysis.)_
 
-**Expected nuances (from the architecture):** GVL (analogous to GIL) and blocking calls; releasing
+**Expected nuances (from the architecture):** the GVL (Ruby VM's global lock — analogous to the
+Python GIL) and blocking calls; releasing
 native handles via finalizer/ensure.
+
+**Card summary.** A Ruby binding; data requires repository analysis. Expected nuances: the GVL (Ruby VM's global lock — analogous to the Python GIL) and blocking calls; releasing native handles via finalizer/ensure.
+
+**Card checklist.**
+
+- [ ] Account for the GVL during long/blocking operations.
+- [ ] Release native handles via finalizer/ensure.
+- [ ] Verify the data against the binding's repository.
 
 ---
 
@@ -322,6 +448,14 @@ native handles via finalizer/ensure.
 
 **Expected nuances (from the architecture):** the same as Java (JNI, pinning, handles), plus Scala
 idiom specifics (futures — be careful with threads).
+
+**Card summary.** A Scala binding via the JVM; data requires repository analysis. Expected nuances — the same as Java (JNI, pinning, handle release), plus Scala idiom specifics: futures require care with threads.
+
+**Card checklist.**
+
+- [ ] Account for the Java JNI nuances (pinning, handle release order).
+- [ ] In futures do not rely on a fixed thread.
+- [ ] Verify the data against the binding's repository.
 
 ---
 
