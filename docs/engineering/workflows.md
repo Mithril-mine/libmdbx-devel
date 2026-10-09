@@ -80,13 +80,17 @@ Parallel infrastructure built on top of the same CTest labels; the legacy 7 GitH
 - **Registry** — `tests/ci/config.json`: single source of truth for every build configuration
   ("cell"). Cell fields: `id`, `runs-on`, `env` (toolchain), `cmake[]` (args, `flag|value` form),
   `ctest` (`regex`/`exclude`/null), `build_only` (Android), `ndk` (Android NDK version, consumed
-  by `setup-ndk` in ci-run.yml), `note`. The historical ARM64 Windows
+  by `setup-ndk` in ci-run.yml), `emulator` (B5 pilot: `{api-level, arch}` — the cell is built
+  and its tests are replayed on a booted Android emulator via adb instead of ctest), `note`.
+  The historical ARM64 Windows
   `ctest.exclude=smoke_sp_` (B14/TASK-27) was removed in 2026-10 after the smoke-framework
   fixes. Generator pinning: a cell that passes `-G`/`-A`/`-T`
   is never overridden with Ninja; cells without them default to Ninja when available.
-- **Profiles**: `push-quick` (5 cells), `linux-full` (8), `win-full` (164), `mac-full` (6),
-  `android-build` (15, build-only), `full` (193, no duplicate ids).
-- **Local runner** — `tests/ci/run-cell.sh <cell-id> [--build-dir <dir>]`: pure CMake/CTest,
+- **Profiles**: `push-quick` (5 cells), `linux-full` (8), `win-full` (148), `mac-full` (6),
+  `android-build` (15, build-only), `linux-locking` (8, MDBX_LOCKING flavor matrix),
+  `win-arm64` (24, native ARM64-Win), `android-emulator` (1, B5 pilot), `full` (186,
+  no duplicate ids).
+- **Local runner** — `tests/ci/run-cell.py <cell-id> [--scope fast|full] [--build-dir <dir>]`: pure CMake/CTest,
   no `ci.sh`; rc 0 = ok, 1 = build/test fail, 2 = unknown id/usage. Reproduces a failing cell
   locally on Linux-capable cells.
 - **Orchestrator** — `.github/workflows/ci-dispatch.yml`: `push` on devel/master → `push-quick`;
@@ -99,7 +103,9 @@ Parallel infrastructure built on top of the same CTest labels; the legacy 7 GitH
   toolchain env (a registry `PATH` entry prepends to the runner PATH via `$GITHUB_PATH`),
   configure+build (with `--config` for multi-config generators; Ninja only when the cell does
   not pin `-G`/`-A`/`-T`), ctest per-cell regex/exclude and `-C` config (skipped for
-  `build_only`), artifacts on failure. `ci-dispatch` concurrency-cancels overlapping runs and
+  `build_only`), artifacts on failure. Emulator cells (`emulator` field) run the whole build +
+  test replay inside `reactivecircus/android-emulator-runner` instead of the plain build step.
+  `ci-dispatch` concurrency-cancels overlapping runs and
   tests the exact push SHA for `push` events.
 - **Profile table**:
 
@@ -107,10 +113,13 @@ Parallel infrastructure built on top of the same CTest labels; the legacy 7 GitH
   |---|---|---|
   | `push-quick` | 5 | every push/merge to devel/master |
   | `linux-full` | 8 | linux matrix |
-  | `win-full` | 164 | windows matrix (msvc+mscl+mingw+cxx-msvc) |
+  | `win-full` | 148 | windows matrix (msvc+mscl+mingw+cxx-msvc) |
   | `mac-full` | 6 | macos matrix |
-  | `android-build` | 15 | android build-only |
-  | `full` | 193 | nightly on master HEAD |
+  | `android-build` | 15 | android build-only matrix |
+  | `linux-locking` | 8 | MDBX_LOCKING flavors (SYSV/1988/2001/2008 x gcc/clang) |
+  | `win-arm64` | 24 | native ARM64-Windows cells |
+  | `android-emulator` | 1 | android emulator pilot (B5) |
+  | `full` | 186 | nightly on master HEAD |
 
 - **master-config rule**: GitHub `repository_dispatch`/`schedule` fire only if the workflow file
   exists on the default branch and run against its HEAD; SourceCraft reads CI config from
