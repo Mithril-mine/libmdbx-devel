@@ -487,7 +487,7 @@
         "-DMDBX_WITHOUT_MSVC_CRT:BOOL=ON"
       ],
       "ctest": null,
-      "note": "ci-windows-msvc toolset=v145 target=ARM64 Debug dll=ON crt=ON; ARM64 beta-runner smoke_(sp|t1)_ excluded (B14/TASK-27 + TASK-30)"
+      "note": "ci-windows-msvc toolset=v145 target=ARM64 Debug dll=ON crt=ON; ARM64 beta-runner, full smoke suite"
     },
     {
       "id": "win-msvc-v145-arm64-release-dll-on-crt-on",
@@ -500,7 +500,7 @@
         "-DMDBX_WITHOUT_MSVC_CRT:BOOL=ON"
       ],
       "ctest": null,
-      "note": "ci-windows-msvc toolset=v145 target=ARM64 Release dll=ON crt=ON; ARM64 beta-runner smoke_(sp|t1)_ excluded (B14/TASK-27 + TASK-30)"
+      "note": "ci-windows-msvc toolset=v145 target=ARM64 Release dll=ON crt=ON; ARM64 beta-runner, full smoke suite"
     },
     {
       "id": "win-msvc-v145-x64-debug-dll-on-crt-off",
@@ -565,7 +565,7 @@
         "-DMDBX_WITHOUT_MSVC_CRT:BOOL=OFF"
       ],
       "ctest": null,
-      "note": "ci-windows-msvc toolset=v145 target=ARM64 Debug dll=ON crt=OFF; ARM64 beta-runner smoke_(sp|t1)_ excluded (B14/TASK-27 + TASK-30)"
+      "note": "ci-windows-msvc toolset=v145 target=ARM64 Debug dll=ON crt=OFF; ARM64 beta-runner, full smoke suite"
     },
     {
       "id": "win-msvc-v145-arm64-release-dll-on-crt-off",
@@ -578,7 +578,7 @@
         "-DMDBX_WITHOUT_MSVC_CRT:BOOL=OFF"
       ],
       "ctest": null,
-      "note": "ci-windows-msvc toolset=v145 target=ARM64 Release dll=ON crt=OFF; ARM64 beta-runner smoke_(sp|t1)_ excluded (B14/TASK-27 + TASK-30)"
+      "note": "ci-windows-msvc toolset=v145 target=ARM64 Release dll=ON crt=OFF; ARM64 beta-runner, full smoke suite"
     },
     {
       "id": "win-msvc-v145-x64-debug-dll-off-crt-on",
@@ -643,7 +643,7 @@
         "-DMDBX_WITHOUT_MSVC_CRT:BOOL=ON"
       ],
       "ctest": null,
-      "note": "ci-windows-msvc toolset=v145 target=ARM64 Debug dll=OFF crt=ON; ARM64 beta-runner smoke_(sp|t1)_ excluded (B14/TASK-27 + TASK-30)"
+      "note": "ci-windows-msvc toolset=v145 target=ARM64 Debug dll=OFF crt=ON; ARM64 beta-runner, full smoke suite"
     },
     {
       "id": "win-msvc-v145-arm64-release-dll-off-crt-on",
@@ -656,7 +656,7 @@
         "-DMDBX_WITHOUT_MSVC_CRT:BOOL=ON"
       ],
       "ctest": null,
-      "note": "ci-windows-msvc toolset=v145 target=ARM64 Release dll=OFF crt=ON; ARM64 beta-runner smoke_(sp|t1)_ excluded (B14/TASK-27 + TASK-30)"
+      "note": "ci-windows-msvc toolset=v145 target=ARM64 Release dll=OFF crt=ON; ARM64 beta-runner, full smoke suite"
     },
     {
       "id": "win-msvc-v145-x64-debug-dll-off-crt-off",
@@ -721,7 +721,7 @@
         "-DMDBX_WITHOUT_MSVC_CRT:BOOL=OFF"
       ],
       "ctest": null,
-      "note": "ci-windows-msvc toolset=v145 target=ARM64 Debug dll=OFF crt=OFF; ARM64 beta-runner smoke_(sp|t1)_ excluded (B14/TASK-27 + TASK-30)"
+      "note": "ci-windows-msvc toolset=v145 target=ARM64 Debug dll=OFF crt=OFF; ARM64 beta-runner, full smoke suite"
     },
     {
       "id": "win-msvc-v145-arm64-release-dll-off-crt-off",
@@ -734,7 +734,7 @@
         "-DMDBX_WITHOUT_MSVC_CRT:BOOL=OFF"
       ],
       "ctest": null,
-      "note": "ci-windows-msvc toolset=v145 target=ARM64 Release dll=OFF crt=OFF; ARM64 beta-runner smoke_(sp|t1)_ excluded (B14/TASK-27 + TASK-30)"
+      "note": "ci-windows-msvc toolset=v145 target=ARM64 Release dll=OFF crt=OFF; ARM64 beta-runner, full smoke suite"
     },
     {
       "id": "win-mscl-x64-debug-dll-on-crt-on",
@@ -782,7 +782,7 @@
         "-DMDBX_WITHOUT_MSVC_CRT:BOOL=ON"
       ],
       "ctest": null,
-      "note": "ci-windows-mscl studio=18 target=ARM64 Debug dll=ON crt=ON; ARM64 beta-runner smoke_(sp|t1)_ excluded (B14/TASK-27 + TASK-30)"
+      "note": "ci-windows-mscl studio=18 target=ARM64 Debug dll=ON crt=ON; ARM64 beta-runner, full smoke suite"
     },
     {
       "id": "win-mscl-arm64-release-dll-on-crt-on",
@@ -798,7 +798,7 @@
         "-DMDBX_WITHOUT_MSVC_CRT:BOOL=ON"
       ],
       "ctest": null,
-      "note": "ci-windows-mscl studio=18 target=ARM64 Release dll=ON crt=ON; ARM64 beta-runner smoke_(sp|t1)_ excluded (B14/TASK-27 + TASK-30)"
+      "note": "ci-windows-mscl studio=18 target=ARM64 Release dll=ON crt=ON; ARM64 beta-runner, full smoke suite"
     },
     {
       "id": "win-mscl-x64-debug-dll-on-crt-off",
@@ -846,7 +846,7 @@
         "-DMDBX_WITHOUT_MSVC_CRT:BOOL=OFF"
       ],
       "ctest": null,
-      "note": "ci-windows-mscl studio=18 target=ARM64 Debug dll=ON crt=OFF; ARM64 beta-runner smoke_(sp|t1)_ excluded (B14/TASK-27 + TASK-30)"
+      "note": "ci-windows-mscl studio=18 target=ARM64 Debug dll=ON crt=OFF; ARM64 beta-runner, full smoke suite"
     },
     {
       "id": "win-mscl-arm64-release-dll-on-crt-off",
@@ -862,7 +862,7 @@
         "-DMDBX_WITHOUT_MSVC_CRT:BOOL=OFF"
       ],
       "ctest": null,
-      "note": "ci-windows-mscl studio=18 target=ARM64 Release dll=ON crt=OFF; ARM64 beta-runner smoke_(sp|t1)_ excluded (B14/TASK-27 + TASK-30)"
+      "note": "ci-windows-mscl studio=18 target=ARM64 Release dll=ON crt=OFF; ARM64 beta-runner, full smoke suite"
     },
     {
       "id": "win-mscl-x64-debug-dll-off-crt-on",
@@ -910,7 +910,7 @@
         "-DMDBX_WITHOUT_MSVC_CRT:BOOL=ON"
       ],
       "ctest": null,
-      "note": "ci-windows-mscl studio=18 target=ARM64 Debug dll=OFF crt=ON; ARM64 beta-runner smoke_(sp|t1)_ excluded (B14/TASK-27 + TASK-30)"
+      "note": "ci-windows-mscl studio=18 target=ARM64 Debug dll=OFF crt=ON; ARM64 beta-runner, full smoke suite"
     },
     {
       "id": "win-mscl-arm64-release-dll-off-crt-on",
@@ -926,7 +926,7 @@
         "-DMDBX_WITHOUT_MSVC_CRT:BOOL=ON"
       ],
       "ctest": null,
-      "note": "ci-windows-mscl studio=18 target=ARM64 Release dll=OFF crt=ON; ARM64 beta-runner smoke_(sp|t1)_ excluded (B14/TASK-27 + TASK-30)"
+      "note": "ci-windows-mscl studio=18 target=ARM64 Release dll=OFF crt=ON; ARM64 beta-runner, full smoke suite"
     },
     {
       "id": "win-mscl-x64-debug-dll-off-crt-off",
@@ -974,7 +974,7 @@
         "-DMDBX_WITHOUT_MSVC_CRT:BOOL=OFF"
       ],
       "ctest": null,
-      "note": "ci-windows-mscl studio=18 target=ARM64 Debug dll=OFF crt=OFF; ARM64 beta-runner smoke_(sp|t1)_ excluded (B14/TASK-27 + TASK-30)"
+      "note": "ci-windows-mscl studio=18 target=ARM64 Debug dll=OFF crt=OFF; ARM64 beta-runner, full smoke suite"
     },
     {
       "id": "win-mscl-arm64-release-dll-off-crt-off",
@@ -990,7 +990,7 @@
         "-DMDBX_WITHOUT_MSVC_CRT:BOOL=OFF"
       ],
       "ctest": null,
-      "note": "ci-windows-mscl studio=18 target=ARM64 Release dll=OFF crt=OFF; ARM64 beta-runner smoke_(sp|t1)_ excluded (B14/TASK-27 + TASK-30)"
+      "note": "ci-windows-mscl studio=18 target=ARM64 Release dll=OFF crt=OFF; ARM64 beta-runner, full smoke suite"
     },
     {
       "id": "win-mingw-64-debug-dll-on-crt-on",
@@ -1806,7 +1806,7 @@
     },
     {
       "id": "win-cxx-v143-win2022-arm64-debug-std11",
-      "runs-on": "windows-2022",
+      "runs-on": "windows-11-vs2026-arm",
       "env": {
         "CXXSTD": "-std=gnu++11"
       },
@@ -1817,12 +1817,12 @@
         "-DCMAKE_CXX_STANDARD=11"
       ],
       "ctest": null,
-      "build_only": true,
-      "note": "ci-cxx-msvc toolset=v143 cxxstd=11 target=ARM64 Debug; build-only (x64 runner cannot execute ARM64 binaries)"
+      "build_only": false,
+      "note": "ci-cxx-msvc toolset=v143 ARM64, runs natively on windows-11-vs2026-arm"
     },
     {
       "id": "win-cxx-v143-win2022-arm64-release-std11",
-      "runs-on": "windows-2022",
+      "runs-on": "windows-11-vs2026-arm",
       "env": {
         "CXXSTD": "-std=gnu++11"
       },
@@ -1833,8 +1833,8 @@
         "-DCMAKE_CXX_STANDARD=11"
       ],
       "ctest": null,
-      "build_only": true,
-      "note": "ci-cxx-msvc toolset=v143 cxxstd=11 target=ARM64 Release; build-only (x64 runner cannot execute ARM64 binaries)"
+      "build_only": false,
+      "note": "ci-cxx-msvc toolset=v143 ARM64, runs natively on windows-11-vs2026-arm"
     },
     {
       "id": "win-cxx-v143-winlatest-win32-debug-std14",
@@ -1958,7 +1958,7 @@
     },
     {
       "id": "win-cxx-v143-win2022-arm64-debug-std14",
-      "runs-on": "windows-2022",
+      "runs-on": "windows-11-vs2026-arm",
       "env": {
         "CXXSTD": "-std=gnu++14"
       },
@@ -1969,12 +1969,12 @@
         "-DCMAKE_CXX_STANDARD=14"
       ],
       "ctest": null,
-      "build_only": true,
-      "note": "ci-cxx-msvc toolset=v143 cxxstd=14 target=ARM64 Debug; build-only (x64 runner cannot execute ARM64 binaries)"
+      "build_only": false,
+      "note": "ci-cxx-msvc toolset=v143 ARM64, runs natively on windows-11-vs2026-arm"
     },
     {
       "id": "win-cxx-v143-win2022-arm64-release-std14",
-      "runs-on": "windows-2022",
+      "runs-on": "windows-11-vs2026-arm",
       "env": {
         "CXXSTD": "-std=gnu++14"
       },
@@ -1985,8 +1985,8 @@
         "-DCMAKE_CXX_STANDARD=14"
       ],
       "ctest": null,
-      "build_only": true,
-      "note": "ci-cxx-msvc toolset=v143 cxxstd=14 target=ARM64 Release; build-only (x64 runner cannot execute ARM64 binaries)"
+      "build_only": false,
+      "note": "ci-cxx-msvc toolset=v143 ARM64, runs natively on windows-11-vs2026-arm"
     },
     {
       "id": "win-cxx-v143-winlatest-win32-debug-std17",
@@ -2110,7 +2110,7 @@
     },
     {
       "id": "win-cxx-v143-win2022-arm64-debug-std17",
-      "runs-on": "windows-2022",
+      "runs-on": "windows-11-vs2026-arm",
       "env": {
         "CXXSTD": "-std=gnu++17"
       },
@@ -2121,12 +2121,12 @@
         "-DCMAKE_CXX_STANDARD=17"
       ],
       "ctest": null,
-      "build_only": true,
-      "note": "ci-cxx-msvc toolset=v143 cxxstd=17 target=ARM64 Debug; build-only (x64 runner cannot execute ARM64 binaries)"
+      "build_only": false,
+      "note": "ci-cxx-msvc toolset=v143 ARM64, runs natively on windows-11-vs2026-arm"
     },
     {
       "id": "win-cxx-v143-win2022-arm64-release-std17",
-      "runs-on": "windows-2022",
+      "runs-on": "windows-11-vs2026-arm",
       "env": {
         "CXXSTD": "-std=gnu++17"
       },
@@ -2137,8 +2137,8 @@
         "-DCMAKE_CXX_STANDARD=17"
       ],
       "ctest": null,
-      "build_only": true,
-      "note": "ci-cxx-msvc toolset=v143 cxxstd=17 target=ARM64 Release; build-only (x64 runner cannot execute ARM64 binaries)"
+      "build_only": false,
+      "note": "ci-cxx-msvc toolset=v143 ARM64, runs natively on windows-11-vs2026-arm"
     },
     {
       "id": "win-cxx-v143-winlatest-win32-debug-std20",
@@ -2262,7 +2262,7 @@
     },
     {
       "id": "win-cxx-v143-win2022-arm64-debug-std20",
-      "runs-on": "windows-2022",
+      "runs-on": "windows-11-vs2026-arm",
       "env": {
         "CXXSTD": "-std=gnu++20"
       },
@@ -2273,12 +2273,12 @@
         "-DCMAKE_CXX_STANDARD=20"
       ],
       "ctest": null,
-      "build_only": true,
-      "note": "ci-cxx-msvc toolset=v143 cxxstd=20 target=ARM64 Debug; build-only (x64 runner cannot execute ARM64 binaries)"
+      "build_only": false,
+      "note": "ci-cxx-msvc toolset=v143 ARM64, runs natively on windows-11-vs2026-arm"
     },
     {
       "id": "win-cxx-v143-win2022-arm64-release-std20",
-      "runs-on": "windows-2022",
+      "runs-on": "windows-11-vs2026-arm",
       "env": {
         "CXXSTD": "-std=gnu++20"
       },
@@ -2289,8 +2289,8 @@
         "-DCMAKE_CXX_STANDARD=20"
       ],
       "ctest": null,
-      "build_only": true,
-      "note": "ci-cxx-msvc toolset=v143 cxxstd=20 target=ARM64 Release; build-only (x64 runner cannot execute ARM64 binaries)"
+      "build_only": false,
+      "note": "ci-cxx-msvc toolset=v143 ARM64, runs natively on windows-11-vs2026-arm"
     },
     {
       "id": "win-cxx-v143-winlatest-win32-debug-std23",
@@ -2989,6 +2989,23 @@
       ],
       "ctest": null,
       "note": "MDBX_LOCKING matrix: 2008(2008) x clang x Debug"
+    },
+    {
+      "id": "android-r27d-x86-64-emu",
+      "runs-on": "ubuntu-24.04",
+      "env": {},
+      "cmake": [
+        "-DANDROID_ABI=x86_64",
+        "-DCMAKE_TOOLCHAIN_FILE:PATH=${NDK_PATH}/build/cmake/android.toolchain.cmake",
+        "-DCMAKE_BUILD_TYPE=Release"
+      ],
+      "ctest": null,
+      "emulator": {
+        "api-level": 30,
+        "arch": "x86_64"
+      },
+      "note": "android ndk=r27d abi=x86_64 Release on an API-30 x86_64 emulator; B5 pilot (replaces build-only for this ABI)",
+      "ndk": "r27d"
     }
   ],
   "profiles": {
@@ -3369,7 +3386,8 @@
       "linux-lock-2001-gcc-debug",
       "linux-lock-2001-clang-release",
       "linux-lock-2008-gcc-release",
-      "linux-lock-2008-clang-debug"
+      "linux-lock-2008-clang-debug",
+      "android-r27d-x86-64-emu"
     ],
     "coverage": [
       "linux-gcc-ubuntu24-debug-coverage"
@@ -3383,14 +3401,43 @@
       "linux-lock-2001-clang-release",
       "linux-lock-2008-gcc-release",
       "linux-lock-2008-clang-debug"
+    ],
+    "win-arm64": [
+      "win-msvc-v145-arm64-debug-dll-on-crt-on",
+      "win-msvc-v145-arm64-release-dll-on-crt-on",
+      "win-msvc-v145-arm64-debug-dll-on-crt-off",
+      "win-msvc-v145-arm64-release-dll-on-crt-off",
+      "win-msvc-v145-arm64-debug-dll-off-crt-on",
+      "win-msvc-v145-arm64-release-dll-off-crt-on",
+      "win-msvc-v145-arm64-debug-dll-off-crt-off",
+      "win-msvc-v145-arm64-release-dll-off-crt-off",
+      "win-mscl-arm64-debug-dll-on-crt-on",
+      "win-mscl-arm64-release-dll-on-crt-on",
+      "win-mscl-arm64-debug-dll-on-crt-off",
+      "win-mscl-arm64-release-dll-on-crt-off",
+      "win-mscl-arm64-debug-dll-off-crt-on",
+      "win-mscl-arm64-release-dll-off-crt-on",
+      "win-mscl-arm64-debug-dll-off-crt-off",
+      "win-mscl-arm64-release-dll-off-crt-off",
+      "win-cxx-v143-win2022-arm64-debug-std11",
+      "win-cxx-v143-win2022-arm64-release-std11",
+      "win-cxx-v143-win2022-arm64-debug-std14",
+      "win-cxx-v143-win2022-arm64-release-std14",
+      "win-cxx-v143-win2022-arm64-debug-std17",
+      "win-cxx-v143-win2022-arm64-release-std17",
+      "win-cxx-v143-win2022-arm64-debug-std20",
+      "win-cxx-v143-win2022-arm64-release-std20"
+    ],
+    "android-emulator": [
+      "android-r27d-x86-64-emu"
     ]
   },
   "notes": [
     "TASK-28 testing-infra-v2 registry; mirrors 7 legacy workflows as-is (no matrix redesign).",
-    "cell counts: linux=17, macos=6, msvc=40, mscl=16, mingw=8, cxx-msvc=100, android=15; total=202.",
+    "cell counts: linux=17, macos=6, msvc=40, mscl=16, mingw=8, cxx-msvc=100, android=15+buildonly, emu=1; total=203.",
     "full = union of domain cells (no duplicate ids); known-flaky cells (macOS smoke_fault, B13 WIP) kept in full for now, flagged via known_flaky.",
     "ARM64 Windows cells historically carried ctest.exclude=smoke_sp_ (B14/TASK-27); the exclusion was removed (2026-10-07) after the smoke framework fixes.",
-    "Android cells are build_only (no emulator yet).",
+    "Android cells are build-only except the emulator pilot (android-r27d-x86-64-emu): boots an API-30 x86_64 AVD and runs smoke_basic/smoke_chk via adb. Not in push path_zones yet; kept in nightly full for stability signal.",
     "push-quick profile: 2 linux + 1 win-msvc-x64 + 1 macos + 1 win-mingw = 5 cells."
   ],
   "path_zones": {

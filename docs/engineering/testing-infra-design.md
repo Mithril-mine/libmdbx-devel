@@ -17,16 +17,18 @@ Build a **new test infrastructure in parallel** with the current ad-hoc one, tha
 - **Push-minimum**: every push/merge to `devel`/`master` runs only a small representative
   set (~5 cells), not the full ~130–160-cell matrix.
 - **Nightly full**: the complete matrix runs on schedule against `master` HEAD.
-- **Honest platform coverage**: Android cells are explicitly build-only (no emulator yet);
-  cells that are known-slow/flaky (e.g. ARM64 Windows beta-runner `smoke_sp_*`) are declared
-  per-cell so the nightly full matrix doesn't burn minutes on them.
+- **Honest platform coverage**: Android cells are build-only except the emulator pilot
+  (`android-r27d-x86-64-emu`, B5) which replays the quick-smoke scenarios on an API-30 x86_64
+  AVD via adb; cells that are known-slow/flaky (e.g. ARM64 Windows beta-runner `smoke_sp_*`)
+  are declared per-cell so the nightly full matrix doesn't burn minutes on them.
 
 The old infra remains: `tests/ci/ci.sh` = fallback script; the 7 existing workflows lose their
 `on: push` trigger and become dispatch-only fallbacks.
 
 ## 2. Non-goals
 
-- No Android emulator/test-runner integration yet (documented as build-only).
+- Android emulator/test-runner integration is limited to the B5 pilot cell for now; a full
+  emulator matrix (all ABIs, gtest `ut.*` replay) is future work.
 - No SourceCraft `.sourcecraft/ci.yaml` changes for now (quota exhausted; config lives on
   `master` per platform rule; revisit when quota returns).
 - No changes to the local segmented test execution model (`ut.*` labels, P0–P5, tiered smoke
@@ -76,7 +78,8 @@ Single source of truth. Structure:
       "env": { "CC": "gcc", "CXX": "g++" },
       "cmake": ["-DCMAKE_BUILD_TYPE=Devel", "-DMDBX_BUILD_CXX:BOOL=OFF"],
       "ctest": null,                    // default label set; or explicit
-      "build_only": false,              // true for Android (no emulator yet)
+      "build_only": false,              // true for Android build-only cells
+      "emulator": {"api-level": 30, "arch": "x86_64"},  // B5 pilot: run on an AVD via adb
       "note": "SourceCraft ci-linux-debug-gcc equivalent"
     }
   ],
@@ -159,13 +162,14 @@ Unknown ids / bad refs → fail-fast in `resolve` with a clear message (no silen
 ## 9. Affected files
 
 - New: `tests/ci/config.json`, `.github/workflows/ci-run.yml`,
-  `.github/workflows/ci-dispatch.yml`, `tests/ci/run-cell.sh` (local runner).
+  `.github/workflows/ci-dispatch.yml`, `tests/ci/run-cell.py` (local runner).
 - Touched (later phase): legacy workflow files — remove `on: push` block only.
 - Docs: this design + `docs/engineering/workflows.md` note about
   master-config rule.
 
 ## 10. Open items (tracked in BACKLOG)
 
-- Android emulator/test-runner integration (future, separate effort).
+- Android emulator/test-runner integration beyond the B5 pilot (all ABIs, `ut.*` replay on
+  device, `MDBX_ENABLE_SINGLEPROCESS_TESTS` chains) — tracked as separate effort.
 - SourceCraft `.sourcecraft/ci.yaml` migration once quota returns.
 - Whether `full` should also cover `stable`/`lts` branches nightly.
