@@ -1,0 +1,146 @@
+name: ci-dispatch
+
+# Infra v3 orchestrator (Testing Infrastructure v3, see
+# .skynet/plans/testing-infra-v3-plan.md).
+#
+# Triggers:
+#   push        -> change-addressed cells (diff vs previous commit, capped to
+#                  CI_PUSH_CAP, fast scope). Branches: devel, master.
+#   schedule    -> full profile on master HEAD (nightly, slow tier).
+#   workflow_dispatch -> single cell or named profile on any ref (owner UI).
+#   repository_dispatch -> {profile|cell, ref} for agents.
+#
+# Each selected cell fans out to the reusable ci-run.yml which runs the exact
+# registry entry (tests/ci/config.json) with --scope fast/full.
+#
+# NOTE: repository_dispatch/schedule fire only from the default branch, so this
+# workflow must live on master before agents/nightly can use it (design §3).
+
+concurrency:
+  group: ci-dispatch-${{ github.workflow }}-${{ github.head_ref || github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+on:
+  push:
+    branches: [devel, master]
+  schedule:
+    - cron: "30 0 * * *"
+      timezone: "Europe/Moscow"
+  workflow_dispatch:
+    inputs:
+      cell:
+        type: string
+        required: false
+        default: ""
+        description: Registry cell id to run (tests/ci/config.json)
+      profile:
+        type: string
+        required: false
+        default: "push-quick"
+        description: Registry profile name (default push-quick)
+      scope:
+        type: string
+        required: false
+        default: fast
+        description: ctest scope (fast/full)
+  repository_dispatch:
+    types: [dispatch-event]
+
+jobs:
+  resolve:
+    runs-on: ubuntu-24.04
+    outputs:
+      cells: ${{ steps.resolve.outputs.cells }}
+      ref: ${{ steps.resolve.outputs.ref }}
+      scope: ${{ steps.resolve.outputs.scope }}
+    steps:
+      - name: checkout
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+          fetch-tags: true
+          submodules: true
+
+      - name: resolve cells
+        id: resolve
+        shell: bash
+        env:
+          GITHUB_EVENT_NAME: ${{ github.event_name }}
+          GITHUB_REF: ${{ github.ref }}
+          EVENT_PROFILE: ${{ github.event.inputs.profile || github.event.client_payload.profile }}
+          EVENT_CELL: ${{ github.event.inputs.cell || github.event.client_payload.cell }}
+          EVENT_REF: ${{ github.event.inputs.ref || github.event.client_payload.ref }}
+          EVENT_SCOPE: ${{ github.event.inputs.scope || github.event.client_payload.scope }}
+          PUSH_BEFORE: ${{ github.event.before }}
+        run: |
+          set -euo pipefail
+          SCOPE="${EVENT_SCOPE:-fast}"
+          REF=""
+          case "$GITHUB_EVENT_NAME" in
+            push)
+              BASE="${PUSH_BEFORE:-origin/master}"
+              if [ "$BASE" = "0000000000000000000000000000000000000000" ]; then BASE="origin/master"; fi
+              echo "==> push: diff vs $BASE"
+              CELLS=$(tests/ci/select-cells.py --base "$BASE" --cap "${CI_PUSH_CAP:-10}" 2>/dev/null || tests/ci/select-cells.py --profile push-quick)
+              REF="$GITHUB_REF"
+              ;;
+            schedule)
+              echo "==> schedule: nightly full on master"
+              CELLS=$(tests/ci/select-cells.py --profile full)
+              SCOPE=full
+              REF="master"
+              ;;
+            repository_dispatch)
+              PROF="${EVENT_PROFILE:-}"
+              CID="${EVENT_CELL:-}"
+              REF="${EVENT_REF:-}"
+              if [ -n "$CID" ]; then
+                echo "==> dispatch: single cell $CID @ $REF"
+                CELLS="$CID"
+              elif [ -n "$PROF" ]; then
+                echo "==> dispatch: profile $PROF @ $REF"
+                CELLS=$(tests/ci/select-cells.py --profile "$PROF")
+              else
+                echo "dispatch-error: repository_dispatch needs profile or cell" >&2
+                exit 1
+              fi
+              ;;
+            workflow_dispatch)
+              PROF="${EVENT_PROFILE:-push-quick}"
+              CID="${EVENT_CELL:-}"
+              REF="${EVENT_REF:-${GITHUB_REF}}"
+              if [ -n "$CID" ]; then
+                echo "==> workflow_dispatch: single cell $CID @ $REF"
+                CELLS="$CID"
+              else
+                echo "==> workflow_dispatch: profile $PROF @ $REF"
+                CELLS=$(tests/ci/select-cells.py --profile "$PROF")
+              fi
+              ;;
+            *)
+              echo "dispatch-error: unsupported event $GITHUB_EVENT_NAME" >&2
+              exit 1
+              ;;
+          esac
+          # Build the matrix rows: [{cell, runs-on, scope}] resolved from the registry.
+          JSON=$(tests/ci/resolve-cells.py "$CELLS" "$SCOPE" 2> >(sed 's/^/==> /' >&2) || { echo "resolve-cells failed" >&2; exit 1; })
+          echo "cells=${JSON}" >> "$GITHUB_OUTPUT"
+          echo "ref=${REF}" >> "$GITHUB_OUTPUT"
+          echo "scope=${SCOPE}" >> "$GITHUB_OUTPUT"
+
+  run:
+    needs: resolve
+    if: ${{ needs.resolve.outputs.cells != '[]' && needs.resolve.outputs.cells != '' }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include: ${{ fromJson(needs.resolve.outputs.cells) }}
+    uses: ./.github/workflows/ci-run.yml
+    with:
+      cell: ${{ matrix.cell }}
+      "runs-on": ${{ matrix.runs-on }}
+      scope: ${{ matrix.scope }}
+      ref: ${{ needs.resolve.outputs.ref }}

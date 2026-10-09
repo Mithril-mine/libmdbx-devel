@@ -1,0 +1,81 @@
+name: ci-run
+
+# Infra v3 reusable single-cell runner (Testing Infrastructure v3, see
+# .skynet/plans/testing-infra-v3-plan.md). Runs exactly one registry cell
+# (tests/ci/config.json): configure + build + ctest with the fast/full scope,
+# uploads metrics + fault artifacts on failure. No ci.sh involved.
+#
+# Callers: ci-dispatch.yml (push / schedule / dispatch), or ad-hoc
+# workflow_dispatch with an explicit cell id.
+#
+# All cell fields (runs-on/env/cmake/build_only) are read from
+# tests/ci/config.json inside the checked-out ref — single source of truth.
+
+on:
+  workflow_call:
+    inputs:
+      cell:
+        type: string
+        required: true
+        description: Registry cell id (tests/ci/config.json)
+      ref:
+        type: string
+        required: false
+        default: ''
+        description: "Ref to check out (default: calling workflow's ref)"
+      scope:
+        type: string
+        required: false
+        default: fast
+        description: 'ctest scope: fast (smoke-t1|ut.* minus heavy) or full'
+      "runs-on":
+        type: string
+        required: true
+        description: Runner label (resolved by the orchestrator from the registry)
+
+permissions:
+  contents: read
+
+jobs:
+  cell:
+    runs-on: ${{ inputs.runs-on }}
+    steps:
+      - name: checkout
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+          fetch-tags: true
+          submodules: true
+          ref: ${{ inputs.ref || github.sha }}
+
+      - name: configure + build + ctest (fast/full scope)
+        shell: bash
+        env:
+          CI_CTEST_TIMEOUT: "600"
+          # LTO stays off in test builds (skynet/build.md §6.7). ccache is NOT
+          # enabled here: GitHub hosted runners are ephemeral, so a per-run
+          # ccache would only add hashing overhead without persistence — real
+          # caching returns on Stage 2 with actions/cache-backed CCACHE_DIR.
+          RUN_CELL_EXTRA_CMAKE: "-DINTERPROCEDURAL_OPTIMIZATION=OFF"
+        run: |
+          set -euo pipefail
+          tests/ci/run-cell.py "${{ inputs.cell }}" --scope "${{ inputs.scope }}" \
+            --build-dir @ci-cmake-build 2>&1
+
+      - name: upload metrics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: cell-metrics-${{ inputs.cell }}
+          path: '@ci-cmake-build/Testing/Temporary/cell-metrics.json'
+          if-no-files-found: ignore
+
+      - name: upload failure artifacts
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: cell-failure-${{ inputs.cell }}
+          path: |
+            @ci-cmake-build/Testing/Temporary/LastTest.log
+            @ci-cmake-build/Testing/Temporary/cell-metrics.json
+          if-no-files-found: ignore
