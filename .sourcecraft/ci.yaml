@@ -1,54 +1,62 @@
 on:
   push:
-    - workflows: [ci-linux-debug-gcc, ci-linux-debug-clang, ci-linux-release-spilling]
+    - workflows: [ci-linux-gcc-fast, ci-linux-clang-fast]
 #  pull_request:
-#    - workflows: [ci-linux-debug-gcc, ci-linux-debug-clang, ci-linux-release-spilling]
+#    - workflows: [ci-linux-gcc-fast, ci-linux-clang-fast]
   schedule:
-    - workflows: [ci-linux-debug-gcc, ci-linux-debug-clang, ci-linux-release-spilling]
+    - workflows: [ci-linux-nightly-full]
       cron: "42 3 * * *"
-      description: "Ежедневный запуск CI Linux в 03:42 (по умолчанию UTC)"
+      description: "Ежедневный полный прогон тестов в 03:42 (по умолчанию UTC)"
 
-# Файл общий для всех веток
+# SourceCraft uses this config from master regardless of the branch under
+# test (master-config rule). At most 3 workflows are allowed, so the layout
+# mirrors GitHub Infra v3: fast scope on push, full corpus on schedule.
+# Workflows use the cmake-only CI_ACTION=sourcecraft_ci (no `make all`
+# round) to stay well inside the cube duration limit.
 env:
   MDBX_BUILD_OPTIONS: -DMDBX_CHECKING=2 -DMDBX_DEBUG=0 -DMDBX_FORCE_ASSERTIONS=1 -DxMDBX_DEBUG_SPILLING=1 -DMDBX_DEBUG_SPILLING=1
 
 workflows:
-  ci-linux-debug-gcc:
+  ci-linux-gcc-fast:
     settings:
-      max_cube_duration: 30m # Минимум необходимый для сборки в режиме LTO (make + cmake) и выполнения тестов тестов
+      max_cube_duration: 60m
     env:
       CI: SourceCraft
-      CI_MAKE_TARGET: smoke
+      CI_ACTION: sourcecraft_ci
+      CI_CTEST_SCOPE: 'smoke-t1|ut\.'
+      CI_CTEST_EXCLUDE_SCOPE: 'ut\.heavy'
     tasks:
-      - name: ci-linux-debug-gcc-task
+      - name: ci-linux-gcc-fast-task
         cubes:
           - name: ci-step
             image: dh-mirror.gitverse.ru/jakoch/cpp-devbox:forky-latest
             script:
               - CC=gcc CXX=g++ test*/ci/ci.sh "-DCMAKE_BUILD_TYPE=Devel|-DMDBX_BUILD_CXX:BOOL=OFF"
-  ci-linux-debug-clang:
+  ci-linux-clang-fast:
     settings:
-      max_cube_duration: 30m # Минимум необходимый для сборки в режиме LTO (make + cmake) и выполнения тестов тестов
+      max_cube_duration: 60m
     env:
       CI: SourceCraft
-      CI_MAKE_TARGET: test
+      CI_ACTION: sourcecraft_ci
+      CI_CTEST_SCOPE: 'smoke-t1|ut\.'
+      CI_CTEST_EXCLUDE_SCOPE: 'ut\.heavy'
     tasks:
-      - name: ci-linux-debug-clang-task
+      - name: ci-linux-clang-fast-task
         cubes:
           - name: ci-step
             image: dh-mirror.gitverse.ru/jakoch/cpp-devbox:forky-latest
             script:
               - CC=clang CXX=clang++ test*/ci/ci.sh "-DCMAKE_BUILD_TYPE=MinSizeRel|-DMDBX_BUILD_CXX:BOOL=ON"
-  ci-linux-release-spilling:
+  ci-linux-nightly-full:
     settings:
-      max_cube_duration: 30m # Минимум необходимый для сборки в режиме LTO (make + cmake) и выполнения тестов тестов
+      max_cube_duration: 60m
     env:
       CI: SourceCraft
-      CI_MAKE_TARGET: check
+      CI_ACTION: sourcecraft_ci
     tasks:
-      - name: ci-linux-release-spilling-task
+      - name: ci-linux-nightly-full-task
         cubes:
           - name: ci-step
             image: dh-mirror.gitverse.ru/jakoch/cpp-devbox:forky-latest
             script:
-              - CC=clang CXX=clang++ test*/ci/ci.sh "-DCMAKE_BUILD_TYPE=RelWithDebInfo"
+              - CC=clang CXX=clang++ test*/ci/ci.sh "-DCMAKE_BUILD_TYPE=MinSizeRel|-DMDBX_BUILD_CXX:BOOL=ON|-DENABLE_GCOV:BOOL=ON"

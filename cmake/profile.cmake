@@ -31,7 +31,11 @@ if(NOT DEFINED ENABLE_MEMCHECK)
 endif()
 
 include(CheckLibraryExists)
-check_library_exists(gcov __gcov_flush "" HAVE_GCOV)
+check_library_exists(gcov __gcov_dump "" HAVE_GCOV)
+if(NOT HAVE_GCOV)
+  # __gcov_flush was the pre-GCC-7 entry point; __gcov_dump replaced it.
+  check_library_exists(gcov __gcov_flush "" HAVE_GCOV)
+endif()
 
 option(ENABLE_GCOV "Enable integration with gcov, a code coverage program" OFF)
 
