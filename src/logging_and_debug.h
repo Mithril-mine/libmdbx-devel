@@ -154,6 +154,18 @@ MDBX_MAYBE_UNUSED static inline const void *env2obj(const MDBX_env *env) { retur
 #define cASSERT1(mc, expr) CHECK1_OBJ(cursor2obj(mc), expr)
 #define cASSERT2(mc, expr) CHECK2_OBJ(cursor2obj(mc), expr)
 
+/* "Deviant-caller" assertions: guard situations that are valid-but-deviant in
+ * the CALLER rather than invariant violations of the engine. In dev/test
+ * builds (MDBX_PROBES) they become controllable probe-sites (see the
+ * probe-bus block below); otherwise they reduce exactly to CHECK0(), i.e. the
+ * historical ASSERT() semantics, so dist/amalgamated builds are unchanged. */
+#ifndef DEV_ASSERT
+#define DEV_ASSERT(expr) CHECK0(expr)
+#endif
+#ifndef DEV_ASSERT_T
+#define DEV_ASSERT_T(tag, expr) CHECK0(expr)
+#endif
+
 /* --------------------------------------------------------------------------------------------------------------- */
 
 #ifndef __cplusplus
@@ -268,3 +280,162 @@ MDBX_MAYBE_UNUSED static inline char sanitizer_kind_of_poison(const void *addr, 
   }
   return 0;
 }
+
+/* --------------------------------------------------------------------------------------------------------------- */
+
+/* Non-probe fallbacks: keep amalgamated/dist sources compiling even though the
+ * probe-bus implementation is dev-only (cut off from the amalgamation). These
+ * are zero-cost no-ops unless MDBX_PROBES is defined. */
+#ifndef MPROBE_COLLECT
+#define MPROBE_COLLECT(name, value) ((void)(name), (void)(value))
+#endif
+#ifndef MPROBE_WATCH
+#define MPROBE_WATCH(name, value) ((void)(name), (void)(value))
+#endif
+#ifndef MPROBE_FAULT
+#define MPROBE_FAULT(name, var) ((void)(name), (void)(var))
+#endif
+
+/*> dist-cutoff-begin */
+#if defined(MDBX_PROBES)
+
+/* ---------------------------------------------------------------------------
+ * Probe-bus (mprobe v2): managed/controlled testing instrumentation.
+ *
+ * Unified engine-side successor of the former tests/tracing/mprobe v1,
+ * adopting the same taxonomy (COLLECT/WATCH/FAULT) and adding:
+ *  - a process-wide registry keyed by stable SEMANTIC TAGS (not file:line);
+ *  - per-site arm/disarm, word-size counters (seen/hits/suppressed) and
+ *    value capture;
+ *  - deterministic error injection (return-code at FAULT sites, allocation
+ *    failures via the osal_* redirect), driven by the same control channel;
+ *  - control from any test either in-process (mprobe_ctl) or via a simple
+ *    file IPC (env MDBX_PROBE_CTL=<dir>, files <dir>/cmd and <dir>/rep);
+ *  - a single generic DTRACE marker fired at every site (external tracers).
+ *
+ * Contract & methodology: docs/engineering/testing-methodology.md (ch. 9-10);
+ * catalog of existing USDT/DTrace markers: docs/engineering/probes.md.
+ * Enabled by the MDBX_PROBES build option (dev-only, OFF in dist). Runtime
+ * activation via env MDBX_PROBES=1 or MDBX_PROBE_CTL=<dir>.
+ * ------------------------------------------------------------------------- */
+
+enum mprobe_kind {
+  mprobe_kind_collect, /* statistics/metrics channel (aggregation) */
+  mprobe_kind_watch,   /* observable fact/branch (event channel) */
+  mprobe_kind_fault,   /* injection point: may force an error return/value */
+  mprobe_kind_assert   /* deviant-caller assertion (DEV_ASSERT) */
+};
+
+/* Static per-call-site anchor. The canonical state lives in a process-wide
+ * registry record keyed by `name` (semantic tag); the anchor is just cheap
+ * metadata used to find-or-create that record on first evaluation. */
+struct mprobe_site {
+  const char *name;            /* semantic tag (primary key), stable across refactors */
+  const char *file;            /* __FILE__ auxiliary */
+  unsigned line;               /* __LINE__ auxiliary */
+  uint32_t kind;               /* mprobe_kind */
+  mdbx_atomic_size_t rec;      /* canonical registry record, resolved lazily */
+};
+
+enum mprobe_action_mode {
+  mprobe_action_panic = 0,     /* default: report and abort, like ASSERT */
+  mprobe_action_log,           /* report via debug_log and continue */
+  mprobe_action_count          /* count only, no report/abort */
+};
+
+/* Control entry point: applies a request, writes reply into the buffer.
+ * Requests are NUL-terminated lines, ops:
+ *   list                                     - list all registered sites
+ *   arm <tag-pattern> / disarm <tag-pattern> - control individual sites
+ *   mode <panic|log|count>                   - global action mode
+ *   fault <tag-pattern> <code>|<none>        - inject error return at FAULT sites
+ *   alloc-fault <count>|<none>               - fail next N allocations
+ *   query <tag-pattern>                      - dump site state
+ *   reset <tag-pattern>                      - zero counters
+ *   sync                                     - drain file-IPC, then ack
+ * Reply format: "ok\n" + optional payload lines, or "err <msg>\n".
+ * Tag patterns support a trailing '*', e.g. "rkl_resize:*". */
+LIBMDBX_API int mprobe_ctl(const char *request, char *reply, size_t reply_size);
+
+/* Core evaluators called from the macros below (exported for white-box tests
+ * that compile engine sources into themselves and link against libmdbx). */
+LIBMDBX_API void mprobe_fire(struct mprobe_site *site, intptr_t value);
+LIBMDBX_API void mprobe_fault(struct mprobe_site *site, void *var);
+LIBMDBX_API void mprobe_assert_failed(struct mprobe_site *site, const char *expr);
+LIBMDBX_API void mprobe_assert_ok(struct mprobe_site *site);
+
+#ifndef MDBX_MPROBE_CAT_
+#define MDBX_MPROBE_CAT_(a, b) a##b
+#endif
+#ifndef MDBX_MPROBE_CAT
+#define MDBX_MPROBE_CAT(a, b) MDBX_MPROBE_CAT_(a, b)
+#endif
+#ifndef MDBX_MPROBE_STR_
+#define MDBX_MPROBE_STR_(x) #x
+#endif
+#ifndef MDBX_MPROBE_STR
+#define MDBX_MPROBE_STR(x) MDBX_MPROBE_STR_(x)
+#endif
+#ifndef MDBX_MPROBE_VAR
+/* NOTE: __LINE__ (not __COUNTER__) must be used here: within a single macro
+ * expansion it evaluates to the SAME call-site value for both the static
+ * declaration and the references below, while __COUNTER__ advances per
+ * expansion and would desynchronize them. */
+#define MDBX_MPROBE_VAR(base) MDBX_MPROBE_CAT(base, __LINE__)
+#endif
+#ifndef MDBX_MPROBE_AT
+#define MDBX_MPROBE_AT __FILE__ ":" MDBX_MPROBE_STR(__LINE__)
+#endif
+
+/* Statistics probe: aggregates `value` at the point (count + last seen). */
+#undef MPROBE_COLLECT
+#define MPROBE_COLLECT(name, value)                                                \
+  do {                                                                             \
+    static struct mprobe_site MDBX_MPROBE_VAR(mprobe_site_) = {                    \
+        #name, __FILE__, __LINE__, mprobe_kind_collect, {0}};                      \
+    mprobe_fire(&MDBX_MPROBE_VAR(mprobe_site_), (intptr_t)(value));                \
+  } while (0)
+
+/* Event probe: records that the branch/fact was observed. */
+#undef MPROBE_WATCH
+#define MPROBE_WATCH(name, value)                                                  \
+  do {                                                                             \
+    static struct mprobe_site MDBX_MPROBE_VAR(mprobe_site_) = {                    \
+        #name, __FILE__, __LINE__, mprobe_kind_watch, {0}};                        \
+    mprobe_fire(&MDBX_MPROBE_VAR(mprobe_site_), (intptr_t)(value));                \
+  } while (0)
+
+/* Injection probe: when a fault rule is armed for this tag, `var` is mutated to
+ * the injected error code (e.g. MDBX_TXN_FULL); otherwise a no-op that still
+ * observes the site (seen/hits). */
+#undef MPROBE_FAULT
+#define MPROBE_FAULT(name, var)                                                    \
+  do {                                                                             \
+    static struct mprobe_site MDBX_MPROBE_VAR(mprobe_site_) = {                    \
+        #name, __FILE__, __LINE__, mprobe_kind_fault, {0}};                        \
+    mprobe_fault(&MDBX_MPROBE_VAR(mprobe_site_), &(var));                          \
+  } while (0)
+
+#undef DEV_ASSERT
+#undef DEV_ASSERT_T
+
+/* Deviant-caller assertion built on the probe-bus: in the probe build it is a
+ * controllable site (see DEV_ASSERT_T for stable tags); otherwise it reduces
+ * to CHECK0() exactly as declared above (dist behavior unchanged). */
+#define DEV_ASSERT(expr)                                                           \
+  DEV_ASSERT_T(MDBX_MPROBE_STR(expr) "@" __FILE__ ":" MDBX_MPROBE_STR(__LINE__),   \
+               expr)
+#define DEV_ASSERT_T(tag, expr)                                                    \
+  do {                                                                             \
+    static struct mprobe_site MDBX_MPROBE_VAR(mprobe_site_) = {(tag), __FILE__,   \
+                                                                __LINE__,           \
+                                                                mprobe_kind_assert, \
+                                                                {0}};              \
+    if (unlikely(!(expr)))                                                         \
+      mprobe_assert_failed(&MDBX_MPROBE_VAR(mprobe_site_), #expr);                 \
+    else                                                                           \
+      mprobe_assert_ok(&MDBX_MPROBE_VAR(mprobe_site_));                            \
+  } while (0)
+
+#endif /* MDBX_PROBES */
+/*< dist-cutoff-end */
