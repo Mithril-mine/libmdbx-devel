@@ -309,9 +309,16 @@ else()
                                    --dont-cleanup-after ${MDBX_SMOKE_EXTRA} basic)
   set_tests_properties(smoke_basic PROPERTIES LABELS "smoke;smoke-t2" TIMEOUT 600 RUN_SERIAL OFF)
 
+  set(SMOKE_WRITEMAP_SIZE_UPPER "2G")
+  if(CMAKE_SIZEOF_VOID_P EQUAL 4)
+    # 32-bit builds cap the geometry upper bound at 896 MiB (MDBX_PNL_MAX? /
+    # address-space limit); a 2G request aborts mdbx_test startup.
+    set(SMOKE_WRITEMAP_SIZE_UPPER "768M")
+  endif()
+
   add_test(NAME smoke_writemap COMMAND $<TARGET_FILE:mdbx_test> --duration 100 --mode=-writemap,-nosync-safe,-lifo
                                     --progress --console=no --repeat=${MDBX_TEST_ITER} --pathname=smoke.db
-                                    --size-lower=64M --size=256M --size-upper=2G --geometry-jitter=no
+                                    --size-lower=64M --size=256M --size-upper=${SMOKE_WRITEMAP_SIZE_UPPER} --geometry-jitter=no
                                     --dont-cleanup-after ${MDBX_SMOKE_EXTRA} basic)
   set_tests_properties(smoke_writemap PROPERTIES LABELS "smoke;smoke-t2" TIMEOUT 600 DEPENDS smoke_basic RUN_SERIAL OFF)
 
@@ -515,7 +522,36 @@ else()
       set_tests_properties(dbi_nested_txn PROPERTIES LABELS "ut;ut.dbi;ut.txn")
     endif()
     add_extra_test(details_rkl SOURCE ut/api/details_rkl.c)
-    set_tests_properties(extra_details_rkl PROPERTIES LABELS "ut;ut.api;ut.gc")
+    set_tests_properties(extra_details_rkl PROPERTIES LABELS "ut;ut.api;ut.gc"
+      # Routine profile: bounded stochastic scale + deterministic edge-cases
+      # covers the same rkl/txl branches as the full stress at ~1.4s vs ~30s
+      # (measured 2026-09-30, Debug+gcov). Full stress lives in the
+      # ut.heavy-labelled extra_details_rkl_full target below.
+      ENVIRONMENT "MDBX_RKL_CASES=64;MDBX_RKL_LOOPS=8;MDBX_RKL_HOLE_PROBES=512;MDBX_RKL_EDGES=1")
+    add_test(NAME extra_details_rkl_full COMMAND $<TARGET_FILE:test_extra_details_rkl>)
+    set_tests_properties(extra_details_rkl_full PROPERTIES
+      LABELS "ut;ut.api;ut.gc;ut.heavy"
+      TIMEOUT 3600
+      ENVIRONMENT "MDBX_RKL_EDGES=1")
+
+    if(MDBX_PROBES)
+      add_extra_test(probes SOURCE ut/api/probes.c)
+      set_tests_properties(extra_probes PROPERTIES LABELS "ut;ut.api"
+        ENVIRONMENT "MDBX_PROBES=1")
+
+      # File-IPC round-trip: the driver writes requests to <dir>/cmd and reads
+      # replies from <dir>/rep; WORKING_DIRECTORY isolates the IPC files.
+      add_executable(test_extra_probes_ipc ut/api/probes_ipc.c)
+      target_include_directories(test_extra_probes_ipc PRIVATE "${PROJECT_SOURCE_DIR}")
+      target_link_libraries(test_extra_probes_ipc ${TOOL_MDBX_LIB})
+      set_target_properties(test_extra_probes_ipc PROPERTIES C_STANDARD ${MDBX_C_STANDARD} C_STANDARD_REQUIRED ON)
+      set(probes_ipc_dir "${CMAKE_CURRENT_BINARY_DIR}/probes-ipc")
+      file(MAKE_DIRECTORY "${probes_ipc_dir}")
+      add_test(NAME extra_probes_ipc
+               COMMAND $<TARGET_FILE:test_extra_probes_ipc> "${probes_ipc_dir}")
+      set_tests_properties(extra_probes_ipc PROPERTIES LABELS "ut;ut.api"
+        WORKING_DIRECTORY "${probes_ipc_dir}")
+    endif()
 
     add_ut(global_init SOURCE ut/api/global_init.c++ LIBRARY mdbx-static)
     set_tests_properties(global_init PROPERTIES LABELS "ut;ut.api;ut.env")
@@ -549,9 +585,19 @@ else()
         add_ut(buffers SOURCE ut/api/buffers.c++)
         set_tests_properties(buffers PROPERTIES LABELS "ut;ut.api")
         add_ut(bunches_removal SOURCE ut/gc/bunches_removal.c++)
-        set_tests_properties(bunches_removal PROPERTIES LABELS "ut;ut.gc")
+        set_tests_properties(bunches_removal PROPERTIES LABELS "ut;ut.gc"
+          # DEEP=1 exercises all bunch-delete paths and covers the SAME
+          # gc-get/gc-put + page-split/node/tree-ops/pnl/dpl branches as
+          # DEEP=4..5 at ~0.4s vs ~24s+ (measured 2026-09-30 with fixed
+          # MDBX_BUNCHES_SEED; probe_prepare always fills to >=42 entries and
+          # deeper B-trees add no extra line coverage). No full variant needed.
+          ENVIRONMENT "MDBX_BUNCHES_DEEP=1")
         add_ut(get_cached SOURCE ut/api/get_cached.c++)
-        set_tests_properties(get_cached PROPERTIES LABELS "ut;ut.api;ut.txn")
+        set_tests_properties(get_cached PROPERTIES LABELS "ut;ut.api;ut.txn"
+          # Trimmed timeouts: case1 stairway + case2 multithread reach the same
+          # cache branches at ~2.7s vs ~15.6s (measured 2026-09-30); the
+          # extended profile is get_cached_full below.
+          ENVIRONMENT "MDBX_GET_CACHED_TIMEOUT_SEC=2;MDBX_GET_CACHED_CASE2_TIMEOUT_SEC=2")
         # Full-coverage get_cached profile (deep/wide, long timeouts): the
         # routine run uses trimmed env-knob defaults (~25s); this variant
         # restores the deep/wide workload for milestone/nightly runs (kept out
@@ -627,10 +673,11 @@ add_ut(reverse_insertions SOURCE ut/txn/reverse_insertions.c++)
   # Golden characterization tests for the src/tools CLI utilities (TASK-45,
   # Phase B of epic B46). Each case = (fixture setup + args) -> {stdout, stderr,
   # exit-code} recorded as the CURRENT contract (skynet/tools-rewrite/spec-*.md,
-  # Phase A): the tools are NOT fixed here, only the behavior is locked down for
-  # the C++ rewrite validation (Phase D). Deterministic: fixtures come from the
-  # checked-in base.dump stream + fixed geometry, no stochastic runs. Runner:
-  # tests/ut/tools/golden-runner.sh; goldens are committed next to it.
+  # Phase A, kept in poc1-failed): the tools are NOT fixed here, only the
+  # behavior is locked down for the C++ rewrite validation (Phase D).
+  # Deterministic: fixtures come from the checked-in base.dump stream + fixed
+  # geometry, no stochastic runs. Runner: tests/ut/tools/golden-runner.sh;
+  # goldens are committed next to it.
   if(UNIX AND MDBX_BUILD_TOOLS)
     set(UT_TOOLS_RUNNER "${CMAKE_CURRENT_SOURCE_DIR}/ut/tools/golden-runner.sh")
     foreach(UT_TOOL chk copy defrag drop dump load stat)
@@ -639,6 +686,21 @@ add_ut(reverse_insertions SOURCE ut/txn/reverse_insertions.c++)
                        "${MDBX_OUTPUT_DIR}/tools-golden/${UT_TOOL}")
       set_tests_properties(ut_tools_${UT_TOOL} PROPERTIES LABELS "ut;ut.tools" TIMEOUT 300)
     endforeach()
+  endif()
+
+  # Regression probe for the MDBX_MULTIPLE batch-insert early-exit defect
+  # (ported from poc1-failed): MDBX_NOOVERWRITE|MDBX_MULTIPLE on an existing key
+  # must return MDBX_KEYEXIST with done==0. Plain-C, public API only.
+  if(NOT CMAKE_CROSSCOMPILING OR CMAKE_CROSSCOMPILING_EMULATOR)
+    if(MDBX_BUILD_TOOLS)
+      add_executable(mdbx_probe_multiple_iovlen probe-mdbx-multiple-iovlen.c)
+      # Статическая библиотека: убирает необходимость в DLL-пути на Windows
+      # (probe не использует DLL-крутч тестового фреймворка).
+      target_link_libraries(mdbx_probe_multiple_iovlen PRIVATE mdbx-static)
+      target_include_directories(mdbx_probe_multiple_iovlen PRIVATE ${PROJECT_SOURCE_DIR})
+      add_test(NAME probe_multiple_iovlen COMMAND $<TARGET_FILE:mdbx_probe_multiple_iovlen>)
+      set_tests_properties(probe_multiple_iovlen PROPERTIES LABELS "ut;ut.api" TIMEOUT 60)
+    endif()
   endif()
 
 endif()
