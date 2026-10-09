@@ -1,0 +1,9 @@
+mdbx_stat vVERSION (BUILD, T-HASH)
+Running for /base.db...
+Status of Main DB
+  Pagesize: 4096
+  Tree depth: 1
+  Branch pages: 0
+  Leaf pages: 1
+  Large/Overflow pages: 0
+  Entries: 5

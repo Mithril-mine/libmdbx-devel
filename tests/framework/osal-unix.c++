@@ -311,6 +311,34 @@ bool osal_progress_push(bool active) {
 //-----------------------------------------------------------------------------
 
 static std::unordered_map<pid_t, actor_status> children;
+static std::mutex children_mutex;
+
+static bool children_empty(void) {
+  std::lock_guard<std::mutex> lock(children_mutex);
+  return children.empty();
+}
+
+static void children_store(mdbx_pid_t pid, actor_status status) {
+  std::lock_guard<std::mutex> lock(children_mutex);
+  children[pid] = status;
+}
+
+static actor_status children_at(mdbx_pid_t pid) {
+  std::lock_guard<std::mutex> lock(children_mutex);
+  return children.at(pid);
+}
+
+static std::vector<std::pair<pid_t, actor_status>> children_snapshot(void) {
+  std::lock_guard<std::mutex> lock(children_mutex);
+  return std::vector<std::pair<pid_t, actor_status>>(children.begin(), children.end());
+}
+
+static void children_mark_killed(mdbx_pid_t pid) {
+  std::lock_guard<std::mutex> lock(children_mutex);
+  auto it = children.find(pid);
+  if (it != children.end())
+    it->second = as_killed;
+}
 
 static std::atomic_int sigalarm_head;
 static void handler_SIGCHLD(int signum) {
@@ -328,7 +356,7 @@ int osal_delay(unsigned seconds) { return sleep(seconds) ? errno : 0; }
 
 int osal_actor_start(const actor_config &config, mdbx_pid_t &pid) {
   static sigset_t mask;
-  if (children.empty()) {
+  if (children_empty()) {
     struct sigaction act;
     memset(&act, 0, sizeof(act));
     act.sa_handler = handler_SIGBREAK;
@@ -369,14 +397,14 @@ int osal_actor_start(const actor_config &config, mdbx_pid_t &pid) {
     return errno;
 
   log_trace("osal_actor_start: fork pid %ld for %u", (long)pid, config.actor_id);
-  children[pid] = as_running;
+  children_store(pid, as_running);
   return 0;
 }
 
-actor_status osal_actor_info(const mdbx_pid_t pid) { return children.at(pid); }
+actor_status osal_actor_info(const mdbx_pid_t pid) { return children_at(pid); }
 
 static void wait_actors(unsigned timeout) {
-  for (auto &pair : children)
+  for (auto &pair : children_snapshot())
     if (pair.second <= as_running) {
       osal_yield();
       mdbx_pid_t pid = 0;
@@ -387,19 +415,19 @@ static void wait_actors(unsigned timeout) {
 }
 
 void osal_killall_actors(void) {
-  for (auto &pair : children)
+  for (auto &pair : children_snapshot())
     kill(pair.first, SIGINT);
 
   wait_actors(0);
-  for (auto &pair : children) {
+  for (auto &pair : children_snapshot()) {
     osal_yield();
     kill(pair.first, SIGTERM);
   }
 
   wait_actors(1);
-  for (auto &pair : children) {
+  for (auto &pair : children_snapshot()) {
     kill(pair.first, SIGKILL);
-    pair.second = as_killed;
+    children_mark_killed(pair.first);
   }
 }
 
@@ -533,12 +561,12 @@ int osal_actor_poll(mdbx_pid_t &pid, unsigned timeout) {
 
     if (pid > 0) {
       if (WIFEXITED(status))
-        children[pid] = (WEXITSTATUS(status) == EXIT_SUCCESS) ? as_successful : as_failed;
+        children_store(pid, (WEXITSTATUS(status) == EXIT_SUCCESS) ? as_successful : as_failed);
       else if (WIFSIGNALED(status)) {
         int sig = WTERMSIG(status);
 #ifdef WCOREDUMP
         if (WCOREDUMP(status))
-          children[pid] = as_coredump;
+          children_store(pid, as_coredump);
         else
 #endif /* WCOREDUMP */
           switch (sig) {
@@ -548,16 +576,16 @@ int osal_actor_poll(mdbx_pid_t &pid, unsigned timeout) {
           case SIGILL:
           case SIGSEGV:
             log_notice("child pid %lu %s by SIG%s", (long)pid, "terminated", signal_name(sig));
-            children[pid] = as_coredump;
+            children_store(pid, as_coredump);
             break;
           default:
             log_notice("child pid %lu %s by SIG%s", (long)pid, "killed", signal_name(sig));
-            children[pid] = as_killed;
+            children_store(pid, as_killed);
           }
       } else if (WIFSTOPPED(status))
-        children[pid] = as_debugging;
+        children_store(pid, as_debugging);
       else if (WIFCONTINUED(status))
-        children[pid] = as_running;
+        children_store(pid, as_running);
       else {
         assert(false);
       }

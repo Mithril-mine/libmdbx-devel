@@ -256,6 +256,8 @@ struct actor_params_pod {
 
   unsigned test_duration{0};
   unsigned test_nops{0};
+  bool test_duration_explicit{false};
+  bool test_nops_explicit{false};
   unsigned nrepeat{0};
   unsigned nthreads{0};
 

@@ -560,7 +560,13 @@ bool testcase::setup() {
   if (!wait4start())
     return false;
 
-  start_timestamp = chrono::now_monotonic();
+  /* --duration is the TOTAL wall-clock budget across all --repeat iterations
+   * (TASK-43): start_timestamp is set once and never reset, so the deadline
+   * covers the whole run, not each iteration. */
+  if (!start_timestamp_initialized) {
+    start_timestamp = chrono::now_monotonic();
+    start_timestamp_initialized = true;
+  }
   nops_completed = 0;
   return true;
 }
@@ -583,13 +589,26 @@ bool testcase::should_continue(bool check_timeout_only) const {
       result = false;
   }
 
-  if (!check_timeout_only && config.params.test_nops && nops_completed >= config.params.test_nops)
+  /* The default safety bound (test_nops=1000) must NOT truncate a run that has
+   * an explicit --duration: when the duration is set, only an explicit --nops
+   * additionally bounds the run (TASK-43). */
+  if (!check_timeout_only && config.params.test_nops &&
+      (config.params.test_nops_explicit || !config.params.test_duration_explicit) &&
+      nops_completed >= config.params.test_nops)
     result = false;
 
   if (result)
     kick_progress(false);
 
   return result;
+}
+
+bool testcase::budget_exhausted() const {
+  if (!config.params.test_duration)
+    return false;
+  chrono::time since;
+  since.fixedpoint = chrono::now_monotonic().fixedpoint - start_timestamp.fixedpoint;
+  return since.seconds() >= config.params.test_duration;
 }
 
 void testcase::fetch_canary() {
@@ -937,7 +956,7 @@ static bool execute_thunk(const actor_config *const_config, const mdbx_pid_t pid
           log_verbose("test successfully (iteration %zi)", iter);
       }
 
-    } while (config.params.nrepeat == 0 || iter < config.params.nrepeat);
+    } while ((config.params.nrepeat == 0 || iter < config.params.nrepeat) && !test->budget_exhausted());
     return true;
   } catch (const std::exception &pipets) {
     failure("***** Exception: %s *****", pipets.what());

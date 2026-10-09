@@ -1,0 +1,17 @@
+VERSION=3
+mapsize=67108864
+format=bytevalue
+database=duptbl
+type=btree
+db_pagesize=4096
+duplicates=1
+dupsort=1
+HEADER=END
+ 646570742031
+ 3130
+  3230
+  3330
+ 646570742032
+ 3230
+  3430
+DATA=END

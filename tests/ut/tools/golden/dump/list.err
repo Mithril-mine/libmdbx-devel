@@ -1,0 +1,7 @@
+mdbx_dump vVERSION (BUILD, T-HASH)
+Running for /base.db...
+   open-MADV_DONTNEED 16..16384
+   readahead ON 0..10
+   dbi 2 refs to not a named table `aa` for txn 6 (wrong node-flags)
+   dbi 2 refs to not a named table `bb` for txn 6 (wrong node-flags)
+   dbi 2 refs to not a named table `cc` for txn 6 (wrong node-flags)

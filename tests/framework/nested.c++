@@ -335,6 +335,12 @@ bool testcase_nested::run() {
     log_debug("nested: step #%" PRIu64 " (serial %" PRIu64 ", window %u, count %u) salt %" PRIu64, nops_completed,
               serial, window_width, head_count, salt);
 
+    if (!should_continue())
+      /* TASK-43: the --duration/--nops bound is reached — stop promptly
+       * instead of draining the whole table (the full-table drain used to
+       * overrun the deadline by several times on large tables). */
+      break;
+
     if (!trim_tail(window_width))
       return false;
     if (!stochastic_breakable_restart_with_nested()) {

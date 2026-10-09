@@ -49,11 +49,11 @@ L4 sanitizer sweeps → L5 memcheck → L6 `stochastic.sh` → L7 human-controll
 | --- | --- | --- |
 | L1 | `ctest -R <name>` (or run binary) | the specific test for your change |
 | L1-x | sanitizer build dir + `ctest -R <name>` | same test under ASAN/UBSAN/MEMCHECK |
-| L2 | `ctest --output-on-failure` (or `make ctest`) | all deterministic tests: `ut/` + `issues/` + few `mdbx_test` scenarios |
+| L2 | `ctest --output-on-failure` (or `make ctest`) | all deterministic tests: `ut/` + `ut/issues/` + few `mdbx_test` scenarios |
 | L3 | `make check` | smoke + install + amalgamation (`dist/`) validation |
 | L4 | `make test-asan` / `test-ubsan` | sanitizer sweeps (`MDBX_CHECKING=2`) |
 | L5 | `make test-memcheck` | valgrind sweep |
-| L6 | `make test-stochastic` or targeted `tests/stochastic.sh` | stochastic parameter sweep, bounded iterations |
+| L6 | `make test-stochastic` or targeted `tests/scripts/stochastic.sh` | stochastic parameter sweep, bounded iterations |
 | L7 | `tests/battery-tmux.sh`, `make test-long` | human-supervised extended soak (hours/days) |
 | +style | `make reformat` | `clang-format` (LLVM, `.clang-format`); must be idempotent |
 | +locking | `make check-posix-locking` | SYSV/1988/2001/2008 variants |
@@ -170,7 +170,7 @@ Parallel infrastructure built on top of the same CTest labels; the legacy 7 GitH
 - The project relies on a **stochastic framework** (`mdbx_test`) plus deterministic regressions;
   bug fixes must first reproduce the bug (TDD red), then verify with the appropriate scenario
   (see [`build.md`](build.md) §6 and the `test-driven-development` skill).
-- Issue numbers in `tests/issues/issue_gh00XX.c++` map to SourceCraft/GitHub issue numbers;
+- Issue numbers in `tests/ut/issues/issue_gh00XX.c++` map to SourceCraft/GitHub issue numbers;
   new bug reports should add a regression there.
 - `MDBX_CHECKING=2` + `MDBX_FORCE_ASSERTIONS=1` (as CI does) surfaces internal invariant
   violations (`ENSURE`, `CHECKS0/1/2`, panic points) early.

@@ -1,0 +1,19 @@
+mdbx_stat vVERSION (BUILD, T-HASH)
+Running for /base.db...
+Page Usage & Garbage Collection
+  Total: 16384 pages
+  Backed: 16384 pages
+  Allocated: 10, 0.06% of backed, 0.06% of total
+  Remained: 16374, 99.9% of backed, 99.9% of total
+  Used: 6, 0.04% of backed, 0.04% of total
+  GC|whole: 4, 0.02% of backed, 0.02% of total
+  GC|reclaimable: 3, 0.02% of backed, 0.02% of total
+  GC|retained: 1, 0.01% of backed, 0.01% of total
+  Available: 16377, 100.0% of backed, 100.0% of total
+Status of Main DB
+  Pagesize: 4096
+  Tree depth: 1
+  Branch pages: 0
+  Leaf pages: 1
+  Large/Overflow pages: 0
+  Entries: 5

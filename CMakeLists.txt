@@ -1597,6 +1597,7 @@ add_definitions(-DMDBX_CONFIG_H="${CMAKE_CURRENT_BINARY_DIR}/config-cmake.h")
 if(MDBX_ENABLE_TESTS)
   add_subdirectory(examples)
   #> dist-cutoff-begin
+  include(cmake/testing.cmake)
   if(NOT MDBX_AMALGAMATED_SOURCE AND NOT_SUBPROJECT)
     add_subdirectory(tests)
   endif()

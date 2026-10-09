@@ -1,0 +1,3 @@
+mdbx_chk vVERSION (BUILD, T-HASH)
+Running for /bad.db in 'read-only' mode with verbosity level 0 (of 0..9)...
+Total 4 errors are detected, elapsed SECONDS.
