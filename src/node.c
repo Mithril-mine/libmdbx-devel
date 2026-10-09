@@ -5,6 +5,11 @@
 #include "internals.h"
 
 __hot int __must_check_result node_add_dupfix(MDBX_cursor *mc, size_t indx, const MDBX_val *key) {
+  /*> dist-cutoff-begin */
+  #if defined(MDBX_PROBES)
+  MPROBE_WATCH(node_dupfix_add, 1);
+  #endif /* MDBX_PROBES */
+  /*< dist-cutoff-end */
   page_t *mp = mc->pg[mc->top];
   MDBX_ANALYSIS_ASSUME(key != nullptr);
   DKBUF_DEBUG;
@@ -179,6 +184,11 @@ __hot void node_del(MDBX_cursor *mc, size_t ksize) {
   cASSERT0(mc, hole < nkeys);
 
   if (is_dupfix_leaf(mp)) {
+    /*> dist-cutoff-begin */
+    #if defined(MDBX_PROBES)
+    MPROBE_WATCH(node_dupfix_del, 1);
+    #endif /* MDBX_PROBES */
+    /*< dist-cutoff-end */
     cASSERT0(mc, ksize >= sizeof(indx_t));
     size_t diff = nkeys - 1 - hole;
     void *const base = page_dupfix_ptr(mp, hole, ksize);

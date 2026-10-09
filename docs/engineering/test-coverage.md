@@ -28,7 +28,7 @@
 | `open.c++` | **env.c, dxb, meta**: геометрия (fixed/dynamic), повторные open, много процессов на одном env, live re-open |
 | `cursor_closing.c++` | **cursor, dbi**: жизненный цикл курсоров, bind/unbind, закрытие при txn-циклах, многопоточность (case1_thread) |
 | `early_close_dbi.c++` | **dbi, env**: закрытие DBI до конца транзакции, повторное использование |
-| `dupfix_multiple.c++` | **dpl, node, page-split**: DUPFIXED/DUPSORT множественные вставки, batch read, put_multiple_samelength |
+| `dupfix_multiple.c++` | **dpl, node, page-split**: DUPFIXED/DUPSORT множественные вставки (txn/cursor, upsert/update/insert_unique + allow_partial), batch read (GET/SEEK/NEXT/PREV_MULTIPLE + INCOMPATIBLE/ENODATA), erase и конверсия dupfix→plain, рандом-стресс со сверкой с эталоном; pagesize-ось (default + 512); пробники WATCH (cursor_multiple_*, node_dupfix_*, page_split_dupfix) как самоутверждение покрытия |
 | `dupfix_addodd.c` | **dpl**: нечётные длины данных (DUPFIXED выравнивание) |
 | `upsert_alldups.c` | **dml/dpl**: upsert всех дубликатов |
 | `crunched_delete.c++` | **cursor, tree-cutoff, page-merge**: массовые удаления, вырожденные случаи, out-of-range prev |

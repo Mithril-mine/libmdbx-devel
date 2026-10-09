@@ -55,6 +55,12 @@ __hot int page_split(MDBX_cursor *mc, const MDBX_val *const newkey, MDBX_val *co
   const size_t nkeys = page_numkeys(mp);
   const size_t newindx = mc->ki[mc->top];
   STATIC_ASSERT(P_BRANCH == 1);
+  /*> dist-cutoff-begin */
+  #if defined(MDBX_PROBES)
+  if (is_dupfix_leaf(mp))
+    MPROBE_WATCH(page_split_dupfix, 1);
+  #endif /* MDBX_PROBES */
+  /*< dist-cutoff-end */
   const size_t minkeys = (mp->flags & P_BRANCH) + (size_t)1;
   cASSERT0(mc, nkeys + 1 >= minkeys * 2);
   const size_t leftmost_split = minkeys;
