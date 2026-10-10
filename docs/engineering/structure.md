@@ -13,7 +13,7 @@
 | Path | Kind | Description |
 | --- | --- | --- |
 | `CMakeLists.txt` | build | Main CMake build (1619 lines). Detects amalgamated layout (`MDBX_AMALGAMATED_SOURCE=TRUE`, expects `mdbx.c`/`mdbx.h`/`mdbx-internals.h` at root) vs development layout (`FALSE`, expects `.git` + `src/` tree). Includes `cmake/{utils,compiler,profile}.cmake`, runs `semver_provide()` for versioning, generates `src/config.h` from `src/config.h.in`, builds library (static/shared), tools, C++ API (`MDBX_BUILD_CXX`), examples, tests. |
-| `GNUmakefile` | build | Legacy GNU Make build (1105 lines), GNU Make >= 3.81 + bash. Targets: `all`, `lib`, `tools`, `check`, `smoke`, `test`/`test-*` (assertion/ci/ci-extra/asan/leak/singleprocess/ubsan/memcheck/long), `dist` (currently prints "amalgamation no longer required"), `doxygen`, `memcheck`, `cross-gcc`, `cross-qemu`, `gcc-analyzer`, `reformat`, `release-assets`, `options`, `help`. Variables: `MDBX_DEBUG`, `MDBX_CHECKING`, `MDBX_BUILD_OPTIONS`, `MDBX_BUILD_TIMESTAMP`, `MDBX_BUILD_CXX`, `MDBX_BUILD_METADATA`, `CC/CXX/CFLAGS/CXXSTD`. Compiler flags are auto-probed (C11, LTO/IPA, `-fno-semantic-interposition`...). |
+| `GNUmakefile` | build | Legacy GNU Make build (1105 lines), GNU Make >= 3.81 + bash. Targets: `all`, `lib`, `tools`, `check`, `smoke`, `test`/`test-*` (assertion/ci/ci-extra/asan/leak/singleprocess/ubsan/memcheck/long), `dist` (currently prints "amalgamation no longer required"), `docsite` (unified docs site), `books`, `memcheck`, `cross-gcc`, `cross-qemu`, `gcc-analyzer`, `reformat`, `release-assets`, `options`, `help`. Variables: `MDBX_DEBUG`, `MDBX_CHECKING`, `MDBX_BUILD_OPTIONS`, `MDBX_BUILD_TIMESTAMP`, `MDBX_BUILD_CXX`, `MDBX_BUILD_METADATA`, `CC/CXX/CFLAGS/CXXSTD`. Compiler flags are auto-probed (C11, LTO/IPA, `-fno-semantic-interposition`...). |
 | `Makefile` | build | Thunk: forwards every known target to `GNUmakefile` via `gmake`. |
 | `conanfile.py` | build | Conan 2 recipe (>= 2.7). Package `mdbx`, `package_type=library`, `revision_mode=scm`. ~40 `mdbx.*` options mirroring `options.h` (locking, cacheline_size, bigfoot, dbi_lockfree, dbi_sparse, pgop_stat, profgc, refund, env_checkpid, force_assertions, mmap_*, trust_rtc, txn_checkowner, avoid_msync, build_cxx, build_tools, disable_validation, without_msvc_crt...). |
 | `mdbx.h` | public API | C API single header. Doxygen groups: `c_err` Error handling, `c_opening` Opening & Closing, `c_transactions`, `c_dbi` Tables, `c_crud` CRUD, `c_cursors`, `c_statinfo`, `c_settings`, `c_debug`, `c_rqest` Range query estimation, `c_extra`, `api_macros`, `sync_modes`, `value2key`/`key2value`, `chk` Checking and Recovery (internal for `mdbx_chk`). |
@@ -224,9 +224,12 @@ linkage; in amalgamated build (`xMDBX_ALLOY`) = `static`.
 
 ## 6. `docs/`
 
-Doxygen sources: `Doxyfile.in`, `_preface.md`, `_starting.md`, `_restrictions.md`, `_toc.md`,
-`doxygen.css`, `doxygen-extra.css`, `header.html`, `footer.html`, `ld+json`, `sitemap.add`,
-`title`, `libmdbx-logo.svg`. Published site: <https://libmdbx.dqdkfa.ru>.
+Documentation sources: `Doxyfile.in` (doxygen config for the mkdoxy-based
+API reference), the markdown fragments `_preface.md`, `_starting.md`,
+`_restrictions.md`, `_toc.md` (assembled into the doxygen inputs
+`overall.md`/`intro.md`/`usage.md` by the make rules), the locale trees
+`ru/`/`en/` (published docsite), the textbook `textbook/` and the site
+build `docsite/`. Published site: <https://libmdbx.dqdkfa.ru/docs/>.
 
 ---
 

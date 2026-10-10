@@ -233,7 +233,8 @@ help:
 	@echo "  make gcc-analyzer        - run gcc-analyzer (mostly useless for now)"
 	@echo ""
 	@echo "  make dist                - build amalgamated source code"
-	@echo "  make doxygen             - build HTML documentation"
+	@echo "  make docsite             - build the unified documentation site (build/docsite/{en,ru})"
+	@echo "  make books               - build the textbook (HTML + PDF, docs/textbook/site/{ru,en})"
 	@echo "  make release-assets      - build release assets"
 	@echo "  make reformat            - reformat source code with clang-format"
 #< dist-cutoff-end
@@ -450,7 +451,7 @@ else
 ################################################################################
 # Non-amalgamated sources with test framework
 
-.PHONY: build-stochastic build-test-with-valgrind check cross-gcc cross-qemu dist doxygen gcc-analyzer long-test books
+.PHONY: build-stochastic build-test-with-valgrind check cross-gcc cross-qemu dist gcc-analyzer long-test books
 .PHONY: reformat release-assets tags smoke smoke-fault cmake-stochastic-build cmake-probes-build
 .PHONY: smoke-singleprocess test-singleprocess test-valgrind test-memcheck memcheck smoke-memcheck
 .PHONY: smoke-t1 smoke-t2 smoke-t3 select-tests
@@ -777,12 +778,6 @@ docs/options.h: src/options.h $(lastword $(MAKEFILE_LIST))
 docs/en/reference/changelog.md: ChangeLog.md $(lastword $(MAKEFILE_LIST))
 	@echo '  MAKE $@'
 	$(QUIET)mkdir -p $(dir $@) && cp $< $@
-
-doxygen: docs/Doxyfile docs/overall.md docs/intro.md docs/usage.md docs/mdbx.h docs/mdbx.h++ docs/options.h docs/ChangeLog.md COPYRIGHT LICENSE NOTICE docs/ld+json $(lastword $(MAKEFILE_LIST))
-	@echo '  RUNNING doxygen...'
-	$(QUIET)rm -rf docs/html && (cd docs && doxygen Doxyfile $(HUSH)) && cp COPYRIGHT LICENSE NOTICE docs/html/ && \
-	$(SED) -i docs/html/index.html -e '/\/MathJax.js"><\/script>/r docs/ld+json' -e 's/<title>libmdbx: Overall<\/title>//;T;r docs/title' && \
-	$(SED) -i docs/html/sitemap.xml -e '/^\s*<\/urlset>/e cat docs/sitemap.add'
 
 MDBX_BOOK_VERSION ?= $(MDBX_GIT_DESCRIBE)
 MDBX_BOOK_DATE ?= $(shell date +%F)

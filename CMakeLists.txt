@@ -1078,13 +1078,9 @@ elseif(TRUE)
             src/bits.md
             src/amalgam.in
             docs/Doxyfile.in
-            docs/header.html
-            docs/ld+json
             docs/_preface.md
             docs/_restrictions.md
-            docs/sitemap.add
             docs/_starting.md
-            docs/title
             docs/_toc.md
             LICENSE
             NOTICE

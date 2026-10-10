@@ -34,7 +34,7 @@ Historically, _libmdbx_ is a deeply revised and extended descendant of the legen
 
 [![Telegram: Support | Discussions | News](https://img.shields.io/endpoint?color=scarlet&logo=telegram&label=Support%20%7C%20Discussions%20%7C%20News&url=https%3A%2F%2Ftg.sumanjay.workers.dev%2Flibmdbx)](https://t.me/libmdbx)
 
-> Please rely on  the [libmdbx.dqdkfa.ru](https://libmdbx.dqdkfa.ru) site with [FAQ](https://libmdbx.dqdkfa.ru/#sec-faq), [Tips](https://libmdbx.dqdkfa.ru/#sec-tips), [Rules/Checklists](https://libmdbx.dqdkfa.ru/#sec-rules), [Knowledge base](https://libmdbx.dqdkfa.ru/#sec-knowledge), references for [`C++`](https://libmdbx.dqdkfa.ru/doxygen/group__cxx__api.html) and [`C`](https://libmdbx.dqdkfa.ru/doxygen/group__c__api.html) API, etc.
+> Please rely on  the [libmdbx.dqdkfa.ru](https://libmdbx.dqdkfa.ru) site with [FAQ](https://libmdbx.dqdkfa.ru/#sec-faq), [Tips](https://libmdbx.dqdkfa.ru/#sec-tips), [Rules/Checklists](https://libmdbx.dqdkfa.ru/#sec-rules), [Knowledge base](https://libmdbx.dqdkfa.ru/#sec-knowledge), references for [`C++`](https://libmdbx.dqdkfa.ru/docs/en/reference/api/group__cxx__api.html) and [`C`](https://libmdbx.dqdkfa.ru/docs/en/reference/api/group__c__api.html) API, etc.
 
 -----
 
