@@ -32,7 +32,7 @@ def on_config(config):
     plugin = config.get("plugins", {}).get("with-pdf")
     if plugin is not None:
         plugin._options.custom_template_path = os.path.join(
-            os.path.dirname(os.path.abspath(__file__)), "templates")
+            os.path.dirname(os.path.abspath(__file__)), "..", "templates")
     return config
 
 

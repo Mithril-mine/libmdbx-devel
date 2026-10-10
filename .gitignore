@@ -21,6 +21,9 @@ docs/Doxyfile
 docs/html/
 docs/xml/
 docs/textbook/site/
+# generated per-locale copies of the canonical root examples/ (single source)
+docs/ru/textbook/examples/
+docs/en/textbook/examples/
 # doxygen/docsite build intermediates
 docs/__*.md
 docs/overall.md
@@ -88,3 +91,4 @@ __pycache__/
 mdbx_legacy_example
 mdbx_modern_example
 mdbx-test.*
+docs/en/reference/changelog.md
