@@ -787,6 +787,8 @@ books:
 	@echo '  BOOKS en: MkDocs HTML + PDF...'
 	$(QUIET)MDBX_BOOK_VERSION="$(MDBX_BOOK_VERSION)" MDBX_BOOK_DATE="$(MDBX_BOOK_DATE)" \
 		mkdocs build -f docs/textbook/en/mkdocs.yml $(HUSH)
+	@echo '  BOOKS normalize: shared assets/examples, flat pages, S3-safe links...'
+	$(QUIET)python3 docs/textbook/normalize_site.py
 	@echo '  BOOKS done: docs/textbook/site/{ru,en}/'
 
 mdbx++-dylib.o: src/config-gnumake.h src/mdbx.c++ $(HEADERS) $(lastword $(MAKEFILE_LIST))
