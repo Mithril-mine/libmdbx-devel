@@ -180,6 +180,17 @@ def check_pages(pages, sitemap):
         # head links
         text = html.read_text(encoding="utf-8")
         head = re.search(r"<head>(.*?)</head>", text, re.S)
+        # brand block: shared /static-content icons + PWA manifest
+        if head:
+            h = head.group(1)
+            for probe in ('rel="icon" href="/static-content/icon.svg"',
+                          'rel="apple-touch-icon" '
+                          'href="/static-content/apple-touch-icon.png"',
+                          'rel="manifest" href="/static-content/manifest.webmanifest"'):
+                if probe not in h:
+                    fail(f"{name}: brand head block is missing {probe}")
+        else:
+            continue
         links = dict()
         if head:
             for m in re.finditer(

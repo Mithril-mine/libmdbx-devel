@@ -250,7 +250,16 @@ SELECTOR_TEMPLATE = """<!doctype html>
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="application-name" content="libmdbx">
 <title>libmdbx documentation</title>
+<link rel="shortcut icon" href="/static-content/favicon.ico">
+<link rel="icon" href="/static-content/favicon.ico" sizes="any">
+<link rel="icon" href="/static-content/icon.svg" type="image/svg+xml">
+<link rel="icon" href="/static-content/favicon-32x32.png" type="image/png" sizes="32x32">
+<link rel="icon" href="/static-content/favicon-16x16.png" type="image/png" sizes="16x16">
+<link rel="icon" href="/static-content/icon-192.png" type="image/png" sizes="192x192">
+<link rel="apple-touch-icon" href="/static-content/apple-touch-icon.png" sizes="180x180" type="image/png">
+<link rel="manifest" href="/static-content/manifest.webmanifest">
 <style>
 body {{ font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
        display: flex; min-height: 100vh; margin: 0; }}
