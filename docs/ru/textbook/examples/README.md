@@ -12,9 +12,9 @@ If you have already used Berkeley DB, then it will be useful to make a line-by-l
 
 ---
 
-## Textbook examples (docs/{ru,en}/textbook)
+## Textbook examples (docs/textbook)
 
-Scenarios S01–S47 from the libmdbx textbook (`docs/ru/textbook/`), one
+Scenarios S01–S47 from the libmdbx textbook (`docs/textbook/`), one
 self-contained program per scenario, plus the end-to-end `config-store` project
 (growing slices 02–12, one per key chapter). The C++17 versions are primary;
 a C11 version exists where a C port makes sense. Each program:

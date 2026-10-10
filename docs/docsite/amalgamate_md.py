@@ -64,15 +64,18 @@ def audit_amalgamated_refs(md_path: Path, package_root: Path):
     return violations
 
 
-PUBLISHED = ("architecture.ru.md", "architecture.en.md", "deep-dive.ru.md",
-             "deep-dive.en.md", "improvements.ru.md", "improvements.en.md")
+PUBLISHED = (
+    # docs/{ru,en}/deep-dive/ - the published engineering trio
+    "architecture.md", "internals.md", "improvements.md",
+)
 
 if __name__ == "__main__":
     pkg = Path(sys.argv[1]) if len(sys.argv) > 1 else Path(".")
     bad = 0
-    for md in sorted(pkg.glob("docs/engineering/*.md")):
-        if md.name not in PUBLISHED:
-            continue  # dev-only docs are not published; skip the audit
+    for loc in ("ru", "en"):
+        for md in sorted((pkg / "docs" / loc / "deep-dive").glob("*.md")):
+            if md.name not in PUBLISHED:
+                continue  # dev-only docs are not published; skip the audit
         try:
             _, cuts = strip_dist_cutoff(md.read_text(encoding="utf-8"), str(md))
         except ValueError as e:

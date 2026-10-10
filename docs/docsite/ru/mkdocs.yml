@@ -2,8 +2,10 @@
 # Build (from the repo root): make docsite  — or manually:
 #   mkdocs build -f docs/docsite/ru/mkdocs.yml
 # Output: build/docsite/ru/ (post-processed by normalize_site.py)
-# Prerequisites (prepared by make): docs/mdbx.h docs/mdbx.h++ docs/options.h
-# and the generated docs/Doxyfile (consumed by the mkdoxy plugin).
+#
+# The RU tree is the canonical original; the API reference and the change log
+# are English-only (see the note in reference/index.md), so this build has
+# no mkdoxy plugin.
 
 INHERIT: ../base.yml
 
@@ -13,82 +15,33 @@ site_dir: ../../../build/docsite/ru
 site_description: >-
   Документация встраиваемой транзакционной БД libmdbx — гайды, учебник,
   погружение во внутренние механизмы и справочник по C/C++ API.
-docs_dir: ../../
+docs_dir: ../../ru
 
 extra:
   locale: ru
-  index_source: docsite/ru/index.md
-
-# The docs_dir covers the whole docs/ tree; only the curated public pages
-# (landing, guides, textbook, three engineering documents, API reference,
-# ChangeLog) are published. Locale twins (*.en.md) and dev-only documents are
-# excluded; doxygen build intermediates and the nested textbook/site are not
-# part of this build.
-exclude_docs: |
-  *.en.md
-  /README.md
-  /Doxyfile*
-  /doxygen.css
-  /doxygen-extra.css
-  /header.html
-  /footer.html
-  /ld+json
-  /sitemap.add
-  /title
-  __*.md
-  /_*.md
-  /overall.md
-  /intro.md
-  /usage.md
-  /mdbx.h
-  /mdbx.h++
-  /options.h
-  html/
-  xml/
-  docsite/*
-  !docsite/ru/
-  docsite/ru/*
-  !docsite/ru/index.md
-  textbook/site/
-  textbook/en/
-  textbook/ru/book_hooks.py
-  textbook/ru/__pycache__
-  textbook/ru/templates
-  engineering/*
-  !engineering/architecture.ru.md
-  !engineering/deep-dive.ru.md
-  !engineering/improvements.ru.md
-
-# mkdoxy-generated API pages are reachable from the API reference landing
-# (api.ru.md) and cross-linked from the class/function listings; keeping them
-# out of the sidebar makes the navigation readable. The API reference itself
-# is English-only (see api.ru.md).
-not_in_nav: |
-  api/
 
 nav:
   - Главное: index.md
   - Обзор:
-      - Что такое libmdbx: guides/overview.ru.md
-      - Ограничения и подводные камни: guides/restrictions.ru.md
+      - Что такое libmdbx: overview/index.md
+      - Ограничения и подводные камни: overview/restrictions.md
   - Начало работы:
-      - Установка и сборка: guides/install-build.ru.md
-      - Первые шаги: guides/first-steps.ru.md
-      - Режимы durability: guides/durability-modes.ru.md
+      - Установка и сборка: getting-started/install-build.md
+      - Первые шаги: getting-started/first-steps.md
+      - Режимы durability: getting-started/durability-modes.md
   - Учебник:
-      - Об учебнике: textbook/ru/README.md
-      - Каркас: textbook/ru/00-karkas.md
-      - Том I. Основы: textbook/ru/01-tom-i-osnovy.md
-      - Том II. Практика: textbook/ru/02-tom-ii-praktika.md
-      - Том III. Механизмы: textbook/ru/03-tom-iii-mehanizmy.md
-      - Том IV. Производительность: textbook/ru/04-tom-iv-proizvoditelnost.md
-      - Том V. Экспертные темы: textbook/ru/05-tom-v-ekspertnye-temy.md
-      - Том VI. Биндинги: textbook/ru/06-tom-vi-bindings.md
+      - Об учебнике: textbook/index.md
+      - Каркас: textbook/00-karkas.md
+      - Том I. Основы: textbook/01-tom-i-osnovy.md
+      - Том II. Практика: textbook/02-tom-ii-praktika.md
+      - Том III. Механизмы: textbook/03-tom-iii-mehanizmy.md
+      - Том IV. Производительность: textbook/04-tom-iv-proizvoditelnost.md
+      - Том V. Экспертные темы: textbook/05-tom-v-ekspertnye-temy.md
+      - Том VI. Биндинги: textbook/06-tom-vi-bindings.md
   - Погружение:
-      - Архитектура: engineering/architecture.ru.md
-      - Внутренние механизмы: engineering/deep-dive.ru.md
-      - Улучшения относительно LMDB: engineering/improvements.ru.md
+      - Архитектура: deep-dive/architecture.md
+      - Внутренние механизмы: deep-dive/internals.md
+      - Улучшения относительно LMDB: deep-dive/improvements.md
   - Справочник:
-      - Справочник по API: api.ru.md
-      - Утилиты командной строки: guides/tooling.ru.md
-      - Журнал изменений: ChangeLog.md
+      - Справочник по API: reference/index.md
+      - Утилиты командной строки: reference/tooling.md

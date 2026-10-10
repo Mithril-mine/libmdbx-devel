@@ -73,18 +73,17 @@ Author: Leonid Yuriev \<leo@yuriev.ru\>. Home site: <https://libmdbx.dqdkfa.ru>.
 | Document | Contents |
 | --- | --- |
 | [`structure.md`](structure.md) | Full file-by-file map of the repository, classification of `src/` modules into subsystems |
-| [`deep-dive.ru.md`](deep-dive.ru.md) | **How libmdbx works** (RU): functional architecture — subsystems, mechanisms, API entities and their interplay, top-down, without file/module binding; includes a reader Q&A section (big values vs GC, long readers vs DB growth, lazy-search cache, WAF) and a deep-dive part (LIFO, BigFoot, dupsort, DBI handles, bunch delete, range estimation, cursor tracking, nested txns, parking, on-the-fly resize, auto-compaction, defrag) |
-| [`deep-dive.en.md`](deep-dive.en.md) | The same document in English (EN translation of the RU original) |
-| [`improvements.ru.md`](improvements.ru.md) | Catalog of libmdbx improvements over LMDB (RU): features, API extensions, engine mechanisms, bug fixes and optimizations down to micro-details (SIMD, branchless search, atomics), with version timeline — compiled from README history and ChangeLog 0.09–0.14 |
-| [`improvements.en.md`](improvements.en.md) | The same catalog in English (fresh EN text based on the RU original, 16 sections) |
+| [`../ru/deep-dive/internals.md`](../ru/deep-dive/internals.md) | **How libmdbx works** (RU, published): functional architecture — subsystems, mechanisms, API entities and their interplay, top-down, without file/module binding; includes a reader Q&A section (big values vs GC, long readers vs DB growth, lazy-search cache, WAF) and a deep-dive part (LIFO, BigFoot, dupsort, DBI handles, bunch delete, range estimation, cursor tracking, nested txns, parking, on-the-fly resize, auto-compaction, defrag) |
+| [`../en/deep-dive/internals.md`](../en/deep-dive/internals.md) | The same document in English (EN translation of the RU original) |
+| [`../ru/deep-dive/improvements.md`](../ru/deep-dive/improvements.md) | Catalog of libmdbx improvements over LMDB (RU): features, API extensions, engine mechanisms, bug fixes and optimizations down to micro-details (SIMD, branchless search, atomics), with version timeline — compiled from README history and ChangeLog 0.09–0.14 |
+| [`../en/deep-dive/improvements.md`](../en/deep-dive/improvements.md) | The same catalog in English (fresh EN text based on the RU original, 16 sections) |
 | [`test-scenarios.md`](test-scenarios.md) | Test scenario specifications (RU) with SystemTap/DTrace probe injection points: what and how to test per subsystem, expected outcomes, and "pain points" for embedding USDT probes — a spec for the test-writing agent |
 | [`module-interfaces.md`](module-interfaces.md) | Cross-module interface map: exports per module (proto.h), include backbone, verified call sites, dependency cycles |
 | [`cxx-api.md`](cxx-api.md) | C++ API layer in depth: header topology, class inventory, decl/impl split, C↔C++ bridge, build/amalgamation, compiler matrix |
 | [`build.md`](build.md) | Build systems (CMake, GNU Make, Conan), key options, CI matrix, testing commands |
-| [`architecture.md`](architecture.md) | Internal architecture: layers, module relationships, data flow, amalgamation |
-| [`architecture.ru.md`](architecture.ru.md) | Compact cross-mechanism overview (for external experts): MVCC, durability/flush path, GC, file growth/geometry, mmap/memory, single-writer |
+| [`../ru/deep-dive/architecture.md`](../ru/deep-dive/architecture.md) | Internal architecture (RU, published): layers, module relationships, data flow, amalgamation; compact cross-mechanism overview for external experts: MVCC, durability/flush path, GC, file growth/geometry, mmap/memory, single-writer |
 | [`debugging-methodology.md`](debugging-methodology.md) | Debugging methodology: tools (`mdbx_chk`, PROFGC, `commit_latency`, sanitizers), step-by-step scenarios (growth, slow commit, MAP_FULL, corruption, long readers, fork, Windows, containers), internal debugging |
-| [`deep-dive.ru.md`](deep-dive.ru.md) | Deep dive on LCK layout/versions, RLT slots, HSR protocol, fork(), WRITEMAP/auto-sync and recovery modes |
+| [`../ru/deep-dive/internals.md`](../ru/deep-dive/internals.md) | Deep dive on LCK layout/versions, RLT slots, HSR protocol, fork(), WRITEMAP/auto-sync and recovery modes |
 | [`glossary-compact.md`](glossary-compact.md) | Compact glossary of terms used in discussions/reformulations (writemap, WAF, overflow, subpage, stragglers, presync, etc.) |
 | [`libmdbx-invariants.md`](libmdbx-invariants.md) | **Invariants checklist (RU)**: subsystems S1–S14, 6 critical invariants, C/C++ ABI boundary, module-risk matrix — used in every review/test |
 | [`subsystem-map.md`](subsystem-map.md) | Subsystem map S1–S14 with key `src/*` modules and refactoring risk levels (🔴🟠🟡) |
@@ -115,9 +114,9 @@ Depending on the task, start from:
 - **Build / configure / test commands** → [`build.md`](build.md)
 - **Where is module X / what does file Y do** → [`structure.md`](structure.md)
 - **Who calls what / module interfaces** → [`module-interfaces.md`](module-interfaces.md)
-- **How the engine works internally, invariants** → [`architecture.md`](architecture.md)
+- **How the engine works internally, invariants** → [`../en/deep-dive/architecture.md`](../en/deep-dive/architecture.md)
 - **Debugging a slow/corrupt/growing DB, tools and scenarios** → [`debugging-methodology.md`](debugging-methodology.md)
-- **How libmdbx works (functional view, RU, reader Q&A + deep dives)** → [`deep-dive.ru.md`](deep-dive.ru.md)
+- **How libmdbx works (functional view, RU, reader Q&A + deep dives)** → [`../ru/deep-dive/internals.md`](../ru/deep-dive/internals.md)
 - **C++ API / classes / wrappers** → [`cxx-api.md`](cxx-api.md)
 - **What tests guard a module / coverage gaps** → [`test-coverage.md`](test-coverage.md)
 - **How to write tests / achieve full coverage (channels, axes)** → [`testing-methodology.md`](testing-methodology.md)

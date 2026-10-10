@@ -482,7 +482,7 @@ endef
 DIST_EXTRA := AGENTS.md LICENSE NOTICE COPYRIGHT README.md TODO.md CMakeLists.txt GNUmakefile Makefile ChangeLog.md VERSION.json config.h.in ntdll.def \
 	$(addprefix man1/, $(MANPAGES)) cmake/compiler.cmake cmake/profile.cmake cmake/utils.cmake windows-safeseh-masm.asm windows-safeseh-yasm.asm \
 	windows-safeseh.obj valgrind.supp conanfile.py \
-	$(sort $(shell git ls-files examples docs/textbook/en docs/textbook/ru))
+	$(sort $(shell git ls-files examples docs/ru docs/en))
 
 DIST_SRC   := mdbx.h mdbx.h++ mdbx.c mdbx.c++ $(addsuffix .c, $(MDBX_TOOLS)) mdbx-internals.h mdbx-wingetopt.h
 
@@ -773,9 +773,10 @@ docs/options.h: src/options.h $(lastword $(MAKEFILE_LIST))
 	@echo '  MAKE $@'
 	$(QUIET)cp $< $@
 
-docs/ChangeLog.md: ChangeLog.md $(lastword $(MAKEFILE_LIST))
+# the change log is published in the EN reference tree only (English-only)
+docs/en/reference/changelog.md: ChangeLog.md $(lastword $(MAKEFILE_LIST))
 	@echo '  MAKE $@'
-	$(QUIET)cp $< $@
+	$(QUIET)mkdir -p $(dir $@) && cp $< $@
 
 doxygen: docs/Doxyfile docs/overall.md docs/intro.md docs/usage.md docs/mdbx.h docs/mdbx.h++ docs/options.h docs/ChangeLog.md COPYRIGHT LICENSE NOTICE docs/ld+json $(lastword $(MAKEFILE_LIST))
 	@echo '  RUNNING doxygen...'
@@ -791,16 +792,16 @@ MDBX_BOOK_DATE ?= $(shell date +%F)
 # per-locale libmdbx-textbook-{ru,en}.pdf next to the HTML — the layout mirrors
 # https://libmdbx.dqdkfa.ru/textbook/{ru,en}/.
 .PHONY: books
-docsite: docs/Doxyfile docs/overall.md docs/intro.md docs/usage.md docs/mdbx.h docs/mdbx.h++ docs/options.h docs/ChangeLog.md docs/docsite/en/mkdocs.yml docs/docsite/ru/mkdocs.yml $(lastword $(MAKEFILE_LIST))
+docsite: docs/Doxyfile docs/overall.md docs/intro.md docs/usage.md docs/mdbx.h docs/mdbx.h++ docs/options.h docs/en/reference/changelog.md docs/docsite/en/mkdocs.yml docs/docsite/ru/mkdocs.yml $(lastword $(MAKEFILE_LIST))
 	@command -v mkdocs >/dev/null 2>&1 || { \
 		echo '  ERROR: mkdocs is not available. Install the toolchain:'; \
 		echo '    pip install mkdocs mkdocs-material mkdoxy'; exit 1; }
 	@command -v doxygen >/dev/null 2>&1 || { \
 		echo '  ERROR: doxygen is not available (required by the mkdoxy plugin).'; exit 1; }
 	@echo '  DOCSITE en: MkDocs (guides + textbook + engineering + API)...'
-	$(QUIET)mkdocs build -f docs/docsite/en/mkdocs.yml $(HUSH)
+	$(QUIET)mkdocs build --strict -f docs/docsite/en/mkdocs.yml $(HUSH)
 	@echo '  DOCSITE ru: MkDocs (гайды + учебник + engineering + API)...'
-	$(QUIET)mkdocs build -f docs/docsite/ru/mkdocs.yml $(HUSH)
+	$(QUIET)mkdocs build --strict -f docs/docsite/ru/mkdocs.yml $(HUSH)
 	$(QUIET)cp LICENSE build/docsite/en/ && cp LICENSE build/docsite/ru/
 	@echo '  DOCSITE normalize: shared assets, flat pages, S3-safe links...'
 	$(QUIET)python3 docs/docsite/normalize_site.py

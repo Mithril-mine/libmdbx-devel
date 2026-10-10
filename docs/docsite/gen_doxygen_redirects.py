@@ -26,10 +26,10 @@ from pathlib import Path
 
 _root = Path(__file__).resolve().parent.parent.parent
 OLD_DIR = Path(sys.argv[1]) if len(sys.argv) > 1 else _root / "docs" / "html"
-API_DIR = Path(sys.argv[2]) if len(sys.argv) > 2 else _root / "build" / "docsite" / "en" / "api"
+API_DIR = Path(sys.argv[2]) if len(sys.argv) > 2 else _root / "build" / "docsite" / "en" / "reference" / "api"
 OUT = Path(__file__).resolve().parent / "doxygen-redirects.tsv"
 
-BASE = "/docs/en/api"
+BASE = "/docs/en/reference/api"
 
 
 def functions_target(name: str):

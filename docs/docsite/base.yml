@@ -1,8 +1,13 @@
-# Shared base for the unified libmdbx docsite builds (docs/site/{en,ru}).
+# Shared base for the unified libmdbx docsite builds (docs/docsite/{en,ru}).
 # Locale configs INHERIT this file; relative paths here are resolved against
 # the child config's directory. Build (from the repo root): make docsite
 # Output: build/docsite/{en,ru}/ (post-processed by normalize_site.py —
 # S3-safe flat pages, deduped assets, search index relocation).
+#
+# Source layout mirrors the deployed URL tree: docs/{ru,en}/<section>/…
+# (RU is the canonical original, EN the translation; see
+# docs-integration-contract.md §5). The reference API (mkdoxy) is built in
+# the EN locale only — see en/mkdocs.yml.
 
 use_directory_urls: false
 
@@ -32,27 +37,5 @@ theme:
 hooks:
   - ../hooks/docsite_hooks.py
 
-# mkdoxy generates the API reference pages (api/*) from the prepared doxygen
-# inputs (docs/mdbx.h, docs/mdbx.h++, docs/options.h — see the `docsite` and
-# `doxygen` make targets). All paths are relative to the build CWD (repo root).
-# The generated XML is cached in the site dir (assets/.doxy) and stripped by
-# normalize_site.py.
 plugins:
   - search
-  - mkdoxy:
-      full-doc: true
-      projects:
-        api:
-          src-dirs: "docs/mdbx.h docs/mdbx.h++ docs/options.h docs/overall.md docs/intro.md docs/usage.md"
-          api-path: api
-          doxy-cfg-file: "docs/Doxyfile"
-          doxy-cfg:
-            GENERATE_XML: true
-            GENERATE_HTML: false
-            GENERATE_LATEX: false
-            QUIET: true
-            # the mkdoxy plugin runs doxygen from the build CWD (repo root),
-            # where the HTML-customization files are not available; HTML is
-            # disabled anyway
-            HTML_HEADER: ""
-            HTML_FOOTER: ""

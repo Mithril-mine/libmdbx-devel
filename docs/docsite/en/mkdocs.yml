@@ -13,81 +13,63 @@ site_dir: ../../../build/docsite/en
 site_description: >-
   Documentation for the libmdbx embedded transactional database — guides,
   textbook, internals deep dive, and the C/C++ API reference.
-docs_dir: ../../
+docs_dir: ../../en
 
 extra:
   locale: en
-  index_source: docsite/en/index.md
 
-# The docs_dir covers the whole docs/ tree; only the curated public pages
-# (landing, guides, textbook, three engineering documents, API reference,
-# ChangeLog) are published. Locale twins (*.ru.md) and dev-only documents are
-# excluded; doxygen build intermediates and the nested textbook/site are not
-# part of this build.
-exclude_docs: |
-  *.ru.md
-  /README.md
-  /Doxyfile*
-  /doxygen.css
-  /doxygen-extra.css
-  /header.html
-  /footer.html
-  /ld+json
-  /sitemap.add
-  /title
-  __*.md
-  /_*.md
-  /overall.md
-  /intro.md
-  /usage.md
-  /mdbx.h
-  /mdbx.h++
-  /options.h
-  html/
-  xml/
-  docsite/*
-  !docsite/en/
-  docsite/en/*
-  !docsite/en/index.md
-  textbook/site/
-  textbook/ru/
-  textbook/en/book_hooks.py
-  textbook/en/__pycache__
-  textbook/en/templates
-  engineering/*
-  !engineering/architecture.en.md
-  !engineering/deep-dive.en.md
-  !engineering/improvements.en.md
+# mkdoxy generates the API reference pages (reference/api/*) from the prepared
+# doxygen inputs; all paths are relative to the build CWD (repo root). The
+# generated XML is cached in the site dir (assets/.doxy) and stripped by
+# normalize_site.py. The API pages are reachable from the reference landing
+# (reference/index.md) and cross-linked from the class/function listings;
+# keeping them out of the sidebar makes the navigation readable.
+plugins:
+  - search
+  - mkdoxy:
+      full-doc: true
+      projects:
+        api:
+          src-dirs: "docs/mdbx.h docs/mdbx.h++ docs/options.h docs/overall.md docs/intro.md docs/usage.md"
+          api-path: reference/api
+          doxy-cfg-file: "docs/Doxyfile"
+          doxy-cfg:
+            GENERATE_XML: true
+            GENERATE_HTML: false
+            GENERATE_LATEX: false
+            QUIET: true
+            # the mkdoxy plugin runs doxygen from the build CWD (repo root),
+            # where the HTML-customization files are not available; HTML is
+            # disabled anyway
+            HTML_HEADER: ""
+            HTML_FOOTER: ""
 
-# mkdoxy-generated API pages are reachable from the API reference landing
-# (api.en.md) and cross-linked from the class/function listings; keeping them
-# out of the sidebar makes the navigation readable.
 not_in_nav: |
-  api/
+  reference/api/
 
 nav:
   - Home: index.md
   - Overview:
-      - What is libmdbx: guides/overview.en.md
-      - Restrictions & gotchas: guides/restrictions.en.md
+      - What is libmdbx: overview/index.md
+      - Restrictions & gotchas: overview/restrictions.md
   - Getting started:
-      - Install & build: guides/install-build.en.md
-      - First steps: guides/first-steps.en.md
-      - Durability modes: guides/durability-modes.en.md
+      - Install & build: getting-started/install-build.md
+      - First steps: getting-started/first-steps.md
+      - Durability modes: getting-started/durability-modes.md
   - Textbook:
-      - About the textbook: textbook/en/README.md
-      - Outline (skeleton): textbook/en/00-karkas.md
-      - Volume I. Fundamentals: textbook/en/01-tom-i-osnovy.md
-      - Volume II. Practice: textbook/en/02-tom-ii-praktika.md
-      - Volume III. Mechanisms: textbook/en/03-tom-iii-mehanizmy.md
-      - Volume IV. Performance: textbook/en/04-tom-iv-proizvoditelnost.md
-      - Volume V. Expert topics: textbook/en/05-tom-v-ekspertnye-temy.md
-      - Volume VI. Bindings: textbook/en/06-tom-vi-bindings.md
+      - About the textbook: textbook/index.md
+      - Outline (skeleton): textbook/00-karkas.md
+      - Volume I. Fundamentals: textbook/01-tom-i-osnovy.md
+      - Volume II. Practice: textbook/02-tom-ii-praktika.md
+      - Volume III. Mechanisms: textbook/03-tom-iii-mehanizmy.md
+      - Volume IV. Performance: textbook/04-tom-iv-proizvoditelnost.md
+      - Volume V. Expert topics: textbook/05-tom-v-ekspertnye-temy.md
+      - Volume VI. Bindings: textbook/06-tom-vi-bindings.md
   - Deep dive:
-      - Architecture: engineering/architecture.en.md
-      - Internals deep dive: engineering/deep-dive.en.md
-      - Improvements over LMDB: engineering/improvements.en.md
+      - Architecture: deep-dive/architecture.md
+      - Internals deep dive: deep-dive/internals.md
+      - Improvements over LMDB: deep-dive/improvements.md
   - Reference:
-      - API reference: api.en.md
-      - Command-line tools: guides/tooling.en.md
-      - Change log: ChangeLog.md
+      - API reference: reference/index.md
+      - Command-line tools: reference/tooling.md
+      - Change log: reference/changelog.md

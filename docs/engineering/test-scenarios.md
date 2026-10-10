@@ -7,8 +7,8 @@
 >   - агенту(ам), встраивающему пробники SystemTap/DTrace — «болевые точки» с контекстом.
 >
 > Связанные документы: [`test-coverage.md`](test-coverage.md) (карта «тесты → модули» и дыры),
-> [`deep-dive.ru.md`](deep-dive.ru.md) (как работает движок, без привязки
-> к файлам), [`architecture.md`](architecture.md) (внутренняя структура по модулям),
+> [`deep-dive.ru.md`](../ru/deep-dive/internals.md) (как работает движок, без привязки
+> к файлам), [`architecture.md`](../en/deep-dive/architecture.md) (внутренняя структура по модулям),
 > [`testing-methodology.md`](testing-methodology.md) (механизмы управляемого тестирования:
 > COLLECT/WATCH/FAULT), [`probe-bus.md`](probe-bus.md) (движок инъекций mprobe v2),
 > [`probes.md`](probes.md) (каталог USDT/DTrace-маркеров для внешней трассировки).
