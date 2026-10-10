@@ -199,6 +199,11 @@ def check_pages(pages, sitemap):
                 links[m.group(1)] = m.group(2)
         else:
             fail(f"{name}: no <head> found")
+        # analytics counter (owner-provided canonical snippet, id 99261645)
+        for probe in ("ym(99261645", "mc.yandex.ru/watch/99261645"):
+            if probe not in text:
+                fail(f"{name}: Yandex.Metrika counter is missing ({probe})")
+
         # [7] head == sitemap == ld+json
         sm = sitemap.get(canonical)
         if sm is None:
