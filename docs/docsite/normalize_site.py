@@ -147,6 +147,12 @@ def rewrite_links():
             if target == "indexpage.md" and (base / "index.html").is_file():
                 fixed += 1
                 return f'{attr}="index.html"'
+            # mkdoxy file pages reference the license text by a relative
+            # ./LICENSE link; the make target ships it at the locale root
+            if target in ("./LICENSE", "LICENSE") and \
+                    (SITE / "en" / "LICENSE").is_file():
+                fixed += 1
+                return f'{attr}="/docs/en/LICENSE"'
             return m.group(0)  # leave untouched; the audit reports it
 
         new = REF_ATTRS.sub(fix, text)

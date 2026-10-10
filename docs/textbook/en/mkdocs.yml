@@ -11,7 +11,7 @@ site_description: >-
   A practical guide to the libmdbx embedded transactional database — from the
   first steps to expert topics and bindings.
 site_dir: ../site/en
-docs_dir: .
+docs_dir: ../../en/textbook
 # Flat .html pages (no per-page subdirs): the site is hosted from an S3 bucket
 # without directory -> index.html rewrites, so every link must address a file.
 use_directory_urls: false
@@ -62,7 +62,7 @@ plugins:
       toc_title: Table of contents
 
 nav:
-  - About the textbook: README.md
+  - About the textbook: index.md
   - Outline (skeleton): 00-karkas.md
   - Volume I. Fundamentals: 01-tom-i-osnovy.md
   - Volume II. Practice: 02-tom-ii-praktika.md

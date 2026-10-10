@@ -1,62 +1,55 @@
 """Hooks for the unified libmdbx docsite (docs/docsite/{en,ru}/mkdocs.yml).
 
-1. on_files:        re-map the locale landing page (config.extra.index_source,
-                    e.g. `docsite/en/index.md`) to the site root as index.md,
-                    so the deployed locale root resolves to a real index.html
-                    on S3 static hosting;
-2. on_page_content: prepend the language pill (EN <-> RU) linking to the twin
-                    page in the other locale. Twin pages have symmetric URLs
-                    (guides/overview.en.html <-> guides/overview.ru.html);
-                    API pages (mkdoxy-generated, English-only) and the landing
-                    page link to the other locale's root.
+Each locale build uses the matching locale subtree as docs_dir
+(docs/{ru,en}), so a page URL is relative to the locale root and the page's
+twin in the other locale has the same path. This hook prepends the language
+pill (EN <-> RU) linking to that twin. Pages that exist only in the EN tree
+(the generated API reference and the change log) link to the RU reference
+landing instead - the RU landing explains that the reference is English-only.
 """
 
-from pathlib import Path
-
-from mkdocs.structure.files import File
-
 LOCALES = ("en", "ru")
+
+# mkdoxy generates doxygen-style links inside its pages that mkdocs cannot
+# resolve or that point to anchors mkdoxy itself never renders; clean them up
+# so `mkdocs build --strict` passes. Applied to generated API pages only.
+import re
+
+_MKDOXY_LINK_FIXES = (
+    # doxygen page refs -> the mkdoxy-generated page files
+    (re.compile(r"\]\(intro\.html"), "](intro.md"),
+    (re.compile(r"\]\(usage\.html"), "](usage.md"),
+    # the related-pages listing links the main doxygen page by its refid
+    (re.compile(r"\]\(indexpage\.md"), "](index.md"),
+    # anchors mkdoxy links to but never emits (unnamed enums, operators,
+    # friends): fall back to the page-level link
+    (re.compile(r"\]\(([^)]+?)#(?:enum-@\w+|function-operator-[^)#]+|friend-[^)#]+)\)"),
+     r"](\1)"),
+)
+
+
+def _clean_mkdoxy_markdown(markdown: str) -> str:
+    for pattern, repl in _MKDOXY_LINK_FIXES:
+        markdown = pattern.sub(repl, markdown)
+    return markdown
+
+
+def on_page_markdown(markdown, *, page, config, **_kwargs):
+    if page.file.src_uri.startswith("reference/api/"):
+        markdown = _clean_mkdoxy_markdown(markdown)
+    return markdown
 
 
 def _other(locale: str) -> str:
     return "ru" if locale == "en" else "en"
 
 
-def on_files(files, *, config):
-    index_source = config.extra.get("index_source")
-    if not index_source:
-        return files
-    for file in list(files):
-        if file.src_uri == index_source:
-            files.remove(file)
-            files.append(
-                File(
-                    "index.md",
-                    str(Path(file.abs_src_path).parent),
-                    config.site_dir,
-                    config.use_directory_urls,
-                )
-            )
-            break
-    return files
-
-
 def _twin_url(url: str, locale: str, other: str) -> str:
-    """Twin page path relative to the site root: guides/engineering/API-landing
-    pages use the .{locale}.html suffix, textbook pages live under
-    textbook/{locale}/, mkdoxy API pages and the landing page fall back to the
-    other locale root."""
-    if url == "index.html":
-        return f"{other}/index.html"
-    if url.startswith("api/"):
-        return f"{other}/index.html"
-    if url.startswith("textbook/"):
-        parts = url.split("/", 2)
-        if len(parts) == 3 and parts[1] in LOCALES:
-            return f"{other}/textbook/{other}/{parts[2]}"
-    if url.endswith(f".{locale}.html"):
-        # twin pages have symmetric paths with the locale suffix swapped
-        return f"{other}/{url[: -len(f'.{locale}.html')]}.{other}.html"
+    """Twin page path relative to the docsite root (the parent of the locale
+    trees): the same path under the other locale; EN-only reference pages
+    fall back to the RU reference landing."""
+    if url.startswith("reference/api/") or url == "reference/changelog.html":
+        return f"{other}/reference/index.html"
     return f"{other}/{url}"
 
 
@@ -65,8 +58,9 @@ def on_page_content(html, *, page, config, **_kwargs):
     other = _other(locale)
     url = page.url  # flat .html pages (use_directory_urls: false)
     twin = _twin_url(url, locale, other)
-    # the twin path is site-root relative: prepend one '../' per level of
-    # depth of this page (its own dir counts too)
+    # the twin path is docsite-root relative: this page sits `count`
+    # directories below its locale root, the locale root sits one level
+    # below the docsite root
     prefix = "../" * (url.count("/") + 1)
     pill = (
         f'<div class="lang-pill" '

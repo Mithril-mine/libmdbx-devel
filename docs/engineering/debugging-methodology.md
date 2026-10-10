@@ -4,8 +4,8 @@
 > Практическое руководство: какие инструменты даёт движок, как читать их вывод,
 > пошаговые сценарии отладки типовых проблем и приёмы внутренней отладки
 > разработчика. Все факты сверены с кодом на `master` и man-страницами. Теоретическая подоплёка — в
-> [`deep-dive.ru.md`](deep-dive.ru.md) и
-> [`architecture.md`](architecture.md).
+> [`deep-dive.ru.md`](../ru/deep-dive/internals.md) и
+> [`architecture.md`](../en/deep-dive/architecture.md).
 
 ---
 
@@ -334,6 +334,6 @@ CMake-опции (`cmake/profile.cmake`):
 
 ---
 
-*См. также: [`deep-dive.ru.md`](deep-dive.ru.md) (LCK/RLT/HSR/fork/WRITEMAP/recovery),
-[`deep-dive.ru.md`](deep-dive.ru.md) (механика),
-[`architecture.md`](architecture.md) (инварианты рефакторинга).*
+*См. также: [`deep-dive.ru.md`](../ru/deep-dive/internals.md) (LCK/RLT/HSR/fork/WRITEMAP/recovery),
+[`deep-dive.ru.md`](../ru/deep-dive/internals.md) (механика),
+[`architecture.md`](../en/deep-dive/architecture.md) (инварианты рефакторинга).*

@@ -3,7 +3,7 @@
 > Часть индекса [документации разработчика](README.md).
 > Короткие определения терминов, встречающихся в обсуждениях libmdbx и в
 > переформулировках записей базы знаний. Полный функциональный разбор —
-> в [`deep-dive.ru.md`](deep-dive.ru.md) (раздел «Глоссарий»).
+> в [`deep-dive.ru.md`](../ru/deep-dive/internals.md) (раздел «Глоссарий»).
 
 | Термин | Определение |
 | --- | --- |
@@ -41,5 +41,5 @@
 
 ---
 
-*Источник определений — [`deep-dive.ru.md`](deep-dive.ru.md)
-и [`architecture.md`](architecture.md); точные имена API и констант — эталонный `mdbx.h`.*
+*Источник определений — [`deep-dive.ru.md`](../ru/deep-dive/internals.md)
+и [`architecture.md`](../en/deep-dive/architecture.md); точные имена API и констант — эталонный `mdbx.h`.*

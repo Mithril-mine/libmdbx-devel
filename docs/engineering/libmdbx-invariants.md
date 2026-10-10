@@ -1,7 +1,7 @@
 # Инварианты libmdbx — сводный чек-лист (S1–S14, ABI, модульные риски)
 
 > Сводный справочник критических инвариантов и границ подсистем libmdbx.
-> Источники: [`deep-dive.ru.md`](deep-dive.ru.md) (механизмы, §2.3/§2.4/§5.2/§6.2),
+> Источники: [`deep-dive.ru.md`](../ru/deep-dive/internals.md) (механизмы, §2.3/§2.4/§5.2/§6.2),
 > [`structure.md`](structure.md) (карта модулей), [`module-interfaces.md`](module-interfaces.md).
 > Используется как чек-лист при ревью, написании тестов и рефакторинге;
 > детальная матрица конфликтов подсистем — [`module-lock-matrix.md`](module-lock-matrix.md).

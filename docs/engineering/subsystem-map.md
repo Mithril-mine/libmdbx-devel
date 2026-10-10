@@ -1,7 +1,7 @@
 # Subsystem Map — карта подсистем S1–S14 с уровнями риска
 
 > Единая карта подсистем libmdbx для оценки рисков при рефакторинге, планировании
-> тестов и доменных ревью. Источники: [`deep-dive.ru.md`](deep-dive.ru.md),
+> тестов и доменных ревью. Источники: [`deep-dive.ru.md`](../ru/deep-dive/internals.md),
 > [`structure.md`](structure.md) (§2/§7), [`module-interfaces.md`](module-interfaces.md),
 > [`libmdbx-invariants.md`](libmdbx-invariants.md) (подсистемы S1–S14).
 > Синхронизировать с `structure.md`/`deep-dive.ru.md` при изменении
