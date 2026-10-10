@@ -2,7 +2,8 @@
 # Build (HTML + PDF): make books   — or manually:
 #   MDBX_BOOK_VERSION=$(git describe --tags --long) MDBX_BOOK_DATE=$(date +%F) \
 #     mkdocs build -f docs/textbook/en/mkdocs.yml
-# Output: docs/textbook/site/en/
+# Output: docs/textbook/site/en/ (post-processed by normalize_site.py —
+# shared assets/examples hoisted one level up, flat .html pages, S3-safe links)
 
 site_name: libmdbx Textbook
 site_url: https://libmdbx.dqdkfa.ru/textbook/en/
@@ -11,6 +12,9 @@ site_description: >-
   first steps to expert topics and bindings.
 site_dir: ../site/en
 docs_dir: .
+# Flat .html pages (no per-page subdirs): the site is hosted from an S3 bucket
+# without directory -> index.html rewrites, so every link must address a file.
+use_directory_urls: false
 exclude_docs: |
   mkdocs.yml
   book_hooks.py
@@ -49,4 +53,3 @@ nav:
   - Volume IV. Performance: 04-tom-iv-proizvoditelnost.md
   - Volume V. Expert topics: 05-tom-v-ekspertnye-temy.md
   - Volume VI. Bindings: 06-tom-vi-bindings.md
-  - About the textbook: README.md

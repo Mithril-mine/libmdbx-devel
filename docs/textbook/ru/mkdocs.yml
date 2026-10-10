@@ -2,7 +2,8 @@
 # Build (HTML + PDF): make books   — or manually:
 #   MDBX_BOOK_VERSION=$(git describe --tags --long) MDBX_BOOK_DATE=$(date +%F) \
 #     mkdocs build -f docs/textbook/ru/mkdocs.yml
-# Output: docs/textbook/site/ru/
+# Output: docs/textbook/site/ru/ (post-processed by normalize_site.py —
+# shared assets/examples hoisted one level up, flat .html pages, S3-safe links)
 
 site_name: Учебник по libmdbx
 site_url: https://libmdbx.dqdkfa.ru/textbook/ru/
@@ -11,6 +12,10 @@ site_description: >-
   от первых шагов до экспертных тем и биндингов.
 site_dir: ../site/ru
 docs_dir: .
+# Плоские .html-страницы (без постраничных подкаталогов): сайт размещается в
+# S3-бакете без редиректов каталог -> index.html, поэтому каждая ссылка
+# обязана адресовать файл.
+use_directory_urls: false
 exclude_docs: |
   mkdocs.yml
   book_hooks.py
@@ -49,4 +54,3 @@ nav:
   - Том IV. Производительность: 04-tom-iv-proizvoditelnost.md
   - Том V. Экспертные темы: 05-tom-v-ekspertnye-temy.md
   - Том VI. Биндинги: 06-tom-vi-bindings.md
-  - О учебнике: README.md
