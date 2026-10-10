@@ -11,15 +11,15 @@
 
 Точки входа (английский):
 
-- [Аннотированный индекс](/docs/en/reference/api/annotated.html) — все классы и структуры
-- [Классы](/docs/en/reference/api/classes.html) · [Иерархия классов](/docs/en/reference/api/hierarchy.html)
-- [Пространства имён](/docs/en/reference/api/namespaces.html)
-- [Файлы](/docs/en/reference/api/files.html) — C API (`mdbx.h`) со всеми функциями и макросами,
+- [Аннотированный индекс](https://libmdbx.dqdkfa.ru/docs/en/reference/api/annotated.html) — все классы и структуры
+- [Классы](https://libmdbx.dqdkfa.ru/docs/en/reference/api/classes.html) · [Иерархия классов](https://libmdbx.dqdkfa.ru/docs/en/reference/api/hierarchy.html)
+- [Пространства имён](https://libmdbx.dqdkfa.ru/docs/en/reference/api/namespaces.html)
+- [Файлы](https://libmdbx.dqdkfa.ru/docs/en/reference/api/files.html) — C API (`mdbx.h`) со всеми функциями и макросами,
   а также C++ API (`mdbx.h++`)
-- [Члены классов](/docs/en/reference/api/class_members.html) · [Макросы](/docs/en/reference/api/macros.html)
+- [Члены классов](https://libmdbx.dqdkfa.ru/docs/en/reference/api/class_members.html) · [Макросы](https://libmdbx.dqdkfa.ru/docs/en/reference/api/macros.html)
 
 На этом же разделе: [утилиты командной строки](tooling.md);
-[журнал изменений](/docs/en/reference/changelog.html) (английский).
+[журнал изменений](https://libmdbx.dqdkfa.ru/docs/en/reference/changelog.html) (английский).
 
 Вводное руководство — в [гайдах](../index.md); страница
 [первых шагов](../getting-started/first-steps.md) показывает канонический поток

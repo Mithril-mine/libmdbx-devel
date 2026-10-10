@@ -3,7 +3,7 @@
 > A complete practical guide to the embedded transactional database
 > **libmdbx** — from the first steps to expert topics and bindings.
 > All code examples are compilable C++17/C11 programs in the
-> [`examples/`](examples/README.md) directory; fragments in the text are marked as
+> [`examples/`](examples/README.txt) directory; fragments in the text are marked as
 > "Fragment" and supplemented with links to the full code.
 
 ---
@@ -40,7 +40,7 @@ ends with a summary, a checklist, and (in Volumes I–II) exercises.
 
 ## Code examples
 
-All examples live in [`examples/`](examples/README.md) and are built via the
+All examples live in [`examples/`](examples/README.txt) and are built via the
 project's CMake (or pkg-config):
 
 ```sh

@@ -34,6 +34,11 @@ theme:
         icon: material/brightness-4
         name: Switch to light mode
 
+# attr_list: explicit heading ids (e.g. Cyrillic headings get a stable
+# custom anchor instead of an unusable auto-slug)
+markdown_extensions:
+  - attr_list
+
 hooks:
   - ../hooks/docsite_hooks.py
 

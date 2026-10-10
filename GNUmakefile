@@ -797,7 +797,9 @@ MDBX_BOOK_DATE ?= $(shell date +%F)
 # .gitignore), both for the standalone books and for the unified docsite.
 define sync-examples
 	rm -rf docs/ru/textbook/examples docs/en/textbook/examples && \
-		cp -a examples docs/ru/textbook/examples && cp -a examples docs/en/textbook/examples
+		cp -a examples docs/ru/textbook/examples && cp -a examples docs/en/textbook/examples && \
+		find docs/ru/textbook/examples docs/en/textbook/examples -name README.md \
+			| while read f; do mv $$f $${f%.md}.txt; done
 endef
 
 # Everything the docsite build consumes: the tracked sources of both locale
