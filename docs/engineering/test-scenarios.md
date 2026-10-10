@@ -7,7 +7,7 @@
 >   - агенту(ам), встраивающему пробники SystemTap/DTrace — «болевые точки» с контекстом.
 >
 > Связанные документы: [`test-coverage.md`](test-coverage.md) (карта «тесты → модули» и дыры),
-> [`functional-architecture.md`](functional-architecture.md) (как работает движок, без привязки
+> [`deep-dive.ru.md`](deep-dive.ru.md) (как работает движок, без привязки
 > к файлам), [`architecture.md`](architecture.md) (внутренняя структура по модулям),
 > [`testing-methodology.md`](testing-methodology.md) (механизмы управляемого тестирования:
 > COLLECT/WATCH/FAULT), [`probe-bus.md`](probe-bus.md) (движок инъекций mprobe v2),
@@ -428,7 +428,7 @@ mdbx::<подсистема>::<фаза>::<событие>
 3. Проверить влияние `prefer_waf_insteadof_balance` (true/false) на число записанных страниц.
 
 **Ожидания:** относительные соотношения соответствуют модели WAF
-(см. functional-architecture.md §17.4).
+(см. deep-dive.ru.md §17.4).
 
 **Пробники:**
 - `mdbx::pgop::write` (pgno, cause=leaf|branch|gc|meta).
