@@ -808,7 +808,8 @@ endef
 # list is empty - drop build/docsite/.stamp to force a rebuild.
 DOCSITE_SRCS := $(sort $(shell git ls-files --cached --others --exclude-standard docs/ru docs/en examples) \
 	docs/docsite/en/mkdocs.yml docs/docsite/ru/mkdocs.yml docs/docsite/base.yml \
-	docs/docsite/hooks/docsite_hooks.py docs/docsite/normalize_site.py)
+	docs/docsite/hooks/docsite_hooks.py docs/docsite/normalize_site.py \
+	docs/docsite/verify_contract.py docs/docsite/contract-amendment.md)
 
 build/docsite/.stamp: $(DOCSITE_SRCS) docs/Doxyfile docs/overall.md docs/intro.md docs/usage.md docs/mdbx.h docs/mdbx.h++ docs/options.h docs/en/reference/changelog.md $(lastword $(MAKEFILE_LIST))
 	@command -v mkdocs >/dev/null 2>&1 || { \
@@ -825,6 +826,8 @@ build/docsite/.stamp: $(DOCSITE_SRCS) docs/Doxyfile docs/overall.md docs/intro.m
 	$(QUIET)cp LICENSE build/docsite/en/ && cp LICENSE build/docsite/ru/
 	@echo '  DOCSITE normalize: shared assets, flat pages, S3-safe links...'
 	$(QUIET)python3 docs/docsite/normalize_site.py
+	@echo '  DOCSITE verify: docs-integration-contract checklist (section 6)...'
+	$(QUIET)python3 docs/docsite/verify_contract.py
 	$(QUIET)touch $@
 	@echo '  DOCSITE done: build/docsite/{en,ru}/'
 
