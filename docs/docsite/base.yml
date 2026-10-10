@@ -1,0 +1,58 @@
+# Shared base for the unified libmdbx docsite builds (docs/site/{en,ru}).
+# Locale configs INHERIT this file; relative paths here are resolved against
+# the child config's directory. Build (from the repo root): make docsite
+# Output: build/docsite/{en,ru}/ (post-processed by normalize_site.py —
+# S3-safe flat pages, deduped assets, search index relocation).
+
+use_directory_urls: false
+
+theme:
+  name: material
+  features:
+    - content.code.copy
+    - navigation.sections
+  palette:
+    # Auto: follow the OS light/dark preference by default; the header toggle
+    # lets the reader pin light or dark explicitly.
+    - media: "(prefers-color-scheme)"
+      toggle:
+        icon: material/brightness-auto
+        name: Switch to light mode
+    - media: "(prefers-color-scheme: light)"
+      scheme: default
+      toggle:
+        icon: material/brightness-7
+        name: Switch to dark mode
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
+      toggle:
+        icon: material/brightness-4
+        name: Switch to light mode
+
+hooks:
+  - ../hooks/docsite_hooks.py
+
+# mkdoxy generates the API reference pages (api/*) from the prepared doxygen
+# inputs (docs/mdbx.h, docs/mdbx.h++, docs/options.h — see the `docsite` and
+# `doxygen` make targets). All paths are relative to the build CWD (repo root).
+# The generated XML is cached in the site dir (assets/.doxy) and stripped by
+# normalize_site.py.
+plugins:
+  - search
+  - mkdoxy:
+      full-doc: true
+      projects:
+        api:
+          src-dirs: "docs/mdbx.h docs/mdbx.h++ docs/options.h docs/overall.md docs/intro.md docs/usage.md"
+          api-path: api
+          doxy-cfg-file: "docs/Doxyfile"
+          doxy-cfg:
+            GENERATE_XML: true
+            GENERATE_HTML: false
+            GENERATE_LATEX: false
+            QUIET: true
+            # the mkdoxy plugin runs doxygen from the build CWD (repo root),
+            # where the HTML-customization files are not available; HTML is
+            # disabled anyway
+            HTML_HEADER: ""
+            HTML_FOOTER: ""
