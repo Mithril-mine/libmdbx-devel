@@ -27,6 +27,23 @@ theme:
   features:
     - content.code.copy
     - navigation.sections
+  palette:
+    # Auto: follow the OS light/dark preference by default; the header toggle
+    # lets the reader pin light or dark explicitly.
+    - media: "(prefers-color-scheme)"
+      toggle:
+        icon: material/brightness-auto
+        name: Switch to light mode
+    - media: "(prefers-color-scheme: light)"
+      scheme: default
+      toggle:
+        icon: material/brightness-7
+        name: Switch to dark mode
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
+      toggle:
+        icon: material/brightness-4
+        name: Switch to light mode
 
 hooks:
   - book_hooks.py
