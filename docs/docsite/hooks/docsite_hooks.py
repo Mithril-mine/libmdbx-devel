@@ -280,7 +280,28 @@ def on_page_content(html, *, page, config, **_kwargs):
 # ---------------------------------------------------------------------------
 # hreflang <head> links (contract §4.3) - must match the sitemap §3.1
 
+# Brand block, verbatim from the landing page head (favicon set, shared PWA
+# manifest, application name) - the icons live on the app side at
+# /static-content/ and are referenced, not copied.
+_BRAND_HEAD = (
+    '<link rel="icon" href="/static-content/icon.svg" type="image/svg+xml"/>'
+    '<link rel="icon" href="/static-content/favicon-32x32.png" '
+    'type="image/png" sizes="32x32"/>'
+    '<link rel="icon" href="/static-content/favicon-16x16.png" '
+    'type="image/png" sizes="16x16"/>'
+    '<link rel="icon" href="/static-content/icon-192.png" '
+    'type="image/png" sizes="192x192"/>'
+    '<link rel="apple-touch-icon" href="/static-content/apple-touch-icon.png" '
+    'sizes="180x180" type="image/png"/>'
+    '<link rel="manifest" href="/static-content/manifest.webmanifest"/>'
+    '<meta name="application-name" content="libmdbx"/>'
+)
+
+
 def on_post_page(output, *, page, config, **_kwargs):
+    # brand links into <head> (the Material favicon link itself comes from
+    # theme.favicon); hreflang links below must stay absolute (contract §4.3)
+    output = output.replace("</head>", _BRAND_HEAD + "\n</head>", 1)
     locale = config.extra.get("locale", "en")
     other = _other(locale)
     url = page.url

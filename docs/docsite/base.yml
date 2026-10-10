@@ -13,6 +13,10 @@ use_directory_urls: false
 
 theme:
   name: material
+  # brand icons live on the app side (/static-content/), shared with the
+  # landing page - the docsite references them, it does not copy them;
+  # the hook adds the remaining icon links and the shared manifest
+  favicon: /static-content/favicon.ico
   features:
     - content.code.copy
     - navigation.sections
