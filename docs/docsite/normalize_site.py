@@ -27,6 +27,7 @@ Usage: python3 normalize_site.py [site-root]   (default: next to this file/site)
 import datetime
 import hashlib
 import os
+import posixpath
 import re
 import shutil
 import sys
@@ -250,18 +251,59 @@ def prune_theme_leftovers():
         print(f"  prune: dropped {removed} unused default theme favicon(s)")
 
 
-def drop_locale_sitemaps():
-    """MkDocs emits a sitemap per locale; the contract (§3) owns a single
-    /docs/sitemap.xml at the docsite root, generated below."""
-    removed = 0
+SITEMAP_INDEX_STUB = """<?xml version="1.0" encoding="utf-8"?>
+<sitemapindex xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+  <sitemap>
+    <loc>{root}</loc>
+  </sitemap>
+</sitemapindex>
+"""
+
+
+def _content_page_dirs():
+    """Directories containing content pages, locale-root-relative; Material's
+    alternate integration fetches sitemap.xml in the directory of every
+    link[rel=alternate] href, i.e. in the directory of every content page."""
+    dirs = set()
+    for html in SITE.rglob("*.html"):
+        rel = html.relative_to(SITE).as_posix()
+        loc = rel.split("/", 1)[0]
+        if loc not in LOCALES or rel == f"{loc}/404.html":
+            continue
+        dirs.add(posixpath.dirname(rel))
+    dirs.discard("")  # the docsite root carries the canonical sitemap
+    return sorted(dirs)
+
+
+def emit_locale_sitemaps():
+    """Material fetches sitemap.xml at the site root (config.base) on every
+    page - see the `sitemap$` wiring for instant navigation and previews -
+    so each locale root gets a copy of the canonical root sitemap. The
+    mkdocs-generated per-locale sitemaps are replaced; the .gz archives are
+    dropped."""
     for loc in LOCALES:
-        for name in ("sitemap.xml", "sitemap.xml.gz"):
-            f = SITE / loc / name
-            if f.exists():
-                f.unlink()
-                removed += 1
-    if removed:
-        print(f"  sitemap: dropped {removed} per-locale mkdocs sitemaps")
+        gz = SITE / loc / "sitemap.xml.gz"
+        if gz.exists():
+            gz.unlink()
+        shutil.copyfile(SITE / "sitemap.xml", SITE / loc / "sitemap.xml")
+    print(f"  sitemap: locale-root copies emitted ({LOCALES[0]}/{LOCALES[1]})")
+
+
+def emit_directory_stubs():
+    """Per-directory sitemap-index stubs pointing at the canonical root
+    sitemap: without them the Material alternate integration gets a 404 for
+    every content page directory (two per page view). A sitemapindex yields
+    an empty sitemap for the parser - silent - and is a semantically correct
+    pointer for any crawler stumbling on the file. Idempotent."""
+    count = 0
+    for d in _content_page_dirs():
+        stub = SITE / d / "sitemap.xml"
+        if not stub.exists():
+            stub.write_text(
+                SITEMAP_INDEX_STUB.format(root=f"{DOCS_URL}/sitemap.xml"),
+                encoding="utf-8")
+            count += 1
+    print(f"  sitemap: {count} directory stub(s) -> canonical root")
 
 
 SELECTOR_TEMPLATE = """<!doctype html>
@@ -410,9 +452,10 @@ def main():
     rewrite_links()
     localize_canonical_links()
     audit_links()
-    drop_locale_sitemaps()
     make_selector()
     make_sitemap()
+    emit_locale_sitemaps()
+    emit_directory_stubs()
     total = sum(1 for _ in SITE.rglob("*") if _.is_file())
     print(f"  normalize: done ({total} files under {SITE})")
 
