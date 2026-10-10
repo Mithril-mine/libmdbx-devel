@@ -791,13 +791,33 @@ MDBX_BOOK_DATE ?= $(shell date +%F)
 # HTML sites plus PDFs via MkDocs. Output: docs/textbook/site/{ru,en}/ with a
 # per-locale libmdbx-textbook-{ru,en}.pdf next to the HTML — the layout mirrors
 # https://libmdbx.dqdkfa.ru/textbook/{ru,en}/.
-.PHONY: books
-docsite: docs/Doxyfile docs/overall.md docs/intro.md docs/usage.md docs/mdbx.h docs/mdbx.h++ docs/options.h docs/en/reference/changelog.md docs/docsite/en/mkdocs.yml docs/docsite/ru/mkdocs.yml $(lastword $(MAKEFILE_LIST))
+# The textbook/docsite trees embed a per-locale copy of the canonical
+# examples/ - the only tracked copy lives at the repo root (it is what CI
+# builds and tests); the per-locale copies are generated, not tracked (see
+# .gitignore), both for the standalone books and for the unified docsite.
+define sync-examples
+	rm -rf docs/ru/textbook/examples docs/en/textbook/examples && \
+		cp -a examples docs/ru/textbook/examples && cp -a examples docs/en/textbook/examples
+endef
+
+# Everything the docsite build consumes: the tracked sources of both locale
+# trees plus examples/, the docsite build tooling, and the doxygen
+# intermediates (which carry their own dependency chains). A content change
+# or a file add/remove invalidates the stamp and triggers a full rebuild;
+# otherwise `make docsite` is a no-op. In a dist tree (no .git) the source
+# list is empty - drop build/docsite/.stamp to force a rebuild.
+DOCSITE_SRCS := $(sort $(shell git ls-files --cached --others --exclude-standard docs/ru docs/en examples) \
+	docs/docsite/en/mkdocs.yml docs/docsite/ru/mkdocs.yml docs/docsite/base.yml \
+	docs/docsite/hooks/docsite_hooks.py docs/docsite/normalize_site.py)
+
+build/docsite/.stamp: $(DOCSITE_SRCS) docs/Doxyfile docs/overall.md docs/intro.md docs/usage.md docs/mdbx.h docs/mdbx.h++ docs/options.h docs/en/reference/changelog.md $(lastword $(MAKEFILE_LIST))
 	@command -v mkdocs >/dev/null 2>&1 || { \
 		echo '  ERROR: mkdocs is not available. Install the toolchain:'; \
 		echo '    pip install mkdocs mkdocs-material mkdoxy'; exit 1; }
 	@command -v doxygen >/dev/null 2>&1 || { \
 		echo '  ERROR: doxygen is not available (required by the mkdoxy plugin).'; exit 1; }
+	@echo '  SYNC examples -> docs/{ru,en}/textbook/'
+	$(QUIET)$(sync-examples)
 	@echo '  DOCSITE en: MkDocs (guides + textbook + engineering + API)...'
 	$(QUIET)mkdocs build --strict -f docs/docsite/en/mkdocs.yml $(HUSH)
 	@echo '  DOCSITE ru: MkDocs (гайды + учебник + engineering + API)...'
@@ -805,12 +825,18 @@ docsite: docs/Doxyfile docs/overall.md docs/intro.md docs/usage.md docs/mdbx.h d
 	$(QUIET)cp LICENSE build/docsite/en/ && cp LICENSE build/docsite/ru/
 	@echo '  DOCSITE normalize: shared assets, flat pages, S3-safe links...'
 	$(QUIET)python3 docs/docsite/normalize_site.py
+	$(QUIET)touch $@
 	@echo '  DOCSITE done: build/docsite/{en,ru}/'
+
+.PHONY: docsite
+docsite: build/docsite/.stamp
 
 books:
 	@command -v mkdocs >/dev/null 2>&1 || { \
 		echo '  ERROR: mkdocs is not available. Install the toolchain:'; \
 		echo '    pip install mkdocs mkdocs-material mkdocs-with-pdf'; exit 1; }
+	@echo '  SYNC examples -> docs/{ru,en}/textbook/'
+	$(QUIET)$(sync-examples)
 	@echo '  BOOKS ru: MkDocs HTML + PDF...'
 	$(QUIET)MDBX_BOOK_VERSION="$(MDBX_BOOK_VERSION)" MDBX_BOOK_DATE="$(MDBX_BOOK_DATE)" \
 		mkdocs build -f docs/textbook/ru/mkdocs.yml $(HUSH)
