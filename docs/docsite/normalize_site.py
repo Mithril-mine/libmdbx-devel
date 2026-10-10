@@ -24,6 +24,7 @@ idempotent: re-running on an already normalized tree is a no-op.
 
 Usage: python3 normalize_site.py [site-root]   (default: next to this file/site)
 """
+import datetime
 import hashlib
 import os
 import re
@@ -35,6 +36,9 @@ from pathlib import Path
 _here = Path(__file__).resolve().parent
 SITE = Path(sys.argv[1]).resolve() if len(sys.argv) > 1 else _here / ".." / ".." / "build" / "docsite"
 LOCALES = ("en", "ru")
+# canonical origin and /docs/ base from docs-integration-contract §2
+SITE_URL = "https://libmdbx.dqdkfa.ru"
+DOCS_URL = SITE_URL + "/docs"
 REF_ATTRS = re.compile(r'\b(href|src|srcset|poster)="([^"]*)"')
 
 
@@ -66,21 +70,32 @@ def purge_doxy_junk():
 
 
 def dedupe_assets():
-    """One shared copy of the theme assets at site/assets."""
+    """One shared copy of the theme assets at site/assets. Idempotent: when
+    mkdocs re-created the per-locale copies over an already-normalized tree,
+    they are verified against the shared copy and dropped."""
     en, ru = SITE / "en" / "assets", SITE / "ru" / "assets"
     shared = SITE / "assets"
-    if not en.exists() and shared.exists():
+    if not en.exists() and not ru.exists():
+        if not shared.exists():
+            fail("no assets found in the site tree")
         return  # already normalized
-    if not en.exists() or not ru.exists():
-        fail("expected site/en/assets and site/ru/assets to both exist")
-    # byte-identical check
-    en_files = {p.relative_to(en): sha256(p) for p in en.rglob("*") if p.is_file()}
-    ru_files = {p.relative_to(ru): sha256(p) for p in ru.rglob("*") if p.is_file()}
+    # byte-identical check of the two locales (and of re-created copies
+    # against an existing shared copy)
+    def files_of(root):
+        return {p.relative_to(root): sha256(p) for p in root.rglob("*")
+                if p.is_file()}
+    en_files = files_of(en) if en.exists() else files_of(shared)
+    ru_files = files_of(ru) if ru.exists() else files_of(shared)
     if en_files != ru_files:
         diff = {k for k in set(en_files) ^ set(ru_files)}
         diff |= {k for k in en_files.keys() & ru_files.keys()
                  if en_files[k] != ru_files[k]}
         fail(f"assets differ between locales: {sorted(diff)[:5]} ...")
+    if shared.exists():
+        # the shared copy is a normalize product (it carries the search-index
+        # patch); the fresh per-locale copies from the build are the truth -
+        # replace the shared copy wholesale
+        shutil.rmtree(shared)
     shutil.move(str(en), str(shared))
     shutil.rmtree(ru)
     print(f"  assets: deduped -> {shared} ({len(en_files)} files)")
@@ -191,6 +206,147 @@ def audit_links():
           f"(0 directory-style, 0 dangling)")
 
 
+def drop_locale_sitemaps():
+    """MkDocs emits a sitemap per locale; the contract (§3) owns a single
+    /docs/sitemap.xml at the docsite root, generated below."""
+    removed = 0
+    for loc in LOCALES:
+        for name in ("sitemap.xml", "sitemap.xml.gz"):
+            f = SITE / loc / name
+            if f.exists():
+                f.unlink()
+                removed += 1
+    if removed:
+        print(f"  sitemap: dropped {removed} per-locale mkdocs sitemaps")
+
+
+SELECTOR_TEMPLATE = """<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>libmdbx documentation</title>
+<style>
+body {{ font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+       display: flex; min-height: 100vh; margin: 0; }}
+nav {{ margin: auto; text-align: center; }}
+h1 {{ font-weight: 400; }}
+a.lang {{ display: inline-block; margin: .5em 1em; padding: .6em 2.2em;
+          border: 1px solid #888; border-radius: .4em;
+          font-size: 1.2em; text-decoration: none; color: inherit; }}
+a.lang:hover {{ border-color: currentColor; }}
+</style>
+</head>
+<body>
+<nav>
+<h1>libmdbx documentation</h1>
+<p><a class="lang" href="/docs/ru/index.html" lang="ru">Русский</a>
+   <a class="lang" href="/docs/en/index.html" lang="en">English</a></p>
+</nav>
+<script>
+// Auto-redirect per docs-integration-contract: only when the language
+// preference clearly derives from the FIRST entry of navigator.languages
+// (ru* -> RU, en* -> EN, otherwise stay on the selector). A manual choice
+// stored in localStorage overrides the browser preference; a query string
+// or hash disables the auto-redirect entirely.
+(function () {{
+  "use strict";
+  if (location.search || location.hash) return;
+  try {{
+    var saved = localStorage.getItem("docs:lang");
+    if (saved === "ru" || saved === "en") {{
+      location.replace("/docs/" + saved + "/index.html");
+      return;
+    }}
+    var langs = navigator.languages || [navigator.language || "en"];
+    var first = (langs[0] || "en").toLowerCase();
+    if (first.indexOf("ru") === 0)
+      location.replace("/docs/ru/index.html");
+    else if (first.indexOf("en") === 0)
+      location.replace("/docs/en/index.html");
+  }} catch (e) {{ /* stay on the selector */ }}
+}})();
+</script>
+</body>
+</html>
+"""
+
+
+def make_selector():
+    """The language-selector landing at the docsite root: the single target
+    of the API-gateway redirect (docs/ -> docs/index.html). Not a content
+    page: no TechArticle/BreadcrumbList, and it enters the sitemap without
+    hreflang annotations (§3.1)."""
+    target = SITE / "index.html"
+    target.write_text(SELECTOR_TEMPLATE, encoding="utf-8")
+    print(f"  selector: {target.relative_to(SITE.parent)}")
+
+
+def _lastmod_map():
+    """Page URL -> YYYY-MM-DD from the hook manifest; pages missing from it
+    (e.g. the selector) fall back to today."""
+    manifest = SITE / ".lastmod.json"
+    try:
+        return json.loads(manifest.read_text(encoding="utf-8"))
+    except Exception:
+        return {}
+
+
+def make_sitemap():
+    """docs-integration-contract §3/§3.1: one sitemap, both locales, full
+    object paths, hreflang xhtml:link pairs + x-default -> the selector."""
+    import xml.etree.ElementTree as ET
+
+    NS = "http://www.sitemaps.org/schemas/sitemap/0.9"
+    XHTML = "http://www.w3.org/1999/xhtml"
+    ET.register_namespace("xhtml", XHTML)
+    today = datetime.date.today().strftime("%Y-%m-%d")
+    lastmod = _lastmod_map()
+
+    pages = []
+    for html in sorted(SITE.rglob("*.html")):
+        rel = html.relative_to(SITE).as_posix()
+        loc = rel.split("/", 1)[0]
+        if loc not in LOCALES:
+            continue  # the language selector (index.html) at the docsite root
+        if rel == f"{loc}/404.html":
+            continue  # the error page
+        pages.append(rel)
+
+    root = ET.Element("urlset", xmlns=NS)
+    count = 0
+    for rel in pages:
+        loc = rel.split("/", 1)[0]
+        other = "ru" if loc == "en" else "en"
+        url = ET.SubElement(root, "url")
+        ET.SubElement(url, "loc").text = f"{DOCS_URL}/{rel}"
+        ET.SubElement(url, "lastmod").text = lastmod.get(rel, today)
+        if rel.startswith(("en/reference/api/", "en/reference/changelog.html")):
+            # EN-only pages (contract amendment): hreflang en + x-default only
+            ET.SubElement(url, f"{{{XHTML}}}link",
+                          rel="alternate", hreflang="en",
+                          href=f"{DOCS_URL}/{rel}")
+        else:
+            twin = f"{other}/{rel.split('/', 1)[1]}"
+            for lang, href in ((loc, rel), (other, twin)):
+                ET.SubElement(url, f"{{{XHTML}}}link",
+                              rel="alternate", hreflang=lang,
+                              href=f"{DOCS_URL}/{href}")
+        ET.SubElement(url, f"{{{XHTML}}}link",
+                      rel="alternate", hreflang="x-default",
+                      href=f"{DOCS_URL}/index.html")
+        count += 1
+    # the language selector: present without xhtml:link annotations (§3.1)
+    url = ET.SubElement(root, "url")
+    ET.SubElement(url, "loc").text = f"{DOCS_URL}/index.html"
+    ET.SubElement(url, "lastmod").text = today
+
+    ET.indent(root)
+    path = SITE / "sitemap.xml"
+    ET.ElementTree(root).write(path, encoding="utf-8", xml_declaration=True)
+    print(f"  sitemap: {count + 1} URLs -> {path.relative_to(SITE.parent)}")
+
+
 def main():
     if not SITE.exists():
         fail(f"{SITE} not found - run `make docsite` (mkdocs) first")
@@ -199,6 +355,9 @@ def main():
     relocate_search()
     rewrite_links()
     audit_links()
+    drop_locale_sitemaps()
+    make_selector()
+    make_sitemap()
     total = sum(1 for _ in SITE.rglob("*") if _.is_file())
     print(f"  normalize: done ({total} files under {SITE})")
 
