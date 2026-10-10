@@ -70,9 +70,18 @@ _MKDOXY_LINK_FIXES = (
     # the related-pages listing links the main doxygen page by its refid
     (re.compile(r"\]\(indexpage\.md"), "](index.md"),
     # anchors mkdoxy links to but never emits (unnamed enums, operators,
-    # friends): fall back to the page-level link
-    (re.compile(r"\]\(([^)]+?)#(?:enum-@\w+|function-operator-[^)#]+|friend-[^)#]+)\)"),
+    # friends - same-page and cross-page): fall back to the page-level link
+    (re.compile(r"\]\(([^)]*?)#(?:enum-@\w+|function-operator-[^)#]+|friend-[^)#]+)\)"),
      r"](\1)"),
+    # doxygen \anchor targets are rendered by mkdoxy with a section suffix
+    # (long-lived-read -> long-lived-read-transactions): the bare anchor does
+    # not exist, link to the page instead
+    (re.compile(r"\]\(([^)]*?)#long-lived-read\)"), r"](\1)"),
+    # the license blurb links ./LICENSE which mkdocs cannot resolve; point it
+    # at the canonical shipped copy (normalize_site.py localizes it back to a
+    # relative path)
+    (re.compile(r"\]\(\.?/?LICENSE\)"),
+     "](https://libmdbx.dqdkfa.ru/docs/en/LICENSE)"),
 )
 
 # pages present only in the EN tree: no RU pair -> no translation fields,

@@ -3,7 +3,7 @@
 > Смежные: [Установка и сборка](install-build.md) ·
 > [Тулинг](../reference/tooling.md) · [Ограничения](../overview/restrictions.md) ·
 > [Учебник: Том I «Основы»](../textbook/01-tom-i-osnovy.md) ·
-> [Справочник C API](/docs/en/reference/api/group__c__api.html)
+> [Справочник C API](https://libmdbx.dqdkfa.ru/docs/en/reference/api/group__c__api.html)
 
 Всё начинается с **окружения** (`MDBX_env`): `mdbx_env_create()` →
 `mdbx_env_open()` → работа → `mdbx_env_close()`. Ненулевой аргумент `mode`
@@ -52,7 +52,7 @@ read-only; write-транзакции могут быть вложенными. 
 `mdbx_cursor_get()` позиционируется по запрошенной операции (и, для некоторых,
 по ключу): чтобы перечислить все пары — `MDBX_FIRST`, затем `MDBX_NEXT` до
 конца; чтобы получить все ключи от заданного — `MDBX_SET`. Полный список
-операций — в [справочнике](/docs/en/reference/api/group__c__crud.html).
+операций — в [справочнике](https://libmdbx.dqdkfa.ru/docs/en/reference/api/group__c__crud.html).
 
 `mdbx_cursor_put()` либо позиционирует курсор по ключу сам, либо использует
 операцию `MDBX_CURRENT` для текущей позиции (ключ обязан совпадать с текущим).

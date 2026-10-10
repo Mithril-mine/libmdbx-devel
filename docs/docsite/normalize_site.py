@@ -162,18 +162,43 @@ def rewrite_links():
             if target == "indexpage.md" and (base / "index.html").is_file():
                 fixed += 1
                 return f'{attr}="index.html"'
-            # mkdoxy file pages reference the license text by a relative
-            # ./LICENSE link; the make target ships it at the locale root
-            if target in ("./LICENSE", "LICENSE") and \
-                    (SITE / "en" / "LICENSE").is_file():
-                fixed += 1
-                return f'{attr}="/docs/en/LICENSE"'
             return m.group(0)  # leave untouched; the audit reports it
 
         new = REF_ATTRS.sub(fix, text)
         if new != text:
             html.write_text(new, encoding="utf-8")
     print(f"  links: {checked} refs checked, {fixed} adjusted for the hoist")
+
+
+def localize_canonical_links():
+    """Content links may use full canonical URLs (mkdocs skips them silently,
+    so cross-locale and mkdoxy-generated links produce no validation noise).
+    After the build, those are converted to relative paths - EXCEPT the
+    contract-owned absolute URLs: hreflang <link>s in <head> and JSON-LD
+    blocks keep the full https:// form (§2, §3.1, §4.1, §4.3). Idempotent."""
+    fixed = 0
+    checked = 0
+    for html in sorted(SITE.rglob("*.html")):
+        text = html.read_text(encoding="utf-8")
+
+        def fix(m):
+            nonlocal fixed, checked
+            checked += 1
+            abs_url = m.group(2)
+            rel = urllib.parse.urlparse(abs_url).path[len("/docs/"):]
+            target = (SITE / rel).resolve()
+            if not target.is_file():
+                return m.group(0)  # not a built page: keep the absolute URL
+            local = os.path.relpath(target, html.parent)
+            fixed += 1
+            return f'{m.group(1)}"{local}"'
+
+        new = re.sub(rf'(<(?:a|img)[^>]*?\b(?:href|src)=)"'
+                     rf'({re.escape(DOCS_URL)}/[^"]*)"', fix, text)
+        if new != text:
+            html.write_text(new, encoding="utf-8")
+    print(f"  localize: {checked} canonical content links checked, "
+          f"{fixed} made relative")
 
 
 def audit_links():
@@ -354,6 +379,7 @@ def main():
     dedupe_assets()
     relocate_search()
     rewrite_links()
+    localize_canonical_links()
     audit_links()
     drop_locale_sitemaps()
     make_selector()

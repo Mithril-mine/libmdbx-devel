@@ -1,0 +1,10 @@
+# Pinned toolchain for `make docsite` and `make books` (see base.yml and the
+# GNUmakefile docsite/books targets). The MkDocs 2.0 banner printed by
+# mkdocs-material and the mkdoxy DeprecationWarning are known upstream
+# messages; do not upgrade blindly - the normalize/verify pipeline is tuned
+# to these versions.
+mkdocs==1.6.1
+mkdocs-material==9.7.7
+mkdoxy==1.2.8
+mkdocs-with-pdf==0.9.3
+weasyprint==70
