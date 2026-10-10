@@ -214,6 +214,29 @@ def check_pages(pages, sitemap):
             fail(f"{name}: head links {links} != expected {expected} (§6.7)")
 
 
+def check_material_sitemaps(pages):
+    """Material fetches sitemap.xml at every locale root (config.base) and in
+    the directory of every content page (the alternate integration): the
+    locale roots must carry copies of the canonical sitemap, every other
+    content-page directory a stub pointing at it."""
+    root = SITE / "sitemap.xml"
+    if not root.is_file():
+        fail("sitemap.xml missing (checked by check_sitemap)")
+        return
+    for loc in LOCALES:
+        copy = SITE / loc / "sitemap.xml"
+        if not copy.is_file():
+            fail(f"sitemap: {loc}/sitemap.xml is missing (Material config.base fetch)")
+        elif copy.read_bytes() != root.read_bytes():
+            fail(f"sitemap: {loc}/sitemap.xml differs from the canonical root copy")
+    for rel in pages:
+        d = str(Path(rel).parent)
+        if d in LOCALES:
+            continue
+        if not (SITE / d / "sitemap.xml").is_file():
+            fail(f"sitemap: stub missing in {d}/ (Material alternate fetch)")
+
+
 def main():
     if not SITE.exists():
         print(f"VERIFY FAIL: {SITE} not found - run `make docsite` first")
@@ -221,6 +244,7 @@ def main():
     pages = content_pages()
     sitemap = check_sitemap(pages)
     check_pages(pages, sitemap)
+    check_material_sitemaps(pages)
     total = sum(1 for _ in SITE.rglob("*") if _.is_file())
     if errors:
         print(f"VERIFY FAIL: {len(errors)} violation(s):")
