@@ -231,6 +231,25 @@ def audit_links():
           f"(0 directory-style, 0 dangling)")
 
 
+def prune_theme_leftovers():
+    """Material ships its default favicon as a theme static file, which mkdocs
+    copies into the output on every build even though theme.favicon points at
+    the shared /static-content/ icons. Nothing references the copy - prune it.
+    Idempotent."""
+    removed = 0
+    images = SITE / "assets" / "images"
+    if images.is_dir():
+        for name in ("favicon.png", "favicon.ico"):
+            f = images / name
+            if f.exists():
+                f.unlink()
+                removed += 1
+        if not any(images.iterdir()):
+            images.rmdir()
+    if removed:
+        print(f"  prune: dropped {removed} unused default theme favicon(s)")
+
+
 def drop_locale_sitemaps():
     """MkDocs emits a sitemap per locale; the contract (§3) owns a single
     /docs/sitemap.xml at the docsite root, generated below."""
@@ -386,6 +405,7 @@ def main():
         fail(f"{SITE} not found - run `make docsite` (mkdocs) first")
     purge_doxy_junk()
     dedupe_assets()
+    prune_theme_leftovers()
     relocate_search()
     rewrite_links()
     localize_canonical_links()
