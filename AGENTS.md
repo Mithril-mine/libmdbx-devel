@@ -133,7 +133,7 @@ namespace `mdbx` with RAII handles (`env`/`env_managed`, `txn`/`txn_managed`,
 
 - `README.md` — full documentation (characteristics, platform notes, building).
 - `examples/example-mdbx.c` and `examples/example-mdbx.c++` — runnable examples.
-- C and C++ API reference (Doxygen): <https://libmdbx.dqdkfa.ru/doxygen/>.
+- C and C++ API reference: <https://libmdbx.dqdkfa.ru/docs/en/reference/>.
 - License: Apache-2.0 (see `LICENSE`/`NOTICE`/`COPYRIGHT`). Note that the test
   suite of the upstream repository is under a separate non-free license and is
   **not** part of this package.
