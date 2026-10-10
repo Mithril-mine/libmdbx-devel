@@ -280,6 +280,29 @@ def on_page_content(html, *, page, config, **_kwargs):
 # ---------------------------------------------------------------------------
 # hreflang <head> links (contract §4.3) - must match the sitemap §3.1
 
+# Yandex.Metrika counter, canonical snippet (owner-provided), id 99261645.
+# Injected as a whole right after <body> - the same placement the legacy
+# doxygen header used. Independent of docs/header.html.
+_METRIKA_BLOCK = (
+    "<!-- Яндекс Метрика -->\n"
+    '<script type="text/javascript" >\n'
+    "   (function(m,e,t,r,i,k,a){m[i]=m[i]||function(){(m[i].a=m[i].a||[]).push(arguments)};\n"
+    "   m[i].l=1*new Date();k=e.createElement(t),a=e.getElementsByTagName(t)[0],"
+    "k.async=1,k.src=r,a.parentNode.insertBefore(k,a)})\n"
+    '   (window, document, "script", "https://mc.yandex.ru/metrika/tag.js", "ym");\n'
+    "\n"
+    '   ym(99261645, "init", {\n'
+    "       clickmap:true,\n"
+    "       trackLinks:true,\n"
+    "       accurateTrackBounce:true,\n"
+    "       webvisor:true\n"
+    "   });\n"
+    "</script>\n"
+    '<noscript><div><img src="https://mc.yandex.ru/watch/99261645" '
+    'style="position:absolute; left:-9999px;" alt="" /></div></noscript>\n'
+    "<!-- /Яндекс Метрика -->"
+)
+
 # Brand block, verbatim from the landing page head (favicon set, shared PWA
 # manifest, application name) - the icons live on the app side at
 # /static-content/ and are referenced, not copied.
@@ -302,6 +325,10 @@ def on_post_page(output, *, page, config, **_kwargs):
     # brand links into <head> (the Material favicon link itself comes from
     # theme.favicon); hreflang links below must stay absolute (contract §4.3)
     output = output.replace("</head>", _BRAND_HEAD + "\n</head>", 1)
+    # analytics counter: the whole block (script + noscript) right after the
+    # body open tag, as on the legacy doxygen pages
+    output = re.sub(r"(<body[^>]*>)", lambda m: m.group(1) + "\n" + _METRIKA_BLOCK,
+                    output, count=1)
     locale = config.extra.get("locale", "en")
     other = _other(locale)
     url = page.url
