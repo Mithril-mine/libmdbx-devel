@@ -761,11 +761,25 @@ docs/usage.md: docs/__usage.md docs/_starting.md docs/__bindings.md
 	@echo '  MAKE $@'
 	$(QUIET)echo -e "\\page usage Usage\n\\section getting Building & Embedding" | cat - $^ | $(SED) 's/^Bindings$$/Bindings {#bindings}/' >$@
 
-doxygen: docs/Doxyfile docs/overall.md docs/intro.md docs/usage.md $(DIST_DIR)/mdbx.h $(DIST_DIR)/mdbx.h++ src/options.h ChangeLog.md COPYRIGHT LICENSE NOTICE docs/ld+json $(lastword $(MAKEFILE_LIST))
+docs/mdbx.h: $(DIST_DIR)/mdbx.h $(lastword $(MAKEFILE_LIST))
+	@echo '  MAKE $@'
+	$(QUIET)cat $< | tr '\n' '\r' | $(SED) -e 's/LIBMDBX_INLINE_API\s*(\s*\([^,]\+\),\s*\([^,]\+\),\s*(\s*\([^)]\+\)\s*)\s*)\s*{/inline \1 \2(\3) {/g' | tr '\r' '\n' >$@
+
+docs/mdbx.h++: $(DIST_DIR)/mdbx.h++ $(lastword $(MAKEFILE_LIST))
+	@echo '  MAKE $@'
+	$(QUIET)cp $< $@
+
+docs/options.h: src/options.h $(lastword $(MAKEFILE_LIST))
+	@echo '  MAKE $@'
+	$(QUIET)cp $< $@
+
+docs/ChangeLog.md: ChangeLog.md $(lastword $(MAKEFILE_LIST))
+	@echo '  MAKE $@'
+	$(QUIET)cp $< $@
+
+doxygen: docs/Doxyfile docs/overall.md docs/intro.md docs/usage.md docs/mdbx.h docs/mdbx.h++ docs/options.h docs/ChangeLog.md COPYRIGHT LICENSE NOTICE docs/ld+json $(lastword $(MAKEFILE_LIST))
 	@echo '  RUNNING doxygen...'
-	$(QUIET)rm -rf docs/html && \
-	cat $(DIST_DIR)/mdbx.h | tr '\n' '\r' | $(SED) -e 's/LIBMDBX_INLINE_API\s*(\s*\([^,]\+\),\s*\([^,]\+\),\s*(\s*\([^)]\+\)\s*)\s*)\s*{/inline \1 \2(\3) {/g' | tr '\r' '\n' >docs/mdbx.h && \
-	cp $(DIST_DIR)/mdbx.h++ src/options.h ChangeLog.md docs/ && (cd docs && doxygen Doxyfile $(HUSH)) && cp COPYRIGHT LICENSE NOTICE docs/html/ && \
+	$(QUIET)rm -rf docs/html && (cd docs && doxygen Doxyfile $(HUSH)) && cp COPYRIGHT LICENSE NOTICE docs/html/ && \
 	$(SED) -i docs/html/index.html -e '/\/MathJax.js"><\/script>/r docs/ld+json' -e 's/<title>libmdbx: Overall<\/title>//;T;r docs/title' && \
 	$(SED) -i docs/html/sitemap.xml -e '/^\s*<\/urlset>/e cat docs/sitemap.add'
 
@@ -777,6 +791,21 @@ MDBX_BOOK_DATE ?= $(shell date +%F)
 # per-locale libmdbx-textbook-{ru,en}.pdf next to the HTML — the layout mirrors
 # https://libmdbx.dqdkfa.ru/textbook/{ru,en}/.
 .PHONY: books
+docsite: docs/Doxyfile docs/overall.md docs/intro.md docs/usage.md docs/mdbx.h docs/mdbx.h++ docs/options.h docs/ChangeLog.md docs/docsite/en/mkdocs.yml docs/docsite/ru/mkdocs.yml $(lastword $(MAKEFILE_LIST))
+	@command -v mkdocs >/dev/null 2>&1 || { \
+		echo '  ERROR: mkdocs is not available. Install the toolchain:'; \
+		echo '    pip install mkdocs mkdocs-material mkdoxy'; exit 1; }
+	@command -v doxygen >/dev/null 2>&1 || { \
+		echo '  ERROR: doxygen is not available (required by the mkdoxy plugin).'; exit 1; }
+	@echo '  DOCSITE en: MkDocs (guides + textbook + engineering + API)...'
+	$(QUIET)mkdocs build -f docs/docsite/en/mkdocs.yml $(HUSH)
+	@echo '  DOCSITE ru: MkDocs (гайды + учебник + engineering + API)...'
+	$(QUIET)mkdocs build -f docs/docsite/ru/mkdocs.yml $(HUSH)
+	$(QUIET)cp LICENSE build/docsite/en/ && cp LICENSE build/docsite/ru/
+	@echo '  DOCSITE normalize: shared assets, flat pages, S3-safe links...'
+	$(QUIET)python3 docs/docsite/normalize_site.py
+	@echo '  DOCSITE done: build/docsite/{en,ru}/'
+
 books:
 	@command -v mkdocs >/dev/null 2>&1 || { \
 		echo '  ERROR: mkdocs is not available. Install the toolchain:'; \

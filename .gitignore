@@ -19,7 +19,17 @@ dist/
 *.dll
 docs/Doxyfile
 docs/html/
+docs/xml/
 docs/textbook/site/
+# doxygen/docsite build intermediates
+docs/__*.md
+docs/overall.md
+docs/intro.md
+docs/usage.md
+docs/mdbx.h
+docs/mdbx.h++
+docs/options.h
+docs/ChangeLog.md
 *.dSYM
 *.dylib
 *.err
