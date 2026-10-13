@@ -4,7 +4,7 @@ all help options cmake-build ninja \
 clean install install-no-strip install-strip strip tools uninstall \
 bench bench-clean bench-couple bench-quartet bench-triplet re-bench \
 lib libs lib-static lib-shared tools-static \
-libmdbx mdbx mdbx_chk mdbx_copy mdbx_drop mdbx_dump mdbx_load mdbx_stat \
+libmdbx mdbx mdbx_chk mdbx_copy mdbx_drop mdbx_dump mdbx_load mdbx_stat mdbx_defrag \
 check dist memcheck cross-gcc cross-qemu gcc-analyzer reformat docsite books \
 release-assets tags build-test mdbx_test \
 smoke smoke-fault smoke-singleprocess smoke-assertion smoke-memcheck \

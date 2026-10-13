@@ -170,7 +170,7 @@ linkage; in amalgamated build (`xMDBX_ALLOY`) = `static`.
 | `src/tools/stat.c` | `mdbx_stat` | Stats CLI. |
 | `src/tools/defrag.c` | `mdbx_defrag` | Defrag CLI (uses `defrag.c` engine). |
 | `src/tools/wingetopt.c` / `.h` | — | `getopt` implementation for Windows. |
-| `src/man1/mdbx_*.1` | — | Man pages for the six utilities. |
+| `src/man1/mdbx_*.1` | — | Man pages for the seven utilities. |
 
 ---
 

@@ -153,6 +153,7 @@ elseif(
   AND EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/src/man1/mdbx_dump.1"
   AND EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/src/man1/mdbx_load.1"
   AND EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/src/man1/mdbx_stat.1"
+  AND EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/src/man1/mdbx_defrag.1"
   AND EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/src/mdbx.c++"
   AND EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/src/meta.c"
   AND EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/src/meta.h"
@@ -1430,6 +1431,7 @@ if(MDBX_BUILD_TOOLS)
       FILES "${MDBX_SOURCE_DIR}/man1/mdbx_chk.1" "${MDBX_SOURCE_DIR}/man1/mdbx_stat.1"
             "${MDBX_SOURCE_DIR}/man1/mdbx_copy.1" "${MDBX_SOURCE_DIR}/man1/mdbx_dump.1"
             "${MDBX_SOURCE_DIR}/man1/mdbx_load.1" "${MDBX_SOURCE_DIR}/man1/mdbx_drop.1"
+            "${MDBX_SOURCE_DIR}/man1/mdbx_defrag.1"
       DESTINATION ${MDBX_MAN_INSTALL_DESTINATION}
       COMPONENT doc)
   endif()
