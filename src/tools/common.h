@@ -104,8 +104,8 @@ static inline void tool_version_print(const char *tool) {
 }
 
 /* Default logger shared by the tools that do not need custom formatting. */
-static inline void tool_logger_default(MDBX_log_level_t level, const char *function, int line, const char *fmt,
-                                       va_list args) {
+MDBX_MAYBE_UNUSED static inline void tool_logger_default(MDBX_log_level_t level, const char *function, int line,
+                                                         const char *fmt, va_list args) {
   static const char *const prefixes[] = {
       "!!!fatal: ", // 0 fatal
       " ! ",        // 1 error
