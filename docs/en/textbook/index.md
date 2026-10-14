@@ -5,6 +5,7 @@
 > All code examples are compilable C++17/C11 programs in the
 > [`examples/`](examples/README.txt) directory; fragments in the text are marked as
 > "Fragment" and supplemented with links to the full code.
+> A [PDF edition of the textbook](libmdbx-textbook-en.pdf) is available for offline reading.
 
 ---
 

@@ -233,8 +233,8 @@ help:
 	@echo "  make gcc-analyzer        - run gcc-analyzer (mostly useless for now)"
 	@echo ""
 	@echo "  make dist                - build amalgamated source code"
-	@echo "  make docsite             - build the unified documentation site (build/docsite/{en,ru})"
-	@echo "  make books               - build the textbook (HTML + PDF, docs/textbook/site/{ru,en})"
+	@echo "  make docsite             - build the unified documentation site (build/docsite/{en,ru}, incl. textbook PDFs)"
+	@echo "  make books               - build the textbook (HTML + PDF, build/textbook/{ru,en})"
 	@echo "  make release-assets      - build release assets"
 	@echo "  make reformat            - reformat source code with clang-format"
 #< dist-cutoff-end
@@ -723,8 +723,9 @@ mdbx-static.o: src/config-gnumake.h src/version.c src/alloy.c $(ALLOY_DEPS) $(la
 	@echo '  CC $@'
 	$(QUIET)$(CC) $(CFLAGS) $(MDBX_BUILD_OPTIONS) '-DMDBX_CONFIG_H="config-gnumake.h"' -ULIBMDBX_EXPORTS -c src/alloy.c -o $@
 
-docs/Doxyfile: docs/Doxyfile.in src/version.c $(lastword $(MAKEFILE_LIST))
+build/docsite-inputs/Doxyfile: docs/Doxyfile.in src/version.c $(lastword $(MAKEFILE_LIST))
 	@echo '  MAKE $@'
+	$(QUIET)mkdir -p $(@D)
 	$(QUIET)$(SED) \
 		-e "s|@MDBX_GIT_TIMESTAMP@|$(MDBX_GIT_TIMESTAMP)|" \
 		-e "s|@MDBX_GIT_TREE@|$(shell git show --no-patch --format=%T HEAD || echo 'Please install latest git version')|" \
@@ -739,8 +740,9 @@ docs/Doxyfile: docs/Doxyfile.in src/version.c $(lastword $(MAKEFILE_LIST))
 	docs/Doxyfile.in >$@
 
 define md-extract-section
-docs/__$(1).md: $(2) $(lastword $(MAKEFILE_LIST))
+build/docsite-inputs/__$(1).md: $(2) $(lastword $(MAKEFILE_LIST))
 	@echo '  EXTRACT $1'
+	$(QUIET)mkdir -p $$(@D)
 	$(QUIET)$(SED) -n '/<!-- section-begin $(1) -->/,/<!-- section-end -->/p' $(2) >$$@ && test -s $$@
 
 endef
@@ -750,29 +752,33 @@ docs/contrib.fame: src/version.c $(lastword $(MAKEFILE_LIST))
 	@echo '  MAKE $@'
 	$(QUIET)echo "" > $@ && git fame --show-email --format=md --silent-progress -w -M -C | grep '^|' >> $@
 
-docs/overall.md: docs/__overview.md docs/_toc.md docs/__mithril.md docs/__history.md COPYRIGHT LICENSE NOTICE $(lastword $(MAKEFILE_LIST))
+build/docsite-inputs/overall.md: build/docsite-inputs/__overview.md docs/_toc.md build/docsite-inputs/__mithril.md build/docsite-inputs/__history.md COPYRIGHT LICENSE NOTICE $(lastword $(MAKEFILE_LIST))
 	@echo '  MAKE $@'
+	$(QUIET)mkdir -p $(@D)
 	$(QUIET)echo -e "\\mainpage Overall\n\\section brief Brief" | cat - $(filter %.md, $^) >$@ && echo -e "\n\n\nLicense\n=======\n" | cat - LICENSE >>$@
 
-docs/intro.md: docs/_preface.md docs/__characteristics.md docs/__improvements.md docs/_restrictions.md
+build/docsite-inputs/intro.md: docs/_preface.md build/docsite-inputs/__characteristics.md build/docsite-inputs/__improvements.md docs/_restrictions.md
 	@echo '  MAKE $@'
+	$(QUIET)mkdir -p $(@D)
 	$(QUIET)cat $^ | $(SED) 's/^Performance comparison$$/Performance comparison {#performance}/;s/^Improvements beyond LMDB$$/Improvements beyond LMDB {#improvements}/' >$@
 
-docs/usage.md: docs/__usage.md docs/_starting.md docs/__bindings.md
+build/docsite-inputs/usage.md: build/docsite-inputs/__usage.md docs/_starting.md build/docsite-inputs/__bindings.md
 	@echo '  MAKE $@'
+	$(QUIET)mkdir -p $(@D)
 	$(QUIET)echo -e "\\page usage Usage\n\\section getting Building & Embedding" | cat - $^ | $(SED) 's/^Bindings$$/Bindings {#bindings}/' >$@
 
-docs/mdbx.h: $(DIST_DIR)/mdbx.h $(lastword $(MAKEFILE_LIST))
+build/docsite-inputs/mdbx.h: $(DIST_DIR)/mdbx.h $(lastword $(MAKEFILE_LIST))
 	@echo '  MAKE $@'
+	$(QUIET)mkdir -p $(@D)
 	$(QUIET)cat $< | tr '\n' '\r' | $(SED) -e 's/LIBMDBX_INLINE_API\s*(\s*\([^,]\+\),\s*\([^,]\+\),\s*(\s*\([^)]\+\)\s*)\s*)\s*{/inline \1 \2(\3) {/g' | tr '\r' '\n' >$@
 
-docs/mdbx.h++: $(DIST_DIR)/mdbx.h++ $(lastword $(MAKEFILE_LIST))
+build/docsite-inputs/mdbx.h++: $(DIST_DIR)/mdbx.h++ $(lastword $(MAKEFILE_LIST))
 	@echo '  MAKE $@'
-	$(QUIET)cp $< $@
+	$(QUIET)mkdir -p $(@D) && cp $< $@
 
-docs/options.h: src/options.h $(lastword $(MAKEFILE_LIST))
+build/docsite-inputs/options.h: src/options.h $(lastword $(MAKEFILE_LIST))
 	@echo '  MAKE $@'
-	$(QUIET)cp $< $@
+	$(QUIET)mkdir -p $(@D) && cp $< $@
 
 # the change log is published in the EN reference tree only (English-only)
 docs/en/reference/changelog.md: ChangeLog.md $(lastword $(MAKEFILE_LIST))
@@ -782,10 +788,10 @@ docs/en/reference/changelog.md: ChangeLog.md $(lastword $(MAKEFILE_LIST))
 MDBX_BOOK_VERSION ?= $(MDBX_GIT_DESCRIBE)
 MDBX_BOOK_DATE ?= $(shell date +%F)
 
-# Builds both localizations of the textbook (docs/textbook/{ru,en}) as static
-# HTML sites plus PDFs via MkDocs. Output: docs/textbook/site/{ru,en}/ with a
-# per-locale libmdbx-textbook-{ru,en}.pdf next to the HTML — the layout mirrors
-# https://libmdbx.dqdkfa.ru/textbook/{ru,en}/.
+# Builds both localizations of the textbook (docs/textbook/{ru,en} configs) as
+# static HTML sites plus PDFs via MkDocs. Output: build/textbook/{ru,en}/ with
+# a per-locale libmdbx-textbook-{ru,en}.pdf next to the HTML — the layout
+# mirrors https://libmdbx.dqdkfa.ru/textbook/{ru,en}/.
 # The textbook/docsite trees embed a per-locale copy of the canonical
 # examples/ - the only tracked copy lives at the repo root (it is what CI
 # builds and tests); the per-locale copies are generated, not tracked (see
@@ -813,7 +819,7 @@ DOCSITE_SRCS := $(sort $(shell git ls-files --cached --others --exclude-standard
 	docs/docsite/normalize_site.py \
 	docs/docsite/verify_contract.py docs/docsite/contract-amendment.md)
 
-build/docsite/.stamp: $(DOCSITE_SRCS) docs/Doxyfile docs/overall.md docs/intro.md docs/usage.md docs/mdbx.h docs/mdbx.h++ docs/options.h docs/en/reference/changelog.md $(lastword $(MAKEFILE_LIST))
+build/docsite/.stamp: $(DOCSITE_SRCS) build/docsite-inputs/Doxyfile build/docsite-inputs/overall.md build/docsite-inputs/intro.md build/docsite-inputs/usage.md build/docsite-inputs/mdbx.h build/docsite-inputs/mdbx.h++ build/docsite-inputs/options.h docs/en/reference/changelog.md $(lastword $(MAKEFILE_LIST))
 	@command -v mkdocs >/dev/null 2>&1 || { \
 		echo '  ERROR: mkdocs is not available. Install the toolchain:'; \
 		echo '    pip install mkdocs mkdocs-material mkdoxy'; exit 1; }
@@ -821,6 +827,15 @@ build/docsite/.stamp: $(DOCSITE_SRCS) docs/Doxyfile docs/overall.md docs/intro.m
 		echo '  ERROR: doxygen is not available (required by the mkdoxy plugin).'; exit 1; }
 	@echo '  SYNC examples -> docs/{ru,en}/textbook/'
 	$(QUIET)$(sync-examples)
+	@echo '  BOOKS {ru,en}: MkDocs HTML + PDF...'
+	$(QUIET)MDBX_BOOK_VERSION="$(MDBX_BOOK_VERSION)" MDBX_BOOK_DATE="$(MDBX_BOOK_DATE)" \
+		mkdocs build -f docs/textbook/ru/mkdocs.yml $(HUSH)
+	$(QUIET)MDBX_BOOK_VERSION="$(MDBX_BOOK_VERSION)" MDBX_BOOK_DATE="$(MDBX_BOOK_DATE)" \
+		mkdocs build -f docs/textbook/en/mkdocs.yml $(HUSH)
+	$(QUIET)python3 docs/textbook/normalize_site.py
+	@echo '  DOCSITE pdf: stage textbook PDFs into docs/{en,ru}/textbook/'
+	$(QUIET)cp build/textbook/ru/libmdbx-textbook-ru.pdf docs/ru/textbook/
+	$(QUIET)cp build/textbook/en/libmdbx-textbook-en.pdf docs/en/textbook/
 	@echo '  DOCSITE en: MkDocs (guides + textbook + engineering + API)...'
 	$(QUIET)mkdocs build --strict -f docs/docsite/en/mkdocs.yml $(HUSH)
 	@echo '  DOCSITE ru: MkDocs (гайды + учебник + engineering + API)...'
@@ -831,7 +846,7 @@ build/docsite/.stamp: $(DOCSITE_SRCS) docs/Doxyfile docs/overall.md docs/intro.m
 	@echo '  DOCSITE verify: docs-integration-contract checklist (section 6)...'
 	$(QUIET)python3 docs/docsite/verify_contract.py
 	$(QUIET)touch $@
-	@echo '  DOCSITE done: build/docsite/{en,ru}/'
+	@echo '  DOCSITE done: build/docsite/{en,ru}/ (incl. textbook PDFs)'
 
 .PHONY: docsite
 docsite: build/docsite/.stamp
@@ -840,6 +855,9 @@ books:
 	@command -v mkdocs >/dev/null 2>&1 || { \
 		echo '  ERROR: mkdocs is not available. Install the toolchain:'; \
 		echo '    pip install mkdocs mkdocs-material mkdocs-with-pdf'; exit 1; }
+	@python3 -c "import weasyprint" 2>/dev/null || { \
+		echo '  ERROR: weasyprint (PDF engine) is not usable. Install it and its'; \
+		echo '    system deps, e.g. on Debian/Ubuntu: libpangoft2-1.0-0'; exit 1; }
 	@echo '  SYNC examples -> docs/{ru,en}/textbook/'
 	$(QUIET)$(sync-examples)
 	@echo '  BOOKS ru: MkDocs HTML + PDF...'
@@ -850,7 +868,7 @@ books:
 		mkdocs build -f docs/textbook/en/mkdocs.yml $(HUSH)
 	@echo '  BOOKS normalize: shared assets/examples, flat pages, S3-safe links...'
 	$(QUIET)python3 docs/textbook/normalize_site.py
-	@echo '  BOOKS done: docs/textbook/site/{ru,en}/'
+	@echo '  BOOKS done: build/textbook/{ru,en}/ (HTML + libmdbx-textbook-{ru,en}.pdf)'
 
 mdbx++-dylib.o: src/config-gnumake.h src/mdbx.c++ $(HEADERS) $(lastword $(MAKEFILE_LIST))
 	@echo '  CC $@'

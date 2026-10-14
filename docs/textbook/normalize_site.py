@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """Post-build normalizer for the libmdbx textbook site (make books).
 
-Runs after both MkDocs builds (site/{en,ru}) and reshapes the output for
-S3-bucket hosting (no directory -> index.html rewrites available):
+Runs after both MkDocs builds (build/textbook/{en,ru}) and reshapes the output
+for S3-bucket hosting (no directory -> index.html rewrites available):
 
 1. assets:  site/{en,ru}/assets must be identical -> moved to site/assets
             (single copy), per-locale copies removed;
@@ -19,6 +19,8 @@ S3-bucket hosting (no directory -> index.html rewrites available):
             reported and make the script exit non-zero.
 
 The script is idempotent: re-running on an already normalized tree is a no-op.
+
+Usage: python3 normalize_site.py [site-root]   (default: repo root / build/textbook)
 """
 import hashlib
 import os
@@ -29,7 +31,8 @@ import sys
 import urllib.parse
 from pathlib import Path
 
-SITE = Path(__file__).resolve().parent / "site"
+_here = Path(__file__).resolve().parent
+SITE = Path(sys.argv[1]).resolve() if len(sys.argv) > 1 else _here.parents[1] / "build" / "textbook"
 LOCALES = ("en", "ru")
 REF_ATTRS = re.compile(r'\b(href|src|srcset|poster)="([^"]*)"')
 
@@ -53,6 +56,10 @@ def dedupe_assets():
     shared = SITE / "assets"
     if not en.exists() and shared.exists():
         return  # already normalized
+    if shared.exists():
+        # stale hoist from a previous run while mkdocs has rebuilt the
+        # per-locale trees again
+        shutil.rmtree(shared)
     if not en.exists() or not ru.exists():
         fail("expected site/en/assets and site/ru/assets to both exist")
     # byte-identical check
@@ -72,6 +79,9 @@ def dedupe_examples():
     """Hoist byte-identical example files to site/examples, keep the
     locale-specific ones (localized rendered index.html) per locale."""
     shared = SITE / "examples"
+    if shared.exists() and SITE.joinpath("en", "examples").exists():
+        # stale hoist from a previous run (see dedupe_assets)
+        shutil.rmtree(shared)
     moved = kept = 0
     for loc in LOCALES:
         root = SITE / loc / "examples"

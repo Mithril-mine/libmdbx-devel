@@ -151,9 +151,11 @@ def _git_date(config, src_path) -> str:
     elif src_path.parts[-3:-1] == ("assets", ".doxy") or \
             "/reference/api/" in str(src_path):
         # mkdoxy work area: the API reference derives from the doxygen inputs
+        # (staged into build/docsite-inputs by make); use the tracked canonical
+        # sources for the last-modified date
         base = str(config.docs_dir).rsplit("/docs/", 1)[0]
-        candidates = [f"{base}/docs/mdbx.h", f"{base}/docs/mdbx.h++",
-                      f"{base}/docs/options.h"]
+        candidates = [f"{base}/mdbx.h", f"{base}/mdbx.h++",
+                      f"{base}/src/options.h"]
     for path in candidates:
         if repo and not path.startswith("/"):
             path = f"{repo}/{path}"
@@ -244,6 +246,17 @@ def on_page_content(html, *, page, config, **_kwargs):
         f'<a href="{prefix}{twin}">{other.upper()}</a></div>'
     )
 
+    # the textbook PDF ships next to the flat textbook pages (the docsite
+    # build copies it into build/docsite/{loc}/textbook/)
+    pdf = ""
+    if url.startswith("textbook/"):
+        pdf = (
+            '<div class="book-pdf-link" '
+            'style="margin:0 0 1.5em;padding:.3em 1em;font-size:.72em;opacity:.9;'
+            'border:1px solid currentColor;border-radius:.3em;display:inline-block;">'
+            f'<a href="libmdbx-textbook-{locale}.pdf">PDF</a></div>'
+        )
+
     if url != "404.html" and url not in _LASTMOD:
         # page_content fires before page_context in mkdocs, so the date is
         # collected here for both the article and the sitemap manifest
@@ -274,7 +287,7 @@ def on_page_content(html, *, page, config, **_kwargs):
           + json.dumps({"@context": "https://schema.org", "@graph": graph},
                        ensure_ascii=False)
           + "</script>")
-    return pill + html + ld
+    return pill + pdf + html + ld
 
 
 # ---------------------------------------------------------------------------

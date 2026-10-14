@@ -2,7 +2,7 @@
 # Build (HTML + PDF): make books   — or manually:
 #   MDBX_BOOK_VERSION=$(git describe --tags --long) MDBX_BOOK_DATE=$(date +%F) \
 #     mkdocs build -f docs/textbook/en/mkdocs.yml
-# Output: docs/textbook/site/en/ (post-processed by normalize_site.py —
+# Output: build/textbook/en/ (post-processed by normalize_site.py —
 # shared assets/examples hoisted one level up, flat .html pages, S3-safe links)
 
 site_name: libmdbx Textbook
@@ -10,7 +10,7 @@ site_url: https://libmdbx.dqdkfa.ru/textbook/en/
 site_description: >-
   A practical guide to the libmdbx embedded transactional database — from the
   first steps to expert topics and bindings.
-site_dir: ../site/en
+site_dir: ../../../build/textbook/en
 docs_dir: ../../en/textbook
 # Flat .html pages (no per-page subdirs): the site is hosted from an S3 bucket
 # without directory -> index.html rewrites, so every link must address a file.

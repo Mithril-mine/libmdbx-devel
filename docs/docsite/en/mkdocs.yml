@@ -2,8 +2,9 @@
 # Build (from the repo root): make docsite  — or manually:
 #   mkdocs build -f docs/docsite/en/mkdocs.yml
 # Output: build/docsite/en/ (post-processed by normalize_site.py)
-# Prerequisites (prepared by make): docs/mdbx.h docs/mdbx.h++ docs/options.h
-# and the generated docs/Doxyfile (consumed by the mkdoxy plugin).
+# Prerequisites (prepared by make): build/docsite-inputs/mdbx.h
+# build/docsite-inputs/mdbx.h++ build/docsite-inputs/options.h
+# and the generated build/docsite-inputs/Doxyfile (consumed by the mkdoxy plugin).
 
 INHERIT: ../base.yml
 
@@ -30,9 +31,9 @@ plugins:
       full-doc: true
       projects:
         api:
-          src-dirs: "docs/mdbx.h docs/mdbx.h++ docs/options.h docs/overall.md docs/intro.md docs/usage.md"
+          src-dirs: "build/docsite-inputs/mdbx.h build/docsite-inputs/mdbx.h++ build/docsite-inputs/options.h build/docsite-inputs/overall.md build/docsite-inputs/intro.md build/docsite-inputs/usage.md"
           api-path: reference/api
-          doxy-cfg-file: "docs/Doxyfile"
+          doxy-cfg-file: "build/docsite-inputs/Doxyfile"
           doxy-cfg:
             GENERATE_XML: true
             GENERATE_HTML: false
