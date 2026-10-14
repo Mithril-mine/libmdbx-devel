@@ -49,6 +49,7 @@ Cutting-edge release with new core features and internal refactoring.
  - Fixed `mdbx_replace_ex()` with overlapping buffers possibly hanging or crashing the next operation on the same sub-table (issue #56).
  - Fixed a crafted database file that passed validation and could corrupt data or crash when deleted (issue #57).
  - Fixed MSVC+AddressSanitizer builds failing to compile (issue #62).
+ - Fixed `mdbx_env_copy()`/`mdbx_copy -f` possibly deleting a pre-existing destination database when `MDBX_CP_OVERWRITE` could not lock it (issue #58).
 
 
 --------------------------------------------------------------------------------
