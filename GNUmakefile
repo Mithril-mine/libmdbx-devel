@@ -790,11 +790,15 @@ MDBX_BOOK_DATE ?= $(shell date +%F)
 # examples/ - the only tracked copy lives at the repo root (it is what CI
 # builds and tests); the per-locale copies are generated, not tracked (see
 # .gitignore), both for the standalone books and for the unified docsite.
+# localize_examples.py makes each copy locale-pure: it drops comment lines
+# marked with the other language ('// EN:' in the 'ru' copy and '// RU:' in
+# the 'en' copy), strips the language marker from the kept comments, and
+# substitutes the per-locale prose translations (README.<locale>.md,
+# sample-bdb.ru.txt) tracked next to the canonical files.
 define sync-examples
-	rm -rf docs/ru/textbook/examples docs/en/textbook/examples && \
-		cp -a examples docs/ru/textbook/examples && cp -a examples docs/en/textbook/examples && \
-		find docs/ru/textbook/examples docs/en/textbook/examples -name README.md \
-			| while read f; do mv $$f $${f%.md}.txt; done
+	$(QUIET)rm -rf docs/ru/textbook/examples docs/en/textbook/examples
+	$(QUIET)python3 docs/docsite/localize_examples.py ru examples docs/ru/textbook/examples
+	$(QUIET)python3 docs/docsite/localize_examples.py en examples docs/en/textbook/examples
 endef
 
 # Everything the docsite build consumes: the tracked sources of both locale
@@ -805,7 +809,8 @@ endef
 # list is empty - drop build/docsite/.stamp to force a rebuild.
 DOCSITE_SRCS := $(sort $(shell git ls-files --cached --others --exclude-standard docs/ru docs/en examples) \
 	docs/docsite/en/mkdocs.yml docs/docsite/ru/mkdocs.yml docs/docsite/base.yml \
-	docs/docsite/hooks/docsite_hooks.py docs/docsite/normalize_site.py \
+	docs/docsite/hooks/docsite_hooks.py docs/docsite/localize_examples.py \
+	docs/docsite/normalize_site.py \
 	docs/docsite/verify_contract.py docs/docsite/contract-amendment.md)
 
 build/docsite/.stamp: $(DOCSITE_SRCS) docs/Doxyfile docs/overall.md docs/intro.md docs/usage.md docs/mdbx.h docs/mdbx.h++ docs/options.h docs/en/reference/changelog.md $(lastword $(MAKEFILE_LIST))

@@ -112,3 +112,19 @@ Platform notes:
 - Examples that involve `fork()`/process spawning and recovery (`S15`, `S26`,
   `S27`) degrade gracefully on Windows: the process-related parts are skipped
   with a message, the rest still runs.
+
+### Localization for the docsite & textbooks
+
+The per-locale copies in `docs/{ru,en}/textbook/examples` (see `make docsite` /
+`make books`) are generated from this canonical tree by
+[`docs/docsite/localize_examples.py`](../docs/docsite/localize_examples.py):
+
+- comments marked `// EN:`/`// RU:` are filtered per locale and the marker is
+  stripped (`// RU: текст` → `// текст` in the `ru` copy and vice versa);
+- prose files are taken from the per-locale translations tracked next to the
+  canonical ones: `README.<locale>.md` for the READMEs (shipped as
+  `README.txt`) and `sample-bdb.ru.txt` for the Berkeley DB sample in the `ru`
+  copy.
+
+The canonical bilingual tree is the single source of truth — CI builds and
+tests it as-is.

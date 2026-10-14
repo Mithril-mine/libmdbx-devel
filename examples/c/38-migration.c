@@ -5,10 +5,12 @@
 //
 // EN: Map of macros/names when porting code from LMDB (full table — in §31.4):
 // RU: Карта макросов/имён при переносе кода с LMDB (полная таблица — в §31.4):
+// EN: Note: mdb_env_set_mapsize → mdbx_env_set_geometry is not a plain rename, but a different API.
+// RU: Примечание: mdb_env_set_mapsize → mdbx_env_set_geometry — не просто переименование, а другой API.
 //   mdb_env_create      → mdbx_env_create
 //   mdb_env_open        → mdbx_env_open
 //   mdb_env_close       → mdbx_env_close
-//   mdb_env_set_mapsize → mdbx_env_set_geometry (другой API! / different API!)
+//   mdb_env_set_mapsize → mdbx_env_set_geometry
 //   mdb_txn_begin       → mdbx_txn_begin
 //   mdb_txn_commit      → mdbx_txn_commit
 //   mdb_txn_abort       → mdbx_txn_abort
@@ -16,7 +18,9 @@
 //   mdb_get/put/del     → mdbx_get/mdbx_put/mdbx_del
 //   mdb_cursor_open/get → mdbx_cursor_open/mdbx_cursor_get
 //   MDB_NOTLS           → MDBX_NOSTICKYTHREADS
-//   MDB_NOSYNC          → MDBX_SAFE_NOSYNC или MDBX_UTTERLY_NOSYNC (или / or)
+// EN: Note: instead of MDB_NOSYNC use MDBX_SAFE_NOSYNC or MDBX_UTTERLY_NOSYNC.
+// RU: Примечание: вместо MDB_NOSYNC используйте MDBX_SAFE_NOSYNC или MDBX_UTTERLY_NOSYNC.
+//   MDB_NOSYNC          → MDBX_SAFE_NOSYNC / MDBX_UTTERLY_NOSYNC
 //   MDB_APPEND          → MDBX_APPEND
 //   MDB_INTEGERKEY      → MDBX_INTEGERKEY
 //   mdb_strerror        → mdbx_strerror

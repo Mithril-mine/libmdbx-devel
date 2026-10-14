@@ -9,7 +9,7 @@
 // EN: Expected output:
 // EN:   key_exists: code=<N> (MDBX_KEYEXIST: Key/data pair already exists)
 // EN:   not_found: code=<N> (MDBX_NOTFOUND: No matching key/data pair found)
-// EN:   busy attempt 1: failed (<причина>)
+// EN:   busy attempt 1: failed (<reason>)
 // EN:   busy: persists after 3 attempts (expected while env is open)
 // EN:   ok: expected codes parsed, retry pattern shown
 // EN: On failure — message to stderr and exit 1.
