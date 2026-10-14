@@ -377,8 +377,10 @@ int mdbx_replace_ex(MDBX_txn *txn, MDBX_dbi dbi, const MDBX_val *key, MDBX_val *
       goto bailout;
   } else {
     /* в old_data буфер для сохранения предыдущего значения */
-    if (unlikely(new_data && old_data->iov_len && old_data->iov_base == new_data->iov_base))
-      return LOG_IFERR(MDBX_EINVAL);
+    if (unlikely(new_data && old_data->iov_len && old_data->iov_base == new_data->iov_base)) {
+      rc = MDBX_EINVAL;
+      goto bailout;
+    }
     MDBX_val present_data;
     rc = cursor_seek(&cx.outer, &present_key, &present_data, MDBX_SET_KEY).err;
     if (unlikely(rc != MDBX_SUCCESS)) {
