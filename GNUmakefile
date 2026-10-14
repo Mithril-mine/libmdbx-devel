@@ -303,7 +303,7 @@ clean:
 		*.gcov *.log *.err src/*.o tests/*.o tests/framework/*.o tests/ut/*.o tests/issues/*.o \
 		mdbx_legacy_example mdbx_modern_example dist @dist-check \
 		config-gnumake.h src/config-gnumake.h *.tar* @buildflags.tag @dist-checked.tag \
-		mdbx_*.static mdbx_*.static-lto CMakeFiles
+		mdbx_*.static mdbx_*.static-lto CMakeFiles build/docsite build/textbook build/tmp
 
 MDBX_BUILD_FLAGS =$(strip MDBX_BUILD_CXX=$(MDBX_BUILD_CXX) $(MDBX_BUILD_OPTIONS) $(call select_by,MDBX_BUILD_CXX,$(CXXFLAGS) $(LDFLAGS) $(LIB_STDCXXFS) $(LIBS),$(CFLAGS) $(LDFLAGS) $(LIBS)))
 check_buildflags_tag:
@@ -723,7 +723,7 @@ mdbx-static.o: src/config-gnumake.h src/version.c src/alloy.c $(ALLOY_DEPS) $(la
 	@echo '  CC $@'
 	$(QUIET)$(CC) $(CFLAGS) $(MDBX_BUILD_OPTIONS) '-DMDBX_CONFIG_H="config-gnumake.h"' -ULIBMDBX_EXPORTS -c src/alloy.c -o $@
 
-build/docsite-inputs/Doxyfile: docs/Doxyfile.in src/version.c $(lastword $(MAKEFILE_LIST))
+build/tmp/docsite-inputs/Doxyfile: docs/Doxyfile.in src/version.c $(lastword $(MAKEFILE_LIST))
 	@echo '  MAKE $@'
 	$(QUIET)mkdir -p $(@D)
 	$(QUIET)$(SED) \
@@ -740,7 +740,7 @@ build/docsite-inputs/Doxyfile: docs/Doxyfile.in src/version.c $(lastword $(MAKEF
 	docs/Doxyfile.in >$@
 
 define md-extract-section
-build/docsite-inputs/__$(1).md: $(2) $(lastword $(MAKEFILE_LIST))
+build/tmp/docsite-inputs/__$(1).md: $(2) $(lastword $(MAKEFILE_LIST))
 	@echo '  EXTRACT $1'
 	$(QUIET)mkdir -p $$(@D)
 	$(QUIET)$(SED) -n '/<!-- section-begin $(1) -->/,/<!-- section-end -->/p' $(2) >$$@ && test -s $$@
@@ -752,31 +752,31 @@ docs/contrib.fame: src/version.c $(lastword $(MAKEFILE_LIST))
 	@echo '  MAKE $@'
 	$(QUIET)echo "" > $@ && git fame --show-email --format=md --silent-progress -w -M -C | grep '^|' >> $@
 
-build/docsite-inputs/overall.md: build/docsite-inputs/__overview.md docs/_toc.md build/docsite-inputs/__mithril.md build/docsite-inputs/__history.md COPYRIGHT LICENSE NOTICE $(lastword $(MAKEFILE_LIST))
+build/tmp/docsite-inputs/overall.md: build/tmp/docsite-inputs/__overview.md docs/_toc.md build/tmp/docsite-inputs/__mithril.md build/tmp/docsite-inputs/__history.md COPYRIGHT LICENSE NOTICE $(lastword $(MAKEFILE_LIST))
 	@echo '  MAKE $@'
 	$(QUIET)mkdir -p $(@D)
 	$(QUIET)echo -e "\\mainpage Overall\n\\section brief Brief" | cat - $(filter %.md, $^) >$@ && echo -e "\n\n\nLicense\n=======\n" | cat - LICENSE >>$@
 
-build/docsite-inputs/intro.md: docs/_preface.md build/docsite-inputs/__characteristics.md build/docsite-inputs/__improvements.md docs/_restrictions.md
+build/tmp/docsite-inputs/intro.md: docs/_preface.md build/tmp/docsite-inputs/__characteristics.md build/tmp/docsite-inputs/__improvements.md docs/_restrictions.md
 	@echo '  MAKE $@'
 	$(QUIET)mkdir -p $(@D)
 	$(QUIET)cat $^ | $(SED) 's/^Performance comparison$$/Performance comparison {#performance}/;s/^Improvements beyond LMDB$$/Improvements beyond LMDB {#improvements}/' >$@
 
-build/docsite-inputs/usage.md: build/docsite-inputs/__usage.md docs/_starting.md build/docsite-inputs/__bindings.md
+build/tmp/docsite-inputs/usage.md: build/tmp/docsite-inputs/__usage.md docs/_starting.md build/tmp/docsite-inputs/__bindings.md
 	@echo '  MAKE $@'
 	$(QUIET)mkdir -p $(@D)
 	$(QUIET)echo -e "\\page usage Usage\n\\section getting Building & Embedding" | cat - $^ | $(SED) 's/^Bindings$$/Bindings {#bindings}/' >$@
 
-build/docsite-inputs/mdbx.h: $(DIST_DIR)/mdbx.h $(lastword $(MAKEFILE_LIST))
+build/tmp/docsite-inputs/mdbx.h: $(DIST_DIR)/mdbx.h $(lastword $(MAKEFILE_LIST))
 	@echo '  MAKE $@'
 	$(QUIET)mkdir -p $(@D)
 	$(QUIET)cat $< | tr '\n' '\r' | $(SED) -e 's/LIBMDBX_INLINE_API\s*(\s*\([^,]\+\),\s*\([^,]\+\),\s*(\s*\([^)]\+\)\s*)\s*)\s*{/inline \1 \2(\3) {/g' | tr '\r' '\n' >$@
 
-build/docsite-inputs/mdbx.h++: $(DIST_DIR)/mdbx.h++ $(lastword $(MAKEFILE_LIST))
+build/tmp/docsite-inputs/mdbx.h++: $(DIST_DIR)/mdbx.h++ $(lastword $(MAKEFILE_LIST))
 	@echo '  MAKE $@'
 	$(QUIET)mkdir -p $(@D) && cp $< $@
 
-build/docsite-inputs/options.h: src/options.h $(lastword $(MAKEFILE_LIST))
+build/tmp/docsite-inputs/options.h: src/options.h $(lastword $(MAKEFILE_LIST))
 	@echo '  MAKE $@'
 	$(QUIET)mkdir -p $(@D) && cp $< $@
 
@@ -812,14 +812,15 @@ endef
 # intermediates (which carry their own dependency chains). A content change
 # or a file add/remove invalidates the stamp and triggers a full rebuild;
 # otherwise `make docsite` is a no-op. In a dist tree (no .git) the source
-# list is empty - drop build/docsite/.stamp to force a rebuild.
+# list is empty - drop build/tmp/.stamp to force a rebuild.
 DOCSITE_SRCS := $(sort $(shell git ls-files --cached --others --exclude-standard docs/ru docs/en examples) \
 	docs/docsite/en/mkdocs.yml docs/docsite/ru/mkdocs.yml docs/docsite/base.yml \
 	docs/docsite/hooks/docsite_hooks.py docs/docsite/localize_examples.py \
 	docs/docsite/normalize_site.py \
 	docs/docsite/verify_contract.py docs/docsite/contract-amendment.md)
 
-build/docsite/.stamp: $(DOCSITE_SRCS) build/docsite-inputs/Doxyfile build/docsite-inputs/overall.md build/docsite-inputs/intro.md build/docsite-inputs/usage.md build/docsite-inputs/mdbx.h build/docsite-inputs/mdbx.h++ build/docsite-inputs/options.h docs/en/reference/changelog.md $(lastword $(MAKEFILE_LIST))
+build/tmp/.stamp: $(DOCSITE_SRCS) build/tmp/docsite-inputs/Doxyfile build/tmp/docsite-inputs/overall.md build/tmp/docsite-inputs/intro.md build/tmp/docsite-inputs/usage.md build/tmp/docsite-inputs/mdbx.h build/tmp/docsite-inputs/mdbx.h++ build/tmp/docsite-inputs/options.h docs/en/reference/changelog.md $(lastword $(MAKEFILE_LIST))
+	@mkdir -p build/tmp
 	@command -v mkdocs >/dev/null 2>&1 || { \
 		echo '  ERROR: mkdocs is not available. Install the toolchain:'; \
 		echo '    pip install mkdocs mkdocs-material mkdoxy'; exit 1; }
@@ -849,7 +850,7 @@ build/docsite/.stamp: $(DOCSITE_SRCS) build/docsite-inputs/Doxyfile build/docsit
 	@echo '  DOCSITE done: build/docsite/{en,ru}/ (incl. textbook PDFs)'
 
 .PHONY: docsite
-docsite: build/docsite/.stamp
+docsite: build/tmp/.stamp
 
 books:
 	@command -v mkdocs >/dev/null 2>&1 || { \

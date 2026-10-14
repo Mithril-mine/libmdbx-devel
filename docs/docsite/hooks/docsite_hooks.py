@@ -22,6 +22,7 @@ fields (fixed by the contract amendment).
 
 import datetime
 import json
+import os
 import re
 import subprocess
 
@@ -124,9 +125,8 @@ def on_page_markdown(markdown, *, page, config, **_kwargs):
 
 # ---------------------------------------------------------------------------
 # lastmod manifest (consumed by normalize_site.py for the sitemap <lastmod>)
-
 _LASTMOD = {}
-_MANIFEST = ".lastmod.json"
+_MANIFEST = "lastmod.json"
 
 
 def _git_date(config, src_path) -> str:
@@ -151,8 +151,8 @@ def _git_date(config, src_path) -> str:
     elif src_path.parts[-3:-1] == ("assets", ".doxy") or \
             "/reference/api/" in str(src_path):
         # mkdoxy work area: the API reference derives from the doxygen inputs
-        # (staged into build/docsite-inputs by make); use the tracked canonical
-        # sources for the last-modified date
+        # (staged into build/tmp/docsite-inputs by make); use the tracked
+        # canonical sources for the last-modified date
         base = str(config.docs_dir).rsplit("/docs/", 1)[0]
         candidates = [f"{base}/mdbx.h", f"{base}/mdbx.h++",
                       f"{base}/src/options.h"]
@@ -176,10 +176,13 @@ def _git_date(config, src_path) -> str:
 
 
 def on_post_build(*, config, **_kwargs):
-    """Merge this build's dates into the shared manifest at the docsite root
-    (site_dir is the per-locale tree; the docsite root is its parent and both
-    locale builds write into the same file, sequentially)."""
-    path = config.site_dir + "/../" + _MANIFEST
+    """Merge this build's dates into the shared manifest at
+    build/tmp/lastmod.json (site_dir is the per-locale tree; both locale
+    builds write into the same file, sequentially; the tmp/ tree keeps the
+    docsite output free of intermediate files)."""
+    docsite_root = os.path.dirname(os.path.dirname(config.site_dir))
+    path = os.path.join(docsite_root, "tmp", _MANIFEST)
+    os.makedirs(os.path.dirname(path), exist_ok=True)
     try:
         merged = dict(json.load(open(path, encoding="utf-8")))
     except Exception:

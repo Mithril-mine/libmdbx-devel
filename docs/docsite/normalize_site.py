@@ -26,6 +26,7 @@ Usage: python3 normalize_site.py [site-root]   (default: next to this file/site)
 """
 import datetime
 import hashlib
+import json
 import os
 import posixpath
 import re
@@ -131,6 +132,71 @@ def relocate_search():
     bundle.write_text(patched, encoding="utf-8")
     print(f"  search: bundle patched ({bundle.name})"
           f"{'' if moved else ' (index already relocated)'}")
+
+
+_DIR_LINK = re.compile(
+    r'<a href="dir_[0-9a-f]{32}\.html"><strong>[^<]*</strong></a>\s*'
+    r'<strong>&gt;</strong>\s*')
+# a doxygen directory node in the file-list page: <li>dir <a>name</a> <ul>..</ul></li>
+_DIR_TREE_NODE = re.compile(
+    r'<li><strong>dir</strong> <a href="dir_[0-9a-f]{32}\.html">'
+    r'<strong>[^<]*</strong></a>\s*<ul>\s*(.*?)\s*</ul>\s*</li>',
+    re.S)
+# the doxygen inputs are staged by make under build/{tmp/,}docsite-inputs
+_INPUT_LOCATION = re.compile(r"build/(?:tmp/)?docsite-inputs/")
+
+
+def prune_reference_dirs():
+    """Drop the doxygen 'directory' pages from the EN API reference.
+
+    Doxygen unconditionally emits a dir_<hash>.xml compound for every
+    directory holding input files (there is no option to disable it), and
+    mkdoxy renders those into dir_*.html pages titled after the staging
+    directory (build/tmp/docsite-inputs). Those pages leak the build layout
+    into the public reference and are otherwise useless, so they are removed
+    together with the breadcrumb segments ('FileList > build > docsite-inputs'),
+    the file-list directory tree (keeps a flat list of files) and the staging
+    path in 'generated from the following file ...'."""
+    api_dir = SITE / "en" / "reference" / "api"
+    if not api_dir.exists():
+        return
+    removed = rewritten = 0
+    for path in sorted(api_dir.glob("dir_*.html")):
+        path.unlink()
+        removed += 1
+    for html in sorted(api_dir.glob("*.html")):
+        orig = html.read_text(encoding="utf-8")
+        text = _DIR_LINK.sub("", orig)
+        # flatten the file-list directory tree to the plain file entries
+        while True:
+            folded = _DIR_TREE_NODE.sub(r"\1", text)
+            if folded == text:
+                break
+            text = folded
+        text = _INPUT_LOCATION.sub("", text)
+        if text != orig:
+            html.write_text(text, encoding="utf-8")
+            rewritten += 1
+    print(f"  api: {removed} directory page(s) pruned, "
+          f"{rewritten} page(s) cleaned")
+
+
+def drop_dir_search_entries():
+    """Exclude the pruned directory pages from the relocated search index."""
+    for loc in LOCALES:
+        idx = SITE / loc / "search_index.json"
+        if not idx.exists():
+            continue
+        data = json.loads(idx.read_text(encoding="utf-8"))
+        docs = data.get("docs", [])
+        before = len(docs)
+        docs = [d for d in docs
+                if not str(d.get("location", "")).startswith("reference/api/dir_")]
+        if len(docs) != before:
+            data["docs"] = docs
+            idx.write_text(json.dumps(data, ensure_ascii=False), encoding="utf-8")
+            print(f"  search: {loc} - dropped {before - len(docs)} "
+                  f"directory page entries")
 
 
 def rewrite_links():
@@ -395,7 +461,7 @@ def make_selector():
 def _lastmod_map():
     """Page URL -> YYYY-MM-DD from the hook manifest; pages missing from it
     (e.g. the selector) fall back to today."""
-    manifest = SITE / ".lastmod.json"
+    manifest = SITE.parent / "tmp" / "lastmod.json"
     try:
         return json.loads(manifest.read_text(encoding="utf-8"))
     except Exception:
@@ -461,9 +527,11 @@ def main():
     if not SITE.exists():
         fail(f"{SITE} not found - run `make docsite` (mkdocs) first")
     purge_doxy_junk()
+    prune_reference_dirs()
     dedupe_assets()
     prune_theme_leftovers()
     relocate_search()
+    drop_dir_search_entries()
     rewrite_links()
     localize_canonical_links()
     audit_links()
