@@ -31,6 +31,7 @@ In the `master` branch, development of version v0.15 will begin, with the techni
  - Fixed an off-by-one in `rkl_push()` while rolling back a duplicate insertion: the tail of the internal list was lost, making the structure invalid. The defect was unreachable in current usage scenarios, but could be triggered by specific crafted internal sequences (backport).
  - Fixed `MDBX_TXN_TRY` leakage into a transaction state flags (backport).
  - Fixed print-mode `mdbx_dump -p` emitting a field's leading space byte verbatim: such a line was misread by `mdbx_load` as the concise repeat marker, desynchronizing the dump stream and silently losing data on round-trip. A leading space is now escaped as `\20`, and `mdbx_load` rejects a concise-repeat marker where a value is expected (issue #61) (backport).
+ - Fixed `mdbx_replace_ex()` leaving its on-stack cursor linked into `txn->cursors[]` when it returns `MDBX_EINVAL` for aliased old/new buffers: the next operation on the same DBI walked the stale cursor list and could hang (Linux `-O2`) or crash (use-after-return under ASan) (issue #56) (backport).
  - Fixed typos in the ChangeLog.
 
 
