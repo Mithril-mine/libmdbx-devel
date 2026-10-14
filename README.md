@@ -266,7 +266,7 @@ Please refer to the online [_libmdbx_ API reference](https://libmdbx.dqdkfa.ru/d
 
 ## Textbook
 
-A complete practical guide to libmdbx — six volumes from the first steps to expert topics and bindings — is available online in [Russian](https://libmdbx.dqdkfa.ru/textbook/ru/) and [English](https://libmdbx.dqdkfa.ru/textbook/en/); each online version links a downloadable PDF.
+A complete practical guide to libmdbx — six volumes from the first steps to expert topics and bindings — is available online in [Russian](https://libmdbx.dqdkfa.ru/docs/textbook/ru/) and [English](https://libmdbx.dqdkfa.ru/docs/textbook/en/); each online version links a downloadable PDF.
 
 The textbook's source (markdown, in `docs/textbook/ru` and `docs/textbook/en`) and all code examples (`examples/` — compilable C11/C++17 programs, exercised by CTest) are part of this repository. Both localizations are built into HTML + PDF with `make books` (requires `pip install mkdocs mkdocs-material mkdocs-with-pdf`).
 

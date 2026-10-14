@@ -235,6 +235,7 @@ help:
 	@echo "  make dist                - build amalgamated source code"
 	@echo "  make docsite             - build the unified documentation site (build/docsite/{en,ru}, incl. textbook PDFs)"
 	@echo "  make books               - build the textbook (HTML + PDF, build/textbook/{ru,en})"
+	@echo "  make check-links-live  - verify the libmdbx.dqdkfa.ru links over the network"
 	@echo "  make release-assets      - build release assets"
 	@echo "  make reformat            - reformat source code with clang-format"
 #< dist-cutoff-end
@@ -677,7 +678,7 @@ $(MDBX_GIT_DIR)/HEAD $(MDBX_GIT_DIR)/index $(MDBX_GIT_DIR)/refs/tags:
 	@echo '*** Please don''t use tarballs nor zips which are automatically provided by GitHub !' >&2
 	@echo '*** These archives do not contain version information and thus are unfit to build libmdbx.' >&2
 	@echo '*** ' >&2
-	@echo '*** Instead just follow the https://libmdbx.dqdkfa.ru/usage.html' >&2
+	@echo '*** Instead just follow the https://libmdbx.dqdkfa.ru/docs/en/getting-started/install-build.html' >&2
 	@echo '*** PLEASE, AVOID USING ANY OTHER TECHNIQUES.' >&2
 	@echo '*** ' >&2
 	@false
@@ -790,8 +791,8 @@ MDBX_BOOK_DATE ?= $(shell date +%F)
 
 # Builds both localizations of the textbook (docs/textbook/{ru,en} configs) as
 # static HTML sites plus PDFs via MkDocs. Output: build/textbook/{ru,en}/ with
-# a per-locale libmdbx-textbook-{ru,en}.pdf next to the HTML — the layout
-# mirrors https://libmdbx.dqdkfa.ru/textbook/{ru,en}/.
+# per-locale libmdbx-textbook-{ru,en}.pdf next to the HTML — the layout
+# mirrors https://libmdbx.dqdkfa.ru/docs/textbook/{ru,en}/.
 # The textbook/docsite trees embed a per-locale copy of the canonical
 # examples/ - the only tracked copy lives at the repo root (it is what CI
 # builds and tests); the per-locale copies are generated, not tracked (see
@@ -813,10 +814,10 @@ endef
 # or a file add/remove invalidates the stamp and triggers a full rebuild;
 # otherwise `make docsite` is a no-op. In a dist tree (no .git) the source
 # list is empty - drop build/tmp/.stamp to force a rebuild.
-DOCSITE_SRCS := $(sort $(shell git ls-files --cached --others --exclude-standard docs/ru docs/en examples) \
+DOCSITE_SRCS := $(sort $(shell git ls-files --cached --others --exclude-standard docs/ru docs/en docs/textbook examples) \
 	docs/docsite/en/mkdocs.yml docs/docsite/ru/mkdocs.yml docs/docsite/base.yml \
 	docs/docsite/hooks/docsite_hooks.py docs/docsite/localize_examples.py \
-	docs/docsite/normalize_site.py \
+	docs/docsite/normalize_site.py docs/docsite/check_links.py \
 	docs/docsite/verify_contract.py docs/docsite/contract-amendment.md)
 
 build/tmp/.stamp: $(DOCSITE_SRCS) build/tmp/docsite-inputs/Doxyfile build/tmp/docsite-inputs/overall.md build/tmp/docsite-inputs/intro.md build/tmp/docsite-inputs/usage.md build/tmp/docsite-inputs/mdbx.h build/tmp/docsite-inputs/mdbx.h++ build/tmp/docsite-inputs/options.h docs/en/reference/changelog.md $(lastword $(MAKEFILE_LIST))
@@ -828,15 +829,16 @@ build/tmp/.stamp: $(DOCSITE_SRCS) build/tmp/docsite-inputs/Doxyfile build/tmp/do
 		echo '  ERROR: doxygen is not available (required by the mkdoxy plugin).'; exit 1; }
 	@echo '  SYNC examples -> docs/{ru,en}/textbook/'
 	$(QUIET)$(sync-examples)
-	@echo '  BOOKS {ru,en}: MkDocs HTML + PDF...'
+	@echo '  BOOKS {ru,en}: MkDocs HTML + PDF (staged into build/tmp/textbook)...'
+	$(QUIET)rm -rf build/textbook
 	$(QUIET)MDBX_BOOK_VERSION="$(MDBX_BOOK_VERSION)" MDBX_BOOK_DATE="$(MDBX_BOOK_DATE)" \
-		mkdocs build -f docs/textbook/ru/mkdocs.yml $(HUSH)
+		mkdocs build --site-dir $(abspath build/tmp/textbook/ru) -f docs/textbook/ru/mkdocs.yml $(HUSH)
 	$(QUIET)MDBX_BOOK_VERSION="$(MDBX_BOOK_VERSION)" MDBX_BOOK_DATE="$(MDBX_BOOK_DATE)" \
-		mkdocs build -f docs/textbook/en/mkdocs.yml $(HUSH)
-	$(QUIET)python3 docs/textbook/normalize_site.py
+		mkdocs build --site-dir $(abspath build/tmp/textbook/en) -f docs/textbook/en/mkdocs.yml $(HUSH)
 	@echo '  DOCSITE pdf: stage textbook PDFs into docs/{en,ru}/textbook/'
-	$(QUIET)cp build/textbook/ru/libmdbx-textbook-ru.pdf docs/ru/textbook/
-	$(QUIET)cp build/textbook/en/libmdbx-textbook-en.pdf docs/en/textbook/
+	$(QUIET)cp build/tmp/textbook/ru/libmdbx-textbook-ru.pdf docs/ru/textbook/
+	$(QUIET)cp build/tmp/textbook/en/libmdbx-textbook-en.pdf docs/en/textbook/
+	$(QUIET)rm -rf build/tmp/textbook
 	@echo '  DOCSITE en: MkDocs (guides + textbook + engineering + API)...'
 	$(QUIET)mkdocs build --strict -f docs/docsite/en/mkdocs.yml $(HUSH)
 	@echo '  DOCSITE ru: MkDocs (гайды + учебник + engineering + API)...'
@@ -846,11 +848,18 @@ build/tmp/.stamp: $(DOCSITE_SRCS) build/tmp/docsite-inputs/Doxyfile build/tmp/do
 	$(QUIET)python3 docs/docsite/normalize_site.py
 	@echo '  DOCSITE verify: docs-integration-contract checklist (section 6)...'
 	$(QUIET)python3 docs/docsite/verify_contract.py
+	@echo '  DOCSITE links: mechanical libmdbx.dqdkfa.ru link audit (offline)...'
+	$(QUIET)python3 docs/docsite/check_links.py
 	$(QUIET)touch $@
 	@echo '  DOCSITE done: build/docsite/{en,ru}/ (incl. textbook PDFs)'
 
 .PHONY: docsite
 docsite: build/tmp/.stamp
+
+.PHONY: check-links-live
+check-links-live: docsite
+	@echo '  LINKS live: verify the non-/docs/ libmdbx.dqdkfa.ru URLs over the network...'
+	$(QUIET)python3 docs/docsite/check_links.py --online
 
 books:
 	@command -v mkdocs >/dev/null 2>&1 || { \

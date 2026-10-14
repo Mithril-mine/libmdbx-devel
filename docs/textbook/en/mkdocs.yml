@@ -6,7 +6,7 @@
 # shared assets/examples hoisted one level up, flat .html pages, S3-safe links)
 
 site_name: libmdbx Textbook
-site_url: https://libmdbx.dqdkfa.ru/textbook/en/
+site_url: https://libmdbx.dqdkfa.ru/docs/textbook/en/
 site_description: >-
   A practical guide to the libmdbx embedded transactional database — from the
   first steps to expert topics and bindings.

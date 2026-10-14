@@ -4,7 +4,7 @@
 
 ### C API
 [`example-mdbx.c`](example-mdbx.c) — пример использования C API.
-Однако настоятельно рекомендуется использовать современный [C++ API](https://libmdbx.dqdkfa.ru/group__cxx__api.html): он требует меньше
+Однако настоятельно рекомендуется использовать современный [C++ API](https://libmdbx.dqdkfa.ru/docs/en/reference/api/group__cxx__api.html): он требует меньше
 усилий и защищает от многих ошибок, связанных с утечками ресурсов.
 
 ### Berkeley DB

@@ -82,8 +82,8 @@ _libmdbx_ — встраиваемая транзакционная [key-value �
 - **MVCC + долгие читатели**: параллельная активная модификация данных при
   долгоживущем read-транзакции увеличивает рабочий набор и может исчерпать
   свободное место. Избегайте долгих чтений; используйте
-  [парковку транзакций](https://libmdbx.dqdkfa.ru/doxygen/group__c__transactions.html)
-  и [Handle-Slow-Readers](https://libmdbx.dqdkfa.ru/doxygen/group__c__err.html) —
+  [парковку транзакций](https://libmdbx.dqdkfa.ru/docs/en/reference/api/group__c__transactions.html)
+  и [Handle-Slow-Readers](https://libmdbx.dqdkfa.ru/docs/en/reference/api/group__c__err.html) —
   подробнее в [ограничениях](restrictions.md).
 - Чрезвычайная скорость требует внимательности: линейный поиск может оказаться
   выгоднее сложных индексов, а неоптимальность кода заметна только на больших данных.

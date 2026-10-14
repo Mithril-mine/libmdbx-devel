@@ -6,7 +6,7 @@
 # shared assets/examples hoisted one level up, flat .html pages, S3-safe links)
 
 site_name: Учебник по libmdbx
-site_url: https://libmdbx.dqdkfa.ru/textbook/ru/
+site_url: https://libmdbx.dqdkfa.ru/docs/textbook/ru/
 site_description: >-
   Практическое руководство по встраиваемой транзакционной базе данных libmdbx —
   от первых шагов до экспертных тем и биндингов.

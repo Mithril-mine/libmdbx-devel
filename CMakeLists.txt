@@ -221,7 +221,7 @@ else()
   message(
     FATAL_ERROR
       "\nThe set of libmdbx source code files is incomplete!"
-      "  Instead just follow the https://libmdbx.dqdkfa.ru/usage.html" "  PLEASE, AVOID USING ANY OTHER TECHNIQUES.")
+      "  Instead just follow the https://libmdbx.dqdkfa.ru/docs/en/getting-started/install-build.html" "  PLEASE, AVOID USING ANY OTHER TECHNIQUES.")
 endif()
 
 # Provide version

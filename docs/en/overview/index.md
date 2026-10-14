@@ -92,8 +92,8 @@ Full treatment — [Restrictions and gotchas](restrictions.md).
 - **MVCC + long-lived readers**: heavy data alteration while a long-lived read
   transaction is active increases the working set and may exhaust the free
   space. Avoid long reads; use
-  [transaction parking](https://libmdbx.dqdkfa.ru/doxygen/group__c__transactions.html)
-  and the [Handle-Slow-Readers callback](https://libmdbx.dqdkfa.ru/doxygen/group__c__err.html)
+  [transaction parking](https://libmdbx.dqdkfa.ru/docs/en/reference/api/group__c__transactions.html)
+  and the [Handle-Slow-Readers callback](https://libmdbx.dqdkfa.ru/docs/en/reference/api/group__c__err.html)
   — details in [restrictions](restrictions.md).
 - Extraordinary speed requires care: a simple linear scan may beat complex
   indexes, and suboptimal code shows its cost only on large data.
