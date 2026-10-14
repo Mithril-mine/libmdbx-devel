@@ -32,6 +32,7 @@ In the `master` branch, development of version v0.15 will begin, with the techni
  - Fixed `MDBX_TXN_TRY` leakage into a transaction state flags (backport).
  - Fixed print-mode `mdbx_dump -p` emitting a field's leading space byte verbatim: such a line was misread by `mdbx_load` as the concise repeat marker, desynchronizing the dump stream and silently losing data on round-trip. A leading space is now escaped as `\20`, and `mdbx_load` rejects a concise-repeat marker where a value is expected (issue #61) (backport).
  - Fixed `mdbx_replace_ex()` leaving its on-stack cursor linked into `txn->cursors[]` when it returns `MDBX_EINVAL` for aliased old/new buffers: the next operation on the same DBI walked the stale cursor list and could hang (Linux `-O2`) or crash (use-after-return under ASan) (issue #56) (backport).
+ - Fixed building with MSVC and AddressSanitizer: `MDBX_ATTRIBUTE_NO_SANITIZE_ADDRESS` expanded to a GCC-only `__attribute__` under `__SANITIZE_ADDRESS__`, which MSVC cannot parse; it now uses `__declspec(no_sanitize_address)` (issue #62) (backport).
  - Fixed typos in the ChangeLog.
 
 
