@@ -68,7 +68,7 @@ static void text(MDBX_val *v) {
   c = v->iov_base;
   end = c + v->iov_len;
   while (c < end) {
-    if (isprint(*c) && *c != '\\') {
+    if (isprint(*c) && *c != '\\' && !(*c == ' ' && c == v->iov_base)) {
       putchar(*c);
     } else {
       putchar('\\');
