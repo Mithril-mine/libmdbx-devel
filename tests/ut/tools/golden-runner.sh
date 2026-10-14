@@ -54,7 +54,7 @@ normalize() {
     -e 's/^ - build: .*/ - build: <BUILD>/' \
     -e 's#^ - flags: .*# - flags: <FLAGS>#' \
     -e 's#^ - options: .*# - options: <OPTIONS>#' \
-    -e 's#[^ ]*/(base\.db|copy\.db|bad\.db|compact\.db|out\.img|reload\.db|ver\.db|bad\.dump|exists\.db|named\.db)#/\1#g' \
+    -e 's#[^ ]*/(base\.db|copy\.db|bad\.db|compact\.db|out\.img|reload\.db|ver\.db|bad\.dump|exists\.db|named\.db|space\.db|legacy\.db)#/\1#g' \
     -e '/troika:/d' \
     -e 's#^usage: [^ ]*/mdbx_[a-z]+ #usage: mdbx_BIN #' \
     -e 's#^[^ ]*/mdbx_(load|dump|copy|chk|stat|drop|defrag): #mdbx_\1: #' \
@@ -138,6 +138,15 @@ fresh_base() {
   rm -rf "$d"; mkdir -p "$d"
   "$LOAD_BIN" -nq -f "$FIXTURES/base.dump" -G 67108864:67108864:0:0:4096 "$d/base.db" 2>/dev/null
   [ -f "$d/base.db" ] || { echo "fixture build failed" >&2; exit 1; }
+}
+
+# fresh_space <dir>: deterministic DB with a value starting with a space byte
+# and one with a mid-field space (fixtures/space.dump), fixed geometry.
+fresh_space() {
+  local d="$1"
+  rm -rf "$d"; mkdir -p "$d"
+  "$LOAD_BIN" -nq -f "$FIXTURES/space.dump" -G 67108864:67108864:0:0:4096 "$d/space.db" 2>/dev/null
+  [ -f "$d/space.db" ] || { echo "space fixture build failed" >&2; exit 1; }
 }
 
 # corrupt_db <src> <dst>: flip a byte in an allocated data page (offset 20480
@@ -266,6 +275,12 @@ case_dump_print() {
   local d="$WORK/dump_p"; fresh_base "$d"
   run_case print 0 -- "$BIN" -p "$d/base.db"
 }
+case_dump_print_space() {
+  # Issue #61: a field whose first byte is a space must be escaped as \20 so
+  # the dump line cannot be mistaken for the concise repeat marker.
+  local d="$WORK/dump_ps"; fresh_space "$d"
+  run_case print_space 0 -- "$BIN" -p "$d/space.db"
+}
 case_dump_concise_dups() {
   local d="$WORK/dump_c"; fresh_base "$d"
   run_case concise_dups 0 -- "$BIN" -c -s duptbl "$d/base.db"
@@ -318,6 +333,51 @@ case_load_stdin() {
     log "  stdout diff:"; diff "$d/stdout.norm" "$d/golden.out.norm" 2>&1 | head -8 | sed 's/^/      /'
     log "  stderr diff:"; diff "$d/stderr.norm" "$d/golden.err.norm" 2>&1 | head -8 | sed 's/^/      /'
   fi
+}
+case_load_leading_space() {
+  # Issue #61: a print-mode dump escapes a leading space as \20, and the
+  # round-trip must preserve the data exactly (including raw mid-field spaces).
+  local d="$WORK/load_ls"; fresh_space "$d"
+  "$DUMP_BIN" -p "$d/space.db" > "$d/print.dump" 2>/dev/null
+  ( "$BIN" -nf "$d/print.dump" "$d/reload.db" ) > "$d/stdout" 2> "$d/stderr"
+  local rc=$?
+  local name=leading_space
+  local data_ok=1
+  "$DUMP_BIN" -q "$d/space.db" > "$d/src.dump" 2>/dev/null &&
+  "$DUMP_BIN" -q "$d/reload.db" > "$d/reloaded.dump" 2>/dev/null &&
+  cmp -s "$d/src.dump" "$d/reloaded.dump" || data_ok=0
+  if [ "$UPDATE" = 1 ]; then
+    mkdir -p "$GOLDEN/$TOOL"
+    normalize <"$d/stdout" >"$GOLDEN/$TOOL/$name.out"
+    normalize <"$d/stderr" >"$GOLDEN/$TOOL/$name.err"
+    printf '%s\n' "$rc" >"$GOLDEN/$TOOL/$name.rc"
+    log "golden $TOOL/$name (rc=$rc, data_ok=$data_ok)"
+    return
+  fi
+  local ok=1
+  [ -f "$GOLDEN/$TOOL/$name.out" ] || { ok=0; log "MISSING golden $TOOL/$name.out"; }
+  normalize <"$d/stdout" >"$d/stdout.norm"; normalize <"$d/stderr" >"$d/stderr.norm"
+  normalize <"$GOLDEN/$TOOL/$name.out" >"$d/golden.out.norm"
+  normalize <"$GOLDEN/$TOOL/$name.err" >"$d/golden.err.norm"
+  diff -q "$d/stdout.norm" "$d/golden.out.norm" >/dev/null 2>&1 || ok=0
+  diff -q "$d/stderr.norm" "$d/golden.err.norm" >/dev/null 2>&1 || ok=0
+  local want_rc="$(cat "$GOLDEN/$TOOL/$name.rc")"
+  [ "$rc" = "$want_rc" ] || ok=0
+  [ "$data_ok" = 1 ] || { ok=0; log "  $TOOL/$name: round-trip data mismatch (issue #61)"; diff "$d/src.dump" "$d/reloaded.dump" 2>&1 | head -8 | sed 's/^/      /'; }
+  if [ "$ok" = 1 ]; then pass=$((pass+1)); log "PASS $TOOL/$name"
+  else
+    fail=$((fail+1)); FAILED_CASES+=("$TOOL/$name"); log "FAIL $TOOL/$name (rc=$rc want=$want_rc)"
+    log "  stdout diff:"; diff "$d/stdout.norm" "$d/golden.out.norm" 2>&1 | head -8 | sed 's/^/      /'
+    log "  stderr diff:"; diff "$d/stderr.norm" "$d/golden.err.norm" 2>&1 | head -8 | sed 's/^/      /'
+  fi
+}
+case_load_legacy_two_space() {
+  # Issue #61: a pre-fix print-mode dump writes a raw two-space line for a
+  # leading-space field; mdbx_load must reject it as a concise-repeat marker
+  # where a value is expected (parse error, non-zero exit).
+  local d="$WORK/load_l2"; rm -rf "$d"; mkdir -p "$d"
+  printf 'VERSION=3\nformat=print\ntype=btree\ndb_pagesize=4096\nHEADER=END\n k1\n AAAA\n k2\n  LEGACY_SPACE_VALUE\nDATA=END\n' > "$d/legacy.dump"
+  run_case legacy_two_space 1 -- "$BIN" -nf "$d/legacy.dump" "$d/legacy.db"
 }
 case_load_bad_mapsize() {
   local d="$WORK/load_bm"; fresh_base "$d"
@@ -405,9 +465,12 @@ for f in $tool_funcs; do
     case_dump_named) case_dump_named;;
     case_dump_list) case_dump_list;;
     case_dump_print) case_dump_print;;
+    case_dump_print_space) case_dump_print_space;;
     case_dump_concise_dups) case_dump_concise_dups;;
     case_load_roundtrip) case_load_roundtrip;;
     case_load_stdin) case_load_stdin;;
+    case_load_leading_space) case_load_leading_space;;
+    case_load_legacy_two_space) case_load_legacy_two_space;;
     case_load_bad_mapsize) case_load_bad_mapsize;;
     case_load_bad_version) case_load_bad_version;;
     case_load_purge) case_load_purge;;

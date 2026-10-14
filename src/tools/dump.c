@@ -42,7 +42,7 @@ static void dumpval(const MDBX_val *v) {
   putchar(' ');
   for (const unsigned char *c = v->iov_base, *end = c + v->iov_len; c < end; ++c) {
     if (mode & PRINT) {
-      if (isprint(*c) && *c != '\\') {
+      if (isprint(*c) && *c != '\\' && !(*c == ' ' && c == v->iov_base)) {
         putchar(*c);
         continue;
       } else

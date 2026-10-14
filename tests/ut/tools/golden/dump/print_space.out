@@ -1,0 +1,14 @@
+VERSION=3
+mapsize=67108864
+format=print
+type=btree
+db_pagesize=4096
+duplicates=0
+HEADER=END
+ k1
+ AAAA
+ k2
+ \20LEADING_SPACE_VALUE
+ k3
+ A B C
+DATA=END

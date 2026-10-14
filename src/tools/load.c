@@ -323,7 +323,7 @@ static inline uint8_t unhex(const char *hex) {
   return (uint8_t)(hi << 4 | lo);
 }
 
-__hot static int readline(MDBX_val *out, MDBX_val *buf) {
+__hot static int readline(MDBX_val *out, MDBX_val *buf, bool *concise) {
   if (user_break)
     return MDBX_EINTR;
 
@@ -346,8 +346,11 @@ __hot static int readline(MDBX_val *out, MDBX_val *buf) {
   int c = fgetc(stdin);
   if (c == EOF)
     return errno ? errno : EOF;
-  if (c == ' ')
+  if (c == ' ') {
+    if (concise)
+      *concise = true;
     return (ungetc(c, stdin) == c) ? MDBX_SUCCESS : (errno ? errno : EOF);
+  }
 
   char *line = buf->iov_base;
   line[0] = (char)c;
@@ -776,7 +779,7 @@ int main(int argc, char *argv[]) {
     size_t count = 0;
     MDBX_val key = {.iov_base = nullptr, .iov_len = 0}, data = {.iov_base = nullptr, .iov_len = 0};
     while (err == MDBX_SUCCESS) {
-      err = readline(&key, &key_buf);
+      err = readline(&key, &key_buf, nullptr);
       if (err == EOF)
         break;
       if (err) {
@@ -785,10 +788,17 @@ int main(int argc, char *argv[]) {
         goto bailout;
       }
 
-      err = readline(&data, &data_buf);
+      bool data_concise = false;
+      err = readline(&data, &data_buf, &data_concise);
       if (err) {
         if (!quiet)
           fprintf(stderr, "%s: line %" PRIiSIZE ": failed to read %s\n", prog, lineno, "value");
+        goto bailout;
+      }
+      if (data_concise) {
+        if (!quiet)
+          fprintf(stderr, "%s: line %" PRIiSIZE ": concise-repeat marker for a value\n", prog, lineno);
+        err = MDBX_ENODATA;
         goto bailout;
       }
 
