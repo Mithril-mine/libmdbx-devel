@@ -159,6 +159,15 @@ __cold int page_check(const MDBX_cursor *const mc, const page_t *const mp) {
         prev = here;
       }
     } else {
+      const indx_t off = mp->entries[i];
+      if (unlikely(off < mp->upper || off > env->ps - PAGEHDRSZ || (off & 1))) {
+        /* Below upper the offset points into the header/free-gap area: the node
+         * header/body would alias the index and node_del()/node_shrink() would
+         * underflow the shift length of memmove(). (issue #57) */
+        rc = bad_page(mp, "node[%zu] offset (%u) outside [upper(%u), %zu]\n", i, off, mp->upper,
+                      (size_t)env->ps - PAGEHDRSZ);
+        continue;
+      }
       const node_t *const node = page_node(mp, i);
       const char *const node_end = ptr_disp(node, NODESIZE);
       if (unlikely(node_end > end_of_page)) {

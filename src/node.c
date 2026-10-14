@@ -204,6 +204,10 @@ __hot void node_del(MDBX_cursor *mc, size_t ksize) {
       mp->entries[w++] = (mp->entries[r] < hole_offset) ? mp->entries[r] + (indx_t)hole_size : mp->entries[r];
 
   void *const base = ptr_disp(mp, mp->upper + PAGEHDRSZ);
+  /* Defense-in-depth: hole_offset must sit at or above upper, otherwise the
+   * memmove() length below underflows to ~SIZE_MAX. The primary guard is the
+   * corresponding entries-offset check in page_check(). (issue #57) */
+  cASSERT0(mc, hole_offset >= mp->upper);
   memmove(ptr_disp(base, hole_size), base, hole_offset - mp->upper);
 
   cASSERT(mc, mp->lower >= sizeof(indx_t));
@@ -270,6 +274,7 @@ node_t *node_shrink(page_t *mp, size_t indx, node_t *node) {
   memmove(ptr_disp(base, delta), base, ptr_dist(sp, base) + len);
 
   const size_t pivot = mp->entries[indx];
+  ASSERT(pivot >= mp->upper);
   for (intptr_t i = page_numkeys(mp); --i >= 0;) {
     if (mp->entries[i] <= pivot) {
       assert((size_t)UINT16_MAX - mp->entries[i] >= delta);
