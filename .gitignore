@@ -25,6 +25,15 @@ docs/ru/textbook/libmdbx-textbook-ru.pdf
 docs/en/textbook/libmdbx-textbook-en.pdf
 # generated EN reference change log page (English-only, served from the EN tree)
 docs/en/reference/changelog.md
+# stale artifacts of the retired legacy doxygen pipeline (see «make docsite»)
+docs/Doxyfile
+docs/__*.md
+docs/intro.md
+docs/mdbx.h
+docs/mdbx.h++
+docs/options.h
+docs/overall.md
+docs/usage.md
 *.dSYM
 *.dylib
 *.err
