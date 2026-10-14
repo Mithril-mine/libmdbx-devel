@@ -1,0 +1,11 @@
+usage: mdbx_BIN [-V] [-q] [-e] [-f[f[f]]] [-r[r]] [-a|-s table] [-h|--help] dbpath
+  -V		print version and exit
+  -q		be quiet
+  -p		show statistics of page operations for current session
+  -e		show whole DB info
+  -f		show GC info
+  -r		show readers
+  -a		print stat of main DB and all tables
+  -s table	print stat of only the specified named table
+  		by default print stat of only the main DB
+  -h|--help	print this usage message and exit

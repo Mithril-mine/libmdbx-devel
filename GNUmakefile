@@ -646,15 +646,15 @@ endef
 $(foreach file,$(TEST_SRC),$(eval $(call test-rule,$(file))))
 
 define tool-rule
-mdbx_$(1):	src/tools/$(1).c libmdbx.a
+mdbx_$(1):	src/tools/$(1).c src/tools/common.h libmdbx.a
 	@echo '  CC+LD $$@'
-	$(QUIET)$$(CC) $$(CFLAGS) $$(MDBX_BUILD_OPTIONS) -Isrc '-DMDBX_CONFIG_H="config-gnumake.h"' $$^ $$(LDFLAGS) $$(EXE_LDFLAGS) $$(LIBS) -o $$@
+	$(QUIET)$$(CC) $$(CFLAGS) $$(MDBX_BUILD_OPTIONS) -Isrc '-DMDBX_CONFIG_H="config-gnumake.h"' $$(filter-out src/tools/common.h,$$^) $$(LDFLAGS) $$(EXE_LDFLAGS) $$(LIBS) -o $$@
 
-mdbx_$(1).static:	src/tools/$(1).c mdbx-static.o
+mdbx_$(1).static:	src/tools/$(1).c src/tools/common.h mdbx-static.o
 	@echo '  CC+LD $$@'
-	$(QUIET)$$(CC) $$(CFLAGS) $$(MDBX_BUILD_OPTIONS) -Isrc '-DMDBX_CONFIG_H="config-gnumake.h"' $$^ $$(LDFLAGS) $$(EXE_LDFLAGS) $$(LIBS) -static -Wl,--strip-all -o $$@
+	$(QUIET)$$(CC) $$(CFLAGS) $$(MDBX_BUILD_OPTIONS) -Isrc '-DMDBX_CONFIG_H="config-gnumake.h"' $$(filter-out src/tools/common.h,$$^) $$(LDFLAGS) $$(EXE_LDFLAGS) $$(LIBS) -static -Wl,--strip-all -o $$@
 
-mdbx_$(1).static-lto: src/tools/$(1).c src/config-gnumake.h src/version.c src/alloy.c $(ALLOY_DEPS)
+mdbx_$(1).static-lto: src/tools/$(1).c src/tools/common.h src/config-gnumake.h src/version.c src/alloy.c $(ALLOY_DEPS)
 	@echo '  CC+LD $$@'
 	$(QUIET)$$(CC) $$(CFLAGS) -Os -flto $$(MDBX_BUILD_OPTIONS) -Isrc '-DLIBMDBX_API=' '-DMDBX_CONFIG_H="config-gnumake.h"' \
 		$$< src/alloy.c $$(LDFLAGS) $$(EXE_LDFLAGS) $$(LIBS) -static -Wl,--strip-all -o $$@
@@ -1023,13 +1023,14 @@ $(DIST_DIR)/mdbx-wingetopt.h: src/tools/wingetopt.h src/tools/wingetopt.c
 	| grep -v '^///' | cat -s >$@
 
 define dist-tool-rule
-$(DIST_DIR)/mdbx_$(1).c: src/tools/$(1).c \
+$(DIST_DIR)/mdbx_$(1).c: src/tools/$(1).c src/tools/common.h \
 		$(DIST_DIR)/mdbx-internals.h $(lastword $(MAKEFILE_LIST)) $(DIST_DIR)/@tmp-amalgam.inc
 	@echo '  MAKE $$@'
 	$(QUIET)mkdir -p dist && \
 	$(SED) \
 		-e 's|#include "essentials.h"|@INCLUDE "mdbx-internals.h"|' \
 		-e 's|#include "wingetopt.h"|@INCLUDE "mdbx-wingetopt.h"|' \
+		-e '/#include "tools\/common.h"/r src/tools/common.h' \
 		-e '/#include "/d;/#pragma once/d;/#define xMDBX_ALLOY/d' \
 		-e 's|@INCLUDE|#include|' \
 		src/tools/$(1).c \

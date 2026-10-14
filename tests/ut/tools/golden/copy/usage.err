@@ -1,4 +1,4 @@
-usage: mdbx_BIN [-V] [-q] [-c] [-d] [-p] [-u|U] src_path [dest_path]
+usage: mdbx_BIN [-V] [-q] [-c] [-d] [-f] [-p] [-u|U] [-n] [-h|--help] src_path [dest_path]
   -V		print version and exit
   -q		be quiet
   -c		enable compactification (skip unused pages)
@@ -8,5 +8,7 @@ usage: mdbx_BIN [-V] [-q] [-c] [-d] [-p] [-u|U] src_path [dest_path]
     		to avoid stopping recycling and overflowing the DB
   -u		warmup database before copying
   -U		warmup and try lock database pages in memory before copying
+  -n		open MDBX environment(s) which do not use subdirectories
+  -h|--help	print this usage message and exit
   src_path	source database
   dest_path	destination (stdout if not specified)

@@ -8,32 +8,20 @@
 #define xMDBX_TOOLS /* Avoid using internal ASSERT(), etc */
 #include "essentials.h"
 
+#include "tools/common.h"
+
 enum { MDBX_STAT_MAXDBS = 2 };
 
 #if IS_WINDOWS
 
 /* Bit of madness for Windows console */
-#define mdbx_strerror mdbx_strerror_ANSI2OEM
-#define mdbx_strerror_r mdbx_strerror_r_ANSI2OEM
 
 #include "wingetopt.h"
 
-static volatile BOOL user_break;
-static BOOL WINAPI ConsoleBreakHandlerRoutine(DWORD dwCtrlType) {
-  (void)dwCtrlType;
-  user_break = true;
-  return true;
-}
+#endif /* WINDOWS */
 
-#else /* WINDOWS */
-
-static volatile sig_atomic_t user_break;
-static void signal_handler(int sig) {
-  (void)sig;
-  user_break = 1;
-}
-
-#endif /* !WINDOWS */
+static const char *prog;
+static bool quiet = false;
 
 static void print_stat(const MDBX_stat *ms) {
   printf("  Pagesize: %u\n", ms->ms_psize);
@@ -44,9 +32,9 @@ static void print_stat(const MDBX_stat *ms) {
   printf("  Entries: %" PRIu64 "\n", ms->ms_entries);
 }
 
-static void usage(const char *prog) {
-  fprintf(stderr,
-          "usage: %s [-V] [-q] [-e] [-f[f[f]]] [-r[r]] [-a|-s table] dbpath\n"
+static void usage_msg(FILE *out) {
+  fprintf(out,
+          "usage: %s [-V] [-q] [-e] [-f[f[f]]] [-r[r]] [-a|-s table] [-h|--help] dbpath\n"
           "  -V\t\tprint version and exit\n"
           "  -q\t\tbe quiet\n"
           "  -p\t\tshow statistics of page operations for current session\n"
@@ -55,9 +43,19 @@ static void usage(const char *prog) {
           "  -r\t\tshow readers\n"
           "  -a\t\tprint stat of main DB and all tables\n"
           "  -s table\tprint stat of only the specified named table\n"
-          "  \t\tby default print stat of only the main DB\n",
+          "  \t\tby default print stat of only the main DB\n"
+          "  -h|--help\tprint this usage message and exit\n",
           prog);
+}
+
+static void usage(void) {
+  usage_msg(stderr);
   exit(EXIT_FAILURE);
+}
+
+static void help(void) {
+  usage_msg(stdout);
+  exit(EXIT_SUCCESS);
 }
 
 static int reader_list_func(void *ctx, int num, int slot, mdbx_pid_t pid, mdbx_tid_t thread, uint64_t txnid,
@@ -111,26 +109,9 @@ static int gc_list_func(void *ctx, const MDBX_txn *txn, uint64_t span_txnid, siz
   return user_break ? MDBX_RESULT_TRUE : MDBX_RESULT_FALSE;
 }
 
-static const char *prog;
-static bool quiet = false;
 static void error(const char *func, int rc) {
   if (!quiet)
     fprintf(stderr, "%s: %s() error %d %s\n", prog, func, rc, mdbx_strerror(rc));
-}
-
-static void logger(MDBX_log_level_t level, const char *function, int line, const char *fmt, va_list args) {
-  static const char *const prefixes[] = {
-      "!!!fatal: ", // 0 fatal
-      " ! ",        // 1 error
-      " ~ ",        // 2 warning
-      "   ",        // 3 notice
-      "   //",      // 4 verbose
-  };
-  if (level >= 0 && level < MDBX_LOG_DEBUG) {
-    if (function && line && (size_t)level < ARRAY_LENGTH(prefixes))
-      fprintf(stderr, "%s", prefixes[level]);
-    vfprintf(stderr, fmt, args);
-  }
 }
 
 static void print_pages_percentage(const char *caption, size_t value, size_t backed, size_t total) {
@@ -161,7 +142,10 @@ int main(int argc, char *argv[]) {
   short show_gc = 0, show_readers = 0;
 
   if (argc < 2)
-    usage(prog);
+    usage();
+
+  if (tool_help_requested(argc, argv, "Vqpaefnrs:h"))
+    help();
 
   while ((opt = getopt(argc, argv,
                        "V"
@@ -172,18 +156,14 @@ int main(int argc, char *argv[]) {
                        "f"
                        "n"
                        "r"
-                       "s:")) != EOF) {
+                       "s:"
+                       "h")) != EOF) {
     switch (opt) {
+    case 'h':
+      help();
+      break;
     case 'V':
-      printf("mdbx_stat version %d.%d.%d.%d\n"
-             " - source: %s %s, commit %s, tree %s\n"
-             " - anchor: %s\n"
-             " - build: %s for %s by %s\n"
-             " - flags: %s\n"
-             " - options: %s\n",
-             mdbx_version.major, mdbx_version.minor, mdbx_version.patch, mdbx_version.tweak, mdbx_version.git.describe,
-             mdbx_version.git.datetime, mdbx_version.git.commit, mdbx_version.git.tree, mdbx_sourcery_anchor,
-             mdbx_build.datetime, mdbx_build.target, mdbx_build.compiler, mdbx_build.flags, mdbx_build.options);
+      tool_version_print("stat");
       return EXIT_SUCCESS;
     case 'q':
       quiet = true;
@@ -193,7 +173,7 @@ int main(int argc, char *argv[]) {
       break;
     case 'a':
       if (table)
-        usage(prog);
+        usage();
       alltbl = true;
       break;
     case 'e':
@@ -209,36 +189,25 @@ int main(int argc, char *argv[]) {
       break;
     case 's':
       if (alltbl)
-        usage(prog);
+        usage();
       table = optarg;
       break;
     default:
-      usage(prog);
+      usage();
     }
   }
 
   if (optind != argc - 1)
-    usage(prog);
+    usage();
 
-#if IS_WINDOWS
-  SetConsoleCtrlHandler(ConsoleBreakHandlerRoutine, true);
-#else
-#ifdef SIGPIPE
-  signal(SIGPIPE, signal_handler);
-#endif
-#ifdef SIGHUP
-  signal(SIGHUP, signal_handler);
-#endif
-  signal(SIGINT, signal_handler);
-  signal(SIGTERM, signal_handler);
-#endif /* !WINDOWS */
+  tool_break_setup();
 
   envname = argv[optind];
   if (!quiet) {
     printf("mdbx_stat %s (%s, T-%s)\nRunning for %s...\n", mdbx_version.git.describe, mdbx_version.git.datetime,
            mdbx_version.git.tree, envname);
     fflush(nullptr);
-    mdbx_setup_debug(MDBX_LOG_NOTICE, MDBX_DBG_DONTCHANGE, logger);
+    mdbx_setup_debug(MDBX_LOG_NOTICE, MDBX_DBG_DONTCHANGE, tool_logger_default);
   }
 
   rc = mdbx_env_create(&env);

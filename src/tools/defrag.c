@@ -7,36 +7,21 @@
 #define xMDBX_TOOLS /* Avoid using internal ASSERT(), etc */
 #include "essentials.h"
 
+#include "tools/common.h"
+
 #if IS_WINDOWS
 
 /* Bit of madness for Windows console */
-#define mdbx_strerror mdbx_strerror_ANSI2OEM
-#define mdbx_strerror_r mdbx_strerror_r_ANSI2OEM
 
 #include "wingetopt.h"
 
-static volatile BOOL user_break;
-static BOOL WINAPI ConsoleBreakHandlerRoutine(DWORD dwCtrlType) {
-  (void)dwCtrlType;
-  user_break = user_break ? 2 : 1;
-  return true;
-}
-
-#else /* WINDOWS */
-
-static volatile sig_atomic_t user_break;
-static void signal_handler(int sig) {
-  (void)sig;
-  user_break = user_break ? 2 : 1;
-}
-
-#endif /* !WINDOWS */
+#endif /* WINDOWS */
 
 static char *prog;
-static void usage(void) {
-  fprintf(stderr,
+static void usage_msg(FILE *out) {
+  fprintf(out,
           "usage: %s [-V] [-v[v[v...]]] [-q] [-1..9] [-t seconds] [-f percent] [-r percent] [-s megabytes] [-c] [-u|U] "
-          "db_pathname\n"
+          "[-h|--help] db_pathname\n"
           "  -V\t\tprint version and exit\n"
           "  -v\t\tmore verbose, could be repeated for extra details from debug-enabled builds.\n"
           "  -q\t\tbe quiet.\n"
@@ -49,9 +34,19 @@ static void usage(void) {
           "  -c\t\tforce cooperative mode (don't try exclusive).\n"
           "  -u\t\twarmup database before defragmenting.\n"
           "  -U\t\twarmup and try lock database pages in memory before defragmenting.\n"
+          "  -h|--help\tprint this usage message and exit.\n"
           "  db_pathname\tpath to the database.\n",
           prog);
+}
+
+static void usage(void) {
+  usage_msg(stderr);
   exit(EXIT_FAILURE);
+}
+
+static void help(void) {
+  usage_msg(stdout);
+  exit(EXIT_SUCCESS);
 }
 
 static MDBX_log_level_t verbosity = MDBX_LOG_WARN;
@@ -190,6 +185,9 @@ int main(int argc, char *argv[]) {
   if (argc < 2)
     usage();
 
+  if (tool_help_requested(argc, argv, "Vvq123456789s:t:f:r:cuUh"))
+    help();
+
   for (int i; (i = getopt(argc, argv,
                           "V"
                           "v"
@@ -201,18 +199,14 @@ int main(int argc, char *argv[]) {
                           "r:"
                           "c"
                           "u"
-                          "U")) != EOF;) {
+                          "U"
+                          "h")) != EOF;) {
     switch (i) {
+    case 'h':
+      help();
+      break;
     case 'V':
-      printf("mdbx_defrag version %d.%d.%d.%d\n"
-             " - source: %s %s, commit %s, tree %s\n"
-             " - anchor: %s\n"
-             " - build: %s for %s by %s\n"
-             " - flags: %s\n"
-             " - options: %s\n",
-             mdbx_version.major, mdbx_version.minor, mdbx_version.patch, mdbx_version.tweak, mdbx_version.git.describe,
-             mdbx_version.git.datetime, mdbx_version.git.commit, mdbx_version.git.tree, mdbx_sourcery_anchor,
-             mdbx_build.datetime, mdbx_build.target, mdbx_build.compiler, mdbx_build.flags, mdbx_build.options);
+      tool_version_print("defrag");
       return EXIT_SUCCESS;
     case 'v':
       if (++verbosity > 9)
@@ -282,20 +276,12 @@ int main(int argc, char *argv[]) {
   if (optind != argc - 1)
     usage();
 
+  tool_break_setup();
 #if IS_WINDOWS
-  SetConsoleCtrlHandler(ConsoleBreakHandlerRoutine, true);
   is_console = _isatty(_fileno(stdout)) != 0;
 #else
   is_console = isatty(fileno(stdout)) == 1;
-#ifdef SIGPIPE
-  signal(SIGPIPE, signal_handler);
 #endif
-#ifdef SIGHUP
-  signal(SIGHUP, signal_handler);
-#endif
-  signal(SIGINT, signal_handler);
-  signal(SIGTERM, signal_handler);
-#endif /* !WINDOWS */
 
   const char *const db_pathname = argv[optind];
   if (!quiet) {

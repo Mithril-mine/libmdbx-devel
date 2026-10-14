@@ -1,4 +1,4 @@
-usage: mdbx_BIN [-V] [-v] [-q] [-c] [-0|1|2] [-w] [-d] [-i] [-s table] [-u|U] db_pathname
+usage: mdbx_BIN [-V] [-v] [-q] [-c] [-0|1|2] [-w] [-d] [-i] [-s table] [-u|U] [-h|--help] db_pathname
   -V		print version and exit
   -v		more verbose, could be repeated upto 9 times for extra details
   -q		be quiet
@@ -12,3 +12,4 @@ usage: mdbx_BIN [-V] [-v] [-q] [-c] [-0|1|2] [-w] [-d] [-i] [-s table] [-u|U] db
   -0|1|2	force using specific meta-page 0, or 2 for checking
   -t		turn to a specified meta-page on successful check
   -T		turn to a specified meta-page EVEN ON UNSUCCESSFUL CHECK!
+  -h|--help	print this usage message and exit

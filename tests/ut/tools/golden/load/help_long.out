@@ -1,0 +1,23 @@
+usage: mdbx_BIN [-V] [-q] [-a] [-b number] [-L megabytes] [-d percent] [-G geometry] [-f file] [-s name] [-N] [-p] [-T] [-r] [-n] [-h|--help] dbpath
+  -V		print version and exit.
+  -q		be quiet.
+  -a		append records in input order (required for custom comparators).
+  -b number	insertion batch size as number of items (100K by default).
+  -L megabytes	limits the amount of transactions in megabytes.
+  -d percent	desired pages filling density in percent between 50 and 100 (100 by default).
+  -G geometry	override database geometry in the form of five numbers L:U:G:S:P delimited by a colon,
+		where:
+		  L - lower/minimal database size in bytes;
+		  U - upper/maximal database size in bytes;
+		  G - growth step in bytes;
+		  S - shrink threshold in bytes;
+		  P - page size in bytes;
+		see description of mdbx_env_set_geometry() for more information.
+  -f file	read from file instead of stdin.
+  -s name	load into specified named table.
+  -N		don't overwrite existing records when loading, just skip ones.
+  -p		purge target table(s) before loading.
+  -T		read plaintext.
+  -r		rescue mode (ignore errors to load corrupted DB dump).
+  -n		don't use subdirectory for newly created database (MDBX_NOSUBDIR).
+  -h|--help	print this usage message and exit.

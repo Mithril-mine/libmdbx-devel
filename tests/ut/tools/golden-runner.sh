@@ -361,6 +361,22 @@ case_stat_gc() {
   run_case gc 0 -- "$BIN" -f "$d/base.db"
 }
 
+############################################# -h / --help (all tools)
+case_chk_help() { run_case help 0 -- "$BIN" -h; }
+case_chk_help_long() { run_case help_long 0 -- "$BIN" --help; }
+case_copy_help() { run_case help 0 -- "$BIN" -h; }
+case_copy_help_long() { run_case help_long 0 -- "$BIN" --help; }
+case_defrag_help() { run_case help 0 -- "$BIN" -h; }
+case_defrag_help_long() { run_case help_long 0 -- "$BIN" --help; }
+case_drop_help() { run_case help 0 -- "$BIN" -h; }
+case_drop_help_long() { run_case help_long 0 -- "$BIN" --help; }
+case_dump_help() { run_case help 0 -- "$BIN" -h; }
+case_dump_help_long() { run_case help_long 0 -- "$BIN" --help; }
+case_load_help() { run_case help 0 -- "$BIN" -h; }
+case_load_help_long() { run_case help_long 0 -- "$BIN" --help; }
+case_stat_help() { run_case help 0 -- "$BIN" -h; }
+case_stat_help_long() { run_case help_long 0 -- "$BIN" --help; }
+
 # dispatch per tool
 tool_funcs="$(declare -F | awk '{print $3}' | grep "^case_${TOOL}_")"
 for f in $tool_funcs; do
@@ -401,6 +417,20 @@ for f in $tool_funcs; do
     case_stat_named) case_stat_named;;
     case_stat_readers) case_stat_readers;;
     case_stat_gc) case_stat_gc;;
+    case_chk_help) case_chk_help;;
+    case_chk_help_long) case_chk_help_long;;
+    case_copy_help) case_copy_help;;
+    case_copy_help_long) case_copy_help_long;;
+    case_defrag_help) case_defrag_help;;
+    case_defrag_help_long) case_defrag_help_long;;
+    case_drop_help) case_drop_help;;
+    case_drop_help_long) case_drop_help_long;;
+    case_dump_help) case_dump_help;;
+    case_dump_help_long) case_dump_help_long;;
+    case_load_help) case_load_help;;
+    case_load_help_long) case_load_help_long;;
+    case_stat_help) case_stat_help;;
+    case_stat_help_long) case_stat_help_long;;
   esac
 done
 

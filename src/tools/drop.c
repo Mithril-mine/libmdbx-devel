@@ -8,65 +8,44 @@
 #define xMDBX_TOOLS /* Avoid using internal ASSERT(), etc */
 #include "essentials.h"
 
+#include "tools/common.h"
 #include <ctype.h>
 
 #if IS_WINDOWS
 
 /* Bit of madness for Windows console */
-#define mdbx_strerror mdbx_strerror_ANSI2OEM
-#define mdbx_strerror_r mdbx_strerror_r_ANSI2OEM
 
 #include "wingetopt.h"
 
-static volatile BOOL user_break;
-static BOOL WINAPI ConsoleBreakHandlerRoutine(DWORD dwCtrlType) {
-  (void)dwCtrlType;
-  user_break = true;
-  return true;
-}
-
-#else /* WINDOWS */
-
-static volatile sig_atomic_t user_break;
-static void signal_handler(int sig) {
-  (void)sig;
-  user_break = 1;
-}
-
-#endif /* !WINDOWS */
+#endif /* WINDOWS */
 
 static char *prog;
 static bool quiet = false;
-static void usage(void) {
-  fprintf(stderr,
-          "usage: %s [-V] [-q] [-d] [-s name] dbpath\n"
+static void usage_msg(FILE *out) {
+  fprintf(out,
+          "usage: %s [-V] [-q] [-d] [-s name] [-h|--help] dbpath\n"
           "  -V\t\tprint version and exit\n"
           "  -q\t\tbe quiet\n"
           "  -d\t\tdelete the specified database, don't just empty it\n"
           "  -s name\tdrop the specified named table\n"
-          "  \t\tby default empty the main DB\n",
+          "  \t\tby default empty the main DB\n"
+          "  -h|--help\tprint this usage message and exit\n",
           prog);
+}
+
+static void usage(void) {
+  usage_msg(stderr);
   exit(EXIT_FAILURE);
+}
+
+static void help(void) {
+  usage_msg(stdout);
+  exit(EXIT_SUCCESS);
 }
 
 static void error(const char *func, int rc) {
   if (!quiet)
     fprintf(stderr, "%s: %s() error %d %s\n", prog, func, rc, mdbx_strerror(rc));
-}
-
-static void logger(MDBX_log_level_t level, const char *function, int line, const char *fmt, va_list args) {
-  static const char *const prefixes[] = {
-      "!!!fatal: ", // 0 fatal
-      " ! ",        // 1 error
-      " ~ ",        // 2 warning
-      "   ",        // 3 notice
-      "   //",      // 4 verbose
-  };
-  if (level >= 0 && level < MDBX_LOG_DEBUG) {
-    if (function && line && (size_t)level < ARRAY_LENGTH(prefixes))
-      fprintf(stderr, "%s", prefixes[level]);
-    vfprintf(stderr, fmt, args);
-  }
 }
 
 int main(int argc, char *argv[]) {
@@ -83,23 +62,22 @@ int main(int argc, char *argv[]) {
   if (argc < 2)
     usage();
 
+  if (tool_help_requested(argc, argv, "ds:nqVh"))
+    help();
+
   while ((i = getopt(argc, argv,
                      "d"
                      "s:"
                      "n"
                      "q"
-                     "V")) != EOF) {
+                     "V"
+                     "h")) != EOF) {
     switch (i) {
+    case 'h':
+      help();
+      break;
     case 'V':
-      printf("mdbx_drop version %d.%d.%d.%d\n"
-             " - source: %s %s, commit %s, tree %s\n"
-             " - anchor: %s\n"
-             " - build: %s for %s by %s\n"
-             " - flags: %s\n"
-             " - options: %s\n",
-             mdbx_version.major, mdbx_version.minor, mdbx_version.patch, mdbx_version.tweak, mdbx_version.git.describe,
-             mdbx_version.git.datetime, mdbx_version.git.commit, mdbx_version.git.tree, mdbx_sourcery_anchor,
-             mdbx_build.datetime, mdbx_build.target, mdbx_build.compiler, mdbx_build.flags, mdbx_build.options);
+      tool_version_print("drop");
       return EXIT_SUCCESS;
     case 'q':
       quiet = true;
@@ -120,25 +98,14 @@ int main(int argc, char *argv[]) {
   if (optind != argc - 1)
     usage();
 
-#if IS_WINDOWS
-  SetConsoleCtrlHandler(ConsoleBreakHandlerRoutine, true);
-#else
-#ifdef SIGPIPE
-  signal(SIGPIPE, signal_handler);
-#endif
-#ifdef SIGHUP
-  signal(SIGHUP, signal_handler);
-#endif
-  signal(SIGINT, signal_handler);
-  signal(SIGTERM, signal_handler);
-#endif /* !WINDOWS */
+  tool_break_setup();
 
   envname = argv[optind];
   if (!quiet) {
     printf("mdbx_drop %s (%s, T-%s)\nRunning for %s/%s...\n", mdbx_version.git.describe, mdbx_version.git.datetime,
            mdbx_version.git.tree, envname, subname ? subname : "@MAIN");
     fflush(nullptr);
-    mdbx_setup_debug(MDBX_LOG_NOTICE, MDBX_DBG_DONTCHANGE, logger);
+    mdbx_setup_debug(MDBX_LOG_NOTICE, MDBX_DBG_DONTCHANGE, tool_logger_default);
   }
 
   rc = mdbx_env_create(&env);

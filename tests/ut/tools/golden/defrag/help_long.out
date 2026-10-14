@@ -1,0 +1,15 @@
+usage: mdbx_BIN [-V] [-v[v[v...]]] [-q] [-1..9] [-t seconds] [-f percent] [-r percent] [-s megabytes] [-c] [-u|U] [-h|--help] db_pathname
+  -V		print version and exit
+  -v		more verbose, could be repeated for extra details from debug-enabled builds.
+  -q		be quiet.
+  -1		perform a single quick defragmentation cycle without two-stage moves.
+  -2 .. -9	limits the number of defragmentation cycles.
+  -t seconds	limits the duration of defragmentation in seconds.
+  -f percent	defragment until free up a given percentage of unused space (default 100).
+  -r percent	acceptable undefragmented residue in percent of used space (0 by default).
+  -s megabytes	preferred defragmentation step/transaction size.
+  -c		force cooperative mode (don't try exclusive).
+  -u		warmup database before defragmenting.
+  -U		warmup and try lock database pages in memory before defragmenting.
+  -h|--help	print this usage message and exit.
+  db_pathname	path to the database.

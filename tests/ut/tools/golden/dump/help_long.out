@@ -1,0 +1,15 @@
+usage: mdbx_BIN [-V] [-q] [-c] [-f file] [-l] [-p] [-r] [-a|-s table] [-u|U] [-h|--help] dbpath
+  -V		print version and exit
+  -q		be quiet
+  -c		concise mode without repeating keys,
+  		but incompatible with Berkeley DB and LMDB
+  -f		write to file instead of stdout
+  -l		list tables and exit
+  -p		use printable characters
+  -r		rescue mode (ignore errors to dump corrupted DB)
+  -a		dump main DB and all tables
+  -s name	dump only the specified named table
+  -u		warmup database before dumping
+  -U		warmup and try lock database pages in memory before dumping
+  		by default dump only the main DB
+  -h|--help	print this usage message and exit

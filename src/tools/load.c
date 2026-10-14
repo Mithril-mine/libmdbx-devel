@@ -8,32 +8,16 @@
 #define xMDBX_TOOLS /* Avoid using internal ASSERT(), etc */
 #include "essentials.h"
 
+#include "tools/common.h"
 #include <ctype.h>
 
 #if IS_WINDOWS
 
 /* Bit of madness for Windows console */
-#define mdbx_strerror mdbx_strerror_ANSI2OEM
-#define mdbx_strerror_r mdbx_strerror_r_ANSI2OEM
 
 #include "wingetopt.h"
 
-static volatile BOOL user_break;
-static BOOL WINAPI ConsoleBreakHandlerRoutine(DWORD dwCtrlType) {
-  (void)dwCtrlType;
-  user_break = true;
-  return true;
-}
-
-#else /* WINDOWS */
-
-static volatile sig_atomic_t user_break;
-static void signal_handler(int sig) {
-  (void)sig;
-  user_break = 1;
-}
-
-#endif /* !WINDOWS */
+#endif /* WINDOWS */
 
 static char *prog;
 static bool quiet = false;
@@ -45,21 +29,6 @@ static void error(const char *func, int rc) {
               mdbx_strerror(rc));
     else
       fprintf(stderr, "%s: %s() error %d %s\n", prog, func, rc, mdbx_strerror(rc));
-  }
-}
-
-static void logger(MDBX_log_level_t level, const char *function, int line, const char *fmt, va_list args) {
-  static const char *const prefixes[] = {
-      "!!!fatal: ", // 0 fatal
-      " ! ",        // 1 error
-      " ~ ",        // 2 warning
-      "   ",        // 3 notice
-      "   //",      // 4 verbose
-  };
-  if (level >= 0 && level < MDBX_LOG_DEBUG) {
-    if (function && line && (size_t)level < ARRAY_LENGTH(prefixes))
-      fprintf(stderr, "%s", prefixes[level]);
-    vfprintf(stderr, fmt, args);
   }
 }
 
@@ -446,10 +415,10 @@ __hot static int readline(MDBX_val *out, MDBX_val *buf) {
   return MDBX_SUCCESS;
 }
 
-static void usage(void) {
-  fprintf(stderr,
+static void usage_msg(FILE *out) {
+  fprintf(out,
           "usage: %s "
-          "[-V] [-q] [-a] [-f file] [-s name] [-N] [-p] [-T] [-r] [-n] dbpath\n"
+          "[-V] [-q] [-a] [-b number] [-L megabytes] [-d percent] [-G geometry] [-f file] [-s name] [-N] [-p] [-T] [-r] [-n] [-h|--help] dbpath\n"
           "  -V\t\tprint version and exit.\n"
           "  -q\t\tbe quiet.\n"
           "  -a\t\tappend records in input order (required for custom comparators).\n"
@@ -470,9 +439,19 @@ static void usage(void) {
           "  -p\t\tpurge target table(s) before loading.\n"
           "  -T\t\tread plaintext.\n"
           "  -r\t\trescue mode (ignore errors to load corrupted DB dump).\n"
-          "  -n\t\tdon't use subdirectory for newly created database (MDBX_NOSUBDIR).\n",
+          "  -n\t\tdon't use subdirectory for newly created database (MDBX_NOSUBDIR).\n"
+          "  -h|--help\tprint this usage message and exit.\n",
           prog);
+}
+
+static void usage(void) {
+  usage_msg(stderr);
   exit(EXIT_FAILURE);
+}
+
+static void help(void) {
+  usage_msg(stdout);
+  exit(EXIT_SUCCESS);
 }
 
 static int equal_or_greater(const MDBX_val *a, const MDBX_val *b) {
@@ -504,6 +483,9 @@ int main(int argc, char *argv[]) {
   if (argc < 2)
     usage();
 
+  if (tool_help_requested(argc, argv, "ab:L:d:G:fn:s:NpTVrqh"))
+    help();
+
   while ((i = getopt(argc, argv,
                      "a"
                      "b:"
@@ -518,18 +500,14 @@ int main(int argc, char *argv[]) {
                      "T"
                      "V"
                      "r"
-                     "q")) != EOF) {
+                     "q"
+                     "h")) != EOF) {
     switch (i) {
+    case 'h':
+      help();
+      break;
     case 'V':
-      printf("mdbx_load version %d.%d.%d.%d\n"
-             " - source: %s %s, commit %s, tree %s\n"
-             " - anchor: %s\n"
-             " - build: %s for %s by %s\n"
-             " - flags: %s\n"
-             " - options: %s\n",
-             mdbx_version.major, mdbx_version.minor, mdbx_version.patch, mdbx_version.tweak, mdbx_version.git.describe,
-             mdbx_version.git.datetime, mdbx_version.git.commit, mdbx_version.git.tree, mdbx_sourcery_anchor,
-             mdbx_build.datetime, mdbx_build.target, mdbx_build.compiler, mdbx_build.flags, mdbx_build.options);
+      tool_version_print("load");
       return EXIT_SUCCESS;
     case 'a':
       putflags |= MDBX_APPEND;
@@ -610,18 +588,7 @@ int main(int argc, char *argv[]) {
     envname = argv[optind];
   }
 
-#if IS_WINDOWS
-  SetConsoleCtrlHandler(ConsoleBreakHandlerRoutine, true);
-#else
-#ifdef SIGPIPE
-  signal(SIGPIPE, signal_handler);
-#endif
-#ifdef SIGHUP
-  signal(SIGHUP, signal_handler);
-#endif
-  signal(SIGINT, signal_handler);
-  signal(SIGTERM, signal_handler);
-#endif /* !WINDOWS */
+  tool_break_setup();
 
   if (input_file) {
     if (freopen(input_file, "r", stdin) == nullptr) {
@@ -634,7 +601,7 @@ int main(int argc, char *argv[]) {
     printf("mdbx_load %s (%s, T-%s)\nRunning for %s...\n", mdbx_version.git.describe, mdbx_version.git.datetime,
            mdbx_version.git.tree, envname);
     fflush(nullptr);
-    mdbx_setup_debug(MDBX_LOG_NOTICE, MDBX_DBG_DONTCHANGE, logger);
+    mdbx_setup_debug(MDBX_LOG_NOTICE, MDBX_DBG_DONTCHANGE, tool_logger_default);
   }
 
   data_buf.iov_len = 4096;

@@ -1,0 +1,7 @@
+usage: mdbx_BIN [-V] [-q] [-d] [-s name] [-h|--help] dbpath
+  -V		print version and exit
+  -q		be quiet
+  -d		delete the specified database, don't just empty it
+  -s name	drop the specified named table
+  		by default empty the main DB
+  -h|--help	print this usage message and exit
