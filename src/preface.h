@@ -903,7 +903,11 @@ __extern_C key_t ftok(const char *, int);
 
 #if defined(__SANITIZE_ADDRESS__) && !defined(MDBX_ATTRIBUTE_NO_SANITIZE_ADDRESS)
 /* Avoid ASAN-trap due the target TLS-variable feed by Darwin's tlv_free() */
+#if defined(_MSC_VER) && !defined(__clang__)
+#define MDBX_ATTRIBUTE_NO_SANITIZE_ADDRESS(ELSEWISE) __declspec(no_sanitize_address)
+#else
 #define MDBX_ATTRIBUTE_NO_SANITIZE_ADDRESS(ELSEWISE) __attribute__((__no_sanitize_address__, __noinline__))
+#endif
 #else
 #define MDBX_ATTRIBUTE_NO_SANITIZE_ADDRESS(ELSEWISE) ELSEWISE
 #endif

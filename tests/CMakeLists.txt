@@ -704,6 +704,16 @@ add_ut(reverse_insertions SOURCE ut/txn/reverse_insertions.c++)
     endforeach()
   endif()
 
+  # MDBX_ATTRIBUTE_NO_SANITIZE_ADDRESS must pick a compiler-specific spelling
+  # under __SANITIZE_ADDRESS__ (__declspec for MSVC, __attribute__ for
+  # GCC/Clang). Preprocessor-only regression (issue #62); runs on any UNIX
+  # host with a C compiler available.
+  if(UNIX AND NOT CMAKE_CROSSCOMPILING)
+    add_test(NAME check_asan_macro
+             COMMAND bash ${CMAKE_CURRENT_SOURCE_DIR}/scripts/check-asan-macro.sh)
+    set_tests_properties(check_asan_macro PROPERTIES LABELS "ut;ut.api" TIMEOUT 60)
+  endif()
+
   # Regression probe for the MDBX_MULTIPLE batch-insert early-exit defect
   # (ported from poc1-failed): MDBX_NOOVERWRITE|MDBX_MULTIPLE on an existing key
   # must return MDBX_KEYEXIST with done==0. Plain-C, public API only.

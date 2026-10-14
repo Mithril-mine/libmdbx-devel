@@ -47,6 +47,7 @@ Cutting-edge release with new core features and internal refactoring.
  - Fixed an off-by-one in `rkl_push()` while rolling back a duplicate insertion: the tail of the internal list was lost, making the structure invalid. The defect was unreachable in current usage scenarios, but could be triggered by specific crafted internal sequences.
  - Fixed `MDBX_TXN_TRY` leakage into transaction state flags.
  - Fixed print-mode `mdbx_dump -p` emitting a field's leading space byte verbatim: such a line was misread by `mdbx_load` as the concise repeat marker, desynchronizing the dump stream and silently losing data on round-trip. A leading space is now escaped as `\20`, and `mdbx_load` rejects a concise-repeat marker where a value is expected (issue #61).
+ - Fixed building with MSVC and AddressSanitizer: `MDBX_ATTRIBUTE_NO_SANITIZE_ADDRESS` expanded to a GCC-only `__attribute__` under `__SANITIZE_ADDRESS__`, which MSVC cannot parse; it now uses `__declspec(no_sanitize_address)` (issue #62).
  - Fixed typos in the ChangeLog.
 
 
