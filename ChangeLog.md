@@ -34,6 +34,7 @@ In the `master` branch, development of version v0.15 will begin, with the techni
  - Fixed `mdbx_replace_ex()` leaving its on-stack cursor linked into `txn->cursors[]` when it returns `MDBX_EINVAL` for aliased old/new buffers: the next operation on the same DBI walked the stale cursor list and could hang (Linux `-O2`) or crash (use-after-return under ASan) (issue #56) (backport).
  - Fixed `page_check()` accepting non-DUPFIX node offsets pointing below the page's free-gap `upper` bound: such a crafted page passed validation even under `MDBX_VALIDATION`, and `node_del()`/`node_shrink()` subsequently underflowed a `memmove()` length to ~`SIZE_MAX` (out-of-bounds write). Offsets outside `[upper, page-end]`, including odd ones, are now rejected (issue #57) (backport).
  - Fixed building with MSVC and AddressSanitizer: `MDBX_ATTRIBUTE_NO_SANITIZE_ADDRESS` expanded to a GCC-only `__attribute__` under `__SANITIZE_ADDRESS__`, which MSVC cannot parse; it now uses `__declspec(no_sanitize_address)` (issue #62) (backport).
+ - Fixed `mdbx_env_copy(..., MDBX_CP_OVERWRITE)` and `mdbx_copy -f` deleting a pre-existing destination database on POSIX when the destination could not be locked: the unconditional cleanup removed a file this call never created, silently destroying a live database held open by another process. The destination is now removed only when this call created it or started writing to it; a pre-existing untouched file survives a failed copy (issue #58) (backport).
  - Fixed typos in the ChangeLog.
 
 

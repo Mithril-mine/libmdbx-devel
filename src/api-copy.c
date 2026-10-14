@@ -632,7 +632,7 @@ __cold static int copy_asis(MDBX_env *env, MDBX_txn *txn, mdbx_filehandle_t fd, 
 
 //----------------------------------------------------------------------------
 
-__cold static int copy2fd(MDBX_txn *txn, mdbx_filehandle_t fd, MDBX_copy_flags_t flags) {
+__cold static int copy2fd(MDBX_txn *txn, mdbx_filehandle_t fd, MDBX_copy_flags_t flags, bool *touched) {
   if (unlikely(txn->flags & MDBX_TXN_DIRTY))
     return MDBX_BAD_TXN;
 
@@ -672,6 +672,8 @@ __cold static int copy2fd(MDBX_txn *txn, mdbx_filehandle_t fd, MDBX_copy_flags_t
      * Now we sure to incomplete copy will not be used. */
     memset(buffer, -1, pgno2bytes(env, NUM_METAS));
     rc = osal_write(fd, buffer, pgno2bytes(env, NUM_METAS));
+    if (likely(rc == MDBX_SUCCESS) && touched)
+      *touched = true;
   }
 
   if (likely(rc == MDBX_SUCCESS))
@@ -715,15 +717,39 @@ __cold static int copy2pathname(MDBX_txn *txn, const pathchar_t *dest_path, MDBX
   /* The destination path must exist, but the destination file must not.
    * We don't want the OS to cache the writes, since the source data is
    * already in the OS cache. */
-  mdbx_filehandle_t newfd = INVALID_HANDLE_VALUE;
-  int rc = osal_openfile((flags & MDBX_CP_OVERWRITE) ? MDBX_OPEN_COPY_OVERWRITE : MDBX_OPEN_COPY_EXCL, txn->env,
-                         dest_path, &newfd,
+  const mdbx_mode_t mode =
 #if IS_WINDOWS
-                         (mdbx_mode_t)-1
+      (mdbx_mode_t)-1
 #else
-                         S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP
+      S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP
 #endif
-  );
+      ;
+  mdbx_filehandle_t newfd = INVALID_HANDLE_VALUE;
+  bool created_by_us = false;
+  uint64_t pre_size = 0;
+  int rc;
+  if (flags & MDBX_CP_OVERWRITE) {
+    /* First try to create the destination file exclusively. If it already
+     * exists, it is not ours and must survive any failure of this call. */
+    rc = osal_openfile(MDBX_OPEN_COPY_EXCL, txn->env, dest_path, &newfd, mode);
+    if (rc == MDBX_SUCCESS) {
+      created_by_us = true;
+    } else if (rc == MDBX_EEXIST
+#if IS_WINDOWS
+               || rc == ERROR_FILE_EXISTS || rc == ERROR_ALREADY_EXISTS
+#endif
+    ) {
+      rc = osal_openfile(MDBX_OPEN_COPY_OVERWRITE, txn->env, dest_path, &newfd, mode);
+      if (likely(rc == MDBX_SUCCESS)) {
+        created_by_us = false;
+        if (unlikely(osal_filesize(newfd, &pre_size) != MDBX_SUCCESS))
+          pre_size = (uint64_t)-1;
+      }
+    }
+  } else {
+    rc = osal_openfile(MDBX_OPEN_COPY_EXCL, txn->env, dest_path, &newfd, mode);
+    created_by_us = (rc == MDBX_SUCCESS);
+  }
   if (unlikely(rc != MDBX_SUCCESS)) {
     if (rc != MDBX_EEXIST) {
 #if IS_WINDOWS
@@ -731,9 +757,11 @@ __cold static int copy2pathname(MDBX_txn *txn, const pathchar_t *dest_path, MDBX
           rc == ERROR_BAD_PATHNAME)
         return rc;
 #endif
-      int err = osal_removefile(dest_path);
-      if (err != MDBX_SUCCESS && err != MDBX_ENOFILE)
-        ERROR("unable remove incomplete copy destination `%" MDBX_PRIsPATH "`, error %d", dest_path, err);
+      if (created_by_us) {
+        int err = osal_removefile(dest_path);
+        if (err != MDBX_SUCCESS && err != MDBX_ENOFILE)
+          ERROR("unable remove incomplete copy destination `%" MDBX_PRIsPATH "`, error %d", dest_path, err);
+      }
     }
     return rc;
   }
@@ -798,16 +826,24 @@ __cold static int copy2pathname(MDBX_txn *txn, const pathchar_t *dest_path, MDBX
   }
 #endif /* Windows / POSIX */
 
+  bool touched = false;
   if (rc == MDBX_SUCCESS)
-    rc = copy2fd(txn, newfd, flags);
+    rc = copy2fd(txn, newfd, flags, &touched);
 
   int err = osal_closefile(newfd);
   if (rc == MDBX_SUCCESS && err != rc)
     rc = err;
   if (rc != MDBX_SUCCESS) {
-    err = osal_removefile(dest_path);
-    if (err != MDBX_SUCCESS && err != MDBX_ENOFILE)
-      ERROR("unable remove incomplete copy destination `%" MDBX_PRIsPATH "`, error %d", dest_path, err);
+    /* Remove the destination only when this call owns it: either we created
+     * the file ourselves, or we started writing to it and left it damaged.
+     * A pre-existing non-empty file that we failed before writing to it
+     * (e.g. a live database we could not lock) must survive (issue #58). */
+    const bool remove_dest = created_by_us || touched || pre_size == 0;
+    if (remove_dest) {
+      err = osal_removefile(dest_path);
+      if (err != MDBX_SUCCESS && err != MDBX_ENOFILE)
+        ERROR("unable remove incomplete copy destination `%" MDBX_PRIsPATH "`, error %d", dest_path, err);
+    }
   }
   return rc;
 }
@@ -817,7 +853,7 @@ __cold static int copy2pathname(MDBX_txn *txn, const pathchar_t *dest_path, MDBX
 __cold int mdbx_txn_copy2fd(MDBX_txn *txn, mdbx_filehandle_t fd, MDBX_copy_flags_t flags) {
   int rc = check_txn(txn, MDBX_TXN_BLOCKED);
   if (likely(rc == MDBX_SUCCESS))
-    rc = copy2fd(txn, fd, flags);
+    rc = copy2fd(txn, fd, flags, nullptr);
   if (flags & MDBX_CP_DISPOSE_TXN)
     mdbx_txn_abort(txn);
   return LOG_IFERR(rc);
@@ -836,7 +872,7 @@ __cold int mdbx_env_copy2fd(MDBX_env *env, mdbx_filehandle_t fd, MDBX_copy_flags
   if (unlikely(rc != MDBX_SUCCESS))
     return LOG_IFERR(rc);
 
-  rc = copy2fd(txn, fd, flags | MDBX_CP_DISPOSE_TXN | MDBX_CP_RENEW_TXN);
+  rc = copy2fd(txn, fd, flags | MDBX_CP_DISPOSE_TXN | MDBX_CP_RENEW_TXN, nullptr);
   mdbx_txn_abort(txn);
   return LOG_IFERR(rc);
 }
