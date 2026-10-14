@@ -38,17 +38,17 @@ Cutting-edge release with new core features and internal refactoring.
 
 ### Fixes:
 
- - Fixed missed propagation of a mid-commit flush error in `iov_page()` — a failed write could be silently reported as success (issue #47).
- - Fixed Windows ioring corruption when committing large write-mapped durable transactions — could crash in `ior_wocr()` under a live APC (issue #47).
- - Fixed `mdbx_chk` crash when `-i`/`-s` filtering out named sub-tables (issue #49).
- - Fixed `mdbx_load` reading a dump from standard input by default — `-f` no longer consumes the database path argument (issue #50).
- - Fixed a wrong `env->incore` assertion in `gc_alloc_ex()` (issue #52).
- - Fixed an arithmetic overflow in `reasonable_db_maxsize()` on 32-bit builds on 64-bit machines with large RAM.
- - Fixed an off-by-one in `rkl_push()` while rolling back a duplicate insertion: the tail of the internal list was lost, making the structure invalid. The defect was unreachable in current usage scenarios, but could be triggered by specific crafted internal sequences.
- - Fixed `MDBX_TXN_TRY` leakage into transaction state flags.
- - Fixed print-mode `mdbx_dump -p` emitting a field's leading space byte verbatim: such a line was misread by `mdbx_load` as the concise repeat marker, desynchronizing the dump stream and silently losing data on round-trip. A leading space is now escaped as `\20`, and `mdbx_load` rejects a concise-repeat marker where a value is expected (issue #61).
- - Fixed building with MSVC and AddressSanitizer: `MDBX_ATTRIBUTE_NO_SANITIZE_ADDRESS` expanded to a GCC-only `__attribute__` under `__SANITIZE_ADDRESS__`, which MSVC cannot parse; it now uses `__declspec(no_sanitize_address)` (issue #62).
- - Fixed typos in the ChangeLog.
+ - Fixed a rare durability bug: a failed disk write during a commit could be silently reported as success, and on Windows a large write-mapped durable transaction could crash the engine while committing (issue #47).
+ - Fixed `mdbx_chk` crashing on databases with named sub-tables when using `-i`/`-s` (issue #49).
+ - Fixed `mdbx_load` failing with `ENOENT` when reading a dump from standard input (issue #50).
+ - Fixed a spurious internal assertion failure during page allocation on Windows (issue #52).
+ - Fixed an arithmetic overflow that miscomputed the maximum database size on 32-bit builds with large RAM.
+ - Fixed a rare internal structure corruption during rollback of a duplicate insertion (unreachable in normal use, triggerable only by crafted internal sequences).
+ - Fixed the `MDBX_TXN_TRY` flag leaking into transaction state flags.
+ - Fixed `mdbx_dump -p`/`mdbx_load` silently losing data on round-trip when a key or value starts with a space; such a space is now properly escaped (issue #61).
+ - Fixed `mdbx_replace_ex()` with overlapping buffers possibly hanging or crashing the next operation on the same sub-table (issue #56).
+ - Fixed a crafted database file that passed validation and could corrupt data or crash when deleted (issue #57).
+ - Fixed MSVC+AddressSanitizer builds failing to compile (issue #62).
 
 
 --------------------------------------------------------------------------------
