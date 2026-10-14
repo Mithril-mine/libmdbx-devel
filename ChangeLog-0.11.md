@@ -167,7 +167,7 @@ Acknowledgments:
 New:
 
  - Ability to customise `MDBX_LOCK_SUFFIX`, `MDBX_DATANAME`, `MDBX_LOCKNAME` just by predefine ones during build.
- - Added to [`mdbx::env_managed`](https://libmdbx.dqdkfa.ru/group__cxx__api.html#classmdbx_1_1env__managed)'s methods a few overloads with `const char* pathname` parameter (C++ API).
+ - Added to [`mdbx::env_managed`](https://libmdbx.dqdkfa.ru/docs/en/reference/api/group__cxx__api.html#classmdbx_1_1env__managed)'s methods a few overloads with `const char* pathname` parameter (C++ API).
 
 Fixes:
 

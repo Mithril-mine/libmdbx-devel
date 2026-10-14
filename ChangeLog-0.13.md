@@ -847,7 +847,7 @@ Other:
    приостановкой переработки мусора. Механизм парковки и вытеснения
    припаркованных транзакций является как дополнением, так и более простой
    в использовании альтернативой обратному вызову
-   [Handle-Slow-Readers](https://libmdbx.dqdkfa.ru/group__c__err.html#ga2cb11b56414c282fe06dd942ae6cade6).
+   [Handle-Slow-Readers](https://libmdbx.dqdkfa.ru/docs/en/reference/api/group__c__err.html#ga2cb11b56414c282fe06dd942ae6cade6).
    Для удобства функции `mdbx_txn_park()` и `mdbx_txn_unpark()` имеют
    дополнительные аргументы, позволяющие запросить автоматическую
    "распарковку" припаркованных и перезапуск вытесненных транзакций.

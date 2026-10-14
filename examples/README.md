@@ -4,7 +4,7 @@ This set of examples will be updated, and most of the examples are also publicly
 
 ### C API
 The [`example-mdbx.c`](example-mdbx.c) is the example of using the C API.
-However, it is strongly recommended to use the modern [C++ API](https://libmdbx.dqdkfa.ru/group__cxx__api.html), which requires less effort
+However, it is strongly recommended to use the modern [C++ API](https://libmdbx.dqdkfa.ru/docs/en/reference/api/group__cxx__api.html), which requires less effort
 and ensures against many bugs related to resource leaks.
 
 ### Berkeley DB
