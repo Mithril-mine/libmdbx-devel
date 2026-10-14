@@ -38,6 +38,11 @@ plugins:
             GENERATE_HTML: false
             GENERATE_LATEX: false
             QUIET: true
+            # mkdoxy groups the generated classes by the first character of
+            # the class name and chokes on names starting with '['; use the
+            # "flat" scheme (see doxygen TAGLESS_NAMESTYLE) to keep the
+            # doxygen>=1.18 output consumable
+            TAGLESS_NAMESTYLE: "flat"
             # the mkdoxy plugin runs doxygen from the build CWD (repo root),
             # where the HTML-customization files are not available; HTML is
             # disabled anyway
