@@ -15,22 +15,26 @@ Cutting-edge release with new core features and internal refactoring.
   - The operation of the [project website](https://libmdbx.dqdkfa.ru) has been restored after an attack by ukrainian/european bandera terrorists.
     Along with the website’s revival, the documentation has been significantly expanded, and the layout of the API reference guide is now more readable. The documentation now includes:
        - an extensive [textbook](https://libmdbx.dqdkfa.ru/docs/en/textbook/index.html) on libmdbx with about 50 examples;
-       - the “deep dive” section with a description of the [architecture](https://libmdbx.dqdkfa.ru/docs/en/deep-dive/architecture.html) and [internal mechanisms](https://libmdbx.dqdkfa.ru/docs/en/deep-dive/internals.html);
-       - the [“first steps”](https://libmdbx.dqdkfa.ru/docs/en/getting-started/first-steps.html) sections and the description of [improvements](https://libmdbx.dqdkfa.ru/docs/en/deep-dive/improvements.html) in comparison with LMDB.
+       - the "deep dive" section with a description of the [architecture](https://libmdbx.dqdkfa.ru/docs/en/deep-dive/architecture.html) and [internal mechanisms](https://libmdbx.dqdkfa.ru/docs/en/deep-dive/internals.html);
+       - the ["first steps"](https://libmdbx.dqdkfa.ru/docs/en/getting-started/first-steps.html) sections and the description of [improvements](https://libmdbx.dqdkfa.ru/docs/en/deep-dive/improvements.html) in comparison with LMDB.
 
     As a result of the attack, no source code was damaged, but the working project site, configured work environments and the infrastructure necessary for their operation were lost.
     Therefore, we had to deploy a new website from working drafts without completing the proofreading of the textbook and other new content. So work on updating the website and proofreading the documentation will continue.
 
   - In the `master` branch, development of version v0.15 will begin. The engineering of subsequent releases of the v0.14.x version line will continue in the `stable` branch.
 
+### Appreciations:
+
+ - [Andrea Lanfranchi](https://github.com/AndreaLanfranchi) for bug reporting and assistance with fixing ones.
+
 ### Improvements:
 
- - Minor clarification/refining README and doxygen API descriptions.
- - Added the `-h`/`--help` options to all the command-line utilities (`mdbx_chk`, `mdbx_copy`, `mdbx_drop`, `mdbx_dump`, `mdbx_load`, `mdbx_stat`, `mdbx_defrag`) and deduplicated their common helpers into a shared header-only module.
+ - Clarification/refining README and doxygen API descriptions.
+ - Added the `-h`/`--help` options to all the command-line utilities and deduplicated their common helpers into a shared header-only module.
  - Added the man page for the `mdbx_defrag` utility and updated the other man pages.
- - Rewrote the «Tooling: command-line utilities» document with full option reference of every utility.
- - Added a new bilingual (RU+EN) textbook and integrated it into the documentation site, with the accompanying example programs ported and restructured.
- - Introduced a unified bilingual documentation site (MkDocs-based docsite), six bilingual guides and consolidated engineering documentation (architecture/deep-dive/improvements), replacing the legacy doxygen-based pipeline.
+ - Wrote the "Tooling: command-line utilities" document with full option reference of every utility.
+ - Added a new bilingual textbook and integrated it into the documentation site, with the accompanying example programs ported and restructured.
+ - Introduced a unified bilingual documentation site, six bilingual guides and consolidated engineering documentation.
 
 ### Fixes:
 
