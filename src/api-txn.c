@@ -294,6 +294,7 @@ int mdbx_txn_begin_ex(MDBX_env *env, MDBX_txn *parent, MDBX_txn_flags_t flags, M
         parent->tw.loose_pages = page_next(lp);
         /* Remove from dirty list */
         page_wash(parent, dpl_exist(parent, lp->pgno), lp, 1);
+        txn->tw.dirtyroom = parent->tw.dirtyroom;
       } while (parent->tw.loose_pages);
       parent->tw.loose_count = 0;
 #if MDBX_ENABLE_REFUND
