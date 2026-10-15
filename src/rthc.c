@@ -374,9 +374,9 @@ __cold static int rthc_drown(MDBX_env *const env) {
   const mdbx_pid_t current_pid = osal_getpid();
   int rc = MDBX_SUCCESS;
   MDBX_env *inprocess_neighbor = nullptr;
-  if (likely(env->lck_mmap.lck && current_pid == env->pid)) {
+  if (likely(env->lck_mmap.fd != INVALID_HANDLE_VALUE && current_pid == env->pid)) {
     rc = rthc_uniq_check(&env->lck_mmap, &inprocess_neighbor);
-    if (!inprocess_neighbor) {
+    if (!inprocess_neighbor && env->lck_mmap.lck) {
       reader_slot_t *const begin = &env->lck_mmap.lck->rdt[0];
       reader_slot_t *const end = &env->lck_mmap.lck->rdt[env->max_readers];
       TRACE("== %s env %p pid %zd, readers %p ...%p, current-pid %zd", (current_pid == env->pid) ? "cleanup" : "skip",
