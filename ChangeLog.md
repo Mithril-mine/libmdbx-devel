@@ -39,6 +39,7 @@ In the `master` branch, development of version v0.15 will begin, with the techni
   - Fixed the C++ RAII wrappers: `env_managed::close()` left `handle_` dangling when `mdbx_env_close_ex()` released the environment but returned an error (sync/fstat/panic), so the destructor re-entered the freed object (use-after-free); the `*_managed` destructors and move-assignments called throwing `close()`/`abort()` from implicitly-`noexcept` context, so an error there (e.g. `MDBX_THREAD_MISMATCH` from `mdbx_txn_abort()` on a foreign thread) ended the process with `std::terminate`. `close()` now keeps `handle_` valid on `MDBX_BUSY` and nulls it before throwing on any other error, and the destructors/move-assignments release the handle best-effort without throwing (issue #60) (backport).
  - Fixed a crafted database file driving the engine out of bounds (crash or data corruption) when deleting records (issue #63) (backport).
  - Fixed a performance regression: an empty durable-mode commit still wrote a meta page and flushed the device, adding several milliseconds of latency to no-op commits (issue #64) (backport).
+ - Fixed Windows performance: in write-map mode every no-sync commit flushed the whole mapping, making `SAFE_NOSYNC`/`NOMETASYNC` nearly as expensive as a full synchronization (issue #65) (backport).
  - Fixed typos in the ChangeLog.
 
 

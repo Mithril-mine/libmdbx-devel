@@ -113,7 +113,7 @@ retry:;
       /* pre-sync to avoid latency for writer */
       if (unsynced_pages > presync_threshold) {
         eASSERT0(env, ((flags ^ env->flags) & MDBX_WRITEMAP) == 0);
-        if (flags & MDBX_WRITEMAP) {
+        if ((flags & MDBX_WRITEMAP) && !MDBX_AVOID_MSYNC) {
           /* Acquire guard to avoid collision with remap */
 #if IS_WINDOWS
           imports.srwl_AcquireShared(&env->remap_lock);

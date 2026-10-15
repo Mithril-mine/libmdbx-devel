@@ -1153,7 +1153,11 @@ int dxb_sync_locked(MDBX_env *env, unsigned flags, meta_t *const pending, troika
     } else if (unlikely(env->incore))
       goto skip_incore_sync;
 
-    if (flags & MDBX_WRITEMAP)
+    /* MDBX_AVOID_MSYNC (1 on Windows) routes persistence through explicit
+     * writes + fsync instead of flushing the mapping, because the mapping
+     * flush is expensive; honoring it here also avoids a whole-mapping
+     * FlushViewOfFile on every SAFE_NOSYNC/NOMETASYNC commit. */
+    if ((flags & MDBX_WRITEMAP) && !MDBX_AVOID_MSYNC)
       rc = dxb_msync(env, pending->geometry.first_unallocated, mode_bits);
     else
       rc = dxb_fsync(env, mode_bits);
