@@ -156,6 +156,13 @@ Detailed test documentation (dev-only, in `docs/engineering/`):
 
 ## Code style (dev-only)
  - use LLVM codestyle
+ - Minimize preprocessor conditionals (`#if`/`#ifdef`/`#ifndef`/`#elif`):
+   do not introduce new ones; migrate existing ones into system-dependent
+   modules/files (`src/osal.h`, platform implementations) gradually. Prefer
+   fallbacks in `#define`s that resolve to no-op functions/macros and
+   runtime `if (MDBX_OPTION_...)`-style branches in code instead of
+   compile-time cuts (e.g. the `MPROBE_*` probes are no-op outside
+   `MDBX_PROBES` builds without any `#if` at the call site).
 
 ## Git history & CI policy (dev-only, excluded from `make dist`)
 
