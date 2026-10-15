@@ -56,6 +56,7 @@ Cutting-edge release with new core features and internal refactoring.
  - Fixed a crafted database file driving the engine out of bounds (crash or data corruption) when deleting records (issue #63).
  - Fixed a performance regression: an empty durable-mode commit still wrote a meta page and flushed the device, adding several milliseconds of latency to no-op commits (issue #64).
  - Fixed Windows performance: in write-map mode every no-sync commit flushed the whole mapping, making `SAFE_NOSYNC`/`NOMETASYNC` nearly as expensive as a full synchronization (issue #65).
+ - Fixed the parent transaction's page-reuse accounting ending up inconsistent if a nested transaction begin fails with out-of-memory partway through the move (issue #67).
 
 
 --------------------------------------------------------------------------------
