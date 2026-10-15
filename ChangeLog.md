@@ -35,6 +35,7 @@ Cutting-edge release with new core features and internal refactoring.
  - Wrote the "Tooling: command-line utilities" document with full option reference of every utility.
  - Added a new bilingual textbook and integrated it into the documentation site, with the accompanying example programs ported and restructured.
  - Introduced a unified bilingual documentation site, six bilingual guides and consolidated engineering documentation.
+ - Conan recipe: added `mdbx.lto` (`Default`/`True`/`False`/`Fat`) and `mdbx.sanitize` (`none`/`address`/`undefined`/`address,undefined`) options; the former maps onto `INTERPROCEDURAL_OPTIMIZATION` plus the new CMake `MDBX_LTO_FAT_OBJECTS` (GCC/Clang emit dual `-ffat-lto-objects`, MSVC degrades to plain LTO), the latter onto `-fsanitize=...` compile/link flags. Documented that the binary identity covers the whole profile and every recipe option, while warnings, the `-O` level inside a build type, the consumer's toolchain-file and the system library versions stay outside it — see README "Packaging / Conan".
 
 ### Fixes:
 
