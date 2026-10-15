@@ -1361,8 +1361,9 @@ env_managed &env_managed::operator=(env_managed &&other) noexcept {
     if (MDBX_UNLIKELY(handle_))
       MDBX_CXX20_UNLIKELY {
         assert(handle_ != other.handle_);
-        /* coverity[UNCAUGHT_EXCEPT] */
-        close();
+        /* best-effort release: never throw from a noexcept move-assignment
+         * (issue #60) */
+        (void)::mdbx_env_close(handle_);
       }
     inherited::operator=(std::move(other));
   }
@@ -1371,8 +1372,8 @@ env_managed &env_managed::operator=(env_managed &&other) noexcept {
 
 __cold env_managed::~env_managed() {
   if (MDBX_UNLIKELY(handle_))
-    /* coverity[UNCAUGHT_EXCEPT] */
-    MDBX_CXX20_UNLIKELY error::success_or_throw(::mdbx_env_close(handle_));
+    /* best-effort release: never throw from a destructor (issue #60) */
+    (void)::mdbx_env_close(handle_);
 }
 
 __cold void env_managed::close(bool dont_sync) {
@@ -1380,11 +1381,23 @@ __cold void env_managed::close(bool dont_sync) {
   switch (rc.code()) {
   case MDBX_EBADSIGN:
     MDBX_CXX20_UNLIKELY handle_ = nullptr;
-    __fallthrough /* fall through */;
-  default:
     MDBX_CXX20_UNLIKELY rc.throw_exception();
+    return;
+  case MDBX_BUSY:
+    /* the environment is not released on MDBX_BUSY: keep the handle valid
+     * so a retry from the owner thread is possible (issue #60) */
+    MDBX_CXX20_UNLIKELY rc.throw_exception();
+    return;
   case MDBX_SUCCESS:
     MDBX_CXX20_LIKELY handle_ = nullptr;
+    return;
+  default:
+    /* mdbx_env_close_ex() releases the environment on every path after the
+     * signature CAS, including error returns from sync/fstat or env_close():
+     * null the handle before throwing to keep the destructor from re-entering
+     * the freed object (issue #60) */
+    MDBX_CXX20_UNLIKELY handle_ = nullptr;
+    MDBX_CXX20_UNLIKELY rc.throw_exception();
   }
 }
 
@@ -1480,8 +1493,9 @@ cursor_managed &cursor_managed::operator=(cursor_managed &&other) noexcept {
     if (MDBX_UNLIKELY(handle_))
       MDBX_CXX20_UNLIKELY {
         assert(handle_ != other.handle_);
-        /* coverity[UNCAUGHT_EXCEPT] */
-        close();
+        /* best-effort release: never throw from a noexcept move-assignment
+         * (issue #60) */
+        (void)::mdbx_cursor_close2(handle_);
       }
     inherited::operator=(std::move(other));
   }
@@ -1490,8 +1504,8 @@ cursor_managed &cursor_managed::operator=(cursor_managed &&other) noexcept {
 
 cursor_managed::~cursor_managed() {
   if (handle_)
-    /* coverity[UNCAUGHT_EXCEPT] */
-    error::success_or_throw(::mdbx_cursor_close2(handle_));
+    /* best-effort release: never throw from a destructor (issue #60) */
+    (void)::mdbx_cursor_close2(handle_);
 }
 
 //------------------------------------------------------------------------------
@@ -1512,8 +1526,9 @@ txn_managed &txn_managed::operator=(txn_managed &&other) noexcept {
     if (MDBX_UNLIKELY(handle_))
       MDBX_CXX20_UNLIKELY {
         assert(handle_ != other.handle_);
-        /* coverity[UNCAUGHT_EXCEPT] */
-        abort();
+        /* best-effort release: never throw from a noexcept move-assignment
+         * (issue #60) */
+        (void)::mdbx_txn_abort(handle_);
       }
     inherited::operator=(std::move(other));
   }
@@ -1522,8 +1537,8 @@ txn_managed &txn_managed::operator=(txn_managed &&other) noexcept {
 
 txn_managed::~txn_managed() {
   if (MDBX_UNLIKELY(handle_))
-    /* coverity[UNCAUGHT_EXCEPT] */
-    MDBX_CXX20_UNLIKELY error::success_or_throw(::mdbx_txn_abort(handle_));
+    /* best-effort release: never throw from a destructor (issue #60) */
+    (void)::mdbx_txn_abort(handle_);
 }
 
 void txn_managed::abort() { abort(nullptr); }
