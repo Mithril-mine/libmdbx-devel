@@ -756,7 +756,11 @@ int tree_rebalance(MDBX_cursor *mc) {
         return rc;
       mc->tree->height--;
       mc->ki[0] = mc->ki[1];
-      for (intptr_t i = 1; i < mc->tree->height; i++) {
+      /* The cursor tracks top + 1 pages, so the shift must be bounded by the
+       * cursor's top, never trusting the stored tree height: that is on-disk
+       * data and could drive the shift past the fixed-size pg[]/ki[] arrays
+       * (CURSOR_STACK_SIZE). */
+      for (intptr_t i = 1; i < mc->top; i++) {
         mc->pg[i] = mc->pg[i + 1];
         mc->ki[i] = mc->ki[i + 1];
       }
@@ -765,7 +769,9 @@ int tree_rebalance(MDBX_cursor *mc) {
       for (MDBX_cursor *m2 = mc->txn->cursors[cursor_dbi(mc)]; m2; m2 = m2->next) {
         MDBX_cursor *m3 = (mc->flags & z_inner) ? &m2->subcur->cursor : m2;
         if (is_related(mc, m3) && m3->pg[0] == mp) {
-          for (intptr_t i = 0; i < mc->tree->height; i++) {
+          /* likewise, bound the shift by the related cursor's own top,
+           * never trusting the stored tree height */
+          for (intptr_t i = 0; i < m3->top; i++) {
             m3->pg[i] = m3->pg[i + 1];
             m3->ki[i] = m3->ki[i + 1];
           }
