@@ -378,11 +378,11 @@ static int nested_start(MDBX_txn *const nested, MDBX_txn *parent) {
       MDBX_ASAN_UNPOISON_MEMORY_REGION(&page_next(lp), sizeof(page_t *));
       VALGRIND_MAKE_MEM_DEFINED(&page_next(lp), sizeof(page_t *));
       parent->wr.loose_pages = page_next(lp);
+      parent->wr.loose_count -= 1;
       /* Remove from dirty list */
       page_wash(parent, txn_dpl_exist(parent, lp->pgno), lp, 1);
       nested->wr.dirtyroom = parent->wr.dirtyroom;
     } while (parent->wr.loose_pages);
-    parent->wr.loose_count = 0;
 #if MDBX_ENABLE_REFUND
     parent->wr.loose_refund_wl = 0;
 #endif /* MDBX_ENABLE_REFUND */
