@@ -622,6 +622,13 @@ __cold int meta_validate(MDBX_env *env, meta_t *const meta, const page_t *const 
     WARNING("meta[%u] has invalid %s-root %" PRIaPGNO ", skip it", meta_number, "GC", meta->trees.gc.root);
     return MDBX_CORRUPTED;
   }
+  /* The cursor page/index stacks are fixed-size (CURSOR_STACK_SIZE), so a
+   * stored tree height beyond that bound would walk the stacks out of bounds
+   * during tree_rebalance() root-collapse. Reject such a meta here. */
+  if (unlikely(meta->trees.gc.height >= CURSOR_STACK_SIZE)) {
+    WARNING("meta[%u] has invalid %s-height %u, skip it", meta_number, "GC", meta->trees.gc.height);
+    return MDBX_CORRUPTED;
+  }
 
   /* MainDB */
   if (meta->trees.main.root == P_INVALID) {
@@ -632,6 +639,11 @@ __cold int meta_validate(MDBX_env *env, meta_t *const meta, const page_t *const 
     }
   } else if (unlikely(meta->trees.main.root >= meta->geometry.first_unallocated || meta->trees.main.root < NUM_METAS)) {
     WARNING("meta[%u] has invalid %s-root %" PRIaPGNO ", skip it", meta_number, "MainDB", meta->trees.main.root);
+    return MDBX_CORRUPTED;
+  }
+  /* see the corresponding GC-height check above */
+  if (unlikely(meta->trees.main.height >= CURSOR_STACK_SIZE)) {
+    WARNING("meta[%u] has invalid %s-height %u, skip it", meta_number, "MainDB", meta->trees.main.height);
     return MDBX_CORRUPTED;
   }
 
