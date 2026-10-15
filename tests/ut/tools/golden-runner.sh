@@ -60,6 +60,7 @@ normalize() {
     -e 's#^[^ ]*/mdbx_(load|dump|copy|chk|stat|drop|defrag): #mdbx_\1: #' \
     -e '/MADV_/d' \
     -e '/^   readahead ON /d' \
+    -e '/^   skip update meta[0-9]+ for txn#[0-9]+, since it is already steady$/d' \
     -e '/try growth datafile/d' \
     -e '/dirty-entries/d' \
     -e 's/read meta: empty file \([0-9]+, .*\)/read meta: empty file (ERRNO)/' \

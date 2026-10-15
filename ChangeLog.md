@@ -53,6 +53,7 @@ Cutting-edge release with new core features and internal refactoring.
  - Fixed a failed second in-process open releasing the first handle's file locks, letting another process take exclusive access (issue #59).
  - Fixed the C++ `*_managed` wrappers: a failed `close()`/`abort()` could terminate the process and `env_managed::close()` could re-enter a freed environment (use-after-free) (issue #60).
  - Fixed a crafted database file driving the engine out of bounds (crash or data corruption) when deleting records (issue #63).
+ - Fixed a performance regression: an empty durable-mode commit still wrote a meta page and flushed the device, adding several milliseconds of latency to no-op commits (issue #64).
 
 
 --------------------------------------------------------------------------------
