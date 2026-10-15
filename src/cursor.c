@@ -349,6 +349,13 @@ int cursor_dupsort_setup(MDBX_cursor *mc, const node_t *node, const page_t *mp) 
       goto bailout;
     }
     memcpy(&mx->nested_tree, node_data(node), sizeof(tree_t));
+    /* The cursor page/index stacks are fixed-size (CURSOR_STACK_SIZE), so a
+     * nested tree whose height is beyond that bound would walk the stacks out
+     * of bounds during tree_rebalance() root-collapse. */
+    if (!MDBX_DISABLE_VALIDATION && unlikely(mx->nested_tree.height >= CURSOR_STACK_SIZE)) {
+      ERROR("nested-db height %u is out of range", mx->nested_tree.height);
+      goto bailout;
+    }
     const txnid_t pp_txnid = mp->txnid;
     if (!MDBX_DISABLE_VALIDATION && unlikely(mx->nested_tree.mod_txnid > pp_txnid)) {
       ERROR("nested-db.mod_txnid (%" PRIaTXN ") > page-txnid (%" PRIaTXN ")", mx->nested_tree.mod_txnid, pp_txnid);

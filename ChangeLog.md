@@ -55,7 +55,8 @@ A long-term support phase with periodic releases as fixes accumulate.
  - Fixed `entry point _except_handler4 not found in mdbx.dll` in 32-bit build with `MDBX_WITHOUT_MSVC_CRT=ON` (backport).
  - Fixed building by CLANG/LLVM on Windows, including Microsoft Clang from Visual Studio (backport).
  - Fixed `scan4seq_neon()` for LLP4/ARM64-Windows (backport).
- - Fixed division truncation/underflow in the `default_rp_augment_limit()` which lead to too low and "stepwise" default `MDBX_opt_rp_augment_limit` (backport).
+  - Fixed division truncation/underflow in the `default_rp_augment_limit()` which lead to too low and "stepwise" default `MDBX_opt_rp_augment_limit` (backport).
+  - Fixed a crafted database file driving the engine out of bounds (crash or data corruption) when deleting records (issue #63) (backport).
 
  - Rare or specific conditions:
     - Fixed assertions triggering in a specific scenarios of creating and renaming tables within nested transactions (backport).

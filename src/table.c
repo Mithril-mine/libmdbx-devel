@@ -87,14 +87,22 @@ int tbl_fetch(MDBX_txn *txn, size_t dbi) {
   }
 
   memcpy(db, data.iov_base, sizeof(tree_t));
-#if !MDBX_DISABLE_VALIDATION
-  const txnid_t pp_txnid = couple.outer.pg[couple.outer.top]->txnid;
-  tASSERT(txn, txn->front_txnid >= pp_txnid);
-  if (unlikely(db->mod_txnid > pp_txnid)) {
-    ERROR("db.mod_txnid (%" PRIaTXN ") > page-txnid (%" PRIaTXN ")", db->mod_txnid, pp_txnid);
+  /* The cursor page/index stacks are fixed-size (CURSOR_STACK_SIZE), so a
+   * fetched sub-table whose height is beyond that bound would walk the stacks
+   * out of bounds during tree_rebalance() root-collapse. */
+  if (!MDBX_DISABLE_VALIDATION && unlikely(db->height >= CURSOR_STACK_SIZE)) {
+    NOTICE("dbi %zu has invalid height %u for table `%.*s`", dbi, db->height, (int)kvx->name.iov_len,
+           (const char *)kvx->name.iov_base);
     return MDBX_CORRUPTED;
   }
-#endif /* !MDBX_DISABLE_VALIDATION */
+  if (!MDBX_DISABLE_VALIDATION) {
+    const txnid_t pp_txnid = couple.outer.pg[couple.outer.top]->txnid;
+    tASSERT(txn, txn->front_txnid >= pp_txnid);
+    if (unlikely(db->mod_txnid > pp_txnid)) {
+      ERROR("db.mod_txnid (%" PRIaTXN ") > page-txnid (%" PRIaTXN ")", db->mod_txnid, pp_txnid);
+      return MDBX_CORRUPTED;
+    }
+  }
   rc = tbl_setup_ifneed(txn->env, kvx, db);
   if (unlikely(rc != MDBX_SUCCESS))
     return rc;
