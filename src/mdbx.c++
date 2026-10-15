@@ -1372,11 +1372,23 @@ __cold void env_managed::close(bool dont_sync) {
   switch (rc.code()) {
   case MDBX_EBADSIGN:
     MDBX_CXX20_UNLIKELY handle_ = nullptr;
-    __fallthrough /* fall through */;
-  default:
     MDBX_CXX20_UNLIKELY rc.throw_exception();
+    return;
+  case MDBX_BUSY:
+    /* the environment is not released on MDBX_BUSY: keep the handle valid
+     * so a retry from the owner thread is possible (issue #60) */
+    MDBX_CXX20_UNLIKELY rc.throw_exception();
+    return;
   case MDBX_SUCCESS:
     MDBX_CXX20_LIKELY handle_ = nullptr;
+    return;
+  default:
+    /* mdbx_env_close_ex() releases the environment on every path after the
+     * signature CAS, including error returns from sync/fstat or env_close():
+     * null the handle before throwing to keep the destructor from re-entering
+     * the freed object (issue #60) */
+    MDBX_CXX20_UNLIKELY handle_ = nullptr;
+    MDBX_CXX20_UNLIKELY rc.throw_exception();
   }
 }
 

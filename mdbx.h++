@@ -3914,7 +3914,9 @@ public:
     if (MDBX_UNLIKELY(handle_))
       MDBX_CXX20_UNLIKELY {
         assert(handle_ != other.handle_);
-        close();
+        /* best-effort release: never throw from a noexcept move-assignment
+         * (issue #60) */
+        (void)::mdbx_env_close(handle_);
       }
     inherited::operator=(std::move(other));
     return *this;
@@ -4285,7 +4287,9 @@ public:
     if (MDBX_UNLIKELY(handle_))
       MDBX_CXX20_UNLIKELY {
         assert(handle_ != other.handle_);
-        abort();
+        /* best-effort release: never throw from a noexcept move-assignment
+         * (issue #60) */
+        (void)::mdbx_txn_abort(handle_);
       }
     inherited::operator=(std::move(other));
     return *this;
