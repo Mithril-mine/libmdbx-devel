@@ -59,6 +59,7 @@ A long-term support phase with periodic releases as fixes accumulate.
   - Fixed a crafted database file driving the engine out of bounds (crash or data corruption) when deleting records (issue #63) (backport).
   - Fixed Windows performance: in write-map mode every no-sync commit flushed the whole mapping, making `SAFE_NOSYNC`/`NOMETASYNC` nearly as expensive as a full synchronization (issue #65) (backport).
   - Fixed a checked-build crash when a nested-transaction begin failed partway through the loose-page move, instead of returning the error (prerequisite for issue #67) (backport).
+  - Fixed the parent transaction's page-reuse accounting ending up inconsistent if a nested transaction begin fails with out-of-memory partway through the move (issue #67) (backport).
 
  - Rare or specific conditions:
     - Fixed assertions triggering in a specific scenarios of creating and renaming tables within nested transactions (backport).

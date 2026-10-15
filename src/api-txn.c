@@ -292,11 +292,11 @@ int mdbx_txn_begin_ex(MDBX_env *env, MDBX_txn *parent, MDBX_txn_flags_t flags, M
         MDBX_ASAN_UNPOISON_MEMORY_REGION(&page_next(lp), sizeof(page_t *));
         VALGRIND_MAKE_MEM_DEFINED(&page_next(lp), sizeof(page_t *));
         parent->tw.loose_pages = page_next(lp);
+        parent->tw.loose_count -= 1;
         /* Remove from dirty list */
         page_wash(parent, dpl_exist(parent, lp->pgno), lp, 1);
         txn->tw.dirtyroom = parent->tw.dirtyroom;
       } while (parent->tw.loose_pages);
-      parent->tw.loose_count = 0;
 #if MDBX_ENABLE_REFUND
       parent->tw.loose_refund_wl = 0;
 #endif /* MDBX_ENABLE_REFUND */
