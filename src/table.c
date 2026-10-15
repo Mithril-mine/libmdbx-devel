@@ -105,14 +105,22 @@ int tbl_fetch(MDBX_txn *txn, MDBX_cursor *mc, size_t dbi, const MDBX_val *name, 
 
   tree_t *const db = &txn->dbs[dbi];
   memcpy(db, data.iov_base, sizeof(tree_t));
-#if !MDBX_DISABLE_VALIDATION
-  const txnid_t maindb_leafpage_txnid = mc->pg[mc->top]->txnid;
-  tASSERT0(txn, txn->front_txnid >= maindb_leafpage_txnid);
-  if (unlikely(db->mod_txnid > maindb_leafpage_txnid)) {
-    ERROR("db.mod_txnid (%" PRIaTXN ") > page-txnid (%" PRIaTXN ")", db->mod_txnid, maindb_leafpage_txnid);
+  /* The cursor page/index stacks are fixed-size (CURSOR_STACK_SIZE), so a
+   * fetched sub-table whose height is beyond that bound would walk the stacks
+   * out of bounds during tree_rebalance() root-collapse. */
+  if (!MDBX_DISABLE_VALIDATION && unlikely(db->height >= CURSOR_STACK_SIZE)) {
+    NOTICE("dbi %zu has invalid height %u for table `%.*s`", dbi, db->height, (int)name->iov_len,
+           (const char *)name->iov_base);
     return MDBX_CORRUPTED;
   }
-#endif /* !MDBX_DISABLE_VALIDATION */
+  if (!MDBX_DISABLE_VALIDATION) {
+    const txnid_t maindb_leafpage_txnid = mc->pg[mc->top]->txnid;
+    tASSERT0(txn, txn->front_txnid >= maindb_leafpage_txnid);
+    if (unlikely(db->mod_txnid > maindb_leafpage_txnid)) {
+      ERROR("db.mod_txnid (%" PRIaTXN ") > page-txnid (%" PRIaTXN ")", db->mod_txnid, maindb_leafpage_txnid);
+      return MDBX_CORRUPTED;
+    }
+  }
 
   return MDBX_SUCCESS;
 }
