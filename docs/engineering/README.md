@@ -93,8 +93,7 @@ Author: Leonid Yuriev \<leo@yuriev.ru\>. Home site: <https://libmdbx.dqdkfa.ru>.
 | [`testing-methodology.md`](testing-methodology.md) | Managed/controlled testing methodology: three instrumentation channels (COLLECT/WATCH/FAULT), coverage axes, tool taxonomy, Kaizen iterations, concrete macro implementation (probe-bus v2) |
 | [`testing-codex.md`](testing-codex.md) | **Operational codex C0–C6**: double-loop/Kaizen, test addressing (diff→labels/cells), tiering & budgets (P0–heavy), flake management, metrics/SLA, local/CI parity, corpus hygiene, temp-cleanup |
 | [`test-scenarios-codex.md`](test-scenarios-codex.md) | Quality standard for `test-scenarios.md` (SC-*): mandatory fields, review checklist, verdicts, process |
-| [`probe-bus.md`](probe-bus.md) | Probe-bus (mprobe v2): in-process registry, `MPROBE_COLLECT/WATCH/FAULT` macros, `mprobe_ctl()`, file-IPC transport, fault injection, self-tests |
-| [`probes.md`](probes.md) | USDT/DTrace probe catalog: naming convention, how to enable, per-marker table (module/args/meaning), fault injection, platform validation status |
+| [`probe-bus.md`](probe-bus.md) | Probe-инструментарий: probe-bus (mprobe v2) — in-process registry, `MPROBE_COLLECT/WATCH/FAULT` macros, `mprobe_ctl()`, file-IPC transport, fault injection, self-tests; и каталог USDT/DTrace-маркеров (naming, enable, per-marker table, SystemTap fault injection, platform validation status) |
 | [`systemtap-reference.md`](systemtap-reference.md) | SystemTap reference: user-space/kernel domains, session architecture, statement-probe syntax, target variables, observation vs injection, examples, error checklist |
 | [`coverage-pilot-inventory.md`](coverage-pilot-inventory.md) | Coverage-pilot (B68-P3) inventory: per-test → module/function mapping, reachable-target accounting, success metric |
 | [`testing-infra-design.md`](testing-infra-design.md) | Testing Infrastructure v2 design: registry (`tests/ci/config.json`), orchestrator/runner workflows, request→cell mapping, flaky policy, rollout |
@@ -122,7 +121,7 @@ Depending on the task, start from:
 - **How to write tests / achieve full coverage (channels, axes)** → [`testing-methodology.md`](testing-methodology.md)
 - **Operational test rules & CI budgets (tiers, flaky, SLA)** → [`testing-codex.md`](testing-codex.md)
 - **Test scenarios as specs for test writers** → [`test-scenarios.md`](test-scenarios.md)
-- **Managed fault injection / probing in tests** → [`probe-bus.md`](probe-bus.md), [`probes.md`](probes.md)
+- **Managed fault injection / probing in tests** → [`probe-bus.md`](probe-bus.md)
 - **Critical invariants to check in reviews/tests** → [`libmdbx-invariants.md`](libmdbx-invariants.md), [`subsystem-map.md`](subsystem-map.md)
 - **Subsystem conflict zones for parallel work** → [`module-lock-matrix.md`](module-lock-matrix.md)
 - **Test durability modes / speed-up transports** → [`test-durability-strategy.md`](test-durability-strategy.md)

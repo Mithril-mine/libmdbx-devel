@@ -10,8 +10,8 @@
 > [`deep-dive.ru.md`](../ru/deep-dive/internals.md) (как работает движок, без привязки
 > к файлам), [`architecture.md`](../en/deep-dive/architecture.md) (внутренняя структура по модулям),
 > [`testing-methodology.md`](testing-methodology.md) (механизмы управляемого тестирования:
-> COLLECT/WATCH/FAULT), [`probe-bus.md`](probe-bus.md) (движок инъекций mprobe v2),
-> [`probes.md`](probes.md) (каталог USDT/DTrace-маркеров для внешней трассировки).
+> COLLECT/WATCH/FAULT), [`probe-bus.md`](probe-bus.md) (движок инъекций mprobe v2
+> и каталог USDT/DTrace-маркеров для внешней трассировки).
 >
 > Статус: **первая партия** — ядро (GC, commit-конвейер, CoW, мета/восстановление, спилл,
 > долгие читатели). Партии по API-группам (`c_dbi`, `c_crud`, `c_cursors`, `c_rqest`,

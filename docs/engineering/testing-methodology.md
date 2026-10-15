@@ -15,8 +15,8 @@
 > независимый от реализации.
 >
 > Операционные правила корпуса тестов и CI (тайеры, флаки, бюджеты) — в
-> [`testing-codex.md`](testing-codex.md) (C0–C6); каталог USDT/DTrace-маркеров —
-> в [`probes.md`](probes.md); движок инъекций — в [`probe-bus.md`](probe-bus.md).
+> [`testing-codex.md`](testing-codex.md) (C0–C6); движок инъекций mprobe v2
+> и каталог USDT/DTrace-маркеров — в [`probe-bus.md`](probe-bus.md).
 
 ## Глава 0. Определение и место в контуре
 

@@ -2,7 +2,8 @@
 
 > Консолидированная справка, чтобы не переискивать заново (2026-09-29).
 > Источники: SystemTap Beginners Guide (5.5, sourceware.org), семантика `stapprobes`,
-> консультация Алисы (route=design). Применение к libmdbx — см. `docs/engineering/probes.md`.
+> консультация Алисы (route=design). Применение к libmdbx — см.
+> `docs/engineering/probe-bus.md` (§11 USDT/DTrace-маркеры).
 
 ## 1. Два домена трассировки
 
