@@ -75,6 +75,13 @@ WRITER_TEMPLATE = textwrap.dedent(
         _sig.signal(_sig.SIGTERM, _on_term)
         if mode == "signal_writer":
             _sig.raise_signal(_sig.SIGTERM)
+        # READY-маркер ПОСЛЕ установки обработчика: тест ждёт его и только
+        # потом шлёт SIGTERM — иначе на медленном CI-раннере сигнал может
+        # попасть в окно записи, и «N записей» станет невыполнимым ожиданием
+        # (это была причина флейка: фиксированный sleep(1.5) гонялся со
+        # стартом writer'а).
+        with open(path + ".ready", "w") as _f:
+            _f.write("READY\\n")
         import time as _t
         _t.sleep(30)
     elif mode == "hold":
@@ -137,8 +144,11 @@ def _wait_for_records(db_path, expected, timeout=60):
     return -1
 
 
-def _wait_ready(db_path, timeout=15):
-    """Ждём маркер `<db>.ready` от writer'а (kill9-поток коммитов запущен)."""
+def _wait_ready(db_path, timeout=120):
+    """Ждём маркер `<db>.ready` от writer'а (коммиты сделаны, режим готов).
+
+    Таймаут завышен намеренно: на разделяемом CI-раннере старт Python-писателя
+    и первые записи могут растянуться за 20s (см. _wait_for_records)."""
     marker = db_path + ".ready"
     deadline = time.time() + timeout
     while time.time() < deadline:
@@ -190,39 +200,41 @@ def test_store_persistence_matrix(tmp_path, sync_mode, mode):
          str(N_RECORDS), mode],
         stdout=subprocess.PIPE, stderr=subprocess.PIPE)
     try:
-        if mode == "kill9":
-            # writer пишет 10 записей за доли секунды и уходит в hold
-            time.sleep(1.5)
-            proc.send_signal(signal.SIGKILL)
-            proc.wait(timeout=10)
-        elif mode == "sigterm":
-            # writer пишет, ставит обработчик SIGTERM (graceful close+sync)
-            time.sleep(1.5)
-            proc.send_signal(signal.SIGTERM)
+        if mode in ("kill9", "sigterm"):
+            # Ждём READY-маркер: writer закоммитил все N записей (а для
+            # sigterm — ещё и установил обработчик). Фиксированный sleep
+            # гонялся со стартом writer'а на медленных CI-раннерах: SIGTERM
+            # попадал в окно записи, и часть записей ещё не была закоммичена
+            # (флейк test_store_persistence_matrix[sigterm-durable]: 1 из 10
+            # записей при 8 закоммиченных txnid).
+            assert _wait_ready(db), "writer не закоммитил записи до сигнала"
+            time.sleep(1.5)  # окно writeback частичных мет (как в kill9-тесте)
+            proc.send_signal(signal.SIGTERM if mode == "sigterm" else signal.SIGKILL)
             proc.wait(timeout=10)
         else:  # graceful close
-            proc.wait(timeout=30)
+            proc.wait(timeout=120)
     finally:
         if proc.poll() is None:
             proc.kill()
             proc.wait()
+    stderr = proc.stderr.read().decode("utf-8", "replace")
     time.sleep(0.3)
     res = _verify(db, N_RECORDS)
     got = res["readonly_open"].get("records") if res["readonly_open"]["ok"] else -1
     if sync_mode == "durable":
-        assert res["readonly_open"]["ok"], res
-        assert got == N_RECORDS, res
+        assert res["readonly_open"]["ok"], (res, stderr)
+        assert got == N_RECORDS, (res, stderr)
     elif mode in ("close", "sigterm"):
-        assert res["readonly_open"]["ok"], res
-        assert got == N_RECORDS, res
+        assert res["readonly_open"]["ok"], (res, stderr)
+        assert got == N_RECORDS, (res, stderr)
     else:  # safe_nosync + kill9 (без close): read-only открытие НЕ должно
         # молча откатываться — либо честный успех (движок успел steady-sync),
         # либо явный сигнал WANNA_RECOVERY → решение пользователя (chk / rw).
         if res["readonly_open"]["ok"]:
-            assert 0 <= got <= N_RECORDS, res
+            assert 0 <= got <= N_RECORDS, (res, stderr)
         else:
             err = res["readonly_open"].get("error", "")
-            assert "WANNA_RECOVERY" in err or "recover" in err.lower(), res
+            assert "WANNA_RECOVERY" in err or "recover" in err.lower(), (res, stderr)
 
 
 def test_store_persistence_flush_each(tmp_path):
