@@ -51,6 +51,7 @@ Cutting-edge release with new core features and internal refactoring.
  - Fixed MSVC+AddressSanitizer builds failing to compile (issue #62).
  - Fixed `mdbx_env_copy()`/`mdbx_copy -f` possibly deleting a pre-existing destination database when `MDBX_CP_OVERWRITE` could not lock it (issue #58).
  - Fixed a failed second in-process open releasing the first handle's file locks, letting another process take exclusive access (issue #59).
+ - Fixed the C++ `*_managed` wrappers: a failed `close()`/`abort()` could terminate the process and `env_managed::close()` could re-enter a freed environment (use-after-free) (issue #60).
 
 
 --------------------------------------------------------------------------------
