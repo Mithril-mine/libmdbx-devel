@@ -115,7 +115,7 @@ retry:;
       /* pre-sync to avoid latency for writer */
       if (unsynced_pages > /* FIXME: define threshold */ 42 && (flags & MDBX_SAFE_NOSYNC) == 0) {
         eASSERT(env, ((flags ^ env->flags) & MDBX_WRITEMAP) == 0);
-        if (flags & MDBX_WRITEMAP) {
+        if ((flags & MDBX_WRITEMAP) && !MDBX_AVOID_MSYNC) {
           /* Acquire guard to avoid collision with remap */
 #if defined(_WIN32) || defined(_WIN64)
           imports.srwl_AcquireShared(&env->remap_guard);
