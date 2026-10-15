@@ -475,7 +475,7 @@ define uname2titer
 endef
 
 DIST_EXTRA := LICENSE NOTICE COPYRIGHT README.md CMakeLists.txt GNUmakefile Makefile ChangeLog.md VERSION.json config.h.in ntdll.def \
-	$(addprefix man1/, $(MANPAGES)) cmake/compiler.cmake cmake/profile.cmake cmake/utils.cmake windows-safeseh-masm.asm windows-safeseh-yasm.asm \
+	$(addprefix man1/, $(MANPAGES)) cmake/compiler.cmake cmake/profile.cmake cmake/utils.cmake cmake/mdbx-config.cmake.in windows-safeseh-masm.asm windows-safeseh-yasm.asm \
 	windows-safeseh.obj valgrind.supp conanfile.py \
 	$(addprefix examples/, CMakeLists.txt example-mdbx.c++ example-mdbx.c pcrf/pcrf_simulator.c README.md)
 
@@ -956,6 +956,7 @@ endef
 $(foreach file,$(addprefix src/,ntdll.def windows-safeseh-masm.asm windows-safeseh-yasm.asm windows-safeseh.obj), $(eval $(call dist-copy-rule,$(notdir $(file)),$(file))))
 
 $(eval $(call dist-extra-rule, $(DIST_DIR)/config.h.in, src/config.h.in))
+$(eval $(call dist-extra-rule, $(DIST_DIR)/cmake/mdbx-config.cmake.in, cmake/mdbx-config.cmake.in))
 
 $(eval $(call dist-extra-rule, $(DIST_DIR)/man1/mdbx_%.1, src/man1/mdbx_%.1))
 
