@@ -620,8 +620,7 @@ Signed-off-by: Леонид Юрьев (Leonid Yuriev) <leo@yuriev.ru>
 
 Новое:
 
- - Использование адреса [https://libmdbx.dqdkfa.ru/dead-github](https://libmdbx.dqdkfa.ru/dead-github)
-   для отсылки к сохранённым в web.archive.org копиям ресурсов, уничтоженных администрацией GitHub.
+ - Использование адреса `https://libmdbx.dqdkfa.ru/dead-github/...` для отсылки к сохранённым в web.archive.org копиям ресурсов, уничтоженных администрацией GitHub.
 
  - Реализована prefault-запись при выделении страниц для read-write отображений.
    Это приводит к кратному снижению системных издержек и существенному увеличению

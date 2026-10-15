@@ -72,7 +72,7 @@ Historically, _libmdbx_ is a deeply revised and extended descendant of the legen
 
 - `O(log N)` cost of lookup, insert, update, and delete operations by virtue of [B+ tree characteristics](https://en.wikipedia.org/wiki/B%2B_tree#Characteristics).
 
-- Improbably fast and robust get(key) operations [accelerated by a shareable lock-free cache](https://libmdbx.dqdkfa.ru/docs/en/reference/api/group__c__crud.html#ga5bfb583bf2c5d5676ffddb466e789353).
+- Improbably fast and robust get(key) operations [accelerated by a shareable lock-free cache](https://libmdbx.dqdkfa.ru/docs/en/reference/api/group__c__crud.html#function-mdbx_cache_get).
 
 - Online hot backup.
 
@@ -105,8 +105,8 @@ Thus syncing data to disk might be a bottleneck for write-intensive workloads.
 
 * _libmdbx_ uses [copy-on-write](https://en.wikipedia.org/wiki/Copy-on-write) for [snapshot isolation](https://en.wikipedia.org/wiki/Snapshot_isolation) during updates, but a read transaction prevents recycling of retired/freed pages while it is still reading them.
 Thus altering of data during a parallel long-lived read operation will increase the process work set, may exhaust entire free database space, the database can grow quickly, and result in performance degradation.
-Try to avoid long running read transactions, otherwise use [transaction parking](https://libmdbx.dqdkfa.ru/docs/en/reference/api/group__c__transactions.html#ga2c2c97730ff35cadcedfbd891ac9b12f)
-and/or [Handle-Slow-Readers callback](https://libmdbx.dqdkfa.ru/docs/en/reference/api/group__c__err.html#ga2cb11b56414c282fe06dd942ae6cade6).
+Try to avoid long running read transactions, otherwise use [transaction parking](https://libmdbx.dqdkfa.ru/docs/en/reference/api/group__c__transactions.html#function-mdbx_txn_park)
+and/or [Handle-Slow-Readers callback](https://libmdbx.dqdkfa.ru/docs/en/reference/api/group__c__err.html#function-mdbx_env_set_hsr).
 
 * _libmdbx_ is extraordinarily fast and provides minimal overhead for data access, so you should reconsider using brute force techniques and double check your code.
 On the one hand, in the case of _libmdbx_, a simple linear search may be more profitable than complex indexes.
@@ -266,7 +266,7 @@ Please refer to the online [_libmdbx_ API reference](https://libmdbx.dqdkfa.ru/d
 
 ## Textbook
 
-A complete practical guide to libmdbx — six volumes from the first steps to expert topics and bindings — is available online in [Russian](https://libmdbx.dqdkfa.ru/docs/textbook/ru/) and [English](https://libmdbx.dqdkfa.ru/docs/textbook/en/); each online version links a downloadable PDF.
+A complete practical guide to libmdbx — six volumes from the first steps to expert topics and bindings — is available online in [Russian](https://libmdbx.dqdkfa.ru/docs/ru/textbook/) and [English](https://libmdbx.dqdkfa.ru/docs/en/textbook/); each online version links a downloadable PDF.
 
 The textbook's source (markdown, in `docs/textbook/ru` and `docs/textbook/en`) and all code examples (`examples/` — compilable C11/C++17 programs, exercised by CTest) are part of this repository. Both localizations are built into HTML + PDF with `make books` (requires `pip install mkdocs mkdocs-material mkdocs-with-pdf`).
 
@@ -332,7 +332,7 @@ _libmdbx_ is superior to legendary _[LMDB](https://symas.com/lmdb/)_ in terms of
 * LIFO policy for Garbage Collection recycling. Thanks to the write-back disk cache, this can multiply write performance several times in the best case.
    > LIFO means that the most recently unused pages will be taken for reuse. Therefore the loop of database pages circulation becomes as short as possible. In other words, the set of pages, that are (over)written in memory and on disk during a series of write transactions, will be as small as possible. This creates ideal conditions for the battery-backed or flash-backed disk cache efficiency.
 
-* Parking of read transactions with ousting and auto-restart, [Handle-Slow-Readers callback](https://libmdbx.dqdkfa.ru/docs/en/reference/api/group__c__err.html#ga2cb11b56414c282fe06dd942ae6cade6) to resolve issues due to long-lived read transactions.
+* Parking of read transactions with ousting and auto-restart, [Handle-Slow-Readers callback](https://libmdbx.dqdkfa.ru/docs/en/reference/api/group__c__err.html#function-mdbx_env_set_hsr) to resolve issues due to long-lived read transactions.
 
 * Fast estimation of range query result volume, i.e. how many items can be found between a `KEY1` and a `KEY2`. This is a prerequisite for building and/or optimizing query execution plans.
    > _libmdbx_ performs a rough estimate based on the common B-tree pages along the paths from root to corresponding keys.
@@ -344,15 +344,15 @@ _libmdbx_ is superior to legendary _[LMDB](https://symas.com/lmdb/)_ in terms of
 * Extended information about the whole database, tables/sub-databases, transactions, readers enumeration.
     > _libmdbx_ provides a lot of information, including dirty and leftover pages for a write transaction, reading lag and holdover space for read transactions.
 
-* The ["get-cached" feature](https://libmdbx.dqdkfa.ru/docs/en/reference/api/group__c__crud.html#ga5bfb583bf2c5d5676ffddb466e789353) with lightweight transparent cache that can provide dramatic acceleration in many cases.
+* The ["get-cached" feature](https://libmdbx.dqdkfa.ru/docs/en/reference/api/group__c__crud.html#function-mdbx_cache_get) with lightweight transparent cache that can provide dramatic acceleration in many cases.
 
-* [Cloning a read transaction](https://libmdbx.dqdkfa.ru/docs/en/reference/api/group__c__transactions.html#ga28d3db2426df24b16c0bc40cd0af8187) and [resurrection after fork](https://libmdbx.dqdkfa.ru/docs/en/reference/api/group__c__extra.html#gab7d13c1dbf074bc23ebda2d886add02a) features.
+* [Cloning a read transaction](https://libmdbx.dqdkfa.ru/docs/en/reference/api/group__c__transactions.html#function-mdbx_txn_clone) and [resurrection after fork](https://libmdbx.dqdkfa.ru/docs/en/reference/api/group__c__extra.html#function-mdbx_env_resurrect_after_fork) features.
 
 * Automated steady sync-to-disk upon several thresholds and/or timeout via cheap polling.
 
 * Extended update and quick delete operations.
-    > _libmdbx_ allows [getting the previous value](https://libmdbx.dqdkfa.ru/docs/en/reference/api/group__c__crud.html#gaad688c4b0fbbcff676f181dc0437befa) _at once_ when updating, and addressing the particular item of a multi-value with the same key.
-    > _libmdbx_ supports [massive deletion by bunches](https://libmdbx.dqdkfa.ru/docs/en/reference/api/group__c__crud.html#gac986d35a3b6b27ac43af881c471a6878) of adjacent elements much faster by cutting out entire pages and branches from a B-tree.
+    > _libmdbx_ allows [getting the previous value](https://libmdbx.dqdkfa.ru/docs/en/reference/api/group__c__crud.html#function-mdbx_replace) _at once_ when updating, and addressing the particular item of a multi-value with the same key.
+    > _libmdbx_ supports [massive deletion by bunches](https://libmdbx.dqdkfa.ru/docs/en/reference/api/group__c__crud.html#function-mdbx_cursor_bunch_delete) of adjacent elements much faster by cutting out entire pages and branches from a B-tree.
 
 * Ability to determine whether the particular data is on a dirty page or not, which allows avoiding copy-out before updates.
 
