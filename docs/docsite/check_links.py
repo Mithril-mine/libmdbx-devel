@@ -3,10 +3,17 @@
 
 The rule: each such URL must either
   - lead through /docs/** to an existing file in the built docsite tree
-    (build/docsite by default), or
+    (build/docsite by default), including the textbook pages that are
+    integrated at /docs/{en,ru}/textbook/, or
   - be covered by the allowlist below (archival/dead-by-design references
     and URLs that are known to be served on the live site). With --online
     every non-/docs/ URL is additionally probed over the network.
+
+Since doxygen regenerates member anchors with each API change, URLs that
+carry a #fragment are additionally verified against the anchor set of the
+target page: offline against the built tree, online against the live HTML.
+This catches stale `#ga...`-style identifiers left in the docs after a
+docsite regeneration.
 
 Usage:
   python3 check_links.py [--online] [--site PATH]
@@ -40,12 +47,6 @@ ALLOW_SKIP = [
     # copy of a resource destroyed by GitHub admins; the prefix self-documents
     # the state (see ChangeLog-0.12), the redirect target lives on github.com.
     (re.compile(r"^https://libmdbx\.dqdkfa\.ru/dead-github"), "archival"),
-    # the standalone books site /docs/textbook/{en,ru}/ is a separate
-    # deployment artifact (`make books` -> build/textbook); the offline gate
-    # verifies it against the local tree when present, the live site is
-    # updated independently of the docsite.
-    (re.compile(r"^https://libmdbx\.dqdkfa\.ru/docs/textbook/"),
-     "standalone books site"),
 ]
 
 # (pattern, reason): allowed by the offline gate; with --online these are
@@ -58,20 +59,29 @@ ALLOW_OFFLINE = [
     (re.compile(r"^https://libmdbx\.dqdkfa\.ru/release/"), "release assets"),
 ]
 
+# schema.org/@id semantic fragments injected by docs/docsite/hooks
+# (JSON-LD BreadcrumbList / WebPage references, see docsite_hooks.py).
+# These are conventional RDF-style identifiers, not real HTML anchors, so
+# their presence in the target page must not be required.
+SCHEMA_FRAGMENTS = frozenset(("article", "breadcrumb", "organization", "software", "website"))
+
 
 def resolve_local(path):
-    """Resolve a /docs/<rel> path against the built docsite tree."""
-    candidates = []
+    """Resolve a /docs/<rel> path against the built docsite tree.
+    Returns the resolved file path, or None when the target is missing."""
     if path == "/docs":
-        candidates.append(SITE / "index.html")
+        candidates = [SITE / "index.html"]
     elif path.startswith("/docs/"):
         rel = path[len("/docs/"):].lstrip("/")
-        candidates.append(SITE / rel)
+        candidates = [SITE / rel]
         if not Path(rel).suffix:
             candidates.append(SITE / rel / "index.html")
     else:
-        candidates.append(SITE / "index.html")
-    return any(c.is_file() for c in candidates)
+        candidates = [SITE / "index.html"]
+    for c in candidates:
+        if c.is_file():
+            return c
+    return None
 
 
 def fail(msg):
@@ -143,33 +153,37 @@ def clean(u):
 
 
 def classify_local(u):
-    """Return ('LOCAL', ok) for URLs served by the built docsite tree,
-    ('LOCAL', ok) for the standalone books tree when it is present,
-    otherwise None."""
+    """Return ('LOCAL', file) for URLs served by the built docsite tree,
+    where file is the resolved local page (or None when missing); otherwise
+    return None."""
     path = urllib.parse.urlparse(u).path
-    if path == "/docs/textbook" or path.startswith("/docs/textbook/"):
-        rel = path[len("/docs/textbook/"):].lstrip("/")
-        if not rel:
-            return None  # books root page is part of the books deployment
-        if (BOOKS / rel).is_file():
-            return ("LOCAL", True)
-        if not Path(rel).suffix and (BOOKS / rel / "index.html").is_file():
-            return ("LOCAL", True)
-        return None  # books site absent from this build: offline-allowed
-    if path.startswith("/docs/") or path == "/docs":
+    if path == "/docs" or path.startswith("/docs/"):
         return ("LOCAL", resolve_local(path))
     return None
+
+
+def anchor_in_file(file, frag):
+    """Whether the built HTML page carries the given #fragment anchor."""
+    try:
+        text = file.read_text(encoding="utf-8", errors="replace")
+    except Exception:
+        return False
+    return ('id="%s"' % frag) in text or ('name="%s"' % frag) in text
 
 
 def probe(u):
     req = urllib.request.Request(u, headers={"User-Agent": "libmdbx-link-audit"})
     try:
         with urllib.request.urlopen(req, timeout=20) as resp:
-            return resp.status, resp.geturl()
+            return resp.status, resp.geturl(), resp.read().decode("utf-8", "replace")
     except urllib.error.HTTPError as e:
-        return e.code, getattr(e, "url", u)
+        try:
+            body = e.read().decode("utf-8", "replace")
+        except Exception:
+            body = ""
+        return e.code, getattr(e, "url", u), body
     except Exception as e:
-        return None, str(e)[:80]
+        return None, str(e)[:80], ""
 
 
 def main():
@@ -195,10 +209,15 @@ def main():
     violations = []
     counts = {"local_ok": 0, "allowed": 0, "skipped": 0, "live_ok": 0}
     for url, n in sorted(url_counts.items()):
+        frag = urllib.parse.urlparse(url).fragment
         local = classify_local(url)
         if local is not None:
-            kind, ok = local
-            if ok:
+            kind, file = local
+            if (file is not None and frag and frag not in SCHEMA_FRAGMENTS
+                    and not anchor_in_file(file, frag)):
+                violations.append((url, n, "LOCAL-MISS-ANCHOR"))
+                continue
+            if file is not None:
                 counts["local_ok"] += 1
             else:
                 violations.append((url, n, "LOCAL-MISS"))
@@ -213,9 +232,14 @@ def main():
         if not online:
             violations.append((url, n, "NEEDS-LIVE"))
             continue
-        status, final = probe(url)
+        status, final, body = probe(url)
         if status and 200 <= status < 400:
-            counts["live_ok"] += 1
+            if (frag and frag not in SCHEMA_FRAGMENTS and body
+                    and not ('id="%s"' % frag) in body
+                    and not ('name="%s"' % frag) in body):
+                violations.append((url, n, "LIVE-MISS-ANCHOR", url))
+            else:
+                counts["live_ok"] += 1
         else:
             violations.append((url, n, f"LIVE-{status}", final))
 
