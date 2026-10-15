@@ -3,6 +3,7 @@
 *.[ao]
 *.autosave
 *.bak
+build/
 build.ninja
 cmake-build-*
 CMakeCache.txt
