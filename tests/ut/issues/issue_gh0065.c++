@@ -1,4 +1,4 @@
-#include "mdbx.h++"
+#include "../../../src/internals.h"
 #include <gtest/gtest.h>
 
 #include <cstdio>
@@ -20,14 +20,16 @@
 // The test counts mi_pgop_stat.msync over a batch of no-sync WRITEMAP commits:
 // the counter grows per FlushViewOfFile on the affected builds, so it must
 // stay small (only part of the legitimate growth syncs), not ~one per commit.
+// NB: on builds where write-mapped memory needs the explicit MS_ASYNC "jolt"
+// (MDBX_MMAP_NEEDS_JOLT=1) and persistence is not routed through explicit
+// writes (MDBX_AVOID_MSYNC=0), e.g. macOS/BSD, one cheap async msync per
+// no-sync commit is the designed behavior, so only the durability (fsync)
+// count is bounded there; the strict msync bound applies to Linux and to the
+// Windows-with-AVOID_MSYNC path that the fix preserves.
 
 TEST(issue_gh0065, writemap_nosync_commits_do_not_flush_whole_mapping) {
   const char *const testdb = "issue65.mdbx";
-  try {
-    mdbx::env::remove(testdb);
-  } catch (const mdbx::error &) {
-    /* the test database is not required to exist beforehand */
-  }
+  remove(testdb);
 
   const int N = 200;
   MDBX_env *env = nullptr;
@@ -64,8 +66,14 @@ TEST(issue_gh0065, writemap_nosync_commits_do_not_flush_whole_mapping) {
    * Windows; after it the real syncs are routed through fsync (os mdbx_fsync)
    * and osal_msync/SYNC_NONE is a no-op, so both deltas only reflect the
    * legitimate size/data syncs on the few file-growth events. */
-  EXPECT_LE(msync_delta, uint64_t(N / 4));
-  EXPECT_LE(msync_delta + fsync_delta, uint64_t(N / 4));
+  if (MDBX_AVOID_MSYNC == 0 && MDBX_MMAP_NEEDS_JOLT != 0) {
+    /* jolt platforms (e.g. macOS/BSD): the per-commit async msync "kick" is
+     * by design and cheap, but the durability syncs must stay small. */
+    EXPECT_LE(fsync_delta, uint64_t(N / 4));
+  } else {
+    EXPECT_LE(msync_delta, uint64_t(N / 4));
+    EXPECT_LE(msync_delta + fsync_delta, uint64_t(N / 4));
+  }
 
   /* sanity: all records must survive a clean close and a read-only reopen */
   ASSERT_EQ(MDBX_SUCCESS, mdbx_env_close(env));
@@ -86,5 +94,5 @@ TEST(issue_gh0065, writemap_nosync_commits_do_not_flush_whole_mapping) {
   mdbx_txn_abort(txn);
   mdbx_env_close(env);
   EXPECT_EQ(N, count);
-  mdbx::env::remove(testdb);
+  remove(testdb);
 }
