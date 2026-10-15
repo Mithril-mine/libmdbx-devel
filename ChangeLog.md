@@ -40,6 +40,7 @@ In the `master` branch, development of version v0.15 will begin, with the techni
  - Fixed a crafted database file driving the engine out of bounds (crash or data corruption) when deleting records (issue #63) (backport).
  - Fixed a performance regression: an empty durable-mode commit still wrote a meta page and flushed the device, adding several milliseconds of latency to no-op commits (issue #64) (backport).
  - Fixed Windows performance: in write-map mode every no-sync commit flushed the whole mapping, making `SAFE_NOSYNC`/`NOMETASYNC` nearly as expensive as a full synchronization (issue #65) (backport).
+ - Fixed a checked-build crash when a nested-transaction begin failed partway through the loose-page move, instead of returning the error (prerequisite for issue #67) (backport).
  - Fixed typos in the ChangeLog.
 
 
