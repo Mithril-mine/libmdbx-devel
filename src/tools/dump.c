@@ -97,6 +97,25 @@ static void error(const char *func, int rc) {
     fprintf(stderr, "%s: %s() error %d %s\n", prog, func, rc, mdbx_strerror(rc));
 }
 
+/* Whether a name contains control characters (a table name may contain any
+ * byte except NUL; when emitted raw into a dump stream it could break the
+ * format or reroute data, and when printed to a terminal it could leak
+ * escape sequences). */
+static bool tool_name_has_control(const char *name) {
+  for (const unsigned char *p = (const unsigned char *)name; *p; ++p)
+    if (*p < 0x20 || *p == 0x7f)
+      return true;
+  return false;
+}
+
+/* Print a name replacing control characters with '?', so that no control or
+ * escape sequences leak into a terminal or into a dump stream. */
+static void tool_print_sanitized(const void *data, size_t size) {
+  const unsigned char *p = (const unsigned char *)data;
+  for (size_t i = 0; i < size; ++i)
+    putchar((p[i] < 0x20 || p[i] == 0x7f) ? '?' : p[i]);
+}
+
 /* Dump in BDB-compatible format */
 static int dump_tbl(MDBX_txn *txn, MDBX_dbi dbi, char *name) {
   unsigned flags;
@@ -139,8 +158,14 @@ static int dump_tbl(MDBX_txn *txn, MDBX_dbi dbi, char *name) {
       printf("canary=v%" PRIu64 ",x%" PRIu64 ",y%" PRIu64 ",z%" PRIu64 "\n", canary.v, canary.x, canary.y, canary.z);
   }
   printf("format=%s\n", mode & PRINT ? "print" : "bytevalue");
-  if (name)
+  if (name) {
+    if (tool_name_has_control(name)) {
+      if (!quiet)
+        fprintf(stderr, "%s: refuse to dump a table whose name contains control characters\n", prog);
+      return MDBX_EINVAL;
+    }
     printf("database=%s\n", name);
+  }
   printf("type=btree\n");
   printf("db_pagesize=%u\n", ms.ms_psize);
   /* if (ms.ms_mod_txnid)
@@ -446,7 +471,8 @@ int main(int argc, char *argv[]) {
       } else {
         count++;
         if (list) {
-          printf("%s\n", subname);
+          tool_print_sanitized(subname, strlen(subname));
+          putchar('\n');
         } else {
           err = dump_tbl(txn, sub_dbi, subname);
           if (unlikely(err != MDBX_SUCCESS)) {

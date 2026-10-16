@@ -41,6 +41,17 @@ static char *prog;
 static bool quiet = false;
 static size_t lineno;
 static bool dump_trailer_seen = false;
+
+/* Whether a name contains control characters (a table name may contain any
+ * byte except NUL; when used as a `database=` header value it could break the
+ * dump format or reroute data into a different table). */
+static bool tool_name_has_control(const char *name) {
+  for (const unsigned char *p = (const unsigned char *)name; *p; ++p)
+    if (*p < 0x20 || *p == 0x7f)
+      return true;
+  return false;
+}
+
 static void error(const char *func, int rc) {
   if (!quiet) {
     if (lineno)
@@ -205,6 +216,12 @@ static int readhdr(void) {
     str = valstr(dbuf.iov_base, "database");
     if (str) {
       if (*str) {
+        if (tool_name_has_control(str)) {
+          if (!quiet)
+            fprintf(stderr, "%s: line %" PRIiSIZE ": invalid database name containing control characters\n", prog,
+                    lineno);
+          exit(EXIT_FAILURE);
+        }
         free(subname);
         subname = osal_strdup(str);
         if (!subname) {
