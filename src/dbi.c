@@ -271,9 +271,14 @@ int dbi_bind(MDBX_txn *txn, const size_t dbi, unsigned user_flags, MDBX_cmp_func
     else {
       if (txn->dbi_state[dbi] & DBI_STALE) {
         eASSERT(env, env->dbs_flags[dbi] & DB_VALID);
-        int err = tbl_fetch(txn, dbi);
-        if (unlikely(err == MDBX_SUCCESS))
+        const int err = tbl_fetch(txn, dbi);
+        if (unlikely(err != MDBX_SUCCESS && err != MDBX_BAD_DBI))
           return err;
+        /* A present, empty table falls through to the re-create branch, a
+         * non-empty one is rejected as MDBX_INCOMPATIBLE below, and a dropped
+         * one is (re)created; clear the stale mark so the default-open check
+         * below does not treat this (re-)create path as a stale re-open. */
+        txn->dbi_state[dbi] &= ~DBI_STALE;
       }
       eASSERT(env, ((env->dbs_flags[dbi] ^ txn->dbs[dbi].flags) & DB_PERSISTENT_FLAGS) == 0);
       eASSERT(env, (txn->dbi_state[dbi] & (DBI_LINDO | DBI_VALID | DBI_STALE)) == (DBI_LINDO | DBI_VALID));
@@ -305,6 +310,18 @@ int dbi_bind(MDBX_txn *txn, const size_t dbi, unsigned user_flags, MDBX_cmp_func
       txn->dbi_state[dbi] = DBI_LINDO | DBI_VALID | DBI_CREAT | DBI_DIRTY;
       txn->flags |= MDBX_TXN_DIRTY;
     }
+  }
+
+  /* The default open path does not refresh a stale handle: the table record
+   * may have been dropped by another process, so verify it against the txn
+   * snapshot before reporting an already-absent table as open (issue #107);
+   * the (re)-create path above has already cleared the stale mark. */
+  if (unlikely(txn->dbi_state[dbi] & DBI_STALE)) {
+    const int err = tbl_fetch(txn, dbi);
+    if (unlikely(err == MDBX_BAD_DBI))
+      return MDBX_NOTFOUND;
+    if (unlikely(MDBX_IS_ERROR(err)))
+      return err;
   }
 
   if (!keycmp)
@@ -536,20 +553,24 @@ int dbi_open(MDBX_txn *txn, const MDBX_val *const name, unsigned user_flags, MDB
   if ((user_flags & MDBX_CREATE) && unlikely(txn->flags & MDBX_TXN_RDONLY))
     return MDBX_EACCESS;
 
-  /* main table? */
-  if (unlikely(name == MDBX_CHK_MAIN || name->iov_base == MDBX_CHK_MAIN)) {
+  /* main table? A pseudo-name is passed either as the pointer itself (by
+   * mdbx_dbi_open()) or as iov_base, so compare the pointer without ever
+   * dereferencing a pseudo-name whose iov_base would be a bogus address. */
+  const void *const pseudo =
+      (name == MDBX_CHK_MAIN || name == MDBX_CHK_GC || name == MDBX_CHK_META) ? (const void *)name : name->iov_base;
+  if (unlikely(pseudo == MDBX_CHK_MAIN)) {
     rc = dbi_bind(txn, MAIN_DBI, user_flags, keycmp, datacmp);
     if (likely(rc == MDBX_SUCCESS))
       *dbi = MAIN_DBI;
     return rc;
   }
-  if (unlikely(name == MDBX_CHK_GC || name->iov_base == MDBX_CHK_GC)) {
+  if (unlikely(pseudo == MDBX_CHK_GC)) {
     rc = dbi_bind(txn, FREE_DBI, user_flags, keycmp, datacmp);
     if (likely(rc == MDBX_SUCCESS))
       *dbi = FREE_DBI;
     return rc;
   }
-  if (unlikely(name == MDBX_CHK_META || name->iov_base == MDBX_CHK_META))
+  if (unlikely(pseudo == MDBX_CHK_META))
     return MDBX_EINVAL;
   if (unlikely(name->iov_len > txn->env->leaf_nodemax - NODESIZE - sizeof(tree_t)))
     return MDBX_EINVAL;
