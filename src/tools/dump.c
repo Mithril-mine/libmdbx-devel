@@ -495,6 +495,16 @@ int main(int argc, char *argv[]) {
     err = dump_tbl(txn, dbi, subname);
   }
 
+  fflush(stdout);
+  if (ferror(stdout)) {
+    /* The dump stream swallowed a write error earlier, so the output is
+     * incomplete; report it instead of pretending a successful dump. */
+    if (!quiet)
+      fprintf(stderr, "%s: failed to write dump output\n", prog);
+    if (err == MDBX_SUCCESS)
+      err = MDBX_EIO;
+  }
+
   switch (err) {
   case MDBX_NOTFOUND:
     err = MDBX_SUCCESS;
