@@ -33,6 +33,7 @@ add_issue_test(gh0068 SOURCE "issue_gh0068.c++")
 add_issue_test(gh0069 SOURCE "issue_gh0069.c++")
 add_issue_test(gh0073 SOURCE "issue_gh0073.c++")
 add_issue_test(gh0085 SOURCE "issue_gh0085.c++")
+add_issue_test(gh0086 SOURCE "issue_gh0086.c++")
 if(MDBX_BUILD_TOOLS)
   add_issue_test(gh0070 SOURCE "issue_gh0070.c++")
   set_tests_properties(
