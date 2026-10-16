@@ -49,6 +49,7 @@ In the `master` branch, development of version v0.15 will begin, with the techni
  - Fixed `mdbx_cursor_count_ex()` writing past the caller's buffer when called with the legacy structure size ([#68](https://github.com/Mithril-mine/libmdbx-devel/issues/68)) (backport).
  - Fixed `mdbx_dump -f` truncating the output file on a mistyped command line before the arguments were validated ([#71](https://github.com/Mithril-mine/libmdbx-devel/issues/71)) (backport).
  - Fixed `mdbx_dump` reporting success even when writing the dump to a file failed, and `mdbx_load` accepting a truncated dump as a complete database ([#70](https://github.com/Mithril-mine/libmdbx-devel/issues/70)) (backport).
+ - Fixed `mdbx_dump`/`mdbx_load`/`mdbx_stat` mishandling table names containing control characters: dumping was refused, listing and stat output are sanitized, and such a name in a `database=` header is rejected ([#72](https://github.com/Mithril-mine/libmdbx-devel/issues/72)) (backport).
 
 
 --------------------------------------------------------------------------------

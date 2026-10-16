@@ -89,13 +89,23 @@ static int reader_list_func(void *ctx, int num, int slot, mdbx_pid_t pid, mdbx_t
   return user_break ? MDBX_RESULT_TRUE : MDBX_RESULT_FALSE;
 }
 
+/* Print a name replacing control characters with '?', so that no control or
+ * escape sequences leak into a terminal. */
+static void tool_print_sanitized(const void *data, size_t size) {
+  const unsigned char *p = (const unsigned char *)data;
+  for (size_t i = 0; i < size; ++i)
+    putchar((p[i] < 0x20 || p[i] == 0x7f) ? '?' : p[i]);
+}
+
 static int table_enum_func(void *ctx, const MDBX_txn *txn, const MDBX_val *name, MDBX_db_flags_t db_flags,
                            const struct MDBX_stat *stat, MDBX_dbi dbi) {
   (void)ctx;
   (void)txn;
   (void)db_flags;
   (void)dbi;
-  printf("Status of %.*s\n", (int)name->iov_len, (const char *)name->iov_base);
+  printf("Status of ");
+  tool_print_sanitized(name->iov_base, name->iov_len);
+  putchar('\n');
   print_stat(stat);
   return user_break ? MDBX_RESULT_TRUE : MDBX_RESULT_FALSE;
 }
