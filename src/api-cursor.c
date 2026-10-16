@@ -524,7 +524,7 @@ int mdbx_cursor_scan(MDBX_cursor *mc, MDBX_predicate_func predicate, void *conte
   MDBX_val key = {nullptr, 0}, value = {nullptr, 0};
   int rc = mdbx_cursor_get(mc, &key, &value, start_op);
   if (unlikely(rc != MDBX_SUCCESS))
-    return LOG_IFERR(rc);
+    return (rc == MDBX_NOTFOUND) ? MDBX_RESULT_FALSE : LOG_IFERR(rc);
   return LOG_IFERR(scan_continue(mc, predicate, context, arg, &key, &value, turn_op));
 }
 
@@ -545,6 +545,8 @@ int mdbx_cursor_scan_from(MDBX_cursor *mc, MDBX_predicate_func predicate, void *
     return LOG_IFERR(MDBX_EINVAL);
 
   int rc = mdbx_cursor_get(mc, key, value, from_op);
+  if (unlikely(rc == MDBX_NOTFOUND))
+    return MDBX_RESULT_FALSE;
   if (unlikely(MDBX_IS_ERROR(rc)))
     return LOG_IFERR(rc);
 
@@ -564,7 +566,7 @@ int mdbx_cursor_get_batch(MDBX_cursor *mc, size_t *count, MDBX_val *pairs, size_
     return LOG_IFERR(MDBX_EINVAL);
 
   *count = 0;
-  if (unlikely(limit < 4 || limit > INTPTR_MAX - 2))
+  if (unlikely(limit < 2 || limit > INTPTR_MAX - 2))
     return LOG_IFERR(MDBX_EINVAL);
 
   int rc = cursor_check_ro(mc);
@@ -989,10 +991,15 @@ int mdbx_cursor_distribute(const MDBX_cursor *begin, const MDBX_cursor *end, MDB
 
   const MDBX_cursor *ref = begin ? begin : end;
   MDBX_cursor *iter = nullptr;
+  bool end_in_array = false;
   for (intptr_t i = 0; i < array_size; ++i) {
     MDBX_cursor *const item = array[i];
     if (unlikely(item == nullptr))
       return MDBX_EINVAL;
+    if (item == end)
+      /* `end` is a caller's cursor and will be scribbled by the distribution
+       * writes below, so it must be cloned and the caller's kept intact */
+      end_in_array = true;
     if (item != begin && item != end) {
       rc = cursor_check_pure(item);
       if (unlikely(rc != MDBX_SUCCESS))
@@ -1007,19 +1014,26 @@ int mdbx_cursor_distribute(const MDBX_cursor *begin, const MDBX_cursor *end, MDB
     /* the cursors array is empty or contains no cursors other than begin and end */
     return LOG_IFERR(MDBX_EINVAL);
 
-  cursor_couple_t couple;
+  cursor_couple_t couple, end_couple;
+  bool begin_borrowed_couple = false;
   if (!begin) {
     begin = cursor_clone_complete(end, &couple);
+    begin_borrowed_couple = true;
     rc = outer_first((MDBX_cursor *)begin, nullptr, nullptr);
     if (unlikely(rc != MDBX_SUCCESS))
       return LOG_IFERR(rc);
   }
 
   if (!end) {
+    ASSERT(!begin_borrowed_couple);
     end = cursor_clone_complete(begin, &couple);
     rc = outer_last((MDBX_cursor *)end, nullptr, nullptr);
     if (unlikely(rc != MDBX_SUCCESS))
       return LOG_IFERR(rc);
+  } else if (end_in_array) {
+    /* the caller's `end` cursor is one of the array elements and must survive
+     * the distribution; clone it so the original stays untouched */
+    end = cursor_clone_complete(end, begin_borrowed_couple ? &end_couple : &couple);
   }
 
   rc = cursor_distribute(begin, end, array, array_size, (deepness < CURSOR_STACK_SIZE) ? deepness : CURSOR_STACK_SIZE);
