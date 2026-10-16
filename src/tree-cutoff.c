@@ -110,6 +110,12 @@ intptr_t tree_diff_level(const MDBX_cursor *left, const MDBX_cursor *right) {
 }
 
 int tree_cutoff_twig(MDBX_cursor *mc, const pgno_t pgno, size_t deep, txnid_t parent_txnid, const bool whole_tree) {
+  /* Recursion depth is bounded by the tree height, which is itself bounded by
+   * CURSOR_STACK_SIZE (see meta_validate()/tbl_fetch()). A depth beyond that
+   * can only be a cyclic/self-referencing branch page on a crafted or corrupt
+   * database; reject it instead of recursing until the C stack overflows. */
+  if (unlikely(deep > CURSOR_STACK_SIZE))
+    return MDBX_CORRUPTED;
   /* Пытаемся избежать чтения листовых страниц и связанных с этим page faults. */
   if (whole_tree && (mc->checking & z_pagecheck) == 0 && deep == mc->tree->height && !mc->tree->large_pages &&
       parent_txnid < mc->txn->txnid /* is_frozen(mc->txn, parent_page) */
