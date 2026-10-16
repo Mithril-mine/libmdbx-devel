@@ -249,6 +249,7 @@ int main(int argc, char *argv[]) {
   prog = argv[0];
   char *envname;
   char *subname = nullptr, *buf4free = nullptr;
+  const char *outname = nullptr;
   unsigned envflags = 0;
   bool alldbs = false, list = false;
   bool warmup = false;
@@ -289,10 +290,7 @@ int main(int argc, char *argv[]) {
       alldbs = true;
       break;
     case 'f':
-      if (freopen(optarg, "w", stdout) == nullptr) {
-        fprintf(stderr, "%s: %s: reopen: %s\n", prog, optarg, mdbx_strerror(errno));
-        exit(EXIT_FAILURE);
-      }
+      outname = optarg;
       break;
     case 'n':
       break;
@@ -324,6 +322,15 @@ int main(int argc, char *argv[]) {
 
   if (optind != argc - 1)
     usage();
+
+  if (outname) {
+    /* The output file is opened only after the command line has been fully
+     * validated, so a mistyped/erroneous invocation cannot truncate it. */
+    if (freopen(outname, "w", stdout) == nullptr) {
+      fprintf(stderr, "%s: %s: reopen: %s\n", prog, outname, mdbx_strerror(errno));
+      return EXIT_FAILURE;
+    }
+  }
 
 #if defined(_WIN32) || defined(_WIN64)
   SetConsoleCtrlHandler(ConsoleBreakHandlerRoutine, true);
