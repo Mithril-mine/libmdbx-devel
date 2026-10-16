@@ -160,7 +160,7 @@ int64_t mdbx_jsonInteger_from_key(const MDBX_val v) {
   assert(v.iov_len == 8);
   const uint64_t key = unaligned_peek_u64(2, v.iov_base);
   const uint64_t bias = UINT64_C(0x8000000000000000);
-  const uint64_t covalent = (key > bias) ? key - bias : bias - key - 1;
+  const uint64_t covalent = (key >= bias) ? key - bias : bias - key - 1;
   const int shift = IEEE754_DOUBLE_EXPONENTA_BIAS + 63 -
                     (IEEE754_DOUBLE_EXPONENTA_MAX & (int)(covalent >> IEEE754_DOUBLE_MANTISSA_SIZE));
   if (unlikely(shift < 1))
