@@ -31,6 +31,12 @@ if(MDBX_PROBES)
 endif()
 add_issue_test(gh0068 SOURCE "issue_gh0068.c++")
 if(MDBX_BUILD_TOOLS)
+  add_issue_test(gh0070 SOURCE "issue_gh0070.c++")
+  set_tests_properties(
+    gh0070
+    PROPERTIES
+      ENVIRONMENT
+        "MDBX_TOOL_DUMP=$<TARGET_FILE:mdbx_dump>;MDBX_TOOL_LOAD=$<TARGET_FILE:mdbx_load>")
   add_issue_test(gh0071 SOURCE "issue_gh0071.c++")
   set_tests_properties(gh0071 PROPERTIES
                        ENVIRONMENT "MDBX_TOOL_DUMP=$<TARGET_FILE:mdbx_dump>")
