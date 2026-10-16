@@ -629,6 +629,25 @@ __cold int meta_validate(MDBX_env *env, meta_t *const meta, const page_t *const 
     WARNING("meta[%u] has invalid %s-height %u, skip it", meta_number, "GC", meta->trees.gc.height);
     return MDBX_CORRUPTED;
   }
+  /* Height counts every level from the root down to the leaf pages (nested
+   * sub-tables and overflow/large pages are not counted), so all those levels
+   * are leaf or branch pages. Consequently a tree is empty exactly when its
+   * height is zero, which requires an invalid root and a zero leaf-page count,
+   * and a tree taller than a single leaf page (height > 1) must contain branch
+   * pages. Enforce these equivalences so a crafted tree record cannot give the
+   * range estimator a zero divisor or a nonsense page count. */
+  if (unlikely((meta->trees.gc.height == 0) != (meta->trees.gc.root == P_INVALID))) {
+    WARNING("meta[%u] has invalid %s-height/root combination, skip it", meta_number, "GC");
+    return MDBX_CORRUPTED;
+  }
+  if (unlikely((meta->trees.gc.height == 0) != (meta->trees.gc.leaf_pages == 0))) {
+    WARNING("meta[%u] has invalid %s-height/leaf-pages combination, skip it", meta_number, "GC");
+    return MDBX_CORRUPTED;
+  }
+  if (unlikely((meta->trees.gc.height > 1) != (meta->trees.gc.branch_pages > 0))) {
+    WARNING("meta[%u] has invalid %s-height/branch-pages combination, skip it", meta_number, "GC");
+    return MDBX_CORRUPTED;
+  }
 
   /* MainDB */
   if (meta->trees.main.root == P_INVALID) {
@@ -644,6 +663,19 @@ __cold int meta_validate(MDBX_env *env, meta_t *const meta, const page_t *const 
   /* see the corresponding GC-height check above */
   if (unlikely(meta->trees.main.height >= CURSOR_STACK_SIZE)) {
     WARNING("meta[%u] has invalid %s-height %u, skip it", meta_number, "MainDB", meta->trees.main.height);
+    return MDBX_CORRUPTED;
+  }
+  /* see the corresponding GC tree-record checks above */
+  if (unlikely((meta->trees.main.height == 0) != (meta->trees.main.root == P_INVALID))) {
+    WARNING("meta[%u] has invalid %s-height/root combination, skip it", meta_number, "MainDB");
+    return MDBX_CORRUPTED;
+  }
+  if (unlikely((meta->trees.main.height == 0) != (meta->trees.main.leaf_pages == 0))) {
+    WARNING("meta[%u] has invalid %s-height/leaf-pages combination, skip it", meta_number, "MainDB");
+    return MDBX_CORRUPTED;
+  }
+  if (unlikely((meta->trees.main.height > 1) != (meta->trees.main.branch_pages > 0))) {
+    WARNING("meta[%u] has invalid %s-height/branch-pages combination, skip it", meta_number, "MainDB");
     return MDBX_CORRUPTED;
   }
 
