@@ -119,7 +119,7 @@ struct case_kind {
   const mdbx::map_handle table;
   const mdbx::slice name;
   const MDBX_db_flags_t flags;
-  case_kind(mdbx::txn txn, const char *name, const mdbx::key_mode key_mode, const mdbx::value_mode value_mode) noexcept
+  case_kind(mdbx::txn &txn, const char *name, const mdbx::key_mode key_mode, const mdbx::value_mode value_mode) noexcept
       : table(txn.create_map(name, key_mode, value_mode)), name(name), flags(txn.get_map_flags(table).flags) {}
   case_kind(const case_kind &) = default;
   case_kind(case_kind &&) = default;
@@ -144,7 +144,7 @@ struct case_kind {
 };
 
 struct case_usual : public case_kind {
-  case_usual(mdbx::txn txn) noexcept : case_kind(txn, "usual", mdbx::key_mode::usual, mdbx::value_mode::single) {}
+  case_usual(mdbx::txn &txn) noexcept : case_kind(txn, "usual", mdbx::key_mode::usual, mdbx::value_mode::single) {}
   buffer_pair kv(size_t base) override {
     return buffer_pair(buffer::base58(base).append('.').append(std::to_string(base)),
                        buffer::base58(~base).append(".usual"));
@@ -152,7 +152,7 @@ struct case_usual : public case_kind {
 };
 
 struct case_multi : public case_kind {
-  case_multi(mdbx::txn txn) noexcept : case_kind(txn, "multi", mdbx::key_mode::usual, mdbx::value_mode::multi) {}
+  case_multi(mdbx::txn &txn) noexcept : case_kind(txn, "multi", mdbx::key_mode::usual, mdbx::value_mode::multi) {}
   buffer_pair kv(size_t base) override {
     auto x = mix(base);
     auto w = bit_width(base | 42);
@@ -164,7 +164,7 @@ struct case_multi : public case_kind {
 };
 
 struct case_ordinal : public case_kind {
-  case_ordinal(mdbx::txn txn) noexcept
+  case_ordinal(mdbx::txn &txn) noexcept
       : case_kind(txn, "ordinal", mdbx::key_mode::ordinal, mdbx::value_mode::multi_ordinal) {}
   buffer_pair kv(size_t base) override {
     auto x = mix(base);

@@ -13,7 +13,7 @@ static MDBX_dbi dbi;
 static unsigned r;
 #define NEXT() (r = r * 1103515245u + 12345u)
 
-static void wr_ops(mdbx::txn t, int n, char *vbuf) {
+static void wr_ops(mdbx::txn &t, int n, char *vbuf) {
   char kbuf[32];
   for (int i = 0; i < n; ++i) {
     unsigned k = NEXT() % 4000;
@@ -30,7 +30,7 @@ static void wr_ops(mdbx::txn t, int n, char *vbuf) {
 }
 
 /* recursive nested writer: depth levels, random commit/abort at each */
-static void nest(mdbx::txn parent, int depth, char *vbuf) {
+static void nest(mdbx::txn &parent, int depth, char *vbuf) {
   auto child = parent.start_nested();
   wr_ops(child, 40, vbuf);
   if (depth > 0 && (NEXT() & 1))
