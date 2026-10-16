@@ -1940,7 +1940,7 @@ public:
   /// buffer just refers to data located outside the buffer.
   MDBX_NOTHROW_PURE_FUNCTION MDBX_CXX20_CONSTEXPR bool is_freestanding() const noexcept {
     static_assert(size_t(-intptr_t(max_length)) > max_length, "WTF?");
-    return size_t(byte_ptr() - silo_begin()) < silo_.capacity();
+    return size_t(byte_ptr() - silo_begin()) <= silo_.capacity();
   }
 
   /// \brief Checks whether data chunk stored in place within the buffer instance itself,
@@ -2488,7 +2488,7 @@ public:
   buffer &operator=(struct slice &&src) { return assign(::std::move(src)); }
 
 #if defined(DOXYGEN) || (defined(__cpp_lib_string_view) && __cpp_lib_string_view >= 201606L)
-  template <class CHAR, class T> buffer &operator=(const ::std::basic_string_view<CHAR, T> &view) noexcept {
+  template <class CHAR, class T> buffer &operator=(const ::std::basic_string_view<CHAR, T> &view) {
     return assign(view);
   }
 
