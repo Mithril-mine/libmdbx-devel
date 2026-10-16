@@ -240,13 +240,13 @@ int tbl_stat_summary(const MDBX_txn *txn, MDBX_stat *st) {
         TXN_FOREACH_DBI_USER(txn, dbi)
         if ((txn->dbi_state[dbi] & (DBI_VALID | DBI_STALE)) == DBI_VALID &&
             env->kvs[MAIN_DBI].clc.k.cmp(&name, &env->kvs[dbi].name) == 0)
-          goto next;
+          goto next_node;
 
         tree_t db;
         memcpy(&db, node_data(node), sizeof(db));
         tbl_stat_add(&db, st);
+      next_node:;
       }
-    next:
       err = cursor_sibling_right(&cx.outer);
     }
     if (unlikely(err != MDBX_NOTFOUND))
