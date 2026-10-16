@@ -40,6 +40,7 @@ static void signal_handler(int sig) {
 static char *prog;
 static bool quiet = false;
 static size_t lineno;
+static bool dump_trailer_seen = false;
 static void error(const char *func, int rc) {
   if (!quiet) {
     if (lineno)
@@ -376,8 +377,10 @@ __hot static int readline(MDBX_val *out, MDBX_val *buf) {
       lineno++;
       errno = 0;
       if (fgets(buf->iov_base, (int)buf->iov_len, stdin)) {
-        if (c == 'D' && !strncmp(buf->iov_base, "ATA=END", STRLENOF("ATA=END")))
+        if (c == 'D' && !strncmp(buf->iov_base, "ATA=END", STRLENOF("ATA=END"))) {
+          dump_trailer_seen = true;
           return EOF;
+        }
       }
       return badend();
     }
@@ -739,9 +742,16 @@ int main(int argc, char *argv[]) {
     int batch = 0;
     while (err == MDBX_SUCCESS) {
       MDBX_val key, data;
+      dump_trailer_seen = false;
       err = readline(&key, &kbuf);
-      if (err == EOF)
-        break;
+      if (err == EOF) {
+        if (mode & NOHDR || dump_trailer_seen)
+          break;
+        if (!quiet)
+          fprintf(stderr, "%s: line %" PRIiSIZE ": unexpected end of input (dump truncated)\n", prog, lineno);
+        err = MDBX_ENODATA;
+        goto bailout;
+      }
 
       if (err == MDBX_SUCCESS)
         err = readline(&data, &dbuf);

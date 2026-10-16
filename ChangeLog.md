@@ -62,6 +62,7 @@ A long-term support phase with periodic releases as fixes accumulate.
  - Fixed a checked-build crash when a nested-transaction begin failed partway through the loose-page move ([#67](https://github.com/Mithril-mine/libmdbx-devel/issues/67)) (backport).
   - Fixed a nested-transaction begin failing out-of-memory leaving the parent transaction in an inconsistent state ([#67](https://github.com/Mithril-mine/libmdbx-devel/issues/67)) (backport).
   - Fixed `mdbx_dump -f` truncating the output file on a mistyped command line before the arguments were validated ([#71](https://github.com/Mithril-mine/libmdbx-devel/issues/71)) (backport).
+  - Fixed `mdbx_dump` reporting success even when writing the dump to a file failed, and `mdbx_load` accepting a truncated dump as a complete database ([#70](https://github.com/Mithril-mine/libmdbx-devel/issues/70)) (backport).
 
  - Rare or specific conditions:
     - Fixed assertion failures in specific scenarios of creating and renaming tables within nested transactions (backport).
