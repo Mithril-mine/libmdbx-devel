@@ -36,6 +36,8 @@ __cold int mdbx_drop(MDBX_txn *txn, MDBX_dbi dbi, bool del) {
   int rc = check_txn_rw(txn, MDBX_TXN_BLOCKED);
   if (unlikely(rc != MDBX_SUCCESS))
     return LOG_IFERR(rc);
+  if (unlikely(dbi == FREE_DBI))
+    return LOG_IFERR(MDBX_EACCESS); /* the GC table must never be dropped or cleared */
 
   cursor_couple_t cx;
   rc = cursor_init(&cx.outer, txn, dbi);
