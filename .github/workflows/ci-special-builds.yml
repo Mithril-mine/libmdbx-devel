@@ -1,0 +1,47 @@
+name: ci-special-builds
+
+# Special libmdbx build configurations required by tests that cannot be
+# exercised by the default library build. Currently only the System V IPC
+# locking (issue #80 canary + the osal_ftok passthrough check); see
+# tests/special-builds/README.md and tests/special-builds/locking-sysv/.
+# SysV semaphores are a POSIX mechanism, so only the Linux cell is run.
+
+on:
+  push:
+    branches: [devel, master]
+  workflow_dispatch:
+
+env:
+  CI: GITHUB
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  locking-sysv:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+          submodules: true
+
+      - name: configure
+        shell: bash
+        run: |
+          cmake -S tests/special-builds/locking-sysv -B @ci-special-locking-sysv \
+            -DCMAKE_BUILD_TYPE=Debug
+
+      - name: build
+        shell: bash
+        run: |
+          cmake --build @ci-special-locking-sysv -j 4
+
+      - name: test
+        shell: bash
+        run: |
+          ctest --test-dir @ci-special-locking-sysv --output-on-failure
