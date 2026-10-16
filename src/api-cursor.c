@@ -360,7 +360,7 @@ int mdbx_cursor_count_ex(const MDBX_cursor *mc, size_t *count, MDBX_stat *ns, si
     const size_t size_before_modtxnid = offsetof(MDBX_stat, ms_mod_txnid);
     if (unlikely(bytes != sizeof(MDBX_stat)) && bytes != size_before_modtxnid)
       return LOG_IFERR(MDBX_EINVAL);
-    memset(ns, 0, sizeof(*ns));
+    memset(ns, 0, bytes);
   }
 
   size_t nvals = 0;
