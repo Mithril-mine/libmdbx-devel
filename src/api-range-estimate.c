@@ -87,6 +87,12 @@ __hot static ptrdiff_t estimate(const tree_t *tree, diff_t *const __restrict dr)
   if (btree_power < 0)
     return dr->diff;
 
+  /* A non-empty tree must have at least one leaf page, and a tree taller than
+   * a single leaf page (height > 1) must contain branch pages; never divide by
+   * a zero page count taken from the file. */
+  if (unlikely(tree->leaf_pages == 0 || (tree->height > 1 && tree->branch_pages == 0)))
+    return dr->diff;
+
   ptrdiff_t estimated = (ptrdiff_t)tree->items * dr->diff / (ptrdiff_t)tree->leaf_pages;
   if (btree_power == 0)
     return estimated;
