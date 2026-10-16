@@ -94,8 +94,9 @@ __cold void txn_basal_destroy(MDBX_txn *txn) {
   osal_free(txn);
 }
 
-static bool basal_check_overlapped(lck_t *const lck, const mdbx_pid_t pid, const uintptr_t tid) {
-  const size_t snap_nreaders = atomic_load32(&lck->rdt_length, mo_AcquireRelease);
+static bool basal_check_overlapped(MDBX_env *const env, const mdbx_pid_t pid, const uintptr_t tid) {
+  lck_t *const lck = env->lck;
+  const size_t snap_nreaders = rdt_count(env, lck);
   for (size_t i = 0; i < snap_nreaders; ++i) {
     if (atomic_load_pid(&lck->rdt[i].pid, mo_Relaxed) == pid &&
         unlikely(atomic_load64(&lck->rdt[i].tid, mo_Relaxed) == tid)) {
@@ -203,7 +204,7 @@ int txn_basal_start(MDBX_txn *txn, unsigned flags) {
 
     lck_t *const lck = env->lck_mmap.lck;
     if (lck && !(flags & MDBX_NOSTICKYTHREADS) && !(globals.runtime_flags & MDBX_DBG_LEGACY_OVERLAP) &&
-        basal_check_overlapped(lck, env->pid, tid))
+        basal_check_overlapped(env, env->pid, tid))
       return MDBX_TXN_OVERLAPPING;
 
     /* Not yet touching txn == env->basal_txn, it may be active */
