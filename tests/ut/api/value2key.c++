@@ -62,15 +62,13 @@ TEST(ut_value2key, json_integer_roundtrip) {
   }
 }
 
-TEST(ut_value2key, json_integer_zero_deviation) {
-  /* Deviation flagged to the coordinator (TASK-19 batch 1): zero is inside the
-   * documented RFC-7159 range, and mdbx_key_from_jsonInteger(0) produces the
-   * bias key 0x8000000000000000, yet mdbx_jsonInteger_from_key() decodes that
-   * key to INT64_MAX rather than 0 (src/api-key-transform.c, shift<1 branch).
-   * Documented here as-is until the core fix lands. */
+TEST(ut_value2key, json_integer_zero_roundtrips) {
+  /* Zero is inside the documented RFC-7159 range: mdbx_key_from_jsonInteger(0)
+   * produces the bias key 0x8000000000000000, and mdbx_jsonInteger_from_key()
+   * must decode that key back to 0, not to INT64_MAX (issue #87). */
   const auto key = ::mdbx_key_from_jsonInteger(0);
   MDBX_val kv{const_cast<uint64_t *>(&key), sizeof(key)};
-  EXPECT_EQ(::mdbx_jsonInteger_from_key(kv), INT64_MAX);
+  EXPECT_EQ(::mdbx_jsonInteger_from_key(kv), 0);
 }
 
 TEST(ut_value2key, json_integer_clamping) {
