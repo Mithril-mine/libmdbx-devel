@@ -22,6 +22,7 @@ In the `master` branch, development of version v0.15 will begin, with the techni
 
  - Minor clarification of the README and doxygen API descriptions (backport).
  - Added the man page for the `mdbx_defrag` utility (backport).
+ - When the locking is auto-selected, POSIX shared anonymous semaphores are now preferred over the legacy System V IPC on platforms that provide them, e.g. macOS ([#80](https://github.com/Mithril-mine/libmdbx-devel/issues/80)) (backport).
 
 ### Fixes:
 
