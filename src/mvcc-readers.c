@@ -113,9 +113,24 @@ __hot orsi_rw_t mvcc_snapshot_oldest_rw(const MDBX_txn *const txn) {
   const meta_ptr_t steady = meta_prefer_steady(txn->env, &txn->wr.troika);
   orsi_rw_t result = {.steady_txnid = steady.txnid, .oldest_txnid = prev_oldest};
   tASSERT0(txn, steady.txnid <= txn->env->basal_txn->txnid);
-  tASSERT0(txn, steady.txnid >= prev_oldest);
+  /* A cached oldest-reader txnid beyond the steady snapshot cannot be
+   * legitimate: both live in the externally-writable lock mapping, and steady
+   * is the newest snapshot that any live reader may reference. Never trust a
+   * forged/corrupted value (previously only a debug-build assertion caught
+   * it): force a full reader-table rescan below so the true oldest is
+   * computed from the actual reader slots, and ignore the cached value when
+   * deciding whether a reader lagged behind the previous-oldest (otherwise
+   * every legitimately-old reader would look "stuck" and be demoted). */
+  const bool distrust_cached_oldest = (prev_oldest > steady.txnid);
+  const txnid_t trusted_oldest = distrust_cached_oldest ? MIN_TXNID : prev_oldest;
+  if (unlikely(distrust_cached_oldest))
+    NOTICE("cached oldest-reader %" PRIaTXN " beyond steady %" PRIaTXN ", forcing rescan", prev_oldest,
+           steady.txnid);
 
-  while (nothing_changed_signature != atomic_load32(&lck->rdt_refresh_flag, mo_AcquireRelease)) {
+  bool rescan_forced = distrust_cached_oldest;
+  while (rescan_forced ||
+         nothing_changed_signature != atomic_load32(&lck->rdt_refresh_flag, mo_AcquireRelease)) {
+    rescan_forced = false;
     lck->rdt_refresh_flag.weak = nothing_changed_signature;
     jitter4testing(false);
     const size_t snap_nreaders = rdt_count(txn->env, lck);
@@ -137,7 +152,7 @@ __hot orsi_rw_t mvcc_snapshot_oldest_rw(const MDBX_txn *const txn) {
         goto retry;
       }
 
-      if (unlikely(reader_txnid < prev_oldest)) {
+      if (unlikely(reader_txnid < trusted_oldest)) {
         if (unlikely(nothing_changed_signature == atomic_load32(&lck->rdt_refresh_flag, mo_AcquireRelease)) &&
             safe64_reset_compare(&lck->rdt[i].txnid, reader_txnid)) {
           NOTICE("kick stuck reader[%zu of %zu].pid_%zu %" PRIaTXN " < prev-oldest %" PRIaTXN ", steady-txn %" PRIaTXN,
@@ -157,8 +172,8 @@ __hot orsi_rw_t mvcc_snapshot_oldest_rw(const MDBX_txn *const txn) {
 
   if (result.oldest_txnid != prev_oldest) {
     VERBOSE("update oldest %" PRIaTXN " -> %" PRIaTXN, prev_oldest, result.oldest_txnid);
-    tASSERT0(txn, result.oldest_txnid >= lck->cached_oldest_txnid.weak);
-    tASSERT0(txn, oldest_retired_pages >= lck->cached_oldest_retired.weak);
+    tASSERT0(txn, distrust_cached_oldest || result.oldest_txnid >= lck->cached_oldest_txnid.weak);
+    tASSERT0(txn, distrust_cached_oldest || oldest_retired_pages >= lck->cached_oldest_retired.weak);
     atomic_store64(&lck->cached_oldest_txnid, result.oldest_txnid, mo_Relaxed);
     atomic_store64(&lck->cached_oldest_retired, oldest_retired_pages, mo_Relaxed);
     const meta_ptr_t recent = meta_recent(txn->env, &txn->wr.troika);
@@ -426,7 +441,12 @@ __cold bool mvcc_kick_laggards(MDBX_txn *txn, const txnid_t straggler,
       break;
 
     mdbx_pid_t pid = atomic_load_pid(&stucked->pid, mo_AcquireRelease);
-    if (safe64_read(&stucked->txnid) != straggler || safe64_read(&stucked->tid) != stucked_tid || !pid)
+    /* The pid comes from the externally-writable reader table; a non-positive
+     * value is forged/corrupt and must never reach the (potentially
+     * kill-capable) HSR callback, where POSIX kill() with pid<0 would target
+     * a whole process group. */
+    if (safe64_read(&stucked->txnid) != straggler || safe64_read(&stucked->tid) != stucked_tid ||
+        (intptr_t)pid <= 0)
       continue;
 
     if (optional_obstacle) {
