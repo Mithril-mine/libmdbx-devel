@@ -601,7 +601,7 @@ public:
     const auto begin_ptr = inherited::byte_ptr();
     if (MDBX_UNLIKELY(begin_ptr == nullptr))
       return false;
-    return size_t(begin_ptr - silo_begin()) < silo_.capacity();
+    return size_t(begin_ptr - silo_begin()) <= silo_.capacity();
   }
 
   /// \brief Checks whether data chunk stored in place within the buffer instance itself,
@@ -1119,7 +1119,9 @@ public:
   buffer &operator=(struct slice &&src) { return assign(::std::move(src)); }
 
 #if defined(DOXYGEN) || (defined(__cpp_lib_string_view) && __cpp_lib_string_view >= 201606L)
-  template <class CHAR, class T> buffer &operator=(const ::std::basic_string_view<CHAR, T> &view) noexcept {
+  template <class CHAR, class T> buffer &operator=(const ::std::basic_string_view<CHAR, T> &view) {
+    /* assigning a string_view copies the bytes into owned storage, so this
+     * allocates and must be allowed to throw on out-of-memory (issue #78) */
     return assign(inherited(view));
   }
 
