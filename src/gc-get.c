@@ -795,6 +795,8 @@ static inline pgr_t page_alloc_finalize(MDBX_env *const env, MDBX_txn *const txn
         for (size_t i = 0; i < num; ++i) {
           if (!mincore_probe(env, pgno + (pgno_t)i)) {
             ++cleared;
+            if (n == 0)
+              file_offset = pgno2bytes(env, pgno + (pgno_t)i); /* start of a run */
             iov[n].iov_len = env->ps;
             iov[n].iov_base = pattern;
             if (unlikely(++n == MDBX_AUXILARY_IOV_MAX)) {
