@@ -66,6 +66,7 @@ A long-term support phase with periodic releases as fixes accumulate.
   - Fixed `mdbx_dump`/`mdbx_load`/`mdbx_stat` mishandling table names containing control characters: dumping was refused, listing and stat output are sanitized, and such a name in a `database=` header is rejected ([#72](https://github.com/Mithril-mine/libmdbx-devel/issues/72)) (backport).
   - Fixed `mdbx_drop()` accepting the internal free-list (GC) handle and destroying the garbage-collection tree, permanently leaking every tracked page and corrupting page accounting; the call is now rejected ([#69](https://github.com/Mithril-mine/libmdbx-devel/issues/69)) (backport).
   - Fixed a hardware divide-by-zero in `mdbx_cursor_put(MDBX_MULTIPLE)` when a `MDBX_DUPFIXED` element size of zero was supplied together with a huge element count; the put is now rejected with `MDBX_BAD_VALSIZE` ([#73](https://github.com/Mithril-mine/libmdbx-devel/issues/73)) (backport).
+  - Fixed `mdbx_estimate_distance()` returning a negated result when both cursors were on different duplicates of one key ([#86](https://github.com/Mithril-mine/libmdbx-devel/issues/86)) (backport).
 
  - Rare or specific conditions:
     - Fixed assertion failures in specific scenarios of creating and renaming tables within nested transactions (backport).
