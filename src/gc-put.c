@@ -985,7 +985,9 @@ static inline int gc_reserve4return(MDBX_txn *txn, gcu_t *ctx, const size_t chun
 #endif
   TRACE("%s: reserved +%zu...+%zu [%zu...%zu), err %d", dbg_prefix(ctx), chunk_lo, chunk_hi,
         ctx->return_reserved_lo + 1, ctx->return_reserved_hi + chunk_hi + 1, err);
-  gc_prepare_stockpile4update(txn, ctx);
+  err = gc_prepare_stockpile4update(txn, ctx);
+  if (unlikely(err != MDBX_SUCCESS))
+    return err;
   /* LY: ложные предупреждения coverity возникают из-за поддержки вставки массивов значений в режиме MDBX_MULTIPLE */
   /* coverity[OVERRUN] */
   err = cursor_put(&ctx->cursor, &key, &data, MDBX_RESERVE | MDBX_NOOVERWRITE);
