@@ -18,7 +18,7 @@ __cold int mdbx_reader_list(const MDBX_env *env, MDBX_reader_list_func *func, vo
   int serial = 0;
   lck_t *const lck = env->lck_mmap.lck;
   if (likely(lck)) {
-    const size_t snap_nreaders = atomic_load32(&lck->rdt_length, mo_AcquireRelease);
+    const size_t snap_nreaders = rdt_count(env, lck);
     for (size_t i = 0; i < snap_nreaders; i++) {
       const reader_slot_t *r = lck->rdt + i;
     retry_reader:;

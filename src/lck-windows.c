@@ -210,7 +210,7 @@ int osal_suspend_threads_before_remap(MDBX_env *env, mdbx_handle_array_t **array
   if (env->lck_mmap.lck) {
     /* Scan LCK for threads of the current process */
     const reader_slot_t *const begin = env->lck_mmap.lck->rdt;
-    const reader_slot_t *const end = begin + atomic_load32(&env->lck_mmap.lck->rdt_length, mo_AcquireRelease);
+    const reader_slot_t *const end = begin + rdt_count(env, env->lck_mmap.lck);
     const uintptr_t WriteTxnOwner = env->basal_txn ? env->basal_txn->owner : 0;
     for (const reader_slot_t *reader = begin; reader < end; ++reader) {
       if (reader->pid.weak != env->pid || !reader->tid.weak || reader->tid.weak >= MDBX_TID_TXN_OUSTED) {

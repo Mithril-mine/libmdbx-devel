@@ -592,7 +592,7 @@ int txn_renew(MDBX_txn *txn, unsigned flags) {
       return MDBX_BUSY;
     lck_t *const lck = env->lck_mmap.lck;
     if (lck && (env->flags & MDBX_NOSTICKYTHREADS) == 0 && (globals.runtime_flags & MDBX_DBG_LEGACY_OVERLAP) == 0) {
-      const size_t snap_nreaders = atomic_load32(&lck->rdt_length, mo_AcquireRelease);
+      const size_t snap_nreaders = rdt_count(env, lck);
       for (size_t i = 0; i < snap_nreaders; ++i) {
         if (atomic_load32(&lck->rdt[i].pid, mo_Relaxed) == env->pid &&
             unlikely(atomic_load64(&lck->rdt[i].tid, mo_Relaxed) == tid)) {

@@ -198,7 +198,7 @@ __cold int dxb_resize(MDBX_env *const env, const pgno_t used_pgno, const pgno_t 
         should_unlock_rdt = true;
 
         /* looking for readers from this process */
-        const size_t snap_nreaders = atomic_load32(&lck->rdt_length, mo_AcquireRelease);
+        const size_t snap_nreaders = rdt_count(env, lck);
         eASSERT(env, mode == explicit_resize);
         for (size_t i = 0; i < snap_nreaders; ++i) {
           if (lck->rdt[i].pid.weak == env->pid && lck->rdt[i].tid.weak != osal_thread_self()) {
