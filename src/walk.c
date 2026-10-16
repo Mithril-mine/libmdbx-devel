@@ -29,12 +29,50 @@ static page_type_t walk_subpage_type(const page_t *sp) {
   }
 }
 
+static void walk_ctx_reset(walk_ctx_t *ctx) {
+  if (likely(ctx->visited)) {
+    /* the whole bitset lives in a single allocation: memset over it */
+    memset(ctx->visited, 0, ctx->visited_size);
+  }
+  ctx->nwalked = 0;
+}
+
+/* Mark a page as walked; return MDBX_CORRUPTED on a second visit, or when the
+ * total number of walked pages exceeds the file's page count (a valid tree
+ * never enters more pages than exist and never references a page twice).
+ * With `dont_check_revisit` both guards are disabled: the caller (the `chk`
+ * machinery) has its own loop/dup detection and must see such trees whole. */
+static int walk_visit(walk_ctx_t *ctx, const pgno_t pgno) {
+  if (likely(!(ctx->options & dont_check_revisit))) {
+    if (unlikely(++ctx->nwalked > ctx->walk_limit)) {
+      ERROR("MDBX_CORRUPTED: page-tree walk entered more than %zu pages, the file is not a valid tree",
+            ctx->walk_limit);
+      return MDBX_CORRUPTED;
+    }
+    if (likely(ctx->visited)) {
+      if (pgno < ctx->visited_size * 8) {
+        const size_t byte = (size_t)pgno / 8;
+        const uint8_t bit = (uint8_t)(1u << (pgno % 8));
+        if (unlikely(ctx->visited[byte] & bit)) {
+          ERROR("MDBX_CORRUPTED: page %" PRIaPGNO " is referenced more than once, the file is not a valid tree", pgno);
+          return MDBX_CORRUPTED;
+        }
+        ctx->visited[byte] |= bit;
+      }
+    }
+  }
+  return MDBX_SUCCESS;
+}
+
 /* Depth-first tree traversal. */
 __cold static int walk_pgno(walk_ctx_t *ctx, walk_tbl_t *tbl, const pgno_t pgno, txnid_t parent_txnid,
                             const pgno_t parent_pgno) {
   ASSERT(pgno != P_INVALID);
+  int err = walk_visit(ctx, pgno);
+  if (unlikely(err != MDBX_SUCCESS))
+    return err;
   page_t *mp = nullptr;
-  int err = page_get(ctx->cursor, pgno, &mp, parent_txnid);
+  err = page_get(ctx->cursor, pgno, &mp, parent_txnid);
 
   const page_type_t type = walk_page_type(mp);
   const size_t nentries = mp ? page_numkeys(mp) : 0;
@@ -183,6 +221,9 @@ __cold static int walk_pgno(walk_ctx_t *ctx, walk_tbl_t *tbl, const pgno_t pgno,
       const size_t over_header = PAGEHDRSZ;
 
       ASSERT(err == MDBX_SUCCESS);
+      rc = walk_visit(ctx, large_pgno);
+      if (unlikely(rc != MDBX_SUCCESS))
+        return rc;
       pgr_t lp = page_get_large(ctx->cursor, large_pgno, mp->txnid);
       const size_t npages = lp.page ? lp.page->pages : 1;
       const size_t pagesize = pgno2bytes(ctx->txn->env, npages);
@@ -324,6 +365,25 @@ __cold int walk_pages(MDBX_txn *txn, walk_func *visitor, void *user, walk_option
     return rc;
 
   walk_ctx_t ctx = {.txn = txn, .userctx = user, .visitor = visitor, .options = options};
+
+  /* A legitimate walk enters each page exactly once, so the total number of
+   * entries never exceeds the file's page count; use it both as a hard limit
+   * and (capped to keep the allocation bounded) as a one-bit-per-page marker
+   * to reject duplicate references (cycles and DAGs) on the spot. With
+   * dont_check_revisit both are skipped and no marker is allocated. */
+  const size_t npages = txn->geo.first_unallocated;
+  ctx.walk_limit = npages;
+  if (likely(!(options & dont_check_revisit))) {
+    const size_t visited_max = (npages < (1u << 24)) ? npages : (1u << 24); /* 2 MiB bitmap cap */
+    if (likely(visited_max > 0)) {
+      ctx.visited = (uint8_t *)osal_malloc((visited_max + 7) / 8);
+      if (unlikely(!ctx.visited))
+        return MDBX_ENOMEM;
+      ctx.visited_size = (visited_max + 7) / 8;
+    }
+  }
+  walk_ctx_reset(&ctx);
+
   walk_tbl_t tbl = {.name = {.iov_base = MDBX_CHK_GC}, .internal = &txn->dbs[FREE_DBI]};
   if ((options & dont_walk_GC) == 0)
     rc = walk_tbl(&ctx, &tbl, 0);
@@ -332,5 +392,7 @@ __cold int walk_pages(MDBX_txn *txn, walk_func *visitor, void *user, walk_option
     tbl.internal = &txn->dbs[MAIN_DBI];
     rc = walk_tbl(&ctx, &tbl, 0);
   }
+
+  osal_free(ctx.visited);
   return rc;
 }
