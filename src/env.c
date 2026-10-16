@@ -288,7 +288,7 @@ __cold int env_open(MDBX_env *env, mdbx_mode_t mode) {
     return rc;
 
 #if MDBX_LOCKING == MDBX_LOCKING_SYSV
-  env->me_sysv_ipc.key = ftok(env->pathname.dxb, 42);
+  env->me_sysv_ipc.key = osal_ftok(env->lazy_fd, env->pathname.dxb);
   if (unlikely(env->me_sysv_ipc.key == -1))
     return errno;
 #endif /* MDBX_LOCKING */

@@ -102,6 +102,7 @@ A long-term support phase with periodic releases as fixes accumulate.
 ### Other:
 
  - Added a link to the new .NET bindings (backport).
+ - When the locking is auto-selected, POSIX shared anonymous semaphores are now preferred over the legacy System V IPC on platforms that provide them, e.g. macOS ([#80](https://github.com/Mithril-mine/libmdbx-devel/issues/80)) (backport).
 
 
 --------------------------------------------------------------------------------

@@ -1126,6 +1126,43 @@ int osal_removefile(const pathchar_t *pathname) {
 
 #if !(defined(_WIN32) || defined(_WIN64))
 static bool is_valid_fd(int fd) { return !(isatty(fd) < 0 && errno == EBADF); }
+
+/* ----------------------------------------------------------------------------
+ * osal_ftok() — a wrapper around the system ftok() for the System V IPC
+ * locking (MDBX_LOCKING_SYSV).
+ *
+ * Background: the semaphore key is derived from the data-file path via the
+ * system ftok(), see the issue
+ *   https://github.com/Mithril-mine/libmdbx-devel/issues/80
+ * The glibc/POSIX ftok() uses only a few bits of the file's inode (the low 16
+ * bits) plus the device and an 8-bit project id, so two different databases on
+ * the same filesystem can easily map to the same key. On a key collision the
+ * open path treats the existing semaphore set as a stale leftover, removes it
+ * with IPC_RMID and recreates its own — silently destroying the locking of an
+ * unrelated, in-use database that happens to share the key.
+ *
+ * Why this is intentionally NOT fixed here:
+ *  - if ftok() works poorly, that is a defect of the platform, not of libmdbx;
+ *  - System V IPC is a legacy mechanism: when it is selected, either a legacy
+ *    system is in use about which little is known, or the user made a
+ *    deliberate choice, and then the use of the system ftok() is expected;
+ *  - replacing the system ftok() may make things worse, since the exact
+ *    behavior of the platform implementation is not known.
+ *
+ * A proper fix would be a more collision-resistant key derived from the file
+ * inode number, the filesystem type and the mount point, with a build option
+ * to choose between this implementation and the system ftok(), and would
+ * receive the MDBX_env to use the already-open file descriptor of the DXB
+ * file. The relevant code for obtaining the filesystem type and mount point
+ * already exists inside osal_check_fs_local() and would need to be factored
+ * out into a separate osal function. Until then, this wrapper only isolates
+ * the problem and keeps the exact current behavior: it calls the system
+ * ftok() with project id 42.
+ * -------------------------------------------------------------------------*/
+MDBX_MAYBE_UNUSED MDBX_INTERNAL key_t osal_ftok(int fd, const char *pathname) {
+  (void)fd;
+  return ftok(pathname, 42);
+}
 #endif /*! Windows */
 
 int osal_removedirectory(const pathchar_t *pathname) {
