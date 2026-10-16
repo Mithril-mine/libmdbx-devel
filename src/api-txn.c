@@ -556,7 +556,7 @@ int mdbx_txn_info(const MDBX_txn *txn, MDBX_txn_info *info, bool scan_rlt) {
       if (scan_rlt && info->txn_reader_lag > 1 && lck) {
         /* find next more recent reader */
         txnid_t next_reader = head.txnid;
-        const size_t snap_nreaders = atomic_load32(&lck->rdt_length, mo_AcquireRelease);
+        const size_t snap_nreaders = rdt_count(env, lck);
         for (size_t i = 0; i < snap_nreaders; ++i) {
         retry:
           if (atomic_load_pid(&lck->rdt[i].pid, mo_AcquireRelease)) {
@@ -594,7 +594,7 @@ int mdbx_txn_info(const MDBX_txn *txn, MDBX_txn_info *info, bool scan_rlt) {
     lck_t *const lck = env->lck_mmap.lck;
     if (scan_rlt && lck) {
       txnid_t oldest_reading = txn->txnid;
-      const size_t snap_nreaders = atomic_load32(&lck->rdt_length, mo_AcquireRelease);
+      const size_t snap_nreaders = rdt_count(env, lck);
       if (snap_nreaders) {
         txn_gc_detent(txn);
         oldest_reading = txn->env->gc.detent;

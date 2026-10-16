@@ -673,6 +673,15 @@ MDBX_MAYBE_UNUSED static void static_checks(void) {
 
 #include "sort.h"
 
+/* The reader-table occupancy counter lives in the externally-writable lock
+ * mapping, so a too-large value from a corrupt or hostile lock file must never
+ * be used as a loop/allocation bound over the fixed-size rdt[] array. Clamp it
+ * to the table capacity (max_readers) at every read site. */
+static inline size_t rdt_count(const MDBX_env *env, const lck_t *lck) {
+  const size_t n = atomic_load32(&lck->rdt_length, mo_AcquireRelease);
+  return (n < env->max_readers) ? n : env->max_readers;
+}
+
 #endif /* !__cplusplus */
 
 #ifdef _MSC_VER
