@@ -27,6 +27,14 @@ typedef struct walk_ctx {
   walk_func *visitor;
   MDBX_txn *txn;
   MDBX_cursor *cursor;
+  /* A valid copy-on-write b-tree references every page exactly once, so the
+   * walk marks each visited page in a one-bit-per-page bitmap and rejects any
+   * second visit (a cycle or a reconverging DAG) as corruption, which also
+   * bounds the traversal by the number of pages in the file (issue #82). */
+  uint8_t *visited;    /* bitset, one bit per page; may be a capped subset */
+  size_t visited_size; /* nbytes of the bitmap (0 when not in use) */
+  size_t nwalked;      /* walk_pgno() entries made so far */
+  size_t walk_limit;   /* entries never legitimately exceed the page count */
 } walk_ctx_t;
 
 MDBX_INTERNAL int walk_tbl(walk_ctx_t *ctx, walk_tbl_t *tbl, pgno_t parent_page);
