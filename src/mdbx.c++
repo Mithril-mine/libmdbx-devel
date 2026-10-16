@@ -1530,7 +1530,7 @@ txn_managed &txn_managed::operator=(txn_managed &&other) noexcept {
          * (issue #60) */
         (void)::mdbx_txn_abort(handle_);
       }
-    inherited::operator=(std::move(other));
+    inherited::operator=(static_cast<txn &&>(std::move(other)));
   }
   return *this;
 }

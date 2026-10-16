@@ -444,7 +444,7 @@ struct track_context : public timeout_context {
     }
   }
 
-  pool fetch(mdbx::txn txn, const mdbx::txnid mvcc, prng &rnd) {
+  pool fetch(mdbx::txn &txn, const mdbx::txnid mvcc, prng &rnd) {
     pool result;
     for (auto &pair : tables) {
       auto cursor = txn.open_cursor(pair.first);
@@ -483,7 +483,7 @@ struct track_context : public timeout_context {
     return result;
   }
 
-  bool verify(pool &pool, const mdbx::txnid from_mvcc, mdbx::txn to, const mdbx::txnid to_mvcc) {
+  bool verify(pool &pool, const mdbx::txnid from_mvcc, const mdbx::txn &to, const mdbx::txnid to_mvcc) {
     const bool is_write = to.is_readwrite();
     assert(from_mvcc < to_mvcc && to_mvcc <= to.id());
     for (auto &entry : pool) {
@@ -749,9 +749,10 @@ bool case1_stairway_pass(track_context &ctx, mdbx::env env, prng &rnd, generator
   for (const auto &from : ctx.rx)
     for (const auto &to : ctx.rx)
       if (to.first > from.first)
-        coverage.emplace_back(from.first, to.first, from.second, to.second);
+        coverage.emplace_back(from.first, to.first, static_cast<const mdbx::txn &>(from.second),
+                              static_cast<const mdbx::txn &>(to.second));
   std::shuffle(coverage.begin(), coverage.end(), rnd);
-  for (const auto &step : coverage) {
+  for (auto &step : coverage) {
     pool = ctx.fetch(step.from_txn, step.from_mvcc, rnd);
     ok = ctx.verify(pool, step.from_mvcc, step.to_txn, step.to_mvcc) && ok;
     max_pool = std::max(max_pool, pool.size());

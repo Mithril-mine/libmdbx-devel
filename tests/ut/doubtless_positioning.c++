@@ -136,7 +136,7 @@ static bool probe(mdbx::txn txn, mdbx::map_handle dbi, mdbx::cursor::move_operat
   return ok;
 }
 
-static bool test(mdbx::txn txn, mdbx::map_handle dbi) {
+static bool test(mdbx::txn &txn, mdbx::map_handle dbi) {
   bool ok = true;
 
   ok = probe(txn, dbi, mdbx::cursor::key_lesser_than,
