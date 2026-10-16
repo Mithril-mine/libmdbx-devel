@@ -33,65 +33,65 @@ A long-term support phase with periodic releases as fixes accumulate.
 
 ### Fixes:
 
- - Fixed `mdbx_load` failing with `ENOENT` when the dump is fed through the standard input: the man page advertises stdin as the default input, but `-f <file>` consumed the sole argument, and the remaining dbpath argument was then treated as the input file (issue #50) (backport).
- - Fixed print-mode `mdbx_dump -p` emitting a field's leading space byte verbatim, making the dump line ambiguous for loaders that treat a two-space line as a concise repeat marker. A leading space is now escaped as `\20` (issue #61) (backport).
- - Fixed `mdbx_replace_ex()` leaving its on-stack cursor linked into `txn->cursors[]` when it returns `MDBX_EINVAL` for aliased old/new buffers: the next operation on the same DBI walked the stale cursor list and could hang (Linux `-O2`) or crash (use-after-return under ASan) (issue #56) (backport).
- - Fixed `page_check()` accepting non-DUPFIX node offsets pointing below the page's free-gap `upper` bound: such a crafted page passed validation even under `MDBX_VALIDATION`, and `node_del()`/`node_shrink()` subsequently underflowed a `memmove()` length to ~`SIZE_MAX` (out-of-bounds write). Offsets outside `[upper, page-end]`, including odd ones, are now rejected (issue #57) (backport).
- - Fixed the `MDBX_ATTRIBUTE_NO_SANITIZE_ADDRESS` macro expanding to a GCC-only `__attribute__` under `__SANITIZE_ADDRESS__`: MSVC defines the macro but cannot parse the attribute, so it now uses `__declspec(no_sanitize_address)` for MSVC (issue #62) (backport).
- - Fixed a failed second in-process open dropping the first (live) handle's POSIX file locks on classic-`fcntl` builds (`MDBX_USE_OFDLOCKS=0`): the teardown closed descriptors and released all of the process's `fcntl` locks on the lock file, and the neighbour restore in `lck_destroy()` was skipped because `rthc_drown()` discovered the in-process neighbour only when the lock region was already mapped. `rthc_drown()` now discovers the neighbour by the lock-file descriptor, so another process cannot seize exclusive access under a live handle (issue #59) (backport).
- - Fixed the C++ RAII wrappers: `env_managed::close()` left `handle_` dangling when `mdbx_env_close_ex()` released the environment but returned an error (sync/fstat/panic), so the destructor re-entered the freed object (use-after-free); the `env_managed`/`txn_managed` move-assignments called throwing `close()`/`abort()` from `noexcept` context, ending the process with `std::terminate` on error. `close()` now keeps `handle_` valid on `MDBX_BUSY` and nulls it before throwing on any other error, and the move-assignments release the handle best-effort without throwing (issue #60) (backport).
- - Fixed `mdbx_chk` crashes on databases with named sub-tables: with `-i` the checker passed custom comparators to an already-bound table via `MDBX_DB_ACCEDE` (rejected as `MDBX_INCOMPATIBLE`), and with `-s <table>` it asserted on a NULL table cookie for filtered-out tables (issues #49, #51) (backport).
- - Fixed wrong `env->incore` assertion in `gc_alloc_ex()`: the asserted state (steady point not advanced by `dxb_sync_locked()`) is legitimate on any filesystem, and on Windows `osal_check_fs_incore()` always reports not-in-core, so the assertion could never hold. It is removed and allocation falls through to the unallocated part of the file (issue #52) (backport).
- - Fixed the missed propagation of a mid-commit flush error in `iov_page()` on all platforms — a failed `iov_write()` previously reported `MDBX_SUCCESS` while the dirty page was never queued for writing, with a risk of silent data loss (backport).
- - Fixed Windows ioring corruption when committing large write-mapped durable transactions: gather segments were appended to a `WriteFileEx` single item and outstanding `WriteFileEx` writes in a mixed batch were not awaited before reading `STATUS_PENDING` as an error, which could reset the ring under a live APC and crash in `ior_wocr()` with `hEvent == NULL` (backport).
- - Fixed `mdbx_cursor_count_ex()` corrupting memory past the caller's buffer when called with the legacy 40-byte size of `MDBX_stat`: the library wrote 8 bytes beyond the provided buffer, which could silently corrupt adjacent data or crash the application (backport).
- - Fixed using `[[maybe_unused]] const` as workaround for MSVC bug (backport).
- - Fixed minor copy&paste mistakes and other typos across codebase (backport).
+ - Fixed `mdbx_load` failing with a missing-file error when reading a dump from standard input ([#50](https://github.com/Mithril-mine/libmdbx-devel/issues/50)) (backport).
+ - Fixed `mdbx_dump -p`/`mdbx_load` silently losing data on round-trip when a key or value starts with a space ([#61](https://github.com/Mithril-mine/libmdbx-devel/issues/61)) (backport).
+ - Fixed `mdbx_replace_ex()` possibly hanging or crashing the next operation on the same sub-table when called with overlapping buffers ([#56](https://github.com/Mithril-mine/libmdbx-devel/issues/56)) (backport).
+ - Fixed a crafted database file that passed validation and could later corrupt data or crash when deleted ([#57](https://github.com/Mithril-mine/libmdbx-devel/issues/57)) (backport).
+ - Fixed MSVC+AddressSanitizer builds failing to compile ([#62](https://github.com/Mithril-mine/libmdbx-devel/issues/62)) (backport).
+ - Fixed a failed second in-process open releasing the first handle's file locks, letting another process take exclusive access ([#59](https://github.com/Mithril-mine/libmdbx-devel/issues/59)) (backport).
+ - Fixed the C++ `*_managed` wrappers possibly terminating the process on a failed `close()`/`abort()`, and an `env_managed::close()` use-after-free ([#60](https://github.com/Mithril-mine/libmdbx-devel/issues/60)) (backport).
+ - Fixed `mdbx_chk` crashing on databases with named sub-tables when using the `-i`/`-s` options ([#49](https://github.com/Mithril-mine/libmdbx-devel/issues/49), [#51](https://github.com/Mithril-mine/libmdbx-devel/issues/51)) (backport).
+ - Fixed a spurious internal assertion failure during page allocation on Windows ([#52](https://github.com/Mithril-mine/libmdbx-devel/issues/52)) (backport).
+ - Fixed a rare durability bug: a failed disk write during a commit could be silently reported as success (backport).
+ - Fixed Windows crashes when committing large write-mapped durable transactions (backport).
+ - Fixed `mdbx_cursor_count_ex()` writing past the caller's buffer when called with the legacy structure size ([#68](https://github.com/Mithril-mine/libmdbx-devel/issues/68)) (backport).
+ - Fixed the `[[maybe_unused]] const` workaround for an MSVC bug (backport).
+ - Fixed minor copy-and-paste mistakes and other typos across the codebase (backport).
  - Fixed a lot of typos and a few minor bugs detected by CodeQL (backport).
- - Fixed Windows `writethrough_threshold` option rejecting `UINT64_MAX` default (backport).
- - Fixed typo in handling `NOMETASYNC` while emit `SYNC_IODQ` (backport).
- - Fixed `env_owned_wrtxn()` to avoid by-pass locking in the `MDBX_NOSTICKYTHREADS` mode (backport).
- - Fixed unreasonably high memory 2GB consumption in `mdbx_load` utility due to leftover debug changes (backport).
- - Fixed loss of `mincore()` cache due erase/overwrite on insert (backport).
- - Fixed `entry point _except_handler4 not found in mdbx.dll` in 32-bit build with `MDBX_WITHOUT_MSVC_CRT=ON` (backport).
- - Fixed building by CLANG/LLVM on Windows, including Microsoft Clang from Visual Studio (backport).
- - Fixed `scan4seq_neon()` for LLP4/ARM64-Windows (backport).
-  - Fixed division truncation/underflow in the `default_rp_augment_limit()` which lead to too low and "stepwise" default `MDBX_opt_rp_augment_limit` (backport).
-  - Fixed a crafted database file driving the engine out of bounds (crash or data corruption) when deleting records (issue #63) (backport).
-  - Fixed Windows performance: in write-map mode every no-sync commit flushed the whole mapping, making `SAFE_NOSYNC`/`NOMETASYNC` nearly as expensive as a full synchronization (issue #65) (backport).
-  - Fixed a checked-build crash when a nested-transaction begin failed partway through the loose-page move, instead of returning the error (prerequisite for issue #67) (backport).
-  - Fixed the parent transaction's page-reuse accounting ending up inconsistent if a nested transaction begin fails with out-of-memory partway through the move (issue #67) (backport).
+ - Fixed the `writethrough_threshold` option rejecting its default value on Windows (backport).
+ - Fixed a typo in the handling of the `NOMETASYNC` mode (backport).
+ - Fixed a possible lock bypass in the `MDBX_NOSTICKYTHREADS` mode (backport).
+ - Fixed `mdbx_load` consuming up to 2GB of memory due to leftover debugging code (backport).
+ - Fixed losing disk-cache hints after erase/overwrite inserts (backport).
+ - Fixed the `entry point _except_handler4 not found in mdbx.dll` error in a 32-bit build with `MDBX_WITHOUT_MSVC_CRT=ON` (backport).
+ - Fixed building with CLANG/LLVM on Windows, including the Microsoft Clang from Visual Studio (backport).
+ - Fixed a scan-code path bug on ARM64-Windows with LLP64 (backport).
+ - Fixed the default write-transaction size limit being computed too low (`MDBX_opt_rp_augment_limit`) (backport).
+ - Fixed a crafted database file driving the engine out of bounds (crash or data corruption) when deleting records ([#63](https://github.com/Mithril-mine/libmdbx-devel/issues/63)) (backport).
+ - Fixed a Windows performance regression: every no-sync commit in write-map mode flushed the whole mapping ([#65](https://github.com/Mithril-mine/libmdbx-devel/issues/65)) (backport).
+ - Fixed a checked-build crash when a nested-transaction begin failed partway through the loose-page move ([#67](https://github.com/Mithril-mine/libmdbx-devel/issues/67)) (backport).
+ - Fixed a nested-transaction begin failing out-of-memory leaving the parent transaction in an inconsistent state ([#67](https://github.com/Mithril-mine/libmdbx-devel/issues/67)) (backport).
 
  - Rare or specific conditions:
-    - Fixed assertions triggering in a specific scenarios of creating and renaming tables within nested transactions (backport).
-    - Fixed fix `mdbx_cursor_compare()` for a case when cursors binded with the same DBI and same MVCC-snapshot, but different ro-txns (backport).
-    - Fixed extra rdt-unlock in the failure path of `dxb_resize()` (backport).
-    - Fixed NULL deference in `walk_pgno()` when operating on a corrupted DB, which also affects `mdbx_chk` utility (backport).
-    - Fixed loosing of global init and thread-local-storage destructors in static library build by MinGW toolchain in particular cases (backport).
-    - Fixed missing sub-page header check inside `page_check()` what could be causing `SIGSEGV` during checking a corrupted database.
+    - Fixed assertion failures in specific scenarios of creating and renaming tables within nested transactions (backport).
+    - Fixed `mdbx_cursor_compare()` for cursors on the same sub-table in different read transactions (backport).
+    - Fixed an unbalanced lock release in the environment-resize failure path (backport).
+    - Fixed a crash (including in `mdbx_chk`) when working with a corrupted database (backport).
+    - Fixed lost global-initialization and thread-local destructors in static builds with MinGW (backport).
+    - Fixed a possible crash when checking a corrupted database (backport).
 
  - Resource leaks:
-    - Fixed `mach_port_t` leak inside `mdbx_get_sysraminfo()` (backport).
-    - Fixed Windows section handle leak inside `osal_mresize()` in unsuccessful case (backport).
-    - Fixed `cond_pair` leak in the failure path of `copy_with_compacting()` (backport).
+    - Fixed an OS handle leak when querying system memory on macOS (backport).
+    - Fixed a Windows handle leak in the environment-resize failure path (backport).
+    - Fixed a synchronization-object leak in the error path of `mdbx_env_copy()` with compaction (backport).
 
  - Spilling:
-    - Fixed spurious assertion inside `spill_cursor_keep()` (backport).
-    - Fixed a leak of spilled pages list on a nested transaction abort (backport).
-    - Fixed tracking and invalidation of the inner part of the sibling cursors (backport).
-    - Fixed spilling/accounting for `MDBX_AVOID_MSYNC=ON` (backport).
+    - Fixed a spurious assertion in the spilled-pages handling (backport).
+    - Fixed a leak of the spilled-pages list on a nested transaction abort (backport).
+    - Fixed tracking and invalidation of partially spilled sibling cursors (backport).
+    - Fixed spilling/accounting when `MDBX_AVOID_MSYNC=ON` (backport).
 
  - C++ API:
-    - Fixed `mdbx::from_hex` remainder check before reading a hex digit pair (backport).
-    - Fixed ODR violations warnings from modern GCC while both LTO and UBSAN are enabled (backport).
-    - Fixed UTF-8 U+100000..U+10FFFF range checking/decoding inside `mdbx::slice::is_printable()` (backport).
-    - Fixed off-by-one bugs in the `mdbx::from_base64` and `mdbx::slice::is_printable()` (backport).
-    - Fixed possibility of overflow in `mdbx::slice::safe_middle()` (backport).
-    - Fixed using wide characher count instead of bytes in `mdbx::slice` and `mdbx::buffer<>` methods (backport).
+    - Fixed `mdbx::from_hex()` accepting a malformed trailing hex digit (backport).
+    - Fixed ODR-violation warnings from modern GCC with LTO+UBSan (backport).
+    - Fixed UTF-8 decoding of codepoints above U+10FFFF in `mdbx::slice::is_printable()` (backport).
+    - Fixed off-by-one bugs in `mdbx::from_base64()` and `mdbx::slice::is_printable()` (backport).
+    - Fixed a possible overflow in `mdbx::slice::safe_middle()` (backport).
+    - Fixed `mdbx::slice` and `mdbx::buffer` methods using a character count instead of a byte count (backport).
 
 ### Other:
 
- - add link to new .NET bindings (backport).
+ - Added a link to the new .NET bindings (backport).
 
 
 --------------------------------------------------------------------------------
