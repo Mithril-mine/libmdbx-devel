@@ -1587,6 +1587,8 @@ int cursor_check_multiple(MDBX_cursor *mc, const MDBX_val *key, MDBX_val *data, 
     return MDBX_EINVAL;
   if (unlikely(!(mc->tree->flags & MDBX_DUPFIXED)))
     return MDBX_INCOMPATIBLE;
+  if (unlikely(data->iov_len == 0))
+    return MDBX_BAD_VALSIZE; /* MDBX_DUPFIXED element size must be non-zero */
   const size_t number = data[1].iov_len;
   if (unlikely(number > MAX_MAPSIZE / 2 / (BRANCH_NODE_MAX(MDBX_MAX_PAGESIZE) - NODESIZE))) {
     /* checking for multiplication overflow */
