@@ -30,6 +30,7 @@ if(MDBX_PROBES)
   set_tests_properties(gh0067 PROPERTIES ENVIRONMENT "MDBX_PROBES=1")
 endif()
 add_issue_test(gh0068 SOURCE "issue_gh0068.c++")
+add_issue_test(gh0069 SOURCE "issue_gh0069.c++")
 if(MDBX_BUILD_TOOLS)
   add_issue_test(gh0070 SOURCE "issue_gh0070.c++")
   set_tests_properties(
