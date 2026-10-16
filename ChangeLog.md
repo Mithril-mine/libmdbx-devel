@@ -44,6 +44,7 @@ A long-term support phase with periodic releases as fixes accumulate.
  - Fixed wrong `env->incore` assertion in `gc_alloc_ex()`: the asserted state (steady point not advanced by `dxb_sync_locked()`) is legitimate on any filesystem, and on Windows `osal_check_fs_incore()` always reports not-in-core, so the assertion could never hold. It is removed and allocation falls through to the unallocated part of the file (issue #52) (backport).
  - Fixed the missed propagation of a mid-commit flush error in `iov_page()` on all platforms — a failed `iov_write()` previously reported `MDBX_SUCCESS` while the dirty page was never queued for writing, with a risk of silent data loss (backport).
  - Fixed Windows ioring corruption when committing large write-mapped durable transactions: gather segments were appended to a `WriteFileEx` single item and outstanding `WriteFileEx` writes in a mixed batch were not awaited before reading `STATUS_PENDING` as an error, which could reset the ring under a live APC and crash in `ior_wocr()` with `hEvent == NULL` (backport).
+ - Fixed `mdbx_cursor_count_ex()` corrupting memory past the caller's buffer when called with the legacy 40-byte size of `MDBX_stat`: the library wrote 8 bytes beyond the provided buffer, which could silently corrupt adjacent data or crash the application (backport).
  - Fixed using `[[maybe_unused]] const` as workaround for MSVC bug (backport).
  - Fixed minor copy&paste mistakes and other typos across codebase (backport).
  - Fixed a lot of typos and a few minor bugs detected by CodeQL (backport).
