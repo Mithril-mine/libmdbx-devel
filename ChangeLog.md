@@ -57,7 +57,8 @@ Cutting-edge release with new core features and internal refactoring.
  - Fixed a performance regression: empty durable-mode commits still flushed the device, adding several milliseconds to every no-op commit ([#64](https://github.com/Mithril-mine/libmdbx-devel/issues/64)).
  - Fixed a Windows performance regression: every no-sync commit in write-map mode flushed the whole mapping ([#65](https://github.com/Mithril-mine/libmdbx-devel/issues/65)).
  - Fixed a nested-transaction begin failing out-of-memory leaving the parent transaction in an inconsistent state ([#67](https://github.com/Mithril-mine/libmdbx-devel/issues/67)).
- - Fixed `mdbx_cursor_count_ex()` writing past the caller's buffer when called with the legacy structure size ([#68](https://github.com/Mithril-mine/libmdbx-devel/issues/68)).
+  - Fixed `mdbx_cursor_count_ex()` writing past the caller's buffer when called with the legacy structure size ([#68](https://github.com/Mithril-mine/libmdbx-devel/issues/68)).
+  - Fixed `mdbx_dump -f` truncating the output file on a mistyped command line before the arguments were validated ([#71](https://github.com/Mithril-mine/libmdbx-devel/issues/71)).
 
 
 
