@@ -1034,9 +1034,9 @@ int mdbx_cursor_scroll(MDBX_cursor *mc, intptr_t amount, unsigned deepness) {
     return LOG_IFERR(MDBX_ENODATA);
 
   if (amount > 0)
-    rc = cursor_scroll_forward(mc, amount, deepness);
+    rc = cursor_scroll_forward(mc, amount, (deepness < CURSOR_STACK_SIZE) ? deepness : CURSOR_STACK_SIZE);
   else if (amount < 0)
-    rc = cursor_scroll_backward(mc, -amount, deepness);
+    rc = cursor_scroll_backward(mc, -amount, (deepness < CURSOR_STACK_SIZE) ? deepness : CURSOR_STACK_SIZE);
 
   return LOG_IFERR(rc);
 }
@@ -1111,7 +1111,7 @@ int mdbx_cursor_distance(const MDBX_cursor *begin, const MDBX_cursor *end, intpt
   if (iter != &couple_opposite.outer)
     iter = cursor_clone_complete(iter, &couple_iter);
 
-  cdr_t tdr = cursor_distance(iter, end, deepness);
+  cdr_t tdr = cursor_distance(iter, end, (deepness < CURSOR_STACK_SIZE) ? deepness : CURSOR_STACK_SIZE);
   rc = tdr.err;
   if (likely(rc == MDBX_SUCCESS))
     *distance = (!negative) ? (intptr_t)tdr.distance : -(intptr_t)tdr.distance;
