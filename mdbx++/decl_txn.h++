@@ -16,6 +16,7 @@ namespace mdbx {
 ///
 /// All database operations require a transaction handle. Transactions may be
 /// read-only or read-write.
+class txn_managed;
 class LIBMDBX_API_TYPE txn {
 protected:
   friend class cursor;
@@ -29,6 +30,15 @@ public:
   inline txn &operator=(txn &&) noexcept;
   inline txn(txn &&) noexcept;
   inline ~txn() noexcept;
+  /* The base handle must never be value-initialized from the owning
+   * txn_managed: the slice would silently drop ownership, so the transaction
+   * (and for a writer, the environment's writer lock) would never be released
+   * (issue #77). The exact-match deleted overloads win over the base upcast
+   * and turn `mdbx::txn t = env.start_write();` into a compile error. */
+  txn(const txn_managed &) = delete;
+  txn(txn_managed &&) = delete;
+  txn &operator=(const txn_managed &) = delete;
+  txn &operator=(txn_managed &&) = delete;
 
   MDBX_CXX14_CONSTEXPR operator bool() const noexcept { return handle_ != nullptr; };
   MDBX_CXX14_CONSTEXPR operator const MDBX_txn *() const noexcept { return handle_; }
