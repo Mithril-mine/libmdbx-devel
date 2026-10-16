@@ -269,7 +269,7 @@ int dbi_bind(MDBX_txn *txn, const size_t dbi, unsigned user_flags, MDBX_cmp_func
       if (txn->dbi_state[dbi] & DBI_STALE) {
         eASSERT0(env, env->dbs_flags[dbi] & DB_VALID);
         int err = tbl_refresh(txn, dbi);
-        if (unlikely(err != MDBX_NOTFOUND))
+        if (unlikely(err != MDBX_SUCCESS && err != MDBX_NOTFOUND))
           return err;
       }
       eASSERT0(env, ((env->dbs_flags[dbi] ^ txn->dbs[dbi].flags) & DB_PERSISTENT_FLAGS) == 0);
@@ -570,20 +570,24 @@ int dbi_open(MDBX_txn *txn, const MDBX_val *const name, unsigned user_flags, MDB
   if ((user_flags & MDBX_CREATE) && unlikely(txn->flags & txn_ro_both))
     return MDBX_EACCESS;
 
-  /* main table? */
-  if (unlikely(name == MDBX_CHK_MAIN || name->iov_base == MDBX_CHK_MAIN)) {
+  /* main table? A pseudo-name is passed either as the pointer itself (by
+   * mdbx_dbi_open()) or as iov_base, so compare the pointer without ever
+   * dereferencing a pseudo-name whose iov_base would be a bogus address. */
+  const void *const pseudo =
+      (name == MDBX_CHK_MAIN || name == MDBX_CHK_GC || name == MDBX_CHK_META) ? (const void *)name : name->iov_base;
+  if (unlikely(pseudo == MDBX_CHK_MAIN)) {
     rc = dbi_bind(txn, MAIN_DBI, user_flags, keycmp, datacmp);
     if (likely(rc == MDBX_SUCCESS))
       *dbi = MAIN_DBI;
     return rc;
   }
-  if (unlikely(name == MDBX_CHK_GC || name->iov_base == MDBX_CHK_GC)) {
+  if (unlikely(pseudo == MDBX_CHK_GC)) {
     rc = dbi_bind(txn, FREE_DBI, user_flags, keycmp, datacmp);
     if (likely(rc == MDBX_SUCCESS))
       *dbi = FREE_DBI;
     return rc;
   }
-  if (unlikely(name == MDBX_CHK_META || name->iov_base == MDBX_CHK_META))
+  if (unlikely(pseudo == MDBX_CHK_META))
     return MDBX_EINVAL;
   if (unlikely(name->iov_len > txn->env->leaf_nodemax - NODESIZE - sizeof(tree_t)))
     return MDBX_EINVAL;
@@ -662,9 +666,13 @@ int dbi_open(MDBX_txn *txn, const MDBX_val *const name, unsigned user_flags, MDB
 
     tASSERT0(txn, F_ISSET(txn->dbi_state[slot], DBI_LINDO | DBI_VALID));
     if (txn->dbi_state[slot] & DBI_STALE) {
-      rc = tbl_fetch(txn, &cx.outer, fastpath_slot = slot, name, user_flags);
+      rc = tbl_fetch(txn, &cx.outer, slot, name, user_flags);
       if (unlikely(rc != MDBX_SUCCESS)) {
-        /* таблица отсутствует, её нужно создавать (если запрос с MDBX_CREATE), либо освобождать слот. */
+        /* таблица отсутствует, её нужно создавать (если запрос с MDBX_CREATE),
+         * либо освобождать слот; при этом fastpath_slot остаётся сброшенным,
+         * чтобы медленный путь повторил поиск и вернул реальную ошибку */
+        if (rc == MDBX_NOTFOUND && (user_flags & MDBX_CREATE))
+          fastpath_slot = slot;
         goto slowpath_locking;
       }
       txn->dbi_state[slot] -= DBI_STALE;
