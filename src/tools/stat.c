@@ -91,6 +91,14 @@ static void error(const char *func, int rc) {
     fprintf(stderr, "%s: %s() error %d %s\n", prog, func, rc, mdbx_strerror(rc));
 }
 
+/* Print a name replacing control characters with '?', so that no control or
+ * escape sequences leak into a terminal. */
+static void tool_print_sanitized(const void *data, size_t size) {
+  const unsigned char *p = (const unsigned char *)data;
+  for (size_t i = 0; i < size; ++i)
+    putchar((p[i] < 0x20 || p[i] == 0x7f) ? '?' : p[i]);
+}
+
 static void logger(MDBX_log_level_t level, const char *function, int line, const char *fmt, va_list args) {
   static const char *const prefixes[] = {
       "!!!fatal: ", // 0 fatal
@@ -444,7 +452,12 @@ int main(int argc, char *argv[]) {
     error("mdbx_dbi_stat", rc);
     goto txn_abort;
   }
-  printf("Status of %s\n", table ? table : "Main DB");
+  if (table) {
+    printf("Status of ");
+    tool_print_sanitized(table, strlen(table));
+    putchar('\n');
+  } else
+    printf("Status of Main DB\n");
   print_stat(&mst);
 
   if (alldbs) {
@@ -464,8 +477,11 @@ int main(int argc, char *argv[]) {
       memcpy(table, key.iov_base, key.iov_len);
       table[key.iov_len] = '\0';
       rc = mdbx_dbi_open(txn, table, MDBX_DB_ACCEDE, &xdbi);
-      if (rc == MDBX_SUCCESS)
-        printf("Status of %s\n", table);
+      if (rc == MDBX_SUCCESS) {
+        printf("Status of ");
+        tool_print_sanitized(table, strlen(table));
+        putchar('\n');
+      }
       osal_free(table);
       if (unlikely(rc != MDBX_SUCCESS)) {
         if (rc == MDBX_INCOMPATIBLE)
