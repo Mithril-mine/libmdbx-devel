@@ -42,6 +42,8 @@ In the `master` branch, development of version v0.15 will begin, with the techni
  - Fixed Windows performance: in write-map mode every no-sync commit flushed the whole mapping, making `SAFE_NOSYNC`/`NOMETASYNC` nearly as expensive as a full synchronization (issue #65) (backport).
  - Fixed a checked-build crash when a nested-transaction begin failed partway through the loose-page move, instead of returning the error (prerequisite for issue #67) (backport).
  - Fixed the parent transaction's page-reuse accounting ending up inconsistent if a nested transaction begin fails with out-of-memory partway through the move (issue #67) (backport).
+ - Fixed `mdbx_cursor_count_ex()` corrupting memory past the caller's buffer when called with the legacy 40-byte size of `MDBX_stat`: the library wrote 8 bytes beyond the provided buffer, which could silently corrupt adjacent data or crash the application (backport).
+ - Fixed typos in the ChangeLog.
 
 
 --------------------------------------------------------------------------------
