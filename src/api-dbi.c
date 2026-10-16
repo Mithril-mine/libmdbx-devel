@@ -97,8 +97,12 @@ __cold int mdbx_dbi_rename2(MDBX_txn *txn, MDBX_dbi dbi, const MDBX_val *new_nam
   if (unlikely(rc != MDBX_SUCCESS))
     return LOG_IFERR(rc);
 
-  if (unlikely(new_name == MDBX_CHK_MAIN || new_name->iov_base == MDBX_CHK_MAIN || new_name == MDBX_CHK_GC ||
-               new_name->iov_base == MDBX_CHK_GC || new_name == MDBX_CHK_META || new_name->iov_base == MDBX_CHK_META))
+  /* A pseudo-name is passed either as the pointer itself (by mdbx_dbi_rename())
+   * or as iov_base, so compare the pointer without ever dereferencing one. */
+  const void *const pseudo = (new_name == MDBX_CHK_MAIN || new_name == MDBX_CHK_GC || new_name == MDBX_CHK_META)
+                                 ? (const void *)new_name
+                                 : new_name->iov_base;
+  if (unlikely(pseudo == MDBX_CHK_MAIN || pseudo == MDBX_CHK_GC || pseudo == MDBX_CHK_META))
     return LOG_IFERR(MDBX_EINVAL);
 
   if (unlikely(dbi < CORE_DBS))
