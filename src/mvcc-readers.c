@@ -83,10 +83,21 @@ __hot txnid_t mvcc_snapshot_oldest(MDBX_env *const env, const txnid_t steady) {
   }
 
   const txnid_t prev_oldest = atomic_load64(&lck->cached_oldest, mo_AcquireRelease);
-  eASSERT(env, steady >= prev_oldest);
+  /* A cached oldest-reader txnid beyond the steady snapshot cannot be
+   * legitimate: both live in the externally-writable lock mapping, and steady
+   * is the newest snapshot that any live reader may reference. Never trust a
+   * forged/corrupted value (previously only a debug-build assertion caught
+   * it): force a full reader-table rescan below so the true oldest is
+   * computed from the actual reader slots, and ignore the cached value when
+   * deciding whether a reader lagged behind the previous-oldest (otherwise
+   * every legitimately-old reader would look "stuck" and be demoted). */
+  const bool distrust_cached_oldest = (prev_oldest > steady);
+  const txnid_t trusted_oldest = distrust_cached_oldest ? MIN_TXNID : prev_oldest;
 
   txnid_t new_oldest = prev_oldest;
-  while (nothing_changed != atomic_load32(&lck->rdt_refresh_flag, mo_AcquireRelease)) {
+  bool rescan_forced = distrust_cached_oldest;
+  while (rescan_forced || nothing_changed != atomic_load32(&lck->rdt_refresh_flag, mo_AcquireRelease)) {
+    rescan_forced = false;
     lck->rdt_refresh_flag.weak = nothing_changed;
     jitter4testing(false);
     const size_t snap_nreaders = rdt_count(env, lck);
@@ -99,7 +110,7 @@ __hot txnid_t mvcc_snapshot_oldest(MDBX_env *const env, const txnid_t steady) {
       jitter4testing(true);
 
       const txnid_t rtxn = safe64_read(&lck->rdt[i].txnid);
-      if (unlikely(rtxn < prev_oldest)) {
+      if (unlikely(rtxn < trusted_oldest)) {
         if (unlikely(nothing_changed == atomic_load32(&lck->rdt_refresh_flag, mo_AcquireRelease)) &&
             safe64_reset_compare(&lck->rdt[i].txnid, rtxn)) {
           NOTICE("kick stuck reader[%zu of %zu].pid_%u %" PRIaTXN " < prev-oldest %" PRIaTXN ", steady-txn %" PRIaTXN,
@@ -118,7 +129,7 @@ __hot txnid_t mvcc_snapshot_oldest(MDBX_env *const env, const txnid_t steady) {
 
   if (new_oldest != prev_oldest) {
     VERBOSE("update oldest %" PRIaTXN " -> %" PRIaTXN, prev_oldest, new_oldest);
-    eASSERT(env, new_oldest >= lck->cached_oldest.weak);
+    eASSERT(env, !distrust_cached_oldest || new_oldest >= lck->cached_oldest.weak);
     atomic_store64(&lck->cached_oldest, new_oldest, mo_Relaxed);
   }
   return new_oldest;
@@ -371,7 +382,7 @@ __cold txnid_t mvcc_kick_laggards(MDBX_env *env, const txnid_t straggler) {
 
     uint32_t pid = atomic_load32(&stucked->pid, mo_AcquireRelease);
     uint64_t tid = safe64_read(&stucked->tid);
-    if (safe64_read(&stucked->txnid) != straggler || !pid)
+    if (safe64_read(&stucked->txnid) != straggler || (mdbx_pid_t)pid <= 0)
       continue;
 
     const meta_ptr_t head = meta_recent(env, &env->txn->tw.troika);
