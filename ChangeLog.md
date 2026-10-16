@@ -35,29 +35,31 @@ Cutting-edge release with new core features and internal refactoring.
  - Wrote the "Tooling: command-line utilities" document with full option reference of every utility.
  - Added a new bilingual textbook and integrated it into the documentation site, with the accompanying example programs ported and restructured.
  - Introduced a unified bilingual documentation site, six bilingual guides and consolidated engineering documentation.
- - Conan recipe: added `mdbx.lto` (`Default`/`True`/`False`/`Fat`) and `mdbx.sanitize` (`none`/`address`/`undefined`/`address,undefined`) options; the former maps onto `INTERPROCEDURAL_OPTIMIZATION` plus the new CMake `MDBX_LTO_FAT_OBJECTS` (GCC/Clang emit dual `-ffat-lto-objects`, MSVC degrades to plain LTO), the latter onto `-fsanitize=...` compile/link flags. Documented that the binary identity covers the whole profile and every recipe option, while warnings, the `-O` level inside a build type, the consumer's toolchain-file and the system library versions stay outside it — see README "Packaging / Conan".
+ - Conan recipe: added the `mdbx.lto` and `mdbx.sanitize` options and documented the rules of the package binary identity — see README "Packaging / Conan".
 
 ### Fixes:
 
- - Fixed a rare durability bug: a failed disk write during a commit could be silently reported as success, and on Windows a large write-mapped durable transaction could crash the engine while committing (issue #47).
- - Fixed `mdbx_chk` crashing on databases with named sub-tables when using `-i`/`-s` (issue #49).
- - Fixed `mdbx_load` failing with `ENOENT` when reading a dump from standard input (issue #50).
- - Fixed a spurious internal assertion failure during page allocation on Windows (issue #52).
+ - Fixed a rare durability bug: a failed disk write could be silently reported as success, and a large write-mapped durable commit on Windows could crash ([#47](https://github.com/Mithril-mine/libmdbx-devel/issues/47)).
+ - Fixed `mdbx_chk` crashing on databases with named sub-tables when using the `-i`/`-s` options ([#49](https://github.com/Mithril-mine/libmdbx-devel/issues/49)).
+ - Fixed `mdbx_load` failing with a missing-file error when reading a dump from standard input ([#50](https://github.com/Mithril-mine/libmdbx-devel/issues/50)).
+ - Fixed a spurious internal assertion failure during page allocation on Windows ([#52](https://github.com/Mithril-mine/libmdbx-devel/issues/52)).
  - Fixed an arithmetic overflow that miscomputed the maximum database size on 32-bit builds with large RAM.
- - Fixed a rare internal structure corruption during rollback of a duplicate insertion (unreachable in normal use, triggerable only by crafted internal sequences).
+ - Fixed a rare internal structure corruption during rollback of a duplicate insertion.
  - Fixed the `MDBX_TXN_TRY` flag leaking into transaction state flags.
- - Fixed `mdbx_dump -p`/`mdbx_load` silently losing data on round-trip when a key or value starts with a space; such a space is now properly escaped (issue #61).
- - Fixed `mdbx_replace_ex()` with overlapping buffers possibly hanging or crashing the next operation on the same sub-table (issue #56).
- - Fixed a crafted database file that passed validation and could corrupt data or crash when deleted (issue #57).
- - Fixed MSVC+AddressSanitizer builds failing to compile (issue #62).
- - Fixed `mdbx_env_copy()`/`mdbx_copy -f` possibly deleting a pre-existing destination database when `MDBX_CP_OVERWRITE` could not lock it (issue #58).
- - Fixed a failed second in-process open releasing the first handle's file locks, letting another process take exclusive access (issue #59).
- - Fixed the C++ `*_managed` wrappers: a failed `close()`/`abort()` could terminate the process and `env_managed::close()` could re-enter a freed environment (use-after-free) (issue #60).
- - Fixed a crafted database file driving the engine out of bounds (crash or data corruption) when deleting records (issue #63).
- - Fixed a performance regression: an empty durable-mode commit still wrote a meta page and flushed the device, adding several milliseconds of latency to no-op commits (issue #64).
- - Fixed Windows performance: in write-map mode every no-sync commit flushed the whole mapping, making `SAFE_NOSYNC`/`NOMETASYNC` nearly as expensive as a full synchronization (issue #65).
- - Fixed the parent transaction's page-reuse accounting ending up inconsistent if a nested transaction begin fails with out-of-memory partway through the move (issue #67).
- - Fixed `mdbx_cursor_count_ex()` corrupting memory past the caller's buffer when called with the legacy 40-byte size of `MDBX_stat`: the library wrote 8 bytes beyond the provided buffer, which could silently corrupt adjacent data or crash the application (issue #68).
+ - Fixed `mdbx_dump -p`/`mdbx_load` silently losing data on round-trip when a key or value starts with a space ([#61](https://github.com/Mithril-mine/libmdbx-devel/issues/61)).
+ - Fixed `mdbx_replace_ex()` possibly hanging or crashing the next operation on the same sub-table when called with overlapping buffers ([#56](https://github.com/Mithril-mine/libmdbx-devel/issues/56)).
+ - Fixed a crafted database file that passed validation and could later corrupt data or crash when deleted ([#57](https://github.com/Mithril-mine/libmdbx-devel/issues/57)).
+ - Fixed MSVC+AddressSanitizer builds failing to compile ([#62](https://github.com/Mithril-mine/libmdbx-devel/issues/62)).
+ - Fixed `mdbx_env_copy()`/`mdbx_copy -f` possibly deleting a pre-existing destination database when it could not be locked ([#58](https://github.com/Mithril-mine/libmdbx-devel/issues/58)).
+ - Fixed a failed second in-process open releasing the first handle's file locks, letting another process take exclusive access ([#59](https://github.com/Mithril-mine/libmdbx-devel/issues/59)).
+ - Fixed the C++ `*_managed` wrappers possibly terminating the process on a failed `close()`/`abort()`, and an `env_managed::close()` use-after-free ([#60](https://github.com/Mithril-mine/libmdbx-devel/issues/60)).
+ - Fixed a crafted database file driving the engine out of bounds (crash or data corruption) when deleting records ([#63](https://github.com/Mithril-mine/libmdbx-devel/issues/63)).
+ - Fixed a performance regression: empty durable-mode commits still flushed the device, adding several milliseconds to every no-op commit ([#64](https://github.com/Mithril-mine/libmdbx-devel/issues/64)).
+ - Fixed a Windows performance regression: every no-sync commit in write-map mode flushed the whole mapping ([#65](https://github.com/Mithril-mine/libmdbx-devel/issues/65)).
+ - Fixed a nested-transaction begin failing out-of-memory leaving the parent transaction in an inconsistent state ([#67](https://github.com/Mithril-mine/libmdbx-devel/issues/67)).
+ - Fixed `mdbx_cursor_count_ex()` writing past the caller's buffer when called with the legacy structure size ([#68](https://github.com/Mithril-mine/libmdbx-devel/issues/68)).
+
+
 
 
 --------------------------------------------------------------------------------
