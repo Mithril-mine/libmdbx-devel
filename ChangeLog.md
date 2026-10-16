@@ -54,6 +54,7 @@ In the `master` branch, development of version v0.15 will begin, with the techni
  - Fixed a hardware divide-by-zero in `mdbx_cursor_put(MDBX_MULTIPLE)` when a `MDBX_DUPFIXED` element size of zero was supplied together with a huge element count; the put is now rejected with `MDBX_BAD_VALSIZE` ([#73](https://github.com/Mithril-mine/libmdbx-devel/issues/73)) (backport).
  - Fixed `mdbx_cursor_scroll()` and `mdbx_cursor_distance()` indexing the cursor stack out of bounds when `deepness` was above `INT_MAX` (e.g. `UINT_MAX`); the value is now clamped like in `mdbx_cursor_distribute()` ([#85](https://github.com/Mithril-mine/libmdbx-devel/issues/85)) (backport).
  - Fixed `mdbx_estimate_distance()` returning a negated result when both cursors were on different duplicates of one key ([#86](https://github.com/Mithril-mine/libmdbx-devel/issues/86)) (backport).
+ - Fixed `mdbx_jsonInteger_from_key()` decoding the stored integer `0` as `INT64_MAX`; zero now round-trips correctly ([#87](https://github.com/Mithril-mine/libmdbx-devel/issues/87)) (backport).
 
 
 --------------------------------------------------------------------------------
