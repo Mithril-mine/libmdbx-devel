@@ -1315,12 +1315,18 @@ __cold static int chk_handle_gc(MDBX_chk_scope_t *const scope, MDBX_chk_table_t 
       if ((size_t)data->iov_base % sizeof(pgno_t))
         chk_object_issue(scope, "entry", txnid, "invalid pnl alignment", "%" PRIuPTR, (size_t)data->iov_base);
       size_t number = (data->iov_len >= sizeof(pgno_t) && (size_t)data->iov_base % sizeof(pgno_t) == 0) ? *pnl : 0;
-      if (number > PAGELIST_LIMIT)
+      bool clamped = false;
+      if (number > PAGELIST_LIMIT) {
         chk_object_issue(scope, "entry", txnid, "wrong idl length", "%" PRIuPTR, number);
-      else if ((number + 1) * sizeof(pgno_t) > data->iov_len) {
+        /* clamp the count to what the record can actually hold, so that the
+         * accounting and the per-entry walk below cannot read past it */
+        number = (data->iov_len >= sizeof(pgno_t)) ? data->iov_len / sizeof(pgno_t) - 1 : 0;
+        clamped = true;
+      } else if ((number + 1) * sizeof(pgno_t) > data->iov_len) {
         chk_object_issue(scope, "entry", txnid, "trimmed idl", "%" PRIuSIZE " > %" PRIuSIZE " (corruption)",
                          (number + 1) * sizeof(pgno_t), data->iov_len);
         number = data->iov_len / sizeof(pgno_t) - 1;
+        clamped = true;
       } else if (data->iov_len - (number + 1) * sizeof(pgno_t) >=
                  /* LY: allow gap up to two page. it is ok
                   * and better than shrink-and-retry inside gc_update() */
@@ -1368,7 +1374,7 @@ __cold static int chk_handle_gc(MDBX_chk_scope_t *const scope, MDBX_chk_table_t 
         }
         prev = pgno;
       }
-      if (tbl->cookie) {
+      if (tbl->cookie && !clamped) {
         chk_line_end(chk_print(chk_line_begin(scope, MDBX_chk_details),
                                "transaction %" PRIaTXN ", %" PRIuSIZE " pages, maxspan %" PRIuSIZE "%s", txnid, number,
                                pnl_maxspan(pnl), bad));
