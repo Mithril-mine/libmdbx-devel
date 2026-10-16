@@ -69,6 +69,7 @@ A long-term support phase with periodic releases as fixes accumulate.
   - Fixed `mdbx_estimate_distance()` returning a negated result when both cursors were on different duplicates of one key ([#86](https://github.com/Mithril-mine/libmdbx-devel/issues/86)) (backport).
   - Fixed `mdbx_jsonInteger_from_key()` decoding the stored integer `0` as `INT64_MAX`; zero now round-trips correctly ([#87](https://github.com/Mithril-mine/libmdbx-devel/issues/87)) (backport).
   - Fixed a hardware divide-by-zero in the range-estimation API (`mdbx_estimate_*`) when a crafted database had a valid tree root but zero leaf/branch page counts; such a tree is now rejected on open with `MDBX_VALIDATION` ([#75](https://github.com/Mithril-mine/libmdbx-devel/issues/75)) (backport).
+  - Fixed `mdbx_chk` reading out of bounds and crashing on a corrupted GC record whose page count exceeded the page-list limit; the count is now clamped to what the record can hold ([#76](https://github.com/Mithril-mine/libmdbx-devel/issues/76)) (backport).
 
  - Rare or specific conditions:
     - Fixed assertion failures in specific scenarios of creating and renaming tables within nested transactions (backport).
