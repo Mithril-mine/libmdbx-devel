@@ -36,6 +36,7 @@ Cutting-edge release with new core features and internal refactoring.
  - Added a new bilingual textbook and integrated it into the documentation site, with the accompanying example programs ported and restructured.
  - Introduced a unified bilingual documentation site, six bilingual guides and consolidated engineering documentation.
  - Conan recipe: added the `mdbx.lto` and `mdbx.sanitize` options and documented the rules of the package binary identity — see README "Packaging / Conan".
+ - When the locking is auto-selected, POSIX shared anonymous semaphores are now preferred over the legacy System V IPC on platforms that provide them, e.g. macOS ([#80](https://github.com/Mithril-mine/libmdbx-devel/issues/80)).
 
 ### Fixes:
 
