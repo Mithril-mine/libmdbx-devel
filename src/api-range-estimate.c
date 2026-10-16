@@ -161,7 +161,7 @@ __hot int mdbx_estimate_distance(const MDBX_cursor *first, const MDBX_cursor *la
   if (unlikely(dr.diff == 0) && inner_pointed(first)) {
     first = &first->subcur->cursor;
     last = &last->subcur->cursor;
-    rc = cursor_diff(first, last, &dr);
+    rc = cursor_diff(last, first, &dr);
     if (unlikely(rc != MDBX_SUCCESS))
       return LOG_IFERR(rc);
   }
