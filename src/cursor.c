@@ -452,6 +452,7 @@ MDBX_cursor *cursor_cpstk(const MDBX_cursor *csrc, MDBX_cursor *cdst) {
 }
 
 MDBX_cursor *cursor_copy_position(const MDBX_cursor *csrc, MDBX_cursor *cdst) {
+  cASSERT0(cdst, csrc != cdst);
   cursor_cpstk(csrc, cdst);
   if (cdst->subcur) {
     inner_gone_unconditional(cdst);
@@ -583,6 +584,8 @@ __hot int cursor_sibling_right(MDBX_cursor *mc) {
 }
 
 intptr_t cursor_cmp(const MDBX_cursor *left, const MDBX_cursor *right) {
+  ASSERT((is_inner(left) != 0) == (is_inner(right) != 0));
+  ASSERT(cursor_dbi(left) == cursor_dbi(right));
   ASSERT(left->top == right->top);
   intptr_t cmp = 0;
   for (intptr_t i = 0; i <= left->top; ++i) {
@@ -2651,6 +2654,24 @@ cdr_t cursor_distance(MDBX_cursor *iter, const MDBX_cursor *end, int level) {
   }
 
   /* запрошенный уровень предполагает учет multivalues/дубликатов */
+  if (inner_pointed(iter) && iter->subcur->nested_tree.height <= 1) {
+    /* The leaf amounts below count all duplicates of iter's node, so discount
+     * the ones before iter's position. The rank is measured within the
+     * sub-tree, which is page-walked only when it is a single-level sub-page;
+     * deeper nested trees are left with the pre-fix accounting until the
+     * multi-page nested-tree walking defect (independent of this off-by-one)
+     * is resolved. */
+    MDBX_cursor first = iter->subcur->cursor;
+    tdr.err = inner_first(&first, nullptr);
+    if (unlikely(tdr.err != MDBX_SUCCESS))
+      return tdr;
+    const cdr_t rank = cursor_distance_at(&first, &iter->subcur->cursor, level - iter->tree->height);
+    tdr.err = rank.err;
+    if (unlikely(tdr.err != MDBX_SUCCESS))
+      return tdr;
+    tdr.distance = 0 - rank.distance;
+  }
+
   while (iter->pg[iter->top] != end->pg[iter->top]) {
     cdr_t leaf_tdr = cursor_leaf_amount(iter->pg[iter->top], iter->ki[iter->top], page_numkeys(iter->pg[iter->top]));
     tdr.distance += leaf_tdr.distance;
@@ -2775,7 +2796,7 @@ int cursor_scroll_forward(MDBX_cursor *mc, intptr_t amount, int level) {
   if (inner_pointed(mc)) {
     cdr_t tdr = cursor_forward_at(&mc->subcur->cursor, amount, level - mc->tree->height);
     err = tdr.err;
-    amount = tdr.distance;
+    amount = tdr.distance + 1;
     if (unlikely(err != MDBX_NOTFOUND))
       return err;
     inner_gone_unconditional(mc);
@@ -2798,11 +2819,11 @@ int cursor_scroll_forward(MDBX_cursor *mc, intptr_t amount, int level) {
     err = cursor_dupsort_setup(mc, node, mc->pg[mc->top]);
     if (unlikely(err != MDBX_SUCCESS))
       return err;
-    if ((size_t)amount < mc->subcur->nested_tree.items) {
+    if ((size_t)amount <= mc->subcur->nested_tree.items) {
       err = inner_first(&mc->subcur->cursor, nullptr);
       if (unlikely(err != MDBX_SUCCESS))
         return err;
-      return cursor_forward_at(&mc->subcur->cursor, amount, level - mc->tree->height).err;
+      return cursor_forward_at(&mc->subcur->cursor, (size_t)amount - 1, level - mc->tree->height).err;
     }
     amount -= (size_t)mc->subcur->nested_tree.items;
     inner_gone_unconditional(mc);
@@ -2819,7 +2840,7 @@ int cursor_scroll_backward(MDBX_cursor *mc, intptr_t amount, int level) {
   if (inner_pointed(mc)) {
     cdr_t tdr = cursor_backward_at(&mc->subcur->cursor, amount, level - mc->tree->height);
     err = tdr.err;
-    amount = tdr.distance;
+    amount = tdr.distance + 1;
     if (unlikely(err != MDBX_NOTFOUND))
       return err;
     inner_gone_unconditional(mc);
@@ -2845,11 +2866,11 @@ int cursor_scroll_backward(MDBX_cursor *mc, intptr_t amount, int level) {
     err = cursor_dupsort_setup(mc, node, mc->pg[mc->top]);
     if (unlikely(err != MDBX_SUCCESS))
       return err;
-    if ((size_t)amount < mc->subcur->nested_tree.items) {
+    if ((size_t)amount <= mc->subcur->nested_tree.items) {
       err = inner_last(&mc->subcur->cursor, nullptr);
       if (unlikely(err != MDBX_SUCCESS))
         return err;
-      return cursor_backward_at(&mc->subcur->cursor, amount, level - mc->tree->height).err;
+      return cursor_backward_at(&mc->subcur->cursor, (size_t)amount - 1, level - mc->tree->height).err;
     }
     amount -= (size_t)mc->subcur->nested_tree.items;
     inner_gone_unconditional(mc);
@@ -2908,6 +2929,13 @@ int cursor_distribute(const MDBX_cursor *begin, const MDBX_cursor *end, MDBX_cur
       const size_t left_cursors = array_size - i;
       const size_t left_amount = amount - processed;
       const size_t chunk = (left_amount + left_cursors - 1) / left_cursors;
+      if (mc != iter) {
+        /* hand the iteration over to the cursor being filled, so a cursor whose
+         * position is already distributed (e.g. iter itself when `begin` follows
+         * it in the array) is never moved again */
+        cursor_copy_position(iter, mc);
+        iter = mc;
+      }
       int err = cursor_scroll_forward(iter, chunk, level);
       processed += chunk;
       VERBOSE("cursor %zu of %zu, chunk %zu of %zu, left %zu, distance %zi, expected %zi, err %i", i, array_size, chunk,
@@ -2928,8 +2956,6 @@ int cursor_distribute(const MDBX_cursor *begin, const MDBX_cursor *end, MDBX_cur
           rc = MDBX_RESULT_TRUE;
         }
       }
-      if (mc != iter)
-        cursor_copy_position(iter, mc);
     }
   }
   return rc;
