@@ -126,6 +126,16 @@ __cold int mdbx_dbi_rename2(MDBX_txn *txn, MDBX_dbi dbi, const MDBX_val *new_nam
   if (unlikely(rc != MDBX_SUCCESS))
     return LOG_IFERR(rc);
 
+  if (unlikely(txn->dbi_state[dbi] & DBI_STALE)) {
+    /* dbi_rename_locked() stores txn->dbs[dbi] under the new name, so it must
+     * be the current record, not one left by an aborted transaction or an
+     * older snapshot; otherwise the commit persists a tree whose root points
+     * to pages that were never committed (see issue #106). */
+    rc = tbl_fetch(txn, dbi);
+    if (unlikely(rc != MDBX_SUCCESS))
+      return LOG_IFERR(rc);
+  }
+
   rc = osal_fastmutex_acquire(&txn->env->dbi_lock);
   if (likely(rc == MDBX_SUCCESS)) {
     struct dbi_rename_result pair = dbi_rename_locked(txn, dbi, *new_name);
