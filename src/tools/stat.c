@@ -93,7 +93,9 @@ static int table_enum_func(void *ctx, const MDBX_txn *txn, const MDBX_val *name,
   (void)txn;
   (void)db_flags;
   (void)dbi;
-  printf("Status of %.*s\n", (int)name->iov_len, (const char *)name->iov_base);
+  printf("Status of ");
+  tool_print_sanitized(name->iov_base, name->iov_len);
+  putchar('\n');
   print_stat(stat);
   return user_break ? MDBX_RESULT_TRUE : MDBX_RESULT_FALSE;
 }

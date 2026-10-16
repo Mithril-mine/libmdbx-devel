@@ -170,6 +170,12 @@ static int readhdr(void) {
     str = valstr(data_buf.iov_base, "database");
     if (str) {
       if (*str) {
+        if (tool_name_has_control(str)) {
+          if (!quiet)
+            fprintf(stderr, "%s: line %" PRIiSIZE ": invalid database name containing control characters\n", prog,
+                    lineno);
+          exit(EXIT_FAILURE);
+        }
         free(subname);
         subname = osal_strdup(str);
         if (!subname) {
