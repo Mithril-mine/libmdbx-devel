@@ -203,7 +203,7 @@ mdbx::map_handle case1_cycle_dbi(std::deque<mdbx::map_handle> &dbi) {
   return h;
 }
 
-void case1_read_cycle(mdbx::txn txn, std::deque<mdbx::map_handle> &dbi, std::vector<MDBX_cursor *> &pool,
+void case1_read_cycle(mdbx::txn &txn, std::deque<mdbx::map_handle> &dbi, std::vector<MDBX_cursor *> &pool,
                       mdbx::cursor pre, bool nested = false) {
   if (nested) {
     for (auto c : pool)

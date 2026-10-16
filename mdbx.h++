@@ -3946,6 +3946,15 @@ public:
   inline txn &operator=(txn &&) noexcept;
   inline txn(txn &&) noexcept;
   inline ~txn() noexcept;
+  /* The base handle must never be move-initialized from the owning
+   * txn_managed: the move would silently drop ownership, so the transaction
+   * (and for a writer, the environment's writer lock) would never be released
+   * (issue #77). The exact-match deleted overloads win over the base upcast
+   * and turn `mdbx::txn t = env.start_write();` into a compile error.
+   * Copying from an lvalue txn_managed stays allowed: the copy is a
+   * non-owning view and does not change the source's ownership. */
+  txn(txn_managed &&) = delete;
+  txn &operator=(txn_managed &&) = delete;
 
   MDBX_CXX14_CONSTEXPR operator bool() const noexcept;
   MDBX_CXX14_CONSTEXPR operator const MDBX_txn *() const;
@@ -4291,7 +4300,7 @@ public:
          * (issue #60) */
         (void)::mdbx_txn_abort(handle_);
       }
-    inherited::operator=(std::move(other));
+    inherited::operator=(static_cast<txn &&>(std::move(other)));
     return *this;
   }
   txn_managed(const txn_managed &) = delete;

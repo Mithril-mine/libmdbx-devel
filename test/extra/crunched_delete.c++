@@ -106,7 +106,7 @@ static mdbx::slice mk_val(mdbx::default_buffer &buf, const acase &thecase) {
 
 static std::string name(unsigned n) { return format("Commitment_%05u", n); }
 
-static mdbx::map_handle create_and_fill(mdbx::txn txn, const acase &thecase, const unsigned n) {
+static mdbx::map_handle create_and_fill(mdbx::txn &txn, const acase &thecase, const unsigned n) {
   auto map = txn.create_map(name(n),
                             (thecase.klen_min == thecase.klen_max && (thecase.klen_min == 4 || thecase.klen_max == 8))
                                 ? mdbx::key_mode::ordinal
@@ -133,7 +133,7 @@ static mdbx::map_handle create_and_fill(mdbx::txn txn, const acase &thecase, con
   return map;
 }
 
-static void chunched_delete(mdbx::txn txn, const acase &thecase, const unsigned n) {
+static void chunched_delete(mdbx::txn &txn, const acase &thecase, const unsigned n) {
   // printf(">> %s, case #%i\n", __FUNCTION__, n);
   mdbx::default_buffer k, v;
   auto map = txn.open_map_accede(name(n));
