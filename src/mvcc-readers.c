@@ -34,7 +34,7 @@ bsr_t mvcc_bind_slot(MDBX_env *env) {
   result.err = MDBX_SUCCESS;
   size_t slot, nreaders;
   while (1) {
-    nreaders = env->lck->rdt_length.weak;
+    nreaders = rdt_count(env, env->lck);
     for (slot = 0; slot < nreaders; slot++)
       if (!atomic_load_pid(&env->lck->rdt[slot].pid, mo_AcquireRelease))
         break;
@@ -79,7 +79,7 @@ MDBX_MAYBE_UNUSED __hot orsi_ro_t mvcc_snapshot_oldest_ro(const MDBX_txn *const 
   tASSERT0(txn, (txn->flags & txn_ro_flat) != 0);
   orsi_ro_t result;
   lck_t *const lck = txn->env->lck;
-  result.nreaders = atomic_load32(&lck->rdt_length, mo_AcquireRelease);
+  result.nreaders = rdt_count(txn->env, lck);
   result.thisprocess_oldest_txnid = result.oldest_txnid = result.recent_txnid = recent_committed_txnid(txn->env);
 
   if (!need_thisprocess_oldest &&
@@ -118,7 +118,7 @@ __hot orsi_rw_t mvcc_snapshot_oldest_rw(const MDBX_txn *const txn) {
   while (nothing_changed_signature != atomic_load32(&lck->rdt_refresh_flag, mo_AcquireRelease)) {
     lck->rdt_refresh_flag.weak = nothing_changed_signature;
     jitter4testing(false);
-    const size_t snap_nreaders = atomic_load32(&lck->rdt_length, mo_AcquireRelease);
+    const size_t snap_nreaders = rdt_count(txn->env, lck);
     result.oldest_txnid = result.steady_txnid;
     oldest_retired_pages = unaligned_peek_u64(4, steady.ptr_c->pages_retired);
 
@@ -178,7 +178,7 @@ __hot orsi_rw_t mvcc_snapshot_oldest_rw(const MDBX_txn *const txn) {
 pgno_t mvcc_snapshot_largest(const MDBX_env *env, pgno_t last_used_page) {
   lck_t *const lck = env->lck;
 retry:;
-  const size_t snap_nreaders = atomic_load32(&lck->rdt_length, mo_AcquireRelease);
+  const size_t snap_nreaders = rdt_count(env, lck);
   for (size_t i = 0; i < snap_nreaders; ++i) {
     if (atomic_load_pid(&lck->rdt[i].pid, mo_AcquireRelease)) {
       /* jitter4testing(true); */
@@ -198,7 +198,7 @@ retry:;
 /* Find largest mvcc-snapshot still referenced by this process. */
 pgno_t mvcc_largest_this(MDBX_env *env, pgno_t largest) {
   lck_t *const lck = env->lck;
-  const size_t snap_nreaders = atomic_load32(&lck->rdt_length, mo_AcquireRelease);
+  const size_t snap_nreaders = rdt_count(env, lck);
   for (size_t i = 0; i < snap_nreaders; ++i) {
   retry:
     if (atomic_load_pid(&lck->rdt[i].pid, mo_AcquireRelease) == env->registered_reader_pid) {
@@ -265,7 +265,7 @@ __cold int mvcc_cleanup_dead(MDBX_env *env, int rdt_locked, int *dead) {
     return MDBX_SUCCESS;
   }
 
-  const size_t snap_nreaders = atomic_load32(&lck->rdt_length, mo_AcquireRelease);
+  const size_t snap_nreaders = rdt_count(env, lck);
   mdbx_pid_t pidsbuf_onstask[142];
   mdbx_pid_t *const pids = (snap_nreaders < ARRAY_LENGTH(pidsbuf_onstask))
                                ? pidsbuf_onstask
@@ -380,7 +380,7 @@ __cold bool mvcc_kick_laggards(MDBX_txn *txn, const txnid_t straggler,
     reader_slot_t *stucked = nullptr;
     uint64_t stucked_retired = 0;
     uint64_t stucked_tid = 0;
-    for (size_t i = 0; i < lck->rdt_length.weak; ++i) {
+    for (size_t i = 0; i < rdt_count(env, lck); ++i) {
       mdbx_pid_t pid;
       reader_slot_t *const slot = &lck->rdt[i];
     retry:;

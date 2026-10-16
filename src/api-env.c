@@ -1269,7 +1269,7 @@ __cold int mdbx_env_set_geometry(MDBX_env *env, intptr_t size_lower, intptr_t si
         /* Check if there are any reading threads that do not use the SRWL */
         const size_t CurrentTid = GetCurrentThreadId();
         const reader_slot_t *const begin = env->lck_mmap.lck->rdt;
-        const reader_slot_t *const end = begin + atomic_load32(&env->lck_mmap.lck->rdt_length, mo_AcquireRelease);
+        const reader_slot_t *const end = begin + rdt_count(env, env->lck_mmap.lck);
         for (const reader_slot_t *reader = begin; reader < end; ++reader) {
           if (reader->pid.weak == env->pid && reader->tid.weak != CurrentTid &&
               reader->tid.weak < MDBX_TID_TXN_OUSTED) {
