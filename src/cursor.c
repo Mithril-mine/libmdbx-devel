@@ -2651,6 +2651,24 @@ cdr_t cursor_distance(MDBX_cursor *iter, const MDBX_cursor *end, int level) {
   }
 
   /* запрошенный уровень предполагает учет multivalues/дубликатов */
+  if (inner_pointed(iter) && iter->subcur->nested_tree.height <= 1) {
+    /* The leaf amounts below count all duplicates of iter's node, so discount
+     * the ones before iter's position. The rank is measured within the
+     * sub-tree, which is page-walked only when it is a single-level sub-page;
+     * deeper nested trees are left with the pre-fix accounting until the
+     * multi-page nested-tree walking defect (independent of this off-by-one)
+     * is resolved. */
+    MDBX_cursor first = iter->subcur->cursor;
+    tdr.err = inner_first(&first, nullptr);
+    if (unlikely(tdr.err != MDBX_SUCCESS))
+      return tdr;
+    const cdr_t rank = cursor_distance_at(&first, &iter->subcur->cursor, level - iter->tree->height);
+    tdr.err = rank.err;
+    if (unlikely(tdr.err != MDBX_SUCCESS))
+      return tdr;
+    tdr.distance = 0 - rank.distance;
+  }
+
   while (iter->pg[iter->top] != end->pg[iter->top]) {
     cdr_t leaf_tdr = cursor_leaf_amount(iter->pg[iter->top], iter->ki[iter->top], page_numkeys(iter->pg[iter->top]));
     tdr.distance += leaf_tdr.distance;
@@ -2775,7 +2793,7 @@ int cursor_scroll_forward(MDBX_cursor *mc, intptr_t amount, int level) {
   if (inner_pointed(mc)) {
     cdr_t tdr = cursor_forward_at(&mc->subcur->cursor, amount, level - mc->tree->height);
     err = tdr.err;
-    amount = tdr.distance;
+    amount = tdr.distance + 1;
     if (unlikely(err != MDBX_NOTFOUND))
       return err;
     inner_gone_unconditional(mc);
@@ -2798,11 +2816,11 @@ int cursor_scroll_forward(MDBX_cursor *mc, intptr_t amount, int level) {
     err = cursor_dupsort_setup(mc, node, mc->pg[mc->top]);
     if (unlikely(err != MDBX_SUCCESS))
       return err;
-    if ((size_t)amount < mc->subcur->nested_tree.items) {
+    if ((size_t)amount <= mc->subcur->nested_tree.items) {
       err = inner_first(&mc->subcur->cursor, nullptr);
       if (unlikely(err != MDBX_SUCCESS))
         return err;
-      return cursor_forward_at(&mc->subcur->cursor, amount, level - mc->tree->height).err;
+      return cursor_forward_at(&mc->subcur->cursor, (size_t)amount - 1, level - mc->tree->height).err;
     }
     amount -= (size_t)mc->subcur->nested_tree.items;
     inner_gone_unconditional(mc);
@@ -2819,7 +2837,7 @@ int cursor_scroll_backward(MDBX_cursor *mc, intptr_t amount, int level) {
   if (inner_pointed(mc)) {
     cdr_t tdr = cursor_backward_at(&mc->subcur->cursor, amount, level - mc->tree->height);
     err = tdr.err;
-    amount = tdr.distance;
+    amount = tdr.distance + 1;
     if (unlikely(err != MDBX_NOTFOUND))
       return err;
     inner_gone_unconditional(mc);
@@ -2845,11 +2863,11 @@ int cursor_scroll_backward(MDBX_cursor *mc, intptr_t amount, int level) {
     err = cursor_dupsort_setup(mc, node, mc->pg[mc->top]);
     if (unlikely(err != MDBX_SUCCESS))
       return err;
-    if ((size_t)amount < mc->subcur->nested_tree.items) {
+    if ((size_t)amount <= mc->subcur->nested_tree.items) {
       err = inner_last(&mc->subcur->cursor, nullptr);
       if (unlikely(err != MDBX_SUCCESS))
         return err;
-      return cursor_backward_at(&mc->subcur->cursor, amount, level - mc->tree->height).err;
+      return cursor_backward_at(&mc->subcur->cursor, (size_t)amount - 1, level - mc->tree->height).err;
     }
     amount -= (size_t)mc->subcur->nested_tree.items;
     inner_gone_unconditional(mc);
@@ -2881,13 +2899,9 @@ int cursor_distribute(const MDBX_cursor *begin, const MDBX_cursor *end, MDBX_cur
     return MDBX_RESULT_TRUE;
   }
 
-  MDBX_cursor *iter = (MDBX_cursor *)begin;
-  for (intptr_t i = array_size; --i >= 0;) {
-    if (array[i] != begin && array[i] != end) {
-      iter = array[i];
-      break;
-    }
-  }
+  cursor_couple_t iter_couple, end_couple;
+  MDBX_cursor *const iter = cursor_clone_complete(begin, &iter_couple);
+  end = cursor_clone_complete(end, &end_couple);
   cursor_copy_position(begin, iter);
 
   const cdr_t tdr = cursor_distance(iter, end, level);
@@ -2928,8 +2942,7 @@ int cursor_distribute(const MDBX_cursor *begin, const MDBX_cursor *end, MDBX_cur
           rc = MDBX_RESULT_TRUE;
         }
       }
-      if (mc != iter)
-        cursor_copy_position(iter, mc);
+      cursor_copy_position(iter, mc);
     }
   }
   return rc;
