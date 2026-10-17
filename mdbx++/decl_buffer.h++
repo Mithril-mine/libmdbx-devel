@@ -754,13 +754,6 @@ public:
                                        const allocator_type &alloc = allocator_type())
       : buffer(inherited(str), make_reference, alloc) {}
 
-  template <class CHAR, class T, class A>
-  explicit MDBX_CXX20_CONSTEXPR buffer(const ::std::basic_string<CHAR, T, A> &&str,
-                                       const allocator_type &alloc = allocator_type())
-      : buffer(inherited(str), false, alloc) {
-    str.clear();
-  }
-
   MDBX_CXX20_CONSTEXPR
   buffer(const char *c_str, const allocator_type &alloc = allocator_type()) : buffer(inherited(c_str), alloc) {}
 
@@ -1098,7 +1091,7 @@ public:
   }
 
   template <class CHAR, class T> buffer &append(const ::std::basic_string_view<CHAR, T> &view) {
-    return append(view.begin(), view.end());
+    return append(view.data(), view.size() * sizeof(CHAR));
   }
 #endif /* __cpp_lib_string_view >= 201606L */
 
