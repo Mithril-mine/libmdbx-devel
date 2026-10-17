@@ -998,6 +998,16 @@ public:
     if (MDBX_LIKELY(this != &src))
       MDBX_CXX20_LIKELY {
         const auto kind = src.content_modality();
+        if (MDBX_UNLIKELY(kind == modality::reference && src.const_data() &&
+                          size_t(static_cast<const byte *>(src.const_data()) - silo_begin()) < silo_.capacity())) {
+          /* `src` refers into this buffer's own storage, which the move below would release first,
+           * so just move the bytes to the start of the storage without any (re)allocation */
+          MDBX_INLINE_API_ASSERT(static_cast<const byte *>(src.const_data()) + src.length() <= silo_end());
+          iov_base = ::std::memmove(silo_.data(), src.const_data(), src.length());
+          iov_len = src.length();
+          src.invalidate();
+          return *this;
+        }
         const auto src_headroom = src.headroom();
         const auto src_data = src.const_data();
         const auto src_length = src.length();
@@ -1109,9 +1119,22 @@ public:
   buffer &append(const void *src, size_t bytes) {
     if (MDBX_LIKELY(bytes))
       MDBX_CXX20_LIKELY {
+        const auto begin_ptr = inherited::byte_ptr();
+        const auto src_ptr = static_cast<const byte *>(src);
+        /* In case `src` refers into the own storage, save its relative offset
+         * since the storage may be relocated by the reserve below. */
+        const bool aliased = src_ptr >= begin_ptr && src_ptr < inherited::end_byte_ptr();
+        const size_t src_offset = aliased ? size_t(src_ptr - begin_ptr) : 0;
         if (MDBX_UNLIKELY(tailroom() < check_length(bytes)))
-          MDBX_CXX20_UNLIKELY reserve_tailroom(bytes);
-        memcpy(end_byte_ptr(), src, bytes);
+          MDBX_CXX20_UNLIKELY {
+            if (MDBX_UNLIKELY(!aliased && size_t(src_ptr - silo_begin()) < silo_.capacity())) {
+              /* `src` refers into the own head/tail room, which the reserve below does not preserve */
+              const buffer chunk(src, bytes, get_allocator());
+              return append(chunk.data(), chunk.size());
+            }
+            reserve_tailroom(bytes);
+          }
+        ::std::memmove(end_byte_ptr(), aliased ? byte_ptr() + src_offset : src_ptr, bytes);
         iov_len += bytes;
       }
     return *this;
@@ -1130,9 +1153,22 @@ public:
   buffer &add_header(const void *src, size_t bytes) {
     if (MDBX_LIKELY(bytes))
       MDBX_CXX20_LIKELY {
+        const auto begin_ptr = inherited::byte_ptr();
+        const auto src_ptr = static_cast<const byte *>(src);
+        /* In case `src` refers into the own storage, save its relative offset
+         * since the storage may be relocated by the reserve below. */
+        const bool aliased = src_ptr >= begin_ptr && src_ptr < inherited::end_byte_ptr();
+        const size_t src_offset = aliased ? size_t(src_ptr - begin_ptr) : 0;
         if (MDBX_UNLIKELY(headroom() < check_length(bytes)))
-          MDBX_CXX20_UNLIKELY reserve_headroom(bytes);
-        iov_base = memcpy(byte_ptr() - bytes, src, bytes);
+          MDBX_CXX20_UNLIKELY {
+            if (MDBX_UNLIKELY(!aliased && size_t(src_ptr - silo_begin()) < silo_.capacity())) {
+              /* `src` refers into the own head/tail room, which the reserve below does not preserve */
+              const buffer chunk(src, bytes, get_allocator());
+              return add_header(chunk.data(), chunk.size());
+            }
+            reserve_headroom(bytes);
+          }
+        iov_base = ::std::memmove(byte_ptr() - bytes, aliased ? byte_ptr() + src_offset : src_ptr, bytes);
         iov_len += bytes;
       }
     return *this;
@@ -1145,7 +1181,12 @@ public:
     if (MDBX_LIKELY(wanna_bytes))
       MDBX_CXX20_LIKELY {
         if (MDBX_UNLIKELY(tailroom() < check_length(wanna_bytes)))
-          MDBX_CXX20_UNLIKELY reserve_tailroom(wanna_bytes);
+          MDBX_CXX20_UNLIKELY {
+            /* the producer may refer into this buffer, so produce before relocating the storage */
+            buffer chunk(wanna_bytes, get_allocator());
+            chunk.append_producer(producer);
+            return append(chunk.data(), chunk.size());
+          }
         return set_end(producer.write_bytes(end_char_ptr(), tailroom()));
       }
     return *this;
@@ -1156,7 +1197,12 @@ public:
     if (MDBX_LIKELY(wanna_bytes))
       MDBX_CXX20_LIKELY {
         if (MDBX_UNLIKELY(tailroom() < check_length(wanna_bytes)))
-          MDBX_CXX20_UNLIKELY reserve_tailroom(wanna_bytes);
+          MDBX_CXX20_UNLIKELY {
+            /* the producer may refer into this buffer, so produce before relocating the storage */
+            buffer chunk(wanna_bytes, get_allocator());
+            chunk.append_producer(producer);
+            return append(chunk.data(), chunk.size());
+          }
         return set_end(producer.write_bytes(end_char_ptr(), tailroom()));
       }
     return *this;
