@@ -12,7 +12,12 @@ __cold void debug_log_va(int level, const char *function, int line, const char *
     if (globals.logger_buffer == nullptr)
       globals.logger.fmt(level, function, line, fmt, args);
     else {
-      const int len = vsnprintf(globals.logger_buffer, globals.logger_buffer_size, fmt, args);
+      int len = vsnprintf(globals.logger_buffer, globals.logger_buffer_size, fmt, args);
+      if (len < 0 || (size_t)len >= globals.logger_buffer_size) {
+        /* truncated: C99 vsnprintf() returns the full length, _vsnprintf() returns -1 */
+        globals.logger_buffer[globals.logger_buffer_size - 1] = '\0';
+        len = (int)strlen(globals.logger_buffer);
+      }
       if (len > 0)
         globals.logger.nofmt(level, function, line, globals.logger_buffer, len);
     }
@@ -377,7 +382,7 @@ static inline const char *sanitizer_probe_page_dangling(const MDBX_txn *txn, con
   (void)mc;
 #endif /* MDBX_DEBUG_SPILLING */
 
-  if ((txn->flags & MDBX_WRITEMAP) != 0 || !txn->wr.dirtylist)
+  if ((txn->flags & (MDBX_WRITEMAP | txn_ro_flat)) != 0 || !txn->wr.dirtylist)
     return "MMAP.outside-mmap-region";
 
   do {
