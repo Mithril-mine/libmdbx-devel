@@ -281,8 +281,9 @@ inline slice txn::get(map_handle map, slice key, size_t &values_count, const sli
 
 inline pair_result txn::get_equal_or_great(map_handle map, const slice &key) const {
   pair result(key, slice());
-  bool exact = !error::boolean_or_throw(::mdbx_get_equal_or_great(handle_, map.dbi, &result.key, &result.value));
-  return pair_result(result.key, result.value, exact);
+  error::boolean_or_throw(::mdbx_get_equal_or_great(handle_, map.dbi, &result.key, &result.value));
+  /* for a multimap MDBX_SUCCESS needs the value to match too, while here only the key is given */
+  return pair_result(result.key, result.value, result.key == key);
 }
 
 inline pair_result txn::get_equal_or_great(map_handle map, const slice &key, const slice &value_at_absence) const {
@@ -290,9 +291,9 @@ inline pair_result txn::get_equal_or_great(map_handle map, const slice &key, con
   const int err = ::mdbx_get_equal_or_great(handle_, map.dbi, &result.key, &result.value);
   switch (err) {
   case MDBX_SUCCESS:
-    return pair_result{result.key, result.value, true};
+    return pair_result{result.key, result.value, result.key == key};
   case MDBX_RESULT_TRUE:
-    return pair_result{result.key, result.value, false};
+    return pair_result{result.key, result.value, result.key == key};
   case MDBX_NOTFOUND:
     return pair_result{key, value_at_absence, false};
   default:

@@ -524,7 +524,7 @@ int mdbx_cursor_scan(MDBX_cursor *mc, MDBX_predicate_func predicate, void *conte
   MDBX_val key = {nullptr, 0}, value = {nullptr, 0};
   int rc = mdbx_cursor_get(mc, &key, &value, start_op);
   if (unlikely(rc != MDBX_SUCCESS))
-    return LOG_IFERR(rc);
+    return (rc == MDBX_NOTFOUND) ? MDBX_RESULT_FALSE : LOG_IFERR(rc);
   return LOG_IFERR(scan_continue(mc, predicate, context, arg, &key, &value, turn_op));
 }
 
@@ -545,6 +545,8 @@ int mdbx_cursor_scan_from(MDBX_cursor *mc, MDBX_predicate_func predicate, void *
     return LOG_IFERR(MDBX_EINVAL);
 
   int rc = mdbx_cursor_get(mc, key, value, from_op);
+  if (unlikely(rc == MDBX_NOTFOUND))
+    return MDBX_RESULT_FALSE;
   if (unlikely(MDBX_IS_ERROR(rc)))
     return LOG_IFERR(rc);
 
@@ -564,7 +566,7 @@ int mdbx_cursor_get_batch(MDBX_cursor *mc, size_t *count, MDBX_val *pairs, size_
     return LOG_IFERR(MDBX_EINVAL);
 
   *count = 0;
-  if (unlikely(limit < 4 || limit > INTPTR_MAX - 2))
+  if (unlikely(limit < 2 || limit > INTPTR_MAX - 2))
     return LOG_IFERR(MDBX_EINVAL);
 
   int rc = cursor_check_ro(mc);
