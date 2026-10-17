@@ -35,8 +35,8 @@ __cold pgno_t default_dp_limit(const MDBX_env *env) {
 
 __cold static pgno_t default_rp_augment_limit(const MDBX_env *env) {
   const size_t timeframe = /* 16 секунд */ 16 << 16;
-  const size_t remain_1sec =
-      (env->options.gc_time_limit < timeframe) ? timeframe - (size_t)env->options.gc_time_limit : 0;
+  const size_t gc_time_limit = osal_monotime_to_16dot16(env->options.gc_time_limit);
+  const size_t remain_1sec = (gc_time_limit < timeframe) ? timeframe - gc_time_limit : 0;
   const size_t minimum = (env->maxgc_large1page * 2 > MDBX_PNL_INITIAL) ? env->maxgc_large1page * 2 : MDBX_PNL_INITIAL;
   const size_t one_third = env->geo_in_bytes.now / 3 >> env->ps2ln;
   const size_t augment_limit =
@@ -537,7 +537,7 @@ __cold int mdbx_env_get_option(const MDBX_env *env, const MDBX_option_t option, 
 
   case MDBX_opt_writethrough_threshold:
 #if defined(_WIN32) || defined(_WIN64)
-    *pvalue = (env->flags & MDBX_NOMETASYNC) ? 0 : INT_MAX;
+    *pvalue = (env->flags & MDBX_NOMETASYNC) ? 0 : UINT_MAX;
 #else
     *pvalue = env->options.writethrough_threshold;
 #endif
