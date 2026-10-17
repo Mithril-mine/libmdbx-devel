@@ -671,9 +671,9 @@ __cold static int copy2fd(MDBX_txn *txn, mdbx_filehandle_t fd, MDBX_copy_flags_t
     /* Firstly write a stub to meta-pages.
      * Now we sure to incomplete copy will not be used. */
     memset(buffer, -1, pgno2bytes(env, NUM_METAS));
+    if (touched)
+      *touched = true /* even a partial write damages the destination */;
     rc = osal_write(fd, buffer, pgno2bytes(env, NUM_METAS));
-    if (likely(rc == MDBX_SUCCESS) && touched)
-      *touched = true;
   }
 
   if (likely(rc == MDBX_SUCCESS))
@@ -726,6 +726,7 @@ __cold static int copy2pathname(MDBX_txn *txn, const pathchar_t *dest_path, MDBX
       ;
   mdbx_filehandle_t newfd = INVALID_HANDLE_VALUE;
   bool created_by_us = false;
+  bool pre_existing = false;
   uint64_t pre_size = 0;
   int rc;
   if (flags & MDBX_CP_OVERWRITE) {
@@ -739,6 +740,7 @@ __cold static int copy2pathname(MDBX_txn *txn, const pathchar_t *dest_path, MDBX
                || rc == ERROR_FILE_EXISTS || rc == ERROR_ALREADY_EXISTS
 #endif
     ) {
+      pre_existing = true;
       rc = osal_openfile(MDBX_OPEN_COPY_OVERWRITE, txn->env, dest_path, &newfd, mode);
       if (likely(rc == MDBX_SUCCESS)) {
         created_by_us = false;
@@ -757,7 +759,10 @@ __cold static int copy2pathname(MDBX_txn *txn, const pathchar_t *dest_path, MDBX
           rc == ERROR_BAD_PATHNAME)
         return rc;
 #endif
-      if (created_by_us) {
+      /* The exclusive create did not fail with EEXIST, so the file is either
+       * absent or was just created by it and then rejected (e.g. by the
+       * fd 0..2 safeguard) */
+      if (!pre_existing) {
         int err = osal_removefile(dest_path);
         if (err != MDBX_SUCCESS && err != MDBX_ENOFILE)
           ERROR("unable remove incomplete copy destination `%" MDBX_PRIsPATH "`, error %d", dest_path, err);
@@ -826,7 +831,16 @@ __cold static int copy2pathname(MDBX_txn *txn, const pathchar_t *dest_path, MDBX
   }
 #endif /* Windows / POSIX */
 
+  /* A lock conflict means that another process (e.g. a concurrent copy) owns
+   * the file, even if this call has just created it. */
+  const bool locked_by_other = rc == EWOULDBLOCK || rc == EAGAIN;
   bool touched = false;
+  if (rc == MDBX_SUCCESS && pre_size > 0) {
+    /* Drop the old content, otherwise it survives beyond the end of the copied
+     * data and in the not-yet-used tail of the destination. */
+    touched = true;
+    rc = osal_fsetsize(newfd, 0);
+  }
   if (rc == MDBX_SUCCESS)
     rc = copy2fd(txn, newfd, flags, &touched);
 
@@ -834,11 +848,12 @@ __cold static int copy2pathname(MDBX_txn *txn, const pathchar_t *dest_path, MDBX
   if (rc == MDBX_SUCCESS && err != rc)
     rc = err;
   if (rc != MDBX_SUCCESS) {
-    /* Remove the destination only when this call owns it: either we created
-     * the file ourselves, or we started writing to it and left it damaged.
-     * A pre-existing non-empty file that we failed before writing to it
-     * (e.g. a live database we could not lock) must survive (issue #58). */
-    const bool remove_dest = created_by_us || touched || pre_size == 0;
+    /* Remove the destination only when this call damaged it: either we started
+     * writing to the file, or we created it and no other process holds it. A
+     * pre-existing file that we failed before writing to it (e.g. a live
+     * database we could not lock, issue #58), or a file locked by another
+     * process (e.g. a concurrent copy that has just created it), must survive. */
+    const bool remove_dest = touched || (created_by_us && !locked_by_other);
     if (remove_dest) {
       err = osal_removefile(dest_path);
       if (err != MDBX_SUCCESS && err != MDBX_ENOFILE)
