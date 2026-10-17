@@ -769,7 +769,7 @@ __must_check_result static int env_info_snap(const MDBX_env *env, const MDBX_txn
 
   const lck_t *const lck = env->lck;
   out->mi_maxreaders = env->max_readers;
-  out->mi_numreaders = env->lck_mmap.lck ? atomic_load32(&lck->rdt_length, mo_Relaxed) : INT32_MAX;
+  out->mi_numreaders = env->lck_mmap.lck ? (uint32_t)rdt_count(env, lck) : INT32_MAX;
   out->mi_dxb_pagesize = env->ps;
 
   const uint64_t unsynced_pages = atomic_load64(&lck->unsynced_pages, mo_Relaxed) +
