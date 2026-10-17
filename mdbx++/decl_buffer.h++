@@ -744,6 +744,12 @@ public:
   buffer(const void *ptr, size_t bytes, const allocator_type &alloc = allocator_type())
       : buffer(inherited(ptr, bytes), alloc) {}
 
+  /// \brief Copies `bytes` from `ptr`; keeps an integer length away from `buffer(const char *, bool)`.
+  template <typename INT, typename ::std::enable_if<::std::is_integral<INT>::value && !::std::is_same<INT, bool>::value,
+                                                    int>::type = 0>
+  MDBX_CXX20_CONSTEXPR buffer(const char *ptr, INT bytes, const allocator_type &alloc = allocator_type())
+      : buffer(static_cast<const void *>(ptr), size_t(bytes), alloc) {}
+
   template <class CHAR, class T, class A>
   explicit MDBX_CXX20_CONSTEXPR buffer(const ::std::basic_string<CHAR, T, A> &str,
                                        const allocator_type &alloc = allocator_type())
@@ -823,22 +829,23 @@ public:
   }
 
   /// \brief Returns a new buffer with a hexadecimal dump of the given pod.
-  template <typename POD>
+  template <typename POD,
+            typename ::std::enable_if<!::std::is_constructible<slice, const POD &>::value, int>::type = 0>
   static buffer hex(const POD &pod, bool uppercase = false, unsigned wrap_width = 0,
                     const allocator_type &alloc = allocator_type()) {
     return hex(inherited::wrap(pod), uppercase, wrap_width, alloc);
   }
 
-  /// \brief Returns a new buffer with a
-  /// [Base58](https://en.wikipedia.org/wiki/Base58) dump of the given pod.
-  template <typename POD>
+  template <typename POD,
+            typename ::std::enable_if<!::std::is_constructible<slice, const POD &>::value, int>::type = 0>
   static buffer base58(const POD &pod, unsigned wrap_width = 0, const allocator_type &alloc = allocator_type()) {
     return base58(inherited::wrap(pod), wrap_width, alloc);
   }
 
   /// \brief Returns a new buffer with a
   /// [Base64](https://en.wikipedia.org/wiki/Base64) dump of the given pod.
-  template <typename POD>
+  template <typename POD,
+            typename ::std::enable_if<!::std::is_constructible<slice, const POD &>::value, int>::type = 0>
   static buffer base64(const POD &pod, unsigned wrap_width = 0, const allocator_type &alloc = allocator_type()) {
     return base64(inherited::wrap(pod), wrap_width, alloc);
   }
@@ -1027,6 +1034,12 @@ public:
 
   buffer &assign(const void *ptr, size_t bytes, bool make_reference = false) {
     return make_reference ? assign_reference(ptr, bytes) : assign_freestanding(ptr, bytes);
+  }
+
+  template <typename INT, typename ::std::enable_if<::std::is_integral<INT>::value && !::std::is_same<INT, bool>::value,
+                                                    int>::type = 0>
+  buffer &assign(const char *ptr, INT bytes, bool make_reference = false) {
+    return assign(static_cast<const void *>(ptr), size_t(bytes), make_reference);
   }
 
   buffer &assign(const struct slice &src, bool make_reference = false) {

@@ -286,6 +286,8 @@ struct LIBMDBX_API_TYPE slice : public ::MDBX_val {
 
   /// \brief Returns true if slice is not empty.
   MDBX_CXX11_CONSTEXPR operator bool() const noexcept;
+  /// \brief Same as the const version; keeps `if (s)` away from `operator MDBX_val *()`.
+  MDBX_CXX14_CONSTEXPR operator bool() noexcept { return !is_null(); }
 
   /// \brief Depletes content of slice and make it invalid.
   MDBX_CXX14_CONSTEXPR void invalidate() noexcept;

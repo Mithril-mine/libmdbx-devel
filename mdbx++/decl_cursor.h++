@@ -233,7 +233,9 @@ public:
   move_result move(move_operation operation, const slice &key, const slice &value, bool throw_notfound) {
     return move_result(*this, operation, key, value, throw_notfound);
   }
-  bool move(move_operation operation, slice &key, slice &value, bool throw_notfound) {
+  move_result move(move_operation operation, const slice &key, const slice &value) = delete;
+  template <class SLICE, typename ::std::enable_if<::std::is_same<SLICE, slice>::value, int>::type = 0>
+  bool move(move_operation operation, SLICE &key, SLICE &value, bool throw_notfound) {
     return move(operation, &key, &value, throw_notfound);
   }
 
