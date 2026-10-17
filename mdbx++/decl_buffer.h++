@@ -362,7 +362,7 @@ private:
               if (external_content)
                 memcpy(new_place, content, length);
               else {
-                const size_t old_headroom = bin_.address() - static_cast<const byte *>(content);
+                const size_t old_headroom = static_cast<const byte *>(content) - bin_.address();
                 MDBX_INLINE_API_ASSERT(old_capacity >= old_headroom + length);
                 if (MDBX_UNLIKELY(old_headroom != wanna_headroom))
                   MDBX_CXX20_UNLIKELY ::std::memmove(new_place, content, length);
@@ -929,6 +929,14 @@ public:
 
   /// \brief Reserves space after the payload.
   void reserve_tailroom(size_t wanna_tailroom) { reserve(0, wanna_tailroom); }
+
+  /// \brief Reserves storage space for at least `size` bytes of payload,
+  /// without changing the current length. STL-compatible counterpart of
+  /// \ref reserve(size_t, size_t) that keeps the headroom unchanged.
+  void reserve(size_t size) {
+    if (size > length() && size - length() > tailroom())
+      reserve(headroom(), size - length());
+  }
 
   buffer &assign_reference(const void *ptr, size_t bytes) {
     silo_.clear();

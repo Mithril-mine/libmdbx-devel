@@ -451,7 +451,10 @@ inline BUFFER txn::extract(map_handle map, const slice &key, const ALLOCATOR &al
   typename BUFFER::data_preserver result(alloc);
   error::success_or_throw(
       ::mdbx_replace_ex(handle_, map.dbi, &key, nullptr, &result.data, MDBX_CURRENT, result, &result), result);
-  return result.data;
+  if (result.data.is_freestanding())
+    /* already a private copy made by the preserver: hand it over with its allocator */
+    return BUFFER(::std::move(result.data));
+  return BUFFER(result.data.slice(), false, alloc);
 }
 
 template <class BUFFER, typename ALLOCATOR>
@@ -460,7 +463,10 @@ inline BUFFER txn::replace(map_handle map, const slice &key, const slice &new_va
   error::success_or_throw(::mdbx_replace_ex(handle_, map.dbi, &key, const_cast<slice *>(&new_value), &result.data,
                                             MDBX_CURRENT, result, &result),
                           result);
-  return result.data;
+  if (result.data.is_freestanding())
+    /* already a private copy made by the preserver: hand it over with its allocator */
+    return BUFFER(::std::move(result.data));
+  return BUFFER(result.data.slice(), false, alloc);
 }
 
 template <class BUFFER, typename ALLOCATOR>
@@ -472,7 +478,10 @@ inline BUFFER txn::replace_reserve(map_handle map, const slice &key, size_t leng
   error::success_or_throw(::mdbx_replace_ex(handle_, map.dbi, &key, &new_value_reservation, &result.data,
                                             MDBX_CURRENT | MDBX_RESERVE, result, &result),
                           result);
-  return result.data;
+  if (result.data.is_freestanding())
+    /* already a private copy made by the preserver: hand it over with its allocator */
+    return BUFFER(::std::move(result.data));
+  return BUFFER(result.data.slice(), false, alloc);
 }
 
 inline void txn::append(map_handle map, const slice &key, const slice &value, bool multivalue_order_preserved) {
