@@ -792,9 +792,11 @@ public:
 
   /// \brief Registers the current thread as a reader for the environment,
   /// i.e. assigns a reader slot.
-  inline void thread_register();
+  /// \returns `false` if the thread was already registered.
+  inline bool thread_register();
   /// \brief Unregisters the current thread, i.e. releases its reader slot.
-  inline void thread_unregister();
+  /// \returns `false` if the thread was not registered.
+  inline bool thread_unregister();
 
   /// \brief Loads into memory the given pages of the database and their
   /// on-disk neighbours in advance.
