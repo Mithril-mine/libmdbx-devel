@@ -761,7 +761,7 @@ int osal_ioring_add(osal_ioring_t *ior, const size_t offset, void *data, const s
         ASSERT((item->single.iov_len & ior_WriteFile_flag) == 0);
         return MDBX_SUCCESS;
       }
-      const void *end = ptr_disp(item->single.iov_base, item->single.iov_len - ior_WriteFile_flag);
+const void *end = ptr_disp(item->single.iov_base, item->single.iov_len - ior_WriteFile_flag);
       if (unlikely(end == data)) {
         ASSERT((item->single.iov_len & ior_WriteFile_flag) != 0);
         item->single.iov_len += bytes;
