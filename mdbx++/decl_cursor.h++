@@ -457,6 +457,20 @@ public:
   /// \return `True` if the given key-value pair is found and removed.
   inline bool erase(const slice &key, const slice &value);
 
+  /// \brief Overloads for C strings, which otherwise bind to the `bool` parameters above.
+  template <typename CHARS, typename BOOL = bool,
+            typename std::enable_if<(std::is_same<CHARS, const char *>::value || std::is_same<CHARS, char *>::value) &&
+                                        std::is_same<BOOL, bool>::value,
+                                    int>::type = 0>
+  bool erase(CHARS key, BOOL whole_multivalue = true) {
+    return erase(slice(key), whole_multivalue);
+  }
+  template <size_t SIZE> bool erase(const slice &key, const char (&value)[SIZE]) { return erase(key, slice(value)); }
+  template <size_t KEY_SIZE, size_t VALUE_SIZE>
+  bool erase(const char (&key)[KEY_SIZE], const char (&value)[VALUE_SIZE]) {
+    return erase(slice(key), slice(value));
+  }
+
   /// \brief Modes for deleting bunches of neighboring items, see
   /// \ref ::MDBX_bunch_action_t(). The EXCLUDING and INCLUDING suffixes mean
   /// correspondingly excluding and including deletion items in the current
