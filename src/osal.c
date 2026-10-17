@@ -3814,6 +3814,8 @@ const char *osal_getenv_singlethreaded(const char *name, bool secure) {
       return nullptr;
     }
   }
+  if (size == 1)
+    return "" /* the variable exists with an empty value */;
 #if defined(MDBX_PROBES)
   /*> dist-cutoff-begin */
   /* NB: under MDBX_PROBES, osal_realloc is redirected to mprobe_realloc()
@@ -3821,13 +3823,14 @@ const char *osal_getenv_singlethreaded(const char *name, bool secure) {
    * mprobe_reg_lock is held by the outer mprobe_init_activation() call ->
    * self-deadlock. Use the probe-bus's own raw allocator to avoid the
    * redirect (see osal.h "probe-bus allocation interception"). */
-  buf = (char *)osal_realloc_raw(buf, size);
+  char *const grown = (char *)osal_realloc_raw(buf, size);
   /*< dist-cutoff-end */
 #else
-  buf = (char *)osal_realloc(buf, size);
+  char *const grown = (char *)osal_realloc(buf, size);
 #endif
-  if (!buf)
+  if (!grown)
     return nullptr;
+  buf = grown;
   if (GetEnvironmentVariableA(name, buf, size) == 0)
     return nullptr;
   return buf;
