@@ -234,7 +234,7 @@ __cold int meta_wipe_steady(MDBX_env *env, txnid_t inclusive_upto) {
     err = meta_unsteady(env, inclusive_upto, 2);
   }
 
-  if (err == MDBX_RESULT_TRUE || wiped) {
+  if (!MDBX_IS_ERROR(err) && (err == MDBX_RESULT_TRUE || wiped)) {
     err = MDBX_SUCCESS;
     if (!MDBX_AVOID_MSYNC && (env->flags & MDBX_WRITEMAP))
       err = dxb_msync(env, NUM_METAS, MDBX_SYNC_DATA | MDBX_SYNC_IODQ);
