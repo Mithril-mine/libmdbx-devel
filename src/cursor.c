@@ -452,6 +452,7 @@ MDBX_cursor *cursor_cpstk(const MDBX_cursor *csrc, MDBX_cursor *cdst) {
 }
 
 MDBX_cursor *cursor_copy_position(const MDBX_cursor *csrc, MDBX_cursor *cdst) {
+  cASSERT0(cdst, csrc != cdst);
   cursor_cpstk(csrc, cdst);
   if (cdst->subcur) {
     inner_gone_unconditional(cdst);
@@ -583,6 +584,8 @@ __hot int cursor_sibling_right(MDBX_cursor *mc) {
 }
 
 intptr_t cursor_cmp(const MDBX_cursor *left, const MDBX_cursor *right) {
+  ASSERT((is_inner(left) != 0) == (is_inner(right) != 0));
+  ASSERT(cursor_dbi(left) == cursor_dbi(right));
   ASSERT(left->top == right->top);
   intptr_t cmp = 0;
   for (intptr_t i = 0; i <= left->top; ++i) {
@@ -2899,9 +2902,13 @@ int cursor_distribute(const MDBX_cursor *begin, const MDBX_cursor *end, MDBX_cur
     return MDBX_RESULT_TRUE;
   }
 
-  cursor_couple_t iter_couple, end_couple;
-  MDBX_cursor *const iter = cursor_clone_complete(begin, &iter_couple);
-  end = cursor_clone_complete(end, &end_couple);
+  MDBX_cursor *iter = (MDBX_cursor *)begin;
+  for (intptr_t i = array_size; --i >= 0;) {
+    if (array[i] != begin && array[i] != end) {
+      iter = array[i];
+      break;
+    }
+  }
   cursor_copy_position(begin, iter);
 
   const cdr_t tdr = cursor_distance(iter, end, level);
@@ -2942,7 +2949,8 @@ int cursor_distribute(const MDBX_cursor *begin, const MDBX_cursor *end, MDBX_cur
           rc = MDBX_RESULT_TRUE;
         }
       }
-      cursor_copy_position(iter, mc);
+      if (mc != iter)
+        cursor_copy_position(iter, mc);
     }
   }
   return rc;
