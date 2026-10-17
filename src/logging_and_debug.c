@@ -382,7 +382,7 @@ static inline const char *sanitizer_probe_page_dangling(const MDBX_txn *txn, con
   (void)mc;
 #endif /* MDBX_DEBUG_SPILLING */
 
-  if ((txn->flags & MDBX_WRITEMAP) != 0 || !txn->wr.dirtylist)
+  if ((txn->flags & (MDBX_WRITEMAP | txn_ro_flat)) != 0 || !txn->wr.dirtylist)
     return "MMAP.outside-mmap-region";
 
   do {

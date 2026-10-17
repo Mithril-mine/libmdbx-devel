@@ -274,9 +274,12 @@ struct MDBX_txn {
            * shifted left by 1, deleted slots have the LSB set. */
           pnl_t __restrict list;
         } spilled;
-        size_t writemap_dirty_npages;
-        size_t writemap_spilled_npages;
       };
+      /* WRITEMAP mode keeps two counters instead of the spilled dirty list above */
+      struct {
+        size_t dirty_npages;
+        size_t spilled_npages;
+      } writemap;
       void *preserve_parent_userctx;
       /* In write txns, next is located the array of cursors for each DB */
     } wr;

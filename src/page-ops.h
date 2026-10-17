@@ -139,7 +139,7 @@ static inline void page_wash(MDBX_txn *txn, size_t di, page_t *const mp, const s
     }
   } else {
     tASSERT0(txn, (txn->flags & MDBX_WRITEMAP) && !MDBX_AVOID_MSYNC && !di);
-    txn->wr.writemap_dirty_npages -= (txn->wr.writemap_dirty_npages > npages) ? npages : txn->wr.writemap_dirty_npages;
+    txn->wr.writemap.dirty_npages -= (txn->wr.writemap.dirty_npages > npages) ? npages : txn->wr.writemap.dirty_npages;
   }
   VALGRIND_MAKE_MEM_UNDEFINED(mp, PAGEHDRSZ);
   VALGRIND_MAKE_MEM_NOACCESS(page2payload(mp), pgno2bytes(txn->env, npages) - PAGEHDRSZ);

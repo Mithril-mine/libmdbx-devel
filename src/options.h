@@ -650,7 +650,7 @@
 #else
 #define MDBX_CHECKING MDBX_DEBUG
 #endif
-#elif MDBX_CHECKING < -1 || MDBX_DEBUG > 3
+#elif MDBX_CHECKING < -1 || MDBX_CHECKING > 3
 #error "The MDBX_CHECKING must be defined to -1, 0, 1, 2 or 3"
 #endif /* MDBX_CHECKING */
 
