@@ -765,6 +765,7 @@ int osal_ioring_add(osal_ioring_t *ior, const size_t offset, void *data, const s
       if (unlikely(end == data)) {
         ASSERT((item->single.iov_len & ior_WriteFile_flag) != 0);
         item->single.iov_len += bytes;
+        ior->last_bytes += bytes;
         return MDBX_SUCCESS;
       }
 #elif MDBX_HAVE_PWRITEV
@@ -3814,9 +3815,12 @@ const char *osal_getenv_singlethreaded(const char *name, bool secure) {
       return nullptr;
     }
   }
-  buf = (char *)osal_realloc(buf, size);
-  if (!buf)
+  if (size == 1)
+    return "" /* the variable exists with an empty value */;
+  char *const grown = (char *)osal_realloc(buf, size);
+  if (!grown)
     return nullptr;
+  buf = grown;
   if (GetEnvironmentVariableA(name, buf, size) == 0)
     return nullptr;
   return buf;
