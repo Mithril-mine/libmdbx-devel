@@ -101,7 +101,7 @@ TEST(ut_txn_dataops, get_default_and_try_start_write) {
 
   auto writer = env.try_start_write();
   ASSERT_TRUE(writer);
-  EXPECT_THROW(env.try_start_write(), mdbx::something_busy) << "another writer must not be able to start";
+  EXPECT_FALSE(env.try_start_write()) << "a busy writer must yield an empty handle, not throw";
   writer.abort();
 
   writer = env.try_start_write();
