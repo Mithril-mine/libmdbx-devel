@@ -36,7 +36,7 @@ template <typename buffer> bool case1() {
     vector.push_back(buffer(42, mdbx::slice("allocate"), 42 * 42));
     vector.emplace_back("emplace, reference=false", false);
     vector.emplace_back("emplace, reference=true", true);
-    vector.emplace_back(42, mdbx::slice("emplace, allocate", 42 * 42));
+    vector.emplace_back(42, mdbx::slice("emplace, allocate"), 42 * 42);
     {
       auto copy = vector;
     }
