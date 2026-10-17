@@ -27,6 +27,12 @@ public:
   inline env &operator=(env &&) noexcept;
   inline env(env &&) noexcept;
   inline ~env() noexcept;
+  /* Slicing an owning env_managed temporary into the base handle would drop
+   * ownership and never close the environment (issue #77), so these exact-match
+   * overloads turn `mdbx::env e = mdbx::env_managed(...);` into a compile error,
+   * while a non-owning view of an env_managed lvalue is still allowed. */
+  env(env_managed &&) = delete;
+  env &operator=(env_managed &&) = delete;
 
   MDBX_CXX14_CONSTEXPR operator bool() const noexcept { return handle_ != nullptr; };
   MDBX_CXX14_CONSTEXPR operator const MDBX_env *() const noexcept { return handle_; }

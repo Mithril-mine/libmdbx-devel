@@ -319,7 +319,8 @@ private:
       }
 
       constexpr bool is_inplace(const void *ptr) const noexcept {
-        return size_t(static_cast<const byte *>(ptr) - inplace_.buffer_) < inplace_capacity();
+        /* `<=`: an empty payload may sit at the very end of the inplace storage */
+        return ptr != nullptr && size_t(static_cast<const byte *>(ptr) - inplace_.buffer_) <= inplace_capacity();
       }
 
       constexpr const byte *address() const noexcept {
