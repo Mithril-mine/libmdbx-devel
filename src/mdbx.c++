@@ -1604,12 +1604,21 @@ void txn_managed::commit(finalization_latency *latency) {
   if (handle_ && (::mdbx_txn_flags(handle_) & MDBX_TXN_HAS_CHILD))
     /* the C API would also commit and free the child, which a txn_managed may still own */
     MDBX_CXX20_UNLIKELY error::throw_exception(MDBX_BAD_TXN);
+  const bool was_errored = (::mdbx_txn_flags(handle_) & MDBX_TXN_ERROR) != 0;
   const error err = static_cast<MDBX_error_t>(::mdbx_txn_commit_ex(handle_, latency));
   if (MDBX_LIKELY(err.code() != MDBX_THREAD_MISMATCH))
     /* do not reset the handle in case of errors that do not change the transaction state. */
     MDBX_CXX20_LIKELY handle_ = nullptr;
-  if (MDBX_UNLIKELY(err.code() != MDBX_SUCCESS))
+  if (MDBX_UNLIKELY(err.code() != MDBX_SUCCESS)) {
+    /* MDBX_RESULT_TRUE: aborted instead of committed, either due to previous errors
+     * or as an empty transaction with MDBX_NOSUCCESS_PURE_COMMIT */
+    if (err.code() == MDBX_RESULT_TRUE) {
+      if (!was_errored)
+        return;
+      error::throw_exception(MDBX_BAD_TXN);
+    }
     MDBX_CXX20_UNLIKELY err.throw_exception();
+  }
 }
 
 bool txn_managed::checkpoint(finalization_latency *latency) {

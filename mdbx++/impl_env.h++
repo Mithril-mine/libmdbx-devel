@@ -645,9 +645,9 @@ inline env::info env::get_preopen_snapinfo(const wchar_t *pathname) {
 }
 #endif /* Windows */
 
-inline void env::thread_register() { error::success_or_throw(::mdbx_thread_register(handle_)); }
+inline bool env::thread_register() { return !error::boolean_or_throw(::mdbx_thread_register(handle_)); }
 
-inline void env::thread_unregister() { error::success_or_throw(::mdbx_thread_unregister(handle_)); }
+inline bool env::thread_unregister() { return !error::boolean_or_throw(::mdbx_thread_unregister(handle_)); }
 
 inline int env::warmup(MDBX_warmup_flags_t flags, unsigned timeout_seconds_16dot16, const MDBX_txn *txn) const {
   return ::mdbx_env_warmup(handle_, txn, flags, timeout_seconds_16dot16);
@@ -746,7 +746,7 @@ inline env::defrag_result env::defrag(VISITOR &visitor, size_t defrag_atleast, s
       ::mdbx_env_defrag(handle_, defrag_atleast, time_atleast_dot16, defrag_enough, time_limit_dot16,
                         acceptable_backlash, preferred_batch, thunk.cb, &thunk, &result);
   thunk.rethrow_captured();
-  if (rc != MDBX_SUCCESS && rc != MDBX_RESULT_TRUE)
+  if (rc != MDBX_SUCCESS && rc != MDBX_RESULT_TRUE && rc != MDBX_LAGGARD_READER)
     error::success_or_throw(rc);
   return result;
 }
