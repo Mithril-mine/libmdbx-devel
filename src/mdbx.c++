@@ -1550,6 +1550,9 @@ bool txn_managed::checkpoint() { return checkpoint(nullptr); }
 void txn_managed::commit_embark_read() { commit_embark_read(nullptr); }
 
 void txn_managed::abort(finalization_latency *latency) {
+  if (handle_ && (::mdbx_txn_flags(handle_) & MDBX_TXN_HAS_CHILD))
+    /* the C API would also abort and free the child, which a txn_managed may still own */
+    MDBX_CXX20_UNLIKELY error::throw_exception(MDBX_BAD_TXN);
   const error err = static_cast<MDBX_error_t>(::mdbx_txn_abort_ex(handle_, latency));
   if (MDBX_LIKELY(err.code() != MDBX_THREAD_MISMATCH))
     /* do not reset the handle in case of errors that do not change the transaction state. */
@@ -1559,6 +1562,9 @@ void txn_managed::abort(finalization_latency *latency) {
 }
 
 void txn_managed::commit(finalization_latency *latency) {
+  if (handle_ && (::mdbx_txn_flags(handle_) & MDBX_TXN_HAS_CHILD))
+    /* the C API would also commit and free the child, which a txn_managed may still own */
+    MDBX_CXX20_UNLIKELY error::throw_exception(MDBX_BAD_TXN);
   const error err = static_cast<MDBX_error_t>(::mdbx_txn_commit_ex(handle_, latency));
   if (MDBX_LIKELY(err.code() != MDBX_THREAD_MISMATCH))
     /* do not reset the handle in case of errors that do not change the transaction state. */
