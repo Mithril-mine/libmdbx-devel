@@ -1047,8 +1047,11 @@ public:
         const auto kind = src.content_modality();
         if (MDBX_UNLIKELY(kind == modality::reference && src.const_data() &&
                           size_t(static_cast<const byte *>(src.const_data()) - silo_begin()) < silo_.capacity())) {
-          /* `src` refers into this buffer's own storage, which the move below would release first */
-          assign_freestanding(src.const_data(), src.length());
+          /* `src` refers into this buffer's own storage, which the move below would release first,
+           * so just move the bytes to the start of the storage without any (re)allocation */
+          MDBX_INLINE_API_ASSERT(static_cast<const byte *>(src.const_data()) + src.length() <= silo_end());
+          iov_base = ::std::memmove(silo_.data(), src.const_data(), src.length());
+          iov_len = src.length();
           src.invalidate();
           return *this;
         }
@@ -1170,7 +1173,14 @@ public:
         const bool aliased = src_ptr >= begin_ptr && src_ptr < inherited::end_byte_ptr();
         const size_t src_offset = aliased ? size_t(src_ptr - begin_ptr) : 0;
         if (MDBX_UNLIKELY(tailroom() < check_length(bytes)))
-          MDBX_CXX20_UNLIKELY reserve_tailroom(bytes);
+          MDBX_CXX20_UNLIKELY {
+            if (MDBX_UNLIKELY(!aliased && size_t(src_ptr - silo_begin()) < silo_.capacity())) {
+              /* `src` refers into the own head/tail room, which the reserve below does not preserve */
+              const buffer chunk(src, bytes, get_allocator());
+              return append(chunk.data(), chunk.size());
+            }
+            reserve_tailroom(bytes);
+          }
         ::std::memmove(end_byte_ptr(), aliased ? byte_ptr() + src_offset : src_ptr, bytes);
         iov_len += bytes;
       }
@@ -1197,7 +1207,14 @@ public:
         const bool aliased = src_ptr >= begin_ptr && src_ptr < inherited::end_byte_ptr();
         const size_t src_offset = aliased ? size_t(src_ptr - begin_ptr) : 0;
         if (MDBX_UNLIKELY(headroom() < check_length(bytes)))
-          MDBX_CXX20_UNLIKELY reserve_headroom(bytes);
+          MDBX_CXX20_UNLIKELY {
+            if (MDBX_UNLIKELY(!aliased && size_t(src_ptr - silo_begin()) < silo_.capacity())) {
+              /* `src` refers into the own head/tail room, which the reserve below does not preserve */
+              const buffer chunk(src, bytes, get_allocator());
+              return add_header(chunk.data(), chunk.size());
+            }
+            reserve_headroom(bytes);
+          }
         iov_base = ::std::memmove(byte_ptr() - bytes, aliased ? byte_ptr() + src_offset : src_ptr, bytes);
         iov_len += bytes;
       }
