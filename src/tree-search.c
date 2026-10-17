@@ -26,6 +26,7 @@ __hot __noinline int tree_deepen_lowest(MDBX_cursor *mc) {
 
 __hot int tree_search(MDBX_cursor *mc, const MDBX_val *key, int flags) {
   int err;
+  MPROBE_WATCH(cursor_tree_search, 1);
   if (unlikely(mc->txn->flags & MDBX_TXN_BLOCKED)) {
     DEBUG("%s", "transaction has failed, must abort");
     err = MDBX_BAD_TXN;
