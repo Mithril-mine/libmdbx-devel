@@ -604,7 +604,10 @@ inline MDBX_chk_context_t &env::chk(MDBX_chk_context_t &ctx, const MDBX_chk_call
                                     MDBX_chk_severity_t verbosity, unsigned timeout_seconds_16dot16) const {
   if (!cb)
     cb = &silent_chk_callbacks;
-  error::success_or_throw(::mdbx_env_chk(handle_, cb, &ctx, flags, verbosity, timeout_seconds_16dot16));
+  const int err = ::mdbx_env_chk(handle_, cb, &ctx, flags, verbosity, timeout_seconds_16dot16);
+  /* MDBX_PROBLEM with counted problems is a check result reported in `ctx`, not a failure of the check itself */
+  if (err != MDBX_SUCCESS && !(err == MDBX_PROBLEM && ctx.result.total_problems))
+    error::throw_exception(err);
   return ctx;
 }
 
