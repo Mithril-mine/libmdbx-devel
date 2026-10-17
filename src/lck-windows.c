@@ -34,7 +34,7 @@ static int flock_ex(HANDLE fd, HANDLE event, unsigned flags, size_t offset, size
     return MDBX_SUCCESS;
   }
 
-  DWORD rc = GetLastError();
+  DWORD rc = GetLastError(), unused;
   if (rc == ERROR_IO_PENDING) {
     if (timeout_ms) {
       rc = osal_waitstatus2errcode(WaitForSingleObject(event, timeout_ms));
@@ -44,13 +44,18 @@ static int flock_ex(HANDLE fd, HANDLE event, unsigned flags, size_t offset, size
         goto bailout;
       }
     }
-    if (GetOverlappedResult(fd, &ov, &rc, true)) {
+    if (GetOverlappedResult(fd, &ov, &unused, true)) {
       TRACE("lock<<: fd %p, timeout %u ms, event %p, flags 0x%x offset %zu, bytes %zu << %s", fd, timeout_ms, event,
             flags, offset, bytes, "overlapped-done");
       return MDBX_SUCCESS;
     }
+    rc = GetLastError();
   bailout:
     CancelIo(fd);
+    /* `ov` is on the stack: wait until the cancelled request is completed,
+     * and release the lock if it was granted before the cancellation took effect */
+    if (GetOverlappedResult(fd, &ov, &unused, true))
+      UnlockFile(fd, (DWORD)offset, HIGH_DWORD(offset), (DWORD)bytes, HIGH_DWORD(bytes));
   }
 
   TRACE("lock<<: fd %p, timeout %u ms, event %p, flags 0x%x offset %zu, bytes %zu << err %d", fd, timeout_ms, event,
