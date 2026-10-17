@@ -632,7 +632,8 @@ __cold static int copy_asis(MDBX_env *env, MDBX_txn *txn, mdbx_filehandle_t fd, 
 
 //----------------------------------------------------------------------------
 
-__cold static int copy2fd(MDBX_txn *txn, mdbx_filehandle_t fd, MDBX_copy_flags_t flags, bool *touched) {
+__cold static int copy2fd(MDBX_txn *txn, mdbx_filehandle_t fd, MDBX_copy_flags_t flags, bool *touched,
+                          bool drop_old_content) {
   if (unlikely(txn->flags & MDBX_TXN_DIRTY))
     return MDBX_BAD_TXN;
 
@@ -668,12 +669,19 @@ __cold static int copy2fd(MDBX_txn *txn, mdbx_filehandle_t fd, MDBX_copy_flags_t
     return rc;
 
   if (!dest_is_pipe) {
+    if (touched)
+      *touched = true /* even a partial write damages the destination */;
+    if (drop_old_content)
+      /* Drop the old content, otherwise it survives beyond the end of the copied
+       * data and in the not-yet-used tail of the destination. This is done only
+       * here, after all checks, so a rejected call leaves the file untouched. */
+      rc = osal_fsetsize(fd, 0);
+
     /* Firstly write a stub to meta-pages.
      * Now we sure to incomplete copy will not be used. */
     memset(buffer, -1, pgno2bytes(env, NUM_METAS));
-    if (touched)
-      *touched = true /* even a partial write damages the destination */;
-    rc = osal_write(fd, buffer, pgno2bytes(env, NUM_METAS));
+    if (likely(rc == MDBX_SUCCESS))
+      rc = osal_write(fd, buffer, pgno2bytes(env, NUM_METAS));
   }
 
   if (likely(rc == MDBX_SUCCESS))
@@ -835,14 +843,8 @@ __cold static int copy2pathname(MDBX_txn *txn, const pathchar_t *dest_path, MDBX
    * the file, even if this call has just created it. */
   const bool locked_by_other = rc == EWOULDBLOCK || rc == EAGAIN;
   bool touched = false;
-  if (rc == MDBX_SUCCESS && pre_size > 0) {
-    /* Drop the old content, otherwise it survives beyond the end of the copied
-     * data and in the not-yet-used tail of the destination. */
-    touched = true;
-    rc = osal_fsetsize(newfd, 0);
-  }
   if (rc == MDBX_SUCCESS)
-    rc = copy2fd(txn, newfd, flags, &touched);
+    rc = copy2fd(txn, newfd, flags, &touched, pre_size > 0);
 
   int err = osal_closefile(newfd);
   if (rc == MDBX_SUCCESS && err != rc)
@@ -868,7 +870,7 @@ __cold static int copy2pathname(MDBX_txn *txn, const pathchar_t *dest_path, MDBX
 __cold int mdbx_txn_copy2fd(MDBX_txn *txn, mdbx_filehandle_t fd, MDBX_copy_flags_t flags) {
   int rc = check_txn(txn, MDBX_TXN_BLOCKED);
   if (likely(rc == MDBX_SUCCESS))
-    rc = copy2fd(txn, fd, flags, nullptr);
+    rc = copy2fd(txn, fd, flags, nullptr, false);
   if (flags & MDBX_CP_DISPOSE_TXN)
     mdbx_txn_abort(txn);
   return LOG_IFERR(rc);
@@ -887,7 +889,7 @@ __cold int mdbx_env_copy2fd(MDBX_env *env, mdbx_filehandle_t fd, MDBX_copy_flags
   if (unlikely(rc != MDBX_SUCCESS))
     return LOG_IFERR(rc);
 
-  rc = copy2fd(txn, fd, flags | MDBX_CP_DISPOSE_TXN | MDBX_CP_RENEW_TXN, nullptr);
+  rc = copy2fd(txn, fd, flags | MDBX_CP_DISPOSE_TXN | MDBX_CP_RENEW_TXN, nullptr, false);
   mdbx_txn_abort(txn);
   return LOG_IFERR(rc);
 }
