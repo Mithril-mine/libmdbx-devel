@@ -610,6 +610,34 @@ static struct mprobe_record *mprobe_find_or_create(const struct mprobe_site *sit
   return rec;
 }
 
+/* Create the record for an exact tag ahead of its site first run, so a control
+ * rule given before the site executes is not silently dropped: the site fills
+ * in its file/line/kind when it first runs. Caller holds mprobe_lock(). */
+static void mprobe_precreate_locked(const char *name) {
+  const size_t name_len = strlen(name);
+  if (name_len == 0 || name[name_len - 1] == '*')
+    return;
+  for (struct mprobe_record *rec = mprobe_registry; rec; rec = rec->next)
+    if (strcmp(rec->name, name) == 0)
+      return;
+  const uint32_t nsites = atomic_load32(&mprobe_nsites, mo_Relaxed);
+  if (nsites >= MPROBE_MAX_SITES)
+    return;
+  struct mprobe_record *rec = osal_calloc_raw(1, sizeof(*rec));
+  if (!rec)
+    return;
+  rec->name = (const char *)osal_calloc_raw(name_len + 1, 1);
+  if (!rec->name) {
+    osal_free_raw(rec);
+    return;
+  }
+  memcpy((char *)rec->name, name, name_len);
+  atomic_store32(&rec->flags, MPROBE_FLAG_ARMED, mo_Relaxed);
+  rec->next = mprobe_registry;
+  mprobe_registry = rec;
+  atomic_add32(&mprobe_nsites, 1);
+}
+
 /* Resolve the canonical record for an anchor, caching it in the anchor so the
  * hot path is a single relaxed load once registered. */
 static struct mprobe_record *mprobe_resolve(struct mprobe_site *site) {
@@ -764,9 +792,20 @@ void *mprobe_calloc(size_t nelem, size_t size, const char *site) {
 #define MPROBE_IPC_LINE_MAX 256
 
 #if !MDBX_WITHOUT_MSVC_CRT
+static mdbx_atomic_uint32_t mprobe_drain_lock;
+static void mprobe_drain_ipc_locked(void);
+
+/* Serialized: concurrent probe fires must not apply the same lines twice. */
 static void mprobe_drain_ipc(void) {
   if (unlikely(!(atomic_load32(&mprobe_state, mo_Relaxed) & MPROBE_STATE_IPC)))
     return;
+  while (unlikely(!atomic_cas32(&mprobe_drain_lock, 0, 1)))
+    osal_yield();
+  mprobe_drain_ipc_locked();
+  atomic_store32(&mprobe_drain_lock, 0, mo_AcquireRelease);
+}
+
+static void mprobe_drain_ipc_locked(void) {
   char path[1024];
   /* <dir>/cmd: one request per line, appended by the test. */
   int n = snprintf(path, sizeof(path), "%s/cmd", mprobe_ipc_dir);
@@ -781,9 +820,13 @@ static void mprobe_drain_ipc(void) {
     return;
   }
   char request[MPROBE_IPC_LINE_MAX];
+  uint64_t done = offset;
   while (fgets(request, sizeof(request), cmd)) {
     const size_t len = strlen(request);
-    if (len > 0 && request[len - 1] == '\n')
+    if (len + 1 < sizeof(request) && (len == 0 || request[len - 1] != '\n'))
+      break; /* an incomplete line: the test has not finished writing it */
+    done += len;
+    if (request[len - 1] == '\n')
       request[len - 1] = 0;
     char reply[MPROBE_IPC_LINE_MAX];
     reply[0] = 0;
@@ -799,10 +842,9 @@ static void mprobe_drain_ipc(void) {
       }
     }
   }
-  const long pos = ftell(cmd);
   fclose(cmd);
-  if (pos > 0)
-    atomic_store64(&mprobe_ipc_offset, (uint64_t)pos, mo_AcquireRelease);
+  if (done != offset)
+    atomic_store64(&mprobe_ipc_offset, done, mo_AcquireRelease);
 }
 #else /* MDBX_WITHOUT_MSVC_CRT */
 static void mprobe_drain_ipc(void) { (void)mprobe_ipc_offset; }
@@ -890,6 +932,7 @@ static int mprobe_ctl_apply(const char *request, char *reply, size_t reply_size)
   } else if (strcmp(op, "arm") == 0 || strcmp(op, "disarm") == 0) {
     mprobe_init_activation();
     mprobe_lock();
+    mprobe_precreate_locked(arg);
     const bool arm = (op[0] == 'a');
     for (struct mprobe_record *rec = mprobe_registry; rec; rec = rec->next) {
       if (mprobe_match(arg, rec->name)) {
@@ -917,6 +960,7 @@ static int mprobe_ctl_apply(const char *request, char *reply, size_t reply_size)
     pattern[plen] = 0;
     const char *code_str = sp2 + 1;
     mprobe_lock();
+    mprobe_precreate_locked(pattern);
     for (struct mprobe_record *rec = mprobe_registry; rec; rec = rec->next) {
       if (!mprobe_match(pattern, rec->name))
         continue;

@@ -1284,7 +1284,14 @@ static bool case3_error_paths(mdbx::env env, get_cached_t get_cached) {
       const int rc = mprobe_ctl(request, reply, sizeof(reply));
       const char *const site = (rc == 0) ? strstr(reply, "site ") : nullptr;
       unsigned seen = 0;
+#if defined(_MSC_VER)
+#pragma warning(push)
+#pragma warning(disable : 4996) /* 'sscanf': This function or variable may be unsafe */
+#endif
       if (!site || sscanf(site, "site %*s %*u %*u %u", &seen) != 1 || seen == 0) {
+#if defined(_MSC_VER)
+#pragma warning(pop)
+#endif
         std::cerr << "FAIL attestation: site \"" << tags[i] << "\" seen==" << seen << " (reply=\"" << reply << "\")"
                   << std::endl;
         ok = false;
