@@ -706,7 +706,6 @@ int txn_nested_fakero_end(MDBX_txn *nested) {
 }
 
 int txn_nested_rollback(MDBX_txn *nested) {
-  tASSERT0(nested, nested->flags & txn_ro_nested);
   tASSERT0(nested, rkl_empty(&nested->wr.gc.comeback));
   MDBX_txn *parent = nested->parent;
   if (unlikely(!parent || parent->nested != nested || parent->env != nested->env)) {
@@ -719,13 +718,24 @@ int txn_nested_rollback(MDBX_txn *nested) {
     return MDBX_BAD_TXN;
   }
 
-  const unsigned preserved_flags = nested->flags & txn_ro_nested;
+  const unsigned flags =
+      nested->flags & (txn_rw_begin_flags | MDBX_NOSTICKYTHREADS | MDBX_WRITEMAP | MDBX_TXN_RDONLY | txn_ro_nested);
   int rc = nested_undo(nested);
-  if (likely(rc == MDBX_SUCCESS))
+  if (likely(rc == MDBX_SUCCESS)) {
+    /* release what the previous nested_start() allocated, as nested_free() does, but keep the handle */
+    rkl_clear_and_shrink(&nested->wr.gc.reclaimed);
+    rkl_clear_and_shrink(&nested->wr.gc.ready4reuse);
+    txn_dpl_free(nested);
+    pnl_free(nested->wr.repnl);
+    nested->wr.repnl = nullptr;
+    pnl_free(nested->wr.spilled.list);
+    nested->wr.spilled.list = nullptr;
+    nested->wr.loose_pages = nullptr;
+    nested->wr.loose_count = 0;
+    nested->flags = flags | (parent->flags & MDBX_TXN_SPILLS);
     rc = nested_start(nested, parent);
-  if (likely(rc == MDBX_SUCCESS))
-    nested->flags |= preserved_flags;
-  else
+  }
+  if (unlikely(rc != MDBX_SUCCESS))
     txn_nested_abort(nested);
   return rc;
 }
