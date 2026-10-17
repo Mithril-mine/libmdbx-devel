@@ -128,6 +128,8 @@ static int basal_start_locked(MDBX_txn *txn, unsigned flags) {
   pnl_setsize(txn->wr.retired_pages, 0);
   txn->wr.spilled.list = nullptr;
   txn->wr.spilled.least_removed = 0;
+  txn->wr.writemap.dirty_npages = 0;
+  txn->wr.writemap.spilled_npages = 0;
   txn->wr.gc.spent = 0;
   tASSERT0(txn, rkl_empty(&txn->wr.gc.reclaimed));
   tASSERT0(txn, rkl_empty(&txn->wr.gc.ready4reuse));
@@ -177,8 +179,8 @@ static int basal_start_locked(MDBX_txn *txn, unsigned flags) {
     txn->wr.dirtylru = 0;
   }
 
-  eASSERT0(env, txn->wr.writemap_dirty_npages == 0);
-  eASSERT0(env, txn->wr.writemap_spilled_npages == 0);
+  eASSERT0(env, txn->wr.writemap.dirty_npages == 0);
+  eASSERT0(env, txn->wr.writemap.spilled_npages == 0);
   MDBX_cursor *const gc = ptr_disp(txn, sizeof(MDBX_txn));
   err = cursor_init(gc, txn, FREE_DBI);
   if (err != MDBX_SUCCESS)
@@ -443,7 +445,7 @@ int txn_basal_commit(MDBX_txn *txn, struct commit_timestamp *ts) {
     }
   } else {
     tASSERT0(txn, (txn->flags & MDBX_WRITEMAP) != 0 && !MDBX_AVOID_MSYNC);
-    env->lck->unsynced_pages.weak += txn->wr.writemap_dirty_npages;
+    env->lck->unsynced_pages.weak += txn->wr.writemap.dirty_npages;
     if (!env->lck->eoos_timestamp.weak)
       env->lck->eoos_timestamp.weak = osal_monotime();
   }

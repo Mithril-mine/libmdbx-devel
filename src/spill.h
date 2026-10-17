@@ -58,7 +58,7 @@ static inline int txn_spill(MDBX_txn *const txn, MDBX_cursor *const m0, const si
 
   const intptr_t wanna_spill_entries = txn->wr.dirtylist ? (need - txn->wr.dirtyroom - txn->wr.loose_count) : 0;
   const intptr_t wanna_spill_npages =
-      need + (txn->wr.dirtylist ? txn->wr.dirtylist->pages_including_loose : txn->wr.writemap_dirty_npages) -
+      need + (txn->wr.dirtylist ? txn->wr.dirtylist->pages_including_loose : txn->wr.writemap.dirty_npages) -
       txn->wr.loose_count - txn->env->options.dp_limit;
 
   /* production mode */
