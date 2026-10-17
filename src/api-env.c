@@ -773,7 +773,7 @@ static int env_info_snap(const MDBX_env *env, const MDBX_txn *txn, MDBX_envinfo 
 
   const lck_t *const lck = env->lck;
   out->mi_maxreaders = env->max_readers;
-  out->mi_numreaders = env->lck_mmap.lck ? atomic_load32(&lck->rdt_length, mo_Relaxed) : INT32_MAX;
+  out->mi_numreaders = env->lck_mmap.lck ? (uint32_t)rdt_count(env, lck) : INT32_MAX;
   out->mi_dxb_pagesize = env->ps;
   out->mi_sys_pagesize = globals.sys_pagesize;
 
