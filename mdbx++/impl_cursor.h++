@@ -142,6 +142,11 @@ inline ::std::vector<pair> cursor::get_batch(size_t max_pairs, move_operation op
   ::std::vector<MDBX_val> pairs(limit);
   size_t count = 0;
   int rc = ::mdbx_cursor_get_batch(handle_, &count, pairs.data(), limit, MDBX_cursor_op(op));
+  if (rc == MDBX_NOTFOUND || rc == MDBX_ENODATA) {
+    if (is_last)
+      *is_last = true;
+    return result;
+  }
   if (rc == MDBX_RESULT_TRUE) {
     if (is_last)
       *is_last = true;
