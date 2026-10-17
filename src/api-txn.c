@@ -594,7 +594,7 @@ int mdbx_txn_info(const MDBX_txn *txn, MDBX_txn_info *info, bool scan_rlt) {
     info->txn_space_leftover = pgno2bytes(env, txn->wr.dirtyroom);
     info->txn_space_dirty =
         pgno2bytes(env, txn->wr.dirtylist ? txn->wr.dirtylist->pages_including_loose
-                                          : (txn->wr.writemap_dirty_npages + txn->wr.writemap_spilled_npages));
+                                          : (txn->wr.writemap.dirty_npages + txn->wr.writemap.spilled_npages));
     info->txn_reader_lag = INT64_MAX;
     lck_t *const lck = env->lck_mmap.lck;
     if (scan_rlt && lck) {

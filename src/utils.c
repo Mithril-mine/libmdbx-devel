@@ -89,7 +89,9 @@ __cold char *ratio2digits(const uint64_t v, const uint64_t d, ratio2digits_buffe
       *scan = (carry = *scan == '9') ? '0' : *scan + 1;
   }
   ASSERT(tail > buffer->string && tail < ARRAY_END(buffer->string) - 1);
-  *++tail = '\0';
+  if (tail > dot)
+    ++tail;
+  *tail = '\0';
 
   char *head = dot;
   i += carry;
