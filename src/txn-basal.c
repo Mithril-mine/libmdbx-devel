@@ -218,6 +218,7 @@ int txn_basal_start(MDBX_txn *txn, unsigned flags) {
 
   int err = basal_start_locked(txn, flags);
   if (unlikely(err != MDBX_SUCCESS)) {
+    txn->flags |= MDBX_TXN_ERROR; /* not started, so not a live txn for txn_basal_end() */
     txn_basal_end(txn, true);
     return err;
   }
@@ -493,8 +494,11 @@ int txn_basal_checkpoint(MDBX_txn *txn, MDBX_txn_flags_t weakening_durability, s
       /* txn->userctx = preserved_context; */
       return txn_basal_start(txn, preserved_flags | txn_rw_already_locked);
     }
+    return rc; /* txn_basal_end() has already released the writer lock */
   }
 
+  if (MDBX_IS_ERROR(rc))
+    txn->flags |= MDBX_TXN_ERROR; /* as txn_commit() does, so dbi_update() rolls back */
   int err = txn_basal_end(txn, true);
   return (err == MDBX_SUCCESS) ? rc : err;
 }

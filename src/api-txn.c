@@ -375,18 +375,23 @@ int mdbx_txn_commit_embark_read(MDBX_txn **ptxn, MDBX_commit_latency *latency) {
   MDBX_txn *rtxn = nullptr;
   if (wtxn == env->basal_txn) {
     void *const preserved_context = wtxn->userctx;
+    bool unlocked = false;
     rc = txn_basal_commit(wtxn, latency ? &ts : nullptr);
     if (likely(rc == MDBX_SUCCESS)) {
       rc = txn_basal_end(wtxn, /* завершение транзакции без освобождения блокировки */ false);
       if (likely(rc == MDBX_SUCCESS)) {
         rtxn = txn_alloc(txn_ro_flat, env);
         rc = likely(rtxn) ? txn_ro_start(rtxn, false) : MDBX_ENOMEM;
-      }
-    }
+      } else
+        unlocked = true; /* txn_basal_end() has already released the writer lock */
+    } else if (MDBX_IS_ERROR(rc))
+      wtxn->flags |= MDBX_TXN_ERROR; /* as txn_commit() does, so dbi_update() rolls back */
 
-    const int err = txn_basal_end(wtxn, /* освобождение блокировки */ true);
-    if (unlikely(err != MDBX_SUCCESS) && rc == MDBX_SUCCESS)
-      rc = err;
+    if (!unlocked) {
+      const int err = txn_basal_end(wtxn, /* освобождение блокировки */ true);
+      if (unlikely(err != MDBX_SUCCESS) && rc == MDBX_SUCCESS)
+        rc = err;
+    }
     if (likely(rc == MDBX_SUCCESS)) {
       rtxn->userctx = preserved_context;
       rtxn->signature = txn_signature;
