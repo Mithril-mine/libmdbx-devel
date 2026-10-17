@@ -191,8 +191,9 @@ inline txn::map_stat txn::get_map_stat(map_handle map) const {
 }
 
 inline uint32_t txn::get_tree_deepmask(map_handle map) const {
-  uint32_t r;
-  error::success_or_throw(::mdbx_dbi_dupsort_depthmask(handle_, map.dbi, &r));
+  uint32_t r = 0;
+  /* MDBX_RESULT_TRUE: not a multi-value table, so there are no nested trees */
+  error::boolean_or_throw(::mdbx_dbi_dupsort_depthmask(handle_, map.dbi, &r));
   return r;
 }
 
@@ -221,7 +222,8 @@ inline uint64_t txn::sequence(map_handle map) const {
 
 inline uint64_t txn::sequence(map_handle map, uint64_t increment) {
   uint64_t result;
-  error::success_or_throw(::mdbx_dbi_sequence(handle_, map.dbi, &result, increment));
+  if (error::boolean_or_throw(::mdbx_dbi_sequence(handle_, map.dbi, &result, increment)))
+    throw ::std::overflow_error("mdbx::txn::sequence(): the increment overflows the sequence");
   return result;
 }
 
