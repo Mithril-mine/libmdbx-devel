@@ -490,8 +490,9 @@ static int nested_undo(MDBX_txn *nested) {
        * therefore promote size changes from nested to the parent txn */
       WARNING("unable undo resize performed by nested txn, promote to "
               "the parent (%u->%u, %u->%u)",
-              nested->geo.upper, parent->geo.now, nested->geo.upper, parent->geo.upper);
-      parent->geo.now = nested->geo.upper;
+              parent->geo.now, nested->geo.now, parent->geo.upper, nested->geo.upper);
+      parent->geo.now = nested->geo.now;
+      parent->geo.upper = nested->geo.upper;
       parent->flags |= MDBX_TXN_DIRTY;
     } else if (unlikely(err != MDBX_SUCCESS)) {
       ERROR("error %d while undo resize performed by nested txn, fail the parent", err);
