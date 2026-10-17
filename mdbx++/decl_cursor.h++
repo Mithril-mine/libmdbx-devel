@@ -427,6 +427,20 @@ public:
   /// \return `True` if the given key-value pair is found and removed.
   inline bool erase(const slice &key, const slice &value);
 
+  /// \brief Overloads for C strings, which otherwise bind to the `bool` parameters above.
+  template <typename CHARS, typename BOOL = bool,
+            typename std::enable_if<(std::is_same<CHARS, const char *>::value || std::is_same<CHARS, char *>::value) &&
+                                        std::is_same<BOOL, bool>::value,
+                                    int>::type = 0>
+  bool erase(CHARS key, BOOL whole_multivalue = true) {
+    return erase(slice(key), whole_multivalue);
+  }
+  template <size_t SIZE> bool erase(const slice &key, const char (&value)[SIZE]) { return erase(key, slice(value)); }
+  template <size_t KEY_SIZE, size_t VALUE_SIZE>
+  bool erase(const char (&key)[KEY_SIZE], const char (&value)[VALUE_SIZE]) {
+    return erase(slice(key), slice(value));
+  }
+
   inline size_t put_multiple_samelength(const slice &key, const size_t value_length, const void *values_array,
                                         size_t values_count, put_mode mode, bool allow_partial = false);
   template <typename VALUE>
