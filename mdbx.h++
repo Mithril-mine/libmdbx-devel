@@ -4028,9 +4028,6 @@ public:
   /// \brief Unbind or close all cursors.
   inline size_t release_all_cursors(bool unbind) const;
 
-  /// \brief Close all cursors.
-  inline size_t close_all_cursors() const { return release_all_cursors(false); }
-
   /// \brief Unbind all cursors.
   inline size_t unbind_all_cursors() const { return release_all_cursors(true); }
 
