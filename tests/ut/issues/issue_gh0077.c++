@@ -17,14 +17,16 @@
 TEST(issue_gh0077, txn_slicing_from_managed_is_a_compile_error) {
   static_assert(!std::is_constructible<mdbx::txn, mdbx::txn_managed>::value,
                 "rvalue txn_managed -> base txn must not compile");
-  static_assert(!std::is_constructible<mdbx::txn, mdbx::txn_managed &>::value,
-                "lvalue txn_managed -> base txn must not compile");
-  static_assert(!std::is_constructible<mdbx::txn, const mdbx::txn_managed &>::value,
-                "const lvalue txn_managed -> base txn must not compile");
   static_assert(!std::is_assignable<mdbx::txn &, mdbx::txn_managed>::value,
-                "txn_managed -> base txn assignment must not compile");
-  static_assert(!std::is_assignable<mdbx::txn &, mdbx::txn_managed &>::value,
-                "txn_managed lvalue -> base txn assignment must not compile");
+                "rvalue txn_managed -> base txn assignment must not compile");
+  /* Copying from an lvalue txn_managed stays allowed: it is a non-owning
+   * borrow that does not change the source's ownership. */
+  static_assert(std::is_constructible<mdbx::txn, const mdbx::txn_managed &>::value,
+                "const lvalue txn_managed -> base txn borrow must compile");
+  static_assert(std::is_constructible<mdbx::txn, mdbx::txn_managed &>::value,
+                "lvalue txn_managed -> base txn borrow must compile");
+  static_assert(std::is_assignable<mdbx::txn &, const mdbx::txn_managed &>::value,
+                "txn_managed lvalue -> base txn borrow-assign must compile");
   /* the non-owning handle itself and the owning wrapper stay usable */
   static_assert(std::is_copy_constructible<mdbx::txn>::value, "base txn remains a copyable handle");
   static_assert(std::is_move_constructible<mdbx::txn>::value, "base txn remains movable");
