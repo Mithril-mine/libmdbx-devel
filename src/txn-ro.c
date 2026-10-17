@@ -329,7 +329,7 @@ int txn_ro_park(MDBX_txn *txn, bool autounpark) {
   }
 
   if (unlikely((txn->flags & MDBX_TXN_ERROR)))
-    return ro_slot_clean(txn);
+    return txn_ro_reset(txn);
 
   atomic_store64(&slot->tid, MDBX_TID_TXN_PARKED, mo_AcquireRelease);
   atomic_store32(&txn->env->lck->rdt_refresh_flag, true, mo_Relaxed);
@@ -385,8 +385,9 @@ int txn_ro_unpark(MDBX_txn *txn) {
     return MDBX_SUCCESS;
   }
 
+  const bool broken = (txn->flags & MDBX_TXN_ERROR) != 0;
   int err = txn_ro_reset(txn);
-  return (err == MDBX_SUCCESS && (txn->flags & MDBX_TXN_OUSTED)) ? MDBX_OUSTED : err;
+  return (err != MDBX_SUCCESS) ? err : broken ? MDBX_BAD_TXN : MDBX_OUSTED;
 }
 
 int txn_ro_clone(const MDBX_txn *const origin, MDBX_txn *const clone) {
@@ -415,7 +416,11 @@ int txn_ro_clone(const MDBX_txn *const origin, MDBX_txn *const clone) {
       const uint64_t pages_retired = origin->ro.slot ? origin->ro.slot->snapshot_pages_retired.weak : 0;
       atomic_store32(&clone->ro.slot->snapshot_pages_used, pages_used, mo_Relaxed);
       atomic_store64(&clone->ro.slot->snapshot_pages_retired, pages_retired, mo_Relaxed);
-      safe64_write(&clone->ro.slot->txnid, (clone->flags & MDBX_TXN_PARKED) ? MDBX_TID_TXN_PARKED : clone->txnid);
+      safe64_write(&clone->ro.slot->txnid, clone->txnid);
+      if (clone->flags & MDBX_TXN_PARKED) {
+        atomic_store64(&clone->ro.slot->tid, MDBX_TID_TXN_PARKED, mo_AcquireRelease);
+        atomic_store32(&env->lck->rdt_refresh_flag, true, mo_Relaxed);
+      }
     } else {
       /* exclusive mode without lck */
       eASSERT0(env, !env->lck_mmap.lck && env->lck == lckless_stub(env));
