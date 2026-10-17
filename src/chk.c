@@ -523,6 +523,7 @@ __cold static void chk_dispose(MDBX_chk_internal_t *chk) {
   osal_free(chk->pagemap);
   chk->usr->internal = nullptr;
   chk->usr->scope = nullptr;
+  chk->usr->result.tables = nullptr; /* points into the freed `chk` */
   chk->pagemap = nullptr;
   memset(chk, 0xDD, sizeof(*chk));
   osal_free(chk);
