@@ -275,7 +275,7 @@ void case1_read_cycle(mdbx::txn &txn, std::deque<mdbx::map_handle> &dbi, std::ve
         i = pool.erase(i);
       else
         ++i;
-    txn.close_all_cursors();
+    txn.release_all_cursors(false);
     break;
   case 1:
     txn.unbind_all_cursors();
