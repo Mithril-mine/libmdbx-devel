@@ -536,10 +536,17 @@ static size_t probe_hits(const char *tag) {
     char name[128];
     unsigned kind = 0, armed = 0;
     unsigned long long seen = 0, hits = 0, suppressed = 0, value = 0;
+#if defined(_MSC_VER)
+#pragma warning(push)
+#pragma warning(disable : 4996) /* 'sscanf': This function or variable may be unsafe */
+#endif
     if (sscanf(reply.c_str() + pos, "site %127s %u %u %llu %llu %llu %llu", name, &kind, &armed, &seen, &hits,
                &suppressed, &value) >= 6 &&
         std::strcmp(name, tag) == 0)
       return size_t(hits);
+#if defined(_MSC_VER)
+#pragma warning(pop)
+#endif
     pos = reply.find("site ", pos + 1);
   }
   return 0;
