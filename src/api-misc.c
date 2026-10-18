@@ -192,6 +192,9 @@ __cold const char *mdbx_liberr2str(int errnum) {
   case MDBX_TXN_OVERLAPPING:
     return "MDBX_TXN_OVERLAPPING: Overlapping read and write transactions for"
            " the current thread";
+  case MDBX_BACKLOG_DEPLETED:
+    return "MDBX_BACKLOG_DEPLETED: Shortage of available pages while updating the GC"
+           " (internal, semantically equivalent to MDBX_PROBLEM)";
   case MDBX_DUPLICATED_LCK:
     return "MDBX_DUPLICATED_LCK: Alternative/Duplicate LCK-file is exists,"
            " please keep one and remove unused other";
