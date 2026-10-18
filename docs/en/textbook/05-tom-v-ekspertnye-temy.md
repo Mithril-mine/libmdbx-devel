@@ -40,7 +40,7 @@ The full list of rules and tips is in the knowledge base (`knowledge-base/rules-
   (`mdbx_limits_valsize4page_max()`): in a plain table — a chunk-number suffix in the key, in a
   DUPSORT table — a prefix with the multivalue number and the chunk number. Manual splitting is
   needed only until the planned **streamed API for long values** ("Streaming BLOBs") arrives.
-  Details — [Restrictions & gotchas](../overview/restrictions.md#storing-long-values).
+  Details — [Restrictions & gotchas](https://libmdbx.dqdkfa.ru/docs/en/overview/restrictions.html).
 
 ### 27.4. Operations
 
@@ -786,7 +786,7 @@ tracking of page usage by readable snapshots).
 - Change subscription (mailboxes, ring buffers).
 - Encryption and compression at the engine level.
 - A streaming read/write mode for long values ("Streaming BLOBs") — without manual chunking, see
-  [Restrictions & gotchas](../overview/restrictions.md#storing-long-values).
+  [Restrictions & gotchas](https://libmdbx.dqdkfa.ru/docs/en/overview/restrictions.html).
 - SWIG and cross-language interop.
 
 ### 33.5. Summary of chapter 33

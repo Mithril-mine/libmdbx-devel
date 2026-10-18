@@ -39,7 +39,7 @@ append at the file end), and rewriting the value rewrites the whole run (CoW of 
 fragmentation, GC churn). The problem can be softened by splitting the long value into chunks that
 fit into a single page (`mdbx_limits_valsize4page_max()`); manual splitting is needed only until
 the planned **streamed API for long values** ("Streaming BLOBs") arrives. Details and mitigations —
-[Restrictions & gotchas](../overview/restrictions.md#storing-long-values).
+[Restrictions & gotchas](https://libmdbx.dqdkfa.ru/docs/en/overview/restrictions.html).
 
 ### 13.2. Why B+tree Rather than B-tree or LSM
 

@@ -750,7 +750,7 @@ Full code: [11-geometry-options.c++](examples/c++/11-geometry-options.c++) · [C
 > made smaller, split it into chunks that fit into one page
 > (`mdbx_limits_valsize4page_max()`); manual splitting is needed only until the
 > planned **streamed API for long values** ("Streaming BLOBs") arrives. Details —
-> [Restrictions & gotchas](../overview/restrictions.md#storing-long-values).
+> [Restrictions & gotchas](https://libmdbx.dqdkfa.ru/docs/en/overview/restrictions.html).
 
 ### 9.6. Statistics
 
