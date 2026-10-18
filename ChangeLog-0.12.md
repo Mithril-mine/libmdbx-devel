@@ -450,7 +450,7 @@ Signed-off-by: Леонид Юрьев (Leonid Yuriev) <leo@yuriev.ru>
  - Устранение причины ложно-позитивного предупреждения новых версий GCC в C++ API.
  - Исправление ссылки на репозиторий бенчмарка ioarena.
  - Добавление перекрестных ссылок в doxygen-документацию по C++ API.
- - Уточнение ограничений в разделе [Restrictions & Caveats](https://libmdbx.dqdkfa.ru/intro.html#restrictions).
+ - Уточнение ограничений в разделе [Restrictions & Caveats](https://libmdbx.dqdkfa.ru/docs/en/overview/restrictions.html).
  - Исправление ссылок на описание `mdbx_canary_put()`.
 
 
@@ -620,8 +620,7 @@ Signed-off-by: Леонид Юрьев (Leonid Yuriev) <leo@yuriev.ru>
 
 Новое:
 
- - Использование адреса [https://libmdbx.dqdkfa.ru/dead-github](https://libmdbx.dqdkfa.ru/dead-github)
-   для отсылки к сохранённым в web.archive.org копиям ресурсов, уничтоженных администрацией GitHub.
+ - Использование адреса `https://libmdbx.dqdkfa.ru/dead-github/...` для отсылки к сохранённым в web.archive.org копиям ресурсов, уничтоженных администрацией GitHub.
 
  - Реализована prefault-запись при выделении страниц для read-write отображений.
    Это приводит к кратному снижению системных издержек и существенному увеличению
