@@ -1609,9 +1609,9 @@ void txn_managed::commit(finalization_latency *latency) {
 bool txn_managed::checkpoint(finalization_latency *latency) {
   const error err = static_cast<MDBX_error_t>(::mdbx_txn_checkpoint(handle_, MDBX_TXN_NOWEAKING, latency));
   if (MDBX_UNLIKELY(err.is_failure())) {
-    if (err.code() != MDBX_THREAD_MISMATCH && err.code() != MDBX_EINVAL)
+    if (err.code() != MDBX_THREAD_MISMATCH && err.code() != MDBX_EINVAL && err.code() != MDBX_BAD_TXN)
       /* do not reset the handle in case of errors that do not change the transaction state,
-       * including MDBX_EINVAL here. */
+       * including MDBX_EINVAL and MDBX_BAD_TXN here. */
       handle_ = nullptr;
     MDBX_CXX20_UNLIKELY err.throw_exception();
   }
