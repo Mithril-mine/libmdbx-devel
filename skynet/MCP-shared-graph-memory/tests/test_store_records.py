@@ -102,8 +102,20 @@ def test_safe_store_bad_type(store):
 
 
 def test_safe_store_unknown_key(store):
+    # по умолчанию авто-регистрация модуля/темы разрешена (новые темы в
+    # потоке рефакторинга не должны блокировать запись)
+    r = store.safe_store("bug:nosuchmod:alignment", "bug", "text", 0.5)
+    assert r["result"] == "created"
+    # тему можно читать из словаря после авто-регистрации
+    assert store.norm.normalize("bug:nosuchmod:alignment") == "bug:nosuchmod:alignment"
+    with store.env.begin(readonly=True) as txn:
+        voc = store.dbi(txn, "vocab")
+        rc, _ = txn.get(voc, b"module:nosuchmod")
+        assert rc == 0  # персистентность в vocab
+    # явный отказ от авто-регистрации сохраняет строгость словаря
     with pytest.raises(MemoryError):
-        store.safe_store("bug:nosuchmod:alignment", "bug", "text", 0.5)
+        store.safe_store("bug:othermod:alignment", "bug", "text", 0.5,
+                         auto_vocab=False)
 
 
 def test_exists(store):

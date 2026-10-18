@@ -245,14 +245,21 @@ def test_server_startup_wants_recovery(tmp_path):
     proc = subprocess.Popen([sys.executable, str(writer), db],
                             stdout=subprocess.PIPE, stderr=subprocess.PIPE)
     try:
-        time.sleep(1.2)
+        # дождаться реального создания/записи БД (а не фиксированной паузы:
+        # под нагрузкой Python может не успеть инициализироваться)
+        deadline = time.time() + 30.0
+        while time.time() < deadline:
+            if os.path.exists(db) and os.path.getsize(db) > 0:
+                break
+            time.sleep(0.05)
+        time.sleep(0.3)
         proc.send_signal(signal.SIGKILL)
         proc.wait(timeout=10)
     finally:
         if proc.poll() is None:
             proc.kill()
             proc.wait()
-    time.sleep(0.3)
+    assert os.path.exists(db) and os.path.getsize(db) > 0, "writer not started"
     env = dict(os.environ, PYTHONPATH=mod,
                SHARED_GRAPH_MEMORY_PATH=db,
                SHARED_GRAPH_MEMORY_READONLY="1")

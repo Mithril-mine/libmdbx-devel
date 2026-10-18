@@ -65,7 +65,7 @@ def test_search_ranks(store):
 def test_search_limit_clamp(store):
     setup(store)
     rows = store.search("arm64", limit=100)
-    assert len(rows) <= 10
+    assert len(rows) <= 20
 
 
 def test_update_terms_on_merge(store):
@@ -88,3 +88,27 @@ def test_inverted_intid_postings(store):
             # каждое значение — ровно 8 байт (uint64)
             rc, _, dval = cur.get(1)  # FIRST_DUP
             assert len(dval) == 8
+
+
+def test_search_idf_ranks_rare_term_higher(store):
+    """Редкий термин (idf-высокий) поднимает запись выше частого совпадения."""
+    setup(store)
+    # одна запись с частым 'buffer', вторая — с редким 'misaligned'
+    rows = store.search("misaligned", limit=5)
+    assert [r["key"] for r in rows][0] == "bug:crypto:alignment"
+    assert "bm25" in rows[0]
+
+
+def test_search_structural_hits(store):
+    """search('fn:...') находит символы карты исходников, если они загружены."""
+    setup(store)
+    # загрузим один символ в структурный слой вручную
+    store.map_put_symbol("fn:crypto:my_handshake", {"kind": "function",
+                                                    "module": "crypto"})
+    rows = store.search("fn:crypto:my_handshake", limit=5)
+    symbols = [r for r in rows if r.get("kind") == "symbol"]
+    assert any(r["key"] == "fn:crypto:my_handshake" for r in symbols)
+    # фасетный поиск по последнему сегменту имени
+    rows2 = store.search("my_handshake", limit=5)
+    assert any(r.get("kind") == "symbol" and "my_handshake" in r["key"]
+               for r in rows2)

@@ -18,11 +18,12 @@
 | `mcp/errors.py` | Контракт ошибок `error$CODE \| CLASS \| DESC \| ACTION \| RETRY` |
 | `mcp/normalize.py` | Канонизация ключей `тип:модуль:тема` + контролируемый словарь |
 | `mcp/index.py` | Токенизация + SimHash (64-бит) для дедупликации |
-| `mcp/store.py` | Store: 20 таблиц, все операции, одна write-txn на операцию, бэкап и защита от удаления |
+| `mcp/store.py` | Store: 23 таблицы, все операции, одна write-txn на операцию, бэкап и защита от удаления |
 | `mcp/mcp_server.py` | MCP-сервер (JSON-RPC 2.0 над stdio), db_* инструменты интроспекции |
 | `mcp/cli.py` | memory-cli (dump/stats/graph/audit/gc/vocab/purge) |
-| `tests/` | 273 теста |
+| `tests/` | 288 тестов |
 | `tools/install.sh` | Безопасная установка (никогда не трогает db.mdbx/backups) |
+| `tools/collect_test_metrics.py` | Коллектор test_metrics/coverage из ctest XML / LastTest.log |
 
 ## Требования
 
@@ -103,6 +104,13 @@ python3 -m mcp.cli --path ~/mem.mdbx gc --dry-run # тиринг hot/warm/cold
 Карта исходников (refactoring-map): `map_symbol(s)`, `map_edges_of`,
 `map_callers_of`, `map_group_members`, `map_regions`/`map_region`,
 `map_uncovered` (данные — `tools/load_map.py --db <живая> --replace`).
+Слой тестов/CI: `test_metrics_insert/get/all` (окно длительностей),
+`coverage_insert/get/all` (тест → символы), `ci_jobs_insert/all`
+(коллектор — `tools/collect_test_metrics.py` из ctest XML).
+
+Поиск `search()` использует BM25-ранжирование (IDF редких терминов проекта)
+и включает структурный слой (symbols/groups) при совпадении с идентификатором
+символа: единая точка входа «код + знания» для глубокого рефакторинга.
 
 ## Установка (безопасная)
 

@@ -91,13 +91,16 @@ def test_reopen_reloads_vocab(tmp_path):
         p = subprocess.run([sys.executable, "-c", code, db],
                            capture_output=True, text=True, timeout=60)
         assert p.returncode == 0, p.stderr
-        # без переоткрытия запись с новой темой падала бы (stale vocab)
+        # строгий режим (auto_vocab=False): без переоткрытия тема из внешнего
+        # процесса неизвестна -> контрактная ошибка invalid
         with pytest.raises(Exception):
-            sA.safe_store("fact:practice:vocab-reopen", "fact", "x", 0.5)
+            sA.safe_store("fact:practice:vocab-reopen", "fact", "x", 0.5,
+                          auto_vocab=False)
         # переоткрытие (ro -> rw) перечитывает словарь
         sA.set_readonly(True)
         sA.set_readonly(False)
-        res = sA.safe_store("fact:practice:vocab-reopen", "fact", "x", 0.5)
+        res = sA.safe_store("fact:practice:vocab-reopen", "fact", "x", 0.5,
+                            auto_vocab=False)
         assert res["result"] in ("created", "merged"), res
     finally:
         sA.close()

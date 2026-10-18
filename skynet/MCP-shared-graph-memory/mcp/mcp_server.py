@@ -10,6 +10,7 @@ from __future__ import annotations
 import json
 import os
 import sys
+import traceback
 
 from . import libmdbx as mdbx
 from .errors import MemoryError
@@ -202,9 +203,48 @@ class McpServer:
                                                    "limit": {"type": "integer"}}}),
             ("map_region", "Один регион #if-дерева по ключу.",
              [], {"type": "object", "properties": {"key": {"type": "string"}}}),
-            ("map_uncovered", "Uncovered-острова смысла (префикс модуля, limit).",
+("map_uncovered", "Uncovered-острова смысла (префикс модуля, limit).",
              [], {"type": "object", "properties": {"prefix": {"type": "string"},
-                                                   "limit": {"type": "integer"}}}),
+                                                    "limit": {"type": "integer"}}}),
+            ("test_metrics_insert", "Зафиксировать длительность тест-кейса "
+             "(скользящее окно истории).", ["test"], {
+                 "type": "object",
+                 "properties": {"test": {"type": "string"},
+                                "duration_ms": {"type": "number"},
+                                "labels": {"type": "array"},
+                                "timeout_sec": {"type": "integer"}},
+                 "required": ["test", "duration_ms"]}),
+            ("test_metrics_get", "Окно истории длительностей тест-кейса.",
+             ["test"], {"type": "object",
+                        "properties": {"test": {"type": "string"}},
+                        "required": ["test"]}),
+            ("test_metrics_all", "Все метрики тестов (prefix, limit).",
+             [], {"type": "object",
+                  "properties": {"prefix": {"type": "string"},
+                                 "limit": {"type": "integer"}}}),
+            ("coverage_insert", "Зафиксировать покрытие теста (набор символов).",
+             ["test"], {"type": "object",
+                        "properties": {"test": {"type": "string"},
+                                       "symbols": {"type": "array"},
+                                       "pct": {"type": "number"}},
+                        "required": ["test", "symbols"]}),
+            ("coverage_get", "Покрытие конкретного теста.", ["test"],
+             {"type": "object",
+              "properties": {"test": {"type": "string"}},
+              "required": ["test"]}),
+            ("coverage_all", "Все покрытия (limit).", [],
+             {"type": "object",
+              "properties": {"limit": {"type": "integer"}}}),
+            ("ci_jobs_insert", "Зафиксировать параметры CI-джобы "
+             "(\"{workflow}/{job}\").", ["job"], {
+                 "type": "object",
+                 "properties": {"job": {"type": "string"},
+                                "body": {"type": "object"}},
+                 "required": ["job"]}),
+            ("ci_jobs_all", "Все CI-джобы (prefix, limit).", [],
+             {"type": "object",
+              "properties": {"prefix": {"type": "string"},
+                             "limit": {"type": "integer"}}}),
         ]
         return {name: {"name": name, "description": desc, "inputSchema": schema}
                 for name, desc, _args, schema in t}
@@ -250,6 +290,9 @@ class McpServer:
                 # контрактная ошибка: класс + действие + политика ретрая
                 return self._error(mid, -32000, str(e))
             except Exception as e:  # noqa: BLE001
+                # внутренний сбой: логируем полный traceback (в stderr) для
+                # диагностики, а агенту отдаём контрактную ошибку
+                traceback.print_exc(file=sys.stderr)
                 return self._error(mid, -32000, "%s: %s" % (tname, e))
         if method == "logging/setLevel":
             return self._resp(mid, {})
@@ -356,6 +399,28 @@ class McpServer:
         if name == "map_uncovered":
             return {"uncovered": s.map_uncovered(args.get("prefix", ""),
                                                  limit=args.get("limit"))}
+        if name == "test_metrics_insert":
+            return s.test_metrics_insert(args["test"],
+                                         float(args["duration_ms"]),
+                                         labels=args.get("labels"),
+                                         timeout_sec=args.get("timeout_sec", 0))
+        if name == "test_metrics_get":
+            return s.test_metrics_get(args["test"])
+        if name == "test_metrics_all":
+            return {"tests": s.test_metrics_all(args.get("prefix", ""),
+                                                limit=args.get("limit"))}
+        if name == "coverage_insert":
+            return s.coverage_insert(args["test"], args.get("symbols") or [],
+                                     float(args.get("pct", 0.0)))
+        if name == "coverage_get":
+            return s.coverage_get(args["test"])
+        if name == "coverage_all":
+            return {"coverage": s.coverage_all(limit=args.get("limit"))}
+        if name == "ci_jobs_insert":
+            return s.ci_jobs_insert(args["job"], args.get("body") or {})
+        if name == "ci_jobs_all":
+            return {"jobs": s.ci_jobs_all(args.get("prefix", ""),
+                                          limit=args.get("limit"))}
         raise MemoryError("NO_SUCH_TOOL", "invalid", "неизвестный инструмент %r" % name,
                           "проверьте tools/list", "none")
 

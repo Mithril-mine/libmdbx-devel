@@ -70,7 +70,7 @@ def test_safe_store_tool(server):
 def test_safe_store_contract_error(server):
     """Ошибка контракта должна уйти как JSON-RPC protocol error (-32000)."""
     r = call(server, "tools/call", {"name": "safe_store", "arguments": {
-        "key": "bug:nosuchmod:theme", "type": "bug",
+        "key": "bug:nosuchmod:theme", "type": "bogus",
         "summary": "text", "importance": 0.5}})
     assert r["error"]["code"] == -32000
     msg = r["error"]["message"]

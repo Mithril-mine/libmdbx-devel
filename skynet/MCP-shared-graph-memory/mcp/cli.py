@@ -105,6 +105,40 @@ def cmd_purge(args) -> None:
         s.close()
 
 
+def cmd_test_metrics(args) -> None:
+    s = _open(args.path)
+    try:
+        if args.test:
+            res = s.test_metrics_get(args.test)
+            print(json.dumps(res, ensure_ascii=False, indent=2) if res else "NOTFOUND")
+        else:
+            print(json.dumps(s.test_metrics_all(args.prefix, args.limit),
+                             ensure_ascii=False, indent=2))
+    finally:
+        s.close()
+
+
+def cmd_coverage(args) -> None:
+    s = _open(args.path)
+    try:
+        if args.test:
+            res = s.coverage_get(args.test)
+            print(json.dumps(res, ensure_ascii=False, indent=2) if res else "NOTFOUND")
+        else:
+            print(json.dumps(s.coverage_all(args.limit), ensure_ascii=False, indent=2))
+    finally:
+        s.close()
+
+
+def cmd_ci_jobs(args) -> None:
+    s = _open(args.path)
+    try:
+        print(json.dumps(s.ci_jobs_all(args.prefix, args.limit),
+                         ensure_ascii=False, indent=2))
+    finally:
+        s.close()
+
+
 def main(argv=None):
     argv = list(sys.argv[1:] if argv is None else argv)
     ap = argparse.ArgumentParser(prog="memory-cli")
@@ -144,6 +178,22 @@ def main(argv=None):
     p = sub.add_parser("purge")
     p.add_argument("keys", nargs="+")
     p.set_defaults(func=cmd_purge)
+
+    p = sub.add_parser("test-metrics")
+    p.add_argument("--test", default="")
+    p.add_argument("--prefix", default="")
+    p.add_argument("--limit", type=int, default=None)
+    p.set_defaults(func=cmd_test_metrics)
+
+    p = sub.add_parser("coverage")
+    p.add_argument("--test", default="")
+    p.add_argument("--limit", type=int, default=None)
+    p.set_defaults(func=cmd_coverage)
+
+    p = sub.add_parser("ci-jobs")
+    p.add_argument("--prefix", default="")
+    p.add_argument("--limit", type=int, default=None)
+    p.set_defaults(func=cmd_ci_jobs)
 
     args = ap.parse_args(argv)
     if not getattr(args, "cmd", None):
