@@ -64,7 +64,7 @@ __cold int mdbx_gc_info(MDBX_txn *txn, MDBX_gc_info_t *info, size_t bytes, MDBX_
 
       const txnid_t id = unaligned_peek_u64(4, gc_key.iov_base);
       if ((txn->flags & txn_ro_flat) == 0 && gc_is_reclaimed(txn, id))
-        continue;
+        goto next_record;
 
       const size_t len = pnl_size(glr.pnl);
       const bool is_reclaimable = id <= reclaiming_detent;
@@ -84,7 +84,10 @@ __cold int mdbx_gc_info(MDBX_txn *txn, MDBX_gc_info_t *info, size_t bytes, MDBX_
             break;
         }
       }
+      if (unlikely(rc != MDBX_SUCCESS))
+        break;
 
+    next_record:
       rc = outer_next(&cx.outer, &gc_key, &gc_data, MDBX_NEXT);
       if (rc != MDBX_SUCCESS) {
         rc = (rc == MDBX_NOTFOUND) ? MDBX_SUCCESS : rc;
