@@ -499,6 +499,7 @@ static bool edge_cases_full(void) {
     CHECK_EQ((uint64_t)rkl_push(&a, id), (uint64_t)MDBX_SUCCESS);
   CHECK_TRUE(rkl_check(&a));
   CHECK_EQ(rkl_len(&a), 63);
+  rkl_destroy(&a);
 
   /* rkl_find: в solid-интервале, перед/после него, в списке, отсутствует */
   rkl_init(&b);
@@ -514,6 +515,7 @@ static bool edge_cases_full(void) {
   CHECK_TRUE(rkl_find(&b, 10, &fi));  /* элемент списка */
   CHECK_FALSE(rkl_find(&b, 11, &fi)); /* после элемента списка */
   CHECK_TRUE(rkl_find(&b, 20, &fi));  /* хвостовой элемент списка */
+  rkl_destroy(&b);
 
   /* rkl_merge: список+интервал, дубликаты с ignore_duplicates и без */
   rkl_init(&a);
@@ -525,6 +527,8 @@ static bool edge_cases_full(void) {
   CHECK_EQ((uint64_t)rkl_merge(&a, &b, true), (uint64_t)MDBX_SUCCESS);
   CHECK_TRUE(rkl_check(&b));
   CHECK_EQ(rkl_len(&b), 31);
+  rkl_destroy(&a);
+  rkl_destroy(&b);
 
   /* rkl_destructive_merge: merge + destroy src */
   rkl_init(&a);

@@ -78,7 +78,7 @@ static MDBX_env *open_dupsort_env(const char *path, MDBX_dbi *dbi_out) {
   return env;
 }
 
-static MDBX_cursor *positioned_cursor(MDBX_env *env, MDBX_dbi dbi) {
+static MDBX_cursor *positioned_cursor(MDBX_env *env, MDBX_dbi dbi, MDBX_txn **txn_out) {
   MDBX_txn *txn = nullptr;
   if (mdbx_txn_begin(env, nullptr, MDBX_TXN_RDONLY, &txn) != MDBX_SUCCESS)
     return nullptr;
@@ -94,6 +94,7 @@ static MDBX_cursor *positioned_cursor(MDBX_env *env, MDBX_dbi dbi) {
     mdbx_txn_abort(txn);
     return nullptr;
   }
+  *txn_out = txn;
   return mc;
 }
 
@@ -103,7 +104,8 @@ TEST(issue_gh0068, legacy_size_does_not_write_past_buffer) {
   MDBX_dbi dbi = 0;
   MDBX_env *env = open_dupsort_env(testdb, &dbi);
   ASSERT_NE(env, nullptr);
-  MDBX_cursor *mc = positioned_cursor(env, dbi);
+  MDBX_txn *rtxn = nullptr;
+  MDBX_cursor *mc = positioned_cursor(env, dbi, &rtxn);
   ASSERT_NE(mc, nullptr);
 
   const size_t legacy = offsetof(MDBX_stat, ms_mod_txnid);
@@ -126,6 +128,7 @@ TEST(issue_gh0068, legacy_size_does_not_write_past_buffer) {
   EXPECT_EQ(CANARY, probe.canary);
 
   mdbx_cursor_close(mc);
+  mdbx_txn_abort(rtxn);
   mdbx_env_close(env);
   remove_db(testdb);
 }
@@ -136,7 +139,8 @@ TEST(issue_gh0068, exact_heap_buffer_is_not_overflowed) {
   MDBX_dbi dbi = 0;
   MDBX_env *env = open_dupsort_env(testdb, &dbi);
   ASSERT_NE(env, nullptr);
-  MDBX_cursor *mc = positioned_cursor(env, dbi);
+  MDBX_txn *rtxn = nullptr;
+  MDBX_cursor *mc = positioned_cursor(env, dbi, &rtxn);
   ASSERT_NE(mc, nullptr);
 
   const size_t legacy = offsetof(MDBX_stat, ms_mod_txnid);
@@ -154,6 +158,7 @@ TEST(issue_gh0068, exact_heap_buffer_is_not_overflowed) {
 
   std::free(buf);
   mdbx_cursor_close(mc);
+  mdbx_txn_abort(rtxn);
   mdbx_env_close(env);
   remove_db(testdb);
 }
@@ -164,7 +169,8 @@ TEST(issue_gh0068, full_size_fills_all_fields_within_buffer) {
   MDBX_dbi dbi = 0;
   MDBX_env *env = open_dupsort_env(testdb, &dbi);
   ASSERT_NE(env, nullptr);
-  MDBX_cursor *mc = positioned_cursor(env, dbi);
+  MDBX_txn *rtxn = nullptr;
+  MDBX_cursor *mc = positioned_cursor(env, dbi, &rtxn);
   ASSERT_NE(mc, nullptr);
 
   mdbx_stat_canary probe;
@@ -180,6 +186,7 @@ TEST(issue_gh0068, full_size_fills_all_fields_within_buffer) {
   EXPECT_EQ(CANARY, probe.canary);
 
   mdbx_cursor_close(mc);
+  mdbx_txn_abort(rtxn);
   mdbx_env_close(env);
   remove_db(testdb);
 }
@@ -190,7 +197,8 @@ TEST(issue_gh0068, invalid_bytes_are_rejected) {
   MDBX_dbi dbi = 0;
   MDBX_env *env = open_dupsort_env(testdb, &dbi);
   ASSERT_NE(env, nullptr);
-  MDBX_cursor *mc = positioned_cursor(env, dbi);
+  MDBX_txn *rtxn = nullptr;
+  MDBX_cursor *mc = positioned_cursor(env, dbi, &rtxn);
   ASSERT_NE(mc, nullptr);
 
   mdbx_stat_canary probe;
@@ -204,6 +212,7 @@ TEST(issue_gh0068, invalid_bytes_are_rejected) {
   EXPECT_EQ(CANARY, probe.canary);
 
   mdbx_cursor_close(mc);
+  mdbx_txn_abort(rtxn);
   mdbx_env_close(env);
   remove_db(testdb);
 }

@@ -55,6 +55,8 @@ TEST(issue_gh0104, unpark_broken_read_reports_bad_txn) {
    * not success for a transaction that has been finished. */
   EXPECT_EQ(MDBX_BAD_TXN, mdbx_txn_unpark(r, false))
       << "unparking a broken read txn must report MDBX_BAD_TXN, not success";
+  /* abandon the parked broken read txn so it does not leak under LSan */
+  EXPECT_EQ(MDBX_SUCCESS, mdbx_txn_abort(r)) << "aborting a parked broken read txn must not assert/crash";
 
   mdbx_env_close(env);
   remove(testdb);

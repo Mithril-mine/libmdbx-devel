@@ -38,6 +38,7 @@ static void create_dumpable_db(const char *path, size_t count) {
   MDBX_env *env = nullptr;
   ASSERT_EQ(MDBX_SUCCESS, mdbx_env_create(&env));
   ASSERT_EQ(MDBX_SUCCESS, mdbx_env_set_maxdbs(env, 8));
+  ASSERT_EQ(MDBX_SUCCESS, mdbx_env_set_geometry(env, -1, -1, 16 << 20, -1, -1, -1));
   ASSERT_EQ(MDBX_SUCCESS, mdbx_env_open(env, path, MDBX_NOSUBDIR, 0644));
 
   MDBX_txn *txn = nullptr;
