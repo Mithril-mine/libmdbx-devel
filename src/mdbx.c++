@@ -283,7 +283,7 @@ namespace mdbx {
 
 [[noreturn]] __cold void throw_bad_value_size() { throw bad_value_size(MDBX_BAD_VALSIZE); }
 
-__cold exception::exception(const ::mdbx::error &error) noexcept : base(error.what()), error_(error) {}
+__cold exception::exception(const ::mdbx::error &error) : base(error.what()), error_(error) {}
 
 __cold exception::~exception() noexcept {}
 
@@ -1365,7 +1365,7 @@ env_managed &env_managed::operator=(env_managed &&other) noexcept {
          * (issue #60) */
         (void)::mdbx_env_close(handle_);
       }
-    inherited::operator=(std::move(other));
+    inherited::operator=(static_cast<env &&>(std::move(other)));
   }
   return *this;
 }
@@ -1536,7 +1536,7 @@ cursor_managed &cursor_managed::operator=(cursor_managed &&other) noexcept {
          * (issue #60) */
         (void)::mdbx_cursor_close2(handle_);
       }
-    inherited::operator=(std::move(other));
+    inherited::operator=(static_cast<cursor &&>(std::move(other)));
   }
   return *this;
 }

@@ -292,7 +292,9 @@ template <typename VISITOR> inline txn::gc_info txn::get_gc_info(VISITOR &visito
     static int cb(void *ctx, const MDBX_txn *, uint64_t span_txnid, size_t span_pgno, size_t span_length,
                   bool span_is_reclaimable) noexcept {
       gc_iter_thunk *thunk = static_cast<gc_iter_thunk *>(ctx);
-      assert(thunk->is_clean());
+      if (MDBX_UNLIKELY(!thunk->is_clean()))
+        /* do not call the visitor again after it has thrown */
+        return loop_control::exit_loop;
       try {
         return loop_control(thunk->visitor_(span_txnid, span_pgno, span_length, span_is_reclaimable));
       } catch (... /* capture any exception to rethrow it over C code */) {

@@ -78,7 +78,7 @@ class LIBMDBX_API_TYPE exception : public ::std::runtime_error {
   ::mdbx::error error_;
 
 public:
-  exception(const ::mdbx::error &) noexcept;
+  exception(const ::mdbx::error &);
   exception(const exception &) = default;
   exception(exception &&) = default;
   exception &operator=(const exception &) = default;

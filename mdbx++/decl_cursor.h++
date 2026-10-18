@@ -26,6 +26,12 @@ public:
   inline cursor &operator=(cursor &&) noexcept;
   inline cursor(cursor &&) noexcept;
   inline ~cursor() noexcept;
+  /* Slicing an owning cursor_managed temporary into the base handle would drop
+   * ownership and leak the cursor (issue #77), so these exact-match overloads
+   * turn `mdbx::cursor c = txn.open_cursor(map);` into a compile error, while
+   * a non-owning view of a cursor_managed lvalue is still allowed. */
+  cursor(cursor_managed &&) = delete;
+  cursor &operator=(cursor_managed &&) = delete;
   cursor_managed clone(void *your_context = nullptr) const;
   inline cursor &assign(const cursor &);
   MDBX_CXX14_CONSTEXPR operator bool() const noexcept { return handle_ != nullptr; };
