@@ -53,7 +53,7 @@ L4 sanitizer sweeps → L5 memcheck → L6 `stochastic.sh` → L7 human-controll
 | L3 | `make check` | smoke + install + amalgamation (`dist/`) validation |
 | L4 | `make test-asan` / `test-ubsan` | sanitizer sweeps (`MDBX_CHECKING=2`) |
 | L5 | `make test-memcheck` | valgrind sweep |
-| L6 | `make test-stochastic` or targeted `tests/scripts/stochastic.sh` | stochastic parameter sweep, bounded iterations |
+| L6 | `make test-stochastic` or targeted `tests/stochastic.sh` | stochastic parameter sweep, bounded iterations |
 | L7 | `tests/battery-tmux.sh`, `make test-long` | human-supervised extended soak (hours/days) |
 | +style | `make reformat` | `clang-format` (LLVM, `.clang-format`); must be idempotent |
 | +locking | `make check-posix-locking` | SYSV/1988/2001/2008 variants |

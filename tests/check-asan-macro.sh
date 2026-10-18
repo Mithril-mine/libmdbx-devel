@@ -13,7 +13,7 @@
 set -u
 
 SELF_DIR="$(cd "$(dirname "$0")" && pwd)"
-SRC="$(cd "$SELF_DIR/../.." && pwd)"
+SRC="$(cd "$SELF_DIR/.." && pwd)"
 
 TMP="$(mktemp -d)"
 trap 'rm -rf "$TMP"' EXIT

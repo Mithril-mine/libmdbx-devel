@@ -37,7 +37,7 @@
 | `docs/` (13 файлов) | Doxygen: `Doxyfile.in`, `_*.md`, CSS/HTML, `ld+json`, `title`, `sitemap.add` | upstream (канон) |
 | `examples/` (75 исходников + READMEs, включая `c/pcrf/`) | Примеры + PCRF-симулятор | upstream |
 | `.github/workflows/` (7 yml), `.sourcecraft/ci.yaml` | CI | upstream |
-| `tests/` (112 файлов) | Тесты (framework/ut/issues/exploits/scripts/docs) | **наш слой** |
+| `tests/` (112 файлов) | Тесты (framework/ut/issues/exploits/docs) | **наш слой** |
 | `skynet/` (67 файлов) | Рой-доки и SKILLS | **наш слой** |
 | `.codeassistant/` (44 файла) + `.codeassistantmodes` (итого 45) | Конфиг/скиллы CodeAssist | **наш слой** |
 
@@ -140,9 +140,9 @@ TU в non-alloy-режиме и читаемую историю правок per
 2. **Отладочные конфиги**: `.gdbinit`, `with.gdb`, `tmux.conf`;
 3. **Доки/прочее**: `README.md`, `mdbx-test-options.md`, `LICENCE`.
 
-Кандидат: `tests/scripts/` (скрипты+конфиги), `tests/docs/`
+Кандидат: `tests/` (скрипты+конфиги), `tests/docs/`
 (README.md, mdbx-test-options.md, LICENCE) — либо минимально: скрипты в
-`tests/scripts/`, остальное оставить.
+`tests/`, остальное оставить.
 
 Точки ссылок (полный список для фазы B, проверен):
 - `GNUmakefile:623` `tests/select-tests.sh`; `GNUmakefile:636` build-stochastic
@@ -261,7 +261,7 @@ non-amalgamated `src/man1/`); дистрибутивные `man1/` в `dist` г�
 
 | № | Кандидат | Ценность (для разработки) | Риск (merge/amalgam/upstream) | Решение |
 | --- | --- | --- | --- | --- |
-| C1 | `tests/` → `tests/scripts/` + `tests/docs/` (группировка корня) | средняя (находимость, чистота) | средний (~46 несамоссылочных ссылок в 22 файлах: GNUmakefile, tests/CMakeLists.txt, .sourcecraft/ci.yaml, .github, skynet/*, SKILLS) | **Трогаем**, батч в фазе C; все ссылки в том же коммите |
+| C1 | `tests/` → `tests/` + `tests/docs/` (группировка корня) | средняя (находимость, чистота) | средний (~46 несамоссылочных ссылок в 22 файлах: GNUmakefile, tests/CMakeLists.txt, .sourcecraft/ci.yaml, .github, skynet/*, SKILLS) | **Трогаем**, батч в фазе C; все ссылки в том же коммите |
 | C2 | Пути `tests/issues/` → `tests/ut/issues/` (16 файлов: 9 доков + 6 SKILLS + правка кода `tests/select-tests.sh:104`) | средняя (онбординг, снижение ложных поисков) | нулевой (тексты + удаление недостижимой ветки) | **Трогаем** (батч C2) |
 | C3 | `.gitignore` vs `.codeassistant/` (противоречие) | низкая (гигиена) | нулевой | **Трогаем** (микро-батч) |
 | C4 | Переименование тёзок `src/chk.c`/`src/defrag.c` | низкая (устранение путаницы) | высокая (upstream-паритет, constraint #2; правки 4+ build-файлов, история) | **НЕ трогаем**; опция — ADR владельцу |
@@ -276,7 +276,7 @@ non-amalgamated `src/man1/`); дистрибутивные `man1/` в `dist` г�
 ## 4. Рекомендации для фаз B/C/D
 
 1. **Фаза B** — детальная карта переносов только для C1–C3:
-   - C1: `git mv` скриптов в `tests/scripts/`, доков в `tests/docs/`; полный
+   - C1: `git mv` скриптов в `tests/`, доков в `tests/docs/`; полный
      список ссылок см. §F3 (проверить дополнительно `grep -rn` по всему репо
      на момент исполнения).
    - C2: правки путей `tests/issues/`→`tests/ut/issues/` в 15 текстовых файлах
