@@ -95,6 +95,12 @@ MCP-сервер отдаёт его как **JSON-RPC protocol error (-32000)**
 - `inverted`: term → `set<uint64>` (`DUPSORT|DUPFIXED|INTEGERDUP`).
   Обновление — точечное: `NODUPDATA`-вставка, `mdbx_del(term,id)` удаление,
   при merge — diff старых/новых термов из `_terms` в теле записи.
+- `search()`: BM25-подобное ранжирование (IDF редких терминов поверх
+  композитного score), query-aware; включает структурный слой при совпадении
+  с идентификатором символа/фаcеты (`_structural_hits_locked`).
+- `links_in` (INTEGERKEY): денормализованный счётчик входящих рёбер —
+  обновляется при link/unlink/purge; `_incoming_count` читает его с fallback
+  на скан при отсутствии записи (миграция).
 - `links`: `{sid}\0pred` → `set<oid>`; обратная связь — `{oid}\0back:pred` → sid.
   `graph()` BFS с дедупликацией рёбер (обратные рёбра не дублируются).
   `purge` удаляет все рёбра узла (по субъекту — префиксным диапазоном, по
@@ -102,6 +108,9 @@ MCP-сервер отдаёт его как **JSON-RPC protocol error (-32000)**
 - `simhash`: id → 64-бит хэш; конфликт-дедуп — скан (корпус мал), Hamming ≤ 3.
 - `access`: id → 24 байта `double score + uint64 last_access + uint64 count`.
   Чтения обновляют LRU с rate-limit 60 с (`_bump_access`), `touch()` — принудительно.
+- `test_metrics` / `coverage` / `ci_jobs`: слой тестов и CI, наполняется
+  коллекторами (tools/collect_test_metrics.py) и методами Store;
+  `map_load_batch(replace=True)` инкрементирует поколение карты (canary.y).
 
 ## 6. Персистентность словаря
 

@@ -441,3 +441,34 @@ def test_set_sync_mode_readonly_rejected(store_path):
         assert "read-only" in str(ei.value), ei.value
     finally:
         s.close()
+
+def test_links_in_denormalized_counter(store):
+    """Денормализованный счётчик входящих рёбер обновляется при link/unlink/purge."""
+    from mcp.store import _pack_u64, _unpack_u64
+    seed_vocab(store, [("crypto", "alignment"), ("platform", "android")])
+    store.safe_store("bug:crypto:alignment", "bug", "bug one", 0.5)
+    store.safe_store("fact:platform:android", "fact", "fact one", 0.5)
+    bug_id = store.get_record("bug:crypto:alignment")["_id"]
+    fact_id = store.get_record("fact:platform:android")["_id"]
+
+    def links_in(rid):
+        with store.env.begin(readonly=True) as txn:
+            _, v = txn.get(store.dbi(txn, "links_in"), _pack_u64(rid))
+            return _unpack_u64(v) if v else 0
+
+    assert links_in(fact_id) == 0
+    store.link("bug:crypto:alignment", "caused-by", "fact:platform:android")
+    assert links_in(fact_id) == 1
+    store.unlink("bug:crypto:alignment", "caused-by", "fact:platform:android")
+    assert links_in(fact_id) == 0
+
+
+def test_predicates_are_extensible(store):
+    """Список предикатов не закрыт: любые не-meta ('без : и \\0') валидны."""
+    seed_vocab(store, [("crypto", "alignment"), ("platform", "android")])
+    store.safe_store("bug:crypto:alignment", "bug", "bug one", 0.5)
+    store.safe_store("fact:platform:android", "fact", "fact one", 0.5)
+    r = store.link("bug:crypto:alignment", "covers", "fact:platform:android")
+    assert r["result"] == "linked"
+    r2 = store.link("bug:crypto:alignment", "covers", "fact:platform:android")
+    assert r2["result"] == "exists"

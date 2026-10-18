@@ -28,9 +28,15 @@
 | `sym_aliases` | DEFAULTS | old_symbol_key → new_symbol_key | переименования (жизненный цикл) |
 | `regions` | DEFAULTS | `region:{module}:{n}` → JSON | #if-дерево (1131 регионов) |
 | `uncovered` | DEFAULTS | `uncovered:{module}:{n}` → JSON | uncovered-острова смысла (433) |
+| `links_in` | INTEGERKEY | uint64 id → uint64 count | денормализованный счётчик входящих рёбер (ускоряет score/stats) |
+| `coverage` | DEFAULTS | `coverage:{test_id}` → JSON `{symbols, pct}` | покрытие теста (символы fn:/type:/macro:) |
+| `test_metrics` | DEFAULTS | `test_metrics:{test_id}` → JSON окно истории | длительности/флаки (скользящее окно) |
+| `ci_jobs` | DEFAULTS | `{workflow}/{job}` → JSON | параметры CI-джоб |
 
 Зарезервировано дизайном (REFACTORING-MAP.md), данные появятся с коллекторами:
-`coverage`, `test_metrics`, `ci_jobs`, `probes` — добавляются аддитивно (§1.1).
+`probes` — добавляются аддитивно (§1.1). Реализованы коллекторы:
+`test_metrics` (tools/collect_test_metrics.py, ctest XML/LastTest.log → окно
+длительностей), `coverage` и `ci_jobs` — методы Store + MCP-инструменты.
 
 `mdbx_env_set_option(env, MDBX_opt_max_db, 32)`. Одна write-транзакция на операцию
 (в т.ч. LRU-касания — батчем, см. §8).

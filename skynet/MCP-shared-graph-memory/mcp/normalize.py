@@ -97,6 +97,8 @@ class Normalizer:
     # --- внутренняя нормализация темы -------------------------------------
     def _normalize_topic(self, raw: str) -> str:
         words = [w for w in _words(raw) if w and w not in STOP_WORDS]
+        # токены с цифрами в ТЕМЕ ключа по-прежнему отбрасываются (стабильность
+        # ключа), т.к. версии/даты не должны попадать в канонический адрес
         words = [w for w in words if not _DIGITS.search(w)]  # без версий/дат
         words = words[:3]  # максимум 3 слова
         topic = "-".join(words)
@@ -115,8 +117,15 @@ class Normalizer:
         return topic
 
     # --- публичные операции ------------------------------------------------
-    def normalize(self, raw: str):
-        """Возвращает канонический ключ или бросает MemoryError(invalid)."""
+    def normalize(self, raw: str, register: bool = False):
+        """Возвращает канонический ключ.
+
+        При ``register=True`` незнакомые модуль/тема автоматически добавляются
+        в словарь (in-memory), чтобы не блокировать запись новой темы:
+        дисциплина словаря сохраняется через явный ``vocab_add``, но создание
+        записей о новых темах перестаёт быть ошибкой (важно для работы в
+        потоке глубокого рефакторинга, где темы появляются постоянно).
+        """
         segments = raw.split(":")
         if len(segments) != 3:
             raise invalid(
@@ -135,20 +144,26 @@ class Normalizer:
         module_n = _fold(module).strip().replace("_", "-").replace(" ", "-")
         module_n = re.sub(r"-{2,}", "-", module_n).strip("-")
         if module_n not in self.modules:
-            hints = difflib.get_close_matches(module_n, sorted(self.modules), n=3)
-            hint = " похожие: %s" % ", ".join(hints) if hints else ""
-            raise invalid(
-                "модуль %r отсутствует в словаре%s" % (module_n, hint),
-                "вызовите vocab_add(module=..., topic=...) или используйте существующий модуль",
-            )
+            if register:
+                self.modules.add(module_n)
+            else:
+                hints = difflib.get_close_matches(module_n, sorted(self.modules), n=3)
+                hint = " похожие: %s" % ", ".join(hints) if hints else ""
+                raise invalid(
+                    "модуль %r отсутствует в словаре%s" % (module_n, hint),
+                    "вызовите vocab_add(module=..., topic=...) или используйте существующий модуль",
+                )
         topic_n = self._normalize_topic(topic)
         if topic_n not in self.topics:
-            hints = difflib.get_close_matches(topic_n, sorted(self.topics), n=3)
-            hint = " похожие: %s" % ", ".join(hints) if hints else ""
-            raise invalid(
-                "тема %r отсутствует в словаре%s" % (topic_n, hint),
-                "вызовите vocab_add(module=<mod>, topic=%r)" % topic_n,
-            )
+            if register:
+                self.topics.add(topic_n)
+            else:
+                hints = difflib.get_close_matches(topic_n, sorted(self.topics), n=3)
+                hint = " похожие: %s" % ", ".join(hints) if hints else ""
+                raise invalid(
+                    "тема %r отсутствует в словаре%s" % (topic_n, hint),
+                    "вызовите vocab_add(module=<mod>, topic=%r)" % topic_n,
+                )
         return "%s:%s:%s" % (rtype, module_n, topic_n)
 
     def fuzzy_topics(self, query: str, n: int = 5) -> list:

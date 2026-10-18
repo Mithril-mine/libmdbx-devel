@@ -108,6 +108,12 @@ class Store:
         "sym_aliases": mdbx.DB_DEFAULTS,
         "regions": mdbx.DB_DEFAULTS,   # #if-дерево: region:{module}:{n} -> JSON
         "uncovered": mdbx.DB_DEFAULTS,  # uncovered-острова: uncovered:{module}:{n}
+        "links_in": mdbx.INTEGERKEY,   # денормализованный счётчик входящих рёбер
+        # --- слой тестов/CI (зарезервирован в SCHEMA §1.1, наполняется
+        # коллекторами из ctest/CI-артефактов) ---
+        "coverage": mdbx.DB_DEFAULTS,    # test_id -> JSON {symbols:[fn:...], pct}
+        "test_metrics": mdbx.DB_DEFAULTS,  # тест-кейс -> JSON окно истории
+        "ci_jobs": mdbx.DB_DEFAULTS,     # {workflow}/{job} -> JSON
     }
 
     def __init__(self, path: str, maxdbs: int = 32, max_value_bytes: int = 16 << 20,
@@ -801,14 +807,20 @@ class Store:
         return json.dumps(body, ensure_ascii=False, sort_keys=True).encode("utf-8")
 
     def safe_store(self, raw_key: str, rtype: str, summary: str, importance: float,
-                   date: str = ""):
-        """Атомарная операция сохранения с дедупликацией. Одна write-txn."""
+                   date: str = "", auto_vocab: bool = True):
+        """Атомарная операция сохранения с дедупликацией. Одна write-txn.
+
+        ``auto_vocab`` — разрешить автоматическую регистрацию новой
+        модуля/темы (в памяти и в таблице vocab) вместо ошибки invalid.
+        По умолчанию включено: новые темы в потоке рефакторинга встречаются
+        постоянно, а явный ``vocab_add`` остаётся для канонизации.
+        """
         if rtype not in RECORD_TYPES:
             raise invalid(
                 "тип %r не из допустимого набора" % rtype,
                 "используйте один из: %s" % ", ".join(RECORD_TYPES),
             )
-        key = self.norm.normalize(raw_key)
+        key = self.norm.normalize(raw_key, register=auto_vocab)
         date = date or time.strftime("%Y-%m-%d", time.gmtime())
         try:
             importance = float(importance)
@@ -833,6 +845,17 @@ class Store:
             if dup is not None:
                 return {"result": "conflict", "key": dup}
 
+            # авто-регистрация новых модуля/темы в vocab (persist), чтобы после
+            # перезапуска словарь не потерял тему, появившуюся в потоке работы
+            if auto_vocab:
+                _t, _m, _tm = key.split(":", 2)
+                voc_dbi = self.dbi(txn, "vocab")
+                mkey = b"module:" + _m.encode()
+                if txn.get(voc_dbi, mkey)[1] is None:
+                    txn.put(voc_dbi, mkey, b"{}")
+                if txn.get(voc_dbi, key.encode())[1] is None:
+                    txn.put(voc_dbi, key.encode(), b"{}")
+
             record_id = self.next_id
             self.next_id += 1
             txn.put(self.dbi(txn, "meta"), b"next_id", _pack_u64(self.next_id))
@@ -845,7 +868,13 @@ class Store:
     def _merge(self, txn, key, rtype, summary, importance, date, terms, old_val):
         old = json.loads(old_val.decode())
         old_terms = old.get("_terms", [])
-        record_id = old.get("_id", self.next_id)
+        record_id = old.get("_id")
+        if record_id is None:
+            # старая запись без _id (например, ручной импорт/легаси) — выделяем
+            # новый id из того же sequence, иначе коллизия в общем id-пространстве
+            record_id = self.next_id
+            self.next_id += 1
+            txn.put(self.dbi(txn, "meta"), b"next_id", _pack_u64(self.next_id))
         # история старой версии
         hist_key = "_history:%s:%d" % (key, _now())
         txn.put(self.dbi(txn, "history"), hist_key.encode(), old_val)
@@ -993,6 +1022,15 @@ class Store:
         }
 
     def _incoming_count(self, txn, record_id: int) -> int:
+        """Число входящих рёбер узла.
+
+        Источник — денормализованный счётчик `links_in` (обновляется при
+        link/unlink/purge). Если записи-счётчика нет (старые/мигрированные
+        узлы) — fallback на скан обратных рёбер в links.
+        """
+        rc, packed = txn.get(self.dbi(txn, "links_in"), _pack_u64(record_id))
+        if packed and len(packed) == ID_LEN:
+            return _unpack_u64(packed)
         links_dbi = self.dbi(txn, "links")
         prefix = _pack_u64(record_id) + b"\0" + b"back:"
         with txn.cursor(links_dbi) as cur:
@@ -1004,6 +1042,15 @@ class Store:
                 n += 1
                 rc, key, _ = cur.get(mdbx.CURSOR_NEXT)
             return n
+
+    def _links_in_delta(self, txn, record_id: int, delta: int) -> None:
+        """Денормализованное обновление счётчика входящих рёбер."""
+        li_dbi = self.dbi(txn, "links_in")
+        packed = _pack_u64(record_id)
+        rc, old = txn.get(li_dbi, packed)
+        n = _unpack_u64(old) if old and len(old) == ID_LEN else 0
+        n = max(0, n + delta)
+        txn.put(li_dbi, packed, _pack_u64(n))
 
     def lookup(self, term: str, limit: int = 50):
         """Точный поиск по инвертированному индексу."""
@@ -1044,25 +1091,131 @@ class Store:
                 rc, _, dval = cur.get(mdbx.CURSOR_NEXT_DUP)
         return out
 
-    def search(self, query: str, limit: int = 5):
-        """Поиск по термам с пересечением постинг-списков и ранжированием."""
-        limit = max(1, min(int(limit), 10))
-        keys = self.lookup(query, limit=1000)
-        if not keys:
-            return []
+    def _structural_hits_locked(self, txn, query: str) -> list:
+        """Записи структурного слоя по запросу (внутри активной txn).
+
+        Срабатывает на явные префиксы идентификаторов (fn:/type:/macro:/
+        group:/region:/uncovered:) и на совпадение последнего сегмента
+        fq-имени символа с термом запроса (фасетный поиск «по коду»).
+        """
+        out = []
+        q = query.strip().lower()
+        prefixes = ("fn:", "type:", "macro:", "group:", "region:", "uncovered:")
+        sym_dbi = self.dbi(txn, "symbols")
+        gr_dbi = self.dbi(txn, "groups")
+        seen = set()
+        for p in prefixes:
+            if not q.startswith(p):
+                continue
+            with txn.cursor(sym_dbi) as cur:
+                rc, k, v = cur.get(mdbx.CURSOR_SET_RANGE, q.encode())
+                while rc == mdbx.RC_SUCCESS:
+                    key = k.decode("utf-8", "replace")
+                    if not key.startswith(q):
+                        break
+                    if key not in seen:
+                        seen.add(key)
+                        body = json.loads(v) if v else {}
+                        out.append({"kind": "symbol", "key": key,
+                                    "score": 1.0, "body": body})
+                    rc, k, v = cur.get(mdbx.CURSOR_NEXT)
+        if not out:
+            words = idx.tokenize(q)
+            with txn.cursor(sym_dbi) as cur:
+                rc, k, v = cur.get(mdbx.CURSOR_FIRST)
+                while rc == mdbx.RC_SUCCESS:
+                    key = k.decode("utf-8", "replace")
+                    tail = key.rpartition(":")[2]
+                    if any(len(w) > 2 and w in tail for w in words):
+                        if key not in seen:
+                            seen.add(key)
+                            out.append({"kind": "symbol", "key": key,
+                                        "score": 0.8,
+                                        "body": json.loads(v) if v else {}})
+                            if len(out) >= 8:
+                                break
+                    rc, k, v = cur.get(mdbx.CURSOR_NEXT)
+        if q.startswith("group:"):
+            with txn.cursor(gr_dbi) as cur:
+                rc, k, _ = cur.get(mdbx.CURSOR_SET_RANGE, q.encode())
+                while rc == mdbx.RC_SUCCESS:
+                    key = k.decode("utf-8", "replace")
+                    if not key.startswith(q):
+                        break
+                    if key not in seen:
+                        seen.add(key)
+                        out.append({"kind": "group", "key": key,
+                                    "score": 0.8, "body": {}})
+                    rc, k, _ = cur.get(mdbx.CURSOR_NEXT)
+        return out[:8]
+
+    def search(self, query: str, limit: int = 5, include_structural: bool = True):
+        """Поиск по термам с query-aware ранжированием.
+
+        Ранжирование BM25-подобное: для каждого терма запроса учитывается
+        IDF (редкие термины весомее частых) в дополнение к композитному
+        score записи (важность/recency/access/links). Это существенно лучше
+        простого пересечения постинг-списков: возрастает релевантность
+        узкоспециализированных терминов проекта (pnl, bigfoot, rkl, troika).
+
+        ``include_structural`` — дополнительно включать в выдачу записи
+        структурного слоя (symbols/groups), если запрос похож на идентификатор
+        символа/фаcеты. Даёт единую точку входа «код + знания».
+        Возвращает список, содержащий записи знаний (kind="record") и при
+        совпадении — элементы структурного слоя (kind="symbol"/"group").
+        """
+        limit = max(1, min(int(limit), 20))
         rows = []
         with self.env.begin(readonly=True) as txn:
-            rec_dbi = self.dbi(txn, "records")
-            for k in keys:
-                rc, val = txn.get(rec_dbi, k.encode())
-                if val is None:
-                    continue
-                body = json.loads(val.decode())
-                rows.append(self._decorate(txn, k, body))
-        rows.sort(key=lambda r: r.get("score", 0.0), reverse=True)
+            if include_structural:
+                rows.extend(self._structural_hits_locked(txn, query))
+            words = idx.tokenize(query)
+            if words:
+                inv_dbi = self.dbi(txn, "inverted")
+                rec_dbi = self.dbi(txn, "records")
+                # число документов считаем в этой же txn (вложенный read-txn
+                # в одном потоке запрещён: MDBX_BAD_RSLOT)
+                n_docs = 0
+                with txn.cursor(rec_dbi) as cur:
+                    rc, _, _ = cur.get(mdbx.CURSOR_FIRST)
+                    while rc == mdbx.RC_SUCCESS:
+                        n_docs += 1
+                        rc, _, _ = cur.get(mdbx.CURSOR_NEXT)
+                postings = {}
+                for w in words:
+                    postings[w] = self._posting(txn, inv_dbi, w)
+                id_sets = [s for s in postings.values() if s]
+                if id_sets:
+                    common = set(id_sets[0])
+                    for s in id_sets[1:]:
+                        common &= set(s)
+                    for rec_id in common:
+                        _, k = txn.get(self.dbi(txn, "id2key"), _pack_u64(rec_id))
+                        if k is None:
+                            continue
+                        key = k.decode("utf-8", "replace")
+                        rc, val = txn.get(rec_dbi, key.encode())
+                        if val is None:
+                            continue
+                        body = json.loads(val.decode())
+                        row = self._decorate(txn, key, body)
+                        # запросная релевантность: сумма IDF по совпавшим термам
+                        idf_sum = 0.0
+                        for w, plist in postings.items():
+                            if rec_id in plist:
+                                df = len(plist)
+                                idf_sum += math.log(1.0 + (n_docs - df + 0.5) / (df + 0.5))
+                        row["query_score"] = round(row.get("score", 0.0) * (0.5 + idf_sum), 4)
+                        row["bm25"] = round(idf_sum, 4)
+                        row["kind"] = "record"
+                        rows.append(row)
+        # sort и LRU-касания — ВНЕ read-txn: флэш касаний пишет, а параллельная
+        # read-транзакция в том же потоке дала бы MDBX_TXN_OVERLAPPING
+        rows.sort(key=lambda r: r.get("query_score", r.get("score", 0.0)), reverse=True)
         top = rows[:limit]
         for r in top:
-            self._bump_access(r["key"])
+            if r.get("kind") == "record":
+                self._bump_access(r["key"])
         self._flush_touches()
         return top
 
@@ -1108,6 +1261,10 @@ class Store:
             with txn.cursor(links_dbi) as cur:
                 added_f = cur.put_nodupe(fwd, _pack_u64(oid))
                 cur.put_nodupe(back, _pack_u64(sid))
+            if added_f:
+                # денормализованный счётчик входящих рёбер у объекта (и его
+                # обратного ребра)
+                self._links_in_delta(txn, oid, +1)
             return {"result": "linked" if added_f else "exists"}
 
     def unlink(self, subject: str, predicate: str, object_: str) -> dict:
@@ -1127,6 +1284,8 @@ class Store:
             back = _pack_u64(oid) + b"\0" + b"back:" + predicate.encode()
             r1 = txn.delete(links_dbi, fwd, _pack_u64(oid))
             txn.delete(links_dbi, back, _pack_u64(sid))
+            if r1:
+                self._links_in_delta(txn, oid, -1)
             return {"result": "unlinked" if r1 else "notfound"}
 
     def graph(self, key: str, depth: int = 1):
@@ -1361,17 +1520,19 @@ class Store:
         # удаляем все рёбра, где субъект = rec_id
         prefix = idb + b"\0"
         with txn.cursor(links_dbi) as cur:
-            rc, lk, _ = cur.get(mdbx.CURSOR_SET_RANGE, prefix)
+            rc, lk, lv = cur.get(mdbx.CURSOR_SET_RANGE, prefix)
             while rc == mdbx.RC_SUCCESS:
                 if not lk.startswith(prefix):
                     break
+                self._links_in_delta(txn, _unpack_u64(lv), -1)
                 cur.delete()
-                rc, lk, _ = cur.get(mdbx.CURSOR_SET_RANGE, prefix)
+                rc, lk, lv = cur.get(mdbx.CURSOR_SET_RANGE, prefix)
         # удаляем рёбра, где объект = rec_id (обратные/прямые)
         with txn.cursor(links_dbi) as cur:
             rc, lk, lv = cur.get(mdbx.CURSOR_FIRST)
             while rc == mdbx.RC_SUCCESS:
                 if _unpack_u64(lv) == rec_id:
+                    self._links_in_delta(txn, _unpack_u64(lk[:8]), -1)
                     cur.delete()
                 rc, lk, lv = cur.get(mdbx.CURSOR_NEXT)
 
@@ -1558,6 +1719,11 @@ class Store:
                         while rc == mdbx.RC_SUCCESS:
                             cur.delete()
                             rc, _, _ = cur.get(mdbx.CURSOR_NEXT)
+                # поколение карты: инкрементируем canary.y при replace
+                canary = txn.canary_get()
+                txn.canary_put(x=canary.get("x", 0),
+                               y=int(canary.get("y", 0)) + 1,
+                               z=canary.get("z", 0))
             sid_dbi = self._dbi["sym_ids"]
             id2key_dbi = self._dbi["sym_id2key"]
             for i, (key, body) in enumerate(sorted(symbols.items())):
@@ -1780,6 +1946,128 @@ class Store:
         txn.put(sid_dbi, key.encode(), _pack_u64(nid))
         txn.put(self.dbi(txn, "sym_id2key"), _pack_u64(nid), key.encode())
         return nid
+
+    # --- слой тестов/CI: test_metrics / coverage / ci_jobs -------------------
+    def test_metrics_insert(self, test_id: str, duration_ms: float,
+                            labels: list = None, timeout_sec: int = 0,
+                            window: int = 16) -> dict:
+        """Обновляет окно истории длительностей тест-кейса (additive).
+
+        Хранит не чистый снапшот, а скользящее окно: last/min/max/p90,
+        число прогонов и счётчик флаков (runs > 1 и резкое удлинение).
+        Наполняется коллектором ``tools/collect_test_metrics.py`` из ctest XML.
+        """
+        key = "test_metrics:" + test_id
+        with self._begin_write() as txn:
+            rec_dbi = self.dbi(txn, "test_metrics")
+            rc, old_val = txn.get(rec_dbi, key.encode())
+            old = json.loads(old_val.decode()) if old_val else {}
+            runs = old.get("runs", 0)
+            vals = list(old.get("history", []))[-window:]
+            old_max = max(vals) if vals else 0.0
+            vals.append(duration_ms)
+            vals = vals[-window:]
+            last = vals[-1]
+            mn = min(vals)
+            mx = max(vals)
+            sorted_v = sorted(vals)
+            p90 = sorted_v[int(len(sorted_v) * 0.9) - 1] if vals else 0.0
+            flaky = old.get("flaky_count", 0)
+            # резкое удлинение против истории (> 2x старого max при min 3 прогона)
+            if len(vals) >= 4 and old_max > 0 and last > max(2.0 * old_max, 10.0):
+                flaky += 1
+            body = {
+                "last_ms": round(last, 1),
+                "min_ms": round(mn, 1),
+                "max_ms": round(mx, 1),
+                "p90_ms": round(p90, 1),
+                "runs": runs + 1,
+                "flaky_count": flaky,
+                "timeout_sec": timeout_sec,
+                "labels": labels or old.get("labels", []),
+                "history": vals,
+            }
+            txn.put(rec_dbi, key.encode(),
+                    json.dumps(body, ensure_ascii=False).encode())
+            return {"test": test_id, "body": body}
+
+    def test_metrics_get(self, test_id: str) -> dict:
+        with self.env.begin(readonly=True) as txn:
+            rc, val = txn.get(self.dbi(txn, "test_metrics"),
+                              ("test_metrics:" + test_id).encode())
+            if val is None:
+                return {}
+            return json.loads(val.decode())
+
+    def test_metrics_all(self, prefix: str = "", limit: int = None) -> list:
+        out = []
+        with self.env.begin(readonly=True) as txn:
+            dbi = self.dbi(txn, "test_metrics")
+            with txn.cursor(dbi) as cur:
+                rc, k, v = cur.get(mdbx.CURSOR_FIRST)
+                while rc == mdbx.RC_SUCCESS:
+                    key = k.decode("utf-8", "replace")
+                    if key.startswith("test_metrics:" + prefix):
+                        out.append({"test": key[len("test_metrics:"):],
+                                    "body": json.loads(v)})
+                        if limit and len(out) >= limit:
+                            break
+                    rc, k, v = cur.get(mdbx.CURSOR_NEXT)
+        return out
+
+    def coverage_insert(self, test_id: str, symbols: list, pct: float = 0.0) -> dict:
+        """Фиксирует покрытие теста: набор символов (fn:/type:/macro:)."""
+        with self._begin_write() as txn:
+            key = "coverage:" + test_id
+            body = {"test_id": test_id, "symbols": symbols,
+                    "pct": round(pct, 1)}
+            txn.put(self.dbi(txn, "coverage"), key.encode(),
+                    json.dumps(body, ensure_ascii=False).encode())
+            return {"test": test_id, "symbols": len(symbols)}
+
+    def coverage_get(self, test_id: str) -> dict:
+        with self.env.begin(readonly=True) as txn:
+            rc, val = txn.get(self.dbi(txn, "coverage"),
+                              ("coverage:" + test_id).encode())
+            if val is None:
+                return {}
+            return json.loads(val.decode())
+
+    def coverage_all(self, limit: int = None) -> list:
+        out = []
+        with self.env.begin(readonly=True) as txn:
+            dbi = self.dbi(txn, "coverage")
+            with txn.cursor(dbi) as cur:
+                rc, k, v = cur.get(mdbx.CURSOR_FIRST)
+                while rc == mdbx.RC_SUCCESS:
+                    out.append({"test": k.decode("utf-8", "replace"),
+                                "body": json.loads(v)})
+                    if limit and len(out) >= limit:
+                        break
+                    rc, k, v = cur.get(mdbx.CURSOR_NEXT)
+        return out
+
+    def ci_jobs_insert(self, job_key: str, body: dict) -> dict:
+        """Фиксирует параметры CI-джобы ({workflow}/{job})."""
+        with self._begin_write() as txn:
+            txn.put(self.dbi(txn, "ci_jobs"), job_key.encode(),
+                    json.dumps(body, ensure_ascii=False).encode())
+            return {"job": job_key}
+
+    def ci_jobs_all(self, prefix: str = "", limit: int = None) -> list:
+        out = []
+        with self.env.begin(readonly=True) as txn:
+            dbi = self.dbi(txn, "ci_jobs")
+            with txn.cursor(dbi) as cur:
+                rc, k, v = cur.get(mdbx.CURSOR_FIRST)
+                while rc == mdbx.RC_SUCCESS:
+                    key = k.decode("utf-8", "replace")
+                    if key.startswith(prefix):
+                        out.append({"job": key, "body": json.loads(v)})
+                        if limit and len(out) >= limit:
+                            break
+                    rc, k, v = cur.get(mdbx.CURSOR_NEXT)
+        return out
 
     def stats(self) -> dict:
         by_type = {}
