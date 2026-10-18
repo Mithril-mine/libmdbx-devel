@@ -35,8 +35,7 @@ TEST(issue_gh0065, writemap_nosync_commits_do_not_flush_whole_mapping) {
   MDBX_env *env = nullptr;
   ASSERT_EQ(MDBX_SUCCESS, mdbx_env_create(&env));
   ASSERT_EQ(MDBX_SUCCESS, mdbx_env_set_geometry(env, -1, -1, 64 << 20, -1, -1, -1));
-  ASSERT_EQ(MDBX_SUCCESS,
-            mdbx_env_open(env, testdb, MDBX_NOSUBDIR | MDBX_WRITEMAP | MDBX_SAFE_NOSYNC, 0644));
+  ASSERT_EQ(MDBX_SUCCESS, mdbx_env_open(env, testdb, MDBX_NOSUBDIR | MDBX_WRITEMAP | MDBX_SAFE_NOSYNC, 0644));
 
   MDBX_envinfo ei;
   std::memset(&ei, 0, sizeof(ei));

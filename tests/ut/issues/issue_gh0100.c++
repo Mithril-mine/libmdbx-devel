@@ -45,8 +45,7 @@ TEST(issue_gh0100, experimental_filesystem_selector) {
    * the detection defines, not the misspelled old name. A wrong selection
    * either fails the build (C++17) or silently falls back mdbx::path to a
    * string (C++14), so a runtime probe cannot fail; compile is the test. */
-  static_assert(MDBX_USING_CXX_EXPERIMENTAL_FILESYSTEM == 0 ||
-                    MDBX_USING_CXX_EXPERIMENTAL_FILESYSTEM == 1,
+  static_assert(MDBX_USING_CXX_EXPERIMENTAL_FILESYSTEM == 0 || MDBX_USING_CXX_EXPERIMENTAL_FILESYSTEM == 1,
                 "the experimental filesystem selector must be a boolean");
   /* The path type exists and is a filesystem path or a string, whichever the
    * configuration chose; the point is that it must follow the renamed macro. */

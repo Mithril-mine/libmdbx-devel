@@ -34,8 +34,11 @@ TEST(ut_env_params, geometry_value_types) {
   EXPECT_EQ(g.pagesize, 4096);
 
   geometry g2;
-  g2.set_size_lower(64 << 20).set_size_upper(1024ull << 20).set_growth_step(16ull << 20)
-      .set_shrink_threshold(128ull << 20).set_pagesize(16384);
+  g2.set_size_lower(64 << 20)
+      .set_size_upper(1024ull << 20)
+      .set_growth_step(16ull << 20)
+      .set_shrink_threshold(128ull << 20)
+      .set_pagesize(16384);
   EXPECT_EQ(g2.size_lower, 64 << 20);
   EXPECT_EQ(g2.size_upper, 1024ull << 20);
   EXPECT_EQ(g2.growth_step, 16ull << 20);
@@ -66,8 +69,9 @@ TEST(ut_env_params, geometry_value_types) {
 }
 
 TEST(ut_env_params, mode_and_durability_enums) {
-    EXPECT_EQ(static_cast<unsigned>(mdbx::env::mode::readonly), 0u);
-  EXPECT_EQ(static_cast<unsigned>(mdbx::env::mode::write_file_io), static_cast<unsigned>(mdbx::env::mode::nested_transactions));
+  EXPECT_EQ(static_cast<unsigned>(mdbx::env::mode::readonly), 0u);
+  EXPECT_EQ(static_cast<unsigned>(mdbx::env::mode::write_file_io),
+            static_cast<unsigned>(mdbx::env::mode::nested_transactions));
   EXPECT_NE(static_cast<unsigned>(mdbx::env::mode::write_mapped_io), static_cast<unsigned>(mdbx::env::mode::readonly));
   EXPECT_EQ(static_cast<unsigned>(mdbx::env::durability::robust_synchronous), 0u);
   EXPECT_NE(static_cast<unsigned>(mdbx::env::durability::half_synchronous_weak_last),
@@ -75,8 +79,8 @@ TEST(ut_env_params, mode_and_durability_enums) {
 }
 
 TEST(ut_env_params, reclaiming_and_operate_options) {
-  using mdbx::reclaiming_options;
   using mdbx::operate_options;
+  using mdbx::reclaiming_options;
 
   reclaiming_options r;
   EXPECT_FALSE(r.lifo);
@@ -92,8 +96,12 @@ TEST(ut_env_params, reclaiming_and_operate_options) {
   EXPECT_FALSE(o.disable_readahead);
   EXPECT_FALSE(o.disable_clear_memory);
   EXPECT_FALSE(o.enable_validation);
-  o.set_no_sticky_threads().set_nested_transactions().set_exclusive().set_disable_readahead()
-      .set_disable_clear_memory().set_enable_validation();
+  o.set_no_sticky_threads()
+      .set_nested_transactions()
+      .set_exclusive()
+      .set_disable_readahead()
+      .set_disable_clear_memory()
+      .set_enable_validation();
   EXPECT_TRUE(o.no_sticky_threads);
   EXPECT_TRUE(o.nested_transactions);
   EXPECT_TRUE(o.exclusive);
@@ -103,12 +111,17 @@ TEST(ut_env_params, reclaiming_and_operate_options) {
 }
 
 TEST(ut_env_params, operate_and_create_parameters_fluent) {
-  using mdbx::operate_parameters;
   using mdbx::create_parameters;
+  using mdbx::operate_parameters;
 
-  const operate_parameters p = operate_parameters().set_max_maps(8).set_max_readers(16)
-                                   .set_mode(mdbx::env::mode::write_file_io).set_durability(mdbx::env::durability::lazy_weak_tail)
-                                   .lifo().no_sticky_threads().exclusive();
+  const operate_parameters p = operate_parameters()
+                                   .set_max_maps(8)
+                                   .set_max_readers(16)
+                                   .set_mode(mdbx::env::mode::write_file_io)
+                                   .set_durability(mdbx::env::durability::lazy_weak_tail)
+                                   .lifo()
+                                   .no_sticky_threads()
+                                   .exclusive();
   EXPECT_EQ(p.max_maps, 8u);
   EXPECT_EQ(p.max_readers, 16u);
   EXPECT_EQ(p.mode, mdbx::env::mode::write_file_io);
@@ -135,10 +148,13 @@ TEST(ut_env_params, operate_and_create_parameters_fluent) {
 TEST(ut_env_params, env_roundtrip) {
   const mdbx::path testdb = "test-env-params";
   mdbx::env::remove(testdb);
-  mdbx::env_managed env(
-      testdb, mdbx::create_parameters(),
-      mdbx::operate_parameters().set_max_maps(8).write_file_io().half_synchronous_weak_last().lifo()
-          .no_sticky_threads());
+  mdbx::env_managed env(testdb, mdbx::create_parameters(),
+                        mdbx::operate_parameters()
+                            .set_max_maps(8)
+                            .write_file_io()
+                            .half_synchronous_weak_last()
+                            .lifo()
+                            .no_sticky_threads());
   EXPECT_EQ(env.get_mode(), mdbx::env::mode::write_file_io);
   EXPECT_EQ(env.get_durability(), mdbx::env::durability::half_synchronous_weak_last);
   EXPECT_TRUE(env.get_reclaiming().lifo);

@@ -23,7 +23,7 @@ TEST(issue_gh0092, commit_abort_with_live_child_is_rejected) {
   } catch (const mdbx::error &) {
   }
   mdbx::env_managed env(testdb, mdbx::env_managed::create_parameters(),
-                       mdbx::env::operate_parameters(4).nested_transactions(true));
+                        mdbx::env::operate_parameters(4).nested_transactions(true));
 
   auto parent = env.start_write();
   auto map = parent.create_map("t");

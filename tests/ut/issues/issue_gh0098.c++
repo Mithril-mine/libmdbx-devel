@@ -35,7 +35,7 @@ TEST(issue_gh0098, get_equal_or_great_exact_on_multimap) {
   /* The key must compare equal against the returned key, so an exact match on
    * a multimap is reported as such even though the C call needs both key and
    * value to match. */
-auto r = txn.get_equal_or_great(plain, mdbx::slice("b"));
+  auto r = txn.get_equal_or_great(plain, mdbx::slice("b"));
   EXPECT_TRUE(r.done) << "plain exact key must be found and reported exact";
   EXPECT_EQ(0, memcmp(r.key.data(), "b", 1)) << "plain exact key must be found";
 
@@ -74,8 +74,10 @@ TEST(issue_gh0098, scan_and_batch_on_empty_and_end) {
   mdbx::txn_managed rtxn = env.start_read();
   mdbx::cursor_managed c = rtxn.open_cursor(empty);
   bool called = false;
-  EXPECT_FALSE(c.fullscan([&](const mdbx::pair &) { called = true; return true; }))
-      << "fullscan() on an empty table must return false";
+  EXPECT_FALSE(c.fullscan([&](const mdbx::pair &) {
+    called = true;
+    return true;
+  })) << "fullscan() on an empty table must return false";
   EXPECT_FALSE(called);
 
   /* get_batch() on an empty table and after the last chunk must return an

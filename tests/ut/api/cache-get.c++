@@ -30,7 +30,7 @@ static std::string to_std_string(const mdbx::slice &s) {
 
 TEST(ut_cache_get, cache_entry_type) {
   mdbx::cache_entry entry;
-  EXPECT_FALSE(entry); // freshly initialized: no confirmed result
+  EXPECT_FALSE(entry);           // freshly initialized: no confirmed result
   EXPECT_TRUE(entry.notfound()); // offset == 0 is the "not found" marker
 
   mdbx::cache_entry copy(entry);

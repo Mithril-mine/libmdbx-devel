@@ -75,9 +75,8 @@ TEST(issue_gh0106, rename_after_aborted_write) {
     ASSERT_EQ(MDBX_SUCCESS, mdbx_dbi_open(rtxn, "u", MDBX_DB_DEFAULTS, &u));
     MDBX_stat st = {};
     ASSERT_EQ(MDBX_SUCCESS, mdbx_dbi_stat(rtxn, u, &st, sizeof(st)));
-    EXPECT_EQ((uint64_t)10, st.ms_entries)
-        << "the renamed table must contain the committed records, not the stale "
-           "record of the aborted transaction";
+    EXPECT_EQ((uint64_t)10, st.ms_entries) << "the renamed table must contain the committed records, not the stale "
+                                              "record of the aborted transaction";
 
     MDBX_cursor *cur = nullptr;
     ASSERT_EQ(MDBX_SUCCESS, mdbx_cursor_open(rtxn, u, &cur));

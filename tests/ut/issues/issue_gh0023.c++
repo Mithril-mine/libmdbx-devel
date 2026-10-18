@@ -1,6 +1,6 @@
 #include "mdbx.h++"
-#include <gtest/gtest.h>
 #include <cstdio>
+#include <gtest/gtest.h>
 
 TEST(issue_gh0023, all) {
   mdbx::path testdb = "issue_gh0023";

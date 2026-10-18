@@ -19,13 +19,13 @@
 /// \author Леонид Юрьев aka Leonid Yuriev <leo@yuriev.ru>
 /// \date 2015-2026
 
-#include "mdbx.h++"
-#include <gtest/gtest.h>
 #include "../probe-ctl.h"
+#include "mdbx.h++"
 #include <algorithm>
 #include <chrono>
 #include <cstdlib>
 #include <cstring>
+#include <gtest/gtest.h>
 #include <iostream>
 #include <iterator>
 #include <map>
@@ -160,8 +160,8 @@ TEST_P(DupfixMultiple, ordering) {
       {13, 3, 4}, {10, 0, 1}, {12, 2, 3}, {15, 5, 6}, {14, 4, 5}, {11, 1, 2}, {16, 6, 7},
   };
   for (const auto &b : batches)
-    EXPECT_EQ(b.count, txn.put_multiple_samelength(map, buffer::key_from_u64(b.key), array + b.offset, b.count,
-                                                   mdbx::upsert));
+    EXPECT_EQ(b.count,
+              txn.put_multiple_samelength(map, buffer::key_from_u64(b.key), array + b.offset, b.count, mdbx::upsert));
   txn.commit();
 
   /* Verify against the reference model instead of a hand-written chain. */
@@ -208,8 +208,8 @@ TEST_P(DupfixMultiple, batch_read) {
     std::vector<uint64_t> values;
     for (uint64_t v = 0; v < per_page * 5 / 2 + 1; ++v)
       values.push_back(k * 100000 + v);
-    EXPECT_EQ(values.size(), txn.put_multiple_samelength(map, buffer::key_from_u64(k), values.data(), values.size(),
-                                                         mdbx::upsert));
+    EXPECT_EQ(values.size(),
+              txn.put_multiple_samelength(map, buffer::key_from_u64(k), values.data(), values.size(), mdbx::upsert));
     expected[k] = std::set<uint64_t>(values.begin(), values.end());
   }
   txn.commit();
@@ -330,14 +330,14 @@ TEST_P(DupfixMultiple, multiple_put) {
   auto txn2 = env.start_write();
   auto cursor = txn2.open_cursor(map);
   static const uint64_t more[] = {21, 23, 29};
-  EXPECT_EQ(std::size(more), cursor.put_multiple_samelength(buffer::key_from_u64(2), more, std::size(more),
-                                                            mdbx::upsert));
+  EXPECT_EQ(std::size(more),
+            cursor.put_multiple_samelength(buffer::key_from_u64(2), more, std::size(more), mdbx::upsert));
 
   /* update (CURRENT) via a cursor deletes just the CURRENT dup and inserts
    * the batch next to the remaining ones. */
   static const uint64_t replacement[] = {100, 200};
-  EXPECT_EQ(std::size(replacement), cursor.put_multiple_samelength(buffer::key_from_u64(2), replacement,
-                                                                   std::size(replacement), mdbx::update));
+  EXPECT_EQ(std::size(replacement),
+            cursor.put_multiple_samelength(buffer::key_from_u64(2), replacement, std::size(replacement), mdbx::update));
   txn2.commit();
   expected[2] = {7, 9, 11, 13, 21, 23, 100, 200};
 
@@ -345,9 +345,9 @@ TEST_P(DupfixMultiple, multiple_put) {
   auto txn3 = env.start_write();
   EXPECT_EQ(std::size(replacement), txn3.put_multiple_samelength(map, buffer::key_from_u64(2), replacement,
                                                                  std::size(replacement), mdbx::update));
-  EXPECT_THROW(txn3.put_multiple_samelength(map, buffer::key_from_u64(999), replacement, std::size(replacement),
-                                            mdbx::update),
-               mdbx::not_found)
+  EXPECT_THROW(
+      txn3.put_multiple_samelength(map, buffer::key_from_u64(999), replacement, std::size(replacement), mdbx::update),
+      mdbx::not_found)
       << "update of an absent key must fail";
   txn3.commit();
   expected[2] = {100, 200};
@@ -359,10 +359,10 @@ TEST_P(DupfixMultiple, multiple_put) {
   static const payload15 payloads[] = {{1, 2}, {3, 4}};
   auto txn4 = env.start_write();
   auto fix15 = txn4.create_map("fix15", mdbx::key_mode::usual, mdbx::value_mode::multi_samelength);
-  EXPECT_EQ(size_t(2), txn4.put_multiple_samelength(fix15, mdbx::slice("k1"), payloads, std::size(payloads),
-                                                    mdbx::upsert));
-  EXPECT_EQ(size_t(2), txn4.put_multiple_samelength(fix15, mdbx::slice("k2"), payloads, std::size(payloads),
-                                                    mdbx::upsert));
+  EXPECT_EQ(size_t(2),
+            txn4.put_multiple_samelength(fix15, mdbx::slice("k1"), payloads, std::size(payloads), mdbx::upsert));
+  EXPECT_EQ(size_t(2),
+            txn4.put_multiple_samelength(fix15, mdbx::slice("k2"), payloads, std::size(payloads), mdbx::upsert));
   txn4.commit();
 
   auto read = env.start_read();

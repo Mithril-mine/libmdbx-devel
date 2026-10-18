@@ -2,12 +2,12 @@
  * mixed commit/abort at each level, plus RO reset/renew/park/unpark cycles.
  * Non-writemap so nested txns are allowed. */
 #include "mdbx.h++"
-#include <gtest/gtest.h>
 #include <chrono>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
 #include <exception>
+#include <gtest/gtest.h>
 
 static MDBX_dbi dbi;
 static unsigned r;

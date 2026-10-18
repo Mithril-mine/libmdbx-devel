@@ -67,7 +67,7 @@ TEST(issue_gh0071, dump_f_does_not_truncate_on_usage_error) {
   /* The natural typo: `-f` swallows the database path, leaving none. */
   EXPECT_NE(run_tool({dump_tool, "-f", dbname}), 0) << "a mistyped `-f` invocation must fail";
 
-/* A correct invocation must still dump the database intact. */
+  /* A correct invocation must still dump the database intact. */
   ASSERT_EQ(run_tool({dump_tool, "-p", "-f", outname, dbname}), 0);
 
   bool saw_key = false, saw_trailer = false;

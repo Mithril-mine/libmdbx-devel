@@ -45,8 +45,7 @@ static bool create_base_db(const std::string &testdb) {
   MDBX_env *env = nullptr;
   MDBX_txn *txn = nullptr;
   MDBX_dbi dbi = 0;
-  bool ok = mdbx_env_create(&env) == MDBX_SUCCESS &&
-            mdbx_env_set_maxdbs(env, 1) == MDBX_SUCCESS &&
+  bool ok = mdbx_env_create(&env) == MDBX_SUCCESS && mdbx_env_set_maxdbs(env, 1) == MDBX_SUCCESS &&
             mdbx_env_set_geometry(env, -1, -1, -1, -1, -1, pagesize) == MDBX_SUCCESS &&
             mdbx_env_open(env, testdb.c_str(), MDBX_NOSUBDIR, 0644) == MDBX_SUCCESS &&
             mdbx_txn_begin(env, nullptr, MDBX_TXN_READWRITE, &txn) == MDBX_SUCCESS &&

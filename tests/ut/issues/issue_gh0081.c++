@@ -59,8 +59,7 @@ TEST(issue_gh0081, poisoned_cached_oldest_reclamped) {
   ASSERT_EQ(MDBX_SUCCESS, mdbx_env_set_maxdbs(env, 4));
   ASSERT_EQ(MDBX_SUCCESS, mdbx_env_set_maxreaders(env, 8));
   ASSERT_EQ(MDBX_SUCCESS, mdbx_env_set_geometry(env, -1, -1, -1, -1, -1, pagesize));
-  ASSERT_EQ(MDBX_SUCCESS, mdbx_env_open(env, testdb.c_str(), MDBX_NOSUBDIR, 0644))
-      << "the base environment must open";
+  ASSERT_EQ(MDBX_SUCCESS, mdbx_env_open(env, testdb.c_str(), MDBX_NOSUBDIR, 0644)) << "the base environment must open";
 
   /* One committed write transaction so the steady snapshot is sane. */
   MDBX_dbi dbi;
@@ -91,8 +90,7 @@ TEST(issue_gh0081, poisoned_cached_oldest_reclamped) {
     std::fstream f(lck_path, std::ios::in | std::ios::out | std::ios::binary);
     ASSERT_TRUE(f.is_open()) << "must be able to open the lock file";
     write_raw(f, static_cast<std::streamoff>(oldest_off), &poisoned, sizeof(poisoned));
-    write_raw(f, static_cast<std::streamoff>(flag_off), &nothing_changed_signature,
-              sizeof(nothing_changed_signature));
+    write_raw(f, static_cast<std::streamoff>(flag_off), &nothing_changed_signature, sizeof(nothing_changed_signature));
     f.flush();
     f.close();
   }

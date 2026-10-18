@@ -90,8 +90,7 @@ env_managed::create_parameters &env_managed::create_parameters::set_geometry(con
 }
 
 MDBX_CXX14_CONSTEXPR
-env_managed::create_parameters &
-env_managed::create_parameters::set_file_mode_bits(mdbx_mode_t value) noexcept {
+env_managed::create_parameters &env_managed::create_parameters::set_file_mode_bits(mdbx_mode_t value) noexcept {
   file_mode_bits = value;
   return *this;
 }
@@ -742,9 +741,8 @@ inline env::defrag_result env::defrag(VISITOR &visitor, size_t defrag_atleast, s
   };
   defrag_thunk thunk(visitor);
   defrag_result result;
-  const int rc =
-      ::mdbx_env_defrag(handle_, defrag_atleast, time_atleast_dot16, defrag_enough, time_limit_dot16,
-                        acceptable_backlash, preferred_batch, thunk.cb, &thunk, &result);
+  const int rc = ::mdbx_env_defrag(handle_, defrag_atleast, time_atleast_dot16, defrag_enough, time_limit_dot16,
+                                   acceptable_backlash, preferred_batch, thunk.cb, &thunk, &result);
   thunk.rethrow_captured();
   if (rc != MDBX_SUCCESS && rc != MDBX_RESULT_TRUE && rc != MDBX_LAGGARD_READER)
     error::success_or_throw(rc);

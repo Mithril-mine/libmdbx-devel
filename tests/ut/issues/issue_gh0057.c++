@@ -61,8 +61,8 @@ TEST(issue_gh0057, node_offset_below_upper_rejected) {
   f.read(reinterpret_cast<char *>(buf.data()), std::streamsize(buf.size()));
   ASSERT_EQ(f.gcount(), std::streamsize(buf.size()));
 
-  constexpr size_t PAGEHDRSZ = 20;         /* offsetof(page_t, entries), non-dupfix pages */
-  constexpr uint16_t P_LEAF = 0x02;        /* page_type enum value */
+  constexpr size_t PAGEHDRSZ = 20;  /* offsetof(page_t, entries), non-dupfix pages */
+  constexpr uint16_t P_LEAF = 0x02; /* page_type enum value */
   bool patched = false;
   for (size_t off = 0; off + pagesize <= buf.size(); off += pagesize) {
     const uint16_t flags = read_u16_le(&buf[off + 10]);
@@ -73,8 +73,8 @@ TEST(issue_gh0057, node_offset_below_upper_rejected) {
     if (flags == P_LEAF && lower == 2 && upper > PAGEHDRSZ) {
       /* entries[0] must point below upper; plant a node header that keeps the
        * old page_check() satisfied: ksize=4, a 4-byte key, no ordering peer. */
-      write_u16_le(&buf[off + PAGEHDRSZ + 0], 0);      /* entries[0] = 0 < upper */
-      write_u16_le(&buf[off + PAGEHDRSZ + 6], 4);      /* fabricated node->ksize */
+      write_u16_le(&buf[off + PAGEHDRSZ + 0], 0);        /* entries[0] = 0 < upper */
+      write_u16_le(&buf[off + PAGEHDRSZ + 6], 4);        /* fabricated node->ksize */
       std::memcpy(&buf[off + PAGEHDRSZ + 8], "junk", 4); /* fabricated key */
       patched = true;
       break;

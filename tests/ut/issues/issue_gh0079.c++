@@ -61,8 +61,7 @@ static MDBX_env *create_open_env(const std::string &testdb, const std::string &l
   EXPECT_EQ(MDBX_SUCCESS, mdbx_env_create(&env));
   EXPECT_EQ(MDBX_SUCCESS, mdbx_env_set_maxreaders(env, 8));
   EXPECT_EQ(MDBX_SUCCESS, mdbx_env_set_geometry(env, -1, -1, -1, -1, -1, pagesize));
-  EXPECT_EQ(MDBX_SUCCESS, mdbx_env_open(env, testdb.c_str(), MDBX_NOSUBDIR, 0644))
-      << "the base environment must open";
+  EXPECT_EQ(MDBX_SUCCESS, mdbx_env_open(env, testdb.c_str(), MDBX_NOSUBDIR, 0644)) << "the base environment must open";
   return env;
 }
 
@@ -99,8 +98,7 @@ TEST(issue_gh0079, env_info_clamps_rdt_length) {
   memset(&info, 0, sizeof(info));
   EXPECT_EQ(MDBX_SUCCESS, mdbx_env_info_ex(env, nullptr, &info, sizeof(info)))
       << "the poisoned rdt_length must be clamped, not scanned out of bounds";
-  EXPECT_LE(info.mi_numreaders, info.mi_maxreaders)
-      << "mi_numreaders must not exceed max_readers";
+  EXPECT_LE(info.mi_numreaders, info.mi_maxreaders) << "mi_numreaders must not exceed max_readers";
 
   mdbx_env_close(env);
   mdbx::env::remove(testdb);

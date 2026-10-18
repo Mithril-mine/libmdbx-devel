@@ -19,8 +19,8 @@
 /// \author Леонид Юрьев aka Leonid Yuriev <leo@yuriev.ru>
 /// \date 2015-2026
 
-#include <mdbx.h>
 #include <gtest/gtest.h>
+#include <mdbx.h>
 #include <stdio.h>
 #include <stdlib.h>
 

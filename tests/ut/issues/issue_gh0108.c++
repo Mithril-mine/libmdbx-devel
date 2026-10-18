@@ -66,8 +66,7 @@ TEST(issue_gh0108, stat_ex_summary_not_shrinking_after_table_use) {
 
   ASSERT_EQ(MDBX_SUCCESS, mdbx_env_stat_ex(env, rtxn, &st, sizeof(st)));
   const uint64_t after = st.ms_entries;
-  EXPECT_EQ(before, after)
-      << "using a table in the transaction must not hide the other tables of the same leaf page";
+  EXPECT_EQ(before, after) << "using a table in the transaction must not hide the other tables of the same leaf page";
   EXPECT_GE(after, (uint64_t)(100 + 200 + 300)) << "the summary must account all table records";
 
   mdbx_txn_abort(rtxn);

@@ -1,9 +1,9 @@
 /* nested child spills, then is aborted -> spilled.list leaks. */
 #include "mdbx.h++"
-#include <gtest/gtest.h>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <gtest/gtest.h>
 
 TEST(issue_gh0010, all) {
   const mdbx::path testdb = "issue10";

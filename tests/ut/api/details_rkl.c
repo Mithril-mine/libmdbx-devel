@@ -507,13 +507,13 @@ static bool edge_cases_full(void) {
   CHECK_EQ((uint64_t)rkl_push(&b, 10), (uint64_t)MDBX_SUCCESS);   /* список */
   CHECK_EQ((uint64_t)rkl_push(&b, 20), (uint64_t)MDBX_SUCCESS);   /* список */
   rkl_iter_t fi;
-  CHECK_TRUE(rkl_find(&b, 3, &fi));      /* в solid */
-  CHECK_FALSE(rkl_find(&b, 6, &fi));     /* сразу после solid, нет в списке */
-  CHECK_FALSE(rkl_find(&b, 7, &fi));     /* после solid, нет в списке */
-  CHECK_FALSE(rkl_find(&b, 0, &fi));     /* до solid, в списке нет */
-  CHECK_TRUE(rkl_find(&b, 10, &fi));     /* элемент списка */
-  CHECK_FALSE(rkl_find(&b, 11, &fi));    /* после элемента списка */
-  CHECK_TRUE(rkl_find(&b, 20, &fi));     /* хвостовой элемент списка */
+  CHECK_TRUE(rkl_find(&b, 3, &fi));   /* в solid */
+  CHECK_FALSE(rkl_find(&b, 6, &fi));  /* сразу после solid, нет в списке */
+  CHECK_FALSE(rkl_find(&b, 7, &fi));  /* после solid, нет в списке */
+  CHECK_FALSE(rkl_find(&b, 0, &fi));  /* до solid, в списке нет */
+  CHECK_TRUE(rkl_find(&b, 10, &fi));  /* элемент списка */
+  CHECK_FALSE(rkl_find(&b, 11, &fi)); /* после элемента списка */
+  CHECK_TRUE(rkl_find(&b, 20, &fi));  /* хвостовой элемент списка */
 
   /* rkl_merge: список+интервал, дубликаты с ignore_duplicates и без */
   rkl_init(&a);
@@ -666,7 +666,7 @@ static bool edge_cases_full2(void) {
    * [5,10,15,20] + push(10) -> [5,10,15,15] (невалидно). */
   rkl_init(&a);
   CHECK_EQ((uint64_t)rkl_push(&a, 1), (uint64_t)MDBX_SUCCESS); /* solid [1..2) */
-  CHECK_EQ((uint64_t)rkl_push(&a, 5), (uint64_t)MDBX_SUCCESS);  /* список */
+  CHECK_EQ((uint64_t)rkl_push(&a, 5), (uint64_t)MDBX_SUCCESS); /* список */
   CHECK_EQ((uint64_t)rkl_push(&a, 10), (uint64_t)MDBX_SUCCESS);
   CHECK_EQ((uint64_t)rkl_push(&a, 15), (uint64_t)MDBX_SUCCESS);
   CHECK_EQ((uint64_t)rkl_push(&a, 20), (uint64_t)MDBX_SUCCESS);
@@ -869,7 +869,7 @@ static bool edge_cases_probes(void) {
   /* --- R: rkl_hole reverse past-end (L518-522) --- */
   rkl_init(&a);
   CHECK_EQ((uint64_t)rkl_push(&a, 1), (uint64_t)MDBX_SUCCESS);
-  CHECK_EQ((uint64_t)rkl_push(&a, 2), (uint64_t)MDBX_SUCCESS); /* solid[1,3) */
+  CHECK_EQ((uint64_t)rkl_push(&a, 2), (uint64_t)MDBX_SUCCESS);  /* solid[1,3) */
   CHECK_EQ((uint64_t)rkl_push(&a, 42), (uint64_t)MDBX_SUCCESS); /* list[42] */
   {
     rkl_iter_t f = rkl_iterator(&a, false);
@@ -938,9 +938,8 @@ static bool edge_cases_probes(void) {
   {
     static const char *const tags[] = {
         "rkl:resize:wanna_gt_length", /* D: disarmed срабатывание считается в seen */
-        "rkl_extend_solid_gap_head",  "rkl_extend_solid_gap_tail",
-        "rkl_hole_past_end_reverse",  "rkl_check_limit_below_inplace",
-        "rkl_check_solid_float_high", "txl_reserve_too_long",
+        "rkl_extend_solid_gap_head",     "rkl_extend_solid_gap_tail",  "rkl_hole_past_end_reverse",
+        "rkl_check_limit_below_inplace", "rkl_check_solid_float_high", "txl_reserve_too_long",
     };
     for (size_t i = 0; i < ARRAY_LENGTH(tags); ++i) {
       char request[512];

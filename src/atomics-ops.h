@@ -248,7 +248,7 @@ MDBX_MAYBE_UNUSED static __always_inline size_t atomic_store_size(mdbx_atomic_si
                                                                   enum mdbx_memory_order order) {
 #ifdef MDBX_HAVE_C11ATOMICS
   atomic_store_explicit(MDBX_c11a_rw(size_t, p), value, mo_c11_store(order));
-#else /* MDBX_HAVE_C11ATOMICS */
+#else  /* MDBX_HAVE_C11ATOMICS */
   if (order != mo_Relaxed)
     osal_compiler_barrier();
   p->weak = value;
@@ -261,7 +261,7 @@ MDBX_MAYBE_UNUSED static __always_inline size_t atomic_load_size(const volatile 
                                                                  enum mdbx_memory_order order) {
 #ifdef MDBX_HAVE_C11ATOMICS
   return atomic_load_explicit(MDBX_c11a_ro(size_t, p), mo_c11_load(order));
-#else /* MDBX_HAVE_C11ATOMICS */
+#else  /* MDBX_HAVE_C11ATOMICS */
   osal_memory_fence(order, false);
   const size_t value = p->weak;
   if (order != mo_Relaxed)

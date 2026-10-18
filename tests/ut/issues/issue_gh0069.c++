@@ -102,8 +102,7 @@ TEST(issue_gh0069, free_dbi_drop_is_rejected_and_gc_survives) {
   ASSERT_GT(entries_before, 0u) << "the GC tree should have tracked discarded pages";
 
   /* Clearing (or dropping) the GC table must be refused, not executed. */
-  EXPECT_EQ(MDBX_EACCESS, mdbx_drop(txn, FREE_DBI, false))
-      << "mdbx_drop(FREE_DBI) must be rejected";
+  EXPECT_EQ(MDBX_EACCESS, mdbx_drop(txn, FREE_DBI, false)) << "mdbx_drop(FREE_DBI) must be rejected";
 
   std::memset(&st, 0, sizeof(st));
   ASSERT_EQ(MDBX_SUCCESS, mdbx_dbi_stat(txn, FREE_DBI, &st, sizeof(st)));

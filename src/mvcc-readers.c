@@ -124,12 +124,10 @@ __hot orsi_rw_t mvcc_snapshot_oldest_rw(const MDBX_txn *const txn) {
   const bool distrust_cached_oldest = (prev_oldest > steady.txnid);
   const txnid_t trusted_oldest = distrust_cached_oldest ? MIN_TXNID : prev_oldest;
   if (unlikely(distrust_cached_oldest))
-    NOTICE("cached oldest-reader %" PRIaTXN " beyond steady %" PRIaTXN ", forcing rescan", prev_oldest,
-           steady.txnid);
+    NOTICE("cached oldest-reader %" PRIaTXN " beyond steady %" PRIaTXN ", forcing rescan", prev_oldest, steady.txnid);
 
   bool rescan_forced = distrust_cached_oldest;
-  while (rescan_forced ||
-         nothing_changed_signature != atomic_load32(&lck->rdt_refresh_flag, mo_AcquireRelease)) {
+  while (rescan_forced || nothing_changed_signature != atomic_load32(&lck->rdt_refresh_flag, mo_AcquireRelease)) {
     rescan_forced = false;
     lck->rdt_refresh_flag.weak = nothing_changed_signature;
     jitter4testing(false);
@@ -445,8 +443,7 @@ __cold bool mvcc_kick_laggards(MDBX_txn *txn, const txnid_t straggler,
      * value is forged/corrupt and must never reach the (potentially
      * kill-capable) HSR callback, where POSIX kill() with pid<0 would target
      * a whole process group. */
-    if (safe64_read(&stucked->txnid) != straggler || safe64_read(&stucked->tid) != stucked_tid ||
-        (intptr_t)pid <= 0)
+    if (safe64_read(&stucked->txnid) != straggler || safe64_read(&stucked->tid) != stucked_tid || (intptr_t)pid <= 0)
       continue;
 
     if (optional_obstacle) {

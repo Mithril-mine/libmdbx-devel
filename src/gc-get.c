@@ -1399,8 +1399,7 @@ done:
     /* USDT mdbx:alloc__source (pgno, mode): report page-allocation source,
      * mode: 0=gc-reclaimed, 1=tail-of-unallocated, 2=grow-datafile.
      * See skynet/probes.md. */
-    MDBX_DTRACE2(alloc__source,
-                 (uint64_t)(pgno ? pgno : txn->geo.first_unallocated),
+    MDBX_DTRACE2(alloc__source, (uint64_t)(pgno ? pgno : txn->geo.first_unallocated),
                  (uint32_t)(pgno ? 0 : (grew ? 2 : 1)));
     if (pgno) {
       eASSERT0(env, pgno + num <= txn->geo.first_unallocated && pgno >= NUM_METAS);

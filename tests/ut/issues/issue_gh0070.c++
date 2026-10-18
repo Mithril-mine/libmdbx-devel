@@ -99,8 +99,7 @@ TEST(issue_gh0070, truncated_dump_is_rejected) {
   }
 
   /* The truncated dump must not be reported as a successful restore. */
-  EXPECT_NE(run_tool({load_tool, "-f", truncname, loadname}), 0)
-      << "restoring a truncated dump must fail";
+  EXPECT_NE(run_tool({load_tool, "-f", truncname, loadname}), 0) << "restoring a truncated dump must fail";
 
   remove_env(loadname);
   remove(truncname);

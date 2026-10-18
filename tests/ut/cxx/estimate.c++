@@ -111,10 +111,8 @@ TEST(ut_estimate, dupsort_range_with_values) {
 
   const mdbx::pair across_from("k05", "v1");
   const mdbx::pair across_to("k07", "v6");
-  EXPECT_GT(txn.estimate(multi, across_from, across_to), 0)
-      << "pair-based estimate across keys counts the whole range";
-  EXPECT_LT(txn.estimate(multi, across_to, across_from), 0)
-      << "reversed pair range gives a negative estimate";
+  EXPECT_GT(txn.estimate(multi, across_from, across_to), 0) << "pair-based estimate across keys counts the whole range";
+  EXPECT_LT(txn.estimate(multi, across_to, across_from), 0) << "reversed pair range gives a negative estimate";
 
   txn.commit();
   env.close();

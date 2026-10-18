@@ -69,8 +69,7 @@ static MDBX_env *open_dupsort_env(const char *path, MDBX_dbi *dbi_out) {
   MDBX_val first = {const_cast<char *>("first"), 5};
   MDBX_val second = {const_cast<char *>("second"), 6};
   if (mdbx_put(txn, dbi, &key, &first, MDBX_UPSERT) != MDBX_SUCCESS ||
-      mdbx_put(txn, dbi, &key, &second, MDBX_APPENDDUP) != MDBX_SUCCESS ||
-      mdbx_txn_commit(txn) != MDBX_SUCCESS) {
+      mdbx_put(txn, dbi, &key, &second, MDBX_APPENDDUP) != MDBX_SUCCESS || mdbx_txn_commit(txn) != MDBX_SUCCESS) {
     mdbx_txn_abort(txn);
     mdbx_env_close(env);
     return nullptr;

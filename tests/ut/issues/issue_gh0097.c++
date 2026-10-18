@@ -42,8 +42,7 @@ TEST(issue_gh0097, getters_usable_inside_read_transaction) {
    * against -1 and report INT32_MIN as a live read-write transaction). */
   mdbx::txn_managed w = env.start_write();
   w.abort();
-  EXPECT_THROW(w.is_readwrite(), mdbx::bad_transaction)
-      << "a finished transaction must not report read-write";
+  EXPECT_THROW(w.is_readwrite(), mdbx::bad_transaction) << "a finished transaction must not report read-write";
 
   /* amend(dont_wait=true) must not dereference a null handle after commit. */
   {

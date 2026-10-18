@@ -114,7 +114,7 @@ static inline void osal_free(void *ptr) { HeapFree(GetProcessHeap(), 0, ptr); }
  * recursion through the osal_* redirect defined below). */
 #define osal_malloc_raw(bytes) HeapAlloc(GetProcessHeap(), 0, (bytes))
 #define osal_calloc_raw(nelem, size) HeapAlloc(GetProcessHeap(), HEAP_ZERO_MEMORY, (nelem) * (size))
-#define osal_realloc_raw(ptr, bytes)                                                                                    \
+#define osal_realloc_raw(ptr, bytes)                                                                                   \
   ((ptr) ? HeapReAlloc(GetProcessHeap(), 0, (ptr), (bytes)) : HeapAlloc(GetProcessHeap(), 0, (bytes)))
 #define osal_free_raw(ptr) HeapFree(GetProcessHeap(), 0, (ptr))
 #endif /* MDBX_PROBES */

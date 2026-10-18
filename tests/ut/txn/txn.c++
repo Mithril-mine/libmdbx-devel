@@ -41,9 +41,7 @@
 
 #if !defined(__cpp_lib_latch) || __cpp_lib_latch < 201907L
 
-TEST(ut_txn, all) {
-  GTEST_SKIP() << "no C++20 std::thread and/or std::latch";
-}
+TEST(ut_txn, all) { GTEST_SKIP() << "no C++20 std::thread and/or std::latch"; }
 
 #else
 

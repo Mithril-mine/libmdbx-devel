@@ -230,7 +230,8 @@ MDBX_NOTHROW_PURE_FUNCTION MDBX_CXX14_CONSTEXPR size_t slice::find_first_of(byte
   return find_first_of(slice(&c, sizeof(c)), pos);
 }
 
-MDBX_NOTHROW_PURE_FUNCTION MDBX_CXX14_CONSTEXPR size_t slice::find_last_of(const slice &chars, size_t pos) const noexcept {
+MDBX_NOTHROW_PURE_FUNCTION MDBX_CXX14_CONSTEXPR size_t slice::find_last_of(const slice &chars,
+                                                                           size_t pos) const noexcept {
   if (MDBX_UNLIKELY(chars.empty() || empty()))
     return npos;
   if (pos >= length())

@@ -3,7 +3,7 @@ project(test_package LANGUAGES CXX)
 
 find_package(mdbx REQUIRED CONFIG)
 
-add_executable(test_package main.cpp)
+add_executable(test_package main.c++)
 target_link_libraries(test_package PRIVATE mdbx::mdbx)
 
 include(CTest)

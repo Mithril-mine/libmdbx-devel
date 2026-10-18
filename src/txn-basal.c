@@ -357,10 +357,8 @@ int txn_basal_commit(MDBX_txn *txn, struct commit_timestamp *ts) {
    * with a weak head, fall through to the full commit path so the empty commit
    * upgrades the weak head to steady. */
   if ((!txn->wr.dirtylist || txn->wr.dirtylist->length == 0) &&
-      (txn->flags & (MDBX_TXN_DIRTY | MDBX_TXN_SPILLS)) == 0 &&
-      !need_flush_for_nometasync &&
-      (head.is_steady || ((env->flags | txn->flags) & (MDBX_SAFE_NOSYNC | MDBX_NOMETASYNC))) &&
-      !CHECKS2_ENABLED()) {
+      (txn->flags & (MDBX_TXN_DIRTY | MDBX_TXN_SPILLS)) == 0 && !need_flush_for_nometasync &&
+      (head.is_steady || ((env->flags | txn->flags) & (MDBX_SAFE_NOSYNC | MDBX_NOMETASYNC))) && !CHECKS2_ENABLED()) {
     TXN_FOREACH_DBI_ALL(txn, i) { tASSERT0(txn, !(txn->dbi_state[i] & (DBI_DIRTY | DBI_SLAIN))); }
     /* fast completion of pure transaction */
     return MDBX_NOSUCCESS_PURE_COMMIT ? MDBX_RESULT_TRUE : MDBX_SUCCESS;

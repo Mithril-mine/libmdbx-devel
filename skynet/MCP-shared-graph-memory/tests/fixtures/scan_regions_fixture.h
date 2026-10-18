@@ -13,18 +13,18 @@ static int other_os(void) { return 3; }
 #if MDBX_ENABLE_PROFGC
 static int profgc_helper(int x) {
 #if MDBX_DEBUG
-    return x + 1;
+  return x + 1;
 #else
-    return x * 2;
+  return x * 2;
 #endif
 }
 #endif
 
 static int always_here(void) {
 #if MDBX_PNL_ASCENDING
-    return 10;
+  return 10;
 #else
-    return 20;
+  return 20;
 #endif
 }
 

@@ -19,8 +19,8 @@
 /// \author Леонид Юрьев aka Leonid Yuriev <leo@yuriev.ru>
 /// \date 2015-2026
 
-#include "mdbx.h++"
 #include "../probe-ctl.h"
+#include "mdbx.h++"
 #include <gtest/gtest.h>
 
 #include <chrono>
@@ -32,8 +32,8 @@
 #include <latch>
 #include <thread>
 #endif
-#include <array>
 #include <algorithm>
+#include <array>
 #include <functional>
 #include <iterator>
 #include <map>
@@ -842,12 +842,10 @@ bool case1_stairway_pass(track_context &ctx, mdbx::env env, prng &rnd, generator
   return ok;
 }
 
-template <size_t DEEP>
-bool case1_stairway_run(track_context &ctx, mdbx::env env, prng &rnd) {
+template <size_t DEEP> bool case1_stairway_run(track_context &ctx, mdbx::env env, prng &rnd) {
   bool ok = true;
-  const auto n_orders =
-      std::min<unsigned>(getenv_uint("MDBX_GET_CACHED_ORDERS", 5),
-                         generator::keys_order::end - generator::keys_order::begin);
+  const auto n_orders = std::min<unsigned>(getenv_uint("MDBX_GET_CACHED_ORDERS", 5),
+                                           generator::keys_order::end - generator::keys_order::begin);
   for (auto order = generator::keys_order::begin;
        order < generator::keys_order(generator::keys_order::begin + n_orders) && !ctx.is_timeouted();
        order = generator::keys_order(order + 1))
@@ -1220,7 +1218,7 @@ static bool case3_error_paths(mdbx::env env, get_cached_t get_cached) {
     }
   }
 
-/* R: notfound_elevate_trunk — запись entry из старого снапшота (offset=0,
+  /* R: notfound_elevate_trunk — запись entry из старого снапшота (offset=0,
    * lc = R0), поиск в новом снапшоте R1 после изменения ДРУГОЙ части дерева:
    * ветка на пути к отсутствующему ключу осталась нетронутой (txnid <= lc). */
   {
@@ -1261,11 +1259,9 @@ static bool case3_error_paths(mdbx::env env, get_cached_t get_cached) {
 
     txn = env.start_read();
 
-    const char *const err_tags[] = {"cache_check_txn_err",   "cache_tbl_refresh_err",
-                                    "cache_cursor_init_err", "cache_page_get_err",
-                                    "cache_page_get_branch_err", "cache_cursor_push_err",
-                                    "cache_leaf_validation_fail", "cache_node_read_err",
-                                    "cache_check_key_err"};
+    const char *const err_tags[] = {"cache_check_txn_err",        "cache_tbl_refresh_err",     "cache_cursor_init_err",
+                                    "cache_page_get_err",         "cache_page_get_branch_err", "cache_cursor_push_err",
+                                    "cache_leaf_validation_fail", "cache_node_read_err",       "cache_check_key_err"};
     for (size_t i = 0; i < sizeof(err_tags) / sizeof(err_tags[0]); ++i) {
       mdbx_cache_init(&entry);
       if (!probe_arm_fault(err_tags[i], 9999))
@@ -1301,11 +1297,10 @@ static bool case3_error_paths(mdbx::env env, get_cached_t get_cached) {
 
   /* Аттестация: все fault-сайты обязаны иметь seen > 0. */
   {
-    static const char *const tags[] = {"cache_check_txn_err",   "cache_tbl_refresh_err",
-                                       "cache_cursor_init_err", "cache_page_get_err",
-                                       "cache_page_get_branch_err", "cache_cursor_push_err",
-                                       "cache_leaf_validation_fail", "cache_node_read_err",
-                                       "cache_check_key_err"};
+    static const char *const tags[] = {
+        "cache_check_txn_err",        "cache_tbl_refresh_err",     "cache_cursor_init_err",
+        "cache_page_get_err",         "cache_page_get_branch_err", "cache_cursor_push_err",
+        "cache_leaf_validation_fail", "cache_node_read_err",       "cache_check_key_err"};
     char reply[4096];
     for (size_t i = 0; i < sizeof(tags) / sizeof(tags[0]); ++i) {
       char request[512];

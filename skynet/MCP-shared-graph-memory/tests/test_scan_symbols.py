@@ -50,8 +50,8 @@ def test_c_fixture_functions_and_edges():
     assert {"helper_impl", "scan_fixture_entry"} <= names
     fn = col.functions["fn:scan_fixture:scan_fixture_entry"]
     assert fn["is_definition"] is True
-    assert fn["l0"] == 11
-    assert fn["l1"] == 24
+    assert fn["l0"] == 9
+    assert fn["l1"] == 22
     assert len(fn["blocks"]) >= 3  # for/if/while
     assert {e["callee"] for e in edges} == {"fn:helper_impl"}
     assert all(e["resolved"] for e in edges)

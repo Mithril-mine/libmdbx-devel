@@ -50,8 +50,7 @@ TEST(issue_gh0114, gc_time_limit_keeps_rp_augment_limit) {
    * and the broken scaling yield that minimum */
   ASSERT_EQ(MDBX_SUCCESS,
             mdbx_env_set_geometry(env, 16 * 1024 * 1024, 64 * 1024 * 1024, 64 * 1024 * 1024, -1, -1, 4096));
-  ASSERT_EQ(MDBX_SUCCESS, mdbx_env_open(env, testdb, MDBX_NOSUBDIR, 0644))
-      << "the base environment must open";
+  ASSERT_EQ(MDBX_SUCCESS, mdbx_env_open(env, testdb, MDBX_NOSUBDIR, 0644)) << "the base environment must open";
 
   constexpr uint64_t gc_time_limit = 1u << 16 /* 1 second in 16.16 */;
   ASSERT_EQ(MDBX_SUCCESS, mdbx_env_set_option(env, MDBX_opt_gc_time_limit, gc_time_limit));
