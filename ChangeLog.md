@@ -21,6 +21,7 @@ In the `master` branch, development of version v0.15 will begin, with the techni
 ### Fixes:
 
  - Core:
+    - Fixed undefined behavior in the JSON-integer key encoding: a negative shift when encoding magnitudes above 2^52 and the negation of `INT64_MIN` were UB caught by UBSAN, and a null-but-empty key could be passed to `memcpy` while inserting a node (backport).
     - Fixed the `MDBX_TXN_TRY` flag leaking into transaction state flags (backport).
     - Fixed `mdbx_env_copy()`/`mdbx_copy -f` possibly deleting a pre-existing destination database when it could not be locked ([#58](https://github.com/Mithril-mine/libmdbx-devel/issues/58)) (backport).
     - Fixed a failed second in-process open releasing the first handle's file locks, letting another process take exclusive access ([#59](https://github.com/Mithril-mine/libmdbx-devel/issues/59)) (backport).
