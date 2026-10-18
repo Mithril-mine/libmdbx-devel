@@ -1045,6 +1045,13 @@ public:
     if (MDBX_LIKELY(this != &src))
       MDBX_CXX20_LIKELY {
         const auto kind = src.content_modality();
+        if (MDBX_UNLIKELY(kind == modality::reference && src.const_data() &&
+                          size_t(static_cast<const byte *>(src.const_data()) - silo_begin()) < silo_.capacity())) {
+          /* `src` refers into this buffer's own storage, which the move below would release first */
+          assign_freestanding(src.const_data(), src.length());
+          src.invalidate();
+          return *this;
+        }
         const auto src_headroom = src.headroom();
         const auto src_data = src.const_data();
         const auto src_length = src.length();
@@ -1204,7 +1211,12 @@ public:
     if (MDBX_LIKELY(wanna_bytes))
       MDBX_CXX20_LIKELY {
         if (MDBX_UNLIKELY(tailroom() < check_length(wanna_bytes)))
-          MDBX_CXX20_UNLIKELY reserve_tailroom(wanna_bytes);
+          MDBX_CXX20_UNLIKELY {
+            /* the producer may refer into this buffer, so produce before relocating the storage */
+            buffer chunk(wanna_bytes, get_allocator());
+            chunk.append_producer(producer);
+            return append(chunk.data(), chunk.size());
+          }
         return set_end(producer.write_bytes(end_char_ptr(), tailroom()));
       }
     return *this;
@@ -1215,7 +1227,12 @@ public:
     if (MDBX_LIKELY(wanna_bytes))
       MDBX_CXX20_LIKELY {
         if (MDBX_UNLIKELY(tailroom() < check_length(wanna_bytes)))
-          MDBX_CXX20_UNLIKELY reserve_tailroom(wanna_bytes);
+          MDBX_CXX20_UNLIKELY {
+            /* the producer may refer into this buffer, so produce before relocating the storage */
+            buffer chunk(wanna_bytes, get_allocator());
+            chunk.append_producer(producer);
+            return append(chunk.data(), chunk.size());
+          }
         return set_end(producer.write_bytes(end_char_ptr(), tailroom()));
       }
     return *this;
