@@ -144,7 +144,7 @@ __cold int mdbx_env_warmup(const MDBX_env *env, const MDBX_txn *txn, MDBX_warmup
       return LOG_IFERR(err);
   }
   if (env) {
-    int err = check_env(env, false);
+    int err = check_env(env, true);
     if (unlikely(err != MDBX_SUCCESS))
       return LOG_IFERR(err);
     if (txn && unlikely(txn->env != env))
