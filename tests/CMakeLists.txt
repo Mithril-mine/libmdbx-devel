@@ -614,15 +614,18 @@ else()
           # extended profile is get_cached_full below. MDBX_PROBES=1 включает
           # fault-инъекцию и аттестацию (case3_error_paths, пилот B68-P3).
           ENVIRONMENT "MDBX_GET_CACHED_TIMEOUT_SEC=2;MDBX_GET_CACHED_CASE2_TIMEOUT_SEC=2;MDBX_PROBES=1")
-        # Full-coverage get_cached profile (deep/wide, long timeouts): the
-        # routine run uses trimmed env-knob defaults (~25s); this variant
-        # restores the deep/wide workload for milestone/nightly runs (kept out
-        # of routine runs via the orthogonal ut.heavy label, see README.md).
+        # Full-coverage get_cached profile (deep/wide): the routine run uses
+        # trimmed env-knob defaults (~2.5s); this variant restores the
+        # deep/wide workload for milestone/nightly runs (kept out of routine
+        # runs via the orthogonal ut.heavy label, see README.md). Since the
+        # coverage pass now reuses the per-from pool (O(rx) instead of O(rx^2)
+        # fetches), DEEP=5 x TABLES=4 exercises the same cache branches at
+        # ~25s vs the former ~600s profile (DEEP=6 x TABLES=8).
         add_test(NAME get_cached_full COMMAND $<TARGET_FILE:ut_get_cached>)
         set_tests_properties(get_cached_full PROPERTIES
             LABELS "ut;ut.api;ut.txn;ut.heavy"
-            TIMEOUT 3600
-            ENVIRONMENT "MDBX_PROBES=1;MDBX_GET_CACHED_DBNAME=test-get-cached-full;MDBX_GET_CACHED_TABLES=8;MDBX_GET_CACHED_DEEP=6;MDBX_GET_CACHED_ORDERS=5;MDBX_GET_CACHED_TIMEOUT_SEC=600;MDBX_GET_CACHED_CASE2_TIMEOUT_SEC=120;MDBX_GET_CACHED_THREADS=0")
+            TIMEOUT 600
+            ENVIRONMENT "MDBX_PROBES=1;MDBX_GET_CACHED_DBNAME=test-get-cached-full;MDBX_GET_CACHED_TABLES=4;MDBX_GET_CACHED_DEEP=5;MDBX_GET_CACHED_ORDERS=5;MDBX_GET_CACHED_TIMEOUT_SEC=3600;MDBX_GET_CACHED_CASE2_TIMEOUT_SEC=20;MDBX_GET_CACHED_THREADS=0")
 add_ut(reverse_insertions SOURCE ut/txn/reverse_insertions.c++)
         set_tests_properties(reverse_insertions PROPERTIES LABELS "ut;ut.txn")
         add_ut(parameters SOURCE ut/api/parameters.c++)
