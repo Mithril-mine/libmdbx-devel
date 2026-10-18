@@ -511,6 +511,8 @@ inline unsigned env::sync_period__seconds_16dot16() const {
 }
 
 inline env &env::set_sync_period__seconds_double(double seconds) {
+  if (MDBX_UNLIKELY(!(seconds >= 0 && seconds * 65536 <= double(UINT_MAX))))
+    MDBX_CXX20_UNLIKELY error::throw_exception(MDBX_EINVAL);
   return set_sync_period__seconds_16dot16(unsigned(seconds * 65536));
 }
 
@@ -692,7 +694,14 @@ inline txn_managed env::start_write(txn &parent) {
   return txn_managed(ptr);
 }
 
-inline txn_managed env::try_start_write() { return start_write(true); }
+inline txn_managed env::try_start_write() {
+  ::MDBX_txn *ptr;
+  const int err = ::mdbx_txn_begin(handle_, nullptr, MDBX_TXN_READWRITE | MDBX_TXN_TRY, &ptr);
+  if (err == MDBX_BUSY)
+    return txn_managed();
+  error::success_or_throw(err);
+  return txn_managed(ptr);
+}
 
 inline bool env::txn_lock(bool dont_wait) {
   const int err = ::mdbx_txn_lock(handle_, dont_wait);

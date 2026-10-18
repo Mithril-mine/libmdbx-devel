@@ -531,7 +531,7 @@ public:
   inline stat get_stat() const;
 
   /// \brief Returns pagesize of this MDBX environment.
-  size_t get_pagesize() const { return get_stat().ms_psize; }
+  size_t get_pagesize() const { return get_info().mi_dxb_pagesize; }
 
   /// \brief Return snapshot information about the MDBX environment.
   inline info get_info() const;
@@ -1144,7 +1144,7 @@ inline MDBX_cmp_func get_datacmp(MDBX_db_flags_t flags) { return ::mdbx_get_data
 /// \see ::mdbx_setup_debug()
 inline int setup_debug(MDBX_log_level_t log_level = MDBX_LOG_DONTCHANGE,
                        MDBX_debug_flags_t debug_flags = MDBX_DBG_DONTCHANGE,
-                       MDBX_debug_func logger = nullptr) {
+                       MDBX_debug_func logger = MDBX_LOGGER_DONTCHANGE) {
   return ::mdbx_setup_debug(log_level, debug_flags, logger);
 }
 

@@ -47,7 +47,7 @@ inline env txn::env() const noexcept { return ::mdbx_txn_env(handle_); }
 
 inline MDBX_txn_flags_t txn::flags() const {
   const int bits = mdbx_txn_flags(handle_);
-  error::throw_on_failure((bits != -1) ? MDBX_SUCCESS : MDBX_BAD_TXN);
+  error::throw_on_failure((bits != static_cast<int>(MDBX_TXN_INVALID)) ? MDBX_SUCCESS : MDBX_BAD_TXN);
   return static_cast<MDBX_txn_flags_t>(bits);
 }
 
