@@ -1623,8 +1623,13 @@ void txn_managed::commit_embark_read(finalization_latency *latency) {
 }
 
 bool txn_managed::amend(bool dont_wait) {
-  return !error::boolean_or_throw(::mdbx_txn_amend(
-      handle_, &handle_, dont_wait ? MDBX_TXN_READWRITE | MDBX_TXN_TRY : MDBX_TXN_READWRITE, handle_->userctx));
+  error::throw_on_nullptr(handle_, MDBX_BAD_TXN);
+  const int err = ::mdbx_txn_amend(handle_, &handle_, dont_wait ? MDBX_TXN_READWRITE | MDBX_TXN_TRY : MDBX_TXN_READWRITE,
+                                   handle_->userctx);
+  if (dont_wait && err == MDBX_BUSY)
+    /* documented: `false` if the read-only transaction still continues */
+    return false;
+  return !error::boolean_or_throw(err);
 }
 
 //------------------------------------------------------------------------------
