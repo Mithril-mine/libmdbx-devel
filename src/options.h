@@ -367,8 +367,8 @@
 #else
 #define MDBX_LOCKING MDBX_LOCKING_POSIX2001
 #endif
-#elif defined(__sun) || defined(__SVR4) || defined(__svr4__) || defined(__HAIKU__) ||                              \
-    (defined(_POSIX_SEMAPHORES) && _POSIX_SEMAPHORES >= 200112L &&                                                \
+#elif defined(__sun) || defined(__SVR4) || defined(__svr4__) || defined(__HAIKU__) ||                                  \
+    (defined(_POSIX_SEMAPHORES) && _POSIX_SEMAPHORES >= 200112L &&                                                     \
      !defined(__OpenBSD__)) /* OpenBSD's sem_init() always fails with EPERM on pshared */
 /* Prefer POSIX shared anonymous semaphores (POSIX1988) over the legacy System V IPC
  * (SysV) whenever the platform provides process-shared semaphores, e.g. FreeBSD and
