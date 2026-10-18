@@ -115,7 +115,7 @@ TEST(issue_gh0066, append_to_empty_and_exact_match) {
   /* exact match of the last key: plain append semantics replace the value */
   uint8_t raw[8];
   for (unsigned b = 0; b < 8; ++b)
-    raw[b] = (uint8_t)(9 >> (56 - 8 * b));
+    raw[b] = (uint8_t)(UINT64_C(9) >> (56 - 8 * b));
   slice key9{static_cast<const void *>(raw), (size_t)8};
   slice val2("w", 1);
   ASSERT_EQ(MDBX_SUCCESS, cur.put(key9, &val2, MDBX_put_flags_t(MDBX_APPEND)));

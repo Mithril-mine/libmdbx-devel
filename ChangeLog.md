@@ -41,6 +41,7 @@ Cutting-edge release with new core features and internal refactoring.
 ### Fixes:
 
  - Core engine:
+    - Fixed undefined behavior in the JSON-integer key encoding: a negative shift when encoding magnitudes above 2^52 and the negation of `INT64_MIN` were UB caught by UBSAN, and a null-but-empty key could be passed to `memcpy` while inserting a node.
     - Fixed a rare durability bug: a failed disk write could be silently reported as success, and a large write-mapped durable commit on Windows could crash ([#47](https://github.com/Mithril-mine/libmdbx-devel/issues/47)).
     - Fixed an arithmetic overflow that miscomputed the maximum database size on 32-bit builds with large RAM.
     - Fixed a rare internal structure corruption during rollback of a duplicate insertion.
