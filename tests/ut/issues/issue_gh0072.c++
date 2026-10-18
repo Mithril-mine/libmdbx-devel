@@ -64,8 +64,7 @@ TEST(issue_gh0072, dump_refuses_control_char_table_name) {
   remove_env(dbname);
   create_hostile_db(dbname);
 
-  EXPECT_NE(run_tool({dump_tool, "-a", dbname}), 0)
-      << "dumping a table whose name breaks the header format must fail";
+  EXPECT_NE(run_tool({dump_tool, "-a", dbname}), 0) << "dumping a table whose name breaks the header format must fail";
 
   remove_env(dbname);
 }
@@ -116,16 +115,15 @@ TEST(issue_gh0072, load_rejects_control_char_name) {
 
   /* A `database=` header value containing a control character (a tab here)
    * must be rejected instead of being used to select the target table. */
-  const char *const dump_text =
-      "VERSION=3\n"
-      "format=print\n"
-      "type=btree\n"
-      "duplicates=0\n"
-      "database=evil\tb\n"
-      "HEADER=END\n"
-      " k1\n"
-      " v1\n"
-      "DATA=END\n";
+  const char *const dump_text = "VERSION=3\n"
+                                "format=print\n"
+                                "type=btree\n"
+                                "duplicates=0\n"
+                                "database=evil\tb\n"
+                                "HEADER=END\n"
+                                " k1\n"
+                                " v1\n"
+                                "DATA=END\n";
   {
     std::ofstream out(dumpname, std::ios::binary);
     const size_t len = strlen(dump_text);

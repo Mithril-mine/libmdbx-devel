@@ -430,7 +430,8 @@ __hot static int readline(MDBX_val *out, MDBX_val *buf, bool *concise) {
 static void usage_msg(FILE *out) {
   fprintf(out,
           "usage: %s "
-          "[-V] [-q] [-a] [-b number] [-L megabytes] [-d percent] [-G geometry] [-f file] [-s name] [-N] [-p] [-T] [-r] [-n] [-h|--help] dbpath\n"
+          "[-V] [-q] [-a] [-b number] [-L megabytes] [-d percent] [-G geometry] [-f file] [-s name] [-N] [-p] [-T] "
+          "[-r] [-n] [-h|--help] dbpath\n"
           "  -V\t\tprint version and exit.\n"
           "  -q\t\tbe quiet.\n"
           "  -a\t\tappend records in input order (required for custom comparators).\n"

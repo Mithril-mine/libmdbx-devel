@@ -1,6 +1,6 @@
 #include "mdbx.h++"
-#include <gtest/gtest.h>
 #include <cstdio>
+#include <gtest/gtest.h>
 
 #ifdef _MSC_VER
 #pragma warning(disable : 4702) /* unreachable code */

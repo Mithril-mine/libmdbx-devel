@@ -43,7 +43,7 @@ static unsigned failures;
   do {                                                                                                                 \
     if (!(cond)) {                                                                                                     \
       ++failures;                                                                                                      \
-      fprintf(stderr, "FAIL %s:%u: %s\n", __FILE__, __LINE__, #cond);                                                 \
+      fprintf(stderr, "FAIL %s:%u: %s\n", __FILE__, __LINE__, #cond);                                                  \
     }                                                                                                                  \
   } while (0)
 
@@ -51,7 +51,7 @@ static unsigned failures;
   do {                                                                                                                 \
     if (!strstr((buf), (needle))) {                                                                                    \
       ++failures;                                                                                                      \
-      fprintf(stderr, "FAIL %s:%u: reply \"%s\" lacks \"%s\"\n", __FILE__, __LINE__, (buf), (needle));                \
+      fprintf(stderr, "FAIL %s:%u: reply \"%s\" lacks \"%s\"\n", __FILE__, __LINE__, (buf), (needle));                 \
     }                                                                                                                  \
   } while (0)
 

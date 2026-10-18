@@ -32,9 +32,7 @@ using create_parameters = mdbx::create_parameters;
 
 // Compute geometry units in 64-bit to avoid signed constant-overflow
 // warnings (e.g. MSVC C4307) on 32-bit targets where intptr_t is 32-bit.
-constexpr intptr_t gib(int n) noexcept {
-  return intptr_t(int64_t(n) * geometry::GiB);
-}
+constexpr intptr_t gib(int n) noexcept { return intptr_t(int64_t(n) * geometry::GiB); }
 
 // All fluent setters must be noexcept and chainable on the same instance.
 static_assert(noexcept(geometry().set_size_lower(1)), "set_size_lower() must be noexcept");
@@ -52,12 +50,10 @@ static_assert(noexcept(operate_options().set_disable_clear_memory()), "set_disab
 static_assert(noexcept(operate_options().set_enable_validation()), "set_enable_validation() must be noexcept");
 static_assert(noexcept(operate_parameters().set_max_maps(1)), "set_max_maps() must be noexcept");
 static_assert(noexcept(operate_parameters().set_max_readers(1)), "set_max_readers() must be noexcept");
-static_assert(noexcept(operate_parameters().set_mode(mdbx::env::mode::readonly)),
-              "set_mode() must be noexcept");
+static_assert(noexcept(operate_parameters().set_mode(mdbx::env::mode::readonly)), "set_mode() must be noexcept");
 static_assert(noexcept(operate_parameters().set_durability(mdbx::env::durability::whole_fragile)),
               "set_durability() must be noexcept");
-static_assert(noexcept(operate_parameters().set_reclaiming(reclaiming_options())),
-              "set_reclaiming() must be noexcept");
+static_assert(noexcept(operate_parameters().set_reclaiming(reclaiming_options())), "set_reclaiming() must be noexcept");
 static_assert(noexcept(operate_parameters().set_options(operate_options())), "set_options() must be noexcept");
 static_assert(noexcept(operate_parameters().readonly()), "readonly() must be noexcept");
 static_assert(noexcept(operate_parameters().write_file_io()), "write_file_io() must be noexcept");
@@ -161,13 +157,12 @@ void test_operate_parameters_setters() {
   EXPECT_FALSE(op.reclaiming.lifo);
   EXPECT_FALSE(op.options.exclusive);
 
-  operate_parameters &ref =
-      op.set_max_maps(7)
-          .set_max_readers(4)
-          .set_mode(mdbx::env::mode::readonly)
-          .set_durability(mdbx::env::durability::half_synchronous_weak_last)
-          .set_reclaiming(reclaiming_options().set_lifo())
-          .set_options(operate_options().set_exclusive().set_enable_validation());
+  operate_parameters &ref = op.set_max_maps(7)
+                                .set_max_readers(4)
+                                .set_mode(mdbx::env::mode::readonly)
+                                .set_durability(mdbx::env::durability::half_synchronous_weak_last)
+                                .set_reclaiming(reclaiming_options().set_lifo())
+                                .set_options(operate_options().set_exclusive().set_enable_validation());
   EXPECT_EQ(&ref, &op);
   EXPECT_EQ(op.max_maps, 7u);
   EXPECT_EQ(op.max_readers, 4u);
@@ -203,8 +198,7 @@ void test_flags_equivalence() {
       mdbx::env::operate_parameters().set_mode(mdbx::env::mode::write_mapped_io).make_flags();
   EXPECT_NE(0u, writemap & MDBX_WRITEMAP);
 
-  const MDBX_env_flags_t readonly =
-      mdbx::env::operate_parameters().readonly().make_flags();
+  const MDBX_env_flags_t readonly = mdbx::env::operate_parameters().readonly().make_flags();
   EXPECT_NE(0u, readonly & MDBX_RDONLY);
   EXPECT_EQ(0u, readonly & MDBX_WRITEMAP);
 

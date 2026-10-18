@@ -174,8 +174,7 @@ TEST(ut_put_flags, put_multiple_samelength_modes) {
   EXPECT_EQ(txn.put_multiple_samelength(table, "k3", data + 4, 3, mdbx::insert_unique), 3u)
       << "MDBX_NOOVERWRITE inserts a whole batch for a brand-new key";
 
-  EXPECT_THROW((void)txn.put_multiple_samelength(table, "k3", data + 4, 3, mdbx::insert_unique),
-               mdbx::key_exists)
+  EXPECT_THROW((void)txn.put_multiple_samelength(table, "k3", data + 4, 3, mdbx::insert_unique), mdbx::key_exists)
       << "MDBX_NOOVERWRITE refuses a batch for an already-existing key";
   txn.abort();
   env.close();

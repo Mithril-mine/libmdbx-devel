@@ -112,7 +112,8 @@ public:
     intptr_t pagesize{default_value};
 
     MDBX_CXX14_CONSTEXPR geometry &make_fixed(intptr_t size) noexcept;
-    MDBX_CXX14_CONSTEXPR geometry &make_dynamic(intptr_t lower = default_value, intptr_t upper = default_value) noexcept;
+    MDBX_CXX14_CONSTEXPR geometry &make_dynamic(intptr_t lower = default_value,
+                                                intptr_t upper = default_value) noexcept;
 
     /// \brief Sets the lower bound of database size in bytes.
     MDBX_CXX14_CONSTEXPR geometry &set_size_lower(intptr_t size) noexcept;
@@ -191,9 +192,7 @@ public:
 #if defined(__cpp_impl_three_way_comparison) && __cpp_impl_three_way_comparison >= 201907L
     friend auto operator<=>(const reclaiming_options &a, const reclaiming_options &b) = default;
 #else
-    MDBX_CXX14_CONSTEXPR bool operator==(const reclaiming_options &other) const noexcept {
-      return lifo == other.lifo;
-    }
+    MDBX_CXX14_CONSTEXPR bool operator==(const reclaiming_options &other) const noexcept { return lifo == other.lifo; }
     MDBX_CXX14_CONSTEXPR bool operator!=(const reclaiming_options &other) const noexcept { return !(*this == other); }
 #endif
 
@@ -340,8 +339,8 @@ public:
 #endif
 
     MDBX_NODISCARD MDBX_env_flags_t make_flags(bool accede = true, ///< Allows accepting incompatible operating options
-                                                               ///< in case the database is already being used by
-                                                               ///< another process(es) \see MDBX_ACCEDE
+                                                                   ///< in case the database is already being used by
+                                                                   ///< another process(es) \see MDBX_ACCEDE
                                                bool use_subdirectory = false ///< use subdirectory to place the DB files
     ) const;
     MDBX_NODISCARD static env::mode mode_from_flags(MDBX_env_flags_t) noexcept;
@@ -956,8 +955,8 @@ public:
   /// \throws mdbx::error on failure (other than stopping reasons above).
   /// \see ::mdbx_env_defrag()
   inline defrag_result defrag(VISITOR &visitor, size_t defrag_atleast = 0, size_t time_atleast_dot16 = 0,
-                              size_t defrag_enough = 0, size_t time_limit_dot16 = 0,
-                              intptr_t acceptable_backlash = -1, intptr_t preferred_batch = 0);
+                              size_t defrag_enough = 0, size_t time_limit_dot16 = 0, intptr_t acceptable_backlash = -1,
+                              intptr_t preferred_batch = 0);
   /// \brief Performs database defragmentation without a progress visitor.
   ///
   /// \details The same defragmentation as in the overload accepting a
@@ -1160,8 +1159,8 @@ inline int setup_debug(MDBX_log_level_t log_level = MDBX_LOG_DONTCHANGE,
 /// preformatted messages.
 /// \returns A non-negative value on success, or a negative error.
 /// \see ::mdbx_setup_debug_nofmt()
-inline int setup_debug_nofmt(MDBX_log_level_t log_level, MDBX_debug_flags_t debug_flags,
-                             MDBX_debug_func_nofmt logger, char *logger_buffer, size_t logger_buffer_size) {
+inline int setup_debug_nofmt(MDBX_log_level_t log_level, MDBX_debug_flags_t debug_flags, MDBX_debug_func_nofmt logger,
+                             char *logger_buffer, size_t logger_buffer_size) {
   return ::mdbx_setup_debug_nofmt(log_level, debug_flags, logger, logger_buffer, logger_buffer_size);
 }
 

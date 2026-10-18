@@ -9,8 +9,8 @@
 #include <sys/time.h>
 
 #include "mdbx.h"
-#include <gtest/gtest.h>
 #include <assert.h>
+#include <gtest/gtest.h>
 #include <inttypes.h>
 #include <limits.h>
 #include <stddef.h>

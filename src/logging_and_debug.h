@@ -293,7 +293,9 @@ MDBX_MAYBE_UNUSED static inline char sanitizer_kind_of_poison(const void *addr, 
 #define MPROBE_WATCH(name, value) ((void)(value))
 #endif
 #ifndef MPROBE_WATCH_IF
-#define MPROBE_WATCH_IF(cond, name, value) do { } while (0)
+#define MPROBE_WATCH_IF(cond, name, value)                                                                             \
+  do {                                                                                                                 \
+  } while (0)
 #endif
 #ifndef MPROBE_FAULT
 #define MPROBE_FAULT(name, var) ((void)(var))
@@ -333,17 +335,17 @@ enum mprobe_kind {
  * registry record keyed by `name` (semantic tag); the anchor is just cheap
  * metadata used to find-or-create that record on first evaluation. */
 struct mprobe_site {
-  const char *name;            /* semantic tag (primary key), stable across refactors */
-  const char *file;            /* __FILE__ auxiliary */
-  unsigned line;               /* __LINE__ auxiliary */
-  uint32_t kind;               /* mprobe_kind */
-  mdbx_atomic_size_t rec;      /* canonical registry record, resolved lazily */
+  const char *name;       /* semantic tag (primary key), stable across refactors */
+  const char *file;       /* __FILE__ auxiliary */
+  unsigned line;          /* __LINE__ auxiliary */
+  uint32_t kind;          /* mprobe_kind */
+  mdbx_atomic_size_t rec; /* canonical registry record, resolved lazily */
 };
 
 enum mprobe_action_mode {
-  mprobe_action_panic = 0,     /* default: report and abort, like ASSERT */
-  mprobe_action_log,           /* report via debug_log and continue */
-  mprobe_action_count          /* count only, no report/abort */
+  mprobe_action_panic = 0, /* default: report and abort, like ASSERT */
+  mprobe_action_log,       /* report via debug_log and continue */
+  mprobe_action_count      /* count only, no report/abort */
 };
 
 /* Control entry point: applies a request, writes reply into the buffer.
@@ -392,37 +394,35 @@ LIBMDBX_API void mprobe_assert_ok(struct mprobe_site *site);
 
 /* Statistics probe: aggregates `value` at the point (count + last seen). */
 #undef MPROBE_COLLECT
-#define MPROBE_COLLECT(name, value)                                                \
-  do {                                                                             \
-    static struct mprobe_site MDBX_MPROBE_VAR(mprobe_site_) = {                    \
-        #name, __FILE__, __LINE__, mprobe_kind_collect, {0}};                      \
-    mprobe_fire(&MDBX_MPROBE_VAR(mprobe_site_), (intptr_t)(value));                \
+#define MPROBE_COLLECT(name, value)                                                                                    \
+  do {                                                                                                                 \
+    static struct mprobe_site MDBX_MPROBE_VAR(mprobe_site_) = {#name, __FILE__, __LINE__, mprobe_kind_collect, {0}};   \
+    mprobe_fire(&MDBX_MPROBE_VAR(mprobe_site_), (intptr_t)(value));                                                    \
   } while (0)
 
 /* Event probe: records that the branch/fact was observed. */
 #undef MPROBE_WATCH
-#define MPROBE_WATCH(name, value)                                                  \
-  do {                                                                             \
-    static struct mprobe_site MDBX_MPROBE_VAR(mprobe_site_) = {                    \
-        #name, __FILE__, __LINE__, mprobe_kind_watch, {0}};                        \
-    mprobe_fire(&MDBX_MPROBE_VAR(mprobe_site_), (intptr_t)(value));                \
+#define MPROBE_WATCH(name, value)                                                                                      \
+  do {                                                                                                                 \
+    static struct mprobe_site MDBX_MPROBE_VAR(mprobe_site_) = {#name, __FILE__, __LINE__, mprobe_kind_watch, {0}};     \
+    mprobe_fire(&MDBX_MPROBE_VAR(mprobe_site_), (intptr_t)(value));                                                    \
   } while (0)
 
 /* Conditional event probe: fires only when `cond` holds; the condition is
  * evaluated solely in probe builds (zero cost otherwise). */
 #undef MPROBE_WATCH_IF
-#define MPROBE_WATCH_IF(cond, name, value)                                         \
-  if (cond) MPROBE_WATCH(name, value)
+#define MPROBE_WATCH_IF(cond, name, value)                                                                             \
+  if (cond)                                                                                                            \
+  MPROBE_WATCH(name, value)
 
 /* Injection probe: when a fault rule is armed for this tag, `var` is mutated to
  * the injected error code (e.g. MDBX_TXN_FULL); otherwise a no-op that still
  * observes the site (seen/hits). */
 #undef MPROBE_FAULT
-#define MPROBE_FAULT(name, var)                                                    \
-  do {                                                                             \
-    static struct mprobe_site MDBX_MPROBE_VAR(mprobe_site_) = {                    \
-        #name, __FILE__, __LINE__, mprobe_kind_fault, {0}};                        \
-    mprobe_fault(&MDBX_MPROBE_VAR(mprobe_site_), &(var));                          \
+#define MPROBE_FAULT(name, var)                                                                                        \
+  do {                                                                                                                 \
+    static struct mprobe_site MDBX_MPROBE_VAR(mprobe_site_) = {#name, __FILE__, __LINE__, mprobe_kind_fault, {0}};     \
+    mprobe_fault(&MDBX_MPROBE_VAR(mprobe_site_), &(var));                                                              \
   } while (0)
 
 #undef DEV_ASSERT
@@ -431,19 +431,14 @@ LIBMDBX_API void mprobe_assert_ok(struct mprobe_site *site);
 /* Deviant-caller assertion built on the probe-bus: in the probe build it is a
  * controllable site (see DEV_ASSERT_T for stable tags); otherwise it reduces
  * to CHECK0() exactly as declared above (dist behavior unchanged). */
-#define DEV_ASSERT(expr)                                                           \
-  DEV_ASSERT_T(MDBX_MPROBE_STR(expr) "@" __FILE__ ":" MDBX_MPROBE_STR(__LINE__),   \
-               expr)
-#define DEV_ASSERT_T(tag, expr)                                                    \
-  do {                                                                             \
-    static struct mprobe_site MDBX_MPROBE_VAR(mprobe_site_) = {(tag), __FILE__,   \
-                                                                __LINE__,           \
-                                                                mprobe_kind_assert, \
-                                                                {0}};              \
-    if (unlikely(!(expr)))                                                         \
-      mprobe_assert_failed(&MDBX_MPROBE_VAR(mprobe_site_), #expr);                 \
-    else                                                                           \
-      mprobe_assert_ok(&MDBX_MPROBE_VAR(mprobe_site_));                            \
+#define DEV_ASSERT(expr) DEV_ASSERT_T(MDBX_MPROBE_STR(expr) "@" __FILE__ ":" MDBX_MPROBE_STR(__LINE__), expr)
+#define DEV_ASSERT_T(tag, expr)                                                                                        \
+  do {                                                                                                                 \
+    static struct mprobe_site MDBX_MPROBE_VAR(mprobe_site_) = {(tag), __FILE__, __LINE__, mprobe_kind_assert, {0}};    \
+    if (unlikely(!(expr)))                                                                                             \
+      mprobe_assert_failed(&MDBX_MPROBE_VAR(mprobe_site_), #expr);                                                     \
+    else                                                                                                               \
+      mprobe_assert_ok(&MDBX_MPROBE_VAR(mprobe_site_));                                                                \
   } while (0)
 
 #endif /* MDBX_PROBES */

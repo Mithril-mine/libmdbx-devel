@@ -13,9 +13,8 @@
 // at the very end of the silo as a non-owning reference.
 
 TEST(issue_gh0078, buffer_string_view_assignment_is_not_noexcept) {
-  static_assert(
-      !noexcept(std::declval<mdbx::buffer<> &>() = std::declval<const std::string_view &>()),
-      "buffer::operator=(string_view) allocates, so it must be allowed to throw on out-of-memory");
+  static_assert(!noexcept(std::declval<mdbx::buffer<> &>() = std::declval<const std::string_view &>()),
+                "buffer::operator=(string_view) allocates, so it must be allowed to throw on out-of-memory");
 }
 
 TEST(issue_gh0078, buffer_string_view_assignment_roundtrip) {

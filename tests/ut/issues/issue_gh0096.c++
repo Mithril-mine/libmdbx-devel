@@ -15,8 +15,7 @@
 // error handler formatting the message.
 
 TEST(issue_gh0096, backlog_depleted_has_message) {
-  EXPECT_NE(nullptr, mdbx_liberr2str(MDBX_BACKLOG_DEPLETED))
-      << "a libmdbx-specific code must have a message";
+  EXPECT_NE(nullptr, mdbx_liberr2str(MDBX_BACKLOG_DEPLETED)) << "a libmdbx-specific code must have a message";
   const char *const str = mdbx_strerror(MDBX_BACKLOG_DEPLETED);
   EXPECT_NE(nullptr, str);
   {

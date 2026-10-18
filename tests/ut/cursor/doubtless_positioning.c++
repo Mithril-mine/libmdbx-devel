@@ -20,9 +20,9 @@
 /// \date 2015-2026
 
 #include "mdbx.h++"
-#include <gtest/gtest.h>
 #include <array>
 #include <functional>
+#include <gtest/gtest.h>
 #include <iostream>
 #include <random>
 

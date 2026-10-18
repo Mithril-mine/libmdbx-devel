@@ -46,8 +46,7 @@ TEST(ut_stat_info, preopen_snapinfo) {
   const mdbx::path testdb = "test-stat-info";
   mdbx::env::remove(testdb);
   {
-    mdbx::env_managed env(testdb, mdbx::create_parameters(),
-                          mdbx::operate_parameters().set_max_maps(8));
+    mdbx::env_managed env(testdb, mdbx::create_parameters(), mdbx::operate_parameters().set_max_maps(8));
     auto txn = env.start_write();
     auto table = txn.create_map("table-1");
     txn.upsert(table, mdbx::slice("key"), mdbx::slice("value"));

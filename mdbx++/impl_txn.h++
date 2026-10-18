@@ -106,10 +106,10 @@ inline void txn::copy(const MDBX_STD_FILESYSTEM_PATH &destination, bool compacti
 #endif /* MDBX_STD_FILESYSTEM_PATH */
 
 inline void txn::copy(filehandle fd, bool compactify, bool force_dynamic_size) {
-  error::success_or_throw(::mdbx_txn_copy2fd(
-      handle_, fd,
-      MDBX_copy_flags_t((compactify ? MDBX_CP_COMPACT : MDBX_CP_DEFAULTS) |
-                        (force_dynamic_size ? MDBX_CP_FORCE_DYNAMIC_SIZE : MDBX_CP_DEFAULTS))));
+  error::success_or_throw(
+      ::mdbx_txn_copy2fd(handle_, fd,
+                         MDBX_copy_flags_t((compactify ? MDBX_CP_COMPACT : MDBX_CP_DEFAULTS) |
+                                           (force_dynamic_size ? MDBX_CP_FORCE_DYNAMIC_SIZE : MDBX_CP_DEFAULTS))));
 }
 
 inline txn_managed txn::clone(void *context) const {
@@ -219,9 +219,7 @@ inline map_handle txn::open_map(const ::std::string &name, const ::mdbx::key_mod
 inline map_handle txn::open_map_accede(const ::std::string &name) const { return open_map_accede(slice(name)); }
 
 #if defined(__cpp_lib_string_view) && __cpp_lib_string_view >= 201606L
-inline map_handle txn::open_map_accede(const ::std::string_view &name) const {
-  return open_map_accede(slice(name));
-}
+inline map_handle txn::open_map_accede(const ::std::string_view &name) const { return open_map_accede(slice(name)); }
 #endif /* __cpp_lib_string_view >= 201606L */
 
 inline map_handle txn::create_map(const ::std::string &name, const ::mdbx::key_mode key_mode,
@@ -267,8 +265,8 @@ inline map_handle::info txn::get_map_flags(map_handle map) const {
 template <typename VISITOR> inline int txn::enumerate_tables(VISITOR &visitor) const {
   struct tables_enum_thunk : public exception_thunk {
     VISITOR &visitor_;
-    static int cb(void *ctx, const MDBX_txn *, const MDBX_val *name, MDBX_db_flags_t flags,
-                  const MDBX_stat *stat, MDBX_dbi dbi) noexcept {
+    static int cb(void *ctx, const MDBX_txn *, const MDBX_val *name, MDBX_db_flags_t flags, const MDBX_stat *stat,
+                  MDBX_dbi dbi) noexcept {
       tables_enum_thunk *thunk = static_cast<tables_enum_thunk *>(ctx);
       assert(thunk->is_clean());
       try {

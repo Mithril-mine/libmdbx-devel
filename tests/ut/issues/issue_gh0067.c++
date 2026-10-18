@@ -141,4 +141,4 @@ TEST(issue_gh0067, loose_count_stays_consistent_on_alloc_failure) {
   remove(dbname);
 }
 
-}  // namespace
+} // namespace

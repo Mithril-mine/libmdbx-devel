@@ -47,12 +47,10 @@ public:
   };
 
   friend MDBX_CXX14_CONSTEXPR bool operator==(const cache_entry &a, const cache_entry &b) noexcept {
-    return a.trunk_txnid == b.trunk_txnid && a.last_confirmed_txnid == b.last_confirmed_txnid &&
-           a.offset == b.offset && a.length == b.length;
+    return a.trunk_txnid == b.trunk_txnid && a.last_confirmed_txnid == b.last_confirmed_txnid && a.offset == b.offset &&
+           a.length == b.length;
   }
-  friend MDBX_CXX14_CONSTEXPR bool operator!=(const cache_entry &a, const cache_entry &b) noexcept {
-    return !(a == b);
-  }
+  friend MDBX_CXX14_CONSTEXPR bool operator!=(const cache_entry &a, const cache_entry &b) noexcept { return !(a == b); }
 };
 
 //------------------------------------------------------------------------------

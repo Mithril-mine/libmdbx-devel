@@ -20,10 +20,10 @@
 /// \date 2015-2026
 
 #include "mdbx.h++"
+#include <cstdlib>
 #include <gtest/gtest.h>
 #include <iostream>
 #include <iterator>
-#include <cstdlib>
 #include <memory>
 #include <random>
 #include <set>

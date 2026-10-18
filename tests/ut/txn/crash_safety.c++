@@ -149,8 +149,7 @@ static bool spawn_crash_child(const std::string &path) {
     return false;
   }
 
-  std::string cmdline = "\"" + std::string(exe) +
-                        "\" --gtest_filter=*crashed_child* --gtest_also_run_disabled_tests";
+  std::string cmdline = "\"" + std::string(exe) + "\" --gtest_filter=*crashed_child* --gtest_also_run_disabled_tests";
   if (!SetEnvironmentVariableA("MDBX_CRASH_CHILD_ENV", path.c_str())) {
     ADD_FAILURE() << "SetEnvironmentVariableA() failed: " << GetLastError();
     return false;
@@ -239,8 +238,7 @@ TEST(ut_crash_safety, kill_mid_txn_recovers) {
     // The child's uncommitted rows must be absent.
     for (unsigned i = 0; i < child_count; ++i) {
       const std::string k = key_of(i, 'C');
-      EXPECT_THROW(rtxn.get(table, mdbx::slice(k)), mdbx::not_found)
-          << "uncommitted row leaked at key " << k;
+      EXPECT_THROW(rtxn.get(table, mdbx::slice(k)), mdbx::not_found) << "uncommitted row leaked at key " << k;
     }
   }
 

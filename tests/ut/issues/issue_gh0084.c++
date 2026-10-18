@@ -113,8 +113,7 @@ static void check_distribute(MDBX_cursor *begin, MDBX_cursor *end, MDBX_cursor *
   const size_t half = (items.size() - 1 + 1) / 2;
   EXPECT_EQ(items[half].first + ":" + items[half].second, cursor_item(c0))
       << "distribute {c0,c1}: c0 must start the second half";
-  EXPECT_EQ(last.first + ":" + last.second, cursor_item(c1))
-      << "distribute {c0,c1}: c1 must reach the range end";
+  EXPECT_EQ(last.first + ":" + last.second, cursor_item(c1)) << "distribute {c0,c1}: c1 must reach the range end";
 
   /* with the range end also in the array; c1 and end must not be clobbered */
   ASSERT_NO_FATAL_FAILURE(position_at(begin, items, 0));
@@ -162,8 +161,7 @@ TEST(issue_gh0084, subpage_dups_scroll_distance) {
   ASSERT_EQ(MDBX_SUCCESS, mdbx_env_open(env, testdb, MDBX_NOSUBDIR, 0644));
 
   const std::vector<item_t> items = {
-      {"k1", "a"}, {"k2", "a"}, {"k2", "b"}, {"k2", "c"},
-      {"k2", "d"}, {"k2", "e"}, {"k3", "a"}, {"k4", "a"},
+      {"k1", "a"}, {"k2", "a"}, {"k2", "b"}, {"k2", "c"}, {"k2", "d"}, {"k2", "e"}, {"k3", "a"}, {"k4", "a"},
   };
   MDBX_dbi dbi = 0;
   ASSERT_TRUE(build_table(env, &dbi, items));
@@ -195,8 +193,7 @@ TEST(issue_gh0084, subpage_dups_distribute) {
   ASSERT_EQ(MDBX_SUCCESS, mdbx_env_open(env, testdb, MDBX_NOSUBDIR, 0644));
 
   const std::vector<item_t> items = {
-      {"k1", "a"}, {"k2", "a"}, {"k2", "b"}, {"k2", "c"},
-      {"k2", "d"}, {"k2", "e"}, {"k3", "a"}, {"k4", "a"},
+      {"k1", "a"}, {"k2", "a"}, {"k2", "b"}, {"k2", "c"}, {"k2", "d"}, {"k2", "e"}, {"k3", "a"}, {"k4", "a"},
   };
   MDBX_dbi dbi = 0;
   ASSERT_TRUE(build_table(env, &dbi, items));

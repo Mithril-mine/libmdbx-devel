@@ -7,8 +7,8 @@
  *     (e.g. MDBX_THREAD_MISMATCH from mdbx_txn_abort() on a foreign thread)
  *     ended the process with std::terminate instead of being recoverable. */
 #include "mdbx.h++"
-#include <gtest/gtest.h>
 #include <cstdio>
+#include <gtest/gtest.h>
 #include <optional>
 #include <thread>
 

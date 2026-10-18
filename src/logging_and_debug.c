@@ -506,19 +506,16 @@ struct mprobe_record {
   const char *file; /* __FILE__ of the first registration */
   unsigned line;
   uint32_t kind;
-  mdbx_atomic_uint32_t flags;        /* bit0: ARMED, bit1: FAULT_ONCE */
-  mdbx_atomic_size_t seen;           /* evaluated at least once */
-  mdbx_atomic_size_t hits;           /* fires */
-  mdbx_atomic_size_t suppressed;     /* would-fire but disarmed */
-  mdbx_atomic_size_t value;          /* last captured value */
-  mdbx_atomic_size_t fault_code;     /* injected code or 0 */
+  mdbx_atomic_uint32_t flags;    /* bit0: ARMED, bit1: FAULT_ONCE */
+  mdbx_atomic_size_t seen;       /* evaluated at least once */
+  mdbx_atomic_size_t hits;       /* fires */
+  mdbx_atomic_size_t suppressed; /* would-fire but disarmed */
+  mdbx_atomic_size_t value;      /* last captured value */
+  mdbx_atomic_size_t fault_code; /* injected code or 0 */
   struct mprobe_record *next;
 };
 
-enum mprobe_record_flags {
-  MPROBE_FLAG_ARMED = 1u << 0,
-  MPROBE_FLAG_FAULT_ONCE = 1u << 1
-};
+enum mprobe_record_flags { MPROBE_FLAG_ARMED = 1u << 0, MPROBE_FLAG_FAULT_ONCE = 1u << 1 };
 
 /* Global runtime state (single registry per process). Guarded by
  * mprobe_reg_lock for structural mutations; counters are word-size atomics. */
@@ -531,11 +528,7 @@ static mdbx_atomic_size_t mprobe_alloc_fault;   /* remaining forced alloc failur
 static char *mprobe_ipc_dir;
 static mdbx_atomic_uint64_t mprobe_ipc_offset;
 
-enum mprobe_state_bits {
-  MPROBE_STATE_INIT_DONE = 1u << 0,
-  MPROBE_STATE_ACTIVE = 1u << 1,
-  MPROBE_STATE_IPC = 1u << 2
-};
+enum mprobe_state_bits { MPROBE_STATE_INIT_DONE = 1u << 0, MPROBE_STATE_ACTIVE = 1u << 1, MPROBE_STATE_IPC = 1u << 2 };
 
 static void mprobe_lock(void) {
   while (unlikely(!atomic_cas32(&mprobe_reg_lock, 0, 1)))
@@ -716,8 +709,7 @@ void mprobe_assert_failed(struct mprobe_site *site, const char *expr) {
     atomic_add_size(&rec->hits, 1);
     const uint32_t mode = atomic_load32(&mprobe_action_mode, mo_Relaxed);
     if (mode != mprobe_action_count) {
-      debug_log(MDBX_LOG_ERROR, site->file, site->line,
-                "DEV_ASSERT failed: %s (tag \"%s\")\n", expr, rec->name);
+      debug_log(MDBX_LOG_ERROR, site->file, site->line, "DEV_ASSERT failed: %s (tag \"%s\")\n", expr, rec->name);
       if (mode == mprobe_action_panic) {
         const struct MDBX_panic_point at = {site->file ? site->file : __func__, expr, site->line};
         panic_at(&at);
@@ -846,7 +838,7 @@ static void mprobe_drain_ipc_locked(void) {
   if (done != offset)
     atomic_store64(&mprobe_ipc_offset, done, mo_AcquireRelease);
 }
-#else /* MDBX_WITHOUT_MSVC_CRT */
+#else  /* MDBX_WITHOUT_MSVC_CRT */
 static void mprobe_drain_ipc(void) { (void)mprobe_ipc_offset; }
 #endif /* MDBX_WITHOUT_MSVC_CRT */
 

@@ -36,9 +36,8 @@ add_issue_test(gh0074 SOURCE "issue_gh0074.c++")
 add_issue_test(gh0075 SOURCE "issue_gh0075.c++")
 add_issue_test(gh0079 SOURCE "issue_gh0079.c++")
 if(NOT WIN32)
-  # On Windows the environment keeps the lower region of the lock file (up to
-  # rdt_length) byte-range locked while open, so no second handle in the process
-  # can write there and cached_oldest_txnid is not externally tamper-able.
+  # On Windows the environment keeps the lower region of the lock file (up to rdt_length) byte-range locked while open,
+  # so no second handle in the process can write there and cached_oldest_txnid is not externally tamper-able.
   add_issue_test(gh0081 SOURCE "issue_gh0081.c++")
 endif()
 add_issue_test(gh0085 SOURCE "issue_gh0085.c++")

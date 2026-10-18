@@ -1,6 +1,6 @@
 #include "mdbx.h++"
-#include <gtest/gtest.h>
 #include <cstdio>
+#include <gtest/gtest.h>
 
 TEST(issue_gh0025, all) {
   const char payload[] = "0123456789";

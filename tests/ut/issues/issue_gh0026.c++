@@ -1,6 +1,6 @@
 #include "mdbx.h++"
-#include <gtest/gtest.h>
 #include <cstdio>
+#include <gtest/gtest.h>
 #include <string>
 
 TEST(issue_gh0026, all) {

@@ -1,6 +1,6 @@
 #include "mdbx.h++"
-#include <gtest/gtest.h>
 #include <cstdio>
+#include <gtest/gtest.h>
 
 #ifdef _MSC_VER
 #pragma warning(disable : 4702) /* unreachable code */
@@ -38,8 +38,7 @@ TEST(issue_gh0056, aliased_old_new_buffers) {
   char buf[8] = "world";
   MDBX_val new_data = {buf, 5};
   MDBX_val old_data = {buf, 5}; // same iov_base as new_data
-  EXPECT_EQ(MDBX_EINVAL,
-            mdbx_replace_ex(txn, dbi, &key, &new_data, &old_data, MDBX_UPSERT, nullptr, nullptr));
+  EXPECT_EQ(MDBX_EINVAL, mdbx_replace_ex(txn, dbi, &key, &new_data, &old_data, MDBX_UPSERT, nullptr, nullptr));
 
   /* On the buggy code the on-stack cursor of mdbx_replace_ex() is still linked
    * into txn->cursors[dbi]; the following put then hangs (Linux -O2) or traps

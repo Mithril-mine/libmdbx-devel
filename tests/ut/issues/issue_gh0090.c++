@@ -114,8 +114,7 @@ TEST(issue_gh0090, erase_c_string_key_and_slice_value) {
   fill_map(txn, map);
   c.to_first(false);
   EXPECT_TRUE(c.erase("C", mdbx::slice("v1")));
-  EXPECT_EQ("A:v1 A:v2 B:v1 B:v2 C:v2", dump_all(txn, map))
-      << "erase(\"C\", slice(\"v1\")) must remove only C:v1";
+  EXPECT_EQ("A:v1 A:v2 B:v1 B:v2 C:v2", dump_all(txn, map)) << "erase(\"C\", slice(\"v1\")) must remove only C:v1";
 
   txn.abort();
   env.close();

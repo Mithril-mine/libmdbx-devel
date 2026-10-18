@@ -143,9 +143,9 @@ TEST(ut_transforms, txn_copy_fd) {
     txn.upsert(table, mdbx::slice("key"), mdbx::slice("value"));
     txn.commit();
 
-    #if defined(_WIN32) || defined(_WIN64)
-    const HANDLE fd = ::CreateFileW(copydb.c_str(), GENERIC_WRITE, 0, nullptr, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL,
-                                    nullptr);
+#if defined(_WIN32) || defined(_WIN64)
+    const HANDLE fd =
+        ::CreateFileW(copydb.c_str(), GENERIC_WRITE, 0, nullptr, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, nullptr);
     ASSERT_NE(fd, INVALID_HANDLE_VALUE);
     auto reader = env.start_read();
     reader.copy(mdbx::filehandle(fd), /*compactify=*/false);
