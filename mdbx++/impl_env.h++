@@ -725,7 +725,9 @@ inline env::defrag_result env::defrag(VISITOR &visitor, size_t defrag_atleast, s
     VISITOR &visitor_;
     static int cb(void *ctx, const MDBX_defrag_result_t *progress) noexcept {
       defrag_thunk *thunk = static_cast<defrag_thunk *>(ctx);
-      assert(thunk->is_clean());
+      if (MDBX_UNLIKELY(!thunk->is_clean()))
+        /* the C side notifies once more (final milestone) after the visitor has thrown */
+        return static_cast<int>(defrag_control::abort);
       try {
         return static_cast<int>(thunk->visitor_(*progress));
       } catch (... /* capture any exception to rethrow it over C code */) {

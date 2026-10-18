@@ -45,7 +45,11 @@ TEST(issue_gh0114, gc_time_limit_keeps_rp_augment_limit) {
 
   MDBX_env *env = nullptr;
   ASSERT_EQ(MDBX_SUCCESS, mdbx_env_create(&env));
-  ASSERT_EQ(MDBX_SUCCESS, mdbx_env_set_geometry(env, 16 * 1024 * 1024, -1, -1, -1, 64 * 1024 * 1024, 4096));
+  /* the current size must be large enough for one third of it to exceed the
+   * rp_augment_limit minimum (2 * maxgc_large1page), otherwise both the fixed
+   * and the broken scaling yield that minimum */
+  ASSERT_EQ(MDBX_SUCCESS,
+            mdbx_env_set_geometry(env, 16 * 1024 * 1024, 64 * 1024 * 1024, 64 * 1024 * 1024, -1, -1, 4096));
   ASSERT_EQ(MDBX_SUCCESS, mdbx_env_open(env, testdb, MDBX_NOSUBDIR, 0644))
       << "the base environment must open";
 

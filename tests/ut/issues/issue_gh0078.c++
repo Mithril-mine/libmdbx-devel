@@ -42,3 +42,36 @@ TEST(issue_gh0078, owned_buffer_reserve_keeps_freestanding) {
   EXPECT_EQ(mdbx::buffer<>::modality::allocated, b.content_modality());
   EXPECT_GE(b.capacity(), initial_capacity);
 }
+
+TEST(issue_gh0078, owned_buffer_data_at_silo_end_is_freestanding) {
+  /* the `<=` boundary itself: an allocated buffer filled exactly to capacity,
+   * then emptied from the front, has data_offset == capacity */
+  mdbx::buffer<> b;
+  b.assign(std::string(1000, 'x'));
+  ASSERT_EQ(mdbx::buffer<>::modality::allocated, b.content_modality());
+  const size_t capacity = b.capacity();
+  b.append(std::string(b.tailroom(), 'y'));
+  ASSERT_EQ(capacity, b.capacity());
+  ASSERT_EQ(0u, b.tailroom());
+  b.remove_prefix(b.length());
+  EXPECT_TRUE(b.is_freestanding()) << "an owned buffer with its data at the very end of the silo is not a reference";
+  EXPECT_EQ(capacity, b.headroom());
+  EXPECT_EQ(mdbx::buffer<>::modality::allocated, b.content_modality());
+}
+
+TEST(issue_gh0078, inplace_buffer_data_at_storage_end_stays_inplace) {
+  /* the same boundary for the inplace storage: an empty payload at its very end
+   * is still inplace, so a move yields an owned buffer, not a reference into
+   * the moved-from object */
+  mdbx::buffer<> b;
+  b.assign(std::string(1, 'x'));
+  ASSERT_EQ(mdbx::buffer<>::modality::inplace, b.content_modality());
+  b.assign(std::string(b.capacity(), 'x'));
+  ASSERT_EQ(mdbx::buffer<>::modality::inplace, b.content_modality());
+  b.remove_prefix(b.length());
+  EXPECT_EQ(mdbx::buffer<>::modality::inplace, b.content_modality());
+  mdbx::buffer<> moved(std::move(b));
+  EXPECT_TRUE(moved.is_freestanding()) << "a moved inplace buffer must not refer into the moved-from object";
+  EXPECT_EQ(mdbx::buffer<>::modality::inplace, moved.content_modality());
+  EXPECT_EQ(0u, moved.length());
+}
