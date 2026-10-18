@@ -31,6 +31,7 @@ A long-term support phase with periodic releases as fixes accumulate.
 ### Fixes:
 
  - Core engine:
+    - Fixed undefined behavior in the JSON-integer key encoding: a negative shift when encoding magnitudes above 2^52 and the negation of `INT64_MIN` were UB caught by UBSAN, and a null-but-empty key could be passed to `memcpy` while inserting a node (backport).
     - Fixed `mdbx_replace_ex()` possibly hanging or crashing the next operation on the same sub-table when called with overlapping buffers ([#56](https://github.com/Mithril-mine/libmdbx-devel/issues/56)) (backport).
     - Fixed a failed second in-process open releasing the first handle's file locks, letting another process take exclusive access ([#59](https://github.com/Mithril-mine/libmdbx-devel/issues/59)) (backport).
     - Fixed `mdbx_cursor_count_ex()` writing past the caller's buffer when called with the legacy structure size ([#68](https://github.com/Mithril-mine/libmdbx-devel/issues/68)) (backport).

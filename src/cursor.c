@@ -1293,7 +1293,8 @@ __hot int cursor_put(MDBX_cursor *mc, const MDBX_val *key, MDBX_val *data, unsig
           cASSERT(mc, node_flags(node) == 0);
           cASSERT(mc, key->iov_len < UINT16_MAX);
           node_set_ks(node, key->iov_len);
-          memcpy(node_key(node), key->iov_base, key->iov_len);
+          if (likely(key->iov_len))
+            memcpy(node_key(node), key->iov_base, key->iov_len);
           cASSERT(mc, ptr_disp(node_key(node), node_ds(node)) < ptr_disp(mc->pg[mc->top], env->ps));
           goto fix_parent;
         }
