@@ -784,17 +784,44 @@ bool case1_stairway_pass(track_context &ctx, mdbx::env env, prng &rnd, generator
   };
 
   std::vector<coverage_step> coverage;
+  const size_t coverage_max = getenv_uint("MDBX_GET_CACHED_MAX_COVERAGE", 0);
+  const size_t coverage_total_log = ([](const auto &rx) {
+    size_t n = 0;
+    for (const auto &from : rx)
+      for (const auto &to : rx)
+        if (to.first > from.first)
+          ++n;
+    return n;
+  })(ctx.rx);
+  size_t coverage_built = 0, coverage_skipped = 0;
   for (const auto &from : ctx.rx)
     for (const auto &to : ctx.rx)
-      if (to.first > from.first)
+      if (to.first > from.first) {
+        if (coverage_max && coverage_built >= coverage_max) {
+          ++coverage_skipped;
+          continue;
+        }
         coverage.emplace_back(from.first, to.first, static_cast<const mdbx::txn &>(from.second),
                               static_cast<const mdbx::txn &>(to.second));
+        ++coverage_built;
+      }
   std::shuffle(coverage.begin(), coverage.end(), rnd);
+  /* Пул записей зависит только от from_mvcc, а не от пары: один и тот же
+   * from участвует во множестве пар, поэтому кэшируем СВЕЖИЙ pool (fetch не
+   * мутирует его), а для каждой verify берём персональную копию, поскольку
+   * verify мутирует entry.cache/entry.value — общий pool ломал бы
+   * семантику честного кэширования. Сводим число полных обходов таблиц к
+   * ~rx вместо ~rx^2. */
+  std::unordered_map<mdbx::txnid, typename track_context::pool> pools_by_from;
+  pools_by_from.reserve(ctx.rx.size());
   for (auto &step : coverage) {
-    pool = ctx.fetch(step.from_txn, step.from_mvcc, rnd);
-    ok = ctx.verify(pool, step.from_mvcc, step.to_txn, step.to_mvcc) && ok;
-    max_pool = std::max(max_pool, pool.size());
-    number_checks += pool.size();
+    auto cached = pools_by_from.find(step.from_mvcc);
+    if (cached == pools_by_from.end())
+      cached = pools_by_from.emplace(step.from_mvcc, ctx.fetch(step.from_txn, step.from_mvcc, rnd)).first;
+    typename track_context::pool verify_copy = cached->second;
+    ok = ctx.verify(verify_copy, step.from_mvcc, step.to_txn, step.to_mvcc) && ok;
+    max_pool = std::max(max_pool, verify_copy.size());
+    number_checks += verify_copy.size();
     number_passes += 1;
     if (ctx.is_timeouted()) {
       std::cout << "timeout, bailout\n";
@@ -802,6 +829,8 @@ bool case1_stairway_pass(track_context &ctx, mdbx::env env, prng &rnd, generator
       break;
     }
   }
+  std::cout << "coverage: total-pairs " << coverage_total_log << ", built " << coverage_built << ", skipped "
+            << coverage_skipped << std::endl;
 
   txn = env.start_write();
   for (auto &pair : ctx.tables)
