@@ -377,7 +377,7 @@ template <class ALLOCATOR = default_allocator>
 using string = ::std::basic_string<char, ::std::char_traits<char>, ALLOCATOR>;
 
 using filehandle = ::mdbx_filehandle_t;
-#if MDBX_USING_CXX_EXPERIMETAL_FILESYSTEM
+#if MDBX_USING_CXX_EXPERIMENTAL_FILESYSTEM
 #ifdef _MSC_VER
 namespace filesystem = ::std::experimental::filesystem::v1;
 #else

@@ -59,7 +59,7 @@ struct LIBMDBX_API_TYPE slice : public ::MDBX_val {
   MDBX_CXX14_CONSTEXPR slice(slice &&src) noexcept;
 
 #if defined(DOXYGEN) || (defined(__cpp_lib_span) && __cpp_lib_span >= 202002L)
-  template <typename POD> MDBX_CXX14_CONSTEXPR slice(const ::std::span<POD> &span) : slice(span.begin(), span.end()) {
+  template <typename POD> MDBX_CXX14_CONSTEXPR slice(const ::std::span<POD> &span) : slice(span.data(), span.size_bytes()) {
     static_assert(::std::is_standard_layout<POD>::value && !::std::is_pointer<POD>::value,
                   "Must be a standard layout type!");
   }
