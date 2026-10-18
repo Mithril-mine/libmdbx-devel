@@ -422,7 +422,8 @@ The most significant ones are listed below.
 - The project is a winner of the **Yandex Open Source** contest among open-source projects; the code
   stays open with free support.
 - **The strategic direction is MithrilDB** (announced in late 2025): a common API for supporting
-  several database formats. Planned: txnid-cached search, streaming BLOBs, optional mmap,
+  several database formats. Planned: txnid-cached search, a streaming read/write mode for long values
+  ("Streaming BLOBs"), optional mmap,
   engine-level encryption and compression, SWIG, replication, and cross-language C/C++↔Rust
   interaction. Old formats and databases will be supported while users need them.
 

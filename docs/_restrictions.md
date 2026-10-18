@@ -94,6 +94,24 @@ instructions.
 This issue will be addressed in _MithrilDB_ and refined within one of
 0.15.x libmdbx releases.
 
+### Splitting long values into chunks
+
+Until the streamed API for long values ("Streaming BLOBs", planned in the
+roadmap) removes the need for it, a too-long value can be **explicitly split
+into chunks** that fit into a single page together with the key
+(`mdbx_limits_valsize4page_max()`; for multivalue tables use
+`mdbx_limits_valsize_max(MDBX_DUPSORT)`):
+
+- in a **plain table**, append the chunk number to the key (`K#0`, `K#1`, …):
+  a prefix search over `K` yields all chunks in order;
+- in a **DUPSORT (multivalue) table**, prefix each chunk's data with the
+  multivalue number (when several long values share one key) and the chunk
+  number: searching by key yields all multivalues with their chunks, and a
+  prefix search with the multivalue number yields just that value's chunks.
+
+The planned streaming API will provide this functionality without manual
+chunking.
+
 
 ### Huge transactions
 
