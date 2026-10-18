@@ -22,7 +22,7 @@ MDBX_CXX20_CONSTEXPR buffer<ALLOCATOR, CAPACITY_POLICY>::buffer(const struct sli
 template <class ALLOCATOR, typename CAPACITY_POLICY>
 inline buffer<ALLOCATOR, CAPACITY_POLICY>::buffer(const txn &transaction, const struct slice &src,
                                                   const allocator_type &alloc)
-    : buffer(src, !transaction.is_dirty(src.data()), alloc) {}
+    : buffer(src, src.data() && ::mdbx_is_dirty(transaction, src.data()) == MDBX_RESULT_FALSE, alloc) {}
 
 template <class ALLOCATOR, typename CAPACITY_POLICY>
 inline ::std::ostream &operator<<(::std::ostream &out, const buffer<ALLOCATOR, CAPACITY_POLICY> &it) {
