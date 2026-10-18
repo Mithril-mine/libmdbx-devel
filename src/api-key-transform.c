@@ -74,12 +74,13 @@ uint64_t mdbx_key_from_jsonInteger(const int64_t json_integer) {
   if (json_integer > 0) {
     const uint64_t u64 = json_integer;
     int shift = (int)clz64(u64) - (64 - IEEE754_DOUBLE_MANTISSA_SIZE - 1);
-    uint64_t mantissa = u64 << shift;
-    if (unlikely(shift < 0)) {
+    uint64_t mantissa;
+    if (unlikely(shift < 0))
       mantissa = round_mantissa(u64, shift);
-      if (mantissa > IEEE754_DOUBLE_MANTISSA_AMAX)
-        mantissa = round_mantissa(u64, --shift);
-    }
+    else
+      mantissa = u64 << shift;
+    if (mantissa > IEEE754_DOUBLE_MANTISSA_AMAX)
+      mantissa = round_mantissa(u64, --shift);
 
     ASSERT(mantissa >= IEEE754_DOUBLE_IMPLICIT_LEAD && mantissa <= IEEE754_DOUBLE_MANTISSA_AMAX);
     const uint64_t exponent = (uint64_t)IEEE754_DOUBLE_EXPONENTA_BIAS + IEEE754_DOUBLE_MANTISSA_SIZE - shift;
@@ -93,14 +94,15 @@ uint64_t mdbx_key_from_jsonInteger(const int64_t json_integer) {
   }
 
   if (json_integer < 0) {
-    const uint64_t u64 = -json_integer;
+    const uint64_t u64 = 0 - (uint64_t)json_integer;
     int shift = (int)clz64(u64) - (64 - IEEE754_DOUBLE_MANTISSA_SIZE - 1);
-    uint64_t mantissa = u64 << shift;
-    if (unlikely(shift < 0)) {
+    uint64_t mantissa;
+    if (unlikely(shift < 0))
       mantissa = round_mantissa(u64, shift);
-      if (mantissa > IEEE754_DOUBLE_MANTISSA_AMAX)
-        mantissa = round_mantissa(u64, --shift);
-    }
+    else
+      mantissa = u64 << shift;
+    if (mantissa > IEEE754_DOUBLE_MANTISSA_AMAX)
+      mantissa = round_mantissa(u64, --shift);
 
     ASSERT(mantissa >= IEEE754_DOUBLE_IMPLICIT_LEAD && mantissa <= IEEE754_DOUBLE_MANTISSA_AMAX);
     const uint64_t exponent = (uint64_t)IEEE754_DOUBLE_EXPONENTA_BIAS + IEEE754_DOUBLE_MANTISSA_SIZE - shift;
