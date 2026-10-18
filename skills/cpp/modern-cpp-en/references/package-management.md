@@ -29,7 +29,7 @@
 ```cmake
 # CMakeLists.txt — set toolchain
 cmake_minimum_required(VERSION 3.20)
-set(CMAKE_TOOLCHAIN_FILE "$ENV{VCPKG_ROOT}/scripts/buildsystems/vcpkg.cmake"
+set(CMAKE_TOOLCHAIN_FILE "$ENV{VCPKG_ROOT}/buildsystems/vcpkg.cmake"
     CACHE STRING "Vcpkg toolchain file")
 project(myproject LANGUAGES CXX)
 

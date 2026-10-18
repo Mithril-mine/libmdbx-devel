@@ -242,12 +242,12 @@ probe process("/path/to/libmdbx.so").mark("alloc__source") {
 Полноценная эмуляция `MDBX_MAP_FULL` и других кодов — через `return`-пробники
 (точки выхода функций, где решение уже принято). Требуется рантайм SystemTap
 (`stap`), которого нет на сборочных хостах CI; для CI-проверки присутствия
-пробников используется `tests/scripts/probes-check.sh` (см. §11.6).
+пробников используется `tests/probes-check.sh` (см. §11.6).
 
 ### 11.6 Проверка без рантайма SystemTap
 
 - `readelf -n <libmdbx.so>` показывает секцию `.note.stapsdt` со всеми маркерами.
-- `tests/scripts/probes-check.sh <elffile>` — проверяет наличие ожидаемого набора
+- `tests/probes-check.sh <elffile>` — проверяет наличие ожидаемого набора
   маркеров, пригоден для CI (не требует root и `stap`).
 
 > Справка по языку SystemTap (user-space/kernel домены, statement-пробники,

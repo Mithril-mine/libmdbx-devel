@@ -2,7 +2,7 @@
 
 > Part of the [Skynet project index](README.md).
 > How this repository is built (CMake, GNU Make, Conan), the key options, the CI matrix,
-> the **testing infrastructure** in depth (`mdbx_test`, `tests/scripts/stochastic.sh`,
+> the **testing infrastructure** in depth (`mdbx_test`, `tests/stochastic.sh`,
 > `tests/battery-tmux.sh`, GNUmakefile test targets, CTest) and the **amalgamation process**
 > (`make dist`, `dist-cutoff` markers, alloy) — both areas are central for the upcoming work
 > (test rework incl. possible GoogleTest integration, refactoring). Facts verified against sources.
@@ -154,7 +154,7 @@ over the Infra v3 cell registry (`tests/ci/config.json`, fast scope).
 The testing stack has four layers:
 
 1. **`mdbx_test`** — the big stochastic test framework (CLI utility).
-2. **`tests/scripts/stochastic.sh`** — orchestrator that sweeps parameters/modes and calls `mdbx_test`
+2. **`tests/stochastic.sh`** — orchestrator that sweeps parameters/modes and calls `mdbx_test`
    in a loop, verifying each DB with `mdbx_chk`.
 3. **`tests/battery-tmux.sh`** — parallel runner of several `stochastic.sh` instances in tmux.
 4. **Small C/C++ tests** — `tests/ut/` (areas: `api|cursor|cxx|dbi|env|gc|txn|issues`,
@@ -193,7 +193,7 @@ deadline. A single-actor run WITHOUT `--timeout` keeps the classic in-process "s
 path (no fork), which is required for QEMU/cross-compiled runs; such runs have no internal
 deadline and rely on the outer CTest timeout only.
 
-### 6.2 `tests/scripts/stochastic.sh` — parameter-sweep orchestrator (798 lines)
+### 6.2 `tests/stochastic.sh` — parameter-sweep orchestrator (798 lines)
 
 Flow: parse options → platform prep → RAM estimation → (optionally) `make mdbx_test mdbx_chk`
 → build caseset → iterate nops/batch ladder → run probes (each probe = `mdbx_test` + `mdbx_chk`
@@ -255,9 +255,9 @@ variant uses `--delay $((3+n*7))`. If multiple NUMA nodes exist, commands cycle 
 | `smoke-asan`/`test-asan` | `CFLAGS_EXTRA += -Os -fsanitize=address`, `MDBX_CHECKING=2`, ENABLE_ASAN=ON |
 | `test-leak` | re-run `test-stochastic` with `CFLAGS_EXTRA="-fsanitize=leak"` |
 | `smoke-memcheck`/`test-memcheck` | `VALGRIND=valgrind --trace-children=yes --log-file=valgrind-%p.log --leak-check=full --track-origins=yes --read-var-info=yes --error-exitcode=42 --suppressions=valgrind.supp`; `CFLAGS_EXTRA=-Ofast -DENABLE_MEMCHECK`, `MDBX_CHECKING=1`; `test-memcheck` also runs `stochastic.sh --with-valgrind --loops 2 --db-upto-mb 256 --skip-make` |
-| `test-stochastic` | `tests/scripts/stochastic.sh --whole-duration 600 --probe-duration 60 --dont-check-ram-size --loops 2 --db-upto-mb 256 --skip-make --taillog` |
-| `test-long` | `tests/scripts/stochastic.sh --loops 42 --db-upto-mb 1024 --extra --skip-make --taillog` (weeks) |
-| `test-singleprocess` | `tests/scripts/stochastic.sh --single --loops 2 --whole-duration 600 --probe-duration 60 --dont-check-ram-size --db-upto-mb 256 --skip-make --taillog` |
+| `test-stochastic` | `tests/stochastic.sh --whole-duration 600 --probe-duration 60 --dont-check-ram-size --loops 2 --db-upto-mb 256 --skip-make --taillog` |
+| `test-long` | `tests/stochastic.sh --loops 42 --db-upto-mb 1024 --extra --skip-make --taillog` (weeks) |
+| `test-singleprocess` | `tests/stochastic.sh --single --loops 2 --whole-duration 600 --probe-duration 60 --dont-check-ram-size --db-upto-mb 256 --skip-make --taillog` |
 | `test-ci` | loop: `check smoke-singleprocess smoke-fault smoke-memcheck test-leak test-asan test-ubsan test-singleprocess test-memcheck` |
 | `test-ci-extra` | `test-ci` + `cross-gcc` + `cross-qemu` |
 | `check` | `clean | smoke-assertion ninja-assertions dist install test ctest` with `DESTDIR=@check-install` |
