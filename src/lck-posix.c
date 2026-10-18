@@ -824,8 +824,8 @@ static int osal_ipclock_unlock(MDBX_env *env, osal_ipclock_t *ipc) {
     if (current_pid != env->pid)
       rc = MDBX_SUCCESS /* a forked child: the lock belongs to the parent */;
     if (current_pid == env->pid || LOG_ENABLED(MDBX_LOG_NOTICE))
-      debug_log((current_pid == env->pid) ? MDBX_LOG_FATAL : MDBX_LOG_NOTICE, "ipc-unlock()",
-                __LINE__, "failed: env %p, lck-%s %p, err %d\n", __Wpedantic_format_voidptr(env),
+      debug_log((current_pid == env->pid) ? MDBX_LOG_FATAL : MDBX_LOG_NOTICE, "ipc-unlock()", __LINE__,
+                "failed: env %p, lck-%s %p, err %d\n", __Wpedantic_format_voidptr(env),
                 (env->lck == env->lck_mmap.lck) ? "mmap" : "stub", __Wpedantic_format_voidptr(env->lck), err);
   }
   return rc;

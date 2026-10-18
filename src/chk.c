@@ -980,7 +980,7 @@ __cold static int chk_handle_kv(MDBX_chk_scope_t *const scope, MDBX_chk_table_t 
                                 const MDBX_val *key, const MDBX_val *data) {
   MDBX_chk_internal_t *const chk = scope->internal;
   int err = MDBX_SUCCESS;
-/* cookie == nullptr means the table was filtered out by the user (see the
+  /* cookie == nullptr means the table was filtered out by the user (see the
    * table_filter callback, e.g. `mdbx_chk -s <table>`); no per-record user
    * processing for such tables. In particular the MAIN table always carries a
    * cookie only when it passes the filter, so this is not an invariant to
