@@ -265,6 +265,25 @@ class McpServer:
              {"type": "object",
               "properties": {"test": {"type": "string"}},
               "required": ["test"]}),
+            ("project_load", "Загрузить project-map (files+file_deps).",
+             ["files"], {"type": "object",
+                         "properties": {"files": {"type": "object"},
+                                        "edges": {"type": "array"},
+                                        "replace": {"type": "boolean"}},
+                         "required": ["files"]}),
+            ("project_files", "Файлы проекта по префиксу пути.", [],
+             {"type": "object",
+              "properties": {"prefix": {"type": "string"},
+                             "limit": {"type": "integer"}}}),
+            ("file_deps", "Зависимости файла (file:path).", ["path"],
+             {"type": "object",
+              "properties": {"path": {"type": "string"}},
+              "required": ["path"]}),
+            ("file_dependents", "Файлы, зависящие от path.", ["path"],
+             {"type": "object",
+              "properties": {"path": {"type": "string"},
+                             "limit": {"type": "integer"}},
+              "required": ["path"]}),
         ]
         return {name: {"name": name, "description": desc, "inputSchema": schema}
                 for name, desc, _args, schema in t}
@@ -452,6 +471,18 @@ class McpServer:
             return s.ci_jobs_get(args["job"])
         if name == "ci_jobs_by_test":
             return {"jobs": s.ci_jobs_by_test(args["test"])}
+        if name == "project_load":
+            return s.project_load(args.get("files") or {},
+                                  args.get("edges") or [],
+                                  replace=bool(args.get("replace", True)))
+        if name == "project_files":
+            return {"files": s.project_files(args.get("prefix", ""),
+                                             limit=args.get("limit"))}
+        if name == "file_deps":
+            return {"deps": s.file_deps(args["path"])}
+        if name == "file_dependents":
+            return {"dependents": s.file_dependents(
+                args["path"], limit=args.get("limit"))}
         raise MemoryError("NO_SUCH_TOOL", "invalid", "неизвестный инструмент %r" % name,
                           "проверьте tools/list", "none")
 

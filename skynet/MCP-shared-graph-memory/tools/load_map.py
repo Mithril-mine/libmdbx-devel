@@ -43,6 +43,8 @@ def main():
                     help="очистить структурные таблицы перед загрузкой")
     ap.add_argument("--skip-regions", action="store_true",
                     help="не грузить regions/uncovered")
+    ap.add_argument("--project", default=None,
+                    help="дополнительно загрузить project-map.json (путь)")
     ap.add_argument("--dry-run", action="store_true",
                     help="сверка только: не писать в БД")
     args = ap.parse_args()
@@ -93,6 +95,12 @@ def main():
         loaded.get("regions", 0), loaded.get("uncovered", 0), dt))
     print("verify: symbols=%d regions=%d uncovered=%d reverse_sample=%d" % (
         n_sym, n_reg, n_unc, n_rev))
+    if args.project:
+        with open(args.project) as f:
+            pj = json.load(f)
+        r = store.project_load(pj.get("files") or {}, pj.get("edges") or [],
+                               replace=args.replace)
+        print("project-map: files=%d edges=%d" % (r["files"], r["edges"]))
     store.close()
 
 

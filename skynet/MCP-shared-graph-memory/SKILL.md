@@ -58,6 +58,9 @@ shared-graph-memory.mdbx — персистентная память роя на
 | `coverage_symbols(symbol_prefix?)` | **Какие тесты защищают символ** (covered_by) |
 | `ci_jobs_insert(job, body)` / `ci_jobs_all(prefix?)` | Параметры CI-джоб (`{workflow}/{job}`) |
 | `ci_jobs_get(job)` / `ci_jobs_by_test(test)` | Одна джоба / джобы, исполняющие тест |
+| `project_load(files, edges, replace?)` | Загрузка project-map (весь репозиторий) |
+| `project_files(prefix?, limit?)` | Файлы проекта по префиксу пути |
+| `file_deps(path)` / `file_dependents(path)` | Зависимости файла / зависящие от него |
 
 ### Карта исходников (refactoring-map)
 

@@ -33,13 +33,17 @@
 | `covered_by` | DEFAULTS | `covered_by:{sym}` → JSON `[test_id]` | обратный индекс: какие тесты защищают символ |
 | `test_metrics` | DEFAULTS | `test_metrics:{test_id}` → JSON окно истории | длительности/флаки (скользящее окно) |
 | `ci_jobs` | DEFAULTS | `{workflow}/{job}` → JSON | параметры CI-джоб (matrix/scope/tests_hint) |
+| `project_files` | DEFAULTS | `rel_path` → JSON `{kind, lang, module, deps}` | карта проекта (весь репо: cmake/scripts/docs/ci/config) |
+| `file_deps` | DEFAULTS | `file:{rel}` → JSON `[dep_rel]` | рёбра файл→файл (include/import/source/ссылка/workflow) |
 
 Зарезервировано дизайном (REFACTORING-MAP.md), данные появятся с коллекторами:
 `probes` — добавляются аддитивно (§1.1). Реализованы коллекторы:
 `test_metrics` (tools/collect_test_metrics.py, ctest XML/LastTest.log → окно
 длительностей), `coverage` (tools/collect_coverage.py: lcov/llvm-cov →
 тест→символы + covered_by), `ci_jobs` (tools/map_ci_jobs.py:
-.github/workflows/*.yml → matrix/scope/tests) — методы Store + MCP-инструменты.
+.github/workflows/*.yml → matrix/scope/tests), `project_files`/`file_deps`
+(tools/scan_project.py → project-map.json: cmake/scripts/docs/ci/config,
+загрузка `load_map.py --project`) — методы Store + MCP-инструменты.
 
 `mdbx_env_set_option(env, MDBX_opt_max_db, 32)`. Одна write-транзакция на операцию
 (в т.ч. LRU-касания — батчем, см. §8).

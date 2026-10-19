@@ -115,6 +115,9 @@ class Store:
         "test_metrics": mdbx.DB_DEFAULTS,  # тест-кейс -> JSON окно истории
         "ci_jobs": mdbx.DB_DEFAULTS,     # {workflow}/{job} -> JSON
         "covered_by": mdbx.DB_DEFAULTS,  # covered_by:{fn:...} -> JSON [test_id]
+        # --- слой карты проекта (весь репозиторий, вне C/C++ AST) ---
+        "project_files": mdbx.DB_DEFAULTS,  # rel_path -> JSON {kind, lang, module, deps}
+        "file_deps": mdbx.DB_DEFAULTS,   # file:rel -> JSON [dep_rel]
     }
 
     def __init__(self, path: str, maxdbs: int = 32, max_value_bytes: int = 16 << 20,
@@ -1892,6 +1895,81 @@ class Store:
     @staticmethod
     def _uncovered_key(file: str, idx: int) -> str:
         return "uncovered:%s:%d" % (Store._module_of_file(file), idx)
+
+    # --- слой карты проекта (весь репозиторий: cmake/scripts/docs/ci) --------
+    def project_load(self, files: dict, edges: list, replace: bool = True) -> dict:
+        """Загружает project-map: файлы и рёбра file_deps.
+
+        `files`: rel_path -> {kind, lang, module, size?, deps?}
+        `edges`: [{from, to, kind}] — дедуплицируются в file:from -> [to...].
+        """
+        with self._begin_write() as txn:
+            if replace:
+                for dbi in ("project_files", "file_deps"):
+                    with txn.cursor(self.dbi(txn, dbi)) as cur:
+                        rc, _, _ = cur.get(mdbx.CURSOR_FIRST)
+                        while rc == mdbx.RC_SUCCESS:
+                            cur.delete()
+                            rc, _, _ = cur.get(mdbx.CURSOR_NEXT)
+            pf_dbi = self.dbi(txn, "project_files")
+            fd_dbi = self.dbi(txn, "file_deps")
+            for rel, meta in sorted(files.items()):
+                body = {k: v for k, v in meta.items() if k != "deps"}
+                txn.put(pf_dbi, rel.encode(),
+                        json.dumps(body, ensure_ascii=False).encode())
+            # агрегируем рёбра: file:from -> set(to)
+            dep_map = {}
+            for e in edges:
+                src = e.get("from")
+                dst = e.get("to")
+                if not src or not dst:
+                    continue
+                dep_map.setdefault(src, set()).add(dst)
+            for src, dsts in sorted(dep_map.items()):
+                txn.put(fd_dbi, ("file:" + src).encode(),
+                        json.dumps(sorted(dsts), ensure_ascii=False).encode())
+            return {"files": len(files), "edges": len(edges)}
+
+    def project_files(self, prefix: str = "", limit: int = None) -> list:
+        out = []
+        with self.env.begin(readonly=True) as txn:
+            dbi = self.dbi(txn, "project_files")
+            with txn.cursor(dbi) as cur:
+                rc, k, v = cur.get(mdbx.CURSOR_FIRST)
+                while rc == mdbx.RC_SUCCESS:
+                    key = k.decode("utf-8", "replace")
+                    if key.startswith(prefix):
+                        body = json.loads(v)
+                        out.append({"path": key, "meta": body})
+                        if limit and len(out) >= limit:
+                            break
+                    rc, k, v = cur.get(mdbx.CURSOR_NEXT)
+        return out
+
+    def file_deps(self, path: str) -> list:
+        """Зависимости файла (file:path -> [dep...])."""
+        with self.env.begin(readonly=True) as txn:
+            rc, val = txn.get(self.dbi(txn, "file_deps"),
+                              ("file:" + path).encode())
+            if val is None:
+                return []
+            return json.loads(val.decode())
+
+    def file_dependents(self, path: str, limit: int = 50) -> list:
+        """Файлы, зависящие от path (обратный обход file_deps)."""
+        out = []
+        with self.env.begin(readonly=True) as txn:
+            dbi = self.dbi(txn, "file_deps")
+            with txn.cursor(dbi) as cur:
+                rc, k, v = cur.get(mdbx.CURSOR_FIRST)
+                while rc == mdbx.RC_SUCCESS:
+                    src = k.decode("utf-8", "replace")[len("file:"):]
+                    if path in (json.loads(v) or []):
+                        out.append(src)
+                        if limit and len(out) >= limit:
+                            break
+                    rc, k, v = cur.get(mdbx.CURSOR_NEXT)
+        return out
 
     def map_load_regions(self, regions: list, uncovered: list,
                          replace: bool = False) -> dict:
