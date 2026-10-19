@@ -2031,6 +2031,7 @@ class Store:
                             try:
                                 out[bare] = json.loads(v)
                             except ValueError:
+                                # повреждённая запись символа: пропускаем (перегенерация перезапишет)
                                 pass
                         rc, k, v = cur.get(mdbx.CURSOR_NEXT)
             return out
@@ -2397,6 +2398,7 @@ class Store:
                         body = json.loads(val.decode())
                         static_callees.add(body.get("callee", ""))
                     except ValueError:
+                        # повреждённое ребро: пропускаем (регенерация перезапишет)
                         pass
                     rc, _, val = cur.get(mdbx.CURSOR_NEXT_DUP)
         observed_callees = set()

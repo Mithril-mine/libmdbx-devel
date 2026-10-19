@@ -48,7 +48,6 @@ _PY_IMPORT = re.compile(r"^\s*(?:from\s+([\w.]+)\s+import|import\s+([\w.]+))")
 _PY_DEF = re.compile(r"^def\s+([\w]+)\s*\(")
 _SH_SOURCE = re.compile(r"^\s*\.\s+([^\s]+)|^\s*source\s+([^\s]+)")
 _SH_DEF = re.compile(r"^([\w]+)\s*\(\)\s*\{")
-_CI_JOB = re.compile(r"^  ([\w-]+):\s*$")
 
 
 def _is_skippable(root: str, rel: str) -> bool:

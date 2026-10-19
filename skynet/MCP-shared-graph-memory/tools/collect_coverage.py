@@ -55,6 +55,7 @@ def parse_lcov(path: str) -> dict:
                     if int(line.split(",")[1]) > 0:
                         files[cur].add(int(ln))
                 except (ValueError, IndexError):
+                    # некорректная DA:-запись (мусор/хвост файла): пропускаем
                     pass
     return files
 
