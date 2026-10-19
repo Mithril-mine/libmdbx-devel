@@ -28,6 +28,7 @@ nav:
   - Начало работы:
       - Установка и сборка: getting-started/install-build.md
       - Первые шаги: getting-started/first-steps.md
+      - Шпаргалка CRUD: getting-started/crud-quick.md
       - Режимы durability: getting-started/durability-modes.md
   - Учебник:
       - Об учебнике: textbook/index.md

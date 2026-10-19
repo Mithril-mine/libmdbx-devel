@@ -117,6 +117,9 @@ are only a few cases of changing data.
 |Key exist → Delete by key with data matching check|\ref mdbx_del() with the parameter `data` filled with the value which should be match for deletion|Deletion or \ref MDBX_NOTFOUND if the value does not match|
 |Delete at the current cursor position        |\ref mdbx_cursor_del() with \ref MDBX_CURRENT flag|Deletion|
 |Extract (read & delete) value by the key     |\ref mdbx_replace() with zero flag and parameter `new_data = NULL`|Returning a deleted value|
+| _APPENDING_|||
+|Key is absent and new key is greater than all existing ones|\ref MDBX_APPEND|Insertion at the tail|
+|Key is absent but the new key is not greater than the last existing one|\ref MDBX_APPEND|Error \ref MDBX_EKEYMISMATCH|
 
 
 ## Tables with NON-UNIQUE keys
@@ -148,6 +151,10 @@ as a duplicates or as like a multiple values corresponds to keys.
 |Key exist → Delete particular value corresponds given key|\ref mdbx_del() with the parameter `data` filled with the value that wanna to delete, or \ref mdbx_replace() with \ref MDBX_CURRENT + \ref MDBX_NOOVERWRITE and the `old_value` parameter filled with the value that wanna to delete and `new_data = NULL`| Deletion or \ref MDBX_NOTFOUND if no such key-value pair|
 |Delete one value at the current cursor position|\ref mdbx_cursor_del() with \ref MDBX_CURRENT flag|Deletion only the current entry|
 |Delete all values of key at the current cursor position|\ref mdbx_cursor_del() with \ref MDBX_ALLDUPS flag|Deletion all duplicates of key (all multi-values) at the current cursor position|
+| _APPENDING_|||
+|Key is absent and new key is greater than all existing ones|\ref MDBX_APPEND|Insertion at the tail|
+|Key is absent but the new key is not greater than the last existing one|\ref MDBX_APPEND|Error \ref MDBX_EKEYMISMATCH|
+|Key exist → Append one more value to the key|\ref MDBX_APPENDDUP|Insertion of a new value at the tail of the key's value set|
 
  \defgroup c_cursors Cursors
  \defgroup c_statinfo Statistics & Information
@@ -1437,7 +1444,7 @@ typedef enum MDBX_env_flags {
    *    transactions; because MDBX will rollback to last steady commit since it
    *    kept explicitly.
    *  - the last steady transaction makes an effect similar to "long-lived" read
-   *    transaction (see above in the \ref restrictions section) since prevents
+   *    transaction (see above in the [restrictions](https://libmdbx.dqdkfa.ru/docs/en/overview/restrictions.html) section) since prevents
    *    reuse of pages freed by newer write transactions, thus the any data
    *    changes will be placed in newly allocated pages.
    *  - to avoid rapid database growth, the system will sync data and issue
@@ -2661,7 +2668,7 @@ LIBMDBX_API int mdbx_env_deleteW(const wchar_t *pathname, MDBX_env_delete_mode_t
  * No lockfile is created, since it gets recreated at need.
  * \note This call can trigger significant file size growth if run in
  * parallel with write transactions, because it employs a read-only
- * transaction. See long-lived transactions under \ref restrictions section.
+ * transaction. See long-lived transactions under [restrictions](https://libmdbx.dqdkfa.ru/docs/en/overview/restrictions.html) section.
  *
  * \note On Windows the \ref mdbx_env_copyW() is recommended to use.
  * \see mdbx_env_copy2fd()
@@ -2716,7 +2723,7 @@ LIBMDBX_API int mdbx_env_copy(MDBX_env *env, const char *dest, MDBX_copy_flags_t
  * No lockfile is created, since it gets recreated at need.
  * \note This call can trigger significant file size growth if run in
  * parallel with write transactions, because it employs a read-only
- * transaction. See long-lived transactions under \ref restrictions section.
+ * transaction. See long-lived transactions under [restrictions](https://libmdbx.dqdkfa.ru/docs/en/overview/restrictions.html) section.
  *
  * \note On Windows the \ref mdbx_txn_copy2pathnameW() is recommended to use.
  * \see mdbx_txn_copy2fd()
@@ -2792,7 +2799,7 @@ LIBMDBX_API int mdbx_txn_copy2pathnameW(MDBX_txn *txn, const wchar_t *dest, MDBX
  *
  * \note This call can trigger significant file size growth if run in
  *       parallel with write transactions, because it employs a read-only
- *       transaction. See long-lived transactions under \ref restrictions
+ *       transaction. See long-lived transactions under [restrictions](https://libmdbx.dqdkfa.ru/docs/en/overview/restrictions.html)
  *       section.
  *
  * \note Fails if the environment has suffered a page leak and the destination
@@ -2817,7 +2824,7 @@ LIBMDBX_API int mdbx_env_copy2fd(MDBX_env *env, mdbx_filehandle_t fd, MDBX_copy_
  *
  * \note This call can trigger significant file size growth if run in
  *       parallel with write transactions, because it employs a read-only
- *       transaction. See long-lived transactions under \ref restrictions
+ *       transaction. See long-lived transactions under [restrictions](https://libmdbx.dqdkfa.ru/docs/en/overview/restrictions.html)
  *       section.
  *
  * \note Fails if the environment has suffered a page leak and the destination
@@ -4680,7 +4687,7 @@ LIBMDBX_API int mdbx_txn_reset(MDBX_txn *txn);
  * \see mdbx_txn_unpark()
  * \see mdbx_txn_flags()
  * \see mdbx_env_set_hsr()
- * \see <a href="intro.html#long-lived-read">Long-lived read transactions</a>
+ * \see [Long-lived read transactions](https://libmdbx.dqdkfa.ru/docs/en/overview/restrictions.html#mvcc-and-long-lived-readers)
  *
  * \param [in] txn          A read transaction started by \ref mdbx_txn_begin().
  *
@@ -4699,7 +4706,7 @@ LIBMDBX_API int mdbx_txn_park(MDBX_txn *txn, bool autounpark);
  *
  * \see mdbx_txn_park()
  * \see mdbx_txn_flags()
- * \see <a href="intro.html#long-lived-read">Long-lived read transactions</a>
+ * \see [Long-lived read transactions](https://libmdbx.dqdkfa.ru/docs/en/overview/restrictions.html#mvcc-and-long-lived-readers)
  *
  * \param [in] txn     A read transaction started by \ref mdbx_txn_begin() and then parked by \ref mdbx_txn_park.
  *
@@ -5151,8 +5158,9 @@ LIBMDBX_INLINE_API(int, mdbx_dbi_flags, (const MDBX_txn *txn, MDBX_dbi dbi, unsi
  * any transaction(s) running by other thread(s).
  * So the `mdbx_dbi_close()` MUST NOT be called in-parallel/concurrently
  * with any transactions using the closing dbi-handle, nor during other thread
- * commit/abort a write transaction(s). The "next" version of libmdbx (\ref
- * MithrilDB) will solve this issue.
+ * commit/abort a write transaction(s). The "next" version of libmdbx
+ * ([MithrilDB](https://libmdbx.dqdkfa.ru/docs/en/overview/index.html#roadmap-and-the-future))
+ * will solve this issue.
  *
  * Handles should only be closed if no other threads are going to reference
  * the table handle or one of its cursors any further. Do not close a handle
@@ -6959,7 +6967,7 @@ LIBMDBX_API int mdbx_thread_unregister(const MDBX_env *env);
  * \see mdbx_env_set_hsr()
  * \see mdbx_env_get_hsr()
  * \see mdbx_txn_park()
- * \see <a href="intro.html#long-lived-read">Long-lived read transactions</a>
+ * \see [Long-lived read transactions](https://libmdbx.dqdkfa.ru/docs/en/overview/restrictions.html#mvcc-and-long-lived-readers)
  *
  * Using this callback you can choose how to resolve the situation:
  *   - abort the write transaction with an error;
@@ -7032,7 +7040,7 @@ typedef int (*MDBX_hsr_func)(const MDBX_env *env, const MDBX_txn *txn, mdbx_pid_
  * \see MDBX_hsr_func
  * \see mdbx_env_get_hsr()
  * \see mdbx_txn_park()
- * \see <a href="intro.html#long-lived-read">Long-lived read transactions</a>
+ * \see [Long-lived read transactions](https://libmdbx.dqdkfa.ru/docs/en/overview/restrictions.html#mvcc-and-long-lived-readers)
  *
  * \param [in] env             An environment handle returned
  *                             by \ref mdbx_env_create().
@@ -7048,7 +7056,7 @@ LIBMDBX_API int mdbx_env_set_hsr(MDBX_env *env, MDBX_hsr_func hsr_callback);
  * \see MDBX_hsr_func
  * \see mdbx_env_set_hsr()
  * \see mdbx_txn_park()
- * \see <a href="intro.html#long-lived-read">Long-lived read transactions</a>
+ * \see [Long-lived read transactions](https://libmdbx.dqdkfa.ru/docs/en/overview/restrictions.html#mvcc-and-long-lived-readers)
  *
  * \param [in] env   An environment handle returned by \ref mdbx_env_create().
  *

@@ -742,7 +742,8 @@ public:
   /// \note Use with care.
   /// This call is synchronized via mutex with other calls \ref close_map(), but
   /// NOT with other transactions running by other threads. The "next" version
-  /// of libmdbx (\ref MithrilDB) will solve this issue.
+  /// of libmdbx ([MithrilDB](https://libmdbx.dqdkfa.ru/docs/en/overview/index.html#roadmap-and-the-future))
+  /// will solve this issue.
   ///
   /// Handles should only be closed if no other threads are going to reference
   /// the table handle or one of its cursors any further. Do not close a
