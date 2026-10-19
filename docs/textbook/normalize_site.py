@@ -140,6 +140,45 @@ def relocate_search():
           f"{'' if moved else ' (index already relocated)'}")
 
 
+def fix_search_worker_urls():
+    """The Material `__config` metadata embeds the search-worker path relative
+    to each page. The asset hoist (dedupe_assets) lifts assets from
+    site/{loc}/assets to site/assets one level up, so the embedded paths go
+    stale on every page and the search worker 404s (visible as a forever
+    "Initializing search" placeholder). Rewrite the `search` value in the
+    JSON config of every page to a relative path that resolves to the hoisted
+    worker. Idempotent: pages whose path already resolves are left alone."""
+    workers = sorted((SITE / "assets" / "javascripts" / "workers").glob("search.*.min.js"))
+    if not workers:
+        fail("search worker not found under assets/javascripts/workers/")
+    worker = workers[0]
+    pattern = re.compile(r'(<script[^>]*\bid="__config"[^>]*>)(.*?)(</script>)', re.S)
+    fixed = 0
+    for html in sorted(SITE.rglob("*.html")):
+        text = html.read_text(encoding="utf-8")
+
+        def patch(m):
+            nonlocal fixed
+            prefix, payload, suffix = m.group(1), m.group(2), m.group(3)
+            config = json.loads(payload)
+            current = config.get("search", "")
+            if not current:
+                return m.group(0)
+            base = html.parent
+            if (base / current).resolve().is_file():
+                return m.group(0)  # already resolves to the actual worker
+            rel = os.path.relpath(worker, base)
+            config["search"] = rel
+            fixed += 1
+            return prefix + json.dumps(config, ensure_ascii=False) + suffix
+
+        new = pattern.sub(patch, text)
+        if new != text:
+            html.write_text(new, encoding="utf-8")
+    print(f"  search: worker URLs fixed in {fixed} page(s) "
+          f"({worker.name})")
+
+
 def rewrite_links():
     """Make every local href/src/srcset resolve to an existing file under the
     final tree: insert one more '../' where the asset hoist shifted depth, and
@@ -218,6 +257,7 @@ def main():
     dedupe_assets()
     dedupe_examples()
     relocate_search()
+    fix_search_worker_urls()
     rewrite_links()
     audit_links()
     total = sum(1 for _ in SITE.rglob("*") if _.is_file())
