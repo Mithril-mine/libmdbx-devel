@@ -55,13 +55,17 @@ TEST(issue_gh0093, chk_reports_problems_in_ctx_not_as_exception) {
 
   MDBX_chk_context_t ctx;
   std::memset(&ctx, 0, sizeof(ctx));
-  /* The callback reports one problem; the check must return normally with the
-   * problem counted in ctx instead of throwing mdbx::internal_problem. */
+  /* The callback reports a problem and returns MDBX_PROBLEM; the check must
+   * return normally with the problem counted in ctx instead of throwing
+   * mdbx::internal_problem. */
   MDBX_chk_callbacks_t cb;
   std::memset(&cb, 0, sizeof(cb));
-  cb.stage_end = [](MDBX_chk_context_t *c, MDBX_chk_stage_t, int) noexcept {
-    ::mdbx_env_chk_encount_problem(c);
-    return 0;
+  cb.stage_end = [](MDBX_chk_context_t *c, MDBX_chk_stage_t stage, int err) -> int {
+    if (stage == MDBX_chk_finalize) {
+      ::mdbx_env_chk_encount_problem(c);
+      return MDBX_PROBLEM;
+    }
+    return err;
   };
   MDBX_chk_context_t &chk_problem = env.chk(ctx, &cb);
   (void)chk_problem;
