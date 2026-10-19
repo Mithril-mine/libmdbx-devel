@@ -22,7 +22,7 @@
 | `COPYRIGHT`, `LICENSE`, `NOTICE` | legal | Apache-2.0, license-change explanation. |
 | `ChangeLog*.md` | docs | Changelogs per version (0.09, 0.10, 0.12, 0.13, Old). |
 | `.clang-format`, `.cmake-format.yaml` | style | Formatting rules (LLVM). |
-| `docs/` | docs | Doxygen: `Doxyfile.in`, `_preface.md`, `_starting.md`, `_restrictions.md`, `_toc.md`, CSS/HTML assets, logo. |
+| `docs/` | docs | Doxygen: `Doxyfile.in`, CSS/HTML assets, logo. |
 | `examples/` | docs/code | `example-mdbx.c`, `example-mdbx.c++`, `sample-bdb.txt`, `c/` (C examples + `c/pcrf/`), `c++/` (C++ examples), `common/` (shared helpers), `config-store/` (end-to-end tutorial project). |
 | `.github/workflows/` | CI | GH Actions: linux, macos, windows-msvc, windows-mingw, windows-mscl, cxx-msvc, android. |
 | `.sourcecraft/ci.yaml` | CI | SourceCraft CI: workflows `ci-linux-debug-gcc`, `ci-linux-debug-clang`, `ci-linux-release-spilling`; cubes image `dh-mirror.gitverse.ru/jakoch/cpp-devbox:forky-latest`; env `MDBX_BUILD_OPTIONS=-DMDBX_CHECKING=2 -DMDBX_DEBUG=0 -DMDBX_FORCE_ASSERTIONS=1 -DMDBX_DEBUG_SPILLING=1`; runs `tests/ci/ci.sh`; daily cron 03:42 UTC. |
@@ -225,11 +225,9 @@ linkage; in amalgamated build (`xMDBX_ALLOY`) = `static`.
 ## 6. `docs/`
 
 Documentation sources: `Doxyfile.in` (doxygen config for the mkdoxy-based
-API reference), the markdown fragments `_preface.md`, `_starting.md`,
-`_restrictions.md`, `_toc.md` (assembled into the doxygen inputs
-`overall.md`/`intro.md`/`usage.md` by the make rules), the locale trees
-`ru/`/`en/` (published docsite), the textbook `textbook/` and the site
-build `docsite/`. Published site: <https://libmdbx.dqdkfa.ru/docs/>.
+API reference), the locale trees `ru/`/`en/` (published docsite), the
+textbook `textbook/` and the site build `docsite/`.
+Published site: <https://libmdbx.dqdkfa.ru/docs/>.
 
 ---
 

@@ -1082,10 +1082,6 @@ elseif(TRUE)
             src/bits.md
             src/amalgam.in
             docs/Doxyfile.in
-            docs/_preface.md
-            docs/_restrictions.md
-            docs/_starting.md
-            docs/_toc.md
             LICENSE
             NOTICE
             COPYRIGHT
