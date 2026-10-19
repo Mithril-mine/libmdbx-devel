@@ -77,6 +77,7 @@ shared-graph-memory.mdbx — персистентная память роя на
 | `cbm_link(our_key, cbm_node, cbm_project?)` / `cbm_unlink(our_key)` | Мост: наш fq-ключ ↔ узел codebase-memory-mcp |
 | `cbm_linked(prefix?)` | Список мостов |
 | `cbm_search(query, project?, tool?, args?)` | Поиск в CBM (CLI-подпроцесс). **Опционально**: без CBM → `unavailable: true`; полноценная работа сохраняется |
+| `version_info` | **Версии**: модуля / libmdbx / схемы данных / данных (map_generation, records, symbols) — для оперативного контроля состояния |
 
 > ⚠️ **Зонды в базе знаний — только постоянные.** Временные/отладочные
 > пробники (добавляемые при трассировке одной ветви) НЕ регистрируются в

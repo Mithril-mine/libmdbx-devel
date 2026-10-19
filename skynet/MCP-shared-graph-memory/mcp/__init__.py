@@ -7,4 +7,4 @@ from . import errors, index, libmdbx, normalize
 from .store import Store
 
 __all__ = ["Store", "errors", "index", "libmdbx", "normalize"]
-__version__ = "0.1.0"
+__version__ = "0.2.0"

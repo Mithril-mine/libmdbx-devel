@@ -22,6 +22,7 @@ import time
 
 TOOLS_DIR = os.path.dirname(os.path.abspath(__file__))
 MODULE_DIR = os.path.dirname(TOOLS_DIR)
+sys.path.insert(0, MODULE_DIR)
 REPO_ROOT = os.path.dirname(os.path.dirname(MODULE_DIR))
 SRC_DIR = os.path.join(REPO_ROOT, "src")
 PROBE_BUS = os.path.join(REPO_ROOT, "docs", "engineering", "probe-bus.md")

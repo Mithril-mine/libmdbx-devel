@@ -18,7 +18,7 @@
 | `simhash` | INTEGERKEY | uint64 id → uint64 hash | дедупликация (Hamming ≤ 3) |
 | `access` | INTEGERKEY | uint64 id → 24 B: score+last_access+count | LRU/тиринг |
 | `archive` | DEFAULTS | record_key → JSON | миграция cold-записей |
-| `meta` | DEFAULTS | `next_id` → uint64 | sequence id |
+| `meta` | DEFAULTS | `next_id` → uint64; `schema_ver` → str | sequence id; версия схемы (SCHEMA_VERSION) |
 | `symbols` | DEFAULTS | fq-имя символа → JSON | карта исходников (refactoring-map) |
 | `call_edges` | DUPSORT | `caller_id` → JSON `{kind, resolved, ambiguous, callee}` | вызовы (syntax/semantic) |
 | `call_edges_rev` | DUPSORT | `callee_id` → `caller_id` | обратные рёбра (impact) |

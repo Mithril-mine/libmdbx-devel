@@ -192,10 +192,14 @@ class McpServer:
             ("map_symbols", "Префиксный список символов карты (limit).",
              [], {"type": "object", "properties": {"prefix": {"type": "string"},
                                                   "limit": {"type": "integer"}}}),
-            ("map_edges_of", "Исходящие вызовы символа (caller -> callee).",
-             [], {"type": "object", "properties": {"caller": {"type": "string"}}}),
-            ("map_callers_of", "Кто вызывает символ (обратные рёбра, impact).",
-             [], {"type": "object", "properties": {"callee": {"type": "string"}}}),
+            ("map_edges_of", "Исходящие вызовы символа (caller -> callee; "
+             "принимает caller|symbol).", [], {"type": "object",
+             "properties": {"caller": {"type": "string"},
+                            "symbol": {"type": "string"}}}),
+            ("map_callers_of", "Кто вызывает символ (callee|symbol; impact).",
+             [], {"type": "object",
+                  "properties": {"callee": {"type": "string"},
+                                 "symbol": {"type": "string"}}}),
             ("map_group_members", "Члены фасет-группы (group:{kind}:{name}).",
              [], {"type": "object", "properties": {"group": {"type": "string"}}}),
             ("map_regions", "#if-дерево: префиксный список регионов region:{module}:{n}.",
@@ -400,6 +404,8 @@ class McpServer:
                                         "tool": {"type": "string"},
                                         "args": {"type": "object"}},
                          "required": ["query"]}),
+            ("version_info", "Версии: модуль / libmdbx / схема данных / данные.",
+             [], {"type": "object"}),
         ]
         return {name: {"name": name, "description": desc, "inputSchema": schema}
                 for name, desc, _args, schema in t}
@@ -541,9 +547,20 @@ class McpServer:
             return {"symbols": s.map_symbols(args.get("prefix", ""),
                                              limit=args.get("limit"))}
         if name == "map_edges_of":
-            return {"edges": s.map_edges_of(args["caller"])}
+            # алиас: агент может передать caller или symbol (семант. имя)
+            sym = args.get("caller") or args.get("symbol")
+            if not sym:
+                raise MemoryError(
+                    "invalid", "invalid", "map_edges_of требует 'caller' или 'symbol'",
+                    "укажите символ", "none")
+            return {"edges": s.map_edges_of(sym)}
         if name == "map_callers_of":
-            return {"callers": s.map_callers_of(args["callee"])}
+            sym = args.get("callee") or args.get("symbol")
+            if not sym:
+                raise MemoryError(
+                    "invalid", "invalid", "map_callers_of требует 'callee' или 'symbol'",
+                    "укажите символ", "none")
+            return {"callers": s.map_callers_of(sym)}
         if name == "map_group_members":
             return {"members": s.map_group_members(args["group"])}
         if name == "map_regions":
@@ -665,6 +682,8 @@ class McpServer:
                                 project=args.get("project", ""),
                                 tool=args.get("tool", "search_graph"),
                                 args=args.get("args"))
+        if name == "version_info":
+            return s.version_info()
         raise MemoryError("NO_SUCH_TOOL", "invalid", "неизвестный инструмент %r" % name,
                           "проверьте tools/list", "none")
 

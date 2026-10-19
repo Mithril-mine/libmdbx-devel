@@ -125,3 +125,16 @@ def test_map_ci_jobs_parser(tmp_path):
     assert "cc" in s["matrix"]
     s2 = mci.summarize(jobs[1][0], jobs[1][1], jobs[1][2])
     assert s2["matrix"] is None
+
+
+def test_version_info_fields(store):
+    """version_info отдаёт версии модуля/libmdbx/схемы/данных."""
+    v = store.version_info()
+    assert v["module_version"] == "0.2.0"
+    assert v["schema_version"] == "2"
+    assert v["libmdbx_version"]
+    assert "map_generation" in v["data"]
+    assert "records" in v["data"]
+    store.safe_store("fact:meta:ver", "fact", "v", 0.1)
+    v2 = store.version_info()
+    assert v2["data"]["records"] >= 1

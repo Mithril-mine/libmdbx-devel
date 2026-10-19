@@ -261,3 +261,18 @@ def test_map_refresh_stale_redirects_via_alias(store):
     outs = [rel.get("object") for rel in g.get("edges", [])]
     assert "fn:cpp::impl" in str(outs)
     assert "fn:old_impl" not in str(outs)
+
+def test_map_symbols_module_filter(store):
+    """Кайдзен: map_symbols('fn:gc') находит функции из модулей gc-* даже
+    когда канонический ключ — fn:{qname} (module в теле, не в ключе)."""
+    store.map_put_symbol("fn:gc_alloc_ex", {"kind": "function",
+                                            "module": "gc-get", "name": "gc_alloc_ex"})
+    store.map_put_symbol("fn:spill_cycle", {"kind": "function",
+                                            "module": "spill", "name": "spill_cycle"})
+    store.map_put_symbol("fn:mdbx_env_open", {"kind": "function",
+                                              "module": "api-env", "name": "mdbx_env_open"})
+    got = store.map_symbols(prefix="fn:gc", limit=10)
+    assert "fn:gc_alloc_ex" in got
+    assert "fn:spill_cycle" not in got
+    # префиксный по ключу как раньше
+    assert store.map_symbols(prefix="fn:spill") == ["fn:spill_cycle"]

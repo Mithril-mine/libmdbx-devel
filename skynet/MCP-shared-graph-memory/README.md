@@ -21,7 +21,7 @@
 | `mcp/store.py` | Store: 23 таблицы, все операции, одна write-txn на операцию, бэкап и защита от удаления |
 | `mcp/mcp_server.py` | MCP-сервер (JSON-RPC 2.0 над stdio), db_* инструменты интроспекции |
 | `mcp/cli.py` | memory-cli (dump/stats/graph/audit/gc/vocab/purge) |
-| `tests/` | 315 тестов |
+| `tests/` | 317 тестов |
 | `tools/install.sh` | Безопасная установка (никогда не трогает db.mdbx/backups) |
 | `tools/collect_test_metrics.py` | Коллектор test_metrics из ctest XML / LastTest.log (+ ci_jobs) |
 | `tools/collect_coverage.py` | lcov / llvm-cov → coverage (тест→символы) + covered_by |
@@ -135,6 +135,16 @@ python3 -m mcp.cli --path ~/mem.mdbx gc --dry-run # тиринг hot/warm/cold
   при отсутствии бинаря/проекта возвращает `{"unavailable": true}` и
   НЕ мешает работе (без CBM всё остальное работает как обычно);
 - `cbm_linked(prefix)` — обзор мостов для навигации в обе стороны.
+
+### Контроль состояния
+
+`version_info` (MCP-инструмент, CLI `mcp version`) отдаёт версии для
+оперативного контроля:
+- **модуля** (`mcp.__version__`), **libmdbx** (из `mdbx_version`),
+  **схемы данных** (persisted в `meta.schema_ver`, сверка `schema_matches`)
+  и **данных** (`map_generation`, `records`, `symbols`, `next_id`) —
+  ответ на вопросы «что за версия, совместима ли схема, какое поколение
+  карты загружено».
 
 ## Установка (безопасная)
 

@@ -84,6 +84,13 @@ def _now() -> int:
     return int(time.time())
 
 
+# Версия схемы хранилища. Инкремент при ОБРАТНО-несовместимых изменениях
+# форматов таблиц/ключей; при аддитивных расширениях не меняется.
+SCHEMA_VERSION = "2"
+# Версия модуля (дублирует mcp.__version__; здесь — без import-циклов).
+MODULE_VERSION = "0.2.0"
+
+
 class Store:
     """Основной объект: открывает env, управляет таблицами."""
 
@@ -708,9 +715,20 @@ class Store:
                 rc, key, _ = cur.get(mdbx.CURSOR_NEXT)
 
     def _load_next_id(self) -> int:
-        with self.env.begin(readonly=True) as txn:
-            rc, val = txn.get(self.dbi(txn, "meta"), b"next_id")
-            return _unpack_u64(val) if val is not None else 1
+        try:
+            with self.env.begin() as txn:
+                meta = self.dbi(txn, "meta")
+                rc, val = txn.get(meta, b"next_id")
+                if val is None:
+                    # первое создание БД: фиксируем версию схемы
+                    txn.put(meta, b"schema_ver", SCHEMA_VERSION.encode())
+                    txn.put(meta, b"next_id", _pack_u64(1))
+                    return 1
+                return _unpack_u64(val)
+        except Exception:  # noqa: BLE001  (read-only env: не пишем)
+            with self.env.begin(readonly=True) as txn:
+                rc, val = txn.get(self.dbi(txn, "meta"), b"next_id")
+                return _unpack_u64(val) if val is not None else 1
 
     def dbi(self, txn, name: str) -> int:
         return self._dbi[name]
@@ -1615,19 +1633,38 @@ class Store:
                                              old_key.strip())
 
     def map_symbols(self, prefix: str = "", limit: int = None) -> list:
-        """Все ключи symbols по префиксу (детерминированная сортировка)."""
+        """Все ключи symbols по префиксу (детерминированная сортировка).
+
+        Исключение Кайдзен: канонические ключи функций — `fn:{qname}`
+        (module вятел), поэтому префикс вида `fn:gc`/`fn:gc-` ДОПОЛНИтельно
+        фильтрует по `module`-полю тела (аддитивно: поиск по модулю работает
+        и при несовпадении префикса ключа с названием модуля).
+        """
         out = []
         with self.env.begin(readonly=True) as txn:
             sym_dbi = self.dbi(txn, "symbols")
+            mod_pat = None
+            if prefix.startswith("fn:") and ":" not in prefix[3:].lstrip(":"):
+                mod_pat = prefix[3:].lstrip(":")
             with txn.cursor(sym_dbi) as cur:
-                rc, k, _ = cur.get(mdbx.CURSOR_FIRST)
+                rc, k, v = cur.get(mdbx.CURSOR_FIRST)
                 while rc == mdbx.RC_SUCCESS:
                     key = k.decode()
-                    if not prefix or key.startswith(prefix):
+                    if key.startswith(prefix):
                         out.append(key)
                         if limit and len(out) >= limit:
                             break
-                    rc, k, _ = cur.get(mdbx.CURSOR_NEXT)
+                    elif mod_pat:
+                        try:
+                            body = json.loads(v)
+                        except ValueError:
+                            body = {}
+                        mod = body.get("module", "")
+                        if mod.startswith(mod_pat):
+                            out.append(key)
+                            if limit and len(out) >= limit:
+                                break
+                    rc, k, v = cur.get(mdbx.CURSOR_NEXT)
         return out
 
     def map_put_symbol(self, key: str, body: dict) -> None:
@@ -2716,6 +2753,45 @@ class Store:
             "vocab_topics": len(self.norm.topics),
             "last_gc": self.last_gc,
             "next_id": self.next_id,
+        }
+
+    def version_info(self) -> dict:
+        """Полная версионная картина для оперативного контроля.
+
+        Возвращает: версию модуля, версию libmdbx (из экспортируемого
+        mdbx_version), версию схемы данных (persisted в meta.schema_ver) и
+        версию данных (поколение карты canary.y + число записей + символов).
+        """
+        try:
+            lib_ver = mdbx.version_string()
+        except Exception:  # noqa: BLE001
+            lib_ver = "?"
+        st = self.stats()
+        try:
+            gen = self.map_generations()
+            data_gen = gen["generation"]
+            data_symbols = gen["symbols"]
+        except Exception:  # noqa: BLE001
+            data_gen, data_symbols = None, None
+        schema_ver = SCHEMA_VERSION
+        try:
+            with self.env.begin(readonly=True) as txn:
+                rc, vmeta = txn.get(self.dbi(txn, "meta"), b"schema_ver")
+                if vmeta is not None:
+                    schema_ver = vmeta.decode()
+        except Exception:  # noqa: BLE001
+            pass
+        return {
+            "module_version": MODULE_VERSION,
+            "libmdbx_version": lib_ver,
+            "schema_version": schema_ver,
+            "schema_matches": schema_ver == SCHEMA_VERSION,
+            "data": {
+                "map_generation": data_gen,
+                "records": st.get("records"),
+                "symbols": data_symbols,
+                "next_id": st.get("next_id"),
+            },
         }
 
     def close(self) -> None:
