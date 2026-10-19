@@ -46,11 +46,8 @@ def cmd_stats(args) -> None:
 
 
 def cmd_version(args) -> None:
-    s = _open(args.path)
-    try:
+    with _open(args.path) as s:
         print(json.dumps(s.version_info(), ensure_ascii=False, indent=2))
-    finally:
-        s.close()
 
 
 def cmd_graph(args) -> None:

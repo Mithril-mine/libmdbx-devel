@@ -29,7 +29,6 @@ from mcp import Store  # noqa: E402
 from tools.collect_coverage import symbol_hits  # noqa: E402
 
 _COVERED_RE = re.compile(r"^\s*(\d+):\s*(\d+):")
-_UNCOVERED_RE = re.compile(r"^\s*#####:\s*(\d+):")
 
 
 def parse_gcov(path: str) -> tuple:
@@ -98,8 +97,7 @@ def main():
             print("  ", s)
         return 0
 
-    store = Store(args.db)
-    try:
+    with Store(args.db) as store:
         pre = store.layer_prefix(args.layer)
         r = store.coverage_insert((pre + args.test_id), sorted(hits))
         print("coverage_insert: %s -> %d symbols" % (r["test"], r["symbols"]))
@@ -107,8 +105,6 @@ def main():
             n = store.coverage_blocks_insert(args.test_id, blocks,
                                              layer=args.layer)
             print("coverage_blocks: %d block-records" % n)
-    finally:
-        store.close()
     return 0
 
 

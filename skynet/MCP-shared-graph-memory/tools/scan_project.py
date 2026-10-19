@@ -26,7 +26,6 @@ import argparse
 import json
 import os
 import re
-import sys
 import time
 from itertools import chain
 
@@ -136,7 +135,6 @@ def scan_doc_deps(rel: str, root: str, files: dict) -> list:
     for cand_rel in files:
         if cand_rel == rel:
             continue
-        cand = cand_rel.split("/")[-1]
         # имя файла без расширения и расширение — слишком шумно; ищем полный
         # относительный путь или `<repo>/path`
         if cand_rel in text or ("/" + cand_rel) in text or (
@@ -301,4 +299,4 @@ def main():
 
 
 if __name__ == "__main__":
-    sys.exit(main())
+    main()

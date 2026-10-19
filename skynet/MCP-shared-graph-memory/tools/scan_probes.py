@@ -147,12 +147,9 @@ def main():
         return 0
     if args.db:
         from mcp import Store  # noqa: PLC0415
-        store = Store(args.db)
-        try:
+        with Store(args.db) as store:
             r = store.probe_batch(merged)
             print("probe_batch:", r)
-        finally:
-            store.close()
     return 0
 
 

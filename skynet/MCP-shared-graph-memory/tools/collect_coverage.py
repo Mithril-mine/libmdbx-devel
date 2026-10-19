@@ -158,8 +158,7 @@ def main():
             print("  ", s)
         return 0
 
-    store = Store(args.db)
-    try:
+    with Store(args.db) as store:
         t0 = time.time()
         pre = store.layer_prefix(args.layer)
         res = store.coverage_insert((pre + args.test_id), sorted(hits),
@@ -172,8 +171,6 @@ def main():
             n = store.coverage_blocks_insert(args.test_id, blocks,
                                              layer=args.layer)
             print("coverage_blocks: %d block-records stored" % n)
-    finally:
-        store.close()
     return 0
 
 

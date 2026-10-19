@@ -1,8 +1,5 @@
 """Тесты моста с codebase-memory-mcp (опциональный, работает без CBM)."""
 
-import json
-import os
-
 
 def test_cbm_link_unlink_linked(store):
     r = store.cbm_link("fn:api-env:mdbx_env_open", "fn:env:open",

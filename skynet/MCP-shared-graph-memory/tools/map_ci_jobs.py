@@ -129,15 +129,12 @@ def main():
                                                   j["runs_on"], j["matrix"]))
         return 0
 
-    store = Store(args.db)
-    try:
+    with Store(args.db) as store:
         t0 = time.time()
         for j in jobs:
             jkey = "%s/%s" % (j["workflow"], j["job"])
             store.ci_jobs_insert(jkey, j)
         print("ci_jobs: stored %d in %.1fs" % (len(jobs), time.time() - t0))
-    finally:
-        store.close()
     return 0
 
 
