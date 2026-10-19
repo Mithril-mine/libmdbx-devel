@@ -334,11 +334,11 @@ class McpServer:
               "properties": {"prefix": {"type": "string"},
                              "kind": {"type": "string"},
                              "limit": {"type": "integer"}}}),
-            ("probe_status", "Сменить статус зонда.", ["tag"],
+            ("probe_status", "Сменить статус зонда.", ["tag", "status"],
              {"type": "object",
               "properties": {"tag": {"type": "string"},
                              "status": {"type": "string"}},
-              "required": ["tag"]}),
+              "required": ["tag", "status"]}),
             ("probe_remove", "Удалить зонд.", ["tag"],
              {"type": "object",
               "properties": {"tag": {"type": "string"}},
@@ -368,7 +368,9 @@ class McpServer:
              ["caller", "callee"], {"type": "object",
                                     "properties": {"caller": {"type": "string"},
                                                    "callee": {"type": "string"},
-                                                   "kind": {"type": "string"}},
+                                                   "kind": {"type": "string"},
+                                                   "layer": {"type": "string"},
+                                                   "configs": {"type": "array"}},
                                     "required": ["caller", "callee"]}),
             ("map_mark_stale", "Пометить отсутствующие в live_keys символы "
              "как stale (alive остальным).", ["live_keys"], {
@@ -714,7 +716,9 @@ class McpServer:
             return s.trace_compare(args["symbol"])
         if name == "map_put_edge":
             s.map_put_edge(args["caller"], args["callee"],
-                           kind=args.get("kind", "syntax"))
+                           kind=args.get("kind", "syntax"),
+                           layer=args.get("layer", ""),
+                           configs=args.get("configs"))
             return {"result": "ok"}
         if name == "map_mark_stale":
             return s.map_mark_stale(args.get("live_keys") or [])
@@ -808,6 +812,11 @@ def main(argv=None):
     if readonly and not os.path.exists(path):
         Store(path, readonly=False).close()
         created = True
+    elif not readonly:
+        # rw-старт: создаём/обновляем схему (новые таблицы для старых БД);
+        # временный Store ЗАКРЫВАЕМ до основного открытия
+        with Store(path, readonly=False) as _upg:
+            _upg.upgrade()
     try:
         store = Store(path, readonly=readonly)
     except mdbx.LibmdbxError as e:

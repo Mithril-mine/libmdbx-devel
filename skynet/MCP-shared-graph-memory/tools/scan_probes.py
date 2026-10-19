@@ -27,12 +27,15 @@ REPO_ROOT = os.path.dirname(os.path.dirname(MODULE_DIR))
 SRC_DIR = os.path.join(REPO_ROOT, "src")
 PROBE_BUS = os.path.join(REPO_ROOT, "docs", "engineering", "probe-bus.md")
 
-_MPROBE_RE = re.compile(r"\bMPROBE_(COLLECT|WATCH|FAULT)\(\s*([A-Za-z_][\w]*)")
+# MPROBE_(COLLECT|WATCH|FAULT)(tag) и MPROBE_WATCH_IF(cond, tag, value)
+_MPROBE_RE = re.compile(
+    r"\bMPROBE_(COLLECT|WATCH|FAULT)\(\s*([A-Za-z_][\w]*)"
+    r"|\bMPROBE_WATCH_IF\(\s*[^,]+,\s*([A-Za-z_][\w]*)\s*,", re.S)
 # DEV_ASSERT_T с литеральным тегом ("rkl:resize:wanna_gt_length") или identifier
 _DEVASSERT_RE = re.compile(
     r"\bDEV_ASSERT(?:_T)?\(\s*(?:\"([^\"]+)\"|([A-Za-z_][\w]*))\s*,", re.M)
-# USDT-маркеры ТОЛЬКО в явном контексте "USDT mdbx:..." (не обычные qname)
-_USDT_RE = re.compile(r"\bUSDT\s+(mdbx:[a-z0-9_]+(?:::[a-z0-9_]+)+)", re.I)
+# USDT-маркеры "USDT mdbx:name__event" (без :: после префикса — реальные метки)
+_USDT_RE = re.compile(r"\bUSDT\s+(mdbx:[a-z0-9_]+(?:(?:__|::)[a-z0-9_]+)*)", re.I)
 
 # механизмы по подкаталогам/файлам src
 _MECHANISM_BY_FILE = {
@@ -64,19 +67,24 @@ def scan_src(root: str) -> list:
                     lines = fh.readlines()
             except OSError:
                 continue
+            in_macro = False
             for i, ln in enumerate(lines, 1):
-                # пропускаем макроопределения/продолжения: формальные параметры
-                # (MPROBE_WATCH(name, value)) не должны стать постоянными тегами
                 stripped = ln.lstrip()
-                if stripped.startswith("#define") or (
-                        stripped.startswith("#") and stripped.rstrip().endswith("\\")):
+                # пропускаем макроопределения И их ПРОДОЛЖЕНИЯ: формальные
+                # параметры (MPROBE_WATCH(name, value)) не должны стать
+                # постоянными тегами (строки продолжения без '#' тоже)
+                if in_macro or stripped.startswith("#define"):
+                    in_macro = stripped.rstrip().endswith("\\")
                     continue
+                in_macro = stripped.rstrip().endswith("\\")
                 m = _MPROBE_RE.search(ln)
                 if m:
                     kind_map = {"COLLECT": "collect", "WATCH": "watch",
                                 "FAULT": "injected"}
+                    tag = m.group(2) or m.group(3)
+                    kind = kind_map.get(m.group(1), "watch")
                     out.append({
-                        "tag": m.group(2), "kind": kind_map[m.group(1)],
+                        "tag": tag, "kind": kind,
                         "file": rel, "line": i, "mechanism": mechanism_of(fname),
                     })
                     continue
@@ -116,10 +124,12 @@ def scan_probe_bus(path: str) -> list:
         return out
     with open(path, errors="replace") as fh:
         lines = fh.readlines()
-    # границы каталога: ищем раздел про USDT/пробники
+    # границы каталога: специфичный заголовок РАЗДЕЛА (§11.4 «Каталог USDT»),
+    # а не первый заголовок с USDT (титул документа содержит USDT)
     start = None
     for i, ln in enumerate(lines):
-        if re.search(r"USDT|пробник|каталог", ln, re.I) and ln.lstrip().startswith("#"):
+        if ln.lstrip().startswith("#") and re.search(
+                r"каталог.*usdt|usdt.*каталог|§11|11\.4|пробники", ln, re.I):
             start = i
             break
     body = lines[start:] if start is not None else lines
@@ -132,8 +142,9 @@ def scan_probe_bus(path: str) -> list:
         loc = ""
         for cell in line.split("`"):
             c = cell.strip()
-            if "/" in c and c.endswith((".c", ".c++", ".h", ".h++")):
-                loc = c
+            # полный путь src/... или basename (без slash) — резолвим под src/
+            if c.endswith((".c", ".c++", ".h", ".h++")):
+                loc = c if "/" in c else "src/" + c
                 break
         out.append({
             "tag": m.group(1).replace(":", "_"),

@@ -199,13 +199,25 @@ def scan_script_deps(rel: str, root: str, files: dict) -> list:
     except OSError:
         return deps
     if rel.endswith(".py"):
+        base_dir = os.path.dirname(rel)
         for m in _PY_IMPORT.finditer(text):
             mod = (m.group(1) or m.group(2))
-            cand = mod.replace(".", "/")
-            if cand + ".py" in files:
-                deps.append(cand + ".py")
-            elif cand in files:
-                deps.append(cand)
+            # относительный импорт (`.errors`, `..x`) — от каталога пакета
+            if mod.startswith("."):
+                dots = len(mod) - len(mod.lstrip("."))
+                relmod = mod.lstrip(".").replace(".", "/")
+                pkg_dir = base_dir
+                for _ in range(dots - 1):
+                    pkg_dir = os.path.dirname(pkg_dir)
+                cand_rel = os.path.normpath(os.path.join(pkg_dir, relmod))
+                cand_rel = cand_rel.lstrip("./")
+            else:
+                cand_rel = mod.replace(".", "/")
+            for cand in (cand_rel + ".py", cand_rel + "/__init__.py",
+                         cand_rel):
+                if cand in files:
+                    deps.append(cand)
+                    break
     elif rel.endswith(".sh"):
         for m in _SH_SOURCE.finditer(text):
             ref = (m.group(1) or m.group(2))

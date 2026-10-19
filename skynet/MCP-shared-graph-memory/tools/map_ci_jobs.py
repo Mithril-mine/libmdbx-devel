@@ -72,12 +72,22 @@ def summarize(workflow_name: str, jid: str, body: dict,
                 out[k] = v
             elif v is not None:
                 out[k] = [v]
+        # аккумулируем значения по ВСЕМ include-записям (distinct),
+        # включая явные False: иначе второй cell теряется
+        accum = {k: [] for k in ("scope", "coverage", "ndk", "cell")}
         for inc in matrix.get("include") or []:
             if not isinstance(inc, dict):
                 continue
-            for k in ("scope", "coverage", "ndk", "cell"):
-                if out.get(k) is None and inc.get(k):
-                    out[k] = [inc[k]]
+            for k in accum:
+                v = inc.get(k)
+                if v is not None:
+                    vals = v if isinstance(v, list) else [v]
+                    for x in vals:
+                        if x not in accum[k]:
+                            accum[k].append(x)
+        for k in ("scope", "coverage", "ndk", "cell"):
+            if accum[k]:
+                out[k] = accum[k]
     # enterprises: берём из инлайн-переменной / шагов (приблизительно)
     env = body.get("env") or {}
     for k in ("scope", "coverage", "ndk", "cell"):

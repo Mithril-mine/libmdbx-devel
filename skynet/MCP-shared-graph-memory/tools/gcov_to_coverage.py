@@ -66,7 +66,9 @@ def run_gcov(gcda_dir: str) -> dict:
                            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
             for gcov_file in glob.glob(os.path.join(tmp, "*.gcov")):
                 src, covered = parse_gcov(gcov_file)
-                if src and covered:
+                if src:
+                    # сохраняем и ПУСТЫЕ (файл не исполнен) — чтобы
+                    # symbol_hits() выдал их блоки как covered=False
                     files.setdefault(src, set()).update(covered)
     return files
 
@@ -104,12 +106,14 @@ def main():
         return 0
 
     with Store(args.db) as store:
-        pre = store.layer_prefix(args.layer)
+        # ЕДИНЫЙ слой для обоих писателей (явный --layer или активная ветка)
+        eff_layer = store._effective_layer(args.layer)
+        pre = store.layer_prefix(eff_layer)
         r = store.coverage_insert((pre + args.test_id), sorted(hits))
         print("coverage_insert: %s -> %d symbols" % (r["test"], r["symbols"]))
         if args.store_blocks and blocks:
             n = store.coverage_blocks_insert(args.test_id, blocks,
-                                             layer=args.layer)
+                                             layer=eff_layer)
             print("coverage_blocks: %d block-records" % n)
     return 0
 

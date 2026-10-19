@@ -81,28 +81,39 @@ def main():
     loaded = store.map_load_batch(symbols, edges, groups,
                                   replace=args.replace,
                                   layer=args.layer)
-    if not args.skip_regions and (regions or uncovered):
+    # ВАЖНО: regions/uncovered и project-map пока НЕ слоистые — при загрузке
+    # feature-слоя (не базового) они очистили бы глобальные (base) таблицы.
+    # Режектим их до записи, пока не реализована layer-изоляция.
+    layer_is_base = store.layer_prefix(args.layer) == ""
+    if layer_is_base and not args.skip_regions and (regions or uncovered):
         r = store.map_load_regions(regions, uncovered, replace=args.replace)
         loaded.update(r)
+    elif not layer_is_base and (regions or uncovered):
+        print("warning: regions/uncovered пропущены для feature-слоя "
+              "(пока не слоистые)", file=sys.stderr)
     dt = time.time() - t0
 
-    n_sym = len(store.map_symbols())
+    n_sym = len(store.map_symbols(layer=args.layer))
     n_reg = len(store.map_regions(limit=10**9))
     n_unc = len(store.map_uncovered(limit=10**9))
     # проверка обратных рёбер: случайное разрешённое ребро
     n_rev = 0
     if edges:
         sample = next(e for e in edges if e.get("resolved"))
-        n_rev = len(store.map_callers_of(sample["callee"]))
+        n_rev = len(store.map_callers_of(sample["callee"], layer=args.layer))
     print("loaded: symbols=%d edges=%d groups=%d regions=%d uncovered=%d in %.1fs" % (
         loaded["symbols"], loaded["edges"], loaded["groups"],
         loaded.get("regions", 0), loaded.get("uncovered", 0), dt))
     print("verify: symbols=%d regions=%d uncovered=%d reverse_sample=%d" % (
         n_sym, n_reg, n_unc, n_rev))
     if args.project:
-        with open(args.project) as f:
-            pj = json.load(f)
-        r = store.project_load(pj.get("files") or {}, pj.get("edges") or [],
+        if not layer_is_base:
+            print("warning: project-map пропущен для feature-слоя "
+                  "(пока не слоистый)", file=sys.stderr)
+        else:
+            with open(args.project) as f:
+                pj = json.load(f)
+            r = store.project_load(pj.get("files") or {}, pj.get("edges") or [],
                                replace=args.replace)
         print("project-map: files=%d edges=%d" % (r["files"], r["edges"]))
     store.close()

@@ -161,12 +161,22 @@ class Store:
         self.norm = Normalizer()
         self._dbi = {}
         # открываем все таблицы один раз (CREATE) в первой write-txn;
-        # в read-only режиме CREATE не нужен — dbi открываются с DEFAULTS
+        # в read-only режиме CREATE не нужен — dbi открываются с DEFAULTS.
+        # ВАЖНО: при readonly существующие БД могут НЕ содержать новые таблицы
+        # (напр. branches/coverage_blocks) — открываем с NOSUBDIR-толерантностью:
+        # отсутствующая таблица -> None в _dbi (методы вернут пусто), а полный
+        # upgrade выполняется Store.upgrade() при rw-старте сервера.
         txn_flags = mdbx.TXN_RDONLY if readonly else mdbx.TXN_READWRITE
         with self.env.begin(readonly=readonly) as txn:
             for name in self.TABLES:
                 fl = self.TABLES[name] | (mdbx.CREATE if not readonly else 0)
-                self._dbi[name] = txn.open_dbi(name, fl)
+                try:
+                    self._dbi[name] = txn.open_dbi(name, fl)
+                except mdbx.LibmdbxError as e:
+                    if readonly and "NOTFOUND" in str(e):
+                        self._dbi[name] = None  # таблица появится после upgrade
+                    else:
+                        raise
         self._load_vocab()
         self.next_id = self._load_next_id()
         self.last_gc = None
@@ -743,6 +753,48 @@ class Store:
 
     def dbi(self, txn, name: str) -> int:
         return self._dbi[name]
+
+    def upgrade(self) -> dict:
+        """Создаёт ВСЕ таблицы схемы (rw) для существующей БД, созданной до
+        расширения (upgrade-path: read-only старт не может создавать dbi).
+
+        Вызывается сервером при первом rw-старте (или явно через CLI). После
+        создания — повторное открытие БД в readonly работает с полным набором.
+        Также бэкфиллит covered_by из существующих coverage-записей.
+        """
+        created = []
+        with self._begin_write() as txn:
+            for name, fl in self.TABLES.items():
+                if self._dbi.get(name) is None:
+                    self._dbi[name] = txn.open_dbi(name, fl | mdbx.CREATE)
+                    created.append(name)
+        # backfill covered_by из существующих coverage (однократно, маркер)
+        marker = "covered_by_backfilled"
+        with self._begin_write() as txn:
+            meta = self.dbi(txn, "meta")
+            rc, val = txn.get(meta, marker.encode())
+            if val is None:
+                cov_dbi = self.dbi(txn, "coverage")
+                cb_dbi = self.dbi(txn, "covered_by")
+                n = 0
+                with txn.cursor(cov_dbi) as cur:
+                    rc, k, v = cur.get(mdbx.CURSOR_FIRST)
+                    while rc == mdbx.RC_SUCCESS:
+                        key = k.decode()
+                        if key.startswith("coverage:"):
+                            test_id = key[len("coverage:"):]
+                            for sym in json.loads(v).get("symbols", []):
+                                cb_key = ("covered_by:" + sym).encode()
+                                rc2, val2 = txn.get(cb_dbi, cb_key)
+                                cur2 = json.loads(val2.decode()) if val2 else []
+                                if test_id not in cur2:
+                                    cur2.append(test_id)
+                                    txn.put(cb_dbi, cb_key,
+                                            json.dumps(cur2).encode())
+                                    n += 1
+                        rc, k, v = cur.get(mdbx.CURSOR_NEXT)
+                txn.put(meta, marker.encode(), str(n).encode())
+        return {"created": created, "covered_by_backfilled": n}
 
     # --- helpers --------------------------------------------------------------
     def _check_size(self, key: bytes, value: bytes) -> None:
@@ -1696,8 +1748,10 @@ class Store:
                             body = json.loads(v)
                         except ValueError:
                             body = {}
-                        mod = body.get("module", "")
-                        if mod.startswith(mod_pat):
+                        # merged-карты хранят module внутри implementations
+                        mods = [m.get("module") for m in body.get("implementations") or []]
+                        mods.append(body.get("module", ""))
+                        if any(m and m.startswith(mod_pat) for m in mods):
                             out.append(bare)
                             if limit and len(out) >= limit:
                                 break
@@ -1767,14 +1821,16 @@ class Store:
         return out
 
     def map_put_edge(self, caller: str, callee: str, kind: str = "syntax",
-                     layer: str = "") -> None:
+                     layer: str = "", configs: list = None) -> None:
         layer = self._effective_layer(layer)
         pre = self.layer_prefix(layer)
         with self._begin_write() as txn:
             ce_dbi = self.dbi(txn, "call_edges")
-            val = json.dumps({"kind": kind, "resolved": False,
-                              "ambiguous": False, "callee": pre + callee},
-                             ensure_ascii=False).encode()
+            body = {"kind": kind, "resolved": False,
+                    "ambiguous": False, "callee": pre + callee}
+            if configs:
+                body["configs"] = sorted(set(configs))
+            val = json.dumps(body, ensure_ascii=False).encode()
             with txn.cursor(ce_dbi) as cur:
                 cur.put_nodupe((pre + caller).encode(), val)
             rev_dbi = self.dbi(txn, "call_edges_rev")
@@ -1811,7 +1867,8 @@ class Store:
                 rc, k, val = cur.get(mdbx.CURSOR_FIRST)
                 while rc == mdbx.RC_SUCCESS:
                     key = k.decode()
-                    if pre and not key.startswith(pre):
+                    if (pre and not key.startswith(pre)) or \
+                       (not pre and _LAYER_KEY_RE.match(key)):
                         rc, k, val = cur.get(mdbx.CURSOR_NEXT)
                         continue
                     gkey = key[len(pre):] if pre else key
@@ -2106,13 +2163,19 @@ class Store:
         changed = {}
 
         def _structural(body):
-            """Нормализованное структурное содержимое для сравнения."""
+            """Нормализованное структурное содержимое для сравнения.
+
+            Учитывает и nested-блоки внутри implementations (merged-карты
+            хранят blocks там, а не на верхнем card).
+            """
             return (body.get("l0"), body.get("l1"),
                     body.get("signature"), body.get("file"),
                     tuple((bl.get("id"), bl.get("l0"), bl.get("l1"))
                           for bl in body.get("blocks") or []),
                     tuple(sorted((i.get("file"), i.get("l0"), i.get("l1"),
-                                  i.get("config"))
+                                  i.get("config"),
+                                  tuple((b.get("id"), b.get("l0"), b.get("l1"))
+                                        for b in i.get("blocks") or []))
                                  for i in body.get("implementations") or [])))
 
         for key, body in b.items():
@@ -2127,14 +2190,23 @@ class Store:
         def by_module(d):
             m = {}
             for key, body in d.items():
-                mod = body.get("module", "?")
+                # merged-карты: module внутри implementations
+                mods = [i.get("module") for i in body.get("implementations") or []
+                        if i.get("module")]
+                mod = mods[0] if mods else body.get("module", "?")
                 m.setdefault(mod, []).append(key)
             for k in m:
                 m[k].sort()
             return m
 
+        def _block_count(body):
+            n = len(body.get("blocks") or [])
+            for i in body.get("implementations") or []:
+                n += len(i.get("blocks") or [])
+            return n
+
         nf = lambda d: sum(1 for b in d.values() if b.get("kind") == "function")
-        nb = lambda d: sum(len(b.get("blocks", [])) for b in d.values())
+        nb = lambda d: sum(_block_count(b) for b in d.values())
         return {
             "from": from_layer, "to": to_layer,
             "added": by_module(added),
@@ -2481,6 +2553,11 @@ class Store:
                 while rc == mdbx.RC_SUCCESS:
                     try:
                         body = json.loads(val.decode())
+                        # только syntax-рёбра: semantic-саморебро (эквивалентные
+                        # конфиги) не является реальным вызовом
+                        if body.get("kind") != "syntax":
+                            rc, _, val = cur.get(mdbx.CURSOR_NEXT_DUP)
+                            continue
                         cal = body.get("callee", "")
                         if pre and cal.startswith(pre):
                             cal = cal[len(pre):]
@@ -2495,7 +2572,11 @@ class Store:
             rc, val = txn.get(self.dbi(txn, "call_traces"),
                               (pre + symbol).encode())
             if val is not None:
-                observed_callees = set(json.loads(val.decode()).keys())
+                for cal in json.loads(val.decode()).keys():
+                    # нормализуем observed до layer-local (префикс слоя снят)
+                    if pre and cal.startswith(pre):
+                        cal = cal[len(pre):]
+                    observed_callees.add(cal)
         return {
             "symbol": symbol,
             "static": sorted(static_callees),
@@ -2804,6 +2885,7 @@ class Store:
         with self._begin_write() as txn:
             cov_dbi = self.dbi(txn, "coverage")
             cb_dbi = self.dbi(txn, "covered_by")
+            cbk_dbi = self.dbi(txn, "coverage_blocks")
             key = "coverage:" + test_id
             rc, old_val = txn.get(cov_dbi, key.encode())
             old_syms = set(json.loads(old_val.decode()).get("symbols", [])
@@ -2835,6 +2917,10 @@ class Store:
                                 json.dumps(cur, ensure_ascii=False).encode())
                     else:
                         txn.delete(cb_dbi, cb_key)
+                # удаляем устаревшие блочные записи для этого теста+символа
+                bk = ("coverage_blocks:%s:%s" % (test_id, sym)).encode()
+                if txn.get(cbk_dbi, bk)[1] is not None:
+                    txn.delete(cbk_dbi, bk)
             return {"test": test_id, "symbols": len(symbols)}
 
     def coverage_batch(self, tests: dict) -> dict:
@@ -2999,11 +3085,19 @@ class Store:
         uncovered_symbols = []
         for sym in all_syms:
             body = self.map_symbol(sym, layer=layer)
-            if mod_pat and not body.get("module", "").startswith(mod_pat):
+            # merged-карты: module внутри implementations
+            mods = [i.get("module") for i in body.get("implementations") or []
+                    if i.get("module")]
+            if body.get("module"):
+                mods.insert(0, body.get("module", ""))
+            if mod_pat and not any(
+                    m and m.startswith(mod_pat) for m in mods):
                 continue
             if sym not in covd_syms:
-                uncovered_symbols.append({"symbol": sym,
-                                          "module": body.get("module", "")})
+                uncovered_symbols.append({
+                    "symbol": sym,
+                    "module": mods[0] if mods else body.get("module", ""),
+                })
                 if limit and len(uncovered_symbols) >= limit:
                     break
         return {

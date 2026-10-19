@@ -80,12 +80,17 @@ def parse_llvm_cov_json(path: str) -> dict:
                 if len(seg_) < 3 or seg_[2] <= 0:
                     continue
                 start_line = seg_[0]
-                # граница интервала: следующая строка/столбец смены состояния
                 if i + 1 < len(seg) and len(seg[i + 1]) >= 2:
-                    end_line = seg[i + 1][0]
+                    next_line, next_col = seg[i + 1][0], seg[i + 1][1]
+                    # half-open: сегмент покрывает [start, next_line),
+                    # а не включая boundary. Если следующий сегмент начинается
+                    # в колонке 1 — его строка НЕ покрыта предыдущим.
+                    if next_col == 1:
+                        end_line = next_line - 1
+                    else:
+                        end_line = next_line
                 else:
                     end_line = start_line
-                # покрываем [start_line, end_line] (на одной строке — одну)
                 for ln in range(start_line, end_line + 1):
                     covered.add(ln)
             if fname:
@@ -218,7 +223,9 @@ def main():
 
     with Store(args.db) as store:
         t0 = time.time()
-        pre = store.layer_prefix(args.layer)
+        # ЕДИНЫЙ слой для обоих писателей: явный --layer или активная ветка
+        eff_layer = store._effective_layer(args.layer)
+        pre = store.layer_prefix(eff_layer)
         res = store.coverage_insert((pre + args.test_id), sorted(hits),
                                     pct=args.pct or 0.0)
         dt = time.time() - t0
@@ -227,7 +234,7 @@ def main():
         if args.store_blocks and blocks:
             # блочная детализация: coverage_blocks:{test_id}:{symbol} -> [blocks]
             n = store.coverage_blocks_insert(args.test_id, blocks,
-                                             layer=args.layer)
+                                             layer=eff_layer)
             print("coverage_blocks: %d block-records stored" % n)
     return 0
 
