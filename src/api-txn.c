@@ -629,6 +629,15 @@ int mdbx_txn_clone(const MDBX_txn *source, MDBX_txn **in_out_clone, void *clone_
     return LOG_IFERR(MDBX_EINVAL);
 
   MDBX_txn *clone = *in_out_clone;
+  bool published = false;
+  if (clone) {
+    /* reject a wrong handle before the bailout below could reset it as a read-only transaction */
+    const int err = check_txn(clone, 0);
+    if (unlikely(err != MDBX_SUCCESS))
+      return LOG_IFERR(err);
+    if (unlikely((clone->flags & txn_ro_flat) == 0))
+      return LOG_IFERR(MDBX_EINVAL);
+  }
 retry:
   osal_memory_fence(mo_AcquireRelease, true);
   int rc = check_txn_anythread(
@@ -652,14 +661,6 @@ retry:
 
   const txnid_t txnid = source->txnid;
   if (clone) {
-    rc = check_txn(clone, 0);
-    if (unlikely(rc != MDBX_SUCCESS))
-      goto bailout;
-    if (unlikely((clone->flags & txn_ro_flat) == 0)) {
-      rc = MDBX_EINVAL;
-      goto bailout;
-    }
-
     if (clone_context == clone)
       clone_context = clone->userctx;
 
@@ -680,9 +681,11 @@ retry:
   rc = txn_ro_clone(source, clone);
   if (unlikely(rc != MDBX_SUCCESS))
     goto bailout;
+  published = true;
 
   osal_memory_fence(mo_AcquireRelease, true);
   rc = check_txn_anythread(source, MDBX_TXN_FINISHED | MDBX_TXN_DIRTY);
+  MPROBE_FAULT(txn_clone_recheck, rc);
   if (unlikely(rc != MDBX_SUCCESS))
     goto bailout;
 
@@ -701,6 +704,15 @@ retry:
 
 bailout:
   if (clone) {
+    if (published && clone->ro.slot && (clone->flags & MDBX_TXN_FINISHED)) {
+      /* txn_ro_clone() has published the snapshot (and the parking) in the slot */
+      atomic_store32(&clone->ro.slot->snapshot_pages_used, 0, mo_Relaxed);
+      atomic_store64(&clone->ro.slot->snapshot_pages_retired, 0, mo_Relaxed);
+      safe64_reset(&clone->ro.slot->txnid, true);
+      if (clone->flags & MDBX_TXN_PARKED)
+        atomic_store64(&clone->ro.slot->tid, clone->owner, mo_AcquireRelease);
+      clone->flags &= ~(MDBX_TXN_PARKED | MDBX_TXN_AUTOUNPARK);
+    }
     if (clone != *in_out_clone)
       txn_ro_free(clone);
     else
