@@ -117,6 +117,9 @@ are only a few cases of changing data.
 |Key exist → Delete by key with data matching check|\ref mdbx_del() with the parameter `data` filled with the value which should be match for deletion|Deletion or \ref MDBX_NOTFOUND if the value does not match|
 |Delete at the current cursor position        |\ref mdbx_cursor_del() with \ref MDBX_CURRENT flag|Deletion|
 |Extract (read & delete) value by the key     |\ref mdbx_replace() with zero flag and parameter `new_data = NULL`|Returning a deleted value|
+| _APPENDING_|||
+|Key is absent and new key is greater than all existing ones|\ref MDBX_APPEND|Insertion at the tail|
+|Key is absent but the new key is not greater than the last existing one|\ref MDBX_APPEND|Error \ref MDBX_EKEYMISMATCH|
 
 
 ## Tables with NON-UNIQUE keys
@@ -148,6 +151,10 @@ as a duplicates or as like a multiple values corresponds to keys.
 |Key exist → Delete particular value corresponds given key|\ref mdbx_del() with the parameter `data` filled with the value that wanna to delete, or \ref mdbx_replace() with \ref MDBX_CURRENT + \ref MDBX_NOOVERWRITE and the `old_value` parameter filled with the value that wanna to delete and `new_data = NULL`| Deletion or \ref MDBX_NOTFOUND if no such key-value pair|
 |Delete one value at the current cursor position|\ref mdbx_cursor_del() with \ref MDBX_CURRENT flag|Deletion only the current entry|
 |Delete all values of key at the current cursor position|\ref mdbx_cursor_del() with \ref MDBX_ALLDUPS flag|Deletion all duplicates of key (all multi-values) at the current cursor position|
+| _APPENDING_|||
+|Key is absent and new key is greater than all existing ones|\ref MDBX_APPEND|Insertion at the tail|
+|Key is absent but the new key is not greater than the last existing one|\ref MDBX_APPEND|Error \ref MDBX_EKEYMISMATCH|
+|Key exist → Append one more value to the key|\ref MDBX_APPENDDUP|Insertion of a new value at the tail of the key's value set|
 
  \defgroup c_cursors Cursors
  \defgroup c_statinfo Statistics & Information

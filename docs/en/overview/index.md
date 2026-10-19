@@ -136,3 +136,22 @@ Go ([mdbx-go](https://github.com/torquem-ch/mdbx-go)),
 Python ([PyPi/libmdbx](https://pypi.org/project/libmdbx/)),
 .NET ([libmdbx-dotnet](https://public.git.amsoft.spb.ru/libmdbx/libmdbx-dotnet)),
 NodeJS ([mdbxmou](https://github.com/ikonopistsev/mdbxmou)) and others.
+
+## Roadmap and the future
+
+- **MithrilDB** — the next-generation engine that removes the architectural
+  limitations inherited from LMDB: a common API for several storage formats,
+  reworked long-value handling, fundamental GC/freelist improvements, and no
+  more trouble with long-lived readers. See the [Textbook: Chapter 33 «Roadmap
+  and the future: MithrilDB»](../textbook/05-tom-v-ekspertnye-temy.md) and the
+  [Roadmap](../overview/restrictions.md#roadmap) section.
+- **Roadmap presentation** — the annotated slide-deck
+  «[_libmdbx_: successes, obstacles, goals and roadmap](https://libmdbx.dqdkfa.ru/release/libmdbx-roadmap-HNY2026-english.pdf)»
+  with important explanations embedded as comments (a
+  [Russian version](https://libmdbx.dqdkfa.ru/release/libmdbx-roadmap-HNY2026-russian.pdf)).
+- **TODO** — the current open directions are tracked in
+  [`TODO.md`](https://sourcecraft.dev/dqdkfa/libmdbx/browse/TODO.md): new APIs,
+  WASM, bindings, tracing, and more.
+- **SkyNET** (Mission «Concordia Intellectuum») — an experimental AI model, a
+  coordinated hierarchical swarm/harness, used in the development and
+  maintenance of _libmdbx_.
