@@ -65,9 +65,6 @@ SECTION_ENTRY = {
 # resolve or that point to anchors mkdoxy itself never renders; clean them up
 # so `mkdocs build --strict` passes. Applied to generated API pages only.
 _MKDOXY_LINK_FIXES = (
-    # doxygen page refs -> the mkdoxy-generated page files
-    (re.compile(r"\]\(intro\.html"), "](intro.md"),
-    (re.compile(r"\]\(usage\.html"), "](usage.md"),
     # the related-pages listing links the main doxygen page by its refid
     (re.compile(r"\]\(indexpage\.md"), "](index.md"),
     # anchors mkdoxy links to but never emits (unnamed enums, operators,

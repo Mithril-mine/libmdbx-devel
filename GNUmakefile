@@ -747,26 +747,10 @@ build/tmp/docsite-inputs/__$(1).md: $(2) $(lastword $(MAKEFILE_LIST))
 	$(QUIET)$(SED) -n '/<!-- section-begin $(1) -->/,/<!-- section-end -->/p' $(2) >$$@ && test -s $$@
 
 endef
-$(foreach section,overview mithril characteristics improvements history usage performance bindings,$(eval $(call md-extract-section,$(section),$(DIST_DIR)/README.md)))
 
 docs/contrib.fame: src/version.c $(lastword $(MAKEFILE_LIST))
 	@echo '  MAKE $@'
 	$(QUIET)echo "" > $@ && git fame --show-email --format=md --silent-progress -w -M -C | grep '^|' >> $@
-
-build/tmp/docsite-inputs/overall.md: build/tmp/docsite-inputs/__overview.md docs/_toc.md build/tmp/docsite-inputs/__mithril.md build/tmp/docsite-inputs/__history.md COPYRIGHT LICENSE NOTICE $(lastword $(MAKEFILE_LIST))
-	@echo '  MAKE $@'
-	$(QUIET)mkdir -p $(@D)
-	$(QUIET)echo -e "\\mainpage Overall\n\\section brief Brief" | cat - $(filter %.md, $^) >$@ && echo -e "\n\n\nLicense\n=======\n" | cat - LICENSE >>$@
-
-build/tmp/docsite-inputs/intro.md: docs/_preface.md build/tmp/docsite-inputs/__characteristics.md build/tmp/docsite-inputs/__improvements.md docs/_restrictions.md
-	@echo '  MAKE $@'
-	$(QUIET)mkdir -p $(@D)
-	$(QUIET)cat $^ | $(SED) 's/^Performance comparison$$/Performance comparison {#performance}/;s/^Improvements beyond LMDB$$/Improvements beyond LMDB {#improvements}/' >$@
-
-build/tmp/docsite-inputs/usage.md: build/tmp/docsite-inputs/__usage.md docs/_starting.md build/tmp/docsite-inputs/__bindings.md
-	@echo '  MAKE $@'
-	$(QUIET)mkdir -p $(@D)
-	$(QUIET)echo -e "\\page usage Usage\n\\section getting Building & Embedding" | cat - $^ | $(SED) 's/^Bindings$$/Bindings {#bindings}/' >$@
 
 build/tmp/docsite-inputs/mdbx.h: $(DIST_DIR)/mdbx.h $(lastword $(MAKEFILE_LIST))
 	@echo '  MAKE $@'
@@ -818,9 +802,9 @@ DOCSITE_SRCS := $(sort $(shell git ls-files --cached --others --exclude-standard
 	docs/docsite/en/mkdocs.yml docs/docsite/ru/mkdocs.yml docs/docsite/base.yml \
 	docs/docsite/hooks/docsite_hooks.py docs/docsite/localize_examples.py \
 	docs/docsite/normalize_site.py docs/docsite/check_links.py \
-	docs/docsite/verify_contract.py docs/docsite/contract-amendment.md)
+	docs/docsite/verify_contract.py docs/docsite/doc_audit.py docs/docsite/contract-amendment.md)
 
-build/tmp/.stamp: $(DOCSITE_SRCS) build/tmp/docsite-inputs/Doxyfile build/tmp/docsite-inputs/overall.md build/tmp/docsite-inputs/intro.md build/tmp/docsite-inputs/usage.md build/tmp/docsite-inputs/mdbx.h build/tmp/docsite-inputs/mdbx.h++ build/tmp/docsite-inputs/options.h docs/en/reference/changelog.md $(lastword $(MAKEFILE_LIST))
+build/tmp/.stamp: $(DOCSITE_SRCS) build/tmp/docsite-inputs/Doxyfile build/tmp/docsite-inputs/mdbx.h build/tmp/docsite-inputs/mdbx.h++ build/tmp/docsite-inputs/options.h docs/en/reference/changelog.md $(lastword $(MAKEFILE_LIST))
 	@mkdir -p build/tmp
 	@command -v mkdocs >/dev/null 2>&1 || { \
 		echo '  ERROR: mkdocs is not available. Install the toolchain:'; \
@@ -848,6 +832,8 @@ build/tmp/.stamp: $(DOCSITE_SRCS) build/tmp/docsite-inputs/Doxyfile build/tmp/do
 	$(QUIET)python3 docs/docsite/normalize_site.py
 	@echo '  DOCSITE verify: docs-integration-contract checklist (section 6)...'
 	$(QUIET)python3 docs/docsite/verify_contract.py
+	@echo '  DOCSITE audit: published-docs integrity (dist-cutoff + refs)...'
+	$(QUIET)python3 docs/docsite/doc_audit.py
 	@echo '  DOCSITE links: mechanical libmdbx.dqdkfa.ru link audit (offline)...'
 	$(QUIET)python3 docs/docsite/check_links.py
 	$(QUIET)touch $@
