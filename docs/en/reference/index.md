@@ -14,6 +14,11 @@ Entry points:
   and macros, and the C++ API (`mdbx.h++`)
 - [Class members](api/class_members.md) · [Macros](api/macros.md)
 
+The headers themselves, with the complete inline documentation:
+
+- [The `mdbx.h` C API header](api/mdbx_8h.md)
+- [The `mdbx.h++` C++ API header](api/mdbx_8h_09_09.md)
+
 Also in this section: [command-line tools](tooling.md).
 
 Getting-started guidance lives in the [guides](../index.md);

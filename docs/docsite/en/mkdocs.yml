@@ -5,7 +5,6 @@
 # Prerequisites (prepared by make): build/tmp/docsite-inputs/mdbx.h
 # build/tmp/docsite-inputs/mdbx.h++ build/tmp/docsite-inputs/options.h
 # and the generated build/tmp/docsite-inputs/Doxyfile (consumed by the mkdoxy plugin).
-
 INHERIT: ../base.yml
 
 site_name: libmdbx documentation
@@ -31,7 +30,7 @@ plugins:
       full-doc: true
       projects:
         api:
-          src-dirs: "build/tmp/docsite-inputs/mdbx.h build/tmp/docsite-inputs/mdbx.h++ build/tmp/docsite-inputs/options.h build/tmp/docsite-inputs/overall.md build/tmp/docsite-inputs/intro.md build/tmp/docsite-inputs/usage.md"
+          src-dirs: "build/tmp/docsite-inputs/mdbx.h build/tmp/docsite-inputs/mdbx.h++ build/tmp/docsite-inputs/options.h"
           api-path: reference/api
           doxy-cfg-file: "build/tmp/docsite-inputs/Doxyfile"
           doxy-cfg:
@@ -61,6 +60,7 @@ nav:
   - Getting started:
       - Install & build: getting-started/install-build.md
       - First steps: getting-started/first-steps.md
+      - Quick CRUD: getting-started/crud-quick.md
       - Durability modes: getting-started/durability-modes.md
   - Textbook:
       - About the textbook: textbook/index.md
