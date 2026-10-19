@@ -235,6 +235,18 @@ class McpServer:
             ("coverage_all", "Все покрытия (limit).", [],
              {"type": "object",
               "properties": {"limit": {"type": "integer"}}}),
+            ("coverage_batch", "Батчевая фиксация покрытия {test: {symbols, pct}}.",
+             ["tests"], {"type": "object",
+                         "properties": {"tests": {"type": "object"}},
+                         "required": ["tests"]}),
+            ("coverage_symbols", "Тесты, покрывающие символы (prefix).",
+             [], {"type": "object",
+                  "properties": {"symbol_prefix": {"type": "string"},
+                                 "limit": {"type": "integer"}}}),
+            ("coverage_remove", "Удалить покрытие теста + covered_by.", ["test"],
+             {"type": "object",
+              "properties": {"test": {"type": "string"}},
+              "required": ["test"]}),
             ("ci_jobs_insert", "Зафиксировать параметры CI-джобы "
              "(\"{workflow}/{job}\").", ["job"], {
                  "type": "object",
@@ -245,6 +257,14 @@ class McpServer:
              {"type": "object",
               "properties": {"prefix": {"type": "string"},
                              "limit": {"type": "integer"}}}),
+            ("ci_jobs_get", "Параметры одной CI-джобы.", ["job"],
+             {"type": "object",
+              "properties": {"job": {"type": "string"}},
+              "required": ["job"]}),
+            ("ci_jobs_by_test", "Джобы, исполняющие тест.", ["test"],
+             {"type": "object",
+              "properties": {"test": {"type": "string"}},
+              "required": ["test"]}),
         ]
         return {name: {"name": name, "description": desc, "inputSchema": schema}
                 for name, desc, _args, schema in t}
@@ -416,11 +436,22 @@ class McpServer:
             return s.coverage_get(args["test"])
         if name == "coverage_all":
             return {"coverage": s.coverage_all(limit=args.get("limit"))}
+        if name == "coverage_batch":
+            return s.coverage_batch(args.get("tests") or {})
+        if name == "coverage_symbols":
+            return {"symbols": s.coverage_symbols(
+                args.get("symbol_prefix", ""), limit=args.get("limit"))}
+        if name == "coverage_remove":
+            return s.coverage_remove(args["test"])
         if name == "ci_jobs_insert":
             return s.ci_jobs_insert(args["job"], args.get("body") or {})
         if name == "ci_jobs_all":
             return {"jobs": s.ci_jobs_all(args.get("prefix", ""),
                                           limit=args.get("limit"))}
+        if name == "ci_jobs_get":
+            return s.ci_jobs_get(args["job"])
+        if name == "ci_jobs_by_test":
+            return {"jobs": s.ci_jobs_by_test(args["test"])}
         raise MemoryError("NO_SUCH_TOOL", "invalid", "неизвестный инструмент %r" % name,
                           "проверьте tools/list", "none")
 

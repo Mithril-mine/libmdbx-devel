@@ -53,8 +53,11 @@ shared-graph-memory.mdbx — персистентная память роя на
 | `map_uncovered(prefix?, limit?)` | Uncovered-острова смысла вне union-AST |
 | `test_metrics_insert(test, duration_ms, labels?, timeout_sec?)` | Окно истории длительностей тест-кейса (минутное: last/min/max/p90, флаки) |
 | `test_metrics_get(test)` / `test_metrics_all(prefix?)` | Метрики теста / всех |
-| `coverage_insert(test, symbols, pct?)` / `coverage_get(test)` / `coverage_all()` | Покрытие теста (набор fn:/type:/macro: символов) |
+| `coverage_insert(test, symbols, pct?)` / `coverage_batch(tests)` | Покрытие теста (набор fn:/type:/macro:), батч |
+| `coverage_get(test)` / `coverage_all()` / `coverage_remove(test)` | Покрытие / все / удалить |
+| `coverage_symbols(symbol_prefix?)` | **Какие тесты защищают символ** (covered_by) |
 | `ci_jobs_insert(job, body)` / `ci_jobs_all(prefix?)` | Параметры CI-джоб (`{workflow}/{job}`) |
+| `ci_jobs_get(job)` / `ci_jobs_by_test(test)` | Одна джоба / джобы, исполняющие тест |
 
 ### Карта исходников (refactoring-map)
 

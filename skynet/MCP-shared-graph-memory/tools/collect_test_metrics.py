@@ -85,6 +85,11 @@ def main():
         os.path.expanduser("~"), ".local", "share", "shared-graph-memory",
         "db.mdbx"))
     ap.add_argument("--dry-run", action="store_true")
+    ap.add_argument("--jobs", default=None,
+                    help="путь к .github/workflows или каталогу workflows: "
+                         "дополнительно заполняет ci_jobs (map_ci_jobs)")
+    ap.add_argument("--repo", default=None,
+                    help="корень репозитория (для --jobs по умолчанию: ../..)")
     ap.add_argument("--list-tests", default=None,
                     help="вывести (name, ms) из XML/LastLog без записи")
     args = ap.parse_args()
@@ -126,10 +131,25 @@ def main():
         t0 = time.time()
         n = 0
         for r in rows:
-            res = store.test_metrics_insert(r["name"], r["ms"])
+            store.test_metrics_insert(r["name"], r["ms"],
+                                      labels=[r["status"]],
+                                      timeout_sec=0)
             n += 1
         dt = time.time() - t0
         print("test_metrics: %d rows in %.1fs" % (n, dt))
+        if args.jobs:
+            # заполняем ci_jobs из workflows (переиспользуем map_ci_jobs)
+            import map_ci_jobs as mci
+            wf = args.jobs
+            if not os.path.isdir(wf):
+                wf = os.path.dirname(wf)
+            jobs = []
+            for wfpath in sorted(glob.glob(os.path.join(wf, "*.yml"))):
+                for wname, jid, body in mci.iter_jobs(wfpath):
+                    jobs.append(mci.summarize(wname, jid, body))
+            for j in jobs:
+                store.ci_jobs_insert("%s/%s" % (j["workflow"], j["job"]), j)
+            print("ci_jobs: %d jobs" % len(jobs))
     finally:
         store.close()
     return 0

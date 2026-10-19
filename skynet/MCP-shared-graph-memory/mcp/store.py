@@ -114,6 +114,7 @@ class Store:
         "coverage": mdbx.DB_DEFAULTS,    # test_id -> JSON {symbols:[fn:...], pct}
         "test_metrics": mdbx.DB_DEFAULTS,  # тест-кейс -> JSON окно истории
         "ci_jobs": mdbx.DB_DEFAULTS,     # {workflow}/{job} -> JSON
+        "covered_by": mdbx.DB_DEFAULTS,  # covered_by:{fn:...} -> JSON [test_id]
     }
 
     def __init__(self, path: str, maxdbs: int = 32, max_value_bytes: int = 16 << 20,
@@ -2016,14 +2017,98 @@ class Store:
         return out
 
     def coverage_insert(self, test_id: str, symbols: list, pct: float = 0.0) -> dict:
-        """Фиксирует покрытие теста: набор символов (fn:/type:/macro:)."""
+        """Фиксирует покрытие теста: набор символов (fn:/type:/macro:).
+
+        Одновременно поддерживает обратный индекс `covered_by:{sym}` →
+        [test_id], чтобы по символу находить защищающие его тесты.
+        """
+        symbols = symbols or []
         with self._begin_write() as txn:
+            cov_dbi = self.dbi(txn, "coverage")
+            cb_dbi = self.dbi(txn, "covered_by")
             key = "coverage:" + test_id
             body = {"test_id": test_id, "symbols": symbols,
                     "pct": round(pct, 1)}
-            txn.put(self.dbi(txn, "coverage"), key.encode(),
+            txn.put(cov_dbi, key.encode(),
                     json.dumps(body, ensure_ascii=False).encode())
+            for sym in symbols:
+                cb_key = ("covered_by:" + sym).encode()
+                rc, val = txn.get(cb_dbi, cb_key)
+                cur = json.loads(val.decode()) if val else []
+                if test_id not in cur:
+                    cur.append(test_id)
+                    txn.put(cb_dbi, cb_key,
+                            json.dumps(cur, ensure_ascii=False).encode())
             return {"test": test_id, "symbols": len(symbols)}
+
+    def coverage_batch(self, tests: dict) -> dict:
+        """Батчевая фиксация покрытия: {test_id: {symbols, pct}} в одной txn."""
+        n = 0
+        with self._begin_write() as txn:
+            cov_dbi = self.dbi(txn, "coverage")
+            cb_dbi = self.dbi(txn, "covered_by")
+            for test_id, info in tests.items():
+                symbols = (info or {}).get("symbols") or []
+                pct = float((info or {}).get("pct", 0.0))
+                key = "coverage:" + test_id
+                body = {"test_id": test_id, "symbols": symbols,
+                        "pct": round(pct, 1)}
+                txn.put(cov_dbi, key.encode(),
+                        json.dumps(body, ensure_ascii=False).encode())
+                for sym in symbols:
+                    cb_key = ("covered_by:" + sym).encode()
+                    rc, val = txn.get(cb_dbi, cb_key)
+                    cur = json.loads(val.decode()) if val else []
+                    if test_id not in cur:
+                        cur.append(test_id)
+                        txn.put(cb_dbi, cb_key,
+                                json.dumps(cur, ensure_ascii=False).encode())
+                n += 1
+            return {"tests": n}
+
+    def coverage_symbols(self, symbol_prefix: str, limit: int = 20) -> list:
+        """Тесты, покрывающие символы с префиксом (covered_by)."""
+        out = []
+        with self.env.begin(readonly=True) as txn:
+            dbi = self.dbi(txn, "covered_by")
+            with txn.cursor(dbi) as cur:
+                rc, k, v = cur.get(mdbx.CURSOR_FIRST)
+                while rc == mdbx.RC_SUCCESS:
+                    key = k.decode("utf-8", "replace")
+                    if key.startswith("covered_by:" + symbol_prefix):
+                        sym = key[len("covered_by:"):]
+                        out.append({"symbol": sym,
+                                    "tests": json.loads(v)})
+                        if limit and len(out) >= limit:
+                            break
+                    rc, k, v = cur.get(mdbx.CURSOR_NEXT)
+        return out
+
+    def coverage_remove(self, test_id: str) -> dict:
+        """Удаляет покрытие теста и его вхождения из covered_by."""
+        with self._begin_write() as txn:
+            cov_dbi = self.dbi(txn, "coverage")
+            cb_dbi = self.dbi(txn, "covered_by")
+            key = "coverage:" + test_id
+            rc, val = txn.get(cov_dbi, key.encode())
+            if val is None:
+                return {"result": "notfound"}
+            symbols = json.loads(val.decode()).get("symbols", [])
+            txn.delete(cov_dbi, key.encode())
+            for sym in symbols:
+                cb_key = ("covered_by:" + sym).encode()
+                rc2, v2 = txn.get(cb_dbi, cb_key)
+                if v2 is None:
+                    continue
+                cur = json.loads(v2.decode())
+                if test_id in cur:
+                    cur.remove(test_id)
+                    if cur:
+                        txn.put(cb_dbi, cb_key,
+                                json.dumps(cur, ensure_ascii=False).encode())
+                    else:
+                        txn.delete(cb_dbi, cb_key)
+            return {"result": "removed"}
 
     def coverage_get(self, test_id: str) -> dict:
         with self.env.begin(readonly=True) as txn:
@@ -2053,6 +2138,28 @@ class Store:
             txn.put(self.dbi(txn, "ci_jobs"), job_key.encode(),
                     json.dumps(body, ensure_ascii=False).encode())
             return {"job": job_key}
+
+    def ci_jobs_get(self, job_key: str) -> dict:
+        with self.env.begin(readonly=True) as txn:
+            rc, val = txn.get(self.dbi(txn, "ci_jobs"), job_key.encode())
+            if val is None:
+                return {}
+            return json.loads(val.decode())
+
+    def ci_jobs_by_test(self, test_id: str) -> list:
+        """Джобы, в которых исполняется тест (по labels/шагам в ci_jobs)."""
+        out = []
+        with self.env.begin(readonly=True) as txn:
+            dbi = self.dbi(txn, "ci_jobs")
+            with txn.cursor(dbi) as cur:
+                rc, k, v = cur.get(mdbx.CURSOR_FIRST)
+                while rc == mdbx.RC_SUCCESS:
+                    body = json.loads(v)
+                    tests = body.get("tests") or body.get("tests_hint") or []
+                    if test_id in tests:
+                        out.append(k.decode("utf-8", "replace"))
+                    rc, k, v = cur.get(mdbx.CURSOR_NEXT)
+        return out
 
     def ci_jobs_all(self, prefix: str = "", limit: int = None) -> list:
         out = []

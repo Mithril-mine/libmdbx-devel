@@ -71,3 +71,57 @@ def test_links_in_reflects_purge(store):
     with store.env.begin(readonly=True) as txn:
         _, v = txn.get(store.dbi(txn, "links_in"), _pack_u64(fact_id))
         assert v is None or _unpack_u64(v) == 0
+
+def test_coverage_covered_by_reverse_index(store):
+    """После coverage_insert по символу находятся защищающие его тесты."""
+    store.coverage_insert("ut/api/cursor", ["fn:api-cursor:mdbx_cursor_get",
+                                            "fn:api-cursor:mdbx_cursor_put"],
+                          pct=80.0)
+    store.coverage_insert("ut/api/cursors2", ["fn:api-cursor:mdbx_cursor_put"])
+    r = store.coverage_symbols("fn:api-cursor:mdbx_cursor_get")
+    assert len(r) == 1 and r[0]["tests"] == ["ut/api/cursor"]
+    r2 = store.coverage_symbols("fn:api-cursor:mdbx_cursor_put")
+    assert {t for x in r2 for t in x["tests"]} == {"ut/api/cursor",
+                                                   "ut/api/cursors2"}
+    # удаление теста чистит обратный индекс
+    store.coverage_remove("ut/api/cursors2")
+    r3 = store.coverage_symbols("fn:api-cursor:mdbx_cursor_put")
+    assert {t for x in r3 for t in x["tests"]} == {"ut/api/cursor"}
+
+
+def test_coverage_batch(store):
+    """coverage_batch фиксирует несколько тестов в одной транзакции."""
+    store.coverage_batch({
+        "ut/t1": {"symbols": ["fn:a:b"], "pct": 10.0},
+        "ut/t2": {"symbols": ["fn:c:d"], "pct": 20.0},
+    })
+    assert store.coverage_get("ut/t1")["symbols"] == ["fn:a:b"]
+    assert store.coverage_get("ut/t2")["pct"] == 20.0
+
+
+def test_ci_jobs_get_and_by_test(store):
+    store.ci_jobs_insert("linux/gcc", {"workflow": "linux", "job": "gcc",
+                                       "tests_hint": ["ut/api/cursor", "ut/txn"]})
+    store.ci_jobs_insert("windows/msvc", {"workflow": "windows", "job": "msvc"})
+    assert store.ci_jobs_get("linux/gcc")["job"] == "gcc"
+    jobs = store.ci_jobs_by_test("ut/api/cursor")
+    assert jobs == ["linux/gcc"]
+    jobs2 = store.ci_jobs_by_test("missing/test")
+    assert jobs2 == []
+
+
+def test_map_ci_jobs_parser(tmp_path):
+    """map_ci_jobs: парсинг workflow YAML в компактные описания джоб."""
+    import shutil
+    import tools.map_ci_jobs as mci
+    f = str(tmp_path / "wf.yml")
+    shutil.copy("tests/fixtures/workflow-fixture.yml", f)
+    jobs = list(mci.iter_jobs(f))
+    assert len(jobs) == 2
+    s = mci.summarize(jobs[0][0], jobs[0][1], jobs[0][2])
+    assert s["workflow"] == "ci-fixture"
+    assert s["runs_on"] == "ubuntu-24.04"
+    assert "coverage" in s["matrix"]
+    assert "cc" in s["matrix"]
+    s2 = mci.summarize(jobs[1][0], jobs[1][1], jobs[1][2])
+    assert s2["matrix"] is None

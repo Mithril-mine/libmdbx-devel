@@ -1,0 +1,19 @@
+name: ci-fixture
+on:
+  push:
+    branches: [devel]
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    strategy:
+      matrix:
+        cc: [gcc, clang]
+        coverage: [off, on]
+    steps:
+      - name: configure
+        run: cmake -S . -B build
+  lint:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: lint
+        run: make lint

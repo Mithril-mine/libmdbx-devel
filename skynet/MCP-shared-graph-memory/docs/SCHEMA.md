@@ -30,13 +30,16 @@
 | `uncovered` | DEFAULTS | `uncovered:{module}:{n}` → JSON | uncovered-острова смысла (433) |
 | `links_in` | INTEGERKEY | uint64 id → uint64 count | денормализованный счётчик входящих рёбер (ускоряет score/stats) |
 | `coverage` | DEFAULTS | `coverage:{test_id}` → JSON `{symbols, pct}` | покрытие теста (символы fn:/type:/macro:) |
+| `covered_by` | DEFAULTS | `covered_by:{sym}` → JSON `[test_id]` | обратный индекс: какие тесты защищают символ |
 | `test_metrics` | DEFAULTS | `test_metrics:{test_id}` → JSON окно истории | длительности/флаки (скользящее окно) |
-| `ci_jobs` | DEFAULTS | `{workflow}/{job}` → JSON | параметры CI-джоб |
+| `ci_jobs` | DEFAULTS | `{workflow}/{job}` → JSON | параметры CI-джоб (matrix/scope/tests_hint) |
 
 Зарезервировано дизайном (REFACTORING-MAP.md), данные появятся с коллекторами:
 `probes` — добавляются аддитивно (§1.1). Реализованы коллекторы:
 `test_metrics` (tools/collect_test_metrics.py, ctest XML/LastTest.log → окно
-длительностей), `coverage` и `ci_jobs` — методы Store + MCP-инструменты.
+длительностей), `coverage` (tools/collect_coverage.py: lcov/llvm-cov →
+тест→символы + covered_by), `ci_jobs` (tools/map_ci_jobs.py:
+.github/workflows/*.yml → matrix/scope/tests) — методы Store + MCP-инструменты.
 
 `mdbx_env_set_option(env, MDBX_opt_max_db, 32)`. Одна write-транзакция на операцию
 (в т.ч. LRU-касания — батчем, см. §8).
