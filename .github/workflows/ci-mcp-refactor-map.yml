@@ -148,6 +148,8 @@ jobs:
           tools/artifacts/refactoring-map-linux.json \
           tools/artifacts/refactoring-map-macos.json \
           --out tools/artifacts/refactoring-map.json
+        python3 tools/scan_uncovered.py \
+          --map tools/artifacts/refactoring-map.json
     - name: validate merged (fixture)
       shell: bash
       run: |

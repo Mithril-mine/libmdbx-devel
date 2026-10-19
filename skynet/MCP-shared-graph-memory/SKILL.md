@@ -89,6 +89,12 @@ shared-graph-memory.mdbx — персистентная память роя на
 ### Карта исходников (refactoring-map)
 
 - Структурный слой: `symbols` (fn:/type:/macro:), `call_edges(+rev)`, `groups`,
+  `regions`, `uncovered`; наполняется `scan_symbols.py` → `load_map.py`.
+- **Ключи**: канонические fq-ключи функций — `fn:{qname}` (module в теле,
+  `@<module>` для TU-static, `#<sig>` для перегрузок). **Не выдумывайте
+  ключи**: получайте их через `map_symbols(prefix)` / `map_symbol` перед
+  `map_edges_of`/`map_callers_of`/`coverage_symbols`. Поиск по модулю —
+  `map_symbols("fn:gc")` (фильтр по module-полю).
   `regions` (#if-дерево), `uncovered` (острова смысла вне union-AST всех конфигов).
 - Данные генерируются `tools/scan_symbols.py` (+scan_regions/uncovered),
   загружаются `tools/load_map.py --db <живая> --replace`, сверяются

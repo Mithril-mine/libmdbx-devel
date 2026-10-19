@@ -138,3 +138,24 @@ def test_version_info_fields(store):
     store.safe_store("fact:meta:ver", "fact", "v", 0.1)
     v2 = store.version_info()
     assert v2["data"]["records"] >= 1
+
+
+def test_map_ci_jobs_cells_resolve_tests(tmp_path):
+    """map_ci_jobs: cells list[dict] c id+ctest резолвится в tests_hint."""
+    import shutil
+    import tools.map_ci_jobs as mci
+    wf = str(tmp_path / "wf.yml")
+    shutil.copy("tests/fixtures/workflow-fixture.yml", wf)
+    cfg = tmp_path / "config.json"
+    cfg.write_text('{"cells": [{"id": "linux-gcc-cursor", '
+                   '"ctest": ["ut/api/cursor", "ut/cursor"]}]}')
+    cells = mci.load_cells(str(cfg))
+    jobs = list(mci.iter_jobs(wf))
+    s = mci.summarize(jobs[0][0], jobs[0][1], jobs[0][2], cells=cells)
+    # у fixture workflow нет cell в matrix — tests_hint остаётся пустым
+    assert s["tests_hint"] == []
+    # принудительно зададим cell и проверим резолв
+    s2 = dict(jobs[0][2])
+    s2["strategy"] = {"matrix": {"cell": ["linux-gcc-cursor"]}}
+    s3 = mci.summarize(jobs[0][0], jobs[0][1], s2, cells=cells)
+    assert sorted(s3["tests_hint"]) == ["ut/api/cursor", "ut/cursor"]

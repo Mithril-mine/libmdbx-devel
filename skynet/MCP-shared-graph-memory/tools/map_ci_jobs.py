@@ -76,22 +76,31 @@ def summarize(workflow_name: str, jid: str, body: dict,
     for k in ("scope", "coverage", "ndk", "cell"):
         if out.get(k) is None and env.get(k):
             out[k] = [env[k]]
-    # tests hint: если cell известен — из реестра cells
+    # tests hint: если cell известен — из реестра cells (format: list[dict])
     if cells and isinstance(out.get("cell"), list):
         for c in out["cell"]:
-            rec = cells.get("cells", {}).get(c) if isinstance(cells, dict) else None
+            rec = None
+            for cand in cells:
+                if isinstance(cand, dict) and cand.get("id") == c:
+                    rec = cand
+                    break
             if rec:
-                out["tests_hint"].extend(rec.get("tests", []) or [])
+                ctest = rec.get("ctest") or []
+                if isinstance(ctest, str):
+                    ctest = [ctest]
+                out["tests_hint"].extend(ctest)
+                out.setdefault("cell_id", []).append(c)
     out["tests_hint"] = sorted(set(out["tests_hint"]))[:200]
     return out
 
 
-def load_cells(path: str) -> dict:
+def load_cells(path: str) -> list:
     try:
         with open(path) as fh:
-            return json.load(fh)
+            data = json.load(fh)
+        return data.get("cells", []) if isinstance(data, dict) else []
     except (OSError, ValueError):
-        return {}
+        return []
 
 
 def main():
