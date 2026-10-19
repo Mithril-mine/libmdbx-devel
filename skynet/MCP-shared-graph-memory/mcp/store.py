@@ -173,8 +173,13 @@ class Store:
                 try:
                     self._dbi[name] = txn.open_dbi(name, fl)
                 except mdbx.LibmdbxError as e:
-                    if readonly and "NOTFOUND" in str(e):
-                        self._dbi[name] = None  # таблица появится после upgrade
+                    # несовместимые флаги (таблица из более старой схемы,
+                    # например call_traces было DUPSORT, теперь DEFAULTS):
+                    # не фейлим — помечаем None, upgrade() пересоздаст.
+                    # readonly: отсутствующая таблица тоже → None.
+                    if ("INCOMPATIBLE" in str(e)) or \
+                       (readonly and "NOTFOUND" in str(e)):
+                        self._dbi[name] = None
                     else:
                         raise
         self._load_vocab()
@@ -724,7 +729,10 @@ class Store:
     # --- init -----------------------------------------------------------------
     def _load_vocab(self) -> None:
         with self.env.begin(readonly=True) as txn:
-            cur = txn.cursor(self.dbi(txn, "vocab"))
+            dbi = self._opt_dbi(txn, "vocab")
+            if dbi is None:
+                return  # очень старая БД без vocab — словарь остаётся пустым
+            cur = txn.cursor(dbi)
             rc, key, _ = cur.get(mdbx.CURSOR_FIRST)
             while rc == mdbx.RC_SUCCESS:
                 text = key.decode("utf-8", "replace")
@@ -769,9 +777,32 @@ class Store:
         created = []
         with self._begin_write() as txn:
             for name, fl in self.TABLES.items():
-                if self._dbi.get(name) is None:
+                dbi = self._dbi.get(name)
+                if dbi is not None:
+                    continue
+                try:
                     self._dbi[name] = txn.open_dbi(name, fl | mdbx.CREATE)
-                    created.append(name)
+                except mdbx.LibmdbxError:
+                    # таблица существует со СТАРЫМИ флагами (например
+                    # call_traces было DUPSORT, теперь DEFAULTS): открываем
+                    # по имени с перебором известных наборов флагов, чтобы
+                    # получить handle, затем drop (del=1) и пересоздаём.
+                    old = None
+                    for cand_fl in (mdbx.DUPSORT,
+                                    mdbx.DUPSORT | mdbx.INTEGERKEY,
+                                    mdbx.DUPSORT | mdbx.DUPFIXED,
+                                    mdbx.DB_DEFAULTS,
+                                    mdbx.DUPSORT | mdbx.DUPFIXED | mdbx.INTEGERDUP):
+                        try:
+                            old = txn.open_dbi(name, cand_fl)
+                            break
+                        except mdbx.LibmdbxError:
+                            continue
+                    if old is None:
+                        raise
+                    txn.drop_dbi(old, del_=True)
+                    self._dbi[name] = txn.open_dbi(name, fl | mdbx.CREATE)
+                created.append(name)
         # backfill covered_by из существующих coverage (однократно, маркер)
         marker = "covered_by_backfilled"
         n = 0
@@ -1126,7 +1157,10 @@ class Store:
         link/unlink/purge). Если записи-счётчика нет (старые/мигрированные
         узлы) — fallback на скан обратных рёбер в links.
         """
-        rc, packed = txn.get(self.dbi(txn, "links_in"), _pack_u64(record_id))
+        li_dbi = self._opt_dbi(txn, "links_in")
+        packed = None
+        if li_dbi is not None:
+            rc, packed = txn.get(li_dbi, _pack_u64(record_id))
         if packed and len(packed) == ID_LEN:
             return _unpack_u64(packed)
         links_dbi = self.dbi(txn, "links")
@@ -2325,7 +2359,9 @@ class Store:
     def project_files(self, prefix: str = "", limit: int = None) -> list:
         out = []
         with self.env.begin(readonly=True) as txn:
-            dbi = self.dbi(txn, "project_files")
+            dbi = self._opt_dbi(txn, "project_files")
+            if dbi is None:
+                return []
             with txn.cursor(dbi) as cur:
                 rc, k, v = cur.get(mdbx.CURSOR_FIRST)
                 while rc == mdbx.RC_SUCCESS:
@@ -2341,8 +2377,10 @@ class Store:
     def file_deps(self, path: str) -> list:
         """Зависимости файла (file:path -> [dep...])."""
         with self.env.begin(readonly=True) as txn:
-            rc, val = txn.get(self.dbi(txn, "file_deps"),
-                              ("file:" + path).encode())
+            fd_dbi = self._opt_dbi(txn, "file_deps")
+            if fd_dbi is None:
+                return []
+            rc, val = txn.get(fd_dbi, ("file:" + path).encode())
             if val is None:
                 return []
             return json.loads(val.decode())
@@ -2351,7 +2389,9 @@ class Store:
         """Файлы, зависящие от path (обратный обход file_deps)."""
         out = []
         with self.env.begin(readonly=True) as txn:
-            dbi = self.dbi(txn, "file_deps")
+            dbi = self._opt_dbi(txn, "file_deps")
+            if dbi is None:
+                return []
             with txn.cursor(dbi) as cur:
                 rc, k, v = cur.get(mdbx.CURSOR_FIRST)
                 while rc == mdbx.RC_SUCCESS:
@@ -2428,8 +2468,10 @@ class Store:
 
     def probe_get(self, tag: str) -> dict:
         with self.env.begin(readonly=True) as txn:
-            rc, val = txn.get(self.dbi(txn, "probes"),
-                              ("probe:" + tag).encode())
+            dbi = self._opt_dbi(txn, "probes")
+            if dbi is None:
+                return {}
+            rc, val = txn.get(dbi, ("probe:" + tag).encode())
             if val is None:
                 return {}
             return json.loads(val.decode())
@@ -2438,7 +2480,9 @@ class Store:
                    limit: int = None) -> list:
         out = []
         with self.env.begin(readonly=True) as txn:
-            dbi = self.dbi(txn, "probes")
+            dbi = self._opt_dbi(txn, "probes")
+            if dbi is None:
+                return []  # старая БД без probes
             with txn.cursor(dbi) as cur:
                 rc, k, v = cur.get(mdbx.CURSOR_FIRST)
                 while rc == mdbx.RC_SUCCESS:
@@ -2493,7 +2537,9 @@ class Store:
         """Наблюдаемые вызовы (возможно по префиксу caller)."""
         out = []
         with self.env.begin(readonly=True) as txn:
-            dbi = self.dbi(txn, "call_traces")
+            dbi = self._opt_dbi(txn, "call_traces")
+            if dbi is None:
+                return []
             with txn.cursor(dbi) as cur:
                 rc, k, v = cur.get(mdbx.CURSOR_FIRST)
                 while rc == mdbx.RC_SUCCESS:
@@ -2511,7 +2557,9 @@ class Store:
         """BFS по наблюдаемым рёбрам: src → dst (пути observed-вызовов)."""
         adj = {}
         with self.env.begin(readonly=True) as txn:
-            dbi = self.dbi(txn, "call_traces")
+            dbi = self._opt_dbi(txn, "call_traces")
+            if dbi is None:
+                return []
             with txn.cursor(dbi) as cur:
                 rc, k, v = cur.get(mdbx.CURSOR_FIRST)
                 while rc == mdbx.RC_SUCCESS:
@@ -2573,8 +2621,11 @@ class Store:
                     rc, _, val = cur.get(mdbx.CURSOR_NEXT_DUP)
         observed_callees = set()
         with self.env.begin(readonly=True) as txn:
-            rc, val = txn.get(self.dbi(txn, "call_traces"),
-                              (pre + symbol).encode())
+            ct_dbi = self._opt_dbi(txn, "call_traces")
+            if ct_dbi is None:
+                observed_callees = set()
+            else:
+                rc, val = txn.get(ct_dbi, (pre + symbol).encode())
             if val is not None:
                 for cal in json.loads(val.decode()).keys():
                     # нормализуем observed до layer-local (префикс слоя снят)
@@ -2623,8 +2674,10 @@ class Store:
 
     def adr_get(self, name: str) -> dict:
         with self.env.begin(readonly=True) as txn:
-            rc, val = txn.get(self.dbi(txn, "adr"),
-                              ("adr:" + name).encode())
+            dbi = self._opt_dbi(txn, "adr")
+            if dbi is None:
+                return {}
+            rc, val = txn.get(dbi, ("adr:" + name).encode())
             if val is None:
                 return {}
             return json.loads(val.decode())
@@ -2633,7 +2686,9 @@ class Store:
         """Заголовки всех ADR (title/status/date) — краткий обзор."""
         out = []
         with self.env.begin(readonly=True) as txn:
-            dbi = self.dbi(txn, "adr")
+            dbi = self._opt_dbi(txn, "adr")
+            if dbi is None:
+                return []
             with txn.cursor(dbi) as cur:
                 rc, k, v = cur.get(mdbx.CURSOR_FIRST)
                 while rc == mdbx.RC_SUCCESS:
@@ -2700,7 +2755,9 @@ class Store:
     def cbm_linked(self, prefix: str = "", limit: int = 50) -> list:
         out = []
         with self.env.begin(readonly=True) as txn:
-            dbi = self.dbi(txn, "bridge")
+            dbi = self._opt_dbi(txn, "bridge")
+            if dbi is None:
+                return []
             with txn.cursor(dbi) as cur:
                 rc, k, v = cur.get(mdbx.CURSOR_FIRST)
                 while rc == mdbx.RC_SUCCESS:
@@ -2855,8 +2912,10 @@ class Store:
 
     def test_metrics_get(self, test_id: str) -> dict:
         with self.env.begin(readonly=True) as txn:
-            rc, val = txn.get(self.dbi(txn, "test_metrics"),
-                              ("test_metrics:" + test_id).encode())
+            dbi = self._opt_dbi(txn, "test_metrics")
+            if dbi is None:
+                return {}
+            rc, val = txn.get(dbi, ("test_metrics:" + test_id).encode())
             if val is None:
                 return {}
             return json.loads(val.decode())
@@ -2864,7 +2923,9 @@ class Store:
     def test_metrics_all(self, prefix: str = "", limit: int = None) -> list:
         out = []
         with self.env.begin(readonly=True) as txn:
-            dbi = self.dbi(txn, "test_metrics")
+            dbi = self._opt_dbi(txn, "test_metrics")
+            if dbi is None:
+                return []
             with txn.cursor(dbi) as cur:
                 rc, k, v = cur.get(mdbx.CURSOR_FIRST)
                 while rc == mdbx.RC_SUCCESS:
@@ -2976,7 +3037,9 @@ class Store:
         """Тесты, покрывающие символы с префиксом (covered_by)."""
         out = []
         with self.env.begin(readonly=True) as txn:
-            dbi = self.dbi(txn, "covered_by")
+            dbi = self._opt_dbi(txn, "covered_by")
+            if dbi is None:
+                return []  # старая БД без covered_by
             with txn.cursor(dbi) as cur:
                 rc, k, v = cur.get(mdbx.CURSOR_FIRST)
                 while rc == mdbx.RC_SUCCESS:
@@ -3052,7 +3115,10 @@ class Store:
         pre = self.layer_prefix(layer)
         key = ("coverage_blocks:%s:%s" % (pre + test_id, symbol)).encode()
         with self.env.begin(readonly=True) as txn:
-            rc, val = txn.get(self.dbi(txn, "coverage_blocks"), key)
+            dbi = self._opt_dbi(txn, "coverage_blocks")
+            if dbi is None:
+                return []
+            rc, val = txn.get(dbi, key)
             if val is None:
                 return []
             return json.loads(val.decode())
@@ -3141,7 +3207,10 @@ class Store:
 
     def ci_jobs_get(self, job_key: str) -> dict:
         with self.env.begin(readonly=True) as txn:
-            rc, val = txn.get(self.dbi(txn, "ci_jobs"), job_key.encode())
+            dbi = self._opt_dbi(txn, "ci_jobs")
+            if dbi is None:
+                return {}
+            rc, val = txn.get(dbi, job_key.encode())
             if val is None:
                 return {}
             return json.loads(val.decode())
@@ -3150,7 +3219,9 @@ class Store:
         """Джобы, в которых исполняется тест (по labels/шагам в ci_jobs)."""
         out = []
         with self.env.begin(readonly=True) as txn:
-            dbi = self.dbi(txn, "ci_jobs")
+            dbi = self._opt_dbi(txn, "ci_jobs")
+            if dbi is None:
+                return []
             with txn.cursor(dbi) as cur:
                 rc, k, v = cur.get(mdbx.CURSOR_FIRST)
                 while rc == mdbx.RC_SUCCESS:
@@ -3164,7 +3235,9 @@ class Store:
     def ci_jobs_all(self, prefix: str = "", limit: int = None) -> list:
         out = []
         with self.env.begin(readonly=True) as txn:
-            dbi = self.dbi(txn, "ci_jobs")
+            dbi = self._opt_dbi(txn, "ci_jobs")
+            if dbi is None:
+                return []  # старая БД без ci_jobs
             with txn.cursor(dbi) as cur:
                 rc, k, v = cur.get(mdbx.CURSOR_FIRST)
                 while rc == mdbx.RC_SUCCESS:
@@ -3310,7 +3383,9 @@ class Store:
     def branch_list(self, base_only: bool = False) -> list:
         out = []
         with self.env.begin(readonly=True) as txn:
-            dbi = self.dbi(txn, "branches")
+            dbi = self._opt_dbi(txn, "branches")
+            if dbi is None:
+                return []  # старая БД без таблицы branches
             with txn.cursor(dbi) as cur:
                 rc, k, v = cur.get(mdbx.CURSOR_FIRST)
                 while rc == mdbx.RC_SUCCESS:

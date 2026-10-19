@@ -1,5 +1,7 @@
 """Тесты нелинейного версионирования БЗ: слои веток и структурный diff."""
 
+from mcp import Store
+
 
 def test_branch_register_and_prefix(store):
     r = store.branch_register("0.15", "base", 0,
@@ -83,3 +85,47 @@ def test_effective_layer_active_branch_defaults(store):
     assert "fn:base_only" not in syms
     # явный layer перебивает активную ветку
     assert "fn:base_only" in store.map_symbols("fn:", layer="0.15.base")
+
+
+def test_upgrade_recreates_incompatible_table(tmp_path):
+    """Миграция: таблица со старыми флагами пересоздаётся при rw-upgrade."""
+    from mcp import libmdbx as mdbx
+    db = str(tmp_path / "old.mdbx")
+    # «старая» БД: call_traces была DUPSORT, остальные базовые таблицы
+    env = mdbx.Env(db, maxdbs=64, readonly=False, sync_mode="safe_nosync")
+    with env.begin() as txn:
+        txn.open_dbi("meta", mdbx.CREATE | mdbx.DB_DEFAULTS)
+        txn.open_dbi("records", mdbx.CREATE | mdbx.DB_DEFAULTS)
+        txn.open_dbi("call_traces", mdbx.CREATE | mdbx.DUPSORT)
+    env.close()
+    # rw-открытие не должно падать на INCOMPATIBLE (tolerant), upgrade проходит
+    s = Store(db, readonly=False)
+    r = s.upgrade()
+    assert r["created"] == [] or "call_traces" in r["created"]
+    s.close()
+    # readonly после миграции работает
+    s2 = Store(db, readonly=True)
+    assert s2.trace_observed() == []
+    s2.close()
+
+
+def test_readonly_old_db_without_new_tables(tmp_path):
+    """Старая БД (без новых таблиц) открывается readonly без падений."""
+    from mcp import libmdbx as mdbx
+    db = str(tmp_path / "min.mdbx")
+    env = mdbx.Env(db, maxdbs=64, readonly=False, sync_mode="safe_nosync")
+    with env.begin() as txn:
+        txn.open_dbi("meta", mdbx.CREATE | mdbx.DB_DEFAULTS)
+        txn.open_dbi("records", mdbx.CREATE | mdbx.DB_DEFAULTS)
+        txn.open_dbi("links", mdbx.CREATE | mdbx.DUPSORT)
+        txn.open_dbi("vocab", mdbx.CREATE | mdbx.DB_DEFAULTS)
+    env.close()
+    s = Store(db, readonly=True)
+    assert s.branch_list() == []
+    assert s.probe_list() == []
+    assert s.coverage_symbols("fn:") == []
+    assert s.adr_outline() == []
+    assert s.ci_jobs_all() == []
+    assert s.test_metrics_all() == []
+    assert s.cbm_linked() == []
+    s.close()

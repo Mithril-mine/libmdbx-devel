@@ -219,6 +219,8 @@ ffi.cdef(
     int mdbx_txn_copy2pathnameW(void *txn, const wchar_t *dest, unsigned int flags);
     int mdbx_dbi_open(void *txn, const char *name, unsigned int flags,
                       MDBX_dbi *dbi);
+    int mdbx_dbi_close(void *env, MDBX_dbi dbi);
+    int mdbx_drop(void *txn, MDBX_dbi dbi, int del);
     int mdbx_dbi_sequence(void *txn, MDBX_dbi dbi, uint64_t *result,
                           uint64_t increment);
     int mdbx_canary_put(void *txn, struct MDBX_canary *canary);
@@ -893,6 +895,14 @@ class Txn:
         dbi = ffi.new("MDBX_dbi *")
         check(_get_lib().mdbx_dbi_open(self.ptr, name.encode(), flags, dbi), "mdbx_dbi_open")
         return int(dbi[0])
+
+    def drop_dbi(self, dbi: int, del_: bool = True) -> None:
+        """mdbx_drop: очистить (del_=False) или удалить (del_=True) dbi."""
+        check(_get_lib().mdbx_drop(self.ptr, dbi, 1 if del_ else 0),
+              "mdbx_drop")
+
+    def close_dbi(self, env, dbi: int) -> None:
+        check(_get_lib().mdbx_dbi_close(env, dbi), "mdbx_dbi_close")
 
     def get(self, dbi: int, key: bytes) -> Tuple[int, Optional[bytes]]:
         kval = _val_from_bytes(key)

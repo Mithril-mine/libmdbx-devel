@@ -817,19 +817,10 @@ def main(argv=None):
         # временный Store ЗАКРЫВАЕМ до основного открытия
         with Store(path, readonly=False) as _upg:
             _upg.upgrade()
-    elif os.path.exists(path):
-        # readonly-старт существующей БД: upgrade создаёт недостающие таблицы,
-        # НО только если БД не требует recovery (unsteady): preopen-проверка
-        # не пишет в БД и сохраняет recovery-сигнал для обработки ниже.
-        try:
-            mdbx.preopen_snapinfo(path)
-            with Store(path, readonly=False) as _upg:
-                _upg.upgrade()
-        except mdbx.LibmdbxError as e:
-            if e.rc in (mdbx.RC_WANNA_RECOVERY, mdbx.RC_CORRUPTED):
-                pass  # recovery-путь ниже (rc=2)
-            else:
-                raise
+    # readonly-старт существующей БД НЕ выполняет upgrade (никаких rw-записей
+    # без явного выбора write-режима): новые таблицы создаются при первом
+    # rw-старте или переключении режима; readonly-чтение переживает их
+    # отсутствие (tolerant None-handle в Store.__init__).
     try:
         store = Store(path, readonly=readonly)
     except mdbx.LibmdbxError as e:

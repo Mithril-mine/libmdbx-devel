@@ -81,7 +81,9 @@ def summarize(workflow_name: str, jid: str, body: dict,
                 if v is None:
                     continue
                 vals = v if isinstance(v, list) else [v]
-                cur = out.setdefault(k, [])
+                cur = out.get(k)
+                if cur is None:
+                    cur = out[k] = []
                 for x in vals:
                     if x not in cur:
                         cur.append(x)
