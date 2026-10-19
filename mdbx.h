@@ -6229,21 +6229,24 @@ LIBMDBX_API int mdbx_cursor_scan_from(MDBX_cursor *cursor, MDBX_predicate_func p
  * \param [out] count     The number of key and value item returned, on success
  *                        it always be the even because the key-value
  *                        pairs are returned.
- * \param [in,out] pairs  A pointer to the array of key value pairs.
- * \param [in] limit      The size of pairs buffer as the number of items,
- *                        but not a pairs.
- * \param [in] op         A cursor operation \ref MDBX_cursor_op (only
- *                        \ref MDBX_FIRST and \ref MDBX_NEXT are supported).
- *
- * \returns A non-zero error value on failure and 0 on success,
- *          some possible errors are:
- * \retval MDBX_THREAD_MISMATCH  Given transaction is not owned
- *                               by current thread.
- * \retval MDBX_NOTFOUND         No any key-value pairs are available.
- * \retval MDBX_ENODATA          The cursor is already at the end of data.
- * \retval MDBX_RESULT_TRUE      The returned chunk is the last one,
- *                               and there are no pairs left.
- * \retval MDBX_EINVAL           An invalid parameter was specified. */
+  * \param [in,out] pairs  A pointer to the array of key value pairs.
+  * \param [in] limit      The size of pairs buffer as the number of items,
+  *                        but not a pairs: one key-value pair occupies two
+  *                        items, so `limit` must be at least 2; an odd
+  *                        `limit` is accepted and its last item slot stays
+  *                        unused.
+  * \param [in] op         A cursor operation \ref MDBX_cursor_op (only
+  *                        \ref MDBX_FIRST and \ref MDBX_NEXT are supported).
+  *
+  * \returns A non-zero error value on failure and 0 on success,
+  *          some possible errors are:
+  * \retval MDBX_THREAD_MISMATCH  Given transaction is not owned
+  *                               by current thread.
+  * \retval MDBX_NOTFOUND         No any key-value pairs are available.
+  * \retval MDBX_ENODATA          The cursor is already at the end of data.
+  * \retval MDBX_RESULT_TRUE      The returned chunk is the last one,
+  *                               and there are no pairs left.
+  * \retval MDBX_EINVAL           An invalid parameter was specified. */
 LIBMDBX_API int mdbx_cursor_get_batch(MDBX_cursor *cursor, size_t *count, MDBX_val *pairs, size_t limit,
                                       MDBX_cursor_op op);
 

@@ -566,6 +566,8 @@ int mdbx_cursor_get_batch(MDBX_cursor *mc, size_t *count, MDBX_val *pairs, size_
     return LOG_IFERR(MDBX_EINVAL);
 
   *count = 0;
+  /* `limit` counts MDBX_val slots and one key-value pair occupies two slots,
+   * so a buffer smaller than two items cannot hold a pair. */
   if (unlikely(limit < 2 || limit > INTPTR_MAX - 2))
     return LOG_IFERR(MDBX_EINVAL);
 

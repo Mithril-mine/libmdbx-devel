@@ -62,12 +62,14 @@ TEST(issue_gh0098, scan_and_batch_on_empty_and_end) {
   mdbx::txn_managed txn = env.start_write();
   auto empty = txn.create_map("empty");
   auto plain = txn.create_map("plain");
+  auto dups = txn.create_map("dups", mdbx::key_mode::usual, mdbx::value_mode::multi);
   txn.commit();
 
   {
     mdbx::txn_managed wt = env.start_write();
     wt.upsert(plain, mdbx::slice("a"), mdbx::slice("1"));
     wt.upsert(plain, mdbx::slice("b"), mdbx::slice("2"));
+    wt.upsert(dups, mdbx::slice("k"), mdbx::slice("v"));
     wt.commit();
   }
 
@@ -101,6 +103,14 @@ TEST(issue_gh0098, scan_and_batch_on_empty_and_end) {
   auto single = q.get_batch(1, mdbx::cursor::first, &last);
   ASSERT_EQ(1u, single.size()) << "a single-pair batch must work";
   EXPECT_FALSE(last);
+
+  /* The C entry must refuse a DUPSORT table regardless of the limit. */
+  mdbx::cursor_managed dc = rtxn.open_cursor(dups);
+  MDBX_val pairs[2];
+  size_t count = 0;
+  EXPECT_EQ(MDBX_INCOMPATIBLE, ::mdbx_cursor_get_batch(dc.handle(), &count, pairs, 2, MDBX_FIRST))
+      << "get_batch() must reject a DUPSORT table";
+  EXPECT_EQ(0u, count);
 
   rtxn.abort();
   env.close();

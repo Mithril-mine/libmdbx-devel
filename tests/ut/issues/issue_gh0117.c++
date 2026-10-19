@@ -23,6 +23,11 @@ TEST(issue_gh0117, writemap_dirty_space_is_not_doubled) {
   MDBX_env *env = nullptr;
   ASSERT_EQ(MDBX_SUCCESS, mdbx_env_create(&env));
   ASSERT_EQ(MDBX_SUCCESS, mdbx_env_set_option(env, MDBX_opt_max_db, 4));
+  /* Pin 4-KiB database pages so each 3072-byte value lives on its own
+   * overflow page regardless of the platform default; otherwise on large
+   * pages the values fit inline and the doubled dirty count stays below any
+   * page-count bound. */
+  ASSERT_EQ(MDBX_SUCCESS, mdbx_env_set_geometry(env, -1, -1, -1, -1, -1, 4096));
   ASSERT_EQ(MDBX_SUCCESS, mdbx_env_open(env, testdb, MDBX_NOSUBDIR | MDBX_WRITEMAP, 0644));
 
   MDBX_txn *txn = nullptr;
@@ -43,9 +48,15 @@ TEST(issue_gh0117, writemap_dirty_space_is_not_doubled) {
   memset(&info, 0, sizeof(info));
   ASSERT_EQ(MDBX_SUCCESS, mdbx_txn_info(txn, &info, false));
   EXPECT_GT(info.txn_space_dirty, (uint64_t)0) << "the dirty space must be reported";
-  /* 200 values of ~3 KB: hundreds of dirty pages; the doubled reported count
-   * would be about twice the real one. */
-  EXPECT_LT(info.txn_space_dirty, (uint64_t)(2048 * 4096))
+  /* 200 values of ~3 KB each live on their own overflow pages: the correct
+   * dirty byte count is about 200 pages, while the doubled one (the aliasing
+   * bug reported) is about 400. A 300-page bound separates the two without
+   * depending on the platform page size. */
+  MDBX_envinfo einfo;
+  memset(&einfo, 0, sizeof(einfo));
+  ASSERT_EQ(MDBX_SUCCESS, mdbx_env_info_ex(env, nullptr, &einfo, sizeof(einfo)));
+  const size_t pagesize = einfo.mi_dxb_pagesize;
+  EXPECT_LT(info.txn_space_dirty, (uint64_t)(300 * pagesize))
       << "the writemap dirty byte count must not be doubled by counter aliasing";
 
   ASSERT_EQ(MDBX_SUCCESS, mdbx_txn_commit(txn));

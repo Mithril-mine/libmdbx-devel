@@ -155,6 +155,9 @@ public:
   inline cursor_managed open_cursor(map_handle map) const;
 
   /// \brief Unbind or close all cursors.
+  /// \warning With `unbind=false` it must NOT be used while any cursor of the
+  ///   transaction is owned by a \ref cursor_managed: the cursor is closed
+  ///   behind the wrapper's back, which is left owning a freed handle.
   inline size_t release_all_cursors(bool unbind) const;
 
   // TODO: пересмотреть вариант реализации при переходе на двухсвязанные
