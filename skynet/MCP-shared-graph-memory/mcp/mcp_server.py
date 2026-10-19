@@ -284,6 +284,39 @@ class McpServer:
               "properties": {"path": {"type": "string"},
                              "limit": {"type": "integer"}},
               "required": ["path"]}),
+            ("probe_add", "Регистрация зонда (SystemMap), dedup по тегу.", ["tag"],
+             {"type": "object",
+              "properties": {"tag": {"type": "string"},
+                             "kind": {"type": "string"},
+                             "mechanism": {"type": "string"},
+                             "test_theme": {"type": "string"},
+                             "symbol": {"type": "string"},
+                             "file": {"type": "string"},
+                             "line": {"type": "integer"},
+                             "status": {"type": "string"}},
+              "required": ["tag"]}),
+            ("probe_batch", "Батчевая регистрация зондов (scan_probes.py).",
+             ["probes"], {"type": "object",
+                          "properties": {"probes": {"type": "array"}},
+                          "required": ["probes"]}),
+            ("probe_get", "Зонд по тегу.", ["tag"],
+             {"type": "object",
+              "properties": {"tag": {"type": "string"}},
+              "required": ["tag"]}),
+            ("probe_list", "Зонды по префиксу/kind.", [],
+             {"type": "object",
+              "properties": {"prefix": {"type": "string"},
+                             "kind": {"type": "string"},
+                             "limit": {"type": "integer"}}}),
+            ("probe_status", "Сменить статус зонда.", ["tag"],
+             {"type": "object",
+              "properties": {"tag": {"type": "string"},
+                             "status": {"type": "string"}},
+              "required": ["tag"]}),
+            ("probe_remove", "Удалить зонд.", ["tag"],
+             {"type": "object",
+              "properties": {"tag": {"type": "string"}},
+              "required": ["tag"]}),
         ]
         return {name: {"name": name, "description": desc, "inputSchema": schema}
                 for name, desc, _args, schema in t}
@@ -483,6 +516,26 @@ class McpServer:
         if name == "file_dependents":
             return {"dependents": s.file_dependents(
                 args["path"], limit=args.get("limit"))}
+        if name == "probe_add":
+            return s.probe_add(args["tag"], kind=args.get("kind", "usdt"),
+                               mechanism=args.get("mechanism", ""),
+                               test_theme=args.get("test_theme", ""),
+                               symbol=args.get("symbol", ""),
+                               file=args.get("file", ""),
+                               line=int(args.get("line", 0)),
+                               status=args.get("status", "candidate"))
+        if name == "probe_batch":
+            return s.probe_batch(args.get("probes") or [])
+        if name == "probe_get":
+            return s.probe_get(args["tag"])
+        if name == "probe_list":
+            return {"probes": s.probe_list(args.get("prefix", ""),
+                                           kind=args.get("kind", ""),
+                                           limit=args.get("limit"))}
+        if name == "probe_status":
+            return s.probe_status(args["tag"], args["status"])
+        if name == "probe_remove":
+            return s.probe_remove(args["tag"])
         raise MemoryError("NO_SUCH_TOOL", "invalid", "неизвестный инструмент %r" % name,
                           "проверьте tools/list", "none")
 

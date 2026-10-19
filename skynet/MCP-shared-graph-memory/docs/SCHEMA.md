@@ -30,11 +30,12 @@
 | `uncovered` | DEFAULTS | `uncovered:{module}:{n}` → JSON | uncovered-острова смысла (433) |
 | `links_in` | INTEGERKEY | uint64 id → uint64 count | денормализованный счётчик входящих рёбер (ускоряет score/stats) |
 | `coverage` | DEFAULTS | `coverage:{test_id}` → JSON `{symbols, pct}` | покрытие теста (символы fn:/type:/macro:) |
+| `project_files` | DEFAULTS | `rel_path` → JSON `{kind, lang, module, deps}` | карта проекта (весь репо: cmake/scripts/docs/ci/config) |
+| `file_deps` | DEFAULTS | `file:{rel}` → JSON `[dep_rel]` | рёбра файл→файл (include/import/source/ссылка/workflow) |
+| `probes` | DEFAULTS | `probe:{tag}` → JSON | SystemMap: реестр зондов (usdt/bookmark/injected/dev_assert), status |
 | `covered_by` | DEFAULTS | `covered_by:{sym}` → JSON `[test_id]` | обратный индекс: какие тесты защищают символ |
 | `test_metrics` | DEFAULTS | `test_metrics:{test_id}` → JSON окно истории | длительности/флаки (скользящее окно) |
 | `ci_jobs` | DEFAULTS | `{workflow}/{job}` → JSON | параметры CI-джоб (matrix/scope/tests_hint) |
-| `project_files` | DEFAULTS | `rel_path` → JSON `{kind, lang, module, deps}` | карта проекта (весь репо: cmake/scripts/docs/ci/config) |
-| `file_deps` | DEFAULTS | `file:{rel}` → JSON `[dep_rel]` | рёбра файл→файл (include/import/source/ссылка/workflow) |
 
 Зарезервировано дизайном (REFACTORING-MAP.md), данные появятся с коллекторами:
 `probes` — добавляются аддитивно (§1.1). Реализованы коллекторы:

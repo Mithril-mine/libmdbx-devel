@@ -61,6 +61,9 @@ shared-graph-memory.mdbx — персистентная память роя на
 | `project_load(files, edges, replace?)` | Загрузка project-map (весь репозиторий) |
 | `project_files(prefix?, limit?)` | Файлы проекта по префиксу пути |
 | `file_deps(path)` / `file_dependents(path)` | Зависимости файла / зависящие от него |
+| `probe_add(tag, kind, ...)` / `probe_batch(probes)` | Реестр зондов (SystemMap): регистрация, dedup по семантическому тегу |
+| `probe_get(tag)` / `probe_list(prefix?, kind?)` | Зонд / список зондов |
+| `probe_status(tag, status)` / `probe_remove(tag)` | Смена статуса / удаление |
 
 ### Карта исходников (refactoring-map)
 

@@ -118,6 +118,8 @@ class Store:
         # --- слой карты проекта (весь репозиторий, вне C/C++ AST) ---
         "project_files": mdbx.DB_DEFAULTS,  # rel_path -> JSON {kind, lang, module, deps}
         "file_deps": mdbx.DB_DEFAULTS,   # file:rel -> JSON [dep_rel]
+        # --- реестр probes/SystemMap ---
+        "probes": mdbx.DB_DEFAULTS,      # probe:{tag} -> JSON {kind, mechanism, symbol, test_theme, status}
     }
 
     def __init__(self, path: str, maxdbs: int = 32, max_value_bytes: int = 16 << 20,
@@ -1970,6 +1972,103 @@ class Store:
                             break
                     rc, k, v = cur.get(mdbx.CURSOR_NEXT)
         return out
+
+    # --- реестр probes / SystemMap -------------------------------------------
+    def probe_add(self, tag: str, kind: str = "usdt", mechanism: str = "",
+                  test_theme: str = "", symbol: str = "", file: str = "",
+                  line: int = 0, status: str = "candidate") -> dict:
+        """Регистрирует зонд/пробу (SystemMap).
+
+        `kind`: usdt | bookmark | injected | dev_assert
+        `status`: candidate | inserted | validated
+        Тег — семантический (стабильный при рефакторинге). Один тег → одна
+        запись (dedup по тегу), как в probe-bus (§4 «Реестр»).
+        """
+        tag = tag.strip()
+        if not tag:
+            raise invalid("probe: пустой тег", "укажите семантический тег")
+        with self._begin_write() as txn:
+            dbi = self.dbi(txn, "probes")
+            key = ("probe:" + tag).encode()
+            rc, old_val = txn.get(dbi, key)
+            old = json.loads(old_val.decode()) if old_val else {}
+            body = {
+                "tag": tag,
+                "kind": kind or old.get("kind", "usdt"),
+                "mechanism": mechanism or old.get("mechanism", ""),
+                "test_theme": test_theme or old.get("test_theme", ""),
+                "symbol": symbol or old.get("symbol", ""),
+                "file": file or old.get("file", ""),
+                "line": line or old.get("line", 0),
+                "status": status or old.get("status", "candidate"),
+            }
+            txn.put(dbi, key, json.dumps(body, ensure_ascii=False).encode())
+            return {"result": "merged" if old_val else "created", "tag": tag}
+
+    def probe_batch(self, probes: list) -> dict:
+        """Батчевая регистрация зондов (из scan_probes.py)."""
+        n = 0
+        with self._begin_write() as txn:
+            dbi = self.dbi(txn, "probes")
+            for p in probes:
+                tag = p.get("tag", "").strip()
+                if not tag:
+                    continue
+                key = ("probe:" + tag).encode()
+                rc, old_val = txn.get(dbi, key)
+                old = json.loads(old_val.decode()) if old_val else {}
+                body = {"tag": tag,
+                        "kind": p.get("kind") or old.get("kind", "usdt"),
+                        "mechanism": p.get("mechanism") or old.get("mechanism", ""),
+                        "test_theme": p.get("test_theme") or old.get("test_theme", ""),
+                        "symbol": p.get("symbol") or old.get("symbol", ""),
+                        "file": p.get("file") or old.get("file", ""),
+                        "line": int(p.get("line") or old.get("line", 0)),
+                        "status": p.get("status") or old.get("status", "candidate")}
+                txn.put(dbi, key, json.dumps(body, ensure_ascii=False).encode())
+                n += 1
+            return {"probes": n}
+
+    def probe_get(self, tag: str) -> dict:
+        with self.env.begin(readonly=True) as txn:
+            rc, val = txn.get(self.dbi(txn, "probes"),
+                              ("probe:" + tag).encode())
+            if val is None:
+                return {}
+            return json.loads(val.decode())
+
+    def probe_list(self, prefix: str = "", kind: str = "",
+                   limit: int = None) -> list:
+        out = []
+        with self.env.begin(readonly=True) as txn:
+            dbi = self.dbi(txn, "probes")
+            with txn.cursor(dbi) as cur:
+                rc, k, v = cur.get(mdbx.CURSOR_FIRST)
+                while rc == mdbx.RC_SUCCESS:
+                    key = k.decode("utf-8", "replace")
+                    if key.startswith("probe:" + prefix):
+                        body = json.loads(v)
+                        if not kind or body.get("kind") == kind:
+                            out.append({"tag": key[len("probe:"):],
+                                        "body": body})
+                            if limit and len(out) >= limit:
+                                break
+                    rc, k, v = cur.get(mdbx.CURSOR_NEXT)
+        return out
+
+    def probe_status(self, tag: str, status: str) -> dict:
+        """Переводит статус зонда (candidate/inserted/validated)."""
+        return self.probe_add(tag, status=status)
+
+    def probe_remove(self, tag: str) -> dict:
+        with self._begin_write() as txn:
+            dbi = self.dbi(txn, "probes")
+            key = ("probe:" + tag).encode()
+            rc, val = txn.get(dbi, key)
+            if val is None:
+                return {"result": "notfound"}
+            txn.delete(dbi, key)
+            return {"result": "removed"}
 
     def map_load_regions(self, regions: list, uncovered: list,
                          replace: bool = False) -> dict:
