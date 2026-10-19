@@ -98,7 +98,7 @@ def scan_src(root: str) -> list:
                     continue
                 for usdt in _USDT_RE.findall(ln):
                     out.append({
-                        "tag": usdt.replace("::", "_"), "kind": "usdt",
+                        "tag": usdt.replace(":", "_"), "kind": "usdt",
                         "file": rel, "line": i, "mechanism": mechanism_of(fname),
                         "symbol": usdt,
                     })

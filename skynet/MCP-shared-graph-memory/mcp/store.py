@@ -754,6 +754,10 @@ class Store:
     def dbi(self, txn, name: str) -> int:
         return self._dbi[name]
 
+    def _opt_dbi(self, txn, name: str):
+        """dbi для опциональных таблиц (может отсутствовать в старой readonly-БД)."""
+        return self._dbi.get(name)
+
     def upgrade(self) -> dict:
         """Создаёт ВСЕ таблицы схемы (rw) для существующей БД, созданной до
         расширения (upgrade-path: read-only старт не может создавать dbi).
@@ -770,13 +774,13 @@ class Store:
                     created.append(name)
         # backfill covered_by из существующих coverage (однократно, маркер)
         marker = "covered_by_backfilled"
+        n = 0
         with self._begin_write() as txn:
             meta = self.dbi(txn, "meta")
             rc, val = txn.get(meta, marker.encode())
             if val is None:
                 cov_dbi = self.dbi(txn, "coverage")
                 cb_dbi = self.dbi(txn, "covered_by")
-                n = 0
                 with txn.cursor(cov_dbi) as cur:
                     rc, k, v = cur.get(mdbx.CURSOR_FIRST)
                     while rc == mdbx.RC_SUCCESS:

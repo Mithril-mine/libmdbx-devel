@@ -115,7 +115,7 @@ def main():
                 pj = json.load(f)
             r = store.project_load(pj.get("files") or {}, pj.get("edges") or [],
                                replace=args.replace)
-        print("project-map: files=%d edges=%d" % (r["files"], r["edges"]))
+            print("project-map: files=%d edges=%d" % (r["files"], r["edges"]))
     store.close()
 
 

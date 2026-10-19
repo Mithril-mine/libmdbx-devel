@@ -66,28 +66,25 @@ def summarize(workflow_name: str, jid: str, body: dict,
     # matrix может содержать ключи scope/coverage/ndk/cell, а также
     # include (список резолвер-записей из matrix.include=fromJson(...))
     if isinstance(matrix, dict):
+        # оси matrix (прямые значения) + include (расширение, не замена)
         for k in ("scope", "coverage", "ndk", "cell"):
             v = matrix.get(k)
             if isinstance(v, list):
-                out[k] = v
+                out[k] = list(v)
             elif v is not None:
                 out[k] = [v]
-        # аккумулируем значения по ВСЕМ include-записям (distinct),
-        # включая явные False: иначе второй cell теряется
-        accum = {k: [] for k in ("scope", "coverage", "ndk", "cell")}
         for inc in matrix.get("include") or []:
             if not isinstance(inc, dict):
                 continue
-            for k in accum:
+            for k in ("scope", "coverage", "ndk", "cell"):
                 v = inc.get(k)
-                if v is not None:
-                    vals = v if isinstance(v, list) else [v]
-                    for x in vals:
-                        if x not in accum[k]:
-                            accum[k].append(x)
-        for k in ("scope", "coverage", "ndk", "cell"):
-            if accum[k]:
-                out[k] = accum[k]
+                if v is None:
+                    continue
+                vals = v if isinstance(v, list) else [v]
+                cur = out.setdefault(k, [])
+                for x in vals:
+                    if x not in cur:
+                        cur.append(x)
     # enterprises: берём из инлайн-переменной / шагов (приблизительно)
     env = body.get("env") or {}
     for k in ("scope", "coverage", "ndk", "cell"):
