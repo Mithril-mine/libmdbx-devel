@@ -21,7 +21,7 @@
 | `mcp/store.py` | Store: 23 таблицы, все операции, одна write-txn на операцию, бэкап и защита от удаления |
 | `mcp/mcp_server.py` | MCP-сервер (JSON-RPC 2.0 над stdio), db_* инструменты интроспекции |
 | `mcp/cli.py` | memory-cli (dump/stats/graph/audit/gc/vocab/purge) |
-| `tests/` | 317 тестов |
+| `tests/` | 325 тестов |
 | `tools/install.sh` | Безопасная установка (никогда не трогает db.mdbx/backups) |
 | `tools/collect_test_metrics.py` | Коллектор test_metrics из ctest XML / LastTest.log (+ ci_jobs) |
 | `tools/collect_coverage.py` | lcov / llvm-cov → coverage (тест→символы) + covered_by |
@@ -29,6 +29,7 @@
 | `tools/scan_project.py` | Карта всего репозитория (cmake/scripts/docs/ci/config) → project-map.json |
 | `tools/scan_probes.py` | Реестр зондов: MPROBE_*/DEV_ASSERT из src/ + USDT из probe-bus.md |
 | `tools/scan_symbols.py --merge` | + semantic-рёбра из implementations (эквивалентность по конфигам) |
+| `tools/gcov_to_coverage.py` | Реальное покрытие из gcov (.gcda) → coverage + блочная детализация |
 
 ## Требования
 

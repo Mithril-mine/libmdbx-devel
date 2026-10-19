@@ -159,3 +159,32 @@ def test_map_ci_jobs_cells_resolve_tests(tmp_path):
     s2["strategy"] = {"matrix": {"cell": ["linux-gcc-cursor"]}}
     s3 = mci.summarize(jobs[0][0], jobs[0][1], s2, cells=cells)
     assert sorted(s3["tests_hint"]) == ["ut/api/cursor", "ut/cursor"]
+
+
+def test_coverage_blocks_insert_get(store):
+    """Блочная детализация покрытия: хранение и чтение по символу."""
+    n = store.coverage_blocks_insert("ut/gc", [
+        {"symbol": "fn:gc_alloc_ex", "block_id": "B1", "l0": 1, "l1": 2,
+         "covered": True},
+        {"symbol": "fn:gc_alloc_ex", "block_id": "B2", "l0": 5, "l1": 8,
+         "covered": False},
+    ])
+    assert n == 1
+    blocks = store.coverage_blocks_get("ut/gc", "fn:gc_alloc_ex")
+    assert len(blocks) == 2
+    by_id = {b["block_id"]: b["covered"] for b in blocks}
+    assert by_id == {"B1": True, "B2": False}
+
+
+def test_coverage_gaps_finds_uncovered_symbols(store):
+    """coverage_gaps('gc') находит символы gc без покрытия."""
+    store.map_put_symbol("fn:gc_alloc_ex", {"module": "gc-get", "kind": "function"})
+    store.map_put_symbol("fn:gc_update", {"module": "gc-put", "kind": "function"})
+    store.map_put_symbol("fn:spill_cycle", {"module": "spill", "kind": "function"})
+    # покрыт только gc_alloc_ex
+    store.coverage_insert("ut/gc", ["fn:gc_alloc_ex"])
+    gaps = store.coverage_gaps(module="gc")
+    syms = {g["symbol"] for g in gaps["uncovered_symbols"]}
+    assert "fn:gc_update" in syms
+    assert "fn:gc_alloc_ex" not in syms
+    assert gaps["uncovered_symbols_count"] >= 1

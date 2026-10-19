@@ -130,6 +130,7 @@ class Store:
         "test_metrics": mdbx.DB_DEFAULTS,  # тест-кейс -> JSON окно истории
         "ci_jobs": mdbx.DB_DEFAULTS,     # {workflow}/{job} -> JSON
         "covered_by": mdbx.DB_DEFAULTS,  # covered_by:{fn:...} -> JSON [test_id]
+        "coverage_blocks": mdbx.DB_DEFAULTS,  # coverage_blocks:{test}:{sym} -> JSON [blocks]
         # --- слой карты проекта (весь репозиторий, вне C/C++ AST) ---
         "project_files": mdbx.DB_DEFAULTS,  # rel_path -> JSON {kind, lang, module, deps}
         "file_deps": mdbx.DB_DEFAULTS,   # file:rel -> JSON [dep_rel]
@@ -2784,6 +2785,82 @@ class Store:
                     else:
                         txn.delete(cb_dbi, cb_key)
             return {"result": "removed"}
+
+    def coverage_blocks_insert(self, test_id: str, blocks: list,
+                               layer: str = "") -> int:
+        """Сохраняет блочную детализацию покрытия теста.
+
+        Формат записи: `coverage_blocks:{test}:{symbol}` → JSON
+        `[{"block_id", "l0", "l1", "covered"}]`. Агрегирует блоки по символу.
+        """
+        pre = self.layer_prefix(layer)
+        by_sym = {}
+        for b in blocks:
+            sym = (pre + b.get("symbol", "")).encode()
+            by_sym.setdefault(sym, []).append({
+                "block_id": b.get("block_id", ""),
+                "l0": b.get("l0", 0), "l1": b.get("l1", 0),
+                "covered": bool(b.get("covered")),
+            })
+        with self._begin_write() as txn:
+            dbi = self.dbi(txn, "coverage_blocks")
+            for sym, bl in sorted(by_sym.items()):
+                bare = sym.decode()[len(pre):] if pre else sym.decode()
+                key = ("coverage_blocks:%s:%s" % (pre + test_id,
+                                                  bare)).encode()
+                txn.put(dbi, key, json.dumps(bl, ensure_ascii=False).encode())
+        return len(by_sym)
+
+    def coverage_blocks_get(self, test_id: str, symbol: str,
+                            layer: str = "") -> list:
+        """Блоки символа, покрытые тестом (или [] если нет данных)."""
+        pre = self.layer_prefix(layer)
+        key = ("coverage_blocks:%s:%s" % (pre + test_id, pre + symbol)).encode()
+        with self.env.begin(readonly=True) as txn:
+            rc, val = txn.get(self.dbi(txn, "coverage_blocks"), key)
+            if val is None:
+                return []
+            return json.loads(val.decode())
+
+    def coverage_gaps(self, module: str = "", layer: str = "",
+                      limit: int = 100) -> dict:
+        """Белые пятна покрытия: символы modules без покрытия (или блоки).
+
+        Агрегирует по символам:
+          - uncovered_symbols — символы module, без записи в coverage;
+          - uncovered_blocks — блоки, отмеченные covered=false в
+            coverage_blocks по всем тестам.
+        """
+        pre = self.layer_prefix(layer)
+        covd_syms = set()
+        with self.env.begin(readonly=True) as txn:
+            cov_dbi = self.dbi(txn, "coverage")
+            with txn.cursor(cov_dbi) as cur:
+                rc, k, v = cur.get(mdbx.CURSOR_FIRST)
+                while rc == mdbx.RC_SUCCESS:
+                    if not pre or k.decode().startswith(pre):
+                        body = json.loads(v)
+                        for s in body.get("symbols", []) or []:
+                            covd_syms.add(s[len(pre):] if pre else s)
+                    rc, k, v = cur.get(mdbx.CURSOR_NEXT)
+        # вне read-txn: map_symbols открывает свою (вложенные — OVERLAPPING)
+        all_syms = self.map_symbols(prefix="fn:", layer=layer)
+        mod_pat = module
+        uncovered_symbols = []
+        for sym in all_syms:
+            body = self.map_symbol(sym, layer=layer)
+            if mod_pat and not body.get("module", "").startswith(mod_pat):
+                continue
+            if sym not in covd_syms:
+                uncovered_symbols.append({"symbol": sym,
+                                          "module": body.get("module", "")})
+                if limit and len(uncovered_symbols) >= limit:
+                    break
+        return {
+            "module": module, "layer": layer,
+            "uncovered_symbols": uncovered_symbols,
+            "uncovered_symbols_count": len(uncovered_symbols),
+        }
 
     def coverage_get(self, test_id: str) -> dict:
         with self.env.begin(readonly=True) as txn:

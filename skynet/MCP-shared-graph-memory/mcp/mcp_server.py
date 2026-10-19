@@ -255,6 +255,24 @@ class McpServer:
              {"type": "object",
               "properties": {"test": {"type": "string"}},
               "required": ["test"]}),
+            ("coverage_blocks_insert", "Сохранить блочную детализацию "
+             "покрытия теста (blocks).", ["test", "blocks"], {
+                 "type": "object",
+                 "properties": {"test": {"type": "string"},
+                                "blocks": {"type": "array"},
+                                "layer": {"type": "string"}},
+                 "required": ["test", "blocks"]}),
+            ("coverage_blocks_get", "Блоки символа, покрытые тестом.",
+             ["test", "symbol"], {"type": "object",
+                                  "properties": {"test": {"type": "string"},
+                                                 "symbol": {"type": "string"},
+                                                 "layer": {"type": "string"}},
+                                  "required": ["test", "symbol"]}),
+            ("coverage_gaps", "Белые пятна: символы module без покрытия.",
+             [], {"type": "object",
+                  "properties": {"module": {"type": "string"},
+                                 "layer": {"type": "string"},
+                                 "limit": {"type": "integer"}}}),
             ("ci_jobs_insert", "Зафиксировать параметры CI-джобы "
              "(\"{workflow}/{job}\").", ["job"], {
                  "type": "object",
@@ -629,6 +647,17 @@ class McpServer:
                 args.get("symbol_prefix", ""), limit=args.get("limit"))}
         if name == "coverage_remove":
             return s.coverage_remove(args["test"])
+        if name == "coverage_blocks_insert":
+            return {"stored": s.coverage_blocks_insert(
+                args["test"], args.get("blocks") or [],
+                layer=args.get("layer", ""))}
+        if name == "coverage_blocks_get":
+            return {"blocks": s.coverage_blocks_get(
+                args["test"], args["symbol"], layer=args.get("layer", ""))}
+        if name == "coverage_gaps":
+            return s.coverage_gaps(module=args.get("module", ""),
+                                   layer=args.get("layer", ""),
+                                   limit=args.get("limit"))
         if name == "ci_jobs_insert":
             return s.ci_jobs_insert(args["job"], args.get("body") or {})
         if name == "ci_jobs_all":

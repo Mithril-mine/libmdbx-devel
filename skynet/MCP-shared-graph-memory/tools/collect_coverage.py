@@ -78,22 +78,43 @@ def parse_llvm_cov_json(path: str) -> dict:
     return files
 
 
-def symbol_hits(files_covered, symbol_map) -> list:
-    """Символы карты, пересекающиеся с покрытыми строками."""
+def symbol_hits(files_covered, symbol_map) -> tuple:
+    """Символы и блоки карты, пересекающиеся с покрытыми строками.
+
+    Возвращает (symbols, blocks):
+      symbols — набор fq-ключей, где хотя бы одна строка покрыта;
+      blocks  — [{"symbol", "block_id", "l0", "l1", "covered"}] для каждого
+                блока символа (покрыт, если любая его строка в covered).
+    """
+    # индексы: абс-путь и basename → покрытые строки (gcov даёт абс; карта — относит.)
+    idx_abs = {os.path.abspath(p): s for p, s in files_covered.items()}
+    idx_base = {}
+    for p, s in files_covered.items():
+        idx_base.setdefault(os.path.basename(p), set()).update(s)
     hits = []
+    blocks = []
     for sym, info in symbol_map.items():
         f = info.get("file")
         if not f:
             continue
-        fabs = os.path.abspath(f)
-        lines = files_covered.get(f) or files_covered.get(fabs)
+        lines = (files_covered.get(f)
+                 or idx_abs.get(os.path.abspath(f))
+                 or idx_base.get(os.path.basename(f)))
         if not lines:
             continue
         l0, l1 = info.get("l0", 0), info.get("l1", 0)
         # символ покрыт, если любая его строка входит в покрытое множество
         if any(x in lines for x in range(l0, l1 + 1)):
             hits.append(sym)
-    return hits
+        # блочная детализация: каждый блок (id, l0, l1) — покрыт/нет
+        for b in info.get("blocks", []) or []:
+            bl0, bl1 = b.get("l0", 0), b.get("l1", 0)
+            covered = any(x in lines for x in range(bl0, bl1 + 1))
+            blocks.append({
+                "symbol": sym, "block_id": b.get("id", ""),
+                "l0": bl0, "l1": bl1, "covered": covered,
+            })
+    return hits, blocks
 
 
 def main():
@@ -108,6 +129,10 @@ def main():
     ap.add_argument("--db", default=os.path.join(
         os.path.expanduser("~"), ".local", "share", "shared-graph-memory",
         "db.mdbx"))
+    ap.add_argument("--layer", default="",
+                    help="слой ветки (см. docs/BRANCHES.md); base — пусто")
+    ap.add_argument("--store-blocks", action="store_true",
+                    help="сохранить блочную детализацию (coverage_blocks)")
     ap.add_argument("--dry-run", action="store_true")
     args = ap.parse_args()
 
@@ -125,8 +150,9 @@ def main():
     with open(args.map) as fh:
         artifact = json.load(fh)
     symbols = artifact.get("symbols", {})
-    hits = symbol_hits(files, symbols)
-    print("coverage: %d files, %d symbols hit" % (len(files), len(hits)))
+    hits, blocks = symbol_hits(files, symbols)
+    print("coverage: %d files, %d symbols hit, %d block-records"
+          % (len(files), len(hits), len(blocks)))
     if args.dry_run:
         for s in sorted(hits)[:30]:
             print("  ", s)
@@ -135,11 +161,17 @@ def main():
     store = Store(args.db)
     try:
         t0 = time.time()
-        res = store.coverage_insert(args.test_id, sorted(hits),
+        pre = store.layer_prefix(args.layer)
+        res = store.coverage_insert((pre + args.test_id), sorted(hits),
                                     pct=args.pct or 0.0)
         dt = time.time() - t0
         print("coverage_insert: %s -> %d symbols in %.1fs"
               % (res.get("test"), res.get("symbols"), dt))
+        if args.store_blocks and blocks:
+            # блочная детализация: coverage_blocks:{test_id}:{symbol} -> [blocks]
+            n = store.coverage_blocks_insert(args.test_id, blocks,
+                                             layer=args.layer)
+            print("coverage_blocks: %d block-records stored" % n)
     finally:
         store.close()
     return 0
