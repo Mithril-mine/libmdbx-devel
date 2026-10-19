@@ -125,6 +125,29 @@ non-dupsort»:** каждое значение — отдельный элеме
 - **Фиксы**: `_merge` корректно выделяет новый id при отсутствии `_id`
   (иначе коллизия); traceback логируется в stderr на internal-ошибках MCP.
 
+## 4.2 Полный E2E и Кайдзен-итерация (окт 2026)
+
+После расширения до 76 MCP-инструментов модуль был **полностью опробован**
+на живой БД: карта (`scan_symbols --config linux`), project-map, probes,
+coverage/ci_jobs/test_metrics, traces, ADR, CBM-мост, `version_info`.
+Каждое наблюдение → улучшение (по одному на итерацию):
+
+- **map_symbols(prefix="fn:gc")** не находил символы по модулю: канонические
+  ключи функций — `fn:{qname}`, module в теле. Добавлен аддитивный фильтр по
+  `module`-полю тела (поиск по модулям работает). Документирована модель
+  ключей (REFACTORING-MAP §symbols).
+- **map_edges_of/map_callers_of** принимали только caller/callee — добавлен
+  алиас `symbol` (дружелюбно для агентов).
+- **scan_probes.py --db** падал (MODULE_DIR не в sys.path) — исправлено.
+- **ci_jobs tests_hint** не резолвился: реестр cells — `list[dict]`
+  (id + ctest), а не dict; `map_ci_jobs` теперь раскрывает cell → тесты.
+- **CI-workflow**: после merge не запускался `scan_uncovered` — добавлен.
+- **Версионный контроль**: добавлен `version_info` (модуль / libmdbx /
+  схема / данные); `meta.schema_ver` пишется при создании БД;
+  `schema_matches` — контроль совместимости.
+- **Дисциплина ключей** для агентов зафиксирована в SKILL («не выдумывайте
+  fq-ключи; получайте через map_symbols/map_symbol»).
+
 ## 5. Критерии приёмки
 
 1. Валидация: unit-тесты ≥ 95% покрытия, прогон `nice -n 10`.

@@ -232,12 +232,33 @@ group:task:B63            → {символы, тесты, записи, док�
    (unique pairs), unresolved 1295, coverage_pct 96.09%, uncovered 443
    островов. Тестовые домены: ut 2503 fn / issues 1936 fn /
    framework 2302 fn.
-5. **Шаг 2**: semantic-рёбра (генератор в `scan_symbols.py --merge`), реестр
-   probes (`probes`-таблица + `scan_probes.py`, см. probe-bus.md §4.1),
-   коллекторы coverage/test_metrics/ci_jobs (реализованы), полноценный
-   coverage от mdbx_test (instrumented run, pending),
-   **macOS-скан — через GitHub Actions** (`.github/workflows/ci-mcp-refactor-map.yml`,
-   runner macos-15; merge linux+macos в `implementations`).
+5. **Шаг 2 (реализован, окт 2026)**:
+   - **semantic-рёбра**: генератор в `scan_symbols.py --merge` (тела одной
+     функции в разных конфигах — пары эквивалентности `fn:name@cfg1 →
+     fn:name@cfg2`, kind=semantic);
+   - **реестр probes**: `probes`-таблица + MCP `probe_*` + `scan_probes.py`
+     (MPROBE/DEV_ASSERT из src + USDT из probe-bus.md; §4.1 — правило
+     регистрации и запрет временных зондов);
+   - **коллекторы**: coverage (`collect_coverage.py`, lcov/llvm-cov →
+     тест→символы + `covered_by`), test_metrics (`collect_test_metrics.py`,
+     окно длительностей/флаки), ci_jobs (`map_ci_jobs.py`, workflows +
+     cells→tests);
+   - **project-map**: `scan_project.py` — карта ВСЕГО репозитория
+     (cmake/scripts/docs/ci/config → файловые депсы, док→код), таблицы
+     `project_files`/`file_deps`;
+   - **observed traces**: `call_traces`/`call_traces_rev`, MCP
+     `trace_ingest/observed/path/compare` — possible vs observed;
+   - **жизненный цикл**: `map_mark_stale` (пометка, не удаление),
+     `map_generations`/`map_snapshot`/`map_diff`;
+   - **ADR**: `adr:*` + MCP `adr_update/get/outline/delete`;
+   - **CBM-мост** (опциональный): `bridge` + `cbm_*` (полноценная работа
+     без CBM сохраняется);
+   - **macOS-скан — через GitHub Actions** (`.github/workflows/ci-mcp-refactor-map.yml`,
+     runner macos-15; merge linux+macos в `implementations`; uncovered в CI);
+   - **контроль состояния**: `version_info` (модуль / libmdbx / схема /
+     данные).
+   Покрытие от instrumented-прогона mdbx_test — единственный pending-пункт
+   (не зависит от этого модуля).
 
 ## Ограничения (зафиксированы)
 
