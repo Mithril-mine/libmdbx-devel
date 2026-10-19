@@ -72,6 +72,8 @@ shared-graph-memory.mdbx — персистентная память роя на
 | `map_mark_stale(live_keys)` | Пометить отсутствующие символы stale (alive остальным) |
 | `map_generations()` / `map_snapshot()` | Поколение карты (canary.y) / полный снимок |
 | `map_diff(other?)` | Разница текущего снимка с прошлым (added/removed/common) |
+| `adr_update(name, ...)` / `adr_get(name)` | ADR: сохранить/прочитать архитектурное решение |
+| `adr_outline(prefix?)` / `adr_delete(name)` | Обзор ADR / удаление |
 
 > ⚠️ **Зонды в базе знаний — только постоянные.** Временные/отладочные
 > пробники (добавляемые при трассировке одной ветви) НЕ регистрируются в

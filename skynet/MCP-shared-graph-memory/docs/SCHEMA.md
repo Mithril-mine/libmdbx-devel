@@ -35,6 +35,7 @@
 | `probes` | DEFAULTS | `probe:{tag}` → JSON | SystemMap: реестр зондов (usdt/bookmark/injected/dev_assert), status |
 | `call_traces` | DEFAULTS | `caller` → JSON `{callee: count}` | наблюдаемые вызовы (runtime traces) |
 | `call_traces_rev` | DUPSORT | `callee` → `caller` | обратные рёбра observed-вызовов |
+| `adr` | DEFAULTS | `adr:{name}` → JSON | архитектурные решения (context/decision/consequences/sections) |
 | `covered_by` | DEFAULTS | `covered_by:{sym}` → JSON `[test_id]` | обратный индекс: какие тесты защищают символ |
 | `test_metrics` | DEFAULTS | `test_metrics:{test_id}` → JSON окно истории | длительности/флаки (скользящее окно) |
 | `ci_jobs` | DEFAULTS | `{workflow}/{job}` → JSON | параметры CI-джоб (matrix/scope/tests_hint) |

@@ -123,6 +123,8 @@ class Store:
         # --- наблюдаемые вызовы (runtime traces) ---
         "call_traces": mdbx.DUPSORT,     # caller -> JSON {count, label}
         "call_traces_rev": mdbx.DUPSORT, # callee -> caller (обратные рёбра)
+        # --- ADR (архитектурные решения) ---
+        "adr": mdbx.DB_DEFAULTS,         # adr:{name} -> JSON (context/decision/consequences)
     }
 
     def __init__(self, path: str, maxdbs: int = 32, max_value_bytes: int = 16 << 20,
@@ -2238,6 +2240,76 @@ class Store:
             "only_static": sorted(static_callees - observed_callees),
             "only_observed": sorted(observed_callees - static_callees),
         }
+
+    # --- ADR (архитектурные решения) -----------------------------------------
+    def adr_update(self, name: str, body: dict) -> dict:
+        """Сохраняет/обновляет ADR (context/decision/consequences).
+
+        Формат body (секции ADR): {"title", "status", "date", "context",
+        "decision", "consequences", "sections": {<имя>: <текст>}}. Любые
+        секции допускаются; обновление заменяет только переданные поля.
+        """
+        name = name.strip()
+        if not name:
+            raise invalid("adr: пустое имя", "укажите имя ADR")
+        with self._begin_write() as txn:
+            dbi = self.dbi(txn, "adr")
+            key = ("adr:" + name).encode()
+            rc, old_val = txn.get(dbi, key)
+            old = json.loads(old_val.decode()) if old_val else {}
+            sections = dict(old.get("sections") or {})
+            if body.get("sections"):
+                sections.update(body["sections"])
+            new = {
+                "title": body.get("title", old.get("title", name)),
+                "status": body.get("status", old.get("status", "draft")),
+                "date": body.get("date", old.get("date", "")),
+                "context": body.get("context", old.get("context", "")),
+                "decision": body.get("decision", old.get("decision", "")),
+                "consequences": body.get("consequences",
+                                         old.get("consequences", "")),
+                "sections": sections,
+            }
+            txn.put(dbi, key, json.dumps(new, ensure_ascii=False).encode())
+            return {"result": "merged" if old_val else "created", "name": name}
+
+    def adr_get(self, name: str) -> dict:
+        with self.env.begin(readonly=True) as txn:
+            rc, val = txn.get(self.dbi(txn, "adr"),
+                              ("adr:" + name).encode())
+            if val is None:
+                return {}
+            return json.loads(val.decode())
+
+    def adr_outline(self, prefix: str = "", limit: int = None) -> list:
+        """Заголовки всех ADR (title/status/date) — краткий обзор."""
+        out = []
+        with self.env.begin(readonly=True) as txn:
+            dbi = self.dbi(txn, "adr")
+            with txn.cursor(dbi) as cur:
+                rc, k, v = cur.get(mdbx.CURSOR_FIRST)
+                while rc == mdbx.RC_SUCCESS:
+                    key = k.decode("utf-8", "replace")
+                    if key.startswith("adr:" + prefix):
+                        body = json.loads(v)
+                        out.append({"name": key[len("adr:"):],
+                                    "title": body.get("title", ""),
+                                    "status": body.get("status", ""),
+                                    "date": body.get("date", "")})
+                        if limit and len(out) >= limit:
+                            break
+                    rc, k, v = cur.get(mdbx.CURSOR_NEXT)
+        return out
+
+    def adr_delete(self, name: str) -> dict:
+        with self._begin_write() as txn:
+            dbi = self.dbi(txn, "adr")
+            key = ("adr:" + name).encode()
+            rc, val = txn.get(dbi, key)
+            if val is None:
+                return {"result": "notfound"}
+            txn.delete(dbi, key)
+            return {"result": "removed"}
 
     def map_load_regions(self, regions: list, uncovered: list,
                          replace: bool = False) -> dict:

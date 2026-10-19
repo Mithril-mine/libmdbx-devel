@@ -356,6 +356,29 @@ class McpServer:
             ("map_diff", "Разница текущего снимка с other (keys/generation).",
              [], {"type": "object",
                   "properties": {"other": {"type": "object"}}}),
+            ("adr_update", "Сохранить/обновить ADR (context/decision/consequences).",
+             ["name"], {"type": "object",
+                        "properties": {"name": {"type": "string"},
+                                       "title": {"type": "string"},
+                                       "status": {"type": "string"},
+                                       "date": {"type": "string"},
+                                       "context": {"type": "string"},
+                                       "decision": {"type": "string"},
+                                       "consequences": {"type": "string"},
+                                       "sections": {"type": "object"}},
+                        "required": ["name"]}),
+            ("adr_get", "Получить ADR по имени.", ["name"],
+             {"type": "object",
+              "properties": {"name": {"type": "string"}},
+              "required": ["name"]}),
+            ("adr_outline", "Обзор всех ADR (title/status/date).", [],
+             {"type": "object",
+              "properties": {"prefix": {"type": "string"},
+                             "limit": {"type": "integer"}}}),
+            ("adr_delete", "Удалить ADR.", ["name"],
+             {"type": "object",
+              "properties": {"name": {"type": "string"}},
+              "required": ["name"]}),
         ]
         return {name: {"name": name, "description": desc, "inputSchema": schema}
                 for name, desc, _args, schema in t}
@@ -599,6 +622,15 @@ class McpServer:
             return s.map_snapshot()
         if name == "map_diff":
             return s.map_diff(other=args.get("other"))
+        if name == "adr_update":
+            return s.adr_update(args["name"], args)
+        if name == "adr_get":
+            return s.adr_get(args["name"])
+        if name == "adr_outline":
+            return {"adr": s.adr_outline(args.get("prefix", ""),
+                                         limit=args.get("limit"))}
+        if name == "adr_delete":
+            return s.adr_delete(args["name"])
         raise MemoryError("NO_SUCH_TOOL", "invalid", "неизвестный инструмент %r" % name,
                           "проверьте tools/list", "none")
 
