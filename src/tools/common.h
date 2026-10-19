@@ -93,14 +93,14 @@ static inline bool tool_help_requested(int argc, char *const argv[], const char 
  * byte except NUL; when emitted raw into a dump stream it could break the
  * format or reroute data, and when printed to a terminal it could leak
  * escape sequences). */
-static inline bool tool_name_has_control(const char *name) {
+MDBX_MAYBE_UNUSED static inline bool tool_name_has_control(const char *name) {
   for (const unsigned char *p = (const unsigned char *)name; *p; ++p)
     if (*p < 0x20 || *p == 0x7f)
       return true;
   return false;
 }
 
-static inline bool tool_data_has_control(const void *data, size_t size) {
+MDBX_MAYBE_UNUSED static inline bool tool_data_has_control(const void *data, size_t size) {
   const unsigned char *p = (const unsigned char *)data;
   for (size_t i = 0; i < size; ++i)
     if (p[i] < 0x20 || p[i] == 0x7f)
@@ -110,7 +110,7 @@ static inline bool tool_data_has_control(const void *data, size_t size) {
 
 /* Print a name replacing control characters with '?', so that no control or
  * escape sequences leak into a terminal or into a dump stream. */
-static inline void tool_print_sanitized(const void *data, size_t size) {
+MDBX_MAYBE_UNUSED static inline void tool_print_sanitized(const void *data, size_t size) {
   const unsigned char *p = (const unsigned char *)data;
   for (size_t i = 0; i < size; ++i)
     putchar((p[i] < 0x20 || p[i] == 0x7f) ? '?' : p[i]);
