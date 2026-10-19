@@ -28,8 +28,11 @@ SRC_DIR = os.path.join(REPO_ROOT, "src")
 PROBE_BUS = os.path.join(REPO_ROOT, "docs", "engineering", "probe-bus.md")
 
 _MPROBE_RE = re.compile(r"\bMPROBE_(COLLECT|WATCH|FAULT)\(\s*([A-Za-z_][\w]*)")
-_DEVASSERT_RE = re.compile(r"\bDEV_ASSERT(?:_T)?\(\s*([A-Za-z_][\w]*)\s*,")
-_USDT_RE = re.compile(r"\bmdbx::[a-z0-9_]+(?:::[a-z0-9_]+)+", re.I)
+# DEV_ASSERT_T с литеральным тегом ("rkl:resize:wanna_gt_length") или identifier
+_DEVASSERT_RE = re.compile(
+    r"\bDEV_ASSERT(?:_T)?\(\s*(?:\"([^\"]+)\"|([A-Za-z_][\w]*))\s*,", re.M)
+# USDT-маркеры ТОЛЬКО в явном контексте "USDT mdbx:..." (не обычные qname)
+_USDT_RE = re.compile(r"\bUSDT\s+(mdbx:[a-z0-9_]+(?:::[a-z0-9_]+)+)", re.I)
 
 # механизмы по подкаталогам/файлам src
 _MECHANISM_BY_FILE = {
@@ -62,6 +65,12 @@ def scan_src(root: str) -> list:
             except OSError:
                 continue
             for i, ln in enumerate(lines, 1):
+                # пропускаем макроопределения/продолжения: формальные параметры
+                # (MPROBE_WATCH(name, value)) не должны стать постоянными тегами
+                stripped = ln.lstrip()
+                if stripped.startswith("#define") or (
+                        stripped.startswith("#") and stripped.rstrip().endswith("\\")):
+                    continue
                 m = _MPROBE_RE.search(ln)
                 if m:
                     kind_map = {"COLLECT": "collect", "WATCH": "watch",
@@ -73,8 +82,9 @@ def scan_src(root: str) -> list:
                     continue
                 m = _DEVASSERT_RE.search(ln)
                 if m:
+                    tag = m.group(1) or m.group(2)
                     out.append({
-                        "tag": m.group(1), "kind": "dev_assert",
+                        "tag": tag, "kind": "dev_assert",
                         "file": rel, "line": i, "mechanism": mechanism_of(fname),
                     })
                     continue
@@ -94,25 +104,45 @@ def scan_src(root: str) -> list:
 
 
 def scan_probe_bus(path: str) -> list:
-    """Импорт каталога USDT-пробников из probe-bus.md (§11.4 таблица)."""
+    """Импорт каталога USDT-пробников из probe-bus.md (§11.4 таблица).
+
+    Парсит ТОЛЬКО раздел каталога (после заголовка «USDT-пробники» /
+    «Каталог»), а не ранние таблицы-маппинги. Файл/модуль извлекаются из
+    ячейки, содержащей реальный путь (содержит '/' и .c/.h), — ячейка-
+    разделитель '|' не считается файлом.
+    """
     out = []
     if not os.path.exists(path):
         return out
     with open(path, errors="replace") as fh:
-        text = fh.read()
-    # ищем строки таблицы `mdbx:...__...` с описанием
-    for line in text.splitlines():
-        if "mdbx:" in line and "`" in line:
-            m = re.search(r"`(mdbx:[a-z0-9_]+)`", line)
-            if m:
-                out.append({
-                    "tag": m.group(1).replace(":", "_").replace("__", "__"),
-                    "kind": "usdt",
-                    "file": line.split("`")[2] if line.count("`") >= 3 else "",
-                    "line": 0,
-                    "mechanism": "usdt",
-                    "test_theme": "",
-                })
+        lines = fh.readlines()
+    # границы каталога: ищем раздел про USDT/пробники
+    start = None
+    for i, ln in enumerate(lines):
+        if re.search(r"USDT|пробник|каталог", ln, re.I) and ln.lstrip().startswith("#"):
+            start = i
+            break
+    body = lines[start:] if start is not None else lines
+    for line in body:
+        if "mdbx:" not in line or "`" not in line:
+            continue
+        m = re.search(r"`(mdbx:[a-z0-9_]+)`", line)
+        if not m:
+            continue
+        loc = ""
+        for cell in line.split("`"):
+            c = cell.strip()
+            if "/" in c and c.endswith((".c", ".c++", ".h", ".h++")):
+                loc = c
+                break
+        out.append({
+            "tag": m.group(1).replace(":", "_"),
+            "kind": "usdt",
+            "file": loc,
+            "line": 0,
+            "mechanism": "usdt",
+            "test_theme": "",
+        })
     # dedup
     seen, uniq = set(), []
     for p in out:

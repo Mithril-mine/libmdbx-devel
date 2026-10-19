@@ -156,6 +156,26 @@ jobs:
         cd skynet/MCP-shared-graph-memory
         python3 tools/validate_map.py --map tools/artifacts/refactoring-map.json \
           --tus fixture
+    - name: validate merged artifact (content)
+      shell: bash
+      run: |
+        cd skynet/MCP-shared-graph-memory
+        python3 - <<'PY'
+        import json
+        p = "tools/artifacts/refactoring-map.json"
+        a = json.load(open(p))
+        syms = a.get("symbols", {})
+        edges = a.get("edges", [])
+        counts = a.get("counts", {})
+        assert len(syms) > 0, "artifact has no symbols"
+        assert counts.get("functions", 0) > 0, "artifact has no functions"
+        assert counts.get("blocks", 0) > 0, "artifact has no blocks"
+        assert counts.get("edges", 0) == len(edges), "edges count mismatch"
+        bad = [e for e in edges if not e.get("caller") or not e.get("callee")]
+        assert not bad, "edges with missing endpoints: %d" % len(bad)
+        print("artifact OK: functions=%d blocks=%d edges=%d" % (
+            counts.get("functions"), counts.get("blocks"), len(edges)))
+        PY
     - name: upload merged map
       uses: actions/upload-artifact@v4
       with:

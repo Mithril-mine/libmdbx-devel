@@ -27,7 +27,6 @@ import json
 import os
 import re
 import time
-from itertools import chain
 
 TOOLS_DIR = os.path.dirname(os.path.abspath(__file__))
 MODULE_DIR = os.path.dirname(TOOLS_DIR)
@@ -44,10 +43,10 @@ _CMAKE_ADDSUB = re.compile(r"add_subdirectory\(\s*([\w./-]+)")
 _CMAKE_INCLUDE = re.compile(r"include\(\s*([\w./-]+)")
 _CMAKE_FUNC = re.compile(r"^\s*(function|macro)\(\s*([\w]+)")
 _CMAKE_TARGET = re.compile(r"^\s*(add_library|add_executable|add_ut|add_test)\s*\(\s*([\w-]+)")
-_PY_IMPORT = re.compile(r"^\s*(?:from\s+([\w.]+)\s+import|import\s+([\w.]+))")
-_PY_DEF = re.compile(r"^def\s+([\w]+)\s*\(")
-_SH_SOURCE = re.compile(r"^\s*\.\s+([^\s]+)|^\s*source\s+([^\s]+)")
-_SH_DEF = re.compile(r"^([\w]+)\s*\(\)\s*\{")
+_PY_IMPORT = re.compile(r"^\s*(?:from\s+([\w.]+)\s+import|import\s+([\w.]+))", re.M)
+_PY_DEF = re.compile(r"^def\s+([\w]+)\s*\(", re.M)
+_SH_SOURCE = re.compile(r"^\s*\.\s+([^\s]+)|^\s*source\s+([^\s]+)", re.M)
+_SH_DEF = re.compile(r"^([\w]+)\s*\(\)\s*\{", re.M)
 
 
 def _is_skippable(root: str, rel: str) -> bool:
@@ -119,7 +118,24 @@ def scan_doc_deps(rel: str, root: str, files: dict) -> list:
             text = fh.read()
     except OSError:
         return deps
-    # 1) markdown-ссылки на .md
+    # 1) markdown-ссылки `](dest)` — резолвим ОТ dirname(rel)
+    base_dir = os.path.dirname(rel)
+    for m in re.finditer(r"\]\(\s*([^)\s]+)(?:#\S+)?\s*\)", text):
+        dest = m.group(1).strip()
+        if not dest or dest.startswith(("http://", "https://", "mailto:")):
+            continue
+        norm = dest.lstrip("./")
+        while norm.startswith("../"):
+            norm = norm[3:]
+        # относительный от base_dir
+        cand = os.path.normpath(os.path.join(base_dir, norm)).lstrip("./")
+        if cand in files:
+            deps.append(cand)
+        elif norm in files:
+            deps.append(norm)
+        elif "docs/" + norm in files:
+            deps.append("docs/" + norm)
+    # 1b) упоминания .md-путей в тексте (без ]( — для полноты)
     for m in _ANCHOR_RE.finditer(text):
         ref = m.group(1)
         norm = ref
@@ -150,11 +166,21 @@ def scan_cmake_deps(rel: str, root: str, files: dict) -> list:
             text = fh.read()
     except OSError:
         return deps
-    for m in chain(_CMAKE_ADDSUB.finditer(text), _CMAKE_INCLUDE.finditer(text)):
+    for m in _CMAKE_ADDSUB.finditer(text):
+        ref = m.group(1).strip('"')
+        # add_subdirectory(dir) — ссылка на КАТАЛОГ: резолвим в CMakeLists.txt
+        cand = os.path.normpath(os.path.join(os.path.dirname(rel), ref))
+        if cand + "/CMakeLists.txt" in files:
+            deps.append(cand + "/CMakeLists.txt")
+        elif cand in files:
+            deps.append(cand)
+    for m in _CMAKE_INCLUDE.finditer(text):
         ref = m.group(1).strip('"')
         cand = os.path.normpath(os.path.join(os.path.dirname(rel), ref))
         if cand in files:
             deps.append(cand)
+        elif ref in files:
+            deps.append(ref)
     for m in _INCLUDE_C.finditer(text):
         ref = m.group(1)
         # include в CMake-контексте — обычно заголовки проекта

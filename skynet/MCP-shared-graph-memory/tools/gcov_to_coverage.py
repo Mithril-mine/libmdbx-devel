@@ -28,7 +28,7 @@ sys.path.insert(0, MODULE_DIR)
 from mcp import Store  # noqa: E402
 from tools.collect_coverage import symbol_hits  # noqa: E402
 
-_COVERED_RE = re.compile(r"^\s*(\d+):\s*(\d+):")
+_COVERED_RE = re.compile(r"^\s*(\d+)\*?:\s*(\d+):")
 
 
 def parse_gcov(path: str) -> tuple:
@@ -48,20 +48,26 @@ def parse_gcov(path: str) -> tuple:
 
 
 def run_gcov(gcda_dir: str) -> dict:
-    """Запускает gcov на каждом .gcda, собирает {abs_path: covered_lines}."""
+    """Запускает gcov на каждом .gcda, собирает {abs_path: covered_lines}.
+
+    gcda-пути передаются АБСОЛЮТНЫМИ (gcov выполняется в изолированном tmp-
+    каталоге, чтобы относительные пути не терялись). Собираются ВСЕ .gcov
+    из этого каталога: имя выхода зависит от исходника (foo.c.gcov для
+    объекта foo.c.o.gcda), а не от basename gcda; заголовки дают доп. файлы.
+    """
+    import tempfile
     files = {}
-    for gcda in sorted(glob.glob(os.path.join(gcda_dir, "**", "*.gcda"),
+    abs_dir = os.path.abspath(gcda_dir)
+    for gcda in sorted(glob.glob(os.path.join(abs_dir, "**", "*.gcda"),
                                  recursive=True)):
-        # gcov создаёт .gcov рядом (в CWD); запускаем в gcda_dir
-        subprocess.run(["gcov", "-b", gcda],
-                       cwd=os.path.dirname(gcda),
-                       stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-        base_name = os.path.basename(gcda)[:-len(".gcda")]
-        cand = os.path.join(os.path.dirname(gcda), base_name + ".gcov")
-        if os.path.exists(cand):
-            src, covered = parse_gcov(cand)
-            if src and covered:
-                files.setdefault(src, set()).update(covered)
+        with tempfile.TemporaryDirectory() as tmp:
+            subprocess.run(["gcov", "-b", gcda],
+                           cwd=tmp,
+                           stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            for gcov_file in glob.glob(os.path.join(tmp, "*.gcov")):
+                src, covered = parse_gcov(gcov_file)
+                if src and covered:
+                    files.setdefault(src, set()).update(covered)
     return files
 
 

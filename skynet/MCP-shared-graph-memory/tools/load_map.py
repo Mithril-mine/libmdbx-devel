@@ -41,6 +41,9 @@ def main():
     ap.add_argument("--db", default=":memory:")
     ap.add_argument("--replace", action="store_true",
                     help="очистить структурные таблицы перед загрузкой")
+    ap.add_argument("--layer", default="",
+                    help="слой ветки (см. docs/BRANCHES.md): базовый (пусто/"
+                         "'0.15') без префикса; feature — с префиксом")
     ap.add_argument("--skip-regions", action="store_true",
                     help="не грузить regions/uncovered")
     ap.add_argument("--project", default=None,
@@ -76,7 +79,8 @@ def main():
 
     t0 = time.time()
     loaded = store.map_load_batch(symbols, edges, groups,
-                                  replace=args.replace)
+                                  replace=args.replace,
+                                  layer=args.layer)
     if not args.skip_regions and (regions or uncovered):
         r = store.map_load_regions(regions, uncovered, replace=args.replace)
         loaded.update(r)

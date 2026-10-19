@@ -63,7 +63,8 @@ def summarize(workflow_name: str, jid: str, body: dict,
         "cell": None,
         "tests_hint": [],
     }
-    # matrix может содержать ключи scope/coverage/ndk/cell
+    # matrix может содержать ключи scope/coverage/ndk/cell, а также
+    # include (список резолвер-записей из matrix.include=fromJson(...))
     if isinstance(matrix, dict):
         for k in ("scope", "coverage", "ndk", "cell"):
             v = matrix.get(k)
@@ -71,12 +72,21 @@ def summarize(workflow_name: str, jid: str, body: dict,
                 out[k] = v
             elif v is not None:
                 out[k] = [v]
+        for inc in matrix.get("include") or []:
+            if not isinstance(inc, dict):
+                continue
+            for k in ("scope", "coverage", "ndk", "cell"):
+                if out.get(k) is None and inc.get(k):
+                    out[k] = [inc[k]]
     # enterprises: берём из инлайн-переменной / шагов (приблизительно)
     env = body.get("env") or {}
     for k in ("scope", "coverage", "ndk", "cell"):
         if out.get(k) is None and env.get(k):
             out[k] = [env[k]]
-    # tests hint: если cell известен — из реестра cells (format: list[dict])
+    # tests hint: если cell известен — из реестра cells (format: list[dict]).
+    # ВАЖНО: реальный ctest-селектор — объект {regex, exclude} или null
+    # (scope-зависимые дефолты); имена тестов НЕ в списке — не плодим мусор,
+    # оставляем tests_hint пустым, но фиксируем cell_id.
     if cells and isinstance(out.get("cell"), list):
         for c in out["cell"]:
             rec = None
@@ -85,10 +95,12 @@ def summarize(workflow_name: str, jid: str, body: dict,
                     rec = cand
                     break
             if rec:
-                ctest = rec.get("ctest") or []
+                ctest = rec.get("ctest")
                 if isinstance(ctest, str):
-                    ctest = [ctest]
-                out["tests_hint"].extend(ctest)
+                    out["tests_hint"].append(ctest)
+                elif isinstance(ctest, list):
+                    # старый формат (имена) — совместимость
+                    out["tests_hint"].extend(ctest)
                 out.setdefault("cell_id", []).append(c)
     out["tests_hint"] = sorted(set(out["tests_hint"]))[:200]
     return out

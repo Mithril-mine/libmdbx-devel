@@ -143,10 +143,15 @@ def main():
             wf = args.jobs
             if not os.path.isdir(wf):
                 wf = os.path.dirname(wf)
+            # cell-реестр: без него matrix.cell даёт пустой tests_hint и
+            # может стереть ранее резолвленные отображения
+            repo = args.repo or os.path.join(MODULE_DIR, "..", "..")
+            cells = mci.load_cells(os.path.join(repo, "tests", "ci",
+                                                "config.json"))
             jobs = []
             for wfpath in sorted(glob.glob(os.path.join(wf, "*.yml"))):
                 for wname, jid, body in mci.iter_jobs(wfpath):
-                    jobs.append(mci.summarize(wname, jid, body))
+                    jobs.append(mci.summarize(wname, jid, body, cells=cells))
             for j in jobs:
                 store.ci_jobs_insert("%s/%s" % (j["workflow"], j["job"]), j)
             print("ci_jobs: %d jobs" % len(jobs))

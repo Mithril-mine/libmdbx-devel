@@ -60,7 +60,14 @@ def parse_lcov(path: str) -> dict:
 
 
 def parse_llvm_cov_json(path: str) -> dict:
-    """llvm-cov export -format=json → {abs_file: set(covered_line)}."""
+    """llvm-cov export -format=json → {abs_file: set(covered_line)}.
+
+    Сегменты — границы состояния покрытия: сегмент с count>0 покрывает
+    строки ОТ своей позиции ДО следующей границы (interval), а не только
+    стартовую строку. Учитываются колонки (переход на той же строке не
+    покрывает всю строку автоматически — но для блочной детализации
+    достаточно «строка упомянута с count>0»).
+    """
     files = {}
     with open(path) as fh:
         data = json.load(fh)
@@ -68,11 +75,19 @@ def parse_llvm_cov_json(path: str) -> dict:
         for fld in f.get("files", []):
             fname = fld.get("filename")
             seg = fld.get("segments", [])
-            # segments: [line, col, count, ...]; покрытие строки где count>0
             covered = set()
-            for seg_ in seg:
-                if len(seg_) >= 3 and seg_[2] > 0:
-                    covered.add(seg_[0])
+            for i, seg_ in enumerate(seg):
+                if len(seg_) < 3 or seg_[2] <= 0:
+                    continue
+                start_line = seg_[0]
+                # граница интервала: следующая строка/столбец смены состояния
+                if i + 1 < len(seg) and len(seg[i + 1]) >= 2:
+                    end_line = seg[i + 1][0]
+                else:
+                    end_line = start_line
+                # покрываем [start_line, end_line] (на одной строке — одну)
+                for ln in range(start_line, end_line + 1):
+                    covered.add(ln)
             if fname:
                 files.setdefault(fname, set()).update(covered)
     return files
@@ -86,35 +101,78 @@ def symbol_hits(files_covered, symbol_map) -> tuple:
       blocks  — [{"symbol", "block_id", "l0", "l1", "covered"}] для каждого
                 блока символа (покрыт, если любая его строка в covered).
     """
-    # индексы: абс-путь и basename → покрытые строки (gcov даёт абс; карта — относит.)
+    # индексы: абс-путь; basename → покрытые строки, но ТОЛЬКО если имя
+    # однозначно (иначе foo.c одного каталога ошибочно покроет foo.c другого)
     idx_abs = {os.path.abspath(p): s for p, s in files_covered.items()}
     idx_base = {}
+    base_count = {}
     for p, s in files_covered.items():
-        idx_base.setdefault(os.path.basename(p), set()).update(s)
+        b = os.path.basename(p)
+        base_count[b] = base_count.get(b, 0) + 1
+        if base_count[b] == 1:
+            idx_base[b] = s
+        elif base_count[b] == 2:
+            # имя неоднозначно — не используем basename-fallback вовсе
+            idx_base.pop(b, None)
     hits = []
     blocks = []
     for sym, info in symbol_map.items():
-        f = info.get("file")
-        if not f:
-            continue
-        lines = (files_covered.get(f)
-                 or idx_abs.get(os.path.abspath(f))
-                 or idx_base.get(os.path.basename(f)))
-        if not lines:
-            continue
-        l0, l1 = info.get("l0", 0), info.get("l1", 0)
-        # символ покрыт, если любая его строка входит в покрытое множество
-        if any(x in lines for x in range(l0, l1 + 1)):
+        # для merged-карт тела лежат в implementations (по конфигурациям):
+        # собираем файлы/диапазоны и из них, а не только из верхнего card
+        impls = info.get("implementations") or []
+        regions = [(info.get("file"), info.get("l0"), info.get("l1"))]
+        if impls:
+            regions = [(i.get("file"), i.get("l0"), i.get("l1")) for i in impls]
+            if not any(all(v is not None for v in r) for r in regions):
+                continue
+        covered_any = False
+        for f, l0, l1 in regions:
+            if f is None or l0 is None or l1 is None:
+                continue
+            lines = None
+            if f in files_covered:
+                lines = files_covered[f]  # точное совпадение (даже пустое)
+            elif os.path.abspath(f) in idx_abs:
+                lines = idx_abs[os.path.abspath(f)]
+            elif os.path.basename(f) in idx_base:
+                lines = idx_base[os.path.basename(f)]
+            if lines is None:
+                continue
+            if any(x in lines for x in range(l0, l1 + 1)):
+                covered_any = True
+                break
+        if covered_any:
             hits.append(sym)
-        # блочная детализация: каждый блок (id, l0, l1) — покрыт/нет
-        for b in info.get("blocks", []) or []:
-            bl0, bl1 = b.get("l0", 0), b.get("l1", 0)
+        # блочная детализация по телам implementations
+        for f, bl0, bl1, bl_id in _block_records(info):
+            lines = None
+            if f in files_covered:
+                lines = files_covered[f]
+            elif os.path.abspath(f) in idx_abs:
+                lines = idx_abs[os.path.abspath(f)]
+            elif os.path.basename(f) in idx_base:
+                lines = idx_base[os.path.basename(f)]
+            if lines is None:
+                continue
             covered = any(x in lines for x in range(bl0, bl1 + 1))
             blocks.append({
-                "symbol": sym, "block_id": b.get("id", ""),
+                "symbol": sym, "block_id": bl_id,
                 "l0": bl0, "l1": bl1, "covered": covered,
             })
     return hits, blocks
+
+
+def _block_records(info) -> list:
+    """[(file, l0, l1, block_id)] — блоки из card или его implementations."""
+    out = []
+    for b in info.get("blocks") or []:
+        out.append((info.get("file"), b.get("l0"), b.get("l1"),
+                    b.get("id", "")))
+    for impl in info.get("implementations") or []:
+        for b in impl.get("blocks") or []:
+            out.append((impl.get("file"), b.get("l0"), b.get("l1"),
+                        b.get("id", "")))
+    return out
 
 
 def main():

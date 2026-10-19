@@ -680,13 +680,14 @@ class McpServer:
             return {"dependents": s.file_dependents(
                 args["path"], limit=args.get("limit"))}
         if name == "probe_add":
-            return s.probe_add(args["tag"], kind=args.get("kind", "usdt"),
+            # kind/status передаются только если указаны (None => merge сохранит старое)
+            return s.probe_add(args["tag"], kind=args.get("kind"),
                                mechanism=args.get("mechanism", ""),
                                test_theme=args.get("test_theme", ""),
                                symbol=args.get("symbol", ""),
                                file=args.get("file", ""),
                                line=int(args.get("line", 0)),
-                               status=args.get("status", "candidate"))
+                               status=args.get("status"))
         if name == "probe_batch":
             return s.probe_batch(args.get("probes") or [])
         if name == "probe_get":
@@ -708,7 +709,7 @@ class McpServer:
         if name == "trace_path":
             return {"paths": s.trace_path(args["src"], args["dst"],
                                           depth=int(args.get("depth", 5)),
-                                          limit=args.get("limit"))}
+                                          limit=args.get("limit", 50))}
         if name == "trace_compare":
             return s.trace_compare(args["symbol"])
         if name == "map_put_edge":

@@ -995,19 +995,16 @@ def merge_configs(scans: list) -> tuple:
         if "implementations" in s:
             impls = s["implementations"]
             # semantic-рёбра: тела одного символа в разных конфигах
-            # функционально эквивалентны (реализуют одну функциональность)
-            for i_impl in impls:
-                for j_impl in impls:
-                    if i_impl.get("config") == j_impl.get("config"):
-                        continue
-                    a = "%s@%s" % (key, i_impl.get("config"))
-                    b = "%s@%s" % (key, j_impl.get("config"))
-                    semantic_edges.append({
-                        "kind": "semantic", "caller": a, "callee": b,
-                        "resolved": True, "ambiguous": False,
-                        "configs": sorted({i_impl.get("config"),
-                                           j_impl.get("config")}),
-                    })
+            # функционально эквивалентны (реализуют одну функциональность).
+            # Оба конца — КАНОНИЧЕСКИЙ ключ (key@config endpoints не являются
+            # адресуемыми карточками): map_edges_of(key) вернёт ребро с
+            # kind=semantic и перечнем configs — «эквивалентные конфиги».
+            if len(impls) > 1:
+                semantic_edges.append({
+                    "kind": "semantic", "caller": key, "callee": key,
+                    "resolved": True, "ambiguous": False,
+                    "configs": sorted({i.get("config") for i in impls}),
+                })
             cfg_union = sorted({c for i in impls for c in i.get("configs", [])})
             for i in impls:
                 i.pop("configs", None)

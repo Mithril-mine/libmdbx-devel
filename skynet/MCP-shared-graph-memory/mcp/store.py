@@ -137,7 +137,7 @@ class Store:
         # --- реестр probes/SystemMap ---
         "probes": mdbx.DB_DEFAULTS,      # probe:{tag} -> JSON {kind, mechanism, symbol, test_theme, status}
         # --- наблюдаемые вызовы (runtime traces) ---
-        "call_traces": mdbx.DUPSORT,     # caller -> JSON {count, label}
+        "call_traces": mdbx.DB_DEFAULTS,   # caller -> JSON {callee: count}
         "call_traces_rev": mdbx.DUPSORT, # callee -> caller (обратные рёбра)
         # --- ADR (архитектурные решения) ---
         "adr": mdbx.DB_DEFAULTS,         # adr:{name} -> JSON (context/decision/consequences)
@@ -1674,6 +1674,10 @@ class Store:
                 rc, k, v = cur.get(mdbx.CURSOR_FIRST)
                 while rc == mdbx.RC_SUCCESS:
                     key = k.decode()
+                    # базовый слой не должен видеть чужие feature-слои
+                    if not pre and _LAYER_KEY_RE.match(key):
+                        rc, k, v = cur.get(mdbx.CURSOR_NEXT)
+                        continue
                     if pre and not key.startswith(pre):
                         rc, k, v = cur.get(mdbx.CURSOR_NEXT)
                         continue
@@ -1683,6 +1687,11 @@ class Store:
                         if limit and len(out) >= limit:
                             break
                     elif mod_pat:
+                        # module-fallback ТОЛЬКО для fn:-пространства: не
+                        # путать type:/macro: карты с функциями
+                        if not bare.startswith("fn:"):
+                            rc, k, v = cur.get(mdbx.CURSOR_NEXT)
+                            continue
                         try:
                             body = json.loads(v)
                         except ValueError:
@@ -1695,21 +1704,26 @@ class Store:
                     rc, k, v = cur.get(mdbx.CURSOR_NEXT)
         return out
 
-    def map_put_symbol(self, key: str, body: dict) -> None:
+    def map_put_symbol(self, key: str, body: dict, layer: str = "") -> None:
         """Аддитивная запись символа (перегенерируемый слой).
 
         Присваивает стабильный числовой id при первом появлении.
+        Пустой layer — активная ветка.
         """
+        layer = self._effective_layer(layer)
+        pre = self.layer_prefix(layer)
+        skey = (pre + key)
         with self._begin_write() as txn:
-            txn.put(self.dbi(txn, "symbols"), key.encode(),
+            txn.put(self.dbi(txn, "symbols"), skey.encode(),
                     json.dumps(body, ensure_ascii=False).encode())
-            self._sym_id_locked(txn, key)
+            self._sym_id_locked(txn, skey)
 
     def map_edges_of(self, caller: str, layer: str = "") -> list:
         """callee-дубликаты из call_edges для caller (DUPSORT).
 
         `layer` — слой ветки: feature-слой адресуется через `layer/`-префикс;
         базовый слой (""/ver) — без префикса. Пустой — активная ветка.
+        Возвращает layer-local ключи (префикс слоя снят), как map_symbols.
         """
         layer = self._effective_layer(layer)
         pre = self.layer_prefix(layer)
@@ -1720,12 +1734,22 @@ class Store:
                 rc, _, val = cur.get(mdbx.CURSOR_SET_KEY,
                                      (pre + caller).encode())
                 while rc == mdbx.RC_SUCCESS:
-                    out.append(val.decode())
+                    try:
+                        body = json.loads(val.decode())
+                        cal = body.get("callee", "")
+                        if pre and cal.startswith(pre):
+                            body["callee"] = cal[len(pre):]
+                        out.append(json.dumps(body, ensure_ascii=False))
+                    except ValueError:
+                        pass
                     rc, _, val = cur.get(mdbx.CURSOR_NEXT_DUP)
         return out
 
     def map_callers_of(self, callee: str, layer: str = "") -> list:
-        """Обратные рёбра: кто вызывает callee (DUPSORT call_edges_rev)."""
+        """Обратные рёбра: кто вызывает callee (DUPSORT call_edges_rev).
+
+        Возвращает layer-local ключи (префикс слоя снят).
+        """
         layer = self._effective_layer(layer)
         pre = self.layer_prefix(layer)
         out = []
@@ -1735,7 +1759,10 @@ class Store:
                 rc, _, val = cur.get(mdbx.CURSOR_SET_KEY,
                                      (pre + callee).encode())
                 while rc == mdbx.RC_SUCCESS:
-                    out.append(val.decode())
+                    caller = val.decode()
+                    if pre and caller.startswith(pre):
+                        caller = caller[len(pre):]
+                    out.append(caller)
                     rc, _, val = cur.get(mdbx.CURSOR_NEXT_DUP)
         return out
 
@@ -1755,37 +1782,55 @@ class Store:
                 cur.put_nodupe((pre + callee).encode(),
                                (pre + caller).encode())
 
-    def map_groups_of(self, group_key: str) -> list:
-        """Члены группы (DUPSORT-набор)."""
+    def map_groups_of(self, group_key: str, layer: str = "") -> list:
+        """Члены группы (DUPSORT-набор), layer-local ключи."""
+        layer = self._effective_layer(layer)
+        pre = self.layer_prefix(layer)
         out = []
         with self.env.begin(readonly=True) as txn:
             gr_dbi = self.dbi(txn, "groups")
             with txn.cursor(gr_dbi) as cur:
-                rc, _, val = cur.get(mdbx.CURSOR_SET_KEY, group_key.encode())
+                rc, _, val = cur.get(mdbx.CURSOR_SET_KEY,
+                                     (pre + group_key).encode())
                 while rc == mdbx.RC_SUCCESS:
-                    out.append(val.decode())
+                    m = val.decode()
+                    if pre and m.startswith(pre):
+                        m = m[len(pre):]
+                    out.append(m)
                     rc, _, val = cur.get(mdbx.CURSOR_NEXT_DUP)
         return out
 
-    def map_group_members(self, prefix: str = "") -> list:
-        """Все группы с их членами по префиксу ключа группы."""
+    def map_group_members(self, prefix: str = "", layer: str = "") -> list:
+        """Все группы с их членами по префиксу ключа группы (layer-local)."""
+        layer = self._effective_layer(layer)
+        pre = self.layer_prefix(layer)
         out = []
         with self.env.begin(readonly=True) as txn:
             gr_dbi = self.dbi(txn, "groups")
             with txn.cursor(gr_dbi) as cur:
                 rc, k, val = cur.get(mdbx.CURSOR_FIRST)
                 while rc == mdbx.RC_SUCCESS:
-                    gkey = k.decode()
+                    key = k.decode()
+                    if pre and not key.startswith(pre):
+                        rc, k, val = cur.get(mdbx.CURSOR_NEXT)
+                        continue
+                    gkey = key[len(pre):] if pre else key
+                    m = val.decode()
+                    if pre and m.startswith(pre):
+                        m = m[len(pre):]
                     if not prefix or gkey.startswith(prefix):
-                        out.append((gkey, val.decode()))
+                        out.append((gkey, m))
                     rc, k, val = cur.get(mdbx.CURSOR_NEXT)
         return out
 
-    def map_put_group(self, group_key: str, member: str) -> None:
+    def map_put_group(self, group_key: str, member: str, layer: str = "") -> None:
+        layer = self._effective_layer(layer)
+        pre = self.layer_prefix(layer)
         with self._begin_write() as txn:
             gr_dbi = self.dbi(txn, "groups")
             with txn.cursor(gr_dbi) as cur:
-                cur.put_nodupe(group_key.encode(), member.encode())
+                cur.put_nodupe((pre + group_key).encode(),
+                               (pre + member).encode())
 
     def map_load_batch(self, symbols: dict, edges: list, groups: dict,
                        chunk: int = 4096, replace: bool = False,
@@ -1796,10 +1841,13 @@ class Store:
         symbols/call_edges/call_edges_rev/groups.
         `layer` — слой ветки (см. docs/BRANCHES.md): базовый слой (""/"0.15")
         пишет без префикса, feature-слои — с префиксом `{layer}/`.
-        При replace=True очищается только ПРЕФИКС этого слоя (не весь dbi) —
-        параллельные ветки не затираются.
+        Пустой `layer` — использует активную ветку (branch_current), чтобы
+        загрузка не расходилась с чтениями после branch_activate.
+        При replace=True очищается только ТЕКУЩИЙ слой (feature-префиксы
+        чужих веток защищены _LAYER_KEY_RE).
         Возвращает счётчики для сверки.
         """
+        layer = self._effective_layer(layer)
         pre = self.layer_prefix(layer)
         put_sym, put_edge, put_grp = 0, 0, 0
         sym_dbi = self._dbi["symbols"]
@@ -1808,12 +1856,16 @@ class Store:
         gr_dbi = self._dbi["groups"]
         with self._begin_write() as txn:
             if replace:
-                # очищаем только записи с префиксом слоя (base="" — весь dbi)
+                # Очищаем только записи ТЕКУЩЕГО слоя. Важно: базовый слой
+                # (pre=="") не должен сносить feature-слои параллельных веток
+                # ("0.16.feat.N/...") — их защищает _LAYER_KEY_RE.
                 for dbi in (sym_dbi, ce_dbi, rev_dbi, gr_dbi):
                     with txn.cursor(dbi) as cur:
                         rc, k, _ = cur.get(mdbx.CURSOR_FIRST)
                         while rc == mdbx.RC_SUCCESS:
-                            if not pre or k.decode().startswith(pre):
+                            key = k.decode()
+                            if (not pre and not _LAYER_KEY_RE.match(key)) or \
+                               (pre and key.startswith(pre)):
                                 cur.delete()
                             rc, k, _ = cur.get(mdbx.CURSOR_NEXT)
                 if not pre:
@@ -1934,14 +1986,17 @@ class Store:
         return {"removed_links": removed, "redirected_links": redirected}
 
     # --- жизненный цикл: stale-пометка + поколения карты ----------------------
-    def map_mark_stale(self, live_keys: list) -> dict:
+    def map_mark_stale(self, live_keys: list, layer: str = "") -> dict:
         """Помечает символы, отсутствующие в live_keys, как stale.
 
+        Работает ТОЛЬКО по активному/явному слою: не задевает чужие ветки.
         В отличие от `map_refresh_stale` (удаляющего висячие ссылки), этот
         метод НЕ удаляет записи symbols: проставляет `status: "stale"` в теле
         символа (идемпотентно). Живые символы получают `status: "alive"`.
         Удаление остаётся опцией (purge/refresh с удалением).
         """
+        layer = self._effective_layer(layer)
+        pre = self.layer_prefix(layer)
         live = set(live_keys or [])
         marked, unmarked = 0, 0
         with self._begin_write() as txn:
@@ -1950,8 +2005,13 @@ class Store:
                 rc, k, v = cur.get(mdbx.CURSOR_FIRST)
                 while rc == mdbx.RC_SUCCESS:
                     key = k.decode("utf-8", "replace")
+                    if (pre and not key.startswith(pre)) or \
+                       (not pre and _LAYER_KEY_RE.match(key)):
+                        rc, k, v = cur.get(mdbx.CURSOR_NEXT)
+                        continue
+                    bare = key[len(pre):] if pre else key
                     body = json.loads(v)
-                    wanted = "alive" if key in live else "stale"
+                    wanted = "alive" if bare in live else "stale"
                     if body.get("status") != wanted:
                         body["status"] = wanted
                         txn.put(syms, k,
@@ -1985,7 +2045,9 @@ class Store:
         """
         cur_keys = set(self.map_symbols())
         if isinstance(other, dict):
-            other_keys = set(other.get("symbols") or cur_keys)
+            # []/None для пустого снимка — валидное «ничего», не falsy-замена
+            keys = other.get("symbols")
+            other_keys = set(keys) if keys is not None else cur_keys
         elif isinstance(other, (list, set, tuple)):
             other_keys = set(other)
         else:
@@ -2042,13 +2104,21 @@ class Store:
         added = {}
         removed = {}
         changed = {}
+
+        def _structural(body):
+            """Нормализованное структурное содержимое для сравнения."""
+            return (body.get("l0"), body.get("l1"),
+                    body.get("signature"), body.get("file"),
+                    tuple((bl.get("id"), bl.get("l0"), bl.get("l1"))
+                          for bl in body.get("blocks") or []),
+                    tuple(sorted((i.get("file"), i.get("l0"), i.get("l1"),
+                                  i.get("config"))
+                                 for i in body.get("implementations") or [])))
+
         for key, body in b.items():
             if key not in a:
                 added[key] = body
-            elif (body.get("l0"), body.get("l1"),
-                  body.get("signature")) != (a[key].get("l0"),
-                                             a[key].get("l1"),
-                                             a[key].get("signature")):
+            elif _structural(body) != _structural(a[key]):
                 changed[key] = {"from": a[key], "to": body}
         for key in a:
             if key not in b:
@@ -2218,13 +2288,17 @@ class Store:
         return out
 
     # --- реестр probes / SystemMap -------------------------------------------
-    def probe_add(self, tag: str, kind: str = "usdt", mechanism: str = "",
+    def probe_add(self, tag: str, kind: str = None, mechanism: str = "",
                   test_theme: str = "", symbol: str = "", file: str = "",
-                  line: int = 0, status: str = "candidate") -> dict:
+                  line: int = 0, status: str = None) -> dict:
         """Регистрирует зонд/пробу (SystemMap).
 
         `kind`: usdt | bookmark | injected | dev_assert
         `status`: candidate | inserted | validated
+        При обновлении существующего зонда `kind`/`status`, переданные как
+        None (не указаны), сохраняют старые значения; дефолты (usdt /
+        candidate) применяются ТОЛЬКО при создании — чтобы probe_status не
+        сбрасывал kind, а обновление локации не откатывало status.
         Тег — семантический (стабильный при рефакторинге). Один тег → одна
         запись (dedup по тегу), как в probe-bus (§4 «Реестр»).
         """
@@ -2236,15 +2310,18 @@ class Store:
             key = ("probe:" + tag).encode()
             rc, old_val = txn.get(dbi, key)
             old = json.loads(old_val.decode()) if old_val else {}
+            is_new = not old_val
             body = {
                 "tag": tag,
-                "kind": kind or old.get("kind", "usdt"),
+                "kind": (kind if kind is not None
+                         else (old.get("kind") if not is_new else "usdt")),
                 "mechanism": mechanism or old.get("mechanism", ""),
                 "test_theme": test_theme or old.get("test_theme", ""),
                 "symbol": symbol or old.get("symbol", ""),
                 "file": file or old.get("file", ""),
                 "line": line or old.get("line", 0),
-                "status": status or old.get("status", "candidate"),
+                "status": (status if status is not None
+                           else (old.get("status") if not is_new else "candidate")),
             }
             txn.put(dbi, key, json.dumps(body, ensure_ascii=False).encode())
             return {"result": "merged" if old_val else "created", "tag": tag}
@@ -2387,25 +2464,38 @@ class Store:
                     queue.append((nxt, new_path))
         return found
 
-    def trace_compare(self, symbol: str) -> dict:
-        """Сравнение static (call_edges) и observed (call_traces) для символа."""
+    def trace_compare(self, symbol: str, layer: str = "") -> dict:
+        """Сравнение static (call_edges) и observed (call_traces) для символа.
+
+        observed берётся ТОЧНО по caller (не prefix), чтобы fn:foo не
+        включало наблюдения из fn:foobar.
+        """
+        layer = self._effective_layer(layer)
+        pre = self.layer_prefix(layer)
         static_callees = set()
         with self.env.begin(readonly=True) as txn:
             ce_dbi = self.dbi(txn, "call_edges")
             with txn.cursor(ce_dbi) as cur:
-                rc, _, val = cur.get(mdbx.CURSOR_SET_KEY, symbol.encode())
+                rc, _, val = cur.get(mdbx.CURSOR_SET_KEY,
+                                     (pre + symbol).encode())
                 while rc == mdbx.RC_SUCCESS:
                     try:
                         body = json.loads(val.decode())
-                        static_callees.add(body.get("callee", ""))
+                        cal = body.get("callee", "")
+                        if pre and cal.startswith(pre):
+                            cal = cal[len(pre):]
+                        static_callees.add(cal)
                     except ValueError:
                         # повреждённое ребро: пропустить (перегенерируется)
                         rc, _, val = cur.get(mdbx.CURSOR_NEXT_DUP)
                         continue
                     rc, _, val = cur.get(mdbx.CURSOR_NEXT_DUP)
         observed_callees = set()
-        for rec in self.trace_observed(caller=symbol):
-            observed_callees.add(rec["callee"])
+        with self.env.begin(readonly=True) as txn:
+            rc, val = txn.get(self.dbi(txn, "call_traces"),
+                              (pre + symbol).encode())
+            if val is not None:
+                observed_callees = set(json.loads(val.decode()).keys())
         return {
             "symbol": symbol,
             "static": sorted(static_callees),
@@ -2707,12 +2797,18 @@ class Store:
 
         Одновременно поддерживает обратный индекс `covered_by:{sym}` →
         [test_id], чтобы по символу находить защищающие его тесты.
+        Устаревшие членства (символы, покрытые раньше, но не теперь)
+        удаляются в той же транзакции.
         """
         symbols = symbols or []
         with self._begin_write() as txn:
             cov_dbi = self.dbi(txn, "coverage")
             cb_dbi = self.dbi(txn, "covered_by")
             key = "coverage:" + test_id
+            rc, old_val = txn.get(cov_dbi, key.encode())
+            old_syms = set(json.loads(old_val.decode()).get("symbols", [])
+                           ) if old_val else set()
+            new_syms = set(symbols)
             body = {"test_id": test_id, "symbols": symbols,
                     "pct": round(pct, 1)}
             txn.put(cov_dbi, key.encode(),
@@ -2725,10 +2821,27 @@ class Store:
                     cur.append(test_id)
                     txn.put(cb_dbi, cb_key,
                             json.dumps(cur, ensure_ascii=False).encode())
+            # убрать устаревшие членства (prev - new)
+            for sym in old_syms - new_syms:
+                cb_key = ("covered_by:" + sym).encode()
+                rc, val = txn.get(cb_dbi, cb_key)
+                if val is None:
+                    continue
+                cur = json.loads(val.decode())
+                if test_id in cur:
+                    cur.remove(test_id)
+                    if cur:
+                        txn.put(cb_dbi, cb_key,
+                                json.dumps(cur, ensure_ascii=False).encode())
+                    else:
+                        txn.delete(cb_dbi, cb_key)
             return {"test": test_id, "symbols": len(symbols)}
 
     def coverage_batch(self, tests: dict) -> dict:
-        """Батчевая фиксация покрытия: {test_id: {symbols, pct}} в одной txn."""
+        """Батчевая фиксация покрытия: {test_id: {symbols, pct}} в одной txn.
+
+        Устаревшие членства covered_by удаляются (prev - new).
+        """
         n = 0
         with self._begin_write() as txn:
             cov_dbi = self.dbi(txn, "coverage")
@@ -2737,6 +2850,10 @@ class Store:
                 symbols = (info or {}).get("symbols") or []
                 pct = float((info or {}).get("pct", 0.0))
                 key = "coverage:" + test_id
+                rc, old_val = txn.get(cov_dbi, key.encode())
+                old_syms = set(json.loads(old_val.decode()).get("symbols", [])
+                               ) if old_val else set()
+                new_syms = set(symbols)
                 body = {"test_id": test_id, "symbols": symbols,
                         "pct": round(pct, 1)}
                 txn.put(cov_dbi, key.encode(),
@@ -2749,6 +2866,19 @@ class Store:
                         cur.append(test_id)
                         txn.put(cb_dbi, cb_key,
                                 json.dumps(cur, ensure_ascii=False).encode())
+                for sym in old_syms - new_syms:
+                    cb_key = ("covered_by:" + sym).encode()
+                    rc, val = txn.get(cb_dbi, cb_key)
+                    if val is None:
+                        continue
+                    cur = json.loads(val.decode())
+                    if test_id in cur:
+                        cur.remove(test_id)
+                        if cur:
+                            txn.put(cb_dbi, cb_key,
+                                    json.dumps(cur, ensure_ascii=False).encode())
+                        else:
+                            txn.delete(cb_dbi, cb_key)
                 n += 1
             return {"tests": n}
 
@@ -2800,33 +2930,37 @@ class Store:
                                layer: str = "") -> int:
         """Сохраняет блочную детализацию покрытия теста.
 
-        Формат записи: `coverage_blocks:{test}:{symbol}` → JSON
+        Формат записи: `coverage_blocks:{layer}/test:{sym-bare}` → JSON
         `[{"block_id", "l0", "l1", "covered"}]`. Агрегирует блоки по символу.
+        Пустой layer — активная ветка (чтобы feature-прогоны не писали в base).
         """
+        layer = self._effective_layer(layer)
         pre = self.layer_prefix(layer)
         by_sym = {}
         for b in blocks:
-            sym = (pre + b.get("symbol", "")).encode()
-            by_sym.setdefault(sym, []).append({
+            sym_bare = b.get("symbol", "")
+            by_sym.setdefault(sym_bare, []).append({
                 "block_id": b.get("block_id", ""),
                 "l0": b.get("l0", 0), "l1": b.get("l1", 0),
                 "covered": bool(b.get("covered")),
             })
         with self._begin_write() as txn:
             dbi = self.dbi(txn, "coverage_blocks")
-            for sym, bl in sorted(by_sym.items()):
-                bare = sym.decode()[len(pre):] if pre else sym.decode()
-                key = ("coverage_blocks:%s:%s" % (pre + test_id,
-                                                  bare)).encode()
+            for sym_bare, bl in sorted(by_sym.items()):
+                key = ("coverage_blocks:%s:%s"
+                       % (pre + test_id, sym_bare)).encode()
                 txn.put(dbi, key, json.dumps(bl, ensure_ascii=False).encode())
         return len(by_sym)
 
     def coverage_blocks_get(self, test_id: str, symbol: str,
                             layer: str = "") -> list:
-        """Блоки символа, покрытые тестом (или [] если нет данных)."""
+        """Блоки символа, покрытые тестом (или [] если нет данных).
+
+        Ключ согласован с coverage_blocks_insert: `{layer}/test:{sym-bare}`.
+        """
         layer = self._effective_layer(layer)
         pre = self.layer_prefix(layer)
-        key = ("coverage_blocks:%s:%s" % (pre + test_id, pre + symbol)).encode()
+        key = ("coverage_blocks:%s:%s" % (pre + test_id, symbol)).encode()
         with self.env.begin(readonly=True) as txn:
             rc, val = txn.get(self.dbi(txn, "coverage_blocks"), key)
             if val is None:
@@ -2850,10 +2984,14 @@ class Store:
             with txn.cursor(cov_dbi) as cur:
                 rc, k, v = cur.get(mdbx.CURSOR_FIRST)
                 while rc == mdbx.RC_SUCCESS:
-                    if not pre or k.decode().startswith(pre):
+                    key = k.decode()
+                    # тест-id в ключе: "coverage:{layer}/test" для feature-слоя
+                    test_part = key[len("coverage:"):] if key.startswith("coverage:") else key
+                    if (pre and test_part.startswith(pre)) or \
+                       (not pre and not _LAYER_KEY_RE.match(test_part)):
                         body = json.loads(v)
                         for s in body.get("symbols", []) or []:
-                            covd_syms.add(s[len(pre):] if pre else s)
+                            covd_syms.add(s)
                     rc, k, v = cur.get(mdbx.CURSOR_NEXT)
         # вне read-txn: map_symbols открывает свою (вложенные — OVERLAPPING)
         all_syms = self.map_symbols(prefix="fn:", layer=layer)
