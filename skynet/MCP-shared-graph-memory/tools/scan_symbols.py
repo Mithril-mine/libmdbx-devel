@@ -988,18 +988,33 @@ def merge_configs(scans: list) -> tuple:
                 edges.append(e)
 
     out = {}
+    semantic_edges = []
     for key, s in merged.items():
         s.pop("_fps", None)
         s["in_configs"] = sorted(s["in_configs"])
         if "implementations" in s:
             impls = s["implementations"]
+            # semantic-рёбра: тела одного символа в разных конфигах
+            # функционально эквивалентны (реализуют одну функциональность)
+            for i_impl in impls:
+                for j_impl in impls:
+                    if i_impl.get("config") == j_impl.get("config"):
+                        continue
+                    a = "%s@%s" % (key, i_impl.get("config"))
+                    b = "%s@%s" % (key, j_impl.get("config"))
+                    semantic_edges.append({
+                        "kind": "semantic", "caller": a, "callee": b,
+                        "resolved": True, "ambiguous": False,
+                        "configs": sorted({i_impl.get("config"),
+                                           j_impl.get("config")}),
+                    })
             cfg_union = sorted({c for i in impls for c in i.get("configs", [])})
             for i in impls:
                 i.pop("configs", None)
             if cfg_union:
                 s["configs"] = cfg_union
         out[key] = s
-    return out, edges
+    return out, edges, semantic_edges
 
 
 def main():
@@ -1026,7 +1041,8 @@ def main():
                 art = json.load(f)
             scans.append({"config": art["config"], "symbols": art["symbols"],
                           "edges": art["edges"]})
-        symbols, edges = merge_configs(scans)
+        symbols, edges, semantic_edges = merge_configs(scans)
+        edges = edges + semantic_edges
         regions = build_regions(collect_source_files())
         counts = {
             "functions": sum(1 for v in symbols.values() if v["kind"] == "function"),
@@ -1036,6 +1052,7 @@ def main():
             "blocks": _count_blocks(symbols),
             "edges": len(edges),
             "unresolved_edges": sum(1 for e in edges if not e["resolved"]),
+            "semantic_edges": len(semantic_edges),
             "regions": len(regions),
         }
         artifact = {

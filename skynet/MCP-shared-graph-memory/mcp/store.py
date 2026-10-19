@@ -120,6 +120,9 @@ class Store:
         "file_deps": mdbx.DB_DEFAULTS,   # file:rel -> JSON [dep_rel]
         # --- реестр probes/SystemMap ---
         "probes": mdbx.DB_DEFAULTS,      # probe:{tag} -> JSON {kind, mechanism, symbol, test_theme, status}
+        # --- наблюдаемые вызовы (runtime traces) ---
+        "call_traces": mdbx.DUPSORT,     # caller -> JSON {count, label}
+        "call_traces_rev": mdbx.DUPSORT, # callee -> caller (обратные рёбра)
     }
 
     def __init__(self, path: str, maxdbs: int = 32, max_value_bytes: int = 16 << 20,
@@ -2069,6 +2072,104 @@ class Store:
                 return {"result": "notfound"}
             txn.delete(dbi, key)
             return {"result": "removed"}
+
+    # --- наблюдаемые вызовы (runtime traces) ---------------------------------
+    def trace_ingest(self, caller: str, callee: str, count: int = 1,
+                     label: str = "") -> dict:
+        """Фиксирует наблюдаемый вызов (possible vs observed).
+
+        Хранит одну запись на caller (JSON: {callee -> count}), плюс обратные
+        рёбра в `call_traces_rev` (callee -> caller). Повторный вызов пары
+        инкрементирует счётчик.
+        """
+        count = max(1, int(count))
+        with self._begin_write() as txn:
+            ct_dbi = self.dbi(txn, "call_traces")
+            ctr_dbi = self.dbi(txn, "call_traces_rev")
+            key = caller.encode()
+            rc, val = txn.get(ct_dbi, key)
+            m = json.loads(val.decode()) if val else {}
+            m[callee] = m.get(callee, 0) + count
+            txn.put(ct_dbi, key, json.dumps(m, ensure_ascii=False).encode())
+            with txn.cursor(ctr_dbi) as cur:
+                cur.put(callee.encode(), caller.encode())
+            return {"caller": caller, "callee": callee, "count": m[callee]}
+
+    def trace_observed(self, caller: str = "") -> list:
+        """Наблюдаемые вызовы (возможно по префиксу caller)."""
+        out = []
+        with self.env.begin(readonly=True) as txn:
+            dbi = self.dbi(txn, "call_traces")
+            with txn.cursor(dbi) as cur:
+                rc, k, v = cur.get(mdbx.CURSOR_FIRST)
+                while rc == mdbx.RC_SUCCESS:
+                    key = k.decode("utf-8", "replace")
+                    if key.startswith(caller):
+                        body = json.loads(v)
+                        for cal, cnt in sorted(body.items()):
+                            out.append({"caller": key, "callee": cal,
+                                        "count": cnt})
+                    rc, k, v = cur.get(mdbx.CURSOR_NEXT)
+        return out
+
+    def trace_path(self, src: str, dst: str, depth: int = 5,
+                   limit: int = 50) -> list:
+        """BFS по наблюдаемым рёбрам: src → dst (пути observed-вызовов)."""
+        adj = {}
+        with self.env.begin(readonly=True) as txn:
+            dbi = self.dbi(txn, "call_traces")
+            with txn.cursor(dbi) as cur:
+                rc, k, v = cur.get(mdbx.CURSOR_FIRST)
+                while rc == mdbx.RC_SUCCESS:
+                    key = k.decode("utf-8", "replace")
+                    body = json.loads(v)
+                    adj.setdefault(key, []).extend(body.keys())
+                    rc, k, v = cur.get(mdbx.CURSOR_NEXT)
+        found = []
+        from collections import deque
+        seen = {(src,)}
+        queue = deque([(src, [src])])
+        while queue and len(found) < limit:
+            node, path = queue.popleft()
+            if len(path) > depth:
+                continue
+            for nxt in adj.get(node, []):
+                if not nxt or nxt in path:
+                    continue
+                new_path = path + [nxt]
+                if nxt == dst:
+                    found.append(new_path)
+                    if len(found) >= limit:
+                        break
+                if len(new_path) <= depth and tuple(new_path) not in seen:
+                    seen.add(tuple(new_path))
+                    queue.append((nxt, new_path))
+        return found
+
+    def trace_compare(self, symbol: str) -> dict:
+        """Сравнение static (call_edges) и observed (call_traces) для символа."""
+        static_callees = set()
+        with self.env.begin(readonly=True) as txn:
+            ce_dbi = self.dbi(txn, "call_edges")
+            with txn.cursor(ce_dbi) as cur:
+                rc, _, val = cur.get(mdbx.CURSOR_SET_KEY, symbol.encode())
+                while rc == mdbx.RC_SUCCESS:
+                    try:
+                        body = json.loads(val.decode())
+                        static_callees.add(body.get("callee", ""))
+                    except ValueError:
+                        pass
+                    rc, _, val = cur.get(mdbx.CURSOR_NEXT_DUP)
+        observed_callees = set()
+        for rec in self.trace_observed(caller=symbol):
+            observed_callees.add(rec["callee"])
+        return {
+            "symbol": symbol,
+            "static": sorted(static_callees),
+            "observed": sorted(observed_callees),
+            "only_static": sorted(static_callees - observed_callees),
+            "only_observed": sorted(observed_callees - static_callees),
+        }
 
     def map_load_regions(self, regions: list, uncovered: list,
                          replace: bool = False) -> dict:

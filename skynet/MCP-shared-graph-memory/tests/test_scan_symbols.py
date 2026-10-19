@@ -233,7 +233,7 @@ def test_merge_configs_single_config_flat():
     linux = {"config": "linux", "symbols": {
         "fn:lck_seize": _mk_sym("lck_seize", "src/lck-posix.c", "lck-posix",
                                 1, 20, ["B1"])}, "edges": []}
-    out, edges = s.merge_configs([linux])
+    out, edges, _sem = s.merge_configs([linux])
     assert "fn:lck_seize" in out
     sym = out["fn:lck_seize"]
     assert "implementations" not in sym
@@ -250,7 +250,7 @@ def test_merge_configs_twins_become_implementations():
     win32 = {"config": "win32", "symbols": {
         "fn:lck_seize": _mk_sym("lck_seize", "src/lck-windows.c", "lck-windows",
                                 30, 55, ["B1"])}, "edges": []}
-    out, _ = s.merge_configs([linux, win32])
+    out, _, _sem = s.merge_configs([linux, win32])
     sym = out["fn:lck_seize"]
     assert sym["in_configs"] == ["linux", "win32"]
     assert "implementations" in sym
@@ -272,7 +272,7 @@ def test_merge_configs_identical_body_dedup():
         {"config": "linux", "symbols": {"fn:mdbx_env_open": dict(body)}, "edges": []},
         {"config": "win32", "symbols": {"fn:mdbx_env_open": dict(body)}, "edges": []},
     ]
-    out, _ = s.merge_configs(scans)
+    out, _, _sem = s.merge_configs(scans)
     sym = out["fn:mdbx_env_open"]
     assert "implementations" not in sym
     assert sym["in_configs"] == ["linux", "win32"]
@@ -287,7 +287,7 @@ def test_merge_configs_edges_dedup_across_configs():
         {"config": "linux", "symbols": {}, "edges": [dict(edge)]},
         {"config": "win32", "symbols": {}, "edges": [dict(edge)]},
     ]
-    _, edges = s.merge_configs(scans)
+    _, edges, _sem = s.merge_configs(scans)
     assert len(edges) == 1
 
 
@@ -303,7 +303,7 @@ def test_link_symbols_regions_with_implementations():
     ]
     posix = _mk_sym("lck_seize", "src/lck-posix.c", "lck-posix", 10, 20, ["B1"])
     win = _mk_sym("lck_seize", "src/lck-windows.c", "lck-windows", 10, 20, ["B1"])
-    merged, _ = s.merge_configs([
+    merged, _, _sem = s.merge_configs([
         {"config": "linux", "symbols": {"fn:lck_seize": posix}, "edges": []},
         {"config": "win32", "symbols": {"fn:lck_seize": win}, "edges": []},
     ])

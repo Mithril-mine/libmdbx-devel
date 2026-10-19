@@ -317,6 +317,33 @@ class McpServer:
              {"type": "object",
               "properties": {"tag": {"type": "string"}},
               "required": ["tag"]}),
+            ("trace_ingest", "Наблюдаемый вызов (runtime): caller → callee.",
+             ["caller", "callee"], {"type": "object",
+                                    "properties": {"caller": {"type": "string"},
+                                                   "callee": {"type": "string"},
+                                                   "count": {"type": "integer"},
+                                                   "label": {"type": "string"}},
+                                    "required": ["caller", "callee"]}),
+            ("trace_observed", "Наблюдаемые вызовы (prefix caller).", [],
+             {"type": "object",
+              "properties": {"caller": {"type": "string"}}}),
+            ("trace_path", "Пути по observed-рёбрам src → dst.",
+             ["src", "dst"], {"type": "object",
+                              "properties": {"src": {"type": "string"},
+                                             "dst": {"type": "string"},
+                                             "depth": {"type": "integer"},
+                                             "limit": {"type": "integer"}},
+                              "required": ["src", "dst"]}),
+            ("trace_compare", "Compare static (call_edges) vs observed (traces).",
+             ["symbol"], {"type": "object",
+                          "properties": {"symbol": {"type": "string"}},
+                          "required": ["symbol"]}),
+            ("map_put_edge", "Записать ребро вызова (kind: syntax|semantic).",
+             ["caller", "callee"], {"type": "object",
+                                    "properties": {"caller": {"type": "string"},
+                                                   "callee": {"type": "string"},
+                                                   "kind": {"type": "string"}},
+                                    "required": ["caller", "callee"]}),
         ]
         return {name: {"name": name, "description": desc, "inputSchema": schema}
                 for name, desc, _args, schema in t}
@@ -536,6 +563,22 @@ class McpServer:
             return s.probe_status(args["tag"], args["status"])
         if name == "probe_remove":
             return s.probe_remove(args["tag"])
+        if name == "trace_ingest":
+            return s.trace_ingest(args["caller"], args["callee"],
+                                  count=int(args.get("count", 1)),
+                                  label=args.get("label", ""))
+        if name == "trace_observed":
+            return {"traces": s.trace_observed(args.get("caller", ""))}
+        if name == "trace_path":
+            return {"paths": s.trace_path(args["src"], args["dst"],
+                                          depth=int(args.get("depth", 5)),
+                                          limit=args.get("limit"))}
+        if name == "trace_compare":
+            return s.trace_compare(args["symbol"])
+        if name == "map_put_edge":
+            s.map_put_edge(args["caller"], args["callee"],
+                           kind=args.get("kind", "syntax"))
+            return {"result": "ok"}
         raise MemoryError("NO_SUCH_TOOL", "invalid", "неизвестный инструмент %r" % name,
                           "проверьте tools/list", "none")
 

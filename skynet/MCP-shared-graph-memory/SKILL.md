@@ -64,6 +64,18 @@ shared-graph-memory.mdbx — персистентная память роя на
 | `probe_add(tag, kind, ...)` / `probe_batch(probes)` | Реестр зондов (SystemMap): регистрация, dedup по семантическому тегу |
 | `probe_get(tag)` / `probe_list(prefix?, kind?)` | Зонд / список зондов |
 | `probe_status(tag, status)` / `probe_remove(tag)` | Смена статуса / удаление |
+| `trace_ingest(caller, callee, count?, label?)` | Наблюдаемый вызов (runtime), инкремент счётчика |
+| `trace_observed(caller?)` | Наблюдаемые вызовы (по префиксу caller) |
+| `trace_path(src, dst, depth?)` | Пути по observed-рёбрам (BFS) |
+| `trace_compare(symbol)` | **possible vs observed**: static (call_edges) vs runtime (traces) |
+| `map_put_edge(caller, callee, kind?)` | Записать ребро вызова (syntax/semantic) |
+
+> ⚠️ **Зонды в базе знаний — только постоянные.** Временные/отладочные
+> пробники (добавляемые при трассировке одной ветви) НЕ регистрируются в
+> `probes`: если такой зонд всё же попал в реестр — удалите его
+> (`probe_remove`) или перегенерируйте реестр свежим `scan_probes.py`
+> (с замещением). Реестр — SystemMap для постоянных точек; мусор деградирует
+> навигацию и поведенческую паритетность C→C++.
 
 ### Карта исходников (refactoring-map)
 
