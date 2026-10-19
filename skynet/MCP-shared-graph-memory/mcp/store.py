@@ -352,8 +352,8 @@ class Store:
         try:
             os.link(self.path, dest)
             return "link"
-        except OSError:
-            pass
+        except OSError as e:
+            sys.stderr.write("cbm link: %s\n" % e)
         fd = self.env.get_fd()
         for proc in ("/proc/self/fd/%d" % fd, "/dev/fd/%d" % fd):
             try:
@@ -507,8 +507,8 @@ class Store:
             with open(tmp, "w", encoding="utf-8") as fh:
                 json.dump(st, fh)
             os.replace(tmp, self._state_path())
-        except OSError:
-            pass
+        except OSError as e:
+            sys.stderr.write("state save: %s\n" % e)
 
     def _list_backups(self, prefix: str = "") -> list:
         out = []
@@ -519,8 +519,8 @@ class Store:
                     p = os.path.join(self.backup_dir, fn)
                     out.append({"name": fn, "path": p,
                                 "size": os.path.getsize(p)})
-        except OSError:
-            pass
+        except OSError as e:
+            sys.stderr.write("list backups: %s\n" % e)
         return out
 
     def _backup_dir_size(self) -> int:
@@ -530,8 +530,8 @@ class Store:
             for fn in os.listdir(self.backup_dir):
                 if fn.endswith(".mdbx") and fn != BACKUP_LIFELINE:
                     total += os.path.getsize(os.path.join(self.backup_dir, fn))
-        except OSError:
-            pass
+        except OSError as e:
+            sys.stderr.write("backup dir size: %s\n" % e)
         return total
 
     def _rotation_candidates(self, keep: int = None) -> list:
@@ -620,7 +620,7 @@ class Store:
                 os.unlink(c["path"])
                 removed.append(c["name"])
             except OSError:
-                pass
+                continue
         return {"dry_run": False, "removed": removed, "candidates": names,
                 "total_bytes": total, "keep": keep or self.backup_keep}
 
@@ -706,8 +706,8 @@ class Store:
         self._stop_sync_thread()
         try:
             self.env.sync(force=True, nonblock=False)
-        except Exception:
-            pass
+        except Exception as e:
+            sys.stderr.write("env sync: %s\n" % e)
         self.env.close()
         self._readonly = readonly
         self.env = mdbx.Env(self.path, maxdbs=64, readonly=readonly,
@@ -716,7 +716,20 @@ class Store:
         with self.env.begin(readonly=readonly) as txn:
             for name in self.TABLES:
                 fl = self.TABLES[name] | (mdbx.CREATE if not readonly else 0)
-                self._dbi[name] = txn.open_dbi(name, fl)
+                try:
+                    self._dbi[name] = txn.open_dbi(name, fl)
+                except mdbx.LibmdbxError as e:
+                    # несовместимые/отсутствующие таблицы → None; при переходе
+                    # в rw upgrade() ниже создаст/пересоздаст их
+                    if ("INCOMPATIBLE" in str(e)) or \
+                       (readonly and "NOTFOUND" in str(e)):
+                        self._dbi[name] = None
+                    else:
+                        raise
+        if not readonly:
+            # переход rw: миграция схемы (новые таблицы, INCOMPATIBLE-пересоздание,
+            # backfill covered_by) — до начала обслуживания записей
+            self.upgrade()
         self._protect_lifeline()
         self._load_vocab()  # словарь мог измениться внешними процессами
         self._sync_stop = threading.Event()
@@ -1833,7 +1846,8 @@ class Store:
                             body["callee"] = cal[len(pre):]
                         out.append(json.dumps(body, ensure_ascii=False))
                     except ValueError:
-                        pass
+                        rc, _, val = cur.get(mdbx.CURSOR_NEXT_DUP)
+                        continue
                     rc, _, val = cur.get(mdbx.CURSOR_NEXT_DUP)
         return out
 
@@ -1986,13 +2000,16 @@ class Store:
                     txn.put(sid_dbi, skey, _pack_u64(nid))
                     txn.put(id2key_dbi, _pack_u64(nid), skey)
             for e in edges:
-                # JSON-значение: kind, resolved, ambiguous, callee
-                val = json.dumps({
+                # JSON-значение: kind, resolved, ambiguous, callee (+ configs)
+                body = {
                     "kind": e.get("kind", "syntax"),
                     "resolved": e.get("resolved", False),
                     "ambiguous": e.get("ambiguous", False),
                     "callee": pre + e["callee"],
-                }, ensure_ascii=False).encode()
+                }
+                if e.get("configs"):
+                    body["configs"] = sorted(set(e["configs"]))
+                val = json.dumps(body, ensure_ascii=False).encode()
                 with txn.cursor(ce_dbi) as cur:
                     cur.put_nodupe((pre + e["caller"]).encode(), val)
                 put_edge += 1
@@ -2622,16 +2639,14 @@ class Store:
         observed_callees = set()
         with self.env.begin(readonly=True) as txn:
             ct_dbi = self._opt_dbi(txn, "call_traces")
-            if ct_dbi is None:
-                observed_callees = set()
-            else:
+            if ct_dbi is not None:
                 rc, val = txn.get(ct_dbi, (pre + symbol).encode())
-            if val is not None:
-                for cal in json.loads(val.decode()).keys():
-                    # нормализуем observed до layer-local (префикс слоя снят)
-                    if pre and cal.startswith(pre):
-                        cal = cal[len(pre):]
-                    observed_callees.add(cal)
+                if val is not None:
+                    for cal in json.loads(val.decode()).keys():
+                        # нормализуем observed до layer-local (префикс слоя снят)
+                        if pre and cal.startswith(pre):
+                            cal = cal[len(pre):]
+                        observed_callees.add(cal)
         return {
             "symbol": symbol,
             "static": sorted(static_callees),
@@ -3435,13 +3450,13 @@ class Store:
         # сбросить накопленные LRU-касания и остановить фоновый тред синка
         try:
             self._flush_touches()
-        except Exception:
-            pass
+        except Exception as e:
+            sys.stderr.write("flush touches: %s\n" % e)
         self._stop_sync_thread()
         try:
             self.env.sync(force=True, nonblock=False)
-        except Exception:
-            pass
+        except Exception as e:
+            sys.stderr.write("env sync: %s\n" % e)
         self.env.close()
 
     def __enter__(self) -> "Store":
