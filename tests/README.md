@@ -34,7 +34,7 @@ labels:
 
 ```sh
 # fast unit tests only (default for routine changes)
-ctest -L 'ut\.' -LE 'ut\.heavy'
+ctest -L 'ut\.'
 
 # a specific area (e.g. the C++ API)
 ctest -L 'ut\.cxx'
