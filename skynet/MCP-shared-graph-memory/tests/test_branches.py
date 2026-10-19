@@ -64,3 +64,22 @@ def test_map_diff_branches_content(store):
     assert c["added_blocks"] == 1       # fn:new блок B1
     assert list(d["added"].keys()) == ["gc"]
     assert list(d["changed"].keys()) == ["gc"]
+
+def test_effective_layer_active_branch_defaults(store):
+    """После branch_activate слой используется инструментами по умолчанию."""
+    store.branch_register("0.15", "base")
+    store.branch_register("0.15", "feat", 3)
+    store.map_load_batch({"fn:base_only": {"module": "m", "l0": 1, "l1": 2}},
+                         [], {}, replace=True, layer="0.15.base")
+    store.map_load_batch({"fn:feat_only": {"module": "m", "l0": 1, "l1": 2}},
+                         [], {}, replace=True, layer="0.15.feat.3")
+    # до активации виден базовый слой
+    assert "fn:base_only" in store.map_symbols("fn:", layer="")
+    assert "fn:feat_only" not in store.map_symbols("fn:", layer="")
+    # активируем feature-слой — дефолтные чтения переключаются
+    store.branch_activate("0.15.feat.3")
+    syms = store.map_symbols("fn:")
+    assert "fn:feat_only" in syms
+    assert "fn:base_only" not in syms
+    # явный layer перебивает активную ветку
+    assert "fn:base_only" in store.map_symbols("fn:", layer="0.15.base")

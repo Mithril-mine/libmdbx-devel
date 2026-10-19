@@ -1583,7 +1583,9 @@ class Store:
         """Читает символ из structural-слоя (symbols).
 
         `layer` — слой ветки; базовый слой (""/ver) без префикса.
+        Пустой layer — использует активную ветку (branch_current).
         """
+        layer = self._effective_layer(layer)
         pre = self.layer_prefix(layer)
         with self.env.begin(readonly=True) as txn:
             rc, val = txn.get(self.dbi(txn, "symbols"),
@@ -1660,6 +1662,7 @@ class Store:
         фильтрует по `module`-полю тела (аддитивно: поиск по модулю работает
         и при несовпадении префикса ключа с названием модуля).
         """
+        layer = self._effective_layer(layer)
         pre = self.layer_prefix(layer)
         out = []
         with self.env.begin(readonly=True) as txn:
@@ -1706,8 +1709,9 @@ class Store:
         """callee-дубликаты из call_edges для caller (DUPSORT).
 
         `layer` — слой ветки: feature-слой адресуется через `layer/`-префикс;
-        базовый слой (""/ver) — без префикса.
+        базовый слой (""/ver) — без префикса. Пустой — активная ветка.
         """
+        layer = self._effective_layer(layer)
         pre = self.layer_prefix(layer)
         out = []
         with self.env.begin(readonly=True) as txn:
@@ -1722,6 +1726,7 @@ class Store:
 
     def map_callers_of(self, callee: str, layer: str = "") -> list:
         """Обратные рёбра: кто вызывает callee (DUPSORT call_edges_rev)."""
+        layer = self._effective_layer(layer)
         pre = self.layer_prefix(layer)
         out = []
         with self.env.begin(readonly=True) as txn:
@@ -1736,6 +1741,7 @@ class Store:
 
     def map_put_edge(self, caller: str, callee: str, kind: str = "syntax",
                      layer: str = "") -> None:
+        layer = self._effective_layer(layer)
         pre = self.layer_prefix(layer)
         with self._begin_write() as txn:
             ce_dbi = self.dbi(txn, "call_edges")
@@ -2814,6 +2820,7 @@ class Store:
     def coverage_blocks_get(self, test_id: str, symbol: str,
                             layer: str = "") -> list:
         """Блоки символа, покрытые тестом (или [] если нет данных)."""
+        layer = self._effective_layer(layer)
         pre = self.layer_prefix(layer)
         key = ("coverage_blocks:%s:%s" % (pre + test_id, pre + symbol)).encode()
         with self.env.begin(readonly=True) as txn:
@@ -2831,6 +2838,7 @@ class Store:
           - uncovered_blocks — блоки, отмеченные covered=false в
             coverage_blocks по всем тестам.
         """
+        layer = self._effective_layer(layer)
         pre = self.layer_prefix(layer)
         covd_syms = set()
         with self.env.begin(readonly=True) as txn:
@@ -3012,6 +3020,20 @@ class Store:
         if layer.endswith(".base") or _VVER_RE.fullmatch(layer):
             return ""
         return layer + "/"
+
+    def _effective_layer(self, layer: str = "") -> str:
+        """Слой для чтения/записи: явный аргумент > активная ветка.
+
+        Кайдзен (окт 2026): `branch_activate` должен влиять на map/coverage/
+        probe-инструменты по умолчанию — иначе активация декларативна, а
+        данные читаются из базового слоя (путаница в многобраншевой работе).
+        """
+        if layer:
+            return layer
+        try:
+            return self.branch_current().get("layer", "")
+        except Exception:  # noqa: BLE001
+            return ""
 
     def branch_register(self, ver_slug: str, feature_slug: str = "base",
                         n_commits: int = 0, revision: str = "",

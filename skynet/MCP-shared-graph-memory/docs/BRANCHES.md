@@ -102,6 +102,9 @@ python3 tools/load_map.py --map .../refactoring-map-${BRANCH}.json \
 
 - В feature-ветке пилить в **свой слой** (не трогать base): указывать
   `layer` во всех map/coverage/probe/trace-инструментах.
+- **Активная ветка** (`branch_activate`) задаёт слой по умолчанию для
+  map/coverage/probe/trace (аргумент `layer` явно перебивает её). После
+  активации проверяйте `branch_current`/`version_info` перед чтением.
 - Перед «какие тесты покрывают X» — указывать актуальный слой.
 - `version_info` всегда показывает активный слой + ревизию.
 
