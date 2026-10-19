@@ -2,8 +2,9 @@ name: ci-probes
 
 # Probe-bus (mprobe v2) smoke: managed/controlled testing instrumentation
 # (COLLECT/WATCH/FAULT + deterministic fault injection). Cross-platform check
-# that MDBX_PROBES builds cleanly and the self-tests pass on Linux, Windows
-# and macOS. Lightweight: single cell, two tests.
+# that MDBX_PROBES builds cleanly and the probe-gated regression tests pass on
+# Linux, Windows and macOS. Lightweight: a single cell, the probe self-tests
+# plus the MDBX_PROBES-gated issue regressions (gh0103_restart, gh0104_clone).
 # Supersedes ci-tracing (mprobe v1, tests/tracing/): the engine-side
 # probe-bus unified the taxonomy with a process-wide registry, control channel
 # (in-process mprobe_ctl + file IPC) and no external tracer dependencies.
@@ -11,6 +12,7 @@ name: ci-probes
 on:
   push:
     branches: [devel, master]
+  pull_request:
   workflow_dispatch:
 
 env:
@@ -45,14 +47,15 @@ jobs:
         cmake -S . -B @ci-probes -G Ninja \
           -DCMAKE_BUILD_TYPE=Debug \
           -DMDBX_PROBES=ON \
+          -DMDBX_BUILD_CXX=ON \
           -DINTERPROCEDURAL_OPTIMIZATION=OFF
 
     - name: build
       shell: bash
       run: |
-        cmake --build @ci-probes --target test_extra_probes test_extra_probes_ipc -j 4
+        cmake --build @ci-probes --target test_extra_probes test_extra_probes_ipc test_issue_gh0103_restart test_issue_gh0104_clone -j 4
 
     - name: test
       shell: bash
       run: |
-        ctest --test-dir @ci-probes -R '^extra_probes(_ipc)?$' --output-on-failure
+        ctest --test-dir @ci-probes -R '^extra_probes(_ipc)?$|^gh0103_restart$|^gh0104_clone$' --output-on-failure
