@@ -480,6 +480,7 @@ static int nested_undo(MDBX_txn *nested) {
     tASSERT0(parent, pnl_size(nested->wr.retired_pages) >= (uintptr_t)parent->wr.retired_pages);
     pnl_setsize(nested->wr.retired_pages, (uintptr_t)parent->wr.retired_pages);
     parent->wr.retired_pages = nested->wr.retired_pages;
+    nested->wr.retired_pages = nullptr;
   }
 
   nested->flags = MDBX_TXN_FINISHED;
@@ -738,6 +739,12 @@ int txn_nested_rollback(MDBX_txn *nested) {
     nested->wr.loose_count = 0;
     nested->flags = flags | (parent->flags & MDBX_TXN_SPILLS);
     rc = nested_start(nested, parent);
+    if (unlikely(rc != MDBX_SUCCESS)) {
+      /* a restart that failed halfway does not pass the checks in txn_nested_abort() */
+      nested_undo(nested);
+      nested_free(nested);
+      return rc;
+    }
   }
   if (unlikely(rc != MDBX_SUCCESS))
     txn_nested_abort(nested);
