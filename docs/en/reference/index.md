@@ -14,8 +14,7 @@ Entry points:
   and macros, and the C++ API (`mdbx.h++`)
 - [Class members](api/class_members.md) · [Macros](api/macros.md)
 
-Also in this section: [command-line tools](tooling.md);
-[change log](changelog.md).
+Also in this section: [command-line tools](tooling.md).
 
 Getting-started guidance lives in the [guides](../index.md);
 the [first steps](../getting-started/first-steps.md) page shows the canonical
