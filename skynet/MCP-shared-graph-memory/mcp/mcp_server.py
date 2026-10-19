@@ -379,6 +379,27 @@ class McpServer:
              {"type": "object",
               "properties": {"name": {"type": "string"}},
               "required": ["name"]}),
+            ("cbm_link", "Мост: наш fq-ключ ↔ узел codebase-memory-mcp.",
+             ["our_key", "cbm_node"], {"type": "object",
+                                       "properties": {"our_key": {"type": "string"},
+                                                      "cbm_node": {"type": "string"},
+                                                      "cbm_project": {"type": "string"}},
+                                       "required": ["our_key", "cbm_node"]}),
+            ("cbm_unlink", "Убрать мост для нашего ключа.", ["our_key"],
+             {"type": "object",
+              "properties": {"our_key": {"type": "string"}},
+              "required": ["our_key"]}),
+            ("cbm_linked", "Список мостов по префиксу.", [],
+             {"type": "object",
+              "properties": {"prefix": {"type": "string"},
+                             "limit": {"type": "integer"}}}),
+            ("cbm_search", "Поиск в codebase-memory-mcp (CLI, опционально).",
+             ["query"], {"type": "object",
+                         "properties": {"query": {"type": "string"},
+                                        "project": {"type": "string"},
+                                        "tool": {"type": "string"},
+                                        "args": {"type": "object"}},
+                         "required": ["query"]}),
         ]
         return {name: {"name": name, "description": desc, "inputSchema": schema}
                 for name, desc, _args, schema in t}
@@ -631,6 +652,19 @@ class McpServer:
                                          limit=args.get("limit"))}
         if name == "adr_delete":
             return s.adr_delete(args["name"])
+        if name == "cbm_link":
+            return s.cbm_link(args["our_key"], args["cbm_node"],
+                              cbm_project=args.get("cbm_project", ""))
+        if name == "cbm_unlink":
+            return s.cbm_unlink(args["our_key"])
+        if name == "cbm_linked":
+            return {"bridges": s.cbm_linked(args.get("prefix", ""),
+                                            limit=args.get("limit"))}
+        if name == "cbm_search":
+            return s.cbm_search(args["query"],
+                                project=args.get("project", ""),
+                                tool=args.get("tool", "search_graph"),
+                                args=args.get("args"))
         raise MemoryError("NO_SUCH_TOOL", "invalid", "неизвестный инструмент %r" % name,
                           "проверьте tools/list", "none")
 

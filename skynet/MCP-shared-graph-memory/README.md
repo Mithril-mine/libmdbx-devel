@@ -21,7 +21,7 @@
 | `mcp/store.py` | Store: 23 таблицы, все операции, одна write-txn на операцию, бэкап и защита от удаления |
 | `mcp/mcp_server.py` | MCP-сервер (JSON-RPC 2.0 над stdio), db_* инструменты интроспекции |
 | `mcp/cli.py` | memory-cli (dump/stats/graph/audit/gc/vocab/purge) |
-| `tests/` | 311 тестов |
+| `tests/` | 315 тестов |
 | `tools/install.sh` | Безопасная установка (никогда не трогает db.mdbx/backups) |
 | `tools/collect_test_metrics.py` | Коллектор test_metrics из ctest XML / LastTest.log (+ ci_jobs) |
 | `tools/collect_coverage.py` | lcov / llvm-cov → coverage (тест→символы) + covered_by |
@@ -116,6 +116,20 @@ python3 -m mcp.cli --path ~/mem.mdbx gc --dry-run # тиринг hot/warm/cold
 Поиск `search()` использует BM25-ранжирование (IDF редких терминов проекта)
 и включает структурный слой (symbols/groups) при совпадении с идентификатором
 символа: единая точка входа «код + знания» для глубокого рефакторинга.
+
+### Совместная работа с codebase-memory-mcp (CBM)
+
+Основной режим — совместная работа с [codebase-memory-mcp] (граф кода CBM
+доступен параллельно в сессии). Мост **опционален**: модуль полноценно
+работает и без CBM.
+
+- `cbm_link(our_key, cbm_node, cbm_project)` — запись соответствия
+  «наш fq-ключ ↔ узел CBM» в таблицу `bridge`;
+- `cbm_search(query, project?, tool?, args?)` — вызов CBM CLI
+  (`codebase-memory-mcp cli --json <tool> <args>`) из нашего поиска;
+  при отсутствии бинаря/проекта возвращает `{"unavailable": true}` и
+  НЕ мешает работе (без CBM всё остальное работает как обычно);
+- `cbm_linked(prefix)` — обзор мостов для навигации в обе стороны.
 
 ## Установка (безопасная)
 

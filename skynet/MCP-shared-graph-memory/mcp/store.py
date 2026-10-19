@@ -125,6 +125,8 @@ class Store:
         "call_traces_rev": mdbx.DUPSORT, # callee -> caller (обратные рёбра)
         # --- ADR (архитектурные решения) ---
         "adr": mdbx.DB_DEFAULTS,         # adr:{name} -> JSON (context/decision/consequences)
+        # --- мост с codebase-memory-mcp (опциональный) ---
+        "bridge": mdbx.DB_DEFAULTS,      # bridge:{our_key} -> JSON {cbm_project, cbm_node, mapped_at}
     }
 
     def __init__(self, path: str, maxdbs: int = 32, max_value_bytes: int = 16 << 20,
@@ -2310,6 +2312,101 @@ class Store:
                 return {"result": "notfound"}
             txn.delete(dbi, key)
             return {"result": "removed"}
+
+    # --- мост с codebase-memory-mcp (опциональный, совместный режим) ---------
+    @staticmethod
+    def cbm_binary() -> str:
+        """Путь к бинарю codebase-memory-mcp (или "" если не установлен)."""
+        env = os.environ.get("CBM_BIN")
+        if env:
+            return env if os.path.exists(env) else ""
+        for cand in (os.path.expanduser("~/.local/bin/codebase-memory-mcp"),
+                     "/usr/local/bin/codebase-memory-mcp"):
+            if os.path.exists(cand):
+                return cand
+        import shutil
+        return shutil.which("codebase-memory-mcp") or ""
+
+    def cbm_link(self, our_key: str, cbm_node: str,
+                 cbm_project: str = "") -> dict:
+        """Записывает соответствие наш fq-ключ ↔ узел CBM."""
+        if not our_key:
+            raise invalid("cbm: пустой our_key", "укажите fq-ключ")
+        with self._begin_write() as txn:
+            body = {"our_key": our_key, "cbm_node": cbm_node,
+                    "cbm_project": cbm_project,
+                    "mapped_at": time.strftime("%Y-%m-%dT%H:%M:%SZ",
+                                               time.gmtime())}
+            txn.put(self.dbi(txn, "bridge"),
+                    ("bridge:" + our_key).encode(),
+                    json.dumps(body, ensure_ascii=False).encode())
+            return body
+
+    def cbm_unlink(self, our_key: str) -> dict:
+        with self._begin_write() as txn:
+            key = ("bridge:" + our_key).encode()
+            rc, val = txn.get(self.dbi(txn, "bridge"), key)
+            if val is None:
+                return {"result": "notfound"}
+            txn.delete(self.dbi(txn, "bridge"), key)
+            return {"result": "removed"}
+
+    def cbm_linked(self, prefix: str = "", limit: int = 50) -> list:
+        out = []
+        with self.env.begin(readonly=True) as txn:
+            dbi = self.dbi(txn, "bridge")
+            with txn.cursor(dbi) as cur:
+                rc, k, v = cur.get(mdbx.CURSOR_FIRST)
+                while rc == mdbx.RC_SUCCESS:
+                    key = k.decode("utf-8", "replace")
+                    if key.startswith("bridge:" + prefix):
+                        out.append(json.loads(v))
+                        if limit and len(out) >= limit:
+                            break
+                    rc, k, v = cur.get(mdbx.CURSOR_NEXT)
+        return out
+
+    def cbm_search(self, query: str, project: str = "",
+                   tool: str = "search_graph", args: dict = None,
+                   timeout: int = 60) -> dict:
+        """Вызывает CBM CLI (подпроцесс) для query.
+
+        Основной режим — совместная работа с codebase-memory-mcp; НО модуль
+        полноценно работает и без CBM: если бинарь не найден или вызов
+        падает — возвращается {"unavailable": true, ...}, не ошибка.
+        """
+        binary = self.cbm_binary()
+        if not binary:
+            return {"unavailable": True,
+                    "reason": "codebase-memory-mcp not installed"}
+        import subprocess as _sp
+        args = dict(args or {})
+        if tool == "search_graph":
+            args.setdefault("query", query)
+        elif tool == "search_code":
+            args.setdefault("pattern", query)
+        if project:
+            args.setdefault("project", project)
+        cmd = [binary, "cli", "--json", tool]
+        # передаём аргументы как JSON строку после tool? CBM cli принимает
+        # args в JSON-форме позиционно
+        import json as _json
+        cmd.append(_json.dumps(args, ensure_ascii=False))
+        try:
+            p = _sp.run(cmd, capture_output=True, text=True,
+                        timeout=timeout, check=False)
+        except Exception as e:  # noqa: BLE001
+            return {"unavailable": True, "reason": "cbm cli error: %s" % e}
+        if p.returncode != 0:
+            return {"unavailable": True,
+                    "reason": "cbm cli rc=%s: %s" % (p.returncode,
+                                                     p.stderr[:300])}
+        try:
+            envelope = json.loads(p.stdout)
+        except ValueError:
+            return {"raw": p.stdout[:2000], "reason": "non-JSON output"}
+        return {"cbm": True, "tool": tool, "query": query,
+                "result": envelope}
 
     def map_load_regions(self, regions: list, uncovered: list,
                          replace: bool = False) -> dict:
