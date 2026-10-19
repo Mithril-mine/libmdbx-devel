@@ -804,6 +804,8 @@ add_option(MDBX MMAP_NEEDS_JOLT "Assume system needs explicit syscall to sync/fl
 mark_as_advanced(MDBX_MMAP_NEEDS_JOLT)
 add_option(MDBX LOCKING "Locking method (Windows=-1, SystemV=5, POSIX=1988, POSIX=2001, POSIX=2008)" AUTO)
 mark_as_advanced(MDBX_LOCKING)
+add_option(MDBX AVOID_FTOK "Use own collision-resistant key derivation for System V IPC instead of the system ftok()" OFF)
+mark_as_advanced(MDBX_AVOID_FTOK)
 add_option(MDBX TRUST_RTC "Does a system have battery-backed Real-Time Clock or just a fake" AUTO)
 mark_as_advanced(MDBX_TRUST_RTC)
 add_option(

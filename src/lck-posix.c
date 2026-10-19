@@ -532,6 +532,21 @@ __cold int lck_destroy(MDBX_env *env, MDBX_env *inprocess_neighbor, const mdbx_p
 
 /*---------------------------------------------------------------------------*/
 
+#if MDBX_LOCKING == MDBX_LOCKING_SYSV
+/* Decision on EEXIST from semget(key, IPC_CREAT|IPC_EXCL): whether to
+ * reclaim the existing semaphore set ("hit") or to bail out with an error
+ * ("flee"). The `semid` of the existing set is passed so a liveness check
+ * can inspect it (e.g. via semctl(IPC_STAT)); issue #80.
+ * Currently keeps the legacy behavior: any existing set is treated as our
+ * stale leftover and reclaimed. */
+static int sysv_ipc_eeexist_decide(MDBX_env *env, key_t key, int semid) {
+  (void)env;
+  (void)key;
+  (void)semid;
+  return MDBX_RESULT_TRUE; /* reclaim (legacy behavior) */
+}
+#endif /* MDBX_LOCKING == MDBX_LOCKING_SYSV */
+
 __cold int lck_init(MDBX_env *env, MDBX_env *inprocess_neighbor, int global_uniqueness_flag) {
 #if MDBX_LOCKING == MDBX_LOCKING_SYSV
   int semid = -1;
@@ -548,7 +563,10 @@ __cold int lck_init(MDBX_env *env, MDBX_env *inprocess_neighbor, int global_uniq
       if (err != EEXIST)
         return err;
 
-      /* remove and re-create semaphore set */
+      /* Existing set under our key: decide whether to reclaim ("hit") or to
+       * bail out ("flee"). The decision is delegated so the liveness check can
+       * be implemented separately (issue #80); currently it keeps the legacy
+       * behavior of reclaiming any existing set. */
       semid = semget(env->me_sysv_ipc.key, 2, 0);
       if (semid == -1) {
         err = errno;
@@ -556,6 +574,8 @@ __cold int lck_init(MDBX_env *env, MDBX_env *inprocess_neighbor, int global_uniq
           return err;
         goto sysv_retry_create;
       }
+      if (unlikely(sysv_ipc_eeexist_decide(env, env->me_sysv_ipc.key, semid) != MDBX_RESULT_TRUE))
+        return MDBX_BUSY; /* a live set belonging to another database; do not touch it */
       if (semctl(semid, 2, IPC_RMID)) {
         err = errno;
         if (err != EIDRM)
