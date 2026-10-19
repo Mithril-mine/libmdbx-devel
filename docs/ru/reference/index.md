@@ -18,8 +18,7 @@
   а также C++ API (`mdbx.h++`)
 - [Члены классов](https://libmdbx.dqdkfa.ru/docs/en/reference/api/class_members.html) · [Макросы](https://libmdbx.dqdkfa.ru/docs/en/reference/api/macros.html)
 
-На этом же разделе: [утилиты командной строки](tooling.md);
-[журнал изменений](https://libmdbx.dqdkfa.ru/docs/en/reference/changelog.html) (английский).
+На этом же разделе: [утилиты командной строки](tooling.md).
 
 Вводное руководство — в [гайдах](../index.md); страница
 [первых шагов](../getting-started/first-steps.md) показывает канонический поток
