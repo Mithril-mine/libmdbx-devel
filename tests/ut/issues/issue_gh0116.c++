@@ -45,9 +45,10 @@ TEST(issue_gh0116, nofmt_logger_receives_truncated_bounded_message) {
   (void)mdbx_env_open(env, "issue116-notadb.mdbx", MDBX_ENV_DEFAULTS, 0644);
   mdbx_env_close(env);
 
-  if (received_length > 0) {
-    EXPECT_LE(received_length, sizeof(buffer) - 1)
-        << "the delivered length must fit the application buffer, not the full message size";
-    EXPECT_EQ(0, buffer[received_length]) << "the delivered message must be terminated";
-  }
+  /* The message must actually reach the nofmt logger: on Windows the old code
+   * dropped an over-long message, leaving length 0 and passing every check. */
+  ASSERT_GT(received_length, 0u) << "the logger must receive the (truncated) message";
+  EXPECT_LE(received_length, sizeof(buffer) - 1)
+      << "the delivered length must fit the application buffer, not the full message size";
+  EXPECT_EQ(0, buffer[received_length]) << "the delivered message must be terminated";
 }

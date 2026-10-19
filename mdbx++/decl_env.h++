@@ -832,8 +832,8 @@ public:
   /// \note The API is not frozen yet and may be improved in future versions.
   ///
   /// \param [in,out] ctx  A zero-initialized context of the check, where the
-  ///   results are generated. Pointers in `ctx.result` (e.g. `tables`) remain
-  ///   valid until the next check or close of the environment.
+  ///   results are generated. `ctx.result.tables` is valid only inside the
+  ///   callbacks and is `nullptr` once the check returns.
   /// \param [in] cb   A set of callback functions, all optional. `nullptr`
   ///   means no callbacks.
   /// \param [in] flags  Flags/options of the check, \ref MDBX_chk_flags_t.

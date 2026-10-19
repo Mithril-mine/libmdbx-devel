@@ -77,10 +77,25 @@ TEST(issue_gh0099, extract_returns_buffer_with_caller_allocator) {
   txn.upsert(map, mdbx::slice("k"), mdbx::slice("value-of-k"));
   /* extract() must hand the value to the caller as an owned buffer of the
    * caller's allocator, not as a reference into the transaction (which dies
-   * on commit) nor as a copy from a different resource. */
-  mdbx::buffer<> old = txn.extract<mdbx::buffer<>>(map, mdbx::slice("k"));
+   * on commit) nor as a copy from a different resource. Pass a distinct
+   * memory-resource instance so a substitute default one would be detected. */
+#if MDBX_CXX_HAS_POLYMORPHIC_ALLOCATOR
+  std::pmr::monotonic_buffer_resource resource;
+  mdbx::buffer<mdbx::polymorphic_allocator> old =
+      txn.extract<mdbx::buffer<mdbx::polymorphic_allocator>>(map, mdbx::slice("k"),
+                                                            mdbx::polymorphic_allocator(&resource));
   EXPECT_TRUE(old.is_freestanding()) << "extract() must return an owned buffer";
   EXPECT_EQ(0, memcmp(old.data(), "value-of-k", 9));
+  /* The buffer must carry the caller's allocator (memory resource), not a
+   * substitute default one. */
+  mdbx::buffer<mdbx::polymorphic_allocator> probe{mdbx::polymorphic_allocator(&resource)};
+  EXPECT_EQ(probe.get_allocator(), old.get_allocator())
+      << "extract() must hand the value over with the caller's allocator";
+#else
+  mdbx::buffer<mdbx::legacy_allocator> old = txn.extract<mdbx::buffer<mdbx::legacy_allocator>>(map, mdbx::slice("k"));
+  EXPECT_TRUE(old.is_freestanding()) << "extract() must return an owned buffer";
+  EXPECT_EQ(0, memcmp(old.data(), "value-of-k", 9));
+#endif
   txn.commit();
 
   env.close();
