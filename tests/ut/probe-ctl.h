@@ -8,6 +8,8 @@
 
 #pragma once
 
+#include <cstddef>
+
 #if defined(MDBX_PROBES)
 extern "C" int mprobe_ctl(const char *request, char *reply, size_t reply_size);
 #endif /* MDBX_PROBES */
