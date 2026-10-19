@@ -4,7 +4,7 @@
 > Эволюционировала из исходной спецификации владельца; целочисленные индексы
 > — по `docs/DESIGN.md`.
 
-## 1. Таблицы (DBI) — 20
+## 1. Таблицы (DBI) — 31
 
 | DBI | Флаги | Ключ → Значение | Назначение |
 |---|---|---|---|
@@ -37,6 +37,7 @@
 | `call_traces_rev` | DUPSORT | `callee` → `caller` | обратные рёбра observed-вызовов |
 | `adr` | DEFAULTS | `adr:{name}` → JSON | архитектурные решения (context/decision/consequences/sections) |
 | `bridge` | DEFAULTS | `bridge:{our_key}` → JSON | мост с codebase-memory-mcp (наш fq-ключ ↔ узел CBM) |
+| `branches` | DEFAULTS | `branch:{layer}` → JSON | слои веток (нелинейное версионирование БЗ, см. BRANCHES.md) |
 | `covered_by` | DEFAULTS | `covered_by:{sym}` → JSON `[test_id]` | обратный индекс: какие тесты защищают символ |
 | `test_metrics` | DEFAULTS | `test_metrics:{test_id}` → JSON окно истории | длительности/флаки (скользящее окно) |
 | `ci_jobs` | DEFAULTS | `{workflow}/{job}` → JSON | параметры CI-джоб (matrix/scope/tests_hint) |

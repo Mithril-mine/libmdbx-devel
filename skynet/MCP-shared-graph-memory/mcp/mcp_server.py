@@ -188,18 +188,22 @@ class McpServer:
               [], {"type": "object",
                    "properties": {"target_meta": {"type": "integer"}}}),
             ("map_symbol", "Символ карты исходников по fq-ключу (fn:/type:/macro:).",
-             [], {"type": "object", "properties": {"key": {"type": "string"}}}),
-            ("map_symbols", "Префиксный список символов карты (limit).",
+             [], {"type": "object", "properties": {"key": {"type": "string"},
+                                                   "layer": {"type": "string"}}}),
+            ("map_symbols", "Префиксный список символов карты (limit, layer).",
              [], {"type": "object", "properties": {"prefix": {"type": "string"},
-                                                  "limit": {"type": "integer"}}}),
+                                                  "limit": {"type": "integer"},
+                                                  "layer": {"type": "string"}}}),
             ("map_edges_of", "Исходящие вызовы символа (caller -> callee; "
-             "принимает caller|symbol).", [], {"type": "object",
+             "принимает caller|symbol, layer).", [], {"type": "object",
              "properties": {"caller": {"type": "string"},
-                            "symbol": {"type": "string"}}}),
-            ("map_callers_of", "Кто вызывает символ (callee|symbol; impact).",
+                            "symbol": {"type": "string"},
+                            "layer": {"type": "string"}}}),
+            ("map_callers_of", "Кто вызывает символ (callee|symbol, layer; impact).",
              [], {"type": "object",
                   "properties": {"callee": {"type": "string"},
-                                 "symbol": {"type": "string"}}}),
+                                 "symbol": {"type": "string"},
+                                 "layer": {"type": "string"}}}),
             ("map_group_members", "Члены фасет-группы (group:{kind}:{name}).",
              [], {"type": "object", "properties": {"group": {"type": "string"}}}),
             ("map_regions", "#if-дерево: префиксный список регионов region:{module}:{n}.",
@@ -406,6 +410,35 @@ class McpServer:
                          "required": ["query"]}),
             ("version_info", "Версии: модуль / libmdbx / схема данных / данные.",
              [], {"type": "object"}),
+            ("branch_register", "Регистрация слоя ветки "
+             "({ver}.{feature}.{n}).", ["ver_slug"], {
+                 "type": "object",
+                 "properties": {"ver_slug": {"type": "string"},
+                                "feature_slug": {"type": "string"},
+                                "n_commits": {"type": "integer"},
+                                "revision": {"type": "string"},
+                                "git_tag": {"type": "string"},
+                                "base_branch": {"type": "string"},
+                                "status": {"type": "string"}},
+                 "required": ["ver_slug"]}),
+            ("branch_list", "Список слоёв веток (base_only?).", [],
+             {"type": "object",
+              "properties": {"base_only": {"type": "boolean"}}}),
+            ("branch_current", "Активный слой.", [], {"type": "object"}),
+            ("branch_activate", "Активировать слой.", ["layer"],
+             {"type": "object",
+              "properties": {"layer": {"type": "string"}},
+              "required": ["layer"]}),
+            ("branch_remove", "Убрать слой ветки.", ["layer"],
+             {"type": "object",
+              "properties": {"layer": {"type": "string"}},
+              "required": ["layer"]}),
+            ("map_diff_branches", "Структурный diff двух слоёв (по содержимому).",
+             ["from_layer", "to_layer"], {"type": "object",
+                                          "properties": {"from_layer": {"type": "string"},
+                                                         "to_layer": {"type": "string"},
+                                                         "limit": {"type": "integer"}},
+                                          "required": ["from_layer", "to_layer"]}),
         ]
         return {name: {"name": name, "description": desc, "inputSchema": schema}
                 for name, desc, _args, schema in t}
@@ -542,10 +575,11 @@ class McpServer:
             target = int(args.get("target_meta", 0))
             return s.recover(target)
         if name == "map_symbol":
-            return s.map_symbol(args["key"])
+            return s.map_symbol(args["key"], layer=args.get("layer", ""))
         if name == "map_symbols":
             return {"symbols": s.map_symbols(args.get("prefix", ""),
-                                             limit=args.get("limit"))}
+                                             limit=args.get("limit"),
+                                             layer=args.get("layer", ""))}
         if name == "map_edges_of":
             # алиас: агент может передать caller или symbol (семант. имя)
             sym = args.get("caller") or args.get("symbol")
@@ -553,14 +587,14 @@ class McpServer:
                 raise MemoryError(
                     "invalid", "invalid", "map_edges_of требует 'caller' или 'symbol'",
                     "укажите символ", "none")
-            return {"edges": s.map_edges_of(sym)}
+            return {"edges": s.map_edges_of(sym, layer=args.get("layer", ""))}
         if name == "map_callers_of":
             sym = args.get("callee") or args.get("symbol")
             if not sym:
                 raise MemoryError(
                     "invalid", "invalid", "map_callers_of требует 'callee' или 'symbol'",
                     "укажите символ", "none")
-            return {"callers": s.map_callers_of(sym)}
+            return {"callers": s.map_callers_of(sym, layer=args.get("layer", ""))}
         if name == "map_group_members":
             return {"members": s.map_group_members(args["group"])}
         if name == "map_regions":
@@ -684,6 +718,25 @@ class McpServer:
                                 args=args.get("args"))
         if name == "version_info":
             return s.version_info()
+        if name == "branch_register":
+            return s.branch_register(
+                args["ver_slug"], feature_slug=args.get("feature_slug", "base"),
+                n_commits=int(args.get("n_commits", 0)),
+                revision=args.get("revision", ""),
+                git_tag=args.get("git_tag", ""),
+                base_branch=args.get("base_branch", ""),
+                status=args.get("status", "active"))
+        if name == "branch_list":
+            return {"branches": s.branch_list(base_only=bool(args.get("base_only")))}
+        if name == "branch_current":
+            return s.branch_current()
+        if name == "branch_activate":
+            return s.branch_activate(args["layer"])
+        if name == "branch_remove":
+            return s.branch_remove(args["layer"])
+        if name == "map_diff_branches":
+            return s.map_diff_branches(args["from_layer"], args["to_layer"],
+                                       limit=args.get("limit"))
         raise MemoryError("NO_SUCH_TOOL", "invalid", "неизвестный инструмент %r" % name,
                           "проверьте tools/list", "none")
 

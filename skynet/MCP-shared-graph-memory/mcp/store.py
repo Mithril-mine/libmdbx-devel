@@ -23,6 +23,7 @@ from __future__ import annotations
 import json
 import math
 import os
+import re
 import shutil
 import sys
 import threading
@@ -90,6 +91,13 @@ SCHEMA_VERSION = "2"
 # Версия модуля (дублирует mcp.__version__; здесь — без import-циклов).
 MODULE_VERSION = "0.2.0"
 
+# Регулярка версионного slug базового слоя ("0.15", "0.16.0").
+_VVER_RE = re.compile(r"^\d+(\.\d+){1,2}$")
+
+# Признак ключа чужого feature-слоя в перегенерируемых таблицах:
+# версионный префикс слоя ("0.16.abc.N/") перед fn:/type:/macro:/region:...
+_LAYER_KEY_RE = re.compile(r"^\d+(\.\d+)+\.[A-Za-z0-9._-]+\.\d+/")
+
 
 class Store:
     """Основной объект: открывает env, управляет таблицами."""
@@ -134,9 +142,11 @@ class Store:
         "adr": mdbx.DB_DEFAULTS,         # adr:{name} -> JSON (context/decision/consequences)
         # --- мост с codebase-memory-mcp (опциональный) ---
         "bridge": mdbx.DB_DEFAULTS,      # bridge:{our_key} -> JSON {cbm_project, cbm_node, mapped_at}
+        # --- слои веток (нелинейное версионирование БЗ) ---
+        "branches": mdbx.DB_DEFAULTS,    # branch:{layer} -> JSON атрибутов слоя
     }
 
-    def __init__(self, path: str, maxdbs: int = 32, max_value_bytes: int = 16 << 20,
+    def __init__(self, path: str, maxdbs: int = 64, max_value_bytes: int = 16 << 20,
                  sync_mode: str = "safe_nosync", readonly: bool = False,
                  _skip_sync_thread: bool = False):
         self.path = path
@@ -684,7 +694,7 @@ class Store:
             pass
         self.env.close()
         self._readonly = readonly
-        self.env = mdbx.Env(self.path, maxdbs=32, readonly=readonly,
+        self.env = mdbx.Env(self.path, maxdbs=64, readonly=readonly,
                             accede=readonly, sync_mode=self.sync_mode)
         self._dbi = {}
         with self.env.begin(readonly=readonly) as txn:
@@ -1568,10 +1578,15 @@ class Store:
                 rc, lk, lv = cur.get(mdbx.CURSOR_NEXT)
 
     # --- refactoring-map (структурный слой) ---------------------------------
-    def map_symbol(self, key: str) -> dict:
-        """Читает символ из structural-слоя (symbols)."""
+    def map_symbol(self, key: str, layer: str = "") -> dict:
+        """Читает символ из structural-слоя (symbols).
+
+        `layer` — слой ветки; базовый слой (""/ver) без префикса.
+        """
+        pre = self.layer_prefix(layer)
         with self.env.begin(readonly=True) as txn:
-            rc, val = txn.get(self.dbi(txn, "symbols"), key.encode())
+            rc, val = txn.get(self.dbi(txn, "symbols"),
+                              (pre + key).encode())
         if val is None:
             return {}
         return json.loads(val.decode())
@@ -1632,14 +1647,19 @@ class Store:
                                              self.dbi(txn, "sym_aliases"),
                                              old_key.strip())
 
-    def map_symbols(self, prefix: str = "", limit: int = None) -> list:
+    def map_symbols(self, prefix: str = "", limit: int = None,
+                    layer: str = "") -> list:
         """Все ключи symbols по префиксу (детерминированная сортировка).
+
+        `layer` — слой ветки; базовый слой без учёта префикса; feature-слой
+        ищет только в своём префиксе (и возвращает ключи без префикса слоя).
 
         Исключение Кайдзен: канонические ключи функций — `fn:{qname}`
         (module вятел), поэтому префикс вида `fn:gc`/`fn:gc-` ДОПОЛНИтельно
         фильтрует по `module`-полю тела (аддитивно: поиск по модулю работает
         и при несовпадении префикса ключа с названием модуля).
         """
+        pre = self.layer_prefix(layer)
         out = []
         with self.env.begin(readonly=True) as txn:
             sym_dbi = self.dbi(txn, "symbols")
@@ -1650,8 +1670,12 @@ class Store:
                 rc, k, v = cur.get(mdbx.CURSOR_FIRST)
                 while rc == mdbx.RC_SUCCESS:
                     key = k.decode()
-                    if key.startswith(prefix):
-                        out.append(key)
+                    if pre and not key.startswith(pre):
+                        rc, k, v = cur.get(mdbx.CURSOR_NEXT)
+                        continue
+                    bare = key[len(pre):] if pre else key
+                    if bare.startswith(prefix):
+                        out.append(bare)
                         if limit and len(out) >= limit:
                             break
                     elif mod_pat:
@@ -1661,7 +1685,7 @@ class Store:
                             body = {}
                         mod = body.get("module", "")
                         if mod.startswith(mod_pat):
-                            out.append(key)
+                            out.append(bare)
                             if limit and len(out) >= limit:
                                 break
                     rc, k, v = cur.get(mdbx.CURSOR_NEXT)
@@ -1677,41 +1701,52 @@ class Store:
                     json.dumps(body, ensure_ascii=False).encode())
             self._sym_id_locked(txn, key)
 
-    def map_edges_of(self, caller: str) -> list:
-        """callee-дубликаты из call_edges для caller (DUPSORT)."""
+    def map_edges_of(self, caller: str, layer: str = "") -> list:
+        """callee-дубликаты из call_edges для caller (DUPSORT).
+
+        `layer` — слой ветки: feature-слой адресуется через `layer/`-префикс;
+        базовый слой (""/ver) — без префикса.
+        """
+        pre = self.layer_prefix(layer)
         out = []
         with self.env.begin(readonly=True) as txn:
             ce_dbi = self.dbi(txn, "call_edges")
             with txn.cursor(ce_dbi) as cur:
-                rc, _, val = cur.get(mdbx.CURSOR_SET_KEY, caller.encode())
+                rc, _, val = cur.get(mdbx.CURSOR_SET_KEY,
+                                     (pre + caller).encode())
                 while rc == mdbx.RC_SUCCESS:
                     out.append(val.decode())
                     rc, _, val = cur.get(mdbx.CURSOR_NEXT_DUP)
         return out
 
-    def map_callers_of(self, callee: str) -> list:
+    def map_callers_of(self, callee: str, layer: str = "") -> list:
         """Обратные рёбра: кто вызывает callee (DUPSORT call_edges_rev)."""
+        pre = self.layer_prefix(layer)
         out = []
         with self.env.begin(readonly=True) as txn:
             ce_dbi = self.dbi(txn, "call_edges_rev")
             with txn.cursor(ce_dbi) as cur:
-                rc, _, val = cur.get(mdbx.CURSOR_SET_KEY, callee.encode())
+                rc, _, val = cur.get(mdbx.CURSOR_SET_KEY,
+                                     (pre + callee).encode())
                 while rc == mdbx.RC_SUCCESS:
                     out.append(val.decode())
                     rc, _, val = cur.get(mdbx.CURSOR_NEXT_DUP)
         return out
 
-    def map_put_edge(self, caller: str, callee: str, kind: str = "syntax") -> None:
+    def map_put_edge(self, caller: str, callee: str, kind: str = "syntax",
+                     layer: str = "") -> None:
+        pre = self.layer_prefix(layer)
         with self._begin_write() as txn:
             ce_dbi = self.dbi(txn, "call_edges")
             val = json.dumps({"kind": kind, "resolved": False,
-                              "ambiguous": False, "callee": callee},
+                              "ambiguous": False, "callee": pre + callee},
                              ensure_ascii=False).encode()
             with txn.cursor(ce_dbi) as cur:
-                cur.put_nodupe(caller.encode(), val)
+                cur.put_nodupe((pre + caller).encode(), val)
             rev_dbi = self.dbi(txn, "call_edges_rev")
             with txn.cursor(rev_dbi) as cur:
-                cur.put_nodupe(callee.encode(), caller.encode())
+                cur.put_nodupe((pre + callee).encode(),
+                               (pre + caller).encode())
 
     def map_groups_of(self, group_key: str) -> list:
         """Члены группы (DUPSORT-набор)."""
@@ -1746,16 +1781,19 @@ class Store:
                 cur.put_nodupe(group_key.encode(), member.encode())
 
     def map_load_batch(self, symbols: dict, edges: list, groups: dict,
-                       chunk: int = 4096, replace: bool = False) -> dict:
+                       chunk: int = 4096, replace: bool = False,
+                       layer: str = "") -> dict:
         """Батчевая загрузка структурного слоя.
 
         Принимает готовые данные (из автогенератора) и пишет в
         symbols/call_edges/call_edges_rev/groups.
-        При replace=True таблицы очищаются перед загрузкой (самоизлечение
-        дрейфа координат: исчезнувшие символы удаляются). Безопасно —
-        это перегенерируемый слой, курируемые tables не затрагиваются.
+        `layer` — слой ветки (см. docs/BRANCHES.md): базовый слой (""/"0.15")
+        пишет без префикса, feature-слои — с префиксом `{layer}/`.
+        При replace=True очищается только ПРЕФИКС этого слоя (не весь dbi) —
+        параллельные ветки не затираются.
         Возвращает счётчики для сверки.
         """
+        pre = self.layer_prefix(layer)
         put_sym, put_edge, put_grp = 0, 0, 0
         sym_dbi = self._dbi["symbols"]
         ce_dbi = self._dbi["call_edges"]
@@ -1763,50 +1801,56 @@ class Store:
         gr_dbi = self._dbi["groups"]
         with self._begin_write() as txn:
             if replace:
+                # очищаем только записи с префиксом слоя (base="" — весь dbi)
                 for dbi in (sym_dbi, ce_dbi, rev_dbi, gr_dbi):
                     with txn.cursor(dbi) as cur:
-                        rc, _, _ = cur.get(mdbx.CURSOR_FIRST)
+                        rc, k, _ = cur.get(mdbx.CURSOR_FIRST)
                         while rc == mdbx.RC_SUCCESS:
-                            cur.delete()
-                            rc, _, _ = cur.get(mdbx.CURSOR_NEXT)
-                # поколение карты: инкрементируем canary.y при replace
-                canary = txn.canary_get()
-                txn.canary_put(x=canary.get("x", 0),
-                               y=int(canary.get("y", 0)) + 1,
-                               z=canary.get("z", 0))
+                            if not pre or k.decode().startswith(pre):
+                                cur.delete()
+                            rc, k, _ = cur.get(mdbx.CURSOR_NEXT)
+                if not pre:
+                    # поколение карты при полном replace
+                    canary = txn.canary_get()
+                    txn.canary_put(x=canary.get("x", 0),
+                                   y=int(canary.get("y", 0)) + 1,
+                                   z=canary.get("z", 0))
             sid_dbi = self._dbi["sym_ids"]
             id2key_dbi = self._dbi["sym_id2key"]
             for i, (key, body) in enumerate(sorted(symbols.items())):
-                txn.put(sym_dbi, key.encode(),
+                skey = (pre + key).encode()
+                txn.put(sym_dbi, skey,
                         json.dumps(body, ensure_ascii=False).encode())
                 put_sym += 1
                 # стабильный числовой id (НЕ чистится при replace)
-                rc, val = txn.get(sid_dbi, key.encode())
+                rc, val = txn.get(sid_dbi, skey)
                 if val is None or len(val) != 8:
                     nid = self.next_id
                     self.next_id += 1
                     txn.put(self.dbi(txn, "meta"), b"next_id",
                             _pack_u64(self.next_id))
-                    txn.put(sid_dbi, key.encode(), _pack_u64(nid))
-                    txn.put(id2key_dbi, _pack_u64(nid), key.encode())
+                    txn.put(sid_dbi, skey, _pack_u64(nid))
+                    txn.put(id2key_dbi, _pack_u64(nid), skey)
             for e in edges:
                 # JSON-значение: kind, resolved, ambiguous, callee
                 val = json.dumps({
                     "kind": e.get("kind", "syntax"),
                     "resolved": e.get("resolved", False),
                     "ambiguous": e.get("ambiguous", False),
-                    "callee": e["callee"],
+                    "callee": pre + e["callee"],
                 }, ensure_ascii=False).encode()
                 with txn.cursor(ce_dbi) as cur:
-                    cur.put_nodupe(e["caller"].encode(), val)
+                    cur.put_nodupe((pre + e["caller"]).encode(), val)
                 put_edge += 1
                 # обратное ребро: callee → caller
                 with txn.cursor(rev_dbi) as cur:
-                    cur.put_nodupe(e["callee"].encode(), e["caller"].encode())
+                    cur.put_nodupe((pre + e["callee"]).encode(),
+                                   (pre + e["caller"]).encode())
             for gkey, members in groups.items():
                 with txn.cursor(gr_dbi) as cur:
                     for m in members:
-                        cur.put_nodupe(gkey.encode(), m.encode())
+                        cur.put_nodupe((pre + gkey).encode(),
+                                       (pre + m).encode())
                         put_grp += 1
         return {"symbols": put_sym, "edges": put_edge, "groups": put_grp}
 
@@ -1949,6 +1993,85 @@ class Store:
         """Полный снимок текущей карты (для map_generations/map_diff)."""
         return {"generation": self.map_generations()["generation"],
                 "symbols": list(self.map_symbols())}
+
+    def map_diff_branches(self, from_layer: str, to_layer: str,
+                          limit: int = 200) -> dict:
+        """Структурный diff двух слоёв веток ПО СОДЕРЖИМОМУ карты.
+
+        Сравнивает множество символов (fn:/type:/macro:) и диапазоны
+        (l0/l1), а не коммиты: это честный ответ на «масштаб различий»,
+        не зависящий от переписывания истории.
+
+        Возвращает: добавленные/удалённые/изменённые символы (по модулям),
+        число затронутых функций/блоков, и совпавшие (common).
+        """
+        def layer_symbols(layer: str) -> dict:
+            pre = self.layer_prefix(layer)
+            out = {}
+            with self.env.begin(readonly=True) as txn:
+                sym_dbi = self.dbi(txn, "symbols")
+                with txn.cursor(sym_dbi) as cur:
+                    rc, k, v = cur.get(mdbx.CURSOR_FIRST)
+                    while rc == mdbx.RC_SUCCESS:
+                        key = k.decode()
+                        # базовый слой (pre=="") не должен захватывать ключи
+                        # чужих feature-слоёв ("0.16.feat.N/fn:...")
+                        if not pre and _LAYER_KEY_RE.match(key):
+                            rc, k, v = cur.get(mdbx.CURSOR_NEXT)
+                            continue
+                        if not pre or key.startswith(pre):
+                            bare = key[len(pre):] if pre else key
+                            try:
+                                out[bare] = json.loads(v)
+                            except ValueError:
+                                pass
+                        rc, k, v = cur.get(mdbx.CURSOR_NEXT)
+            return out
+
+        a = layer_symbols(from_layer)
+        b = layer_symbols(to_layer)
+        added = {}
+        removed = {}
+        changed = {}
+        for key, body in b.items():
+            if key not in a:
+                added[key] = body
+            elif (body.get("l0"), body.get("l1"),
+                  body.get("signature")) != (a[key].get("l0"),
+                                             a[key].get("l1"),
+                                             a[key].get("signature")):
+                changed[key] = {"from": a[key], "to": body}
+        for key in a:
+            if key not in b:
+                removed[key] = a[key]
+
+        def by_module(d):
+            m = {}
+            for key, body in d.items():
+                mod = body.get("module", "?")
+                m.setdefault(mod, []).append(key)
+            for k in m:
+                m[k].sort()
+            return m
+
+        nf = lambda d: sum(1 for b in d.values() if b.get("kind") == "function")
+        nb = lambda d: sum(len(b.get("blocks", [])) for b in d.values())
+        return {
+            "from": from_layer, "to": to_layer,
+            "added": by_module(added),
+            "removed": by_module(removed),
+            "changed": by_module({k: v["to"] for k, v in changed.items()}),
+            "counts": {
+                "added": len(added), "removed": len(removed),
+                "changed": len(changed),
+                "added_functions": nf(added),
+                "removed_functions": nf(removed),
+                "changed_functions": nf({k: v["to"] for k, v in changed.items()}),
+                "added_blocks": nb(added),
+                "removed_blocks": nb(removed),
+            },
+            "total_from": len(a), "total_to": len(b),
+        }
 
     # --- regions / uncovered (refactoring-map: #if-дерево и острова смысла) ---
     def map_regions(self, prefix: str = "", limit: int = None) -> list:
@@ -2786,6 +2909,7 @@ class Store:
             "libmdbx_version": lib_ver,
             "schema_version": schema_ver,
             "schema_matches": schema_ver == SCHEMA_VERSION,
+            "branch": self.branch_current(),
             "data": {
                 "map_generation": data_gen,
                 "records": st.get("records"),
@@ -2793,6 +2917,102 @@ class Store:
                 "next_id": st.get("next_id"),
             },
         }
+
+    # --- слои веток: нелинейное версионирование БЗ ---------------------------
+    @staticmethod
+    def layer_prefix(layer: str = "") -> str:
+        """Префикс слоя для перегенерируемых таблиц.
+
+        Базовая ветка ("" или "0.15.base" и т.п.) живёт БЕЗ префикса
+        (обратная совместимость); любой другой слой — с префиксом
+        `{layer}/`. Стабильность: версия (0.15) важнее имени ветки
+        (master→stable→lts) — см. docs/BRANCHES.md.
+        """
+        layer = (layer or "").strip().strip("/")
+        if not layer:
+            return ""
+        # "0.15.base"/"0.15" — базовые слои: без префикса
+        if layer.endswith(".base") or _VVER_RE.fullmatch(layer):
+            return ""
+        return layer + "/"
+
+    def branch_register(self, ver_slug: str, feature_slug: str = "base",
+                        n_commits: int = 0, revision: str = "",
+                        git_tag: str = "", base_branch: str = "",
+                        status: str = "active") -> dict:
+        """Регистрирует слой ветки (нелинейное версионирование).
+
+        Идентификатор слоя: `{ver-slug}.{feature-slug}.{n}` (см. BRANCHES.md).
+        Базовая ветка (`feature`="base"|"") живёт без префикса.
+        """
+        ver = ver_slug.strip().lstrip("v")
+        feat = (feature_slug or "base").strip().strip("/")
+        if not ver:
+            raise invalid("branch: не указан версионный slug",
+                          "укажите ver_slug (например 0.15)")
+        feat_clean = re.sub(r"[^A-Za-z0-9._-]", "-", feat)
+        layer = "%s.%s.%d" % (ver, feat_clean, int(n_commits)) if feat_clean != "base" else ver
+        body = {
+            "ver_slug": ver,
+            "feature_slug": feat_clean,
+            "n_commits": int(n_commits),
+            "revision": revision,
+            "git_tag": git_tag,
+            "base_branch": base_branch,
+            "status": status,
+            "created_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+            "is_base": feat_clean == "base",
+        }
+        with self._begin_write() as txn:
+            txn.put(self.dbi(txn, "branches"), ("branch:" + layer).encode(),
+                    json.dumps(body, ensure_ascii=False).encode())
+        return {"layer": layer, "body": body}
+
+    def branch_list(self, base_only: bool = False) -> list:
+        out = []
+        with self.env.begin(readonly=True) as txn:
+            dbi = self.dbi(txn, "branches")
+            with txn.cursor(dbi) as cur:
+                rc, k, v = cur.get(mdbx.CURSOR_FIRST)
+                while rc == mdbx.RC_SUCCESS:
+                    body = json.loads(v)
+                    if not base_only or body.get("is_base"):
+                        out.append({"layer": k.decode()[len("branch:"):],
+                                    "body": body})
+                    rc, k, v = cur.get(mdbx.CURSOR_NEXT)
+        return out
+
+    def branch_current(self) -> dict:
+        with self.env.begin(readonly=True) as txn:
+            rc, val = txn.get(self.dbi(txn, "meta"), b"branch_current")
+            layer = val.decode() if val else ""
+            if not layer:
+                rc2, rcval = txn.get(self.dbi(txn, "meta"), b"branch_ver")
+                layer = rcval.decode() if rcval else ""
+            return {"layer": layer}
+
+    def branch_activate(self, layer: str) -> dict:
+        layer = layer.strip().strip("/")
+        with self._begin_write() as txn:
+            meta = self.dbi(txn, "meta")
+            rc, val = txn.get(meta, b"branch_current")
+            prev = val.decode() if val else ""
+            txn.put(meta, b"branch_current", layer.encode())
+            # canary.z = активный слой (для внешних читателей/отладки)
+            c = txn.canary_get()
+            txn.canary_put(x=c.get("x", 0), y=c.get("y", 0), z=len(layer))
+            return {"previous": prev, "current": layer}
+
+    def branch_remove(self, layer: str) -> dict:
+        layer = layer.strip().strip("/")
+        with self._begin_write() as txn:
+            dbi = self.dbi(txn, "branches")
+            key = ("branch:" + layer).encode()
+            rc, val = txn.get(dbi, key)
+            if val is None:
+                return {"result": "notfound"}
+            txn.delete(dbi, key)
+            return {"result": "removed", "layer": layer}
 
     def close(self) -> None:
         if self._closed:
