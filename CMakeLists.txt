@@ -1065,7 +1065,6 @@ elseif(TRUE)
   add_custom_target(
     non-code
     SOURCES README.md
-            TODO.md
             ChangeLog.md
             src/bits.md
             src/amalgam.in
