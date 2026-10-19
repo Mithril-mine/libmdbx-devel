@@ -1,6 +1,11 @@
 """Тесты слоя тестов/CI: test_metrics / coverage / ci_jobs + поколение карты."""
 
+import os
+
 from tests.conftest import seed_vocab
+
+# абсолютный путь к fixtures — pytest в CI может запускаться из другого CWD
+FIXTURES = os.path.join(os.path.dirname(os.path.abspath(__file__)), "fixtures")
 
 
 def test_test_metrics_insert_window(store):
@@ -115,7 +120,7 @@ def test_map_ci_jobs_parser(tmp_path):
     import shutil
     import tools.map_ci_jobs as mci
     f = str(tmp_path / "wf.yml")
-    shutil.copy("tests/fixtures/workflow-fixture.yml", f)
+    shutil.copy(os.path.join(FIXTURES, "workflow-fixture.yml"), f)
     jobs = list(mci.iter_jobs(f))
     assert len(jobs) == 2
     s = mci.summarize(jobs[0][0], jobs[0][1], jobs[0][2])
@@ -145,7 +150,7 @@ def test_map_ci_jobs_cells_resolve_tests(tmp_path):
     import shutil
     import tools.map_ci_jobs as mci
     wf = str(tmp_path / "wf.yml")
-    shutil.copy("tests/fixtures/workflow-fixture.yml", wf)
+    shutil.copy(os.path.join(FIXTURES, "workflow-fixture.yml"), wf)
     cfg = tmp_path / "config.json"
     cfg.write_text('{"cells": [{"id": "linux-gcc-cursor", '
                    '"ctest": ["ut/api/cursor", "ut/cursor"]}]}')
