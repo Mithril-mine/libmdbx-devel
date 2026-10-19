@@ -1174,12 +1174,13 @@ public:
         const auto src_ptr = static_cast<const byte *>(src);
         /* In case `src` refers into the own storage, save its relative offset
          * since the storage may be relocated by the reserve below. */
-        const bool aliased = src_ptr >= begin_ptr && src_ptr < inherited::end_byte_ptr();
+        const bool aliased = src_ptr >= begin_ptr && src_ptr < inherited::end_byte_ptr() &&
+                             bytes <= size_t(inherited::end_byte_ptr() - src_ptr);
         const size_t src_offset = aliased ? size_t(src_ptr - begin_ptr) : 0;
         if (MDBX_UNLIKELY(tailroom() < check_length(bytes)))
           MDBX_CXX20_UNLIKELY {
             if (MDBX_UNLIKELY(!aliased && size_t(src_ptr - silo_begin()) < silo_.capacity())) {
-              /* `src` refers into the own head/tail room, which the reserve below does not preserve */
+              /* `src` is in the own storage, but not wholly in the content, which alone the reserve preserves */
               const buffer chunk(src, bytes, get_allocator());
               return append(chunk.data(), chunk.size());
             }
@@ -1208,12 +1209,13 @@ public:
         const auto src_ptr = static_cast<const byte *>(src);
         /* In case `src` refers into the own storage, save its relative offset
          * since the storage may be relocated by the reserve below. */
-        const bool aliased = src_ptr >= begin_ptr && src_ptr < inherited::end_byte_ptr();
+        const bool aliased = src_ptr >= begin_ptr && src_ptr < inherited::end_byte_ptr() &&
+                             bytes <= size_t(inherited::end_byte_ptr() - src_ptr);
         const size_t src_offset = aliased ? size_t(src_ptr - begin_ptr) : 0;
         if (MDBX_UNLIKELY(headroom() < check_length(bytes)))
           MDBX_CXX20_UNLIKELY {
             if (MDBX_UNLIKELY(!aliased && size_t(src_ptr - silo_begin()) < silo_.capacity())) {
-              /* `src` refers into the own head/tail room, which the reserve below does not preserve */
+              /* `src` is in the own storage, but not wholly in the content, which alone the reserve preserves */
               const buffer chunk(src, bytes, get_allocator());
               return add_header(chunk.data(), chunk.size());
             }
