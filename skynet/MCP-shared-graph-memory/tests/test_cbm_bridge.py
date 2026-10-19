@@ -22,17 +22,26 @@ def test_cbm_search_unavailable_without_binary(store, monkeypatch):
 
 
 def test_cbm_search_uses_binary_and_returns_envelope(store, tmp_path, monkeypatch):
-    """С фейковым CBM-бинарем вызов проходит и отдаёт MCP-обёртку."""
-    fake = tmp_path / "cbm"
-    fake.write_text(
-        "#!/bin/sh\n"
-        "printf '{\"content\":[{\"type\":\"text\",\"text\":\"ok %s\"}],\"isError\":false}\\n' \"$3\"\n")
-    fake.chmod(0o755)
+    """cbm_search вызывает CBM-подпроцесс и отдаёт MCP-обёртку.
+
+    Mock через subprocess.run (платформонезависимо; на Windows POSIX-
+    shebang-скрипты не исполняются).
+    """
+    import subprocess as sp
     monkeypatch.delenv("CBM_BIN", raising=False)
-    monkeypatch.setattr(store, "cbm_binary", staticmethod(lambda: str(fake)))
+    monkeypatch.setattr(store, "cbm_binary", staticmethod(lambda: "fake-cbm"))
+    calls = {}
+
+    def fake_run(cmd, capture_output=True, text=True, timeout=60, check=False):
+        calls["cmd"] = cmd
+        out = '{"content":[{"type":"text","text":"ok fake"}],"isError":false}'
+        return sp.CompletedProcess(cmd, 0, stdout=out, stderr="")
+
+    monkeypatch.setattr(sp, "run", fake_run)
     r = store.cbm_search("mdbx_env_open", tool="search_graph")
     assert r["cbm"] is True
     assert r["tool"] == "search_graph"
+    assert "search_graph" in calls["cmd"]
 
 
 def test_cbm_link_persists_after_reopen(store):
