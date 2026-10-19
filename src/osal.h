@@ -609,6 +609,14 @@ MDBX_INTERNAL int osal_msync(const osal_mmap_t *map, size_t length, enum osal_sy
 MDBX_INTERNAL int osal_check_fs_rdonly(mdbx_filehandle_t handle, const pathchar_t *pathname, int err);
 MDBX_INTERNAL int osal_check_fs_incore(mdbx_filehandle_t handle);
 MDBX_INTERNAL int osal_check_fs_local(mdbx_filehandle_t handle, int flags);
+#if !IS_WINDOWS
+typedef struct osal_fsinfo {
+  uint64_t ino;
+  uint64_t dev;
+  unsigned type;
+} osal_fsinfo_t;
+MDBX_INTERNAL int osal_fsinfo(mdbx_filehandle_t handle, osal_fsinfo_t *info);
+#endif /* !IS_WINDOWS */
 
 #if !defined(_WIN32) && !defined(_WIN64)
 #if defined(__ANDROID_API__) || defined(ANDROID) || defined(BIONIC)
