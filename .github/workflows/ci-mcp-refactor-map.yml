@@ -1,0 +1,161 @@
+name: ci-mcp-refactor-map
+
+# Structural map scanning (refactoring-map + project-map) on Linux and macOS,
+# with the generator validator against the golden counts. Produces:
+#   - tools/artifacts/refactoring-map.json (linux, macos, merged on request)
+#   - tools/artifacts/project-map.json      (whole repo: cmake/scripts/docs/ci)
+#   - tools/artifacts/probes.json           (SystemMap from src + probe-bus)
+# Linux and macOS runs are independent; the merge job combines their symbols
+# into implementations (polymorphic bodies per config) and runs the validator.
+
+env:
+  CI: GITHUB
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.head_ref || github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+on:
+  push:
+  schedule:
+    - cron: "23 4 * * *"
+      timezone: "Europe/Moscow"
+  workflow_dispatch:
+
+jobs:
+  scan-linux:
+    runs-on: ubuntu-24.04
+    steps:
+    - uses: actions/checkout@v7
+      with:
+        fetch-depth: 0
+        fetch-tags: true
+        submodules: true
+    - uses: actions/setup-python@v5
+      with:
+        python-version: "3.11"
+    - name: deps
+      run: python3 -m pip install --quiet cffi pytest pyyaml
+    - name: prepare build-scan
+      shell: bash
+      run: |
+        cmake -S . -B _build-scan -DCMAKE_BUILD_TYPE=Debug \
+          -DMDBX_BUILD_CXX=ON -DMDBX_ENABLE_TESTS=ON -DMDBX_BUILD_TOOLS=ON \
+          -DINTERPROCEDURAL_OPTIMIZATION=OFF \
+          -DCMAKE_EXPORT_COMPILE_COMMANDS=ON \
+          -DMDBX_ALLOY_BUILD=ON -DMDBX_USE_MINCORE=OFF
+    - name: scan symbols (linux)
+      shell: bash
+      run: |
+        cd skynet/MCP-shared-graph-memory
+        python3 tools/scan_symbols.py --config linux \
+          --out tools/artifacts/refactoring-map-linux.json
+        echo "scan exit: $?"
+    - name: scan project-map
+      shell: bash
+      run: |
+        cd skynet/MCP-shared-graph-memory
+        python3 tools/scan_project.py --repo "$GITHUB_WORKSPACE" \
+          --out tools/artifacts/project-map.json
+    - name: scan probes
+      shell: bash
+      run: |
+        cd skynet/MCP-shared-graph-memory
+        python3 tools/scan_probes.py --src "$GITHUB_WORKSPACE/src" \
+          --probe-bus "$GITHUB_WORKSPACE/docs/engineering/probe-bus.md" \
+          --out tools/artifacts/probes.json --dry-run
+    - name: validate generator (fixture + full)
+      shell: bash
+      run: |
+        cd skynet/MCP-shared-graph-memory
+        python3 tools/validate_map.py --map tools/artifacts/refactoring-map-linux.json \
+          --cc "$GITHUB_WORKSPACE/_build-scan/compile_commands.json" --tus fixture
+        python3 tools/validate_map.py --map tools/artifacts/refactoring-map-linux.json \
+          --cc "$GITHUB_WORKSPACE/_build-scan/compile_commands.json" --tus full
+    - name: upload linux artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: refactor-map-linux
+        path: |
+          skynet/MCP-shared-graph-memory/tools/artifacts/refactoring-map-linux.json
+          skynet/MCP-shared-graph-memory/tools/artifacts/project-map.json
+          skynet/MCP-shared-graph-memory/tools/artifacts/probes.json
+
+  scan-macos:
+    runs-on: macos-15
+    steps:
+    - uses: actions/checkout@v7
+      with:
+        fetch-depth: 0
+        fetch-tags: true
+        submodules: true
+    - uses: actions/setup-python@v5
+      with:
+        python-version: "3.11"
+    - name: deps
+      run: python3 -m pip install --quiet cffi pytest pyyaml
+    - name: prepare build-scan
+      shell: bash
+      run: |
+        cmake -S . -B _build-scan -DCMAKE_BUILD_TYPE=Debug \
+          -DMDBX_BUILD_CXX=ON -DMDBX_ENABLE_TESTS=ON -DMDBX_BUILD_TOOLS=ON \
+          -DINTERPROCEDURAL_OPTIMIZATION=OFF \
+          -DCMAKE_EXPORT_COMPILE_COMMANDS=ON \
+          -DMDBX_ALLOY_BUILD=ON -DMDBX_USE_MINCORE=OFF
+    - name: scan symbols (macos)
+      shell: bash
+      run: |
+        cd skynet/MCP-shared-graph-memory
+        python3 tools/scan_symbols.py --config macos \
+          --out tools/artifacts/refactoring-map-macos.json
+    - name: upload macos artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: refactor-map-macos
+        path: skynet/MCP-shared-graph-memory/tools/artifacts/refactoring-map-macos.json
+
+  merge-validate:
+    needs: [scan-linux, scan-macos]
+    runs-on: ubuntu-24.04
+    steps:
+    - uses: actions/checkout@v7
+      with:
+        fetch-depth: 0
+        submodules: true
+    - uses: actions/setup-python@v5
+      with:
+        python-version: "3.11"
+    - name: deps
+      run: python3 -m pip install --quiet cffi pyyaml
+    - name: download artifacts
+      uses: actions/download-artifact@v4
+      with:
+        path: artifacts
+        merge-multiple: true
+    - name: merge configs (implementations)
+      shell: bash
+      run: |
+        cd skynet/MCP-shared-graph-memory
+        mkdir -p tools/artifacts
+        mv "$GITHUB_WORKSPACE/artifacts/refactoring-map-linux.json" \
+           tools/artifacts/refactoring-map-linux.json
+        mv "$GITHUB_WORKSPACE/artifacts/refactoring-map-macos.json" \
+           tools/artifacts/refactoring-map-macos.json
+        python3 tools/scan_symbols.py --merge \
+          tools/artifacts/refactoring-map-linux.json \
+          tools/artifacts/refactoring-map-macos.json \
+          --out tools/artifacts/refactoring-map.json
+    - name: validate merged (fixture)
+      shell: bash
+      run: |
+        cd skynet/MCP-shared-graph-memory
+        python3 tools/validate_map.py --map tools/artifacts/refactoring-map.json \
+          --tus fixture
+    - name: upload merged map
+      uses: actions/upload-artifact@v4
+      with:
+        name: refactor-map-merged
+        path: skynet/MCP-shared-graph-memory/tools/artifacts/refactoring-map.json

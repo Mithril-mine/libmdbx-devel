@@ -60,6 +60,11 @@ ctest --test-dir build -L mcp-shared-graph-memory --output-on-failure
   cross-compile без эмулятора — пропускаются).
 - Альтернатива без CMake: `python3 tools/build_libmdbx.py && python3 -m pytest tests/`.
 
+Карта исходников и project-map собираются в CI: workflow
+`.github/workflows/ci-mcp-refactor-map.yml` (Linux + macOS) готовит
+`_build-scan`, запускает `scan_symbols.py` (linux/macos + merge),
+`scan_project.py`, `scan_probes.py` и валидатор против golden-счётчиков.
+
 ## Запуск
 
 ```bash

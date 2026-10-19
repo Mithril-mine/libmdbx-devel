@@ -227,9 +227,12 @@ group:task:B63            → {символы, тесты, записи, док�
    (unique pairs), unresolved 1295, coverage_pct 96.09%, uncovered 443
    островов. Тестовые домены: ut 2503 fn / issues 1936 fn /
    framework 2302 fn.
-5. **Шаг 2**: semantic-рёбра, реестр probes (из `docs/engineering/probe-bus.md`), коллекторы
-   coverage/test_metrics/ci_jobs, полноценный coverage от mdbx_test
-   (instrumented run), macOS-скан (нужен osxcross/SDK).
+5. **Шаг 2**: semantic-рёбра (генератор в `scan_symbols.py --merge`), реестр
+   probes (`probes`-таблица + `scan_probes.py`, см. probe-bus.md §4.1),
+   коллекторы coverage/test_metrics/ci_jobs (реализованы), полноценный
+   coverage от mdbx_test (instrumented run, pending),
+   **macOS-скан — через GitHub Actions** (`.github/workflows/ci-mcp-refactor-map.yml`,
+   runner macos-15; merge linux+macos в `implementations`).
 
 ## Ограничения (зафиксированы)
 
