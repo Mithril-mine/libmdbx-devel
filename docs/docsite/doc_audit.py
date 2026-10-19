@@ -179,7 +179,7 @@ def inventory_from_map(symbols):
 
 
 def parse_mdbx_h(path):
-    text = open(path).read()
+    text = Path(path).read_text(encoding="utf-8")
     defines = sorted(set(_MDBX_DEFINE.findall(text)))
     enumerators = []
     for m in _ENUM_BLOCK.finditer(text):
@@ -235,7 +235,7 @@ def parse_cpp_enums(paths):
     ident = re.compile(r"[A-Za-z_]\w*")
     for path in paths:
         try:
-            text = _strip_cpp_comments(open(path).read())
+            text = _strip_cpp_comments(Path(path).read_text(encoding="utf-8"))
         except OSError:
             continue
         base = os.path.basename(path)
@@ -305,9 +305,6 @@ def parse_cpp_enums(paths):
     return out
 
 
-_CORPUS_IDENT = re.compile(r"\b[A-Za-z_][A-Za-z0-9_]*\b")
-
-
 def build_corpus(dir_path):
     parts = []
     if not dir_path.is_dir():
@@ -330,15 +327,6 @@ def check_coverage(corpus, names, cache=None):
             cache[name] = bool(word_pattern(name).search(corpus))
         out[name] = cache[name]
     return out
-
-
-GENERIC_SHORT = frozenset({
-    "get", "set", "put", "del", "open", "close", "begin", "end", "next",
-    "prev", "first", "last", "count", "size", "empty", "clone", "move",
-    "swap", "clear", "read", "write", "copy", "bind", "commit", "abort",
-    "mode", "value", "data", "key", "info", "stat", "name", "path",
-    "result", "status", "error", "time", "length", "c_str", "compare",
-})
 
 
 def api_coverage_report(map_path: Path, repo: Path) -> int:
@@ -368,7 +356,6 @@ def api_coverage_report(map_path: Path, repo: Path) -> int:
     cpp_short_cov = check_coverage(corpus, cpp_short_names, cache)
     cpp_enum_names = sorted({e for _, _, es in cpp_enums for e in es})
     cpp_enum_cov = check_coverage(corpus, cpp_enum_names, cache)
-    generic = sorted(n for n in cpp_short_names if n in GENERIC_SHORT)
 
     def summarize(names, cov, label):
         total = len(names)
