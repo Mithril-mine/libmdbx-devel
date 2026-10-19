@@ -154,3 +154,23 @@ TEST(issue_gh0095, move_assign_reference_into_own_storage_keeps_storage) {
   EXPECT_EQ(capacity, a.capacity()) << "the storage must be kept, without reallocation";
   EXPECT_EQ(storage, a.data()) << "the storage must be kept, without reallocation";
 }
+
+TEST(issue_gh0094, append_and_add_header_from_content_into_tailroom) {
+  /* A source that starts in the content and runs into the tailroom is not
+   * wholly carried over when the storage grows, so it must be copied out too. */
+  buffer a(0, mdbx::slice("ABCD"), 3);
+  const size_t tr = a.tailroom();
+  ASSERT_GT(tr, 0u);
+  memset(a.end(), 'x', tr);
+  a.append(mdbx::slice(a.byte_ptr() + 2, 2 + tr));
+  EXPECT_EQ("ABCDCD" + std::string(tr, 'x'), std::string(a.char_ptr(), a.length()))
+      << "append() from the own content and tailroom";
+
+  buffer h(0, mdbx::slice("ABCD"), 3);
+  const size_t htr = h.tailroom();
+  ASSERT_EQ(0u, h.headroom());
+  memset(h.end(), 'y', htr);
+  h.add_header(mdbx::slice(h.byte_ptr() + 2, 2 + htr));
+  EXPECT_EQ("CD" + std::string(htr, 'y') + "ABCD", std::string(h.char_ptr(), h.length()))
+      << "add_header() from the own content and tailroom";
+}
