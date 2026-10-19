@@ -3,7 +3,7 @@
 > Related: [Installation and building](install-build.md) ·
 > [Tooling](../reference/tooling.md) · [Restrictions](../overview/restrictions.md) ·
 > [Textbook: Volume I "Fundamentals"](../textbook/01-tom-i-osnovy.md) ·
-> [C API reference](../reference/api/group__c__api.md)
+> [Quick CRUD](crud-quick.md) · [C API reference](../reference/api/group__c__api.md)
 
 Everything starts with an **environment** (`MDBX_env`): `mdbx_env_create()` →
 `mdbx_env_open()` → work → `mdbx_env_close()`. A non-zero `mode` argument of

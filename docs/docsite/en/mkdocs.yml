@@ -61,6 +61,7 @@ nav:
   - Getting started:
       - Install & build: getting-started/install-build.md
       - First steps: getting-started/first-steps.md
+      - Quick CRUD: getting-started/crud-quick.md
       - Durability modes: getting-started/durability-modes.md
   - Textbook:
       - About the textbook: textbook/index.md

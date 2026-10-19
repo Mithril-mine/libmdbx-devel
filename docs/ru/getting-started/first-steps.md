@@ -3,6 +3,7 @@
 > Смежные: [Установка и сборка](install-build.md) ·
 > [Тулинг](../reference/tooling.md) · [Ограничения](../overview/restrictions.md) ·
 > [Учебник: Том I «Основы»](../textbook/01-tom-i-osnovy.md) ·
+> [Шпаргалка CRUD](crud-quick.md) ·
 > [Справочник C API](https://libmdbx.dqdkfa.ru/docs/en/reference/api/group__c__api.html)
 
 Всё начинается с **окружения** (`MDBX_env`): `mdbx_env_create()` →

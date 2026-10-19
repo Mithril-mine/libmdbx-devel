@@ -18,6 +18,11 @@
   а также C++ API (`mdbx.h++`)
 - [Члены классов](https://libmdbx.dqdkfa.ru/docs/en/reference/api/class_members.html) · [Макросы](https://libmdbx.dqdkfa.ru/docs/en/reference/api/macros.html)
 
+Сами заголовки с полной встроенной документацией:
+
+- [Заголовок C API `mdbx.h`](https://libmdbx.dqdkfa.ru/docs/en/reference/api/mdbx_8h.html)
+- [Заголовок C++ API `mdbx.h++`](https://libmdbx.dqdkfa.ru/docs/en/reference/api/mdbx_8h_09_09.html)
+
 На этом же разделе: [утилиты командной строки](tooling.md).
 
 Вводное руководство — в [гайдах](../index.md); страница
