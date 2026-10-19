@@ -1841,6 +1841,74 @@ class Store:
                 removed += 1
         return {"removed_links": removed, "redirected_links": redirected}
 
+    # --- жизненный цикл: stale-пометка + поколения карты ----------------------
+    def map_mark_stale(self, live_keys: list) -> dict:
+        """Помечает символы, отсутствующие в live_keys, как stale.
+
+        В отличие от `map_refresh_stale` (удаляющего висячие ссылки), этот
+        метод НЕ удаляет записи symbols: проставляет `status: "stale"` в теле
+        символа (идемпотентно). Живые символы получают `status: "alive"`.
+        Удаление остаётся опцией (purge/refresh с удалением).
+        """
+        live = set(live_keys or [])
+        marked, unmarked = 0, 0
+        with self._begin_write() as txn:
+            syms = self.dbi(txn, "symbols")
+            with txn.cursor(syms) as cur:
+                rc, k, v = cur.get(mdbx.CURSOR_FIRST)
+                while rc == mdbx.RC_SUCCESS:
+                    key = k.decode("utf-8", "replace")
+                    body = json.loads(v)
+                    wanted = "alive" if key in live else "stale"
+                    if body.get("status") != wanted:
+                        body["status"] = wanted
+                        txn.put(syms, k,
+                                json.dumps(body, ensure_ascii=False).encode())
+                        if wanted == "stale":
+                            marked += 1
+                        else:
+                            unmarked += 1
+                    rc, k, v = cur.get(mdbx.CURSOR_NEXT)
+        return {"marked_stale": marked, "marked_alive": unmarked}
+
+    def map_generations(self) -> dict:
+        """Текущее поколение карты: canary.y (инкрементируется map_load_batch
+        при replace) + счётчики символов/рёбер."""
+        with self.env.begin(readonly=True) as txn:
+            syms = self.dbi(txn, "symbols")
+            n_syms = 0
+            with txn.cursor(syms) as cur:
+                rc, _, _ = cur.get(mdbx.CURSOR_FIRST)
+                while rc == mdbx.RC_SUCCESS:
+                    n_syms += 1
+                    rc, _, _ = cur.get(mdbx.CURSOR_NEXT)
+            canary = txn.canary_get()  # в той же txn (без вложенной)
+            return {"generation": canary.get("y", 0), "symbols": n_syms}
+
+    def map_diff(self, other=None) -> dict:
+        """Разница текущего снимка карты с `other` (генерацией или списком).
+
+        Если `other` — dict вида {"generation": G, "symbols": [keys]} от
+        более раннего снимка — вернёт добавленные/удалённые/общие символы.
+        """
+        cur_keys = set(self.map_symbols())
+        if isinstance(other, dict):
+            other_keys = set(other.get("symbols") or cur_keys)
+        elif isinstance(other, (list, set, tuple)):
+            other_keys = set(other)
+        else:
+            other_keys = set()
+        added = sorted(cur_keys - other_keys)
+        removed = sorted(other_keys - cur_keys)
+        common = sorted(cur_keys & other_keys)
+        return {"added": added, "removed": removed, "common": common,
+                "added_count": len(added), "removed_count": len(removed)}
+
+    def map_snapshot(self) -> dict:
+        """Полный снимок текущей карты (для map_generations/map_diff)."""
+        return {"generation": self.map_generations()["generation"],
+                "symbols": list(self.map_symbols())}
+
     # --- regions / uncovered (refactoring-map: #if-дерево и острова смысла) ---
     def map_regions(self, prefix: str = "", limit: int = None) -> list:
         """Сканирование таблицы regions (region:{module}:{n})."""

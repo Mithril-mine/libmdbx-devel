@@ -344,6 +344,18 @@ class McpServer:
                                                    "callee": {"type": "string"},
                                                    "kind": {"type": "string"}},
                                     "required": ["caller", "callee"]}),
+            ("map_mark_stale", "Пометить отсутствующие в live_keys символы "
+             "как stale (alive остальным).", ["live_keys"], {
+                 "type": "object",
+                 "properties": {"live_keys": {"type": "array"}},
+                 "required": ["live_keys"]}),
+            ("map_generations", "Поколение карты (canary.y) + счётчики.", [],
+             {"type": "object"}),
+            ("map_snapshot", "Полный снимок карты (для diff поколений).", [],
+             {"type": "object"}),
+            ("map_diff", "Разница текущего снимка с other (keys/generation).",
+             [], {"type": "object",
+                  "properties": {"other": {"type": "object"}}}),
         ]
         return {name: {"name": name, "description": desc, "inputSchema": schema}
                 for name, desc, _args, schema in t}
@@ -579,6 +591,14 @@ class McpServer:
             s.map_put_edge(args["caller"], args["callee"],
                            kind=args.get("kind", "syntax"))
             return {"result": "ok"}
+        if name == "map_mark_stale":
+            return s.map_mark_stale(args.get("live_keys") or [])
+        if name == "map_generations":
+            return s.map_generations()
+        if name == "map_snapshot":
+            return s.map_snapshot()
+        if name == "map_diff":
+            return s.map_diff(other=args.get("other"))
         raise MemoryError("NO_SUCH_TOOL", "invalid", "неизвестный инструмент %r" % name,
                           "проверьте tools/list", "none")
 
