@@ -298,6 +298,18 @@ def main() -> int:
         ctest_exclude = "ut\\.heavy"
         by_label = True
 
+    # Runtime limiter for the gtest binaries (tests/ut/test-env.h): a soft
+    # in-test deadline with a 60s margin under CI_CTEST_TIMEOUT (default 600),
+    # so long suites GTEST_SKIP() the remainder instead of being killed by the
+    # hard ctest timeout. GTEST_SHUFFLE=1 (random test order, so a different
+    # subset runs each night) is enabled for nightly runs only (CI_NIGHTLY=1).
+    env["GTEST_RUNTIME_LIMIT"] = os.environ.get(
+        "GTEST_RUNTIME_LIMIT",
+        str(max(int(os.environ.get("CI_CTEST_TIMEOUT", "600")) - 60, 60)),
+    )
+    if os.environ.get("CI_NIGHTLY", "") == "1":
+        env.setdefault("GTEST_SHUFFLE", "1")
+
     ctest_cmd = ["ctest", "--output-on-failure", "--parallel", "3",
                  "--schedule-random", "--no-tests=error",
                  "--timeout", os.environ.get("CI_CTEST_TIMEOUT", "600")]
