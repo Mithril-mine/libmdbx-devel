@@ -446,7 +446,6 @@ def walk(node, col: Collector):
             # path-based id: путь от корня функции через уровни вложенности.
             # Каждый уровень = число завершённых сиблингов + 1; вырожденные
             # макро-блоки не ломают нумерацию (контекст независим от строк).
-            depth = len(col._block_ctx)
             if not col._block_ctx:
                 bid = "B%d" % 1
                 col._block_ctx.append(1)
@@ -544,12 +543,12 @@ def canonicalize_symbols(symbols: dict) -> tuple:
                 if len(decls) > 1:
                     new_key = "%s@%s" % (base, e["module"])
                 if new_key not in new_funcs:
-                    e2 = dict(e); e2["is_definition"] = False
+                    e2 = dict(e)
+                    e2["is_definition"] = False
                     new_funcs[new_key] = e2
                 mapping[old_key] = new_key
             continue
         # несколько определений?
-        modules = {e["module"] for _, e in defs}
         files = {e["file"] for _, e in defs}
         sigs = {e["signature"] for _, e in defs}
         same_sig_all = len(sigs) == 1
@@ -766,7 +765,7 @@ def link_symbols_to_regions(symbols: dict, regions: list) -> dict:
     к внутреннему). Символы вне условной компиляции получают пустой
     список (явное отличие от отсутствия данных).
     """
-    from bisect import bisect_left, bisect_right
+    from bisect import bisect_right
     by_file = {}
     for r in regions:
         by_file.setdefault(r["file"], []).append(r)
@@ -988,18 +987,36 @@ def merge_configs(scans: list) -> tuple:
                 edges.append(e)
 
     out = {}
+    semantic_edges = []
     for key, s in merged.items():
         s.pop("_fps", None)
         s["in_configs"] = sorted(s["in_configs"])
         if "implementations" in s:
             impls = s["implementations"]
+            # semantic-рёбра: тела одного символа в разных конфигах
+            # функционально эквивалентны (реализуют одну функциональность).
+            # Оба конца — КАНОНИЧЕСКИЙ ключ (key@config endpoints не являются
+            # адресуемыми карточками): map_edges_of(key) вернёт ребро с
+            # kind=semantic и перечнем configs — «эквивалентные конфиги».
+            if len(impls) > 1:
+                # configs: distinct-тела (impls/configs) + конфиги с идентичным
+                # телом (in_configs) — иначе эквивалентность теряется
+                all_cfgs = {i.get("config") for i in impls}
+                for i in impls:
+                    all_cfgs.update(i.get("configs") or [])
+                all_cfgs.update(s.get("in_configs") or [])
+                semantic_edges.append({
+                    "kind": "semantic", "caller": key, "callee": key,
+                    "resolved": True, "ambiguous": False,
+                    "configs": sorted(all_cfgs - {None}),
+                })
             cfg_union = sorted({c for i in impls for c in i.get("configs", [])})
             for i in impls:
                 i.pop("configs", None)
             if cfg_union:
                 s["configs"] = cfg_union
         out[key] = s
-    return out, edges
+    return out, edges, semantic_edges
 
 
 def main():
@@ -1026,7 +1043,8 @@ def main():
                 art = json.load(f)
             scans.append({"config": art["config"], "symbols": art["symbols"],
                           "edges": art["edges"]})
-        symbols, edges = merge_configs(scans)
+        symbols, edges, semantic_edges = merge_configs(scans)
+        edges = edges + semantic_edges
         regions = build_regions(collect_source_files())
         counts = {
             "functions": sum(1 for v in symbols.values() if v["kind"] == "function"),
@@ -1036,6 +1054,7 @@ def main():
             "blocks": _count_blocks(symbols),
             "edges": len(edges),
             "unresolved_edges": sum(1 for e in edges if not e["resolved"]),
+            "semantic_edges": len(semantic_edges),
             "regions": len(regions),
         }
         artifact = {

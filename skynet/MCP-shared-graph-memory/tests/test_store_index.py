@@ -1,6 +1,6 @@
 """Тесты поиска: recall / search / lookup / инвертированный индекс."""
 
-from tests.conftest import seed_crypto, seed_vocab
+from tests.conftest import seed_vocab
 
 
 def setup(s):

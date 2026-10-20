@@ -40,7 +40,7 @@ jobs:
       with:
         python-version: "3.11"
     - name: deps
-      run: python3 -m pip install --quiet cffi pytest
+      run: python3 -m pip install --quiet cffi pytest pyyaml
     - name: configure
       shell: bash
       run: |

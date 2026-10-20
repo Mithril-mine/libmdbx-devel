@@ -25,7 +25,6 @@
   - force-sync после каждой записи (B3) × любой C = N.
 """
 
-import json
 import os
 import signal
 import subprocess
@@ -102,18 +101,23 @@ WRITER_TEMPLATE = textwrap.dedent(
 )
 
 
-def _writer_script():
-    """Записывает скрипт-писатель во временный каталог и возвращает путь."""
+def _writer_script(dir=None):
+    """Записывает скрипт-писатель в каталог `dir` и возвращает путь.
+
+    `dir=None` — mkdtemp БЕЗ очистки (утечка в /tmp): передавайте pytest
+    tmp_path, который чистится автоматически. Отдельный каталог
+    persist-writer-* больше не создаётся.
+    """
     import tempfile
-    d = tempfile.mkdtemp(prefix="persist-writer-")
+    d = str(dir) if dir is not None else tempfile.mkdtemp(prefix="persist-writer-")
     path = os.path.join(d, "writer.py")
     with open(path, "w") as f:
         f.write(WRITER_TEMPLATE.format(moddir=MODULE_DIR))
     return path
 
 
-def _spawn_writer(db_path, sync_mode, flush_each, mode="close"):
-    script = _writer_script()
+def _spawn_writer(db_path, sync_mode, flush_each, mode="close", dir=None):
+    script = _writer_script(dir)
     proc = subprocess.Popen(
         [sys.executable, script, db_path, sync_mode, "1" if flush_each else "0",
          str(N_RECORDS), mode],
@@ -196,7 +200,7 @@ def test_store_persistence_matrix(tmp_path, sync_mode, mode):
     """A2 (Store): режимы sync × способы завершения."""
     db = str(tmp_path / "t.mdbx")
     proc = subprocess.Popen(
-        [sys.executable, _writer_script(), db, sync_mode, "0",
+        [sys.executable, _writer_script(tmp_path), db, sync_mode, "0",
          str(N_RECORDS), mode],
         stdout=subprocess.PIPE, stderr=subprocess.PIPE)
     try:
@@ -241,7 +245,7 @@ def test_store_persistence_flush_each(tmp_path):
     """A2: safe_nosync + flush после КАЖДОЙ записи переживает SIGKILL."""
     db = str(tmp_path / "t.mdbx")
     proc = subprocess.Popen(
-        [sys.executable, _writer_script(), db, "safe_nosync", "1",
+        [sys.executable, _writer_script(tmp_path), db, "safe_nosync", "1",
          str(N_RECORDS), "hold"],
         stdout=subprocess.PIPE, stderr=subprocess.PIPE)
     try:
@@ -282,7 +286,7 @@ def test_kill9_nosync_readonly_wants_recovery(tmp_path):
     for attempt in range(4):
         db = str(tmp_path / ("t%d.mdbx" % attempt))
         proc = subprocess.Popen(
-            [sys.executable, _writer_script(), db, "safe_nosync", "0",
+            [sys.executable, _writer_script(tmp_path), db, "safe_nosync", "0",
              str(N_RECORDS), "kill9"],
             stdout=subprocess.PIPE, stderr=subprocess.PIPE)
         try:
@@ -324,8 +328,6 @@ def test_kill9_nosync_readonly_wants_recovery(tmp_path):
 
 def test_server_main_sigterm_flushes(tmp_path):
     """A3: MCP-сервер (main) по SIGTERM делает close -> force sync."""
-    import io
-    from mcp.mcp_server import main as server_main
     # запускаем реальный сервер в подпроцессе со stdin pipe (loop ждёт строк)
     import subprocess as sp
     env = dict(os.environ)
@@ -368,11 +370,8 @@ def test_readonly_blocks_writes(tmp_path):
     s0 = Store(db, readonly=False, _skip_sync_thread=True)
     s0.vocab_add("practice", "durability-zz")
     s0.close()
-    s = Store(db, readonly=True, _skip_sync_thread=True)
-    try:
+    with Store(db, readonly=True, _skip_sync_thread=True) as s:
         with pytest.raises(Exception) as ei:
             s.safe_store("fact:practice:durability-zz", "fact", "no", 0.5)
         text = str(ei.value)
         assert "READONLY_MODE" in text or "read-only" in text, text
-    finally:
-        s.close()

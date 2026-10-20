@@ -19,7 +19,6 @@ import pytest
 
 from mcp import Store
 from mcp.errors import MemoryError
-from mcp.libmdbx import LibmdbxError
 from mcp.mcp_server import McpServer
 
 MODULE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -281,3 +280,34 @@ def test_server_startup_log(tmp_path):
     assert "shared-graph-memory started" in p.stderr, p.stderr
     assert "CREATED-NEW" in p.stderr
     assert "readonly=True" in p.stderr, p.stderr
+
+
+def test_readonly_open_does_not_create_backup_dir(tmp_path, monkeypatch):
+    """Read-only открытие НЕ создаёт backup_dir/LIFELINE (без оснований)."""
+    monkeypatch.setenv("SHARED_GRAPH_MEMORY_BACKUP_DIR", str(tmp_path / "bk"))
+    db = str(tmp_path / "t.mdbx")
+    Store(db, _skip_sync_thread=True).close()   # rw создание
+    import os
+    import shutil
+    shutil.rmtree(str(tmp_path / "bk"), ignore_errors=True)  # убрать от rw
+    s = Store(db, readonly=True, _skip_sync_thread=True)
+    assert not os.path.exists(s.backup_dir), "readonly не создаёт backup_dir"
+    s.close()
+
+
+def test_auto_backup_skipped_when_db_unchanged(tmp_path, monkeypatch):
+    """Авто-бэкап не создаётся, если txnid не вырос (нет изменений)."""
+    monkeypatch.setenv("SHARED_GRAPH_MEMORY_BACKUP_DIR", str(tmp_path / "bk"))
+    monkeypatch.setenv("SHARED_GRAPH_MEMORY_AUTO_BACKUP_SECONDS", "1")
+    db = str(tmp_path / "t.mdbx")
+    with Store(db, _skip_sync_thread=True) as s:
+        # первый бэкап (БД изменилась при создании)
+        s.before_call()
+        n = len(_files(s, "auto-"))
+        assert n == 1, "первый auto-бэкап должен быть создан"
+        st = s._load_backup_state()
+        # нет изменений: следующий тик таймера НЕ должен плодить копии
+        st["last_auto"] = 0  # форсируем интервал
+        s._save_backup_state(st)
+        s.before_call()
+        assert len(_files(s, "auto-")) == n, "без изменений — бэкапа нет"
