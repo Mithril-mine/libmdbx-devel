@@ -2108,6 +2108,13 @@ class Store:
         загрузка не расходилась с чтениями после branch_activate.
         При replace=True очищается только ТЕКУЩИЙ слой (feature-префиксы
         чужих веток защищены _LAYER_KEY_RE).
+        `chunk` — размер порции элементов на одну write-txn (A2): коммит
+        каждые `chunk` записей освобождает writer-лок между порциями, чтобы
+        загрузка карты не вытесняла писателей роя в busy_io. Поколение
+        (canary.y) инкрементируется один раз в финальной txn — читатели
+        видят прежнее поколение вплоть до завершения. Загрузка идемпотентна:
+        перезапуск после обрыва эквивалентен (очистка в первом чанке +
+        upsert/put_nodupe).
         Возвращает счётчики для сверки.
         """
         layer = self._effective_layer(layer)
@@ -2117,63 +2124,85 @@ class Store:
         ce_dbi = self._dbi["call_edges"]
         rev_dbi = self._dbi["call_edges_rev"]
         gr_dbi = self._dbi["groups"]
-        with self._begin_write() as txn:
-            if replace:
-                # Очищаем только записи ТЕКУЩЕГО слоя. Важно: базовый слой
-                # (pre=="") не должен сносить feature-слои параллельных веток
-                # ("0.16.feat.N/...") — их защищает _LAYER_KEY_RE.
-                for dbi in (sym_dbi, ce_dbi, rev_dbi, gr_dbi):
-                    with txn.cursor(dbi) as cur:
-                        rc, k, _ = cur.get(mdbx.CURSOR_FIRST)
-                        while rc == mdbx.RC_SUCCESS:
-                            key = k.decode()
-                            if (not pre and not _LAYER_KEY_RE.match(key)) or \
-                               (pre and key.startswith(pre)):
-                                cur.delete()
-                            rc, k, _ = cur.get(mdbx.CURSOR_NEXT)
-                if not pre:
-                    # поколение карты при полном replace
-                    canary = txn.canary_get()
-                    txn.canary_put(x=canary.get("x", 0),
-                                   y=int(canary.get("y", 0)) + 1,
-                                   z=canary.get("z", 0))
-            sid_dbi = self._dbi["sym_ids"]
-            id2key_dbi = self._dbi["sym_id2key"]
-            for i, (key, body) in enumerate(sorted(symbols.items())):
-                skey = (pre + key).encode()
-                txn.put(sym_dbi, skey,
-                        json.dumps(body, ensure_ascii=False).encode())
-                put_sym += 1
-                # стабильный числовой id (НЕ чистится при replace)
-                rc, val = txn.get(sid_dbi, skey)
-                if val is None or len(val) != 8:
-                    nid = self._alloc_id_locked(txn)
-                    txn.put(sid_dbi, skey, _pack_u64(nid))
-                    txn.put(id2key_dbi, _pack_u64(nid), skey)
-            for e in edges:
-                # JSON-значение: kind, resolved, ambiguous, callee (+ configs)
-                body = {
-                    "kind": e.get("kind", "syntax"),
-                    "resolved": e.get("resolved", False),
-                    "ambiguous": e.get("ambiguous", False),
-                    "callee": pre + e["callee"],
-                }
-                if e.get("configs"):
-                    body["configs"] = sorted(set(e["configs"]))
-                val = json.dumps(body, ensure_ascii=False).encode()
-                with txn.cursor(ce_dbi) as cur:
-                    cur.put_nodupe((pre + e["caller"]).encode(), val)
-                put_edge += 1
-                # обратное ребро: callee → caller
-                with txn.cursor(rev_dbi) as cur:
-                    cur.put_nodupe((pre + e["callee"]).encode(),
-                                   (pre + e["caller"]).encode())
-            for gkey, members in groups.items():
-                with txn.cursor(gr_dbi) as cur:
-                    for m in members:
-                        cur.put_nodupe((pre + gkey).encode(),
-                                       (pre + m).encode())
+        sid_dbi = self._dbi["sym_ids"]
+        id2key_dbi = self._dbi["sym_id2key"]
+        # Рабочие элементы: ("sym", key, body) | ("edge", e) | ("grp", g, m).
+        # Порядок детерминирован (символы отсортированы) — идемпотентность
+        # перезапуска прерванной загрузки: put upsert/put_nodupe + очистка
+        # слоя в первом чанке делают повтор эквивалентным.
+        work = [("sym", k, b) for k, b in sorted(symbols.items())]
+        work += [("edge", e, None) for e in edges]
+        work += [("grp", gk, m) for gk, members in groups.items()
+                 for m in members]
+        # чанкинг по write-txn (A2): одна монолитная txn на ~25k put держит
+        # writer-лок секунды и вытесняет писателей роя в busy_io; коммитим
+        # каждые `chunk` элементов, освобождая лок между чанками.
+        chunk = max(1, int(chunk or 0))
+        chunks = [work[i:i + chunk] for i in range(0, len(work), chunk)] \
+            or [[]]
+        first = True
+        for part in chunks:
+            with self._begin_write() as txn:
+                if replace and first:
+                    # Очищаем только записи ТЕКУЩЕГО слоя. Важно: базовый слой
+                    # (pre=="") не должен сносить feature-слои параллельных
+                    # веток ("0.16.feat.N/...") — их защищает _LAYER_KEY_RE.
+                    # Идемпотентно: повторная загрузка после обрыва между
+                    # чанками начинается с той же очистки.
+                    for dbi in (sym_dbi, ce_dbi, rev_dbi, gr_dbi):
+                        with txn.cursor(dbi) as cur:
+                            rc, k, _ = cur.get(mdbx.CURSOR_FIRST)
+                            while rc == mdbx.RC_SUCCESS:
+                                key = k.decode()
+                                if (not pre and not _LAYER_KEY_RE.match(key)) \
+                                   or (pre and key.startswith(pre)):
+                                    cur.delete()
+                                rc, k, _ = cur.get(mdbx.CURSOR_NEXT)
+                first = False
+                for kind, k1, k2 in part:
+                    if kind == "sym":
+                        skey = (pre + k1).encode()
+                        txn.put(sym_dbi, skey,
+                                json.dumps(k2, ensure_ascii=False).encode())
+                        put_sym += 1
+                        # стабильный числовой id (НЕ чистится при replace)
+                        rc, val = txn.get(sid_dbi, skey)
+                        if val is None or len(val) != 8:
+                            nid = self._alloc_id_locked(txn)
+                            txn.put(sid_dbi, skey, _pack_u64(nid))
+                            txn.put(id2key_dbi, _pack_u64(nid), skey)
+                    elif kind == "edge":
+                        # JSON-значение: kind, resolved, ambiguous, callee...
+                        body = {
+                            "kind": k1.get("kind", "syntax"),
+                            "resolved": k1.get("resolved", False),
+                            "ambiguous": k1.get("ambiguous", False),
+                            "callee": pre + k1["callee"],
+                        }
+                        if k1.get("configs"):
+                            body["configs"] = sorted(set(k1["configs"]))
+                        val = json.dumps(body, ensure_ascii=False).encode()
+                        with txn.cursor(ce_dbi) as cur:
+                            cur.put_nodupe((pre + k1["caller"]).encode(), val)
+                        put_edge += 1
+                        # обратное ребро: callee → caller
+                        with txn.cursor(rev_dbi) as cur:
+                            cur.put_nodupe((pre + k1["callee"]).encode(),
+                                           (pre + k1["caller"]).encode())
+                    else:  # grp
+                        with txn.cursor(gr_dbi) as cur:
+                            cur.put_nodupe((pre + k1).encode(),
+                                           (pre + k2).encode())
                         put_grp += 1
+        if replace and not pre:
+            # поколение карты — ОДИН раз на целую загрузку, в финальной txn:
+            # промежуточные чанки не двигают generation (читатели видят
+            # прежнее поколение до завершения, атомарность поколения сохранена)
+            with self._begin_write() as txn:
+                canary = txn.canary_get()
+                txn.canary_put(x=canary.get("x", 0),
+                               y=int(canary.get("y", 0)) + 1,
+                               z=canary.get("z", 0))
         return {"symbols": put_sym, "edges": put_edge, "groups": put_grp}
 
     # --- canary (поколение карты / метки схемы) -------------------------
