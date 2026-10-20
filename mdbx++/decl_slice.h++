@@ -1,5 +1,8 @@
 // > dist-cutoff-begin
 #pragma once
+#if defined(DOXYGEN) || (defined(__cpp_lib_optional) && __cpp_lib_optional >= 201606L)
+#include <optional>
+#endif /* __cpp_lib_optional >= 201606L */
 #include "decl_exceptions.h++"
 namespace mdbx {
 // < dist-cutoff-end
@@ -489,6 +492,22 @@ struct LIBMDBX_API_TYPE slice : public ::MDBX_val {
   /// \brief Build a null slice which zero length and refers to null address.
   MDBX_CXX14_CONSTEXPR static slice null() noexcept { return slice(nullptr, size_t(0)); }
 
+  /// \brief Builds a "blank" slice for a \ref MDBX_RESERVE allocation: it has
+  /// a null data pointer but the requested non-zero length, which the C API
+  /// fills in on return from \ref txn::insert_reserve(), \ref txn::upsert_reserve()
+  /// and friends.
+  /// \details Since a null pointer with a non-zero length is rejected by the
+  /// ordinary \ref slice() constructor and \ref assign() (issue #142), this
+  /// explicit factory is the only way to spell the reserve form; it builds the
+  /// blank via the special private constructor (like \ref invalid()) but still
+  /// validates `length` against \ref MDBX_MAXDATASIZE, so an oversize request
+  /// throws \ref max_length_exceeded exactly as the old `slice(nullptr, N)`
+  /// spelling did.
+  /// \throws max_length_exceeded if `length` exceeds the maximum value size.
+  MDBX_CXX14_CONSTEXPR static slice blank_for_put_reserve(size_t length) {
+    return slice(/* validates length, then uses the unchecked special ctor */ check_length(length));
+  }
+
   template <typename POD> MDBX_CXX14_CONSTEXPR POD as_pod() const {
     static_assert(::std::is_standard_layout<POD>::value && !::std::is_pointer<POD>::value,
                   "Must be a standard layout type!");
@@ -500,6 +519,23 @@ struct LIBMDBX_API_TYPE slice : public ::MDBX_val {
       }
     throw_bad_value_size();
   }
+
+#if defined(DOXYGEN) || (defined(__cpp_lib_optional) && __cpp_lib_optional >= 201606L)
+  /// \brief Non-throwing counterpart of \ref as_pod(): returns `std::nullopt`
+  /// when the slice length does not exactly match `sizeof(POD)`.
+  /// \note The returned object is a copy of the referenced bytes, so the slice
+  /// need not outlive the result (issue #144).
+  template <typename POD> MDBX_CXX14_CONSTEXPR ::std::optional<POD> try_as_pod() const {
+    static_assert(::std::is_standard_layout<POD>::value && !::std::is_pointer<POD>::value,
+                  "Must be a standard layout type!");
+    if (MDBX_LIKELY(size() == sizeof(POD))) {
+      POD _as_pod_local;
+      memcpy(&_as_pod_local, data(), sizeof(_as_pod_local));
+      return _as_pod_local;
+    }
+    return ::std::nullopt;
+  }
+#endif /* __cpp_lib_optional >= 201606L */
 
 #ifdef MDBX_U128_TYPE
   MDBX_CXX14_CONSTEXPR MDBX_U128_TYPE as_uint128() const { return as_pod<MDBX_U128_TYPE>(); }
