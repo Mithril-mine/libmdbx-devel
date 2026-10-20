@@ -6,8 +6,9 @@ import tempfile
 
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(
     os.path.abspath(__file__))), "tools"))
-from scan_uncovered import (covered_ranges, find_islands, _merge_spans,
-                            _code_like, _classify_all, REPO_ROOT)  # noqa: E402
+from scan_uncovered import (  # noqa: E402
+    covered_ranges, find_islands, _merge_spans, _code_like, _classify_all, REPO_ROOT,
+)
 
 FIXTURES = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
                         "tests", "fixtures")
@@ -111,12 +112,10 @@ def test_classify_all_by_regions():
 
 def test_scan_regions_fixture_islands():
     """Сканер на реальной фикстуре регионов: острова внутри неактивных веток."""
-    import scan_symbols as s
     fixture = os.path.join(FIXTURES, "scan_regions_fixture.h")
-    regs = []
     with open(fixture) as f:
         from scan_regions import RegionBuilder
-        regs = RegionBuilder(fixture).parse(f.read().splitlines())
+        RegionBuilder(fixture).parse(f.read().splitlines())
     rel = os.path.relpath(fixture, REPO_ROOT)
     syms = {
         "fn:fixture:win_only": {"kind": "function", "file": rel, "l0": 6,

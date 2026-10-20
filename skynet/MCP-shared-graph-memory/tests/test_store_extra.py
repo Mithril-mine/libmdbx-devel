@@ -111,13 +111,12 @@ def test_begin_write_busy_retry(store, monkeypatch):
 
 def test_begin_write_busy_exhaust(store, monkeypatch):
     from mcp import libmdbx as mdbx
-    from mcp.errors import MemoryError as ME
 
     def fake(readonly=False, parent=None):
         raise mdbx.LibmdbxError(mdbx.RC_BUSY, "t")
 
     monkeypatch.setattr(store.env, "begin", fake)
-    with pytest.raises(ME):
+    with pytest.raises(MemoryError):
         store._begin_write()
 
 
@@ -270,7 +269,6 @@ def test_remove_topic_normalizer():
 
 def test_begin_write_non_busy_error(store, monkeypatch):
     from mcp import libmdbx as mdbx
-    from mcp.errors import MemoryError as ME
 
     def fake(readonly=False, parent=None):
         raise mdbx.LibmdbxError(mdbx.RC_MAP_FULL, "t")
@@ -442,13 +440,13 @@ def test_set_sync_mode_readonly_rejected(store_path):
     finally:
         s.close()
 
+
 def test_links_in_denormalized_counter(store):
     """Денормализованный счётчик входящих рёбер обновляется при link/unlink/purge."""
     from mcp.store import _pack_u64, _unpack_u64
     seed_vocab(store, [("crypto", "alignment"), ("platform", "android")])
     store.safe_store("bug:crypto:alignment", "bug", "bug one", 0.5)
     store.safe_store("fact:platform:android", "fact", "fact one", 0.5)
-    bug_id = store.get_record("bug:crypto:alignment")["_id"]
     fact_id = store.get_record("fact:platform:android")["_id"]
 
     def links_in(rid):

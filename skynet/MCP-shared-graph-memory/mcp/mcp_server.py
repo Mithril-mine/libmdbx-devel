@@ -45,7 +45,7 @@ class McpServer:
                  "properties": {
                      "key": {"type": "string"},
                      "type": {"type": "string", "enum": ["decision", "bug", "proc",
-                                                        "bottleneck", "fact", "event"]},
+                                                         "bottleneck", "fact", "event"]},
                      "summary": {"type": "string"},
                      "importance": {"type": "number"},
                      "date": {"type": "string"},
@@ -65,10 +65,10 @@ class McpServer:
                  "required": ["query"],
              }),
             ("lookup", "Точный поиск по инвертированному индексу.", ["term"], {
-                 "type": "object",
-                 "properties": {"term": {"type": "string"}},
-                 "required": ["term"],
-             }),
+                "type": "object",
+                "properties": {"term": {"type": "string"}},
+                "required": ["term"],
+            }),
             ("link", "Типизированная связь subject --predicate--> object "
              "(создаёт и обратную).", ["subject_key", "predicate", "object_key"], {
                  "type": "object",
@@ -78,17 +78,17 @@ class McpServer:
                  "required": ["subject_key", "predicate", "object_key"],
              }),
             ("unlink", "Удаление связи.", ["subject_key", "predicate", "object_key"], {
-                 "type": "object",
-                 "properties": {"subject_key": {"type": "string"},
-                                "predicate": {"type": "string"},
-                                "object_key": {"type": "string"}},
-                 "required": ["subject_key", "predicate", "object_key"],
-             }),
+                "type": "object",
+                "properties": {"subject_key": {"type": "string"},
+                               "predicate": {"type": "string"},
+                               "object_key": {"type": "string"}},
+                "required": ["subject_key", "predicate", "object_key"],
+            }),
             ("graph", "Обход графа связей от ключа.", ["key"], {
-                 "type": "object",
-                 "properties": {"key": {"type": "string"}, "depth": {"type": "integer"}},
-                 "required": ["key"],
-             }),
+                "type": "object",
+                "properties": {"key": {"type": "string"}, "depth": {"type": "integer"}},
+                "required": ["key"],
+            }),
             ("vocab_add", "Добавить модуль или тему в контролируемый словарь.",
              ["module"], {
                  "type": "object",
@@ -96,25 +96,25 @@ class McpServer:
                  "required": ["module"],
              }),
             ("vocab_find", "Fuzzy-поиск по словарю.", ["query"], {
-                 "type": "object",
-                 "properties": {"query": {"type": "string"}},
-                 "required": ["query"],
-             }),
+                "type": "object",
+                "properties": {"query": {"type": "string"}},
+                "required": ["query"],
+            }),
             ("exists", "Проверка существования записи по ключу.", ["key"], {
-                 "type": "object",
-                 "properties": {"key": {"type": "string"}},
-                 "required": ["key"],
-             }),
+                "type": "object",
+                "properties": {"key": {"type": "string"}},
+                "required": ["key"],
+            }),
             ("dump_context", "Снимок контекста перед сжатием.", [], {
-                 "type": "object",
-                 "properties": {"task": {"type": "string"}, "milestone": {"type": "string"},
-                                "keys": {"type": "array"}, "hypotheses": {"type": "array"}},
-             }),
+                "type": "object",
+                "properties": {"task": {"type": "string"}, "milestone": {"type": "string"},
+                               "keys": {"type": "array"}, "hypotheses": {"type": "array"}},
+            }),
             ("restore_context", "Восстановление контекста после сжатия.", ["context_id"], {
-                 "type": "object",
-                 "properties": {"context_id": {"type": "string"}},
-                 "required": ["context_id"],
-             }),
+                "type": "object",
+                "properties": {"context_id": {"type": "string"}},
+                "required": ["context_id"],
+            }),
             ("gc", "Тиринг записей hot/warm/cold (никогда не удаляет без явного purge).",
              [], {
                  "type": "object",
@@ -122,10 +122,10 @@ class McpServer:
                                 "archive": {"type": "boolean"}},
              }),
             ("purge", "Явное удаление записей и их индексов.", ["keys"], {
-                 "type": "object",
-                 "properties": {"keys": {"type": "array", "items": {"type": "string"}}},
-                 "required": ["keys"],
-             }),
+                "type": "object",
+                "properties": {"keys": {"type": "array", "items": {"type": "string"}}},
+                "required": ["keys"],
+            }),
             ("stats", "Статистика хранилища.", [], {"type": "object"}),
             ("db_status", "Диагностика БД по мета-страницам/bootid/txnid "
              "(живут в файле, НЕ в LCK): preopen.recent_txnid + env.meta_txnid, "
@@ -137,8 +137,8 @@ class McpServer:
              [], {"type": "object",
                   "properties": {"check": {"type": "boolean"}}}),
             ("db_stat", "Статистика env или конкретной таблицы.", [], {
-                 "type": "object",
-                 "properties": {"table": {"type": "string"}}}),
+                "type": "object",
+                "properties": {"table": {"type": "string"}}}),
             ("db_set_mode", "Переключение режима БД: sync "
              "(durable|metasync|safe_nosync) на лету; readonly true/false — "
              "переоткрытие env. По умолчанию сервер стартует read-only; для "
@@ -182,30 +182,44 @@ class McpServer:
              "(preparation/gc/write/sync/ending/whole в µs) + сводка по окну. "
              "gc_prof заполняется только в сборках с MDBX_ENABLE_PROFGC.",
              [], {"type": "object"}),
-("db_recover", "Диагностика меты для восстановления (безопасный probe; "
-              "open_for_recovery требует остановленного сервера). target_meta=0..2. "
-              "Обычно предпочтителен mdbx_chk или восстановление из db_backup.",
-              [], {"type": "object",
-                   "properties": {"target_meta": {"type": "integer"}}}),
+            ("db_recover", "Диагностика меты для восстановления (безопасный probe; "
+             "open_for_recovery требует остановленного сервера). target_meta=0..2. "
+             "Обычно предпочтителен mdbx_chk или восстановление из db_backup.",
+             [], {"type": "object",
+                  "properties": {"target_meta": {"type": "integer"}}}),
             ("map_symbol", "Символ карты исходников по fq-ключу (fn:/type:/macro:).",
-             [], {"type": "object", "properties": {"key": {"type": "string"}}}),
-            ("map_symbols", "Префиксный список символов карты (limit).",
+             ["key"], {"type": "object",
+                       "properties": {"key": {"type": "string"},
+                                      "layer": {"type": "string"}},
+                       "required": ["key"]}),
+            ("map_symbols", "Префиксный список символов карты (limit, layer).",
              [], {"type": "object", "properties": {"prefix": {"type": "string"},
-                                                  "limit": {"type": "integer"}}}),
-            ("map_edges_of", "Исходящие вызовы символа (caller -> callee).",
-             [], {"type": "object", "properties": {"caller": {"type": "string"}}}),
-            ("map_callers_of", "Кто вызывает символ (обратные рёбра, impact).",
-             [], {"type": "object", "properties": {"callee": {"type": "string"}}}),
+                                                   "limit": {"type": "integer"},
+                                                   "layer": {"type": "string"}}}),
+            ("map_edges_of", "Исходящие вызовы символа (caller -> callee; "
+             "принимает caller|symbol, layer).", [], {"type": "object",
+                                                      "properties": {"caller": {"type": "string"},
+                                                                     "symbol": {"type": "string"},
+                                                                     "layer": {"type": "string"}}}),
+            ("map_callers_of", "Кто вызывает символ (callee|symbol, layer; impact).",
+             [], {"type": "object",
+                  "properties": {"callee": {"type": "string"},
+                                 "symbol": {"type": "string"},
+                                 "layer": {"type": "string"}}}),
             ("map_group_members", "Члены фасет-группы (group:{kind}:{name}).",
-             [], {"type": "object", "properties": {"group": {"type": "string"}}}),
+             ["group"], {"type": "object",
+                         "properties": {"group": {"type": "string"}},
+                         "required": ["group"]}),
             ("map_regions", "#if-дерево: префиксный список регионов region:{module}:{n}.",
              [], {"type": "object", "properties": {"prefix": {"type": "string"},
                                                    "limit": {"type": "integer"}}}),
             ("map_region", "Один регион #if-дерева по ключу.",
-             [], {"type": "object", "properties": {"key": {"type": "string"}}}),
-("map_uncovered", "Uncovered-острова смысла (префикс модуля, limit).",
+             ["key"], {"type": "object",
+                       "properties": {"key": {"type": "string"}},
+                       "required": ["key"]}),
+            ("map_uncovered", "Uncovered-острова смысла (префикс модуля, limit).",
              [], {"type": "object", "properties": {"prefix": {"type": "string"},
-                                                    "limit": {"type": "integer"}}}),
+                                                   "limit": {"type": "integer"}}}),
             ("test_metrics_insert", "Зафиксировать длительность тест-кейса "
              "(скользящее окно истории).", ["test"], {
                  "type": "object",
@@ -226,15 +240,57 @@ class McpServer:
              ["test"], {"type": "object",
                         "properties": {"test": {"type": "string"},
                                        "symbols": {"type": "array"},
-                                       "pct": {"type": "number"}},
+                                       "pct": {"type": "number"},
+                                       "layer": {"type": "string"}},
                         "required": ["test", "symbols"]}),
-            ("coverage_get", "Покрытие конкретного теста.", ["test"],
+            ("coverage_get", "Покрытие конкретного теста (layer).", ["test"],
              {"type": "object",
-              "properties": {"test": {"type": "string"}},
+              "properties": {"test": {"type": "string"},
+                             "layer": {"type": "string"}},
               "required": ["test"]}),
-            ("coverage_all", "Все покрытия (limit).", [],
+            ("coverage_all", "Все покрытия слоя (limit, layer).", [],
              {"type": "object",
-              "properties": {"limit": {"type": "integer"}}}),
+              "properties": {"limit": {"type": "integer"},
+                             "layer": {"type": "string"}}}),
+            ("coverage_batch", "Батчевая фиксация покрытия {test: {symbols, pct}}.",
+             ["tests"], {"type": "object",
+                         "properties": {"tests": {"type": "object"},
+                                        "layer": {"type": "string"}},
+                         "required": ["tests"]}),
+            ("coverage_symbols", "Тесты, покрывающие символы (prefix, layer).",
+             [], {"type": "object",
+                  "properties": {"symbol_prefix": {"type": "string"},
+                                 "limit": {"type": "integer"},
+                                 "layer": {"type": "string"}}}),
+            ("coverage_remove", "Удалить покрытие теста + covered_by + блоки.",
+             ["test"],
+             {"type": "object",
+              "properties": {"test": {"type": "string"},
+                             "layer": {"type": "string"}},
+              "required": ["test"]}),
+            ("coverage_summary", "Сводка покрытия слоя по модулям "
+             "(union: покрыто ≥1 тестом).", [],
+             {"type": "object",
+              "properties": {"module": {"type": "string"},
+                             "layer": {"type": "string"}}}),
+            ("coverage_blocks_insert", "Сохранить блочную детализацию "
+             "покрытия теста (blocks).", ["test", "blocks"], {
+                 "type": "object",
+                 "properties": {"test": {"type": "string"},
+                                "blocks": {"type": "array"},
+                                "layer": {"type": "string"}},
+                 "required": ["test", "blocks"]}),
+            ("coverage_blocks_get", "Блоки символа, покрытые тестом.",
+             ["test", "symbol"], {"type": "object",
+                                  "properties": {"test": {"type": "string"},
+                                                 "symbol": {"type": "string"},
+                                                 "layer": {"type": "string"}},
+                                  "required": ["test", "symbol"]}),
+            ("coverage_gaps", "Белые пятна: символы module без покрытия.",
+             [], {"type": "object",
+                  "properties": {"module": {"type": "string"},
+                                 "layer": {"type": "string"},
+                                 "limit": {"type": "integer"}}}),
             ("ci_jobs_insert", "Зафиксировать параметры CI-джобы "
              "(\"{workflow}/{job}\").", ["job"], {
                  "type": "object",
@@ -245,6 +301,205 @@ class McpServer:
              {"type": "object",
               "properties": {"prefix": {"type": "string"},
                              "limit": {"type": "integer"}}}),
+            ("ci_jobs_get", "Параметры одной CI-джобы.", ["job"],
+             {"type": "object",
+              "properties": {"job": {"type": "string"}},
+              "required": ["job"]}),
+            ("ci_jobs_by_test", "Джобы, исполняющие тест.", ["test"],
+             {"type": "object",
+              "properties": {"test": {"type": "string"}},
+              "required": ["test"]}),
+            ("project_load", "Загрузить project-map (files+file_deps).",
+             ["files"], {"type": "object",
+                         "properties": {"files": {"type": "object"},
+                                        "edges": {"type": "array"},
+                                        "replace": {"type": "boolean"}},
+                         "required": ["files"]}),
+            ("project_files", "Файлы проекта по префиксу пути.", [],
+             {"type": "object",
+              "properties": {"prefix": {"type": "string"},
+                             "limit": {"type": "integer"}}}),
+            ("file_deps", "Зависимости файла (file:path).", ["path"],
+             {"type": "object",
+              "properties": {"path": {"type": "string"}},
+              "required": ["path"]}),
+            ("file_dependents", "Файлы, зависящие от path.", ["path"],
+             {"type": "object",
+              "properties": {"path": {"type": "string"},
+                             "limit": {"type": "integer"}},
+              "required": ["path"]}),
+            ("probe_add", "Регистрация зонда (SystemMap), dedup по тегу.", ["tag"],
+             {"type": "object",
+              "properties": {"tag": {"type": "string"},
+                             "kind": {"type": "string"},
+                             "mechanism": {"type": "string"},
+                             "test_theme": {"type": "string"},
+                             "symbol": {"type": "string"},
+                             "file": {"type": "string"},
+                             "line": {"type": "integer"},
+                             "status": {"type": "string"},
+                             "layer": {"type": "string"}},
+              "required": ["tag"]}),
+            ("probe_batch", "Батчевая регистрация зондов (scan_probes.py).",
+             ["probes"], {"type": "object",
+                          "properties": {"probes": {"type": "array"},
+                                         "layer": {"type": "string"}},
+                          "required": ["probes"]}),
+            ("probe_get", "Зонд по тегу (layer).", ["tag"],
+             {"type": "object",
+              "properties": {"tag": {"type": "string"},
+                             "layer": {"type": "string"}},
+              "required": ["tag"]}),
+            ("probe_list", "Зонды по префиксу/kind.", [],
+             {"type": "object",
+              "properties": {"prefix": {"type": "string"},
+                             "kind": {"type": "string"},
+                             "limit": {"type": "integer"},
+                             "layer": {"type": "string"}}}),
+            ("probe_status", "Сменить статус зонда (candidate/inserted/"
+             "validated).", ["tag", "status"],
+             {"type": "object",
+              "properties": {"tag": {"type": "string"},
+                             "status": {"type": "string"},
+                             "layer": {"type": "string"}},
+              "required": ["tag", "status"]}),
+            ("probe_remove", "Удалить зонд (layer).", ["tag"],
+             {"type": "object",
+              "properties": {"tag": {"type": "string"},
+                             "layer": {"type": "string"}},
+              "required": ["tag"]}),
+            ("trace_ingest", "Наблюдаемый вызов (runtime): caller → callee.",
+             ["caller", "callee"], {"type": "object",
+                                    "properties": {"caller": {"type": "string"},
+                                                   "callee": {"type": "string"},
+                                                   "count": {"type": "integer"},
+                                                   "label": {"type": "string"},
+                                                   "layer": {"type": "string"}},
+                                    "required": ["caller", "callee"]}),
+            ("trace_ingest_batch", "Батчевый ingest наблюдаемых вызовов "
+             "(одна txn) из дампа probe-bus/счётчиков.", ["pairs"], {
+                 "type": "object",
+                 "properties": {"pairs": {"type": "array"},
+                                "layer": {"type": "string"}},
+                 "required": ["pairs"]}),
+            ("trace_observed", "Наблюдаемые вызовы слоя (prefix caller).", [],
+             {"type": "object",
+              "properties": {"caller": {"type": "string"},
+                             "layer": {"type": "string"}}}),
+            ("trace_path", "Пути по observed-рёбрам src → dst.",
+             ["src", "dst"], {"type": "object",
+                              "properties": {"src": {"type": "string"},
+                                             "dst": {"type": "string"},
+                                             "depth": {"type": "integer"},
+                                             "limit": {"type": "integer"},
+                                             "layer": {"type": "string"}},
+                              "required": ["src", "dst"]}),
+            ("trace_compare", "Compare static (call_edges) vs observed (traces).",
+             ["symbol"], {"type": "object",
+                          "properties": {"symbol": {"type": "string"},
+                                         "layer": {"type": "string"}},
+                          "required": ["symbol"]}),
+            ("map_put_edge", "Записать ребро вызова (kind: syntax|semantic).",
+             ["caller", "callee"], {"type": "object",
+                                    "properties": {"caller": {"type": "string"},
+                                                   "callee": {"type": "string"},
+                                                   "kind": {"type": "string"},
+                                                   "layer": {"type": "string"},
+                                                   "configs": {"type": "array"}},
+                                    "required": ["caller", "callee"]}),
+            ("map_mark_stale", "Пометить отсутствующие в live_keys символы "
+             "как stale (alive остальным).", ["live_keys"], {
+                 "type": "object",
+                 "properties": {"live_keys": {"type": "array"}},
+                 "required": ["live_keys"]}),
+            ("map_generations", "Поколение карты (canary.y) + счётчики.", [],
+             {"type": "object"}),
+            ("map_snapshot", "Полный снимок карты (для diff поколений).", [],
+             {"type": "object",
+              "properties": {"layer": {"type": "string"}}}),
+            ("map_port_status", "Приборная панель миграции C→C++ "
+             "(cpp_status по модулям + топ непортированных).", [],
+             {"type": "object",
+              "properties": {"module": {"type": "string"},
+                             "layer": {"type": "string"}}}),
+            ("map_diff", "Разница текущего снимка с other (keys/generation).",
+             [], {"type": "object",
+                  "properties": {"other": {"type": "object"}}}),
+            ("adr_update", "Сохранить/обновить ADR (context/decision/consequences).",
+             ["name"], {"type": "object",
+                        "properties": {"name": {"type": "string"},
+                                       "title": {"type": "string"},
+                                       "status": {"type": "string"},
+                                       "date": {"type": "string"},
+                                       "context": {"type": "string"},
+                                       "decision": {"type": "string"},
+                                       "consequences": {"type": "string"},
+                                       "sections": {"type": "object"}},
+                        "required": ["name"]}),
+            ("adr_get", "Получить ADR по имени.", ["name"],
+             {"type": "object",
+              "properties": {"name": {"type": "string"}},
+              "required": ["name"]}),
+            ("adr_outline", "Обзор всех ADR (title/status/date).", [],
+             {"type": "object",
+              "properties": {"prefix": {"type": "string"},
+                             "limit": {"type": "integer"}}}),
+            ("adr_delete", "Удалить ADR.", ["name"],
+             {"type": "object",
+              "properties": {"name": {"type": "string"}},
+              "required": ["name"]}),
+            ("cbm_link", "Мост: наш fq-ключ ↔ узел codebase-memory-mcp.",
+             ["our_key", "cbm_node"], {"type": "object",
+                                       "properties": {"our_key": {"type": "string"},
+                                                      "cbm_node": {"type": "string"},
+                                                      "cbm_project": {"type": "string"}},
+                                       "required": ["our_key", "cbm_node"]}),
+            ("cbm_unlink", "Убрать мост для нашего ключа.", ["our_key"],
+             {"type": "object",
+              "properties": {"our_key": {"type": "string"}},
+              "required": ["our_key"]}),
+            ("cbm_linked", "Список мостов по префиксу.", [],
+             {"type": "object",
+              "properties": {"prefix": {"type": "string"},
+                             "limit": {"type": "integer"}}}),
+            ("cbm_search", "Поиск в codebase-memory-mcp (CLI, опционально).",
+             ["query"], {"type": "object",
+                         "properties": {"query": {"type": "string"},
+                                        "project": {"type": "string"},
+                                        "tool": {"type": "string"},
+                                        "args": {"type": "object"}},
+                         "required": ["query"]}),
+            ("version_info", "Версии: модуль / libmdbx / схема данных / данные.",
+             [], {"type": "object"}),
+            ("branch_register", "Регистрация слоя ветки "
+             "({ver}.{feature}.{n}).", ["ver_slug"], {
+                 "type": "object",
+                 "properties": {"ver_slug": {"type": "string"},
+                                "feature_slug": {"type": "string"},
+                                "n_commits": {"type": "integer"},
+                                "revision": {"type": "string"},
+                                "git_tag": {"type": "string"},
+                                "base_branch": {"type": "string"},
+                                "status": {"type": "string"}},
+                 "required": ["ver_slug"]}),
+            ("branch_list", "Список слоёв веток (base_only?).", [],
+             {"type": "object",
+              "properties": {"base_only": {"type": "boolean"}}}),
+            ("branch_current", "Активный слой.", [], {"type": "object"}),
+            ("branch_activate", "Активировать слой.", ["layer"],
+             {"type": "object",
+              "properties": {"layer": {"type": "string"}},
+              "required": ["layer"]}),
+            ("branch_remove", "Убрать слой ветки.", ["layer"],
+             {"type": "object",
+              "properties": {"layer": {"type": "string"}},
+              "required": ["layer"]}),
+            ("map_diff_branches", "Структурный diff двух слоёв (по содержимому).",
+             ["from_layer", "to_layer"], {"type": "object",
+                                          "properties": {"from_layer": {"type": "string"},
+                                                         "to_layer": {"type": "string"},
+                                                         "limit": {"type": "integer"}},
+                                          "required": ["from_layer", "to_layer"]}),
         ]
         return {name: {"name": name, "description": desc, "inputSchema": schema}
                 for name, desc, _args, schema in t}
@@ -381,14 +636,26 @@ class McpServer:
             target = int(args.get("target_meta", 0))
             return s.recover(target)
         if name == "map_symbol":
-            return s.map_symbol(args["key"])
+            return s.map_symbol(args["key"], layer=args.get("layer", ""))
         if name == "map_symbols":
             return {"symbols": s.map_symbols(args.get("prefix", ""),
-                                             limit=args.get("limit"))}
+                                             limit=args.get("limit"),
+                                             layer=args.get("layer", ""))}
         if name == "map_edges_of":
-            return {"edges": s.map_edges_of(args["caller"])}
+            # алиас: агент может передать caller или symbol (семант. имя)
+            sym = args.get("caller") or args.get("symbol")
+            if not sym:
+                raise MemoryError(
+                    "invalid", "invalid", "map_edges_of требует 'caller' или 'symbol'",
+                    "укажите символ", "none")
+            return {"edges": s.map_edges_of(sym, layer=args.get("layer", ""))}
         if name == "map_callers_of":
-            return {"callers": s.map_callers_of(args["callee"])}
+            sym = args.get("callee") or args.get("symbol")
+            if not sym:
+                raise MemoryError(
+                    "invalid", "invalid", "map_callers_of требует 'callee' или 'symbol'",
+                    "укажите символ", "none")
+            return {"callers": s.map_callers_of(sym, layer=args.get("layer", ""))}
         if name == "map_group_members":
             return {"members": s.map_group_members(args["group"])}
         if name == "map_regions":
@@ -411,16 +678,161 @@ class McpServer:
                                                 limit=args.get("limit"))}
         if name == "coverage_insert":
             return s.coverage_insert(args["test"], args.get("symbols") or [],
-                                     float(args.get("pct", 0.0)))
+                                     float(args.get("pct", 0.0)),
+                                     layer=args.get("layer", ""))
         if name == "coverage_get":
-            return s.coverage_get(args["test"])
+            return s.coverage_get(args["test"], layer=args.get("layer", ""))
         if name == "coverage_all":
-            return {"coverage": s.coverage_all(limit=args.get("limit"))}
+            return {"coverage": s.coverage_all(limit=args.get("limit"),
+                                               layer=args.get("layer", ""))}
+        if name == "coverage_batch":
+            return s.coverage_batch(args.get("tests") or {},
+                                    layer=args.get("layer", ""))
+        if name == "coverage_symbols":
+            return {"symbols": s.coverage_symbols(
+                args.get("symbol_prefix", ""), limit=args.get("limit"),
+                layer=args.get("layer", ""))}
+        if name == "coverage_remove":
+            return s.coverage_remove(args["test"], layer=args.get("layer", ""))
+        if name == "coverage_summary":
+            return s.coverage_summary(module=args.get("module", ""),
+                                      layer=args.get("layer", ""))
+        if name == "coverage_blocks_insert":
+            return {"stored": s.coverage_blocks_insert(
+                args["test"], args.get("blocks") or [],
+                layer=args.get("layer", ""))}
+        if name == "coverage_blocks_get":
+            return {"blocks": s.coverage_blocks_get(
+                args["test"], args["symbol"], layer=args.get("layer", ""))}
+        if name == "coverage_gaps":
+            return s.coverage_gaps(module=args.get("module", ""),
+                                   layer=args.get("layer", ""),
+                                   limit=args.get("limit"))
         if name == "ci_jobs_insert":
             return s.ci_jobs_insert(args["job"], args.get("body") or {})
         if name == "ci_jobs_all":
             return {"jobs": s.ci_jobs_all(args.get("prefix", ""),
                                           limit=args.get("limit"))}
+        if name == "ci_jobs_get":
+            return s.ci_jobs_get(args["job"])
+        if name == "ci_jobs_by_test":
+            return {"jobs": s.ci_jobs_by_test(args["test"])}
+        if name == "project_load":
+            return s.project_load(args.get("files") or {},
+                                  args.get("edges") or [],
+                                  replace=bool(args.get("replace", True)))
+        if name == "project_files":
+            return {"files": s.project_files(args.get("prefix", ""),
+                                             limit=args.get("limit"))}
+        if name == "file_deps":
+            return {"deps": s.file_deps(args["path"])}
+        if name == "file_dependents":
+            return {"dependents": s.file_dependents(
+                args["path"], limit=args.get("limit"))}
+        if name == "probe_add":
+            # kind/status передаются только если указаны (None => merge сохранит старое)
+            return s.probe_add(args["tag"], kind=args.get("kind"),
+                               mechanism=args.get("mechanism", ""),
+                               test_theme=args.get("test_theme", ""),
+                               symbol=args.get("symbol", ""),
+                               file=args.get("file", ""),
+                               line=int(args.get("line", 0)),
+                               status=args.get("status"),
+                               layer=args.get("layer", ""))
+        if name == "probe_batch":
+            return s.probe_batch(args.get("probes") or [],
+                                 layer=args.get("layer", ""))
+        if name == "probe_get":
+            return s.probe_get(args["tag"], layer=args.get("layer", ""))
+        if name == "probe_list":
+            return {"probes": s.probe_list(args.get("prefix", ""),
+                                           kind=args.get("kind", ""),
+                                           limit=args.get("limit"),
+                                           layer=args.get("layer", ""))}
+        if name == "probe_status":
+            return s.probe_status(args["tag"], args["status"],
+                                  layer=args.get("layer", ""))
+        if name == "probe_remove":
+            return s.probe_remove(args["tag"], layer=args.get("layer", ""))
+        if name == "trace_ingest":
+            return s.trace_ingest(args["caller"], args["callee"],
+                                  count=int(args.get("count", 1)),
+                                  label=args.get("label", ""),
+                                  layer=args.get("layer", ""))
+        if name == "trace_ingest_batch":
+            return s.trace_ingest_batch(args.get("pairs") or [],
+                                        layer=args.get("layer", ""))
+        if name == "trace_observed":
+            return {"traces": s.trace_observed(args.get("caller", ""),
+                                               layer=args.get("layer", ""))}
+        if name == "trace_path":
+            return {"paths": s.trace_path(args["src"], args["dst"],
+                                          depth=int(args.get("depth", 5)),
+                                          limit=args.get("limit", 50),
+                                          layer=args.get("layer", ""))}
+        if name == "trace_compare":
+            return s.trace_compare(args["symbol"],
+                                   layer=args.get("layer", ""))
+        if name == "map_put_edge":
+            s.map_put_edge(args["caller"], args["callee"],
+                           kind=args.get("kind", "syntax"),
+                           layer=args.get("layer", ""),
+                           configs=args.get("configs"))
+            return {"result": "ok"}
+        if name == "map_mark_stale":
+            return s.map_mark_stale(args.get("live_keys") or [])
+        if name == "map_generations":
+            return s.map_generations()
+        if name == "map_snapshot":
+            return s.map_snapshot(layer=args.get("layer", ""))
+        if name == "map_port_status":
+            return s.map_port_status(module=args.get("module", ""),
+                                     layer=args.get("layer", ""))
+        if name == "map_diff":
+            return s.map_diff(other=args.get("other"))
+        if name == "adr_update":
+            return s.adr_update(args["name"], args)
+        if name == "adr_get":
+            return s.adr_get(args["name"])
+        if name == "adr_outline":
+            return {"adr": s.adr_outline(args.get("prefix", ""),
+                                         limit=args.get("limit"))}
+        if name == "adr_delete":
+            return s.adr_delete(args["name"])
+        if name == "cbm_link":
+            return s.cbm_link(args["our_key"], args["cbm_node"],
+                              cbm_project=args.get("cbm_project", ""))
+        if name == "cbm_unlink":
+            return s.cbm_unlink(args["our_key"])
+        if name == "cbm_linked":
+            return {"bridges": s.cbm_linked(args.get("prefix", ""),
+                                            limit=args.get("limit"))}
+        if name == "cbm_search":
+            return s.cbm_search(args["query"],
+                                project=args.get("project", ""),
+                                tool=args.get("tool", "search_graph"),
+                                args=args.get("args"))
+        if name == "version_info":
+            return s.version_info()
+        if name == "branch_register":
+            return s.branch_register(
+                args["ver_slug"], feature_slug=args.get("feature_slug", "base"),
+                n_commits=int(args.get("n_commits", 0)),
+                revision=args.get("revision", ""),
+                git_tag=args.get("git_tag", ""),
+                base_branch=args.get("base_branch", ""),
+                status=args.get("status", "active"))
+        if name == "branch_list":
+            return {"branches": s.branch_list(base_only=bool(args.get("base_only")))}
+        if name == "branch_current":
+            return s.branch_current()
+        if name == "branch_activate":
+            return s.branch_activate(args["layer"])
+        if name == "branch_remove":
+            return s.branch_remove(args["layer"])
+        if name == "map_diff_branches":
+            return s.map_diff_branches(args["from_layer"], args["to_layer"],
+                                       limit=args.get("limit"))
         raise MemoryError("NO_SUCH_TOOL", "invalid", "неизвестный инструмент %r" % name,
                           "проверьте tools/list", "none")
 
@@ -462,6 +874,15 @@ def main(argv=None):
     if readonly and not os.path.exists(path):
         Store(path, readonly=False).close()
         created = True
+    elif not readonly:
+        # rw-старт: создаём/обновляем схему (новые таблицы для старых БД);
+        # временный Store ЗАКРЫВАЕМ до основного открытия
+        with Store(path, readonly=False) as _upg:
+            _upg.upgrade()
+    # readonly-старт существующей БД НЕ выполняет upgrade (никаких rw-записей
+    # без явного выбора write-режима): новые таблицы создаются при первом
+    # rw-старте или переключении режима; readonly-чтение переживает их
+    # отсутствие (tolerant None-handle в Store.__init__).
     try:
         store = Store(path, readonly=readonly)
     except mdbx.LibmdbxError as e:
