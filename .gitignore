@@ -5,6 +5,7 @@
 *.autosave
 *.bak
 build/
+build-*/
 build.ninja
 cmake-build-*
 _build-*/

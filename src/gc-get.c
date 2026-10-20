@@ -903,10 +903,13 @@ const char *gc_check_rowdata(const MDBX_txn *const txn, const MDBX_val data) {
   const const_pnl_t pnl = data.iov_base;
   if (unlikely(data.iov_len < MDBX_PNL_SIZEOF(pnl)))
     return "trimmed GC-record";
-  if (unlikely(!pnl_check(pnl, txn->geo.first_unallocated)))
-    return "wrong GC-record";
-
-  return /* no error */ nullptr;
+  /* Untrusted GC data: reject disorder or duplicates inside a record when
+   * explicit validation is requested, otherwise only do the cheap bounds
+   * check so a release build does not pay for crafted-data hardening. */
+  const bool validate = (txn->env->flags & MDBX_VALIDATION) || CHECKS2_ENABLED();
+  const bool ok = validate ? pnl_check_full(pnl, txn->geo.first_unallocated)
+                           : pnl_check(pnl, txn->geo.first_unallocated);
+  return ok ? nullptr : "wrong GC-record";
 }
 
 glr_t gc_row_pnl(const MDBX_txn *const txn, const MDBX_val data) {
@@ -1153,7 +1156,17 @@ next_gc:
     DEBUG_EXTRA_PRINT(", first_unallocated %u\n", txn->geo.first_unallocated);
   }
 
-  /* Merge in descending sorted order */
+  /* Merge in descending sorted order. First reject a page already present in
+   * the retired-pages list: a valid GC never lists a page in two records, so
+   * any overlap proves the GC is corrupted and the page would otherwise have
+   * been handed out twice. This is always-on, regardless of the runtime audit
+   * flag, because a duplicated page in a release build would silently alias
+   * two b-tree nodes onto one physical page. */
+  if (unlikely(pnl_intersect(txn->wr.repnl, gc_pnl))) {
+    ERROR("%s/%d: %s", "MDBX_CORRUPTED", MDBX_CORRUPTED, "page reclaimed from two GC records");
+    ret.err = MDBX_CORRUPTED;
+    goto fail;
+  }
 #if MDBX_ENABLE_PROFGC
   const uint64_t merge_begin = osal_monotime();
 #endif /* MDBX_ENABLE_PROFGC */
@@ -1164,14 +1177,15 @@ next_gc:
   prof->pnl_merge.time += osal_monotime() - merge_begin;
 #endif /* MDBX_ENABLE_PROFGC */
   flags |= ALLOC_SHOULD_SCAN;
-  if (CHECKS2_ENABLED()) {
-    if (unlikely(!pnl_check(txn->wr.repnl, txn->geo.first_unallocated))) {
-      ERROR("%s/%d: %s", "MDBX_CORRUPTED", MDBX_CORRUPTED, "invalid txn retired-list");
-      ret.err = MDBX_CORRUPTED;
-      goto fail;
-    }
-  } else {
-    eASSERT1(env, pnl_check_allocated(txn->wr.repnl, txn->geo.first_unallocated));
+  /* Defence-in-depth after the merge: pnl_intersect() above proved the merged
+   * lists are disjoint and each is strictly ordered, so a strict order of the
+   * resulting list follows by construction. The scan below only guards
+   * against a hypothetical pnl_merge() defect and costs one linear pass, so
+   * it stays always-on like any other GC-untrusted boundary check. */
+  if (unlikely(!pnl_check_full(txn->wr.repnl, txn->geo.first_unallocated))) {
+    ERROR("%s/%d: %s", "MDBX_CORRUPTED", MDBX_CORRUPTED, "duplicate page in the retired-pages list");
+    ret.err = MDBX_CORRUPTED;
+    goto fail;
   }
   eASSERT1(env, txn_dpl_check(txn));
 
