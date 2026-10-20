@@ -1819,24 +1819,44 @@ class Store:
                 pass  # неканонический ключ — vocab не трогаем
 
     def _delete_links_of(self, txn, links_dbi, idb, rec_id) -> None:
-        # удаляем все рёбра, где субъект = rec_id
+        # Все рёбра записи адресуются ДВУМЯ точными префиксами (A4):
+        #   pack(rec_id)+b"\0"            — исходящие fwd (субъект = rec_id),
+        #   pack(rec_id)+b"\0back:"       — входящие обратные рёбра
+        # (пара к fwd-ребру pack(sid)+b"\0"+pred со значением pack(rec_id)).
+        # Полный скан links не нужен и при росте таблицы не держит write-txn.
+        # Сначала собираем входящие fwd-рёбра (по back:-ключам), чтобы
+        # удалить и их fwd-половины: иначе остались бы висячие fwd-рёбра.
+        back_pre = idb + b"\0back:"
+        incoming = []  # (fwd_key, sid) чужих fwd-рёбер на эту запись
+        with txn.cursor(links_dbi) as cur:
+            rc, lk, lv = cur.get(mdbx.CURSOR_SET_RANGE, back_pre)
+            while rc == mdbx.RC_SUCCESS:
+                if not lk.startswith(back_pre):
+                    break
+                sid = _unpack_u64(lv)
+                pred = lk[ID_LEN + 1 + len(b"back:"):]
+                incoming.append((_pack_u64(sid) + b"\0" + pred, sid))
+                rc, lk, lv = cur.get(mdbx.CURSOR_NEXT)
+        # удаляем ВСЕ рёбра записи одним префиксным проходом (fwd и back:
+        # разделяют префикс pack(rec_id)+b"\0")
         prefix = idb + b"\0"
         with txn.cursor(links_dbi) as cur:
             rc, lk, lv = cur.get(mdbx.CURSOR_SET_RANGE, prefix)
             while rc == mdbx.RC_SUCCESS:
                 if not lk.startswith(prefix):
                     break
-                self._links_in_delta(txn, _unpack_u64(lv), -1)
+                pred = lk[ID_LEN + 1:]
+                # счётчик входящих крутим только у fwd-рёбер (объект = lv);
+                # у back:-рёбер lv — sid чужого fwd-ребра, его счётчик
+                # учитывается при удалении fwd-половины ниже.
+                if not pred.startswith(b"back:"):
+                    self._links_in_delta(txn, _unpack_u64(lv), -1)
                 cur.delete()
-                rc, lk, lv = cur.get(mdbx.CURSOR_SET_RANGE, prefix)
-        # удаляем рёбра, где объект = rec_id (обратные/прямые)
-        with txn.cursor(links_dbi) as cur:
-            rc, lk, lv = cur.get(mdbx.CURSOR_FIRST)
-            while rc == mdbx.RC_SUCCESS:
-                if _unpack_u64(lv) == rec_id:
-                    self._links_in_delta(txn, _unpack_u64(lk[:8]), -1)
-                    cur.delete()
                 rc, lk, lv = cur.get(mdbx.CURSOR_NEXT)
+        # fwd-половины входящих рёбер (счётчик этой записи — в объекте lv,
+        # т.е. она сама: декремент не нужен — запись удаляется целиком).
+        for fwd_key, sid in incoming:
+            txn.delete(links_dbi, fwd_key, idb)
 
     # --- refactoring-map (структурный слой) ---------------------------------
     def map_symbol(self, key: str, layer: str = "") -> dict:
@@ -3510,7 +3530,8 @@ class Store:
                                 json.dumps(cur, ensure_ascii=False).encode())
                     else:
                         txn.delete(cb_dbi, cb_key)
-            # все блочные записи теста (префиксный скан)
+            # все блочные записи теста (префиксный скан; после delete курсор
+            # уже на следующем элементе — NEXT вместо повторного SET_RANGE)
             blk_pre = ("coverage_blocks:%s%s:" % (pre, test_id)).encode()
             with txn.cursor(cbk_dbi) as cur:
                 rc, k, _ = cur.get(mdbx.CURSOR_SET_RANGE, blk_pre)
@@ -3518,7 +3539,7 @@ class Store:
                     if not k.startswith(blk_pre):
                         break
                     cur.delete()
-                    rc, k, _ = cur.get(mdbx.CURSOR_SET_RANGE, blk_pre)
+                    rc, k, _ = cur.get(mdbx.CURSOR_NEXT)
             return {"result": "removed"}
 
     @staticmethod
