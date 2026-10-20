@@ -3288,39 +3288,64 @@ class Store:
         число прогонов и счётчик флаков (runs > 1 и резкое удлинение).
         Наполняется коллектором ``tools/collect_test_metrics.py`` из ctest XML.
         """
-        key = "test_metrics:" + test_id
         with self._begin_write() as txn:
-            rec_dbi = self.dbi(txn, "test_metrics")
-            rc, old_val = txn.get(rec_dbi, key.encode())
-            old = json.loads(old_val.decode()) if old_val else {}
-            runs = old.get("runs", 0)
-            vals = list(old.get("history", []))[-window:]
-            old_max = max(vals) if vals else 0.0
-            vals.append(duration_ms)
-            vals = vals[-window:]
-            last = vals[-1]
-            mn = min(vals)
-            mx = max(vals)
-            sorted_v = sorted(vals)
-            p90 = sorted_v[int(len(sorted_v) * 0.9) - 1] if vals else 0.0
-            flaky = old.get("flaky_count", 0)
-            # резкое удлинение против истории (> 2x старого max при min 3 прогона)
-            if len(vals) >= 4 and old_max > 0 and last > max(2.0 * old_max, 10.0):
-                flaky += 1
-            body = {
-                "last_ms": round(last, 1),
-                "min_ms": round(mn, 1),
-                "max_ms": round(mx, 1),
-                "p90_ms": round(p90, 1),
-                "runs": runs + 1,
-                "flaky_count": flaky,
-                "timeout_sec": timeout_sec,
-                "labels": labels or old.get("labels", []),
-                "history": vals,
-            }
-            txn.put(rec_dbi, key.encode(),
-                    json.dumps(body, ensure_ascii=False).encode())
-            return {"test": test_id, "body": body}
+            return self._test_metrics_put_locked(
+                txn, test_id, duration_ms, labels, timeout_sec, window)
+
+    def _test_metrics_put_locked(self, txn, test_id: str, duration_ms: float,
+                                 labels: list = None, timeout_sec: int = 0,
+                                 window: int = 16) -> dict:
+        """RMW окна истории одного теста внутри write-txn (общая точка)."""
+        key = "test_metrics:" + test_id
+        rec_dbi = self.dbi(txn, "test_metrics")
+        rc, old_val = txn.get(rec_dbi, key.encode())
+        old = json.loads(old_val.decode()) if old_val else {}
+        runs = old.get("runs", 0)
+        vals = list(old.get("history", []))[-window:]
+        old_max = max(vals) if vals else 0.0
+        vals.append(duration_ms)
+        vals = vals[-window:]
+        last = vals[-1]
+        mn = min(vals)
+        mx = max(vals)
+        sorted_v = sorted(vals)
+        p90 = sorted_v[int(len(sorted_v) * 0.9) - 1] if vals else 0.0
+        flaky = old.get("flaky_count", 0)
+        # резкое удлинение против истории (> 2x старого max при min 3 прогона)
+        if len(vals) >= 4 and old_max > 0 and last > max(2.0 * old_max, 10.0):
+            flaky += 1
+        body = {
+            "last_ms": round(last, 1),
+            "min_ms": round(mn, 1),
+            "max_ms": round(mx, 1),
+            "p90_ms": round(p90, 1),
+            "runs": runs + 1,
+            "flaky_count": flaky,
+            "timeout_sec": timeout_sec,
+            "labels": labels or old.get("labels", []),
+            "history": vals,
+        }
+        txn.put(rec_dbi, key.encode(),
+                json.dumps(body, ensure_ascii=False).encode())
+        return {"test": test_id, "body": body}
+
+    def test_metrics_batch(self, metrics: dict, window: int = 16) -> dict:
+        """Батчевая запись метрик: {test_id: {...}} в ОДНОЙ write-txn (A3).
+
+        Каждый элемент — как у test_metrics_insert (duration_ms, labels?,
+        timeout_sec?). Одна txn на ctest-прогон вместо txn на тест —
+        collect_test_metrics не удерживает writer-лок роя между тестами.
+        """
+        n = 0
+        with self._begin_write() as txn:
+            for test_id, info in (metrics or {}).items():
+                info = info or {}
+                self._test_metrics_put_locked(
+                    txn, test_id, float(info.get("duration_ms", 0.0)),
+                    info.get("labels"), int(info.get("timeout_sec", 0) or 0),
+                    window)
+                n += 1
+        return {"tests": n}
 
     def test_metrics_get(self, test_id: str) -> dict:
         with self.env.begin(readonly=True) as txn:
@@ -3496,6 +3521,31 @@ class Store:
                     rc, k, _ = cur.get(mdbx.CURSOR_SET_RANGE, blk_pre)
             return {"result": "removed"}
 
+    @staticmethod
+    def _blocks_by_sym(blocks: list) -> dict:
+        """Агрегация блоков по символу (общая для insert/batch)."""
+        by_sym = {}
+        for b in blocks:
+            sym_bare = b.get("symbol", "")
+            by_sym.setdefault(sym_bare, []).append({
+                "symbol": sym_bare,  # в теле: summary читает symbol отсюда
+                "block_id": b.get("block_id", ""),
+                "l0": b.get("l0", 0), "l1": b.get("l1", 0),
+                "covered": bool(b.get("covered")),
+            })
+        return by_sym
+
+    def _coverage_blocks_put_locked(self, txn, pre: str, test_id: str,
+                                    blocks: list) -> int:
+        """Запись блоков одного теста внутри write-txn (общая точка)."""
+        dbi = self.dbi(txn, "coverage_blocks")
+        by_sym = self._blocks_by_sym(blocks)
+        for sym_bare, bl in sorted(by_sym.items()):
+            key = ("coverage_blocks:%s:%s"
+                   % (pre + test_id, sym_bare)).encode()
+            txn.put(dbi, key, json.dumps(bl, ensure_ascii=False).encode())
+        return len(by_sym)
+
     def coverage_blocks_insert(self, test_id: str, blocks: list,
                                layer: str = "") -> int:
         """Сохраняет блочную детализацию покрытия теста.
@@ -3506,22 +3556,25 @@ class Store:
         """
         layer = self._effective_layer(layer)
         pre = self.layer_prefix(layer)
-        by_sym = {}
-        for b in blocks:
-            sym_bare = b.get("symbol", "")
-            by_sym.setdefault(sym_bare, []).append({
-                "symbol": sym_bare,  # в теле: summary читает symbol отсюда
-                "block_id": b.get("block_id", ""),
-                "l0": b.get("l0", 0), "l1": b.get("l1", 0),
-                "covered": bool(b.get("covered")),
-            })
         with self._begin_write() as txn:
-            dbi = self.dbi(txn, "coverage_blocks")
-            for sym_bare, bl in sorted(by_sym.items()):
-                key = ("coverage_blocks:%s:%s"
-                       % (pre + test_id, sym_bare)).encode()
-                txn.put(dbi, key, json.dumps(bl, ensure_ascii=False).encode())
-        return len(by_sym)
+            return self._coverage_blocks_put_locked(txn, pre, test_id, blocks)
+
+    def coverage_blocks_batch(self, tests: dict, layer: str = "") -> dict:
+        """Батчевая запись блоков: {test_id: [blocks]} в ОДНОЙ write-txn (A3).
+
+        Та же семантика, что coverage_blocks_insert, но одна txn на весь
+        прогон: run_coverage пишет ~2 txn вместо 2×N (N = число тестов),
+        не удерживая writer-лок роя между тестами.
+        """
+        layer = self._effective_layer(layer)
+        pre = self.layer_prefix(layer)
+        n_tests, n_syms = 0, 0
+        with self._begin_write() as txn:
+            for test_id, blocks in (tests or {}).items():
+                n_syms += self._coverage_blocks_put_locked(
+                    txn, pre, test_id, blocks or [])
+                n_tests += 1
+        return {"tests": n_tests, "symbols": n_syms}
 
     def coverage_blocks_get(self, test_id: str, symbol: str,
                             layer: str = "") -> list:
