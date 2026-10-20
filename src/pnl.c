@@ -159,17 +159,22 @@ __hot __noinline bool pnl_check(const const_pnl_t pnl, const size_t limit) {
       return false;
     if (unlikely(MDBX_PNL_MOST(pnl) >= limit))
       return false;
+  }
+  return true;
+}
 
-    if ((!MDBX_DISABLE_VALIDATION || CHECKS2_ENABLED()) && likely(pnl_size(pnl) > 1)) {
-      const pgno_t *scan = MDBX_PNL_BEGIN(pnl);
-      const pgno_t *const end = MDBX_PNL_END(pnl);
-      pgno_t prev = *scan++;
-      do {
-        if (unlikely(!MDBX_PNL_ORDERED(prev, *scan)))
-          return false;
-        prev = *scan;
-      } while (likely(++scan != end));
-    }
+__hot __noinline bool pnl_check_full(const const_pnl_t pnl, const size_t limit) {
+  if (unlikely(!pnl_check(pnl, limit)))
+    return false;
+  if (likely(pnl_size(pnl) > 1)) {
+    const pgno_t *scan = MDBX_PNL_BEGIN(pnl);
+    const pgno_t *const end = MDBX_PNL_END(pnl);
+    pgno_t prev = *scan++;
+    do {
+      if (unlikely(!MDBX_PNL_ORDERED(prev, *scan)))
+        return false;
+      prev = *scan;
+    } while (likely(++scan != end));
   }
   return true;
 }
@@ -229,6 +234,33 @@ __hot size_t pnl_merge(pnl_t dst, const const_pnl_t src) {
   }
   ASSERT(pnl_check_allocated(dst, MAX_PAGENO + 1));
   return total;
+}
+
+/* Check whether two sorted page-number lists share at least one page number.
+ * Used to detect a page mentioned by two different GC records: a valid GC
+ * never lists a page twice, so any common page is proof of corruption. The
+ * lists are traversed with a classic two-pointer intersection scan, which is
+ * linear only in the overlapping part and stops at the first common element. */
+__hot __noinline bool pnl_intersect(const const_pnl_t a, const const_pnl_t b) {
+  const size_t a_len = pnl_size(a), b_len = pnl_size(b);
+  if (likely(!a_len || !b_len))
+    return false;
+  /* Both lists are kept in the same (descending) order; walk them with two
+   * pointers, advancing the one that currently holds the larger value, and
+   * stop at the first common page number. O(min)+. */
+  size_t ia = 1, ib = 1;
+  while (ia <= a_len && ib <= b_len) {
+    if (a[ia] > b[ib]) {
+      ++ia;
+      continue;
+    }
+    if (a[ia] < b[ib]) {
+      ++ib;
+      continue;
+    }
+    return true;
+  }
+  return false;
 }
 
 #if MDBX_PNL_ASCENDING
