@@ -61,13 +61,17 @@ struct reader_ctx {
 };
 
 static void reader_thread(reader_ctx *ctx) {
+  std::fprintf(stderr, "[gh0083] reader: txn_begin...\n");
   ctx->txn = nullptr;
   ctx->rc = mdbx_txn_begin(ctx->env, nullptr, MDBX_TXN_RDONLY, &ctx->txn);
+  std::fprintf(stderr, "[gh0083] reader: txn_begin rc=%d\n", ctx->rc);
   ctx->started.store(true, std::memory_order_release);
   while (!ctx->stop.load(std::memory_order_acquire))
     std::this_thread::sleep_for(std::chrono::milliseconds(1));
+  std::fprintf(stderr, "[gh0083] reader: stopping, aborting txn\n");
   if (ctx->txn)
     mdbx_txn_abort(ctx->txn);
+  std::fprintf(stderr, "[gh0083] reader: done\n");
 }
 
 /* Build a database with several GC records: each write commit retires the
@@ -75,12 +79,14 @@ static void reader_thread(reader_ctx *ctx) {
  * first snapshot so retired pages stay listed instead of being recycled, and
  * every subsequent commit leaves its own GC record behind. */
 static bool create_gc_db(const std::string &testdb) {
+  std::fprintf(stderr, "[gh0083] create_gc_db: env_remove + env_open\n");
   env_remove(testdb.c_str());
 
   MDBX_env *env = nullptr;
   MDBX_dbi dbi = 0;
   bool ok = mdbx_env_create(&env) == MDBX_SUCCESS && mdbx_env_set_maxdbs(env, 2) == MDBX_SUCCESS &&
             mdbx_env_open(env, testdb.c_str(), MDBX_NOSUBDIR, 0644) == MDBX_SUCCESS;
+  std::fprintf(stderr, "[gh0083] create_gc_db: env_open ok=%d\n", (int)ok);
   if (!ok) {
     if (env)
       mdbx_env_close(env);
@@ -103,15 +109,19 @@ static bool create_gc_db(const std::string &testdb) {
     ok = mdbx_txn_commit(txn) == MDBX_SUCCESS;
   else
     mdbx_txn_abort(txn);
+  std::fprintf(stderr, "[gh0083] create_gc_db: 50 keys committed ok=%d\n", (int)ok);
 
   reader_ctx reader = {env, nullptr, {false}, {false}, 0};
   std::thread thr(reader_thread, &reader);
+  std::fprintf(stderr, "[gh0083] create_gc_db: reader thread spawned, waiting started\n");
   while (!reader.started.load(std::memory_order_acquire))
     std::this_thread::sleep_for(std::chrono::milliseconds(1));
+  std::fprintf(stderr, "[gh0083] create_gc_db: reader started rc=%d\n", reader.rc);
 
   for (unsigned round = 0; ok && round < 3; ++round) {
     txn = nullptr;
     ok = mdbx_txn_begin(env, nullptr, MDBX_TXN_READWRITE, &txn) == MDBX_SUCCESS;
+    std::fprintf(stderr, "[gh0083] create_gc_db: round %u txn_begin ok=%d\n", round, (int)ok);
     for (int i = 0; ok && i < 15; ++i) {
       char key[16], val[128];
       std::snprintf(key, sizeof key, "k%u_%u", round, i);
@@ -124,11 +134,15 @@ static bool create_gc_db(const std::string &testdb) {
       ok = mdbx_txn_commit(txn) == MDBX_SUCCESS;
     else
       mdbx_txn_abort(txn);
+    std::fprintf(stderr, "[gh0083] create_gc_db: round %u done ok=%d\n", round, (int)ok);
   }
 
+  std::fprintf(stderr, "[gh0083] create_gc_db: stopping reader\n");
   reader.stop.store(true, std::memory_order_release);
   thr.join();
+  std::fprintf(stderr, "[gh0083] create_gc_db: env_close\n");
   mdbx_env_close(env);
+  std::fprintf(stderr, "[gh0083] create_gc_db: done ok=%d\n", (int)ok);
   return ok;
 }
 
@@ -186,6 +200,7 @@ static int craft_shared_page(const std::string &testdb, uint32_t pagesize) {
   std::fstream f(testdb, std::ios::in | std::ios::out | std::ios::binary);
   if (!f.is_open())
     return -1;
+  std::fprintf(stderr, "[gh0083] craft: file opened, size check\n");
   f.seekg(0, std::ios::end);
   const std::streamoff end = f.tellg();
   if (end <= 0)
@@ -195,6 +210,7 @@ static int craft_shared_page(const std::string &testdb, uint32_t pagesize) {
   f.read(reinterpret_cast<char *>(buf.data()), std::streamsize(buf.size()));
   if (f.gcount() != std::streamsize(buf.size()))
     return -1;
+  std::fprintf(stderr, "[gh0083] craft: read %lld bytes\n", (long long)end);
 
   const size_t PAGEHDRSZ = 20;
   uint32_t root = 0xFFFFFFFFu;
@@ -214,7 +230,9 @@ static int craft_shared_page(const std::string &testdb, uint32_t pagesize) {
     return -1;
 
   std::vector<gc_record> recs;
+  std::fprintf(stderr, "[gh0083] craft: walk_gc_leaf root=%u\n", root);
   walk_gc_leaf(buf, pagesize, root, 0, recs);
+  std::fprintf(stderr, "[gh0083] craft: walk done, %zu records\n", recs.size());
   if (recs.size() < 2)
     return 0;
 
@@ -237,8 +255,10 @@ static int craft_shared_page(const std::string &testdb, uint32_t pagesize) {
 
 TEST(issue_gh0083, duplicated_page_across_gc_records_rejected) {
   const std::string testdb = "issue83.mdbx";
+  std::fprintf(stderr, "[gh0083] test: start\n");
   env_remove(testdb.c_str());
   ASSERT_TRUE(create_gc_db(testdb)) << "must be able to create a GC with several records";
+  std::fprintf(stderr, "[gh0083] test: create_gc_db done\n");
 
   /* Obtain the actual page size from the environment instead of assuming a
    * platform-dependent constant. */
@@ -255,8 +275,11 @@ TEST(issue_gh0083, duplicated_page_across_gc_records_rejected) {
     mdbx_env_close(env);
     ASSERT_GE(pagesize, 256u);
   }
+  std::fprintf(stderr, "[gh0083] test: pagesize=%u\n", pagesize);
 
+  std::fprintf(stderr, "[gh0083] test: crafting shared page...\n");
   const int crafted = craft_shared_page(testdb, pagesize);
+  std::fprintf(stderr, "[gh0083] test: crafted=%d\n", crafted);
   if (crafted == 0) {
     /* Engine GC coalescing may merge the retired lists into a single record,
      * making the crafted two-record scenario inapplicable; skip rather than
@@ -268,7 +291,9 @@ TEST(issue_gh0083, duplicated_page_across_gc_records_rejected) {
   MDBX_env *env = nullptr;
   ASSERT_EQ(MDBX_SUCCESS, mdbx_env_create(&env));
   ASSERT_EQ(MDBX_SUCCESS, mdbx_env_set_maxdbs(env, 2));
+  std::fprintf(stderr, "[gh0083] test: reopen env\n");
   ASSERT_EQ(MDBX_SUCCESS, mdbx_env_open(env, testdb.c_str(), MDBX_NOSUBDIR, 0644));
+  std::fprintf(stderr, "[gh0083] test: reopen done, defrag start\n");
 
   /* Defragmentation assembles the whole retired-pages list from the untrusted
    * GC records in one go (defrag_load_gc), so a page shared by two records
@@ -278,9 +303,12 @@ TEST(issue_gh0083, duplicated_page_across_gc_records_rejected) {
    * a corrupted page walk (a different error code, hence the red/green split). */
   MDBX_defrag_result_t result;
   std::memset(&result, 0, sizeof result);
+  std::fprintf(stderr, "[gh0083] test: calling defrag\n");
   const int rc = mdbx_env_defrag(env, 1, 0, 16, 0, 0, 4096, nullptr, nullptr, &result);
+  std::fprintf(stderr, "[gh0083] test: defrag rc=%d\n", rc);
   mdbx_env_close(env);
   env_remove(testdb.c_str());
 
   EXPECT_EQ(MDBX_PROBLEM, rc) << "a page listed by two GC records must be rejected, not double-allocated";
+  std::fprintf(stderr, "[gh0083] test: done\n");
 }
