@@ -2320,6 +2320,49 @@ class Store:
         return {"added": added, "removed": removed, "common": common,
                 "added_count": len(added), "removed_count": len(removed)}
 
+    def map_port_status(self, module: str = "", layer: str = "") -> dict:
+        """Приборная панель миграции C→C++ по слою.
+
+        Классифицирует функции по курируемому полю `cpp_status`
+        (none|mapped|partial|done) + наличию `cpp_eq`. Возвращает агрегат
+        по модулям + топ-N крупнейших неспортированных (по числу блоков) —
+        «что переписывать следующим».
+        """
+        layer = self._effective_layer(layer)
+        mods = {}
+        not_ported = []
+        for key in self.map_symbols(prefix="fn:", layer=layer):
+            body = self.map_symbol(key, layer=layer)
+            mod_list = [i.get("module") for i in body.get("implementations") or []
+                        if i.get("module")]
+            if body.get("module"):
+                mod_list.insert(0, body.get("module", ""))
+            mod = mod_list[0] if mod_list else "?"
+            if module and not mod.startswith(module):
+                continue
+            st = body.get("cpp_status") or ("done" if body.get("cpp_eq") else "none")
+            if st not in ("none", "mapped", "partial", "done"):
+                st = "none"
+            m = mods.setdefault(mod, {"total": 0, "none": 0, "mapped": 0,
+                                      "partial": 0, "done": 0})
+            m["total"] += 1
+            m[st] += 1
+            if st in ("none", "partial"):
+                blocks = len(body.get("blocks") or [])
+                for impl in body.get("implementations") or []:
+                    blocks += len(impl.get("blocks") or [])
+                not_ported.append({"symbol": key, "module": mod,
+                                   "status": st, "blocks": blocks})
+        not_ported.sort(key=lambda r: -r["blocks"])
+        total = {"total": 0, "none": 0, "mapped": 0, "partial": 0, "done": 0}
+        for m in mods.values():
+            for k in total:
+                total[k] += m[k]
+        total["pct_done"] = round(100.0 * total["done"] / total["total"], 1) \
+            if total["total"] else 0.0
+        return {"layer": layer, "module": module, "modules": mods,
+                "total": total, "top_not_ported": not_ported[:20]}
+
     def map_snapshot(self, layer: str = "") -> dict:
         """Атомарный снимок карты: поколение + ключи + content_hash.
 
@@ -2813,6 +2856,43 @@ class Store:
                                (pre + caller).encode())
             return {"caller": caller, "callee": callee,
                     "count": entry["count"], "layer": layer}
+
+    def trace_ingest_batch(self, pairs: list, layer: str = "") -> dict:
+        """Батчевый ingest наблюдаемых вызовов в одной write-txn.
+
+        pairs: [{"caller", "callee", "count"?, "label"?}] — из дампов
+        probe-bus/счётчиков (collect_traces.py). Быстрее цикла одиночных
+        trace_ingest (одна txn на файл, B3-δ).
+        """
+        layer = self._effective_layer(layer)
+        pre = self.layer_prefix(layer)
+        n = 0
+        with self._begin_write() as txn:
+            ct_dbi = self.dbi(txn, "call_traces")
+            ctr_dbi = self.dbi(txn, "call_traces_rev")
+            for p in pairs:
+                caller = (p.get("caller") or "").strip()
+                callee = (p.get("callee") or "").strip()
+                if not caller or not callee:
+                    continue
+                count = max(1, int(p.get("count", 1)))
+                label = p.get("label", "")
+                key = (pre + caller).encode()
+                rc, val = txn.get(ct_dbi, key)
+                m = json.loads(val.decode()) if val else {}
+                prev = self._trace_count(m, callee)
+                entry = {"count": prev + count}
+                if label:
+                    entry["label"] = label
+                elif isinstance(m.get(callee), dict) and m[callee].get("label"):
+                    entry["label"] = m[callee]["label"]
+                m[callee] = entry
+                txn.put(ct_dbi, key, json.dumps(m, ensure_ascii=False).encode())
+                with txn.cursor(ctr_dbi) as cur:
+                    cur.put_nodupe((pre + callee).encode(),
+                                   (pre + caller).encode())
+                n += 1
+        return {"ingested": n, "layer": layer}
 
     def trace_observed(self, caller: str = "", layer: str = "") -> list:
         """Наблюдаемые вызовы слоя (по префиксу caller, layer-local ключи)."""

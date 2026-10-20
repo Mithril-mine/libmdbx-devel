@@ -50,3 +50,23 @@ def test_scan_project_cmake_add_test_name(tmp_path):
     assert any("mcp_pytest" in k for k in keys), keys
     assert any("#mdbx" in k for k in keys)
     assert any("my_func" in k for k in keys)
+
+
+def test_run_coverage_helpers(tmp_path):
+    """run_coverage: clear_gcda удаляет .gcda; gcda_dirs находит каталоги."""
+    import sys
+    import os
+    sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(
+        os.path.abspath(__file__))), "tools"))
+    import run_coverage as rc
+    bd = tmp_path / "build"
+    (bd / "a" / "b").mkdir(parents=True)
+    (bd / "a" / "b" / "x.gcda").write_text("d")
+    (bd / "a" / "y.gcda").write_text("d")
+    (bd / "a" / "y.gcno").write_text("n")  # не gcda — остаётся
+    dirs = rc.gcda_dirs(str(bd))
+    assert len(dirs) == 2
+    n = rc.clear_gcda(str(bd))
+    assert n == 2
+    assert rc.gcda_dirs(str(bd)) == []
+    assert (bd / "a" / "y.gcno").exists()  # gcno не тронут

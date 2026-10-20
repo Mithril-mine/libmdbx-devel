@@ -53,9 +53,12 @@ shared-graph-memory.mdbx — персистентная память роя на
 | `map_uncovered(prefix?, limit?)` | Uncovered-острова смысла вне union-AST |
 | `test_metrics_insert(test, duration_ms, labels?, timeout_sec?)` | Окно истории длительностей тест-кейса (минутное: last/min/max/p90, флаки) |
 | `test_metrics_get(test)` / `test_metrics_all(prefix?)` | Метрики теста / всех |
-| `coverage_insert(test, symbols, pct?)` / `coverage_batch(tests)` | Покрытие теста (набор fn:/type:/macro:), батч |
-| `coverage_get(test)` / `coverage_all()` / `coverage_remove(test)` | Покрытие / все / удалить |
-| `coverage_symbols(symbol_prefix?)` | **Какие тесты защищают символ** (covered_by) |
+| `coverage_insert(test, symbols, pct?, layer?)` / `coverage_batch(tests, layer?)` | Покрытие теста (набор fn:/type:/macro:), батч |
+| `coverage_get(test, layer?)` / `coverage_all(layer?)` / `coverage_remove(test, layer?)` | Покрытие / все / удалить (чистит и coverage_blocks) |
+| `coverage_symbols(symbol_prefix?, layer?)` | **Какие тесты защищают символ** (covered_by) |
+| `coverage_blocks_insert(test, blocks, layer?)` / `coverage_blocks_get(test, symbol, layer?)` | Блочная детализация: каким блокам символа тест прошёл |
+| `coverage_summary(module?, layer?)` | **Сводка покрытия**: union по модулям — covered/total символов+блоков, pct |
+| `coverage_gaps(module?, layer?)` | **Белые пятна**: символы модуля без покрытия ни одним тестом |
 | `ci_jobs_insert(job, body)` / `ci_jobs_all(prefix?)` | Параметры CI-джоб (`{workflow}/{job}`) |
 | `ci_jobs_get(job)` / `ci_jobs_by_test(test)` | Одна джоба / джобы, исполняющие тест |
 | `project_load(files, edges, replace?)` | Загрузка project-map (весь репозиторий) |
@@ -65,11 +68,13 @@ shared-graph-memory.mdbx — персистентная память роя на
 | `probe_get(tag)` / `probe_list(prefix?, kind?)` | Зонд / список зондов |
 | `probe_status(tag, status)` / `probe_remove(tag)` | Смена статуса / удаление |
 | `trace_ingest(caller, callee, count?, label?)` | Наблюдаемый вызов (runtime), инкремент счётчика |
+| `trace_ingest_batch(pairs, layer?)` | Батчевый ingest (одна txn) из дампа probe-bus |
 | `trace_observed(caller?)` | Наблюдаемые вызовы (по префиксу caller) |
 | `trace_path(src, dst, depth?)` | Пути по observed-рёбрам (BFS) |
 | `trace_compare(symbol)` | **possible vs observed**: static (call_edges) vs runtime (traces) |
 | `map_put_edge(caller, callee, kind?)` | Записать ребро вызова (syntax/semantic) |
-| `map_mark_stale(live_keys)` | Пометить отсутствующие символы stale (alive остальным) |
+| `map_mark_stale(live_keys, layer?)` | Пометить отсутствующие символы stale (alive остальным) |
+| `map_port_status(module?, layer?)` | **Приборная панель C→C++**: cpp_status по модулям + топ непортированных (по блокам) |
 | `map_generations()` / `map_snapshot()` | Поколение карты (canary.y) / полный снимок |
 | `map_diff(other?)` | Разница текущего снимка с прошлым (added/removed/common) |
 | `adr_update(name, ...)` / `adr_get(name)` | ADR: сохранить/прочитать архитектурное решение |
