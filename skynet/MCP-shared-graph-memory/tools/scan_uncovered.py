@@ -120,7 +120,7 @@ def _island_text(filepath: str, island: dict, n: int = 2) -> list:
     with open(filepath, errors="replace") as f:
         lines = f.read().splitlines()
     return [lines[i - 1].strip()[:100] for i in range(island["l0"],
-                                                     min(island["l1"], island["l0"] + n) + 1)]
+                                                      min(island["l1"], island["l0"] + n) + 1)]
 
 
 def compute(symbols: dict, regions: list,

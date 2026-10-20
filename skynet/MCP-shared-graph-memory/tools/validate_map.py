@@ -115,7 +115,7 @@ def main():
                          if v["kind"] in ("record", "cxxrecord", "enum", "typedef")),
             "macros": sum(1 for v in symbols.values() if v["kind"] == "macro"),
             "blocks": sum(len(v["blocks"]) for v in symbols.values()
-                         if v["kind"] == "function"),
+                          if v["kind"] == "function"),
         }
         # регионы считаются из исходников (без clang) — точечная проверка
         try:
