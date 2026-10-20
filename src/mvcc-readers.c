@@ -362,6 +362,7 @@ __cold int mvcc_cleanup_dead(MDBX_env *env, int rdt_locked, int *dead) {
 
 __cold bool mvcc_kick_laggards(MDBX_txn *txn, const txnid_t straggler,
                                struct gc_reclaiming_obstacle *optional_obstacle) {
+  fprintf(stderr, "[kick_laggards] enter straggler=%" PRIaTXN "\n", straggler);
   DEBUG("DB size maxed out by reading #%" PRIaTXN, straggler);
   osal_memory_fence(mo_AcquireRelease, false);
   if (optional_obstacle) {
@@ -382,6 +383,9 @@ __cold bool mvcc_kick_laggards(MDBX_txn *txn, const txnid_t straggler,
     eASSERT0(env, orsi.oldest_txnid < env->basal_txn->txnid);
     eASSERT0(env, orsi.oldest_txnid >= straggler);
     eASSERT0(env, orsi.oldest_txnid >= env->lck->cached_oldest_txnid.weak);
+    if ((retry & 0xFFFF) == 0)
+      fprintf(stderr, "[kick_laggards] iter %d oldest=%" PRIaTXN " steady=%" PRIaTXN "\n", retry, orsi.oldest_txnid,
+              orsi.steady_txnid);
 
     lck_t *const lck = env->lck_mmap.lck;
     if (orsi.oldest_txnid == orsi.steady_txnid || orsi.oldest_txnid > straggler || /* without-LCK mode */ !lck)
@@ -486,6 +490,7 @@ __cold bool mvcc_kick_laggards(MDBX_txn *txn, const txnid_t straggler,
 
   } while (++retry < INT_MAX);
 
+  fprintf(stderr, "[kick_laggards] loop exit after %d iters, oldest=%" PRIaTXN "\n", retry, orsi.oldest_txnid);
   if (notify_eof_of_loop) {
     /* notify end of hsr-loop */
     const txnid_t turn = orsi.oldest_txnid - straggler;
@@ -493,5 +498,6 @@ __cold bool mvcc_kick_laggards(MDBX_txn *txn, const txnid_t straggler,
       NOTICE("hsr-kick: done turn %" PRIaTXN " -> %" PRIaTXN " +%" PRIaTXN, straggler, orsi.oldest_txnid, turn);
     callback(env, env->txn, 0, 0, straggler, (turn < UINT_MAX) ? (unsigned)turn : UINT_MAX, 0, -retry);
   }
+  fprintf(stderr, "[kick_laggards] exit oldest=%" PRIaTXN " straggler=%" PRIaTXN "\n", orsi.oldest_txnid, straggler);
   return orsi.oldest_txnid > straggler;
 }

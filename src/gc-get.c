@@ -931,6 +931,7 @@ MDBX_cursor *gc_cursor_init(MDBX_txn *txn) {
 }
 
 pgr_t gc_alloc_ex(const MDBX_cursor *const mc, const size_t num, uint8_t flags) {
+  fprintf(stderr, "[gc_alloc_ex] enter num=%zu flags=0x%x\n", num, flags);
   pgr_t ret;
   MDBX_txn *const txn = mc->txn;
   MDBX_env *const env = txn->env;
@@ -979,6 +980,7 @@ pgr_t gc_alloc_ex(const MDBX_cursor *const mc, const size_t num, uint8_t flags) 
 
   if (unlikely(!is_reclaimable(txn, mc, flags))) {
     eASSERT0(env, (txn->flags & txn_gc_drained) || num > 1 || mc->tree == &txn->dbs[FREE_DBI]);
+    fprintf(stderr, "[gc_alloc_ex] not reclaimable -> no_gc\n");
     goto no_gc;
   }
 
@@ -1008,9 +1010,12 @@ pgr_t gc_alloc_ex(const MDBX_cursor *const mc, const size_t num, uint8_t flags) 
   }
 
   MDBX_cursor *const gc = gc_cursor_init(txn);
+  fprintf(stderr, "[gc_alloc_ex] retry_gc_refresh_detent\n");
 retry_gc_refresh_detent:
   txn_gc_detent(txn);
 retry_gc_have_detent:
+  fprintf(stderr, "[gc_alloc_ex] retry_gc_have_detent detent=%" PRIaTXN " basis=%" PRIaTXN "\n", txn->env->gc.detent,
+          txn_basis_snapshot(txn));
   if (unlikely(txn->env->gc.detent > txn_basis_snapshot(txn))) {
     FATAL("unexpected/invalid gc-detent %" PRIaTXN " for current-txnid %" PRIaTXN, txn->env->gc.detent, txn->txnid);
     ret.err = MDBX_PROBLEM;
@@ -1351,8 +1356,11 @@ depleted_gc:
     goto done;
   }
 
-  if (txn_basis_snapshot(txn) > txn->env->gc.detent && mvcc_kick_laggards(txn, txn->env->gc.detent, nullptr))
+  if (txn_basis_snapshot(txn) > txn->env->gc.detent && mvcc_kick_laggards(txn, txn->env->gc.detent, nullptr)) {
+    fprintf(stderr, "[gc_alloc_ex] kick_laggards returned true -> retry\n");
     goto retry_gc_refresh_detent;
+  }
+  fprintf(stderr, "[gc_alloc_ex] kick_laggards returned false -> continue\n");
 
   //---------------------------------------------------------------------------
 
@@ -1397,6 +1405,7 @@ no_gc:
          aligned, aligned - txn->geo.end_pgno, txn->txnid, env->gc.detent, syncpoint.is_steady ? "steady" : "weak",
          syncpoint.txnid, oldest_cached, oldest_rescan, (intptr_t)(oldest_rescan - oldest_cached));
   ret.err = dxb_resize(env, txn->geo.first_unallocated, (pgno_t)aligned, txn->geo.upper, implicit_grow);
+  fprintf(stderr, "[gc_alloc_ex] dxb_resize rc=%d\n", ret.err);
   if (ret.err != MDBX_SUCCESS) {
     ERROR("unable growth datafile to %zu pages (+%zu), errcode %d", aligned, aligned - txn->geo.end_pgno, ret.err);
     goto fail;
@@ -1409,6 +1418,7 @@ no_gc:
 
 done:
   ret.err = MDBX_SUCCESS;
+  fprintf(stderr, "[gc_alloc_ex] done pgno=%" PRIaPGNO "\n", pgno);
   if (likely((flags & ALLOC_RESERVE) == 0)) {
     /* USDT mdbx:alloc__source (pgno, mode): report page-allocation source,
      * mode: 0=gc-reclaimed, 1=tail-of-unallocated, 2=grow-datafile.
@@ -1426,6 +1436,7 @@ done:
     }
 
     ret = page_alloc_finalize(env, txn, mc, pgno, num);
+    fprintf(stderr, "[gc_alloc_ex] page_alloc_finalize rc=%d\n", ret.err);
     if (unlikely(ret.err != MDBX_SUCCESS)) {
     fail:
       eASSERT0(env, ret.err != MDBX_SUCCESS);

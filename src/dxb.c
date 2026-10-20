@@ -143,10 +143,14 @@ __cold int dxb_read_header(MDBX_env *env, meta_t *dest, const int lck_exclusive,
 
 __cold int dxb_resize(MDBX_env *const env, const pgno_t allocated_pgno, const pgno_t size_pgno, pgno_t limit_pgno,
                       const enum resize_mode mode) {
+  fprintf(stderr, "[dxb_resize] enter size=%" PRIaPGNO " limit=%" PRIaPGNO " mode=%d\n", size_pgno, limit_pgno,
+          (int)mode);
   /* Acquire guard to avoid collision between read and write txns
    * around geo_in_bytes and dxb_mmap */
 #if IS_WINDOWS
+  fprintf(stderr, "[dxb_resize] acquiring remap_lock exclusive (Windows)\n");
   imports.srwl_AcquireExclusive(&env->remap_lock);
+  fprintf(stderr, "[dxb_resize] remap_lock acquired\n");
   int rc = MDBX_SUCCESS;
   mdbx_handle_array_t *suspended = nullptr;
   mdbx_handle_array_t array_onstack;
@@ -363,6 +367,7 @@ bailout:
 
 #if IS_WINDOWS
   imports.srwl_ReleaseExclusive(&env->remap_lock);
+  fprintf(stderr, "[dxb_resize] remap_lock released (Windows), rc=%d\n", rc);
   int err = MDBX_SUCCESS;
   if (suspended) {
     err = osal_resume_threads_after_remap(suspended);

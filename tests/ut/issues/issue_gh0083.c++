@@ -11,6 +11,19 @@
 #include <thread>
 #include <vector>
 
+/* WATCHDOG: abort the hung process after 120 s so Windows Error Reporting
+ * dumps the stuck stack in CI (diagnostics for the gh0083 Windows timeout). */
+static std::atomic<bool> watchdog_armed{true};
+static void watchdog_thread() {
+  for (int i = 0; i < 120 && watchdog_armed.load(std::memory_order_acquire); ++i)
+    std::this_thread::sleep_for(std::chrono::seconds(1));
+  if (watchdog_armed.load(std::memory_order_acquire)) {
+    std::fprintf(stderr, "[gh0083-watchdog] 120s elapsed, hanging detected, aborting for stack dump\n");
+    std::fflush(stderr);
+    std::abort();
+  }
+}
+
 #ifdef _MSC_VER
 #pragma warning(disable : 4702) /* unreachable code */
 #endif
@@ -254,6 +267,8 @@ static int craft_shared_page(const std::string &testdb, uint32_t pagesize) {
 }
 
 TEST(issue_gh0083, duplicated_page_across_gc_records_rejected) {
+  std::thread watchdog(watchdog_thread);
+  watchdog.detach();
   const std::string testdb = "issue83.mdbx";
   std::fprintf(stderr, "[gh0083] test: start\n");
   env_remove(testdb.c_str());
@@ -311,4 +326,5 @@ TEST(issue_gh0083, duplicated_page_across_gc_records_rejected) {
 
   EXPECT_EQ(MDBX_PROBLEM, rc) << "a page listed by two GC records must be rejected, not double-allocated";
   std::fprintf(stderr, "[gh0083] test: done\n");
+  watchdog_armed.store(false, std::memory_order_release);
 }
