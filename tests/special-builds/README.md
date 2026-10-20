@@ -18,12 +18,6 @@ Each subdirectory is a self-contained CMake project:
   required options and registers the tests via CTest, and
 - the test sources live next to it.
 
-A test that documents a known, deliberately-unfixed defect (see the issue
-tracker) is registered with `WILL_FAIL TRUE` and a comment in its source: it
-keeps the CTest run green while the defect is present and turns red as soon as
-the defect is fixed, signalling that it should be converted into a normal
-regression test.
-
 Run a special build locally, e.g.:
 
 ```sh
@@ -32,3 +26,6 @@ cmake -S tests/special-builds/locking-sysv -B @build-special \
 cmake --build @build-special
 ctest --test-dir @build-special --output-on-failure
 ```
+
+The `locking-sysv` tests need the probe-bus at run time (`MDBX_PROBES=1`),
+which `CMakeLists.txt` sets on the affected CTest tests.
