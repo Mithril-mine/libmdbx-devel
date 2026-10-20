@@ -8,7 +8,7 @@ namespace mdbx {
 MDBX_CXX11_CONSTEXPR slice::slice() noexcept : ::MDBX_val({nullptr, 0}) {}
 
 MDBX_CXX14_CONSTEXPR slice::slice(const void *ptr, size_t bytes)
-    : ::MDBX_val({const_cast<void *>(ptr), check_length(bytes)}) {}
+    : ::MDBX_val({const_cast<void *>(ptr), ptr ? check_length(bytes) : check_nullptr_length(bytes)}) {}
 
 MDBX_CXX14_CONSTEXPR slice::slice(const void *begin, const void *end)
     : slice(begin, static_cast<const byte *>(end) - static_cast<const byte *>(begin)) {}
@@ -23,7 +23,7 @@ MDBX_CXX14_CONSTEXPR slice::slice(slice &&src) noexcept : slice(src) { src.inval
 
 inline slice &slice::assign(const void *ptr, size_t bytes) {
   iov_base = const_cast<void *>(ptr);
-  iov_len = check_length(bytes);
+  iov_len = ptr ? check_length(bytes) : check_nullptr_length(bytes);
   return *this;
 }
 
