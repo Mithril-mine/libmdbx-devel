@@ -144,7 +144,9 @@ void lck_txn_unlock(MDBX_env *env) {
 #define LCK_UPPER LCK_UP_OFFSET, LCK_UP_LEN
 
 int lck_rdt_lock(MDBX_env *env) {
+  fprintf(stderr, "[lck_rdt_lock] AcquireShared remap_lock...\n");
   imports.srwl_AcquireShared(&env->remap_lock);
+  fprintf(stderr, "[lck_rdt_lock] remap_lock shared acquired\n");
 
   int rc = osal_fastmutex_acquire(&env->lck_event_cs);
   if (unlikely(rc != MDBX_SUCCESS))
@@ -171,6 +173,7 @@ bailout:
 }
 
 void lck_rdt_unlock(MDBX_env *env) {
+  fprintf(stderr, "[lck_rdt_unlock] releasing...\n");
   if (env->lck_mmap.fd != INVALID_HANDLE_VALUE && (env->flags & MDBX_EXCLUSIVE) == 0) {
     /* transition from S-E (locked) to S-? (used), e.g. unlock upper-part */
     int err = funlock(env->lck_mmap.fd, LCK_UPPER);
@@ -179,6 +182,7 @@ void lck_rdt_unlock(MDBX_env *env) {
   }
   LeaveCriticalSection(&env->lck_event_cs);
   imports.srwl_ReleaseShared(&env->remap_lock);
+  fprintf(stderr, "[lck_rdt_unlock] remap_lock shared released\n");
 }
 
 int osal_lockfile(mdbx_filehandle_t fd, bool wait) {
@@ -234,6 +238,7 @@ int osal_suspend_threads_before_remap(MDBX_env *env, mdbx_handle_array_t **array
       if (reader->tid.weak == CurrentTid || reader->tid.weak == WriteTxnOwner)
         goto skip_lck;
 
+      fprintf(stderr, "[suspend] suspending reader tid=%" PRIu64 "\n", (uint64_t)reader->tid.weak);
       rc = suspend_and_append(array, (mdbx_tid_t)reader->tid.weak);
       if (rc != MDBX_SUCCESS) {
       bailout_lck:

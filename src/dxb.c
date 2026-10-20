@@ -197,6 +197,7 @@ __cold int dxb_resize(MDBX_env *const env, const pgno_t allocated_pgno, const pg
   if ((env->flags & MDBX_NOSTICKYTHREADS) == 0) {
 #if IS_WINDOWS
     if ((size_bytes < env->dxb_mmap.current && mode > implicit_grow) || limit_bytes != env->dxb_mmap.limit) {
+      fprintf(stderr, "[dxb_resize] need suspend threads before remap\n");
       /* 1) Windows allows only extending a read-write section, but not a
        *    corresponding mapped view. Therefore in other cases we must suspend
        *    the local threads for safe remap.
@@ -209,7 +210,9 @@ __cold int dxb_resize(MDBX_env *const env, const pgno_t allocated_pgno, const pg
       array_onstack.limit = ARRAY_LENGTH(array_onstack.handles);
       array_onstack.count = 0;
       suspended = &array_onstack;
+      fprintf(stderr, "[dxb_resize] suspending threads...\n");
       rc = osal_suspend_threads_before_remap(env, &suspended);
+      fprintf(stderr, "[dxb_resize] suspend rc=%d\n", rc);
       if (rc != MDBX_SUCCESS) {
         ERROR("failed suspend-for-remap: errcode %d", rc);
         goto bailout;
@@ -303,6 +306,7 @@ __cold int dxb_resize(MDBX_env *const env, const pgno_t allocated_pgno, const pg
   }
 
   rc = osal_mresize(mresize_flags, &env->dxb_mmap, size_bytes, limit_bytes);
+  fprintf(stderr, "[dxb_resize] osal_mresize rc=%d (flags 0x%x)\n", rc, mresize_flags);
   eASSERT0(env, env->dxb_mmap.limit >= env->dxb_mmap.current);
 
   if (rc == MDBX_SUCCESS) {
