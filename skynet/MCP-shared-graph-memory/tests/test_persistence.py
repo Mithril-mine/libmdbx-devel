@@ -31,14 +31,8 @@ def test_persistence_full(store_path):
 
 def test_persistence_after_write(store_path):
     _seed(store_path)
-    s = Store(store_path)
-    try:
+    with Store(store_path) as s:
         s.safe_store("bug:crypto:alignment", "bug", "Updated text.", 0.5)
         assert s.get_record("bug:crypto:alignment")["summary"] == "Updated text."
-    finally:
-        s.close()
-    s2 = Store(store_path)
-    try:
+    with Store(store_path) as s2:
         assert s2.get_record("bug:crypto:alignment")["summary"] == "Updated text."
-    finally:
-        s2.close()

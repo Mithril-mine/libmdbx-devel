@@ -1,6 +1,5 @@
 """Тесты MCP-сервера (JSON-RPC stdio, прямое обращение к handle)."""
 
-import json
 
 import pytest
 
