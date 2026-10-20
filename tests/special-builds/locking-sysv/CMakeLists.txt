@@ -10,8 +10,11 @@ set(LIBMDBX_SOURCE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../../.."
     CACHE PATH "Path to the libmdbx repository root")
 
 # The library must be built from this repository with the System V IPC locking
-# enabled and nothing else pulled in (no tests/tools/C++).
+# enabled, the probe-bus enabled (the collision test injects a colliding key
+# via the ftok_key_collide FAULT site), and nothing else pulled in
+# (no tests/tools/C++).
 set(MDBX_LOCKING 5 CACHE STRING "Locking method" FORCE)
+set(MDBX_PROBES ON CACHE BOOL "Enable probe-bus instrumentation" FORCE)
 set(BUILD_TESTING OFF CACHE BOOL "Build tests" FORCE)
 set(MDBX_ENABLE_TESTS OFF CACHE BOOL "Build MDBX tests" FORCE)
 set(MDBX_BUILD_TOOLS OFF CACHE BOOL "Build MDBX tools" FORCE)
@@ -27,11 +30,21 @@ target_include_directories(issue_gh0080_ftok PRIVATE ${LIBMDBX_SOURCE_DIR})
 target_link_libraries(issue_gh0080_ftok PRIVATE mdbx-static)
 add_test(NAME issue_gh0080_ftok COMMAND issue_gh0080_ftok)
 
-# Canary for the deliberately-unfixed collision defect (issue #80): the
-# database survives only when the defect is gone, so the expected result is a
-# failure. Convert it into a normal test once the defect is fixed.
+# Regression test for the ftok() key collision defect (issue #80): a colliding
+# open of a live database must be refused instead of reclaiming (removing) the
+# live semaphore set. The collision is injected via the ftok_key_collide FAULT
+# site, so the probe-bus must be active at run time (MDBX_PROBES=1).
 add_executable(issue_gh0080_collision issue_gh0080_collision.c)
 target_include_directories(issue_gh0080_collision PRIVATE ${LIBMDBX_SOURCE_DIR})
 target_link_libraries(issue_gh0080_collision PRIVATE mdbx-static)
 add_test(NAME issue_gh0080_collision COMMAND issue_gh0080_collision)
-set_tests_properties(issue_gh0080_collision PROPERTIES WILL_FAIL TRUE)
+set_tests_properties(issue_gh0080_collision PROPERTIES ENVIRONMENT "MDBX_PROBES=1")
+
+# Regression test for the reclaim path of the same defect: reopening a database
+# whose semaphore set was left behind by a crashed owner must reclaim the stale
+# set and succeed (otherwise a legitimate reopen would be a denial of service).
+add_executable(issue_gh0080_reclaim issue_gh0080_reclaim.c)
+target_include_directories(issue_gh0080_reclaim PRIVATE ${LIBMDBX_SOURCE_DIR})
+target_link_libraries(issue_gh0080_reclaim PRIVATE mdbx-static)
+add_test(NAME issue_gh0080_reclaim COMMAND issue_gh0080_reclaim)
+set_tests_properties(issue_gh0080_reclaim PROPERTIES ENVIRONMENT "MDBX_PROBES=1")

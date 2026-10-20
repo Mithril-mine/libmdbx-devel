@@ -1275,10 +1275,20 @@ MDBX_MAYBE_UNUSED MDBX_INTERNAL key_t osal_ftok(int fd, const char *pathname) {
   }
   const uint64_t h = rrxmrrxmsx_0(info.ino ^ (uint64_t)info.dev * UINT64_C(40503) ^
                                  (uint64_t)info.type * UINT64_C(2654435761));
-  return (key_t)(h & 0x7fffffff);
+  key_t key = (key_t)(h & 0x7fffffff);
+  int injected = 0;
+  MPROBE_FAULT(ftok_key_collide, injected);
+  if (injected)
+    key = (key_t)injected;
+  return key;
 #else
   (void)fd;
-  return ftok(pathname, 42);
+  key_t key = ftok(pathname, 42);
+  int injected = 0;
+  MPROBE_FAULT(ftok_key_collide, injected);
+  if (injected)
+    key = (key_t)injected;
+  return key;
 #endif
 }
 #endif /*! Windows */
@@ -2037,7 +2047,7 @@ int osal_check_fs_incore(mdbx_filehandle_t handle) {
   return MDBX_RESULT_FALSE;
 }
 
-int osal_fsinfo(mdbx_filehandle_t handle, osal_fsinfo_t *info) {
+MDBX_MAYBE_UNUSED int osal_fsinfo(mdbx_filehandle_t handle, osal_fsinfo_t *info) {
 #if IS_WINDOWS
   (void)handle;
   info->ino = 0;
