@@ -55,6 +55,10 @@ struct LIBMDBX_API_TYPE slice : public ::MDBX_val {
 
   MDBX_CXX14_CONSTEXPR slice(const MDBX_val &src);
   MDBX_CXX11_CONSTEXPR slice(const slice &) noexcept = default;
+  /// \brief Takes over a temporary \ref MDBX_val: the slice refers to its
+  ///   bytes and the moved-from `src.iov_base` is set to null, while
+  ///   `src.iov_len` is kept (matching the library's own moved-from state);
+  ///   the slice does not own the bytes.
   MDBX_CXX14_CONSTEXPR slice(MDBX_val &&src);
   MDBX_CXX14_CONSTEXPR slice(slice &&src) noexcept;
 
