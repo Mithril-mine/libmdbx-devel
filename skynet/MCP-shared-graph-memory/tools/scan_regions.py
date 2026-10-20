@@ -24,7 +24,6 @@ import argparse
 import json
 import os
 import re
-import sys
 
 TOOLS_DIR = os.path.dirname(os.path.abspath(__file__))
 MODULE_DIR = os.path.dirname(TOOLS_DIR)

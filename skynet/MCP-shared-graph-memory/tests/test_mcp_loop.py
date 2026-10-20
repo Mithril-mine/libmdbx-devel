@@ -2,7 +2,6 @@
 
 import io
 import json
-import os
 
 from mcp.mcp_server import McpServer, _default_db_path
 

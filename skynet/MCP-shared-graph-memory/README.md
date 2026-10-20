@@ -21,9 +21,15 @@
 | `mcp/store.py` | Store: 23 таблицы, все операции, одна write-txn на операцию, бэкап и защита от удаления |
 | `mcp/mcp_server.py` | MCP-сервер (JSON-RPC 2.0 над stdio), db_* инструменты интроспекции |
 | `mcp/cli.py` | memory-cli (dump/stats/graph/audit/gc/vocab/purge) |
-| `tests/` | 288 тестов |
+| `tests/` | 326 тестов |
 | `tools/install.sh` | Безопасная установка (никогда не трогает db.mdbx/backups) |
-| `tools/collect_test_metrics.py` | Коллектор test_metrics/coverage из ctest XML / LastTest.log |
+| `tools/collect_test_metrics.py` | Коллектор test_metrics из ctest XML / LastTest.log (+ ci_jobs) |
+| `tools/collect_coverage.py` | lcov / llvm-cov → coverage (тест→символы) + covered_by |
+| `tools/map_ci_jobs.py` | Парсер `.github/workflows/*.yml` → ci_jobs (matrix/scope/tests) |
+| `tools/scan_project.py` | Карта всего репозитория (cmake/scripts/docs/ci/config) → project-map.json |
+| `tools/scan_probes.py` | Реестр зондов: MPROBE_*/DEV_ASSERT из src/ + USDT из probe-bus.md |
+| `tools/scan_symbols.py --merge` | + semantic-рёбра из implementations (эквивалентность по конфигам) |
+| `tools/gcov_to_coverage.py` | Реальное покрытие из gcov (.gcda) → coverage + блочная детализация |
 
 ## Требования
 
@@ -54,6 +60,11 @@ ctest --test-dir build -L mcp-shared-graph-memory --output-on-failure
   окружении хоста можно выполнять тесты (`MDBX_CAN_RUN_HOST_TESTS`; на
   cross-compile без эмулятора — пропускаются).
 - Альтернатива без CMake: `python3 tools/build_libmdbx.py && python3 -m pytest tests/`.
+
+Карта исходников и project-map собираются в CI: workflow
+`.github/workflows/ci-mcp-refactor-map.yml` (Linux + macOS) готовит
+`_build-scan`, запускает `scan_symbols.py` (linux/macos + merge),
+`scan_project.py`, `scan_probes.py` и валидатор против golden-счётчиков.
 
 ## Запуск
 
@@ -111,6 +122,30 @@ python3 -m mcp.cli --path ~/mem.mdbx gc --dry-run # тиринг hot/warm/cold
 Поиск `search()` использует BM25-ранжирование (IDF редких терминов проекта)
 и включает структурный слой (symbols/groups) при совпадении с идентификатором
 символа: единая точка входа «код + знания» для глубокого рефакторинга.
+
+### Совместная работа с codebase-memory-mcp (CBM)
+
+Основной режим — совместная работа с [codebase-memory-mcp] (граф кода CBM
+доступен параллельно в сессии). Мост **опционален**: модуль полноценно
+работает и без CBM.
+
+- `cbm_link(our_key, cbm_node, cbm_project)` — запись соответствия
+  «наш fq-ключ ↔ узел CBM» в таблицу `bridge`;
+- `cbm_search(query, project?, tool?, args?)` — вызов CBM CLI
+  (`codebase-memory-mcp cli --json <tool> <args>`) из нашего поиска;
+  при отсутствии бинаря/проекта возвращает `{"unavailable": true}` и
+  НЕ мешает работе (без CBM всё остальное работает как обычно);
+- `cbm_linked(prefix)` — обзор мостов для навигации в обе стороны.
+
+### Контроль состояния
+
+`version_info` (MCP-инструмент, CLI `mcp version`) отдаёт версии для
+оперативного контроля:
+- **модуля** (`mcp.__version__`), **libmdbx** (из `mdbx_version`),
+  **схемы данных** (persisted в `meta.schema_ver`, сверка `schema_matches`)
+  и **данных** (`map_generation`, `records`, `symbols`, `next_id`) —
+  ответ на вопросы «что за версия, совместима ли схема, какое поколение
+  карты загружено».
 
 ## Установка (безопасная)
 
