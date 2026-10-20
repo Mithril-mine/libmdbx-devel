@@ -141,3 +141,86 @@ TEST(issue_gh0101, buffer_from_private_conversion) {
   pc.assign_to(d);
   EXPECT_EQ(3u, d.length());
 }
+
+/* Issue #142: a null pointer with a non-zero length must be rejected by the
+ * owning buffer and the non-owning slice alike (bad_value_size, as the
+ * `buffer(nullptr, N)` guard added by #140 does), while the zero-length
+ * spellings stay valid. The MDBX_RESERVE blank form is only reachable through
+ * the explicit slice::blank_for_put_reserve() factory. */
+TEST(issue_gh0101, null_pointer_with_nonzero_length_is_rejected) {
+  /* zero-length null spellings stay valid */
+  const buffer empty1(nullptr, 0);
+  EXPECT_TRUE(empty1.empty());
+  buffer empty2;
+  empty2.assign(nullptr, 0);
+  EXPECT_TRUE(empty2.empty());
+  const mdbx::slice ns(nullptr, size_t(0));
+  EXPECT_TRUE(ns.empty());
+  EXPECT_TRUE(ns.is_valid());
+
+  /* non-zero-length null spellings are rejected, not turned into a dangling
+   * non-empty reference (undefined behavior on use) */
+  EXPECT_THROW(buffer(nullptr, 42), mdbx::bad_value_size);
+  buffer b;
+  EXPECT_THROW(b.assign(nullptr, 42), mdbx::bad_value_size);
+  EXPECT_THROW(buffer(nullptr, 42, false), mdbx::bad_value_size);
+  EXPECT_THROW(mdbx::slice(nullptr, size_t(42)), mdbx::bad_value_size);
+  mdbx::slice s;
+  EXPECT_THROW(s.assign(nullptr, size_t(42)), mdbx::bad_value_size);
+
+  /* the rejected operations must not corrupt the object */
+  EXPECT_TRUE(b.empty());
+  EXPECT_TRUE(s.empty());
+}
+
+/* Issue #142: the MDBX_RESERVE blank form is spelled explicitly and stays
+ * usable. */
+TEST(issue_gh0101, slice_reserve_factory) {
+  const mdbx::slice blank = mdbx::slice::blank_for_put_reserve(42);
+  EXPECT_EQ(42u, blank.length());
+  EXPECT_EQ(nullptr, blank.data());
+  EXPECT_FALSE(blank.is_valid()) << "a reserve blank is intentionally invalid until the C API fills it";
+
+  /* zero-length reserve is just a null slice and stays valid */
+  const mdbx::slice zero = mdbx::slice::blank_for_put_reserve(0);
+  EXPECT_TRUE(zero.is_valid());
+  EXPECT_TRUE(zero.empty());
+
+  /* an oversize reserve request must still be rejected, exactly as the old
+   * `slice(nullptr, N)` spelling did via check_length() */
+  EXPECT_THROW(mdbx::slice::blank_for_put_reserve(size_t(MDBX_MAXDATASIZE) + 1), std::length_error)
+      << "blank_for_put_reserve() must validate the length against MDBX_MAXDATASIZE";
+}
+
+TEST(issue_gh0101, invalidated_slice_can_rebind) {
+  mdbx::slice s("abc", 3);
+  ASSERT_EQ(3u, s.length());
+  s.invalidate();
+  EXPECT_FALSE(s.is_valid()) << "invalidate() keeps the length but nulls the address";
+  EXPECT_NO_THROW(s.assign("xyz", 3)) << "a nulled slice must be re-bindable via assign()";
+  EXPECT_EQ(0, memcmp(s.data(), "xyz", 3));
+}
+
+/* Issue #144: try_as_pod() reports a length mismatch as nullopt instead of
+ * throwing, while as_pod() keeps the throwing behavior for exact sizes. */
+TEST(issue_gh0101, slice_try_as_pod) {
+#if defined(__cpp_lib_optional) && __cpp_lib_optional >= 201606L
+  const mdbx::slice eight("abcdefgh", 8);
+  ASSERT_EQ(8u, sizeof(uint64_t));
+  ASSERT_TRUE(eight.try_as_pod<uint64_t>().has_value())
+      << "an 8-byte slice must convert to a uint64_t";
+  EXPECT_EQ(uint64_t(0x6867666564636261ULL), eight.try_as_pod<uint64_t>().value())
+      << "little-endian bytes must be copied as-is";
+
+  const mdbx::slice short_s("abc", 3);
+  EXPECT_FALSE(short_s.try_as_pod<uint64_t>().has_value())
+      << "a 3-byte slice cannot be a uint64_t";
+
+  EXPECT_EQ(uint64_t(0x6867666564636261ULL), eight.as_pod<uint64_t>())
+      << "as_pod() keeps working for the exact-size case";
+  EXPECT_THROW(short_s.as_pod<uint64_t>(), mdbx::bad_value_size)
+      << "as_pod() with a wrong size still throws";
+#else
+  GTEST_SKIP() << "try_as_pod() requires <optional> (C++17)";
+#endif /* __cpp_lib_optional >= 201606L */
+}

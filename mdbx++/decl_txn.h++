@@ -158,6 +158,8 @@ public:
   /// \warning With `unbind=false` it must NOT be used while any cursor of the
   ///   transaction is owned by a \ref cursor_managed: the cursor is closed
   ///   behind the wrapper's back, which is left owning a freed handle.
+  /// \note With `unbind=true` the wrappers are left alive but detached (see
+  ///   \ref unbind_all_cursors()).
   inline size_t release_all_cursors(bool unbind) const;
 
   // TODO: пересмотреть вариант реализации при переходе на двухсвязанные
@@ -168,6 +170,17 @@ public:
   // inline size_t close_all_cursors() const { return release_all_cursors(false); }
 
   /// \brief Unbind all cursors.
+  /// \details Unbinds (detaches) every live cursor of the transaction, the
+  ///   underlying C objects stay allocated and owned. A \ref cursor_managed
+  ///   wrapper, however, is not informed about the unbind: it still holds the
+  ///   same C handle, so any subsequent cursor operation (seeking, moving,
+  ///   reading the current entry, etc.) fails with \ref MDBX_BAD_CURSOR or
+  ///   \ref MDBX_EINVAL at the next C API call. There is no way to detect the
+  ///   detached state from the wrapper side except observing those errors.
+  ///   To keep using a cursor after this call, re-bind it explicitly via
+  ///   \ref cursor::bind() / \ref cursor::renew() (the cursor's `unbind()`
+  ///   makes the detachment explicit and is the recommended way to invalidate
+  ///   a wrapper you intend to re-use) (issue #146).
   inline size_t unbind_all_cursors() const { return release_all_cursors(true); }
 
   /// \brief Open existing key-value map.
