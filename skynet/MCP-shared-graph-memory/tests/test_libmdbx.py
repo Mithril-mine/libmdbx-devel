@@ -1,7 +1,6 @@
 """Тесты низкоуровневого биндинга libmdbx."""
 
 import os
-import tempfile
 
 import pytest
 
@@ -29,7 +28,7 @@ def test_constants():
     assert mdbx.MDBX_OPT_SYNC_PERIOD == 3
 
 
-def test_env_sync_flags_and_options(monkeypatch):
+def test_env_sync_flags_and_options(tmp_path, monkeypatch):
     """Env открывается с SAFE_NOSYNC и порогами sync_bytes/sync_period."""
     open_flags = {}
     options = []
@@ -50,8 +49,8 @@ def test_env_sync_flags_and_options(monkeypatch):
             self.mdbx_env_open = fake_open
 
     monkeypatch.setattr(mdbx, "_get_lib", lambda: _FakeLib())
-    env = mdbx.Env(os.path.join(tempfile.mkdtemp(), "t.mdbx"),
-                   sync_bytes=64 << 20, sync_period=60)
+    mdbx.Env(os.path.join(str(tmp_path), "t.mdbx"),
+             sync_bytes=64 << 20, sync_period=60)
     assert open_flags["flags"] & mdbx.MDBX_SAFE_NOSYNC
     opts = dict(options)
     assert opts[mdbx.MDBX_OPT_SYNC_BYTES] == 64 << 20
@@ -67,9 +66,9 @@ def test_strerror_and_version():
     assert mdbx.build_string()
 
 
-def test_env_create_flag():
+def test_env_create_flag(tmp_path):
     """mode=0 открывает существующее без создания (mdbx.h env_open)."""
-    d = tempfile.mkdtemp()
+    d = str(tmp_path)
     p = os.path.join(d, "e.mdbx")
     with pytest.raises(mdbx.LibmdbxError):
         mdbx.Env(p, maxdbs=8, create=False)
@@ -79,8 +78,8 @@ def test_env_create_flag():
     env2.close()
 
 
-def test_env_create_open_close():
-    d = tempfile.mkdtemp()
+def test_env_create_open_close(tmp_path):
+    d = str(tmp_path)
     p = os.path.join(d, "e.mdbx")
     env = mdbx.Env(p, maxdbs=8)
     assert env.maxkeysize() > 100
@@ -91,8 +90,8 @@ def test_env_create_open_close():
     env2.close()
 
 
-def test_put_get_delete():
-    d = tempfile.mkdtemp()
+def test_put_get_delete(tmp_path):
+    d = str(tmp_path)
     p = os.path.join(d, "e.mdbx")
     env = mdbx.Env(p, maxdbs=8)
     try:
@@ -112,8 +111,8 @@ def test_put_get_delete():
         env.close()
 
 
-def test_put_nooverwrite():
-    d = tempfile.mkdtemp()
+def test_put_nooverwrite(tmp_path):
+    d = str(tmp_path)
     env = mdbx.Env(os.path.join(d, "e.mdbx"), maxdbs=8)
     try:
         with env.begin() as txn:
@@ -127,9 +126,9 @@ def test_put_nooverwrite():
         env.close()
 
 
-def test_dupsort_integerdup_postings():
+def test_dupsort_integerdup_postings(tmp_path):
     """Постинг-список: term -> множество uint64 id (INTEGERDUP)."""
-    d = tempfile.mkdtemp()
+    d = str(tmp_path)
     env = mdbx.Env(os.path.join(d, "e.mdbx"), maxdbs=8)
     try:
         flags = mdbx.DUPSORT | mdbx.DUPFIXED | mdbx.INTEGERDUP | mdbx.CREATE
@@ -158,9 +157,9 @@ def test_dupsort_integerdup_postings():
         env.close()
 
 
-def test_integerkey_table():
+def test_integerkey_table(tmp_path):
     """INTEGERKEY: числовые ключи, range-поиск."""
-    d = tempfile.mkdtemp()
+    d = str(tmp_path)
     env = mdbx.Env(os.path.join(d, "e.mdbx"), maxdbs=8)
     try:
         with env.begin() as txn:
@@ -178,8 +177,8 @@ def test_integerkey_table():
         env.close()
 
 
-def test_cursor_count_all():
-    d = tempfile.mkdtemp()
+def test_cursor_count_all(tmp_path):
+    d = str(tmp_path)
     env = mdbx.Env(os.path.join(d, "e.mdbx"), maxdbs=8)
     try:
         with env.begin() as txn:
@@ -193,8 +192,8 @@ def test_cursor_count_all():
         env.close()
 
 
-def test_get_empty_value():
-    d = tempfile.mkdtemp()
+def test_get_empty_value(tmp_path):
+    d = str(tmp_path)
     env = mdbx.Env(os.path.join(d, "e.mdbx"), maxdbs=8)
     try:
         with env.begin() as txn:
@@ -208,15 +207,15 @@ def test_get_empty_value():
         env.close()
 
 
-def test_env_context_manager():
-    d = tempfile.mkdtemp()
+def test_env_context_manager(tmp_path):
+    d = str(tmp_path)
     p = os.path.join(d, "e.mdbx")
     with mdbx.Env(p, maxdbs=8) as env:
         assert env.maxkeysize() > 0
 
 
-def test_cursor_put_direct():
-    d = tempfile.mkdtemp()
+def test_cursor_put_direct(tmp_path):
+    d = str(tmp_path)
     env = mdbx.Env(os.path.join(d, "e.mdbx"), maxdbs=8)
     try:
         with env.begin() as txn:

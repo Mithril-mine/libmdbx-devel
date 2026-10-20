@@ -1,6 +1,5 @@
 import os
 import sys
-import tempfile
 
 import pytest
 
@@ -10,17 +9,17 @@ from mcp import Store  # noqa: E402
 
 
 @pytest.fixture
-def store():
-    d = tempfile.mkdtemp()
-    s = Store(os.path.join(d, "test.mdbx"))
+def store(tmp_path):
+    # tmp_path чистится pytest автоматически: никаких утечек в /tmp
+    # (mkdtemp без cleanup переполнял диск — сотни каталогов с БД+backups)
+    s = Store(str(tmp_path / "test.mdbx"))
     yield s
     s.close()
 
 
 @pytest.fixture
-def store_path():
-    d = tempfile.mkdtemp()
-    return os.path.join(d, "test.mdbx")
+def store_path(tmp_path):
+    return str(tmp_path / "test.mdbx")
 
 
 def seed_vocab(s: Store, pairs):

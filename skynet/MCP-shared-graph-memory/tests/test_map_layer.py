@@ -2,7 +2,6 @@
 
 import json
 
-from mcp import Store
 from tests.conftest import seed_vocab
 
 
@@ -179,8 +178,8 @@ def test_sym_and_record_ids_do_not_collide(store):
 def test_bridge_link_record_to_symbol(store):
     """Мост curated ↔ structural: link запись → символ через sym_id."""
     seed_vocab(store, [("crypto", "alignment")])
-    r = store.safe_store("bug:crypto:alignment", "bug",
-                         "Segfault in AES on arm64", 0.7)
+    store.safe_store("bug:crypto:alignment", "bug",
+                     "Segfault in AES on arm64", 0.7)
     store.map_put_symbol("fn:mdbx_env_open", {"kind": "function",
                                               "name": "mdbx_env_open"})
     res = store.link("bug:crypto:alignment", "related-to", "fn:mdbx_env_open")
@@ -226,6 +225,7 @@ def test_map_refresh_stale_removes_dangling_symbol_links(store):
     # fn:alive получит id; fn:gone больше нет в symbols
     store.sym_id("fn:alive")
     res = store.map_refresh_stale()
+    assert res["removed_links"] >= 1
     # связь к fn:gone удалена
     g = store.graph("bug:crypto:alignment", depth=1)
     outs = [rel.get("object") for rel in g.get("edges", [])]
@@ -261,3 +261,19 @@ def test_map_refresh_stale_redirects_via_alias(store):
     outs = [rel.get("object") for rel in g.get("edges", [])]
     assert "fn:cpp::impl" in str(outs)
     assert "fn:old_impl" not in str(outs)
+
+
+def test_map_symbols_module_filter(store):
+    """Кайдзен: map_symbols('fn:gc') находит функции из модулей gc-* даже
+    когда канонический ключ — fn:{qname} (module в теле, не в ключе)."""
+    store.map_put_symbol("fn:gc_alloc_ex", {"kind": "function",
+                                            "module": "gc-get", "name": "gc_alloc_ex"})
+    store.map_put_symbol("fn:spill_cycle", {"kind": "function",
+                                            "module": "spill", "name": "spill_cycle"})
+    store.map_put_symbol("fn:mdbx_env_open", {"kind": "function",
+                                              "module": "api-env", "name": "mdbx_env_open"})
+    got = store.map_symbols(prefix="fn:gc", limit=10)
+    assert "fn:gc_alloc_ex" in got
+    assert "fn:spill_cycle" not in got
+    # префиксный по ключу как раньше
+    assert store.map_symbols(prefix="fn:spill") == ["fn:spill_cycle"]

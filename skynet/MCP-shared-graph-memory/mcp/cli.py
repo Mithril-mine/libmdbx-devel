@@ -45,6 +45,11 @@ def cmd_stats(args) -> None:
         s.close()
 
 
+def cmd_version(args) -> None:
+    with _open(args.path) as s:
+        print(json.dumps(s.version_info(), ensure_ascii=False, indent=2))
+
+
 def cmd_graph(args) -> None:
     s = _open(args.path)
     try:
@@ -153,6 +158,9 @@ def main(argv=None):
 
     p = sub.add_parser("stats")
     p.set_defaults(func=cmd_stats)
+
+    p = sub.add_parser("version")
+    p.set_defaults(func=cmd_version)
 
     p = sub.add_parser("graph")
     p.add_argument("--key", required=True)

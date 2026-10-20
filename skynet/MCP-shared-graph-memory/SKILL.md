@@ -53,12 +53,72 @@ shared-graph-memory.mdbx — персистентная память роя на
 | `map_uncovered(prefix?, limit?)` | Uncovered-острова смысла вне union-AST |
 | `test_metrics_insert(test, duration_ms, labels?, timeout_sec?)` | Окно истории длительностей тест-кейса (минутное: last/min/max/p90, флаки) |
 | `test_metrics_get(test)` / `test_metrics_all(prefix?)` | Метрики теста / всех |
-| `coverage_insert(test, symbols, pct?)` / `coverage_get(test)` / `coverage_all()` | Покрытие теста (набор fn:/type:/macro: символов) |
+| `coverage_insert(test, symbols, pct?)` / `coverage_batch(tests)` | Покрытие теста (набор fn:/type:/macro:), батч |
+| `coverage_get(test)` / `coverage_all()` / `coverage_remove(test)` | Покрытие / все / удалить |
+| `coverage_symbols(symbol_prefix?)` | **Какие тесты защищают символ** (covered_by) |
 | `ci_jobs_insert(job, body)` / `ci_jobs_all(prefix?)` | Параметры CI-джоб (`{workflow}/{job}`) |
+| `ci_jobs_get(job)` / `ci_jobs_by_test(test)` | Одна джоба / джобы, исполняющие тест |
+| `project_load(files, edges, replace?)` | Загрузка project-map (весь репозиторий) |
+| `project_files(prefix?, limit?)` | Файлы проекта по префиксу пути |
+| `file_deps(path)` / `file_dependents(path)` | Зависимости файла / зависящие от него |
+| `probe_add(tag, kind, ...)` / `probe_batch(probes)` | Реестр зондов (SystemMap): регистрация, dedup по семантическому тегу |
+| `probe_get(tag)` / `probe_list(prefix?, kind?)` | Зонд / список зондов |
+| `probe_status(tag, status)` / `probe_remove(tag)` | Смена статуса / удаление |
+| `trace_ingest(caller, callee, count?, label?)` | Наблюдаемый вызов (runtime), инкремент счётчика |
+| `trace_observed(caller?)` | Наблюдаемые вызовы (по префиксу caller) |
+| `trace_path(src, dst, depth?)` | Пути по observed-рёбрам (BFS) |
+| `trace_compare(symbol)` | **possible vs observed**: static (call_edges) vs runtime (traces) |
+| `map_put_edge(caller, callee, kind?)` | Записать ребро вызова (syntax/semantic) |
+| `map_mark_stale(live_keys)` | Пометить отсутствующие символы stale (alive остальным) |
+| `map_generations()` / `map_snapshot()` | Поколение карты (canary.y) / полный снимок |
+| `map_diff(other?)` | Разница текущего снимка с прошлым (added/removed/common) |
+| `adr_update(name, ...)` / `adr_get(name)` | ADR: сохранить/прочитать архитектурное решение |
+| `adr_outline(prefix?)` / `adr_delete(name)` | Обзор ADR / удаление |
+| `cbm_link(our_key, cbm_node, cbm_project?)` / `cbm_unlink(our_key)` | Мост: наш fq-ключ ↔ узел codebase-memory-mcp |
+| `cbm_linked(prefix?)` | Список мостов |
+| `cbm_search(query, project?, tool?, args?)` | Поиск в CBM (CLI-подпроцесс). **Опционально**: без CBM → `unavailable: true`; полноценная работа сохраняется |
+| `version_info` | **Версии**: модуля / libmdbx / схемы данных / данных (map_generation, records, symbols) — для оперативного контроля состояния |
+
+> ⚠️ **Зонды в базе знаний — только постоянные.** Временные/отладочные
+> пробники (добавляемые при трассировке одной ветви) НЕ регистрируются в
+> `probes`: если такой зонд всё же попал в реестр — удалите его
+> (`probe_remove`) или перегенерируйте реестр свежим `scan_probes.py`
+> (с замещением). Реестр — SystemMap для постоянных точек; мусор деградирует
+> навигацию и поведенческую паритетность C→C++.
+
+### Ветки и слои (нелинейное версионирование БЗ)
+
+Параллельные ветки кода живут в **отдельных слоях** (идентификатор
+`{ver}.{feature}.{n}`, см. docs/BRANCHES.md):
+
+- `branch_register(ver, feature, n)` / `branch_list` / `branch_current` /
+  `branch_activate(layer)` — управление слоями;
+- `map_diff_branches(from, to)` — **структурный diff по содержимому** карты
+  (не по коммитам): что реально изменилось между ветками;
+- `layer=` принимают map-инструменты (`map_symbol(s)`, `map_edges_of`,
+  `map_callers_of`); базовый слой (`0.15`) — без префикса;
+- **Правило**: в feature-ветке работайте в СВОЁМ слое (передавайте `layer`),
+  не затирая базовый. Знания (curated-слой) — общие; структурный слой —
+  per-branch.
+- **Активная ветка**: после `branch_activate(layer)` все инструменты о
+  состоянии кода — `map_*`, `coverage_*` (insert/batch/remove/get/all/
+  symbols/summary/gaps/blocks), `probe_*`, `trace_*` — по умолчанию
+  читают/пишут ЭТОТ слой; аргумент `layer` перебивает активную ветку.
+  Коллекторы (`collect_coverage.py`, `gcov_to_coverage.py`, `load_map.py`)
+  принимают `--layer`. Знания (curated-слой: records/links/vocab/adr/
+  ci_jobs/test_metrics) — общие, per-branch только структурный слой.
+- При слиянии: `map_diff_branches(base, feature)` → перенос новых символов в
+  base → пересканировать base → feature `status=merged` (архив, НЕ удалять).
 
 ### Карта исходников (refactoring-map)
 
 - Структурный слой: `symbols` (fn:/type:/macro:), `call_edges(+rev)`, `groups`,
+  `regions`, `uncovered`; наполняется `scan_symbols.py` → `load_map.py`.
+- **Ключи**: канонические fq-ключи функций — `fn:{qname}` (module в теле,
+  `@<module>` для TU-static, `#<sig>` для перегрузок). **Не выдумывайте
+  ключи**: получайте их через `map_symbols(prefix)` / `map_symbol` перед
+  `map_edges_of`/`map_callers_of`/`coverage_symbols`. Поиск по модулю —
+  `map_symbols("fn:gc")` (фильтр по module-полю).
   `regions` (#if-дерево), `uncovered` (острова смысла вне union-AST всех конфигов).
 - Данные генерируются `tools/scan_symbols.py` (+scan_regions/uncovered),
   загружаются `tools/load_map.py --db <живая> --replace`, сверяются
