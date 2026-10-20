@@ -236,6 +236,11 @@ class McpServer:
              [], {"type": "object",
                   "properties": {"prefix": {"type": "string"},
                                  "limit": {"type": "integer"}}}),
+            ("test_metrics_batch", "Батчевая запись метрик {test: {...}} "
+             "в одной транзакции (A3).", ["metrics"], {
+                 "type": "object",
+                 "properties": {"metrics": {"type": "object"}},
+                 "required": ["metrics"]}),
             ("coverage_insert", "Зафиксировать покрытие теста (набор символов).",
              ["test"], {"type": "object",
                         "properties": {"test": {"type": "string"},
@@ -280,6 +285,12 @@ class McpServer:
                                 "blocks": {"type": "array"},
                                 "layer": {"type": "string"}},
                  "required": ["test", "blocks"]}),
+            ("coverage_blocks_batch", "Батчевая запись блоков "
+             "{test: [blocks]} в одной транзакции (A3).", ["tests"], {
+                 "type": "object",
+                 "properties": {"tests": {"type": "object"},
+                                "layer": {"type": "string"}},
+                 "required": ["tests"]}),
             ("coverage_blocks_get", "Блоки символа, покрытые тестом.",
              ["test", "symbol"], {"type": "object",
                                   "properties": {"test": {"type": "string"},
@@ -679,6 +690,8 @@ class McpServer:
         if name == "test_metrics_all":
             return {"tests": s.test_metrics_all(args.get("prefix", ""),
                                                 limit=args.get("limit"))}
+        if name == "test_metrics_batch":
+            return s.test_metrics_batch(args.get("metrics") or {})
         if name == "coverage_insert":
             return s.coverage_insert(args["test"], args.get("symbols") or [],
                                      float(args.get("pct", 0.0)),
@@ -704,6 +717,9 @@ class McpServer:
             return {"stored": s.coverage_blocks_insert(
                 args["test"], args.get("blocks") or [],
                 layer=args.get("layer", ""))}
+        if name == "coverage_blocks_batch":
+            return s.coverage_blocks_batch(args.get("tests") or {},
+                                           layer=args.get("layer", ""))
         if name == "coverage_blocks_get":
             return {"blocks": s.coverage_blocks_get(
                 args["test"], args["symbol"], layer=args.get("layer", ""))}
