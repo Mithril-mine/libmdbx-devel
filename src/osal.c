@@ -1242,8 +1242,8 @@ int osal_removefile(const pathchar_t *pathname) {
 static bool is_valid_fd(int fd) { return !(isatty(fd) < 0 && errno == EBADF); }
 
 /* ----------------------------------------------------------------------------
- * osal_ftok() — a wrapper around the system ftok() for the System V IPC
- * locking (MDBX_LOCKING_SYSV).
+ * osal_ftok() — System V IPC semaphore key derivation for the
+ * MDBX_LOCKING_SYSV locking.
  *
  * Background: the semaphore key is derived from the data-file path via the
  * system ftok(), see the issue
@@ -1255,27 +1255,41 @@ static bool is_valid_fd(int fd) { return !(isatty(fd) < 0 && errno == EBADF); }
  * with IPC_RMID and recreates its own — silently destroying the locking of an
  * unrelated, in-use database that happens to share the key.
  *
- * Why this is intentionally NOT fixed here:
- *  - if ftok() works poorly, that is a defect of the platform, not of libmdbx;
- *  - System V IPC is a legacy mechanism: when it is selected, either a legacy
- *    system is in use about which little is known, or the user made a
- *    deliberate choice, and then the use of the system ftok() is expected;
- *  - replacing the system ftok() may make things worse, since the exact
- *    behavior of the platform implementation is not known.
- *
- * A proper fix would be a more collision-resistant key derived from the file
- * inode number, the filesystem type and the mount point, with a build option
- * to choose between this implementation and the system ftok(), and would
- * receive the MDBX_env to use the already-open file descriptor of the DXB
- * file. The relevant code for obtaining the filesystem type and mount point
- * already exists inside osal_check_fs_local() and would need to be factored
- * out into a separate osal function. Until then, this wrapper only isolates
- * the problem and keeps the exact current behavior: it calls the system
- * ftok() with project id 42.
+ * With MDBX_AVOID_FTOK the key is derived from the full inode number, the
+ * device and the filesystem type, mixed by rrxmrrxmsx_0(); this makes the key
+ * space much wider than the system ftok() and lowers the collision
+ * probability, but does not eliminate it — the System V IPC key is still
+ * 32-bit wide, and the ultimate guard is the decision made in lck_init()
+ * (see sysv_ipc_eeexist_decide()). The path is deliberately not hashed, since
+ * that would require its full canonicalization (mount point, overlays, FS
+ * collation), which is unreliable.
  * -------------------------------------------------------------------------*/
 MDBX_MAYBE_UNUSED MDBX_INTERNAL key_t osal_ftok(int fd, const char *pathname) {
+#if MDBX_AVOID_FTOK
+  (void)pathname;
+  osal_fsinfo_t info;
+  int err = osal_fsinfo(fd, &info);
+  if (unlikely(err != MDBX_SUCCESS)) {
+    errno = err;
+    return (key_t)-1;
+  }
+  const uint64_t h = rrxmrrxmsx_0(info.ino ^ (uint64_t)info.dev * UINT64_C(40503) ^
+                                 (uint64_t)info.type * UINT64_C(2654435761));
+  key_t key = (key_t)(h & 0x7fffffff);
+  int injected = 0;
+  MPROBE_FAULT(ftok_key_collide, injected);
+  if (injected)
+    key = (key_t)injected;
+  return key;
+#else
   (void)fd;
-  return ftok(pathname, 42);
+  key_t key = ftok(pathname, 42);
+  int injected = 0;
+  MPROBE_FAULT(ftok_key_collide, injected);
+  if (injected)
+    key = (key_t)injected;
+  return key;
+#endif
 }
 #endif /*! Windows */
 
@@ -2031,6 +2045,45 @@ int osal_check_fs_incore(mdbx_filehandle_t handle) {
 #endif /* !Windows */
 
   return MDBX_RESULT_FALSE;
+}
+
+MDBX_MAYBE_UNUSED int osal_fsinfo(mdbx_filehandle_t handle, osal_fsinfo_t *info) {
+#if IS_WINDOWS
+  (void)handle;
+  info->ino = 0;
+  info->dev = 0;
+  info->type = 0;
+  return MDBX_SUCCESS;
+#else
+  struct stat st;
+  if (fstat(handle, &st))
+    return errno;
+  info->ino = (uint64_t)st.st_ino;
+  info->dev = (uint64_t)st.st_dev;
+
+  unsigned type = 0;
+#if defined(_AIX) || defined(__OS400__)
+  type = st.st_vfstype;
+#elif defined(__sun) || defined(__SVR4) || defined(__svr4__) || defined(ST_FSTYPSZ) || defined(_ST_FSTYPSZ)
+  /* Solaris: no numeric fs type in stat */
+#elif defined(__NetBSD__)
+  struct statvfs statvfs_info;
+  if (fstatvfs(handle, &statvfs_info))
+    return errno;
+  /* NetBSD: no numeric magic, keep type 0 */
+#elif defined(FSTYPSZ) || defined(_FSTYPSZ)
+  /* AIX/OS400 handled above; generic fstypename platforms: no numeric magic */
+#else
+  struct statfs statfs_info;
+  if (fstatfs(handle, &statfs_info))
+    return errno;
+#if !defined(__OpenBSD__)
+  type = (unsigned)statfs_info.f_type;
+#endif /* !OpenBSD */
+#endif
+  info->type = type;
+  return MDBX_SUCCESS;
+#endif /* !Windows */
 }
 
 int osal_check_fs_local(mdbx_filehandle_t handle, int flags) {

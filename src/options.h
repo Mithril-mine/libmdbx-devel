@@ -399,6 +399,12 @@
 #define MDBX_USE_OFDLOCKS_CONFIG MDBX_STRINGIFY(MDBX_USE_OFDLOCKS)
 #endif /* MDBX_USE_OFDLOCKS */
 
+/** Advanced: Using own collision-resistant key derivation for the System V IPC
+ * locking instead of the system ftok(); default OFF keeps the system behavior. */
+#ifndef MDBX_AVOID_FTOK
+#define MDBX_AVOID_FTOK 0
+#endif
+
 /** Advanced: Using sendfile() syscall (autodetection by default). */
 #ifndef MDBX_USE_SENDFILE
 #if ((defined(__linux__) || defined(__gnu_linux__)) && !defined(__ANDROID_API__)) ||                                   \

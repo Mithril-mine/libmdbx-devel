@@ -41,6 +41,7 @@
 #ifndef MDBX_LOCKING_AUTO
 #cmakedefine MDBX_LOCKING @MDBX_LOCKING@
 #endif
+#cmakedefine01 MDBX_AVOID_FTOK
 #cmakedefine MDBX_TRUST_RTC_AUTO
 #ifndef MDBX_TRUST_RTC_AUTO
 #cmakedefine01 MDBX_TRUST_RTC
