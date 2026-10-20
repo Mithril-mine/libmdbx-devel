@@ -88,6 +88,45 @@ def test_effective_layer_active_branch_defaults(store):
     assert "fn:base_only" in store.map_symbols("fn:", layer="0.15.base")
 
 
+def test_env_layer_overrides_active_branch(store_path, monkeypatch):
+    """SHARED_GRAPH_MEMORY_LAYER изолирует процесс от чужой активации (N1)."""
+    monkeypatch.setenv("SHARED_GRAPH_MEMORY_LAYER", "0.15.mine.1")
+    from mcp import Store
+    s = Store(store_path)
+    try:
+        s.map_load_batch({"fn:mine": {"module": "m", "l0": 1, "l1": 2}},
+                         [], {}, replace=True, layer="0.15.mine.1")
+        s.map_load_batch({"fn:theirs": {"module": "m", "l0": 1, "l1": 2}},
+                         [], {}, replace=True, layer="0.15.theirs.2")
+        # другой агент активировал свою ветку — глобальный default переключён
+        s.branch_activate("0.15.theirs.2")
+        # мой процесс читает СВОЙ слой (env-override), а не активный чужой
+        syms = s.map_symbols("fn:")
+        assert "fn:mine" in syms
+        assert "fn:theirs" not in syms
+        # явный layer= побеждает env-override
+        assert "fn:theirs" in s.map_symbols("fn:", layer="0.15.theirs.2")
+    finally:
+        s.close()
+
+
+def test_branch_activate_expected_prev_cas(store):
+    """CAS: активация с неверным expected_prev отклоняется конфликтом (N1)."""
+    import pytest
+    from mcp.errors import MemoryError as ME
+    store.branch_register("0.15", "base")
+    store.branch_activate("0.15")
+    assert store.branch_current()["layer"] == "0.15"
+    # гонка: другой агент уже переключил слой — CAS ловит расхождение
+    with pytest.raises(ME) as ei:
+        store.branch_activate("0.15.feat.1", expected_prev="0.15.stale.9")
+    assert "CONFLICT" in str(ei.value)
+    assert store.branch_current()["layer"] == "0.15"  # не переключился
+    # корректный expected_prev — активация проходит
+    r = store.branch_activate("0.15.feat.1", expected_prev="0.15")
+    assert r["previous"] == "0.15" and r["current"] == "0.15.feat.1"
+
+
 def test_upgrade_recreates_incompatible_table(tmp_path):
     """Миграция: таблица со старыми флагами пересоздаётся при rw-upgrade."""
     from mcp import libmdbx as mdbx

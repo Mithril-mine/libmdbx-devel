@@ -52,6 +52,11 @@ GC_WARM = 0.3
 LRU_RATE_LIMIT_SECONDS = 60
 SYNC_POLL_INTERVAL_SECONDS = 1.0
 
+# --- слой ветки процесса (роевая изоляция, N1): per-process override поверх
+# глобальной meta.branch_current. Агент роя выставляет свою ветку один раз —
+# и его вызовы с layer="" не переключаются чужим branch_activate.
+ENV_LAYER = "SHARED_GRAPH_MEMORY_LAYER"
+
 # --- резервное копирование и защита от удаления файла БД ----------------------
 ENV_BACKUP_DIR = "SHARED_GRAPH_MEMORY_BACKUP_DIR"
 ENV_AUTO_BACKUP_SECONDS = "SHARED_GRAPH_MEMORY_AUTO_BACKUP_SECONDS"
@@ -160,6 +165,10 @@ class Store:
         self.max_value_bytes = max_value_bytes
         self.sync_mode = sync_mode
         self._readonly = readonly
+        # per-process слой (env SHARED_GRAPH_MEMORY_LAYER): читается один раз —
+        # детерминирован на время жизни Store и не перетирается чужими
+        # branch_activate из параллельных процессов роя (N1).
+        self._env_layer = (os.environ.get(ENV_LAYER) or "").strip().strip("/")
         # read-only открытие НЕ должно трогать LCK на запись: используем
         # ACCEDE чтобы присоединиться к уже открытой БД без конфликта флагов.
         self.env = mdbx.Env(path, maxdbs=maxdbs, readonly=readonly,
@@ -3824,14 +3833,18 @@ class Store:
         return layer + "/"
 
     def _effective_layer(self, layer: str = "") -> str:
-        """Слой для чтения/записи: явный аргумент > активная ветка.
+        """Слой для чтения/записи: явный аргумент > env процесса > активная ветка.
 
         Кайдзен (окт 2026): `branch_activate` должен влиять на map/coverage/
         probe-инструменты по умолчанию — иначе активация декларативна, а
         данные читаются из базового слоя (путаница в многобраншевой работе).
+        Env-уровень (SHARED_GRAPH_MEMORY_LAYER) изолирует процесс роя от
+        чужих branch_activate (N1).
         """
         if layer:
             return layer
+        if self._env_layer:
+            return self._env_layer
         try:
             return self.branch_current().get("layer", "")
         except Exception:  # noqa: BLE001
@@ -3842,9 +3855,12 @@ class Store:
 
         Используется там, где снимок должен быть атомарным (map_snapshot):
         иначе разрешение слоя открыло бы вторую read-txn (C-1).
+        Env-уровень применяется до meta — в той же иерархии (N1).
         """
         if layer:
             return layer
+        if self._env_layer:
+            return self._env_layer
         try:
             rc, val = txn.get(self.dbi(txn, "meta"), b"branch_current")
             layer = val.decode() if val else ""
@@ -3912,12 +3928,26 @@ class Store:
                 layer = rcval.decode() if rcval else ""
             return {"layer": layer}
 
-    def branch_activate(self, layer: str) -> dict:
+    def branch_activate(self, layer: str, expected_prev=None) -> dict:
+        """Переключает активный слой (глобальный default чтения/записи).
+
+        `expected_prev` — CAS-защита от гонки в рое (N1): если задан и не
+        совпал с текущим активным слоем, активация отвергается ошибкой
+        conflict — параллельный агент уже переключил ветку. Без аргумента
+        поведение прежнее (безусловная установка).
+        """
         layer = layer.strip().strip("/")
         with self._begin_write() as txn:
             meta = self.dbi(txn, "meta")
             rc, val = txn.get(meta, b"branch_current")
             prev = val.decode() if val else ""
+            if expected_prev is not None and prev != expected_prev:
+                raise MemoryError(
+                    "CONFLICT", "conflict",
+                    "активный слой %r не совпал с ожидаемым %r — "
+                    "переключён другим агентом" % (prev, expected_prev),
+                    "перечитайте branch_current и повторите с актуальным "
+                    "expected_prev", "retry once")
             txn.put(meta, b"branch_current", layer.encode())
             # canary.z = активный слой (для внешних читателей/отладки)
             c = txn.canary_get()
