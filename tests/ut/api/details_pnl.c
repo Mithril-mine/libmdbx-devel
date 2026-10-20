@@ -68,8 +68,9 @@ static void test_intersect(void) {
   make_pnl(b, (pgno_t[]){4, 3}, 2);
   CHECK_TRUE(pnl_intersect(a, b));
 
-  /* empty lists never intersect */
-  make_pnl(a, (pgno_t[]){}, 0);
+  /* empty lists never intersect; MSVC rejects an empty compound literal
+   * `(pgno_t[]){}`, and an empty pnl is just a zero size word */
+  a[0] = 0;
   make_pnl(b, (pgno_t[]){4, 3}, 2);
   CHECK_FALSE(pnl_intersect(a, b));
   CHECK_FALSE(pnl_intersect(b, a));
