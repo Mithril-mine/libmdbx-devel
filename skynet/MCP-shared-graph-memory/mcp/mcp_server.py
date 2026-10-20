@@ -486,9 +486,12 @@ class McpServer:
              {"type": "object",
               "properties": {"base_only": {"type": "boolean"}}}),
             ("branch_current", "Активный слой.", [], {"type": "object"}),
-            ("branch_activate", "Активировать слой.", ["layer"],
+            ("branch_activate",
+             "Активировать слой (expected_prev — CAS от гонки в рое).",
+             ["layer"],
              {"type": "object",
-              "properties": {"layer": {"type": "string"}},
+              "properties": {"layer": {"type": "string"},
+                             "expected_prev": {"type": "string"}},
               "required": ["layer"]}),
             ("branch_remove", "Убрать слой ветки.", ["layer"],
              {"type": "object",
@@ -827,7 +830,8 @@ class McpServer:
         if name == "branch_current":
             return s.branch_current()
         if name == "branch_activate":
-            return s.branch_activate(args["layer"])
+            return s.branch_activate(args["layer"],
+                                     expected_prev=args.get("expected_prev"))
         if name == "branch_remove":
             return s.branch_remove(args["layer"])
         if name == "map_diff_branches":
