@@ -80,8 +80,7 @@ def test_load_map_cli_real_artifact(tmp_path):
 def test_reopen_reloads_vocab(tmp_path):
     """Словарь, добавленный ВНЕШНИМ процессом, виден после переоткрытия env."""
     db = str(tmp_path / "t.mdbx")
-    sA = Store(db, _skip_sync_thread=True)
-    try:
+    with Store(db, _skip_sync_thread=True) as sA:
         # внешний процесс (как distill.py/restore.py) добавляет тему в словарь
         mod = MODULE_DIR
         code = ("import sys; sys.path.insert(0,%r); from mcp import Store; "
@@ -102,5 +101,3 @@ def test_reopen_reloads_vocab(tmp_path):
         res = sA.safe_store("fact:practice:vocab-reopen", "fact", "x", 0.5,
                             auto_vocab=False)
         assert res["result"] in ("created", "merged"), res
-    finally:
-        sA.close()

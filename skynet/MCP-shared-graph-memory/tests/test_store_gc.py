@@ -1,8 +1,6 @@
 """Тесты gc / purge / архивирования / контекста."""
 
-import pytest
 
-from mcp.errors import MemoryError
 from tests.conftest import seed_vocab
 
 

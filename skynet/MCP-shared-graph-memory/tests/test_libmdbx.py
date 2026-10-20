@@ -50,8 +50,8 @@ def test_env_sync_flags_and_options(monkeypatch):
             self.mdbx_env_open = fake_open
 
     monkeypatch.setattr(mdbx, "_get_lib", lambda: _FakeLib())
-    env = mdbx.Env(os.path.join(tempfile.mkdtemp(), "t.mdbx"),
-                   sync_bytes=64 << 20, sync_period=60)
+    mdbx.Env(os.path.join(tempfile.mkdtemp(), "t.mdbx"),
+             sync_bytes=64 << 20, sync_period=60)
     assert open_flags["flags"] & mdbx.MDBX_SAFE_NOSYNC
     opts = dict(options)
     assert opts[mdbx.MDBX_OPT_SYNC_BYTES] == 64 << 20

@@ -25,7 +25,6 @@
   - force-sync после каждой записи (B3) × любой C = N.
 """
 
-import json
 import os
 import signal
 import subprocess
@@ -324,8 +323,6 @@ def test_kill9_nosync_readonly_wants_recovery(tmp_path):
 
 def test_server_main_sigterm_flushes(tmp_path):
     """A3: MCP-сервер (main) по SIGTERM делает close -> force sync."""
-    import io
-    from mcp.mcp_server import main as server_main
     # запускаем реальный сервер в подпроцессе со stdin pipe (loop ждёт строк)
     import subprocess as sp
     env = dict(os.environ)
@@ -368,11 +365,8 @@ def test_readonly_blocks_writes(tmp_path):
     s0 = Store(db, readonly=False, _skip_sync_thread=True)
     s0.vocab_add("practice", "durability-zz")
     s0.close()
-    s = Store(db, readonly=True, _skip_sync_thread=True)
-    try:
+    with Store(db, readonly=True, _skip_sync_thread=True) as s:
         with pytest.raises(Exception) as ei:
             s.safe_store("fact:practice:durability-zz", "fact", "no", 0.5)
         text = str(ei.value)
         assert "READONLY_MODE" in text or "read-only" in text, text
-    finally:
-        s.close()

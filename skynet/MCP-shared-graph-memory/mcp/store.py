@@ -23,6 +23,7 @@ from __future__ import annotations
 import json
 import math
 import os
+import re
 import shutil
 import sys
 import threading
@@ -35,9 +36,7 @@ from .errors import (
     MemoryError,
     busy_io,
     db_file_deleted,
-    internal,
     invalid,
-    parse,
     readonly_mode,
     size_limit,
 )
@@ -84,6 +83,20 @@ def _now() -> int:
     return int(time.time())
 
 
+# Версия схемы хранилища. Инкремент при ОБРАТНО-несовместимых изменениях
+# форматов таблиц/ключей; при аддитивных расширениях не меняется.
+SCHEMA_VERSION = "2"
+# Версия модуля (дублирует mcp.__version__; здесь — без import-циклов).
+MODULE_VERSION = "0.2.0"
+
+# Регулярка версионного slug базового слоя ("0.15", "0.16.0").
+_VVER_RE = re.compile(r"^\d+(\.\d+){1,2}$")
+
+# Признак ключа чужого feature-слоя в перегенерируемых таблицах:
+# версионный префикс слоя ("0.16.abc.N/") перед fn:/type:/macro:/region:...
+_LAYER_KEY_RE = re.compile(r"^\d+(\.\d+)+\.[A-Za-z0-9._-]+\.\d+/")
+
+
 class Store:
     """Основной объект: открывает env, управляет таблицами."""
 
@@ -114,9 +127,25 @@ class Store:
         "coverage": mdbx.DB_DEFAULTS,    # test_id -> JSON {symbols:[fn:...], pct}
         "test_metrics": mdbx.DB_DEFAULTS,  # тест-кейс -> JSON окно истории
         "ci_jobs": mdbx.DB_DEFAULTS,     # {workflow}/{job} -> JSON
+        "covered_by": mdbx.DB_DEFAULTS,  # covered_by:{fn:...} -> JSON [test_id]
+        "coverage_blocks": mdbx.DB_DEFAULTS,  # coverage_blocks:{test}:{sym} -> JSON [blocks]
+        # --- слой карты проекта (весь репозиторий, вне C/C++ AST) ---
+        "project_files": mdbx.DB_DEFAULTS,  # rel_path -> JSON {kind, lang, module, deps}
+        "file_deps": mdbx.DB_DEFAULTS,   # file:rel -> JSON [dep_rel]
+        # --- реестр probes/SystemMap ---
+        "probes": mdbx.DB_DEFAULTS,      # probe:{tag} -> JSON {kind, mechanism, symbol, test_theme, status}
+        # --- наблюдаемые вызовы (runtime traces) ---
+        "call_traces": mdbx.DB_DEFAULTS,   # caller -> JSON {callee: count}
+        "call_traces_rev": mdbx.DUPSORT,  # callee -> caller (обратные рёбра)
+        # --- ADR (архитектурные решения) ---
+        "adr": mdbx.DB_DEFAULTS,         # adr:{name} -> JSON (context/decision/consequences)
+        # --- мост с codebase-memory-mcp (опциональный) ---
+        "bridge": mdbx.DB_DEFAULTS,      # bridge:{our_key} -> JSON {cbm_project, cbm_node, mapped_at}
+        # --- слои веток (нелинейное версионирование БЗ) ---
+        "branches": mdbx.DB_DEFAULTS,    # branch:{layer} -> JSON атрибутов слоя
     }
 
-    def __init__(self, path: str, maxdbs: int = 32, max_value_bytes: int = 16 << 20,
+    def __init__(self, path: str, maxdbs: int = 64, max_value_bytes: int = 16 << 20,
                  sync_mode: str = "safe_nosync", readonly: bool = False,
                  _skip_sync_thread: bool = False):
         self.path = path
@@ -130,12 +159,26 @@ class Store:
         self.norm = Normalizer()
         self._dbi = {}
         # открываем все таблицы один раз (CREATE) в первой write-txn;
-        # в read-only режиме CREATE не нужен — dbi открываются с DEFAULTS
-        txn_flags = mdbx.TXN_RDONLY if readonly else mdbx.TXN_READWRITE
+        # в read-only режиме CREATE не нужен — dbi открываются с DEFAULTS.
+        # ВАЖНО: при readonly существующие БД могут НЕ содержать новые таблицы
+        # (напр. branches/coverage_blocks) — открываем с NOSUBDIR-толерантностью:
+        # отсутствующая таблица -> None в _dbi (методы вернут пусто), а полный
+        # upgrade выполняется Store.upgrade() при rw-старте сервера.
         with self.env.begin(readonly=readonly) as txn:
             for name in self.TABLES:
                 fl = self.TABLES[name] | (mdbx.CREATE if not readonly else 0)
-                self._dbi[name] = txn.open_dbi(name, fl)
+                try:
+                    self._dbi[name] = txn.open_dbi(name, fl)
+                except mdbx.LibmdbxError as e:
+                    # несовместимые флаги (таблица из более старой схемы,
+                    # например call_traces было DUPSORT, теперь DEFAULTS):
+                    # не фейлим — помечаем None, upgrade() пересоздаст.
+                    # readonly: отсутствующая таблица тоже → None.
+                    if ("INCOMPATIBLE" in str(e)) or \
+                       (readonly and "NOTFOUND" in str(e)):
+                        self._dbi[name] = None
+                    else:
+                        raise
         self._load_vocab()
         self.next_id = self._load_next_id()
         self.last_gc = None
@@ -158,7 +201,8 @@ class Store:
         self.backup_pending = False  # PROMPT-интервал: спросить пользователя
         self._lifeline_error = None
         self._lifeline_mode = None   # "link" | "copy" | None (Windows)
-        self._protect_lifeline()
+        if not readonly:
+            self._protect_lifeline()
         # Фоновый тред: раз в секунду mdbx_env_sync_poll (дешёвый nonblocking
         # сброс по порогам sync_bytes/sync_period) + контроль st_nlink.
         # Транзакций не создаёт. В read-only режиме тред не запускаем
@@ -306,8 +350,8 @@ class Store:
         try:
             os.link(self.path, dest)
             return "link"
-        except OSError:
-            pass
+        except OSError as e:
+            sys.stderr.write("cbm link: %s\n" % e)
         fd = self.env.get_fd()
         for proc in ("/proc/self/fd/%d" % fd, "/dev/fd/%d" % fd):
             try:
@@ -436,8 +480,8 @@ class Store:
             "count": len(self._latencies),
             "last_us": last,
             "window_whole_us": {"mean": mean_us, "max": max_us},
-            "gc_prof_available": bool(self._latencies and
-                                      self._latencies[-1].get("gc_prof")),
+            "gc_prof_available": bool(self._latencies
+                                      and self._latencies[-1].get("gc_prof")),
         }
 
     def _note_commit_latency(self, lat: dict) -> None:
@@ -461,8 +505,8 @@ class Store:
             with open(tmp, "w", encoding="utf-8") as fh:
                 json.dump(st, fh)
             os.replace(tmp, self._state_path())
-        except OSError:
-            pass
+        except OSError as e:
+            sys.stderr.write("state save: %s\n" % e)
 
     def _list_backups(self, prefix: str = "") -> list:
         out = []
@@ -473,8 +517,8 @@ class Store:
                     p = os.path.join(self.backup_dir, fn)
                     out.append({"name": fn, "path": p,
                                 "size": os.path.getsize(p)})
-        except OSError:
-            pass
+        except OSError as e:
+            sys.stderr.write("list backups: %s\n" % e)
         return out
 
     def _backup_dir_size(self) -> int:
@@ -484,8 +528,8 @@ class Store:
             for fn in os.listdir(self.backup_dir):
                 if fn.endswith(".mdbx") and fn != BACKUP_LIFELINE:
                     total += os.path.getsize(os.path.join(self.backup_dir, fn))
-        except OSError:
-            pass
+        except OSError as e:
+            sys.stderr.write("backup dir size: %s\n" % e)
         return total
 
     def _rotation_candidates(self, keep: int = None) -> list:
@@ -495,6 +539,20 @@ class Store:
         if len(files) <= keep:
             return []
         return files[:-keep]  # sorted по имени = по времени
+
+    def _prune_auto(self) -> int:
+        """Авто-ротация AUTO-копий сверх backup_keep (после успешного бэкапа).
+
+        Удаляет старейшие, чтобы каталог не рос бесконечно (в т.ч. в /tmp).
+        """
+        removed = 0
+        for c in self._rotation_candidates():
+            try:
+                os.unlink(c["path"])
+                removed += 1
+            except OSError:
+                continue  # файл мог исчезнуть (другой процесс) — пропускаем
+        return removed
 
     def backup(self, kind: str = "user", dest: str = None) -> dict:
         """Консистентная копия БД (MVCC-снапшот) через txn_copy2pathname.
@@ -519,25 +577,47 @@ class Store:
         return {"path": r["dest"], "txnid": r["txnid"], "kind": kind,
                 "size": os.path.getsize(r["dest"])}
 
+    def _current_txnid(self) -> int:
+        """Текущий txnid (хвост мета) — без записи."""
+        try:
+            mt = self.env.diag().get("meta_txnid") or []
+            if isinstance(mt, (list, tuple)) and mt:
+                return int(mt[-1])
+            return 0
+        except Exception:  # noqa: BLE001
+            return 0
+
     def maybe_run_auto_backup(self) -> None:
-        """Таймеры AUTO (тихо) и PROMPT (с запросом); 0 = выключено."""
+        """Таймеры AUTO (тихо) и PROMPT (с запросом); 0 = выключено.
+
+        AUTO-бэкап создаётся ТОЛЬКО если БД реально изменялась с прошлого
+        (txnid вырос): пустые «бэкапы без оснований» и мусорные каталоги в
+        /tmp исключаются.
+        """
         if os.name == "nt" or self.db_file_deleted:
             return
         now = time.time()
         st = self._load_backup_state()
         if (self.auto_backup_seconds > 0
                 and now - st.get("last_auto", 0) >= self.auto_backup_seconds):
-            if self._backup_dir_size() > self.backup_max_bytes:
-                self.backup_notice = (
-                    "auto-backup пропущен: каталог бэкапов превышает лимит "
-                    "%d МБ" % (self.backup_max_bytes >> 20))
-            else:
-                try:
-                    self.backup(kind="auto")
-                except Exception as e:  # noqa: BLE001
-                    self.backup_notice = "auto-backup failed: %s" % e
-            st["last_auto"] = now
-            self._save_backup_state(st)
+            cur = self._current_txnid()
+            last = st.get("last_auto_txnid", 0)
+            if cur > last:
+                # БД реально изменялась — только тогда бэкап
+                if self._backup_dir_size() > self.backup_max_bytes:
+                    self.backup_notice = (
+                        "auto-backup пропущен: каталог бэкапов превышает лимит "
+                        "%d МБ" % (self.backup_max_bytes >> 20))
+                else:
+                    try:
+                        self.backup(kind="auto")
+                        self._prune_auto()
+                    except Exception as e:  # noqa: BLE001
+                        self.backup_notice = "auto-backup failed: %s" % e
+                st["last_auto"] = now
+                st["last_auto_txnid"] = cur
+                self._save_backup_state(st)
+            # иначе: БД не менялась — тихий пропуск, ничего не пишем
         if (self.prompt_backup_seconds > 0 and not self.backup_pending
                 and now - st.get("last_prompt", 0) >= self.prompt_backup_seconds):
             self.backup_pending = True
@@ -574,7 +654,7 @@ class Store:
                 os.unlink(c["path"])
                 removed.append(c["name"])
             except OSError:
-                pass
+                continue
         return {"dry_run": False, "removed": removed, "candidates": names,
                 "total_bytes": total, "keep": keep or self.backup_keep}
 
@@ -611,7 +691,6 @@ class Store:
     def backup_status(self) -> dict:
         """Состояние бэкапов: каталог, таймеры, счётчики тиров, кандидаты."""
         st = self._load_backup_state()
-        now = time.time()
         next_auto = (st.get("last_auto", 0) + self.auto_backup_seconds
                      if self.auto_backup_seconds else None)
         next_prompt = (st.get("last_prompt", 0) + self.prompt_backup_seconds
@@ -651,8 +730,11 @@ class Store:
         Оставлен как точка расширения для будущего stateful-режима.
         """
         class _G:
-            def __enter__(self): return None
-            def __exit__(self, *exc): return False
+            def __enter__(self):
+                return None
+
+            def __exit__(self, *exc):
+                return False
         return _G()
 
     def _reopen(self, readonly: bool) -> None:
@@ -660,18 +742,32 @@ class Store:
         self._stop_sync_thread()
         try:
             self.env.sync(force=True, nonblock=False)
-        except Exception:
-            pass
+        except Exception as e:
+            sys.stderr.write("env sync: %s\n" % e)
         self.env.close()
         self._readonly = readonly
-        self.env = mdbx.Env(self.path, maxdbs=32, readonly=readonly,
+        self.env = mdbx.Env(self.path, maxdbs=64, readonly=readonly,
                             accede=readonly, sync_mode=self.sync_mode)
         self._dbi = {}
         with self.env.begin(readonly=readonly) as txn:
             for name in self.TABLES:
                 fl = self.TABLES[name] | (mdbx.CREATE if not readonly else 0)
-                self._dbi[name] = txn.open_dbi(name, fl)
-        self._protect_lifeline()
+                try:
+                    self._dbi[name] = txn.open_dbi(name, fl)
+                except mdbx.LibmdbxError as e:
+                    # несовместимые/отсутствующие таблицы → None; при переходе
+                    # в rw upgrade() ниже создаст/пересоздаст их
+                    if ("INCOMPATIBLE" in str(e)) or \
+                       (readonly and "NOTFOUND" in str(e)):
+                        self._dbi[name] = None
+                    else:
+                        raise
+        if not readonly:
+            # переход rw: миграция схемы (новые таблицы, INCOMPATIBLE-пересоздание,
+            # backfill covered_by) — до начала обслуживания записей
+            self.upgrade()
+        if not readonly:
+            self._protect_lifeline()
         self._load_vocab()  # словарь мог измениться внешними процессами
         self._sync_stop = threading.Event()
         self._sync_thread = None
@@ -683,7 +779,10 @@ class Store:
     # --- init -----------------------------------------------------------------
     def _load_vocab(self) -> None:
         with self.env.begin(readonly=True) as txn:
-            cur = txn.cursor(self.dbi(txn, "vocab"))
+            dbi = self._opt_dbi(txn, "vocab")
+            if dbi is None:
+                return  # очень старая БД без vocab — словарь остаётся пустым
+            cur = txn.cursor(dbi)
             rc, key, _ = cur.get(mdbx.CURSOR_FIRST)
             while rc == mdbx.RC_SUCCESS:
                 text = key.decode("utf-8", "replace")
@@ -695,12 +794,92 @@ class Store:
                 rc, key, _ = cur.get(mdbx.CURSOR_NEXT)
 
     def _load_next_id(self) -> int:
-        with self.env.begin(readonly=True) as txn:
-            rc, val = txn.get(self.dbi(txn, "meta"), b"next_id")
-            return _unpack_u64(val) if val is not None else 1
+        try:
+            with self.env.begin() as txn:
+                meta = self.dbi(txn, "meta")
+                rc, val = txn.get(meta, b"next_id")
+                if val is None:
+                    # первое создание БД: фиксируем версию схемы
+                    txn.put(meta, b"schema_ver", SCHEMA_VERSION.encode())
+                    txn.put(meta, b"next_id", _pack_u64(1))
+                    return 1
+                return _unpack_u64(val)
+        except Exception:  # noqa: BLE001  (read-only env: не пишем)
+            with self.env.begin(readonly=True) as txn:
+                rc, val = txn.get(self.dbi(txn, "meta"), b"next_id")
+                return _unpack_u64(val) if val is not None else 1
 
     def dbi(self, txn, name: str) -> int:
         return self._dbi[name]
+
+    def _opt_dbi(self, txn, name: str):
+        """dbi для опциональных таблиц (может отсутствовать в старой readonly-БД)."""
+        return self._dbi.get(name)
+
+    def upgrade(self) -> dict:
+        """Создаёт ВСЕ таблицы схемы (rw) для существующей БД, созданной до
+        расширения (upgrade-path: read-only старт не может создавать dbi).
+
+        Вызывается сервером при первом rw-старте (или явно через CLI). После
+        создания — повторное открытие БД в readonly работает с полным набором.
+        Также бэкфиллит covered_by из существующих coverage-записей.
+        """
+        created = []
+        with self._begin_write() as txn:
+            for name, fl in self.TABLES.items():
+                dbi = self._dbi.get(name)
+                if dbi is not None:
+                    continue
+                try:
+                    self._dbi[name] = txn.open_dbi(name, fl | mdbx.CREATE)
+                except mdbx.LibmdbxError:
+                    # таблица существует со СТАРЫМИ флагами (например
+                    # call_traces было DUPSORT, теперь DEFAULTS): открываем
+                    # по имени с перебором известных наборов флагов, чтобы
+                    # получить handle, затем drop (del=1) и пересоздаём.
+                    old = None
+                    for cand_fl in (mdbx.DUPSORT,
+                                    mdbx.DUPSORT | mdbx.INTEGERKEY,
+                                    mdbx.DUPSORT | mdbx.DUPFIXED,
+                                    mdbx.DB_DEFAULTS,
+                                    mdbx.DUPSORT | mdbx.DUPFIXED | mdbx.INTEGERDUP):
+                        try:
+                            old = txn.open_dbi(name, cand_fl)
+                            break
+                        except mdbx.LibmdbxError:
+                            continue
+                    if old is None:
+                        raise
+                    txn.drop_dbi(old, del_=True)
+                    self._dbi[name] = txn.open_dbi(name, fl | mdbx.CREATE)
+                created.append(name)
+        # backfill covered_by из существующих coverage (однократно, маркер)
+        marker = "covered_by_backfilled"
+        n = 0
+        with self._begin_write() as txn:
+            meta = self.dbi(txn, "meta")
+            rc, val = txn.get(meta, marker.encode())
+            if val is None:
+                cov_dbi = self.dbi(txn, "coverage")
+                cb_dbi = self.dbi(txn, "covered_by")
+                with txn.cursor(cov_dbi) as cur:
+                    rc, k, v = cur.get(mdbx.CURSOR_FIRST)
+                    while rc == mdbx.RC_SUCCESS:
+                        key = k.decode()
+                        if key.startswith("coverage:"):
+                            test_id = key[len("coverage:"):]
+                            for sym in json.loads(v).get("symbols", []):
+                                cb_key = ("covered_by:" + sym).encode()
+                                rc2, val2 = txn.get(cb_dbi, cb_key)
+                                cur2 = json.loads(val2.decode()) if val2 else []
+                                if test_id not in cur2:
+                                    cur2.append(test_id)
+                                    txn.put(cb_dbi, cb_key,
+                                            json.dumps(cur2).encode())
+                                    n += 1
+                        rc, k, v = cur.get(mdbx.CURSOR_NEXT)
+                txn.put(meta, marker.encode(), str(n).encode())
+        return {"created": created, "covered_by_backfilled": n}
 
     # --- helpers --------------------------------------------------------------
     def _check_size(self, key: bytes, value: bytes) -> None:
@@ -923,11 +1102,9 @@ class Store:
         rc, old = txn.get(acc_dbi, packed)
         if old is not None and len(old) == ACCESS_LEN:
             old_score = struct_double(old[0:8])
-            old_ts = _unpack_u64(old[8:16])
             old_cnt = _unpack_u64(old[16:24])
         else:
             old_score = score if score is not None else 0.5
-            old_ts = _now()
             old_cnt = 0
         new_score = score if score is not None else old_score
         new_ts = _now()
@@ -942,7 +1119,6 @@ class Store:
         with txn.cursor(sim_dbi) as cur:
             rc, idk, val = cur.get(mdbx.CURSOR_FIRST)
             while rc == mdbx.RC_SUCCESS:
-                rec_id = _unpack_u64(idk)
                 other = _unpack_u64(val)
                 if idx.hamming(h, other) <= 3:
                     _, k = txn.get(id2key_dbi, idk)
@@ -1028,7 +1204,10 @@ class Store:
         link/unlink/purge). Если записи-счётчика нет (старые/мигрированные
         узлы) — fallback на скан обратных рёбер в links.
         """
-        rc, packed = txn.get(self.dbi(txn, "links_in"), _pack_u64(record_id))
+        li_dbi = self._opt_dbi(txn, "links_in")
+        packed = None
+        if li_dbi is not None:
+            rc, packed = txn.get(li_dbi, _pack_u64(record_id))
         if packed and len(packed) == ID_LEN:
             return _unpack_u64(packed)
         links_dbi = self.dbi(txn, "links")
@@ -1304,7 +1483,6 @@ class Store:
         frontier = [root]
         with self.env.begin(readonly=True) as txn:
             rec_dbi = self.dbi(txn, "records")
-            id2key_dbi = self.dbi(txn, "id2key")
             links_dbi = self.dbi(txn, "links")
             for _ in range(depth + 1):
                 nxt = []
@@ -1537,10 +1715,17 @@ class Store:
                 rc, lk, lv = cur.get(mdbx.CURSOR_NEXT)
 
     # --- refactoring-map (структурный слой) ---------------------------------
-    def map_symbol(self, key: str) -> dict:
-        """Читает символ из structural-слоя (symbols)."""
+    def map_symbol(self, key: str, layer: str = "") -> dict:
+        """Читает символ из structural-слоя (symbols).
+
+        `layer` — слой ветки; базовый слой (""/ver) без префикса.
+        Пустой layer — использует активную ветку (branch_current).
+        """
+        layer = self._effective_layer(layer)
+        pre = self.layer_prefix(layer)
         with self.env.begin(readonly=True) as txn:
-            rc, val = txn.get(self.dbi(txn, "symbols"), key.encode())
+            rc, val = txn.get(self.dbi(txn, "symbols"),
+                              (pre + key).encode())
         if val is None:
             return {}
         return json.loads(val.decode())
@@ -1601,111 +1786,211 @@ class Store:
                                              self.dbi(txn, "sym_aliases"),
                                              old_key.strip())
 
-    def map_symbols(self, prefix: str = "", limit: int = None) -> list:
-        """Все ключи symbols по префиксу (детерминированная сортировка)."""
+    def map_symbols(self, prefix: str = "", limit: int = None,
+                    layer: str = "") -> list:
+        """Все ключи symbols по префиксу (детерминированная сортировка).
+
+        `layer` — слой ветки; базовый слой без учёта префикса; feature-слой
+        ищет только в своём префиксе (и возвращает ключи без префикса слоя).
+
+        Исключение Кайдзен: канонические ключи функций — `fn:{qname}`
+        (module вятел), поэтому префикс вида `fn:gc`/`fn:gc-` ДОПОЛНИтельно
+        фильтрует по `module`-полю тела (аддитивно: поиск по модулю работает
+        и при несовпадении префикса ключа с названием модуля).
+        """
+        layer = self._effective_layer(layer)
+        pre = self.layer_prefix(layer)
         out = []
         with self.env.begin(readonly=True) as txn:
             sym_dbi = self.dbi(txn, "symbols")
+            mod_pat = None
+            if prefix.startswith("fn:") and ":" not in prefix[3:].lstrip(":"):
+                mod_pat = prefix[3:].lstrip(":")
             with txn.cursor(sym_dbi) as cur:
-                rc, k, _ = cur.get(mdbx.CURSOR_FIRST)
+                rc, k, v = cur.get(mdbx.CURSOR_FIRST)
                 while rc == mdbx.RC_SUCCESS:
                     key = k.decode()
-                    if not prefix or key.startswith(prefix):
-                        out.append(key)
+                    # базовый слой не должен видеть чужие feature-слои
+                    if not pre and _LAYER_KEY_RE.match(key):
+                        rc, k, v = cur.get(mdbx.CURSOR_NEXT)
+                        continue
+                    if pre and not key.startswith(pre):
+                        rc, k, v = cur.get(mdbx.CURSOR_NEXT)
+                        continue
+                    bare = key[len(pre):] if pre else key
+                    if bare.startswith(prefix):
+                        out.append(bare)
                         if limit and len(out) >= limit:
                             break
-                    rc, k, _ = cur.get(mdbx.CURSOR_NEXT)
+                    elif mod_pat:
+                        # module-fallback ТОЛЬКО для fn:-пространства: не
+                        # путать type:/macro: карты с функциями
+                        if not bare.startswith("fn:"):
+                            rc, k, v = cur.get(mdbx.CURSOR_NEXT)
+                            continue
+                        try:
+                            body = json.loads(v)
+                        except ValueError:
+                            body = {}
+                        # merged-карты хранят module внутри implementations
+                        mods = [m.get("module") for m in body.get("implementations") or []]
+                        mods.append(body.get("module", ""))
+                        if any(m and m.startswith(mod_pat) for m in mods):
+                            out.append(bare)
+                            if limit and len(out) >= limit:
+                                break
+                    rc, k, v = cur.get(mdbx.CURSOR_NEXT)
         return out
 
-    def map_put_symbol(self, key: str, body: dict) -> None:
+    def map_put_symbol(self, key: str, body: dict, layer: str = "") -> None:
         """Аддитивная запись символа (перегенерируемый слой).
 
         Присваивает стабильный числовой id при первом появлении.
+        Пустой layer — активная ветка.
         """
+        layer = self._effective_layer(layer)
+        pre = self.layer_prefix(layer)
+        skey = (pre + key)
         with self._begin_write() as txn:
-            txn.put(self.dbi(txn, "symbols"), key.encode(),
+            txn.put(self.dbi(txn, "symbols"), skey.encode(),
                     json.dumps(body, ensure_ascii=False).encode())
-            self._sym_id_locked(txn, key)
+            self._sym_id_locked(txn, skey)
 
-    def map_edges_of(self, caller: str) -> list:
-        """callee-дубликаты из call_edges для caller (DUPSORT)."""
+    def map_edges_of(self, caller: str, layer: str = "") -> list:
+        """callee-дубликаты из call_edges для caller (DUPSORT).
+
+        `layer` — слой ветки: feature-слой адресуется через `layer/`-префикс;
+        базовый слой (""/ver) — без префикса. Пустой — активная ветка.
+        Возвращает layer-local ключи (префикс слоя снят), как map_symbols.
+        """
+        layer = self._effective_layer(layer)
+        pre = self.layer_prefix(layer)
         out = []
         with self.env.begin(readonly=True) as txn:
             ce_dbi = self.dbi(txn, "call_edges")
             with txn.cursor(ce_dbi) as cur:
-                rc, _, val = cur.get(mdbx.CURSOR_SET_KEY, caller.encode())
+                rc, _, val = cur.get(mdbx.CURSOR_SET_KEY,
+                                     (pre + caller).encode())
                 while rc == mdbx.RC_SUCCESS:
-                    out.append(val.decode())
+                    try:
+                        body = json.loads(val.decode())
+                        cal = body.get("callee", "")
+                        if pre and cal.startswith(pre):
+                            body["callee"] = cal[len(pre):]
+                        out.append(json.dumps(body, ensure_ascii=False))
+                    except ValueError:
+                        rc, _, val = cur.get(mdbx.CURSOR_NEXT_DUP)
+                        continue
                     rc, _, val = cur.get(mdbx.CURSOR_NEXT_DUP)
         return out
 
-    def map_callers_of(self, callee: str) -> list:
-        """Обратные рёбра: кто вызывает callee (DUPSORT call_edges_rev)."""
+    def map_callers_of(self, callee: str, layer: str = "") -> list:
+        """Обратные рёбра: кто вызывает callee (DUPSORT call_edges_rev).
+
+        Возвращает layer-local ключи (префикс слоя снят).
+        """
+        layer = self._effective_layer(layer)
+        pre = self.layer_prefix(layer)
         out = []
         with self.env.begin(readonly=True) as txn:
             ce_dbi = self.dbi(txn, "call_edges_rev")
             with txn.cursor(ce_dbi) as cur:
-                rc, _, val = cur.get(mdbx.CURSOR_SET_KEY, callee.encode())
+                rc, _, val = cur.get(mdbx.CURSOR_SET_KEY,
+                                     (pre + callee).encode())
                 while rc == mdbx.RC_SUCCESS:
-                    out.append(val.decode())
+                    caller = val.decode()
+                    if pre and caller.startswith(pre):
+                        caller = caller[len(pre):]
+                    out.append(caller)
                     rc, _, val = cur.get(mdbx.CURSOR_NEXT_DUP)
         return out
 
-    def map_put_edge(self, caller: str, callee: str, kind: str = "syntax") -> None:
+    def map_put_edge(self, caller: str, callee: str, kind: str = "syntax",
+                     layer: str = "", configs: list = None) -> None:
+        layer = self._effective_layer(layer)
+        pre = self.layer_prefix(layer)
         with self._begin_write() as txn:
             ce_dbi = self.dbi(txn, "call_edges")
-            val = json.dumps({"kind": kind, "resolved": False,
-                              "ambiguous": False, "callee": callee},
-                             ensure_ascii=False).encode()
+            body = {"kind": kind, "resolved": False,
+                    "ambiguous": False, "callee": pre + callee}
+            if configs:
+                body["configs"] = sorted(set(configs))
+            val = json.dumps(body, ensure_ascii=False).encode()
             with txn.cursor(ce_dbi) as cur:
-                cur.put_nodupe(caller.encode(), val)
+                cur.put_nodupe((pre + caller).encode(), val)
             rev_dbi = self.dbi(txn, "call_edges_rev")
             with txn.cursor(rev_dbi) as cur:
-                cur.put_nodupe(callee.encode(), caller.encode())
+                cur.put_nodupe((pre + callee).encode(),
+                               (pre + caller).encode())
 
-    def map_groups_of(self, group_key: str) -> list:
-        """Члены группы (DUPSORT-набор)."""
+    def map_groups_of(self, group_key: str, layer: str = "") -> list:
+        """Члены группы (DUPSORT-набор), layer-local ключи."""
+        layer = self._effective_layer(layer)
+        pre = self.layer_prefix(layer)
         out = []
         with self.env.begin(readonly=True) as txn:
             gr_dbi = self.dbi(txn, "groups")
             with txn.cursor(gr_dbi) as cur:
-                rc, _, val = cur.get(mdbx.CURSOR_SET_KEY, group_key.encode())
+                rc, _, val = cur.get(mdbx.CURSOR_SET_KEY,
+                                     (pre + group_key).encode())
                 while rc == mdbx.RC_SUCCESS:
-                    out.append(val.decode())
+                    m = val.decode()
+                    if pre and m.startswith(pre):
+                        m = m[len(pre):]
+                    out.append(m)
                     rc, _, val = cur.get(mdbx.CURSOR_NEXT_DUP)
         return out
 
-    def map_group_members(self, prefix: str = "") -> list:
-        """Все группы с их членами по префиксу ключа группы."""
+    def map_group_members(self, prefix: str = "", layer: str = "") -> list:
+        """Все группы с их членами по префиксу ключа группы (layer-local)."""
+        layer = self._effective_layer(layer)
+        pre = self.layer_prefix(layer)
         out = []
         with self.env.begin(readonly=True) as txn:
             gr_dbi = self.dbi(txn, "groups")
             with txn.cursor(gr_dbi) as cur:
                 rc, k, val = cur.get(mdbx.CURSOR_FIRST)
                 while rc == mdbx.RC_SUCCESS:
-                    gkey = k.decode()
+                    key = k.decode()
+                    if (pre and not key.startswith(pre)) or \
+                       (not pre and _LAYER_KEY_RE.match(key)):
+                        rc, k, val = cur.get(mdbx.CURSOR_NEXT)
+                        continue
+                    gkey = key[len(pre):] if pre else key
+                    m = val.decode()
+                    if pre and m.startswith(pre):
+                        m = m[len(pre):]
                     if not prefix or gkey.startswith(prefix):
-                        out.append((gkey, val.decode()))
+                        out.append((gkey, m))
                     rc, k, val = cur.get(mdbx.CURSOR_NEXT)
         return out
 
-    def map_put_group(self, group_key: str, member: str) -> None:
+    def map_put_group(self, group_key: str, member: str, layer: str = "") -> None:
+        layer = self._effective_layer(layer)
+        pre = self.layer_prefix(layer)
         with self._begin_write() as txn:
             gr_dbi = self.dbi(txn, "groups")
             with txn.cursor(gr_dbi) as cur:
-                cur.put_nodupe(group_key.encode(), member.encode())
+                cur.put_nodupe((pre + group_key).encode(),
+                               (pre + member).encode())
 
     def map_load_batch(self, symbols: dict, edges: list, groups: dict,
-                       chunk: int = 4096, replace: bool = False) -> dict:
+                       chunk: int = 4096, replace: bool = False,
+                       layer: str = "") -> dict:
         """Батчевая загрузка структурного слоя.
 
         Принимает готовые данные (из автогенератора) и пишет в
         symbols/call_edges/call_edges_rev/groups.
-        При replace=True таблицы очищаются перед загрузкой (самоизлечение
-        дрейфа координат: исчезнувшие символы удаляются). Безопасно —
-        это перегенерируемый слой, курируемые tables не затрагиваются.
+        `layer` — слой ветки (см. docs/BRANCHES.md): базовый слой (""/"0.15")
+        пишет без префикса, feature-слои — с префиксом `{layer}/`.
+        Пустой `layer` — использует активную ветку (branch_current), чтобы
+        загрузка не расходилась с чтениями после branch_activate.
+        При replace=True очищается только ТЕКУЩИЙ слой (feature-префиксы
+        чужих веток защищены _LAYER_KEY_RE).
         Возвращает счётчики для сверки.
         """
+        layer = self._effective_layer(layer)
+        pre = self.layer_prefix(layer)
         put_sym, put_edge, put_grp = 0, 0, 0
         sym_dbi = self._dbi["symbols"]
         ce_dbi = self._dbi["call_edges"]
@@ -1713,50 +1998,63 @@ class Store:
         gr_dbi = self._dbi["groups"]
         with self._begin_write() as txn:
             if replace:
+                # Очищаем только записи ТЕКУЩЕГО слоя. Важно: базовый слой
+                # (pre=="") не должен сносить feature-слои параллельных веток
+                # ("0.16.feat.N/...") — их защищает _LAYER_KEY_RE.
                 for dbi in (sym_dbi, ce_dbi, rev_dbi, gr_dbi):
                     with txn.cursor(dbi) as cur:
-                        rc, _, _ = cur.get(mdbx.CURSOR_FIRST)
+                        rc, k, _ = cur.get(mdbx.CURSOR_FIRST)
                         while rc == mdbx.RC_SUCCESS:
-                            cur.delete()
-                            rc, _, _ = cur.get(mdbx.CURSOR_NEXT)
-                # поколение карты: инкрементируем canary.y при replace
-                canary = txn.canary_get()
-                txn.canary_put(x=canary.get("x", 0),
-                               y=int(canary.get("y", 0)) + 1,
-                               z=canary.get("z", 0))
+                            key = k.decode()
+                            if (not pre and not _LAYER_KEY_RE.match(key)) or \
+                               (pre and key.startswith(pre)):
+                                cur.delete()
+                            rc, k, _ = cur.get(mdbx.CURSOR_NEXT)
+                if not pre:
+                    # поколение карты при полном replace
+                    canary = txn.canary_get()
+                    txn.canary_put(x=canary.get("x", 0),
+                                   y=int(canary.get("y", 0)) + 1,
+                                   z=canary.get("z", 0))
             sid_dbi = self._dbi["sym_ids"]
             id2key_dbi = self._dbi["sym_id2key"]
             for i, (key, body) in enumerate(sorted(symbols.items())):
-                txn.put(sym_dbi, key.encode(),
+                skey = (pre + key).encode()
+                txn.put(sym_dbi, skey,
                         json.dumps(body, ensure_ascii=False).encode())
                 put_sym += 1
                 # стабильный числовой id (НЕ чистится при replace)
-                rc, val = txn.get(sid_dbi, key.encode())
+                rc, val = txn.get(sid_dbi, skey)
                 if val is None or len(val) != 8:
                     nid = self.next_id
                     self.next_id += 1
                     txn.put(self.dbi(txn, "meta"), b"next_id",
                             _pack_u64(self.next_id))
-                    txn.put(sid_dbi, key.encode(), _pack_u64(nid))
-                    txn.put(id2key_dbi, _pack_u64(nid), key.encode())
+                    txn.put(sid_dbi, skey, _pack_u64(nid))
+                    txn.put(id2key_dbi, _pack_u64(nid), skey)
             for e in edges:
-                # JSON-значение: kind, resolved, ambiguous, callee
-                val = json.dumps({
+                # JSON-значение: kind, resolved, ambiguous, callee (+ configs)
+                body = {
                     "kind": e.get("kind", "syntax"),
                     "resolved": e.get("resolved", False),
                     "ambiguous": e.get("ambiguous", False),
-                    "callee": e["callee"],
-                }, ensure_ascii=False).encode()
+                    "callee": pre + e["callee"],
+                }
+                if e.get("configs"):
+                    body["configs"] = sorted(set(e["configs"]))
+                val = json.dumps(body, ensure_ascii=False).encode()
                 with txn.cursor(ce_dbi) as cur:
-                    cur.put_nodupe(e["caller"].encode(), val)
+                    cur.put_nodupe((pre + e["caller"]).encode(), val)
                 put_edge += 1
                 # обратное ребро: callee → caller
                 with txn.cursor(rev_dbi) as cur:
-                    cur.put_nodupe(e["callee"].encode(), e["caller"].encode())
+                    cur.put_nodupe((pre + e["callee"]).encode(),
+                                   (pre + e["caller"]).encode())
             for gkey, members in groups.items():
                 with txn.cursor(gr_dbi) as cur:
                     for m in members:
-                        cur.put_nodupe(gkey.encode(), m.encode())
+                        cur.put_nodupe((pre + gkey).encode(),
+                                       (pre + m).encode())
                         put_grp += 1
         return {"symbols": put_sym, "edges": put_edge, "groups": put_grp}
 
@@ -1832,6 +2130,191 @@ class Store:
                 removed += 1
         return {"removed_links": removed, "redirected_links": redirected}
 
+    # --- жизненный цикл: stale-пометка + поколения карты ----------------------
+    def map_mark_stale(self, live_keys: list, layer: str = "") -> dict:
+        """Помечает символы, отсутствующие в live_keys, как stale.
+
+        Работает ТОЛЬКО по активному/явному слою: не задевает чужие ветки.
+        В отличие от `map_refresh_stale` (удаляющего висячие ссылки), этот
+        метод НЕ удаляет записи symbols: проставляет `status: "stale"` в теле
+        символа (идемпотентно). Живые символы получают `status: "alive"`.
+        Удаление остаётся опцией (purge/refresh с удалением).
+        """
+        layer = self._effective_layer(layer)
+        pre = self.layer_prefix(layer)
+        live = set(live_keys or [])
+        marked, unmarked = 0, 0
+        with self._begin_write() as txn:
+            syms = self.dbi(txn, "symbols")
+            with txn.cursor(syms) as cur:
+                rc, k, v = cur.get(mdbx.CURSOR_FIRST)
+                while rc == mdbx.RC_SUCCESS:
+                    key = k.decode("utf-8", "replace")
+                    if (pre and not key.startswith(pre)) or \
+                       (not pre and _LAYER_KEY_RE.match(key)):
+                        rc, k, v = cur.get(mdbx.CURSOR_NEXT)
+                        continue
+                    bare = key[len(pre):] if pre else key
+                    body = json.loads(v)
+                    wanted = "alive" if bare in live else "stale"
+                    if body.get("status") != wanted:
+                        body["status"] = wanted
+                        txn.put(syms, k,
+                                json.dumps(body, ensure_ascii=False).encode())
+                        if wanted == "stale":
+                            marked += 1
+                        else:
+                            unmarked += 1
+                    rc, k, v = cur.get(mdbx.CURSOR_NEXT)
+        return {"marked_stale": marked, "marked_alive": unmarked}
+
+    def map_generations(self) -> dict:
+        """Текущее поколение карты: canary.y (инкрементируется map_load_batch
+        при replace) + счётчики символов/рёбер."""
+        with self.env.begin(readonly=True) as txn:
+            syms = self.dbi(txn, "symbols")
+            n_syms = 0
+            with txn.cursor(syms) as cur:
+                rc, _, _ = cur.get(mdbx.CURSOR_FIRST)
+                while rc == mdbx.RC_SUCCESS:
+                    n_syms += 1
+                    rc, _, _ = cur.get(mdbx.CURSOR_NEXT)
+            canary = txn.canary_get()  # в той же txn (без вложенной)
+            return {"generation": canary.get("y", 0), "symbols": n_syms}
+
+    def map_diff(self, other=None) -> dict:
+        """Разница текущего снимка карты с `other` (генерацией или списком).
+
+        Если `other` — dict вида {"generation": G, "symbols": [keys]} от
+        более раннего снимка — вернёт добавленные/удалённые/общие символы.
+        """
+        cur_keys = set(self.map_symbols())
+        if isinstance(other, dict):
+            # []/None для пустого снимка — валидное «ничего», не falsy-замена
+            keys = other.get("symbols")
+            other_keys = set(keys) if keys is not None else cur_keys
+        elif isinstance(other, (list, set, tuple)):
+            other_keys = set(other)
+        else:
+            other_keys = set()
+        added = sorted(cur_keys - other_keys)
+        removed = sorted(other_keys - cur_keys)
+        common = sorted(cur_keys & other_keys)
+        return {"added": added, "removed": removed, "common": common,
+                "added_count": len(added), "removed_count": len(removed)}
+
+    def map_snapshot(self) -> dict:
+        """Полный снимок текущей карты (для map_generations/map_diff)."""
+        return {"generation": self.map_generations()["generation"],
+                "symbols": list(self.map_symbols())}
+
+    def map_diff_branches(self, from_layer: str, to_layer: str,
+                          limit: int = 200) -> dict:
+        """Структурный diff двух слоёв веток ПО СОДЕРЖИМОМУ карты.
+
+        Сравнивает множество символов (fn:/type:/macro:) и диапазоны
+        (l0/l1), а не коммиты: это честный ответ на «масштаб различий»,
+        не зависящий от переписывания истории.
+
+        Возвращает: добавленные/удалённые/изменённые символы (по модулям),
+        число затронутых функций/блоков, и совпавшие (common).
+        """
+        def layer_symbols(layer: str) -> dict:
+            pre = self.layer_prefix(layer)
+            out = {}
+            with self.env.begin(readonly=True) as txn:
+                sym_dbi = self.dbi(txn, "symbols")
+                with txn.cursor(sym_dbi) as cur:
+                    rc, k, v = cur.get(mdbx.CURSOR_FIRST)
+                    while rc == mdbx.RC_SUCCESS:
+                        key = k.decode()
+                        # базовый слой (pre=="") не должен захватывать ключи
+                        # чужих feature-слоёв ("0.16.feat.N/fn:...")
+                        if not pre and _LAYER_KEY_RE.match(key):
+                            rc, k, v = cur.get(mdbx.CURSOR_NEXT)
+                            continue
+                        if not pre or key.startswith(pre):
+                            bare = key[len(pre):] if pre else key
+                            try:
+                                out[bare] = json.loads(v)
+                            except ValueError:
+                                # повреждённая запись: пропустить (перегенерируется)
+                                rc, k, v = cur.get(mdbx.CURSOR_NEXT)
+                                continue
+                        rc, k, v = cur.get(mdbx.CURSOR_NEXT)
+            return out
+
+        a = layer_symbols(from_layer)
+        b = layer_symbols(to_layer)
+        added = {}
+        removed = {}
+        changed = {}
+
+        def _structural(body):
+            """Нормализованное структурное содержимое для сравнения.
+
+            Учитывает и nested-блоки внутри implementations (merged-карты
+            хранят blocks там, а не на верхнем card).
+            """
+            return (body.get("l0"), body.get("l1"),
+                    body.get("signature"), body.get("file"),
+                    tuple((bl.get("id"), bl.get("l0"), bl.get("l1"))
+                          for bl in body.get("blocks") or []),
+                    tuple(sorted((i.get("file"), i.get("l0"), i.get("l1"),
+                                  i.get("config"),
+                                  tuple((b.get("id"), b.get("l0"), b.get("l1"))
+                                        for b in i.get("blocks") or []))
+                                 for i in body.get("implementations") or [])))
+
+        for key, body in b.items():
+            if key not in a:
+                added[key] = body
+            elif _structural(body) != _structural(a[key]):
+                changed[key] = {"from": a[key], "to": body}
+        for key in a:
+            if key not in b:
+                removed[key] = a[key]
+
+        def by_module(d):
+            m = {}
+            for key, body in d.items():
+                # merged-карты: module внутри implementations
+                mods = [i.get("module") for i in body.get("implementations") or []
+                        if i.get("module")]
+                mod = mods[0] if mods else body.get("module", "?")
+                m.setdefault(mod, []).append(key)
+            for k in m:
+                m[k].sort()
+            return m
+
+        def _block_count(body):
+            n = len(body.get("blocks") or [])
+            for i in body.get("implementations") or []:
+                n += len(i.get("blocks") or [])
+            return n
+
+        def _nf(d):
+            return sum(1 for b in d.values() if b.get("kind") == "function")
+
+        def _nb(d):
+            return sum(_block_count(b) for b in d.values())
+        return {
+            "from": from_layer, "to": to_layer,
+            "added": by_module(added),
+            "removed": by_module(removed),
+            "changed": by_module({k: v["to"] for k, v in changed.items()}),
+            "counts": {
+                "added": len(added), "removed": len(removed),
+                "changed": len(changed),
+                "added_functions": _nf(added),
+                "removed_functions": _nf(removed),
+                "changed_functions": _nf({k: v["to"] for k, v in changed.items()}),
+                "added_blocks": _nb(added),
+                "removed_blocks": _nb(removed),
+            },
+            "total_from": len(a), "total_to": len(b),
+        }
+
     # --- regions / uncovered (refactoring-map: #if-дерево и острова смысла) ---
     def map_regions(self, prefix: str = "", limit: int = None) -> list:
         """Сканирование таблицы regions (region:{module}:{n})."""
@@ -1891,6 +2374,493 @@ class Store:
     @staticmethod
     def _uncovered_key(file: str, idx: int) -> str:
         return "uncovered:%s:%d" % (Store._module_of_file(file), idx)
+
+    # --- слой карты проекта (весь репозиторий: cmake/scripts/docs/ci) --------
+    def project_load(self, files: dict, edges: list, replace: bool = True) -> dict:
+        """Загружает project-map: файлы и рёбра file_deps.
+
+        `files`: rel_path -> {kind, lang, module, size?, deps?}
+        `edges`: [{from, to, kind}] — дедуплицируются в file:from -> [to...].
+        """
+        with self._begin_write() as txn:
+            if replace:
+                for dbi in ("project_files", "file_deps"):
+                    with txn.cursor(self.dbi(txn, dbi)) as cur:
+                        rc, _, _ = cur.get(mdbx.CURSOR_FIRST)
+                        while rc == mdbx.RC_SUCCESS:
+                            cur.delete()
+                            rc, _, _ = cur.get(mdbx.CURSOR_NEXT)
+            pf_dbi = self.dbi(txn, "project_files")
+            fd_dbi = self.dbi(txn, "file_deps")
+            for rel, meta in sorted(files.items()):
+                body = {k: v for k, v in meta.items() if k != "deps"}
+                txn.put(pf_dbi, rel.encode(),
+                        json.dumps(body, ensure_ascii=False).encode())
+            # агрегируем рёбра: file:from -> set(to)
+            dep_map = {}
+            for e in edges:
+                src = e.get("from")
+                dst = e.get("to")
+                if not src or not dst:
+                    continue
+                dep_map.setdefault(src, set()).add(dst)
+            for src, dsts in sorted(dep_map.items()):
+                txn.put(fd_dbi, ("file:" + src).encode(),
+                        json.dumps(sorted(dsts), ensure_ascii=False).encode())
+            return {"files": len(files), "edges": len(edges)}
+
+    def project_files(self, prefix: str = "", limit: int = None) -> list:
+        out = []
+        with self.env.begin(readonly=True) as txn:
+            dbi = self._opt_dbi(txn, "project_files")
+            if dbi is None:
+                return []
+            with txn.cursor(dbi) as cur:
+                rc, k, v = cur.get(mdbx.CURSOR_FIRST)
+                while rc == mdbx.RC_SUCCESS:
+                    key = k.decode("utf-8", "replace")
+                    if key.startswith(prefix):
+                        body = json.loads(v)
+                        out.append({"path": key, "meta": body})
+                        if limit and len(out) >= limit:
+                            break
+                    rc, k, v = cur.get(mdbx.CURSOR_NEXT)
+        return out
+
+    def file_deps(self, path: str) -> list:
+        """Зависимости файла (file:path -> [dep...])."""
+        with self.env.begin(readonly=True) as txn:
+            fd_dbi = self._opt_dbi(txn, "file_deps")
+            if fd_dbi is None:
+                return []
+            rc, val = txn.get(fd_dbi, ("file:" + path).encode())
+            if val is None:
+                return []
+            return json.loads(val.decode())
+
+    def file_dependents(self, path: str, limit: int = 50) -> list:
+        """Файлы, зависящие от path (обратный обход file_deps)."""
+        out = []
+        with self.env.begin(readonly=True) as txn:
+            dbi = self._opt_dbi(txn, "file_deps")
+            if dbi is None:
+                return []
+            with txn.cursor(dbi) as cur:
+                rc, k, v = cur.get(mdbx.CURSOR_FIRST)
+                while rc == mdbx.RC_SUCCESS:
+                    src = k.decode("utf-8", "replace")[len("file:"):]
+                    if path in (json.loads(v) or []):
+                        out.append(src)
+                        if limit and len(out) >= limit:
+                            break
+                    rc, k, v = cur.get(mdbx.CURSOR_NEXT)
+        return out
+
+    # --- реестр probes / SystemMap -------------------------------------------
+    def probe_add(self, tag: str, kind: str = None, mechanism: str = "",
+                  test_theme: str = "", symbol: str = "", file: str = "",
+                  line: int = 0, status: str = None) -> dict:
+        """Регистрирует зонд/пробу (SystemMap).
+
+        `kind`: usdt | bookmark | injected | dev_assert
+        `status`: candidate | inserted | validated
+        При обновлении существующего зонда `kind`/`status`, переданные как
+        None (не указаны), сохраняют старые значения; дефолты (usdt /
+        candidate) применяются ТОЛЬКО при создании — чтобы probe_status не
+        сбрасывал kind, а обновление локации не откатывало status.
+        Тег — семантический (стабильный при рефакторинге). Один тег → одна
+        запись (dedup по тегу), как в probe-bus (§4 «Реестр»).
+        """
+        tag = tag.strip()
+        if not tag:
+            raise invalid("probe: пустой тег", "укажите семантический тег")
+        with self._begin_write() as txn:
+            dbi = self.dbi(txn, "probes")
+            key = ("probe:" + tag).encode()
+            rc, old_val = txn.get(dbi, key)
+            old = json.loads(old_val.decode()) if old_val else {}
+            is_new = not old_val
+            body = {
+                "tag": tag,
+                "kind": (kind if kind is not None
+                         else (old.get("kind") if not is_new else "usdt")),
+                "mechanism": mechanism or old.get("mechanism", ""),
+                "test_theme": test_theme or old.get("test_theme", ""),
+                "symbol": symbol or old.get("symbol", ""),
+                "file": file or old.get("file", ""),
+                "line": line or old.get("line", 0),
+                "status": (status if status is not None
+                           else (old.get("status") if not is_new else "candidate")),
+            }
+            txn.put(dbi, key, json.dumps(body, ensure_ascii=False).encode())
+            return {"result": "merged" if old_val else "created", "tag": tag}
+
+    def probe_batch(self, probes: list) -> dict:
+        """Батчевая регистрация зондов (из scan_probes.py)."""
+        n = 0
+        with self._begin_write() as txn:
+            dbi = self.dbi(txn, "probes")
+            for p in probes:
+                tag = p.get("tag", "").strip()
+                if not tag:
+                    continue
+                key = ("probe:" + tag).encode()
+                rc, old_val = txn.get(dbi, key)
+                old = json.loads(old_val.decode()) if old_val else {}
+                body = {"tag": tag,
+                        "kind": p.get("kind") or old.get("kind", "usdt"),
+                        "mechanism": p.get("mechanism") or old.get("mechanism", ""),
+                        "test_theme": p.get("test_theme") or old.get("test_theme", ""),
+                        "symbol": p.get("symbol") or old.get("symbol", ""),
+                        "file": p.get("file") or old.get("file", ""),
+                        "line": int(p.get("line") or old.get("line", 0)),
+                        "status": p.get("status") or old.get("status", "candidate")}
+                txn.put(dbi, key, json.dumps(body, ensure_ascii=False).encode())
+                n += 1
+            return {"probes": n}
+
+    def probe_get(self, tag: str) -> dict:
+        with self.env.begin(readonly=True) as txn:
+            dbi = self._opt_dbi(txn, "probes")
+            if dbi is None:
+                return {}
+            rc, val = txn.get(dbi, ("probe:" + tag).encode())
+            if val is None:
+                return {}
+            return json.loads(val.decode())
+
+    def probe_list(self, prefix: str = "", kind: str = "",
+                   limit: int = None) -> list:
+        out = []
+        with self.env.begin(readonly=True) as txn:
+            dbi = self._opt_dbi(txn, "probes")
+            if dbi is None:
+                return []  # старая БД без probes
+            with txn.cursor(dbi) as cur:
+                rc, k, v = cur.get(mdbx.CURSOR_FIRST)
+                while rc == mdbx.RC_SUCCESS:
+                    key = k.decode("utf-8", "replace")
+                    if key.startswith("probe:" + prefix):
+                        body = json.loads(v)
+                        if not kind or body.get("kind") == kind:
+                            out.append({"tag": key[len("probe:"):],
+                                        "body": body})
+                            if limit and len(out) >= limit:
+                                break
+                    rc, k, v = cur.get(mdbx.CURSOR_NEXT)
+        return out
+
+    def probe_status(self, tag: str, status: str) -> dict:
+        """Переводит статус зонда (candidate/inserted/validated)."""
+        return self.probe_add(tag, status=status)
+
+    def probe_remove(self, tag: str) -> dict:
+        with self._begin_write() as txn:
+            dbi = self.dbi(txn, "probes")
+            key = ("probe:" + tag).encode()
+            rc, val = txn.get(dbi, key)
+            if val is None:
+                return {"result": "notfound"}
+            txn.delete(dbi, key)
+            return {"result": "removed"}
+
+    # --- наблюдаемые вызовы (runtime traces) ---------------------------------
+    def trace_ingest(self, caller: str, callee: str, count: int = 1,
+                     label: str = "") -> dict:
+        """Фиксирует наблюдаемый вызов (possible vs observed).
+
+        Хранит одну запись на caller (JSON: {callee -> count}), плюс обратные
+        рёбра в `call_traces_rev` (callee -> caller). Повторный вызов пары
+        инкрементирует счётчик.
+        """
+        count = max(1, int(count))
+        with self._begin_write() as txn:
+            ct_dbi = self.dbi(txn, "call_traces")
+            ctr_dbi = self.dbi(txn, "call_traces_rev")
+            key = caller.encode()
+            rc, val = txn.get(ct_dbi, key)
+            m = json.loads(val.decode()) if val else {}
+            m[callee] = m.get(callee, 0) + count
+            txn.put(ct_dbi, key, json.dumps(m, ensure_ascii=False).encode())
+            with txn.cursor(ctr_dbi) as cur:
+                cur.put(callee.encode(), caller.encode())
+            return {"caller": caller, "callee": callee, "count": m[callee]}
+
+    def trace_observed(self, caller: str = "") -> list:
+        """Наблюдаемые вызовы (возможно по префиксу caller)."""
+        out = []
+        with self.env.begin(readonly=True) as txn:
+            dbi = self._opt_dbi(txn, "call_traces")
+            if dbi is None:
+                return []
+            with txn.cursor(dbi) as cur:
+                rc, k, v = cur.get(mdbx.CURSOR_FIRST)
+                while rc == mdbx.RC_SUCCESS:
+                    key = k.decode("utf-8", "replace")
+                    if key.startswith(caller):
+                        body = json.loads(v)
+                        for cal, cnt in sorted(body.items()):
+                            out.append({"caller": key, "callee": cal,
+                                        "count": cnt})
+                    rc, k, v = cur.get(mdbx.CURSOR_NEXT)
+        return out
+
+    def trace_path(self, src: str, dst: str, depth: int = 5,
+                   limit: int = 50) -> list:
+        """BFS по наблюдаемым рёбрам: src → dst (пути observed-вызовов)."""
+        adj = {}
+        with self.env.begin(readonly=True) as txn:
+            dbi = self._opt_dbi(txn, "call_traces")
+            if dbi is None:
+                return []
+            with txn.cursor(dbi) as cur:
+                rc, k, v = cur.get(mdbx.CURSOR_FIRST)
+                while rc == mdbx.RC_SUCCESS:
+                    key = k.decode("utf-8", "replace")
+                    body = json.loads(v)
+                    adj.setdefault(key, []).extend(body.keys())
+                    rc, k, v = cur.get(mdbx.CURSOR_NEXT)
+        found = []
+        from collections import deque
+        seen = {(src,)}
+        queue = deque([(src, [src])])
+        while queue and len(found) < limit:
+            node, path = queue.popleft()
+            if len(path) > depth:
+                continue
+            for nxt in adj.get(node, []):
+                if not nxt or nxt in path:
+                    continue
+                new_path = path + [nxt]
+                if nxt == dst:
+                    found.append(new_path)
+                    if len(found) >= limit:
+                        break
+                if len(new_path) <= depth and tuple(new_path) not in seen:
+                    seen.add(tuple(new_path))
+                    queue.append((nxt, new_path))
+        return found
+
+    def trace_compare(self, symbol: str, layer: str = "") -> dict:
+        """Сравнение static (call_edges) и observed (call_traces) для символа.
+
+        observed берётся ТОЧНО по caller (не prefix), чтобы fn:foo не
+        включало наблюдения из fn:foobar.
+        """
+        layer = self._effective_layer(layer)
+        pre = self.layer_prefix(layer)
+        static_callees = set()
+        with self.env.begin(readonly=True) as txn:
+            ce_dbi = self.dbi(txn, "call_edges")
+            with txn.cursor(ce_dbi) as cur:
+                rc, _, val = cur.get(mdbx.CURSOR_SET_KEY,
+                                     (pre + symbol).encode())
+                while rc == mdbx.RC_SUCCESS:
+                    try:
+                        body = json.loads(val.decode())
+                        # только syntax-рёбра: semantic-саморебро (эквивалентные
+                        # конфиги) не является реальным вызовом
+                        if body.get("kind") != "syntax":
+                            rc, _, val = cur.get(mdbx.CURSOR_NEXT_DUP)
+                            continue
+                        cal = body.get("callee", "")
+                        if pre and cal.startswith(pre):
+                            cal = cal[len(pre):]
+                        static_callees.add(cal)
+                    except ValueError:
+                        # повреждённое ребро: пропустить (перегенерируется)
+                        rc, _, val = cur.get(mdbx.CURSOR_NEXT_DUP)
+                        continue
+                    rc, _, val = cur.get(mdbx.CURSOR_NEXT_DUP)
+        observed_callees = set()
+        with self.env.begin(readonly=True) as txn:
+            ct_dbi = self._opt_dbi(txn, "call_traces")
+            if ct_dbi is not None:
+                rc, val = txn.get(ct_dbi, (pre + symbol).encode())
+                if val is not None:
+                    for cal in json.loads(val.decode()).keys():
+                        # нормализуем observed до layer-local (префикс слоя снят)
+                        if pre and cal.startswith(pre):
+                            cal = cal[len(pre):]
+                        observed_callees.add(cal)
+        return {
+            "symbol": symbol,
+            "static": sorted(static_callees),
+            "observed": sorted(observed_callees),
+            "only_static": sorted(static_callees - observed_callees),
+            "only_observed": sorted(observed_callees - static_callees),
+        }
+
+    # --- ADR (архитектурные решения) -----------------------------------------
+    def adr_update(self, name: str, body: dict) -> dict:
+        """Сохраняет/обновляет ADR (context/decision/consequences).
+
+        Формат body (секции ADR): {"title", "status", "date", "context",
+        "decision", "consequences", "sections": {<имя>: <текст>}}. Любые
+        секции допускаются; обновление заменяет только переданные поля.
+        """
+        name = name.strip()
+        if not name:
+            raise invalid("adr: пустое имя", "укажите имя ADR")
+        with self._begin_write() as txn:
+            dbi = self.dbi(txn, "adr")
+            key = ("adr:" + name).encode()
+            rc, old_val = txn.get(dbi, key)
+            old = json.loads(old_val.decode()) if old_val else {}
+            sections = dict(old.get("sections") or {})
+            if body.get("sections"):
+                sections.update(body["sections"])
+            new = {
+                "title": body.get("title", old.get("title", name)),
+                "status": body.get("status", old.get("status", "draft")),
+                "date": body.get("date", old.get("date", "")),
+                "context": body.get("context", old.get("context", "")),
+                "decision": body.get("decision", old.get("decision", "")),
+                "consequences": body.get("consequences",
+                                         old.get("consequences", "")),
+                "sections": sections,
+            }
+            txn.put(dbi, key, json.dumps(new, ensure_ascii=False).encode())
+            return {"result": "merged" if old_val else "created", "name": name}
+
+    def adr_get(self, name: str) -> dict:
+        with self.env.begin(readonly=True) as txn:
+            dbi = self._opt_dbi(txn, "adr")
+            if dbi is None:
+                return {}
+            rc, val = txn.get(dbi, ("adr:" + name).encode())
+            if val is None:
+                return {}
+            return json.loads(val.decode())
+
+    def adr_outline(self, prefix: str = "", limit: int = None) -> list:
+        """Заголовки всех ADR (title/status/date) — краткий обзор."""
+        out = []
+        with self.env.begin(readonly=True) as txn:
+            dbi = self._opt_dbi(txn, "adr")
+            if dbi is None:
+                return []
+            with txn.cursor(dbi) as cur:
+                rc, k, v = cur.get(mdbx.CURSOR_FIRST)
+                while rc == mdbx.RC_SUCCESS:
+                    key = k.decode("utf-8", "replace")
+                    if key.startswith("adr:" + prefix):
+                        body = json.loads(v)
+                        out.append({"name": key[len("adr:"):],
+                                    "title": body.get("title", ""),
+                                    "status": body.get("status", ""),
+                                    "date": body.get("date", "")})
+                        if limit and len(out) >= limit:
+                            break
+                    rc, k, v = cur.get(mdbx.CURSOR_NEXT)
+        return out
+
+    def adr_delete(self, name: str) -> dict:
+        with self._begin_write() as txn:
+            dbi = self.dbi(txn, "adr")
+            key = ("adr:" + name).encode()
+            rc, val = txn.get(dbi, key)
+            if val is None:
+                return {"result": "notfound"}
+            txn.delete(dbi, key)
+            return {"result": "removed"}
+
+    # --- мост с codebase-memory-mcp (опциональный, совместный режим) ---------
+    @staticmethod
+    def cbm_binary() -> str:
+        """Путь к бинарю codebase-memory-mcp (или "" если не установлен)."""
+        env = os.environ.get("CBM_BIN")
+        if env:
+            return env if os.path.exists(env) else ""
+        for cand in (os.path.expanduser("~/.local/bin/codebase-memory-mcp"),
+                     "/usr/local/bin/codebase-memory-mcp"):
+            if os.path.exists(cand):
+                return cand
+        import shutil
+        return shutil.which("codebase-memory-mcp") or ""
+
+    def cbm_link(self, our_key: str, cbm_node: str,
+                 cbm_project: str = "") -> dict:
+        """Записывает соответствие наш fq-ключ ↔ узел CBM."""
+        if not our_key:
+            raise invalid("cbm: пустой our_key", "укажите fq-ключ")
+        with self._begin_write() as txn:
+            body = {"our_key": our_key, "cbm_node": cbm_node,
+                    "cbm_project": cbm_project,
+                    "mapped_at": time.strftime("%Y-%m-%dT%H:%M:%SZ",
+                                               time.gmtime())}
+            txn.put(self.dbi(txn, "bridge"),
+                    ("bridge:" + our_key).encode(),
+                    json.dumps(body, ensure_ascii=False).encode())
+            return body
+
+    def cbm_unlink(self, our_key: str) -> dict:
+        with self._begin_write() as txn:
+            key = ("bridge:" + our_key).encode()
+            rc, val = txn.get(self.dbi(txn, "bridge"), key)
+            if val is None:
+                return {"result": "notfound"}
+            txn.delete(self.dbi(txn, "bridge"), key)
+            return {"result": "removed"}
+
+    def cbm_linked(self, prefix: str = "", limit: int = 50) -> list:
+        out = []
+        with self.env.begin(readonly=True) as txn:
+            dbi = self._opt_dbi(txn, "bridge")
+            if dbi is None:
+                return []
+            with txn.cursor(dbi) as cur:
+                rc, k, v = cur.get(mdbx.CURSOR_FIRST)
+                while rc == mdbx.RC_SUCCESS:
+                    key = k.decode("utf-8", "replace")
+                    if key.startswith("bridge:" + prefix):
+                        out.append(json.loads(v))
+                        if limit and len(out) >= limit:
+                            break
+                    rc, k, v = cur.get(mdbx.CURSOR_NEXT)
+        return out
+
+    def cbm_search(self, query: str, project: str = "",
+                   tool: str = "search_graph", args: dict = None,
+                   timeout: int = 60) -> dict:
+        """Вызывает CBM CLI (подпроцесс) для query.
+
+        Основной режим — совместная работа с codebase-memory-mcp; НО модуль
+        полноценно работает и без CBM: если бинарь не найден или вызов
+        падает — возвращается {"unavailable": true, ...}, не ошибка.
+        """
+        binary = self.cbm_binary()
+        if not binary:
+            return {"unavailable": True,
+                    "reason": "codebase-memory-mcp not installed"}
+        import subprocess as _sp
+        args = dict(args or {})
+        if tool == "search_graph":
+            args.setdefault("query", query)
+        elif tool == "search_code":
+            args.setdefault("pattern", query)
+        if project:
+            args.setdefault("project", project)
+        cmd = [binary, "cli", "--json", tool]
+        # передаём аргументы как JSON строку после tool? CBM cli принимает
+        # args в JSON-форме позиционно
+        import json as _json
+        cmd.append(_json.dumps(args, ensure_ascii=False))
+        try:
+            p = _sp.run(cmd, capture_output=True, text=True,
+                        timeout=timeout, check=False)
+        except Exception as e:  # noqa: BLE001
+            return {"unavailable": True, "reason": "cbm cli error: %s" % e}
+        if p.returncode != 0:
+            return {"unavailable": True,
+                    "reason": "cbm cli rc=%s: %s" % (p.returncode,
+                                                     p.stderr[:300])}
+        try:
+            envelope = json.loads(p.stdout)
+        except ValueError:
+            return {"raw": p.stdout[:2000], "reason": "non-JSON output"}
+        return {"cbm": True, "tool": tool, "query": query,
+                "result": envelope}
 
     def map_load_regions(self, regions: list, uncovered: list,
                          replace: bool = False) -> dict:
@@ -1993,8 +2963,10 @@ class Store:
 
     def test_metrics_get(self, test_id: str) -> dict:
         with self.env.begin(readonly=True) as txn:
-            rc, val = txn.get(self.dbi(txn, "test_metrics"),
-                              ("test_metrics:" + test_id).encode())
+            dbi = self._opt_dbi(txn, "test_metrics")
+            if dbi is None:
+                return {}
+            rc, val = txn.get(dbi, ("test_metrics:" + test_id).encode())
             if val is None:
                 return {}
             return json.loads(val.decode())
@@ -2002,7 +2974,9 @@ class Store:
     def test_metrics_all(self, prefix: str = "", limit: int = None) -> list:
         out = []
         with self.env.begin(readonly=True) as txn:
-            dbi = self.dbi(txn, "test_metrics")
+            dbi = self._opt_dbi(txn, "test_metrics")
+            if dbi is None:
+                return []
             with txn.cursor(dbi) as cur:
                 rc, k, v = cur.get(mdbx.CURSOR_FIRST)
                 while rc == mdbx.RC_SUCCESS:
@@ -2016,14 +2990,242 @@ class Store:
         return out
 
     def coverage_insert(self, test_id: str, symbols: list, pct: float = 0.0) -> dict:
-        """Фиксирует покрытие теста: набор символов (fn:/type:/macro:)."""
+        """Фиксирует покрытие теста: набор символов (fn:/type:/macro:).
+
+        Одновременно поддерживает обратный индекс `covered_by:{sym}` →
+        [test_id], чтобы по символу находить защищающие его тесты.
+        Устаревшие членства (символы, покрытые раньше, но не теперь)
+        удаляются в той же транзакции.
+        """
+        symbols = symbols or []
         with self._begin_write() as txn:
+            cov_dbi = self.dbi(txn, "coverage")
+            cb_dbi = self.dbi(txn, "covered_by")
+            cbk_dbi = self.dbi(txn, "coverage_blocks")
             key = "coverage:" + test_id
+            rc, old_val = txn.get(cov_dbi, key.encode())
+            old_syms = set(json.loads(old_val.decode()).get("symbols", [])
+                           ) if old_val else set()
+            new_syms = set(symbols)
             body = {"test_id": test_id, "symbols": symbols,
                     "pct": round(pct, 1)}
-            txn.put(self.dbi(txn, "coverage"), key.encode(),
+            txn.put(cov_dbi, key.encode(),
                     json.dumps(body, ensure_ascii=False).encode())
+            for sym in symbols:
+                cb_key = ("covered_by:" + sym).encode()
+                rc, val = txn.get(cb_dbi, cb_key)
+                cur = json.loads(val.decode()) if val else []
+                if test_id not in cur:
+                    cur.append(test_id)
+                    txn.put(cb_dbi, cb_key,
+                            json.dumps(cur, ensure_ascii=False).encode())
+            # убрать устаревшие членства (prev - new)
+            for sym in old_syms - new_syms:
+                cb_key = ("covered_by:" + sym).encode()
+                rc, val = txn.get(cb_dbi, cb_key)
+                if val is None:
+                    continue
+                cur = json.loads(val.decode())
+                if test_id in cur:
+                    cur.remove(test_id)
+                    if cur:
+                        txn.put(cb_dbi, cb_key,
+                                json.dumps(cur, ensure_ascii=False).encode())
+                    else:
+                        txn.delete(cb_dbi, cb_key)
+                # удаляем устаревшие блочные записи для этого теста+символа
+                bk = ("coverage_blocks:%s:%s" % (test_id, sym)).encode()
+                if txn.get(cbk_dbi, bk)[1] is not None:
+                    txn.delete(cbk_dbi, bk)
             return {"test": test_id, "symbols": len(symbols)}
+
+    def coverage_batch(self, tests: dict) -> dict:
+        """Батчевая фиксация покрытия: {test_id: {symbols, pct}} в одной txn.
+
+        Устаревшие членства covered_by удаляются (prev - new).
+        """
+        n = 0
+        with self._begin_write() as txn:
+            cov_dbi = self.dbi(txn, "coverage")
+            cb_dbi = self.dbi(txn, "covered_by")
+            for test_id, info in tests.items():
+                symbols = (info or {}).get("symbols") or []
+                pct = float((info or {}).get("pct", 0.0))
+                key = "coverage:" + test_id
+                rc, old_val = txn.get(cov_dbi, key.encode())
+                old_syms = set(json.loads(old_val.decode()).get("symbols", [])
+                               ) if old_val else set()
+                new_syms = set(symbols)
+                body = {"test_id": test_id, "symbols": symbols,
+                        "pct": round(pct, 1)}
+                txn.put(cov_dbi, key.encode(),
+                        json.dumps(body, ensure_ascii=False).encode())
+                for sym in symbols:
+                    cb_key = ("covered_by:" + sym).encode()
+                    rc, val = txn.get(cb_dbi, cb_key)
+                    cur = json.loads(val.decode()) if val else []
+                    if test_id not in cur:
+                        cur.append(test_id)
+                        txn.put(cb_dbi, cb_key,
+                                json.dumps(cur, ensure_ascii=False).encode())
+                for sym in old_syms - new_syms:
+                    cb_key = ("covered_by:" + sym).encode()
+                    rc, val = txn.get(cb_dbi, cb_key)
+                    if val is None:
+                        continue
+                    cur = json.loads(val.decode())
+                    if test_id in cur:
+                        cur.remove(test_id)
+                        if cur:
+                            txn.put(cb_dbi, cb_key,
+                                    json.dumps(cur, ensure_ascii=False).encode())
+                        else:
+                            txn.delete(cb_dbi, cb_key)
+                n += 1
+            return {"tests": n}
+
+    def coverage_symbols(self, symbol_prefix: str, limit: int = 20) -> list:
+        """Тесты, покрывающие символы с префиксом (covered_by)."""
+        out = []
+        with self.env.begin(readonly=True) as txn:
+            dbi = self._opt_dbi(txn, "covered_by")
+            if dbi is None:
+                return []  # старая БД без covered_by
+            with txn.cursor(dbi) as cur:
+                rc, k, v = cur.get(mdbx.CURSOR_FIRST)
+                while rc == mdbx.RC_SUCCESS:
+                    key = k.decode("utf-8", "replace")
+                    if key.startswith("covered_by:" + symbol_prefix):
+                        sym = key[len("covered_by:"):]
+                        out.append({"symbol": sym,
+                                    "tests": json.loads(v)})
+                        if limit and len(out) >= limit:
+                            break
+                    rc, k, v = cur.get(mdbx.CURSOR_NEXT)
+        return out
+
+    def coverage_remove(self, test_id: str) -> dict:
+        """Удаляет покрытие теста и его вхождения из covered_by."""
+        with self._begin_write() as txn:
+            cov_dbi = self.dbi(txn, "coverage")
+            cb_dbi = self.dbi(txn, "covered_by")
+            key = "coverage:" + test_id
+            rc, val = txn.get(cov_dbi, key.encode())
+            if val is None:
+                return {"result": "notfound"}
+            symbols = json.loads(val.decode()).get("symbols", [])
+            txn.delete(cov_dbi, key.encode())
+            for sym in symbols:
+                cb_key = ("covered_by:" + sym).encode()
+                rc2, v2 = txn.get(cb_dbi, cb_key)
+                if v2 is None:
+                    continue
+                cur = json.loads(v2.decode())
+                if test_id in cur:
+                    cur.remove(test_id)
+                    if cur:
+                        txn.put(cb_dbi, cb_key,
+                                json.dumps(cur, ensure_ascii=False).encode())
+                    else:
+                        txn.delete(cb_dbi, cb_key)
+            return {"result": "removed"}
+
+    def coverage_blocks_insert(self, test_id: str, blocks: list,
+                               layer: str = "") -> int:
+        """Сохраняет блочную детализацию покрытия теста.
+
+        Формат записи: `coverage_blocks:{layer}/test:{sym-bare}` → JSON
+        `[{"block_id", "l0", "l1", "covered"}]`. Агрегирует блоки по символу.
+        Пустой layer — активная ветка (чтобы feature-прогоны не писали в base).
+        """
+        layer = self._effective_layer(layer)
+        pre = self.layer_prefix(layer)
+        by_sym = {}
+        for b in blocks:
+            sym_bare = b.get("symbol", "")
+            by_sym.setdefault(sym_bare, []).append({
+                "block_id": b.get("block_id", ""),
+                "l0": b.get("l0", 0), "l1": b.get("l1", 0),
+                "covered": bool(b.get("covered")),
+            })
+        with self._begin_write() as txn:
+            dbi = self.dbi(txn, "coverage_blocks")
+            for sym_bare, bl in sorted(by_sym.items()):
+                key = ("coverage_blocks:%s:%s"
+                       % (pre + test_id, sym_bare)).encode()
+                txn.put(dbi, key, json.dumps(bl, ensure_ascii=False).encode())
+        return len(by_sym)
+
+    def coverage_blocks_get(self, test_id: str, symbol: str,
+                            layer: str = "") -> list:
+        """Блоки символа, покрытые тестом (или [] если нет данных).
+
+        Ключ согласован с coverage_blocks_insert: `{layer}/test:{sym-bare}`.
+        """
+        layer = self._effective_layer(layer)
+        pre = self.layer_prefix(layer)
+        key = ("coverage_blocks:%s:%s" % (pre + test_id, symbol)).encode()
+        with self.env.begin(readonly=True) as txn:
+            dbi = self._opt_dbi(txn, "coverage_blocks")
+            if dbi is None:
+                return []
+            rc, val = txn.get(dbi, key)
+            if val is None:
+                return []
+            return json.loads(val.decode())
+
+    def coverage_gaps(self, module: str = "", layer: str = "",
+                      limit: int = 100) -> dict:
+        """Белые пятна покрытия: символы modules без покрытия (или блоки).
+
+        Агрегирует по символам:
+          - uncovered_symbols — символы module, без записи в coverage;
+          - uncovered_blocks — блоки, отмеченные covered=false в
+            coverage_blocks по всем тестам.
+        """
+        layer = self._effective_layer(layer)
+        pre = self.layer_prefix(layer)
+        covd_syms = set()
+        with self.env.begin(readonly=True) as txn:
+            cov_dbi = self.dbi(txn, "coverage")
+            with txn.cursor(cov_dbi) as cur:
+                rc, k, v = cur.get(mdbx.CURSOR_FIRST)
+                while rc == mdbx.RC_SUCCESS:
+                    key = k.decode()
+                    # тест-id в ключе: "coverage:{layer}/test" для feature-слоя
+                    test_part = key[len("coverage:"):] if key.startswith("coverage:") else key
+                    if (pre and test_part.startswith(pre)) or \
+                       (not pre and not _LAYER_KEY_RE.match(test_part)):
+                        body = json.loads(v)
+                        for s in body.get("symbols", []) or []:
+                            covd_syms.add(s)
+                    rc, k, v = cur.get(mdbx.CURSOR_NEXT)
+        # вне read-txn: map_symbols открывает свою (вложенные — OVERLAPPING)
+        all_syms = self.map_symbols(prefix="fn:", layer=layer)
+        mod_pat = module
+        uncovered_symbols = []
+        for sym in all_syms:
+            body = self.map_symbol(sym, layer=layer)
+            # merged-карты: module внутри implementations
+            mods = [i.get("module") for i in body.get("implementations") or []
+                    if i.get("module")]
+            if body.get("module"):
+                mods.insert(0, body.get("module", ""))
+            if mod_pat and not any(
+                    m and m.startswith(mod_pat) for m in mods):
+                continue
+            if sym not in covd_syms:
+                uncovered_symbols.append({
+                    "symbol": sym,
+                    "module": mods[0] if mods else body.get("module", ""),
+                })
+                if limit and len(uncovered_symbols) >= limit:
+                    break
+        return {
+            "module": module, "layer": layer,
+            "uncovered_symbols": uncovered_symbols,
+            "uncovered_symbols_count": len(uncovered_symbols),
+        }
 
     def coverage_get(self, test_id: str) -> dict:
         with self.env.begin(readonly=True) as txn:
@@ -2054,10 +3256,39 @@ class Store:
                     json.dumps(body, ensure_ascii=False).encode())
             return {"job": job_key}
 
+    def ci_jobs_get(self, job_key: str) -> dict:
+        with self.env.begin(readonly=True) as txn:
+            dbi = self._opt_dbi(txn, "ci_jobs")
+            if dbi is None:
+                return {}
+            rc, val = txn.get(dbi, job_key.encode())
+            if val is None:
+                return {}
+            return json.loads(val.decode())
+
+    def ci_jobs_by_test(self, test_id: str) -> list:
+        """Джобы, в которых исполняется тест (по labels/шагам в ci_jobs)."""
+        out = []
+        with self.env.begin(readonly=True) as txn:
+            dbi = self._opt_dbi(txn, "ci_jobs")
+            if dbi is None:
+                return []
+            with txn.cursor(dbi) as cur:
+                rc, k, v = cur.get(mdbx.CURSOR_FIRST)
+                while rc == mdbx.RC_SUCCESS:
+                    body = json.loads(v)
+                    tests = body.get("tests") or body.get("tests_hint") or []
+                    if test_id in tests:
+                        out.append(k.decode("utf-8", "replace"))
+                    rc, k, v = cur.get(mdbx.CURSOR_NEXT)
+        return out
+
     def ci_jobs_all(self, prefix: str = "", limit: int = None) -> list:
         out = []
         with self.env.begin(readonly=True) as txn:
-            dbi = self.dbi(txn, "ci_jobs")
+            dbi = self._opt_dbi(txn, "ci_jobs")
+            if dbi is None:
+                return []  # старая БД без ci_jobs
             with txn.cursor(dbi) as cur:
                 rc, k, v = cur.get(mdbx.CURSOR_FIRST)
                 while rc == mdbx.RC_SUCCESS:
@@ -2096,6 +3327,158 @@ class Store:
             "next_id": self.next_id,
         }
 
+    def version_info(self) -> dict:
+        """Полная версионная картина для оперативного контроля.
+
+        Возвращает: версию модуля, версию libmdbx (из экспортируемого
+        mdbx_version), версию схемы данных (persisted в meta.schema_ver) и
+        версию данных (поколение карты canary.y + число записей + символов).
+        """
+        try:
+            lib_ver = mdbx.version_string()
+        except Exception:  # noqa: BLE001
+            lib_ver = "?"
+        st = self.stats()
+        try:
+            gen = self.map_generations()
+            data_gen = gen["generation"]
+            data_symbols = gen["symbols"]
+        except Exception:  # noqa: BLE001
+            data_gen, data_symbols = None, None
+        schema_ver = SCHEMA_VERSION
+        try:
+            with self.env.begin(readonly=True) as txn:
+                rc, vmeta = txn.get(self.dbi(txn, "meta"), b"schema_ver")
+                if vmeta is not None:
+                    schema_ver = vmeta.decode()
+        except Exception:  # noqa: BLE001
+            pass
+        return {
+            "module_version": MODULE_VERSION,
+            "libmdbx_version": lib_ver,
+            "schema_version": schema_ver,
+            "schema_matches": schema_ver == SCHEMA_VERSION,
+            "branch": self.branch_current(),
+            "data": {
+                "map_generation": data_gen,
+                "records": st.get("records"),
+                "symbols": data_symbols,
+                "next_id": st.get("next_id"),
+            },
+        }
+
+    # --- слои веток: нелинейное версионирование БЗ ---------------------------
+    @staticmethod
+    def layer_prefix(layer: str = "") -> str:
+        """Префикс слоя для перегенерируемых таблиц.
+
+        Базовая ветка ("" или "0.15.base" и т.п.) живёт БЕЗ префикса
+        (обратная совместимость); любой другой слой — с префиксом
+        `{layer}/`. Стабильность: версия (0.15) важнее имени ветки
+        (master→stable→lts) — см. docs/BRANCHES.md.
+        """
+        layer = (layer or "").strip().strip("/")
+        if not layer:
+            return ""
+        # "0.15.base"/"0.15" — базовые слои: без префикса
+        if layer.endswith(".base") or _VVER_RE.fullmatch(layer):
+            return ""
+        return layer + "/"
+
+    def _effective_layer(self, layer: str = "") -> str:
+        """Слой для чтения/записи: явный аргумент > активная ветка.
+
+        Кайдзен (окт 2026): `branch_activate` должен влиять на map/coverage/
+        probe-инструменты по умолчанию — иначе активация декларативна, а
+        данные читаются из базового слоя (путаница в многобраншевой работе).
+        """
+        if layer:
+            return layer
+        try:
+            return self.branch_current().get("layer", "")
+        except Exception:  # noqa: BLE001
+            return ""
+
+    def branch_register(self, ver_slug: str, feature_slug: str = "base",
+                        n_commits: int = 0, revision: str = "",
+                        git_tag: str = "", base_branch: str = "",
+                        status: str = "active") -> dict:
+        """Регистрирует слой ветки (нелинейное версионирование).
+
+        Идентификатор слоя: `{ver-slug}.{feature-slug}.{n}` (см. BRANCHES.md).
+        Базовая ветка (`feature`="base"|"") живёт без префикса.
+        """
+        ver = ver_slug.strip().lstrip("v")
+        feat = (feature_slug or "base").strip().strip("/")
+        if not ver:
+            raise invalid("branch: не указан версионный slug",
+                          "укажите ver_slug (например 0.15)")
+        feat_clean = re.sub(r"[^A-Za-z0-9._-]", "-", feat)
+        layer = "%s.%s.%d" % (ver, feat_clean, int(n_commits)) if feat_clean != "base" else ver
+        body = {
+            "ver_slug": ver,
+            "feature_slug": feat_clean,
+            "n_commits": int(n_commits),
+            "revision": revision,
+            "git_tag": git_tag,
+            "base_branch": base_branch,
+            "status": status,
+            "created_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+            "is_base": feat_clean == "base",
+        }
+        with self._begin_write() as txn:
+            txn.put(self.dbi(txn, "branches"), ("branch:" + layer).encode(),
+                    json.dumps(body, ensure_ascii=False).encode())
+        return {"layer": layer, "body": body}
+
+    def branch_list(self, base_only: bool = False) -> list:
+        out = []
+        with self.env.begin(readonly=True) as txn:
+            dbi = self._opt_dbi(txn, "branches")
+            if dbi is None:
+                return []  # старая БД без таблицы branches
+            with txn.cursor(dbi) as cur:
+                rc, k, v = cur.get(mdbx.CURSOR_FIRST)
+                while rc == mdbx.RC_SUCCESS:
+                    body = json.loads(v)
+                    if not base_only or body.get("is_base"):
+                        out.append({"layer": k.decode()[len("branch:"):],
+                                    "body": body})
+                    rc, k, v = cur.get(mdbx.CURSOR_NEXT)
+        return out
+
+    def branch_current(self) -> dict:
+        with self.env.begin(readonly=True) as txn:
+            rc, val = txn.get(self.dbi(txn, "meta"), b"branch_current")
+            layer = val.decode() if val else ""
+            if not layer:
+                rc2, rcval = txn.get(self.dbi(txn, "meta"), b"branch_ver")
+                layer = rcval.decode() if rcval else ""
+            return {"layer": layer}
+
+    def branch_activate(self, layer: str) -> dict:
+        layer = layer.strip().strip("/")
+        with self._begin_write() as txn:
+            meta = self.dbi(txn, "meta")
+            rc, val = txn.get(meta, b"branch_current")
+            prev = val.decode() if val else ""
+            txn.put(meta, b"branch_current", layer.encode())
+            # canary.z = активный слой (для внешних читателей/отладки)
+            c = txn.canary_get()
+            txn.canary_put(x=c.get("x", 0), y=c.get("y", 0), z=len(layer))
+            return {"previous": prev, "current": layer}
+
+    def branch_remove(self, layer: str) -> dict:
+        layer = layer.strip().strip("/")
+        with self._begin_write() as txn:
+            dbi = self.dbi(txn, "branches")
+            key = ("branch:" + layer).encode()
+            rc, val = txn.get(dbi, key)
+            if val is None:
+                return {"result": "notfound"}
+            txn.delete(dbi, key)
+            return {"result": "removed", "layer": layer}
+
     def close(self) -> None:
         if self._closed:
             return
@@ -2103,13 +3486,13 @@ class Store:
         # сбросить накопленные LRU-касания и остановить фоновый тред синка
         try:
             self._flush_touches()
-        except Exception:
-            pass
+        except Exception as e:
+            sys.stderr.write("flush touches: %s\n" % e)
         self._stop_sync_thread()
         try:
             self.env.sync(force=True, nonblock=False)
-        except Exception:
-            pass
+        except Exception as e:
+            sys.stderr.write("env sync: %s\n" % e)
         self.env.close()
 
     def __enter__(self) -> "Store":

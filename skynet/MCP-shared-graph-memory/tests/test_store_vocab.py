@@ -1,10 +1,7 @@
 """Тесты словаря vocab."""
 
-import pytest
 
 from mcp import Store
-from mcp.errors import MemoryError
-from mcp.normalize import DEFAULT_MODULES
 
 
 def test_default_modules_present(store):
@@ -70,8 +67,5 @@ def test_normalize_uses_persisted_vocab(store_path):
     s1.vocab_add("custom", "theme")
     s1.safe_store("bug:custom:theme", "bug", "some bug text", 0.5)
     s1.close()
-    s2 = Store(store_path)
-    try:
+    with Store(store_path) as s2:
         assert s2.exists("bug:custom:theme")
-    finally:
-        s2.close()

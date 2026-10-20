@@ -14,7 +14,8 @@ import difflib
 import re
 import unicodedata
 
-from .errors import MemoryError, invalid
+from .errors import invalid
+
 
 RECORD_TYPES = ("decision", "bug", "proc", "bottleneck", "fact", "event")
 
