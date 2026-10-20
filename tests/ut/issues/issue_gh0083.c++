@@ -1,6 +1,8 @@
 #include "mdbx.h++"
 #include <gtest/gtest.h>
 
+#include "../test-env.h"
+
 #include <atomic>
 #include <chrono>
 #include <cstdint>
@@ -236,6 +238,10 @@ static int craft_shared_page(const std::string &testdb, uint32_t pagesize) {
 }
 
 TEST(issue_gh0083, duplicated_page_across_gc_records_rejected) {
+  if (MDBX_GTEST_IS_EXECUTION_TIMEOUT()) {
+    GTEST_SKIP() << "SKIPPED by RUNTIME_LIMIT";
+    return;
+  }
   const std::string testdb = "issue83.mdbx";
   env_remove(testdb.c_str());
   ASSERT_TRUE(create_gc_db(testdb)) << "must be able to create a GC with several records";
