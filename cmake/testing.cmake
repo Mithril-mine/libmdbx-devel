@@ -351,6 +351,20 @@ if(BUILD_TESTING)
       set_tests_properties(ut_copy_dlls PROPERTIES LABELS "ut;ut.api" TIMEOUT 60 FIXTURES_SETUP ut-dlls)
       set(UT_DLL_COPY_TEST ut_copy_dlls)
     endif()
+
+    # Shared test-environment TU (tests/ut/test-env.c++): the single
+    # ci_runtime_limiter instance (GTEST_RUNTIME_LIMIT guard) and the single
+    # CI-only CRT popup suppressor. It is compiled INTO every gtest target
+    # (not a static library): with a static lib the linker would drop the
+    # whole object from binaries that never reference the limiter, silently
+    # disabling the popup suppression for those tests.
+    if(CMAKE_CXX_COMPILER_LOADED AND EXISTS "${CMAKE_CURRENT_LIST_DIR}/../tests/ut/test-env.c++")
+      set(UT_TEST_ENV_SOURCE "${CMAKE_CURRENT_LIST_DIR}/../tests/ut/test-env.c++")
+      set(UT_TEST_ENV_INCLUDE_DIR "${CMAKE_CURRENT_LIST_DIR}/../tests/ut")
+    else()
+      set(UT_TEST_ENV_SOURCE "")
+      set(UT_TEST_ENV_INCLUDE_DIR "")
+    endif()
   else()
     set(UT_INCLUDE_DIRECTORIES "")
     set(UT_LIBRARIES "")
@@ -381,7 +395,12 @@ if(BUILD_TESTING)
       endif()
 
       set(target "${params_PREFIX}${name}")
-      add_executable(${target} ${params_SOURCE})
+      if(UT_TEST_ENV_SOURCE)
+        add_executable(${target} ${params_SOURCE} ${UT_TEST_ENV_SOURCE})
+        target_include_directories(${target} PRIVATE ${UT_TEST_ENV_INCLUDE_DIR})
+      else()
+        add_executable(${target} ${params_SOURCE})
+      endif()
       set_target_properties(${target} PROPERTIES SKIP_BUILD_RPATH FALSE BUILD_WITH_INSTALL_RPATH FALSE)
 
       if(MSVC AND MSVC_C11_MAD_ATOMICS)

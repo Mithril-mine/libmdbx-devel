@@ -90,6 +90,11 @@ jobs:
               ;;
             schedule)
               echo "==> schedule: nightly full on master"
+              # Nightly marker: enables GTEST_SHUFFLE=1 (random gtest order)
+              # in tests/ci/run-cell.py, so a different subset of the suite
+              # runs each night under the GTEST_RUNTIME_LIMIT soft deadline.
+              export CI_NIGHTLY=1
+              echo "CI_NIGHTLY=1" >> "$GITHUB_ENV"
               CELLS=$(tests/ci/select-cells.py --profile full)
               SCOPE=full
               REF="master"
