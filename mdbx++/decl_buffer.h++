@@ -778,6 +778,14 @@ public:
   MDBX_CXX20_CONSTEXPR buffer(const char *ptr, INT bytes, const allocator_type &alloc = allocator_type())
       : buffer(static_cast<const void *>(ptr), size_t(bytes), alloc) {}
 
+  /// \brief Takes `nullptr`, so that a literal `0` or `NULL` is ambiguous instead of a null `const char *`.
+  /// \note A null pointer with a non-zero length would dereference address
+  ///   zero; only `nullptr` with zero bytes (an empty buffer) is accepted.
+  template <typename INT, typename ::std::enable_if<::std::is_integral<INT>::value && !::std::is_same<INT, bool>::value,
+                                                    int>::type = 0>
+  MDBX_CXX20_CONSTEXPR buffer(::std::nullptr_t, INT bytes, const allocator_type &alloc = allocator_type())
+      : buffer(static_cast<const void *>(nullptr), check_nullptr_length(size_t(bytes)), alloc) {}
+
   /// \brief Creates a buffer that stores a copy of the string's content.
   /// The source string may be a temporary: the bytes are copied immediately,
   /// so there are no lifetime requirements (unlike mdbx::slice).
@@ -1076,6 +1084,12 @@ public:
                                                     int>::type = 0>
   buffer &assign(const char *ptr, INT bytes, bool make_reference = false) {
     return assign(static_cast<const void *>(ptr), size_t(bytes), make_reference);
+  }
+
+  template <typename INT, typename ::std::enable_if<::std::is_integral<INT>::value && !::std::is_same<INT, bool>::value,
+                                                    int>::type = 0>
+  buffer &assign(::std::nullptr_t, INT bytes, bool make_reference = false) {
+    return assign(static_cast<const void *>(nullptr), check_nullptr_length(size_t(bytes)), make_reference);
   }
 
   buffer &assign(const struct slice &src, bool make_reference = false) {
