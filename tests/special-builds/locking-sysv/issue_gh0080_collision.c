@@ -1,37 +1,32 @@
-/* Canary for https://github.com/Mithril-mine/libmdbx-devel/issues/80 (WONTFIX):
- * the System V IPC semaphore key is derived via the system ftok(), which uses
- * only the low 16 bits of the file's inode, so two databases on the same
- * filesystem can map to the same key. On a collision the open path removes the
- * existing semaphore set (IPC_RMID) and recreates it, silently breaking the
- * locking of the other database. This test deliberately crafts such a
- * collision: it opens database A, creates a file whose inode collides with A's
- * in the ftok() key space, opens database B there and closes it, then checks
- * that A's semaphore set still exists and A still works.
+/* Regression test for https://github.com/Mithril-mine/libmdbx-devel/issues/80:
+ * the System V IPC semaphore key is derived via the system ftok(), whose
+ * narrow key space lets two databases collide; on a collision the open path
+ * used to remove the existing semaphore set (IPC_RMID) and recreate it,
+ * silently breaking the locking of the other database. The fix refuses the
+ * colliding open instead.
  *
- * While the defect is present the check FAILS and the test is registered with
- * WILL_FAIL TRUE in CMakeLists.txt, keeping CTest green while documenting the
- * known defect. Once the defect is fixed this test starts passing and must be
- * converted into a regular regression test. */
+ * The collision is generated deterministically via the probe-bus: the
+ * ftok_key_collide FAULT site in osal_ftok() is armed so that both databases
+ * derive the very same key. Database A is opened and exercised (a write txn
+ * does a semop, making its owner pid visible), then database B is opened with
+ * the same injected key; the liveness check must refuse B while A's set and
+ * A itself survive.
+ *
+ * Requires the probe-bus build (MDBX_PROBES=ON) and MDBX_PROBES=1 at run
+ * time, see tests/special-builds/locking-sysv/CMakeLists.txt. */
 #include "mdbx.h"
 
 #include <errno.h>
-#include <fcntl.h>
 #include <signal.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <sys/ipc.h>
-#include <sys/sem.h>
-#include <sys/stat.h>
 #include <unistd.h>
 
-#define MAX_PROBES 200000
+extern int mprobe_ctl(const char *request, char *reply, size_t reply_size);
 
-/* The defect currently makes the collision path crash (assertion/abort) or
- * fail; convert such a death into a clean non-zero exit so that the CTest
- * WILL_FAIL inversion works for both "crashed" and "returned error" forms. */
 static void trap_signal(int sig) {
-  fprintf(stderr, "\ncanary: terminated by signal %d while exercising the #80 collision defect\n", sig);
+  fprintf(stderr, "\ncollision-test: terminated by signal %d\n", sig);
   _exit(1);
 }
 
@@ -63,94 +58,72 @@ int main(void) {
   signal(SIGBUS, trap_signal);
 
   const char *db_a = "gh0080-collision-a.mdbx";
-  char lck_a[128], lck_b[300];
+  const char *db_b = "gh0080-collision-b.mdbx";
+  char lck_a[128], lck_b[128];
   snprintf(lck_a, sizeof lck_a, "%s-lck", db_a);
+  snprintf(lck_b, sizeof lck_b, "%s-lck", db_b);
   unlink(db_a);
   unlink(lck_a);
+  unlink(db_b);
+  unlink(lck_b);
 
-  char probedir[128];
-  snprintf(probedir, sizeof probedir, "gh0080-collision-probes-%d", (int)getpid());
-  if (mkdir(probedir, 0700) != 0 && errno != EEXIST) {
-    perror("mkdir(probedir)");
+  char reply[256], cmd[128];
+
+  /* Arm the FAULT site: osal_ftok() will return the same injected key for
+   * every database, forcing a deterministic System V IPC key collision. */
+  snprintf(cmd, sizeof cmd, "fault ftok_key_collide %d", (int)0x00712345);
+  if (mprobe_ctl(cmd, reply, sizeof reply) != 0) {
+    fprintf(stderr, "mprobe_ctl(arm ftok_key_collide) failed\n");
     return 2;
   }
 
   MDBX_env *env_a = NULL;
   if (open_db(db_a, &env_a) != 0) {
     fprintf(stderr, "cannot open database A\n");
+    mprobe_ctl("fault ftok_key_collide none", reply, sizeof reply);
     return 2;
   }
-  const key_t key_a = ftok(db_a, 42);
-  if (key_a == (key_t)-1) {
-    fprintf(stderr, "ftok(A) failed: %s\n", strerror(errno));
+  /* Make A an *active* database: a write transaction performs a semop() on
+   * the set, so its owner pid (GETPID) becomes visible to a colliding open. */
+  MDBX_txn *txn_a = NULL;
+  if (mdbx_txn_begin(env_a, NULL, MDBX_TXN_READWRITE, &txn_a) != MDBX_SUCCESS ||
+      mdbx_txn_commit(txn_a) != MDBX_SUCCESS) {
+    fprintf(stderr, "cannot write to database A\n");
     mdbx_env_close(env_a);
+    mprobe_ctl("fault ftok_key_collide none", reply, sizeof reply);
     return 2;
   }
-  struct stat st;
-  if (stat(db_a, &st) != 0) {
-    fprintf(stderr, "stat(A) failed\n");
-    mdbx_env_close(env_a);
-    return 2;
-  }
-  const int target = (int)(st.st_ino & 0xffff);
 
-  /* Probe empty files until the low 16 bits of an inode collide with A's. */
-  char db_b[256];
-  int found = 0;
-  for (size_t i = 0; i < MAX_PROBES && !found; i++) {
-    char name[256];
-    snprintf(name, sizeof name, "%s/probe-%06zu", probedir, i);
-    const int fd = open(name, O_CREAT | O_EXCL | O_WRONLY, 0600);
-    if (fd < 0)
-      continue;
-    close(fd);
-    struct stat cs;
-    if (stat(name, &cs) == 0 && (int)(cs.st_ino & 0xffff) == target) {
-      snprintf(db_b, sizeof db_b, "%s", name);
-      found = 1;
-    }
-  }
-  if (!found) {
-    fprintf(stderr, "inconclusive: could not craft an ftok() collision on this filesystem\n");
-    mdbx_env_close(env_a);
-    return 2;
-  }
-  snprintf(lck_b, sizeof lck_b, "%s-lck", db_b);
-  unlink(lck_b);
-
+  /* Opening B under the same injected key must be refused: A's set is live. */
   MDBX_env *env_b = NULL;
-  if (open_db(db_b, &env_b) != 0) {
-    fprintf(stderr, "cannot open database B\n");
+  const int open_b_rc = open_db(db_b, &env_b);
+  if (open_b_rc == 0) {
+    mdbx_env_close(env_b);
     mdbx_env_close(env_a);
-    return 2;
+    cleanup_files((const char *[]){db_a, lck_a, db_b, lck_b}, 4);
+    mprobe_ctl("fault ftok_key_collide none", reply, sizeof reply);
+    fprintf(stderr, "BUG PRESENT (issue #80): opening B succeeded despite the live colliding database A\n");
+    return 1;
   }
-  mdbx_env_close(env_b);
-  /* B's open/close happened; A's semaphore set must have survived. */
-  const int semid_a = semget(key_a, 2, 0);
-  const int after_open = errno;
 
+  /* A must still begin and commit a write transaction (which uses the set). */
   MDBX_txn *txn = NULL;
   int rc = mdbx_txn_begin(env_a, NULL, MDBX_TXN_READWRITE, &txn);
   if (rc != MDBX_SUCCESS) {
     mdbx_env_close(env_a);
     cleanup_files((const char *[]){db_a, lck_a, db_b, lck_b}, 4);
-    fprintf(stderr,
-            "BUG PRESENT (issue #80): opening the colliding database B broke database A: "
-            "semget(%d, 2, 0) -> %s, write-txn begin -> %d\n",
-            (int)key_a, semid_a == -1 ? strerror(after_open) : "ok", rc);
+    mprobe_ctl("fault ftok_key_collide none", reply, sizeof reply);
+    fprintf(stderr, "BUG PRESENT (issue #80): opening the colliding database B broke database A: %d\n", rc);
     return 1;
   }
   rc = mdbx_txn_commit(txn);
   mdbx_env_close(env_a);
   cleanup_files((const char *[]){db_a, lck_a, db_b, lck_b}, 4);
+  mprobe_ctl("fault ftok_key_collide none", reply, sizeof reply);
   if (rc != MDBX_SUCCESS) {
-    fprintf(stderr, "BUG PRESENT (issue #80): commit on database A failed after opening B: %d\n", rc);
+    fprintf(stderr, "BUG PRESENT (issue #80): commit on database A failed after the collision: %d\n", rc);
     return 1;
   }
-  if (semid_a == -1) {
-    fprintf(stderr, "BUG PRESENT (issue #80): database A's semaphore set was removed by opening B\n");
-    return 1;
-  }
-  printf("OK: database A survived opening the colliding database B\n");
+  printf("OK: database A survived the colliding database B (B was refused)\n");
   return 0;
 }

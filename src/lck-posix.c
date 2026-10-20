@@ -533,17 +533,92 @@ __cold int lck_destroy(MDBX_env *env, MDBX_env *inprocess_neighbor, const mdbx_p
 /*---------------------------------------------------------------------------*/
 
 #if MDBX_LOCKING == MDBX_LOCKING_SYSV
+/* Error code for a System V IPC key collision: another live database holds a
+ * semaphore set under our key, so opening must fail rather than reclaim it. */
+#define MDBX_FTOK_COLLISION ENOLCK
+
 /* Decision on EEXIST from semget(key, IPC_CREAT|IPC_EXCL): whether to
  * reclaim the existing semaphore set ("hit") or to bail out with an error
- * ("flee"). The `semid` of the existing set is passed so a liveness check
- * can inspect it (e.g. via semctl(IPC_STAT)); issue #80.
- * Currently keeps the legacy behavior: any existing set is treated as our
- * stale leftover and reclaimed. */
+ * ("flee"). The `semid` of the existing set is passed so the liveness check
+ * can inspect it; issue #80.
+ *
+ * The question arises only when we hold the exclusive access to the LCK-file
+ * of our database, so any live process that last used the set is by
+ * definition a foreign collision, not our own (our process, or another one
+ * of ours, would hold the LCK and we would not have got the exclusive).
+ * A set whose last semop() process is dead (ESRCH) is our crashed leftover
+ * and safe to reclaim. Because semget()/semctl()/kill() are not atomic, the
+ * liveness is re-checked several rounds before reclaiming.
+ *
+ * semop() happens on both semaphores of the set (the writer lock and the
+ * reader-table lock), so GETPID of a single semaphore can miss the last
+ * activity of a live database; the owner pid of each semaphore is checked and
+ * the set is treated as live if any of them is a live process. */
 static int sysv_ipc_eeexist_decide(MDBX_env *env, key_t key, int semid) {
   (void)env;
-  (void)key;
-  (void)semid;
-  return MDBX_RESULT_TRUE; /* reclaim (legacy behavior) */
+  struct semid_ds ds;
+  if (unlikely(semctl(semid, 0, IPC_STAT, &ds) == -1)) {
+    const int err = errno;
+    if (err == EIDRM || err == EINVAL)
+      return MDBX_RESULT_TRUE; /* the set disappeared; retry creation */
+    ERROR("%s, key %d, semid %d: %s", "sysv-ipc IPC_STAT failed", (int)key, semid, strerror(err));
+    return MDBX_RESULT_FALSE;
+  }
+
+  /* A foreign format (not a two-semaphore set created by libmdbx) must never
+   * be reclaimed, whatever its liveness looks like. */
+  if (unlikely(ds.sem_nsems != 2))
+    return MDBX_RESULT_FALSE;
+
+  /* A set that has never been used by a semop() cannot belong to a database
+   * that has ever locked; on its own this is indistinguishable from a foreign
+   * database in the middle of its open (set created, not yet locked), so it
+   * is only a shortcut — the same multi-round liveness check below applies. */
+  const bool never_used = (ds.sem_otime == 0);
+
+  /* Re-check the owner liveness several rounds to close the race between
+   * semget()/semctl()/kill(). A live owner (or an EPERM-like outcome) means
+   * a foreign collision — flee; only an owner that is dead in every round is
+   * our crashed leftover — hit. */
+  for (int round = 0; round < 3; ++round) {
+    for (int semnum = 0; semnum < 2; ++semnum) {
+      const int sempid = semctl(semid, semnum, GETPID);
+      if (unlikely(sempid == -1)) {
+        const int err = errno;
+        if (err == EIDRM || err == EINVAL)
+          return MDBX_RESULT_TRUE; /* the set disappeared; retry creation */
+        ERROR("%s, key %d, semid %d: %s", "sysv-ipc GETPID failed", (int)key, semid, strerror(err));
+        return MDBX_RESULT_FALSE;
+      }
+      if (sempid != 0) {
+        errno = 0;
+        if (kill((pid_t)sempid, 0) == 0)
+          return MDBX_RESULT_FALSE; /* a live foreign process owns the set */
+        if (errno != ESRCH)
+          return MDBX_RESULT_FALSE; /* EPERM & co: the owner exists but is foreign */
+      }
+    }
+    if (round + 1 < 3)
+      osal_yield(); /* give a competing live process a chance to make its semop() */
+  }
+
+  /* The set is empty or its last users are dead in every round. Before
+   * reclaiming, re-check that it has not become used meanwhile (a foreign
+   * database finishing its open between our rounds). */
+  struct semid_ds ds2;
+  if (unlikely(semctl(semid, 0, IPC_STAT, &ds2) == -1)) {
+    const int err = errno;
+    if (err == EIDRM || err == EINVAL)
+      return MDBX_RESULT_TRUE; /* the set disappeared; retry creation */
+    ERROR("%s, key %d, semid %d: %s", "sysv-ipc IPC_STAT failed", (int)key, semid, strerror(err));
+    return MDBX_RESULT_FALSE;
+  }
+  if (ds2.sem_nsems != 2)
+    return MDBX_RESULT_FALSE;
+  if (!never_used && ds2.sem_otime != ds.sem_otime)
+    return MDBX_RESULT_FALSE; /* the set was used since the first check */
+
+  return MDBX_RESULT_TRUE; /* dead/absent owner in every round: our stale leftover */
 }
 #endif /* MDBX_LOCKING == MDBX_LOCKING_SYSV */
 
@@ -564,9 +639,8 @@ __cold int lck_init(MDBX_env *env, MDBX_env *inprocess_neighbor, int global_uniq
         return err;
 
       /* Existing set under our key: decide whether to reclaim ("hit") or to
-       * bail out ("flee"). The decision is delegated so the liveness check can
-       * be implemented separately (issue #80); currently it keeps the legacy
-       * behavior of reclaiming any existing set. */
+       * bail out ("flee") — a live foreign database collides on the key and
+       * its semaphores must not be removed. */
       semid = semget(env->me_sysv_ipc.key, 2, 0);
       if (semid == -1) {
         err = errno;
@@ -575,7 +649,7 @@ __cold int lck_init(MDBX_env *env, MDBX_env *inprocess_neighbor, int global_uniq
         goto sysv_retry_create;
       }
       if (unlikely(sysv_ipc_eeexist_decide(env, env->me_sysv_ipc.key, semid) != MDBX_RESULT_TRUE))
-        return MDBX_BUSY; /* a live set belonging to another database; do not touch it */
+        return MDBX_FTOK_COLLISION; /* a live set belonging to another database; do not touch it */
       if (semctl(semid, 2, IPC_RMID)) {
         err = errno;
         if (err != EIDRM)
