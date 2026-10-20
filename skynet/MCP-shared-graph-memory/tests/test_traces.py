@@ -97,3 +97,45 @@ def test_trace_path_layer_isolated(store):
     # D недостижим из base-слоя
     assert store.trace_path("A", "D", layer="0.15.base") == []
     assert store.trace_path("C", "D", layer="0.15.feat.1") == [["C", "D"]]
+
+
+def test_trace_ingest_batch(store):
+    """Батчевый ingest: одна txn, накопление счётчиков, label."""
+    r = store.trace_ingest_batch([
+        {"caller": "fn:m1", "callee": "fn:m2", "count": 3, "label": "ci"},
+        {"caller": "fn:m1", "callee": "fn:m2", "count": 2},
+        {"caller": "fn:m1", "callee": "fn:m3"},
+        {"caller": "", "callee": "fn:skip"},       # бракованная — пропуск
+        {"caller": "fn:skip2", "callee": ""},
+    ], layer="0.15.base")
+    assert r["ingested"] == 3
+    obs = store.trace_observed("fn:m1", layer="0.15.base")
+    by = {o["callee"]: o for o in obs}
+    assert by["fn:m2"]["count"] == 5
+    assert by["fn:m2"]["label"] == "ci"
+    assert by["fn:m3"]["count"] == 1
+
+
+def test_collect_traces_parser(tmp_path):
+    """collect_traces.parse_dump: text, json, jsonl."""
+    import sys
+    import os
+    sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(
+        os.path.abspath(__file__))), "tools"))
+    from collect_traces import parse_dump
+    # текстовый
+    t = tmp_path / "t.txt"
+    t.write_text("# comment\nfn:a fn:b 5 ci-run\nfn:c fn:d\n\nfn:e fn:f 2\n")
+    pairs = parse_dump(str(t))
+    assert len(pairs) == 3
+    assert pairs[0] == {"caller": "fn:a", "callee": "fn:b", "count": 5,
+                        "label": "ci-run"}
+    assert pairs[1] == {"caller": "fn:c", "callee": "fn:d"}
+    # json-массив
+    j = tmp_path / "t.json"
+    j.write_text('[{"caller":"x","callee":"y","count":7}]')
+    assert parse_dump(str(j)) == [{"caller": "x", "callee": "y", "count": 7}]
+    # jsonl
+    jl = tmp_path / "t.jsonl"
+    jl.write_text('{"caller":"p","callee":"q"}\n{"caller":"r","callee":"s","count":2}\n')
+    assert len(parse_dump(str(jl))) == 2

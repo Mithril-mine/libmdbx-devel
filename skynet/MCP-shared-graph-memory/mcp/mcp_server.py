@@ -376,6 +376,12 @@ class McpServer:
                                                    "label": {"type": "string"},
                                                    "layer": {"type": "string"}},
                                     "required": ["caller", "callee"]}),
+            ("trace_ingest_batch", "Батчевый ingest наблюдаемых вызовов "
+             "(одна txn) из дампа probe-bus/счётчиков.", ["pairs"], {
+                 "type": "object",
+                 "properties": {"pairs": {"type": "array"},
+                                "layer": {"type": "string"}},
+                 "required": ["pairs"]}),
             ("trace_observed", "Наблюдаемые вызовы слоя (prefix caller).", [],
              {"type": "object",
               "properties": {"caller": {"type": "string"},
@@ -409,7 +415,13 @@ class McpServer:
             ("map_generations", "Поколение карты (canary.y) + счётчики.", [],
              {"type": "object"}),
             ("map_snapshot", "Полный снимок карты (для diff поколений).", [],
-             {"type": "object"}),
+             {"type": "object",
+              "properties": {"layer": {"type": "string"}}}),
+            ("map_port_status", "Приборная панель миграции C→C++ "
+             "(cpp_status по модулям + топ непортированных).", [],
+             {"type": "object",
+              "properties": {"module": {"type": "string"},
+                             "layer": {"type": "string"}}}),
             ("map_diff", "Разница текущего снимка с other (keys/generation).",
              [], {"type": "object",
                   "properties": {"other": {"type": "object"}}}),
@@ -747,6 +759,9 @@ class McpServer:
                                   count=int(args.get("count", 1)),
                                   label=args.get("label", ""),
                                   layer=args.get("layer", ""))
+        if name == "trace_ingest_batch":
+            return s.trace_ingest_batch(args.get("pairs") or [],
+                                        layer=args.get("layer", ""))
         if name == "trace_observed":
             return {"traces": s.trace_observed(args.get("caller", ""),
                                                layer=args.get("layer", ""))}
@@ -769,7 +784,10 @@ class McpServer:
         if name == "map_generations":
             return s.map_generations()
         if name == "map_snapshot":
-            return s.map_snapshot()
+            return s.map_snapshot(layer=args.get("layer", ""))
+        if name == "map_port_status":
+            return s.map_port_status(module=args.get("module", ""),
+                                     layer=args.get("layer", ""))
         if name == "map_diff":
             return s.map_diff(other=args.get("other"))
         if name == "adr_update":

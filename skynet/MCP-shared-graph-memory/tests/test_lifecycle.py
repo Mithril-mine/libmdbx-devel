@@ -86,3 +86,32 @@ def test_map_snapshot_single_txn_and_hash(store, monkeypatch):
     # map_diff: обычный путь со списком
     d2 = store.map_diff(other={"symbols": []})
     assert d2["added"] == ["fn:a:foo"]
+
+
+def test_map_port_status(store):
+    """Приборная панель C→C++: агрегат cpp_status по модулям."""
+    store.map_put_symbol("fn:m:done_fn", {"module": "api-env",
+                                          "kind": "function",
+                                          "cpp_status": "done",
+                                          "cpp_eq": "mdbx::env::open"},
+                         layer="0.15.base")
+    store.map_put_symbol("fn:m:part_fn", {"module": "api-env",
+                                          "kind": "function",
+                                          "cpp_status": "partial",
+                                          "blocks": [{"id": "B1"}, {"id": "B2"},
+                                                     {"id": "B3"}]},
+                         layer="0.15.base")
+    store.map_put_symbol("fn:m:none_fn", {"module": "gc-get",
+                                          "kind": "function"},
+                         layer="0.15.base")
+    st = store.map_port_status(layer="0.15.base")
+    assert st["modules"]["api-env"]["total"] == 2
+    assert st["modules"]["api-env"]["done"] == 1
+    assert st["modules"]["api-env"]["partial"] == 1
+    assert st["total"]["none"] == 1
+    assert st["total"]["pct_done"] == 33.3
+    # топ непортированных: partial_fn с 3 блоками первый
+    assert st["top_not_ported"][0]["symbol"] == "fn:m:part_fn"
+    # фильтр по модулю
+    st2 = store.map_port_status(module="gc-get", layer="0.15.base")
+    assert set(st2["modules"].keys()) == {"gc-get"}
