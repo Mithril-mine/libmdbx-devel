@@ -470,7 +470,7 @@ inline value_result txn::try_insert(map_handle map, const slice &key, slice valu
 }
 
 inline slice txn::insert_reserve(map_handle map, const slice &key, size_t value_length) {
-  slice result(nullptr, value_length);
+  slice result = slice::blank_for_put_reserve(value_length);
   /* LY: ложные предупреждения coverity возникают из-за поддержки вставки массивов значений в режиме MDBX_MULTIPLE */
   /* coverity[OVERRUN] */
   error::success_or_throw(put(map, key, &result /* takes the present value in case MDBX_KEYEXIST */,
@@ -479,7 +479,7 @@ inline slice txn::insert_reserve(map_handle map, const slice &key, size_t value_
 }
 
 inline value_result txn::try_insert_reserve(map_handle map, const slice &key, size_t value_length) {
-  slice result(nullptr, value_length);
+  slice result = slice::blank_for_put_reserve(value_length);
   /* LY: ложные предупреждения coverity возникают из-за поддержки вставки массивов значений в режиме MDBX_MULTIPLE */
   /* coverity[OVERRUN] */
   const int err = put(map, key, &result /* takes the present value in case MDBX_KEYEXIST */,
@@ -501,7 +501,7 @@ inline void txn::upsert(map_handle map, const slice &key, const slice &value) {
 }
 
 inline slice txn::upsert_reserve(map_handle map, const slice &key, size_t value_length) {
-  slice result(nullptr, value_length);
+  slice result = slice::blank_for_put_reserve(value_length);
   /* LY: ложные предупреждения coverity возникают из-за поддержки вставки массивов значений в режиме MDBX_MULTIPLE */
   /* coverity[OVERRUN] */
   error::success_or_throw(put(map, key, &result, MDBX_put_flags_t(put_mode::upsert) | MDBX_RESERVE));
@@ -529,7 +529,7 @@ inline bool txn::try_update(map_handle map, const slice &key, const slice &value
 }
 
 inline slice txn::update_reserve(map_handle map, const slice &key, size_t value_length) {
-  slice result(nullptr, value_length);
+  slice result = slice::blank_for_put_reserve(value_length);
   /* LY: ложные предупреждения coverity возникают из-за поддержки вставки массивов значений в режиме MDBX_MULTIPLE */
   /* coverity[OVERRUN] */
   error::success_or_throw(put(map, key, &result, MDBX_put_flags_t(put_mode::update) | MDBX_RESERVE));
@@ -537,7 +537,7 @@ inline slice txn::update_reserve(map_handle map, const slice &key, size_t value_
 }
 
 inline value_result txn::try_update_reserve(map_handle map, const slice &key, size_t value_length) {
-  slice result(nullptr, value_length);
+  slice result = slice::blank_for_put_reserve(value_length);
   /* LY: ложные предупреждения coverity возникают из-за поддержки вставки массивов значений в режиме MDBX_MULTIPLE */
   /* coverity[OVERRUN] */
   const int err = put(map, key, &result, MDBX_put_flags_t(put_mode::update) | MDBX_RESERVE);
@@ -606,8 +606,7 @@ inline BUFFER txn::replace(map_handle map, const slice &key, const slice &new_va
 template <class BUFFER, typename ALLOCATOR>
 inline BUFFER txn::replace_reserve(map_handle map, const slice &key, size_t length, slice &new_value_reservation,
                                    const ALLOCATOR &alloc) {
-  new_value_reservation.iov_base = nullptr;
-  new_value_reservation.iov_len = length;
+  new_value_reservation = slice::blank_for_put_reserve(length);
   typename BUFFER::data_preserver result(alloc);
   error::success_or_throw(::mdbx_replace_ex(handle_, map.dbi, &key, &new_value_reservation, &result.data,
                                             MDBX_CURRENT | MDBX_RESERVE, result, &result),
