@@ -44,6 +44,49 @@
   `--nops`, таймауты) или явно перевести в `ut.heavy`.
 - Тяжёлые/флак-тесты — вне быстрого тайера (метки `ut.heavy`, `chk`).
 
+### C2.1 — Мягкий лимит выполнения (runtime limiter, `tests/ut/test-env.h`)
+
+Общий TU `tests/ut/test-env.{h,c++}` компилируется в **каждый** gtest-таргет
+(`add_gtest()` в `cmake/testing.cmake`) и содержит единственный на бинарь
+экземпляр `ci_runtime_limiter` (deadline читается из `GTEST_RUNTIME_LIMIT`
+при статической инициализации) и единственный подавитель CRT-попапов Windows
+(только на CI: env `CI` или `MDBX_TEST_NO_CRT_POPUP`; локально попапы
+сохраняются для интерактивной отладки).
+
+CI-обвязка: `tests/ci/run-cell.py` экспортирует
+`GTEST_RUNTIME_LIMIT = CI_CTEST_TIMEOUT − 60` (по умолчанию 540 при 600);
+`GTEST_SHUFFLE=1` ставится только для nightly (`CI_NIGHTLY=1` в
+`ci-dispatch.yml`), рутинные ячейки идут в детерминированном порядке.
+
+Правила принятия лимитера в тест:
+
+1. Проверка `MDBX_GTEST_IS_EXECUTION_TIMEOUT()` — **в самом начале тела
+   каждого** `TEST()`, который должен уметь скипаться; **нельзя** в fixture
+   `SetUp()`/`TearDown()` или в хелпере, вызываемом один раз на бинарь
+   (иначе deadline вычисляется один раз вместо per-test).
+2. Паттерн:
+   ```c++
+   #include "../test-env.h"   // или "test-env.h" для ut/api/*
+   TEST(suite, name) {
+     if (MDBX_GTEST_IS_EXECUTION_TIMEOUT()) {
+       GTEST_SKIP() << "SKIPPED by RUNTIME_LIMIT";
+       return;
+     }
+     ...
+   }
+   ```
+3. При исчерпании лимита бинарь печатает `[  SKIPPED ] RUNTIME_LIMIT was
+   reached` один раз; последующие проверки скипаются, rc=0 — жёсткий
+   ctest-timeout (убийство процесса) не наступает.
+4. Поведение покрыто self-test'ом `ut/api/test-env-selftest.c++`
+   (детерминированные переходы через конструктор `runtime_limiter(for_testing,
+   absolute_edge)` — без sleep и без манипуляций окружением). При изменении
+   `runtime_limiter` обновляйте self-test.
+5. При достижении лимита каждый раз скипается один и тот же «хвост» набора
+   (детерминированный порядок в рутинных ячейках) — это ожидаемо.
+6. Plain-C тесты (`add_simple_test`: `details_pnl`, `details_rkl`, `probes`)
+   `test-env.c++` **не** получают — они не gtest-овые, лимитер им не нужен.
+
 ## C3 — Флак-менеджмент
 
 - **Авто-карантин**: тест падает N раз без изменения кода → known-flaky:
