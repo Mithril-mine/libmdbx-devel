@@ -5,9 +5,10 @@
   1. сборка с -DENABLE_GCOV=ON (или готовый --build-dir);
   2. ctest -N → список тестов (--filter ограничивает);
   3. для каждого теста: очистить *.gcda → прогнать ОДИН тест →
-     gcov_to_coverage.run_gcov → symbol_hits → Store.coverage_insert +
-     coverage_blocks_insert (test-id = имя ctest-теста);
-  4. в конце — Store.coverage_summary (union: блок покрыт ≥1 тестом).
+     gcov_to_coverage.run_gcov → symbol_hits → накопление в буфер;
+  4. финал: ОДНА coverage_batch + ОДНА coverage_blocks_batch (A3: 2 write-txn
+     на прогон вместо 2×N — writer-лок роя не удерживается между тестами),
+     затем Store.coverage_summary (union: блок покрыт ≥1 тестом).
 
 Тесты прогоняются ПОСЛЕДОВАТЕЛЬНО (B1-β): параллельный ctest смешал бы
 счётчики gcda между тестами.
@@ -129,6 +130,7 @@ def main():
 
     t0 = time.time()
     ok_tests, failed_tests = [], []
+    cov_tests, blk_tests = {}, {}
     with Store(args.db) as store:
         for i, test in enumerate(tests, 1):
             clear_gcda(build_dir)
@@ -146,12 +148,17 @@ def main():
                 for f, cov in run_gcov(d).items():
                     files.setdefault(f, set()).update(cov)
             hits, blocks = symbol_hits(files, symbol_map)
-            store.coverage_insert(test, sorted(hits), layer=args.layer)
+            # накапливаем, а не пишем поштучно (A3)
+            cov_tests[test] = {"symbols": sorted(hits), "pct": 0.0}
             if blocks:
-                store.coverage_blocks_insert(test, blocks, layer=args.layer)
+                blk_tests[test] = blocks
             print("[%d/%d] %s — %s, symbols=%d blocks=%d (%.1fs)"
                   % (i, len(tests), test, "ok" if ok else "FAIL",
                      len(hits), len(blocks), time.time() - t0))
+        # две write-txn на весь прогон вместо 2×N (A3)
+        store.coverage_batch(cov_tests, layer=args.layer)
+        if blk_tests:
+            store.coverage_blocks_batch(blk_tests, layer=args.layer)
         summary = store.coverage_summary(layer=args.layer)
     print("=== итоги: %d ok, %d failed, %.1fs ==="
           % (len(ok_tests), len(failed_tests), time.time() - t0))
