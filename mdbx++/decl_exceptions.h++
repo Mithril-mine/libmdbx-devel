@@ -163,6 +163,15 @@ MDBX_MAYBE_UNUSED static MDBX_CXX14_CONSTEXPR size_t check_length(size_t headroo
   return check_length(check_length(headroom, payload) + check_length(tailroom));
 }
 
+/// \brief The only length allowed for a null pointer: zero.
+/// A null pointer with a non-zero length would dereference address zero;
+/// it is rejected with \ref bad_value_size.
+MDBX_MAYBE_UNUSED static MDBX_CXX14_CONSTEXPR size_t check_nullptr_length(size_t bytes) {
+  if (MDBX_UNLIKELY(bytes != 0))
+    MDBX_CXX20_UNLIKELY throw_bad_value_size();
+  return bytes;
+}
+
 /// end of cxx_exceptions @}
 
 // > dist-cutoff-begin

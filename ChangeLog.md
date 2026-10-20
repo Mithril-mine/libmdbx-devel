@@ -120,6 +120,7 @@ Cutting-edge release with new core features and internal refactoring.
     - Documented the `txn::release_all_cursors(false)` hazard in C++: it closes the cursors behind the `cursor_managed` wrappers, which keep freed handles ([#91](https://github.com/Mithril-mine/libmdbx-devel/issues/91)).
     - Corrected the `env::chk()` documentation: `ctx.result.tables` is valid only inside the callbacks and is `nullptr` once the check returns ([#93](https://github.com/Mithril-mine/libmdbx-devel/issues/93)).
     - Fixed the probe test header compiling with `-Werror` on Linux: `<cstddef>` was missing for `size_t` ([#118](https://github.com/Mithril-mine/libmdbx-devel/issues/118)).
+    - Fixed the C++ `buffer(0, N)`/`assign(0, N)` calls accepting a literal integer `0` or `NULL` as a null pointer and building a reference to address zero (or crashing on `assign`); such calls are a compile error again, as they were originally, `nullptr` still compiles, and a null pointer with a non-zero length is now rejected with `bad_value_size` instead of dereferencing address zero ([#137](https://github.com/Mithril-mine/libmdbx-devel/issues/137)).
 
  - Performance:
     - Fixed a performance regression: empty durable-mode commits still flushed the device, adding several milliseconds to every no-op commit ([#64](https://github.com/Mithril-mine/libmdbx-devel/issues/64)).
