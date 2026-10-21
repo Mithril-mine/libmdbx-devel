@@ -53,15 +53,22 @@ class McpServer:
                  "required": ["key", "type", "summary", "importance"],
              }),
             ("recall", "Поиск по префиксу ключа с ранжированием "
-             "(pattern вида 'bug:crypto:*').", ["pattern"], {
+             "(pattern вида 'bug:crypto:*'). touch=true — учёт чтения в "
+             "LRU; по умолчанию touch=false.", ["pattern"], {
                  "type": "object",
-                 "properties": {"pattern": {"type": "string"}, "limit": {"type": "integer"}},
+                 "properties": {"pattern": {"type": "string"},
+                                "limit": {"type": "integer"},
+                                "touch": {"type": "boolean"}},
                  "required": ["pattern"],
              }),
-            ("search", "Поиск по термам (пересечение постинг-списков + ранжирование).",
+            ("search", "Поиск по термам (пересечение постинг-списков + "
+             "ранжирование; touch=true — считать использованием для LRU; "
+             "по умолчанию touch=false: чтение не влияет на LRU).",
              ["query"], {
                  "type": "object",
-                 "properties": {"query": {"type": "string"}, "limit": {"type": "integer"}},
+                 "properties": {"query": {"type": "string"},
+                                "limit": {"type": "integer"},
+                                "touch": {"type": "boolean"}},
                  "required": ["query"],
              }),
             ("lookup", "Точный поиск по инвертированному индексу.", ["term"], {
@@ -607,9 +614,11 @@ class McpServer:
             return s.safe_store(args["key"], args["type"], args["summary"],
                                 args["importance"], args.get("date", ""))
         if name == "recall":
-            return {"records": s.recall(args["pattern"], args.get("limit", 5))}
+            return {"records": s.recall(args["pattern"], args.get("limit", 5),
+                                        touch=bool(args.get("touch", False)))}
         if name == "search":
-            return {"records": s.search(args["query"], args.get("limit", 5))}
+            return {"records": s.search(args["query"], args.get("limit", 5),
+                                        touch=bool(args.get("touch", False)))}
         if name == "lookup":
             return {"record_keys": s.lookup(args["term"])}
         if name == "link":
