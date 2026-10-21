@@ -410,6 +410,22 @@ class McpServer:
                           "properties": {"symbol": {"type": "string"},
                                          "layer": {"type": "string"}},
                           "required": ["symbol"]}),
+            ("map_put_symbol", "Записать символ карты (cpp_status: "
+             "none|mapped|partial|done).",
+             ["key", "body"], {"type": "object",
+                               "properties": {"key": {"type": "string"},
+                                              "body": {"type": "object"},
+                                              "layer": {"type": "string"}},
+                               "required": ["key", "body"]}),
+            ("map_alias", "Фиксировать переименование символа "
+             "(old_key -> new_key).",
+             ["old_key", "new_key"], {"type": "object",
+                                      "properties": {
+                                          "old_key": {"type": "string"},
+                                          "new_key": {"type": "string"}},
+                                      "required": ["old_key", "new_key"]}),
+            ("map_refresh_stale", "Перецепить/удалить висячие ссылки "
+             "на исчезнувшие символы.", [], {"type": "object"}),
             ("map_put_edge", "Записать ребро вызова (kind: syntax|semantic).",
              ["caller", "callee"], {"type": "object",
                                     "properties": {"caller": {"type": "string"},
@@ -797,6 +813,14 @@ class McpServer:
         if name == "trace_compare":
             return s.trace_compare(args["symbol"],
                                    layer=args.get("layer", ""))
+        if name == "map_put_symbol":
+            s.map_put_symbol(args["key"], args.get("body") or {},
+                             layer=args.get("layer", ""))
+            return {"result": "stored", "key": args["key"]}
+        if name == "map_alias":
+            return s.map_alias(args["old_key"], args["new_key"])
+        if name == "map_refresh_stale":
+            return s.map_refresh_stale()
         if name == "map_put_edge":
             s.map_put_edge(args["caller"], args["callee"],
                            kind=args.get("kind", "syntax"),
