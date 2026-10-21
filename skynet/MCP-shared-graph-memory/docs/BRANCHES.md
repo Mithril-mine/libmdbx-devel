@@ -60,6 +60,14 @@
 - Таблица **`branches`** (DEFAULTS): `branch:{layer}` → JSON
   `{ver_slug, feature_slug, n_commits, revision, git_tag, base_branch, status, created_at, is_base}`.
 - `meta.branch_current` — активный слой; зеркало в canary.z.
+- **`map_generations()`/canary.y — поколение ТОЛЬКО базового слоя** (N13):
+  инкрементируется `map_load_batch(replace=True)` лишь когда слой базовый
+  (`pre==""`). У feature-слоя monotonic-поколения нет — `map_snapshot(layer=feat)`
+  возвращает `generation` базового canary, а не своего. Для контроля изменений
+  feature-слоя используйте `map_snapshot.content_hash` (считается по факту
+  содержимого слоя) и `map_diff_branches`, а не generation. Это by-design:
+  generation задумано как «поколение основной карты», content_hash — как
+  универсальный токен состояния любого слоя.
 - **Курируемый слой** (`records/links/vocab/adr/test_metrics/ci_jobs/bridge`) —
   **общий на все ветки**: знания роя не ветвятся; ссылки на символы — по
   имени слоя в атрибуте связи (агент указывает layer в map-*).
@@ -77,7 +85,9 @@
 ## Инструменты
 
 - MCP: `branch_register`, `branch_list`, `branch_current`, `branch_activate`
-  (`expected_prev` — CAS от гонки в рое), `branch_remove` (реестр),
+  (`expected_prev` — CAS от гонки в рое; активация НЕзарегистрированного
+  слоя возвращает `warning` — чтения уйдут в пустой слой),
+  `branch_remove` (реестр),
   `branch_purge` (слой С данными; базовый и АКТИВНЫЙ слой запрещены —
   сначала переключите ветку),
   `map_diff_branches(from,to)`, `coverage_migrate(from,to,symbols?)`.

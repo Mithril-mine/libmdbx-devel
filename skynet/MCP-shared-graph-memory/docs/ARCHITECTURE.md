@@ -28,12 +28,17 @@
 - **Запись**: одна write-txn на операцию (`_begin_write`). Конкуренция между
   процессами сериализуется single-writer моделью; `MDBX_BUSY` ретраится до 3 раз
   с задержкой 50/100/150 мс, затем поднимается контрактная ошибка `busy-io`.
+  Контеншен наблюдаем: `db_status` → секция `ops` (`busy_retries`,
+  `busy_failures`, `commit_p90_us`/mean/max — **per-process**, только
+  счётчики своего процесса; контеншен роя не агрегируется).
 - `safe_store` = один write-txn: normalize → проверка существования →
   merge (old → `history`) или SimHash-дедуп (`conflict`) → `records` +
   `ids` + `id2key` + `inverted`(термы) + `simhash` + `access` + `meta.next_id`.
-- **LRU-касания батчем**: `recall`/`search` копят касания в памяти
-  (in-memory rate-limit 60 с на запись) и сбрасывают одной write-txn
-  (`_flush_touches`) — не по транзакции на запись.
+- **LRU-касания — по требованию, батчем**: `recall`/`search` по умолчанию
+  (`touch=false`) НЕ обновляют LRU — чтения дашбордов роя не искажают
+  recency/score и не плодят write-txn; `touch=true` или явный `touch()` —
+  принудительный учёт использования (in-memory rate-limit 60 с на запись,
+  сброс одной write-txn `_flush_touches`).
 
 ### 2.1 Синхронизация
 
@@ -107,7 +112,9 @@ MCP-сервер отдаёт его как **JSON-RPC protocol error (-32000)**
   объекту — сканом значений).
 - `simhash`: id → 64-бит хэш; конфликт-дедуп — скан (корпус мал), Hamming ≤ 3.
 - `access`: id → 24 байта `double score + uint64 last_access + uint64 count`.
-  Чтения обновляют LRU с rate-limit 60 с (`_bump_access`), `touch()` — принудительно.
+  LRU обновляется только при явном использовании (`touch()`/`touch=true` в
+  recall/search; rate-limit 60 с, `_bump_access`) — чтения по умолчанию LRU
+  не кормят (D1/N9).
 - `test_metrics` / `coverage` / `ci_jobs`: слой тестов и CI, наполняется
   коллекторами (tools/collect_test_metrics.py) и методами Store;
   `map_load_batch(replace=True)` инкрементирует поколение карты (canary.y).
@@ -131,7 +138,7 @@ MCP-сервер отдаёт его как **JSON-RPC protocol error (-32000)**
 - Прямые вызовы Store без MCP (фикстура создаёт env во временном каталоге);
   MCP-сервер тестируется через `handle()` и `loop(stdin/stdout)` с инъекцией
   потоков; CLI — прямыми вызовами `main()` и подпроцессами.
-- 168 тестов, покрытие 99% (непокрытое — entry-pointы `__main__` и недостижимые
+- ~400 тестов, покрытие 99% (непокрытое — entry-pointы `__main__` и недостижимые
   защитные ветки).
 - Прогон: `nice -n 10 python3 -m pytest tests/`.
 
@@ -185,7 +192,8 @@ endif()
 | LIFELINE | `current.mdbx` | старт (инвариант `st_nlink ≥ 2`) | жёсткая ссылка (0 места) | никогда не удаляется |
 | EMERGENCY | `snapshot_YYMMDD_HHMMSS_txnidN.db` | детекция удаления файла БД | жёсткая ссылка | никогда автоматически |
 | AUTO | `auto-YYYYMMDD-HHMMSS_txnidN.mdbx` | тихий интервал | реальная копия (`txn_copy2pathname`) | ротация с подтверждением |
-| USER | `user-YYYYMMDD-HHMMSS_txnidN.mdbx` | `db_backup` / PROMPT с запросом | реальная копия | только явное подтверждение |
+| PIN | `pin-YYYYMMDD-HHMMSS_txnidN.mdbx` | `db_backup` / PROMPT с запросом | реальная копия | никогда не ротируется (закреплённая точка сохранения) |
+| EXPORT | путь по `dest` (ВНЕ backup_dir) | `db_export` | реальная копия | судьбу решает владелец пути; НЕ учитывается в лимите и tiers |
 
 #### Детекция удаления (не-Windows)
 
@@ -204,11 +212,27 @@ endif()
 - `…_AUTO_BACKUP_SECONDS` (0=выкл): тихо создаёт AUTO-копию на вызове
   инструмента (синхронно, тестируемо); таймеры в `.backup-state.json`.
 - `…_PROMPT_BACKUP_SECONDS` (0=выкл): выставляет pending → notice «спросите
-  пользователя» → `db_backup kind=user` / `db_backup skip=true`.
-- Кап объёма `…_BACKUP_MAX_MB` (512): при превышении AUTO пропускается + notice.
+  пользователя» → `db_backup` (сделать PIN-точку) / `db_backup skip=true`.
+- Кап объёма `…_BACKUP_MAX_MB` (512): при превышении AUTO пропускается +
+  notice + ПЕРСИСТЕНТНЫЙ флаг `auto_skipped_limit` в state-файле (виден
+  рою). Флаг отражает СОСТОЯНИЕ лимита: снимается успешным auto-бэкапом
+  ИЛИ cleanup'ом, когда размер каталога снова под лимитом (даже если
+  ротация ничего не удалила — при pin-only переполнении место освобождается
+  вручную). Ставится только при лимитной причине (контрактный INVALID),
+  не при любой ошибке backup. Лимит — для ЛЮБОЙ копии ВНУТРИ каталога
+  (auto/pin; EXPORT наружу не расходует бюджет). Граница — строгое `>`
+  (size==max проходит; каталог может превысить max на одну копию — это
+  предохранитель роста, не точная квота). Обход — `force=true` (pin).
+- `db_export dest=…` — экспорт НАРУЖУ каталога (внешняя архивация/перенос):
+  dest обязателен и вне backup_dir ВКЛЮЧАЯ ПОДКАТАЛОГИ — сравнение через
+  realpath+normcase (закрывает symlink-обход и Windows-регистр), иначе
+  invalid; не учитывается в лимите/tiers, не ротируется. `kind=auto` через
+  MCP недоступен (внутренний таймер); устаревшие kind/dest у db_backup
+  отклоняются fail-loud.
 - Ротация: старейшие `auto-*` сверх `…_BACKUP_KEEP` (7) — кандидаты
   (`db_backup_cleanup dry_run`); удаление — только с `confirm=true` по
-  подтверждению пользователя. USER/LIFELINE/EMERGENCY ротация не трогает.
+  подтверждению пользователя. PIN/LIFELINE/EMERGENCY ротация не трогает
+  (EXPORT вне каталога — тем более).
 
 #### Аварийное восстановление
 

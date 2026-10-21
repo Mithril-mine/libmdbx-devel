@@ -165,22 +165,24 @@ class McpServer:
              "падение) данные последних транзакций могут быть потеряны без "
              "возможности восстановления. Обычный сервер памяти роя НЕ "
              "должен включать этот режим.", [], {"type": "object"}),
-             ("db_backup", "Точка сохранения БД (MVCC-снапшот, компактификация) "
-              "ВНУТРИ backup-каталога (pin-*): учитывается в лимите, НЕ ротируется. "
-              "skip=true — ответ на PROMPT-запрос (пропустить); force=true — обойти "
-              "лимит каталога. Для экспорта наружу — db_export. "
-              "Если установлен PROMPT-таймер (SHARED_GRAPH_MEMORY_PROMPT_BACKUP_SECONDS) "
-              "и агент получил notice — спросите пользователя и вызовите "
-              "db_backup (сделать) или db_backup skip=true (пропустить).",
-              [], {"type": "object",
-                   "properties": {"skip": {"type": "boolean"},
-                                  "force": {"type": "boolean"}}}),
-             ("db_export", "Экспорт копии БД НАРУЖУ (внешняя архивация / перенос "
-              "на другой хост): dest обязателен и ВНЕ backup-каталога; НЕ учитывается "
-              "в лимите и tiers, НЕ ротируется.", ["dest"],
-              {"type": "object",
-               "properties": {"dest": {"type": "string"}},
-               "required": ["dest"]}),
+            ("db_backup", "Точка сохранения БД (MVCC-снапшот, компактификация) "
+             "ВНУТРИ backup-каталога (pin-*): учитывается в лимите, НЕ ротируется. "
+             "skip=true — ответ на PROMPT-запрос (пропустить); force=true — обойти "
+             "лимит каталога. Для экспорта наружу — db_export. "
+             "Если установлен PROMPT-таймер (SHARED_GRAPH_MEMORY_PROMPT_BACKUP_SECONDS) "
+             "и агент получил notice — спросите пользователя и вызовите "
+             "db_backup (сделать) или db_backup skip=true (пропустить).",
+             [], {"type": "object",
+                  "properties": {"skip": {"type": "boolean"},
+                                 "force": {"type": "boolean"}}}),
+            ("db_export", "Экспорт копии БД НАРУЖУ (внешняя архивация / перенос "
+             "на другой хост): dest обязателен и ВНЕ backup-каталога ВКЛЮЧАЯ "
+             "ПОДКАТАЛОГИ (realpath+normcase: symlink и Windows-регистр не "
+             "обходят проверку); НЕ учитывается в лимите и tiers, НЕ ротируется.",
+             ["dest"],
+             {"type": "object",
+              "properties": {"dest": {"type": "string"}},
+              "required": ["dest"]}),
             ("db_backup_status", "Состояние бэкапов: каталог, таймеры AUTO/PROMPT, "
              "счётчики по тирам (lifeline/auto/pin/snapshot), кандидаты на ротацию, "
              "лимиты.", [], {"type": "object"}),
