@@ -37,6 +37,7 @@
 #include <algorithm>   // for std::min/max
 #include <cassert>     // for assert()
 #include <climits>     // for CHAR_BIT
+#include <cstdint>     // for std::uintptr_t, std::intptr_t
 #include <cstring>     // for std::strlen, str:memcmp
 #include <exception>   // for std::exception_ptr
 #include <ostream>     // for std::ostream
