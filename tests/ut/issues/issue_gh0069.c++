@@ -1,6 +1,8 @@
 #include "mdbx.h++"
 #include <gtest/gtest.h>
 
+#include "../test-env.h"
+
 #include <cstddef>
 #include <cstdint>
 #include <cstdio>
@@ -84,6 +86,10 @@ static bool populate_gc(MDBX_env *env) {
 }
 
 TEST(issue_gh0069, free_dbi_drop_is_rejected_and_gc_survives) {
+  if (MDBX_GTEST_IS_EXECUTION_TIMEOUT()) {
+    GTEST_SKIP() << "SKIPPED by RUNTIME_LIMIT";
+    return;
+  }
   const char *const testdb = "issue69.mdbx";
   remove_db(testdb);
 

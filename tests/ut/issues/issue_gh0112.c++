@@ -1,6 +1,8 @@
 #include "mdbx.h"
 #include <gtest/gtest.h>
 
+#include "../test-env.h"
+
 #include <cstdint>
 #include <cstdio>
 #include <cstring>
@@ -83,6 +85,10 @@ static long file_size(const char *path) {
 }
 
 TEST(issue_gh0112, copy_does_not_delete_locked_destination) {
+  if (MDBX_GTEST_IS_EXECUTION_TIMEOUT()) {
+    GTEST_SKIP() << "SKIPPED by RUNTIME_LIMIT";
+    return;
+  }
 #if defined(_WIN32)
   GTEST_SKIP() << "POSIX flock semantics not present on Windows";
 #else
@@ -118,6 +124,10 @@ TEST(issue_gh0112, copy_does_not_delete_locked_destination) {
 }
 
 TEST(issue_gh0112, copy_overwrite_truncates_old_content) {
+  if (MDBX_GTEST_IS_EXECUTION_TIMEOUT()) {
+    GTEST_SKIP() << "SKIPPED by RUNTIME_LIMIT";
+    return;
+  }
   const char *const testdb = "issue112-src2.mdbx";
   const char *const dest = "issue112-dest2.mdbx";
   remove_db(testdb);
@@ -155,6 +165,10 @@ TEST(issue_gh0112, copy_overwrite_truncates_old_content) {
 }
 
 TEST(issue_gh0112, rejected_copy_keeps_destination) {
+  if (MDBX_GTEST_IS_EXECUTION_TIMEOUT()) {
+    GTEST_SKIP() << "SKIPPED by RUNTIME_LIMIT";
+    return;
+  }
   const char *const testdb = "issue112-src3.mdbx";
   const char *const dest = "issue112-dest3.mdbx";
   remove_db(testdb);

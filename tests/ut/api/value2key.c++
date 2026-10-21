@@ -22,6 +22,8 @@
 #include "mdbx.h++"
 #include <gtest/gtest.h>
 
+#include "../test-env.h"
+
 #include <limits>
 
 namespace {
@@ -44,6 +46,10 @@ static inline uint64_t bswap64_be(uint64_t key) {
 } // namespace
 
 TEST(ut_value2key, json_integer_roundtrip) {
+  if (MDBX_GTEST_IS_EXECUTION_TIMEOUT()) {
+    GTEST_SKIP() << "SKIPPED by RUNTIME_LIMIT";
+    return;
+  }
   const int64_t values[] = {INT64_C(1),
                             INT64_C(-1),
                             INT64_C(2),
@@ -63,6 +69,10 @@ TEST(ut_value2key, json_integer_roundtrip) {
 }
 
 TEST(ut_value2key, json_integer_zero_roundtrips) {
+  if (MDBX_GTEST_IS_EXECUTION_TIMEOUT()) {
+    GTEST_SKIP() << "SKIPPED by RUNTIME_LIMIT";
+    return;
+  }
   /* Zero is inside the documented RFC-7159 range: mdbx_key_from_jsonInteger(0)
    * produces the bias key 0x8000000000000000, and mdbx_jsonInteger_from_key()
    * must decode that key back to 0, not to INT64_MAX (issue #87). */
@@ -72,6 +82,10 @@ TEST(ut_value2key, json_integer_zero_roundtrips) {
 }
 
 TEST(ut_value2key, json_integer_clamping) {
+  if (MDBX_GTEST_IS_EXECUTION_TIMEOUT()) {
+    GTEST_SKIP() << "SKIPPED by RUNTIME_LIMIT";
+    return;
+  }
   const uint64_t pos = ::mdbx_key_from_double(1e19);
   const uint64_t neg = ::mdbx_key_from_double(-1e19);
   MDBX_val kp{const_cast<uint64_t *>(&pos), sizeof(pos)};
@@ -81,6 +95,10 @@ TEST(ut_value2key, json_integer_clamping) {
 }
 
 TEST(ut_value2key, json_integer_mixed_ordering) {
+  if (MDBX_GTEST_IS_EXECUTION_TIMEOUT()) {
+    GTEST_SKIP() << "SKIPPED by RUNTIME_LIMIT";
+    return;
+  }
   auto env = make_env("test-value2key");
   auto txn = env.start_write();
   auto table = txn.create_map("table");
@@ -115,6 +133,10 @@ TEST(ut_value2key, json_integer_mixed_ordering) {
 }
 
 TEST(ut_value2key, equivalent_to_ordinal) {
+  if (MDBX_GTEST_IS_EXECUTION_TIMEOUT()) {
+    GTEST_SKIP() << "SKIPPED by RUNTIME_LIMIT";
+    return;
+  }
   auto env = make_env("test-value2key");
   auto txn = env.start_write();
   auto v2k_ordinal = txn.create_map("v2k", mdbx::key_mode::ordinal);
@@ -168,6 +190,10 @@ TEST(ut_value2key, equivalent_to_ordinal) {
 }
 
 TEST(ut_value2key, in_dupsort) {
+  if (MDBX_GTEST_IS_EXECUTION_TIMEOUT()) {
+    GTEST_SKIP() << "SKIPPED by RUNTIME_LIMIT";
+    return;
+  }
   auto env = make_env("test-value2key");
   auto txn = env.start_write();
   auto multi = txn.create_map("multi", mdbx::key_mode::usual, mdbx::value_mode::multi);

@@ -22,6 +22,8 @@
 #include "mdbx.h++"
 #include <gtest/gtest.h>
 
+#include "../test-env.h"
+
 #include <iostream>
 #include <random>
 #include <set>
@@ -134,6 +136,10 @@ int doit() {
 }
 
 TEST(ut_buffers, all) {
+  if (MDBX_GTEST_IS_EXECUTION_TIMEOUT()) {
+    GTEST_SKIP() << "SKIPPED by RUNTIME_LIMIT";
+    return;
+  }
   try {
     ASSERT_EQ(EXIT_SUCCESS, doit());
   } catch (const std::exception &ex) {

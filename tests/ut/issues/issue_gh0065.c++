@@ -1,6 +1,8 @@
 #include "../../../src/internals.h"
 #include <gtest/gtest.h>
 
+#include "../test-env.h"
+
 #include <cstdio>
 #include <cstring>
 
@@ -28,6 +30,10 @@
 // Windows-with-AVOID_MSYNC path that the fix preserves.
 
 TEST(issue_gh0065, writemap_nosync_commits_do_not_flush_whole_mapping) {
+  if (MDBX_GTEST_IS_EXECUTION_TIMEOUT()) {
+    GTEST_SKIP() << "SKIPPED by RUNTIME_LIMIT";
+    return;
+  }
   const char *const testdb = "issue65.mdbx";
   remove(testdb);
 

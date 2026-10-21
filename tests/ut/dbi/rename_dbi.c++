@@ -23,6 +23,8 @@ Observed with MDBX_DEBUG=1:
 #include "mdbx.h"
 #include <gtest/gtest.h>
 
+#include "../test-env.h"
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -94,6 +96,10 @@ static void run_nested(MDBX_env *env) {
 }
 
 TEST(ut_rename_dbi, all) {
+  if (MDBX_GTEST_IS_EXECUTION_TIMEOUT()) {
+    GTEST_SKIP() << "SKIPPED by RUNTIME_LIMIT";
+    return;
+  }
   const char *path = "rename_repro";
   cleanup(path);
 

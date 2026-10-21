@@ -1,6 +1,8 @@
 #include "mdbx.h++"
 #include <gtest/gtest.h>
 
+#include "../test-env.h"
+
 #include <cstdio>
 #include <cstring>
 
@@ -68,6 +70,10 @@ static bool commit_empty(MDBX_env *env, unsigned txn_flags) {
 }
 
 TEST(issue_gh0064, empty_durable_commits_do_not_advance_txnid) {
+  if (MDBX_GTEST_IS_EXECUTION_TIMEOUT()) {
+    GTEST_SKIP() << "SKIPPED by RUNTIME_LIMIT";
+    return;
+  }
   const char *const testdb = "issue64-durable.mdbx";
   remove_db(testdb);
   MDBX_env *env = nullptr;
@@ -94,6 +100,10 @@ TEST(issue_gh0064, empty_durable_commits_do_not_advance_txnid) {
 }
 
 TEST(issue_gh0064, empty_durable_commit_after_nometasync_keeps_meta_sync) {
+  if (MDBX_GTEST_IS_EXECUTION_TIMEOUT()) {
+    GTEST_SKIP() << "SKIPPED by RUNTIME_LIMIT";
+    return;
+  }
   const char *const testdb = "issue64-nometa.mdbx";
   remove_db(testdb);
   MDBX_env *env = nullptr;
@@ -131,6 +141,10 @@ TEST(issue_gh0064, empty_durable_commit_after_nometasync_keeps_meta_sync) {
 }
 
 TEST(issue_gh0064, empty_commits_in_safe_nosync_env_do_not_advance_txnid) {
+  if (MDBX_GTEST_IS_EXECUTION_TIMEOUT()) {
+    GTEST_SKIP() << "SKIPPED by RUNTIME_LIMIT";
+    return;
+  }
   const char *const testdb = "issue64-nosync.mdbx";
   remove_db(testdb);
   MDBX_env *env = nullptr;
@@ -154,6 +168,10 @@ TEST(issue_gh0064, empty_commits_in_safe_nosync_env_do_not_advance_txnid) {
 }
 
 TEST(issue_gh0064, empty_nosync_commits_do_not_advance_txnid) {
+  if (MDBX_GTEST_IS_EXECUTION_TIMEOUT()) {
+    GTEST_SKIP() << "SKIPPED by RUNTIME_LIMIT";
+    return;
+  }
   const char *const testdb = "issue64-txn-nosync.mdbx";
   remove_db(testdb);
   MDBX_env *env = nullptr;

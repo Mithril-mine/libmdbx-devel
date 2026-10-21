@@ -1,6 +1,8 @@
 #include "mdbx.h++"
 #include <gtest/gtest.h>
 
+#include "../test-env.h"
+
 #include <cstdint>
 #include <cstdio>
 #include <cstring>
@@ -35,6 +37,10 @@ static std::string hex_of(const buffer &b) {
 }
 
 TEST(issue_gh0094, append_transcoders_produce_before_relocating) {
+  if (MDBX_GTEST_IS_EXECUTION_TIMEOUT()) {
+    GTEST_SKIP() << "SKIPPED by RUNTIME_LIMIT";
+    return;
+  }
   /* A value long enough to allocate, shrunk so the next append with the
    * buffer's own bytes as the source must grow the storage again: the
    * reproducer from the issue, where the producer read the freed block. */
@@ -70,6 +76,10 @@ TEST(issue_gh0094, append_transcoders_produce_before_relocating) {
 }
 
 TEST(issue_gh0095, move_assign_reference_into_own_storage) {
+  if (MDBX_GTEST_IS_EXECUTION_TIMEOUT()) {
+    GTEST_SKIP() << "SKIPPED by RUNTIME_LIMIT";
+    return;
+  }
   buffer a;
   const std::string src(64, 'Q');
   a.assign(mdbx::slice(src.data(), src.size()));
@@ -98,6 +108,10 @@ static void check_self_append(const char *name, const buffer &input, const buffe
 }
 
 TEST(issue_gh0094, append_base58_and_decoded_of_itself) {
+  if (MDBX_GTEST_IS_EXECUTION_TIMEOUT()) {
+    GTEST_SKIP() << "SKIPPED by RUNTIME_LIMIT";
+    return;
+  }
   const std::string raw(150, 'A');
   const mdbx::slice bin(raw.data(), raw.size());
   const buffer hex = buffer::hex(bin), b58 = buffer::base58(bin), b64 = buffer::base64(bin);
@@ -108,6 +122,10 @@ TEST(issue_gh0094, append_base58_and_decoded_of_itself) {
 }
 
 TEST(issue_gh0094, append_and_add_header_from_own_head_or_tail_room) {
+  if (MDBX_GTEST_IS_EXECUTION_TIMEOUT()) {
+    GTEST_SKIP() << "SKIPPED by RUNTIME_LIMIT";
+    return;
+  }
   /* A source lying in the own storage, but outside the content, is not carried
    * over when the storage grows, so it must be copied out beforehand. */
   std::string src;
@@ -136,6 +154,10 @@ TEST(issue_gh0094, append_and_add_header_from_own_head_or_tail_room) {
 }
 
 TEST(issue_gh0095, move_assign_reference_into_own_storage_keeps_storage) {
+  if (MDBX_GTEST_IS_EXECUTION_TIMEOUT()) {
+    GTEST_SKIP() << "SKIPPED by RUNTIME_LIMIT";
+    return;
+  }
   /* Such move-assign is noexcept for the legacy allocator, so it must not
    * allocate (out-of-memory would std::terminate), but move the bytes in place. */
   using legacy_buffer = mdbx::buffer<mdbx::legacy_allocator, mdbx::default_capacity_policy>;
@@ -156,6 +178,10 @@ TEST(issue_gh0095, move_assign_reference_into_own_storage_keeps_storage) {
 }
 
 TEST(issue_gh0094, append_and_add_header_from_content_into_tailroom) {
+  if (MDBX_GTEST_IS_EXECUTION_TIMEOUT()) {
+    GTEST_SKIP() << "SKIPPED by RUNTIME_LIMIT";
+    return;
+  }
   /* A source that starts in the content and runs into the tailroom is not
    * wholly carried over when the storage grows, so it must be copied out too. */
   buffer a(0, mdbx::slice("ABCD"), 3);

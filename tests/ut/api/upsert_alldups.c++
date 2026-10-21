@@ -7,6 +7,9 @@
 
 #include "mdbx.h"
 #include <gtest/gtest.h>
+
+#include "../test-env.h"
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -46,6 +49,10 @@ static int put(MDBX_txn *txn, MDBX_dbi dbi, const char *k, const char *v, MDBX_p
 }
 
 TEST(ut_upsert_alldups, all) {
+  if (MDBX_GTEST_IS_EXECUTION_TIMEOUT()) {
+    GTEST_SKIP() << "SKIPPED by RUNTIME_LIMIT";
+    return;
+  }
   const char *errmsg = NULL;
   MDBX_env *env = NULL;
   MDBX_txn *txn = NULL;

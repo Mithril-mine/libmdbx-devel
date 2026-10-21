@@ -22,6 +22,8 @@
 #include "mdbx.h++"
 #include <gtest/gtest.h>
 
+#include "../test-env.h"
+
 #include <cstring>
 
 namespace {
@@ -33,6 +35,10 @@ mdbx::env_managed make_env(const char *name) {
 } // namespace
 
 TEST(ut_put_flags, reserve_variants) {
+  if (MDBX_GTEST_IS_EXECUTION_TIMEOUT()) {
+    GTEST_SKIP() << "SKIPPED by RUNTIME_LIMIT";
+    return;
+  }
   auto env = make_env("test-put-flags");
   auto txn = env.start_write();
   auto map = txn.create_map("table");
@@ -78,6 +84,10 @@ TEST(ut_put_flags, reserve_variants) {
 }
 
 TEST(ut_put_flags, reserve_forbidden_on_dupsort) {
+  if (MDBX_GTEST_IS_EXECUTION_TIMEOUT()) {
+    GTEST_SKIP() << "SKIPPED by RUNTIME_LIMIT";
+    return;
+  }
   auto env = make_env("test-put-flags");
   auto txn = env.start_write();
   auto multi = txn.create_map("multi", mdbx::key_mode::usual, mdbx::value_mode::multi);
@@ -90,6 +100,10 @@ TEST(ut_put_flags, reserve_forbidden_on_dupsort) {
 }
 
 TEST(ut_put_flags, append_single_and_dupsort) {
+  if (MDBX_GTEST_IS_EXECUTION_TIMEOUT()) {
+    GTEST_SKIP() << "SKIPPED by RUNTIME_LIMIT";
+    return;
+  }
   auto env = make_env("test-put-flags");
   auto txn = env.start_write();
   auto map = txn.create_map("table");
@@ -138,6 +152,10 @@ TEST(ut_put_flags, append_single_and_dupsort) {
 }
 
 TEST(ut_put_flags, append_to_dupsort_last_key) {
+  if (MDBX_GTEST_IS_EXECUTION_TIMEOUT()) {
+    GTEST_SKIP() << "SKIPPED by RUNTIME_LIMIT";
+    return;
+  }
   auto env = make_env("test-put-flags");
   auto txn = env.start_write();
   auto multi = txn.create_map("multi", mdbx::key_mode::usual, mdbx::value_mode::multi);
@@ -156,6 +174,10 @@ TEST(ut_put_flags, append_to_dupsort_last_key) {
 }
 
 TEST(ut_put_flags, put_multiple_samelength_modes) {
+  if (MDBX_GTEST_IS_EXECUTION_TIMEOUT()) {
+    GTEST_SKIP() << "SKIPPED by RUNTIME_LIMIT";
+    return;
+  }
   auto env = make_env("test-put-flags");
   auto txn = env.start_write();
   auto table = txn.create_map("table", mdbx::key_mode::usual, mdbx::value_mode::multi_samelength);
@@ -182,6 +204,10 @@ TEST(ut_put_flags, put_multiple_samelength_modes) {
 }
 
 TEST(ut_put_flags, replace_and_get_equal_or_great) {
+  if (MDBX_GTEST_IS_EXECUTION_TIMEOUT()) {
+    GTEST_SKIP() << "SKIPPED by RUNTIME_LIMIT";
+    return;
+  }
   auto env = make_env("test-put-flags");
   auto txn = env.start_write();
   auto map = txn.create_map("table");
@@ -224,6 +250,10 @@ TEST(ut_put_flags, replace_and_get_equal_or_great) {
 }
 
 TEST(ut_put_flags, put_multiple_samelength_iovlen_on_keyexist) {
+  if (MDBX_GTEST_IS_EXECUTION_TIMEOUT()) {
+    GTEST_SKIP() << "SKIPPED by RUNTIME_LIMIT";
+    return;
+  }
   auto env = make_env("test-put-flags");
   auto txn = env.start_write();
   auto table = txn.create_map("table", mdbx::key_mode::usual, mdbx::value_mode::multi_samelength);
@@ -243,6 +273,10 @@ TEST(ut_put_flags, put_multiple_samelength_iovlen_on_keyexist) {
 }
 
 TEST(ut_put_flags, put_multiple_samelength_strict_failure) {
+  if (MDBX_GTEST_IS_EXECUTION_TIMEOUT()) {
+    GTEST_SKIP() << "SKIPPED by RUNTIME_LIMIT";
+    return;
+  }
   auto env = make_env("test-put-flags");
   auto txn = env.start_write();
   auto table = txn.create_map("table", mdbx::key_mode::usual, mdbx::value_mode::multi_samelength);

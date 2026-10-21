@@ -2,11 +2,17 @@
 #include <cstdio>
 #include <gtest/gtest.h>
 
+#include "../test-env.h"
+
 #ifdef _MSC_VER
 #pragma warning(disable : 4702) /* unreachable code */
 #endif
 
 TEST(issue_gh0030, all) {
+  if (MDBX_GTEST_IS_EXECUTION_TIMEOUT()) {
+    GTEST_SKIP() << "SKIPPED by RUNTIME_LIMIT";
+    return;
+  }
   const mdbx::path testdb = "issue30";
   mdbx::env::remove(testdb);
   mdbx::env::operate_parameters op(4);

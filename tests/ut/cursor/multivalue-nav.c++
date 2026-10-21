@@ -22,6 +22,8 @@
 #include "mdbx.h++"
 #include <gtest/gtest.h>
 
+#include "../test-env.h"
+
 namespace {
 mdbx::env_managed make_env(const char *name) {
   const mdbx::path testdb = name;
@@ -44,6 +46,10 @@ void seed_multi(mdbx::txn_managed &txn, mdbx::map_handle map) {
 } // namespace
 
 TEST(ut_multivalue_nav, find_and_bounds) {
+  if (MDBX_GTEST_IS_EXECUTION_TIMEOUT()) {
+    GTEST_SKIP() << "SKIPPED by RUNTIME_LIMIT";
+    return;
+  }
   auto env = make_env("test-multivalue-nav");
   auto txn = env.start_write();
   auto map = txn.create_map("multi", mdbx::key_mode::usual, mdbx::value_mode::multi);
@@ -72,6 +78,10 @@ TEST(ut_multivalue_nav, find_and_bounds) {
 }
 
 TEST(ut_multivalue_nav, walk_multi_values) {
+  if (MDBX_GTEST_IS_EXECUTION_TIMEOUT()) {
+    GTEST_SKIP() << "SKIPPED by RUNTIME_LIMIT";
+    return;
+  }
   auto env = make_env("test-multivalue-nav");
   auto txn = env.start_write();
   auto map = txn.create_map("multi", mdbx::key_mode::usual, mdbx::value_mode::multi);
@@ -103,6 +113,10 @@ TEST(ut_multivalue_nav, walk_multi_values) {
 }
 
 TEST(ut_multivalue_nav, erase_pair_and_whole) {
+  if (MDBX_GTEST_IS_EXECUTION_TIMEOUT()) {
+    GTEST_SKIP() << "SKIPPED by RUNTIME_LIMIT";
+    return;
+  }
   auto env = make_env("test-multivalue-nav");
   auto txn = env.start_write();
   auto map = txn.create_map("multi", mdbx::key_mode::usual, mdbx::value_mode::multi);

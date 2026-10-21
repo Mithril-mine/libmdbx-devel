@@ -22,7 +22,13 @@
 #include "mdbx.h++"
 #include <gtest/gtest.h>
 
+#include "../test-env.h"
+
 TEST(ut_env_params, geometry_value_types) {
+  if (MDBX_GTEST_IS_EXECUTION_TIMEOUT()) {
+    GTEST_SKIP() << "SKIPPED by RUNTIME_LIMIT";
+    return;
+  }
   using mdbx::geometry;
 
   const geometry g(1, 2, 3, 4, 5, 4096);
@@ -69,6 +75,10 @@ TEST(ut_env_params, geometry_value_types) {
 }
 
 TEST(ut_env_params, mode_and_durability_enums) {
+  if (MDBX_GTEST_IS_EXECUTION_TIMEOUT()) {
+    GTEST_SKIP() << "SKIPPED by RUNTIME_LIMIT";
+    return;
+  }
   EXPECT_EQ(static_cast<unsigned>(mdbx::env::mode::readonly), 0u);
   EXPECT_EQ(static_cast<unsigned>(mdbx::env::mode::write_file_io),
             static_cast<unsigned>(mdbx::env::mode::nested_transactions));
@@ -79,6 +89,10 @@ TEST(ut_env_params, mode_and_durability_enums) {
 }
 
 TEST(ut_env_params, reclaiming_and_operate_options) {
+  if (MDBX_GTEST_IS_EXECUTION_TIMEOUT()) {
+    GTEST_SKIP() << "SKIPPED by RUNTIME_LIMIT";
+    return;
+  }
   using mdbx::operate_options;
   using mdbx::reclaiming_options;
 
@@ -111,6 +125,10 @@ TEST(ut_env_params, reclaiming_and_operate_options) {
 }
 
 TEST(ut_env_params, operate_and_create_parameters_fluent) {
+  if (MDBX_GTEST_IS_EXECUTION_TIMEOUT()) {
+    GTEST_SKIP() << "SKIPPED by RUNTIME_LIMIT";
+    return;
+  }
   using mdbx::create_parameters;
   using mdbx::operate_parameters;
 
@@ -146,6 +164,10 @@ TEST(ut_env_params, operate_and_create_parameters_fluent) {
 }
 
 TEST(ut_env_params, env_roundtrip) {
+  if (MDBX_GTEST_IS_EXECUTION_TIMEOUT()) {
+    GTEST_SKIP() << "SKIPPED by RUNTIME_LIMIT";
+    return;
+  }
   const mdbx::path testdb = "test-env-params";
   mdbx::env::remove(testdb);
   mdbx::env_managed env(testdb, mdbx::create_parameters(),
