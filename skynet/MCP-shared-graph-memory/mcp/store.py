@@ -1038,6 +1038,25 @@ class Store:
         Также бэкфиллит covered_by из существующих coverage-записей.
         """
         created = []
+        # N16 fast-path: если все таблицы уже открыты (Store.__init__
+        # создаёт их на свежей БД) и backfill-маркер стоит — делать нечего,
+        # не открываем write-txn вовсе (важно для read-heavy роя: upgrade
+        # вызывается сервером на каждом rw-старте).
+        if all(v is not None for v in self._dbi.values()) \
+                and len(self._dbi) >= len(self.TABLES):
+            try:
+                with self.env.begin(readonly=True) as txn:
+                    rc, val = txn.get(self.dbi(txn, "meta"),
+                                      b"covered_by_backfilled")
+                if val is not None:
+                    return {"created": [], "covered_by_backfilled": 0,
+                            "fast_path": True}
+            except Exception:  # noqa: BLE001
+                # Осознанно глотаем любую ошибку проверки маркера (в т.ч.
+                # «meta не открывается») и идём обычным путём — он
+                # идемпотентен; fast-path — чистая оптимизация, и диагностика
+                # его промаха важнее, чем лишняя write-txn (ревью #164-r4).
+                pass
         with self._begin_write() as txn:
             # ПРОХОД 1: открываем недостающие таблицы; для существующих с
             # НЕСОВМЕСТИМЫМИ флагами получаем old-handle и проверяем пустоту.
@@ -4031,6 +4050,13 @@ class Store:
         Формат записи: `coverage_blocks:{layer}/test:{sym-bare}` → JSON
         `[{"block_id", "l0", "l1", "covered"}]`. Агрегирует блоки по символу.
         Пустой layer — активная ветка (чтобы feature-прогоны не писали в base).
+
+        N15: семантика ЗАМЕНЫ по символу — повторный вызов для (test, symbol)
+        перезаписывает весь список блоков этого символа, а не объединяет.
+        Поэтому частичный повторный insert одним символом оставит только
+        переданные блоки. Коллекторы пишут полный набор блоков символа за раз
+        (run_coverage/gcov_to_coverage), поэтому в штатном пайплайне это
+        безопасно; для инкремента читайте текущие блоки и передавайте union.
         """
         layer = self._effective_layer(layer)
         pre = self.layer_prefix(layer)
@@ -4540,7 +4566,22 @@ class Store:
             # canary.z = активный слой (для внешних читателей/отладки)
             c = txn.canary_get()
             txn.canary_put(x=c.get("x", 0), y=c.get("y", 0), z=len(layer))
-            return {"previous": prev, "current": layer}
+            # N14: активация НЕзарегистрированного слоя — операторская
+            # ловушка (чтения молча вернут пустой слой). Не ошибка (слой
+            # мог быть очищен purge'ем намеренно), но предупреждаем явно.
+            registered = False
+            if layer:
+                br_dbi = self._opt_dbi(txn, "branches")
+                if br_dbi is not None:
+                    rc2, rv = txn.get(br_dbi, ("branch:" + layer).encode())
+                    registered = rv is not None
+            out = {"previous": prev, "current": layer}
+            if not registered:
+                out["warning"] = (
+                    "слой %r отсутствует в реестре branches — чтения/записи "
+                    "пойдут в пустой слой; зарегистрируйте его "
+                    "(branch_register) или исправьте опечатку" % layer)
+            return out
 
     def branch_remove(self, layer: str) -> dict:
         layer = layer.strip().strip("/")
