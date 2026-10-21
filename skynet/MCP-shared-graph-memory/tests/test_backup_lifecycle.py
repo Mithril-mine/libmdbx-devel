@@ -51,18 +51,21 @@ def test_lifeline_created_on_open(tmp_path):
         s.close()
 
 
-def test_backup_user_compact_snapshot(tmp_path):
+def test_backup_pin_compact_snapshot(tmp_path):
     db = str(tmp_path / "t.mdbx")
     s = Store(db, _skip_sync_thread=True)
     try:
         s.vocab_add("practice", "durability-aa")
         s.safe_store("fact:practice:durability-aa", "fact", "bk", 0.5)
-        r = s.backup(kind="user")
-        assert r["kind"] == "user"
+        r = s.backup(kind="pin")
+        assert r["kind"] == "pin"
         assert os.path.isfile(r["path"])
-        assert os.path.basename(r["path"]).startswith("user-")
+        assert os.path.basename(r["path"]).startswith("pin-")
         assert r["txnid"] > 0
-        assert _files(s, "user-") == [os.path.basename(r["path"])]
+        assert _files(s, "pin-") == [os.path.basename(r["path"])]
+        # дефолт backup() — pin (внутренняя точка сохранения)
+        r2 = s.backup()
+        assert r2["kind"] == "pin"
     finally:
         s.close()
 
@@ -100,7 +103,7 @@ def test_prompt_backup_pending_and_approve(tmp_path, monkeypatch):
         r = s.run_prompt_backup(approve=True)
         assert r["approved"] is True
         assert r.get("path"), r
-        assert _files(s, "user-")
+        assert _files(s, "pin-")
         # pending снят
         assert s.before_call().get("backup_pending") is None
     finally:
@@ -115,7 +118,7 @@ def test_prompt_backup_skip(tmp_path, monkeypatch):
         s.before_call()  # pending установлен
         r = s.run_prompt_backup(approve=False)
         assert r["approved"] is False
-        assert _files(s, "user-") == []
+        assert _files(s, "pin-") == []
     finally:
         s.close()
 
@@ -138,9 +141,9 @@ def test_rotation_candidates_and_cleanup(tmp_path):
         r = s.cleanup(dry_run=False, confirm=True)
         assert len(r["removed"]) == 3
         assert len(_files(s, "auto-")) == s.backup_keep
-        # тир user не в кандидатах
-        s.backup(kind="user")
-        assert _files(s, "user-")
+        # тир pin не в кандидатах
+        s.backup(kind="pin")
+        assert _files(s, "pin-")
         assert s.cleanup(dry_run=True)["candidates"] == []
     finally:
         s.close()
@@ -214,11 +217,31 @@ def test_mcp_new_tools_and_prompt_notice(store, tmp_path, monkeypatch):
     assert "nlink" in r["result"]["structuredContent"]
     r = call("db_latency")
     assert "count" in r["result"]["structuredContent"]
-    r = call("db_backup", {"kind": "user"})
+    # kind из протокола убран: db_backup при pending = PROMPT-подтверждение
+    # → внутренняя точка сохранения (pin-*)
+    r = call("db_backup", {})
     sc = r["result"]["structuredContent"]
     assert sc["approved"] is True and sc.get("path"), sc
+    assert os.path.basename(sc["path"]).startswith("pin-"), sc
+    # db_export: dest обязателен и вне backup-каталога
+    ext = str(tmp_path / "outside" / "mcp-export.mdbx")
+    r = call("db_export", {"dest": ext})
+    sc = r["result"]["structuredContent"]
+    assert sc["kind"] == "export" and sc["path"] == ext, sc
+    # export без dest → контрактная ошибка
+    r = call("db_export", {})
+    assert r.get("error") and "dest обязателен" in r["error"]["message"]
+    # ревью #164: export ВНУТРЬ backup_dir (и в подкаталог) → invalid
+    r = call("db_export", {"dest": os.path.join(store.backup_dir, "x.mdbx")})
+    assert r.get("error") and "внутри backup-каталога" in r["error"]["message"]
+    r = call("db_export",
+             {"dest": os.path.join(store.backup_dir, "sub", "x.mdbx")})
+    assert r.get("error") and "внутри backup-каталога" in r["error"]["message"]
     r = call("db_backup_status")
-    assert "tiers" in r["result"]["structuredContent"]
+    sc = r["result"]["structuredContent"]
+    assert "tiers" in sc
+    # экспорт не учитывается в tiers каталога
+    assert sc["tiers"].get("pin", 0) >= 1
     r = call("db_backup_cleanup", {"dry_run": True})
     assert r["result"]["structuredContent"]["dry_run"] is True
     r = call("db_recover", {"target_meta": 0})
@@ -311,3 +334,368 @@ def test_auto_backup_skipped_when_db_unchanged(tmp_path, monkeypatch):
         s._save_backup_state(st)
         s.before_call()
         assert len(_files(s, "auto-")) == n, "без изменений — бэкапа нет"
+
+
+def _inflate_backup_dir(store, mb=2):
+    """Создать мусорные .mdbx-файлы, чтобы _backup_dir_size превысил лимит."""
+    os.makedirs(store.backup_dir, exist_ok=True)
+    for i in range(mb):
+        p = os.path.join(store.backup_dir, "filler%d.mdbx" % i)
+        with open(p, "wb") as fh:
+            fh.write(b"\0" * (1 << 20))
+
+
+def test_pin_backup_over_limit_rejected_force_bypasses(tmp_path, monkeypatch):
+    """D2/N10 + split: внутренняя точка (pin) сверх лимита — явная ошибка;
+    force обходит. Экспорт (export) — наружу каталога, лимиту не подчинён.
+
+    Дыра #5 (прямой db_backup kind=auto минует бюджет и ротацию) закрыта
+    по построению: kind удалён из протокола MCP — db_backup это всегда pin,
+    db_export — всегда наружу. Store.backup(kind="auto") остаётся для
+    таймера и всё ещё подчиняется лимиту (защита в глубину).
+    """
+    monkeypatch.setenv("SHARED_GRAPH_MEMORY_BACKUP_DIR", str(tmp_path / "bk"))
+    db = str(tmp_path / "t.mdbx")
+    with Store(db, _skip_sync_thread=True) as s:
+        s.safe_store("fact:x:y", "fact", "seed", 0.5)
+        s.backup_max_bytes = 1 << 20  # 1 МБ
+        _inflate_backup_dir(s, mb=2)  # каталог ~2 МБ > лимита
+        # pin под лимитом — явная ошибка с причиной
+        with pytest.raises(MemoryError) as ei:
+            s.backup(kind="pin")
+        assert "превышает лимит" in str(ei.value)
+        assert not _files(s, "pin-"), "копия не должна появиться"
+        # force обходит лимит
+        r = s.backup(kind="pin", force=True)
+        assert os.path.isfile(r["path"])
+        assert _files(s, "pin-")
+        # auto (внутренний, для таймера) тоже под лимитом — защита в глубину
+        with pytest.raises(MemoryError):
+            s.backup(kind="auto")
+        assert not [f for f in _files(s, "auto-") if "filler" not in f], \
+            "auto-копия сверх лимита не должна появиться"
+        # экспорт НАРУЖУ каталога — лимиту не подчинён (не расходует бюджет)
+        ext = str(tmp_path / "outside" / "export.mdbx")
+        re_ = s.export(ext)
+        assert os.path.isfile(re_["path"]) and re_["kind"] == "export"
+        assert re_["path"] == ext
+        # экспорт БЕЗ dest — invalid
+        with pytest.raises(MemoryError) as ei2:
+            s.export("")
+        assert "dest обязателен" in str(ei2.value)
+        # экспорт ВНУТРЬ backup-каталога — invalid (это не экспорт)
+        with pytest.raises(MemoryError) as ei3:
+            s.export(os.path.join(s.backup_dir, "nope.mdbx"))
+        assert "внутри backup-каталога" in str(ei3.value)
+        # ревью #164: подкаталог backup_dir тоже отклоняется — иначе файл
+        # ускользнул бы из лимита/tiers (listdir нерекурсивен)
+        with pytest.raises(MemoryError) as ei4:
+            s.export(os.path.join(s.backup_dir, "sub", "x.mdbx"))
+        assert "внутри backup-каталога" in str(ei4.value)
+        assert not os.path.exists(os.path.join(s.backup_dir, "sub"))
+        # путь с общим префиксом имени каталога (не подкаталог) — разрешён
+        sibling = str(tmp_path / "bk-sibling" / "e.mdbx")
+        rs = s.export(sibling)
+        assert rs["kind"] == "export" and os.path.isfile(rs["path"])
+
+
+def test_auto_skip_flag_persistent_cleared_on_success(tmp_path, monkeypatch):
+    """D2/N10: пропуск auto по лимиту — персистентный флаг; успех снимает.
+
+    Флаг виден всем процессам роя (state-файл, не память) и переживает
+    рестарт; снимается успешным auto-бэкапом после освобождения места.
+    """
+    monkeypatch.setenv("SHARED_GRAPH_MEMORY_BACKUP_DIR", str(tmp_path / "bk"))
+    monkeypatch.setenv("SHARED_GRAPH_MEMORY_AUTO_BACKUP_SECONDS", "1")
+    db = str(tmp_path / "t.mdbx")
+    with Store(db, _skip_sync_thread=True) as s:
+        s.safe_store("fact:x:y", "fact", "seed", 0.5)
+        s.backup_max_bytes = 1 << 20
+        _inflate_backup_dir(s, mb=2)
+        out = s.before_call()
+        assert "пропущен" in out.get("backup_notice", ""), out
+        st = s._load_backup_state()
+        assert st.get("auto_skipped_limit") is True
+        assert not _files(s, "auto-"), "auto-копия не должна появиться"
+        assert s.backup_status()["auto_skipped_limit"] is True
+
+        # оператор освободил место; следующий такт таймера проходит и снимает
+        for f in _files(s, "filler"):
+            os.unlink(os.path.join(s.backup_dir, f))
+        st = s._load_backup_state()
+        st["last_auto"] = 0          # форсируем таймер
+        st["last_auto_txnid"] = 0    # и условие «БД менялась»
+        s._save_backup_state(st)
+        s.before_call()
+        assert _files(s, "auto-"), "auto-бэкап должен пройти после очистки"
+        assert s._load_backup_state().get("auto_skipped_limit") is None
+        assert s.backup_status()["auto_skipped_limit"] is False
+
+
+def test_auto_skip_flag_set_on_toctou_failure(tmp_path, monkeypatch):
+    """Ревью #164-#1 (TOCTOU): гонка между проверкой таймера и backup()
+    тоже выставляет персистентный флаг.
+
+    Сценарий: таймер видит свободный лимит, но между его проверкой и
+    вызовом backup(kind="auto") ДРУГОЙ процесс роя заполняет каталог —
+    backup() бросает invalid. Раньше except-ветка ставила только
+    одноразовый in-memory notice, и backup_status другого агента показывал
+    auto_skipped_limit=False, хотя авто-бэкапы фактически блокируются.
+    """
+    monkeypatch.setenv("SHARED_GRAPH_MEMORY_BACKUP_DIR", str(tmp_path / "bk"))
+    monkeypatch.setenv("SHARED_GRAPH_MEMORY_AUTO_BACKUP_SECONDS", "1")
+    db = str(tmp_path / "t.mdbx")
+    with Store(db, _skip_sync_thread=True) as s:
+        s.safe_store("fact:x:y", "fact", "seed", 0.5)
+        s.backup_max_bytes = 1 << 20
+        # имитация гонки: каталог заполняется МЕЖДУ проверкой таймера
+        # и вызовом backup() — патчим _backup_dir_size: 0 до backup,
+        # 2 МБ внутри него
+        real_size = s._backup_dir_size
+        state = {"phase": "timer"}
+
+        def racing_size():
+            if state["phase"] == "timer":
+                return 0          # таймер видит свободное место
+            return 2 << 20        # backup() видит переполнение
+
+        real_backup = s.backup
+
+        def racing_backup(kind="pin", dest=None, force=False):
+            state["phase"] = "backup"  # «другой процесс» заполнил каталог
+            return real_backup(kind=kind, dest=dest, force=force)
+
+        monkeypatch.setattr(s, "_backup_dir_size", racing_size)
+        monkeypatch.setattr(s, "backup", racing_backup)
+        st = s._load_backup_state()
+        st["last_auto"] = 0
+        st["last_auto_txnid"] = 0
+        s._save_backup_state(st)
+        out = s.before_call()
+        # backup() упал из-за лимита → флаг обязан быть выставлен
+        assert "failed" in (out.get("backup_notice") or ""), out
+        monkeypatch.setattr(s, "_backup_dir_size", real_size)
+        assert s._load_backup_state().get("auto_skipped_limit") is True
+        assert s.backup_status()["auto_skipped_limit"] is True
+
+
+def test_auto_skip_flag_cleared_on_manual_free(tmp_path, monkeypatch):
+    """Ревью #164-#9: флаг auto_skipped_limit отражает СОСТОЯНИЕ лимита,
+    а не факт удаления auto-копий.
+
+    При pin-only переполнении ротация cleanup ничего не удаляет (pin не
+    ротируется), но оператор может освободить место вручную — cleanup
+    обязан снять флаг, когда размер каталога снова под лимитом, иначе рой
+    навсегда остался бы с «auto блокирован» без штатного пути разблокировки.
+    """
+    monkeypatch.setenv("SHARED_GRAPH_MEMORY_BACKUP_DIR", str(tmp_path / "bk"))
+    monkeypatch.setenv("SHARED_GRAPH_MEMORY_AUTO_BACKUP_SECONDS", "1")
+    db = str(tmp_path / "t.mdbx")
+    with Store(db, _skip_sync_thread=True) as s:
+        s.auto_backup_seconds = 1
+        s.backup_max_bytes = 1 << 20
+        s.safe_store("fact:x:y", "fact", "seed", 0.5)
+        # pin-only переполнение (имитация: 2 мусорных pin-* по 1 МБ)
+        for i in range(2):
+            p = os.path.join(s.backup_dir, "pin-20200101-00000%d_txnid%d.mdbx"
+                             % (i, i))
+            with open(p, "wb") as fh:
+                fh.write(b"\0" * (1 << 20))
+        st = s._load_backup_state()
+        st["last_auto"] = 0
+        st["last_auto_txnid"] = 0
+        s._save_backup_state(st)
+        s.before_call()
+        assert s._load_backup_state().get("auto_skipped_limit") is True
+        # оператор удалил pin вручную; cleanup ротирует только auto →
+        # removed=[] , но место освобождено → флаг обязан сняться
+        for f in _files(s, "pin-"):
+            os.unlink(os.path.join(s.backup_dir, f))
+        r = s.cleanup(dry_run=False, confirm=True)
+        assert r["removed"] == []  # auto-копий не было — ротация пуста
+        assert s._load_backup_state().get("auto_skipped_limit") is None, \
+            "флаг должен сняться при восстановлении места (pin-only)"
+        assert s.backup_status()["auto_skipped_limit"] is False
+
+
+def test_mcp_db_backup_fail_loud_on_legacy_kind(store):
+    """Ревью #164 (split): db_backup с устаревшими kind/dest — явная
+    ошибка, а не молчаливый сдвиг семантики (user-* → pin-*)."""
+    from mcp.mcp_server import McpServer
+    serv = McpServer(store)
+
+    def call(name, args=None):
+        return serv.handle({"jsonrpc": "2.0", "id": 1,
+                            "method": "tools/call",
+                            "params": {"name": name,
+                                       "arguments": args or {}}})
+
+    r = call("db_backup", {"kind": "user"})
+    assert r.get("error"), r
+    assert "удалены из протокола" in r["error"]["message"]
+    assert "db_export" in r["error"]["message"]
+    r = call("db_backup", {"dest": "/tmp/x.mdbx"})
+    assert r.get("error")
+    # чистый вызов (без legacy-параметров) по-прежнему работает
+    r = call("db_backup", {})
+    sc = r["result"]["structuredContent"]
+    assert os.path.basename(sc["path"]).startswith("pin-"), sc
+
+
+def test_mcp_backup_failed_class_is_invalid_on_limit(store, tmp_path,
+                                                     monkeypatch):
+    """Ревью #164-#7: PROMPT + over-limit → класс ошибки invalid,
+    не internal (контрактный отказ лимита не деградирует)."""
+    from mcp.mcp_server import McpServer
+    store.backup_max_bytes = 1 << 20
+    store.safe_store("fact:x:lim", "fact", "seed", 0.5)
+    _inflate_backup_dir(store, mb=2)
+    store.backup_pending = True  # имитация сработавшего PROMPT-таймера
+    serv = McpServer(store)
+    r = serv.handle({"jsonrpc": "2.0", "id": 1, "method": "tools/call",
+                     "params": {"name": "db_backup", "arguments": {}}})
+    assert r.get("error"), r
+    msg = r["error"]["message"]
+    assert "BACKUP_FAILED" in msg and "CLASS=invalid" in msg, msg
+    assert "превышает лимит" in msg
+
+
+def test_backup_status_tiers_contract(store):
+    """Ревью #164: контракт tiers — все 4 ключа с типами.
+
+    Фиксирует набор {lifeline: bool, auto: int, pin: int, snapshot: int}:
+    переименование ключа (напр. pin→user) или смена типа пройдут незамеченными
+    без этого теста. Тир export отсутствует по дизайну (вне каталога).
+    """
+    store.safe_store("fact:x:tier", "fact", "seed", 0.5)
+    store.backup(kind="pin")
+    sc = store.backup_status()
+    tiers = sc["tiers"]
+    assert set(tiers.keys()) == {"lifeline", "auto", "pin", "snapshot"}, tiers
+    assert isinstance(tiers["lifeline"], bool)
+    for k in ("auto", "pin", "snapshot"):
+        assert isinstance(tiers[k], int) and tiers[k] >= 0
+    assert tiers["pin"] >= 1
+    # export НЕ попадает в tiers (копия вне каталога)
+    assert "export" not in tiers
+
+
+def test_auto_skip_flag_not_set_on_nonlimit_failure(tmp_path, monkeypatch):
+    """Ревью #164: флаг auto_skipped_limit ставится ТОЛЬКО при лимитной
+    причине падения backup().
+
+    Граница except-ветки TOCTOU-фикса: если backup() упал по другой причине
+    (диск/права) при СВОБОДНОМ каталоге — флаг остаться не должен, иначе рой
+    ложно увидит «auto блокирован лимитом».
+    """
+    monkeypatch.setenv("SHARED_GRAPH_MEMORY_BACKUP_DIR", str(tmp_path / "bk"))
+    monkeypatch.setenv("SHARED_GRAPH_MEMORY_AUTO_BACKUP_SECONDS", "1")
+    db = str(tmp_path / "t.mdbx")
+    with Store(db, _skip_sync_thread=True) as s:
+        s.safe_store("fact:x:y", "fact", "seed", 0.5)
+        s.backup_max_bytes = 100 << 20  # лимит свободен
+
+        def disk_failure(kind="pin", dest=None, force=False):
+            raise OSError("No space left on device")
+
+        monkeypatch.setattr(s, "backup", disk_failure)
+        st = s._load_backup_state()
+        st["last_auto"] = 0
+        st["last_auto_txnid"] = 0
+        s._save_backup_state(st)
+        out = s.before_call()
+        assert "failed" in (out.get("backup_notice") or ""), out
+        # каталог свободен → флаг НЕ ставится (причина не лимит)
+        assert s._load_backup_state().get("auto_skipped_limit") is None
+        assert s.backup_status()["auto_skipped_limit"] is False
+
+
+def test_auto_skip_flag_not_set_on_nonlimit_overfull(tmp_path, monkeypatch):
+    """Ревью #164-r4 (1b): не-лимитная ошибка при ПЕРЕПОЛНЕННОМ каталоге
+    не должна ставить флаг auto_skipped_limit.
+
+    Сценарий из аудита: каталог переполнен по независимой причине, backup()
+    падает по не-лимитной причине (диск/IO). Старое условие (только по
+    размеру каталога) ставило флаг — рой ложно видел «auto блокирован
+    лимитом», и после исправления первопричины auto не возобновлялся.
+    Теперь флаг требует контрактный INVALID из backup() И переполнение.
+    """
+    monkeypatch.setenv("SHARED_GRAPH_MEMORY_BACKUP_DIR", str(tmp_path / "bk"))
+    monkeypatch.setenv("SHARED_GRAPH_MEMORY_AUTO_BACKUP_SECONDS", "1")
+    db = str(tmp_path / "t.mdbx")
+    with Store(db, _skip_sync_thread=True) as s:
+        s.safe_store("fact:x:y", "fact", "seed", 0.5)
+        s.backup_max_bytes = 1 << 20
+        _inflate_backup_dir(s, mb=2)  # каталог ~2 МБ > лимита
+        # гонка: первая проверка таймера видит свободное место (иначе он
+        # штатно поставил бы флаг в ветке пропуска — это другой тест),
+        # а внутри backup() «другой процесс» уже заполнил каталог и копия
+        # падает по НЕ-лимитной причине (IO-ошибка)
+        real_size = s._backup_dir_size
+        phase = {"p": "timer"}
+
+        def racing_size():
+            return 0 if phase["p"] == "timer" else real_size()
+
+        def io_failure(kind="pin", dest=None, force=False):
+            phase["p"] = "backup"
+            raise OSError("Input/output error")
+
+        monkeypatch.setattr(s, "_backup_dir_size", racing_size)
+        monkeypatch.setattr(s, "backup", io_failure)
+        st = s._load_backup_state()
+        st["last_auto"] = 0
+        st["last_auto_txnid"] = 0
+        s._save_backup_state(st)
+        out = s.before_call()
+        assert "failed" in (out.get("backup_notice") or ""), out
+        monkeypatch.setattr(s, "_backup_dir_size", real_size)
+        # причина НЕ лимит (OSError) → флаг НЕ ставится, несмотря на
+        # переполненный каталог
+        assert s._load_backup_state().get("auto_skipped_limit") is None
+        assert s.backup_status()["auto_skipped_limit"] is False
+
+
+def test_export_rejects_symlink_into_backup_dir(tmp_path, monkeypatch):
+    """Ревью #164-r4: symlink внутрь backup_dir не обходит inside-проверку.
+
+    abspath не резолвит симлинки — dest через symlink указывал бы внутрь
+    каталога и ускользал из лимита/tiers. realpath закрывает обход.
+    """
+    monkeypatch.setenv("SHARED_GRAPH_MEMORY_BACKUP_DIR", str(tmp_path / "bk"))
+    db = str(tmp_path / "t.mdbx")
+    with Store(db, _skip_sync_thread=True) as s:
+        s.safe_store("fact:x:y", "fact", "seed", 0.5)
+        os.makedirs(s.backup_dir, exist_ok=True)
+        # symlink снаружи, ведущий ВНУТРЬ backup_dir
+        link = str(tmp_path / "outside.mdbx")
+        target = os.path.join(s.backup_dir, "sub")
+        os.makedirs(target, exist_ok=True)
+        try:
+            os.symlink(os.path.join(target, "x.mdbx"), link)
+        except OSError as e:
+            pytest.skip("symlink недоступен (Windows: developer mode): %s" % e)
+        assert s._is_inside_backup_dir(link), "realpath должен видеть symlink"
+        with pytest.raises(MemoryError) as ei:
+            s.export(link)
+        assert "внутри backup-каталога" in str(ei.value)
+
+
+def test_inside_backup_dir_case_insensitive(monkeypatch):
+    """Ревью #164-r4: Windows-регистр не обходит inside-проверку.
+
+    ФС Windows регистронезависима: `c:\\bk\\sub` vs `C:\\Bk` без normcase
+    дали бы outside=False. Проверяем хелпер через мок normcase с
+    Windows-семантикой (casefold) на POSIX-пути.
+    """
+    from mcp.store import Store as StoreCls
+    # мок-объект с backup_dir и хелпером
+    obj = StoreCls.__new__(StoreCls)
+    obj.backup_dir = "/Bk"
+    # normcase как на Windows: casefold (на POSIX реальный — no-op, поэтому
+    # патчим на casefold-семантику, чтобы проверить применение normcase)
+    monkeypatch.setattr("os.path.normcase", lambda p: p.lower())
+    assert obj._is_inside_backup_dir("/bk/sub/x.mdbx") is True, \
+        "case-различие не должно обходить проверку (normcase применён)"
+    assert obj._is_inside_backup_dir("/BK") is True
+    assert obj._is_inside_backup_dir("/elsewhere/x.mdbx") is False
