@@ -1008,7 +1008,13 @@ class Store:
         self._touch_ids.append(key)
 
     def _flush_touches(self) -> None:
-        """Одна write-txn на все накопленные LRU-касания (вместо N мелких)."""
+        """Одна write-txn на все накопленные LRU-касания (вместо N мелких).
+
+        Rate-limit — только per-process (_lru_last в _bump_access): ts в
+        access-записи трогать нельзя — он же источник recency для score,
+        а safe_store пишет его свежим (D1-заметка: межпроцессная дедупликация
+        касаний потребовала бы отдельного поля, не ts).
+        """
         if not self._touch_ids:
             return
         pending, self._touch_ids = self._touch_ids, []
@@ -1235,7 +1241,14 @@ class Store:
         return (0.35 * importance + 0.25 * recency + 0.20 * access_factor
                 + 0.20 * link_factor)
 
-    def recall(self, pattern: str, limit: int = 5):
+    def recall(self, pattern: str, limit: int = 5, touch: bool = False):
+        """Поиск по префиксу ключа с ранжированием.
+
+        `touch=False` (D1/N9): чтение НЕ накачивает LRU-статистику —
+        дашборды и массовые recall роя не искажают recency/access score
+        и не порождают write-txn касаний. touch=True — прежнее поведение
+        (осознанное «использование» записи).
+        """
         limit = max(1, min(int(limit), 10))
         prefix = pattern[:-1] if pattern.endswith("*") else pattern
         out = []
@@ -1253,9 +1266,10 @@ class Store:
                     rc, key, val = cur.get(mdbx.CURSOR_NEXT)
         out.sort(key=lambda r: r.get("score", 0.0), reverse=True)
         top = out[:limit]
-        for r in top:
-            self._bump_access(r["key"])
-        self._flush_touches()
+        if touch:
+            for r in top:
+                self._bump_access(r["key"])
+            self._flush_touches()
         return top
 
     def keys(self, pattern: str = "", limit: int = None) -> list:
@@ -1420,8 +1434,11 @@ class Store:
                     rc, k, _ = cur.get(mdbx.CURSOR_NEXT)
         return out[:8]
 
-    def search(self, query: str, limit: int = 5, include_structural: bool = True):
+    def search(self, query: str, limit: int = 5, include_structural: bool = True,
+               touch: bool = False):
         """Поиск по термам с query-aware ранжированием.
+
+        `touch=False` (D1/N9): чтение не накачивает LRU (см. recall).
 
         Ранжирование BM25-подобное: для каждого терма запроса учитывается
         IDF (редкие термины весомее частых) в дополнение к композитному
@@ -1480,14 +1497,16 @@ class Store:
                         row["bm25"] = round(idf_sum, 4)
                         row["kind"] = "record"
                         rows.append(row)
-        # sort и LRU-касания — ВНЕ read-txn: флэш касаний пишет, а параллельная
-        # read-транзакция в том же потоке дала бы MDBX_TXN_OVERLAPPING
+        # sort — ВНЕ read-txn: при touch=True флэш касаний пишет, а
+        # параллельная read-транзакция в том же потоке дала бы
+        # MDBX_TXN_OVERLAPPING
         rows.sort(key=lambda r: r.get("query_score", r.get("score", 0.0)), reverse=True)
         top = rows[:limit]
-        for r in top:
-            if r.get("kind") == "record":
-                self._bump_access(r["key"])
-        self._flush_touches()
+        if touch:
+            for r in top:
+                if r.get("kind") == "record":
+                    self._bump_access(r["key"])
+            self._flush_touches()
         return top
 
     # --- links -----------------------------------------------------------------
