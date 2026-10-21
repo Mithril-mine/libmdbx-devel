@@ -99,6 +99,11 @@ SCHEMA_VERSION = "2"
 PROBE_KINDS = ("usdt", "bookmark", "injected", "dev_assert", "collect", "watch")
 # status: жизненный цикл зонда по probe-bus.md §4 (реестр).
 PROBE_STATUSES = ("candidate", "inserted", "validated")
+# Статусы портирования C→C++ (поле cpp_status тела символа карты):
+# none — не начат; mapped — есть C++-каркас/декларация; partial — частично
+# переписан; done — эквивалент подтверждён (cpp_eq). map_port_status и
+# map_put_symbol оперируют этим набором (N6: валидация на входе).
+CPP_STATUSES = ("none", "mapped", "partial", "done")
 # Версия модуля (дублирует mcp.__version__; здесь — без import-циклов).
 MODULE_VERSION = "0.2.0"
 
@@ -2018,7 +2023,19 @@ class Store:
 
         Присваивает стабильный числовой id при первом появлении.
         Пустой layer — активная ветка.
+        `cpp_status` в body валидируется против CPP_STATUSES (N6): статус
+        портирования C→C++ читает map_port_status — мусорное значение
+        молча ушло бы в "none", поэтому лучше отклонить на входе.
         """
+        key = (key or "").strip()
+        if not key:
+            raise invalid("map_put_symbol: пустой ключ символа",
+                          "укажите fq-ключ fn:/type:/macro:")
+        st = (body or {}).get("cpp_status")
+        if st is not None and st not in CPP_STATUSES:
+            raise invalid(
+                "map_put_symbol: cpp_status %r не из допустимого набора" % st,
+                "допустимые: %s" % ", ".join(CPP_STATUSES))
         layer = self._effective_layer(layer)
         pre = self.layer_prefix(layer)
         skey = (pre + key)
@@ -2446,7 +2463,7 @@ class Store:
                     continue
                 st = body.get("cpp_status") or \
                     ("done" if body.get("cpp_eq") else "none")
-                if st not in ("none", "mapped", "partial", "done"):
+                if st not in CPP_STATUSES:
                     st = "none"
                 m = mods.setdefault(mod, {"total": 0, "none": 0, "mapped": 0,
                                           "partial": 0, "done": 0})
