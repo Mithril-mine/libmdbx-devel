@@ -74,7 +74,7 @@ uint64_t mdbx_txn_id(const MDBX_txn *txn) {
 MDBX_txn_flags_t mdbx_txn_flags(const MDBX_txn *txn) {
   STATIC_ASSERT(
       (MDBX_TXN_INVALID & (MDBX_TXN_FINISHED | MDBX_TXN_ERROR | MDBX_TXN_DIRTY | MDBX_TXN_SPILLS | MDBX_TXN_HAS_CHILD |
-                           txn_gc_drained | txn_shrink_allowed | txn_rw_begin_flags | txn_ro_begin_flags)) == 0);
+                           txn_gc_drained | txn_unmap_allowed | txn_rw_begin_flags | txn_ro_begin_flags)) == 0);
   if (unlikely(!txn || txn->signature != txn_signature))
     return MDBX_TXN_INVALID;
   ASSERT(0 == (int)(txn->flags & MDBX_TXN_INVALID));
@@ -312,14 +312,14 @@ int mdbx_txn_begin_ex(MDBX_env *env, MDBX_txn *parent, MDBX_txn_flags_t flags, M
     eASSERT0(env, txn->flags == (txn_ro_flat | MDBX_TXN_FINISHED));
   else if ((flags & txn_ro_flat) != 0 && !parent)
     eASSERT0(env, (txn->flags & ~(MDBX_NOSTICKYTHREADS | txn_ro_flat | MDBX_WRITEMAP |
-                                  /* Win32: SRWL flag */ txn_shrink_allowed)) == 0);
+                                  /* Win32: SRWL flag */ txn_unmap_allowed)) == 0);
   else {
     if (MDBX_ENABLE_FAKE_NESTED_READONLY_TRANSACTIONS)
-      eASSERT0(env, (txn->flags & ~(MDBX_NOSTICKYTHREADS | MDBX_WRITEMAP | txn_shrink_allowed | txn_may_have_cursors |
+      eASSERT0(env, (txn->flags & ~(MDBX_NOSTICKYTHREADS | MDBX_WRITEMAP | txn_unmap_allowed | txn_may_have_cursors |
                                     MDBX_NOMETASYNC | MDBX_SAFE_NOSYNC | MDBX_TXN_SPILLS | txn_ro_nested |
                                     MDBX_TXN_DIRTY | txn_gc_drained)) == 0);
     else {
-      eASSERT0(env, (txn->flags & ~(MDBX_NOSTICKYTHREADS | MDBX_WRITEMAP | txn_shrink_allowed | txn_may_have_cursors |
+      eASSERT0(env, (txn->flags & ~(MDBX_NOSTICKYTHREADS | MDBX_WRITEMAP | txn_unmap_allowed | txn_may_have_cursors |
                                     MDBX_NOMETASYNC | MDBX_SAFE_NOSYNC | MDBX_TXN_SPILLS | txn_ro_nested)) == 0);
       eASSERT0(env, !txn->wr.spilled.list && !txn->wr.spilled.least_removed);
     }
