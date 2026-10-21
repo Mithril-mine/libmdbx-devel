@@ -73,6 +73,8 @@ shared-graph-memory.mdbx — персистентная память роя на
 | `trace_path(src, dst, depth?)` | Пути по observed-рёбрам (BFS) |
 | `trace_compare(symbol)` | **possible vs observed**: static (call_edges) vs runtime (traces) |
 | `map_put_edge(caller, callee, kind?)` | Записать ребро вызова (syntax/semantic) |
+| `map_put_symbol(key, body, layer?)` | Записать символ карты; `cpp_status` (none/mapped/partial/done) валидируется |
+| `map_alias(old_key, new_key)` / `map_refresh_stale()` | Фиксировать переименование / перецепить висячие ссылки |
 | `map_mark_stale(live_keys, layer?)` | Пометить отсутствующие символы stale (alive остальным) |
 | `map_port_status(module?, layer?)` | **Приборная панель C→C++**: cpp_status по модулям + топ непортированных (по блокам) |
 | `map_generations()` / `map_snapshot()` | Поколение карты (canary.y) / полный снимок |
@@ -97,9 +99,15 @@ shared-graph-memory.mdbx — персистентная память роя на
 `{ver}.{feature}.{n}`, см. docs/BRANCHES.md):
 
 - `branch_register(ver, feature, n)` / `branch_list` / `branch_current` /
-  `branch_activate(layer)` — управление слоями;
+  `branch_activate(layer, expected_prev?)` — управление слоями;
+  `expected_prev` — CAS-защита от гонки активаций в рое;
+- `branch_remove(layer)` — убрать запись реестра; `branch_purge(layer)` —
+  удалить слой **со всеми данными** (symbols/edges/coverage/probes/traces);
+  базовый слой purge запрещён;
 - `map_diff_branches(from, to)` — **структурный diff по содержимому** карты
   (не по коммитам): что реально изменилось между ветками;
+- `coverage_migrate(from, to, symbols?)` — копия coverage/blocks/traces
+  слоя в другой (merge ветки): источник цел, конфликт test_id → перезапись;
 - `layer=` принимают map-инструменты (`map_symbol(s)`, `map_edges_of`,
   `map_callers_of`); базовый слой (`0.15`) — без префикса;
 - **Правило**: в feature-ветке работайте в СВОЁМ слое (передавайте `layer`),
@@ -112,8 +120,18 @@ shared-graph-memory.mdbx — персистентная память роя на
   Коллекторы (`collect_coverage.py`, `gcov_to_coverage.py`, `load_map.py`)
   принимают `--layer`. Знания (curated-слой: records/links/vocab/adr/
   ci_jobs/test_metrics) — общие, per-branch только структурный слой.
+- **Иерархия слоя** (кто побеждает при `layer=""`): явный аргумент `layer=`
+  > env `SHARED_GRAPH_MEMORY_LAYER` (per-process, читается один раз) >
+  `meta.branch_current` (глобальный). В рое из нескольких агентов каждая
+  ветвь выставляет свой `SHARED_GRAPH_MEMORY_LAYER` — и чужой
+  `branch_activate` не переключит её записи в чужой слой.
+  Исключения (глобальные, БЕЗ слойной изоляции): `map_alias`
+  (таблица `sym_aliases`) и `map_refresh_stale` (сканирует `sym_id2key`/
+  `links` целиком) — переименования и чистка висячих ссылок видны всем
+  слоям. Curated-знания (records/links/vocab/adr) — тоже общие.
 - При слиянии: `map_diff_branches(base, feature)` → перенос новых символов в
-  base → пересканировать base → feature `status=merged` (архив, НЕ удалять).
+  base → `coverage_migrate(feature, base)` → пересканировать base → feature
+  `status=merged`; мёртвый слой после rebase — `branch_purge(feature)`.
 
 ### Карта исходников (refactoring-map)
 
