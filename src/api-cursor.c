@@ -585,11 +585,10 @@ int mdbx_cursor_get_batch(MDBX_cursor *mc, size_t *count, MDBX_val *pairs, size_
     break;
 
   case MDBX_FIRST:
-    if (!is_filled(mc)) {
-      rc = outer_first(mc, nullptr, nullptr);
-      if (unlikely(rc != MDBX_SUCCESS))
-        return LOG_IFERR(rc);
-    }
+    /* always rewind, also a cursor that is already positioned */
+    rc = outer_first(mc, nullptr, nullptr);
+    if (unlikely(rc != MDBX_SUCCESS))
+      return LOG_IFERR(rc);
     break;
 
   default:

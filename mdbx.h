@@ -6244,6 +6244,9 @@ LIBMDBX_API int mdbx_cursor_scan_from(MDBX_cursor *cursor, MDBX_predicate_func p
   *                        unused.
   * \param [in] op         A cursor operation \ref MDBX_cursor_op (only
   *                        \ref MDBX_FIRST and \ref MDBX_NEXT are supported).
+  *                        \ref MDBX_FIRST always starts from the first pair,
+  *                        whatever the cursor position; \ref MDBX_NEXT
+  *                        continues from the current position.
   *
   * \returns A non-zero error value on failure and 0 on success,
   *          some possible errors are:
