@@ -12,6 +12,7 @@ typedef union osal_srwlock {
 } osal_srwlock_t;
 
 typedef void(WINAPI *osal_srwlock_t_function)(osal_srwlock_t *);
+typedef BOOLEAN(WINAPI *osal_srwlock_t_try_function)(osal_srwlock_t *);
 
 #if _WIN32_WINNT < 0x0600 /* prior to Windows Vista */
 typedef enum _FILE_INFO_BY_HANDLE_CLASS {
@@ -112,6 +113,7 @@ struct libmdbx_imports {
   osal_srwlock_t_function srwl_ReleaseShared;
   osal_srwlock_t_function srwl_AcquireExclusive;
   osal_srwlock_t_function srwl_ReleaseExclusive;
+  osal_srwlock_t_try_function srwl_TryAcquireExclusive;
   MDBX_NtExtendSection NtExtendSection;
   MDBX_GetFileInformationByHandleEx GetFileInformationByHandleEx;
   MDBX_GetVolumeInformationByHandleW GetVolumeInformationByHandleW;
