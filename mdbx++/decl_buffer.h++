@@ -564,6 +564,12 @@ private:
     return silo_begin() + silo_.capacity();
   }
 
+  /* `data` overlaps the own tailroom, which append_producer() overwrites in place while still reading `data` */
+  MDBX_NOTHROW_PURE_FUNCTION bool reaches_tailroom(const struct slice &data) const noexcept {
+    return data.length() && is_freestanding() && uintptr_t(data.byte_ptr()) < uintptr_t(silo_end()) &&
+           uintptr_t(data.end_byte_ptr()) > uintptr_t(inherited::end_byte_ptr());
+  }
+
   struct data_preserver : public exception_thunk {
     buffer data;
     data_preserver(const allocator_type &alloc) : data(alloc) {}
@@ -1247,6 +1253,20 @@ public:
 
   buffer &add_header(const struct slice &chunk) { return add_header(chunk.data(), chunk.size()); }
 
+  /// \brief Appends the bytes produced by the given producer to the end of the buffer.
+  ///
+  /// \pre The producer must not read from the destination region `[end_char_ptr(), silo_end())`
+  /// while producing: when the result fits the tailroom, it is written in place, at
+  /// `end_char_ptr()`, so a source overlapping the own tailroom would be overwritten before
+  /// being read (the `dest` argument of `write_bytes()` is `__restrict`). The `append_hex()`,
+  /// `append_base58()`, `append_base64()` and the `append_decoded_*()` methods handle a
+  /// slice source that reaches the own tailroom themselves (by copying it out first); for a
+  /// custom producer, avoiding such an overlap is the caller's responsibility.
+  ///
+  /// \param [in,out] producer  A mutable or immutable byte producer, e.g. `to_hex`,
+  ///                           `from_base64`, or a user-provided one; it may refer into this
+  ///                           buffer, but only into the content or the headroom.
+  /// \returns A reference to this buffer.
   template <MDBX_CXX20_CONCEPT(MutableByteProducer, PRODUCER)> buffer &append_producer(PRODUCER &producer) {
     const size_t wanna_bytes = producer.envisage_result_length();
     if (MDBX_LIKELY(wanna_bytes))
@@ -1263,6 +1283,8 @@ public:
     return *this;
   }
 
+  /// \brief Appends the bytes produced by the given immutable producer, see the overload above.
+  /// \pre The same: the producer must not read from `[end_char_ptr(), silo_end())` while producing.
   template <MDBX_CXX20_CONCEPT(ImmutableByteProducer, PRODUCER)> buffer &append_producer(const PRODUCER &producer) {
     const size_t wanna_bytes = producer.envisage_result_length();
     if (MDBX_LIKELY(wanna_bytes))
@@ -1280,26 +1302,38 @@ public:
   }
 
   buffer &append_hex(const struct slice &data, bool uppercase = false, unsigned wrap_width = 0) {
+    if (MDBX_UNLIKELY(reaches_tailroom(data)))
+      return append_hex(buffer(data, get_allocator()), uppercase, wrap_width);
     return append_producer(to_hex(data, uppercase, wrap_width));
   }
 
   buffer &append_base58(const struct slice &data, unsigned wrap_width = 0) {
+    if (MDBX_UNLIKELY(reaches_tailroom(data)))
+      return append_base58(buffer(data, get_allocator()), wrap_width);
     return append_producer(to_base58(data, wrap_width));
   }
 
   buffer &append_base64(const struct slice &data, unsigned wrap_width = 0) {
+    if (MDBX_UNLIKELY(reaches_tailroom(data)))
+      return append_base64(buffer(data, get_allocator()), wrap_width);
     return append_producer(to_base64(data, wrap_width));
   }
 
   buffer &append_decoded_hex(const struct slice &data, bool ignore_spaces = false) {
+    if (MDBX_UNLIKELY(reaches_tailroom(data)))
+      return append_decoded_hex(buffer(data, get_allocator()), ignore_spaces);
     return append_producer(from_hex(data, ignore_spaces));
   }
 
   buffer &append_decoded_base58(const struct slice &data, bool ignore_spaces = false) {
+    if (MDBX_UNLIKELY(reaches_tailroom(data)))
+      return append_decoded_base58(buffer(data, get_allocator()), ignore_spaces);
     return append_producer(from_base58(data, ignore_spaces));
   }
 
   buffer &append_decoded_base64(const struct slice &data, bool ignore_spaces = false) {
+    if (MDBX_UNLIKELY(reaches_tailroom(data)))
+      return append_decoded_base64(buffer(data, get_allocator()), ignore_spaces);
     return append_producer(from_base64(data, ignore_spaces));
   }
 
