@@ -68,6 +68,77 @@ TEST(ut_cursor_batch, get_batch) {
   mdbx::env::remove(testdb);
 }
 
+TEST(ut_cursor_batch, first_rewinds_positioned_cursor) {
+  if (MDBX_GTEST_IS_EXECUTION_TIMEOUT()) {
+    GTEST_SKIP() << "SKIPPED by RUNTIME_LIMIT";
+    return;
+  }
+  const mdbx::path testdb = "test-cursor-batch";
+  mdbx::env::remove(testdb);
+  mdbx::env_managed env(testdb, mdbx::create_parameters(), mdbx::operate_parameters().set_max_maps(8));
+  {
+    auto txn = env.start_write();
+    auto table = txn.create_map("table-1");
+    char key[5];                      // exactly "%04d" and the terminator, see slice(const char (&)[SIZE])
+    const std::string value(64, 'v'); // several leaf pages, so the tree has a branch level
+    for (int i = 0; i < 1000; ++i) {
+      snprintf(key, sizeof(key), "%04d", i);
+      txn.upsert(table, mdbx::slice(key), mdbx::slice(value));
+    }
+    txn.commit();
+  }
+
+  auto txn = env.start_read();
+  auto cursor = txn.open_cursor(txn.open_map("table-1"));
+  bool is_last = false;
+
+  cursor.to_last();
+  auto batch = cursor.get_batch(10, mdbx::cursor::move_operation::first, &is_last);
+  ASSERT_EQ(batch.size(), 10u) << "after to_last()";
+  EXPECT_FALSE(is_last);
+  EXPECT_EQ(to_std_string(batch.front().key), "0000") << "after to_last()";
+
+  cursor.find(mdbx::slice("0500"));
+  batch = cursor.get_batch(10, mdbx::cursor::move_operation::first, &is_last);
+  ASSERT_EQ(batch.size(), 10u) << "after find()";
+  EXPECT_FALSE(is_last) << "after find()";
+  EXPECT_EQ(to_std_string(batch.front().key), "0000") << "after find()";
+
+  batch = cursor.get_batch(10, mdbx::cursor::move_operation::next, &is_last);
+  ASSERT_EQ(batch.size(), 10u);
+  EXPECT_EQ(to_std_string(batch.front().key), "0010") << "next continues after the rewound batch";
+
+  txn.abort();
+
+  /* write-transaction scenarios from the issue report: after a delete under a
+   * positioned cursor the batch used to skip the items before it, and a smaller
+   * key inserted while the cursor is positioned used to be missed */
+  {
+    auto wtxn = env.start_write();
+    auto table = wtxn.open_map("table-1");
+    auto wcursor = wtxn.open_cursor(table);
+
+    wcursor.find(mdbx::slice("0500"));
+    EXPECT_TRUE(wcursor.erase()) << "erase() must delete the pair under the cursor";
+    batch = wcursor.get_batch(10, mdbx::cursor::move_operation::first, &is_last);
+    ASSERT_EQ(batch.size(), 10u) << "after erase() in a write transaction";
+    EXPECT_FALSE(is_last) << "after erase()";
+    EXPECT_EQ(to_std_string(batch.front().key), "0000") << "after erase() in a write transaction";
+
+    wcursor.find(mdbx::slice("0600"));
+    wtxn.upsert(table, mdbx::slice("0"), mdbx::slice("x")); /* lexicographically before "0000" */
+    batch = wcursor.get_batch(10, mdbx::cursor::move_operation::first, &is_last);
+    ASSERT_EQ(batch.size(), 10u) << "after a smaller key was inserted";
+    EXPECT_FALSE(is_last) << "after a smaller key was inserted";
+    EXPECT_EQ(to_std_string(batch.front().key), "0") << "the newly inserted smaller key must not be missed";
+
+    wtxn.commit();
+  }
+
+  env.close();
+  mdbx::env::remove(testdb);
+}
+
 TEST(ut_cursor_batch, ignore_key_order) {
   if (MDBX_GTEST_IS_EXECUTION_TIMEOUT()) {
     GTEST_SKIP() << "SKIPPED by RUNTIME_LIMIT";
