@@ -195,3 +195,23 @@ def test_map_diff_branches_single_read_txn(store, monkeypatch):
     monkeypatch.undo()
     assert calls["n"] == 1, "diff: ожидалась 1 read-txn, %d" % calls["n"]
     assert d["counts"]["added"] == 1
+
+
+def test_map_diff_branches_removed_parity(store):
+    """B2: hash-based diff — removed отдаёт полные функции/блоки (паритет)."""
+    fa = {"module": "m", "l0": 1, "l1": 9, "kind": "function",
+          "blocks": [{"id": "B1"}, {"id": "B2"}]}
+    fb = {"module": "m", "l0": 1, "l1": 2, "kind": "function",
+          "blocks": [{"id": "B1"}]}
+    store.map_load_batch({"fn:gone": fa, "fn:stay": fb}, [], {},
+                         replace=True, layer="0.15.base")
+    store.map_load_batch({"fn:stay": fb}, [], {}, replace=True,
+                         layer="0.15.feat.1")
+    d = store.map_diff_branches("0.15.base", "0.15.feat.1")
+    c = d["counts"]
+    assert c["removed"] == 1
+    # removed-символ — полное тело: функция и её блоки учитываются
+    assert c["removed_functions"] == 1
+    assert c["removed_blocks"] == 2
+    assert list(d["removed"].keys()) == ["m"]
+    assert d["removed"]["m"] == ["fn:gone"]
