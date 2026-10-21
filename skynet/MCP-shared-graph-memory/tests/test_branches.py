@@ -68,6 +68,28 @@ def test_map_diff_branches_content(store):
     assert list(d["changed"].keys()) == ["gc"]
 
 
+def test_map_diff_branches_same_layer_is_empty(store):
+    """Регрессия B2: diff слоя с самим собой (pre_a == pre_b) — пустой.
+
+    Блокер ревью #155: безусловный break в коллекторе относил ключ только
+    к первому префиксу — to-сторона оставалась пустой и всё отмечалось
+    removed. Здесь from == to: ключ совпадает с ОБОИМИ префиксами.
+    """
+    body = {"module": "m", "l0": 1, "l1": 2, "kind": "function",
+            "blocks": [{"id": "B1"}]}
+    store.map_load_batch({"fn:x": body, "fn:y": body}, [], {},
+                         replace=True, layer="0.15.feat.1")
+    d = store.map_diff_branches("0.15.feat.1", "0.15.feat.1")
+    c = d["counts"]
+    assert c["added"] == 0 and c["removed"] == 0 and c["changed"] == 0
+    assert d["total_from"] == 2 and d["total_to"] == 2
+    # и для базового слоя с самим собой
+    store.map_load_batch({"fn:b": body}, [], {}, replace=True,
+                         layer="0.15.base")
+    d2 = store.map_diff_branches("0.15.base", "0.15.base")
+    assert d2["counts"]["removed"] == 0 and d2["total_to"] == 1
+
+
 def test_effective_layer_active_branch_defaults(store):
     """После branch_activate слой используется инструментами по умолчанию."""
     store.branch_register("0.15", "base")
