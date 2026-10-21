@@ -22,9 +22,15 @@
 #include "mdbx.h++"
 #include <gtest/gtest.h>
 
+#include "../test-env.h"
+
 #include <string>
 
 TEST(ut_stat_info, sysraminfo) {
+  if (MDBX_GTEST_IS_EXECUTION_TIMEOUT()) {
+    GTEST_SKIP() << "SKIPPED by RUNTIME_LIMIT";
+    return;
+  }
   const mdbx::env::sysraminfo info = mdbx::env::get_sysraminfo();
   EXPECT_GT(info.page_size, intptr_t(0));
   EXPECT_LT(info.page_size, intptr_t(1 << 20));
@@ -34,6 +40,10 @@ TEST(ut_stat_info, sysraminfo) {
 }
 
 TEST(ut_stat_info, ratio_and_readahead) {
+  if (MDBX_GTEST_IS_EXECUTION_TIMEOUT()) {
+    GTEST_SKIP() << "SKIPPED by RUNTIME_LIMIT";
+    return;
+  }
   EXPECT_NE(mdbx::ratio2percents(1, 4).find("25"), std::string::npos);
   EXPECT_NE(mdbx::ratio2percents(1, 3).find("33"), std::string::npos);
   EXPECT_NE(mdbx::ratio2digits(1, 4, 2).find("0.25"), std::string::npos);
@@ -43,6 +53,10 @@ TEST(ut_stat_info, ratio_and_readahead) {
 }
 
 TEST(ut_stat_info, preopen_snapinfo) {
+  if (MDBX_GTEST_IS_EXECUTION_TIMEOUT()) {
+    GTEST_SKIP() << "SKIPPED by RUNTIME_LIMIT";
+    return;
+  }
   const mdbx::path testdb = "test-stat-info";
   mdbx::env::remove(testdb);
   {
@@ -61,6 +75,10 @@ TEST(ut_stat_info, preopen_snapinfo) {
 }
 
 TEST(ut_stat_info, gc_info) {
+  if (MDBX_GTEST_IS_EXECUTION_TIMEOUT()) {
+    GTEST_SKIP() << "SKIPPED by RUNTIME_LIMIT";
+    return;
+  }
   const mdbx::path testdb = "test-stat-info";
   mdbx::env::remove(testdb);
   mdbx::env_managed env(testdb, mdbx::create_parameters(), mdbx::operate_parameters().set_max_maps(8));
@@ -118,6 +136,10 @@ TEST(ut_stat_info, gc_info) {
   mdbx::env::remove(testdb);
 }
 TEST(ut_stat_info, debug_and_threads) {
+  if (MDBX_GTEST_IS_EXECUTION_TIMEOUT()) {
+    GTEST_SKIP() << "SKIPPED by RUNTIME_LIMIT";
+    return;
+  }
   EXPECT_GE(mdbx::setup_debug(), 0); // read current settings, keep them
   mdbx::set_panic(nullptr);
 

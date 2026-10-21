@@ -1,6 +1,8 @@
 #include "mdbx.h++"
 #include <gtest/gtest.h>
 
+#include "../test-env.h"
+
 #include <cstdint>
 #include <cstring>
 
@@ -19,6 +21,10 @@ using buffer = mdbx::buffer<>;
 // of the data.
 
 TEST(issue_gh0101, slice_bool_is_null_aware) {
+  if (MDBX_GTEST_IS_EXECUTION_TIMEOUT()) {
+    GTEST_SKIP() << "SKIPPED by RUNTIME_LIMIT";
+    return;
+  }
   mdbx::slice s; /* empty */
   EXPECT_FALSE(s) << "an empty slice must be false";
   mdbx::slice v = mdbx::slice("x", 1);
@@ -26,6 +32,10 @@ TEST(issue_gh0101, slice_bool_is_null_aware) {
 }
 
 TEST(issue_gh0101, buffer_with_integer_length_copies) {
+  if (MDBX_GTEST_IS_EXECUTION_TIMEOUT()) {
+    GTEST_SKIP() << "SKIPPED by RUNTIME_LIMIT";
+    return;
+  }
   const char *const p = "abcdef";
   buffer b(p, 3);
   EXPECT_EQ(3u, b.length()) << "buffer(p, 3) must copy 3 bytes, not run strlen";
@@ -40,6 +50,10 @@ TEST(issue_gh0101, buffer_with_integer_length_copies) {
 }
 
 TEST(issue_gh0101, hex_of_string_like_encodes_data) {
+  if (MDBX_GTEST_IS_EXECUTION_TIMEOUT()) {
+    GTEST_SKIP() << "SKIPPED by RUNTIME_LIMIT";
+    return;
+  }
   const std::string_view sv("abc");
   const buffer h = buffer::hex(sv);
   EXPECT_EQ((size_t)6, h.length()) << "hex of three bytes is six characters";
@@ -60,6 +74,10 @@ static_assert(std::is_constructible<buffer, std::nullptr_t, int>::value, "buffer
 static_assert(std::is_constructible<buffer, char *, int>::value, "buffer(char *, int) must compile");
 
 TEST(issue_gh0101, buffer_nullptr_must_be_empty_or_rejected) {
+  if (MDBX_GTEST_IS_EXECUTION_TIMEOUT()) {
+    GTEST_SKIP() << "SKIPPED by RUNTIME_LIMIT";
+    return;
+  }
   /* `nullptr` is a null pointer constant that exact-matches the new template;
    * it must yield an empty buffer for zero bytes and reject any non-zero
    * length instead of building a reference to address zero. */
@@ -97,6 +115,10 @@ struct both_chars {
 };
 
 TEST(issue_gh0101, buffer_from_class_converting_to_chars) {
+  if (MDBX_GTEST_IS_EXECUTION_TIMEOUT()) {
+    GTEST_SKIP() << "SKIPPED by RUNTIME_LIMIT";
+    return;
+  }
   noncopyable_chars nc;
   lvalue_chars lc;
   const buffer a(nc, 3), b(lc, 3);
@@ -133,6 +155,10 @@ public:
 };
 
 TEST(issue_gh0101, buffer_from_private_conversion) {
+  if (MDBX_GTEST_IS_EXECUTION_TIMEOUT()) {
+    GTEST_SKIP() << "SKIPPED by RUNTIME_LIMIT";
+    return;
+  }
   const private_chars pc;
   const buffer c = pc.make();
   EXPECT_EQ(3u, c.length());
@@ -148,6 +174,10 @@ TEST(issue_gh0101, buffer_from_private_conversion) {
  * spellings stay valid. The MDBX_RESERVE blank form is only reachable through
  * the explicit slice::blank_for_put_reserve() factory. */
 TEST(issue_gh0101, null_pointer_with_nonzero_length_is_rejected) {
+  if (MDBX_GTEST_IS_EXECUTION_TIMEOUT()) {
+    GTEST_SKIP() << "SKIPPED by RUNTIME_LIMIT";
+    return;
+  }
   /* zero-length null spellings stay valid */
   const buffer empty1(nullptr, 0);
   EXPECT_TRUE(empty1.empty());
@@ -176,6 +206,10 @@ TEST(issue_gh0101, null_pointer_with_nonzero_length_is_rejected) {
 /* Issue #142: the MDBX_RESERVE blank form is spelled explicitly and stays
  * usable. */
 TEST(issue_gh0101, slice_reserve_factory) {
+  if (MDBX_GTEST_IS_EXECUTION_TIMEOUT()) {
+    GTEST_SKIP() << "SKIPPED by RUNTIME_LIMIT";
+    return;
+  }
   const mdbx::slice blank = mdbx::slice::blank_for_put_reserve(42);
   EXPECT_EQ(42u, blank.length());
   EXPECT_EQ(nullptr, blank.data());
@@ -193,6 +227,10 @@ TEST(issue_gh0101, slice_reserve_factory) {
 }
 
 TEST(issue_gh0101, invalidated_slice_can_rebind) {
+  if (MDBX_GTEST_IS_EXECUTION_TIMEOUT()) {
+    GTEST_SKIP() << "SKIPPED by RUNTIME_LIMIT";
+    return;
+  }
   mdbx::slice s("abc", 3);
   ASSERT_EQ(3u, s.length());
   s.invalidate();
@@ -204,6 +242,10 @@ TEST(issue_gh0101, invalidated_slice_can_rebind) {
 /* Issue #144: try_as_pod() reports a length mismatch as nullopt instead of
  * throwing, while as_pod() keeps the throwing behavior for exact sizes. */
 TEST(issue_gh0101, slice_try_as_pod) {
+  if (MDBX_GTEST_IS_EXECUTION_TIMEOUT()) {
+    GTEST_SKIP() << "SKIPPED by RUNTIME_LIMIT";
+    return;
+  }
 #if defined(__cpp_lib_optional) && __cpp_lib_optional >= 201606L
   const mdbx::slice eight("abcdefgh", 8);
   ASSERT_EQ(8u, sizeof(uint64_t));

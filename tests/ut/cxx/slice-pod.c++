@@ -22,7 +22,13 @@
 #include "mdbx.h++"
 #include <gtest/gtest.h>
 
+#include "../test-env.h"
+
 TEST(ut_slice_pod, as_pod_typed) {
+  if (MDBX_GTEST_IS_EXECUTION_TIMEOUT()) {
+    GTEST_SKIP() << "SKIPPED by RUNTIME_LIMIT";
+    return;
+  }
   const uint64_t value = 0x1122334455667788ull;
   const mdbx::slice s(&value, sizeof(value));
   EXPECT_EQ(s.as_pod<uint64_t>(), value);
@@ -39,6 +45,10 @@ TEST(ut_slice_pod, as_pod_typed) {
 }
 
 TEST(ut_slice_pod, byte_ptr_and_views) {
+  if (MDBX_GTEST_IS_EXECUTION_TIMEOUT()) {
+    GTEST_SKIP() << "SKIPPED by RUNTIME_LIMIT";
+    return;
+  }
   const mdbx::slice s("Hello");
   EXPECT_EQ(s.byte_ptr()[0], mdbx::byte('H'));
   EXPECT_EQ(s.end_byte_ptr()[-1], mdbx::byte('o'));
@@ -49,6 +59,10 @@ TEST(ut_slice_pod, byte_ptr_and_views) {
 }
 
 TEST(ut_slice_pod, construction_variants) {
+  if (MDBX_GTEST_IS_EXECUTION_TIMEOUT()) {
+    GTEST_SKIP() << "SKIPPED by RUNTIME_LIMIT";
+    return;
+  }
   const mdbx::slice empty;
   EXPECT_TRUE(empty.empty());
   EXPECT_TRUE(mdbx::slice::null().empty());

@@ -22,6 +22,8 @@
 #include "mdbx.h++"
 #include <gtest/gtest.h>
 
+#include "../test-env.h"
+
 #include <string>
 
 static std::string to_std_string(const mdbx::slice &s) {
@@ -29,6 +31,10 @@ static std::string to_std_string(const mdbx::slice &s) {
 }
 
 TEST(ut_cache_get, cache_entry_type) {
+  if (MDBX_GTEST_IS_EXECUTION_TIMEOUT()) {
+    GTEST_SKIP() << "SKIPPED by RUNTIME_LIMIT";
+    return;
+  }
   mdbx::cache_entry entry;
   EXPECT_FALSE(entry);           // freshly initialized: no confirmed result
   EXPECT_TRUE(entry.notfound()); // offset == 0 is the "not found" marker
@@ -46,6 +52,10 @@ TEST(ut_cache_get, cache_entry_type) {
 }
 
 TEST(ut_cache_get, get_cached) {
+  if (MDBX_GTEST_IS_EXECUTION_TIMEOUT()) {
+    GTEST_SKIP() << "SKIPPED by RUNTIME_LIMIT";
+    return;
+  }
   const mdbx::path testdb = "test-cache-get";
   mdbx::env::remove(testdb);
   mdbx::env_managed env(testdb, mdbx::create_parameters(), mdbx::operate_parameters().set_max_maps(8));
@@ -115,6 +125,10 @@ TEST(ut_cache_get, get_cached) {
 }
 
 TEST(ut_cache_get, open_for_recovery) {
+  if (MDBX_GTEST_IS_EXECUTION_TIMEOUT()) {
+    GTEST_SKIP() << "SKIPPED by RUNTIME_LIMIT";
+    return;
+  }
   const mdbx::path testdb = "test-cache-get";
   mdbx::env::remove(testdb);
   {

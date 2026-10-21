@@ -22,6 +22,8 @@
 #include "mdbx.h++"
 #include <gtest/gtest.h>
 
+#include "../test-env.h"
+
 #include <cstdio>
 #include <string>
 
@@ -30,6 +32,10 @@ static std::string to_std_string(const mdbx::slice &s) {
 }
 
 TEST(ut_cursor_batch, get_batch) {
+  if (MDBX_GTEST_IS_EXECUTION_TIMEOUT()) {
+    GTEST_SKIP() << "SKIPPED by RUNTIME_LIMIT";
+    return;
+  }
   const mdbx::path testdb = "test-cursor-batch";
   mdbx::env::remove(testdb);
   mdbx::env_managed env(testdb, mdbx::create_parameters(), mdbx::operate_parameters().set_max_maps(8));
@@ -70,6 +76,10 @@ TEST(ut_cursor_batch, get_batch) {
 }
 
 TEST(ut_cursor_batch, ignore_key_order) {
+  if (MDBX_GTEST_IS_EXECUTION_TIMEOUT()) {
+    GTEST_SKIP() << "SKIPPED by RUNTIME_LIMIT";
+    return;
+  }
   const mdbx::path testdb = "test-cursor-batch";
   mdbx::env::remove(testdb);
   mdbx::env_managed env(testdb, mdbx::create_parameters(), mdbx::operate_parameters().set_max_maps(8));

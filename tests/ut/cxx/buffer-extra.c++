@@ -22,7 +22,13 @@
 #include "mdbx.h++"
 #include <gtest/gtest.h>
 
+#include "../test-env.h"
+
 TEST(ut_buffer_extra, modality_transitions) {
+  if (MDBX_GTEST_IS_EXECUTION_TIMEOUT()) {
+    GTEST_SKIP() << "SKIPPED by RUNTIME_LIMIT";
+    return;
+  }
   using buffer = mdbx::buffer<>;
 
   buffer empty;
@@ -56,6 +62,10 @@ TEST(ut_buffer_extra, modality_transitions) {
 }
 
 TEST(ut_buffer_extra, stl_members) {
+  if (MDBX_GTEST_IS_EXECUTION_TIMEOUT()) {
+    GTEST_SKIP() << "SKIPPED by RUNTIME_LIMIT";
+    return;
+  }
   mdbx::buffer<> buf;
   EXPECT_EQ(buf.size(), 0u);
   buf.reserve(64);
@@ -82,6 +92,10 @@ TEST(ut_buffer_extra, stl_members) {
 }
 
 TEST(ut_buffer_extra, self_append_and_add_header) {
+  if (MDBX_GTEST_IS_EXECUTION_TIMEOUT()) {
+    GTEST_SKIP() << "SKIPPED by RUNTIME_LIMIT";
+    return;
+  }
   const mdbx::slice abc_payload("abc");
   mdbx::buffer<> buf(abc_payload, /*make_reference=*/false);
   const mdbx::slice view = buf;

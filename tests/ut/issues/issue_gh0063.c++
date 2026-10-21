@@ -1,6 +1,8 @@
 #include "mdbx.h++"
 #include <gtest/gtest.h>
 
+#include "../test-env.h"
+
 #include <cstdint>
 #include <cstdio>
 #include <cstring>
@@ -147,6 +149,10 @@ static int reopen_with_validation(const std::string &testdb) {
 }
 
 TEST(issue_gh0063, main_tree_height_rejected) {
+  if (MDBX_GTEST_IS_EXECUTION_TIMEOUT()) {
+    GTEST_SKIP() << "SKIPPED by RUNTIME_LIMIT";
+    return;
+  }
   const std::string testdb = "issue63main.mdbx";
   ASSERT_TRUE(create_base_db(testdb, /* retire_pages = */ false));
   // trees.main.height is at meta_t + 90; the GC tree of this database is
@@ -158,6 +164,10 @@ TEST(issue_gh0063, main_tree_height_rejected) {
 }
 
 TEST(issue_gh0063, gc_tree_height_rejected) {
+  if (MDBX_GTEST_IS_EXECUTION_TIMEOUT()) {
+    GTEST_SKIP() << "SKIPPED by RUNTIME_LIMIT";
+    return;
+  }
   const std::string testdb = "issue63gc.mdbx";
   // Deleting all keys retires pages, so the GC (FreeDB) tree gets a valid
   // root and a real height; patching trees.gc.height (meta_t + 42) then

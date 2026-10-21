@@ -10,6 +10,9 @@
  * MDBX_EXCLUSIVE|MDBX_RDONLY must still get MDBX_BUSY (locks intact). */
 #include "mdbx.h"
 #include <gtest/gtest.h>
+
+#include "../test-env.h"
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -43,6 +46,10 @@ static void mkdb(const char *path) {
 }
 
 TEST(issue_gh0059, failed_second_open_must_not_drop_first_handle_locks) {
+  if (MDBX_GTEST_IS_EXECUTION_TIMEOUT()) {
+    GTEST_SKIP() << "SKIPPED by RUNTIME_LIMIT";
+    return;
+  }
   const char *dir = "issue_gh59";
   char db[512], lck[600];
   snprintf(db, sizeof(db), "%s/env.db", dir);

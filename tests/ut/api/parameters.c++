@@ -22,6 +22,8 @@
 #include "mdbx.h++"
 #include <gtest/gtest.h>
 
+#include "../test-env.h"
+
 namespace {
 
 using geometry = mdbx::geometry;
@@ -344,6 +346,10 @@ static_assert(cxx14_read_only.mode == mdbx::env::mode::readonly, "constexpr read
 #endif /* constexpr setters */
 
 TEST(ut_parameters, all) {
+  if (MDBX_GTEST_IS_EXECUTION_TIMEOUT()) {
+    GTEST_SKIP() << "SKIPPED by RUNTIME_LIMIT";
+    return;
+  }
   test_geometry_setters();
   test_reclaiming_options_setters();
   test_operate_options_setters();
