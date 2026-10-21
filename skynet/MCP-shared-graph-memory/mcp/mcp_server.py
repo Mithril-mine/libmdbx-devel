@@ -262,6 +262,15 @@ class McpServer:
                          "properties": {"tests": {"type": "object"},
                                         "layer": {"type": "string"}},
                          "required": ["tests"]}),
+            ("coverage_migrate", "Копировать покрытие/блоки/трассы слоя "
+             "в другой слой (merge ветки).",
+             ["from_layer", "to_layer"], {"type": "object",
+                                          "properties": {
+                                              "from_layer": {"type": "string"},
+                                              "to_layer": {"type": "string"},
+                                              "symbols": {"type": "array"}},
+                                          "required": ["from_layer",
+                                                       "to_layer"]}),
             ("coverage_symbols", "Тесты, покрывающие символы (prefix, layer).",
              [], {"type": "object",
                   "properties": {"symbol_prefix": {"type": "string"},
@@ -725,6 +734,9 @@ class McpServer:
         if name == "coverage_batch":
             return s.coverage_batch(args.get("tests") or {},
                                     layer=args.get("layer", ""))
+        if name == "coverage_migrate":
+            return s.coverage_migrate(args["from_layer"], args["to_layer"],
+                                      symbols=args.get("symbols"))
         if name == "coverage_symbols":
             return {"symbols": s.coverage_symbols(
                 args.get("symbol_prefix", ""), limit=args.get("limit"),

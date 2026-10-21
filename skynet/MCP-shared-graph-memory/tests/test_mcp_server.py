@@ -305,3 +305,55 @@ def test_mcp_map_alias_and_refresh_stale(server):
                                     "arguments": {}})
     sc = r["result"]["structuredContent"]
     assert "removed_links" in sc and "redirected_links" in sc
+
+
+def test_mcp_branch_purge_contract(server):
+    """C1/N5: branch_purge через MCP — контракт ответа на JSON-RPC уровне.
+
+    Seed — coverage_insert (MCP-инструмент, доступный и в C1); map_put_symbol
+    появляется только в C2, поэтому здесь его не используем (порядок коммитов).
+    """
+    call(server, "tools/call", {"name": "coverage_insert", "arguments": {
+        "test": "ut/dead", "symbols": ["fn:m:dead"], "pct": 10.0,
+        "layer": "0.15.dead.9"}})
+    call(server, "tools/call", {"name": "branch_register", "arguments": {
+        "ver_slug": "0.15", "feature_slug": "dead", "n_commits": 9}})
+    r = call(server, "tools/call", {"name": "branch_purge", "arguments": {
+        "layer": "0.15.dead.9"}})
+    sc = r["result"]["structuredContent"]
+    assert sc["result"] == "purged", sc
+    assert sc["removed"]["coverage"] >= 1
+    # повторный purge — notfound (данных нет)
+    r2 = call(server, "tools/call", {"name": "branch_purge", "arguments": {
+        "layer": "0.15.dead.9"}})
+    assert r2["result"]["structuredContent"]["result"] == "notfound"
+    # базовый слой purge запрещён → контрактная ошибка
+    r3 = call(server, "tools/call", {"name": "branch_purge", "arguments": {
+        "layer": "0.15.base"}})
+    assert r3.get("error") and "базовый" in r3["error"]["message"]
+
+
+def test_mcp_coverage_migrate_contract(server):
+    """C3/N5: coverage_migrate через MCP — контракт ответа."""
+    call(server, "tools/call", {"name": "coverage_insert", "arguments": {
+        "test": "ut/m1", "symbols": ["fn:m:a"], "pct": 20.0,
+        "layer": "0.15.mig.1"}})
+    r = call(server, "tools/call", {"name": "coverage_migrate", "arguments": {
+        "from_layer": "0.15.mig.1", "to_layer": "0.15.base"}})
+    sc = r["result"]["structuredContent"]
+    assert sc["tests"] == 1 and sc["from"] == "0.15.mig.1", sc
+    assert sc["to"] == "0.15.base"
+    # данные переехали
+    g = call(server, "tools/call", {"name": "coverage_get", "arguments": {
+        "test": "ut/m1", "layer": "0.15.base"}})
+    assert g["result"]["structuredContent"]["symbols"] == ["fn:m:a"]
+    # совпадающие префиксы → контрактная ошибка
+    r2 = call(server, "tools/call", {"name": "coverage_migrate", "arguments": {
+        "from_layer": "0.15.mig.1", "to_layer": "0.15.mig.1"}})
+    assert r2.get("error")
+    assert "один префикс" in r2["error"]["message"], r2
+    # разные имена, ОДИН префикс ("0.15" и "0.15.base" оба → "") — тоже
+    r3 = call(server, "tools/call", {"name": "coverage_migrate", "arguments": {
+        "from_layer": "0.15", "to_layer": "0.15.base"}})
+    assert r3.get("error")
+    assert "один префикс" in r3["error"]["message"], r3
