@@ -214,6 +214,9 @@ class Store:
         self._touch_ids: list = []
         # commit-latency последних write-транзакций (кольцо).
         self._latencies = deque(maxlen=COMMIT_LATENCY_WINDOW)
+        # наблюдаемость writer-контеншена роя (D4/N12, per-process):
+        self._busy_retries = 0     # сколько раз BUSY заставил повторить begin
+        self._busy_failures = 0    # сколько раз исчерпались BUSY_RETRIES
         # --- резервное копирование / защита от удаления ----------------------
         self.backup_dir = self._resolve_backup_dir(path)
         self.auto_backup_seconds = _env_int(ENV_AUTO_BACKUP_SECONDS, 0)
@@ -285,6 +288,27 @@ class Store:
         except Exception as e:  # noqa: BLE001
             out["preopen"] = {"error": str(e),
                               "note": "вален при закрытой/синхронизированной env"}
+        # D4/N12: наблюдаемость writer-контеншена роя. Без этих метрик узкое
+        # место single-writer невидимо, пока не упрётся в busy_io у агентов.
+        lat = self.commit_latency()
+        wholes = sorted(lat_rec.get("whole") for lat_rec in self._latencies
+                        if lat_rec.get("whole") is not None)
+        p90_us = 0.0
+        if wholes:
+            # наивный percentile: floor-индекс int(n*0.9), кламп к последнему
+            # элементу. Осознанно: на малых окнах (n<=10) смещается к max —
+            # консервативно для мониторинга; это не off-by-one.
+            p90_us = round(wholes[min(len(wholes) - 1,
+                                      int(len(wholes) * 0.9))]
+                           * 1000000.0 / 65536.0, 1)
+        out["ops"] = {
+            "busy_retries": self._busy_retries,
+            "busy_failures": self._busy_failures,
+            "commits_in_window": len(self._latencies),
+            "commit_p90_us": p90_us,
+            "commit_mean_us": lat["window_whole_us"]["mean"],
+            "commit_max_us": lat["window_whole_us"]["max"],
+        }
         return out
 
     def flush_sync(self) -> dict:
@@ -1122,8 +1146,15 @@ class Store:
                 if e.rc != mdbx.RC_BUSY:
                     raise
                 last_err = e
+                # D4/N12: наблюдаемость контеншена. СЕМАНТИКА (ревью #164-r4):
+                # считается КАЖДАЯ BUSY-попытка begin, включая финальную
+                # неудачную — при исчерпании ретраев busy_retries += RETRIES+1
+                # и busy_failures += 1; поэтому busy_retries/busy_failures —
+                # НЕ среднее число ретраев до успеха (это «всего BUSY-ударов»).
+                self._busy_retries += 1
                 if attempt < BUSY_RETRIES:
                     time.sleep(0.05 * (attempt + 1))
+        self._busy_failures += 1
         raise busy_io(desc=str(last_err), action="повторите операцию позже")
 
     # --- records ---------------------------------------------------------------
