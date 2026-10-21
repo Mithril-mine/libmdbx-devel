@@ -508,6 +508,11 @@ class McpServer:
              {"type": "object",
               "properties": {"layer": {"type": "string"}},
               "required": ["layer"]}),
+            ("branch_purge", "Удалить слой ветки С ДАННЫМИ (rebase/merge).",
+             ["layer"],
+             {"type": "object",
+              "properties": {"layer": {"type": "string"}},
+              "required": ["layer"]}),
             ("map_diff_branches", "Структурный diff двух слоёв (по содержимому).",
              ["from_layer", "to_layer"], {"type": "object",
                                           "properties": {"from_layer": {"type": "string"},
@@ -850,6 +855,8 @@ class McpServer:
                                      expected_prev=args.get("expected_prev"))
         if name == "branch_remove":
             return s.branch_remove(args["layer"])
+        if name == "branch_purge":
+            return s.branch_purge(args["layer"])
         if name == "map_diff_branches":
             return s.map_diff_branches(args["from_layer"], args["to_layer"],
                                        limit=args.get("limit"))
