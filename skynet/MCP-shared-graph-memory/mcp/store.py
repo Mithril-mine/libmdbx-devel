@@ -2572,7 +2572,7 @@ class Store:
                         try:
                             body = json.loads(v)
                         except ValueError:
-                            break  # повреждённая запись: пропустить
+                            break  # повреждённая запись: пропустить целиком
                         acc_h[bare] = _hash(body)
                         if keep_body:
                             acc_m[bare] = body
@@ -2584,7 +2584,9 @@ class Store:
                                     for i in body.get("implementations") or []
                                 ] if body.get("implementations") else [],
                             }
-                        break
+                        # НЕ break: ключ может совпасть с ОБОИМИ префиксами
+                        # (same-layer/same-prefix diff, pre_a == pre_b) —
+                        # тогда он принадлежит обеим сторонам сравнения.
                     rc, k, v = cur.get(mdbx.CURSOR_NEXT)
             # различия по хэшам; полные тела added/changed уже есть (b_body);
             # для removed дочитываем from-тела точечно (их немного).
@@ -3827,9 +3829,10 @@ class Store:
                             if not sym:
                                 continue
                             bid = b.get("block_id", "")
-                            # union-счётчики вместо set'ов всех block_id
-                            # (B2): [total, covered] на символ — пик памяти
-                            # O(символов), а не O(всех блоков слоя).
+                            # union по block_id: [total_ids, covered_ids].
+                            # Set'ы НУЖНЫ для точности union (один block_id
+                            # встречается в разных тестах); выигрыш B2 здесь
+                            # не в памяти, а в однопроходности и одной txn.
                             agg = blocks_agg.setdefault(sym, [set(), set()])
                             agg[0].add(bid)
                             if b.get("covered"):

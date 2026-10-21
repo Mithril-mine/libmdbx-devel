@@ -197,6 +197,25 @@ def test_map_diff_branches_single_read_txn(store, monkeypatch):
     assert d["counts"]["added"] == 1
 
 
+def test_stats_gc_graph_single_read_txn(store, monkeypatch):
+    """B1 (follow-up): stats/gc/graph — тоже одна read-txn на вызов."""
+    store.safe_store("fact:m:alpha", "fact", "запись альфа про связи", 0.5)
+    store.safe_store("fact:m:beta", "fact", "запись бета про связи", 0.5)
+    store.link("fact:m:alpha", "related-to", "fact:m:beta")
+    for method, kw in (("stats", {}),
+                       ("graph", {"key": "fact:m:alpha", "depth": 1})):
+        calls = _spy_read_txns(store, monkeypatch)
+        getattr(store, method)(**kw)
+        monkeypatch.undo()
+        assert calls["n"] == 1, \
+            "%s: ожидалась 1 read-txn, получено %d" % (method, calls["n"])
+    # gc: классификация — одна read-txn (write-фаза archive отдельна)
+    calls = _spy_read_txns(store, monkeypatch)
+    store.gc(dry_run=True)
+    monkeypatch.undo()
+    assert calls["n"] == 1, "gc: ожидалась 1 read-txn, %d" % calls["n"]
+
+
 def test_map_diff_branches_removed_parity(store):
     """B2: hash-based diff — removed отдаёт полные функции/блоки (паритет)."""
     fa = {"module": "m", "l0": 1, "l1": 9, "kind": "function",
