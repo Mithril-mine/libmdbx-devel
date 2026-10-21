@@ -450,13 +450,30 @@ int txn_ro_clone(const MDBX_txn *const origin, MDBX_txn *const clone) {
     clone->dbi_seqs[FREE_DBI] = origin->dbi_seqs[FREE_DBI];
     clone->dbi_seqs[MAIN_DBI] = origin->dbi_seqs[MAIN_DBI];
 
-    if (!(clone->flags & MDBX_TXN_PARKED)) {
-      if (likely(clone->ro.slot) && unlikely(clone->txnid != atomic_load64(&clone->ro.slot->txnid, mo_Relaxed)))
-        return MDBX_OUSTED;
-      if (unlikely(clone->txnid < atomic_load64(&env->lck->cached_oldest_txnid, mo_AcquireRelease)))
-        return MDBX_MVCC_RETARDED;
+    err = MDBX_SUCCESS;
+    if (clone->flags & MDBX_TXN_PARKED) {
+      /* a parked origin may have been ousted meanwhile, then its snapshot may be recycled already */
+      osal_memory_barrier();
+      if (likely(origin->ro.slot) && unlikely(safe64_read(&origin->ro.slot->txnid) != clone->txnid))
+        err = MDBX_OUSTED;
+    } else if (likely(clone->ro.slot) &&
+               unlikely(clone->txnid != atomic_load64(&clone->ro.slot->txnid, mo_Relaxed)))
+      err = MDBX_OUSTED;
+    else if (unlikely(clone->txnid < atomic_load64(&env->lck->cached_oldest_txnid, mo_AcquireRelease)))
+      err = MDBX_MVCC_RETARDED;
+    if (unlikely(err != MDBX_SUCCESS) && likely(clone->ro.slot)) {
+      /* take back what was published above, the clone stays finished;
+       * deliberately duplicated by the bailout in mdbx_txn_clone() (defensive:
+       * the clone's slot must be left clean regardless of the caller's path) */
+      if (safe64_reset_compare(&clone->ro.slot->txnid, clone->txnid)) {
+        atomic_store32(&clone->ro.slot->snapshot_pages_used, 0, mo_Relaxed);
+        atomic_store64(&clone->ro.slot->snapshot_pages_retired, 0, mo_Relaxed);
+      }
+      if (clone->flags & MDBX_TXN_PARKED)
+        atomic_store64(&clone->ro.slot->tid, clone->owner, mo_AcquireRelease);
+      clone->flags &= ~(MDBX_TXN_PARKED | MDBX_TXN_AUTOUNPARK);
     }
-    return MDBX_SUCCESS;
+    return err;
   }
 
   return ro_seize(clone);
