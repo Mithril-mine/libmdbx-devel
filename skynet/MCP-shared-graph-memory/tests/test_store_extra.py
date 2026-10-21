@@ -332,11 +332,13 @@ def test_store_context_manager(store_path):
 
 
 def test_search_flushes_one_txn(store, monkeypatch):
-    """search(touch=True) с несколькими результатами делает одну write-txn на LRU."""
+    """search(touch=True) с несколькими результатами — одна write-txn на LRU."""
     seed_vocab(store, [("crypto", "alignment"), ("platform", "android"),
                        ("platform", "android-abi")])
-    store.safe_store("bug:crypto:alignment", "bug", "buffer overflow crash", 0.7)
-    store.safe_store("fact:platform:android", "fact", "android overflow fix note", 0.9)
+    store.safe_store("bug:crypto:alignment", "bug",
+                     "buffer overflow crash", 0.7)
+    store.safe_store("fact:platform:android", "fact",
+                     "android overflow fix note", 0.9)
     store._lru_last.clear()
     writes = []
 
@@ -355,8 +357,10 @@ def test_search_flushes_one_txn(store, monkeypatch):
 def test_search_default_no_lru_write(store, monkeypatch):
     """D1/N9: search по умолчанию НЕ накачивает LRU (touch=False)."""
     seed_vocab(store, [("crypto", "alignment"), ("platform", "android")])
-    store.safe_store("bug:crypto:alignment", "bug", "buffer overflow crash", 0.7)
-    store.safe_store("fact:platform:android", "fact", "android overflow fix", 0.9)
+    store.safe_store("bug:crypto:alignment", "bug",
+                     "buffer overflow crash", 0.7)
+    store.safe_store("fact:platform:android", "fact",
+                     "android overflow fix", 0.9)
     store._lru_last.clear()
     writes = []
 
@@ -509,3 +513,46 @@ def test_predicates_are_extensible(store):
     assert r["result"] == "linked"
     r2 = store.link("bug:crypto:alignment", "covers", "fact:platform:android")
     assert r2["result"] == "exists"
+
+
+def test_sync_loop_periodic_reader_check(store, monkeypatch):
+    """D3/N11: _sync_loop периодически чистит мёртвые reader-слоты.
+
+    kill -9 агентов роя оставляет слоты занятыми; без чистки maxreaders
+    может исчерпаться. reader_check вызывается раз в
+    READER_CHECK_INTERVAL_SECONDS, а не каждый тик синка.
+    """
+    import threading
+    import time as _time
+
+    # короткий интервал синка, длинный — чистки: за время теста check
+    # должен произойти ровно один раз (первый тик, last=0.0)
+    monkeypatch.setattr("mcp.store.SYNC_POLL_INTERVAL_SECONDS", 0.05)
+    monkeypatch.setattr("mcp.store.READER_CHECK_INTERVAL_SECONDS", 3600.0)
+
+    calls = []
+    real_check = store.env.reader_check
+
+    def spy_check():
+        calls.append(_time.time())
+        return real_check()
+
+    monkeypatch.setattr(store.env, "reader_check", spy_check)
+    # перезапускаем тред с новыми интервалами (fixture создан со skip)
+    store._sync_stop = threading.Event()
+    store._last_reader_check = 0.0
+    store._sync_thread = threading.Thread(
+        target=store._sync_loop, name="test-sync", daemon=True)
+    store._sync_thread.start()
+    # активное ожидание первого тика (дедлайн 5с) вместо фиксированного
+    # sleep — нет флаки под нагрузкой CI (ревью #164-3)
+    deadline = _time.time() + 5.0
+    while not calls and _time.time() < deadline:
+        _time.sleep(0.01)
+    # даём ещё пару тиков синка (интервал чистки 3600с — второго вызова
+    # быть не должно)
+    _time.sleep(0.15)
+    store._stop_sync_thread()
+    assert len(calls) == 1, (
+        "reader_check должен вызваться ровно один раз (первый тик), %d"
+        % len(calls))

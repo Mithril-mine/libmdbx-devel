@@ -237,3 +237,45 @@ def test_load_library_fallback():
         assert lib is not None
     except OSError:
         pass  # системной libmdbx.so нет — поведение корректно
+
+
+@pytest.mark.skipif(not hasattr(os, "fork"),
+                    reason="os.fork() отсутствует на Windows")
+def test_env_pid_guard_rejects_forked_child(tmp_path):
+    """D3/N11: env не fork-safe — потомок получает явную ошибку, не коррупцию.
+
+    Унаследованный handle в дочернем процессе повредил бы LCK/reader-слоты
+    молча; begin()/sync()/reader_check() сверяют pid и отказывают.
+    """
+    d = str(tmp_path / "pid.mdbx")
+    with mdbx.Env(d, maxdbs=4, readonly=False,
+                  sync_mode="safe_nosync") as env:
+        with env.begin() as txn:
+            txn.open_dbi("t", mdbx.CREATE | mdbx.DB_DEFAULTS)
+        pid = os.fork()
+        if pid == 0:
+            code = 0
+            try:
+                env.begin(readonly=True)
+                code = 1  # guard не сработал — ошибка теста
+            except RuntimeError as e:
+                code = 0 if "fork-safe" in str(e) else 2
+            try:
+                env.sync(force=False, nonblock=True)
+                code = code or 3  # guard не сработал
+            except RuntimeError as e:
+                if "fork-safe" not in str(e):
+                    code = code or 5  # не та ошибка
+            try:
+                env.reader_check()
+                code = code or 4  # guard не сработал
+            except RuntimeError as e:
+                if "fork-safe" not in str(e):
+                    code = code or 6  # не та ошибка
+            os._exit(code)
+        _, status = os.waitpid(pid, 0)
+        assert os.WIFEXITED(status) and os.WEXITSTATUS(status) == 0, \
+            "потомок должен получить RuntimeError из всех точек входа"
+        # родитель не затронут
+        with env.begin(readonly=True) as txn:
+            pass
