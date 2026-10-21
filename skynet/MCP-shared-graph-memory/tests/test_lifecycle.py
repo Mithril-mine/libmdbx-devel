@@ -149,3 +149,49 @@ def test_map_port_status(store):
     # фильтр по модулю
     st2 = store.map_port_status(module="gc-get", layer="0.15.base")
     assert set(st2["modules"].keys()) == {"gc-get"}
+
+
+def _spy_read_txns(store, monkeypatch):
+    """Счётчик read-txn через env.begin(readonly=True)."""
+    orig = store.env.begin
+    calls = {"n": 0}
+
+    def spy(*a, **kw):
+        if kw.get("readonly") or (a and a[0] is True):
+            calls["n"] += 1
+        return orig(*a, **kw)
+
+    monkeypatch.setattr(store.env, "begin", spy)
+    return calls
+
+
+def test_dashboards_single_read_txn(store, monkeypatch):
+    """B1: дашборды читают карту+coverage РОВНО одной read-txn на вызов."""
+    store.map_put_symbol("fn:m:a", {"module": "m", "l0": 1, "l1": 2})
+    store.map_put_symbol("fn:m:b", {"module": "m", "l0": 3, "l1": 4})
+    store.coverage_insert("ut/t1", ["fn:m:a"], pct=10.0)
+    store.coverage_blocks_insert("ut/t1", [
+        {"symbol": "fn:m:a", "block_id": "B1", "covered": True}])
+    for method, kw in (("map_port_status", {}),
+                       ("coverage_summary", {}),
+                       ("coverage_gaps", {})):
+        calls = _spy_read_txns(store, monkeypatch)
+        getattr(store, method)(**kw)
+        monkeypatch.undo()
+        assert calls["n"] == 1, \
+            "%s: ожидалась 1 read-txn, получено %d" % (method, calls["n"])
+
+
+def test_map_diff_branches_single_read_txn(store, monkeypatch):
+    """B1: diff двух слоёв — из одного MVCC-снимка (1 read-txn)."""
+    body = {"module": "m", "l0": 1, "l1": 2, "kind": "function",
+            "blocks": [{"id": "B1"}]}
+    store.map_load_batch({"fn:x": body}, [], {}, replace=True,
+                         layer="0.15.base")
+    store.map_load_batch({"fn:x": body, "fn:y": body}, [], {}, replace=True,
+                         layer="0.15.feat.1")
+    calls = _spy_read_txns(store, monkeypatch)
+    d = store.map_diff_branches("0.15.base", "0.15.feat.1")
+    monkeypatch.undo()
+    assert calls["n"] == 1, "diff: ожидалась 1 read-txn, %d" % calls["n"]
+    assert d["counts"]["added"] == 1
