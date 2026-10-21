@@ -25,6 +25,22 @@ def test_trace_path_bfs(store):
     assert store.trace_path("A", "ZZZ", depth=5) == []
 
 
+def test_trace_path_lazy_no_full_adj(store):
+    """B2: ленивый BFS корректен и не тянет недостижимые ветви."""
+    # цепочка src→...→dst плюс «тяжёлая» ветвь, недостижимая из src
+    store.trace_ingest("src", "m1")
+    store.trace_ingest("m1", "m2")
+    store.trace_ingest("m2", "dst")
+    store.trace_ingest("heavy", "x1")
+    store.trace_ingest("heavy", "x2")
+    store.trace_ingest("x1", "x3")
+    paths = store.trace_path("src", "dst", depth=6)
+    assert paths == [["src", "m1", "m2", "dst"]]
+    # heavy-узлы не появляются ни в одном пути из src
+    flat = {n for p in paths for n in p}
+    assert "heavy" not in flat and "x1" not in flat
+
+
 def test_trace_compare_static_vs_observed(store):
     # static-ребро в call_edges
     store.map_put_edge("fn:lib:foo", "fn:lib:bar", kind="syntax")
