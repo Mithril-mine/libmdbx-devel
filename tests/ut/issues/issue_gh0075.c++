@@ -1,6 +1,8 @@
 #include "mdbx.h++"
 #include <gtest/gtest.h>
 
+#include "../test-env.h"
+
 #include <cstdint>
 #include <cstdio>
 #include <cstring>
@@ -140,6 +142,10 @@ static constexpr size_t tall_item_count = 200;
 static constexpr size_t shallow_item_count = 5;
 
 TEST(issue_gh0075, zero_leaf_pages_rejected) {
+  if (MDBX_GTEST_IS_EXECUTION_TIMEOUT()) {
+    GTEST_SKIP() << "SKIPPED by RUNTIME_LIMIT";
+    return;
+  }
   const std::string testdb = "issue75-leaf.mdbx";
   ASSERT_TRUE(create_base_db(testdb, tall_item_count));
   ASSERT_TRUE(patch_main_field(testdb, tree_leaf_pages_off, [](uint8_t *p) { write_u32_le(p, 0); }));
@@ -148,6 +154,10 @@ TEST(issue_gh0075, zero_leaf_pages_rejected) {
 }
 
 TEST(issue_gh0075, zero_height_with_valid_root_rejected) {
+  if (MDBX_GTEST_IS_EXECUTION_TIMEOUT()) {
+    GTEST_SKIP() << "SKIPPED by RUNTIME_LIMIT";
+    return;
+  }
   const std::string testdb = "issue75-height.mdbx";
   ASSERT_TRUE(create_base_db(testdb, tall_item_count));
   ASSERT_TRUE(patch_main_field(testdb, tree_height_off, [](uint8_t *p) { write_u16_le(p, 0); }));
@@ -156,6 +166,10 @@ TEST(issue_gh0075, zero_height_with_valid_root_rejected) {
 }
 
 TEST(issue_gh0075, zero_branch_pages_tall_tree_rejected) {
+  if (MDBX_GTEST_IS_EXECUTION_TIMEOUT()) {
+    GTEST_SKIP() << "SKIPPED by RUNTIME_LIMIT";
+    return;
+  }
   const std::string testdb = "issue75-branch.mdbx";
   ASSERT_TRUE(create_base_db(testdb, tall_item_count));
   ASSERT_TRUE(patch_main_field(testdb, tree_branch_pages_off, [](uint8_t *p) { write_u32_le(p, 0); }));
@@ -164,6 +178,10 @@ TEST(issue_gh0075, zero_branch_pages_tall_tree_rejected) {
 }
 
 TEST(issue_gh0075, spurious_branch_pages_shallow_tree_rejected) {
+  if (MDBX_GTEST_IS_EXECUTION_TIMEOUT()) {
+    GTEST_SKIP() << "SKIPPED by RUNTIME_LIMIT";
+    return;
+  }
   const std::string testdb = "issue75-branchspur.mdbx";
   ASSERT_TRUE(create_base_db(testdb, shallow_item_count));
   ASSERT_TRUE(patch_main_field(testdb, tree_branch_pages_off, [](uint8_t *p) { write_u32_le(p, 1); }));

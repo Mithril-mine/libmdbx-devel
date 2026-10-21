@@ -3,6 +3,8 @@
 #include "src/layout-lck.h"
 #include <gtest/gtest.h>
 
+#include "../test-env.h"
+
 #include <cstdint>
 #include <cstdio>
 #include <cstring>
@@ -66,6 +68,10 @@ static MDBX_env *create_open_env(const std::string &testdb, const std::string &l
 }
 
 TEST(issue_gh0079, oversized_rdt_length_clamped) {
+  if (MDBX_GTEST_IS_EXECUTION_TIMEOUT()) {
+    GTEST_SKIP() << "SKIPPED by RUNTIME_LIMIT";
+    return;
+  }
   const std::string testdb = "issue79.mdbx";
   const std::string lck_path = testdb + "-lck";
   MDBX_env *env = create_open_env(testdb, lck_path);
@@ -84,6 +90,10 @@ TEST(issue_gh0079, oversized_rdt_length_clamped) {
 }
 
 TEST(issue_gh0079, env_info_clamps_rdt_length) {
+  if (MDBX_GTEST_IS_EXECUTION_TIMEOUT()) {
+    GTEST_SKIP() << "SKIPPED by RUNTIME_LIMIT";
+    return;
+  }
   const std::string testdb = "issue79-envinfo.mdbx";
   const std::string lck_path = testdb + "-lck";
   MDBX_env *env = create_open_env(testdb, lck_path);

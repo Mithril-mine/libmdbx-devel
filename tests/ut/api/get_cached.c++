@@ -23,6 +23,8 @@
 #include "mdbx.h++"
 #include <gtest/gtest.h>
 
+#include "../test-env.h"
+
 #include <chrono>
 #include <climits>
 #include <cstdlib>
@@ -1388,6 +1390,10 @@ int doit() {
 }
 
 TEST(ut_get_cached, all) {
+  if (MDBX_GTEST_IS_EXECUTION_TIMEOUT()) {
+    GTEST_SKIP() << "SKIPPED by RUNTIME_LIMIT";
+    return;
+  }
   mdbx_setup_debug_nofmt(MDBX_LOG_VERBOSE, MDBX_DBG_ASSERT | MDBX_DBG_LEGACY_MULTIOPEN | MDBX_DBG_LEGACY_OVERLAP,
                          logger_nofmt, log_buffer, sizeof(log_buffer));
   try {

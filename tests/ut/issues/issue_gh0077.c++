@@ -1,6 +1,8 @@
 #include "mdbx.h++"
 #include <gtest/gtest.h>
 
+#include "../test-env.h"
+
 #include <string>
 #include <type_traits>
 
@@ -15,6 +17,10 @@
 // txn stays a legitimate non-owning, copyable handle.
 
 TEST(issue_gh0077, txn_slicing_from_managed_is_a_compile_error) {
+  if (MDBX_GTEST_IS_EXECUTION_TIMEOUT()) {
+    GTEST_SKIP() << "SKIPPED by RUNTIME_LIMIT";
+    return;
+  }
   static_assert(!std::is_constructible<mdbx::txn, mdbx::txn_managed>::value,
                 "rvalue txn_managed -> base txn must not compile");
   static_assert(!std::is_assignable<mdbx::txn &, mdbx::txn_managed>::value,
@@ -35,6 +41,10 @@ TEST(issue_gh0077, txn_slicing_from_managed_is_a_compile_error) {
 }
 
 TEST(issue_gh0077, managed_writer_releases_the_writer_lock) {
+  if (MDBX_GTEST_IS_EXECUTION_TIMEOUT()) {
+    GTEST_SKIP() << "SKIPPED by RUNTIME_LIMIT";
+    return;
+  }
   const std::string testdb = "issue77.mdbx";
   try {
     mdbx::env::remove(testdb);

@@ -5,7 +5,13 @@
 #include <cstring>
 #include <gtest/gtest.h>
 
+#include "../test-env.h"
+
 TEST(issue_gh0010, all) {
+  if (MDBX_GTEST_IS_EXECUTION_TIMEOUT()) {
+    GTEST_SKIP() << "SKIPPED by RUNTIME_LIMIT";
+    return;
+  }
   const mdbx::path testdb = "issue10";
   mdbx::env::remove(testdb);
   mdbx::env_managed::create_parameters cp;

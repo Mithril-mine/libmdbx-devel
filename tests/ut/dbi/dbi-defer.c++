@@ -22,6 +22,8 @@
 #include "mdbx.h++"
 #include <gtest/gtest.h>
 
+#include "../test-env.h"
+
 namespace {
 mdbx::env_managed make_env(const char *name) {
   const mdbx::path testdb = name;
@@ -31,6 +33,10 @@ mdbx::env_managed make_env(const char *name) {
 } // namespace
 
 TEST(ut_dbi_defer, drop_and_reuse_handle_in_same_txn) {
+  if (MDBX_GTEST_IS_EXECUTION_TIMEOUT()) {
+    GTEST_SKIP() << "SKIPPED by RUNTIME_LIMIT";
+    return;
+  }
   auto env = make_env("test-dbi-defer");
   auto txn = env.start_write();
   auto dropped = txn.create_map("dropped");
@@ -50,6 +56,10 @@ TEST(ut_dbi_defer, drop_and_reuse_handle_in_same_txn) {
 }
 
 TEST(ut_dbi_defer, drop_commit_then_reopen) {
+  if (MDBX_GTEST_IS_EXECUTION_TIMEOUT()) {
+    GTEST_SKIP() << "SKIPPED by RUNTIME_LIMIT";
+    return;
+  }
   auto env = make_env("test-dbi-defer");
   {
     auto txn = env.start_write();
@@ -72,6 +82,10 @@ TEST(ut_dbi_defer, drop_commit_then_reopen) {
 }
 
 TEST(ut_dbi_defer, drop_in_read_only_txn) {
+  if (MDBX_GTEST_IS_EXECUTION_TIMEOUT()) {
+    GTEST_SKIP() << "SKIPPED by RUNTIME_LIMIT";
+    return;
+  }
   auto env = make_env("test-dbi-defer");
   {
     auto txn = env.start_write();

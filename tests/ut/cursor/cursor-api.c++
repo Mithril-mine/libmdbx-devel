@@ -22,6 +22,8 @@
 #include "mdbx.h++"
 #include <gtest/gtest.h>
 
+#include "../test-env.h"
+
 namespace {
 void fill(mdbx::txn_managed &txn, mdbx::map_handle map, size_t count = 1000) {
   for (size_t i = 0; i < count; ++i) {
@@ -34,6 +36,10 @@ void fill(mdbx::txn_managed &txn, mdbx::map_handle map, size_t count = 1000) {
 } // namespace
 
 TEST(ut_cursor_api, navigation_and_estimate) {
+  if (MDBX_GTEST_IS_EXECUTION_TIMEOUT()) {
+    GTEST_SKIP() << "SKIPPED by RUNTIME_LIMIT";
+    return;
+  }
   const mdbx::path testdb = "test-cursor-api";
   mdbx::env::remove(testdb);
   mdbx::env_managed env(testdb, mdbx::create_parameters(), mdbx::operate_parameters().set_max_maps(8));
@@ -69,6 +75,10 @@ TEST(ut_cursor_api, navigation_and_estimate) {
 }
 
 TEST(ut_cursor_api, count_multivalue) {
+  if (MDBX_GTEST_IS_EXECUTION_TIMEOUT()) {
+    GTEST_SKIP() << "SKIPPED by RUNTIME_LIMIT";
+    return;
+  }
   const mdbx::path testdb = "test-cursor-api";
   mdbx::env::remove(testdb);
   mdbx::env_managed env(testdb, mdbx::create_parameters(), mdbx::operate_parameters().set_max_maps(8));
@@ -88,6 +98,10 @@ TEST(ut_cursor_api, count_multivalue) {
 }
 
 TEST(ut_map_ops, lifecycle) {
+  if (MDBX_GTEST_IS_EXECUTION_TIMEOUT()) {
+    GTEST_SKIP() << "SKIPPED by RUNTIME_LIMIT";
+    return;
+  }
   const mdbx::path testdb = "test-cursor-api";
   mdbx::env::remove(testdb);
   mdbx::env_managed env(testdb, mdbx::create_parameters(), mdbx::operate_parameters().set_max_maps(8));
