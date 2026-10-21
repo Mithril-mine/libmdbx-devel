@@ -2,7 +2,13 @@
 #include <cstdio>
 #include <gtest/gtest.h>
 
+#include "../test-env.h"
+
 TEST(issue_gh0025, all) {
+  if (MDBX_GTEST_IS_EXECUTION_TIMEOUT()) {
+    GTEST_SKIP() << "SKIPPED by RUNTIME_LIMIT";
+    return;
+  }
   const char payload[] = "0123456789";
   mdbx::default_buffer buf(mdbx::slice(payload), /*make_reference=*/true);
   EXPECT_TRUE(buf.is_reference());

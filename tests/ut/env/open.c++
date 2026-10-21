@@ -22,6 +22,8 @@
 #include "mdbx.h++"
 #include <gtest/gtest.h>
 
+#include "../test-env.h"
+
 #include <iostream>
 
 #if !defined(__cpp_lib_latch) || __cpp_lib_latch < 201907L
@@ -185,6 +187,10 @@ int doit() {
 }
 
 TEST(ut_open, all) {
+  if (MDBX_GTEST_IS_EXECUTION_TIMEOUT()) {
+    GTEST_SKIP() << "SKIPPED by RUNTIME_LIMIT";
+    return;
+  }
   try {
     mdbx_setup_debug_nofmt(MDBX_LOG_VERBOSE, MDBX_DBG_ASSERT | MDBX_DBG_LEGACY_MULTIOPEN, logger_nofmt, log_buffer,
                            sizeof(log_buffer));

@@ -1,6 +1,8 @@
 #include "mdbx.h"
 #include <gtest/gtest.h>
 
+#include "../test-env.h"
+
 #include <cstdint>
 #include <cstring>
 
@@ -15,6 +17,10 @@
 // error handler formatting the message.
 
 TEST(issue_gh0096, backlog_depleted_has_message) {
+  if (MDBX_GTEST_IS_EXECUTION_TIMEOUT()) {
+    GTEST_SKIP() << "SKIPPED by RUNTIME_LIMIT";
+    return;
+  }
   EXPECT_NE(nullptr, mdbx_liberr2str(MDBX_BACKLOG_DEPLETED)) << "a libmdbx-specific code must have a message";
   const char *const str = mdbx_strerror(MDBX_BACKLOG_DEPLETED);
   EXPECT_NE(nullptr, str);

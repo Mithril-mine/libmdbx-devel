@@ -22,6 +22,8 @@
 #include "mdbx.h++"
 #include <gtest/gtest.h>
 
+#include "../test-env.h"
+
 namespace {
 mdbx::env_managed make_env(const char *name) {
   const mdbx::path testdb = name;
@@ -37,6 +39,10 @@ std::string key_of(size_t i) {
 } // namespace
 
 TEST(ut_estimate, empty_map) {
+  if (MDBX_GTEST_IS_EXECUTION_TIMEOUT()) {
+    GTEST_SKIP() << "SKIPPED by RUNTIME_LIMIT";
+    return;
+  }
   auto env = make_env("test-estimate");
   auto txn = env.start_write();
   auto map = txn.create_map("table");
@@ -51,6 +57,10 @@ TEST(ut_estimate, empty_map) {
 }
 
 TEST(ut_estimate, single_key_exact) {
+  if (MDBX_GTEST_IS_EXECUTION_TIMEOUT()) {
+    GTEST_SKIP() << "SKIPPED by RUNTIME_LIMIT";
+    return;
+  }
   auto env = make_env("test-estimate");
   auto txn = env.start_write();
   auto map = txn.create_map("table");
@@ -75,6 +85,10 @@ TEST(ut_estimate, single_key_exact) {
 }
 
 TEST(ut_estimate, range_sign_and_monotonicity) {
+  if (MDBX_GTEST_IS_EXECUTION_TIMEOUT()) {
+    GTEST_SKIP() << "SKIPPED by RUNTIME_LIMIT";
+    return;
+  }
   auto env = make_env("test-estimate");
   auto txn = env.start_write();
   auto map = txn.create_map("table");
@@ -100,6 +114,10 @@ TEST(ut_estimate, range_sign_and_monotonicity) {
 }
 
 TEST(ut_estimate, dupsort_range_with_values) {
+  if (MDBX_GTEST_IS_EXECUTION_TIMEOUT()) {
+    GTEST_SKIP() << "SKIPPED by RUNTIME_LIMIT";
+    return;
+  }
   auto env = make_env("test-estimate");
   auto txn = env.start_write();
   auto multi = txn.create_map("multi", mdbx::key_mode::usual, mdbx::value_mode::multi);
@@ -120,6 +138,10 @@ TEST(ut_estimate, dupsort_range_with_values) {
 }
 
 TEST(ut_estimate, cursor_move_estimates) {
+  if (MDBX_GTEST_IS_EXECUTION_TIMEOUT()) {
+    GTEST_SKIP() << "SKIPPED by RUNTIME_LIMIT";
+    return;
+  }
   auto env = make_env("test-estimate");
   auto txn = env.start_write();
   auto map = txn.create_map("table");

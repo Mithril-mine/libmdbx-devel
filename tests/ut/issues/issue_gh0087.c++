@@ -1,6 +1,8 @@
 #include "mdbx.h++"
 #include <gtest/gtest.h>
 
+#include "../test-env.h"
+
 #include <cstdint>
 #include <cstring>
 
@@ -15,6 +17,10 @@
 // the exponent wrapped to all-ones and the "too large" branch fired.
 
 TEST(issue_gh0087, zero_roundtrips) {
+  if (MDBX_GTEST_IS_EXECUTION_TIMEOUT()) {
+    GTEST_SKIP() << "SKIPPED by RUNTIME_LIMIT";
+    return;
+  }
   const int64_t vals[] = {0, 1, -1, 42, -42, INT64_MAX, INT64_MIN};
   for (const int64_t expected : vals) {
     const uint64_t key = mdbx_key_from_jsonInteger(expected);

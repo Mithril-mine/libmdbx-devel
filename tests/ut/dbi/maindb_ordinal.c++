@@ -21,6 +21,9 @@
 
 #include "mdbx.h++"
 #include <gtest/gtest.h>
+
+#include "../test-env.h"
+
 #include <iostream>
 
 static int doit() {
@@ -69,6 +72,10 @@ static int doit() {
 }
 
 TEST(ut_maindb_ordinal, all) {
+  if (MDBX_GTEST_IS_EXECUTION_TIMEOUT()) {
+    GTEST_SKIP() << "SKIPPED by RUNTIME_LIMIT";
+    return;
+  }
   try {
     ASSERT_EQ(EXIT_SUCCESS, doit());
   } catch (const std::exception &ex) {

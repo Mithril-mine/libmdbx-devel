@@ -61,12 +61,14 @@ CI-обвязка: `tests/ci/run-cell.py` экспортирует
 Правила принятия лимитера в тест:
 
 1. Проверка `MDBX_GTEST_IS_EXECUTION_TIMEOUT()` — **в самом начале тела
-   каждого** `TEST()`, который должен уметь скипаться; **нельзя** в fixture
-   `SetUp()`/`TearDown()` или в хелпере, вызываемом один раз на бинарь
+   каждого** `TEST()` и `TEST_P()` **без исключений** (кроме однострочных
+   заглушек, тело которых само является безусловным `GTEST_SKIP()`, и
+   `ut/api/test-env-selftest.c++`, который тестирует сам лимитер); **нельзя** в
+   fixture `SetUp()`/`TearDown()` или в хелпере, вызываемом один раз на бинарь
    (иначе deadline вычисляется один раз вместо per-test).
-2. Паттерн:
+2. Паттерн (образец: `tests/ut/issues/issue_gh0083.c++`):
    ```c++
-   #include "../test-env.h"   // или "test-env.h" для ut/api/*
+   #include "../test-env.h"   // единая форма; каталог tests/ut добавлен в include-путь add_gtest()
    TEST(suite, name) {
      if (MDBX_GTEST_IS_EXECUTION_TIMEOUT()) {
        GTEST_SKIP() << "SKIPPED by RUNTIME_LIMIT";
@@ -75,6 +77,8 @@ CI-обвязка: `tests/ci/run-cell.py` экспортирует
      ...
    }
    ```
+   Новый gtest-тест **обязан** следовать этому паттерну; при ревью проверяется
+   наличие guard'а в каждом `TEST()`/`TEST_P()`.
 3. При исчерпании лимита бинарь печатает `[  SKIPPED ] RUNTIME_LIMIT was
    reached` один раз; последующие проверки скипаются, rc=0 — жёсткий
    ctest-timeout (убийство процесса) не наступает.

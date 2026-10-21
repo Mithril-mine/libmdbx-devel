@@ -1,6 +1,8 @@
 #include "mdbx.h++"
 #include <gtest/gtest.h>
 
+#include "../test-env.h"
+
 #include <string>
 #include <utility>
 
@@ -13,11 +15,19 @@
 // at the very end of the silo as a non-owning reference.
 
 TEST(issue_gh0078, buffer_string_view_assignment_is_not_noexcept) {
+  if (MDBX_GTEST_IS_EXECUTION_TIMEOUT()) {
+    GTEST_SKIP() << "SKIPPED by RUNTIME_LIMIT";
+    return;
+  }
   static_assert(!noexcept(std::declval<mdbx::buffer<> &>() = std::declval<const std::string_view &>()),
                 "buffer::operator=(string_view) allocates, so it must be allowed to throw on out-of-memory");
 }
 
 TEST(issue_gh0078, buffer_string_view_assignment_roundtrip) {
+  if (MDBX_GTEST_IS_EXECUTION_TIMEOUT()) {
+    GTEST_SKIP() << "SKIPPED by RUNTIME_LIMIT";
+    return;
+  }
   mdbx::buffer<> b;
   std::string_view payload("hello, world");
   b = payload;
@@ -27,6 +37,10 @@ TEST(issue_gh0078, buffer_string_view_assignment_roundtrip) {
 }
 
 TEST(issue_gh0078, owned_buffer_reserve_keeps_freestanding) {
+  if (MDBX_GTEST_IS_EXECUTION_TIMEOUT()) {
+    GTEST_SKIP() << "SKIPPED by RUNTIME_LIMIT";
+    return;
+  }
   /* an owned buffer whose payload is moved around the silo (reserve a
    * headroom) keeps owning its allocation: capacity(), headroom() and
    * content_modality() must stay consistent with is_freestanding() */
@@ -43,6 +57,10 @@ TEST(issue_gh0078, owned_buffer_reserve_keeps_freestanding) {
 }
 
 TEST(issue_gh0078, owned_buffer_data_at_silo_end_is_freestanding) {
+  if (MDBX_GTEST_IS_EXECUTION_TIMEOUT()) {
+    GTEST_SKIP() << "SKIPPED by RUNTIME_LIMIT";
+    return;
+  }
   /* the `<=` boundary itself: an allocated buffer filled exactly to capacity,
    * then emptied from the front, has data_offset == capacity */
   mdbx::buffer<> b;
@@ -59,6 +77,10 @@ TEST(issue_gh0078, owned_buffer_data_at_silo_end_is_freestanding) {
 }
 
 TEST(issue_gh0078, inplace_buffer_data_at_storage_end_stays_inplace) {
+  if (MDBX_GTEST_IS_EXECUTION_TIMEOUT()) {
+    GTEST_SKIP() << "SKIPPED by RUNTIME_LIMIT";
+    return;
+  }
   /* the same boundary for the inplace storage: an empty payload at its very end
    * is still inplace, so a move yields an owned buffer, not a reference into
    * the moved-from object */
