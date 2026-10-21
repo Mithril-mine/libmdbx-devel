@@ -412,12 +412,20 @@ public:
   //----------------------------------------------------------------------------
 
   /// \brief Renew/bind a cursor with a new transaction and previously used key-value map handle.
+  /// \throws mdbx::error on failure. After \ref unbind() or after
+  ///   \ref txn::unbind_all_cursors() this is how the cursor becomes usable again.
   inline void renew(::mdbx::txn &txn);
 
   /// \brief Bind/renew a cursor with a new transaction and specified key-value map handle.
+  /// \throws mdbx::error on failure (issue #146).
   inline void bind(::mdbx::txn &txn, ::mdbx::map_handle map_handle);
 
   /// \brief Unbind cursor from a transaction.
+  /// \details Detaches the cursor from its transaction without closing the
+  ///   underlying C object: the wrapper keeps the handle and the destructor
+  ///   still closes it. While unbound, any seek/move/read operation fails with
+  ///   \ref MDBX_BAD_CURSOR or \ref MDBX_EINVAL; call \ref renew() / \ref bind()
+  ///   to attach the cursor to a transaction again (issue #146).
   inline void unbind();
 
   /// \brief Returns the cursor's transaction.
