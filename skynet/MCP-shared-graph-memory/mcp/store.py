@@ -99,6 +99,11 @@ SCHEMA_VERSION = "2"
 PROBE_KINDS = ("usdt", "bookmark", "injected", "dev_assert", "collect", "watch")
 # status: жизненный цикл зонда по probe-bus.md §4 (реестр).
 PROBE_STATUSES = ("candidate", "inserted", "validated")
+# Статусы портирования C→C++ (поле cpp_status тела символа карты):
+# none — не начат; mapped — есть C++-каркас/декларация; partial — частично
+# переписан; done — эквивалент подтверждён (cpp_eq). map_port_status и
+# map_put_symbol оперируют этим набором (N6: валидация на входе).
+CPP_STATUSES = ("none", "mapped", "partial", "done")
 # Версия модуля (дублирует mcp.__version__; здесь — без import-циклов).
 MODULE_VERSION = "0.2.0"
 
@@ -1906,7 +1911,9 @@ class Store:
         пространством, пересечение диапазонов символов и записей было бы
         неоднозначностью. Отображения sym_ids/sym_id2key НЕ чистятся при
         replace — числовые ссылки (links) остаются стабильными между
-        регенерациями.
+        регенерациями. При `branch_purge` пары id↔key слоя УДАЛЯЮТСЯ
+        (иначе сироты); links curated-записей на символы purged-слоя
+        становятся висячими до `map_refresh_stale`.
         """
         with self._begin_write() as txn:
             sid_dbi = self.dbi(txn, "sym_ids")
@@ -2018,7 +2025,19 @@ class Store:
 
         Присваивает стабильный числовой id при первом появлении.
         Пустой layer — активная ветка.
+        `cpp_status` в body валидируется против CPP_STATUSES (N6): статус
+        портирования C→C++ читает map_port_status — мусорное значение
+        молча ушло бы в "none", поэтому лучше отклонить на входе.
         """
+        key = (key or "").strip()
+        if not key:
+            raise invalid("map_put_symbol: пустой ключ символа",
+                          "укажите fq-ключ fn:/type:/macro:")
+        st = (body or {}).get("cpp_status")
+        if st is not None and st not in CPP_STATUSES:
+            raise invalid(
+                "map_put_symbol: cpp_status %r не из допустимого набора" % st,
+                "допустимые: %s" % ", ".join(CPP_STATUSES))
         layer = self._effective_layer(layer)
         pre = self.layer_prefix(layer)
         skey = (pre + key)
@@ -2446,7 +2465,7 @@ class Store:
                     continue
                 st = body.get("cpp_status") or \
                     ("done" if body.get("cpp_eq") else "none")
-                if st not in ("none", "mapped", "partial", "done"):
+                if st not in CPP_STATUSES:
                     st = "none"
                 m = mods.setdefault(mod, {"total": 0, "none": 0, "mapped": 0,
                                           "partial": 0, "done": 0})
@@ -3545,6 +3564,172 @@ class Store:
                 n += 1
             return {"tests": n}
 
+    def coverage_migrate(self, from_layer: str, to_layer: str,
+                         symbols: list = None) -> dict:
+        """Копирует покрытие/блоки/трассы слоя в другой слой (merge ветки).
+
+        N5 (BRANCHES.md §Слияние): при слиянии feature-ветки её прогон
+        coverage переносится в целевой слой, чтобы белая карта покрытия
+        не начиналась с нуля. Источник НЕ изменяется (копия).
+
+        Переносятся: coverage (+covered_by через _coverage_put_locked),
+        coverage_blocks и call_traces(+rev). `symbols` — необязательный
+        фильтр; АСИММЕТРИЧЕН: coverage.symbols фильтруются по membership
+        (тест, потерявший все символы под фильтром, НЕ переносится —
+        целевая запись остаётся нетронутой), coverage_blocks — по symbol
+        записи, call_traces — по CALLER (тело копируется целиком, callee
+        вне фильтра остаётся в теле как часть наблюдения источника).
+        Конфликт test_id/caller в целевом слое — ПЕРЕЗАПИСЬ
+        (merge-семантика: свежие данные источника побеждают;
+        _coverage_put_locked сам чистит устаревшие членства covered_by,
+        висячие call_traces_rev удалённых callee — тоже, P2).
+        Битые/несогласованные записи источника пропускаются с отчётом в
+        "skipped" (миграция не падает и не порождает мусорных ключей).
+        Одна read-txn сбора + одна write-txn записи.
+        """
+        from_layer = (from_layer or "").strip().strip("/")
+        to_layer = (to_layer or "").strip().strip("/")
+        pre_from = self.layer_prefix(from_layer)
+        pre_to = self.layer_prefix(to_layer)
+        if pre_from == pre_to:
+            # совпадение имён ИЛИ разные имена с одним префиксом
+            # ("0.15" и "0.15.base" оба → ""): миграция бессмысленна
+            raise invalid(
+                "coverage_migrate: слои %r и %r резолвятся в один префикс"
+                % (from_layer, to_layer),
+                "укажите разные слои (feature vs base)")
+        want = set(symbols) if symbols else None
+        cov_tests = {}   # test_id -> {symbols, pct}
+        blk_tests = {}   # test_id -> [blocks]
+        traces = {}      # caller -> body dict
+        skipped = []     # битые/несогласованные записи (не мигрируются)
+        with self.env.begin(readonly=True) as txn:
+            cov_dbi = self._opt_dbi(txn, "coverage")
+            if cov_dbi is not None:
+                scan_pre = ("coverage:" + pre_from).encode()
+                with txn.cursor(cov_dbi) as cur:
+                    rc, k, v = cur.get(mdbx.CURSOR_SET_RANGE, scan_pre)
+                    while rc == mdbx.RC_SUCCESS:
+                        if not k.startswith(scan_pre):
+                            break
+                        test_id = k.decode()[len("coverage:") + len(pre_from):]
+                        # битая запись источника не должна ронять миграцию —
+                        # пропуск с отчётом (как probe_batch, C-8)
+                        try:
+                            body = json.loads(v.decode())
+                            syms = body.get("symbols", []) or []
+                            if want is not None:
+                                syms = [s for s in syms if s in want]
+                            if want is None or syms:
+                                cov_tests[test_id] = {
+                                    "symbols": syms,
+                                    "pct": float(body.get("pct", 0.0))}
+                        except (ValueError, TypeError, AttributeError):
+                            skipped.append({"reason": "corrupt-coverage",
+                                            "test": test_id})
+                        rc, k, v = cur.get(mdbx.CURSOR_NEXT)
+            cbk_dbi = self._opt_dbi(txn, "coverage_blocks")
+            if cbk_dbi is not None:
+                scan_pre = ("coverage_blocks:" + pre_from).encode()
+                with txn.cursor(cbk_dbi) as cur:
+                    rc, k, v = cur.get(mdbx.CURSOR_SET_RANGE, scan_pre)
+                    while rc == mdbx.RC_SUCCESS:
+                        if not k.startswith(scan_pre):
+                            break
+                        # "coverage_blocks:{pre}{test}:{sym}" — ОБА сегмента
+                        # могут содержать ":" (test_id свободен, sym = fn:…),
+                        # разбор неоднозначен. sym берём из тела (записан в
+                        # каждом блоке, _blocks_by_sym), test_id — хвост
+                        # ключа без известного суффикса ":"+sym. Для legacy-
+                        # записей без symbol в теле — rsplit-fallback; при
+                        # НЕсовпадении sym из тела с суффиксом ключа запись
+                        # считается несогласованной и пропускается с
+                        # отчётом (никакой склейки мусорных ключей).
+                        tail = k.decode()[len("coverage_blocks:")
+                                          + len(pre_from):]
+                        try:
+                            blocks = json.loads(v.decode())
+                            # тело — список dict-блоков; мусор (не-list или
+                            # не-dict элементы) ловим и пропускаем
+                            if not isinstance(blocks, list) or \
+                                    any(not isinstance(b, dict)
+                                        for b in blocks):
+                                raise ValueError("non-dict blocks")
+                            sym = (blocks[0].get("symbol", "")
+                                   if blocks else "")
+                        except (ValueError, TypeError, AttributeError):
+                            skipped.append({"reason": "corrupt-blocks",
+                                            "key": tail})
+                            rc, k, v = cur.get(mdbx.CURSOR_NEXT)
+                            continue
+                        if sym and tail.endswith(":" + sym):
+                            test_id = tail[:-(len(sym) + 1)]
+                        elif not sym:
+                            test_id, sym = tail.rsplit(":", 1)
+                        else:
+                            # sym в теле ≠ sym в ключе — повреждённая запись:
+                            # разбор неоднозначен, мигрировать небезопасно
+                            skipped.append({"reason": "sym-mismatch",
+                                            "key": tail})
+                            rc, k, v = cur.get(mdbx.CURSOR_NEXT)
+                            continue
+                        if want is not None and sym not in want:
+                            rc, k, v = cur.get(mdbx.CURSOR_NEXT)
+                            continue
+                        blk_tests.setdefault(test_id, []).extend(blocks)
+                        rc, k, v = cur.get(mdbx.CURSOR_NEXT)
+            ct_dbi = self._opt_dbi(txn, "call_traces")
+            if ct_dbi is not None:
+                scan_pre = pre_from.encode()
+                with txn.cursor(ct_dbi) as cur:
+                    rc, k, v = cur.get(mdbx.CURSOR_SET_RANGE, scan_pre)
+                    while rc == mdbx.RC_SUCCESS:
+                        if not k.startswith(scan_pre):
+                            break
+                        caller = k.decode()[len(pre_from):]
+                        if want is None or caller in want:
+                            try:
+                                traces[caller] = json.loads(v.decode())
+                            except ValueError:
+                                skipped.append({"reason": "corrupt-trace",
+                                                "caller": caller})
+                        rc, k, v = cur.get(mdbx.CURSOR_NEXT)
+        n_blocks = sum(len(bl) for bl in blk_tests.values())
+        with self._begin_write() as txn:
+            for test_id, info in cov_tests.items():
+                self._coverage_put_locked(txn, pre_to, test_id,
+                                          info["symbols"], info["pct"])
+            for test_id, blocks in blk_tests.items():
+                self._coverage_blocks_put_locked(txn, pre_to, test_id,
+                                                 blocks)
+            ct_dbi = self.dbi(txn, "call_traces")
+            ctr_dbi = self.dbi(txn, "call_traces_rev")
+            for caller, body in traces.items():
+                ckey = (pre_to + caller).encode()
+                # перезапись caller: обратные рёбра на callee, исчезнувшие
+                # из нового тела, должны быть удалены — иначе rev-индекс
+                # расходится с прямым (висячие callee→caller пары).
+                rc, old_val = txn.get(ct_dbi, ckey)
+                if old_val:
+                    try:
+                        stale = set(json.loads(old_val.decode()).keys()) \
+                            - set(body.keys())
+                    except ValueError:
+                        stale = set()
+                    for sc in stale:
+                        txn.delete(ctr_dbi, (pre_to + sc).encode(), ckey)
+                txn.put(ct_dbi, ckey,
+                        json.dumps(body, ensure_ascii=False).encode())
+                with txn.cursor(ctr_dbi) as cur:
+                    for callee in body.keys():
+                        cur.put_nodupe((pre_to + callee).encode(), ckey)
+        result = {"from": from_layer, "to": to_layer,
+                  "tests": len(cov_tests), "blocks": n_blocks,
+                  "traces": len(traces)}
+        if skipped:
+            result["skipped"] = skipped
+        return result
+
     def coverage_symbols(self, symbol_prefix: str, limit: int = 20,
                          layer: str = "") -> list:
         """Тесты, покрывающие символы с префиксом (covered_by, в слое)."""
@@ -4166,6 +4351,97 @@ class Store:
                 return {"result": "notfound"}
             txn.delete(dbi, key)
             return {"result": "removed", "layer": layer}
+
+    def branch_purge(self, layer: str) -> dict:
+        """Удаляет слой ветки С ДАННЫМИ во всех перегенерируемых таблицах.
+
+        Жизненный цикл слоя (N5): после rebase/переписывания истории старый
+        slug {ver}.{feat}.{n} мёртв — branch_remove оставляет его данные
+        мусором навсегда (таблицы растут монотонно). Purge чистит все ключи
+        `{layer}/...` в symbols/call_edges(_rev)/groups/call_traces(_rev)/
+        coverage/covered_by/coverage_blocks/probes, пары id↔key слоя в
+        sym_ids/sym_id2key + строку реестра branches.
+
+        Базовый слой (pre=="") purge ЗАПРЕЩЁН: он — корень карты/покрытия;
+        его обновление = replace-загрузка (map_load_batch/coverage_batch),
+        не удаление. АКТИВНЫЙ слой (branch_current) purge тоже ЗАПРЕЩЁН:
+        иначе meta.branch_current укажет на мёртвый слой и все чтения с
+        layer="" будут молча пусты — сначала переключите ветку.
+        Возвращает счётчики удалённых ключей по таблицам.
+        """
+        layer = layer.strip().strip("/")
+        pre = self.layer_prefix(layer)
+        if not pre:
+            raise invalid(
+                "branch_purge: базовый слой %r удалять нельзя" % layer,
+                "purge предназначен для feature-слоёв; базовый слой "
+                "обновляется replace-загрузкой карты")
+        if self.layer_prefix(self.branch_current().get("layer", "")) == pre:
+            raise invalid(
+                "branch_purge: слой %r является активным" % layer,
+                "сначала переключите активный слой "
+                "(branch_activate на другой или базовый)")
+        # схема префиксов ключей по таблицам (см. комментарии _TABLES):
+        # map-family — "{pre}", coverage-family/probes — "family:{pre}"
+        prefixes = {
+            "symbols": pre, "call_edges": pre, "call_edges_rev": pre,
+            "groups": pre, "call_traces": pre, "call_traces_rev": pre,
+            "coverage": "coverage:" + pre,
+            "covered_by": "covered_by:" + pre,
+            "coverage_blocks": "coverage_blocks:" + pre,
+            "probes": "probe:" + pre,
+        }
+        removed = {}
+        had_reg = False
+        with self._begin_write() as txn:
+            for table, scan_pre in prefixes.items():
+                dbi = self._opt_dbi(txn, table)
+                if dbi is None:
+                    continue  # старая БД без таблицы
+                n = 0
+                with txn.cursor(dbi) as cur:
+                    rc, k, _ = cur.get(mdbx.CURSOR_SET_RANGE,
+                                       scan_pre.encode())
+                    while rc == mdbx.RC_SUCCESS:
+                        if not k.startswith(scan_pre.encode()):
+                            break
+                        cur.delete()  # MDBX_CURRENT: текущая k/v-пара
+                        n += 1        # (DUPSORT: по дупу за проход)
+                        rc, k, _ = cur.get(mdbx.CURSOR_NEXT)
+                if n:
+                    removed[table] = n
+            # sym_ids/sym_id2key: числовые id символов слоя (ключи "{pre}…").
+            # Таблицы глобальные, но skey несёт префикс слоя — удаляем пары
+            # id↔key слоя, иначе после purge остаются сироты (P3: монотонный
+            # рост таблиц при циклах rebase→purge — та самая деградация,
+            # которую purge призван лечить).
+            sid_dbi = self._opt_dbi(txn, "sym_ids")
+            id2key_dbi = self._opt_dbi(txn, "sym_id2key")
+            if sid_dbi is not None:
+                n = 0
+                with txn.cursor(sid_dbi) as cur:
+                    rc, k, v = cur.get(mdbx.CURSOR_SET_RANGE, pre.encode())
+                    while rc == mdbx.RC_SUCCESS:
+                        if not k.startswith(pre.encode()):
+                            break
+                        if id2key_dbi is not None and v is not None \
+                                and len(v) == ID_LEN:
+                            txn.delete(id2key_dbi, v)
+                        cur.delete()
+                        n += 1
+                        rc, k, v = cur.get(mdbx.CURSOR_NEXT)
+                if n:
+                    removed["sym_ids"] = n
+            # строка реестра (если есть)
+            br_dbi = self._opt_dbi(txn, "branches")
+            if br_dbi is not None:
+                rc, val = txn.get(br_dbi, ("branch:" + layer).encode())
+                had_reg = val is not None
+                if had_reg:
+                    txn.delete(br_dbi, ("branch:" + layer).encode())
+        if not removed and not had_reg:
+            return {"result": "notfound", "layer": layer}
+        return {"result": "purged", "layer": layer, "removed": removed}
 
     def close(self) -> None:
         if self._closed:

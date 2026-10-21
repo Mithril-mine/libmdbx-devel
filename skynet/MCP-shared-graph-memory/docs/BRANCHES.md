@@ -76,12 +76,18 @@
 
 ## Инструменты
 
-- MCP: `branch_register`, `branch_list`, `branch_current`, `branch_activate`,
-  `branch_remove`, `map_diff_branches(from,to)`.
+- MCP: `branch_register`, `branch_list`, `branch_current`, `branch_activate`
+  (`expected_prev` — CAS от гонки в рое), `branch_remove` (реестр),
+  `branch_purge` (слой С данными; базовый и АКТИВНЫЙ слой запрещены —
+  сначала переключите ветку),
+  `map_diff_branches(from,to)`, `coverage_migrate(from,to,symbols?)`.
+- MCP (запись карты, C2): `map_put_symbol` (валидирует `cpp_status`),
+  `map_alias`, `map_refresh_stale`.
 - `layer=` принимают: `map_symbol(s)`, `map_edges_of`, `map_callers_of`,
-  `map_put_edge`, `coverage_insert/batch/remove/get/all`, `coverage_symbols`,
-  `coverage_summary`, `coverage_gaps`, `coverage_blocks_insert/get`,
-  `probe_*`, `trace_*` (project — пока нет, см. «НЕ слоистые»).
+  `map_put_edge`, `map_put_symbol`, `coverage_insert/batch/remove/get/all`,
+  `coverage_symbols`, `coverage_summary`, `coverage_gaps`,
+  `coverage_blocks_insert/batch/get`, `probe_*`, `trace_*` (project — пока
+  нет, см. «НЕ слоистые»).
 - `load_map.py --layer <layer>` — загрузка карты в слой (базовый — без
   префикса).
 
@@ -102,8 +108,19 @@ python3 tools/load_map.py --map .../refactoring-map-${BRANCH}.json \
 1. `map_diff_branches(base, feature)` — структурный diff содержимого:
    какие символы добавлены/изменены/удалены, по модулям, число блоков.
 2. Пересканировать base (включить новые символы feature в base-слой).
-3. Перенести `coverage/probes/traces` новых символов в base-слой.
-4. Feature-слой → `status=merged` (архивировать, НЕ удалять — история).
+3. Перенести `coverage/blocks/traces` в base-слой:
+   `coverage_migrate(feature, base)` — копия (источник цел); при
+   конфликте test_id/caller целевой слой перезаписывается свежими данными
+   (merge-семантика; для coverage — набор сужается фильтром, для traces —
+   caller копируется целиком телом источника). Фильтр `symbols=[...]` —
+   только новые символы. Битые/несогласованные записи источника не
+   роняют миграцию — уходят в отчёт `skipped`.
+4. Feature-слой → `status=merged` (`branch_register(..., status="merged")`).
+   Данные мёртвого слоя после rebase/слияния — `branch_purge(feature)`
+   (базовый слой purge запрещён: он обновляется replace-загрузкой;
+   активный слой тоже — сначала `branch_activate` на другой). После purge
+   links curated-записей на его символы становятся висячими — прогоните
+   `map_refresh_stale`.
 
 ### Работа агента
 
