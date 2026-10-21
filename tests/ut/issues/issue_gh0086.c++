@@ -1,6 +1,8 @@
 #include "mdbx.h++"
 #include <gtest/gtest.h>
 
+#include "../test-env.h"
+
 #include <cstddef>
 #include <cstdint>
 #include <cstdio>
@@ -78,6 +80,10 @@ static bool at(MDBX_cursor *mc, const char *key_str, const char *data_str) {
 }
 
 TEST(issue_gh0086, same_key_duplicates_distance_is_positive) {
+  if (MDBX_GTEST_IS_EXECUTION_TIMEOUT()) {
+    GTEST_SKIP() << "SKIPPED by RUNTIME_LIMIT";
+    return;
+  }
   const char *const testdb = "issue86.mdbx";
   remove_db(testdb);
   MDBX_dbi dbi = 0;

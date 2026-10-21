@@ -22,6 +22,8 @@
 #include "mdbx.h++"
 #include <gtest/gtest.h>
 
+#include "../test-env.h"
+
 #include <filesystem>
 #include <thread>
 
@@ -37,6 +39,10 @@ uintmax_t file_size_of(const char *name) {
 } // namespace
 
 TEST(ut_copy_ops, env_copy_plain_and_compact) {
+  if (MDBX_GTEST_IS_EXECUTION_TIMEOUT()) {
+    GTEST_SKIP() << "SKIPPED by RUNTIME_LIMIT";
+    return;
+  }
   mdbx::env::remove(mdbx::path(kSource));
   mdbx::env::remove(mdbx::path(kPlainCopy));
   mdbx::env::remove(mdbx::path(kCompactCopy));
@@ -77,6 +83,10 @@ TEST(ut_copy_ops, env_copy_plain_and_compact) {
 }
 
 TEST(ut_copy_ops, txn_copy_snapshot) {
+  if (MDBX_GTEST_IS_EXECUTION_TIMEOUT()) {
+    GTEST_SKIP() << "SKIPPED by RUNTIME_LIMIT";
+    return;
+  }
   mdbx::env::remove(mdbx::path(kSource));
   mdbx::env::remove(mdbx::path(kPlainCopy));
 

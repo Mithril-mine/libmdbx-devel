@@ -1,6 +1,8 @@
 #include "mdbx.h"
 #include <gtest/gtest.h>
 
+#include "../test-env.h"
+
 #include <cstdint>
 #include <cstring>
 
@@ -15,6 +17,10 @@
 // finished the transaction, hiding the problem from the caller.
 
 TEST(issue_gh0104, park_broken_read_then_abort_is_safe) {
+  if (MDBX_GTEST_IS_EXECUTION_TIMEOUT()) {
+    GTEST_SKIP() << "SKIPPED by RUNTIME_LIMIT";
+    return;
+  }
   const char *const testdb = "issue104.mdbx";
   remove(testdb);
 
@@ -40,6 +46,10 @@ TEST(issue_gh0104, park_broken_read_then_abort_is_safe) {
 }
 
 TEST(issue_gh0104, unpark_broken_read_reports_bad_txn) {
+  if (MDBX_GTEST_IS_EXECUTION_TIMEOUT()) {
+    GTEST_SKIP() << "SKIPPED by RUNTIME_LIMIT";
+    return;
+  }
   const char *const testdb = "issue104b.mdbx";
   remove(testdb);
 

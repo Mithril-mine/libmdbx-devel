@@ -22,6 +22,8 @@
 #include "mdbx.h++"
 #include <gtest/gtest.h>
 
+#include "../test-env.h"
+
 namespace {
 mdbx::env_managed make_env(const char *name) {
   const mdbx::path testdb = name;
@@ -31,6 +33,10 @@ mdbx::env_managed make_env(const char *name) {
 } // namespace
 
 TEST(ut_get_ex, values_count_for_dupsort) {
+  if (MDBX_GTEST_IS_EXECUTION_TIMEOUT()) {
+    GTEST_SKIP() << "SKIPPED by RUNTIME_LIMIT";
+    return;
+  }
   auto env = make_env("test-get-ex");
   auto txn = env.start_write();
   auto multi = txn.create_map("multi", mdbx::key_mode::usual, mdbx::value_mode::multi);
@@ -59,6 +65,10 @@ TEST(ut_get_ex, values_count_for_dupsort) {
 }
 
 TEST(ut_get_ex, values_count_for_single_value_table) {
+  if (MDBX_GTEST_IS_EXECUTION_TIMEOUT()) {
+    GTEST_SKIP() << "SKIPPED by RUNTIME_LIMIT";
+    return;
+  }
   auto env = make_env("test-get-ex");
   auto txn = env.start_write();
   auto table = txn.create_map("table");

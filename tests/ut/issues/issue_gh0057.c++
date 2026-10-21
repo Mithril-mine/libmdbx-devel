@@ -1,6 +1,8 @@
 #include "mdbx.h++"
 #include <gtest/gtest.h>
 
+#include "../test-env.h"
+
 #include <cstdint>
 #include <cstdio>
 #include <cstring>
@@ -27,6 +29,10 @@ static void write_u16_le(uint8_t *p, uint16_t v) {
 }
 
 TEST(issue_gh0057, node_offset_below_upper_rejected) {
+  if (MDBX_GTEST_IS_EXECUTION_TIMEOUT()) {
+    GTEST_SKIP() << "SKIPPED by RUNTIME_LIMIT";
+    return;
+  }
   const std::string testdb = "issue57.mdbx";
   try {
     mdbx::env::remove(testdb);

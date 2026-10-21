@@ -22,6 +22,8 @@
 #include "mdbx.h++"
 #include <gtest/gtest.h>
 
+#include "../test-env.h"
+
 #if defined(_WIN32) || defined(_WIN64)
 #include <windows.h>
 #else
@@ -36,6 +38,10 @@ static std::string to_std_string(const mdbx::slice &s) {
 }
 
 TEST(ut_transforms, key_value_transforms) {
+  if (MDBX_GTEST_IS_EXECUTION_TIMEOUT()) {
+    GTEST_SKIP() << "SKIPPED by RUNTIME_LIMIT";
+    return;
+  }
   // int32: numerical order is preserved, roundtrip decodes correctly
   const uint32_t k1 = mdbx::key_from_int32(1);
   const uint32_t k10 = mdbx::key_from_int32(10);
@@ -67,6 +73,10 @@ TEST(ut_transforms, key_value_transforms) {
 }
 
 TEST(ut_transforms, numeric_slice_adapters) {
+  if (MDBX_GTEST_IS_EXECUTION_TIMEOUT()) {
+    GTEST_SKIP() << "SKIPPED by RUNTIME_LIMIT";
+    return;
+  }
   const uint64_t u64 = 0x0102030405060708ull;
   EXPECT_EQ(mdbx::slice::wrap(u64).as_uint64_adapt(), u64);
 
@@ -91,6 +101,10 @@ TEST(ut_transforms, numeric_slice_adapters) {
 }
 
 TEST(ut_transforms, dump_val) {
+  if (MDBX_GTEST_IS_EXECUTION_TIMEOUT()) {
+    GTEST_SKIP() << "SKIPPED by RUNTIME_LIMIT";
+    return;
+  }
   EXPECT_EQ(mdbx::dump_val(mdbx::slice("hello")), "hello");
   EXPECT_EQ(mdbx::dump_val(mdbx::slice()), "<empty>");
 
@@ -102,6 +116,10 @@ TEST(ut_transforms, dump_val) {
 }
 
 TEST(ut_transforms, txn_copy) {
+  if (MDBX_GTEST_IS_EXECUTION_TIMEOUT()) {
+    GTEST_SKIP() << "SKIPPED by RUNTIME_LIMIT";
+    return;
+  }
   const mdbx::path testdb = "test-transforms";
   const mdbx::path copydb = "test-transforms-copy";
   mdbx::env::remove(testdb);
@@ -132,6 +150,10 @@ TEST(ut_transforms, txn_copy) {
 }
 
 TEST(ut_transforms, txn_copy_fd) {
+  if (MDBX_GTEST_IS_EXECUTION_TIMEOUT()) {
+    GTEST_SKIP() << "SKIPPED by RUNTIME_LIMIT";
+    return;
+  }
   const mdbx::path testdb = "test-transforms";
   const mdbx::path copydb = "test-transforms-copy-fd";
   mdbx::env::remove(testdb);
@@ -169,6 +191,10 @@ TEST(ut_transforms, txn_copy_fd) {
 }
 
 TEST(ut_transforms, cursor_count_ex) {
+  if (MDBX_GTEST_IS_EXECUTION_TIMEOUT()) {
+    GTEST_SKIP() << "SKIPPED by RUNTIME_LIMIT";
+    return;
+  }
   const mdbx::path testdb = "test-transforms";
   mdbx::env::remove(testdb);
   mdbx::env_managed env(testdb, mdbx::create_parameters(), mdbx::operate_parameters().set_max_maps(8));

@@ -1,6 +1,8 @@
 #include "mdbx.h++"
 #include <gtest/gtest.h>
 
+#include "../test-env.h"
+
 #include <cstddef>
 #include <cstdint>
 #include <cstdio>
@@ -28,6 +30,10 @@ static void remove_db(const char *path) {
 }
 
 TEST(issue_gh0073, multiple_with_zero_element_size_is_rejected) {
+  if (MDBX_GTEST_IS_EXECUTION_TIMEOUT()) {
+    GTEST_SKIP() << "SKIPPED by RUNTIME_LIMIT";
+    return;
+  }
   const char *const testdb = "issue73.mdbx";
   remove_db(testdb);
 

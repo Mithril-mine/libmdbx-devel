@@ -2,6 +2,8 @@
 #include "tool_runner.h"
 #include <gtest/gtest.h>
 
+#include "../test-env.h"
+
 #include <cstddef>
 #include <cstdint>
 #include <cstdio>
@@ -126,6 +128,10 @@ static bool patch_first_gc_record(std::vector<uint8_t> &buf, size_t pagesize, ui
 }
 
 TEST(issue_gh0076, chk_survives_over_limit_gc_count) {
+  if (MDBX_GTEST_IS_EXECUTION_TIMEOUT()) {
+    GTEST_SKIP() << "SKIPPED by RUNTIME_LIMIT";
+    return;
+  }
   const std::string testdb = "issue76.mdbx";
   ASSERT_TRUE(create_gc_db(testdb));
 

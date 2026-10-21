@@ -22,6 +22,9 @@
 #include "mdbx.h++"
 #include <cstring>
 #include <gtest/gtest.h>
+
+#include "../test-env.h"
+
 #include <iostream>
 
 static const char *const testkey = "testkey";
@@ -146,6 +149,10 @@ int doit() {
 }
 
 TEST(ut_early_close_dbi, all) {
+  if (MDBX_GTEST_IS_EXECUTION_TIMEOUT()) {
+    GTEST_SKIP() << "SKIPPED by RUNTIME_LIMIT";
+    return;
+  }
   try {
     ASSERT_EQ(EXIT_SUCCESS, doit());
   } catch (const std::exception &ex) {

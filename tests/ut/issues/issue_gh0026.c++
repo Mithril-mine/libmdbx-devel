@@ -1,9 +1,16 @@
 #include "mdbx.h++"
 #include <cstdio>
 #include <gtest/gtest.h>
+
+#include "../test-env.h"
+
 #include <string>
 
 TEST(issue_gh0026, all) {
+  if (MDBX_GTEST_IS_EXECUTION_TIMEOUT()) {
+    GTEST_SKIP() << "SKIPPED by RUNTIME_LIMIT";
+    return;
+  }
   std::u16string s(u"abcd1234"); // 8 chars = 16 bytes
   bool ok = true;
 

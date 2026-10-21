@@ -1,6 +1,8 @@
 #include "mdbx.h++"
 #include <gtest/gtest.h>
 
+#include "../test-env.h"
+
 #include <cstdint>
 #include <cstdio>
 #include <cstring>
@@ -17,6 +19,10 @@
 // checkpoint() already does.
 
 TEST(issue_gh0092, commit_abort_with_live_child_is_rejected) {
+  if (MDBX_GTEST_IS_EXECUTION_TIMEOUT()) {
+    GTEST_SKIP() << "SKIPPED by RUNTIME_LIMIT";
+    return;
+  }
   const std::string testdb = "issue92.mdbx";
   try {
     mdbx::env::remove(testdb);

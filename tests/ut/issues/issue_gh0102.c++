@@ -1,6 +1,8 @@
 #include "mdbx.h++"
 #include <gtest/gtest.h>
 
+#include "../test-env.h"
+
 #include <cstdint>
 #include <cstring>
 
@@ -17,6 +19,10 @@
 // MDBX_LAGGARD_READER instead of reporting it in the result.
 
 TEST(issue_gh0102, thread_register_returns_false_when_already_registered) {
+  if (MDBX_GTEST_IS_EXECUTION_TIMEOUT()) {
+    GTEST_SKIP() << "SKIPPED by RUNTIME_LIMIT";
+    return;
+  }
   const std::string testdb = "issue102.mdbx";
   try {
     mdbx::env::remove(testdb);
@@ -35,6 +41,10 @@ TEST(issue_gh0102, thread_register_returns_false_when_already_registered) {
 }
 
 TEST(issue_gh0102, non_error_results_do_not_throw) {
+  if (MDBX_GTEST_IS_EXECUTION_TIMEOUT()) {
+    GTEST_SKIP() << "SKIPPED by RUNTIME_LIMIT";
+    return;
+  }
   const std::string testdb = "issue102b.mdbx";
   try {
     mdbx::env::remove(testdb);

@@ -22,6 +22,8 @@
 #include "mdbx.h++"
 #include <gtest/gtest.h>
 
+#include "../test-env.h"
+
 #include <filesystem>
 
 namespace {
@@ -38,6 +40,10 @@ uintmax_t file_size_of(const mdbx::path &p) {
 } // namespace
 
 TEST(ut_fluent_params, geometry_fluent_matches_c_api) {
+  if (MDBX_GTEST_IS_EXECUTION_TIMEOUT()) {
+    GTEST_SKIP() << "SKIPPED by RUNTIME_LIMIT";
+    return;
+  }
   mdbx::env::remove(path_of(kPathA));
   mdbx::env::remove(path_of(kPathB));
 
@@ -67,6 +73,10 @@ TEST(ut_fluent_params, geometry_fluent_matches_c_api) {
 }
 
 TEST(ut_fluent_params, runtime_options_roundtrip) {
+  if (MDBX_GTEST_IS_EXECUTION_TIMEOUT()) {
+    GTEST_SKIP() << "SKIPPED by RUNTIME_LIMIT";
+    return;
+  }
   mdbx::env::remove(path_of("test-fluent-opt"));
   mdbx::env_managed env(path_of("test-fluent-opt"), mdbx::create_parameters(), mdbx::operate_parameters());
 

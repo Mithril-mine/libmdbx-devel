@@ -1,6 +1,8 @@
 #include "mdbx.h++"
 #include <gtest/gtest.h>
 
+#include "../test-env.h"
+
 #include <cstdint>
 #include <cstdio>
 #include <cstring>
@@ -19,6 +21,10 @@
 // aborts the broken transaction.
 
 TEST(issue_gh0089, checkpoint_badtxn_keeps_handle) {
+  if (MDBX_GTEST_IS_EXECUTION_TIMEOUT()) {
+    GTEST_SKIP() << "SKIPPED by RUNTIME_LIMIT";
+    return;
+  }
   const std::string testdb = "issue89.mdbx";
   try {
     mdbx::env::remove(testdb);

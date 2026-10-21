@@ -1,6 +1,8 @@
 #include "mdbx.h++"
 #include <gtest/gtest.h>
 
+#include "../test-env.h"
+
 #include <cstdio>
 #include <string>
 
@@ -23,6 +25,10 @@ static void put_key(MDBX_txn *txn, MDBX_dbi dbi, const std::string &key) {
 }
 
 TEST(issue_gh0108, stat_ex_summary_not_shrinking_after_table_use) {
+  if (MDBX_GTEST_IS_EXECUTION_TIMEOUT()) {
+    GTEST_SKIP() << "SKIPPED by RUNTIME_LIMIT";
+    return;
+  }
   const std::string testdb = "issue108.mdbx";
   try {
     mdbx::env::remove(testdb);

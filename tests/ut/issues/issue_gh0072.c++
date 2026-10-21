@@ -2,6 +2,8 @@
 #include "tool_runner.h"
 #include <gtest/gtest.h>
 
+#include "../test-env.h"
+
 #include <cstddef>
 #include <cstdint>
 #include <cstdio>
@@ -60,6 +62,10 @@ static int run_tool(const std::vector<std::string> &args, const char *stdout_fil
 }
 
 TEST(issue_gh0072, dump_refuses_control_char_table_name) {
+  if (MDBX_GTEST_IS_EXECUTION_TIMEOUT()) {
+    GTEST_SKIP() << "SKIPPED by RUNTIME_LIMIT";
+    return;
+  }
   const char *const dbname = "issue72.mdbx";
   remove_env(dbname);
   create_hostile_db(dbname);
@@ -70,6 +76,10 @@ TEST(issue_gh0072, dump_refuses_control_char_table_name) {
 }
 
 TEST(issue_gh0072, dump_list_sanitizes_control_chars) {
+  if (MDBX_GTEST_IS_EXECUTION_TIMEOUT()) {
+    GTEST_SKIP() << "SKIPPED by RUNTIME_LIMIT";
+    return;
+  }
   const char *const dbname = "issue72-list.mdbx";
   const char *const outname = "issue72-list.txt";
   remove_env(dbname);
@@ -89,6 +99,10 @@ TEST(issue_gh0072, dump_list_sanitizes_control_chars) {
 }
 
 TEST(issue_gh0072, stat_sanitizes_control_chars) {
+  if (MDBX_GTEST_IS_EXECUTION_TIMEOUT()) {
+    GTEST_SKIP() << "SKIPPED by RUNTIME_LIMIT";
+    return;
+  }
   const char *const dbname = "issue72-stat.mdbx";
   const char *const outname = "issue72-stat.txt";
   remove_env(dbname);
@@ -108,6 +122,10 @@ TEST(issue_gh0072, stat_sanitizes_control_chars) {
 }
 
 TEST(issue_gh0072, load_rejects_control_char_name) {
+  if (MDBX_GTEST_IS_EXECUTION_TIMEOUT()) {
+    GTEST_SKIP() << "SKIPPED by RUNTIME_LIMIT";
+    return;
+  }
   const char *const dumpname = "issue72.dump";
   const char *const loadname = "issue72.load";
   remove_env(loadname);

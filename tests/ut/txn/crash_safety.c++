@@ -29,6 +29,9 @@
 
 #include "mdbx.h++"
 #include <gtest/gtest.h>
+
+#include "../test-env.h"
+
 #include MDBX_CONFIG_H
 
 #include <cerrno>
@@ -213,6 +216,10 @@ static void run_mdbx_chk_best_effort(const std::string &path) {
 }
 
 TEST(ut_crash_safety, kill_mid_txn_recovers) {
+  if (MDBX_GTEST_IS_EXECUTION_TIMEOUT()) {
+    GTEST_SKIP() << "SKIPPED by RUNTIME_LIMIT";
+    return;
+  }
   const std::string path = "test-crash-safety-" + std::to_string(current_pid());
   mdbx::env::remove(path);
 
@@ -280,6 +287,10 @@ static const char *getenv_cstr(const char *name) {
 }
 
 TEST(ut_crash_safety, DISABLED_crashed_child) {
+  if (MDBX_GTEST_IS_EXECUTION_TIMEOUT()) {
+    GTEST_SKIP() << "SKIPPED by RUNTIME_LIMIT";
+    return;
+  }
   const char *path = getenv_cstr("MDBX_CRASH_CHILD_ENV");
   if (!path) {
     GTEST_SKIP() << "not spawned as crash child";

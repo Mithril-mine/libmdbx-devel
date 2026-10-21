@@ -2,6 +2,9 @@
  * lck-less environment registered in the same process. */
 #include "mdbx.h"
 #include <gtest/gtest.h>
+
+#include "../test-env.h"
+
 #include <pthread.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -28,6 +31,10 @@ static void *reader_thread(void *arg) {
 }
 
 TEST(issue_gh0016, all) {
+  if (MDBX_GTEST_IS_EXECUTION_TIMEOUT()) {
+    GTEST_SKIP() << "SKIPPED by RUNTIME_LIMIT";
+    return;
+  }
   const char *dir = "issue_gh16";
   char rodb[512], normdb[512], buf[600];
   snprintf(rodb, sizeof(rodb), "%s/ro.db", dir);
