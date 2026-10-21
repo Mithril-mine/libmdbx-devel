@@ -3548,11 +3548,15 @@ LIBMDBX_API int mdbx_env_get_fd(const MDBX_env *env, mdbx_filehandle_t *fd);
  *
  * If the mapsize is increased by another process, MDBX silently and
  * transparently adopt these changes at next transaction start. However,
- * \ref mdbx_txn_begin() will return \ref MDBX_UNABLE_EXTEND_MAPSIZE if new
- * mapping size could not be applied for current process (for instance if
- * address space is busy).  Therefore, in the case of
- * \ref MDBX_UNABLE_EXTEND_MAPSIZE error you need close and reopen the
- * environment to resolve error.
+ * \ref mdbx_txn_begin() and \ref mdbx_env_set_geometry() will return
+ * \ref MDBX_UNABLE_EXTEND_MAPSIZE if the new mapping size could not be applied
+ * for the current process, in particular:
+ *  - the address space for the larger mapping is busy;
+ *  - on Windows, a read transaction of this process currently holds the
+ *    remap-lock shared, so the mapping cannot be re-created right now. In this
+ *    case the operation should simply be retried once the read transactions
+ *    are closed, otherwise the environment must be closed and reopened to
+ *    resolve the error.
  *
  * \note Actual values may be different than your have specified because of
  * rounding to specified database page size, the system page size and/or the
@@ -3626,6 +3630,14 @@ LIBMDBX_API int mdbx_env_get_fd(const MDBX_env *env, mdbx_filehandle_t *fd);
  *                        geometry, but there read transaction(s) is running
  *                        and no corresponding thread(s) could be suspended
  *                        since the \ref MDBX_NOSTICKYTHREADS mode is used.
+ * \retval MDBX_UNABLE_EXTEND_MAPSIZE
+ *                        The requested geometry change needs the mapping to be
+ *                        re-created, but it could not be applied right now:
+ *                        either the address space for the new mapping is busy,
+ *                        or a read transaction of this process holds the
+ *                        remap-lock shared (Windows). Retry once the read
+ *                        transactions are closed, or close and reopen the
+ *                        environment.
  * \retval MDBX_EACCESS   The environment opened in read-only.
  * \retval MDBX_MAP_FULL  Specified size smaller than the space already
  *                        consumed by the environment.
@@ -3953,8 +3965,15 @@ MDBX_NOTHROW_PURE_FUNCTION LIBMDBX_API void *mdbx_env_get_userctx(const MDBX_env
  *                            environment must be shut down.
  * \retval MDBX_UNABLE_EXTEND_MAPSIZE  Another process wrote data beyond
  *                                     this MDBX_env's mapsize and this
- *                                     environment map must be resized as well.
- *                                     See \ref mdbx_env_set_mapsize().
+ *                                     environment map must be resized as well,
+ *                                     but the remap could not be applied right
+ *                                     now: the address space is busy, or on
+ *                                     Windows a read transaction of this
+ *                                     process holds the remap-lock shared.
+ *                                     Retry once the read transactions are
+ *                                     closed, or close and reopen the
+ *                                     environment.
+ *                                     See \ref mdbx_env_set_geometry().
  * \retval MDBX_READERS_FULL  A read-only transaction was requested and
  *                            the reader lock table is full.
  *                            See \ref mdbx_env_set_maxreaders().
@@ -4010,8 +4029,15 @@ LIBMDBX_API int mdbx_txn_begin_ex(MDBX_env *env, MDBX_txn *parent, MDBX_txn_flag
  *                            environment must be shut down.
  * \retval MDBX_UNABLE_EXTEND_MAPSIZE  Another process wrote data beyond
  *                                     this MDBX_env's mapsize and this
- *                                     environment map must be resized as well.
- *                                     See \ref mdbx_env_set_mapsize().
+ *                                     environment map must be resized as well,
+ *                                     but the remap could not be applied right
+ *                                     now: the address space is busy, or on
+ *                                     Windows a read transaction of this
+ *                                     process holds the remap-lock shared.
+ *                                     Retry once the read transactions are
+ *                                     closed, or close and reopen the
+ *                                     environment.
+ *                                     See \ref mdbx_env_set_geometry().
  * \retval MDBX_READERS_FULL  A read-only transaction was requested and
  *                            the reader lock table is full.
  *                            See \ref mdbx_env_set_maxreaders().
@@ -4323,6 +4349,18 @@ typedef struct MDBX_commit_latency MDBX_commit_latency;
  *    before or after transaction commit, either can be reused with
  *    \ref mdbx_cursor_renew() until it will be explicitly closed by
  *    \ref mdbx_cursor_close().
+ *
+ * \note On Windows the shrinking of the datafile (when enabled via
+ * `shrink_threshold` of \ref mdbx_env_set_geometry()) requires the mapping to
+ * be unmapped, which is impossible while a read transaction of this process is
+ * open. In that case the shrink is skipped for this commit (the commit still
+ * succeeds and the reported geometry is left unchanged) and is re-attempted by
+ * a later commit once the read transactions are closed, so the datafile keeps
+ * its larger size until then. The skip is detected up front, so no unnecessary
+ * durable sync is performed while a reader holds the mapping; a shrink that is
+ * already in flight can still be deferred if a reader appears meanwhile, which
+ * transiently shows up in \ref mdbx_env_info_ex() as the file size being larger
+ * than the reported `now` geometry value.
  *
  * \param [in] txn  A transaction handle returned by \ref mdbx_txn_begin().
  * \param [out] latency             An optional pointer for getting information of latencies during the commit stages.

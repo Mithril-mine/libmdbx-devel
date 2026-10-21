@@ -562,6 +562,15 @@ struct MDBX_env {
 
 #if IS_WINDOWS
   osal_srwlock_t remap_lock;
+  /* Leaf lock serializing concurrent resizers (issue #154). remap_lock is now
+   * taken shared for a plain grow, so two growers (a read txn noticing the file
+   * grew by another process, and the writer growing it) could otherwise mutate
+   * env->dxb_mmap and call NtExtendSection() concurrently. This mutex makes
+   * grow-vs-grow and grow-vs-shrink mutually exclusive without blocking
+   * readers, which only ever hold remap_lock shared. Always acquired BEFORE
+   * remap_lock and released AFTER it, and never held across a blocking wait on
+   * remap_lock, so it stays a leaf (no deadlock cycle). */
+  osal_fastmutex_t resize_mutex;
   /* Workaround for LockFileEx and WriteFile multithread bug */
   CRITICAL_SECTION lck_event_cs;
   CRITICAL_SECTION dxb_event_cs;
