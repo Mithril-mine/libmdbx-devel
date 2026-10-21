@@ -51,6 +51,9 @@ GC_HOT = 0.7
 GC_WARM = 0.3
 LRU_RATE_LIMIT_SECONDS = 60
 SYNC_POLL_INTERVAL_SECONDS = 1.0
+# D3/N11: периодическая чистка мёртвых reader-слотов (kill -9 агентов роя
+# оставляет их занятыми; без чистки maxreaders может исчерпаться).
+READER_CHECK_INTERVAL_SECONDS = 60.0
 
 # --- слой ветки процесса (роевая изоляция, N1): per-process override поверх
 # глобальной meta.branch_current. Агент роя выставляет свою ветку один раз —
@@ -231,6 +234,7 @@ class Store:
         # (синк не нужен и может писать в LCK).
         self._sync_stop = threading.Event()
         self._sync_thread = None
+        self._last_reader_check = 0.0  # D3: таймер чистки reader-слотов
         if not readonly and not _skip_sync_thread:
             self._sync_thread = threading.Thread(
                 target=self._sync_loop, name="store-sync-poll", daemon=True)
@@ -242,6 +246,13 @@ class Store:
             try:
                 self._check_deleted()
                 self.env.sync(force=False, nonblock=True)
+                # D3/N11: раз в READER_CHECK_INTERVAL секунд чистим мёртвые
+                # reader-слоты (kill -9 агентов роя оставляет их занятыми).
+                now = time.time()
+                if (now - self._last_reader_check
+                        >= READER_CHECK_INTERVAL_SECONDS):
+                    self._last_reader_check = now
+                    self.env.reader_check()
             except Exception:
                 pass  # опрос синка не должен ломать сервер
 
