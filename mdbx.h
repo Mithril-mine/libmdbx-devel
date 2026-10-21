@@ -4054,14 +4054,17 @@ LIBMDBX_INLINE_API(int, mdbx_txn_begin, (MDBX_env * env, MDBX_txn *parent, MDBX_
  *                                Just use NULL if doubt.
  * \returns A non-zero error value on failure and 0 on success,
  *          some possible errors are:
- * \retval MDBX_EINVAL        An invalid parameter was specified, i.e. the `in_out_clone` is NULL.
+ * \retval MDBX_EINVAL        An invalid parameter was specified, i.e. the `in_out_clone` is NULL,
+ *                            or the handle referenced by `in_out_clone` is not a read-only transaction,
+ *                            belongs to another environment or is the origin transaction itself.
  * \retval MDBX_BAD_TXN       Origin transaction is already finished or never began,
- *                            or handle referenced by `in_out_clone` is invalid or not a read-only transaction.
+ *                            or handle referenced by `in_out_clone` is invalid.
  *                            Cloning of a write transactions with pending changes (aka dirtied) is also
  *                            prohibited to avoid confusion.
  * \retval MDBX_EBADSIGN      Origin transaction object or reference by `in_out_clone`, has invalid signature,
  *                            e.g. transaction was already terminated or memory was corrupted.
- * \retval MDBX_OUSTED        Cloned was outed immediately for the sake of recycling old MVCC snapshots.
+ * \retval MDBX_OUSTED        Cloned was outed immediately for the sake of recycling old MVCC snapshots,
+ *                            or the parked origin transaction had been ousted already.
  * \retval MDBX_MVCC_RETARDED The MVCC snapshot used by origin transaction was bygone.
  * \retval MDBX_READERS_FULL  A read-only transaction was requested and
  *                            the reader lock table is full.
@@ -4485,6 +4488,10 @@ LIBMDBX_API int mdbx_txn_amend(MDBX_txn *read_txn, MDBX_txn **ptr_write_txn, MDB
  * Aborts and then restarts the transaction, rolling back all uncommitted changes.
  * If the current thread is not eligible to manage the transaction then
  * the \ref MDBX_THREAD_MISMATCH error will returned.
+ *
+ * \note If restarting a nested transaction fails during its rollback, the
+ * nested transaction is aborted and its handle is freed, as by
+ * \ref mdbx_txn_abort(), so the handle must not be used anymore.
  *
  * \param [in] txn  A transaction handle returned by \ref mdbx_txn_begin().
  *
