@@ -1,6 +1,8 @@
 #include "mdbx.h"
 #include <gtest/gtest.h>
 
+#include "../test-env.h"
+
 #include <cstdint>
 #include <cstring>
 
@@ -16,6 +18,10 @@
 // debug builds aborted on the ro-nested assertion.
 
 TEST(issue_gh0103, nested_write_rollback_keeps_running) {
+  if (MDBX_GTEST_IS_EXECUTION_TIMEOUT()) {
+    GTEST_SKIP() << "SKIPPED by RUNTIME_LIMIT";
+    return;
+  }
   const char *const testdb = "issue103.mdbx";
   remove(testdb);
 

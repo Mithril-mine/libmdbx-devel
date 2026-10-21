@@ -1,6 +1,8 @@
 #include "mdbx.h++"
 #include <gtest/gtest.h>
 
+#include "../test-env.h"
+
 #include <cstdint>
 #include <cstdio>
 #include <cstring>
@@ -18,6 +20,10 @@
 // through ctx, not as an exception.
 
 TEST(issue_gh0093, tables_is_reset_after_chk) {
+  if (MDBX_GTEST_IS_EXECUTION_TIMEOUT()) {
+    GTEST_SKIP() << "SKIPPED by RUNTIME_LIMIT";
+    return;
+  }
   const std::string testdb = "issue93.mdbx";
   try {
     mdbx::env::remove(testdb);
@@ -41,6 +47,10 @@ TEST(issue_gh0093, tables_is_reset_after_chk) {
 }
 
 TEST(issue_gh0093, chk_reports_problems_in_ctx_not_as_exception) {
+  if (MDBX_GTEST_IS_EXECUTION_TIMEOUT()) {
+    GTEST_SKIP() << "SKIPPED by RUNTIME_LIMIT";
+    return;
+  }
   const std::string testdb = "issue93b.mdbx";
   try {
     mdbx::env::remove(testdb);

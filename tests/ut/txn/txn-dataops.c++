@@ -22,6 +22,8 @@
 #include "mdbx.h++"
 #include <gtest/gtest.h>
 
+#include "../test-env.h"
+
 namespace {
 mdbx::env_managed make_env(const char *name) {
   const mdbx::path testdb = name;
@@ -31,6 +33,10 @@ mdbx::env_managed make_env(const char *name) {
 } // namespace
 
 TEST(ut_txn_dataops, insert_and_try_insert) {
+  if (MDBX_GTEST_IS_EXECUTION_TIMEOUT()) {
+    GTEST_SKIP() << "SKIPPED by RUNTIME_LIMIT";
+    return;
+  }
   auto env = make_env("test-txn-dataops");
   auto txn = env.start_write();
   auto map = txn.create_map("table");
@@ -52,6 +58,10 @@ TEST(ut_txn_dataops, insert_and_try_insert) {
 }
 
 TEST(ut_txn_dataops, upsert_update_erase) {
+  if (MDBX_GTEST_IS_EXECUTION_TIMEOUT()) {
+    GTEST_SKIP() << "SKIPPED by RUNTIME_LIMIT";
+    return;
+  }
   auto env = make_env("test-txn-dataops");
   auto txn = env.start_write();
   auto map = txn.create_map("table");
@@ -75,6 +85,10 @@ TEST(ut_txn_dataops, upsert_update_erase) {
 }
 
 TEST(ut_txn_dataops, extract_and_append) {
+  if (MDBX_GTEST_IS_EXECUTION_TIMEOUT()) {
+    GTEST_SKIP() << "SKIPPED by RUNTIME_LIMIT";
+    return;
+  }
   auto env = make_env("test-txn-dataops");
   auto txn = env.start_write();
   auto map = txn.create_map("table");
@@ -97,6 +111,10 @@ TEST(ut_txn_dataops, extract_and_append) {
 }
 
 TEST(ut_txn_dataops, get_default_and_try_start_write) {
+  if (MDBX_GTEST_IS_EXECUTION_TIMEOUT()) {
+    GTEST_SKIP() << "SKIPPED by RUNTIME_LIMIT";
+    return;
+  }
   auto env = make_env("test-txn-dataops");
 
   auto writer = env.try_start_write();
@@ -119,6 +137,10 @@ TEST(ut_txn_dataops, get_default_and_try_start_write) {
 }
 
 TEST(ut_txn_dataops, amend_read_to_write) {
+  if (MDBX_GTEST_IS_EXECUTION_TIMEOUT()) {
+    GTEST_SKIP() << "SKIPPED by RUNTIME_LIMIT";
+    return;
+  }
   auto env = make_env("test-txn-dataops");
   {
     auto w = env.start_write();

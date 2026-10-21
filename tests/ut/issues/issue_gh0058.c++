@@ -5,6 +5,9 @@
  * survive. */
 #include "mdbx.h"
 #include <gtest/gtest.h>
+
+#include "../test-env.h"
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -42,6 +45,10 @@ static int exists(const char *path) {
 }
 
 TEST(issue_gh0058, copy_overwrite_must_not_delete_live_destination) {
+  if (MDBX_GTEST_IS_EXECUTION_TIMEOUT()) {
+    GTEST_SKIP() << "SKIPPED by RUNTIME_LIMIT";
+    return;
+  }
   const char *dir = "issue_gh58";
   char src_db[512], dst_db[512], lck[600];
   snprintf(src_db, sizeof(src_db), "%s/src.db", dir);

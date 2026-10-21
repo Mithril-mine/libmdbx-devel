@@ -22,6 +22,8 @@
 #include "mdbx.h++"
 #include <gtest/gtest.h>
 
+#include "../test-env.h"
+
 #include <string>
 #include <thread>
 
@@ -30,6 +32,10 @@ static std::string to_std_string(const mdbx::slice &s) {
 }
 
 TEST(ut_defrag_cursors, txn_lock_unlock) {
+  if (MDBX_GTEST_IS_EXECUTION_TIMEOUT()) {
+    GTEST_SKIP() << "SKIPPED by RUNTIME_LIMIT";
+    return;
+  }
   const mdbx::path testdb = "test-defrag-cursors";
   mdbx::env::remove(testdb);
   mdbx::env_managed env(testdb, mdbx::create_parameters(), mdbx::operate_parameters().set_max_maps(8));
@@ -52,6 +58,10 @@ TEST(ut_defrag_cursors, txn_lock_unlock) {
 }
 
 TEST(ut_defrag_cursors, txn_refresh) {
+  if (MDBX_GTEST_IS_EXECUTION_TIMEOUT()) {
+    GTEST_SKIP() << "SKIPPED by RUNTIME_LIMIT";
+    return;
+  }
   const mdbx::path testdb = "test-defrag-cursors";
   mdbx::env::remove(testdb);
   mdbx::env_managed env(testdb, mdbx::create_parameters(), mdbx::operate_parameters().set_max_maps(8));
@@ -85,6 +95,10 @@ TEST(ut_defrag_cursors, txn_refresh) {
 }
 
 TEST(ut_defrag_cursors, cursor_reset) {
+  if (MDBX_GTEST_IS_EXECUTION_TIMEOUT()) {
+    GTEST_SKIP() << "SKIPPED by RUNTIME_LIMIT";
+    return;
+  }
   const mdbx::path testdb = "test-defrag-cursors";
   mdbx::env::remove(testdb);
   mdbx::env_managed env(testdb, mdbx::create_parameters(), mdbx::operate_parameters().set_max_maps(8));
@@ -110,6 +124,10 @@ TEST(ut_defrag_cursors, cursor_reset) {
 }
 
 TEST(ut_defrag_cursors, cursor_bunch_delete) {
+  if (MDBX_GTEST_IS_EXECUTION_TIMEOUT()) {
+    GTEST_SKIP() << "SKIPPED by RUNTIME_LIMIT";
+    return;
+  }
   const mdbx::path testdb = "test-defrag-cursors";
   mdbx::env::remove(testdb);
   mdbx::env_managed env(testdb, mdbx::create_parameters(), mdbx::operate_parameters().set_max_maps(8));
@@ -149,6 +167,10 @@ TEST(ut_defrag_cursors, cursor_bunch_delete) {
 }
 
 TEST(ut_defrag_cursors, cursor_delete_range) {
+  if (MDBX_GTEST_IS_EXECUTION_TIMEOUT()) {
+    GTEST_SKIP() << "SKIPPED by RUNTIME_LIMIT";
+    return;
+  }
   const mdbx::path testdb = "test-defrag-cursors";
   mdbx::env::remove(testdb);
   mdbx::env_managed env(testdb, mdbx::create_parameters(), mdbx::operate_parameters().set_max_maps(8));
@@ -177,12 +199,20 @@ TEST(ut_defrag_cursors, cursor_delete_range) {
 }
 
 TEST(ut_defrag_cursors, get_datacmp) {
+  if (MDBX_GTEST_IS_EXECUTION_TIMEOUT()) {
+    GTEST_SKIP() << "SKIPPED by RUNTIME_LIMIT";
+    return;
+  }
   EXPECT_NE(mdbx::get_datacmp(MDBX_db_flags_t(0)), nullptr);
   EXPECT_NE(mdbx::get_datacmp(MDBX_db_flags_t(MDBX_DUPSORT)), nullptr);
   EXPECT_EQ(mdbx::get_datacmp(MDBX_db_flags_t(0)), mdbx::get_datacmp(MDBX_db_flags_t(0)));
 }
 
 TEST(ut_defrag_cursors, defrag) {
+  if (MDBX_GTEST_IS_EXECUTION_TIMEOUT()) {
+    GTEST_SKIP() << "SKIPPED by RUNTIME_LIMIT";
+    return;
+  }
   const mdbx::path testdb = "test-defrag-cursors";
   mdbx::env::remove(testdb);
   mdbx::env_managed env(testdb, mdbx::create_parameters(), mdbx::operate_parameters().set_max_maps(8));

@@ -1,6 +1,8 @@
 #include "mdbx.h++"
 #include <gtest/gtest.h>
 
+#include "../test-env.h"
+
 #include <cstdint>
 #include <cstring>
 
@@ -35,6 +37,10 @@ static uint64_t decode_key(const slice &key) {
 }
 
 TEST(issue_gh0066, append_builds_ordered_tree) {
+  if (MDBX_GTEST_IS_EXECUTION_TIMEOUT()) {
+    GTEST_SKIP() << "SKIPPED by RUNTIME_LIMIT";
+    return;
+  }
   const std::string testdb = "issue66.mdbx";
   try {
     mdbx::env::remove(testdb);
@@ -96,6 +102,10 @@ TEST(issue_gh0066, append_builds_ordered_tree) {
 }
 
 TEST(issue_gh0066, append_to_empty_and_exact_match) {
+  if (MDBX_GTEST_IS_EXECUTION_TIMEOUT()) {
+    GTEST_SKIP() << "SKIPPED by RUNTIME_LIMIT";
+    return;
+  }
   const std::string testdb = "issue66b.mdbx";
   try {
     mdbx::env::remove(testdb);

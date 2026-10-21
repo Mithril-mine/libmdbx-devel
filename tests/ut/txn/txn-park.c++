@@ -22,6 +22,8 @@
 #include "mdbx.h++"
 #include <gtest/gtest.h>
 
+#include "../test-env.h"
+
 namespace {
 mdbx::env_managed make_env(const char *name) {
   const mdbx::path testdb = name;
@@ -39,6 +41,10 @@ void seed(mdbx::txn_managed &txn, mdbx::map_handle map) {
 } // namespace
 
 TEST(ut_txn_park, park_unpark_roundtrip) {
+  if (MDBX_GTEST_IS_EXECUTION_TIMEOUT()) {
+    GTEST_SKIP() << "SKIPPED by RUNTIME_LIMIT";
+    return;
+  }
   auto env = make_env("test-txn-park");
   {
     auto w = env.start_write();
@@ -64,6 +70,10 @@ TEST(ut_txn_park, park_unpark_roundtrip) {
 }
 
 TEST(ut_txn_park, autounpark) {
+  if (MDBX_GTEST_IS_EXECUTION_TIMEOUT()) {
+    GTEST_SKIP() << "SKIPPED by RUNTIME_LIMIT";
+    return;
+  }
   auto env = make_env("test-txn-park");
   {
     auto w = env.start_write();
@@ -83,6 +93,10 @@ TEST(ut_txn_park, autounpark) {
 }
 
 TEST(ut_txn_park, write_txn_cannot_park) {
+  if (MDBX_GTEST_IS_EXECUTION_TIMEOUT()) {
+    GTEST_SKIP() << "SKIPPED by RUNTIME_LIMIT";
+    return;
+  }
   auto env = make_env("test-txn-park");
   auto w = env.start_write();
   EXPECT_THROW(w.park_reading(), std::invalid_argument) << "parking a write txn must report MDBX_EINVAL";

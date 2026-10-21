@@ -1,6 +1,8 @@
 #include "mdbx.h"
 #include <gtest/gtest.h>
 
+#include "../test-env.h"
+
 #include <cstdint>
 #include <cstdio>
 #include <cstring>
@@ -38,6 +40,10 @@ static int stop_visitor(void *ctx, const MDBX_txn *txn, uint64_t span_txnid, siz
 }
 
 TEST(issue_gh0088, gc_info_stops_on_visitor_return) {
+  if (MDBX_GTEST_IS_EXECUTION_TIMEOUT()) {
+    GTEST_SKIP() << "SKIPPED by RUNTIME_LIMIT";
+    return;
+  }
   const char *const testdb = "issue88.mdbx";
   remove(testdb);
   struct stat st;

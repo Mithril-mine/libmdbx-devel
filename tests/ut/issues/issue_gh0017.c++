@@ -1,6 +1,9 @@
 /* offsetof(tree_t, root) == 8: u16 flags, u16 height, u32 dupfix_size, then pgno_t root */
 #include "../../../src/essentials.h"
 #include <gtest/gtest.h>
+
+#include "../test-env.h"
+
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -12,6 +15,10 @@ static void die(const char *what, int rc) {
 }
 
 TEST(issue_gh0017, all) {
+  if (MDBX_GTEST_IS_EXECUTION_TIMEOUT()) {
+    GTEST_SKIP() << "SKIPPED by RUNTIME_LIMIT";
+    return;
+  }
   const char *path = "issue_gh0017";
   mdbx_env_delete(path, MDBX_ENV_JUST_DELETE);
   int rc;

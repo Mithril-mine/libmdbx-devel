@@ -9,10 +9,17 @@
 #include "mdbx.h++"
 #include <cstdio>
 #include <gtest/gtest.h>
+
+#include "../test-env.h"
+
 #include <optional>
 #include <thread>
 
 TEST(issue_gh0060, dtor_on_foreign_thread_must_not_terminate) {
+  if (MDBX_GTEST_IS_EXECUTION_TIMEOUT()) {
+    GTEST_SKIP() << "SKIPPED by RUNTIME_LIMIT";
+    return;
+  }
   const std::string testdb = "issue60.mdbx";
   try {
     mdbx::env::remove(testdb);
@@ -40,6 +47,10 @@ TEST(issue_gh0060, dtor_on_foreign_thread_must_not_terminate) {
 }
 
 TEST(issue_gh0060, close_busy_keeps_handle_alive) {
+  if (MDBX_GTEST_IS_EXECUTION_TIMEOUT()) {
+    GTEST_SKIP() << "SKIPPED by RUNTIME_LIMIT";
+    return;
+  }
   const std::string testdb = "issue60b.mdbx";
   try {
     mdbx::env::remove(testdb);

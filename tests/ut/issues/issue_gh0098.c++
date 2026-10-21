@@ -1,6 +1,8 @@
 #include "mdbx.h++"
 #include <gtest/gtest.h>
 
+#include "../test-env.h"
+
 #include <cstdint>
 #include <cstring>
 
@@ -15,6 +17,10 @@
 // instead of returning false/empty; get_batch(1) always threw MDBX_EINVAL.
 
 TEST(issue_gh0098, get_equal_or_great_exact_on_multimap) {
+  if (MDBX_GTEST_IS_EXECUTION_TIMEOUT()) {
+    GTEST_SKIP() << "SKIPPED by RUNTIME_LIMIT";
+    return;
+  }
   const std::string testdb = "issue98.mdbx";
   try {
     mdbx::env::remove(testdb);
@@ -52,6 +58,10 @@ TEST(issue_gh0098, get_equal_or_great_exact_on_multimap) {
 }
 
 TEST(issue_gh0098, scan_and_batch_on_empty_and_end) {
+  if (MDBX_GTEST_IS_EXECUTION_TIMEOUT()) {
+    GTEST_SKIP() << "SKIPPED by RUNTIME_LIMIT";
+    return;
+  }
   const std::string testdb = "issue98b.mdbx";
   try {
     mdbx::env::remove(testdb);

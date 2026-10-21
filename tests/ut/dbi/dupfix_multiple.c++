@@ -26,6 +26,9 @@
 #include <cstdlib>
 #include <cstring>
 #include <gtest/gtest.h>
+
+#include "../test-env.h"
+
 #include <iostream>
 #include <iterator>
 #include <map>
@@ -142,6 +145,10 @@ protected:
 //--------------------------------------------------------------------------------------------------------------
 
 TEST_P(DupfixMultiple, ordering) {
+  if (MDBX_GTEST_IS_EXECUTION_TIMEOUT()) {
+    GTEST_SKIP() << "SKIPPED by RUNTIME_LIMIT";
+    return;
+  }
   auto txn = env.start_write();
   auto map = txn.create_map("ordering", mdbx::key_mode::ordinal, mdbx::value_mode::multi_ordinal);
 
@@ -196,6 +203,10 @@ TEST_P(DupfixMultiple, ordering) {
 //--------------------------------------------------------------------------------------------------------------
 
 TEST_P(DupfixMultiple, batch_read) {
+  if (MDBX_GTEST_IS_EXECUTION_TIMEOUT()) {
+    GTEST_SKIP() << "SKIPPED by RUNTIME_LIMIT";
+    return;
+  }
   auto txn = env.start_write();
   auto map = txn.create_map("batch", mdbx::key_mode::ordinal, mdbx::value_mode::multi_ordinal);
   const size_t psize = txn.get_map_stat(map).ms_psize;
@@ -279,6 +290,10 @@ TEST_P(DupfixMultiple, batch_read) {
 //--------------------------------------------------------------------------------------------------------------
 
 TEST_P(DupfixMultiple, multiple_put) {
+  if (MDBX_GTEST_IS_EXECUTION_TIMEOUT()) {
+    GTEST_SKIP() << "SKIPPED by RUNTIME_LIMIT";
+    return;
+  }
   auto txn = env.start_write();
   auto map = txn.create_map("mput", mdbx::key_mode::ordinal, mdbx::value_mode::multi_ordinal);
 
@@ -373,6 +388,10 @@ TEST_P(DupfixMultiple, multiple_put) {
 //--------------------------------------------------------------------------------------------------------------
 
 TEST_P(DupfixMultiple, erase_and_conversion) {
+  if (MDBX_GTEST_IS_EXECUTION_TIMEOUT()) {
+    GTEST_SKIP() << "SKIPPED by RUNTIME_LIMIT";
+    return;
+  }
   auto txn = env.start_write();
   auto map = txn.create_map("erase", mdbx::key_mode::ordinal, mdbx::value_mode::multi_ordinal);
   const size_t psize = txn.get_map_stat(map).ms_psize;
@@ -439,6 +458,10 @@ TEST_P(DupfixMultiple, erase_and_conversion) {
 //--------------------------------------------------------------------------------------------------------------
 
 TEST_P(DupfixMultiple, stress_model) {
+  if (MDBX_GTEST_IS_EXECUTION_TIMEOUT()) {
+    GTEST_SKIP() << "SKIPPED by RUNTIME_LIMIT";
+    return;
+  }
   if (GetParam() == 0)
     GTEST_SKIP() << "the stress runs on the small-page instance only";
 
@@ -556,6 +579,10 @@ static size_t probe_hits(const char *tag) {
 /* Self-asserted coverage: every watched dupfix/multiple branch of the engine
  * must be hit by the scenario above (the probe-bus WATCH channel). */
 TEST_P(DupfixMultiple, probe_watch) {
+  if (MDBX_GTEST_IS_EXECUTION_TIMEOUT()) {
+    GTEST_SKIP() << "SKIPPED by RUNTIME_LIMIT";
+    return;
+  }
 #if defined(MDBX_PROBES)
   if (GetParam() == 0)
     GTEST_SKIP() << "probe coverage runs once, on the small-page instance";

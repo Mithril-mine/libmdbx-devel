@@ -2,11 +2,17 @@
 #include <cstdio>
 #include <gtest/gtest.h>
 
+#include "../test-env.h"
+
 #ifdef _MSC_VER
 #pragma warning(disable : 4702) /* unreachable code */
 #endif
 
 TEST(issue_gh0028, all) {
+  if (MDBX_GTEST_IS_EXECUTION_TIMEOUT()) {
+    GTEST_SKIP() << "SKIPPED by RUNTIME_LIMIT";
+    return;
+  }
   mdbx::slice s("hello");
   try {
     mdbx::slice m = s.safe_middle(SIZE_MAX - 1, 2); // from + n wraps to 0 <= size() -> passes

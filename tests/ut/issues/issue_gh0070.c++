@@ -2,6 +2,8 @@
 #include "tool_runner.h"
 #include <gtest/gtest.h>
 
+#include "../test-env.h"
+
 #include <cstddef>
 #include <cstdint>
 #include <cstdio>
@@ -61,6 +63,10 @@ static int run_tool(const std::vector<std::string> &args, const char *stdin_file
 }
 
 TEST(issue_gh0070, truncated_dump_is_rejected) {
+  if (MDBX_GTEST_IS_EXECUTION_TIMEOUT()) {
+    GTEST_SKIP() << "SKIPPED by RUNTIME_LIMIT";
+    return;
+  }
   const char *const dbname = "issue70.mdbx";
   const char *const dumpname = "issue70.dump";
   const char *const truncname = "issue70.trunc.dump";
@@ -108,6 +114,10 @@ TEST(issue_gh0070, truncated_dump_is_rejected) {
 }
 
 TEST(issue_gh0070, dump_reports_write_errors) {
+  if (MDBX_GTEST_IS_EXECUTION_TIMEOUT()) {
+    GTEST_SKIP() << "SKIPPED by RUNTIME_LIMIT";
+    return;
+  }
   std::ifstream probe("/dev/full");
   if (!probe.good())
     GTEST_SKIP() << "no /dev/full (non-POSIX host)";

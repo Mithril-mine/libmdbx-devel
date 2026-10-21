@@ -22,6 +22,8 @@
 #include "mdbx.h++"
 #include <gtest/gtest.h>
 
+#include "../test-env.h"
+
 namespace {
 mdbx::env_managed make_env(const char *name) {
   const mdbx::path testdb = name;
@@ -31,6 +33,10 @@ mdbx::env_managed make_env(const char *name) {
 } // namespace
 
 TEST(ut_env_maintenance, sync_to_disk) {
+  if (MDBX_GTEST_IS_EXECUTION_TIMEOUT()) {
+    GTEST_SKIP() << "SKIPPED by RUNTIME_LIMIT";
+    return;
+  }
   auto env = make_env("test-env-maintenance");
   {
     auto w = env.start_write();
@@ -46,6 +52,10 @@ TEST(ut_env_maintenance, sync_to_disk) {
 }
 
 TEST(ut_env_maintenance, enumerate_readers) {
+  if (MDBX_GTEST_IS_EXECUTION_TIMEOUT()) {
+    GTEST_SKIP() << "SKIPPED by RUNTIME_LIMIT";
+    return;
+  }
   auto env = make_env("test-env-maintenance");
   {
     auto w = env.start_write();

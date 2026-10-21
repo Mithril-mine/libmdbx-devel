@@ -3,6 +3,8 @@
 #include "src/layout-lck.h"
 #include <gtest/gtest.h>
 
+#include "../test-env.h"
+
 #include <cstdint>
 #include <cstdio>
 #include <cstring>
@@ -45,6 +47,10 @@ static void read_raw(std::fstream &f, std::streamoff off, void *data, size_t siz
 }
 
 TEST(issue_gh0081, poisoned_cached_oldest_reclamped) {
+  if (MDBX_GTEST_IS_EXECUTION_TIMEOUT()) {
+    GTEST_SKIP() << "SKIPPED by RUNTIME_LIMIT";
+    return;
+  }
   const std::string testdb = "issue81.mdbx";
   const std::string lck_path = testdb + "-lck";
   try {

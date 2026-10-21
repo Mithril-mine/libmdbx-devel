@@ -22,6 +22,8 @@
 #include "mdbx.h++"
 #include <gtest/gtest.h>
 
+#include "../test-env.h"
+
 namespace {
 mdbx::env_managed make_env(const char *name) {
   const mdbx::path testdb = name;
@@ -37,6 +39,10 @@ size_t multivalue_count(mdbx::txn &txn, mdbx::map_handle map) {
 } // namespace
 
 TEST(ut_put_matrix, single_value_table) {
+  if (MDBX_GTEST_IS_EXECUTION_TIMEOUT()) {
+    GTEST_SKIP() << "SKIPPED by RUNTIME_LIMIT";
+    return;
+  }
   auto env = make_env("test-put-matrix");
   auto txn = env.start_write();
   auto table = txn.create_map("table");
@@ -76,6 +82,10 @@ TEST(ut_put_matrix, single_value_table) {
 }
 
 TEST(ut_put_matrix, dupsort_table) {
+  if (MDBX_GTEST_IS_EXECUTION_TIMEOUT()) {
+    GTEST_SKIP() << "SKIPPED by RUNTIME_LIMIT";
+    return;
+  }
   auto env = make_env("test-put-matrix");
   auto txn = env.start_write();
   auto multi = txn.create_map("multi", mdbx::key_mode::usual, mdbx::value_mode::multi);
@@ -117,6 +127,10 @@ TEST(ut_put_matrix, dupsort_table) {
 }
 
 TEST(ut_put_matrix, del_matrix) {
+  if (MDBX_GTEST_IS_EXECUTION_TIMEOUT()) {
+    GTEST_SKIP() << "SKIPPED by RUNTIME_LIMIT";
+    return;
+  }
   auto env = make_env("test-put-matrix");
   auto txn = env.start_write();
   auto multi = txn.create_map("multi", mdbx::key_mode::usual, mdbx::value_mode::multi);
