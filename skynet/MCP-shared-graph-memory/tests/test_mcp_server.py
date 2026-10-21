@@ -264,3 +264,44 @@ def test_db_utterly_nosync_only_via_explicit_tool(store):
     r = call(serv, "tools/call", {"name": "db_set_mode", "arguments": {
         "sync": "safe_nosync"}})
     assert r["result"]["structuredContent"]["sync_mode"] == "safe_nosync"
+
+
+def test_mcp_map_put_symbol_cpp_status(server):
+    """C2/N6: map_put_symbol через MCP с валидацией cpp_status."""
+    # валидный статус → виден в приборной панели портирования
+    r = call(server, "tools/call", {"name": "map_put_symbol", "arguments": {
+        "key": "fn:api-env:mdbx_env_open",
+        "body": {"module": "api-env", "kind": "function",
+                 "cpp_status": "partial", "cpp_eq": ""},
+        "layer": "0.15.base"}})
+    assert r["result"]["structuredContent"]["result"] == "stored", r
+    ps = call(server, "tools/call", {"name": "map_port_status", "arguments": {
+        "layer": "0.15.base"}})
+    mods = ps["result"]["structuredContent"]["modules"]
+    assert mods["api-env"]["partial"] == 1
+    # невалидный статус → контрактная ошибка, запись НЕ появилась
+    r = call(server, "tools/call", {"name": "map_put_symbol", "arguments": {
+        "key": "fn:api-env:bogus", "body": {"cpp_status": "bogus"}}})
+    assert r.get("error"), r
+    assert "none, mapped, partial, done" in r["error"]["message"]
+    ps2 = call(server, "tools/call", {"name": "map_port_status", "arguments": {
+        "layer": "0.15.base"}})
+    assert ps2["result"]["structuredContent"]["modules"]["api-env"]["total"] \
+        == 1
+
+
+def test_mcp_map_alias_and_refresh_stale(server):
+    """C2/N6: map_alias + map_refresh_stale через MCP."""
+    call(server, "tools/call", {"name": "map_put_symbol", "arguments": {
+        "key": "fn:m:old_name", "body": {"module": "m"},
+        "layer": "0.15.base"}})
+    call(server, "tools/call", {"name": "map_put_symbol", "arguments": {
+        "key": "fn:m:new_name", "body": {"module": "m"},
+        "layer": "0.15.base"}})
+    r = call(server, "tools/call", {"name": "map_alias", "arguments": {
+        "old_key": "fn:m:old_name", "new_key": "fn:m:new_name"}})
+    assert r["result"]["structuredContent"]["result"] == "aliased"
+    r = call(server, "tools/call", {"name": "map_refresh_stale",
+                                    "arguments": {}})
+    sc = r["result"]["structuredContent"]
+    assert "removed_links" in sc and "redirected_links" in sc
