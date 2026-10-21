@@ -632,10 +632,12 @@ int mdbx_txn_clone(const MDBX_txn *source, MDBX_txn **in_out_clone, void *clone_
   bool published = false;
   if (clone) {
     /* reject a wrong handle before the bailout below could reset it as a read-only transaction */
-    const int err = check_txn(clone, 0);
+    int err = check_txn(clone, 0);
+    if (likely(err == MDBX_SUCCESS))
+      err = check_txn_anythread(source, 0);
     if (unlikely(err != MDBX_SUCCESS))
       return LOG_IFERR(err);
-    if (unlikely((clone->flags & txn_ro_flat) == 0))
+    if (unlikely((clone->flags & txn_ro_flat) == 0 || clone == source || clone->env != source->env))
       return LOG_IFERR(MDBX_EINVAL);
   }
 retry:
