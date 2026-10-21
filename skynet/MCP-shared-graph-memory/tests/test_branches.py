@@ -369,3 +369,141 @@ def test_upgrade_rejects_nonempty_incompatible_table(tmp_path):
         rc, v = txn.get(d, b"legacy_row")
         assert v is not None and b"x" in v
     env.close()
+
+
+def test_coverage_migrate_isolates_source(store):
+    """C3/N5: миграция покрытия merge-ветки — копия, источник цел."""
+    L = "0.15.merge-me.9"
+    store.map_put_symbol("fn:m:a", {"module": "m"}, layer=L)
+    store.map_put_symbol("fn:m:b", {"module": "m"}, layer=L)
+    store.coverage_insert("ut/t1", ["fn:m:a"], pct=10.0, layer=L)
+    store.coverage_blocks_insert(
+        "ut/t1", [{"symbol": "fn:m:a", "block_id": "B1", "covered": True}],
+        layer=L)
+    store.trace_ingest("fn:m:a", "fn:m:b", count=2, layer=L)
+
+    r = store.coverage_migrate(L, "0.15.base")
+    assert r["tests"] == 1 and r["blocks"] == 1 and r["traces"] == 1
+
+    # целевой слой получил данные
+    c = store.coverage_get("ut/t1", layer="0.15.base")
+    assert c["symbols"] == ["fn:m:a"] and c["pct"] == 10.0
+    assert [b["block_id"] for b in
+            store.coverage_blocks_get("ut/t1", "fn:m:a",
+                                      layer="0.15.base")] == ["B1"]
+    assert store.trace_observed("fn:m:a", layer="0.15.base")[0]["count"] == 2
+    # covered_by в целевом слое согласован
+    cb = store.coverage_symbols("fn:m:a", layer="0.15.base")
+    assert any(x["symbol"] == "fn:m:a" and x["tests"] == ["ut/t1"]
+               for x in cb)
+
+    # источник НЕ изменился
+    c2 = store.coverage_get("ut/t1", layer=L)
+    assert c2["symbols"] == ["fn:m:a"]
+    assert store.trace_observed("fn:m:a", layer=L)[0]["count"] == 2
+
+
+def test_coverage_migrate_symbol_filter_and_conflicts(store):
+    """C3: фильтр symbols; конфликт test_id в целевом слое — перезапись."""
+    import pytest
+    from mcp.errors import MemoryError as ME
+    L = "0.15.merge2.3"
+    store.coverage_insert("ut/t1", ["fn:m:a", "fn:m:b"], pct=50.0, layer=L)
+    store.coverage_insert("ut/t2", ["fn:m:b"], pct=100.0, layer=L)
+    # целевой слой уже имеет ut/t1 со старыми данными — миграция перезапишет
+    store.coverage_insert("ut/t1", ["fn:old:sym"], pct=1.0, layer="0.15.base")
+
+    r = store.coverage_migrate(L, "0.15.base", symbols=["fn:m:b"])
+    # оба теста содержат fn:m:b → перенесены оба
+    assert r["tests"] == 2
+    # ut/t1 в базовом перезаписан: старые символы ушли, пришёл fn:m:b
+    c = store.coverage_get("ut/t1", layer="0.15.base")
+    assert c["symbols"] == ["fn:m:b"] and c["pct"] == 50.0
+    # stale-членство fn:old:sym вычищено (_coverage_put_locked)
+    assert store.coverage_symbols("fn:old", layer="0.15.base") == []
+    # новый член covered_by появился
+    cb = store.coverage_symbols("fn:m:b", layer="0.15.base")
+    assert cb and sorted(cb[0]["tests"]) == ["ut/t1", "ut/t2"]
+
+    # совпадающие префиксы ("0.15" и "0.15.base" оба → "") — invalid
+    with pytest.raises(ME):
+        store.coverage_migrate("0.15", "0.15.base")
+    with pytest.raises(ME):
+        store.coverage_migrate(L, L)
+
+
+def test_coverage_migrate_blocks_colon_in_test_id(store):
+    """C3/P1: test_id с ":" не мисатрибутируется при миграции блоков.
+
+    Ключ "coverage_blocks:{pre}{test}:{sym}" неоднозначен, когда и test_id,
+    и sym содержат ":" (ut/api:case + fn:m:a). Раньше split(":",1) резал по
+    ПЕРВОМУ ":" → блок уезжал под чужой test_id "ut/api". Теперь sym берётся
+    из тела JSON, test_id — хвост ключа без суффикса ":"+sym.
+    """
+    L = "0.15.colon.4"
+    store.coverage_blocks_insert(
+        "ut/api:case",
+        [{"symbol": "fn:m:a", "block_id": "B1", "covered": True}], layer=L)
+    r = store.coverage_migrate(L, "0.15.base")
+    assert r["blocks"] == 1
+    # блок под ПРАВИЛЬНЫМ test_id (не под мисатрибутированным "ut/api")
+    got = store.coverage_blocks_get("ut/api:case", "fn:m:a", layer="0.15.base")
+    assert [b["block_id"] for b in got] == ["B1"]
+    # старый баг обрезал test_id до первого ":" → ключ ".../ut/api:fn:m:a"
+    # (без ":case"); его быть не должно
+    assert store.coverage_blocks_get("ut/api", "fn:m:a",
+                                     layer="0.15.base") == []
+
+
+def test_coverage_migrate_blocks_symbol_filter_colon(store):
+    """C3/P1: фильтр symbols работает и при test_id с ":" (sym из тела)."""
+    L = "0.15.colon2.5"
+    store.coverage_blocks_insert(
+        "ut/api:case",
+        [{"symbol": "fn:m:a", "block_id": "B1", "covered": True},
+         {"symbol": "fn:m:b", "block_id": "B9", "covered": True}], layer=L)
+    # переносим только fn:m:a
+    store.coverage_migrate(L, "0.15.base", symbols=["fn:m:a"])
+    got_a = store.coverage_blocks_get("ut/api:case", "fn:m:a",
+                                      layer="0.15.base")
+    assert [b["block_id"] for b in got_a] == ["B1"]
+    # fn:m:b не перенесён (фильтр)
+    assert store.coverage_blocks_get("ut/api:case", "fn:m:b",
+                                     layer="0.15.base") == []
+
+
+def _rev_callers(store, callee, layer=""):
+    """Прямое чтение call_traces_rev (внутренний индекс, читателя нет)."""
+    from mcp import libmdbx as _mdbx
+    pre = store.layer_prefix(layer)
+    with store.env.begin(readonly=True) as txn:
+        dbi = store.dbi(txn, "call_traces_rev")
+        out = []
+        with txn.cursor(dbi) as cur:
+            rc, k, v = cur.get(_mdbx.CURSOR_SET_RANGE, (pre + callee).encode())
+            while rc == _mdbx.RC_SUCCESS and k == (pre + callee).encode():
+                out.append(v.decode()[len(pre):])
+                rc, k, v = cur.get(_mdbx.CURSOR_NEXT)
+    return out
+
+
+def test_coverage_migrate_traces_rev_no_dangling(store):
+    """C3/P2: перезапись caller в целевом слое чистит висячие rev-рёбра.
+
+    Прямой индекс call_traces[caller] перезаписывается телом источника;
+    обратный call_traces_rev для callee, исчезнувших из тела, должен быть
+    удалён — иначе rev расходится с прямым (висячие callee→caller).
+    """
+    L = "0.15.trmig.6"
+    # base: caller fn:m:a -> fn:old:callee
+    store.trace_ingest("fn:m:a", "fn:old:callee", layer="0.15.base")
+    # feature: тот же caller fn:m:a -> fn:new:callee
+    store.trace_ingest("fn:m:a", "fn:new:callee", layer=L)
+    store.coverage_migrate(L, "0.15.base")
+    # прямой индекс согласован: только new_callee
+    obs = store.trace_observed("fn:m:a", layer="0.15.base")
+    assert [o["callee"] for o in obs] == ["fn:new:callee"]
+    # обратный: old_callee больше НЕ указывает на fn:m:a (перезатёрт)
+    assert _rev_callers(store, "fn:old:callee", "0.15.base") == []
+    # new_callee указывает корректно
+    assert _rev_callers(store, "fn:new:callee", "0.15.base") == ["fn:m:a"]
