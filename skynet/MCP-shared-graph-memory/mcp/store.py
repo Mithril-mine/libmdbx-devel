@@ -2524,40 +2524,6 @@ class Store:
         Возвращает: добавленные/удалённые/изменённые символы (по модулям),
         число затронутых функций/блоков, и совпавшие (common).
         """
-        def layer_symbols(txn, layer: str) -> dict:
-            pre = self.layer_prefix(layer)
-            out = {}
-            sym_dbi = self.dbi(txn, "symbols")
-            with txn.cursor(sym_dbi) as cur:
-                rc, k, v = cur.get(mdbx.CURSOR_FIRST)
-                while rc == mdbx.RC_SUCCESS:
-                    key = k.decode()
-                    # базовый слой (pre=="") не должен захватывать ключи
-                    # чужих feature-слоёв ("0.16.feat.N/fn:...")
-                    if not pre and _LAYER_KEY_RE.match(key):
-                        rc, k, v = cur.get(mdbx.CURSOR_NEXT)
-                        continue
-                    if not pre or key.startswith(pre):
-                        bare = key[len(pre):] if pre else key
-                        try:
-                            out[bare] = json.loads(v)
-                        except ValueError:
-                            # повреждённая запись: пропустить (перегенерируется)
-                            rc, k, v = cur.get(mdbx.CURSOR_NEXT)
-                            continue
-                    rc, k, v = cur.get(mdbx.CURSOR_NEXT)
-            return out
-
-        # ОДНА read-txn на оба слоя (B1): diff двух поколений из одного
-        # снимка — раньше каждый слой читался своей txn и мог оказаться из
-        # разных MVCC-поколений (diff наполовину «старое против нового»).
-        with self.env.begin(readonly=True) as txn:
-            a = layer_symbols(txn, from_layer)
-            b = layer_symbols(txn, to_layer)
-        added = {}
-        removed = {}
-        changed = {}
-
         def _structural(body):
             """Нормализованное структурное содержимое для сравнения.
 
@@ -2574,14 +2540,65 @@ class Store:
                                         for b in i.get("blocks") or []))
                                  for i in body.get("implementations") or [])))
 
-        for key, body in b.items():
-            if key not in a:
-                added[key] = body
-            elif _structural(body) != _structural(a[key]):
-                changed[key] = {"from": a[key], "to": body}
-        for key in a:
-            if key not in b:
-                removed[key] = a[key]
+        def _hash(body) -> str:
+            """Стабильный хэш структурного содержимого символа (B2): diff
+            сравнивает хэши, а не полные тела — оба слоя не держатся в
+            памяти одновременно."""
+            return hashlib.sha1(repr(_structural(body)).encode()).hexdigest()
+
+        # ОДНА read-txn на оба слоя (B1) + hash-based сравнение (B2):
+        # один проход собирает хэши+meta обоих слоёв и полные тела to-слоя;
+        # полные тела from-слоя подгружаем ТОЛЬКО для removed-ключей (в той
+        # же txn). Пик памяти ~ размер to-слоя + дельты, а не оба слоя целиком.
+        with self.env.begin(readonly=True) as txn:
+            pre_a = self.layer_prefix(from_layer)
+            pre_b = self.layer_prefix(to_layer)
+            a_hash, a_meta = {}, {}
+            b_hash, b_body = {}, {}
+            sym_dbi = self.dbi(txn, "symbols")
+            with txn.cursor(sym_dbi) as cur:
+                rc, k, v = cur.get(mdbx.CURSOR_FIRST)
+                while rc == mdbx.RC_SUCCESS:
+                    key = k.decode()
+                    for pre, acc_h, acc_m, keep_body in (
+                            (pre_a, a_hash, a_meta, False),
+                            (pre_b, b_hash, b_body, True)):
+                        # базовый слой (pre=="") не захватывает чужие feature
+                        if not pre and _LAYER_KEY_RE.match(key):
+                            continue
+                        if pre and not key.startswith(pre):
+                            continue
+                        bare = key[len(pre):] if pre else key
+                        try:
+                            body = json.loads(v)
+                        except ValueError:
+                            break  # повреждённая запись: пропустить
+                        acc_h[bare] = _hash(body)
+                        if keep_body:
+                            acc_m[bare] = body
+                        else:
+                            acc_m[bare] = {
+                                "module": body.get("module"),
+                                "implementations": [
+                                    {"module": i.get("module")}
+                                    for i in body.get("implementations") or []
+                                ] if body.get("implementations") else [],
+                            }
+                        break
+                    rc, k, v = cur.get(mdbx.CURSOR_NEXT)
+            # различия по хэшам; полные тела added/changed уже есть (b_body);
+            # для removed дочитываем from-тела точечно (их немного).
+            added = {}
+            removed = {}
+            changed = {}
+            for key, h in b_hash.items():
+                if key not in a_hash:
+                    added[key] = b_body[key]
+                elif a_hash[key] != h:
+                    changed[key] = {"from": a_meta[key], "to": b_body[key]}
+            for key in a_hash:
+                if key not in b_hash:
+                    removed[key] = self._map_symbol_locked(txn, pre_a, key)
 
         def by_module(d):
             m = {}
@@ -2620,7 +2637,7 @@ class Store:
                 "added_blocks": _nb(added),
                 "removed_blocks": _nb(removed),
             },
-            "total_from": len(a), "total_to": len(b),
+            "total_from": len(a_hash), "total_to": len(b_hash),
         }
 
     # --- regions / uncovered (refactoring-map: #if-дерево и острова смысла) ---
@@ -3033,45 +3050,47 @@ class Store:
 
     def trace_path(self, src: str, dst: str, depth: int = 5,
                    limit: int = 50, layer: str = "") -> list:
-        """BFS по наблюдаемым рёбрам слоя: src → dst (layer-local ключи)."""
-        layer = self._effective_layer(layer)
-        pre = self.layer_prefix(layer)
-        adj = {}
+        """BFS по наблюдаемым рёбрам слоя: src → dst (layer-local ключи).
+
+        Ленивый BFS (B2): соседи читаются точечными get из одной read-txn
+        по мере обхода, а не полным снимком adj всей таблицы в память —
+        при больших трассах это разница между O(путей) и O(всего слоя).
+        """
+        from collections import deque
+        found = []
         with self.env.begin(readonly=True) as txn:
+            layer = self._effective_layer_locked(txn, layer)
+            pre = self.layer_prefix(layer)
             dbi = self._opt_dbi(txn, "call_traces")
             if dbi is None:
                 return []
-            with txn.cursor(dbi) as cur:
-                rc, k, v = cur.get(mdbx.CURSOR_FIRST)
-                while rc == mdbx.RC_SUCCESS:
-                    key = k.decode("utf-8", "replace")
-                    if (pre and not key.startswith(pre)) or \
-                       (not pre and _LAYER_KEY_RE.match(key)):
-                        rc, k, v = cur.get(mdbx.CURSOR_NEXT)
-                        continue
-                    bare = key[len(pre):] if pre else key
-                    body = json.loads(v)
-                    adj.setdefault(bare, []).extend(body.keys())
-                    rc, k, v = cur.get(mdbx.CURSOR_NEXT)
-        found = []
-        from collections import deque
-        seen = {(src,)}
-        queue = deque([(src, [src])])
-        while queue and len(found) < limit:
-            node, path = queue.popleft()
-            if len(path) > depth:
-                continue
-            for nxt in adj.get(node, []):
-                if not nxt or nxt in path:
+
+            def neighbors(node: str) -> list:
+                rc, val = txn.get(dbi, (pre + node).encode())
+                if val is None:
+                    return []
+                try:
+                    return list(json.loads(val.decode()).keys())
+                except ValueError:
+                    return []
+
+            seen = {(src,)}
+            queue = deque([(src, [src])])
+            while queue and len(found) < limit:
+                node, path = queue.popleft()
+                if len(path) > depth:
                     continue
-                new_path = path + [nxt]
-                if nxt == dst:
-                    found.append(new_path)
-                    if len(found) >= limit:
-                        break
-                if len(new_path) <= depth and tuple(new_path) not in seen:
-                    seen.add(tuple(new_path))
-                    queue.append((nxt, new_path))
+                for nxt in neighbors(node):
+                    if not nxt or nxt in path:
+                        continue
+                    new_path = path + [nxt]
+                    if nxt == dst:
+                        found.append(new_path)
+                        if len(found) >= limit:
+                            break
+                    if len(new_path) <= depth and tuple(new_path) not in seen:
+                        seen.add(tuple(new_path))
+                        queue.append((nxt, new_path))
         return found
 
     def trace_compare(self, symbol: str, layer: str = "") -> dict:
@@ -3766,8 +3785,7 @@ class Store:
         Примитив дашборда «белые пятна» для итеративного развития покрытия.
         """
         covd_syms = set()
-        blocks_total = {}
-        blocks_covered = {}
+        blocks_agg = {}  # sym -> [set(total block_ids), set(covered block_ids)]
         mods = {}
         # ОДНА read-txn на весь метод (B1): coverage, coverage_blocks
         # и symbols — из одного снимка; раньше итерация символов шла
@@ -3809,10 +3827,13 @@ class Store:
                             if not sym:
                                 continue
                             bid = b.get("block_id", "")
-                            tot = blocks_total.setdefault(sym, set())
-                            tot.add(bid)
+                            # union-счётчики вместо set'ов всех block_id
+                            # (B2): [total, covered] на символ — пик памяти
+                            # O(символов), а не O(всех блоков слоя).
+                            agg = blocks_agg.setdefault(sym, [set(), set()])
+                            agg[0].add(bid)
                             if b.get("covered"):
-                                blocks_covered.setdefault(sym, set()).add(bid)
+                                agg[1].add(bid)
                         rc, k, v = cur.get(mdbx.CURSOR_NEXT)
             # символы слоя → по модулям (в той же txn)
             for sym in self._map_symbols_locked(txn, pre, ""):
@@ -3832,8 +3853,10 @@ class Store:
                 m["symbols_total"] += 1
                 if sym in covd_syms:
                     m["symbols_covered"] += 1
-                m["blocks_total"] += len(blocks_total.get(sym, ()))
-                m["blocks_covered"] += len(blocks_covered.get(sym, ()))
+                agg = blocks_agg.get(sym)
+                if agg:
+                    m["blocks_total"] += len(agg[0])
+                    m["blocks_covered"] += len(agg[1])
         tot = {"symbols_total": 0, "symbols_covered": 0,
                "blocks_total": 0, "blocks_covered": 0}
         for m in mods.values():
