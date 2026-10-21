@@ -34,7 +34,7 @@ shared-graph-memory.mdbx — персистентная память роя на
 | `gc(dry_run=true, archive=false)` | Тиринг hot/warm/cold (не удаляет без purge) |
 | `purge(keys)` | Явное удаление записей |
 | `stats()` | Статистика хранилища (здоровье памяти) |
-| `db_status()` | Полная диагностика БД (`MDBX_envinfo`: меты/bootid/txnid/pgop/geo, sync-пороги) |
+| `db_status()` | Диагностика БД (`MDBX_envinfo`: меты/bootid/txnid/pgop/geo, sync-пороги) + `ops` (busy_retries/busy_failures/commit_p90_us — **per-process**, только счётчики своего процесса) |
 | `db_flush()` | Принудительный сброс данных на диск (sync force=true) |
 | `db_readers(check=false)` | Число активных читателей; check=true чистит мёртвых |
 | `db_stat(table?)` | Статистика env или конкретной таблицы |
