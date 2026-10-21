@@ -1557,19 +1557,21 @@ class Store:
     def graph(self, key: str, depth: int = 1):
         depth = max(0, min(int(depth), 3))
         root = self.norm.normalize(key)
-        with self.env.begin(readonly=True) as txn:
-            rc, _ = txn.get(self.dbi(txn, "records"), root.encode())
-        if rc != mdbx.RC_SUCCESS:
-            raise invalid(
-                "запись %r не существует" % root,
-                "сначала сохраните её через safe_store",
-            )
         nodes = {root}
         edges = []
         visited = set()
         frontier = [root]
+        # ОДНА read-txn: проверка существования root и BFS из одного снимка
+        # (B1) — раньше проверка была отдельной txn (TOCTOU: запись могли
+        # удалить между проверкой и обходом).
         with self.env.begin(readonly=True) as txn:
             rec_dbi = self.dbi(txn, "records")
+            rc, _ = txn.get(rec_dbi, root.encode())
+            if rc != mdbx.RC_SUCCESS:
+                raise invalid(
+                    "запись %r не существует" % root,
+                    "сначала сохраните её через safe_store",
+                )
             links_dbi = self.dbi(txn, "links")
             for _ in range(depth + 1):
                 nxt = []
@@ -1730,23 +1732,35 @@ class Store:
     def gc(self, dry_run: bool = True, archive: bool = False, threshold: float = GC_WARM):
         hot, warm, cold = [], [], []
         ids_to_cold = []
-        for key, val in self._all_records():
-            body = json.loads(val.decode())
-            if body.get("type") == "proc" and "context-snapshot" in key.decode():
-                hot.append((key, None))
-                continue
-            rec_id = body.get("_id", 0)
-            with self.env.begin(readonly=True) as txn:
-                incoming = self._incoming_count(txn, rec_id)
-                score = self._score_of(txn, rec_id, body.get("importance", 0.0), incoming)
-            item = (key, score)
-            if score > GC_HOT:
-                hot.append(item)
-            elif score > threshold:
-                warm.append(item)
-            else:
-                cold.append(item)
-                ids_to_cold.append((key, rec_id, body))
+        # ОДНА read-txn классификации (B1): records + счётчики входящих из
+        # одного снимка — раньше на каждую запись открывалась своя txn (N+1).
+        # Тиринг фиксируется консистентно; запись (archive/delete) ниже — в
+        # своей write-txn, как и прежде.
+        with self.env.begin(readonly=True) as txn:
+            rec_dbi = self.dbi(txn, "records")
+            with txn.cursor(rec_dbi) as cur:
+                rc, key, val = cur.get(mdbx.CURSOR_FIRST)
+                while rc == mdbx.RC_SUCCESS:
+                    body = json.loads(val.decode())
+                    if body.get("type") == "proc" and \
+                            "context-snapshot" in key.decode():
+                        hot.append((key, None))
+                        rc, key, val = cur.get(mdbx.CURSOR_NEXT)
+                        continue
+                    rec_id = body.get("_id", 0)
+                    incoming = self._incoming_count(txn, rec_id)
+                    score = self._score_of(txn, rec_id,
+                                           body.get("importance", 0.0),
+                                           incoming)
+                    item = (key, score)
+                    if score > GC_HOT:
+                        hot.append(item)
+                    elif score > threshold:
+                        warm.append(item)
+                    else:
+                        cold.append(item)
+                        ids_to_cold.append((key, rec_id, body))
+                    rc, key, val = cur.get(mdbx.CURSOR_NEXT)
         stats = {
             "hot": len(hot), "warm": len(warm), "cold": len(cold),
             "dry_run": dry_run, "archive": archive,
@@ -1866,6 +1880,13 @@ class Store:
             txn.delete(links_dbi, fwd_key, idb)
 
     # --- refactoring-map (структурный слой) ---------------------------------
+    def _map_symbol_locked(self, txn, pre: str, key: str) -> dict:
+        """map_symbol внутри УЖЕ открытой read-txn (без своей txn)."""
+        rc, val = txn.get(self.dbi(txn, "symbols"), (pre + key).encode())
+        if val is None:
+            return {}
+        return json.loads(val.decode())
+
     def map_symbol(self, key: str, layer: str = "") -> dict:
         """Читает символ из structural-слоя (symbols).
 
@@ -1875,11 +1896,7 @@ class Store:
         layer = self._effective_layer(layer)
         pre = self.layer_prefix(layer)
         with self.env.begin(readonly=True) as txn:
-            rc, val = txn.get(self.dbi(txn, "symbols"),
-                              (pre + key).encode())
-        if val is None:
-            return {}
-        return json.loads(val.decode())
+            return self._map_symbol_locked(txn, pre, key)
 
     def sym_id(self, key: str) -> int:
         """Стабильный числовой id символа.
@@ -1934,6 +1951,51 @@ class Store:
                                              self.dbi(txn, "sym_aliases"),
                                              old_key.strip())
 
+    def _map_symbols_locked(self, txn, pre: str, prefix: str = "",
+                            limit: int = None) -> list:
+        """map_symbols внутри УЖЕ открытой read-txn (без своей txn)."""
+        sym_dbi = self.dbi(txn, "symbols")
+        mod_pat = None
+        if prefix.startswith("fn:") and ":" not in prefix[3:].lstrip(":"):
+            mod_pat = prefix[3:].lstrip(":")
+        out = []
+        with txn.cursor(sym_dbi) as cur:
+            rc, k, v = cur.get(mdbx.CURSOR_FIRST)
+            while rc == mdbx.RC_SUCCESS:
+                key = k.decode()
+                # базовый слой не должен видеть чужие feature-слои
+                if not pre and _LAYER_KEY_RE.match(key):
+                    rc, k, v = cur.get(mdbx.CURSOR_NEXT)
+                    continue
+                if pre and not key.startswith(pre):
+                    rc, k, v = cur.get(mdbx.CURSOR_NEXT)
+                    continue
+                bare = key[len(pre):] if pre else key
+                if bare.startswith(prefix):
+                    out.append(bare)
+                    if limit and len(out) >= limit:
+                        break
+                elif mod_pat:
+                    # module-fallback ТОЛЬКО для fn:-пространства: не
+                    # путать type:/macro: карты с функциями
+                    if not bare.startswith("fn:"):
+                        rc, k, v = cur.get(mdbx.CURSOR_NEXT)
+                        continue
+                    try:
+                        body = json.loads(v)
+                    except ValueError:
+                        body = {}
+                    # merged-карты хранят module внутри implementations
+                    mods = [m.get("module")
+                            for m in body.get("implementations") or []]
+                    mods.append(body.get("module", ""))
+                    if any(m and m.startswith(mod_pat) for m in mods):
+                        out.append(bare)
+                        if limit and len(out) >= limit:
+                            break
+                rc, k, v = cur.get(mdbx.CURSOR_NEXT)
+        return out
+
     def map_symbols(self, prefix: str = "", limit: int = None,
                     layer: str = "") -> list:
         """Все ключи symbols по префиксу (детерминированная сортировка).
@@ -1948,47 +2010,8 @@ class Store:
         """
         layer = self._effective_layer(layer)
         pre = self.layer_prefix(layer)
-        out = []
         with self.env.begin(readonly=True) as txn:
-            sym_dbi = self.dbi(txn, "symbols")
-            mod_pat = None
-            if prefix.startswith("fn:") and ":" not in prefix[3:].lstrip(":"):
-                mod_pat = prefix[3:].lstrip(":")
-            with txn.cursor(sym_dbi) as cur:
-                rc, k, v = cur.get(mdbx.CURSOR_FIRST)
-                while rc == mdbx.RC_SUCCESS:
-                    key = k.decode()
-                    # базовый слой не должен видеть чужие feature-слои
-                    if not pre and _LAYER_KEY_RE.match(key):
-                        rc, k, v = cur.get(mdbx.CURSOR_NEXT)
-                        continue
-                    if pre and not key.startswith(pre):
-                        rc, k, v = cur.get(mdbx.CURSOR_NEXT)
-                        continue
-                    bare = key[len(pre):] if pre else key
-                    if bare.startswith(prefix):
-                        out.append(bare)
-                        if limit and len(out) >= limit:
-                            break
-                    elif mod_pat:
-                        # module-fallback ТОЛЬКО для fn:-пространства: не
-                        # путать type:/macro: карты с функциями
-                        if not bare.startswith("fn:"):
-                            rc, k, v = cur.get(mdbx.CURSOR_NEXT)
-                            continue
-                        try:
-                            body = json.loads(v)
-                        except ValueError:
-                            body = {}
-                        # merged-карты хранят module внутри implementations
-                        mods = [m.get("module") for m in body.get("implementations") or []]
-                        mods.append(body.get("module", ""))
-                        if any(m and m.startswith(mod_pat) for m in mods):
-                            out.append(bare)
-                            if limit and len(out) >= limit:
-                                break
-                    rc, k, v = cur.get(mdbx.CURSOR_NEXT)
-        return out
+            return self._map_symbols_locked(txn, pre, prefix, limit)
 
     def map_put_symbol(self, key: str, body: dict, layer: str = "") -> None:
         """Аддитивная запись символа (перегенерируемый слой).
@@ -2404,31 +2427,37 @@ class Store:
         по модулям + топ-N крупнейших неспортированных (по числу блоков) —
         «что переписывать следующим».
         """
-        layer = self._effective_layer(layer)
         mods = {}
         not_ported = []
-        for key in self.map_symbols(prefix="fn:", layer=layer):
-            body = self.map_symbol(key, layer=layer)
-            mod_list = [i.get("module") for i in body.get("implementations") or []
-                        if i.get("module")]
-            if body.get("module"):
-                mod_list.insert(0, body.get("module", ""))
-            mod = mod_list[0] if mod_list else "?"
-            if module and not mod.startswith(module):
-                continue
-            st = body.get("cpp_status") or ("done" if body.get("cpp_eq") else "none")
-            if st not in ("none", "mapped", "partial", "done"):
-                st = "none"
-            m = mods.setdefault(mod, {"total": 0, "none": 0, "mapped": 0,
-                                      "partial": 0, "done": 0})
-            m["total"] += 1
-            m[st] += 1
-            if st in ("none", "partial"):
-                blocks = len(body.get("blocks") or [])
-                for impl in body.get("implementations") or []:
-                    blocks += len(impl.get("blocks") or [])
-                not_ported.append({"symbol": key, "module": mod,
-                                   "status": st, "blocks": blocks})
+        # ОДНА read-txn на весь метод (B1): слой резолвится внутри неё —
+        # снимок согласован даже при параллельной записи/активации слоя.
+        with self.env.begin(readonly=True) as txn:
+            layer = self._effective_layer_locked(txn, layer)
+            pre = self.layer_prefix(layer)
+            for key in self._map_symbols_locked(txn, pre, "fn:"):
+                body = self._map_symbol_locked(txn, pre, key)
+                mod_list = [i.get("module")
+                            for i in body.get("implementations") or []
+                            if i.get("module")]
+                if body.get("module"):
+                    mod_list.insert(0, body.get("module", ""))
+                mod = mod_list[0] if mod_list else "?"
+                if module and not mod.startswith(module):
+                    continue
+                st = body.get("cpp_status") or \
+                    ("done" if body.get("cpp_eq") else "none")
+                if st not in ("none", "mapped", "partial", "done"):
+                    st = "none"
+                m = mods.setdefault(mod, {"total": 0, "none": 0, "mapped": 0,
+                                          "partial": 0, "done": 0})
+                m["total"] += 1
+                m[st] += 1
+                if st in ("none", "partial"):
+                    blocks = len(body.get("blocks") or [])
+                    for impl in body.get("implementations") or []:
+                        blocks += len(impl.get("blocks") or [])
+                    not_ported.append({"symbol": key, "module": mod,
+                                       "status": st, "blocks": blocks})
         not_ported.sort(key=lambda r: -r["blocks"])
         total = {"total": 0, "none": 0, "mapped": 0, "partial": 0, "done": 0}
         for m in mods.values():
@@ -2495,33 +2524,36 @@ class Store:
         Возвращает: добавленные/удалённые/изменённые символы (по модулям),
         число затронутых функций/блоков, и совпавшие (common).
         """
-        def layer_symbols(layer: str) -> dict:
+        def layer_symbols(txn, layer: str) -> dict:
             pre = self.layer_prefix(layer)
             out = {}
-            with self.env.begin(readonly=True) as txn:
-                sym_dbi = self.dbi(txn, "symbols")
-                with txn.cursor(sym_dbi) as cur:
-                    rc, k, v = cur.get(mdbx.CURSOR_FIRST)
-                    while rc == mdbx.RC_SUCCESS:
-                        key = k.decode()
-                        # базовый слой (pre=="") не должен захватывать ключи
-                        # чужих feature-слоёв ("0.16.feat.N/fn:...")
-                        if not pre and _LAYER_KEY_RE.match(key):
+            sym_dbi = self.dbi(txn, "symbols")
+            with txn.cursor(sym_dbi) as cur:
+                rc, k, v = cur.get(mdbx.CURSOR_FIRST)
+                while rc == mdbx.RC_SUCCESS:
+                    key = k.decode()
+                    # базовый слой (pre=="") не должен захватывать ключи
+                    # чужих feature-слоёв ("0.16.feat.N/fn:...")
+                    if not pre and _LAYER_KEY_RE.match(key):
+                        rc, k, v = cur.get(mdbx.CURSOR_NEXT)
+                        continue
+                    if not pre or key.startswith(pre):
+                        bare = key[len(pre):] if pre else key
+                        try:
+                            out[bare] = json.loads(v)
+                        except ValueError:
+                            # повреждённая запись: пропустить (перегенерируется)
                             rc, k, v = cur.get(mdbx.CURSOR_NEXT)
                             continue
-                        if not pre or key.startswith(pre):
-                            bare = key[len(pre):] if pre else key
-                            try:
-                                out[bare] = json.loads(v)
-                            except ValueError:
-                                # повреждённая запись: пропустить (перегенерируется)
-                                rc, k, v = cur.get(mdbx.CURSOR_NEXT)
-                                continue
-                        rc, k, v = cur.get(mdbx.CURSOR_NEXT)
+                    rc, k, v = cur.get(mdbx.CURSOR_NEXT)
             return out
 
-        a = layer_symbols(from_layer)
-        b = layer_symbols(to_layer)
+        # ОДНА read-txn на оба слоя (B1): diff двух поколений из одного
+        # снимка — раньше каждый слой читался своей txn и мог оказаться из
+        # разных MVCC-поколений (diff наполовину «старое против нового»).
+        with self.env.begin(readonly=True) as txn:
+            a = layer_symbols(txn, from_layer)
+            b = layer_symbols(txn, to_layer)
         added = {}
         removed = {}
         changed = {}
@@ -3642,10 +3674,14 @@ class Store:
           - uncovered_blocks — блоки, отмеченные covered=false в
             coverage_blocks по всем тестам.
         """
-        layer = self._effective_layer(layer)
-        pre = self.layer_prefix(layer)
         covd_syms = set()
+        uncovered_symbols = []
+        # ОДНА read-txn на весь метод (B1): coverage и symbols читаются из
+        # одного снимка — раньше symbols шли отдельными txn (OVERLAPPING)
+        # и могли быть из другого поколения, чем coverage.
         with self.env.begin(readonly=True) as txn:
+            layer = self._effective_layer_locked(txn, layer)
+            pre = self.layer_prefix(layer)
             cov_dbi = self.dbi(txn, "coverage")
             with txn.cursor(cov_dbi) as cur:
                 rc, k, v = cur.get(mdbx.CURSOR_FIRST)
@@ -3659,27 +3695,26 @@ class Store:
                         for s in body.get("symbols", []) or []:
                             covd_syms.add(s)
                     rc, k, v = cur.get(mdbx.CURSOR_NEXT)
-        # вне read-txn: map_symbols открывает свою (вложенные — OVERLAPPING)
-        all_syms = self.map_symbols(prefix="fn:", layer=layer)
-        mod_pat = module
-        uncovered_symbols = []
-        for sym in all_syms:
-            body = self.map_symbol(sym, layer=layer)
-            # merged-карты: module внутри implementations
-            mods = [i.get("module") for i in body.get("implementations") or []
-                    if i.get("module")]
-            if body.get("module"):
-                mods.insert(0, body.get("module", ""))
-            if mod_pat and not any(
-                    m and m.startswith(mod_pat) for m in mods):
-                continue
-            if sym not in covd_syms:
-                uncovered_symbols.append({
-                    "symbol": sym,
-                    "module": mods[0] if mods else body.get("module", ""),
-                })
-                if limit and len(uncovered_symbols) >= limit:
-                    break
+            all_syms = self._map_symbols_locked(txn, pre, "fn:")
+            mod_pat = module
+            for sym in all_syms:
+                body = self._map_symbol_locked(txn, pre, sym)
+                # merged-карты: module внутри implementations
+                mods = [i.get("module")
+                        for i in body.get("implementations") or []
+                        if i.get("module")]
+                if body.get("module"):
+                    mods.insert(0, body.get("module", ""))
+                if mod_pat and not any(
+                        m and m.startswith(mod_pat) for m in mods):
+                    continue
+                if sym not in covd_syms:
+                    uncovered_symbols.append({
+                        "symbol": sym,
+                        "module": mods[0] if mods else body.get("module", ""),
+                    })
+                    if limit and len(uncovered_symbols) >= limit:
+                        break
         return {
             "module": module, "layer": layer,
             "uncovered_symbols": uncovered_symbols,
@@ -3730,12 +3765,16 @@ class Store:
         По модулям + итого: symbols_covered/total, blocks_covered/total, pct.
         Примитив дашборда «белые пятна» для итеративного развития покрытия.
         """
-        layer = self._effective_layer(layer)
-        pre = self.layer_prefix(layer)
         covd_syms = set()
         blocks_total = {}
         blocks_covered = {}
+        mods = {}
+        # ОДНА read-txn на весь метод (B1): coverage, coverage_blocks
+        # и symbols — из одного снимка; раньше итерация символов шла
+        # отдельными txn (OVERLAPPING) и могла расходиться с coverage.
         with self.env.begin(readonly=True) as txn:
+            layer = self._effective_layer_locked(txn, layer)
+            pre = self.layer_prefix(layer)
             cov_dbi = self._opt_dbi(txn, "coverage")
             cbk_dbi = self._opt_dbi(txn, "coverage_blocks")
             if cov_dbi is not None:
@@ -3775,24 +3814,26 @@ class Store:
                             if b.get("covered"):
                                 blocks_covered.setdefault(sym, set()).add(bid)
                         rc, k, v = cur.get(mdbx.CURSOR_NEXT)
-        # символы слоя → по модулям
-        mods = {}
-        for sym in self.map_symbols(prefix="", layer=layer):
-            body = self.map_symbol(sym, layer=layer)
-            mod_list = [i.get("module") for i in body.get("implementations") or []
-                        if i.get("module")]
-            if body.get("module"):
-                mod_list.insert(0, body.get("module", ""))
-            mod = mod_list[0] if mod_list else body.get("module", "?")
-            if module and not mod.startswith(module):
-                continue
-            m = mods.setdefault(mod, {"symbols_total": 0, "symbols_covered": 0,
-                                      "blocks_total": 0, "blocks_covered": 0})
-            m["symbols_total"] += 1
-            if sym in covd_syms:
-                m["symbols_covered"] += 1
-            m["blocks_total"] += len(blocks_total.get(sym, ()))
-            m["blocks_covered"] += len(blocks_covered.get(sym, ()))
+            # символы слоя → по модулям (в той же txn)
+            for sym in self._map_symbols_locked(txn, pre, ""):
+                body = self._map_symbol_locked(txn, pre, sym)
+                mod_list = [i.get("module")
+                            for i in body.get("implementations") or []
+                            if i.get("module")]
+                if body.get("module"):
+                    mod_list.insert(0, body.get("module", ""))
+                mod = mod_list[0] if mod_list else body.get("module", "?")
+                if module and not mod.startswith(module):
+                    continue
+                m = mods.setdefault(mod, {"symbols_total": 0,
+                                          "symbols_covered": 0,
+                                          "blocks_total": 0,
+                                          "blocks_covered": 0})
+                m["symbols_total"] += 1
+                if sym in covd_syms:
+                    m["symbols_covered"] += 1
+                m["blocks_total"] += len(blocks_total.get(sym, ()))
+                m["blocks_covered"] += len(blocks_covered.get(sym, ()))
         tot = {"symbols_total": 0, "symbols_covered": 0,
                "blocks_total": 0, "blocks_covered": 0}
         for m in mods.values():
@@ -3864,16 +3905,30 @@ class Store:
         total_importance = 0.0
         n = 0
         incoming_top = []
-        for key, val in self._all_records():
-            body = json.loads(val.decode())
-            t = body.get("type", "?")
-            by_type[t] = by_type.get(t, 0) + 1
-            total_importance += body.get("importance", 0.0)
-            n += 1
-            rec_id = body.get("_id", 0)
-            with self.env.begin(readonly=True) as txn:
-                inc = self._incoming_count(txn, rec_id)
-            incoming_top.append((key.decode(), inc))
+        # ОДНА read-txn на весь метод (B1): records + счётчики входящих +
+        # next_id из одного снимка — раньше на каждую запись открывалась
+        # своя txn (N+1) плюс отдельная на next_id.
+        next_id = self.next_id
+        with self.env.begin(readonly=True) as txn:
+            rec_dbi = self.dbi(txn, "records")
+            try:
+                rc, nid_val = txn.get(self.dbi(txn, "meta"), b"next_id")
+                if nid_val is not None and len(nid_val) == ID_LEN:
+                    next_id = _unpack_u64(nid_val)
+            except Exception:  # noqa: BLE001
+                pass
+            with txn.cursor(rec_dbi) as cur:
+                rc, key, val = cur.get(mdbx.CURSOR_FIRST)
+                while rc == mdbx.RC_SUCCESS:
+                    body = json.loads(val.decode())
+                    t = body.get("type", "?")
+                    by_type[t] = by_type.get(t, 0) + 1
+                    total_importance += body.get("importance", 0.0)
+                    n += 1
+                    rec_id = body.get("_id", 0)
+                    inc = self._incoming_count(txn, rec_id)
+                    incoming_top.append((key.decode(), inc))
+                    rc, key, val = cur.get(mdbx.CURSOR_NEXT)
         incoming_top.sort(key=lambda kv: -kv[1])
         return {
             "records": n,
@@ -3883,7 +3938,7 @@ class Store:
             "vocab_modules": len(self.norm.modules),
             "vocab_topics": len(self.norm.topics),
             "last_gc": self.last_gc,
-            "next_id": self._peek_next_id(),  # свежее из meta (read-only)
+            "next_id": next_id,
         }
 
     def _peek_next_id(self) -> int:
