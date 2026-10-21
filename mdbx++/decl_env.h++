@@ -132,6 +132,13 @@ public:
     MDBX_CXX11_CONSTEXPR
     geometry(const geometry &) noexcept = default;
     MDBX_CXX14_CONSTEXPR geometry &operator=(const geometry &) noexcept = default;
+
+    /// \brief All `geometry::set_*` methods are noexcept by design: they only
+    /// fill a value object, checking nothing and performing no C API calls. The
+    /// resulting geometry is applied via \ref env::set_geometry(), which
+    /// throws \ref mdbx::error on any invalid/inapplicable value (e.g. a size
+    /// below the current file size or a late call after open), so configuration
+    /// errors are never silently swallowed (issue #143).
     MDBX_CXX11_CONSTEXPR geometry(intptr_t size_lower, intptr_t size_now = default_value,
                                   intptr_t size_upper = default_value, intptr_t growth_step = default_value,
                                   intptr_t shrink_threshold = default_value, intptr_t pagesize = default_value) noexcept
@@ -719,6 +726,8 @@ public:
   inline env &alter_flags(MDBX_env_flags_t flags, bool on_off);
 
   /// \brief Set all size-related parameters of environment.
+  /// \throws mdbx::error on invalid or inapplicable values (e.g. a size below
+  /// the current file size or a late call after the environment was opened).
   inline env &set_geometry(const geometry &size);
 
   /// \brief Flush the environment data buffers.
