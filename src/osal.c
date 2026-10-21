@@ -2622,6 +2622,12 @@ int osal_mresize(const int flags, osal_mmap_t *map, size_t size, size_t limit) {
   if ((flags & MDBX_MRESIZE_MAY_UNMAP) == 0) {
     if (size <= map->current && limit == map->limit)
       return MDBX_SUCCESS;
+    /* MDBX_EPERM here means "the requested resize cannot be done without
+     * un-mapping, and un-mapping is not permitted in this context" — i.e. an
+     * OS/system limitation, NOT a shortage of resources (address space
+     * exhaustion is reported separately as MDBX_UNABLE_EXTEND_MAPSIZE, and a
+     * deferred shrink/remap caused by readers holding the remap-lock shared is
+     * decided by the caller in dxb_resize(); see issue #154). */
     return MDBX_EPERM;
   }
 
