@@ -66,7 +66,7 @@ __cold int env_sync(MDBX_env *env, bool force, bool nonblock) {
   int rc = MDBX_RESULT_TRUE /* means "nothing to sync" */;
 
 retry:;
-  unsigned flags = env->flags & ~(MDBX_NOMETASYNC | txn_shrink_allowed);
+  unsigned flags = env->flags & ~(MDBX_NOMETASYNC | txn_unmap_allowed);
   if (unlikely((flags & (ENV_FATAL_ERROR | ENV_ACTIVE)) != ENV_ACTIVE)) {
     rc = (flags & ENV_FATAL_ERROR) ? MDBX_PANIC : MDBX_EPERM;
     goto bailout;
@@ -159,11 +159,11 @@ retry:;
     eASSERT1(env, head.txnid == recent_committed_txnid(env));
     env->basal_txn->txnid = head.txnid;
     txn_gc_detent(env->basal_txn);
-    flags |= txn_shrink_allowed;
+    flags |= txn_unmap_allowed;
   }
 
   eASSERT0(env, txn_owned || should_unlock);
-  eASSERT0(env, !txn_owned || (flags & txn_shrink_allowed) == 0);
+  eASSERT0(env, !txn_owned || (flags & txn_unmap_allowed) == 0);
 
   if (!head.is_steady && unlikely(env->stuck_meta >= 0) && troika.recent != (uint8_t)env->stuck_meta) {
     NOTICE("skip %s since wagering meta-page (%u) is mismatch the recent meta-page (%u)", "sync datafile",
