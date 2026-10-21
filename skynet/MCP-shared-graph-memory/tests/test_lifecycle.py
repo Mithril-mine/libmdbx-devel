@@ -55,6 +55,40 @@ def test_map_load_batch_bumps_generation(store):
     assert g1 == g0 + 1
 
 
+def test_map_load_batch_chunked(store, monkeypatch):
+    """Чанкование (A2): несколько write-txn, итог и поколение как у монолита."""
+    syms = {"fn:m:s%d" % i: _mk_sym() for i in range(5)}
+    edges = [{"caller": "fn:m:s0", "callee": "fn:m:s%d" % i}
+             for i in (1, 2, 3)]
+    groups = {"grp:m:all": ["fn:m:s%d" % i for i in range(5)]}
+    orig = store._begin_write
+    calls = {"n": 0}
+
+    def spy():
+        calls["n"] += 1
+        return orig()
+
+    monkeypatch.setattr(store, "_begin_write", spy)
+    g0 = store.map_generations()["generation"]
+    # chunk=2: 5 sym + 3 edge + 5 grp = 13 элементов → 7 чанков + 1 txn
+    # поколения (canary.y в финале, базовый слой)
+    r = store.map_load_batch(syms, edges, groups, chunk=2, replace=True)
+    monkeypatch.undo()
+    assert r == {"symbols": 5, "edges": 3, "groups": 5}
+    assert calls["n"] == 8, \
+        "ожидались 7 чанков + txn поколения, %d" % calls["n"]
+    # итог идентичен монолитной загрузке
+    assert sorted(store.map_symbols("fn:")) == sorted(syms)
+    assert len(store.map_edges_of("fn:m:s0")) == 3
+    assert len(store.map_group_members("grp:m:all")) == 5
+    # поколение инкрементировано ровно один раз (не по чанку)
+    assert store.map_generations()["generation"] == g0 + 1
+    # идемпотентность: повтор той же загрузки — тот же контент, поколение +1
+    store.map_load_batch(syms, edges, groups, chunk=2, replace=True)
+    assert len(store.map_edges_of("fn:m:s0")) == 3  # нет дублей
+    assert store.map_generations()["generation"] == g0 + 2
+
+
 def test_map_snapshot_single_txn_and_hash(store, monkeypatch):
     """map_snapshot открывает РОВНО одну read-txn; content_hash чувствителен."""
     store.map_put_symbol("fn:a:foo", {"module": "m", "l0": 1, "l1": 5,

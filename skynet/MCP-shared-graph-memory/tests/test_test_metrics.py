@@ -182,6 +182,61 @@ def test_coverage_blocks_insert_get(store):
     assert by_id == {"B1": True, "B2": False}
 
 
+def test_coverage_blocks_batch(store, monkeypatch):
+    """coverage_blocks_batch (A3): одна txn на прогон, семантика insert."""
+    orig = store._begin_write
+    calls = {"n": 0}
+
+    def spy():
+        calls["n"] += 1
+        return orig()
+
+    monkeypatch.setattr(store, "_begin_write", spy)
+    res = store.coverage_blocks_batch({
+        "ut/gc": [{"symbol": "fn:gc_alloc_ex", "block_id": "B1",
+                   "covered": True}],
+        "ut/api": [{"symbol": "fn:mdbx_get", "block_id": "B1",
+                    "covered": True},
+                   {"symbol": "fn:mdbx_get", "block_id": "B2",
+                    "covered": False}],
+    })
+    monkeypatch.undo()
+    assert res == {"tests": 2, "symbols": 2}
+    assert calls["n"] == 1, "батч = одна write-txn, %d" % calls["n"]
+    # содержимое идентично поштучной записи
+    b1 = store.coverage_blocks_get("ut/gc", "fn:gc_alloc_ex")
+    b2 = store.coverage_blocks_get("ut/api", "fn:mdbx_get")
+    assert [b["block_id"] for b in b1] == ["B1"]
+    assert {b["block_id"]: b["covered"] for b in b2} == \
+        {"B1": True, "B2": False}
+
+
+def test_test_metrics_batch(store, monkeypatch):
+    """test_metrics_batch (A3): одна txn на ctest-прогон, окна как у insert."""
+    orig = store._begin_write
+    calls = {"n": 0}
+
+    def spy():
+        calls["n"] += 1
+        return orig()
+
+    monkeypatch.setattr(store, "_begin_write", spy)
+    res = store.test_metrics_batch({
+        "ut/a": {"duration_ms": 100.0, "labels": ["passed"],
+                 "timeout_sec": 0},
+        "ut/b": {"duration_ms": 250.0, "labels": ["failed"],
+                 "timeout_sec": 0},
+    })
+    monkeypatch.undo()
+    assert res == {"tests": 2}
+    assert calls["n"] == 1, "батч = одна write-txn, %d" % calls["n"]
+    ma = store.test_metrics_get("ut/a")
+    mb = store.test_metrics_get("ut/b")
+    assert ma["runs"] == 1 and ma["last_ms"] == 100.0
+    assert ma["labels"] == ["passed"]
+    assert mb["last_ms"] == 250.0 and mb["labels"] == ["failed"]
+
+
 def test_coverage_gaps_finds_uncovered_symbols(store):
     """coverage_gaps('gc') находит символы gc без покрытия."""
     store.map_put_symbol("fn:gc_alloc_ex", {"module": "gc-get", "kind": "function"})
