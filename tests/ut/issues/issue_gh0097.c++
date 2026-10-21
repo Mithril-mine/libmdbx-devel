@@ -1,6 +1,8 @@
 #include "mdbx.h++"
 #include <gtest/gtest.h>
 
+#include "../test-env.h"
+
 #include <cstdint>
 #include <cstdio>
 #include <cstring>
@@ -19,6 +21,10 @@
 // UB. The read-transaction cases are exercised here.
 
 TEST(issue_gh0097, getters_usable_inside_read_transaction) {
+  if (MDBX_GTEST_IS_EXECUTION_TIMEOUT()) {
+    GTEST_SKIP() << "SKIPPED by RUNTIME_LIMIT";
+    return;
+  }
   const std::string testdb = "issue97.mdbx";
   try {
     mdbx::env::remove(testdb);
@@ -56,6 +62,10 @@ TEST(issue_gh0097, getters_usable_inside_read_transaction) {
 }
 
 TEST(issue_gh0097, sync_period_double_rejects_out_of_range) {
+  if (MDBX_GTEST_IS_EXECUTION_TIMEOUT()) {
+    GTEST_SKIP() << "SKIPPED by RUNTIME_LIMIT";
+    return;
+  }
   const std::string testdb = "issue97b.mdbx";
   try {
     mdbx::env::remove(testdb);

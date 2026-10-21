@@ -2,6 +2,8 @@
 #include "tool_runner.h"
 #include <gtest/gtest.h>
 
+#include "../test-env.h"
+
 #include <cstddef>
 #include <cstdint>
 #include <cstdio>
@@ -59,6 +61,10 @@ static void create_dumpable_db(const char *path, size_t count) {
 static int run_tool(const std::vector<std::string> &args) { return tool_runner::run(args); }
 
 TEST(issue_gh0071, dump_f_does_not_truncate_on_usage_error) {
+  if (MDBX_GTEST_IS_EXECUTION_TIMEOUT()) {
+    GTEST_SKIP() << "SKIPPED by RUNTIME_LIMIT";
+    return;
+  }
   const char *const dbname = "issue71.mdbx";
   const char *const outname = "issue71.dump";
   remove_file(dbname);

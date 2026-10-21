@@ -1,6 +1,8 @@
 #include "mdbx.h++"
 #include <gtest/gtest.h>
 
+#include "../test-env.h"
+
 #include <cstdint>
 #include <cstdio>
 #include <cstring>
@@ -139,6 +141,10 @@ static bool craft_cyclic_root(const std::string &testdb) {
 }
 
 TEST(issue_gh0074, cyclic_branch_rejected_on_drop) {
+  if (MDBX_GTEST_IS_EXECUTION_TIMEOUT()) {
+    GTEST_SKIP() << "SKIPPED by RUNTIME_LIMIT";
+    return;
+  }
   const std::string testdb = "issue74.mdbx";
   ASSERT_TRUE(create_base_db(testdb));
   ASSERT_TRUE(craft_cyclic_root(testdb));

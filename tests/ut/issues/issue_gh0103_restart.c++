@@ -1,6 +1,8 @@
 #include "mdbx.h"
 #include <gtest/gtest.h>
 
+#include "../test-env.h"
+
 #include <cstdio>
 #include <cstring>
 
@@ -16,6 +18,10 @@ extern "C" int mprobe_ctl(const char *request, char *reply, size_t reply_size);
 // `alloc-fault`, so this requires MDBX_PROBES=ON and MDBX_PROBES=1.
 
 TEST(issue_gh0103, failed_restart_keeps_parent_usable) {
+  if (MDBX_GTEST_IS_EXECUTION_TIMEOUT()) {
+    GTEST_SKIP() << "SKIPPED by RUNTIME_LIMIT";
+    return;
+  }
   const char *const dbname = "issue103-restart.mdbx";
   remove(dbname);
 

@@ -1,6 +1,8 @@
 #include "mdbx.h++"
 #include <gtest/gtest.h>
 
+#include "../test-env.h"
+
 #include <cstdint>
 #include <cstring>
 
@@ -17,6 +19,10 @@ using buffer = mdbx::buffer<>;
 // return a buffer that lost the caller's allocator.
 
 TEST(issue_gh0099, reserve_keeps_capacity_and_headroom) {
+  if (MDBX_GTEST_IS_EXECUTION_TIMEOUT()) {
+    GTEST_SKIP() << "SKIPPED by RUNTIME_LIMIT";
+    return;
+  }
   buffer b(mdbx::slice("payload"), false);
   b.reserve_tailroom(4096);
   const size_t capacity = b.capacity();
@@ -30,6 +36,10 @@ TEST(issue_gh0099, reserve_keeps_capacity_and_headroom) {
 }
 
 TEST(issue_gh0099, reseve_with_headroom_does_not_trip_assertion) {
+  if (MDBX_GTEST_IS_EXECUTION_TIMEOUT()) {
+    GTEST_SKIP() << "SKIPPED by RUNTIME_LIMIT";
+    return;
+  }
   buffer h(mdbx::slice("payload"), false);
   h.reserve(32, 32);
   /* an ordinary reserve() over a buffer with headroom used to compute the old
@@ -39,6 +49,10 @@ TEST(issue_gh0099, reseve_with_headroom_does_not_trip_assertion) {
 }
 
 TEST(issue_gh0099, buffer_from_txn_accepts_user_memory_and_empty_slice) {
+  if (MDBX_GTEST_IS_EXECUTION_TIMEOUT()) {
+    GTEST_SKIP() << "SKIPPED by RUNTIME_LIMIT";
+    return;
+  }
   const std::string testdb = "issue99.mdbx";
   try {
     mdbx::env::remove(testdb);
@@ -65,6 +79,10 @@ TEST(issue_gh0099, buffer_from_txn_accepts_user_memory_and_empty_slice) {
 }
 
 TEST(issue_gh0099, extract_returns_buffer_with_caller_allocator) {
+  if (MDBX_GTEST_IS_EXECUTION_TIMEOUT()) {
+    GTEST_SKIP() << "SKIPPED by RUNTIME_LIMIT";
+    return;
+  }
   const std::string testdb = "issue99b.mdbx";
   try {
     mdbx::env::remove(testdb);

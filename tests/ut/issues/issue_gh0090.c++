@@ -1,6 +1,8 @@
 #include "mdbx.h++"
 #include <gtest/gtest.h>
 
+#include "../test-env.h"
+
 #include <cstdint>
 #include <cstdio>
 #include <cstring>
@@ -31,6 +33,10 @@ static std::string dump_all(mdbx::txn &txn, mdbx::map_handle map) {
 }
 
 TEST(issue_gh0090, erase_literal_binds_to_key_not_bool) {
+  if (MDBX_GTEST_IS_EXECUTION_TIMEOUT()) {
+    GTEST_SKIP() << "SKIPPED by RUNTIME_LIMIT";
+    return;
+  }
   const std::string testdb = "issue90.mdbx";
   try {
     mdbx::env::remove(testdb);
@@ -82,6 +88,10 @@ static void fill_map(mdbx::txn &txn, mdbx::map_handle map) {
 }
 
 TEST(issue_gh0090, erase_c_string_key_and_slice_value) {
+  if (MDBX_GTEST_IS_EXECUTION_TIMEOUT()) {
+    GTEST_SKIP() << "SKIPPED by RUNTIME_LIMIT";
+    return;
+  }
   const std::string testdb = "issue90b.mdbx";
   try {
     mdbx::env::remove(testdb);

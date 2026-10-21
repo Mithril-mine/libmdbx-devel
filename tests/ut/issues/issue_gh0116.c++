@@ -1,6 +1,8 @@
 #include "mdbx.h"
 #include <gtest/gtest.h>
 
+#include "../test-env.h"
+
 #include <cstdint>
 #include <cstdio>
 #include <cstring>
@@ -30,6 +32,10 @@ static void nofmt_logger(MDBX_log_level_t log_level, const char *function, int l
 }
 
 TEST(issue_gh0116, nofmt_logger_receives_truncated_bounded_message) {
+  if (MDBX_GTEST_IS_EXECUTION_TIMEOUT()) {
+    GTEST_SKIP() << "SKIPPED by RUNTIME_LIMIT";
+    return;
+  }
   char buffer[16];
   received_length = 0;
   memset(received_msg, 0, sizeof(received_msg));

@@ -20,6 +20,9 @@
 /// \date 2015-2026
 
 #include <gtest/gtest.h>
+
+#include "../test-env.h"
+
 #include <mdbx.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -36,6 +39,10 @@
 #define check(rc) check_is(MDBX_SUCCESS, rc)
 
 TEST(ut_dbi_nested_txn, all) {
+  if (MDBX_GTEST_IS_EXECUTION_TIMEOUT()) {
+    GTEST_SKIP() << "SKIPPED by RUNTIME_LIMIT";
+    return;
+  }
   const char *db_filename = "./test-dbi-nested-txn";
   int err = mdbx_env_delete(db_filename, MDBX_ENV_JUST_DELETE);
   if (err)

@@ -9,6 +9,8 @@
 #include <exception>
 #include <gtest/gtest.h>
 
+#include "../test-env.h"
+
 static MDBX_dbi dbi;
 static unsigned r;
 #define NEXT() (r = r * 1103515245u + 12345u)
@@ -42,6 +44,10 @@ static void nest(mdbx::txn &parent, int depth, char *vbuf) {
 }
 
 TEST(issue_gh0011, all) {
+  if (MDBX_GTEST_IS_EXECUTION_TIMEOUT()) {
+    GTEST_SKIP() << "SKIPPED by RUNTIME_LIMIT";
+    return;
+  }
   const mdbx::path testdb = "issue11";
   mdbx::env::remove(testdb);
   size_t seed = size_t(std::chrono::high_resolution_clock::now().time_since_epoch().count());

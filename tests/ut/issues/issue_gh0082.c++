@@ -1,6 +1,8 @@
 #include "mdbx.h++"
 #include <gtest/gtest.h>
 
+#include "../test-env.h"
+
 #include <cstdint>
 #include <cstdio>
 #include <cstring>
@@ -147,6 +149,10 @@ static bool craft_shared_leaf(const std::string &testdb) {
 }
 
 TEST(issue_gh0082, defrag_rejects_shared_page) {
+  if (MDBX_GTEST_IS_EXECUTION_TIMEOUT()) {
+    GTEST_SKIP() << "SKIPPED by RUNTIME_LIMIT";
+    return;
+  }
   const std::string testdb = "issue82.mdbx";
   ASSERT_TRUE(create_base_db(testdb));
   ASSERT_TRUE(craft_shared_leaf(testdb)) << "must be able to craft the shared-leaf tree";

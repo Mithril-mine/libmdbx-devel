@@ -11,6 +11,9 @@
 #include "mdbx.h"
 #include <assert.h>
 #include <gtest/gtest.h>
+
+#include "../test-env.h"
+
 #include <inttypes.h>
 #include <limits.h>
 #include <stddef.h>
@@ -20,6 +23,10 @@
 #include <string.h>
 
 TEST(ut_dupfix_addodd, all) {
+  if (MDBX_GTEST_IS_EXECUTION_TIMEOUT()) {
+    GTEST_SKIP() << "SKIPPED by RUNTIME_LIMIT";
+    return;
+  }
   int rc;
   MDBX_env *env = NULL;
   MDBX_dbi dbi = 0;

@@ -1,6 +1,8 @@
 #include "mdbx.h++"
 #include <gtest/gtest.h>
 
+#include "../test-env.h"
+
 #include <cstddef>
 #include <cstdint>
 #include <cstdio>
@@ -73,6 +75,10 @@ static MDBX_env *open_env(const char *path, MDBX_dbi *dbi_out) {
 }
 
 TEST(issue_gh0085, scroll_with_unlimited_deepness_is_safe) {
+  if (MDBX_GTEST_IS_EXECUTION_TIMEOUT()) {
+    GTEST_SKIP() << "SKIPPED by RUNTIME_LIMIT";
+    return;
+  }
   const char *const testdb = "issue85.mdbx";
   remove_db(testdb);
   MDBX_dbi dbi = 0;
@@ -101,6 +107,10 @@ TEST(issue_gh0085, scroll_with_unlimited_deepness_is_safe) {
 }
 
 TEST(issue_gh0085, distance_with_unlimited_deepness_is_safe) {
+  if (MDBX_GTEST_IS_EXECUTION_TIMEOUT()) {
+    GTEST_SKIP() << "SKIPPED by RUNTIME_LIMIT";
+    return;
+  }
   const char *const testdb = "issue85b.mdbx";
   remove_db(testdb);
   MDBX_dbi dbi = 0;

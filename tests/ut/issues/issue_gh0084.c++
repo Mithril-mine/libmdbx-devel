@@ -1,6 +1,8 @@
 #include "mdbx.h++"
 #include <gtest/gtest.h>
 
+#include "../test-env.h"
+
 #include <cstdint>
 #include <cstdio>
 #include <cstring>
@@ -153,6 +155,10 @@ static void check_distribute(MDBX_cursor *begin, MDBX_cursor *end, MDBX_cursor *
 }
 
 TEST(issue_gh0084, subpage_dups_scroll_distance) {
+  if (MDBX_GTEST_IS_EXECUTION_TIMEOUT()) {
+    GTEST_SKIP() << "SKIPPED by RUNTIME_LIMIT";
+    return;
+  }
   const char *const testdb = "issue84a.mdbx";
   env_remove(testdb);
   MDBX_env *env = nullptr;
@@ -185,6 +191,10 @@ TEST(issue_gh0084, subpage_dups_scroll_distance) {
 }
 
 TEST(issue_gh0084, subpage_dups_distribute) {
+  if (MDBX_GTEST_IS_EXECUTION_TIMEOUT()) {
+    GTEST_SKIP() << "SKIPPED by RUNTIME_LIMIT";
+    return;
+  }
   const char *const testdb = "issue84b.mdbx";
   env_remove(testdb);
   MDBX_env *env = nullptr;
@@ -218,6 +228,10 @@ TEST(issue_gh0084, subpage_dups_distribute) {
 }
 
 TEST(issue_gh0084, nested_tree_scroll_distance) {
+  if (MDBX_GTEST_IS_EXECUTION_TIMEOUT()) {
+    GTEST_SKIP() << "SKIPPED by RUNTIME_LIMIT";
+    return;
+  }
   const char *const testdb = "issue84c.mdbx";
   env_remove(testdb);
   MDBX_env *env = nullptr;
@@ -266,6 +280,10 @@ TEST(issue_gh0084, nested_tree_scroll_distance) {
 }
 
 TEST(issue_gh0084, nested_tree_distribute) {
+  if (MDBX_GTEST_IS_EXECUTION_TIMEOUT()) {
+    GTEST_SKIP() << "SKIPPED by RUNTIME_LIMIT";
+    return;
+  }
   const char *const testdb = "issue84d.mdbx";
   env_remove(testdb);
   MDBX_env *env = nullptr;

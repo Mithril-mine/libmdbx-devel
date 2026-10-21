@@ -1,6 +1,8 @@
 #include "mdbx.h"
 #include <gtest/gtest.h>
 
+#include "../test-env.h"
+
 #include <cstdint>
 #include <cstdio>
 #include <thread>
@@ -19,6 +21,10 @@ extern "C" int mprobe_ctl(const char *request, char *reply, size_t reply_size);
 // and MDBX_PROBES=1.
 
 TEST(issue_gh0104, clone_bailout_after_publishing_the_snapshot) {
+  if (MDBX_GTEST_IS_EXECUTION_TIMEOUT()) {
+    GTEST_SKIP() << "SKIPPED by RUNTIME_LIMIT";
+    return;
+  }
   const char *const dbname = "issue104-clone.mdbx";
   remove(dbname);
 
@@ -96,6 +102,10 @@ static int count_parked_idle_slots(MDBX_env *env) {
 }
 
 TEST(issue_gh0104, clone_bailout_of_parked_source_on_another_thread) {
+  if (MDBX_GTEST_IS_EXECUTION_TIMEOUT()) {
+    GTEST_SKIP() << "SKIPPED by RUNTIME_LIMIT";
+    return;
+  }
   /* Default (sticky) threads: the clone uses the worker thread's own slot,
    * which must get back its thread id after the bailout. */
   const char *const dbname = "issue104-clone-sticky.mdbx";

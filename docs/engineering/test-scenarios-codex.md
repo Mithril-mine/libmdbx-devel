@@ -41,6 +41,10 @@
 6. **Sync-mode и диск** — корректный выбор; durability упоминается только когда
    проверяется именно она.
 7. **Нет маркетинга/общих рассуждений** — только проверяемое поведение.
+8. **Runtime-limiter** — реализованный юнит-тест подключает `#include "../test-env.h"`
+   и начинает каждый `TEST()`/`TEST_P()` с `MDBX_GTEST_IS_EXECUTION_TIMEOUT()`
+   (паттерн и образец `tests/ut/issues/issue_gh0083.c++`, правило —
+   [`testing-codex.md`](testing-codex.md) §C2.1).
 
 ## Вердикты ревью
 
