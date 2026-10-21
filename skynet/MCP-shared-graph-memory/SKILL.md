@@ -21,8 +21,8 @@ shared-graph-memory.mdbx — персистентная память роя на
 |---|---|
 | `normalize_key(raw)` | Проверка/канонизация строки в `тип:модуль:тема` |
 | `safe_store(key, type, summary, importance, date?)` | Сохранение с дедупом → `created`/`merged`/`conflict` |
-| `recall(pattern, limit=5)` | Поиск по префиксу (`bug:crypto:*`), ранжирование |
-| `search(query, limit=5)` | Поиск по термам (пересечение постинг-списков), ранжированные записи |
+| `recall(pattern, limit=5, touch=false)` | Поиск по префиксу (`bug:crypto:*`), ранжирование; touch=true — учёт чтения в LRU |
+| `search(query, limit=5, touch=false)` | Поиск по термам (пересечение постинг-списков), ранжированные записи; touch=true — учёт чтения в LRU |
 | `lookup(term)` | Точный поиск: AND-пересечение термов → ключи |
 | `link(subject_key, predicate, object_key)` | Типизированная связь (RDF triple) |
 | `unlink(subject_key, predicate, object_key)` | Удаление связи |
@@ -40,8 +40,9 @@ shared-graph-memory.mdbx — персистентная память роя на
 | `db_stat(table?)` | Статистика env или конкретной таблицы |
 | `db_set_mode(sync?, readonly?)` | Ротация sync (durable\|metasync\|safe_nosync) и/или read-only↔rw |
 | `db_enable_utterly_nosync()` | **ОПАСНО**: отключение синхронизации (см. §«Режимы БД») |
-| `db_backup(kind?, skip?)` | Консистентная копия БД (COMPACT); ответ на PROMPT-запрос |
-| `db_backup_status()` | Состояние бэкапов: таймеры, тиры, кандидаты ротации |
+| `db_backup(skip?, force?)` | PIN-точка сохранения внутри backup-каталога (COMPACT, не ротируется); ответ на PROMPT-запрос |
+| `db_export(dest)` | Экспорт копии НАРУЖУ каталога (внешняя архивация/перенос); не учитывается в лимите и tiers |
+| `db_backup_status()` | Состояние бэкапов: таймеры, тиры (lifeline/auto/pin/snapshot), `auto_skipped_limit`, кандидаты ротации |
 | `db_backup_cleanup(dry_run?, confirm?)` | Показать/удалить старейшие `auto-*` (только AUTO-тир) |
 | `db_fileinfo()` | fstat(fd): st_nlink/size/inode + признак удаления файла БД |
 | `db_latency()` | Commit-латентности последних записей по стадиям (µs) |
@@ -258,20 +259,29 @@ union-AST), но не отвечает на вопрос «что реально
 - **LIFELINE** (`current.mdbx`, жёсткая ссылка) создаётся при старте сервера;
   инвариант `st_nlink ≥ 2`. **EMERGENCY** (`snapshot_*`) — при детекции
   удаления файла БД. Эти тиры НИКОГДА не удаляются автоматически.
-- **AUTO** (`auto-*`) — тихий интервал; **USER** (`user-*`) — ручной/с запросом.
+- **AUTO** (`auto-*`) — тихий интервал, ротируется; **PIN** (`pin-*`) —
+  закреплённая точка сохранения внутри каталога (`db_backup`, PROMPT-запрос
+  или явный вызов), учитывается в лимите, НЕ ротируется; **EXPORT** —
+  копия НАРУЖУ каталога (`db_export dest=…`, внешняя архивация/перенос),
+  не учитывается в лимите и tiers.
 - **Получив `DB_FILE_DELETED`** — выдать пользователю ПРЕДУПРЕЖДЕНИЕ и спросить:
   (1) восстановить файл жёсткой ссылкой из `backup_dir`
   (например `os.link("<backup_dir>/current.mdbx", "<path>")`), (2) остановить
   сервер для `mdbx_chk`, или (3) продолжить, осознав риск. Операции записи
   заблокированы до решения.
 - **Получив notice `backup_pending`** — спросить пользователя: «сделать
-  резервную копию сейчас?» → да: `db_backup(kind="user")`; нет:
+  резервную копию сейчас?» → да: `db_backup` (pin-точка); нет:
   `db_backup(skip=true)`.
 - **Ротация AUTO**: `db_backup_cleanup(dry_run=true)` показывает кандидатов
   (старейшие сверх `BACKUP_KEEP`). Удаление — ТОЛЬКО после подтверждения
-  пользователя, через `confirm=true`. Тиры user/lifeline/snapshot ротация
+  пользователя, через `confirm=true`. Тиры pin/lifeline/snapshot ротация
   не трогает.
-- После критичных записей — `db_flush()`; плановый бэкап — `db_backup(kind="user")`.
+- **Лимит каталога** (`BACKUP_MAX_MB`): pin/auto сверх лимита → явная
+  ошибка (причина + remedy: cleanup / поднять лимит / `force=true`);
+  auto-пропуск ставит персистентный флаг `auto_skipped_limit` (виден в
+  `db_backup_status`). Export наружу лимиту не подчинён.
+- После критичных записей — `db_flush()`; плановый бэкап — `db_backup`
+  (pin-точка); копия для внешней архивации/переноса — `db_export(dest=…)`.
 
 ## Когда сохранять
 
