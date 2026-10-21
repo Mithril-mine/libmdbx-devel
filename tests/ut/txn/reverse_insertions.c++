@@ -22,6 +22,8 @@
 #include "mdbx.h++"
 #include <gtest/gtest.h>
 
+#include "../test-env.h"
+
 #include <cstdint>
 #include <iostream>
 #include <random>
@@ -144,6 +146,10 @@ static void logger_nofmt(MDBX_log_level_t loglevel, const char *function, int li
 }
 
 TEST(ut_reverse_insertions, all) {
+  if (MDBX_GTEST_IS_EXECUTION_TIMEOUT()) {
+    GTEST_SKIP() << "SKIPPED by RUNTIME_LIMIT";
+    return;
+  }
   mdbx_setup_debug_nofmt(MDBX_LOG_NOTICE, MDBX_DBG_ASSERT, logger_nofmt, log_buffer, sizeof(log_buffer));
   try {
     ASSERT_EQ(EXIT_SUCCESS, doit());

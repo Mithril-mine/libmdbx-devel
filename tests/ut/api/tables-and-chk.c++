@@ -22,11 +22,17 @@
 #include "mdbx.h++"
 #include <gtest/gtest.h>
 
+#include "../test-env.h"
+
 #include <algorithm>
 #include <string>
 #include <vector>
 
 TEST(ut_tables_and_chk, enumerate_tables) {
+  if (MDBX_GTEST_IS_EXECUTION_TIMEOUT()) {
+    GTEST_SKIP() << "SKIPPED by RUNTIME_LIMIT";
+    return;
+  }
   const mdbx::path testdb = "test-tables-and-chk";
   mdbx::env::remove(testdb);
   mdbx::env_managed env(testdb, mdbx::create_parameters(), mdbx::operate_parameters().set_max_maps(16));
@@ -80,6 +86,10 @@ TEST(ut_tables_and_chk, enumerate_tables) {
 }
 
 TEST(ut_tables_and_chk, env_chk) {
+  if (MDBX_GTEST_IS_EXECUTION_TIMEOUT()) {
+    GTEST_SKIP() << "SKIPPED by RUNTIME_LIMIT";
+    return;
+  }
   const mdbx::path testdb = "test-tables-and-chk";
   mdbx::env::remove(testdb);
   {

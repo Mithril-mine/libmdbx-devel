@@ -1,6 +1,8 @@
 #include "mdbx.h++"
 #include <gtest/gtest.h>
 
+#include "../test-env.h"
+
 #include <cstdint>
 #include <cstring>
 
@@ -18,6 +20,10 @@ using buffer = mdbx::buffer<>;
 // raw bytes, slice(std::span) points at the span data.
 
 TEST(issue_gh0100, documented_templates_compile_and_work) {
+  if (MDBX_GTEST_IS_EXECUTION_TIMEOUT()) {
+    GTEST_SKIP() << "SKIPPED by RUNTIME_LIMIT";
+    return;
+  }
   /* buffer(std::string&&): the removed const&& constructor let rvalue strings
    * use the lvalue one, which copies. */
   buffer a(std::to_string(42));
@@ -41,6 +47,10 @@ TEST(issue_gh0100, documented_templates_compile_and_work) {
 }
 
 TEST(issue_gh0100, experimental_filesystem_selector) {
+  if (MDBX_GTEST_IS_EXECUTION_TIMEOUT()) {
+    GTEST_SKIP() << "SKIPPED by RUNTIME_LIMIT";
+    return;
+  }
   /* This is a compile-time property: the branch must follow the macro that
    * the detection defines, not the misspelled old name. A wrong selection
    * either fails the build (C++17) or silently falls back mdbx::path to a

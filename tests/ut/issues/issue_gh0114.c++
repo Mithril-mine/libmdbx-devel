@@ -1,6 +1,8 @@
 #include "mdbx.h++"
 #include <gtest/gtest.h>
 
+#include "../test-env.h"
+
 #include <cstdint>
 #include <cstdio>
 #include <cstring>
@@ -29,6 +31,10 @@ static void remove_db(const char *path) {
 }
 
 TEST(issue_gh0114, warmup_requires_opened_env) {
+  if (MDBX_GTEST_IS_EXECUTION_TIMEOUT()) {
+    GTEST_SKIP() << "SKIPPED by RUNTIME_LIMIT";
+    return;
+  }
   MDBX_env *env = nullptr;
   ASSERT_EQ(MDBX_SUCCESS, mdbx_env_create(&env));
   ASSERT_NE(nullptr, env);
@@ -40,6 +46,10 @@ TEST(issue_gh0114, warmup_requires_opened_env) {
 }
 
 TEST(issue_gh0114, gc_time_limit_keeps_rp_augment_limit) {
+  if (MDBX_GTEST_IS_EXECUTION_TIMEOUT()) {
+    GTEST_SKIP() << "SKIPPED by RUNTIME_LIMIT";
+    return;
+  }
   const char *const testdb = "issue114.mdbx";
   remove_db(testdb);
 

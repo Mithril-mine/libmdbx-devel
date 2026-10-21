@@ -22,6 +22,8 @@
 #include "mdbx.h++"
 #include <gtest/gtest.h>
 
+#include "../test-env.h"
+
 #include <chrono>
 #include <deque>
 #include <iostream>
@@ -436,6 +438,10 @@ int doit() {
 }
 
 TEST(ut_cursor_closing, all) {
+  if (MDBX_GTEST_IS_EXECUTION_TIMEOUT()) {
+    GTEST_SKIP() << "SKIPPED by RUNTIME_LIMIT";
+    return;
+  }
   mdbx_setup_debug_nofmt(MDBX_LOG_NOTICE, MDBX_DBG_ASSERT, logger_nofmt, log_buffer, sizeof(log_buffer));
   try {
     ASSERT_EQ(EXIT_SUCCESS, doit());

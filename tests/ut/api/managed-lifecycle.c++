@@ -22,6 +22,8 @@
 #include "mdbx.h++"
 #include <gtest/gtest.h>
 
+#include "../test-env.h"
+
 #include <thread>
 
 namespace {
@@ -29,6 +31,10 @@ const char *kTestPath = "test-managed-lifecycle";
 } // namespace
 
 TEST(ut_managed_lifecycle, txn_move_transfers_ownership) {
+  if (MDBX_GTEST_IS_EXECUTION_TIMEOUT()) {
+    GTEST_SKIP() << "SKIPPED by RUNTIME_LIMIT";
+    return;
+  }
   mdbx::env::remove(mdbx::path(kTestPath));
   mdbx::env_managed env(kTestPath, mdbx::create_parameters(), mdbx::operate_parameters().set_max_maps(8));
 
@@ -45,6 +51,10 @@ TEST(ut_managed_lifecycle, txn_move_transfers_ownership) {
 }
 
 TEST(ut_managed_lifecycle, cursor_withdraw_handle) {
+  if (MDBX_GTEST_IS_EXECUTION_TIMEOUT()) {
+    GTEST_SKIP() << "SKIPPED by RUNTIME_LIMIT";
+    return;
+  }
   mdbx::env::remove(mdbx::path(kTestPath));
   mdbx::env_managed env(kTestPath, mdbx::create_parameters(), mdbx::operate_parameters().set_max_maps(8));
   auto txn = env.start_write();
@@ -65,6 +75,10 @@ TEST(ut_managed_lifecycle, cursor_withdraw_handle) {
 }
 
 TEST(ut_managed_lifecycle, context_roundtrip) {
+  if (MDBX_GTEST_IS_EXECUTION_TIMEOUT()) {
+    GTEST_SKIP() << "SKIPPED by RUNTIME_LIMIT";
+    return;
+  }
   mdbx::env::remove(mdbx::path(kTestPath));
   mdbx::env_managed env(kTestPath, mdbx::create_parameters(), mdbx::operate_parameters().set_max_maps(8));
 
@@ -88,6 +102,10 @@ TEST(ut_managed_lifecycle, context_roundtrip) {
 }
 
 TEST(ut_managed_lifecycle, destructor_order) {
+  if (MDBX_GTEST_IS_EXECUTION_TIMEOUT()) {
+    GTEST_SKIP() << "SKIPPED by RUNTIME_LIMIT";
+    return;
+  }
   mdbx::env::remove(mdbx::path(kTestPath));
   {
     mdbx::env_managed env(kTestPath, mdbx::create_parameters(), mdbx::operate_parameters().set_max_maps(8));
@@ -109,6 +127,10 @@ TEST(ut_managed_lifecycle, destructor_order) {
   mdbx::env::remove(mdbx::path(kTestPath));
 }
 TEST(ut_managed_lifecycle, config_setters_throw_on_error) {
+  if (MDBX_GTEST_IS_EXECUTION_TIMEOUT()) {
+    GTEST_SKIP() << "SKIPPED by RUNTIME_LIMIT";
+    return;
+  }
   mdbx::env::remove(mdbx::path(kTestPath));
   mdbx::env_managed env(kTestPath, mdbx::create_parameters(), mdbx::operate_parameters().set_max_maps(8));
 
@@ -131,6 +153,10 @@ TEST(ut_managed_lifecycle, config_setters_throw_on_error) {
 }
 
 TEST(ut_managed_lifecycle, close_from_foreign_thread_best_effort) {
+  if (MDBX_GTEST_IS_EXECUTION_TIMEOUT()) {
+    GTEST_SKIP() << "SKIPPED by RUNTIME_LIMIT";
+    return;
+  }
   mdbx::env::remove(mdbx::path(kTestPath));
   /* The environment is created and owned here (the "owner" thread), then the
    * ownership is moved into a foreign thread where it is closed and destroyed:

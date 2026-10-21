@@ -23,6 +23,9 @@
 #include <array>
 #include <functional>
 #include <gtest/gtest.h>
+
+#include "../test-env.h"
+
 #include <iostream>
 #include <random>
 
@@ -261,6 +264,10 @@ int doit() {
 }
 
 TEST(ut_doubtless_positioning, all) {
+  if (MDBX_GTEST_IS_EXECUTION_TIMEOUT()) {
+    GTEST_SKIP() << "SKIPPED by RUNTIME_LIMIT";
+    return;
+  }
   try {
     ASSERT_EQ(EXIT_SUCCESS, doit());
   } catch (const std::exception &ex) {

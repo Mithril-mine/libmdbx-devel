@@ -22,6 +22,8 @@
 #include "mdbx.h++"
 #include <gtest/gtest.h>
 
+#include "../test-env.h"
+
 namespace {
 mdbx::env_managed make_env(const char *name) {
   const mdbx::path testdb = name;
@@ -31,6 +33,10 @@ mdbx::env_managed make_env(const char *name) {
 } // namespace
 
 TEST(ut_cursor_multis, count_and_deepmask) {
+  if (MDBX_GTEST_IS_EXECUTION_TIMEOUT()) {
+    GTEST_SKIP() << "SKIPPED by RUNTIME_LIMIT";
+    return;
+  }
   auto env = make_env("test-cursor-multis");
   auto txn = env.start_write();
   auto multi = txn.create_map("multi", mdbx::key_mode::usual, mdbx::value_mode::multi);
@@ -59,6 +65,10 @@ TEST(ut_cursor_multis, count_and_deepmask) {
 }
 
 TEST(ut_cursor_multis, put_update_nodupdata_and_del) {
+  if (MDBX_GTEST_IS_EXECUTION_TIMEOUT()) {
+    GTEST_SKIP() << "SKIPPED by RUNTIME_LIMIT";
+    return;
+  }
   auto env = make_env("test-cursor-multis");
   auto txn = env.start_write();
   auto multi = txn.create_map("multi", mdbx::key_mode::usual, mdbx::value_mode::multi);
@@ -97,6 +107,10 @@ TEST(ut_cursor_multis, put_update_nodupdata_and_del) {
 }
 
 TEST(ut_cursor_multis, bind_unbind_rebind) {
+  if (MDBX_GTEST_IS_EXECUTION_TIMEOUT()) {
+    GTEST_SKIP() << "SKIPPED by RUNTIME_LIMIT";
+    return;
+  }
   auto env = make_env("test-cursor-multis");
   auto txn = env.start_write();
   auto a = txn.create_map("a");

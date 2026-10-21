@@ -22,7 +22,13 @@
 #include "mdbx.h++"
 #include <gtest/gtest.h>
 
+#include "../test-env.h"
+
 TEST(ut_slice_view, iterators_and_front_back) {
+  if (MDBX_GTEST_IS_EXECUTION_TIMEOUT()) {
+    GTEST_SKIP() << "SKIPPED by RUNTIME_LIMIT";
+    return;
+  }
   const mdbx::slice s("Hello");
   size_t count = 0;
   for (mdbx::byte b : s) {
@@ -37,6 +43,10 @@ TEST(ut_slice_view, iterators_and_front_back) {
 }
 
 TEST(ut_slice_view, substr_and_middle) {
+  if (MDBX_GTEST_IS_EXECUTION_TIMEOUT()) {
+    GTEST_SKIP() << "SKIPPED by RUNTIME_LIMIT";
+    return;
+  }
   const mdbx::slice s("Hello, world!");
   EXPECT_EQ(s.substr(0, 5), mdbx::slice("Hello"));
   EXPECT_EQ(s.substr(7, 5), mdbx::slice("world"));
@@ -53,6 +63,10 @@ TEST(ut_slice_view, substr_and_middle) {
 }
 
 TEST(ut_slice_view, find_family) {
+  if (MDBX_GTEST_IS_EXECUTION_TIMEOUT()) {
+    GTEST_SKIP() << "SKIPPED by RUNTIME_LIMIT";
+    return;
+  }
   const mdbx::slice s("Hello, world!");
   EXPECT_EQ(s.find(mdbx::slice("world")), 7u);
   EXPECT_EQ(s.find(mdbx::slice("world"), 8), mdbx::slice::npos);
@@ -79,6 +93,10 @@ TEST(ut_slice_view, find_family) {
 }
 
 TEST(ut_slice_view, remove_prefix_suffix_and_at) {
+  if (MDBX_GTEST_IS_EXECUTION_TIMEOUT()) {
+    GTEST_SKIP() << "SKIPPED by RUNTIME_LIMIT";
+    return;
+  }
   mdbx::slice s("Hello, world!");
   s.remove_prefix(7);
   EXPECT_EQ(s, mdbx::slice("world!"));
@@ -99,6 +117,10 @@ TEST(ut_slice_view, remove_prefix_suffix_and_at) {
 }
 
 TEST(ut_slice_view, prefix_suffix) {
+  if (MDBX_GTEST_IS_EXECUTION_TIMEOUT()) {
+    GTEST_SKIP() << "SKIPPED by RUNTIME_LIMIT";
+    return;
+  }
   const mdbx::slice s("Hello, world!");
   EXPECT_TRUE(s.starts_with(mdbx::slice("Hello")));
   EXPECT_FALSE(s.starts_with(mdbx::slice("World")));

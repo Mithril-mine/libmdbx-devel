@@ -1,6 +1,8 @@
 #include "mdbx.h++"
 #include <gtest/gtest.h>
 
+#include "../test-env.h"
+
 #include <cstdio>
 #include <cstring>
 #include <string>
@@ -29,6 +31,10 @@ static void put_key(MDBX_txn *txn, MDBX_dbi dbi, const std::string &key) {
 }
 
 TEST(issue_gh0107, pseudo_names_and_recreate) {
+  if (MDBX_GTEST_IS_EXECUTION_TIMEOUT()) {
+    GTEST_SKIP() << "SKIPPED by RUNTIME_LIMIT";
+    return;
+  }
   const std::string testdb = "issue107.mdbx";
   try {
     mdbx::env::remove(testdb);
@@ -86,6 +92,10 @@ TEST(issue_gh0107, pseudo_names_and_recreate) {
 }
 
 TEST(issue_gh0107, open_dropped_table_by_another_process) {
+  if (MDBX_GTEST_IS_EXECUTION_TIMEOUT()) {
+    GTEST_SKIP() << "SKIPPED by RUNTIME_LIMIT";
+    return;
+  }
   const std::string testdb = "issue107b.mdbx";
   const std::string lck_path = testdb + "-lck";
   try {

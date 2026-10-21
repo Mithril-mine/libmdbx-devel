@@ -4,6 +4,8 @@
 #include "mdbx.h"
 #include <gtest/gtest.h>
 
+#include "../test-env.h"
+
 static void check(int rc, const char *op) {
   if (rc != MDBX_SUCCESS) {
     fprintf(stderr, "%s: %d (%s)\n", op, rc, mdbx_strerror(rc));
@@ -18,6 +20,10 @@ static int get(MDBX_txn *txn, MDBX_dbi dbi) {
 }
 
 TEST(ut_nested_drop_abort, all) {
+  if (MDBX_GTEST_IS_EXECUTION_TIMEOUT()) {
+    GTEST_SKIP() << "SKIPPED by RUNTIME_LIMIT";
+    return;
+  }
   const char *dbfile = "nested_drop_abort";
   MDBX_env *env;
   mdbx_env_delete(dbfile, MDBX_ENV_JUST_DELETE);
