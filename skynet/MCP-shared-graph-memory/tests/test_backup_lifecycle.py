@@ -681,6 +681,91 @@ def test_export_rejects_symlink_into_backup_dir(tmp_path, monkeypatch):
         assert "внутри backup-каталога" in str(ei.value)
 
 
+def test_diag_ops_section_and_busy_counters(tmp_path, monkeypatch):
+    """D4/N12: db_status/diag показывает writer-контеншен и p90 коммитов.
+
+    busy_retries/busy_failures растут на RC_BUSY (роёвое узкое место
+    single-writer становится видимым до того, как упрётся в busy_io).
+    """
+    from mcp import libmdbx as mdbx_lib
+
+    db = str(tmp_path / "t.mdbx")
+    with Store(db, _skip_sync_thread=True) as s:
+        s.safe_store("fact:x:y", "fact", "seed", 0.5)
+        ops = s.diag()["ops"]
+        assert ops["busy_retries"] == 0 and ops["busy_failures"] == 0
+        assert ops["commits_in_window"] >= 1
+        assert ops["commit_p90_us"] >= 0 and ops["commit_mean_us"] >= 0
+
+        # имитируем BUSY: первые два begin бросают RC_BUSY, третий проходит
+        real_begin = s.env.begin
+        state = {"n": 0}
+
+        def flaky_begin(readonly=False, parent=None):
+            if not readonly and state["n"] < 2:
+                state["n"] += 1
+                raise mdbx_lib.LibmdbxError(mdbx_lib.RC_BUSY, "busy")
+            return real_begin(readonly=readonly, parent=parent)
+
+        monkeypatch.setattr(s.env, "begin", flaky_begin)
+        s.safe_store("fact:x:z", "fact", "seed2", 0.5)
+        ops = s.diag()["ops"]
+        assert ops["busy_retries"] == 2, ops
+        assert ops["busy_failures"] == 0
+
+        # исчерпание ретраев → busy_failures и контрактная busy_io ошибка
+        def always_busy(readonly=False, parent=None):
+            if not readonly:
+                raise mdbx_lib.LibmdbxError(mdbx_lib.RC_BUSY, "busy")
+            return real_begin(readonly=readonly, parent=parent)
+
+        monkeypatch.setattr(s.env, "begin", always_busy)
+        monkeypatch.setattr("mcp.store.time.sleep", lambda *_: None)
+        with pytest.raises(MemoryError) as ei:
+            s.safe_store("fact:x:w", "fact", "seed3", 0.5)
+        assert "BUSY" in str(ei.value)
+        assert s.diag()["ops"]["busy_failures"] == 1
+
+
+def test_mcp_db_status_ops_contract(store, monkeypatch):
+    """D4/N12: ops-секция db_status пробрасывается через JSON-RPC handle.
+
+    Контракт всех 6 полей зафиксирован (включая commit_max_us, который
+    иначе никем не проверяется); на свежей БД без коммитов — нули.
+    """
+    from mcp.mcp_server import McpServer
+    serv = McpServer(store)
+    r = serv.handle({"jsonrpc": "2.0", "id": 1, "method": "tools/call",
+                     "params": {"name": "db_status", "arguments": {}}})
+    sc = r["result"]["structuredContent"]
+    assert "ops" in sc, sc
+    ops = sc["ops"]
+    for field in ("busy_retries", "busy_failures", "commits_in_window",
+                  "commit_p90_us", "commit_mean_us", "commit_max_us"):
+        assert field in ops, "нет поля %s в ops" % field
+    assert ops["busy_retries"] == 0 and ops["busy_failures"] == 0
+
+
+def test_backup_limit_boundary_size_equals_max(tmp_path, monkeypatch):
+    """D2/D4: граница лимита — строгое >, size==max проходит (контракт).
+
+    Фиксирует осознанный off-by-one выбор: лимит сравнивает размер ДО
+    копии, ровно на границе копия разрешена; каталог может превысить
+    max на размер одной копии (предохранитель от роста, не точная квота).
+    """
+    monkeypatch.setenv("SHARED_GRAPH_MEMORY_BACKUP_DIR", str(tmp_path / "bk"))
+    db = str(tmp_path / "t.mdbx")
+    with Store(db, _skip_sync_thread=True) as s:
+        s.safe_store("fact:x:y", "fact", "seed", 0.5)
+        # ровно на границе: size == max — копия проходит
+        s.backup_max_bytes = s._backup_dir_size()
+        r = s.backup(kind="pin")
+        assert os.path.isfile(r["path"]), "size==max должен проходить"
+        # теперь size > max (копия добавилась) — следующая блокируется
+        with pytest.raises(MemoryError):
+            s.backup(kind="pin")
+
+
 def test_inside_backup_dir_case_insensitive(monkeypatch):
     """Ревью #164-r4: Windows-регистр не обходит inside-проверку.
 
