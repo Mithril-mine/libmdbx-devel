@@ -1906,7 +1906,9 @@ class Store:
         пространством, пересечение диапазонов символов и записей было бы
         неоднозначностью. Отображения sym_ids/sym_id2key НЕ чистятся при
         replace — числовые ссылки (links) остаются стабильными между
-        регенерациями.
+        регенерациями. При `branch_purge` пары id↔key слоя УДАЛЯЮТСЯ
+        (иначе сироты); links curated-записей на символы purged-слоя
+        становятся висячими до `map_refresh_stale`.
         """
         with self._begin_write() as txn:
             sid_dbi = self.dbi(txn, "sym_ids")
@@ -4166,6 +4168,97 @@ class Store:
                 return {"result": "notfound"}
             txn.delete(dbi, key)
             return {"result": "removed", "layer": layer}
+
+    def branch_purge(self, layer: str) -> dict:
+        """Удаляет слой ветки С ДАННЫМИ во всех перегенерируемых таблицах.
+
+        Жизненный цикл слоя (N5): после rebase/переписывания истории старый
+        slug {ver}.{feat}.{n} мёртв — branch_remove оставляет его данные
+        мусором навсегда (таблицы растут монотонно). Purge чистит все ключи
+        `{layer}/...` в symbols/call_edges(_rev)/groups/call_traces(_rev)/
+        coverage/covered_by/coverage_blocks/probes, пары id↔key слоя в
+        sym_ids/sym_id2key + строку реестра branches.
+
+        Базовый слой (pre=="") purge ЗАПРЕЩЁН: он — корень карты/покрытия;
+        его обновление = replace-загрузка (map_load_batch/coverage_batch),
+        не удаление. АКТИВНЫЙ слой (branch_current) purge тоже ЗАПРЕЩЁН:
+        иначе meta.branch_current укажет на мёртвый слой и все чтения с
+        layer="" будут молча пусты — сначала переключите ветку.
+        Возвращает счётчики удалённых ключей по таблицам.
+        """
+        layer = layer.strip().strip("/")
+        pre = self.layer_prefix(layer)
+        if not pre:
+            raise invalid(
+                "branch_purge: базовый слой %r удалять нельзя" % layer,
+                "purge предназначен для feature-слоёв; базовый слой "
+                "обновляется replace-загрузкой карты")
+        if self.layer_prefix(self.branch_current().get("layer", "")) == pre:
+            raise invalid(
+                "branch_purge: слой %r является активным" % layer,
+                "сначала переключите активный слой "
+                "(branch_activate на другой или базовый)")
+        # схема префиксов ключей по таблицам (см. комментарии _TABLES):
+        # map-family — "{pre}", coverage-family/probes — "family:{pre}"
+        prefixes = {
+            "symbols": pre, "call_edges": pre, "call_edges_rev": pre,
+            "groups": pre, "call_traces": pre, "call_traces_rev": pre,
+            "coverage": "coverage:" + pre,
+            "covered_by": "covered_by:" + pre,
+            "coverage_blocks": "coverage_blocks:" + pre,
+            "probes": "probe:" + pre,
+        }
+        removed = {}
+        had_reg = False
+        with self._begin_write() as txn:
+            for table, scan_pre in prefixes.items():
+                dbi = self._opt_dbi(txn, table)
+                if dbi is None:
+                    continue  # старая БД без таблицы
+                n = 0
+                with txn.cursor(dbi) as cur:
+                    rc, k, _ = cur.get(mdbx.CURSOR_SET_RANGE,
+                                       scan_pre.encode())
+                    while rc == mdbx.RC_SUCCESS:
+                        if not k.startswith(scan_pre.encode()):
+                            break
+                        cur.delete()  # MDBX_CURRENT: текущая k/v-пара
+                        n += 1        # (DUPSORT: по дупу за проход)
+                        rc, k, _ = cur.get(mdbx.CURSOR_NEXT)
+                if n:
+                    removed[table] = n
+            # sym_ids/sym_id2key: числовые id символов слоя (ключи "{pre}…").
+            # Таблицы глобальные, но skey несёт префикс слоя — удаляем пары
+            # id↔key слоя, иначе после purge остаются сироты (P3: монотонный
+            # рост таблиц при циклах rebase→purge — та самая деградация,
+            # которую purge призван лечить).
+            sid_dbi = self._opt_dbi(txn, "sym_ids")
+            id2key_dbi = self._opt_dbi(txn, "sym_id2key")
+            if sid_dbi is not None:
+                n = 0
+                with txn.cursor(sid_dbi) as cur:
+                    rc, k, v = cur.get(mdbx.CURSOR_SET_RANGE, pre.encode())
+                    while rc == mdbx.RC_SUCCESS:
+                        if not k.startswith(pre.encode()):
+                            break
+                        if id2key_dbi is not None and v is not None \
+                                and len(v) == ID_LEN:
+                            txn.delete(id2key_dbi, v)
+                        cur.delete()
+                        n += 1
+                        rc, k, v = cur.get(mdbx.CURSOR_NEXT)
+                if n:
+                    removed["sym_ids"] = n
+            # строка реестра (если есть)
+            br_dbi = self._opt_dbi(txn, "branches")
+            if br_dbi is not None:
+                rc, val = txn.get(br_dbi, ("branch:" + layer).encode())
+                had_reg = val is not None
+                if had_reg:
+                    txn.delete(br_dbi, ("branch:" + layer).encode())
+        if not removed and not had_reg:
+            return {"result": "notfound", "layer": layer}
+        return {"result": "purged", "layer": layer, "removed": removed}
 
     def close(self) -> None:
         if self._closed:
