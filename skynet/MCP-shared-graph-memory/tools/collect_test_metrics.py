@@ -128,14 +128,13 @@ def main():
     store = Store(args.db)
     try:
         t0 = time.time()
-        n = 0
-        for r in rows:
-            store.test_metrics_insert(r["name"], r["ms"],
-                                      labels=[r["status"]],
-                                      timeout_sec=0)
-            n += 1
+        # одна write-txn на весь прогон вместо txn на каждый тест (A3)
+        metrics = {r["name"]: {"duration_ms": r["ms"],
+                               "labels": [r["status"]], "timeout_sec": 0}
+                   for r in rows}
+        res = store.test_metrics_batch(metrics)
         dt = time.time() - t0
-        print("test_metrics: %d rows in %.1fs" % (n, dt))
+        print("test_metrics: %d rows in %.1fs" % (res["tests"], dt))
         if args.jobs:
             # заполняем ci_jobs из workflows (переиспользуем map_ci_jobs)
             import map_ci_jobs as mci

@@ -52,6 +52,11 @@ GC_WARM = 0.3
 LRU_RATE_LIMIT_SECONDS = 60
 SYNC_POLL_INTERVAL_SECONDS = 1.0
 
+# --- слой ветки процесса (роевая изоляция, N1): per-process override поверх
+# глобальной meta.branch_current. Агент роя выставляет свою ветку один раз —
+# и его вызовы с layer="" не переключаются чужим branch_activate.
+ENV_LAYER = "SHARED_GRAPH_MEMORY_LAYER"
+
 # --- резервное копирование и защита от удаления файла БД ----------------------
 ENV_BACKUP_DIR = "SHARED_GRAPH_MEMORY_BACKUP_DIR"
 ENV_AUTO_BACKUP_SECONDS = "SHARED_GRAPH_MEMORY_AUTO_BACKUP_SECONDS"
@@ -160,6 +165,10 @@ class Store:
         self.max_value_bytes = max_value_bytes
         self.sync_mode = sync_mode
         self._readonly = readonly
+        # per-process слой (env SHARED_GRAPH_MEMORY_LAYER): читается один раз —
+        # детерминирован на время жизни Store и не перетирается чужими
+        # branch_activate из параллельных процессов роя (N1).
+        self._env_layer = (os.environ.get(ENV_LAYER) or "").strip().strip("/")
         # read-only открытие НЕ должно трогать LCK на запись: используем
         # ACCEDE чтобы присоединиться к уже открытой БД без конфликта флагов.
         self.env = mdbx.Env(path, maxdbs=maxdbs, readonly=readonly,
@@ -1810,24 +1819,44 @@ class Store:
                 pass  # неканонический ключ — vocab не трогаем
 
     def _delete_links_of(self, txn, links_dbi, idb, rec_id) -> None:
-        # удаляем все рёбра, где субъект = rec_id
+        # Все рёбра записи адресуются ДВУМЯ точными префиксами (A4):
+        #   pack(rec_id)+b"\0"            — исходящие fwd (субъект = rec_id),
+        #   pack(rec_id)+b"\0back:"       — входящие обратные рёбра
+        # (пара к fwd-ребру pack(sid)+b"\0"+pred со значением pack(rec_id)).
+        # Полный скан links не нужен и при росте таблицы не держит write-txn.
+        # Сначала собираем входящие fwd-рёбра (по back:-ключам), чтобы
+        # удалить и их fwd-половины: иначе остались бы висячие fwd-рёбра.
+        back_pre = idb + b"\0back:"
+        incoming = []  # (fwd_key, sid) чужих fwd-рёбер на эту запись
+        with txn.cursor(links_dbi) as cur:
+            rc, lk, lv = cur.get(mdbx.CURSOR_SET_RANGE, back_pre)
+            while rc == mdbx.RC_SUCCESS:
+                if not lk.startswith(back_pre):
+                    break
+                sid = _unpack_u64(lv)
+                pred = lk[ID_LEN + 1 + len(b"back:"):]
+                incoming.append((_pack_u64(sid) + b"\0" + pred, sid))
+                rc, lk, lv = cur.get(mdbx.CURSOR_NEXT)
+        # удаляем ВСЕ рёбра записи одним префиксным проходом (fwd и back:
+        # разделяют префикс pack(rec_id)+b"\0")
         prefix = idb + b"\0"
         with txn.cursor(links_dbi) as cur:
             rc, lk, lv = cur.get(mdbx.CURSOR_SET_RANGE, prefix)
             while rc == mdbx.RC_SUCCESS:
                 if not lk.startswith(prefix):
                     break
-                self._links_in_delta(txn, _unpack_u64(lv), -1)
+                pred = lk[ID_LEN + 1:]
+                # счётчик входящих крутим только у fwd-рёбер (объект = lv);
+                # у back:-рёбер lv — sid чужого fwd-ребра, его счётчик
+                # учитывается при удалении fwd-половины ниже.
+                if not pred.startswith(b"back:"):
+                    self._links_in_delta(txn, _unpack_u64(lv), -1)
                 cur.delete()
-                rc, lk, lv = cur.get(mdbx.CURSOR_SET_RANGE, prefix)
-        # удаляем рёбра, где объект = rec_id (обратные/прямые)
-        with txn.cursor(links_dbi) as cur:
-            rc, lk, lv = cur.get(mdbx.CURSOR_FIRST)
-            while rc == mdbx.RC_SUCCESS:
-                if _unpack_u64(lv) == rec_id:
-                    self._links_in_delta(txn, _unpack_u64(lk[:8]), -1)
-                    cur.delete()
                 rc, lk, lv = cur.get(mdbx.CURSOR_NEXT)
+        # fwd-половины входящих рёбер (счётчик этой записи — в объекте lv,
+        # т.е. она сама: декремент не нужен — запись удаляется целиком).
+        for fwd_key, sid in incoming:
+            txn.delete(links_dbi, fwd_key, idb)
 
     # --- refactoring-map (структурный слой) ---------------------------------
     def map_symbol(self, key: str, layer: str = "") -> dict:
@@ -2099,6 +2128,13 @@ class Store:
         загрузка не расходилась с чтениями после branch_activate.
         При replace=True очищается только ТЕКУЩИЙ слой (feature-префиксы
         чужих веток защищены _LAYER_KEY_RE).
+        `chunk` — размер порции элементов на одну write-txn (A2): коммит
+        каждые `chunk` записей освобождает writer-лок между порциями, чтобы
+        загрузка карты не вытесняла писателей роя в busy_io. Поколение
+        (canary.y) инкрементируется один раз в финальной txn — читатели
+        видят прежнее поколение вплоть до завершения. Загрузка идемпотентна:
+        перезапуск после обрыва эквивалентен (очистка в первом чанке +
+        upsert/put_nodupe).
         Возвращает счётчики для сверки.
         """
         layer = self._effective_layer(layer)
@@ -2108,63 +2144,85 @@ class Store:
         ce_dbi = self._dbi["call_edges"]
         rev_dbi = self._dbi["call_edges_rev"]
         gr_dbi = self._dbi["groups"]
-        with self._begin_write() as txn:
-            if replace:
-                # Очищаем только записи ТЕКУЩЕГО слоя. Важно: базовый слой
-                # (pre=="") не должен сносить feature-слои параллельных веток
-                # ("0.16.feat.N/...") — их защищает _LAYER_KEY_RE.
-                for dbi in (sym_dbi, ce_dbi, rev_dbi, gr_dbi):
-                    with txn.cursor(dbi) as cur:
-                        rc, k, _ = cur.get(mdbx.CURSOR_FIRST)
-                        while rc == mdbx.RC_SUCCESS:
-                            key = k.decode()
-                            if (not pre and not _LAYER_KEY_RE.match(key)) or \
-                               (pre and key.startswith(pre)):
-                                cur.delete()
-                            rc, k, _ = cur.get(mdbx.CURSOR_NEXT)
-                if not pre:
-                    # поколение карты при полном replace
-                    canary = txn.canary_get()
-                    txn.canary_put(x=canary.get("x", 0),
-                                   y=int(canary.get("y", 0)) + 1,
-                                   z=canary.get("z", 0))
-            sid_dbi = self._dbi["sym_ids"]
-            id2key_dbi = self._dbi["sym_id2key"]
-            for i, (key, body) in enumerate(sorted(symbols.items())):
-                skey = (pre + key).encode()
-                txn.put(sym_dbi, skey,
-                        json.dumps(body, ensure_ascii=False).encode())
-                put_sym += 1
-                # стабильный числовой id (НЕ чистится при replace)
-                rc, val = txn.get(sid_dbi, skey)
-                if val is None or len(val) != 8:
-                    nid = self._alloc_id_locked(txn)
-                    txn.put(sid_dbi, skey, _pack_u64(nid))
-                    txn.put(id2key_dbi, _pack_u64(nid), skey)
-            for e in edges:
-                # JSON-значение: kind, resolved, ambiguous, callee (+ configs)
-                body = {
-                    "kind": e.get("kind", "syntax"),
-                    "resolved": e.get("resolved", False),
-                    "ambiguous": e.get("ambiguous", False),
-                    "callee": pre + e["callee"],
-                }
-                if e.get("configs"):
-                    body["configs"] = sorted(set(e["configs"]))
-                val = json.dumps(body, ensure_ascii=False).encode()
-                with txn.cursor(ce_dbi) as cur:
-                    cur.put_nodupe((pre + e["caller"]).encode(), val)
-                put_edge += 1
-                # обратное ребро: callee → caller
-                with txn.cursor(rev_dbi) as cur:
-                    cur.put_nodupe((pre + e["callee"]).encode(),
-                                   (pre + e["caller"]).encode())
-            for gkey, members in groups.items():
-                with txn.cursor(gr_dbi) as cur:
-                    for m in members:
-                        cur.put_nodupe((pre + gkey).encode(),
-                                       (pre + m).encode())
+        sid_dbi = self._dbi["sym_ids"]
+        id2key_dbi = self._dbi["sym_id2key"]
+        # Рабочие элементы: ("sym", key, body) | ("edge", e) | ("grp", g, m).
+        # Порядок детерминирован (символы отсортированы) — идемпотентность
+        # перезапуска прерванной загрузки: put upsert/put_nodupe + очистка
+        # слоя в первом чанке делают повтор эквивалентным.
+        work = [("sym", k, b) for k, b in sorted(symbols.items())]
+        work += [("edge", e, None) for e in edges]
+        work += [("grp", gk, m) for gk, members in groups.items()
+                 for m in members]
+        # чанкинг по write-txn (A2): одна монолитная txn на ~25k put держит
+        # writer-лок секунды и вытесняет писателей роя в busy_io; коммитим
+        # каждые `chunk` элементов, освобождая лок между чанками.
+        chunk = max(1, int(chunk or 0))
+        chunks = [work[i:i + chunk] for i in range(0, len(work), chunk)] \
+            or [[]]
+        first = True
+        for part in chunks:
+            with self._begin_write() as txn:
+                if replace and first:
+                    # Очищаем только записи ТЕКУЩЕГО слоя. Важно: базовый слой
+                    # (pre=="") не должен сносить feature-слои параллельных
+                    # веток ("0.16.feat.N/...") — их защищает _LAYER_KEY_RE.
+                    # Идемпотентно: повторная загрузка после обрыва между
+                    # чанками начинается с той же очистки.
+                    for dbi in (sym_dbi, ce_dbi, rev_dbi, gr_dbi):
+                        with txn.cursor(dbi) as cur:
+                            rc, k, _ = cur.get(mdbx.CURSOR_FIRST)
+                            while rc == mdbx.RC_SUCCESS:
+                                key = k.decode()
+                                if (not pre and not _LAYER_KEY_RE.match(key)) \
+                                   or (pre and key.startswith(pre)):
+                                    cur.delete()
+                                rc, k, _ = cur.get(mdbx.CURSOR_NEXT)
+                first = False
+                for kind, k1, k2 in part:
+                    if kind == "sym":
+                        skey = (pre + k1).encode()
+                        txn.put(sym_dbi, skey,
+                                json.dumps(k2, ensure_ascii=False).encode())
+                        put_sym += 1
+                        # стабильный числовой id (НЕ чистится при replace)
+                        rc, val = txn.get(sid_dbi, skey)
+                        if val is None or len(val) != 8:
+                            nid = self._alloc_id_locked(txn)
+                            txn.put(sid_dbi, skey, _pack_u64(nid))
+                            txn.put(id2key_dbi, _pack_u64(nid), skey)
+                    elif kind == "edge":
+                        # JSON-значение: kind, resolved, ambiguous, callee...
+                        body = {
+                            "kind": k1.get("kind", "syntax"),
+                            "resolved": k1.get("resolved", False),
+                            "ambiguous": k1.get("ambiguous", False),
+                            "callee": pre + k1["callee"],
+                        }
+                        if k1.get("configs"):
+                            body["configs"] = sorted(set(k1["configs"]))
+                        val = json.dumps(body, ensure_ascii=False).encode()
+                        with txn.cursor(ce_dbi) as cur:
+                            cur.put_nodupe((pre + k1["caller"]).encode(), val)
+                        put_edge += 1
+                        # обратное ребро: callee → caller
+                        with txn.cursor(rev_dbi) as cur:
+                            cur.put_nodupe((pre + k1["callee"]).encode(),
+                                           (pre + k1["caller"]).encode())
+                    else:  # grp
+                        with txn.cursor(gr_dbi) as cur:
+                            cur.put_nodupe((pre + k1).encode(),
+                                           (pre + k2).encode())
                         put_grp += 1
+        if replace and not pre:
+            # поколение карты — ОДИН раз на целую загрузку, в финальной txn:
+            # промежуточные чанки не двигают generation (читатели видят
+            # прежнее поколение до завершения, атомарность поколения сохранена)
+            with self._begin_write() as txn:
+                canary = txn.canary_get()
+                txn.canary_put(x=canary.get("x", 0),
+                               y=int(canary.get("y", 0)) + 1,
+                               z=canary.get("z", 0))
         return {"symbols": put_sym, "edges": put_edge, "groups": put_grp}
 
     # --- canary (поколение карты / метки схемы) -------------------------
@@ -3250,39 +3308,64 @@ class Store:
         число прогонов и счётчик флаков (runs > 1 и резкое удлинение).
         Наполняется коллектором ``tools/collect_test_metrics.py`` из ctest XML.
         """
-        key = "test_metrics:" + test_id
         with self._begin_write() as txn:
-            rec_dbi = self.dbi(txn, "test_metrics")
-            rc, old_val = txn.get(rec_dbi, key.encode())
-            old = json.loads(old_val.decode()) if old_val else {}
-            runs = old.get("runs", 0)
-            vals = list(old.get("history", []))[-window:]
-            old_max = max(vals) if vals else 0.0
-            vals.append(duration_ms)
-            vals = vals[-window:]
-            last = vals[-1]
-            mn = min(vals)
-            mx = max(vals)
-            sorted_v = sorted(vals)
-            p90 = sorted_v[int(len(sorted_v) * 0.9) - 1] if vals else 0.0
-            flaky = old.get("flaky_count", 0)
-            # резкое удлинение против истории (> 2x старого max при min 3 прогона)
-            if len(vals) >= 4 and old_max > 0 and last > max(2.0 * old_max, 10.0):
-                flaky += 1
-            body = {
-                "last_ms": round(last, 1),
-                "min_ms": round(mn, 1),
-                "max_ms": round(mx, 1),
-                "p90_ms": round(p90, 1),
-                "runs": runs + 1,
-                "flaky_count": flaky,
-                "timeout_sec": timeout_sec,
-                "labels": labels or old.get("labels", []),
-                "history": vals,
-            }
-            txn.put(rec_dbi, key.encode(),
-                    json.dumps(body, ensure_ascii=False).encode())
-            return {"test": test_id, "body": body}
+            return self._test_metrics_put_locked(
+                txn, test_id, duration_ms, labels, timeout_sec, window)
+
+    def _test_metrics_put_locked(self, txn, test_id: str, duration_ms: float,
+                                 labels: list = None, timeout_sec: int = 0,
+                                 window: int = 16) -> dict:
+        """RMW окна истории одного теста внутри write-txn (общая точка)."""
+        key = "test_metrics:" + test_id
+        rec_dbi = self.dbi(txn, "test_metrics")
+        rc, old_val = txn.get(rec_dbi, key.encode())
+        old = json.loads(old_val.decode()) if old_val else {}
+        runs = old.get("runs", 0)
+        vals = list(old.get("history", []))[-window:]
+        old_max = max(vals) if vals else 0.0
+        vals.append(duration_ms)
+        vals = vals[-window:]
+        last = vals[-1]
+        mn = min(vals)
+        mx = max(vals)
+        sorted_v = sorted(vals)
+        p90 = sorted_v[int(len(sorted_v) * 0.9) - 1] if vals else 0.0
+        flaky = old.get("flaky_count", 0)
+        # резкое удлинение против истории (> 2x старого max при min 3 прогона)
+        if len(vals) >= 4 and old_max > 0 and last > max(2.0 * old_max, 10.0):
+            flaky += 1
+        body = {
+            "last_ms": round(last, 1),
+            "min_ms": round(mn, 1),
+            "max_ms": round(mx, 1),
+            "p90_ms": round(p90, 1),
+            "runs": runs + 1,
+            "flaky_count": flaky,
+            "timeout_sec": timeout_sec,
+            "labels": labels or old.get("labels", []),
+            "history": vals,
+        }
+        txn.put(rec_dbi, key.encode(),
+                json.dumps(body, ensure_ascii=False).encode())
+        return {"test": test_id, "body": body}
+
+    def test_metrics_batch(self, metrics: dict, window: int = 16) -> dict:
+        """Батчевая запись метрик: {test_id: {...}} в ОДНОЙ write-txn (A3).
+
+        Каждый элемент — как у test_metrics_insert (duration_ms, labels?,
+        timeout_sec?). Одна txn на ctest-прогон вместо txn на тест —
+        collect_test_metrics не удерживает writer-лок роя между тестами.
+        """
+        n = 0
+        with self._begin_write() as txn:
+            for test_id, info in (metrics or {}).items():
+                info = info or {}
+                self._test_metrics_put_locked(
+                    txn, test_id, float(info.get("duration_ms", 0.0)),
+                    info.get("labels"), int(info.get("timeout_sec", 0) or 0),
+                    window)
+                n += 1
+        return {"tests": n}
 
     def test_metrics_get(self, test_id: str) -> dict:
         with self.env.begin(readonly=True) as txn:
@@ -3447,7 +3530,8 @@ class Store:
                                 json.dumps(cur, ensure_ascii=False).encode())
                     else:
                         txn.delete(cb_dbi, cb_key)
-            # все блочные записи теста (префиксный скан)
+            # все блочные записи теста (префиксный скан; после delete курсор
+            # уже на следующем элементе — NEXT вместо повторного SET_RANGE)
             blk_pre = ("coverage_blocks:%s%s:" % (pre, test_id)).encode()
             with txn.cursor(cbk_dbi) as cur:
                 rc, k, _ = cur.get(mdbx.CURSOR_SET_RANGE, blk_pre)
@@ -3455,8 +3539,33 @@ class Store:
                     if not k.startswith(blk_pre):
                         break
                     cur.delete()
-                    rc, k, _ = cur.get(mdbx.CURSOR_SET_RANGE, blk_pre)
+                    rc, k, _ = cur.get(mdbx.CURSOR_NEXT)
             return {"result": "removed"}
+
+    @staticmethod
+    def _blocks_by_sym(blocks: list) -> dict:
+        """Агрегация блоков по символу (общая для insert/batch)."""
+        by_sym = {}
+        for b in blocks:
+            sym_bare = b.get("symbol", "")
+            by_sym.setdefault(sym_bare, []).append({
+                "symbol": sym_bare,  # в теле: summary читает symbol отсюда
+                "block_id": b.get("block_id", ""),
+                "l0": b.get("l0", 0), "l1": b.get("l1", 0),
+                "covered": bool(b.get("covered")),
+            })
+        return by_sym
+
+    def _coverage_blocks_put_locked(self, txn, pre: str, test_id: str,
+                                    blocks: list) -> int:
+        """Запись блоков одного теста внутри write-txn (общая точка)."""
+        dbi = self.dbi(txn, "coverage_blocks")
+        by_sym = self._blocks_by_sym(blocks)
+        for sym_bare, bl in sorted(by_sym.items()):
+            key = ("coverage_blocks:%s:%s"
+                   % (pre + test_id, sym_bare)).encode()
+            txn.put(dbi, key, json.dumps(bl, ensure_ascii=False).encode())
+        return len(by_sym)
 
     def coverage_blocks_insert(self, test_id: str, blocks: list,
                                layer: str = "") -> int:
@@ -3468,22 +3577,25 @@ class Store:
         """
         layer = self._effective_layer(layer)
         pre = self.layer_prefix(layer)
-        by_sym = {}
-        for b in blocks:
-            sym_bare = b.get("symbol", "")
-            by_sym.setdefault(sym_bare, []).append({
-                "symbol": sym_bare,  # в теле: summary читает symbol отсюда
-                "block_id": b.get("block_id", ""),
-                "l0": b.get("l0", 0), "l1": b.get("l1", 0),
-                "covered": bool(b.get("covered")),
-            })
         with self._begin_write() as txn:
-            dbi = self.dbi(txn, "coverage_blocks")
-            for sym_bare, bl in sorted(by_sym.items()):
-                key = ("coverage_blocks:%s:%s"
-                       % (pre + test_id, sym_bare)).encode()
-                txn.put(dbi, key, json.dumps(bl, ensure_ascii=False).encode())
-        return len(by_sym)
+            return self._coverage_blocks_put_locked(txn, pre, test_id, blocks)
+
+    def coverage_blocks_batch(self, tests: dict, layer: str = "") -> dict:
+        """Батчевая запись блоков: {test_id: [blocks]} в ОДНОЙ write-txn (A3).
+
+        Та же семантика, что coverage_blocks_insert, но одна txn на весь
+        прогон: run_coverage пишет ~2 txn вместо 2×N (N = число тестов),
+        не удерживая writer-лок роя между тестами.
+        """
+        layer = self._effective_layer(layer)
+        pre = self.layer_prefix(layer)
+        n_tests, n_syms = 0, 0
+        with self._begin_write() as txn:
+            for test_id, blocks in (tests or {}).items():
+                n_syms += self._coverage_blocks_put_locked(
+                    txn, pre, test_id, blocks or [])
+                n_tests += 1
+        return {"tests": n_tests, "symbols": n_syms}
 
     def coverage_blocks_get(self, test_id: str, symbol: str,
                             layer: str = "") -> list:
@@ -3824,14 +3936,18 @@ class Store:
         return layer + "/"
 
     def _effective_layer(self, layer: str = "") -> str:
-        """Слой для чтения/записи: явный аргумент > активная ветка.
+        """Слой для чтения/записи: явный аргумент > env процесса > активная ветка.
 
         Кайдзен (окт 2026): `branch_activate` должен влиять на map/coverage/
         probe-инструменты по умолчанию — иначе активация декларативна, а
         данные читаются из базового слоя (путаница в многобраншевой работе).
+        Env-уровень (SHARED_GRAPH_MEMORY_LAYER) изолирует процесс роя от
+        чужих branch_activate (N1).
         """
         if layer:
             return layer
+        if self._env_layer:
+            return self._env_layer
         try:
             return self.branch_current().get("layer", "")
         except Exception:  # noqa: BLE001
@@ -3842,9 +3958,12 @@ class Store:
 
         Используется там, где снимок должен быть атомарным (map_snapshot):
         иначе разрешение слоя открыло бы вторую read-txn (C-1).
+        Env-уровень применяется до meta — в той же иерархии (N1).
         """
         if layer:
             return layer
+        if self._env_layer:
+            return self._env_layer
         try:
             rc, val = txn.get(self.dbi(txn, "meta"), b"branch_current")
             layer = val.decode() if val else ""
@@ -3912,12 +4031,26 @@ class Store:
                 layer = rcval.decode() if rcval else ""
             return {"layer": layer}
 
-    def branch_activate(self, layer: str) -> dict:
+    def branch_activate(self, layer: str, expected_prev=None) -> dict:
+        """Переключает активный слой (глобальный default чтения/записи).
+
+        `expected_prev` — CAS-защита от гонки в рое (N1): если задан и не
+        совпал с текущим активным слоем, активация отвергается ошибкой
+        conflict — параллельный агент уже переключил ветку. Без аргумента
+        поведение прежнее (безусловная установка).
+        """
         layer = layer.strip().strip("/")
         with self._begin_write() as txn:
             meta = self.dbi(txn, "meta")
             rc, val = txn.get(meta, b"branch_current")
             prev = val.decode() if val else ""
+            if expected_prev is not None and prev != expected_prev:
+                raise MemoryError(
+                    "CONFLICT", "conflict",
+                    "активный слой %r не совпал с ожидаемым %r — "
+                    "переключён другим агентом" % (prev, expected_prev),
+                    "перечитайте branch_current и повторите с актуальным "
+                    "expected_prev", "retry once")
             txn.put(meta, b"branch_current", layer.encode())
             # canary.z = активный слой (для внешних читателей/отладки)
             c = txn.canary_get()
