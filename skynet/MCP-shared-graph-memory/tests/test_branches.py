@@ -744,3 +744,47 @@ def test_schema_outdated_branch_list_raises(tmp_path):
     s2 = Store(db2, readonly=True)
     assert s2.branch_list() == []  # актуальная схема → нет данных, не ошибка
     s2.close()
+
+
+def test_branch_purge_expected_current_cas(store):
+    """F5.4a/M1: CAS в branch_purge ловит гонку purge/activate.
+
+    expected_current не совпал с текущим активным слоем → CONFLICT;
+    purge не выполняется. С верным expected_current — проходит.
+    """
+    import pytest
+    from mcp.errors import MemoryError as ME
+    L1 = "0.15.cas.1"
+    store.branch_register("0.15", "cas", n_commits=1)
+    store.map_put_symbol("fn:m:a", {"module": "m"}, layer=L1)
+    # активный слой другой → CAS-ожидание не совпало
+    with pytest.raises(ME) as ei:
+        store.branch_purge(L1, expected_current="0.15.cas.X")
+    assert "CONFLICT" in str(ei.value)
+    # purge не выполнился (данные целы)
+    assert "fn:m:a" in store.map_symbols(layer=L1)
+    # корректный expected_current (текущий активный) — проходит
+    cur = store.branch_current()["layer"]
+    r = store.branch_purge(L1, expected_current=cur)
+    assert r["result"] == "purged"
+    assert store.map_symbols(layer=L1) == []
+
+
+def test_branch_purge_cas_mcp_contract(store):
+    """F5.4a/M1: branch_purge expected_current доступен через MCP."""
+    store.branch_register("0.15", "cas2", n_commits=2)
+    from mcp.mcp_server import McpServer
+    serv = McpServer(store)
+    r = serv.handle({"jsonrpc": "2.0", "id": 1, "method": "tools/call",
+                     "params": {"name": "branch_purge",
+                                "arguments": {
+                                    "layer": "0.15.cas2.2",
+                                    "expected_current": "wrong"}}})
+    assert r.get("error") and "CONFLICT" in r["error"]["message"]
+    r2 = serv.handle({"jsonrpc": "2.0", "id": 2, "method": "tools/call",
+                      "params": {"name": "branch_purge",
+                                 "arguments": {
+                                     "layer": "0.15.cas2.2",
+                                     "expected_current": (
+                                         store.branch_current()["layer"])}}})
+    assert r2["result"]["structuredContent"]["result"] == "purged"
