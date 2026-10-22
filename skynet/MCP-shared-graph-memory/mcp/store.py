@@ -4782,6 +4782,9 @@ class Store:
         не удаление. АКТИВНЫЙ слой (branch_current) purge тоже ЗАПРЕЩЁН:
         иначе meta.branch_current укажет на мёртвый слой и все чтения с
         layer="" будут молча пусты — сначала переключите ветку.
+        `expected_current` — CAS (ревью #175-#12): проверяется ВНУТРИ
+        той же write-txn, что и удаление (атомарно) — другой агент не
+        может активировать слой между проверкой и удалением.
         Возвращает счётчики удалённых ключей по таблицам.
         """
         layer = layer.strip().strip("/")
@@ -4791,25 +4794,6 @@ class Store:
                 "branch_purge: базовый слой %r удалять нельзя" % layer,
                 "purge предназначен для feature-слоёв; базовый слой "
                 "обновляется replace-загрузкой карты")
-        if self.layer_prefix(self.branch_current().get("layer", "")) == pre:
-            raise invalid(
-                "branch_purge: слой %r является активным" % layer,
-                "сначала переключите активный слой "
-                "(branch_activate на другой или базовый)")
-        # M1 (ревью #164-r5): CAS-защита окна гонки purge/activate. Другой
-        # агент мог переключить активный слой МЕЖДУ нашей проверке выше и
-        # write-txn: expected_current (переданный вызывающим) обязан совпасть
-        # с текущим meta.branch_current, иначе контрактный конфликт, а не
-        # молчаливое удаление слоя, который стал активным.
-        if expected_current is not None:
-            cur = self.branch_current().get("layer", "")
-            if cur != expected_current:
-                raise MemoryError(
-                    "CONFLICT", "conflict",
-                    "branch_purge: активный слой %r не совпал с ожидаемым %r"
-                    % (cur, expected_current),
-                    "перечитайте branch_current и повторите с актуальным "
-                    "expected_current", "retry once")
         # схема префиксов ключей по таблицам (см. комментарии _TABLES):
         # map-family — "{pre}", coverage-family/probes — "family:{pre}"
         prefixes = {
@@ -4822,7 +4806,28 @@ class Store:
         }
         removed = {}
         had_reg = False
+        # Ревью #175-#12: проверки «слой активен» и CAS expected_current
+        # обязаны быть ВНУТРИ write-txn. Раньше они читались из read-txn
+        # ДО _begin_write — между проверкой и удалением другой агент мог
+        # выполнить branch_activate(layer), и purge молча сносил данные
+        # ставшего активным слоя (окно TOCTOU). branch_activate делает
+        # CAS внутри своей write-txn — purge теперь так же (атомарно).
         with self._begin_write() as txn:
+            meta = self.dbi(txn, "meta")
+            rc, val = txn.get(meta, b"branch_current")
+            cur_active = val.decode() if val else ""
+            if self.layer_prefix(cur_active) == pre:
+                raise invalid(
+                    "branch_purge: слой %r является активным" % layer,
+                    "сначала переключите активный слой "
+                    "(branch_activate на другой или базовый)")
+            if expected_current is not None and cur_active != expected_current:
+                raise MemoryError(
+                    "CONFLICT", "conflict",
+                    "branch_purge: активный слой %r не совпал с ожидаемым %r"
+                    % (cur_active, expected_current),
+                    "перечитайте branch_current и повторите с актуальным "
+                    "expected_current", "retry once")
             for table, scan_pre in prefixes.items():
                 dbi = self._opt_dbi(txn, table)
                 if dbi is None:
