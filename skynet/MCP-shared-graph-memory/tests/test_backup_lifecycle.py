@@ -876,3 +876,34 @@ def test_file_lock_serializes_state(tmp_path, monkeypatch):
     # вне треда — повторный захват (после освобождения) проходит
     with _file_lock(p):
         pass
+
+
+def test_busy_retry_sleep_uses_jitter(tmp_path, monkeypatch):
+    """F5.3/R4: задержка при BUSY-ретрае — jitter, размывающий фазу роя.
+
+    Детерминированная 0.05*(attempt+1) при 20 агентах — синхронное
+    пробуждение (thundering herd). Тест фиксирует, что sleep вызывается
+    с результатом random.uniform(0, max), а не константой.
+    """
+    from mcp import libmdbx as mdbx_lib
+    db = str(tmp_path / "t.mdbx")
+    with Store(db, _skip_sync_thread=True) as s:
+        s.safe_store("fact:x:y", "fact", "seed", 0.5)
+        real_begin = s.env.begin
+        state = {"n": 0}
+        sleeps = []
+
+        def busy_begin(readonly=False, parent=None):
+            if not readonly and state["n"] == 0:
+                state["n"] += 1
+                raise mdbx_lib.LibmdbxError(mdbx_lib.RC_BUSY, "busy")
+            return real_begin(readonly=readonly, parent=parent)
+
+        monkeypatch.setattr("time.sleep",
+                            lambda dt: sleeps.append(dt))
+        monkeypatch.setattr(s.env, "begin", busy_begin)
+        s.safe_store("fact:x:z", "fact", "seed2", 0.5)
+        assert len(sleeps) == 1, "одна BUSY-попытка → один sleep"
+        # jitter: sleep получил значение uniform(0, 0.05), не константу 0.05
+        assert 0.0 <= sleeps[0] <= 0.05
+        assert sleeps[0] != 0.05  # jitter, равный max — маловероятен
