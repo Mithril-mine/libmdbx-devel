@@ -236,14 +236,14 @@ inline value_result cursor::try_insert(const slice &key, slice value) {
 }
 
 inline slice cursor::insert_reserve(const slice &key, size_t value_length) {
-  slice result(nullptr, value_length);
+  slice result = slice::blank_for_put_reserve(value_length);
   error::success_or_throw(put(key, &result /* takes the present value in case MDBX_KEYEXIST */,
                               MDBX_put_flags_t(put_mode::insert_unique) | MDBX_RESERVE));
   return result;
 }
 
 inline value_result cursor::try_insert_reserve(const slice &key, size_t value_length) {
-  slice result(nullptr, value_length);
+  slice result = slice::blank_for_put_reserve(value_length);
   const int err = put(key, &result /* takes the present value in case MDBX_KEYEXIST */,
                       MDBX_put_flags_t(put_mode::insert_unique) | MDBX_RESERVE);
   switch (err) {
@@ -261,7 +261,7 @@ inline void cursor::upsert(const slice &key, const slice &value) {
 }
 
 inline slice cursor::upsert_reserve(const slice &key, size_t value_length) {
-  slice result(nullptr, value_length);
+  slice result = slice::blank_for_put_reserve(value_length);
   error::success_or_throw(put(key, &result, MDBX_put_flags_t(put_mode::upsert) | MDBX_RESERVE));
   return result;
 }
@@ -283,13 +283,13 @@ inline bool cursor::try_update(const slice &key, const slice &value) {
 }
 
 inline slice cursor::update_reserve(const slice &key, size_t value_length) {
-  slice result(nullptr, value_length);
+  slice result = slice::blank_for_put_reserve(value_length);
   error::success_or_throw(put(key, &result, MDBX_put_flags_t(put_mode::update) | MDBX_RESERVE));
   return result;
 }
 
 inline value_result cursor::try_update_reserve(const slice &key, size_t value_length) {
-  slice result(nullptr, value_length);
+  slice result = slice::blank_for_put_reserve(value_length);
   const int err = put(key, &result, MDBX_put_flags_t(put_mode::update) | MDBX_RESERVE);
   switch (err) {
   case MDBX_SUCCESS:
