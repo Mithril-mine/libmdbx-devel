@@ -547,6 +547,12 @@ def test_schema_outdated_other_families_raise(tmp_path):
         ("trace_compare", ("fn:a",)),
         ("test_metrics_get", ("t1",)),
         ("test_metrics_all", ()),
+        # write-писатели: тоже _check_opt_table первым (страховка от
+        # рефакторинга порядка валидаций, r4)
+        ("trace_ingest", ("fn:a", "fn:b")),
+        ("coverage_insert", ("t1", ["fn:m:a"])),
+        ("coverage_blocks_insert", ("t1", [{"symbol": "fn:m:a"}])),
+        ("test_metrics_insert", ("t1", 100.0)),
     ]
     for meth, args in cases:
         with pytest.raises(ME) as ei:
@@ -725,8 +731,7 @@ def test_state_merge_real_race_no_lost_flag(tmp_path, monkeypatch):
             s2.close()
         os._exit(0)
     # родитель: читает state (до записи потомка), ставит барьер, пишет флаг
-    s3 = Store(db, _skip_sync_thread=True)
-    try:
+    with Store(db, _skip_sync_thread=True) as s3:
         st3 = s3._load_backup_state()
         st3["auto_skipped_limit"] = True
         os.close(os.open(barrier, os.O_CREAT))  # отпускаем потомка
@@ -742,15 +747,10 @@ def test_state_merge_real_race_no_lost_flag(tmp_path, monkeypatch):
                     "потомок не записал last_auto за 5с (flaky-дедлайн)")
             _t.sleep(0.01)
         s3._save_backup_state(st3)  # merge: флаг + last_auto потомка переживут
-    finally:
-        s3.close()
     _, status = os.waitpid(pid, 0)
     assert os.WIFEXITED(status) and os.WEXITSTATUS(status) == 0, \
         "дочерний процесс завершился аварийно: status=%r" % status
-    s4 = Store(db, _skip_sync_thread=True)
-    try:
+    with Store(db, _skip_sync_thread=True) as s4:
         cur = s4._load_backup_state()
         assert cur.get("auto_skipped_limit") is True, "флаг родителя сохранён"
         assert cur.get("last_auto") == 555.0, "last_auto потомка пережил merge"
-    finally:
-        s4.close()

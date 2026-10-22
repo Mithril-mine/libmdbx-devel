@@ -1132,19 +1132,16 @@ def test_state_merge_two_processes(tmp_path, monkeypatch):
     # родитель: ставит флаг ПОСЛЕ чтения потомка (гонка эмулируется
     # порядком: сначала потомок пишет last_auto, потом родитель — флаг)
     os.waitpid(pid, 0)
-    s3 = Store(db, _skip_sync_thread=True)
-    try:
+    with Store(db, _skip_sync_thread=True) as s3:
         st3 = s3._load_backup_state()
         st3["auto_skipped_limit"] = True
         s3._save_backup_state(st3)
         cur = s3._load_backup_state()
         assert cur.get("auto_skipped_limit") is True
         assert cur.get("last_auto") == 111.0  # потомков last_auto сохранился
-    finally:
-        s3.close()
 
 
-def test_file_lock_reentrant_same_thread(monkeypatch):
+def test_file_lock_reentrant_same_thread(tmp_path, monkeypatch):
     """Ревью Q6: вложенный _file_lock того же потока — yield (нет deadlock).
 
     AUTO-блок maybe_run_auto_backup держит _file_lock, а _save_backup_state
@@ -1152,7 +1149,7 @@ def test_file_lock_reentrant_same_thread(monkeypatch):
     сам себя; reentrant-счётчик защищает.
     """
     from mcp.store import _file_lock
-    p = __import__("tempfile").mktemp()
+    p = str(tmp_path / "lock-gate")
     with _file_lock(p):
         with _file_lock(p):  # вложенный вход того же потока
             pass
@@ -1297,3 +1294,22 @@ def test_next_auto_correct_during_backoff(tmp_path, monkeypatch):
         stat2 = s.backup_status()
         assert abs(stat2["next_auto"] - stt2["last_auto"]) >= 9.0, \
             "без backoff next_auto = last_auto + interval"
+
+
+def test_file_lock_different_paths_independent(tmp_path):
+    """Ревью r4: разные path блокируются независимо (нет deadlock).
+
+    per-thread dict по path — p2 должен реально flock'нуться (не reentrant
+    для p1), оба освобождаются.
+    """
+    from mcp.store import _file_lock
+    p1 = str(tmp_path / "l1")
+    p2 = str(tmp_path / "l2")
+    with _file_lock(p1):
+        with _file_lock(p2):
+            pass  # p2 — независимый flock, не reentrant p1
+    # после выхода — оба перезахватываются (локи освобождены)
+    with _file_lock(p1):
+        pass
+    with _file_lock(p2):
+        pass
