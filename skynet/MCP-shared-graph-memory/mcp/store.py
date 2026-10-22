@@ -132,7 +132,29 @@ def _file_lock(path: str):
     msvcrt.locking (замок на диапазон файла). Защищает read-modify-write
     `.backup-state.json` от параллельных процессов роя (ревью #164-r5,
     R1): без неё last-writer-wins затирает персистентный auto_skipped_limit.
+
+    РЕЕНТЕРАБЕЛЬНОСТЬ (ревью #175-r3 Q6): AUTO-блок maybe_run_auto_backup
+    держит _file_lock целиком, а _save_backup_state внутри той же ветки
+    снова вызывает _file_lock на ТОТ ЖЕ lock-файл. Повторный flock на том
+    же процессе на другом fd заблокировал бы сам себя (deadlock).
+    Per-thread словарь глубины: первый вход на path — настоящая блокировка,
+    вложенный вход того же потока на тот же path — yield без повторного
+    захвата (разные path блокируются независимо). Разные процессы роя всё
+    равно сериализуются flock.
     """
+    ctx = _file_lock._local  # threading.local: {path: depth}
+    paths = getattr(ctx, "paths", None)
+    if paths is None:
+        paths = {}
+        ctx.paths = paths
+    depth = paths.get(path, 0)
+    if depth > 0:
+        paths[path] = depth + 1
+        try:
+            yield
+        finally:
+            paths[path] = depth
+        return
     lock_path = path + ".lock"
     try:
         with open(lock_path, "a+b") as fh:
@@ -142,9 +164,11 @@ def _file_lock(path: str):
             else:
                 import fcntl  # локально: недоступен на Windows
                 fcntl.flock(fh.fileno(), fcntl.LOCK_EX)
+            paths[path] = 1
             try:
                 yield
             finally:
+                paths.pop(path, None)
                 if os.name == "nt":
                     import msvcrt
                     fh.seek(0)
@@ -165,6 +189,9 @@ def _file_lock(path: str):
             "auto_skipped_limit" % e, RuntimeWarning, stacklevel=2)
         sys.stderr.write("state lock: %s\n" % e)
         yield
+
+
+_file_lock._local = threading.local()  # {path: depth} per-thread (см. docstring)
 
 
 class Store:
@@ -841,82 +868,88 @@ class Store:
         if os.name == "nt" or self.db_file_deleted:
             return
         now = time.time()
-        st = self._load_backup_state()
-        if (self.auto_backup_seconds > 0
-                and now - st.get("last_auto", 0) >= self.auto_backup_seconds):
-            cur = self._current_txnid()
-            last = st.get("last_auto_txnid", 0)
-            if cur > last:
-                # БД реально изменялась — только тогда бэкап
-                if self._backup_dir_size() > self.backup_max_bytes:
-                    self.backup_notice = (
-                        "auto-backup пропущен: каталог бэкапов превышает лимит "
-                        "%d МБ" % (self.backup_max_bytes >> 20))
-                    # пропуск по лимиту — осознанное решение: таймер
-                    # обновляем (следующий бэкап не раньше интервала),
-                    # флаг показывает рою состояние лимита
-                    st["last_auto"] = now
-                    st["last_auto_txnid"] = cur
-                    if not st.get("auto_skipped_limit"):
-                        st["auto_skipped_limit"] = True
-                    self._save_backup_state(st)
-                else:
-                    try:
-                        self.backup(kind="auto")
-                        self._prune_auto()
+        # Q6 (ревью #175-r3): read-modify-write state-файла — под ОДНИМ
+        # _file_lock на весь AUTO-блок. Раньше read был вне лока (лок только
+        # в _save_backup_state): два процесса, попавшие в не-лимитную
+        # except-ветку, теряли инкремент auto_failure_count (lost update).
+        # _file_lock реентерабелен: вложенные _save_backup_state на тот же
+        # lock-файл yield'ят без повторного захвата (нет deadlock).
+        with _file_lock(self._state_path()):
+            st = self._load_backup_state()
+            if (self.auto_backup_seconds > 0
+                    and now - st.get("last_auto", 0)
+                    >= self.auto_backup_seconds):
+                cur = self._current_txnid()
+                last = st.get("last_auto_txnid", 0)
+                if cur > last:
+                    # БД реально изменялась — только тогда бэкап
+                    if self._backup_dir_size() > self.backup_max_bytes:
+                        self.backup_notice = (
+                            "auto-backup пропущен: каталог бэкапов превышает "
+                            "лимит %d МБ" % (self.backup_max_bytes >> 20))
+                        # пропуск по лимиту — осознанное решение: таймер
+                        # обновляем (следующий бэкап не раньше интервала),
+                        # флаг показывает рою состояние лимита, сбрасываем
+                        # backoff-счётчик (Q6a: симметрия с post-hoc limit_hit)
                         st["last_auto"] = now
                         st["last_auto_txnid"] = cur
-                        # успех: сброс backoff-счётчика не-лимитных неудач
+                        if not st.get("auto_skipped_limit"):
+                            st["auto_skipped_limit"] = True
                         if st.get("auto_failure_count"):
                             st["auto_failure_count"] = 0
-                        # снимаем флаг через None (не pop): merge-запись
-                        # _save_backup_state видит ключ и удаляет его из файла
-                        if st.get("auto_skipped_limit"):
-                            st["auto_skipped_limit"] = None
                         self._save_backup_state(st)
-                    except Exception as e:  # noqa: BLE001
-                        self.backup_notice = "auto-backup failed: %s" % e
-                        # TOCTOU (ревью #164): между нашей проверкой и
-                        # backup() другой процесс мог заполнить каталог —
-                        # тогда персистентный флаг обязан быть выставлен и
-                        # здесь, иначе рой/рестарт не видят, что auto-бэкапы
-                        # фактически блокированы лимитом.
-                        # НО (ревью #164-r4, 1b): флаг ставим ТОЛЬКО если
-                        # причина падения — именно лимит (контрактный
-                        # INVALID из backup()). Не-лимитные ошибки (диск,
-                        # DB_FILE_DELETED) на переполненном каталоге не
-                        # должны ложно сигнализировать «auto блокирован
-                        # лимитом» — иначе после исправления первопричины
-                        # auto не возобновился бы, а рой видел бы ложный флаг.
-                        limit_hit = (isinstance(e, MemoryError)
-                                     and getattr(e, "code", None) == "INVALID"
-                                     and self._backup_dir_size()
-                                     > self.backup_max_bytes)
-                        if limit_hit:
-                            st["auto_skipped_limit"] = True
-                            # провал по лимиту сдвигает таймер и сбрасывает
-                            # счётчик не-лимитных неудач (пропуск осознанный)
+                    else:
+                        try:
+                            self.backup(kind="auto")
+                            self._prune_auto()
                             st["last_auto"] = now
                             st["last_auto_txnid"] = cur
-                            st["auto_failure_count"] = 0
+                            # успех: сброс backoff-счётчика не-лимитных неудач
+                            if st.get("auto_failure_count"):
+                                st["auto_failure_count"] = 0
+                            # снимаем флаг через None (не pop): merge-запись
+                            # _save_backup_state видит ключ и удаляет его
+                            if st.get("auto_skipped_limit"):
+                                st["auto_skipped_limit"] = None
                             self._save_backup_state(st)
-                        # Не-лимитная ошибка (ревью #164-r5, R1): таймер НЕ
-                        # продвигаем, чтобы auto не затихал на интервал; но
-                        # при ПОСТОЯННОЙ ошибке (диск полон, права) каждый
-                        # before_call (1с) повторял бы дорогой снапшот ~ГБ —
-                        # у 20 агентов это writer-convention amplification.
-                        # Экспоненциальный backoff (ревью #175-#4): счётчик
-                        # последовательных не-лимитных неудач в state-файле,
-                        # last_auto отодвигается на interval*2^count (потолок
-                        # 32x) — попытка реже, пока причина не устранена.
-                        else:
-                            fails = int(st.get("auto_failure_count", 0)) + 1
-                            st["auto_failure_count"] = fails
-                            backoff = self.auto_backup_seconds * \
-                                min(2 ** fails, 32)
-                            st["last_auto"] = now + backoff
-                            self._save_backup_state(st)
-            # иначе: БД не менялась — тихий пропуск, ничего не пишем
+                        except Exception as e:  # noqa: BLE001
+                            self.backup_notice = "auto-backup failed: %s" % e
+                            # TOCTOU (ревью #164): между нашей проверкой и
+                            # backup() другой процесс мог заполнить каталог —
+                            # тогда персистентный флаг обязан быть выставлен
+                            # и здесь (рой/рестарт видят блокировку лимитом).
+                            # НО (ревью #164-r4, 1b): флаг только при лимитной
+                            # причине (контрактный INVALID), не при любой.
+                            limit_hit = (
+                                isinstance(e, MemoryError)
+                                and getattr(e, "code", None) == "INVALID"
+                                and self._backup_dir_size()
+                                > self.backup_max_bytes)
+                            if limit_hit:
+                                st["auto_skipped_limit"] = True
+                                # провал по лимиту: сдвигаем таймер и
+                                # сбрасываем счётчик не-лимитных неудач
+                                st["last_auto"] = now
+                                st["last_auto_txnid"] = cur
+                                st["auto_failure_count"] = 0
+                                self._save_backup_state(st)
+                            # Не-лимитная ошибка (ревью #164-r5, R1): таймер
+                            # НЕ продвигаем, чтобы auto не затихал; но при
+                            # ПОСТОЯННОЙ ошибке каждый before_call повторял бы
+                            # дорогой снапшот ~ГБ — у 20 агентов это
+                            # writer-convention amplification. Экспоненциальный
+                            # backoff (ревью #175-#4): счётчик последовательных
+                            # не-лимитных неудач в state-файле, last_auto
+                            # отодвигается на interval*2^count (потолок 32x).
+                            else:
+                                fails = int(
+                                    st.get("auto_failure_count", 0)) + 1
+                                st["auto_failure_count"] = fails
+                                backoff = self.auto_backup_seconds * \
+                                    min(2 ** fails, 32)
+                                st["last_auto"] = now + backoff
+                                self._save_backup_state(st)
+        # иначе: БД не менялась — тихий пропуск, ничего не пишем
         if (self.prompt_backup_seconds > 0 and not self.backup_pending
                 and now - st.get("last_prompt", 0) >= self.prompt_backup_seconds):
             self.backup_pending = True

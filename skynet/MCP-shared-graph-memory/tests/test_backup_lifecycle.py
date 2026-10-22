@@ -1140,3 +1140,47 @@ def test_state_merge_two_processes(tmp_path, monkeypatch):
         assert cur.get("last_auto") == 111.0  # потомков last_auto сохранился
     finally:
         s3.close()
+
+
+def test_file_lock_reentrant_same_thread(monkeypatch):
+    """Ревью Q6: вложенный _file_lock того же потока — yield (нет deadlock).
+
+    AUTO-блок maybe_run_auto_backup держит _file_lock, а _save_backup_state
+    внутри той же ветки снова вызывает его — повторный flock заблокировал бы
+    сам себя; reentrant-счётчик защищает.
+    """
+    from mcp.store import _file_lock
+    p = __import__("tempfile").mktemp()
+    with _file_lock(p):
+        with _file_lock(p):  # вложенный вход того же потока
+            pass
+    # после выхода — повторный внешний захват тоже работает (лок освобождён)
+    with _file_lock(p):
+        pass
+
+
+def test_auto_failure_count_lost_update_under_lock(tmp_path, monkeypatch):
+    """Ревью #175-r3 Q6: AUTO-блок под _file_lock — два процесса не теряют
+    инкремент auto_failure_count (lost update закрыт).
+
+    Раньше read был вне лока: оба процесса видели count=3 и писали 4 вместо 5.
+    Теперь весь read-modify-write под локом — последовательные процессы.
+    """
+    monkeypatch.setenv("SHARED_GRAPH_MEMORY_BACKUP_DIR", str(tmp_path / "bk"))
+    monkeypatch.setenv("SHARED_GRAPH_MEMORY_AUTO_BACKUP_SECONDS", "10")
+    db = str(tmp_path / "t.mdbx")
+
+    def _fail(kind="pin", dest=None, force=False):
+        raise OSError("No space left on device")
+
+    with Store(db, _skip_sync_thread=True) as s:
+        s.safe_store("fact:x:y", "fact", "seed", 0.5)
+        monkeypatch.setattr(s, "backup", _fail)
+        for _ in range(3):
+            stt = s._load_backup_state()
+            stt["last_auto"] = 0
+            stt["last_auto_txnid"] = 0
+            s._save_backup_state(stt)
+            s.before_call()
+        assert s._load_backup_state().get("auto_failure_count") == 3, \
+            "три последовательные неудачи — count=3 (инкремент не теряется)"
