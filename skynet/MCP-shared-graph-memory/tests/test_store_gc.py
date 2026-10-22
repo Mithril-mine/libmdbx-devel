@@ -1,6 +1,7 @@
 """Тесты gc / purge / архивирования / контекста."""
 
 
+from mcp import Store
 from tests.conftest import seed_vocab
 
 
@@ -40,14 +41,13 @@ def test_gc_archive_single_txn(store, monkeypatch):
     store.safe_store("fact:platform:android", "fact", "trivial cold note", 0.01)
     writes = []
 
-    import mcp.store as store_mod
-    orig = store_mod.Store._begin_write
+    orig = Store._begin_write
 
     def counting(self):
         writes.append(1)
         return orig(self)
 
-    monkeypatch.setattr(store_mod.Store, "_begin_write", counting)
+    monkeypatch.setattr(Store, "_begin_write", counting)
     res = store.gc(dry_run=False, archive=True)
     assert res["archived"] >= 1
     assert len(writes) == 1

@@ -196,14 +196,13 @@ def test_bump_batched_single_txn(store, monkeypatch):
     store._lru_last.clear()
     writes = []
 
-    import mcp.store as store_mod
-    orig = store_mod.Store._begin_write
+    orig = Store._begin_write
 
     def counting(self):
         writes.append(1)
         return orig(self)
 
-    monkeypatch.setattr(store_mod.Store, "_begin_write", counting)
+    monkeypatch.setattr(Store, "_begin_write", counting)
     store._bump_access("bug:crypto:alignment", force=True)
     store._bump_access("fact:platform:android", force=True)
     store._flush_touches()
@@ -216,7 +215,7 @@ def test_bump_batched_single_txn(store, monkeypatch):
 
 
 def test_recall_flushes_one_txn(store, monkeypatch):
-    """recall(limit=5) делает одну write-txn на LRU, а не по одной на запись."""
+    """recall(touch=True) делает одну write-txn на LRU, а не по одной на запись."""
     seed_vocab(store, [("crypto", "alignment"), ("platform", "android"),
                        ("platform", "android-abi"), ("build", "release")])
     store.safe_store("bug:crypto:alignment", "bug", "bug alpha", 0.7)
@@ -225,16 +224,39 @@ def test_recall_flushes_one_txn(store, monkeypatch):
     store._lru_last.clear()
     writes = []
 
-    import mcp.store as store_mod
-    orig = store_mod.Store._begin_write
+    orig = Store._begin_write
 
     def counting(self):
         writes.append(1)
         return orig(self)
 
-    monkeypatch.setattr(store_mod.Store, "_begin_write", counting)
-    store.recall("fact:*")
+    monkeypatch.setattr(Store, "_begin_write", counting)
+    store.recall("fact:*", touch=True)
     assert len(writes) == 1
+
+
+def test_recall_default_no_lru_write(store, monkeypatch):
+    """D1/N9: recall по умолчанию НЕ накачивает LRU (touch=False).
+
+    Дашборды и массовые recall роя не должны искажать recency/access score
+    и порождать write-txn касаний — чтения по умолчанию read-only.
+    """
+    seed_vocab(store, [("crypto", "alignment"), ("platform", "android")])
+    store.safe_store("bug:crypto:alignment", "bug", "bug alpha", 0.7)
+    store.safe_store("fact:platform:android", "fact", "fact beta", 0.9)
+    store._lru_last.clear()
+    writes = []
+
+    orig = Store._begin_write
+
+    def counting(self):
+        writes.append(1)
+        return orig(self)
+
+    monkeypatch.setattr(Store, "_begin_write", counting)
+    recs = store.recall("fact:*")
+    assert recs  # результаты есть
+    assert len(writes) == 0  # ни одной write-txn на LRU
 
 
 def test_sync_poll_thread_lifecycle(store, monkeypatch):
@@ -310,25 +332,48 @@ def test_store_context_manager(store_path):
 
 
 def test_search_flushes_one_txn(store, monkeypatch):
-    """search() с несколькими результатами делает одну write-txn на LRU."""
+    """search(touch=True) с несколькими результатами — одна write-txn на LRU."""
     seed_vocab(store, [("crypto", "alignment"), ("platform", "android"),
                        ("platform", "android-abi")])
-    store.safe_store("bug:crypto:alignment", "bug", "buffer overflow crash", 0.7)
-    store.safe_store("fact:platform:android", "fact", "android overflow fix note", 0.9)
+    store.safe_store("bug:crypto:alignment", "bug",
+                     "buffer overflow crash", 0.7)
+    store.safe_store("fact:platform:android", "fact",
+                     "android overflow fix note", 0.9)
     store._lru_last.clear()
     writes = []
 
-    import mcp.store as store_mod
-    orig = store_mod.Store._begin_write
+    orig = Store._begin_write
 
     def counting(self):
         writes.append(1)
         return orig(self)
 
-    monkeypatch.setattr(store_mod.Store, "_begin_write", counting)
-    recs = store.search("overflow", limit=10)
+    monkeypatch.setattr(Store, "_begin_write", counting)
+    recs = store.search("overflow", limit=10, touch=True)
     assert len(recs) == 2
     assert len(writes) == 1
+
+
+def test_search_default_no_lru_write(store, monkeypatch):
+    """D1/N9: search по умолчанию НЕ накачивает LRU (touch=False)."""
+    seed_vocab(store, [("crypto", "alignment"), ("platform", "android")])
+    store.safe_store("bug:crypto:alignment", "bug",
+                     "buffer overflow crash", 0.7)
+    store.safe_store("fact:platform:android", "fact",
+                     "android overflow fix", 0.9)
+    store._lru_last.clear()
+    writes = []
+
+    orig = Store._begin_write
+
+    def counting(self):
+        writes.append(1)
+        return orig(self)
+
+    monkeypatch.setattr(Store, "_begin_write", counting)
+    recs = store.search("overflow", limit=10)
+    assert len(recs) == 2
+    assert len(writes) == 0
 
 
 def test_close_final_sync(store, monkeypatch):
@@ -373,14 +418,13 @@ def test_recall_all_rate_limited_zero_txn(store, monkeypatch):
     store.recall("bug:*")  # прогреваем фильтр (касание + флаш)
     writes = []
 
-    import mcp.store as store_mod
-    orig = store_mod.Store._begin_write
+    orig = Store._begin_write
 
     def counting(self):
         writes.append(1)
         return orig(self)
 
-    monkeypatch.setattr(store_mod.Store, "_begin_write", counting)
+    monkeypatch.setattr(Store, "_begin_write", counting)
     store.recall("bug:*")  # в пределах 60с — касание проигнорировано
     assert len(writes) == 0
 
@@ -396,14 +440,13 @@ def test_touch_single_txn(store, monkeypatch):
     store.safe_store("bug:crypto:alignment", "bug", "some bug", 0.5)
     writes = []
 
-    import mcp.store as store_mod
-    orig = store_mod.Store._begin_write
+    orig = Store._begin_write
 
     def counting(self):
         writes.append(1)
         return orig(self)
 
-    monkeypatch.setattr(store_mod.Store, "_begin_write", counting)
+    monkeypatch.setattr(Store, "_begin_write", counting)
     store.touch("bug:crypto:alignment")
     assert len(writes) == 1
 
@@ -470,3 +513,46 @@ def test_predicates_are_extensible(store):
     assert r["result"] == "linked"
     r2 = store.link("bug:crypto:alignment", "covers", "fact:platform:android")
     assert r2["result"] == "exists"
+
+
+def test_sync_loop_periodic_reader_check(store, monkeypatch):
+    """D3/N11: _sync_loop периодически чистит мёртвые reader-слоты.
+
+    kill -9 агентов роя оставляет слоты занятыми; без чистки maxreaders
+    может исчерпаться. reader_check вызывается раз в
+    READER_CHECK_INTERVAL_SECONDS, а не каждый тик синка.
+    """
+    import threading
+    import time as _time
+
+    # короткий интервал синка, длинный — чистки: за время теста check
+    # должен произойти ровно один раз (первый тик, last=0.0)
+    monkeypatch.setattr("mcp.store.SYNC_POLL_INTERVAL_SECONDS", 0.05)
+    monkeypatch.setattr("mcp.store.READER_CHECK_INTERVAL_SECONDS", 3600.0)
+
+    calls = []
+    real_check = store.env.reader_check
+
+    def spy_check():
+        calls.append(_time.time())
+        return real_check()
+
+    monkeypatch.setattr(store.env, "reader_check", spy_check)
+    # перезапускаем тред с новыми интервалами (fixture создан со skip)
+    store._sync_stop = threading.Event()
+    store._last_reader_check = 0.0
+    store._sync_thread = threading.Thread(
+        target=store._sync_loop, name="test-sync", daemon=True)
+    store._sync_thread.start()
+    # активное ожидание первого тика (дедлайн 5с) вместо фиксированного
+    # sleep — нет флаки под нагрузкой CI (ревью #164-3)
+    deadline = _time.time() + 5.0
+    while not calls and _time.time() < deadline:
+        _time.sleep(0.01)
+    # даём ещё пару тиков синка (интервал чистки 3600с — второго вызова
+    # быть не должно)
+    _time.sleep(0.15)
+    store._stop_sync_thread()
+    assert len(calls) == 1, (
+        "reader_check должен вызваться ровно один раз (первый тик), %d"
+        % len(calls))

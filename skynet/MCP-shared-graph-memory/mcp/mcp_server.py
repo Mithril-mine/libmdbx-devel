@@ -53,15 +53,22 @@ class McpServer:
                  "required": ["key", "type", "summary", "importance"],
              }),
             ("recall", "Поиск по префиксу ключа с ранжированием "
-             "(pattern вида 'bug:crypto:*').", ["pattern"], {
+             "(pattern вида 'bug:crypto:*'). touch=true — учёт чтения в "
+             "LRU; по умолчанию touch=false.", ["pattern"], {
                  "type": "object",
-                 "properties": {"pattern": {"type": "string"}, "limit": {"type": "integer"}},
+                 "properties": {"pattern": {"type": "string"},
+                                "limit": {"type": "integer"},
+                                "touch": {"type": "boolean"}},
                  "required": ["pattern"],
              }),
-            ("search", "Поиск по термам (пересечение постинг-списков + ранжирование).",
+            ("search", "Поиск по термам (пересечение постинг-списков + "
+             "ранжирование; touch=true — считать использованием для LRU; "
+             "по умолчанию touch=false: чтение не влияет на LRU).",
              ["query"], {
                  "type": "object",
-                 "properties": {"query": {"type": "string"}, "limit": {"type": "integer"}},
+                 "properties": {"query": {"type": "string"},
+                                "limit": {"type": "integer"},
+                                "touch": {"type": "boolean"}},
                  "required": ["query"],
              }),
             ("lookup", "Точный поиск по инвертированному индексу.", ["term"], {
@@ -129,7 +136,9 @@ class McpServer:
             ("stats", "Статистика хранилища.", [], {"type": "object"}),
             ("db_status", "Диагностика БД по мета-страницам/bootid/txnid "
              "(живут в файле, НЕ в LCK): preopen.recent_txnid + env.meta_txnid, "
-             "bootid. Критерий «достигли ли данные диска» и «откат к steady».", [],
+             "bootid. Критерий «достигли ли данные диска» и «откат к steady». "
+             "Секция ops (busy_retries/busy_failures/commit_p90_us) — "
+             "per-process: только счётчики своего процесса.", [],
              {"type": "object"}),
             ("db_flush", "Принудительный сброс данных на диск (sync force=true).",
              [], {"type": "object"}),
@@ -156,21 +165,30 @@ class McpServer:
              "падение) данные последних транзакций могут быть потеряны без "
              "возможности восстановления. Обычный сервер памяти роя НЕ "
              "должен включать этот режим.", [], {"type": "object"}),
-            ("db_backup", "Консистентная копия БД (MVCC-снапшот, компактификация). "
-             "kind=user|manual; skip=true — ответ на PROMPT-запрос (пропустить). "
+            ("db_backup", "Точка сохранения БД (MVCC-снапшот, компактификация) "
+             "ВНУТРИ backup-каталога (pin-*): учитывается в лимите, НЕ ротируется. "
+             "skip=true — ответ на PROMPT-запрос (пропустить); force=true — обойти "
+             "лимит каталога. Для экспорта наружу — db_export. "
              "Если установлен PROMPT-таймер (SHARED_GRAPH_MEMORY_PROMPT_BACKUP_SECONDS) "
              "и агент получил notice — спросите пользователя и вызовите "
-             "db_backup kind=user (сделать) или db_backup skip=true (пропустить).",
+             "db_backup (сделать) или db_backup skip=true (пропустить).",
              [], {"type": "object",
-                  "properties": {"kind": {"type": "string"},
-                                 "dest": {"type": "string"},
-                                 "skip": {"type": "boolean"}}}),
+                  "properties": {"skip": {"type": "boolean"},
+                                 "force": {"type": "boolean"}}}),
+            ("db_export", "Экспорт копии БД НАРУЖУ (внешняя архивация / перенос "
+             "на другой хост): dest обязателен и ВНЕ backup-каталога ВКЛЮЧАЯ "
+             "ПОДКАТАЛОГИ (realpath+normcase: symlink и Windows-регистр не "
+             "обходят проверку); НЕ учитывается в лимите и tiers, НЕ ротируется.",
+             ["dest"],
+             {"type": "object",
+              "properties": {"dest": {"type": "string"}},
+              "required": ["dest"]}),
             ("db_backup_status", "Состояние бэкапов: каталог, таймеры AUTO/PROMPT, "
-             "счётчики по тирам (lifeline/auto/user/snapshot), кандидаты на ротацию, "
+             "счётчики по тирам (lifeline/auto/pin/snapshot), кандидаты на ротацию, "
              "лимиты.", [], {"type": "object"}),
             ("db_backup_cleanup", "Ротация AUTO-копий: показать кандидатов "
              "(dry_run=true, по умолчанию) или удалить (confirm=true). Удаляются "
-             "ТОЛЬКО старейшие auto-* сверх keep; тиры user/lifeline/snapshot "
+             "ТОЛЬКО старейшие auto-* сверх keep; тиры pin/lifeline/snapshot "
              "никогда не трогаются. Перед удалением — подтверждение пользователя.",
              [], {"type": "object",
                   "properties": {"dry_run": {"type": "boolean"},
@@ -607,9 +625,11 @@ class McpServer:
             return s.safe_store(args["key"], args["type"], args["summary"],
                                 args["importance"], args.get("date", ""))
         if name == "recall":
-            return {"records": s.recall(args["pattern"], args.get("limit", 5))}
+            return {"records": s.recall(args["pattern"], args.get("limit", 5),
+                                        touch=bool(args.get("touch", False)))}
         if name == "search":
-            return {"records": s.search(args["query"], args.get("limit", 5))}
+            return {"records": s.search(args["query"], args.get("limit", 5),
+                                        touch=bool(args.get("touch", False)))}
         if name == "lookup":
             return {"record_keys": s.lookup(args["term"])}
         if name == "link":
@@ -655,17 +675,44 @@ class McpServer:
         if name == "db_enable_utterly_nosync":
             return s.enable_utterly_nosync()
         if name == "db_backup":
+            # fail-loud (ревью #164): kind/dest удалены из протокола после
+            # split — старый вызов должен получить явную ошибку, а не
+            # молчаливый сдвиг семантики (user-* → pin-*)
+            if "kind" in args or "dest" in args:
+                raise MemoryError(
+                    "INVALID", "invalid",
+                    "db_backup: параметры kind/dest удалены из протокола",
+                    "db_backup — pin-точка внутри backup-каталога; "
+                    "для экспорта наружу используйте db_export(dest=...)",
+                    "none")
             if args.get("skip"):
                 return s.run_prompt_backup(approve=False)
-            kind = args.get("kind") or ("user" if s.backup_pending else "manual")
+            force = bool(args.get("force", False))
             if s.backup_pending:
-                r = s.run_prompt_backup(approve=True)
+                r = s.run_prompt_backup(approve=True, force=force)
                 if r.get("approved") and "error" not in r:
                     return r
-                raise MemoryError("BACKUP_FAILED", "internal",
-                                  r.get("error", "бэкап не создан"),
-                                  "проверьте backup_dir и права на запись", "none")
-            return s.backup(kind=kind, dest=args.get("dest"))
+                # класс ошибки из backup() пробрасывается (ревью #164-#7):
+                # контрактный отказ лимита — invalid, а не internal.
+                # ЗАМЕЧАНИЕ (ревью #164-r4, tech-debt): err — уже
+                # отрендеренная контрактная строка («error$INVALID | ...»),
+                # она вкладывается в DESC обёртки BACKUP_FAILED — двойная
+                # вложенность; errors.parse() читает только верхний уровень,
+                # вложенный CLASS в DESC игнорируется (осознанно: агент
+                # видит причину в тексте). Чистый проброс MemoryError без
+                # BACKUP_FAILED изменил бы формат — оставлено как есть.
+                err = r.get("error", "")
+                cls = "invalid" if err.startswith("error$INVALID") \
+                    else "internal"
+                raise MemoryError("BACKUP_FAILED", cls,
+                                  err or "бэкап не создан",
+                                  "см. текст ошибки (напр. лимит каталога — "
+                                  "освободите место или force=true)", "none")
+            # kind из протокола убран: db_backup — только внутренняя точка
+            # сохранения (pin); kind=auto извне невозможен по построению MCP
+            return s.backup(kind="pin", force=force)
+        if name == "db_export":
+            return s.export(args.get("dest"))
         if name == "db_backup_status":
             return s.backup_status()
         if name == "db_backup_cleanup":
