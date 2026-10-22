@@ -20,6 +20,7 @@ env открыт с MDBX_SAFE_NOSYNC, фоновый тред раз в секу
 
 from __future__ import annotations
 
+import contextlib
 import hashlib
 import json
 import math
@@ -116,6 +117,41 @@ _VVER_RE = re.compile(r"^\d+(\.\d+){1,2}$")
 # Признак ключа чужого feature-слоя в перегенерируемых таблицах:
 # версионный префикс слоя ("0.16.abc.N/") перед fn:/type:/macro:/region:...
 _LAYER_KEY_RE = re.compile(r"^\d+(\.\d+)+\.[A-Za-z0-9._-]+\.\d+/")
+
+
+@contextlib.contextmanager
+def _file_lock(path: str):
+    """Системно-независимая файловая блокировка (stdlib, без зависимостей).
+
+    Адvisory-лок на отдельный lock-файл `<path>.lock` рядом с целевым:
+    захватываем, yield, освобождаем. POSIX — fcntl.flock, Windows —
+    msvcrt.locking (замок на диапазон файла). Защищает read-modify-write
+    `.backup-state.json` от параллельных процессов роя (ревью #164-r5,
+    R1): без неё last-writer-wins затирает персистентный auto_skipped_limit.
+    """
+    lock_path = path + ".lock"
+    try:
+        with open(lock_path, "a+b") as fh:
+            if os.name == "nt":
+                import msvcrt  # локально: недоступен на POSIX
+                msvcrt.locking(fh.fileno(), msvcrt.LK_LOCK, 1)
+            else:
+                import fcntl  # локально: недоступен на Windows
+                fcntl.flock(fh.fileno(), fcntl.LOCK_EX)
+            try:
+                yield
+            finally:
+                if os.name == "nt":
+                    import msvcrt
+                    fh.seek(0)
+                    msvcrt.locking(fh.fileno(), msvcrt.LK_UNLCK, 1)
+                else:
+                    import fcntl
+                    fcntl.flock(fh.fileno(), fcntl.LOCK_UN)
+    except OSError as e:
+        # блокировка — вспомогательная: сбой не должен валить бэкап
+        sys.stderr.write("state lock: %s\n" % e)
+        yield
 
 
 class Store:
@@ -545,7 +581,7 @@ class Store:
     def _note_commit_latency(self, lat: dict) -> None:
         self._latencies.append(lat)
 
-    # --- резервное копирование ----------------------------------------------
+# --- резервное копирование ----------------------------------------------
     def _state_path(self) -> str:
         return os.path.join(self.backup_dir, BACKUP_STATE_FILE)
 
@@ -556,13 +592,37 @@ class Store:
         except Exception:  # noqa: BLE001
             return {}
 
+    # ключи state-файла, которые процессы обновляют (атомарно, под блокировкой);
+    # merge-семантика: НЕ трогаем ключи, которых нет в st (могли быть обновлены
+    # другим процессом роя между нашим чтением и записью).
+    _STATE_MERGE_KEYS = ("last_auto", "last_auto_txnid", "auto_skipped_limit",
+                         "last_prompt")
+
     def _save_backup_state(self, st: dict) -> None:
+        """Атомарная запись state-файла под блокировкой, с merge-семантикой.
+
+        Read-modify-write всего файла при 20 процессах — last-writer-wins:
+        процесс, сохраняющий свой last_auto, затирал бы auto_skipped_limit,
+        выставленный другим, — персистентная видимость флага рою (D2) теряется
+        тем же механизмом. Поэтому пишем ТОЛЬКО свои ключи поверх текущего
+        содержимого (read-current под блокировкой → merge → запись).
+        """
         try:
             os.makedirs(self.backup_dir, exist_ok=True)
-            tmp = self._state_path() + ".tmp"
-            with open(tmp, "w", encoding="utf-8") as fh:
-                json.dump(st, fh)
-            os.replace(tmp, self._state_path())
+            with _file_lock(self._state_path()):
+                cur = self._load_backup_state()
+                for k in self._STATE_MERGE_KEYS:
+                    if k in st:
+                        if st[k] is None:
+                            # явный сигнал снятия (напр. auto_skipped_limit):
+                            # удаляем ключ, иначе stale True пережил бы merge
+                            cur.pop(k, None)
+                        else:
+                            cur[k] = st[k]
+                tmp = self._state_path() + ".tmp"
+                with open(tmp, "w", encoding="utf-8") as fh:
+                    json.dump(cur, fh)
+                os.replace(tmp, self._state_path())
         except OSError as e:
             sys.stderr.write("state save: %s\n" % e)
 
@@ -770,15 +830,25 @@ class Store:
                     self.backup_notice = (
                         "auto-backup пропущен: каталог бэкапов превышает лимит "
                         "%d МБ" % (self.backup_max_bytes >> 20))
+                    # пропуск по лимиту — осознанное решение: таймер
+                    # обновляем (следующий бэкап не раньше интервала),
+                    # флаг показывает рою состояние лимита
+                    st["last_auto"] = now
+                    st["last_auto_txnid"] = cur
                     if not st.get("auto_skipped_limit"):
                         st["auto_skipped_limit"] = True
-                        self._save_backup_state(st)
+                    self._save_backup_state(st)
                 else:
                     try:
                         self.backup(kind="auto")
                         self._prune_auto()
+                        st["last_auto"] = now
+                        st["last_auto_txnid"] = cur
+                        # снимаем флаг через None (не pop): merge-запись
+                        # _save_backup_state видит ключ и удаляет его из файла
                         if st.get("auto_skipped_limit"):
-                            st.pop("auto_skipped_limit")
+                            st["auto_skipped_limit"] = None
+                        self._save_backup_state(st)
                     except Exception as e:  # noqa: BLE001
                         self.backup_notice = "auto-backup failed: %s" % e
                         # TOCTOU (ревью #164): между нашей проверкой и
@@ -793,15 +863,20 @@ class Store:
                         # должны ложно сигнализировать «auto блокирован
                         # лимитом» — иначе после исправления первопричины
                         # auto не возобновился бы, а рой видел бы ложный флаг.
+                        # Таймер НЕ обновляем (ревью #164-r5, R1): иначе при
+                        # постоянной не-лимитной ошибке (диск полон) auto
+                        # молча затихал бы на полный интервал; следующий
+                        # такт снова попробует.
                         limit_hit = (isinstance(e, MemoryError)
                                      and getattr(e, "code", None) == "INVALID"
                                      and self._backup_dir_size()
                                      > self.backup_max_bytes)
-                        if limit_hit and not st.get("auto_skipped_limit"):
+                        if limit_hit:
                             st["auto_skipped_limit"] = True
-                st["last_auto"] = now
-                st["last_auto_txnid"] = cur
-                self._save_backup_state(st)
+                            # провал по лимиту тоже сдвигает таймер
+                            st["last_auto"] = now
+                            st["last_auto_txnid"] = cur
+                            self._save_backup_state(st)
             # иначе: БД не менялась — тихий пропуск, ничего не пишем
         if (self.prompt_backup_seconds > 0 and not self.backup_pending
                 and now - st.get("last_prompt", 0) >= self.prompt_backup_seconds):
@@ -849,7 +924,8 @@ class Store:
         st = self._load_backup_state()
         if st.get("auto_skipped_limit") and \
                 self._backup_dir_size() <= self.backup_max_bytes:
-            st.pop("auto_skipped_limit", None)
+            # None, не pop — merge-запись удалит ключ из файла
+            st["auto_skipped_limit"] = None
             self._save_backup_state(st)
         return {"dry_run": False, "removed": removed, "candidates": names,
                 "total_bytes": total, "keep": keep or self.backup_keep}
