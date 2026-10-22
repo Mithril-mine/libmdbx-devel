@@ -42,7 +42,7 @@ shared-graph-memory.mdbx — персистентная память роя на
 | `db_enable_utterly_nosync()` | **ОПАСНО**: отключение синхронизации (см. §«Режимы БД») |
 | `db_backup(skip?, force?)` | PIN-точка сохранения внутри backup-каталога (COMPACT, не ротируется); ответ на PROMPT-запрос |
 | `db_export(dest)` | Экспорт копии НАРУЖУ каталога (внешняя архивация/перенос); не учитывается в лимите и tiers |
-| `db_backup_status()` | Состояние бэкапов: таймеры, тиры (lifeline/auto/pin/snapshot), `auto_skipped_limit`, кандидаты ротации |
+| `db_backup_status()` | Состояние бэкапов: таймеры, тиры (lifeline/auto/pin/snapshot), `auto_skipped_limit`, `auto_failure_count`, кандидаты ротации |
 | `db_backup_cleanup(dry_run?, confirm?)` | Показать/удалить старейшие `auto-*` (только AUTO-тир) |
 | `db_fileinfo()` | fstat(fd): st_nlink/size/inode + признак удаления файла БД |
 | `db_latency()` | Commit-латентности последних записей по стадиям (µs) |
@@ -173,11 +173,13 @@ shared-graph-memory.mdbx — персистентная память роя на
 - Таймер авто: `last_auto` продвигается на успехе/осознанном пропуске
   лимита; при НЕ-лимитной ошибке — `last_auto` ОТОДВИГАЕТСЯ на
   экспоненциальный backoff (`interval*2^count`, потолок 32x; счётчик
-  `auto_failure_count` в state-файле, общий для РОЯ — merge last-writer-wins),
+  `auto_failure_count` в state-файле, общий для РОЯ — per-key merge под локом),
   попытка реже, не затихание. Флаг `auto_skipped_limit` виден даже в окне
   backoff (проверка размера каталога до таймер-гейта). Рой при ENOSPC не
   повторяет снапшот ~ГБ каждый тик. `backup_status` показывает
-  `auto_failure_count` (текущий backoff-счётчик).
+  `auto_failure_count` (текущий backoff-счётчик) и корректный `next_auto`:
+  при активном backoff он равен моменту следующей попытки (last_auto),
+  не прибавленному ещё раз на интервал.
 - `__future__`: `db_readers check=true` — ручная чистка stale-слотов; рой
   без rw-писателя — явные `check=true` (libmdbx чистит читателей сам).
 
