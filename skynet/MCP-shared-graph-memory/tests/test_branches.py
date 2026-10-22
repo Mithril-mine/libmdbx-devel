@@ -686,3 +686,61 @@ def test_upgrade_fast_path_no_write_txn(store, monkeypatch):
     assert r.get("fast_path") is True, r
     assert r["created"] == []
     assert calls["n"] == 0, "fast-path не должен открывать write-txn"
+
+
+def test_schema_too_new_rejected(tmp_path):
+    """F5.2/R2: БД, созданная более новой версией модуля, отклоняется.
+
+    Устаревший MCP-модуль на свежей БД (schema_ver=99 > поддерживаемой 2)
+    не должен молча работать с неизвестной схемой — контрактная
+    SCHEMA_TOO_NEW при открытии, с указанием обновить модуль.
+    """
+    import pytest
+    from mcp import libmdbx as mdbx
+    from mcp.errors import MemoryError as ME
+    db = str(tmp_path / "new.mdbx")
+    env = mdbx.Env(db, maxdbs=64, readonly=False, sync_mode="safe_nosync")
+    with env.begin() as txn:
+        meta = txn.open_dbi("meta", mdbx.CREATE | mdbx.DB_DEFAULTS)
+        txn.open_dbi("records", mdbx.CREATE | mdbx.DB_DEFAULTS)
+        txn.put(meta, b"schema_ver", b"99")
+    env.close()
+    with pytest.raises(ME) as ei:
+        Store(db)
+    assert "SCHEMA_TOO_NEW" in str(ei.value)
+    assert "99" in str(ei.value) and "обновите MCP-модуль" in str(ei.value)
+
+
+def test_schema_outdated_branch_list_raises(tmp_path):
+    """F5.2/R2: старая схема — branch_list даёт SCHEMA_OUTDATED, не [].
+
+    Молчаливый пустой список неотличим от «нет веток»; агент должен увидеть
+    несовместимость и целенаправленно переключиться в rw для миграции.
+    """
+    import pytest
+    from mcp import libmdbx as mdbx
+    from mcp.errors import MemoryError as ME
+    db = str(tmp_path / "old.mdbx")
+    env = mdbx.Env(db, maxdbs=64, readonly=False, sync_mode="safe_nosync")
+    with env.begin() as txn:
+        meta = txn.open_dbi("meta", mdbx.CREATE | mdbx.DB_DEFAULTS)
+        txn.open_dbi("records", mdbx.CREATE | mdbx.DB_DEFAULTS)
+        txn.put(meta, b"schema_ver", b"1")  # старая схема без branches
+    env.close()
+    s = Store(db, readonly=True)  # readonly: branches → None, schema_ver=1
+    with pytest.raises(ME) as ei:
+        s.branch_list()
+    assert "SCHEMA_OUTDATED" in str(ei.value)
+    assert "db_set_mode" in str(ei.value)
+    s.close()
+    # в актуальной схеме + read-only-старт (таблицы нет) — толерантность
+    db2 = str(tmp_path / "fresh.mdbx")
+    env2 = mdbx.Env(db2, maxdbs=64, readonly=False, sync_mode="safe_nosync")
+    with env2.begin() as txn:
+        meta2 = txn.open_dbi("meta", mdbx.CREATE | mdbx.DB_DEFAULTS)
+        txn.open_dbi("records", mdbx.CREATE | mdbx.DB_DEFAULTS)
+        txn.put(meta2, b"schema_ver", b"2")
+    env2.close()
+    s2 = Store(db2, readonly=True)
+    assert s2.branch_list() == []  # актуальная схема → нет данных, не ошибка
+    s2.close()
