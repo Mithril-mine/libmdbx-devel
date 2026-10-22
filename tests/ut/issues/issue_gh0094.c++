@@ -214,3 +214,42 @@ TEST(issue_gh0094, append_and_add_header_from_content_into_tailroom) {
   EXPECT_EQ("CD" + std::string(htr, 'y') + "ABCD", std::string(h.char_ptr(), h.length()))
       << "add_header() from the own content and tailroom";
 }
+
+TEST(issue_gh0094, append_transcoders_from_own_tailroom) {
+  if (MDBX_GTEST_IS_EXECUTION_TIMEOUT()) {
+    GTEST_SKIP() << "SKIPPED by RUNTIME_LIMIT";
+    return;
+  }
+  /* A source that runs from the content into the tailroom, with a result that
+   * fits the tailroom: the producer wrote in place over source bytes it had
+   * not read yet. */
+  using op_t = void (*)(buffer &, const mdbx::slice &);
+  const auto str = [](const mdbx::slice &s) { return std::string(s.char_ptr(), s.length()); };
+  const mdbx::slice raw("ABCDEFGH");
+  buffer hex, b58, b64;
+  hex.append_hex(raw);
+  b58.append_base58(raw);
+  b64.append_base64(raw);
+  const struct {
+    const char *name;
+    std::string source;
+    op_t op;
+  } cases[] = {
+      {"append_hex", str(raw), [](buffer &b, const mdbx::slice &s) { b.append_hex(s); }},
+      {"append_base58", str(raw), [](buffer &b, const mdbx::slice &s) { b.append_base58(s); }},
+      {"append_base64", str(raw), [](buffer &b, const mdbx::slice &s) { b.append_base64(s); }},
+      {"append_decoded_hex", str(hex), [](buffer &b, const mdbx::slice &s) { b.append_decoded_hex(s); }},
+      {"append_decoded_base58", str(b58), [](buffer &b, const mdbx::slice &s) { b.append_decoded_base58(s); }},
+      {"append_decoded_base64", str(b64), [](buffer &b, const mdbx::slice &s) { b.append_decoded_base64(s); }},
+  };
+  for (const auto &c : cases) {
+    buffer expected;
+    c.op(expected, mdbx::slice(c.source.data(), c.source.size()));
+
+    buffer a(0, mdbx::slice(c.source.data(), 2), 64);
+    ASSERT_GE(a.tailroom(), c.source.size() + expected.size()) << c.name;
+    memcpy(a.end(), c.source.data() + 2, c.source.size() - 2);
+    c.op(a, mdbx::slice(a.byte_ptr(), c.source.size()));
+    EXPECT_EQ(c.source.substr(0, 2) + str(expected), str(a)) << c.name;
+  }
+}
