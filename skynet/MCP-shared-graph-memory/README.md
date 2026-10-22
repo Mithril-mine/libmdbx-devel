@@ -98,20 +98,26 @@ python3 -m mcp.cli --path ~/mem.mdbx gc --dry-run # тиринг hot/warm/cold
 | LIFELINE | `current.mdbx` | старт сервера (жёсткая ссылка, инвариант `st_nlink≥2`) | никогда автоматически |
 | EMERGENCY | `snapshot_YYMMDD_HHMMSS_txnidN.db` | детекция удаления файла БД (жёсткая ссылка) | никогда автоматически |
 | AUTO | `auto-YYYYMMDD-HHMMSS_txnidN.mdbx` | тихий интервал (`…_AUTO_BACKUP_SECONDS`) | ротация (`…_BACKUP_KEEP`) с подтверждением |
-| USER | `user-YYYYMMDD-HHMMSS_txnidN.mdbx` | `db_backup` / PROMPT-интервал с запросом | только явное подтверждение |
+| PIN | `pin-YYYYMMDD-HHMMSS_txnidN.mdbx` | `db_backup` / PROMPT-интервал с запросом | никогда автоматически (закреплённая точка сохранения) |
+| EXPORT | путь по `dest` (ВНЕ `backup_dir`) | `db_export` (внешняя архивация/перенос) | владелец пути назначения; вне лимита и tiers |
 
 - **Детекция удаления** (не-Windows): `mdbx_env_get_fd` + `fstat(st_nlink)`.
   При `st_nlink < 2` и пропаже пути — аварийная жёсткая ссылка в `backup_dir`
   и контрактная ошибка `DB_FILE_DELETED` (предохранитель блокирует операции).
 - **PROMPT-таймер**: сервер выставляет notice «спросите пользователя»;
-  агент вызывает `db_backup kind=user` (сделать) или `db_backup skip=true`.
+  агент вызывает `db_backup` (pin-точка) или `db_backup skip=true`.
+- **Лимит каталога** (`…_BACKUP_MAX_MB`): pin/auto сверх лимита → явная
+  ошибка (remedy: cleanup / поднять лимит / `force=true`); auto-пропуск
+  ставит персистентный флаг `auto_skipped_limit` (виден в `db_backup_status`).
+  EXPORT наружу лимиту не подчинён.
 - **Ротация**: `db_backup_cleanup(dry_run=true)` показывает кандидатов (только
   `auto-*`); удаление — `confirm=true`, по подтверждению пользователя.
 
-Инструменты интроспекции: `db_status` (полный `MDBX_envinfo`),
-`db_stat(table?)`, `db_readers`, `db_flush`, `db_set_mode`,
-`db_enable_utterly_nosync`, `db_backup`, `db_backup_status`,
-`db_backup_cleanup`, `db_fileinfo`, `db_latency`, `db_recover`.
+Инструменты интроспекции: `db_status` (полный `MDBX_envinfo` + `ops`-метрики
+writer-контеншена per-process), `db_stat(table?)`, `db_readers`, `db_flush`,
+`db_set_mode`, `db_enable_utterly_nosync`, `db_backup` (pin), `db_export`,
+`db_backup_status`, `db_backup_cleanup`, `db_fileinfo`, `db_latency`,
+`db_recover`.
 Карта исходников (refactoring-map): `map_symbol(s)`, `map_edges_of`,
 `map_callers_of`, `map_group_members`, `map_regions`/`map_region`,
 `map_uncovered` (данные — `tools/load_map.py --db <живая> --replace`).

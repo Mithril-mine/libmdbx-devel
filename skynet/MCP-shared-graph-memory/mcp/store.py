@@ -51,6 +51,9 @@ GC_HOT = 0.7
 GC_WARM = 0.3
 LRU_RATE_LIMIT_SECONDS = 60
 SYNC_POLL_INTERVAL_SECONDS = 1.0
+# D3/N11: периодическая чистка мёртвых reader-слотов (kill -9 агентов роя
+# оставляет их занятыми; без чистки maxreaders может исчерпаться).
+READER_CHECK_INTERVAL_SECONDS = 60.0
 
 # --- слой ветки процесса (роевая изоляция, N1): per-process override поверх
 # глобальной meta.branch_current. Агент роя выставляет свою ветку один раз —
@@ -211,6 +214,9 @@ class Store:
         self._touch_ids: list = []
         # commit-latency последних write-транзакций (кольцо).
         self._latencies = deque(maxlen=COMMIT_LATENCY_WINDOW)
+        # наблюдаемость writer-контеншена роя (D4/N12, per-process):
+        self._busy_retries = 0     # сколько раз BUSY заставил повторить begin
+        self._busy_failures = 0    # сколько раз исчерпались BUSY_RETRIES
         # --- резервное копирование / защита от удаления ----------------------
         self.backup_dir = self._resolve_backup_dir(path)
         self.auto_backup_seconds = _env_int(ENV_AUTO_BACKUP_SECONDS, 0)
@@ -231,6 +237,7 @@ class Store:
         # (синк не нужен и может писать в LCK).
         self._sync_stop = threading.Event()
         self._sync_thread = None
+        self._last_reader_check = 0.0  # D3: таймер чистки reader-слотов
         if not readonly and not _skip_sync_thread:
             self._sync_thread = threading.Thread(
                 target=self._sync_loop, name="store-sync-poll", daemon=True)
@@ -242,6 +249,13 @@ class Store:
             try:
                 self._check_deleted()
                 self.env.sync(force=False, nonblock=True)
+                # D3/N11: раз в READER_CHECK_INTERVAL секунд чистим мёртвые
+                # reader-слоты (kill -9 агентов роя оставляет их занятыми).
+                now = time.time()
+                if (now - self._last_reader_check
+                        >= READER_CHECK_INTERVAL_SECONDS):
+                    self._last_reader_check = now
+                    self.env.reader_check()
             except Exception:
                 pass  # опрос синка не должен ломать сервер
 
@@ -274,6 +288,27 @@ class Store:
         except Exception as e:  # noqa: BLE001
             out["preopen"] = {"error": str(e),
                               "note": "вален при закрытой/синхронизированной env"}
+        # D4/N12: наблюдаемость writer-контеншена роя. Без этих метрик узкое
+        # место single-writer невидимо, пока не упрётся в busy_io у агентов.
+        lat = self.commit_latency()
+        wholes = sorted(lat_rec.get("whole") for lat_rec in self._latencies
+                        if lat_rec.get("whole") is not None)
+        p90_us = 0.0
+        if wholes:
+            # наивный percentile: floor-индекс int(n*0.9), кламп к последнему
+            # элементу. Осознанно: на малых окнах (n<=10) смещается к max —
+            # консервативно для мониторинга; это не off-by-one.
+            p90_us = round(wholes[min(len(wholes) - 1,
+                                      int(len(wholes) * 0.9))]
+                           * 1000000.0 / 65536.0, 1)
+        out["ops"] = {
+            "busy_retries": self._busy_retries,
+            "busy_failures": self._busy_failures,
+            "commits_in_window": len(self._latencies),
+            "commit_p90_us": p90_us,
+            "commit_mean_us": lat["window_whole_us"]["mean"],
+            "commit_max_us": lat["window_whole_us"]["max"],
+        }
         return out
 
     def flush_sync(self) -> dict:
@@ -467,7 +502,8 @@ class Store:
             out["backup_pending"] = True
             out["backup_prompt"] = (
                 "пора сделать резервную копию; спросите пользователя: "
-                "db_backup kind=user (сделать) или db_backup skip=true (пропустить)")
+                "db_backup (сделать точку сохранения) или "
+                "db_backup skip=true (пропустить)")
         if notice:
             out["backup_notice"] = notice
         return out
@@ -544,7 +580,17 @@ class Store:
         return out
 
     def _backup_dir_size(self) -> int:
-        """Суммарный размер независимых копий (без жёстких ссылок)."""
+        """Суммарный размер независимых копий (без жёстких ссылок).
+
+        Исключения (не расходуют бюджет, см. ревью #164):
+        - LIFELINE `current.mdbx` — жёсткая ссылка на живую БД (0 места);
+          исключена поимённо. ВНИМАНИЕ: в copy-режиме (кросс-ФС, macOS
+          EPERM) это полноценная копия — тогда лимит занижается на размер
+          БД; случай редкий, учтён как MINOR.
+        - EMERGENCY `snapshot_*.db` — тоже жёсткая ссылка, но исключена
+          ПОБОЧНО через суффикс `.db` (фильтр `.mdbx` ниже), не поимённо;
+          переименование snapshot в `.mdbx` молча изменит семантику лимита.
+        """
         total = 0
         try:
             for fn in os.listdir(self.backup_dir):
@@ -576,19 +622,57 @@ class Store:
                 continue  # файл мог исчезнуть (другой процесс) — пропускаем
         return removed
 
-    def backup(self, kind: str = "user", dest: str = None) -> dict:
-        """Консистентная копия БД (MVCC-снапшот) через txn_copy2pathname.
+    def backup(self, kind: str = "pin", dest: str = None,
+               force: bool = False) -> dict:
+        """Внутренняя точка сохранения (MVCC-снапшот) через txn_copy2pathname.
 
-        kind: 'auto' — тихий интервал; 'user' — с запросом/явно; 'manual' —
-        ручной db_backup. Имя: {kind}-YYYYMMDD-HHMMSS_txnid<N>.mdbx.
+        kind: 'auto' — тихий интервал (таймер maybe_run_auto_backup,
+        ротируется _prune_auto); 'pin' — закреплённая точка сохранения по
+        запросу пользователя / PROMPT-подтверждению: ВНУТРИ backup-каталога,
+        учитывается в лимите и tiers, НИКОГДА не ротируется.
+        Имя: {kind}-YYYYMMDD-HHMMSS_txnid<N>.mdbx.
         Флаги: COMPACT | OVERWRITE (компактификация).
+
+        Экспорт данных наружу (внешняя архивация / перенос на другой хост) —
+        отдельный метод `export(dest)`: вне backup-каталога, без учёта в
+        лимите и tiers, не ротируется. Через MCP kind не передаётся:
+        db_backup = pin, db_export = export. kind="auto" НЕДОСТУПЕН через
+        MCP (там kind вообще убран), но Store.backup(kind="auto") остаётся
+        публичным для Python-API и используется таймером
+        maybe_run_auto_backup — прямой вызов auto подчиняется лимиту, но
+        НЕ ротируется _prune_auto до следующего тика таймера (ротация
+        привязана к таймеру).
+
+        Лимит каталога (D2/N10): раньше backup_max_bytes проверялся только
+        для auto (и молча — notice терялся в памяти процесса). Теперь:
+        - auto — пропуск с ПЕРСИСТЕНТНЫМ флагом в state-файле (виден всем
+          процессам роя и переживает рестарт, снимается cleanup/успехом);
+        - pin — явная контрактная ошибка (агент должен увидеть причину, а не
+          тихий пропуск), обход — force=True.
         """
         if self.db_file_deleted:
             self._raise_if_deleted()
-        if kind not in ("auto", "user", "manual"):
+        if kind not in ("auto", "pin"):
             raise invalid("неизвестный kind бэкапа %r" % kind,
-                          "используйте auto|user|manual")
+                          "используйте auto|pin (экспорт — export())")
         os.makedirs(self.backup_dir, exist_ok=True)
+        # проверка лимита по умолчанию каталога — только когда dest внутри
+        # backup_dir (копия во внешний путь лимит не расходует — но извне
+        # это уже export()). Прямые вызовы pin/auto подчиняются бюджету:
+        # без этой защиты каталог раздувался бы мимо ротации _prune_auto.
+        # Штатный auto из maybe_run_auto_backup проверяет лимит ДО вызова,
+        # поэтому для него это условие не срабатывает.
+        in_dir = dest is None or os.path.dirname(os.path.abspath(dest)) == \
+            os.path.abspath(self.backup_dir)
+        if in_dir and not force \
+                and self._backup_dir_size() > self.backup_max_bytes:
+            raise invalid(
+                "каталог бэкапов (%.1f МБ) превышает лимит %d МБ"
+                % (self._backup_dir_size() / (1 << 20),
+                   self.backup_max_bytes >> 20),
+                "освободите место (db_cleanup confirm=true / удалите старые "
+                "копии), поднимьте SHARED_GRAPH_MEMORY_BACKUP_MAX_MB или "
+                "повторите с force=true")
         with self.env.begin(readonly=True) as txn:
             txnid = txn.id()
             if dest is None:
@@ -598,6 +682,59 @@ class Store:
             r = txn.copy2pathname(dest, mdbx.CP_BACKUP)
         return {"path": r["dest"], "txnid": r["txnid"], "kind": kind,
                 "size": os.path.getsize(r["dest"])}
+
+    def export(self, dest: str) -> dict:
+        """Экспорт данных НАРУЖУ: копия для внешней архивации/переноса.
+
+        Семантика (по решению владельца): db_export — это формирование
+        копии для ВНЕШНЕГО потребления, поэтому:
+        - `dest` ОБЯЗАТЕЛЕН и должен указывать ВНЕ backup-каталога
+          (иначе это не экспорт, а внутренняя точка — db_backup);
+          «вне» включает ПОДКАТАЛОГИ backup_dir (ревью #164): иначе
+          `backup_dir/sub/x.mdbx` прошёл бы проверку (dirname ≠ backup_dir)
+          и ускользнул из лимита/tiers (listdir нерекурсивен) — учётная дыра;
+          сравнение — через realpath+normcase (_is_inside_backup_dir), что
+          закрывает symlink-обход и Windows-регистр (ревью #164-r4);
+        - копия НЕ учитывается в лимите каталога (не расходует бюджет)
+          и НЕ попадает в tiers backup_status;
+        - НЕ ротируется (судьбу копии решает владелец пути назначения).
+        Флаги те же: COMPACT | OVERWRITE (компактификация).
+        """
+        if self.db_file_deleted:
+            self._raise_if_deleted()
+        if not dest or not str(dest).strip():
+            raise invalid("export: dest обязателен",
+                          "укажите путь назначения ВНЕ backup-каталога "
+                          "(внешняя архивация / перенос на другой хост)")
+        dest = str(dest).strip()
+        if self._is_inside_backup_dir(dest):
+            raise invalid(
+                "export: dest %r внутри backup-каталога" % dest,
+                "экспорт — наружу каталога (включая подкаталоги); для "
+                "внутренней точки сохранения используйте db_backup (pin)")
+        d = os.path.dirname(os.path.abspath(dest))
+        if d:
+            os.makedirs(d, exist_ok=True)
+        with self.env.begin(readonly=True) as txn:
+            r = txn.copy2pathname(dest, mdbx.CP_BACKUP)
+        return {"path": r["dest"], "txnid": r["txnid"], "kind": "export",
+                "size": os.path.getsize(r["dest"])}
+
+    def _is_inside_backup_dir(self, dest: str) -> bool:
+        """dest внутри backup_dir (включая подкаталоги) — сравнение путей.
+
+        realpath резолвит симлинки и «..» (иначе symlink внутрь каталога
+        обошёл бы проверку); normcase casefold'ит на Windows (ФС там
+        регистронезависима: `c:\\bk\\sub` vs `C:\\Bk` без него — outside).
+        На POSIX обе нормализации no-op. commonpath бросает ValueError на
+        разных дисках Windows — там пути заведомо вне каталога, False.
+        """
+        adir = os.path.normcase(os.path.realpath(dest))
+        abk = os.path.normcase(os.path.realpath(self.backup_dir))
+        try:
+            return adir == abk or os.path.commonpath([adir, abk]) == abk
+        except ValueError:
+            return False
 
     def _current_txnid(self) -> int:
         """Текущий txnid (хвост мета) — без записи."""
@@ -614,7 +751,10 @@ class Store:
 
         AUTO-бэкап создаётся ТОЛЬКО если БД реально изменялась с прошлого
         (txnid вырос): пустые «бэкапы без оснований» и мусорные каталоги в
-        /tmp исключаются.
+        /tmp исключаются. Пропуск по лимиту каталога — ПЕРСИСТЕНТНЫЙ флаг
+        `auto_skipped_limit` в state-файле (D2/N10): виден всем процессам
+        роя и переживает рестарт; notice одноразовый (in-memory) дополняет
+        его для текущего процесса. Флаг снимается успешным auto-бэкапом.
         """
         if os.name == "nt" or self.db_file_deleted:
             return
@@ -630,12 +770,35 @@ class Store:
                     self.backup_notice = (
                         "auto-backup пропущен: каталог бэкапов превышает лимит "
                         "%d МБ" % (self.backup_max_bytes >> 20))
+                    if not st.get("auto_skipped_limit"):
+                        st["auto_skipped_limit"] = True
+                        self._save_backup_state(st)
                 else:
                     try:
                         self.backup(kind="auto")
                         self._prune_auto()
+                        if st.get("auto_skipped_limit"):
+                            st.pop("auto_skipped_limit")
                     except Exception as e:  # noqa: BLE001
                         self.backup_notice = "auto-backup failed: %s" % e
+                        # TOCTOU (ревью #164): между нашей проверкой и
+                        # backup() другой процесс мог заполнить каталог —
+                        # тогда персистентный флаг обязан быть выставлен и
+                        # здесь, иначе рой/рестарт не видят, что auto-бэкапы
+                        # фактически блокированы лимитом.
+                        # НО (ревью #164-r4, 1b): флаг ставим ТОЛЬКО если
+                        # причина падения — именно лимит (контрактный
+                        # INVALID из backup()). Не-лимитные ошибки (диск,
+                        # DB_FILE_DELETED) на переполненном каталоге не
+                        # должны ложно сигнализировать «auto блокирован
+                        # лимитом» — иначе после исправления первопричины
+                        # auto не возобновился бы, а рой видел бы ложный флаг.
+                        limit_hit = (isinstance(e, MemoryError)
+                                     and getattr(e, "code", None) == "INVALID"
+                                     and self._backup_dir_size()
+                                     > self.backup_max_bytes)
+                        if limit_hit and not st.get("auto_skipped_limit"):
+                            st["auto_skipped_limit"] = True
                 st["last_auto"] = now
                 st["last_auto_txnid"] = cur
                 self._save_backup_state(st)
@@ -644,7 +807,7 @@ class Store:
                 and now - st.get("last_prompt", 0) >= self.prompt_backup_seconds):
             self.backup_pending = True
 
-    def run_prompt_backup(self, approve: bool) -> dict:
+    def run_prompt_backup(self, approve: bool, force: bool = False) -> dict:
         """Ответ агента на PROMPT-запрос: сделать/пропустить копию."""
         if not self.backup_pending:
             return {"pending": False}
@@ -653,7 +816,7 @@ class Store:
         result = {"pending": False, "approved": approve}
         if approve:
             try:
-                r = self.backup(kind="user")
+                r = self.backup(kind="pin", force=force)
                 result.update(r)
             except Exception as e:  # noqa: BLE001
                 result["error"] = str(e)
@@ -677,6 +840,17 @@ class Store:
                 removed.append(c["name"])
             except OSError:
                 continue
+        # Флаг auto_skipped_limit отражает СОСТОЯНИЕ лимита («места нет»),
+        # а не факт удаления auto-копий (ревью #164-#9): при pin-only
+        # переполнении ротация ничего не удаляет, но оператор мог освободить
+        # место вручную (rm pin-*/другое) — перепроверяем размер каталога и
+        # снимаем флаг, как только место есть. Иначе рой навсегда остался бы
+        # с флагом «auto блокирован» без штатного пути разблокировки.
+        st = self._load_backup_state()
+        if st.get("auto_skipped_limit") and \
+                self._backup_dir_size() <= self.backup_max_bytes:
+            st.pop("auto_skipped_limit", None)
+            self._save_backup_state(st)
         return {"dry_run": False, "removed": removed, "candidates": names,
                 "total_bytes": total, "keep": keep or self.backup_keep}
 
@@ -729,6 +903,7 @@ class Store:
             "next_auto": next_auto,
             "next_prompt": next_prompt,
             "pending": self.backup_pending,
+            "auto_skipped_limit": bool(st.get("auto_skipped_limit")),
             "db_file_deleted": self.db_file_deleted,
             "notice": self.backup_notice,
             "lifeline_error": self._lifeline_error,
@@ -736,7 +911,7 @@ class Store:
                 "lifeline": os.path.isfile(os.path.join(self.backup_dir,
                                                         BACKUP_LIFELINE)),
                 "auto": len(self._list_backups("auto-")),
-                "user": len(self._list_backups("user-")),
+                "pin": len(self._list_backups("pin-")),
                 "snapshot": len([f for f in self._list_backups("snapshot_")]),
             },
             "rotation_candidates": [c["name"]
@@ -863,6 +1038,25 @@ class Store:
         Также бэкфиллит covered_by из существующих coverage-записей.
         """
         created = []
+        # N16 fast-path: если все таблицы уже открыты (Store.__init__
+        # создаёт их на свежей БД) и backfill-маркер стоит — делать нечего,
+        # не открываем write-txn вовсе (важно для read-heavy роя: upgrade
+        # вызывается сервером на каждом rw-старте).
+        if all(v is not None for v in self._dbi.values()) \
+                and len(self._dbi) >= len(self.TABLES):
+            try:
+                with self.env.begin(readonly=True) as txn:
+                    rc, val = txn.get(self.dbi(txn, "meta"),
+                                      b"covered_by_backfilled")
+                if val is not None:
+                    return {"created": [], "covered_by_backfilled": 0,
+                            "fast_path": True}
+            except Exception:  # noqa: BLE001
+                # Осознанно глотаем любую ошибку проверки маркера (в т.ч.
+                # «meta не открывается») и идём обычным путём — он
+                # идемпотентен; fast-path — чистая оптимизация, и диагностика
+                # его промаха важнее, чем лишняя write-txn (ревью #164-r4).
+                pass
         with self._begin_write() as txn:
             # ПРОХОД 1: открываем недостающие таблицы; для существующих с
             # НЕСОВМЕСТИМЫМИ флагами получаем old-handle и проверяем пустоту.
@@ -971,8 +1165,15 @@ class Store:
                 if e.rc != mdbx.RC_BUSY:
                     raise
                 last_err = e
+                # D4/N12: наблюдаемость контеншена. СЕМАНТИКА (ревью #164-r4):
+                # считается КАЖДАЯ BUSY-попытка begin, включая финальную
+                # неудачную — при исчерпании ретраев busy_retries += RETRIES+1
+                # и busy_failures += 1; поэтому busy_retries/busy_failures —
+                # НЕ среднее число ретраев до успеха (это «всего BUSY-ударов»).
+                self._busy_retries += 1
                 if attempt < BUSY_RETRIES:
                     time.sleep(0.05 * (attempt + 1))
+        self._busy_failures += 1
         raise busy_io(desc=str(last_err), action="повторите операцию позже")
 
     # --- records ---------------------------------------------------------------
@@ -1008,7 +1209,13 @@ class Store:
         self._touch_ids.append(key)
 
     def _flush_touches(self) -> None:
-        """Одна write-txn на все накопленные LRU-касания (вместо N мелких)."""
+        """Одна write-txn на все накопленные LRU-касания (вместо N мелких).
+
+        Rate-limit — только per-process (_lru_last в _bump_access): ts в
+        access-записи трогать нельзя — он же источник recency для score,
+        а safe_store пишет его свежим (D1-заметка: межпроцессная дедупликация
+        касаний потребовала бы отдельного поля, не ts).
+        """
         if not self._touch_ids:
             return
         pending, self._touch_ids = self._touch_ids, []
@@ -1235,7 +1442,14 @@ class Store:
         return (0.35 * importance + 0.25 * recency + 0.20 * access_factor
                 + 0.20 * link_factor)
 
-    def recall(self, pattern: str, limit: int = 5):
+    def recall(self, pattern: str, limit: int = 5, touch: bool = False):
+        """Поиск по префиксу ключа с ранжированием.
+
+        `touch=False` (D1/N9): чтение НЕ накачивает LRU-статистику —
+        дашборды и массовые recall роя не искажают recency/access score
+        и не порождают write-txn касаний. touch=True — прежнее поведение
+        (осознанное «использование» записи).
+        """
         limit = max(1, min(int(limit), 10))
         prefix = pattern[:-1] if pattern.endswith("*") else pattern
         out = []
@@ -1253,9 +1467,10 @@ class Store:
                     rc, key, val = cur.get(mdbx.CURSOR_NEXT)
         out.sort(key=lambda r: r.get("score", 0.0), reverse=True)
         top = out[:limit]
-        for r in top:
-            self._bump_access(r["key"])
-        self._flush_touches()
+        if touch:
+            for r in top:
+                self._bump_access(r["key"])
+            self._flush_touches()
         return top
 
     def keys(self, pattern: str = "", limit: int = None) -> list:
@@ -1420,8 +1635,11 @@ class Store:
                     rc, k, _ = cur.get(mdbx.CURSOR_NEXT)
         return out[:8]
 
-    def search(self, query: str, limit: int = 5, include_structural: bool = True):
+    def search(self, query: str, limit: int = 5, include_structural: bool = True,
+               touch: bool = False):
         """Поиск по термам с query-aware ранжированием.
+
+        `touch=False` (D1/N9): чтение не накачивает LRU (см. recall).
 
         Ранжирование BM25-подобное: для каждого терма запроса учитывается
         IDF (редкие термины весомее частых) в дополнение к композитному
@@ -1480,14 +1698,16 @@ class Store:
                         row["bm25"] = round(idf_sum, 4)
                         row["kind"] = "record"
                         rows.append(row)
-        # sort и LRU-касания — ВНЕ read-txn: флэш касаний пишет, а параллельная
-        # read-транзакция в том же потоке дала бы MDBX_TXN_OVERLAPPING
+        # sort — ВНЕ read-txn: при touch=True флэш касаний пишет, а
+        # параллельная read-транзакция в том же потоке дала бы
+        # MDBX_TXN_OVERLAPPING
         rows.sort(key=lambda r: r.get("query_score", r.get("score", 0.0)), reverse=True)
         top = rows[:limit]
-        for r in top:
-            if r.get("kind") == "record":
-                self._bump_access(r["key"])
-        self._flush_touches()
+        if touch:
+            for r in top:
+                if r.get("kind") == "record":
+                    self._bump_access(r["key"])
+            self._flush_touches()
         return top
 
     # --- links -----------------------------------------------------------------
@@ -3830,6 +4050,13 @@ class Store:
         Формат записи: `coverage_blocks:{layer}/test:{sym-bare}` → JSON
         `[{"block_id", "l0", "l1", "covered"}]`. Агрегирует блоки по символу.
         Пустой layer — активная ветка (чтобы feature-прогоны не писали в base).
+
+        N15: семантика ЗАМЕНЫ по символу — повторный вызов для (test, symbol)
+        перезаписывает весь список блоков этого символа, а не объединяет.
+        Поэтому частичный повторный insert одним символом оставит только
+        переданные блоки. Коллекторы пишут полный набор блоков символа за раз
+        (run_coverage/gcov_to_coverage), поэтому в штатном пайплайне это
+        безопасно; для инкремента читайте текущие блоки и передавайте union.
         """
         layer = self._effective_layer(layer)
         pre = self.layer_prefix(layer)
@@ -4339,7 +4566,22 @@ class Store:
             # canary.z = активный слой (для внешних читателей/отладки)
             c = txn.canary_get()
             txn.canary_put(x=c.get("x", 0), y=c.get("y", 0), z=len(layer))
-            return {"previous": prev, "current": layer}
+            # N14: активация НЕзарегистрированного слоя — операторская
+            # ловушка (чтения молча вернут пустой слой). Не ошибка (слой
+            # мог быть очищен purge'ем намеренно), но предупреждаем явно.
+            registered = False
+            if layer:
+                br_dbi = self._opt_dbi(txn, "branches")
+                if br_dbi is not None:
+                    rc2, rv = txn.get(br_dbi, ("branch:" + layer).encode())
+                    registered = rv is not None
+            out = {"previous": prev, "current": layer}
+            if not registered:
+                out["warning"] = (
+                    "слой %r отсутствует в реестре branches — чтения/записи "
+                    "пойдут в пустой слой; зарегистрируйте его "
+                    "(branch_register) или исправьте опечатку" % layer)
+            return out
 
     def branch_remove(self, layer: str) -> dict:
         layer = layer.strip().strip("/")
