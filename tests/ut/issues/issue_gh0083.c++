@@ -150,8 +150,8 @@ static bool create_gc_db(const std::string &testdb) {
 
 struct gc_record {
   size_t data_off;        /* absolute file offset of the record's page list */
-  uint32_t count;         /* pnl[0] */
-  uint32_t last_pgno_off; /* absolute file offset of the least page number */
+  size_t count;         /* pnl[0] */
+  size_t last_pgno_off;   /* absolute file offset of the least page number */
 };
 
 /* Descend into the GC tree from the meta and collect up to two leaf records. */
@@ -181,8 +181,8 @@ static bool walk_gc_leaf(const std::vector<uint8_t> &buf, uint32_t pagesize, uin
         rec.data_off = data_off;
         rec.count = read_u32_le(&buf[data_off]);
         if (rec.count > 0 && rec.count <= 0x1FFFFFu /* sane bound */ &&
-            data_off + (size_t)(rec.count + 1) * sizeof(uint32_t) <= off + pagesize) {
-          rec.last_pgno_off = data_off + (size_t)rec.count * sizeof(uint32_t);
+            data_off + (rec.count + 1) * sizeof(uint32_t) <= off + pagesize) {
+          rec.last_pgno_off = data_off + rec.count * sizeof(uint32_t);
           out.push_back(rec);
         }
       }

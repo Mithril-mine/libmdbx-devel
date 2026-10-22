@@ -1136,7 +1136,7 @@ __cold int dxb_setup(MDBX_env *env, const int lck_rc, const mdbx_mode_t mode_bit
  * lag far behind or run ahead of the shrink threshold, so gating the datafile
  * shrink on it is incorrect.
  */
-static bool dxb_shrink_maybe(const meta_t *const pending, const pgno_t filesize_pgno) {
+static bool dxb_shrink_maybe(const meta_t *const pending, const size_t filesize_pgno) {
   if (!pending->geometry.shrink_pv)
     return false;
   const pgno_t stockpile_gap = 3 + pending->trees.gc.height * 3;
@@ -1150,7 +1150,7 @@ static bool dxb_shrink_maybe(const meta_t *const pending, const pgno_t filesize_
  * zero is not a usable page number here (a datafile bottom is never below
  * `geometry.lower` >= NUM_METAS), so it cannot collide with a real result. */
 static pgno_t dxb_shrink_bottom(const MDBX_env *env, const meta_t *const pending, const pgno_t largest_pgno,
-                                const pgno_t filesize_pgno) {
+                                const size_t filesize_pgno) {
   const pgno_t stockpile_gap = 3 + pending->trees.gc.height * 3;
   const pgno_t shrink_step = pv2pages(pending->geometry.shrink_pv);
   if (filesize_pgno <= largest_pgno || filesize_pgno - largest_pgno <= shrink_step + stockpile_gap)
@@ -1188,9 +1188,9 @@ int dxb_sync_locked(MDBX_env *env, unsigned flags, meta_t *const pending, troika
       flags &= MDBX_WRITEMAP | txn_unmap_allowed; /* force steady */
   }
 
-  pgno_t shrink = 0;
+  size_t shrink = 0;
   if (flags & txn_unmap_allowed) {
-    const pgno_t filesize_pgno = bytes2pgno(env, env->dxb_mmap.filesize);
+    const size_t filesize_pgno = (size_t)(env->dxb_mmap.filesize >> env->ps2ln);
 
     /* LY: check conditions to discard unused pages via MADV_DONTNEED (POSIX
      * only). Gated by `discarded_tail`, a property of this madvise machinery
@@ -1519,7 +1519,7 @@ int dxb_sync_locked(MDBX_env *env, unsigned flags, meta_t *const pending, troika
 
   /* LY: shrink datafile if needed */
   if (unlikely(shrink)) {
-    VERBOSE("shrink to %" PRIaPGNO " pages (-%" PRIaPGNO ")", pending->geometry.now, shrink);
+    VERBOSE("shrink to %" PRIaPGNO " pages (-%zu)", pending->geometry.now, shrink);
     rc = dxb_resize(env, pending->geometry.first_unallocated, pending->geometry.now, pending->geometry.upper,
                     implicit_shrink);
     if (rc != MDBX_SUCCESS && rc != MDBX_EPERM && rc != MDBX_UNABLE_EXTEND_MAPSIZE)
