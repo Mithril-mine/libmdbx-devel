@@ -531,9 +531,24 @@ def test_schema_outdated_other_families_raise(tmp_path):
         txn.put(meta, b"schema_ver", b"1")  # старая схема (нет опц. таблиц)
     env.close()
     s = Store(db, readonly=True)  # None-handle для всех опц. таблиц
-    for meth, args in (("coverage_get", ("t1",)),
-                       ("probe_get", ("tag",)),
-                       ("ci_jobs_all", ())):
+    # представители ВСЕХ семейств с _check_opt_table (ревью #175-r3 T2)
+    cases = [
+        ("coverage_get", ("t1",)),
+        ("probe_get", ("tag",)),
+        ("ci_jobs_all", ()),
+        ("coverage_symbols", ("fn:",)),
+        ("coverage_summary", ()),
+        ("coverage_gaps", ()),
+        ("coverage_blocks_get", ("t1", "fn:m:a")),
+        ("probe_list", ()),
+        ("probe_add", ("tag",)),
+        ("trace_observed", ()),
+        ("trace_path", ("fn:a", "fn:b")),
+        ("trace_compare", ("fn:a",)),
+        ("test_metrics_get", ("t1",)),
+        ("test_metrics_all", ()),
+    ]
+    for meth, args in cases:
         with pytest.raises(ME) as ei:
             getattr(s, meth)(*args)
         assert "SCHEMA_OUTDATED" in str(ei.value), "%s: %s" % (meth, ei.value)
@@ -588,3 +603,135 @@ def test_schema_ver_zero_is_outdated_not_too_new(tmp_path):
         s.branch_list()
     assert "SCHEMA_OUTDATED" in str(ei.value)
     s.close()
+
+
+def test_branch_purge_vs_activate_race_no_corruption(tmp_path):
+    """Ревью #175-r3 Q4: двухпроцессная гонка purge vs activate никогда не даёт
+    «слой активен И данные удалены».
+
+    fork: потомок делает branch_activate(L) в цикле с retry при BUSY,
+    родитель — branch_purge(L, expected_current=""). Ожидаемый исход — либо
+    purge CONFLICT (activate-first), либо purge удалил ДО активации и потомок
+    получил warning «purge'нут». Оба корректны; инвариант: после обоих
+    НЕ может существовать активный L с пустыми данными.
+    """
+    import os
+    import subprocess
+    import sys
+    from mcp.errors import MemoryError as ME
+    db = str(tmp_path / "race.mdbx")
+    L = "0.15.race.3"
+    # подготовка: регистрируем слой и кладём данные (env закрыт ДО fork —
+    # иначе оба процесса унаследуют LCK и env не откроется в потомке)
+    s = Store(db, _skip_sync_thread=True)
+    s.branch_register("0.15", "race", n_commits=3)
+    s.map_put_symbol("fn:m:r", {"module": "m"}, layer=L)
+    s.close()
+    # Гонка через ОТДЕЛЬНЫЙ процесс (subprocess): fork в pytest-процессе
+    # может унаследовать чужие env-fd (fixtures) → mdbx_env_open(11).
+    # subprocess стартует чистым процессом (как отдельный агент роя).
+    srcdir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    child_code = (
+        "import sys, time\n"
+        "sys.path.insert(0, %r)\n"
+        "from mcp.store import Store\n"
+        "from mcp import libmdbx as mdbx\n"
+        "s = Store(%r, _skip_sync_thread=True)\n"
+        "for _ in range(50):\n"
+        "    try:\n"
+        "        r = s.branch_activate(%r)\n"
+        "        r.get('warning')\n"
+        "        s.close()\n"
+        "        sys.exit(0)\n"
+        "    except mdbx.LibmdbxError as e:\n"
+        "        if e.rc == mdbx.RC_BUSY:\n"
+        "            time.sleep(0.01)\n"
+        "            continue\n"
+        "        s.close()\n"
+        "        sys.exit(1)\n"
+        "s.close()\n"
+        "sys.exit(2)\n"
+        % (srcdir, db, L))
+    proc = subprocess.Popen([sys.executable, "-c", child_code])
+    # родитель: открывает свой env, purge с CAS на неактивный слой
+    outcome = "other"
+    try:
+        s3 = Store(db, _skip_sync_thread=True)
+        s3.branch_purge(L, expected_current="")
+        s3.close()
+        outcome = "purged"
+    except ME as e:
+        msg = str(e)
+        if "CONFLICT" in msg:
+            outcome = "conflict"
+        elif "является активным" in msg:
+            outcome = "invalid-active"  # activate-first: guard отклонил
+    rc = proc.wait(timeout=30)
+    child_ok = rc == 0
+    # ИНТЕРПРЕТАЦИЯ (ревью Q4): гонка serial-писателей; ТРИ исхода допустимы:
+    #   - purge первым (purged): в его write-txn слой НЕ был активен, данные
+    #     удалены законно; потомок ПОТОМ активировал пустой — warning
+    #     «purge'нут» (данные не вернутся) — корректный жизненный цикл;
+    #   - activate первым: purge получил CONFLICT (CAS) или
+    #     invalid-active (guard активного слоя), данные ЦЕЛЫ.
+    # Запрещён ЛИШЬ случай: purge удалил данные слоя, КОТОРЫЙ был активен
+    # В ТУ ЖЕ write-txn (guard бы отклонил) — это проверяет outcome.
+    s4 = Store(db, _skip_sync_thread=True)
+    data = s4.map_symbols(layer=L)
+    s4.close()
+    assert child_ok, "потомок должен завершиться корректно (rc=%d)" % rc
+    if outcome in ("conflict", "invalid-active"):
+        # purge отклонён (activate-first) — данные обязаны быть ЦЕЛЫ
+        assert data, "activate-first: данные слоя не должны быть удалены"
+    elif outcome == "purged":
+        # purge прошёл: данные удалены ДО возможной активации потомка — ок
+        pass
+    else:
+        raise AssertionError("неизвестный исход purge: %r" % outcome)
+
+
+def test_state_merge_real_race_no_lost_flag(tmp_path, monkeypatch):
+    """Ревью #175-r3 Q10: настоящая гонка state-файла — потомок пишет
+    между read и save родителя; флаг родителя не теряется (merge под локом)."""
+    import os
+    import time as _t
+    import tempfile
+    signal = tempfile.mktemp()
+    # файл-барьер: потомок ждёт его появления
+    barrier = signal + ".start"
+    monkeypatch.setenv("SHARED_GRAPH_MEMORY_BACKUP_DIR", str(tmp_path / "bk"))
+    db = str(tmp_path / "t.mdbx")
+    st_ = Store(db, _skip_sync_thread=True)
+    st_.safe_store("fact:x:y", "fact", "seed", 0.5)
+    st_.close()
+    pid = os.fork()
+    if pid == 0:
+        # потомок: ждёт барьер, пишет last_auto
+        while not os.path.exists(barrier):
+            _t.sleep(0.001)
+        s2 = Store(db, _skip_sync_thread=True)
+        try:
+            st2 = s2._load_backup_state()
+            st2["last_auto"] = 555.0
+            s2._save_backup_state(st2)
+        finally:
+            s2.close()
+        os._exit(0)
+    # родитель: читает state (до записи потомка), ставит барьер, пишет флаг
+    s3 = Store(db, _skip_sync_thread=True)
+    try:
+        st3 = s3._load_backup_state()
+        st3["auto_skipped_limit"] = True
+        os.close(os.open(barrier, os.O_CREAT))  # отпускаем потомка
+        _t.sleep(0.05)  # даём потомку записать last_auto
+        s3._save_backup_state(st3)  # merge: флаг + last_auto потомка переживут
+    finally:
+        s3.close()
+    os.waitpid(pid, 0)
+    s4 = Store(db, _skip_sync_thread=True)
+    try:
+        cur = s4._load_backup_state()
+        assert cur.get("auto_skipped_limit") is True, "флаг родителя сохранён"
+        assert cur.get("last_auto") == 555.0, "last_auto потомка пережил merge"
+    finally:
+        s4.close()

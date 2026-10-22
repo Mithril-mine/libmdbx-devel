@@ -1204,3 +1204,30 @@ def test_auto_skip_flag_visible_during_backoff_window(tmp_path, monkeypatch):
         s.before_call()
         assert s.backup_status()["auto_skipped_limit"] is True, \
             "флаг лимита должен быть виден немедленно (не через backoff)"
+
+
+def test_auto_backoff_ceiling_32x(tmp_path, monkeypatch):
+    """Ревью #175-r3 T4: потолок backoff 32x — после 5+ неудач last_auto
+    отодвигается на interval*32 (не 64x/128x).
+    """
+    monkeypatch.setenv("SHARED_GRAPH_MEMORY_BACKUP_DIR", str(tmp_path / "bk"))
+    monkeypatch.setenv("SHARED_GRAPH_MEMORY_AUTO_BACKUP_SECONDS", "1")
+    db = str(tmp_path / "t.mdbx")
+    with Store(db, _skip_sync_thread=True) as s:
+        s.safe_store("fact:x:y", "fact", "seed", 0.5)
+
+        def disk_fail(kind="pin", dest=None, force=False):
+            raise OSError("No space left on device")
+
+        monkeypatch.setattr(s, "backup", disk_fail)
+        for _ in range(7):  # count растёт до 7 (>=5)
+            stt = s._load_backup_state()
+            stt["last_auto"] = 0
+            stt["last_auto_txnid"] = 0
+            s._save_backup_state(stt)
+            s.before_call()
+        st = s._load_backup_state()
+        assert st.get("auto_failure_count") == 7
+        # потолок: min(2**7=128, 32) = 32 → offset ≈ interval*32 = 32с
+        offset = st.get("last_auto", 0) - time.time()
+        assert 30 <= offset <= 34, "потолок 32x (не 64/128): %.1f" % offset
