@@ -147,32 +147,23 @@ def cmd_ci_jobs(args) -> None:
 
 def cmd_backup(args) -> None:
     """Внутренняя точка сохранения (pin-*): db_backup."""
-    s = _open(args.path)
-    try:
+    with _open(args.path) as s:
         r = s.backup(kind="pin", force=args.force)
         print(json.dumps(r, ensure_ascii=False, indent=2))
-    finally:
-        s.close()
 
 
 def cmd_export(args) -> None:
     """Экспорт копии НАРУЖУ каталога (внешняя архивация/перенос)."""
-    s = _open(args.path)
-    try:
+    with _open(args.path) as s:
         r = s.export(args.dest)
         print(json.dumps(r, ensure_ascii=False, indent=2))
-    finally:
-        s.close()
 
 
 def cmd_upgrade(args) -> None:
     """Схема-миграция (новые таблицы, INCOMPATIBLE-пересоздание, backfill)."""
-    s = Store(args.path, readonly=False)
-    try:
+    with Store(args.path, readonly=False) as s:
         r = s.upgrade()
         print(json.dumps(r, ensure_ascii=False, indent=2))
-    finally:
-        s.close()
 
 
 def main(argv=None):
