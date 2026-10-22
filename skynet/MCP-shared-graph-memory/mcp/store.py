@@ -3188,6 +3188,7 @@ class Store:
         Тег — семантический (стабильный при рефакторинге). Один тег → одна
         запись (dedup по тегу), как в probe-bus (§4 «Реестр»).
         """
+        self._check_opt_table("probes")
         tag = tag.strip()
         if not tag:
             raise invalid("probe: пустой тег", "укажите семантический тег")
@@ -3229,6 +3230,7 @@ class Store:
         с отчётом в `skipped` — одна бракованная строка не роняет загрузку
         всего реестра (решение A5-β: skip+отчёт, не fail-fast).
         """
+        self._check_opt_table("probes")
         layer = self._effective_layer(layer)
         pre = self.layer_prefix(layer)
         n = 0
@@ -3269,6 +3271,8 @@ class Store:
             return {"probes": n, "skipped": skipped}
 
     def probe_get(self, tag: str, layer: str = "") -> dict:
+        # единый контракт: SCHEMA_OUTDATED на старой схеме
+        self._check_opt_table("probes")
         layer = self._effective_layer(layer)
         pre = self.layer_prefix(layer)
         with self.env.begin(readonly=True) as txn:
@@ -3283,6 +3287,7 @@ class Store:
     def probe_list(self, prefix: str = "", kind: str = "",
                    limit: int = None, layer: str = "") -> list:
         """Зонды слоя. `prefix` применяется к тегу (после layer-префикса)."""
+        self._check_opt_table("probes")
         layer = self._effective_layer(layer)
         pre = self.layer_prefix(layer)
         out = []
@@ -3317,6 +3322,7 @@ class Store:
         `status` валидируется по PROBE_STATUSES (C-8): произвольные строки
         отвергаются как invalid.
         """
+        self._check_opt_table("probes")
         return self.probe_add(tag, status=status, layer=layer)
 
     def probe_remove(self, tag: str, layer: str = "") -> dict:
@@ -3350,6 +3356,7 @@ class Store:
         другим label перезаписывает label (последний побеждает, A5-α),
         count накапливается. Обратные рёбра — put_nodupe (без дублей, C-6).
         """
+        self._check_opt_table("call_traces")
         count = max(1, int(count))
         layer = self._effective_layer(layer)
         pre = self.layer_prefix(layer)
@@ -3380,6 +3387,7 @@ class Store:
         probe-bus/счётчиков (collect_traces.py). Быстрее цикла одиночных
         trace_ingest (одна txn на файл, B3-δ).
         """
+        self._check_opt_table("call_traces")
         layer = self._effective_layer(layer)
         pre = self.layer_prefix(layer)
         n = 0
@@ -3412,6 +3420,7 @@ class Store:
 
     def trace_observed(self, caller: str = "", layer: str = "") -> list:
         """Наблюдаемые вызовы слоя (по префиксу caller, layer-local ключи)."""
+        self._check_opt_table("call_traces")
         layer = self._effective_layer(layer)
         pre = self.layer_prefix(layer)
         out = []
@@ -3447,6 +3456,7 @@ class Store:
         по мере обхода, а не полным снимком adj всей таблицы в память —
         при больших трассах это разница между O(путей) и O(всего слоя).
         """
+        self._check_opt_table("call_traces")
         from collections import deque
         found = []
         with self.env.begin(readonly=True) as txn:
@@ -3490,6 +3500,7 @@ class Store:
         observed берётся ТОЧНО по caller (не prefix), чтобы fn:foo не
         включало наблюдения из fn:foobar.
         """
+        self._check_opt_table("call_traces")
         layer = self._effective_layer(layer)
         pre = self.layer_prefix(layer)
         static_callees = set()
@@ -3768,6 +3779,7 @@ class Store:
         число прогонов и счётчик флаков (runs > 1 и резкое удлинение).
         Наполняется коллектором ``tools/collect_test_metrics.py`` из ctest XML.
         """
+        self._check_opt_table("test_metrics")
         with self._begin_write() as txn:
             return self._test_metrics_put_locked(
                 txn, test_id, duration_ms, labels, timeout_sec, window)
@@ -3828,6 +3840,8 @@ class Store:
         return {"tests": n}
 
     def test_metrics_get(self, test_id: str) -> dict:
+        # единый контракт: SCHEMA_OUTDATED на старой схеме
+        self._check_opt_table("test_metrics")
         with self.env.begin(readonly=True) as txn:
             dbi = self._opt_dbi(txn, "test_metrics")
             if dbi is None:
@@ -3838,6 +3852,8 @@ class Store:
             return json.loads(val.decode())
 
     def test_metrics_all(self, prefix: str = "", limit: int = None) -> list:
+        # единый контракт: SCHEMA_OUTDATED на старой схеме
+        self._check_opt_table("test_metrics")
         out = []
         with self.env.begin(readonly=True) as txn:
             dbi = self._opt_dbi(txn, "test_metrics")
@@ -3910,6 +3926,7 @@ class Store:
         [test_id]. Устаревшие членства и блоки (old−new) удаляются в той же
         транзакции.
         """
+        self._check_opt_table("coverage")
         symbols = symbols or []
         layer = self._effective_layer(layer)
         pre = self.layer_prefix(layer)
@@ -3923,6 +3940,7 @@ class Store:
         Та же семантика, что coverage_insert (через _coverage_put_locked):
         устаревшие членства covered_by И блочные записи old−new удаляются.
         """
+        self._check_opt_table("coverage")
         layer = self._effective_layer(layer)
         pre = self.layer_prefix(layer)
         n = 0
@@ -3957,6 +3975,7 @@ class Store:
         "skipped" (миграция не падает и не порождает мусорных ключей).
         Одна read-txn сбора + одна write-txn записи.
         """
+        self._check_opt_table("coverage")
         from_layer = (from_layer or "").strip().strip("/")
         to_layer = (to_layer or "").strip().strip("/")
         pre_from = self.layer_prefix(from_layer)
@@ -4103,6 +4122,7 @@ class Store:
     def coverage_symbols(self, symbol_prefix: str, limit: int = 20,
                          layer: str = "") -> list:
         """Тесты, покрывающие символы с префиксом (covered_by, в слое)."""
+        self._check_opt_table("covered_by")
         layer = self._effective_layer(layer)
         pre = self.layer_prefix(layer)
         out = []
@@ -4131,6 +4151,7 @@ class Store:
         `coverage_blocks:{pre}{test}:*` — иначе блоки удалённого теста
         остаются «живыми» (C-3).
         """
+        self._check_opt_table("coverage")
         layer = self._effective_layer(layer)
         pre = self.layer_prefix(layer)
         with self._begin_write() as txn:
@@ -4208,6 +4229,7 @@ class Store:
         (run_coverage/gcov_to_coverage), поэтому в штатном пайплайне это
         безопасно; для инкремента читайте текущие блоки и передавайте union.
         """
+        self._check_opt_table("coverage_blocks")
         layer = self._effective_layer(layer)
         pre = self.layer_prefix(layer)
         with self._begin_write() as txn:
@@ -4220,6 +4242,7 @@ class Store:
         прогон: run_coverage пишет ~2 txn вместо 2×N (N = число тестов),
         не удерживая writer-лок роя между тестами.
         """
+        self._check_opt_table("coverage_blocks")
         layer = self._effective_layer(layer)
         pre = self.layer_prefix(layer)
         n_tests, n_syms = 0, 0
@@ -4236,6 +4259,7 @@ class Store:
 
         Ключ согласован с coverage_blocks_insert: `{layer}/test:{sym-bare}`.
         """
+        self._check_opt_table("coverage_blocks")
         layer = self._effective_layer(layer)
         pre = self.layer_prefix(layer)
         key = ("coverage_blocks:%s:%s" % (pre + test_id, symbol)).encode()
@@ -4257,6 +4281,7 @@ class Store:
           - uncovered_blocks — блоки, отмеченные covered=false в
             coverage_blocks по всем тестам.
         """
+        self._check_opt_table("coverage")
         covd_syms = set()
         uncovered_symbols = []
         # ОДНА read-txn на весь метод (B1): coverage и symbols читаются из
@@ -4305,6 +4330,8 @@ class Store:
         }
 
     def coverage_get(self, test_id: str, layer: str = "") -> dict:
+        # единый контракт: SCHEMA_OUTDATED на старой схеме
+        self._check_opt_table("coverage")
         layer = self._effective_layer(layer)
         pre = self.layer_prefix(layer)
         with self.env.begin(readonly=True) as txn:
@@ -4350,6 +4377,7 @@ class Store:
         По модулям + итого: symbols_covered/total, blocks_covered/total, pct.
         Примитив дашборда «белые пятна» для итеративного развития покрытия.
         """
+        self._check_opt_table("coverage")
         covd_syms = set()
         blocks_agg = {}  # sym -> [set(total block_ids), set(covered block_ids)]
         mods = {}
@@ -4474,11 +4502,13 @@ class Store:
         return out
 
     def ci_jobs_all(self, prefix: str = "", limit: int = None) -> list:
+        # единый контракт: SCHEMA_OUTDATED на старой схеме
+        self._check_opt_table("ci_jobs")
         out = []
         with self.env.begin(readonly=True) as txn:
             dbi = self._opt_dbi(txn, "ci_jobs")
             if dbi is None:
-                return []  # старая БД без ci_jobs
+                return []
             with txn.cursor(dbi) as cur:
                 rc, k, v = cur.get(mdbx.CURSOR_FIRST)
                 while rc == mdbx.RC_SUCCESS:
@@ -4659,6 +4689,7 @@ class Store:
         Идентификатор слоя: `{ver-slug}.{feature-slug}.{n}` (см. BRANCHES.md).
         Базовая ветка (`feature`="base"|"") живёт без префикса.
         """
+        self._check_opt_table("branches")
         ver = ver_slug.strip().lstrip("v")
         feat = (feature_slug or "base").strip().strip("/")
         if not ver:
@@ -4757,6 +4788,8 @@ class Store:
             return out
 
     def branch_remove(self, layer: str) -> dict:
+        # единый контракт: опц. таблица на старой схеме → SCHEMA_OUTDATED
+        self._check_opt_table("branches")
         layer = layer.strip().strip("/")
         with self._begin_write() as txn:
             dbi = self.dbi(txn, "branches")
