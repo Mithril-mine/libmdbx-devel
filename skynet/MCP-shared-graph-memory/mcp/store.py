@@ -876,6 +876,18 @@ class Store:
         # lock-файл yield'ят без повторного захвата (нет deadlock).
         with _file_lock(self._state_path()):
             st = self._load_backup_state()
+            # Q5 (ревью #175-r3): флаг auto_skipped_limit отражает СОСТОЯНИЕ
+            # лимита, включая окно backoff. Ветка лимита ниже выполняется
+            # только при истёкшем таймере; если каталог переполнился ВО ВРЕМЯ
+            # backoff (last_auto в будущем), рой должен видеть флаг сразу,
+            # а не через до 32×interval. Чтение дешёвое (listdir).
+            if self.auto_backup_seconds > 0 and \
+                    self._backup_dir_size() > self.backup_max_bytes:
+                # место исчерпано: флаг рою виден немедленно (не ждём конца
+                # backoff); попытка backup — только по таймеру ниже
+                if not st.get("auto_skipped_limit"):
+                    st["auto_skipped_limit"] = True
+                    self._save_backup_state(st)
             if (self.auto_backup_seconds > 0
                     and now - st.get("last_auto", 0)
                     >= self.auto_backup_seconds):
