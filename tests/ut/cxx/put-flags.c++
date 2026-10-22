@@ -76,6 +76,69 @@ TEST(ut_put_flags, reserve_variants) {
   mdbx::env::remove("test-put-flags");
 }
 
+TEST(ut_put_flags, cursor_reserve_variants) {
+  if (MDBX_GTEST_IS_EXECUTION_TIMEOUT()) {
+    GTEST_SKIP() << "SKIPPED by RUNTIME_LIMIT";
+    return;
+  }
+  auto env = make_env("test-put-flags");
+  auto txn = env.start_write();
+  auto map = txn.create_map("table");
+  auto cursor = txn.open_cursor(map);
+
+  {
+    auto reservation = cursor.insert_reserve("k1", 4);
+    ASSERT_EQ(reservation.size(), 4u);
+    memcpy(reservation.byte_ptr(), "abcd", 4);
+    EXPECT_EQ(txn.get(map, "k1"), mdbx::slice("abcd"));
+  }
+
+  {
+    const auto duplicate = cursor.try_insert_reserve("k1", 8);
+    EXPECT_FALSE(duplicate.done);
+    EXPECT_EQ(txn.get(map, "k1"), mdbx::slice("abcd")) << "existing value must survive a failed reserve";
+  }
+
+  {
+    auto reservation = cursor.upsert_reserve("k2", 7);
+    ASSERT_EQ(reservation.size(), 7u);
+    memcpy(reservation.byte_ptr(), "abcdefg", 7);
+    EXPECT_EQ(txn.get(map, "k2"), mdbx::slice("abcdefg"));
+  }
+
+  {
+    ASSERT_TRUE(cursor.seek("k1"));
+    auto reservation = cursor.update_reserve("k1", 3);
+    ASSERT_EQ(reservation.size(), 3u);
+    memcpy(reservation.byte_ptr(), "XYZ", 3);
+    EXPECT_EQ(txn.get(map, "k1"), mdbx::slice("XYZ"));
+  }
+
+  {
+    ASSERT_TRUE(cursor.seek("k2"));
+    auto updated = cursor.try_update_reserve("k2", 2);
+    ASSERT_TRUE(updated.done);
+    ASSERT_EQ(updated.value.size(), 2u);
+    memcpy(updated.value.byte_ptr(), "QR", 2);
+    EXPECT_EQ(txn.get(map, "k2"), mdbx::slice("QR"));
+  }
+
+  {
+    ASSERT_TRUE(cursor.seek("k1"));
+    auto reservation = cursor.reserve_current(5);
+    ASSERT_EQ(reservation.size(), 5u);
+    memcpy(reservation.byte_ptr(), "12345", 5);
+    EXPECT_EQ(txn.get(map, "k1"), mdbx::slice("12345"));
+  }
+
+  EXPECT_THROW((void)cursor.upsert_reserve("k3", size_t(MDBX_MAXDATASIZE) + 1), std::length_error)
+      << "an oversize reservation must be rejected as before PR #147";
+
+  txn.commit();
+  env.close();
+  mdbx::env::remove("test-put-flags");
+}
+
 TEST(ut_put_flags, reserve_forbidden_on_dupsort) {
   if (MDBX_GTEST_IS_EXECUTION_TIMEOUT()) {
     GTEST_SKIP() << "SKIPPED by RUNTIME_LIMIT";
