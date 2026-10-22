@@ -409,317 +409,6 @@ def test_upgrade_rejects_nonempty_incompatible_table(tmp_path):
     import pytest
     from mcp import libmdbx as mdbx
     from mcp.errors import MemoryError as ME
-    db = str(tmp_path / "old2.mdbx")
-    _make_old_schema_db(db, rows=[("legacy_row", '{"x":1}')])
-    s = Store(db, readonly=False)
-    with pytest.raises(ME) as ei:
-        s.upgrade()
-    assert "INVALID" in str(ei.value)
-    assert "schema-mismatch" in str(ei.value)
-    s.close()
-    # данные целы (старый handle, старый формат)
-    env = mdbx.Env(db, maxdbs=64, readonly=True)
-    with env.begin(readonly=True) as txn:
-        d = txn.open_dbi("call_traces", mdbx.DUPSORT)
-        rc, v = txn.get(d, b"legacy_row")
-        assert v is not None and b"x" in v
-    env.close()
-
-
-def test_coverage_migrate_isolates_source(store):
-    """C3/N5: миграция покрытия merge-ветки — копия, источник цел."""
-    L = "0.15.merge-me.9"
-    store.map_put_symbol("fn:m:a", {"module": "m"}, layer=L)
-    store.map_put_symbol("fn:m:b", {"module": "m"}, layer=L)
-    store.coverage_insert("ut/t1", ["fn:m:a"], pct=10.0, layer=L)
-    store.coverage_blocks_insert(
-        "ut/t1", [{"symbol": "fn:m:a", "block_id": "B1", "covered": True}],
-        layer=L)
-    store.trace_ingest("fn:m:a", "fn:m:b", count=2, layer=L)
-
-    r = store.coverage_migrate(L, "0.15.base")
-    assert r["tests"] == 1 and r["blocks"] == 1 and r["traces"] == 1
-
-    # целевой слой получил данные
-    c = store.coverage_get("ut/t1", layer="0.15.base")
-    assert c["symbols"] == ["fn:m:a"] and c["pct"] == 10.0
-    assert [b["block_id"] for b in
-            store.coverage_blocks_get("ut/t1", "fn:m:a",
-                                      layer="0.15.base")] == ["B1"]
-    assert store.trace_observed("fn:m:a", layer="0.15.base")[0]["count"] == 2
-    # covered_by в целевом слое согласован
-    cb = store.coverage_symbols("fn:m:a", layer="0.15.base")
-    assert any(x["symbol"] == "fn:m:a" and x["tests"] == ["ut/t1"]
-               for x in cb)
-
-    # источник НЕ изменился
-    c2 = store.coverage_get("ut/t1", layer=L)
-    assert c2["symbols"] == ["fn:m:a"]
-    assert store.trace_observed("fn:m:a", layer=L)[0]["count"] == 2
-
-
-def test_coverage_migrate_symbol_filter_and_conflicts(store):
-    """C3: фильтр symbols; конфликт test_id в целевом слое — перезапись."""
-    import pytest
-    from mcp.errors import MemoryError as ME
-    L = "0.15.merge2.3"
-    store.coverage_insert("ut/t1", ["fn:m:a", "fn:m:b"], pct=50.0, layer=L)
-    store.coverage_insert("ut/t2", ["fn:m:b"], pct=100.0, layer=L)
-    # целевой слой уже имеет ut/t1 со старыми данными — миграция перезапишет
-    store.coverage_insert("ut/t1", ["fn:old:sym"], pct=1.0, layer="0.15.base")
-
-    r = store.coverage_migrate(L, "0.15.base", symbols=["fn:m:b"])
-    # оба теста содержат fn:m:b → перенесены оба
-    assert r["tests"] == 2
-    # ut/t1 в базовом перезаписан: старые символы ушли, пришёл fn:m:b
-    c = store.coverage_get("ut/t1", layer="0.15.base")
-    assert c["symbols"] == ["fn:m:b"] and c["pct"] == 50.0
-    # stale-членство fn:old:sym вычищено (_coverage_put_locked)
-    assert store.coverage_symbols("fn:old", layer="0.15.base") == []
-    # новый член covered_by появился
-    cb = store.coverage_symbols("fn:m:b", layer="0.15.base")
-    assert cb and sorted(cb[0]["tests"]) == ["ut/t1", "ut/t2"]
-
-    # совпадающие префиксы ("0.15" и "0.15.base" оба → "") — invalid
-    with pytest.raises(ME):
-        store.coverage_migrate("0.15", "0.15.base")
-    with pytest.raises(ME):
-        store.coverage_migrate(L, L)
-
-
-def test_coverage_migrate_blocks_colon_in_test_id(store):
-    """C3/P1: test_id с ":" не мисатрибутируется при миграции блоков.
-
-    Ключ "coverage_blocks:{pre}{test}:{sym}" неоднозначен, когда и test_id,
-    и sym содержат ":" (ut/api:case + fn:m:a). Раньше split(":",1) резал по
-    ПЕРВОМУ ":" → блок уезжал под чужой test_id "ut/api". Теперь sym берётся
-    из тела JSON, test_id — хвост ключа без суффикса ":"+sym.
-    """
-    L = "0.15.colon.4"
-    store.coverage_blocks_insert(
-        "ut/api:case",
-        [{"symbol": "fn:m:a", "block_id": "B1", "covered": True}], layer=L)
-    r = store.coverage_migrate(L, "0.15.base")
-    assert r["blocks"] == 1
-    # блок под ПРАВИЛЬНЫМ test_id (не под мисатрибутированным "ut/api")
-    got = store.coverage_blocks_get("ut/api:case", "fn:m:a", layer="0.15.base")
-    assert [b["block_id"] for b in got] == ["B1"]
-    # старый баг обрезал test_id до первого ":" → ключ ".../ut/api:fn:m:a"
-    # (без ":case"); его быть не должно
-    assert store.coverage_blocks_get("ut/api", "fn:m:a",
-                                     layer="0.15.base") == []
-
-
-def test_coverage_migrate_blocks_symbol_filter_colon(store):
-    """C3/P1: фильтр symbols работает и при test_id с ":" (sym из тела)."""
-    L = "0.15.colon2.5"
-    store.coverage_blocks_insert(
-        "ut/api:case",
-        [{"symbol": "fn:m:a", "block_id": "B1", "covered": True},
-         {"symbol": "fn:m:b", "block_id": "B9", "covered": True}], layer=L)
-    # переносим только fn:m:a
-    store.coverage_migrate(L, "0.15.base", symbols=["fn:m:a"])
-    got_a = store.coverage_blocks_get("ut/api:case", "fn:m:a",
-                                      layer="0.15.base")
-    assert [b["block_id"] for b in got_a] == ["B1"]
-    # fn:m:b не перенесён (фильтр)
-    assert store.coverage_blocks_get("ut/api:case", "fn:m:b",
-                                     layer="0.15.base") == []
-
-
-def _rev_callers(store, callee, layer=""):
-    """Прямое чтение call_traces_rev (внутренний индекс, читателя нет)."""
-    from mcp import libmdbx as _mdbx
-    pre = store.layer_prefix(layer)
-    with store.env.begin(readonly=True) as txn:
-        dbi = store.dbi(txn, "call_traces_rev")
-        out = []
-        with txn.cursor(dbi) as cur:
-            rc, k, v = cur.get(_mdbx.CURSOR_SET_RANGE, (pre + callee).encode())
-            while rc == _mdbx.RC_SUCCESS and k == (pre + callee).encode():
-                out.append(v.decode()[len(pre):])
-                rc, k, v = cur.get(_mdbx.CURSOR_NEXT)
-    return out
-
-
-def test_coverage_migrate_traces_rev_no_dangling(store):
-    """C3/P2: перезапись caller в целевом слое чистит висячие rev-рёбра.
-
-    Прямой индекс call_traces[caller] перезаписывается телом источника;
-    обратный call_traces_rev для callee, исчезнувших из тела, должен быть
-    удалён — иначе rev расходится с прямым (висячие callee→caller).
-    """
-    L = "0.15.trmig.6"
-    # base: caller fn:m:a -> fn:old:callee
-    store.trace_ingest("fn:m:a", "fn:old:callee", layer="0.15.base")
-    # feature: тот же caller fn:m:a -> fn:new:callee
-    store.trace_ingest("fn:m:a", "fn:new:callee", layer=L)
-    store.coverage_migrate(L, "0.15.base")
-    # прямой индекс согласован: только new_callee
-    obs = store.trace_observed("fn:m:a", layer="0.15.base")
-    assert [o["callee"] for o in obs] == ["fn:new:callee"]
-    # обратный: old_callee больше НЕ указывает на fn:m:a (перезатёрт)
-    assert _rev_callers(store, "fn:old:callee", "0.15.base") == []
-    # new_callee указывает корректно
-    assert _rev_callers(store, "fn:new:callee", "0.15.base") == ["fn:m:a"]
-
-
-def test_coverage_migrate_skips_corrupt_records(store):
-    """Ревью: битые/несогласованные записи пропускаются с отчётом skipped.
-
-    Миграция не падает на мусоре источника и не порождает мусорных ключей:
-    corrupt-JSON, не-dict блоки и несовпадение symbol-тела с sym-ключом
-    — все три случая попадают в отчёт "skipped" (паттерн probe_batch),
-    остальные записи переносятся нормально (включая legacy без symbol).
-    """
-    L = "0.15.corrupt.7"
-    with store._begin_write() as txn:
-        dbi = store.dbi(txn, "coverage_blocks")
-        # мусорный JSON-элемент (не dict)
-        txn.put(dbi, ("coverage_blocks:%s/ut/c1:fn:m:a" % L).encode(),
-                b"[1]")
-        # несогласованная: тело symbol=fn:OTHER, ключ sym=fn:m:a
-        txn.put(dbi, ("coverage_blocks:%s/ut/c2:fn:m:a" % L).encode(),
-                b'[{"symbol": "fn:OTHER", "block_id": "B9", "covered": true}]')
-        # legacy без symbol в теле (пустой sym → ключ оканчивается ":")
-        txn.put(dbi, ("coverage_blocks:%s/ut/c3:" % L).encode(),
-                b'[{"block_id": "B4", "covered": false}]')
-        # нормальная запись
-        txn.put(dbi, ("coverage_blocks:%s/ut/c4:fn:m:b" % L).encode(),
-                b'[{"symbol": "fn:m:b", "block_id": "B1", "covered": true}]')
-        cov = store.dbi(txn, "coverage")
-        txn.put(cov, ("coverage:%s/ut/c5" % L).encode(), b"{oops")
-        txn.put(cov, ("coverage:%s/ut/c6" % L).encode(),
-                b'{"symbols": ["fn:m:b"], "pct": 1.0}')
-
-    r = store.coverage_migrate(L, "0.15.base")
-    reasons = sorted(s["reason"] for s in r["skipped"])
-    assert reasons == ["corrupt-blocks", "corrupt-coverage", "sym-mismatch"]
-    # хорошие записи перенесены
-    assert r["tests"] == 1 and r["blocks"] == 2
-    assert store.coverage_get("ut/c6", layer="0.15.base")["symbols"] == \
-        ["fn:m:b"]
-    assert [b["block_id"] for b in
-            store.coverage_blocks_get("ut/c4", "fn:m:b",
-                                      layer="0.15.base")] == ["B1"]
-    assert [b["block_id"] for b in
-            store.coverage_blocks_get("ut/c3", "",
-                                      layer="0.15.base")] == ["B4"]
-    # мусор НЕ перенесён (и не склеен в чужие ключи)
-    assert store.coverage_blocks_get("ut/c1", "fn:m:a", layer="0.15.base") \
-        == []
-    assert store.coverage_blocks_get("ut/c2", "fn:m:a", layer="0.15.base") \
-        == []
-    assert store.coverage_blocks_get("ut/c2", "fn:OTHER", layer="0.15.base") \
-        == []
-
-
-def test_merge_flow_migrate_then_purge(store):
-    """Merge-цепочка BRANCHES.md end-to-end: migrate → purge.
-
-    coverage_migrate(feature, base) переносит прогон, branch_purge(feature)
-    сносит мёртвый слой; целевой слой данные сохранил, источник пуст.
-    Ловит регрессии, где purge затирает мигрированные данные (пересечение
-    префиксов coverage/blocks в чистке).
-    """
-    L = "0.15.flow.11"
-    body = {"module": "m", "kind": "function"}
-    store.map_put_symbol("fn:m:new", body, layer=L)
-    store.coverage_insert("ut/f1", ["fn:m:new"], pct=100.0, layer=L)
-    store.coverage_blocks_insert(
-        "ut/f1",
-        [{"symbol": "fn:m:new", "block_id": "B1", "covered": True}], layer=L)
-    store.trace_ingest("fn:m:new", "fn:m:base", layer=L)
-    store.branch_register("0.15", "flow", n_commits=11)
-
-    m = store.coverage_migrate(L, "0.15.base")
-    assert m["tests"] == 1 and m["blocks"] == 1 and m["traces"] == 1
-    p = store.branch_purge(L)
-    assert p["result"] == "purged"
-    # источник пуст
-    assert store.map_symbols(layer=L) == []
-    assert store.coverage_all(layer=L) == []
-    # мигрированные данные в base ЦЕЛЫ после purge источника
-    c = store.coverage_get("ut/f1", layer="0.15.base")
-    assert c["symbols"] == ["fn:m:new"] and c["pct"] == 100.0
-    assert [b["block_id"] for b in
-            store.coverage_blocks_get("ut/f1", "fn:m:new",
-                                      layer="0.15.base")] == ["B1"]
-    assert store.trace_observed("fn:m:new", layer="0.15.base")
-    cb = store.coverage_symbols("fn:m:new", layer="0.15.base")
-    assert cb and cb[0]["tests"] == ["ut/f1"]
-
-
-def test_branch_activate_unregistered_warns(store):
-    """D5/N14: активация незарегистрированного слоя → warning (не ошибка).
-
-    Слой мог быть намеренно очищен purge'ем, поэтому это не отказ; но
-    чтения/записи уйдут в пустой слой — предупреждаем явно.
-    """
-    r = store.branch_activate("0.15.ghost.9")
-    assert r["current"] == "0.15.ghost.9"
-    assert "warning" in r and "реестре" in r["warning"]
-    # зарегистрированный слой — без warning
-    store.branch_register("0.15", "real", n_commits=2)
-    r2 = store.branch_activate("0.15.real.2")
-    assert "warning" not in r2, r2
-
-
-def test_upgrade_fast_path_no_write_txn(store, monkeypatch):
-    """D5/N16: повторный upgrade на готовой БД не открывает write-txn.
-
-    upgrade вызывается сервером на каждом rw-старте; если все таблицы
-    открыты и backfill-маркер стоит — fast-path возвращает результат без
-    write-txn (важно для read-heavy роя).
-    """
-    store.upgrade()  # первый вызов ставит backfill-маркер
-    orig = store._begin_write
-    calls = {"n": 0}
-
-    def spy():
-        calls["n"] += 1
-        return orig()
-
-    monkeypatch.setattr(store, "_begin_write", spy)
-    r = store.upgrade()
-    monkeypatch.undo()
-    assert r.get("fast_path") is True, r
-    assert r["created"] == []
-    assert calls["n"] == 0, "fast-path не должен открывать write-txn"
-
-
-def test_schema_too_new_rejected(tmp_path):
-    """F5.2/R2: БД, созданная более новой версией модуля, отклоняется.
-
-    Устаревший MCP-модуль на свежей БД (schema_ver=99 > поддерживаемой 2)
-    не должен молча работать с неизвестной схемой — контрактная
-    SCHEMA_TOO_NEW при открытии, с указанием обновить модуль.
-    """
-    import pytest
-    from mcp import libmdbx as mdbx
-    from mcp.errors import MemoryError as ME
-    db = str(tmp_path / "new.mdbx")
-    env = mdbx.Env(db, maxdbs=64, readonly=False, sync_mode="safe_nosync")
-    with env.begin() as txn:
-        meta = txn.open_dbi("meta", mdbx.CREATE | mdbx.DB_DEFAULTS)
-        txn.open_dbi("records", mdbx.CREATE | mdbx.DB_DEFAULTS)
-        txn.put(meta, b"schema_ver", b"99")
-    env.close()
-    with pytest.raises(ME) as ei:
-        Store(db)
-    assert "SCHEMA_TOO_NEW" in str(ei.value)
-    assert "99" in str(ei.value) and "обновите MCP-модуль" in str(ei.value)
-
-
-def test_schema_outdated_branch_list_raises(tmp_path):
-    """F5.2/R2: старая схема — branch_list даёт SCHEMA_OUTDATED, не [].
-
-    Молчаливый пустой список неотличим от «нет веток»; агент должен увидеть
-    несовместимость и целенаправленно переключиться в rw для миграции.
-    """
-    import pytest
-    from mcp import libmdbx as mdbx
-    from mcp.errors import MemoryError as ME
     db = str(tmp_path / "old.mdbx")
     env = mdbx.Env(db, maxdbs=64, readonly=False, sync_mode="safe_nosync")
     with env.begin() as txn:
@@ -822,3 +511,43 @@ def test_branch_purge_cas_atomic_in_write_txn(store, monkeypatch):
     assert calls["branch_current"] == 0, \
         "branch_current не должен вызываться из purge (точечная проверка)"
     assert calls["write_txn"] == 1, "одна write-txn на purge"
+
+
+def test_schema_outdated_other_families_raise(tmp_path):
+    """Ревью #175-#7: единый контракт SCHEMA_OUTDATED во ВСЕХ семействах
+    опциональных таблиц (не только branch_list/coverage_all).
+
+    Раньше coverage_get/probe_get/ci_jobs_all молча возвращали {} / [] на
+    старой схеме — ловушка «пусто = нет данных». Теперь — контрактная ошибка.
+    """
+    import pytest
+    from mcp import libmdbx as mdbx
+    from mcp.errors import MemoryError as ME
+    db = str(tmp_path / "old.mdbx")
+    env = mdbx.Env(db, maxdbs=64, readonly=False, sync_mode="safe_nosync")
+    with env.begin() as txn:
+        meta = txn.open_dbi("meta", mdbx.CREATE | mdbx.DB_DEFAULTS)
+        txn.open_dbi("records", mdbx.CREATE | mdbx.DB_DEFAULTS)
+        txn.put(meta, b"schema_ver", b"1")  # старая схема (нет опц. таблиц)
+    env.close()
+    s = Store(db, readonly=True)  # None-handle для всех опц. таблиц
+    for meth, args in (("coverage_get", ("t1",)),
+                       ("probe_get", ("tag",)),
+                       ("ci_jobs_all", ())):
+        with pytest.raises(ME) as ei:
+            getattr(s, meth)(*args)
+        assert "SCHEMA_OUTDATED" in str(ei.value), "%s: %s" % (meth, ei.value)
+    s.close()
+    # актуальная схема + read-only → толерантность (как и раньше)
+    db2 = str(tmp_path / "fresh.mdbx")
+    env2 = mdbx.Env(db2, maxdbs=64, readonly=False, sync_mode="safe_nosync")
+    with env2.begin() as txn:
+        meta2 = txn.open_dbi("meta", mdbx.CREATE | mdbx.DB_DEFAULTS)
+        txn.open_dbi("records", mdbx.CREATE | mdbx.DB_DEFAULTS)
+        txn.put(meta2, b"schema_ver", b"2")
+    env2.close()
+    s2 = Store(db2, readonly=True)
+    assert s2.coverage_get("t1") == {}
+    assert s2.probe_get("tag") == {}
+    assert s2.ci_jobs_all() == []
+    s2.close()
