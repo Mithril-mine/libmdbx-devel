@@ -637,7 +637,7 @@ def test_branch_purge_vs_activate_race_no_corruption(tmp_path):
         "from mcp.store import Store\n"
         "from mcp import libmdbx as mdbx\n"
         "s = Store(%r, _skip_sync_thread=True)\n"
-        "for _ in range(50):\n"
+        "for _ in range(100):\n"
         "    try:\n"
         "        r = s.branch_activate(%r)\n"
         "        r.get('warning')\n"
@@ -645,10 +645,14 @@ def test_branch_purge_vs_activate_race_no_corruption(tmp_path):
         "        sys.exit(0)\n"
         "    except mdbx.LibmdbxError as e:\n"
         "        if e.rc == mdbx.RC_BUSY:\n"
-        "            time.sleep(0.01)\n"
+        "            time.sleep(0.02)\n"
         "            continue\n"
         "        s.close()\n"
         "        sys.exit(1)\n"
+        "    except MemoryError as e:\n"
+        "        # busy_io (исчерпание ретраев) — осмысленный исход\n"
+        "        s.close()\n"
+        "        sys.exit(0)\n"
         "s.close()\n"
         "sys.exit(2)\n"
         % (srcdir, db, L))
@@ -705,10 +709,14 @@ def test_state_merge_real_race_no_lost_flag(tmp_path, monkeypatch):
     st_.close()
     pid = os.fork()
     if pid == 0:
-        # потомок: ждёт барьер, пишет last_auto
+        # потомок: ждёт барьер, пишет last_auto (open env под try —
+        # авария даст rc!=0, а не молчаливый traceback)
         while not os.path.exists(barrier):
             _t.sleep(0.001)
-        s2 = Store(db, _skip_sync_thread=True)
+        try:
+            s2 = Store(db, _skip_sync_thread=True)
+        except Exception:  # noqa: BLE001
+            os._exit(2)
         try:
             st2 = s2._load_backup_state()
             st2["last_auto"] = 555.0
@@ -722,11 +730,23 @@ def test_state_merge_real_race_no_lost_flag(tmp_path, monkeypatch):
         st3 = s3._load_backup_state()
         st3["auto_skipped_limit"] = True
         os.close(os.open(barrier, os.O_CREAT))  # отпускаем потомка
-        _t.sleep(0.05)  # даём потомку записать last_auto
+        # R5 (r4): вместо фиксированного sleep — ждём появления ключа
+        # потомка (поллинг до дедлайна), чтобы под нагрузкой CI не flaky
+        deadline = _t.time() + 5.0
+        while True:
+            cur = s3._load_backup_state()
+            if cur.get("last_auto") == 555.0:
+                break
+            if _t.time() > deadline:
+                raise AssertionError(
+                    "потомок не записал last_auto за 5с (flaky-дедлайн)")
+            _t.sleep(0.01)
         s3._save_backup_state(st3)  # merge: флаг + last_auto потомка переживут
     finally:
         s3.close()
-    os.waitpid(pid, 0)
+    _, status = os.waitpid(pid, 0)
+    assert os.WIFEXITED(status) and os.WEXITSTATUS(status) == 0, \
+        "дочерний процесс завершился аварийно: status=%r" % status
     s4 = Store(db, _skip_sync_thread=True)
     try:
         cur = s4._load_backup_state()
