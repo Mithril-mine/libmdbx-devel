@@ -25,6 +25,7 @@ import hashlib
 import json
 import math
 import os
+import random
 import re
 import shutil
 import sys
@@ -1310,7 +1311,12 @@ class Store:
                 # НЕ среднее число ретраев до успеха (это «всего BUSY-ударов»).
                 self._busy_retries += 1
                 if attempt < BUSY_RETRIES:
-                    time.sleep(0.05 * (attempt + 1))
+                    # F5.3/R4 (jitter): детерминированный 0.05*(attempt+1)
+                    # задержал бы всех агентов роя синхронно (thundering
+                    # herd): все просыпаются в один момент и повторяют BUSY
+                    # вместе — при массовом CI часть получает busy_io при
+                    # живой системе. uniform(0, max) размывает фазу.
+                    time.sleep(random.uniform(0.0, 0.05 * (attempt + 1)))
         self._busy_failures += 1
         raise busy_io(desc=str(last_err), action="повторите операцию позже")
 
