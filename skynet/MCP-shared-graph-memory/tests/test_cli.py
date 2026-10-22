@@ -99,3 +99,37 @@ def test_cli_purge(seeded):
 def test_cli_no_args_help(seeded):
     r = run(["--path", seeded])
     assert r.returncode == 1
+
+
+def test_cli_backup(seeded, tmp_path, monkeypatch):
+    """CLI backup (pin-точка) — JSON-вывод, файл во внутреннем каталоге."""
+    monkeypatch.setenv("SHARED_GRAPH_MEMORY_BACKUP_DIR", str(tmp_path / "bk"))
+    r = run(["--path", seeded, "backup"])
+    assert r.returncode == 0, r.stderr
+    out = json.loads(r.stdout)
+    assert out["kind"] == "pin" and os.path.isfile(out["path"])
+    assert os.path.basename(out["path"]).startswith("pin-")
+    assert r.stdout.count("pin-") >= 1
+
+
+def test_cli_export(seeded, tmp_path, monkeypatch):
+    """CLI export (dst-обязателен) — копия наружу каталога."""
+    monkeypatch.setenv("SHARED_GRAPH_MEMORY_BACKUP_DIR", str(tmp_path / "bk"))
+    dest = str(tmp_path / "outside" / "export.mdbx")
+    os.makedirs(os.path.dirname(dest), exist_ok=True)
+    r = run(["--path", seeded, "export", dest])
+    assert r.returncode == 0, r.stderr
+    out = json.loads(r.stdout)
+    assert out["kind"] == "export" and out["path"] == dest
+    # export без dest → контрактная ошибка (argparse required)
+    r2 = run(["--path", seeded, "export"])
+    assert r2.returncode != 0
+    assert "required" in (r2.stderr or "")
+
+
+def test_cli_upgrade(seeded):
+    """CLI upgrade — миграция схемы, готовый вывод."""
+    r = run(["--path", seeded, "upgrade"])
+    assert r.returncode == 0, r.stderr
+    out = json.loads(r.stdout)
+    assert "created" in out and "covered_by_backfilled" in out
