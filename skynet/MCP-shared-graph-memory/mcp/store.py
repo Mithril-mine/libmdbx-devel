@@ -255,6 +255,10 @@ class Store:
         self._lru_last: dict = {}
         self._touch_ids: list = []
         # commit-latency последних write-транзакций (кольцо).
+        # M12 (ревью #164-r5): потоковая модель — deque(maxlen).append
+        # атомарен под GIL; читатели (commit_latency/diag) итерируют живое
+        # кольцо: снапшот полу-консистентный (mean/max по окну, которое могло
+        # меняться на ходу) — осознанно для метрики мониторинга, не бухгалтерии.
         self._latencies = deque(maxlen=COMMIT_LATENCY_WINDOW)
         # наблюдаемость writer-контеншена роя (D4/N12, per-process):
         self._busy_retries = 0     # сколько раз BUSY заставил повторить begin
