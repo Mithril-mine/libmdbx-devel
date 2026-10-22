@@ -187,7 +187,9 @@ static int defrag_load_gc(dfc_t *dfc) {
 
   if (likely(!MDBX_IS_ERROR(rc))) {
     pnl_sort_nochk(txn->wr.repnl);
-    if (unlikely(!pnl_check(txn->wr.repnl, txn->geo.first_unallocated)))
+    /* The retired-pages list was assembled from untrusted GC records: check it
+     * in full, so any page listed by two different records is rejected. */
+    if (unlikely(!pnl_check_full(txn->wr.repnl, txn->geo.first_unallocated)))
       return MDBX_PROBLEM;
   }
 

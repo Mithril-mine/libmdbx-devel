@@ -136,15 +136,31 @@ MDBX_NOTHROW_PURE_FUNCTION MDBX_INTERNAL size_t pnl_search_nochk(const const_pnl
 
 MDBX_INTERNAL void pnl_sort_nochk(pnl_t pnl);
 
-MDBX_INTERNAL bool pnl_check(const const_pnl_t pnl, const size_t limit);
+/* A light-weight check of a page-number list: the list size bounds and the
+ * page-number range, all O(1). It intentionally does not scan the page
+ * numbers for disorder or duplicates, so it is suitable for assertions and
+ * other places where the list is expected to be valid by construction.
+ * Use pnl_check_full() for untrusted data, e.g. records read from the GC
+ * tree, where the O(n) ordering check must run. */
+MDBX_INTERNAL bool pnl_check_lite(const const_pnl_t pnl, const size_t limit);
+
+/* A full check of a page-number list: the same O(1) bounds as pnl_check_lite()
+ * plus a scan verifying that the list is strictly ordered, which also
+ * rejects internal duplicates. This is the variant for untrusted (on-disk
+ * or externally provided) data. */
+MDBX_INTERNAL bool pnl_check_full(const const_pnl_t pnl, const size_t limit);
 
 MDBX_MAYBE_UNUSED static inline bool pnl_check_allocated(const const_pnl_t pnl, const size_t limit) {
-  return pnl == nullptr || (pnl_alloclen(pnl) >= pnl_size(pnl) && pnl_check(pnl, limit));
+  return pnl == nullptr || (pnl_alloclen(pnl) >= pnl_size(pnl) && pnl_check_lite(pnl, limit));
+}
+
+MDBX_MAYBE_UNUSED static inline bool pnl_check_full_allocated(const const_pnl_t pnl, const size_t limit) {
+  return pnl == nullptr || (pnl_alloclen(pnl) >= pnl_size(pnl) && pnl_check_full(pnl, limit));
 }
 
 MDBX_MAYBE_UNUSED static inline void pnl_sort(pnl_t pnl, size_t limit4check) {
   pnl_sort_nochk(pnl);
-  ASSERT(pnl_check(pnl, limit4check));
+  ASSERT(pnl_check_lite(pnl, limit4check));
   (void)limit4check;
 }
 
@@ -187,6 +203,8 @@ MDBX_NOTHROW_PURE_FUNCTION MDBX_MAYBE_UNUSED static inline bool pnl_contains_spa
 }
 
 MDBX_INTERNAL size_t pnl_merge(pnl_t dst, const const_pnl_t src);
+
+MDBX_MAYBE_UNUSED MDBX_NOTHROW_PURE_FUNCTION MDBX_INTERNAL bool pnl_intersect(const const_pnl_t a, const const_pnl_t b);
 
 MDBX_MAYBE_UNUSED MDBX_NOTHROW_PURE_FUNCTION MDBX_INTERNAL size_t pnl_maxspan(const const_pnl_t pnl);
 

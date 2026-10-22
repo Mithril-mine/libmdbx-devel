@@ -516,6 +516,8 @@ else()
       add_ut(dbi_nested_txn SOURCE ut/dbi/dbi_nested_txn.c++)
       set_tests_properties(dbi_nested_txn PROPERTIES LABELS "ut;ut.dbi;ut.txn")
     endif()
+    add_extra_test(details_pnl SOURCE ut/api/details_pnl.c)
+    set_tests_properties(extra_details_pnl PROPERTIES LABELS "ut;ut.api;ut.gc")
     add_extra_test(details_rkl SOURCE ut/api/details_rkl.c)
     set_tests_properties(extra_details_rkl PROPERTIES LABELS "ut;ut.api;ut.gc"
       # Routine profile: bounded stochastic scale + deterministic edge-cases

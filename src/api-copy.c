@@ -389,15 +389,12 @@ __cold static int copy_with_compacting(MDBX_env *env, MDBX_txn *txn, mdbx_fileha
     MDBX_val key, data;
     rc = outer_first(&couple.outer, &key, &data);
     while (rc == MDBX_SUCCESS) {
+      const char *const reason = gc_check_rowdata(txn, data);
+      if (unlikely(reason)) {
+        ERROR("%s/%d: %s", "MDBX_CORRUPTED", MDBX_CORRUPTED, reason);
+        return MDBX_CORRUPTED;
+      }
       const pnl_t pnl = data.iov_base;
-      if (unlikely(data.iov_len % sizeof(pgno_t) || data.iov_len < MDBX_PNL_SIZEOF(pnl))) {
-        ERROR("%s/%d: %s %zu", "MDBX_CORRUPTED", MDBX_CORRUPTED, "invalid GC-record length", data.iov_len);
-        return MDBX_CORRUPTED;
-      }
-      if (unlikely(!pnl_check(pnl, txn->geo.first_unallocated))) {
-        ERROR("%s/%d: %s", "MDBX_CORRUPTED", MDBX_CORRUPTED, "invalid GC-record content");
-        return MDBX_CORRUPTED;
-      }
       gc_npages += pnl_size(pnl);
       rc = outer_next(&couple.outer, &key, &data, MDBX_NEXT);
     }
