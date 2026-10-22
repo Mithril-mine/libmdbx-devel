@@ -40,6 +40,8 @@ from .errors import (
     db_file_deleted,
     invalid,
     readonly_mode,
+    schema_outdated,
+    schema_too_new,
     size_limit,
 )
 from .normalize import RECORD_TYPES, Normalizer
@@ -240,6 +242,9 @@ class Store:
                         self._dbi[name] = None
                     else:
                         raise
+        # F5.2/R2: БД, созданная более новой версией модуля — явный отказ
+        # (иначе читали бы/писали неизвестную схему; см. _check_schema_too_new)
+        self._check_schema_too_new()
         self._load_vocab()
         self.next_id = self._load_next_id()
         self.last_gc = None
@@ -1102,8 +1107,65 @@ class Store:
         return self._dbi[name]
 
     def _opt_dbi(self, txn, name: str):
-        """dbi для опциональных таблиц (может отсутствовать в старой readonly-БД)."""
+        """dbi для опциональных таблиц (None-handle в старой/readonly БД)."""
         return self._dbi.get(name)
+
+    def _schema_ver_from_meta(self) -> str:
+        """schema_ver из meta (read-only); при ошибке — SCHEMA_VERSION."""
+        try:
+            with self.env.begin(readonly=True) as txn:
+                rc, vmeta = txn.get(self.dbi(txn, "meta"), b"schema_ver")
+                if vmeta is not None:
+                    return vmeta.decode()
+        except Exception:  # noqa: BLE001
+            pass
+        return SCHEMA_VERSION
+
+    def _check_schema_too_new(self) -> None:
+        """Отклонить БД, созданную более НОВОЙ версией модуля.
+
+        Сценарий (ревью #164-r5, R2): устаревший MCP-модуль на свежей БД.
+        Мы знаем СВОЮ схему, но не знаем чужую более новую — продолжать
+        работать значило бы читать/писать таблицы с неизвестной семантикой.
+        Контрактный SCHEMA_TOO_NEW вместо undefined behavior.
+        """
+        disk_ver = self._schema_ver_from_meta()
+        try:
+            if int(disk_ver) > int(SCHEMA_VERSION):
+                raise schema_too_new(
+                    "БД создана более новой версией модуля: schema_ver %s > "
+                    "поддерживаемая %s" % (disk_ver, SCHEMA_VERSION),
+                    "обновите MCP-модуль до версии, поддерживающей схему %s"
+                    % disk_ver)
+        except ValueError:
+            # schema_ver не число — чужая/битая мета: тоже несовместима
+            if disk_ver != SCHEMA_VERSION:
+                raise schema_too_new(
+                    "неизвестный schema_ver %r в мета БД" % disk_ver,
+                    "обновите MCP-модуль или пересоздайте БД")
+
+    def _check_opt_table(self, name: str) -> None:
+        """Методы опциональных таблиц: None-handle на старой схеме — ошибка.
+
+        Различие (ревью #164-r5, R2): None-handle при актуальной схеме —
+        это легитимный read-only старт (таблица не создана, читается пустой);
+        None-handle при старой схеме (schema_ver < SCHEMA_VERSION) — реальная
+        несовместимость, которую агент должен увидеть и устранить переходом
+        в rw-режим (db_set_mode readonly=false → upgrade), а НЕ молчаливый
+        пустой результат (неотличимый от «данных нет»).
+        """
+        if self._dbi.get(name) is None:
+            disk_ver = self._schema_ver_from_meta()
+            try:
+                old = int(disk_ver) < int(SCHEMA_VERSION)
+            except ValueError:
+                old = disk_ver != SCHEMA_VERSION
+            if old:
+                raise schema_outdated(
+                    "схема БД устарела: schema_ver %s, модуль ожидает %s; "
+                    "таблица %r недоступна" % (disk_ver, SCHEMA_VERSION, name),
+                    "переключитесь в rw-режим (db_set_mode readonly=false): "
+                    "upgrade мигрирует схему и пересоздаст таблицу")
 
     def upgrade(self) -> dict:
         """Создаёт ВСЕ таблицы схемы (rw) для существующей БД, созданной до
@@ -4243,6 +4305,8 @@ class Store:
             return json.loads(val.decode())
 
     def coverage_all(self, limit: int = None, layer: str = "") -> list:
+        # F5.2/R2: пустой список на старой схеме — ошибка, а не «нет покрытия»
+        self._check_opt_table("coverage")
         layer = self._effective_layer(layer)
         pre = self.layer_prefix(layer)
         out = []
@@ -4490,11 +4554,24 @@ class Store:
                     schema_ver = vmeta.decode()
         except Exception:  # noqa: BLE001
             pass
+        try:
+            disk_int = int(schema_ver)
+        except ValueError:
+            disk_int = None
+        # F5.2/R2: семантика for агента — bool matches + ДИРЕКЦИЯ:
+        # too_new (БД новее модуля — обновить MCP) vs outdated (БД старше
+        # модуля — надо переключиться в rw для миграции), vs matches (норма)
+        schema_matches = schema_ver == SCHEMA_VERSION
+        schema_too_new = (disk_int is not None
+                          and disk_int > int(SCHEMA_VERSION))
+        schema_outdated = (schema_ver != SCHEMA_VERSION and not schema_too_new)
         return {
             "module_version": MODULE_VERSION,
             "libmdbx_version": lib_ver,
             "schema_version": schema_ver,
-            "schema_matches": schema_ver == SCHEMA_VERSION,
+            "schema_matches": schema_matches,
+            "schema_too_new": schema_too_new,
+            "schema_outdated": schema_outdated,
             "branch": self.branch_current(),
             "data": {
                 "map_generation": data_gen,
@@ -4594,11 +4671,14 @@ class Store:
         return {"layer": layer, "body": body}
 
     def branch_list(self, base_only: bool = False) -> list:
+        # F5.2/R2: пустой список на старой схеме молча неотличим от «нет
+        # веток» (ревью #164-r5): отсутствие таблицы на старой схеме — ошибка
+        self._check_opt_table("branches")
         out = []
         with self.env.begin(readonly=True) as txn:
             dbi = self._opt_dbi(txn, "branches")
             if dbi is None:
-                return []  # старая БД без таблицы branches
+                return []  # актуальная схема + read-only старт: таблицы нет
             with txn.cursor(dbi) as cur:
                 rc, k, v = cur.get(mdbx.CURSOR_FIRST)
                 while rc == mdbx.RC_SUCCESS:
