@@ -21,8 +21,8 @@ shared-graph-memory.mdbx — персистентная память роя на
 |---|---|
 | `normalize_key(raw)` | Проверка/канонизация строки в `тип:модуль:тема` |
 | `safe_store(key, type, summary, importance, date?)` | Сохранение с дедупом → `created`/`merged`/`conflict` |
-| `recall(pattern, limit=5, touch=false)` | Поиск по префиксу (`bug:crypto:*`), ранжирование; touch=true — учёт чтения в LRU |
-| `search(query, limit=5, touch=false)` | Поиск по термам (пересечение постинг-списков), ранжированные записи; touch=true — учёт чтения в LRU |
+| `recall(pattern, limit=5, touch=false)` | Поиск по префиксу (`bug:crypto:*`), ранжирование; touch=true — учёт чтения в LRU. Значение по умолчанию touch=false: чтение НЕ кормит recency — активно читаемая, но не помеченная запись со временем уйдёт в cold/gc. Передавайте touch=true, когда чтение = «использую запись» и её нужно удержать от gc |
+| `search(query, limit=5, touch=false)` | Поиск по термам (пересечение постинг-списков), ранжированные записи; touch=true — учёт чтения в LRU (см. recall о touch) |
 | `lookup(term)` | Точный поиск: AND-пересечение термов → ключи |
 | `link(subject_key, predicate, object_key)` | Типизированная связь (RDF triple) |
 | `unlink(subject_key, predicate, object_key)` | Удаление связи |
@@ -30,7 +30,7 @@ shared-graph-memory.mdbx — персистентная память роя на
 | `vocab_add(module, topic?)` | Добавить модуль/тему в словарь |
 | `vocab_find(query)` | Fuzzy-поиск по словарю |
 | `exists(key)` | Проверка существования |
-| `dump_context(...)` / `restore_context(context_id)` | Снимок/восстановление контекста |
+| `dump_context(...)` / `restore_context(context_id)` | Снимок/восстановление контекста. ВНИМАНИЕ: restore_context НЕ продлевает recency даже event-записей снимка (внутренние recall без touch); если event в снимке нужно удержать от gc — `touch(key)`. Два пути учёта использования: `touch(key)` — явная отметка (одна write-txn, без rate-limit); `recall/search touch=true` — пакетный (rate-limit 60с на запись, одна write-txn на набор) |
 | `gc(dry_run=true, archive=false)` | Тиринг hot/warm/cold (не удаляет без purge) |
 | `purge(keys)` | Явное удаление записей |
 | `stats()` | Статистика хранилища (здоровье памяти) |
