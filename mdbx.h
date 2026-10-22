@@ -1922,7 +1922,10 @@ typedef enum MDBX_error {
   /** Environment maxdbs reached */
   MDBX_DBS_FULL = -30791,
 
-  /** Environment maxreaders reached */
+  /** Environment maxreaders reached
+   * \see mdbx_env_set_maxreaders() \see mdbx_env_get_maxreaders()
+   * \see mdbx_reader_check() \see mdbx_reader_list()
+   */
   MDBX_READERS_FULL = -30790,
 
   /** Transaction has too many dirty pages, i.e transaction too big */
@@ -2186,7 +2189,8 @@ typedef enum MDBX_option {
    * when the database is opened by the first process interacts with the
    * database.
    *
-   * \see mdbx_env_set_maxreaders() \see mdbx_env_get_maxreaders() */
+   * \see mdbx_env_set_maxreaders() \see mdbx_env_get_maxreaders()
+   * \see mdbx_reader_check() \see mdbx_reader_list() */
   MDBX_opt_max_readers,
 
   /** \brief Controls interprocess/shared threshold to force flush the data
@@ -3727,6 +3731,7 @@ MDBX_NOTHROW_CONST_FUNCTION LIBMDBX_API intptr_t mdbx_limits_txnsize_max(intptr_
  * before \ref mdbx_env_open(), and has an effect only when the database is
  * opened by the first process interacts with the database.
  * \see mdbx_env_get_maxreaders()
+ * \see mdbx_reader_check() \see mdbx_reader_list()
  *
  * \param [in] env       An environment handle returned
  *                       by \ref mdbx_env_create().
@@ -3743,6 +3748,7 @@ LIBMDBX_INLINE_API(int, mdbx_env_set_maxreaders, (MDBX_env * env, unsigned reade
 /** \brief Get the maximum number of threads/reader slots for the environment.
  * \ingroup c_statinfo
  * \see mdbx_env_set_maxreaders()
+ * \see mdbx_reader_check() \see mdbx_reader_list()
  *
  * \param [in] env       An environment handle returned
  *                       by \ref mdbx_env_create().
@@ -6898,6 +6904,8 @@ typedef int (*MDBX_reader_list_func)(void *ctx, int num, int slot, mdbx_pid_t pi
 /** \brief Enumerate the entries in the reader lock table.
  *
  * \ingroup c_statinfo
+ * \see mdbx_env_set_maxreaders() \see mdbx_env_get_maxreaders()
+ * \see mdbx_reader_check()
  *
  * \param [in] env     An environment handle returned by \ref mdbx_env_create().
  * \param [in] func    A \ref MDBX_reader_list_func function.
@@ -6910,6 +6918,8 @@ LIBMDBX_API int mdbx_reader_list(const MDBX_env *env, MDBX_reader_list_func func
 
 /** \brief Check for stale entries in the reader lock table.
  * \ingroup c_extra
+ * \see mdbx_env_set_maxreaders() \see mdbx_env_get_maxreaders()
+ * \see mdbx_reader_list()
  *
  * \param [in] env     An environment handle returned by \ref mdbx_env_create().
  * \param [out] dead   Number of stale slots that were cleared.
@@ -6941,6 +6951,8 @@ MDBX_DEPRECATED LIBMDBX_API int mdbx_txn_straggler(const MDBX_txn *txn, int *per
  * thread.
  *
  * \see mdbx_thread_unregister()
+ * \see mdbx_env_set_maxreaders() \see mdbx_env_get_maxreaders()
+ * \see mdbx_reader_check() \see mdbx_reader_list()
  *
  * \note Threads are registered automatically the first time a read transaction
  *       starts. Therefore, there is no need to use this function, except in
@@ -6960,6 +6972,8 @@ LIBMDBX_API int mdbx_thread_register(const MDBX_env *env);
  * the thread ends or the environment closes. This function allows you to
  * explicitly release the assigned reader slot.
  * \see mdbx_thread_register()
+ * \see mdbx_env_set_maxreaders() \see mdbx_env_get_maxreaders()
+ * \see mdbx_reader_check() \see mdbx_reader_list()
  *
  * \param [in] env   An environment handle returned by \ref mdbx_env_create().
  *
@@ -6981,6 +6995,8 @@ LIBMDBX_API int mdbx_thread_unregister(const MDBX_env *env);
  * \see mdbx_env_get_hsr()
  * \see mdbx_txn_park()
  * \see [Long-lived read transactions](https://libmdbx.dqdkfa.ru/docs/en/overview/restrictions.html#mvcc-and-long-lived-readers)
+ * \see mdbx_env_set_maxreaders() \see mdbx_env_get_maxreaders()
+ * \see mdbx_reader_check() \see mdbx_reader_list()
  *
  * Using this callback you can choose how to resolve the situation:
  *   - abort the write transaction with an error;
@@ -7054,6 +7070,8 @@ typedef int (*MDBX_hsr_func)(const MDBX_env *env, const MDBX_txn *txn, mdbx_pid_
  * \see mdbx_env_get_hsr()
  * \see mdbx_txn_park()
  * \see [Long-lived read transactions](https://libmdbx.dqdkfa.ru/docs/en/overview/restrictions.html#mvcc-and-long-lived-readers)
+ * \see mdbx_env_set_maxreaders() \see mdbx_env_get_maxreaders()
+ * \see mdbx_reader_check() \see mdbx_reader_list()
  *
  * \param [in] env             An environment handle returned
  *                             by \ref mdbx_env_create().
@@ -7070,6 +7088,8 @@ LIBMDBX_API int mdbx_env_set_hsr(MDBX_env *env, MDBX_hsr_func hsr_callback);
  * \see mdbx_env_set_hsr()
  * \see mdbx_txn_park()
  * \see [Long-lived read transactions](https://libmdbx.dqdkfa.ru/docs/en/overview/restrictions.html#mvcc-and-long-lived-readers)
+ * \see mdbx_env_set_maxreaders() \see mdbx_env_get_maxreaders()
+ * \see mdbx_reader_check() \see mdbx_reader_list()
  *
  * \param [in] env   An environment handle returned by \ref mdbx_env_create().
  *
