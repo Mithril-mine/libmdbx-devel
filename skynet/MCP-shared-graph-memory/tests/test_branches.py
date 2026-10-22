@@ -788,3 +788,37 @@ def test_branch_purge_cas_mcp_contract(store):
                                      "expected_current": (
                                          store.branch_current()["layer"])}}})
     assert r2["result"]["structuredContent"]["result"] == "purged"
+
+
+def test_branch_purge_cas_atomic_in_write_txn(store, monkeypatch):
+    """Ревью #175-#12: branch_purge проверяет active/CAS ВНУТРИ write-txn.
+
+    branch_current НЕ должен вызываться в отдельной read-txn до удаления
+    (окно TOCTOU: другой агент мог бы активировать слой между проверкой
+    и write-txn — purge снёс бы данные активного слоя).
+    """
+    L = "0.15.cas.9"
+    store.branch_register("0.15", "cas9", n_commits=9)
+    store.map_put_symbol("fn:m:z", {"module": "m"}, layer=L)
+    calls = {"branch_current": 0, "write_txn": 0}
+    real_bc = store.branch_current
+    real_bw = store._begin_write
+
+    def spy_bc():
+        calls["branch_current"] += 1
+        return real_bc()
+
+    def spy_bw():
+        calls["write_txn"] += 1
+        return real_bw()
+
+    monkeypatch.setattr(store, "branch_current", spy_bc)
+    monkeypatch.setattr(store, "_begin_write", spy_bw)
+    r = store.branch_purge(L, expected_current="")  # активный не L
+    monkeypatch.undo()
+    assert r["result"] == "purged"
+    # активная ветка читается ТОЛЬКО внутри write-txn (txn.get meta),
+    # не через branch_current в отдельной read-txn
+    assert calls["branch_current"] == 0, \
+        "branch_current не должен вызываться из purge (точечная проверка)"
+    assert calls["write_txn"] == 1, "одна write-txn на purge"
