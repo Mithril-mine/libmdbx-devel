@@ -1237,22 +1237,30 @@ def test_auto_backoff_ceiling_32x(tmp_path, monkeypatch):
 
 def test_lock_degradation_sets_backup_notice(tmp_path, monkeypatch):
     """Ревью #175-r3 Q8: деградация _file_lock видна агенту через
-    backup_notice (не только stderr/warnings — они глушатся на CI)."""
+    backup_notice; R2 (r4): per-path — чужой деградировавший лок НЕ даёт
+    ложный notice другому Store в том же процессе."""
     import warnings as _w
     from mcp.store import Store, _file_lock
-    db = str(tmp_path / "t.mdbx")
-    with Store(db, _skip_sync_thread=True) as s:
-        s.safe_store("fact:x:y", "fact", "seed", 0.5)
-        with _w.catch_warnings():
-            _w.simplefilter("ignore")
-            _file_lock._degraded = False
-            st = s._load_backup_state()
-            # эмулируем деградацию: после lock-OSError _file_lock ставит флаг
-            _file_lock._degraded = True
-            s._save_backup_state(st)
-        assert "lock" in (s.backup_notice or ""), \
-            "backup_notice должен упомянуть деградацию лока"
-        assert _file_lock._degraded is False, "флаг сброшен после чтения"
+    d1 = str(tmp_path / "a.mdbx")
+    d2 = str(tmp_path / "b.mdbx")
+    with Store(d1, _skip_sync_thread=True) as a:
+        with Store(d2, _skip_sync_thread=True) as b:
+            a.safe_store("fact:x:y", "fact", "seed", 0.5)
+            b.safe_store("fact:x:y", "fact", "seed", 0.5)
+            with _w.catch_warnings():
+                _w.simplefilter("ignore")
+                # деградация ТОЛЬКО на lock A
+                _file_lock._degraded_paths.add(a._state_path() + ".lock")
+                a._save_backup_state(a._load_backup_state())
+                assert "lock" in (a.backup_notice or ""), \
+                    "notice A должен упомянуть деградацию"
+                # B не должен получить ложный notice (его local-FS лок цел)
+                b._save_backup_state(b._load_backup_state())
+                assert not b.backup_notice, \
+                    "B не должен видеть деградацию A: %r" % b.backup_notice
+            lp = a._state_path() + ".lock"
+            assert lp not in _file_lock._degraded_paths, \
+                "флаг per-path сброшен после чтения"
 
 
 def test_next_auto_correct_during_backoff(tmp_path, monkeypatch):
