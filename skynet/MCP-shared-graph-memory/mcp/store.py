@@ -728,8 +728,10 @@ class Store:
         # без этой защиты каталог раздувался бы мимо ротации _prune_auto.
         # Штатный auto из maybe_run_auto_backup проверяет лимит ДО вызова,
         # поэтому для него это условие не срабатывает.
-        in_dir = dest is None or os.path.dirname(os.path.abspath(dest)) == \
-            os.path.abspath(self.backup_dir)
+        # M3 (ревью #164-r5): in_dir через _is_inside_backup_dir — симметрично
+        # export (realpath+normcase): иначе symlink-dest внутрь каталога
+        # обходил бы проверку (dirname != backup_dir) и лимит для pin.
+        in_dir = dest is None or self._is_inside_backup_dir(dest)
         if in_dir and not force \
                 and self._backup_dir_size() > self.backup_max_bytes:
             raise invalid(
@@ -4739,10 +4741,15 @@ class Store:
                     registered = rv is not None
             out = {"previous": prev, "current": layer}
             if not registered:
+                # M2 (ревью #164-r5): различаем два случая явно — слоя
+                # НИКОГДА не было (опечатка?) ИЛИ он был purge'нут другим
+                # агентом (данные не вернутся — purge их уничтожил).
                 out["warning"] = (
                     "слой %r отсутствует в реестре branches — чтения/записи "
-                    "пойдут в пустой слой; зарегистрируйте его "
-                    "(branch_register) или исправьте опечатку" % layer)
+                    "пойдут в пустой слой; слоя никогда не было (опечатка?) "
+                    "ИЛИ он purge'нут другим агентом (данные не вернутся); "
+                    "зарегистрируйте его (branch_register) или исправьте "
+                    "опечатку" % layer)
             return out
 
     def branch_remove(self, layer: str) -> dict:
@@ -4756,7 +4763,7 @@ class Store:
             txn.delete(dbi, key)
             return {"result": "removed", "layer": layer}
 
-    def branch_purge(self, layer: str) -> dict:
+    def branch_purge(self, layer: str, expected_current: str = None) -> dict:
         """Удаляет слой ветки С ДАННЫМИ во всех перегенерируемых таблицах.
 
         Жизненный цикл слоя (N5): после rebase/переписывания истории старый
@@ -4785,6 +4792,20 @@ class Store:
                 "branch_purge: слой %r является активным" % layer,
                 "сначала переключите активный слой "
                 "(branch_activate на другой или базовый)")
+        # M1 (ревью #164-r5): CAS-защита окна гонки purge/activate. Другой
+        # агент мог переключить активный слой МЕЖДУ нашей проверке выше и
+        # write-txn: expected_current (переданный вызывающим) обязан совпасть
+        # с текущим meta.branch_current, иначе контрактный конфликт, а не
+        # молчаливое удаление слоя, который стал активным.
+        if expected_current is not None:
+            cur = self.branch_current().get("layer", "")
+            if cur != expected_current:
+                raise MemoryError(
+                    "CONFLICT", "conflict",
+                    "branch_purge: активный слой %r не совпал с ожидаемым %r"
+                    % (cur, expected_current),
+                    "перечитайте branch_current и повторите с актуальным "
+                    "expected_current", "retry once")
         # схема префиксов ключей по таблицам (см. комментарии _TABLES):
         # map-family — "{pre}", coverage-family/probes — "family:{pre}"
         prefixes = {

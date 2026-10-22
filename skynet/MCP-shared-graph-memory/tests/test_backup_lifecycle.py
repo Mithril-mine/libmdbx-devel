@@ -907,3 +907,49 @@ def test_busy_retry_sleep_uses_jitter(tmp_path, monkeypatch):
         # jitter: sleep получил значение uniform(0, 0.05), не константу 0.05
         assert 0.0 <= sleeps[0] <= 0.05
         assert sleeps[0] != 0.05  # jitter, равный max — маловероятен
+
+
+def test_backup_pin_dest_symlink_into_dir_limited(tmp_path, monkeypatch):
+    """F5.4a/M3: pin с symlink-dest внутрь backup_dir — под лимитом.
+
+    backup(kind="pin", dest) использует _is_inside_backup_dir (realpath) —
+    симметрично export(): иначе symlink-dest обходил бы проверку dirname
+    и лимит для pin-копии (учётная дыра).
+    """
+    monkeypatch.setenv("SHARED_GRAPH_MEMORY_BACKUP_DIR", str(tmp_path / "bk"))
+    db = str(tmp_path / "t.mdbx")
+    with Store(db, _skip_sync_thread=True) as s:
+        s.safe_store("fact:x:y", "fact", "seed", 0.5)
+        s.backup_max_bytes = 1 << 20
+        os.makedirs(s.backup_dir, exist_ok=True)
+        sub = os.path.join(s.backup_dir, "sub")
+        os.makedirs(sub, exist_ok=True)
+        link = str(tmp_path / "pin-link.mdbx")
+        try:
+            os.symlink(os.path.join(sub, "x.mdbx"), link)
+        except OSError as e:
+            pytest.skip("symlink недоступен: %s" % e)
+        _inflate_backup_dir(s, mb=2)  # каталог > лимита
+        # symlink ведёт внутрь каталога → in_dir=True → лимит применяется
+        with pytest.raises(MemoryError) as ei:
+            s.backup(kind="pin", dest=link)
+        assert "превышает лимит" in str(ei.value)
+
+
+def test_branch_activate_warning_distinguishes_purged(tmp_path):
+    """F5.4a/M2: warning активации отличает «не было» и «purge'нут»."""
+    from mcp.store import Store
+    db = str(tmp_path / "t.mdbx")
+    with Store(db, _skip_sync_thread=True) as s:
+        s.map_put_symbol("fn:m:z", {"module": "m"}, layer="0.15.warn.1")
+        s.branch_register("0.15", "warn", n_commits=1)
+        # слой существует → активация без warning
+        r = s.branch_activate("0.15.warn.1")
+        assert "warning" not in r, r
+        # purge другой ветки, затем активация purge'нутого — warning с
+        # упоминанием «purge'нут»
+        s.branch_activate("0.15")
+        s.branch_purge("0.15.warn.1")
+        r2 = s.branch_activate("0.15.warn.1")
+        assert "warning" in r2
+        assert "purge'нут" in r2["warning"]
