@@ -31,6 +31,7 @@ import shutil
 import sys
 import threading
 import time
+import warnings
 from collections import deque
 
 from . import index as idx
@@ -152,7 +153,16 @@ def _file_lock(path: str):
                     import fcntl
                     fcntl.flock(fh.fileno(), fcntl.LOCK_UN)
     except OSError as e:
-        # блокировка — вспомогательная: сбой не должен валить бэкап
+        # Блокировка — вспомогательная: сбой НЕ должен валить бэкап, но
+        # деградация до lockless у РОЯ (NFS c выключенным locking daemon,
+        # EINTR от сигнала) возвращает last-writer-wins — merge-семантика
+        # теряется именно там, где она нужнее всего (шаренный state).
+        # Поэтому деградация обязана быть ЗАМЕТНОЙ, а не тихой строчкой
+        # stderr (ревью #175-#2): warnings.warn виден в pytest/logs.
+        warnings.warn(
+            "state lock недоступен (%r): merge-семантика .backup-state.json "
+            "деградирует до lockless — параллельные процессы могут затереть "
+            "auto_skipped_limit" % e, RuntimeWarning, stacklevel=2)
         sys.stderr.write("state lock: %s\n" % e)
         yield
 
@@ -606,7 +616,7 @@ class Store:
     # merge-семантика: НЕ трогаем ключи, которых нет в st (могли быть обновлены
     # другим процессом роя между нашим чтением и записью).
     _STATE_MERGE_KEYS = ("last_auto", "last_auto_txnid", "auto_skipped_limit",
-                         "last_prompt")
+                         "last_prompt", "auto_failure_count")
 
     def _save_backup_state(self, st: dict) -> None:
         """Атомарная запись state-файла под блокировкой, с merge-семантикой.
@@ -856,6 +866,9 @@ class Store:
                         self._prune_auto()
                         st["last_auto"] = now
                         st["last_auto_txnid"] = cur
+                        # успех: сброс backoff-счётчика не-лимитных неудач
+                        if st.get("auto_failure_count"):
+                            st["auto_failure_count"] = 0
                         # снимаем флаг через None (не pop): merge-запись
                         # _save_backup_state видит ключ и удаляет его из файла
                         if st.get("auto_skipped_limit"):
@@ -875,19 +888,33 @@ class Store:
                         # должны ложно сигнализировать «auto блокирован
                         # лимитом» — иначе после исправления первопричины
                         # auto не возобновился бы, а рой видел бы ложный флаг.
-                        # Таймер НЕ обновляем (ревью #164-r5, R1): иначе при
-                        # постоянной не-лимитной ошибке (диск полон) auto
-                        # молча затихал бы на полный интервал; следующий
-                        # такт снова попробует.
                         limit_hit = (isinstance(e, MemoryError)
                                      and getattr(e, "code", None) == "INVALID"
                                      and self._backup_dir_size()
                                      > self.backup_max_bytes)
                         if limit_hit:
                             st["auto_skipped_limit"] = True
-                            # провал по лимиту тоже сдвигает таймер
+                            # провал по лимиту сдвигает таймер и сбрасывает
+                            # счётчик не-лимитных неудач (пропуск осознанный)
                             st["last_auto"] = now
                             st["last_auto_txnid"] = cur
+                            st["auto_failure_count"] = 0
+                            self._save_backup_state(st)
+                        # Не-лимитная ошибка (ревью #164-r5, R1): таймер НЕ
+                        # продвигаем, чтобы auto не затихал на интервал; но
+                        # при ПОСТОЯННОЙ ошибке (диск полон, права) каждый
+                        # before_call (1с) повторял бы дорогой снапшот ~ГБ —
+                        # у 20 агентов это writer-convention amplification.
+                        # Экспоненциальный backoff (ревью #175-#4): счётчик
+                        # последовательных не-лимитных неудач в state-файле,
+                        # last_auto отодвигается на interval*2^count (потолок
+                        # 32x) — попытка реже, пока причина не устранена.
+                        else:
+                            fails = int(st.get("auto_failure_count", 0)) + 1
+                            st["auto_failure_count"] = fails
+                            backoff = self.auto_backup_seconds * \
+                                min(2 ** fails, 32)
+                            st["last_auto"] = now + backoff
                             self._save_backup_state(st)
             # иначе: БД не менялась — тихий пропуск, ничего не пишем
         if (self.prompt_backup_seconds > 0 and not self.backup_pending

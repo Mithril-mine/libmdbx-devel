@@ -825,11 +825,9 @@ def test_state_merge_preserves_foreign_keys(tmp_path, monkeypatch):
 
 
 def test_auto_timer_not_advanced_on_nonlimit_failure(tmp_path, monkeypatch):
-    """F5.1/R1: при НЕ-лимитной ошибке auto таймер НЕ продвигается.
-
-    Иначе при постоянной ошибке записи (диск полон, но не лимит) auto
-    молча затихал бы на полный интервал. Теперь следующий такт снова
-    попробует (last_auto не обновляется).
+    """F5.1/R1 + #175-#4: при НЕ-лимитной ошибке auto НЕ затихает на весь
+    интервал, а применяет ЭКСПОНЕНЦИАЛЬНЫЙ backoff (следующий такт всё равно
+    попробует, но реже — last_auto отодвигается на interval*2^count).
     """
     monkeypatch.setenv("SHARED_GRAPH_MEMORY_BACKUP_DIR", str(tmp_path / "bk"))
     monkeypatch.setenv("SHARED_GRAPH_MEMORY_AUTO_BACKUP_SECONDS", "1")
@@ -846,10 +844,15 @@ def test_auto_timer_not_advanced_on_nonlimit_failure(tmp_path, monkeypatch):
         st["last_auto"] = 0
         st["last_auto_txnid"] = 0
         s._save_backup_state(st)
+        t0 = time.time()
         s.before_call()
         st2 = s._load_backup_state()
-        assert st2.get("last_auto") == 0, \
-            "таймер не продвигается при не-лимитной ошибке"
+        # backoff: last_auto отодвинут на ~interval*2^1=2с (не 0 — не затих,
+        # попытка реально отложена, но следующий такт придёт быстрее, чем
+        # если бы затихли на "интервал успеха")
+        assert st2.get("last_auto", 0) >= t0 + 1.5, \
+            "таймер отодвинут на backoff: %r" % st2.get("last_auto")
+        assert st2.get("auto_failure_count") == 1
 
 
 def test_file_lock_serializes_state(tmp_path, monkeypatch):
@@ -1033,3 +1036,69 @@ def test_backup_pin_dest_inside_outside_contract(tmp_path, monkeypatch):
         outside = str(outside_dir / "pin-out.mdbx")
         r = s.backup(kind="pin", dest=outside)
         assert r["path"] == outside and os.path.isfile(outside)
+
+
+def test_auto_backoff_exponential_on_nonlimit_failure(tmp_path, monkeypatch):
+    """Ревью #175-#4: экспоненциальный backoff при постоянной не-лимитной
+    ошибке — last_auto отодвигается на interval*2^count (потолок 32x).
+
+    Иначе 20 агентов при ENOSPC повторяли бы дорогой снапшот каждый
+    before_call (writer contention amplification).
+    """
+    monkeypatch.setenv("SHARED_GRAPH_MEMORY_BACKUP_DIR", str(tmp_path / "bk"))
+    monkeypatch.setenv("SHARED_GRAPH_MEMORY_AUTO_BACKUP_SECONDS", "10")
+    db = str(tmp_path / "t.mdbx")
+    with Store(db, _skip_sync_thread=True) as s:
+        s.safe_store("fact:x:y", "fact", "seed", 0.5)
+        import mcp.store as sm
+        real_backup = s.backup
+
+        def disk_fail(kind="pin", dest=None, force=False):
+            raise OSError("No space left on device")
+
+        monkeypatch.setattr(s, "backup", disk_fail)
+        offsets = []
+        for _ in range(3):
+            stt = s._load_backup_state()
+            stt["last_auto"] = 0
+            stt["last_auto_txnid"] = 0
+            s._save_backup_state(stt)
+            t0 = sm.time.time()
+            s.before_call()
+            stt = s._load_backup_state()
+            offsets.append(stt.get("last_auto", 0) - t0)
+            assert stt.get("auto_failure_count") == len(offsets)
+        # 10 * 2^1=20, 2^2=40, 2^3=80
+        assert offsets[0] >= 19, offsets
+        assert offsets[1] >= 39, offsets
+        assert offsets[2] >= 79, offsets
+        # успех сбрасывает счётчик
+        monkeypatch.setattr(s, "backup", real_backup)
+        stt = s._load_backup_state()
+        stt["last_auto"] = 0
+        stt["last_auto_txnid"] = 0
+        s._save_backup_state(stt)
+        s.before_call()
+        assert s._load_backup_state().get("auto_failure_count") == 0
+
+
+def test_file_lock_degradation_warns(tmp_path, monkeypatch):
+    """Ревью #175-#2: деградация _file_lock до lockless — ЗАМЕТНАЯ
+    (warnings.warn), не тихая строчка stderr.
+    """
+    import warnings as _w
+    from mcp.store import _file_lock
+    state = str(tmp_path / "state.json")
+    with _w.catch_warnings(record=True) as w:
+        _w.simplefilter("always")
+
+        def _throw(*_a, **_kw):
+            raise OSError(95, "Operation not supported")
+
+        monkeypatch.setattr("fcntl.flock", _throw)
+        monkeypatch.setattr("fcntl.LOCK_EX", 1)
+        monkeypatch.setattr("fcntl.LOCK_UN", 4)
+        with _file_lock(state):
+            pass
+    assert any("state lock недоступен" in str(x.message) for x in w), \
+        "деградация должна быть заметной (warnings.warn)"
