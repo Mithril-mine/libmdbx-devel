@@ -1,6 +1,7 @@
 """memory-cli — утилиты обслуживания хранилища без MCP.
 
-Команды: dump, stats, graph, audit, gc, vocab, export, import, purge.
+Команды: dump, stats, graph, audit, gc, vocab, purge, test-metrics, coverage,
+ci-jobs, backup (pin-точка), export (наружу), upgrade (схема-миграция).
 """
 
 from __future__ import annotations
@@ -144,6 +145,36 @@ def cmd_ci_jobs(args) -> None:
         s.close()
 
 
+def cmd_backup(args) -> None:
+    """Внутренняя точка сохранения (pin-*): db_backup."""
+    s = _open(args.path)
+    try:
+        r = s.backup(kind="pin", force=args.force)
+        print(json.dumps(r, ensure_ascii=False, indent=2))
+    finally:
+        s.close()
+
+
+def cmd_export(args) -> None:
+    """Экспорт копии НАРУЖУ каталога (внешняя архивация/перенос)."""
+    s = _open(args.path)
+    try:
+        r = s.export(args.dest)
+        print(json.dumps(r, ensure_ascii=False, indent=2))
+    finally:
+        s.close()
+
+
+def cmd_upgrade(args) -> None:
+    """Схема-миграция (новые таблицы, INCOMPATIBLE-пересоздание, backfill)."""
+    s = Store(args.path, readonly=False)
+    try:
+        r = s.upgrade()
+        print(json.dumps(r, ensure_ascii=False, indent=2))
+    finally:
+        s.close()
+
+
 def main(argv=None):
     argv = list(sys.argv[1:] if argv is None else argv)
     ap = argparse.ArgumentParser(prog="memory-cli")
@@ -202,6 +233,17 @@ def main(argv=None):
     p.add_argument("--prefix", default="")
     p.add_argument("--limit", type=int, default=None)
     p.set_defaults(func=cmd_ci_jobs)
+
+    p = sub.add_parser("backup")
+    p.add_argument("--force", action="store_true")
+    p.set_defaults(func=cmd_backup)
+
+    p = sub.add_parser("export")
+    p.add_argument("dest")
+    p.set_defaults(func=cmd_export)
+
+    p = sub.add_parser("upgrade")
+    p.set_defaults(func=cmd_upgrade)
 
     args = ap.parse_args(argv)
     if not getattr(args, "cmd", None):
