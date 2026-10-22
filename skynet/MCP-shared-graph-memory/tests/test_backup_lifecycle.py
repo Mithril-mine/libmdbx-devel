@@ -953,3 +953,83 @@ def test_branch_activate_warning_distinguishes_purged(tmp_path):
         r2 = s.branch_activate("0.15.warn.1")
         assert "warning" in r2
         assert "purge'нут" in r2["warning"]
+
+
+def test_backup_status_type_contract(tmp_path):
+    """F5.4c/M14: верхнеуровневые ключи backup_status — полнота + типы.
+
+    Переименование/смена типа ключа (напр. auto_skipped_limit bool →
+    str, tiers — набор) пройдут незамеченными без этого контракта.
+    """
+    db = str(tmp_path / "t.mdbx")
+    with Store(db, _skip_sync_thread=True) as s:
+        s.safe_store("fact:x:y", "fact", "seed", 0.5)
+        st = s.backup_status()
+        for k in ("backup_dir", "auto_backup_seconds", "prompt_backup_seconds",
+                  "backup_keep", "backup_max_mb", "dir_size_mb", "last_auto",
+                  "last_prompt", "next_auto", "next_prompt", "pending",
+                  "auto_skipped_limit", "db_file_deleted", "notice",
+                  "lifeline_error", "tiers", "rotation_candidates"):
+            assert k in st, "нет ключа %r в backup_status" % k
+        assert isinstance(st["auto_skipped_limit"], bool)
+        assert isinstance(st["pending"], bool)
+        assert isinstance(st["tiers"], dict)
+        assert set(st["tiers"]) == {"lifeline", "auto", "pin", "snapshot"}
+        assert isinstance(st["rotation_candidates"], list)
+        assert st["auto_skipped_limit"] is False
+
+
+def test_auto_resumes_after_manual_free_and_cleanup(tmp_path, monkeypatch):
+    """F5.4c/M8: сквозной цикл — переполнение → флаг → rm → cleanup → auto
+    возобновляется (новый auto-* создаётся на следующем такте).
+    """
+    monkeypatch.setenv("SHARED_GRAPH_MEMORY_BACKUP_DIR", str(tmp_path / "bk"))
+    monkeypatch.setenv("SHARED_GRAPH_MEMORY_AUTO_BACKUP_SECONDS", "1")
+    db = str(tmp_path / "t.mdbx")
+    with Store(db, _skip_sync_thread=True) as s:
+        s.safe_store("fact:x:y", "fact", "seed", 0.5)
+        s.backup_max_bytes = 1 << 20
+        _inflate_backup_dir(s, mb=2)
+        st = s._load_backup_state()
+        st["last_auto"] = 0
+        st["last_auto_txnid"] = 0
+        s._save_backup_state(st)
+        s.before_call()
+        assert s.backup_status()["auto_skipped_limit"] is True
+        # оператор освобождает место вручную
+        for f in _files(s, "filler"):
+            os.unlink(os.path.join(s.backup_dir, f))
+        s.cleanup(dry_run=False, confirm=True)
+        assert s.backup_status()["auto_skipped_limit"] is False
+        # следующий такт таймера (БД менялась: next_id вырос) — auto-копия
+        s.safe_store("fact:x:z", "fact", "seed2", 0.5)
+        st = s._load_backup_state()
+        st["last_auto"] = 0
+        st["last_auto_txnid"] = 0
+        s._save_backup_state(st)
+        s.before_call()
+        assert _files(s, "auto-"), "auto-бэкап должен возобновиться"
+
+
+def test_backup_pin_dest_inside_outside_contract(tmp_path, monkeypatch):
+    """F5.4c/M9: контракт backup(pin, dest): inside-каталог → лимит,
+    outside → лимит не применяется («pin наружу»).
+    """
+    monkeypatch.setenv("SHARED_GRAPH_MEMORY_BACKUP_DIR", str(tmp_path / "bk"))
+    db = str(tmp_path / "t.mdbx")
+    with Store(db, _skip_sync_thread=True) as s:
+        s.safe_store("fact:x:y", "fact", "seed", 0.5)
+        s.backup_max_bytes = 1 << 20
+        _inflate_backup_dir(s, mb=2)  # каталог > лимита
+        # dest ВНУТРИ backup_dir → лимит применяется → ошибка
+        inside = os.path.join(s.backup_dir, "custom.mdbx")
+        with pytest.raises(MemoryError) as ei:
+            s.backup(kind="pin", dest=inside)
+        assert "превышает лимит" in str(ei.value)
+        assert not os.path.exists(inside)
+        # dest НАРУЖУ backup_dir → лимит не применяется («pin наружу»)
+        outside_dir = tmp_path / "outside"
+        outside_dir.mkdir(exist_ok=True)
+        outside = str(outside_dir / "pin-out.mdbx")
+        r = s.backup(kind="pin", dest=outside)
+        assert r["path"] == outside and os.path.isfile(outside)
