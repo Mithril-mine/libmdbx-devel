@@ -358,6 +358,9 @@ int mdbx_replace_ex(MDBX_txn *txn, MDBX_dbi dbi, const MDBX_val *key, MDBX_val *
   rc = cursor_init(&cx.outer, txn, dbi);
   if (unlikely(rc != MDBX_SUCCESS))
     return LOG_IFERR(rc);
+  if (unlikely((flags & MDBX_RESERVE) &&
+               (cx.outer.tree->flags & (MDBX_DUPSORT | MDBX_REVERSEDUP | MDBX_INTEGERDUP | MDBX_DUPFIXED))))
+    return LOG_IFERR(MDBX_INCOMPATIBLE);
   cx.outer.next = txn->cursors[dbi];
   txn->cursors[dbi] = &cx.outer;
 
@@ -413,7 +416,7 @@ int mdbx_replace_ex(MDBX_txn *txn, MDBX_dbi dbi, const MDBX_val *key, MDBX_val *
       }
 
       if (is_modifiable(txn, page)) {
-        if (new_data && unlikely(eq_fast(&present_data, new_data))) {
+        if (new_data && !(flags & MDBX_RESERVE) && unlikely(eq_fast(&present_data, new_data))) {
           /* если данные совпадают, то ничего делать не надо */
           *old_data = present_data;
           goto bailout;
