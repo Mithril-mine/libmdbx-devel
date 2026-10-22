@@ -784,3 +784,95 @@ def test_inside_backup_dir_case_insensitive(monkeypatch):
         "case-различие не должно обходить проверку (normcase применён)"
     assert obj._is_inside_backup_dir("/BK") is True
     assert obj._is_inside_backup_dir("/elsewhere/x.mdbx") is False
+
+
+def test_state_merge_preserves_foreign_keys(tmp_path, monkeypatch):
+    """F5.1/R1: merge-семантика state-файла — свои ключи поверх чужих.
+
+    Имитация двух процессов через один Store: A ставит auto_skipped_limit,
+    затем «B» (другой процесс) пишет свой last_auto — merge должен
+    сохранить флаг A; B снимает флаг (None) — merge удаляет ключ.
+    Env эксклюзивен на процесс, поэтому два Store одновременно
+    невозможны — state-операции линейны (как при блокировке).
+    """
+    monkeypatch.setenv("SHARED_GRAPH_MEMORY_BACKUP_DIR", str(tmp_path / "bk"))
+    db = str(tmp_path / "t.mdbx")
+    with Store(db, _skip_sync_thread=True) as s:
+        s.safe_store("fact:x:y", "fact", "seed", 0.5)
+        # A ставит флаг
+        sa = s._load_backup_state()
+        sa["auto_skipped_limit"] = True
+        s._save_backup_state(sa)
+        assert s._load_backup_state().get("auto_skipped_limit") is True
+        # B пишет свой last_auto (без знания о флаге)
+        sb = s._load_backup_state()
+        sb["last_auto"] = 123456.0
+        s._save_backup_state(sb)
+        cur = s._load_backup_state()
+        assert cur.get("auto_skipped_limit") is True, \
+            "merge должен сохранить флаг A при записи B"
+        assert cur.get("last_auto") == 123456.0
+        # B снимает флаг (None) — merge удаляет ключ
+        sb2 = s._load_backup_state()
+        sb2["auto_skipped_limit"] = None
+        s._save_backup_state(sb2)
+        assert s._load_backup_state().get("auto_skipped_limit") is None
+        # чужой ключ не в merge-списке — не попадает в файл
+        sb3 = s._load_backup_state()
+        sb3["foreign_marker"] = "x"
+        s._save_backup_state(sb3)
+        assert "foreign_marker" not in s._load_backup_state()
+
+
+def test_auto_timer_not_advanced_on_nonlimit_failure(tmp_path, monkeypatch):
+    """F5.1/R1: при НЕ-лимитной ошибке auto таймер НЕ продвигается.
+
+    Иначе при постоянной ошибке записи (диск полон, но не лимит) auto
+    молча затихал бы на полный интервал. Теперь следующий такт снова
+    попробует (last_auto не обновляется).
+    """
+    monkeypatch.setenv("SHARED_GRAPH_MEMORY_BACKUP_DIR", str(tmp_path / "bk"))
+    monkeypatch.setenv("SHARED_GRAPH_MEMORY_AUTO_BACKUP_SECONDS", "1")
+    db = str(tmp_path / "t.mdbx")
+    with Store(db, _skip_sync_thread=True) as s:
+        s.safe_store("fact:x:y", "fact", "seed", 0.5)
+        s.backup_max_bytes = 100 << 20  # лимит свободен — не лимитная ветка
+
+        def disk_failure(kind="pin", dest=None, force=False):
+            raise OSError("No space left on device")
+
+        monkeypatch.setattr(s, "backup", disk_failure)
+        st = s._load_backup_state()
+        st["last_auto"] = 0
+        st["last_auto_txnid"] = 0
+        s._save_backup_state(st)
+        s.before_call()
+        st2 = s._load_backup_state()
+        assert st2.get("last_auto") == 0, \
+            "таймер не продвигается при не-лимитной ошибке"
+
+
+def test_file_lock_serializes_state(tmp_path, monkeypatch):
+    """F5.1/R1: _file_lock захватывается/освобождается (POSIX flock).
+
+    Два вложенных захвата одного lock-файла блокируются бы (deadlock) —
+    проверяем только, что за пределами контекста блокировка отпущена
+    (повторный захват проходит сразу).
+    """
+    import threading
+    from mcp.store import _file_lock
+    p = str(tmp_path / "state.json")
+    ok = []
+
+    def grab():
+        with _file_lock(p):
+            ok.append(1)
+            time.sleep(0.05)
+
+    t = threading.Thread(target=grab)
+    t.start()
+    t.join(2.0)
+    assert ok == [1], "блокировка должна захватываться в треде"
+    # вне треда — повторный захват (после освобождения) проходит
+    with _file_lock(p):
+        pass
