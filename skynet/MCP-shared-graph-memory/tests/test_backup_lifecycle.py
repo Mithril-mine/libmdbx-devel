@@ -1253,3 +1253,39 @@ def test_lock_degradation_sets_backup_notice(tmp_path, monkeypatch):
         assert "lock" in (s.backup_notice or ""), \
             "backup_notice должен упомянуть деградацию лока"
         assert _file_lock._degraded is False, "флаг сброшен после чтения"
+
+
+def test_next_auto_correct_during_backoff(tmp_path, monkeypatch):
+    """Ревью #175-r4 R1: next_auto при backoff = last_auto (момент следующей
+    попытки), не last_auto + interval (по нему монитору врали бы)."""
+    import time as _t
+    monkeypatch.setenv("SHARED_GRAPH_MEMORY_BACKUP_DIR", str(tmp_path / "bk"))
+    monkeypatch.setenv("SHARED_GRAPH_MEMORY_AUTO_BACKUP_SECONDS", "10")
+    db = str(tmp_path / "t.mdbx")
+    with Store(db, _skip_sync_thread=True) as s:
+        s.safe_store("fact:x:y", "fact", "seed", 0.5)
+
+        def disk_fail(kind="pin", dest=None, force=False):
+            raise OSError("No space left on device")
+
+        monkeypatch.setattr(s, "backup", disk_fail)
+        stt = s._load_backup_state()
+        stt["last_auto"] = 0
+        stt["last_auto_txnid"] = 0
+        s._save_backup_state(stt)
+        s.before_call()  # не-лимитная ошибка → backoff: last_auto = now + 20
+        stt = s._load_backup_state()
+        assert stt.get("auto_failure_count") >= 1
+        stat = s.backup_status()
+        # next_auto == last_auto (не last_auto + interval)
+        assert abs(stt["last_auto"] - stat["next_auto"]) < 1.0, \
+            "next_auto в backoff-окне должен = last_auto: %r vs %r" % (
+                stt["last_auto"], stat["next_auto"])
+        # БЕЗ backoff (count=0): next_auto = last_auto + interval
+        stt2 = s._load_backup_state()
+        stt2["auto_failure_count"] = 0
+        stt2["last_auto"] = _t.time()
+        s._save_backup_state(stt2)
+        stat2 = s.backup_status()
+        assert abs(stat2["next_auto"] - stt2["last_auto"]) >= 9.0, \
+            "без backoff next_auto = last_auto + interval"
