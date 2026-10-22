@@ -1184,3 +1184,23 @@ def test_auto_failure_count_lost_update_under_lock(tmp_path, monkeypatch):
             s.before_call()
         assert s._load_backup_state().get("auto_failure_count") == 3, \
             "три последовательные неудачи — count=3 (инкремент не теряется)"
+
+
+def test_auto_skip_flag_visible_during_backoff_window(tmp_path, monkeypatch):
+    """Ревью Q5: флаг auto_skipped_limit виден в окне backoff (каталог
+    переполнился, пока last_auto в будущем), не ждёт конца backoff."""
+    import time as _t
+    monkeypatch.setenv("SHARED_GRAPH_MEMORY_BACKUP_DIR", str(tmp_path / "bk"))
+    monkeypatch.setenv("SHARED_GRAPH_MEMORY_AUTO_BACKUP_SECONDS", "60")
+    db = str(tmp_path / "t.mdbx")
+    with Store(db, _skip_sync_thread=True) as s:
+        s.safe_store("fact:x:y", "fact", "seed", 0.5)
+        s.backup_max_bytes = 1 << 20
+        _inflate_backup_dir(s, mb=2)  # каталог переполнен
+        st = s._load_backup_state()
+        st["last_auto"] = _t.time() + 3600  # backoff активен (таймер НЕ истёк)
+        s._save_backup_state(st)
+        assert not s.backup_status()["auto_skipped_limit"]
+        s.before_call()
+        assert s.backup_status()["auto_skipped_limit"] is True, \
+            "флаг лимита должен быть виден немедленно (не через backoff)"
