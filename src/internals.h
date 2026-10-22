@@ -176,7 +176,9 @@ enum txn_flags {
   txn_rw_begin_flags = MDBX_TXN_NOMETASYNC | MDBX_TXN_NOSYNC | MDBX_TXN_TRY,
   txn_rw_already_locked = MDBX_TXN_RDONLY_PREPARE & ~MDBX_TXN_RDONLY,
   txn_nipped = UINT32_C(0x1000),
-  txn_shrink_allowed = UINT32_C(0x40000000),
+  /* The transaction may unmap/remap the database mapping (possibly with an
+   * address change) for resize; see dxb_resize()/osal_mresize(). */
+  txn_unmap_allowed = UINT32_C(0x40000000),
   txn_parked = MDBX_TXN_PARKED,
   txn_gc_drained = 0x100 /* GC was depleted up to oldest reader */,
   txn_may_have_cursors = 0x400,
@@ -560,6 +562,15 @@ struct MDBX_env {
 
 #if IS_WINDOWS
   osal_srwlock_t remap_lock;
+  /* Leaf lock serializing concurrent resizers (issue #154). remap_lock is now
+   * taken shared for a plain grow, so two growers (a read txn noticing the file
+   * grew by another process, and the writer growing it) could otherwise mutate
+   * env->dxb_mmap and call NtExtendSection() concurrently. This mutex makes
+   * grow-vs-grow and grow-vs-shrink mutually exclusive without blocking
+   * readers, which only ever hold remap_lock shared. Always acquired BEFORE
+   * remap_lock and released AFTER it, and never held across a blocking wait on
+   * remap_lock, so it stays a leaf (no deadlock cycle). */
+  osal_fastmutex_t resize_mutex;
   /* Workaround for LockFileEx and WriteFile multithread bug */
   CRITICAL_SECTION lck_event_cs;
   CRITICAL_SECTION dxb_event_cs;
@@ -611,7 +622,7 @@ MDBX_MAYBE_UNUSED static void static_checks(void) {
 
   STATIC_ASSERT_MSG((txn_state_flags & (txn_rw_begin_flags | txn_ro_begin_flags)) == 0,
                     "Oops, some txn flags overlapped or wrong");
-  STATIC_ASSERT_MSG(((txn_rw_begin_flags | txn_ro_begin_flags | txn_state_flags) & txn_shrink_allowed) == 0,
+  STATIC_ASSERT_MSG(((txn_rw_begin_flags | txn_ro_begin_flags | txn_state_flags) & txn_unmap_allowed) == 0,
                     "Oops, some txn flags overlapped or wrong");
 
   STATIC_ASSERT(sizeof(reader_slot_t) == 32);

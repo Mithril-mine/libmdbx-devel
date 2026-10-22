@@ -331,6 +331,17 @@ int txn_setup_primal(MDBX_txn *txn) {
      *  и при завершении такой транзакции файл БД остаётся не-уменьшеным из-за
      *  читающих транзакций использующих предыдущие снимки. */
 #if IS_WINDOWS
+    /* This block writes env->dxb_mmap.filesize/current, so it must be
+     * serialized against dxb_resize() the same way resizers are serialized
+     * among themselves: since issue #154 both this path and a plain grow hold
+     * remap_lock only SHARED, and shared holders are mutually compatible.
+     * resize_mutex is the leaf lock that provides the missing mutual exclusion
+     * (see dxb_resize()); readers never take it. */
+    err = osal_fastmutex_acquire(&env->resize_mutex);
+    if (unlikely(err != MDBX_SUCCESS)) {
+      ERROR("resize_mutex failed, err %d", err);
+      return err;
+    }
     imports.srwl_AcquireShared(&env->remap_lock);
 #else
     err = osal_fastmutex_acquire(&env->remap_lock);
@@ -349,6 +360,7 @@ int txn_setup_primal(MDBX_txn *txn) {
     }
 #if IS_WINDOWS
     imports.srwl_ReleaseShared(&env->remap_lock);
+    osal_fastmutex_release(&env->resize_mutex);
 #else
     ENSURE_OBJ(env, osal_fastmutex_release(&env->remap_lock) == MDBX_SUCCESS);
 #endif
