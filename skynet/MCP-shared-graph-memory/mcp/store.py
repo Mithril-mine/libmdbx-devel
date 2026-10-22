@@ -189,14 +189,19 @@ def _file_lock(path: str):
             "auto_skipped_limit" % e, RuntimeWarning, stacklevel=2)
         sys.stderr.write("state lock: %s\n" % e)
         # Q8 (ревью #175-r3): деградация также видна агенту через
-        # backup_notice (warnings могут глушиться PYTHONWARNINGS=ignore)
-        _file_lock._degraded = True
+        # backup_notice (warnings могут глушиться PYTHONWARNINGS=ignore).
+        # R2 (ревью #175-r4): флаг per-PATH (set lock-файлов), а не глобальный
+        # на процесс — в много-Store процессе (несколько БД/backup_dir) один
+        # деградировавший лок не должен давать ложный notice другому Store.
+        _file_lock._degraded_paths.add(lock_path)
         yield
 
 
 _file_lock._local = threading.local()  # per-thread: {path: depth}
-# Q8: lock-OSError → merge деградировал до lockless (атомарный флаг)
-_file_lock._degraded = False
+# Q8+R2: lock-OSError → merge деградировал до lockless — per-path set
+# {lock_path}, а не атомарный bool (много-Store процесс, перекрёстная
+# атрибуция деградации между Store'ами недопустима)
+_file_lock._degraded_paths = set()
 
 
 class Store:
@@ -676,13 +681,16 @@ class Store:
                     json.dump(cur, fh)
                 os.replace(tmp, self._state_path())
             # Q8 (ревью #175-r3): деградация блокировки видна агенту через
-            # backup_notice (warnings могут быть отфильтрованы на CI)
-            if getattr(_file_lock, "_degraded", False):
+            # backup_notice (warnings могут быть отфильтрованы на CI);
+            # R2 (ревью #175-r4): per-path (этот Store), не по процессу —
+            # иначе чужой деградировавший лок дал бы ложный notice.
+            lock_path = self._state_path() + ".lock"
+            if lock_path in getattr(_file_lock, "_degraded_paths", set()):
                 self.backup_notice = (
                     "state lock недоступен (NFS/сигнал): merge-семантика "
                     ".backup-state.json деградировала до lockless — "
                     "параллельные процессы могут затереть auto_skipped_limit")
-                _file_lock._degraded = False
+                _file_lock._degraded_paths.discard(lock_path)
         except OSError as e:
             sys.stderr.write("state save: %s\n" % e)
 
