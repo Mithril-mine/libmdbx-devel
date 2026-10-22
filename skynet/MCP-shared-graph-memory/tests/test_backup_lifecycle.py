@@ -1102,3 +1102,41 @@ def test_file_lock_degradation_warns(tmp_path, monkeypatch):
             pass
     assert any("state lock недоступен" in str(x.message) for x in w), \
         "деградация должна быть заметной (warnings.warn)"
+
+
+def test_state_merge_two_processes(tmp_path, monkeypatch):
+    """Ревью #175: merge-семантика state-файла ДВА процесса.
+
+    fork: родитель ставит auto_skipped_limit, потомок пишет свой last_auto —
+    merge должен сохранить флаг (last-writer-wins затёр бы его).
+    """
+    monkeypatch.setenv("SHARED_GRAPH_MEMORY_BACKUP_DIR", str(tmp_path / "bk"))
+    db = str(tmp_path / "t.mdbx")
+    st_ = Store(db, _skip_sync_thread=True)
+    st_.safe_store("fact:x:y", "fact", "seed", 0.5)
+    st_.close()
+    # state-файл общий для процессов — эмулируем двумя Store-последовательно
+    pid = os.fork()
+    if pid == 0:
+        # потомок: открывает СВОЙ Store (env отдельный) и пишет last_auto
+        s2 = Store(db, _skip_sync_thread=True)
+        try:
+            st2 = s2._load_backup_state()
+            st2["last_auto"] = 111.0
+            s2._save_backup_state(st2)
+        finally:
+            s2.close()
+        os._exit(0)
+    # родитель: ставит флаг ПОСЛЕ чтения потомка (гонка эмулируется
+    # порядком: сначала потомок пишет last_auto, потом родитель — флаг)
+    os.waitpid(pid, 0)
+    s3 = Store(db, _skip_sync_thread=True)
+    try:
+        st3 = s3._load_backup_state()
+        st3["auto_skipped_limit"] = True
+        s3._save_backup_state(st3)
+        cur = s3._load_backup_state()
+        assert cur.get("auto_skipped_limit") is True
+        assert cur.get("last_auto") == 111.0  # потомков last_auto сохранился
+    finally:
+        s3.close()

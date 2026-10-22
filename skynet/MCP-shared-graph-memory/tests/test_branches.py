@@ -551,3 +551,40 @@ def test_schema_outdated_other_families_raise(tmp_path):
     assert s2.probe_get("tag") == {}
     assert s2.ci_jobs_all() == []
     s2.close()
+
+
+def test_schema_ver_non_numeric(tmp_path):
+    """Ревью #175: schema_ver="2.5" (не int) → SCHEMA_TOO_NEW (чужая схема)."""
+    import pytest
+    from mcp import libmdbx as mdbx
+    from mcp.errors import MemoryError as ME
+    db = str(tmp_path / "odd.mdbx")
+    env = mdbx.Env(db, maxdbs=64, readonly=False, sync_mode="safe_nosync")
+    with env.begin() as txn:
+        meta = txn.open_dbi("meta", mdbx.CREATE | mdbx.DB_DEFAULTS)
+        txn.open_dbi("records", mdbx.CREATE | mdbx.DB_DEFAULTS)
+        txn.put(meta, b"schema_ver", b"2.5")
+    env.close()
+    with pytest.raises(ME) as ei:
+        Store(db)
+    assert "SCHEMA_TOO_NEW" in str(ei.value)
+
+
+def test_schema_ver_zero_is_outdated_not_too_new(tmp_path):
+    """Ревью #175: schema_ver="0" (int < SCHEMA_VERSION) → НЕ too_new,
+    а SCHEMA_OUTDATED при доступе к опциональной таблице."""
+    import pytest
+    from mcp import libmdbx as mdbx
+    from mcp.errors import MemoryError as ME
+    db = str(tmp_path / "zero.mdbx")
+    env = mdbx.Env(db, maxdbs=64, readonly=False, sync_mode="safe_nosync")
+    with env.begin() as txn:
+        meta = txn.open_dbi("meta", mdbx.CREATE | mdbx.DB_DEFAULTS)
+        txn.open_dbi("records", mdbx.CREATE | mdbx.DB_DEFAULTS)
+        txn.put(meta, b"schema_ver", b"0")
+    env.close()
+    s = Store(db, readonly=True)  # старшего нет → не too_new
+    with pytest.raises(ME) as ei:
+        s.branch_list()
+    assert "SCHEMA_OUTDATED" in str(ei.value)
+    s.close()
