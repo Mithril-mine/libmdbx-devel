@@ -66,6 +66,16 @@ def db_file_deleted(desc: str, action: str) -> MemoryError:
                        "restore file or restart")
 
 
+def schema_outdated(desc: str, action: str) -> MemoryError:
+    return MemoryError("SCHEMA_OUTDATED", "schema-outdated", desc, action,
+                       action)
+
+
+def schema_too_new(desc: str, action: str) -> MemoryError:
+    return MemoryError("SCHEMA_TOO_NEW", "schema-too-new", desc, action,
+                       action)
+
+
 def parse(text: str):
     """Разбор контрактной строки обратно в MemoryError (для тестов)."""
     m = MemoryError("?", "?", "?", "?", "?")
