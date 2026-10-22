@@ -971,10 +971,12 @@ def test_backup_status_type_contract(tmp_path):
         for k in ("backup_dir", "auto_backup_seconds", "prompt_backup_seconds",
                   "backup_keep", "backup_max_mb", "dir_size_mb", "last_auto",
                   "last_prompt", "next_auto", "next_prompt", "pending",
-                  "auto_skipped_limit", "db_file_deleted", "notice",
+                  "auto_skipped_limit", "auto_failure_count",
+                  "db_file_deleted", "notice",
                   "lifeline_error", "tiers", "rotation_candidates"):
             assert k in st, "нет ключа %r в backup_status" % k
         assert isinstance(st["auto_skipped_limit"], bool)
+        assert isinstance(st["auto_failure_count"], int)
         assert isinstance(st["pending"], bool)
         assert isinstance(st["tiers"], dict)
         assert set(st["tiers"]) == {"lifeline", "auto", "pin", "snapshot"}
@@ -1231,3 +1233,23 @@ def test_auto_backoff_ceiling_32x(tmp_path, monkeypatch):
         # потолок: min(2**7=128, 32) = 32 → offset ≈ interval*32 = 32с
         offset = st.get("last_auto", 0) - time.time()
         assert 30 <= offset <= 34, "потолок 32x (не 64/128): %.1f" % offset
+
+
+def test_lock_degradation_sets_backup_notice(tmp_path, monkeypatch):
+    """Ревью #175-r3 Q8: деградация _file_lock видна агенту через
+    backup_notice (не только stderr/warnings — они глушатся на CI)."""
+    import warnings as _w
+    from mcp.store import Store, _file_lock
+    db = str(tmp_path / "t.mdbx")
+    with Store(db, _skip_sync_thread=True) as s:
+        s.safe_store("fact:x:y", "fact", "seed", 0.5)
+        with _w.catch_warnings():
+            _w.simplefilter("ignore")
+            _file_lock._degraded = False
+            st = s._load_backup_state()
+            # эмулируем деградацию: после lock-OSError _file_lock ставит флаг
+            _file_lock._degraded = True
+            s._save_backup_state(st)
+        assert "lock" in (s.backup_notice or ""), \
+            "backup_notice должен упомянуть деградацию лока"
+        assert _file_lock._degraded is False, "флаг сброшен после чтения"

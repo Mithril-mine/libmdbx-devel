@@ -691,12 +691,11 @@ def test_branch_purge_vs_activate_race_no_corruption(tmp_path):
 
 
 def test_state_merge_real_race_no_lost_flag(tmp_path, monkeypatch):
-    """Ревью #175-r3 Q10: настоящая гонка state-файла — потомок пишет
+    """Ревью Q10: настоящая гонка state-файла — потомок пишет
     между read и save родителя; флаг родителя не теряется (merge под локом)."""
     import os
     import time as _t
-    import tempfile
-    signal = tempfile.mktemp()
+    signal = str(tmp_path / "state-gate")
     # файл-барьер: потомок ждёт его появления
     barrier = signal + ".start"
     monkeypatch.setenv("SHARED_GRAPH_MEMORY_BACKUP_DIR", str(tmp_path / "bk"))

@@ -30,7 +30,7 @@ shared-graph-memory.mdbx — персистентная память роя на
 | `vocab_add(module, topic?)` | Добавить модуль/тему в словарь |
 | `vocab_find(query)` | Fuzzy-поиск по словарю |
 | `exists(key)` | Проверка существования |
-| `dump_context(...)` / `restore_context(context_id)` | Снимок/восстановление контекста. ВНИМАНИЕ: restore_context НЕ продлевает recency даже event-записей снимка (внутренние recall без touch); если event в снимке нужно удержать от gc — `touch(key)`. Два пути учёта использования: `touch(key)` — явная отметка (одна write-txn, без rate-limit); `recall(..., touch=true)` — пакетный (rate-limit 60с на запись, одна write-txn на набор; `search` — ТОЛЬКО bump накопленный, без отдельного flush — используйте recall/touch для пакетной отметки) |
+| `dump_context(...)` / `restore_context(context_id)` | Снимок/восстановление контекста. ВНИМАНИЕ: restore_context НЕ продлевает recency даже event-записей снимка (внутренние recall без touch); если event в снимке нужно удержать от gc — `touch(key)`. Два пути учёта использования: `touch(key)` — явная отметка (одна write-txn, без rate-limit); `recall(..., touch=true)` и `search(..., touch=true)` — пакетные (rate-limit 60с на запись; обе вызывают `_flush_touches()` — одна write-txn флэш на набор) |
 | `gc(dry_run=true, archive=false)` | Тиринг hot/warm/cold (не удаляет без purge) |
 | `purge(keys)` | Явное удаление записей |
 | `stats()` | Статистика хранилища (здоровье памяти) |
@@ -170,10 +170,14 @@ shared-graph-memory.mdbx — персистентная память роя на
   снимается успехом auto ИЛИ cleanup при восстановлении места (пин-only
   переполнение — ручным rm + cleanup). State-файл: merge-запись под
   блокировкой (flock/msvcrt) — параллельный процесс не затирает флаг.
-- Таймер авто: `last_auto` продвигается ТОЛЬКО на успехе/осознанном пропуске
-  лимита; при НЕ-лимитной ошибке — экспоненциальный backoff
-  (`interval*2^count`, потолок 32x) — попытка реже, не затихание. Рой при
-  ENOSPC не повторяет снапшот ~ГБ каждый тик.
+- Таймер авто: `last_auto` продвигается на успехе/осознанном пропуске
+  лимита; при НЕ-лимитной ошибке — `last_auto` ОТОДВИГАЕТСЯ на
+  экспоненциальный backoff (`interval*2^count`, потолок 32x; счётчик
+  `auto_failure_count` в state-файле, общий для РОЯ — merge last-writer-wins),
+  попытка реже, не затихание. Флаг `auto_skipped_limit` виден даже в окне
+  backoff (проверка размера каталога до таймер-гейта). Рой при ENOSPC не
+  повторяет снапшот ~ГБ каждый тик. `backup_status` показывает
+  `auto_failure_count` (текущий backoff-счётчик).
 - `__future__`: `db_readers check=true` — ручная чистка stale-слотов; рой
   без rw-писателя — явные `check=true` (libmdbx чистит читателей сам).
 

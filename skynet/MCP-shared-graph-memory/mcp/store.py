@@ -188,10 +188,15 @@ def _file_lock(path: str):
             "деградирует до lockless — параллельные процессы могут затереть "
             "auto_skipped_limit" % e, RuntimeWarning, stacklevel=2)
         sys.stderr.write("state lock: %s\n" % e)
+        # Q8 (ревью #175-r3): деградация также видна агенту через
+        # backup_notice (warnings могут глушиться PYTHONWARNINGS=ignore)
+        _file_lock._degraded = True
         yield
 
 
-_file_lock._local = threading.local()  # {path: depth} per-thread (см. docstring)
+_file_lock._local = threading.local()  # per-thread: {path: depth}
+# Q8: lock-OSError → merge деградировал до lockless (атомарный флаг)
+_file_lock._degraded = False
 
 
 class Store:
@@ -670,6 +675,14 @@ class Store:
                 with open(tmp, "w", encoding="utf-8") as fh:
                     json.dump(cur, fh)
                 os.replace(tmp, self._state_path())
+            # Q8 (ревью #175-r3): деградация блокировки видна агенту через
+            # backup_notice (warnings могут быть отфильтрованы на CI)
+            if getattr(_file_lock, "_degraded", False):
+                self.backup_notice = (
+                    "state lock недоступен (NFS/сигнал): merge-семантика "
+                    ".backup-state.json деградировала до lockless — "
+                    "параллельные процессы могут затереть auto_skipped_limit")
+                _file_lock._degraded = False
         except OSError as e:
             sys.stderr.write("state save: %s\n" % e)
 
@@ -1064,6 +1077,7 @@ class Store:
             "next_prompt": next_prompt,
             "pending": self.backup_pending,
             "auto_skipped_limit": bool(st.get("auto_skipped_limit")),
+            "auto_failure_count": int(st.get("auto_failure_count", 0) or 0),
             "db_file_deleted": self.db_file_deleted,
             "notice": self.backup_notice,
             "lifeline_error": self._lifeline_error,
