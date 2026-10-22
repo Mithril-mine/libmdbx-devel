@@ -582,6 +582,10 @@ class Env:
         out = ffi.new("void **")
         check(_get_lib().mdbx_env_create(out), "mdbx_env_create")
         self._env = out[0]
+        # pid-guard (D3/N11): env НЕ fork-safe — унаследованный handle в
+        # дочернем процессе портил бы LCK/reader-слоты молча. begin()
+        # сверяет pid и даёт явную ошибку вместо коррупции.
+        self._pid = os.getpid()
         check(_get_lib().mdbx_env_set_option(self._env, MDBX_OPT_MAX_DB, maxdbs),
               "mdbx_env_set_option(max_db)")
         # mode=0 означает "открыть существующее, не создавать" (mdbx.h env_open).
@@ -708,6 +712,7 @@ class Env:
             self.set_flags(bits, True)
 
     def reader_check(self) -> int:
+        self._guard_pid()
         dead = ffi.new("int *")
         rc = _get_lib().mdbx_reader_check(self._env, dead)
         if rc not in (RC_SUCCESS, RC_RESULT_TRUE):
@@ -750,11 +755,33 @@ class Env:
         force=True — принудительный сброс; force=False — polling: сброс только
         если достигнут порог sync_bytes/sync_period. nonblock=True не ждёт
         чужую write-txn (вернёт MDBX_BUSY)."""
+        self._guard_pid()
         rc = _get_lib().mdbx_env_sync_ex(self._env, force, nonblock)
         if rc not in (RC_SUCCESS, RC_RESULT_TRUE, RC_BUSY):
             check(rc, "mdbx_env_sync_ex")
 
+    def _guard_pid(self) -> None:
+        """Отклонить использование env в процессе, отличном от создавшего.
+
+        libmdbx env не переживает fork: дочерний процесс с унаследованным
+        handle повредил бы LCK-файл и reader-слоты (молчаливая коррупция).
+        Явная ошибка направляет на переоткрытие Env в потомке (D3/N11).
+
+        ПЕРИМЕТР (ревью #164-r4): guard стоит на begin/sync/reader_check —
+        главных путях коррупции LCK/reader-слотов. close()/diag()/file_stat()
+        намеренно не покрыты: у потомка отдельный fd, его close/diag не
+        трогают файл БД и LCK родителя (libmdbx сам «drown»-ит env после
+        fork), а добавление guard туда лишь усложнило бы atexit-пути.
+        """
+        pid = os.getpid()
+        if pid != self._pid:
+            raise RuntimeError(
+                "libmdbx Env использован в процессе %d, но создан в %d: "
+                "env не fork-safe — откройте новый Env в потомке"
+                % (pid, self._pid))
+
     def begin(self, readonly: bool = False, parent: Optional[object] = None) -> "Txn":
+        self._guard_pid()
         out = ffi.new("void **")
         flags = TXN_RDONLY if readonly else TXN_READWRITE
         parent_ptr = ffi.NULL if parent is None else parent._txn

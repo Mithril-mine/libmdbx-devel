@@ -648,3 +648,41 @@ def test_merge_flow_migrate_then_purge(store):
     assert store.trace_observed("fn:m:new", layer="0.15.base")
     cb = store.coverage_symbols("fn:m:new", layer="0.15.base")
     assert cb and cb[0]["tests"] == ["ut/f1"]
+
+
+def test_branch_activate_unregistered_warns(store):
+    """D5/N14: активация незарегистрированного слоя → warning (не ошибка).
+
+    Слой мог быть намеренно очищен purge'ем, поэтому это не отказ; но
+    чтения/записи уйдут в пустой слой — предупреждаем явно.
+    """
+    r = store.branch_activate("0.15.ghost.9")
+    assert r["current"] == "0.15.ghost.9"
+    assert "warning" in r and "реестре" in r["warning"]
+    # зарегистрированный слой — без warning
+    store.branch_register("0.15", "real", n_commits=2)
+    r2 = store.branch_activate("0.15.real.2")
+    assert "warning" not in r2, r2
+
+
+def test_upgrade_fast_path_no_write_txn(store, monkeypatch):
+    """D5/N16: повторный upgrade на готовой БД не открывает write-txn.
+
+    upgrade вызывается сервером на каждом rw-старте; если все таблицы
+    открыты и backfill-маркер стоит — fast-path возвращает результат без
+    write-txn (важно для read-heavy роя).
+    """
+    store.upgrade()  # первый вызов ставит backfill-маркер
+    orig = store._begin_write
+    calls = {"n": 0}
+
+    def spy():
+        calls["n"] += 1
+        return orig()
+
+    monkeypatch.setattr(store, "_begin_write", spy)
+    r = store.upgrade()
+    monkeypatch.undo()
+    assert r.get("fast_path") is True, r
+    assert r["created"] == []
+    assert calls["n"] == 0, "fast-path не должен открывать write-txn"
