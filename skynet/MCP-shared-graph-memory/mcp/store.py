@@ -1071,14 +1071,14 @@ class Store:
         if not self.auto_backup_seconds:
             next_auto = None
         else:
-            # R1 (ревью #175-r4): при активном backoff last_auto УЖЕ = момент
-            # следующей попытки (now + interval*2^count) — прибавлять интервал
-            # ещё раз значило бы врать монитору («попытка позже, чем реально»).
-            if st.get("auto_failure_count"):
-                next_auto = st.get("last_auto", 0) or None
-            else:
-                next_auto = (st.get("last_auto", 0) + self.auto_backup_seconds
-                             if st.get("last_auto") else None)
+            # Б1 (ревью #175-r5): next_auto = last_auto + interval в обоих
+            # режимах. При backoff last_auto = время ошибки + отсрочка
+            # (now + interval*2^count), а гейт/таймер позволяет попытку при
+            # now >= last_auto + interval — т.е. реальная попытка через
+            # last_auto + interval. Откат R1: «next_auto=last_auto» занижал
+            # на interval (монитору врали в обратную сторону).
+            next_auto = (st.get("last_auto", 0) + self.auto_backup_seconds
+                         if st.get("last_auto") else None)
         next_prompt = (st.get("last_prompt", 0) + self.prompt_backup_seconds
                        if self.prompt_backup_seconds else None)
         return {
