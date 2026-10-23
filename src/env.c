@@ -295,6 +295,8 @@ __cold int env_open(MDBX_env *env, mdbx_mode_t mode) {
     rc = errno;
     return LOG_IFERR(rc);
   }
+  VERBOSE("use %s ftok-key 0x%08X for sysv-icp/locking", MDBX_AVOID_FTOK ? "mdbx-flavour" : "system-libc",
+          env->me_sysv_ipc.key);
 #endif /* MDBX_LOCKING */
 
   /* Set the position in files outside of the data to avoid corruption
