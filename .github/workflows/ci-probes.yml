@@ -1,13 +1,13 @@
 name: ci-probes
 
-# Probe-bus (mprobe v2) smoke: managed/controlled testing instrumentation
+# Probe-bus (mdbx-probes) smoke: managed/controlled testing instrumentation
 # (COLLECT/WATCH/FAULT + deterministic fault injection). Cross-platform check
 # that MDBX_PROBES builds cleanly and the probe-gated regression tests pass on
 # Linux, Windows and macOS. Lightweight: a single cell, the probe self-tests
 # plus the MDBX_PROBES-gated issue regressions (gh0103_restart, gh0104_clone).
 # Supersedes ci-tracing (mprobe v1, tests/tracing/): the engine-side
 # probe-bus unified the taxonomy with a process-wide registry, control channel
-# (in-process mprobe_ctl + file IPC) and no external tracer dependencies.
+# (in-process mdbx_probe_ctl + file IPC) and no external tracer dependencies.
 
 on:
   push:

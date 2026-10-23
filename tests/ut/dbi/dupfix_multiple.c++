@@ -540,8 +540,8 @@ TEST_P(DupfixMultiple, stress_model) {
 #if defined(MDBX_PROBES)
 static std::string probe_ctl(const char *request) {
   char reply[16384];
-  const int rc = mprobe_ctl(request, reply, sizeof(reply));
-  EXPECT_EQ(rc, 0) << "mprobe_ctl(" << request << ")";
+  const int rc = mdbx_probe_ctl(request, reply, sizeof(reply));
+  EXPECT_EQ(rc, 0) << "mdbx_probe_ctl(" << request << ")";
   return std::string(reply);
 }
 

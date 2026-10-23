@@ -731,10 +731,10 @@ static bool stochastic_hole(size_t probes) {
 #if defined(MDBX_PROBES)
 static int probe_ctl_ok(const char *request) {
   char reply[1024];
-  const int rc = mprobe_ctl(request, reply, sizeof(reply));
+  const int rc = mdbx_probe_ctl(request, reply, sizeof(reply));
   if (rc != 0 || strncmp(reply, "ok", 2) != 0) {
     ++tst_failed;
-    fprintf(stderr, "FAIL mprobe_ctl(\"%s\") rc=%d reply=\"%s\"\n", request, rc, reply);
+    fprintf(stderr, "FAIL mdbx_probe_ctl(\"%s\") rc=%d reply=\"%s\"\n", request, rc, reply);
     return -1;
   }
   return 0;
@@ -941,7 +941,7 @@ static bool edge_cases_probes(void) {
     for (size_t i = 0; i < ARRAY_LENGTH(tags); ++i) {
       char request[512];
       snprintf(request, sizeof(request), "query %s", tags[i]);
-      const int rc = mprobe_ctl(request, reply, sizeof(reply));
+      const int rc = mdbx_probe_ctl(request, reply, sizeof(reply));
       if (rc != 0) {
         ++tst_failed;
         fprintf(stderr, "FAIL attestation: query \"%s\" rc=%d\n", tags[i], rc);

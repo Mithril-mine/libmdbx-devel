@@ -1,7 +1,7 @@
-# Probe-инструментарий libmdbx: probe-bus (mprobe v2) и USDT/DTrace-маркеры
+# Probe-инструментарий libmdbx: probe-bus (mdbx-probes) и USDT/DTrace-маркеры
 
 > Объединённый документ. Описывает **движковый** механизм управляемого
-> тестирования `MDBX_PROBES` — probe-bus (mprobe v2) — и каталог внешних
+> тестирования `MDBX_PROBES` — probe-bus (mdbx-probes) — и каталог внешних
 > статических трассировочных пробников `USDT`/`SystemTap`/`DTrace`,
 > встроенных в движок. Разделение ролей:
 > per-site USDT-маркеры нужны внешней трассировке в эксплуатации и
@@ -85,9 +85,9 @@ fault_code  инъектируемый код (0 = нет)
 ограничена `MPROBE_MAX_SITES` (512). Счётчики — `mdbx_atomic_size_t`
 (32-битные на 32-битных платформах).
 
-## 5. Управление: `mprobe_ctl()`
+## 5. Управление: `mdbx_probe_ctl()`
 
-`int mprobe_ctl(const char *request, char *reply, size_t reply_size);`
+`int mdbx_probe_ctl(const char *request, char *reply, size_t reply_size);`
 
 Строковый протокол (ops), reply: `ok\n` + payload или `err <msg>\n`:
 
@@ -144,19 +144,19 @@ file, line)` сразу после коммита (либо обновите р�
 
 ### 6.1 In-process (основной)
 
-Тест вызывает `mprobe_ctl()` напрямую — он линкует libmdbx. Детерминированно:
+Тест вызывает `mdbx_probe_ctl()` напрямую — он линкует libmdbx. Детерминированно:
 запрос применяется синхронно до возврата.
 
 ### 6.2 Файловое IPC
 
 env `MDBX_PROBE_CTL=<dir>`: запросы в `<dir>/cmd` (по строке), ответы в
 `<dir>/rep` (append). Библиотека сливает `cmd` лениво — на probe-срабатываниях
-и на каждом `mprobe_ctl()` (с отслеживанием смещения, повторное применение
+и на каждом `mdbx_probe_ctl()` (с отслеживанием смещения, повторное применение
 исключено). **Детерминированный контракт**: записать строки в `cmd` → вызвать
-`mprobe_ctl("sync")` (слив + ack) → выполнить действие.
+`mdbx_probe_ctl("sync")` (слив + ack) → выполнить действие.
 
 Используется stdio (`fopen/fgets/fwrite`); при `MDBX_WITHOUT_MSVC_CRT`
-(нет CRT stdio) канал деградирует в no-op, in-process `mprobe_ctl` работает.
+(нет CRT stdio) канал деградирует в no-op, in-process `mdbx_probe_ctl` работает.
 
 ## 7. Инъекция ошибок
 

@@ -22,7 +22,7 @@
 #include <cstring>
 #include <vector>
 
-extern "C" int mprobe_ctl(const char *request, char *reply, size_t reply_size);
+extern "C" int mdbx_probe_ctl(const char *request, char *reply, size_t reply_size);
 
 // Regression test for https://github.com/Mithril-mine/libmdbx-devel/issues/67
 // A nested-transaction begin moves the parent's loose pages into the parent's
@@ -112,13 +112,13 @@ TEST(issue_gh0067, loose_count_stays_consistent_on_alloc_failure) {
   EXPECT_EQ(loose, prelinked);
 
   char reply[512];
-  ASSERT_EQ(0, mprobe_ctl("fault txn_nested_loose_move none", reply, sizeof reply));
+  ASSERT_EQ(0, mdbx_probe_ctl("fault txn_nested_loose_move none", reply, sizeof reply));
 
   /* Arm the FAULT site and begin a nested transaction: the injected error is
    * consumed after the first loose page has been unlinked and washed (K=1). */
   char cmd[128];
   std::snprintf(cmd, sizeof cmd, "fault txn_nested_loose_move %d", (int)MDBX_ENOMEM);
-  ASSERT_EQ(0, mprobe_ctl(cmd, reply, sizeof reply));
+  ASSERT_EQ(0, mdbx_probe_ctl(cmd, reply, sizeof reply));
 
   MDBX_txn *nested = nullptr;
   const int rc = mdbx_txn_begin(env, parent, MDBX_TXN_READWRITE, &nested);
@@ -142,7 +142,7 @@ TEST(issue_gh0067, loose_count_stays_consistent_on_alloc_failure) {
   EXPECT_EQ(linked, parent->wr.loose_count);
 
   /* Disarm the fault; the parent must remain open and usable. */
-  ASSERT_EQ(0, mprobe_ctl("fault txn_nested_loose_move none", reply, sizeof reply));
+  ASSERT_EQ(0, mdbx_probe_ctl("fault txn_nested_loose_move none", reply, sizeof reply));
   char kbuf[32], vbuf[32];
   int kn = std::snprintf(kbuf, sizeof kbuf, "k%07zu", 2 * batch);
   int vn = std::snprintf(vbuf, sizeof vbuf, "v%07zu", 2 * batch);
