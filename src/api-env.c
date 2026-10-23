@@ -912,6 +912,10 @@ __cold int mdbx_preopen_snapinfoW(const wchar_t *pathname, MDBX_envinfo *out, si
   env.lck_lock_event = INVALID_HANDLE_VALUE;
   env.ioring.overlapped_fd = INVALID_HANDLE_VALUE;
 #endif /* Windows */
+#if MDBX_LOCKING == MDBX_LOCKING_SYSV
+  env.me_sysv_ipc.key = -1;
+  env.me_sysv_ipc.semid = -1;
+#endif /* MDBX_LOCKING == MDBX_LOCKING_SYSV */
   env_options_init(&env);
 
   int err, rc = env_handle_pathname(&env, pathname, 0);
