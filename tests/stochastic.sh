@@ -41,6 +41,7 @@ EXTRA=no
 TAILLOG=0
 DELAY=0
 REPORT_DEPTH=no
+DISABLE_LOG_COMPRESSION=no
 REPEAT=11
 ROUNDS=1
 DURATION_PROBE=
@@ -54,6 +55,7 @@ while [ -n "$1" ]
 do
   case "$1" in
   --help)
+    echo "--dlc                  Disable logs compression"
     echo "--multi                Engage multi-process test scenario (default)"
     echo "--single               Execute series of single-process tests (for QEMU, etc)"
     echo "--nested               Execute only 'nested' testcase"
@@ -303,6 +305,9 @@ do
     NUMABIND="numactl --membind ${NUMANODE} --cpunodebind ${NUMANODE}"
     shift
   ;;
+  --dlc)
+    DISABLE_LOG_COMPRESSION=yes
+  ;;
   *)
     echo "Unknown option '$1'"
     exit -2
@@ -495,7 +500,7 @@ else
   SETSID=""
 fi
 
-if which lz4 >/dev/null; then
+if [[ ${DISABLE_LOG_COMPRESSION} = 'no' ]] && which lz4 >/dev/null; then
   function logger {
     ${SETSID} lz4 -z -c > ${TESTDB_DIR}/long.log.lz4 || echo "FAILED 'lz4 -z -c > ${TESTDB_DIR}/long.log.lz4'" >&2
   }
@@ -507,7 +512,7 @@ if which lz4 >/dev/null; then
       echo "=============================================== no test log"
     fi
   }
-elif which gzip >/dev/null; then
+elif [[ ${DISABLE_LOG_COMPRESSION} = 'no' ]] && which gzip >/dev/null; then
   function logger {
     ${SETSID} gzip -c -k > ${TESTDB_DIR}/long.log.gz || echo "FAILED 'gzip -c -k > ${TESTDB_DIR}/long.log.gz'" >&2
   }
