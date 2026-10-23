@@ -642,6 +642,7 @@ def test_branch_purge_vs_activate_race_no_corruption(tmp_path):
         "sys.path.insert(0, %r)\n"
         "from mcp.store import Store\n"
         "from mcp import libmdbx as mdbx\n"
+        "from mcp.errors import MemoryError as ME\n"  # Б2: контрактные ошибки
         "s = Store(%r, _skip_sync_thread=True)\n"
         "for _ in range(100):\n"
         "    try:\n"
@@ -655,8 +656,8 @@ def test_branch_purge_vs_activate_race_no_corruption(tmp_path):
         "            continue\n"
         "        s.close()\n"
         "        sys.exit(1)\n"
-        "    except MemoryError as e:\n"
-        "        # busy_io (исчерпание ретраев) — осмысленный исход\n"
+        "    except ME as e:\n"
+        "        # busy_io/CONFLICT/invalid — контрактные исходы\n"
         "        s.close()\n"
         "        sys.exit(0)\n"
         "s.close()\n"
@@ -754,3 +755,19 @@ def test_state_merge_real_race_no_lost_flag(tmp_path, monkeypatch):
         cur = s4._load_backup_state()
         assert cur.get("auto_skipped_limit") is True, "флаг родителя сохранён"
         assert cur.get("last_auto") == 555.0, "last_auto потомка пережил merge"
+
+
+def test_mcp_memoryerror_not_stdlib(tmp_path):
+    """Ревью #175-r5 Б2: mcp.errors.MemoryError — кастомный класс, НЕ
+    наследник builtins.MemoryError. Иначе child_code `except MemoryError`
+    ловил бы stdlib OOM, а не busy_io/CONFLICT — флак под нагрузкой."""
+    from mcp.errors import MemoryError as ME
+    assert not issubclass(ME, __builtins__["MemoryError"]) if isinstance(
+        __builtins__, dict) else False, \
+        "ME не должен быть подклассом stdlib MemoryError"
+    # конкретный тип ошибки из _begin_write — busy_io
+    from mcp.errors import busy_io
+    e = busy_io("test")
+    assert not isinstance(e, __builtins__["MemoryError"]), \
+        "busy_io не должен перехватываться как stdlib MemoryError"
+    assert isinstance(e, ME)
