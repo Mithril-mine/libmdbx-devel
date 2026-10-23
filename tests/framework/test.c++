@@ -586,7 +586,6 @@ bool testcase::should_continue(bool check_timeout_only) const {
    * an explicit --duration: when the duration is set, only an explicit --nops
    * additionally bounds the run (TASK-43). */
   if (!check_timeout_only && config.params.test_nops &&
-      (config.params.test_nops_explicit || !config.params.test_duration_explicit) &&
       nops_completed >= config.params.test_nops)
     result = false;
 

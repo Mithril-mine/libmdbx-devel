@@ -544,14 +544,10 @@ int main(int argc, char *const argv[]) {
       params.waitfor_nops = 0;
       continue;
     }
-    if (config::parse_option(argc, argv, narg, "duration", params.test_duration, config::duration, 1)) {
-      params.test_duration_explicit = true;
+    if (config::parse_option(argc, argv, narg, "duration", params.test_duration, config::duration, 1))
       continue;
-    }
-    if (config::parse_option(argc, argv, narg, "nops", params.test_nops, config::decimal, 1)) {
-      params.test_nops_explicit = true;
+    if (config::parse_option(argc, argv, narg, "nops", params.test_nops, config::decimal, 1))
       continue;
-    }
     if (config::parse_option(argc, argv, narg, "hill", &value, "auto")) {
       fixup4qemu(params);
       configure_actor(last_space_id, ac_hill, value, params);
