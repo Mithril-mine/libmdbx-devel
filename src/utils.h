@@ -89,6 +89,8 @@ MDBX_MAYBE_UNUSED MDBX_NOTHROW_CONST_FUNCTION MDBX_INTERNAL size_t ceil_log2n(si
 
 MDBX_NOTHROW_CONST_FUNCTION MDBX_INTERNAL uint64_t rrxmrrxmsx_0(uint64_t v);
 
+MDBX_MAYBE_UNUSED MDBX_NOTHROW_CONST_FUNCTION MDBX_INTERNAL uint64_t xnasamx(uint64_t v, uint64_t c);
+
 struct monotime_cache {
   uint64_t value;
   int expire_countdown;
