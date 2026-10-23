@@ -178,8 +178,11 @@ shared-graph-memory.mdbx — персистентная память роя на
   backoff (проверка размера каталога до таймер-гейта). Рой при ENOSPC не
   повторяет снапшот ~ГБ каждый тик. `backup_status` показывает
   `auto_failure_count` (текущий backoff-счётчик) и корректный `next_auto`:
-  при активном backoff он равен моменту следующей попытки (last_auto),
-  не прибавленному ещё раз на интервал.
+  = `last_auto + interval` в обоих режимах (без backoff — попытка через
+  интервал после успеха; при backoff last_auto = now + interval*2^count,
+  гейт допускает now >= last_auto + interval — реальный момент попытки
+  через last_auto + interval). Потолок backoff 32·interval; с учётом гейта
+  попытка — примерно 33·interval от последнего тика.
 - `__future__`: `db_readers check=true` — ручная чистка stale-слотов; рой
   без rw-писателя — явные `check=true` (libmdbx чистит читателей сам).
 
@@ -326,6 +329,18 @@ union-AST), но не отвечает на вопрос «что реально
   `db_backup_status`). Export наружу лимиту не подчинён.
 - После критичных записей — `db_flush()`; плановый бэкап — `db_backup`
   (pin-точка); копия для внешней архивации/переноса — `db_export(dest=…)`.
+- **State-файл и flock (claim/reserve, Б3)**: `.backup-state.json` —
+  per-key merge под коротким `_file_lock`. AUTO-копия (~ГБ) выполняется
+  ВНЕ лока: под локом только claim (`last_auto=now`) и finalize. Рой НЕ
+  блокируется на время копии; дубль копии исключён claim'ом (второй агент
+  видит свежий `last_auto` → гейт закрыт). Crash между claim и finalize
+  стоит один interval.
+- **Деградация лока (Q8/R2)**: если `_file_lock` недоступен (NFS без
+  lockd, EINTR), merge-семантика деградирует до lockless — это ЗАМЕТНО:
+  `warnings.warn(RuntimeWarning)` + `backup_notice` «state lock
+  недоступен (NFS/сигнал): merge-семантика …lockless». Ничего чинить не
+  надо (следующий успешный лок вернёт семантику); notice информативный.
+  `_file_lock` реентерабелен (вложенный save на тот же файл — yield).
 
 ## Когда сохранять
 

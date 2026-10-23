@@ -1052,7 +1052,6 @@ def test_auto_backoff_exponential_on_nonlimit_failure(tmp_path, monkeypatch):
     db = str(tmp_path / "t.mdbx")
     with Store(db, _skip_sync_thread=True) as s:
         s.safe_store("fact:x:y", "fact", "seed", 0.5)
-        import mcp.store as sm
         real_backup = s.backup
 
         def disk_fail(kind="pin", dest=None, force=False):
@@ -1065,7 +1064,7 @@ def test_auto_backoff_exponential_on_nonlimit_failure(tmp_path, monkeypatch):
             stt["last_auto"] = 0
             stt["last_auto_txnid"] = 0
             s._save_backup_state(stt)
-            t0 = sm.time.time()
+            t0 = time.time()
             s.before_call()
             stt = s._load_backup_state()
             offsets.append(stt.get("last_auto", 0) - t0)
@@ -1121,13 +1120,10 @@ def test_state_merge_two_processes(tmp_path, monkeypatch):
     pid = os.fork()
     if pid == 0:
         # потомок: открывает СВОЙ Store (env отдельный) и пишет last_auto
-        s2 = Store(db, _skip_sync_thread=True)
-        try:
+        with Store(db, _skip_sync_thread=True) as s2:
             st2 = s2._load_backup_state()
             st2["last_auto"] = 111.0
             s2._save_backup_state(st2)
-        finally:
-            s2.close()
         os._exit(0)
     # родитель: ставит флаг ПОСЛЕ чтения потомка (гонка эмулируется
     # порядком: сначала потомок пишет last_auto, потом родитель — флаг)
@@ -1305,14 +1301,142 @@ def test_file_lock_different_paths_independent(tmp_path):
     per-thread dict по path — p2 должен реально flock'нуться (не reentrant
     для p1), оба освобождаются.
     """
+    import fcntl
     from mcp.store import _file_lock
     p1 = str(tmp_path / "l1")
     p2 = str(tmp_path / "l2")
     with _file_lock(p1):
         with _file_lock(p2):
-            pass  # p2 — независимый flock, не reentrant p1
+            # М1: физический flock на p2 — неблокирующий захват того же
+            # lock-файла обязан дать BlockingIOError (иначе reentrant-yield)
+            fh = open(p2 + ".lock", "a+b")
+            try:
+                fcntl.flock(fh.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+                raise AssertionError(
+                    "p2 не был физически заблокирован (reentrant-yield?)")
+            except OSError:
+                pass  # BlockingIOError — p2 реально залочен
+            finally:
+                fh.close()
     # после выхода — оба перезахватываются (локи освобождены)
     with _file_lock(p1):
         pass
     with _file_lock(p2):
         pass
+
+
+def test_auto_lock_released_during_backup(tmp_path, monkeypatch):
+    """Ревью #175-r5 Б3(a): flock НЕ удерживается во время ГБ-копии.
+
+    Q6 держал лок на весь AUTO-блок включая backup() — before_call
+    блокировал рой на время копии. Claim/reserve: копия вне лока.
+    """
+    import fcntl
+    monkeypatch.setenv("SHARED_GRAPH_MEMORY_BACKUP_DIR", str(tmp_path / "bk"))
+    monkeypatch.setenv("SHARED_GRAPH_MEMORY_AUTO_BACKUP_SECONDS", "1")
+    db = str(tmp_path / "t.mdbx")
+    with Store(db, _skip_sync_thread=True) as s:
+        s.safe_store("fact:x:y", "fact", "seed", 0.5)
+        state = {"free": None}
+
+        def fake_copy(kind="auto", dest=None, force=False):
+            lp = s._state_path() + ".lock"
+            fh = open(lp, "a+b")
+            try:
+                fcntl.flock(fh.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+                state["free"] = True
+                fcntl.flock(fh.fileno(), fcntl.LOCK_UN)
+            except OSError:
+                state["free"] = False
+            finally:
+                fh.close()
+            return {"path": "x", "txnid": 1, "kind": "auto", "size": 1}
+
+        monkeypatch.setattr(s, "backup", fake_copy)
+        stt = s._load_backup_state()
+        stt["last_auto"] = 0
+        stt["last_auto_txnid"] = 0
+        s._save_backup_state(stt)
+        s.before_call()
+        assert state["free"] is True, \
+            "лок должен быть свободен во время копии (claim/reserve)"
+
+
+def test_auto_claim_prevents_duplicate(tmp_path, monkeypatch):
+    """Ревью #175-r5 Б3(b): claim (last_auto=now) атомарно закрывает гейт —
+    следующий агент, увидев свежий last_auto, НЕ делает вторую копию."""
+    import time as _t
+    monkeypatch.setenv("SHARED_GRAPH_MEMORY_BACKUP_DIR", str(tmp_path / "bk"))
+    monkeypatch.setenv("SHARED_GRAPH_MEMORY_AUTO_BACKUP_SECONDS", "1")
+    db = str(tmp_path / "t.mdbx")
+    with Store(db, _skip_sync_thread=True) as s:
+        s.safe_store("fact:x:y", "fact", "seed", 0.5)
+        copies = {"n": 0}
+
+        def fake_copy(kind="auto", dest=None, force=False):
+            copies["n"] += 1
+            _t.sleep(0.05)
+            return {"path": "x", "txnid": 1, "kind": "auto", "size": 1}
+
+        monkeypatch.setattr(s, "backup", fake_copy)
+        stt = s._load_backup_state()
+        stt["last_auto"] = 0
+        stt["last_auto_txnid"] = 0
+        s._save_backup_state(stt)
+        s.before_call()  # A: claim + копия
+        assert copies["n"] == 1
+        # гейт закрыт claim'ом — B (тот же state) НЕ копирует
+        st_fresh = s._load_backup_state()
+        gate_open = (_t.time() - st_fresh.get("last_auto", 0)
+                     >= s.auto_backup_seconds)
+        assert not gate_open, "claim должен закрыть гейт (дубль исключён)"
+        s.before_call()  # повторный вызов сразу — таймер НЕ истёк
+        assert copies["n"] == 1, "повторный before_call не должен копировать"
+
+
+def test_file_lock_cross_thread_mutual_exclusion(tmp_path):
+    """Ревью r4 М2: два потока на ОДНОМ path — взаимное исключение.
+
+    Второй поток должен ждать освобождения первого (flock per-fd),
+    а не reentrant-yield — иначе сломается merge-контракт state-файла.
+    """
+    import threading
+    from mcp.store import _file_lock
+    p = str(tmp_path / "mt")
+    entered = {"a": False, "b": False}
+    order = []
+    done = threading.Event()
+
+    def thread_a():
+        with _file_lock(p):
+            entered["a"] = True
+            order.append("a-in")
+            done.wait(2.0)  # держим лок, пока B не пытается
+            order.append("a-out")
+
+    def thread_b():
+        # B пытается войти — должен ждать освобождения A
+        started = threading.Event()
+        with _file_lock(p):
+            entered["b"] = True
+            order.append("b-in")
+            started.set()
+
+    ta = threading.Thread(target=thread_a)
+    tb = threading.Thread(target=thread_b)
+    ta.start()
+    # ждём, пока A в критической секции
+    import time as _t
+    deadline = _t.time() + 2.0
+    while not entered["a"] and _t.time() < deadline:
+        _t.sleep(0.005)
+    assert entered["a"], "A не вошёл в секцию"
+    tb.start()  # B теперь должен блокироваться на flock
+    # B не должен войти, пока A держит (даже подождав 0.3с)
+    _t.sleep(0.3)
+    assert not entered["b"], \
+        "B вошёл, пока A держит лок — нет взаимного исключения"
+    done.set()  # освобождаем A
+    tb.join(2.0)
+    ta.join(2.0)
+    assert entered["b"], "B так и не вошёл после освобождения A"
