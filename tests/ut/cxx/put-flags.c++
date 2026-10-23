@@ -305,6 +305,88 @@ TEST(ut_put_flags, replace_and_get_equal_or_great) {
   mdbx::env::remove("test-put-flags");
 }
 
+TEST(ut_put_flags, replace_reserve_ignores_caller_bytes) {
+  if (MDBX_GTEST_IS_EXECUTION_TIMEOUT()) {
+    GTEST_SKIP() << "SKIPPED by RUNTIME_LIMIT";
+    return;
+  }
+  auto env = make_env("test-put-flags");
+  auto txn = env.start_write();
+  auto map = txn.create_map("table");
+
+  txn.insert(map, "k1", "abcd");
+  /* MDBX_RESERVE ignores the incoming iov_base, even when it points to bytes equal to the value in a dirty page */
+  const mdbx::slice key("k1");
+  char caller[4] = {'a', 'b', 'c', 'd'};
+  MDBX_val reservation = {caller, sizeof(caller)};
+  char old_buf[16];
+  MDBX_val old = {old_buf, sizeof(old_buf)};
+  ASSERT_EQ(mdbx_replace(txn, map.dbi, &key, &reservation, &old, MDBX_RESERVE), MDBX_SUCCESS);
+  EXPECT_EQ(mdbx::slice(old), mdbx::slice("abcd"));
+  ASSERT_EQ(reservation.iov_len, 4u);
+  ASSERT_NE(reservation.iov_base, static_cast<void *>(caller)) << "the reservation must point into the database";
+  memcpy(reservation.iov_base, "WXYZ", 4);
+  EXPECT_EQ(txn.get(map, "k1"), mdbx::slice("WXYZ"));
+
+  txn.commit();
+  env.close();
+  mdbx::env::remove("test-put-flags");
+}
+
+TEST(ut_put_flags, replace_reserve_same_length_in_dirty_page) {
+  if (MDBX_GTEST_IS_EXECUTION_TIMEOUT()) {
+    GTEST_SKIP() << "SKIPPED by RUNTIME_LIMIT";
+    return;
+  }
+  auto env = make_env("test-put-flags");
+  auto txn = env.start_write();
+  auto map = txn.create_map("table");
+
+  txn.insert(map, "k1", "abcd");
+  mdbx::slice reservation;
+  const auto prev = txn.replace_reserve<mdbx::buffer<>>(map, "k1", 4, reservation);
+  EXPECT_EQ(prev, mdbx::slice("abcd"));
+  ASSERT_EQ(reservation.size(), 4u);
+  ASSERT_NE(reservation.data(), nullptr);
+  memcpy(reservation.byte_ptr(), "WXYZ", 4);
+  EXPECT_EQ(txn.get(map, "k1"), mdbx::slice("WXYZ"));
+
+  txn.commit();
+  env.close();
+  mdbx::env::remove("test-put-flags");
+}
+
+TEST(ut_put_flags, replace_reserve_forbidden_on_dupsort) {
+  if (MDBX_GTEST_IS_EXECUTION_TIMEOUT()) {
+    GTEST_SKIP() << "SKIPPED by RUNTIME_LIMIT";
+    return;
+  }
+  auto env = make_env("test-put-flags");
+  auto txn = env.start_write();
+  auto multi = txn.create_map("multi", mdbx::key_mode::usual, mdbx::value_mode::multi);
+  txn.upsert(multi, "k", "abcd");
+
+  {
+    const mdbx::slice key("k");
+    char caller[4] = {'a', 'b', 'c', 'd'};
+    MDBX_val reservation = {caller, sizeof(caller)};
+    char old_buf[16];
+    MDBX_val old = {old_buf, sizeof(old_buf)};
+    EXPECT_EQ(mdbx_replace(txn, multi.dbi, &key, &reservation, &old, MDBX_RESERVE), MDBX_INCOMPATIBLE)
+        << "MDBX_RESERVE on DUPSORT is not permitted, as for mdbx_put()";
+  }
+  {
+    mdbx::slice reservation;
+    EXPECT_THROW((void)txn.replace_reserve<mdbx::buffer<>>(multi, "k", 4, reservation), mdbx::incompatible_operation);
+  }
+  EXPECT_EQ(txn.get(multi, "k"), mdbx::slice("abcd"));
+  EXPECT_EQ(txn.get_map_stat(multi).ms_entries, 1u);
+
+  txn.abort();
+  env.close();
+  mdbx::env::remove("test-put-flags");
+}
+
 TEST(ut_put_flags, put_multiple_samelength_iovlen_on_keyexist) {
   if (MDBX_GTEST_IS_EXECUTION_TIMEOUT()) {
     GTEST_SKIP() << "SKIPPED by RUNTIME_LIMIT";
