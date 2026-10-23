@@ -522,9 +522,9 @@ struct MDBX_env {
   } geo_in_bytes;
 
 #if MDBX_LOCKING == MDBX_LOCKING_SYSV
-  union {
-    key_t key;
+  struct {
     int semid;
+    key_t key;
   } me_sysv_ipc;
 #endif /* MDBX_LOCKING == MDBX_LOCKING_SYSV */
   bool incore;
