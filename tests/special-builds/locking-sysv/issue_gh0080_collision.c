@@ -37,7 +37,7 @@
 #include <string.h>
 #include <unistd.h>
 
-extern int mprobe_ctl(const char *request, char *reply, size_t reply_size);
+extern int mdbx_probe_ctl(const char *request, char *reply, size_t reply_size);
 
 static void trap_signal(int sig) {
   fprintf(stderr, "\ncollision-test: terminated by signal %d\n", sig);
@@ -86,15 +86,15 @@ int main(void) {
   /* Arm the FAULT site: osal_ftok() will return the same injected key for
    * every database, forcing a deterministic System V IPC key collision. */
   snprintf(cmd, sizeof cmd, "fault ftok_key_collide %d", (int)0x00712345);
-  if (mprobe_ctl(cmd, reply, sizeof reply) != 0) {
-    fprintf(stderr, "mprobe_ctl(arm ftok_key_collide) failed\n");
+  if (mdbx_probe_ctl(cmd, reply, sizeof reply) != 0) {
+    fprintf(stderr, "mdbx_probe_ctl(arm ftok_key_collide) failed: %s\n", reply);
     return 2;
   }
 
   MDBX_env *env_a = NULL;
   if (open_db(db_a, &env_a) != 0) {
     fprintf(stderr, "cannot open database A\n");
-    mprobe_ctl("fault ftok_key_collide none", reply, sizeof reply);
+    mdbx_probe_ctl("fault ftok_key_collide none", reply, sizeof reply);
     return 2;
   }
   /* Make A an *active* database: a write transaction performs a semop() on
@@ -104,7 +104,7 @@ int main(void) {
       mdbx_txn_commit(txn_a) != MDBX_SUCCESS) {
     fprintf(stderr, "cannot write to database A\n");
     mdbx_env_close(env_a);
-    mprobe_ctl("fault ftok_key_collide none", reply, sizeof reply);
+    mdbx_probe_ctl("fault ftok_key_collide none", reply, sizeof reply);
     return 2;
   }
 
@@ -115,7 +115,7 @@ int main(void) {
     mdbx_env_close(env_b);
     mdbx_env_close(env_a);
     cleanup_files((const char *[]){db_a, lck_a, db_b, lck_b}, 4);
-    mprobe_ctl("fault ftok_key_collide none", reply, sizeof reply);
+    mdbx_probe_ctl("fault ftok_key_collide none", reply, sizeof reply);
     fprintf(stderr, "BUG PRESENT (issue #80): opening B succeeded despite the live colliding database A\n");
     return 1;
   }
@@ -126,14 +126,14 @@ int main(void) {
   if (rc != MDBX_SUCCESS) {
     mdbx_env_close(env_a);
     cleanup_files((const char *[]){db_a, lck_a, db_b, lck_b}, 4);
-    mprobe_ctl("fault ftok_key_collide none", reply, sizeof reply);
+    mdbx_probe_ctl("fault ftok_key_collide none", reply, sizeof reply);
     fprintf(stderr, "BUG PRESENT (issue #80): opening the colliding database B broke database A: %d\n", rc);
     return 1;
   }
   rc = mdbx_txn_commit(txn);
   mdbx_env_close(env_a);
   cleanup_files((const char *[]){db_a, lck_a, db_b, lck_b}, 4);
-  mprobe_ctl("fault ftok_key_collide none", reply, sizeof reply);
+  mdbx_probe_ctl("fault ftok_key_collide none", reply, sizeof reply);
   if (rc != MDBX_SUCCESS) {
     fprintf(stderr, "BUG PRESENT (issue #80): commit on database A failed after the collision: %d\n", rc);
     return 1;

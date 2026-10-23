@@ -20,7 +20,7 @@
 #include <cstdio>
 #include <cstring>
 
-extern "C" int mprobe_ctl(const char *request, char *reply, size_t reply_size);
+extern "C" int mdbx_probe_ctl(const char *request, char *reply, size_t reply_size);
 
 // Follow-up regression test for https://github.com/Mithril-mine/libmdbx-devel/issues/103
 // mdbx_txn_rollback() of a nested write transaction undoes it and starts it
@@ -64,9 +64,9 @@ TEST(issue_gh0103, failed_restart_keeps_parent_usable) {
   }
 
   char reply[256];
-  ASSERT_EQ(0, mprobe_ctl("alloc-fault 1", reply, sizeof reply));
+  ASSERT_EQ(0, mdbx_probe_ctl("alloc-fault 1", reply, sizeof reply));
   const int rc = mdbx_txn_rollback(nested);
-  ASSERT_EQ(0, mprobe_ctl("alloc-fault none", reply, sizeof reply));
+  ASSERT_EQ(0, mdbx_probe_ctl("alloc-fault none", reply, sizeof reply));
   ASSERT_EQ(MDBX_ENOMEM, rc) << "the restart must fail with the injected out-of-memory";
 
   /* The nested transaction is gone; the parent must be intact and commit. */

@@ -12,9 +12,9 @@
 ///
 /// \author Леонид Юрьев aka Leonid Yuriev <leo@yuriev.ru> \date 2025-2026
 
-/* Probe-bus self-test: exercises the mprobe v2 mechanism end-to-end without
+/* Probe-bus self-test: exercises the mdbx-probes mechanism end-to-end without
  * relying on the engine internals — sites placed in this very test, driven via
- * the exported mprobe_ctl() control API. Requires MDBX_PROBES=ON at configure
+ * the exported mdbx_probe_ctl() control API. Requires MDBX_PROBES=ON at configure
  * time; the probe machinery itself is activated by setting MDBX_PROBES=1 in
  * the environment before the first probe fires. */
 
@@ -47,7 +47,7 @@ static unsigned failures;
   } while (0)
 
 static void do_ctl(const char *request, char *reply, size_t size) {
-  const int rc = mprobe_ctl(request, reply, size);
+  const int rc = mdbx_probe_ctl(request, reply, size);
   CHECK(rc == 0);
 }
 
@@ -96,7 +96,7 @@ int main(void) {
   int injected = MDBX_SUCCESS;
   {
     struct mprobe_site site = {"test_fault", __FILE__, __LINE__, mprobe_kind_fault, {0}};
-    mprobe_fault(&site, &injected);
+    mdbx_probe_fault(&site, &injected);
   }
   CHECK(injected == -30798);
 
@@ -115,7 +115,7 @@ int main(void) {
   do_ctl("mode count", reply, sizeof(reply));
   {
     struct mprobe_site site = {"test_assert_site", __FILE__, __LINE__, mprobe_kind_assert, {0}};
-    mprobe_assert_failed(&site, "deliberate");
+    mdbx_probe_assert_failed(&site, "deliberate");
   }
   do_ctl("mode panic", reply, sizeof(reply));
   do_ctl("query test_assert_site", reply, sizeof(reply));

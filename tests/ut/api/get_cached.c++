@@ -1094,9 +1094,9 @@ bool case2_multithread(mdbx::env, prng &, get_cached_t) {
 #if defined(MDBX_PROBES)
 static bool probe_ctl_ok(const char *request) {
   char reply[4096];
-  const int rc = mprobe_ctl(request, reply, sizeof(reply));
+  const int rc = mdbx_probe_ctl(request, reply, sizeof(reply));
   if (rc != 0 || strncmp(reply, "ok", 2) != 0) {
-    std::cerr << "FAIL mprobe_ctl(" << request << ") rc=" << rc << " reply=\"" << reply << "\"" << std::endl;
+    std::cerr << "FAIL mdbx_probe_ctl(" << request << ") rc=" << rc << " reply=\"" << reply << "\"" << std::endl;
     return false;
   }
   return true;
@@ -1300,7 +1300,7 @@ static bool case3_error_paths(mdbx::env env, get_cached_t get_cached) {
     for (size_t i = 0; i < sizeof(tags) / sizeof(tags[0]); ++i) {
       char request[512];
       snprintf(request, sizeof(request), "query %s", tags[i]);
-      const int rc = mprobe_ctl(request, reply, sizeof(reply));
+      const int rc = mdbx_probe_ctl(request, reply, sizeof(reply));
       const char *const site = (rc == 0) ? strstr(reply, "site ") : nullptr;
       unsigned seen = 0;
 #if defined(_MSC_VER)

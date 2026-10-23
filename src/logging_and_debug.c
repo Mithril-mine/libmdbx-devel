@@ -490,7 +490,7 @@ __hot void txn_probe_all_cursors_against_dangling(MDBX_txn *txn, const char *fun
 #if defined(MDBX_PROBES)
 
 /* ---------------------------------------------------------------------------
- * Probe-bus implementation (mprobe v2). See logging_and_debug.h for the
+ * Probe-bus implementation (mdbx-probes). See logging_and_debug.h for the
  * contract and the control protocol. All symbols in this block are exported
  * (LIBMDBX_API) so tests can link against them, including white-box tests
  * that compile engine sources into themselves.
@@ -649,9 +649,9 @@ static void mprobe_emit(const struct mprobe_record *rec) {
 
 /* Forward decls for the file-IPC drain (see below). */
 static void mprobe_drain_ipc(void);
-static int mprobe_ctl_apply(const char *request, char *reply, size_t reply_size);
+static int mdbx_probe_ctl_apply(const char *request, char *reply, size_t reply_size);
 
-void mprobe_fire(struct mprobe_site *site, intptr_t value) {
+void mdbx_probe_fire(struct mprobe_site *site, intptr_t value) {
   if (unlikely(!mprobe_is_active()))
     return;
   mprobe_drain_ipc();
@@ -664,7 +664,7 @@ void mprobe_fire(struct mprobe_site *site, intptr_t value) {
   mprobe_emit(rec);
 }
 
-void mprobe_fault(struct mprobe_site *site, void *var) {
+void mdbx_probe_fault(struct mprobe_site *site, void *var) {
   if (unlikely(!mprobe_is_active()))
     return;
   mprobe_drain_ipc();
@@ -690,7 +690,7 @@ void mprobe_fault(struct mprobe_site *site, void *var) {
   }
 }
 
-void mprobe_assert_failed(struct mprobe_site *site, const char *expr) {
+void mdbx_probe_assert_failed(struct mprobe_site *site, const char *expr) {
   if (unlikely(!mprobe_is_active())) {
     /* Not activated: keep historical ASSERT (CHECK0) semantics. */
     if (CHECKS0_ENABLED()) {
@@ -720,7 +720,7 @@ void mprobe_assert_failed(struct mprobe_site *site, const char *expr) {
   }
 }
 
-void mprobe_assert_ok(struct mprobe_site *site) {
+void mdbx_assert_ok(struct mprobe_site *site) {
   if (unlikely(!mprobe_is_active()))
     return;
   mprobe_drain_ipc();
@@ -774,12 +774,12 @@ void *mprobe_calloc(size_t nelem, size_t size, const char *site) {
 
 /* The probe-bus serves the same line protocol over a simple file-based IPC:
  *   env MDBX_PROBE_CTL=<dir>  ->  requests in <dir>/cmd, replies in <dir>/rep
- * The library drains <dir>/cmd lazily (on probe fires and on every mprobe_ctl
+ * The library drains <dir>/cmd lazily (on probe fires and on every mdbx_probe_ctl
  * call, see mprobe_drain_ipc), appends each reply to <dir>/rep. Tests use the
  * "sync" op as a deterministic barrier: write cmd lines, ctl("sync"), act.
  * Plain stdio is used on purpose here (dev-only instrumentation; the engine
  * itself avoids it). The MDBX_WITHOUT_MSVC_CRT build has no CRT stdio, so the
- * file-IPC degrades to no-op there (in-process mprobe_ctl still works). */
+ * file-IPC degrades to no-op there (in-process mdbx_probe_ctl still works). */
 #define MPROBE_IPC_LINE_MAX 256
 
 #if !MDBX_WITHOUT_MSVC_CRT
@@ -821,7 +821,7 @@ static void mprobe_drain_ipc_locked(void) {
       request[len - 1] = 0;
     char reply[MPROBE_IPC_LINE_MAX];
     reply[0] = 0;
-    if (mprobe_ctl_apply(request, reply, sizeof(reply)) != 0)
+    if (mdbx_probe_ctl_apply(request, reply, sizeof(reply)) != 0)
       snprintf(reply, sizeof(reply), "err unknown command\n");
     /* <dir>/rep: append the reply. */
     n = snprintf(path, sizeof(path), "%s/rep", mprobe_ipc_dir);
@@ -854,7 +854,7 @@ static char *mprobe_reply(char *out, const char *const end, const char *fmt, ...
   return out;
 }
 
-static int mprobe_ctl_apply(const char *request, char *reply, size_t reply_size) {
+static int mdbx_probe_ctl_apply(const char *request, char *reply, size_t reply_size) {
   char *const end = reply + reply_size;
   char *out = reply;
 
@@ -989,16 +989,16 @@ static int mprobe_ctl_apply(const char *request, char *reply, size_t reply_size)
   return (out) ? 0 : -1;
 }
 
-int mprobe_ctl(const char *request, char *reply, size_t reply_size) {
+int mdbx_probe_ctl(const char *request, char *reply, size_t reply_size) {
   if (!reply || reply_size < 2)
     return -1;
   if (unlikely(!mprobe_is_active())) {
-    snprintf(reply, reply_size, "mprobes not enabled via MDBX_MPROBE=1 in the environment\n");
+    snprintf(reply, reply_size, "mprobes not enabled via %s=1 in the environment\n", "MDBX_PROBES");
     return -1;
   }
   reply[0] = 0;
   mprobe_drain_ipc();
-  if (mprobe_ctl_apply(request, reply, reply_size) != 0) {
+  if (mdbx_probe_ctl_apply(request, reply, reply_size) != 0) {
     snprintf(reply, reply_size, "err unknown command\n");
     return -1;
   }
