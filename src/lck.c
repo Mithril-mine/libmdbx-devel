@@ -87,20 +87,10 @@ __cold static int lck_setup_locked(MDBX_env *env) {
 
   lck_t *lck = env->lck_mmap.lck;
   if (lck_seize_rc == MDBX_RESULT_TRUE) {
-    /* If we succeed got exclusive lock, then nobody is using the lock region
-     * and we should initialize it. */
+    /* If we succeed got exclusive lock, then nobody is using the lock region and we should initialize LCK-file. */
     memset(lck, 0, (size_t)size);
     jitter4testing(false);
     lck->magic_and_version = MDBX_LOCK_MAGIC;
-    lck->os_and_format = MDBX_LOCK_FORMAT;
-    lck_options_init_defaults(env, lck);
-    lck->pgops.wops.weak = 1;
-    err = osal_msync(&env->lck_mmap, (size_t)size, MDBX_SYNC_DATA | MDBX_SYNC_SIZE);
-    if (unlikely(err != MDBX_SUCCESS)) {
-      ERROR("initial-%s for lck-file failed, err %d", "msync/fsync", err);
-      eASSERT0(env, MDBX_IS_ERROR(err));
-      return err;
-    }
   } else {
     if (lck->magic_and_version != MDBX_LOCK_MAGIC) {
       const bool invalid = (lck->magic_and_version >> 8) != MDBX_MAGIC;
@@ -120,6 +110,19 @@ __cold static int lck_setup_locked(MDBX_env *env) {
   if (unlikely(err != MDBX_SUCCESS)) {
     eASSERT0(env, MDBX_IS_ERROR(err));
     return err;
+  }
+
+  if (lck_seize_rc == MDBX_RESULT_TRUE) {
+    /* finalyze LCK-file initialization */
+    lck->os_and_format = MDBX_LOCK_FORMAT;
+    lck_options_init_defaults(env, lck);
+    lck->pgops.wops.weak = 1;
+    err = osal_msync(&env->lck_mmap, (size_t)size, MDBX_SYNC_DATA | MDBX_SYNC_SIZE);
+    if (unlikely(err != MDBX_SUCCESS)) {
+      ERROR("initial-%s for lck-file failed, err %d", "msync/fsync", err);
+      eASSERT0(env, MDBX_IS_ERROR(err));
+      return err;
+    }
   }
 
   env->lck = lck;
