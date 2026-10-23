@@ -15,7 +15,7 @@ description: Profile for testing libmdbx — monolithic test decomposition, char
 > [`docs/engineering/test-scenarios.md`](../../../docs/engineering/test-scenarios.md)
 > (ТЗ сценариев SC-*), [`docs/engineering/test-coverage.md`](../../../docs/engineering/test-coverage.md)
 > (карта «тесты → модули», дыры), [`docs/engineering/probe-bus.md`](../../../docs/engineering/probe-bus.md)
-> (движок инъекций mprobe v2 и каталог USDT/DTrace-маркеров),
+> (движок инъекций mdbx-probes и каталог USDT/DTrace-маркеров),
 > [`docs/engineering/testing-infra-design.md`](../../../docs/engineering/testing-infra-design.md)
 > (дизайн CI v2), [`docs/engineering/debugging-methodology.md`](../../../docs/engineering/debugging-methodology.md)
 > (инструменты отладки и сценарии).

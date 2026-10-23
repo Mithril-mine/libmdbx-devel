@@ -12,9 +12,9 @@
 ///
 /// \author Леонид Юрьев aka Leonid Yuriev <leo@yuriev.ru> \date 2025-2026
 
-/* File-IPC round-trip for the probe-bus (mprobe v2): the test acts as the
+/* File-IPC round-trip for the probe-bus (mdbx-probes): the test acts as the
  * external driver, writing requests to <dir>/cmd and reading replies from
- * <dir>/rep, while the library drains them lazily on the next mprobe_ctl()
+ * <dir>/rep, while the library drains them lazily on the next mdbx_probe_ctl()
  * call ("sync" is the deterministic barrier). */
 
 #include "src/essentials.h"
@@ -82,7 +82,7 @@ int main(int argc, char **argv) {
   /* Barrier: the library drains <dir>/cmd on this call and appends replies. */
   char reply[256];
   reply[0] = 0;
-  CHECK(mprobe_ctl("sync", reply, sizeof(reply)) == 0);
+  CHECK(mdbx_probe_ctl("sync", reply, sizeof(reply)) == 0);
   CHECK_REPLY(reply, "ok");
 
   /* Wait for the lazy drain to have produced replies. */

@@ -15,7 +15,7 @@
 > независимый от реализации.
 >
 > Операционные правила корпуса тестов и CI (тайеры, флаки, бюджеты) — в
-> [`testing-codex.md`](testing-codex.md) (C0–C6); движок инъекций mprobe v2
+> [`testing-codex.md`](testing-codex.md) (C0–C6); движок инъекций mdbx-probes
 > и каталог USDT/DTrace-маркеров — в [`probe-bus.md`](probe-bus.md).
 
 ## Глава 0. Определение и место в контуре
@@ -340,22 +340,21 @@ SystemTap/DTrace, eBPF/bpftrace, ETW, LTTng, Frida, Detours, strace, Lever и
 и результат синтеза. Справка по языку SystemTap — в
 `docs/engineering/systemtap-reference.md`.
 
-## Глава 9. Конкретная реализация макросов (синтез с инструкциями владельца)
+## Глава 9. Конкретная реализация макросов
 
 Синтез абстрактного контракта (главы 0–8) с инструкциями владельца дал слой
-макросов `MPROBE_COLLECT/WATCH/FAULT`. Реализация прошла две версии:
-**v1** (`tests/tracing/`, внешние трассировщики LTTng/USDT/ETW/Detours) и
-**v2** — движковый **probe-bus** (`MDBX_PROBES`, `mprobe_*`), который
-унифицировал механизм: реестр по семантическим тегам, per-site arm/disarm,
+макросов `MPROBE_COLLECT/WATCH/FAULT`.
+Реализация механизма **probe-bus** (`MDBX_PROBES`, `mdbx_probe_*`) на основе внешних трассировщиков LTTng/USDT/ETW/Detours), который
+унифицировал взаимодействие: реестр по семантическим тегам, per-site arm/disarm,
 счётчики, детерминированная инъекция ошибок и управление из тестов
-(in-process `mprobe_ctl()` + файловое IPC). Полное описание —
+(in-process `mdbx_probe_ctl()` + файловое IPC). Полное описание —
 `docs/engineering/probe-bus.md`. v1 выведен из эксплуатации (удалён).
 
-### 9.1. Маппинг контракта на механизмы (v2, probe-bus)
+### 9.1. Маппинг контракта на механизмы (probe-bus)
 
 | Канал | Механизм | Управление/наблюдение |
 | --- | --- | --- |
-| `MPROBE_COLLECT` (метрики) | реестр + словоразмерные счётчики (`seen/hits/suppressed`, `value`) | `query` через `mprobe_ctl()` |
+| `MPROBE_COLLECT` (метрики) | реестр + словоразмерные счётчики (`seen/hits/suppressed`, `value`) | `query` через `mdbx_probe_ctl()` |
 | `MPROBE_WATCH` (факты/ветви) | реестр + счётчики, один общий DTRACE-маркер на срабатывание | `query` / `reset` |
 | `MPROBE_FAULT` (инъекция) | принудительный код возврата по тегу; аллокации — через redirect `osal_*` | `fault <tag> <code>` / `alloc-fault <N>` |
 
@@ -365,7 +364,7 @@ SystemTap/DTrace, eBPF/bpftrace, ETW, LTTng, Frida, Detours, strace, Lever и
 трассировщики остаются опциональным каналом наблюдения через единый
 DTRACE-маркер.
 
-### 9.2. Структура probe-bus (v2)
+### 9.2. Структура probe-bus
 
 ```c
 // MPROBE_COLLECT(name, value) — статистика/метрики (счётчик + последнее значение);
@@ -373,7 +372,7 @@ DTRACE-маркер.
 // MPROBE_FAULT(name, var)      — инъекция: при наличии правила `fault <tag> <code>`
 //                                переменная var мутируется кодом ошибки;
 // DEV_ASSERT[_T](tag, expr)    — девиантная проверка вызывающего кода на том же реестре.
-// Управление: int mprobe_ctl(const char *request, char *reply, size_t size);
+// Управление: int mdbx_probe_ctl(const char *request, char *reply, size_t size);
 // Включение: MDBX_PROBES (build) + MDBX_PROBES=1 либо MDBX_PROBE_CTL=<dir> (runtime).
 ```
 
@@ -383,7 +382,7 @@ dist-cutoff-маркеров; самопроверка — `tests/ut/api/probes.
 
 ### 9.3. Детерминизм и изоляция
 
-- Управление через `mprobe_ctl()` синхронно в процессе теста; файловое IPC
+- Управление через `mdbx_probe_ctl()` синхронно в процессе теста; файловое IPC
   (`MDBX_PROBE_CTL=<dir>`) — барьер `sync` после записи в `<dir>/cmd`.
 - Счётчики — словоразмерные атомики (`mdbx_atomic_size_t`, 32-битные на
   32-битных платформах), недорогие на всех таргетах.
@@ -396,7 +395,7 @@ dist-cutoff-маркеров; самопроверка — `tests/ut/api/probes.
 
 | Опция | Платформа | Назначение |
 | --- | --- | --- |
-| `MDBX_PROBES` (v2, dev-only) | все | включает probe-bus (mprobe v2): реестр, управление, инъекцию ошибок; dist-cutoff, OFF по умолчанию |
+| `MDBX_PROBES` (dev-only) | все | включает probe-bus (mdbx-probes): реестр, управление, инъекцию ошибок; dist-cutoff, OFF по умолчанию |
 
 ### 10.2. Поиск зависимостей
 
@@ -423,11 +422,11 @@ Probe-bus не требует внешних трассировщиков/биб
 
 Строки — каналы; таксономия осей — глава 4.1.
 
-| Канал | Требуемая capability | Механизм (v2 probe-bus) | mutate? | Права/стоимость | Статус |
-| --- | --- | --- | --- | --- | --- |
-| `COLLECT` | наблюдение (метрики) | реестр + счётчики `seen/hits/value` | нет | нет (in-process) | v2 |
-| `WATCH` | наблюдение (факт/ветвь) | реестр + счётчики + DTRACE-маркер | нет | нет | v2 |
-| `FAULT` | mutate (или tier=test fallback) | принудительный код возврата + redirect `osal_*` | да | нет (in-process, детерминированно) | v2 |
+| Канал | Требуемая capability | Механизм (probe-bus) | mutate? | Права/стоимость |
+| --- | --- | --- | --- | --- |
+| `COLLECT` | наблюдение (метрики) | реестр + счётчики `seen/hits/value` | нет | нет (in-process) |
+| `WATCH` | наблюдение (факт/ветвь) | реестр + счётчики + DTRACE-маркер | нет | нет |
+| `FAULT` | mutate (или tier=test fallback) | принудительный код возврата + redirect `osal_*` | да | нет (in-process, детерминированно) |
 
 Правила выбора реализации — глава 4.2; результат живого внедрения отслеживается в
 главе 12.
@@ -435,8 +434,6 @@ Probe-bus не требует внешних трассировщиков/биб
 ## Глава 12. Статус внедрения (чек-лист)
 
 - [x] Документ-синтез (главы 9–12) — черновик;
-- [x] v1 `tests/tracing/` (LTTng/USDT/ETW/Detours) — реализован, затем
-      **унифицирован в v2 и удалён** (2026-09-30, решение владельца);
 - [x] CMake: `MDBX_PROBES` (dist-cutoff), самопроверки `probes`/`probes_ipc`;
 - [x] Локальный прогон (Linux, Debug+Release): `extra_probes` PASS,
       `extra_probes_ipc` PASS, dist-вырезка чистая (grep по dist пуст);
@@ -446,8 +443,7 @@ Probe-bus не требует внешних трассировщиков/биб
 ## Глава 13. Пилот coverage-аттестации (B68-P3, 2026-10-01)
 
 Пилотное применение probe-bus к трём тестам (`extra_details_rkl`, `get_cached`,
-`bunches_removal`) для достижения «100% по функционалу тестов». Полный инвентарь,
-классификация и статусы: `docs/engineering/coverage-pilot-inventory.md`.
+`bunches_removal`) для достижения «100% по функционалу тестов».
 
 ### 13.1. Классификация непокрытых строк
 
@@ -474,7 +470,7 @@ Probe-bus не требует внешних трассировщиков/биб
 
 ### 13.3. Аттестация покрытия в тесте
 
-Тест в конце опрашивает реестр: `mprobe_ctl("query <tag>")` и требует `seen > 0`
+Тест в конце опрашивает реестр: `mdbx_probe_ctl("query <tag>")` и требует `seen > 0`
 для каждого обязательного тега (дефенсивные ветки + fault-сайты). Это делает
 покрытие САМОУТВЕРЖДАЕМЫМ в CI (без gcov) и ловит регрессии «ветка перестала
 достигаться после рефакторинга».

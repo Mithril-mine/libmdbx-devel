@@ -62,7 +62,7 @@ Anything else → `FATAL_ERROR "The set of libmdbx source code files is incomple
 | `MDBX_OUTPUT_DIR` | build dir | Binary output directory |
 | `MDBX_ALLOY_BUILD` | ON for non-DEBUG | Single-object ("alloy") build of the dev tree |
 | `ENABLE_ASAN` / `ENABLE_UBSAN` / `ENABLE_MEMCHECK` | — | Sanitizer switches (used by make targets and CI) |
-| `MDBX_PROBES` | OFF | probe-bus (mprobe v2): controllable probe-sites + fault injection for tests; dev-only, code lives inside `dist-cutoff` + `#if MDBX_PROBES`. See `docs/engineering/probe-bus.md` |
+| `MDBX_PROBES` | OFF | probe-bus (mdbx-probes): controllable probe-sites + fault injection for tests; dev-only, code lives inside `dist-cutoff` + `#if MDBX_PROBES`. See `docs/engineering/probe-bus.md` |
 | `MDBX_NATIVE_SEH`, `MDBX_USE_MINCORE`, `MDBX_NEED_LIBATOMIC` | platform | Platform auto-setup |
 
 C/C++ standards: C11 default (C99 fallback for old MSVC, C23 if available); C++

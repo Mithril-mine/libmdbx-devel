@@ -21,7 +21,7 @@
 #include <cstdio>
 #include <thread>
 
-extern "C" int mprobe_ctl(const char *request, char *reply, size_t reply_size);
+extern "C" int mdbx_probe_ctl(const char *request, char *reply, size_t reply_size);
 
 // Follow-up regression test for https://github.com/Mithril-mine/libmdbx-devel/issues/104
 // mdbx_txn_clone() publishes the snapshot in the clone's reader slot while the
@@ -61,14 +61,14 @@ TEST(issue_gh0104, clone_bailout_after_publishing_the_snapshot) {
 
   char reply[256], cmd[128];
   std::snprintf(cmd, sizeof cmd, "fault txn_clone_recheck %d", (int)MDBX_BAD_TXN);
-  ASSERT_EQ(0, mprobe_ctl(cmd, reply, sizeof reply));
+  ASSERT_EQ(0, mdbx_probe_ctl(cmd, reply, sizeof reply));
   /* Both bailout paths: into the existing clone, and into a new one. */
   EXPECT_EQ(MDBX_BAD_TXN, mdbx_txn_clone(source, &clone, nullptr));
-  ASSERT_EQ(0, mprobe_ctl(cmd, reply, sizeof reply));
+  ASSERT_EQ(0, mdbx_probe_ctl(cmd, reply, sizeof reply));
   MDBX_txn *fresh = nullptr;
   EXPECT_EQ(MDBX_BAD_TXN, mdbx_txn_clone(source, &fresh, nullptr));
   EXPECT_EQ(nullptr, fresh);
-  ASSERT_EQ(0, mprobe_ctl("fault txn_clone_recheck none", reply, sizeof reply));
+  ASSERT_EQ(0, mdbx_probe_ctl("fault txn_clone_recheck none", reply, sizeof reply));
 
   /* The clone handle is reusable afterwards. */
   ASSERT_EQ(MDBX_SUCCESS, mdbx_txn_clone(source, &clone, nullptr));
@@ -77,9 +77,9 @@ TEST(issue_gh0104, clone_bailout_after_publishing_the_snapshot) {
   /* A parked source: the clone's slot also gets the parking mark, which the
    * bailout must take back together with the snapshot. */
   ASSERT_EQ(MDBX_SUCCESS, mdbx_txn_park(source, false));
-  ASSERT_EQ(0, mprobe_ctl(cmd, reply, sizeof reply));
+  ASSERT_EQ(0, mdbx_probe_ctl(cmd, reply, sizeof reply));
   EXPECT_EQ(MDBX_BAD_TXN, mdbx_txn_clone(source, &clone, nullptr));
-  ASSERT_EQ(0, mprobe_ctl("fault txn_clone_recheck none", reply, sizeof reply));
+  ASSERT_EQ(0, mdbx_probe_ctl("fault txn_clone_recheck none", reply, sizeof reply));
   EXPECT_EQ(MDBX_SUCCESS, mdbx_txn_renew(clone)) << "the clone's slot must be left clean";
   EXPECT_EQ(MDBX_SUCCESS, mdbx_get(clone, main_dbi, &key, &data));
   EXPECT_EQ(MDBX_SUCCESS, mdbx_txn_abort(clone));
@@ -141,9 +141,9 @@ TEST(issue_gh0104, clone_bailout_of_parked_source_on_another_thread) {
     char reply[256], cmd[128];
     std::snprintf(cmd, sizeof cmd, "fault txn_clone_recheck %d", (int)MDBX_BAD_TXN);
     clone = nullptr;
-    if (mprobe_ctl(cmd, reply, sizeof reply) == 0)
+    if (mdbx_probe_ctl(cmd, reply, sizeof reply) == 0)
       faulted = mdbx_txn_clone(source, &clone, nullptr);
-    mprobe_ctl("fault txn_clone_recheck none", reply, sizeof reply);
+    mdbx_probe_ctl("fault txn_clone_recheck none", reply, sizeof reply);
     parked_idle = count_parked_idle_slots(env);
     /* prepare-only reuse: the slot must be clean enough for it (the bailout
      * has to clear snapshot_pages_used, not only the snapshot id). */
