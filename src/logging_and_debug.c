@@ -538,36 +538,35 @@ static void mprobe_unlock(void) { atomic_store32(&mprobe_reg_lock, 0, mo_Acquire
 
 /* Lazily read the runtime activation environment. Called at most once per
  * process (guarded by MPROBE_STATE_INIT_DONE under mprobe_lock). */
-static void mprobe_init_activation(void) {
-  if (atomic_load32(&mprobe_state, mo_Relaxed) & MPROBE_STATE_INIT_DONE)
-    return;
-  mprobe_lock();
-  if (!(atomic_load32(&mprobe_state, mo_Relaxed) & MPROBE_STATE_INIT_DONE)) {
-    uint32_t state = MPROBE_STATE_INIT_DONE;
-    /* NB: osal_getenv_singlethreaded() может возвращать общий статический
-     * буфер (Windows), поэтому значение MDBX_PROBES потребляем ДО чтения
-     * MDBX_PROBE_CTL. */
-    const char *const flag = osal_getenv_singlethreaded("MDBX_PROBES", false);
-    const bool flag_set = flag && flag[0] && flag[0] != '0';
-    const char *dir = osal_getenv_singlethreaded("MDBX_PROBE_CTL", false);
-    if (flag_set)
-      state |= MPROBE_STATE_ACTIVE;
-    if (dir && dir[0]) {
-      mprobe_ipc_dir = osal_strdup(dir);
-      if (mprobe_ipc_dir)
-        state |= MPROBE_STATE_ACTIVE | MPROBE_STATE_IPC;
+static unsigned mprobe_lazy_init(void) {
+  uint32_t state = atomic_load32(&mprobe_state, mo_Relaxed);
+  if (unlikely(!(state & MPROBE_STATE_INIT_DONE))) {
+    mprobe_lock();
+    state = atomic_load32(&mprobe_state, mo_Relaxed);
+    if (!(state & MPROBE_STATE_INIT_DONE)) {
+      state = MPROBE_STATE_INIT_DONE;
+      /* NB: osal_getenv_singlethreaded() может возвращать общий статический
+       * буфер (Windows), поэтому значение MDBX_PROBES потребляем ДО чтения
+       * MDBX_PROBE_CTL. */
+      const char *const flag = osal_getenv_singlethreaded("MDBX_PROBES", false);
+      const bool flag_set = flag && flag[0] && flag[0] != '0';
+      const char *dir = osal_getenv_singlethreaded("MDBX_PROBE_CTL", false);
+      if (flag_set)
+        state |= MPROBE_STATE_ACTIVE;
+      if (dir && dir[0]) {
+        mprobe_ipc_dir = osal_strdup(dir);
+        if (mprobe_ipc_dir)
+          state |= MPROBE_STATE_ACTIVE | MPROBE_STATE_IPC;
+      }
+      atomic_store32(&mprobe_state, state, mo_AcquireRelease);
+      MDBX_DTRACE2(mprobe_active, flag ? flag : "noenv", dir ? dir : "noctl");
     }
-    atomic_store32(&mprobe_state, state, mo_AcquireRelease);
-    MDBX_DTRACE2(mprobe_active, flag ? flag : "noenv", dir ? dir : "noctl");
+    mprobe_unlock();
   }
-  mprobe_unlock();
+  return state;
 }
 
-static __always_inline bool mprobe_is_active(void) {
-  if (unlikely(!(atomic_load32(&mprobe_state, mo_Relaxed) & MPROBE_STATE_INIT_DONE)))
-    mprobe_init_activation();
-  return (atomic_load32(&mprobe_state, mo_Relaxed) & MPROBE_STATE_ACTIVE) != 0;
-}
+static __always_inline bool mprobe_is_active(void) { return (mprobe_lazy_init() & MPROBE_STATE_ACTIVE) != 0; }
 
 static bool mprobe_match(const char *pattern, const char *name) {
   size_t len = strlen(pattern);
@@ -872,7 +871,7 @@ static int mprobe_ctl_apply(const char *request, char *reply, size_t reply_size)
   const char *arg = space ? space + 1 : "";
 
   if (strcmp(op, "list") == 0) {
-    mprobe_init_activation();
+    mprobe_lazy_init();
     out = mprobe_reply(out, end, "ok\n");
     if (!out)
       return -1;
@@ -884,7 +883,7 @@ static int mprobe_ctl_apply(const char *request, char *reply, size_t reply_size)
     }
     mprobe_unlock();
   } else if (strcmp(op, "sync") == 0) {
-    mprobe_init_activation();
+    mprobe_lazy_init();
     out = mprobe_reply(out, end, "ok\n");
   } else if (strcmp(op, "mode") == 0) {
     uint32_t mode;
@@ -910,7 +909,7 @@ static int mprobe_ctl_apply(const char *request, char *reply, size_t reply_size)
     }
     out = mprobe_reply(out, end, "ok\n");
   } else if (strcmp(op, "reset") == 0) {
-    mprobe_init_activation();
+    mprobe_lazy_init();
     mprobe_lock();
     for (struct mprobe_record *rec = mprobe_registry; rec; rec = rec->next) {
       if (mprobe_match(arg, rec->name)) {
@@ -922,7 +921,7 @@ static int mprobe_ctl_apply(const char *request, char *reply, size_t reply_size)
     mprobe_unlock();
     out = mprobe_reply(out, end, "ok\n");
   } else if (strcmp(op, "arm") == 0 || strcmp(op, "disarm") == 0) {
-    mprobe_init_activation();
+    mprobe_lazy_init();
     mprobe_lock();
     mprobe_precreate_locked(arg);
     const bool arm = (op[0] == 'a');
@@ -939,7 +938,7 @@ static int mprobe_ctl_apply(const char *request, char *reply, size_t reply_size)
     mprobe_unlock();
     out = mprobe_reply(out, end, "ok\n");
   } else if (strcmp(op, "fault") == 0) {
-    mprobe_init_activation();
+    mprobe_lazy_init();
     /* fault <pattern> <code>|<none> */
     const char *sp2 = strchr(arg, ' ');
     if (!sp2)
@@ -969,7 +968,7 @@ static int mprobe_ctl_apply(const char *request, char *reply, size_t reply_size)
     mprobe_unlock();
     out = mprobe_reply(out, end, "ok\n");
   } else if (strcmp(op, "query") == 0) {
-    mprobe_init_activation();
+    mprobe_lazy_init();
     mprobe_lock();
     out = mprobe_reply(out, end, "ok\n");
     for (struct mprobe_record *rec = mprobe_registry; rec; rec = rec->next) {
@@ -993,8 +992,11 @@ static int mprobe_ctl_apply(const char *request, char *reply, size_t reply_size)
 int mprobe_ctl(const char *request, char *reply, size_t reply_size) {
   if (!reply || reply_size < 2)
     return -1;
+  if (unlikely(!mprobe_is_active())) {
+    snprintf(reply, reply_size, "mprobes not enabled via MDBX_MPROBE=1 in the environment\n");
+    return -1;
+  }
   reply[0] = 0;
-  mprobe_init_activation();
   mprobe_drain_ipc();
   if (mprobe_ctl_apply(request, reply, reply_size) != 0) {
     snprintf(reply, reply_size, "err unknown command\n");
