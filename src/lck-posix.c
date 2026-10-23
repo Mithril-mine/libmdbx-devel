@@ -457,8 +457,11 @@ __cold int lck_destroy(MDBX_env *env, MDBX_env *inprocess_neighbor, const mdbx_p
     VERBOSE("%p got exclusive, drown ipc-locks", __Wpedantic_format_voidptr(env));
     eASSERT0(env, current_pid == env->pid);
 #if MDBX_LOCKING == MDBX_LOCKING_SYSV
-    if (env->me_sysv_ipc.semid != -1)
+    if (env->me_sysv_ipc.semid != -1) {
       rc = semctl(env->me_sysv_ipc.semid, 2, IPC_RMID) ? errno : 0;
+      if (rc != MDBX_SUCCESS)
+        ERROR("semctl(semid = %d, IPC_RMID) failed: %d, %s", env->me_sysv_ipc.semid, rc, strerror(rc));
+    }
 #else
     rc = lck_ipclock_destroy(&lck->rdt_lock);
     if (rc == 0)
@@ -554,21 +557,24 @@ __cold int lck_destroy(MDBX_env *env, MDBX_env *inprocess_neighbor, const mdbx_p
  * reader-table lock), so GETPID of a single semaphore can miss the last
  * activity of a live database; the owner pid of each semaphore is checked and
  * the set is treated as live if any of them is a live process. */
-static int sysv_ipc_eeexist_decide(MDBX_env *env, key_t key, int semid) {
-  (void)env;
+static int sysv_ipc_eeexist_decide(const MDBX_env *env, int semid) {
+  ENSURE(!env->lck && env->lck_mmap.lck && env->lck_mmap.lck->magic_and_version == MDBX_LOCK_MAGIC &&
+         env->lck_mmap.lck->os_and_format == 0 && env->lck_mmap.lck->os_and_format != MDBX_LOCK_FORMAT);
   struct semid_ds ds;
   if (unlikely(semctl(semid, 0, IPC_STAT, &ds) == -1)) {
     const int err = errno;
     if (err == EIDRM || err == EINVAL)
       return MDBX_RESULT_TRUE; /* the set disappeared; retry creation */
-    ERROR("%s, key %d, semid %d: %s", "sysv-ipc IPC_STAT failed", (int)key, semid, strerror(err));
+    NOTICE("%s, key %d, semid %d: %s", "sysv-ipc IPC_STAT failed", env->me_sysv_ipc.key, semid, strerror(err));
     return MDBX_RESULT_FALSE;
   }
 
   /* A foreign format (not a two-semaphore set created by libmdbx) must never
    * be reclaimed, whatever its liveness looks like. */
-  if (unlikely(ds.sem_nsems != 2))
+  if (unlikely(ds.sem_nsems != 2)) {
+    NOTICE("%s, key %d, semid %d: %s", "sysv-ipc check failed", env->me_sysv_ipc.key, semid, "sem_nsems != 2");
     return MDBX_RESULT_FALSE;
+  }
 
   /* A set that has never been used by a semop() cannot belong to a database
    * that has ever locked; on its own this is indistinguishable from a foreign
@@ -582,20 +588,21 @@ static int sysv_ipc_eeexist_decide(MDBX_env *env, key_t key, int semid) {
    * our crashed leftover — hit. */
   for (int round = 0; round < 3; ++round) {
     for (int semnum = 0; semnum < 2; ++semnum) {
-      const int sempid = semctl(semid, semnum, GETPID);
-      if (unlikely(sempid == -1)) {
+      const mdbx_pid_t sempid = semctl(semid, semnum, GETPID);
+      if (unlikely(sempid == (mdbx_pid_t)-1)) {
         const int err = errno;
         if (err == EIDRM || err == EINVAL)
           return MDBX_RESULT_TRUE; /* the set disappeared; retry creation */
-        ERROR("%s, key %d, semid %d: %s", "sysv-ipc GETPID failed", (int)key, semid, strerror(err));
+        NOTICE("%s, key %d, semid %d: %s", "sysv-ipc GETPID failed", env->me_sysv_ipc.key, semid, strerror(err));
         return MDBX_RESULT_FALSE;
       }
       if (sempid != 0) {
-        errno = 0;
-        if (kill((pid_t)sempid, 0) == 0)
-          return MDBX_RESULT_FALSE; /* a live foreign process owns the set */
-        if (errno != ESRCH)
+        const int err = (kill((pid_t)sempid, 0) == 0) ? 0 : errno;
+        if (errno != ESRCH) {
+          NOTICE("%s, key %d, semid %d: %s (pid %u, err %d)", "sysv-ipc check failed", env->me_sysv_ipc.key, semid,
+                 "another live process owns the resource", sempid, err);
           return MDBX_RESULT_FALSE; /* EPERM & co: the owner exists but is foreign */
+        }
       }
     }
     if (round + 1 < 3)
@@ -610,13 +617,18 @@ static int sysv_ipc_eeexist_decide(MDBX_env *env, key_t key, int semid) {
     const int err = errno;
     if (err == EIDRM || err == EINVAL)
       return MDBX_RESULT_TRUE; /* the set disappeared; retry creation */
-    ERROR("%s, key %d, semid %d: %s", "sysv-ipc IPC_STAT failed", (int)key, semid, strerror(err));
+    NOTICE("%s, key %d, semid %d: %s", "sysv-ipc IPC_STAT failed", env->me_sysv_ipc.key, semid, strerror(err));
     return MDBX_RESULT_FALSE;
   }
-  if (ds2.sem_nsems != 2)
+  if (ds2.sem_nsems != 2) {
+    NOTICE("%s, key %d, semid %d: %s", "sysv-ipc check failed", env->me_sysv_ipc.key, semid, "sem_nsems != 2");
     return MDBX_RESULT_FALSE;
-  if (!never_used && ds2.sem_otime != ds.sem_otime)
+  }
+  if (!never_used && ds2.sem_otime != ds.sem_otime) {
+    NOTICE("%s, key %d, semid %d: %s", "sysv-ipc check failed", env->me_sysv_ipc.key, semid,
+           "the sem_otime was changed since the first check");
     return MDBX_RESULT_FALSE; /* the set was used since the first check */
+  }
 
   return MDBX_RESULT_TRUE; /* dead/absent owner in every round: our stale leftover */
 }
@@ -648,8 +660,11 @@ __cold int lck_init(MDBX_env *env, MDBX_env *inprocess_neighbor, int global_uniq
           return err;
         goto sysv_retry_create;
       }
-      if (unlikely(sysv_ipc_eeexist_decide(env, env->me_sysv_ipc.key, semid) != MDBX_RESULT_TRUE))
+      if (unlikely(sysv_ipc_eeexist_decide(env, semid) != MDBX_RESULT_TRUE)) {
+        ERROR("%s, return MDBX_FTOK_COLLISION (%d, %s)", "sysv-ipc ftok collision detected", MDBX_FTOK_COLLISION,
+              strerror(MDBX_FTOK_COLLISION));
         return MDBX_FTOK_COLLISION; /* a live set belonging to another database; do not touch it */
+      }
       if (semctl(semid, 2, IPC_RMID)) {
         err = errno;
         if (err != EIDRM)
