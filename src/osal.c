@@ -1264,32 +1264,27 @@ static bool is_valid_fd(int fd) { return !(isatty(fd) < 0 && errno == EBADF); }
  * that would require its full canonicalization (mount point, overlays, FS
  * collation), which is unreliable.
  * -------------------------------------------------------------------------*/
+
 MDBX_MAYBE_UNUSED MDBX_INTERNAL key_t osal_ftok(int fd, const char *pathname) {
 #if MDBX_AVOID_FTOK
   (void)pathname;
-  osal_fsinfo_t info;
-  int err = osal_fsinfo(fd, &info);
-  if (unlikely(err != MDBX_SUCCESS)) {
-    errno = err;
+  struct stat st;
+  if (fstat(fd, &st)) {
+    ERROR("%s() failed: %d, %s", "fstat", errno, strerror(errno));
     return (key_t)-1;
   }
-  const uint64_t h = rrxmrrxmsx_0(info.ino ^ (uint64_t)info.dev * UINT64_C(40503) ^
-                                 (uint64_t)info.type * UINT64_C(2654435761));
+  const uint64_t h = rrxmrrxmsx_0(xnasamx(rrxmrrxmsx_0(st.st_dev), st.st_ino));
   key_t key = (key_t)(h & 0x7fffffff);
-  int injected = 0;
-  MPROBE_FAULT(ftok_key_collide, injected);
-  if (injected)
-    key = (key_t)injected;
-  return key;
 #else
   (void)fd;
   key_t key = ftok(pathname, 42);
+#endif
+
   int injected = 0;
   MPROBE_FAULT(ftok_key_collide, injected);
   if (injected)
     key = (key_t)injected;
   return key;
-#endif
 }
 #endif /*! Windows */
 
@@ -2045,45 +2040,6 @@ int osal_check_fs_incore(mdbx_filehandle_t handle) {
 #endif /* !Windows */
 
   return MDBX_RESULT_FALSE;
-}
-
-MDBX_MAYBE_UNUSED int osal_fsinfo(mdbx_filehandle_t handle, osal_fsinfo_t *info) {
-#if IS_WINDOWS
-  (void)handle;
-  info->ino = 0;
-  info->dev = 0;
-  info->type = 0;
-  return MDBX_SUCCESS;
-#else
-  struct stat st;
-  if (fstat(handle, &st))
-    return errno;
-  info->ino = (uint64_t)st.st_ino;
-  info->dev = (uint64_t)st.st_dev;
-
-  unsigned type = 0;
-#if defined(_AIX) || defined(__OS400__)
-  type = st.st_vfstype;
-#elif defined(__sun) || defined(__SVR4) || defined(__svr4__) || defined(ST_FSTYPSZ) || defined(_ST_FSTYPSZ)
-  /* Solaris: no numeric fs type in stat */
-#elif defined(__NetBSD__)
-  struct statvfs statvfs_info;
-  if (fstatvfs(handle, &statvfs_info))
-    return errno;
-  /* NetBSD: no numeric magic, keep type 0 */
-#elif defined(FSTYPSZ) || defined(_FSTYPSZ)
-  /* AIX/OS400 handled above; generic fstypename platforms: no numeric magic */
-#else
-  struct statfs statfs_info;
-  if (fstatfs(handle, &statfs_info))
-    return errno;
-#if !defined(__OpenBSD__)
-  type = (unsigned)statfs_info.f_type;
-#endif /* !OpenBSD */
-#endif
-  info->type = type;
-  return MDBX_SUCCESS;
-#endif /* !Windows */
 }
 
 int osal_check_fs_local(mdbx_filehandle_t handle, int flags) {
