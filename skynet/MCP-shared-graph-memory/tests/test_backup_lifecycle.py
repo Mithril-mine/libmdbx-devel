@@ -1261,8 +1261,10 @@ def test_lock_degradation_sets_backup_notice(tmp_path, monkeypatch):
 
 
 def test_next_auto_correct_during_backoff(tmp_path, monkeypatch):
-    """Ревью #175-r4 R1: next_auto при backoff = last_auto (момент следующей
-    попытки), не last_auto + interval (по нему монитору врали бы)."""
+    """Ревью #175-r5 Б1: next_auto = last_auto + interval ВСЕГДА (в т.ч.
+    при backoff). last_auto в backoff = now + interval*2^count, а гейт
+    допускает попытку при now >= last_auto + interval — реальный момент
+    попытки = last_auto + interval (R1 был регрессией: занижал на interval)."""
     import time as _t
     monkeypatch.setenv("SHARED_GRAPH_MEMORY_BACKUP_DIR", str(tmp_path / "bk"))
     monkeypatch.setenv("SHARED_GRAPH_MEMORY_AUTO_BACKUP_SECONDS", "10")
@@ -1282,9 +1284,10 @@ def test_next_auto_correct_during_backoff(tmp_path, monkeypatch):
         stt = s._load_backup_state()
         assert stt.get("auto_failure_count") >= 1
         stat = s.backup_status()
-        # next_auto == last_auto (не last_auto + interval)
-        assert abs(stt["last_auto"] - stat["next_auto"]) < 1.0, \
-            "next_auto в backoff-окне должен = last_auto: %r vs %r" % (
+        # next_auto = last_auto + interval (реальный момент попытки)
+        assert abs((stt["last_auto"] + s.auto_backup_seconds)
+                   - stat["next_auto"]) < 1.0, \
+            "next_auto в backoff = last_auto + interval: %r vs %r" % (
                 stt["last_auto"], stat["next_auto"])
         # БЕЗ backoff (count=0): next_auto = last_auto + interval
         stt2 = s._load_backup_state()
