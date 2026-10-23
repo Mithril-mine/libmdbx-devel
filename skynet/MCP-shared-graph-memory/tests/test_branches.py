@@ -667,9 +667,8 @@ def test_branch_purge_vs_activate_race_no_corruption(tmp_path):
     # родитель: открывает свой env, purge с CAS на неактивный слой
     outcome = "other"
     try:
-        s3 = Store(db, _skip_sync_thread=True)
-        s3.branch_purge(L, expected_current="")
-        s3.close()
+        with Store(db, _skip_sync_thread=True) as s3:
+            s3.branch_purge(L, expected_current="")
         outcome = "purged"
     except ME as e:
         msg = str(e)
@@ -721,15 +720,12 @@ def test_state_merge_real_race_no_lost_flag(tmp_path, monkeypatch):
         while not os.path.exists(barrier):
             _t.sleep(0.001)
         try:
-            s2 = Store(db, _skip_sync_thread=True)
+            with Store(db, _skip_sync_thread=True) as s2:
+                st2 = s2._load_backup_state()
+                st2["last_auto"] = 555.0
+                s2._save_backup_state(st2)
         except Exception:  # noqa: BLE001
             os._exit(2)
-        try:
-            st2 = s2._load_backup_state()
-            st2["last_auto"] = 555.0
-            s2._save_backup_state(st2)
-        finally:
-            s2.close()
         os._exit(0)
     # родитель: читает state (до записи потомка), ставит барьер, пишет флаг
     with Store(db, _skip_sync_thread=True) as s3:
