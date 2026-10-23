@@ -10,6 +10,7 @@
 
 #if MDBX_LOCKING == MDBX_LOCKING_SYSV
 #include <sys/sem.h>
+#include <sys/wait.h>
 #endif /* MDBX_LOCKING == MDBX_LOCKING_SYSV */
 
 /* Описание реализации блокировок для POSIX & Linux:
@@ -120,6 +121,7 @@ static int lck_op(const mdbx_filehandle_t fd, int cmd, const int lck, const off_
     jitter4testing(true);
     if (rc != -1) {
       if (cmd == op_getlk) {
+        ASSERT(lock_op.l_pid != getpid());
         /* Checks reader by pid. Returns:
          *   MDBX_RESULT_TRUE   - if pid is live (reader holds a lock).
          *   MDBX_RESULT_FALSE  - if pid is dead (a lock could be placed). */
@@ -444,43 +446,105 @@ int lck_upgrade(MDBX_env *env, bool dont_wait) {
 
 __cold int lck_destroy(MDBX_env *env, MDBX_env *inprocess_neighbor, const mdbx_pid_t current_pid) {
   eASSERT0(env, osal_getpid() == current_pid);
-  int rc = MDBX_SUCCESS;
-  struct stat lck_info;
-  lck_t *lck = env->lck;
-  if (lck && lck == env->lck_mmap.lck && !inprocess_neighbor &&
-      /* try get exclusive access */
-      lck_op(env->lck_mmap.fd, op_setlk, F_WRLCK, 0, OFF_T_MAX) == 0 &&
-      /* if LCK was not removed */
-      fstat(env->lck_mmap.fd, &lck_info) == 0 && lck_info.st_nlink > 0 &&
-      lck_op(env->lazy_fd, op_setlk, (env->flags & MDBX_RDONLY) ? F_RDLCK : F_WRLCK, 0, OFF_T_MAX) == 0) {
 
-    VERBOSE("%p got exclusive, drown ipc-locks", __Wpedantic_format_voidptr(env));
-    eASSERT0(env, current_pid == env->pid);
+  int rc = MDBX_SUCCESS;
+  if (current_pid != env->pid) {
+    VERBOSE("%p skip drown ipc-locks after fork (pid %u -> %u)", __Wpedantic_format_voidptr(env), env->pid,
+            current_pid);
+  } else if (inprocess_neighbor) {
+    VERBOSE("%p has inprocess-neighbor %p, skip drown ipc-locks", __Wpedantic_format_voidptr(env),
+            __Wpedantic_format_voidptr(inprocess_neighbor));
+  } else {
+    if ((env->lck_mmap.fd == INVALID_HANDLE_VALUE ||
+         /* acquire LCK exclusive */ lck_op(env->lck_mmap.fd, op_setlk, F_WRLCK, 0, OFF_T_MAX) == 0) &&
+        (env->lazy_fd == INVALID_HANDLE_VALUE ||
+         /* acquire DXB exclusive */ lck_op(env->lazy_fd, op_setlk, (env->flags & MDBX_RDONLY) ? F_RDLCK : F_WRLCK, 0,
+                                            OFF_T_MAX) == 0)) {
+      VERBOSE("%p got exclusive, drown ipc-locks", __Wpedantic_format_voidptr(env));
 #if MDBX_LOCKING == MDBX_LOCKING_SYSV
-    if (env->me_sysv_ipc.semid != -1) {
-      rc = semctl(env->me_sysv_ipc.semid, 2, IPC_RMID) ? errno : 0;
-      if (rc != MDBX_SUCCESS)
-        ERROR("semctl(semid = %d, IPC_RMID) failed: %d, %s", env->me_sysv_ipc.semid, rc, strerror(rc));
-    }
+      if (env->me_sysv_ipc.semid != -1) {
+        VERBOSE("sysv-ipc: drown  semid %d, %s ftok-key 0x%08X", env->me_sysv_ipc.semid,
+                MDBX_AVOID_FTOK ? "mdbx-flavour" : "system-libc", env->me_sysv_ipc.key);
+        rc = semctl(env->me_sysv_ipc.semid, 2, IPC_RMID) ? errno : 0;
+        if (rc != MDBX_SUCCESS)
+          ERROR("sysv-ipc: semctl(semid = %d, IPC_RMID) failed: %d, %s", env->me_sysv_ipc.semid, rc, strerror(rc));
+        else
+          env->me_sysv_ipc.semid = -1;
+        jitter4testing(false);
+      }
 #else
-    rc = lck_ipclock_destroy(&lck->rdt_lock);
-    if (rc == 0)
-      rc = lck_ipclock_destroy(&lck->wrt_lock);
+      if (env->lck_mmap.lck) {
+        rc = lck_ipclock_destroy(&env->lck_mmap.lck->rdt_lock);
+        if (rc == 0)
+          rc = lck_ipclock_destroy(&env->lck_mmap.lck->wrt_lock);
+      }
 #endif /* MDBX_LOCKING */
 
-    eASSERT0(env, rc == 0);
-    if (rc == 0) {
-      const bool synced = lck->unsynced_pages.weak == 0;
-      osal_munmap(&env->lck_mmap);
-      if (synced && env->lck_mmap.fd != INVALID_HANDLE_VALUE)
-        rc = ftruncate(env->lck_mmap.fd, 0) ? errno : 0;
+      struct stat lck_info;
+      const bool lck_not_removed =
+          env->lck_mmap.fd != INVALID_HANDLE_VALUE && fstat(env->lck_mmap.fd, &lck_info) == 0 && lck_info.st_nlink > 0;
+      if (rc == MDBX_SUCCESS && lck_not_removed && env->lck_mmap.lck) {
+        const bool synced = env->lck_mmap.lck->unsynced_pages.weak == 0;
+        osal_munmap(&env->lck_mmap);
+        if (synced && env->lck_mmap.fd != INVALID_HANDLE_VALUE)
+          rc = ftruncate(env->lck_mmap.fd, 0) ? errno : 0;
+      }
+      jitter4testing(false);
+    } else {
+      VERBOSE("%p not got exclusive(), skip drown ipc-locks", __Wpedantic_format_voidptr(env));
     }
-
-    jitter4testing(false);
   }
 
 #if MDBX_LOCKING == MDBX_LOCKING_SYSV
-  env->me_sysv_ipc.semid = -1;
+  if (env->me_sysv_ipc.semid != -1 && !inprocess_neighbor) {
+    const bool need_kick = semctl(env->me_sysv_ipc.semid, 0, GETPID) == current_pid ||
+                           semctl(env->me_sysv_ipc.semid, 1, GETPID) == current_pid;
+    if (need_kick) {
+      VERBOSE("sysv-ipc: %p need to kick semid %d to sweep sempid", __Wpedantic_format_voidptr(env),
+              env->me_sysv_ipc.semid);
+      // fflush(nullptr);
+      const int semid = env->me_sysv_ipc.semid;
+      const pid_t child_pid = fork();
+      if (child_pid == 0) {
+        struct sembuf kick_a[2] = {{.sem_num = 0, .sem_op = 0, .sem_flg = IPC_NOWAIT},
+                                   {.sem_num = 1, .sem_op = 0, .sem_flg = IPC_NOWAIT}};
+        struct sembuf kick_b[4] = {{.sem_num = 0, .sem_op = 1, .sem_flg = 0},
+                                   {.sem_num = 1, .sem_op = 1, .sem_flg = 0},
+                                   {.sem_num = 0, .sem_op = -1, .sem_flg = 0},
+                                   {.sem_num = 1, .sem_op = -1, .sem_flg = 0}};
+        rc = semop(semid, kick_a, 2) ? errno : 0;
+        // NOTICE("sysv-ipc: %p kick-a semid %d to sweep sempid - result %d", __Wpedantic_format_voidptr(env),
+        //        semid, rc);
+        if (rc == EAGAIN || rc == EBUSY || rc == EWOULDBLOCK) {
+          rc = semop(semid, kick_b, 4) ? errno : 0;
+          // NOTICE("sysv-ipc: %p kick-b semid %d to sweep sempid - result %d", __Wpedantic_format_voidptr(env),
+          //        semid, rc);
+        }
+        // fflush(nullptr);
+        /* !!! This code can be called from the thread local storage destructor, so calling `exit()` instead of
+         * `_exit()` will result in a deadlock !!! */
+        _exit(rc);
+      }
+      rc = ECHILD;
+      if (child_pid < 0)
+        rc = errno;
+      else {
+        int child_status = 0;
+        if (waitpid(child_pid, &child_status, 0) == child_pid && WIFEXITED(child_status))
+          rc = WEXITSTATUS(child_status);
+      }
+      if (rc == MDBX_SUCCESS) {
+        VERBOSE("sysv-ipc: %p kick semid %d to sweep sempid - done", __Wpedantic_format_voidptr(env),
+                env->me_sysv_ipc.semid);
+        ENSURE(semctl(env->me_sysv_ipc.semid, 0, GETPID) != current_pid);
+        ENSURE(semctl(env->me_sysv_ipc.semid, 1, GETPID) != current_pid);
+      } else
+        ERROR("sysv-ipc: %p kick semid %d to sweep sempid - failed, error %d (%s)", __Wpedantic_format_voidptr(env),
+              env->me_sysv_ipc.semid, rc, strerror(rc));
+    }
+    env->me_sysv_ipc.semid = -1;
+  }
+  env->me_sysv_ipc.key = -1;
 #endif /* MDBX_LOCKING */
 
   if (current_pid != env->pid) {
@@ -597,7 +661,7 @@ static int sysv_ipc_eeexist_decide(const MDBX_env *env, int semid) {
         return MDBX_RESULT_FALSE;
       }
       if (sempid != 0) {
-        const int err = (kill((pid_t)sempid, 0) == 0) ? 0 : errno;
+        const int err = (sempid == env->pid || kill(sempid, 0) == 0) ? 0 : errno;
         if (errno != ESRCH) {
           NOTICE("%s, key %d, semid %d: %s (pid %u, err %d)", "sysv-ipc check failed", env->me_sysv_ipc.key, semid,
                  "another live process owns the resource", sempid, err);
@@ -638,8 +702,7 @@ __cold int lck_init(MDBX_env *env, MDBX_env *inprocess_neighbor, int global_uniq
 #if MDBX_LOCKING == MDBX_LOCKING_SYSV
   int semid = -1;
   /* don't initialize semaphores twice */
-  (void)inprocess_neighbor;
-  if (global_uniqueness_flag == MDBX_RESULT_TRUE) {
+  if (!inprocess_neighbor && global_uniqueness_flag == MDBX_RESULT_TRUE) {
     struct stat st;
     if (fstat(env->lazy_fd, &st))
       return errno;
