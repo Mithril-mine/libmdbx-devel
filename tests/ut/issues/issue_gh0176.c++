@@ -103,17 +103,17 @@ public:
       const size_t nkeys = lower / 2;
       for (size_t i = 0; i < nkeys; ++i) {
         const uint16_t entry = read_u16_le(&buf[off + PAGEHDRSZ + 2 * i]);
-        const size_t node_off = off + PAGEHDRSZ + entry;
-        if (node_off + 8 > off + pagesize)
+        const size_t node_position = off + PAGEHDRSZ + entry;
+        if (node_position + 8 > off + pagesize)
           continue;
-        if (buf[node_off + 4] & N_DUP) {
-          const uint32_t dsize = uint32_t(buf[node_off]) | uint32_t(uint32_t(buf[node_off + 1]) << 8) |
-                                 uint32_t(uint32_t(buf[node_off + 2]) << 16) |
-                                 uint32_t(uint32_t(buf[node_off + 3]) << 24);
-          const uint16_t ksize = uint16_t(buf[node_off + 6] | (uint16_t(buf[node_off + 7]) << 8));
-          const size_t data_off = node_off + 8 + ksize;
+        if (buf[node_position + 4] & N_DUP) {
+          const uint32_t dsize = uint32_t(buf[node_position]) | uint32_t(uint32_t(buf[node_position + 1]) << 8) |
+                                 uint32_t(uint32_t(buf[node_position + 2]) << 16) |
+                                 uint32_t(uint32_t(buf[node_position + 3]) << 24);
+          const uint16_t ksize = uint16_t(buf[node_position + 6] | (uint16_t(buf[node_position + 7]) << 8));
+          const size_t data_off = node_position + 8 + ksize;
           if (dsize > PAGEHDRSZ && data_off + dsize <= off + pagesize) {
-            this->node_off = node_off;
+            this->node_off = node_position;
             sub_dsize = dsize;
             sub_off = data_off;
             return true;
