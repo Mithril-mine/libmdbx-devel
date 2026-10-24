@@ -623,11 +623,15 @@ else()
         # coverage pass now reuses the per-from pool (O(rx) instead of O(rx^2)
         # fetches), DEEP=5 x TABLES=4 exercises the same cache branches at
         # ~25s vs the former ~600s profile (DEEP=6 x TABLES=8).
-        add_test(NAME get_cached_full COMMAND $<TARGET_FILE:ut_get_cached>)
-        set_tests_properties(get_cached_full PROPERTIES
-            LABELS "ut;ut.api;ut.txn;ut.heavy"
-            TIMEOUT 600
-            ENVIRONMENT "MDBX_PROBES=1;MDBX_GET_CACHED_DBNAME=test-get-cached-full;MDBX_GET_CACHED_TABLES=4;MDBX_GET_CACHED_DEEP=5;MDBX_GET_CACHED_ORDERS=5;MDBX_GET_CACHED_TIMEOUT_SEC=3600;MDBX_GET_CACHED_CASE2_TIMEOUT_SEC=20;MDBX_GET_CACHED_THREADS=0")
+        # Guarded by the target: ut_get_cached is not built when GoogleTest
+        # requires a newer C++ standard than requested (see cmake/testing.cmake).
+        if(TARGET ut_get_cached)
+          add_test(NAME get_cached_full COMMAND $<TARGET_FILE:ut_get_cached>)
+          set_tests_properties(get_cached_full PROPERTIES
+              LABELS "ut;ut.api;ut.txn;ut.heavy"
+              TIMEOUT 600
+              ENVIRONMENT "MDBX_PROBES=1;MDBX_GET_CACHED_DBNAME=test-get-cached-full;MDBX_GET_CACHED_TABLES=4;MDBX_GET_CACHED_DEEP=5;MDBX_GET_CACHED_ORDERS=5;MDBX_GET_CACHED_TIMEOUT_SEC=3600;MDBX_GET_CACHED_CASE2_TIMEOUT_SEC=20;MDBX_GET_CACHED_THREADS=0")
+        endif()
 add_ut(reverse_insertions SOURCE ut/txn/reverse_insertions.c++)
         set_tests_properties(reverse_insertions PROPERTIES LABELS "ut;ut.txn")
         add_ut(parameters SOURCE ut/api/parameters.c++)
