@@ -1256,7 +1256,7 @@ static bool is_valid_fd(int fd) { return !(isatty(fd) < 0 && errno == EBADF); }
  * unrelated, in-use database that happens to share the key.
  *
  * With MDBX_AVOID_FTOK the key is derived from the full inode number, the
- * device and the filesystem type, mixed by rrxmrrxmsx_0(); this makes the key
+ * device and the filesystem type, mixed by stir(); this makes the key
  * space much wider than the system ftok() and lowers the collision
  * probability, but does not eliminate it — the System V IPC key is still
  * 32-bit wide, and the ultimate guard is the decision made in lck_init()
@@ -1273,7 +1273,7 @@ MDBX_MAYBE_UNUSED MDBX_INTERNAL key_t osal_ftok(int fd, const char *pathname) {
     ERROR("%s() failed: %d, %s", "fstat", errno, strerror(errno));
     return (key_t)-1;
   }
-  const uint64_t h = rrxmrrxmsx_0(xnasamx(rrxmrrxmsx_0(st.st_dev), st.st_ino));
+  const uint64_t h = stir(st.st_dev, st.st_ino);
   key_t key = (key_t)(h & 0x7fffffff);
 #else
   (void)fd;
