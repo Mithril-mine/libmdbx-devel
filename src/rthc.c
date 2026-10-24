@@ -44,10 +44,9 @@ static int uniq_poke(const osal_mmap_t *pending, osal_mmap_t *scan, uint64_t *ab
     const uintptr_t tid = osal_thread_self();
     uintptr_t uit = 0;
     memcpy(&uit, &tid, (sizeof(tid) < sizeof(uit)) ? sizeof(tid) : sizeof(uit));
-    *abra = rrxmrrxmsx_0(osal_monotime() + UINT64_C(5873865991930747) * uit);
+    *abra = nasam(osal_monotime() + UINT64_C(5873865991930747) * uit);
   }
-  const uint64_t cadabra =
-      rrxmrrxmsx_0(*abra + UINT64_C(7680760450171793) * (unsigned)osal_getpid()) << 24 | *abra >> 40;
+  const uint64_t cadabra = nasam(*abra + UINT64_C(7680760450171793) * (unsigned)osal_getpid()) << 24 | *abra >> 40;
   lck_t *const scan_lck = scan->lck;
   atomic_store64(&scan_lck->bait_uniqueness, cadabra, mo_AcquireRelease);
   *abra = *abra * UINT64_C(6364136223846793005) + 1;
