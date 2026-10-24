@@ -21,8 +21,8 @@ shared-graph-memory.mdbx — персистентная память роя на
 |---|---|
 | `normalize_key(raw)` | Проверка/канонизация строки в `тип:модуль:тема` |
 | `safe_store(key, type, summary, importance, date?)` | Сохранение с дедупом → `created`/`merged`/`conflict` |
-| `recall(pattern, limit=5, touch=false)` | Поиск по префиксу (`bug:crypto:*`), ранжирование; touch=true — учёт чтения в LRU |
-| `search(query, limit=5, touch=false)` | Поиск по термам (пересечение постинг-списков), ранжированные записи; touch=true — учёт чтения в LRU |
+| `recall(pattern, limit=5, touch=false)` | Поиск по префиксу (`bug:crypto:*`), ранжирование; touch=true — учёт чтения в LRU. Значение по умолчанию touch=false: чтение НЕ кормит recency — активно читаемая, но не помеченная запись со временем уйдёт в cold/gc. Передавайте touch=true, когда чтение = «использую запись» и её нужно удержать от gc |
+| `search(query, limit=5, touch=false)` | Поиск по термам (пересечение постинг-списков), ранжированные записи; touch=true — учёт чтения в LRU (см. recall о touch) |
 | `lookup(term)` | Точный поиск: AND-пересечение термов → ключи |
 | `link(subject_key, predicate, object_key)` | Типизированная связь (RDF triple) |
 | `unlink(subject_key, predicate, object_key)` | Удаление связи |
@@ -30,7 +30,7 @@ shared-graph-memory.mdbx — персистентная память роя на
 | `vocab_add(module, topic?)` | Добавить модуль/тему в словарь |
 | `vocab_find(query)` | Fuzzy-поиск по словарю |
 | `exists(key)` | Проверка существования |
-| `dump_context(...)` / `restore_context(context_id)` | Снимок/восстановление контекста |
+| `dump_context(...)` / `restore_context(context_id)` | Снимок/восстановление контекста. ВНИМАНИЕ: restore_context НЕ продлевает recency даже event-записей снимка (внутренние recall без touch); если event в снимке нужно удержать от gc — `touch(key)`. Два пути учёта использования: `touch(key)` — явная отметка (одна write-txn, без rate-limit); `recall(..., touch=true)` и `search(..., touch=true)` — пакетные (rate-limit 60с на запись; обе вызывают `_flush_touches()` — одна write-txn флэш на набор) |
 | `gc(dry_run=true, archive=false)` | Тиринг hot/warm/cold (не удаляет без purge) |
 | `purge(keys)` | Явное удаление записей |
 | `stats()` | Статистика хранилища (здоровье памяти) |
@@ -42,7 +42,7 @@ shared-graph-memory.mdbx — персистентная память роя на
 | `db_enable_utterly_nosync()` | **ОПАСНО**: отключение синхронизации (см. §«Режимы БД») |
 | `db_backup(skip?, force?)` | PIN-точка сохранения внутри backup-каталога (COMPACT, не ротируется); ответ на PROMPT-запрос |
 | `db_export(dest)` | Экспорт копии НАРУЖУ каталога (внешняя архивация/перенос); не учитывается в лимите и tiers |
-| `db_backup_status()` | Состояние бэкапов: таймеры, тиры (lifeline/auto/pin/snapshot), `auto_skipped_limit`, кандидаты ротации |
+| `db_backup_status()` | Состояние бэкапов: таймеры, тиры (lifeline/auto/pin/snapshot), `auto_skipped_limit`, `auto_failure_count`, кандидаты ротации |
 | `db_backup_cleanup(dry_run?, confirm?)` | Показать/удалить старейшие `auto-*` (только AUTO-тир) |
 | `db_fileinfo()` | fstat(fd): st_nlink/size/inode + признак удаления файла БД |
 | `db_latency()` | Commit-латентности последних записей по стадиям (µs) |
@@ -102,11 +102,18 @@ shared-graph-memory.mdbx — персистентная память роя на
 - `branch_register(ver, feature, n)` / `branch_list` / `branch_current` /
   `branch_activate(layer, expected_prev?)` — управление слоями;
   `expected_prev` — CAS-защита от гонки активаций в рое;
-- `branch_remove(layer)` — убрать запись реестра; `branch_purge(layer)` —
-  удалить слой **со всеми данными** (symbols/edges/coverage/probes/traces
-  + sym_id-пары); базовый слой purge запрещён; АКТИВНЫЙ слой purge тоже
-  запрещён — сначала переключите ветку (`branch_activate`), иначе
-  `meta.branch_current` укажет на мёртвый слой;
+- `branch_remove(layer)` — убрать запись реестра; `branch_purge(layer,
+  expected_current?)` — удалить слой **со всеми данными**
+  (symbols/edges/coverage/probes/traces + sym_id-пары); базовый слой purge
+  запрещён; АКТИВНЫЙ слой purge тоже запрещён — сначала переключите ветку
+  (`branch_activate`), иначе `meta.branch_current` укажет на мёртвый слой;
+  `expected_current` — CAS-защита окна гонки purge/activate (проверяется
+  ВНУТРИ той же write-txn, атомарно): если активный слой не совпал с
+  ожидаемым — `CONFLICT`;
+- **Активация незарегистрированного слоя** → `warning`: «слоя никогда не
+  было (опечатка?) ИЛИ он purge'нут другим агентом (данные не вернутся)».
+  Для опечатки — исправьте slug; для purge'нутого — пересоздайте с нуля
+  (branch_register не восстановит данные);
 - `map_diff_branches(from, to)` — **структурный diff по содержимому** карты
   (не по коммитам): что реально изменилось между ветками;
 - `coverage_migrate(from, to, symbols?)` — копия coverage/blocks/traces
@@ -138,6 +145,46 @@ shared-graph-memory.mdbx — персистентная память роя на
 - При слиянии: `map_diff_branches(base, feature)` → перенос новых символов в
   base → `coverage_migrate(feature, base)` → пересканировать base → feature
   `status=merged`; мёртвый слой после rebase — `branch_purge(feature)`.
+
+### Совместимость схемы данных (SCHEMA_VERSION)
+
+- `version_info` → `schema_matches` + направление: `schema_too_new`
+  (БД создана более новой версией модуля — **обновите MCP-модуль**, иначе
+  `Store` откажется открывать БД ошибкой `SCHEMA_TOO_NEW`) / `schema_outdated`
+  (БД старше модуля — методы опциональных таблиц дают `SCHEMA_OUTDATED`,
+  «переключитесь в rw-режим (`db_set_mode readonly=false`) для миграции»).
+- КОНТРАКТ `SCHEMA_OUTDATED` — ЕДИНЫЙ для всех методов опциональных таблиц
+  (branch_*, coverage_*, probe_*, trace_*, test_metrics, ci_jobs): на старой
+  схеме они бросают ошибку, а НЕ возвращают `{}`/`[]` (иначе «пусто = нет
+  данных» — молчаливая потеря). На актуальной схеме + read-only старт
+  (таблица не создана) — прежняя толерантность (пустой результат).
+- Старая схема репозитория (schema_ver=1) — breaking change: `branch_list`
+  больше не `[]`, а `SCHEMA_OUTDATED`; миграция — переход в rw.
+
+### Резервные копии — контракты
+
+- `db_backup` (pin-*) / `db_export` (наружу, dest обязателен ВНЕ каталога
+  включая подкаталоги — realpath+normcase) / auto-таймер.
+- ПЕРСИСТЕНТНЫЙ флаг `auto_skipped_limit` в `.backup-state.json` STATE
+  (виден рою, переживает рестарт): ставится при лимитной причине (INVALID),
+  снимается успехом auto ИЛИ cleanup при восстановлении места (пин-only
+  переполнение — ручным rm + cleanup). State-файл: merge-запись под
+  блокировкой (flock/msvcrt) — параллельный процесс не затирает флаг.
+- Таймер авто: `last_auto` продвигается на успехе/осознанном пропуске
+  лимита; при НЕ-лимитной ошибке — `last_auto` ОТОДВИГАЕТСЯ на
+  экспоненциальный backoff (`interval*2^count`, потолок 32x; счётчик
+  `auto_failure_count` в state-файле, общий для РОЯ — per-key merge под локом),
+  попытка реже, не затихание. Флаг `auto_skipped_limit` виден даже в окне
+  backoff (проверка размера каталога до таймер-гейта). Рой при ENOSPC не
+  повторяет снапшот ~ГБ каждый тик. `backup_status` показывает
+  `auto_failure_count` (текущий backoff-счётчик) и корректный `next_auto`:
+  = `last_auto + interval` в обоих режимах (без backoff — попытка через
+  интервал после успеха; при backoff last_auto = now + interval*2^count,
+  гейт допускает now >= last_auto + interval — реальный момент попытки
+  через last_auto + interval). Потолок backoff 32·interval; с учётом гейта
+  попытка — примерно 33·interval от последнего тика.
+- `__future__`: `db_readers check=true` — ручная чистка stale-слотов; рой
+  без rw-писателя — явные `check=true` (libmdbx чистит читателей сам).
 
 ### Карта исходников (refactoring-map)
 
@@ -282,6 +329,18 @@ union-AST), но не отвечает на вопрос «что реально
   `db_backup_status`). Export наружу лимиту не подчинён.
 - После критичных записей — `db_flush()`; плановый бэкап — `db_backup`
   (pin-точка); копия для внешней архивации/переноса — `db_export(dest=…)`.
+- **State-файл и flock (claim/reserve, Б3)**: `.backup-state.json` —
+  per-key merge под коротким `_file_lock`. AUTO-копия (~ГБ) выполняется
+  ВНЕ лока: под локом только claim (`last_auto=now`) и finalize. Рой НЕ
+  блокируется на время копии; дубль копии исключён claim'ом (второй агент
+  видит свежий `last_auto` → гейт закрыт). Crash между claim и finalize
+  стоит один interval.
+- **Деградация лока (Q8/R2)**: если `_file_lock` недоступен (NFS без
+  lockd, EINTR), merge-семантика деградирует до lockless — это ЗАМЕТНО:
+  `warnings.warn(RuntimeWarning)` + `backup_notice` «state lock
+  недоступен (NFS/сигнал): merge-семантика …lockless». Ничего чинить не
+  надо (следующий успешный лок вернёт семантику); notice информативный.
+  `_file_lock` реентерабелен (вложенный save на тот же файл — yield).
 
 ## Когда сохранять
 

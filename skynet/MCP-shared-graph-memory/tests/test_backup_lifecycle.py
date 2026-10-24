@@ -784,3 +784,659 @@ def test_inside_backup_dir_case_insensitive(monkeypatch):
         "case-различие не должно обходить проверку (normcase применён)"
     assert obj._is_inside_backup_dir("/BK") is True
     assert obj._is_inside_backup_dir("/elsewhere/x.mdbx") is False
+
+
+def test_state_merge_preserves_foreign_keys(tmp_path, monkeypatch):
+    """F5.1/R1: merge-семантика state-файла — свои ключи поверх чужих.
+
+    Имитация двух процессов через один Store: A ставит auto_skipped_limit,
+    затем «B» (другой процесс) пишет свой last_auto — merge должен
+    сохранить флаг A; B снимает флаг (None) — merge удаляет ключ.
+    Env эксклюзивен на процесс, поэтому два Store одновременно
+    невозможны — state-операции линейны (как при блокировке).
+    """
+    monkeypatch.setenv("SHARED_GRAPH_MEMORY_BACKUP_DIR", str(tmp_path / "bk"))
+    db = str(tmp_path / "t.mdbx")
+    with Store(db, _skip_sync_thread=True) as s:
+        s.safe_store("fact:x:y", "fact", "seed", 0.5)
+        # A ставит флаг
+        sa = s._load_backup_state()
+        sa["auto_skipped_limit"] = True
+        s._save_backup_state(sa)
+        assert s._load_backup_state().get("auto_skipped_limit") is True
+        # B пишет свой last_auto (без знания о флаге)
+        sb = s._load_backup_state()
+        sb["last_auto"] = 123456.0
+        s._save_backup_state(sb)
+        cur = s._load_backup_state()
+        assert cur.get("auto_skipped_limit") is True, \
+            "merge должен сохранить флаг A при записи B"
+        assert cur.get("last_auto") == 123456.0
+        # B снимает флаг (None) — merge удаляет ключ
+        sb2 = s._load_backup_state()
+        sb2["auto_skipped_limit"] = None
+        s._save_backup_state(sb2)
+        assert s._load_backup_state().get("auto_skipped_limit") is None
+        # чужой ключ не в merge-списке — не попадает в файл
+        sb3 = s._load_backup_state()
+        sb3["foreign_marker"] = "x"
+        s._save_backup_state(sb3)
+        assert "foreign_marker" not in s._load_backup_state()
+
+
+def test_auto_timer_not_advanced_on_nonlimit_failure(tmp_path, monkeypatch):
+    """F5.1/R1 + #175-#4: при НЕ-лимитной ошибке auto НЕ затихает на весь
+    интервал, а применяет ЭКСПОНЕНЦИАЛЬНЫЙ backoff (следующий такт всё равно
+    попробует, но реже — last_auto отодвигается на interval*2^count).
+    """
+    monkeypatch.setenv("SHARED_GRAPH_MEMORY_BACKUP_DIR", str(tmp_path / "bk"))
+    monkeypatch.setenv("SHARED_GRAPH_MEMORY_AUTO_BACKUP_SECONDS", "1")
+    db = str(tmp_path / "t.mdbx")
+    with Store(db, _skip_sync_thread=True) as s:
+        s.safe_store("fact:x:y", "fact", "seed", 0.5)
+        s.backup_max_bytes = 100 << 20  # лимит свободен — не лимитная ветка
+
+        def disk_failure(kind="pin", dest=None, force=False):
+            raise OSError("No space left on device")
+
+        monkeypatch.setattr(s, "backup", disk_failure)
+        st = s._load_backup_state()
+        st["last_auto"] = 0
+        st["last_auto_txnid"] = 0
+        s._save_backup_state(st)
+        t0 = time.time()
+        s.before_call()
+        st2 = s._load_backup_state()
+        # backoff: last_auto отодвинут на ~interval*2^1=2с (не 0 — не затих,
+        # попытка реально отложена, но следующий такт придёт быстрее, чем
+        # если бы затихли на "интервал успеха")
+        assert st2.get("last_auto", 0) >= t0 + 1.5, \
+            "таймер отодвинут на backoff: %r" % st2.get("last_auto")
+        assert st2.get("auto_failure_count") == 1
+
+
+def test_file_lock_serializes_state(tmp_path, monkeypatch):
+    """F5.1/R1: _file_lock захватывается/освобождается (POSIX flock).
+
+    Два вложенных захвата одного lock-файла блокируются бы (deadlock) —
+    проверяем только, что за пределами контекста блокировка отпущена
+    (повторный захват проходит сразу).
+    """
+    import threading
+    from mcp.store import _file_lock
+    p = str(tmp_path / "state.json")
+    ok = []
+
+    def grab():
+        with _file_lock(p):
+            ok.append(1)
+            time.sleep(0.05)
+
+    t = threading.Thread(target=grab)
+    t.start()
+    t.join(2.0)
+    assert ok == [1], "блокировка должна захватываться в треде"
+    # вне треда — повторный захват (после освобождения) проходит
+    with _file_lock(p):
+        pass
+
+
+def test_busy_retry_sleep_uses_jitter(tmp_path, monkeypatch):
+    """F5.3/R4: задержка при BUSY-ретрае — jitter, размывающий фазу роя.
+
+    Детерминированная 0.05*(attempt+1) при 20 агентах — синхронное
+    пробуждение (thundering herd). Тест фиксирует, что sleep вызывается
+    с результатом random.uniform(0, max), а не константой.
+    """
+    from mcp import libmdbx as mdbx_lib
+    db = str(tmp_path / "t.mdbx")
+    with Store(db, _skip_sync_thread=True) as s:
+        s.safe_store("fact:x:y", "fact", "seed", 0.5)
+        real_begin = s.env.begin
+        state = {"n": 0}
+        sleeps = []
+
+        def busy_begin(readonly=False, parent=None):
+            if not readonly and state["n"] == 0:
+                state["n"] += 1
+                raise mdbx_lib.LibmdbxError(mdbx_lib.RC_BUSY, "busy")
+            return real_begin(readonly=readonly, parent=parent)
+
+        monkeypatch.setattr("time.sleep",
+                            lambda dt: sleeps.append(dt))
+        monkeypatch.setattr(s.env, "begin", busy_begin)
+        s.safe_store("fact:x:z", "fact", "seed2", 0.5)
+        assert len(sleeps) == 1, "одна BUSY-попытка → один sleep"
+        # jitter: sleep получил значение uniform(0, 0.05), не константу 0.05
+        assert 0.0 <= sleeps[0] <= 0.05
+        assert sleeps[0] != 0.05  # jitter, равный max — маловероятен
+
+
+def test_backup_pin_dest_symlink_into_dir_limited(tmp_path, monkeypatch):
+    """F5.4a/M3: pin с symlink-dest внутрь backup_dir — под лимитом.
+
+    backup(kind="pin", dest) использует _is_inside_backup_dir (realpath) —
+    симметрично export(): иначе symlink-dest обходил бы проверку dirname
+    и лимит для pin-копии (учётная дыра).
+    """
+    monkeypatch.setenv("SHARED_GRAPH_MEMORY_BACKUP_DIR", str(tmp_path / "bk"))
+    db = str(tmp_path / "t.mdbx")
+    with Store(db, _skip_sync_thread=True) as s:
+        s.safe_store("fact:x:y", "fact", "seed", 0.5)
+        s.backup_max_bytes = 1 << 20
+        os.makedirs(s.backup_dir, exist_ok=True)
+        sub = os.path.join(s.backup_dir, "sub")
+        os.makedirs(sub, exist_ok=True)
+        link = str(tmp_path / "pin-link.mdbx")
+        try:
+            os.symlink(os.path.join(sub, "x.mdbx"), link)
+        except OSError as e:
+            pytest.skip("symlink недоступен: %s" % e)
+        _inflate_backup_dir(s, mb=2)  # каталог > лимита
+        # symlink ведёт внутрь каталога → in_dir=True → лимит применяется
+        with pytest.raises(MemoryError) as ei:
+            s.backup(kind="pin", dest=link)
+        assert "превышает лимит" in str(ei.value)
+
+
+def test_branch_activate_warning_distinguishes_purged(tmp_path):
+    """F5.4a/M2: warning активации отличает «не было» и «purge'нут»."""
+    from mcp.store import Store
+    db = str(tmp_path / "t.mdbx")
+    with Store(db, _skip_sync_thread=True) as s:
+        s.map_put_symbol("fn:m:z", {"module": "m"}, layer="0.15.warn.1")
+        s.branch_register("0.15", "warn", n_commits=1)
+        # слой существует → активация без warning
+        r = s.branch_activate("0.15.warn.1")
+        assert "warning" not in r, r
+        # purge другой ветки, затем активация purge'нутого — warning с
+        # упоминанием «purge'нут»
+        s.branch_activate("0.15")
+        s.branch_purge("0.15.warn.1")
+        r2 = s.branch_activate("0.15.warn.1")
+        assert "warning" in r2
+        assert "purge'нут" in r2["warning"]
+
+
+def test_backup_status_type_contract(tmp_path):
+    """F5.4c/M14: верхнеуровневые ключи backup_status — полнота + типы.
+
+    Переименование/смена типа ключа (напр. auto_skipped_limit bool →
+    str, tiers — набор) пройдут незамеченными без этого контракта.
+    """
+    db = str(tmp_path / "t.mdbx")
+    with Store(db, _skip_sync_thread=True) as s:
+        s.safe_store("fact:x:y", "fact", "seed", 0.5)
+        st = s.backup_status()
+        for k in ("backup_dir", "auto_backup_seconds", "prompt_backup_seconds",
+                  "backup_keep", "backup_max_mb", "dir_size_mb", "last_auto",
+                  "last_prompt", "next_auto", "next_prompt", "pending",
+                  "auto_skipped_limit", "auto_failure_count",
+                  "db_file_deleted", "notice",
+                  "lifeline_error", "tiers", "rotation_candidates"):
+            assert k in st, "нет ключа %r в backup_status" % k
+        assert isinstance(st["auto_skipped_limit"], bool)
+        assert isinstance(st["auto_failure_count"], int)
+        assert isinstance(st["pending"], bool)
+        assert isinstance(st["tiers"], dict)
+        assert set(st["tiers"]) == {"lifeline", "auto", "pin", "snapshot"}
+        assert isinstance(st["rotation_candidates"], list)
+        assert st["auto_skipped_limit"] is False
+
+
+def test_auto_resumes_after_manual_free_and_cleanup(tmp_path, monkeypatch):
+    """F5.4c/M8: сквозной цикл — переполнение → флаг → rm → cleanup → auto
+    возобновляется (новый auto-* создаётся на следующем такте).
+    """
+    monkeypatch.setenv("SHARED_GRAPH_MEMORY_BACKUP_DIR", str(tmp_path / "bk"))
+    monkeypatch.setenv("SHARED_GRAPH_MEMORY_AUTO_BACKUP_SECONDS", "1")
+    db = str(tmp_path / "t.mdbx")
+    with Store(db, _skip_sync_thread=True) as s:
+        s.safe_store("fact:x:y", "fact", "seed", 0.5)
+        s.backup_max_bytes = 1 << 20
+        _inflate_backup_dir(s, mb=2)
+        st = s._load_backup_state()
+        st["last_auto"] = 0
+        st["last_auto_txnid"] = 0
+        s._save_backup_state(st)
+        s.before_call()
+        assert s.backup_status()["auto_skipped_limit"] is True
+        # оператор освобождает место вручную
+        for f in _files(s, "filler"):
+            os.unlink(os.path.join(s.backup_dir, f))
+        s.cleanup(dry_run=False, confirm=True)
+        assert s.backup_status()["auto_skipped_limit"] is False
+        # следующий такт таймера (БД менялась: next_id вырос) — auto-копия
+        s.safe_store("fact:x:z", "fact", "seed2", 0.5)
+        st = s._load_backup_state()
+        st["last_auto"] = 0
+        st["last_auto_txnid"] = 0
+        s._save_backup_state(st)
+        s.before_call()
+        assert _files(s, "auto-"), "auto-бэкап должен возобновиться"
+
+
+def test_backup_pin_dest_inside_outside_contract(tmp_path, monkeypatch):
+    """F5.4c/M9: контракт backup(pin, dest): inside-каталог → лимит,
+    outside → лимит не применяется («pin наружу»).
+    """
+    monkeypatch.setenv("SHARED_GRAPH_MEMORY_BACKUP_DIR", str(tmp_path / "bk"))
+    db = str(tmp_path / "t.mdbx")
+    with Store(db, _skip_sync_thread=True) as s:
+        s.safe_store("fact:x:y", "fact", "seed", 0.5)
+        s.backup_max_bytes = 1 << 20
+        _inflate_backup_dir(s, mb=2)  # каталог > лимита
+        # dest ВНУТРИ backup_dir → лимит применяется → ошибка
+        inside = os.path.join(s.backup_dir, "custom.mdbx")
+        with pytest.raises(MemoryError) as ei:
+            s.backup(kind="pin", dest=inside)
+        assert "превышает лимит" in str(ei.value)
+        assert not os.path.exists(inside)
+        # dest НАРУЖУ backup_dir → лимит не применяется («pin наружу»)
+        outside_dir = tmp_path / "outside"
+        outside_dir.mkdir(exist_ok=True)
+        outside = str(outside_dir / "pin-out.mdbx")
+        r = s.backup(kind="pin", dest=outside)
+        assert r["path"] == outside and os.path.isfile(outside)
+
+
+def test_auto_backoff_exponential_on_nonlimit_failure(tmp_path, monkeypatch):
+    """Ревью #175-#4: экспоненциальный backoff при постоянной не-лимитной
+    ошибке — last_auto отодвигается на interval*2^count (потолок 32x).
+
+    Иначе 20 агентов при ENOSPC повторяли бы дорогой снапшот каждый
+    before_call (writer contention amplification).
+    """
+    monkeypatch.setenv("SHARED_GRAPH_MEMORY_BACKUP_DIR", str(tmp_path / "bk"))
+    monkeypatch.setenv("SHARED_GRAPH_MEMORY_AUTO_BACKUP_SECONDS", "10")
+    db = str(tmp_path / "t.mdbx")
+    with Store(db, _skip_sync_thread=True) as s:
+        s.safe_store("fact:x:y", "fact", "seed", 0.5)
+        real_backup = s.backup
+
+        def disk_fail(kind="pin", dest=None, force=False):
+            raise OSError("No space left on device")
+
+        monkeypatch.setattr(s, "backup", disk_fail)
+        offsets = []
+        for _ in range(3):
+            stt = s._load_backup_state()
+            stt["last_auto"] = 0
+            stt["last_auto_txnid"] = 0
+            s._save_backup_state(stt)
+            t0 = time.time()
+            s.before_call()
+            stt = s._load_backup_state()
+            offsets.append(stt.get("last_auto", 0) - t0)
+            assert stt.get("auto_failure_count") == len(offsets)
+        # 10 * 2^1=20, 2^2=40, 2^3=80
+        assert offsets[0] >= 19, offsets
+        assert offsets[1] >= 39, offsets
+        assert offsets[2] >= 79, offsets
+        # успех сбрасывает счётчик
+        monkeypatch.setattr(s, "backup", real_backup)
+        stt = s._load_backup_state()
+        stt["last_auto"] = 0
+        stt["last_auto_txnid"] = 0
+        s._save_backup_state(stt)
+        s.before_call()
+        assert s._load_backup_state().get("auto_failure_count") == 0
+
+
+def test_file_lock_degradation_warns(tmp_path, monkeypatch):
+    """Ревью #175-#2: деградация _file_lock до lockless — ЗАМЕТНАЯ
+    (warnings.warn), не тихая строчка stderr.
+    """
+    import warnings as _w
+    from mcp.store import _file_lock
+    state = str(tmp_path / "state.json")
+    with _w.catch_warnings(record=True) as w:
+        _w.simplefilter("always")
+
+        def _throw(*_a, **_kw):
+            raise OSError(95, "Operation not supported")
+
+        monkeypatch.setattr("fcntl.flock", _throw)
+        monkeypatch.setattr("fcntl.LOCK_EX", 1)
+        monkeypatch.setattr("fcntl.LOCK_UN", 4)
+        with _file_lock(state):
+            pass
+    assert any("state lock недоступен" in str(x.message) for x in w), \
+        "деградация должна быть заметной (warnings.warn)"
+
+
+def test_state_merge_two_processes(tmp_path, monkeypatch):
+    """Ревью #175: merge-семантика state-файла ДВА процесса.
+
+    fork: родитель ставит auto_skipped_limit, потомок пишет свой last_auto —
+    merge должен сохранить флаг (last-writer-wins затёр бы его).
+    """
+    monkeypatch.setenv("SHARED_GRAPH_MEMORY_BACKUP_DIR", str(tmp_path / "bk"))
+    db = str(tmp_path / "t.mdbx")
+    st_ = Store(db, _skip_sync_thread=True)
+    st_.safe_store("fact:x:y", "fact", "seed", 0.5)
+    st_.close()
+    # state-файл общий для процессов — эмулируем двумя Store-последовательно
+    pid = os.fork()
+    if pid == 0:
+        # потомок: открывает СВОЙ Store (env отдельный) и пишет last_auto
+        with Store(db, _skip_sync_thread=True) as s2:
+            st2 = s2._load_backup_state()
+            st2["last_auto"] = 111.0
+            s2._save_backup_state(st2)
+        os._exit(0)
+    # родитель: ставит флаг ПОСЛЕ чтения потомка (гонка эмулируется
+    # порядком: сначала потомок пишет last_auto, потом родитель — флаг)
+    os.waitpid(pid, 0)
+    with Store(db, _skip_sync_thread=True) as s3:
+        st3 = s3._load_backup_state()
+        st3["auto_skipped_limit"] = True
+        s3._save_backup_state(st3)
+        cur = s3._load_backup_state()
+        assert cur.get("auto_skipped_limit") is True
+        assert cur.get("last_auto") == 111.0  # потомков last_auto сохранился
+
+
+def test_file_lock_reentrant_same_thread(tmp_path, monkeypatch):
+    """Ревью Q6: вложенный _file_lock того же потока — yield (нет deadlock).
+
+    AUTO-блок maybe_run_auto_backup держит _file_lock, а _save_backup_state
+    внутри той же ветки снова вызывает его — повторный flock заблокировал бы
+    сам себя; reentrant-счётчик защищает.
+    """
+    from mcp.store import _file_lock
+    p = str(tmp_path / "lock-gate")
+    with _file_lock(p):
+        with _file_lock(p):  # вложенный вход того же потока
+            pass
+    # после выхода — повторный внешний захват тоже работает (лок освобождён)
+    with _file_lock(p):
+        pass
+
+
+def test_auto_failure_count_lost_update_under_lock(tmp_path, monkeypatch):
+    """Ревью #175-r3 Q6: AUTO-блок под _file_lock — два процесса не теряют
+    инкремент auto_failure_count (lost update закрыт).
+
+    Раньше read был вне лока: оба процесса видели count=3 и писали 4 вместо 5.
+    Теперь весь read-modify-write под локом — последовательные процессы.
+    """
+    monkeypatch.setenv("SHARED_GRAPH_MEMORY_BACKUP_DIR", str(tmp_path / "bk"))
+    monkeypatch.setenv("SHARED_GRAPH_MEMORY_AUTO_BACKUP_SECONDS", "10")
+    db = str(tmp_path / "t.mdbx")
+
+    def _fail(kind="pin", dest=None, force=False):
+        raise OSError("No space left on device")
+
+    with Store(db, _skip_sync_thread=True) as s:
+        s.safe_store("fact:x:y", "fact", "seed", 0.5)
+        monkeypatch.setattr(s, "backup", _fail)
+        for _ in range(3):
+            stt = s._load_backup_state()
+            stt["last_auto"] = 0
+            stt["last_auto_txnid"] = 0
+            s._save_backup_state(stt)
+            s.before_call()
+        assert s._load_backup_state().get("auto_failure_count") == 3, \
+            "три последовательные неудачи — count=3 (инкремент не теряется)"
+
+
+def test_auto_skip_flag_visible_during_backoff_window(tmp_path, monkeypatch):
+    """Ревью Q5: флаг auto_skipped_limit виден в окне backoff (каталог
+    переполнился, пока last_auto в будущем), не ждёт конца backoff."""
+    import time as _t
+    monkeypatch.setenv("SHARED_GRAPH_MEMORY_BACKUP_DIR", str(tmp_path / "bk"))
+    monkeypatch.setenv("SHARED_GRAPH_MEMORY_AUTO_BACKUP_SECONDS", "60")
+    db = str(tmp_path / "t.mdbx")
+    with Store(db, _skip_sync_thread=True) as s:
+        s.safe_store("fact:x:y", "fact", "seed", 0.5)
+        s.backup_max_bytes = 1 << 20
+        _inflate_backup_dir(s, mb=2)  # каталог переполнен
+        st = s._load_backup_state()
+        st["last_auto"] = _t.time() + 3600  # backoff активен (таймер НЕ истёк)
+        s._save_backup_state(st)
+        assert not s.backup_status()["auto_skipped_limit"]
+        s.before_call()
+        assert s.backup_status()["auto_skipped_limit"] is True, \
+            "флаг лимита должен быть виден немедленно (не через backoff)"
+
+
+def test_auto_backoff_ceiling_32x(tmp_path, monkeypatch):
+    """Ревью #175-r3 T4: потолок backoff 32x — после 5+ неудач last_auto
+    отодвигается на interval*32 (не 64x/128x).
+    """
+    monkeypatch.setenv("SHARED_GRAPH_MEMORY_BACKUP_DIR", str(tmp_path / "bk"))
+    monkeypatch.setenv("SHARED_GRAPH_MEMORY_AUTO_BACKUP_SECONDS", "1")
+    db = str(tmp_path / "t.mdbx")
+    with Store(db, _skip_sync_thread=True) as s:
+        s.safe_store("fact:x:y", "fact", "seed", 0.5)
+
+        def disk_fail(kind="pin", dest=None, force=False):
+            raise OSError("No space left on device")
+
+        monkeypatch.setattr(s, "backup", disk_fail)
+        for _ in range(7):  # count растёт до 7 (>=5)
+            stt = s._load_backup_state()
+            stt["last_auto"] = 0
+            stt["last_auto_txnid"] = 0
+            s._save_backup_state(stt)
+            s.before_call()
+        st = s._load_backup_state()
+        assert st.get("auto_failure_count") == 7
+        # потолок: min(2**7=128, 32) = 32 → offset ≈ interval*32 = 32с
+        offset = st.get("last_auto", 0) - time.time()
+        assert 30 <= offset <= 34, "потолок 32x (не 64/128): %.1f" % offset
+
+
+def test_lock_degradation_sets_backup_notice(tmp_path, monkeypatch):
+    """Ревью #175-r3 Q8: деградация _file_lock видна агенту через
+    backup_notice; R2 (r4): per-path — чужой деградировавший лок НЕ даёт
+    ложный notice другому Store в том же процессе."""
+    import warnings as _w
+    from mcp.store import Store, _file_lock
+    d1 = str(tmp_path / "a.mdbx")
+    d2 = str(tmp_path / "b.mdbx")
+    with Store(d1, _skip_sync_thread=True) as a:
+        with Store(d2, _skip_sync_thread=True) as b:
+            a.safe_store("fact:x:y", "fact", "seed", 0.5)
+            b.safe_store("fact:x:y", "fact", "seed", 0.5)
+            with _w.catch_warnings():
+                _w.simplefilter("ignore")
+                # деградация ТОЛЬКО на lock A
+                _file_lock._degraded_paths.add(a._state_path() + ".lock")
+                a._save_backup_state(a._load_backup_state())
+                assert "lock" in (a.backup_notice or ""), \
+                    "notice A должен упомянуть деградацию"
+                # B не должен получить ложный notice (его local-FS лок цел)
+                b._save_backup_state(b._load_backup_state())
+                assert not b.backup_notice, \
+                    "B не должен видеть деградацию A: %r" % b.backup_notice
+            lp = a._state_path() + ".lock"
+            assert lp not in _file_lock._degraded_paths, \
+                "флаг per-path сброшен после чтения"
+
+
+def test_next_auto_correct_during_backoff(tmp_path, monkeypatch):
+    """Ревью #175-r5 Б1: next_auto = last_auto + interval ВСЕГДА (в т.ч.
+    при backoff). last_auto в backoff = now + interval*2^count, а гейт
+    допускает попытку при now >= last_auto + interval — реальный момент
+    попытки = last_auto + interval (R1 был регрессией: занижал на interval)."""
+    import time as _t
+    monkeypatch.setenv("SHARED_GRAPH_MEMORY_BACKUP_DIR", str(tmp_path / "bk"))
+    monkeypatch.setenv("SHARED_GRAPH_MEMORY_AUTO_BACKUP_SECONDS", "10")
+    db = str(tmp_path / "t.mdbx")
+    with Store(db, _skip_sync_thread=True) as s:
+        s.safe_store("fact:x:y", "fact", "seed", 0.5)
+
+        def disk_fail(kind="pin", dest=None, force=False):
+            raise OSError("No space left on device")
+
+        monkeypatch.setattr(s, "backup", disk_fail)
+        stt = s._load_backup_state()
+        stt["last_auto"] = 0
+        stt["last_auto_txnid"] = 0
+        s._save_backup_state(stt)
+        s.before_call()  # не-лимитная ошибка → backoff: last_auto = now + 20
+        stt = s._load_backup_state()
+        assert stt.get("auto_failure_count") >= 1
+        stat = s.backup_status()
+        # next_auto = last_auto + interval (реальный момент попытки)
+        assert abs((stt["last_auto"] + s.auto_backup_seconds)
+                   - stat["next_auto"]) < 1.0, \
+            "next_auto в backoff = last_auto + interval: %r vs %r" % (
+                stt["last_auto"], stat["next_auto"])
+        # БЕЗ backoff (count=0): next_auto = last_auto + interval
+        stt2 = s._load_backup_state()
+        stt2["auto_failure_count"] = 0
+        stt2["last_auto"] = _t.time()
+        s._save_backup_state(stt2)
+        stat2 = s.backup_status()
+        assert abs(stat2["next_auto"] - stt2["last_auto"]) >= 9.0, \
+            "без backoff next_auto = last_auto + interval"
+
+
+def test_file_lock_different_paths_independent(tmp_path):
+    """Ревью r4: разные path блокируются независимо (нет deadlock).
+
+    per-thread dict по path — p2 должен реально flock'нуться (не reentrant
+    для p1), оба освобождаются.
+    """
+    import fcntl
+    from mcp.store import _file_lock
+    p1 = str(tmp_path / "l1")
+    p2 = str(tmp_path / "l2")
+    with _file_lock(p1):
+        with _file_lock(p2):
+            # М1: физический flock на p2 — неблокирующий захват того же
+            # lock-файла обязан дать BlockingIOError (иначе reentrant-yield)
+            fh = open(p2 + ".lock", "a+b")
+            try:
+                fcntl.flock(fh.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+                raise AssertionError(
+                    "p2 не был физически заблокирован (reentrant-yield?)")
+            except OSError:
+                pass  # BlockingIOError — p2 реально залочен
+            finally:
+                fh.close()
+    # после выхода — оба перезахватываются (локи освобождены)
+    with _file_lock(p1):
+        pass
+    with _file_lock(p2):
+        pass
+
+
+def test_auto_lock_released_during_backup(tmp_path, monkeypatch):
+    """Ревью #175-r5 Б3(a): flock НЕ удерживается во время ГБ-копии.
+
+    Q6 держал лок на весь AUTO-блок включая backup() — before_call
+    блокировал рой на время копии. Claim/reserve: копия вне лока.
+    """
+    import fcntl
+    monkeypatch.setenv("SHARED_GRAPH_MEMORY_BACKUP_DIR", str(tmp_path / "bk"))
+    monkeypatch.setenv("SHARED_GRAPH_MEMORY_AUTO_BACKUP_SECONDS", "1")
+    db = str(tmp_path / "t.mdbx")
+    with Store(db, _skip_sync_thread=True) as s:
+        s.safe_store("fact:x:y", "fact", "seed", 0.5)
+        state = {"free": None}
+
+        def fake_copy(kind="auto", dest=None, force=False):
+            lp = s._state_path() + ".lock"
+            fh = open(lp, "a+b")
+            try:
+                fcntl.flock(fh.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+                state["free"] = True
+                fcntl.flock(fh.fileno(), fcntl.LOCK_UN)
+            except OSError:
+                state["free"] = False
+            finally:
+                fh.close()
+            return {"path": "x", "txnid": 1, "kind": "auto", "size": 1}
+
+        monkeypatch.setattr(s, "backup", fake_copy)
+        stt = s._load_backup_state()
+        stt["last_auto"] = 0
+        stt["last_auto_txnid"] = 0
+        s._save_backup_state(stt)
+        s.before_call()
+        assert state["free"] is True, \
+            "лок должен быть свободен во время копии (claim/reserve)"
+
+
+def test_auto_claim_prevents_duplicate(tmp_path, monkeypatch):
+    """Ревью #175-r5 Б3(b): claim (last_auto=now) атомарно закрывает гейт —
+    следующий агент, увидев свежий last_auto, НЕ делает вторую копию."""
+    import time as _t
+    monkeypatch.setenv("SHARED_GRAPH_MEMORY_BACKUP_DIR", str(tmp_path / "bk"))
+    monkeypatch.setenv("SHARED_GRAPH_MEMORY_AUTO_BACKUP_SECONDS", "1")
+    db = str(tmp_path / "t.mdbx")
+    with Store(db, _skip_sync_thread=True) as s:
+        s.safe_store("fact:x:y", "fact", "seed", 0.5)
+        copies = {"n": 0}
+
+        def fake_copy(kind="auto", dest=None, force=False):
+            copies["n"] += 1
+            _t.sleep(0.05)
+            return {"path": "x", "txnid": 1, "kind": "auto", "size": 1}
+
+        monkeypatch.setattr(s, "backup", fake_copy)
+        stt = s._load_backup_state()
+        stt["last_auto"] = 0
+        stt["last_auto_txnid"] = 0
+        s._save_backup_state(stt)
+        s.before_call()  # A: claim + копия
+        assert copies["n"] == 1
+        # гейт закрыт claim'ом — B (тот же state) НЕ копирует
+        st_fresh = s._load_backup_state()
+        gate_open = (_t.time() - st_fresh.get("last_auto", 0)
+                     >= s.auto_backup_seconds)
+        assert not gate_open, "claim должен закрыть гейт (дубль исключён)"
+        s.before_call()  # повторный вызов сразу — таймер НЕ истёк
+        assert copies["n"] == 1, "повторный before_call не должен копировать"
+
+
+def test_file_lock_cross_thread_mutual_exclusion(tmp_path):
+    """Ревью r4 М2: два потока на ОДНОМ path — взаимное исключение.
+
+    Второй поток должен ждать освобождения первого (flock per-fd),
+    а не reentrant-yield — иначе сломается merge-контракт state-файла.
+    """
+    import threading
+    from mcp.store import _file_lock
+    p = str(tmp_path / "mt")
+    entered = {"a": False, "b": False}
+    order = []
+    done = threading.Event()
+
+    def thread_a():
+        with _file_lock(p):
+            entered["a"] = True
+            order.append("a-in")
+            done.wait(2.0)  # держим лок, пока B не пытается
+            order.append("a-out")
+
+    def thread_b():
+        # B пытается войти — должен ждать освобождения A
+        started = threading.Event()
+        with _file_lock(p):
+            entered["b"] = True
+            order.append("b-in")
+            started.set()
+
+    ta = threading.Thread(target=thread_a)
+    tb = threading.Thread(target=thread_b)
+    ta.start()
+    # ждём, пока A в критической секции
+    import time as _t
+    deadline = _t.time() + 2.0
+    while not entered["a"] and _t.time() < deadline:
+        _t.sleep(0.005)
+    assert entered["a"], "A не вошёл в секцию"
+    tb.start()  # B теперь должен блокироваться на flock
+    # B не должен войти, пока A держит (даже подождав 0.3с)
+    _t.sleep(0.3)
+    assert not entered["b"], \
+        "B вошёл, пока A держит лок — нет взаимного исключения"
+    done.set()  # освобождаем A
+    tb.join(2.0)
+    ta.join(2.0)
+    assert entered["b"], "B так и не вошёл после освобождения A"
