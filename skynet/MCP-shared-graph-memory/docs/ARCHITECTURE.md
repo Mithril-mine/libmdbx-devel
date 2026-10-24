@@ -229,6 +229,21 @@ endif()
   invalid; не учитывается в лимите/tiers, не ротируется. `kind=auto` через
   MCP недоступен (внутренний таймер); устаревшие kind/dest у db_backup
   отклоняются fail-loud.
+- **State-файл и flock (Б3 claim/reserve)**: `.backup-state.json` — per-key
+  merge под коротким `_file_lock`; AUTO-copy (~ГБ) выполняется ВНЕ лока:
+  под локом только claim (`last_auto=now`, `last_auto_txnid=cur`) и
+  finalize. Рой не блокируется на время копии; дубль исключён claim'ом
+  (второй агент видит свежий `last_auto` → гейт закрыт). Crash между
+  claim/finalize стоит один interval. `_file_lock` реентерабелен
+  (вложенный save на тот же файл — yield) и при OSError деградирует до
+  lockless с ЗАМЕТНЫМ `warnings.warn` + `backup_notice` (не тихо).
+- **Backoff**: при не-лимитной ошибке `auto_failure_count` растёт,
+  `last_auto` отодвигается на `interval*2^count` (потолок 32×); с учётом
+  гейта `now >= last_auto + interval` реальная попытка — через
+  `last_auto + interval` (~33×interval на потолке). `next_auto` (в
+  `backup_status`) = `last_auto + interval` в обоих режимах — точен.
+  Trade-off: при включённом auto каждый tool-call делает listdir+stat
+  backup-каталога (дёшево, но пер-тиковая стоимость Q5).
 - Ротация: старейшие `auto-*` сверх `…_BACKUP_KEEP` (7) — кандидаты
   (`db_backup_cleanup dry_run`); удаление — только с `confirm=true` по
   подтверждению пользователя. PIN/LIFELINE/EMERGENCY ротация не трогает
