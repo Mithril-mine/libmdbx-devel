@@ -792,6 +792,16 @@ public:
   MDBX_CXX20_CONSTEXPR buffer(::std::nullptr_t, INT bytes, const allocator_type &alloc = allocator_type())
       : buffer(static_cast<const void *>(nullptr), check_nullptr_length(size_t(bytes)), alloc) {}
 
+  /// \brief Null pointer with an explicit `make_reference` flag.
+  /// \note Exists to keep `buffer(nullptr, N, false)` unambiguous on the
+  ///   Windows compilers where the generic `(const void *, size_t, bool)`
+  ///   overload and the integral-length templates otherwise collide on the
+  ///   `bool` third argument ([#142](https://github.com/Mithril-mine/libmdbx-devel/issues/142)).
+  template <typename INT, typename ::std::enable_if<::std::is_integral<INT>::value && !::std::is_same<INT, bool>::value,
+                                                    int>::type = 0>
+  MDBX_CXX20_CONSTEXPR buffer(::std::nullptr_t, INT bytes, bool make_reference)
+      : buffer(static_cast<const void *>(nullptr), check_nullptr_length(size_t(bytes)), make_reference) {}
+
   /// \brief Creates a buffer that stores a copy of the string's content.
   /// The source string may be a temporary: the bytes are copied immediately,
   /// so there are no lifetime requirements (unlike mdbx::slice).
