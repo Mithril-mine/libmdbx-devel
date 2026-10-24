@@ -147,6 +147,7 @@ Cutting-edge release with new core features and internal refactoring.
  - Minors:
     - Fixed MSVC+AddressSanitizer builds failing to compile ([#62](https://github.com/Mithril-mine/libmdbx-devel/issues/62)).
     - Fixed the development-only probe bus: `fault`/`arm`/`disarm` control rules silently did nothing when given before the target probe site had ever run (the record is now pre-created and the site fills itself in on first run); the file-command drain applied a half-written line and could apply the same commands twice under concurrency (it now stops at an incomplete line, advances the offset only past complete ones and is serialized); the `get_cached_full` probe test never activated the bus (its environment now enables `MDBX_PROBES`); and the probe tests did not build with MSVC because of `sscanf` deprecation warnings ([#118](https://github.com/Mithril-mine/libmdbx-devel/issues/118)).
+    - Fixed a crafted or corrupted database crashing or corrupting memory through invalid offsets inside a set of duplicate values; such databases are now detected and rejected instead ([#176](https://github.com/Mithril-mine/libmdbx-devel/issues/176)).
     - etc...
 
 

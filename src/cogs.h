@@ -307,6 +307,18 @@ MDBX_NOTHROW_PURE_FUNCTION static inline size_t page_room(const page_t *mp) {
   return mp->upper - mp->lower;
 }
 
+/* O(1) sanity check of a sub-page header geometry, to be performed on the
+ * normal (non-MDBX_VALIDATION) paths against the region actually allocated
+ * for the nested page (node_ds). Without it, crafted upper/lower values make
+ * node_del()/cursor_put() underflow their memmove()/memcpy() lengths
+ * (issues #57 and #176). The full O(n) contents check stays in page_check().
+ * Call sites guard the call with !MDBX_DISABLE_VALIDATION so the check is
+ * compiled away together with the rest of the validation in LMDB-benchmark
+ * builds. */
+MDBX_NOTHROW_PURE_FUNCTION static inline bool subpage_geometry_ok(const page_t *sp, size_t limit) {
+  return !(sp->upper < sp->lower || (sp->lower & 1) || PAGEHDRSZ + sp->upper > limit);
+}
+
 MDBX_NOTHROW_PURE_FUNCTION static inline size_t page_space(const MDBX_env *env) {
   STATIC_ASSERT(PAGEHDRSZ % 2 == 0);
   return env->ps - PAGEHDRSZ;
