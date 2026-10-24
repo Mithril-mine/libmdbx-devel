@@ -308,6 +308,221 @@ if(BUILD_TESTING)
     else()
       set(UT_LIBRARIES GTest::Main GTest::GTest ${CMAKE_THREAD_LIBS_INIT})
     endif()
+
+    # ------------------------------------------------------------------------
+    # GoogleTest advertises its own minimum standard as INTERFACE_COMPILE_FEATURES
+    # `cxx_std_NN` (e.g. `cxx_std_17` for v1.15+). CMake raises a client target to
+    # the maximum of its CXX_STANDARD and every linked INTERFACE feature, which
+    # would silently build the tests at a newer standard than the library and,
+    # worse, make the probe below measure that raised standard instead of the real
+    # requirement.
+    #
+    # The imported GoogleTest targets are read-only and their feature demand cannot
+    # be removed, so a private INTERFACE target is created instead: it carries the
+    # include directories and links the real library files, but declares no
+    # compile-feature requirement. Both the probe and the gtest test targets link
+    # this wrapper, so the requested CXX_STANDARD pins the actual standard.
+    # ------------------------------------------------------------------------
+    if(GTEST_FOUND)
+      # The system (imported) GoogleTest targets are read-only and publish
+      # INTERFACE_COMPILE_FEATURES "cxx_std_NN" (17 for v1.15+, 14 for 1.14).
+      # Leaving them linked as targets would silently raise every client that
+      # requests C++11/14 to the GoogleTest minimum, desynchronizing the tests
+      # from the library. They are already compiled, so only the feature demand
+      # matters for clients: a wrapper INTERFACE target links the real library
+      # files via "$<TARGET_FILE:...>", which carries the link but no feature
+      # demand, and pins the requested standard.
+      #
+      # The bundled (add_subdirectory) GoogleTest is built with
+      # GTEST_CXX_STANDARD = the requested standard (see below) and is only
+      # enabled when the requested standard is at least GoogleTest's minimum
+      # (the probe gates it). Its own PUBLIC cxx_std_NN then matches or is
+      # below the requested standard, so the plain targets can be linked
+      # directly without a wrapper or a double -l.
+      foreach(_gt_candidate gtest_main gtest)
+        if(TARGET ${_gt_candidate})
+          set(_gtest_is_bundled TRUE)
+          break()
+        endif()
+      endforeach()
+      unset(_gt_candidate)
+
+      if(_gtest_is_bundled)
+        # Bundled mode: plain target link, no wrapper needed.
+        set(UT_LIBRARIES gtest_main gtest ${CMAKE_THREAD_LIBS_INIT})
+      else()
+        # System mode: wrapper over the real library files.
+        add_library(mdbx_gtest_link INTERFACE)
+        set(gtest_link_files "")
+        set(gtest_include_dirs "")
+        foreach(_gt_candidate GTest::gtest_main GTest::gtest gtest_main gtest)
+          if(TARGET ${_gt_candidate})
+            list(APPEND gtest_link_files "$<TARGET_FILE:${_gt_candidate}>")
+          endif()
+        endforeach()
+        foreach(_gt_candidate GTest::gtest GTest::GTest gtest)
+          if(TARGET ${_gt_candidate})
+            get_target_property(_gt_includes ${_gt_candidate} INTERFACE_INCLUDE_DIRECTORIES)
+            if(_gt_includes)
+              list(APPEND gtest_include_dirs ${_gt_includes})
+            endif()
+            unset(_gt_includes)
+          endif()
+        endforeach()
+        if(gtest_include_dirs)
+          target_include_directories(mdbx_gtest_link INTERFACE ${gtest_include_dirs})
+        endif()
+        if(gtest_link_files)
+          list(REMOVE_DUPLICATES gtest_link_files)
+          target_link_libraries(mdbx_gtest_link INTERFACE ${gtest_link_files} ${CMAKE_THREAD_LIBS_INIT})
+        endif()
+        unset(gtest_link_files)
+        unset(gtest_include_dirs)
+        set(UT_LIBRARIES mdbx_gtest_link ${CMAKE_THREAD_LIBS_INIT})
+      endif()
+      unset(_gtest_is_bundled)
+    endif()
+
+    # ------------------------------------------------------------------------
+    # Discover the minimum C++ standard the *already built* GoogleTest accepts.
+    #
+    # GoogleTest 1.15+ hard-requires C++17 (`#error C++ versions less than
+    # C++17 are not supported` in gtest-port.h) and publishes that as an
+    # INTERFACE_COMPILE_FEATURES `cxx_std_17` requirement, which CMake silently
+    # raises every client target to — even when the user asked for C++11/14.
+    # That desynchronized the library (built at the requested standard) from
+    # the tests (built at C++17), so `mdbx::default_allocator` and
+    # `mdbx::path` differed between them and linking failed with undefined
+    # `buffer<polymorphic_allocator>` / `env::remove(filesystem::path)` symbols.
+    #
+    # The version is therefore not assumed but probed from the real headers, so
+    # an older GoogleTest (1.14 needs C++14, <=1.12 needs C++11) is used to its
+    # full extent. Nothing is downloaded: only the GoogleTest that was found.
+    # ------------------------------------------------------------------------
+    set(gtest_probe_target "")
+    foreach(_gt_candidate GTest::gtest GTest::GTest gtest)
+      if(TARGET ${_gt_candidate})
+        set(gtest_probe_target ${_gt_candidate})
+        break()
+      endif()
+    endforeach()
+
+    if(gtest_probe_target AND CMAKE_CXX_COMPILER_LOADED)
+      get_target_property(gtest_probe_includes ${gtest_probe_target} INTERFACE_INCLUDE_DIRECTORIES)
+      include(CMakePushCheckState)
+      include(CheckCXXSourceCompiles)
+
+      # The probe sources are tiny; compile them quietly to keep the configure
+      # log readable.
+      set(gtest_probe_code [[
+#include <gtest/gtest.h>
+/* Defines exactly the compile-time requirement of GoogleTest's headers; the
+ * program intentionally never references any testing::* symbol, so this probe
+ * does not need to link against the prebuilt GoogleTest libraries. */
+int main() { return 0; }
+]])
+
+      set(GTEST_MIN_CXX_STANDARD "")
+      # Probe the user-requested standard first (the common case), then walk up
+      # to report an accurate minimum in the diagnostic message.
+      set(gtest_probe_standards "")
+      if(MDBX_CXX_STANDARD AND NOT MDBX_CXX_STANDARD LESS 11)
+        list(APPEND gtest_probe_standards ${MDBX_CXX_STANDARD})
+      endif()
+      foreach(_std 11 14 17 20 23)
+        list(FIND gtest_probe_standards ${_std} _already)
+        if(_already LESS 0)
+          list(APPEND gtest_probe_standards ${_std})
+        endif()
+      endforeach()
+
+      foreach(_std IN LISTS gtest_probe_standards)
+        if(NOT GTEST_MIN_CXX_STANDARD)
+          # check_cxx_source_compiles() ignores CMAKE_CXX_STANDARD, so the
+          # standard must be spelled out as an explicit flag — otherwise the
+          # probe runs at the compiler default and reports a false success.
+          # For GCC/Clang the explicit flag is mandatory: an empty (default)
+          # flag would compile at gnu++17 and wrongly "pass" C++11. Only MSVC
+          # may fall back to no flag, because it has no /std:c++11 and CMake
+          # relies on its default level (C++14) for the older standards.
+          set(gtest_probe_flags "")
+          if(MSVC)
+            if(_std EQUAL 23)
+              set(gtest_probe_flags "/std:c++latest")
+            elseif(NOT _std LESS 14)
+              set(gtest_probe_flags "/std:c++${_std}")
+            else()
+              set(gtest_probe_flags "/std:c++14")
+            endif()
+            # MSVC default level is the last-resort candidate for C++11/14.
+            list(APPEND gtest_probe_flags "")
+          elseif(_std EQUAL 23)
+            set(gtest_probe_flags "-std=gnu++23;-std=gnu++2b;-std=c++23;-std=c++2b")
+          elseif(CXX_FALLBACK_GNU11)
+            set(gtest_probe_flags "-std=gnu++${_std}")
+          else()
+            set(gtest_probe_flags "-std=c++${_std}")
+          endif()
+
+          cmake_push_check_state()
+          set(CMAKE_CXX_STANDARD ${_std})
+          set(CMAKE_CXX_STANDARD_REQUIRED ON)
+          set(CMAKE_CXX_EXTENSIONS ON)
+          if(gtest_probe_includes)
+            set(CMAKE_REQUIRED_INCLUDES ${gtest_probe_includes})
+          endif()
+          # No linking needed: the probe only references GoogleTest's headers.
+
+          set(gtest_probe_ok "")
+          foreach(_flag IN LISTS gtest_probe_flags)
+            if(NOT gtest_probe_ok)
+              # Build a cache-safe variable name from the flag.
+              string(REGEX REPLACE "[^A-Za-z0-9]" "" _flag_id "${_flag}")
+              if(NOT _flag_id)
+                set(_flag_id "compilerdefault")
+              endif()
+              set(CMAKE_REQUIRED_FLAGS ${_flag})
+              check_cxx_source_compiles("${gtest_probe_code}" GTEST_WORKS_AT_CXX${_std}_${_flag_id})
+              if(GTEST_WORKS_AT_CXX${_std}_${_flag_id})
+                set(gtest_probe_ok TRUE)
+              endif()
+            endif()
+          endforeach()
+          cmake_pop_check_state()
+
+          if(gtest_probe_ok)
+            set(GTEST_MIN_CXX_STANDARD ${_std})
+          endif()
+        endif()
+      endforeach()
+      unset(gtest_probe_standards)
+      unset(gtest_probe_flags)
+      unset(gtest_probe_ok)
+      unset(gtest_probe_code)
+      unset(gtest_probe_includes)
+      unset(gtest_probe_target)
+      unset(_std)
+      unset(_flag)
+      unset(_flag_id)
+
+      if(NOT GTEST_MIN_CXX_STANDARD)
+        message(
+          WARNING
+            "GoogleTest is unusable with any C++ standard from 11 to 23; the gtest-based tests will not be built.")
+      elseif(MDBX_CXX_STANDARD AND MDBX_CXX_STANDARD LESS GTEST_MIN_CXX_STANDARD)
+        message(
+          STATUS
+            "GoogleTest requires C++${GTEST_MIN_CXX_STANDARD}, but C++${MDBX_CXX_STANDARD} was requested: "
+            "the gtest-based tests are skipped, while the library, the C++ API, the examples and the "
+            "`mdbx_test` framework are still built and tested at C++${MDBX_CXX_STANDARD}.")
+        set(GTEST_FOUND FALSE)
+      else()
+        message(STATUS "GoogleTest is usable at C++${GTEST_MIN_CXX_STANDARD}")
+      endif()
+    endif()
+  endif()
+
+  if(GTEST_FOUND)
     if(MEMORYCHECK_COMMAND OR CMAKE_MEMORYCHECK_COMMAND)
       add_custom_target(
         test_memcheck
@@ -524,6 +739,24 @@ if(BUILD_TESTING)
           set_tests_properties(${name} PROPERTIES ENVIRONMENT "PATH=${params_DLLPATH_ENV}")
         endif()
       endif()
+    else()
+      # GoogleTest is unavailable, or requires a newer C++ standard than the one
+      # requested: register a stub test that reports why it is skipped, so that
+      # neither the build nor the surrounding set_tests_properties() calls of the
+      # caller break. The library, the C++ API, the examples and the non-gtest
+      # `mdbx_test` framework are still built and tested at the requested standard.
+      if(GTEST_MIN_CXX_STANDARD)
+        set(gtest_skip_reason
+            "GoogleTest requires C++${GTEST_MIN_CXX_STANDARD}, but C++${MDBX_CXX_STANDARD} was requested")
+      else()
+        set(gtest_skip_reason "GoogleTest is not available")
+      endif()
+      add_test(NAME ${name} COMMAND ${CMAKE_COMMAND} -E echo "SKIPPED: ${name}: ${gtest_skip_reason}")
+      set_tests_properties(${name} PROPERTIES SKIP_RETURN_CODE 0)
+      if(params_LABELS)
+        set_tests_properties(${name} PROPERTIES LABELS "${params_LABELS}")
+      endif()
+      unset(gtest_skip_reason)
     endif()
   endfunction(add_gtest)
 
