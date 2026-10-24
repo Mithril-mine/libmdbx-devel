@@ -380,12 +380,20 @@ int cursor_dupsort_setup(MDBX_cursor *mc, const node_t *node, const page_t *mp) 
     }
     mx->cursor.combo_state = z_fresh_mark | z_inner;
     break;
-  case N_DUP:
-    if (!MDBX_DISABLE_VALIDATION && unlikely(node_ds(node) <= PAGEHDRSZ)) {
-      ERROR("invalid nested-page size %zu", node_ds(node));
+  case N_DUP: {
+    const size_t dsize = node_ds(node);
+    page_t *const sp = node_data(node);
+    if (!MDBX_DISABLE_VALIDATION && unlikely(!subpage_geometry_ok(sp, dsize))) {
+      /* Crafted nested-page lower/upper make node_del()/cursor_put()
+       * underflow their memmove()/memcpy() lengths even on the normal
+       * (non-MDBX_VALIDATION) path. (issue #176) */
+      return bad_page(sp, "invalid nested %s-page lower(%u)/upper(%u) for size %zu\n",
+                      is_dupfix_leaf(sp) ? "leaf2" : "leaf", sp->lower, sp->upper, node_ds(node) - PAGEHDRSZ);
+    }
+    if (!MDBX_DISABLE_VALIDATION && unlikely(dsize <= PAGEHDRSZ)) {
+      ERROR("invalid nested-page size %zu", dsize);
       goto bailout;
     }
-    page_t *sp = node_data(node);
     mx->nested_tree.flags = flags_db2sub(mc->tree->flags);
     mx->nested_tree.height = 1;
     mx->nested_tree.dupfix_size = mc->tree->dupfix_size;
@@ -401,8 +409,8 @@ int cursor_dupsort_setup(MDBX_cursor *mc, const node_t *node, const page_t *mp) 
     mx->cursor.ki[0] = 0;
     mx->nested_tree.flags = flags_db2sub(mc->tree->flags);
     mx->nested_tree.dupfix_size = (mc->tree->flags & MDBX_DUPFIXED) ? sp->dupfix_ksize : 0;
-    break;
   }
+  } /* switch */
 
   if (unlikely(mx->nested_tree.dupfix_size != mc->tree->dupfix_size)) {
     if (!MDBX_DISABLE_VALIDATION && unlikely(mc->tree->dupfix_size != 0)) {
@@ -1272,6 +1280,13 @@ __hot int cursor_put(MDBX_cursor *mc, const MDBX_val *key, MDBX_val *data, unsig
         } else {
           /* Data is on sub-page */
           fp = old_data.iov_base;
+          if (!MDBX_DISABLE_VALIDATION && unlikely(!subpage_geometry_ok(fp, old_data.iov_len))) {
+            /* The nested upper/lower are crafted: the copy at
+             * "fp->upper + PAGEHDRSZ" below would underflow its memcpy/memmove
+             * length. (issue #176) */
+            return bad_page(fp, "invalid nested %s-page lower(%u)/upper(%u) for size %zu\n",
+                            is_dupfix_leaf(fp) ? "leaf2" : "leaf", fp->lower, fp->upper, old_data.iov_len - PAGEHDRSZ);
+          }
           switch (flags) {
           default:
             growth = is_dupfix_leaf(fp) ? fp->dupfix_ksize : (node_size(data, nullptr) + sizeof(indx_t));
@@ -2096,8 +2111,13 @@ got_node:
 
   if (node_flags(node) & N_DUP) {
     ret.err = cursor_dupsort_setup(mc, node, mp);
-    if (unlikely(ret.err != MDBX_SUCCESS))
+    if (unlikely(ret.err != MDBX_SUCCESS)) {
+      /* The sub-page could not be materialized (corruption): the positioned
+       * match is not a usable exact match, keep the exact/exact-implies-success
+       * invariant. (issue #176) */
+      ret.exact = false;
       return ret;
+    }
     if (op >= MDBX_SET) {
       MDBX_ANALYSIS_ASSUME(mc->subcur != nullptr);
       if (node_flags(node) & N_TREE) {
