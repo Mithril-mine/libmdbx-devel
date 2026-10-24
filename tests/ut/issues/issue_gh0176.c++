@@ -38,6 +38,7 @@
 
 namespace {
 constexpr size_t PAGEHDRSZ = 20; /* offsetof(page_t, entries) */
+constexpr size_t NODESIZE = 8;   /* sizeof(node_t) header without key/data */
 constexpr uint16_t P_LEAF = 0x02;
 constexpr uint8_t N_DUP = 0x04;
 
@@ -132,33 +133,41 @@ public:
   }
 
   uint16_t upper() const { return read_u16_le(&buf[sub_off + 14]); }
+  uint16_t lower() const { return read_u16_le(&buf[sub_off + 12]); }
   void set_entries(size_t i, uint16_t v) { write_u16_le(&buf[sub_off + PAGEHDRSZ + 2 * i], v); }
   void set_upper(uint16_t v) { write_u16_le(&buf[sub_off + 14], v); }
+  void set_lower(uint16_t v) { write_u16_le(&buf[sub_off + 12], v); }
+  size_t dup_nodes() const { return lower() / 2; }
+
+  /* Plant a fabricated but internally-consistent node header + key starting at
+   * sub_off + PAGEHDRSZ + offset (i.e. where entries[offset/2] would alias it
+   * through page_node()). This is the same technique the main-page test
+   * (issue #57) uses: the node is valid enough to pass every content check
+   * except the entries-offset (vs upper) one. */
+  void plant_node(size_t offset, const char *key, size_t ksize) {
+    const size_t base = sub_off + PAGEHDRSZ + offset;
+    std::memset(&buf[base], 0, NODESIZE + ksize);
+    write_u16_le(&buf[base + 6], uint16_t(ksize)); /* node->ksize */
+    std::memcpy(&buf[base + NODESIZE], key, ksize);
+  }
 };
 
 template <typename Fn> void expect_rejected(const char *db, bool validation, Fn &&body) {
   auto opts = mdbx::env::operate_parameters(4).set_options(mdbx::env::operate_options().set_exclusive());
   if (validation)
     opts.set_options(mdbx::env::operate_options().set_exclusive().set_enable_validation());
-  mdbx::env_managed env(db, mdbx::env_managed::create_parameters(), opts);
-  mdbx::txn_managed txn = env.start_write();
-  auto map = txn.open_map("", mdbx::key_mode::usual, mdbx::value_mode::multi);
   int rc = 0;
   try {
+    mdbx::env_managed env(db, mdbx::env_managed::create_parameters(), opts);
+    mdbx::txn_managed txn = env.start_write();
+    auto map = txn.open_map("", mdbx::key_mode::usual, mdbx::value_mode::multi);
     body(txn, map);
     txn.commit();
-  } catch (const mdbx::error &e) {
-    rc = e.code();
-    try {
-      txn.abort();
-    } catch (const mdbx::error &) {
-    }
+    env.close();
+  } catch (const mdbx::exception &e) {
+    rc = e.error().code();
   }
   EXPECT_EQ(MDBX_CORRUPTED, rc) << "must be rejected with MDBX_CORRUPTED, got: " << mdbx_strerror(rc);
-  try {
-    env.close();
-  } catch (const mdbx::error &) {
-  }
 }
 
 static void cleanup(const std::string &db) {
@@ -177,8 +186,14 @@ TEST(issue_gh0176, nested_offset_below_upper_rejected_by_validation) {
   DupsortDb db;
   ASSERT_TRUE(db.create()) << "must create a two-dup DUPSORT database";
   ASSERT_NE(0u, db.sub_off) << "N_DUP sub-page not found";
-  ASSERT_GT(db.upper(), 0u);
-  db.set_entries(0, 0); /* offset 0 < upper */
+  ASSERT_EQ(2u, db.dup_nodes()) << "must be a two-dup sub-page";
+  /* Make the first entry point below upper, into the header/index region, and
+   * plant a valid node body exactly there: dsize == 0, flags == 0, ksize == 2
+   * and a small key. Every content check but the entries-offset one (mirror
+   * of issue #57, added for nested pages) is satisfied. nkeys is shrunk to 1
+   * so the aliased second entry is not walked. */
+  db.set_lower(2); /* only one entry is walked */
+  db.plant_node(0, "a", 2);
   db.write_file();
 
   expect_rejected(db.testdb.c_str(), true, [](mdbx::txn_managed &txn, mdbx::map_handle map) {
