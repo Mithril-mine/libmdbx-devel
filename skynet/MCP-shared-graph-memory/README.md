@@ -20,8 +20,8 @@
 | `mcp/index.py` | Токенизация + SimHash (64-бит) для дедупликации |
 | `mcp/store.py` | Store: 23 таблицы, все операции, одна write-txn на операцию, бэкап и защита от удаления |
 | `mcp/mcp_server.py` | MCP-сервер (JSON-RPC 2.0 над stdio), db_* инструменты интроспекции |
-| `mcp/cli.py` | memory-cli (dump/stats/graph/audit/gc/vocab/purge) |
-| `tests/` | 326 тестов |
+| `mcp/cli.py` | memory-cli (dump/stats/graph/audit/gc/vocab/purge/test-metrics/coverage/ci-jobs/backup/export/upgrade) |
+| `tests/` | ~410 тестов |
 | `tools/install.sh` | Безопасная установка (никогда не трогает db.mdbx/backups) |
 | `tools/collect_test_metrics.py` | Коллектор test_metrics из ctest XML / LastTest.log (+ ci_jobs) |
 | `tools/collect_coverage.py` | lcov / llvm-cov → coverage (тест→символы) + covered_by |
