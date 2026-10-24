@@ -15,7 +15,7 @@
 typedef void osal_ipclock_t;
 #elif MDBX_LOCKING == MDBX_LOCKING_SYSV
 
-#define MDBX_LCK_SIGN UINT32_C(0xF18D)
+#define MDBX_LCK_SIGN UINT32_C(0xF81D)
 typedef mdbx_pid_t osal_ipclock_t;
 
 #elif MDBX_LOCKING == MDBX_LOCKING_POSIX2001 || MDBX_LOCKING == MDBX_LOCKING_POSIX2008

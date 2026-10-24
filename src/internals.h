@@ -524,7 +524,7 @@ struct MDBX_env {
 #if MDBX_LOCKING == MDBX_LOCKING_SYSV
   struct {
     int semid;
-    key_t key;
+    mdbx_ftok_t ft;
   } me_sysv_ipc;
 #endif /* MDBX_LOCKING == MDBX_LOCKING_SYSV */
   bool incore;

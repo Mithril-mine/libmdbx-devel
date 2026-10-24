@@ -16,7 +16,7 @@
 #ifndef __cplusplus
 
 MDBX_MAYBE_UNUSED static __always_inline void atomic_yield(void) {
-#if defined(_WIN32) || defined(_WIN64)
+#if IS_WINDOWS
   YieldProcessor();
 #elif defined(__ia32__) || defined(__e2k__)
   __builtin_ia32_pause();
