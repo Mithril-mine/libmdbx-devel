@@ -380,6 +380,17 @@ MDBX_MAYBE_UNUSED static inline uintptr_t osal_thread_self(void) {
   return (uintptr_t)thunk;
 }
 
+#if !IS_WINDOWS
+#define MDBX_SYSVFTOK_SIGN_CHUNKS 6 /* ftok extended signature */
+typedef struct mdbx_ftok {
+  key_t key;
+  /* Extra semaphores whose semval holds the database signature, so a key
+   * collision with another database's live set can be detected. */
+  unsigned short signature[MDBX_SYSVFTOK_SIGN_CHUNKS];
+} mdbx_ftok_t;
+MDBX_INTERNAL int osal_ftok(int fd, const char *pathname, mdbx_ftok_t *ft);
+#endif /* !IS_WINDOWS */
+
 #ifndef __cplusplus
 
 /* Actually this is not ioring for now, but on the way. */
@@ -580,9 +591,6 @@ MDBX_INTERNAL int osal_fileexists(const pathchar_t *pathname);
 MDBX_INTERNAL int osal_openfile(const enum osal_openfile_purpose purpose, const MDBX_env *env,
                                 const pathchar_t *pathname, mdbx_filehandle_t *fd, mdbx_mode_t unix_mode_bits);
 MDBX_INTERNAL int osal_closefile(mdbx_filehandle_t fd);
-#if !IS_WINDOWS
-MDBX_INTERNAL key_t osal_ftok(int fd, const char *pathname);
-#endif /* !Windows */
 MDBX_INTERNAL int osal_removefile(const pathchar_t *pathname);
 MDBX_INTERNAL int osal_removedirectory(const pathchar_t *pathname);
 MDBX_INTERNAL int osal_is_pipe(mdbx_filehandle_t fd);
