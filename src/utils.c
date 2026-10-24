@@ -55,26 +55,22 @@ size_t ceil_log2n(size_t value_uintptr) {
   return log2n_powerof2(value_uintptr + 1);
 }
 
-uint64_t rrxmrrxmsx_0(uint64_t v) {
-  /* Pelle Evensen's mixer, https://mostlymangling.blogspot.com/2019/01/ */
-  v ^= (v << 39 | v >> 25) ^ (v << 14 | v >> 50);
-  v *= UINT64_C(0xA24BAED4963EE407);
-  v ^= (v << 40 | v >> 24) ^ (v << 15 | v >> 49);
-  v *= UINT64_C(0x9FB21C651E98DF25);
-  return v ^ v >> 28;
-}
-
-uint64_t xnasamx(uint64_t v, uint64_t c) {
-  /* Pelle Evensen's mixer, https://mostlymangling.blogspot.com/2020/01/ */
-  v ^= c;
+uint64_t nasam(uint64_t v) {
   v ^= (v << 39 | v >> 25) ^ (v << 17 | v >> 47);
   v *= UINT64_C(0x9E6C63D0676A9A99);
   v ^= v >> 23 ^ v >> 51;
   v *= UINT64_C(0x9E6D62D06F6A9A9B);
   v ^= v >> 23 ^ v >> 51;
-  v ^= c;
   return v;
 }
+
+uint64_t pelican(uint64_t z) {
+  z = (z ^ (z << 41 | z >> 23) ^ (z << 17 | z >> 47) ^ UINT64_C(0xD1B54A32D192ED03)) * UINT64_C(0xAEF17502108EF2D9);
+  z = (z ^ z >> 43 ^ z >> 31 ^ z >> 23) * UINT64_C(0xDB4F0B9175AE2165);
+  return z ^ z >> 28;
+}
+
+uint64_t stir(uint64_t a, uint64_t b) { return nasam(a + pelican(b + nasam(a + pelican(b)))); }
 
 __cold char *ratio2digits(const uint64_t v, const uint64_t d, ratio2digits_buffer_t *const buffer, int precision) {
   ASSERT(d > 0 && precision < 20);

@@ -108,3 +108,10 @@ MDBX_INTERNAL int lck_rpid_clear(MDBX_env *env);
 ///     or not working with DB (indicative lock is not present).
 ///   Otherwise (not 0 and not -1) - error code.
 MDBX_INTERNAL int lck_rpid_check(MDBX_env *env, uint32_t pid);
+
+#if MDBX_LOCKING == MDBX_LOCKING_SYSV
+#define MDBX_LOCKING_SYSV_NSEM 2 /* txn и rdt */
+#define MDBX_LOCKING_SYSV_NSEM_WITH_SIGNATURE (MDBX_LOCKING_SYSV_NSEM + MDBX_SYSVFTOK_SIGN_CHUNKS)
+typedef struct mdbx_ftok mdbx_ftok_t;
+MDBX_INTERNAL int lck_ftok(int fd, const char *pathname, mdbx_ftok_t *ft);
+#endif /* MDBX_LOCKING_SYSV */
