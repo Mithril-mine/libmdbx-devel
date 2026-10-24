@@ -48,3 +48,13 @@ target_include_directories(issue_gh0080_reclaim PRIVATE ${LIBMDBX_SOURCE_DIR})
 target_link_libraries(issue_gh0080_reclaim PRIVATE mdbx-static)
 add_test(NAME issue_gh0080_reclaim COMMAND issue_gh0080_reclaim)
 set_tests_properties(issue_gh0080_reclaim PROPERTIES ENVIRONMENT "MDBX_PROBES=1")
+
+# Regression test for issue #159: a database that is open but idle, whose last
+# semop() owner process is dead, must not lose its semaphore set to a colliding
+# open of another database. The signature-based ownership check (not the owner
+# pid) is what protects it, so the probe-bus must be active at run time.
+add_executable(issue_gh0159_idle_holder issue_gh0159_idle_holder.c)
+target_include_directories(issue_gh0159_idle_holder PRIVATE ${LIBMDBX_SOURCE_DIR})
+target_link_libraries(issue_gh0159_idle_holder PRIVATE mdbx-static)
+add_test(NAME issue_gh0159_idle_holder COMMAND issue_gh0159_idle_holder)
+set_tests_properties(issue_gh0159_idle_holder PROPERTIES ENVIRONMENT "MDBX_PROBES=1")
