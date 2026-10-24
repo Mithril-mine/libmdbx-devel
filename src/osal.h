@@ -249,7 +249,7 @@ typedef char pathchar_t;
 #endif
 
 MDBX_MAYBE_UNUSED static inline bool osal_yield(void) {
-#if defined(_WIN32) || defined(_WIN64)
+#if IS_WINDOWS
   return SleepEx(0, true) == WAIT_IO_COMPLETION;
 #else
   return sched_yield() != 0;
@@ -265,13 +265,13 @@ typedef struct osal_mmap {
   size_t limit;   /* mapping length, but NOT a size of file nor DB */
   size_t current; /* mapped region size, i.e. the size of file and DB */
   uint64_t filesize /* in-process cache of a file size */;
-#if defined(_WIN32) || defined(_WIN64)
+#if IS_WINDOWS
   HANDLE section; /* memory-mapped section handle */
 #endif
 } osal_mmap_t;
 
 #ifndef MDBX_HAVE_PWRITEV
-#if defined(_WIN32) || defined(_WIN64)
+#if IS_WINDOWS
 
 #define MDBX_HAVE_PWRITEV 0
 
@@ -308,7 +308,7 @@ typedef struct osal_mmap {
 #endif /* MDBX_HAVE_PWRITEV */
 
 typedef struct ior_item {
-#if defined(_WIN32) || defined(_WIN64)
+#if IS_WINDOWS
   OVERLAPPED ov;
 #define ior_sgv_gap4terminator 1
 #define ior_sgv_element FILE_SEGMENT_ELEMENT
@@ -331,7 +331,7 @@ typedef struct ior_item {
 typedef struct osal_ioring {
   unsigned slots_left;
   unsigned allocated;
-#if defined(_WIN32) || defined(_WIN64)
+#if IS_WINDOWS
 #define IOR_STATE_LOCKED 1
   HANDLE overlapped_fd;
   unsigned pagesize;
@@ -361,7 +361,7 @@ typedef struct osal_ioring {
 
 MDBX_MAYBE_UNUSED static inline mdbx_pid_t osal_getpid(void) {
   STATIC_ASSERT(sizeof(mdbx_pid_t) <= sizeof(uint32_t));
-#if defined(_WIN32) || defined(_WIN64)
+#if IS_WINDOWS
   return GetCurrentProcessId();
 #else
   STATIC_ASSERT(sizeof(pid_t) <= sizeof(uint32_t));
@@ -372,7 +372,7 @@ MDBX_MAYBE_UNUSED static inline mdbx_pid_t osal_getpid(void) {
 MDBX_MAYBE_UNUSED static inline uintptr_t osal_thread_self(void) {
   mdbx_tid_t thunk;
   STATIC_ASSERT(sizeof(uintptr_t) >= sizeof(thunk));
-#if defined(_WIN32) || defined(_WIN64)
+#if IS_WINDOWS
   thunk = GetCurrentThreadId();
 #else
   thunk = pthread_self();
@@ -384,7 +384,7 @@ MDBX_MAYBE_UNUSED static inline uintptr_t osal_thread_self(void) {
 
 /* Actually this is not ioring for now, but on the way. */
 MDBX_INTERNAL int osal_ioring_create(osal_ioring_t *
-#if defined(_WIN32) || defined(_WIN64)
+#if IS_WINDOWS
                                      ,
                                      bool enable_direct, mdbx_filehandle_t overlapped_fd
 #endif /* Windows */
@@ -410,7 +410,7 @@ MDBX_MAYBE_UNUSED static inline unsigned osal_ioring_used(const osal_ioring_t *i
 
 MDBX_MAYBE_UNUSED static inline int osal_ioring_prepare(osal_ioring_t *ior, size_t items, size_t bytes) {
   items = (items > 32) ? items : 32;
-#if defined(_WIN32) || defined(_WIN64)
+#if IS_WINDOWS
   if (ior->direct) {
     const size_t npages = bytes >> ior->pagesize_ln2;
     items = (items > npages) ? items : npages;
@@ -424,7 +424,7 @@ MDBX_MAYBE_UNUSED static inline int osal_ioring_prepare(osal_ioring_t *ior, size
   return osal_ioring_resize(ior, items);
 }
 
-#if defined(_WIN32) || defined(_WIN64)
+#if IS_WINDOWS
 MDBX_INTERNAL HANDLE ior_get_event(osal_ioring_t *ior);
 MDBX_INTERNAL void ior_put_event(osal_ioring_t *ior, HANDLE event);
 #endif
@@ -497,7 +497,7 @@ MDBX_MAYBE_UNUSED MDBX_INTERNAL void osal_jitter(bool tiny);
 #endif /* !Windows */
 
 MDBX_MAYBE_UNUSED static inline int osal_get_errno(void) {
-#if defined(_WIN32) || defined(_WIN64)
+#if IS_WINDOWS
   DWORD rc = GetLastError();
 #else
   int rc = errno;
@@ -528,7 +528,7 @@ MDBX_INTERNAL int osal_pwritev(mdbx_filehandle_t fd, struct iovec *iov, size_t s
 MDBX_INTERNAL int osal_pread(mdbx_filehandle_t fd, void *buf, size_t bytes, uint64_t offset);
 MDBX_INTERNAL int osal_pwrite(mdbx_filehandle_t fd, const void *buf, size_t bytes, uint64_t offset);
 MDBX_INTERNAL int osal_write(mdbx_filehandle_t fd, const void *buf, size_t bytes);
-#if defined(_WIN32) || defined(_WIN64)
+#if IS_WINDOWS
 MDBX_INTERNAL int osal_pwrite_ev(mdbx_filehandle_t fd, HANDLE ev, const void *buf, size_t bytes, uint64_t offset);
 MDBX_INTERNAL int osal_pread_ev(mdbx_filehandle_t fd, HANDLE ev, void *buf, size_t bytes, uint64_t offset);
 #endif
@@ -555,7 +555,7 @@ enum osal_openfile_purpose {
   MDBX_OPEN_DXB_READ,
   MDBX_OPEN_DXB_LAZY,
   MDBX_OPEN_DXB_DSYNC,
-#if defined(_WIN32) || defined(_WIN64)
+#if IS_WINDOWS
   MDBX_OPEN_DXB_OVERLAPPED,
   MDBX_OPEN_DXB_OVERLAPPED_DIRECT,
 #endif /* Windows */
@@ -567,7 +567,7 @@ enum osal_openfile_purpose {
 
 MDBX_MAYBE_UNUSED static inline bool osal_isdirsep(pathchar_t c) {
   return
-#if defined(_WIN32) || defined(_WIN64)
+#if IS_WINDOWS
       c == '\\' ||
 #endif
       c == '/';
@@ -580,9 +580,6 @@ MDBX_INTERNAL int osal_fileexists(const pathchar_t *pathname);
 MDBX_INTERNAL int osal_openfile(const enum osal_openfile_purpose purpose, const MDBX_env *env,
                                 const pathchar_t *pathname, mdbx_filehandle_t *fd, mdbx_mode_t unix_mode_bits);
 MDBX_INTERNAL int osal_closefile(mdbx_filehandle_t fd);
-#if !IS_WINDOWS
-MDBX_INTERNAL key_t osal_ftok(int fd, const char *pathname);
-#endif /* !Windows */
 MDBX_INTERNAL int osal_removefile(const pathchar_t *pathname);
 MDBX_INTERNAL int osal_removedirectory(const pathchar_t *pathname);
 MDBX_INTERNAL int osal_is_pipe(mdbx_filehandle_t fd);
@@ -596,7 +593,7 @@ MDBX_INTERNAL void osal_munmap(osal_mmap_t *map);
 #define MDBX_MRESIZE_MAY_MOVE 0x00000100
 #define MDBX_MRESIZE_MAY_UNMAP 0x00000200
 MDBX_INTERNAL int osal_mresize(const int flags, osal_mmap_t *map, size_t size, size_t limit);
-#if defined(_WIN32) || defined(_WIN64)
+#if IS_WINDOWS
 typedef struct {
   unsigned limit, count;
   HANDLE handles[31];
@@ -640,7 +637,7 @@ MDBX_NORETURN MDBX_INTERNAL void osal_panic(const char *msg, const char *func, u
 MDBX_INTERNAL void osal_ctor(void);
 MDBX_INTERNAL void osal_dtor(void);
 
-#if defined(_WIN32) || defined(_WIN64)
+#if IS_WINDOWS
 MDBX_INTERNAL int osal_mb2w(const char *const src, wchar_t **const pdst);
 #endif /* Windows */
 
