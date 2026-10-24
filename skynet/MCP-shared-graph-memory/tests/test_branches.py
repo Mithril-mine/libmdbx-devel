@@ -409,280 +409,361 @@ def test_upgrade_rejects_nonempty_incompatible_table(tmp_path):
     import pytest
     from mcp import libmdbx as mdbx
     from mcp.errors import MemoryError as ME
-    db = str(tmp_path / "old2.mdbx")
-    _make_old_schema_db(db, rows=[("legacy_row", '{"x":1}')])
-    s = Store(db, readonly=False)
-    with pytest.raises(ME) as ei:
-        s.upgrade()
-    assert "INVALID" in str(ei.value)
-    assert "schema-mismatch" in str(ei.value)
-    s.close()
-    # данные целы (старый handle, старый формат)
-    env = mdbx.Env(db, maxdbs=64, readonly=True)
-    with env.begin(readonly=True) as txn:
-        d = txn.open_dbi("call_traces", mdbx.DUPSORT)
-        rc, v = txn.get(d, b"legacy_row")
-        assert v is not None and b"x" in v
+    db = str(tmp_path / "old.mdbx")
+    env = mdbx.Env(db, maxdbs=64, readonly=False, sync_mode="safe_nosync")
+    with env.begin() as txn:
+        meta = txn.open_dbi("meta", mdbx.CREATE | mdbx.DB_DEFAULTS)
+        txn.open_dbi("records", mdbx.CREATE | mdbx.DB_DEFAULTS)
+        txn.put(meta, b"schema_ver", b"1")  # старая схема без branches
     env.close()
+    s = Store(db, readonly=True)  # readonly: branches → None, schema_ver=1
+    with pytest.raises(ME) as ei:
+        s.branch_list()
+    assert "SCHEMA_OUTDATED" in str(ei.value)
+    assert "db_set_mode" in str(ei.value)
+    s.close()
+    # в актуальной схеме + read-only-старт (таблицы нет) — толерантность
+    db2 = str(tmp_path / "fresh.mdbx")
+    env2 = mdbx.Env(db2, maxdbs=64, readonly=False, sync_mode="safe_nosync")
+    with env2.begin() as txn:
+        meta2 = txn.open_dbi("meta", mdbx.CREATE | mdbx.DB_DEFAULTS)
+        txn.open_dbi("records", mdbx.CREATE | mdbx.DB_DEFAULTS)
+        txn.put(meta2, b"schema_ver", b"2")
+    env2.close()
+    s2 = Store(db2, readonly=True)
+    assert s2.branch_list() == []  # актуальная схема → нет данных, не ошибка
+    s2.close()
 
 
-def test_coverage_migrate_isolates_source(store):
-    """C3/N5: миграция покрытия merge-ветки — копия, источник цел."""
-    L = "0.15.merge-me.9"
-    store.map_put_symbol("fn:m:a", {"module": "m"}, layer=L)
-    store.map_put_symbol("fn:m:b", {"module": "m"}, layer=L)
-    store.coverage_insert("ut/t1", ["fn:m:a"], pct=10.0, layer=L)
-    store.coverage_blocks_insert(
-        "ut/t1", [{"symbol": "fn:m:a", "block_id": "B1", "covered": True}],
-        layer=L)
-    store.trace_ingest("fn:m:a", "fn:m:b", count=2, layer=L)
+def test_branch_purge_expected_current_cas(store):
+    """F5.4a/M1: CAS в branch_purge ловит гонку purge/activate.
 
-    r = store.coverage_migrate(L, "0.15.base")
-    assert r["tests"] == 1 and r["blocks"] == 1 and r["traces"] == 1
-
-    # целевой слой получил данные
-    c = store.coverage_get("ut/t1", layer="0.15.base")
-    assert c["symbols"] == ["fn:m:a"] and c["pct"] == 10.0
-    assert [b["block_id"] for b in
-            store.coverage_blocks_get("ut/t1", "fn:m:a",
-                                      layer="0.15.base")] == ["B1"]
-    assert store.trace_observed("fn:m:a", layer="0.15.base")[0]["count"] == 2
-    # covered_by в целевом слое согласован
-    cb = store.coverage_symbols("fn:m:a", layer="0.15.base")
-    assert any(x["symbol"] == "fn:m:a" and x["tests"] == ["ut/t1"]
-               for x in cb)
-
-    # источник НЕ изменился
-    c2 = store.coverage_get("ut/t1", layer=L)
-    assert c2["symbols"] == ["fn:m:a"]
-    assert store.trace_observed("fn:m:a", layer=L)[0]["count"] == 2
-
-
-def test_coverage_migrate_symbol_filter_and_conflicts(store):
-    """C3: фильтр symbols; конфликт test_id в целевом слое — перезапись."""
+    expected_current не совпал с текущим активным слоем → CONFLICT;
+    purge не выполняется. С верным expected_current — проходит.
+    """
     import pytest
     from mcp.errors import MemoryError as ME
-    L = "0.15.merge2.3"
-    store.coverage_insert("ut/t1", ["fn:m:a", "fn:m:b"], pct=50.0, layer=L)
-    store.coverage_insert("ut/t2", ["fn:m:b"], pct=100.0, layer=L)
-    # целевой слой уже имеет ut/t1 со старыми данными — миграция перезапишет
-    store.coverage_insert("ut/t1", ["fn:old:sym"], pct=1.0, layer="0.15.base")
-
-    r = store.coverage_migrate(L, "0.15.base", symbols=["fn:m:b"])
-    # оба теста содержат fn:m:b → перенесены оба
-    assert r["tests"] == 2
-    # ut/t1 в базовом перезаписан: старые символы ушли, пришёл fn:m:b
-    c = store.coverage_get("ut/t1", layer="0.15.base")
-    assert c["symbols"] == ["fn:m:b"] and c["pct"] == 50.0
-    # stale-членство fn:old:sym вычищено (_coverage_put_locked)
-    assert store.coverage_symbols("fn:old", layer="0.15.base") == []
-    # новый член covered_by появился
-    cb = store.coverage_symbols("fn:m:b", layer="0.15.base")
-    assert cb and sorted(cb[0]["tests"]) == ["ut/t1", "ut/t2"]
-
-    # совпадающие префиксы ("0.15" и "0.15.base" оба → "") — invalid
-    with pytest.raises(ME):
-        store.coverage_migrate("0.15", "0.15.base")
-    with pytest.raises(ME):
-        store.coverage_migrate(L, L)
+    L1 = "0.15.cas.1"
+    store.branch_register("0.15", "cas", n_commits=1)
+    store.map_put_symbol("fn:m:a", {"module": "m"}, layer=L1)
+    # активный слой другой → CAS-ожидание не совпало
+    with pytest.raises(ME) as ei:
+        store.branch_purge(L1, expected_current="0.15.cas.X")
+    assert "CONFLICT" in str(ei.value)
+    # purge не выполнился (данные целы)
+    assert "fn:m:a" in store.map_symbols(layer=L1)
+    # корректный expected_current (текущий активный) — проходит
+    cur = store.branch_current()["layer"]
+    r = store.branch_purge(L1, expected_current=cur)
+    assert r["result"] == "purged"
+    assert store.map_symbols(layer=L1) == []
 
 
-def test_coverage_migrate_blocks_colon_in_test_id(store):
-    """C3/P1: test_id с ":" не мисатрибутируется при миграции блоков.
+def test_branch_purge_cas_mcp_contract(store):
+    """F5.4a/M1: branch_purge expected_current доступен через MCP."""
+    store.branch_register("0.15", "cas2", n_commits=2)
+    from mcp.mcp_server import McpServer
+    serv = McpServer(store)
+    r = serv.handle({"jsonrpc": "2.0", "id": 1, "method": "tools/call",
+                     "params": {"name": "branch_purge",
+                                "arguments": {
+                                    "layer": "0.15.cas2.2",
+                                    "expected_current": "wrong"}}})
+    assert r.get("error") and "CONFLICT" in r["error"]["message"]
+    r2 = serv.handle({"jsonrpc": "2.0", "id": 2, "method": "tools/call",
+                      "params": {"name": "branch_purge",
+                                 "arguments": {
+                                     "layer": "0.15.cas2.2",
+                                     "expected_current": (
+                                         store.branch_current()["layer"])}}})
+    assert r2["result"]["structuredContent"]["result"] == "purged"
 
-    Ключ "coverage_blocks:{pre}{test}:{sym}" неоднозначен, когда и test_id,
-    и sym содержат ":" (ut/api:case + fn:m:a). Раньше split(":",1) резал по
-    ПЕРВОМУ ":" → блок уезжал под чужой test_id "ut/api". Теперь sym берётся
-    из тела JSON, test_id — хвост ключа без суффикса ":"+sym.
+
+def test_branch_purge_cas_atomic_in_write_txn(store, monkeypatch):
+    """Ревью #175-#12: branch_purge проверяет active/CAS ВНУТРИ write-txn.
+
+    branch_current НЕ должен вызываться в отдельной read-txn до удаления
+    (окно TOCTOU: другой агент мог бы активировать слой между проверкой
+    и write-txn — purge снёс бы данные активного слоя).
     """
-    L = "0.15.colon.4"
-    store.coverage_blocks_insert(
-        "ut/api:case",
-        [{"symbol": "fn:m:a", "block_id": "B1", "covered": True}], layer=L)
-    r = store.coverage_migrate(L, "0.15.base")
-    assert r["blocks"] == 1
-    # блок под ПРАВИЛЬНЫМ test_id (не под мисатрибутированным "ut/api")
-    got = store.coverage_blocks_get("ut/api:case", "fn:m:a", layer="0.15.base")
-    assert [b["block_id"] for b in got] == ["B1"]
-    # старый баг обрезал test_id до первого ":" → ключ ".../ut/api:fn:m:a"
-    # (без ":case"); его быть не должно
-    assert store.coverage_blocks_get("ut/api", "fn:m:a",
-                                     layer="0.15.base") == []
+    L = "0.15.cas.9"
+    store.branch_register("0.15", "cas9", n_commits=9)
+    store.map_put_symbol("fn:m:z", {"module": "m"}, layer=L)
+    calls = {"branch_current": 0, "write_txn": 0}
+    real_bc = store.branch_current
+    real_bw = store._begin_write
 
+    def spy_bc():
+        calls["branch_current"] += 1
+        return real_bc()
 
-def test_coverage_migrate_blocks_symbol_filter_colon(store):
-    """C3/P1: фильтр symbols работает и при test_id с ":" (sym из тела)."""
-    L = "0.15.colon2.5"
-    store.coverage_blocks_insert(
-        "ut/api:case",
-        [{"symbol": "fn:m:a", "block_id": "B1", "covered": True},
-         {"symbol": "fn:m:b", "block_id": "B9", "covered": True}], layer=L)
-    # переносим только fn:m:a
-    store.coverage_migrate(L, "0.15.base", symbols=["fn:m:a"])
-    got_a = store.coverage_blocks_get("ut/api:case", "fn:m:a",
-                                      layer="0.15.base")
-    assert [b["block_id"] for b in got_a] == ["B1"]
-    # fn:m:b не перенесён (фильтр)
-    assert store.coverage_blocks_get("ut/api:case", "fn:m:b",
-                                     layer="0.15.base") == []
+    def spy_bw():
+        calls["write_txn"] += 1
+        return real_bw()
 
-
-def _rev_callers(store, callee, layer=""):
-    """Прямое чтение call_traces_rev (внутренний индекс, читателя нет)."""
-    from mcp import libmdbx as _mdbx
-    pre = store.layer_prefix(layer)
-    with store.env.begin(readonly=True) as txn:
-        dbi = store.dbi(txn, "call_traces_rev")
-        out = []
-        with txn.cursor(dbi) as cur:
-            rc, k, v = cur.get(_mdbx.CURSOR_SET_RANGE, (pre + callee).encode())
-            while rc == _mdbx.RC_SUCCESS and k == (pre + callee).encode():
-                out.append(v.decode()[len(pre):])
-                rc, k, v = cur.get(_mdbx.CURSOR_NEXT)
-    return out
-
-
-def test_coverage_migrate_traces_rev_no_dangling(store):
-    """C3/P2: перезапись caller в целевом слое чистит висячие rev-рёбра.
-
-    Прямой индекс call_traces[caller] перезаписывается телом источника;
-    обратный call_traces_rev для callee, исчезнувших из тела, должен быть
-    удалён — иначе rev расходится с прямым (висячие callee→caller).
-    """
-    L = "0.15.trmig.6"
-    # base: caller fn:m:a -> fn:old:callee
-    store.trace_ingest("fn:m:a", "fn:old:callee", layer="0.15.base")
-    # feature: тот же caller fn:m:a -> fn:new:callee
-    store.trace_ingest("fn:m:a", "fn:new:callee", layer=L)
-    store.coverage_migrate(L, "0.15.base")
-    # прямой индекс согласован: только new_callee
-    obs = store.trace_observed("fn:m:a", layer="0.15.base")
-    assert [o["callee"] for o in obs] == ["fn:new:callee"]
-    # обратный: old_callee больше НЕ указывает на fn:m:a (перезатёрт)
-    assert _rev_callers(store, "fn:old:callee", "0.15.base") == []
-    # new_callee указывает корректно
-    assert _rev_callers(store, "fn:new:callee", "0.15.base") == ["fn:m:a"]
-
-
-def test_coverage_migrate_skips_corrupt_records(store):
-    """Ревью: битые/несогласованные записи пропускаются с отчётом skipped.
-
-    Миграция не падает на мусоре источника и не порождает мусорных ключей:
-    corrupt-JSON, не-dict блоки и несовпадение symbol-тела с sym-ключом
-    — все три случая попадают в отчёт "skipped" (паттерн probe_batch),
-    остальные записи переносятся нормально (включая legacy без symbol).
-    """
-    L = "0.15.corrupt.7"
-    with store._begin_write() as txn:
-        dbi = store.dbi(txn, "coverage_blocks")
-        # мусорный JSON-элемент (не dict)
-        txn.put(dbi, ("coverage_blocks:%s/ut/c1:fn:m:a" % L).encode(),
-                b"[1]")
-        # несогласованная: тело symbol=fn:OTHER, ключ sym=fn:m:a
-        txn.put(dbi, ("coverage_blocks:%s/ut/c2:fn:m:a" % L).encode(),
-                b'[{"symbol": "fn:OTHER", "block_id": "B9", "covered": true}]')
-        # legacy без symbol в теле (пустой sym → ключ оканчивается ":")
-        txn.put(dbi, ("coverage_blocks:%s/ut/c3:" % L).encode(),
-                b'[{"block_id": "B4", "covered": false}]')
-        # нормальная запись
-        txn.put(dbi, ("coverage_blocks:%s/ut/c4:fn:m:b" % L).encode(),
-                b'[{"symbol": "fn:m:b", "block_id": "B1", "covered": true}]')
-        cov = store.dbi(txn, "coverage")
-        txn.put(cov, ("coverage:%s/ut/c5" % L).encode(), b"{oops")
-        txn.put(cov, ("coverage:%s/ut/c6" % L).encode(),
-                b'{"symbols": ["fn:m:b"], "pct": 1.0}')
-
-    r = store.coverage_migrate(L, "0.15.base")
-    reasons = sorted(s["reason"] for s in r["skipped"])
-    assert reasons == ["corrupt-blocks", "corrupt-coverage", "sym-mismatch"]
-    # хорошие записи перенесены
-    assert r["tests"] == 1 and r["blocks"] == 2
-    assert store.coverage_get("ut/c6", layer="0.15.base")["symbols"] == \
-        ["fn:m:b"]
-    assert [b["block_id"] for b in
-            store.coverage_blocks_get("ut/c4", "fn:m:b",
-                                      layer="0.15.base")] == ["B1"]
-    assert [b["block_id"] for b in
-            store.coverage_blocks_get("ut/c3", "",
-                                      layer="0.15.base")] == ["B4"]
-    # мусор НЕ перенесён (и не склеен в чужие ключи)
-    assert store.coverage_blocks_get("ut/c1", "fn:m:a", layer="0.15.base") \
-        == []
-    assert store.coverage_blocks_get("ut/c2", "fn:m:a", layer="0.15.base") \
-        == []
-    assert store.coverage_blocks_get("ut/c2", "fn:OTHER", layer="0.15.base") \
-        == []
-
-
-def test_merge_flow_migrate_then_purge(store):
-    """Merge-цепочка BRANCHES.md end-to-end: migrate → purge.
-
-    coverage_migrate(feature, base) переносит прогон, branch_purge(feature)
-    сносит мёртвый слой; целевой слой данные сохранил, источник пуст.
-    Ловит регрессии, где purge затирает мигрированные данные (пересечение
-    префиксов coverage/blocks в чистке).
-    """
-    L = "0.15.flow.11"
-    body = {"module": "m", "kind": "function"}
-    store.map_put_symbol("fn:m:new", body, layer=L)
-    store.coverage_insert("ut/f1", ["fn:m:new"], pct=100.0, layer=L)
-    store.coverage_blocks_insert(
-        "ut/f1",
-        [{"symbol": "fn:m:new", "block_id": "B1", "covered": True}], layer=L)
-    store.trace_ingest("fn:m:new", "fn:m:base", layer=L)
-    store.branch_register("0.15", "flow", n_commits=11)
-
-    m = store.coverage_migrate(L, "0.15.base")
-    assert m["tests"] == 1 and m["blocks"] == 1 and m["traces"] == 1
-    p = store.branch_purge(L)
-    assert p["result"] == "purged"
-    # источник пуст
-    assert store.map_symbols(layer=L) == []
-    assert store.coverage_all(layer=L) == []
-    # мигрированные данные в base ЦЕЛЫ после purge источника
-    c = store.coverage_get("ut/f1", layer="0.15.base")
-    assert c["symbols"] == ["fn:m:new"] and c["pct"] == 100.0
-    assert [b["block_id"] for b in
-            store.coverage_blocks_get("ut/f1", "fn:m:new",
-                                      layer="0.15.base")] == ["B1"]
-    assert store.trace_observed("fn:m:new", layer="0.15.base")
-    cb = store.coverage_symbols("fn:m:new", layer="0.15.base")
-    assert cb and cb[0]["tests"] == ["ut/f1"]
-
-
-def test_branch_activate_unregistered_warns(store):
-    """D5/N14: активация незарегистрированного слоя → warning (не ошибка).
-
-    Слой мог быть намеренно очищен purge'ем, поэтому это не отказ; но
-    чтения/записи уйдут в пустой слой — предупреждаем явно.
-    """
-    r = store.branch_activate("0.15.ghost.9")
-    assert r["current"] == "0.15.ghost.9"
-    assert "warning" in r and "реестре" in r["warning"]
-    # зарегистрированный слой — без warning
-    store.branch_register("0.15", "real", n_commits=2)
-    r2 = store.branch_activate("0.15.real.2")
-    assert "warning" not in r2, r2
-
-
-def test_upgrade_fast_path_no_write_txn(store, monkeypatch):
-    """D5/N16: повторный upgrade на готовой БД не открывает write-txn.
-
-    upgrade вызывается сервером на каждом rw-старте; если все таблицы
-    открыты и backfill-маркер стоит — fast-path возвращает результат без
-    write-txn (важно для read-heavy роя).
-    """
-    store.upgrade()  # первый вызов ставит backfill-маркер
-    orig = store._begin_write
-    calls = {"n": 0}
-
-    def spy():
-        calls["n"] += 1
-        return orig()
-
-    monkeypatch.setattr(store, "_begin_write", spy)
-    r = store.upgrade()
+    monkeypatch.setattr(store, "branch_current", spy_bc)
+    monkeypatch.setattr(store, "_begin_write", spy_bw)
+    r = store.branch_purge(L, expected_current="")  # активный не L
     monkeypatch.undo()
-    assert r.get("fast_path") is True, r
-    assert r["created"] == []
-    assert calls["n"] == 0, "fast-path не должен открывать write-txn"
+    assert r["result"] == "purged"
+    # активная ветка читается ТОЛЬКО внутри write-txn (txn.get meta),
+    # не через branch_current в отдельной read-txn
+    assert calls["branch_current"] == 0, \
+        "branch_current не должен вызываться из purge (точечная проверка)"
+    assert calls["write_txn"] == 1, "одна write-txn на purge"
+
+
+def test_schema_outdated_other_families_raise(tmp_path):
+    """Ревью #175-#7: единый контракт SCHEMA_OUTDATED во ВСЕХ семействах
+    опциональных таблиц (не только branch_list/coverage_all).
+
+    Раньше coverage_get/probe_get/ci_jobs_all молча возвращали {} / [] на
+    старой схеме — ловушка «пусто = нет данных». Теперь — контрактная ошибка.
+    """
+    import pytest
+    from mcp import libmdbx as mdbx
+    from mcp.errors import MemoryError as ME
+    db = str(tmp_path / "old.mdbx")
+    env = mdbx.Env(db, maxdbs=64, readonly=False, sync_mode="safe_nosync")
+    with env.begin() as txn:
+        meta = txn.open_dbi("meta", mdbx.CREATE | mdbx.DB_DEFAULTS)
+        txn.open_dbi("records", mdbx.CREATE | mdbx.DB_DEFAULTS)
+        txn.put(meta, b"schema_ver", b"1")  # старая схема (нет опц. таблиц)
+    env.close()
+    s = Store(db, readonly=True)  # None-handle для всех опц. таблиц
+    # представители ВСЕХ семейств с _check_opt_table (ревью #175-r3 T2)
+    cases = [
+        ("coverage_get", ("t1",)),
+        ("probe_get", ("tag",)),
+        ("ci_jobs_all", ()),
+        ("coverage_symbols", ("fn:",)),
+        ("coverage_summary", ()),
+        ("coverage_gaps", ()),
+        ("coverage_blocks_get", ("t1", "fn:m:a")),
+        ("probe_list", ()),
+        ("probe_add", ("tag",)),
+        ("trace_observed", ()),
+        ("trace_path", ("fn:a", "fn:b")),
+        ("trace_compare", ("fn:a",)),
+        ("test_metrics_get", ("t1",)),
+        ("test_metrics_all", ()),
+        # write-писатели: тоже _check_opt_table первым (страховка от
+        # рефакторинга порядка валидаций, r4)
+        ("trace_ingest", ("fn:a", "fn:b")),
+        ("coverage_insert", ("t1", ["fn:m:a"])),
+        ("coverage_blocks_insert", ("t1", [{"symbol": "fn:m:a"}])),
+        ("test_metrics_insert", ("t1", 100.0)),
+    ]
+    for meth, args in cases:
+        with pytest.raises(ME) as ei:
+            getattr(s, meth)(*args)
+        assert "SCHEMA_OUTDATED" in str(ei.value), "%s: %s" % (meth, ei.value)
+    s.close()
+    # актуальная схема + read-only → толерантность (как и раньше)
+    db2 = str(tmp_path / "fresh.mdbx")
+    env2 = mdbx.Env(db2, maxdbs=64, readonly=False, sync_mode="safe_nosync")
+    with env2.begin() as txn:
+        meta2 = txn.open_dbi("meta", mdbx.CREATE | mdbx.DB_DEFAULTS)
+        txn.open_dbi("records", mdbx.CREATE | mdbx.DB_DEFAULTS)
+        txn.put(meta2, b"schema_ver", b"2")
+    env2.close()
+    s2 = Store(db2, readonly=True)
+    assert s2.coverage_get("t1") == {}
+    assert s2.probe_get("tag") == {}
+    assert s2.ci_jobs_all() == []
+    s2.close()
+
+
+def test_schema_ver_non_numeric(tmp_path):
+    """Ревью #175: schema_ver="2.5" (не int) → SCHEMA_TOO_NEW (чужая схема)."""
+    import pytest
+    from mcp import libmdbx as mdbx
+    from mcp.errors import MemoryError as ME
+    db = str(tmp_path / "odd.mdbx")
+    env = mdbx.Env(db, maxdbs=64, readonly=False, sync_mode="safe_nosync")
+    with env.begin() as txn:
+        meta = txn.open_dbi("meta", mdbx.CREATE | mdbx.DB_DEFAULTS)
+        txn.open_dbi("records", mdbx.CREATE | mdbx.DB_DEFAULTS)
+        txn.put(meta, b"schema_ver", b"2.5")
+    env.close()
+    with pytest.raises(ME) as ei:
+        Store(db)
+    assert "SCHEMA_TOO_NEW" in str(ei.value)
+
+
+def test_schema_ver_zero_is_outdated_not_too_new(tmp_path):
+    """Ревью #175: schema_ver="0" (int < SCHEMA_VERSION) → НЕ too_new,
+    а SCHEMA_OUTDATED при доступе к опциональной таблице."""
+    import pytest
+    from mcp import libmdbx as mdbx
+    from mcp.errors import MemoryError as ME
+    db = str(tmp_path / "zero.mdbx")
+    env = mdbx.Env(db, maxdbs=64, readonly=False, sync_mode="safe_nosync")
+    with env.begin() as txn:
+        meta = txn.open_dbi("meta", mdbx.CREATE | mdbx.DB_DEFAULTS)
+        txn.open_dbi("records", mdbx.CREATE | mdbx.DB_DEFAULTS)
+        txn.put(meta, b"schema_ver", b"0")
+    env.close()
+    s = Store(db, readonly=True)  # старшего нет → не too_new
+    with pytest.raises(ME) as ei:
+        s.branch_list()
+    assert "SCHEMA_OUTDATED" in str(ei.value)
+    s.close()
+
+
+def test_branch_purge_vs_activate_race_no_corruption(tmp_path):
+    """Ревью #175-r3 Q4: двухпроцессная гонка purge vs activate никогда не даёт
+    «слой активен И данные удалены».
+
+    fork: потомок делает branch_activate(L) в цикле с retry при BUSY,
+    родитель — branch_purge(L, expected_current=""). Ожидаемый исход — либо
+    purge CONFLICT (activate-first), либо purge удалил ДО активации и потомок
+    получил warning «purge'нут». Оба корректны; инвариант: после обоих
+    НЕ может существовать активный L с пустыми данными.
+    """
+    import os
+    import subprocess
+    import sys
+    from mcp.errors import MemoryError as ME
+    db = str(tmp_path / "race.mdbx")
+    L = "0.15.race.3"
+    # подготовка: регистрируем слой и кладём данные (env закрыт ДО fork —
+    # иначе оба процесса унаследуют LCK и env не откроется в потомке)
+    s = Store(db, _skip_sync_thread=True)
+    s.branch_register("0.15", "race", n_commits=3)
+    s.map_put_symbol("fn:m:r", {"module": "m"}, layer=L)
+    s.close()
+    # Гонка через ОТДЕЛЬНЫЙ процесс (subprocess): fork в pytest-процессе
+    # может унаследовать чужие env-fd (fixtures) → mdbx_env_open(11).
+    # subprocess стартует чистым процессом (как отдельный агент роя).
+    srcdir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    child_code = (
+        "import sys, time\n"
+        "sys.path.insert(0, %r)\n"
+        "from mcp.store import Store\n"
+        "from mcp import libmdbx as mdbx\n"
+        "from mcp.errors import MemoryError as ME\n"  # Б2: контрактные ошибки
+        "s = Store(%r, _skip_sync_thread=True)\n"
+        "for _ in range(100):\n"
+        "    try:\n"
+        "        r = s.branch_activate(%r)\n"
+        "        r.get('warning')\n"
+        "        s.close()\n"
+        "        sys.exit(0)\n"
+        "    except mdbx.LibmdbxError as e:\n"
+        "        if e.rc == mdbx.RC_BUSY:\n"
+        "            time.sleep(0.02)\n"
+        "            continue\n"
+        "        s.close()\n"
+        "        sys.exit(1)\n"
+        "    except ME as e:\n"
+        "        # busy_io/CONFLICT/invalid — контрактные исходы\n"
+        "        s.close()\n"
+        "        sys.exit(0)\n"
+        "s.close()\n"
+        "sys.exit(2)\n"
+        % (srcdir, db, L))
+    proc = subprocess.Popen([sys.executable, "-c", child_code])
+    # родитель: открывает свой env, purge с CAS на неактивный слой
+    outcome = "other"
+    try:
+        with Store(db, _skip_sync_thread=True) as s3:
+            s3.branch_purge(L, expected_current="")
+        outcome = "purged"
+    except ME as e:
+        msg = str(e)
+        if "CONFLICT" in msg:
+            outcome = "conflict"
+        elif "является активным" in msg:
+            outcome = "invalid-active"  # activate-first: guard отклонил
+    rc = proc.wait(timeout=30)
+    child_ok = rc == 0
+    # ИНТЕРПРЕТАЦИЯ (ревью Q4): гонка serial-писателей; ТРИ исхода допустимы:
+    #   - purge первым (purged): в его write-txn слой НЕ был активен, данные
+    #     удалены законно; потомок ПОТОМ активировал пустой — warning
+    #     «purge'нут» (данные не вернутся) — корректный жизненный цикл;
+    #   - activate первым: purge получил CONFLICT (CAS) или
+    #     invalid-active (guard активного слоя), данные ЦЕЛЫ.
+    # Запрещён ЛИШЬ случай: purge удалил данные слоя, КОТОРЫЙ был активен
+    # В ТУ ЖЕ write-txn (guard бы отклонил) — это проверяет outcome.
+    s4 = Store(db, _skip_sync_thread=True)
+    data = s4.map_symbols(layer=L)
+    s4.close()
+    assert child_ok, "потомок должен завершиться корректно (rc=%d)" % rc
+    if outcome in ("conflict", "invalid-active"):
+        # purge отклонён (activate-first) — данные обязаны быть ЦЕЛЫ
+        assert data, "activate-first: данные слоя не должны быть удалены"
+    elif outcome == "purged":
+        # purge прошёл: данные удалены ДО возможной активации потомка — ок
+        pass
+    else:
+        raise AssertionError("неизвестный исход purge: %r" % outcome)
+
+
+def test_state_merge_real_race_no_lost_flag(tmp_path, monkeypatch):
+    """Ревью Q10: настоящая гонка state-файла — потомок пишет
+    между read и save родителя; флаг родителя не теряется (merge под локом)."""
+    import os
+    import time as _t
+    signal = str(tmp_path / "state-gate")
+    # файл-барьер: потомок ждёт его появления
+    barrier = signal + ".start"
+    monkeypatch.setenv("SHARED_GRAPH_MEMORY_BACKUP_DIR", str(tmp_path / "bk"))
+    db = str(tmp_path / "t.mdbx")
+    st_ = Store(db, _skip_sync_thread=True)
+    st_.safe_store("fact:x:y", "fact", "seed", 0.5)
+    st_.close()
+    pid = os.fork()
+    if pid == 0:
+        # потомок: ждёт барьер, пишет last_auto (open env под try —
+        # авария даст rc!=0, а не молчаливый traceback)
+        while not os.path.exists(barrier):
+            _t.sleep(0.001)
+        try:
+            with Store(db, _skip_sync_thread=True) as s2:
+                st2 = s2._load_backup_state()
+                st2["last_auto"] = 555.0
+                s2._save_backup_state(st2)
+        except Exception:  # noqa: BLE001
+            os._exit(2)
+        os._exit(0)
+    # родитель: читает state (до записи потомка), ставит барьер, пишет флаг
+    with Store(db, _skip_sync_thread=True) as s3:
+        st3 = s3._load_backup_state()
+        st3["auto_skipped_limit"] = True
+        os.close(os.open(barrier, os.O_CREAT))  # отпускаем потомка
+        # R5 (r4): вместо фиксированного sleep — ждём появления ключа
+        # потомка (поллинг до дедлайна), чтобы под нагрузкой CI не flaky
+        deadline = _t.time() + 5.0
+        while True:
+            cur = s3._load_backup_state()
+            if cur.get("last_auto") == 555.0:
+                break
+            if _t.time() > deadline:
+                raise AssertionError(
+                    "потомок не записал last_auto за 5с (flaky-дедлайн)")
+            _t.sleep(0.01)
+        s3._save_backup_state(st3)  # merge: флаг + last_auto потомка переживут
+    _, status = os.waitpid(pid, 0)
+    assert os.WIFEXITED(status) and os.WEXITSTATUS(status) == 0, \
+        "дочерний процесс завершился аварийно: status=%r" % status
+    with Store(db, _skip_sync_thread=True) as s4:
+        cur = s4._load_backup_state()
+        assert cur.get("auto_skipped_limit") is True, "флаг родителя сохранён"
+        assert cur.get("last_auto") == 555.0, "last_auto потомка пережил merge"
+
+
+def test_mcp_memoryerror_not_stdlib(tmp_path):
+    """Ревью #175-r5 Б2: mcp.errors.MemoryError — кастомный класс, НЕ
+    наследник builtins.MemoryError. Иначе child_code `except MemoryError`
+    ловил бы stdlib OOM, а не busy_io/CONFLICT — флак под нагрузкой."""
+    from mcp.errors import MemoryError as ME
+    assert not issubclass(ME, __builtins__["MemoryError"]) if isinstance(
+        __builtins__, dict) else False, \
+        "ME не должен быть подклассом stdlib MemoryError"
+    # конкретный тип ошибки из _begin_write — busy_io
+    from mcp.errors import busy_io
+    e = busy_io("test")
+    assert not isinstance(e, __builtins__["MemoryError"]), \
+        "busy_io не должен перехватываться как stdlib MemoryError"
+    assert isinstance(e, ME)

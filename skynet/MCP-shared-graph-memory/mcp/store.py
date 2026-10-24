@@ -20,15 +20,18 @@ env открыт с MDBX_SAFE_NOSYNC, фоновый тред раз в секу
 
 from __future__ import annotations
 
+import contextlib
 import hashlib
 import json
 import math
 import os
+import random
 import re
 import shutil
 import sys
 import threading
 import time
+import warnings
 from collections import deque
 
 from . import index as idx
@@ -39,6 +42,8 @@ from .errors import (
     db_file_deleted,
     invalid,
     readonly_mode,
+    schema_outdated,
+    schema_too_new,
     size_limit,
 )
 from .normalize import RECORD_TYPES, Normalizer
@@ -116,6 +121,87 @@ _VVER_RE = re.compile(r"^\d+(\.\d+){1,2}$")
 # Признак ключа чужого feature-слоя в перегенерируемых таблицах:
 # версионный префикс слоя ("0.16.abc.N/") перед fn:/type:/macro:/region:...
 _LAYER_KEY_RE = re.compile(r"^\d+(\.\d+)+\.[A-Za-z0-9._-]+\.\d+/")
+
+
+@contextlib.contextmanager
+def _file_lock(path: str):
+    """Системно-независимая файловая блокировка (stdlib, без зависимостей).
+
+    Адvisory-лок на отдельный lock-файл `<path>.lock` рядом с целевым:
+    захватываем, yield, освобождаем. POSIX — fcntl.flock, Windows —
+    msvcrt.locking (замок на диапазон файла). Защищает read-modify-write
+    `.backup-state.json` от параллельных процессов роя (ревью #164-r5,
+    R1): без неё last-writer-wins затирает персистентный auto_skipped_limit.
+
+    РЕЕНТЕРАБЕЛЬНОСТЬ (ревью #175-r3 Q6): AUTO-блок maybe_run_auto_backup
+    держит _file_lock целиком, а _save_backup_state внутри той же ветки
+    снова вызывает _file_lock на ТОТ ЖЕ lock-файл. Повторный flock на том
+    же процессе на другом fd заблокировал бы сам себя (deadlock).
+    Per-thread словарь глубины: первый вход на path — настоящая блокировка,
+    вложенный вход того же потока на тот же path — yield без повторного
+    захвата (разные path блокируются независимо). Разные процессы роя всё
+    равно сериализуются flock.
+    """
+    ctx = _file_lock._local  # threading.local: {path: depth}
+    paths = getattr(ctx, "paths", None)
+    if paths is None:
+        paths = {}
+        ctx.paths = paths
+    depth = paths.get(path, 0)
+    if depth > 0:
+        paths[path] = depth + 1
+        try:
+            yield
+        finally:
+            paths[path] = depth
+        return
+    lock_path = path + ".lock"
+    try:
+        with open(lock_path, "a+b") as fh:
+            if os.name == "nt":
+                import msvcrt  # локально: недоступен на POSIX
+                msvcrt.locking(fh.fileno(), msvcrt.LK_LOCK, 1)
+            else:
+                import fcntl  # локально: недоступен на Windows
+                fcntl.flock(fh.fileno(), fcntl.LOCK_EX)
+            paths[path] = 1
+            try:
+                yield
+            finally:
+                paths.pop(path, None)
+                if os.name == "nt":
+                    import msvcrt
+                    fh.seek(0)
+                    msvcrt.locking(fh.fileno(), msvcrt.LK_UNLCK, 1)
+                else:
+                    import fcntl
+                    fcntl.flock(fh.fileno(), fcntl.LOCK_UN)
+    except OSError as e:
+        # Блокировка — вспомогательная: сбой НЕ должен валить бэкап, но
+        # деградация до lockless у РОЯ (NFS c выключенным locking daemon,
+        # EINTR от сигнала) возвращает last-writer-wins — merge-семантика
+        # теряется именно там, где она нужнее всего (шаренный state).
+        # Поэтому деградация обязана быть ЗАМЕТНОЙ, а не тихой строчкой
+        # stderr (ревью #175-#2): warnings.warn виден в pytest/logs.
+        warnings.warn(
+            "state lock недоступен (%r): merge-семантика .backup-state.json "
+            "деградирует до lockless — параллельные процессы могут затереть "
+            "auto_skipped_limit" % e, RuntimeWarning, stacklevel=2)
+        sys.stderr.write("state lock: %s\n" % e)
+        # Q8 (ревью #175-r3): деградация также видна агенту через
+        # backup_notice (warnings могут глушиться PYTHONWARNINGS=ignore).
+        # R2 (ревью #175-r4): флаг per-PATH (set lock-файлов), а не глобальный
+        # на процесс — в много-Store процессе (несколько БД/backup_dir) один
+        # деградировавший лок не должен давать ложный notice другому Store.
+        _file_lock._degraded_paths.add(lock_path)
+        yield
+
+
+_file_lock._local = threading.local()  # per-thread: {path: depth}
+# Q8+R2: lock-OSError → merge деградировал до lockless — per-path set
+# {lock_path}, а не атомарный bool (много-Store процесс, перекрёстная
+# атрибуция деградации между Store'ами недопустима)
+_file_lock._degraded_paths = set()
 
 
 class Store:
@@ -204,6 +290,9 @@ class Store:
                         self._dbi[name] = None
                     else:
                         raise
+        # F5.2/R2: БД, созданная более новой версией модуля — явный отказ
+        # (иначе читали бы/писали неизвестную схему; см. _check_schema_too_new)
+        self._check_schema_too_new()
         self._load_vocab()
         self.next_id = self._load_next_id()
         self.last_gc = None
@@ -213,6 +302,10 @@ class Store:
         self._lru_last: dict = {}
         self._touch_ids: list = []
         # commit-latency последних write-транзакций (кольцо).
+        # M12 (ревью #164-r5): потоковая модель — deque(maxlen).append
+        # атомарен под GIL; читатели (commit_latency/diag) итерируют живое
+        # кольцо: снапшот полу-консистентный (mean/max по окну, которое могло
+        # меняться на ходу) — осознанно для метрики мониторинга, не бухгалтерии.
         self._latencies = deque(maxlen=COMMIT_LATENCY_WINDOW)
         # наблюдаемость writer-контеншена роя (D4/N12, per-process):
         self._busy_retries = 0     # сколько раз BUSY заставил повторить begin
@@ -545,7 +638,7 @@ class Store:
     def _note_commit_latency(self, lat: dict) -> None:
         self._latencies.append(lat)
 
-    # --- резервное копирование ----------------------------------------------
+# --- резервное копирование ----------------------------------------------
     def _state_path(self) -> str:
         return os.path.join(self.backup_dir, BACKUP_STATE_FILE)
 
@@ -556,13 +649,48 @@ class Store:
         except Exception:  # noqa: BLE001
             return {}
 
+    # ключи state-файла, которые процессы обновляют (атомарно, под блокировкой);
+    # merge-семантика: НЕ трогаем ключи, которых нет в st (могли быть обновлены
+    # другим процессом роя между нашим чтением и записью).
+    _STATE_MERGE_KEYS = ("last_auto", "last_auto_txnid", "auto_skipped_limit",
+                         "last_prompt", "auto_failure_count")
+
     def _save_backup_state(self, st: dict) -> None:
+        """Атомарная запись state-файла под блокировкой, с merge-семантикой.
+
+        Read-modify-write всего файла при 20 процессах — last-writer-wins:
+        процесс, сохраняющий свой last_auto, затирал бы auto_skipped_limit,
+        выставленный другим, — персистентная видимость флага рою (D2) теряется
+        тем же механизмом. Поэтому пишем ТОЛЬКО свои ключи поверх текущего
+        содержимого (read-current под блокировкой → merge → запись).
+        """
         try:
             os.makedirs(self.backup_dir, exist_ok=True)
-            tmp = self._state_path() + ".tmp"
-            with open(tmp, "w", encoding="utf-8") as fh:
-                json.dump(st, fh)
-            os.replace(tmp, self._state_path())
+            with _file_lock(self._state_path()):
+                cur = self._load_backup_state()
+                for k in self._STATE_MERGE_KEYS:
+                    if k in st:
+                        if st[k] is None:
+                            # явный сигнал снятия (напр. auto_skipped_limit):
+                            # удаляем ключ, иначе stale True пережил бы merge
+                            cur.pop(k, None)
+                        else:
+                            cur[k] = st[k]
+                tmp = self._state_path() + ".tmp"
+                with open(tmp, "w", encoding="utf-8") as fh:
+                    json.dump(cur, fh)
+                os.replace(tmp, self._state_path())
+            # Q8 (ревью #175-r3): деградация блокировки видна агенту через
+            # backup_notice (warnings могут быть отфильтрованы на CI);
+            # R2 (ревью #175-r4): per-path (этот Store), не по процессу —
+            # иначе чужой деградировавший лок дал бы ложный notice.
+            lock_path = self._state_path() + ".lock"
+            if lock_path in getattr(_file_lock, "_degraded_paths", set()):
+                self.backup_notice = (
+                    "state lock недоступен (NFS/сигнал): merge-семантика "
+                    ".backup-state.json деградировала до lockless — "
+                    "параллельные процессы могут затереть auto_skipped_limit")
+                _file_lock._degraded_paths.discard(lock_path)
         except OSError as e:
             sys.stderr.write("state save: %s\n" % e)
 
@@ -662,8 +790,10 @@ class Store:
         # без этой защиты каталог раздувался бы мимо ротации _prune_auto.
         # Штатный auto из maybe_run_auto_backup проверяет лимит ДО вызова,
         # поэтому для него это условие не срабатывает.
-        in_dir = dest is None or os.path.dirname(os.path.abspath(dest)) == \
-            os.path.abspath(self.backup_dir)
+        # M3 (ревью #164-r5): in_dir через _is_inside_backup_dir — симметрично
+        # export (realpath+normcase): иначе symlink-dest внутрь каталога
+        # обходил бы проверку (dirname != backup_dir) и лимит для pin.
+        in_dir = dest is None or self._is_inside_backup_dir(dest)
         if in_dir and not force \
                 and self._backup_dir_size() > self.backup_max_bytes:
             raise invalid(
@@ -759,52 +889,99 @@ class Store:
         if os.name == "nt" or self.db_file_deleted:
             return
         now = time.time()
-        st = self._load_backup_state()
-        if (self.auto_backup_seconds > 0
-                and now - st.get("last_auto", 0) >= self.auto_backup_seconds):
-            cur = self._current_txnid()
-            last = st.get("last_auto_txnid", 0)
-            if cur > last:
-                # БД реально изменялась — только тогда бэкап
-                if self._backup_dir_size() > self.backup_max_bytes:
-                    self.backup_notice = (
-                        "auto-backup пропущен: каталог бэкапов превышает лимит "
-                        "%d МБ" % (self.backup_max_bytes >> 20))
-                    if not st.get("auto_skipped_limit"):
-                        st["auto_skipped_limit"] = True
-                        self._save_backup_state(st)
-                else:
-                    try:
-                        self.backup(kind="auto")
-                        self._prune_auto()
-                        if st.get("auto_skipped_limit"):
-                            st.pop("auto_skipped_limit")
-                    except Exception as e:  # noqa: BLE001
-                        self.backup_notice = "auto-backup failed: %s" % e
-                        # TOCTOU (ревью #164): между нашей проверкой и
-                        # backup() другой процесс мог заполнить каталог —
-                        # тогда персистентный флаг обязан быть выставлен и
-                        # здесь, иначе рой/рестарт не видят, что auto-бэкапы
-                        # фактически блокированы лимитом.
-                        # НО (ревью #164-r4, 1b): флаг ставим ТОЛЬКО если
-                        # причина падения — именно лимит (контрактный
-                        # INVALID из backup()). Не-лимитные ошибки (диск,
-                        # DB_FILE_DELETED) на переполненном каталоге не
-                        # должны ложно сигнализировать «auto блокирован
-                        # лимитом» — иначе после исправления первопричины
-                        # auto не возобновился бы, а рой видел бы ложный флаг.
-                        limit_hit = (isinstance(e, MemoryError)
-                                     and getattr(e, "code", None) == "INVALID"
-                                     and self._backup_dir_size()
-                                     > self.backup_max_bytes)
-                        if limit_hit and not st.get("auto_skipped_limit"):
+        # Б3 (ревью #175-r5, claim/reserve): state read-modify-write —
+        # под ОДНИМ И КОРОТКИМ _file_lock; сама ГБ-копия — ВНЕ лока.
+        # Раунд-3 Q6 держал flock на весь AUTO-блок, включая backup()
+        # (copy2pathname COMPACT ~ГБ) и _prune_auto — before_call (hook
+        # ПЕРЕД каждым tool-call, store.py:590) блокировал весь рой на
+        # время копии; на Windows msvcrt через ~10с бросал OSError → у
+        # здоровых агентов ложная «деградация лока» (R2-notice).
+        # Claim: решаем + бронируем (last_auto=now) атомарно под локом →
+        # другие агенты видят свежий last_auto → гейт закрыт → ДУБЛЬ
+        # копии невозможен. Копия вне лока никого не блокирует.
+        claimed = False
+        with _file_lock(self._state_path()):
+            st = self._load_backup_state()
+            # Q5 (ревью #175-r3): флаг auto_skipped_limit отражает СОСТОЯНИЕ
+            # лимита, включая окно backoff. Ветка лимита ниже выполняется
+            # только при истёкшем таймере; если каталог переполнился ВО ВРЕМЯ
+            # backoff (last_auto в будущем), рой должен видеть флаг сразу.
+            if self.auto_backup_seconds > 0 and \
+                    self._backup_dir_size() > self.backup_max_bytes:
+                if not st.get("auto_skipped_limit"):
+                    st["auto_skipped_limit"] = True
+                    self._save_backup_state(st)
+            if (self.auto_backup_seconds > 0
+                    and now - st.get("last_auto", 0)
+                    >= self.auto_backup_seconds):
+                cur = self._current_txnid()
+                last = st.get("last_auto_txnid", 0)
+                if cur > last:
+                    # БД реально изменялась — только тогда бэкап
+                    if self._backup_dir_size() > self.backup_max_bytes:
+                        self.backup_notice = (
+                            "auto-backup пропущен: каталог бэкапов превышает "
+                            "лимит %d МБ" % (self.backup_max_bytes >> 20))
+                        # пропуск по лимиту — осознанное решение: таймер
+                        # обновляем, флаг показывает рою, сбрасываем счётчик
+                        st["last_auto"] = now
+                        st["last_auto_txnid"] = cur
+                        if not st.get("auto_skipped_limit"):
                             st["auto_skipped_limit"] = True
-                st["last_auto"] = now
-                st["last_auto_txnid"] = cur
+                        if st.get("auto_failure_count"):
+                            st["auto_failure_count"] = 0
+                        self._save_backup_state(st)
+                    else:
+                        # CLAIM: резервируем копию (last_auto=now, txnid=cur)
+                        # атомарно под локом. Остальные агенты посчитают гейт
+                        # не истёкшим → только один делает копию.
+                        st["last_auto"] = now
+                        st["last_auto_txnid"] = cur
+                        self._save_backup_state(st)
+                        claimed = True
+        # КОПИЯ ВНЕ ЛОКА (Б3): flock освобождён до дорогой операции.
+        # Crash между claim и finalize ценой одного interval: last_auto=now
+        # персистентен, счётчик не инкрементирован — следующая попытка
+        # через interval (не через backoff). Это лучше, чем ГБ-копия под локом.
+        if claimed:
+            ok = True
+            err = None
+            try:
+                self.backup(kind="auto")
+                self._prune_auto()
+            except Exception as e:  # noqa: BLE001
+                ok = False
+                err = e
+            # Лок #2 (короткий): finalize из СВЕЖЕГО state (кто-то ещё мог
+            # писать между локом #1 и сюда — merge под локом не затирает).
+            with _file_lock(self._state_path()):
+                st = self._load_backup_state()
+                if ok:
+                    st["auto_failure_count"] = 0
+                    if st.get("auto_skipped_limit"):
+                        st["auto_skipped_limit"] = None
+                    self._save_backup_state(st)
+                    return
+                self.backup_notice = "auto-backup failed: %s" % err
+                limit_hit = (
+                    isinstance(err, MemoryError)
+                    and getattr(err, "code", None) == "INVALID"
+                    and self._backup_dir_size() > self.backup_max_bytes)
+                if limit_hit:
+                    st["auto_skipped_limit"] = True
+                    st["auto_failure_count"] = 0
+                    self._save_backup_state(st)
+                    return
+                # не-лимитная ошибка → экспоненциальный backoff
+                fails = int(st.get("auto_failure_count", 0)) + 1
+                st["auto_failure_count"] = fails
+                backoff = self.auto_backup_seconds * min(2 ** fails, 32)
+                st["last_auto"] = now + backoff
                 self._save_backup_state(st)
-            # иначе: БД не менялась — тихий пропуск, ничего не пишем
+        # иначе: БД не менялась — тихий пропуск, ничего не пишем
         if (self.prompt_backup_seconds > 0 and not self.backup_pending
-                and now - st.get("last_prompt", 0) >= self.prompt_backup_seconds):
+                and now - self._load_backup_state().get("last_prompt", 0)
+                >= self.prompt_backup_seconds):
             self.backup_pending = True
 
     def run_prompt_backup(self, approve: bool, force: bool = False) -> dict:
@@ -849,7 +1026,8 @@ class Store:
         st = self._load_backup_state()
         if st.get("auto_skipped_limit") and \
                 self._backup_dir_size() <= self.backup_max_bytes:
-            st.pop("auto_skipped_limit", None)
+            # None, не pop — merge-запись удалит ключ из файла
+            st["auto_skipped_limit"] = None
             self._save_backup_state(st)
         return {"dry_run": False, "removed": removed, "candidates": names,
                 "total_bytes": total, "keep": keep or self.backup_keep}
@@ -887,8 +1065,17 @@ class Store:
     def backup_status(self) -> dict:
         """Состояние бэкапов: каталог, таймеры, счётчики тиров, кандидаты."""
         st = self._load_backup_state()
-        next_auto = (st.get("last_auto", 0) + self.auto_backup_seconds
-                     if self.auto_backup_seconds else None)
+        if not self.auto_backup_seconds:
+            next_auto = None
+        else:
+            # Б1 (ревью #175-r5): next_auto = last_auto + interval в обоих
+            # режимах. При backoff last_auto = время ошибки + отсрочка
+            # (now + interval*2^count), а гейт/таймер позволяет попытку при
+            # now >= last_auto + interval — т.е. реальная попытка через
+            # last_auto + interval. Откат R1: «next_auto=last_auto» занижал
+            # на interval (монитору врали в обратную сторону).
+            next_auto = (st.get("last_auto", 0) + self.auto_backup_seconds
+                         if st.get("last_auto") else None)
         next_prompt = (st.get("last_prompt", 0) + self.prompt_backup_seconds
                        if self.prompt_backup_seconds else None)
         return {
@@ -904,6 +1091,7 @@ class Store:
             "next_prompt": next_prompt,
             "pending": self.backup_pending,
             "auto_skipped_limit": bool(st.get("auto_skipped_limit")),
+            "auto_failure_count": int(st.get("auto_failure_count", 0) or 0),
             "db_file_deleted": self.db_file_deleted,
             "notice": self.backup_notice,
             "lifeline_error": self._lifeline_error,
@@ -1026,8 +1214,65 @@ class Store:
         return self._dbi[name]
 
     def _opt_dbi(self, txn, name: str):
-        """dbi для опциональных таблиц (может отсутствовать в старой readonly-БД)."""
+        """dbi для опциональных таблиц (None-handle в старой/readonly БД)."""
         return self._dbi.get(name)
+
+    def _schema_ver_from_meta(self) -> str:
+        """schema_ver из meta (read-only); при ошибке — SCHEMA_VERSION."""
+        try:
+            with self.env.begin(readonly=True) as txn:
+                rc, vmeta = txn.get(self.dbi(txn, "meta"), b"schema_ver")
+                if vmeta is not None:
+                    return vmeta.decode()
+        except Exception:  # noqa: BLE001
+            pass
+        return SCHEMA_VERSION
+
+    def _check_schema_too_new(self) -> None:
+        """Отклонить БД, созданную более НОВОЙ версией модуля.
+
+        Сценарий (ревью #164-r5, R2): устаревший MCP-модуль на свежей БД.
+        Мы знаем СВОЮ схему, но не знаем чужую более новую — продолжать
+        работать значило бы читать/писать таблицы с неизвестной семантикой.
+        Контрактный SCHEMA_TOO_NEW вместо undefined behavior.
+        """
+        disk_ver = self._schema_ver_from_meta()
+        try:
+            if int(disk_ver) > int(SCHEMA_VERSION):
+                raise schema_too_new(
+                    "БД создана более новой версией модуля: schema_ver %s > "
+                    "поддерживаемая %s" % (disk_ver, SCHEMA_VERSION),
+                    "обновите MCP-модуль до версии, поддерживающей схему %s"
+                    % disk_ver)
+        except ValueError:
+            # schema_ver не число — чужая/битая мета: тоже несовместима
+            if disk_ver != SCHEMA_VERSION:
+                raise schema_too_new(
+                    "неизвестный schema_ver %r в мета БД" % disk_ver,
+                    "обновите MCP-модуль или пересоздайте БД")
+
+    def _check_opt_table(self, name: str) -> None:
+        """Методы опциональных таблиц: None-handle на старой схеме — ошибка.
+
+        Различие (ревью #164-r5, R2): None-handle при актуальной схеме —
+        это легитимный read-only старт (таблица не создана, читается пустой);
+        None-handle при старой схеме (schema_ver < SCHEMA_VERSION) — реальная
+        несовместимость, которую агент должен увидеть и устранить переходом
+        в rw-режим (db_set_mode readonly=false → upgrade), а НЕ молчаливый
+        пустой результат (неотличимый от «данных нет»).
+        """
+        if self._dbi.get(name) is None:
+            disk_ver = self._schema_ver_from_meta()
+            try:
+                old = int(disk_ver) < int(SCHEMA_VERSION)
+            except ValueError:
+                old = disk_ver != SCHEMA_VERSION
+            if old:
+                raise schema_outdated(
+                    "схема БД устарела: schema_ver %s, модуль ожидает %s; "
+                    "таблица %r недоступна" % (disk_ver, SCHEMA_VERSION, name),
+                    "переключитесь в rw-режим (db_set_mode readonly=false): "
+                    "upgrade мигрирует схему и пересоздаст таблицу")
 
     def upgrade(self) -> dict:
         """Создаёт ВСЕ таблицы схемы (rw) для существующей БД, созданной до
@@ -1172,7 +1417,12 @@ class Store:
                 # НЕ среднее число ретраев до успеха (это «всего BUSY-ударов»).
                 self._busy_retries += 1
                 if attempt < BUSY_RETRIES:
-                    time.sleep(0.05 * (attempt + 1))
+                    # F5.3/R4 (jitter): детерминированный 0.05*(attempt+1)
+                    # задержал бы всех агентов роя синхронно (thundering
+                    # herd): все просыпаются в один момент и повторяют BUSY
+                    # вместе — при массовом CI часть получает busy_io при
+                    # живой системе. uniform(0, max) размывает фазу.
+                    time.sleep(random.uniform(0.0, 0.05 * (attempt + 1)))
         self._busy_failures += 1
         raise busy_io(desc=str(last_err), action="повторите операцию позже")
 
@@ -3038,6 +3288,7 @@ class Store:
         Тег — семантический (стабильный при рефакторинге). Один тег → одна
         запись (dedup по тегу), как в probe-bus (§4 «Реестр»).
         """
+        self._check_opt_table("probes")
         tag = tag.strip()
         if not tag:
             raise invalid("probe: пустой тег", "укажите семантический тег")
@@ -3079,6 +3330,7 @@ class Store:
         с отчётом в `skipped` — одна бракованная строка не роняет загрузку
         всего реестра (решение A5-β: skip+отчёт, не fail-fast).
         """
+        self._check_opt_table("probes")
         layer = self._effective_layer(layer)
         pre = self.layer_prefix(layer)
         n = 0
@@ -3119,6 +3371,8 @@ class Store:
             return {"probes": n, "skipped": skipped}
 
     def probe_get(self, tag: str, layer: str = "") -> dict:
+        # единый контракт: SCHEMA_OUTDATED на старой схеме
+        self._check_opt_table("probes")
         layer = self._effective_layer(layer)
         pre = self.layer_prefix(layer)
         with self.env.begin(readonly=True) as txn:
@@ -3133,6 +3387,7 @@ class Store:
     def probe_list(self, prefix: str = "", kind: str = "",
                    limit: int = None, layer: str = "") -> list:
         """Зонды слоя. `prefix` применяется к тегу (после layer-префикса)."""
+        self._check_opt_table("probes")
         layer = self._effective_layer(layer)
         pre = self.layer_prefix(layer)
         out = []
@@ -3167,6 +3422,7 @@ class Store:
         `status` валидируется по PROBE_STATUSES (C-8): произвольные строки
         отвергаются как invalid.
         """
+        self._check_opt_table("probes")
         return self.probe_add(tag, status=status, layer=layer)
 
     def probe_remove(self, tag: str, layer: str = "") -> dict:
@@ -3200,6 +3456,7 @@ class Store:
         другим label перезаписывает label (последний побеждает, A5-α),
         count накапливается. Обратные рёбра — put_nodupe (без дублей, C-6).
         """
+        self._check_opt_table("call_traces")
         count = max(1, int(count))
         layer = self._effective_layer(layer)
         pre = self.layer_prefix(layer)
@@ -3230,6 +3487,7 @@ class Store:
         probe-bus/счётчиков (collect_traces.py). Быстрее цикла одиночных
         trace_ingest (одна txn на файл, B3-δ).
         """
+        self._check_opt_table("call_traces")
         layer = self._effective_layer(layer)
         pre = self.layer_prefix(layer)
         n = 0
@@ -3262,6 +3520,7 @@ class Store:
 
     def trace_observed(self, caller: str = "", layer: str = "") -> list:
         """Наблюдаемые вызовы слоя (по префиксу caller, layer-local ключи)."""
+        self._check_opt_table("call_traces")
         layer = self._effective_layer(layer)
         pre = self.layer_prefix(layer)
         out = []
@@ -3297,6 +3556,7 @@ class Store:
         по мере обхода, а не полным снимком adj всей таблицы в память —
         при больших трассах это разница между O(путей) и O(всего слоя).
         """
+        self._check_opt_table("call_traces")
         from collections import deque
         found = []
         with self.env.begin(readonly=True) as txn:
@@ -3340,6 +3600,7 @@ class Store:
         observed берётся ТОЧНО по caller (не prefix), чтобы fn:foo не
         включало наблюдения из fn:foobar.
         """
+        self._check_opt_table("call_traces")
         layer = self._effective_layer(layer)
         pre = self.layer_prefix(layer)
         static_callees = set()
@@ -3618,6 +3879,7 @@ class Store:
         число прогонов и счётчик флаков (runs > 1 и резкое удлинение).
         Наполняется коллектором ``tools/collect_test_metrics.py`` из ctest XML.
         """
+        self._check_opt_table("test_metrics")
         with self._begin_write() as txn:
             return self._test_metrics_put_locked(
                 txn, test_id, duration_ms, labels, timeout_sec, window)
@@ -3678,6 +3940,8 @@ class Store:
         return {"tests": n}
 
     def test_metrics_get(self, test_id: str) -> dict:
+        # единый контракт: SCHEMA_OUTDATED на старой схеме
+        self._check_opt_table("test_metrics")
         with self.env.begin(readonly=True) as txn:
             dbi = self._opt_dbi(txn, "test_metrics")
             if dbi is None:
@@ -3688,6 +3952,8 @@ class Store:
             return json.loads(val.decode())
 
     def test_metrics_all(self, prefix: str = "", limit: int = None) -> list:
+        # единый контракт: SCHEMA_OUTDATED на старой схеме
+        self._check_opt_table("test_metrics")
         out = []
         with self.env.begin(readonly=True) as txn:
             dbi = self._opt_dbi(txn, "test_metrics")
@@ -3760,6 +4026,7 @@ class Store:
         [test_id]. Устаревшие членства и блоки (old−new) удаляются в той же
         транзакции.
         """
+        self._check_opt_table("coverage")
         symbols = symbols or []
         layer = self._effective_layer(layer)
         pre = self.layer_prefix(layer)
@@ -3773,6 +4040,7 @@ class Store:
         Та же семантика, что coverage_insert (через _coverage_put_locked):
         устаревшие членства covered_by И блочные записи old−new удаляются.
         """
+        self._check_opt_table("coverage")
         layer = self._effective_layer(layer)
         pre = self.layer_prefix(layer)
         n = 0
@@ -3807,6 +4075,7 @@ class Store:
         "skipped" (миграция не падает и не порождает мусорных ключей).
         Одна read-txn сбора + одна write-txn записи.
         """
+        self._check_opt_table("coverage")
         from_layer = (from_layer or "").strip().strip("/")
         to_layer = (to_layer or "").strip().strip("/")
         pre_from = self.layer_prefix(from_layer)
@@ -3953,6 +4222,7 @@ class Store:
     def coverage_symbols(self, symbol_prefix: str, limit: int = 20,
                          layer: str = "") -> list:
         """Тесты, покрывающие символы с префиксом (covered_by, в слое)."""
+        self._check_opt_table("covered_by")
         layer = self._effective_layer(layer)
         pre = self.layer_prefix(layer)
         out = []
@@ -3981,6 +4251,7 @@ class Store:
         `coverage_blocks:{pre}{test}:*` — иначе блоки удалённого теста
         остаются «живыми» (C-3).
         """
+        self._check_opt_table("coverage")
         layer = self._effective_layer(layer)
         pre = self.layer_prefix(layer)
         with self._begin_write() as txn:
@@ -4058,6 +4329,7 @@ class Store:
         (run_coverage/gcov_to_coverage), поэтому в штатном пайплайне это
         безопасно; для инкремента читайте текущие блоки и передавайте union.
         """
+        self._check_opt_table("coverage_blocks")
         layer = self._effective_layer(layer)
         pre = self.layer_prefix(layer)
         with self._begin_write() as txn:
@@ -4070,6 +4342,7 @@ class Store:
         прогон: run_coverage пишет ~2 txn вместо 2×N (N = число тестов),
         не удерживая writer-лок роя между тестами.
         """
+        self._check_opt_table("coverage_blocks")
         layer = self._effective_layer(layer)
         pre = self.layer_prefix(layer)
         n_tests, n_syms = 0, 0
@@ -4086,6 +4359,7 @@ class Store:
 
         Ключ согласован с coverage_blocks_insert: `{layer}/test:{sym-bare}`.
         """
+        self._check_opt_table("coverage_blocks")
         layer = self._effective_layer(layer)
         pre = self.layer_prefix(layer)
         key = ("coverage_blocks:%s:%s" % (pre + test_id, symbol)).encode()
@@ -4107,6 +4381,7 @@ class Store:
           - uncovered_blocks — блоки, отмеченные covered=false в
             coverage_blocks по всем тестам.
         """
+        self._check_opt_table("coverage")
         covd_syms = set()
         uncovered_symbols = []
         # ОДНА read-txn на весь метод (B1): coverage и symbols читаются из
@@ -4155,6 +4430,8 @@ class Store:
         }
 
     def coverage_get(self, test_id: str, layer: str = "") -> dict:
+        # единый контракт: SCHEMA_OUTDATED на старой схеме
+        self._check_opt_table("coverage")
         layer = self._effective_layer(layer)
         pre = self.layer_prefix(layer)
         with self.env.begin(readonly=True) as txn:
@@ -4167,6 +4444,8 @@ class Store:
             return json.loads(val.decode())
 
     def coverage_all(self, limit: int = None, layer: str = "") -> list:
+        # F5.2/R2: пустой список на старой схеме — ошибка, а не «нет покрытия»
+        self._check_opt_table("coverage")
         layer = self._effective_layer(layer)
         pre = self.layer_prefix(layer)
         out = []
@@ -4198,6 +4477,7 @@ class Store:
         По модулям + итого: symbols_covered/total, blocks_covered/total, pct.
         Примитив дашборда «белые пятна» для итеративного развития покрытия.
         """
+        self._check_opt_table("coverage")
         covd_syms = set()
         blocks_agg = {}  # sym -> [set(total block_ids), set(covered block_ids)]
         mods = {}
@@ -4322,11 +4602,13 @@ class Store:
         return out
 
     def ci_jobs_all(self, prefix: str = "", limit: int = None) -> list:
+        # единый контракт: SCHEMA_OUTDATED на старой схеме
+        self._check_opt_table("ci_jobs")
         out = []
         with self.env.begin(readonly=True) as txn:
             dbi = self._opt_dbi(txn, "ci_jobs")
             if dbi is None:
-                return []  # старая БД без ci_jobs
+                return []
             with txn.cursor(dbi) as cur:
                 rc, k, v = cur.get(mdbx.CURSOR_FIRST)
                 while rc == mdbx.RC_SUCCESS:
@@ -4414,11 +4696,24 @@ class Store:
                     schema_ver = vmeta.decode()
         except Exception:  # noqa: BLE001
             pass
+        try:
+            disk_int = int(schema_ver)
+        except ValueError:
+            disk_int = None
+        # F5.2/R2: семантика for агента — bool matches + ДИРЕКЦИЯ:
+        # too_new (БД новее модуля — обновить MCP) vs outdated (БД старше
+        # модуля — надо переключиться в rw для миграции), vs matches (норма)
+        schema_matches = schema_ver == SCHEMA_VERSION
+        schema_too_new = (disk_int is not None
+                          and disk_int > int(SCHEMA_VERSION))
+        schema_outdated = (schema_ver != SCHEMA_VERSION and not schema_too_new)
         return {
             "module_version": MODULE_VERSION,
             "libmdbx_version": lib_ver,
             "schema_version": schema_ver,
-            "schema_matches": schema_ver == SCHEMA_VERSION,
+            "schema_matches": schema_matches,
+            "schema_too_new": schema_too_new,
+            "schema_outdated": schema_outdated,
             "branch": self.branch_current(),
             "data": {
                 "map_generation": data_gen,
@@ -4494,6 +4789,7 @@ class Store:
         Идентификатор слоя: `{ver-slug}.{feature-slug}.{n}` (см. BRANCHES.md).
         Базовая ветка (`feature`="base"|"") живёт без префикса.
         """
+        self._check_opt_table("branches")
         ver = ver_slug.strip().lstrip("v")
         feat = (feature_slug or "base").strip().strip("/")
         if not ver:
@@ -4518,11 +4814,14 @@ class Store:
         return {"layer": layer, "body": body}
 
     def branch_list(self, base_only: bool = False) -> list:
+        # F5.2/R2: пустой список на старой схеме молча неотличим от «нет
+        # веток» (ревью #164-r5): отсутствие таблицы на старой схеме — ошибка
+        self._check_opt_table("branches")
         out = []
         with self.env.begin(readonly=True) as txn:
             dbi = self._opt_dbi(txn, "branches")
             if dbi is None:
-                return []  # старая БД без таблицы branches
+                return []  # актуальная схема + read-only старт: таблицы нет
             with txn.cursor(dbi) as cur:
                 rc, k, v = cur.get(mdbx.CURSOR_FIRST)
                 while rc == mdbx.RC_SUCCESS:
@@ -4577,13 +4876,20 @@ class Store:
                     registered = rv is not None
             out = {"previous": prev, "current": layer}
             if not registered:
+                # M2 (ревью #164-r5): различаем два случая явно — слоя
+                # НИКОГДА не было (опечатка?) ИЛИ он был purge'нут другим
+                # агентом (данные не вернутся — purge их уничтожил).
                 out["warning"] = (
                     "слой %r отсутствует в реестре branches — чтения/записи "
-                    "пойдут в пустой слой; зарегистрируйте его "
-                    "(branch_register) или исправьте опечатку" % layer)
+                    "пойдут в пустой слой; слоя никогда не было (опечатка?) "
+                    "ИЛИ он purge'нут другим агентом (данные не вернутся); "
+                    "зарегистрируйте его (branch_register) или исправьте "
+                    "опечатку" % layer)
             return out
 
     def branch_remove(self, layer: str) -> dict:
+        # единый контракт: опц. таблица на старой схеме → SCHEMA_OUTDATED
+        self._check_opt_table("branches")
         layer = layer.strip().strip("/")
         with self._begin_write() as txn:
             dbi = self.dbi(txn, "branches")
@@ -4594,7 +4900,7 @@ class Store:
             txn.delete(dbi, key)
             return {"result": "removed", "layer": layer}
 
-    def branch_purge(self, layer: str) -> dict:
+    def branch_purge(self, layer: str, expected_current: str = None) -> dict:
         """Удаляет слой ветки С ДАННЫМИ во всех перегенерируемых таблицах.
 
         Жизненный цикл слоя (N5): после rebase/переписывания истории старый
@@ -4609,6 +4915,9 @@ class Store:
         не удаление. АКТИВНЫЙ слой (branch_current) purge тоже ЗАПРЕЩЁН:
         иначе meta.branch_current укажет на мёртвый слой и все чтения с
         layer="" будут молча пусты — сначала переключите ветку.
+        `expected_current` — CAS (ревью #175-#12): проверяется ВНУТРИ
+        той же write-txn, что и удаление (атомарно) — другой агент не
+        может активировать слой между проверкой и удалением.
         Возвращает счётчики удалённых ключей по таблицам.
         """
         layer = layer.strip().strip("/")
@@ -4618,11 +4927,6 @@ class Store:
                 "branch_purge: базовый слой %r удалять нельзя" % layer,
                 "purge предназначен для feature-слоёв; базовый слой "
                 "обновляется replace-загрузкой карты")
-        if self.layer_prefix(self.branch_current().get("layer", "")) == pre:
-            raise invalid(
-                "branch_purge: слой %r является активным" % layer,
-                "сначала переключите активный слой "
-                "(branch_activate на другой или базовый)")
         # схема префиксов ключей по таблицам (см. комментарии _TABLES):
         # map-family — "{pre}", coverage-family/probes — "family:{pre}"
         prefixes = {
@@ -4635,7 +4939,28 @@ class Store:
         }
         removed = {}
         had_reg = False
+        # Ревью #175-#12: проверки «слой активен» и CAS expected_current
+        # обязаны быть ВНУТРИ write-txn. Раньше они читались из read-txn
+        # ДО _begin_write — между проверкой и удалением другой агент мог
+        # выполнить branch_activate(layer), и purge молча сносил данные
+        # ставшего активным слоя (окно TOCTOU). branch_activate делает
+        # CAS внутри своей write-txn — purge теперь так же (атомарно).
         with self._begin_write() as txn:
+            meta = self.dbi(txn, "meta")
+            rc, val = txn.get(meta, b"branch_current")
+            cur_active = val.decode() if val else ""
+            if self.layer_prefix(cur_active) == pre:
+                raise invalid(
+                    "branch_purge: слой %r является активным" % layer,
+                    "сначала переключите активный слой "
+                    "(branch_activate на другой или базовый)")
+            if expected_current is not None and cur_active != expected_current:
+                raise MemoryError(
+                    "CONFLICT", "conflict",
+                    "branch_purge: активный слой %r не совпал с ожидаемым %r"
+                    % (cur_active, expected_current),
+                    "перечитайте branch_current и повторите с актуальным "
+                    "expected_current", "retry once")
             for table, scan_pre in prefixes.items():
                 dbi = self._opt_dbi(txn, table)
                 if dbi is None:
