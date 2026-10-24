@@ -18,9 +18,11 @@ if(NOT DEFINED MDBX_LIBRARY)
   set(MDBX_LIBRARY mdbx)
 endif()
 
-if(MDBX_BUILD_CXX
-   AND CMAKE_CXX_COMPILER_LOADED
-   AND NOT MDBX_CXX_STANDARD LESS 17)
+if(MDBX_BUILD_CXX AND CMAKE_CXX_COMPILER_LOADED)
+  # The main C++ example deliberately sticks to C++11 constructs, so it is
+  # built at whatever standard was requested (11/14/17/20/23). This is what
+  # verifies that the C++ API itself still compiles, links and works at the
+  # older standards — the `c++_api` ctest below runs it.
   add_executable(mdbx_modern_example example-mdbx.c++)
   set_target_properties(mdbx_modern_example PROPERTIES CXX_STANDARD ${MDBX_CXX_STANDARD} CXX_STANDARD_REQUIRED ON)
   target_link_libraries(mdbx_modern_example ${MDBX_LIBRARY})
@@ -29,9 +31,23 @@ if(MDBX_BUILD_CXX
                                                          $<BOOL:${INTERPROCEDURAL_OPTIMIZATION}>)
   endif()
 else()
-  message(NOTICE
-          "The C++ example will be skipped, since C++17 standard is unavailable or C++ API of libmdbx was disabled.")
+  message(NOTICE "The C++ example will be skipped, since the C++ API of libmdbx was disabled.")
   set(MDBX_BUILD_CXX FALSE)
+endif()
+
+# The textbook examples (examples/c++, examples/config-store) share
+# common/common.h++, which needs C++17 (std::string_view, inline functions), so
+# they are gated separately from the main example above.
+if(MDBX_BUILD_CXX AND CMAKE_CXX_COMPILER_LOADED AND NOT MDBX_CXX_STANDARD LESS 17)
+  set(MDBX_TEXTBOOK_CXX_AVAILABLE TRUE)
+else()
+  set(MDBX_TEXTBOOK_CXX_AVAILABLE FALSE)
+  if(MDBX_BUILD_CXX AND NOT MDBX_CXX_STANDARD LESS 11 AND MDBX_CXX_STANDARD LESS 17)
+    message(
+      NOTICE
+        "The C++ textbook examples will be skipped: they require C++17 (common.h++), "
+        "while C++${MDBX_CXX_STANDARD} was requested. The main C++ example is still built and tested.")
+  endif()
 endif()
 
 add_executable(mdbx_legacy_example example-mdbx.c)
@@ -156,7 +172,7 @@ set(MDBX_TEXTBOOK_EXAMPLES_C
     18-tree-height.c
     38-migration.c)
 
-if(MDBX_BUILD_CXX)
+if(MDBX_TEXTBOOK_CXX_AVAILABLE)
   foreach(source IN LISTS MDBX_TEXTBOOK_EXAMPLES_CXX)
     get_filename_component(name "${source}" NAME_WE)
     mdbx_textbook_add_cxx("mdbx_ex_${name}" "c++/${source}")

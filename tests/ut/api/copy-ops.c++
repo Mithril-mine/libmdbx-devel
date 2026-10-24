@@ -17,8 +17,12 @@
 
 #include "../test-env.h"
 
+#if defined(__cpp_lib_filesystem) && __cpp_lib_filesystem >= 201703L
 #include <filesystem>
+#endif /* __cpp_lib_filesystem >= 201703L */
 #include <thread>
+
+#if defined(__cpp_lib_filesystem) && __cpp_lib_filesystem >= 201703L
 
 namespace {
 const char *kSource = "test-copy-src";
@@ -119,3 +123,15 @@ TEST(ut_copy_ops, txn_copy_snapshot) {
   mdbx::env::remove(mdbx::path(kSource));
   mdbx::env::remove(mdbx::path(kPlainCopy));
 }
+
+#else /* !(filesystem available) */
+
+TEST(ut_copy_ops, env_copy_plain_and_compact) {
+  GTEST_SKIP() << "requires <filesystem> (C++17), disabled since the requested standard is older";
+}
+
+TEST(ut_copy_ops, txn_copy_snapshot) {
+  GTEST_SKIP() << "requires <filesystem> (C++17), disabled since the requested standard is older";
+}
+
+#endif /* __cpp_lib_filesystem >= 201703L */
