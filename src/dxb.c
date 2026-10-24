@@ -113,7 +113,13 @@ __cold int dxb_read_header(MDBX_env *env, meta_t *dest, const int lck_exclusive,
     bool latch;
     if (env->stuck_meta >= 0)
       latch = (meta_number == (unsigned)env->stuck_meta);
-    else if (meta_bootid_match(meta))
+    else if (meta_bootid_match(meta) && env->lck_mmap.lck)
+      /* A weak checkpoint of the current boot encountered while the shared lock
+       * file is present (a read-only or writable open): keep preferring it, so
+       * the open either recovers/promotes it (writable) or requires recovery
+       * (read-only, MDBX_WANNA_RECOVERY). Preopen inspection has no lock file
+       * (env->lck_mmap.lck == NULL), so it falls through to the steady path and
+       * reports the usable steady checkpoint instead of failing. */
       latch = meta_choice_recent(meta->unsafe_txnid, SIGN_IS_STEADY(meta->unsafe_sign), dest->unsafe_txnid,
                                  SIGN_IS_STEADY(dest->unsafe_sign));
     else

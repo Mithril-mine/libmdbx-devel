@@ -270,7 +270,9 @@ def test_kill9_nosync_readonly_wants_recovery(tmp_path):
     """safe_nosync + SIGKILL без close: read-only НЕ откатывается молча.
 
     Проверяемый контракт:
-      1) preopen_snapinfo → MDBX_CORRUPTED (меты unsteady, троица s:w:w);
+      1) preopen_snapinfo → SUCCESS: фоновая инспекция без блокировок
+         сообщает геометрию последней usable (steady) меты и НЕ ошибается
+         из-за того, что новейшая мета weak (проблема #182);
       2) read-only открытие → MDBX_WANNA_RECOVERY — явный сигнал пользователю
          (не тихий откат к steady);
       3) осознанное read-write открытие само делает steady-sync и данные
@@ -300,22 +302,35 @@ def test_kill9_nosync_readonly_wants_recovery(tmp_path):
                 proc.wait()
         time.sleep(0.3)
         try:
-            with pytest.raises(Exception) as ei:
-                m.preopen_snapinfo(db)
-            assert "CORRUPTED" in str(ei.value), ei.value
-            break
-        except (AssertionError, pytest.fail.Exception):
-            # Меты успели лечь steady целиком (OS writeback) либо троица
-            # не s:w:w — это не провал контракта, а неудачный тайминг:
-            # переходим к следующей свежей БД.
+            # preopen inspection must NOT fail on the weak checkpoint: since
+            # #182 it reports the usable steady checkpoint geometry instead of
+            # returning MDBX_CORRUPTED. So SIGKILL-leftover weak metas must no
+            # longer make preopen raise; the signal to the user comes from the
+            # read-only open (WANNA_RECOVERY) right below.
+            pre = m.preopen_snapinfo(db)
+            assert pre["recent_txnid"] > 0, pre
+        except Exception as e:  # noqa: BLE001
+            # A preopen failure is not the expected post-kill state under #182:
+            # treat it as a failed attempt (e.g. the last writeback landed fully
+            # steady and the file looks clean, or the kill raced the writer).
             if attempt == 3:
                 raise
             continue
-
-    with pytest.raises(Exception) as ei:
-        Store(db, readonly=True, _skip_sync_thread=True)
-    text = str(ei.value)
-    assert "WANNA_RECOVERY" in text and "recover" in text.lower(), text
+        try:
+            Store(db, readonly=True, _skip_sync_thread=True)
+        except Exception as ei:
+            text = str(ei)
+            if "WANNA_RECOVERY" in text and "recover" in text.lower():
+                break
+            # Some other read-only failure: not the contract under test.
+            if attempt == 3:
+                raise
+            continue
+        # Read-only open succeeded without recovery — the writeback landed
+        # fully steady before the SIGKILL (unlucky timing). Retry on a fresh DB.
+        if attempt == 3:
+            assert False, "read-only open succeeded, but WANNA_RECOVERY is expected after SIGKILL"
+        continue
 
     s = Store(db, readonly=False, _skip_sync_thread=True)
     try:
