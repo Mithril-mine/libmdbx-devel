@@ -26,6 +26,10 @@
 
 #include "../test-env.h"
 
+/* The RAII foreign-thread scenarios below need std::optional (C++17). Under
+ * older standards the test is compiled as a stub that reports the skip reason.
+ */
+#if defined(__cpp_lib_optional) && __cpp_lib_optional >= 201606L
 #include <optional>
 #include <thread>
 
@@ -92,3 +96,15 @@ TEST(issue_gh0060, close_busy_keeps_handle_alive) {
   env.close();
   std::puts("RESULT: busy-close kept the handle alive");
 }
+
+#else /* !(optional available) */
+
+TEST(issue_gh0060, dtor_on_foreign_thread_must_not_terminate) {
+  GTEST_SKIP() << "requires <optional> (C++17), disabled since the requested standard is older";
+}
+
+TEST(issue_gh0060, close_busy_keeps_handle_alive) {
+  GTEST_SKIP() << "requires <optional> (C++17), disabled since the requested standard is older";
+}
+
+#endif /* __cpp_lib_optional >= 201606L */

@@ -17,7 +17,11 @@
 
 #include "../test-env.h"
 
+#if defined(__cpp_lib_filesystem) && __cpp_lib_filesystem >= 201703L
 #include <filesystem>
+#endif /* __cpp_lib_filesystem >= 201703L */
+
+#if defined(__cpp_lib_filesystem) && __cpp_lib_filesystem >= 201703L
 
 namespace {
 const char *kPathA = "test-fluent-a";
@@ -64,6 +68,18 @@ TEST(ut_fluent_params, geometry_fluent_matches_c_api) {
   mdbx::env::remove(path_of(kPathA));
   mdbx::env::remove(path_of(kPathB));
 }
+
+#else /* !(filesystem available) */
+
+TEST(ut_fluent_params, geometry_fluent_matches_c_api) {
+  GTEST_SKIP() << "requires <filesystem> (C++17), disabled since the requested standard is older";
+}
+
+TEST(ut_fluent_params, runtime_options_roundtrip) {
+  GTEST_SKIP() << "requires <filesystem> (C++17), disabled since the requested standard is older";
+}
+
+#endif /* __cpp_lib_filesystem >= 201703L */
 
 TEST(ut_fluent_params, runtime_options_roundtrip) {
   if (MDBX_GTEST_IS_EXECUTION_TIMEOUT()) {
