@@ -20,6 +20,8 @@
 #include <string>
 #include <utility>
 
+#if defined(__cpp_lib_string_view) && __cpp_lib_string_view >= 201606L
+
 // Regression test for https://github.com/Mithril-mine/libmdbx-devel/issues/78
 // Two buffer defects: (1) `buffer::operator=(std::string_view)` was declared
 // `noexcept` even though assigning copies the view's bytes into owned storage
@@ -110,3 +112,27 @@ TEST(issue_gh0078, inplace_buffer_data_at_storage_end_stays_inplace) {
   EXPECT_EQ(mdbx::buffer<>::modality::inplace, moved.content_modality());
   EXPECT_EQ(0u, moved.length());
 }
+
+#else /* !(string_view available) */
+
+TEST(issue_gh0078, buffer_string_view_assignment_is_not_noexcept) {
+  GTEST_SKIP() << "requires <string_view> (C++17), disabled since the requested standard is older";
+}
+
+TEST(issue_gh0078, buffer_string_view_assignment_roundtrip) {
+  GTEST_SKIP() << "requires <string_view> (C++17), disabled since the requested standard is older";
+}
+
+TEST(issue_gh0078, owned_buffer_reserve_keeps_freestanding) {
+  GTEST_SKIP() << "requires <string_view> (C++17), disabled since the requested standard is older";
+}
+
+TEST(issue_gh0078, owned_buffer_data_at_silo_end_is_freestanding) {
+  GTEST_SKIP() << "requires <string_view> (C++17), disabled since the requested standard is older";
+}
+
+TEST(issue_gh0078, inplace_buffer_data_at_storage_end_stays_inplace) {
+  GTEST_SKIP() << "requires <string_view> (C++17), disabled since the requested standard is older";
+}
+
+#endif /* __cpp_lib_string_view >= 201606L */
