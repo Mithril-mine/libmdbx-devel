@@ -1241,50 +1241,61 @@ int osal_removefile(const pathchar_t *pathname) {
 #if !IS_WINDOWS
 static bool is_valid_fd(int fd) { return !(isatty(fd) < 0 && errno == EBADF); }
 
-/* ----------------------------------------------------------------------------
- * osal_ftok() — System V IPC semaphore key derivation for the
- * MDBX_LOCKING_SYSV locking.
- *
- * Background: the semaphore key is derived from the data-file path via the
- * system ftok(), see the issue
- *   https://github.com/Mithril-mine/libmdbx-devel/issues/80
- * The glibc/POSIX ftok() uses only a few bits of the file's inode (the low 16
- * bits) plus the device and an 8-bit project id, so two different databases on
- * the same filesystem can easily map to the same key. On a key collision the
- * open path treats the existing semaphore set as a stale leftover, removes it
- * with IPC_RMID and recreates its own — silently destroying the locking of an
- * unrelated, in-use database that happens to share the key.
- *
- * With MDBX_AVOID_FTOK the key is derived from the full inode number, the
- * device and the filesystem type, mixed by stir(); this makes the key
- * space much wider than the system ftok() and lowers the collision
- * probability, but does not eliminate it — the System V IPC key is still
- * 32-bit wide, and the ultimate guard is the decision made in lck_init()
- * (see sysv_ipc_eeexist_decide()). The path is deliberately not hashed, since
- * that would require its full canonicalization (mount point, overlays, FS
- * collation), which is unreliable.
- * -------------------------------------------------------------------------*/
+/* System V IPC semaphore ft derivation for the MDBX_LOCKING_SYSV locking. */
+MDBX_MAYBE_UNUSED MDBX_INTERNAL int osal_ftok(int fd, const char *pathname, mdbx_ftok_t *ft) {
+  int rc;
+  memset(ft, -1, sizeof(*ft));
 
-MDBX_MAYBE_UNUSED MDBX_INTERNAL key_t osal_ftok(int fd, const char *pathname) {
-#if MDBX_AVOID_FTOK
-  (void)pathname;
   struct stat st;
   if (fstat(fd, &st)) {
-    ERROR("%s() failed: %d, %s", "fstat", errno, strerror(errno));
-    return (key_t)-1;
+    rc = errno;
+    ERROR("%s() failed: %d, %s", "fstat", rc, strerror(rc));
+    return rc;
   }
-  const uint64_t h = stir(st.st_dev, st.st_ino);
-  key_t key = (key_t)(h & 0x7fffffff);
+
+  const uint64_t p = stir((uint64_t)st.st_ino, (uint64_t)st.st_dev);
+  const uint64_t q = stir((uint64_t)st.st_dev, (uint64_t)st.st_ino);
+  const size_t semval_bits = sizeof(short) * CHAR_BIT - 2;
+  const size_t semval_mask = (1u << semval_bits) - 1;
+  const size_t inode_bits = sizeof(st.st_ino) * CHAR_BIT;
+  const size_t device_bits = sizeof(st.st_dev) * CHAR_BIT;
+  const size_t signature_bits = semval_bits * ARRAY_LENGTH(ft->signature);
+  uint64_t x = p, y = q;
+  if (signature_bits > inode_bits + device_bits) {
+    x = (uint64_t)((ino_t)(st.st_ino * UINT64_C(0x930E2D162AA1D5)));
+    y = (uint64_t)((dev_t)(st.st_dev * UINT64_C(0xDDE84704855A93)));
+    if (sizeof(x) > sizeof(st.st_ino)) {
+      const size_t shift = (sizeof(x) - sizeof(st.st_ino)) * CHAR_BIT;
+      x |= y << (sizeof(y) * CHAR_BIT - shift);
+      y >>= shift;
+    }
+  }
+
+  for (size_t i = 0; i < ARRAY_LENGTH(ft->signature); ++i) {
+    ft->signature[i] = (uint16_t)(semval_mask & x);
+    x = x >> semval_bits | y << (sizeof(y) * CHAR_BIT - semval_bits);
+    y >>= semval_bits;
+  }
+
+#if MDBX_AVOID_FTOK
+  (void)pathname;
+  const key_t key_mask = ((key_t)1 << (sizeof(key_t) * CHAR_BIT - 1)) - 1;
+  ft->key = key_mask & (key_y)(a ^ b);
 #else
   (void)fd;
-  key_t key = ftok(pathname, 42);
-#endif
+  ft->key = ftok(pathname, 42);
+  if (ft->key < 0) {
+    rc = errno;
+    ERROR("%s() failed: %d, %s", "ftok", rc, strerror(rc));
+    return rc;
+  }
+#endif /* MDBX_AVOID_FTOK */
 
   int injected = 0;
   MPROBE_FAULT(ftok_key_collide, injected);
   if (injected)
-    key = (key_t)injected;
-  return key;
+    ft->key = (key_t)injected;
+  return MDBX_SUCCESS;
 }
 #endif /*! Windows */
 
