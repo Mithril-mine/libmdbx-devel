@@ -10,7 +10,7 @@ static void nested_merge(MDBX_txn *const parent, MDBX_txn *const nested, const s
 
   /* Remove refunded pages from parent's dirty list */
   dpl_t *const dst = txn_dpl_sort(parent);
-  if (MDBX_ENABLE_REFUND) {
+  {
     size_t n = dst->length;
     while (n && dst->items[n].pgno >= parent->geo.first_unallocated) {
       const unsigned npages = dpl_npages(dst, n);
@@ -92,7 +92,7 @@ static void nested_merge(MDBX_txn *const parent, MDBX_txn *const nested, const s
     size_t len = pnl_size(sl);
     if (len) {
       /* Remove refunded pages from parent's spill list */
-      if (MDBX_ENABLE_REFUND && MDBX_PNL_MOST(sl) >= (parent->geo.first_unallocated << 1)) {
+      if (MDBX_PNL_MOST(sl) >= (parent->geo.first_unallocated << 1)) {
 #if MDBX_PNL_ASCENDING
         size_t i = pnl_size(sl);
         ASSERT(MDBX_PNL_MOST(sl) == MDBX_PNL_LAST(sl));
@@ -386,14 +386,10 @@ static int nested_start(MDBX_txn *const nested, MDBX_txn *parent) {
       if (unlikely(err != MDBX_SUCCESS))
         return LOG_IFERR(err);
     } while (parent->wr.loose_pages);
-#if MDBX_ENABLE_REFUND
     parent->wr.loose_refund_wl = 0;
-#endif /* MDBX_ENABLE_REFUND */
     tASSERT1(parent, txn_dpl_check(parent));
   }
-#if MDBX_ENABLE_REFUND
   nested->wr.loose_refund_wl = 0;
-#endif /* MDBX_ENABLE_REFUND */
   nested->wr.dirtyroom = parent->wr.dirtyroom;
   nested->wr.dirtylru = parent->wr.dirtylru;
 #if MDBX_ENABLE_PGET_STAT
@@ -410,7 +406,7 @@ static int nested_start(MDBX_txn *const nested, MDBX_txn *parent) {
   tASSERT1(nested, pnl_check_allocated(nested->wr.repnl, (nested->geo.first_unallocated /* LY: intentional assignment
                                                                              here, only for assertion */
                                                           = parent->geo.first_unallocated) -
-                                                             MDBX_ENABLE_REFUND));
+                                                             1));
 
   nested->wr.gc.spent = parent->wr.gc.spent;
   err = rkl_copy(&parent->wr.gc.reclaimed, &nested->wr.gc.reclaimed);
@@ -537,7 +533,7 @@ int txn_nested_abort(MDBX_txn *nested) {
   tASSERT0(nested, nested != nested->env->basal_txn);
   tASSERT0(nested, nested->parent->nested == nested && (nested->parent->flags & MDBX_TXN_HAS_CHILD) != 0);
   tASSERT1(nested, txn_dpl_check(nested));
-  tASSERT1(nested, pnl_check_allocated(nested->wr.repnl, nested->geo.first_unallocated - MDBX_ENABLE_REFUND));
+  tASSERT1(nested, pnl_check_allocated(nested->wr.repnl, nested->geo.first_unallocated - 1));
   tASSERT1(nested, memcmp(&nested->wr.troika, &nested->parent->wr.troika, sizeof(troika_t)) == 0);
 
   int rc = nested_undo(nested);
@@ -552,7 +548,7 @@ static int nested_join(MDBX_txn *nested, struct commit_timestamp *ts) {
   eASSERT0(env, nested != env->basal_txn);
   eASSERT0(env, parent->nested == nested && (parent->flags & MDBX_TXN_HAS_CHILD) != 0);
   eASSERT1(env, txn_dpl_check(nested));
-  tASSERT1(nested, pnl_check_allocated(nested->wr.repnl, nested->geo.first_unallocated - MDBX_ENABLE_REFUND));
+  tASSERT1(nested, pnl_check_allocated(nested->wr.repnl, nested->geo.first_unallocated - 1));
   tASSERT1(nested, memcmp(&nested->wr.troika, &parent->wr.troika, sizeof(troika_t)) == 0);
   tASSERT0(nested, rkl_empty(&nested->wr.gc.comeback));
 
@@ -627,15 +623,12 @@ static int nested_join(MDBX_txn *nested, struct commit_timestamp *ts) {
     parent->flags |= MDBX_TXN_DIRTY;
 
     /* Move loose pages to parent */
-#if MDBX_ENABLE_REFUND
     parent->wr.loose_refund_wl = nested->wr.loose_refund_wl;
-#endif /* MDBX_ENABLE_REFUND */
     parent->wr.loose_count = nested->wr.loose_count;
     parent->wr.loose_pages = nested->wr.loose_pages;
 
     nested_merge(parent, nested, parent_retired_len);
 
-#if MDBX_ENABLE_REFUND
     txn_refund(parent);
     if (CHECKS1_ENABLED()) {
       /* Check parent's loose pages not suitable for refund */
@@ -648,7 +641,6 @@ static int nested_join(MDBX_txn *nested, struct commit_timestamp *ts) {
       if (pnl_size(parent->wr.repnl))
         tASSERT0(parent, MDBX_PNL_MOST(parent->wr.repnl) + 1 < parent->geo.first_unallocated);
     }
-#endif /* MDBX_ENABLE_REFUND */
   } else {
     VERBOSE("fast-complete pure nested txn %" PRIaTXN, nested->txnid);
 

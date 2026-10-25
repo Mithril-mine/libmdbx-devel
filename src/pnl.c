@@ -151,7 +151,7 @@ __hot int __must_check_result pnl_insert_span(__restrict pnl_t *ppnl, pgno_t pgn
 }
 
 __hot bool pnl_check_lite(const const_pnl_t pnl, const size_t limit) {
-  ASSERT(limit >= MIN_PAGENO - MDBX_ENABLE_REFUND);
+  ASSERT(limit >= MIN_PAGENO - 1);
   if (likely(pnl_size(pnl))) {
     if (unlikely(pnl_size(pnl) > PAGELIST_LIMIT))
       return false;

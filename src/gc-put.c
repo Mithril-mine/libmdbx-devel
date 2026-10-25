@@ -356,9 +356,7 @@ int gc_merge_loose(MDBX_txn *txn, gcu_t *ctx) {
   }
   txn->wr.loose_pages = nullptr;
   txn->wr.loose_count = 0;
-#if MDBX_ENABLE_REFUND
   txn->wr.loose_refund_wl = 0;
-#endif /* MDBX_ENABLE_REFUND */
   return MDBX_SUCCESS;
 }
 
@@ -991,7 +989,7 @@ static inline int gc_reserve4return(MDBX_txn *txn, gcu_t *ctx, const size_t chun
   /* LY: ложные предупреждения coverity возникают из-за поддержки вставки массивов значений в режиме MDBX_MULTIPLE */
   /* coverity[OVERRUN] */
   err = cursor_put(&ctx->cursor, &key, &data, MDBX_RESERVE | MDBX_NOOVERWRITE);
-  tASSERT1(txn, pnl_check_allocated(txn->wr.repnl, txn->geo.first_unallocated - MDBX_ENABLE_REFUND));
+  tASSERT1(txn, pnl_check_allocated(txn->wr.repnl, txn->geo.first_unallocated - 1));
   if (unlikely(err != MDBX_SUCCESS))
     return err;
 
@@ -1311,7 +1309,7 @@ static int gc_enforce_not_spilled(MDBX_txn *txn, gcu_t *ctx, txnid_t id, MDBX_va
 
 /* Заполняет зарезервированные записи номерами возвращаемых в GC страниц. */
 static int gc_fill_returned(MDBX_txn *txn, gcu_t *ctx) {
-  tASSERT1(txn, pnl_check_allocated(txn->wr.repnl, txn->geo.first_unallocated - MDBX_ENABLE_REFUND));
+  tASSERT1(txn, pnl_check_allocated(txn->wr.repnl, txn->geo.first_unallocated - 1));
   tASSERT1(txn, txn_dpl_check(txn));
   MDBX_val data;
 
@@ -1485,7 +1483,7 @@ retry:
 
     /* return suitable into unallocated space */
     if (txn_refund(txn)) {
-      tASSERT1(txn, pnl_check_allocated(txn->wr.repnl, txn->geo.first_unallocated - MDBX_ENABLE_REFUND));
+      tASSERT1(txn, pnl_check_allocated(txn->wr.repnl, txn->geo.first_unallocated - 1));
       if (CHECKS2_ENABLED())
         ENSURE_OBJ(txn, audit_ex(txn, ctx->retired_stored, false) == MDBX_SUCCESS);
     }
@@ -1498,7 +1496,7 @@ retry:
       continue;
     }
 
-    tASSERT1(txn, pnl_check_allocated(txn->wr.repnl, txn->geo.first_unallocated - MDBX_ENABLE_REFUND));
+    tASSERT1(txn, pnl_check_allocated(txn->wr.repnl, txn->geo.first_unallocated - 1));
     tASSERT0(txn, txn->wr.loose_count == 0);
     if (CHECKS2_ENABLED())
       ENSURE_OBJ(txn, audit_ex(txn, ctx->retired_stored, false) == MDBX_SUCCESS);

@@ -380,9 +380,8 @@ static inline bool suitable4loose(const MDBX_txn *txn, pgno_t pgno) {
    *  2) стоит подумать над тем, чтобы при большом loose-списке отбрасывать
          половину в reclaimed. */
   return txn->wr.loose_count < txn->env->options.dp_loose_limit &&
-         (!MDBX_ENABLE_REFUND ||
-          /* skip pages near to the end in favor of compactification */
-          txn->geo.first_unallocated > pgno + txn->env->options.dp_loose_limit ||
+         /* skip pages near to the end in favor of compactification */
+         (txn->geo.first_unallocated > pgno + txn->env->options.dp_loose_limit ||
           txn->geo.first_unallocated <= txn->env->options.dp_loose_limit);
 }
 
@@ -521,7 +520,7 @@ status_done:
   /* Возврат страниц в нераспределенный "хвост" БД.
    * Содержимое страниц не уничтожается, а для вложенных транзакций граница
    * нераспределенного "хвоста" БД сдвигается только при их коммите. */
-  if (MDBX_ENABLE_REFUND && unlikely(pgno + npages == txn->geo.first_unallocated)) {
+  if (unlikely(pgno + npages == txn->geo.first_unallocated)) {
     const char *kind = nullptr;
     if (status == modifiable) {
       /* Страница испачкана в этой транзакции, но до этого могла быть
@@ -578,9 +577,7 @@ status_done:
       page_next(mp) = txn->wr.loose_pages;
       txn->wr.loose_pages = mp;
       txn->wr.loose_count++;
-#if MDBX_ENABLE_REFUND
       txn->wr.loose_refund_wl = (pgno + 2 > txn->wr.loose_refund_wl) ? pgno + 2 : txn->wr.loose_refund_wl;
-#endif /* MDBX_ENABLE_REFUND */
       VALGRIND_MAKE_MEM_NOACCESS(page2payload(mp), txn->env->ps - PAGEHDRSZ);
       MDBX_ASAN_POISON_MEMORY_REGION(page2payload(mp), txn->env->ps - PAGEHDRSZ);
       return MDBX_SUCCESS;
@@ -619,11 +616,11 @@ status_done:
   reclaim:
     DEBUG("reclaim %zu %s page %" PRIaPGNO, npages, "dirty", pgno);
     rc = pnl_insert_span(&txn->wr.repnl, pgno, npages);
-    if (MDBX_ENABLE_REFUND && unlikely(MDBX_PNL_MOST(txn->wr.repnl) == txn->geo.first_unallocated - 1)) {
+    if (unlikely(MDBX_PNL_MOST(txn->wr.repnl) == txn->geo.first_unallocated - 1)) {
       /* Refund suitable pages into "unallocated" space */
       txn_refund(txn);
     }
-    tASSERT1(txn, pnl_check_allocated(txn->wr.repnl, txn->geo.first_unallocated - MDBX_ENABLE_REFUND));
+    tASSERT1(txn, pnl_check_allocated(txn->wr.repnl, txn->geo.first_unallocated - 1));
     tASSERT1(txn, txn_dpl_check(txn));
     return rc;
   }
@@ -706,8 +703,7 @@ __hot int __must_check_result page_dirty(MDBX_txn *txn, page_t *mp, size_t npage
       txn->wr.dirtyroom++;
       if (!MDBX_AVOID_MSYNC || !(txn->flags & MDBX_WRITEMAP))
         page_shadow_release(txn->env, lp, 1);
-      if (MDBX_ENABLE_REFUND && pnl_size(txn->wr.repnl) &&
-          unlikely(MDBX_PNL_MOST(txn->wr.repnl) == txn->geo.first_unallocated - 1)) {
+      if (pnl_size(txn->wr.repnl) && unlikely(MDBX_PNL_MOST(txn->wr.repnl) == txn->geo.first_unallocated - 1)) {
         /* Refund suitable pages into "unallocated" space */
         txn_refund(txn);
       }
