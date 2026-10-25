@@ -530,4 +530,19 @@ LIBMDBX_API __cold intptr_t mdbx_limits_pgsize_min(void) { return __inline_mdbx_
 
 LIBMDBX_API __cold intptr_t mdbx_limits_pgsize_max(void) { return __inline_mdbx_limits_pgsize_max(); }
 
+LIBMDBX_API __cold int mdbx_preopen_snapinfo(const char *pathname, MDBX_envinfo *out, size_t bytes) {
+  return __inline_mdbx_preopen_snapinfo(pathname, out, bytes);
+}
+
+LIBMDBX_API __cold int mdbx_preopen_snapinfoW(const wchar_t *pathname, MDBX_envinfo *out, size_t bytes) {
+#if IS_WINDOWS
+  return __inline_mdbx_preopen_snapinfoW(pathname, out, bytes);
+#else
+  (void)pathname;
+  (void)out;
+  (void)bytes;
+  return MDBX_ENOSYS;
+#endif /* IS_WINDOWS */
+}
+
 #endif /* LIBMDBX_NO_EXPORTS_LEGACY_API */

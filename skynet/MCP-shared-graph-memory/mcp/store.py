@@ -366,10 +366,12 @@ class Store:
             через открытый env);
           - env.bootid_current vs bootid_meta — «разошлась» ли БД с boot`ом
             (при отличии — при следующем открытии откат к steady);
-          - preopen.recent_txnid — последний txnid видимый БЕЗ открытия; этот
-            вызов валиден только при закрытой env или синхронизированной
-            (при живой nosync-env вернёт MDBX_CORRUPTED) — обрабатываем
-            best-effort, для живого сервера основой служит env.diag().
+          - preopen.recent_txnid — последний txnid видимый БЕЗ открытия; после
+            #182 + mdbx_preopen_snapinfo_ex() preopen работает в режиме
+            PROPERLY: при unsteady-новейшей мете (троица s:w:w) возвращается
+            MDBX_WANNA_RECOVERY — явный сигнал, что нужен recovery, вместо
+            молчаливой выдачи steady-геометрии или MDBX_CORRUPTED. Для живого
+            сервера основой служит env.diag().
         """
         out = {}
         try:

@@ -6,3 +6,6 @@ _build-mcp-shared-graph-memory/
 _build-scan/
 mcp/_lib/
 tools/artifacts/
+# pytest tmp_path leftovers in the fixtures dir
+tests/fixtures/tmp*.c
+tests/fixtures/tmp*.cxx
