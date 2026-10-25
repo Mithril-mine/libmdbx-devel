@@ -26,6 +26,7 @@ Cutting-edge release with new core features and internal refactoring.
 ### Appreciations:
 
  - [Andrea Lanfranchi](https://github.com/AndreaLanfranchi) for bug reporting and assistance with fixing ones.
+ - [Omar Gylyjov](https://github.com/dahiAbi) for bug reporting and fixing/PR.
 
 ### Improvements:
 
@@ -36,6 +37,7 @@ Cutting-edge release with new core features and internal refactoring.
  - Added a new bilingual textbook and integrated it into the documentation site, with the accompanying example programs ported and restructured.
  - Introduced a unified bilingual documentation site, six bilingual guides and consolidated engineering documentation.
  - Conan recipe: added the `mdbx.lto` and `mdbx.sanitize` options and documented the rules of the package binary identity — see README "Packaging / Conan".
+ - Added the `MDBX_AVOID_FTOK` build option for the System V IPC locking: it replaces the system `ftok()` (whose low 16 inode bits make two databases collide) with a key derived from the full inode, device and filesystem type, mixed by the internal hash; this lowers the collision probability on top of the signature guard ([#80](https://github.com/Mithril-mine/libmdbx-devel/issues/80)).
 
 ### Fixes:
 
@@ -89,8 +91,8 @@ Cutting-edge release with new core features and internal refactoring.
     - Fixed the System V IPC locking destroying another live database's semaphores on a key collision: when `semget(key, IPC_CREAT|IPC_EXCL)` found an existing set, the open path used to remove it with `IPC_RMID` and recreate its own, so opening database B could silently break the locking of an in-use database A sharing the `ftok()` key. Every semaphore set created by libmdbx now carries a signature derived from the database file identity in the extra semaphores (`semval`), and the open refuses with an error instead of removing a set whose signature does not match — even a database that is open but idle, or whose last locking process has exited, is protected ([#80](https://github.com/Mithril-mine/libmdbx-devel/issues/80), [#159](https://github.com/Mithril-mine/libmdbx-devel/issues/159)).
     - Fixed a compacting copy (`mdbx_env_copy*()` with `MDBX_CP_COMPACT`) hanging forever when the dedicated writer thread hit a write error (e.g. the destination pipe was closed or the disk ran full): the thread left without waking the copy producer sleeping on the buffer handover, so the call never returned. The writer now signals the producer on its way out, so the error is reported instead ([#171](https://github.com/Mithril-mine/libmdbx-devel/issues/171)).
     - Fixed `mdbx_replace()`/`mdbx_replace_ex()` and the C++ `txn::replace_reserve()` used with `MDBX_RESERVE`: when the replaced value was on a page already modified by the transaction and had the same length, the call compared the caller's pointer (not data under `MDBX_RESERVE`) with the stored value, so a NULL reservation crashed the process and matching bytes made it report success without reserving the space, silently losing the new value; on maps with duplicates such calls could also crash or lose updates. The unchanged-value shortcut is now skipped under `MDBX_RESERVE`, and `MDBX_RESERVE` on a map with duplicates is rejected with `MDBX_INCOMPATIBLE` upfront, as `mdbx_put()` and `mdbx_cursor_put()` already do ([#166](https://github.com/Mithril-mine/libmdbx-devel/issues/166)).
-    - Added the `MDBX_AVOID_FTOK` build option for the System V IPC locking: it replaces the system `ftok()` (whose low 16 inode bits make two databases collide) with a key derived from the full inode, device and filesystem type, mixed by the internal hash; this lowers the collision probability on top of the signature guard ([#80](https://github.com/Mithril-mine/libmdbx-devel/issues/80)).
- - Excluded OpenBSD from the POSIX-semaphore locking auto-selection, since its `sem_init()` always fails with `EPERM` for process-shared semaphores and thus a default build could not open any environment; also corrected the misleading comment naming macOS, which uses the POSIX-2001 path anyway ([#115](https://github.com/Mithril-mine/libmdbx-devel/issues/115)).
+    - Excluded OpenBSD from the POSIX-semaphore locking auto-selection, since its `sem_init()` always fails with `EPERM` for process-shared semaphores and thus a default build could not open any environment; also corrected the misleading comment naming macOS, which uses the POSIX-2001 path anyway ([#115](https://github.com/Mithril-mine/libmdbx-devel/issues/115)).
+    - Fixed `mdbx_env_open()` fails with EINVAL on Android due invalid internal lseek-offset ([#197](https://github.com/Mithril-mine/libmdbx-devel/issues/197)).
 
  - Windows:
     - Fixed a spurious internal assertion failure during page allocation on Windows ([#52](https://github.com/Mithril-mine/libmdbx-devel/issues/52)).
