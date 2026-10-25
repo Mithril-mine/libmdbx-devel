@@ -30,6 +30,8 @@ permissions:
 on:
   push:
     branches: [devel, master]
+  pull_request:
+    branches: [devel, master]
   workflow_dispatch:
     inputs:
       cell:
@@ -76,11 +78,18 @@ jobs:
           EVENT_REF: ${{ github.event.inputs.ref || github.event.client_payload.ref }}
           EVENT_SCOPE: ${{ github.event.inputs.scope || github.event.client_payload.scope }}
           PUSH_BEFORE: ${{ github.event.before }}
+          PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
         run: |
           set -euo pipefail
           SCOPE="${EVENT_SCOPE:-fast}"
           REF=""
           case "$GITHUB_EVENT_NAME" in
+            pull_request)
+              echo "==> pull_request: push-quick preflight on the PR head"
+              CELLS=$(tests/ci/select-cells.py --profile push-quick)
+              SCOPE=fast
+              REF="${PR_HEAD_SHA:-${GITHUB_REF}}"
+              ;;
             push)
               BASE="${PUSH_BEFORE:-origin/master}"
               if [ "$BASE" = "0000000000000000000000000000000000000000" ]; then BASE="origin/master"; fi
@@ -160,3 +169,30 @@ jobs:
       coverage: ${{ matrix.coverage }}
       ndk: ${{ matrix.ndk }}
       ref: ${{ needs.resolve.outputs.ref }}
+
+  dist:
+    name: dist (linux)
+    runs-on: ubuntu-24.04
+    if: ${{ github.event_name == 'pull_request' || github.event_name == 'push' }}
+    steps:
+      - name: checkout
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+          fetch-tags: true
+          submodules: true
+      - name: make dist
+        shell: bash
+        run: |
+          set -euo pipefail
+          make dist V=1
+      - name: check dist archive
+        shell: bash
+        run: |
+          set -euo pipefail
+          DIST_TARBALL=$(ls libmdbx-sources-*.tar.gz 2>/dev/null || true)
+          if [ -z "$DIST_TARBALL" ]; then
+            echo "dist tarball (libmdbx-sources-*.tar.gz) not produced" >&2
+            exit 1
+          fi
+          echo "dist archive ok: $DIST_TARBALL"
