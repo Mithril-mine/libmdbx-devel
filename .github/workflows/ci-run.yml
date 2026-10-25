@@ -103,7 +103,12 @@ jobs:
         uses: actions/cache@v4
         with:
           path: ${{ runner.temp }}/ccache
-          key: ccache-${{ inputs.cell }}-${{ github.sha }}
+          # Rolling key per cell: binding to github.sha would never hit (a
+          # save under an exact SHA cannot match a future run), only adding
+          # cache upload/download overhead. run_number keeps each run saving a
+          # fresher cache under a distinct key, while restore-keys falls back
+          # to the latest one from a previous run of the same cell.
+          key: ccache-${{ inputs.cell }}-${{ github.run_number }}
           restore-keys: |
             ccache-${{ inputs.cell }}-
 
