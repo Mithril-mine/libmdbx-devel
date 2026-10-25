@@ -112,11 +112,17 @@ static bool doit(const mdbx::path &database_pathname) {
 
 int main(int, const char *[]) {
   try {
+    // On Windows with C++ < 17 `mdbx::path` is `std::wstring`, so only a
+    // wide literal matches; with `std::filesystem::path` (C++17+) or on POSIX
+    // the ordinary narrow form is fine. Keeping this example minimal, we do
+    // not perform any UTF-8 transcoding here.
     const mdbx::path bench_database =
-#if !(defined(_WIN32) || defined(_WIN64) || defined(_WINDOWS))
-        "/tmp/"
-#endif /* !Windows */
-        "bench_example_database.mdbx";
+#if defined(MDBX_STD_FILESYSTEM_PATH) || !(defined(_WIN32) || defined(_WIN64) || defined(_WINDOWS))
+        "/tmp/bench_example_database.mdbx"
+#else
+        L"\\bench_example_database.mdbx"
+#endif
+        ;
     thousand(bench_database, mdbx::env::mode::write_file_io, mdbx::env::durability::robust_synchronous);
     thousand(bench_database, mdbx::env::mode::write_file_io, mdbx::env::durability::half_synchronous_weak_last);
     thousand(bench_database, mdbx::env::mode::write_file_io, mdbx::env::durability::lazy_weak_tail);
@@ -125,7 +131,15 @@ int main(int, const char *[]) {
     thousand(bench_database, mdbx::env::mode::write_mapped_io, mdbx::env::durability::half_synchronous_weak_last);
     thousand(bench_database, mdbx::env::mode::write_mapped_io, mdbx::env::durability::lazy_weak_tail);
     thousand(bench_database, mdbx::env::mode::write_mapped_io, mdbx::env::durability::whole_fragile);
-    return doit("example_database") ? EXIT_SUCCESS : EXIT_FAILURE;
+    return doit(
+#if defined(MDBX_STD_FILESYSTEM_PATH) || !(defined(_WIN32) || defined(_WIN64) || defined(_WINDOWS))
+               "example_database"
+#else
+               L"example_database"
+#endif
+               )
+               ? EXIT_SUCCESS
+               : EXIT_FAILURE;
   } catch (const std::exception &ex) {
     std::cerr << "Exception: " << ex.what() << "\n";
     return EXIT_FAILURE;
