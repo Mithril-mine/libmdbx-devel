@@ -2645,7 +2645,6 @@
       "cmake": [
         "-DCMAKE_BUILD_TYPE=Release",
         "-DMDBX_BUILD_CXX:BOOL=ON",
-        "-DMDBX_ENABLE_REFUND:BOOL=OFF",
         "-DMDBX_ENABLE_BIGFOOT:BOOL=OFF",
         "-DMDBX_ENABLE_PGOP_STAT:BOOL=OFF",
         "-DMDBX_ENABLE_PROFGC:BOOL=ON",
@@ -2760,7 +2759,6 @@
         "-DCMAKE_BUILD_TYPE=Release",
         "-DMDBX_BUILD_SHARED_LIBRARY:BOOL=OFF",
         "-DMDBX_WITHOUT_MSVC_CRT:BOOL=OFF",
-        "-DMDBX_ENABLE_REFUND:BOOL=OFF",
         "-DMDBX_ENABLE_BIGFOOT:BOOL=OFF",
         "-DMDBX_ENABLE_PGOP_STAT:BOOL=OFF",
         "-DMDBX_ENABLE_PROFGC:BOOL=ON",
@@ -2770,22 +2768,6 @@
       ],
       "ctest": null,
       "note": "ci-windows-msvc toolset=v145 target=x64 Release dll=OFF crt=OFF; all ENABLE_* inverted (alt-options)"
-    },
-    {
-      "id": "win-cxx-v142-win2022-x64-debug-std11-norefund",
-      "runs-on": "windows-2022",
-      "env": {
-        "CXXSTD": "-std=gnu++11"
-      },
-      "cmake": [
-        "-A|x64",
-        "-T|v142",
-        "-DCMAKE_BUILD_TYPE=Debug",
-        "-DCMAKE_CXX_STANDARD=11",
-        "-DMDBX_ENABLE_REFUND:BOOL=OFF"
-      ],
-      "ctest": null,
-      "note": "ci-cxx-msvc toolset=v142 cxxstd=11 target=x64 Debug; ENABLE_REFUND=OFF"
     },
     {
       "id": "win-cxx-v142-win2022-win32-release-std20-nobigfoot",
@@ -2953,7 +2935,7 @@
       "android-r27d-x86-64-emu"
     ],
     "win-gate": [
-      "win-cxx-v142-win2022-x64-debug-std11-norefund",
+      "win-cxx-v142-win2022-x64-debug-std11",
       "win-cxx-v143-win2022-arm64-debug-std17",
       "win-cxx-v145-winlatest-x64-release-std23-nodbisp",
       "win-cxx-v142-win2022-win32-release-std20-nobigfoot",
