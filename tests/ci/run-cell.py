@@ -22,6 +22,11 @@
 #   RUN_CELL_EXTRA_CMAKE  extra CMake args for the configure step (policy
 #                         flags like -DINTERPROCEDURAL_OPTIMIZATION=OFF)
 #   CI_CTEST_TIMEOUT      ctest per-test timeout override (default 600)
+#   GTEST_RUNTIME_LIMIT   relative in-test soft deadline in seconds (default
+#                         CI_CTEST_TIMEOUT-60), see tests/ut/test-env.h
+#   GTEST_RUNTIME_DEADLINE absolute in-test deadline in UTC epoch seconds;
+#                         passed through when set, so a whole parallel run can
+#                         share one stop instant (the earliest of the two wins)
 
 import argparse
 import json
@@ -301,12 +306,17 @@ def main() -> int:
     # Runtime limiter for the gtest binaries (tests/ut/test-env.h): a soft
     # in-test deadline with a 60s margin under CI_CTEST_TIMEOUT (default 600),
     # so long suites GTEST_SKIP() the remainder instead of being killed by the
-    # hard ctest timeout. GTEST_SHUFFLE=1 (random test order, so a different
+    # hard ctest timeout. GTEST_RUNTIME_DEADLINE (an absolute UTC-epoch
+    # deadline) is passed through when set by the caller, so a whole parallel
+    # run can share one stop instant; the limiter picks the earliest of the two.
+    # GTEST_SHUFFLE=1 (random test order, so a different
     # subset runs each night) is enabled for nightly runs only (CI_NIGHTLY=1).
     env["GTEST_RUNTIME_LIMIT"] = os.environ.get(
         "GTEST_RUNTIME_LIMIT",
         str(max(int(os.environ.get("CI_CTEST_TIMEOUT", "600")) - 60, 60)),
     )
+    if os.environ.get("GTEST_RUNTIME_DEADLINE"):
+        env["GTEST_RUNTIME_DEADLINE"] = os.environ["GTEST_RUNTIME_DEADLINE"]
     if os.environ.get("CI_NIGHTLY", "") == "1":
         env.setdefault("GTEST_SHUFFLE", "1")
 

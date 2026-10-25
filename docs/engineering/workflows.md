@@ -93,7 +93,9 @@ Parallel infrastructure built on top of the same CTest labels; the legacy 7 GitH
  - **Local runner** — `tests/ci/run-cell.py <cell-id> [--scope fast|full] [--build-dir <dir>]`: pure CMake/CTest,
   no `ci.sh`; rc 0 = ok, 1 = build/test fail, 2 = unknown id/usage. Reproduces a failing cell
   locally on Linux-capable cells. Exports `GTEST_RUNTIME_LIMIT` (default `CI_CTEST_TIMEOUT − 60`,
-  i.e. 540s) for the in-test soft deadline (`tests/ut/test-env.h`, see testing-codex C2.1) and
+  i.e. 540s) for the in-test soft deadline and passes through `GTEST_RUNTIME_DEADLINE` (an absolute
+  UTC-epoch deadline so a whole parallel run stops at one shared instant; the earliest of the two
+  wins) — see `tests/ut/test-env.h` and testing-codex C2.1 — and
   sets `GTEST_SHUFFLE=1` only when `CI_NIGHTLY=1` (set by the `schedule` branch of the
   orchestrator); on Windows CI the env `CI`/`MDBX_TEST_NO_CRT_POPUP` additionally silences
   CRT assert popups in the test binaries.

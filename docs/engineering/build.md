@@ -287,12 +287,43 @@ Sanitizer env defaults: `ASAN_OPTIONS=log_path=asan.log:poison_history_size=42`,
   (`--mode=+writemap --table=+data.fixed --keygen.split=29 --datalen=rnd`) + chk tests;
   `uniq_nested` (`--mode=-writemap,-nosync-safe,-lifo`) + chk tests.
 
-### 6.6 Per AGENTS.md rules
+### 6.6 Shared test-env object and the gtest PCH (`cmake/testing.cmake`)
+
+Two build-time optimisations keep the ~120 single-TU gtest binaries cheap to build:
+
+- **`mdbx_test_env` OBJECT library** — `tests/ut/test-env.c++` (the single
+  `ci_runtime_limiter` instance and the CI-only CRT popup suppressor) is compiled
+  **once** and its object is placed on the link line of every gtest target via
+  `$<TARGET_OBJECTS:mdbx_test_env>`. An OBJECT (not STATIC) library is used
+  deliberately: its object always reaches the link line, so the linker cannot drop
+  it from binaries that never reference the limiter (which would silently disable
+  the popup suppression). Verify with `nm <test-binary> | grep ci_runtime_limiter`.
+- **`mdbx_test_pch` shared PCH** — `tests/ut/pch.h++` (GoogleTest via `test-env.h`
+  + the common standard headers) is precompiled once into the `mdbx_test_pch`
+  anchor library, and every gtest target reuses it through
+  `target_precompile_headers(<target> REUSE_FROM mdbx_test_pch)` (applied by the
+  `ut_apply_pch()` macro inside `add_gtest()`). Saves ~1 s per TU. Notes:
+  - Gated on CMake ≥ 3.16 (`REUSE_FROM`); on older CMake `ut_apply_pch()` is a
+    no-op, so the project's 3.12 minimum is untouched and call sites need no branch.
+  - `REUSE_FROM` only reuses the PCH when the compile flags match the anchor, so
+    the anchor mirrors the gtest targets' standard, include dirs and `-fPIE`
+    (`POSITION_INDEPENDENT_CODE OFF` + explicit `-fPIE`, because a static library
+    would default to `-fPIC` and GCC rejects a PIC/PIE-mismatched PCH under
+    `-Werror`). A target with extra flags (the `MDBX_PROBES` ones) simply falls
+    back to a normal compile — clean, no `-Winvalid-pch` error.
+  - `mdbx.h` / `mdbx.h++` are **not** in the PCH: the white-box tests
+    (`issue_gh0017/0065/0067`) include `src/essentials.h` + `internals.h`, which
+    redefine macros the public header also defines; baking `mdbx.h` into the PCH
+    would collide under `-Werror`. Each test includes the libmdbx header it needs.
+  - Plain-C tests (`add_simple_test`/`add_extra_test`) and the `mdbx_test`
+    framework do not use the PCH.
+
+### 6.7 Per AGENTS.md rules
 
 - Build with CMake, test with CTest.
 - Build and test at least on **Linux and Windows**.
 
-### 6.7 Test-time budget rules (owner strategy, Kaizen 2026-09-21/22)
+### 6.8 Test-time budget rules (owner strategy, Kaizen 2026-09-21/22)
 
 Tests and CI dominate the schedule (>90% of wall time); every check must be as
 fast and as targeted as possible.
