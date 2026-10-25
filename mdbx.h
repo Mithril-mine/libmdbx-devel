@@ -7187,34 +7187,6 @@ LIBMDBX_API int mdbx_env_open_for_recoveryW(MDBX_env *env, const wchar_t *pathna
  * leg(s). */
 LIBMDBX_API int mdbx_env_turn_for_recovery(MDBX_env *env, unsigned target_meta);
 
-/** \brief Gets basic information about the database without opening it.
- * \ingroup c_opening
- *
- * The purpose of the function is to obtain basic information without opening the database nor mapping data to memory,
- * which can be quite a costly action for the OS kernel. The information obtained in this way can be useful for
- * adjusting the options for working with the database before opening it, as well as in scripts, file managers and other
- * auxiliary utilities.
- *
- * \todo Add to the API a possibility to install a callback for reviewing the
- * database options during its opening (while holding locks).
- *
- * \param [in]  pathname  The path to the directory or database file.
- * \param [out] info      A pointer to the \ref MDBX_envinfo structure to get information.
- * \param [in] bytes      The size of the \ref MDBX_envinfo structure,
- *                        which is used to ensure ABI compatibility.
- *
- * \note Only some fields of the \ref MDBX_envinfo structure will be provided/filled-in, the values of which can be
- * obtained without mapping database files to memory and without acquiring locks: the size of the database page, the
- * geometry of the database, the size of the allocated space (the number of the last distributed page), the number of
- * the last transaction, and the boot-id stored in the corresponding meta-page.
- *
- * \warning The information received is a snapshot for the moment of the function call and can be changed at any time by
- * a process working with the database. In particular, there is no obstacle to another process deleting the database and
- * recreating it with a different page size and/or changing any other parameters.
- *
- * \returns A non-zero error value on failure and 0 on success.
- * \see mdbx_preopen_snapinfo_ex() */
-
 /** \brief The mode of processing weak checkpoints during a preopen inspection.
  * \ingroup c_opening
  *
@@ -7278,13 +7250,45 @@ LIBMDBX_API int mdbx_preopen_snapinfo_exW(const wchar_t *pathname, MDBX_preopen_
 #define mdbx_preopen_snapinfo_exT(pathname, mode, info, bytes) mdbx_preopen_snapinfo_ex(pathname, mode, info, bytes)
 #endif /* Windows */
 
-LIBMDBX_API int mdbx_preopen_snapinfo(const char *pathname, MDBX_envinfo *info, size_t bytes);
+/** \brief Gets basic information about the database without opening it.
+ * \ingroup c_opening
+ *
+ * The purpose of the function is to obtain basic information without opening the database nor mapping data to memory,
+ * which can be quite a costly action for the OS kernel. The information obtained in this way can be useful for
+ * adjusting the options for working with the database before opening it, as well as in scripts, file managers and other
+ * auxiliary utilities.
+ *
+ * \todo Add to the API a possibility to install a callback for reviewing the
+ * database options during its opening (while holding locks).
+ *
+ * \param [in]  pathname  The path to the directory or database file.
+ * \param [out] info      A pointer to the \ref MDBX_envinfo structure to get information.
+ * \param [in] bytes      The size of the \ref MDBX_envinfo structure,
+ *                        which is used to ensure ABI compatibility.
+ *
+ * \note Only some fields of the \ref MDBX_envinfo structure will be provided/filled-in, the values of which can be
+ * obtained without mapping database files to memory and without acquiring locks: the size of the database page, the
+ * geometry of the database, the size of the allocated space (the number of the last distributed page), the number of
+ * the last transaction, and the boot-id stored in the corresponding meta-page.
+ *
+ * \warning The information received is a snapshot for the moment of the function call and can be changed at any time by
+ * a process working with the database. In particular, there is no obstacle to another process deleting the database and
+ * recreating it with a different page size and/or changing any other parameters.
+ *
+ * \returns A non-zero error value on failure and 0 on success.
+ * \see mdbx_preopen_snapinfo_ex() */
+LIBMDBX_INLINE_API(int, mdbx_preopen_snapinfo, (const char *pathname, MDBX_envinfo *info, size_t bytes)) {
+  return mdbx_preopen_snapinfo_ex(pathname, MDBX_PREOPEN_PROPERLY, info, bytes);
+}
+
 #if defined(_WIN32) || defined(_WIN64) || defined(DOXYGEN)
 /** \copydoc mdbx_preopen_snapinfo()
  * \ingroup c_opening
  * \note Available only on Windows.
  * \see mdbx_preopen_snapinfo() */
-LIBMDBX_API int mdbx_preopen_snapinfoW(const wchar_t *pathname, MDBX_envinfo *info, size_t bytes);
+LIBMDBX_INLINE_API(int, mdbx_preopen_snapinfoW, (const wchar_t *pathname, MDBX_envinfo *info, size_t bytes)) {
+  return mdbx_preopen_snapinfo_exW(pathname, MDBX_PREOPEN_PROPERLY, info, bytes);
+}
 #define mdbx_preopen_snapinfoT(pathname, info, bytes) mdbx_preopen_snapinfoW(pathname, info, bytes)
 #else
 #define mdbx_preopen_snapinfoT(pathname, info, bytes) mdbx_preopen_snapinfo(pathname, info, bytes)
