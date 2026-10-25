@@ -523,20 +523,27 @@ public:
   /// \brief Provides information about a database, including meta-page and
   /// geometry, without opening it.
   ///
+  /// \param [in] mode The mode of processing weak checkpoints, see \ref MDBX_preopen_flags.
+  ///   Defaults to `MDBX_PREOPEN_PROPERLY` (same as the legacy `get_preopen_snapinfo()`).
   /// \returns The \ref info of the database. Errors are thrown as
   /// \ref mdbx::error.
-  /// \see ::mdbx_preopen_snapinfo()
-  MDBX_NODISCARD static inline info get_preopen_snapinfo(const ::std::string &pathname);
-  MDBX_NODISCARD static inline info get_preopen_snapinfo(const char *pathname);
+  /// \see ::mdbx_preopen_snapinfo_ex()
+  MDBX_NODISCARD static inline info get_preopen_snapinfo(const ::std::string &pathname,
+                                                         MDBX_preopen_flags mode = MDBX_PREOPEN_PROPERLY);
+  MDBX_NODISCARD static inline info get_preopen_snapinfo(const char *pathname,
+                                                         MDBX_preopen_flags mode = MDBX_PREOPEN_PROPERLY);
 #ifdef MDBX_STD_FILESYSTEM_PATH
-  /// \copydoc get_preopen_snapinfo(const char *)
-  MDBX_NODISCARD static inline info get_preopen_snapinfo(const MDBX_STD_FILESYSTEM_PATH &pathname);
+  /// \copydoc get_preopen_snapinfo(const char *, MDBX_preopen_flags)
+  MDBX_NODISCARD static inline info get_preopen_snapinfo(const MDBX_STD_FILESYSTEM_PATH &pathname,
+                                                         MDBX_preopen_flags mode = MDBX_PREOPEN_PROPERLY);
 #endif /* MDBX_STD_FILESYSTEM_PATH */
 #if defined(_WIN32) || defined(_WIN64) || defined(DOXYGEN)
-  /// \copydoc get_preopen_snapinfo(const char *)
-  MDBX_NODISCARD static inline info get_preopen_snapinfo(const ::std::wstring &pathname);
-  /// \copydoc get_preopen_snapinfo(const char *)
-  MDBX_NODISCARD static inline info get_preopen_snapinfo(const wchar_t *pathname);
+  /// \copydoc get_preopen_snapinfo(const char *, MDBX_preopen_flags)
+  MDBX_NODISCARD static inline info get_preopen_snapinfo(const ::std::wstring &pathname,
+                                                         MDBX_preopen_flags mode = MDBX_PREOPEN_PROPERLY);
+  /// \copydoc get_preopen_snapinfo(const char *, MDBX_preopen_flags)
+  MDBX_NODISCARD static inline info get_preopen_snapinfo(const wchar_t *pathname,
+                                                         MDBX_preopen_flags mode = MDBX_PREOPEN_PROPERLY);
 #endif /* Windows */
 
   /// \brief Returns snapshot statistics about the MDBX environment.

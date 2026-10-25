@@ -7212,7 +7212,72 @@ LIBMDBX_API int mdbx_env_turn_for_recovery(MDBX_env *env, unsigned target_meta);
  * a process working with the database. In particular, there is no obstacle to another process deleting the database and
  * recreating it with a different page size and/or changing any other parameters.
  *
- * \returns A non-zero error value on failure and 0 on success. */
+ * \returns A non-zero error value on failure and 0 on success.
+ * \see mdbx_preopen_snapinfo_ex() */
+
+/** \brief The mode of processing weak checkpoints during a preopen inspection.
+ * \ingroup c_opening
+ *
+ * Determines which meta-pages are considered usable by \ref mdbx_preopen_snapinfo_ex()
+ * when the newest one is a weak checkpoint, and which error is returned if the
+ * inspection cannot report usable geometry. */
+typedef enum MDBX_preopen_flags {
+  /** \brief Legacy behavior: if the newest meta-page is not steady, fail with
+   * \ref MDBX_CORRUPTED regardless of the boot-id. */
+  MDBX_PREOPEN_LEGACY = 0,
+  /** \brief If the newest meta-page is not steady, fail with
+   * \ref MDBX_WANNA_RECOVERY regardless of the boot-id, even if a usable steady
+   * checkpoint exists. */
+  MDBX_PREOPEN_PROPERLY,
+  /** \brief Use the newest steady checkpoint regardless of the boot-id, fail
+   * with \ref MDBX_CORRUPTED if there is no usable steady checkpoint. */
+  MDBX_PREOPEN_PESSIMISTIC,
+  /** \brief Treat a weak checkpoint whose boot-id matches the current one as
+   * if it was steady, so the newest usable meta-page is reported. Fail with
+   * \ref MDBX_CORRUPTED if there are no usable meta-pages. */
+  MDBX_PREOPEN_OPTIMISTIC
+} MDBX_preopen_flags;
+
+/** \brief Gets basic information about the database without opening it, with
+ * explicit control of weak-checkpoint processing.
+ * \ingroup c_opening
+ *
+ * The purpose of the function is to obtain basic information without opening the database nor mapping data to memory,
+ * which can be quite a costly action for the OS kernel. The information obtained in this way can be useful for
+ * adjusting the options for working with the database before opening it, as well as in scripts, file managers and other
+ * auxiliary utilities.
+ *
+ * \param [in]  pathname  The path to the directory or database file.
+ * \param [in]  mode      The mode of processing weak checkpoints, see \ref MDBX_preopen_flags.
+ * \param [out] info      A pointer to the \ref MDBX_envinfo structure to get information.
+ * \param [in]  bytes     The size of the \ref MDBX_envinfo structure,
+ *                        which is used to ensure ABI compatibility.
+ *
+ * \note Only some fields of the \ref MDBX_envinfo structure will be provided/filled-in, the values of which can be
+ * obtained without mapping database files to memory and without acquiring locks: the size of the database page, the
+ * geometry of the database, the size of the allocated space (the number of the last distributed page), the number of
+ * the last transaction, and the boot-id stored in the corresponding meta-page.
+ *
+ * \warning The information received is a snapshot for the moment of the function call and can be changed at any time by
+ * a process working with the database. In particular, there is no obstacle to another process deleting the database and
+ * recreating it with a different page size and/or changing any other parameters.
+ *
+ * \returns A non-zero error value on failure and 0 on success.
+ * \see mdbx_preopen_snapinfo() */
+LIBMDBX_API int mdbx_preopen_snapinfo_ex(const char *pathname, MDBX_preopen_flags mode, MDBX_envinfo *info,
+                                         size_t bytes);
+#if defined(_WIN32) || defined(_WIN64) || defined(DOXYGEN)
+/** \copydoc mdbx_preopen_snapinfo_ex()
+ * \ingroup c_opening
+ * \note Available only on Windows.
+ * \see mdbx_preopen_snapinfo_ex() */
+LIBMDBX_API int mdbx_preopen_snapinfo_exW(const wchar_t *pathname, MDBX_preopen_flags mode, MDBX_envinfo *info,
+                                          size_t bytes);
+#define mdbx_preopen_snapinfo_exT(pathname, mode, info, bytes) mdbx_preopen_snapinfo_exW(pathname, mode, info, bytes)
+#else
+#define mdbx_preopen_snapinfo_exT(pathname, mode, info, bytes) mdbx_preopen_snapinfo_ex(pathname, mode, info, bytes)
+#endif /* Windows */
+
 LIBMDBX_API int mdbx_preopen_snapinfo(const char *pathname, MDBX_envinfo *info, size_t bytes);
 #if defined(_WIN32) || defined(_WIN64) || defined(DOXYGEN)
 /** \copydoc mdbx_preopen_snapinfo()
