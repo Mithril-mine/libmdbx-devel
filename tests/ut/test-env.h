@@ -5,13 +5,18 @@
 ///
 /// Provides:
 ///  - class runtime_limiter: a CI execution-time guard (pattern adopted from
-///    libfpta's GTEST_IS_EXECUTION_TIMEOUT). The limit in seconds is read from
-///    the GTEST_RUNTIME_LIMIT environment variable at construction; when the
-///    deadline is exceeded the test reports "[  SKIPPED ] RUNTIME_LIMIT was
-///    reached" once and the caller is expected to GTEST_SKIP() itself. It is
-///    intended to be used together with GTEST_SHUFFLE=1 so that a part of the
-///    tests runs in random order until the limit is hit, instead of the whole
-///    run being killed by the CI timeout.
+///    libfpta's GTEST_IS_EXECUTION_TIMEOUT). The deadline is read at
+///    construction from two environment variables: GTEST_RUNTIME_LIMIT (a
+///    relative budget in seconds from the start) and GTEST_RUNTIME_DEADLINE
+///    (an absolute deadline in UTC seconds since the epoch, so a whole
+///    parallel run shares one moment in time); when both are set the earliest
+///    wins. The clock is std::chrono::steady_clock, so changing the system
+///    time does not affect the limiter. When the deadline is exceeded the
+///    test reports "[  SKIPPED ] RUNTIME_LIMIT was reached" once and the
+///    caller is expected to GTEST_SKIP() itself. It is intended to be used
+///    together with GTEST_SHUFFLE=1 so that a part of the tests runs in
+///    random order until the limit is hit, instead of the whole run being
+///    killed by the CI timeout.
 ///
 ///    ADOPTION RULES:
 ///      - place the MDBX_GTEST_IS_EXECUTION_TIMEOUT() check at the very top of
@@ -41,6 +46,8 @@
 
 #include <gtest/gtest.h>
 
+#include <chrono>
+#include <cstdint>
 #include <cstdlib>
 #include <ctime>
 #include <iostream>
@@ -81,18 +88,47 @@ static inline const char *mdtest_getenv(const char *name) {
  * Нужен для предотвращения таймаута тестов в CI. Предполагается, что он
  * используется вместе с установкой GTEST_SHUFFLE=1, что в сумме дает
  * выполнение части тестов в случайном порядке, пока не будет превышен лимит,
- * заданный через переменную среды окружения GTEST_RUNTIME_LIMIT. */
+ * заданный через переменные среды окружения:
+ *  - GTEST_RUNTIME_LIMIT — относительный лимит в секундах от момента старта;
+ *  - GTEST_RUNTIME_DEADLINE — абсолютный дедлайн в UTC-секундах (epoch),
+ *    позволяет ограничить суммарное время набора тестов, запускаемых
+ *    параллельно и в случайном порядке, единым моментом времени.
+ * Если заданы обе переменные, действует более ранний дедлайн. Отсчет ведется
+ * от std::chrono::steady_clock, поэтому перевод системного времени не влияет. */
 class runtime_limiter {
-  const time_t edge;
+  const std::chrono::steady_clock::time_point edge;
 
-  static time_t fetch() {
-    const char *const GTEST_RUNTIME_LIMIT = mdtest_getenv("GTEST_RUNTIME_LIMIT");
-    if (GTEST_RUNTIME_LIMIT) {
-      const long limit = atol(GTEST_RUNTIME_LIMIT);
-      if (limit > 0)
-        return time(nullptr) + static_cast<time_t>(limit);
+  /* Deadline math shared by the default constructor and the self-test:
+   * `limit_seconds` is a relative budget (<=0 means unset), `utc_deadline`
+   * an absolute wall-clock deadline in UTC seconds (<=0 means unset).
+   * The earliest of the two wins; both unset give a zero (disabled) edge.
+   * int64_t because time_t is 64-bit on Windows while `long` is 32-bit there
+   * (MSVC C4244 under /WX). */
+  static std::chrono::steady_clock::time_point compute(const std::int64_t limit_seconds,
+                                                       const std::int64_t utc_deadline) {
+    const auto now = std::chrono::steady_clock::now();
+    std::chrono::steady_clock::time_point result;
+    if (limit_seconds > 0)
+      result = now + std::chrono::seconds(limit_seconds);
+    if (utc_deadline > 0) {
+      const std::int64_t delta = utc_deadline - static_cast<std::int64_t>(std::time(nullptr));
+      const auto absolute = delta > 0 ? now + std::chrono::seconds(delta) : now - std::chrono::seconds(1);
+      if (result == std::chrono::steady_clock::time_point() || absolute < result)
+        result = absolute;
     }
-    return 0;
+    return result;
+  }
+
+  static std::chrono::steady_clock::time_point fetch() {
+    std::int64_t limit_seconds = 0;
+    const char *const limit = mdtest_getenv("GTEST_RUNTIME_LIMIT");
+    if (limit)
+      limit_seconds = std::atoll(limit);
+    std::int64_t utc_deadline = 0;
+    const char *const deadline = mdtest_getenv("GTEST_RUNTIME_DEADLINE");
+    if (deadline)
+      utc_deadline = std::atoll(deadline);
+    return compute(limit_seconds, utc_deadline);
   }
 
 public:
@@ -102,13 +138,23 @@ public:
   /// environment-driven one).
   struct for_testing {};
 
-  /// Testing constructor: an explicit absolute deadline (0 disables the
-  /// limiter); an edge in the past makes is_timeout() true immediately, with
-  /// no sleeping and no environment involved (see ut/api/test-env-selftest.c++).
-  runtime_limiter(for_testing, time_t absolute_edge) : edge(absolute_edge) {}
+  /// Testing constructor: an explicit steady-clock offset from now (zero
+  /// disables the limiter, a negative one makes is_timeout() true
+  /// immediately), with no sleeping and no environment involved (see
+  /// ut/api/test-env-selftest.c++).
+  runtime_limiter(for_testing, const std::chrono::seconds offset)
+      : edge(offset.count() == 0 ? std::chrono::steady_clock::time_point()
+                                 : std::chrono::steady_clock::now() + offset) {}
+
+  /// The same deadline math the environment-driven constructor performs,
+  /// exposed for the self-test without touching the environment.
+  static std::chrono::steady_clock::time_point compute_edge(const std::int64_t limit_seconds,
+                                                            const std::int64_t utc_deadline) {
+    return compute(limit_seconds, utc_deadline);
+  }
 
   bool is_timeout() {
-    if (edge && time(nullptr) > edge) {
+    if (edge != std::chrono::steady_clock::time_point() && std::chrono::steady_clock::now() > edge) {
       const auto current = ::testing::UnitTest::GetInstance();
       static const void *last_reported;
       if (last_reported != current) {
