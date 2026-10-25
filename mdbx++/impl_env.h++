@@ -616,30 +616,30 @@ inline env::sysraminfo env::get_sysraminfo() {
   return result;
 }
 
-inline env::info env::get_preopen_snapinfo(const ::std::string &pathname) {
-  return get_preopen_snapinfo(pathname.c_str());
+inline env::info env::get_preopen_snapinfo(const ::std::string &pathname, MDBX_preopen_flags mode) {
+  return get_preopen_snapinfo(pathname.c_str(), mode);
 }
 
-inline env::info env::get_preopen_snapinfo(const char *pathname) {
+inline env::info env::get_preopen_snapinfo(const char *pathname, MDBX_preopen_flags mode) {
   env::info result;
-  error::success_or_throw(::mdbx_preopen_snapinfo(pathname, &result, sizeof(result)));
+  error::success_or_throw(::mdbx_preopen_snapinfo_ex(pathname, mode, &result, sizeof(result)));
   return result;
 }
 
 #ifdef MDBX_STD_FILESYSTEM_PATH
-inline env::info env::get_preopen_snapinfo(const MDBX_STD_FILESYSTEM_PATH &pathname) {
-  return get_preopen_snapinfo(pathname.native().c_str());
+inline env::info env::get_preopen_snapinfo(const MDBX_STD_FILESYSTEM_PATH &pathname, MDBX_preopen_flags mode) {
+  return get_preopen_snapinfo(pathname.native().c_str(), mode);
 }
 #endif /* MDBX_STD_FILESYSTEM_PATH */
 
 #if defined(_WIN32) || defined(_WIN64)
-inline env::info env::get_preopen_snapinfo(const ::std::wstring &pathname) {
-  return get_preopen_snapinfo(pathname.c_str());
+inline env::info env::get_preopen_snapinfo(const ::std::wstring &pathname, MDBX_preopen_flags mode) {
+  return get_preopen_snapinfo(pathname.c_str(), mode);
 }
 
-inline env::info env::get_preopen_snapinfo(const wchar_t *pathname) {
+inline env::info env::get_preopen_snapinfo(const wchar_t *pathname, MDBX_preopen_flags mode) {
   env::info result;
-  error::success_or_throw(::mdbx_preopen_snapinfoW(pathname, &result, sizeof(result)));
+  error::success_or_throw(::mdbx_preopen_snapinfo_exW(pathname, mode, &result, sizeof(result)));
   return result;
 }
 #endif /* Windows */
