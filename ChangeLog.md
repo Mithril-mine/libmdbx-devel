@@ -27,6 +27,10 @@ Cutting-edge release with new core features and internal refactoring.
 
  - [Andrea Lanfranchi](https://github.com/AndreaLanfranchi) for bug reporting and assistance with fixing ones.
 
+### Backward compatibility breaks:
+
+ - The `MDBX_ENABLE_REFUND` build option was removed; the zero-cost online auto-compactification it controlled is now always enabled ([#193](https://github.com/Mithril-mine/libmdbx-devel/issues/193)).
+
 ### Improvements:
 
  - Clarification/refining README and doxygen API descriptions.
