@@ -814,7 +814,6 @@ add_option(
   "Disable some checks to reduce an overhead and detection probability of database corruption to a values closer to the LMDB"
   OFF)
 mark_as_advanced(MDBX_DISABLE_VALIDATION)
-add_option(MDBX ENABLE_REFUND "Zerocost auto-compactification during write-transactions" ON)
 add_option(MDBX ENABLE_BIGFOOT
            "Chunking long list of retired pages during huge transactions commit to avoid use sequences of pages" ON)
 add_option(MDBX ENABLE_PGOP_STAT "Gathering statistics on pages modification operations" ON)

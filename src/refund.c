@@ -3,7 +3,6 @@
 
 #include "internals.h"
 
-#if MDBX_ENABLE_REFUND
 static void refund_reclaimed(MDBX_txn *txn) {
   /* Scanning in descend order */
   pgno_t first_unallocated = txn->geo.first_unallocated;
@@ -200,13 +199,3 @@ bool txn_refund(MDBX_txn *txn) {
 
   return true;
 }
-
-#else /* MDBX_ENABLE_REFUND */
-
-bool txn_refund(MDBX_txn *txn) {
-  (void)txn;
-  /* No online auto-compactification. */
-  return false;
-}
-
-#endif /* MDBX_ENABLE_REFUND */

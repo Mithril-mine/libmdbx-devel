@@ -1200,12 +1200,11 @@ next_gc:
     eASSERT1(env, pnl_check_full_allocated(txn->wr.repnl, txn->geo.first_unallocated));
 
   eASSERT0(env, pnl_size(txn->wr.repnl) == 0 || MDBX_PNL_MOST(txn->wr.repnl) < txn->geo.first_unallocated);
-  if (MDBX_ENABLE_REFUND && pnl_size(txn->wr.repnl) &&
-      unlikely(MDBX_PNL_MOST(txn->wr.repnl) == txn->geo.first_unallocated - 1)) {
+  if (pnl_size(txn->wr.repnl) && unlikely(MDBX_PNL_MOST(txn->wr.repnl) == txn->geo.first_unallocated - 1)) {
     /* Refund suitable pages into "unallocated" space */
     txn_refund(txn);
   }
-  eASSERT1(env, pnl_check_allocated(txn->wr.repnl, txn->geo.first_unallocated - MDBX_ENABLE_REFUND));
+  eASSERT1(env, pnl_check_allocated(txn->wr.repnl, txn->geo.first_unallocated - 1));
 
   eASSERT0(env, op == MDBX_PREV || op == MDBX_NEXT);
   rkl_t *rkl = &txn->wr.gc.reclaimed;
@@ -1427,7 +1426,7 @@ done:
                  (uint32_t)(pgno ? 0 : (grew ? 2 : 1)));
     if (pgno) {
       eASSERT0(env, pgno + num <= txn->geo.first_unallocated && pgno >= NUM_METAS);
-      eASSERT1(env, pnl_check_allocated(txn->wr.repnl, txn->geo.first_unallocated - MDBX_ENABLE_REFUND));
+      eASSERT1(env, pnl_check_allocated(txn->wr.repnl, txn->geo.first_unallocated - 1));
     } else {
       pgno = txn->geo.first_unallocated;
       txn->geo.first_unallocated += (pgno_t)num;
@@ -1440,12 +1439,11 @@ done:
     fail:
       eASSERT0(env, ret.err != MDBX_SUCCESS);
       if ((txn->flags & MDBX_TXN_ERROR) == 0) {
-        if (MDBX_ENABLE_REFUND && pnl_size(txn->wr.repnl) &&
-            unlikely(MDBX_PNL_MOST(txn->wr.repnl) == txn->geo.first_unallocated - 1)) {
+        if (pnl_size(txn->wr.repnl) && unlikely(MDBX_PNL_MOST(txn->wr.repnl) == txn->geo.first_unallocated - 1)) {
           /* Refund suitable pages into "unallocated" space */
           txn_refund(txn);
         }
-        eASSERT1(env, pnl_check_allocated(txn->wr.repnl, txn->geo.first_unallocated - MDBX_ENABLE_REFUND));
+        eASSERT1(env, pnl_check_allocated(txn->wr.repnl, txn->geo.first_unallocated - 1));
       }
       int level;
       if (flags & ALLOC_UNIMPORTANT)
@@ -1499,13 +1497,11 @@ __hot pgr_t gc_alloc_single(const MDBX_cursor *const mc) {
 
   /* If there are any loose pages, just use them */
   while (likely(txn->wr.loose_pages)) {
-#if MDBX_ENABLE_REFUND
     if (unlikely(txn->wr.loose_refund_wl > txn->geo.first_unallocated)) {
       txn_refund(txn);
       if (!txn->wr.loose_pages)
         break;
     }
-#endif /* MDBX_ENABLE_REFUND */
 
     page_t *lp = txn->wr.loose_pages;
     MDBX_ASAN_UNPOISON_MEMORY_REGION(lp, txn->env->ps);

@@ -122,9 +122,7 @@ static int basal_start_locked(MDBX_txn *txn, unsigned flags) {
   txn->nested = nullptr;
   txn->wr.loose_pages = nullptr;
   txn->wr.loose_count = 0;
-#if MDBX_ENABLE_REFUND
   txn->wr.loose_refund_wl = 0;
-#endif /* MDBX_ENABLE_REFUND */
   pnl_setsize(txn->wr.retired_pages, 0);
   txn->wr.spilled.list = nullptr;
   txn->wr.spilled.least_removed = 0;
