@@ -568,17 +568,30 @@ int main() { return 0; }
     endif()
 
     # Shared test-environment TU (tests/ut/test-env.c++): the single
-    # ci_runtime_limiter instance (GTEST_RUNTIME_LIMIT guard) and the single
-    # CI-only CRT popup suppressor. It is compiled INTO every gtest target
-    # (not a static library): with a static lib the linker would drop the
-    # whole object from binaries that never reference the limiter, silently
-    # disabling the popup suppression for those tests.
+    # ci_runtime_limiter instance (GTEST_RUNTIME_LIMIT / GTEST_RUNTIME_DEADLINE
+    # guard) and the single CI-only CRT popup suppressor. It is compiled ONCE
+    # into an OBJECT library and that object is linked into every gtest target
+    # via $<TARGET_OBJECTS:...>. An object library (not a static one) is used
+    # deliberately: its object goes straight onto the link line of every
+    # consumer, so the linker cannot drop it from binaries that never reference
+    # the limiter — which would otherwise silently disable the popup
+    # suppression. Compiling it once instead of per target avoids rebuilding the
+    # same translation unit for each of the ~120 gtest binaries.
     if(CMAKE_CXX_COMPILER_LOADED AND EXISTS "${CMAKE_CURRENT_LIST_DIR}/../tests/ut/test-env.c++")
       set(UT_TEST_ENV_SOURCE "${CMAKE_CURRENT_LIST_DIR}/../tests/ut/test-env.c++")
       set(UT_TEST_ENV_INCLUDE_DIR "${CMAKE_CURRENT_LIST_DIR}/../tests/ut")
+      add_library(mdbx_test_env OBJECT "${UT_TEST_ENV_SOURCE}")
+      target_include_directories(mdbx_test_env PUBLIC "${UT_TEST_ENV_INCLUDE_DIR}")
+      target_link_libraries(mdbx_test_env PUBLIC ${UT_LIBRARIES})
+      if(MDBX_BUILD_CXX AND MDBX_CXX_STANDARD)
+        set_target_properties(mdbx_test_env PROPERTIES CXX_STANDARD ${MDBX_CXX_STANDARD}
+                                                       CXX_STANDARD_REQUIRED ON)
+      endif()
+      set(UT_TEST_ENV_OBJECT "$<TARGET_OBJECTS:mdbx_test_env>")
     else()
       set(UT_TEST_ENV_SOURCE "")
       set(UT_TEST_ENV_INCLUDE_DIR "")
+      set(UT_TEST_ENV_OBJECT "")
     endif()
   else()
     set(UT_INCLUDE_DIRECTORIES "")
@@ -610,8 +623,8 @@ int main() { return 0; }
       endif()
 
       set(target "${params_PREFIX}${name}")
-      if(UT_TEST_ENV_SOURCE)
-        add_executable(${target} ${params_SOURCE} ${UT_TEST_ENV_SOURCE})
+      if(UT_TEST_ENV_OBJECT)
+        add_executable(${target} ${params_SOURCE} ${UT_TEST_ENV_OBJECT})
         target_include_directories(${target} PRIVATE ${UT_TEST_ENV_INCLUDE_DIR})
       else()
         add_executable(${target} ${params_SOURCE})
