@@ -290,13 +290,11 @@ __cold int env_open(MDBX_env *env, mdbx_mode_t mode) {
     return LOG_IFERR(rc);
 
 #if MDBX_LOCKING == MDBX_LOCKING_SYSV
-  env->me_sysv_ipc.key = osal_ftok(env->lazy_fd, env->pathname.dxb);
-  if (unlikely(env->me_sysv_ipc.key == -1)) {
-    rc = errno;
+  rc = lck_ftok(env->lazy_fd, env->pathname.dxb, &env->me_sysv_ipc.ft);
+  if (unlikely(rc != MDBX_SUCCESS))
     return LOG_IFERR(rc);
-  }
   VERBOSE("use %s ftok-key 0x%08X for sysv-icp/locking", MDBX_AVOID_FTOK ? "mdbx-flavour" : "system-libc",
-          env->me_sysv_ipc.key);
+          env->me_sysv_ipc.ft.key);
 #endif /* MDBX_LOCKING */
 
   /* Set the position in files outside of the data to avoid corruption

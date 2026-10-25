@@ -217,6 +217,10 @@ __cold int mdbx_env_create(MDBX_env **penv) {
   env->lazy_fd = env->dsync_fd = env->fd4meta = env->lck_mmap.fd = INVALID_HANDLE_VALUE;
   env->stuck_meta = -1;
 
+#if MDBX_LOCKING == MDBX_LOCKING_SYSV
+  memset(&env->me_sysv_ipc, -1, sizeof(env->me_sysv_ipc));
+#endif /* MDBX_LOCKING == MDBX_LOCKING_SYSV */
+
   env_options_init(env);
   env_setup_pagesize(env, (globals.sys_pagesize < MDBX_MAX_PAGESIZE) ? globals.sys_pagesize : MDBX_MAX_PAGESIZE);
 
@@ -913,8 +917,7 @@ __cold int mdbx_preopen_snapinfoW(const wchar_t *pathname, MDBX_envinfo *out, si
   env.ioring.overlapped_fd = INVALID_HANDLE_VALUE;
 #endif /* Windows */
 #if MDBX_LOCKING == MDBX_LOCKING_SYSV
-  env.me_sysv_ipc.key = -1;
-  env.me_sysv_ipc.semid = -1;
+  memset(&env.me_sysv_ipc, -1, sizeof(env.me_sysv_ipc));
 #endif /* MDBX_LOCKING == MDBX_LOCKING_SYSV */
   env_options_init(&env);
 

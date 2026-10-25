@@ -1240,52 +1240,6 @@ int osal_removefile(const pathchar_t *pathname) {
 
 #if !IS_WINDOWS
 static bool is_valid_fd(int fd) { return !(isatty(fd) < 0 && errno == EBADF); }
-
-/* ----------------------------------------------------------------------------
- * osal_ftok() — System V IPC semaphore key derivation for the
- * MDBX_LOCKING_SYSV locking.
- *
- * Background: the semaphore key is derived from the data-file path via the
- * system ftok(), see the issue
- *   https://github.com/Mithril-mine/libmdbx-devel/issues/80
- * The glibc/POSIX ftok() uses only a few bits of the file's inode (the low 16
- * bits) plus the device and an 8-bit project id, so two different databases on
- * the same filesystem can easily map to the same key. On a key collision the
- * open path treats the existing semaphore set as a stale leftover, removes it
- * with IPC_RMID and recreates its own — silently destroying the locking of an
- * unrelated, in-use database that happens to share the key.
- *
- * With MDBX_AVOID_FTOK the key is derived from the full inode number, the
- * device and the filesystem type, mixed by stir(); this makes the key
- * space much wider than the system ftok() and lowers the collision
- * probability, but does not eliminate it — the System V IPC key is still
- * 32-bit wide, and the ultimate guard is the decision made in lck_init()
- * (see sysv_ipc_eeexist_decide()). The path is deliberately not hashed, since
- * that would require its full canonicalization (mount point, overlays, FS
- * collation), which is unreliable.
- * -------------------------------------------------------------------------*/
-
-MDBX_MAYBE_UNUSED MDBX_INTERNAL key_t osal_ftok(int fd, const char *pathname) {
-#if MDBX_AVOID_FTOK
-  (void)pathname;
-  struct stat st;
-  if (fstat(fd, &st)) {
-    ERROR("%s() failed: %d, %s", "fstat", errno, strerror(errno));
-    return (key_t)-1;
-  }
-  const uint64_t h = stir(st.st_dev, st.st_ino);
-  key_t key = (key_t)(h & 0x7fffffff);
-#else
-  (void)fd;
-  key_t key = ftok(pathname, 42);
-#endif
-
-  int injected = 0;
-  MPROBE_FAULT(ftok_key_collide, injected);
-  if (injected)
-    key = (key_t)injected;
-  return key;
-}
 #endif /*! Windows */
 
 int osal_removedirectory(const pathchar_t *pathname) {
