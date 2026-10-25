@@ -15,6 +15,16 @@
 #endif
 #endif /* MSVC */
 
+#if MDBX_LOCKING == MDBX_LOCKING_SYSV
+#define MDBX_SYSVFTOK_SIGN_CHUNKS 6 /* ftok extended signature */
+typedef struct mdbx_ftok {
+  key_t key;
+  /* Extra semaphores whose semval holds the database signature, so a key
+   * collision with another database's live set can be detected. */
+  unsigned short signature[MDBX_SYSVFTOK_SIGN_CHUNKS];
+} mdbx_ftok_t;
+#endif /* MDBX_LOCKING_SYSV */
+
 typedef struct dp dp_t;
 typedef struct dpl dpl_t;
 typedef struct kvx kvx_t;
@@ -524,7 +534,7 @@ struct MDBX_env {
 #if MDBX_LOCKING == MDBX_LOCKING_SYSV
   struct {
     int semid;
-    key_t key;
+    mdbx_ftok_t ft;
   } me_sysv_ipc;
 #endif /* MDBX_LOCKING == MDBX_LOCKING_SYSV */
   bool incore;

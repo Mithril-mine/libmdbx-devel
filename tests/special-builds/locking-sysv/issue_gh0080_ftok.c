@@ -13,7 +13,7 @@
 /// \author Леонид Юрьев aka Leonid Yuriev <leo@yuriev.ru> \date 2026
 
 /* Regression test for https://github.com/Mithril-mine/libmdbx-devel/issues/80
- * The System V IPC locking key used by libmdbx is produced by osal_ftok(),
+ * The System V IPC locking key used by libmdbx is produced by lck_ftok(),
  * which is a passthrough to the system ftok(path, 42). This test opens a
  * database and verifies that the semaphore set created for it exists under
  * exactly ftok(path, 42), proving the wrapper keeps the system-ftok behavior. */
