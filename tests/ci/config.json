@@ -217,7 +217,7 @@
       "note": "ci-macos macos-26-intel Release; crash-safety covered by ut.txn.crash_safety"
     },
     {
-      "id": "win-msvc-v143-x64-debug-dll-on-crt-on",
+      "id": "win-msvc-v143-x64-debug-shared-on-mscrt-off",
       "runs-on": "windows-latest",
       "cmake": [
         "-A|x64",
@@ -230,7 +230,7 @@
       "note": "ci-windows-msvc toolset=v143 target=x64 Debug dll=ON crt=ON"
     },
     {
-      "id": "win-msvc-v143-x64-release-dll-on-crt-on",
+      "id": "win-msvc-v143-x64-release-shared-on-mscrt-off",
       "runs-on": "windows-latest",
       "cmake": [
         "-A|x64",
@@ -243,7 +243,7 @@
       "note": "ci-windows-msvc toolset=v143 target=x64 Release dll=ON crt=ON"
     },
     {
-      "id": "win-msvc-v143-win32-debug-dll-on-crt-on",
+      "id": "win-msvc-v143-win32-debug-shared-on-mscrt-off",
       "runs-on": "windows-latest",
       "cmake": [
         "-A|Win32",
@@ -256,7 +256,7 @@
       "note": "ci-windows-msvc toolset=v143 target=Win32 Debug dll=ON crt=ON"
     },
     {
-      "id": "win-msvc-v143-win32-release-dll-on-crt-on",
+      "id": "win-msvc-v143-win32-release-shared-on-mscrt-off",
       "runs-on": "windows-latest",
       "cmake": [
         "-A|Win32",
@@ -269,7 +269,7 @@
       "note": "ci-windows-msvc toolset=v143 target=Win32 Release dll=ON crt=ON"
     },
     {
-      "id": "win-msvc-v143-x64-debug-dll-on-crt-off",
+      "id": "win-msvc-v143-x64-debug-shared-on-mscrt-on",
       "runs-on": "windows-latest",
       "cmake": [
         "-A|x64",
@@ -282,7 +282,7 @@
       "note": "ci-windows-msvc toolset=v143 target=x64 Debug dll=ON crt=OFF"
     },
     {
-      "id": "win-msvc-v143-x64-release-dll-on-crt-off",
+      "id": "win-msvc-v143-x64-release-shared-on-mscrt-on",
       "runs-on": "windows-latest",
       "cmake": [
         "-A|x64",
@@ -295,7 +295,7 @@
       "note": "ci-windows-msvc toolset=v143 target=x64 Release dll=ON crt=OFF"
     },
     {
-      "id": "win-msvc-v143-win32-debug-dll-on-crt-off",
+      "id": "win-msvc-v143-win32-debug-shared-on-mscrt-on",
       "runs-on": "windows-latest",
       "cmake": [
         "-A|Win32",
@@ -308,7 +308,7 @@
       "note": "ci-windows-msvc toolset=v143 target=Win32 Debug dll=ON crt=OFF"
     },
     {
-      "id": "win-msvc-v143-win32-release-dll-on-crt-off",
+      "id": "win-msvc-v143-win32-release-shared-on-mscrt-on",
       "runs-on": "windows-latest",
       "cmake": [
         "-A|Win32",
@@ -321,7 +321,7 @@
       "note": "ci-windows-msvc toolset=v143 target=Win32 Release dll=ON crt=OFF"
     },
     {
-      "id": "win-msvc-v143-x64-debug-dll-off-crt-on",
+      "id": "win-msvc-v143-x64-debug-shared-off-mscrt-off",
       "runs-on": "windows-latest",
       "cmake": [
         "-A|x64",
@@ -334,7 +334,7 @@
       "note": "ci-windows-msvc toolset=v143 target=x64 Debug dll=OFF crt=ON"
     },
     {
-      "id": "win-msvc-v143-x64-release-dll-off-crt-on",
+      "id": "win-msvc-v143-x64-release-shared-off-mscrt-off",
       "runs-on": "windows-latest",
       "cmake": [
         "-A|x64",
@@ -347,7 +347,7 @@
       "note": "ci-windows-msvc toolset=v143 target=x64 Release dll=OFF crt=ON"
     },
     {
-      "id": "win-msvc-v143-win32-debug-dll-off-crt-on",
+      "id": "win-msvc-v143-win32-debug-shared-off-mscrt-off",
       "runs-on": "windows-latest",
       "cmake": [
         "-A|Win32",
@@ -360,7 +360,7 @@
       "note": "ci-windows-msvc toolset=v143 target=Win32 Debug dll=OFF crt=ON"
     },
     {
-      "id": "win-msvc-v143-win32-release-dll-off-crt-on",
+      "id": "win-msvc-v143-win32-release-shared-off-mscrt-off",
       "runs-on": "windows-latest",
       "cmake": [
         "-A|Win32",
@@ -373,7 +373,7 @@
       "note": "ci-windows-msvc toolset=v143 target=Win32 Release dll=OFF crt=ON"
     },
     {
-      "id": "win-msvc-v143-x64-debug-dll-off-crt-off",
+      "id": "win-msvc-v143-x64-debug-shared-off-mscrt-on",
       "runs-on": "windows-latest",
       "cmake": [
         "-A|x64",
@@ -386,7 +386,7 @@
       "note": "ci-windows-msvc toolset=v143 target=x64 Debug dll=OFF crt=OFF"
     },
     {
-      "id": "win-msvc-v143-x64-release-dll-off-crt-off",
+      "id": "win-msvc-v143-x64-release-shared-off-mscrt-on",
       "runs-on": "windows-latest",
       "cmake": [
         "-A|x64",
@@ -399,7 +399,7 @@
       "note": "ci-windows-msvc toolset=v143 target=x64 Release dll=OFF crt=OFF"
     },
     {
-      "id": "win-msvc-v143-win32-debug-dll-off-crt-off",
+      "id": "win-msvc-v143-win32-debug-shared-off-mscrt-on",
       "runs-on": "windows-latest",
       "cmake": [
         "-A|Win32",
@@ -412,7 +412,7 @@
       "note": "ci-windows-msvc toolset=v143 target=Win32 Debug dll=OFF crt=OFF"
     },
     {
-      "id": "win-msvc-v143-win32-release-dll-off-crt-off",
+      "id": "win-msvc-v143-win32-release-shared-off-mscrt-on",
       "runs-on": "windows-latest",
       "cmake": [
         "-A|Win32",
@@ -425,7 +425,7 @@
       "note": "ci-windows-msvc toolset=v143 target=Win32 Release dll=OFF crt=OFF"
     },
     {
-      "id": "win-msvc-v145-x64-debug-dll-on-crt-on",
+      "id": "win-msvc-v145-x64-debug-shared-on-mscrt-off",
       "runs-on": "windows-latest",
       "cmake": [
         "-A|x64",
@@ -439,7 +439,7 @@
       "note": "ci-windows-msvc toolset=v145 target=x64 Debug dll=ON crt=ON; C++17 pins the ut block (otherwise WIN32+std<17 silently skips most C++ ut targets and compile-breaks slip through the fast gate)"
     },
     {
-      "id": "win-msvc-v145-x64-release-dll-on-crt-on",
+      "id": "win-msvc-v145-x64-release-shared-on-mscrt-off",
       "runs-on": "windows-latest",
       "cmake": [
         "-A|x64",
@@ -452,7 +452,7 @@
       "note": "ci-windows-msvc toolset=v145 target=x64 Release dll=ON crt=ON"
     },
     {
-      "id": "win-msvc-v145-win32-debug-dll-on-crt-on",
+      "id": "win-msvc-v145-win32-debug-shared-on-mscrt-off",
       "runs-on": "windows-latest",
       "cmake": [
         "-A|Win32",
@@ -465,7 +465,7 @@
       "note": "ci-windows-msvc toolset=v145 target=Win32 Debug dll=ON crt=ON"
     },
     {
-      "id": "win-msvc-v145-win32-release-dll-on-crt-on",
+      "id": "win-msvc-v145-win32-release-shared-on-mscrt-off",
       "runs-on": "windows-latest",
       "cmake": [
         "-A|Win32",
@@ -478,7 +478,7 @@
       "note": "ci-windows-msvc toolset=v145 target=Win32 Release dll=ON crt=ON"
     },
     {
-      "id": "win-msvc-v145-arm64-debug-dll-on-crt-on",
+      "id": "win-msvc-v145-arm64-debug-shared-on-mscrt-off",
       "runs-on": "windows-11-vs2026-arm",
       "cmake": [
         "-A|ARM64",
@@ -491,7 +491,7 @@
       "note": "ci-windows-msvc toolset=v145 target=ARM64 Debug dll=ON crt=ON; ARM64 beta-runner, full smoke suite"
     },
     {
-      "id": "win-msvc-v145-arm64-release-dll-on-crt-on",
+      "id": "win-msvc-v145-arm64-release-shared-on-mscrt-off",
       "runs-on": "windows-11-vs2026-arm",
       "cmake": [
         "-A|ARM64",
@@ -504,7 +504,7 @@
       "note": "ci-windows-msvc toolset=v145 target=ARM64 Release dll=ON crt=ON; ARM64 beta-runner, full smoke suite"
     },
     {
-      "id": "win-msvc-v145-x64-debug-dll-on-crt-off",
+      "id": "win-msvc-v145-x64-debug-shared-on-mscrt-on",
       "runs-on": "windows-latest",
       "cmake": [
         "-A|x64",
@@ -517,7 +517,7 @@
       "note": "ci-windows-msvc toolset=v145 target=x64 Debug dll=ON crt=OFF"
     },
     {
-      "id": "win-msvc-v145-x64-release-dll-on-crt-off",
+      "id": "win-msvc-v145-x64-release-shared-on-mscrt-on",
       "runs-on": "windows-latest",
       "cmake": [
         "-A|x64",
@@ -530,7 +530,7 @@
       "note": "ci-windows-msvc toolset=v145 target=x64 Release dll=ON crt=OFF"
     },
     {
-      "id": "win-msvc-v145-win32-debug-dll-on-crt-off",
+      "id": "win-msvc-v145-win32-debug-shared-on-mscrt-on",
       "runs-on": "windows-latest",
       "cmake": [
         "-A|Win32",
@@ -543,7 +543,7 @@
       "note": "ci-windows-msvc toolset=v145 target=Win32 Debug dll=ON crt=OFF"
     },
     {
-      "id": "win-msvc-v145-win32-release-dll-on-crt-off",
+      "id": "win-msvc-v145-win32-release-shared-on-mscrt-on",
       "runs-on": "windows-latest",
       "cmake": [
         "-A|Win32",
@@ -556,7 +556,7 @@
       "note": "ci-windows-msvc toolset=v145 target=Win32 Release dll=ON crt=OFF"
     },
     {
-      "id": "win-msvc-v145-arm64-debug-dll-on-crt-off",
+      "id": "win-msvc-v145-arm64-debug-shared-on-mscrt-on",
       "runs-on": "windows-11-vs2026-arm",
       "cmake": [
         "-A|ARM64",
@@ -569,7 +569,7 @@
       "note": "ci-windows-msvc toolset=v145 target=ARM64 Debug dll=ON crt=OFF; ARM64 beta-runner, full smoke suite"
     },
     {
-      "id": "win-msvc-v145-arm64-release-dll-on-crt-off",
+      "id": "win-msvc-v145-arm64-release-shared-on-mscrt-on",
       "runs-on": "windows-11-vs2026-arm",
       "cmake": [
         "-A|ARM64",
@@ -582,7 +582,7 @@
       "note": "ci-windows-msvc toolset=v145 target=ARM64 Release dll=ON crt=OFF; ARM64 beta-runner, full smoke suite"
     },
     {
-      "id": "win-msvc-v145-x64-debug-dll-off-crt-on",
+      "id": "win-msvc-v145-x64-debug-shared-off-mscrt-off",
       "runs-on": "windows-latest",
       "cmake": [
         "-A|x64",
@@ -595,7 +595,7 @@
       "note": "ci-windows-msvc toolset=v145 target=x64 Debug dll=OFF crt=ON"
     },
     {
-      "id": "win-msvc-v145-x64-release-dll-off-crt-on",
+      "id": "win-msvc-v145-x64-release-shared-off-mscrt-off",
       "runs-on": "windows-latest",
       "cmake": [
         "-A|x64",
@@ -608,7 +608,7 @@
       "note": "ci-windows-msvc toolset=v145 target=x64 Release dll=OFF crt=ON"
     },
     {
-      "id": "win-msvc-v145-win32-debug-dll-off-crt-on",
+      "id": "win-msvc-v145-win32-debug-shared-off-mscrt-off",
       "runs-on": "windows-latest",
       "cmake": [
         "-A|Win32",
@@ -621,7 +621,7 @@
       "note": "ci-windows-msvc toolset=v145 target=Win32 Debug dll=OFF crt=ON"
     },
     {
-      "id": "win-msvc-v145-win32-release-dll-off-crt-on",
+      "id": "win-msvc-v145-win32-release-shared-off-mscrt-off",
       "runs-on": "windows-latest",
       "cmake": [
         "-A|Win32",
@@ -634,7 +634,7 @@
       "note": "ci-windows-msvc toolset=v145 target=Win32 Release dll=OFF crt=ON"
     },
     {
-      "id": "win-msvc-v145-arm64-debug-dll-off-crt-on",
+      "id": "win-msvc-v145-arm64-debug-shared-off-mscrt-off",
       "runs-on": "windows-11-vs2026-arm",
       "cmake": [
         "-A|ARM64",
@@ -647,7 +647,7 @@
       "note": "ci-windows-msvc toolset=v145 target=ARM64 Debug dll=OFF crt=ON; ARM64 beta-runner, full smoke suite"
     },
     {
-      "id": "win-msvc-v145-arm64-release-dll-off-crt-on",
+      "id": "win-msvc-v145-arm64-release-shared-off-mscrt-off",
       "runs-on": "windows-11-vs2026-arm",
       "cmake": [
         "-A|ARM64",
@@ -660,7 +660,7 @@
       "note": "ci-windows-msvc toolset=v145 target=ARM64 Release dll=OFF crt=ON; ARM64 beta-runner, full smoke suite"
     },
     {
-      "id": "win-msvc-v145-x64-debug-dll-off-crt-off",
+      "id": "win-msvc-v145-x64-debug-shared-off-mscrt-on",
       "runs-on": "windows-latest",
       "cmake": [
         "-A|x64",
@@ -673,7 +673,7 @@
       "note": "ci-windows-msvc toolset=v145 target=x64 Debug dll=OFF crt=OFF"
     },
     {
-      "id": "win-msvc-v145-x64-release-dll-off-crt-off",
+      "id": "win-msvc-v145-x64-release-shared-off-mscrt-on",
       "runs-on": "windows-latest",
       "cmake": [
         "-A|x64",
@@ -686,7 +686,7 @@
       "note": "ci-windows-msvc toolset=v145 target=x64 Release dll=OFF crt=OFF"
     },
     {
-      "id": "win-msvc-v145-win32-debug-dll-off-crt-off",
+      "id": "win-msvc-v145-win32-debug-shared-off-mscrt-on",
       "runs-on": "windows-latest",
       "cmake": [
         "-A|Win32",
@@ -699,7 +699,7 @@
       "note": "ci-windows-msvc toolset=v145 target=Win32 Debug dll=OFF crt=OFF"
     },
     {
-      "id": "win-msvc-v145-win32-release-dll-off-crt-off",
+      "id": "win-msvc-v145-win32-release-shared-off-mscrt-on",
       "runs-on": "windows-latest",
       "cmake": [
         "-A|Win32",
@@ -712,7 +712,7 @@
       "note": "ci-windows-msvc toolset=v145 target=Win32 Release dll=OFF crt=OFF"
     },
     {
-      "id": "win-msvc-v145-arm64-debug-dll-off-crt-off",
+      "id": "win-msvc-v145-arm64-debug-shared-off-mscrt-on",
       "runs-on": "windows-11-vs2026-arm",
       "cmake": [
         "-A|ARM64",
@@ -725,7 +725,7 @@
       "note": "ci-windows-msvc toolset=v145 target=ARM64 Debug dll=OFF crt=OFF; ARM64 beta-runner, full smoke suite"
     },
     {
-      "id": "win-msvc-v145-arm64-release-dll-off-crt-off",
+      "id": "win-msvc-v145-arm64-release-shared-off-mscrt-on",
       "runs-on": "windows-11-vs2026-arm",
       "cmake": [
         "-A|ARM64",
@@ -738,7 +738,7 @@
       "note": "ci-windows-msvc toolset=v145 target=ARM64 Release dll=OFF crt=OFF; ARM64 beta-runner, full smoke suite"
     },
     {
-      "id": "win-mscl-x64-debug-dll-on-crt-on",
+      "id": "win-mscl-x64-debug-shared-on-mscrt-off",
       "runs-on": "windows-latest",
       "env": {
         "STUDIO_CLANG_DIR": "C:/Program Files/Microsoft Visual Studio/18/Enterprise/VC/Tools/Llvm/x64/bin",
@@ -754,7 +754,7 @@
       "note": "ci-windows-mscl studio=18 target=x64 Debug dll=ON crt=ON"
     },
     {
-      "id": "win-mscl-x64-release-dll-on-crt-on",
+      "id": "win-mscl-x64-release-shared-on-mscrt-off",
       "runs-on": "windows-latest",
       "env": {
         "STUDIO_CLANG_DIR": "C:/Program Files/Microsoft Visual Studio/18/Enterprise/VC/Tools/Llvm/x64/bin",
@@ -770,7 +770,7 @@
       "note": "ci-windows-mscl studio=18 target=x64 Release dll=ON crt=ON"
     },
     {
-      "id": "win-mscl-arm64-debug-dll-on-crt-on",
+      "id": "win-mscl-arm64-debug-shared-on-mscrt-off",
       "runs-on": "windows-11-vs2026-arm",
       "env": {
         "STUDIO_CLANG_DIR": "C:/Program Files/Microsoft Visual Studio/18/Enterprise/VC/Tools/Llvm/ARM64/bin",
@@ -786,7 +786,7 @@
       "note": "ci-windows-mscl studio=18 target=ARM64 Debug dll=ON crt=ON; ARM64 beta-runner, full smoke suite"
     },
     {
-      "id": "win-mscl-arm64-release-dll-on-crt-on",
+      "id": "win-mscl-arm64-release-shared-on-mscrt-off",
       "runs-on": "windows-11-vs2026-arm",
       "env": {
         "STUDIO_CLANG_DIR": "C:/Program Files/Microsoft Visual Studio/18/Enterprise/VC/Tools/Llvm/ARM64/bin",
@@ -802,7 +802,7 @@
       "note": "ci-windows-mscl studio=18 target=ARM64 Release dll=ON crt=ON; ARM64 beta-runner, full smoke suite"
     },
     {
-      "id": "win-mscl-x64-debug-dll-on-crt-off",
+      "id": "win-mscl-x64-debug-shared-on-mscrt-on",
       "runs-on": "windows-latest",
       "env": {
         "STUDIO_CLANG_DIR": "C:/Program Files/Microsoft Visual Studio/18/Enterprise/VC/Tools/Llvm/x64/bin",
@@ -818,7 +818,7 @@
       "note": "ci-windows-mscl studio=18 target=x64 Debug dll=ON crt=OFF"
     },
     {
-      "id": "win-mscl-x64-release-dll-on-crt-off",
+      "id": "win-mscl-x64-release-shared-on-mscrt-on",
       "runs-on": "windows-latest",
       "env": {
         "STUDIO_CLANG_DIR": "C:/Program Files/Microsoft Visual Studio/18/Enterprise/VC/Tools/Llvm/x64/bin",
@@ -834,7 +834,7 @@
       "note": "ci-windows-mscl studio=18 target=x64 Release dll=ON crt=OFF"
     },
     {
-      "id": "win-mscl-arm64-debug-dll-on-crt-off",
+      "id": "win-mscl-arm64-debug-shared-on-mscrt-on",
       "runs-on": "windows-11-vs2026-arm",
       "env": {
         "STUDIO_CLANG_DIR": "C:/Program Files/Microsoft Visual Studio/18/Enterprise/VC/Tools/Llvm/ARM64/bin",
@@ -850,7 +850,7 @@
       "note": "ci-windows-mscl studio=18 target=ARM64 Debug dll=ON crt=OFF; ARM64 beta-runner, full smoke suite"
     },
     {
-      "id": "win-mscl-arm64-release-dll-on-crt-off",
+      "id": "win-mscl-arm64-release-shared-on-mscrt-on",
       "runs-on": "windows-11-vs2026-arm",
       "env": {
         "STUDIO_CLANG_DIR": "C:/Program Files/Microsoft Visual Studio/18/Enterprise/VC/Tools/Llvm/ARM64/bin",
@@ -866,7 +866,7 @@
       "note": "ci-windows-mscl studio=18 target=ARM64 Release dll=ON crt=OFF; ARM64 beta-runner, full smoke suite"
     },
     {
-      "id": "win-mscl-x64-debug-dll-off-crt-on",
+      "id": "win-mscl-x64-debug-shared-off-mscrt-off",
       "runs-on": "windows-latest",
       "env": {
         "STUDIO_CLANG_DIR": "C:/Program Files/Microsoft Visual Studio/18/Enterprise/VC/Tools/Llvm/x64/bin",
@@ -882,7 +882,7 @@
       "note": "ci-windows-mscl studio=18 target=x64 Debug dll=OFF crt=ON"
     },
     {
-      "id": "win-mscl-x64-release-dll-off-crt-on",
+      "id": "win-mscl-x64-release-shared-off-mscrt-off",
       "runs-on": "windows-latest",
       "env": {
         "STUDIO_CLANG_DIR": "C:/Program Files/Microsoft Visual Studio/18/Enterprise/VC/Tools/Llvm/x64/bin",
@@ -898,7 +898,7 @@
       "note": "ci-windows-mscl studio=18 target=x64 Release dll=OFF crt=ON"
     },
     {
-      "id": "win-mscl-arm64-debug-dll-off-crt-on",
+      "id": "win-mscl-arm64-debug-shared-off-mscrt-off",
       "runs-on": "windows-11-vs2026-arm",
       "env": {
         "STUDIO_CLANG_DIR": "C:/Program Files/Microsoft Visual Studio/18/Enterprise/VC/Tools/Llvm/ARM64/bin",
@@ -914,7 +914,7 @@
       "note": "ci-windows-mscl studio=18 target=ARM64 Debug dll=OFF crt=ON; ARM64 beta-runner, full smoke suite"
     },
     {
-      "id": "win-mscl-arm64-release-dll-off-crt-on",
+      "id": "win-mscl-arm64-release-shared-off-mscrt-off",
       "runs-on": "windows-11-vs2026-arm",
       "env": {
         "STUDIO_CLANG_DIR": "C:/Program Files/Microsoft Visual Studio/18/Enterprise/VC/Tools/Llvm/ARM64/bin",
@@ -930,7 +930,7 @@
       "note": "ci-windows-mscl studio=18 target=ARM64 Release dll=OFF crt=ON; ARM64 beta-runner, full smoke suite"
     },
     {
-      "id": "win-mscl-x64-debug-dll-off-crt-off",
+      "id": "win-mscl-x64-debug-shared-off-mscrt-on",
       "runs-on": "windows-latest",
       "env": {
         "STUDIO_CLANG_DIR": "C:/Program Files/Microsoft Visual Studio/18/Enterprise/VC/Tools/Llvm/x64/bin",
@@ -946,7 +946,7 @@
       "note": "ci-windows-mscl studio=18 target=x64 Debug dll=OFF crt=OFF"
     },
     {
-      "id": "win-mscl-x64-release-dll-off-crt-off",
+      "id": "win-mscl-x64-release-shared-off-mscrt-on",
       "runs-on": "windows-latest",
       "env": {
         "STUDIO_CLANG_DIR": "C:/Program Files/Microsoft Visual Studio/18/Enterprise/VC/Tools/Llvm/x64/bin",
@@ -962,7 +962,7 @@
       "note": "ci-windows-mscl studio=18 target=x64 Release dll=OFF crt=OFF"
     },
     {
-      "id": "win-mscl-arm64-debug-dll-off-crt-off",
+      "id": "win-mscl-arm64-debug-shared-off-mscrt-on",
       "runs-on": "windows-11-vs2026-arm",
       "env": {
         "STUDIO_CLANG_DIR": "C:/Program Files/Microsoft Visual Studio/18/Enterprise/VC/Tools/Llvm/ARM64/bin",
@@ -978,7 +978,7 @@
       "note": "ci-windows-mscl studio=18 target=ARM64 Debug dll=OFF crt=OFF; ARM64 beta-runner, full smoke suite"
     },
     {
-      "id": "win-mscl-arm64-release-dll-off-crt-off",
+      "id": "win-mscl-arm64-release-shared-off-mscrt-on",
       "runs-on": "windows-11-vs2026-arm",
       "env": {
         "STUDIO_CLANG_DIR": "C:/Program Files/Microsoft Visual Studio/18/Enterprise/VC/Tools/Llvm/ARM64/bin",
@@ -994,7 +994,7 @@
       "note": "ci-windows-mscl studio=18 target=ARM64 Release dll=OFF crt=OFF; ARM64 beta-runner, full smoke suite"
     },
     {
-      "id": "win-mingw-64-debug-dll-on-crt-on",
+      "id": "win-mingw-64-debug-shared-on-mscrt-off",
       "runs-on": "windows-latest",
       "env": {
         "MDBX_BUILD_OPTIONS": "-DMDBX_CHECKING=2 -DMDBX_DEBUG=1",
@@ -1012,7 +1012,7 @@
       "build_parallel": 4
     },
     {
-      "id": "win-mingw-32-debug-dll-on-crt-on",
+      "id": "win-mingw-32-debug-shared-on-mscrt-off",
       "runs-on": "windows-latest",
       "env": {
         "CC": "x86_64-w64-mingw32-gcc",
@@ -1025,14 +1025,15 @@
         "-G|MinGW Makefiles",
         "-DCMAKE_BUILD_TYPE=Debug",
         "-DMDBX_BUILD_SHARED_LIBRARY:BOOL=ON",
-        "-DMDBX_WITHOUT_MSVC_CRT:BOOL=ON"
+        "-DMDBX_WITHOUT_MSVC_CRT:BOOL=ON",
+        "-m32"
       ],
       "ctest": null,
       "note": "ci-windows-mingw Debug dll=ON crt=ON bitness=32",
       "build_parallel": 4
     },
     {
-      "id": "win-mingw-64-debug-dll-on-crt-off",
+      "id": "win-mingw-64-debug-shared-on-mscrt-on",
       "runs-on": "windows-latest",
       "env": {
         "MDBX_BUILD_OPTIONS": "-DMDBX_CHECKING=2 -DMDBX_DEBUG=1",
@@ -1050,7 +1051,7 @@
       "build_parallel": 4
     },
     {
-      "id": "win-mingw-32-debug-dll-on-crt-off",
+      "id": "win-mingw-32-debug-shared-on-mscrt-on",
       "runs-on": "windows-latest",
       "env": {
         "CC": "x86_64-w64-mingw32-gcc",
@@ -1063,14 +1064,15 @@
         "-G|MinGW Makefiles",
         "-DCMAKE_BUILD_TYPE=Debug",
         "-DMDBX_BUILD_SHARED_LIBRARY:BOOL=ON",
-        "-DMDBX_WITHOUT_MSVC_CRT:BOOL=OFF"
+        "-DMDBX_WITHOUT_MSVC_CRT:BOOL=OFF",
+        "-m32"
       ],
       "ctest": null,
       "note": "ci-windows-mingw Debug dll=ON crt=OFF bitness=32",
       "build_parallel": 4
     },
     {
-      "id": "win-mingw-64-release-dll-on-crt-off",
+      "id": "win-mingw-64-release-shared-on-mscrt-on",
       "runs-on": "windows-latest",
       "env": {
         "MDBX_BUILD_OPTIONS": "-DMDBX_CHECKING=0 -DMDBX_DEBUG=0",
@@ -1088,7 +1090,7 @@
       "build_parallel": 4
     },
     {
-      "id": "win-mingw-32-release-dll-on-crt-off",
+      "id": "win-mingw-32-release-shared-on-mscrt-on",
       "runs-on": "windows-latest",
       "env": {
         "CC": "x86_64-w64-mingw32-gcc",
@@ -1101,14 +1103,15 @@
         "-G|MinGW Makefiles",
         "-DCMAKE_BUILD_TYPE=Release",
         "-DMDBX_BUILD_SHARED_LIBRARY:BOOL=ON",
-        "-DMDBX_WITHOUT_MSVC_CRT:BOOL=OFF"
+        "-DMDBX_WITHOUT_MSVC_CRT:BOOL=OFF",
+        "-m32"
       ],
       "ctest": null,
       "note": "ci-windows-mingw Release dll=ON crt=OFF bitness=32",
       "build_parallel": 4
     },
     {
-      "id": "win-mingw-64-release-dll-off-crt-off",
+      "id": "win-mingw-64-release-shared-off-mscrt-on",
       "runs-on": "windows-latest",
       "env": {
         "MDBX_BUILD_OPTIONS": "-DMDBX_CHECKING=0 -DMDBX_DEBUG=0",
@@ -1126,7 +1129,7 @@
       "build_parallel": 4
     },
     {
-      "id": "win-mingw-32-release-dll-off-crt-off",
+      "id": "win-mingw-32-release-shared-off-mscrt-on",
       "runs-on": "windows-latest",
       "env": {
         "CC": "x86_64-w64-mingw32-gcc",
@@ -1139,26 +1142,12 @@
         "-G|MinGW Makefiles",
         "-DCMAKE_BUILD_TYPE=Release",
         "-DMDBX_BUILD_SHARED_LIBRARY:BOOL=OFF",
-        "-DMDBX_WITHOUT_MSVC_CRT:BOOL=OFF"
+        "-DMDBX_WITHOUT_MSVC_CRT:BOOL=OFF",
+        "-m32"
       ],
       "ctest": null,
       "note": "ci-windows-mingw Release dll=OFF crt=OFF bitness=32",
       "build_parallel": 4
-    },
-    {
-      "id": "win-cxx-v142-winlatest-win32-debug-std11",
-      "runs-on": "windows-latest",
-      "env": {
-        "CXXSTD": "-std=gnu++11"
-      },
-      "cmake": [
-        "-A|Win32",
-        "-T|v142",
-        "-DCMAKE_BUILD_TYPE=Debug",
-        "-DCMAKE_CXX_STANDARD=11"
-      ],
-      "ctest": null,
-      "note": "ci-cxx-msvc toolset=v142 cxxstd=11 target=Win32 Debug"
     },
     {
       "id": "win-cxx-v142-win2022-win32-debug-std11",
@@ -1176,21 +1165,6 @@
       "note": "ci-cxx-msvc toolset=v142 cxxstd=11 target=Win32 Debug"
     },
     {
-      "id": "win-cxx-v142-winlatest-win32-release-std11",
-      "runs-on": "windows-latest",
-      "env": {
-        "CXXSTD": "-std=gnu++11"
-      },
-      "cmake": [
-        "-A|Win32",
-        "-T|v142",
-        "-DCMAKE_BUILD_TYPE=Release",
-        "-DCMAKE_CXX_STANDARD=11"
-      ],
-      "ctest": null,
-      "note": "ci-cxx-msvc toolset=v142 cxxstd=11 target=Win32 Release"
-    },
-    {
       "id": "win-cxx-v142-win2022-win32-release-std11",
       "runs-on": "windows-2022",
       "env": {
@@ -1204,21 +1178,6 @@
       ],
       "ctest": null,
       "note": "ci-cxx-msvc toolset=v142 cxxstd=11 target=Win32 Release"
-    },
-    {
-      "id": "win-cxx-v142-winlatest-x64-debug-std11",
-      "runs-on": "windows-latest",
-      "env": {
-        "CXXSTD": "-std=gnu++11"
-      },
-      "cmake": [
-        "-A|x64",
-        "-T|v142",
-        "-DCMAKE_BUILD_TYPE=Debug",
-        "-DCMAKE_CXX_STANDARD=11"
-      ],
-      "ctest": null,
-      "note": "ci-cxx-msvc toolset=v142 cxxstd=11 target=x64 Debug"
     },
     {
       "id": "win-cxx-v142-win2022-x64-debug-std11",
@@ -1236,21 +1195,6 @@
       "note": "ci-cxx-msvc toolset=v142 cxxstd=11 target=x64 Debug"
     },
     {
-      "id": "win-cxx-v142-winlatest-x64-release-std11",
-      "runs-on": "windows-latest",
-      "env": {
-        "CXXSTD": "-std=gnu++11"
-      },
-      "cmake": [
-        "-A|x64",
-        "-T|v142",
-        "-DCMAKE_BUILD_TYPE=Release",
-        "-DCMAKE_CXX_STANDARD=11"
-      ],
-      "ctest": null,
-      "note": "ci-cxx-msvc toolset=v142 cxxstd=11 target=x64 Release"
-    },
-    {
       "id": "win-cxx-v142-win2022-x64-release-std11",
       "runs-on": "windows-2022",
       "env": {
@@ -1264,21 +1208,6 @@
       ],
       "ctest": null,
       "note": "ci-cxx-msvc toolset=v142 cxxstd=11 target=x64 Release"
-    },
-    {
-      "id": "win-cxx-v142-winlatest-win32-debug-std14",
-      "runs-on": "windows-latest",
-      "env": {
-        "CXXSTD": "-std=gnu++14"
-      },
-      "cmake": [
-        "-A|Win32",
-        "-T|v142",
-        "-DCMAKE_BUILD_TYPE=Debug",
-        "-DCMAKE_CXX_STANDARD=14"
-      ],
-      "ctest": null,
-      "note": "ci-cxx-msvc toolset=v142 cxxstd=14 target=Win32 Debug"
     },
     {
       "id": "win-cxx-v142-win2022-win32-debug-std14",
@@ -1296,21 +1225,6 @@
       "note": "ci-cxx-msvc toolset=v142 cxxstd=14 target=Win32 Debug"
     },
     {
-      "id": "win-cxx-v142-winlatest-win32-release-std14",
-      "runs-on": "windows-latest",
-      "env": {
-        "CXXSTD": "-std=gnu++14"
-      },
-      "cmake": [
-        "-A|Win32",
-        "-T|v142",
-        "-DCMAKE_BUILD_TYPE=Release",
-        "-DCMAKE_CXX_STANDARD=14"
-      ],
-      "ctest": null,
-      "note": "ci-cxx-msvc toolset=v142 cxxstd=14 target=Win32 Release"
-    },
-    {
       "id": "win-cxx-v142-win2022-win32-release-std14",
       "runs-on": "windows-2022",
       "env": {
@@ -1324,21 +1238,6 @@
       ],
       "ctest": null,
       "note": "ci-cxx-msvc toolset=v142 cxxstd=14 target=Win32 Release"
-    },
-    {
-      "id": "win-cxx-v142-winlatest-x64-debug-std14",
-      "runs-on": "windows-latest",
-      "env": {
-        "CXXSTD": "-std=gnu++14"
-      },
-      "cmake": [
-        "-A|x64",
-        "-T|v142",
-        "-DCMAKE_BUILD_TYPE=Debug",
-        "-DCMAKE_CXX_STANDARD=14"
-      ],
-      "ctest": null,
-      "note": "ci-cxx-msvc toolset=v142 cxxstd=14 target=x64 Debug"
     },
     {
       "id": "win-cxx-v142-win2022-x64-debug-std14",
@@ -1356,21 +1255,6 @@
       "note": "ci-cxx-msvc toolset=v142 cxxstd=14 target=x64 Debug"
     },
     {
-      "id": "win-cxx-v142-winlatest-x64-release-std14",
-      "runs-on": "windows-latest",
-      "env": {
-        "CXXSTD": "-std=gnu++14"
-      },
-      "cmake": [
-        "-A|x64",
-        "-T|v142",
-        "-DCMAKE_BUILD_TYPE=Release",
-        "-DCMAKE_CXX_STANDARD=14"
-      ],
-      "ctest": null,
-      "note": "ci-cxx-msvc toolset=v142 cxxstd=14 target=x64 Release"
-    },
-    {
       "id": "win-cxx-v142-win2022-x64-release-std14",
       "runs-on": "windows-2022",
       "env": {
@@ -1384,21 +1268,6 @@
       ],
       "ctest": null,
       "note": "ci-cxx-msvc toolset=v142 cxxstd=14 target=x64 Release"
-    },
-    {
-      "id": "win-cxx-v142-winlatest-win32-debug-std17",
-      "runs-on": "windows-latest",
-      "env": {
-        "CXXSTD": "-std=gnu++17"
-      },
-      "cmake": [
-        "-A|Win32",
-        "-T|v142",
-        "-DCMAKE_BUILD_TYPE=Debug",
-        "-DCMAKE_CXX_STANDARD=17"
-      ],
-      "ctest": null,
-      "note": "ci-cxx-msvc toolset=v142 cxxstd=17 target=Win32 Debug"
     },
     {
       "id": "win-cxx-v142-win2022-win32-debug-std17",
@@ -1416,21 +1285,6 @@
       "note": "ci-cxx-msvc toolset=v142 cxxstd=17 target=Win32 Debug"
     },
     {
-      "id": "win-cxx-v142-winlatest-win32-release-std17",
-      "runs-on": "windows-latest",
-      "env": {
-        "CXXSTD": "-std=gnu++17"
-      },
-      "cmake": [
-        "-A|Win32",
-        "-T|v142",
-        "-DCMAKE_BUILD_TYPE=Release",
-        "-DCMAKE_CXX_STANDARD=17"
-      ],
-      "ctest": null,
-      "note": "ci-cxx-msvc toolset=v142 cxxstd=17 target=Win32 Release"
-    },
-    {
       "id": "win-cxx-v142-win2022-win32-release-std17",
       "runs-on": "windows-2022",
       "env": {
@@ -1444,21 +1298,6 @@
       ],
       "ctest": null,
       "note": "ci-cxx-msvc toolset=v142 cxxstd=17 target=Win32 Release"
-    },
-    {
-      "id": "win-cxx-v142-winlatest-x64-debug-std17",
-      "runs-on": "windows-latest",
-      "env": {
-        "CXXSTD": "-std=gnu++17"
-      },
-      "cmake": [
-        "-A|x64",
-        "-T|v142",
-        "-DCMAKE_BUILD_TYPE=Debug",
-        "-DCMAKE_CXX_STANDARD=17"
-      ],
-      "ctest": null,
-      "note": "ci-cxx-msvc toolset=v142 cxxstd=17 target=x64 Debug"
     },
     {
       "id": "win-cxx-v142-win2022-x64-debug-std17",
@@ -1476,21 +1315,6 @@
       "note": "ci-cxx-msvc toolset=v142 cxxstd=17 target=x64 Debug"
     },
     {
-      "id": "win-cxx-v142-winlatest-x64-release-std17",
-      "runs-on": "windows-latest",
-      "env": {
-        "CXXSTD": "-std=gnu++17"
-      },
-      "cmake": [
-        "-A|x64",
-        "-T|v142",
-        "-DCMAKE_BUILD_TYPE=Release",
-        "-DCMAKE_CXX_STANDARD=17"
-      ],
-      "ctest": null,
-      "note": "ci-cxx-msvc toolset=v142 cxxstd=17 target=x64 Release"
-    },
-    {
       "id": "win-cxx-v142-win2022-x64-release-std17",
       "runs-on": "windows-2022",
       "env": {
@@ -1504,21 +1328,6 @@
       ],
       "ctest": null,
       "note": "ci-cxx-msvc toolset=v142 cxxstd=17 target=x64 Release"
-    },
-    {
-      "id": "win-cxx-v142-winlatest-win32-debug-std20",
-      "runs-on": "windows-latest",
-      "env": {
-        "CXXSTD": "-std=gnu++20"
-      },
-      "cmake": [
-        "-A|Win32",
-        "-T|v142",
-        "-DCMAKE_BUILD_TYPE=Debug",
-        "-DCMAKE_CXX_STANDARD=20"
-      ],
-      "ctest": null,
-      "note": "ci-cxx-msvc toolset=v142 cxxstd=20 target=Win32 Debug"
     },
     {
       "id": "win-cxx-v142-win2022-win32-debug-std20",
@@ -1536,21 +1345,6 @@
       "note": "ci-cxx-msvc toolset=v142 cxxstd=20 target=Win32 Debug"
     },
     {
-      "id": "win-cxx-v142-winlatest-win32-release-std20",
-      "runs-on": "windows-latest",
-      "env": {
-        "CXXSTD": "-std=gnu++20"
-      },
-      "cmake": [
-        "-A|Win32",
-        "-T|v142",
-        "-DCMAKE_BUILD_TYPE=Release",
-        "-DCMAKE_CXX_STANDARD=20"
-      ],
-      "ctest": null,
-      "note": "ci-cxx-msvc toolset=v142 cxxstd=20 target=Win32 Release"
-    },
-    {
       "id": "win-cxx-v142-win2022-win32-release-std20",
       "runs-on": "windows-2022",
       "env": {
@@ -1564,21 +1358,6 @@
       ],
       "ctest": null,
       "note": "ci-cxx-msvc toolset=v142 cxxstd=20 target=Win32 Release"
-    },
-    {
-      "id": "win-cxx-v142-winlatest-x64-debug-std20",
-      "runs-on": "windows-latest",
-      "env": {
-        "CXXSTD": "-std=gnu++20"
-      },
-      "cmake": [
-        "-A|x64",
-        "-T|v142",
-        "-DCMAKE_BUILD_TYPE=Debug",
-        "-DCMAKE_CXX_STANDARD=20"
-      ],
-      "ctest": null,
-      "note": "ci-cxx-msvc toolset=v142 cxxstd=20 target=x64 Debug"
     },
     {
       "id": "win-cxx-v142-win2022-x64-debug-std20",
@@ -1596,21 +1375,6 @@
       "note": "ci-cxx-msvc toolset=v142 cxxstd=20 target=x64 Debug"
     },
     {
-      "id": "win-cxx-v142-winlatest-x64-release-std20",
-      "runs-on": "windows-latest",
-      "env": {
-        "CXXSTD": "-std=gnu++20"
-      },
-      "cmake": [
-        "-A|x64",
-        "-T|v142",
-        "-DCMAKE_BUILD_TYPE=Release",
-        "-DCMAKE_CXX_STANDARD=20"
-      ],
-      "ctest": null,
-      "note": "ci-cxx-msvc toolset=v142 cxxstd=20 target=x64 Release"
-    },
-    {
       "id": "win-cxx-v142-win2022-x64-release-std20",
       "runs-on": "windows-2022",
       "env": {
@@ -1624,81 +1388,6 @@
       ],
       "ctest": null,
       "note": "ci-cxx-msvc toolset=v142 cxxstd=20 target=x64 Release"
-    },
-    {
-      "id": "win-cxx-v142-winlatest-win32-debug-std23",
-      "runs-on": "windows-latest",
-      "env": {
-        "CXXSTD": "-std=gnu++23"
-      },
-      "cmake": [
-        "-A|Win32",
-        "-T|v142",
-        "-DCMAKE_BUILD_TYPE=Debug",
-        "-DCMAKE_CXX_STANDARD=23"
-      ],
-      "ctest": null,
-      "note": "ci-cxx-msvc toolset=v142 cxxstd=23 target=Win32 Debug"
-    },
-    {
-      "id": "win-cxx-v142-winlatest-win32-release-std23",
-      "runs-on": "windows-latest",
-      "env": {
-        "CXXSTD": "-std=gnu++23"
-      },
-      "cmake": [
-        "-A|Win32",
-        "-T|v142",
-        "-DCMAKE_BUILD_TYPE=Release",
-        "-DCMAKE_CXX_STANDARD=23"
-      ],
-      "ctest": null,
-      "note": "ci-cxx-msvc toolset=v142 cxxstd=23 target=Win32 Release"
-    },
-    {
-      "id": "win-cxx-v142-winlatest-x64-debug-std23",
-      "runs-on": "windows-latest",
-      "env": {
-        "CXXSTD": "-std=gnu++23"
-      },
-      "cmake": [
-        "-A|x64",
-        "-T|v142",
-        "-DCMAKE_BUILD_TYPE=Debug",
-        "-DCMAKE_CXX_STANDARD=23"
-      ],
-      "ctest": null,
-      "note": "ci-cxx-msvc toolset=v142 cxxstd=23 target=x64 Debug"
-    },
-    {
-      "id": "win-cxx-v142-winlatest-x64-release-std23",
-      "runs-on": "windows-latest",
-      "env": {
-        "CXXSTD": "-std=gnu++23"
-      },
-      "cmake": [
-        "-A|x64",
-        "-T|v142",
-        "-DCMAKE_BUILD_TYPE=Release",
-        "-DCMAKE_CXX_STANDARD=23"
-      ],
-      "ctest": null,
-      "note": "ci-cxx-msvc toolset=v142 cxxstd=23 target=x64 Release"
-    },
-    {
-      "id": "win-cxx-v143-winlatest-win32-debug-std11",
-      "runs-on": "windows-latest",
-      "env": {
-        "CXXSTD": "-std=gnu++11"
-      },
-      "cmake": [
-        "-A|Win32",
-        "-T|v143",
-        "-DCMAKE_BUILD_TYPE=Debug",
-        "-DCMAKE_CXX_STANDARD=11"
-      ],
-      "ctest": null,
-      "note": "ci-cxx-msvc toolset=v143 cxxstd=11 target=Win32 Debug"
     },
     {
       "id": "win-cxx-v143-win2022-win32-debug-std11",
@@ -1716,21 +1405,6 @@
       "note": "ci-cxx-msvc toolset=v143 cxxstd=11 target=Win32 Debug"
     },
     {
-      "id": "win-cxx-v143-winlatest-win32-release-std11",
-      "runs-on": "windows-latest",
-      "env": {
-        "CXXSTD": "-std=gnu++11"
-      },
-      "cmake": [
-        "-A|Win32",
-        "-T|v143",
-        "-DCMAKE_BUILD_TYPE=Release",
-        "-DCMAKE_CXX_STANDARD=11"
-      ],
-      "ctest": null,
-      "note": "ci-cxx-msvc toolset=v143 cxxstd=11 target=Win32 Release"
-    },
-    {
       "id": "win-cxx-v143-win2022-win32-release-std11",
       "runs-on": "windows-2022",
       "env": {
@@ -1746,21 +1420,6 @@
       "note": "ci-cxx-msvc toolset=v143 cxxstd=11 target=Win32 Release"
     },
     {
-      "id": "win-cxx-v143-winlatest-x64-debug-std11",
-      "runs-on": "windows-latest",
-      "env": {
-        "CXXSTD": "-std=gnu++11"
-      },
-      "cmake": [
-        "-A|x64",
-        "-T|v143",
-        "-DCMAKE_BUILD_TYPE=Debug",
-        "-DCMAKE_CXX_STANDARD=11"
-      ],
-      "ctest": null,
-      "note": "ci-cxx-msvc toolset=v143 cxxstd=11 target=x64 Debug"
-    },
-    {
       "id": "win-cxx-v143-win2022-x64-debug-std11",
       "runs-on": "windows-2022",
       "env": {
@@ -1774,21 +1433,6 @@
       ],
       "ctest": null,
       "note": "ci-cxx-msvc toolset=v143 cxxstd=11 target=x64 Debug"
-    },
-    {
-      "id": "win-cxx-v143-winlatest-x64-release-std11",
-      "runs-on": "windows-latest",
-      "env": {
-        "CXXSTD": "-std=gnu++11"
-      },
-      "cmake": [
-        "-A|x64",
-        "-T|v143",
-        "-DCMAKE_BUILD_TYPE=Release",
-        "-DCMAKE_CXX_STANDARD=11"
-      ],
-      "ctest": null,
-      "note": "ci-cxx-msvc toolset=v143 cxxstd=11 target=x64 Release"
     },
     {
       "id": "win-cxx-v143-win2022-x64-release-std11",
@@ -1838,21 +1482,6 @@
       "note": "ci-cxx-msvc toolset=v143 ARM64, runs natively on windows-11-vs2026-arm"
     },
     {
-      "id": "win-cxx-v143-winlatest-win32-debug-std14",
-      "runs-on": "windows-latest",
-      "env": {
-        "CXXSTD": "-std=gnu++14"
-      },
-      "cmake": [
-        "-A|Win32",
-        "-T|v143",
-        "-DCMAKE_BUILD_TYPE=Debug",
-        "-DCMAKE_CXX_STANDARD=14"
-      ],
-      "ctest": null,
-      "note": "ci-cxx-msvc toolset=v143 cxxstd=14 target=Win32 Debug"
-    },
-    {
       "id": "win-cxx-v143-win2022-win32-debug-std14",
       "runs-on": "windows-2022",
       "env": {
@@ -1866,21 +1495,6 @@
       ],
       "ctest": null,
       "note": "ci-cxx-msvc toolset=v143 cxxstd=14 target=Win32 Debug"
-    },
-    {
-      "id": "win-cxx-v143-winlatest-win32-release-std14",
-      "runs-on": "windows-latest",
-      "env": {
-        "CXXSTD": "-std=gnu++14"
-      },
-      "cmake": [
-        "-A|Win32",
-        "-T|v143",
-        "-DCMAKE_BUILD_TYPE=Release",
-        "-DCMAKE_CXX_STANDARD=14"
-      ],
-      "ctest": null,
-      "note": "ci-cxx-msvc toolset=v143 cxxstd=14 target=Win32 Release"
     },
     {
       "id": "win-cxx-v143-win2022-win32-release-std14",
@@ -1898,21 +1512,6 @@
       "note": "ci-cxx-msvc toolset=v143 cxxstd=14 target=Win32 Release"
     },
     {
-      "id": "win-cxx-v143-winlatest-x64-debug-std14",
-      "runs-on": "windows-latest",
-      "env": {
-        "CXXSTD": "-std=gnu++14"
-      },
-      "cmake": [
-        "-A|x64",
-        "-T|v143",
-        "-DCMAKE_BUILD_TYPE=Debug",
-        "-DCMAKE_CXX_STANDARD=14"
-      ],
-      "ctest": null,
-      "note": "ci-cxx-msvc toolset=v143 cxxstd=14 target=x64 Debug"
-    },
-    {
       "id": "win-cxx-v143-win2022-x64-debug-std14",
       "runs-on": "windows-2022",
       "env": {
@@ -1926,21 +1525,6 @@
       ],
       "ctest": null,
       "note": "ci-cxx-msvc toolset=v143 cxxstd=14 target=x64 Debug"
-    },
-    {
-      "id": "win-cxx-v143-winlatest-x64-release-std14",
-      "runs-on": "windows-latest",
-      "env": {
-        "CXXSTD": "-std=gnu++14"
-      },
-      "cmake": [
-        "-A|x64",
-        "-T|v143",
-        "-DCMAKE_BUILD_TYPE=Release",
-        "-DCMAKE_CXX_STANDARD=14"
-      ],
-      "ctest": null,
-      "note": "ci-cxx-msvc toolset=v143 cxxstd=14 target=x64 Release"
     },
     {
       "id": "win-cxx-v143-win2022-x64-release-std14",
@@ -1990,21 +1574,6 @@
       "note": "ci-cxx-msvc toolset=v143 ARM64, runs natively on windows-11-vs2026-arm"
     },
     {
-      "id": "win-cxx-v143-winlatest-win32-debug-std17",
-      "runs-on": "windows-latest",
-      "env": {
-        "CXXSTD": "-std=gnu++17"
-      },
-      "cmake": [
-        "-A|Win32",
-        "-T|v143",
-        "-DCMAKE_BUILD_TYPE=Debug",
-        "-DCMAKE_CXX_STANDARD=17"
-      ],
-      "ctest": null,
-      "note": "ci-cxx-msvc toolset=v143 cxxstd=17 target=Win32 Debug"
-    },
-    {
       "id": "win-cxx-v143-win2022-win32-debug-std17",
       "runs-on": "windows-2022",
       "env": {
@@ -2018,21 +1587,6 @@
       ],
       "ctest": null,
       "note": "ci-cxx-msvc toolset=v143 cxxstd=17 target=Win32 Debug"
-    },
-    {
-      "id": "win-cxx-v143-winlatest-win32-release-std17",
-      "runs-on": "windows-latest",
-      "env": {
-        "CXXSTD": "-std=gnu++17"
-      },
-      "cmake": [
-        "-A|Win32",
-        "-T|v143",
-        "-DCMAKE_BUILD_TYPE=Release",
-        "-DCMAKE_CXX_STANDARD=17"
-      ],
-      "ctest": null,
-      "note": "ci-cxx-msvc toolset=v143 cxxstd=17 target=Win32 Release"
     },
     {
       "id": "win-cxx-v143-win2022-win32-release-std17",
@@ -2050,21 +1604,6 @@
       "note": "ci-cxx-msvc toolset=v143 cxxstd=17 target=Win32 Release"
     },
     {
-      "id": "win-cxx-v143-winlatest-x64-debug-std17",
-      "runs-on": "windows-latest",
-      "env": {
-        "CXXSTD": "-std=gnu++17"
-      },
-      "cmake": [
-        "-A|x64",
-        "-T|v143",
-        "-DCMAKE_BUILD_TYPE=Debug",
-        "-DCMAKE_CXX_STANDARD=17"
-      ],
-      "ctest": null,
-      "note": "ci-cxx-msvc toolset=v143 cxxstd=17 target=x64 Debug"
-    },
-    {
       "id": "win-cxx-v143-win2022-x64-debug-std17",
       "runs-on": "windows-2022",
       "env": {
@@ -2078,21 +1617,6 @@
       ],
       "ctest": null,
       "note": "ci-cxx-msvc toolset=v143 cxxstd=17 target=x64 Debug"
-    },
-    {
-      "id": "win-cxx-v143-winlatest-x64-release-std17",
-      "runs-on": "windows-latest",
-      "env": {
-        "CXXSTD": "-std=gnu++17"
-      },
-      "cmake": [
-        "-A|x64",
-        "-T|v143",
-        "-DCMAKE_BUILD_TYPE=Release",
-        "-DCMAKE_CXX_STANDARD=17"
-      ],
-      "ctest": null,
-      "note": "ci-cxx-msvc toolset=v143 cxxstd=17 target=x64 Release"
     },
     {
       "id": "win-cxx-v143-win2022-x64-release-std17",
@@ -2142,21 +1666,6 @@
       "note": "ci-cxx-msvc toolset=v143 ARM64, runs natively on windows-11-vs2026-arm"
     },
     {
-      "id": "win-cxx-v143-winlatest-win32-debug-std20",
-      "runs-on": "windows-latest",
-      "env": {
-        "CXXSTD": "-std=gnu++20"
-      },
-      "cmake": [
-        "-A|Win32",
-        "-T|v143",
-        "-DCMAKE_BUILD_TYPE=Debug",
-        "-DCMAKE_CXX_STANDARD=20"
-      ],
-      "ctest": null,
-      "note": "ci-cxx-msvc toolset=v143 cxxstd=20 target=Win32 Debug"
-    },
-    {
       "id": "win-cxx-v143-win2022-win32-debug-std20",
       "runs-on": "windows-2022",
       "env": {
@@ -2170,21 +1679,6 @@
       ],
       "ctest": null,
       "note": "ci-cxx-msvc toolset=v143 cxxstd=20 target=Win32 Debug"
-    },
-    {
-      "id": "win-cxx-v143-winlatest-win32-release-std20",
-      "runs-on": "windows-latest",
-      "env": {
-        "CXXSTD": "-std=gnu++20"
-      },
-      "cmake": [
-        "-A|Win32",
-        "-T|v143",
-        "-DCMAKE_BUILD_TYPE=Release",
-        "-DCMAKE_CXX_STANDARD=20"
-      ],
-      "ctest": null,
-      "note": "ci-cxx-msvc toolset=v143 cxxstd=20 target=Win32 Release"
     },
     {
       "id": "win-cxx-v143-win2022-win32-release-std20",
@@ -2202,21 +1696,6 @@
       "note": "ci-cxx-msvc toolset=v143 cxxstd=20 target=Win32 Release"
     },
     {
-      "id": "win-cxx-v143-winlatest-x64-debug-std20",
-      "runs-on": "windows-latest",
-      "env": {
-        "CXXSTD": "-std=gnu++20"
-      },
-      "cmake": [
-        "-A|x64",
-        "-T|v143",
-        "-DCMAKE_BUILD_TYPE=Debug",
-        "-DCMAKE_CXX_STANDARD=20"
-      ],
-      "ctest": null,
-      "note": "ci-cxx-msvc toolset=v143 cxxstd=20 target=x64 Debug"
-    },
-    {
       "id": "win-cxx-v143-win2022-x64-debug-std20",
       "runs-on": "windows-2022",
       "env": {
@@ -2230,21 +1709,6 @@
       ],
       "ctest": null,
       "note": "ci-cxx-msvc toolset=v143 cxxstd=20 target=x64 Debug"
-    },
-    {
-      "id": "win-cxx-v143-winlatest-x64-release-std20",
-      "runs-on": "windows-latest",
-      "env": {
-        "CXXSTD": "-std=gnu++20"
-      },
-      "cmake": [
-        "-A|x64",
-        "-T|v143",
-        "-DCMAKE_BUILD_TYPE=Release",
-        "-DCMAKE_CXX_STANDARD=20"
-      ],
-      "ctest": null,
-      "note": "ci-cxx-msvc toolset=v143 cxxstd=20 target=x64 Release"
     },
     {
       "id": "win-cxx-v143-win2022-x64-release-std20",
@@ -2292,66 +1756,6 @@
       "ctest": null,
       "build_only": false,
       "note": "ci-cxx-msvc toolset=v143 ARM64, runs natively on windows-11-vs2026-arm"
-    },
-    {
-      "id": "win-cxx-v143-winlatest-win32-debug-std23",
-      "runs-on": "windows-latest",
-      "env": {
-        "CXXSTD": "-std=gnu++23"
-      },
-      "cmake": [
-        "-A|Win32",
-        "-T|v143",
-        "-DCMAKE_BUILD_TYPE=Debug",
-        "-DCMAKE_CXX_STANDARD=23"
-      ],
-      "ctest": null,
-      "note": "ci-cxx-msvc toolset=v143 cxxstd=23 target=Win32 Debug"
-    },
-    {
-      "id": "win-cxx-v143-winlatest-win32-release-std23",
-      "runs-on": "windows-latest",
-      "env": {
-        "CXXSTD": "-std=gnu++23"
-      },
-      "cmake": [
-        "-A|Win32",
-        "-T|v143",
-        "-DCMAKE_BUILD_TYPE=Release",
-        "-DCMAKE_CXX_STANDARD=23"
-      ],
-      "ctest": null,
-      "note": "ci-cxx-msvc toolset=v143 cxxstd=23 target=Win32 Release"
-    },
-    {
-      "id": "win-cxx-v143-winlatest-x64-debug-std23",
-      "runs-on": "windows-latest",
-      "env": {
-        "CXXSTD": "-std=gnu++23"
-      },
-      "cmake": [
-        "-A|x64",
-        "-T|v143",
-        "-DCMAKE_BUILD_TYPE=Debug",
-        "-DCMAKE_CXX_STANDARD=23"
-      ],
-      "ctest": null,
-      "note": "ci-cxx-msvc toolset=v143 cxxstd=23 target=x64 Debug"
-    },
-    {
-      "id": "win-cxx-v143-winlatest-x64-release-std23",
-      "runs-on": "windows-latest",
-      "env": {
-        "CXXSTD": "-std=gnu++23"
-      },
-      "cmake": [
-        "-A|x64",
-        "-T|v143",
-        "-DCMAKE_BUILD_TYPE=Release",
-        "-DCMAKE_CXX_STANDARD=23"
-      ],
-      "ctest": null,
-      "note": "ci-cxx-msvc toolset=v143 cxxstd=23 target=x64 Release"
     },
     {
       "id": "win-cxx-v145-winlatest-win32-debug-std11",
@@ -3009,52 +2413,6 @@
       "ndk": "r27d"
     },
     {
-      "id": "win-cxx-v145-winlatest-win32-std23-build",
-      "runs-on": "windows-latest",
-      "env": {
-        "CXXSTD": "-std=gnu++23"
-      },
-      "cmake": [
-        "-A|Win32",
-        "-T|v145",
-        "-DCMAKE_BUILD_TYPE=Debug",
-        "-DCMAKE_CXX_STANDARD=23"
-      ],
-      "ctest": {},
-      "note": "build-only: newest toolset x win32 x std23 compile surface (matrix-matrix cell)",
-      "build_only": true
-    },
-    {
-      "id": "win-cxx-v143-winlatest-x64-std14-build",
-      "runs-on": "windows-latest",
-      "env": {
-        "CXXSTD": "-std=gnu++14"
-      },
-      "cmake": [
-        "-A|x64",
-        "-T|v143",
-        "-DCMAKE_BUILD_TYPE=Debug",
-        "-DCMAKE_CXX_STANDARD=14"
-      ],
-      "ctest": {},
-      "note": "build-only: middle toolset x std14 compile surface",
-      "build_only": true
-    },
-    {
-      "id": "win-msvc-v143-win32-crt-off-build",
-      "runs-on": "windows-latest",
-      "cmake": [
-        "-A|Win32",
-        "-T|v143",
-        "-DCMAKE_BUILD_TYPE=Release",
-        "-DMDBX_BUILD_SHARED_LIBRARY:BOOL=ON",
-        "-DMDBX_WITHOUT_MSVC_CRT:BOOL=OFF"
-      ],
-      "ctest": {},
-      "note": "build-only: win32 x crt-off (no-CRT) compile surface",
-      "build_only": true
-    },
-    {
       "id": "linux-clang-ubuntu24-release-cxx-on",
       "runs-on": "ubuntu-24.04",
       "env": {
@@ -3067,16 +2425,446 @@
       ],
       "ctest": null,
       "note": "nightly linux clang (LLVM) surface cell - mainline library compiled by the second compiler family; role=run-full"
+    },
+    {
+      "id": "win-cxx-v142-win2022-x64-debug-std23",
+      "runs-on": "windows-2022",
+      "env": {
+        "CXXSTD": "-std=gnu++23"
+      },
+      "cmake": [
+        "-A|x64",
+        "-T|v142",
+        "-DCMAKE_BUILD_TYPE=Debug",
+        "-DCMAKE_CXX_STANDARD=23"
+      ],
+      "ctest": null,
+      "build_only": false,
+      "note": "(per winlatest->win2022) ci-cxx-msvc toolset=v142 cxxstd=23 target=x64 Debug"
+    },
+    {
+      "id": "win-cxx-v142-win2022-x64-release-std23",
+      "runs-on": "windows-2022",
+      "env": {
+        "CXXSTD": "-std=gnu++23"
+      },
+      "cmake": [
+        "-A|x64",
+        "-T|v142",
+        "-DCMAKE_BUILD_TYPE=Release",
+        "-DCMAKE_CXX_STANDARD=23"
+      ],
+      "ctest": null,
+      "build_only": false,
+      "note": "(per winlatest->win2022) ci-cxx-msvc toolset=v142 cxxstd=23 target=x64 Release"
+    },
+    {
+      "id": "win-cxx-v142-win2022-win32-debug-std23",
+      "runs-on": "windows-2022",
+      "env": {
+        "CXXSTD": "-std=gnu++23"
+      },
+      "cmake": [
+        "-A|Win32",
+        "-T|v142",
+        "-DCMAKE_BUILD_TYPE=Debug",
+        "-DCMAKE_CXX_STANDARD=23"
+      ],
+      "ctest": null,
+      "build_only": false,
+      "note": "(per winlatest->win2022) ci-cxx-msvc toolset=v142 cxxstd=23 target=Win32 Debug"
+    },
+    {
+      "id": "win-cxx-v142-win2022-win32-release-std23",
+      "runs-on": "windows-2022",
+      "env": {
+        "CXXSTD": "-std=gnu++23"
+      },
+      "cmake": [
+        "-A|Win32",
+        "-T|v142",
+        "-DCMAKE_BUILD_TYPE=Release",
+        "-DCMAKE_CXX_STANDARD=23"
+      ],
+      "ctest": null,
+      "build_only": false,
+      "note": "(per winlatest->win2022) ci-cxx-msvc toolset=v142 cxxstd=23 target=Win32 Release"
+    },
+    {
+      "id": "win-cxx-v143-win2022-x64-debug-std23",
+      "runs-on": "windows-2022",
+      "env": {
+        "CXXSTD": "-std=gnu++23"
+      },
+      "cmake": [
+        "-A|x64",
+        "-T|v143",
+        "-DCMAKE_BUILD_TYPE=Debug",
+        "-DCMAKE_CXX_STANDARD=23"
+      ],
+      "ctest": null,
+      "build_only": false,
+      "note": "(per winlatest->win2022) ci-cxx-msvc toolset=v143 cxxstd=23 target=x64 Debug"
+    },
+    {
+      "id": "win-cxx-v143-win2022-x64-release-std23",
+      "runs-on": "windows-2022",
+      "env": {
+        "CXXSTD": "-std=gnu++23"
+      },
+      "cmake": [
+        "-A|x64",
+        "-T|v143",
+        "-DCMAKE_BUILD_TYPE=Release",
+        "-DCMAKE_CXX_STANDARD=23"
+      ],
+      "ctest": null,
+      "build_only": false,
+      "note": "(per winlatest->win2022) ci-cxx-msvc toolset=v143 cxxstd=23 target=x64 Release"
+    },
+    {
+      "id": "win-cxx-v143-win2022-win32-debug-std23",
+      "runs-on": "windows-2022",
+      "env": {
+        "CXXSTD": "-std=gnu++23"
+      },
+      "cmake": [
+        "-A|Win32",
+        "-T|v143",
+        "-DCMAKE_BUILD_TYPE=Debug",
+        "-DCMAKE_CXX_STANDARD=23"
+      ],
+      "ctest": null,
+      "build_only": false,
+      "note": "(per winlatest->win2022) ci-cxx-msvc toolset=v143 cxxstd=23 target=Win32 Debug"
+    },
+    {
+      "id": "win-cxx-v143-win2022-win32-release-std23",
+      "runs-on": "windows-2022",
+      "env": {
+        "CXXSTD": "-std=gnu++23"
+      },
+      "cmake": [
+        "-A|Win32",
+        "-T|v143",
+        "-DCMAKE_BUILD_TYPE=Release",
+        "-DCMAKE_CXX_STANDARD=23"
+      ],
+      "ctest": null,
+      "build_only": false,
+      "note": "(per winlatest->win2022) ci-cxx-msvc toolset=v143 cxxstd=23 target=Win32 Release"
+    },
+    {
+      "id": "win-cxx-v145-winlatest-arm64-debug-std17",
+      "runs-on": "windows-11-vs2026-arm",
+      "env": {
+        "CXXSTD": "-std=gnu++17"
+      },
+      "cmake": [
+        "-A|ARM64",
+        "-T|v145",
+        "-DCMAKE_BUILD_TYPE=Debug",
+        "-DCMAKE_CXX_STANDARD=17"
+      ],
+      "ctest": null,
+      "build_only": false,
+      "note": "ci-cxx-msvc toolset=v145 ARM64 cxxstd=17 Debug"
+    },
+    {
+      "id": "win-cxx-v145-winlatest-arm64-debug-std20",
+      "runs-on": "windows-11-vs2026-arm",
+      "env": {
+        "CXXSTD": "-std=gnu++20"
+      },
+      "cmake": [
+        "-A|ARM64",
+        "-T|v145",
+        "-DCMAKE_BUILD_TYPE=Debug",
+        "-DCMAKE_CXX_STANDARD=20"
+      ],
+      "ctest": null,
+      "build_only": false,
+      "note": "ci-cxx-msvc toolset=v145 ARM64 cxxstd=20 Debug"
+    },
+    {
+      "id": "win-cxx-v145-winlatest-arm64-release-std17",
+      "runs-on": "windows-11-vs2026-arm",
+      "env": {
+        "CXXSTD": "-std=gnu++17"
+      },
+      "cmake": [
+        "-A|ARM64",
+        "-T|v145",
+        "-DCMAKE_BUILD_TYPE=Release",
+        "-DCMAKE_CXX_STANDARD=17"
+      ],
+      "ctest": null,
+      "build_only": false,
+      "note": "ci-cxx-msvc toolset=v145 ARM64 cxxstd=17 Release"
+    },
+    {
+      "id": "win-cxx-v145-winlatest-arm64-release-std20",
+      "runs-on": "windows-11-vs2026-arm",
+      "env": {
+        "CXXSTD": "-std=gnu++20"
+      },
+      "cmake": [
+        "-A|ARM64",
+        "-T|v145",
+        "-DCMAKE_BUILD_TYPE=Release",
+        "-DCMAKE_CXX_STANDARD=20"
+      ],
+      "ctest": null,
+      "build_only": false,
+      "note": "ci-cxx-msvc toolset=v145 ARM64 cxxstd=20 Release"
+    },
+    {
+      "id": "linux-gcc-ubuntu24-release-cxx-on-avoid-msync-on",
+      "runs-on": "ubuntu-24.04",
+      "env": {
+        "CC": "gcc",
+        "CXX": "g++",
+        "MDBX_BUILD_OPTIONS": "-DMDBX_CHECKING=0 -DMDBX_DEBUG=0"
+      },
+      "cmake": [
+        "-DCMAKE_BUILD_TYPE=Release",
+        "-DMDBX_BUILD_CXX:BOOL=ON",
+        "-DMDBX_AVOID_MSYNC:BOOL=ON"
+      ],
+      "ctest": null,
+      "note": "ci-linux ubuntu-24.04 Release cxx=ON; AVOID_MSYNC=ON (non-default POSIX)"
+    },
+    {
+      "id": "linux-gcc-ubuntu24-release-cxx-on-alt-options",
+      "runs-on": "ubuntu-24.04",
+      "env": {
+        "CC": "gcc",
+        "CXX": "g++",
+        "MDBX_BUILD_OPTIONS": "-DMDBX_CHECKING=0 -DMDBX_DEBUG=0"
+      },
+      "cmake": [
+        "-DCMAKE_BUILD_TYPE=Release",
+        "-DMDBX_BUILD_CXX:BOOL=ON",
+        "-DMDBX_ENABLE_BIGFOOT:BOOL=OFF",
+        "-DMDBX_ENABLE_PGOP_STAT:BOOL=OFF",
+        "-DMDBX_ENABLE_PROFGC:BOOL=ON",
+        "-DMDBX_ENABLE_PGET_STAT:BOOL=OFF",
+        "-DMDBX_ENABLE_DBI_SPARSE:BOOL=OFF",
+        "-DMDBX_ENABLE_DBI_LOCKFREE:BOOL=OFF"
+      ],
+      "ctest": null,
+      "note": "ci-linux ubuntu-24.04 Release cxx=ON; all ENABLE_* inverted (alt-options)"
+    },
+    {
+      "id": "win-cxx-v143-win2022-arm64-debug-std17-avoid-msync-off",
+      "runs-on": "windows-11-vs2026-arm",
+      "env": {
+        "CXXSTD": "-std=gnu++17"
+      },
+      "cmake": [
+        "-A|ARM64",
+        "-T|v143",
+        "-DCMAKE_BUILD_TYPE=Debug",
+        "-DCMAKE_CXX_STANDARD=17",
+        "-DMDBX_AVOID_MSYNC:BOOL=OFF"
+      ],
+      "ctest": null,
+      "build_only": false,
+      "note": "ci-cxx-msvc toolset=v143 ARM64, runs natively on windows-11-vs2026-arm; AVOID_MSYNC=OFF (non-default Windows)"
+    },
+    {
+      "id": "win-cxx-v145-winlatest-x64-debug-std11-avoid-msync-off",
+      "runs-on": "windows-latest",
+      "env": {
+        "CXXSTD": "-std=gnu++11"
+      },
+      "cmake": [
+        "-A|x64",
+        "-T|v145",
+        "-DCMAKE_BUILD_TYPE=Debug",
+        "-DCMAKE_CXX_STANDARD=11",
+        "-DMDBX_AVOID_MSYNC:BOOL=OFF"
+      ],
+      "ctest": null,
+      "note": "ci-cxx-msvc toolset=v145 cxxstd=11 target=x64 Debug; AVOID_MSYNC=OFF (non-default Windows)"
+    },
+    {
+      "id": "win-cxx-v143-win2022-x64-debug-std14-avoid-msync-off",
+      "runs-on": "windows-2022",
+      "env": {
+        "CXXSTD": "-std=gnu++14"
+      },
+      "cmake": [
+        "-A|x64",
+        "-T|v143",
+        "-DCMAKE_BUILD_TYPE=Debug",
+        "-DCMAKE_CXX_STANDARD=14",
+        "-DMDBX_AVOID_MSYNC:BOOL=OFF"
+      ],
+      "ctest": null,
+      "note": "ci-cxx-msvc toolset=v143 cxxstd=14 target=x64 Debug; AVOID_MSYNC=OFF (non-default Windows)"
+    },
+    {
+      "id": "win-mscl-x64-release-shared-on-mscrt-on-avoid-msync-off",
+      "runs-on": "windows-latest",
+      "env": {
+        "STUDIO_CLANG_DIR": "C:/Program Files/Microsoft Visual Studio/18/Enterprise/VC/Tools/Llvm/x64/bin",
+        "CC": "C:/Program Files/Microsoft Visual Studio/18/Enterprise/VC/Tools/Llvm/x64/bin/clang.exe",
+        "CXX": "C:/Program Files/Microsoft Visual Studio/18/Enterprise/VC/Tools/Llvm/x64/bin/clang++.exe"
+      },
+      "cmake": [
+        "-DCMAKE_BUILD_TYPE=Release",
+        "-DMDBX_BUILD_SHARED_LIBRARY:BOOL=ON",
+        "-DMDBX_WITHOUT_MSVC_CRT:BOOL=OFF",
+        "-DMDBX_AVOID_MSYNC:BOOL=OFF"
+      ],
+      "ctest": null,
+      "note": "ci-windows-mscl studio=18 target=x64 Release dll=ON crt=OFF; AVOID_MSYNC=OFF (non-default Windows)"
+    },
+    {
+      "id": "win-msvc-v145-arm64-release-shared-on-mscrt-on-avoid-msync-off",
+      "runs-on": "windows-11-vs2026-arm",
+      "cmake": [
+        "-A|ARM64",
+        "-T|v145",
+        "-DCMAKE_BUILD_TYPE=Release",
+        "-DMDBX_BUILD_SHARED_LIBRARY:BOOL=ON",
+        "-DMDBX_WITHOUT_MSVC_CRT:BOOL=OFF",
+        "-DMDBX_AVOID_MSYNC:BOOL=OFF"
+      ],
+      "ctest": null,
+      "note": "ci-windows-msvc toolset=v145 target=ARM64 Release dll=ON crt=OFF; ARM64 beta-runner, full smoke suite; AVOID_MSYNC=OFF (non-default Windows)"
+    },
+    {
+      "id": "win-msvc-v145-x64-debug-shared-on-mscrt-off-avoid-msync-off",
+      "runs-on": "windows-latest",
+      "cmake": [
+        "-A|x64",
+        "-T|v145",
+        "-DCMAKE_BUILD_TYPE=Debug",
+        "-DCMAKE_CXX_STANDARD=17",
+        "-DMDBX_BUILD_SHARED_LIBRARY:BOOL=ON",
+        "-DMDBX_WITHOUT_MSVC_CRT:BOOL=ON",
+        "-DMDBX_AVOID_MSYNC:BOOL=OFF"
+      ],
+      "ctest": null,
+      "note": "ci-windows-msvc toolset=v145 target=x64 Debug dll=ON crt=ON; C++17 pins the ut block (otherwise WIN32+std<17 silently skips most C++ ut targets and compile-breaks slip through the fast gate); AVOID_MSYNC=OFF (non-default Windows)"
+    },
+    {
+      "id": "win-msvc-v145-x64-release-shared-off-mscrt-on-alt-options",
+      "runs-on": "windows-latest",
+      "cmake": [
+        "-A|x64",
+        "-T|v145",
+        "-DCMAKE_BUILD_TYPE=Release",
+        "-DMDBX_BUILD_SHARED_LIBRARY:BOOL=OFF",
+        "-DMDBX_WITHOUT_MSVC_CRT:BOOL=OFF",
+        "-DMDBX_ENABLE_BIGFOOT:BOOL=OFF",
+        "-DMDBX_ENABLE_PGOP_STAT:BOOL=OFF",
+        "-DMDBX_ENABLE_PROFGC:BOOL=ON",
+        "-DMDBX_ENABLE_PGET_STAT:BOOL=OFF",
+        "-DMDBX_ENABLE_DBI_SPARSE:BOOL=OFF",
+        "-DMDBX_ENABLE_DBI_LOCKFREE:BOOL=OFF"
+      ],
+      "ctest": null,
+      "note": "ci-windows-msvc toolset=v145 target=x64 Release dll=OFF crt=OFF; all ENABLE_* inverted (alt-options)"
+    },
+    {
+      "id": "win-cxx-v142-win2022-win32-release-std20-nobigfoot",
+      "runs-on": "windows-2022",
+      "env": {
+        "CXXSTD": "-std=gnu++20"
+      },
+      "cmake": [
+        "-A|Win32",
+        "-T|v142",
+        "-DCMAKE_BUILD_TYPE=Release",
+        "-DCMAKE_CXX_STANDARD=20",
+        "-DMDBX_ENABLE_BIGFOOT:BOOL=OFF"
+      ],
+      "ctest": null,
+      "note": "ci-cxx-msvc toolset=v142 cxxstd=20 target=Win32 Release; ENABLE_BIGFOOT=OFF"
+    },
+    {
+      "id": "win-cxx-v145-winlatest-x64-release-std23-nodbisp",
+      "runs-on": "windows-latest",
+      "env": {
+        "CXXSTD": "-std=gnu++23"
+      },
+      "cmake": [
+        "-A|x64",
+        "-T|v145",
+        "-DCMAKE_BUILD_TYPE=Release",
+        "-DCMAKE_CXX_STANDARD=23",
+        "-DMDBX_ENABLE_DBI_SPARSE:BOOL=OFF"
+      ],
+      "ctest": null,
+      "note": "ci-cxx-msvc toolset=v145 cxxstd=23 target=x64 Release; ENABLE_DBI_SPARSE=OFF"
+    },
+    {
+      "id": "win-cxx-v143-win2022-arm64-debug-std17-nodbifr",
+      "runs-on": "windows-11-vs2026-arm",
+      "env": {
+        "CXXSTD": "-std=gnu++17"
+      },
+      "cmake": [
+        "-A|ARM64",
+        "-T|v143",
+        "-DCMAKE_BUILD_TYPE=Debug",
+        "-DCMAKE_CXX_STANDARD=17",
+        "-DMDBX_ENABLE_DBI_LOCKFREE:BOOL=OFF"
+      ],
+      "ctest": null,
+      "build_only": false,
+      "note": "ci-cxx-msvc toolset=v143 ARM64, runs natively on windows-11-vs2026-arm; ENABLE_DBI_LOCKFREE=OFF"
+    },
+    {
+      "id": "win-msvc-v143-win32-release-shared-on-mscrt-on-nativeseh-off",
+      "runs-on": "windows-latest",
+      "cmake": [
+        "-A|Win32",
+        "-T|v143",
+        "-DCMAKE_BUILD_TYPE=Release",
+        "-DMDBX_BUILD_SHARED_LIBRARY:BOOL=ON",
+        "-DMDBX_WITHOUT_MSVC_CRT:BOOL=OFF",
+        "-DMDBX_NATIVE_SEH:BOOL=OFF"
+      ],
+      "ctest": null,
+      "note": "ci-windows-msvc toolset=v143 target=Win32 Release dll=ON crt=OFF; NATIVE_SEH=OFF"
+    },
+    {
+      "id": "linux-clang-ubuntu24-release-cxx-on-profgc",
+      "runs-on": "ubuntu-24.04",
+      "env": {
+        "CC": "clang",
+        "CXX": "clang++"
+      },
+      "cmake": [
+        "-DCMAKE_BUILD_TYPE=Release",
+        "-DMDBX_BUILD_CXX:BOOL=ON",
+        "-DMDBX_ENABLE_PROFGC:BOOL=ON"
+      ],
+      "ctest": null,
+      "note": "nightly linux clang (LLVM) surface cell - mainline library compiled by the second compiler family; role=run-full; ENABLE_PROFGC=ON"
     }
   ],
   "profiles": {
     "push-quick": [
       "linux-gcc-ubuntu24-debug-cxx-off",
-      "linux-gcc-ubuntu24-release-cxx-on",
-      "win-msvc-v145-x64-debug-dll-on-crt-on",
-      "win-mingw-64-release-dll-on-crt-off",
+      "linux-gcc-ubuntu24-release-cxx-on-avoid-msync-on",
+      "linux-gcc-ubuntu24-release-cxx-on-alt-options",
       "macos-macos15-release",
-      "win-cxx-v142-win2022-win32-release-std20"
+      "win-cxx-v142-win2022-win32-release-std20",
+      "win-cxx-v143-win2022-arm64-debug-std17-avoid-msync-off",
+      "win-cxx-v145-winlatest-x64-debug-std11-avoid-msync-off",
+      "win-cxx-v143-win2022-x64-debug-std14-avoid-msync-off",
+      "win-cxx-v145-winlatest-x64-release-std23",
+      "win-mingw-64-release-shared-on-mscrt-on",
+      "win-mscl-x64-release-shared-on-mscrt-on-avoid-msync-off",
+      "win-msvc-v143-win32-debug-shared-on-mscrt-off",
+      "win-msvc-v145-arm64-release-shared-on-mscrt-on-avoid-msync-off",
+      "win-msvc-v145-x64-release-shared-off-mscrt-on-alt-options",
+      "win-msvc-v145-x64-debug-shared-on-mscrt-off-avoid-msync-off"
     ],
     "full": [
       "android-r26d-armeabi-v7a-with-neon-release",
@@ -3098,13 +2886,11 @@
       "win-cxx-v142-win2022-win32-release-std20",
       "win-cxx-v142-win2022-x64-debug-std11",
       "win-cxx-v143-win2022-arm64-debug-std17",
-      "win-cxx-v143-winlatest-x64-std14-build",
-      "win-cxx-v145-winlatest-win32-std23-build",
+      "win-cxx-v145-winlatest-win32-debug-std23",
       "win-cxx-v145-winlatest-x64-release-std23",
-      "win-mingw-64-debug-dll-on-crt-on",
-      "win-mscl-x64-release-dll-on-crt-off",
-      "win-msvc-v143-win32-crt-off-build",
-      "win-msvc-v145-x64-release-dll-off-crt-off"
+      "win-mingw-64-debug-shared-on-mscrt-off",
+      "win-mscl-x64-release-shared-on-mscrt-on",
+      "win-msvc-v145-x64-release-shared-off-mscrt-on"
     ],
     "coverage": [
       "linux-gcc-ubuntu24-debug-coverage"
@@ -3120,27 +2906,27 @@
       "linux-lock-2008-clang-debug"
     ],
     "win-arm64": [
-      "win-msvc-v145-arm64-debug-dll-on-crt-on",
-      "win-msvc-v145-arm64-release-dll-on-crt-on",
-      "win-msvc-v145-arm64-debug-dll-on-crt-off",
-      "win-msvc-v145-arm64-release-dll-on-crt-off",
-      "win-msvc-v145-arm64-debug-dll-off-crt-on",
-      "win-msvc-v145-arm64-release-dll-off-crt-on",
-      "win-msvc-v145-arm64-debug-dll-off-crt-off",
-      "win-msvc-v145-arm64-release-dll-off-crt-off",
-      "win-mscl-arm64-debug-dll-on-crt-on",
-      "win-mscl-arm64-release-dll-on-crt-on",
-      "win-mscl-arm64-debug-dll-on-crt-off",
-      "win-mscl-arm64-release-dll-on-crt-off",
-      "win-mscl-arm64-debug-dll-off-crt-on",
-      "win-mscl-arm64-release-dll-off-crt-on",
-      "win-mscl-arm64-debug-dll-off-crt-off",
-      "win-mscl-arm64-release-dll-off-crt-off",
+      "win-msvc-v145-arm64-debug-shared-on-mscrt-off",
+      "win-msvc-v145-arm64-release-shared-on-mscrt-off",
+      "win-msvc-v145-arm64-debug-shared-on-mscrt-on",
+      "win-msvc-v145-arm64-release-shared-on-mscrt-on",
+      "win-msvc-v145-arm64-debug-shared-off-mscrt-off",
+      "win-msvc-v145-arm64-release-shared-off-mscrt-off",
+      "win-msvc-v145-arm64-debug-shared-off-mscrt-on",
+      "win-msvc-v145-arm64-release-shared-off-mscrt-on",
+      "win-mscl-arm64-debug-shared-on-mscrt-off",
+      "win-mscl-arm64-release-shared-on-mscrt-off",
+      "win-mscl-arm64-debug-shared-on-mscrt-on",
+      "win-mscl-arm64-release-shared-on-mscrt-on",
+      "win-mscl-arm64-debug-shared-off-mscrt-off",
+      "win-mscl-arm64-release-shared-off-mscrt-off",
+      "win-mscl-arm64-debug-shared-off-mscrt-on",
+      "win-mscl-arm64-release-shared-off-mscrt-on",
       "win-cxx-v143-win2022-arm64-debug-std11",
       "win-cxx-v143-win2022-arm64-release-std11",
       "win-cxx-v143-win2022-arm64-debug-std14",
       "win-cxx-v143-win2022-arm64-release-std14",
-      "win-cxx-v143-win2022-arm64-debug-std17",
+      "win-cxx-v143-win2022-arm64-debug-std17-nodbifr",
       "win-cxx-v143-win2022-arm64-release-std17",
       "win-cxx-v143-win2022-arm64-debug-std20",
       "win-cxx-v143-win2022-arm64-release-std20"
@@ -3151,21 +2937,20 @@
     "win-gate": [
       "win-cxx-v142-win2022-x64-debug-std11",
       "win-cxx-v143-win2022-arm64-debug-std17",
-      "win-cxx-v145-winlatest-x64-release-std23",
-      "win-cxx-v142-win2022-win32-release-std20",
-      "win-cxx-v145-winlatest-win32-std23-build",
-      "win-cxx-v143-winlatest-x64-std14-build",
-      "win-mscl-x64-release-dll-on-crt-off",
-      "win-msvc-v145-x64-release-dll-off-crt-off",
-      "win-msvc-v143-win32-crt-off-build",
-      "win-mingw-64-debug-dll-on-crt-on"
+      "win-cxx-v145-winlatest-x64-release-std23-nodbisp",
+      "win-cxx-v142-win2022-win32-release-std20-nobigfoot",
+      "win-cxx-v145-winlatest-win32-debug-std23",
+      "win-mscl-x64-release-shared-on-mscrt-on",
+      "win-msvc-v145-x64-release-shared-off-mscrt-on",
+      "win-mingw-64-debug-shared-on-mscrt-off",
+      "win-msvc-v143-win32-release-shared-on-mscrt-on-nativeseh-off"
     ],
     "linux-nightly": [
       "linux-gcc-ubuntu24-debug-cxx-on",
       "linux-gcc-ubuntu24-release-cxx-off",
       "linux-gcc-ubuntu26-arm-release-cxx-on",
       "linux-gcc-ubuntu26-arm-debug-cxx-off",
-      "linux-clang-ubuntu24-release-cxx-on",
+      "linux-clang-ubuntu24-release-cxx-on-profgc",
       "linux-lock-sysv-gcc-debug",
       "linux-lock-1988-clang-debug",
       "linux-lock-2001-gcc-debug",
@@ -3195,88 +2980,88 @@
     "src/": [
       "linux-gcc-ubuntu24-debug-cxx-off",
       "linux-gcc-ubuntu24-release-cxx-on",
-      "win-msvc-v145-x64-debug-dll-on-crt-on",
-      "win-mingw-64-release-dll-on-crt-off",
+      "win-msvc-v145-x64-debug-shared-on-mscrt-off",
+      "win-mingw-64-release-shared-on-mscrt-on",
       "macos-macos15-release",
       "win-cxx-v142-win2022-win32-release-std20"
     ],
     "mdbx.h": [
       "linux-gcc-ubuntu24-debug-cxx-off",
       "linux-gcc-ubuntu24-release-cxx-on",
-      "win-msvc-v145-x64-debug-dll-on-crt-on",
-      "win-mingw-64-release-dll-on-crt-off",
+      "win-msvc-v145-x64-debug-shared-on-mscrt-off",
+      "win-mingw-64-release-shared-on-mscrt-on",
       "macos-macos15-release",
       "win-cxx-v142-win2022-win32-release-std20"
     ],
     "mdbx.h++": [
       "linux-gcc-ubuntu24-debug-cxx-off",
       "linux-gcc-ubuntu24-release-cxx-on",
-      "win-msvc-v145-x64-debug-dll-on-crt-on",
-      "win-mingw-64-release-dll-on-crt-off",
+      "win-msvc-v145-x64-debug-shared-on-mscrt-off",
+      "win-mingw-64-release-shared-on-mscrt-on",
       "macos-macos15-release",
       "win-cxx-v142-win2022-win32-release-std20"
     ],
     "mdbx++/": [
       "linux-gcc-ubuntu24-debug-cxx-off",
       "linux-gcc-ubuntu24-release-cxx-on",
-      "win-msvc-v145-x64-debug-dll-on-crt-on",
-      "win-mingw-64-release-dll-on-crt-off",
+      "win-msvc-v145-x64-debug-shared-on-mscrt-off",
+      "win-mingw-64-release-shared-on-mscrt-on",
       "macos-macos15-release",
       "win-cxx-v142-win2022-win32-release-std20"
     ],
     "cmake/": [
       "linux-gcc-ubuntu24-debug-cxx-off",
       "linux-gcc-ubuntu24-release-cxx-on",
-      "win-msvc-v145-x64-debug-dll-on-crt-on",
-      "win-mingw-64-release-dll-on-crt-off",
+      "win-msvc-v145-x64-debug-shared-on-mscrt-off",
+      "win-mingw-64-release-shared-on-mscrt-on",
       "macos-macos15-release",
       "win-cxx-v142-win2022-win32-release-std20"
     ],
     "CMakeLists.txt": [
       "linux-gcc-ubuntu24-debug-cxx-off",
       "linux-gcc-ubuntu24-release-cxx-on",
-      "win-msvc-v145-x64-debug-dll-on-crt-on",
-      "win-mingw-64-release-dll-on-crt-off",
+      "win-msvc-v145-x64-debug-shared-on-mscrt-off",
+      "win-mingw-64-release-shared-on-mscrt-on",
       "macos-macos15-release",
       "win-cxx-v142-win2022-win32-release-std20"
     ],
     "GNUmakefile": [
       "linux-gcc-ubuntu24-debug-cxx-off",
       "linux-gcc-ubuntu24-release-cxx-on",
-      "win-msvc-v145-x64-debug-dll-on-crt-on",
-      "win-mingw-64-release-dll-on-crt-off",
+      "win-msvc-v145-x64-debug-shared-on-mscrt-off",
+      "win-mingw-64-release-shared-on-mscrt-on",
       "macos-macos15-release",
       "win-cxx-v142-win2022-win32-release-std20"
     ],
     "tests/ut/": [
       "linux-gcc-ubuntu24-debug-cxx-off",
       "linux-gcc-ubuntu24-release-cxx-on",
-      "win-msvc-v145-x64-debug-dll-on-crt-on",
-      "win-mingw-64-release-dll-on-crt-off",
+      "win-msvc-v145-x64-debug-shared-on-mscrt-off",
+      "win-mingw-64-release-shared-on-mscrt-on",
       "macos-macos15-release",
       "win-cxx-v142-win2022-win32-release-std20"
     ],
     "tests/framework/": [
       "linux-gcc-ubuntu24-debug-cxx-off",
       "linux-gcc-ubuntu24-release-cxx-on",
-      "win-msvc-v145-x64-debug-dll-on-crt-on",
-      "win-mingw-64-release-dll-on-crt-off",
+      "win-msvc-v145-x64-debug-shared-on-mscrt-off",
+      "win-mingw-64-release-shared-on-mscrt-on",
       "macos-macos15-release",
       "win-cxx-v142-win2022-win32-release-std20"
     ],
     "tests/ci/": [
       "linux-gcc-ubuntu24-debug-cxx-off",
       "linux-gcc-ubuntu24-release-cxx-on",
-      "win-msvc-v145-x64-debug-dll-on-crt-on",
-      "win-mingw-64-release-dll-on-crt-off",
+      "win-msvc-v145-x64-debug-shared-on-mscrt-off",
+      "win-mingw-64-release-shared-on-mscrt-on",
       "macos-macos15-release",
       "win-cxx-v142-win2022-win32-release-std20"
     ],
     ".github/workflows/": [
       "linux-gcc-ubuntu24-debug-cxx-off",
       "linux-gcc-ubuntu24-release-cxx-on",
-      "win-msvc-v145-x64-debug-dll-on-crt-on",
-      "win-mingw-64-release-dll-on-crt-off",
+      "win-msvc-v145-x64-debug-shared-on-mscrt-off",
+      "win-mingw-64-release-shared-on-mscrt-on",
       "macos-macos15-release",
       "win-cxx-v142-win2022-win32-release-std20"
     ],
