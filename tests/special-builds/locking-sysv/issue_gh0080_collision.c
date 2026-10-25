@@ -20,7 +20,7 @@
  * colliding open instead.
  *
  * The collision is generated deterministically via the probe-bus: the
- * ftok_key_collide FAULT site in osal_ftok() is armed so that both databases
+ * ftok_key_collide FAULT site in lck_ftok() is armed so that both databases
  * derive the very same key. Database A is opened and exercised (a write txn
  * does a semop, making its owner pid visible), then database B is opened with
  * the same injected key; the liveness check must refuse B while A's set and
@@ -83,7 +83,7 @@ int main(void) {
 
   char reply[256], cmd[128];
 
-  /* Arm the FAULT site: osal_ftok() will return the same injected key for
+  /* Arm the FAULT site: lck_ftok() will return the same injected key for
    * every database, forcing a deterministic System V IPC key collision. */
   snprintf(cmd, sizeof cmd, "fault ftok_key_collide %d", (int)0x00712345);
   if (mdbx_probe_ctl(cmd, reply, sizeof reply) != 0) {
