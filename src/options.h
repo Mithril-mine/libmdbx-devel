@@ -78,13 +78,6 @@
 #define MDBX_TRUST_RTC_CONFIG MDBX_STRINGIFY(MDBX_TRUST_RTC)
 #endif /* MDBX_TRUST_RTC */
 
-/** Controls online database auto-compactification during write-transactions. */
-#ifndef MDBX_ENABLE_REFUND
-#define MDBX_ENABLE_REFUND 1
-#elif !(MDBX_ENABLE_REFUND == 0 || MDBX_ENABLE_REFUND == 1)
-#error MDBX_ENABLE_REFUND must be defined as 0 or 1
-#endif /* MDBX_ENABLE_REFUND */
-
 /** Controls profiling of GC search and updates. */
 #ifndef MDBX_ENABLE_PROFGC
 #define MDBX_ENABLE_PROFGC 0

@@ -259,9 +259,7 @@ struct MDBX_txn {
         rkl_t comeback;    /* The list of ids of records returned into GC during commit, etc */
       } gc;
       bool prefault_write_activated;
-#if MDBX_ENABLE_REFUND
       pgno_t loose_refund_wl /* FIXME: describe */;
-#endif /* MDBX_ENABLE_REFUND */
       /* a sequence to spilling dirty page with LRU policy */
       unsigned dirtylru;
       /* dirtylist room: Dirty array size - dirty pages visible to this txn.
