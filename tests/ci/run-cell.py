@@ -269,21 +269,37 @@ def main() -> int:
             generator = ["-G", "Ninja"]
 
     print(f"==> cmake configure: {' '.join(cmake_args)}")
+    conf_start = time_ns()
     rc = run(["cmake", *generator, *cmake_args, source_rel], cwd=build_dir, env=env)
+    configure_ms = (time_ns() - conf_start) // 1_000_000
     if rc != 0:
         return 1
     print("==> cmake build")
-    # Some cells (mingw on shared Windows runners) run out of memory when the
-    # whole suite compiles in parallel; pin the build parallelism explicitly.
-    build_parallel = cell.get("build_parallel")
-    build_parallel_args = ["--parallel", str(build_parallel)] if build_parallel else ["--parallel"]
+    # Build always in parallel: one worker per core. Some cells (mingw on
+    # shared Windows runners) run out of memory when the whole suite compiles
+    # unthrottled, so a per-cell "build_parallel" acts as an upper ceiling
+    # rather than a fixed value.
+    build_parallel = os.cpu_count() or 2
+    cap = cell.get("build_parallel")
+    if cap:
+        build_parallel = min(build_parallel, int(cap))
+    build_parallel_args = ["--parallel", str(build_parallel)]
+    build_start = time_ns()
     if build_config:
         rc = run(["cmake", "--build", ".", *build_parallel_args, "--config", build_config],
                  cwd=build_dir, env=env)
     else:
         rc = run(["cmake", "--build", ".", *build_parallel_args], cwd=build_dir, env=env)
+    build_ms = (time_ns() - build_start) // 1_000_000
     if rc != 0:
         return 1
+    # Report ccache stats when it is used as the compiler launcher: a read
+    # the hit/miss rates at a glance and feeds the build-mode experiments.
+    if shutil.which("ccache"):
+        stats = run(["ccache", "-s"], cwd=build_dir, env=env, capture=True)
+        if stats.returncode == 0:
+            print("==> ccache stats:")
+            print(stats.stdout, end="")
 
     if cell.get("emulator"):
         return run_emulator_tests(cell, build_dir, args.scope)
@@ -293,8 +309,10 @@ def main() -> int:
         # still produced (ci-run.yml uploads it unconditionally) instead of
         # warning "No files were found".
         elapsed_ms = (time_ns() - started_ns) // 1_000_000
-        write_metrics(build_dir, cell["id"], args.scope, 0, elapsed_ms, [])
-        print(f"==> build_only cell: skipping ctest ({cell['id']}, wall_ms={elapsed_ms})")
+        write_metrics(build_dir, cell["id"], args.scope, 0, elapsed_ms,
+                      [], configure_ms=0, build_ms=build_ms)
+        print(f"==> build_only cell: skipping ctest ({cell['id']}, wall_ms={elapsed_ms}, "
+              f"configure_ms={configure_ms}, build_ms={build_ms})")
         return 0
 
     # --- ctest --------------------------------------------------------------
@@ -378,25 +396,36 @@ def main() -> int:
     for m in pattern.finditer(result.stdout):
         per_test.append({"test": m.group(1), "status": m.group(2),
                          "sec": round(float(m.group(3)), 3)})
-    write_metrics(build_dir, cell["id"], args.scope, result.returncode, elapsed_ms, per_test)
+    write_metrics(build_dir, cell["id"], args.scope, result.returncode, elapsed_ms,
+                  per_test, configure_ms=configure_ms, build_ms=build_ms)
 
     if result.returncode != 0:
         print(f"==> cell {cell['id']} FAILED (rc={result.returncode})", file=sys.stderr)
     return result.returncode
 
 
-def write_metrics(build_dir, cell_id, scope, rc, wall_ms, per_test):
+def write_metrics(build_dir, cell_id, scope, rc, wall_ms, per_test,
+                  configure_ms=0, build_ms=0):
+    # wall_ms is the ctest wall time when tests ran; for build_only cells it
+    # covers the whole run. test_ms is narrow (only the ctest exec time).
+    test_ms = wall_ms - configure_ms - build_ms if rc is not None else wall_ms
+    if test_ms < 0:
+        test_ms = wall_ms
     metrics = {
         "cell": cell_id,
         "scope": scope,
         "rc": rc,
         "wall_ms": wall_ms,
+        "configure_ms": configure_ms,
+        "build_ms": build_ms,
+        "test_ms": test_ms,
         "tests": per_test,
     }
     metrics_path = Path(build_dir) / "Testing" / "Temporary" / "cell-metrics.json"
     metrics_path.parent.mkdir(parents=True, exist_ok=True)
     metrics_path.write_text(json.dumps(metrics, indent=1), encoding="utf-8")
-    print(f"==> cell-metrics: {metrics_path} ({len(per_test)} tests, wall_ms={wall_ms})")
+    print(f"==> cell-metrics: {metrics_path} ({len(per_test)} tests, "
+          f"configure_ms={configure_ms}, build_ms={build_ms}, test_ms={test_ms})")
 
 
 def time_ns() -> int:
