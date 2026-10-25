@@ -211,7 +211,7 @@ static int defrag_clear_reclaimed(dfc_t *dfc) {
     } else if (gc_may_clean_reclaimed(txn)) {
       gc->next = txn->cursors[FREE_DBI];
       txn->cursors[FREE_DBI] = gc;
-      txn_refund(txn);
+      force_refund(txn);
       do {
         MDBX_val gc_key;
         rc = outer_first(gc, &gc_key, nullptr);
@@ -234,7 +234,7 @@ static int defrag_clear_reclaimed(dfc_t *dfc) {
           rc = gc_merge_loose(txn, nullptr);
           if (unlikely(rc != MDBX_SUCCESS))
             break;
-          txn_refund(txn);
+          force_refund(txn);
         }
         rc = cursor_del(gc, 0);
         if (unlikely(rc != MDBX_SUCCESS))
@@ -242,7 +242,7 @@ static int defrag_clear_reclaimed(dfc_t *dfc) {
         rc = rkl_push(&txn->wr.gc.ready4reuse, gc_first);
         if (unlikely(rc != MDBX_SUCCESS))
           break;
-        txn_refund(txn);
+        force_refund(txn);
 
         defrag_progress(dfc, /* TODO? */ 1);
         if (defrag_aborted(dfc)) {
@@ -258,7 +258,7 @@ static int defrag_clear_reclaimed(dfc_t *dfc) {
     if (txn->wr.loose_count > 0)
       rc = gc_merge_loose(txn, nullptr);
     if (likely(rc == MDBX_SUCCESS))
-      txn_refund(txn);
+      force_refund(txn);
   }
 
   return rc;

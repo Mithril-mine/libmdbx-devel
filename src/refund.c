@@ -3,7 +3,6 @@
 
 #include "internals.h"
 
-#if MDBX_ENABLE_REFUND
 static void refund_reclaimed(MDBX_txn *txn) {
   /* Scanning in descend order */
   pgno_t first_unallocated = txn->geo.first_unallocated;
@@ -171,7 +170,7 @@ static void refund_loose(MDBX_txn *txn) {
   txn->wr.loose_refund_wl = txn->geo.first_unallocated;
 }
 
-bool txn_refund(MDBX_txn *txn) {
+bool force_refund(MDBX_txn *txn) {
   const pgno_t before = txn->geo.first_unallocated;
 
   if (txn->wr.loose_pages && txn->wr.loose_refund_wl > txn->geo.first_unallocated)
@@ -199,6 +198,15 @@ bool txn_refund(MDBX_txn *txn) {
     spill_purge(txn);
 
   return true;
+}
+
+#if MDBX_ENABLE_REFUND
+
+bool txn_refund(MDBX_txn *txn) {
+  /* Online zero-cost auto-compactification during write transactions.
+   * force_refund() is also used by defrag with MDBX_ENABLE_REFUND disabled,
+   * so the real work lives in the always-compiled function above. */
+  return force_refund(txn);
 }
 
 #else /* MDBX_ENABLE_REFUND */

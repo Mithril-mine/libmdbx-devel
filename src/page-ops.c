@@ -379,8 +379,9 @@ static inline bool suitable4loose(const MDBX_txn *txn, pgno_t pgno) {
    *     страница не примыкает к какой-либо из уже находящийся в reclaimed.
    *  2) стоит подумать над тем, чтобы при большом loose-списке отбрасывать
          половину в reclaimed. */
+  const bool refund_enabled = MDBX_ENABLE_REFUND != 0;
   return txn->wr.loose_count < txn->env->options.dp_loose_limit &&
-         (!MDBX_ENABLE_REFUND ||
+         (!refund_enabled ||
           /* skip pages near to the end in favor of compactification */
           txn->geo.first_unallocated > pgno + txn->env->options.dp_loose_limit ||
           txn->geo.first_unallocated <= txn->env->options.dp_loose_limit);

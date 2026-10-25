@@ -75,6 +75,7 @@ MDBX_INTERNAL void txn_probe_all_cursors_against_dangling(MDBX_txn *txn, const c
 #endif /* MDBX_DEBUG_SPILLING */
 
 MDBX_INTERNAL bool txn_refund(MDBX_txn *txn);
+MDBX_INTERNAL bool force_refund(MDBX_txn *txn);
 MDBX_INTERNAL bool txn_gc_detent(const MDBX_txn *const txn);
 MDBX_INTERNAL int txn_check_badbits_parked(const MDBX_txn *txn, int bad_bits);
 MDBX_INTERNAL void txn_done_cursors(MDBX_txn *txn);
