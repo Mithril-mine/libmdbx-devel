@@ -35,6 +35,7 @@ import re
 import shutil
 import subprocess
 import sys
+import time
 from pathlib import Path
 
 SCRIPT_DIR = Path(__file__).resolve().parent
@@ -215,6 +216,19 @@ def main() -> int:
     print(f"==> run-cell: {cell['id']} (runs-on: {runs_on})")
     print(f"==> build dir: {build_dir}")
 
+    # Report every explicit MDBX_* build option so the effective configuration
+    # of a cell is visible at a glance in the CI log (cmake flags + env).
+    mdbx_options = sorted(
+        arg for arg in (cell.get("cmake") or [])
+        if arg.replace("-D", "", 1).startswith("MDBX_")
+    )
+    mdbx_options += sorted(
+        v for k, v in (cell.get("env") or {}).items()
+        if k.startswith("MDBX_")
+    )
+    if mdbx_options:
+        print(f"==> mdbx-options: {' '.join(mdbx_options)}")
+
     # --- toolchain env ------------------------------------------------------
     env = dict(os.environ)
     for key, value in (cell.get("env") or {}).items():
@@ -315,12 +329,24 @@ def main() -> int:
         "GTEST_RUNTIME_LIMIT",
         str(max(int(os.environ.get("CI_CTEST_TIMEOUT", "600")) - 60, 60)),
     )
+    # A cell may pin its own test-execution budget via `ctest.runtime` (seconds).
+    # Translate it into an absolute UTC-epoch deadline measured from the moment
+    # the tests actually start, so a whole parallel run shares one stop instant;
+    # an externally-set GTEST_RUNTIME_DEADLINE always wins (PR gate overrides).
+    cell_runtime = ((cell.get("ctest") or {}) or {}).get("runtime")
     if os.environ.get("GTEST_RUNTIME_DEADLINE"):
         env["GTEST_RUNTIME_DEADLINE"] = os.environ["GTEST_RUNTIME_DEADLINE"]
+    elif isinstance(cell_runtime, int) and cell_runtime > 0:
+        env["GTEST_RUNTIME_DEADLINE"] = str(int(time.time()) + cell_runtime)
+        print(f"==> runtime deadline set from cell.ctest.runtime={cell_runtime}s"
+              f" (deadline={env['GTEST_RUNTIME_DEADLINE']})")
     if os.environ.get("CI_NIGHTLY", "") == "1":
         env.setdefault("GTEST_SHUFFLE", "1")
 
-    ctest_cmd = ["ctest", "--output-on-failure", "--parallel", "3",
+    # Run the tests in parallel on one more worker than the physical cores,
+    # keeping one slot free for the CI runner itself.
+    parallel_jobs = os.cpu_count() or 1
+    ctest_cmd = ["ctest", "--output-on-failure", "--parallel", str(parallel_jobs + 1),
                  "--schedule-random", "--no-tests=error",
                  "--timeout", os.environ.get("CI_CTEST_TIMEOUT", "600")]
     if build_config:
