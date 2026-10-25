@@ -568,17 +568,90 @@ int main() { return 0; }
     endif()
 
     # Shared test-environment TU (tests/ut/test-env.c++): the single
-    # ci_runtime_limiter instance (GTEST_RUNTIME_LIMIT guard) and the single
-    # CI-only CRT popup suppressor. It is compiled INTO every gtest target
-    # (not a static library): with a static lib the linker would drop the
-    # whole object from binaries that never reference the limiter, silently
-    # disabling the popup suppression for those tests.
+    # ci_runtime_limiter instance (GTEST_RUNTIME_LIMIT / GTEST_RUNTIME_DEADLINE
+    # guard) and the single CI-only CRT popup suppressor. It is compiled ONCE
+    # into an OBJECT library and that object is linked into every gtest target
+    # via $<TARGET_OBJECTS:...>. An object library (not a static one) is used
+    # deliberately: its object goes straight onto the link line of every
+    # consumer, so the linker cannot drop it from binaries that never reference
+    # the limiter — which would otherwise silently disable the popup
+    # suppression. Compiling it once instead of per target avoids rebuilding the
+    # same translation unit for each of the ~120 gtest binaries.
     if(CMAKE_CXX_COMPILER_LOADED AND EXISTS "${CMAKE_CURRENT_LIST_DIR}/../tests/ut/test-env.c++")
       set(UT_TEST_ENV_SOURCE "${CMAKE_CURRENT_LIST_DIR}/../tests/ut/test-env.c++")
       set(UT_TEST_ENV_INCLUDE_DIR "${CMAKE_CURRENT_LIST_DIR}/../tests/ut")
+      add_library(mdbx_test_env OBJECT "${UT_TEST_ENV_SOURCE}")
+      target_include_directories(mdbx_test_env PUBLIC "${UT_TEST_ENV_INCLUDE_DIR}")
+      target_link_libraries(mdbx_test_env PUBLIC ${UT_LIBRARIES})
+      if(MDBX_BUILD_CXX AND MDBX_CXX_STANDARD)
+        set_target_properties(mdbx_test_env PROPERTIES CXX_STANDARD ${MDBX_CXX_STANDARD}
+                                                       CXX_STANDARD_REQUIRED ON)
+      endif()
+      set(UT_TEST_ENV_OBJECT "$<TARGET_OBJECTS:mdbx_test_env>")
     else()
       set(UT_TEST_ENV_SOURCE "")
       set(UT_TEST_ENV_INCLUDE_DIR "")
+      set(UT_TEST_ENV_OBJECT "")
+    endif()
+
+    # ------------------------------------------------------------------------
+    # Shared precompiled header for the gtest binaries.
+    #
+    # Parsing GoogleTest + the libmdbx APIs + the common standard headers costs
+    # ~2 s per translation unit, and each gtest binary is a single TU, so a
+    # clean build re-parses them ~120 times. Precompiling them once into an
+    # anchor library and letting every test reuse that PCH via REUSE_FROM turns
+    # those minutes into a single parse.
+    #
+    # target_precompile_headers()/REUSE_FROM need CMake >= 3.16; the library
+    # itself still builds on 3.12, so the PCH is an opt-in acceleration gated on
+    # the CMake version rather than a raised project-wide minimum. The gate is
+    # expressed by which definition of the ut_apply_pch macro is in effect (the
+    # real one is defined below alongside the anchor, a no-op fallback after this
+    # block), so the call site in add_gtest() carries no version branch. REUSE_FROM
+    # requires the compile flags of the anchor and of each reusing target to
+    # match, so the anchor mirrors the gtest targets' standard, include dirs and
+    # PIC mode; a target whose flags differ (e.g. the MDBX_PROBES ones) simply
+    # does not reuse the PCH — GCC then falls back to a normal compile without an
+    # error, so this is safe.
+    # ------------------------------------------------------------------------
+    if(NOT CMAKE_VERSION VERSION_LESS 3.16 AND UT_TEST_ENV_SOURCE)
+      set(UT_PCH_ANCHOR_SOURCE "${CMAKE_CURRENT_LIST_DIR}/../tests/ut/pch_anchor.cxx")
+      set(UT_PCH_HEADER "${CMAKE_CURRENT_LIST_DIR}/../tests/ut/pch.h++")
+      add_library(mdbx_test_pch STATIC "${UT_PCH_ANCHOR_SOURCE}")
+      target_include_directories(mdbx_test_pch PUBLIC ${UT_TEST_ENV_INCLUDE_DIR})
+      target_link_libraries(mdbx_test_pch PUBLIC ${UT_LIBRARIES})
+      # Link the same libmdbx target the gtest binaries link, so the anchor is
+      # compiled with the identical include paths (notably the project root that
+      # provides mdbx.h/mdbx.h++ via the library's INTERFACE include dir).
+      # PRIVATE: the anchor is only a PCH carrier, its consumers already link
+      # libmdbx themselves, so the dependency must not propagate and duplicate.
+      if(DEFINED TOOL_MDBX_LIB)
+        target_link_libraries(mdbx_test_pch PRIVATE ${TOOL_MDBX_LIB})
+      endif()
+      # The gtest binaries are executables: with CMAKE_POSITION_INDEPENDENT_CODE
+      # on Linux/GCC they are compiled -fPIE, while a static library defaults to
+      # -fPIC. GCC/Clang refuse to reuse a PCH created with different PIC/PIE
+      # settings (a fatal -Winvalid-pch under -Werror), so build the anchor's PCH
+      # with the very PIE option the consumers get. Use CMAKE_CXX_COMPILE_OPTIONS_PIE
+      # rather than a hardcoded -fPIE: it is "-fPIE" on Linux/GCC but empty on
+      # Windows (MinGW leaves COMPILE_OPTIONS_PIE empty and MSVC has no such
+      # flag), which is exactly where the executables are built without -fPIE.
+      set_target_properties(mdbx_test_pch PROPERTIES POSITION_INDEPENDENT_CODE OFF)
+      if(CMAKE_CXX_COMPILE_OPTIONS_PIE AND CMAKE_POSITION_INDEPENDENT_CODE)
+        target_compile_options(mdbx_test_pch PRIVATE ${CMAKE_CXX_COMPILE_OPTIONS_PIE})
+      endif()
+      if(MDBX_BUILD_CXX AND MDBX_CXX_STANDARD)
+        set_target_properties(mdbx_test_pch PROPERTIES CXX_STANDARD ${MDBX_CXX_STANDARD}
+                                                       CXX_STANDARD_REQUIRED ON)
+      endif()
+      target_precompile_headers(mdbx_test_pch PRIVATE "${UT_PCH_HEADER}")
+      # Real definition of the PCH helper, in effect only for CMake >= 3.16 with
+      # the anchor built; call sites just invoke ut_apply_pch() with no branch.
+      macro(ut_apply_pch target)
+        target_link_libraries(${target} mdbx_test_pch)
+        target_precompile_headers(${target} REUSE_FROM mdbx_test_pch)
+      endmacro()
     endif()
   else()
     set(UT_INCLUDE_DIRECTORIES "")
@@ -586,8 +659,16 @@ int main() { return 0; }
     message(STATUS "GoogleTest NOT available, so testing NOT be ENABLED")
   endif()
 
+  # No-op fallback when the real helper was not defined above (CMake < 3.16, or
+  # no GoogleTest, or no test-env TU): the version gate is expressed purely by
+  # which definition of ut_apply_pch is in effect, so call sites never branch.
+  if(NOT COMMAND ut_apply_pch)
+    macro(ut_apply_pch target)
+    endmacro()
+  endif()
+
   function(add_gtest name)
-    set(options DISABLED)
+    set(options DISABLED NO_PCH)
     set(oneValueArgs TIMEOUT PREFIX)
     set(multiValueArgs SOURCE LIBRARY INCLUDE_DIRECTORY DEPEND DLLPATH LABELS)
     cmake_parse_arguments(params "${options}" "${oneValueArgs}" "${multiValueArgs}" ${ARGN})
@@ -610,8 +691,8 @@ int main() { return 0; }
       endif()
 
       set(target "${params_PREFIX}${name}")
-      if(UT_TEST_ENV_SOURCE)
-        add_executable(${target} ${params_SOURCE} ${UT_TEST_ENV_SOURCE})
+      if(UT_TEST_ENV_OBJECT)
+        add_executable(${target} ${params_SOURCE} ${UT_TEST_ENV_OBJECT})
         target_include_directories(${target} PRIVATE ${UT_TEST_ENV_INCLUDE_DIR})
       else()
         add_executable(${target} ${params_SOURCE})
@@ -653,6 +734,17 @@ int main() { return 0; }
 
       if(params_INCLUDE_DIRECTORY)
         set_target_properties(${target} PROPERTIES INCLUDE_DIRECTORIES ${params_INCLUDE_DIRECTORY})
+      endif()
+
+      # Reuse the shared precompiled header. Called after the standard and
+      # include dirs are set so the flags match the anchor and the PCH is reused.
+      # The ut_apply_pch macro is a no-op unless CMake >= 3.16 built the anchor.
+      # NO_PCH opts a target out: the white-box tests include src/internals.h,
+      # whose osal.h redefines snprintf (the ntdll fallback in WITHOUT_MSVC_CRT
+      # builds) and other macros that clash with the already-parsed std headers
+      # baked into the PCH.
+      if(NOT params_NO_PCH)
+        ut_apply_pch(${target})
       endif()
 
       if(UT_NEED_DLLCRUTCH)

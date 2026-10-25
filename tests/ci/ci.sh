@@ -62,6 +62,11 @@ function default_cmake_test {
 	# CI_CTEST_SCOPE / CI_CTEST_EXCLUDE_SCOPE are optional label-regex
 	# filters (e.g. 'smoke-t1|ut\.' minus 'ut\.heavy'); the '|' separator is
 	# safe here because these come from env, not the '|'-split ci.sh args.
+	# GTEST_RUNTIME_DEADLINE (absolute UTC-epoch deadline) is passed through
+	# when set by the caller, so a whole parallel run can share one stop
+	# instant; the in-test limiter picks the earliest of it and the LIMIT below.
+	# `export` of an unset name is a no-op, so this does not invent an empty var.
+	export GTEST_RUNTIME_DEADLINE
 	GTEST_SHUFFLE=1 GTEST_RUNTIME_LIMIT=99 MALLOC_CHECK_=7 MALLOC_PERTURB_=42 \
 	ctest --output-on-failure --parallel 3 --schedule-random --no-tests=error \
 	${CI_CTEST_SCOPE:+-L "${CI_CTEST_SCOPE}"} ${CI_CTEST_EXCLUDE_SCOPE:+-LE "${CI_CTEST_EXCLUDE_SCOPE}"} \
