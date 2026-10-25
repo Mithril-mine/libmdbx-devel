@@ -615,7 +615,10 @@ int main() { return 0; }
     # does not reuse the PCH — GCC then falls back to a normal compile without an
     # error, so this is safe.
     # ------------------------------------------------------------------------
-    if(NOT CMAKE_VERSION VERSION_LESS 3.16 AND UT_TEST_ENV_SOURCE)
+    if(NOT MDBX_TEST_PCH)
+      # PCH reuse is incompatible with some build modes (e.g. ccache on MSVC);
+      # MDBX_TEST_PCH=OFF falls through to the no-op ut_apply_pch() fallback.
+    elseif(NOT CMAKE_VERSION VERSION_LESS 3.16 AND UT_TEST_ENV_SOURCE)
       set(UT_PCH_ANCHOR_SOURCE "${CMAKE_CURRENT_LIST_DIR}/../tests/ut/pch_anchor.cxx")
       set(UT_PCH_HEADER "${CMAKE_CURRENT_LIST_DIR}/../tests/ut/pch.h++")
       add_library(mdbx_test_pch STATIC "${UT_PCH_ANCHOR_SOURCE}")

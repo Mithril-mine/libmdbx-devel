@@ -40,6 +40,17 @@ def main() -> int:
         rows.append({"cell": cid, "runs-on": c.get("runs-on", "ubuntu-24.04"),
                      "scope": scope, "coverage": bool(c.get("coverage", False)),
                      "ndk": c.get("ndk", "")})
+    # Order the matrix so the slowest/rarest cells get initiated first. GitHub
+    # Actions hands out runners of one label in arrival order and caps the
+    # concurrency, so putting the long cells front reduces the makespan when
+    # the queue throttles the burst; with plentiful runners this is a no-op
+    # (stable sort keeps the original profile order for equals).
+    for row in rows:
+        c = by_id[row["cell"]]
+        row["_expected_sec"] = int(c.get("expected_sec", 0) or 0)
+    rows.sort(key=lambda r: r["_expected_sec"], reverse=True)
+    for row in rows:
+        del row["_expected_sec"]
     print(f"resolved {len(rows)} cells, scope={scope}", file=sys.stderr)
     print(json.dumps(rows))
     return 0

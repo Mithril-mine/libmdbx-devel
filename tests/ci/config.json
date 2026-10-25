@@ -106,7 +106,8 @@
         "-DMDBX_BUILD_CXX:BOOL=OFF"
       ],
       "ctest": null,
-      "note": "ci-linux ubuntu-24.04 Debug cxx=OFF"
+      "note": "ci-linux ubuntu-24.04 Debug cxx=OFF",
+      "expected_sec": 45
     },
     {
       "id": "linux-gcc-ubuntu24-release-cxx-on",
@@ -121,7 +122,8 @@
         "-DMDBX_BUILD_CXX:BOOL=ON"
       ],
       "ctest": null,
-      "note": "ci-linux ubuntu-24.04 Release cxx=ON"
+      "note": "ci-linux ubuntu-24.04 Release cxx=ON",
+      "expected_sec": 45
     },
     {
       "id": "linux-gcc-ubuntu24-release-cxx-off",
@@ -162,7 +164,8 @@
         "-DMDBX_BUILD_CXX:BOOL=ON"
       ],
       "ctest": null,
-      "note": "ci-macos macos-15 Release; crash-safety covered by ut.txn.crash_safety"
+      "note": "ci-macos macos-15 Release; crash-safety covered by ut.txn.crash_safety",
+      "expected_sec": 136
     },
     {
       "id": "macos-xcode27-debug",
@@ -253,7 +256,8 @@
         "-DMDBX_WITHOUT_MSVC_CRT:BOOL=ON"
       ],
       "ctest": null,
-      "note": "ci-windows-msvc toolset=v143 target=Win32 Debug dll=ON crt=ON"
+      "note": "ci-windows-msvc toolset=v143 target=Win32 Debug dll=ON crt=ON",
+      "expected_sec": 186
     },
     {
       "id": "win-msvc-v143-win32-release-shared-on-mscrt-off",
@@ -1087,7 +1091,8 @@
       ],
       "ctest": null,
       "note": "ci-windows-mingw Release dll=ON crt=OFF bitness=64",
-      "build_parallel": 4
+      "build_parallel": 4,
+      "expected_sec": 523
     },
     {
       "id": "win-mingw-32-release-shared-on-mscrt-on",
@@ -1357,7 +1362,8 @@
         "-DCMAKE_CXX_STANDARD=20"
       ],
       "ctest": null,
-      "note": "ci-cxx-msvc toolset=v142 cxxstd=20 target=Win32 Release"
+      "note": "ci-cxx-msvc toolset=v142 cxxstd=20 target=Win32 Release",
+      "expected_sec": 372
     },
     {
       "id": "win-cxx-v142-win2022-x64-debug-std20",
@@ -2055,7 +2061,8 @@
         "-DCMAKE_CXX_STANDARD=23"
       ],
       "ctest": null,
-      "note": "ci-cxx-msvc toolset=v145 cxxstd=23 target=x64 Release"
+      "note": "ci-cxx-msvc toolset=v145 cxxstd=23 target=x64 Release",
+      "expected_sec": 365
     },
     {
       "id": "android-r26d-arm64-v8a-release",
@@ -2632,7 +2639,8 @@
         "-DMDBX_AVOID_MSYNC:BOOL=ON"
       ],
       "ctest": null,
-      "note": "ci-linux ubuntu-24.04 Release cxx=ON; AVOID_MSYNC=ON (non-default POSIX)"
+      "note": "ci-linux ubuntu-24.04 Release cxx=ON; AVOID_MSYNC=ON (non-default POSIX)",
+      "expected_sec": 151
     },
     {
       "id": "linux-gcc-ubuntu24-release-cxx-on-alt-options",
@@ -2653,7 +2661,8 @@
         "-DMDBX_ENABLE_DBI_LOCKFREE:BOOL=OFF"
       ],
       "ctest": null,
-      "note": "ci-linux ubuntu-24.04 Release cxx=ON; all ENABLE_* inverted (alt-options)"
+      "note": "ci-linux ubuntu-24.04 Release cxx=ON; all ENABLE_* inverted (alt-options)",
+      "expected_sec": 166
     },
     {
       "id": "win-cxx-v143-win2022-arm64-debug-std17-avoid-msync-off",
@@ -2670,7 +2679,8 @@
       ],
       "ctest": null,
       "build_only": false,
-      "note": "ci-cxx-msvc toolset=v143 ARM64, runs natively on windows-11-vs2026-arm; AVOID_MSYNC=OFF (non-default Windows)"
+      "note": "ci-cxx-msvc toolset=v143 ARM64, runs natively on windows-11-vs2026-arm; AVOID_MSYNC=OFF (non-default Windows)",
+      "expected_sec": 429
     },
     {
       "id": "win-cxx-v145-winlatest-x64-debug-std11-avoid-msync-off",
@@ -2686,7 +2696,8 @@
         "-DMDBX_AVOID_MSYNC:BOOL=OFF"
       ],
       "ctest": null,
-      "note": "ci-cxx-msvc toolset=v145 cxxstd=11 target=x64 Debug; AVOID_MSYNC=OFF (non-default Windows)"
+      "note": "ci-cxx-msvc toolset=v145 cxxstd=11 target=x64 Debug; AVOID_MSYNC=OFF (non-default Windows)",
+      "expected_sec": 118
     },
     {
       "id": "win-cxx-v143-win2022-x64-debug-std14-avoid-msync-off",
@@ -2702,7 +2713,8 @@
         "-DMDBX_AVOID_MSYNC:BOOL=OFF"
       ],
       "ctest": null,
-      "note": "ci-cxx-msvc toolset=v143 cxxstd=14 target=x64 Debug; AVOID_MSYNC=OFF (non-default Windows)"
+      "note": "ci-cxx-msvc toolset=v143 cxxstd=14 target=x64 Debug; AVOID_MSYNC=OFF (non-default Windows)",
+      "expected_sec": 109
     },
     {
       "id": "win-mscl-x64-release-shared-on-mscrt-on-avoid-msync-off",
@@ -2719,7 +2731,8 @@
         "-DMDBX_AVOID_MSYNC:BOOL=OFF"
       ],
       "ctest": null,
-      "note": "ci-windows-mscl studio=18 target=x64 Release dll=ON crt=OFF; AVOID_MSYNC=OFF (non-default Windows)"
+      "note": "ci-windows-mscl studio=18 target=x64 Release dll=ON crt=OFF; AVOID_MSYNC=OFF (non-default Windows)",
+      "expected_sec": 354
     },
     {
       "id": "win-msvc-v145-arm64-release-shared-on-mscrt-on-avoid-msync-off",
@@ -2733,7 +2746,8 @@
         "-DMDBX_AVOID_MSYNC:BOOL=OFF"
       ],
       "ctest": null,
-      "note": "ci-windows-msvc toolset=v145 target=ARM64 Release dll=ON crt=OFF; ARM64 beta-runner, full smoke suite; AVOID_MSYNC=OFF (non-default Windows)"
+      "note": "ci-windows-msvc toolset=v145 target=ARM64 Release dll=ON crt=OFF; ARM64 beta-runner, full smoke suite; AVOID_MSYNC=OFF (non-default Windows)",
+      "expected_sec": 561
     },
     {
       "id": "win-msvc-v145-x64-debug-shared-on-mscrt-off-avoid-msync-off",
@@ -2748,7 +2762,8 @@
         "-DMDBX_AVOID_MSYNC:BOOL=OFF"
       ],
       "ctest": null,
-      "note": "ci-windows-msvc toolset=v145 target=x64 Debug dll=ON crt=ON; C++17 pins the ut block (otherwise WIN32+std<17 silently skips most C++ ut targets and compile-breaks slip through the fast gate); AVOID_MSYNC=OFF (non-default Windows)"
+      "note": "ci-windows-msvc toolset=v145 target=x64 Debug dll=ON crt=ON; C++17 pins the ut block (otherwise WIN32+std<17 silently skips most C++ ut targets and compile-breaks slip through the fast gate); AVOID_MSYNC=OFF (non-default Windows)",
+      "expected_sec": 148
     },
     {
       "id": "win-msvc-v145-x64-release-shared-off-mscrt-on-alt-options",
@@ -2767,7 +2782,8 @@
         "-DMDBX_ENABLE_DBI_LOCKFREE:BOOL=OFF"
       ],
       "ctest": null,
-      "note": "ci-windows-msvc toolset=v145 target=x64 Release dll=OFF crt=OFF; all ENABLE_* inverted (alt-options)"
+      "note": "ci-windows-msvc toolset=v145 target=x64 Release dll=OFF crt=OFF; all ENABLE_* inverted (alt-options)",
+      "expected_sec": 277
     },
     {
       "id": "win-cxx-v142-win2022-win32-release-std20-nobigfoot",
