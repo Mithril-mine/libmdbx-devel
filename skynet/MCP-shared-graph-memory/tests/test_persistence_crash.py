@@ -269,10 +269,11 @@ def test_store_persistence_flush_each(tmp_path):
 def test_kill9_nosync_readonly_wants_recovery(tmp_path):
     """safe_nosync + SIGKILL без close: read-only НЕ откатывается молча.
 
-    Проверяемый контракт:
-      1) preopen_snapinfo → MDBX_CORRUPTED (меты unsteady, троица s:w:w);
-      2) read-only открытие → MDBX_WANNA_RECOVERY — явный сигнал пользователю
-         (не тихий откат к steady);
+    Проверяемый контракт (после #182 + mdbx_preopen_snapinfo_ex):
+      1) preopen_snapinfo (mode=PROPERLY) → MDBX_WANNA_RECOVERY, если новейшая
+         мета weak (троица s:w:w) — явный сигнал пользователю без открытия;
+      2) read-only открытие → MDBX_WANNA_RECOVERY — тот же сигнал, но уже от
+         open (не тихий откат к steady);
       3) осознанное read-write открытие само делает steady-sync и данные
          целы (safe_nosync сбрасывает страницы данных, задержаны только меты).
 
@@ -300,14 +301,20 @@ def test_kill9_nosync_readonly_wants_recovery(tmp_path):
                 proc.wait()
         time.sleep(0.3)
         try:
-            with pytest.raises(Exception) as ei:
-                m.preopen_snapinfo(db)
-            assert "CORRUPTED" in str(ei.value), ei.value
-            break
-        except (AssertionError, pytest.fail.Exception):
-            # Меты успели лечь steady целиком (OS writeback) либо троица
-            # не s:w:w — это не провал контракта, а неудачный тайминг:
-            # переходим к следующей свежей БД.
+            # After #182 preopen_snapinfo(mode=PROPERLY) reports
+            # MDBX_WANNA_RECOVERY when the newest checkpoint is not steady.
+            pre = m.preopen_snapinfo(db)
+            assert False, "preopen unexpectedly succeeded: %r" % (pre,)
+        except m.LibmdbxError as e:
+            if e.rc == m.RC_WANNA_RECOVERY:
+                # The expected signal: a weak checkpoint of the current boot.
+                break
+            if e.rc == m.RC_CORRUPTED:
+                # No usable meta-pages at all (e.g. the kill raced the
+                # writer): neither steady nor same-boot weak checkpoint.
+                if attempt == 3:
+                    raise
+                continue
             if attempt == 3:
                 raise
             continue
