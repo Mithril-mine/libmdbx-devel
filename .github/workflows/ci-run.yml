@@ -100,6 +100,7 @@ jobs:
           fi
 
       - name: ccache cache
+        if: ${{ !(startsWith(inputs.cell, 'win-msvc-') || startsWith(inputs.cell, 'win-cxx-')) }}
         uses: actions/cache@v4
         with:
           path: ${{ runner.temp }}/ccache
@@ -144,13 +145,24 @@ jobs:
           # everything between jobs otherwise). Coverage cells skip ccache:
           # gcov's .gcno/.gcda are not restored on cache hits.
           CCACHE_DIR: ${{ runner.temp }}/ccache
-          CCACHE_MAXSIZE: 300M
+          CCACHE_MAXSIZE: 1G
           NDK_PATH: ${{ steps.setup-ndk.outputs.ndk-path }}
           ANDROID_NDK_HOME: ${{ steps.setup-ndk.outputs.ndk-path }}
         run: |
           set -euo pipefail
           EXTRA="-DINTERPROCEDURAL_OPTIMIZATION=OFF"
-          if [ "${{ inputs.coverage }}" != "true" ] && command -v ccache >/dev/null 2>&1; then
+          # ccache does not work with the Visual Studio generator: the compile
+          # launcher is not invoked for MSBuild, so the cache stays empty
+          # (measured 0.0 GB) and only adds upload/download overhead. skip it
+          # for the VS-generator cells (win-msvc-* / win-cxx-*); GCC/Clang
+          # cells (Linux, macOS, mingw, clang-cl) keep ccache.
+          CELL_ID="${{ inputs.cell }}"
+          case "$CELL_ID" in
+            win-msvc-*|win-cxx-*) CCACHE_USABLE=false ;;
+            *) CCACHE_USABLE=true ;;
+          esac
+          if [ "${{ inputs.coverage }}" != "true" ] && [ "$CCACHE_USABLE" = "true" ] \
+             && command -v ccache >/dev/null 2>&1; then
             EXTRA="$EXTRA -DCMAKE_C_COMPILER_LAUNCHER=ccache -DCMAKE_CXX_COMPILER_LAUNCHER=ccache"
           fi
           export RUN_CELL_EXTRA_CMAKE="$EXTRA"
@@ -170,7 +182,7 @@ jobs:
           # LINE BY LINE (one `sh -c` per line), so this must stay a single
           # logical line: no multi-line if/fi, no \-continuations, no cross-
           # line exports (each line is a separate shell).
-          script: EXTRA="-DINTERPROCEDURAL_OPTIMIZATION=OFF"; if [ "${{ inputs.coverage }}" != "true" ] && command -v ccache >/dev/null 2>&1; then EXTRA="$EXTRA -DCMAKE_C_COMPILER_LAUNCHER=ccache -DCMAKE_CXX_COMPILER_LAUNCHER=ccache"; fi; export RUN_CELL_EXTRA_CMAKE="$EXTRA"; export CCACHE_DIR="${{ runner.temp }}/ccache" CCACHE_MAXSIZE=300M NDK_PATH="${{ steps.setup-ndk.outputs.ndk-path }}" ANDROID_NDK_HOME="${{ steps.setup-ndk.outputs.ndk-path }}"; tests/ci/run-cell.py "${{ inputs.cell }}" --scope "${{ inputs.scope }}" --build-dir @ci-cmake-build 2>&1
+          script: EXTRA="-DINTERPROCEDURAL_OPTIMIZATION=OFF"; if [ "${{ inputs.coverage }}" != "true" ] && command -v ccache >/dev/null 2>&1; then EXTRA="$EXTRA -DCMAKE_C_COMPILER_LAUNCHER=ccache -DCMAKE_CXX_COMPILER_LAUNCHER=ccache"; fi; export RUN_CELL_EXTRA_CMAKE="$EXTRA"; export CCACHE_DIR="${{ runner.temp }}/ccache" CCACHE_MAXSIZE=1G NDK_PATH="${{ steps.setup-ndk.outputs.ndk-path }}" ANDROID_NDK_HOME="${{ steps.setup-ndk.outputs.ndk-path }}"; tests/ci/run-cell.py "${{ inputs.cell }}" --scope "${{ inputs.scope }}" --build-dir @ci-cmake-build 2>&1
 
       - name: coverage report
         if: ${{ inputs.coverage }}
