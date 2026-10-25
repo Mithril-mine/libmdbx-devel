@@ -1159,7 +1159,13 @@ next_gc:
 #if MDBX_ENABLE_PROFGC
   const uint64_t merge_begin = osal_monotime();
 #endif /* MDBX_ENABLE_PROFGC */
-  const bool has_duplicates = gc_len + pnl_size(txn->wr.repnl) != pnl_merge(txn->wr.repnl, gc_pnl);
+  /* Reject a page listed both by this GC record and the retired-pages list.
+   * The size of repnl must be read before the merge: pnl_merge() resizes
+   * the destination list, and reading pnl_size() in the same expression
+   * relies on an unspecified C evaluation order, which made this check fire
+   * spuriously on MSVC x86 while silently doing nothing elsewhere. */
+  const size_t repnl_size_before = pnl_size(txn->wr.repnl);
+  const bool has_duplicates = gc_len + repnl_size_before != pnl_merge(txn->wr.repnl, gc_pnl);
 #if MDBX_ENABLE_PROFGC
   prof->pnl_merge.calls += 1;
   prof->pnl_merge.volume += pnl_size(txn->wr.repnl);
