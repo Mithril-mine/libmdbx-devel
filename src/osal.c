@@ -1855,13 +1855,16 @@ int osal_fseek_shut(mdbx_filehandle_t fd, uint64_t *safe_parking_lot_offset) {
    * due to erroneous use of file descriptors in the application code. */
   int rc = osal_fseek(fd, *safe_parking_lot_offset);
   if (unlikely(rc == MDBX_EINVAL)) {
-    uint64_t offset = *safe_parking_lot_offset;
+    const uint64_t offset = *safe_parking_lot_offset;
+    uint64_t best = 0;
     unsigned shift_min = 1, shift_max = 32;
     while (shift_min <= shift_max) {
       unsigned shift = (shift_min + shift_max) >> 1;
-      *safe_parking_lot_offset = offset >> shift;
-      int err = osal_fseek(fd, *safe_parking_lot_offset);
+      const uint64_t probe = offset >> shift;
+      int err = osal_fseek(fd, probe);
       if (err == MDBX_SUCCESS) {
+        /* remember only successful offset, since the search may end on a failing probe */
+        best = probe;
         shift_max = shift - 1;
         rc = err;
       } else if (err == MDBX_EINVAL)
@@ -1870,6 +1873,12 @@ int osal_fseek_shut(mdbx_filehandle_t fd, uint64_t *safe_parking_lot_offset) {
         rc = err;
         break;
       }
+    }
+    if (rc == MDBX_SUCCESS) {
+      *safe_parking_lot_offset = best;
+      /* the last successful probe is the one with the smallest shift, i.e. `best`,
+       * but re-seek explicitly to not depend on the order of probes */
+      rc = osal_fseek(fd, best);
     }
   }
   return rc;
