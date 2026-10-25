@@ -203,6 +203,8 @@ ffi.cdef(
     int mdbx_env_info_ex(const void *env, const void *txn, struct MDBX_envinfo *info, size_t bytes);
     int mdbx_env_stat_ex(const void *env, const void *txn, struct MDBX_stat *stat, size_t bytes);
     int mdbx_dbi_stat(const void *txn, unsigned int dbi, struct MDBX_stat *stat, size_t bytes);
+    int mdbx_preopen_snapinfo_ex(const char *pathname, int mode, struct MDBX_envinfo *info, size_t bytes);
+    int mdbx_preopen_snapinfo_exW(const wchar_t *pathname, int mode, struct MDBX_envinfo *info, size_t bytes);
     int mdbx_preopen_snapinfo(const char *pathname, struct MDBX_envinfo *info, size_t bytes);
     int mdbx_preopen_snapinfoW(const wchar_t *pathname, struct MDBX_envinfo *info, size_t bytes);
     int mdbx_reader_check(void *env, int *dead);
@@ -356,6 +358,12 @@ RC_EMULTIVAL = -30421
 RC_WANNA_RECOVERY = -30419
 RC_CORRUPTED = -30796
 
+# MDBX_preopen_flags (see mdbx.h)
+MDBX_PREOPEN_LEGACY = 0
+MDBX_PREOPEN_PROPERLY = 1
+MDBX_PREOPEN_PESSIMISTIC = 2
+MDBX_PREOPEN_OPTIMISTIC = 3
+
 # MDBX_option_t: enum MDBX_option (mdbx.h) — значения по порядку членов.
 MDBX_OPT_MAX_DB = 0
 MDBX_OPT_MAX_READERS = 1
@@ -446,23 +454,27 @@ def build_string() -> str:
         return ""
 
 
-def preopen_snapinfo(path: str) -> dict:
-    """Базовая информация о БД БЕЗ открытия env (mdbx_preopen_snapinfo).
+def preopen_snapinfo(path: str, mode: int = MDBX_PREOPEN_PROPERLY) -> dict:
+    """Базовая информация о БД БЕЗ открытия env (mdbx_preopen_snapinfo_ex).
 
     Заполняет ТОЛЬКО поля, читаемые без mmap и блокировок: pagesize,
     геометрию, last_pgno, **последний txnid (mi_recent_txnid)** и bootid
     текущей мета-страницы. Критично: переживает пересоздание LCK-файла.
     На Windows используется *W-вариант.
 
+    `mode` — режим обработки weak-меты (см. MDBX_preopen_flags):
+      LEGACY/PROPERLY/PESSIMISTIC/OPTIMISTIC.
+
     Для полных meta_txnid[3] нужен Env.diag() после read-only открытия.
     """
+    mode = int(mode)
     info = ffi.new("struct MDBX_envinfo *")
     if os.name == "nt":
-        rc = _get_lib().mdbx_preopen_snapinfoW(
-            ctypes.c_wchar_p(path), info, ffi.sizeof("struct MDBX_envinfo"))
+        rc = _get_lib().mdbx_preopen_snapinfo_exW(
+            ctypes.c_wchar_p(path), mode, info, ffi.sizeof("struct MDBX_envinfo"))
     else:
-        rc = _get_lib().mdbx_preopen_snapinfo(
-            path.encode(), info, ffi.sizeof("struct MDBX_envinfo"))
+        rc = _get_lib().mdbx_preopen_snapinfo_ex(
+            path.encode(), mode, info, ffi.sizeof("struct MDBX_envinfo"))
     check(rc, "mdbx_preopen_snapinfo")
     return {
         "geo": {"lower": int(info.mi_geo.lower),
