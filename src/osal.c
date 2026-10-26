@@ -1672,6 +1672,33 @@ int osal_pwritev(mdbx_filehandle_t fd, struct iovec *iov, size_t sgvcnt, uint64_
 #endif
 }
 
+/* Write an auxiliary (stub) buffer to the database body through the handle that
+ * holds the per-txn body lock: overlapped_fd on Windows when present, otherwise
+ * the memory-mapped (lazy) handle.  On Windows byte-range locks are per-handle,
+ * so writing a locked region through a different handle fails with
+ * ERROR_LOCK_VIOLATION; routing through the lock owner avoids that.
+ *
+ * Both helpers delegate to osal_pwrite()/osal_pwritev(), which on Windows
+ * already implement a synchronous-over-overlapped write with hEvent == NULL
+ * (GetOverlappedResult waits on the file handle, not on a manual-reset event).
+ * Because the scatter-gather segments are written strictly one after another,
+ * there is no risk of reusing a shared event across in-flight operations. */
+int osal_dxb_write_stub(const MDBX_env *env, const void *buf, size_t bytes, uint64_t offset) {
+#if IS_WINDOWS
+  if (env->ioring.overlapped_fd)
+    return osal_pwrite(env->ioring.overlapped_fd, buf, bytes, offset);
+#endif
+  return osal_pwrite(env->lazy_fd, buf, bytes, offset);
+}
+
+int osal_dxb_write_stubv(const MDBX_env *env, struct iovec *iov, size_t sgvcnt, uint64_t offset) {
+#if IS_WINDOWS
+  if (env->ioring.overlapped_fd)
+    return osal_pwritev(env->ioring.overlapped_fd, iov, sgvcnt, offset);
+#endif
+  return osal_pwritev(env->lazy_fd, iov, sgvcnt, offset);
+}
+
 int osal_fsync(mdbx_filehandle_t fd, enum osal_syncmode_bits mode_bits) {
 #if IS_WINDOWS
   if ((mode_bits & (MDBX_SYNC_DATA | MDBX_SYNC_IODQ)) && !FlushFileBuffers(fd))
