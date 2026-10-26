@@ -48,6 +48,7 @@ function test_numanode {
 ${TMUX} kill-session -t mdbx
 rm -rf ${PREFIX}*
 # git clean -x -f -d && make test-assertions
+${DIR}/stochastic.sh --prepare-only --skip-make || (echo "PREPARATION FAILED!" && exit 2)
 ${TMUX} -f "${DIR}/tmux.conf" new-session -d -s mdbx htop
 
 W=0
