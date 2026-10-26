@@ -50,6 +50,7 @@ Cutting-edge release with new core features and internal refactoring.
 ### Fixes:
 
  - Core engine:
+    - On Windows, opening a database in exclusive mode no longer switches it to the slow flush-based commit path; commits now keep the same write-through performance as usual, roughly doubling the exclusive-mode speed ([#179](https://github.com/Mithril-mine/libmdbx-devel/issues/179)).
     - Fixed silently ignored auxiliary page-write errors that could mask a failing disk; on Windows they clashed with the txn file lock, so page pre-warming never worked ([#203](https://github.com/Mithril-mine/libmdbx-devel/issues/203)).
     - Fixed undefined behavior in the JSON-integer key encoding: a negative shift when encoding magnitudes above 2^52 and the negation of `INT64_MIN` were UB caught by UBSAN, and a null-but-empty key could be passed to `memcpy` while inserting a node.
     - Fixed a rare durability bug: a failed disk write could be silently reported as success, and a large write-mapped durable commit on Windows could crash ([#47](https://github.com/Mithril-mine/libmdbx-devel/issues/47)).
