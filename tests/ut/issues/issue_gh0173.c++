@@ -144,6 +144,10 @@ bool open_env(MDBX_env **out_env, MDBX_dbi *out_dbi, const char *path = kTestPat
   mdbx_env_set_maxdbs(env, 4);
   /* lower 256KiB, upper 64MiB, grow/shrink step 64KiB, shrink threshold 64KiB */
   mdbx_env_set_geometry(env, 256 << 10, -1, 64 << 20, 64 << 10, 64 << 10, -1);
+  /* issue #170: disable the shrink-attempt throttling, this test relies on the
+   * deferred shrink being applied by the very next commit after the reader is
+   * gone (see issue_gh0170 for the throttling behavior itself). */
+  mdbx_env_set_option(env, MDBX_opt_shrink_retry_period, 0);
   if (mdbx_env_open(env, path, MDBX_NOSUBDIR, 0644) != MDBX_SUCCESS) {
     mdbx_env_close(env);
     return false;
