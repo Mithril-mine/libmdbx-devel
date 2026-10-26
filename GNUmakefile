@@ -483,9 +483,9 @@ define uname2titer
 endef
 
 DIST_EXTRA := AGENTS.md LICENSE NOTICE COPYRIGHT README.md TODO.md CMakeLists.txt GNUmakefile Makefile ChangeLog.md VERSION.json config.h.in ntdll.def \
- 	$(addprefix man1/, $(MANPAGES)) cmake/compiler.cmake cmake/profile.cmake cmake/utils.cmake cmake/mdbx-config.cmake.in windows-safeseh-masm.asm windows-safeseh-yasm.asm \
-	windows-safeseh.obj valgrind.supp conanfile.py \
-	$(sort $(shell git ls-files examples docs/ru docs/en))
+ 	$(addprefix man1/, $(MANPAGES)) cmake/compiler.cmake cmake/profile.cmake cmake/utils.cmake cmake/pch.cmake cmake/mdbx-config.cmake.in windows-safeseh-masm.asm windows-safeseh-yasm.asm \
+ 	windows-safeseh.obj valgrind.supp conanfile.py \
+ 	$(sort $(shell git ls-files examples docs/ru docs/en))
 
 DIST_SRC   := mdbx.h mdbx.h++ mdbx.c mdbx.c++ $(addsuffix .c, $(MDBX_TOOLS)) mdbx-internals.h mdbx-wingetopt.h
 
