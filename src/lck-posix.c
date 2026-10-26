@@ -1072,4 +1072,12 @@ void lck_txn_unlock(MDBX_env *env) {
   jitter4testing(true);
 }
 
+/* Shrinking the datafile never needs un-mapping on POSIX (ftruncate works with
+ * the mapping in place), so an attempt is never deferred for exclusivity or
+ * throttling reasons — see the Windows implementation for issue #170. */
+bool dxb_shrink_attempt_allowed(MDBX_env *env) {
+  (void)env;
+  return true;
+}
+
 #endif /* !Windows LCK-implementation */

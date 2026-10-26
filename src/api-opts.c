@@ -76,6 +76,10 @@ static uint16_t default_subpage_reserve_limit(const MDBX_env *env) {
   return 2753 /* 4.2% */;
 }
 
+/* Default minimal period between datafile-shrink attempts: 5 seconds, in
+ * 1/65536-of-second units (issue #170). */
+static uint32_t default_shrink_retry_period_16dot16(void) { return /* 5 seconds */ 5 << 16; }
+
 static uint16_t default_merge_threshold_dot16(const MDBX_env *env) {
   (void)env;
   return 65536 / 3 /* 33% */;
@@ -132,6 +136,7 @@ void env_options_init(MDBX_env *env) {
   env->options.spill_parent4child_denominator = default_spill_parent4child_denominator(env);
   env->options.dp_loose_limit = default_dp_loose_limit(env);
   env->options.merge_threshold_dot16 = default_merge_threshold_dot16(env);
+  env->options.shrink_retry_period = osal_16dot16_to_monotime(default_shrink_retry_period_16dot16());
   if (default_prefer_waf_insteadof_balance(env))
     env->options.prefer_waf_insteadof_balance = true;
 
@@ -496,6 +501,17 @@ __cold int mdbx_env_set_option(MDBX_env *env, const MDBX_option_t option, uint64
       env->lck->presync_threshold.weak = (uint32_t)max_unsigned(bytes_ceil2os_pgno(env, (size_t)value), 1);
     break;
 
+  case MDBX_opt_shrink_retry_period:
+    if (value == /* default */ UINT64_MAX)
+      value = default_shrink_retry_period_16dot16();
+    if (unlikely(value > UINT32_MAX))
+      return LOG_IFERR(MDBX_EINVAL);
+    if (unlikely(env->flags & MDBX_RDONLY))
+      return LOG_IFERR(MDBX_EACCESS);
+    /* stored in monotonic units; zero disables the throttling */
+    env->options.shrink_retry_period = osal_16dot16_to_monotime((uint32_t)value);
+    break;
+
   default:
     return LOG_IFERR(MDBX_EINVAL);
   }
@@ -608,6 +624,10 @@ __cold int mdbx_env_get_option(const MDBX_env *env, const MDBX_option_t option, 
 
   case MDBX_opt_presync_threshold:
     *pvalue = env->lck ? pgno2bytes(env, env->lck->presync_threshold.weak) : 0;
+    break;
+
+  case MDBX_opt_shrink_retry_period:
+    *pvalue = osal_monotime_to_16dot16(env->options.shrink_retry_period);
     break;
 
   default:
