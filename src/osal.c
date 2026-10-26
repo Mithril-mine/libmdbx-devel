@@ -1315,6 +1315,15 @@ int osal_openfile(const enum osal_openfile_purpose purpose, const MDBX_env *env,
     break;
   case MDBX_OPEN_DXB_LAZY:
     DesiredAccess |= GENERIC_READ | GENERIC_WRITE;
+    /* With the exclusive fast i/o path (issue #179) the data file is opened
+     * shareable even in MDBX_EXCLUSIVE, so that the overlapped write-through
+     * and dsync handles below can be created from this same process; the
+     * exclusivity is then enforced by the constant byte-range locks taken in
+     * windows_seize_exclusive(). Only the real data-file opens are relaxed: the
+     * lock file above stays unshareable in exclusive mode for a fast rejection
+     * of other openers, and DELETE/COPY below keep the original semantics. */
+    if (env_exclusive_fastpath(env))
+      ShareMode = FILE_SHARE_READ | FILE_SHARE_WRITE;
     break;
   case MDBX_OPEN_DXB_OVERLAPPED_DIRECT:
     FlagsAndAttributes |= FILE_FLAG_NO_BUFFERING;
@@ -1326,6 +1335,8 @@ int osal_openfile(const enum osal_openfile_purpose purpose, const MDBX_env *env,
     CreationDisposition = OPEN_EXISTING;
     DesiredAccess |= GENERIC_WRITE | GENERIC_READ;
     FlagsAndAttributes |= FILE_FLAG_WRITE_THROUGH;
+    if (env_exclusive_fastpath(env))
+      ShareMode = FILE_SHARE_READ | FILE_SHARE_WRITE; /* see MDBX_OPEN_DXB_LAZY */
     break;
   case MDBX_OPEN_DELETE:
     CreationDisposition = OPEN_EXISTING;
@@ -1350,6 +1361,12 @@ int osal_openfile(const enum osal_openfile_purpose purpose, const MDBX_env *env,
       if (GetFileAttributesW(pathname) == INVALID_FILE_ATTRIBUTES && GetLastError() == ERROR_FILE_NOT_FOUND)
         err = ERROR_FILE_NOT_FOUND;
     }
+    /* In exclusive mode a sharing/lock violation means exactly what
+     * mdbx_env_open() documents: the environment is in use by another process
+     * (or another exclusive opener of this process). Report MDBX_BUSY instead
+     * of the raw winerror. (issue #179) */
+    if ((env->flags & MDBX_EXCLUSIVE) && (err == ERROR_SHARING_VIOLATION || err == ERROR_LOCK_VIOLATION))
+      err = MDBX_BUSY;
     return err;
   }
 
