@@ -1264,12 +1264,21 @@ int dxb_sync_locked(MDBX_env *env, unsigned flags, meta_t *const pending, troika
      * MDBX_NOMETASYNC/ENV_UNSYNC again nor pays another full durable sync. */
     const bool shrink_maybe = dxb_shrink_maybe(pending, filesize_pgno);
 
+    /* Issue #170: on Windows a shrink-through-un-map is expensive and doomed
+     * while readers exist (in-process ones hold the remap-lock shared, other
+     * processes keep the file mapped). Skip such an attempt entirely when it
+     * is not allowed right now — the throttle/exclusivity check is cheap and
+     * platform-specific: on POSIX it is a no-op that always allows. Deferring
+     * here leaves the meta untouched, and since the shrink predicate above
+     * reads the real file size, a later commit re-attempts it naturally. */
+    const bool shrink_now = shrink_maybe && dxb_shrink_attempt_allowed(env);
+
     /* Both the shrink (Phase B) and the madvise discard need the largest live
      * snapshot; compute it at most once and share it between the two (issue
      * #154). In the common case neither is needed and the O(readers) scan is
      * skipped entirely. */
     pgno_t largest_pgno = 0;
-    if (shrink_maybe || need_discard_scan) {
+    if (shrink_now || need_discard_scan) {
       largest_pgno =
           mvcc_snapshot_largest(env, (head.ptr_c->geometry.first_unallocated > pending->geometry.first_unallocated)
                                          ? head.ptr_c->geometry.first_unallocated
@@ -1277,7 +1286,7 @@ int dxb_sync_locked(MDBX_env *env, unsigned flags, meta_t *const pending, troika
       eASSERT0(env, largest_pgno >= NUM_METAS);
     }
 
-    if (shrink_maybe) {
+    if (shrink_now) {
       const pgno_t bottom = dxb_shrink_bottom(env, pending, largest_pgno, filesize_pgno);
       if (bottom) {
         if (TROIKA_HAVE_STEADY(troika) && meta_prefer_steady(env, troika).ptr_c->geometry.first_unallocated > bottom)
