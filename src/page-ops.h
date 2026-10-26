@@ -114,8 +114,8 @@ MDBX_INTERNAL page_t *page_shadow_alloc(MDBX_txn *txn, size_t num);
 
 MDBX_INTERNAL void page_shadow_release(MDBX_env *env, page_t *dp, size_t npages);
 
-MDBX_INTERNAL int page_retire_ex(MDBX_cursor *mc, const pgno_t pgno, page_t *mp /* maybe null */,
-                                 unsigned pageflags /* maybe unknown/zero */);
+MDBX_INTERNAL int __must_check_result page_retire_ex(MDBX_cursor *mc, const pgno_t pgno, page_t *mp /* maybe null */,
+                                                     unsigned pageflags /* maybe unknown/zero */);
 
 static inline int page_retire(MDBX_cursor *mc, page_t *mp) { return page_retire_ex(mc, mp->pgno, mp, mp->flags); }
 
