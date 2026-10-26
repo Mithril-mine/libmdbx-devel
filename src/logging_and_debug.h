@@ -257,13 +257,13 @@ MDBX_INTERNAL const char *pagetype_caption(const uint8_t type, char buf4unknown[
 
 MDBX_INTERNAL void log_error(const int err, const char *func, unsigned line);
 
-MDBX_MAYBE_UNUSED static inline int log_if_error(const int err, const char *func, unsigned line) {
+MDBX_MAYBE_UNUSED static inline int handle_rc(const int err, const char *func, unsigned line) {
   if (unlikely(err != MDBX_SUCCESS))
     log_error(err, func, line);
   return err;
 }
 
-#define LOG_IFERR(err) log_if_error((err), __func__, __LINE__)
+#define LOG_IFERR(err) handle_rc((err), __func__, __LINE__)
 
 #endif /* !__cplusplus */
 

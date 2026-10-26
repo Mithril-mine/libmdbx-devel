@@ -66,11 +66,14 @@ __cold void debug_log(int level, const char *function, int line, const char *fmt
 
 __cold void log_error(const int err, const char *func, unsigned line) {
   ASSERT(err != MDBX_SUCCESS);
-  if (unlikely(globals.loglevel >= MDBX_LOG_DEBUG)) {
+  if (unlikely(globals.runtime_flags & MDBX_DBG_ERR)) {
     const bool is_error = err != MDBX_RESULT_TRUE && err != MDBX_NOTFOUND;
-    char buf[256];
-    debug_log(is_error ? MDBX_LOG_ERROR : MDBX_LOG_VERBOSE, func, line, "%s %d (%s)\n",
-              is_error ? "error" : "condition", err, mdbx_strerror_r(err, buf, sizeof(buf)));
+    const MDBX_log_level_t level = is_error ? MDBX_LOG_ERROR : MDBX_LOG_VERBOSE;
+    if (globals.loglevel > level) {
+      char buf[256];
+      debug_log(level, func, line, "%s %d (%s)\n", is_error ? "error" : "condition", err,
+                mdbx_strerror_r(err, buf, sizeof(buf)));
+    }
   }
 }
 
@@ -139,7 +142,7 @@ __cold static int setup_debug(MDBX_log_level_t level, MDBX_debug_flags_t flags, 
   }
 
   if (flags != MDBX_DBG_DONTCHANGE) {
-    flags &= MDBX_DBG_DUMP | MDBX_DBG_LEGACY_MULTIOPEN | MDBX_DBG_LEGACY_OVERLAP | MDBX_DBG_DONT_UPGRADE
+    flags &= MDBX_DBG_DUMP | MDBX_DBG_LEGACY_MULTIOPEN | MDBX_DBG_LEGACY_OVERLAP | MDBX_DBG_DONT_UPGRADE | MDBX_DBG_ERR
 #if MDBX_DEBUG > 0
              | MDBX_DBG_JITTER
 #endif
