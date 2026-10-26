@@ -59,11 +59,11 @@ function(add_simple_test name)
     # in src/rkl.c and src/txl.c) and therefore need C11 atomics on MSVC for
     # non-x86 targets. Use the plain flag, not a COMPILE_LANGUAGE generator
     # expression: the latter was observed to silently no-op for these subdirectory
-    # targets under the Visual Studio generator (see TASK-17).
+    # targets under the Visual Studio generator.
     # C_STANDARD is required too: without /std:c11+ cl.exe keeps __STDC_VERSION__
     # at 199901L, so atomics-types.h does not define MDBX_HAVE_C11ATOMICS and
     # atomics-ops.h:46 aborts with C1189 on non-x86 targets even when
-    # /experimental:c11atomics is passed (TASK-17 incomplete for msvc ARM64).
+    # /experimental:c11atomics is passed.
     set_target_properties(${target} PROPERTIES C_STANDARD ${MDBX_C_STANDARD} C_STANDARD_REQUIRED ON)
     target_compile_options(${target} PRIVATE /experimental:c11atomics)
   endif()
@@ -173,11 +173,18 @@ if(CMAKE_CROSSCOMPILING AND NOT CMAKE_CROSSCOMPILING_EMULATOR)
                                                               "No emulator to run cross-compiled tests")
 else()
 
-  string(
-    RANDOM
-    LENGTH 9
-    ALPHABET "1234567890" test_seed)
-  message(STATUS "The ${test_seed} will be used for seeding tests. Re-run cmake to re-seed it.")
+  # mdbx_test is STOCHASTIC: a pseudorandom sequence is generated based on the --prng-seed parameter,
+  # so fixed seed values SHOULD NEVER BE USED to increase coverage. To ensure the reproducibility of tests,
+  # we generate seed values during CMake configuration and output them to the log. This allows us to reproduce
+  # the tests if necessary (with the caveat that multi‑process scenarios are not reproducible due to the lack
+  # of determinism in process switching by the OS kernel, which is influenced by external factors and hardware).
+  if (NOT DEFINED MDBX_TESTS_SEED)
+    string(
+      RANDOM
+      LENGTH 9
+      ALPHABET "1234567890" MDBX_TESTS_SEED)
+  endif()
+  message(STATUS "The ${MDBX_TESTS_SEED} will be used for seeding tests. Re-run cmake to re-seed it.")
 
   if(WIN32 OR APPLE)
     set(MDBX_TEST_ITER 2)
@@ -188,7 +195,7 @@ else()
   endif()
 
   # ------------------------------------------------------------------
-  # Tiered depth control (TASK-42).
+  # Tiered depth control.
   #
   # The GNUmakefile->CMake relocation merged make targets of different depth
   # (smoke / smoke-fault / smoke-singleprocess / long stochastic) into ONE
@@ -211,7 +218,7 @@ else()
          OFF)
 
   if(MDBX_ENABLE_LONG_TESTS)
-  add_test(NAME smoke_long COMMAND $<TARGET_FILE:mdbx_test> --duration=5m --loglevel=notice --prng-seed=${test_seed}
+  add_test(NAME smoke_long COMMAND $<TARGET_FILE:mdbx_test> --duration=5m --loglevel=notice --prng-seed=${MDBX_TESTS_SEED}
                                    --progress --console=no --pathname=smoke-long.db --dont-cleanup-after basic)
   set_tests_properties(smoke_long PROPERTIES LABELS "smoke-long;smoke-t3" TIMEOUT 1800 RUN_SERIAL OFF)
   if(MDBX_BUILD_TOOLS)
@@ -249,7 +256,7 @@ else()
   add_test(
     NAME dupsort_writemap
     COMMAND
-      $<TARGET_FILE:mdbx_test> --duration=5m --loglevel=notice --prng-seed=${test_seed} --mode=+writemap
+      $<TARGET_FILE:mdbx_test> --duration=5m --loglevel=notice --prng-seed=${MDBX_TESTS_SEED} --mode=+writemap
       --table=+data.fixed --keygen.split=29 --datalen=rnd --progress --console=no --repeat=2
       --pathname=dupsort_writemap.db --dont-cleanup-after basic)
   set_tests_properties(dupsort_writemap PROPERTIES LABELS "smoke-long;smoke-t3" TIMEOUT 1800 RUN_SERIAL OFF)
@@ -351,7 +358,7 @@ else()
     TIMEOUT 240
     RUN_SERIAL OFF
     WILL_FAIL TRUE)
-  # TASK-43 (done): the --timeout deadline is enforced by the OVERLORD main
+  # The --timeout deadline is enforced by the OVERLORD main
   # thread (tests/framework/main.c++), with no worker threads, from the very
   # start including the setup/barrier phase. The writefault hits at op 42 and
   # normal runs fail in seconds, so the 180s internal bound is generous; the
@@ -367,8 +374,6 @@ else()
 
   if(MDBX_ENABLE_SINGLEPROCESS_TESTS)
   # Single-process scenario chain: only for cross-qemu/cross-toolchain runs
-  # (TASK-42); the fast deterministic twins smoke_t1_* cover this scenario in
-  # the default corpus.
   add_test(NAME smoke_sp_hill COMMAND $<TARGET_FILE:mdbx_test> --duration 100 --table=+data.integer --keygen.split=29
                                   --datalen.min=min --datalen.max=max --progress --console=no --repeat=42
                                   --pathname=singleprocess.db --dont-cleanup-after ${MDBX_SMOKE_EXTRA} --hill)
@@ -412,10 +417,9 @@ else()
   endif() # MDBX_ENABLE_SINGLEPROCESS_TESTS
 
   # ------------------------------------------------------------------
-  # Tiered smoke profiles (TASK-22, BACKLOG B21-B33).
+  # Tiered smoke profiles.
   #
-  # mdbx_test is STOCHASTIC: the pseudo-random sequence derives from
-  # --prng-seed, so a FIXED seed reproduces the same per-actor operation
+  # It should be the same per-actor operation
   # sequence (single-process actors fully deterministic, multi-process
   # interleaving is not). Tiered runs are addressable via CTest labels:
   #
@@ -426,39 +430,39 @@ else()
   # GNUmakefile convenience targets: make smoke-t1 / smoke-t2 / smoke-t3.
   #
   # T1 must complete in seconds and never run long iterations: bound with
-  # --nops (bounded work) instead of --timeout, keep --repeat=1 and use the
+  # --nops (bounded work) and --duration instead of --timeout, keep --repeat=1 and use the
   # fast +nosync-safe mode when durability is not the point.
-  set(MDBX_T1_SEED_HILL 20260921)
-  set(MDBX_T1_SEED_NESTED 20260922)
-  set(MDBX_T1_SEED_COPY 20260923)
+  math(EXPR MDBX_T1_SEED_HILL "${MDBX_TESTS_SEED} + 1")
+  math(EXPR MDBX_T1_SEED_NESTED "${MDBX_TESTS_SEED} + 2")
+  math(EXPR MDBX_T1_SEED_COPY "${MDBX_TESTS_SEED} + 3")
 
   # NOTE: mdbx_test copies actor params when it parses the scenario selector
   # (--hill/--nested/--copy/...), so ALL tuning options must precede the
   # selector, mirroring the existing smoke_sp_* registrations above.
   add_test(NAME smoke_t1_hill
-           COMMAND $<TARGET_FILE:mdbx_test> --nops=1K --prng-seed=${MDBX_T1_SEED_HILL}
+           COMMAND $<TARGET_FILE:mdbx_test> --nops=1K --duration 60 --prng-seed=${MDBX_T1_SEED_HILL}
                    --mode=+nosync-safe --progress --console=no --repeat=1 --pathname=t1-hill.db
                    --cleanup-before --dont-cleanup-after ${MDBX_SMOKE_EXTRA} --hill)
-  set_tests_properties(smoke_t1_hill PROPERTIES LABELS "smoke;smoke-t1" TIMEOUT 60 RUN_SERIAL OFF)
+  set_tests_properties(smoke_t1_hill PROPERTIES LABELS "smoke;smoke-t1" TIMEOUT 100 RUN_SERIAL OFF)
 
   add_test(NAME smoke_t1_nested
-           COMMAND $<TARGET_FILE:mdbx_test> --nops=1K --prng-seed=${MDBX_T1_SEED_NESTED}
+           COMMAND $<TARGET_FILE:mdbx_test> --nops=1K --duration 60 --prng-seed=${MDBX_T1_SEED_NESTED}
                    --mode=-writemap,-nosync-safe,-lifo --progress --console=no --repeat=1
                    --pathname=t1-nested.db --cleanup-before --dont-cleanup-after ${MDBX_SMOKE_EXTRA} --nested)
-  set_tests_properties(smoke_t1_nested PROPERTIES LABELS "smoke;smoke-t1" TIMEOUT 60 RUN_SERIAL OFF)
+  set_tests_properties(smoke_t1_nested PROPERTIES LABELS "smoke;smoke-t1" TIMEOUT 100 RUN_SERIAL OFF)
 
   add_test(NAME smoke_t1_copy
-           COMMAND $<TARGET_FILE:mdbx_test> --nops=256 --prng-seed=${MDBX_T1_SEED_COPY}
+           COMMAND $<TARGET_FILE:mdbx_test> --nops=256 --duration 60 --prng-seed=${MDBX_T1_SEED_COPY}
                    --mode=+nosync-safe --progress --console=no --repeat=1 --pathname=t1-copy.db
                    --cleanup-before --dont-cleanup-after ${MDBX_SMOKE_EXTRA} --copy)
-  set_tests_properties(smoke_t1_copy PROPERTIES LABELS "smoke;smoke-t1" TIMEOUT 60 RUN_SERIAL OFF)
+  set_tests_properties(smoke_t1_copy PROPERTIES LABELS "smoke;smoke-t1" TIMEOUT 100 RUN_SERIAL OFF)
 
   if(UNIX AND MDBX_ENABLE_LONG_TESTS)
     add_test(NAME stochastic COMMAND ${CMAKE_CURRENT_SOURCE_DIR}/stochastic.sh --whole-duration 600 --probe-duration 60
                                     --dont-check-ram-size --loops 2 --db-upto-mb 256 --skip-make --taillog)
     set_tests_properties(stochastic PROPERTIES
       LABELS "stochastic;smoke-t3"
-      TIMEOUT 10800
+      TIMEOUT 900
       RUN_SERIAL ON
       WORKING_DIRECTORY ${MDBX_OUTPUT_DIR}
       RESOURCE_LOCK stochastic)
@@ -468,16 +472,16 @@ else()
                                      --skip-make --taillog)
     set_tests_properties(stochastic_single PROPERTIES
       LABELS "stochastic-single;smoke-t3"
-      TIMEOUT 10800
+      TIMEOUT 900
       RUN_SERIAL ON
       WORKING_DIRECTORY ${MDBX_OUTPUT_DIR}
       RESOURCE_LOCK stochastic)
 
-    add_test(NAME stochastic_long COMMAND ${CMAKE_CURRENT_SOURCE_DIR}/stochastic.sh --loops 42 --db-upto-mb 1024
+    add_test(NAME stochastic_long COMMAND ${CMAKE_CURRENT_SOURCE_DIR}/stochastic.sh --duration 28800 --loops 42 --db-upto-mb 1024
                                     --extra --skip-make --taillog)
     set_tests_properties(stochastic_long PROPERTIES
       LABELS "stochastic-long;smoke-t3"
-      TIMEOUT 0
+      TIMEOUT 33333
       RUN_SERIAL ON
       WORKING_DIRECTORY ${MDBX_OUTPUT_DIR}
       RESOURCE_LOCK stochastic)
@@ -506,7 +510,7 @@ else()
     #   |- ut.cursor        - cursors (positioning, iteration, closing)
     #   |- ut.gc            - garbage collection / reclaim
     #   |- ut.issues        - regression tests for reported issues
-    #   |- ut.tools         - src/tools CLI utilities (golden characterization, TASK-45)
+    #   |- ut.tools         - src/tools CLI utilities (golden characterization)
     #   Attribute labels (orthogonal): ut.heavy for slow/stress tests.
     if(UNIX)
       add_ut(upsert_alldups SOURCE ut/api/upsert_alldups.c++)
@@ -697,11 +701,7 @@ add_ut(reverse_insertions SOURCE ut/txn/reverse_insertions.c++)
     endif()
   endif()
 
-  # Golden characterization tests for the src/tools CLI utilities (TASK-45,
-  # Phase B of epic B46). Each case = (fixture setup + args) -> {stdout, stderr,
-  # exit-code} recorded as the CURRENT contract (skynet/tools-rewrite/spec-*.md,
-  # Phase A, kept in poc1-failed): the tools are NOT fixed here, only the
-  # behavior is locked down for the C++ rewrite validation (Phase D).
+  # Golden characterization tests for the src/tools CLI utilities
   # Deterministic: fixtures come from the checked-in base.dump stream + fixed
   # geometry, no stochastic runs. Runner: tests/ut/tools/golden-runner.sh;
   # goldens are committed next to it.
