@@ -49,6 +49,7 @@ DURATION_WHOLE=
 SMALL=no
 NUMABIND=
 SCRIPT_DIR=$(dirname "$0")
+PREPARE_ONLY=no
 
 shopt -s extglob
 while [ -n "$1" ]
@@ -80,6 +81,7 @@ do
     echo "--numa NODE            Bind to the specified NUMA node"
     echo "--dont-check-ram-size  Don't check available RAM"
     echo "--extra                Iterate extra modes/flags"
+    echo "--prepare-only         Prepare environment only"
     echo "--taillog              Dump tail of test log on failure"
     echo "--delay NN             Delay NN seconds before run test"
     echo "--report-depth         Report tree depth (tee+grep log)"
@@ -307,6 +309,9 @@ do
   ;;
   --dlc)
     DISABLE_LOG_COMPRESSION=yes
+  ;;
+  --prepare-only)
+    PREPARE_ONLY=yes
   ;;
   *)
     echo "Unknown option '$1'"
@@ -563,6 +568,11 @@ if [ -z "${TEE4PIPE:-}" ]; then
 fi
 export ASAN_OPTIONS="log_path=${TESTDB_DIR}/asan.log:poison_history_size=42"
 export UBSAN_OPTIONS="log_path=${TESTDB_DIR}/ubsan.log:print_stacktrace=1"
+
+if [[ ${PREPARE_ONLY} == yes ]]; then
+  echo "PREPARATION DONE"
+  exit 0
+fi
 
 function failed {
   set +euo pipefail
