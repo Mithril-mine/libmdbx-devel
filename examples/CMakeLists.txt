@@ -100,6 +100,9 @@ function(mdbx_textbook_add_cxx target source)
   set_target_properties(${target} PROPERTIES CXX_STANDARD ${MDBX_CXX_STANDARD}
                                                         CXX_STANDARD_REQUIRED ON)
   target_link_libraries(${target} ${MDBX_LIBRARY})
+  # Reuse the shared examples PCH; a no-op when MDBX_ENABLE_PCH=OFF or the
+  # CMake/compiler does not support PCH reuse.
+  mdbx_examples_pch_apply(${target})
   if(DEFINED INTERPROCEDURAL_OPTIMIZATION)
     set_target_properties(${target} PROPERTIES INTERPROCEDURAL_OPTIMIZATION
                                                  $<BOOL:${INTERPROCEDURAL_OPTIMIZATION}>)
@@ -173,6 +176,22 @@ set(MDBX_TEXTBOOK_EXAMPLES_C
     38-migration.c)
 
 if(MDBX_TEXTBOOK_CXX_AVAILABLE)
+  # Shared precompiled header for the C++ textbook examples (see cmake/pch.cmake
+  # for the mechanics). The ~55 C++ example binaries each include
+  # examples/common/common.h++ (which pulls <mdbx.h++> and the std headers), so
+  # precompiling them once and reusing via REUSE_FROM saves a noticeable parse
+  # per binary on a clean build. The anchor mirrors the consumers' flags:
+  # C++ standard (17+, common.h++ requires it), the common/ include dir, -fPIE
+  # and the libmdbx include dirs (via a PRIVATE link). It is created only when
+  # the textbook examples are enabled: on C++11/14 or in dist builds there is
+  # nothing to precompile.
+  set(MDBX_EXAMPLES_PCH_ANCHOR_SOURCE "${CMAKE_CURRENT_SOURCE_DIR}/common/pch_anchor.cxx")
+  set(MDBX_EXAMPLES_PCH_HEADER "${CMAKE_CURRENT_SOURCE_DIR}/common/pch.h++")
+  mdbx_add_pch_anchor(mdbx_examples_pch "${MDBX_EXAMPLES_PCH_HEADER}" "${MDBX_EXAMPLES_PCH_ANCHOR_SOURCE}"
+                      CXX_STANDARD ${MDBX_CXX_STANDARD}
+                      INCLUDE "${CMAKE_CURRENT_SOURCE_DIR}/common"
+                      LINK_PRIVATE ${MDBX_LIBRARY})
+
   foreach(source IN LISTS MDBX_TEXTBOOK_EXAMPLES_CXX)
     get_filename_component(name "${source}" NAME_WE)
     mdbx_textbook_add_cxx("mdbx_ex_${name}" "c++/${source}")
