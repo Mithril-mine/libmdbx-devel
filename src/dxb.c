@@ -70,6 +70,13 @@ __cold int dxb_read_header(MDBX_env *env, meta_t *dest, const int lck_exclusive,
           WARNING("read meta[%u,%u]: %i, %s", offset, MDBX_MIN_PAGESIZE, err, mdbx_strerror(err));
           continue;
         }
+        /* A persistent lock violation while opening exclusively means the data
+         * file is held by another exclusive env — possibly one reached through
+         * a different hard-link, hence with its own lock file, so lck_setup()
+         * could not detect the contention. Report the documented MDBX_BUSY
+         * rather than the raw winerror. (issue #179) */
+        if (err == ERROR_LOCK_VIOLATION && env_exclusive_fastpath(env))
+          return MDBX_BUSY;
       }
 #endif /* Windows */
       if (err != MDBX_SUCCESS) {
@@ -87,6 +94,8 @@ __cold int dxb_read_header(MDBX_env *env, meta_t *dest, const int lck_exclusive,
           WARNING("read meta[%u,%u]: %i, %s", offset, MDBX_MIN_PAGESIZE, err, mdbx_strerror(err));
           continue;
         }
+        if (err == ERROR_LOCK_VIOLATION && env_exclusive_fastpath(env))
+          return MDBX_BUSY; /* see the note above */
       }
 #endif /* Windows */
       if (err != MDBX_SUCCESS) {
@@ -749,6 +758,29 @@ __cold int dxb_setup(MDBX_env *env, const int lck_rc, const mdbx_mode_t mode_bit
     if (unlikely(err != MDBX_SUCCESS))
       return LOG_IFERR(err);
   }
+
+  /* With the exclusive fast i/o path the data file is shareable, so exclusivity
+   * must be established by the constant meta/body byte-range locks before this
+   * function mutates an *existing* database: the geometry application below and
+   * the resize/mmap (osal_fsetsize + osal_mmap SETLENGTH) at the end. env->ps is
+   * known only after the non-mutating header read (and env_setup_pagesize just
+   * above), which is why the locks are taken here rather than earlier.
+   *
+   * The new-database branch above does write the meta triplet and set the file
+   * size before this point, but that path is only reached for an empty file
+   * (dxb_read_header returned ENODATA), which cannot have a concurrent
+   * without-lck reader holding a shared data-file lock, and a competing creator
+   * is already rejected at the lock-file level (lck_seize + the MDBX_EXCLUSIVE
+   * check in lck_setup). So no mutation of a database visible to another env
+   * can happen before the locks are taken.
+   *
+   * A conflicting lock (another exclusive env — including one reached through a
+   * different hard-link with its own lock file — or a without-lck reader) makes
+   * this fail with MDBX_BUSY before the existing database is resized/remapped.
+   * No-op unless env_exclusive_fastpath(). (issue #179) */
+  err = windows_seize_exclusive(env);
+  if (unlikely(MDBX_IS_ERROR(err)))
+    return LOG_IFERR(err);
 
   size_t expected_filesize = 0;
   const size_t allocated_bytes = pgno2bytes(env, header.geometry.first_unallocated);
