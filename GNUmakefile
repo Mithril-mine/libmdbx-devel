@@ -234,6 +234,7 @@ help:
 	@echo ""
 	@echo "  make dist                - build amalgamated source code"
 	@echo "  make docsite             - build the unified documentation site (build/docsite/{en,ru}, incl. textbook PDFs)"
+	@echo "  make test-doxygen        - strict audit of the doxygen comments completeness in the public headers"
 	@echo "  make books               - build the textbook (HTML + PDF, build/textbook/{ru,en})"
 	@echo "  make check-links-live  - verify the libmdbx.dqdkfa.ru links over the network"
 	@echo "  make release-assets      - build release assets"
@@ -530,7 +531,7 @@ MDBX_SMOKE_EXTRA ?=
 
 check: DESTDIR = $(shell pwd)/@check-install
 check: CMAKE_OPT += -Werror=dev
-check: clean | smoke-assertion ninja-assertions dist install test ctest
+check: clean | smoke-assertion ninja-assertions dist install test ctest test-doxygen
 smoke-assertion: MDBX_CHECKING=2
 smoke-assertion: smoke
 long-test-assertion: MDBX_CHECKING=2
@@ -841,6 +842,39 @@ build/tmp/.stamp: $(DOCSITE_SRCS) build/tmp/docsite-inputs/Doxyfile build/tmp/do
 
 .PHONY: docsite
 docsite: build/tmp/.stamp
+
+# Strict doxygen-comment audit: verifies the completeness and correctness of
+# the doxygen comments in the public headers (the same prepared inputs the
+# docsite consumes). Unlike `make docsite` — where the mkdoxy plugin runs
+# doxygen with QUIET and discards its output — this target runs doxygen
+# directly in the strict mode (EXTRACT_ALL=NO, WARN_NO_PARAMDOC=YES,
+# WARN_AS_ERROR=FAIL_ON_WARNINGS, see docs/Doxyfile-check.in) and fails on
+# any warning, so a missing \param/\return or a broken \ref is caught early.
+build/tmp/docsite-inputs/Doxyfile-audit: build/tmp/docsite-inputs/Doxyfile docs/Doxyfile-check.in $(lastword $(MAKEFILE_LIST))
+	@echo '  MAKE $@'
+	$(QUIET)cat build/tmp/docsite-inputs/Doxyfile docs/Doxyfile-check.in >$@
+
+.PHONY: test-doxygen
+test-doxygen: build/tmp/docsite-inputs/Doxyfile-audit build/tmp/docsite-inputs/mdbx.h build/tmp/docsite-inputs/mdbx.h++ build/tmp/docsite-inputs/options.h
+	@command -v doxygen >/dev/null 2>&1 || { \
+		echo '  ERROR: doxygen is not available.'; exit 1; }
+	@# doxygen < 1.18 mis-attaches \param/\returns that follow a \file block and
+	@# would report thousands of false "not documented" findings, so require it
+	@# (the docsite/mkdoxy also expects doxygen>=1.18, see docs/docsite/en/mkdocs.yml).
+	@v=$$(doxygen --version 2>/dev/null | sed -n 's/^\([0-9]*\.[0-9]*\).*/\1/p'); \
+		[ -n "$$v" ] && [ $$(printf '%s\n1.18\n' "$$v" | sort -V | head -1) = "1.18" ] || { \
+		echo "  ERROR: doxygen >= 1.18 is required for 'test-doxygen' (found '$${v:-unknown}')."; \
+		echo '         Older releases mis-attach \\param/\\returns after a \\file block'; \
+		echo '         and report false "not documented" findings.'; exit 1; }
+	@echo '  TEST-DOXYGEN: strict audit of the public-header doxygen comments...'
+	$(QUIET)rm -rf build/tmp/docsite-check && mkdir -p build/tmp/docsite-check
+	$(QUIET)if doxygen build/tmp/docsite-inputs/Doxyfile-audit >build/tmp/docsite-check/audit.log 2>&1; then \
+		echo '  TEST-DOXYGEN: OK, the doxygen comments are complete and correct'; \
+	else \
+		cat build/tmp/docsite-check/audit.log; \
+		echo '  TEST-DOXYGEN: FAILED, see the doxygen warnings/errors above'; \
+		exit 1; \
+	fi
 
 .PHONY: check-links-live
 check-links-live: docsite

@@ -135,24 +135,29 @@
 #error MDBX_DISABLE_VALIDATION must be defined as 0 or 1
 #endif /* MDBX_DISABLE_VALIDATION */
 
+/** Controls pre-allocation of page number lists (PNL) for the radix sort. */
 #ifndef MDBX_PNL_PREALLOC_FOR_RADIXSORT
 #define MDBX_PNL_PREALLOC_FOR_RADIXSORT 1
 #elif !(MDBX_PNL_PREALLOC_FOR_RADIXSORT == 0 || MDBX_PNL_PREALLOC_FOR_RADIXSORT == 1)
 #error MDBX_PNL_PREALLOC_FOR_RADIXSORT must be defined as 0 or 1
 #endif /* MDBX_PNL_PREALLOC_FOR_RADIXSORT */
 
+/** Controls pre-allocation of dirty page lists (DPL) for the radix sort. */
 #ifndef MDBX_DPL_PREALLOC_FOR_RADIXSORT
 #define MDBX_DPL_PREALLOC_FOR_RADIXSORT 1
 #elif !(MDBX_DPL_PREALLOC_FOR_RADIXSORT == 0 || MDBX_DPL_PREALLOC_FOR_RADIXSORT == 1)
 #error MDBX_DPL_PREALLOC_FOR_RADIXSORT must be defined as 0 or 1
 #endif /* MDBX_DPL_PREALLOC_FOR_RADIXSORT */
 
+/** Controls pre-allocation of dirty multi-page lists (DML) for the radix sort. */
 #ifndef MDBX_DML_PREALLOC_FOR_RADIXSORT
 #define MDBX_DML_PREALLOC_FOR_RADIXSORT 1
 #elif !(MDBX_DML_PREALLOC_FOR_RADIXSORT == 0 || MDBX_DML_PREALLOC_FOR_RADIXSORT == 1)
 #error MDBX_DML_PREALLOC_FOR_RADIXSORT must be defined as 0 or 1
 #endif /* MDBX_DML_PREALLOC_FOR_RADIXSORT */
 
+/** Controls the DPL-cache size in pages; the reasonable default depends
+ * on the target architecture. */
 #ifndef MDBX_DPL_CACHE_NPAGES
 #if MDBX_WORDBITS >= 64
 #define MDBX_DPL_CACHE_NPAGES 1
@@ -437,6 +442,8 @@
 #define MDBX_USE_FALLOCATE_CONFIG MDBX_STRINGIFY(MDBX_USE_FALLOCATE)
 #endif /* MDBX_USE_FALLOCATE */
 
+/** Controls using 128-bit accumulators for internal histograms, which is
+ * reasonable on 64-bit architectures. */
 #ifndef MDBX_HISTOGRAM_USING_128BIT
 #if MDBX_WORDBITS >= 64
 #define MDBX_HISTOGRAM_USING_128BIT 1
@@ -449,6 +456,9 @@
 
 //------------------------------------------------------------------------------
 
+/** Indicates that the CPU requires explicit cache flush after write-back
+ * to the memory-mapped region; zero for the architectures with coherent
+ * caches. */
 #ifndef MDBX_CPU_WRITEBACK_INCOHERENT
 #if defined(__ia32__) || defined(__e2k__) || defined(__hppa) || defined(__hppa__) || defined(DOXYGEN)
 #define MDBX_CPU_WRITEBACK_INCOHERENT 0
@@ -459,6 +469,8 @@
 #error MDBX_CPU_WRITEBACK_INCOHERENT must be defined as 0 or 1
 #endif /* MDBX_CPU_WRITEBACK_INCOHERENT */
 
+/** Indicates that writes to the memory-mapped region are not coherent with
+ * the file, i.e. an explicit sync is required; known only on OpenBSD. */
 #ifndef MDBX_MMAP_INCOHERENT_FILE_WRITE
 #ifdef __OpenBSD__
 #define MDBX_MMAP_INCOHERENT_FILE_WRITE 1
@@ -469,6 +481,8 @@
 #error MDBX_MMAP_INCOHERENT_FILE_WRITE must be defined as 0 or 1
 #endif /* MDBX_MMAP_INCOHERENT_FILE_WRITE */
 
+/** Indicates that the CPU data-cache is not coherent with the memory-mapped
+ * region, i.e. an explicit cache management is required; known only on MIPS. */
 #ifndef MDBX_MMAP_INCOHERENT_CPU_CACHE
 #if defined(__mips) || defined(__mips__) || defined(__mips64) || defined(__mips64__) || defined(_M_MRX000) ||          \
     defined(_MIPS_) || defined(__MWERKS__) || defined(__sgi)
@@ -495,6 +509,8 @@
 #error MDBX_MMAP_NEEDS_JOLT must be defined as 0 or 1
 #endif /* MDBX_MMAP_NEEDS_JOLT */
 
+/** Indicates availability of 64-bit atomic operations; the reasonable default
+ * depends on the target architecture. */
 #ifndef MDBX_64BIT_ATOMIC
 #if MDBX_WORDBITS >= 64 || defined(DOXYGEN)
 #define MDBX_64BIT_ATOMIC 1
@@ -508,6 +524,8 @@
 #define MDBX_64BIT_ATOMIC_CONFIG MDBX_STRINGIFY(MDBX_64BIT_ATOMIC)
 #endif /* MDBX_64BIT_ATOMIC */
 
+/** Indicates availability of the 64-bit compare-and-swap operation; the
+ * reasonable default depends on the target toolchain. */
 #ifndef MDBX_64BIT_CAS
 #if defined(__GCC_ATOMIC_LLONG_LOCK_FREE)
 #if __GCC_ATOMIC_LLONG_LOCK_FREE > 1
@@ -539,6 +557,8 @@
 #define MDBX_64BIT_CAS_CONFIG MDBX_STRINGIFY(MDBX_64BIT_CAS)
 #endif /* MDBX_64BIT_CAS */
 
+/** Controls allowing of unaligned access; the value is the maximum size
+ * in bytes of a word that could be accessed unaligned. */
 #ifndef MDBX_UNALIGNED_OK
 #if defined(__ALIGNED__) || defined(__SANITIZE_UNDEFINED__) || defined(ENABLE_UBSAN)
 #define MDBX_UNALIGNED_OK 0 /* no unaligned access allowed */
@@ -564,6 +584,7 @@
 #define MDBX_UNALIGNED_OK 32 /* any unaligned access allowed */
 #endif                       /* MDBX_UNALIGNED_OK */
 
+/** The size of a CPU cache line in bytes, used for padding and aligning. */
 #ifndef MDBX_CACHELINE_SIZE
 #if defined(SYSTEM_CACHE_ALIGNMENT_SIZE)
 #define MDBX_CACHELINE_SIZE SYSTEM_CACHE_ALIGNMENT_SIZE
@@ -574,7 +595,7 @@
 #endif
 #endif /* MDBX_CACHELINE_SIZE */
 
-/* Max length of iov-vector passed to writev() call, used for auxiliary writes */
+/** Max length of iov-vector passed to writev() call, used for auxiliary writes. */
 #ifndef MDBX_AUXILARY_IOV_MAX
 #define MDBX_AUXILARY_IOV_MAX 64
 #endif
@@ -583,7 +604,7 @@
 #define MDBX_AUXILARY_IOV_MAX IOV_MAX
 #endif /* MDBX_AUXILARY_IOV_MAX */
 
-/* An extra/custom information provided during library build */
+/** An extra/custom information provided during library build. */
 #ifndef MDBX_BUILD_METADATA
 #define MDBX_BUILD_METADATA ""
 #endif /* MDBX_BUILD_METADATA */

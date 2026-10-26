@@ -35,6 +35,7 @@ Cutting-edge release with new core features and internal refactoring.
 
 ### Improvements:
 
+ - Added `make test-doxygen` to audit the doxygen comments of the public headers strictly; the C/C++ API documentation is completed to pass it (needs doxygen >= 1.18).
  - Clarification/refining README and doxygen API descriptions.
  - Added the `-h`/`--help` options to all the command-line utilities and deduplicated their common helpers into a shared header-only module.
  - Added the man page for the `mdbx_defrag` utility and updated the other man pages.

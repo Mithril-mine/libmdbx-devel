@@ -1100,7 +1100,10 @@ EXCLUDE_SYMBOLS        = NOMINMAX \
                          MDBX_LOCKING_CONFIG \
                          MDBX_TRUST_RTC_CONFIG \
                          MDBX_TXN_CHECKOWNER_CONFIG \
-                         MDBX_USE_OFDLOCKS_CONFIG
+                         MDBX_USE_OFDLOCKS_CONFIG \
+                         MDBX_USE_MINCORE_CONFIG \
+                         MDBX_USE_FALLOCATE_CONFIG \
+                         MDBX_MMAP_NEEDS_JOLT_CONFIG
 
 # The EXAMPLE_PATH tag can be used to specify one or more files or directories
 # that contain example code fragments that are included (see the \include
@@ -2468,7 +2471,7 @@ PREDEFINED             = DOXYGEN \
                          MDBX_STD_FILESYSTEM_PATH=::mdbx::filesystem::path \
                          MDBX_U128_TYPE=uint128_t \
                          MDBX_I128_TYPE=int128_t \
-                         "MDBX_DECLARE_EXCEPTION(NAME)=struct LIBMDBX_API_TYPE NAME : public exception{NAME(const ::mdbx::error &); virtual ~NAME() noexcept; }" \
+                         "MDBX_DECLARE_EXCEPTION(NAME)=struct LIBMDBX_API_TYPE NAME : public exception{/** \brief Constructs the exception from the given error. \param err The error information. */ NAME(const ::mdbx::error &err); /** \brief Destroys the exception. */ virtual ~NAME() noexcept; }" \
                          MDBX_PURE_FUNCTION=[[gnu::pure]] \
                          "MDBX_NOTHROW_PURE_FUNCTION=[[gnu::pure, gnu::nothrow]]" \
                          MDBX_CONST_FUNCTION=[[gnu::const]] \
@@ -2489,6 +2492,9 @@ PREDEFINED             = DOXYGEN \
                          MDBX_DEPRECATED=[[deprecated]] \
                          MDBX_DEPRECATED_ENUM=[[deprecated]] \
                          "MDBX_DEFINE_ENUM_FLAG_OPERATORS(ENUM)=" \
+                         MDBX_MSVC_DECLSPEC_EMPTY_BASES= \
+                         "MDBX_INSTALL_API_TEMPLATE(API_ATTRIBUTES,...)=" \
+                         "MDBX_EXTERN_API_TEMPLATE(API_ATTRIBUTES,...)=" \
 			 MDBX_CXX_HAS_POLYMORPHIC_ALLOCATOR=1
 
 # If the MACRO_EXPANSION and EXPAND_ONLY_PREDEF tags are set to YES then this
@@ -2890,15 +2896,6 @@ DOT_GRAPH_MAX_NODES    = 50
 # This tag requires that the tag HAVE_DOT is set to YES.
 
 MAX_DOT_GRAPH_DEPTH    = 0
-
-# Set the DOT_MULTI_TARGETS tag to YES to allow dot to generate multiple output
-# files in one run (i.e. multiple -o and -T options on the command line). This
-# makes dot run faster, but since only newer versions of dot (>1.8.10) support
-# this, this feature is disabled by default.
-# The default value is: NO.
-# This tag requires that the tag HAVE_DOT is set to YES.
-
-DOT_MULTI_TARGETS      = NO
 
 # If the GENERATE_LEGEND tag is set to YES Doxygen will generate a legend page
 # explaining the meaning of the various boxes and arrows in the dot generated
