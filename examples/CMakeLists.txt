@@ -78,19 +78,6 @@ if(NOT MDBX_AMALGAMATED_SOURCE)
 
 set(MDBX_TEXTBOOK_COMMON_C common/common.c)
 
-# Shared precompiled header for the C++ textbook examples (see cmake/pch.cmake
-# for the mechanics). The ~55 C++ example binaries each include
-# examples/common/common.h++ (which pulls <mdbx.h++> and the std headers), so
-# precompiling them once and reusing via REUSE_FROM saves a noticeable parse
-# per binary on a clean build. The anchor mirrors the consumers' flags:
-# C++ standard, the common/ include dir and -fPIE.
-set(MDBX_EXAMPLES_PCH_ANCHOR_SOURCE "${CMAKE_CURRENT_SOURCE_DIR}/common/pch_anchor.cxx")
-set(MDBX_EXAMPLES_PCH_HEADER "${CMAKE_CURRENT_SOURCE_DIR}/common/pch.h++")
-mdbx_add_pch_anchor(mdbx_examples_pch "${MDBX_EXAMPLES_PCH_HEADER}" "${MDBX_EXAMPLES_PCH_ANCHOR_SOURCE}"
-                    CXX_STANDARD ${MDBX_CXX_STANDARD}
-                    INCLUDE "${CMAKE_CURRENT_SOURCE_DIR}/common"
-                    LINK_PRIVATE ${MDBX_LIBRARY})
-
 # Adds a C11 textbook example: target, source, links the shared C helpers.
 function(mdbx_textbook_add_c target source)
   add_executable(${target} ${source} ${MDBX_TEXTBOOK_COMMON_C})
@@ -189,6 +176,22 @@ set(MDBX_TEXTBOOK_EXAMPLES_C
     38-migration.c)
 
 if(MDBX_TEXTBOOK_CXX_AVAILABLE)
+  # Shared precompiled header for the C++ textbook examples (see cmake/pch.cmake
+  # for the mechanics). The ~55 C++ example binaries each include
+  # examples/common/common.h++ (which pulls <mdbx.h++> and the std headers), so
+  # precompiling them once and reusing via REUSE_FROM saves a noticeable parse
+  # per binary on a clean build. The anchor mirrors the consumers' flags:
+  # C++ standard (17+, common.h++ requires it), the common/ include dir, -fPIE
+  # and the libmdbx include dirs (via a PRIVATE link). It is created only when
+  # the textbook examples are enabled: on C++11/14 or in dist builds there is
+  # nothing to precompile.
+  set(MDBX_EXAMPLES_PCH_ANCHOR_SOURCE "${CMAKE_CURRENT_SOURCE_DIR}/common/pch_anchor.cxx")
+  set(MDBX_EXAMPLES_PCH_HEADER "${CMAKE_CURRENT_SOURCE_DIR}/common/pch.h++")
+  mdbx_add_pch_anchor(mdbx_examples_pch "${MDBX_EXAMPLES_PCH_HEADER}" "${MDBX_EXAMPLES_PCH_ANCHOR_SOURCE}"
+                      CXX_STANDARD ${MDBX_CXX_STANDARD}
+                      INCLUDE "${CMAKE_CURRENT_SOURCE_DIR}/common"
+                      LINK_PRIVATE ${MDBX_LIBRARY})
+
   foreach(source IN LISTS MDBX_TEXTBOOK_EXAMPLES_CXX)
     get_filename_component(name "${source}" NAME_WE)
     mdbx_textbook_add_cxx("mdbx_ex_${name}" "c++/${source}")
