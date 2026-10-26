@@ -18,7 +18,11 @@ single-cell driver: `tests/ci/run-cell.py` (reports `configure_ms` / `build_ms`
 
 Observations:
 - **PCH pays off on MSVC**: -30 % build time (57s vs 81s). Keep the shared test
-  PCH (`MDBX_TEST_PCH` default ON).
+  PCH (`MDBX_ENABLE_PCH` default ON).
+- **PCH also pays off for the C++ textbook examples** on GCC/Clang: measured
+  -31 % on the ~55 example binaries (57s → 39s clean rebuild, Linux/GCC,
+  Ninja). The examples share one PCH (examples/common/pch.h++) via the common
+  `mdbx_add_pch_anchor()` helper in cmake/pch.cmake.
 - **ccache is useless on the Visual Studio generator**: the compiler launcher
   is not invoked for MSBuild, so `ccache` cache stays empty (`Cache size 0.0/0.3 GB`
   in the cell log) while still paying cache upload/download overhead. ccache is
@@ -36,7 +40,8 @@ Observations:
   `actions/cache` step for the VS-generator cells (`win-msvc-*`, `win-cxx-*`);
   GCC/Clang cells keep ccache.
 - `CCACHE_MAXSIZE` raised 300M -> 1G for the platforms where ccache works.
-- `MDBX_TEST_PCH` left ON by default (measured win).
+- `MDBX_ENABLE_PCH` left ON by default (measured win on both MSVC gtest and
+  GCC examples).
 - The rolling ccache key (per-cell, `github.run_number` + prefix `restore-keys`)
   stays; it makes warm-GCC/Clang rebuilds fast across runs.
 
