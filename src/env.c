@@ -314,7 +314,16 @@ __cold int env_open(MDBX_env *env, mdbx_mode_t mode) {
     return (int)GetLastError();
   eASSERT0(env, env->ioring.overlapped_fd == 0);
   bool ior_direct = false;
-  if (!(env->flags & (MDBX_RDONLY | MDBX_SAFE_NOSYNC | MDBX_NOMETASYNC | MDBX_EXCLUSIVE))) {
+  /* The overlapped write-through handle is required for the normal durable
+   * i/o path. It is skipped for read-only and non-durable modes, as well as
+   * for MDBX_EXCLUSIVE unless the fast i/o path is enabled — with
+   * env_exclusive_fastpath() the data file was opened shareable (see
+   * osal_openfile()), so the handle can be created and exclusivity is
+   * enforced later by windows_seize_exclusive() with constant byte-range locks.
+   * (issue #179) */
+  const bool durable_iopath = !(env->flags & (MDBX_RDONLY | MDBX_SAFE_NOSYNC | MDBX_NOMETASYNC)) &&
+                              ((env->flags & MDBX_EXCLUSIVE) == 0 || env_exclusive_fastpath(env));
+  if (durable_iopath) {
     if (MDBX_AVOID_MSYNC && (env->flags & MDBX_WRITEMAP)) {
       /* Запрошен режим MDBX_SYNC_DURABLE | MDBX_WRITEMAP при активной опции
        * MDBX_AVOID_MSYNC.
@@ -382,11 +391,11 @@ __cold int env_open(MDBX_env *env, mdbx_mode_t mode) {
   }
 
   eASSERT0(env, env->dsync_fd == INVALID_HANDLE_VALUE);
-  if (!(env->flags & (MDBX_RDONLY | MDBX_SAFE_NOSYNC | DEPRECATED_MAPASYNC
-#if IS_WINDOWS
-                      | MDBX_EXCLUSIVE
-#endif /* !Windows */
-                      ))) {
+  /* Same reasoning as for the overlapped handle above: on Windows the dsync
+   * handle used to be skipped in MDBX_EXCLUSIVE, unless the fast i/o path is
+   * enabled. On other platforms MDBX_EXCLUSIVE never affected this handle. */
+  const bool skip_dsync_exclusive = IS_WINDOWS && (env->flags & MDBX_EXCLUSIVE) != 0 && !env_exclusive_fastpath(env);
+  if (!(env->flags & (MDBX_RDONLY | MDBX_SAFE_NOSYNC | DEPRECATED_MAPASYNC)) && !skip_dsync_exclusive) {
     rc = osal_openfile(MDBX_OPEN_DXB_DSYNC, env, env->pathname.dxb, &env->dsync_fd, 0);
     if (unlikely(MDBX_IS_ERROR(rc)))
       return LOG_IFERR(rc);
@@ -578,6 +587,13 @@ __cold int env_close(MDBX_env *env, bool resurrect_after_fork) {
     (void)osal_closefile(env->lazy_fd);
     env->lazy_fd = INVALID_HANDLE_VALUE;
   }
+
+  /* fd4meta only ever aliases lazy_fd or dsync_fd (it owns no handle), so it
+   * must be invalidated once those are closed. Otherwise a failed open that
+   * already reached the handle setup, followed by a retry that fails before
+   * reassigning fd4meta, would leave it dangling and lck_unlock() would call
+   * UnlockFile() on a closed handle. (issue #179) */
+  env->fd4meta = INVALID_HANDLE_VALUE;
 
   if (env->lck_mmap.fd != INVALID_HANDLE_VALUE) {
     (void)osal_closefile(env->lck_mmap.fd);
