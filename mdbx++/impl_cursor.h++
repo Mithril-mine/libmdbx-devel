@@ -36,10 +36,24 @@ inline cursor &cursor::set_context(void *ptr) {
   return *this;
 }
 
+/// \brief Compares the positions of two cursors without throwing.
+/// \param left           The left-hand cursor.
+/// \param right          The right-hand cursor.
+/// \param ignore_nested  Ignore the position within a nested (dupsort) tree.
+/// \returns A negative value if `left` is before `right`, a positive value if
+///          after, zero if at the same position, or \ref MDBX_RESULT_TRUE
+///          when the cursors are incomparable.
 inline int compare_position_nothrow(const cursor &left, const cursor &right, bool ignore_nested = false) noexcept {
   return mdbx_cursor_compare(left.handle_, right.handle_, ignore_nested);
 }
 
+/// \brief Compares the positions of two cursors.
+/// \param left           The left-hand cursor.
+/// \param right          The right-hand cursor.
+/// \param ignore_nested  Ignore the position within a nested (dupsort) tree.
+/// \returns A negative value if `left` is before `right`, a positive value if
+///          after, zero if at the same position.
+/// \throws `std::logic_error` if the cursors are incomparable.
 inline int compare_position(const cursor &left, const cursor &right, bool ignore_nested = false) {
   const auto diff = compare_position_nothrow(left, right, ignore_nested);
   MDBX_INLINE_API_ASSERT(compare_position_nothrow(right, left, ignore_nested) == -diff);
@@ -87,6 +101,12 @@ inline ptrdiff_t cursor::estimate(move_operation operation, MDBX_val *key, MDBX_
   return result;
 }
 
+/// \brief Estimates the distance (number of items) between two cursor positions.
+/// \param from  The cursor at the "from" position.
+/// \param to    The cursor at the "to" position.
+/// \returns The approximate distance; a negative value means the `to` position
+///          is before the `from` one.
+/// \throws The corresponding \ref mdbx::exception on failure.
 inline ptrdiff_t estimate(const cursor &from, const cursor &to) {
   ptrdiff_t result;
   error::success_or_throw(mdbx_estimate_distance(from, to, &result));
