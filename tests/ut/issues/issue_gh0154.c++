@@ -233,7 +233,9 @@ TEST(issue_gh0154, resize_with_open_reader_neither_hangs_nor_poisons_env) {
  *     and not a hang;
  *   - once the reader is closed, the SAME change MUST succeed.
  * That distinguishes the fixed behavior from both master (hang) and from a naive
- * "always succeed" implementation. */
+ * "always succeed" implementation. The size assertions below additionally pin
+ * that a deferred explicit resize leaves both the logical and the physical size
+ * untouched (scenario C of issue #173). */
 TEST(issue_gh0154, explicit_resize_defers_while_reader_open_then_succeeds) {
   if (MDBX_GTEST_IS_EXECUTION_TIMEOUT()) {
     GTEST_SKIP() << "SKIPPED by RUNTIME_LIMIT";
@@ -269,6 +271,15 @@ TEST(issue_gh0154, explicit_resize_defers_while_reader_open_then_succeeds) {
   EXPECT_EQ(MDBX_UNABLE_EXTEND_MAPSIZE, deferred_rc)
       << "an explicit remap with an open reader must defer with UNABLE_EXTEND_MAPSIZE, got: "
       << mdbx_strerror(deferred_rc);
+
+  /* A deferred explicit resize must not write a meta nor touch the file: both
+   * the logical and the physical size stay exactly as they were. */
+  MDBX_envinfo deferred_info;
+  std::memset(&deferred_info, 0, sizeof deferred_info);
+  const int info_rc = mdbx_env_info_ex(env, nullptr, &deferred_info, sizeof deferred_info);
+  EXPECT_EQ(MDBX_SUCCESS, info_rc) << "env_info_ex must work while the resize is deferred";
+  EXPECT_EQ(info.mi_geo.current, deferred_info.mi_geo.current) << "logical size must be unchanged on deferral";
+  EXPECT_EQ(info.mi_dxb_fsize, deferred_info.mi_dxb_fsize) << "physical file must be unchanged on deferral";
 
   /* The env must stay usable (not poisoned). */
   MDBX_txn *txn = nullptr;
