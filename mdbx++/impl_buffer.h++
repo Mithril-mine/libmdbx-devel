@@ -19,6 +19,11 @@ MDBX_CXX20_CONSTEXPR buffer<ALLOCATOR, CAPACITY_POLICY>::buffer(const struct sli
     insulate();
 }
 
+/// \brief Constructs a buffer owning a clone of the given slice when its data
+/// is dirty within the given transaction, otherwise a reference to it.
+/// \param transaction  The transaction to check the data dirtiness against.
+/// \param src          The source slice.
+/// \param alloc        The allocator for the owned storage.
 template <class ALLOCATOR, typename CAPACITY_POLICY>
 inline buffer<ALLOCATOR, CAPACITY_POLICY>::buffer(const txn &transaction, const struct slice &src,
                                                   const allocator_type &alloc)
@@ -42,6 +47,11 @@ using default_buffer = buffer<default_allocator, default_capacity_policy>;
 
 //------------------------------------------------------------------------------
 
+/// \brief Produces a buffer from a mutable byte-producer (see the
+/// \ref MutableByteProducer concept).
+/// \param producer  The producer of bytes.
+/// \param alloc     The allocator for the resulting buffer.
+/// \returns The produced \ref buffer.
 template <class ALLOCATOR, class CAPACITY_POLICY, MDBX_CXX20_CONCEPT(MutableByteProducer, PRODUCER)>
 inline buffer<ALLOCATOR, CAPACITY_POLICY> make_buffer(PRODUCER &producer, const ALLOCATOR &alloc) {
   if (MDBX_LIKELY(!producer.is_empty()))
@@ -53,6 +63,11 @@ inline buffer<ALLOCATOR, CAPACITY_POLICY> make_buffer(PRODUCER &producer, const 
   return buffer<ALLOCATOR, CAPACITY_POLICY>(alloc);
 }
 
+/// \brief Produces a buffer from an immutable byte-producer (see the
+/// \ref ImmutableByteProducer concept).
+/// \param producer  The producer of bytes.
+/// \param alloc     The allocator for the resulting buffer.
+/// \returns The produced \ref buffer.
 template <class ALLOCATOR, class CAPACITY_POLICY, MDBX_CXX20_CONCEPT(ImmutableByteProducer, PRODUCER)>
 inline buffer<ALLOCATOR, CAPACITY_POLICY> make_buffer(const PRODUCER &producer, const ALLOCATOR &alloc) {
   if (MDBX_LIKELY(!producer.is_empty()))
@@ -64,6 +79,11 @@ inline buffer<ALLOCATOR, CAPACITY_POLICY> make_buffer(const PRODUCER &producer, 
   return buffer<ALLOCATOR, CAPACITY_POLICY>(alloc);
 }
 
+/// \brief Produces a string from a mutable byte-producer (see the
+/// \ref MutableByteProducer concept).
+/// \param producer  The producer of bytes.
+/// \param alloc     The allocator for the resulting string.
+/// \returns The produced \ref string.
 template <class ALLOCATOR, MDBX_CXX20_CONCEPT(MutableByteProducer, PRODUCER)>
 inline string<ALLOCATOR> make_string(PRODUCER &producer, const ALLOCATOR &alloc) {
   string<ALLOCATOR> result(alloc);
@@ -75,6 +95,11 @@ inline string<ALLOCATOR> make_string(PRODUCER &producer, const ALLOCATOR &alloc)
   return result;
 }
 
+/// \brief Produces a string from an immutable byte-producer (see the
+/// \ref ImmutableByteProducer concept).
+/// \param producer  The producer of bytes.
+/// \param alloc     The allocator for the resulting string.
+/// \returns The produced \ref string.
 template <class ALLOCATOR, MDBX_CXX20_CONCEPT(ImmutableByteProducer, PRODUCER)>
 inline string<ALLOCATOR> make_string(const PRODUCER &producer, const ALLOCATOR &alloc) {
   string<ALLOCATOR> result(alloc);

@@ -1,0 +1,110 @@
+# Doxygen strict-audit configuration for `make test-doxygen`.
+#
+# Derived from docs/Doxyfile.in by the make recipe (appending the overrides
+# below — in a Doxygen config the last occurrence of a tag wins), so the
+# project identity, EXCLUDE_SYMBOLS base list and the group structure stay in
+# sync with the documentation site build.
+#
+# The audit answers one question: are the doxygen comments in the public
+# headers complete and correct?  Compared with the docsite (mkdoxy) run:
+#
+#  - EXTRACT_ALL=NO re-enables the completeness warnings that EXTRACT_ALL
+#    silently disables (undocumented members, missing parameter docs);
+#  - WARN_NO_PARAMDOC=YES requires every documented function to document
+#    its parameters and its return value;
+#  - WARN_IF_UNDOC_ENUM_VAL=NO keeps individual enum values undocumented
+#    (most of them carry self-documenting names);
+#  - WARN_AS_ERROR=FAIL_ON_WARNINGS makes any remaining warning a non-zero
+#    exit status, so `make test-doxygen` fails.
+#
+# Identifiers that must stay undocumented are listed in EXCLUDE_SYMBOLS: the
+# base list in docs/Doxyfile.in (shared with the docsite) plus the
+# implementation-detail symbols appended here (see the note above each group).
+
+# Re-enable the completeness warnings that EXTRACT_ALL silently disables:
+# undocumented members, missing parameter/return docs, broken \ref targets.
+EXTRACT_ALL            = NO
+EXTRACT_PRIVATE        = NO
+QUIET                  = YES
+WARNINGS               = YES
+WARN_IF_UNDOCUMENTED   = YES
+WARN_IF_DOC_ERROR      = YES
+WARN_IF_INCOMPLETE_DOC = YES
+WARN_NO_PARAMDOC       = YES
+WARN_IF_UNDOC_ENUM_VAL = NO
+WARN_AS_ERROR          = FAIL_ON_WARNINGS
+
+# SITEMAP_URL requires GENERATE_HTML=YES; the audit renders nothing, so clear
+# it here to keep the audit's exit status meaningful (FAIL_ON_WARNINGS).
+SITEMAP_URL            =
+
+# The audit needs no rendered output; XML is the cheapest generator and
+# silences the "no output formats selected" warning.
+GENERATE_HTML          = NO
+GENERATE_LATEX         = NO
+GENERATE_XML           = YES
+OUTPUT_DIRECTORY       = build/tmp/docsite-check
+XML_OUTPUT             = xml-audit
+
+# Audit the prepared docsite inputs as a directory, so the \file names in the
+# headers match the input file names (no "not an input file" warnings).
+INPUT                  = build/tmp/docsite-inputs
+FILE_PATTERNS          = *.h *.h++
+
+# --- Implementation-detail symbols that are not part of the documented API. ---
+#
+# The C++ amalgamated header inlines the whole implementation (mdbx++/impl_*),
+# so helper namespaces, throw_* internals, low-level buffer storage, injected
+# std::hash specializations and the friend comparison operators surface as
+# undocumented members. They are internal mechanics, not API to document.
+EXCLUDE_SYMBOLS       += mdbx::*details*
+EXCLUDE_SYMBOLS       += throw_*
+EXCLUDE_SYMBOLS       += mdbx::buffer::silo*
+EXCLUDE_SYMBOLS       += std::hash*
+EXCLUDE_SYMBOLS       += *operator==
+EXCLUDE_SYMBOLS       += *operator!=
+EXCLUDE_SYMBOLS       += *operator<
+EXCLUDE_SYMBOLS       += *operator<=
+EXCLUDE_SYMBOLS       += *operator>
+EXCLUDE_SYMBOLS       += *operator>=
+#
+# Technical macros that have no user-facing meaning: the header include guard,
+# the amalgamation/build markers, compiler feature-test shims, symbol
+# visibility/ABI decorations, branch hints and attribute helpers. They are
+# excluded from the docsite too (they clutter the API reference), so listing
+# them here keeps the audit and the published docs consistent.
+EXCLUDE_SYMBOLS       += LIBMDBX_H
+EXCLUDE_SYMBOLS       += MDBX_AMALGAMATED_SOURCE
+EXCLUDE_SYMBOLS       += LIBMDBX_API
+EXCLUDE_SYMBOLS       += LIBMDBX_API_TYPE
+EXCLUDE_SYMBOLS       += LIBMDBX_VERINFO_API
+EXCLUDE_SYMBOLS       += __has_C23_or_CXX_attribute
+EXCLUDE_SYMBOLS       += __has_c_attribute
+EXCLUDE_SYMBOLS       += __has_c_attribute_qualified
+EXCLUDE_SYMBOLS       += __has_cpp_attribute_qualified
+EXCLUDE_SYMBOLS       += __has_exceptions_disabled
+EXCLUDE_SYMBOLS       += MDBX_CXX01_CONSTEXPR_VAR
+EXCLUDE_SYMBOLS       += MDBX_CXX11_CONSTEXPR_VAR
+EXCLUDE_SYMBOLS       += MDBX_CXX14_CONSTEXPR_VAR
+EXCLUDE_SYMBOLS       += MDBX_INLINE_API_ASSERT
+EXCLUDE_SYMBOLS       += MDBX_LIKELY
+EXCLUDE_SYMBOLS       += MDBX_UNLIKELY
+EXCLUDE_SYMBOLS       += MDBX_MAYBE_UNUSED
+EXCLUDE_SYMBOLS       += MDBX_NORETURN
+#
+# The same kind of technical macros from the C++ API preamble: template
+# instantiation helpers, MSVC workarounds, C++ attribute shims and the
+# concept/constexpr/fallthrough decorations.
+EXCLUDE_SYMBOLS       += MDBX_USING_CXX_EXPERIMENTAL_FILESYSTEM
+EXCLUDE_SYMBOLS       += MDBX_MSVC_DECLSPEC_EMPTY_BASES
+EXCLUDE_SYMBOLS       += MDBX_INSTALL_API_TEMPLATE
+EXCLUDE_SYMBOLS       += MDBX_EXTERN_API_TEMPLATE
+EXCLUDE_SYMBOLS       += MDBX_CXX01_CONSTEXPR_ENUM
+EXCLUDE_SYMBOLS       += MDBX_CXX11_CONSTEXPR_ENUM
+EXCLUDE_SYMBOLS       += MDBX_CXX14_CONSTEXPR_ENUM
+EXCLUDE_SYMBOLS       += MDBX_CXX17_CONSTEXPR_ENUM
+EXCLUDE_SYMBOLS       += MDBX_CXX20_CONSTEXPR_ENUM
+EXCLUDE_SYMBOLS       += MDBX_CXX17_FALLTHROUGH
+EXCLUDE_SYMBOLS       += MDBX_CXX20_LIKELY
+EXCLUDE_SYMBOLS       += MDBX_ASSERT_CXX20_CONCEPT_SATISFIED
+EXCLUDE_SYMBOLS       += MDBX_DECLARE_EXCEPTION
