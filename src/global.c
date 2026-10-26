@@ -286,7 +286,8 @@ __cold static void mdbx_init(void) {
                           (getenv_bool("MDBX_DBG_DUMP", false) ? MDBX_DBG_DUMP : 0) |
                           (getenv_bool("MDBX_DBG_LEGACY_MULTIOPEN", false) ? MDBX_DBG_LEGACY_MULTIOPEN : 0) |
                           (getenv_bool("MDBX_DBG_LEGACY_OVERLAP", false) ? MDBX_DBG_LEGACY_OVERLAP : 0) |
-                          (getenv_bool("MDBX_DBG_DONT_UPGRADE", false) ? MDBX_DBG_DONT_UPGRADE : 0);
+                          (getenv_bool("MDBX_DBG_DONT_UPGRADE", false) ? MDBX_DBG_DONT_UPGRADE : 0) |
+                          (getenv_bool("MDBX_DBG_ERR", false) ? MDBX_DBG_ERR : 0);
   globals.loglevel = MDBX_LOG_NOTICE;
   ENSURE(osal_fastmutex_init(&globals.debug_lock) == 0);
   osal_ctor();
