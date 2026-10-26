@@ -704,6 +704,31 @@ static inline size_t rdt_count(const MDBX_env *env, const lck_t *lck) {
   return (n < env->max_readers) ? n : env->max_readers;
 }
 
+/* Decision point for a failed auxiliary (stub) page write, i.e. the writes that
+ * store a placeholder rather than database data: scrubbing a freed page in
+ * page_kill() and the best-effort prefault-write in page_alloc_finalize().
+ * Such a failure never corrupts the database, but it is the only indication of
+ * a failing media/filesystem on these paths, so it must not be dropped.
+ *
+ * TODO: This is a placeholder for the planned mechanism of user-supplied
+ * callbacks that let the application code make decisions at chosen points.
+ * Later it is expected to invoke a user callback receiving the very same
+ * arguments (env, txn, pgno, bytes, errcode) and returning the final code:
+ *   - MDBX_SUCCESS  => ignore the error and continue;
+ *   - other code    => break the transaction and return that code;
+ *   - MDBX_PANIC    => additionally mark env->flags with a fatal error.
+ * For now there is no suitable callback infrastructure, so it just returns the
+ * original error code unchanged (i.e. the caller surfaces it and breaks the
+ * transaction). See https://github.com/Mithril-mine/libmdbx-devel/issues/203 */
+static inline int stub_write_errdecide(const MDBX_env *env, const MDBX_txn *txn, pgno_t pgno, size_t bytes,
+                                       int errcode) {
+  (void)env;
+  (void)txn;
+  (void)pgno;
+  (void)bytes;
+  return errcode;
+}
+
 #endif /* !__cplusplus */
 
 #ifdef _MSC_VER
