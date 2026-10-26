@@ -6,6 +6,11 @@ name: ci-docs
 # Unlike `make docsite`, where the mkdoxy plugin runs doxygen with QUIET and
 # discards its output, this job fails on any doxygen warning, so a removed
 # \param or a stale reference is caught in CI. See docs/Doxyfile-check.in.
+#
+# Doxygen >= 1.18 is required (the ubuntu-24.04 apt package is 1.9.8, which
+# mis-attaches \param/\returns that follow a \file block and would report
+# thousands of false findings; the docsite/mkdoxy also expects >=1.18), so the
+# official prebuilt release is downloaded instead of using apt.
 
 on:
   push:
@@ -32,10 +37,16 @@ jobs:
           fetch-depth: 0
           fetch-tags: true
 
-      - name: install doxygen
+      - name: install doxygen 1.18
         shell: bash
         run: |
-          sudo apt-get update -qq && sudo apt-get install -y --no-install-recommends doxygen
+          set -euo pipefail
+          VER=1.18.0
+          curl -sSL -o /tmp/doxygen.tar.gz \
+            "https://github.com/doxygen/doxygen/releases/download/Release_${VER//./_}/doxygen-${VER}.linux.bin.tar.gz"
+          sudo tar xzf /tmp/doxygen.tar.gz -C /opt
+          sudo ln -sf "/opt/doxygen-${VER}/bin/doxygen" /usr/local/bin/doxygen
+          doxygen --version
 
       - name: test-doxygen
         shell: bash
