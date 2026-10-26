@@ -185,6 +185,47 @@ int osal_lockfile(mdbx_filehandle_t fd, bool wait) {
   return flock_ex(fd, 0, wait ? LCK_EXCLUSIVE | LCK_WAITFOR : LCK_EXCLUSIVE | LCK_DONTWAIT, 0, DXB_MAXLEN, 0);
 }
 
+/* Acquire the constant byte-range locks that enforce exclusivity when the
+ * data file is opened shareable (env_exclusive_fastpath(), issue #179).
+ *
+ * The whole file is covered by two locks, each taken through the very handle
+ * that writes the corresponding region, since Windows byte-range locks are
+ * per-handle: a locked region may be written only through the lock owner.
+ *  - meta region [0, ps*NUM_METAS) via fd4meta;
+ *  - body region [ps*NUM_METAS, DXB_MAXLEN) via fd4data (overlapped ?: lazy).
+ * The locks are held until lck_unlock()/env close and do not interfere with
+ * SetEndOfFile (resize), FlushFileBuffers or CPU access via the memory map.
+ *
+ * TODO: This function should be moved and renamed; ask the owner for details.
+ */
+int windows_seize_exclusive(MDBX_env *env) {
+  if (!env_exclusive_fastpath(env))
+    return MDBX_SUCCESS;
+
+  const HANDLE fd4data = env->ioring.overlapped_fd ? env->ioring.overlapped_fd : env->lazy_fd;
+  const size_t meta_bytes = pgno2bytes(env, NUM_METAS);
+  jitter4testing(false);
+
+  int rc = flock_ex(env->fd4meta, env->dxb_lock_event, LCK_EXCLUSIVE | LCK_DONTWAIT, 0, meta_bytes, 0);
+  if (rc != MDBX_SUCCESS) {
+    ERROR("%s, err %u", "seize-exclusive(meta)", rc);
+    return (rc == ERROR_LOCK_VIOLATION || rc == ERROR_SHARING_VIOLATION) ? MDBX_BUSY : rc;
+  }
+
+  jitter4testing(false);
+  rc = flock_ex(fd4data, env->dxb_lock_event, LCK_EXCLUSIVE | LCK_DONTWAIT, DXB_BODY, 0);
+  if (rc != MDBX_SUCCESS) {
+    ERROR("%s, err %u", "seize-exclusive(body)", rc);
+    const int err = funlock(env->fd4meta, 0, meta_bytes);
+    if (err != MDBX_SUCCESS)
+      panic_fmt(env, "dxb/%s-unlock error %u", "seize-exclusive(meta) rollback", err);
+    return (rc == ERROR_LOCK_VIOLATION || rc == ERROR_SHARING_VIOLATION) ? MDBX_BUSY : rc;
+  }
+
+  DEBUG("%s", "seize-exclusive: constant meta+body locks acquired");
+  return MDBX_SUCCESS;
+}
+
 static int suspend_and_append(mdbx_handle_array_t **array, const DWORD ThreadId) {
   const unsigned limit = (*array)->limit;
   if ((*array)->count == limit) {
@@ -365,6 +406,23 @@ static void lck_unlock(MDBX_env *env) {
 
     do
       err = funlock(fd4data, DXB_WHOLE);
+    while (err == MDBX_SUCCESS);
+    ASSERT(err == ERROR_NOT_LOCKED || (globals.running_under_Wine && err == ERROR_LOCK_VIOLATION));
+    SetLastError(ERROR_SUCCESS);
+  }
+
+  /* Release the constant meta-region lock of the exclusive fast i/o path.
+   * It is held via fd4meta, which may be a different handle (dsync_fd) than
+   * fd4data, so the loops above do not cover it.
+   * NOTE: lck_unlock() is also called from lck_destroy() during env close;
+   * env->flags keeps MDBX_EXCLUSIVE there (only ENV_INTERNAL_FLAGS are cleared
+   * beforehand) and env->ps/env->fd4meta are still valid at that point, so the
+   * predicate and pgno2bytes() below evaluate exactly as when the lock was
+   * taken. env_close() resets fd4meta after closing the fds, guarding the
+   * failed-open/retry path against unlocking a stale handle. (issue #179) */
+  if (env_exclusive_fastpath(env) && env->fd4meta != INVALID_HANDLE_VALUE) {
+    do
+      err = funlock(env->fd4meta, 0, pgno2bytes(env, NUM_METAS));
     while (err == MDBX_SUCCESS);
     ASSERT(err == ERROR_NOT_LOCKED || (globals.running_under_Wine && err == ERROR_LOCK_VIOLATION));
     SetLastError(ERROR_SUCCESS);
