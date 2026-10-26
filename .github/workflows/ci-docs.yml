@@ -1,0 +1,43 @@
+name: ci-docs
+
+# Strict audit of the doxygen comments in the public headers (`make
+# test-doxygen`): completeness (every documented entity has \brief, \param and
+# \returns as required) and correctness (no broken \ref/@copydoc targets).
+# Unlike `make docsite`, where the mkdoxy plugin runs doxygen with QUIET and
+# discards its output, this job fails on any doxygen warning, so a removed
+# \param or a stale reference is caught in CI. See docs/Doxyfile-check.in.
+
+on:
+  push:
+    branches: [devel, master]
+  pull_request:
+  workflow_dispatch:
+
+env:
+  CI: GITHUB
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  doxygen-audit:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+          fetch-tags: true
+
+      - name: install doxygen
+        shell: bash
+        run: |
+          sudo apt-get update -qq && sudo apt-get install -y --no-install-recommends doxygen
+
+      - name: test-doxygen
+        shell: bash
+        run: |
+          make test-doxygen
