@@ -300,23 +300,33 @@ def test_kill9_nosync_readonly_wants_recovery(tmp_path):
                 proc.kill()
                 proc.wait()
         time.sleep(0.3)
+        # After #182 preopen_snapinfo(mode=PROPERLY) reports MDBX_WANNA_RECOVERY
+        # when the newest checkpoint is not steady. Three outcomes are possible
+        # after the SIGKILL, and only the first is the contract under test:
+        #   - WANNA_RECOVERY: the newest meta is a weak checkpoint of the
+        #     current boot -> this is what we want to observe;
+        #   - preopen SUCCEEDS: the OS writeback flushed every meta steady
+        #     before the kill ("unlucky timing") -> retry on a fresh DB;
+        #   - CORRUPTED / any other error: the kill raced the writer and left
+        #     no usable meta -> retry on a fresh DB.
+        # NB: the retry signal must not be an assertion raised inside the try,
+        # because AssertionError is not a LibmdbxError and would escape the
+        # bounded-retry loop (that made this test flaky on macOS, where the OS
+        # more often flushes the metas steady within the writeback window).
+        unlucky = False
         try:
-            # After #182 preopen_snapinfo(mode=PROPERLY) reports
-            # MDBX_WANNA_RECOVERY when the newest checkpoint is not steady.
-            pre = m.preopen_snapinfo(db)
-            assert False, "preopen unexpectedly succeeded: %r" % (pre,)
+            m.preopen_snapinfo(db)
         except m.LibmdbxError as e:
             if e.rc == m.RC_WANNA_RECOVERY:
-                # The expected signal: a weak checkpoint of the current boot.
-                break
-            if e.rc == m.RC_CORRUPTED:
-                # No usable meta-pages at all (e.g. the kill raced the
-                # writer): neither steady nor same-boot weak checkpoint.
-                if attempt == 3:
-                    raise
-                continue
+                break  # the expected signal: a weak checkpoint of this boot
+            unlucky = True  # CORRUPTED / kill raced the writer
+        else:
+            unlucky = True  # preopen succeeded: metas landed fully steady
+        if unlucky:
             if attempt == 3:
-                raise
+                pytest.fail("all 4 attempts landed on a fully-steady or "
+                            "unusable meta troika; cannot observe the "
+                            "WANNA_RECOVERY contract on this host")
             continue
 
     with pytest.raises(Exception) as ei:
