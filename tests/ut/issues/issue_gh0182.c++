@@ -62,10 +62,20 @@ std::array<uint8_t, 16> make_weak_checkpoint_db() {
     EXPECT_EQ(MDBX_SUCCESS, mdbx_put(txn, dbi, &key, &value, MDBX_UPSERT));
   }
   EXPECT_EQ(MDBX_SUCCESS, mdbx_txn_commit(txn));
+  EXPECT_EQ(MDBX_SUCCESS, mdbx_env_close(env));
 
-  EXPECT_EQ(MDBX_SUCCESS, mdbx_env_set_flags(env, MDBX_SAFE_NOSYNC, true));
-  EXPECT_EQ(MDBX_SUCCESS, mdbx_env_set_option(env, MDBX_opt_writethrough_threshold, 0));
+  /* Re-open non-durable to produce the weak checkpoint. The mode must be
+   * requested at open time rather than toggled at runtime: the write-through
+   * handles (Windows) / the dsync handle are chosen when the env is opened, so
+   * a runtime flag change would still leave the data going through them and
+   * the commit would end up steady on every platform. */
+  EXPECT_EQ(MDBX_SUCCESS, mdbx_env_create(&env));
+  EXPECT_EQ(MDBX_SUCCESS, mdbx_env_set_geometry(env, -1, -1, -1, -1, -1, kPagesize));
+  EXPECT_EQ(MDBX_SUCCESS, mdbx_env_open(env, kTestPath, MDBX_NOSUBDIR | MDBX_EXCLUSIVE | MDBX_SAFE_NOSYNC, 0600));
+  if (!env)
+    return {};
   EXPECT_EQ(MDBX_SUCCESS, mdbx_txn_begin(env, nullptr, MDBX_TXN_READWRITE, &txn));
+  EXPECT_EQ(MDBX_SUCCESS, mdbx_dbi_open(txn, nullptr, MDBX_DB_DEFAULTS, &dbi));
   {
     MDBX_val key = {(void *)"weak", 4}, value = {(void *)"saved", 5};
     EXPECT_EQ(MDBX_SUCCESS, mdbx_put(txn, dbi, &key, &value, MDBX_UPSERT));
