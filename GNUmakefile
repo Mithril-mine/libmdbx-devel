@@ -858,6 +858,14 @@ build/tmp/docsite-inputs/Doxyfile-audit: build/tmp/docsite-inputs/Doxyfile docs/
 test-doxygen: build/tmp/docsite-inputs/Doxyfile-audit build/tmp/docsite-inputs/mdbx.h build/tmp/docsite-inputs/mdbx.h++ build/tmp/docsite-inputs/options.h
 	@command -v doxygen >/dev/null 2>&1 || { \
 		echo '  ERROR: doxygen is not available.'; exit 1; }
+	@# doxygen < 1.18 mis-attaches \param/\returns that follow a \file block and
+	@# would report thousands of false "not documented" findings, so require it
+	@# (the docsite/mkdoxy also expects doxygen>=1.18, see docs/docsite/en/mkdocs.yml).
+	@v=$$(doxygen --version 2>/dev/null | sed -n 's/^\([0-9]*\.[0-9]*\).*/\1/p'); \
+		[ -n "$$v" ] && [ $$(printf '%s\n1.18\n' "$$v" | sort -V | head -1) = "1.18" ] || { \
+		echo "  ERROR: doxygen >= 1.18 is required for 'test-doxygen' (found '$${v:-unknown}')."; \
+		echo '         Older releases mis-attach \\param/\\returns after a \\file block'; \
+		echo '         and report false "not documented" findings.'; exit 1; }
 	@echo '  TEST-DOXYGEN: strict audit of the public-header doxygen comments...'
 	$(QUIET)rm -rf build/tmp/docsite-check && mkdir -p build/tmp/docsite-check
 	$(QUIET)if doxygen build/tmp/docsite-inputs/Doxyfile-audit >build/tmp/docsite-check/audit.log 2>&1; then \
