@@ -82,6 +82,13 @@ add_issue_test(gh0108 SOURCE "issue_gh0108.c++")
 add_issue_test(gh0182 SOURCE "issue_gh0182.c++")
 add_issue_test(gh0154 SOURCE "issue_gh0154.c++")
 add_issue_test(gh0173 SOURCE "issue_gh0173.c++")
+add_issue_test(gh0170 SOURCE "issue_gh0170.c++")
+if(WIN32 AND MDBX_PROBES)
+  # issue #170: Windows-only throttling of the datafile-shrink attempts,
+  # observed through the probe-bus (dxb_shrink_throttled / dxb_shrink_attempt).
+  add_issue_test(gh0170_throttle SOURCE "issue_gh0170_throttle.c++" NO_PCH)
+  set_tests_properties(gh0170_throttle PROPERTIES ENVIRONMENT "MDBX_PROBES=1")
+endif()
 add_issue_test(gh0112 SOURCE "issue_gh0112.c++")
 add_issue_test(gh0114 SOURCE "issue_gh0114.c++")
 add_issue_test(gh0082 SOURCE "issue_gh0082.c++")
