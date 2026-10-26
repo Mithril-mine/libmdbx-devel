@@ -226,6 +226,7 @@ endif()
 
 # Provide version
 include(cmake/utils.cmake)
+include(cmake/pch.cmake)
 set(MDBX_BUILD_METADATA
     "${MDBX_BUILD_METADATA}"
     CACHE STRING "An extra/custom information provided during libmdbx build")
@@ -292,10 +293,11 @@ if(NOT ((DEFINED BUILD_TESTING AND NOT BUILD_TESTING) OR (DEFINED MDBX_ENABLE_TE
   option(MDBX_ENABLE_TESTS "Build MDBX tests" ${BUILD_TESTING})
 endif()
 
-# Opt-in acceleration for the gtest binaries: a shared precompiled header.
-# Disabled via -DMDBX_TEST_PCH=OFF when a build mode (e.g. ccache) is
-# incompatible with PCH reuse; see cmake/testing.cmake.
-option(MDBX_TEST_PCH "Use a shared precompiled header for the gtest binaries" ON)
+# Opt-in acceleration for the test and example binaries: shared precompiled
+# headers (see cmake/pch.cmake). Disabled via -DMDBX_ENABLE_PCH=OFF when a
+# build mode (e.g. ccache on MSVC) is incompatible with PCH reuse.
+option(MDBX_ENABLE_PCH "Use precompiled headers for the tests and examples" ON)
+mark_as_advanced(MDBX_ENABLE_PCH)
 
 # Try to find a C++ compiler unless sure that this is unnecessary.
 if(NOT CMAKE_CXX_COMPILER_LOADED)
