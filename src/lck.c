@@ -135,6 +135,12 @@ __cold int lck_setup(MDBX_env *env, mdbx_mode_t mode) {
   eASSERT0(env, env->lck_mmap.fd == INVALID_HANDLE_VALUE);
 
   int err = osal_openfile(MDBX_OPEN_LCK, env, env->pathname.lck, &env->lck_mmap.fd, mode);
+  /* Test-only fault site: deterministically force the lck-open to fail with
+   * EACCES, turning the environment into lckless mode regardless of the
+   * filesystem/permissions (instead of relying on a read-only lock file or a
+   * chmod side-effect). Necessary to verify that the meta-pages verdict does
+   * not depend on the lock file being present. (issue #215) */
+  MPROBE_FAULT(lck_setup_eacces, err);
   if (err != MDBX_SUCCESS) {
     switch (err) {
     case MDBX_EACCESS:

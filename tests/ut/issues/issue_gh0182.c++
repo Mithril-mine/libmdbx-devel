@@ -17,6 +17,13 @@
 
 #include "../test-env.h"
 
+#if defined(MDBX_PROBES)
+/* The probe-bus control entry point (src/logging_and_debug.h). Declared here
+ * instead of including the internal C headers, whose macros (MDBX_DEPRECATED
+ * etc.) clash with the public mdbx.h++ already included above. */
+extern "C" int mdbx_probe_ctl(const char *request, char *reply, size_t reply_size);
+#endif
+
 #include <array>
 #include <cstdint>
 #include <cstdio>
@@ -292,3 +299,79 @@ TEST(issue_gh0182, writable_open_same_boot_promotes_weak_to_steady) {
   std::memset(&info, 0, sizeof(info));
   EXPECT_EQ(MDBX_SUCCESS, mdbx_preopen_snapinfo(kTestPath, &info, sizeof(info)));
 }
+
+#if defined(MDBX_PROBES)
+/* The two lckless scenarios of issue #215: a database ending with a weak
+ * checkpoint of the current boot is reopened without a lock file. The verdict
+ * must not depend on the lock file being present (a boot-id match means the
+ * data is live; read-only cannot steady-sync, so recovery is required) - it
+ * must never silently roll back to the older steady checkpoint. */
+TEST(issue_gh0182, lckless_ro_exclusive_weak_requires_recovery) {
+  if (MDBX_GTEST_IS_EXECUTION_TIMEOUT()) {
+    GTEST_SKIP() << "SKIPPED by RUNTIME_LIMIT";
+    return;
+  }
+
+  const auto boot = make_weak_checkpoint_db();
+  if (boot == std::array<uint8_t, 16>{}) {
+    GTEST_SKIP() << "no usable boot id on this system";
+    return;
+  }
+
+  /* Deterministically force the lck-open to fail with EACCES so the following
+   * open runs in lckless mode, regardless of the filesystem/permissions
+   * (instead of a fragile read-only lock file). */
+  char reply[256];
+  ASSERT_EQ(0, mdbx_probe_ctl("fault lck_setup_eacces none", reply, sizeof reply));
+  char cmd[128];
+  std::snprintf(cmd, sizeof cmd, "fault lck_setup_eacces %d", (int)MDBX_EACCESS);
+  ASSERT_EQ(0, mdbx_probe_ctl(cmd, reply, sizeof reply));
+
+  /* Read-only exclusive open of a weak same-boot checkpoint: the data is live
+   * (boot-id match) but steady-sync is impossible in read-only mode, so the
+   * open must require recovery - not silently roll back to the older steady
+   * checkpoint (the issue #215 regression). */
+  MDBX_env *env = nullptr;
+  ASSERT_EQ(MDBX_SUCCESS, mdbx_env_create(&env));
+  const int rc = mdbx_env_open(env, kTestPath, MDBX_NOSUBDIR | MDBX_RDONLY | MDBX_EXCLUSIVE, 0);
+  if (env)
+    mdbx_env_close(env);
+  EXPECT_EQ(MDBX_WANNA_RECOVERY, rc)
+      << "lckless read-only exclusive open of a weak same-boot checkpoint must require recovery";
+
+  ASSERT_EQ(0, mdbx_probe_ctl("fault lck_setup_eacces none", reply, sizeof reply));
+}
+
+TEST(issue_gh0182, lckless_ro_weak_never_rolls_back_to_older_steady) {
+  if (MDBX_GTEST_IS_EXECUTION_TIMEOUT()) {
+    GTEST_SKIP() << "SKIPPED by RUNTIME_LIMIT";
+    return;
+  }
+
+  const auto boot = make_weak_checkpoint_db();
+  if (boot == std::array<uint8_t, 16>{}) {
+    GTEST_SKIP() << "no usable boot id on this system";
+    return;
+  }
+
+  char reply[256];
+  ASSERT_EQ(0, mdbx_probe_ctl("fault lck_setup_eacces none", reply, sizeof reply));
+  char cmd[128];
+  std::snprintf(cmd, sizeof cmd, "fault lck_setup_eacces %d", (int)MDBX_EACCESS);
+  ASSERT_EQ(0, mdbx_probe_ctl(cmd, reply, sizeof reply));
+
+  /* Read-only cooperative open in lckless mode: the weak same-boot checkpoint
+   * must not be silently abandoned for the older steady one - the open must
+   * either require recovery or report corruption, never MDBX_SUCCESS on the
+   * stale checkpoint. */
+  MDBX_env *env = nullptr;
+  ASSERT_EQ(MDBX_SUCCESS, mdbx_env_create(&env));
+  const int rc = mdbx_env_open(env, kTestPath, MDBX_NOSUBDIR | MDBX_RDONLY, 0);
+  if (env)
+    mdbx_env_close(env);
+  EXPECT_NE(MDBX_SUCCESS, rc)
+      << "lckless read-only open of a weak same-boot checkpoint must not roll back to an older steady one";
+
+  ASSERT_EQ(0, mdbx_probe_ctl("fault lck_setup_eacces none", reply, sizeof reply));
+}
+#endif /* MDBX_PROBES */

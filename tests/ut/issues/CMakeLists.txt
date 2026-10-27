@@ -80,7 +80,15 @@ if(NOT WIN32)
   add_issue_test(gh0107 SOURCE "issue_gh0107.c++")
 endif()
 add_issue_test(gh0108 SOURCE "issue_gh0108.c++")
-add_issue_test(gh0182 SOURCE "issue_gh0182.c++")
+add_issue_test(gh0182 SOURCE "issue_gh0182.c++" NO_PCH)
+# gh0182 also carries the probe-bus lckless tests of issue #215 (they use
+# mdbx_probe_ctl to force the lck-open failure): the C++ TU does not see the
+# internal config-cmake.h define by itself, so propagate MDBX_PROBES and
+# activate the registry at runtime.
+if(MDBX_PROBES)
+  target_compile_definitions(issue_gh0182 PRIVATE MDBX_PROBES)
+  set_tests_properties(gh0182 PROPERTIES ENVIRONMENT "MDBX_PROBES=1")
+endif()
 add_issue_test(gh0154 SOURCE "issue_gh0154.c++")
 add_issue_test(gh0173 SOURCE "issue_gh0173.c++")
 add_issue_test(gh0170 SOURCE "issue_gh0170.c++")
