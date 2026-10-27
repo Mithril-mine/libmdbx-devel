@@ -1613,6 +1613,19 @@ int dxb_sync_locked(MDBX_env *env, unsigned flags, meta_t *const pending, troika
                     implicit_shrink);
     if (rc != MDBX_SUCCESS && rc != MDBX_EPERM && rc != MDBX_UNABLE_EXTEND_MAPSIZE)
       goto fail;
+    if (rc == MDBX_SUCCESS) {
+      /* The shrink actually succeeded: clear the rate-limit timestamp, so a
+       * FOLLOW-UP shrink-warranted commit is not throttled just because it
+       * falls inside the MDBX_opt_shrink_retry_period window (issue #217).
+       * The throttle is meant for DOOMED attempts (a foreign process keeps the
+       * file mapped, or the remap-lock was not obtainable); one that succeeded
+       * proves there is no obstacle, so the very next warranted commit must be
+       * free to shrink again immediately. The field exists only on Windows,
+       * where shrink-through-un-map is the costly path the throttle protects. */
+#if IS_WINDOWS
+      env->shrink_last_attempt = 0;
+#endif /* IS_WINDOWS */
+    }
     if (rc != MDBX_SUCCESS) {
       /* The shrink was DEFERRED (issue #154): on Windows an in-process reader
        * holds the remap-lock shared, so the mapping cannot be un-mapped and the
