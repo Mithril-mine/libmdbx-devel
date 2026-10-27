@@ -457,12 +457,20 @@ else
 .PHONY: reformat release-assets tags smoke smoke-fault cmake-stochastic-build cmake-probes-build
 .PHONY: smoke-singleprocess test-singleprocess test-valgrind test-memcheck memcheck smoke-memcheck
 .PHONY: smoke-t1 smoke-t2 smoke-t3 select-tests
-.PHONY: smoke-assertion long-test-assertion test-ci test-ci-extra check-posix-locking
+.PHONY: smoke-assertion long-test-assertion test-ci test-ci-extra test-ci-config check-posix-locking
 
 test-ci-extra: test-ci cross-gcc cross-qemu
 
+# Local, fast validation of the CI registry consistency and axis coverage
+# (the same checks run in the ci-dispatch `validate-config` job).
+test-ci-config:
+	$(QUIET)python3 tests/ci/validate-config.py check-structure
+	$(QUIET)python3 tests/ci/validate-config.py check-coverage
+
 test-ci:
-	$(QUIET)for T in check \
+	$(QUIET)python3 tests/ci/validate-config.py check-structure && \
+	python3 tests/ci/validate-config.py check-coverage && \
+	for T in check \
 		smoke-singleprocess smoke-fault smoke-memcheck \
 		test-leak test-asan test-ubsan test-singleprocess test-memcheck; \
 	do $(MAKE) $$T || break; done

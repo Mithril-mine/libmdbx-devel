@@ -2871,15 +2871,7 @@
       "linux-gcc-ubuntu24-release-cxx-on-alt-options",
       "macos-macos15-release",
       "win-cxx-v142-win2022-win32-release-std20",
-      "win-cxx-v143-win2022-arm64-debug-std17-avoid-msync-off",
-      "win-cxx-v145-winlatest-x64-debug-std11-avoid-msync-off",
-      "win-cxx-v143-win2022-x64-debug-std14-avoid-msync-off",
-      "win-cxx-v145-winlatest-x64-release-std23",
       "win-mingw-64-release-shared-on-mscrt-on",
-      "win-mscl-x64-release-shared-on-mscrt-on-avoid-msync-off",
-      "win-msvc-v143-win32-debug-shared-on-mscrt-off",
-      "win-msvc-v145-arm64-release-shared-on-mscrt-on-avoid-msync-off",
-      "win-msvc-v145-x64-release-shared-off-mscrt-on-alt-options",
       "win-msvc-v145-x64-debug-shared-on-mscrt-off-avoid-msync-off"
     ],
     "full": [
@@ -2989,100 +2981,22 @@
     "cell counts: linux=17, macos=6, msvc=40, mscl=16, mingw=8, cxx-msvc=100, android=15+buildonly, emu=1; total=203.",
     "full = union of domain cells (no duplicate ids); known-flaky cells (macOS smoke_fault, B13 WIP) kept in full for now, flagged via known_flaky.",
     "ARM64 Windows cells historically carried ctest.exclude=smoke_sp_ (B14/TASK-27); the exclusion was removed (2026-10-07) after the smoke framework fixes.",
-    "Android cells are build-only except the emulator pilot (android-r27d-x86-64-emu): boots an API-30 x86_64 AVD and runs smoke_basic/smoke_chk via adb. Not in push path_zones yet; kept in nightly full for stability signal.",
-    "push-quick profile: 2 linux + 1 win-msvc-x64 + 1 macos + 1 win-mingw = 5 cells."
+    "Android cells are build-only except the emulator pilot (android-r27d-x86-64-emu): boots an API-30 x86_64 AVD and runs smoke_basic/smoke_chk via adb. Kept in nightly full for stability signal; not part of the change-addressed gate.",
+    "push-quick profile: 2 linux + 1 macos + 3 windows (v142 win2022, v145 winlatest, mingw) = 7 cells, fast scope, on any push."
   ],
-  "path_zones": {
-    "src/": [
-      "linux-gcc-ubuntu24-debug-cxx-off",
-      "linux-gcc-ubuntu24-release-cxx-on",
-      "win-msvc-v145-x64-debug-shared-on-mscrt-off",
-      "win-mingw-64-release-shared-on-mscrt-on",
-      "macos-macos15-release",
-      "win-cxx-v142-win2022-win32-release-std20"
-    ],
-    "mdbx.h": [
-      "linux-gcc-ubuntu24-debug-cxx-off",
-      "linux-gcc-ubuntu24-release-cxx-on",
-      "win-msvc-v145-x64-debug-shared-on-mscrt-off",
-      "win-mingw-64-release-shared-on-mscrt-on",
-      "macos-macos15-release",
-      "win-cxx-v142-win2022-win32-release-std20"
-    ],
-    "mdbx.h++": [
-      "linux-gcc-ubuntu24-debug-cxx-off",
-      "linux-gcc-ubuntu24-release-cxx-on",
-      "win-msvc-v145-x64-debug-shared-on-mscrt-off",
-      "win-mingw-64-release-shared-on-mscrt-on",
-      "macos-macos15-release",
-      "win-cxx-v142-win2022-win32-release-std20"
-    ],
-    "mdbx++/": [
-      "linux-gcc-ubuntu24-debug-cxx-off",
-      "linux-gcc-ubuntu24-release-cxx-on",
-      "win-msvc-v145-x64-debug-shared-on-mscrt-off",
-      "win-mingw-64-release-shared-on-mscrt-on",
-      "macos-macos15-release",
-      "win-cxx-v142-win2022-win32-release-std20"
-    ],
-    "cmake/": [
-      "linux-gcc-ubuntu24-debug-cxx-off",
-      "linux-gcc-ubuntu24-release-cxx-on",
-      "win-msvc-v145-x64-debug-shared-on-mscrt-off",
-      "win-mingw-64-release-shared-on-mscrt-on",
-      "macos-macos15-release",
-      "win-cxx-v142-win2022-win32-release-std20"
-    ],
-    "CMakeLists.txt": [
-      "linux-gcc-ubuntu24-debug-cxx-off",
-      "linux-gcc-ubuntu24-release-cxx-on",
-      "win-msvc-v145-x64-debug-shared-on-mscrt-off",
-      "win-mingw-64-release-shared-on-mscrt-on",
-      "macos-macos15-release",
-      "win-cxx-v142-win2022-win32-release-std20"
-    ],
-    "GNUmakefile": [
-      "linux-gcc-ubuntu24-debug-cxx-off",
-      "linux-gcc-ubuntu24-release-cxx-on",
-      "win-msvc-v145-x64-debug-shared-on-mscrt-off",
-      "win-mingw-64-release-shared-on-mscrt-on",
-      "macos-macos15-release",
-      "win-cxx-v142-win2022-win32-release-std20"
-    ],
-    "tests/ut/": [
-      "linux-gcc-ubuntu24-debug-cxx-off",
-      "linux-gcc-ubuntu24-release-cxx-on",
-      "win-msvc-v145-x64-debug-shared-on-mscrt-off",
-      "win-mingw-64-release-shared-on-mscrt-on",
-      "macos-macos15-release",
-      "win-cxx-v142-win2022-win32-release-std20"
-    ],
-    "tests/framework/": [
-      "linux-gcc-ubuntu24-debug-cxx-off",
-      "linux-gcc-ubuntu24-release-cxx-on",
-      "win-msvc-v145-x64-debug-shared-on-mscrt-off",
-      "win-mingw-64-release-shared-on-mscrt-on",
-      "macos-macos15-release",
-      "win-cxx-v142-win2022-win32-release-std20"
-    ],
-    "tests/ci/": [
-      "linux-gcc-ubuntu24-debug-cxx-off",
-      "linux-gcc-ubuntu24-release-cxx-on",
-      "win-msvc-v145-x64-debug-shared-on-mscrt-off",
-      "win-mingw-64-release-shared-on-mscrt-on",
-      "macos-macos15-release",
-      "win-cxx-v142-win2022-win32-release-std20"
-    ],
-    ".github/workflows/": [
-      "linux-gcc-ubuntu24-debug-cxx-off",
-      "linux-gcc-ubuntu24-release-cxx-on",
-      "win-msvc-v145-x64-debug-shared-on-mscrt-off",
-      "win-mingw-64-release-shared-on-mscrt-on",
-      "macos-macos15-release",
-      "win-cxx-v142-win2022-win32-release-std20"
-    ],
-    "docs/": [],
-    "skynet/": []
-  },
-  "zones_notes": "Cell matrix criteria (Infra v3): push path_zones -> push-quick surface (6 cells, fast scope) on every push; nightly = 4 platform workflows (ci-linux/ci-windows/ci-macos/ci-android) over linux-nightly(9)/win-gate(10)/mac-nightly(3)/android-nightly(4), run cells at full ctest scope. Cell roles: surface = one cell per axis value (OS, word-size, compiler family, CRT mode, std); diagonal = interaction of two axes (win32 x v142, arm64 x std17, crt-off x dll-off); build-only = compile surface without ctest (toolset x std x arch x crt grid); run-full = behavioural attestation incl heavy/crash-safety/locking suites. Clang coverage: linux-clang cell + win-mscl (clang-cl) + locking-clang + macOS/NDK-clang inherently."
+  "zones_notes": "CI v3.5 model: change-addressed gate = union(push-quick, win-gate). push on ANY branch runs push-quick (7 surface cells, fast scope; Windows = v142 on win2022 + v145 on winlatest + mingw). A change touching any common_prefix (src/, CMakeLists.txt, mdbx.h, .github/workflows/, ...) is addressed by change-addressed = push-quick\u222awin-gate (~16 cells), which covers the full Windows axis matrix (v142/v143/v145, mscl, mingw, x64/win32/arm64, mscrt on/off, shared on/off, debug/release), Linux, macos. Nightly full (schedule on master) keeps the 190-cell repeated stochastic coverage. Consistency and axis coverage are enforced by tests/ci/validate-config.py (CI job + make test-ci-config).",
+  "common_prefixes": [
+    "src/",
+    "cmake/",
+    "CMakeLists.txt",
+    "mdbx.h",
+    "mdbx.h++",
+    "mdbx++/",
+    "GNUmakefile",
+    "Makefile",
+    "tests/ut/",
+    "tests/framework/",
+    "tests/ci/",
+    ".github/workflows/"
+  ]
 }
