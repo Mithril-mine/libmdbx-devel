@@ -23,6 +23,7 @@ import argparse
 import glob
 import json
 import os
+import re
 import subprocess
 import sys
 import time
@@ -49,11 +50,12 @@ def ctest_list(build_dir: str, filt: str = "") -> list:
         return []
     out = []
     for line in p.stdout.splitlines():
-        line = line.strip()
-        if line.startswith("Test #"):
-            # "Test #12: name ...."
-            name = line.split(":", 1)[1].strip()
-            out.append(name)
+        # ctest выравнивает номера пробелами: "  Test   #1: c_api" и
+        # "  Test  #10: name"; startswith("Test #") такие строки терял,
+        # из-за чего пропускались тесты с номерами < 100 (99 из 212).
+        m = re.match(r"\s*Test\s+#\d+:\s*(.+)$", line)
+        if m:
+            out.append(m.group(1).strip())
     return out
 
 
@@ -72,8 +74,10 @@ def clear_gcda(build_dir: str) -> int:
 
 def run_one_test(build_dir: str, test_name: str, timeout: int = 600) -> bool:
     """Прогон ОДНОГО ctest-теста. Возвращает успех."""
+    # re.escape: имена тестов содержат regex-метасимволы (например "c++_api",
+    # где '+' — квантификатор); без экранирования ctest -R находил ноль тестов.
     cmd = ["ctest", "--test-dir", build_dir, "-R",
-           "^%s$" % test_name, "--timeout", str(timeout)]
+           "^%s$" % re.escape(test_name), "--timeout", str(timeout)]
     p = subprocess.run(cmd, capture_output=True, text=True)
     return p.returncode == 0
 
