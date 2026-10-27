@@ -603,58 +603,26 @@ int main() { return 0; }
     # anchor library and letting every test reuse that PCH via REUSE_FROM turns
     # those minutes into a single parse.
     #
-    # target_precompile_headers()/REUSE_FROM need CMake >= 3.16; the library
-    # itself still builds on 3.12, so the PCH is an opt-in acceleration gated on
-    # the CMake version rather than a raised project-wide minimum. The gate is
-    # expressed by which definition of the ut_apply_pch macro is in effect (the
-    # real one is defined below alongside the anchor, a no-op fallback after this
-    # block), so the call site in add_gtest() carries no version branch. REUSE_FROM
-    # requires the compile flags of the anchor and of each reusing target to
-    # match, so the anchor mirrors the gtest targets' standard, include dirs and
-    # PIC mode; a target whose flags differ (e.g. the MDBX_PROBES ones) simply
-    # does not reuse the PCH — GCC then falls back to a normal compile without an
-    # error, so this is safe.
-    # ------------------------------------------------------------------------
-    if(NOT MDBX_TEST_PCH)
-      # PCH reuse is incompatible with some build modes (e.g. ccache on MSVC);
-      # MDBX_TEST_PCH=OFF falls through to the no-op ut_apply_pch() fallback.
-    elseif(NOT CMAKE_VERSION VERSION_LESS 3.16 AND UT_TEST_ENV_SOURCE)
+    # The anchor mirrors the gtest targets' compile flags (standard, include
+    # dirs, PIC/PIE); the mechanics live in cmake/pch.cmake and are shared with
+    # the examples-PCH (see examples/CMakeLists.txt). REUSE_FROM only reuses a
+    # PCH when the flags match; a target whose flags differ (e.g. the
+    # MDBX_PROBES ones) simply does not reuse the PCH — GCC then falls back to
+    # a normal compile without an error, so this is safe.
+    if(UT_TEST_ENV_SOURCE)
       set(UT_PCH_ANCHOR_SOURCE "${CMAKE_CURRENT_LIST_DIR}/../tests/ut/pch_anchor.cxx")
       set(UT_PCH_HEADER "${CMAKE_CURRENT_LIST_DIR}/../tests/ut/pch.h++")
-      add_library(mdbx_test_pch STATIC "${UT_PCH_ANCHOR_SOURCE}")
-      target_include_directories(mdbx_test_pch PUBLIC ${UT_TEST_ENV_INCLUDE_DIR})
-      target_link_libraries(mdbx_test_pch PUBLIC ${UT_LIBRARIES})
-      # Link the same libmdbx target the gtest binaries link, so the anchor is
-      # compiled with the identical include paths (notably the project root that
-      # provides mdbx.h/mdbx.h++ via the library's INTERFACE include dir).
-      # PRIVATE: the anchor is only a PCH carrier, its consumers already link
-      # libmdbx themselves, so the dependency must not propagate and duplicate.
-      if(DEFINED TOOL_MDBX_LIB)
-        target_link_libraries(mdbx_test_pch PRIVATE ${TOOL_MDBX_LIB})
+      mdbx_add_pch_anchor(mdbx_test_pch "${UT_PCH_HEADER}" "${UT_PCH_ANCHOR_SOURCE}"
+                          CXX_STANDARD ${MDBX_CXX_STANDARD}
+                          INCLUDE ${UT_TEST_ENV_INCLUDE_DIR}
+                          LINK ${UT_LIBRARIES}
+                          LINK_PRIVATE ${TOOL_MDBX_LIB})
+      # Local alias for the call sites in add_gtest()/add_issue_test().
+      if(NOT COMMAND ut_apply_pch)
+        macro(ut_apply_pch target)
+          mdbx_test_pch_apply(${target})
+        endmacro()
       endif()
-      # The gtest binaries are executables: with CMAKE_POSITION_INDEPENDENT_CODE
-      # on Linux/GCC they are compiled -fPIE, while a static library defaults to
-      # -fPIC. GCC/Clang refuse to reuse a PCH created with different PIC/PIE
-      # settings (a fatal -Winvalid-pch under -Werror), so build the anchor's PCH
-      # with the very PIE option the consumers get. Use CMAKE_CXX_COMPILE_OPTIONS_PIE
-      # rather than a hardcoded -fPIE: it is "-fPIE" on Linux/GCC but empty on
-      # Windows (MinGW leaves COMPILE_OPTIONS_PIE empty and MSVC has no such
-      # flag), which is exactly where the executables are built without -fPIE.
-      set_target_properties(mdbx_test_pch PROPERTIES POSITION_INDEPENDENT_CODE OFF)
-      if(CMAKE_CXX_COMPILE_OPTIONS_PIE AND CMAKE_POSITION_INDEPENDENT_CODE)
-        target_compile_options(mdbx_test_pch PRIVATE ${CMAKE_CXX_COMPILE_OPTIONS_PIE})
-      endif()
-      if(MDBX_BUILD_CXX AND MDBX_CXX_STANDARD)
-        set_target_properties(mdbx_test_pch PROPERTIES CXX_STANDARD ${MDBX_CXX_STANDARD}
-                                                       CXX_STANDARD_REQUIRED ON)
-      endif()
-      target_precompile_headers(mdbx_test_pch PRIVATE "${UT_PCH_HEADER}")
-      # Real definition of the PCH helper, in effect only for CMake >= 3.16 with
-      # the anchor built; call sites just invoke ut_apply_pch() with no branch.
-      macro(ut_apply_pch target)
-        target_link_libraries(${target} mdbx_test_pch)
-        target_precompile_headers(${target} REUSE_FROM mdbx_test_pch)
-      endmacro()
     endif()
   else()
     set(UT_INCLUDE_DIRECTORIES "")
@@ -662,9 +630,9 @@ int main() { return 0; }
     message(STATUS "GoogleTest NOT available, so testing NOT be ENABLED")
   endif()
 
-  # No-op fallback when the real helper was not defined above (CMake < 3.16, or
-  # no GoogleTest, or no test-env TU): the version gate is expressed purely by
-  # which definition of ut_apply_pch is in effect, so call sites never branch.
+  # No-op fallback when the real helper was not defined above (MDBX_ENABLE_PCH=OFF,
+  # CMake < 3.16, no GoogleTest, or no test-env TU): the gate is expressed purely
+  # by whether mdbx_test_pch_apply is a no-op or not, so call sites never branch.
   if(NOT COMMAND ut_apply_pch)
     macro(ut_apply_pch target)
     endmacro()
