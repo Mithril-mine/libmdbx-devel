@@ -21,13 +21,21 @@
 ## C1 — Адресность
 
 - **«Не запускай то, что не изменилось»**: дифф → (метки ∪ ячейки).
-- Локально: `tests/ci/select-cells.sh` (дифф→ячейки) + `ctest -L 'ut\.' -LE
-  'ut\.heavy'` (метки). CI push-gate: `ci-dispatch.yml` → `select-cells.sh
-  --cap 10` → `run-cell.sh --scope fast`.
+- Локально: `tests/ci/select-cells.py` (дифф→ячейки) + `ctest -L 'ut\.' -LE
+  'ut\.heavy'` (метки). CI-гейты: push на любой ветке →
+  `select-cells.py --profile push-quick` (7 клетей); pull_request →
+  change-addressed (union push-quick+win-gate, ~16 клетей) при изменении
+  общего кода (см. `common_prefixes` в `tests/ci/config.json`).
 - Каждый новый тест обязан указать свою область: через подкаталог
   `tests/ut/<area>/` или метку `ut.<area>`.
-- Зоны ответственности путей→ячеек — в `tests/ci/config.json` (`path_zones`).
-  Путь без зоны = «docs-only», тесты не запускаются.
+- Пути→ячейки: рукописные `path_zones` удалены во избежание многократного
+  несогласования с `cells`. Вместо них действует фиксированный
+  `change-addressed` гейт: любое изменение общего кода (src/, CMakeLists,
+  mdbx.h, .github/, ...) гоняет полный ось-набор (все Windows-тулчейны,
+  арки, CRT/shared, Debug/Release, Linux/macOS), docs-only — компактный
+  push-quick. Актуальность набора гарантируется
+  `tests/ci/validate-config.py` (job `validate-config` в ci-dispatch +
+  локально `make test-ci-config`).
 
 ## C2 — Тайеринг и бюджет
 
