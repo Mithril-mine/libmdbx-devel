@@ -124,16 +124,16 @@ __cold int dxb_read_header(MDBX_env *env, meta_t *dest, const int lck_exclusive,
     if (env->stuck_meta >= 0)
       latch = (meta_number == (unsigned)env->stuck_meta);
     else if (preopen_mode == MDBX_PREOPEN_NONE)
-      /* Regular open (with or without a shared lock file): keep preferring a
-       * weak checkpoint of the current boot when the lock is present, so the
-       * open either recovers/promotes it (writable) or requires recovery
-       * (read-only, MDBX_WANNA_RECOVERY). Without a lock file fall through to
-       * the steady path as before. */
-      latch = meta_bootid_match(meta)
-                  ? meta_choice_recent(meta->unsafe_txnid, SIGN_IS_STEADY(meta->unsafe_sign), dest->unsafe_txnid,
-                                       SIGN_IS_STEADY(dest->unsafe_sign))
-                  : meta_choice_steady(meta->unsafe_txnid, SIGN_IS_STEADY(meta->unsafe_sign), dest->unsafe_txnid,
-                                       SIGN_IS_STEADY(dest->unsafe_sign));
+      /* Regular open: prefer a weak checkpoint of the current boot. Whether
+       * it is usable is decided below by the lock mode (meta_weak_acceptable):
+       * a boot-id match means the data is live, a writable open can
+       * steady-sync/promote it, a read-only one requires recovery. The
+       * presence of a lock file must not steer this choice: lckless and
+       * with-lck opens behave identically here. (issue #215) */
+      latch = meta_bootid_match(meta) ? meta_choice_recent(meta->unsafe_txnid, SIGN_IS_STEADY(meta->unsafe_sign),
+                                                           dest->unsafe_txnid, SIGN_IS_STEADY(dest->unsafe_sign))
+                                      : meta_choice_steady(meta->unsafe_txnid, SIGN_IS_STEADY(meta->unsafe_sign),
+                                                           dest->unsafe_txnid, SIGN_IS_STEADY(dest->unsafe_sign));
     else
       switch (preopen_mode) {
       case MDBX_PREOPEN_LEGACY:
