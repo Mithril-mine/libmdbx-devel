@@ -21,15 +21,24 @@ name: ci-dispatch
 # workflow must live on master before agents/nightly can use it (design §3).
 
 concurrency:
-  group: ci-dispatch-${{ github.workflow }}-${{ github.head_ref || github.ref }}
+  # Separate the push-run (compact push-quick gate) from the pull_request-run
+  # (change-addressed gate): a push to a branch that also has a PR must trigger
+  # BOTH — the PR cells are what actually gate the change on the full Windows
+  # axis matrix, and sharing one cancel-in-progress group would silently drop
+  # one of the runs.
+  group: ci-dispatch-${{ github.event_name }}-${{ github.head_ref || github.ref }}
   cancel-in-progress: true
 
 permissions:
   contents: read
 
 on:
+  # Push on ANY branch runs the compact push-quick gate (CI v3.5): a breakage
+  # in common code (src/, CMakeLists.txt, mdbx.h, .github/...) must be caught on
+  # feature branches too, not only after merge. The nightly 190-cell full gate
+  # still owns repeated stochastic coverage on master via the platform workflows.
   push:
-    branches: [devel, master]
+    branches: ['**']
   pull_request:
     branches: [devel, master]
   workflow_dispatch:
@@ -53,7 +62,27 @@ on:
     types: [dispatch-event]
 
 jobs:
+  validate-config:
+    # Guarantee the registry is consistent and the change-addressed gate covers
+    # the full axis matrix (CI v3.5, see tests/ci/validate-config.py). A
+    # failure here blocks the whole dispatch, including nightly.
+    runs-on: ubuntu-24.04
+    steps:
+      - name: checkout
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+          fetch-tags: true
+          submodules: true
+      - name: validate structure + coverage
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 tests/ci/validate-config.py check-structure
+          python3 tests/ci/validate-config.py check-coverage
+
   resolve:
+    needs: validate-config
     runs-on: ubuntu-24.04
     outputs:
       cells: ${{ steps.resolve.outputs.cells }}
@@ -79,22 +108,43 @@ jobs:
           EVENT_SCOPE: ${{ github.event.inputs.scope || github.event.client_payload.scope }}
           PUSH_BEFORE: ${{ github.event.before }}
           PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
         run: |
           set -euo pipefail
           SCOPE="${EVENT_SCOPE:-fast}"
           REF=""
           case "$GITHUB_EVENT_NAME" in
             pull_request)
-              echo "==> pull_request: push-quick preflight on the PR head"
-              CELLS=$(tests/ci/select-cells.py --profile push-quick)
+              # Change-addressed gate: select by diff against the merge base.
+              # Common-code changes get union(push-quick, win-gate); docs-only
+              # get the compact push-quick. Fall back to the FULL change-addressed
+              # gate (never just push-quick) if the base is unavailable or the
+              # diff cannot be resolved: under a PR the safer direction is more
+              # coverage, not less.
+              echo "==> pull_request: change-addressed gate on the PR head"
+              BASE="${PR_BASE_SHA:-${GITHUB_REF}}"
+              # The PR-base commit may not be present in the shallow fetch of the
+              # head ref; ensure it is available so the diff-selection works
+              # (fallback = full change-addressed gate if the fetch still fails).
+              git fetch origin "$BASE" || true
+              CELLS=$(tests/ci/select-cells.py --base "$BASE" || tests/ci/select-cells.py --profile change-addressed)
               SCOPE=fast
               REF="${PR_HEAD_SHA:-${GITHUB_REF}}"
               ;;
             push)
-              BASE="${PUSH_BEFORE:-origin/master}"
-              if [ "$BASE" = "0000000000000000000000000000000000000000" ]; then BASE="origin/master"; fi
-              echo "==> push: diff vs $BASE"
-              CELLS=$(tests/ci/select-cells.py --base "$BASE" --cap "${CI_PUSH_CAP:-10}" 2>/dev/null || tests/ci/select-cells.py --profile push-quick)
+              # Push on ANY branch runs the change-addressed gate: diff against
+              # the previous commit selects union(push-quick, win-gate) for
+              # common-code changes and the compact push-quick for docs-only
+              # ones. This is what ensures a push to a feature branch (e.g. a
+              # Windows-breaking src/ change) runs the full Windows axis matrix
+              # even when no PR run is created.
+              echo "==> push: change-addressed gate on $GITHUB_REF"
+              BASE="${PUSH_BEFORE:-${GITHUB_REF}}"
+              if [ "$BASE" = "0000000000000000000000000000000000000000" ]; then
+                BASE="${GITHUB_REF}"
+              fi
+              git fetch origin "$BASE" 2>/dev/null || true
+              CELLS=$(tests/ci/select-cells.py --base "$BASE" || tests/ci/select-cells.py --profile push-quick)
               REF="$GITHUB_REF"
               ;;
             schedule)
