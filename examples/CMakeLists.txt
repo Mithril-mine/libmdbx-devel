@@ -194,7 +194,7 @@ if(MDBX_TEXTBOOK_CXX_AVAILABLE)
 
   foreach(source IN LISTS MDBX_TEXTBOOK_EXAMPLES_CXX)
     get_filename_component(name "${source}" NAME_WE)
-    mdbx_textbook_add_cxx("mdbx_ex_${name}" "c++/${source}")
+    mdbx_textbook_add_cxx("eg_${name}" "c++/${source}")
   endforeach()
 
   # Сквозной проект config-store: срезы 02–12 (C++17).
@@ -212,13 +212,13 @@ if(MDBX_TEXTBOOK_CXX_AVAILABLE)
   foreach(source IN LISTS MDBX_TEXTBOOK_CONFIG_STORE)
     get_filename_component(name "${source}" NAME_WE)
     string(REPLACE "config-store-" "" short "${name}")
-    mdbx_textbook_add_cxx("mdbx_config_store_${short}" "config-store/${source}")
+    mdbx_textbook_add_cxx("cs_${short}" "config-store/${source}")
   endforeach()
 endif()
 
 foreach(source IN LISTS MDBX_TEXTBOOK_EXAMPLES_C)
   get_filename_component(name "${source}" NAME_WE)
-  mdbx_textbook_add_c("mdbx_ex_${name}_c" "c/${source}")
+  mdbx_textbook_add_c("eg_${name}_c" "c/${source}")
 endforeach()
 
 endif() # NOT MDBX_AMALGAMATED_SOURCE (textbook examples not shipped in dist)
