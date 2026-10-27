@@ -115,6 +115,9 @@ TEST(issue_gh0170, shrink_retry_period_settable_after_open_but_not_readonly) {
   ASSERT_NE(nullptr, ro_env);
   ASSERT_EQ(MDBX_SUCCESS, mdbx_env_open(ro_env, kTestPath, MDBX_NOSUBDIR | MDBX_RDONLY, 0644));
   EXPECT_EQ(MDBX_EACCESS, mdbx_env_set_option(ro_env, MDBX_opt_shrink_retry_period, 3 * 65536));
+  /* the read-only rejection is uniform: an out-of-range value is still EACCESS
+   * (the range check must not shadow the access check, issue #217) */
+  EXPECT_EQ(MDBX_EACCESS, mdbx_env_set_option(ro_env, MDBX_opt_shrink_retry_period, UINT64_C(0x100000000)));
   /* reading is still allowed and reports the default */
   EXPECT_EQ(5u * 65536u, get_period(ro_env));
   mdbx_env_close(ro_env);
