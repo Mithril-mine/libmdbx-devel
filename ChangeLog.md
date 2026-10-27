@@ -132,6 +132,7 @@ Cutting-edge release with new core features and internal refactoring.
 
  - Build:
     - Fixed MSVC+AddressSanitizer builds failing to compile ([#62](https://github.com/Mithril-mine/libmdbx-devel/issues/62)).
+    - Fixed linking with compiler-rt for `__builtin_cpu_supports()` by Clang.
 
 
 

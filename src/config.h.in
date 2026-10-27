@@ -48,6 +48,11 @@
 #endif
 #cmakedefine01 MDBX_DISABLE_VALIDATION
 #cmakedefine01 MDBX_AVOID_MSYNC
+/* Clang on x86/x64: __builtin_cpu_supports() pulls __cpu_model from
+ * compiler-rt, whose availability is probed at configure time by
+ * cmake/compiler.cmake. Left empty for other compilers: the engine
+ * decides by itself (see options.h). */
+@MDBX_X86_CPU_FEATURES_DEFINE@
 #cmakedefine01 MDBX_ENABLE_EXCLUSIVE_FASTPATH
 #cmakedefine01 MDBX_ENABLE_BIGFOOT
 #cmakedefine01 MDBX_ENABLE_PGOP_STAT
