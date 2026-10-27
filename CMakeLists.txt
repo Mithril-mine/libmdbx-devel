@@ -1256,6 +1256,15 @@ target_include_directories(
 if(MDBX_CLANG_BUILTINS_LIB)
   target_link_libraries(mdbx-static INTERFACE "${MDBX_CLANG_BUILTINS_LIB}")
 endif()
+if(MDBX_CLANG_CPU_RT_LIB)
+  # Normalized in cmake/compiler.cmake (backslash Windows paths are invalid here).
+  if(NOT MDBX_CLANG_CPU_RT_LINK)
+    file(TO_CMAKE_PATH "${MDBX_CLANG_CPU_RT_LIB}" MDBX_CLANG_CPU_RT_LINK)
+  endif()
+  if(MDBX_CLANG_CPU_RT_LINK AND NOT MDBX_CLANG_CPU_BUILTINS_OK)
+    target_link_libraries(mdbx-static INTERFACE "${MDBX_CLANG_CPU_RT_LINK}")
+  endif()
+endif()
 
 # ######################################################################################################################
 
@@ -1309,6 +1318,14 @@ if(MDBX_BUILD_SHARED_LIBRARY)
     INTERFACE "$<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}>" "$<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}>")
   if(MDBX_CLANG_BUILTINS_LIB)
     target_link_libraries(mdbx PRIVATE "${MDBX_CLANG_BUILTINS_LIB}")
+  endif()
+  if(MDBX_CLANG_CPU_RT_LIB)
+    if(NOT MDBX_CLANG_CPU_RT_LINK)
+      file(TO_CMAKE_PATH "${MDBX_CLANG_CPU_RT_LIB}" MDBX_CLANG_CPU_RT_LINK)
+    endif()
+    if(MDBX_CLANG_CPU_RT_LINK AND NOT MDBX_CLANG_CPU_BUILTINS_OK)
+      target_link_libraries(mdbx PRIVATE "${MDBX_CLANG_CPU_RT_LINK}")
+    endif()
   endif()
 endif()
 
