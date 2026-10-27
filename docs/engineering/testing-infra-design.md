@@ -101,12 +101,25 @@ in a workflow matrix row: `runs-on`, toolchain env, cmake args, ctest args.
 
 ### 4.2 Orchestrator — `ci-dispatch.yml`
 
-- Triggers:
-  - `push` → profile `push-quick` (branches: `devel`, `master`).
+- Triggers (CI v3.5 model, no hand-maintained `path_zones`):
+  - `push` on **any branch** → compact `push-quick` gate (7 surface cells, fast
+    scope; Windows = v142 on win2022 + v145 on winlatest + mingw). A breakage
+    in common code is caught on feature branches too, not only after merge.
+  - `pull_request` → **change-addressed** selection: diff against the merge base;
+    any change touching a `common_prefix` (`src/`, `cmake/`, `CMakeLists.txt`,
+    `mdbx.h`, `.github/workflows/`, ...) runs the gate
+    `union(push-quick, win-gate)` (~16 cells) — the full Windows axis matrix
+    (v142/v143/v145, mscl, mingw, x64/win32/arm64, mscrt on/off, shared on/off,
+    debug/release) plus Linux/macOS. Docs-only changes run `push-quick`.
   - `workflow_dispatch` → inputs: `profile` (choice) or `cell` (choice/free), plus `ref`.
   - `repository_dispatch` (`types: [dispatch-event]`) → `client_payload`:
     `{"profile"|"cell": "...", "ref": "branch-or-sha"}`. For agents, `ref` is mandatory.
   - `schedule` → profile `full` on `master` HEAD (00:30 UTC daily).
+- `job validate-config` (always, before resolve): runs
+  `tests/ci/validate-config.py check-structure` + `check-coverage`, enforcing
+  that the change-addressed gate covers every mandatory axis. It fails the run
+  (blocking the PR/push) when the registry is inconsistent or an axis is missing,
+  so the coverage stays correct **without manual bookkeeping**.
 - `job resolve`: reads the registry **from the requested ref** (checkout the ref, parse
   `tests/ci/config.json`), resolves profile/cell → emits JSON array of cell objects.
 - `job run`: matrix over that JSON; each matrix row calls `ci-run.yml` with the cell fields.
@@ -127,11 +140,19 @@ in a workflow matrix row: `runs-on`, toolchain env, cmake args, ctest args.
 
 | Request | Resolved to |
 | --- | --- |
-| `push` on devel/master | `push-quick` profile (~5 cells) |
-| `schedule` daily | `full` profile on `master` HEAD |
+| `push` on any branch | `push-quick` profile (7 cells) |
+| `pull_request` (common change vs merge-base) | `change-addressed` = union(`push-quick`, `win-gate`) (~16 cells) |
+| `pull_request` (docs/skynet only) | `push-quick` profile |
+| `schedule` daily | `full` profile on `master` HEAD (190 cells, nightly depth) |
 | `workflow_dispatch` with `cell=win-msvc-v145-arm64-...` | that single cell |
 | `workflow_dispatch` with `profile=mac-full` | all mac cells |
 | `repository_dispatch` `{profile, ref}` / `{cell, ref}` | resolved against `ref`'s registry |
+
+Consistency is enforced by `tests/ci/validate-config.py` (`check-structure` +
+`check-coverage`) in the `validate-config` job and via `make test-ci-config`
+locally: adding a new toolchain/arch/crt axis without wiring it into the gate
+fails the check with a `COVERAGE-GAP` report instead of silently shrinking
+coverage.
 
 Unknown ids / bad refs → fail-fast in `resolve` with a clear message (no silent empty matrix).
 
