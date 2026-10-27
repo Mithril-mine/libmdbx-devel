@@ -1,18 +1,25 @@
 #!/usr/bin/env python3
-# Infra v3 (C1): diff -> cell selection. Maps changed paths onto the
-# path_zones registry (tests/ci/config.json) and prints the union of cell
-# ids to run for the fast tier. Combined with run-cell.py --scope fast this
-# is the change-addressed push gate: "never run what did not change".
+# Infra v3 (C1): diff -> cell selection (CI v3.5 model, no path_zones).
+#
+# Maps the changed paths onto a two-tier policy:
+#   * any change touching a "common prefix" (src/, cmake/, CMakeLists.txt,
+#     mdbx.h, mdbx.h++, mdbx++/, GNUmakefile, Makefile, tests/ut/,
+#     tests/framework/, tests/ci/, .github/workflows/) -> the change-addressed
+#     gate = union(push-quick, win-gate);
+#   * otherwise (docs/, skynet/, isolated files) -> push-quick.
+# A gate covers the full Windows axis matrix (see validate-config.py), so a
+# breakage in common code is always seen on every platform/toolset.
 #
 # Usage:
 #   tests/ci/select-cells.py [--base <ref>] [path...]
-#   tests/ci/select-cells.py                    # changed = git diff vs origin/devel
-#   tests/ci/select-cells.py src/cursor.c       # explicit paths
-#   tests/ci/select-cells.py --profile push-quick   # fixed profile (nightly/full)
-#   tests/ci/select-cells.py --cap N            # shrink to N diverse cells
+#   tests/ci/select-cells.py                    # changed = git diff vs base
+#   tests/ci/select-cells.py src/cursor.c        # explicit paths
+#   tests/ci/select-cells.py --profile NAME      # fixed profile (gate/others)
+#   tests/ci/select-cells.py --cap N             # shrink to N diverse cells
 #
 # Output: newline-separated cell ids on stdout; stats on stderr.
-# Exit: 0 = ok (may be empty), 1 = nothing selected, 2 = usage/error.
+# Exit: 0 = ok (non-empty selection ensured), 1 = nothing selected,
+#       2 = usage/error.
 
 import argparse
 import json
@@ -29,8 +36,33 @@ def git(args):
                           capture_output=True, text=True)
 
 
-def zone_cells(cfg, zone):
-    return list(cfg.get("path_zones", {}).get(zone, []))
+def profile_cells(cfg, name):
+    prof = cfg.get("profiles", {})
+    if name not in prof:
+        print(f"select-cells: unknown profile '{name}'", file=sys.stderr)
+        return None
+    return list(prof[name])
+
+
+def change_addressed_cells(cfg):
+    """union(push-quick, win-gate), deduplicated, order-preserving."""
+    seen = set()
+    out = []
+    for name in ("push-quick", "win-gate"):
+        for cid in cfg.get("profiles", {}).get(name, []):
+            if cid not in seen:
+                seen.add(cid)
+                out.append(cid)
+    return out
+
+
+def hits_common(cfg, paths):
+    prefixes = cfg.get("common_prefixes", [])
+    for p in paths:
+        for pref in prefixes:
+            if p == pref or p.startswith(pref):
+                return True
+    return False
 
 
 def main():
@@ -49,51 +81,43 @@ def main():
     cfg = json.loads(REGISTRY.read_text(encoding="utf-8"))
 
     if args.profile:
-        profiles = cfg.get("profiles", {})
-        if args.profile not in profiles:
-            print(f"select-cells: unknown profile '{args.profile}'", file=sys.stderr)
+        if args.profile == "change-addressed":
+            result = change_addressed_cells(cfg)
+        else:
+            result = profile_cells(cfg, args.profile)
+        if result is None:
             return 1
-        for cid in profiles[args.profile]:
-            print(cid)
-        return 0
-
-    paths = list(args.paths)
-    if not paths:
-        # git diff --name-only vs base...HEAD + working tree changes + untracked
-        base = args.base
-        r = git(["rev-parse", "--verify", "-q", base])
-        if r.returncode != 0:
-            print(f"select-cells: base '{base}' not found (give --base or paths)",
-                  file=sys.stderr)
-            return 1
-        paths = git(["diff", "--name-only", f"{base}...HEAD"]).stdout.splitlines()
-        paths += git(["diff", "--name-only"]).stdout.splitlines()
-        paths += git(["ls-files", "--others", "--exclude-standard"]).stdout.splitlines()
-        paths = [p for p in paths if p]
+    else:
+        paths = list(args.paths)
         if not paths:
-            print(f"select-cells: no changes vs {base}", file=sys.stderr)
-            return 1
-
-    result = []
-    seen = set()
-    zones = list(cfg.get("path_zones", {}).keys())
-    for p in paths:
-        matched = False
-        for zone in zones:
-            if p.startswith(zone):
-                matched = True
-                for cid in zone_cells(cfg, zone):
-                    if cid not in seen:
-                        seen.add(cid)
-                        result.append(cid)
-        if not matched:
-            print(f"select-cells: no zone for '{p}'", file=sys.stderr)
+            base = args.base
+            r = git(["rev-parse", "--verify", "-q", base])
+            if r.returncode != 0:
+                print(f"select-cells: base '{base}' not found (give --base or paths)",
+                      file=sys.stderr)
+                return 1
+            paths = git(["diff", "--name-only", f"{base}...HEAD"]).stdout.splitlines()
+            paths += git(["diff", "--name-only"]).stdout.splitlines()
+            paths += git(["ls-files", "--others", "--exclude-standard"]).stdout.splitlines()
+            paths = [p for p in paths if p]
+            if not paths:
+                print(f"select-cells: no changes vs {base}", file=sys.stderr)
+                return 1
+        # two-tier policy: common -> change-addressed gate, else push-quick
+        if hits_common(cfg, paths):
+            result = change_addressed_cells(cfg)
+            print("select-cells: common change -> change-addressed gate "
+                  f"({len(result)} cells)", file=sys.stderr)
+        else:
+            result = profile_cells(cfg, "push-quick") or []
+            print("select-cells: non-common change -> push-quick "
+                  f"({len(result)} cells)", file=sys.stderr)
 
     if not result:
-        print("select-cells: no cells selected (docs-only change?)", file=sys.stderr)
+        print("select-cells: nothing selected (gate may be empty)", file=sys.stderr)
         return 1
 
-    # --cap N: shrink keeping platform diversity and push-quick priority.
+    # --cap N: shrink keeping platform diversity and gate priority.
     if args.cap > 0 and len(result) > args.cap:
         pushquick = set(cfg.get("profiles", {}).get("push-quick", []))
         runs_on = {c["id"]: c.get("runs-on", "") for c in cfg["cells"]}
@@ -130,8 +154,7 @@ def main():
 
     for cid in result:
         print(cid)
-    print(f"select-cells: selected {len(result)} cells for {len(paths)} changed paths",
-          file=sys.stderr)
+    print(f"select-cells: selected {len(result)} cells", file=sys.stderr)
     return 0
 
 
