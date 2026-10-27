@@ -1,5 +1,5 @@
 macro(add_issue_test)
-  add_gtest(${ARGV} PREFIX "test_issue_" LABELS "ut;ut.issues")
+  add_gtest(${ARGV} PREFIX "issue_" LABELS "ut;ut.issues")
 endmacro(add_issue_test)
 
 add_issue_test(gh0010 SOURCE "issue_gh0010.c++")
