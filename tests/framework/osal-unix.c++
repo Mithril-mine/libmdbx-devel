@@ -688,6 +688,11 @@ int osal_actor_poll(mdbx_pid_t &pid, unsigned timeout) {
 
     if (err != EINTR)
       return err;
+    /* waitpid() was interrupted by a stray signal (not SIGALRM/SIGUSR1/2,
+     * e.g. SIGURG/SIGWINCH from the environment): transient, so retry.
+     * A child exit is never lost by waitpid, and the loop is bounded by the
+     * sigalarm/sigbreak conditions above. */
+    continue;
   }
   /* waitpid() may have left a stale -1 in `pid` on EINTR when the loop exits
    * via the alarm/sigbreak condition; never report it as a child. */
