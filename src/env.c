@@ -603,8 +603,7 @@ __cold int env_close(MDBX_env *env, bool resurrect_after_fork) {
   if (!resurrect_after_fork) {
     if (env->kvs) {
       for (size_t i = CORE_DBS; i < env->n_dbi; ++i)
-        if (env->kvs[i].name.iov_len)
-          osal_free(env->kvs[i].name.iov_base);
+        osal_free(env->kvs[i].name.iov_base);
       osal_free(env->kvs);
       env->n_dbi = CORE_DBS;
       env->kvs = nullptr;
