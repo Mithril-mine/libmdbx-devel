@@ -36,10 +36,24 @@ inline cursor &cursor::set_context(void *ptr) {
   return *this;
 }
 
+/// \brief Compares the positions of two cursors without throwing.
+/// \param left           The left-hand cursor.
+/// \param right          The right-hand cursor.
+/// \param ignore_nested  Ignore the position within a nested (dupsort) tree.
+/// \returns A negative value if `left` is before `right`, a positive value if
+///          after, zero if at the same position, or \ref MDBX_RESULT_TRUE
+///          when the cursors are incomparable.
 inline int compare_position_nothrow(const cursor &left, const cursor &right, bool ignore_nested = false) noexcept {
   return mdbx_cursor_compare(left.handle_, right.handle_, ignore_nested);
 }
 
+/// \brief Compares the positions of two cursors.
+/// \param left           The left-hand cursor.
+/// \param right          The right-hand cursor.
+/// \param ignore_nested  Ignore the position within a nested (dupsort) tree.
+/// \returns A negative value if `left` is before `right`, a positive value if
+///          after, zero if at the same position.
+/// \throws `std::logic_error` if the cursors are incomparable.
 inline int compare_position(const cursor &left, const cursor &right, bool ignore_nested = false) {
   const auto diff = compare_position_nothrow(left, right, ignore_nested);
   MDBX_INLINE_API_ASSERT(compare_position_nothrow(right, left, ignore_nested) == -diff);
@@ -87,6 +101,12 @@ inline ptrdiff_t cursor::estimate(move_operation operation, MDBX_val *key, MDBX_
   return result;
 }
 
+/// \brief Estimates the distance (number of items) between two cursor positions.
+/// \param from  The cursor at the "from" position.
+/// \param to    The cursor at the "to" position.
+/// \returns The approximate distance; a negative value means the `to` position
+///          is before the `from` one.
+/// \throws The corresponding \ref mdbx::exception on failure.
 inline ptrdiff_t estimate(const cursor &from, const cursor &to) {
   ptrdiff_t result;
   error::success_or_throw(mdbx_estimate_distance(from, to, &result));
@@ -124,6 +144,44 @@ inline size_t cursor::count_multivalue() const {
   error::success_or_throw(::mdbx_cursor_count(*this, &result));
   return result;
 }
+
+inline size_t cursor::count_multivalue(MDBX_stat *stat) const {
+  size_t result;
+  error::success_or_throw(::mdbx_cursor_count_ex(*this, &result, stat, sizeof(*stat)));
+  return result;
+}
+
+inline ::std::vector<pair> cursor::get_batch(size_t max_pairs, move_operation op, bool *is_last) const {
+  if (is_last)
+    *is_last = false;
+  ::std::vector<pair> result;
+  if (!max_pairs)
+    return result;
+
+  const size_t limit = max_pairs * 2;
+  ::std::vector<MDBX_val> pairs(limit);
+  size_t count = 0;
+  int rc = ::mdbx_cursor_get_batch(handle_, &count, pairs.data(), limit, MDBX_cursor_op(op));
+  if (rc == MDBX_NOTFOUND || rc == MDBX_ENODATA) {
+    if (is_last)
+      *is_last = true;
+    return result;
+  }
+  if (rc == MDBX_RESULT_TRUE) {
+    if (is_last)
+      *is_last = true;
+    rc = MDBX_SUCCESS;
+  }
+  error::success_or_throw(rc);
+
+  MDBX_INLINE_API_ASSERT(count % 2 == 0 && count <= limit);
+  result.reserve(count / 2);
+  for (size_t i = 0; i + 1 < count; i += 2)
+    result.emplace_back(slice(pairs[i]), slice(pairs[i + 1]));
+  return result;
+}
+
+inline void cursor::ignore_key_order() { error::success_or_throw(::mdbx_cursor_ignord(handle_)); }
 
 inline bool cursor::eof() const { return error::boolean_or_throw(::mdbx_cursor_eof(*this)); }
 
@@ -198,14 +256,14 @@ inline value_result cursor::try_insert(const slice &key, slice value) {
 }
 
 inline slice cursor::insert_reserve(const slice &key, size_t value_length) {
-  slice result(nullptr, value_length);
+  slice result = slice::blank_for_put_reserve(value_length);
   error::success_or_throw(put(key, &result /* takes the present value in case MDBX_KEYEXIST */,
                               MDBX_put_flags_t(put_mode::insert_unique) | MDBX_RESERVE));
   return result;
 }
 
 inline value_result cursor::try_insert_reserve(const slice &key, size_t value_length) {
-  slice result(nullptr, value_length);
+  slice result = slice::blank_for_put_reserve(value_length);
   const int err = put(key, &result /* takes the present value in case MDBX_KEYEXIST */,
                       MDBX_put_flags_t(put_mode::insert_unique) | MDBX_RESERVE);
   switch (err) {
@@ -223,7 +281,7 @@ inline void cursor::upsert(const slice &key, const slice &value) {
 }
 
 inline slice cursor::upsert_reserve(const slice &key, size_t value_length) {
-  slice result(nullptr, value_length);
+  slice result = slice::blank_for_put_reserve(value_length);
   error::success_or_throw(put(key, &result, MDBX_put_flags_t(put_mode::upsert) | MDBX_RESERVE));
   return result;
 }
@@ -245,13 +303,13 @@ inline bool cursor::try_update(const slice &key, const slice &value) {
 }
 
 inline slice cursor::update_reserve(const slice &key, size_t value_length) {
-  slice result(nullptr, value_length);
+  slice result = slice::blank_for_put_reserve(value_length);
   error::success_or_throw(put(key, &result, MDBX_put_flags_t(put_mode::update) | MDBX_RESERVE));
   return result;
 }
 
 inline value_result cursor::try_update_reserve(const slice &key, size_t value_length) {
-  slice result(nullptr, value_length);
+  slice result = slice::blank_for_put_reserve(value_length);
   const int err = put(key, &result, MDBX_put_flags_t(put_mode::update) | MDBX_RESERVE);
   switch (err) {
   case MDBX_SUCCESS:
@@ -284,6 +342,20 @@ inline bool cursor::erase(const slice &key, const slice &value) {
   move_result data = find_multivalue(key, value, false);
   return data.done && erase();
 }
+
+inline size_t cursor::erase_bunch(bunch_delete action) {
+  uint64_t affected;
+  error::success_or_throw(::mdbx_cursor_bunch_delete(handle_, MDBX_bunch_action_t(action), &affected));
+  return size_t(affected);
+}
+
+inline size_t cursor::erase_range(const cursor &end, bool end_including) {
+  uint64_t affected;
+  error::success_or_throw(::mdbx_cursor_delete_range(handle_, end.handle_, end_including, &affected));
+  return size_t(affected);
+}
+
+inline void cursor::reset() { error::success_or_throw(::mdbx_cursor_reset(handle_)); }
 
 inline size_t cursor::put_multiple_samelength(const slice &key, const size_t value_length, const void *values_array,
                                               size_t values_count, put_mode mode, bool allow_partial) {

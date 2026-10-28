@@ -35,12 +35,18 @@ inline ::std::ostream &operator<<(::std::ostream &out, const MDBX_error_t &errco
 /// \ingroup cxx_api
 namespace std {
 
+/// \brief Converts the given \ref mdbx::slice to a string.
+/// \param value  The slice to be converted.
+/// \returns The string representation.
 inline string to_string(const ::mdbx::slice &value) {
   ostringstream out;
   out << value;
   return out.str();
 }
 
+/// \brief Converts the given \ref mdbx::buffer to a string.
+/// \param buffer  The buffer to be converted.
+/// \returns The string representation.
 template <class ALLOCATOR, typename CAPACITY_POLICY>
 inline string to_string(const ::mdbx::buffer<ALLOCATOR, CAPACITY_POLICY> &buffer) {
   ostringstream out;
@@ -48,72 +54,108 @@ inline string to_string(const ::mdbx::buffer<ALLOCATOR, CAPACITY_POLICY> &buffer
   return out.str();
 }
 
+/// \brief Converts the given \ref mdbx::pair to a string.
+/// \param value  The key-value pair to be converted.
+/// \returns The string representation.
 inline string to_string(const ::mdbx::pair &value) {
   ostringstream out;
   out << value;
   return out.str();
 }
 
+/// \brief Converts the given \ref mdbx::env::geometry to a string.
+/// \param value  The geometry to be converted.
+/// \returns The string representation.
 inline string to_string(const ::mdbx::env::geometry &value) {
   ostringstream out;
   out << value;
   return out.str();
 }
 
+/// \brief Converts the given \ref mdbx::env::operate_parameters to a string.
+/// \param value  The operate parameters to be converted.
+/// \returns The string representation.
 inline string to_string(const ::mdbx::env::operate_parameters &value) {
   ostringstream out;
   out << value;
   return out.str();
 }
 
+/// \brief Converts the given \ref mdbx::env::mode to a string.
+/// \param value  The mode to be converted.
+/// \returns The string representation.
 inline string to_string(const ::mdbx::env::mode &value) {
   ostringstream out;
   out << value;
   return out.str();
 }
 
+/// \brief Converts the given \ref mdbx::env::durability to a string.
+/// \param value  The durability to be converted.
+/// \returns The string representation.
 inline string to_string(const ::mdbx::env::durability &value) {
   ostringstream out;
   out << value;
   return out.str();
 }
 
+/// \brief Converts the given \ref mdbx::env::reclaiming_options to a string.
+/// \param value  The reclaiming options to be converted.
+/// \returns The string representation.
 inline string to_string(const ::mdbx::env::reclaiming_options &value) {
   ostringstream out;
   out << value;
   return out.str();
 }
 
+/// \brief Converts the given \ref mdbx::env::operate_options to a string.
+/// \param value  The operate options to be converted.
+/// \returns The string representation.
 inline string to_string(const ::mdbx::env::operate_options &value) {
   ostringstream out;
   out << value;
   return out.str();
 }
 
+/// \brief Converts the given \ref mdbx::env_managed::create_parameters to a string.
+/// \param value  The create parameters to be converted.
+/// \returns The string representation.
 inline string to_string(const ::mdbx::env_managed::create_parameters &value) {
   ostringstream out;
   out << value;
   return out.str();
 }
 
+/// \brief Converts the given \ref MDBX_log_level_t to a string.
+/// \param value  The log level to be converted.
+/// \returns The string representation.
 inline string to_string(const ::MDBX_log_level_t &value) {
   ostringstream out;
   out << value;
   return out.str();
 }
 
+/// \brief Converts the given \ref MDBX_debug_flags_t to a string.
+/// \param value  The debug flags to be converted.
+/// \returns The string representation.
 inline string to_string(const ::MDBX_debug_flags_t &value) {
   ostringstream out;
   out << value;
   return out.str();
 }
 
+/// \brief Converts the given \ref mdbx::error to a string.
+/// \param value  The error to be converted.
+/// \returns The string representation.
 inline string to_string(const ::mdbx::error &value) {
   ostringstream out;
   out << value;
   return out.str();
 }
 
+/// \brief Converts the given \ref MDBX_error_t code to a string.
+/// \param errcode  The error code to be converted.
+/// \returns The string representation.
 inline string to_string(const ::MDBX_error_t &errcode) { return to_string(::mdbx::error(errcode)); }
 
 template <> struct hash<::mdbx::slice> {

@@ -1218,7 +1218,7 @@ __cold MDBX_env_flags_t env::operate_parameters::make_flags(bool accede, bool us
   if (options.enable_validation)
     flags |= MDBX_VALIDATION;
 
-  if (mode != readonly) {
+  if (mode != env::mode::readonly) {
     if (options.nested_transactions)
       flags &= ~MDBX_WRITEMAP;
     if (reclaiming.lifo)
@@ -1477,6 +1477,45 @@ __cold env_managed::env_managed(const MDBX_STD_FILESYSTEM_PATH &pathname, const 
 
 //------------------------------------------------------------------------------
 
+__cold env_managed env_managed::open_for_recovery(const char *pathname, unsigned target_meta, bool writeable,
+                                                  unsigned max_maps) {
+  env_managed result(create_env());
+  if (max_maps > 0)
+    error::success_or_throw(::mdbx_env_set_maxdbs(result.handle_, max_maps));
+  error::success_or_throw(::mdbx_env_open_for_recovery(result.handle_, pathname, target_meta, writeable));
+  return result;
+}
+
+__cold env_managed env_managed::open_for_recovery(const ::std::string &pathname, unsigned target_meta, bool writeable,
+                                                  unsigned max_maps) {
+  return open_for_recovery(pathname.c_str(), target_meta, writeable, max_maps);
+}
+
+#if defined(_WIN32) || defined(_WIN64)
+__cold env_managed env_managed::open_for_recovery(const wchar_t *pathname, unsigned target_meta, bool writeable,
+                                                  unsigned max_maps) {
+  env_managed result(create_env());
+  if (max_maps > 0)
+    error::success_or_throw(::mdbx_env_set_maxdbs(result.handle_, max_maps));
+  error::success_or_throw(::mdbx_env_open_for_recoveryW(result.handle_, pathname, target_meta, writeable));
+  return result;
+}
+
+__cold env_managed env_managed::open_for_recovery(const ::std::wstring &pathname, unsigned target_meta, bool writeable,
+                                                  unsigned max_maps) {
+  return open_for_recovery(pathname.c_str(), target_meta, writeable, max_maps);
+}
+#endif /* Windows */
+
+#ifdef MDBX_STD_FILESYSTEM_PATH
+__cold env_managed env_managed::open_for_recovery(const MDBX_STD_FILESYSTEM_PATH &pathname, unsigned target_meta,
+                                                  bool writeable, unsigned max_maps) {
+  return open_for_recovery(pathname.native(), target_meta, writeable, max_maps);
+}
+#endif /* MDBX_STD_FILESYSTEM_PATH */
+
+//------------------------------------------------------------------------------
+
 void cursor_managed::close() {
   error::success_or_throw(::mdbx_cursor_close2(handle_));
   handle_ = nullptr;
@@ -1585,9 +1624,9 @@ void txn_managed::commit(finalization_latency *latency) {
 bool txn_managed::checkpoint(finalization_latency *latency) {
   const error err = static_cast<MDBX_error_t>(::mdbx_txn_checkpoint(handle_, MDBX_TXN_NOWEAKING, latency));
   if (MDBX_UNLIKELY(err.is_failure())) {
-    if (err.code() != MDBX_THREAD_MISMATCH && err.code() != MDBX_EINVAL)
+    if (err.code() != MDBX_THREAD_MISMATCH && err.code() != MDBX_EINVAL && err.code() != MDBX_BAD_TXN)
       /* do not reset the handle in case of errors that do not change the transaction state,
-       * including MDBX_EINVAL here. */
+       * including MDBX_EINVAL and MDBX_BAD_TXN here. */
       handle_ = nullptr;
     MDBX_CXX20_UNLIKELY err.throw_exception();
   }
@@ -1599,8 +1638,13 @@ void txn_managed::commit_embark_read(finalization_latency *latency) {
 }
 
 bool txn_managed::amend(bool dont_wait) {
-  return !error::boolean_or_throw(::mdbx_txn_amend(
-      handle_, &handle_, dont_wait ? MDBX_TXN_READWRITE | MDBX_TXN_TRY : MDBX_TXN_READWRITE, handle_->userctx));
+  error::throw_on_nullptr(handle_, MDBX_BAD_TXN);
+  const int err = ::mdbx_txn_amend(
+      handle_, &handle_, dont_wait ? MDBX_TXN_READWRITE | MDBX_TXN_TRY : MDBX_TXN_READWRITE, handle_->userctx);
+  if (dont_wait && err == MDBX_BUSY)
+    /* documented: `false` if the read-only transaction still continues */
+    return false;
+  return !error::boolean_or_throw(err);
 }
 
 //------------------------------------------------------------------------------
@@ -1722,7 +1766,7 @@ void cursor::update_current(const slice &value) {
   update(key, value);
 }
 
-slice cursor::reverse_current(size_t value_length) {
+slice cursor::reserve_current(size_t value_length) {
   default_buffer holder;
   auto key = current().key;
   if (error::boolean_or_throw(mdbx_is_dirty(handle_->txn, key.iov_base)))

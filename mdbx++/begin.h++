@@ -37,6 +37,7 @@
 #include <algorithm>   // for std::min/max
 #include <cassert>     // for assert()
 #include <climits>     // for CHAR_BIT
+#include <cstdint>     // for std::uintptr_t, std::intptr_t
 #include <cstring>     // for std::strlen, str:memcmp
 #include <exception>   // for std::exception_ptr
 #include <ostream>     // for std::ostream
@@ -53,6 +54,10 @@
 
 #if defined(__cpp_lib_string_view) && __cpp_lib_string_view >= 201606L
 #include <string_view>
+#endif
+
+#if defined(__cpp_lib_optional) && __cpp_lib_optional >= 201606L
+#include <optional>
 #endif
 
 #ifndef MDBX_USING_CXX_EXPERIMENTAL_FILESYSTEM
@@ -216,6 +221,15 @@
 #endif
 #endif /* MDBX_CXX20_UNLIKELY */
 
+/** Workaround for old compilers without `[[nodiscard]]` support */
+#ifndef MDBX_NODISCARD
+#if defined(DOXYGEN) || __cplusplus >= 201703L
+#define MDBX_NODISCARD [[nodiscard]]
+#else
+#define MDBX_NODISCARD /* nope */
+#endif
+#endif /* MDBX_NODISCARD */
+
 #ifndef MDBX_HAVE_CXX20_CONCEPTS
 #if defined(__cpp_concepts) && __cpp_concepts >= 202002L && defined(__cpp_lib_concepts) && __cpp_lib_concepts >= 202002L
 #include <concepts>
@@ -310,10 +324,12 @@ enum class endian { little = __ORDER_LITTLE_ENDIAN__, big = __ORDER_BIG_ENDIAN__
 /// \copydoc MDBX_version_info
 using version_info = ::MDBX_version_info;
 /// \brief Returns libmdbx version information.
+/// \returns A reference to the constant \ref version_info instance.
 MDBX_CXX11_CONSTEXPR const version_info &get_version() noexcept;
 /// \copydoc MDBX_build_info
 using build_info = ::MDBX_build_info;
 /// \brief Returns libmdbx build information.
+/// \returns A reference to the constant \ref build_info instance.
 MDBX_CXX11_CONSTEXPR const build_info &get_build() noexcept;
 
 /// \brief constexpr-enabled strlen().
@@ -344,8 +360,14 @@ using legacy_allocator = ::std::string::allocator_type;
 #if defined(DOXYGEN) || MDBX_CXX_HAS_POLYMORPHIC_ALLOCATOR
 /// \brief Default polymorphic allocator for modern code.
 using polymorphic_allocator = ::std::pmr::string::allocator_type;
+/// \brief The default allocator for \ref buffer and \ref string; resolves to
+/// \ref polymorphic_allocator when the latter is available, otherwise to
+/// \ref legacy_allocator.
 using default_allocator = polymorphic_allocator;
 #else
+/// \brief The default allocator for \ref buffer and \ref string; resolves to
+/// \ref polymorphic_allocator when the latter is available, otherwise to
+/// \ref legacy_allocator.
 using default_allocator = legacy_allocator;
 #endif /* MDBX_CXX_HAS_POLYMORPHIC_ALLOCATOR */
 
@@ -367,6 +389,8 @@ using txnid = uint64_t;
 template <class ALLOCATOR = default_allocator>
 using string = ::std::basic_string<char, ::std::char_traits<char>, ALLOCATOR>;
 
+/// \brief The platform-dependent file handle type, i.e. an alias for
+/// \ref mdbx_filehandle_t.
 using filehandle = ::mdbx_filehandle_t;
 #if MDBX_USING_CXX_EXPERIMENTAL_FILESYSTEM
 #ifdef _MSC_VER
@@ -384,22 +408,38 @@ namespace filesystem = ::std::experimental::filesystem;
 namespace filesystem = ::std::filesystem;
 /// \brief Defined if `mdbx::filesystem::path` is available.
 /// \details If defined, it is always `mdbx::filesystem::path`,
-/// which in turn can be refs to `std::filesystem::path` or `std::experimental::filesystem::path`.
-/// Nonetheless `MDBX_STD_FILESYSTEM_PATH` not defined if the `::mdbx::path`
-/// is fallbacked to c `std::string` or `std::wstring`.
+/// which in turn can refer to `std::filesystem::path` or `std::experimental::filesystem::path`.
+/// Nonetheless `MDBX_STD_FILESYSTEM_PATH` is not defined if the `::mdbx::path`
+/// falls back to a plain `std::string` or `std::wstring`.
 #define MDBX_STD_FILESYSTEM_PATH ::mdbx::filesystem::path
 #endif /* MDBX_STD_FILESYSTEM_PATH */
 
 #ifdef MDBX_STD_FILESYSTEM_PATH
+/// \brief The default path type for opening environments; resolves to
+/// `mdbx::filesystem::path` when the filesystem library is available,
+/// otherwise to `std::wstring` on Windows and `std::string` elsewhere.
 using path = MDBX_STD_FILESYSTEM_PATH;
+/// \brief The string type used by \ref path, i.e. `std::wstring` on Windows
+/// and `std::string` elsewhere (or `path::string_type` for the filesystem
+/// library).
 using path_string = MDBX_STD_FILESYSTEM_PATH::string_type;
 #elif defined(_WIN32) || defined(_WIN64) || defined(_WINDOWS)
+/// \brief The default path type for opening environments; resolves to
+/// `mdbx::filesystem::path` when the filesystem library is available,
+/// otherwise to `std::wstring` on Windows and `std::string` elsewhere.
 using path = ::std::wstring;
+/// \brief The string type used by \ref path.
 using path_string = path;
 #else
+/// \brief The default path type for opening environments; resolves to
+/// `mdbx::filesystem::path` when the filesystem library is available,
+/// otherwise to `std::wstring` on Windows and `std::string` elsewhere.
 using path = ::std::string;
+/// \brief The string type used by \ref path.
 using path_string = path;
 #endif /* mdbx::path */
+/// \brief The character type of \ref path_string, i.e. `wchar_t` on Windows
+/// and `char` elsewhere.
 using path_char = path_string::value_type;
 
 #if defined(__SIZEOF_INT128__) || (defined(_INTEGRAL_MAX_BITS) && _INTEGRAL_MAX_BITS >= 128)
