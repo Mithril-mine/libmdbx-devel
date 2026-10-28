@@ -342,7 +342,7 @@ void page_shadow_release(MDBX_env *env, page_t *dp, size_t npages) {
   }
 }
 
-__cold static void page_kill(MDBX_txn *txn, page_t *mp, pgno_t pgno, size_t npages) {
+__cold static int page_kill(MDBX_txn *txn, page_t *mp, pgno_t pgno, size_t npages) {
   MDBX_env *const env = txn->env;
   DEBUG("kill %zu page(s) %" PRIaPGNO, npages, pgno);
   eASSERT0(env, pgno >= NUM_METAS && npages);
@@ -350,9 +350,22 @@ __cold static void page_kill(MDBX_txn *txn, page_t *mp, pgno_t pgno, size_t npag
     const size_t bytes = pgno2bytes(env, npages);
     memset(mp, -1, bytes);
     mp->pgno = pgno;
-    if ((txn->flags & MDBX_WRITEMAP) == 0)
-      osal_pwrite(env->lazy_fd, mp, bytes, pgno2bytes(env, pgno));
+    if ((txn->flags & MDBX_WRITEMAP) == 0) {
+      int err = osal_dxb_write_stub(env, mp, bytes, pgno2bytes(env, pgno));
+      (void)(err); /* no MPROBE_FAULT in stable */
+      if (unlikely(err != MDBX_SUCCESS)) {
+        err = stub_write_errdecide(env, txn, pgno, bytes, err);
+        if (unlikely(err != MDBX_SUCCESS))
+          return err;
+      }
+    }
   } else {
+    /* Defensive/unreachable as called today: page_kill() is invoked only for a
+     * modifiable page (status == modifiable), where is_modifiable() implies
+     * mp->txnid == txn->front_txnid, so is_frozen() (mp->txnid < txn->txnid) is
+     * always false. This frozen scatter-gather branch is kept for symmetry and
+     * future call sites; the live scatter-gather coverage comes from the
+     * prefault path in page_alloc_finalize(). (issue #203) */
     struct iovec iov[MDBX_AUXILARY_IOV_MAX];
     /* Using the same pattern/buffer to write each page of npages. */
     iov[0].iov_len = env->ps;
@@ -362,15 +375,29 @@ __cold static void page_kill(MDBX_txn *txn, page_t *mp, pgno_t pgno, size_t npag
       /* clone first iov item and overwrite itself on a next batch-cycle */
       iov[n] = iov[0];
       if (++n == MDBX_AUXILARY_IOV_MAX) {
-        osal_pwritev(env->lazy_fd, iov, MDBX_AUXILARY_IOV_MAX, iov_off);
+        int err = osal_dxb_write_stubv(env, iov, MDBX_AUXILARY_IOV_MAX, iov_off);
+        (void)(err); /* no MPROBE_FAULT in stable */
+        if (unlikely(err != MDBX_SUCCESS)) {
+          /* pgno/bytes describe this failed write: its first page and size */
+          err = stub_write_errdecide(env, txn, bytes2pgno(env, iov_off), pgno2bytes(env, MDBX_AUXILARY_IOV_MAX), err);
+          if (unlikely(err != MDBX_SUCCESS))
+            return err;
+        }
         /* advance offset to next batch-cycle and reset the n as counter of iov-items */
         iov_off += pgno2bytes(env, MDBX_AUXILARY_IOV_MAX);
         n = 0;
       }
     }
     /* osal_pwritev() accepts n = 0 */
-    osal_pwritev(env->lazy_fd, iov, n, iov_off);
+    int err = osal_dxb_write_stubv(env, iov, n, iov_off);
+    (void)(err); /* no MPROBE_FAULT in stable */
+    if (unlikely(err != MDBX_SUCCESS)) {
+      err = stub_write_errdecide(env, txn, bytes2pgno(env, iov_off), pgno2bytes(env, n), err);
+      if (unlikely(err != MDBX_SUCCESS))
+        return err;
+    }
   }
+  return MDBX_SUCCESS;
 }
 
 static inline bool suitable4loose(const MDBX_txn *txn, pgno_t pgno) {
@@ -396,7 +423,7 @@ static inline bool suitable4loose(const MDBX_txn *txn, pgno_t pgno) {
  * to this txn's free list. */
 int page_retire_ex(MDBX_cursor *mc, const pgno_t pgno, page_t *mp /* maybe null */,
                    unsigned pageflags /* maybe unknown/zero */) {
-  int rc;
+  int rc = MDBX_SUCCESS;
   MDBX_txn *const txn = mc->txn;
   tASSERT0(txn, !mp || (mp->pgno == pgno && mp->flags == pageflags));
 
@@ -604,7 +631,19 @@ status_done:
 #if defined(ENABLE_MEMCHECK) || defined(__SANITIZE_ADDRESS__)
       if (MDBX_CHECKING > 1 || unlikely(txn->env->flags & MDBX_PAGEPERTURB))
 #endif
-        page_kill(txn, mp, pgno, npages);
+      {
+        /* A failed stub write is not fatal for the database contents (the page
+         * is being freed anyway), but it is the only indication of a failing
+         * media/filesystem here. Note the page has already been scrubbed with
+         * a stub by page_kill(), so it MUST still be washed off the dirty list
+         * and reclaimed below to keep the transaction state consistent; the
+         * error is surfaced only at the very end. (issue #203) */
+        const int kill_err = page_kill(txn, mp, pgno, npages);
+        if (unlikely(kill_err != MDBX_SUCCESS)) {
+          txn->flags |= MDBX_TXN_ERROR;
+          rc = kill_err;
+        }
+      }
       if ((txn->flags & MDBX_WRITEMAP) == 0) {
         VALGRIND_MAKE_MEM_NOACCESS(page2payload(pgno2page(txn->env, pgno)), pgno2bytes(txn->env, npages) - PAGEHDRSZ);
         MDBX_ASAN_POISON_MEMORY_REGION(page2payload(pgno2page(txn->env, pgno)),
@@ -618,14 +657,16 @@ status_done:
 
   reclaim:
     DEBUG("reclaim %zu %s page %" PRIaPGNO, npages, "dirty", pgno);
-    rc = pnl_insert_span(&txn->wr.repnl, pgno, npages);
+    const int wash_rc = pnl_insert_span(&txn->wr.repnl, pgno, npages);
     if (MDBX_ENABLE_REFUND && unlikely(MDBX_PNL_MOST(txn->wr.repnl) == txn->geo.first_unallocated - 1)) {
       /* Refund suitable pages into "unallocated" space */
       txn_refund(txn);
     }
     tASSERT1(txn, pnl_check_allocated(txn->wr.repnl, txn->geo.first_unallocated - MDBX_ENABLE_REFUND));
     tASSERT1(txn, txn_dpl_check(txn));
-    return rc;
+    /* If page_kill() already failed (rc != SUCCESS) that error is more telling
+     * than a reclaim-list hiccup, so wash_rc is intentionally discarded. */
+    return (rc != MDBX_SUCCESS) ? rc : wash_rc;
   }
 
   if (si) {
