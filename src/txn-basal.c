@@ -468,7 +468,7 @@ int txn_basal_commit(MDBX_txn *txn, struct commit_timestamp *ts) {
   meta.unsafe_sign = DATASIGN_NONE;
   meta_set_txnid(env, &meta, commit_txnid);
 
-  rc = dxb_sync_locked(env, env->flags | txn->flags | txn_shrink_allowed, &meta, &txn->wr.troika);
+  rc = dxb_sync_locked(env, env->flags | txn->flags | txn_unmap_allowed, &meta, &txn->wr.troika);
 
   if (ts)
     ts->sync = osal_monotime();

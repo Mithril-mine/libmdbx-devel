@@ -2745,7 +2745,7 @@ retry_mapview:;
       if (size > map->filesize) {
         rc = osal_fsetsize(map->fd, size);
         VERBOSE("osal_fsetsize-%s %zu, err %d", "extend", size, rc);
-      } else if (flags & txn_shrink_allowed) {
+      } else if (flags & txn_unmap_allowed) {
         rc = osal_fsetsize(map->fd, size);
         VERBOSE("osal_fsetsize-%s %zu, err %d", "shrink", size, rc);
       }
