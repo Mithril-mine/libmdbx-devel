@@ -41,13 +41,25 @@ static void WINAPI stub_srwlock_ReleaseShared(osal_srwlock_t *srwl) {
   _InterlockedDecrement(&srwl->readerCount);
 }
 
-static void WINAPI stub_srwlock_AcquireExclusive(osal_srwlock_t *srwl) {
+/* Common logic of acquiring the writer slot of the stub SRW lock.
+ *
+ * `dont_wait` turns both spin-waits into a single attempt: the function returns
+ * false instead of waiting if a writer is already present, if another writer
+ * wins the race, or if the outstanding readers have not drained yet (rolling
+ * back the writer slot in that last case). A conservative false only makes the
+ * caller defer its operation, which is always safe.
+ *
+ * Note that once writerCount is set to 1, new readers wait, so the reader drain
+ * makes progress and the blocking variant always completes. */
+static bool stub_srwlock_AcquireExclusive_common(osal_srwlock_t *srwl, const bool dont_wait) {
   while (true) {
     ASSERT(srwl->writerCount >= 0 && srwl->readerCount >= 0);
 
     //  If there's a writer already, spin without unnecessarily
     //  interlocking the CPUs
     if (srwl->writerCount != 0) {
+      if (dont_wait)
+        return false;
       SwitchToThread();
       continue;
     }
@@ -56,6 +68,8 @@ static void WINAPI stub_srwlock_AcquireExclusive(osal_srwlock_t *srwl) {
     // locks the CPUs, so writing should be an infrequent process)
     if (_InterlockedExchange(&srwl->writerCount, 1) == 0)
       break;
+    if (dont_wait)
+      return false; /* another writer won the race */
   }
 
   // Now we're the writer, but there may be outstanding readers.
@@ -63,13 +77,26 @@ static void WINAPI stub_srwlock_AcquireExclusive(osal_srwlock_t *srwl) {
   // that we're the writer.
   while (srwl->readerCount != 0) {
     ASSERT(srwl->writerCount >= 0 && srwl->readerCount >= 0);
+    if (dont_wait) {
+      srwl->writerCount = 0; /* roll back, the caller will retry later */
+      return false;
+    }
     SwitchToThread();
   }
+  return true;
+}
+
+static void WINAPI stub_srwlock_AcquireExclusive(osal_srwlock_t *srwl) {
+  stub_srwlock_AcquireExclusive_common(srwl, false);
 }
 
 static void WINAPI stub_srwlock_ReleaseExclusive(osal_srwlock_t *srwl) {
   ASSERT(srwl->writerCount == 1 && srwl->readerCount >= 0);
   srwl->writerCount = 0;
+}
+
+static BOOLEAN WINAPI stub_srwlock_TryAcquireExclusive(osal_srwlock_t *srwl) {
+  return stub_srwlock_AcquireExclusive_common(srwl, true) ? TRUE : FALSE;
 }
 
 static uint64_t WINAPI stub_GetTickCount64(void) {
@@ -124,12 +151,15 @@ void windows_import(void) {
     imports.srwl_ReleaseShared = (osal_srwlock_t_function)GetProcAddress(hKernel32dll, "ReleaseSRWLockShared");
     imports.srwl_AcquireExclusive = (osal_srwlock_t_function)GetProcAddress(hKernel32dll, "AcquireSRWLockExclusive");
     imports.srwl_ReleaseExclusive = (osal_srwlock_t_function)GetProcAddress(hKernel32dll, "ReleaseSRWLockExclusive");
+    imports.srwl_TryAcquireExclusive =
+        (osal_srwlock_t_try_function)GetProcAddress(hKernel32dll, "TryAcquireSRWLockExclusive");
   } else {
     imports.srwl_Init = stub_srwlock_Init;
     imports.srwl_AcquireShared = stub_srwlock_AcquireShared;
     imports.srwl_ReleaseShared = stub_srwlock_ReleaseShared;
     imports.srwl_AcquireExclusive = stub_srwlock_AcquireExclusive;
     imports.srwl_ReleaseExclusive = stub_srwlock_ReleaseExclusive;
+    imports.srwl_TryAcquireExclusive = stub_srwlock_TryAcquireExclusive;
   }
 
   const HINSTANCE hAdvapi32dll = GetModuleHandleA("advapi32.dll");

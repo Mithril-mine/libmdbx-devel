@@ -198,13 +198,133 @@ __cold int dxb_read_header(MDBX_env *env, meta_t *dest, const int lck_exclusive,
   return MDBX_SUCCESS;
 }
 
+#if IS_WINDOWS
+/* Acquire the exclusive remap-lock for a resize that requires un-mapping the
+ * mapping (a shrink, or a grow beyond the current mapping limit, or an
+ * explicit geometry change) on Windows.
+ *
+ * A reader may hold the lock shared for an unbounded time, so we must not wait
+ * indefinitely — that is exactly the #154 deadlock. A few bounded attempts
+ * with a time-slice yield in between let a reader that is about to finish
+ * release the lock, while a long-lived reader still defers the operation
+ * promptly. This is a plain static inline so it can later be turned into a
+ * user-overridable callback.
+ *
+ * Note: remap_lock is a process-local SRWL (a field of MDBX_env, not of the
+ * shared lock file), so failing to acquire it is by itself the precise test
+ * for "an in-process reader holds it shared" — no separate reader-table scan
+ * is needed to decide whether to defer.
+ *
+ * On failure the resize is deferred and the return code is chosen per the
+ * resize mode (issue #154):
+ *  - implicit_shrink → MDBX_EPERM, which dxb_sync_locked() and the nested
+ *    rollback path in txn-nested.c treat as "regular on Windows": the commit
+ *    still succeeds and the shrink is re-attempted later, since the shrink
+ *    predicate is based on the real file size (see dxb_shrink_maybe() and
+ *    dxb_shrink_bottom()).
+ *  - implicit_grow (the file was grown by another process beyond this
+ *    process's mapping limit, so a remap is needed) and explicit_resize →
+ *    MDBX_UNABLE_EXTEND_MAPSIZE, the documented code for "the requested
+ *    mapping size could not be applied right now"; it is returned to the
+ *    caller of mdbx_txn_begin()/mdbx_env_set_geometry() without poisoning the
+ *    env, and the operation may be retried once the readers are gone (or the
+ *    environment is reopened).
+ * The message is a WARNING, not an ERROR: this is an expected, recoverable
+ * condition while a read transaction is open. */
+static int windows_remap_lock_exclusive(MDBX_env *env, const enum resize_mode mode) {
+  for (int attempt = 0; attempt < 5; ++attempt) {
+    if (imports.srwl_TryAcquireExclusive(&env->remap_lock))
+      return MDBX_SUCCESS;
+    if (attempt + 1 < 5)
+      osal_yield(); /* give a finishing reader a chance to release the lock */
+  }
+  WARNING("%s", "unable to acquire the exclusive remap-lock for a database shrink/remap: "
+                "another reader holds it shared, cannot unmap and remap safely");
+  /* an implicit shrink is deferred silently by the commit path, everything else
+   * is reported as "the mapping size could not be applied right now" */
+  return (mode == implicit_shrink) ? MDBX_EPERM : MDBX_UNABLE_EXTEND_MAPSIZE;
+}
+
+/* Cheap non-blocking probe: can the exclusive remap-lock be taken right now?
+ *
+ * A datafile shrink requires the exclusive remap-lock (the mapping must be
+ * un-mapped), and on Windows an in-process reader may hold it shared for an
+ * unbounded time (issue #154). Probing here avoids paying twice for a shrink
+ * that is bound to be deferred on every commit while such a reader is open:
+ *  - the `force steady` below, which clears MDBX_NOMETASYNC/ENV_UNSYNC purely
+ *    to make truncating the file safe;
+ *  - the bounded try-acquire inside dxb_resize() and its WARNING.
+ *
+ * The probe takes and immediately releases the lock, so it never blocks and
+ * never deadlocks. A false negative (a reader appeared right after the probe)
+ * is harmless: dxb_resize() re-checks and defers correctly. Note that the
+ * committing thread itself does not hold the remap-lock here — env_sync()'s
+ * pre-sync msync takes and releases it earlier, and the writer holds only the
+ * write lock — so the probe reflects other threads' holds.
+ *
+ * The probe deliberately does NOT take resize_mutex: it is a best-effort
+ * advisory check, and taking the leaf lock here would only serialize it with
+ * other resizers without changing the outcome. It never violates the
+ * resize_mutex → remap_lock order, since it acquires remap-lock alone (exactly
+ * like a reader does). */
+static inline bool remap_lock_exclusive_available(MDBX_env *const env) {
+  if (!imports.srwl_TryAcquireExclusive(&env->remap_lock))
+    return false;
+  imports.srwl_ReleaseExclusive(&env->remap_lock);
+  return true;
+}
+#else
+/* POSIX: remap_lock is a short-lived fastmutex that read transactions never
+ * hold, so an exclusive acquire cannot be blocked by a reader — no probing is
+ * needed (a no-op, per the project's fallback-macro convention). */
+static inline bool remap_lock_exclusive_available(MDBX_env *const env) {
+  (void)env;
+  return true;
+}
+#endif /* Windows */
+
 __cold int dxb_resize(MDBX_env *const env, const pgno_t allocated_pgno, const pgno_t size_pgno, pgno_t limit_pgno,
                       const enum resize_mode mode) {
   /* Acquire guard to avoid collision between read and write txns
    * around geo_in_bytes and dxb_mmap */
 #if IS_WINDOWS
-  imports.srwl_AcquireExclusive(&env->remap_lock);
-  int rc = MDBX_SUCCESS;
+  /* resize_mutex (a leaf) serializes resizers among themselves. Since a plain
+   * grow now holds only the SHARED remap-lock, two concurrent growers — a read
+   * txn noticing the file grew by another process, and the writer growing it —
+   * would otherwise race on the env->dxb_mmap bookkeeping and call
+   * NtExtendSection() on the same section simultaneously. Readers never take
+   * resize_mutex and the exclusive remap-lock is only ever try-acquired while
+   * holding it, so the shared acquire below cannot block behind another
+   * resizer: no deadlock cycle exists. Lock order is always
+   * resize_mutex → remap_lock, released in reverse. */
+  int rc = osal_fastmutex_acquire(&env->resize_mutex);
+  if (unlikely(rc != MDBX_SUCCESS))
+    return rc;
+
+  /* Whether the mapping can be extended in place (NtExtendSection: no unmap,
+   * no address change): only a plain grow whose new size still fits the
+   * current mapping limit AND the platform supports section extending (not
+   * under Wine, where NtExtendSection is unavailable and every resize needs
+   * unmap+remap). Such a grow needs no exclusive remap-lock and no thread
+   * suspension, so it cannot deadlock with long-lived readers (issue #154).
+   * A grow beyond the limit, a shrink, or an explicit resize all need the
+   * mapping to be unmapped and remapped, hence the exclusive remap-lock. */
+  const bool no_remap_needed =
+      (mode == implicit_grow) && imports.NtExtendSection && pgno_ceil2os_bytes(env, size_pgno) <= env->dxb_mmap.limit;
+  bool have_exclusive = false;
+  if (no_remap_needed) {
+    imports.srwl_AcquireShared(&env->remap_lock);
+  } else {
+    /* NOTE: deliberately no fallback to the blocking srwl_AcquireExclusive()
+     * here — that is exactly the #154 deadlock, since a reader may hold the
+     * lock shared for an unbounded time. Deferring is always safe. */
+    rc = windows_remap_lock_exclusive(env, mode);
+    if (unlikely(rc != MDBX_SUCCESS)) {
+      osal_fastmutex_release(&env->resize_mutex);
+      return rc;
+    }
+    have_exclusive = true;
+  }
   mdbx_handle_array_t *suspended = nullptr;
   mdbx_handle_array_t array_onstack;
 #else
@@ -249,16 +369,30 @@ __cold int dxb_resize(MDBX_env *const env, const pgno_t allocated_pgno, const pg
    * выполнить remap-действия требующие приостановки работающих с БД потоков. */
   if ((env->flags & MDBX_NOSTICKYTHREADS) == 0) {
 #if IS_WINDOWS
-    if ((size_bytes < env->dxb_mmap.current && mode > implicit_grow) || limit_bytes != env->dxb_mmap.limit) {
-      /* 1) Windows allows only extending a read-write section, but not a
-       *    corresponding mapped view. Therefore in other cases we must suspend
-       *    the local threads for safe remap.
-       * 2) At least on Windows 10 1803 the entire mapped section is unavailable
-       *    for short time during NtExtendSection() or VirtualAlloc() execution.
-       * 3) Under Wine runtime environment on Linux a section extending is not
-       *    supported.
+    if (have_exclusive &&
+        ((size_bytes < env->dxb_mmap.current && mode > implicit_grow) || limit_bytes != env->dxb_mmap.limit)) {
+      /* Local threads must be suspended whenever the mapping is UNMAPPED and
+       * re-created (a shrink, or a grow past the mapping limit), because the
+       * base address may change and any thread touching the old view would
+       * fault. Windows allows extending a read-write section in place, but NOT
+       * a corresponding mapped view, so a remap is the only way to grow past the
+       * limit or to shrink.
        *
-       * THEREFORE LOCAL THREADS SUSPENDING IS ALWAYS REQUIRED! */
+       * NOTE (issue #154): a PLAIN in-place grow (NtExtendSection within the
+       * current limit) deliberately does NOT come here and does NOT suspend
+       * threads — it takes the remap-lock only SHARED so it cannot deadlock
+       * with a long-lived reader. It keeps the base address and the existing
+       * view valid, so concurrent readers of this process may stay active while
+       * the section is extended.
+       *
+       * REMINDER / WARNING (keep as bread crumbs): at least on Windows 10 1803
+       * the whole mapped section was reportedly unavailable for a short time
+       * during NtExtendSection()/VirtualAlloc(), and under Wine a section
+       * extending is not supported at all (hence `no_remap_needed` requires
+       * imports.NtExtendSection). The in-place grow without suspension was
+       * validated on the Windows CI cells and native multi-reader runs; if a
+       * crash ever appears while extending, this historical caveat is the first
+       * thing to re-examine. */
       array_onstack.limit = ARRAY_LENGTH(array_onstack.handles);
       array_onstack.count = 0;
       suspended = &array_onstack;
@@ -419,13 +553,19 @@ bailout:
   }
 
 #if IS_WINDOWS
-  imports.srwl_ReleaseExclusive(&env->remap_lock);
+  if (have_exclusive) {
+    imports.srwl_ReleaseExclusive(&env->remap_lock);
+  } else {
+    imports.srwl_ReleaseShared(&env->remap_lock);
+  }
   int err = MDBX_SUCCESS;
   if (suspended) {
     err = osal_resume_threads_after_remap(suspended);
     if (suspended != &array_onstack)
       osal_free(suspended);
   }
+  /* release the resizer leaf lock LAST (it was acquired first, reverse order) */
+  osal_fastmutex_release(&env->resize_mutex);
 #else
   if (should_unlock_rdt)
     lck_rdt_unlock(env);
@@ -755,15 +895,24 @@ __cold int dxb_setup(MDBX_env *env, const int lck_rc, const mdbx_mode_t mode_bit
     expected_filesize = env->geo_in_bytes.now;
   const uint64_t filesize_before = env->dxb_mmap.filesize;
   if (unlikely(filesize_before != env->geo_in_bytes.now)) {
+    /* Two directions are possible and must not be conflated (issue #154):
+     *  - `filesize > geo.now`: another process has grown the file, OR our own
+     *    earlier commit deferred a shrink (on Windows the mapping cannot be
+     *    un-mapped while readers exist, so the meta was written with the
+     *    reduced `now` while the file kept its size);
+     *  - `filesize < geo.now`: the file is genuinely smaller than the meta
+     *    claims and must be grown to match. */
+    const char *const direction = (filesize_before > env->geo_in_bytes.now) ? "larger" : "smaller";
     if (lck_rc != /* lck exclusive */ MDBX_RESULT_TRUE) {
       VERBOSE("filesize mismatch (expect %" PRIuPTR "b/%" PRIaPGNO "p, have %" PRIu64 "b/%" PRIu64
-              "p), assume other process working",
+              "p, %s), assume other process working or a deferred shrink",
               env->geo_in_bytes.now, bytes2pgno(env, env->geo_in_bytes.now), filesize_before,
-              filesize_before >> env->ps2ln);
+              filesize_before >> env->ps2ln, direction);
     } else {
       if (filesize_before != expected_filesize)
-        WARNING("filesize mismatch (expect %" PRIuSIZE "b/%" PRIaPGNO "p, have %" PRIu64 "b/%" PRIu64 "p)",
-                expected_filesize, bytes2pgno(env, expected_filesize), filesize_before, filesize_before >> env->ps2ln);
+        WARNING("filesize mismatch (expect %" PRIuSIZE "b/%" PRIaPGNO "p, have %" PRIu64 "b/%" PRIu64 "p, %s)",
+                expected_filesize, bytes2pgno(env, expected_filesize), filesize_before, filesize_before >> env->ps2ln,
+                direction);
       if (filesize_before < allocated_bytes) {
         ERROR("last-page beyond end-of-file (last %" PRIaPGNO ", have %" PRIaPGNO ")",
               header.geometry.first_unallocated, bytes2pgno(env, (size_t)filesize_before));
@@ -1085,6 +1234,52 @@ __cold int dxb_setup(MDBX_env *env, const int lck_rc, const mdbx_mode_t mode_bit
   return rc;
 }
 
+/* Decide whether and how far the datafile can be shrunk (issue #154).
+ *
+ * Two-phase: Phase A (`dxb_shrink_maybe`) is pure arithmetic and needs no
+ * reader-table scan, so the common "nothing to shrink" case skips the
+ * O(readers) `mvcc_snapshot_largest()` entirely. Phase B (`dxb_shrink_bottom`)
+ * computes the exact bottom from the largest live snapshot.
+ *
+ * Both phases are based on the REAL file size (`dxb_mmap.filesize`), not on
+ * `geometry.now`. This upholds the invariant "the logical geometry is lowered
+ * only together with a successful un-map/fsetsize, and a deferred shrink keeps
+ * the predicate true": when a shrink is deferred on Windows (a reader holds the
+ * remap-lock shared, so the mapping cannot be unmapped right now), the file
+ * keeps its size and the shrink is re-attempted by a later commit.
+ *
+ * This predicate is intentionally decoupled from the madvise `discarded_tail`
+ * gate: `discarded_tail` tracks only the POSIX MADV_DONTNEED machinery and may
+ * lag far behind or run ahead of the shrink threshold, so gating the datafile
+ * shrink on it is incorrect.
+ */
+static bool dxb_shrink_maybe(const meta_t *const pending, const pgno_t filesize_pgno) {
+  if (!pending->geometry.shrink_pv)
+    return false;
+  const pgno_t stockpile_gap = 3 + pending->trees.gc.height * 3;
+  const pgno_t shrink_step = pv2pages(pending->geometry.shrink_pv);
+  return filesize_pgno > pending->geometry.first_unallocated &&
+         filesize_pgno - pending->geometry.first_unallocated > shrink_step + stockpile_gap;
+}
+
+/* Phase B: the exact shrink target ("bottom") given the largest live snapshot.
+ * Returns the new `geometry.now`, or zero as the "nothing to shrink" sentinel —
+ * zero is not a usable page number here (a datafile bottom is never below
+ * `geometry.lower` >= NUM_METAS), so it cannot collide with a real result. */
+static pgno_t dxb_shrink_bottom(const MDBX_env *env, const meta_t *const pending, const pgno_t largest_pgno,
+                                const pgno_t filesize_pgno) {
+  const pgno_t stockpile_gap = 3 + pending->trees.gc.height * 3;
+  const pgno_t shrink_step = pv2pages(pending->geometry.shrink_pv);
+  if (filesize_pgno <= largest_pgno || filesize_pgno - largest_pgno <= shrink_step + stockpile_gap)
+    return 0;
+
+  const pgno_t aligner = pending->geometry.grow_pv ? /* grow_step */ pv2pages(pending->geometry.grow_pv) : shrink_step;
+  const pgno_t with_stockpile_gap = largest_pgno + stockpile_gap;
+  const pgno_t aligned = pgno_ceil2os_pgno(env, (size_t)with_stockpile_gap + aligner - with_stockpile_gap % aligner);
+  const pgno_t bottom = (aligned > pending->geometry.lower) ? aligned : pending->geometry.lower;
+  return (bottom < filesize_pgno) ? bottom : 0;
+}
+
 int dxb_sync_locked(MDBX_env *env, unsigned flags, meta_t *const pending, troika_t *const troika) {
   eASSERT0(env, ((env->flags ^ flags) & MDBX_WRITEMAP) == 0);
   eASSERT0(env, pending->trees.gc.flags == MDBX_INTEGERKEY);
@@ -1112,17 +1307,69 @@ int dxb_sync_locked(MDBX_env *env, unsigned flags, meta_t *const pending, troika
 
   pgno_t shrink = 0;
   if (flags & txn_unmap_allowed) {
+    const pgno_t filesize_pgno = bytes2pgno(env, env->dxb_mmap.filesize);
+
+    /* LY: check conditions to discard unused pages via MADV_DONTNEED (POSIX
+     * only). Gated by `discarded_tail`, a property of this madvise machinery
+     * alone and deliberately NOT used to gate the datafile shrink below. */
     const size_t prev_discarded_pgno = atomic_load32(&env->lck->discarded_tail, mo_Relaxed);
+    const bool need_discard_scan = prev_discarded_pgno >= pending->geometry.first_unallocated + env->madv_threshold;
     if (prev_discarded_pgno < pending->geometry.first_unallocated)
       env->lck->discarded_tail.weak = pending->geometry.first_unallocated;
-    else if (prev_discarded_pgno >= pending->geometry.first_unallocated + env->madv_threshold) {
-      /* LY: check conditions to discard unused pages */
-      const pgno_t largest_pgno =
+
+    /* LY: check conditions to shrink the datafile; see dxb_shrink_maybe()/
+     * dxb_shrink_bottom() for the rationale (real filesize, decoupled from
+     * `discarded_tail`, two-phase). A deferred shrink (a reader holds the
+     * remap-lock, so the mapping cannot be unmapped right now) is re-attempted
+     * by a later commit because the predicate reads the real file size.
+     *
+     * On Windows the shrink also needs the exclusive remap-lock, which an
+     * in-process reader may hold shared for an unbounded time (issue #154).
+     * Probe it here rather than deferring later in dxb_resize(): deferring
+     * there would already have cleared MDBX_NOMETASYNC/ENV_UNSYNC below ("force
+     * steady"), so every commit for as long as the reader stays open would pay
+     * a full durable sync that truncates nothing. Skipping the whole shrink
+     * plan keeps the deferral free and leaves the meta geometry untouched, so
+     * the later commit still finds the same predicate true and retries. */
+    const bool shrink_maybe = dxb_shrink_maybe(pending, filesize_pgno) && remap_lock_exclusive_available(env);
+
+    /* Both the shrink (Phase B) and the madvise discard need the largest live
+     * snapshot; compute it at most once and share it between the two (issue
+     * #154). In the common case neither is needed and the O(readers) scan is
+     * skipped entirely. */
+    pgno_t largest_pgno = 0;
+    if (shrink_maybe || need_discard_scan) {
+      largest_pgno =
           mvcc_snapshot_largest(env, (head.ptr_c->geometry.first_unallocated > pending->geometry.first_unallocated)
                                          ? head.ptr_c->geometry.first_unallocated
                                          : pending->geometry.first_unallocated);
       eASSERT0(env, largest_pgno >= NUM_METAS);
+    }
 
+    if (shrink_maybe) {
+      const pgno_t bottom = dxb_shrink_bottom(env, pending, largest_pgno, filesize_pgno);
+      if (bottom) {
+        if (TROIKA_HAVE_STEADY(troika))
+          /* force steady, but only if steady-checkpoint is present */
+          flags &= MDBX_WRITEMAP | txn_unmap_allowed;
+        shrink = filesize_pgno - bottom;
+        pending->geometry.now = bottom;
+        if (unlikely(head.txnid == pending->unsafe_txnid)) {
+          const txnid_t txnid = safe64_txnid_next(pending->unsafe_txnid);
+          NOTICE("force-forward pending-txn %" PRIaTXN " -> %" PRIaTXN, pending->unsafe_txnid, txnid);
+          ENSURE_OBJ(env, !env->basal_txn || !env->txn);
+          if (unlikely(txnid > MAX_TXNID)) {
+            rc = MDBX_TXN_FULL;
+            ERROR("txnid overflow, raise %d", rc);
+            goto fail;
+          }
+          meta_set_txnid(env, pending, txnid);
+          eASSERT1(env, coherency_check_meta(env, pending, true));
+        }
+      }
+    }
+
+    if (need_discard_scan) {
 #if defined(ENABLE_MEMCHECK) || defined(__SANITIZE_ADDRESS__)
       const pgno_t edge = env->poison_edge;
       if (edge > largest_pgno) {
@@ -1177,41 +1424,6 @@ int dxb_sync_locked(MDBX_env *env, unsigned flags, meta_t *const pending, troika
         }
       }
 #endif /* MADV_DONTNEED || POSIX_MADV_DONTNEED */
-
-      /* LY: check conditions to shrink datafile */
-      const pgno_t stockpile_gap = 3 + pending->trees.gc.height * 3;
-      pgno_t shrink_step = 0;
-      if (pending->geometry.shrink_pv && pending->geometry.now - pending->geometry.first_unallocated >
-                                             (shrink_step = pv2pages(pending->geometry.shrink_pv)) + stockpile_gap) {
-        if (pending->geometry.now > largest_pgno &&
-            pending->geometry.now - largest_pgno > shrink_step + stockpile_gap) {
-          const pgno_t aligner =
-              pending->geometry.grow_pv ? /* grow_step */ pv2pages(pending->geometry.grow_pv) : shrink_step;
-          const pgno_t with_stockpile_gap = largest_pgno + stockpile_gap;
-          const pgno_t aligned =
-              pgno_ceil2os_pgno(env, (size_t)with_stockpile_gap + aligner - with_stockpile_gap % aligner);
-          const pgno_t bottom = (aligned > pending->geometry.lower) ? aligned : pending->geometry.lower;
-          if (pending->geometry.now > bottom) {
-            if (TROIKA_HAVE_STEADY(troika))
-              /* force steady, but only if steady-checkpoint is present */
-              flags &= MDBX_WRITEMAP | txn_unmap_allowed;
-            shrink = pending->geometry.now - bottom;
-            pending->geometry.now = bottom;
-            if (unlikely(head.txnid == pending->unsafe_txnid)) {
-              const txnid_t txnid = safe64_txnid_next(pending->unsafe_txnid);
-              NOTICE("force-forward pending-txn %" PRIaTXN " -> %" PRIaTXN, pending->unsafe_txnid, txnid);
-              ENSURE_OBJ(env, !env->basal_txn || !env->txn);
-              if (unlikely(txnid > MAX_TXNID)) {
-                rc = MDBX_TXN_FULL;
-                ERROR("txnid overflow, raise %d", rc);
-                goto fail;
-              }
-              meta_set_txnid(env, pending, txnid);
-              eASSERT1(env, coherency_check_meta(env, pending, true));
-            }
-          }
-        }
-      }
     }
   }
 
@@ -1424,6 +1636,28 @@ int dxb_sync_locked(MDBX_env *env, unsigned flags, meta_t *const pending, troika
                     implicit_shrink);
     if (rc != MDBX_SUCCESS && rc != MDBX_EPERM && rc != MDBX_UNABLE_EXTEND_MAPSIZE)
       goto fail;
+    if (rc != MDBX_SUCCESS) {
+      /* The shrink was DEFERRED (issue #154): on Windows an in-process reader
+       * holds the remap-lock shared, so the mapping cannot be un-mapped and the
+       * file keeps its larger size for now. The meta-page above was written with
+       * the reduced `geometry.now` (the logical size), while the physical file
+       * size is tracked separately by `dxb_mmap.filesize`.
+       *
+       * Keep the runtime geometry in sync with the meta (`geo_in_bytes.now`
+       * mirrors `meta.geometry.now`, the logical size), so that
+       * `mdbx_env_info_ex().mi_geo.current` matches a freshly started txn's
+       * `geo.now` and `mdbx_env_chk()`'s `txn->geo.now == mi_geo.current /
+       * pagesize` assertion holds. The physical file (`dxb_mmap.filesize` /
+       * `dxb_mmap.current`) legitimately stays larger until the shrink succeeds
+       * — that transient "logical < physical" state IS the deferred shrink.
+       *
+       * The shrink is re-attempted by a later commit because dxb_shrink_maybe()
+       * / dxb_shrink_bottom() are based on the real file size, and dxb_setup()
+       * reconciles the geometry on reopen. There is no way to roll the file back
+       * while readers exist, so this deferral is the regular outcome, not an
+       * error. */
+      env->geo_in_bytes.now = pgno2bytes(env, pending->geometry.now);
+    }
     eASSERT1(env, coherency_check_meta(env, target, true));
   }
 
