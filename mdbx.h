@@ -4351,14 +4351,15 @@ typedef struct MDBX_commit_latency MDBX_commit_latency;
  * \note On Windows the shrinking of the datafile (when enabled via
  * `shrink_threshold` of \ref mdbx_env_set_geometry()) requires the mapping to
  * be unmapped, which is impossible while a read transaction of this process is
- * open. In that case the shrink is skipped for this commit (the commit still
- * succeeds and the reported geometry is left unchanged) and is re-attempted by
- * a later commit once the read transactions are closed, so the datafile keeps
- * its larger size until then. The skip is detected up front, so no unnecessary
- * durable sync is performed while a reader holds the mapping; a shrink that is
- * already in flight can still be deferred if a reader appears meanwhile, which
- * transiently shows up in \ref mdbx_env_info_ex() as the file size being larger
- * than the reported `now` geometry value.
+ * open. In that case the shrink is deferred: the commit still succeeds and the
+ * reported geometry is updated to the intended smaller size, while the physical
+ * datafile keeps its larger size until a later commit truncates it once the
+ * read transactions are closed. The transient mismatch shows up in
+ * \ref mdbx_env_info_ex() as the file size being larger than the reported `now`
+ * geometry value. Repeated deferrals are cheap: the durable sync that shrinking
+ * normally forces is only performed while it is still needed to keep the file
+ * consistent, so no redundant full sync happens while a reader holds the
+ * mapping.
  *
  * \param [in] txn  A transaction handle returned by \ref mdbx_txn_begin().
  * \param [out] latency             An optional pointer for getting information of latencies during the commit stages.
