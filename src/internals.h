@@ -485,6 +485,10 @@ struct MDBX_env {
     uint8_t spill_parent4child_denominator;
     uint16_t merge_threshold_dot16;
     uint16_t split_reserve_dot16;
+    /* Minimal period between attempts to shrink the datafile, in monotonic
+     * units (see osal_monotime()); zero means no throttling. Affects the
+     * current process only (issue #170). */
+    uint64_t shrink_retry_period;
 #if !IS_WINDOWS
     unsigned writethrough_threshold;
 #endif /* Windows */
@@ -561,6 +565,11 @@ struct MDBX_env {
   osal_ioring_t ioring;
 
 #if IS_WINDOWS
+  /* Monotonic timestamp of the last datafile-shrink attempt, for the
+   * per-process throttling of shrink-through-un-map (issue #170). Kept here
+   * (a per-process field) rather than in the shared lck_t, so no lock-file
+   * format/version change is required. */
+  uint64_t shrink_last_attempt;
   osal_srwlock_t remap_lock;
   /* Leaf lock serializing concurrent resizers (issue #154). remap_lock is now
    * taken shared for a plain grow, so two growers (a read txn noticing the file

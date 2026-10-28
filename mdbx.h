@@ -2480,7 +2480,26 @@ typedef enum MDBX_option {
    * \see MDBX_opt_sync_period
    *
    * The option value is specified in bytes: minimal 1, maximal 2147483648 (2 GiB), default is 256 KiB. */
-  MDBX_opt_presync_threshold
+  MDBX_opt_presync_threshold,
+
+  /** \brief Sets the minimal period between attempts to shrink the database file.
+   *
+   * Shrinking the file is not always possible right away. In particular, on Windows the file cannot be truncated while
+   * it is mapped by another process or while a read transaction of the current process holds the corresponding lock,
+   * so the attempt is deferred and repeated by a later commit. Repeating a doomed attempt on every commit is a waste
+   * of resources, so such attempts are rate-limited.
+   *
+   * This option sets how often the shrinking is allowed to be attempted. The zero value disables the rate-limiting,
+   * i.e. an attempt will be made on every commit that meets the shrinking condition.
+   *
+   * \note This option affects the current process only, is not stored in the lock file, and therefore neither is
+   * inherited by other processes nor requires any lock-file format change.
+   *
+   * \see MDBX_opt_sync_period
+   *
+   * The option value is specified in 1/65536 of second units: minimal 0 (no throttling), default is 5 seconds
+   * (327680). */
+  MDBX_opt_shrink_retry_period
 } MDBX_option_t;
 
 /** \brief Sets the value of a extra runtime options for an environment.
