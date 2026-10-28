@@ -31,7 +31,8 @@ __cold int dxb_pread(MDBX_env *env, void *buf, uint64_t offset) {
   return osal_pread(env->dxb_mmap.fd, buf, env->ps, offset);
 }
 
-__cold int dxb_read_header(MDBX_env *env, meta_t *dest, const int lck_exclusive, const mdbx_mode_t mode_bits) {
+__cold int dxb_read_header(MDBX_env *env, meta_t *dest, const int lck_exclusive, const mdbx_mode_t mode_bits,
+                           const int preopen_mode) {
   memset(dest, 0, sizeof(meta_t));
   int rc = osal_filesize(env->lazy_fd, &env->dxb_mmap.filesize);
   if (unlikely(rc != MDBX_SUCCESS))
@@ -113,12 +114,44 @@ __cold int dxb_read_header(MDBX_env *env, meta_t *dest, const int lck_exclusive,
     bool latch;
     if (env->stuck_meta >= 0)
       latch = (meta_number == (unsigned)env->stuck_meta);
-    else if (meta_bootid_match(meta))
-      latch = meta_choice_recent(meta->unsafe_txnid, SIGN_IS_STEADY(meta->unsafe_sign), dest->unsafe_txnid,
-                                 SIGN_IS_STEADY(dest->unsafe_sign));
+    else if (preopen_mode == MDBX_PREOPEN_NONE)
+      /* Regular open (with or without a shared lock file): keep preferring a
+       * weak checkpoint of the current boot when the lock is present, so the
+       * open either recovers/promotes it (writable) or requires recovery
+       * (read-only, MDBX_WANNA_RECOVERY). Without a lock file fall through to
+       * the steady path as before. */
+      latch = meta_bootid_match(meta)
+                  ? meta_choice_recent(meta->unsafe_txnid, SIGN_IS_STEADY(meta->unsafe_sign), dest->unsafe_txnid,
+                                       SIGN_IS_STEADY(dest->unsafe_sign))
+                  : meta_choice_steady(meta->unsafe_txnid, SIGN_IS_STEADY(meta->unsafe_sign), dest->unsafe_txnid,
+                                       SIGN_IS_STEADY(dest->unsafe_sign));
     else
-      latch = meta_choice_steady(meta->unsafe_txnid, SIGN_IS_STEADY(meta->unsafe_sign), dest->unsafe_txnid,
-                                 SIGN_IS_STEADY(dest->unsafe_sign));
+      switch (preopen_mode) {
+      case MDBX_PREOPEN_LEGACY:
+      case MDBX_PREOPEN_PROPERLY:
+        /* The newest meta-page regardless of its nature/sign, i.e. a raw
+         * "most recent" choice: a weak checkpoint on top leads to
+         * MDBX_CORRUPTED (legacy) or MDBX_WANNA_RECOVERY (properly) below. */
+        latch = meta_choice_recent(meta->unsafe_txnid, SIGN_IS_STEADY(meta->unsafe_sign), dest->unsafe_txnid,
+                                   SIGN_IS_STEADY(dest->unsafe_sign));
+        break;
+      case MDBX_PREOPEN_PESSIMISTIC:
+        /* The newest steady checkpoint regardless of the boot-id. */
+        latch = meta_choice_steady(meta->unsafe_txnid, SIGN_IS_STEADY(meta->unsafe_sign), dest->unsafe_txnid,
+                                   SIGN_IS_STEADY(dest->unsafe_sign));
+        break;
+      case MDBX_PREOPEN_OPTIMISTIC: {
+        /* A weak checkpoint with a matching boot-id is treated as if it was
+         * steady, so the newest usable meta-page wins (usable dominates, then
+         * the larger txnid). */
+        const bool a_usable = SIGN_IS_STEADY(meta->unsafe_sign) || meta_bootid_match(meta);
+        const bool b_usable = SIGN_IS_STEADY(dest->unsafe_sign) || meta_bootid_match(dest);
+        latch = meta_choice_steady(meta->unsafe_txnid, a_usable, dest->unsafe_txnid, b_usable);
+        break;
+      }
+      default:
+        latch = false;
+      }
     if (latch) {
       *dest = *meta;
       if (!lck_exclusive && !meta_is_steady(dest))
@@ -127,8 +160,23 @@ __cold int dxb_read_header(MDBX_env *env, meta_t *dest, const int lck_exclusive,
     }
   }
 
-  if (dest->pagesize == 0 ||
-      (env->stuck_meta < 0 && !(meta_is_steady(dest) || meta_weak_acceptable(env, dest, lck_exclusive)))) {
+  if (dest->pagesize == 0) {
+    ERROR("%s", "no meta-pages, database is corrupted");
+    if (!MDBX_IS_ERROR(rc)) {
+      /* TODO: try to restore the database by fully checking b-tree structure
+       * for the each meta page, if the corresponding option was given */
+      return MDBX_CORRUPTED;
+    }
+    return rc;
+  }
+
+  if (preopen_mode == MDBX_PREOPEN_PROPERLY && !meta_is_steady(dest)) {
+    ERROR("%s", "the newest checkpoint is not steady, recovery is required");
+    return MDBX_WANNA_RECOVERY;
+  }
+
+  if (env->stuck_meta < 0 && !(meta_is_steady(dest) || meta_weak_acceptable(env, dest, lck_exclusive) ||
+                               (preopen_mode == MDBX_PREOPEN_OPTIMISTIC && meta_bootid_match(dest)))) {
     ERROR("%s", "no usable meta-pages, database is corrupted");
     if (!MDBX_IS_ERROR(rc)) {
       /* TODO: try to restore the database by fully checking b-tree structure
@@ -536,7 +584,7 @@ __cold int dxb_setup(MDBX_env *env, const int lck_rc, const mdbx_mode_t mode_bit
   meta_t header;
   eASSERT0(env, !(env->flags & ENV_ACTIVE));
   int rc = MDBX_RESULT_FALSE;
-  int err = dxb_read_header(env, &header, lck_rc, mode_bits);
+  int err = dxb_read_header(env, &header, lck_rc, mode_bits, MDBX_PREOPEN_NONE);
   if (unlikely(err != MDBX_SUCCESS)) {
     if (lck_rc != /* lck exclusive */ MDBX_RESULT_TRUE || err != MDBX_ENODATA || (env->flags & MDBX_RDONLY) != 0 ||
         /* recovery mode */ env->stuck_meta >= 0)
@@ -566,7 +614,7 @@ __cold int dxb_setup(MDBX_env *env, const int lck_rc, const mdbx_mode_t mode_bit
       return LOG_IFERR(err);
 
 #if MDBX_CHECKING > 0 || MDBX_DEBUG > 0
-    err = dxb_read_header(env, &header, lck_rc, mode_bits);
+    err = dxb_read_header(env, &header, lck_rc, mode_bits, MDBX_PREOPEN_NONE);
     if (unlikely(err != MDBX_SUCCESS))
       return LOG_IFERR(err);
 #endif /* MDBX_CHECKING > 0 || MDBX_DEBUG > 0 */

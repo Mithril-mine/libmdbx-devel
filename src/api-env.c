@@ -865,18 +865,19 @@ __cold int mdbx_env_info_ex(const MDBX_env *env, const MDBX_txn *txn, MDBX_envin
   return LOG_IFERR(env_info(env, txn, arg, &troika));
 }
 
-__cold int mdbx_preopen_snapinfo(const char *pathname, MDBX_envinfo *out, size_t bytes) {
+__cold int mdbx_preopen_snapinfo_ex(const char *pathname, MDBX_preopen_flags mode, MDBX_envinfo *out, size_t bytes) {
 #if IS_WINDOWS
   wchar_t *pathnameW = nullptr;
   int rc = osal_mb2w(pathname, &pathnameW);
   if (likely(rc == MDBX_SUCCESS)) {
-    rc = mdbx_preopen_snapinfoW(pathnameW, out, bytes);
+    rc = mdbx_preopen_snapinfo_exW(pathnameW, mode, out, bytes);
     osal_free(pathnameW);
   }
   return LOG_IFERR(rc);
 }
 
-__cold int mdbx_preopen_snapinfoW(const wchar_t *pathname, MDBX_envinfo *out, size_t bytes) {
+__cold int mdbx_preopen_snapinfo_exW(const pathchar_t *pathname, const MDBX_preopen_flags mode, MDBX_envinfo *out,
+                                     size_t bytes) {
 #endif /* Windows */
   if (unlikely(!out))
     return LOG_IFERR(MDBX_EINVAL);
@@ -914,7 +915,7 @@ __cold int mdbx_preopen_snapinfoW(const wchar_t *pathname, MDBX_envinfo *out, si
     goto bailout;
 
   meta_t header;
-  rc = dxb_read_header(&env, &header, 0, 0);
+  rc = dxb_read_header(&env, &header, 0, 0, (int)mode);
   if (unlikely(rc != MDBX_SUCCESS))
     goto bailout;
 
