@@ -1952,6 +1952,14 @@ __cold ::std::ostream &operator<<(::std::ostream &out, const MDBX_debug_flags_t 
     out << delimiter << "DBG_LEGACY_OVERLAP";
     delimiter = comma;
   }
+  if (it & MDBX_DBG_DONT_UPGRADE) {
+    out << delimiter << "MDBX_DBG_DONT_UPGRADE";
+    delimiter = comma;
+  }
+  if (it & MDBX_DBG_ERR) {
+    out << delimiter << "MDBX_DBG_ERR";
+    delimiter = comma;
+  }
   if (delimiter != comma)
     out << "DBG_NONE";
   return out << "}";
