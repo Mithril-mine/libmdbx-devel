@@ -102,6 +102,13 @@ if(WIN32 AND MDBX_PROBES)
   add_issue_test(gh0170_throttle SOURCE "issue_gh0170_throttle.c++")
   set_tests_properties(gh0170_throttle PROPERTIES ENVIRONMENT "MDBX_PROBES=1")
 endif()
+if(WIN32)
+  # issue #217: the shrink throttle must not rate-limit non-doomed shrinks
+  # (single-process / MDBX_EXCLUSIVE), and a shrink must be deferred while a
+  # FOREIGN process (spawned child) holds a read transaction. Plain Windows
+  # test: no probe-bus dependency, so the regular Windows CI cells run it.
+  add_issue_test(gh0217 SOURCE "issue_gh0217.c++")
+endif()
 add_issue_test(gh0112 SOURCE "issue_gh0112.c++")
 add_issue_test(gh0114 SOURCE "issue_gh0114.c++")
 add_issue_test(gh0082 SOURCE "issue_gh0082.c++")
