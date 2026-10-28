@@ -56,6 +56,10 @@
 #include <string_view>
 #endif
 
+#if defined(__cpp_lib_optional) && __cpp_lib_optional >= 201606L
+#include <optional>
+#endif
+
 #ifndef MDBX_USING_CXX_EXPERIMENTAL_FILESYSTEM
 #ifdef MDBX_USING_CXX_EXPERIMETAL_FILESYSTEM
 /* backward compatibility with the old misspelled name */

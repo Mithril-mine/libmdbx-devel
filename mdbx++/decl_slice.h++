@@ -1,8 +1,5 @@
 // > dist-cutoff-begin
 #pragma once
-#if defined(DOXYGEN) || (defined(__cpp_lib_optional) && __cpp_lib_optional >= 201606L)
-#include <optional>
-#endif /* __cpp_lib_optional >= 201606L */
 #include "decl_exceptions.h++"
 namespace mdbx {
 // < dist-cutoff-end
