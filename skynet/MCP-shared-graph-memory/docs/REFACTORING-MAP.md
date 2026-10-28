@@ -262,6 +262,101 @@ group:task:B63            → {символы, тесты, записи, док�
    Покрытие от instrumented-прогона mdbx_test — единственный pending-пункт
    (не зависит от этого модуля).
 
+## Многоплатформенное сканирование (воспроизведение)
+
+Полнота структурной карты достигается многоконфигурационным прогоном
+(linux + win32 + macos) с последующим merge в один артефакт. Ниже —
+точные рецепты, чтобы это можно было легко повторить локально и в CI.
+
+### Оркестратор `tools/scan_all.py`
+
+Единая точка входа для всего конвейера (вместо ручного запуска цепочки
+скриптов):
+
+```bash
+python3 tools/scan_all.py --configs linux,win32 \
+  --db ~/.local/share/shared-graph-memory/db.mdbx
+```
+
+Шаги (каждый можно пропустить флагом):
+
+| Шаг | Команда/скрипт | Флаг пропуска |
+|---|---|---|
+| `configure` | `cmake -S . -B _build-scan -DCMAKE_BUILD_TYPE=Debug -DMDBX_BUILD_CXX=ON -DMDBX_ENABLE_TESTS=ON -DMDBX_BUILD_TOOLS=ON -DINTERPROCEDURAL_OPTIMIZATION=OFF -DCMAKE_EXPORT_COMPILE_COMMANDS=ON -DMDBX_ALLOY_BUILD=ON -DMDBX_USE_MINCORE=OFF` | `--skip-build` |
+| `scan linux` | `scan_symbols.py --config linux` | `--configs` |
+| `scan win32` | `scan_symbols.py --config win32 --target x86_64-w64-windows-gnu` | `--configs` |
+| `scan macos` | из CI-артефакта (`--artifacts-from-ci <run-id>`), локально невозможен без osxcross/SDK | `--configs` |
+| `merge` | `scan_symbols.py --merge {linux,win32,macos}` + `scan_uncovered.py` | `--skip-merge` |
+| `project` | `scan_project.py --repo $REPO` | `--skip-project` |
+| `probes` | `scan_probes.py --src src --probe-bus docs/engineering/probe-bus.md` | `--skip-probes` |
+| `validate` | `validate_map.py --map merged --tus fixture`; `--validate-full` включает дополнительно `--tus full` | `--skip-validate` |
+| `load` | pin-бэкап БД (`mcp.cli backup`, флаг `--skip-backup`) → `load_map.py --replace --map merged --project project-map --db …` | `--skip-load` |
+| `report` | счётчики по конфигам, coverage_pct, uncovered | — |
+
+`scan_all.py` не изобретает новые шаги — он только связывает существующие
+инструменты в детерминированную последовательность и проверяет непустоту
+каждого конфига (см. «Fail-loudly» ниже).
+
+### Конфигурации и их особенности
+
+**linux (нативный, эталон).** Флаги берутся из `_build-scan/compile_commands.json`
+как есть. `MDBX_ALLOY_BUILD=ON` обязателен: иначе `src/alloy.c` нет в
+compile_commands и C-ядро выпадает из скана (functions ~3127→2400).
+`MDBX_USE_MINCORE=OFF` обязателен для кросс-win32 (mingw не объявляет
+`mincore()`).
+
+**win32 (кросс, clang → mingw-w64).** `--target=x86_64-w64-windows-gnu`
+на ubuntu (пакет `mingw-w64`). Заголовки — из системного каталога
+mingw-w64; clang находит их автоматически. Никаких дополнительных
+`-D/-I/-include` не требуется: код C-ядра с 2026-10-28 (`cc98781e`,
+«fuses against using POSIX error codes») компилируется под Windows-таргетом
+чисто — все POSIX-коды ошибок вынесены из платформенно-нейтрального кода в
+POSIX-ветки `#if`.
+
+> **Fuse (предохранитель) `src/essentials.h`:** для не-MinGW Windows
+> (`IS_WINDOWS && !(__MINGW__||__MINGW32__||__MINGW64__||__CYGWIN__)`)
+> все POSIX `E*`-коды `#undef`-ятся и переопределяются в ядовитый символ
+> `POSIX_error_codes_should_not_be_used_in_Windows_build` (`EINVAL` — как
+> вызов функции, чтобы не ломать контексты STL/MSVC-заголовков). Под
+> **MinGW-таргетом fuse не активен** (guard исключает MinGW): поэтому
+> win32-cross-скан сам по себе НЕ детектирует утечки POSIX-кодов — их
+> ловят нативные MSVC-сборки в CI (fuse активен там) плюс структурные
+> проверки (строки вне `#if`). Это осознанное решение: MinGW-заголовки
+> сами определяют POSIX-имена, и «ядовитые» макросы ломали бы сборку
+> системных заголовков.
+
+**macos (только CI).** Локально невозможен без osxcross/SDK; артефакт
+берётся из GitHub Actions (`scan-macos` job workflow
+`ci-mcp-refactor-map.yml`). Раннер использует **AppleClang**, чей
+`-ast-dump=json` отличается от LLVM clang: один объект JSON + хвост →
+`json.loads()` даёт `Extra data`. Сканер обрабатывает это через
+`JSONDecoder.raw_decode` (берёт первый валидный объект, хвост отбрасывает;
+см. `run_tu()`).
+
+### Fail-loudly (защита от молчаливой потери конфига)
+
+Сканирование многоплатформенно и дорого, поэтому пайплайн обязан падать,
+а не писать «пустой» артефакт:
+
+- `scan_symbols.py`: артефакт с `functions == 0` **не пишется** — выход
+  с ненулевым кодом и сообщением (раньше писался молча, из-за чего
+  macOS-скан с 0 функций «успешно» доезжал в merged).
+- `--merge`: конфиг, внёсший 0 символов, **отклоняется** с ошибкой.
+- CI `merge-validate`: проверка непустоты каждого конфига (иначе job красный).
+- CI `scan-macos`: после скана — явная проверка `functions > 0` на раннере.
+
+### Как это выглядело раньше (история дефектов)
+
+- `-include errno.h` в win32-скане — **костыль, запрещён**: он маскировал
+  реальную хрупкость кода (POSIX-коды вне `#if`), а не исправлял её.
+  Корень был в `api-copy.c:846` (`locked_by_other = rc == EWOULDBLOCK ||
+  rc == EAGAIN` вне `#if IS_WINDOWS`, добавлено #112): clang-mingw честно
+  падал (`EWOULDBLOCK` undeclared), mingw-gcc/MSVC проходили лишь из-за
+  транзитивного `<errno.h>`. Исправлено в ядре (`cc98781e`): строка
+  перенесена в POSIX-ветку, Windows получил `locked_by_other = false`.
+- macOS-скан молча давал `functions:0` (AppleClang «Extra data») и вливался
+  в merged — до появления fail-loudly и `raw_decode`.
+
 ## Ограничения (зафиксированы)
 
 - **Тела функций из веток, неактивных в текущей конфигурации, отсутствуют

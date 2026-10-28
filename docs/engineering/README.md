@@ -90,6 +90,7 @@ Author: Leonid Yuriev \<leo@yuriev.ru\>. Home site: <https://libmdbx.dqdkfa.ru>.
 | [`module-lock-matrix.md`](module-lock-matrix.md) | Pairwise subsystem conflict matrix (HIGH/MED/LOW) + high-risk `src/*` zones for parallel work planning |
 | [`test-durability-strategy.md`](test-durability-strategy.md) | Test durability strategy: `MDBX_SYNC_*` modes, speed-up transports (`/dev/shm`, RAM-disk), Quick/Full matrix |
 | [`test-coverage.md`](test-coverage.md) | Tests → modules coverage map: which test guards which module/feature, coverage gaps |
+| [`../../skynet/MCP-shared-graph-memory/docs/REFACTORING-MAP.md`](../../skynet/MCP-shared-graph-memory/docs/REFACTORING-MAP.md) | Structural refactoring map: clang-AST symbols/blocks/edges, `#if`-regions, multi-config merge (linux+win32+macos), uncovered islands, coverage/traces/probes; оркестратор `scan_all.py` (см. секцию «Многоплатформенное сканирование») |
 | [`testing-methodology.md`](testing-methodology.md) | Managed/controlled testing methodology: three instrumentation channels (COLLECT/WATCH/FAULT), coverage axes, tool taxonomy, Kaizen iterations, concrete macro implementation (probe-bus) |
 | [`testing-codex.md`](testing-codex.md) | **Operational codex C0–C6**: double-loop/Kaizen, test addressing (diff→labels/cells), tiering & budgets (P0–heavy), flake management, metrics/SLA, local/CI parity, corpus hygiene, temp-cleanup |
 | [`test-scenarios-codex.md`](test-scenarios-codex.md) | Quality standard for `test-scenarios.md` (SC-*): mandatory fields, review checklist, verdicts, process |

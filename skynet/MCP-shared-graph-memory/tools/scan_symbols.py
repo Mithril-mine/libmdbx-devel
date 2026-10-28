@@ -656,13 +656,27 @@ def run_tu(clang, tu, entry, cfg: ScanConfig = None) -> tuple:
     cmd += ["-fsyntax-only"] + args + [entry["file"]]
     proc = subprocess.run(cmd, cwd=entry["directory"],
                           capture_output=True, text=True)
-    if proc.returncode != 0 or not proc.stdout:
+    if not proc.stdout:
         return tu, None, proc.stderr[:500]
+    # AppleClang 17: -ast-dump=json печатает один валидный объект, затем хвост
+    # (например "}" или мусор), из-за чего json.loads() даёт "Extra data".
+    # Берём ПЕРВЫЙ валидный JSON-объект через raw_decode; хвост отбрасываем.
+    # returncode != 0 при этом не фатален: clang отдаёт partial AST даже при
+    # ошибках (например clang-mingw на неполных заголовках) — терять весь TU
+    # нельзя, иначе конфиг молча пустеет (functions:0).
+    ast, err = None, None
     try:
-        ast = json.loads(proc.stdout)
+        dec = json.JSONDecoder()
+        text = proc.stdout
+        idx = 0
+        while idx < len(text) and text[idx] in " \t\r\n":
+            idx += 1
+        ast, idx = dec.raw_decode(text, idx)
     except json.JSONDecodeError as e:
         return tu, None, "JSON parse error: %s" % e
-    return tu, ast, None
+    if proc.returncode != 0:
+        err = proc.stderr[:500]
+    return tu, ast, err
 
 
 def select_tus(cc) -> list:
@@ -905,9 +919,13 @@ def scan_configuration(clang, cc, tus, cfg: ScanConfig,
     t0 = time.time()
     for name, entry in tus:
         _, ast, err = run_tu(clang, name, entry, cfg)
-        if err or ast is None:
+        # partial AST: clang отдаёт его даже при ошибках препроцессора
+        # (см. run_tu); nullable AST — фатально для TU, err ругается.
+        if ast is None:
             errors[name] = err or "empty AST"
             continue
+        if err:
+            errors[name] = err
         col.default_file = entry["file"]
         col.tu_dir = entry["directory"]
         col._loc_file = None
@@ -956,6 +974,12 @@ def merge_configs(scans: list) -> tuple:
     merged = {}
     for scan in scans:
         cfg_name = scan["config"]
+        if not scan.get("symbols"):
+            # Молчаливый приём пустого конфига уже терял целые платформы
+            # (macOS-скан с functions:0 «успешно» вливался в merged). Здесь
+            # конфиг ОБЯЗАН внести символы — иначе это поломка сканера/CI.
+            sys.stderr.write("merge: config '%s' contributed 0 symbols — aborting\n" % cfg_name)
+            raise SystemExit(2)
         for key, sym in scan["symbols"].items():
             prev = merged.get(key)
             if prev is None:
@@ -1070,6 +1094,10 @@ def main():
         }
         artifact["symbols"] = link_symbols_to_regions(artifact["symbols"], regions)
         artifact["symbols"] = annotate_configs(artifact["symbols"], regions)
+        if artifact["counts"]["functions"] == 0:
+            sys.stderr.write("scan: config '%s' yielded 0 functions — aborting, artifact not written\n"
+                             % artifact.get("config", "merged"))
+            raise SystemExit(1)
         os.makedirs(os.path.dirname(args.out), exist_ok=True)
         with open(args.out, "w") as f:
             json.dump(artifact, f, ensure_ascii=False, indent=1)
@@ -1126,6 +1154,10 @@ def main():
     }
     artifact["symbols"] = link_symbols_to_regions(artifact["symbols"], regions)
     artifact["symbols"] = annotate_configs(artifact["symbols"], regions)
+    if artifact["counts"]["functions"] == 0:
+        sys.stderr.write("scan: config '%s' yielded 0 functions — aborting, artifact not written\n"
+                         % artifact["config"])
+        raise SystemExit(1)
     os.makedirs(os.path.dirname(args.out), exist_ok=True)
     with open(args.out, "w") as f:
         json.dump(artifact, f, ensure_ascii=False, indent=1)

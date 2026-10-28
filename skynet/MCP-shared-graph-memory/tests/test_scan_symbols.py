@@ -283,9 +283,11 @@ def test_merge_configs_edges_dedup_across_configs():
     """Идентичные рёбра из разных конфигов дедуплицируются."""
     edge = {"caller": "fn:lck_seize", "callee": "fn:mdbx_env_open",
             "kind": "syntax", "resolved": True, "ambiguous": False}
+    sym = {"kind": "function", "name": "lck_seize", "file": "src/lck-posix.c",
+           "module": "lck-posix", "l0": 1, "l1": 2, "blocks": [], "regions": []}
     scans = [
-        {"config": "linux", "symbols": {}, "edges": [dict(edge)]},
-        {"config": "win32", "symbols": {}, "edges": [dict(edge)]},
+        {"config": "linux", "symbols": {"fn:lck_seize": dict(sym)}, "edges": [dict(edge)]},
+        {"config": "win32", "symbols": {"fn:lck_seize": dict(sym)}, "edges": [dict(edge)]},
     ]
     _, edges, _sem = s.merge_configs(scans)
     assert len(edges) == 1
@@ -332,3 +334,122 @@ def test_select_test_tus_domains():
     fw = s.select_test_tus("framework")
     assert all(f[0] == "framework" for f in fw)
     assert not any("main.c++" in f[1]["file"] for f in fw)
+
+
+# ---------------------------------------------------------------------------
+# Многоплатформенное сканирование: AppleClang raw_decode, fail-loudly, merge
+# ---------------------------------------------------------------------------
+
+class _FakeProc:
+    def __init__(self, returncode, stdout, stderr=""):
+        self.returncode = returncode
+        self.stdout = stdout
+        self.stderr = stderr
+
+
+def _fake_run(monkeypatch, proc):
+    monkeypatch.setattr(subprocess, "run", lambda *a, **kw: proc)
+
+
+def _sample_ast_json():
+    """Минимальный валидный AST (Collector.walk не разберёт, но run_tu не ходит в walk)."""
+    return ('{"kind":"TranslationUnitDecl","loc":{"file":"src/alloy.c"},"inner":['
+            '{"kind":"FunctionDecl","name":"mdbx_env_open","loc":{"file":"src/alloy.c","line":1,"col":1},'
+            '"type":{"qualType":"int (void)"},"storageClass":"none"}]}')
+
+
+def test_run_tu_accepts_partial_ast_with_nonzero_exit(monkeypatch):
+    """clang отдаёт валидный JSON-хвост даже при ошибках (returncode != 0).
+
+    Сканер должен принимать partial AST (как делает clang-mingw на ошибках
+    заголовков), а не терять весь TU. Ошибки попадают в err-строку для errors[].
+    """
+    _fake_run(monkeypatch, _FakeProc(1, _sample_ast_json(), "EWOULDBLOCK undeclared"))
+    tu = ("library", {"file": "src/alloy.c", "directory": ".", "command": "clang -c src/alloy.c"})
+    _tu, ast, err = s.run_tu("clang", tu, tu[1], s.ScanConfig(name="win32"))
+    assert ast is not None, "partial AST не должен теряться при returncode!=0"
+    assert ast["kind"] == "TranslationUnitDecl"
+    assert "EWOULDBLOCK" in (err or "")
+
+
+def test_run_tu_appleclang_extra_data_taken_via_raw_decode(monkeypatch):
+    """AppleClang 17: -ast-dump=json даёт один объект + хвост (Extra data).
+
+    Должен браться ПЕРВЫЙ валидный JSON-объект через raw_decode, хвост
+    отбрасываться — иначе macOS-скан молча даёт functions:0.
+    """
+    payload = _sample_ast_json() + "\n}\n{\"trailing\":true}\n"
+    _fake_run(monkeypatch, _FakeProc(0, payload, ""))
+    tu = ("library", {"file": "src/alloy.c", "directory": ".", "command": "clang -c src/alloy.c"})
+    _tu, ast, err = s.run_tu("clang", tu, tu[1], s.ScanConfig())
+    assert ast is not None, "Extra data (AppleClang) должен разбираться raw_decode"
+    assert ast["kind"] == "TranslationUnitDecl"
+    assert err is None, "хвост отбрасывается без ошибки"
+
+
+def test_run_tu_returns_none_on_garbage(monkeypatch):
+    """Полный мусор в stdout — честный None (не мусорный AST)."""
+    _fake_run(monkeypatch, _FakeProc(0, "not json at all", ""))
+    tu = ("library", {"file": "src/alloy.c", "directory": ".", "command": "clang -c src/alloy.c"})
+    _tu, ast, err = s.run_tu("clang", tu, tu[1], s.ScanConfig())
+    assert ast is None
+    assert "JSON parse" in (err or "")
+
+
+def test_scan_configuration_walks_partial_ast(monkeypatch):
+    """TU с ошибками препроцессора: символы из partial AST сохраняются.
+
+    run_tu возвращает (name, ast, err) при returncode!=0; scan_configuration
+    обязан продолжить walk (иначе конфиг молча пустеет на нестабильных
+    заголовках, что уже случалось: functions:0 в macos-скане).
+    """
+    ast = {"kind": "TranslationUnitDecl", "loc": {"file": "src/alloy.c"}, "inner": []}
+    walked = []
+
+    def fake_run_tu(clang, name, entry, cfg):
+        # library — «сломанный» TU (partial AST), tools — чистый
+        if name == "library":
+            return name, ast, "EWOULDBLOCK undeclared"
+        return name, ast, None
+
+    def fake_walk(node, collector):
+        walked.append(node)
+
+    monkeypatch.setattr(s, "run_tu", fake_run_tu)
+    monkeypatch.setattr(s, "walk", fake_walk)
+    # scan_macros тоже мокаем (не зовёт clang)
+    monkeypatch.setattr(s, "scan_macros", lambda *a, **k: None)
+
+    tus = [("library", {"file": "src/alloy.c", "directory": ".", "command": "c"}),
+           ("tools", {"file": "src/tools/copy.c", "directory": ".", "command": "c"})]
+    res = s.scan_configuration("clang", None, tus, s.ScanConfig(name="win32"))
+    # оба TU разобраны (walk вызван дважды), включая library с partial AST
+    assert len(walked) == 2, "partial AST должен обрабатываться walk-ом"
+    assert "library" in res["errors"], "предупреждение об ошибке должно попасть в errors[]"
+    # символы не теряются (canonicalize пустой col не падает)
+    assert res["symbols"] is not None
+
+
+def test_merge_configs_rejects_empty_config():
+    """Конфиг, внёсший 0 символов, не должен молча вливаться в merged."""
+    linux = {"config": "linux",
+             "symbols": {"fn:lck_seize": {"kind": "function", "name": "lck_seize",
+                                           "file": "src/lck-posix.c", "module": "lck-posix",
+                                           "l0": 1, "l1": 2, "blocks": [], "regions": []}},
+             "edges": []}
+    empty = {"config": "macos", "symbols": {}, "edges": []}
+    with pytest.raises(SystemExit) as exc:
+        s.merge_configs([linux, empty])
+    assert exc.value.code != 0
+
+
+def test_merge_configs_empty_first_config_also_rejected():
+    linux = {"config": "linux",
+             "symbols": {"fn:lck_seize": {"kind": "function", "name": "lck_seize",
+                                           "file": "src/lck-posix.c", "module": "lck-posix",
+                                           "l0": 1, "l1": 2, "blocks": [], "regions": []}},
+             "edges": []}
+    empty = {"config": "macos", "symbols": {}, "edges": []}
+    with pytest.raises(SystemExit) as exc:
+        s.merge_configs([empty, linux])
+    assert exc.value.code != 0

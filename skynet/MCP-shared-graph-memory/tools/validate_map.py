@@ -97,9 +97,11 @@ def main():
         errors = {}
         for name, entry in tus:
             _, ast, err = s.run_tu(args_clang(), name, entry, cfg)
-            if err or ast is None:
-                errors[name] = err
+            if ast is None:
+                errors[name] = err or "empty AST"
                 continue
+            if err:
+                errors[name] = err
             col.default_file = entry["file"]
             col.tu_dir = entry["directory"]
             col._loc_file = None
