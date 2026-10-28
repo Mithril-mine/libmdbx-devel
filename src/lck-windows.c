@@ -674,4 +674,44 @@ int lck_rpid_check(MDBX_env *env, uint32_t pid) {
   }
 }
 
+/*----------------------------------------------------------------------------*/
+/* gating of datafile shrink attempts (issue #170) */
+
+bool dxb_shrink_attempt_allowed(MDBX_env *env) {
+  /* Rate-limit the attempts: shrinking through un-map is expensive (suspending
+   * local threads, try-acquiring the exclusive remap-lock) and is doomed to be
+   * deferred while readers exist, so don't retry more often than the
+   * MDBX_opt_shrink_retry_period option prescribes. The timestamp is
+   * per-process (a field of MDBX_env), so no lock-file format change and no
+   * inter-process interference is involved. */
+  const uint64_t now = osal_monotime();
+  const uint64_t interval = env->options.shrink_retry_period;
+  if (interval && env->shrink_last_attempt && now - env->shrink_last_attempt < interval) {
+    (void)0; /* no MPROBE_WATCH in stable */
+    return false;
+  }
+  env->shrink_last_attempt = now;
+
+  /* Usage exclusivity: SetEndOfFile() fails while any OTHER process keeps the
+   * datafile mapped, and such a process is present in the reader table while
+   * its environment is in use. If at least one foreign live process is found,
+   * the shrink cannot succeed right now — skip the attempt entirely instead of
+   * walking the expensive dxb_resize() path just to defer.
+   * Stale slots of dead processes are filtered out by lck_rpid_check(). */
+  const lck_t *const lck = env->lck_mmap.lck;
+  if (likely(lck)) {
+    const size_t nreaders = rdt_count(env, lck);
+    for (size_t i = 0; i < nreaders; ++i) {
+      const mdbx_pid_t pid = atomic_load_pid(&lck->rdt[i].pid, mo_AcquireRelease);
+      if (pid && pid != env->pid && lck_rpid_check(env, pid) == MDBX_RESULT_TRUE) {
+        (void)0; /* no MPROBE_WATCH in stable */
+        return false;
+      }
+    }
+  }
+
+  (void)0; /* no MPROBE_WATCH in stable */
+  return true;
+}
+
 #endif /* Windows */

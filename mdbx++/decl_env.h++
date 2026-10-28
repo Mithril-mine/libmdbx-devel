@@ -536,7 +536,9 @@ public:
     /// \copydoc MDBX_opt_split_reserve
     split_reserve = MDBX_opt_split_reserve,
     /// \copydoc MDBX_opt_presync_threshold
-    presync_threshold = MDBX_opt_presync_threshold
+    presync_threshold = MDBX_opt_presync_threshold,
+    /// \copydoc MDBX_opt_shrink_retry_period
+    shrink_retry_period = MDBX_opt_shrink_retry_period
   };
 
   /// \copybrief mdbx_env_set_option()
