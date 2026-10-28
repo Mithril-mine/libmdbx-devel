@@ -69,6 +69,11 @@ __cold static THREAD_RESULT THREAD_CALL compacting_write_thread(void *arg) {
     osal_condpair_signal(&ctx->condpair, false);
   }
 bailout:
+  /* Wake up a producer sleeping on the part=false cond: it waits with an
+   * infinite timeout and re-checks ctx->error, so without this signal a failed
+   * osal_write() would leave mdbx_env_copy() hanging forever. The signal is
+   * issued while holding the lock, exactly as the normal loop does. */
+  osal_condpair_signal(&ctx->condpair, false);
   osal_condpair_unlock(&ctx->condpair);
   return (THREAD_RESULT)0;
 }
