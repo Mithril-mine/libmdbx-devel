@@ -199,6 +199,11 @@ shared-graph-memory.mdbx — персистентная память роя на
 - Данные генерируются `tools/scan_symbols.py` (+scan_regions/uncovered),
   загружаются `tools/load_map.py --db <живая> --replace`, сверяются
   `tools/validate_map.py` (golden: «не меньше»).
+- **Многоплатформенность**: полная карта = merge linux+win32+macos.
+  Локально конвейер воспроизводится одной командой
+  `python3 tools/scan_all.py --configs linux,win32 [--db <живая>]`
+  (macos-артефакт — из CI). Подробности и root-cause заметки — в
+  `docs/REFACTORING-MAP.md`, секция «Многоплатформенное сканирование».
 - Использование для рефакторинга: `map_edges_of('fn:x')` — кто вызывается;
   `map_callers_of('fn:x')` — impact; `map_uncovered('api-copy')` — непокрытые
   острова в модуле; `map_regions('region:chk')` — платформенные ветки.
