@@ -502,12 +502,12 @@ __cold int mdbx_env_set_option(MDBX_env *env, const MDBX_option_t option, uint64
     break;
 
   case MDBX_opt_shrink_retry_period:
+    if (unlikely(env->flags & MDBX_RDONLY))
+      return LOG_IFERR(MDBX_EACCESS);
     if (value == /* default */ UINT64_MAX)
       value = default_shrink_retry_period_16dot16();
     if (unlikely(value > UINT32_MAX))
       return LOG_IFERR(MDBX_EINVAL);
-    if (unlikely(env->flags & MDBX_RDONLY))
-      return LOG_IFERR(MDBX_EACCESS);
     /* stored in monotonic units; zero disables the throttling */
     env->options.shrink_retry_period = osal_16dot16_to_monotime((uint32_t)value);
     break;
