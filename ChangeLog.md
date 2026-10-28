@@ -32,17 +32,15 @@ Cutting-edge release with new core features and internal refactoring.
 
 ### Improvements:
 
- - Added `make test-doxygen` to audit the doxygen comments of the public headers strictly; the C/C++ API documentation is completed to pass it (needs doxygen >= 1.18).
- - Clarification/refining README and doxygen API descriptions.
- - Added the `-h`/`--help` options to all the command-line utilities and deduplicated their common helpers into a shared header-only module.
- - Added the man page for the `mdbx_defrag` utility and updated the other man pages.
- - Wrote the "Tooling: command-line utilities" document with full option reference of every utility.
- - Added a new bilingual textbook and integrated it into the documentation site, with the accompanying example programs ported and restructured.
  - Introduced a unified bilingual documentation site, six bilingual guides and consolidated engineering documentation.
- - Conan recipe: added the `mdbx.lto` and `mdbx.sanitize` options and documented the rules of the package binary identity — see README "Packaging / Conan".
- - Added the `MDBX_AVOID_FTOK` build option for the System V IPC locking: it replaces the system `ftok()` (whose low 16 inode bits make two databases collide) with a key derived from the full inode, device and filesystem type, mixed by the internal hash; this lowers the collision probability on top of the signature guard ([#80](https://github.com/Mithril-mine/libmdbx-devel/issues/80)).
- - Added `mdbx_preopen_snapinfo_ex()` with an explicit `MDBX_preopen_flags` mode of processing weak checkpoints during a preopen inspection: `MDBX_PREOPEN_LEGACY` (MDBX_CORRUPTED unless the newest checkpoint is steady), `MDBX_PREOPEN_PROPERLY` (MDBX_WANNA_RECOVERY unless the newest checkpoint is steady), `MDBX_PREOPEN_PESSIMISTIC` (newest steady checkpoint regardless of the boot-id) and `MDBX_PREOPEN_OPTIMISTIC` (a weak checkpoint is treated as steady when its boot-id matches the current one). `mdbx_preopen_snapinfo()` now corresponds to `MDBX_PREOPEN_PROPERLY` ([#182](https://github.com/Mithril-mine/libmdbx-devel/issues/182)).
+ - Added a new bilingual textbook and integrated it into the documentation site, with the accompanying example programs ported and restructured.
+ - Added `mdbx_preopen_snapinfo_ex()` with an explicit mode (`MDBX_PREOPEN_LEGACY`, `MDBX_PREOPEN_PROPERLY`, `MDBX_PREOPEN_PESSIMISTIC`, `MDBX_PREOPEN_OPTIMISTIC`) of processing weak checkpoints during a preopen inspection; `mdbx_preopen_snapinfo()` now corresponds to `PROPERLY` ([#182](https://github.com/Mithril-mine/libmdbx-devel/issues/182)).
+ - Added the man page for the `mdbx_defrag` utility and updated the other man pages.
+ - Added the `MDBX_AVOID_FTOK` build option for the System V IPC locking: it replaces the system `ftok()` with a key derived from the full file identity, drastically lowering the chance of a key collision ([#80](https://github.com/Mithril-mine/libmdbx-devel/issues/80)).
+ - Added the `-h`/`--help` options to all command-line utilities.
+ - Clarification/refining README and doxygen API descriptions.
  - On Windows the attempts to shrink the database file are no longer repeated on every commit when they are doomed to be deferred (while other processes use the database): they are skipped outright and rate-limited by the new `MDBX_opt_shrink_retry_period` option, which reduces the commit overhead for workloads mixing long-lived readers with the automatic file shrinking ([#170](https://github.com/Mithril-mine/libmdbx-devel/issues/170)).
+ - Added the `MDBX_opt_shrink_retry_period` option: datafile shrink attempts that are doomed to be deferred are now skipped outright and rate-limited, which reduces the commit overhead for workloads mixing long-lived readers with automatic file shrinking ([#170](https://github.com/Mithril-mine/libmdbx-devel/issues/170)).
 
 ### Fixes:
 
@@ -50,28 +48,29 @@ Cutting-edge release with new core features and internal refactoring.
     - A failed disk write could be silently reported as success, and a large write-mapped durable commit could crash on Windows ([#47](https://github.com/Mithril-mine/libmdbx-devel/issues/47)).
     - Auxiliary page-write errors were silently ignored, masking a failing disk; on Windows they also clashed with the transaction file lock, so page pre-warming never worked ([#203](https://github.com/Mithril-mine/libmdbx-devel/issues/203)).
     - The writer trusted a forged snapshot-age hint from the shared lock file and could reuse pages still referenced by live readers; such a hint is now rejected ([#81](https://github.com/Mithril-mine/libmdbx-devel/issues/81)).
-    - A crafted garbage-collection record listing one physical page twice got that page handed out to two b-tree nodes in a single write transaction, silently corrupting data; such records are now rejected ([#83](https://github.com/Mithril-mine/libmdbx-devel/issues/83)).
     - `mdbx_drop()` accepted the internal free-list handle and destroyed the garbage-collection tree, permanently leaking pages and corrupting accounting; such a call is now rejected ([#69](https://github.com/Mithril-mine/libmdbx-devel/issues/69)).
     - A failed second in-process open released the first handle's file locks, letting another process take exclusive access ([#59](https://github.com/Mithril-mine/libmdbx-devel/issues/59)).
     - A copy (`mdbx_env_copy()`, `mdbx_txn_copy2pathname()`) could delete a pre-existing destination database when its file lock failed, leave an orphan file blocking later copies, or keep the old file's tail after an overwrite ([#58](https://github.com/Mithril-mine/libmdbx-devel/issues/58), [#112](https://github.com/Mithril-mine/libmdbx-devel/issues/112)).
-    - A rare internal structure corruption during rollback of a duplicate insertion.
 
- - Crashes, hangs and undefined behavior in the core engine:
+ - Resistance to corrupted or crafted "poisoned" data:
+    - A crafted garbage-collection record listing one physical page twice got that page handed out to two b-tree nodes in a single write transaction, silently corrupting data; such records are now rejected ([#83](https://github.com/Mithril-mine/libmdbx-devel/issues/83)).
     - A crafted database could drive the engine out of bounds (crash or data corruption) when deleting records, dropping a table, estimating a range, or checking the file; such databases are now detected and rejected ([#57](https://github.com/Mithril-mine/libmdbx-devel/issues/57), [#63](https://github.com/Mithril-mine/libmdbx-devel/issues/63), [#74](https://github.com/Mithril-mine/libmdbx-devel/issues/74), [#75](https://github.com/Mithril-mine/libmdbx-devel/issues/75)).
+    - Fixed a rare durability bug: a failed disk write during a commit could be silently reported as success, and on Windows a large write-mapped durable transaction could crash the engine while committing (issue #47).
     - The defragmentation walk became exponential on a crafted tree with shared sub-trees (a denial of service), and a crafted set of duplicate values could crash or corrupt memory; both are now rejected ([#82](https://github.com/Mithril-mine/libmdbx-devel/issues/82), [#176](https://github.com/Mithril-mine/libmdbx-devel/issues/176)).
     - The shared reader-table occupancy counter from a corrupt lock file drove out-of-bounds scans over the fixed-size reader table; the count is now clamped everywhere ([#79](https://github.com/Mithril-mine/libmdbx-devel/issues/79), [#113](https://github.com/Mithril-mine/libmdbx-devel/issues/113)).
+    - `mdbx_gc_info()` looped forever holding the writer lock on a transaction that had already reclaimed a record; the documented visitor stop is now honored as well ([#88](https://github.com/Mithril-mine/libmdbx-devel/issues/88)).
+    - `mdbx_cursor_scroll()` and `mdbx_cursor_distance()` indexed the cursor stack out of bounds when `deepness` was above `INT_MAX` ([#85](https://github.com/Mithril-mine/libmdbx-devel/issues/85)).
+
+ - Crashes, hangs and undefined behavior in the core engine:
     - `mdbx_replace()`/`mdbx_replace_ex()` and the C++ `txn::replace_reserve()` used with `MDBX_RESERVE` could crash the process or silently lose the new value; `MDBX_RESERVE` on a table with duplicates is now rejected upfront, as `mdbx_put()` already did ([#166](https://github.com/Mithril-mine/libmdbx-devel/issues/166)).
     - `mdbx_replace_ex()` with overlapping buffers could hang or crash the next operation on the same table ([#56](https://github.com/Mithril-mine/libmdbx-devel/issues/56)).
     - `mdbx_env_copy()` with `MDBX_CP_COMPACT` hung forever when the dedicated writer thread hit a write error (e.g. a closed destination pipe or a full disk); the error is now reported instead ([#171](https://github.com/Mithril-mine/libmdbx-devel/issues/171)).
-    - `mdbx_gc_info()` looped forever holding the writer lock on a transaction that had already reclaimed a record; the documented visitor stop is now honored as well ([#88](https://github.com/Mithril-mine/libmdbx-devel/issues/88)).
     - `mdbx_txn_rollback()` on a nested write transaction could leave the parent unusable or corrupt it when the restart failed; nested transactions are now finalized cleanly ([#103](https://github.com/Mithril-mine/libmdbx-devel/issues/103), [#124](https://github.com/Mithril-mine/libmdbx-devel/issues/124)).
     - Cloning a read transaction (`mdbx_txn_clone()`) could crash the process on cleanup paths, or yield a clone reading already-recycled pages when a parked origin had been ousted; such clones now fail cleanly with `MDBX_OUSTED`/`MDBX_EINVAL` ([#128](https://github.com/Mithril-mine/libmdbx-devel/issues/128), [#148](https://github.com/Mithril-mine/libmdbx-devel/issues/148)).
     - Parking and unparking read transactions misbehaved: parking a failed transaction crashed on the later abort, cloning a parked transaction produced an unusable clone, and unparking a broken or ousted transaction reported success; all three now behave as documented ([#104](https://github.com/Mithril-mine/libmdbx-devel/issues/104)).
-    - Four transaction error paths leaked table handles or promoted wrong geometry values: a failed checkpoint or commit-as-read, a write start failing after the snapshot was taken, a nested resize that could not be undone, and a discarded meta write error that hid an I/O failure ([#105](https://github.com/Mithril-mine/libmdbx-devel/issues/105)).
     - A nested-transaction begin failing out-of-memory left the parent transaction in an inconsistent state ([#67](https://github.com/Mithril-mine/libmdbx-devel/issues/67)).
     - `mdbx_cursor_count_ex()` wrote past the caller's buffer when given the legacy structure size ([#68](https://github.com/Mithril-mine/libmdbx-devel/issues/68)).
     - A hardware divide-by-zero in `mdbx_cursor_put(MDBX_MULTIPLE)` with a zero element size and a huge count; such a put is now rejected ([#73](https://github.com/Mithril-mine/libmdbx-devel/issues/73)).
-    - `mdbx_cursor_scroll()` and `mdbx_cursor_distance()` indexed the cursor stack out of bounds when `deepness` was above `INT_MAX` ([#85](https://github.com/Mithril-mine/libmdbx-devel/issues/85)).
     - Undefined behavior in the JSON-integer key encoding (a negative shift for magnitudes above 2^52, negation of `INT64_MIN`, an empty key passed to `memcpy`).
     - An arithmetic overflow miscomputed the maximum database size on 32-bit builds with large RAM.
     - The `MDBX_TXN_TRY` flag leaked into the transaction state flags.
@@ -138,6 +137,11 @@ Cutting-edge release with new core features and internal refactoring.
  - Build:
     - Fixed MSVC+AddressSanitizer builds failing to compile ([#62](https://github.com/Mithril-mine/libmdbx-devel/issues/62)).
     - Fixed linking with compiler-rt for `__builtin_cpu_supports()` by Clang.
+    - Conan recipe: added the `mdbx.lto` and `mdbx.sanitize` options and documented the package binary identity rules.
+
+ - Leaks:
+    - Four transaction error paths leaked table handles or promoted wrong geometry values: a failed checkpoint or commit-as-read, a write start failing after the snapshot was taken, a nested resize that could not be undone, and a discarded meta write error that hid an I/O failure ([#105](https://github.com/Mithril-mine/libmdbx-devel/issues/105)).
+    - Fixed the memory leak caused by a table name with zero length.
 
 
 --------------------------------------------------------------------------------
