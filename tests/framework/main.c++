@@ -710,6 +710,7 @@ int main(int argc, char *const argv[]) {
 
       mdbx_pid_t pid;
       int rc = osal_actor_poll(pid, timeout_seconds_left);
+#if !defined(_WIN32) && !defined(_WIN64)
       if (rc == ECHILD) {
         /* All children have already been reaped (e.g. killall()'s wait_actors()
          * raced the poll loop and stole the reaps, or a deadline hard-abort
@@ -718,6 +719,7 @@ int main(int argc, char *const argv[]) {
         failed = true;
         break;
       }
+#endif /* !Windows */
       if (rc)
         failure("Poll error: %s (%d)\n", test_strerror(rc), rc);
 

@@ -514,7 +514,7 @@ __cold int lck_destroy(MDBX_env *env, MDBX_env *inprocess_neighbor, const mdbx_p
    * after file was closed.
    *
    * 2) File locks would be released (by kernel) while the file-descriptors will
-   * be closed. But to avoid false-positive EACCESS and EDEADLK from the kernel,
+   * be closed. But to avoid false-positive EACCES and EDEADLK from the kernel,
    * locks should be released here explicitly with properly order. */
 
   /* close dxb and restore lock */

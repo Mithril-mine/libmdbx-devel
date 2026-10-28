@@ -144,7 +144,7 @@ Deprecated functions and flags:
 Fixes:
 
  - Fix `mdbx_strerror()` for `MDBX_BUSY` error (no error description is returned).
- - Fix update internal meta-geo information in read-only mode (`EACCESS` or `EBADFD` error).
+ - Fix update internal meta-geo information in read-only mode (`EACCES` or `EBADFD` error).
  - Fix `mdbx_page_get()` null-defer when DB corrupted (crash by `SIGSEGV`).
  - Fix `mdbx_env_open()` for re-opening after non-fatal errors (`mdbx_chk` unexpected failures).
  - Workaround for MSVC 19.27 `static_assert()` bug.
