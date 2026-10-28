@@ -263,19 +263,16 @@ TEST(issue_gh0101, slice_try_as_pod) {
 #if defined(__cpp_lib_optional) && __cpp_lib_optional >= 201606L
   const mdbx::slice eight("abcdefgh", 8);
   ASSERT_EQ(8u, sizeof(uint64_t));
-  ASSERT_TRUE(eight.try_as_pod<uint64_t>().has_value())
-      << "an 8-byte slice must convert to a uint64_t";
+  ASSERT_TRUE(eight.try_as_pod<uint64_t>().has_value()) << "an 8-byte slice must convert to a uint64_t";
   EXPECT_EQ(uint64_t(0x6867666564636261ULL), eight.try_as_pod<uint64_t>().value())
       << "little-endian bytes must be copied as-is";
 
   const mdbx::slice short_s("abc", 3);
-  EXPECT_FALSE(short_s.try_as_pod<uint64_t>().has_value())
-      << "a 3-byte slice cannot be a uint64_t";
+  EXPECT_FALSE(short_s.try_as_pod<uint64_t>().has_value()) << "a 3-byte slice cannot be a uint64_t";
 
   EXPECT_EQ(uint64_t(0x6867666564636261ULL), eight.as_pod<uint64_t>())
       << "as_pod() keeps working for the exact-size case";
-  EXPECT_THROW(short_s.as_pod<uint64_t>(), mdbx::bad_value_size)
-      << "as_pod() with a wrong size still throws";
+  EXPECT_THROW(short_s.as_pod<uint64_t>(), mdbx::bad_value_size) << "as_pod() with a wrong size still throws";
 #else
   GTEST_SKIP() << "try_as_pod() requires <optional> (C++17)";
 #endif /* __cpp_lib_optional >= 201606L */

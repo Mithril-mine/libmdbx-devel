@@ -39,8 +39,8 @@ concept SliceTranscoder = ImmutableByteProducer<T> && requires(const slice &sour
 
 /// \brief Hexadecimal encoder which satisfy \ref SliceTranscoder concept.
 struct LIBMDBX_API to_hex {
-  const slice source;      ///< \brief The slice to be encoded.
-  const bool uppercase;    ///< \brief Use uppercase letters for hexadecimal digits.
+  const slice source;        ///< \brief The slice to be encoded.
+  const bool uppercase;      ///< \brief Use uppercase letters for hexadecimal digits.
   const unsigned wrap_width; ///< \brief The width to wrap lines with a newline, zero means no wrapping.
   /// \brief Constructs the encoder for the given slice.
   /// \param source       The slice to be encoded.
@@ -216,7 +216,7 @@ struct LIBMDBX_API to_base64 {
 
 /// \brief Hexadecimal decoder which satisfy \ref SliceTranscoder concept.
 struct LIBMDBX_API from_hex {
-  const slice source;      ///< \brief The slice with a hexadecimal dump to be decoded.
+  const slice source;       ///< \brief The slice with a hexadecimal dump to be decoded.
   const bool ignore_spaces; ///< \brief Skip whitespaces while decoding.
   /// \brief Constructs the decoder for the given slice.
   /// \param source          The slice with a hexadecimal dump to be decoded.
@@ -263,7 +263,7 @@ struct LIBMDBX_API from_hex {
 /// \brief [Base58](https://en.wikipedia.org/wiki/Base58) decoder which satisfy
 /// \ref SliceTranscoder concept.
 struct LIBMDBX_API from_base58 {
-  const slice source;      ///< \brief The slice with a Base58 dump to be decoded.
+  const slice source;       ///< \brief The slice with a Base58 dump to be decoded.
   const bool ignore_spaces; ///< \brief Skip whitespaces while decoding.
   /// \brief Constructs the decoder for the given slice.
   /// \param source          The slice with a Base58 dump to be decoded.
@@ -316,7 +316,7 @@ struct LIBMDBX_API from_base58 {
 /// \brief [Base64](https://en.wikipedia.org/wiki/Base64) decoder which satisfy
 /// \ref SliceTranscoder concept.
 struct LIBMDBX_API from_base64 {
-  const slice source;      ///< \brief The slice with a Base64 dump to be decoded.
+  const slice source;       ///< \brief The slice with a Base64 dump to be decoded.
   const bool ignore_spaces; ///< \brief Skip whitespaces while decoding.
   /// \brief Constructs the decoder for the given slice.
   /// \param source          The slice with a Base64 dump to be decoded.

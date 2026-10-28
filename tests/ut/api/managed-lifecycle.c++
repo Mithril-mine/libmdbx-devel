@@ -155,8 +155,7 @@ TEST(ut_managed_lifecycle, close_from_foreign_thread_best_effort) {
    * ownership is moved into a foreign thread where it is closed and destroyed:
    * the documented contract (issue #145) is a best-effort release, so this
    * must neither crash nor double-close. */
-  auto *env = new mdbx::env_managed(kTestPath, mdbx::create_parameters(),
-                                    mdbx::operate_parameters().set_max_maps(8));
+  auto *env = new mdbx::env_managed(kTestPath, mdbx::create_parameters(), mdbx::operate_parameters().set_max_maps(8));
   std::thread([&env]() {
     env->close(); /* explicit close on the foreign thread must work */
     delete env;   /* destructor with handle_ == nullptr is a no-op */

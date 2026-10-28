@@ -585,8 +585,7 @@ bool testcase::should_continue(bool check_timeout_only) const {
   /* The default safety bound (test_nops=1000) must NOT truncate a run that has
    * an explicit --duration: when the duration is set, only an explicit --nops
    * additionally bounds the run (TASK-43). */
-  if (!check_timeout_only && config.params.test_nops &&
-      nops_completed >= config.params.test_nops)
+  if (!check_timeout_only && config.params.test_nops && nops_completed >= config.params.test_nops)
     result = false;
 
   if (result)

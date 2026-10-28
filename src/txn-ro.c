@@ -456,8 +456,7 @@ int txn_ro_clone(const MDBX_txn *const origin, MDBX_txn *const clone) {
       osal_memory_barrier();
       if (likely(origin->ro.slot) && unlikely(safe64_read(&origin->ro.slot->txnid) != clone->txnid))
         err = MDBX_OUSTED;
-    } else if (likely(clone->ro.slot) &&
-               unlikely(clone->txnid != atomic_load64(&clone->ro.slot->txnid, mo_Relaxed)))
+    } else if (likely(clone->ro.slot) && unlikely(clone->txnid != atomic_load64(&clone->ro.slot->txnid, mo_Relaxed)))
       err = MDBX_OUSTED;
     else if (unlikely(clone->txnid < atomic_load64(&env->lck->cached_oldest_txnid, mo_AcquireRelease)))
       err = MDBX_MVCC_RETARDED;

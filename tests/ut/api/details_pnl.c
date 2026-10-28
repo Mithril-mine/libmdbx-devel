@@ -41,14 +41,14 @@ static bool check_bool(bool v, bool expect, const char *fn, unsigned line) {
 
 #define CHECK_TRUE(v) check_bool(v, true, __func__, __LINE__)
 #define CHECK_FALSE(v) check_bool(v, false, __func__, __LINE__)
-#define CHECK_EQ(v, exp)                                                                                             \
-  do {                                                                                                               \
-    const size_t got = (size_t)(v), want = (size_t)(exp);                                                            \
-    if (unlikely(got != want)) {                                                                                     \
-      ++tst_failed;                                                                                                  \
-      fprintf(stderr, "got %zi, expected %zi, at %s:%u\n", got, want, __func__, __LINE__);                           \
-    } else                                                                                                           \
-      ++tst_ok;                                                                                                      \
+#define CHECK_EQ(v, exp)                                                                                               \
+  do {                                                                                                                 \
+    const size_t got = (size_t)(v), want = (size_t)(exp);                                                              \
+    if (unlikely(got != want)) {                                                                                       \
+      ++tst_failed;                                                                                                    \
+      fprintf(stderr, "got %zi, expected %zi, at %s:%u\n", got, want, __func__, __LINE__);                             \
+    } else                                                                                                             \
+      ++tst_ok;                                                                                                        \
   } while (0)
 
 /* Build a bare page-number list (not an allocated pnl: we only need the data

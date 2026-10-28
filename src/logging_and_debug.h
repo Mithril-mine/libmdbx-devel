@@ -397,7 +397,7 @@ LIBMDBX_API void mdbx_assert_ok(struct mprobe_site *site);
 #define MPROBE_COLLECT(name, value)                                                                                    \
   do {                                                                                                                 \
     static struct mprobe_site MDBX_MPROBE_VAR(mprobe_site_) = {#name, __FILE__, __LINE__, mprobe_kind_collect, {0}};   \
-    mdbx_probe_fire(&MDBX_MPROBE_VAR(mprobe_site_), (intptr_t)(value));                                                    \
+    mdbx_probe_fire(&MDBX_MPROBE_VAR(mprobe_site_), (intptr_t)(value));                                                \
   } while (0)
 
 /* Event probe: records that the branch/fact was observed. */
@@ -405,7 +405,7 @@ LIBMDBX_API void mdbx_assert_ok(struct mprobe_site *site);
 #define MPROBE_WATCH(name, value)                                                                                      \
   do {                                                                                                                 \
     static struct mprobe_site MDBX_MPROBE_VAR(mprobe_site_) = {#name, __FILE__, __LINE__, mprobe_kind_watch, {0}};     \
-    mdbx_probe_fire(&MDBX_MPROBE_VAR(mprobe_site_), (intptr_t)(value));                                                    \
+    mdbx_probe_fire(&MDBX_MPROBE_VAR(mprobe_site_), (intptr_t)(value));                                                \
   } while (0)
 
 /* Conditional event probe: fires only when `cond` holds; the condition is
@@ -422,7 +422,7 @@ LIBMDBX_API void mdbx_assert_ok(struct mprobe_site *site);
 #define MPROBE_FAULT(name, var)                                                                                        \
   do {                                                                                                                 \
     static struct mprobe_site MDBX_MPROBE_VAR(mprobe_site_) = {#name, __FILE__, __LINE__, mprobe_kind_fault, {0}};     \
-    mdbx_probe_fault(&MDBX_MPROBE_VAR(mprobe_site_), &(var));                                                              \
+    mdbx_probe_fault(&MDBX_MPROBE_VAR(mprobe_site_), &(var));                                                          \
   } while (0)
 
 #undef DEV_ASSERT
@@ -436,9 +436,9 @@ LIBMDBX_API void mdbx_assert_ok(struct mprobe_site *site);
   do {                                                                                                                 \
     static struct mprobe_site MDBX_MPROBE_VAR(mprobe_site_) = {(tag), __FILE__, __LINE__, mprobe_kind_assert, {0}};    \
     if (unlikely(!(expr)))                                                                                             \
-      mdbx_probe_assert_failed(&MDBX_MPROBE_VAR(mprobe_site_), #expr);                                                     \
+      mdbx_probe_assert_failed(&MDBX_MPROBE_VAR(mprobe_site_), #expr);                                                 \
     else                                                                                                               \
-      mdbx_assert_ok(&MDBX_MPROBE_VAR(mprobe_site_));                                                                \
+      mdbx_assert_ok(&MDBX_MPROBE_VAR(mprobe_site_));                                                                  \
   } while (0)
 
 #endif /* MDBX_PROBES */

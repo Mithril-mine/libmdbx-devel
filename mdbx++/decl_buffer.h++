@@ -120,10 +120,10 @@ template <typename T, typename A> struct swap_alloc<T, A, true> {
 struct default_capacity_policy {
   /// \brief Policy constants.
   enum : size_t {
-    extra_inplace_storage = 0,        ///< \brief Extra bytes in the inplace storage.
+    extra_inplace_storage = 0,          ///< \brief Extra bytes in the inplace storage.
     inplace_storage_size_rounding = 16, ///< \brief Rounding of the inplace storage size.
-    pettiness_threshold = 64,         ///< \brief The threshold to avoid petty reallocations.
-    max_reserve = 65536               ///< \brief The maximum reserve over the requested capacity.
+    pettiness_threshold = 64,           ///< \brief The threshold to avoid petty reallocations.
+    max_reserve = 65536                 ///< \brief The maximum reserve over the requested capacity.
   };
 
   /// \brief Rounds the given value up to the \ref pettiness_threshold granularity.

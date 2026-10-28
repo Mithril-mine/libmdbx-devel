@@ -80,8 +80,7 @@ int main(void) {
     if (open_db(db, &env) != 0)
       _exit(10);
     MDBX_txn *txn = NULL;
-    if (mdbx_txn_begin(env, NULL, MDBX_TXN_READWRITE, &txn) != MDBX_SUCCESS ||
-        mdbx_txn_commit(txn) != MDBX_SUCCESS)
+    if (mdbx_txn_begin(env, NULL, MDBX_TXN_READWRITE, &txn) != MDBX_SUCCESS || mdbx_txn_commit(txn) != MDBX_SUCCESS)
       _exit(11);
     _exit(0); /* no mdbx_env_close(): the set is left behind */
   }

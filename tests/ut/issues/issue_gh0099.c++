@@ -113,9 +113,8 @@ TEST(issue_gh0099, extract_returns_buffer_with_caller_allocator) {
    * memory-resource instance so a substitute default one would be detected. */
 #if MDBX_CXX_HAS_POLYMORPHIC_ALLOCATOR
   std::pmr::monotonic_buffer_resource resource;
-  mdbx::buffer<mdbx::polymorphic_allocator> old =
-      txn.extract<mdbx::buffer<mdbx::polymorphic_allocator>>(map, mdbx::slice("k"),
-                                                            mdbx::polymorphic_allocator(&resource));
+  mdbx::buffer<mdbx::polymorphic_allocator> old = txn.extract<mdbx::buffer<mdbx::polymorphic_allocator>>(
+      map, mdbx::slice("k"), mdbx::polymorphic_allocator(&resource));
   EXPECT_TRUE(old.is_freestanding()) << "extract() must return an owned buffer";
   EXPECT_EQ(0, memcmp(old.data(), "value-of-k", 9));
   /* The buffer must carry the caller's allocator (memory resource), not a

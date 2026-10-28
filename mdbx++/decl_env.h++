@@ -232,9 +232,9 @@ public:
 
   /// \brief Operation mode.
   enum class mode : unsigned {
-    readonly,        ///< \copydoc MDBX_RDONLY
-    write_file_io,   ///< Write via file I/O (not available on OpenBSD).
-    write_mapped_io, ///< \copydoc MDBX_WRITEMAP
+    readonly,                           ///< \copydoc MDBX_RDONLY
+    write_file_io,                      ///< Write via file I/O (not available on OpenBSD).
+    write_mapped_io,                    ///< \copydoc MDBX_WRITEMAP
     nested_transactions = write_file_io ///< An alias for `write_file_io`, i.e. the mode
                                         ///< that allows nested transactions.
   };
@@ -349,10 +349,11 @@ public:
     /// \brief The maximum number of threads/reader slots for the environment.
     /// Zero means default value.
     unsigned max_readers{0};
-    env::mode mode{env::mode::write_mapped_io};               ///< \brief The operation mode, see \ref env::mode.
-    env::durability durability{env::durability::robust_synchronous}; ///< \brief The durability level, see \ref env::durability.
-    env::reclaiming_options reclaiming;                       ///< \brief The garbage reclaiming options.
-    env::operate_options options;                            ///< \brief The other operate options.
+    env::mode mode{env::mode::write_mapped_io}; ///< \brief The operation mode, see \ref env::mode.
+    env::durability durability{
+        env::durability::robust_synchronous}; ///< \brief The durability level, see \ref env::durability.
+    env::reclaiming_options reclaiming;       ///< \brief The garbage reclaiming options.
+    env::operate_options options;             ///< \brief The other operate options.
 
     /// \brief Constructs the default operate parameters.
     MDBX_CXX11_CONSTEXPR operate_parameters() noexcept {}
@@ -487,8 +488,7 @@ public:
     ///                           another process(es), \see MDBX_ACCEDE
     /// \param use_subdirectory Use a subdirectory to place the DB files.
     /// \returns The \ref MDBX_env_flags_t combination.
-    MDBX_NODISCARD MDBX_env_flags_t make_flags(bool accede = true,
-                                               bool use_subdirectory = false) const;
+    MDBX_NODISCARD MDBX_env_flags_t make_flags(bool accede = true, bool use_subdirectory = false) const;
     /// \brief Extracts the operation mode from environment flags.
     /// \param flags  The \ref MDBX_env_flags_t combination.
     /// \returns The corresponding \ref env::mode.
@@ -652,31 +652,36 @@ public:
     /// single large/overflow-page for specified size and table flags.
     /// \param pagesize  The database page size in bytes.
     /// \param flags  The table flags.
-    /// \returns Maximal data size in bytes to fit in a leaf-page or single large/overflow-page for specified size and table flags.
+    /// \returns Maximal data size in bytes to fit in a leaf-page or single large/overflow-page for specified size and
+    /// table flags.
     static inline size_t valsize4page_max(intptr_t pagesize, MDBX_db_flags_t flags);
     /// \brief Returns maximal data size in bytes to fit in a leaf-page or
     /// single large/overflow-page for specified page size and values mode.
     /// \param pagesize  The database page size in bytes.
     /// \param mode      The value comparison mode, see \ref mdbx::value_mode.
-    /// \returns Maximal data size in bytes to fit in a leaf-page or single large/overflow-page for specified page size and values mode.
+    /// \returns Maximal data size in bytes to fit in a leaf-page or single large/overflow-page for specified page size
+    /// and values mode.
     static inline size_t valsize4page_max(intptr_t pagesize, value_mode mode);
     /// \brief Returns maximal data size in bytes to fit in a leaf-page or
     /// single large/overflow-page for given environment and table flags.
     /// \param env    The environment.
     /// \param flags  The table flags.
-    /// \returns Maximal data size in bytes to fit in a leaf-page or single large/overflow-page for given environment and table flags.
+    /// \returns Maximal data size in bytes to fit in a leaf-page or single large/overflow-page for given environment
+    /// and table flags.
     static inline size_t valsize4page_max(const env &env, MDBX_db_flags_t flags);
     /// \brief Returns maximal data size in bytes to fit in a leaf-page or
     /// single large/overflow-page for given environment and values mode.
     /// \param env   The environment.
     /// \param mode  The value comparison mode, see \ref mdbx::value_mode.
-    /// \returns Maximal data size in bytes to fit in a leaf-page or single large/overflow-page for given environment and values mode.
+    /// \returns Maximal data size in bytes to fit in a leaf-page or single large/overflow-page for given environment
+    /// and values mode.
     static inline size_t valsize4page_max(const env &env, value_mode mode);
 
     /// \brief Returns the maximal write transaction size (i.e. limit for
     /// summary volume of dirty pages) in bytes for specified page size.
     /// \param pagesize  The database page size in bytes.
-    /// \returns The maximal write transaction size (i.e. limit for summary volume of dirty pages) in bytes for specified page size.
+    /// \returns The maximal write transaction size (i.e. limit for summary volume of dirty pages) in bytes for
+    /// specified page size.
     static inline size_t transaction_size_max(intptr_t pagesize);
 
     /// \brief Returns the maximum opened map handles, aka DBI-handles.
@@ -1437,9 +1442,9 @@ public:
   /// \see env_managed(const ::std::string &pathname, const create_parameters &,
   /// const operate_parameters &, bool accede)
   struct create_parameters {
-    env::geometry geometry;               ///< \brief The database geometry, see \ref env::geometry.
-    mdbx_mode_t file_mode_bits{0640};     ///< \brief The file mode bits for the created DB files.
-    bool use_subdirectory{false};         ///< \brief Whether to place the DB files in a subdirectory.
+    env::geometry geometry;           ///< \brief The database geometry, see \ref env::geometry.
+    mdbx_mode_t file_mode_bits{0640}; ///< \brief The file mode bits for the created DB files.
+    bool use_subdirectory{false};     ///< \brief Whether to place the DB files in a subdirectory.
     /// \brief Constructs the default create parameters.
     MDBX_CXX11_CONSTEXPR create_parameters() noexcept = default;
     /// \brief Copy constructor.
@@ -1645,7 +1650,8 @@ inline bool is_readahead_reasonable(size_t volume, intptr_t redundancy) {
 /// flags, which is useful as a fallback when implementing custom comparators.
 /// \see ::mdbx_get_datacmp()
 /// \param flags  The flags.
-/// \returns The built-in data (value) comparator for the given table flags, which is useful as a fallback when implementing custom comparators. \see ::mdbx_get_datacmp().
+/// \returns The built-in data (value) comparator for the given table flags, which is useful as a fallback when
+/// implementing custom comparators. \see ::mdbx_get_datacmp().
 inline MDBX_cmp_func get_datacmp(MDBX_db_flags_t flags) { return ::mdbx_get_datacmp(flags); }
 
 /// \brief Sets up the global log-level, debug options and logger.

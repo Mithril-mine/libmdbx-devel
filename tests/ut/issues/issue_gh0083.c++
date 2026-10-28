@@ -149,9 +149,9 @@ static bool create_gc_db(const std::string &testdb) {
 }
 
 struct gc_record {
-  size_t data_off;        /* absolute file offset of the record's page list */
+  size_t data_off;      /* absolute file offset of the record's page list */
   size_t count;         /* pnl[0] */
-  size_t last_pgno_off;   /* absolute file offset of the least page number */
+  size_t last_pgno_off; /* absolute file offset of the least page number */
 };
 
 /* Descend into the GC tree from the meta and collect up to two leaf records. */
