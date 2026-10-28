@@ -810,6 +810,16 @@ add_option(
   OFF)
 mark_as_advanced(MDBX_DISABLE_VALIDATION)
 add_option(MDBX ENABLE_REFUND "Zerocost auto-compactification during write-transactions" ON)
+if(WIN32)
+  set(MDBX_ENABLE_EXCLUSIVE_FASTPATH_DEFAULT ON)
+else()
+  set(MDBX_ENABLE_EXCLUSIVE_FASTPATH_DEFAULT OFF)
+endif()
+add_option(
+  MDBX ENABLE_EXCLUSIVE_FASTPATH
+  "On Windows keep the normal write-through/dsync i/o path in MDBX_EXCLUSIVE mode, enforcing exclusivity by constant byte-range locks instead of an unshareable data file"
+  ${MDBX_ENABLE_EXCLUSIVE_FASTPATH_DEFAULT})
+mark_as_advanced(MDBX_ENABLE_EXCLUSIVE_FASTPATH)
 add_option(MDBX ENABLE_BIGFOOT
            "Chunking long list of retired pages during huge transactions commit to avoid use sequences of pages" ON)
 add_option(MDBX ENABLE_PGOP_STAT "Gathering statistics on pages modification operations" ON)

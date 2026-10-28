@@ -87,6 +87,40 @@ MDBX_INTERNAL int lck_txn_lock(MDBX_env *env, bool dont_wait);
 /// \brief Releases write-transaction lock..
 MDBX_INTERNAL void lck_txn_unlock(MDBX_env *env);
 
+/// \brief Whether an `MDBX_EXCLUSIVE` environment keeps the normal (fast)
+///   durable i/o path on Windows, enforcing exclusivity by constant byte-range
+///   locks over the data file instead of an unshareable data file handle.
+///
+/// Always false on non-Windows platforms (POSIX exclusive never switched the
+/// i/o path) and under Wine, where `LockFileEx()` emulation is incomplete, so
+/// the historical ShareMode==0 behavior is preserved. Also false for read-only
+/// exclusive opens (no writable handle to hold the locks with) and for the
+/// recovery mode (`stuck_meta >= 0`), where mdbx_env_turn_for_recovery()
+/// re-reads the meta pages through lazy_fd after the open, which would clash
+/// with a constant meta lock held via fd4meta; recovery exclusivity is already
+/// guaranteed by the unshareable lock file.
+/// \see https://github.com/Mithril-mine/libmdbx-devel/issues/179
+static inline bool env_exclusive_fastpath(const MDBX_env *env) {
+  return IS_WINDOWS && MDBX_ENABLE_EXCLUSIVE_FASTPATH && env->stuck_meta < 0 &&
+         (env->flags & (MDBX_EXCLUSIVE | MDBX_RDONLY)) == MDBX_EXCLUSIVE && !mdbx_running_under_Wine();
+}
+
+/// \brief Acquires the constant byte-range locks that enforce exclusivity of
+///   an `MDBX_EXCLUSIVE` environment when env_exclusive_fastpath() is true.
+///   The meta region is locked through `fd4meta` and the body region through
+///   the handle that writes it, because Windows byte-range locks are
+///   per-handle and a region may only be written through its lock owner.
+///
+/// Windows-only, therefore a no-op on other platforms where `MDBX_EXCLUSIVE`
+/// never switched the i/o path and the fcntl locks taken by lck_seize()
+/// already provide the exclusivity.
+/// \return Error code or zero on success.
+#if IS_WINDOWS
+MDBX_INTERNAL int windows_seize_exclusive(MDBX_env *env);
+#else
+#define windows_seize_exclusive(env) MDBX_SUCCESS
+#endif /* Windows */
+
 /// \brief Sets alive-flag of reader presence (indicative lock) for PID of
 ///   the current process. The function does no more than needed for
 ///   the correct working of lck_rpid_check() in other processes.
