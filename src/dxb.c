@@ -244,43 +244,6 @@ static int windows_remap_lock_exclusive(MDBX_env *env, const enum resize_mode mo
    * is reported as "the mapping size could not be applied right now" */
   return (mode == implicit_shrink) ? MDBX_EPERM : MDBX_UNABLE_EXTEND_MAPSIZE;
 }
-
-/* Cheap non-blocking probe: can the exclusive remap-lock be taken right now?
- *
- * A datafile shrink requires the exclusive remap-lock (the mapping must be
- * un-mapped), and on Windows an in-process reader may hold it shared for an
- * unbounded time (issue #154). Probing here avoids paying twice for a shrink
- * that is bound to be deferred on every commit while such a reader is open:
- *  - the `force steady` below, which clears MDBX_NOMETASYNC/ENV_UNSYNC purely
- *    to make truncating the file safe;
- *  - the bounded try-acquire inside dxb_resize() and its WARNING.
- *
- * The probe takes and immediately releases the lock, so it never blocks and
- * never deadlocks. A false negative (a reader appeared right after the probe)
- * is harmless: dxb_resize() re-checks and defers correctly. Note that the
- * committing thread itself does not hold the remap-lock here — env_sync()'s
- * pre-sync msync takes and releases it earlier, and the writer holds only the
- * write lock — so the probe reflects other threads' holds.
- *
- * The probe deliberately does NOT take resize_mutex: it is a best-effort
- * advisory check, and taking the leaf lock here would only serialize it with
- * other resizers without changing the outcome. It never violates the
- * resize_mutex → remap_lock order, since it acquires remap-lock alone (exactly
- * like a reader does). */
-static inline bool remap_lock_exclusive_available(MDBX_env *const env) {
-  if (!imports.srwl_TryAcquireExclusive(&env->remap_lock))
-    return false;
-  imports.srwl_ReleaseExclusive(&env->remap_lock);
-  return true;
-}
-#else
-/* POSIX: remap_lock is a short-lived fastmutex that read transactions never
- * hold, so an exclusive acquire cannot be blocked by a reader — no probing is
- * needed (a no-op, per the project's fallback-macro convention). */
-static inline bool remap_lock_exclusive_available(MDBX_env *const env) {
-  (void)env;
-  return true;
-}
 #endif /* Windows */
 
 __cold int dxb_resize(MDBX_env *const env, const pgno_t allocated_pgno, const pgno_t size_pgno, pgno_t limit_pgno,
@@ -1324,14 +1287,14 @@ int dxb_sync_locked(MDBX_env *env, unsigned flags, meta_t *const pending, troika
      * by a later commit because the predicate reads the real file size.
      *
      * On Windows the shrink also needs the exclusive remap-lock, which an
-     * in-process reader may hold shared for an unbounded time (issue #154).
-     * Probe it here rather than deferring later in dxb_resize(): deferring
-     * there would already have cleared MDBX_NOMETASYNC/ENV_UNSYNC below ("force
-     * steady"), so every commit for as long as the reader stays open would pay
-     * a full durable sync that truncates nothing. Skipping the whole shrink
-     * plan keeps the deferral free and leaves the meta geometry untouched, so
-     * the later commit still finds the same predicate true and retries. */
-    const bool shrink_maybe = dxb_shrink_maybe(pending, filesize_pgno) && remap_lock_exclusive_available(env);
+     * in-process reader may hold shared for an unbounded time (issue #154), so
+     * the attempt can be deferred in dxb_resize(). To keep such a deferral
+     * cheap, the `force steady` below is additionally gated on the steady
+     * checkpoint's allocated pages being beyond the new end of the file: once a
+     * shrink has been attempted (whether or not it succeeded) that checkpoint
+     * is no longer beyond `bottom`, so a repeated attempt neither clears
+     * MDBX_NOMETASYNC/ENV_UNSYNC again nor pays another full durable sync. */
+    const bool shrink_maybe = dxb_shrink_maybe(pending, filesize_pgno);
 
     /* Issue #170: on Windows a shrink-through-un-map is expensive and doomed
      * while readers exist (in-process ones hold the remap-lock shared, other
@@ -1358,8 +1321,13 @@ int dxb_sync_locked(MDBX_env *env, unsigned flags, meta_t *const pending, troika
     if (shrink_now) {
       const pgno_t bottom = dxb_shrink_bottom(env, pending, largest_pgno, filesize_pgno);
       if (bottom) {
-        if (TROIKA_HAVE_STEADY(troika))
-          /* force steady, but only if steady-checkpoint is present */
+        if (TROIKA_HAVE_STEADY(troika) && meta_prefer_steady(env, troika).ptr_c->geometry.first_unallocated > bottom)
+          /* LY: force steady/sync-meta, but only if steady-checkpoint is present and its allocated pages are beyond the
+           * new end of DXB after shrink. By doing this, we guarantee that at any outcome in the database, either the
+           * former/an old/large MVCC snapshot, or a new one.
+           *
+           * However, if the file cannot be shrinked (for instance, due to Windows limitations), then a second attempt
+           * will not require a new fsync(), since `prev_steady->geometry.first_unallocated > bottom` will be false. */
           flags &= MDBX_WRITEMAP | txn_unmap_allowed;
         shrink = filesize_pgno - bottom;
         pending->geometry.now = bottom;
