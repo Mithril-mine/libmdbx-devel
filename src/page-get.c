@@ -334,6 +334,17 @@ __cold int page_check(const MDBX_cursor *const mc, const page_t *const mp) {
                 sub_prev = sub_here;
               }
             } else {
+              const indx_t sub_off = sp->entries[ii];
+              if (unlikely(sub_off < sp->upper || sub_off > dsize - PAGEHDRSZ || (sub_off & 1))) {
+                /* Below upper the offset points into the header/index area of
+                 * the sub-page: the node would alias it and node_del() would
+                 * underflow the shift length of memmove(). Mirror of the
+                 * main-page loop check (issue #57); for a sub-page the outer
+                 * bound is dsize, not env->ps. (issue #176) */
+                rc = bad_page(sp, "nested-node[%zu] offset (%u) outside [upper(%u), %zu]\n", (size_t)ii, sub_off,
+                              (unsigned)sp->upper, dsize - PAGEHDRSZ);
+                continue;
+              }
               const node_t *const sub_node = page_node(sp, ii);
               const char *const sub_node_end = ptr_disp(sub_node, NODESIZE);
               if (unlikely(sub_node_end > end_of_subpage)) {
