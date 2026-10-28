@@ -226,6 +226,11 @@ __cold int mdbx_env_create(MDBX_env **penv) {
 
 #if IS_WINDOWS
   imports.srwl_Init(&env->remap_lock);
+  rc = osal_fastmutex_init(&env->resize_mutex);
+  if (unlikely(rc != MDBX_SUCCESS)) {
+    osal_fastmutex_destroy(&env->dbi_lock);
+    goto bailout;
+  }
   InitializeCriticalSection(&env->lck_event_cs);
   InitializeCriticalSection(&env->dxb_event_cs);
 #else
@@ -622,6 +627,9 @@ __cold int mdbx_env_close_ex(MDBX_env *env, bool dont_sync) {
   /* remap_lock don't have destructor (Slim Reader/Writer Lock) */
   DeleteCriticalSection(&env->lck_event_cs);
   DeleteCriticalSection(&env->dxb_event_cs);
+  /* resize_mutex was initialized before the critical sections above,
+   * destroy it after them (reverse of init order). */
+  ENSURE_OBJ(env, osal_fastmutex_destroy(&env->resize_mutex) == MDBX_SUCCESS);
 #else
   ENSURE_OBJ(env, osal_fastmutex_destroy(&env->remap_lock) == MDBX_SUCCESS);
 #endif /* Windows */
