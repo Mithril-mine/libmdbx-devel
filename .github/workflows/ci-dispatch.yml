@@ -21,15 +21,16 @@ name: ci-dispatch
 # workflow must live on master before agents/nightly can use it (design §3).
 
 concurrency:
-  # Separate the push-run (compact push-quick gate) from the pull_request-run
-  # (change-addressed gate): a push to a branch that also has a PR must trigger
-  # BOTH — the PR cells are what actually gate the change on the full Windows
-  # axis matrix, and sharing one cancel-in-progress group would silently drop
-  # one of the runs.
-  group: ci-dispatch-${{ github.event_name }}-${{ github.head_ref || github.ref }}
+  # The orchestrator (tests/ci/orchestrate.py) is the source of truth for
+  # cancelling superseded/rewritten runs and deduplicating push vs
+  # pull_request on the same SHA. The native group is a coarse safety net:
+  # one group per branch so cancel-in-progress still drops an older run
+  # before the orchestrator's API cancels take effect.
+  group: ci-dispatch-${{ github.head_ref || github.ref }}
   cancel-in-progress: true
 
 permissions:
+  actions: write
   contents: read
 
 on:
@@ -109,42 +110,65 @@ jobs:
           PUSH_BEFORE: ${{ github.event.before }}
           PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
           PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          PR_BASE_REF: ${{ github.event.pull_request.base.ref }}
+          HEAD_REF: ${{ github.head_ref || github.ref }}
+          PUSH_SHA: ${{ github.sha }}
+          RUN_ID: ${{ github.run_id }}
+          GITHUB_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
           SCOPE="${EVENT_SCOPE:-fast}"
           REF=""
           case "$GITHUB_EVENT_NAME" in
             pull_request)
-              # Change-addressed gate: select by diff against the merge base.
-              # Common-code changes get union(push-quick, win-gate); docs-only
-              # get the compact push-quick. Fall back to the FULL change-addressed
-              # gate (never just push-quick) if the base is unavailable or the
-              # diff cannot be resolved: under a PR the safer direction is more
-              # coverage, not less.
-              echo "==> pull_request: change-addressed gate on the PR head"
-              BASE="${PR_BASE_SHA:-${GITHUB_REF}}"
-              # The PR-base commit may not be present in the shallow fetch of the
-              # head ref; ensure it is available so the diff-selection works
-              # (fallback = full change-addressed gate if the fetch still fails).
-              git fetch origin "$BASE" || true
-              CELLS=$(tests/ci/select-cells.py --base "$BASE" || tests/ci/select-cells.py --profile change-addressed)
+              # Orchestrated gate: diff against the nearest successful base run
+              # (last successful ci-dispatch on the base branch, anchored via
+              # temporary ci-ok-* tags), cancelling superseded/rewritten runs on
+              # this branch and deduplicating the same-SHA push run.
+              echo "==> pull_request: orchestrator on the PR head"
+              BASE_REF="${PR_BASE_REF:-origin/devel}"
+              ORCH=$(tests/ci/orchestrate.py --repo "${{ github.repository }}" \
+                --workflow-id "ci-dispatch.yml" \
+                --token "$GITHUB_TOKEN" --head-ref "$HEAD_REF" \
+                --head-sha "$PR_HEAD_SHA" --base-ref "$BASE_REF" \
+                --event pull_request --run-id "$RUN_ID")
+              echo "$ORCH"
+              ORCH_SKIP=$(echo "$ORCH" | python3 -c 'import json,sys; print(json.load(sys.stdin)["skip"])')
+              if [ "$ORCH_SKIP" = "True" ] || [ "$ORCH_SKIP" = "true" ]; then
+                echo "==> pull_request: skipped (duplicate run on the same SHA)"
+                CELLS="[]"
+              else
+                CELLS=$(echo "$ORCH" | python3 -c 'import json,sys; print(json.load(sys.stdin)["cells"])')
+              fi
               SCOPE=fast
               REF="${PR_HEAD_SHA:-${GITHUB_REF}}"
               ;;
             push)
-              # Push on ANY branch runs the change-addressed gate: diff against
-              # the previous commit selects union(push-quick, win-gate) for
-              # common-code changes and the compact push-quick for docs-only
-              # ones. This is what ensures a push to a feature branch (e.g. a
-              # Windows-breaking src/ change) runs the full Windows axis matrix
-              # even when no PR run is created.
-              echo "==> push: change-addressed gate on $GITHUB_REF"
-              BASE="${PUSH_BEFORE:-${GITHUB_REF}}"
-              if [ "$BASE" = "0000000000000000000000000000000000000000" ]; then
-                BASE="${GITHUB_REF}"
+              # Push on ANY branch runs the orchestrated change-addressed gate:
+              # diff against the nearest successful run of the base branch
+              # (origin/devel, fallback origin/master). A push to a feature
+              # branch with an open PR is deduplicated against the pull_request
+              # gate (PR wins); without a PR the push gate is authoritative.
+              echo "==> push: orchestrator on $GITHUB_REF"
+              # Base branch for the diff anchor: prefer origin/master (the main
+              # line whose successful runs are in the ancestry of most feature
+              # branches); the orchestrator falls back to origin/devel and then
+              # to the full gate.
+              BASE_REF="${BASE_REF:-origin/master}"
+              ORCH=$(tests/ci/orchestrate.py --repo "${{ github.repository }}" \
+                --workflow-id "ci-dispatch.yml" \
+                --token "$GITHUB_TOKEN" --head-ref "$HEAD_REF" \
+                --head-sha "$PUSH_SHA" --base-ref "$BASE_REF" \
+                --event push --run-id "$RUN_ID")
+              echo "$ORCH"
+              ORCH_SKIP=$(echo "$ORCH" | python3 -c 'import json,sys; print(json.load(sys.stdin)["skip"])')
+              if [ "$ORCH_SKIP" = "True" ] || [ "$ORCH_SKIP" = "true" ]; then
+                echo "==> push: skipped (duplicate run on the same SHA)"
+                CELLS="[]"
+              else
+                CELLS=$(echo "$ORCH" | python3 -c 'import json,sys; print(json.load(sys.stdin)["cells"])')
               fi
-              git fetch origin "$BASE" 2>/dev/null || true
-              CELLS=$(tests/ci/select-cells.py --base "$BASE" || tests/ci/select-cells.py --profile push-quick)
+              SCOPE=fast
               REF="$GITHUB_REF"
               ;;
             schedule)
@@ -195,7 +219,13 @@ jobs:
               ;;
           esac
           # Build the matrix rows: [{cell, runs-on, scope}] resolved from the registry.
-          JSON=$(tests/ci/resolve-cells.py "$CELLS" "$SCOPE" 2> >(sed 's/^/==> /' >&2) || { echo "resolve-cells failed" >&2; exit 1; })
+          # A literal "[]" (orchestrator skip) is passed through so the run job
+          # is skipped instead of resolve-cells failing on an unknown id.
+          if [ "$CELLS" = "[]" ]; then
+            JSON="[]"
+          else
+            JSON=$(tests/ci/resolve-cells.py "$CELLS" "$SCOPE" 2> >(sed 's/^/==> /' >&2) || { echo "resolve-cells failed" >&2; exit 1; })
+          fi
           echo "cells=${JSON}" >> "$GITHUB_OUTPUT"
           echo "ref=${REF}" >> "$GITHUB_OUTPUT"
           echo "scope=${SCOPE}" >> "$GITHUB_OUTPUT"
