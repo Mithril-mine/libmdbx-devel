@@ -206,6 +206,13 @@ typedef mode_t mdbx_mode_t;
 
 /*----------------------------------------------------------------------------*/
 
+/** \brief Transparent adding string literal `L` for wchar_t pathnames on Windows. */
+#if defined(_WIN32) || defined(_WIN64) || defined(_WINDOWS)
+#define MDBX_PATHNAME_T(path) L ## path
+#else
+#define MDBX_PATHNAME_T(path) path
+#endif /* MDBX_PATHNAME_T */
+
 #ifndef __has_attribute
 #define __has_attribute(x) (0)
 #endif /* __has_attribute */
