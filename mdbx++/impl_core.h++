@@ -46,7 +46,7 @@ static MDBX_CXX20_CONSTEXPR int memcmp(const void *a, const void *b, size_t byte
     return 0;
   } else
 #endif /* __cpp_lib_is_constant_evaluated >= 201811 */
-    return ::std::memcmp(a, b, bytes);
+    return bytes ? ::std::memcmp(a, b, bytes) : 0;
 }
 
 //------------------------------------------------------------------------------

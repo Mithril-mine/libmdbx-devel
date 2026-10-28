@@ -17,15 +17,28 @@ class LIBMDBX_API_TYPE env {
   friend class txn;
 
 protected:
-  MDBX_env *handle_{nullptr};
+  MDBX_env *handle_{nullptr}; ///< \brief The underlying C environment handle, null for an empty instance.
+  /// \brief Constructs a non-owning environment wrapping the given C handle.
+  /// \param ptr  The pointer to the underlying \ref MDBX_env object.
   MDBX_CXX11_CONSTEXPR env(MDBX_env *ptr) noexcept;
 
 public:
+  /// \brief Constructs an empty (null) environment.
   MDBX_CXX11_CONSTEXPR env() noexcept = default;
+  /// \brief Copy constructor.
   env(const env &) noexcept = default;
+  /// \brief Copy assignment operator.
+  /// \returns A reference to this instance.
   env &operator=(const env &) noexcept = default;
-  inline env &operator=(env &&) noexcept;
-  inline env(env &&) noexcept;
+  /// \brief Move assignment operator.
+  /// \param other  The source environment to be moved from.
+  /// \returns A reference to this instance.
+  inline env &operator=(env &&other) noexcept;
+  /// \brief Move constructor: the source environment is nullified.
+  /// \param other  The source environment to be moved from.
+  inline env(env &&other) noexcept;
+  /// \brief Destroys the wrapper; the underlying object is NOT closed
+  /// since the environment is non-owning.
   inline ~env() noexcept;
   /* Slicing an owning env_managed temporary into the base handle would drop
    * ownership and never close the environment (issue #77), so these exact-match
@@ -34,10 +47,20 @@ public:
   env(env_managed &&) = delete;
   env &operator=(env_managed &&) = delete;
 
+  /// \brief Checks whether the environment wraps a non-null handle.
+  /// \returns `true` if the environment is not null.
   MDBX_CXX14_CONSTEXPR operator bool() const noexcept { return handle_ != nullptr; };
+  /// \brief Returns the underlying C handle (read-only).
+  /// \returns The constant pointer to the \ref MDBX_env object.
   MDBX_CXX14_CONSTEXPR operator const MDBX_env *() const noexcept { return handle_; }
+  /// \brief Returns the underlying C handle.
+  /// \returns The mutable pointer to the \ref MDBX_env object.
   MDBX_CXX14_CONSTEXPR operator MDBX_env *() noexcept { return handle_; }
+  /// \brief Returns the underlying C handle (read-only).
+  /// \returns The constant pointer to the \ref MDBX_env object.
   MDBX_CXX14_CONSTEXPR const MDBX_env *handle() const noexcept { return handle_; }
+  /// \brief Returns the underlying C handle.
+  /// \returns The mutable pointer to the \ref MDBX_env object.
   MDBX_CXX14_CONSTEXPR MDBX_env *handle() noexcept { return handle_; };
   friend MDBX_CXX11_CONSTEXPR bool operator==(const env &a, const env &b) noexcept { return a.handle_ == b.handle_; }
   friend MDBX_CXX11_CONSTEXPR bool operator!=(const env &a, const env &b) noexcept { return a.handle_ != b.handle_; }
@@ -74,8 +97,12 @@ public:
 
     /// \brief Tagged type for output to std::ostream
     struct size {
-      intptr_t bytes;
+      intptr_t bytes; ///< \brief The size in bytes.
+      /// \brief Constructs from the given number of bytes.
+      /// \param bytes  The size in bytes.
       MDBX_CXX11_CONSTEXPR size(intptr_t bytes) noexcept : bytes(bytes) {}
+      /// \brief Converts to the plain number of bytes.
+      /// \returns The size in bytes.
       MDBX_CXX11_CONSTEXPR operator intptr_t() const noexcept { return bytes; }
     };
 
@@ -111,26 +138,49 @@ public:
     /// and \ref MDBX_MAX_PAGESIZE.
     intptr_t pagesize{default_value};
 
+    /// \brief Makes a fixed-size geometry, i.e. with disabled growing and shrinking.
+    /// \param size  The fixed database size in bytes.
+    /// \returns A reference to this instance.
     MDBX_CXX14_CONSTEXPR geometry &make_fixed(intptr_t size) noexcept;
+    /// \brief Makes a dynamic-size geometry with the given bounds.
+    /// \param lower  The lower bound of database size in bytes.
+    /// \param upper  The upper bound of database size in bytes.
+    /// \returns A reference to this instance.
     MDBX_CXX14_CONSTEXPR geometry &make_dynamic(intptr_t lower = default_value,
                                                 intptr_t upper = default_value) noexcept;
 
     /// \brief Sets the lower bound of database size in bytes.
+    /// \param size  The lower bound in bytes.
+    /// \returns A reference to this instance.
     MDBX_CXX14_CONSTEXPR geometry &set_size_lower(intptr_t size) noexcept;
     /// \brief Sets the size in bytes to setup the database size for now.
+    /// \param size  The size in bytes to setup for now.
+    /// \returns A reference to this instance.
     MDBX_CXX14_CONSTEXPR geometry &set_size_now(intptr_t size) noexcept;
     /// \brief Sets the upper bound of database size in bytes.
+    /// \param size  The upper bound in bytes.
+    /// \returns A reference to this instance.
     MDBX_CXX14_CONSTEXPR geometry &set_size_upper(intptr_t size) noexcept;
     /// \brief Sets the growth step in bytes.
+    /// \param step  The growth step in bytes.
+    /// \returns A reference to this instance.
     MDBX_CXX14_CONSTEXPR geometry &set_growth_step(intptr_t step) noexcept;
     /// \brief Sets the shrink threshold in bytes.
+    /// \param threshold  The shrink threshold in bytes.
+    /// \returns A reference to this instance.
     MDBX_CXX14_CONSTEXPR geometry &set_shrink_threshold(intptr_t threshold) noexcept;
     /// \brief Sets the database page size for new database creation.
+    /// \param size  The page size in bytes.
+    /// \returns A reference to this instance.
     MDBX_CXX14_CONSTEXPR geometry &set_pagesize(intptr_t size) noexcept;
 
+    /// \brief Constructs a geometry with all values set to \ref default_value.
     MDBX_CXX11_CONSTEXPR geometry() noexcept {}
+    /// \brief Copy constructor.
     MDBX_CXX11_CONSTEXPR
     geometry(const geometry &) noexcept = default;
+    /// \brief Copy assignment operator.
+    /// \returns A reference to this instance.
     MDBX_CXX14_CONSTEXPR geometry &operator=(const geometry &) noexcept = default;
 
     /// \brief All `geometry::set_*` methods are noexcept by design: they only
@@ -139,6 +189,12 @@ public:
     /// throws \ref mdbx::error on any invalid/inapplicable value (e.g. a size
     /// below the current file size or a late call after open), so configuration
     /// errors are never silently swallowed (issue #143).
+    /// \param size_lower  The `size_lower` argument.
+    /// \param size_now  The `size_now` argument.
+    /// \param size_upper  The `size_upper` argument.
+    /// \param growth_step  The `growth_step` argument.
+    /// \param shrink_threshold  The `shrink_threshold` argument.
+    /// \param pagesize  The database page size in bytes.
     MDBX_CXX11_CONSTEXPR geometry(intptr_t size_lower, intptr_t size_now = default_value,
                                   intptr_t size_upper = default_value, intptr_t growth_step = default_value,
                                   intptr_t shrink_threshold = default_value, intptr_t pagesize = default_value) noexcept
@@ -146,11 +202,16 @@ public:
           shrink_threshold(shrink_threshold), pagesize(pagesize) {}
 
     /// \brief Creates a fixed-size geometry, i.e. with disabled growing and shrinking.
+    /// \param size  The new length of the data.
+    /// \returns The result.
     static MDBX_CXX14_CONSTEXPR geometry fixed(intptr_t size) noexcept {
       geometry result;
       return result.make_fixed(size);
     }
     /// \brief Creates a dynamic-size geometry with the given bounds.
+    /// \param lower  The `lower` argument.
+    /// \param upper  The `upper` argument.
+    /// \returns The result.
     static MDBX_CXX14_CONSTEXPR geometry dynamic(intptr_t lower = default_value,
                                                  intptr_t upper = default_value) noexcept {
       geometry result;
@@ -171,10 +232,11 @@ public:
 
   /// \brief Operation mode.
   enum class mode : unsigned {
-    readonly,        ///< \copydoc MDBX_RDONLY
-    write_file_io,   // don't available on OpenBSD
-    write_mapped_io, ///< \copydoc MDBX_WRITEMAP
-    nested_transactions = write_file_io
+    readonly,                           ///< \copydoc MDBX_RDONLY
+    write_file_io,                      ///< Write via file I/O (not available on OpenBSD).
+    write_mapped_io,                    ///< \copydoc MDBX_WRITEMAP
+    nested_transactions = write_file_io ///< An alias for `write_file_io`, i.e. the mode
+                                        ///< that allows nested transactions.
   };
 
   /// \brief Durability level.
@@ -185,15 +247,34 @@ public:
     whole_fragile               ///< \copydoc MDBX_UTTERLY_NOSYNC
   };
 
+  /* Backward-compatibility aliases: before the mode/durability enums became
+   * scoped (`enum class`), their enumerators leaked into `env::`. Keep them
+   * usable via static constants so that existing client code (and tests)
+   * written against the unscoped form keeps compiling and migrates smoothly. */
+  static constexpr mode readonly = mode::readonly;
+  static constexpr mode write_file_io = mode::write_file_io;
+  static constexpr mode write_mapped_io = mode::write_mapped_io;
+  static constexpr mode nested_transactions = mode::nested_transactions;
+  static constexpr durability robust_synchronous = durability::robust_synchronous;
+  static constexpr durability half_synchronous_weak_last = durability::half_synchronous_weak_last;
+  static constexpr durability lazy_weak_tail = durability::lazy_weak_tail;
+  static constexpr durability whole_fragile = durability::whole_fragile;
+
   /// \brief Garbage reclaiming options.
   struct LIBMDBX_API_TYPE reclaiming_options {
     /// \copydoc MDBX_LIFORECLAIM
     bool lifo{false};
+    /// \brief Constructs the default reclaiming options.
     MDBX_CXX11_CONSTEXPR reclaiming_options() noexcept {}
+    /// \brief Copy constructor.
     MDBX_CXX11_CONSTEXPR
     reclaiming_options(const reclaiming_options &) noexcept = default;
+    /// \brief Copy assignment operator.
+    /// \returns A reference to this instance.
     MDBX_CXX14_CONSTEXPR reclaiming_options &operator=(const reclaiming_options &) noexcept = default;
     /// \brief Sets the LIFO reclaiming mode.
+    /// \param value  The value.
+    /// \returns The result.
     MDBX_CXX14_CONSTEXPR reclaiming_options &set_lifo(bool value = true) noexcept;
 
 #if defined(__cpp_impl_three_way_comparison) && __cpp_impl_three_way_comparison >= 201907L
@@ -203,7 +284,9 @@ public:
     MDBX_CXX14_CONSTEXPR bool operator!=(const reclaiming_options &other) const noexcept { return !(*this == other); }
 #endif
 
-    reclaiming_options(MDBX_env_flags_t) noexcept;
+    /// \brief Constructs from the environment flags, extracting the reclaiming bits.
+    /// \param flags  The \ref MDBX_env_flags_t combination.
+    reclaiming_options(MDBX_env_flags_t flags) noexcept;
   };
 
   /// \brief Operate options.
@@ -221,22 +304,38 @@ public:
     bool disable_clear_memory{false};
     /// \copydoc MDBX_VALIDATION
     bool enable_validation{false};
+    /// \brief Constructs the default operate options.
     MDBX_CXX11_CONSTEXPR operate_options() noexcept {}
+    /// \brief Copy constructor.
     MDBX_CXX11_CONSTEXPR
     operate_options(const operate_options &) noexcept = default;
+    /// \brief Copy assignment operator.
+    /// \returns A reference to this instance.
     MDBX_CXX14_CONSTEXPR operate_options &operator=(const operate_options &) noexcept = default;
 
     /// \brief Sets the "no sticky threads" mode.
+    /// \param value  The value.
+    /// \returns The result.
     MDBX_CXX14_CONSTEXPR operate_options &set_no_sticky_threads(bool value = true) noexcept;
     /// \brief Sets the nested transactions mode.
+    /// \param value  The value.
+    /// \returns The result.
     MDBX_CXX14_CONSTEXPR operate_options &set_nested_transactions(bool value = true) noexcept;
     /// \brief Sets the exclusive mode.
+    /// \param value  The value.
+    /// \returns The result.
     MDBX_CXX14_CONSTEXPR operate_options &set_exclusive(bool value = true) noexcept;
     /// \brief Sets the readahead disable mode.
+    /// \param value  The value.
+    /// \returns The result.
     MDBX_CXX14_CONSTEXPR operate_options &set_disable_readahead(bool value = true) noexcept;
     /// \brief Sets the clear-memory disable mode.
+    /// \param value  The value.
+    /// \returns The result.
     MDBX_CXX14_CONSTEXPR operate_options &set_disable_clear_memory(bool value = true) noexcept;
     /// \brief Sets the validation enable mode.
+    /// \param value  The value.
+    /// \returns The result.
     MDBX_CXX14_CONSTEXPR operate_options &set_enable_validation(bool value = true) noexcept;
 
 #if defined(__cpp_impl_three_way_comparison) && __cpp_impl_three_way_comparison >= 201907L
@@ -250,7 +349,9 @@ public:
     MDBX_CXX14_CONSTEXPR bool operator!=(const operate_options &other) const noexcept { return !(*this == other); }
 #endif
 
-    operate_options(MDBX_env_flags_t) noexcept;
+    /// \brief Constructs from the environment flags, extracting the option bits.
+    /// \param flags  The \ref MDBX_env_flags_t combination.
+    operate_options(MDBX_env_flags_t flags) noexcept;
   };
 
   /// \brief Operate parameters.
@@ -261,12 +362,21 @@ public:
     /// \brief The maximum number of threads/reader slots for the environment.
     /// Zero means default value.
     unsigned max_readers{0};
-    env::mode mode{env::mode::write_mapped_io};
-    env::durability durability{env::durability::robust_synchronous};
-    env::reclaiming_options reclaiming;
-    env::operate_options options;
+    env::mode mode{env::mode::write_mapped_io}; ///< \brief The operation mode, see \ref env::mode.
+    env::durability durability{
+        env::durability::robust_synchronous}; ///< \brief The durability level, see \ref env::durability.
+    env::reclaiming_options reclaiming;       ///< \brief The garbage reclaiming options.
+    env::operate_options options;             ///< \brief The other operate options.
 
+    /// \brief Constructs the default operate parameters.
     MDBX_CXX11_CONSTEXPR operate_parameters() noexcept {}
+    /// \brief Constructs the operate parameters.
+    /// \param max_maps    The maximum number of key-value maps (tables).
+    /// \param max_readers The maximum number of concurrent readers.
+    /// \param mode        The operation mode, see \ref env::mode.
+    /// \param durability  The durability mode, see \ref env::durability.
+    /// \param reclaiming  The reclaiming options, see \ref env::reclaiming_options.
+    /// \param options     The other options, see \ref env::operate_options.
     MDBX_CXX11_CONSTEXPR
     operate_parameters(const unsigned max_maps, const unsigned max_readers = 0,
                        const env::mode mode = env::mode::write_mapped_io,
@@ -275,64 +385,104 @@ public:
                        const env::operate_options &options = env::operate_options()) noexcept
         : max_maps(max_maps), max_readers(max_readers), mode(mode), durability(durability), reclaiming(reclaiming),
           options(options) {}
+    /// \brief Copy constructor.
     MDBX_CXX11_CONSTEXPR
     operate_parameters(const operate_parameters &) noexcept = default;
+    /// \brief Copy assignment operator.
+    /// \returns A reference to this instance.
     MDBX_CXX14_CONSTEXPR operate_parameters &operator=(const operate_parameters &) noexcept = default;
 
     /// \brief Sets the maximum number of named tables/maps for the environment.
     /// Zero means default value.
+    /// \param value  The value.
+    /// \returns The result.
     MDBX_CXX14_CONSTEXPR operate_parameters &set_max_maps(unsigned value) noexcept;
     /// \brief Sets the maximum number of threads/reader slots for the environment.
     /// Zero means default value.
+    /// \param value  The value.
+    /// \returns The result.
     MDBX_CXX14_CONSTEXPR operate_parameters &set_max_readers(unsigned value) noexcept;
     /// \brief Sets the operation mode.
+    /// \param value  The value.
+    /// \returns The result.
     MDBX_CXX14_CONSTEXPR operate_parameters &set_mode(env::mode value) noexcept;
     /// \brief Sets the durability level.
+    /// \param value  The value.
+    /// \returns The result.
     MDBX_CXX14_CONSTEXPR operate_parameters &set_durability(env::durability value) noexcept;
     /// \brief Sets the garbage reclaiming options.
+    /// \param value  The value.
+    /// \returns The result.
     MDBX_CXX14_CONSTEXPR operate_parameters &set_reclaiming(const env::reclaiming_options &value) noexcept;
     /// \brief Sets the operate options.
+    /// \param value  The value.
+    /// \returns The result.
     MDBX_CXX14_CONSTEXPR operate_parameters &set_options(const env::operate_options &value) noexcept;
 
     /// \brief Sets the operation mode to \ref env::mode::readonly.
+    /// \returns A reference to this instance.
     MDBX_CXX14_CONSTEXPR operate_parameters &readonly() noexcept;
     /// \brief Sets the operation mode to \ref env::mode::write_file_io.
+    /// \returns A reference to this instance.
     MDBX_CXX14_CONSTEXPR operate_parameters &write_file_io() noexcept;
     /// \brief Sets the operation mode to \ref env::mode::write_mapped_io.
+    /// \returns A reference to this instance.
     MDBX_CXX14_CONSTEXPR operate_parameters &write_mapped_io() noexcept;
     /// \brief Sets the durability level to \ref env::durability::robust_synchronous.
+    /// \returns A reference to this instance.
     MDBX_CXX14_CONSTEXPR operate_parameters &robust_synchronous() noexcept;
     /// \brief Sets the durability level to \ref env::durability::half_synchronous_weak_last.
+    /// \returns A reference to this instance.
     MDBX_CXX14_CONSTEXPR operate_parameters &half_synchronous_weak_last() noexcept;
     /// \brief Sets the durability level to \ref env::durability::lazy_weak_tail.
+    /// \returns A reference to this instance.
     MDBX_CXX14_CONSTEXPR operate_parameters &lazy_weak_tail() noexcept;
     /// \brief Sets the durability level to \ref env::durability::whole_fragile.
+    /// \returns A reference to this instance.
     MDBX_CXX14_CONSTEXPR operate_parameters &whole_fragile() noexcept;
     /// \brief Sets the nested transactions mode, i.e. \ref operate_options::nested_transactions.
+    /// \param value  The value.
+    /// \returns The result.
     MDBX_CXX14_CONSTEXPR operate_parameters &nested_transactions(bool value = true) noexcept;
     /// \brief Sets the LIFO reclaiming mode, i.e. \ref reclaiming_options::lifo.
+    /// \param value  The value.
+    /// \returns The result.
     MDBX_CXX14_CONSTEXPR operate_parameters &lifo(bool value = true) noexcept;
     /// \brief Sets the "no sticky threads" mode, i.e. \ref operate_options::no_sticky_threads.
+    /// \param value  The value.
+    /// \returns The result.
     MDBX_CXX14_CONSTEXPR operate_parameters &no_sticky_threads(bool value = true) noexcept;
     /// \brief Sets the exclusive mode, i.e. \ref operate_options::exclusive.
+    /// \param value  The value.
+    /// \returns The result.
     MDBX_CXX14_CONSTEXPR operate_parameters &exclusive(bool value = true) noexcept;
     /// \brief Sets the readahead disable mode, i.e. \ref operate_options::disable_readahead.
+    /// \param value  The value.
+    /// \returns The result.
     MDBX_CXX14_CONSTEXPR operate_parameters &disable_readahead(bool value = true) noexcept;
     /// \brief Sets the clear-memory disable mode, i.e. \ref operate_options::disable_clear_memory.
+    /// \param value  The value.
+    /// \returns The result.
     MDBX_CXX14_CONSTEXPR operate_parameters &disable_clear_memory(bool value = true) noexcept;
     /// \brief Sets the validation enable mode, i.e. \ref operate_options::enable_validation.
+    /// \param value  The value.
+    /// \returns The result.
     MDBX_CXX14_CONSTEXPR operate_parameters &enable_validation(bool value = true) noexcept;
 
     /// \brief Constructs parameters for a read-only environment.
+    /// \returns The constructed \ref operate_parameters instance.
     static MDBX_CXX14_CONSTEXPR operate_parameters read_only() noexcept;
     /// \brief Constructs parameters for a writable environment with
     /// \ref env::durability::robust_synchronous durability and \ref env::mode::write_mapped_io.
+    /// \returns The constructed \ref operate_parameters instance.
     static MDBX_CXX14_CONSTEXPR operate_parameters safe_write() noexcept;
     /// \brief Constructs parameters for a writable environment with
     /// \ref env::durability::lazy_weak_tail durability and \ref env::mode::write_mapped_io.
+    /// \returns The constructed \ref operate_parameters instance.
     static MDBX_CXX14_CONSTEXPR operate_parameters lazy_write() noexcept;
     /// \brief Constructs parameters for a writable environment with
     /// \ref env::durability::whole_fragile durability and \ref env::mode::write_mapped_io.
+    /// \returns The constructed \ref operate_parameters instance.
     static MDBX_CXX14_CONSTEXPR operate_parameters fragile_write() noexcept;
 
 #if defined(__cpp_impl_three_way_comparison) && __cpp_impl_three_way_comparison >= 201907L
@@ -345,36 +495,58 @@ public:
     MDBX_CXX14_CONSTEXPR bool operator!=(const operate_parameters &other) const noexcept { return !(*this == other); }
 #endif
 
-    MDBX_NODISCARD MDBX_env_flags_t make_flags(bool accede = true, ///< Allows accepting incompatible operating options
-                                                                   ///< in case the database is already being used by
-                                                                   ///< another process(es) \see MDBX_ACCEDE
-                                               bool use_subdirectory = false ///< use subdirectory to place the DB files
-    ) const;
-    MDBX_NODISCARD static env::mode mode_from_flags(MDBX_env_flags_t) noexcept;
-    MDBX_NODISCARD static env::durability durability_from_flags(MDBX_env_flags_t) noexcept;
+    /// \brief Makes the \ref MDBX_env_flags_t combination from these parameters.
+    /// \param accede           Allows accepting incompatible operating options
+    ///                           in case the database is already being used by
+    ///                           another process(es), \see MDBX_ACCEDE
+    /// \param use_subdirectory Use a subdirectory to place the DB files.
+    /// \returns The \ref MDBX_env_flags_t combination.
+    MDBX_NODISCARD MDBX_env_flags_t make_flags(bool accede = true, bool use_subdirectory = false) const;
+    /// \brief Extracts the operation mode from environment flags.
+    /// \param flags  The \ref MDBX_env_flags_t combination.
+    /// \returns The corresponding \ref env::mode.
+    MDBX_NODISCARD static env::mode mode_from_flags(MDBX_env_flags_t flags) noexcept;
+    /// \brief Extracts the durability level from environment flags.
+    /// \param flags  The \ref MDBX_env_flags_t combination.
+    /// \returns The corresponding \ref env::durability.
+    MDBX_NODISCARD static env::durability durability_from_flags(MDBX_env_flags_t flags) noexcept;
+    /// \brief Extracts the reclaiming options from environment flags.
+    /// \param flags  The \ref MDBX_env_flags_t combination.
+    /// \returns The corresponding \ref env::reclaiming_options.
     MDBX_NODISCARD inline static env::reclaiming_options reclaiming_from_flags(MDBX_env_flags_t flags) noexcept;
+    /// \brief Extracts the other options from environment flags.
+    /// \param flags  The \ref MDBX_env_flags_t combination.
+    /// \returns The corresponding \ref env::operate_options.
     MDBX_NODISCARD inline static env::operate_options options_from_flags(MDBX_env_flags_t flags) noexcept;
   };
 
   /// \brief Returns current operation parameters.
+  /// \returns The \ref operate_parameters the environment was opened with.
   MDBX_NODISCARD inline env::operate_parameters get_operation_parameters() const;
   /// \brief Returns current operation mode.
+  /// \returns The \ref env::mode of the environment.
   MDBX_NODISCARD inline env::mode get_mode() const;
   /// \brief Returns current durability mode.
+  /// \returns The \ref env::durability of the environment.
   MDBX_NODISCARD inline env::durability get_durability() const;
   /// \brief Returns current reclaiming options.
+  /// \returns The \ref reclaiming_options of the environment.
   MDBX_NODISCARD inline env::reclaiming_options get_reclaiming() const;
   /// \brief Returns current operate options.
+  /// \returns The \ref operate_options of the environment.
   MDBX_NODISCARD inline env::operate_options get_options() const;
 
   /// \brief Returns `true` for a freshly created database,
   /// but `false` if at least one transaction was committed.
+  /// \returns `true` if the database is pristine.
   bool is_pristine() const;
 
   /// \brief Checks whether the database is empty.
+  /// \returns `true` if the database is empty.
   bool is_empty() const;
 
   /// \brief Returns default page size for current system/platform.
+  /// \returns The default page size in bytes.
   static size_t default_pagesize() noexcept { return ::mdbx_default_pagesize(); }
 
   /// \brief Information about the system RAM, see \ref ::mdbx_get_sysraminfo().
@@ -384,107 +556,221 @@ public:
     intptr_t avail_pages{0}; ///< The number of currently available pages.
   };
   /// \brief Returns information about the system RAM.
+  /// \returns The \ref sysraminfo of the system.
   MDBX_NODISCARD static inline sysraminfo get_sysraminfo();
 
+  /// \brief A namespace-like holder of static functions returning the various
+  /// libmdbx limits, the C++ counterpart of the `mdbx_limits_*()` C API.
   struct limits {
+    /// \brief Construction is prohibited; use the static methods only.
     limits() = delete;
     /// \brief Returns the minimal database page size in bytes.
+    /// \returns The minimal page size in bytes.
     static inline size_t pagesize_min() noexcept;
     /// \brief Returns the maximal database page size in bytes.
+    /// \returns The maximal page size in bytes.
     static inline size_t pagesize_max() noexcept;
     /// \brief Returns the minimal database size in bytes for specified page size.
+    /// \param pagesize  The database page size in bytes.
+    /// \returns The minimal database size in bytes for specified page size.
     static inline size_t dbsize_min(intptr_t pagesize);
     /// \brief Returns the maximal database size in bytes for specified page size.
+    /// \param pagesize  The database page size in bytes.
+    /// \returns The maximal database size in bytes for specified page size.
     static inline size_t dbsize_max(intptr_t pagesize);
     /// \brief Returns the minimal key size in bytes for specified table flags.
+    /// \param flags  The table flags.
+    /// \returns The minimal key size in bytes for specified table flags.
     static inline size_t key_min(MDBX_db_flags_t flags) noexcept;
     /// \brief Returns the minimal key size in bytes for specified keys mode.
+    /// \param mode  The key comparison mode, see \ref mdbx::key_mode.
+    /// \returns The minimal key size in bytes for specified keys mode.
     static inline size_t key_min(key_mode mode) noexcept;
     /// \brief Returns the maximal key size in bytes for specified page size and table flags.
+    /// \param pagesize  The database page size in bytes.
+    /// \param flags  The table flags.
+    /// \returns The maximal key size in bytes for specified page size and table flags.
     static inline size_t key_max(intptr_t pagesize, MDBX_db_flags_t flags);
     /// \brief Returns the maximal key size in bytes for specified page size and keys mode.
+    /// \param pagesize  The database page size in bytes.
+    /// \param mode  The key comparison mode, see \ref mdbx::key_mode.
+    /// \returns The maximal key size in bytes for specified page size and keys mode.
     static inline size_t key_max(intptr_t pagesize, key_mode mode);
     /// \brief Returns the maximal key size in bytes for given environment and table flags.
-    static inline size_t key_max(const env &, MDBX_db_flags_t flags);
+    /// \param env    The environment.
+    /// \param flags  The table flags.
+    /// \returns The maximal key size in bytes for given environment and table flags.
+    static inline size_t key_max(const env &env, MDBX_db_flags_t flags);
     /// \brief Returns the maximal key size in bytes for given environment and keys mode.
-    static inline size_t key_max(const env &, key_mode mode);
+    /// \param env   The environment.
+    /// \param mode  The key comparison mode, see \ref mdbx::key_mode.
+    /// \returns The maximal key size in bytes for given environment and keys mode.
+    static inline size_t key_max(const env &env, key_mode mode);
     /// \brief Returns the minimal values size in bytes for specified table flags.
+    /// \param flags  The table flags.
+    /// \returns The minimal values size in bytes for specified table flags.
     static inline size_t value_min(MDBX_db_flags_t flags) noexcept;
     /// \brief Returns the minimal values size in bytes for specified values mode.
-    static inline size_t value_min(value_mode) noexcept;
+    /// \param mode  The value comparison mode, see \ref mdbx::value_mode.
+    /// \returns The minimal values size in bytes for specified values mode.
+    static inline size_t value_min(value_mode mode) noexcept;
 
     /// \brief Returns the maximal value size in bytes for specified page size and table flags.
+    /// \param pagesize  The database page size in bytes.
+    /// \param flags  The table flags.
+    /// \returns The maximal value size in bytes for specified page size and table flags.
     static inline size_t value_max(intptr_t pagesize, MDBX_db_flags_t flags);
     /// \brief Returns the maximal value size in bytes for specified page size and values mode.
-    static inline size_t value_max(intptr_t pagesize, value_mode);
+    /// \param pagesize  The database page size in bytes.
+    /// \param mode      The value comparison mode, see \ref mdbx::value_mode.
+    /// \returns The maximal value size in bytes for specified page size and values mode.
+    static inline size_t value_max(intptr_t pagesize, value_mode mode);
     /// \brief Returns the maximal value size in bytes for given environment and table flags.
-    static inline size_t value_max(const env &, MDBX_db_flags_t flags);
+    /// \param env    The environment.
+    /// \param flags  The table flags.
+    /// \returns The maximal value size in bytes for given environment and table flags.
+    static inline size_t value_max(const env &env, MDBX_db_flags_t flags);
     /// \brief Returns the maximal value size in bytes for given environment and values mode.
-    static inline size_t value_max(const env &, value_mode);
+    /// \param env   The environment.
+    /// \param mode  The value comparison mode, see \ref mdbx::value_mode.
+    /// \returns The maximal value size in bytes for given environment and values mode.
+    static inline size_t value_max(const env &env, value_mode mode);
 
     /// \brief Returns maximal size of key-value pair to fit in a single page
     /// for specified page size and table flags.
+    /// \param pagesize  The database page size in bytes.
+    /// \param flags  The table flags.
+    /// \returns Maximal size of key-value pair to fit in a single page for specified page size and table flags.
     static inline size_t pairsize4page_max(intptr_t pagesize, MDBX_db_flags_t flags);
     /// \brief Returns maximal size of key-value pair to fit in a single page
     /// for specified page size and values mode.
-    static inline size_t pairsize4page_max(intptr_t pagesize, value_mode);
+    /// \param pagesize  The database page size in bytes.
+    /// \param mode      The value comparison mode, see \ref mdbx::value_mode.
+    /// \returns Maximal size of key-value pair to fit in a single page for specified page size and values mode.
+    static inline size_t pairsize4page_max(intptr_t pagesize, value_mode mode);
     /// \brief Returns maximal size of key-value pair to fit in a single page
     /// for given environment and table flags.
-    static inline size_t pairsize4page_max(const env &, MDBX_db_flags_t flags);
+    /// \param env    The environment.
+    /// \param flags  The table flags.
+    /// \returns Maximal size of key-value pair to fit in a single page for given environment and table flags.
+    static inline size_t pairsize4page_max(const env &env, MDBX_db_flags_t flags);
     /// \brief Returns maximal size of key-value pair to fit in a single page
     /// for given environment and values mode.
-    static inline size_t pairsize4page_max(const env &, value_mode);
+    /// \param env   The environment.
+    /// \param mode  The value comparison mode, see \ref mdbx::value_mode.
+    /// \returns Maximal size of key-value pair to fit in a single page for given environment and values mode.
+    static inline size_t pairsize4page_max(const env &env, value_mode mode);
 
     /// \brief Returns maximal data size in bytes to fit in a leaf-page or
     /// single large/overflow-page for specified size and table flags.
+    /// \param pagesize  The database page size in bytes.
+    /// \param flags  The table flags.
+    /// \returns Maximal data size in bytes to fit in a leaf-page or single large/overflow-page for specified size and
+    /// table flags.
     static inline size_t valsize4page_max(intptr_t pagesize, MDBX_db_flags_t flags);
     /// \brief Returns maximal data size in bytes to fit in a leaf-page or
     /// single large/overflow-page for specified page size and values mode.
-    static inline size_t valsize4page_max(intptr_t pagesize, value_mode);
+    /// \param pagesize  The database page size in bytes.
+    /// \param mode      The value comparison mode, see \ref mdbx::value_mode.
+    /// \returns Maximal data size in bytes to fit in a leaf-page or single large/overflow-page for specified page size
+    /// and values mode.
+    static inline size_t valsize4page_max(intptr_t pagesize, value_mode mode);
     /// \brief Returns maximal data size in bytes to fit in a leaf-page or
     /// single large/overflow-page for given environment and table flags.
-    static inline size_t valsize4page_max(const env &, MDBX_db_flags_t flags);
+    /// \param env    The environment.
+    /// \param flags  The table flags.
+    /// \returns Maximal data size in bytes to fit in a leaf-page or single large/overflow-page for given environment
+    /// and table flags.
+    static inline size_t valsize4page_max(const env &env, MDBX_db_flags_t flags);
     /// \brief Returns maximal data size in bytes to fit in a leaf-page or
     /// single large/overflow-page for given environment and values mode.
-    static inline size_t valsize4page_max(const env &, value_mode);
+    /// \param env   The environment.
+    /// \param mode  The value comparison mode, see \ref mdbx::value_mode.
+    /// \returns Maximal data size in bytes to fit in a leaf-page or single large/overflow-page for given environment
+    /// and values mode.
+    static inline size_t valsize4page_max(const env &env, value_mode mode);
 
     /// \brief Returns the maximal write transaction size (i.e. limit for
     /// summary volume of dirty pages) in bytes for specified page size.
+    /// \param pagesize  The database page size in bytes.
+    /// \returns The maximal write transaction size (i.e. limit for summary volume of dirty pages) in bytes for
+    /// specified page size.
     static inline size_t transaction_size_max(intptr_t pagesize);
 
     /// \brief Returns the maximum opened map handles, aka DBI-handles.
+    /// \returns The maximum number of map (DBI) handles.
     static inline size_t max_map_handles(void);
   };
 
   /// \brief Returns the minimal database size in bytes for the environment.
+  /// \returns The minimal database size in bytes.
   size_t dbsize_min() const { return limits::dbsize_min(this->get_pagesize()); }
   /// \brief Returns the maximal database size in bytes for the environment.
+  /// \returns The maximal database size in bytes.
   size_t dbsize_max() const { return limits::dbsize_max(this->get_pagesize()); }
   /// \brief Returns the minimal key size in bytes for specified keys mode.
+  /// \param mode  The operation mode.
+  /// \returns The minimal key size in bytes for specified keys mode.
   size_t key_min(key_mode mode) const noexcept { return limits::key_min(mode); }
   /// \brief Returns the maximal key size in bytes for specified keys mode.
+  /// \param mode  The operation mode.
+  /// \returns The maximal key size in bytes for specified keys mode.
   size_t key_max(key_mode mode) const { return limits::key_max(*this, mode); }
   /// \brief Returns the minimal value size in bytes for specified values mode.
+  /// \param mode  The operation mode.
+  /// \returns The minimal value size in bytes for specified values mode.
   size_t value_min(value_mode mode) const noexcept { return limits::value_min(mode); }
   /// \brief Returns the maximal value size in bytes for specified values mode.
+  /// \param mode  The operation mode.
+  /// \returns The maximal value size in bytes for specified values mode.
   size_t value_max(value_mode mode) const { return limits::value_max(*this, mode); }
   /// \brief Returns the maximal write transaction size (i.e. limit for summary
   /// volume of dirty pages) in bytes.
+  /// \returns The maximal write transaction size in bytes.
   size_t transaction_size_max() const { return limits::transaction_size_max(this->get_pagesize()); }
 
   /// \brief Make a copy (backup) of an existing environment to the specified
   /// path.
+  /// \param destination         The path to the copy to be made.
+  /// \param compactify          Omit free space from the copy and renumber all pages sequentially.
+  /// \param force_dynamic_size  Force the dynamic size (grow/shrink) of the copy.
+  /// \returns A reference to this environment instance.
+  /// \throws mdbx::error on failure.
 #ifdef MDBX_STD_FILESYSTEM_PATH
   env &copy(const MDBX_STD_FILESYSTEM_PATH &destination, bool compactify, bool force_dynamic_size = false);
 #endif /* MDBX_STD_FILESYSTEM_PATH */
 #if defined(_WIN32) || defined(_WIN64) || defined(DOXYGEN)
+  /// \brief Make a copy (backup) of an existing environment to the specified path.
+  /// \param destination         The path to the copy to be made.
+  /// \param compactify          Omit free space from the copy and renumber all pages sequentially.
+  /// \param force_dynamic_size  Force the dynamic size (grow/shrink) of the copy.
+  /// \returns A reference to this environment instance.
   env &copy(const ::std::wstring &destination, bool compactify, bool force_dynamic_size = false);
+  /// \brief Make a copy (backup) of an existing environment to the specified path.
+  /// \param destination         The path to the copy to be made.
+  /// \param compactify          Omit free space from the copy and renumber all pages sequentially.
+  /// \param force_dynamic_size  Force the dynamic size (grow/shrink) of the copy.
+  /// \returns A reference to this environment instance.
   env &copy(const wchar_t *destination, bool compactify, bool force_dynamic_size = false);
 #endif /* Windows */
+  /// \brief Make a copy (backup) of an existing environment to the specified path.
+  /// \param destination         The path to the copy to be made.
+  /// \param compactify          Omit free space from the copy and renumber all pages sequentially.
+  /// \param force_dynamic_size  Force the dynamic size (grow/shrink) of the copy.
+  /// \returns A reference to this environment instance.
   env &copy(const ::std::string &destination, bool compactify, bool force_dynamic_size = false);
+  /// \brief Make a copy (backup) of an existing environment to the specified path.
+  /// \param destination         The path to the copy to be made.
+  /// \param compactify          Omit free space from the copy and renumber all pages sequentially.
+  /// \param force_dynamic_size  Force the dynamic size (grow/shrink) of the copy.
+  /// \returns A reference to this environment instance.
   env &copy(const char *destination, bool compactify, bool force_dynamic_size = false);
 
   /// \brief Copy an environment to the specified file descriptor.
+  /// \param fd  The file descriptor.
+  /// \param compactify  The `compactify` argument.
+  /// \param force_dynamic_size  The `force_dynamic_size` argument.
+  /// \returns The environment instance.
   env &copy(filehandle fd, bool compactify, bool force_dynamic_size = false);
 
   /// \brief Deletion modes for \ref remove().
@@ -504,14 +790,33 @@ public:
   };
 
   /// \brief Removes the environment's files in a proper and multiprocess-safe way.
+  /// \param pathname  The path to the database.
+  /// \param mode  The operation mode.
+  /// \returns `true` on success, `false` otherwise.
 #ifdef MDBX_STD_FILESYSTEM_PATH
   static bool remove(const MDBX_STD_FILESYSTEM_PATH &pathname, const remove_mode mode = just_remove);
 #endif /* MDBX_STD_FILESYSTEM_PATH */
 #if defined(_WIN32) || defined(_WIN64) || defined(DOXYGEN)
+  /// \brief Removes the environment's files in a proper and multiprocess-safe way.
+  /// \param pathname  The path to the environment.
+  /// \param mode      The removal mode, see \ref remove_mode.
+  /// \returns `true` on success, `false` otherwise.
   static bool remove(const ::std::wstring &pathname, const remove_mode mode = just_remove);
+  /// \brief Removes the environment's files in a proper and multiprocess-safe way.
+  /// \param pathname  The path to the environment.
+  /// \param mode      The removal mode, see \ref remove_mode.
+  /// \returns `true` on success, `false` otherwise.
   static bool remove(const wchar_t *pathname, const remove_mode mode = just_remove);
 #endif /* Windows */
+  /// \brief Removes the environment's files in a proper and multiprocess-safe way.
+  /// \param pathname  The path to the environment.
+  /// \param mode      The removal mode, see \ref remove_mode.
+  /// \returns `true` on success, `false` otherwise.
   static bool remove(const ::std::string &pathname, const remove_mode mode = just_remove);
+  /// \brief Removes the environment's files in a proper and multiprocess-safe way.
+  /// \param pathname  The path to the environment.
+  /// \param mode      The removal mode, see \ref remove_mode.
+  /// \returns `true` on success, `false` otherwise.
   static bool remove(const char *pathname, const remove_mode mode = just_remove);
 
   /// \brief Statistics for a database in the MDBX environment.
@@ -523,6 +828,7 @@ public:
   /// \brief Provides information about a database, including meta-page and
   /// geometry, without opening it.
   ///
+  /// \param [in] pathname The path to the directory or database file.
   /// \param [in] mode The mode of processing weak checkpoints, see \ref MDBX_preopen_flags.
   ///   Defaults to `MDBX_PREOPEN_PROPERLY` (same as the legacy `get_preopen_snapinfo()`).
   /// \returns The \ref info of the database. Errors are thrown as
@@ -530,6 +836,15 @@ public:
   /// \see ::mdbx_preopen_snapinfo_ex()
   MDBX_NODISCARD static inline info get_preopen_snapinfo(const ::std::string &pathname,
                                                          MDBX_preopen_flags mode = MDBX_PREOPEN_PROPERLY);
+  /// \brief Provides information about a database, including meta-page and
+  /// geometry, without opening it.
+  ///
+  /// \param [in] pathname The path to the directory or database file.
+  /// \param [in] mode The mode of processing weak checkpoints, see \ref MDBX_preopen_flags.
+  ///   Defaults to `MDBX_PREOPEN_PROPERLY` (same as the legacy `get_preopen_snapinfo()`).
+  /// \returns The \ref info of the database. Errors are thrown as
+  /// \ref mdbx::error.
+  /// \see ::mdbx_preopen_snapinfo_ex()
   MDBX_NODISCARD static inline info get_preopen_snapinfo(const char *pathname,
                                                          MDBX_preopen_flags mode = MDBX_PREOPEN_PROPERLY);
 #ifdef MDBX_STD_FILESYSTEM_PATH
@@ -547,53 +862,80 @@ public:
 #endif /* Windows */
 
   /// \brief Returns snapshot statistics about the MDBX environment.
+  /// \returns The \ref stat snapshot of the environment.
   inline stat get_stat() const;
 
   /// \brief Returns pagesize of this MDBX environment.
+  /// \returns The database page size in bytes.
   size_t get_pagesize() const { return get_info().mi_dxb_pagesize; }
 
   /// \brief Return snapshot information about the MDBX environment.
+  /// \returns The \ref info snapshot of the environment.
   inline info get_info() const;
 
   /// \brief Return statistics about the MDBX environment accordingly to the specified transaction.
-  inline stat get_stat(const txn &) const;
+  /// \param txn  The transaction for the snapshot.
+  /// \returns The \ref stat accordingly to the given transaction.
+  inline stat get_stat(const txn &txn) const;
 
   /// \brief Return information about the MDBX environment accordingly to the specified transaction.
-  inline info get_info(const txn &) const;
+  /// \param txn  The transaction for the snapshot.
+  /// \returns The \ref info accordingly to the given transaction.
+  inline info get_info(const txn &txn) const;
 
   /// \brief Returns the file descriptor for the DXB file of MDBX environment.
+  /// \returns The \ref filehandle of the DXB file.
   inline filehandle get_filehandle() const;
 
   /// \brief Return the path that was used for opening the environment.
+  /// \returns The path used for opening, or `nullptr` for an empty instance.
   const path_char *get_path() const;
 
-  /// Returns environment flags.
+  /// \brief Returns environment flags.
+  /// \returns The \ref MDBX_env_flags_t combination.
   inline MDBX_env_flags_t get_flags() const;
 
+  /// \brief Checks whether the environment is read-only.
+  /// \returns `true` if the environment is read-only.
   inline bool is_readonly() const { return (get_flags() & MDBX_RDONLY) != 0; }
 
+  /// \brief Checks whether the environment is exclusive.
+  /// \returns `true` if the environment was opened in the exclusive mode.
   inline bool is_exclusive() const { return (get_flags() & MDBX_EXCLUSIVE) != 0; }
 
+  /// \brief Checks whether the environment is cooperative, i.e. not exclusive.
+  /// \returns `true` if the environment can be used concurrently by processes.
   inline bool is_cooperative() const { return !is_exclusive(); }
 
+  /// \brief Checks whether the environment uses memory-mapped I/O for writes.
+  /// \returns `true` if \ref MDBX_WRITEMAP was used.
   inline bool is_writemap() const { return (get_flags() & MDBX_WRITEMAP) != 0; }
 
+  /// \brief Checks whether the environment is read-write.
+  /// \returns `true` if the environment is read-write.
   inline bool is_readwrite() const { return !is_readonly(); }
 
+  /// \brief Checks whether nested transactions are available.
+  /// \returns `true` if nested transactions can be used.
   inline bool is_nested_transactions_available() const { return (get_flags() & (MDBX_WRITEMAP | MDBX_RDONLY)) == 0; }
 
   /// \brief Returns the maximum number of threads/reader slots for the environment.
+  /// \returns The maximum number of readers.
   /// \see extra_runtime_option::max_readers
   inline unsigned max_readers() const;
 
   /// \brief Returns the maximum number of named tables for the environment.
+  /// \returns The maximum number of named tables.
   /// \see extra_runtime_option::max_maps
   inline unsigned max_maps() const;
 
   /// \brief Returns the application context associated with the environment.
+  /// \returns The application context pointer.
   inline void *get_context() const noexcept;
 
   /// \brief Sets the application context associated with the environment.
+  /// \param your_context  The application context pointer.
+  /// \returns The environment instance.
   inline env &set_context(void *your_context);
 
   /// \brief Sets threshold to force flush the data buffers to disk, for
@@ -611,12 +953,14 @@ public:
   /// The default is 0, which means that no threshold is checked and no
   /// additional flush will be made.
   /// \see extra_runtime_option::sync_bytes
+  /// \param bytes  The number of bytes of the source data.
+  /// \returns The environment instance.
   inline env &set_sync_threshold(size_t bytes);
 
   /// \brief Gets threshold used to force flush the data buffers to disk, for
   /// non-sync durability modes.
-  ///
-  /// \copydetails set_sync_threshold()
+  /// \details See \ref set_sync_threshold() for the description of the threshold.
+  /// \returns The threshold in bytes.
   /// \see extra_runtime_option::sync_bytes
   inline size_t sync_threshold() const;
 
@@ -641,31 +985,40 @@ public:
   /// The default is 0, which means that no timeout is checked and no additional
   /// flush will be made.
   /// \see extra_runtime_option::sync_period
+  /// \param period  The period in seconds.
+  /// \returns The environment instance.
   inline env &set_sync_period(const duration &period);
 
   /// \brief Gets relative period since the last unsteady commit that used to
   /// force flush the data buffers to disk, for non-sync durability modes.
-  /// \copydetails set_sync_period(const duration&)
+  /// \details See \ref set_sync_period() for the description of the period.
+  /// \returns The period as a \ref duration value.
   /// \see set_sync_period(const duration&)
   /// \see extra_runtime_option::sync_period
   inline duration sync_period() const;
 #endif
 
-  /// \copydoc set_sync_period(const duration&)
-  /// \param [in] seconds_16dot16  The period in 1/65536 of second when a
+  /// \brief Sets the flush period in 1/65536 of second units; the same as
+  /// \ref set_sync_period() with the corresponding \ref duration.
+  /// \param seconds_16dot16  The period in 1/65536 of second when a
   /// synchronous flush would be made since the last unsteady commit.
+  /// \returns A reference to this environment instance.
   inline env &set_sync_period__seconds_16dot16(unsigned seconds_16dot16);
 
-  /// \copydoc sync_period()
+  /// \brief Gets the flush period in 1/65536 of second units.
+  /// \returns The period in 1/65536 of second units.
   /// \see sync_period__seconds_16dot16(unsigned)
   inline unsigned sync_period__seconds_16dot16() const;
 
-  /// \copydoc set_sync_period(const duration&)
-  /// \param [in] seconds  The period in second when a synchronous flush would
+  /// \brief Sets the flush period in seconds; the same as
+  /// \ref set_sync_period() with the corresponding \ref duration.
+  /// \param seconds  The period in second when a synchronous flush would
   /// be made since the last unsteady commit.
+  /// \returns A reference to this environment instance.
   inline env &set_sync_period__seconds_double(double seconds);
 
-  /// \copydoc sync_period()
+  /// \brief Gets the flush period in seconds.
+  /// \returns The period in seconds.
   /// \see set_sync_period__seconds_double(double)
   inline double sync_period__seconds_double() const;
 
@@ -726,22 +1079,34 @@ public:
   };
 
   /// \copybrief mdbx_env_set_option()
+  /// \param option  The `option` argument.
+  /// \param value  The value.
+  /// \returns The environment instance.
   inline env &set_extra_option(extra_runtime_option option, uint64_t value);
 
   /// \copybrief mdbx_env_get_option()
+  /// \param option  The `option` argument.
+  /// \returns The resulting value.
   inline uint64_t extra_option(extra_runtime_option option) const;
 
   /// \brief Alter environment flags.
+  /// \param flags  The flags.
+  /// \param on_off  The `on_off` argument.
+  /// \returns The environment instance.
   inline env &alter_flags(MDBX_env_flags_t flags, bool on_off);
 
   /// \brief Set all size-related parameters of environment.
   /// \throws mdbx::error on invalid or inapplicable values (e.g. a size below
   /// the current file size or a late call after the environment was opened).
+  /// \param size  The new length of the data.
+  /// \returns The environment instance.
   inline env &set_geometry(const geometry &size);
 
   /// \brief Flush the environment data buffers.
   /// \return `True` if sync done or no data to sync; `false` if the
   /// environment is busy by another thread and `nonblock=true` is used.
+  /// \param force  Force the operation even when it is not required.
+  /// \param nonblock  Don't wait if a write transaction is running by another thread.
   inline bool sync_to_disk(bool force = true, bool nonblock = false);
 
   /// \brief Performs non-blocking polling of sync-to-disk thresholds.
@@ -768,7 +1133,8 @@ public:
   /// handle if an existing transaction has modified its table. Doing so can
   /// cause misbehavior from database corruption to errors like
   /// \ref MDBX_BAD_DBI (since the DB name is gone).
-  inline void close_map(const map_handle &);
+  /// \param map  The table (map) handle to be closed.
+  inline void close_map(const map_handle &map);
 
   /// \brief Reader information
   struct reader_info {
@@ -791,6 +1157,14 @@ public:
                               ///< the MVCC-snapshot for reuse by completion read
                               ///< transaction.
 
+    /// \brief Constructs the reader information.
+    /// \param slot      The reader lock table slot number.
+    /// \param pid       The reader process ID.
+    /// \param thread    The reader thread ID.
+    /// \param txnid     The ID of the transaction being read.
+    /// \param lag       The lag from a recent MVCC-snapshot.
+    /// \param used      The number of last used page in the MVCC-snapshot.
+    /// \param retained  The total size of retained pages in bytes.
     MDBX_CXX11_CONSTEXPR reader_info(int slot, mdbx_pid_t pid, mdbx_tid_t thread, uint64_t txnid, uint64_t lag,
                                      size_t used, size_t retained) noexcept;
   };
@@ -798,14 +1172,16 @@ public:
   /// \brief Enumerate readers.
   ///
   /// The VISITOR class must have `int operator()(const reader_info&, int serial)`
-  /// which should return \ref continue_loop (zero) to continue enumeration,
+  /// which should return `continue_loop` (zero) to continue enumeration,
   /// or any non-zero value to exit.
   ///
+  /// \param visitor  The visitor functor, see the description above.
   /// \returns The last value returned from visitor' functor.
   template <typename VISITOR> inline int enumerate_readers(VISITOR &visitor);
 
   /// \brief Checks for stale readers in the lock table and
   /// return number of cleared slots.
+  /// \returns The number of cleared stale reader slots.
   inline unsigned check_readers();
 
   /// \brief Registers the current thread as a reader for the environment,
@@ -822,6 +1198,9 @@ public:
   /// \returns `MDBX_RESULT_TRUE` if the specified timeout is reached during
   /// loading data into memory, `MDBX_SUCCESS` on success.
   /// \see ::mdbx_env_warmup()
+  /// \param flags  The flags.
+  /// \param timeout_seconds_16dot16  The timeout in 1/65536 of second units.
+  /// \param txn  The transaction handle.
   MDBX_NODISCARD inline int warmup(MDBX_warmup_flags_t flags, unsigned timeout_seconds_16dot16,
                                    const MDBX_txn *txn = nullptr) const;
 
@@ -837,6 +1216,7 @@ public:
   /// change; use only when you know what you are doing. See
   /// \ref env_managed::open_for_recovery().
   /// \see ::mdbx_env_turn_for_recovery()
+  /// \param target_meta  The index of the meta-page.
   inline void turn_for_recovery(unsigned target_meta);
 
   /// \brief Checks the integrity of the environment (database).
@@ -884,27 +1264,41 @@ public:
   ///    transaction;
   ///
   /// \see long-lived-read
-  inline env &set_HandleSlowReaders(MDBX_hsr_func);
+  /// \param cb  The callback function, or `nullptr` to disable.
+  /// \returns A reference to this environment instance.
+  inline env &set_HandleSlowReaders(MDBX_hsr_func cb);
 
   /// \brief Returns the current Handle-Slow-Readers callback used to resolve
   /// database full/overflow issue due to a reader(s) which prevents the old
   /// data from being recycled.
+  /// \returns The current \ref MDBX_hsr_func callback, or `nullptr`.
   /// \see set_HandleSlowReaders()
   inline MDBX_hsr_func get_HandleSlowReaders() const noexcept;
 
   /// \brief Starts read (read-only) transaction.
+  /// \returns The started managed read transaction.
+  /// \throws mdbx::error on failure.
   inline txn_managed start_read() const;
 
   /// \brief Creates but not start read transaction.
+  /// \returns The created (not started) managed read transaction.
+  /// \throws mdbx::error on failure.
   inline txn_managed prepare_read() const;
 
   /// \brief Starts write (read-write) transaction.
+  /// \param parent  The parent transaction.
+  /// \returns The managed transaction instance.
   inline txn_managed start_write(txn &parent);
 
   /// \brief Starts write (read-write) transaction.
+  /// \param dont_wait  Don't wait if the resource is locked by another thread.
+  /// \returns The managed transaction instance.
   inline txn_managed start_write(bool dont_wait = false);
 
   /// \brief Tries to start write (read-write) transaction without blocking.
+  /// \returns The started managed write transaction.
+  /// \throws mdbx::error on failure, including \ref MDBX_BUSY when the write
+  /// lock is held by another thread.
   inline txn_managed try_start_write();
 
   /// \brief Acquires write-transaction lock.
@@ -934,7 +1328,6 @@ public:
     discontinue = 1, ///< Discontinue with completion of scheduled operations.
   };
 
-  template <typename VISITOR>
   /// \brief Performs database defragmentation.
   ///
   /// \details Defragmentation is the transfer of data from pages located at
@@ -973,6 +1366,7 @@ public:
   ///
   /// \throws mdbx::error on failure (other than stopping reasons above).
   /// \see ::mdbx_env_defrag()
+  template <typename VISITOR>
   inline defrag_result defrag(VISITOR &visitor, size_t defrag_atleast = 0, size_t time_atleast_dot16 = 0,
                               size_t defrag_enough = 0, size_t time_limit_dot16 = 0, intptr_t acceptable_backlash = -1,
                               intptr_t preferred_batch = 0);
@@ -995,6 +1389,7 @@ public:
   /// \param [in] preferred_batch  The preferred maximum number of pages to be
   /// moved per defragmentation cycle, zero means no limit.
   ///
+  /// \returns The final \ref defrag_result.
   /// \throws mdbx::error on failure (other than stopping reasons above).
   /// \see ::mdbx_env_defrag()
   inline defrag_result defrag(size_t defrag_atleast = 0, size_t time_atleast_dot16 = 0, size_t defrag_enough = 0,
@@ -1017,34 +1412,68 @@ class LIBMDBX_API_TYPE env_managed : public env {
   void setup(unsigned max_maps, unsigned max_readers = 0);
 
 public:
+  /// \brief Constructs an empty (not opened) managed environment.
   MDBX_CXX11_CONSTEXPR env_managed() noexcept = default;
 
   /// \brief Open existing database.
+  /// \param pathname  The path to the database.
+  /// \param params    The operate parameters, see \ref operate_parameters.
+  /// \param accede    Open with the parameters the database was created with,
+  ///                    instead of failing on a mismatch.
+  /// \throws mdbx::error on failure.
 #ifdef MDBX_STD_FILESYSTEM_PATH
-  env_managed(const MDBX_STD_FILESYSTEM_PATH &pathname, const operate_parameters &, bool accede = true);
+  env_managed(const MDBX_STD_FILESYSTEM_PATH &pathname, const operate_parameters &params, bool accede = true);
 #endif /* MDBX_STD_FILESYSTEM_PATH */
 #if defined(_WIN32) || defined(_WIN64) || defined(DOXYGEN)
-  env_managed(const ::std::wstring &pathname, const operate_parameters &, bool accede = true);
-  explicit env_managed(const wchar_t *pathname, const operate_parameters &, bool accede = true);
+  /// \brief Open existing database (the \ref operate_parameters overload for a wide-string path).
+  /// \param pathname  The path to the database.
+  /// \param params    The operate parameters, see \ref operate_parameters.
+  /// \param accede    Open with the parameters the database was created with.
+  /// \throws mdbx::error on failure.
+  env_managed(const ::std::wstring &pathname, const operate_parameters &params, bool accede = true);
+  /// \brief Open existing database (the \ref operate_parameters overload for a wide-string path).
+  /// \param pathname  The path to the database.
+  /// \param params    The operate parameters, see \ref operate_parameters.
+  /// \param accede    Open with the parameters the database was created with.
+  /// \throws mdbx::error on failure.
+  explicit env_managed(const wchar_t *pathname, const operate_parameters &params, bool accede = true);
 #endif /* Windows */
-  env_managed(const ::std::string &pathname, const operate_parameters &, bool accede = true);
-  explicit env_managed(const char *pathname, const operate_parameters &, bool accede = true);
+  /// \brief Open existing database (the \ref operate_parameters overload for a narrow-string path).
+  /// \param pathname  The path to the database.
+  /// \param params    The operate parameters, see \ref operate_parameters.
+  /// \param accede    Open with the parameters the database was created with.
+  /// \throws mdbx::error on failure.
+  env_managed(const ::std::string &pathname, const operate_parameters &params, bool accede = true);
+  /// \brief Open existing database (the \ref operate_parameters overload for a C-string path).
+  /// \param pathname  The path to the database.
+  /// \param params    The operate parameters, see \ref operate_parameters.
+  /// \param accede    Open with the parameters the database was created with.
+  /// \throws mdbx::error on failure.
+  explicit env_managed(const char *pathname, const operate_parameters &params, bool accede = true);
 
   /// \brief Additional parameters for creating a new database.
   /// \see env_managed(const ::std::string &pathname, const create_parameters &,
   /// const operate_parameters &, bool accede)
   struct create_parameters {
-    env::geometry geometry;
-    mdbx_mode_t file_mode_bits{0640};
-    bool use_subdirectory{false};
+    env::geometry geometry;           ///< \brief The database geometry, see \ref env::geometry.
+    mdbx_mode_t file_mode_bits{0640}; ///< \brief The file mode bits for the created DB files.
+    bool use_subdirectory{false};     ///< \brief Whether to place the DB files in a subdirectory.
+    /// \brief Constructs the default create parameters.
     MDBX_CXX11_CONSTEXPR create_parameters() noexcept = default;
+    /// \brief Copy constructor.
     create_parameters(const create_parameters &) noexcept = default;
 
     /// \brief Sets the database geometry for size management.
+    /// \param value  The geometry to set.
+    /// \returns A reference to this instance.
     MDBX_CXX14_CONSTEXPR create_parameters &set_geometry(const env::geometry &value) noexcept;
     /// \brief Sets the file mode bits used for creation of the DB files.
+    /// \param value  The file mode bits to set.
+    /// \returns A reference to this instance.
     MDBX_CXX14_CONSTEXPR create_parameters &set_file_mode_bits(mdbx_mode_t value) noexcept;
     /// \brief Sets whether to use a subdirectory to place the DB files.
+    /// \param value  `true` to use a subdirectory.
+    /// \returns A reference to this instance.
     MDBX_CXX14_CONSTEXPR create_parameters &set_use_subdirectory(bool value = true) noexcept;
 
 #if defined(__cpp_impl_three_way_comparison) && __cpp_impl_three_way_comparison >= 201907L
@@ -1059,18 +1488,50 @@ public:
   };
 
   /// \brief Create new or open existing database.
+  /// \param pathname        The path to the database.
+  /// \param create_params   The create parameters, see \ref create_parameters.
+  /// \param operate_params  The operate parameters, see \ref operate_parameters.
+  /// \param accede          Open with the parameters the database was created
+  ///                          with, instead of failing on a mismatch.
+  /// \throws mdbx::error on failure.
 #ifdef MDBX_STD_FILESYSTEM_PATH
-  env_managed(const MDBX_STD_FILESYSTEM_PATH &pathname, const create_parameters &, const operate_parameters &,
-              bool accede = true);
+  env_managed(const MDBX_STD_FILESYSTEM_PATH &pathname, const create_parameters &create_params,
+              const operate_parameters &operate_params, bool accede = true);
 #endif /* MDBX_STD_FILESYSTEM_PATH */
 #if defined(_WIN32) || defined(_WIN64) || defined(DOXYGEN)
-  env_managed(const ::std::wstring &pathname, const create_parameters &, const operate_parameters &,
-              bool accede = true);
-  explicit env_managed(const wchar_t *pathname, const create_parameters &, const operate_parameters &,
-                       bool accede = true);
+  /// \brief Create new or open existing database (wide-string path overload).
+  /// \param pathname        The path to the database.
+  /// \param create_params   The create parameters, see \ref create_parameters.
+  /// \param operate_params  The operate parameters, see \ref operate_parameters.
+  /// \param accede          Open with the parameters the database was created with.
+  /// \throws mdbx::error on failure.
+  env_managed(const ::std::wstring &pathname, const create_parameters &create_params,
+              const operate_parameters &operate_params, bool accede = true);
+  /// \brief Create new or open existing database (wide-string path overload).
+  /// \param pathname        The path to the database.
+  /// \param create_params   The create parameters, see \ref create_parameters.
+  /// \param operate_params  The operate parameters, see \ref operate_parameters.
+  /// \param accede          Open with the parameters the database was created with.
+  /// \throws mdbx::error on failure.
+  explicit env_managed(const wchar_t *pathname, const create_parameters &create_params,
+                       const operate_parameters &operate_params, bool accede = true);
 #endif /* Windows */
-  env_managed(const ::std::string &pathname, const create_parameters &, const operate_parameters &, bool accede = true);
-  explicit env_managed(const char *pathname, const create_parameters &, const operate_parameters &, bool accede = true);
+  /// \brief Create new or open existing database (narrow-string path overload).
+  /// \param pathname        The path to the database.
+  /// \param create_params   The create parameters, see \ref create_parameters.
+  /// \param operate_params  The operate parameters, see \ref operate_parameters.
+  /// \param accede          Open with the parameters the database was created with.
+  /// \throws mdbx::error on failure.
+  env_managed(const ::std::string &pathname, const create_parameters &create_params,
+              const operate_parameters &operate_params, bool accede = true);
+  /// \brief Create new or open existing database (C-string path overload).
+  /// \param pathname        The path to the database.
+  /// \param create_params   The create parameters, see \ref create_parameters.
+  /// \param operate_params  The operate parameters, see \ref operate_parameters.
+  /// \param accede          Open with the parameters the database was created with.
+  /// \throws mdbx::error on failure.
+  explicit env_managed(const char *pathname, const create_parameters &create_params,
+                       const operate_parameters &operate_params, bool accede = true);
 
   /// \brief Opens an environment instance using a specific meta-page
   /// for checking and recovery.
@@ -1089,18 +1550,43 @@ public:
   ///                         set before opening; zero means the library
   ///                         default. The recovery tooling uses 2 (MainDB+GC).
   ///
+  /// \returns The opened managed environment.
   /// \see ::mdbx_env_open_for_recovery()
   static env_managed open_for_recovery(const char *pathname, unsigned target_meta, bool writeable,
                                        unsigned max_maps = 2);
+  /// \copybrief env_managed::open_for_recovery(const char *, unsigned, bool, unsigned)
+  /// \param pathname     The path to the database file.
+  /// \param target_meta  The number of the meta-page to use (0..2), or any value for the default behavior.
+  /// \param writeable    Whether to open in read-write mode.
+  /// \param max_maps     The maximum number of named tables/maps.
+  /// \returns The opened managed environment.
   static env_managed open_for_recovery(const ::std::string &pathname, unsigned target_meta, bool writeable,
                                        unsigned max_maps = 2);
 #ifdef MDBX_STD_FILESYSTEM_PATH
+  /// \copybrief env_managed::open_for_recovery(const char *, unsigned, bool, unsigned)
+  /// \param pathname     The path to the database file.
+  /// \param target_meta  The number of the meta-page to use (0..2), or any value for the default behavior.
+  /// \param writeable    Whether to open in read-write mode.
+  /// \param max_maps     The maximum number of named tables/maps.
+  /// \returns The opened managed environment.
   static env_managed open_for_recovery(const MDBX_STD_FILESYSTEM_PATH &pathname, unsigned target_meta, bool writeable,
                                        unsigned max_maps = 2);
 #endif /* MDBX_STD_FILESYSTEM_PATH */
 #if defined(_WIN32) || defined(_WIN64) || defined(DOXYGEN)
+  /// \copybrief env_managed::open_for_recovery(const char *, unsigned, bool, unsigned)
+  /// \param pathname     The path to the database file.
+  /// \param target_meta  The number of the meta-page to use (0..2), or any value for the default behavior.
+  /// \param writeable    Whether to open in read-write mode.
+  /// \param max_maps     The maximum number of named tables/maps.
+  /// \returns The opened managed environment.
   static env_managed open_for_recovery(const wchar_t *pathname, unsigned target_meta, bool writeable,
                                        unsigned max_maps = 2);
+  /// \copybrief env_managed::open_for_recovery(const char *, unsigned, bool, unsigned)
+  /// \param pathname     The path to the database file.
+  /// \param target_meta  The number of the meta-page to use (0..2), or any value for the default behavior.
+  /// \param writeable    Whether to open in read-write mode.
+  /// \param max_maps     The maximum number of named tables/maps.
+  /// \returns The opened managed environment.
   static env_managed open_for_recovery(const ::std::wstring &pathname, unsigned target_meta, bool writeable,
                                        unsigned max_maps = 2);
 #endif /* Windows */
@@ -1121,7 +1607,11 @@ public:
   /// (meta-page update) will rolledback for consistency guarantee.
   void close(bool dont_sync = false);
 
+  /// \brief Move constructor.
   env_managed(env_managed &&) = default;
+  /// \brief Move assignment operator.
+  /// \param other  The source managed environment to be moved from.
+  /// \returns A reference to this instance.
   env_managed &operator=(env_managed &&other) noexcept;
   env_managed(const env_managed &) = delete;
   env_managed &operator=(const env_managed &) = delete;
@@ -1141,6 +1631,10 @@ using create_parameters = env_managed::create_parameters;
 
 /// \brief Converts a fraction to a string of decimal digits without using
 /// floating-point operations. \see ::mdbx_ratio2digits()
+/// \param numerator  The numerator of the fraction.
+/// \param denominator  The denominator of the fraction.
+/// \param precision  The number of digits after the decimal point.
+/// \returns The resulting string.
 inline ::std::string ratio2digits(uint64_t numerator, uint64_t denominator, int precision) {
   char buffer[64];
   return ::mdbx_ratio2digits(numerator, denominator, precision, buffer, sizeof(buffer));
@@ -1148,6 +1642,9 @@ inline ::std::string ratio2digits(uint64_t numerator, uint64_t denominator, int 
 
 /// \brief Converts a fraction to a percentage string without using
 /// floating-point operations. \see ::mdbx_ratio2percents()
+/// \param value  The value.
+/// \param whole  The whole value, i.e. the denominator.
+/// \returns The resulting string.
 inline ::std::string ratio2percents(uint64_t value, uint64_t whole) {
   char buffer[64];
   return ::mdbx_ratio2percents(value, whole, buffer, sizeof(buffer));
@@ -1155,6 +1652,9 @@ inline ::std::string ratio2percents(uint64_t value, uint64_t whole) {
 
 /// \brief Quickly finds out whether readahead is reasonable for the given
 /// data volume and redundancy. \see ::mdbx_is_readahead_reasonable()
+/// \param volume  The volume in bytes.
+/// \param redundancy  The `redundancy` argument.
+/// \returns `true` on success, `false` otherwise.
 inline bool is_readahead_reasonable(size_t volume, intptr_t redundancy) {
   return ::mdbx_is_readahead_reasonable(volume, redundancy) != 0;
 }
@@ -1162,12 +1662,18 @@ inline bool is_readahead_reasonable(size_t volume, intptr_t redundancy) {
 /// \brief Returns the built-in data (value) comparator for the given table
 /// flags, which is useful as a fallback when implementing custom comparators.
 /// \see ::mdbx_get_datacmp()
+/// \param flags  The flags.
+/// \returns The built-in data (value) comparator for the given table flags, which is useful as a fallback when
+/// implementing custom comparators. \see ::mdbx_get_datacmp().
 inline MDBX_cmp_func get_datacmp(MDBX_db_flags_t flags) { return ::mdbx_get_datacmp(flags); }
 
 /// \brief Sets up the global log-level, debug options and logger.
 /// \returns A non-negative value on success (previous settings packed into
 /// the low 16 bits and high 16 bits), or a negative error.
 /// \see ::mdbx_setup_debug()
+/// \param log_level  The log level.
+/// \param debug_flags  The debug flags.
+/// \param logger  The logger callback.
 inline int setup_debug(MDBX_log_level_t log_level = MDBX_LOG_DONTCHANGE,
                        MDBX_debug_flags_t debug_flags = MDBX_DBG_DONTCHANGE,
                        MDBX_debug_func logger = MDBX_LOGGER_DONTCHANGE) {
@@ -1178,6 +1684,11 @@ inline int setup_debug(MDBX_log_level_t log_level = MDBX_LOG_DONTCHANGE,
 /// preformatted messages.
 /// \returns A non-negative value on success, or a negative error.
 /// \see ::mdbx_setup_debug_nofmt()
+/// \param log_level  The log level.
+/// \param debug_flags  The debug flags.
+/// \param logger  The logger callback.
+/// \param logger_buffer  The logger buffer.
+/// \param logger_buffer_size  The size of the logger buffer.
 inline int setup_debug_nofmt(MDBX_log_level_t log_level, MDBX_debug_flags_t debug_flags, MDBX_debug_func_nofmt logger,
                              char *logger_buffer, size_t logger_buffer_size) {
   return ::mdbx_setup_debug_nofmt(log_level, debug_flags, logger, logger_buffer, logger_buffer_size);
@@ -1185,6 +1696,7 @@ inline int setup_debug_nofmt(MDBX_log_level_t log_level, MDBX_debug_flags_t debu
 
 /// \brief Sets a callback for assertion failures, called before printing the
 /// message and aborting. \see ::mdbx_set_panic()
+/// \param func  The function name.
 inline void set_panic(MDBX_panic_func func) { ::mdbx_set_panic(func); }
 
 // > dist-cutoff-begin

@@ -115,14 +115,20 @@ template <typename T, typename A> struct swap_alloc<T, A, true> {
 
 } // namespace allocation_aware_details
 
+/// \brief The default capacity policy for the \ref buffer class: rounds the allocated
+/// capacity and advises whether to grow, keep or shrink it.
 struct default_capacity_policy {
+  /// \brief Policy constants.
   enum : size_t {
-    extra_inplace_storage = 0,
-    inplace_storage_size_rounding = 16,
-    pettiness_threshold = 64,
-    max_reserve = 65536
+    extra_inplace_storage = 0,        ///< \brief Extra bytes in the inplace storage.
+    inplace_storage_size_rounding = 16, ///< \brief Rounding of the inplace storage size.
+    pettiness_threshold = 64,         ///< \brief The threshold to avoid petty reallocations.
+    max_reserve = 65536               ///< \brief The maximum reserve over the requested capacity.
   };
 
+  /// \brief Rounds the given value up to the \ref pettiness_threshold granularity.
+  /// \param value  The value to be rounded.
+  /// \returns The rounded value.
   static MDBX_CXX11_CONSTEXPR size_t round(const size_t value) {
     static_assert((pettiness_threshold & (pettiness_threshold - 1)) == 0, "pettiness_threshold must be a power of 2");
     static_assert(pettiness_threshold >= sizeof(uint64_t), "pettiness_threshold must be > 7");
@@ -130,6 +136,11 @@ struct default_capacity_policy {
     return (value + pettiness_threshold - 1) & pettiness_mask;
   }
 
+  /// \brief Advises the capacity for the requested size.
+  /// \param current  The currently allocated capacity.
+  /// \param wanna    The requested capacity.
+  /// \param inplace  The size of the inplace storage available without allocation.
+  /// \returns The advised capacity to be (re)allocated.
   static MDBX_CXX11_CONSTEXPR size_t advise(const size_t current, const size_t wanna, const size_t inplace) {
     static_assert(max_reserve % pettiness_threshold == 0, "max_reserve must be a multiple of pettiness_threshold");
     static_assert(max_reserve / 3 > pettiness_threshold, "max_reserve must be > pettiness_threshold * 3");
@@ -156,16 +167,29 @@ struct default_capacity_policy {
 struct buffer_tag {};
 
 /// \brief The chunk of data stored inside the buffer or located outside it.
+///
+/// \note Unlike the base `slice`, a buffer by default owns its content: the
+/// constructors from strings/views copy the bytes (freestanding modality), so
+/// there are no lifetime requirements on the source. The `make_reference=true`
+/// overloads switch to slice-like behavior: the buffer just refers to external
+/// data, which must outlive the buffer (the same temporary-lifetime rules as
+/// for `slice` apply). The rvalue-string constructor steals the string's
+/// storage and leaves the source empty.
 template <class ALLOCATOR, typename CAPACITY_POLICY>
 class MDBX_MSVC_DECLSPEC_EMPTY_BASES buffer : public slice, public buffer_tag {
 public:
+  /// \brief The base \ref slice class.
   using inherited = slice;
 #if !defined(_MSC_VER) || _MSC_VER > 1900
+  /// \brief The allocator type rebound for the internal storage.
   using allocator_type = typename ::std::allocator_traits<ALLOCATOR>::template rebind_alloc<uint64_t>;
 #else
+  /// \brief The allocator type rebound for the internal storage.
   using allocator_type = typename ALLOCATOR::template rebind<uint64_t>::other;
 #endif /* MSVC is mad */
+  /// \brief The `allocator_type` traits.
   using allocator_traits = ::std::allocator_traits<allocator_type>;
+  /// \brief The capacity policy type, see \ref default_capacity_policy.
   using reservation_policy = CAPACITY_POLICY;
   enum : size_t {
     max_length = MDBX_MAXDATASIZE,
@@ -360,7 +384,8 @@ private:
           if (MDBX_LIKELY(length))
             MDBX_CXX20_LIKELY {
               if (external_content)
-                memcpy(new_place, content, length);
+                /* `content` may refer into the own storage, so use memmove */
+                ::std::memmove(new_place, content, length);
               else {
                 const size_t old_headroom = static_cast<const byte *>(content) - bin_.address();
                 MDBX_INLINE_API_ASSERT(old_capacity >= old_headroom + length);
@@ -385,9 +410,11 @@ private:
         const auto pair = allocate_storage(new_capacity);
         MDBX_INLINE_API_ASSERT(pair.second >= new_capacity);
         byte *const new_place = static_cast<byte *>(to_address(pair.first)) + wanna_headroom;
-        bin_.make_allocated(pair);
+        /* Copy the content before make_allocated(), since the latter overwrites
+         * the inplace storage (the source of `content` for reshape<false>). */
         if (MDBX_LIKELY(length))
           MDBX_CXX20_LIKELY memcpy(new_place, content, length);
+        bin_.make_allocated(pair);
         return new_place;
       }
 
@@ -553,6 +580,12 @@ private:
     return silo_begin() + silo_.capacity();
   }
 
+  /* `data` overlaps the own tailroom, which append_producer() overwrites in place while still reading `data` */
+  MDBX_NOTHROW_PURE_FUNCTION bool reaches_tailroom(const struct slice &data) const noexcept {
+    return data.length() && is_freestanding() && uintptr_t(data.byte_ptr()) < uintptr_t(silo_end()) &&
+           uintptr_t(data.end_byte_ptr()) > uintptr_t(inherited::end_byte_ptr());
+  }
+
   struct data_preserver : public exception_thunk {
     buffer data;
     data_preserver(const allocator_type &alloc) : data(alloc) {}
@@ -576,58 +609,77 @@ public:
   /// \todo buffer& operator<<(buffer&, ...) for writing
   /// \todo template<class X> key(X) for encoding keys while writing
 
+  /// \brief The move-assignment allocator-propagation helper (internal use).
   using move_assign_alloc = typename silo::move_assign_alloc;
+  /// \brief The copy-assignment allocator-propagation helper (internal use).
   using copy_assign_alloc = typename silo::copy_assign_alloc;
+  /// \brief The swap allocator-propagation helper (internal use).
   using swap_alloc = typename silo::swap_alloc;
+  /// \brief Checks whether the swap operation is noexcept for this allocator.
+  /// \returns `true` if swapping never throws.
   static constexpr bool is_swap_nothrow() noexcept { return swap_alloc::is_nothrow(); }
 
   /// \brief Returns the associated allocator.
+  /// \returns A copy of the allocator associated with the buffer.
   MDBX_CXX20_CONSTEXPR allocator_type get_allocator() const { return silo_.get_allocator(); }
 
   /// \brief Checks whether data chunk stored inside the buffer, otherwise
   /// buffer just refers to data located outside the buffer.
+  /// \returns `true` if the buffer owns its data.
   MDBX_NOTHROW_PURE_FUNCTION MDBX_CXX20_CONSTEXPR bool is_freestanding() const noexcept {
     static_assert(size_t(-intptr_t(max_length)) > max_length, "WTF?");
-    return size_t(inherited::byte_ptr() - silo_begin()) <= silo_.capacity();
+    const auto begin_ptr = inherited::byte_ptr();
+    if (MDBX_UNLIKELY(begin_ptr == nullptr))
+      return false;
+    return size_t(begin_ptr - silo_begin()) <= silo_.capacity();
   }
 
   /// \brief Checks whether data chunk stored in place within the buffer instance itself,
   /// without reference outside nor allocating additional memory resources,
   /// which also implies buffer is freestanding.
+  /// \returns `true` if the data is stored inplace.
   MDBX_NOTHROW_PURE_FUNCTION MDBX_CXX20_CONSTEXPR bool is_inplace() const noexcept {
-    return silo_.is_inplace(inherited::data());
+    return inherited::data() != nullptr && silo_.is_inplace(inherited::data());
   }
 
   /// \brief Checks whether the buffer just refers to data located outside the buffer, rather than stores it.
+  /// \returns `true` if the buffer refers to external data.
   MDBX_NOTHROW_PURE_FUNCTION MDBX_CXX20_CONSTEXPR bool is_reference() const noexcept { return !is_freestanding(); }
 
   /// \brief Returns current modality of buffer content.
+  /// \returns The \ref modality of the content storage.
   MDBX_NOTHROW_PURE_FUNCTION MDBX_CXX20_CONSTEXPR modality content_modality() const noexcept {
     return is_freestanding() ? (is_inplace() ? modality::inplace : modality::allocated) : modality::reference;
   }
 
   /// \brief Returns the number of bytes that can be held in currently allocated storage.
+  /// \returns The capacity in bytes, zero for a referencing buffer.
   MDBX_NOTHROW_PURE_FUNCTION MDBX_CXX20_CONSTEXPR size_t capacity() const noexcept {
     return is_freestanding() ? silo_.capacity() : 0;
   }
 
   /// \brief Returns the number of bytes available in the currently allocated storage in front of the data.
+  /// \returns The headroom in bytes, zero for a referencing buffer.
   MDBX_NOTHROW_PURE_FUNCTION MDBX_CXX20_CONSTEXPR size_t headroom() const noexcept {
     return is_freestanding() ? inherited::byte_ptr() - silo_begin() : 0;
   }
 
   /// \brief Returns the number of bytes that available in currently allocated storage after the data.
+  /// \returns The tailroom in bytes, zero for a referencing buffer.
   MDBX_NOTHROW_PURE_FUNCTION MDBX_CXX20_CONSTEXPR size_t tailroom() const noexcept {
     return is_freestanding() ? silo_end() - inherited::end_byte_ptr() : 0;
   }
 
   /// \brief Returns casted to const pointer to byte an address of data.
+  /// \returns The read-only pointer to the first byte.
   MDBX_CXX11_CONSTEXPR const byte *byte_ptr() const noexcept { return inherited::byte_ptr(); }
 
   /// \brief Returns casted to const pointer to byte an end of data.
+  /// \returns The read-only pointer just after the last byte.
   MDBX_CXX11_CONSTEXPR const byte *end_byte_ptr() const noexcept { return inherited::end_byte_ptr(); }
 
   /// \brief Returns casted to pointer to byte an address of data.
+  /// \returns The mutable pointer to the first byte.
   /// \pre REQUIRES: The buffer should store data chunk, but not referenced to an external one.
   MDBX_CXX11_CONSTEXPR byte *byte_ptr() noexcept {
     MDBX_CONSTEXPR_ASSERT(is_freestanding());
@@ -635,6 +687,7 @@ public:
   }
 
   /// \brief Returns casted to pointer to byte an end of data.
+  /// \returns The mutable pointer just after the last byte.
   /// \pre REQUIRES: The buffer should store data chunk, but not referenced to an external one.
   MDBX_CXX11_CONSTEXPR byte *end_byte_ptr() noexcept {
     MDBX_CONSTEXPR_ASSERT(is_freestanding());
@@ -642,12 +695,15 @@ public:
   }
 
   /// \brief Returns casted to const pointer to char an address of data.
+  /// \returns The read-only pointer to the first byte.
   MDBX_CXX11_CONSTEXPR const char *char_ptr() const noexcept { return inherited::char_ptr(); }
 
   /// \brief Returns casted to const pointer to char an end of data.
+  /// \returns The read-only pointer just after the last byte.
   MDBX_CXX11_CONSTEXPR const char *end_char_ptr() const noexcept { return inherited::end_char_ptr(); }
 
   /// \brief Returns casted to pointer to char an address of data.
+  /// \returns The mutable pointer to the first byte.
   /// \pre REQUIRES: The buffer should store data chunk, but not referenced to an external one.
   MDBX_CXX11_CONSTEXPR char *char_ptr() noexcept {
     MDBX_CONSTEXPR_ASSERT(is_freestanding());
@@ -655,6 +711,7 @@ public:
   }
 
   /// \brief Returns casted to pointer to char an end of data.
+  /// \returns The mutable pointer just after the last byte.
   /// \pre REQUIRES: The buffer should store data chunk, but not referenced to an external one.
   MDBX_CXX11_CONSTEXPR char *end_char_ptr() noexcept {
     MDBX_CONSTEXPR_ASSERT(is_freestanding());
@@ -662,18 +719,23 @@ public:
   }
 
   /// \brief Return a const pointer to the beginning of the referenced data.
+  /// \returns The read-only pointer to the data.
   MDBX_CXX11_CONSTEXPR const void *data() const noexcept { return const_data(); }
 
   /// \brief Return a const pointer to the end of the referenced data.
-  MDBX_CXX11_CONSTEXPR const void *end() const noexcept { return const_end(); }
+  /// \returns The read-only pointer just after the last byte.
+  MDBX_CXX11_CONSTEXPR const byte *end() const noexcept { return static_cast<const byte *>(const_end()); }
 
   /// \brief Return a const pointer to the beginning of the referenced data.
+  /// \returns The read-only pointer to the data.
   MDBX_CXX11_CONSTEXPR const void *const_data() const noexcept { return inherited::data(); }
 
   /// \brief Return a const pointer to the end of the referenced data.
+  /// \returns The read-only pointer just after the last byte.
   MDBX_CXX11_CONSTEXPR const void *const_end() const noexcept { return inherited::end(); }
 
   /// \brief Return a pointer to the beginning of the referenced data.
+  /// \returns The mutable pointer to the data.
   /// \pre REQUIRES: The buffer should store data chunk, but not referenced to an external one.
   MDBX_CXX11_CONSTEXPR void *data() noexcept {
     MDBX_CONSTEXPR_ASSERT(is_freestanding());
@@ -681,25 +743,48 @@ public:
   }
 
   /// \brief Return a pointer to the end of the referenced data.
+  /// \returns The mutable pointer just after the last byte.
   /// \pre REQUIRES: The buffer should store data chunk, but not referenced to an external one.
-  MDBX_CXX11_CONSTEXPR void *end() noexcept {
+  MDBX_CXX11_CONSTEXPR byte *end() noexcept {
     MDBX_CONSTEXPR_ASSERT(is_freestanding());
-    return const_cast<void *>(inherited::end());
+    return const_cast<byte *>(inherited::end_byte_ptr());
   }
 
   /// \brief Returns the number of bytes.
+  /// \returns The length of the data in bytes.
   MDBX_NOTHROW_PURE_FUNCTION MDBX_CXX14_CONSTEXPR size_t length() const noexcept {
     return MDBX_CONSTEXPR_ASSERT(is_reference() || inherited::end_byte_ptr() <= silo_end()), inherited::length();
   }
 
   /// \brief Set length of data.
+  /// \param bytes  The new length of the data.
+  /// \returns A reference to this instance.
   MDBX_CXX14_CONSTEXPR buffer &set_length(size_t bytes) {
     MDBX_CONSTEXPR_ASSERT(is_reference() || inherited::byte_ptr() + bytes <= silo_end());
     inherited::set_length(bytes);
     return *this;
   }
 
+  /// \brief Resizes the buffer to contain `size` bytes, filling the added
+  /// space with zeroes. STL-compatible counterpart of \ref set_length().
+  /// \param size  The new length of the data.
+  void resize(size_t size) { resize(size, byte(0)); }
+
+  /// \brief Resizes the buffer to contain `size` bytes, filling the added
+  /// space with `value`. STL-compatible counterpart of \ref set_length().
+  /// \param size   The new length of the data.
+  /// \param value  The byte to fill the added space with.
+  void resize(size_t size, byte value) {
+    if (MDBX_UNLIKELY(size > length())) {
+      reserve_tailroom(size - length());
+      memset(end_byte_ptr(), value, size - length());
+    }
+    inherited::set_length(size);
+  }
+
   /// \brief Sets the length by specifying the end of the data.
+  /// \param ptr  The address just after the last byte of the data.
+  /// \returns A reference to this instance.
   MDBX_CXX14_CONSTEXPR buffer &set_end(const void *ptr) {
     MDBX_CONSTEXPR_ASSERT(static_cast<const char *>(ptr) >= char_ptr());
     return set_length(static_cast<const char *>(ptr) - char_ptr());
@@ -713,82 +798,174 @@ public:
       insulate();
   }
 
+  /// \brief Constructs an empty buffer.
   MDBX_CXX20_CONSTEXPR buffer() noexcept = default;
+  /// \brief Constructs an empty buffer with the given allocator.
+  /// \param alloc  The allocator for the buffer storage.
   MDBX_CXX20_CONSTEXPR buffer(const allocator_type &alloc) noexcept : silo_(alloc) {}
+  /// \brief Constructs a buffer from the given slice, either copying or referencing it.
+  /// \param src             The source slice.
+  /// \param make_reference  Make the buffer a reference to the source data instead of copying it.
+  /// \param alloc           The allocator for the buffer storage.
   MDBX_CXX20_CONSTEXPR buffer(const struct slice &src, bool make_reference,
                               const allocator_type &alloc = allocator_type());
 
+  /// \brief Constructs a buffer from a memory range, either copying or referencing it.
+  /// \param ptr             The address of the source data.
+  /// \param bytes           The number of bytes of the source data.
+  /// \param make_reference  Make the buffer a reference to the source data instead of copying it.
+  /// \param alloc           The allocator for the buffer storage.
   MDBX_CXX20_CONSTEXPR
   buffer(const void *ptr, size_t bytes, bool make_reference, const allocator_type &alloc = allocator_type())
       : buffer(inherited(ptr, bytes), make_reference, alloc) {}
 
+  /// \brief Constructs a buffer from a null-terminated string, either copying or referencing it.
+  /// \param c_str           The source null-terminated string.
+  /// \param make_reference  Make the buffer a reference to the source data instead of copying it.
+  /// \param alloc           The allocator for the buffer storage.
   buffer(const char *c_str, bool make_reference, const allocator_type &alloc = allocator_type())
       : buffer(inherited(c_str), make_reference, alloc) {}
 
 #if defined(DOXYGEN) || (defined(__cpp_lib_string_view) && __cpp_lib_string_view >= 201606L)
+  /// \brief Constructs a buffer from a string view, either copying or referencing it.
+  /// \param view            The source string view.
+  /// \param make_reference  Make the buffer a reference to the source data instead of copying it.
+  /// \param alloc           The allocator for the buffer storage.
   template <class CHAR, class T>
   MDBX_CXX20_CONSTEXPR buffer(const ::std::basic_string_view<CHAR, T> &view, bool make_reference,
                               const allocator_type &alloc = allocator_type())
       : buffer(inherited(view), make_reference, alloc) {}
 #endif /* __cpp_lib_string_view >= 201606L */
 
+  /// \brief Constructs a buffer storing a copy of the given slice; empty or null
+  /// slices are referenced instead of copied.
+  /// \param src    The source slice.
+  /// \param alloc  The allocator for the buffer storage.
   MDBX_CXX20_CONSTEXPR
   buffer(const struct slice &src, const allocator_type &alloc = allocator_type())
       : buffer(src, src.empty() || src.is_null(), alloc) {}
 
+  /// \brief Copy constructor.
+  /// \param src  The source buffer.
   MDBX_CXX20_CONSTEXPR
   explicit buffer(const buffer &src)
       : buffer(src, allocator_traits::select_on_container_copy_construction(src.get_allocator())) {}
 
+  /// \brief Constructs a buffer storing a copy of the given memory range.
+  /// \param ptr    The address of the source data.
+  /// \param bytes  The number of bytes of the source data.
+  /// \param alloc  The allocator for the buffer storage.
   MDBX_CXX20_CONSTEXPR
   buffer(const void *ptr, size_t bytes, const allocator_type &alloc = allocator_type())
       : buffer(inherited(ptr, bytes), alloc) {}
 
   /// \brief Copies `bytes` from `ptr`; keeps an integer length away from `buffer(const char *, bool)`.
+  /// \param ptr  The address of the source data.
+  /// \param bytes  The number of bytes of the source data.
+  /// \param alloc  The allocator for the buffer storage.
   template <typename INT, typename ::std::enable_if<::std::is_integral<INT>::value && !::std::is_same<INT, bool>::value,
                                                     int>::type = 0>
   MDBX_CXX20_CONSTEXPR buffer(const char *ptr, INT bytes, const allocator_type &alloc = allocator_type())
       : buffer(static_cast<const void *>(ptr), size_t(bytes), alloc) {}
 
+  /// \brief Takes `nullptr`, so that a literal `0` or `NULL` is ambiguous instead of a null `const char *`.
+  /// \note A null pointer with a non-zero length would dereference address
+  ///   zero; only `nullptr` with zero bytes (an empty buffer) is accepted.
+  /// \param bytes  The number of bytes of the source data.
+  /// \param alloc  The allocator for the buffer storage.
+  template <typename INT, typename ::std::enable_if<::std::is_integral<INT>::value && !::std::is_same<INT, bool>::value,
+                                                    int>::type = 0>
+  MDBX_CXX20_CONSTEXPR buffer(::std::nullptr_t, INT bytes, const allocator_type &alloc = allocator_type())
+      : buffer(static_cast<const void *>(nullptr), check_nullptr_length(size_t(bytes)), alloc) {}
+
+  /// \brief Null pointer with an explicit `make_reference` flag.
+  /// \note Exists to keep `buffer(nullptr, N, false)` unambiguous on the
+  ///   Windows compilers where the generic `(const void *, size_t, bool)`
+  ///   overload and the integral-length templates otherwise collide on the
+  ///   `bool` third argument ([#142](https://github.com/Mithril-mine/libmdbx-devel/issues/142)).
+  /// \param bytes  The number of bytes of the source data.
+  /// \param make_reference  Make the buffer a reference to the source data instead of copying it.
+  template <typename INT, typename ::std::enable_if<::std::is_integral<INT>::value && !::std::is_same<INT, bool>::value,
+                                                    int>::type = 0>
+  MDBX_CXX20_CONSTEXPR buffer(::std::nullptr_t, INT bytes, bool make_reference)
+      : buffer(static_cast<const void *>(nullptr), check_nullptr_length(size_t(bytes)), make_reference) {}
+
+  /// \brief Creates a buffer that stores a copy of the string's content.
+  /// The source string may be a temporary: the bytes are copied immediately,
+  /// so there are no lifetime requirements (unlike mdbx::slice).
+  /// \param str  The source string.
+  /// \param alloc  The allocator for the buffer storage.
   template <class CHAR, class T, class A>
   explicit MDBX_CXX20_CONSTEXPR buffer(const ::std::basic_string<CHAR, T, A> &str,
                                        const allocator_type &alloc = allocator_type())
       : buffer(inherited(str), false, alloc) {}
 
+  /// \brief Creates a buffer that either stores a copy of the string's content
+  /// (make_reference=false, the default choice) or just refers to it
+  /// (make_reference=true, then the string must outlive the buffer —
+  /// the same lifetime rules as for mdbx::slice).
+  /// \param str  The source string.
+  /// \param make_reference  Make the buffer a reference to the source data instead of copying it.
+  /// \param alloc  The allocator for the buffer storage.
   template <class CHAR, class T, class A>
   explicit MDBX_CXX20_CONSTEXPR buffer(const ::std::basic_string<CHAR, T, A> &str, bool make_reference,
                                        const allocator_type &alloc = allocator_type())
       : buffer(inherited(str), make_reference, alloc) {}
 
+  /// \brief Constructs a buffer storing a copy of a null-terminated string.
+  /// \param c_str  The source null-terminated string.
+  /// \param alloc  The allocator for the buffer storage.
   MDBX_CXX20_CONSTEXPR
   buffer(const char *c_str, const allocator_type &alloc = allocator_type()) : buffer(inherited(c_str), alloc) {}
 
 #if defined(DOXYGEN) || (defined(__cpp_lib_string_view) && __cpp_lib_string_view >= 201606L)
+  /// \brief Constructs a buffer storing a copy of a string view.
+  /// \param view   The source string view.
+  /// \param alloc  The allocator for the buffer storage.
   template <class CHAR, class T>
   MDBX_CXX20_CONSTEXPR buffer(const ::std::basic_string_view<CHAR, T> &view,
                               const allocator_type &alloc = allocator_type())
       : buffer(inherited(view), alloc) {}
 #endif /* __cpp_lib_string_view >= 201606L */
 
+  /// \brief Constructs an empty buffer with the given headroom and tailroom.
+  /// \param head_room  The number of bytes to reserve in front of the data.
+  /// \param tail_room  The number of bytes to reserve after the data.
+  /// \param alloc      The allocator for the buffer storage.
   buffer(size_t head_room, size_t tail_room, const allocator_type &alloc = allocator_type())
       : silo_(check_length(head_room, tail_room), alloc) {
     iov_base = silo_.get(head_room);
     MDBX_INLINE_API_ASSERT(iov_len == 0);
   }
 
+  /// \brief Constructs an empty buffer with the given capacity.
+  /// \param capacity  The capacity in bytes to allocate.
+  /// \param alloc     The allocator for the buffer storage.
   buffer(size_t capacity, const allocator_type &alloc = allocator_type()) : silo_(check_length(capacity), alloc) {
     iov_base = silo_.get();
     MDBX_INLINE_API_ASSERT(iov_len == 0);
   }
 
+  /// \brief Constructs a buffer storing a copy of the slice with reserved headroom/tailroom.
+  /// \param head_room  The number of bytes to reserve in front of the data.
+  /// \param src        The source slice.
+  /// \param tail_room  The number of bytes to reserve after the data.
+  /// \param alloc      The allocator for the buffer storage.
   buffer(size_t head_room, const slice &src, size_t tail_room, const allocator_type &alloc = allocator_type())
       : silo_(check_length(head_room, src.length(), tail_room), alloc) {
     iov_len = src.length();
     iov_base = memcpy(silo_.get(head_room), src.data(), iov_len);
   }
 
+  /// \brief Constructs a buffer owning a copy of the slice when its data is dirty
+  /// within the given transaction, otherwise a reference to it.
+  /// \param transaction  The transaction to check the data dirtiness against.
+  /// \param src          The source slice.
+  /// \param alloc        The allocator for the buffer storage.
   inline buffer(const txn &transaction, const slice &src, const allocator_type &alloc = allocator_type());
 
+  /// \brief Move constructor: the source buffer is invalidated.
+  /// \param src  The source buffer to be moved from.
   buffer(buffer &&src) noexcept(::std::is_nothrow_move_constructible<allocator_type>::value)
       : inherited(/* no move here */ src), silo_(::std::move(src.silo_), src.is_reference()) {
     /* CoverityScan issues an erroneous warning here about using an uninitialized object. Which is not true,
@@ -801,17 +978,30 @@ public:
   }
 
   /// \brief Build a null buffer which zero length and refers to null address.
+  /// \returns The null buffer instance.
   MDBX_CXX14_CONSTEXPR static buffer null() noexcept { return buffer(inherited::null()); }
 
-  /// \brief Build an invalid buffer which non-zero length and refers to null address.
+  /// \brief Builds an invalid buffer that has a non-zero length and refers to
+  /// a null address.
+  /// \returns The invalid buffer instance.
   MDBX_CXX14_CONSTEXPR static buffer invalid() noexcept { return buffer(inherited::invalid()); }
 
+  /// \brief Wraps an object of a standard-layout type into a buffer.
+  /// \param pod             The object to be wrapped.
+  /// \param make_reference  Make the buffer a reference to the object instead of copying it.
+  /// \param alloc           The allocator for the buffer storage.
+  /// \returns The buffer wrapping the object.
   template <typename POD>
   static buffer wrap(const POD &pod, bool make_reference = false, const allocator_type &alloc = allocator_type()) {
     return buffer(inherited::wrap(pod), make_reference, alloc);
   }
 
   /// \brief Returns a new buffer with a hexadecimal dump of the slice content.
+  /// \param source  The source object.
+  /// \param uppercase  Use uppercase letters for hexadecimal digits.
+  /// \param wrap_width  The width to wrap lines with a newline, zero means no wrapping.
+  /// \param alloc  The allocator for the buffer storage.
+  /// \returns A new buffer with a hexadecimal dump of the slice content.
   static buffer hex(const slice &source, bool uppercase = false, unsigned wrap_width = 0,
                     const allocator_type &alloc = allocator_type()) {
     return source.template encode_hex<ALLOCATOR, CAPACITY_POLICY>(uppercase, wrap_width, alloc);
@@ -819,22 +1009,41 @@ public:
 
   /// \brief Returns a new buffer with a
   /// [Base58](https://en.wikipedia.org/wiki/Base58) dump of the slice content.
+  /// \param source  The source object.
+  /// \param wrap_width  The width to wrap lines with a newline, zero means no wrapping.
+  /// \param alloc  The allocator for the buffer storage.
+  /// \returns A new buffer with a [Base58](https://en.wikipedia.org/wiki/Base58) dump of the slice content.
   static buffer base58(const slice &source, unsigned wrap_width = 0, const allocator_type &alloc = allocator_type()) {
     return source.template encode_base58<ALLOCATOR, CAPACITY_POLICY>(wrap_width, alloc);
   }
   /// \brief Returns a new buffer with a
   /// [Base64](https://en.wikipedia.org/wiki/Base64) dump of the slice content.
+  /// \param source  The source object.
+  /// \param wrap_width  The width to wrap lines with a newline, zero means no wrapping.
+  /// \param alloc  The allocator for the buffer storage.
+  /// \returns A new buffer with a [Base64](https://en.wikipedia.org/wiki/Base64) dump of the slice content.
   static buffer base64(const slice &source, unsigned wrap_width = 0, const allocator_type &alloc = allocator_type()) {
     return source.template encode_base64<ALLOCATOR, CAPACITY_POLICY>(wrap_width, alloc);
   }
 
   /// \brief Returns a new buffer with a hexadecimal dump of the given pod.
+  /// \param pod  The object of a standard-layout type.
+  /// \param uppercase  Use uppercase letters for hexadecimal digits.
+  /// \param wrap_width  The width to wrap lines with a newline, zero means no wrapping.
+  /// \param alloc  The allocator for the buffer storage.
+  /// \returns A new buffer with a hexadecimal dump of the given pod.
   template <typename POD, typename ::std::enable_if<!::std::is_constructible<slice, const POD &>::value, int>::type = 0>
   static buffer hex(const POD &pod, bool uppercase = false, unsigned wrap_width = 0,
                     const allocator_type &alloc = allocator_type()) {
     return hex(inherited::wrap(pod), uppercase, wrap_width, alloc);
   }
 
+  /// \brief Returns a new buffer with a
+  /// [Base58](https://en.wikipedia.org/wiki/Base58) dump of the given pod.
+  /// \param pod         The object of a standard-layout type.
+  /// \param wrap_width  The width to wrap lines with a newline, zero means no wrapping.
+  /// \param alloc       The allocator for the buffer storage.
+  /// \returns A new buffer with a Base58 dump of the given pod.
   template <typename POD, typename ::std::enable_if<!::std::is_constructible<slice, const POD &>::value, int>::type = 0>
   static buffer base58(const POD &pod, unsigned wrap_width = 0, const allocator_type &alloc = allocator_type()) {
     return base58(inherited::wrap(pod), wrap_width, alloc);
@@ -842,12 +1051,20 @@ public:
 
   /// \brief Returns a new buffer with a
   /// [Base64](https://en.wikipedia.org/wiki/Base64) dump of the given pod.
+  /// \param pod  The object of a standard-layout type.
+  /// \param wrap_width  The width to wrap lines with a newline, zero means no wrapping.
+  /// \param alloc  The allocator for the buffer storage.
+  /// \returns A new buffer with a [Base64](https://en.wikipedia.org/wiki/Base64) dump of the given pod.
   template <typename POD, typename ::std::enable_if<!::std::is_constructible<slice, const POD &>::value, int>::type = 0>
   static buffer base64(const POD &pod, unsigned wrap_width = 0, const allocator_type &alloc = allocator_type()) {
     return base64(inherited::wrap(pod), wrap_width, alloc);
   }
 
   /// \brief Returns a new buffer with a hexadecimal dump of the slice content.
+  /// \param uppercase  Use uppercase letters for hexadecimal digits.
+  /// \param wrap_width  The width to wrap lines with a newline, zero means no wrapping.
+  /// \param alloc  The allocator for the buffer storage.
+  /// \returns A new buffer with a hexadecimal dump of the slice content.
   buffer encode_hex(bool uppercase = false, unsigned wrap_width = 0,
                     const allocator_type &alloc = allocator_type()) const {
     return inherited::template encode_hex<ALLOCATOR, CAPACITY_POLICY>(uppercase, wrap_width, alloc);
@@ -855,16 +1072,26 @@ public:
 
   /// \brief Returns a new buffer with a
   /// [Base58](https://en.wikipedia.org/wiki/Base58) dump of the slice content.
+  /// \param wrap_width  The width to wrap lines with a newline, zero means no wrapping.
+  /// \param alloc  The allocator for the buffer storage.
+  /// \returns A new buffer with a [Base58](https://en.wikipedia.org/wiki/Base58) dump of the slice content.
   buffer encode_base58(unsigned wrap_width = 0, const allocator_type &alloc = allocator_type()) const {
     return inherited::template encode_base58<ALLOCATOR, CAPACITY_POLICY>(wrap_width, alloc);
   }
   /// \brief Returns a new buffer with a
   /// [Base64](https://en.wikipedia.org/wiki/Base64) dump of the slice content.
+  /// \param wrap_width  The width to wrap lines with a newline, zero means no wrapping.
+  /// \param alloc  The allocator for the buffer storage.
+  /// \returns A new buffer with a [Base64](https://en.wikipedia.org/wiki/Base64) dump of the slice content.
   buffer encode_base64(unsigned wrap_width = 0, const allocator_type &alloc = allocator_type()) const {
     return inherited::template encode_base64<ALLOCATOR, CAPACITY_POLICY>(wrap_width, alloc);
   }
 
   /// \brief Decodes hexadecimal dump from the slice content to returned buffer.
+  /// \param source  The source object.
+  /// \param ignore_spaces  Skip whitespaces while decoding.
+  /// \param alloc  The allocator for the buffer storage.
+  /// \returns The resulting buffer.
   static buffer hex_decode(const slice &source, bool ignore_spaces = false,
                            const allocator_type &alloc = allocator_type()) {
     return source.template hex_decode<ALLOCATOR, CAPACITY_POLICY>(ignore_spaces, alloc);
@@ -872,6 +1099,10 @@ public:
 
   /// \brief Decodes [Base58](https://en.wikipedia.org/wiki/Base58) dump
   /// from the slice content to returned buffer.
+  /// \param source  The source object.
+  /// \param ignore_spaces  Skip whitespaces while decoding.
+  /// \param alloc  The allocator for the buffer storage.
+  /// \returns The resulting buffer.
   static buffer base58_decode(const slice &source, bool ignore_spaces = false,
                               const allocator_type &alloc = allocator_type()) {
     return source.template base58_decode<ALLOCATOR, CAPACITY_POLICY>(ignore_spaces, alloc);
@@ -879,6 +1110,10 @@ public:
 
   /// \brief Decodes [Base64](https://en.wikipedia.org/wiki/Base64) dump
   /// from the slice content to returned buffer.
+  /// \param source  The source object.
+  /// \param ignore_spaces  Skip whitespaces while decoding.
+  /// \param alloc  The allocator for the buffer storage.
+  /// \returns The resulting buffer.
   static buffer base64_decode(const slice &source, bool ignore_spaces = false,
                               const allocator_type &alloc = allocator_type()) {
     return source.template base64_decode<ALLOCATOR, CAPACITY_POLICY>(ignore_spaces, alloc);
@@ -886,23 +1121,34 @@ public:
 
   /// \brief Decodes hexadecimal dump
   /// from the buffer content to new returned buffer.
+  /// \param ignore_spaces  Skip whitespaces while decoding.
+  /// \param alloc  The allocator for the buffer storage.
+  /// \returns The resulting buffer.
   buffer hex_decode(bool ignore_spaces = false, const allocator_type &alloc = allocator_type()) const {
     return hex_decode(*this, ignore_spaces, alloc);
   }
 
   /// \brief Decodes [Base58](https://en.wikipedia.org/wiki/Base58) dump
   /// from the buffer content to new returned buffer.
+  /// \param ignore_spaces  Skip whitespaces while decoding.
+  /// \param alloc  The allocator for the buffer storage.
+  /// \returns The resulting buffer.
   buffer base58_decode(bool ignore_spaces = false, const allocator_type &alloc = allocator_type()) const {
     return base58_decode(*this, ignore_spaces, alloc);
   }
 
   /// \brief Decodes [Base64](https://en.wikipedia.org/wiki/Base64) dump
   /// from the buffer content to new returned buffer.
+  /// \param ignore_spaces  Skip whitespaces while decoding.
+  /// \param alloc  The allocator for the buffer storage.
+  /// \returns The resulting buffer.
   buffer base64_decode(bool ignore_spaces = false, const allocator_type &alloc = allocator_type()) const {
     return base64_decode(*this, ignore_spaces, alloc);
   }
 
   /// \brief Reserves storage space.
+  /// \param wanna_headroom  The desired headroom in bytes.
+  /// \param wanna_tailroom  The desired tailroom in bytes.
   void reserve(size_t wanna_headroom, size_t wanna_tailroom) {
     wanna_headroom = ::std::min(
         ::std::max(headroom(), wanna_headroom),
@@ -918,34 +1164,50 @@ public:
       iov_base = silo_.template reshape<true>(wanna_capacity, wanna_headroom, iov_base, iov_len);
 
     MDBX_INLINE_API_ASSERT(headroom() >= wanna_headroom && headroom() <= wanna_headroom + pettiness_threshold);
-    MDBX_INLINE_API_ASSERT(tailroom() >= wanna_tailroom && tailroom() <= wanna_tailroom + pettiness_threshold);
+    /* The upper bound is intentionally not checked for the tailroom: the
+     * capacity-growth policy may legitimately over-provision (e.g. by
+     * doubling), so the only guaranteed contract here is the lower bound. */
+    MDBX_INLINE_API_ASSERT(tailroom() >= wanna_tailroom);
   }
 
   /// \brief Reserves space before the payload.
+  /// \param wanna_headroom  The desired headroom in bytes.
   void reserve_headroom(size_t wanna_headroom) { reserve(wanna_headroom, 0); }
 
   /// \brief Reserves space after the payload.
+  /// \param wanna_tailroom  The desired tailroom in bytes.
   void reserve_tailroom(size_t wanna_tailroom) { reserve(0, wanna_tailroom); }
 
   /// \brief Reserves storage space for at least `size` bytes of payload,
   /// without changing the current length. STL-compatible counterpart of
   /// \ref reserve(size_t, size_t) that keeps the headroom unchanged.
+  /// \param size  The new length of the data.
   void reserve(size_t size) {
     if (size > length() && size - length() > tailroom())
       reserve(headroom(), size - length());
   }
 
+  /// \brief Assigns the buffer to reference an external memory range without copying.
+  /// \param ptr    The address of the source data.
+  /// \param bytes  The number of bytes of the source data.
+  /// \returns A reference to this instance.
   buffer &assign_reference(const void *ptr, size_t bytes) {
     silo_.clear();
     inherited::assign(ptr, bytes);
     return *this;
   }
 
+  /// \brief Assigns the buffer to own a copy of an external memory range.
+  /// \param ptr    The address of the source data.
+  /// \param bytes  The number of bytes of the source data.
+  /// \returns A reference to this instance.
   buffer &assign_freestanding(const void *ptr, size_t bytes) {
     inherited::assign(silo_.assign(static_cast<const typename silo::value_type *>(ptr), check_length(bytes)), bytes);
     return *this;
   }
 
+  /// \brief Swaps this buffer with another one.
+  /// \param other  The buffer to swap with.
   MDBX_CXX20_CONSTEXPR void swap(buffer &other) noexcept(swap_alloc::is_nothrow()) {
     const auto pair = silo::exchange(silo_, content_modality(), other.silo_, other.content_modality());
     inherited::swap(other);
@@ -955,19 +1217,34 @@ public:
       other.fixup_imported_inplace(silo_.bin_);
   }
 
+  /// \brief Swaps two buffers (the ADL-friendly free function).
+  /// \param left   The left-hand buffer.
+  /// \param right  The right-hand buffer.
   MDBX_CXX20_CONSTEXPR friend void swap(buffer &left, buffer &right) noexcept(buffer::is_swap_nothrow()) {
     left.swap(right);
   }
 
+  /// \brief Makes a deep copy of the given buffer preserving headroom/tailroom.
+  /// \param src    The source buffer.
+  /// \param alloc  The allocator for the new buffer storage.
+  /// \returns The cloned buffer.
   static buffer clone(const buffer &src, const allocator_type &alloc = allocator_type()) {
     return buffer(src.headroom(), src, src.tailroom(), alloc);
   }
 
+  /// \brief Makes a lightweight copy: inplace when this buffer is inplace,
+  /// otherwise a reference to the same data.
+  /// \returns The new buffer instance.
   MDBX_CXX20_CONSTEXPR buffer make_inplace_or_reference() const {
     return buffer(static_cast<const struct slice &>(*this), !is_inplace(),
                   allocator_traits::select_on_container_copy_construction(get_allocator()));
   }
 
+  /// \brief Assigns a copy of the source buffer with the given headroom/tailroom.
+  /// \param headroom  The number of bytes to reserve in front of the data.
+  /// \param src       The source buffer.
+  /// \param tailroom  The number of bytes to reserve after the data.
+  /// \returns A reference to this instance.
   MDBX_CXX20_CONSTEXPR buffer &assign(size_t headroom, const buffer &src, size_t tailroom) {
     if (MDBX_LIKELY(this != &src))
       MDBX_CXX20_LIKELY {
@@ -982,6 +1259,10 @@ public:
     return *this;
   }
 
+  /// \brief Assigns from another buffer, either copying or referencing it.
+  /// \param src             The source buffer.
+  /// \param make_reference  Make the buffer a reference to the source data instead of copying it.
+  /// \returns A reference to this instance.
   MDBX_CXX20_CONSTEXPR buffer &assign(const buffer &src, bool make_reference = false) {
     if (MDBX_LIKELY(this != &src))
       MDBX_CXX20_LIKELY {
@@ -1000,6 +1281,9 @@ public:
     return *this;
   }
 
+  /// \brief Move-assigns from another buffer; the source is invalidated.
+  /// \param src  The source buffer to be moved from.
+  /// \returns A reference to this instance.
   MDBX_CXX20_CONSTEXPR buffer &assign(buffer &&src) noexcept(move_assign_alloc::is_nothrow()) {
     if (MDBX_LIKELY(this != &src))
       MDBX_CXX20_LIKELY {
@@ -1029,55 +1313,116 @@ public:
     return *this;
   }
 
+  /// \brief Assigns the buffer from a memory range, either copying or referencing it.
+  /// \param ptr             The address of the source data.
+  /// \param bytes           The number of bytes of the source data.
+  /// \param make_reference  Make the buffer a reference to the source data instead of copying it.
+  /// \returns A reference to this instance.
   buffer &assign(const void *ptr, size_t bytes, bool make_reference = false) {
+    /* assign_freestanding() would memcpy from `ptr` before any slice guard can
+     * fire, so reject a null pointer with a non-zero length up front (issue #142). */
+    if (MDBX_UNLIKELY(ptr == nullptr))
+      MDBX_CXX20_UNLIKELY check_nullptr_length(bytes);
     return make_reference ? assign_reference(ptr, bytes) : assign_freestanding(ptr, bytes);
   }
 
+  /// \brief Assigns the buffer from a char-pointer and an integral length.
+  /// \param ptr             The address of the source data.
+  /// \param bytes           The number of bytes of the source data.
+  /// \param make_reference  Make the buffer a reference to the source data instead of copying it.
+  /// \returns A reference to this instance.
   template <typename INT, typename ::std::enable_if<::std::is_integral<INT>::value && !::std::is_same<INT, bool>::value,
                                                     int>::type = 0>
   buffer &assign(const char *ptr, INT bytes, bool make_reference = false) {
     return assign(static_cast<const void *>(ptr), size_t(bytes), make_reference);
   }
 
+  /// \brief Assigns the buffer to a null pointer; only a zero length is accepted.
+  /// \param bytes           The number of bytes, must be zero.
+  /// \param make_reference  Make the buffer a reference instead of copying.
+  /// \returns A reference to this instance.
+  template <typename INT, typename ::std::enable_if<::std::is_integral<INT>::value && !::std::is_same<INT, bool>::value,
+                                                    int>::type = 0>
+  buffer &assign(::std::nullptr_t, INT bytes, bool make_reference = false) {
+    return assign(static_cast<const void *>(nullptr), check_nullptr_length(size_t(bytes)), make_reference);
+  }
+
+  /// \brief Assigns the buffer from a slice, either copying or referencing it.
+  /// \param src             The source slice.
+  /// \param make_reference  Make the buffer a reference to the source data instead of copying it.
+  /// \returns A reference to this instance.
   buffer &assign(const struct slice &src, bool make_reference = false) {
     return assign(src.data(), src.length(), make_reference);
   }
 
+  /// \brief Assigns the buffer from a \ref MDBX_val, either copying or referencing it.
+  /// \param src             The source \ref MDBX_val instance.
+  /// \param make_reference  Make the buffer a reference to the source data instead of copying it.
+  /// \returns A reference to this instance.
   buffer &assign(const ::MDBX_val &src, bool make_reference = false) {
     return assign(src.iov_base, src.iov_len, make_reference);
   }
 
+  /// \brief Move-assigns the buffer from a slice; the source is invalidated.
+  /// \param src             The source slice to be moved from.
+  /// \param make_reference  Make the buffer a reference to the source data instead of copying it.
+  /// \returns A reference to this instance.
   buffer &assign(struct slice &&src, bool make_reference = false) {
     assign(src.data(), src.length(), make_reference);
     src.invalidate();
     return *this;
   }
 
+  /// \brief Takes over a temporary \ref MDBX_val instance.
+  /// \param src             The source \ref MDBX_val to be moved from.
+  /// \param make_reference  Make the buffer a reference to the source data instead of copying it.
+  /// \returns A reference to this instance.
   buffer &assign(::MDBX_val &&src, bool make_reference = false) {
     assign(src.iov_base, src.iov_len, make_reference);
     src.iov_base = nullptr;
     return *this;
   }
 
+  /// \brief Assigns the buffer from a [begin,end) memory range.
+  /// \param begin           The address of the first byte.
+  /// \param end             The address just after the last byte.
+  /// \param make_reference  Make the buffer a reference to the source data instead of copying it.
+  /// \returns A reference to this instance.
   buffer &assign(const void *begin, const void *end, bool make_reference = false) {
     return assign(begin, static_cast<const byte *>(end) - static_cast<const byte *>(begin), make_reference);
   }
 
+  /// \brief Assigns the buffer from a string, either copying or referencing it.
+  /// \param str             The source string.
+  /// \param make_reference  Make the buffer a reference to the source data instead of copying it.
+  /// \returns A reference to this instance.
   template <class CHAR, class T, class A>
   buffer &assign(const ::std::basic_string<CHAR, T, A> &str, bool make_reference = false) {
     return assign(str.data(), str.length() * sizeof(CHAR), make_reference);
   }
 
+  /// \brief Assigns the buffer from a null-terminated string.
+  /// \param c_str           The source null-terminated string.
+  /// \param make_reference  Make the buffer a reference to the source data instead of copying it.
+  /// \returns A reference to this instance.
   buffer &assign(const char *c_str, bool make_reference = false) {
     return assign(c_str, strlen(c_str), make_reference);
   }
 
 #if defined(__cpp_lib_string_view) && __cpp_lib_string_view >= 201606L
+  /// \brief Assigns the buffer from a string view, either copying or referencing it.
+  /// \param view            The source string view.
+  /// \param make_reference  Make the buffer a reference to the source data instead of copying it.
+  /// \returns A reference to this instance.
   template <class CHAR, class T>
   buffer &assign(const ::std::basic_string_view<CHAR, T> &view, bool make_reference = false) {
     return assign(inherited(view), make_reference);
   }
 
+  /// \brief Takes over a temporary string view.
+  /// \param view            The source string view to be moved from.
+  /// \param make_reference  Make the buffer a reference to the source data instead of copying it.
+  /// \returns A reference to this instance.
   template <class CHAR, class T> buffer &assign(::std::basic_string_view<CHAR, T> &&view, bool make_reference = false) {
     assign(inherited(view), make_reference);
     view = {};
@@ -1085,31 +1430,54 @@ public:
   }
 #endif /* __cpp_lib_string_view >= 201606L */
 
+  /// \brief Copy assignment operator.
+  /// \param src  The source buffer.
+  /// \returns A reference to this instance.
   buffer &operator=(const buffer &src) { return assign(src); }
 
+  /// \brief Move assignment operator; the source is invalidated.
+  /// \param src  The source buffer to be moved from.
+  /// \returns A reference to this instance.
   buffer &operator=(buffer &&src) noexcept(move_assign_alloc::is_nothrow()) { return assign(::std::move(src)); }
 
+  /// \brief Assigns from a slice, copying its content.
+  /// \param src  The source slice.
+  /// \returns A reference to this instance.
   buffer &operator=(const struct slice &src) { return assign(src); }
 
+  /// \brief Move-assigns from a slice; the source is invalidated.
+  /// \param src  The source slice to be moved from.
+  /// \returns A reference to this instance.
   buffer &operator=(struct slice &&src) { return assign(::std::move(src)); }
 
 #if defined(DOXYGEN) || (defined(__cpp_lib_string_view) && __cpp_lib_string_view >= 201606L)
+  /// \brief Assigns from a string view, copying its content.
+  /// \param view  The source string view.
+  /// \returns A reference to this instance.
   template <class CHAR, class T> buffer &operator=(const ::std::basic_string_view<CHAR, T> &view) {
     /* assigning a string_view copies the bytes into owned storage, so this
      * allocates and must be allowed to throw on out-of-memory (issue #78) */
     return assign(inherited(view));
   }
 
+  /// \brief Appends a string view to the end of the buffer.
+  /// \param view  The string view to append.
+  /// \returns A reference to this instance.
   template <class CHAR, class T> buffer &append(const ::std::basic_string_view<CHAR, T> &view) {
     return append(view.data(), view.size() * sizeof(CHAR));
   }
 #endif /* __cpp_lib_string_view >= 201606L */
 
+  /// \brief Converts the buffer content to a `std::basic_string`.
+  /// \returns The string with a copy of the buffer content.
   template <class CHAR, class T, class A>
   MDBX_CXX20_CONSTEXPR explicit operator ::std::basic_string<CHAR, T, A>() const {
     return as_string<CHAR, T, A>();
   }
 
+  /// \brief Appends a string to the end of the buffer.
+  /// \param str  The string to append.
+  /// \returns A reference to this instance.
   template <class CHAR, class T, class A> buffer &append(const ::std::basic_string<CHAR, T, A> &str) {
     return append(inherited(str));
   }
@@ -1118,6 +1486,8 @@ public:
   void clear() noexcept { inherited::assign(silo_.clear(), size_t(0)); }
 
   /// \brief Clears the contents and reserve storage.
+  /// \param whole_capacity  The whole capacity to reserve.
+  /// \param headroom  The number of bytes to reserve in front of the data.
   void clear_and_reserve(size_t whole_capacity, size_t headroom = 0) {
     inherited::assign(silo_.clear_and_reserve(whole_capacity, headroom), size_t(0));
   }
@@ -1128,6 +1498,10 @@ public:
       iov_base = silo_.template reshape<false>(iov_len, 0, iov_base, iov_len);
   }
 
+  /// \brief Appends a memory range to the end of the buffer.
+  /// \param src    The address of the data to append.
+  /// \param bytes  The number of bytes to append.
+  /// \returns A reference to this instance.
   buffer &append(const void *src, size_t bytes) {
     if (MDBX_LIKELY(bytes))
       MDBX_CXX20_LIKELY {
@@ -1135,12 +1509,13 @@ public:
         const auto src_ptr = static_cast<const byte *>(src);
         /* In case `src` refers into the own storage, save its relative offset
          * since the storage may be relocated by the reserve below. */
-        const bool aliased = src_ptr >= begin_ptr && src_ptr < inherited::end_byte_ptr();
+        const bool aliased = src_ptr >= begin_ptr && src_ptr < inherited::end_byte_ptr() &&
+                             bytes <= size_t(inherited::end_byte_ptr() - src_ptr);
         const size_t src_offset = aliased ? size_t(src_ptr - begin_ptr) : 0;
         if (MDBX_UNLIKELY(tailroom() < check_length(bytes)))
           MDBX_CXX20_UNLIKELY {
             if (MDBX_UNLIKELY(!aliased && size_t(src_ptr - silo_begin()) < silo_.capacity())) {
-              /* `src` refers into the own head/tail room, which the reserve below does not preserve */
+              /* `src` is in the own storage, but not wholly in the content, which alone the reserve preserves */
               const buffer chunk(src, bytes, get_allocator());
               return append(chunk.data(), chunk.size());
             }
@@ -1152,6 +1527,9 @@ public:
     return *this;
   }
 
+  /// \brief Appends a single byte to the end of the buffer.
+  /// \param c  The byte to append.
+  /// \returns A reference to this instance.
   buffer &append(const byte c) {
     if (MDBX_UNLIKELY(tailroom() < 1))
       MDBX_CXX20_UNLIKELY reserve_tailroom(1);
@@ -1160,8 +1538,15 @@ public:
     return *this;
   }
 
+  /// \brief Appends a slice to the end of the buffer.
+  /// \param chunk  The data chunk to append.
+  /// \returns A reference to this instance.
   buffer &append(const struct slice &chunk) { return append(chunk.data(), chunk.size()); }
 
+  /// \brief Prepends a memory range to the beginning of the buffer (into the headroom).
+  /// \param src    The address of the data to prepend.
+  /// \param bytes  The number of bytes to prepend.
+  /// \returns A reference to this instance.
   buffer &add_header(const void *src, size_t bytes) {
     if (MDBX_LIKELY(bytes))
       MDBX_CXX20_LIKELY {
@@ -1169,12 +1554,13 @@ public:
         const auto src_ptr = static_cast<const byte *>(src);
         /* In case `src` refers into the own storage, save its relative offset
          * since the storage may be relocated by the reserve below. */
-        const bool aliased = src_ptr >= begin_ptr && src_ptr < inherited::end_byte_ptr();
+        const bool aliased = src_ptr >= begin_ptr && src_ptr < inherited::end_byte_ptr() &&
+                             bytes <= size_t(inherited::end_byte_ptr() - src_ptr);
         const size_t src_offset = aliased ? size_t(src_ptr - begin_ptr) : 0;
         if (MDBX_UNLIKELY(headroom() < check_length(bytes)))
           MDBX_CXX20_UNLIKELY {
             if (MDBX_UNLIKELY(!aliased && size_t(src_ptr - silo_begin()) < silo_.capacity())) {
-              /* `src` refers into the own head/tail room, which the reserve below does not preserve */
+              /* `src` is in the own storage, but not wholly in the content, which alone the reserve preserves */
               const buffer chunk(src, bytes, get_allocator());
               return add_header(chunk.data(), chunk.size());
             }
@@ -1186,8 +1572,25 @@ public:
     return *this;
   }
 
+  /// \brief Prepends a slice to the beginning of the buffer (into the headroom).
+  /// \param chunk  The data chunk to prepend.
+  /// \returns A reference to this instance.
   buffer &add_header(const struct slice &chunk) { return add_header(chunk.data(), chunk.size()); }
 
+  /// \brief Appends the bytes produced by the given producer to the end of the buffer.
+  ///
+  /// \pre The producer must not read from the destination region `[end_char_ptr(), silo_end())`
+  /// while producing: when the result fits the tailroom, it is written in place, at
+  /// `end_char_ptr()`, so a source overlapping the own tailroom would be overwritten before
+  /// being read (the `dest` argument of `write_bytes()` is `__restrict`). The `append_hex()`,
+  /// `append_base58()`, `append_base64()` and the `append_decoded_*()` methods handle a
+  /// slice source that reaches the own tailroom themselves (by copying it out first); for a
+  /// custom producer, avoiding such an overlap is the caller's responsibility.
+  ///
+  /// \param [in,out] producer  A mutable or immutable byte producer, e.g. `to_hex`,
+  ///                           `from_base64`, or a user-provided one; it may refer into this
+  ///                           buffer, but only into the content or the headroom.
+  /// \returns A reference to this buffer.
   template <MDBX_CXX20_CONCEPT(MutableByteProducer, PRODUCER)> buffer &append_producer(PRODUCER &producer) {
     const size_t wanna_bytes = producer.envisage_result_length();
     if (MDBX_LIKELY(wanna_bytes))
@@ -1204,6 +1607,10 @@ public:
     return *this;
   }
 
+  /// \brief Appends the bytes produced by the given immutable producer, see the overload above.
+  /// \pre The same: the producer must not read from `[end_char_ptr(), silo_end())` while producing.
+  /// \param producer  An immutable byte producer, e.g. `to_hex` or `from_base64`.
+  /// \returns A reference to this buffer.
   template <MDBX_CXX20_CONCEPT(ImmutableByteProducer, PRODUCER)> buffer &append_producer(const PRODUCER &producer) {
     const size_t wanna_bytes = producer.envisage_result_length();
     if (MDBX_LIKELY(wanna_bytes))
@@ -1220,30 +1627,70 @@ public:
     return *this;
   }
 
+  /// \brief Appends a hexadecimal dump of the given data to the buffer.
+  /// \param data        The data to be encoded.
+  /// \param uppercase   Use uppercase letters for hexadecimal digits.
+  /// \param wrap_width  The width to wrap lines with a newline, zero means no wrapping.
+  /// \returns A reference to this instance.
   buffer &append_hex(const struct slice &data, bool uppercase = false, unsigned wrap_width = 0) {
+    if (MDBX_UNLIKELY(reaches_tailroom(data)))
+      return append_hex(buffer(data, get_allocator()), uppercase, wrap_width);
     return append_producer(to_hex(data, uppercase, wrap_width));
   }
 
+  /// \brief Appends a [Base58](https://en.wikipedia.org/wiki/Base58) dump of the given data to the buffer.
+  /// \param data        The data to be encoded.
+  /// \param wrap_width  The width to wrap lines with a newline, zero means no wrapping.
+  /// \returns A reference to this instance.
   buffer &append_base58(const struct slice &data, unsigned wrap_width = 0) {
+    if (MDBX_UNLIKELY(reaches_tailroom(data)))
+      return append_base58(buffer(data, get_allocator()), wrap_width);
     return append_producer(to_base58(data, wrap_width));
   }
 
+  /// \brief Appends a [Base64](https://en.wikipedia.org/wiki/Base64) dump of the given data to the buffer.
+  /// \param data        The data to be encoded.
+  /// \param wrap_width  The width to wrap lines with a newline, zero means no wrapping.
+  /// \returns A reference to this instance.
   buffer &append_base64(const struct slice &data, unsigned wrap_width = 0) {
+    if (MDBX_UNLIKELY(reaches_tailroom(data)))
+      return append_base64(buffer(data, get_allocator()), wrap_width);
     return append_producer(to_base64(data, wrap_width));
   }
 
+  /// \brief Appends data decoded from a hexadecimal dump to the buffer.
+  /// \param data           The hexadecimal dump to be decoded.
+  /// \param ignore_spaces  Skip whitespaces while decoding.
+  /// \returns A reference to this instance.
   buffer &append_decoded_hex(const struct slice &data, bool ignore_spaces = false) {
+    if (MDBX_UNLIKELY(reaches_tailroom(data)))
+      return append_decoded_hex(buffer(data, get_allocator()), ignore_spaces);
     return append_producer(from_hex(data, ignore_spaces));
   }
 
+  /// \brief Appends data decoded from a [Base58](https://en.wikipedia.org/wiki/Base58) dump to the buffer.
+  /// \param data           The Base58 dump to be decoded.
+  /// \param ignore_spaces  Skip whitespaces while decoding.
+  /// \returns A reference to this instance.
   buffer &append_decoded_base58(const struct slice &data, bool ignore_spaces = false) {
+    if (MDBX_UNLIKELY(reaches_tailroom(data)))
+      return append_decoded_base58(buffer(data, get_allocator()), ignore_spaces);
     return append_producer(from_base58(data, ignore_spaces));
   }
 
+  /// \brief Appends data decoded from a [Base64](https://en.wikipedia.org/wiki/Base64) dump to the buffer.
+  /// \param data           The Base64 dump to be decoded.
+  /// \param ignore_spaces  Skip whitespaces while decoding.
+  /// \returns A reference to this instance.
   buffer &append_decoded_base64(const struct slice &data, bool ignore_spaces = false) {
+    if (MDBX_UNLIKELY(reaches_tailroom(data)))
+      return append_decoded_base64(buffer(data, get_allocator()), ignore_spaces);
     return append_producer(from_base64(data, ignore_spaces));
   }
 
+  /// \brief Appends an 8-bit value in little-endian order.
+  /// \param u8  The value to append.
+  /// \returns A reference to this instance.
   buffer &append_u8(uint_fast8_t u8) {
     if (MDBX_UNLIKELY(tailroom() < 1))
       MDBX_CXX20_UNLIKELY reserve_tailroom(1);
@@ -1252,8 +1699,14 @@ public:
     return *this;
   }
 
+  /// \brief Appends a single byte.
+  /// \param byte  The byte to append.
+  /// \returns A reference to this instance.
   buffer &append_byte(uint_fast8_t byte) { return append_u8(byte); }
 
+  /// \brief Appends a 16-bit value in little-endian order.
+  /// \param u16  The value to append.
+  /// \returns A reference to this instance.
   buffer &append_u16(uint_fast16_t u16) {
     if (MDBX_UNLIKELY(tailroom() < 2))
       MDBX_CXX20_UNLIKELY reserve_tailroom(2);
@@ -1264,6 +1717,9 @@ public:
     return *this;
   }
 
+  /// \brief Appends a 24-bit value in little-endian order.
+  /// \param u24  The value to append.
+  /// \returns A reference to this instance.
   buffer &append_u24(uint_fast32_t u24) {
     if (MDBX_UNLIKELY(tailroom() < 3))
       MDBX_CXX20_UNLIKELY reserve_tailroom(3);
@@ -1275,6 +1731,9 @@ public:
     return *this;
   }
 
+  /// \brief Appends a 32-bit value in little-endian order.
+  /// \param u32  The value to append.
+  /// \returns A reference to this instance.
   buffer &append_u32(uint_fast32_t u32) {
     if (MDBX_UNLIKELY(tailroom() < 4))
       MDBX_CXX20_UNLIKELY reserve_tailroom(4);
@@ -1287,6 +1746,9 @@ public:
     return *this;
   }
 
+  /// \brief Appends a 48-bit value in little-endian order.
+  /// \param u48  The value to append.
+  /// \returns A reference to this instance.
   buffer &append_u48(uint_fast64_t u48) {
     if (MDBX_UNLIKELY(tailroom() < 6))
       MDBX_CXX20_UNLIKELY reserve_tailroom(6);
@@ -1301,6 +1763,9 @@ public:
     return *this;
   }
 
+  /// \brief Appends a 64-bit value in little-endian order.
+  /// \param u64  The value to append.
+  /// \returns A reference to this instance.
   buffer &append_u64(uint_fast64_t u64) {
     if (MDBX_UNLIKELY(tailroom() < 8))
       MDBX_CXX20_UNLIKELY reserve_tailroom(8);
@@ -1319,129 +1784,274 @@ public:
 
   //----------------------------------------------------------------------------
 
+  /// \brief Makes a key buffer from a C string literal.
+  /// \param text            The null-terminated string literal.
+  /// \param make_reference  Make the buffer a reference to the source data
+  ///                          instead of copying it.
+  /// \returns The key \ref buffer.
   template <size_t SIZE> static buffer key_from(const char (&text)[SIZE], bool make_reference = true) {
     return buffer(inherited(text), make_reference);
   }
 
 #if defined(DOXYGEN) || (defined(__cpp_lib_string_view) && __cpp_lib_string_view >= 201606L)
+  /// \brief Makes a key buffer from a `std::basic_string_view`.
+  /// \param src             The source string view.
+  /// \param make_reference  Make the buffer a reference to the source data
+  ///                          instead of copying it.
+  /// \returns The key \ref buffer.
   template <class CHAR, class T>
   static buffer key_from(const ::std::basic_string_view<CHAR, T> &src, bool make_reference = false) {
     return buffer(src, make_reference);
   }
 #endif /* __cpp_lib_string_view >= 201606L */
 
+  /// \brief Makes a key buffer from a null-terminated C string.
+  /// \param src             The source null-terminated string.
+  /// \param make_reference  Make the buffer a reference to the source data
+  ///                          instead of copying it.
+  /// \returns The key \ref buffer.
   static buffer key_from(const char *src, bool make_reference = false) { return buffer(src, make_reference); }
 
+  /// \brief Makes a key buffer from a `std::basic_string`.
+  /// \param src             The source string.
+  /// \param make_reference  Make the buffer a reference to the source data
+  ///                          instead of copying it.
+  /// \returns The key \ref buffer.
   template <class CHAR, class T, class A>
   static buffer key_from(const ::std::basic_string<CHAR, T, A> &src, bool make_reference = false) {
     return buffer(src, make_reference);
   }
 
+  /// \brief Makes a key buffer by moving the given buffer.
+  /// \param src  The source buffer to be moved.
+  /// \returns The key \ref buffer.
   static buffer key_from(buffer &&src) noexcept { return buffer(::std::move(src)); }
 
+  /// \brief Makes a comparable key from a `double` IEEE754 value.
+  /// \param ieee754_64bit  The value to be converted.
+  /// \returns The key \ref buffer.
   static buffer key_from_double(const double ieee754_64bit) { return wrap(::mdbx_key_from_double(ieee754_64bit)); }
 
+  /// \brief Makes a comparable key from a `double` IEEE754 value.
+  /// \param ieee754_64bit  The value to be converted.
+  /// \returns The key \ref buffer.
   static buffer key_from(const double ieee754_64bit) { return key_from_double(ieee754_64bit); }
 
+  /// \brief Makes a comparable key from a `double` IEEE754 value by a pointer.
+  /// \param ieee754_64bit  The address of the value to be converted.
+  /// \returns The key \ref buffer.
   static buffer key_from(const double *ieee754_64bit) { return wrap(::mdbx_key_from_ptrdouble(ieee754_64bit)); }
 
+  /// \brief Makes a comparable key from an unsigned `uint64_t` value.
+  /// \param unsigned_int64  The value to be wrapped.
+  /// \returns The key \ref buffer.
   static buffer key_from_u64(const uint64_t unsigned_int64) { return wrap(unsigned_int64); }
 
+  /// \brief Makes a comparable key from an unsigned `uint64_t` value.
+  /// \param unsigned_int64  The value to be wrapped.
+  /// \returns The key \ref buffer.
   static buffer key_from(const uint64_t unsigned_int64) { return key_from_u64(unsigned_int64); }
 
+  /// \brief Makes a comparable key from a signed `int64_t` value.
+  /// \param signed_int64  The value to be converted.
+  /// \returns The key \ref buffer.
   static buffer key_from_i64(const int64_t signed_int64) { return wrap(::mdbx_key_from_int64(signed_int64)); }
 
+  /// \brief Makes a comparable key from a signed `int64_t` value.
+  /// \param signed_int64  The value to be converted.
+  /// \returns The key \ref buffer.
   static buffer key_from(const int64_t signed_int64) { return key_from_i64(signed_int64); }
 
+  /// \brief Makes a comparable key from a signed `int64_t` JSON-number value.
+  /// \param json_integer  The value to be converted.
+  /// \returns The key \ref buffer, comparable with keys from `double` values.
   static buffer key_from_jsonInteger(const int64_t json_integer) {
     return wrap(::mdbx_key_from_jsonInteger(json_integer));
   }
 
+  /// \brief Makes a comparable key from a `float` IEEE754 value.
+  /// \param ieee754_32bit  The value to be converted.
+  /// \returns The key \ref buffer.
   static buffer key_from_float(const float ieee754_32bit) { return wrap(::mdbx_key_from_float(ieee754_32bit)); }
 
+  /// \brief Makes a comparable key from a `float` IEEE754 value.
+  /// \param ieee754_32bit  The value to be converted.
+  /// \returns The key \ref buffer.
   static buffer key_from(const float ieee754_32bit) { return key_from_float(ieee754_32bit); }
 
+  /// \brief Makes a comparable key from a `float` IEEE754 value by a pointer.
+  /// \param ieee754_32bit  The address of the value to be converted.
+  /// \returns The key \ref buffer.
   static buffer key_from(const float *ieee754_32bit) { return wrap(::mdbx_key_from_ptrfloat(ieee754_32bit)); }
 
+  /// \brief Makes a comparable key from an unsigned `uint32_t` value.
+  /// \param unsigned_int32  The value to be wrapped.
+  /// \returns The key \ref buffer.
   static buffer key_from_u32(const uint32_t unsigned_int32) { return wrap(unsigned_int32); }
 
+  /// \brief Makes a comparable key from an unsigned `uint32_t` value.
+  /// \param unsigned_int32  The value to be wrapped.
+  /// \returns The key \ref buffer.
   static buffer key_from(const uint32_t unsigned_int32) { return key_from_u32(unsigned_int32); }
 
+  /// \brief Makes a comparable key from a signed `int32_t` value.
+  /// \param signed_int32  The value to be converted.
+  /// \returns The key \ref buffer.
   static buffer key_from_i32(const int32_t signed_int32) { return wrap(::mdbx_key_from_int32(signed_int32)); }
 
+  /// \brief Makes a comparable key from a signed `int32_t` value.
+  /// \param signed_int32  The value to be converted.
+  /// \returns The key \ref buffer.
   static buffer key_from(const int32_t signed_int32) { return key_from_i32(signed_int32); }
 
+  /// \brief Returns the base \ref slice view of this buffer.
+  /// \returns A constant reference to this buffer as a \ref slice.
   const slice &slice() const noexcept { return *this; }
 };
 
+/// \brief A pair of \ref buffer instances for a key and a value, with the same
+/// allocator and capacity policy; the buffer counterpart of \ref pair.
 template <typename ALLOCATOR, typename CAPACITY_POLICY> struct buffer_pair_spec {
+  /// \brief The type of the key/value buffers.
   using buffer_type = buffer<ALLOCATOR, CAPACITY_POLICY>;
+  /// \brief The allocator type of the buffers.
   using allocator_type = typename buffer_type::allocator_type;
+  /// \brief The `allocator_type` traits.
   using allocator_traits = typename buffer_type::allocator_traits;
+  /// \brief The capacity policy type, see \ref default_capacity_policy.
   using reservation_policy = CAPACITY_POLICY;
+  /// \brief An alias for `std::pair<buffer_type, buffer_type>`.
   using stl_pair = ::std::pair<buffer_type, buffer_type>;
-  buffer_type key, value;
+  buffer_type key;   ///< \brief The key buffer.
+  buffer_type value; ///< \brief The value buffer.
 
+  /// \brief Constructs an empty pair.
   MDBX_CXX20_CONSTEXPR buffer_pair_spec() noexcept = default;
+  /// \brief Constructs an empty pair with the given allocator.
+  /// \param alloc  The allocator for both buffers.
   MDBX_CXX20_CONSTEXPR
   buffer_pair_spec(const allocator_type &alloc) noexcept : key(alloc), value(alloc) {}
 
+  /// \brief Constructs the pair from the given key and value buffers.
+  /// \param key    The key buffer.
+  /// \param value  The value buffer.
+  /// \param alloc  The allocator for both buffers.
   buffer_pair_spec(const buffer_type &key, const buffer_type &value, const allocator_type &alloc = allocator_type())
       : key(key, alloc), value(value, alloc) {}
+  /// \brief Constructs the pair from the given key and value buffers.
+  /// \param key             The key buffer.
+  /// \param value           The value buffer.
+  /// \param make_reference  Make the buffers references instead of copies.
+  /// \param alloc           The allocator for both buffers.
   buffer_pair_spec(const buffer_type &key, const buffer_type &value, bool make_reference,
                    const allocator_type &alloc = allocator_type())
       : key(key, make_reference, alloc), value(value, make_reference, alloc) {}
 
+  /// \brief Constructs the pair from a `std::pair` of buffers.
+  /// \param pair   The source `std::pair`.
+  /// \param alloc  The allocator for both buffers.
   buffer_pair_spec(const stl_pair &pair, const allocator_type &alloc = allocator_type())
       : buffer_pair_spec(pair.first, pair.second, alloc) {}
+  /// \brief Constructs the pair from a `std::pair` of buffers.
+  /// \param pair            The source `std::pair`.
+  /// \param make_reference  Make the buffers references instead of copies.
+  /// \param alloc           The allocator for both buffers.
   buffer_pair_spec(const stl_pair &pair, bool make_reference, const allocator_type &alloc = allocator_type())
       : buffer_pair_spec(pair.first, pair.second, make_reference, alloc) {}
 
+  /// \brief Constructs the pair from the given key and value slices.
+  /// \param key    The key slice.
+  /// \param value  The value slice.
+  /// \param alloc  The allocator for both buffers.
   buffer_pair_spec(const slice &key, const slice &value, const allocator_type &alloc = allocator_type())
       : key(key, alloc), value(value, alloc) {}
+  /// \brief Constructs the pair from the given key and value slices.
+  /// \param key             The key slice.
+  /// \param value           The value slice.
+  /// \param make_reference  Make the buffers references instead of copies.
+  /// \param alloc           The allocator for both buffers.
   buffer_pair_spec(const slice &key, const slice &value, bool make_reference,
                    const allocator_type &alloc = allocator_type())
       : key(key, make_reference, alloc), value(value, make_reference, alloc) {}
 
+  /// \brief Constructs the pair from the given key-value pair of slices.
+  /// \param pair   The source \ref pair.
+  /// \param alloc  The allocator for both buffers.
   buffer_pair_spec(const pair &pair, const allocator_type &alloc = allocator_type())
       : buffer_pair_spec(pair.key, pair.value, alloc) {}
+  /// \brief Constructs the pair from the given key-value pair of slices.
+  /// \param pair            The source \ref pair.
+  /// \param make_reference  Make the buffers references instead of copies.
+  /// \param alloc           The allocator for both buffers.
   buffer_pair_spec(const pair &pair, bool make_reference, const allocator_type &alloc = allocator_type())
       : buffer_pair_spec(pair.key, pair.value, make_reference, alloc) {}
 
+  /// \brief Constructs the pair owning copies of dirty data of the given transaction.
+  /// \param transaction  The transaction to check the data dirtiness against.
+  /// \param key          The key slice.
+  /// \param value        The value slice.
+  /// \param alloc        The allocator for both buffers.
   buffer_pair_spec(const txn &transaction, const slice &key, const slice &value,
                    const allocator_type &alloc = allocator_type())
       : key(transaction, key, alloc), value(transaction, value, alloc) {}
+  /// \brief Constructs the pair owning copies of dirty data of the given transaction.
+  /// \param transaction  The transaction to check the data dirtiness against.
+  /// \param pair         The source \ref pair.
+  /// \param alloc        The allocator for both buffers.
   buffer_pair_spec(const txn &transaction, const pair &pair, const allocator_type &alloc = allocator_type())
       : buffer_pair_spec(transaction, pair.key, pair.value, alloc) {}
 
+  /// \brief Constructs the pair by moving the given buffers.
+  /// \param key    The key buffer to be moved from.
+  /// \param value  The value buffer to be moved from.
   buffer_pair_spec(buffer_type &&key, buffer_type &&value) noexcept(buffer_type::move_assign_alloc::is_nothrow())
       : key(::std::move(key)), value(::std::move(value)) {}
+  /// \brief Copy constructor.
   buffer_pair_spec(const buffer_pair_spec &) = default;
+  /// \brief Move constructor.
+  /// \param pair  The source pair to be moved from.
   buffer_pair_spec(buffer_pair_spec &&pair) noexcept(buffer_type::move_assign_alloc::is_nothrow())
       : buffer_pair_spec(::std::move(pair.key), ::std::move(pair.value)) {}
 
+  /// \brief Copy assignment operator.
+  /// \returns A reference to this instance.
   buffer_pair_spec &operator=(const buffer_pair_spec &) = default;
+  /// \brief Move assignment operator.
+  /// \param src  The source pair to be moved from.
+  /// \returns A reference to this instance.
   buffer_pair_spec &operator=(buffer_pair_spec &&src) {
     key.assign(std::move(src.key));
     value.assign(std::move(src.value));
     return *this;
   }
 
+  /// \brief Assigns from a \ref pair of slices, copying the content.
+  /// \param src  The source pair.
+  /// \returns A reference to this instance.
   buffer_pair_spec &operator=(const pair &src) {
     key.assign(src.key);
     value.assign(src.value);
     return *this;
   }
+  /// \brief Move-assigns from a \ref pair of slices.
+  /// \param src  The source pair to be moved from.
+  /// \returns A reference to this instance.
   buffer_pair_spec &operator=(pair &&src) {
     key.assign(std::move(src.key));
     value.assign(std::move(src.value));
     return *this;
   }
+  /// \brief Assigns from a `std::pair` of slices, copying the content.
+  /// \param src  The source `std::pair`.
+  /// \returns A reference to this instance.
   buffer_pair_spec &operator=(const stl_pair &src) {
     key.assign(src.first);
     value.assign(src.second);
     return *this;
   }
+  /// \brief Move-assigns from a `std::pair` of slices.
+  /// \param src  The source `std::pair` to be moved from.
+  /// \returns A reference to this instance.
   buffer_pair_spec &operator=(stl_pair &&src) {
     key.assign(std::move(src.first));
     value.assign(std::move(src.second));
@@ -1450,11 +2060,13 @@ template <typename ALLOCATOR, typename CAPACITY_POLICY> struct buffer_pair_spec 
 
   /// \brief Checks whether data chunk stored inside the buffers both, otherwise
   /// at least one of buffers just refers to data located outside.
+  /// \returns `true` if both buffers own their data.
   MDBX_NOTHROW_PURE_FUNCTION MDBX_CXX20_CONSTEXPR bool is_freestanding() const noexcept {
     return key.is_freestanding() && value.is_freestanding();
   }
   /// \brief Checks whether one of the buffers just refers to data located
   /// outside the buffer, rather than stores it.
+  /// \returns `true` if at least one buffer refers to external data.
   MDBX_NOTHROW_PURE_FUNCTION MDBX_CXX20_CONSTEXPR bool is_reference() const noexcept {
     return key.is_reference() || value.is_reference();
   }
@@ -1466,6 +2078,8 @@ template <typename ALLOCATOR, typename CAPACITY_POLICY> struct buffer_pair_spec 
     value.make_freestanding();
   }
 
+  /// \brief Converts to a \ref pair of slices referencing the same data.
+  /// \returns The pair of slices.
   operator pair() const noexcept { return pair(key, value); }
 };
 
