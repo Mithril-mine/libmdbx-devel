@@ -248,23 +248,23 @@ public:
   /// \param name  The table name.
   /// \param key_mode  The key comparison mode, see \ref mdbx::key_mode.
   /// \param value_mode  The value comparison mode, see \ref mdbx::value_mode.
-      /// \returns The table (map) handle.
-      inline map_handle open_map(const char *name, const ::mdbx::key_mode key_mode = ::mdbx::key_mode::usual,
-                                 const ::mdbx::value_mode value_mode = ::mdbx::value_mode::single) const;
+  /// \returns The table (map) handle.
+  inline map_handle open_map(const char *name, const ::mdbx::key_mode key_mode = ::mdbx::key_mode::usual,
+                             const ::mdbx::value_mode value_mode = ::mdbx::value_mode::single) const;
   /// \brief Open existing key-value map.
   /// \param name  The table name.
   /// \param key_mode  The key comparison mode, see \ref mdbx::key_mode.
   /// \param value_mode  The value comparison mode, see \ref mdbx::value_mode.
-      /// \returns The table (map) handle.
-      inline map_handle open_map(const ::std::string &name, const ::mdbx::key_mode key_mode = ::mdbx::key_mode::usual,
-                                 const ::mdbx::value_mode value_mode = ::mdbx::value_mode::single) const;
+  /// \returns The table (map) handle.
+  inline map_handle open_map(const ::std::string &name, const ::mdbx::key_mode key_mode = ::mdbx::key_mode::usual,
+                             const ::mdbx::value_mode value_mode = ::mdbx::value_mode::single) const;
   /// \brief Open existing key-value map.
   /// \param name  The table name.
   /// \param key_mode  The key comparison mode, see \ref mdbx::key_mode.
   /// \param value_mode  The value comparison mode, see \ref mdbx::value_mode.
-      /// \returns The table (map) handle.
-      inline map_handle open_map(const slice &name, const ::mdbx::key_mode key_mode = ::mdbx::key_mode::usual,
-                                 const ::mdbx::value_mode value_mode = ::mdbx::value_mode::single) const;
+  /// \returns The table (map) handle.
+  inline map_handle open_map(const slice &name, const ::mdbx::key_mode key_mode = ::mdbx::key_mode::usual,
+                             const ::mdbx::value_mode value_mode = ::mdbx::value_mode::single) const;
 
   /// \brief Open existing key-value map.
   /// \param name  The table name.
@@ -283,23 +283,23 @@ public:
   /// \param name  The table name.
   /// \param key_mode  The key comparison mode, see \ref mdbx::key_mode.
   /// \param value_mode  The value comparison mode, see \ref mdbx::value_mode.
-      /// \returns The table (map) handle.
-      inline map_handle create_map(const char *name, const ::mdbx::key_mode key_mode = ::mdbx::key_mode::usual,
-                                   const ::mdbx::value_mode value_mode = ::mdbx::value_mode::single);
+  /// \returns The table (map) handle.
+  inline map_handle create_map(const char *name, const ::mdbx::key_mode key_mode = ::mdbx::key_mode::usual,
+                               const ::mdbx::value_mode value_mode = ::mdbx::value_mode::single);
   /// \brief Create new or open existing key-value map.
   /// \param name  The table name.
   /// \param key_mode  The key comparison mode, see \ref mdbx::key_mode.
   /// \param value_mode  The value comparison mode, see \ref mdbx::value_mode.
-      /// \returns The table (map) handle.
-      inline map_handle create_map(const ::std::string &name, const ::mdbx::key_mode key_mode = ::mdbx::key_mode::usual,
-                                   const ::mdbx::value_mode value_mode = ::mdbx::value_mode::single);
+  /// \returns The table (map) handle.
+  inline map_handle create_map(const ::std::string &name, const ::mdbx::key_mode key_mode = ::mdbx::key_mode::usual,
+                               const ::mdbx::value_mode value_mode = ::mdbx::value_mode::single);
   /// \brief Create new or open existing key-value map.
   /// \param name  The table name.
   /// \param key_mode  The key comparison mode, see \ref mdbx::key_mode.
   /// \param value_mode  The value comparison mode, see \ref mdbx::value_mode.
-      /// \returns The table (map) handle.
-      inline map_handle create_map(const slice &name, const ::mdbx::key_mode key_mode = ::mdbx::key_mode::usual,
-                                   const ::mdbx::value_mode value_mode = ::mdbx::value_mode::single);
+  /// \returns The table (map) handle.
+  inline map_handle create_map(const slice &name, const ::mdbx::key_mode key_mode = ::mdbx::key_mode::usual,
+                               const ::mdbx::value_mode value_mode = ::mdbx::value_mode::single);
 
   /// \brief Drops key-value map using handle.
   /// \param map  The table (map) handle.
@@ -386,10 +386,9 @@ public:
   /// \param name  The table name.
   /// \param key_mode  The key comparison mode, see \ref mdbx::key_mode.
   /// \param value_mode  The value comparison mode, see \ref mdbx::value_mode.
-      /// \returns The table (map) handle.
-      inline map_handle open_map(const ::std::string_view &name,
-                                 const ::mdbx::key_mode key_mode = ::mdbx::key_mode::usual,
-                                 const ::mdbx::value_mode value_mode = ::mdbx::value_mode::single) const {
+  /// \returns The table (map) handle.
+  inline map_handle open_map(const ::std::string_view &name, const ::mdbx::key_mode key_mode = ::mdbx::key_mode::usual,
+                             const ::mdbx::value_mode value_mode = ::mdbx::value_mode::single) const {
     return open_map(slice(name), key_mode, value_mode);
   }
   /// \brief Open existing key-value map.
@@ -400,10 +399,10 @@ public:
   /// \param name  The table name.
   /// \param key_mode  The key comparison mode, see \ref mdbx::key_mode.
   /// \param value_mode  The value comparison mode, see \ref mdbx::value_mode.
-      /// \returns The table (map) handle.
-      inline map_handle create_map(const ::std::string_view &name,
-                                   const ::mdbx::key_mode key_mode = ::mdbx::key_mode::usual,
-                                   const ::mdbx::value_mode value_mode = ::mdbx::value_mode::single) {
+  /// \returns The table (map) handle.
+  inline map_handle create_map(const ::std::string_view &name,
+                               const ::mdbx::key_mode key_mode = ::mdbx::key_mode::usual,
+                               const ::mdbx::value_mode value_mode = ::mdbx::value_mode::single) {
     return create_map(slice(name), key_mode, value_mode);
   }
   /// \brief Drop key-value map.

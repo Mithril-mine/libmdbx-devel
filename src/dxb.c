@@ -129,11 +129,10 @@ __cold int dxb_read_header(MDBX_env *env, meta_t *dest, const int lck_exclusive,
        * open either recovers/promotes it (writable) or requires recovery
        * (read-only, MDBX_WANNA_RECOVERY). Without a lock file fall through to
        * the steady path as before. */
-      latch = meta_bootid_match(meta)
-                  ? meta_choice_recent(meta->unsafe_txnid, SIGN_IS_STEADY(meta->unsafe_sign), dest->unsafe_txnid,
-                                       SIGN_IS_STEADY(dest->unsafe_sign))
-                  : meta_choice_steady(meta->unsafe_txnid, SIGN_IS_STEADY(meta->unsafe_sign), dest->unsafe_txnid,
-                                       SIGN_IS_STEADY(dest->unsafe_sign));
+      latch = meta_bootid_match(meta) ? meta_choice_recent(meta->unsafe_txnid, SIGN_IS_STEADY(meta->unsafe_sign),
+                                                           dest->unsafe_txnid, SIGN_IS_STEADY(dest->unsafe_sign))
+                                      : meta_choice_steady(meta->unsafe_txnid, SIGN_IS_STEADY(meta->unsafe_sign),
+                                                           dest->unsafe_txnid, SIGN_IS_STEADY(dest->unsafe_sign));
     else
       switch (preopen_mode) {
       case MDBX_PREOPEN_LEGACY:
