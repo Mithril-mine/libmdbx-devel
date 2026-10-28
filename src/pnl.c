@@ -150,26 +150,33 @@ __hot int __must_check_result pnl_insert_span(__restrict pnl_t *ppnl, pgno_t pgn
   return MDBX_SUCCESS;
 }
 
-__hot __noinline bool pnl_check(const const_pnl_t pnl, const size_t limit) {
+__hot bool pnl_check_lite(const const_pnl_t pnl, const size_t limit) {
   ASSERT(limit >= MIN_PAGENO - MDBX_ENABLE_REFUND);
   if (likely(pnl_size(pnl))) {
     if (unlikely(pnl_size(pnl) > PAGELIST_LIMIT))
+      return false;
+    if (pnl_size(pnl) > 1 && unlikely(MDBX_PNL_LEAST(pnl) >= MDBX_PNL_MOST(pnl)))
       return false;
     if (unlikely(MDBX_PNL_LEAST(pnl) < MIN_PAGENO))
       return false;
     if (unlikely(MDBX_PNL_MOST(pnl) >= limit))
       return false;
+  }
+  return true;
+}
 
-    if ((!MDBX_DISABLE_VALIDATION || CHECKS2_ENABLED()) && likely(pnl_size(pnl) > 1)) {
-      const pgno_t *scan = MDBX_PNL_BEGIN(pnl);
-      const pgno_t *const end = MDBX_PNL_END(pnl);
-      pgno_t prev = *scan++;
-      do {
-        if (unlikely(!MDBX_PNL_ORDERED(prev, *scan)))
-          return false;
-        prev = *scan;
-      } while (likely(++scan != end));
-    }
+__hot __noinline bool pnl_check_full(const const_pnl_t pnl, const size_t limit) {
+  if (unlikely(!pnl_check_lite(pnl, limit)))
+    return false;
+  if (likely(pnl_size(pnl) > 1)) {
+    const pgno_t *scan = MDBX_PNL_BEGIN(pnl);
+    const pgno_t *const end = MDBX_PNL_END(pnl);
+    pgno_t prev = *scan++;
+    do {
+      if (unlikely(!MDBX_PNL_ORDERED(prev, *scan)))
+        return false;
+      prev = *scan;
+    } while (likely(++scan != end));
   }
   return true;
 }
@@ -206,7 +213,7 @@ static __always_inline void pnl_merge_inner(pgno_t *__restrict dst, const pgno_t
 
 __hot size_t pnl_merge(pnl_t dst, const const_pnl_t src) {
   ASSERT(pnl_check_allocated(dst, MAX_PAGENO + 1));
-  ASSERT(pnl_check(src, MAX_PAGENO + 1));
+  ASSERT(pnl_check_lite(src, MAX_PAGENO + 1));
   const size_t src_len = pnl_size(src);
   const size_t dst_len = pnl_size(dst);
   size_t total = dst_len;

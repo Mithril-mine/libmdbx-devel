@@ -929,10 +929,13 @@ const char *gc_check_rowdata(const MDBX_txn *const txn, const MDBX_val data) {
   const const_pnl_t pnl = data.iov_base;
   if (unlikely(data.iov_len < MDBX_PNL_SIZEOF(pnl)))
     return "trimmed GC-record";
-  if (unlikely(!pnl_check(pnl, txn->geo.first_unallocated)))
-    return "wrong GC-record";
-
-  return /* no error */ nullptr;
+  /* Untrusted GC data: reject disorder or duplicates inside a record when
+   * explicit validation is requested, otherwise only do the cheap bounds
+   * check so a release build does not pay for crafted-data hardening. */
+  const bool validate = (txn->env->flags & MDBX_VALIDATION) || CHECKS2_ENABLED();
+  const bool ok =
+      validate ? pnl_check_full(pnl, txn->geo.first_unallocated) : pnl_check_lite(pnl, txn->geo.first_unallocated);
+  return ok ? nullptr : "wrong GC-record";
 }
 
 glr_t gc_row_pnl(const MDBX_txn *const txn, const MDBX_val data) {
@@ -1178,27 +1181,48 @@ next_gc:
     DEBUG_EXTRA_PRINT(", first_unallocated %u\n", txn->geo.first_unallocated);
   }
 
-  /* Merge in descending sorted order */
 #if MDBX_ENABLE_PROFGC
   const uint64_t merge_begin = osal_monotime();
 #endif /* MDBX_ENABLE_PROFGC */
-  pnl_merge(txn->wr.repnl, gc_pnl);
+  const size_t expected_after_merge = gc_len + pnl_size(txn->wr.repnl);
+  const bool has_duplicates = pnl_merge(txn->wr.repnl, gc_pnl) != expected_after_merge;
 #if MDBX_ENABLE_PROFGC
   prof->pnl_merge.calls += 1;
   prof->pnl_merge.volume += pnl_size(txn->wr.repnl);
   prof->pnl_merge.time += osal_monotime() - merge_begin;
 #endif /* MDBX_ENABLE_PROFGC */
   flags |= ALLOC_SHOULD_SCAN;
+  /* Defence-in-depth after the merge: The pnl read from GC was checked above in gc_check_rowdata(),
+   * and the thoroughness of the check depends on MDBX_VALIDATION:
+   *  - without MDBX_VALIDATION, a lightweight check is performed using pnl_check_lite();
+   *  - when MDBX_VALIDATION is enabled, a full check is performed using pnl_check_full() with items order checking.
+   *
+   * Next, here we check that the length after merge is equal to the total length of the source pnls.
+   * Thus, depending on MDBX_VALIDATION, we get two situations:
+   *   - without MDBX_VALIDATION, a minimum of O(1) checks is performed,
+   *     but if the order is violated within pnl from GC, we may not notice duplicates;
+   *   - with MDBX_VALIDATION enabled, the cost of checks is O(n),
+   *     but we will notice both order violations and duplicates.
+   *
+   * Overall, we get a manageable compromise:
+   *  - without MDBX_VALIDATION, there are minimal checks and performance is optimized,
+   *    but control can be enabled via build options;
+   *  - with MDBX_VALIDATION enabled, full checks are performed for maximum resilience against untrusted data. */
+  if (unlikely(has_duplicates)) {
+    ERROR("%s/%d: %s", "MDBX_CORRUPTED", MDBX_CORRUPTED, "duplicate page in the retired-pages list");
+    ret.err = MDBX_CORRUPTED;
+    goto fail;
+  }
+  eASSERT1(env, txn_dpl_check(txn));
+
   if (CHECKS2_ENABLED()) {
-    if (unlikely(!pnl_check(txn->wr.repnl, txn->geo.first_unallocated))) {
+    if (unlikely(!pnl_check_full_allocated(txn->wr.repnl, txn->geo.first_unallocated))) {
       ERROR("%s/%d: %s", "MDBX_CORRUPTED", MDBX_CORRUPTED, "invalid txn retired-list");
       ret.err = MDBX_CORRUPTED;
       goto fail;
     }
-  } else {
-    eASSERT1(env, pnl_check_allocated(txn->wr.repnl, txn->geo.first_unallocated));
-  }
-  eASSERT1(env, txn_dpl_check(txn));
+  } else
+    eASSERT1(env, pnl_check_full_allocated(txn->wr.repnl, txn->geo.first_unallocated));
 
   eASSERT0(env, pnl_size(txn->wr.repnl) == 0 || MDBX_PNL_MOST(txn->wr.repnl) < txn->geo.first_unallocated);
   if (MDBX_ENABLE_REFUND && pnl_size(txn->wr.repnl) &&
