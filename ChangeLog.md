@@ -162,6 +162,9 @@ Cutting-edge release with new core features and internal refactoring.
     - Fixed a crafted or corrupted database crashing or corrupting memory through invalid offsets inside a set of duplicate values; such databases are now detected and rejected instead ([#176](https://github.com/Mithril-mine/libmdbx-devel/issues/176)).
     - etc...
 
+ - Leaks:
+    - Fixed a memory leak when a named table was closed with an empty (zero-length) name: the name buffer was allocated even for an empty name, but the close path skipped freeing it (backport).
+
 
 
 --------------------------------------------------------------------------------
