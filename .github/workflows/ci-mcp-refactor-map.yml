@@ -111,14 +111,75 @@ jobs:
         cd skynet/MCP-shared-graph-memory
         python3 tools/scan_symbols.py --config macos \
           --out tools/artifacts/refactoring-map-macos.json
+    - name: fail if macos scan is empty
+      shell: bash
+      run: |
+        cd skynet/MCP-shared-graph-memory
+        python3 - <<'PY'
+        import json
+        with open("tools/artifacts/refactoring-map-macos.json") as f:
+            a = json.load(f)
+        n = a["counts"]["functions"]
+        print("macos functions:", n)
+        assert n > 0, "macos scan yielded 0 functions — aborting (AppleClang raw_decode?)"
+        PY
     - name: upload macos artifact
       uses: actions/upload-artifact@v4
       with:
         name: refactor-map-macos
         path: skynet/MCP-shared-graph-memory/tools/artifacts/refactoring-map-macos.json
 
+  scan-win32:
+    runs-on: ubuntu-24.04
+    steps:
+    - uses: actions/checkout@v7
+      with:
+        fetch-depth: 0
+        fetch-tags: true
+        submodules: true
+    - uses: actions/setup-python@v5
+      with:
+        python-version: "3.11"
+    - name: deps
+      run: |
+        sudo apt-get update && sudo apt-get install -y --no-install-recommends mingw-w64
+        python3 -m pip install --quiet cffi pytest pyyaml
+    - name: prepare build-scan
+      shell: bash
+      run: |
+        cmake -S . -B _build-scan -DCMAKE_BUILD_TYPE=Debug \
+          -DMDBX_BUILD_CXX=ON -DMDBX_ENABLE_TESTS=ON -DMDBX_BUILD_TOOLS=ON \
+          -DINTERPROCEDURAL_OPTIMIZATION=OFF \
+          -DCMAKE_EXPORT_COMPILE_COMMANDS=ON \
+          -DMDBX_ALLOY_BUILD=ON -DMDBX_USE_MINCORE=OFF
+    - name: scan symbols (win32, cross to mingw-w64)
+      shell: bash
+      run: |
+        cd skynet/MCP-shared-graph-memory
+        python3 tools/scan_symbols.py --config win32 \
+          --target x86_64-w64-windows-gnu \
+          --out tools/artifacts/refactoring-map-win32.json
+        echo "scan exit: $?"
+    - name: fail if win32 scan is empty
+      shell: bash
+      run: |
+        cd skynet/MCP-shared-graph-memory
+        python3 - <<'PY'
+        import json
+        with open("tools/artifacts/refactoring-map-win32.json") as f:
+            a = json.load(f)
+        n = a["counts"]["functions"]
+        print("win32 functions:", n)
+        assert n > 0, "win32 scan yielded 0 functions — aborting"
+        PY
+    - name: upload win32 artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: refactor-map-win32
+        path: skynet/MCP-shared-graph-memory/tools/artifacts/refactoring-map-win32.json
+
   merge-validate:
-    needs: [scan-linux, scan-macos]
+    needs: [scan-linux, scan-macos, scan-win32]
     runs-on: ubuntu-24.04
     steps:
     - uses: actions/checkout@v7
@@ -140,13 +201,26 @@ jobs:
       run: |
         cd skynet/MCP-shared-graph-memory
         mkdir -p tools/artifacts
-        mv "$GITHUB_WORKSPACE/artifacts/refactoring-map-linux.json" \
-           tools/artifacts/refactoring-map-linux.json
-        mv "$GITHUB_WORKSPACE/artifacts/refactoring-map-macos.json" \
-           tools/artifacts/refactoring-map-macos.json
+        for c in linux macos win32; do
+          mv "$GITHUB_WORKSPACE/artifacts/refactoring-map-$c.json" \
+             "tools/artifacts/refactoring-map-$c.json"
+        done
+        python3 - <<'PY'
+        import json, sys
+        # fail-loudly: каждый конфиг обязан внести символы (см. REFACTORING-MAP.md)
+        for c in ("linux", "macos", "win32"):
+            with open("tools/artifacts/refactoring-map-%s.json" % c) as f:
+                a = json.load(f)
+            n = a["counts"]["functions"]
+            print("config %-6s functions=%d" % (c, n))
+            if n == 0:
+                sys.stderr.write("merge: config '%s' contributed 0 symbols — aborting\n" % c)
+                sys.exit(2)
+        PY
         python3 tools/scan_symbols.py --merge \
           tools/artifacts/refactoring-map-linux.json \
           tools/artifacts/refactoring-map-macos.json \
+          tools/artifacts/refactoring-map-win32.json \
           --out tools/artifacts/refactoring-map.json
         python3 tools/scan_uncovered.py \
           --map tools/artifacts/refactoring-map.json
@@ -163,7 +237,8 @@ jobs:
         python3 - <<'PY'
         import json
         p = "tools/artifacts/refactoring-map.json"
-        a = json.load(open(p))
+        with open(p) as f:
+            a = json.load(f)
         syms = a.get("symbols", {})
         edges = a.get("edges", [])
         counts = a.get("counts", {})
