@@ -41,6 +41,7 @@ Cutting-edge release with new core features and internal refactoring.
  - Clarification/refining README and doxygen API descriptions.
  - On Windows the attempts to shrink the database file are no longer repeated on every commit when they are doomed to be deferred (while other processes use the database): they are skipped outright and rate-limited by the new `MDBX_opt_shrink_retry_period` option, which reduces the commit overhead for workloads mixing long-lived readers with the automatic file shrinking ([#170](https://github.com/Mithril-mine/libmdbx-devel/issues/170)).
  - Added the `MDBX_opt_shrink_retry_period` option: datafile shrink attempts that are doomed to be deferred are now skipped outright and rate-limited, which reduces the commit overhead for workloads mixing long-lived readers with automatic file shrinking ([#170](https://github.com/Mithril-mine/libmdbx-devel/issues/170)).
+ - The C++ `mdbx::env::mode`/`mdbx::env::durability` enums are now scoped (`enum class`); the former `env::`-level enumerator names are kept as deprecated `[[deprecated(...)]]` aliases, so existing code keeps compiling while new code should use the scoped form (e.g. `mdbx::env::mode::nested_transactions` instead of `mdbx::env::nested_transactions`).
 
 ### Fixes:
 
