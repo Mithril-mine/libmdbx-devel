@@ -142,6 +142,17 @@ static inline unsigned mdbx_running_on_Valgrind(void) {
 #endif /* ENABLE_MEMCHECK */
 }
 
+/* Whether the process is running under Wine; always false on non-Windows.
+ * Used to fall back to conservative behavior where Wine's Win32 emulation
+ * is incomplete (e.g. LockFileEx byte-range lock semantics). */
+static inline bool mdbx_running_under_Wine(void) {
+#if IS_WINDOWS
+  return globals.running_under_Wine;
+#else
+  return false;
+#endif /* Windows */
+}
+
 #include "logging_and_debug.h"
 
 #include "utils.h"

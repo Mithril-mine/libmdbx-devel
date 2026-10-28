@@ -192,6 +192,29 @@
 #error MDBX_AVOID_MSYNC must be defined as 0 or 1
 #endif /* MDBX_AVOID_MSYNC */
 
+/** Controls whether `MDBX_EXCLUSIVE` on Windows keeps the normal (fast) durable
+ * i/o path: the data-file handles are opened shareable and exclusivity is
+ * enforced by constant byte-range locks (meta region via `fd4meta`, body via
+ * `fd4data`) held for the whole env lifetime, plus the unshareable lock-file.
+ *
+ * 0/OFF = Historical behavior: the data file is opened with ShareMode == 0 and
+ * the overlapped write-through / dsync handles are not opened at all, so an
+ * exclusive durable env commits through lazy writes + FlushFileBuffers (~2x
+ * slower, see https://github.com/Mithril-mine/libmdbx-devel/issues/179).
+ *
+ * 1/ON = The exclusive env uses the very same i/o path as a non-exclusive one.
+ * Ignored on non-Windows platforms (POSIX exclusive never switched the path)
+ * and under Wine (incomplete LockFileEx emulation falls back to ShareMode=0). */
+#ifndef MDBX_ENABLE_EXCLUSIVE_FASTPATH
+#if IS_WINDOWS
+#define MDBX_ENABLE_EXCLUSIVE_FASTPATH 1
+#else
+#define MDBX_ENABLE_EXCLUSIVE_FASTPATH 0
+#endif
+#elif !(MDBX_ENABLE_EXCLUSIVE_FASTPATH == 0 || MDBX_ENABLE_EXCLUSIVE_FASTPATH == 1)
+#error MDBX_ENABLE_EXCLUSIVE_FASTPATH must be defined as 0 or 1
+#endif /* MDBX_ENABLE_EXCLUSIVE_FASTPATH */
+
 /** Controls a supporting sparse sets of DBI-handles to reduce transaction startup and processing overhead. */
 #ifndef MDBX_ENABLE_DBI_SPARSE
 #define MDBX_ENABLE_DBI_SPARSE 1
