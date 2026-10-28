@@ -783,6 +783,7 @@ __cold static int copy2pathname(MDBX_txn *txn, const pathchar_t *dest_path, MDBX
 
 #if IS_WINDOWS
   /* no locking required since the file opened with ShareMode == 0 */
+  const bool locked_by_other = false;
 #else
   MDBX_STRUCT_FLOCK lock_op;
   memset(&lock_op, 0, sizeof(lock_op));
@@ -839,11 +840,12 @@ __cold static int copy2pathname(MDBX_txn *txn, const pathchar_t *dest_path, MDBX
     else
       rc = (err_fcntl && ignore_enosys_and_eremote(err_fcntl) != MDBX_RESULT_TRUE) ? err_fcntl : err_flock;
   }
-#endif /* Windows / POSIX */
 
   /* A lock conflict means that another process (e.g. a concurrent copy) owns
    * the file, even if this call has just created it. */
   const bool locked_by_other = rc == EWOULDBLOCK || rc == EAGAIN;
+#endif /* Windows / POSIX */
+
   bool touched = false;
   if (rc == MDBX_SUCCESS)
     rc = copy2fd(txn, newfd, flags, &touched, pre_size > 0);

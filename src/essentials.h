@@ -19,6 +19,91 @@
 
 #include "preface.h"
 
+#if IS_WINDOWS && !(defined(__CYGWIN__) || defined(__MINGW__) || defined(__MINGW32__) || defined(__MINGW64__))
+/* Protection against leakage/use of POSIX identifiers during build for Windows,
+ * which may also be defined as unstable, arbitrary values dependent on the build environment.
+ *   git grep -h -w -o 'E[A-Z]\+' | sort | uniq
+ */
+#undef EACCES
+#undef EAFNOSUPPORT
+#undef EAGAIN
+#undef EBADF
+#undef EBADFD
+#undef EBUSY
+#undef ECHILD
+#undef EDEADLK
+#undef EDQUOT
+#undef EEXIST
+#undef EFAULT
+#undef EIDRM
+#undef EINTR
+#undef EINVAL
+#undef EIO
+#undef ENODATA
+#undef ENOENT
+#undef ENOFILE
+#undef ENOIMPL
+#undef ENOLCK
+#undef ENOMEM
+#undef ENOPROTOOPT
+#undef ENOSPC
+#undef ENOSUPP
+#undef ENOSYS
+#undef ENOTBLK
+#undef ENOTDIR
+#undef ENOTSUP
+#undef ENOTTY
+#undef EOPNOTSUPP
+#undef EOWNERDEAD
+#undef EPERM
+#undef EPIPE
+#undef EREMOTEIO
+#undef EROFS
+#undef ESRCH
+#undef EWOULDBLOCK
+#undef EXDEV
+#define POSIX_FUSE POSIX_error_codes_should_not_be_used_in_Windows_build
+#define EACCES POSIX_FUSE
+#define EAFNOSUPPORT POSIX_FUSE
+#define EAGAIN POSIX_FUSE
+#define EBADF POSIX_FUSE
+#define EBADFD POSIX_FUSE
+#define EBUSY POSIX_FUSE
+#define ECHILD POSIX_FUSE
+#define EDEADLK POSIX_FUSE
+#define EDQUOT POSIX_FUSE
+#define EEXIST POSIX_FUSE
+#define EFAULT POSIX_FUSE
+#define EIDRM POSIX_FUSE
+#define EINTR POSIX_FUSE
+extern int mdbx_POSIX_error_codes_should_not_be_used_in_Windows_build(void);
+#define EINVAL mdbx_POSIX_error_codes_should_not_be_used_in_Windows_build()
+#define EIO POSIX_FUSE
+#define ENODATA POSIX_FUSE
+#define ENOENT POSIX_FUSE
+#define ENOFILE POSIX_FUSE
+#define ENOIMPL POSIX_FUSE
+#define ENOLCK POSIX_FUSE
+#define ENOMEM POSIX_FUSE
+#define ENOPROTOOPT POSIX_FUSE
+#define ENOSPC POSIX_FUSE
+#define ENOSUPP POSIX_FUSE
+#define ENOSYS POSIX_FUSE
+#define ENOTBLK POSIX_FUSE
+#define ENOTDIR POSIX_FUSE
+#define ENOTSUP POSIX_FUSE
+#define ENOTTY POSIX_FUSE
+#define EOPNOTSUPP POSIX_FUSE
+#define EOWNERDEAD POSIX_FUSE
+#define EPERM POSIX_FUSE
+#define EPIPE POSIX_FUSE
+#define EREMOTEIO POSIX_FUSE
+#define EROFS POSIX_FUSE
+#define ESRCH POSIX_FUSE
+#define EWOULDBLOCK POSIX_FUSE
+#define EXDEV POSIX_FUSE
+#endif /* IS_WINDOWS */
+
 #if defined(xMDBX_ALLOY) && !defined(xMDBX_TOOLS)
 /* Amalgamated build */
 #define MDBX_INTERNAL static
