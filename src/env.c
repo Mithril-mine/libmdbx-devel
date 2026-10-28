@@ -338,7 +338,7 @@ __cold int env_open(MDBX_env *env, mdbx_mode_t mode) {
        * изначального захвата блокировок. */
       meta_t header;
       uint64_t dxb_filesize;
-      int err = dxb_read_header(env, &header, MDBX_SUCCESS, true);
+      int err = dxb_read_header(env, &header, MDBX_SUCCESS, true, MDBX_PREOPEN_NONE);
       if ((err == MDBX_SUCCESS && header.pagesize >= globals.sys_pagesize) ||
           (err == MDBX_ENODATA && mode && env->ps >= globals.sys_pagesize &&
            osal_filesize(env->lazy_fd, &dxb_filesize) == MDBX_SUCCESS && dxb_filesize == 0))
