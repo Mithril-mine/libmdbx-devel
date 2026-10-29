@@ -1,4 +1,10 @@
-add_definitions(-DMDBX_DEBUG=1 -DMDBX_CHECKING=2)
+if(NOT DEFINED MDBX_DEBUG)
+  add_definitions(-DMDBX_DEBUG=1)
+endif()
+
+if(NOT DEFINED MDBX_CHECKING)
+  add_definitions(-DMDBX_CHECKING=2)
+endif()
 
 macro(add_issue_test)
   add_simple_test(${ARGV} SOURCE_PREFIX "issue_" TARGET_PREFIX "test_issue_")
