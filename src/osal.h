@@ -440,14 +440,6 @@ MDBX_INTERNAL int osal_pread(mdbx_filehandle_t fd, void *buf, size_t count, uint
 MDBX_INTERNAL int osal_pwrite(mdbx_filehandle_t fd, const void *buf, size_t count, uint64_t offset);
 MDBX_INTERNAL int osal_write(mdbx_filehandle_t fd, const void *buf, size_t count);
 
-/* Write an auxiliary (stub) buffer to the database body through the handle
- * that holds the per-txn body lock: overlapped_fd on Windows when present,
- * otherwise the memory-mapped (lazy) handle. On Windows byte-range locks are
- * per-handle, so writing a locked region through a different handle fails with
- * ERROR_LOCK_VIOLATION; routing through the lock owner avoids that. */
-MDBX_INTERNAL int osal_dxb_write_stub(const MDBX_env *env, const void *buf, size_t bytes, uint64_t offset);
-MDBX_INTERNAL int osal_dxb_write_stubv(const MDBX_env *env, struct iovec *iov, size_t sgvcnt, uint64_t offset);
-
 MDBX_INTERNAL int osal_thread_create(osal_thread_t *thread, THREAD_RESULT(THREAD_CALL *start_routine)(void *),
                                      void *arg);
 MDBX_INTERNAL int osal_thread_join(osal_thread_t thread);

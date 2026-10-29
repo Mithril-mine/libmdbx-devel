@@ -783,11 +783,7 @@ static inline pgr_t page_alloc_finalize(MDBX_env *const env, MDBX_txn *const txn
       size_t file_offset = pgno2bytes(env, pgno);
       if (likely(num == 1)) {
         if (!mincore_probe(env, pgno)) {
-          int err = osal_dxb_write_stub(env, pattern, env->ps, file_offset);
-          if (unlikely(err != MDBX_SUCCESS)) {
-            ret.err = err;
-            goto bailout;
-          }
+          osal_pwrite(env->lazy_fd, pattern, env->ps, file_offset);
 #if MDBX_ENABLE_PGOP_STAT
           env->lck->pgops.prefault.weak += 1;
 #endif /* MDBX_ENABLE_PGOP_STAT */
@@ -804,11 +800,7 @@ static inline pgr_t page_alloc_finalize(MDBX_env *const env, MDBX_txn *const txn
             iov[n].iov_len = env->ps;
             iov[n].iov_base = pattern;
             if (unlikely(++n == MDBX_AUXILARY_IOV_MAX)) {
-              int err = osal_dxb_write_stubv(env, iov, MDBX_AUXILARY_IOV_MAX, file_offset);
-              if (unlikely(err != MDBX_SUCCESS)) {
-                ret.err = err;
-                goto bailout;
-              }
+              osal_pwritev(env->lazy_fd, iov, MDBX_AUXILARY_IOV_MAX, file_offset);
 #if MDBX_ENABLE_PGOP_STAT
               env->lck->pgops.prefault.weak += 1;
 #endif /* MDBX_ENABLE_PGOP_STAT */
@@ -818,11 +810,7 @@ static inline pgr_t page_alloc_finalize(MDBX_env *const env, MDBX_txn *const txn
           }
         }
         if (likely(n > 0)) {
-          int err = osal_dxb_write_stubv(env, iov, n, file_offset);
-          if (unlikely(err != MDBX_SUCCESS)) {
-            ret.err = err;
-            goto bailout;
-          }
+          osal_pwritev(env->lazy_fd, iov, n, file_offset);
 #if MDBX_ENABLE_PGOP_STAT
           env->lck->pgops.prefault.weak += 1;
 #endif /* MDBX_ENABLE_PGOP_STAT */
