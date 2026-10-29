@@ -1016,6 +1016,26 @@
       "build_parallel": 4
     },
     {
+      "id": "win-mingw-64-debug-coverage",
+      "runs-on": "windows-latest",
+      "env": {
+        "MDBX_BUILD_OPTIONS": "-DMDBX_CHECKING=2 -DMDBX_DEBUG=1",
+        "MDBX_BUILD_CXX": "NO",
+        "PATH": "/c/mingw64/bin:/c/programdata/mingw64/mingw64/bin"
+      },
+      "cmake": [
+        "-G|MinGW Makefiles",
+        "-DCMAKE_BUILD_TYPE=Debug",
+        "-DMDBX_BUILD_SHARED_LIBRARY:BOOL=ON",
+        "-DMDBX_WITHOUT_MSVC_CRT:BOOL=ON",
+        "-DENABLE_GCOV:BOOL=ON"
+      ],
+      "ctest": null,
+      "note": "ci-windows-mingw Debug dll=ON crt=ON + gcov coverage (windows-import/lck-windows)",
+      "coverage": true,
+      "build_parallel": 4
+    },
+    {
       "id": "win-mingw-32-debug-shared-on-mscrt-off",
       "runs-on": "windows-latest",
       "env": {
@@ -2901,7 +2921,8 @@
       "win-msvc-v145-x64-release-shared-off-mscrt-on"
     ],
     "coverage": [
-      "linux-gcc-ubuntu24-debug-coverage"
+      "linux-gcc-ubuntu24-debug-coverage",
+      "win-mingw-64-debug-coverage"
     ],
     "linux-locking": [
       "linux-lock-sysv-gcc-debug",
