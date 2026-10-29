@@ -78,6 +78,11 @@ void testcase_copy::copy_db(const bool with_compaction) {
       case MDBX_EINVAL:
         fail = ro || (copy_flags & (MDBX_CP_THROTTLE_MVCC | MDBX_CP_RENEW_TXN)) == 0;
         break;
+      case MDBX_EEXIST:
+        /* The destination already exists and overwrite was not requested —
+         * acceptable, matching the single-shot branch above. */
+        fail = false;
+        break;
       }
 
       if (fail) {

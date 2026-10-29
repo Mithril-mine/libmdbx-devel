@@ -485,6 +485,28 @@ else()
       RUN_SERIAL ON
       WORKING_DIRECTORY ${MDBX_OUTPUT_DIR}
       RESOURCE_LOCK stochastic)
+
+    # Deterministic stochastic runs pinned to three page sizes (≈13 min each).
+    # Registered only under MDBX_ENABLE_LONG_TESTS, so a plain `ctest` (the
+    # default corpus) does not run them; the full profile / nightly (plain ctest
+    # with MDBX_ENABLE_LONG_TESTS, or `ctest -L stochastic-13m`) does.
+    add_test(NAME stochastic_pagesize_default
+             COMMAND ${CMAKE_CURRENT_SOURCE_DIR}/stochastic.sh --skip-make --dlc
+                     --whole-duration 777 --repeat 7 --from 42 --pagesize default)
+    add_test(NAME stochastic_pagesize_512
+             COMMAND ${CMAKE_CURRENT_SOURCE_DIR}/stochastic.sh --skip-make --dlc
+                     --whole-duration 777 --repeat 7 --from 42 --pagesize 512)
+    add_test(NAME stochastic_pagesize_32K
+             COMMAND ${CMAKE_CURRENT_SOURCE_DIR}/stochastic.sh --skip-make --dlc
+                     --whole-duration 777 --repeat 7 --from 42 --pagesize 32K)
+    foreach(t stochastic_pagesize_default stochastic_pagesize_512 stochastic_pagesize_32K)
+      set_tests_properties(${t} PROPERTIES
+        LABELS "stochastic-13m"
+        TIMEOUT 900
+        RUN_SERIAL ON
+        WORKING_DIRECTORY ${MDBX_OUTPUT_DIR}
+        RESOURCE_LOCK stochastic)
+    endforeach()
   endif()
 
   if(NOT SUBPROJECT)
