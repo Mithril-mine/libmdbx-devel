@@ -84,7 +84,13 @@ WRITER_TEMPLATE = textwrap.dedent(
         import time as _t
         _t.sleep(30)
     elif mode == "hold":
-        # hold: держим env открытым и НЕ закрываем (меты остаются unsteady)
+        # hold: держим env открытым и НЕ закрываем (меты остаются unsteady);
+        # READY ставим ПОСЛЕ всех записей и финального flush: тест ждёт его
+        # вместо опроса read-only открытия, которое на unsteady-метах может
+        # давать WANNA_RECOVERY/сбоить во время активной записи (флейк на
+        # нагруженном CI: _wait_for_records возвращал -1 даже после 60s).
+        with open(path + ".ready", "w") as _f:
+            _f.write("READY\\n")
         import time as _t
         _t.sleep(30)
     elif mode == "kill9":
@@ -125,34 +131,11 @@ def _spawn_writer(db_path, sync_mode, flush_each, mode="close", dir=None):
     return proc, script
 
 
-def _wait_for_records(db_path, expected, timeout=60):
-    """Ждём, пока в read-only открытии станет expected записей.
-
-    Таймаут завышен намеренно: на разделяемом CI-раннере (несколько
-    параллельных workflow после repository_dispatch) старт Python-писателя
-    и первые записи могут растянуться за 20s; тест флакал с -1 при том же
-    коде (push-прогоны проходят). Возврат происходит сразу после появления
-    записей, поэтому лишний таймаут не замедляет успешный путь."""
-    deadline = time.time() + timeout
-    while time.time() < deadline:
-        try:
-            s = Store(db_path, readonly=True, _skip_sync_thread=True)
-            n = sum(1 for k in s.recall("fact:practice:durability-", limit=200)
-                    if k.get("key", "").startswith("fact:practice:durability-"))
-            s.close()
-            if n >= expected:
-                return n
-        except Exception:
-            pass
-        time.sleep(0.2)
-    return -1
-
-
 def _wait_ready(db_path, timeout=120):
     """Ждём маркер `<db>.ready` от writer'а (коммиты сделаны, режим готов).
 
     Таймаут завышен намеренно: на разделяемом CI-раннере старт Python-писателя
-    и первые записи могут растянуться за 20s (см. _wait_for_records)."""
+    и первые записи могут растянуться за 20s."""
     marker = db_path + ".ready"
     deadline = time.time() + timeout
     while time.time() < deadline:
@@ -249,7 +232,12 @@ def test_store_persistence_flush_each(tmp_path):
          str(N_RECORDS), "hold"],
         stdout=subprocess.PIPE, stderr=subprocess.PIPE)
     try:
-        assert _wait_for_records(db, N_RECORDS) >= 0
+        # READY-маркер writer ставит ПОСЛЕ всех записей и финального flush.
+        # Опрос read-only открытия во время активной записи ненадёжен: на
+        # нагруженном CI readonly-Store поверх незакрытых unsteady-мет может
+        # кидать WANNA_RECOVERY/сбоить, из-за чего _wait_for_records ()
+        # возвращал -1 даже при успешно дописавшем writer'е (флейк).
+        assert _wait_ready(db), "writer не закоммитил записи до сигнала"
         # дать writer'у выполнить финальный flush_sync() после последней записи:
         # иначе SIGKILL может попасть в окно commit(N) -> flush(N) и меты
         # останутся unsteady (флейк: 24.w:25.w:23.s)
