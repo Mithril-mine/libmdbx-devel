@@ -125,6 +125,35 @@ __hot int __must_check_result pnl_insert_span(__restrict pnl_t *ppnl, pgno_t pgn
   return MDBX_SUCCESS;
 }
 
+/* Check whether two sorted page-number lists share at least one page number.
+ * Used to detect a page mentioned by two different GC records: a valid GC
+ * never lists a page twice, so any common page is proof of corruption. */
+__hot __noinline bool pnl_intersect(const const_pnl_t a, const const_pnl_t b) {
+  const size_t a_len = MDBX_PNL_GETSIZE(a), b_len = MDBX_PNL_GETSIZE(b);
+  if (likely(!a_len || !b_len))
+    return false;
+  size_t ia = 1, ib = 1;
+  while (ia <= a_len && ib <= b_len) {
+#if MDBX_PNL_ASCENDING
+    if (a[ia] < b[ib]) {
+      ++ia;
+      continue;
+    }
+#else
+    if (a[ia] > b[ib]) {
+      ++ia;
+      continue;
+    }
+#endif
+    if (a[ia] != b[ib]) {
+      ++ib;
+      continue;
+    }
+    return true;
+  }
+  return false;
+}
+
 __hot __noinline bool pnl_check(const const_pnl_t pnl, const size_t limit) {
   assert(limit >= MIN_PAGENO - MDBX_ENABLE_REFUND);
   if (likely(MDBX_PNL_GETSIZE(pnl))) {
