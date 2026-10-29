@@ -363,12 +363,20 @@ int cursor_dupsort_setup(MDBX_cursor *mc, const node_t *node, const page_t *mp) 
     }
     mx->cursor.top_and_flags = z_fresh_mark | z_inner;
     break;
-  case N_DUP:
-    if (!MDBX_DISABLE_VALIDATION && unlikely(node_ds(node) <= PAGEHDRSZ)) {
-      ERROR("invalid nested-page size %zu", node_ds(node));
+  case N_DUP:;
+    const size_t dsize = node_ds(node);
+    page_t *const sp = node_data(node);
+    if (!MDBX_DISABLE_VALIDATION && unlikely(!subpage_geometry_ok(sp, dsize))) {
+      /* Crafted nested-page lower/upper make node_del()/cursor_put()
+       * underflow their memmove()/memcpy() lengths even on the normal
+       * (non-MDBX_VALIDATION) path. (issue #176) */
+      ERROR("invalid nested sub-page lower(%u)/upper(%u) for size %zu", sp->lower, sp->upper, dsize - PAGEHDRSZ);
       goto bailout;
     }
-    page_t *sp = node_data(node);
+    if (!MDBX_DISABLE_VALIDATION && unlikely(dsize <= PAGEHDRSZ)) {
+      ERROR("invalid nested-page size %zu", dsize);
+      goto bailout;
+    }
     mx->nested_tree.height = 1;
     mx->nested_tree.branch_pages = 0;
     mx->nested_tree.leaf_pages = 1;
@@ -2164,8 +2172,9 @@ __hot int cursor_ops(MDBX_cursor *mc, MDBX_val *key, MDBX_val *data, const MDBX_
   case MDBX_NEXT:
   case MDBX_NEXT_NODUP:
     rc = outer_next(mc, key, data, op);
-    /* The z_eof_hard flag reflects internal intermediate state and must not be exposed to outer code after an next-ops.
-     * Elsewise a tree rebalance after deletion may going wrong. So just clear z_eof_hard flag in both cursors anyway.
+    /* The z_eof_hard flag reflects internal intermediate state and must not be exposed to outer code after an
+     * next-ops. Elsewise a tree rebalance after deletion may going wrong. So just clear z_eof_hard flag in both
+     * cursors anyway.
      */
     mc->flags &= ~z_eof_hard;
     ((cursor_couple_t *)mc)->inner.cursor.flags &= ~z_eof_hard;
