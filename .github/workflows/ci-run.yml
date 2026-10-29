@@ -199,8 +199,10 @@ jobs:
               # умеет -b; собираем .gcov-файлы и строим lines.info через
               # tools/gcov_dump_info.py (git-относительные пути).
               TMPGCOV="$(mktemp -d)"
-              for gcda in $(find "$BUILD" -name '*.gcda' | head -200); do
-                (cd "$TMPGCOV" && gcov -b "$ROOT/$gcda") >/dev/null 2>&1 || true
+              # mingw-gcov пишет .gcda в текущий каталог ctest-процесса
+              # (Testing/Temporary), не рядом с .o в build — ищем по workspace.
+              for gcda in $(find "$ROOT" -name '*.gcda' | head -200); do
+                (cd "$TMPGCOV" && gcov -b "$gcda") >/dev/null 2>&1 || true
               done
               python3 "$GITHUB_WORKSPACE/skynet/MCP-shared-graph-memory/tools/gcov_dump_info.py" \
                 --gcov-glob "$TMPGCOV/*.gcov" --root "$ROOT" > coverage/lines.info || true
