@@ -1026,12 +1026,12 @@
       "cmake": [
         "-G|MinGW Makefiles",
         "-DCMAKE_BUILD_TYPE=Debug",
-        "-DMDBX_BUILD_SHARED_LIBRARY:BOOL=ON",
+        "-DMDBX_BUILD_SHARED_LIBRARY:BOOL=OFF",
         "-DMDBX_WITHOUT_MSVC_CRT:BOOL=ON",
         "-DENABLE_GCOV:BOOL=ON"
       ],
       "ctest": null,
-      "note": "ci-windows-mingw Debug dll=ON crt=ON + gcov coverage (windows-import/lck-windows)",
+      "note": "ci-windows-mingw Debug static (gcov flush via exe exit) + coverage windows-import/lck-windows",
       "coverage": true,
       "build_parallel": 4
     },
