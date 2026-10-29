@@ -20,14 +20,10 @@ name: ci-dispatch
 # NOTE: repository_dispatch/schedule fire only from the default branch, so this
 # workflow must live on master before agents/nightly can use it (design §3).
 
-concurrency:
-  # The orchestrator (tests/ci/orchestrate.py) is the source of truth for
-  # cancelling superseded/rewritten runs and deduplicating push vs
-  # pull_request on the same SHA. The native group is a coarse safety net:
-  # one group per branch so cancel-in-progress still drops an older run
-  # before the orchestrator's API cancels take effect.
-  group: ci-dispatch-${{ github.head_ref || github.ref }}
-  cancel-in-progress: true
+# No native concurrency group: the orchestrator (tests/ci/orchestrate.py) is the
+# sole owner of run cancellation/dedup. A native cancel-in-progress group would
+# blindly cancel queued/just-started runs on every new event of the same branch
+# (even when the orchestrator intended to keep or skip them), losing coverage.
 
 permissions:
   actions: write
