@@ -221,7 +221,10 @@ help:
 	@echo "  make smoke-memcheck      - build with Valgrind support and run smoke test under memcheck tool"
 	@echo "  make smoke-fault         - execute transaction owner failure smoke testcase"
 	@echo "  make smoke-singleprocess - execute single-process smoke test"
-	@echo "  make test-memcheck       - build with Valgrind support and run basic test under memcheck tool"
+	@echo "  make memcheck            - alias for make smoke-memcheck"
+	@echo "  make smoke-valgrind      - alias for make smoke-memcheck"
+	@echo "  make test-memcheck       - build with Valgrind support and run ctest -T memcheck and stochastic tests"
+	@echo "  make test-valgrind       - alias for make test-memcheck"
 	@echo "  make test-long           - execute long test which runs for several weeks, or until interruption"
 	@echo "  make test-singleprocess  - execute single-process basic test (also used by make cross-qemu)"
 	@echo "  make cross-gcc           - check cross-compilation without test execution"
@@ -344,19 +347,9 @@ TEST_TARGETS += test-stochastic
 TEST_BUILD_TARGETS += build-stochastic
 #< dist-cutoff-end
 
-.PHONY: ninja-assertions ninja-debug ninja $(TEST_TARGETS) $(TEST_BUILD_TARGETS) test-ubsan test-asan test-memcheck test-leak test-assertion test build-test smoke check
+.PHONY: ninja-assertions ninja-debug ninja $(TEST_TARGETS) $(TEST_BUILD_TARGETS) test-ubsan test-asan test-leak test-assertion test build-test smoke check
 test: $(TEST_TARGETS)
 build-test: show-options $(TEST_BUILD_TARGETS)
-
-smoke-valgrind: smoke-memcheck
-smoke-memcheck test-memcheck: CFLAGS_EXTRA += -Ofast -DENABLE_MEMCHECK
-smoke-memcheck test-memcheck: MDBX_FORCE_ASSERTIONS=1
-smoke-memcheck test-memcheck: CMAKE_OPT += -DENABLE_UBSAN:BOOL=OFF -DENABLE_ASAN:BOOL=OFF -DENABLE_MEMCHECK:BOOL=ON
-smoke-memcheck test-memcheck: CTEST_OPT += -T memcheck
-test-memcheck: build-test build-stochastic ctest
-	@echo '  RUNNING `test/stochastic.sh --with-valgrind --loops 2`...'
-	$(QUIET)$(STOCHASTIC) --with-valgrind --loops 2 --db-upto-mb 256 --skip-make >$(TEST_LOG) || (cat $(TEST_LOG) && false)
-smoke-memcheck: smoke
 
 smoke-assertion test-assertion: MDBX_FORCE_ASSERTIONS=1
 test-assertion: test
@@ -444,9 +437,9 @@ else
 ################################################################################
 # Non-amalgamated sources with test framework
 
-.PHONY: build-stochastic build-test-with-valgrind check cross-gcc cross-qemu dist doxygen gcc-analyzer long-test
+.PHONY: build-stochastic check cross-gcc cross-qemu dist doxygen gcc-analyzer long-test
 .PHONY: reformat release-assets tags smoke smoke-fault
-.PHONY: smoke-singleprocess test-singleprocess test-valgrind test-memcheck memcheck smoke-memcheck
+.PHONY: smoke-singleprocess test-singleprocess test-valgrind test-memcheck memcheck smoke-memcheck smoke-valgrind
 .PHONY: smoke-assertion long-test-assertion test-ci test-ci-extra check-posix-locking
 
 test-ci-extra: test-ci cross-gcc cross-qemu
@@ -578,10 +571,12 @@ test-singleprocess: build-stochastic
 
 smoke-valgrind: smoke-memcheck
 memcheck: smoke-memcheck
-smoke-memcheck: VALGRIND=valgrind --trace-children=yes --log-file=valgrind-%p.log --leak-check=full --track-origins=yes --read-var-info=yes --error-exitcode=42 --suppressions=valgrind_suppress.txt
-smoke-memcheck: CFLAGS_EXTRA=-Ofast -DENABLE_MEMCHECK
-smoke-memcheck: CMAKE_OPT += -DENABLE_MEMCHECK=ON
-smoke-memcheck: CTEST_OPT += -T memcheck
+
+VALGRIND ?= valgrind --trace-children=yes --log-file=valgrind-%p.log --leak-check=full --track-origins=yes --read-var-info=yes --error-exitcode=42 --suppressions=valgrind_suppress.txt
+smoke-memcheck test-memcheck: CFLAGS_EXTRA += -Ofast -DENABLE_MEMCHECK
+smoke-memcheck test-memcheck: MDBX_FORCE_ASSERTIONS=1
+smoke-memcheck test-memcheck: CMAKE_OPT += -DENABLE_UBSAN:BOOL=OFF -DENABLE_ASAN:BOOL=OFF -DENABLE_MEMCHECK:BOOL=ON
+smoke-memcheck test-memcheck: CTEST_OPT += -T memcheck
 smoke-memcheck: build-stochastic
 	@echo "  SMOKE \`mdbx_test basic\` under Valgrind's memcheck..."
 	$(QUIET)rm -f valgrind-*.log $(TEST_DB) $(TEST_DB)-copy $(TEST_LOG).gz && (set -o pipefail; export ASAN_OPTIONS=$(ASAN_OPTIONS) UBSAN_OPTIONS=$(UBSAN_OPTIONS); ( \
@@ -591,6 +586,11 @@ smoke-memcheck: build-stochastic
 		$(VALGRIND) ./mdbx_chk -vvn $(TEST_DB) && \
 		$(VALGRIND) ./mdbx_chk -vvn $(TEST_DB)-copy \
 	) | tee >(gzip --stdout >$(TEST_LOG).gz) | tail -n 99)
+
+test-valgrind: test-memcheck
+test-memcheck: build-test build-stochastic ctest
+	@echo '  RUNNING `test/stochastic.sh --with-valgrind --loops 2`...'
+	$(QUIET)$(STOCHASTIC) --with-valgrind --loops 2 --db-upto-mb 256 --skip-make >$(TEST_LOG) || (cat $(TEST_LOG) && false)
 
 gcc-analyzer:
 	@echo '  RE-BUILD with `-fanalyzer` option...'
