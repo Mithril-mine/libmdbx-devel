@@ -1089,6 +1089,15 @@ next_gc:;
 #if MDBX_ENABLE_PROFGC
   const uint64_t merge_begin = osal_monotime();
 #endif /* MDBX_ENABLE_PROFGC */
+  /* A page mentioned by both this GC record and the already accumulated
+   * retired-list means two GC records/ranges claimed ownership of the same
+   * page: reusing it twice within one transaction would alias two b-tree
+   * nodes. Reject such a corrupted GC instead of proceeding. */
+  if (unlikely(pnl_intersect(txn->tw.repnl, gc_pnl))) {
+    ERROR("%s/%d: %s", "MDBX_CORRUPTED", MDBX_CORRUPTED, "GC page listed by two records");
+    ret.err = MDBX_CORRUPTED;
+    goto fail;
+  }
   pnl_merge(txn->tw.repnl, gc_pnl);
 #if MDBX_ENABLE_PROFGC
   prof->pnl_merge.calls += 1;
