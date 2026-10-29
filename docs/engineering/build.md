@@ -15,7 +15,7 @@
 | --- | --- | --- |
 | CMake | `CMakeLists.txt` (root) | **Primary/recommended**, incl. Windows (MSVC/MinGW), macOS, Android/iOS (toolchain files), HarmonyOS |
 | GNU Make | `GNUmakefile` via `Makefile` thunk | Legacy but supported; GNU Make >= 3.81 + bash |
-| Conan 2 | `conanfile.py` | Packaging recipe (package name `mdbx`) |
+| Conan | `conanfile.py` | Packaging recipe (package name `mdbx`) |
 
 ## 2. CMake build
 
@@ -106,7 +106,7 @@ Auto-probing: C standard (gnu11), C++ standard chain, per-OS linker flags (`unam
 lib suffix (so/dylib/dll). `TEST_ITER` (repeat count): 7 locally, 3 under CI, 2 on macOS/Windows.
 `TEST_DB`/`TEST_LOG` live in `/dev/shm` (or `/tmp`), or `pwd` under CI.
 
-## 4. Conan 2 packaging
+## 4. Conan packaging
 
 `conanfile.py` (`required_conan_version >= 2.7`, `name='mdbx'`, `revision_mode='scm'`,
 `no_copy_source=True`, `test_type='explicit'`, `build_policy='missing'`). ~40 `mdbx.*` options

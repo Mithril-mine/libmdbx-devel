@@ -38,7 +38,7 @@ Author: Leonid Yuriev \<leo@yuriev.ru\>. Home site: <https://libmdbx.dqdkfa.ru>.
 | License | Apache-2.0 (since v0.13, May 2024; see `COPYRIGHT` for history) |
 | Languages | C11 (`-std=gnu11`), C++17..23 for the C++ API, bash for tooling |
 | Primary build | CMake (>= 3.12); legacy GNU Make (`GNUmakefile`, via `Makefile` thunk) |
-| Packaging | Conan 2 recipe (`conanfile.py`) |
+| Packaging | Conan recipe (`conanfile.py`) |
 | Tests | CTest-based; unit tests in `tests/ut/`, regression in `tests/ut/issues/`, framework in `tests/framework/` |
 | CI | SourceCraft `.sourcecraft/ci.yaml` (Linux gcc/clang) + GitHub Actions `.github/workflows/` (cross-platform) |
 | Code style | LLVM (`clang-format`, `.clang-format` at repo root) |
@@ -61,7 +61,7 @@ Author: Leonid Yuriev \<leo@yuriev.ru\>. Home site: <https://libmdbx.dqdkfa.ru>.
 | [`CMakeLists.txt`](../../CMakeLists.txt) | Main CMake build (1619 lines); detects amalgamated vs non-amalgamated layout |
 | [`GNUmakefile`](../../GNUmakefile) | Legacy GNU Make build (1105 lines) with many targets (`check`, `smoke`, `dist`, `doxygen`, ...) |
 | [`Makefile`](../../Makefile) | Thin thunk that forwards to `GNUmakefile` |
-| [`conanfile.py`](../../conanfile.py) | Conan 2 recipe with dozens of `mdbx.*` options |
+| [`conanfile.py`](../../conanfile.py) | Conan recipe with dozens of `mdbx.*` options |
 | `.sourcecraft/` | SourceCraft CI config (`ci.yaml`) |
 | `.github/workflows/` | GitHub Actions CI (android, linux, macos, windows-msvc/mingw/mscl, cxx-msvc) |
 | [`AGENTS.md`](../../AGENTS.md) | Agent rules: CMake+CTest for build/test, Linux+Windows required, LLVM style |
