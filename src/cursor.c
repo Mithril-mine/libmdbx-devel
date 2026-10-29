@@ -363,7 +363,7 @@ int cursor_dupsort_setup(MDBX_cursor *mc, const node_t *node, const page_t *mp) 
     }
     mx->cursor.top_and_flags = z_fresh_mark | z_inner;
     break;
-  case N_DUP:
+  case N_DUP:;
     const size_t dsize = node_ds(node);
     page_t *const sp = node_data(node);
     if (!MDBX_DISABLE_VALIDATION && unlikely(!subpage_geometry_ok(sp, dsize))) {
