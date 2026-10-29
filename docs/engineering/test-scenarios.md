@@ -1256,6 +1256,197 @@ issue_gh0016.
 
 ---
 
+### SC-61. tree-search: ветви перехода страницы
+
+**Область:** cursor (tree-search). Дыра: `tree-search` 40%, 1527 блоков.
+
+**Hypothesis:** поиск по ключам, разнесённым по разным страницам B+tree, покрывает
+все ветви сравнения и переходов (tab-переходы, lower/upper bounds).
+
+**Preconditions:** пустая БД, nosync-safe, RAM-диск; одна DBI.
+
+**Сценарий:**
+1. Вставить N ключей так, чтобы получить 2+ уровня страниц (узлы переполняются;
+   проверять через `mdbx_env_info`/st итерации — размер>2 страниц).
+2. Для выборки ключей (первый/средний/последний/между страницами) выполнить
+   `mdbx_get` (exact), `mdbx_cursor_get` (`FIRST`/`LAST`/`NEXT`/`PREV`/`GET_CURRENT`),
+   `mdbx_cursor_lower_bound`/`upper_bound`.
+3. Прогнать односвязанный диапазон (`mdbx_cursor_get` NEXT до конца).
+
+**Ожидания:**
+- результаты позиционирования коррrectны на границах страниц;
+- после coverage-замера блоки `node_search`, `search_in_page`, переходов по
+  `NODEPGID` покрыты ≥90%.
+
+**Пробники:**
+- `tree_search`/`search`, `node_search`, `page_get_by_index` (переходы по уровням);
+- mprobe `MPROBE_WATCH(cursor_tree_search)` (src/tree-search.c:29).
+
+**Speed:** unit. **Sync:** nosync-safe. **Диск:** /dev/shm.
+
+### SC-62. tree-search: dup-границы
+
+**Область:** cursor/dbi (DUPSORT).
+
+**Hypothesis:** поиск по границам DUP-значений (same key + diff value) корректен
+поперечно веткам сравнения.
+
+**Preconditions:** таблица с `MDBX_DUPSORT`, 3+ значений на ключ, вперемешку
+(ключа на границах страницы).
+
+**Сценарий:**
+1. `mdbx_get` по полному ключу (возвращает первое значение);
+2. курсор: `FIRST`/`LAST`/`NEXT`/`PREV`/`GET_MULTIPLE`, `NEXT_MULTIPLE` на DUP;
+3. поиск частичного ключа (без значения) через `lower_bound`.
+
+**Ожидания:** ветви dup-сравнения покрыты; результаты верны; `MDBX_NOTFOUND` на
+отсутствующих.
+
+**Пробники:** `cmp_dups`, `node_search` (dup-итератор); mprobes
+`cursor_multiple_*` (src/cursor.c:2275-2325), `cursor_tree_search`.
+
+> Замечание (найдено при реализации SC-61/62): повторное открытие
+> DUPSORT-таблицы в read-транзакции через `txn.open_map("name")` БЕЗ
+> `value_mode::multi` даёт `MDBX_INCOMPATIBLE` в `find_multivalue`/
+> `lower_bound_multivalue` — открывать с флагом `value_mode::multi`.
+
+**Speed:** unit. **Sync:** nosync-safe.
+
+### SC-63. decl_transcoders: полное покрытие типов C++
+
+**Область:** cxx (decl_transcoders, 11%).
+
+**Hypothesis:** каждый C++ тип (int/uint всех размеров, float/double, контейнеры,
+строки) проходит через транскодер `buffer`/`slice` в обе стороны.
+
+**Preconditions:** собрано с `MDBX_BUILD_CXX=ON`; Bit-вставки без БД не нужны.
+
+**Сценарий:**
+1. Для каждого типа: `buffer(buf_ptr, size)` → `slice` → обратно, проверить
+   содержимое/размеры.
+2. Экзотика: `buffer` из `std::string`/`std::vector`, view→buffer, oversized
+   (на грани `max_size`).
+3. `from_hex`/`to_hex`, `from_base64` при опции.
+
+**Ожидания:** покрытие `decl_transcoders` ≥80%; round-trip без потерь.
+
+**Пробники:** транскодеры (`transcoders` макрос/класс).
+
+**Speed:** unit.
+
+### SC-64. decl_core: исключения ↔ коды C API
+
+**Область:** cxx (decl_core, 21%).
+
+**Hypothesis:** каждый `MDBX_*` код (NOTFOUND, MAP_FULL, INVALID, READONLY,
+CORRUPTED, ...) маппится на соответствующее C++ исключение, и наоборот.
+
+**Preconditions:** C++ собрано; подключён `<mdbx.h++>`.
+
+**Сценарий:**
+1. Серия вызовов, возвращающих однотипные ошибки (get missing → `no_data`;
+   put без места → `db_full`; неверный txn-id → `invalid`; env readonly →
+   `readonly`), поймать каждое исключение, проверить `code()` и `what()`.
+2. Прогнать исключение из «дикой» ошибки (перенос страницы при повреждении —
+   если реально воспроизвести) → `corrupted`.
+
+**Ожидания:** все маппинги покрыты; нет исключения «не того типа».
+
+**Пробники:** `mdbx::exception` иерархия, `error_code`-производные.
+
+**Speed:** unit.
+
+### SC-65. gc-get/gc-put: цепочки ретирирования
+
+**Область:** gc (gc-get 68%, gc-put 67%).
+
+**Hypothesis:** массовые удаления/обновления формируют корректные GC-цепочки
+(retire → reclaim), включая pipelining; страницы возвращаются в переиспользование.
+
+**Preconditions:** nosync-safe, RAM-диск; одна DBI с большим объёмом данных.
+
+**Сценарий:**
+1. Наполнить БД до нескольких десятков МБ (записи крупные).
+2. `mdbx_del`/`mdbx_cursor_del` большого диапазона (см. SC-13 bunch-delete)
+   — одна транзакция.
+3. Повторить put/delete в цикле 2-3 раза (формирование последовательных
+   GC-записей).
+4. `mdbx_chk` в конце (целостность GC-цепочки); `mdbx_env_info` —
+   размер файла не растёт бесконечно (переиспользование).
+
+**Ожидания:**
+- ветви `gc-get`/`gc-put` (retire лестницы, reclaim по пипelaйну) покрыты ≥85%;
+- страницы возвращены; `mdbx_chk` без ошибок.
+
+**Пробники:** `gc_retire`, `gc_reclaim`, `MDBX_DEBUG_GCU`-логирование.
+
+**Speed:** smoke/heavy. **Sync:** nosync-safe. **Диск:** /dev/shm.
+
+### SC-66. osal: платформенные ветви (минкор/без-минкор)
+
+**Область:** osal. Дыра: 61%, ветви альтернативных API.
+
+**Hypothesis:** при `MDBX_USE_MINCORE=OFF` (и принудительно без MAP_POPULATE)
+ветви osal-обхода исполняются и код корректен.
+
+**Preconditions:** сборка c `-DMDBX_USE_MINCORE=OFF` (+`MDBX_FORCE_*`-флаги
+минимальных API, если есть).
+
+**Сценарий:**
+1. Прогнать smoke/базовые операции (env open, txn begin, put/get/commit,
+   drop) под этой сборкой.
+2. Windows-чаясть веток — через win-gcov-клетку (артефакт CI).
+
+**Ожидания:** pct `osal` растёт; нет падений в альтернативных путях.
+
+**Пробники:** `osal_mmap`, `osal_munmap`, prefault-ветви.
+
+**Speed:** smoke.
+
+### SC-67. lck-posix: конкуренция и EAGAIN-пути
+
+**Область:** lck (lck-posix, 61%).
+
+**Hypothesis:** при живой конкуренции двух процессов EAGAIN/повторные попытки
+захвата lock-файла корретны, без гонок и deadlock.
+
+**Preconditions:** 2 процесса (фолк/субпроцессы), одна БД, `durable`/`nosync-safe`.
+
+**Сценарий:**
+1. Процесс A открывает БД/пишет; процесс B пробует открыть в RW одновременно
+   (ожидает/перелёт), затем пишет после A commit.
+2. `mdbx_chk` в конце — целостность.
+
+**Ожидания:** EAGAIN-ветви захвата покрыты; финальная консистентность.
+
+**Пробники:** `lck-posix` `osenv_...` lock-примитивы, EAGAIN-обработка.
+
+**Speed:** smoke/heavy.
+
+### SC-68. C++ rare ветви env/txn/cursor
+
+**Область:** cxx (impl_env 51%, decl_env 25%, decl_txn 32%, decl_cursor 47%).
+
+**Hypothesis:** редкие жизненные циклы C++ обёрток (move, moved-from, abort при
+открытом txn, исключение в деструкторе) корректны.
+
+**Preconditions:** C++-сборка; модуль `test-env.h` (runtime-limiter) подключён.
+
+**Сценарий:**
+1. `env_managed` move/swap; доступ к moved-from → `invalid`.
+2. `txn_managed` undeảng/rw; commit/abort в необычном порядке;
+   `txn` при `env.close()` живом — `closed`.
+3. `cursor_managed` при закрытой txn.
+
+**Ожидания:** ветви RAII-кода покрыты; нет утечек (проверка через
+`mdbx_extra_rthc`/ASAN).
+
+**Пробники:** деструкторы/`~env`, `~txn`, `~cursor`, state-mашины.
+
+**Speed:** unit.
+
+---
+
 ## 4. Следующие партии (план)
 
 | Партия | Области |
