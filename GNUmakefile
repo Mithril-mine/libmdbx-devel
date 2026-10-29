@@ -364,7 +364,7 @@ smoke-memcheck test-memcheck: CMAKE_OPT += -DENABLE_UBSAN:BOOL=OFF -DENABLE_ASAN
 smoke-memcheck test-memcheck: CTEST_OPT += -T memcheck
 test-memcheck: build-test build-stochastic ctest
 	@echo '  RUNNING `tests/stochastic.sh --with-valgrind --loops 2`...'
-	$(QUIET)$(STOCHASTIC) --with-valgrind --loops 2 --db-upto-mb 256 --skip-make >$(TEST_LOG) || (cat $(TEST_LOG) && false)
+	$(QUIET)$(STOCHASTIC) --with-valgrind --loops 2 --pagesize=min --db-upto-mb 256 --skip-make >$(TEST_LOG) || (cat $(TEST_LOG) && false)
 smoke-memcheck: smoke
 
 smoke-assertion test-assertion: MDBX_CHECKING=2
@@ -491,9 +491,9 @@ define uname2titer
 endef
 
 DIST_EXTRA := AGENTS.md LICENSE NOTICE COPYRIGHT README.md TODO.md CMakeLists.txt GNUmakefile Makefile ChangeLog.md VERSION.json config.h.in ntdll.def \
- 	$(addprefix man1/, $(MANPAGES)) cmake/compiler.cmake cmake/profile.cmake cmake/utils.cmake cmake/pch.cmake cmake/mdbx-config.cmake.in windows-safeseh-masm.asm windows-safeseh-yasm.asm \
- 	windows-safeseh.obj valgrind.supp conanfile.py \
- 	$(sort $(shell git ls-files examples docs/ru docs/en))
+	$(addprefix man1/, $(MANPAGES)) cmake/compiler.cmake cmake/profile.cmake cmake/utils.cmake cmake/pch.cmake cmake/mdbx-config.cmake.in windows-safeseh-masm.asm windows-safeseh-yasm.asm \
+	windows-safeseh.obj valgrind.supp conanfile.py \
+	$(sort $(shell git ls-files examples docs/ru docs/en))
 
 DIST_SRC   := mdbx.h mdbx.h++ mdbx.c mdbx.c++ $(addsuffix .c, $(MDBX_TOOLS)) mdbx-internals.h mdbx-wingetopt.h
 
@@ -616,16 +616,16 @@ select-tests:
 
 test-stochastic: build-stochastic
 	@echo '  RUNNING `tests/stochastic.sh --loops 2`...'
-	$(QUIET)$(STOCHASTIC) --whole-duration 600 --probe-duration 60 --dont-check-ram-size --loops 2 --db-upto-mb 256 --skip-make --taillog >$(TEST_LOG) || (cat $(TEST_LOG) && false)
+	$(QUIET)$(STOCHASTIC) --whole-duration 600 --probe-duration 60 --pagesize=min --dont-check-ram-size --loops 2 --db-upto-mb 256 --skip-make --taillog >$(TEST_LOG) || (cat $(TEST_LOG) && false)
 
 long-test: test-long
 test-long: build-stochastic
 	@echo '  RUNNING `tests/stochastic.sh --loops 42`...'
-	$(QUIET)$(STOCHASTIC) --loops 42 --db-upto-mb 1024 --extra --skip-make --taillog
+	$(QUIET)$(STOCHASTIC) --loops 42 --db-upto-mb 1024 --pagesize=min --extra --skip-make --taillog
 
 test-singleprocess: build-stochastic
 	@echo '  RUNNING `tests/stochastic.sh --single --loops 2`...'
-	$(QUIET)$(STOCHASTIC) --whole-duration 600 --probe-duration 60 --dont-check-ram-size --single --loops 2 --db-upto-mb 256 --skip-make --taillog >$(TEST_LOG) || (cat $(TEST_LOG) && false)
+	$(QUIET)$(STOCHASTIC) --whole-duration 600 --probe-duration 60 --pagesize=min --dont-check-ram-size --single --loops 2 --db-upto-mb 256 --skip-make --taillog >$(TEST_LOG) || (cat $(TEST_LOG) && false)
 
 memcheck: smoke-memcheck
 smoke-memcheck: VALGRIND=valgrind --trace-children=yes --log-file=valgrind-%p.log --leak-check=full --track-origins=yes --read-var-info=yes --error-exitcode=42 --suppressions=valgrind.supp
@@ -633,9 +633,9 @@ smoke-memcheck: CFLAGS_EXTRA=-Ofast -DENABLE_MEMCHECK
 smoke-memcheck: build-stochastic
 	@echo "  SMOKE \`mdbx_test basic\` under Valgrind's memcheck..."
 	$(QUIET)rm -f valgrind-*.log $(TEST_DB) $(TEST_DB)-copy $(TEST_LOG).gz && (set -o pipefail; export ASAN_OPTIONS=$(ASAN_OPTIONS) UBSAN_OPTIONS=$(UBSAN_OPTIONS); ( \
-		$(VALGRIND) ./mdbx_test --duration 100 --table=+data.fixed --keygen.split=29 --datalen=35 --progress --console=no --repeat=2 --pathname=$(TEST_DB) --dont-cleanup-after $(MDBX_SMOKE_EXTRA) basic && \
-		$(VALGRIND) ./mdbx_test --duration 100 --progress --console=no --pathname=$(TEST_DB) --dont-cleanup-before --dont-cleanup-after --copy && \
-		$(VALGRIND) ./mdbx_test --duration 100 --mode=-writemap,-nosync-safe,-lifo --progress --console=no --repeat=4 --pathname=$(TEST_DB) --dont-cleanup-after $(MDBX_SMOKE_EXTRA) basic && \
+		$(VALGRIND) ./mdbx_test --duration 100 --pagesize=min --table=+data.fixed --keygen.split=29 --datalen=35 --progress --console=no --repeat=2 --pathname=$(TEST_DB) --dont-cleanup-after $(MDBX_SMOKE_EXTRA) basic && \
+		$(VALGRIND) ./mdbx_test --duration 100 --pagesize=min  --progress --console=no --pathname=$(TEST_DB) --dont-cleanup-before --dont-cleanup-after --copy && \
+		$(VALGRIND) ./mdbx_test --duration 100 --pagesize=min  --mode=-writemap,-nosync-safe,-lifo --progress --console=no --repeat=4 --pathname=$(TEST_DB) --dont-cleanup-after $(MDBX_SMOKE_EXTRA) basic && \
 		$(VALGRIND) ./mdbx_chk -vvn $(TEST_DB) && \
 		$(VALGRIND) ./mdbx_chk -vvn $(TEST_DB)-copy \
 	) | tee >(gzip --stdout >$(TEST_LOG).gz) | tail -n 99)
