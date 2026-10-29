@@ -337,7 +337,7 @@ void page_shadow_release(MDBX_env *env, page_t *dp, size_t npages) {
   }
 }
 
-__cold static void page_kill(MDBX_txn *txn, page_t *mp, pgno_t pgno, size_t npages) {
+__cold static int page_kill(MDBX_txn *txn, page_t *mp, pgno_t pgno, size_t npages) {
   MDBX_env *const env = txn->env;
   DEBUG("kill %zu page(s) %" PRIaPGNO, npages, pgno);
   eASSERT(env, pgno >= NUM_METAS && npages);
@@ -346,7 +346,8 @@ __cold static void page_kill(MDBX_txn *txn, page_t *mp, pgno_t pgno, size_t npag
     memset(mp, -1, bytes);
     mp->pgno = pgno;
     if ((txn->flags & MDBX_WRITEMAP) == 0)
-      osal_pwrite(env->lazy_fd, mp, bytes, pgno2bytes(env, pgno));
+      return osal_dxb_write_stub(env, mp, bytes, pgno2bytes(env, pgno));
+    return MDBX_SUCCESS;
   } else {
     struct iovec iov[MDBX_AUXILARY_IOV_MAX];
     /* Using the same pattern/buffer to write each page of npages. */
@@ -357,14 +358,16 @@ __cold static void page_kill(MDBX_txn *txn, page_t *mp, pgno_t pgno, size_t npag
       /* clone first iov item and overwrite itself on a next batch-cycle */
       iov[n] = iov[0];
       if (++n == MDBX_AUXILARY_IOV_MAX) {
-        osal_pwritev(env->lazy_fd, iov, MDBX_AUXILARY_IOV_MAX, iov_off);
+        int err = osal_dxb_write_stubv(env, iov, MDBX_AUXILARY_IOV_MAX, iov_off);
+        if (unlikely(err != MDBX_SUCCESS))
+          return err;
         /* advance offset to next batch-cycle and reset the n as counter of iov-items */
         iov_off += pgno2bytes(env, MDBX_AUXILARY_IOV_MAX);
         n = 0;
       }
     }
     /* osal_pwritev() accepts n = 0 */
-    osal_pwritev(env->lazy_fd, iov, n, iov_off);
+    return osal_dxb_write_stubv(env, iov, n, iov_off);
   }
 }
 
@@ -600,7 +603,18 @@ status_done:
 #if defined(ENABLE_MEMCHECK) || defined(__SANITIZE_ADDRESS__)
       if (MDBX_DEBUG != 0 || unlikely(txn->env->flags & MDBX_PAGEPERTURB))
 #endif
-        page_kill(txn, mp, pgno, npages);
+      {
+        /* A failed stub write is not fatal for the database contents (the page
+         * is being freed anyway), but it is the only indication of a failing
+         * media/filesystem on this path. Surface it while keeping the
+         * transaction state consistent (the page is still washed/reclaimed
+         * below). */
+        const int kill_err = page_kill(txn, mp, pgno, npages);
+        if (unlikely(kill_err != MDBX_SUCCESS)) {
+          txn->flags |= MDBX_TXN_ERROR;
+          rc = kill_err;
+        }
+      }
       if ((txn->flags & MDBX_WRITEMAP) == 0) {
         VALGRIND_MAKE_MEM_NOACCESS(page_data(pgno2page(txn->env, pgno)), pgno2bytes(txn->env, npages) - PAGEHDRSZ);
         MDBX_ASAN_POISON_MEMORY_REGION(page_data(pgno2page(txn->env, pgno)), pgno2bytes(txn->env, npages) - PAGEHDRSZ);

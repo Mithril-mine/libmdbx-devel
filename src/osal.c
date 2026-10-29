@@ -1557,6 +1557,22 @@ int osal_pwritev(mdbx_filehandle_t fd, struct iovec *iov, size_t sgvcnt, uint64_
 #endif
 }
 
+int osal_dxb_write_stub(const MDBX_env *env, const void *buf, size_t bytes, uint64_t offset) {
+#if defined(_WIN32) || defined(_WIN64)
+  if (env->ioring.overlapped_fd)
+    return osal_pwrite(env->ioring.overlapped_fd, buf, bytes, offset);
+#endif
+  return osal_pwrite(env->lazy_fd, buf, bytes, offset);
+}
+
+int osal_dxb_write_stubv(const MDBX_env *env, struct iovec *iov, size_t sgvcnt, uint64_t offset) {
+#if defined(_WIN32) || defined(_WIN64)
+  if (env->ioring.overlapped_fd)
+    return osal_pwritev(env->ioring.overlapped_fd, iov, sgvcnt, offset);
+#endif
+  return osal_pwritev(env->lazy_fd, iov, sgvcnt, offset);
+}
+
 int osal_fsync(mdbx_filehandle_t fd, enum osal_syncmode_bits mode_bits) {
 #if defined(_WIN32) || defined(_WIN64)
   if ((mode_bits & (MDBX_SYNC_DATA | MDBX_SYNC_IODQ)) && !FlushFileBuffers(fd))
