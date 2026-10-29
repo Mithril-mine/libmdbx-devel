@@ -1077,13 +1077,35 @@ next_gc:;
 #if MDBX_ENABLE_PROFGC
   const uint64_t merge_begin = osal_monotime();
 #endif /* MDBX_ENABLE_PROFGC */
-  pnl_merge(txn->tw.repnl, gc_pnl);
+  const size_t expected_after_merge = gc_len + MDBX_PNL_GETSIZE(txn->tw.repnl);
+  const bool has_duplicates = pnl_merge(txn->tw.repnl, gc_pnl) != expected_after_merge;
 #if MDBX_ENABLE_PROFGC
   prof->pnl_merge.calls += 1;
   prof->pnl_merge.volume += MDBX_PNL_GETSIZE(txn->tw.repnl);
   prof->pnl_merge.time += osal_monotime() - merge_begin;
 #endif /* MDBX_ENABLE_PROFGC */
   flags |= ALLOC_SHOULD_SCAN;
+  /* Defence-in-depth after the merge: The pnl read from GC was checked above in gc_check_rowdata(),
+   * and the thoroughness of the check depends on MDBX_VALIDATION:
+   *  - without MDBX_VALIDATION, a lightweight check is performed using pnl_check_lite();
+   *  - when MDBX_VALIDATION is enabled, a full check is performed using pnl_check_full() with items order checking.
+   *
+   * Next, here we check that the length after merge is equal to the total length of the source pnls.
+   * Thus, depending on MDBX_VALIDATION, we get two situations:
+   *   - without MDBX_VALIDATION, a minimum of O(1) checks is performed,
+   *     but if the order is violated within pnl from GC, we may not notice duplicates;
+   *   - with MDBX_VALIDATION enabled, the cost of checks is O(n),
+   *     but we will notice both order violations and duplicates.
+   *
+   * Overall, we get a manageable compromise:
+   *  - without MDBX_VALIDATION, there are minimal checks and performance is optimized,
+   *    but control can be enabled via build options;
+   *  - with MDBX_VALIDATION enabled, full checks are performed for maximum resilience against untrusted data. */
+  if (unlikely(has_duplicates)) {
+    ERROR("%s/%d: %s", "MDBX_CORRUPTED", MDBX_CORRUPTED, "duplicate page in the retired-pages list");
+    ret.err = MDBX_CORRUPTED;
+    goto fail;
+  }
   if (AUDIT_ENABLED()) {
     if (unlikely(!pnl_check(txn->tw.repnl, txn->geo.first_unallocated))) {
       ERROR("%s/%d: %s", "MDBX_CORRUPTED", MDBX_CORRUPTED, "invalid txn retired-list");
