@@ -191,19 +191,38 @@ jobs:
           set -euo pipefail
           BUILD="@ci-cmake-build"
           ROOT="$(pwd)"
-          if ! command -v lcov >/dev/null 2>&1; then
-            sudo apt-get update -qq && sudo apt-get install -y -qq lcov
-          fi
           rm -rf coverage
           mkdir -p coverage
-          # GCC emits negative counts and end-line mismatches for the
-          # instrumented test binaries; lcov 2.x needs explicit ignore-errors.
-          lcov --capture --directory "$BUILD" --output-file coverage/lines.info \
-            --quiet --ignore-errors negative,mismatch \
-            --include "$ROOT/src/*"
-          lcov --summary coverage/lines.info 2>&1 | tail -6
-          genhtml coverage/lines.info --output-directory coverage/html \
-            --legend --quiet --title "libmdbx devel (${{ inputs.cell }})"
+          case "$(uname -s)" in
+            MINGW*|MSYS*|CYGWIN*)
+              # Windows (mingw): lcov apt-пакета нет, но gcov (из mingw-w64)
+              # умеет -b; собираем .gcov-файлы и строим lines.info через
+              # tools/gcov_dump_info.py (git-относительные пути).
+              TMPGCOV="$(mktemp -d)"
+              # mingw-gcov пишет .gcda в текущий каталог ctest-процесса
+              # (Testing/Temporary), не рядом с .o в build — ищем по workspace.
+              for gcda in $(find "$ROOT" -name '*.gcda' | head -200); do
+                (cd "$TMPGCOV" && gcov -b "$gcda") >/dev/null 2>&1 || true
+              done
+              python3 "$GITHUB_WORKSPACE/skynet/MCP-shared-graph-memory/tools/gcov_dump_info.py" \
+                --gcov-glob "$TMPGCOV/*.gcov" --root "$ROOT" > coverage/lines.info || true
+              rm -rf "$TMPGCOV"
+              echo "win coverage: $(grep -c '^DA:' coverage/lines.info || true) lines"
+              ;;
+            *)
+              if ! command -v lcov >/dev/null 2>&1; then
+                sudo apt-get update -qq && sudo apt-get install -y -qq lcov
+              fi
+              # GCC emits negative counts and end-line mismatches for the
+              # instrumented test binaries; lcov 2.x needs explicit ignore-errors.
+              lcov --capture --directory "$BUILD" --output-file coverage/lines.info \
+                --quiet --ignore-errors negative,mismatch \
+                --include "$ROOT/src/*"
+              lcov --summary coverage/lines.info 2>&1 | tail -6
+              genhtml coverage/lines.info --output-directory coverage/html \
+                --legend --quiet --title "libmdbx devel (${{ inputs.cell }})"
+              ;;
+          esac
 
       - name: upload coverage report
         if: ${{ inputs.coverage }}
