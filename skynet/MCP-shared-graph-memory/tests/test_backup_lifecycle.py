@@ -18,6 +18,7 @@ import time
 import pytest
 
 from mcp import Store
+from mcp import libmdbx as m
 from mcp.errors import MemoryError
 from mcp.mcp_server import McpServer
 
@@ -250,37 +251,80 @@ def test_mcp_new_tools_and_prompt_notice(store, tmp_path, monkeypatch):
 
 
 def test_server_startup_wants_recovery(tmp_path):
-    """Старт сервера на unsteady БД (kill9 без close) — понятный отказ rc=2."""
+    """Старт сервера на unsteady БД (kill9 без close) — понятный отказ rc=2.
+
+    Устойчивость: writer после коммита стартовой записи пишет READY-маркер
+    (а не просто непустой файл), затем даётся окно writeback частичных мет
+    (~1.2s), после чего writer убивается SIGKILL'ом. «Неудачные» фазы —
+    writer не успел закоммитить (нет READY), меты легли steady целиком,
+    либо kill гонялся с writer'ом — перезапускаются на свежей БД
+    (bounded-retry до 4 попыток, как в test_persistence_crash.py).
+    Только слабая мета текущего boot (RC_WANNA_RECOVERY) даёт
+    проверяемый контракт.
+    """
     if os.name == "nt":
         pytest.skip("POSIX SIGKILL")
     mod = MODULE_DIR
-    db = str(tmp_path / "t.mdbx")
-    writer = tmp_path / "w.py"
-    writer.write_text(
-        "import sys, time\n"
-        "sys.path.insert(0, %r)\n"
-        "from mcp import Store\n"
-        "s = Store(sys.argv[1], readonly=False, _skip_sync_thread=True)\n"
-        "s.vocab_add('practice', 'durability-aa')\n"
-        "s.safe_store('fact:practice:durability-aa', 'fact', 'x', 0.5)\n"
-        "time.sleep(30)\n" % mod)
-    proc = subprocess.Popen([sys.executable, str(writer), db],
-                            stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-    try:
-        # дождаться реального создания/записи БД (а не фиксированной паузы:
-        # под нагрузкой Python может не успеть инициализироваться)
-        deadline = time.time() + 30.0
-        while time.time() < deadline:
-            if os.path.exists(db) and os.path.getsize(db) > 0:
-                break
-            time.sleep(0.05)
+    db = None
+    for attempt in range(4):
+        db = str(tmp_path / ("t%d.mdbx" % attempt))
+        ready = db + ".ready"
+        if os.path.exists(ready):
+            os.remove(ready)
+        writer = tmp_path / ("w%d.py" % attempt)
+        writer.write_text(
+            "import sys, time\n"
+            "sys.path.insert(0, %r)\n"
+            "from mcp import Store\n"
+            "s = Store(sys.argv[1], readonly=False, _skip_sync_thread=True)\n"
+            "s.vocab_add('practice', 'durability-aa')\n"
+            "s.safe_store('fact:practice:durability-aa', 'fact', 'x', 0.5)\n"
+            "open(sys.argv[2], 'w').close()\n"  # READY: коммит сделан
+            "time.sleep(30)\n" % mod)
+        proc = subprocess.Popen([sys.executable, str(writer), db, ready],
+                                stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        try:
+            # дождаться READY-маркера (реального коммита), а не только файла:
+            # под нагрузкой Python может не успеть инициализироваться
+            ready_deadline = time.time() + 30.0
+            while time.time() < ready_deadline and not os.path.exists(ready):
+                time.sleep(0.05)
+            time.sleep(1.2)  # окно writeback частичных мет (как persistence_crash)
+            if os.path.exists(ready):
+                proc.send_signal(signal.SIGKILL)
+                proc.wait(timeout=10)
+        finally:
+            if proc.poll() is None:
+                proc.kill()
+                proc.wait()
+        if not os.path.exists(ready):
+            continue  # writer не успел закоммитить; пробуем на свежей БД
         time.sleep(0.3)
-        proc.send_signal(signal.SIGKILL)
-        proc.wait(timeout=10)
-    finally:
-        if proc.poll() is None:
-            proc.kill()
-            proc.wait()
+        # After #182 preopen_snapinfo(mode=PROPERLY) reports MDBX_WANNA_RECOVERY
+        # when the newest checkpoint is weak and belongs to this boot.
+        # Three outcomes are possible after the SIGKILL, and only the first is
+        # the contract under test:
+        #   - WANNA_RECOVERY: newest meta is a weak checkpoint of this boot;
+        #   - preopen SUCCEEDS: OS writeback flushed everyone steady ("lucky");
+        #   - CORRUPTED / other error: the kill raced the writer ("early").
+        # NB: the retry signal must not be an AssertionError inside this try,
+        # because AssertionError is not a LibmdbxError and would escape the
+        # bounded-retry loop (that made such tests flaky on macOS).
+        unlucky = False
+        try:
+            m.preopen_snapinfo(db)
+        except m.LibmdbxError as e:
+            if e.rc == m.RC_WANNA_RECOVERY:
+                break  # ожидаемый сигнал: слабая мета текущего boot
+            unlucky = True
+        else:
+            unlucky = True
+        if unlucky:
+            continue
+    else:
+        pytest.fail("all 4 attempts landed on a fully-steady or unusable "
+                    "meta troika; cannot observe the WANNA_RECOVERY contract "
+                    "on this host")
     assert os.path.exists(db) and os.path.getsize(db) > 0, "writer not started"
     env = dict(os.environ, PYTHONPATH=mod,
                SHARED_GRAPH_MEMORY_PATH=db,
