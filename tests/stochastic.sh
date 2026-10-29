@@ -35,7 +35,7 @@ GEOMETRY_JITTER=yes
 BANNER="$(which banner 2>/dev/null || echo echo)"
 UNAME="$(uname -s 2>/dev/null || echo Unknown)"
 DB_UPTO_MB=17408
-PAGESIZE=min
+PAGESIZE=default
 DONT_CHECK_RAM=no
 EXTRA=no
 TAILLOG=0
@@ -77,7 +77,7 @@ do
     echo "--db-upto-mb NN        Limits upper size of test DB to the NN megabytes"
     echo "--db-upto-gb NN        --''--''--''--''--''--''--''--''--  NN gigabytes"
     echo "--no-geometry-jitter   Disable jitter for geometry upper-size"
-    echo "--pagesize NN          Use specified page size (256 is minimal and used by default)"
+    echo "--pagesize NN          Use specified page size (by default system page size will be used)"
     echo "--numa NODE            Bind to the specified NUMA node"
     echo "--dont-check-ram-size  Don't check available RAM"
     echo "--extra                Iterate extra modes/flags"
@@ -218,6 +218,9 @@ do
       ;;
       64|64k|64K)
         PAGESIZE=$((1024*64))
+      ;;
+      "default"|"min"|"max")
+        PAGEIZE=$2
       ;;
       *)
         echo "Invalid page size '$2'"
@@ -758,7 +761,7 @@ function pass {
     subcase=0
     for id in $(seq 1 ${cases} | shuf); do
       caption="$((++count)) ${caseset_id2caption[${id}]}, case $((++subcase))/${id} of ${cases}" probe \
-        --prng-seed=${seed} --pagesize=$PAGESIZE --size-upper-upto=${db_size_mb}M ${caseset_id2args[${id}]} --nops=$nops --batch.write=$wbatch
+        --prng-seed=${seed} --pagesize=${PAGESIZE} --size-upper-upto=${db_size_mb}M ${caseset_id2args[${id}]} --nops=$nops --batch.write=$wbatch
       if [[ ${whole_timeout} != "" && $(date +%s) > ${whole_timeout} ]]; then
         echo "=== WHOLE DURATION LIMIT ========== $(date)"
 	exit 0
