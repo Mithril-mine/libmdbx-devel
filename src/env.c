@@ -302,7 +302,7 @@ __cold int env_open(MDBX_env *env, mdbx_mode_t mode) {
 #if defined(_WIN32) || defined(_WIN64)
   eASSERT(env, env->ioring.overlapped_fd == 0);
   bool ior_direct = false;
-  if (!(env->flags & (MDBX_RDONLY | MDBX_SAFE_NOSYNC | MDBX_NOMETASYNC | MDBX_EXCLUSIVE))) {
+  if (!(env->flags & (MDBX_RDONLY | MDBX_SAFE_NOSYNC | MDBX_NOMETASYNC))) {
     if (MDBX_AVOID_MSYNC && (env->flags & MDBX_WRITEMAP)) {
       /* Запрошен режим MDBX_SYNC_DURABLE | MDBX_WRITEMAP при активной опции
        * MDBX_AVOID_MSYNC.
@@ -366,11 +366,7 @@ __cold int env_open(MDBX_env *env, mdbx_mode_t mode) {
     osal_fseek(env->lck_mmap.fd, safe_parking_lot_offset);
 
   eASSERT(env, env->dsync_fd == INVALID_HANDLE_VALUE);
-  if (!(env->flags & (MDBX_RDONLY | MDBX_SAFE_NOSYNC | DEPRECATED_MAPASYNC
-#if defined(_WIN32) || defined(_WIN64)
-                      | MDBX_EXCLUSIVE
-#endif /* !Windows */
-                      ))) {
+  if (!(env->flags & (MDBX_RDONLY | MDBX_SAFE_NOSYNC | DEPRECATED_MAPASYNC))) {
     rc = osal_openfile(MDBX_OPEN_DXB_DSYNC, env, env->pathname.dxb, &env->dsync_fd, 0);
     if (unlikely(MDBX_IS_ERROR(rc)))
       return rc;
