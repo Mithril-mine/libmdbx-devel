@@ -85,7 +85,7 @@ __cold int dxb_read_header(MDBX_env *env, meta_t *dest, const int lck_exclusive,
     bool latch;
     if (env->stuck_meta >= 0)
       latch = (meta_number == (unsigned)env->stuck_meta);
-    else if (meta_bootid_match(meta))
+    else if (meta_bootid_match(meta) && env->lck_mmap.lck)
       latch = meta_choice_recent(meta->unsafe_txnid, SIGN_IS_STEADY(meta->unsafe_sign), dest->unsafe_txnid,
                                  SIGN_IS_STEADY(dest->unsafe_sign));
     else
