@@ -111,10 +111,9 @@ lib suffix (so/dylib/dll). `TEST_ITER` (repeat count): 7 locally, 3 under CI, 2 
 `conanfile.py` (`required_conan_version >= 2.7`, `name='mdbx'`, `revision_mode='scm'`,
 `no_copy_source=True`, `test_type='explicit'`, `build_policy='missing'`). ~40 `mdbx.*` options
 mirroring `options.h`: `locking`, `cacheline_size`, `enable_bigfoot`, `enable_dbi_lockfree`,
-`enable_dbi_sparse`, `enable_pgop_stat`, `enable_profgc`, `enable_refund`, `env_checkpid`,
-`force_assertions`, `mmap_*`, `trust_rtc`, `txn_checkowner`, `avoid_msync`, `build_cxx`,
-`build_tools`, `disable_validation`, `without_msvc_crt`, `64bit_atomic`, `64bit_cas`,
-`apple.speed_insteadof_durability`.
+`enable_dbi_sparse`, `enable_pgop_stat`, `enable_profgc`, `env_checkpid`, `force_assertions`,
+`mmap_*`, `trust_rtc`, `txn_checkowner`, `avoid_msync`, `build_cxx`, `build_tools`,
+`disable_validation`, `without_msvc_crt`, `64bit_atomic`, `64bit_cas`, `apple.speed_insteadof_durability`.
 
 ## 5. CI
 
