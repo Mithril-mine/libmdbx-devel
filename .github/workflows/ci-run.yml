@@ -201,6 +201,12 @@ jobs:
               TMPGCOV="$(mktemp -d)"
               # mingw-gcov пишет .gcda в текущий каталог ctest-процесса
               # (Testing/Temporary), не рядом с .o в build — ищем по workspace.
+              echo "DBG: uname=$(uname -s)"
+              echo "DBG: GCOV_PREFIX=${GCOV_PREFIX-}"
+              find / -name '*.gcda' 2>/dev/null | head -20 || true
+              echo "DBG: gcno в build: $(find "$ROOT/@ci-cmake-build" -name '*.gcno' | wc -l)"
+              echo "DBG: exe запускаю для проверки:"
+              ls "$ROOT"/@ci-cmake-build/ut_global_init.exe 2>/dev/null && (cd /tmp && "$ROOT/@ci-cmake-build/ut_global_init.exe" >/dev/null 2>&1 || true) && sleep 2 && find /tmp -name '*.gcda' 2>/dev/null | head -5 || echo "DBG: exe не найден/не создал gcda"
               for gcda in $(find "$ROOT" -name '*.gcda' | head -200); do
                 (cd "$TMPGCOV" && gcov -b "$gcda") >/dev/null 2>&1 || true
               done
