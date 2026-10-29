@@ -220,7 +220,7 @@ do
         PAGESIZE=$((1024*64))
       ;;
       "default")
-        PAGEIZE=default
+        PAGESIZE=default
       ;;
       *)
         echo "Invalid page size '$2'"
@@ -228,6 +228,41 @@ do
       ;;
     esac
     shift
+    PAGESIZE="--pagesize=${PAGESIZE} "
+  ;;
+  --pagesize=*|--page-size=*)
+    # Same as `--pagesize NN` but with the value glued via '='.
+    PAGESIZE="${1#*=}"
+    case "${PAGESIZE}" in
+      min|max|256|512|1024|2048|4096|8192|16386|32768|65536|default)
+        :
+      ;;
+      1|1k|1K|k|K)
+        PAGESIZE=$((1024*1))
+      ;;
+      2|2k|2K)
+        PAGESIZE=$((1024*2))
+      ;;
+      4|4k|4K)
+        PAGESIZE=$((1024*4))
+      ;;
+      8|8k|8K)
+        PAGESIZE=$((1024*8))
+      ;;
+      16|16k|16K)
+        PAGESIZE=$((1024*16))
+      ;;
+      32|32k|32K)
+        PAGESIZE=$((1024*32))
+      ;;
+      64|64k|64K)
+        PAGESIZE=$((1024*64))
+      ;;
+      *)
+        echo "Invalid page size '${PAGESIZE}'"
+        exit -2
+      ;;
+    esac
     PAGESIZE="--pagesize=${PAGESIZE} "
   ;;
   --probe-duration)
