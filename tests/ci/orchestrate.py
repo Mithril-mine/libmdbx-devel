@@ -188,11 +188,16 @@ def main():
                               branch=args.head_ref)
         current_run_id = args.run_id
         for run in head_runs:
-            # Same-content dedup first: a run on the same SHA (whether still
-            # running or already finished) makes this run a duplicate. GitHub
-            # keeps the per-cell check statuses of a cancelled run, so we never
-            # cancel the other same-SHA run — the first one is authoritative.
+            # Same-content dedup: a live same-SHA run (still running or already
+            # finished successfully) makes this run a duplicate — the first one
+            # is authoritative, so skip. A *cancelled* same-SHA run must NOT
+            # lead to a skip: it produced no result, and skipping on top of it
+            # would leave the gate empty; there is nothing to cancel either.
             if run["head_sha"] == args.head_sha and run["id"] != current_run_id:
+                if run.get("conclusion") == "cancelled":
+                    print(f"orchestrate: same-SHA run {run['id']} ({run['event']}) "
+                          f"is cancelled; proceeding", file=sys.stderr)
+                    continue
                 print(f"orchestrate: duplicate {run['event']} run {run['id']} "
                       f"on the same SHA; skip this {args.event} run",
                       file=sys.stderr)
