@@ -88,7 +88,7 @@ size_t count_entries(MDBX_env *env) {
   MDBX_stat stat;
   EXPECT_EQ(mdbx_dbi_stat(txn, dbi, &stat, sizeof(stat)), MDBX_SUCCESS);
   mdbx_txn_abort(txn);
-  return stat.ms_entries;
+  return static_cast<size_t>(stat.ms_entries);
 }
 
 } // namespace
