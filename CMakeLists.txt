@@ -58,6 +58,8 @@ if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/VERSION.json"
    AND EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/LICENSE"
    AND EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/NOTICE"
    AND EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/README.md"
+   AND EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/CONTRIBUTING.md"
+   AND EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/FUNDING.json"
    AND EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/GNUmakefile"
    AND EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/mdbx.c"
    AND EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/mdbx.c++"
@@ -86,6 +88,8 @@ elseif(
   AND EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/NOTICE"
   AND EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/GNUmakefile"
   AND EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/README.md"
+  AND EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/CONTRIBUTING.md"
+  AND EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/FUNDING.json"
   AND EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/mdbx.h"
   AND EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/mdbx.h++"
   AND EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/mdbx++/decl_slice.h++"
@@ -1097,6 +1101,7 @@ elseif(TRUE)
   add_custom_target(
     non-code
     SOURCES README.md
+            CONTRIBUTING.md
             TODO.md
             ChangeLog.md
             src/bits.md
@@ -1108,6 +1113,7 @@ elseif(TRUE)
             GNUmakefile
             Makefile
             conanfile.py
+            FUNDING.json
             examples/README.md)
 #< dist-cutoff-end
 else()
