@@ -357,6 +357,21 @@ POSIX-ветки `#if`.
 - macOS-скан молча давал `functions:0` (AppleClang «Extra data») и вливался
   в merged — до появления fail-loudly и `raw_decode`.
 
+## Загрузка покрытия в БЗ и codecov
+
+- Загрузчик `tools/lcov_to_coverage.py` (lcov lines.info → Store) пишет
+  **блочную детализацию по умолчанию** (`coverage_blocks`); `--no-store-blocks`
+  — для быстрых проб. Блоки — единственный источник честных %-по-блокам в
+  `coverage_summary` (символьный уровень даёт только да/нет по функциям).
+- Источники lines.info в CI (профиль `coverage`): linux (gcov/lcov),
+  win-mscl (clang/LLVM instrumentation: profraw → llvm-profdata → llvm-cov
+  → конвертер `llvm_cov_to_lcov.py`), win-mingw (gcov; сейчас пуст — см.
+  «Многоплатформенное сканирование»).
+- Каждый источник выгружается в **codecov** (`codecov/codecov-action@v5`)
+  с `flags: <cell-id>`; пустые lines.info фильтруются guard-шагом
+  (`codecov guard` в ci-run.yml). Конфиг — `.codecov.yml` (ignore tests/
+  examples/skynet/docs; статусы informational).
+
 ## Ограничения (зафиксированы)
 
 - **Тела функций из веток, неактивных в текущей конфигурации, отсутствуют

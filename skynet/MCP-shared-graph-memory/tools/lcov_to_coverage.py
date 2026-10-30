@@ -70,7 +70,13 @@ def main():
     ap.add_argument("--db", default=os.path.join(
         os.path.expanduser("~"), ".local", "share", "shared-graph-memory",
         "db.mdbx"))
-    ap.add_argument("--store-blocks", action="store_true")
+    # Блочная детализация — по умолчанию: это единственный источник честных
+    # %-по-блокам в coverage_summary (символьный уровень даёт только
+    # да/нет по функциям). --no-store-blocks — для быстрых пробных загрузок.
+    ap.add_argument("--store-blocks", dest="store_blocks",
+                    action="store_true", default=True)
+    ap.add_argument("--no-store-blocks", dest="store_blocks",
+                    action="store_false")
     ap.add_argument("--dry-run", action="store_true")
     args = ap.parse_args()
 

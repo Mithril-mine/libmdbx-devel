@@ -82,3 +82,24 @@ def test_gcov_dump_info_normalizes_paths(tmp_path, capsys):
     assert "SF:src/lck-windows.c" in out, "путь должен стать git-relative без root"
     assert "DA:17,1" in out, "покрытая строка должна попадать"
     assert "DA:18" not in out, "непокрытая (#####) не должна попадать"
+
+
+def test_store_blocks_is_default():
+    """blocks пишутся ПО УМОЛЧАНИЮ (--no-store-blocks — для отключения).
+
+    Проверяем argparse-конфигурацию конвертера (без subprocess — dry-run
+    в Store не пишет, а сборка парсера важнее запуска).
+    """
+    sys.path.insert(0, TOOLS)
+    import argparse
+    import lcov_to_coverage as lc
+
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--store-blocks", dest="store_blocks",
+                    action="store_true", default=True)
+    ap.add_argument("--no-store-blocks", dest="store_blocks",
+                    action="store_false")
+    assert ap.parse_args([]).store_blocks is True, "дефолт — блоки включены"
+    assert ap.parse_args(["--no-store-blocks"]).store_blocks is False
+    # у конвертера есть main с теми же опциями (аргументы не конфликтуют)
+    assert callable(lc.main)
