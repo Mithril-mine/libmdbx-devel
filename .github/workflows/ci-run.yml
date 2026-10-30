@@ -69,7 +69,7 @@ jobs:
           set -euo pipefail
           python3 - <<'EOF'
           import json, os
-          cfg = json.load(open("tests/ci/config.json"))
+          cfg = json.load(open("tests/ci/config.json", encoding="utf-8"))
           cell = next(x for x in cfg["cells"] if x["id"] == os.environ["CELL_ID"])
           emu = cell.get("emulator") or {}
           with open(os.environ["GITHUB_OUTPUT"], "a") as f:
