@@ -58,7 +58,12 @@
 > **Приоритет по эффекту**: P1+P2 дают ≈ 4/5 непокрытых блоков; P3 —
 > дёшево и быстро (повышает чистоту summary).
 
-> **Windows-модули (windows-import/lck-windows) — N/A**: замер gcov на
+> **cursor (validate-функции, 354 блока) — N/A (отложено)**: `cursor_validate`,
+> `cursor_validate_updating`, `unexpected_dupsort` — отладочные проверки под
+> MDBX_CHECKING/AUDIT (решение владельца: задокументировать и отложить, как
+> audit). Покрытие возможно только CHECKING-клеткой.
+
+> **Windows-модули (windows-import/lck-windows)**: замер gcov на
 > windows-latest/mingw-gcc-15.2 не работает (4 попытки: -lgcov,
 > --no-gc-sections, driver --coverage, GCOV_PREFIX — .gcda не пишутся при
 > валидных .gcno и успешном __gcov_dump; см. БЗ

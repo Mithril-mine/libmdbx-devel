@@ -257,6 +257,9 @@ jobs:
               lcov --capture --directory "$BUILD" --output-file coverage/lines.info \
                 --quiet --ignore-errors negative,mismatch \
                 --include "$ROOT/src/*"
+              # lcov пишет абсолютные SF-пути; codecov и загрузчик в БЗ
+              # требуют git-relative — срезаем префикс repo-root.
+              sed -i "s|^SF:$ROOT/|SF:|" coverage/lines.info
               lcov --summary coverage/lines.info 2>&1 | tail -6
               genhtml coverage/lines.info --output-directory coverage/html \
                 --legend --quiet --title "libmdbx devel (${{ inputs.cell }})"
@@ -270,6 +273,30 @@ jobs:
           name: coverage-${{ inputs.cell }}
           path: coverage
           if-no-files-found: ignore
+
+      - name: codecov guard
+        if: ${{ inputs.coverage }}
+        id: codecov-guard
+        shell: bash
+        run: |
+          # Пустой lines.info (mingw-gcov mystery) в codecov не отправляем:
+          # файл обязан существовать и содержать хотя бы одну DA-строку.
+          if [ -f coverage/lines.info ] && grep -q '^DA:' coverage/lines.info; then
+            echo "has_coverage=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "has_coverage=false" >> "$GITHUB_OUTPUT"
+            echo "no usable lines.info — skipping codecov upload"
+          fi
+
+      - name: upload to codecov
+        if: ${{ inputs.coverage && steps.codecov-guard.outputs.has_coverage == 'true' }}
+        uses: codecov/codecov-action@v5
+        with:
+          files: coverage/lines.info
+          flags: ${{ inputs.cell }}
+          token: ${{ secrets.CODECOV_TOKEN }}
+          fail_ci_if_error: false
+          verbose: true
 
       - name: upload metrics
         if: always()

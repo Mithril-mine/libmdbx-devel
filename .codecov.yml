@@ -1,0 +1,34 @@
+# Codecov configuration for libmdbx-devel
+# Coverage reports come from the CI `coverage` profile cells:
+#   - linux-gcc-ubuntu24-debug-coverage (gcov/lcov)
+#   - win-mscl-x64-debug-coverage       (clang/LLVM instrumentation)
+# The win-mingw cell is present but currently produces no usable data
+# (mingw gcda mystery) — its empty lines.info is filtered out by the
+# codecov guard step in ci-run.yml.
+codecov:
+  require_ci_to_pass: false
+  notify:
+    wait_for_ci: false
+
+comment:
+  layout: "reach, diff, flags, files"
+  behavior: default
+  require_changes: false
+  after_n_builds: 2
+
+coverage:
+  status:
+    # Не красим PR порогами на первое время: растим покрытие сценариев
+    # из docs/engineering/test-coverage-gaps.md постепенно.
+    project:
+      default:
+        informational: true
+    patch:
+      default:
+        informational: true
+
+ignore:
+  - "tests/"
+  - "examples/"
+  - "skynet/"
+  - "docs/"
