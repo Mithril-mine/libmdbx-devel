@@ -205,8 +205,30 @@ if(BUILD_TESTING)
           ON
           CACHE BOOL "" FORCE)
 
+      # GoogleTest must NOT be gcov-instrumented: our global ENABLE_GCOV flags
+      # (-fprofile-arcs -ftest-coverage, see cmake/compiler.cmake) would make the
+      # gtest target pull its own __gcov_init/__gcov_exit (libgcov.a), which then
+      # conflicts with the same symbols when the test executables link against
+      # libmdbx + libgtest.dll ("multiple definition of '__gcov_init'").
+      # Safely drop the flags for the duration of add_subdirectory(gtest).
+      if(ENABLE_GCOV AND (MINGW OR MSYS OR CYGWIN))
+        set(_saved_c_cxx_flags "${CMAKE_C_FLAGS}|${CMAKE_CXX_FLAGS}")
+        string(REPLACE "-fprofile-arcs" "" CMAKE_C_FLAGS "${CMAKE_C_FLAGS}")
+        string(REPLACE "-ftest-coverage" "" CMAKE_C_FLAGS "${CMAKE_C_FLAGS}")
+        string(REPLACE "-fprofile-arcs" "" CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS}")
+        string(REPLACE "-ftest-coverage" "" CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS}")
+      endif()
+
       # Add googletest directly to our build. This defines the gtest and gtest_main targets.
       add_subdirectory(${gtest_root} ${CMAKE_BINARY_DIR}/googletest-build EXCLUDE_FROM_ALL)
+
+      if(ENABLE_GCOV AND (MINGW OR MSYS OR CYGWIN))
+        string(REPLACE "|" ";" _saved_c_cxx "${_saved_c_cxx_flags}")
+        list(GET _saved_c_cxx 0 CMAKE_C_FLAGS)
+        list(GET _saved_c_cxx 1 CMAKE_CXX_FLAGS)
+        unset(_saved_c_cxx)
+        unset(_saved_c_cxx_flags)
+      endif()
       if(CMAKE_INTERPROCEDURAL_OPTIMIZATION AND NOT CMAKE_VERSION VERSION_LESS 3.9)
         file(READ ${gtest_root}/CMakeLists.txt variable gtest_cmake_content)
         string(TOLOWER "${gtest_cmake_content}" gtest_cmake_content)
