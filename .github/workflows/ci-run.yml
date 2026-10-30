@@ -195,9 +195,14 @@ jobs:
           mkdir -p coverage
           case "$(uname -s)" in
             MINGW*|MSYS*|CYGWIN*)
-              # profraw-файлы ищем и в cwd, и в каталоге LLVM_PROFILE_FILE
-              # (путь из env клетки): тесты пишут туда, куда указывает шаблон.
+              # profraw-файлы: LLVM_PROFILE_FILE клетки — относительный шаблон
+              # (runtime пишет в cwd процессов тестов); ищем в cwd и в
+              # каталоге шаблона на случай смены.
               PROFDIR="$(dirname "${LLVM_PROFILE_FILE:-*.profraw}")"
+              mkdir -p "$PROFDIR" 2>/dev/null || true
+              echo "DBG: LLVM_PROFILE_FILE=${LLVM_PROFILE_FILE-}"
+              echo "DBG: profraw в workspace: $(find "$ROOT" -name '*.profraw' 2>/dev/null | head -5)"
+              echo "DBG: profraw на дисках: $(find /c/a /d/a /c/temp "$TEMP" -name '*.profraw' 2>/dev/null | head -5)"
               if [ -n "${LLVM_PROFILE_FILE-}" ] && { ls ./*.profraw >/dev/null 2>&1 || ls "$PROFDIR"/*.profraw >/dev/null 2>&1; }; then
                 # Windows clang (msvc-triple): LLVM instrumentation, не gcov.
                 # Тесты пишут .profraw (LLVM_PROFILE_FILE задан в клетке);
