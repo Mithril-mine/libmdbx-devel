@@ -207,3 +207,26 @@ static inline void mdtest_ci_crt_suppress_popup() {
   SetErrorMode(SEM_FAILCRITICALERRORS | SEM_NOGPFAULTERRORBOX);
 #endif /* _WIN32 */
 }
+
+/* --- gcov flushing on mingw-w64 (Windows) -------------------------------
+ * mingw-w64 does not flush gcov counters at normal process exit the way
+ * Linux glibc does: .gcda files are only written when __gcov_dump() is
+ * called explicitly. Without this, the win-mingw coverage cell (CI
+ * coverage profile) produced an empty lines.info even though the tests
+ * ran fine (all .gcno present in the build tree, no .gcda anywhere).
+ * tests/CMakeLists.txt defines MDBX_GCOV_FLUSH only for ENABLE_GCOV
+ * MINGW/MSYS/CYGWIN test targets; the hook below registers
+ * __gcov_dump() via atexit, so counters are flushed right before
+ * process termination — after all tests ran. No-op elsewhere. */
+#if defined(MDBX_GCOV_FLUSH)
+#include <cstdlib>
+extern "C" void __gcov_dump(void);
+namespace {
+struct gcov_flush_hook {
+  gcov_flush_hook() {
+    std::atexit([] { __gcov_dump(); });
+  }
+};
+__attribute__((unused)) static gcov_flush_hook gcov_flush_hook_instance;
+} // namespace
+#endif /* MDBX_GCOV_FLUSH */
