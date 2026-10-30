@@ -68,7 +68,7 @@
 
 ## 3. Сценарии для закрытия (краткие; полные SC-61+ — в test-scenarios.md)
 
-### SC-61. tree-search: ветви перехода страницы (unit)
+### SC-61. tree-search: ветви перехода страницы (unit) — ✅ реализован (#242)
 
 - **hypothesis**: `mdbx_get`/курсор на ключах, разнесённых по страницам,
   покрывает все точки сравнения в `search-inpage`/`search-paged` (tab-переходы).
@@ -79,7 +79,7 @@
 - **speed_class**: unit; **sync_mode**: nosync-safe; **probe_points**:
   `search_cmp`, `node_search`, `page_get_by_index`.
 
-### SC-62. tree-search: dup-границы (unit)
+### SC-62. tree-search: dup-границы (unit) — ✅ реализован (#242)
 
 - **hypothesis**: DUP-ключи (MDBX_DUPSORT) неправильно расходятся с пограничными
   поисками.
@@ -87,7 +87,7 @@
   равенство полное/частичное.
 - **expectations**: ветви dup-сравнения покрыты; результаты корректны.
 
-### SC-63. decl_transcoders: полное покрытие типов C++ (unit)
+### SC-63. decl_transcoders: полное покрытие типов C++ (unit) — ✅ реализован (#245)
 
 - **hypothesis**: каждый C++ тип данных прогоняется через транскодер в
   `mdbx::buffer`/`slice`.
@@ -95,7 +95,7 @@
   (buffer из slice, slice из buffer, парсинг hex).
 - **expectations**: `decl_transcoders` pct≥80.
 
-### SC-64. decl_core: исключения ↔ коды C API (unit)
+### SC-64. decl_core: исключения ↔ коды C API (unit) — ✅ реализован (#245)
 
 - **hypothesis**: каждый `MDBX_*` код маппится на своё C++ исключение
   (mdbx::exception и подклассы).
@@ -103,7 +103,7 @@
   map full, invalid, readonly...) и проверка пойманного исключения.
 - **expectations**: покрыты все маппинги; сообщения exact.
 
-### SC-65. gc-get/gc-put: цепочки ретирирования (unit/smoke)
+### SC-65. gc-get/gc-put: цепочки ретирирования (unit/smoke) — ✅ реализован (#257)
 
 - **hypothesis**: массовое удаление/обновление формирует корректные GC-цепочки
   (retire/reclaim) и pipelining — ветви `gc-get`/`gc-put` покрываются.
@@ -126,7 +126,7 @@
 - **steps**: 2+ процесса открывают одну БД, чередуют записи.
 - **expectations**: `lck-posix` EAGAIN-ветви покрыты, нет deadlock.
 
-### SC-68. C++ env/txn/cursor: покрыть редкие ветви (unit-scratch)
+### SC-68. C++ env/txn/cursor: покрыть редкие ветви (unit-scratch) — ✅ реализован (#258)
 
 - **hypothesis**: nullable-обёртки, moved-from объекты, исключения из
   деструкторов — корректны.
@@ -135,10 +135,10 @@
 
 ## 4. Порядок исполнения
 
-1. **SC-61/62 (tree-search)** и **SC-65 (gc-get/gc-put)** — крупные ядровые (P1/P2).
-2. **SC-63/64 (decl_transcoders, decl_core)** — C++-типы и исключения.
+1. ~~**SC-61/62 (tree-search)** и **SC-65 (gc-get/gc-put)**~~ — ✅ реализованы (#242, #257).
+2. ~~**SC-63/64 (decl_transcoders, decl_core)**~~ — ✅ реализованы (#245).
 3. **SC-66/67** (osal, lck) — платформенные.
-4. **SC-68** — C++ редкие ветви (P3 добивка).
+4. ~~**SC-68**~~ — ✅ реализован (#258).
 5. После каждого — локальный gcov-прогон теста → `coverage_blocks` растёт.
 
 ## 5. Ограничения и как таблица обновится
