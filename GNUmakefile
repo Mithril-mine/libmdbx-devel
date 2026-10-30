@@ -492,7 +492,7 @@ endef
 
 DIST_EXTRA := AGENTS.md LICENSE NOTICE COPYRIGHT README.md TODO.md CMakeLists.txt GNUmakefile Makefile ChangeLog.md VERSION.json config.h.in ntdll.def \
 	$(addprefix man1/, $(MANPAGES)) cmake/compiler.cmake cmake/profile.cmake cmake/utils.cmake cmake/pch.cmake cmake/mdbx-config.cmake.in windows-safeseh-masm.asm windows-safeseh-yasm.asm \
-	windows-safeseh.obj valgrind.supp conanfile.py \
+	windows-safeseh.obj valgrind.supp conanfile.py FUNDING.json CONTRIBUTING.md \
 	$(sort $(shell git ls-files examples docs/ru docs/en))
 
 DIST_SRC   := mdbx.h mdbx.h++ mdbx.c mdbx.c++ $(addsuffix .c, $(MDBX_TOOLS)) mdbx-internals.h mdbx-wingetopt.h
@@ -1117,7 +1117,7 @@ $(1): $(2) src/version.c $(lastword $(MAKEFILE_LIST))
 	$$< | cat -s >$$@
 
 endef
-$(foreach file,mdbx.h $(filter-out man1/% VERSION.json .clang-format-ignore %.in ntdll.def windows-safeseh%, $(DIST_EXTRA)), $(eval $(call dist-extra-rule, $(DIST_DIR)/$(file), $(file))))
+$(foreach file,mdbx.h $(filter-out man1/% VERSION.json CONTRIBUTING.md .clang-format-ignore %.in ntdll.def windows-safeseh%, $(DIST_EXTRA)), $(eval $(call dist-extra-rule, $(DIST_DIR)/$(file), $(file))))
 
 $(DIST_DIR)/VERSION.json: src/version.c
 	@echo '  MAKE $@'
@@ -1135,9 +1135,9 @@ $(DIST_DIR)/$(1): $(2) $(lastword $(MAKEFILE_LIST))
 endef
 $(foreach file,$(addprefix src/,ntdll.def windows-safeseh-masm.asm windows-safeseh-yasm.asm windows-safeseh.obj), $(eval $(call dist-copy-rule,$(notdir $(file)),$(file))))
 
+$(eval $(call dist-extra-rule, $(DIST_DIR)/CONTRIBUTING.md, CONTRIBUTING-for-amalgamated.md))
 $(eval $(call dist-extra-rule, $(DIST_DIR)/config.h.in, src/config.h.in))
 $(eval $(call dist-extra-rule, $(DIST_DIR)/cmake/mdbx-config.cmake.in, cmake/mdbx-config.cmake.in))
-
 $(eval $(call dist-extra-rule, $(DIST_DIR)/man1/mdbx_%.1, src/man1/mdbx_%.1))
 
 endif
