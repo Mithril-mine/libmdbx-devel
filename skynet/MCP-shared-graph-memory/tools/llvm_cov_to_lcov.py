@@ -52,7 +52,9 @@ def main():
     ap.add_argument("--root", default="", help="срезать префикс пути (repo root)")
     args = ap.parse_args()
 
-    with open(args.json) as fh:
+    # Windows runners default to a legacy ANSI codepage; llvm-cov JSON is
+    # UTF-8 (source paths etc.), so decode explicitly or cp1252 chokes.
+    with open(args.json, encoding="utf-8") as fh:
         doc = json.load(fh)
 
     out = []
