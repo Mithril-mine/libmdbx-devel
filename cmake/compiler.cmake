@@ -1027,15 +1027,22 @@ macro(setup_compile_flags)
     endif()
 
     add_compile_flags("C;CXX" "-fprofile-arcs" "-ftest-coverage")
-    # NOTE: the standard CMAKE_*_LINKER_FLAGS are what actually reach the
-    # targets; the project-local EXE_LINKER_FLAGS variable is never applied.
-    # Without -fprofile-arcs at link time the gcov runtime (libgcov) is not
-    # pulled into the test executables, the in-library counters never
-    # register, and __gcov_dump() (test-env main) has nothing to write —
-    # .gcda never appear (mingw-w64 does not flush at exit either).
-    set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -fprofile-arcs -ftest-coverage")
-    set(CMAKE_SHARED_LINKER_FLAGS "${CMAKE_SHARED_LINKER_FLAGS} -fprofile-arcs -ftest-coverage")
-    set(CMAKE_MODULE_LINKER_FLAGS "${CMAKE_MODULE_LINKER_FLAGS} -fprofile-arcs -ftest-coverage")
+    # Linker flags: these local variables are re-flushed into the standard
+    # CMAKE_*_LINKER_FLAGS cache by setup_compile_flags() at its end, so they
+    # DO reach every target (the earlier belief that they never applied was
+    # wrong). On mingw-w64 the gcc driver does NOT pull the gcov runtime
+    # (libgcov) into executables automatically at link time the way it does
+    # on ELF/Linux, so link it explicitly: without libgcov the arc-counters
+    # never register, __gcov_dump() writes nothing, and no .gcda appear
+    # despite valid .gcno (the win-mingw coverage cell mystery).
+    set(EXE_LINKER_FLAGS "${EXE_LINKER_FLAGS} -fprofile-arcs -ftest-coverage")
+    set(SHARED_LINKER_FLAGS "${SHARED_LINKER_FLAGS} -fprofile-arcs -ftest-coverage")
+    set(MODULE_LINKER_FLAGS "${MODULE_LINKER_FLAGS} -fprofile-arcs -ftest-coverage")
+    if(MINGW OR MSYS OR CYGWIN)
+      set(EXE_LINKER_FLAGS "${EXE_LINKER_FLAGS} -lgcov")
+      set(SHARED_LINKER_FLAGS "${SHARED_LINKER_FLAGS} -lgcov")
+      set(MODULE_LINKER_FLAGS "${MODULE_LINKER_FLAGS} -lgcov")
+    endif()
     # Windows/mingw test binaries define MDBX_GCOV_FLUSH globally (not
     # per-target) so the precompiled header is compiled with the SAME macro
     # set as every test target: a per-target define made the PCH invalid
