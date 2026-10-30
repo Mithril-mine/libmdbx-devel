@@ -1021,7 +1021,9 @@
       "env": {
         "MDBX_BUILD_OPTIONS": "-DMDBX_CHECKING=2 -DMDBX_DEBUG=1",
         "MDBX_BUILD_CXX": "NO",
-        "PATH": "/c/mingw64/bin:/c/programdata/mingw64/mingw64/bin"
+        "PATH": "/c/mingw64/bin:/c/programdata/mingw64/mingw64/bin",
+        "GCOV_PREFIX": "C:\\a\\gcda",
+        "GCOV_PREFIX_STRIP": "3"
       },
       "cmake": [
         "-G|MinGW Makefiles",
