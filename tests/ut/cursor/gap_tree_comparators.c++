@@ -215,6 +215,9 @@ TEST(ut_gap_tree_comparators, custom_comparator) {
 #elif defined(__GNUC__)
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wdeprecated-declarations"
+#elif defined(_MSC_VER)
+#pragma warning(push)
+#pragma warning(disable : 4996)
 #endif
     ASSERT_EQ(mdbx_dbi_open_ex(txn, "custom", MDBX_CREATE, &dbi,
                                gap_cmp, nullptr), MDBX_SUCCESS);
@@ -222,6 +225,8 @@ TEST(ut_gap_tree_comparators, custom_comparator) {
 #pragma clang diagnostic pop
 #elif defined(__GNUC__)
 #pragma GCC diagnostic pop
+#elif defined(_MSC_VER)
+#pragma warning(pop)
 #endif
     for (int i = 0; i < 1500; ++i) {
       auto k = std::to_string(100000 + i);
