@@ -100,7 +100,22 @@ TEST(ut_gap_gc, retire_reclaim_cycles) {
 
   // Переиспользование: после 3 циклов наполнение+удаление размер файла
   // должен быть разумным (страницы переиспользованы, а не накапливаться).
+  // Лимит вычисляется от СИСТЕМНОЙ страницы, не от константы: на macOS
+  // страница 16K (против 4K на Linux) — точная арифметика файла зависит
+  // от платформы (см. замечание в test-coverage-gaps.md).
   {
+    // фактическая страница БД (macOS: 16K, Linux: 4K) — лимит обязан
+    // зависеть от неё, не от константы
+    const uintmax_t page = static_cast<uintmax_t>(env.get_pagesize());
+    // Размер файла определяется не только данными (~1.2МБ payload'а), но и
+    // динамикой роста: gc_alloc_ex резервирует growth-инкремент (по умолчанию
+    // до 4096 страниц), а shrink возвращается к нему же. Поэтому честный
+    // платформо-независимый ceiling — страницы-под-данные (×8 на накладные
+    // B+tree/GC) с округлением вверх до страниц файла.
+    const uintmax_t payload = records * (16 + val_size);
+    const uintmax_t data_pages = (payload * 8 + page - 1) / page;
+    const uintmax_t growth_pages = 4096; // дефолтный growth-инкремент libmdbx
+    const uintmax_t limit = ((data_pages + growth_pages) * page);
     uintmax_t fs = 0;
     std::error_code ec;
     for (const auto &p : std::filesystem::directory_iterator(".")) {
@@ -112,8 +127,6 @@ TEST(ut_gap_gc, retire_reclaim_cycles) {
       }
     }
     EXPECT_GT(fs, 0u);
-    // записи финального наполнения: ~8000×(16+128) ≈ 1.2МБ; файл не должен
-    // превышать этот объём на порядки (переиспользование работает)
-    EXPECT_LT(fs, uintmax_t(64) << 20);
+    EXPECT_LT(fs, limit) << "pagesize=" << page << " payload=" << payload;
   }
 }
