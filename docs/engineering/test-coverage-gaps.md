@@ -73,6 +73,8 @@
 
 ## 3. Сценарии для закрытия (краткие; полные SC-61+ — в test-scenarios.md)
 
+### SC-67. lck-posix contention — ✅ реализован (#278)
+
 ### SC-69. tree-search comparators — ✅ реализован (#273)
 
 ### SC-61. tree-search: ветви перехода страницы (unit) — ✅ реализован (#242)
