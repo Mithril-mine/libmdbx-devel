@@ -195,24 +195,36 @@ jobs:
           mkdir -p coverage
           case "$(uname -s)" in
             MINGW*|MSYS*|CYGWIN*)
-              # Windows (mingw): lcov apt-пакета нет, но gcov (из mingw-w64)
-              # умеет -b; собираем .gcov-файлы и строим lines.info через
-              # tools/gcov_dump_info.py (git-относительные пути).
-              TMPGCOV="$(mktemp -d)"
-              # mingw-gcov пишет .gcda в текущий каталог ctest-процесса
-              # (Testing/Temporary), не рядом с .o в build — ищем по workspace.
-              echo "DBG: uname=$(uname -s)"
-              echo "DBG: GCOV_PREFIX=${GCOV_PREFIX-}"
-              echo "DBG: gcno в build: $(find "$ROOT/@ci-cmake-build" -name '*.gcno' | wc -l)"
-              echo "DBG: exe запускаю для проверки:"
-              ls "$ROOT"/@ci-cmake-build/ut_global_init.exe 2>/dev/null && (cd /tmp && "$ROOT/@ci-cmake-build/ut_global_init.exe" >/dev/null 2>&1 || true) && sleep 2 && find /tmp -name '*.gcda' 2>/dev/null | head -5 || echo "DBG: exe не найден/не создал gcda"
-              for gcda in $(find "$ROOT" -name '*.gcda' | head -200); do
-                (cd "$TMPGCOV" && gcov -b "$gcda") >/dev/null 2>&1 || true
-              done
-              python3 "$GITHUB_WORKSPACE/skynet/MCP-shared-graph-memory/tools/gcov_dump_info.py" \
-                --gcov-glob "$TMPGCOV/*.gcov" --root "$ROOT" > coverage/lines.info || true
-              rm -rf "$TMPGCOV"
-              echo "win coverage: $(grep -c '^DA:' coverage/lines.info || true) lines"
+              if [ -n "${LLVM_PROFILE_FILE-}" ] && ls ./*.profraw >/dev/null 2>&1; then
+                # Windows clang (msvc-triple): LLVM instrumentation, не gcov.
+                # Тесты пишут .profraw (LLVM_PROFILE_FILE задан в клетке);
+                # llvm-profdata/llvm-cov идут из состава VS LLVM.
+                LLVMTOOL="$STUDIO_CLANG_DIR"
+                "$LLVMTOOL/llvm-profdata.exe" merge -sparse ./*.profraw \
+                  -o coverage/merged.profdata
+                # Один из тестовых exe несёт coverage-mapping; берём первый.
+                TESTEXE=$(find "$BUILD" -maxdepth 1 -name '*.exe' | head -1)
+                "$LLVMTOOL/llvm-cov.exe" export "$TESTEXE" \
+                  -instr-profile=coverage/merged.profdata -format=text \
+                  > coverage/llvm.json
+                python3 "$GITHUB_WORKSPACE/skynet/MCP-shared-graph-memory/tools/llvm_cov_to_lcov.py" \
+                  --json coverage/llvm.json --root "$ROOT" > coverage/lines.info
+                echo "llvm coverage: $(grep -c '^DA:' coverage/lines.info || true) lines"
+              else
+                # Windows (mingw): lcov apt-пакета нет, но gcov (из mingw-w64)
+                # умеет -b; собираем .gcov-файлы и строим lines.info через
+                # tools/gcov_dump_info.py (git-относительные пути).
+                TMPGCOV="$(mktemp -d)"
+                # mingw-gcov пишет .gcda в текущий каталог ctest-процесса
+                # (Testing/Temporary), не рядом с .o в build — ищем по workspace.
+                for gcda in $(find "$ROOT" -name '*.gcda' | head -200); do
+                  (cd "$TMPGCOV" && gcov -b "$gcda") >/dev/null 2>&1 || true
+                done
+                python3 "$GITHUB_WORKSPACE/skynet/MCP-shared-graph-memory/tools/gcov_dump_info.py" \
+                  --gcov-glob "$TMPGCOV/*.gcov" --root "$ROOT" > coverage/lines.info || true
+                rm -rf "$TMPGCOV"
+                echo "win coverage: $(grep -c '^DA:' coverage/lines.info || true) lines"
+              fi
               ;;
             *)
               if ! command -v lcov >/dev/null 2>&1; then
