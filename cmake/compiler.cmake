@@ -1042,6 +1042,13 @@ macro(setup_compile_flags)
       set(EXE_LINKER_FLAGS "${EXE_LINKER_FLAGS} -lgcov")
       set(SHARED_LINKER_FLAGS "${SHARED_LINKER_FLAGS} -lgcov")
       set(MODULE_LINKER_FLAGS "${MODULE_LINKER_FLAGS} -lgcov")
+      # The arc counters live in .gcov_* sections of every object; with
+      # -ffunction-sections/-fdata-sections a section-GC link may drop them
+      # (nothing references them until the runtime init runs), so the
+      # registration ctors never execute and __gcov_dump() writes nothing.
+      set(EXE_LINKER_FLAGS "${EXE_LINKER_FLAGS} -Wl,--no-gc-sections")
+      set(SHARED_LINKER_FLAGS "${SHARED_LINKER_FLAGS} -Wl,--no-gc-sections")
+      set(MODULE_LINKER_FLAGS "${MODULE_LINKER_FLAGS} -Wl,--no-gc-sections")
     endif()
     # Windows/mingw test binaries define MDBX_GCOV_FLUSH globally (not
     # per-target) so the precompiled header is compiled with the SAME macro
