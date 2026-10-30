@@ -206,18 +206,32 @@ jobs:
               PROFS="$(find "$ROOT" -name '*.profraw' 2>/dev/null | head -50)"
               if [ -n "$PROFS" ]; then
                 # Windows clang (msvc-triple): LLVM instrumentation, не gcov.
-                # llvm-profdata/llvm-cov идут из состава VS LLVM.
-                LLVMTOOL="$STUDIO_CLANG_DIR"
-                "$LLVMTOOL/llvm-profdata.exe" merge -sparse $PROFS \
-                  -o coverage/merged.profdata
-                # Один из тестовых exe несёт coverage-mapping; берём первый.
-                TESTEXE=$(find "$BUILD" -maxdepth 1 -name '*.exe' | head -1)
-                "$LLVMTOOL/llvm-cov.exe" export "$TESTEXE" \
-                  -instr-profile=coverage/merged.profdata -format=text \
-                  > coverage/llvm.json
+                # llvm-profdata/llvm-cov идут из состава VS LLVM; env клетки в
+                # этот шаг НЕ пробрасывается, поэтому путь ищем: STUDIO_CLANG_DIR
+                # (если задан в окружении шага), иначе — установленный LLVM.
+                LLVMTOOL="${STUDIO_CLANG_DIR-}"
+                if [ -z "$LLVMTOOL" ] || [ ! -x "$LLVMTOOL/llvm-profdata.exe" ]; then
+                  if command -v llvm-profdata >/dev/null 2>&1; then
+                    LLVMTOOL="$(dirname "$(command -v llvm-profdata)")"
+                  elif [ -x "C:/Program Files/LLVM/bin/llvm-profdata.exe" ]; then
+                    LLVMTOOL="C:/Program Files/LLVM/bin"
+                  else
+                    echo "mscl coverage: llvm-profdata not found — skipping" >&2
+                    LLVMTOOL=""
+                  fi
+                fi
+                if [ -n "$LLVMTOOL" ]; then
+                  "$LLVMTOOL/llvm-profdata.exe" merge -sparse $PROFS \
+                    -o coverage/merged.profdata
+                  # Один из тестовых exe несёт coverage-mapping; берём первый.
+                  TESTEXE=$(find "$BUILD" -maxdepth 1 -name '*.exe' | head -1)
+                  "$LLVMTOOL/llvm-cov.exe" export "$TESTEXE" \
+                    -instr-profile=coverage/merged.profdata -format=text \
+                    > coverage/llvm.json
                 python3 "$GITHUB_WORKSPACE/skynet/MCP-shared-graph-memory/tools/llvm_cov_to_lcov.py" \
                   --json coverage/llvm.json --root "$ROOT" > coverage/lines.info
                 echo "llvm coverage: $(grep -c '^DA:' coverage/lines.info || true) lines"
+                fi
               else
                 # Windows (mingw): lcov apt-пакета нет, но gcov (из mingw-w64)
                 # умеет -b; собираем .gcov-файлы и строим lines.info через
