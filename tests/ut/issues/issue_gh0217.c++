@@ -122,6 +122,51 @@ bool wait_shrunk(MDBX_env *env, uint64_t threshold, int budget_ms) {
   return false;
 }
 
+/* Reader-table slot scan callback: remember whether a slot with a pid other
+ * than `my_pid` is present. */
+struct foreign_slot_probe {
+  mdbx_pid_t my_pid;
+  bool foreign_found = false;
+};
+
+static int foreign_slot_probe_fn(void *ctx, int num, int slot, mdbx_pid_t pid, mdbx_tid_t thread, uint64_t txnid,
+                                 uint64_t lag, size_t bytes_used, size_t bytes_retained) noexcept {
+  (void)num;
+  (void)slot;
+  (void)txnid;
+  (void)lag;
+  (void)thread;
+  (void)bytes_used;
+  (void)bytes_retained;
+  foreign_slot_probe *probe = static_cast<foreign_slot_probe *>(ctx);
+  if (pid && pid != probe->my_pid)
+    probe->foreign_found = true;
+  return 0;
+}
+
+/* Wait until a foreign-process reader slot appears in the shared reader table
+ * (i.e. the spawned child has opened the database and begun its read
+ * transaction), or `budget_ms` elapses. Returns true when the foreign slot is
+ * present.
+ *
+ * A fixed sleep is NOT enough here: the child must be scheduled, perform the
+ * full gtest startup, open its environment and begin the read transaction.
+ * On loaded CI runners this takes far longer than the previous 400 ms, and
+ * when the parent's shrink-warranted commit runs before the child registered
+ * its slot, the shrink is NOT deferred — the file shrinks and the test fails
+ * spuriously. */
+bool wait_foreign_reader_slot(MDBX_env *env, mdbx_pid_t my_pid, int budget_ms) {
+  const auto deadline = std::chrono::steady_clock::now() + std::chrono::milliseconds(budget_ms);
+  while (std::chrono::steady_clock::now() < deadline) {
+    foreign_slot_probe probe = {my_pid, false};
+    mdbx_reader_list(env, foreign_slot_probe_fn, &probe);
+    if (probe.foreign_found)
+      return true;
+    std::this_thread::sleep_for(std::chrono::milliseconds(20));
+  }
+  return false;
+}
+
 /* Child mode: open the foreign path read-only and hold a read transaction,
  * refreshing it occasionally, for `MDBX_TEST_GH217_STOP` ms (default 3000). */
 int foreign_reader_child() {
@@ -201,9 +246,15 @@ TEST(issue_gh0217, foreign_read_process_skips_shrink) {
   int child_rc = -1;
   std::thread child_thread([&]() { child_rc = tool_runner::run(args); });
 
-  /* Let the child start and register its reader slot (it spins for ~3 s, so a
-   * short sleep is enough for the reader-table slot to appear). */
-  std::this_thread::sleep_for(std::chrono::milliseconds(400));
+  /* Wait until the child actually registers its reader slot in the shared
+   * reader table (it spins for ~3 s once started). A fixed sleep is not
+   * enough: on loaded CI runners the child's process spawn + gtest startup +
+   * env open can easily exceed 400 ms, and then the shrink-warranted commit
+   * below runs with NO foreign reader registered — the shrink succeeds and
+   * the test fails spuriously (observed on win-msvc/win-cxx CI cells). */
+  const mdbx_pid_t my_pid = GetCurrentProcessId();
+  ASSERT_TRUE(wait_foreign_reader_slot(env, my_pid, 30000))
+      << "the foreign reader did not register its slot in time (child startup is too slow or it died)";
 
   /* The parent's shrink-warranted commit while the foreign reader is alive
    * must be deferred: the file must NOT shrink. */
