@@ -822,6 +822,29 @@
       "note": "ci-windows-mscl studio=18 target=x64 Debug dll=ON crt=OFF"
     },
     {
+      "id": "win-mscl-x64-debug-coverage",
+      "runs-on": "windows-latest",
+      "env": {
+        "STUDIO_CLANG_DIR": "C:/Program Files/Microsoft Visual Studio/18/Enterprise/VC/Tools/Llvm/x64/bin",
+        "CC": "C:/Program Files/Microsoft Visual Studio/18/Enterprise/VC/Tools/Llvm/x64/bin/clang.exe",
+        "CXX": "C:/Program Files/Microsoft Visual Studio/18/Enterprise/VC/Tools/Llvm/x64/bin/clang++.exe",
+        "LLVM_PROFILE_FILE": "C:/a/profraw/libmdbx-%p.profraw"
+      },
+      "cmake": [
+        "-DCMAKE_BUILD_TYPE=Debug",
+        "-DCMAKE_C_FLAGS=-fprofile-instr-generate -fcoverage-mapping",
+        "-DCMAKE_CXX_FLAGS=-fprofile-instr-generate -fcoverage-mapping",
+        "-DCMAKE_EXE_LINKER_FLAGS=-fprofile-instr-generate",
+        "-DCMAKE_SHARED_LINKER_FLAGS=-fprofile-instr-generate",
+        "-DMDBX_BUILD_SHARED_LIBRARY:BOOL=OFF",
+        "-DMDBX_WITHOUT_MSVC_CRT:BOOL=OFF"
+      ],
+      "ctest": null,
+      "note": "ci-windows-mscl(llvm) x64 Debug static + llvm instr coverage (windows-import/lck-windows); static — чтобы runtime писал profraw при выходе exe",
+      "coverage": true,
+      "build_parallel": 4
+    },
+    {
       "id": "win-mscl-x64-release-shared-on-mscrt-on",
       "runs-on": "windows-latest",
       "env": {
@@ -2924,7 +2947,8 @@
     ],
     "coverage": [
       "linux-gcc-ubuntu24-debug-coverage",
-      "win-mingw-64-debug-coverage"
+      "win-mingw-64-debug-coverage",
+      "win-mscl-x64-debug-coverage"
     ],
     "linux-locking": [
       "linux-lock-sysv-gcc-debug",
@@ -3007,7 +3031,7 @@
     "Android cells are build-only except the emulator pilot (android-r27d-x86-64-emu): boots an API-30 x86_64 AVD and runs smoke_basic/smoke_chk via adb. Kept in nightly full for stability signal; not part of the change-addressed gate.",
     "push-quick profile: 2 linux + 1 macos + 3 windows (v142 win2022, v145 winlatest, mingw) = 7 cells, fast scope, on any push."
   ],
-  "zones_notes": "CI v3.5 model: change-addressed gate = union(push-quick, win-gate). push on ANY branch runs push-quick (7 surface cells, fast scope; Windows = v142 on win2022 + v145 on winlatest + mingw). A change touching any common_prefix (src/, CMakeLists.txt, mdbx.h, .github/workflows/, ...) is addressed by change-addressed = push-quick\u222awin-gate (~16 cells), which covers the full Windows axis matrix (v142/v143/v145, mscl, mingw, x64/win32/arm64, mscrt on/off, shared on/off, debug/release), Linux, macos. Nightly full (schedule on master) keeps the 190-cell repeated stochastic coverage. Consistency and axis coverage are enforced by tests/ci/validate-config.py (CI job + make test-ci-config).",
+  "zones_notes": "CI v3.5 model: change-addressed gate = union(push-quick, win-gate). push on ANY branch runs push-quick (7 surface cells, fast scope; Windows = v142 on win2022 + v145 on winlatest + mingw). A change touching any common_prefix (src/, CMakeLists.txt, mdbx.h, .github/workflows/, ...) is addressed by change-addressed = push-quick∪win-gate (~16 cells), which covers the full Windows axis matrix (v142/v143/v145, mscl, mingw, x64/win32/arm64, mscrt on/off, shared on/off, debug/release), Linux, macos. Nightly full (schedule on master) keeps the 190-cell repeated stochastic coverage. Consistency and axis coverage are enforced by tests/ci/validate-config.py (CI job + make test-ci-config).",
   "common_prefixes": [
     "src/",
     "cmake/",
