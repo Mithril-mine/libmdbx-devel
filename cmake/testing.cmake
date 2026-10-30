@@ -371,7 +371,8 @@ if(BUILD_TESTING)
 
       if(_gtest_is_bundled)
         # Bundled mode: plain target link, no wrapper needed.
-        set(UT_LIBRARIES gtest_main gtest ${CMAKE_THREAD_LIBS_INIT})
+        # gtest_main нет: общий main — в tests/ut/test-env.c++ (см. UT_LIBRARIES).
+        set(UT_LIBRARIES gtest ${CMAKE_THREAD_LIBS_INIT})
       else()
         # System mode: wrapper over the real library files.
         add_library(mdbx_gtest_link INTERFACE)
