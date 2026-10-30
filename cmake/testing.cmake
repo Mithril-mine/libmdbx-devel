@@ -689,6 +689,13 @@ int main() { return 0; }
         add_dependencies(${target} ${params_DEPEND})
       endif()
 
+      # mingw-w64 does not flush gcov counters at exit; tests link with
+      # --coverage only in ENABLE_GCOV builds. Expose a marker so
+      # tests/ut/test-env.h can register an atexit(__gcov_dump) hook.
+      if(ENABLE_GCOV AND (MINGW OR MSYS OR CYGWIN))
+        target_compile_definitions(${target} PRIVATE MDBX_GCOV_FLUSH)
+      endif()
+
       target_link_libraries(${target} ${UT_LIBRARIES})
 
       if(NOT params_LIBRARY AND DEFINED TOOL_MDBX_LIB)
