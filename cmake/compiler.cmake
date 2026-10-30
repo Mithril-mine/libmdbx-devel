@@ -1030,7 +1030,15 @@ macro(setup_compile_flags)
     set(EXE_LINKER_FLAGS "${EXE_LINKER_FLAGS} -fprofile-arcs -ftest-coverage")
     set(SHARED_LINKER_FLAGS "${SHARED_LINKER_FLAGS} -fprofile-arcs -ftest-coverage")
     set(MODULE_LINKER_FLAGS "${MODULE_LINKER_FLAGS} -fprofile-arcs -ftest-coverage")
-    # add_library(gcov SHARED IMPORTED)
+    # Windows/mingw test binaries define MDBX_GCOV_FLUSH globally (not
+    # per-target) so the precompiled header is compiled with the SAME macro
+    # set as every test target: a per-target define made the PCH invalid
+    # (cmake_pch.hxx.gch "not used because 'MDBX_GCOV_FLUSH' is defined",
+    # -Werror=invalid-pch). test-env.h uses it to register
+    # atexit(__gcov_dump) because mingw-w64 does not flush .gcda at exit.
+    if(MINGW OR MSYS OR CYGWIN)
+      add_compile_definitions(MDBX_GCOV_FLUSH)
+    endif()
   endif()
 
   if(ENABLE_GPROF)
