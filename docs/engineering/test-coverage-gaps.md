@@ -58,6 +58,14 @@
 > **Приоритет по эффекту**: P1+P2 дают ≈ 4/5 непокрытых блоков; P3 —
 > дёшево и быстро (повышает чистоту summary).
 
+> **Windows-модули (windows-import/lck-windows) — N/A**: замер gcov на
+> windows-latest/mingw-gcc-15.2 не работает (4 попытки: -lgcov,
+> --no-gc-sections, driver --coverage, GCOV_PREFIX — .gcda не пишутся при
+> валидных .gcno и успешном __gcov_dump; см. БЗ
+> bug:ci:win-mingw-gcda-exhausted). Инфраструктура клетки и шага остаётся;
+> вернуться при смене toolchain в клетке. Не включать их проценты в
+> приоритизацию.
+
 ## 3. Сценарии для закрытия (краткие; полные SC-61+ — в test-scenarios.md)
 
 ### SC-61. tree-search: ветви перехода страницы (unit)
