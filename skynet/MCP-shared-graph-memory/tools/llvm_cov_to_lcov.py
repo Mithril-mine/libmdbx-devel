@@ -61,8 +61,13 @@ def main():
     for data in doc.get("data", []):
         for f in data.get("files", []):
             filename = f.get("filename", "")
-            if args.root and filename.startswith(args.root):
-                filename = filename[len(args.root):].lstrip("/\\")
+            # llvm-cov отдаёт абсолютные пути с прямыми слэшами (даже на
+            # Windows), а --root приходит из bash с обратными — сравниваем
+            # в нормализованной форме, срезаем префикс repo-root.
+            norm_root = args.root.replace("\\", "/").rstrip("/") if args.root else ""
+            norm_fn = filename.replace("\\", "/")
+            if norm_root and (norm_fn.startswith(norm_root + "/") or norm_fn.startswith(norm_root + "\\")):
+                filename = norm_fn[len(norm_root):].lstrip("/\\")
             filename = filename.replace("\\\\", "/").replace("\\", "/")
             lines = covered_lines_from_segments(f.get("segments", []))
             if not lines:
