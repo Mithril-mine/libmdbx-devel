@@ -73,6 +73,8 @@
 
 ## 3. Сценарии для закрытия (краткие; полные SC-61+ — в test-scenarios.md)
 
+### SC-69. tree-search comparators — ✅ реализован (#273)
+
 ### SC-61. tree-search: ветви перехода страницы (unit) — ✅ реализован (#242)
 
 - **hypothesis**: `mdbx_get`/курсор на ключах, разнесённых по страницам,
@@ -108,7 +110,11 @@
   map full, invalid, readonly...) и проверка пойманного исключения.
 - **expectations**: покрыты все маппинги; сообщения exact.
 
+### SC-70. defrag engine — ✅ реализован (#274)
+
 ### SC-65. gc-get/gc-put: цепочки ретирирования (unit/smoke) — ✅ реализован (#257)
+
+### SC-71. gc-dense packing — ✅ реализован (#275)
 
 - **hypothesis**: массовое удаление/обновление формирует корректные GC-цепочки
   (retire/reclaim) и pipelining — ветви `gc-get`/`gc-put` покрываются.
