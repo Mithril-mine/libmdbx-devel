@@ -828,7 +828,7 @@
         "STUDIO_CLANG_DIR": "C:/Program Files/Microsoft Visual Studio/18/Enterprise/VC/Tools/Llvm/x64/bin",
         "CC": "C:/Program Files/Microsoft Visual Studio/18/Enterprise/VC/Tools/Llvm/x64/bin/clang.exe",
         "CXX": "C:/Program Files/Microsoft Visual Studio/18/Enterprise/VC/Tools/Llvm/x64/bin/clang++.exe",
-        "LLVM_PROFILE_FILE": "C:/a/profraw/libmdbx-%p.profraw"
+        "LLVM_PROFILE_FILE": "profraw-%p.profraw"
       },
       "cmake": [
         "-DCMAKE_BUILD_TYPE=Debug",
