@@ -195,12 +195,16 @@ jobs:
           mkdir -p coverage
           case "$(uname -s)" in
             MINGW*|MSYS*|CYGWIN*)
-              if [ -n "${LLVM_PROFILE_FILE-}" ] && ls ./*.profraw >/dev/null 2>&1; then
+              # profraw-файлы ищем и в cwd, и в каталоге LLVM_PROFILE_FILE
+              # (путь из env клетки): тесты пишут туда, куда указывает шаблон.
+              PROFDIR="$(dirname "${LLVM_PROFILE_FILE:-*.profraw}")"
+              if [ -n "${LLVM_PROFILE_FILE-}" ] && { ls ./*.profraw >/dev/null 2>&1 || ls "$PROFDIR"/*.profraw >/dev/null 2>&1; }; then
                 # Windows clang (msvc-triple): LLVM instrumentation, не gcov.
                 # Тесты пишут .profraw (LLVM_PROFILE_FILE задан в клетке);
                 # llvm-profdata/llvm-cov идут из состава VS LLVM.
                 LLVMTOOL="$STUDIO_CLANG_DIR"
-                "$LLVMTOOL/llvm-profdata.exe" merge -sparse ./*.profraw \
+                PROFS="$(ls ./*.profraw 2>/dev/null || ls "$PROFDIR"/*.profraw 2>/dev/null)"
+                "$LLVMTOOL/llvm-profdata.exe" merge -sparse $PROFS \
                   -o coverage/merged.profdata
                 # Один из тестовых exe несёт coverage-mapping; берём первый.
                 TESTEXE=$(find "$BUILD" -maxdepth 1 -name '*.exe' | head -1)
