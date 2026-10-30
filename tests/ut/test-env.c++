@@ -18,3 +18,17 @@ struct ci_crt_popup_suppressor {
 } /* namespace detail */
 
 static const ::detail::ci_crt_popup_suppressor ci_crt_popup_suppressor_instance;
+
+/* Собственный main для всех gtest-таргетов: единственный экземпляр общего
+ * кода (test-env.c++ компилируется в каждый gtest-бинарь через
+ * mdbx_test_env OBJECT). Заменяет gtest_main; в coverage-сборках mingw
+ * дополнительно сбрасывает gcov-счётчики явно (см. MDBX_GCOV_FLUSH). */
+int main(int argc, char **argv) {
+  ::testing::InitGoogleTest(&argc, argv);
+  const int rc = RUN_ALL_TESTS();
+#if defined(MDBX_GCOV_FLUSH)
+  extern "C" void __gcov_dump(void);
+  __gcov_dump();
+#endif
+  return rc;
+}
