@@ -36,10 +36,10 @@ In case you have found a suitable issue and still need clarification, you can wr
 
 If you then still feel the need to ask a question and need clarification, we recommend the following:
 
-- Ask to [telegram group](https://t.me/libmdbx).
+- Ask in the [telegram group](https://t.me/libmdbx).
 - Open an issue at [SourceCraft](https://sourcecraft.dev/dqdkfa/libmdbx-devel/create-issue) or [GitHub](https://github.com/Mithril-mine/libmdbx-devel/issues/new).
 - Provide as much context as you can about what you're running into.
-- Provide project and platform versions (nodejs, npm, etc), depending on what seems relevant.
+- Provide project and platform versions (compiler, OS, etc), depending on what seems relevant.
 
 We will then take care of the issue as soon as possible.
 
@@ -113,9 +113,9 @@ We appreciate any contributions: bug fixes, new features, tests, documentation, 
 
 ### License & Copyright
 
-The core of this project (the source code of library inself) is distributed under the Apache‑2.0, but tests and related infrastructure are proprietary. By contributing code, you agree to the license terms.
+The core of this project (the source code of the library itself) is distributed under the Apache‑2.0, but tests and related infrastructure are proprietary. By contributing code, you agree to the license terms.
 
-The Contributor License Agreement (CLA) is under development, be ready to sign it. In short, you must agree to the Apache‑2.0 license terms for the main library code and gratuitously transfer the all rights to the changes made/the addition of tests and related infrastructure to the project (maintainers).
+The Contributor License Agreement (CLA) is under development, be ready to sign it. In short, you must agree to the Apache‑2.0 license terms for the main library code and gratuitously transfer all rights to the changes made/the addition of tests and related infrastructure to the project (maintainers).
 
 If you add third‑party components:
 
@@ -177,7 +177,7 @@ ctest --output-on-failure
 ### Coding Style & Formatting
 
 - Style guide: follow the project’s established C/C++ style (aligned with libmdbx conventions).
-- Use `.c++` and '.h++' for C++ source code files.
+- Use `.c++` and `.h++` for C++ source code files.
 - Formatting: use `clang-format` with the provided `.clang-format` config.
 - Run before committing:
   ```bash
