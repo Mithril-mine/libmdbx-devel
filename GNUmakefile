@@ -998,6 +998,7 @@ $(DIST_DIR)/@tmp-squashed.inc: $(DIST_DIR)/mdbx-internals.h $(DIST_DIR)/@tmp-ama
 		-e '/#include "comparators.h"/r src/comparators.h' \
 		-e '/#include "cogs.h"/r src/cogs.h' \
 		-e '/#include "cursor.h"/r src/cursor.h' \
+		-e '/#include "cursor-internal.h"/r src/cursor-internal.h' \
 		-e '/#include "dbi.h"/r src/dbi.h' \
 		-e '/#include "dml.h"/r src/dml.h' \
 		-e '/#include "dpl.h"/r src/dpl.h' \
@@ -1011,6 +1012,7 @@ $(DIST_DIR)/@tmp-squashed.inc: $(DIST_DIR)/mdbx-internals.h $(DIST_DIR)/@tmp-ama
 		-e '/#include "sort.h"/r src/sort.h' \
 		-e '/#include "rthc.h"/r src/rthc.h' \
 		-e '/#include "walk.h"/r src/walk.h' \
+		-e '/#include "chk-internal.h"/r src/chk-internal.h' \
 		-e '/#include "windows-import.h"/r src/windows-import.h' \
 		src/internals.h \
 	| $(SED) \
