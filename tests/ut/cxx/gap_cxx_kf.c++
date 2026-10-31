@@ -140,11 +140,14 @@ TEST(ut_gap_cxx_kf, append_producer_concepts) {
   b3.append_producer(empty);
   EXPECT_EQ(b3.size(), 0u);
 
-  // несколько подряд
+  // несколько подряд: capacity policy может округлять размер вверх —
+  // проверяем минимум и содержимое
   pattern_producer part{10, 'a'};
   mdbx::buffer<> b4;
   b4.append_producer(part).append_producer(part);
-  EXPECT_EQ(b4.size(), 20u);
+  EXPECT_GE(b4.size(), 20u);
+  for (size_t i = 0; i < 20; ++i)
+    EXPECT_EQ(*(b4.byte_ptr() + i), 'a') << "at " << i;
 }
 
 TEST(ut_gap_cxx_kf, freestanding_reference) {
