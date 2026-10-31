@@ -19,6 +19,8 @@
 #include "api-txn-data.c"
 #include "api-txn.c"
 #include "audit.c"
+#include "chk-report.c"
+#include "chk-walk.c"
 #include "chk.c"
 #include "cogs.c"
 #include "coherency.c"
