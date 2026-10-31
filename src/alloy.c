@@ -28,6 +28,7 @@
 #include "defrag.c"
 #include "dml.c"
 #include "dpl.c"
+#include "dxb-resize.c"
 #include "dxb.c"
 #include "env.c"
 #include "gc-get.c"
