@@ -355,9 +355,6 @@ __cold int chk_tree(MDBX_chk_scope_t *const scope) {
   return err;
 }
 
-typedef int(chk_kv_visitor)(MDBX_chk_scope_t *const scope, MDBX_chk_table_t *tbl, const size_t record_number,
-                            const MDBX_val *key, const MDBX_val *data);
-
 __cold int chk_handle_kv(MDBX_chk_scope_t *const scope, MDBX_chk_table_t *tbl, const size_t record_number,
                                 const MDBX_val *key, const MDBX_val *data) {
   MDBX_chk_internal_t *const chk = scope->internal;
