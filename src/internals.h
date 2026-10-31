@@ -765,6 +765,13 @@ MDBX_INTERNAL int chk_get_tbl(MDBX_chk_scope_t *const scope, const walk_tbl_t *i
 
 #include "sort.h"
 
+/* cursor.c parts (cursor-setup.c / cursor-nav.c / cursor-mut.c / cursor-seek.c
+ * with cursor-internal.h), assembled by the cursor.c umbrella. */
+MDBX_INTERNAL int __must_check_result unexpected_dupsort(MDBX_cursor *mc);
+MDBX_INTERNAL cdr_t cursor_forward_at(MDBX_cursor *iter, size_t amount, int level);
+MDBX_INTERNAL cdr_t cursor_backward_at(MDBX_cursor *iter, size_t amount, int level);
+#include "cursor-internal.h"
+
 /* The reader-table occupancy counter lives in the externally-writable lock
  * mapping, so a too-large value from a corrupt or hostile lock file must never
  * be used as a loop/allocation bound over the fixed-size rdt[] array. Clamp it
