@@ -24,17 +24,6 @@
 /// foliage-ветви dupfix-таблиц. Дефолтные тесты гоняют только lenfast —
 /// остальные ветви (1527 блоков) не исполняются.
 
-namespace {
-/// Наполнить таблицу и вернуть отсортированный вектор ключей в порядке
-/// НАСТОЯЩЕЙ сортировки (зависит от компаратора таблицы).
-template <typename KEYFN>
-void fill_and_check(mdbx::txn_managed &txn, mdbx::map_handle map, size_t count, const KEYFN &make_key,
-                    const std::vector<std::string> &sorted_keys) {
-  for (const auto &k : sorted_keys)
-    txn.put(map, mdbx::slice(k), mdbx::slice("v-" + k), mdbx::upsert);
-}
-} // namespace
-
 /// ordinal-ветви: MDBX_INTEGERKEY (key_mode::ordinal), ключи 4 байта
 /// (uint32) и 8 байт (uint64) — search_branch_uint32/uint64 + ordinal.
 TEST(ut_gap_tree_comparators, ordinal_uint32) {
