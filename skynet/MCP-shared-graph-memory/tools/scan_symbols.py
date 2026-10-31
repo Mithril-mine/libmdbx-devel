@@ -258,7 +258,7 @@ class Collector:
         self._method_index[name] = qname
         return qname
 
-    def add_function(self, file, node, name=None):
+    def add_function(self, file, node, name=None, col=None):
         name = clean_cxx_name(name or node.get("name"))
         if not name:
             return
@@ -274,7 +274,10 @@ class Collector:
                 sig_hash = abs(hash(sig)) % 0xFFFF
                 key = "%s#%x" % (key, sig_hash)
         loc = node.get("loc", {})
-        l0 = loc.get("line", 0)
+        # loc может не содержать прямую "line" (макро-расширения: SEARCH_FOLIAGE
+        # и пр. дают только file+offset, а функция объявлена в теле макроса) —
+        # используем общий резолвер, как для блоков.
+        l0 = _loc_line(loc, col) if col else loc.get("line", 0)
         end = node.get("range", {}).get("end", {})
         # предпочитаем явную строку конца (может относиться к другому
         # файлу при макро-расширениях — offset тогда ненадёжен)
@@ -399,7 +402,7 @@ def walk(node, col: Collector):
             qname = node.get("name")
             if kind in ("CXXMethodDecl", "CXXConstructorDecl", "CXXDestructorDecl"):
                 qname = col.qualify_method(node, qname or "")
-            key = col.add_function(f, node, qname)
+            key = col.add_function(f, node, qname, col=col)
             if key:
                 prev_fn = col._cur_fn
                 prev_ctx = col._block_ctx
