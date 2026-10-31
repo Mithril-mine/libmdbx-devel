@@ -258,10 +258,11 @@ class Collector:
         self._method_index[name] = qname
         return qname
 
-    def add_function(self, file, node, name=None):
+    def add_function(self, file, node, name=None, col=None) -> "str | None":
         name = clean_cxx_name(name or node.get("name"))
         if not name:
-            return
+            # явный None: имя пустое — символ пропускается
+            return None
         sig = node.get("type", {}).get("qualType", "")
         has_body = any(c.get("kind") == "CompoundStmt" for c in node.get("inner", []))
         key = fn_key(file, name)
@@ -274,7 +275,10 @@ class Collector:
                 sig_hash = abs(hash(sig)) % 0xFFFF
                 key = "%s#%x" % (key, sig_hash)
         loc = node.get("loc", {})
-        l0 = loc.get("line", 0)
+        # loc может не содержать прямую "line" (макро-расширения: SEARCH_FOLIAGE
+        # и пр. дают только file+offset, а функция объявлена в теле макроса) —
+        # используем общий резолвер, как для блоков.
+        l0 = _loc_line(loc, col) if col else loc.get("line", 0)
         end = node.get("range", {}).get("end", {})
         # предпочитаем явную строку конца (может относиться к другому
         # файлу при макро-расширениях — offset тогда ненадёжен)
@@ -302,6 +306,8 @@ class Collector:
             if has_body and not old["is_definition"]:
                 self.functions[key] = entry
                 return key
+            # дубликат без тела: существующая запись остаётся, новый
+            # дескриптор не добавляется
             return None
         self.functions[key] = entry
         return key
@@ -309,7 +315,8 @@ class Collector:
     def add_type(self, file, node):
         name = node.get("name")
         if not name or is_builtin_type(name):
-            return
+            # явный None: тип без имени или builtin — пропускается
+            return None
         key = "type:%s:%s" % (module_of(file), name)
         if key in self.types:
             return
@@ -326,10 +333,12 @@ class Collector:
     def add_macro(self, file, node):
         name = node.get("name")
         if not name:
-            return
+            # явный None: макрос без имени — пропускается
+            return None
         key = "macro:%s:%s" % (module_of(file), name)
         if key in self.macros:
-            return
+            # дубликат: существующая запись остаётся
+            return None
         loc = node.get("loc", {})
         self.macros[key] = {
             "kind": "macro", "name": name,
@@ -399,7 +408,7 @@ def walk(node, col: Collector):
             qname = node.get("name")
             if kind in ("CXXMethodDecl", "CXXConstructorDecl", "CXXDestructorDecl"):
                 qname = col.qualify_method(node, qname or "")
-            key = col.add_function(f, node, qname)
+            key = col.add_function(f, node, qname, col=col)
             if key:
                 prev_fn = col._cur_fn
                 prev_ctx = col._block_ctx
