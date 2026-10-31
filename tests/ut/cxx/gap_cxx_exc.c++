@@ -37,6 +37,13 @@ TEST(ut_gap_cxx_exc, all_exception_classes_via_throw) {
     const char *name;
   };
   // Проверяем через динамическое приведение к mdbx::exception и code()
+  // NB: error::throw_exception() always throws on every MDBX_error_t handled
+  // here, so MSVC marks the 'no exception' path and the mdbx::exception catch
+  // branch unreachable (C4702); suppress it for this test lambda only.
+#if defined(_MSC_VER)
+#pragma warning(push)
+#pragma warning(disable : 4702) /* unreachable code */
+#endif
   auto probe_one = [](MDBX_error_t code) {
     mdbx::error err(code);
     try {
@@ -56,6 +63,9 @@ TEST(ut_gap_cxx_exc, all_exception_classes_via_throw) {
       ADD_FAILURE() << "non-standard exception for code " << code;
     }
   };
+#if defined(_MSC_VER)
+#pragma warning(pop)
+#endif
   const MDBX_error_t codes[] = {
       MDBX_BAD_DBI, MDBX_CORRUPTED, MDBX_MAP_FULL, MDBX_INCOMPATIBLE,
       MDBX_NOTFOUND, MDBX_KEYEXIST, MDBX_PROBLEM, MDBX_DBS_FULL,
