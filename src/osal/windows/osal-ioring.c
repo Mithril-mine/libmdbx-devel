@@ -1,12 +1,12 @@
 /// \copyright SPDX-License-Identifier: Apache-2.0
 /// \author Леонид Юрьев aka Leonid Yuriev <leo@yuriev.ru> \date 2015-2026
-/// \file osal-ioring.c — asynchronous/overlapped IO-queue for file writes.
+/// \file osal-ioring.c (Windows part) — asynchronous/overlapped IO-queue for
+/// file writes.
 
 #include "internals.h"
 
 /*----------------------------------------------------------------------------*/
 
-#if IS_WINDOWS
 #define ior_alignment_mask (ior->pagesize - 1)
 #define ior_WriteFile_flag 1
 #define OSAL_IOV_MAX (4096 / sizeof(ior_sgv_element))
@@ -36,26 +36,9 @@ static void WINAPI ior_wocr(DWORD err, DWORD bytes, OVERLAPPED *ov) {
     SetEvent(ior->async_done);
 }
 
-#elif MDBX_HAVE_PWRITEV
-#if defined(_SC_IOV_MAX) || defined(ENABLE_MEMCHECK)
-size_t osal_iov_max;
-#define OSAL_IOV_MAX osal_iov_max
-#else
-#define OSAL_IOV_MAX IOV_MAX
-#endif
-#else
-#undef OSAL_IOV_MAX
-#endif /* OSAL_IOV_MAX */
-
-int osal_ioring_create(osal_ioring_t *ior
-#if IS_WINDOWS
-                       ,
-                       bool enable_direct, mdbx_filehandle_t overlapped_fd
-#endif /* Windows */
-) {
+int osal_ioring_create(osal_ioring_t *ior, bool enable_direct, mdbx_filehandle_t overlapped_fd) {
   memset(ior, 0, sizeof(osal_ioring_t));
 
-#if IS_WINDOWS
   ior->overlapped_fd = overlapped_fd;
   ior->direct = enable_direct && overlapped_fd;
   ior->pagesize = globals.sys_pagesize;
@@ -63,23 +46,14 @@ int osal_ioring_create(osal_ioring_t *ior
   ior->async_done = ior_get_event(ior);
   if (!ior->async_done)
     return GetLastError();
-#endif /* !Windows */
-
-#if MDBX_HAVE_PWRITEV && defined(_SC_IOV_MAX)
-  ASSERT(osal_iov_max > 0);
-#endif /* MDBX_HAVE_PWRITEV && _SC_IOV_MAX */
 
   ior->boundary = ptr_disp(ior->pool, ior->allocated);
   return MDBX_SUCCESS;
 }
 
 static inline size_t ior_offset(const ior_item_t *item) {
-#if IS_WINDOWS
   return item->ov.Offset |
          (size_t)((sizeof(size_t) > sizeof(item->ov.Offset)) ? (uint64_t)item->ov.OffsetHigh << 32 : 0);
-#else
-  return item->offset;
-#endif /* !Windows */
 }
 
 static inline ior_item_t *ior_next(ior_item_t *item, size_t sgvcnt) {
@@ -98,17 +72,14 @@ int osal_ioring_add(osal_ioring_t *ior, const size_t offset, void *data, const s
   ASSERT(bytes % MDBX_MIN_PAGESIZE == 0 && bytes <= MAX_IO_BYTES);
   ASSERT(offset % MDBX_MIN_PAGESIZE == 0 && offset + (uint64_t)bytes <= MAX_MAPSIZE);
 
-#if IS_WINDOWS
   const unsigned segments = (unsigned)(bytes >> ior->pagesize_ln2);
   const bool use_gather = ior->direct && ior->overlapped_fd && ior->slots_left >= segments;
-#endif /* Windows */
 
   ior_item_t *item = ior->pool;
   if (likely(ior->last)) {
     item = ior->last;
     if (unlikely(ior_offset(item) + ior_last_bytes(ior, item) == offset) &&
         likely(ior_last_bytes(ior, item) + bytes <= MAX_IO_BYTES)) {
-#if IS_WINDOWS
       if (use_gather &&
           ((bytes | (uintptr_t)data | ior->last_bytes | (uintptr_t)(uint64_t)item->sgv[0].Buffer) &
            ior_alignment_mask) == 0 &&
@@ -134,31 +105,6 @@ int osal_ioring_add(osal_ioring_t *ior, const size_t offset, void *data, const s
         ior->last_bytes += bytes;
         return MDBX_SUCCESS;
       }
-#elif MDBX_HAVE_PWRITEV
-      ASSERT((int)item->sgvcnt > 0);
-      const void *end = ptr_disp(item->sgv[item->sgvcnt - 1].iov_base, item->sgv[item->sgvcnt - 1].iov_len);
-      if (unlikely(end == data)) {
-        item->sgv[item->sgvcnt - 1].iov_len += bytes;
-        ior->last_bytes += bytes;
-        return MDBX_SUCCESS;
-      }
-      if (likely(item->sgvcnt < OSAL_IOV_MAX)) {
-        if (unlikely(ior->slots_left < 1))
-          return MDBX_RESULT_TRUE;
-        item->sgv[item->sgvcnt].iov_base = data;
-        item->sgv[item->sgvcnt].iov_len = bytes;
-        ior->last_bytes += bytes;
-        item->sgvcnt += 1;
-        ior->slots_left -= 1;
-        return MDBX_SUCCESS;
-      }
-#else
-      const void *end = ptr_disp(item->single.iov_base, item->single.iov_len);
-      if (unlikely(end == data)) {
-        item->single.iov_len += bytes;
-        return MDBX_SUCCESS;
-      }
-#endif
     }
     item = ior_next(item, ior_last_sgvcnt(ior, item));
   }
@@ -167,7 +113,6 @@ int osal_ioring_add(osal_ioring_t *ior, const size_t offset, void *data, const s
     return MDBX_RESULT_TRUE;
 
   unsigned slots_used = 1;
-#if IS_WINDOWS
   item->ov.Internal = item->ov.InternalHigh = 0;
   item->ov.Offset = (DWORD)offset;
   item->ov.OffsetHigh = HIGH_DWORD(offset);
@@ -196,17 +141,6 @@ int osal_ioring_add(osal_ioring_t *ior, const size_t offset, void *data, const s
   }
   ior->last_bytes = bytes;
   ior_last_sgvcnt(ior, item) = slots_used;
-#elif MDBX_HAVE_PWRITEV
-  item->offset = offset;
-  item->sgv[0].iov_base = data;
-  item->sgv[0].iov_len = bytes;
-  ior->last_bytes = bytes;
-  ior_last_sgvcnt(ior, item) = slots_used;
-#else
-  item->offset = offset;
-  item->single.iov_base = data;
-  item->single.iov_len = bytes;
-#endif /* !Windows */
   ior->slots_left -= slots_used;
   ior->last = item;
   return MDBX_SUCCESS;
@@ -215,7 +149,6 @@ int osal_ioring_add(osal_ioring_t *ior, const size_t offset, void *data, const s
 void osal_ioring_walk(osal_ioring_t *ior, iov_ctx_t *ctx,
                       void (*callback)(iov_ctx_t *ctx, size_t offset, void *data, size_t bytes)) {
   for (ior_item_t *item = ior->pool; item <= ior->last;) {
-#if IS_WINDOWS
     size_t offset = ior_offset(item);
     char *data = item->single.iov_base;
     /* Decode counterpart of enqueue-time encoding:
@@ -243,18 +176,6 @@ void osal_ioring_walk(osal_ioring_t *ior, iov_ctx_t *ctx,
     }
     ASSERT(bytes < MAX_IO_BYTES);
     callback(ctx, offset, data, bytes);
-#elif MDBX_HAVE_PWRITEV
-    ASSERT(item->sgvcnt > 0);
-    size_t offset = item->offset;
-    size_t i = 0;
-    do {
-      callback(ctx, offset, item->sgv[i].iov_base, item->sgv[i].iov_len);
-      offset += item->sgv[i].iov_len;
-    } while (++i != item->sgvcnt);
-#else
-    const size_t i = 1;
-    callback(ctx, item->offset, item->single.iov_base, item->single.iov_len);
-#endif
     item = ior_next(item, i);
   }
 }
@@ -262,7 +183,6 @@ void osal_ioring_walk(osal_ioring_t *ior, iov_ctx_t *ctx,
 osal_ioring_write_result_t osal_ioring_write(osal_ioring_t *ior, mdbx_filehandle_t fd) {
   osal_ioring_write_result_t r = {MDBX_SUCCESS, 0};
 
-#if IS_WINDOWS
   HANDLE *const end_wait_for = ior->event_pool + ior->allocated +
                                /* был выделен один дополнительный элемент для async_done */ 1;
   HANDLE *wait_for = end_wait_for;
@@ -456,38 +376,10 @@ osal_ioring_write_result_t osal_ioring_write(osal_ioring_t *ior, mdbx_filehandle
   }
   ASSERT(ior->async_waiting == ior->async_completed);
 
-#else
-  STATIC_ASSERT_MSG(sizeof(off_t) >= sizeof(size_t), "libmdbx requires 64-bit file I/O on 64-bit systems");
-  for (ior_item_t *item = ior->pool; item <= ior->last;) {
-#if MDBX_HAVE_PWRITEV
-    ASSERT(item->sgvcnt > 0);
-    if (item->sgvcnt == 1)
-      r.err = osal_pwrite(fd, item->sgv[0].iov_base, item->sgv[0].iov_len, item->offset);
-    else
-      r.err = osal_pwritev(fd, item->sgv, item->sgvcnt, item->offset);
-
-    // TODO: io_uring_prep_write(sqe, fd, ...);
-
-    item = ior_next(item, item->sgvcnt);
-#else
-    r.err = osal_pwrite(fd, item->single.iov_base, item->single.iov_len, item->offset);
-    item = ior_next(item, 1);
-#endif
-    r.wops += 1;
-    if (unlikely(r.err != MDBX_SUCCESS))
-      break;
-  }
-
-  // TODO: io_uring_submit(&ring)
-  // TODO: err = io_uring_wait_cqe(&ring, &cqe);
-  // TODO: io_uring_cqe_seen(&ring, cqe);
-
-#endif /* !Windows */
   return r;
 }
 
 void osal_ioring_reset(osal_ioring_t *ior) {
-#if IS_WINDOWS
   if (ior->last) {
     for (ior_item_t *item = ior->pool; item <= ior->last;) {
       if (!HasOverlappedIoCompleted(&item->ov)) {
@@ -509,28 +401,22 @@ void osal_ioring_reset(osal_ioring_t *ior) {
   ior->async_waiting = INT_MAX;
   ior->async_completed = 0;
   ResetEvent(ior->async_done);
-#endif /* !Windows */
   ior->slots_left = ior->allocated;
   ior->last = nullptr;
 }
 
 static void ior_cleanup(osal_ioring_t *ior, const size_t since) {
   osal_ioring_reset(ior);
-#if IS_WINDOWS
   for (size_t i = since; i < ior->event_stack; ++i) {
     /* Zap: Using uninitialized memory '**ior.event_pool' */
     MDBX_SUPPRESS_GOOFY_MSVC_ANALYZER(6001);
     CloseHandle(ior->event_pool[i]);
   }
   ior->event_stack = 0;
-#else
-  (void)since;
-#endif /* Windows */
 }
 
 int osal_ioring_resize(osal_ioring_t *ior, size_t items) {
   ASSERT(items > 0 && items < INT_MAX / sizeof(ior_item_t));
-#if IS_WINDOWS
   if (ior->state & IOR_STATE_LOCKED)
     return MDBX_SUCCESS;
   const bool useSetFileIoOverlappedRange = ior->overlapped_fd && imports.SetFileIoOverlappedRange && items > 42;
@@ -538,13 +424,11 @@ int osal_ioring_resize(osal_ioring_t *ior, size_t items) {
       useSetFileIoOverlappedRange ? ((items < 65536 / 2 / sizeof(ior_item_t)) ? 65536 : 65536 * 4) : 1024;
   const size_t bytes = ceil_powerof2(sizeof(ior_item_t) * items, ceiling);
   items = bytes / sizeof(ior_item_t);
-#endif /* Windows */
 
   if (items != ior->allocated) {
     ASSERT(items >= osal_ioring_used(ior));
     if (items < ior->allocated)
       ior_cleanup(ior, items);
-#if IS_WINDOWS
     void *ptr = osal_realloc(ior->event_pool, (items + /* extra for waiting the async_done */ 1) * sizeof(HANDLE));
     if (unlikely(!ptr))
       return MDBX_ENOMEM;
@@ -557,25 +441,18 @@ int osal_ioring_resize(osal_ioring_t *ior, size_t items) {
       memcpy(ptr, ior->pool, ior->allocated * sizeof(ior_item_t));
       osal_memalign_free(ior->pool);
     }
-#else
-    void *ptr = osal_realloc(ior->pool, sizeof(ior_item_t) * items);
-    if (unlikely(!ptr))
-      return MDBX_ENOMEM;
-#endif
     ior->pool = ptr;
 
     if (items > ior->allocated)
       memset(ior->pool + ior->allocated, 0, sizeof(ior_item_t) * (items - ior->allocated));
     ior->allocated = (unsigned)items;
     ior->boundary = ptr_disp(ior->pool, ior->allocated);
-#if IS_WINDOWS
     if (useSetFileIoOverlappedRange) {
       if (imports.SetFileIoOverlappedRange(ior->overlapped_fd, ptr, (ULONG)bytes))
         ior->state += IOR_STATE_LOCKED;
       else
         return (int)GetLastError();
     }
-#endif /* Windows */
   }
   return MDBX_SUCCESS;
 }
@@ -583,15 +460,10 @@ int osal_ioring_resize(osal_ioring_t *ior, size_t items) {
 void osal_ioring_destroy(osal_ioring_t *ior) {
   if (ior->allocated)
     ior_cleanup(ior, 0);
-#if IS_WINDOWS
   osal_memalign_free(ior->pool);
   osal_free(ior->event_pool);
   CloseHandle(ior->async_done);
   if (ior->overlapped_fd)
     CloseHandle(ior->overlapped_fd);
-#else
-  osal_free(ior->pool);
-#endif
   memset(ior, 0, sizeof(osal_ioring_t));
 }
-

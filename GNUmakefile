@@ -19,7 +19,7 @@ endif
 make_ge_4_1   := $(shell expr "$(MAKE_VERx3)" ">=" "  4  1")
 make_ge_4_4   := $(shell expr "$(MAKE_VERx3)" ">=" "  4  4")
 bash_ge_4_3   := $(shell expr "$(BASH_VERx2)" ">=" "  4  3")
-SRC_PROBE_C   := $(shell [ -f mdbx.c ] && echo mdbx.c || echo src/osal.c)
+SRC_PROBE_C   := $(shell [ -f mdbx.c ] && echo mdbx.c || echo src/osal/osal.c)
 SRC_PROBE_CXX := $(shell [ -f mdbx.c++ ] && echo mdbx.c++ || echo src/mdbx.c++)
 UNAME         := $(shell uname -s 2>/dev/null || echo Unknown)
 
@@ -937,7 +937,7 @@ release-assets: libmdbx-amalgamated-$(MDBX_GIT_3DOT).zpaq \
 
 @dist-checked.tag: $(addprefix $(DIST_DIR)/, $(DIST_SRC) $(DIST_EXTRA))
 	@echo -n '  VERIFY amalgamated sources...'
-	$(QUIET)rm -rf $@ $(DIST_DIR)/@tmp-squashed.inc $(DIST_DIR)/@tmp-amalgam.inc \
+	$(QUIET)rm -rf $@ $(DIST_DIR)/@tmp-squashed.inc $(DIST_DIR)/@tmp-amalgam.inc $(DIST_DIR)/@tmp-osal-platform.inc \
 	&& if grep -R "define xMDBX_ALLOY" dist | grep -q MDBX_BUILD_SOURCERY; then echo "sed output is WRONG!" >&2; exit 2; fi \
 	&& rm -rf @dist-check && cp -r -p $(DIST_DIR) @dist-check && ($(MAKE) -j IOARENA=false CXXSTD=$(CXXSTD) -C @dist-check all check ninja-assertions >@dist-check.log 2>@dist-check.err || (cat @dist-check.err && exit 1)) \
 	&& touch $@ || (echo " FAILED! See @dist-check.log and @dist-check.err" >&2; exit 2) && echo " Ok"
@@ -968,7 +968,7 @@ $(DIST_DIR)/mdbx-internals.h: src/version.c $(DIST_DIR)/@tmp-amalgam.inc $(ALLOY
 	&& (grep -v '#include ' src/alloy.c && echo '#define MDBX_BUILD_SOURCERY $(MDBX_BUILD_SOURCERY)' \
 	&& $(SED) \
 		-e '/#include "preface.h"/r src/preface.h' \
-		-e '/#include "osal.h"/r src/osal.h' \
+		-e '/#include "osal\/osal.h"/r src/osal/osal.h' \
 		-e '/#include "options.h"/r src/options.h' \
 		-e '/#include "atomics-types.h"/r src/atomics-types.h' \
 		-e '/#include "layout-dxb.h"/r src/layout-dxb.h' \
@@ -1023,7 +1023,14 @@ $(DIST_DIR)/@tmp-squashed.inc: $(DIST_DIR)/mdbx-internals.h $(DIST_DIR)/@tmp-ama
 
 $(DIST_DIR)/mdbx.c: $(DIST_DIR)/@tmp-squashed.inc $(DIST_DIR)/@tmp-amalgam.inc $(lastword $(MAKEFILE_LIST))
 	@echo '  MAKE $@'
-	$(QUIET)(cat $(DIST_DIR)/@tmp-squashed.inc $(shell git ls-files --deduplicate src/*.c | grep -v alloy) src/version.c | $(SED) \
+	$(QUIET){ \
+		echo '#if IS_WINDOWS /* platform part: osal/windows */'; \
+		for f in src/osal/windows/*.c; do cat $$f; echo; done; \
+		echo '#else /* platform part: osal/posix */'; \
+		for f in src/osal/posix/*.c; do cat $$f; echo; done; \
+		echo '#endif /* platform parts */'; \
+	} > $(DIST_DIR)/@tmp-osal-platform.inc
+	$(QUIET)(cat $(DIST_DIR)/@tmp-squashed.inc $(shell { ls src/*.c src/osal/*.c 2>/dev/null; echo src/version.c; } | sort -u | grep -v alloy | grep -v 'osal/osal.c') $(DIST_DIR)/@tmp-osal-platform.inc | $(SED) \
 		-e '/#include "debug_begin.h"/r src/debug_begin.h' \
 		-e '/#include "debug_end.h"/r src/debug_end.h' \
 	) | $(SED) \
