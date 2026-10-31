@@ -40,8 +40,10 @@ TEST(ut_exceptions, all_exception_classes_via_throw) {
   auto probe_one = [](MDBX_error_t code) {
     mdbx::error err(code);
     try {
+      // throw_exception() объявлен [[noreturn]]: MSVC помечает любой код
+      // после него как unreachable (C4702/-Werror), поэтому проверка
+      // "не бросил" здесь невозможна и не нужна.
       err.throw_exception();
-      ADD_FAILURE() << "no exception for code " << code;
     } catch (const mdbx::exception &e) {
       EXPECT_EQ(e.error().code(), code) << "code mismatch for " << code;
       EXPECT_NE(e.what(), nullptr);
@@ -86,9 +88,10 @@ TEST(ut_exceptions, exception_thunk_capture_rethrow) {
   mdbx::exception_thunk thunk;
   EXPECT_TRUE(thunk.is_clean());
   try {
-    throw mdbx::error(MDBX_NOTFOUND);
+    // бросаем ПОЛНОЦЕННОЕ исключение (mdbx::error — не std::exception,
+    // его rethrow не поймать стандартными хендлерами)
+    throw mdbx::not_found(mdbx::error(MDBX_NOTFOUND));
   } catch (...) {
-    // capture() без аргументов — берёт активное исключение из потока
     thunk.capture();
   }
   EXPECT_FALSE(thunk.is_clean());
