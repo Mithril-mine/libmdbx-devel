@@ -40,8 +40,10 @@ TEST(ut_gap_cxx_exc, all_exception_classes_via_throw) {
   auto probe_one = [](MDBX_error_t code) {
     mdbx::error err(code);
     try {
+      // throw_exception() объявлен [[noreturn]]: MSVC помечает любой код
+      // после него как unreachable (C4702/-Werror), поэтому проверка
+      // "не бросил" здесь невозможна и не нужна.
       err.throw_exception();
-      ADD_FAILURE() << "no exception for code " << code;
     } catch (const mdbx::exception &e) {
       EXPECT_EQ(e.error().code(), code) << "code mismatch for " << code;
       EXPECT_NE(e.what(), nullptr);
