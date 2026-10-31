@@ -48,11 +48,20 @@
 #include "meta.c"
 #include "mvcc-readers.c"
 #include "node.c"
+#if IS_WINDOWS
+#include "osal/windows/osal-misc.c"
+#include "osal/windows/osal-thread.c"
+#include "osal/windows/osal-ioring.c"
+#include "osal/windows/osal-file.c"
+#include "osal/windows/osal-mmap.c"
+#else
 #include "osal/posix/osal-misc.c"
 #include "osal/posix/osal-thread.c"
 #include "osal/posix/osal-ioring.c"
 #include "osal/posix/osal-file.c"
 #include "osal/posix/osal-mmap.c"
+#endif /* platform */
+
 #include "page-get.c"
 #include "page-iov.c"
 #include "page-ops.c"
