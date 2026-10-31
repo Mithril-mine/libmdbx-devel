@@ -119,7 +119,8 @@ TEST(ut_gap_foliage_dupfix, ordinal_dupfix) {
     uint32_t target = k * VALS_PER_KEY + 432; // внутри [0, VALS_PER_KEY)
     EXPECT_TRUE(cur.find_multivalue(key, mdbx::slice(&target, sizeof(target)), false).done);
   }
-  EXPECT_TRUE(cur.move(mdbx::cursor::move_operation::last, true).done);
+  // подсчёт групп с начала (курсор после цикла стоит на последнем ключе)
+  EXPECT_TRUE(cur.move(mdbx::cursor::move_operation::first, true).done);
   size_t groups = 1;
   while (cur.move(mdbx::cursor::move_operation::multi_nextkey_firstvalue, false))
     ++groups;
