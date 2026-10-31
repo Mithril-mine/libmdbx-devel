@@ -229,9 +229,9 @@ TEST(ut_gap_tree_foliage, reverse_lexical_usual_dupfix) {
       std::string ls = "key-" + std::to_string(100000 + i);
       EXPECT_TRUE(cur.find(mdbx::slice(ls), false).done);
     }
-    // lower_bound в multi-таблице: DUPSORT-семантика требует пары;
-    // для чистого позиционирования на ключ используем exact-find соседа.
-    std::string lbk = "key-150000";
+    // exact-find существующего ключа (уточнение диапазона вставки:
+    // ключи key-100000..key-102499)
+    std::string lbk = "key-101500";
     EXPECT_TRUE(cur.find(mdbx::slice(lbk), false).done);
   }
   // lexical-dupfix
