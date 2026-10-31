@@ -258,10 +258,11 @@ class Collector:
         self._method_index[name] = qname
         return qname
 
-    def add_function(self, file, node, name=None, col=None):
+    def add_function(self, file, node, name=None, col=None) -> "str | None":
         name = clean_cxx_name(name or node.get("name"))
         if not name:
-            return
+            # явный None: имя пустое — символ пропускается
+            return None
         sig = node.get("type", {}).get("qualType", "")
         has_body = any(c.get("kind") == "CompoundStmt" for c in node.get("inner", []))
         key = fn_key(file, name)
@@ -305,6 +306,8 @@ class Collector:
             if has_body and not old["is_definition"]:
                 self.functions[key] = entry
                 return key
+            # дубликат без тела: существующая запись остаётся, новый
+            # дескриптор не добавляется
             return None
         self.functions[key] = entry
         return key
@@ -312,7 +315,8 @@ class Collector:
     def add_type(self, file, node):
         name = node.get("name")
         if not name or is_builtin_type(name):
-            return
+            # явный None: тип без имени или builtin — пропускается
+            return None
         key = "type:%s:%s" % (module_of(file), name)
         if key in self.types:
             return
@@ -329,10 +333,12 @@ class Collector:
     def add_macro(self, file, node):
         name = node.get("name")
         if not name:
-            return
+            # явный None: макрос без имени — пропускается
+            return None
         key = "macro:%s:%s" % (module_of(file), name)
         if key in self.macros:
-            return
+            # дубликат: существующая запись остаётся
+            return None
         loc = node.get("loc", {})
         self.macros[key] = {
             "kind": "macro", "name": name,
