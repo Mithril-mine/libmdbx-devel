@@ -86,9 +86,10 @@ TEST(ut_gap_cxx_exc, exception_thunk_capture_rethrow) {
   mdbx::exception_thunk thunk;
   EXPECT_TRUE(thunk.is_clean());
   try {
-    throw mdbx::error(MDBX_NOTFOUND);
+    // бросаем ПОЛНОЦЕННОЕ исключение (mdbx::error — не std::exception,
+    // его rethrow не поймать стандартными хендлерами)
+    throw mdbx::not_found(mdbx::error(MDBX_NOTFOUND));
   } catch (...) {
-    // capture() без аргументов — берёт активное исключение из потока
     thunk.capture();
   }
   EXPECT_FALSE(thunk.is_clean());
