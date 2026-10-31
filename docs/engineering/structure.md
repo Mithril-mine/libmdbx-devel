@@ -149,7 +149,7 @@ linkage; in amalgamated build (`xMDBX_ALLOY`) = `static`.
 | `alloy.c` | Amalgamation driver: source-fusing engine used by old `make dist` rules to produce single-file `mdbx.c`/`mdbx.c++`/`mdbx-internals.h` from `src/` (replaces `MDBX_INTERNAL`→`static`). | Historically invoked via `GNUmakefile` ALLOY rules; `src/amalgam.in` is the header template. |
 | `version.c.in` | Version source template (filled by CMake/GNUmakefile with `MDBX_GIT_DESCRIBE`, timestamp). | Generated `src/version.c`. |
 | `amalgam.in` | Amalgamated-file banner template (`@MDBX_GIT_DESCRIBE@`/`@MDBX_GIT_TIMESTAMP@`). | — |
-| `debug_begin.h` / `debug_end.h` | Scoped instrumentation: enter/leave tracing, timing jitter injection (`jitter4testing`). | — |
+| `debug-begin.h` / `debug-end.h` | Scoped instrumentation: enter/leave tracing, timing jitter injection (`jitter4testing`). | — |
 | `bits.md` | Internal notes on bit/flag layouts. | — |
 
 ### 2.8 C++ API glue

@@ -185,7 +185,7 @@ if(MDBX_TEXTBOOK_CXX_AVAILABLE)
   # and the libmdbx include dirs (via a PRIVATE link). It is created only when
   # the textbook examples are enabled: on C++11/14 or in dist builds there is
   # nothing to precompile.
-  set(MDBX_EXAMPLES_PCH_ANCHOR_SOURCE "${CMAKE_CURRENT_SOURCE_DIR}/common/pch_anchor.cxx")
+  set(MDBX_EXAMPLES_PCH_ANCHOR_SOURCE "${CMAKE_CURRENT_SOURCE_DIR}/common/pch-anchor.c++")
   set(MDBX_EXAMPLES_PCH_HEADER "${CMAKE_CURRENT_SOURCE_DIR}/common/pch.h++")
   mdbx_add_pch_anchor(mdbx_examples_pch "${MDBX_EXAMPLES_PCH_HEADER}" "${MDBX_EXAMPLES_PCH_ANCHOR_SOURCE}"
                       CXX_STANDARD ${MDBX_CXX_STANDARD}

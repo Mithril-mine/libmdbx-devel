@@ -610,7 +610,7 @@ int main() { return 0; }
     # MDBX_PROBES ones) simply does not reuse the PCH — GCC then falls back to
     # a normal compile without an error, so this is safe.
     if(UT_TEST_ENV_SOURCE)
-      set(UT_PCH_ANCHOR_SOURCE "${CMAKE_CURRENT_LIST_DIR}/../tests/ut/pch_anchor.cxx")
+      set(UT_PCH_ANCHOR_SOURCE "${CMAKE_CURRENT_LIST_DIR}/../tests/ut/pch-anchor.c++")
       set(UT_PCH_HEADER "${CMAKE_CURRENT_LIST_DIR}/../tests/ut/pch.h++")
       mdbx_add_pch_anchor(mdbx_test_pch "${UT_PCH_HEADER}" "${UT_PCH_ANCHOR_SOURCE}"
                           CXX_STANDARD ${MDBX_CXX_STANDARD}

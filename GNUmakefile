@@ -1022,8 +1022,8 @@ $(DIST_DIR)/@tmp-squashed.inc: $(DIST_DIR)/mdbx-internals.h $(DIST_DIR)/@tmp-ama
 $(DIST_DIR)/mdbx.c: $(DIST_DIR)/@tmp-squashed.inc $(DIST_DIR)/@tmp-amalgam.inc $(lastword $(MAKEFILE_LIST))
 	@echo '  MAKE $@'
 	$(QUIET)(cat $(DIST_DIR)/@tmp-squashed.inc $(shell git ls-files --deduplicate src/*.c | grep -v alloy) src/version.c | $(SED) \
-		-e '/#include "debug_begin.h"/r src/debug_begin.h' \
-		-e '/#include "debug_end.h"/r src/debug_end.h' \
+		-e '/#include "debug-begin.h"/r src/debug-begin.h' \
+		-e '/#include "debug-end.h"/r src/debug-end.h' \
 	) | $(SED) \
 		-e '/#include "/d;/#pragma once/d' \
 		-e '/dist-cutoff-begin/,/dist-cutoff-end/d' \

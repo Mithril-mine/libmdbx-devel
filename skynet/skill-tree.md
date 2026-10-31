@@ -1,6 +1,6 @@
 # skill-tree — рабочая копия ветки для навыков (workflow)
 
-> `/sourcecraft/workspace/skill-tree` — git worktree от bare-репозитория
+> `~/skill-tree` — git worktree от bare-репозитория
 > `local-origin`, на собственной ветке `skill-tree`, отслеживающей `master`
 > (devel→master влито 2026-10-01). Назначение: стабильный файловый
 > путь для активных навыков, на который указывают глобальные симлинки
@@ -21,7 +21,7 @@ Worktree не может чекаутить саму ветку `devel`/`master`
 
 - Сейчас: базируется на `origin/master` (devel→master влито). Обновление:
   ```sh
-  cd /sourcecraft/workspace/skill-tree
+  cd ~/skill-tree
   git checkout skill-tree
   git fetch origin
   git reset --hard origin/master
@@ -33,7 +33,7 @@ Worktree не может чекаутить саму ветку `devel`/`master`
 ## Обновление skill-tree после изменений master
 
 ```sh
-cd /sourcecraft/workspace/skill-tree
+cd ~/skill-tree
 git fetch origin
 git reset --hard origin/master
 ```
@@ -54,7 +54,7 @@ git reset --hard origin/master
    `.skynet/sessions.json`) в assigned nook.
 3. **Ветка skill-tree привязана к master** (devel→master влито 2026-10-01);
    симлинки при этом НЕ меняются (ведут на
-   `/sourcecraft/workspace/skill-tree/.opencode/skills/*` — путь стабилен).
+   `~/skill-tree/.opencode/skills/*` — путь стабилен).
 
 ## Проверка активации навыков
 
