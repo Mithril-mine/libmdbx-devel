@@ -136,7 +136,7 @@ N/A (debug-only, owner decision): `audit` (88), `cursor_validate` и
 Практический потолок без error-injection — ~83-85% non-debug.
 Реализованные сценарии SC-61..81: см. [`test-scenarios.md`](test-scenarios.md).
 Восстановление после рефакторинга: `scan_all.py` + `load_map.py` +
-`run_coverage.py` (см. REFACTORING-MAP.md в MCP-модуле).
+`run_coverage.py` (см. CODEGRAPH.md в MCP-модуле).
 
 ## 7. Как использовать при рефакторинге
 

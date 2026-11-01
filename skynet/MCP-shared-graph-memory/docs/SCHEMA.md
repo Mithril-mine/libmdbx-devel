@@ -19,7 +19,7 @@
 | `access` | INTEGERKEY | uint64 id → 24 B: score+last_access+count | LRU/тиринг |
 | `archive` | DEFAULTS | record_key → JSON | миграция cold-записей |
 | `meta` | DEFAULTS | `next_id` → uint64; `schema_ver` → str | sequence id; версия схемы (SCHEMA_VERSION) |
-| `symbols` | DEFAULTS | fq-имя символа → JSON | карта исходников (refactoring-map) |
+| `symbols` | DEFAULTS | fq-имя символа → JSON | карта исходников (codegraph) |
 | `call_edges` | DUPSORT | `caller_id` → JSON `{kind, resolved, ambiguous, callee}` | вызовы (syntax/semantic) |
 | `call_edges_rev` | DUPSORT | `callee_id` → `caller_id` | обратные рёбра (impact) |
 | `groups` | DUPSORT | `group:{kind}:{name}` → set member_key | фасеты (подсистемы/темы) |
@@ -38,7 +38,7 @@
 | `adr` | DEFAULTS | `adr:{name}` → JSON | архитектурные решения (context/decision/consequences/sections) |
 | `bridge` | DEFAULTS | `bridge:{our_key}` → JSON | мост с codebase-memory-mcp (наш fq-ключ ↔ узел CBM) |
 | `branches` | DEFAULTS | `branch:{layer}` → JSON | слои веток (нелинейное версионирование БЗ, см. BRANCHES.md) |
-| `sys_headers` | DEFAULTS | `hdr:{name}` → JSON `{name, path, provides, in_configs}` | системный include-граф: PROVIDES (см. REFACTORING-MAP.md «Системный include-граф») |
+| `sys_headers` | DEFAULTS | `hdr:{name}` → JSON `{name, path, provides, in_configs}` | системный include-граф: PROVIDES (см. CODEGRAPH.md «Системный include-граф») |
 | `sys_refs` | DEFAULTS | `sysref:{symbol}` → JSON `{headers:[...]}` | инвертированный индекс: системный символ → заголовки |
 | `sys_uses` | DUPSORT | `file:{rel}` → sysref-символ | USES_SYS: файл → используемые системные символы |
 | `sys_uses_body` | DEFAULTS | `file:{rel}` → JSON `{sys_refs, unresolved}` | полное тело sys-использования файла |
@@ -53,7 +53,7 @@
 | `test_metrics` | DEFAULTS | `test_metrics:{test_id}` → JSON окно истории | длительности/флаки (скользящее окно) |
 | `ci_jobs` | DEFAULTS | `{workflow}/{job}` → JSON | параметры CI-джоб (matrix/scope/tests_hint) |
 
-Зарезервировано дизайном (REFACTORING-MAP.md), данные появятся с коллекторами:
+Зарезервировано дизайном (CODEGRAPH.md), данные появятся с коллекторами:
 `probes` — добавляются аддитивно (§1.1). Реализованы коллекторы:
 `test_metrics` (tools/collect_test_metrics.py, ctest XML/LastTest.log → окно
 длительностей), `coverage` (tools/collect_coverage.py: lcov/llvm-cov →
@@ -66,8 +66,8 @@
 (в т.ч. LRU-касания — батчем, см. §8).
 
 Регионы и uncovered загружаются `load_map.py` из merged-артефакта
-(`tools/artifacts/refactoring-map.json`), читаются через MCP `map_regions`/
-`map_region`/`map_uncovered`; перегенерируемы и затираются `--replace`.
+(`tools/artifacts/codegraph.json`), читаются через MCP `cg_regions`/
+`cg_region`/`cg_uncovered`; перегенерируемы и затираются `--replace`.
 
 Числовые id записей и символов выделяются из **общего** счётчика
 `meta/next_id`: links/coverage оперируют единым числовым пространством,
@@ -88,7 +88,7 @@
   работающий поверх `open_dbi`) — единый реестр `TABLES` это уже позволяет.
 - структурный слой (symbols/call_edges/groups) заполняется автогенераторами
   (`tools/scan_symbols.py` + `tools/load_map.py`), API — методы `map_*`
-  (`Store`), детерминированные и перегенерируемые (см. `docs/REFACTORING-MAP.md`).
+  (`Store`), детерминированные и перегенерируемые (см. `docs/CODEGRAPH.md`).
 - многоконфигурационные символы: поле `implementations` внутри значения
   symbols (не отдельная таблица) — схема не меняется; `in_configs`/
   `configs` фаcеты также в значении.

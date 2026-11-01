@@ -988,7 +988,7 @@ def test_branch_activate_warning_distinguishes_purged(tmp_path):
     from mcp.store import Store
     db = str(tmp_path / "t.mdbx")
     with Store(db, _skip_sync_thread=True) as s:
-        s.map_put_symbol("fn:m:z", {"module": "m"}, layer="0.15.warn.1")
+        s.cg_put_symbol("fn:m:z", {"module": "m"}, layer="0.15.warn.1")
         s.branch_register("0.15", "warn", n_commits=1)
         # слой существует → активация без warning
         r = s.branch_activate("0.15.warn.1")

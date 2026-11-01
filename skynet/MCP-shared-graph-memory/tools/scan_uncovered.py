@@ -193,7 +193,7 @@ def _classify_all(islands: list, regions: list) -> list:
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--map", default=os.path.join(TOOLS_DIR, "artifacts",
-                                                  "refactoring-map.json"))
+                                                  "codegraph.json"))
     ap.add_argument("--out", default=None, help="куда писать (default: тот же --map)")
     ap.add_argument("--summary", action="store_true",
                     help="только сводка по классам островов")

@@ -273,7 +273,7 @@ def _render_branch(reg, regions, by_id, out, depth, max_depth):
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--out", default=os.path.join(TOOLS_DIR, "artifacts",
-                                                  "refactoring-map.json"))
+                                                  "codegraph.json"))
     ap.add_argument("--stats", action="store_true", help="только сводка")
     ap.add_argument("--tree", metavar="MODULE", nargs="?",
                     const="", help="дерево регионов модуля (или всех)")

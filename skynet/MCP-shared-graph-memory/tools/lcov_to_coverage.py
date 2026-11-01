@@ -7,13 +7,13 @@
     ...
     end_of_record
 и собирает {abs_path: set(covered_lines)} (строки со счётчиком > 0).
-Затем через карту (refactoring-map) и symbol_hits() резолвит символы и
+Затем через карту (codegraph) и symbol_hits() резолвит символы и
 блоки, и пишет как один «тест» (coverage_insert + coverage_blocks_insert,
 A3: две write-txn на прогон).
 
 Использование:
   python3 tools/lcov_to_coverage.py --info lines.info \
-      --map tools/artifacts/refactoring-map.json \
+      --map tools/artifacts/codegraph.json \
       --test-id win-mingw-gcov --layer "" --db <path>
 """
 
@@ -64,7 +64,7 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--info", required=True, help="путь к lines.info (lcov)")
     ap.add_argument("--map", default=os.path.join(TOOLS_DIR, "artifacts",
-                                                  "refactoring-map.json"))
+                                                  "codegraph.json"))
     ap.add_argument("--test-id", required=True)
     ap.add_argument("--layer", default="")
     ap.add_argument("--db", default=os.path.join(

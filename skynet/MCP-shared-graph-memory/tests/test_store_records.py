@@ -148,14 +148,14 @@ def test_alloc_id_sequential_stores_no_overlap(tmp_path):
     a = Store(db, _skip_sync_thread=True)
     a.safe_store("fact:crypto:alpha-key", "fact", "alpha", 0.5)
     id1 = a.get_record("fact:crypto:alpha-key")["_id"]
-    a.map_put_symbol("fn:x:y", {"kind": "function", "module": "x"})
+    a.cg_put_symbol("fn:x:y", {"kind": "function", "module": "x"})
     sid1 = a.sym_id("fn:x:y")
     a.close()
     # «второй процесс»: новый Store, свой кэш next_id
     b = Store(db, _skip_sync_thread=True)
     b.safe_store("fact:crypto:beta-key", "fact", "beta", 0.5)
     id2 = b.get_record("fact:crypto:beta-key")["_id"]
-    b.map_put_symbol("fn:x:z", {"kind": "function", "module": "x"})
+    b.cg_put_symbol("fn:x:z", {"kind": "function", "module": "x"})
     sid2 = b.sym_id("fn:x:z")
     assert len({id1, id2, sid1, sid2}) == 4, (id1, id2, sid1, sid2)
     # третий «процесс» поверх двух

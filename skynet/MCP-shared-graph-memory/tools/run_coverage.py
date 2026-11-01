@@ -16,7 +16,7 @@
 Использование:
   python3 tools/run_coverage.py --build-dir ../../../../build-gcov \\
       --db ~/.local/share/shared-graph-memory/db.mdbx [--filter 'ut/'] \\
-      [--layer 0.15.base] [--map tools/artifacts/refactoring-map-linux.json]
+      [--layer 0.15.base] [--map tools/artifacts/codegraph-linux.json]
 """
 
 import argparse
@@ -98,7 +98,7 @@ def main():
     ap.add_argument("--filter", default="",
                     help="ctest -R фильтр (напр. 'ut/' или '^cache-get')")
     ap.add_argument("--map", default=os.path.join(
-        TOOLS_DIR, "artifacts", "refactoring-map-linux.json"))
+        TOOLS_DIR, "artifacts", "codegraph-linux.json"))
     ap.add_argument("--db", default=os.path.join(
         os.path.expanduser("~"), ".local", "share", "shared-graph-memory",
         "db.mdbx"))
