@@ -46,6 +46,10 @@
 | `coverage` | DUPSORT | `test_id` → set symbol_id |
 | `ci_jobs` | DEFAULTS | `{workflow}/{job}` → JSON |
 | `test_metrics` | DEFAULTS | `test_id` → JSON (окно истории) |
+| `sys_headers` | DEFAULTS | `hdr:{name}` → JSON `{name, path, provides{fn,type,macro}, in_configs}` |
+| `sys_refs` | DEFAULTS | `sysref:{symbol}` → JSON `{headers:[hdr:...]}` (инвертированный индекс) |
+| `sys_uses` | DUPSORT | `file:{rel}` → member sysref-символ |
+| `sys_uses_body` | DEFAULTS | `file:{rel}` → JSON `{sys_refs, unresolved}` |
 
 ### symbols
 
@@ -171,6 +175,7 @@ group:task:B63            → {символы, тесты, записи, док�
 | `collect_test_metrics.py` | test_metrics | ctest XML / LastTest.log / CI |
 | `map_ci_jobs.py` | ci_jobs | `.github/workflows/*.yml` |
 | `refresh_stale.py` | пометка `stale` | diff между генерациями |
+| `scan_system_deps.py` | `sys_headers`, `sys_refs`, `sys_uses(+body)` | clang AST per-header + `-E -dD` file-marks TU |
 
 Паттерн исполнения — как `tools/build_libmdbx.py`; детерминированный прогон,
 сверка счётчиков с эталонным подмножеством (валидатор генератора).
@@ -401,6 +406,49 @@ AST-узле хотя бы одного конфига. Оставшиеся о�
 Для каждого острова артефакт хранит `{file, l0, l1, region, cls, cond,
 lines}` — по ним можно решить: это «живой» код (нужен ещё один конфиг/
 опция) или мёртвый (кандидат на удаление/рефакторинг).
+
+## Системный include-граф (`scan_system_deps.py`)
+
+Карта «системный заголовок → объявляемые символы» (PROVIDES) и «использование
+системных символов файлами» (USES_SYS). Источник — clang AST per-header
+(`-Xclang -ast-dump=json -x c <header>`: loc.file узлов совпадает с самим
+заголовком, привязка точна) + препроцессорные file-marks (`-E -dD`) для
+макросов. Никаких эвристик.
+
+### Модель (ограничения зафиксированы)
+
+- **Конфигурация — это toolchain, не ОС**: `linux-gcc`, `win32-mingw`,
+  `win32-clang-cl`, `freebsd-clang` дают РАЗНЫЕ наборы символов даже на одной
+  платформе. Узлы несут `in_configs` — факт наблюдения в конфиге.
+- **«Нет в ответе» ≠ «отсутствует на платформе»**: символ может приходить из
+  не-просканированного include (в т.ч. ошибочного), резолвиться транзитивно
+  или через макрос. Поэтому предоставляются только «позитивные» запросы
+  (`sys_known_on` — известно по сканам; `sys_headers_required_for`); негативные
+  запросы (`sys_missing_*`) не предоставляются принципиально.
+- **Категории** `linux-only/win32-only/...` — производные от наблюдаемых
+  конфигов, не платформенные факты.
+- Макро-использования в TU извлекаются из ИСХОДНОГО текста (ast-dump json не
+  эмитит MacroExpansion); trade-off: идентификаторы из комментариев/строк
+  тоже матчатся — ложных резолвов нет (матч только по реально объявленным
+  именам), но могут быть лишние unresolved-упоминания.
+- Таблицы **не слоистые** (как regions/project-map): при feature-слое
+  пропускаются с warning.
+
+### Конвейер
+
+`scan_all.py`: `scan-headers` → `system-deps-headers-<cfg>.json`;
+`scan-uses` (provides_from=headers) → `system-deps-<cfg>.json` (headers+uses);
+`merge` → `system-deps.json`; `load_map.py --system-deps` → sys-таблицы.
+
+### Запросы (MCP)
+
+- `sys_headers_required_for(file)` — заголовки файла по подтверждённым символам
+- `sys_known_on(file, config)` — символы файла, известные в конфиге
+- `sys_uses_of(file)` / `sys_refs_of(symbol)`
+- `symbol_definitions(name, layer)` — все карточки идентификатора (декларации
+  и тела, все TU/файлы). Только факты: linkage (`static`), `is_definition`,
+  сигнатуры, конфиги. Решение «конфликт ли это» — за вызывающим: одинаковые
+  идентификаторы могут присутствовать и не пересекаться (оба TU-static).
 
 ## Открытые вопросы
 

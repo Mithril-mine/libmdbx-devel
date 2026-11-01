@@ -476,9 +476,34 @@ class McpServer:
              {"type": "object",
               "properties": {"module": {"type": "string"},
                              "layer": {"type": "string"}}}),
-            ("map_diff", "Разница текущего снимка с other (keys/generation).",
-             [], {"type": "object",
-                  "properties": {"other": {"type": "object"}}}),
+             ("map_diff", "Разница текущего снимка с other (keys/generation).",
+              [], {"type": "object",
+                   "properties": {"other": {"type": "object"}}}),
+             ("sys_headers_required_for", "Системные заголовки, требуемые файлу "
+              "по подтверждённым сканами символам.", ["file"],
+              {"type": "object", "required": ["file"],
+               "properties": {"file": {"type": "string"}}}),
+             ("sys_known_on", "Sys-символы файла, известные по сканам в конфиге "
+              "toolchain (config = toolchain: win32-mingw/clang-cl дают разные "
+              "наборы). ВАЖНО: отсутствие в ответе НЕ означает отсутствия "
+              "символа на платформе.", ["file", "config"],
+              {"type": "object", "required": ["file", "config"],
+               "properties": {"file": {"type": "string"},
+                              "config": {"type": "string"}}}),
+             ("sys_uses_of", "Полное sys-использование файла "
+              "(sys_refs + unresolved).", ["file"],
+              {"type": "object", "required": ["file"],
+               "properties": {"file": {"type": "string"}}}),
+             ("sys_refs_of", "Заголовки, объявляющие системный символ.",
+              ["symbol"],
+              {"type": "object", "required": ["symbol"],
+               "properties": {"symbol": {"type": "string"}}}),
+             ("symbol_definitions", "Все карточки идентификатора: декларации и "
+              "тела, по всем файлам/TU (факты; решение о конфликте — за "
+              "вызывающим).", ["name"],
+              {"type": "object", "required": ["name"],
+               "properties": {"name": {"type": "string"},
+                              "layer": {"type": "string"}}}),
             ("adr_update", "Сохранить/обновить ADR (context/decision/consequences).",
              ["name"], {"type": "object",
                         "properties": {"name": {"type": "string"},
@@ -899,6 +924,21 @@ class McpServer:
                                      layer=args.get("layer", ""))
         if name == "map_diff":
             return s.map_diff(other=args.get("other"))
+        if name == "sys_headers_required_for":
+            return {"file": args["file"],
+                    "headers": s.sys_headers_required_for(args["file"])}
+        if name == "sys_known_on":
+            return {"file": args["file"], "config": args["config"],
+                    "known": s.sys_known_on(args["file"], args["config"])}
+        if name == "sys_uses_of":
+            return {"file": args["file"], "uses": s.sys_uses_of(args["file"])}
+        if name == "sys_refs_of":
+            return {"symbol": args["symbol"],
+                    "headers": s.sys_refs_of(args["symbol"])}
+        if name == "symbol_definitions":
+            return {"name": args["name"],
+                    "definitions": s.symbol_definitions(
+                        args["name"], layer=args.get("layer", ""))}
         if name == "adr_update":
             return s.adr_update(args["name"], args)
         if name == "adr_get":

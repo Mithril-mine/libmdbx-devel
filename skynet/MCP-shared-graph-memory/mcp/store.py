@@ -248,8 +248,19 @@ class Store:
         "adr": mdbx.DB_DEFAULTS,         # adr:{name} -> JSON (context/decision/consequences)
         # --- мост с codebase-memory-mcp (опциональный) ---
         "bridge": mdbx.DB_DEFAULTS,      # bridge:{our_key} -> JSON {cbm_project, cbm_node, mapped_at}
-        # --- слои веток (нелинейное версионирование БЗ) ---
+         # --- слои веток (нелинейное версионирование БЗ) ---
         "branches": mdbx.DB_DEFAULTS,    # branch:{layer} -> JSON атрибутов слоя
+        # --- системный include-граф (scan_system_deps.py) ---
+        # ВАЖНО (ограничение модели, см. docs/REFACTORING-MAP.md): описывается
+        # доступность в КОНКРЕТНОЙ КОНФИГУРАЦИИ toolchain (linux-gcc,
+        # win32-mingw, win32-clang-cl — наборы символов различаются даже на
+        # одной ОС). Отсутствие записи НЕ означает отсутствия символа на
+        # платформе: он может приходить из не-просканированного include,
+        # резолвиться транзитивно или через макрос.
+        "sys_headers": mdbx.DB_DEFAULTS,  # hdr:{name} -> JSON {name, path, provides, in_configs}
+        "sys_refs": mdbx.DB_DEFAULTS,    # sysref:{symbol} -> JSON {headers:[hdr:...]}
+        "sys_uses": mdbx.DUPSORT,        # file:{rel} -> member sysref-symbol
+        "sys_uses_body": mdbx.DB_DEFAULTS,  # file:{rel} -> JSON {sys_refs, unresolved}
     }
 
     def __init__(self, path: str, maxdbs: int = 64, max_value_bytes: int = 16 << 20,
@@ -3173,6 +3184,183 @@ class Store:
                                     "uncovered": json.loads(v)})
                         if limit and len(out) >= limit:
                             break
+                    rc, k, v = cur.get(mdbx.CURSOR_NEXT)
+        return out
+
+    # ------------------------------------------------------------------
+    # Системный include-граф (scan_system_deps.py).
+    # Модель описывает доступность в КОНКРЕТНОЙ КОНФИГУРАЦИИ toolchain.
+    # Отсутствие записи НЕ означает отсутствия символа/заголовка на
+    # платформе: он может приходить из не-просканированного include,
+    # резолвиться транзитивно или через макрос. Поэтому «негативные»
+    # запросы (sys_missing) не предоставляются; предоставляются только
+    # «позитивные» (sys_known_on — подтверждённое наличие).
+    # ------------------------------------------------------------------
+
+    def sys_deps_load(self, headers: dict, uses: dict, replace: bool = True) -> dict:
+        """Батчевая загрузка артефакта scan_system_deps (одна write-txn).
+
+        headers: {hdr_key -> JSON {name, path, provides, in_configs?}};
+        uses:    {rel_file -> {sys_refs: {symbol: [hdr_key]}, unresolved: [...]}}.
+        При replace=True очищает sys-таблицы перед записью.
+        Возвращает счётчики {headers, refs, files, verify_sample}.
+        """
+        if replace:
+            self._sys_tables_clear()
+        n_refs = 0
+        with self._begin_write() as txn:
+            h_dbi = self.dbi(txn, "sys_headers")
+            r_dbi = self.dbi(txn, "sys_refs")
+            u_dbi = self.dbi(txn, "sys_uses")
+            ub_dbi = self.dbi(txn, "sys_uses_body")
+            for key, body in headers.items():
+                txn.put(h_dbi, key.encode(), json.dumps(body).encode())
+                # инвертированный индекс: символ -> заголовки
+                for kind, names in (body.get("provides") or {}).items():
+                    for nm in names:
+                        rkey = "sysref:%s" % nm
+                        rc, prev = txn.get(r_dbi, rkey.encode())
+                        lst = json.loads(prev).get("headers", []) if rc == mdbx.RC_SUCCESS else []
+                        for hk in [key]:
+                            if hk not in lst:
+                                lst.append(hk)
+                        txn.put(r_dbi, rkey.encode(),
+                                json.dumps({"headers": sorted(lst)}).encode())
+            for rel, body in uses.items():
+                ukey = "file:%s" % rel
+                txn.put(ub_dbi, ukey.encode(), json.dumps(body).encode())
+                with txn.cursor(u_dbi) as cur:
+                    for sym in body.get("sys_refs", {}):
+                        if cur.put_nodupe(ukey.encode(), sym.encode()):
+                            n_refs += 1
+        # верификация: один случайный символ
+        sample = {}
+        with self.env.begin(readonly=True) as txn:
+            r_dbi = self.dbi(txn, "sys_refs")
+            some = next(iter(headers), None)
+            if some:
+                nm = next(iter((headers[some].get("provides") or {}).get("fn") or []),
+                          None)
+                if nm:
+                    rc, val = txn.get(r_dbi, ("sysref:%s" % nm).encode())
+                    sample[nm] = json.loads(val)["headers"] if rc == mdbx.RC_SUCCESS else []
+        return {"headers": len(headers), "files": len(uses), "refs": n_refs,
+                "verify_sample": sample}
+
+    def _sys_tables_clear(self) -> None:
+        # del_=False: очистить содержимое, сохранив таблицы и кэш dbi-хэндлов.
+        with self._begin_write() as txn:
+            for t in ("sys_headers", "sys_refs", "sys_uses", "sys_uses_body"):
+                txn.drop_dbi(self.dbi(txn, t), del_=False)
+
+    def sys_headers_required_for(self, file: str) -> list:
+        """Системные заголовки, требуемые файлу по подтверждённым символам.
+
+        Возвращает [hdr_key, ...]. Файл задаётся как в артефакте (rel-path).
+        """
+        out = []
+        with self.env.begin(readonly=True) as txn:
+            ub_dbi = self.dbi(txn, "sys_uses_body")
+            rc, val = txn.get(ub_dbi, ("file:%s" % file).encode())
+            if rc != mdbx.RC_SUCCESS:
+                return []
+            body = json.loads(val)
+            h_dbi = self.dbi(txn, "sys_headers")
+            for sym, hdrs in body.get("sys_refs", {}).items():
+                for hk in hdrs:
+                    if hk not in out:
+                        rc, hv = txn.get(h_dbi, hk.encode())
+                        if rc == mdbx.RC_SUCCESS:
+                            out.append(hk)
+        return out
+
+    def sys_known_on(self, file: str, config: str) -> dict:
+        """Sys-символы файла `file`, ИЗВЕСТНЫЕ по сканам в конфиге `config`.
+
+        {symbol: [hdr_key]} — только символы, чей заголовок наблюдается в
+        данной конфигурации (in_configs содержит config).
+        ВАЖНО (ограничение модели): «нет в ответе» НЕ означает «отсутствует
+        на платформе» — символ может приходить из не-просканированного
+        include, резолвиться транзитивно или через макрос. Конфиг — это
+        toolchain (win32-mingw/clang-cl дают разные наборы), не ОС.
+        Для не-сканированного конфига — KeyError (unknown, а не пустой ответ).
+        """
+        known_configs = set()
+        with self.env.begin(readonly=True) as txn:
+            h_dbi = self.dbi(txn, "sys_headers")
+            with txn.cursor(h_dbi) as cur:
+                rc, _, v = cur.get(mdbx.CURSOR_FIRST)
+                while rc == mdbx.RC_SUCCESS:
+                    body = json.loads(v)
+                    known_configs.update(body.get("in_configs") or [])
+                    rc, _, v = cur.get(mdbx.CURSOR_NEXT)
+            if config not in known_configs:
+                raise KeyError(
+                    "sys_known_on: конфигурация %r не сканировалась "
+                    "(известны: %s)" % (config, sorted(known_configs)))
+            ub_dbi = self.dbi(txn, "sys_uses_body")
+            rc, val = txn.get(ub_dbi, ("file:%s" % file).encode())
+            if rc != mdbx.RC_SUCCESS:
+                return {}
+            body = json.loads(val)
+            out = {}
+            for sym, hdrs in body.get("sys_refs", {}).items():
+                ok = []
+                for hk in hdrs:
+                    rc, hv = txn.get(h_dbi, hk.encode())
+                    if rc != mdbx.RC_SUCCESS:
+                        continue
+                    if config in (json.loads(hv).get("in_configs") or []):
+                        ok.append(hk)
+                if ok:
+                    out[sym] = ok
+            return out
+
+    def sys_uses_of(self, file: str) -> dict:
+        """Полное тело sys-использований файла (sys_refs + unresolved)."""
+        with self.env.begin(readonly=True) as txn:
+            ub_dbi = self.dbi(txn, "sys_uses_body")
+            rc, val = txn.get(ub_dbi, ("file:%s" % file).encode())
+            return json.loads(val) if rc == mdbx.RC_SUCCESS else {}
+
+    def sys_refs_of(self, symbol: str) -> list:
+        """Заголовки, объявляющие системный символ [hdr_key, ...]."""
+        with self.env.begin(readonly=True) as txn:
+            r_dbi = self.dbi(txn, "sys_refs")
+            rc, val = txn.get(r_dbi, ("sysref:%s" % symbol).encode())
+            return json.loads(val)["headers"] if rc == mdbx.RC_SUCCESS else []
+
+    def symbol_definitions(self, name: str, layer: str = "") -> list:
+        """Все карточки идентификатора: декларации и тела, по всем файлам/TU.
+
+        Возвращает [{key, kind, signature, file, module, l0, l1, static,
+        is_definition, configs}] — только факты; решение «конфликт ли это» —
+        за вызывающим (одинаковые идентификаторы могут не пересекаться).
+        Реализация: обход symbols слоя + фильтр по короткому имени
+        (fq-ключи: fn:name@module, fn:name, type:..., macro:...).
+        """
+        out = []
+        with self.env.begin(readonly=True) as txn:
+            dbi = self.dbi(txn, "symbols")
+            with txn.cursor(dbi) as cur:
+                rc, k, v = cur.get(mdbx.CURSOR_FIRST)
+                while rc == mdbx.RC_SUCCESS:
+                    key = k.decode()
+                    body = json.loads(v)
+                    short = key.split(":", 1)[1] if ":" in key else key
+                    short = short.split("@", 1)[0].split("#", 1)[0]
+                    if short == name:
+                        out.append({
+                            "key": key,
+                            "kind": body.get("kind"),
+                            "signature": body.get("signature"),
+                            "file": body.get("file"),
+                            "module": body.get("module"),
+                            "l0": body.get("l0"), "l1": body.get("l1"),
+                            "static": body.get("static"),
+                            "is_definition": body.get("is_definition"),
+                            "configs": body.get("configs"),
+                        })
                     rc, k, v = cur.get(mdbx.CURSOR_NEXT)
         return out
 
