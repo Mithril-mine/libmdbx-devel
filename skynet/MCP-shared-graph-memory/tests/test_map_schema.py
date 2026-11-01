@@ -37,17 +37,17 @@ def test_regions_uncovered_load_and_query(tmp_path):
             {"file": "src/api-copy.c", "l0": 23, "l1": 23, "lines": [],
              "region": None},
         ]
-        r = s.map_load_regions(regions, uncovered)
+        r = s.cg_load_regions(regions, uncovered)
         assert r == {"regions": 2, "uncovered": 2}
 
-        regs = s.map_regions("region:api-cold", limit=10)
+        regs = s.cg_regions("region:api-cold", limit=10)
         assert len(regs) == 2
         by_key = {x["key"]: x["region"] for x in regs}
         assert by_key["region:api-cold:2"]["parent"] == "region:api-cold:1"
-        assert s.map_region("region:api-cold:1")["cond"] == "IS_WINDOWS"
-        assert s.map_region("region:nope") == {}
+        assert s.cg_region("region:api-cold:1")["cond"] == "IS_WINDOWS"
+        assert s.cg_region("region:nope") == {}
 
-        unc = s.map_uncovered("api-copy")
+        unc = s.cg_uncovered("api-copy")
         assert len(unc) == 2
         assert all(x["key"].startswith("uncovered:api-copy:") for x in unc)
     finally:
@@ -56,7 +56,7 @@ def test_regions_uncovered_load_and_query(tmp_path):
 
 def test_load_map_cli_real_artifact(tmp_path):
     """load_map.py на реальном merged-артефакте (symbols+edges+regions+uncovered)."""
-    artifact = os.path.join(TOOLS, "artifacts", "refactoring-map.json")
+    artifact = os.path.join(TOOLS, "artifacts", "codegraph.json")
     if not os.path.isfile(artifact):
         pytest.skip("артефакт сканера не в git (вне git, перегенерируемый); "
                     "собирается локально через scan_symbols.py")
@@ -69,10 +69,10 @@ def test_load_map_cli_real_artifact(tmp_path):
     assert p.returncode == 0, p.stderr[-2000:]
     s = Store(db, readonly=True, _skip_sync_thread=True)
     try:
-        assert len(s.map_symbols()) >= 4000
-        assert len(s.map_regions(limit=10 ** 9)) >= 1000
-        assert len(s.map_uncovered(limit=10 ** 9)) >= 400
-        assert len(s.map_regions("region:api-", limit=10)) > 0
+        assert len(s.cg_symbols()) >= 4000
+        assert len(s.cg_regions(limit=10 ** 9)) >= 1000
+        assert len(s.cg_uncovered(limit=10 ** 9)) >= 400
+        assert len(s.cg_regions("region:api-", limit=10)) > 0
     finally:
         s.close()
 

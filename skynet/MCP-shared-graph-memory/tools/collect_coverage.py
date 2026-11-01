@@ -2,7 +2,7 @@
 """collect_coverage.py — загрузка покрытия тестов (lcov/gcov) в Store.
 
 Резолвит покрытые строки из lcov-данных (`lcov` / `llvm-cov export` /
-`gcov -i`) в набор символов карты исходников (refactoring-map.json) по
+`gcov -i`) в набор символов карты исходников (codegraph.json) по
 диапазонам l0/l1 и пишет в `coverage` (test_id → symbols) + обратный
 индекс `covered_by` (символ → тесты). Это делает слой «тест → код»
 первоклассным: по символу можно найти защищающие его тесты.
@@ -11,7 +11,7 @@
   --lcov <file>            lcov-файл (SF:/DA:/LH:/LF:) из одного прогона
   --llvm-cov-json <file>   вывод `llvm-cov export -format=json`
   --gcov-dir <dir>         каталог .gcda/.gcno от gcov (через lcov --capture)
-  --map <refactoring-map.json>   карта символов (по умолчанию tools/artifacts/)
+  --map <codegraph.json>   карта символов (по умолчанию tools/artifacts/)
 
 Карта символов задаёт соответствие file -> [(l0,l1,key)]. Для каждого
 покрытого файла берём набор строк; символ покрыт, если его [l0,l1]
@@ -19,7 +19,7 @@
 
 Использование:
   python3 tools/collect_coverage.py --lcov build/coverage/ut.info \\
-      --map tools/artifacts/refactoring-map.json \\
+      --map tools/artifacts/codegraph.json \\
       --test-id ut --db ~/.local/share/shared-graph-memory/db.mdbx
 """
 
@@ -35,7 +35,7 @@ sys.path.insert(0, MODULE_DIR)
 
 from mcp import Store  # noqa: E402
 
-DEFAULT_MAP = os.path.join(TOOLS_DIR, "artifacts", "refactoring-map.json")
+DEFAULT_MAP = os.path.join(TOOLS_DIR, "artifacts", "codegraph.json")
 
 
 def parse_lcov(path: str) -> dict:

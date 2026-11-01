@@ -6,11 +6,11 @@
     configure → scan (linux/win32[/macos]) → merge → uncovered
              → project → probes → validate → load (pin-бэкап → --replace) → report
 
-Локально воспроизводит то, что делает CI (`.github/workflows/ci-mcp-refactor-map.yml`),
+Локально воспроизводит то, что делает CI (`.github/workflows/ci-codegraph.yml`),
 включая кросс-скан win32 через clang → mingw-w64. macOS-артефакт локально
 невозможен без osxcross/SDK — берётся из CI (`--artifacts-from-ci <run-id>`).
 
-Каждый конфиг обязан внести символы (fail-loudly, см. REFACTORING-MAP.md).
+Каждый конфиг обязан внести символы (fail-loudly, см. CODEGRAPH.md).
 """
 
 import argparse
@@ -61,7 +61,7 @@ def _tool(name):
 def _scan_cmd(config, target=None, extra=None):
     cmd = [sys.executable, _tool("scan_symbols.py"), "--config", config,
            "--cc", COMPILE_DB,
-           "--out", os.path.join(ARTIFACTS, "refactoring-map-%s.json" % config)]
+           "--out", os.path.join(ARTIFACTS, "codegraph-%s.json" % config)]
     if target:
         cmd += ["--target", target]
     if extra:
@@ -117,7 +117,7 @@ def main(argv=None):
         if cfg == "win32":
             cmd = _scan_cmd(cfg, target="x86_64-w64-windows-gnu")
         elif cfg == "macos":
-            macos_art = _artifact("refactoring-map-macos.json")
+            macos_art = _artifact("codegraph-macos.json")
             if not os.path.exists(macos_art):
                 if not args.artifacts_from_ci:
                     sys.stderr.write("scan_all: macOS-скан локально невозможен; "
@@ -125,10 +125,10 @@ def main(argv=None):
                     raise SystemExit(1)
                 # macOS-артефакт скачивается из CI, локальный скан невозможен
                 _sh(["gh", "run", "download", args.artifacts_from_ci,
-                     "--name", "refactor-map-macos", "--dir", ARTIFACTS],
+                     "--name", "codegraph-macos", "--dir", ARTIFACTS],
                     "download-macos", args.dry_run)
-                if os.path.exists(os.path.join(ARTIFACTS, "refactoring-map-macos.json")):
-                    shutil.move(os.path.join(ARTIFACTS, "refactoring-map-macos.json"),
+                if os.path.exists(os.path.join(ARTIFACTS, "codegraph-macos.json")):
+                    shutil.move(os.path.join(ARTIFACTS, "codegraph-macos.json"),
                                 macos_art)
             continue
         else:
@@ -168,7 +168,7 @@ def main(argv=None):
 
     # merge
     if not args.skip_merge:
-        merge_inputs = [_artifact("refactoring-map-%s.json" % c) for c in configs]
+        merge_inputs = [_artifact("codegraph-%s.json" % c) for c in configs]
         missing = [c for c, p in zip(configs, merge_inputs) if not os.path.exists(p)]
         if missing and not args.dry_run:
             # fail-loudly: запрошенный конфиг молча не выпадает из merged —
@@ -183,12 +183,12 @@ def main(argv=None):
             sys.stderr.write("scan_all: для merge нужно ≥2 артефакта, есть: %s\n" % merge_inputs)
             raise SystemExit(1)
         cmd = [sys.executable, _tool("scan_symbols.py"), "--merge"] + merge_inputs + \
-              ["--out", _artifact("refactoring-map.json")]
+              ["--out", _artifact("codegraph.json")]
         _sh(cmd, "merge", args.dry_run)
 
         if not args.skip_uncovered:
             _sh([sys.executable, _tool("scan_uncovered.py"),
-                 "--map", _artifact("refactoring-map.json")],
+                 "--map", _artifact("codegraph.json")],
                 "uncovered", args.dry_run)
 
     # project-map
@@ -204,7 +204,7 @@ def main(argv=None):
              "--out", _artifact("probes.json"), "--dry-run"], "probes", args.dry_run)
 
     # validate
-    merged = _artifact("refactoring-map.json")
+    merged = _artifact("codegraph.json")
     if not args.skip_validate and os.path.exists(merged):
         _sh([sys.executable, _tool("validate_map.py"), "--map", merged, "--tus", "fixture"],
             "validate-fixture", args.dry_run)

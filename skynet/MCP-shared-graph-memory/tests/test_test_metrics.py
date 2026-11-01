@@ -52,15 +52,15 @@ def test_ci_jobs_insert_all(store):
     assert jobs[0]["body"]["matrix"] == "gcc@13"
 
 
-def test_map_load_batch_increments_generation(store):
-    """map_load_batch(replace=True) инкрементирует поколение карты (canary.y)."""
-    gen0 = store.map_canary_get().get("y", 0)
+def test_cg_load_batch_increments_generation(store):
+    """cg_load_batch(replace=True) инкрементирует поколение карты (canary.y)."""
+    gen0 = store.cg_canary_get().get("y", 0)
     symbols = {"fn:core:m1": {"kind": "function", "module": "core"}}
-    store.map_load_batch(symbols, [], {}, replace=True)
-    gen1 = store.map_canary_get().get("y", 0)
+    store.cg_load_batch(symbols, [], {}, replace=True)
+    gen1 = store.cg_canary_get().get("y", 0)
     assert gen1 == gen0 + 1
-    store.map_load_batch(symbols, [], {}, replace=True)
-    gen2 = store.map_canary_get().get("y", 0)
+    store.cg_load_batch(symbols, [], {}, replace=True)
+    gen2 = store.cg_canary_get().get("y", 0)
     assert gen2 == gen1 + 1
 
 
@@ -139,7 +139,7 @@ def test_version_info_fields(store):
     assert v["module_version"] == "0.2.0"
     assert v["schema_version"] == "2"
     assert v["libmdbx_version"]
-    assert "map_generation" in v["data"]
+    assert "cg_generation" in v["data"]
     assert "records" in v["data"]
     store.safe_store("fact:meta:ver", "fact", "v", 0.1)
     v2 = store.version_info()
@@ -239,9 +239,9 @@ def test_test_metrics_batch(store, monkeypatch):
 
 def test_coverage_gaps_finds_uncovered_symbols(store):
     """coverage_gaps('gc') находит символы gc без покрытия."""
-    store.map_put_symbol("fn:gc_alloc_ex", {"module": "gc-get", "kind": "function"})
-    store.map_put_symbol("fn:gc_update", {"module": "gc-put", "kind": "function"})
-    store.map_put_symbol("fn:spill_cycle", {"module": "spill", "kind": "function"})
+    store.cg_put_symbol("fn:gc_alloc_ex", {"module": "gc-get", "kind": "function"})
+    store.cg_put_symbol("fn:gc_update", {"module": "gc-put", "kind": "function"})
+    store.cg_put_symbol("fn:spill_cycle", {"module": "spill", "kind": "function"})
     # покрыт только gc_alloc_ex
     store.coverage_insert("ut/gc", ["fn:gc_alloc_ex"])
     gaps = store.coverage_gaps(module="gc")
@@ -298,12 +298,12 @@ def test_coverage_batch_recreates_blocks_state(store):
 
 def test_coverage_summary_union(store):
     """coverage_summary: union-агрегация по модулям (A4)."""
-    store.map_put_symbol("fn:gc_alloc_ex", {"module": "gc-get",
+    store.cg_put_symbol("fn:gc_alloc_ex", {"module": "gc-get",
                                             "kind": "function",
                                             "l0": 1, "l1": 10,
                                             "blocks": [{"id": "B1"}, {"id": "B2"}]},
                          layer="0.15.base")
-    store.map_put_symbol("fn:gc_put", {"module": "gc-put", "kind": "function",
+    store.cg_put_symbol("fn:gc_put", {"module": "gc-put", "kind": "function",
                                        "l0": 1, "l1": 5,
                                        "blocks": [{"id": "B1"}]},
                          layer="0.15.base")

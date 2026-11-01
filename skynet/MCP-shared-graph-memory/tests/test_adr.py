@@ -7,7 +7,7 @@ def test_adr_create_get(store):
         "status": "accepted",
         "date": "2026-10-19",
         "context": "Structural layer needed for C++ port.",
-        "decision": "Adopt refactoring-map with implementations.",
+        "decision": "Adopt codegraph with implementations.",
         "consequences": "Multi-config scan required.",
     })
     assert r["result"] == "created"

@@ -5,6 +5,9 @@
 # The win-mingw cell is present but currently produces no usable data
 # (mingw gcda mystery) — its empty lines.info is filtered out by the
 # codecov guard step in ci-run.yml.
+# Python coverage of the codegraph module (skynet/MCP-shared-graph-memory)
+# comes from the ci-codegraph scan-linux job (pytest-cov, flag
+# codegraph-scan-python), so skynet/ is NOT in the ignore list.
 codecov:
   require_ci_to_pass: false
   notify:
@@ -30,5 +33,4 @@ coverage:
 ignore:
   - "tests/"
   - "examples/"
-  - "skynet/"
   - "docs/"

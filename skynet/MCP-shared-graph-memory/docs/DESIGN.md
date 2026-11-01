@@ -120,7 +120,7 @@ non-dupsort»:** каждое значение — отдельный элеме
 - **Слой тестов/CI**: таблицы `coverage` / `test_metrics` / `ci_jobs` и
   коллектор `tools/collect_test_metrics.py` (ctest XML/LastTest.log) —
   основа для реорганизации тестов (длительности, флаки, «тест → символы»).
-- **Поколение карты**: `map_load_batch(replace=True)` инкрементирует
+- **Поколение карты**: `cg_load_batch(replace=True)` инкрементирует
   canary.y (видимый diff поколений регенерации).
 - **Фиксы**: `_merge` корректно выделяет новый id при отсутствии `_id`
   (иначе коллизия); traceback логируется в stderr на internal-ошибках MCP.
@@ -132,11 +132,11 @@ non-dupsort»:** каждое значение — отдельный элеме
 coverage/ci_jobs/test_metrics, traces, ADR, CBM-мост, `version_info`.
 Каждое наблюдение → улучшение (по одному на итерацию):
 
-- **map_symbols(prefix="fn:gc")** не находил символы по модулю: канонические
+- **cg_symbols(prefix="fn:gc")** не находил символы по модулю: канонические
   ключи функций — `fn:{qname}`, module в теле. Добавлен аддитивный фильтр по
   `module`-полю тела (поиск по модулям работает). Документирована модель
   ключей (REFACTORING-MAP §symbols).
-- **map_edges_of/map_callers_of** принимали только caller/callee — добавлен
+- **cg_edges_of/cg_callers_of** принимали только caller/callee — добавлен
   алиас `symbol` (дружелюбно для агентов).
 - **scan_probes.py --db** падал (MODULE_DIR не в sys.path) — исправлено.
 - **ci_jobs tests_hint** не резолвился: реестр cells — `list[dict]`
@@ -146,7 +146,7 @@ coverage/ci_jobs/test_metrics, traces, ADR, CBM-мост, `version_info`.
   схема / данные); `meta.schema_ver` пишется при создании БД;
   `schema_matches` — контроль совместимости.
 - **Дисциплина ключей** для агентов зафиксирована в SKILL («не выдумывайте
-  fq-ключи; получайте через map_symbols/map_symbol»).
+  fq-ключи; получайте через cg_symbols/cg_symbol»).
 
 ## 4.3 Пилот «покрытие подсистемы GC» (окт 2026)
 

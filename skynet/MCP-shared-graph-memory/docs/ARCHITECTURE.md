@@ -117,7 +117,7 @@ MCP-сервер отдаёт его как **JSON-RPC protocol error (-32000)**
   не кормят (D1/N9).
 - `test_metrics` / `coverage` / `ci_jobs`: слой тестов и CI, наполняется
   коллекторами (tools/collect_test_metrics.py) и методами Store;
-  `map_load_batch(replace=True)` инкрементирует поколение карты (canary.y).
+  `cg_load_batch(replace=True)` инкрементирует поколение карты (canary.y).
 
 ## 6. Персистентность словаря
 
