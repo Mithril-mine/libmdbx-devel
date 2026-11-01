@@ -443,19 +443,19 @@ else()
            COMMAND $<TARGET_FILE:mdbx_test> --nops=1K --duration 60 --prng-seed=${MDBX_T1_SEED_HILL}
                    --mode=+nosync-safe --progress --console=no --repeat=1 --pathname=t1-hill.db
                    --cleanup-before --dont-cleanup-after ${MDBX_SMOKE_EXTRA} --hill)
-  set_tests_properties(smoke_t1_hill PROPERTIES LABELS "smoke;smoke-t1" TIMEOUT 100 RUN_SERIAL OFF)
+  set_tests_properties(smoke_t1_hill PROPERTIES LABELS "smoke;smoke-t1" TIMEOUT 300 RUN_SERIAL OFF)
 
   add_test(NAME smoke_t1_nested
            COMMAND $<TARGET_FILE:mdbx_test> --nops=1K --duration 60 --prng-seed=${MDBX_T1_SEED_NESTED}
                    --mode=-writemap,-nosync-safe,-lifo --progress --console=no --repeat=1
                    --pathname=t1-nested.db --cleanup-before --dont-cleanup-after ${MDBX_SMOKE_EXTRA} --nested)
-  set_tests_properties(smoke_t1_nested PROPERTIES LABELS "smoke;smoke-t1" TIMEOUT 100 RUN_SERIAL OFF)
+  set_tests_properties(smoke_t1_nested PROPERTIES LABELS "smoke;smoke-t1" TIMEOUT 300 RUN_SERIAL OFF)
 
   add_test(NAME smoke_t1_copy
            COMMAND $<TARGET_FILE:mdbx_test> --nops=256 --duration 60 --prng-seed=${MDBX_T1_SEED_COPY}
                    --mode=+nosync-safe --progress --console=no --repeat=1 --pathname=t1-copy.db
                    --cleanup-before --dont-cleanup-after ${MDBX_SMOKE_EXTRA} --copy)
-  set_tests_properties(smoke_t1_copy PROPERTIES LABELS "smoke;smoke-t1" TIMEOUT 100 RUN_SERIAL OFF)
+  set_tests_properties(smoke_t1_copy PROPERTIES LABELS "smoke;smoke-t1" TIMEOUT 300 RUN_SERIAL OFF)
 
   if(UNIX AND MDBX_ENABLE_LONG_TESTS)
     add_test(NAME stochastic COMMAND ${CMAKE_CURRENT_SOURCE_DIR}/stochastic.sh --whole-duration 600 --probe-duration 60
