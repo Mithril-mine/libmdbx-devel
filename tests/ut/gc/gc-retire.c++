@@ -26,7 +26,7 @@
 /// reclaim/pipelining); страницы возвращаются в переиспользование — размер
 /// файла стабилизируется, mdbx_chk-эквивалент (последовательные txn-инварианты
 /// под MDBX_DEBUG/AUDIT) не нарушается.
-TEST(ut_gap_gc, retire_reclaim_cycles) {
+TEST(ut_gc_retire, retire_reclaim_cycles) {
   if (MDBX_GTEST_IS_EXECUTION_TIMEOUT()) {
     GTEST_SKIP() << "SKIPPED by RUNTIME_LIMIT";
     return;
