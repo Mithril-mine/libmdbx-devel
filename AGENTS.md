@@ -56,6 +56,8 @@ Summary:
 
 ## 4. General workflow
 
+- Follow the [superpowers](skills/superpowers/README.md) methodology flow:
+  brainstorm → plan → worktree → TDD → review → finish.
 - Work by git-flow: branch → PR → review/CI. Clean the history before
   merging: fold fix commits into their sources, and resolve **all**
   reviewer/bot comments before merging.
@@ -119,6 +121,9 @@ Canonical style guide: [docs/engineering/changelog-codex.md](docs/engineering/ch
 
 ## 8. Build & CI hygiene
 
+- Build and test on **at least Linux and Windows** — build support for both
+  platforms is expected for any change (see also
+  [CONTRIBUTING.md](CONTRIBUTING.md)).
 - Build with `ninja` and `ccache`; run tests in parallel (`-j 4`).
 - Do not trigger unnecessary CI iterations; do not wait for red/failing
   runs — go fix them; cancel obsolete CI runs after merges.
@@ -142,6 +147,10 @@ Canonical style guide: [docs/engineering/changelog-codex.md](docs/engineering/ch
   [test-scenarios-codex.md](docs/engineering/test-scenarios-codex.md),
   [docs/engineering/test-coverage.md](docs/engineering/test-coverage.md) —
   testing rules, scenario specs, coverage map (incl. white spots).
+- [docs/engineering/test-durability-strategy.md](docs/engineering/test-durability-strategy.md) —
+  durability modes and speed-up transports for tests.
+- [docs/engineering/testing-infra-design.md](docs/engineering/testing-infra-design.md) —
+  CI v2 infrastructure design.
 - [docs/engineering/probe-bus.md](docs/engineering/probe-bus.md) — probe
   conventions.
 - [docs/engineering/libmdbx-invariants.md](docs/engineering/libmdbx-invariants.md),
@@ -153,3 +162,38 @@ Canonical style guide: [docs/engineering/changelog-codex.md](docs/engineering/ch
   structural map, multi-platform scanning and coverage pipeline.
 - [skynet/knowledge-map.md](skynet/knowledge-map.md) — knowledge index and
   memory procedures.
+
+## 10. Agent skills profiles
+
+Skills live in [`skills/`](skills/README.md) with active copies in
+`.opencode/skills/` (usable through the `skill` tool). Pick a profile by
+task and load it via the tool:
+
+| Task | Profile |
+|---|---|
+| New API function / WAF optimization | `developer` |
+| Deep refactoring (B+tree/CoW/GC/API) | `refactoring` |
+| Test decomposition, characterisation, CI pipeline | `testing` |
+| Code review (C/CXX/ARCH) | `code-review` |
+| Build, CI, amalgamation, NDK, LTO | `platform-build` |
+| Documentation / ADR maintenance | `documentation` |
+
+Every profile's mandatory context references `docs/engineering/*`
+(`libmdbx-invariants.md`, `subsystem-map.md`, `module-lock-matrix.md`,
+`test-durability-strategy.md`); read them by link, do not duplicate
+content.
+
+## 11. Skills update & session restart
+
+Skills are loaded into opencode sessions at startup. When you change
+`skills/*` or `.opencode/skills/*`:
+
+- sync the active copies in `.opencode/skills/` (relative-link depth
+  differs there);
+- mark the commit/PR with `SKILLS-UPDATED` and note "restart sessions
+  required";
+- refresh the `skill-tree` worktree (`git fetch && git reset --hard
+  origin/<branch>`);
+- the coordinator restarts canonical sessions afterwards.
+
+Full workflow: [skynet/skill-tree.md](skynet/skill-tree.md).
