@@ -110,10 +110,33 @@
 7. **Прямые тесты api-*.c тонких обёрток** — большинство через публичный API уже
    покрыто, но «диких» ошибок (неверные аргументы, EINVAL-семантика) — мало.
 
-> Актуальный ранжированный список «белых пятен» с блоками и сценариями раскрыт
-> в [`test-coverage-gaps.md`](test-coverage-gaps.md) (данные из shared-graph-memory
-> `coverage_summary`); включая tree-search (1527 блоков, 40%), audit (0%),
-> decl_transcoders (11%), C++ decl_core/decl_env/decl_txn редкие ветви.
+### 6a. White spots (measured, merged map linux+win32+macos)
+
+Источник: `coverage_summary` из shared-graph-memory DB
+(6612 symbols / 40172 blocks; TOTAL 77.1%, non-debug 78.2%).
+
+Uncovered blocks by module (ranked, large → small):
+
+| Модуль | uncovered | pct | Примечание |
+| --- | --- | --- | --- |
+| `tree-search` | 3221 | 54.5% | Глубокие пути поиска; lenfast-циклы (branch+foliage, ~648 блоков) недостижимы из user API — N/A |
+| `mdbx` (c++) | 407 | 68.1% | SHA/HMAC, get-cached ветви |
+| `lck-posix` | 362 | 63.9% | Error-ветви (`osal_lockfile` fallback, `ipclock_failed`) — требуют системных сбоев |
+| `gc-put` | 330 | 69.9% | Экстремальные dense-случаи |
+| `defrag` | 261 | 66.8% | Cost/span хвосты |
+| `gc-get` | 223 | 75.1% | Хвосты dense |
+| `dpl` | 180 | 85.1% | dp_sort/radixsort хвосты |
+| `chk` | 156 | 79.3% | chk-движок хвосты |
+| `decl_transcoders` | 153 | 24.3% | msgpack-ветви |
+| `decl_buffer` | 157 | 83.4% | capacity/allocator хвосты |
+
+N/A (debug-only, owner decision): `audit` (88), `cursor_validate` и
+родственные (~278 в `cursor`), `logging_and_debug` (294).
+
+Практический потолок без error-injection — ~83-85% non-debug.
+Реализованные сценарии SC-61..81: см. [`test-scenarios.md`](test-scenarios.md).
+Восстановление после рефакторинга: `scan_all.py` + `load_map.py` +
+`run_coverage.py` (см. REFACTORING-MAP.md в MCP-модуле).
 
 ## 7. Как использовать при рефакторинге
 
