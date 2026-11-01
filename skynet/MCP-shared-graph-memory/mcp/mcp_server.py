@@ -498,12 +498,23 @@ class McpServer:
               ["symbol"],
               {"type": "object", "required": ["symbol"],
                "properties": {"symbol": {"type": "string"}}}),
-             ("symbol_definitions", "Все карточки идентификатора: декларации и "
-              "тела, по всем файлам/TU (факты; решение о конфликте — за "
-              "вызывающим).", ["name"],
-              {"type": "object", "required": ["name"],
-               "properties": {"name": {"type": "string"},
-                              "layer": {"type": "string"}}}),
+             ("sys_deps_load", "Батчевая загрузка артефакта scan_system_deps "
+              "(system-deps.json: headers + uses) в sys-таблицы. "
+              "headers: {hdr_key -> {name, path, provides{fn,type,macro}, "
+              "in_configs}}; uses: {rel_file -> {sys_refs{sym: [hdr_key]}, "
+              "unresolved}}. replace=true очищает sys-таблицы перед записью.",
+              ["headers", "uses"],
+              {"type": "object", "required": ["headers", "uses"],
+               "properties": {"headers": {"type": "object"},
+                              "uses": {"type": "object"},
+                              "replace": {"type": "boolean",
+                                          "default": True}}}),
+              ("symbol_definitions", "Все карточки идентификатора: декларации и "
+               "тела, по всем файлам/TU (факты; решение о конфликте — за "
+               "вызывающим).", ["name"],
+               {"type": "object", "required": ["name"],
+                "properties": {"name": {"type": "string"},
+                               "layer": {"type": "string"}}}),
             ("adr_update", "Сохранить/обновить ADR (context/decision/consequences).",
              ["name"], {"type": "object",
                         "properties": {"name": {"type": "string"},
@@ -935,6 +946,9 @@ class McpServer:
         if name == "sys_refs_of":
             return {"symbol": args["symbol"],
                     "headers": s.sys_refs_of(args["symbol"])}
+        if name == "sys_deps_load":
+            return s.sys_deps_load(args["headers"], args["uses"],
+                                   replace=bool(args.get("replace", True)))
         if name == "symbol_definitions":
             return {"name": args["name"],
                     "definitions": s.symbol_definitions(
