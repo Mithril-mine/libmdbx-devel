@@ -85,6 +85,8 @@ def main(argv=None):
     ap.add_argument("--skip-merge", action="store_true")
     ap.add_argument("--skip-project", action="store_true")
     ap.add_argument("--skip-probes", action="store_true")
+    ap.add_argument("--skip-system-deps", action="store_true",
+                    help="пропустить скан системного include-графа")
     ap.add_argument("--skip-validate", action="store_true")
     ap.add_argument("--validate-full", action="store_true",
                     help="дополнительно к fixture запустить validate_map.py --tus full")
@@ -132,6 +134,37 @@ def main(argv=None):
         else:
             cmd = _scan_cmd(cfg)
         _sh(cmd, "scan-%s" % cfg, args.dry_run)
+
+    # system-deps: per-config scan + merge (системный include-граф)
+    if not args.skip_system_deps and not args.dry_run:
+        # Конвейер на конфиг: scan-headers -> system-deps-headers-<cfg>.json;
+        # scan-uses (provides_from=headers) -> system-deps-<cfg>.json
+        # (headers+uses вместе). Merge берёт полные per-config артефакты.
+        sd_arts = []
+        for cfg in configs:
+            if cfg == "macos":
+                continue  # локально невозможен; артефакт из CI через --merge-extra
+            hdrs_art = _artifact("system-deps-headers-%s.json" % cfg)
+            full_art = _artifact("system-deps-%s.json" % cfg)
+            cross = ["--target", "x86_64-w64-windows-gnu"] if cfg == "win32" else []
+            _sh([sys.executable, _tool("scan_system_deps.py"),
+                 "--mode", "scan-headers", "--config", cfg,
+                 "--cc", COMPILE_DB, *cross,
+                 "--out", hdrs_art],
+                "sysdeps-headers-%s" % cfg, args.dry_run)
+            _sh([sys.executable, _tool("scan_system_deps.py"),
+                 "--mode", "scan-uses", "--config", cfg,
+                 "--cc", COMPILE_DB, *cross,
+                 "--provides-from", hdrs_art,
+                 "--out", full_art],
+                "sysdeps-uses-%s" % cfg, args.dry_run)
+            sd_arts.append(full_art)
+        merge_sd = sd_arts + ([args.merge_extra] if args.merge_extra else [])
+        if len(merge_sd) >= 2 or args.dry_run:
+            _sh([sys.executable, _tool("scan_system_deps.py"),
+                 "--mode", "merge", "--scans", ",".join(merge_sd),
+                 "--out", _artifact("system-deps.json")],
+                "sysdeps-merge", args.dry_run)
 
     # merge
     if not args.skip_merge:
@@ -190,6 +223,9 @@ def main(argv=None):
                "--replace"]
         if os.path.exists(project):
             cmd += ["--project", project]
+        sysdeps = _artifact("system-deps.json")
+        if not args.skip_system_deps and os.path.exists(sysdeps):
+            cmd += ["--system-deps", sysdeps]
         _sh(cmd, "load", args.dry_run)
 
     # report

@@ -4,7 +4,7 @@
 > Эволюционировала из исходной спецификации владельца; целочисленные индексы
 > — по `docs/DESIGN.md`.
 
-## 1. Таблицы (DBI) — 31
+## 1. Таблицы (DBI) — 35
 
 | DBI | Флаги | Ключ → Значение | Назначение |
 |---|---|---|---|
@@ -38,6 +38,17 @@
 | `adr` | DEFAULTS | `adr:{name}` → JSON | архитектурные решения (context/decision/consequences/sections) |
 | `bridge` | DEFAULTS | `bridge:{our_key}` → JSON | мост с codebase-memory-mcp (наш fq-ключ ↔ узел CBM) |
 | `branches` | DEFAULTS | `branch:{layer}` → JSON | слои веток (нелинейное версионирование БЗ, см. BRANCHES.md) |
+| `sys_headers` | DEFAULTS | `hdr:{name}` → JSON `{name, path, provides, in_configs}` | системный include-граф: PROVIDES (см. REFACTORING-MAP.md «Системный include-граф») |
+| `sys_refs` | DEFAULTS | `sysref:{symbol}` → JSON `{headers:[...]}` | инвертированный индекс: системный символ → заголовки |
+| `sys_uses` | DUPSORT | `file:{rel}` → sysref-символ | USES_SYS: файл → используемые системные символы |
+| `sys_uses_body` | DEFAULTS | `file:{rel}` → JSON `{sys_refs, unresolved}` | полное тело sys-использования файла |
+
+> **Ограничение модели** (sys-*): описывается доступность в конкретной
+> конфигурации **toolchain** (win32-mingw / clang-cl / cygwin дают разные
+> наборы символов даже на одной ОС). «Нет в ответе» ≠ «отсутствует на
+> платформе»: символ может приходить из не-просканированного include,
+> резолвиться транзитивно или через макрос. Негативные запросы не
+> предоставляются. |
 | `covered_by` | DEFAULTS | `covered_by:{sym}` → JSON `[test_id]` | обратный индекс: какие тесты защищают символ |
 | `test_metrics` | DEFAULTS | `test_metrics:{test_id}` → JSON окно истории | длительности/флаки (скользящее окно) |
 | `ci_jobs` | DEFAULTS | `{workflow}/{job}` → JSON | параметры CI-джоб (matrix/scope/tests_hint) |

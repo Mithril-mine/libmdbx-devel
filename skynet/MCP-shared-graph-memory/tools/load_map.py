@@ -48,6 +48,9 @@ def main():
                     help="не грузить regions/uncovered")
     ap.add_argument("--project", default=None,
                     help="дополнительно загрузить project-map.json (путь)")
+    ap.add_argument("--system-deps", default=None,
+                    help="дополнительно загрузить system-deps-<config>.json "
+                         "(артефакт scan_system_deps.py)")
     ap.add_argument("--dry-run", action="store_true",
                     help="сверка только: не писать в БД")
     args = ap.parse_args()
@@ -130,6 +133,18 @@ def _run_load(store, args, db, symbols, edges, regions, uncovered) -> int:
             r = store.project_load(pj.get("files") or {}, pj.get("edges") or [],
                                    replace=args.replace)
             print("project-map: files=%d edges=%d" % (r["files"], r["edges"]))
+    if args.system_deps:
+        if not layer_is_base:
+            print("warning: system-deps пропущены для feature-слоя "
+                  "(пока не слоистые)", file=sys.stderr)
+        else:
+            with open(args.system_deps) as f:
+                sd = json.load(f)
+            r = store.sys_deps_load(sd.get("headers") or {},
+                                    sd.get("uses") or {},
+                                    replace=args.replace)
+            print("system-deps: headers=%d files=%d refs=%d" % (
+                r["headers"], r["files"], r["refs"]))
     store.close()
     return 0
 

@@ -29,6 +29,7 @@
 | `tools/scan_project.py` | Карта всего репозитория (cmake/scripts/docs/ci/config) → project-map.json |
 | `tools/scan_probes.py` | Реестр зондов: MPROBE_*/DEV_ASSERT из src/ + USDT из probe-bus.md |
 | `tools/scan_symbols.py --merge` | + semantic-рёбра из implementations (эквивалентность по конфигам) |
+| `tools/scan_system_deps.py` | Системный include-граф: PROVIDES (заголовок→символы), USES_SYS (файл→символы), multi-config категории. Ограничение: описывает доступность в конфигурации toolchain, «нет в ответе» ≠ «нет на платформе» (см. docs/REFACTORING-MAP.md) |
 | `tools/gcov_to_coverage.py` | Реальное покрытие из gcov (.gcda) → coverage + блочная детализация |
 
 ## Требования

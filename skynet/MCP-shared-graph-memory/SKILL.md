@@ -52,6 +52,10 @@ shared-graph-memory.mdbx — персистентная память роя на
 | `map_group_members(group)` | Члены фасет-группы (`group:subsystem:{module}` и др.) |
 | `map_regions(prefix?, limit?)` / `map_region(key)` | #if-дерево (region:{module}:{n}) |
 | `map_uncovered(prefix?, limit?)` | Uncovered-острова смысла вне union-AST |
+| `sys_headers_required_for(file)` | Системные заголовки файла по подтверждённым сканами символам |
+| `sys_known_on(file, config)` | Sys-символы файла, известные в конфиге toolchain. ВАЖНО: «нет в ответе» ≠ «нет на платформе» (конфиг = toolchain: mingw/clang-cl/cygwin дают разные наборы на одной ОС) |
+| `sys_uses_of(file)` / `sys_refs_of(symbol)` | Полное sys-использование файла / заголовки системного символа |
+| `symbol_definitions(name)` | Все карточки идентификатора: декларации и тела по всем TU. Только факты (linkage/сигнатуры/конфиги); решение «конфликт ли это» — за вызывающим |
 | `test_metrics_insert(test, duration_ms, labels?, timeout_sec?)` | Окно истории длительностей тест-кейса (минутное: last/min/max/p90, флаки) |
 | `test_metrics_get(test)` / `test_metrics_all(prefix?)` | Метрики теста / всех |
 | `coverage_insert(test, symbols, pct?, layer?)` / `coverage_batch(tests, layer?)` | Покрытие теста (набор fn:/type:/macro:), батч |
