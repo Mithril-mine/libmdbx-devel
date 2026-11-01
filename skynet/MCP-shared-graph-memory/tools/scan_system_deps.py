@@ -96,60 +96,89 @@ def collect_header_marks(tu_list, clang, cfg: ScanConfig):
     return headers
 
 
+def _drop_multi_arch(args: list) -> list:
+    """macOS universal-binary compile_commands несут несколько `-arch` —
+    `-E`/`-H` с ними несовместимы ('cannot use cpp-output with multiple
+    -arch options'). Оставляем только первый."""
+    out, seen_arch = [], False
+    i, n = 0, len(args)
+    while i < n:
+        if args[i] == "-arch":
+            if not seen_arch:
+                out += args[i:i + 2]
+                seen_arch = True
+            i += 2
+            continue
+        if args[i].startswith("-arch"):
+            if not seen_arch:
+                out.append(args[i])
+                seen_arch = True
+            i += 1
+            continue
+        out.append(args[i])
+        i += 1
+    return out
+
+
 def scan_header_provides(clang, header_path, args=None):
     """PROVIDES одного заголовка: per-header AST-скан (`-x c <header>`).
 
     Возвращает {"fn": [...], "type": [...], "macro": [...]} — только имена,
     объявленные непосредственно в этом заголовке (loc.file узла совпадает
-    с заголовком или отсутствует для builtin-подобных).
+    с заголовком или отсутствует для builtin-подобных). None — не удалось
+    получить AST (детали в stderr).
     """
-    cmd = [clang, "-Xclang", "-ast-dump=json", "-fsyntax-only", "-x", "c",
-           header_path]
+    base = [clang, "-Xclang", "-ast-dump=json", "-fsyntax-only"]
+    attempts = []
     if args:
-        cmd = [clang, "-Xclang", "-ast-dump=json", "-fsyntax-only"] + args + \
-              ["-x", "c", header_path]
-    r = subprocess.run(cmd, capture_output=True, text=True, errors="replace")
-    try:
-        ast = json.loads(r.stdout)
-    except ValueError:
-        print("scan_system_deps: AST %s failed: %s"
-              % (header_path, (r.stderr or "")[:200]), file=sys.stderr)
-        return None
+        attempts.append(_drop_multi_arch(list(args)))
+    attempts.append([])  # fallback: голый clang (Windows auto-detect MSVC)
+    last_err = ""
+    for extra in attempts:
+        cmd = base + extra + ["-x", "c", header_path]
+        r = subprocess.run(cmd, capture_output=True, text=True, errors="replace")
+        try:
+            ast = json.loads(r.stdout)
+        except ValueError:
+            last_err = (r.stderr or "").strip().splitlines()[-1] if (r.stderr or "").strip() else "empty AST"
+            continue
+        provides = {"fn": [], "type": [], "macro": []}
+        self_file = os.path.realpath(header_path)
 
-    self_file = os.path.realpath(header_path)
-    provides = {"fn": [], "type": [], "macro": []}
+        def own_decl(n):
+            """Декларация принадлежит этому заголовку: loc.file == header,
+            либо loc.file отсутствует, но spellingLoc.file == header."""
+            loc = n.get("loc", {})
+            f = loc.get("file")
+            if f is None:
+                sp = (n.get("range", {}).get("begin", {}).get("spellingLoc", {})
+                      or {}).get("file")
+                return sp is None or os.path.realpath(sp) == self_file
+            return os.path.realpath(f) == self_file
 
-    def own_decl(n):
-        """Декларация принадлежит этому заголовку: loc.file == header,
-        либо loc.file отсутствует, но spellingLoc.file == header."""
-        loc = n.get("loc", {})
-        f = loc.get("file")
-        if f is None:
-            sp = (n.get("range", {}).get("begin", {}).get("spellingLoc", {})
-                  or {}).get("file")
-            return sp is None or os.path.realpath(sp) == self_file
-        return os.path.realpath(f) == self_file
+        def walk(n):
+            k = n.get("kind")
+            name = n.get("name")
+            if name and not n.get("isImplicit") and own_decl(n):
+                if k == "FunctionDecl":
+                    provides["fn"].append(name)
+                elif k in ("RecordDecl", "EnumDecl", "TypedefDecl", "CXXRecordDecl"):
+                    provides["type"].append(name)
+            for c in n.get("inner", []) or []:
+                walk(c)
 
-    def walk(n):
-        k = n.get("kind")
-        name = n.get("name")
-        if name and not n.get("isImplicit") and own_decl(n):
-            if k == "FunctionDecl":
-                provides["fn"].append(name)
-            elif k in ("RecordDecl", "EnumDecl", "TypedefDecl", "CXXRecordDecl"):
-                provides["type"].append(name)
-        for c in n.get("inner", []) or []:
-            walk(c)
-
-    walk(ast)
-    return {k: sorted(set(v)) for k, v in provides.items()}
+        walk(ast)
+        return {k: sorted(set(v)) for k, v in provides.items()}
+    print("scan_system_deps: AST %s failed: %s"
+          % (os.path.basename(header_path), last_err[:160]), file=sys.stderr)
+    return None
 
 
 def scan_header_macros(clang, header_path, args=None):
     """Макросы, определённые в заголовке (из -E -dD file-marks)."""
     cmd = [clang, "-E", "-dD"]
     if args:
-        cmd += args
+        cmd += _drop_multi_arch(args)
     cmd += ["-x", "c", header_path]
     r = subprocess.run(cmd, capture_output=True, text=True, errors="replace")
     cur = None
@@ -308,6 +337,7 @@ def main():
             # Windows находит MSVC-заголовки через auto-detect). Не найденные
             # платформой честно фиксируются в absent (факт модели).
             resolved_by_name = {}
+            resolve_debug = []
             if entries:
                 args0 = []
                 if args.cc and os.path.isfile(args.cc) and os.path.getsize(args.cc):
@@ -319,17 +349,29 @@ def main():
                         if cfg._cross:
                             args0 = cfg.args_for(tu_list[0][1],
                                                  tu_list[0][1]["file"])
+                        args0 = _drop_multi_arch(args0)
                 tmpdir_hdr = os.path.dirname(out_path) or "."
-                tree_re = re.compile(r'^[. ]*\s(\S+)$')
+                tree_re = re.compile(r'^[. ]*\s(.+?)\s*$')
                 for hpath, hname in entries:
                     probe = os.path.join(tmpdir_hdr,
                                          "_sysdeps-probe-%s.c" % args.config)
                     with open(probe, "w") as f:
                         f.write("#include <%s>\n" % hpath)
-                    r = subprocess.run([clang, "-E", "-H"] + args0 + [probe],
-                                       capture_output=True, text=True,
-                                       errors="replace")
+                    try:
+                        r = subprocess.run([clang, "-E", "-H"] + args0 + [probe],
+                                           capture_output=True, text=True,
+                                           errors="replace")
+                    except FileNotFoundError:
+                        resolve_debug.append("clang binary not found: %r" % clang)
+                        break
                     os.unlink(probe)
+                    if len(resolve_debug) < 3:
+                        # диагностика первых резолв-прогонов (CI-лог): rc и
+                        # первые строки stderr — без этого «0 headers»
+                        # недиагностируем
+                        head = (r.stderr or "").splitlines()[:4]
+                        resolve_debug.append("probe <%s>: rc=%d stderr[:4]=%s"
+                                             % (hpath, r.returncode, head))
                     for line in (r.stderr or "").splitlines():
                         m = tree_re.match(line)
                         if not m:
@@ -340,6 +382,9 @@ def main():
                             if hname not in resolved_by_name:
                                 resolved_by_name[hname] = p
                             break
+                for d in resolve_debug:
+                    print("scan_system_deps: resolve-debug: %s" % d,
+                          file=sys.stderr)
             for hpath, hname in entries:
                 if os.path.isabs(hpath) and os.path.exists(hpath):
                     headers[hpath] = {"name": hname, "entry": None}
@@ -353,6 +398,8 @@ def main():
                                    "reason": "header not found on this platform (clang include paths)"})
         if args.limit_headers:
             headers = dict(list(headers.items())[:args.limit_headers])
+        print("scan_system_deps: resolved=%d absent-notfound=%d"
+              % (len(headers), len(absent)), file=sys.stderr)
         result = {"config": args.config, "headers": {}, "uses": {},
                   "absent": absent}
         for i, (path, meta) in enumerate(sorted(headers.items())):

@@ -323,6 +323,59 @@ jobs:
         name: system-deps-win32-msvc
         path: skynet/MCP-shared-graph-memory/tools/artifacts/system-deps-win32-msvc.json
 
+  sysdeps-merge:
+    needs: [sysdeps-linux, sysdeps-macos, sysdeps-win32]
+    runs-on: ubuntu-24.04
+    steps:
+    - uses: actions/checkout@v7
+      with:
+        fetch-depth: 0
+    - uses: actions/setup-python@v5
+      with:
+        python-version: "3.11"
+    - name: deps
+      run: python3 -m pip install --quiet cffi pyyaml
+    - name: download artifacts
+      uses: actions/download-artifact@v4
+      with:
+        path: artifacts
+        pattern: system-deps-*
+        merge-multiple: true
+    - name: merge system-deps (platform categories)
+      shell: bash
+      run: |
+        cd skynet/MCP-shared-graph-memory
+        mkdir -p tools/artifacts
+        for c in linux macos win32-msvc; do
+          mv "$GITHUB_WORKSPACE/artifacts/system-deps-$c.json"              "tools/artifacts/system-deps-$c.json"
+        done
+        python3 tools/scan_system_deps.py --mode merge           --scans tools/artifacts/system-deps-linux.json,tools/artifacts/system-deps-macos.json,tools/artifacts/system-deps-win32-msvc.json           --out tools/artifacts/system-deps.json
+    - name: validate merged platform facts
+      shell: bash
+      run: |
+        cd skynet/MCP-shared-graph-memory
+        python3 - <<'PY'
+        import json
+        with open("tools/artifacts/system-deps.json") as f:
+            a = json.load(f)
+        configs = a.get("configs", [])
+        assert sorted(configs) == ["linux", "macos", "win32-msvc"], configs
+        hdrs = a.get("headers", {})
+        # each header carries in_configs — the platform-availability fact
+        assert all(h.get("in_configs") for h in hdrs.values())
+        mntent = hdrs.get("hdr:mntent.h", {}).get("in_configs", [])
+        assert mntent == ["linux"], "mntent.h in_configs=%r" % mntent
+        mach = [k for k in hdrs if "mach_time" in k]
+        assert mach and hdrs[mach[0]]["in_configs"] == ["macos"],             "mach_time in_configs broken"
+        print("merged system-deps OK: headers=%d configs=%s" % (
+            len(hdrs), configs))
+        PY
+    - name: upload merged system-deps
+      uses: actions/upload-artifact@v4
+      with:
+        name: system-deps-merged
+        path: skynet/MCP-shared-graph-memory/tools/artifacts/system-deps.json
+
   merge-validate:
     needs: [scan-linux, scan-macos, scan-win32]
     runs-on: ubuntu-24.04
