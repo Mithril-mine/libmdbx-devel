@@ -1,6 +1,6 @@
 // > dist-cutoff-begin
 #pragma once
-#include "decl_buffer.h++"
+#include "decl-buffer.h++"
 namespace mdbx {
 // < dist-cutoff-end
 

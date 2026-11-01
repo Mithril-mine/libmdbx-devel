@@ -1,6 +1,6 @@
 // > dist-cutoff-begin
 #pragma once
-#include "decl_exceptions.h++"
+#include "decl-exceptions.h++"
 namespace mdbx {
 // < dist-cutoff-end
 

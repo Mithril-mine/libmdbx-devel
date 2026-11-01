@@ -1035,21 +1035,21 @@ $(DIST_DIR)/mdbx.h++: $(filter %h++, $(HEADERS)) $(lastword $(MAKEFILE_LIST))
 	@echo '  MAKE $@'
 	$(QUIET)cat mdbx.h++ | $(SED) \
 		-e '/#include "mdbx++\/begin.h++"/r mdbx++/begin.h++' \
-		-e '/#include "mdbx++\/decl_exceptions.h++"/r mdbx++/decl_exceptions.h++' \
-		-e '/#include "mdbx++\/decl_slice.h++"/r mdbx++/decl_slice.h++' \
-		-e '/#include "mdbx++\/decl_transcoders.h++"/r mdbx++/decl_transcoders.h++' \
-		-e '/#include "mdbx++\/decl_buffer.h++"/r mdbx++/decl_buffer.h++' \
-		-e '/#include "mdbx++\/decl_core.h++"/r mdbx++/decl_core.h++' \
-		-e '/#include "mdbx++\/decl_env.h++"/r mdbx++/decl_env.h++' \
-		-e '/#include "mdbx++\/decl_txn.h++"/r mdbx++/decl_txn.h++' \
-		-e '/#include "mdbx++\/decl_cursor.h++"/r mdbx++/decl_cursor.h++' \
-		-e '/#include "mdbx++\/impl_slice.h++"/r mdbx++/impl_slice.h++' \
-		-e '/#include "mdbx++\/impl_buffer.h++"/r mdbx++/impl_buffer.h++' \
-		-e '/#include "mdbx++\/impl_core.h++"/r mdbx++/impl_core.h++' \
-		-e '/#include "mdbx++\/impl_exceptions.h++"/r mdbx++/impl_exceptions.h++' \
-		-e '/#include "mdbx++\/impl_env.h++"/r mdbx++/impl_env.h++' \
-		-e '/#include "mdbx++\/impl_txn.h++"/r mdbx++/impl_txn.h++' \
-		-e '/#include "mdbx++\/impl_cursor.h++"/r mdbx++/impl_cursor.h++' \
+		-e '/#include "mdbx++\/decl-exceptions.h++"/r mdbx++/decl-exceptions.h++' \
+		-e '/#include "mdbx++\/decl-slice.h++"/r mdbx++/decl-slice.h++' \
+		-e '/#include "mdbx++\/decl-transcoders.h++"/r mdbx++/decl-transcoders.h++' \
+		-e '/#include "mdbx++\/decl-buffer.h++"/r mdbx++/decl-buffer.h++' \
+		-e '/#include "mdbx++\/decl-core.h++"/r mdbx++/decl-core.h++' \
+		-e '/#include "mdbx++\/decl-env.h++"/r mdbx++/decl-env.h++' \
+		-e '/#include "mdbx++\/decl-txn.h++"/r mdbx++/decl-txn.h++' \
+		-e '/#include "mdbx++\/decl-cursor.h++"/r mdbx++/decl-cursor.h++' \
+		-e '/#include "mdbx++\/impl-slice.h++"/r mdbx++/impl-slice.h++' \
+		-e '/#include "mdbx++\/impl-buffer.h++"/r mdbx++/impl-buffer.h++' \
+		-e '/#include "mdbx++\/impl-core.h++"/r mdbx++/impl-core.h++' \
+		-e '/#include "mdbx++\/impl-exceptions.h++"/r mdbx++/impl-exceptions.h++' \
+		-e '/#include "mdbx++\/impl-env.h++"/r mdbx++/impl-env.h++' \
+		-e '/#include "mdbx++\/impl-txn.h++"/r mdbx++/impl-txn.h++' \
+		-e '/#include "mdbx++\/impl-cursor.h++"/r mdbx++/impl-cursor.h++' \
 		-e '/#include "mdbx++\/end.h++"/r mdbx++/end.h++' \
 		-e '/#include "xyz"/r xyz' \
 	| $(SED) \

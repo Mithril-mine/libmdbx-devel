@@ -1,13 +1,13 @@
 // > dist-cutoff-begin
 #pragma once
-#include "decl_buffer.h++"
-#include "decl_core.h++"
-#include "decl_cursor.h++"
-#include "decl_env.h++"
-#include "decl_exceptions.h++"
-#include "decl_slice.h++"
-#include "decl_transcoders.h++"
-#include "decl_txn.h++"
+#include "decl-buffer.h++"
+#include "decl-core.h++"
+#include "decl-cursor.h++"
+#include "decl-env.h++"
+#include "decl-exceptions.h++"
+#include "decl-slice.h++"
+#include "decl-transcoders.h++"
+#include "decl-txn.h++"
 namespace mdbx {
 // < dist-cutoff-end
 

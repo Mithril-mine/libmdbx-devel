@@ -211,14 +211,14 @@ def parse_mdbx_h(path):
 
 _CPP_SCOPE_HINT = {
     "begin.h++": "mdbx",
-    "decl_core.h++": "mdbx",
-    "decl_slice.h++": "mdbx",
-    "decl_transcoders.h++": "mdbx",
-    "decl_env.h++": "env",
-    "decl_txn.h++": "txn",
-    "decl_cursor.h++": "cursor",
-    "decl_buffer.h++": "buffer",
-    "decl_exceptions.h++": "exception",
+    "decl-core.h++": "mdbx",
+    "decl-slice.h++": "mdbx",
+    "decl-transcoders.h++": "mdbx",
+    "decl-env.h++": "env",
+    "decl-txn.h++": "txn",
+    "decl-cursor.h++": "cursor",
+    "decl-buffer.h++": "buffer",
+    "decl-exceptions.h++": "exception",
 }
 _CPP_CLASS_NOISE = frozenset({"final", "public", "private", "protected"})
 

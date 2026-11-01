@@ -45,7 +45,7 @@ hardware-platform edge · 🧹 removal candidate (dead/obsolete branch).
 | 🟠 | TODO suspend/resume threads | `osal.c:2762-2764` | unmap/map при ресайзе на POSIX | Средний |
 | 🟠 | TODO avoid search in page_unspill | `cursor.c:1109` | Избежать повторного поиска при unspill | Низкий |
 | 🟠 | TODO min/max keylen от пользователя | `cursor.c:1306-1307` | Опция ограничения размеров ключей/данных | Средний (новая фича) |
-| 🟠 | TODO slice operator<< | `mdbx++/decl_slice.h++:15` | Чтение через operator<< | Низкий (C++ API) |
+| 🟠 | TODO slice operator<< | `mdbx++/decl-slice.h++:15` | Чтение через operator<< | Низкий (C++ API) |
 
 ## 3. FIXME «Not implemented» / упразднённые альтернативы
 

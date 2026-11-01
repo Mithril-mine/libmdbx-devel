@@ -1,8 +1,8 @@
 // > dist-cutoff-begin
 #pragma once
-#include "decl_cursor.h++"
-#include "decl_env.h++"
-#include "decl_txn.h++"
+#include "decl-cursor.h++"
+#include "decl-env.h++"
+#include "decl-txn.h++"
 namespace mdbx {
 // < dist-cutoff-end
 

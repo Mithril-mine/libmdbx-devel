@@ -49,7 +49,7 @@
  * this header is included before the libmdbx ones (in particular it is
  * force-included first by the shared PCH), and gtest pulls <windows.h> in, so
  * the macros must be defined here. Without NOMINMAX the min/max macros break
- * std::min/std::max in mdbx++/decl_buffer.h++ (MSVC C2589). */
+ * std::min/std::max in mdbx++/decl-buffer.h++ (MSVC C2589). */
 #ifndef _WIN32_WINNT
 #define _WIN32_WINNT 0x0A00 /* Windows 10 baseline, as in src/preface.h */
 #endif

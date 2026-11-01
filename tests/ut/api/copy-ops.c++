@@ -109,7 +109,7 @@ TEST(ut_copy_ops, txn_copy_snapshot) {
     writer.join();
   }
   /* On Windows a memory-mapped environment cannot be deleted while it is
-   * still open (decl_env.h++ remove_mode notes), so close before removing. */
+   * still open (decl-env.h++ remove_mode notes), so close before removing. */
   env.close();
 
   /* the copy contains the snapshot state, but not the later table */

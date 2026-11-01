@@ -1,8 +1,8 @@
 // > dist-cutoff-begin
 #pragma once
-#include "decl_buffer.h++"
-#include "decl_core.h++"
-#include "decl_exceptions.h++"
+#include "decl-buffer.h++"
+#include "decl-core.h++"
+#include "decl-exceptions.h++"
 namespace mdbx {
 // < dist-cutoff-end
 

@@ -179,14 +179,14 @@ linkage; in amalgamated build (`xMDBX_ALLOY`) = `static`.
 | File | Role |
 | --- | --- |
 | `begin.h++` / `end.h++` | Preamble/epilogue of the C++ API header (`mdbx.h++`). |
-| `decl_slice.h++` / `impl_slice.h++` | `slice` type: byte-view over keys/values, conversions, transcoders integration. |
-| `decl_buffer.h++` / `impl_buffer.h++` | `buffer` type: owning storage with allocator hooks. |
-| `decl_core.h++` / `impl_core.h++` | Core declarations: base classes, constants, feature macros. |
-| `decl_env.h++` / `impl_env.h++` | `env` class: open/create/options/geometry/backup, RAII. |
-| `decl_txn.h++` / `impl_txn.h++` | `txn` class: begin/commit/abort, nested txns, CRUD wrappers. |
-| `decl_cursor.h++` / `impl_cursor.h++` | `cursor` class: typed cursor over slices, seek/iteration. |
-| `decl_exceptions.h++` / `impl_exceptions.h++` | Exception hierarchy (`error` with `error_code`, derived `map_full`, `bad_dbi`, ...). |
-| `decl_transcoders.h++` | Key/value transcoders for typed access (integers, strings, custom). |
+| `decl-slice.h++` / `impl-slice.h++` | `slice` type: byte-view over keys/values, conversions, transcoders integration. |
+| `decl-buffer.h++` / `impl-buffer.h++` | `buffer` type: owning storage with allocator hooks. |
+| `decl-core.h++` / `impl-core.h++` | Core declarations: base classes, constants, feature macros. |
+| `decl-env.h++` / `impl-env.h++` | `env` class: open/create/options/geometry/backup, RAII. |
+| `decl-txn.h++` / `impl-txn.h++` | `txn` class: begin/commit/abort, nested txns, CRUD wrappers. |
+| `decl-cursor.h++` / `impl-cursor.h++` | `cursor` class: typed cursor over slices, seek/iteration. |
+| `decl-exceptions.h++` / `impl-exceptions.h++` | Exception hierarchy (`error` with `error_code`, derived `map_full`, `bad_dbi`, ...). |
+| `decl-transcoders.h++` | Key/value transcoders for typed access (integers, strings, custom). |
 
 ---
 

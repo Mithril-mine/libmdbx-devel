@@ -1,7 +1,7 @@
 // > dist-cutoff-begin
 #pragma once
-#include "decl_slice.h++"
-#include "decl_transcoders.h++"
+#include "decl-slice.h++"
+#include "decl-transcoders.h++"
 namespace mdbx {
 // < dist-cutoff-end
 

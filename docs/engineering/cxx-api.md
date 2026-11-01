@@ -12,19 +12,19 @@
 ```
 mdbx.h++            — single public C++ header (amalgamated-style even in the dev tree)
 ├── mdbx++/begin.h++            преамбула: макросы, типы, forward-объявления, enum endian
-├── mdbx++/decl_exceptions.h++  error / exception / fatal / exception_thunk / MDBX_DECLARE_EXCEPTION
+├── mdbx++/decl-exceptions.h++  error / exception / fatal / exception_thunk / MDBX_DECLARE_EXCEPTION
 ├── \defgroup cxx_data "Slices and Buffers"
-│   ├── mdbx++/decl_slice.h++       slice (struct : MDBX_val), value_result, pair, pair_result
-│   ├── mdbx++/decl_transcoders.h++ to_hex/from_hex, to_base58/from_base58, to_base64/from_base64 (SliceTranscoder)
-│   └── mdbx++/decl_buffer.h++      buffer<ALLOCATOR,CAPACITY_POLICY> : slice (+ allocator traits)
+│   ├── mdbx++/decl-slice.h++       slice (struct : MDBX_val), value_result, pair, pair_result
+│   ├── mdbx++/decl-transcoders.h++ to_hex/from_hex, to_base58/from_base58, to_base64/from_base64 (SliceTranscoder)
+│   └── mdbx++/decl-buffer.h++      buffer<ALLOCATOR,CAPACITY_POLICY> : slice (+ allocator traits)
 ├── \defgroup cxx_core "Environment, Transactions, Cursors, Key-value tables and map handles"
-│   ├── mdbx++/decl_core.h++        cache_entry, loop_control, key_mode, value_mode, put_mode, map_handle
-│   ├── mdbx++/decl_env.h++         env, env_managed (+ geometry/mode/durability/operate_*/limits/reader_info)
-│   ├── mdbx++/decl_txn.h++         txn, txn_managed
-│   └── mdbx++/decl_cursor.h++      cursor, cursor_managed (+ move_operation/result types)
+│   ├── mdbx++/decl-core.h++        cache_entry, loop_control, key_mode, value_mode, put_mode, map_handle
+│   ├── mdbx++/decl-env.h++         env, env_managed (+ geometry/mode/durability/operate_*/limits/reader_info)
+│   ├── mdbx++/decl-txn.h++         txn, txn_managed
+│   └── mdbx++/decl-cursor.h++      cursor, cursor_managed (+ move_operation/result types)
 ├── inline bodies (порядок обязателен: decl раньше impl)
-│   ├── mdbx++/impl_core.h++        impl_exceptions.h++  impl_slice.h++  impl_buffer.h++
-│   └── mdbx++/impl_env.h++         impl_txn.h++         impl_cursor.h++
+│   ├── mdbx++/impl-core.h++        impl-exceptions.h++  impl-slice.h++  impl-buffer.h++
+│   └── mdbx++/impl-env.h++         impl-txn.h++         impl-cursor.h++
 └── mdbx++/end.h++             эпилог
 ```
 
@@ -40,16 +40,16 @@ mdbx.h++            — single public C++ header (amalgamated-style even in the 
 
 | Тип | Файл | Роль / ключевые члены |
 | --- | --- | --- |
-| `slice` (struct : `::MDBX_val`) | `decl_slice.h++` | view на ключ/значение; `is_printable()` (неинлайн), транскодирование через `operator<<`/`operator>>`; результат-типы `value_result {value, done}`, `pair {key,value}`, `pair_result` |
-| `buffer<ALLOCATOR, CAPACITY_POLICY>` : `slice` | `decl_buffer.h++` | владеющее хранилище; `enum modality {reference, inplace, allocated}`; EBCO-структура `silo : allocator_type`; аллокаторные адаптеры `move_assign_alloc`, `copy_assign_alloc`, `swap_alloc`, `default_capacity_policy`; `data_preserver` для отложенного копирования |
-| `to_hex/from_hex`, `to_base58/from_base58`, `to_base64/from_base64` | `decl_transcoders.h++` | кодек-структуры, удовлетворяющие концепту `SliceTranscoder` |
-| `env` / `env_managed : env` | `decl_env.h++` | окружение (RAII для managed); вложенные: `geometry` (+`size` для ostream), `enum mode {readonly,...}`, `enum durability {robust_synchronous,...}`, `reclaiming_options`, `operate_options`, `operate_parameters`, `limits`, `remove_mode`, `enum class extra_runtime_option` (обёртка `MDBX_option_t`), `reader_info`; `env_managed::create_parameters` |
-| `txn` / `txn_managed : txn` | `decl_txn.h++` | транзакции; `start_nested([readonly])`, `commit_embark_read`, `drop_map/clear_map/rename_map` (неинлайн), CRUD-обёртки |
-| `cursor` / `cursor_managed : cursor` | `decl_cursor.h++` | курсоры; `enum move_operation {first=MDBX_FIRST, ...}`, `move_result : pair_result`, `estimate_result : pair {approximate_quantity}`; шаблоны `scan_until(predicate, start, turn)` (мост через `exception_thunk`) |
-| `error`, `exception : std::runtime_error`, `fatal : exception` | `decl_exceptions.h++` | ошибки/исключения; `MDBX_DECLARE_EXCEPTION(NAME)` генерирует производные (например `map_full`, `bad_dbi`); `exception_thunk` — ловушка исключений из C-колбэков |
-| `cache_entry : MDBX_cache_entry_t` | `decl_core.h++` | запись кэша get-cached (initial draft) |
-| `map_handle` (+`flags`, `info`, `state`) | `decl_core.h++` | дескриптор таблицы; `using state = ::MDBX_dbi_state_t` |
-| `enum key_mode`, `enum value_mode`, `enum put_mode`, `enum loop_control` | `decl_core.h++` | режимы ключей/значений/вставки, управление циклами (`continue_loop=0`, `exit_loop=INT32_MIN`) |
+| `slice` (struct : `::MDBX_val`) | `decl-slice.h++` | view на ключ/значение; `is_printable()` (неинлайн), транскодирование через `operator<<`/`operator>>`; результат-типы `value_result {value, done}`, `pair {key,value}`, `pair_result` |
+| `buffer<ALLOCATOR, CAPACITY_POLICY>` : `slice` | `decl-buffer.h++` | владеющее хранилище; `enum modality {reference, inplace, allocated}`; EBCO-структура `silo : allocator_type`; аллокаторные адаптеры `move_assign_alloc`, `copy_assign_alloc`, `swap_alloc`, `default_capacity_policy`; `data_preserver` для отложенного копирования |
+| `to_hex/from_hex`, `to_base58/from_base58`, `to_base64/from_base64` | `decl-transcoders.h++` | кодек-структуры, удовлетворяющие концепту `SliceTranscoder` |
+| `env` / `env_managed : env` | `decl-env.h++` | окружение (RAII для managed); вложенные: `geometry` (+`size` для ostream), `enum mode {readonly,...}`, `enum durability {robust_synchronous,...}`, `reclaiming_options`, `operate_options`, `operate_parameters`, `limits`, `remove_mode`, `enum class extra_runtime_option` (обёртка `MDBX_option_t`), `reader_info`; `env_managed::create_parameters` |
+| `txn` / `txn_managed : txn` | `decl-txn.h++` | транзакции; `start_nested([readonly])`, `commit_embark_read`, `drop_map/clear_map/rename_map` (неинлайн), CRUD-обёртки |
+| `cursor` / `cursor_managed : cursor` | `decl-cursor.h++` | курсоры; `enum move_operation {first=MDBX_FIRST, ...}`, `move_result : pair_result`, `estimate_result : pair {approximate_quantity}`; шаблоны `scan_until(predicate, start, turn)` (мост через `exception_thunk`) |
+| `error`, `exception : std::runtime_error`, `fatal : exception` | `decl-exceptions.h++` | ошибки/исключения; `MDBX_DECLARE_EXCEPTION(NAME)` генерирует производные (например `map_full`, `bad_dbi`); `exception_thunk` — ловушка исключений из C-колбэков |
+| `cache_entry : MDBX_cache_entry_t` | `decl-core.h++` | запись кэша get-cached (initial draft) |
+| `map_handle` (+`flags`, `info`, `state`) | `decl-core.h++` | дескриптор таблицы; `using state = ::MDBX_dbi_state_t` |
+| `enum key_mode`, `enum value_mode`, `enum put_mode`, `enum loop_control` | `decl-core.h++` | режимы ключей/значений/вставки, управление циклами (`continue_loop=0`, `exit_loop=INT32_MIN`) |
 | `enum endian` | `begin.h++` | little/big/native (из `__BYTE_ORDER__`) |
 
 ## 3. Неинлайн-реализации: `src/mdbx.c++` (1935 строк, 39 точек)

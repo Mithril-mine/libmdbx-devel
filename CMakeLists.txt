@@ -92,11 +92,11 @@ elseif(
   AND EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/FUNDING.json"
   AND EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/mdbx.h"
   AND EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/mdbx.h++"
-  AND EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/mdbx++/decl_slice.h++"
-  AND EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/mdbx++/impl_slice.h++"
-  AND EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/mdbx++/decl_transcoders.h++"
-  AND EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/mdbx++/decl_buffer.h++"
-  AND EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/mdbx++/impl_buffer.h++"
+  AND EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/mdbx++/decl-slice.h++"
+  AND EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/mdbx++/impl-slice.h++"
+  AND EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/mdbx++/decl-transcoders.h++"
+  AND EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/mdbx++/decl-buffer.h++"
+  AND EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/mdbx++/impl-buffer.h++"
   AND EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/src/windows-safeseh-masm.asm"
   AND EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/src/windows-safeseh-yasm.asm"
   AND EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/src/windows-safeseh.obj"
@@ -1132,21 +1132,21 @@ if(MDBX_BUILD_CXX)
   list(APPEND LIBMDBX_SOURCES "${MDBX_SOURCE_DIR}/mdbx.c++" mdbx.h++)
   #> dist-cutoff-begin
   list(APPEND LIBMDBX_SOURCES "${CMAKE_CURRENT_SOURCE_DIR}/mdbx++/begin.h++")
-  list(APPEND LIBMDBX_SOURCES "${CMAKE_CURRENT_SOURCE_DIR}/mdbx++/decl_exceptions.h++")
-  list(APPEND LIBMDBX_SOURCES "${CMAKE_CURRENT_SOURCE_DIR}/mdbx++/impl_exceptions.h++")
-  list(APPEND LIBMDBX_SOURCES "${CMAKE_CURRENT_SOURCE_DIR}/mdbx++/decl_transcoders.h++")
-  list(APPEND LIBMDBX_SOURCES "${CMAKE_CURRENT_SOURCE_DIR}/mdbx++/decl_core.h++")
-  list(APPEND LIBMDBX_SOURCES "${CMAKE_CURRENT_SOURCE_DIR}/mdbx++/impl_core.h++")
-  list(APPEND LIBMDBX_SOURCES "${CMAKE_CURRENT_SOURCE_DIR}/mdbx++/decl_env.h++")
-  list(APPEND LIBMDBX_SOURCES "${CMAKE_CURRENT_SOURCE_DIR}/mdbx++/impl_env.h++")
-  list(APPEND LIBMDBX_SOURCES "${CMAKE_CURRENT_SOURCE_DIR}/mdbx++/decl_txn.h++")
-  list(APPEND LIBMDBX_SOURCES "${CMAKE_CURRENT_SOURCE_DIR}/mdbx++/impl_txn.h++")
-  list(APPEND LIBMDBX_SOURCES "${CMAKE_CURRENT_SOURCE_DIR}/mdbx++/decl_cursor.h++")
-  list(APPEND LIBMDBX_SOURCES "${CMAKE_CURRENT_SOURCE_DIR}/mdbx++/impl_cursor.h++")
-  list(APPEND LIBMDBX_SOURCES "${CMAKE_CURRENT_SOURCE_DIR}/mdbx++/decl_slice.h++")
-  list(APPEND LIBMDBX_SOURCES "${CMAKE_CURRENT_SOURCE_DIR}/mdbx++/impl_slice.h++")
-  list(APPEND LIBMDBX_SOURCES "${CMAKE_CURRENT_SOURCE_DIR}/mdbx++/decl_buffer.h++")
-  list(APPEND LIBMDBX_SOURCES "${CMAKE_CURRENT_SOURCE_DIR}/mdbx++/impl_buffer.h++")
+  list(APPEND LIBMDBX_SOURCES "${CMAKE_CURRENT_SOURCE_DIR}/mdbx++/decl-exceptions.h++")
+  list(APPEND LIBMDBX_SOURCES "${CMAKE_CURRENT_SOURCE_DIR}/mdbx++/impl-exceptions.h++")
+  list(APPEND LIBMDBX_SOURCES "${CMAKE_CURRENT_SOURCE_DIR}/mdbx++/decl-transcoders.h++")
+  list(APPEND LIBMDBX_SOURCES "${CMAKE_CURRENT_SOURCE_DIR}/mdbx++/decl-core.h++")
+  list(APPEND LIBMDBX_SOURCES "${CMAKE_CURRENT_SOURCE_DIR}/mdbx++/impl-core.h++")
+  list(APPEND LIBMDBX_SOURCES "${CMAKE_CURRENT_SOURCE_DIR}/mdbx++/decl-env.h++")
+  list(APPEND LIBMDBX_SOURCES "${CMAKE_CURRENT_SOURCE_DIR}/mdbx++/impl-env.h++")
+  list(APPEND LIBMDBX_SOURCES "${CMAKE_CURRENT_SOURCE_DIR}/mdbx++/decl-txn.h++")
+  list(APPEND LIBMDBX_SOURCES "${CMAKE_CURRENT_SOURCE_DIR}/mdbx++/impl-txn.h++")
+  list(APPEND LIBMDBX_SOURCES "${CMAKE_CURRENT_SOURCE_DIR}/mdbx++/decl-cursor.h++")
+  list(APPEND LIBMDBX_SOURCES "${CMAKE_CURRENT_SOURCE_DIR}/mdbx++/impl-cursor.h++")
+  list(APPEND LIBMDBX_SOURCES "${CMAKE_CURRENT_SOURCE_DIR}/mdbx++/decl-slice.h++")
+  list(APPEND LIBMDBX_SOURCES "${CMAKE_CURRENT_SOURCE_DIR}/mdbx++/impl-slice.h++")
+  list(APPEND LIBMDBX_SOURCES "${CMAKE_CURRENT_SOURCE_DIR}/mdbx++/decl-buffer.h++")
+  list(APPEND LIBMDBX_SOURCES "${CMAKE_CURRENT_SOURCE_DIR}/mdbx++/impl-buffer.h++")
   list(APPEND LIBMDBX_SOURCES "${CMAKE_CURRENT_SOURCE_DIR}/mdbx++/end.h++")
   #< dist-cutoff-end
 else()

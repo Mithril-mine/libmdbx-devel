@@ -42,31 +42,31 @@
 
 #include "mdbx++/begin.h++"
 
-#include "mdbx++/decl_exceptions.h++"
+#include "mdbx++/decl-exceptions.h++"
 
 //------------------------------------------------------------------------------
 
 /// \defgroup cxx_data Slices and Buffers
 /// @{
 
-#include "mdbx++/decl_slice.h++"
+#include "mdbx++/decl-slice.h++"
 
-#include "mdbx++/decl_transcoders.h++"
+#include "mdbx++/decl-transcoders.h++"
 
-#include "mdbx++/decl_buffer.h++"
+#include "mdbx++/decl-buffer.h++"
 
 /// end of cxx_data @}
 
 /// \defgroup cxx_core Environment, Transactions, Cursors, Key-value tables and map handles
 /// @{
 
-#include "mdbx++/decl_core.h++"
+#include "mdbx++/decl-core.h++"
 
-#include "mdbx++/decl_env.h++"
+#include "mdbx++/decl-env.h++"
 
-#include "mdbx++/decl_txn.h++"
+#include "mdbx++/decl-txn.h++"
 
-#include "mdbx++/decl_cursor.h++"
+#include "mdbx++/decl-cursor.h++"
 
 /// end of cxx_core @}
 
@@ -75,21 +75,21 @@
 // Inline body of the libmdbx C++ API
 //
 
-#include "mdbx++/impl_core.h++"
+#include "mdbx++/impl-core.h++"
 
-#include "mdbx++/impl_exceptions.h++"
+#include "mdbx++/impl-exceptions.h++"
 
-#include "mdbx++/impl_slice.h++"
+#include "mdbx++/impl-slice.h++"
 
-#include "mdbx++/impl_buffer.h++"
+#include "mdbx++/impl-buffer.h++"
 
 //------------------------------------------------------------------------------
 
-#include "mdbx++/impl_env.h++"
+#include "mdbx++/impl-env.h++"
 
-#include "mdbx++/impl_txn.h++"
+#include "mdbx++/impl-txn.h++"
 
-#include "mdbx++/impl_cursor.h++"
+#include "mdbx++/impl-cursor.h++"
 
 //------------------------------------------------------------------------------
 

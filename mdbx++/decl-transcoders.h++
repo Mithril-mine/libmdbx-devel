@@ -1,6 +1,6 @@
 // > dist-cutoff-begin
 #pragma once
-#include "decl_slice.h++"
+#include "decl-slice.h++"
 namespace mdbx {
 // < dist-cutoff-end
 
