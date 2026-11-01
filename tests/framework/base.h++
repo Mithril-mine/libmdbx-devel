@@ -87,7 +87,7 @@
 #define MDBX_INTERNAL
 #define xMDBX_TOOLS /* Avoid using internal ASSERT() */
 #include "../../mdbx.h++"
-#include "../../src/osal.h"
+#include "../../src/osal/osal.h"
 
 #include "../../src/options.h"
 

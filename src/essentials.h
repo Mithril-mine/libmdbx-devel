@@ -148,7 +148,7 @@ typedef union bin128 {
 #endif
 } bin128_t;
 
-#include "osal.h"
+#include "osal/osal.h"
 
 #include "options.h"
 

@@ -5,7 +5,7 @@
 
 #pragma once
 
-#include "essentials.h"
+#include "../essentials.h"
 
 /*----------------------------------------------------------------------------*/
 /* Memory/Compiler barriers, cache coherence */
@@ -70,117 +70,9 @@ MDBX_MAYBE_UNUSED static inline void osal_memory_barrier(void) {
 /* system-depended definitions */
 
 #if IS_WINDOWS
-#define HAVE_SYS_STAT_H
-#define HAVE_SYS_TYPES_H
-typedef HANDLE osal_thread_t;
-typedef unsigned osal_thread_key_t;
-#define MAP_FAILED nullptr
-#define HIGH_DWORD(v) ((DWORD)((sizeof(v) > 4) ? ((uint64_t)(v) >> 32) : 0))
-#define THREAD_CALL WINAPI
-#define THREAD_RESULT DWORD
-typedef struct {
-  HANDLE mutex;
-  HANDLE event[2];
-} osal_condpair_t;
-typedef CRITICAL_SECTION osal_fastmutex_t;
-
-#if MDBX_WITHOUT_MSVC_CRT
-
-#ifndef osal_malloc
-static inline void *osal_malloc(size_t bytes) { return HeapAlloc(GetProcessHeap(), 0, bytes); }
-#endif /* osal_malloc */
-
-#ifndef osal_calloc
-static inline void *osal_calloc(size_t nelem, size_t size) {
-  return HeapAlloc(GetProcessHeap(), HEAP_ZERO_MEMORY, nelem * size);
-}
-#endif /* osal_calloc */
-
-#ifndef osal_realloc
-static inline void *osal_realloc(void *ptr, size_t bytes) {
-  return ptr ? HeapReAlloc(GetProcessHeap(), 0, ptr, bytes) : HeapAlloc(GetProcessHeap(), 0, bytes);
-}
-#endif /* osal_realloc */
-
-#ifndef osal_free
-static inline void osal_free(void *ptr) { HeapFree(GetProcessHeap(), 0, ptr); }
-#endif /* osal_free */
-
-#define osal_alloca(size) _alloca(size)
-
-/*> dist-cutoff-begin */
-#if defined(MDBX_PROBES)
-/* Concrete platform allocators used by the probe-bus itself (avoids infinite
- * recursion through the osal_* redirect defined below). */
-#define osal_malloc_raw(bytes) HeapAlloc(GetProcessHeap(), 0, (bytes))
-#define osal_calloc_raw(nelem, size) HeapAlloc(GetProcessHeap(), HEAP_ZERO_MEMORY, (nelem) * (size))
-#define osal_realloc_raw(ptr, bytes)                                                                                   \
-  ((ptr) ? HeapReAlloc(GetProcessHeap(), 0, (ptr), (bytes)) : HeapAlloc(GetProcessHeap(), 0, (bytes)))
-#define osal_free_raw(ptr) HeapFree(GetProcessHeap(), 0, (ptr))
-#endif /* MDBX_PROBES */
-/*< dist-cutoff-end */
-
-#else /* MDBX_WITHOUT_MSVC_CRT */
-
-#define osal_malloc malloc
-#define osal_calloc calloc
-#define osal_realloc realloc
-#define osal_free free
-#define osal_strdup _strdup
-
-/*> dist-cutoff-begin */
-#if defined(MDBX_PROBES)
-#define osal_malloc_raw malloc
-#define osal_calloc_raw calloc
-#define osal_realloc_raw realloc
-#define osal_free_raw free
-#endif /* MDBX_PROBES */
-/*< dist-cutoff-end */
-
-#endif /* MDBX_WITHOUT_MSVC_CRT */
-
-#ifndef snprintf
-#define snprintf _snprintf /* ntdll */
-#endif
-
-#ifndef vsnprintf
-#define vsnprintf _vsnprintf /* ntdll */
-#endif
-
-#ifndef strcasecmp
-#define strcasecmp _stricmp /* ntdll */
-#endif
-
-#ifndef strncasecmp
-#define strncasecmp _strnicmp /* ntdll */
-#endif
-
-#else /*----------------------------------------------------------------------*/
-
-typedef pthread_t osal_thread_t;
-typedef pthread_key_t osal_thread_key_t;
-#define INVALID_HANDLE_VALUE (-1)
-#define THREAD_CALL
-#define THREAD_RESULT void *
-typedef struct {
-  pthread_mutex_t mutex;
-  pthread_cond_t cond[2];
-} osal_condpair_t;
-typedef pthread_mutex_t osal_fastmutex_t;
-#define osal_malloc malloc
-#define osal_calloc calloc
-#define osal_realloc realloc
-#define osal_free free
-#define osal_strdup strdup
-
-/*> dist-cutoff-begin */
-#if defined(MDBX_PROBES)
-#define osal_malloc_raw malloc
-#define osal_calloc_raw calloc
-#define osal_realloc_raw realloc
-#define osal_free_raw free
-#endif /* MDBX_PROBES */
-/*< dist-cutoff-end */
+#include "windows/osal.h"
+#else
+#include "posix/osal.h"
 #endif /* Platform */
 
 #if __GLIBC_PREREQ(2, 12) || defined(__FreeBSD__) || defined(malloc_usable_size)
@@ -241,11 +133,9 @@ LIBMDBX_API char *osal_strdup(const char *str);
 /* OS abstraction layer stuff */
 
 #if IS_WINDOWS
-typedef wchar_t pathchar_t;
-#define MDBX_PRIsPATH "ls"
+#include "windows/osal.h" /* pathchar */
 #else
-typedef char pathchar_t;
-#define MDBX_PRIsPATH "s"
+#include "posix/osal.h" /* pathchar */
 #endif
 
 MDBX_MAYBE_UNUSED static inline bool osal_yield(void) {
@@ -435,6 +325,8 @@ MDBX_INTERNAL void ior_put_event(osal_ioring_t *ior, HANDLE event);
 #if (defined(__GLIBC__) && __GLIBC_PREREQ(2, 1)) && (defined(_GNU_SOURCE) || defined(_BSD_SOURCE))
 #define osal_asprintf asprintf
 #define osal_vasprintf vasprintf
+MDBX_MAYBE_UNUSED extern int asprintf(char **strp, const char *fmt, ...);
+MDBX_MAYBE_UNUSED extern int vasprintf(char **strp, const char *fmt, va_list ap);
 #else
 MDBX_MAYBE_UNUSED MDBX_INTERNAL MDBX_PRINTF_ARGS(2, 3) int osal_asprintf(char **strp, const char *fmt, ...);
 MDBX_INTERNAL int osal_vasprintf(char **strp, const char *fmt, va_list ap);
