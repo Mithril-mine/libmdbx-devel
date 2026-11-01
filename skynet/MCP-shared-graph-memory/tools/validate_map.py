@@ -29,7 +29,7 @@ GOLDEN_PATH = os.path.join(os.path.dirname(TOOLS_DIR), "tests", "golden",
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--map", default=os.path.join(TOOLS_DIR, "artifacts",
-                                                  "refactoring-map.json"))
+                                                  "codegraph.json"))
     ap.add_argument("--cc", default=os.path.join(REPO_ROOT, "_build-scan",
                                                  "compile_commands.json"))
     ap.add_argument("--tus", default="fixture", choices=["fixture", "full"],

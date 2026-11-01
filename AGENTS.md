@@ -21,7 +21,7 @@ Do not duplicate the structure descriptions here — they are maintained in:
   workflows, changelog, issues/PR, testing, coverage).
 - `skynet/` — agent infrastructure; `skynet/MCP-shared-graph-memory/` is the
   shared memory module (Store, scan/coverage tools, [SKILL.md](skynet/MCP-shared-graph-memory/SKILL.md),
-  [docs/REFACTORING-MAP.md](skynet/MCP-shared-graph-memory/docs/REFACTORING-MAP.md));
+  [docs/CODEGRAPH.md](skynet/MCP-shared-graph-memory/docs/CODEGRAPH.md));
   [skynet/knowledge-map.md](skynet/knowledge-map.md) is the knowledge index.
 - `skills/{profiles,shared,superpowers}/` — canonical agent skills;
   `.opencode/skills/` holds active copies (sync rules in its README).
@@ -157,7 +157,7 @@ Canonical style guide: [docs/engineering/changelog-codex.md](docs/engineering/ch
   [docs/engineering/module-lock-matrix.md](docs/engineering/module-lock-matrix.md) —
   mandatory context for review profiles.
 - [skynet/MCP-shared-graph-memory/SKILL.md](skynet/MCP-shared-graph-memory/SKILL.md),
-  [skynet/MCP-shared-graph-memory/docs/REFACTORING-MAP.md](skynet/MCP-shared-graph-memory/docs/REFACTORING-MAP.md),
+  [skynet/MCP-shared-graph-memory/docs/CODEGRAPH.md](skynet/MCP-shared-graph-memory/docs/CODEGRAPH.md),
   [skynet/MCP-shared-graph-memory/tools/scan_all.py](skynet/MCP-shared-graph-memory/tools/scan_all.py) —
   structural map, multi-platform scanning and coverage pipeline.
 - [skynet/knowledge-map.md](skynet/knowledge-map.md) — knowledge index and

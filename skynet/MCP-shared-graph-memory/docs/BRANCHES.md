@@ -29,7 +29,7 @@
 - **`n`** — `git rev-list --count <merge-base>...feature`: монотонный
   счётчик коммитов от точки отделения. **Порядок/навигация, НЕ мера
   отличий**: масштаб различий даёт структурный diff содержимого
-  (`map_diff_branches`), а не счётчик коммитов. История может
+  (`cg_diff_branches`), а не счётчик коммитов. История может
   переписываться — slug+n устойчив к перезаписи (пока merge-base не
   меняется), поэтому hash НЕ входит в идентификатор.
 
@@ -53,19 +53,19 @@
 | --- | --- |
 | master становится stable | `branch_register("0.16","base")`; старый `0.15` → `status=archived` (слой остаётся, prefix переходит к 0.16) |
 | stable становится lts/0.14 | слой 0.14 архивируется; lts-данные живут в `0.13.*` слоях |
-| feature → merged | `map_diff_branches(base, feature)` → перенос новых символов в base → пересканировать base → feature `status=merged` |
+| feature → merged | `cg_diff_branches(base, feature)` → перенос новых символов в base → пересканировать base → feature `status=merged` |
 
 ## Механизм схемы
 
 - Таблица **`branches`** (DEFAULTS): `branch:{layer}` → JSON
   `{ver_slug, feature_slug, n_commits, revision, git_tag, base_branch, status, created_at, is_base}`.
 - `meta.branch_current` — активный слой; зеркало в canary.z.
-- **`map_generations()`/canary.y — поколение ТОЛЬКО базового слоя** (N13):
-  инкрементируется `map_load_batch(replace=True)` лишь когда слой базовый
-  (`pre==""`). У feature-слоя monotonic-поколения нет — `map_snapshot(layer=feat)`
+- **`cg_generations()`/canary.y — поколение ТОЛЬКО базового слоя** (N13):
+  инкрементируется `cg_load_batch(replace=True)` лишь когда слой базовый
+  (`pre==""`). У feature-слоя monotonic-поколения нет — `cg_snapshot(layer=feat)`
   возвращает `generation` базового canary, а не своего. Для контроля изменений
-  feature-слоя используйте `map_snapshot.content_hash` (считается по факту
-  содержимого слоя) и `map_diff_branches`, а не generation. Это by-design:
+  feature-слоя используйте `cg_snapshot.content_hash` (считается по факту
+  содержимого слоя) и `cg_diff_branches`, а не generation. Это by-design:
   generation задумано как «поколение основной карты», content_hash — как
   универсальный токен состояния любого слоя.
 - **Курируемый слой** (`records/links/vocab/adr/test_metrics/ci_jobs/bridge`) —
@@ -90,11 +90,11 @@
   `branch_remove` (реестр),
   `branch_purge` (слой С данными; базовый и АКТИВНЫЙ слой запрещены —
   сначала переключите ветку),
-  `map_diff_branches(from,to)`, `coverage_migrate(from,to,symbols?)`.
-- MCP (запись карты, C2): `map_put_symbol` (валидирует `cpp_status`),
-  `map_alias`, `map_refresh_stale`.
-- `layer=` принимают: `map_symbol(s)`, `map_edges_of`, `map_callers_of`,
-  `map_put_edge`, `map_put_symbol`, `coverage_insert/batch/remove/get/all`,
+  `cg_diff_branches(from,to)`, `coverage_migrate(from,to,symbols?)`.
+- MCP (запись карты, C2): `cg_put_symbol` (валидирует `cpp_status`),
+  `cg_alias`, `cg_refresh_stale`.
+- `layer=` принимают: `cg_symbol(s)`, `cg_edges_of`, `cg_callers_of`,
+  `cg_put_edge`, `cg_put_symbol`, `coverage_insert/batch/remove/get/all`,
   `coverage_symbols`, `coverage_summary`, `coverage_gaps`,
   `coverage_blocks_insert/batch/get`, `probe_*`, `trace_*` (project — пока
   нет, см. «НЕ слоистые»).
@@ -108,14 +108,14 @@
 ```sh
 # в worktree ветки: подготовить _build-scan, запустить сканер на ветку
 python3 tools/scan_symbols.py --config linux \
-    --out tools/artifacts/refactoring-map-${BRANCH}.json
-python3 tools/load_map.py --map .../refactoring-map-${BRANCH}.json \
+    --out tools/artifacts/codegraph-${BRANCH}.json
+python3 tools/load_map.py --map .../codegraph-${BRANCH}.json \
     --db <живая> --layer "0.15.${SLUG}.${N}"
 ```
 
 ### Слияние feature → base
 
-1. `map_diff_branches(base, feature)` — структурный diff содержимого:
+1. `cg_diff_branches(base, feature)` — структурный diff содержимого:
    какие символы добавлены/изменены/удалены, по модулям, число блоков.
 2. Пересканировать base (включить новые символы feature в base-слой).
 3. Перенести `coverage/blocks/traces` в base-слой:
@@ -130,7 +130,7 @@ python3 tools/load_map.py --map .../refactoring-map-${BRANCH}.json \
    (базовый слой purge запрещён: он обновляется replace-загрузкой;
    активный слой тоже — сначала `branch_activate` на другой). После purge
    links curated-записей на его символы становятся висячими — прогоните
-   `map_refresh_stale`.
+   `cg_refresh_stale`.
 
 ### Работа агента
 
@@ -152,5 +152,5 @@ python3 tools/load_map.py --map .../refactoring-map-${BRANCH}.json \
 
 - `0.16-master` → станет `0.16.base`: автоматическая миграция префикса.
 - Ассоциация curated-ссылок со слоем символа (поле `_layer` в теле связи).
-- `map_diff_branches` — дополнение аргументом «только функции / только
+- `cg_diff_branches` — дополнение аргументом «только функции / только
   изменённые сигнатуры» (фильтры).

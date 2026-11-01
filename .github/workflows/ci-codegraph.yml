@@ -1,8 +1,8 @@
-name: ci-mcp-refactor-map
+name: ci-codegraph
 
-# Structural map scanning (refactoring-map + project-map) on Linux and macOS,
+# Structural map scanning (codegraph + project-map) on Linux and macOS,
 # with the generator validator against the golden counts. Produces:
-#   - tools/artifacts/refactoring-map.json (linux, macos, merged on request)
+#   - tools/artifacts/codegraph.json (linux, macos, merged on request)
 #   - tools/artifacts/project-map.json      (whole repo: cmake/scripts/docs/ci)
 #   - tools/artifacts/probes.json           (SystemMap from src + probe-bus)
 # Linux and macOS runs are independent; the merge job combines their symbols
@@ -38,7 +38,25 @@ jobs:
       with:
         python-version: "3.11"
     - name: deps
-      run: python3 -m pip install --quiet cffi pytest pyyaml
+      run: python3 -m pip install --quiet cffi pytest pytest-cov pyyaml
+    - name: build mcp host lib (for module tests + coverage)
+      shell: bash
+      run: python3 skynet/MCP-shared-graph-memory/tools/build_libmdbx.py
+    - name: module tests with coverage (mcp + tools)
+      shell: bash
+      run: |
+        cd skynet/MCP-shared-graph-memory
+        python3 -m pytest tests/ \
+          --cov=mcp --cov=tools --cov-report=xml:coverage/codegraph-python.xml \
+          --cov-report=term-missing:skip-covered -q
+    - name: codecov upload (codegraph python)
+      uses: codecov/codecov-action@v5
+      with:
+        files: skynet/MCP-shared-graph-memory/coverage/codegraph-python.xml
+        flags: codegraph-scan-python
+        token: ${{ secrets.CODECOV_TOKEN }}
+        fail_ci_if_error: false
+        verbose: true
     - name: prepare build-scan
       shell: bash
       run: |
@@ -52,7 +70,7 @@ jobs:
       run: |
         cd skynet/MCP-shared-graph-memory
         python3 tools/scan_symbols.py --config linux \
-          --out tools/artifacts/refactoring-map-linux.json
+          --out tools/artifacts/codegraph-linux.json
         echo "scan exit: $?"
     - name: scan project-map
       shell: bash
@@ -71,16 +89,16 @@ jobs:
       shell: bash
       run: |
         cd skynet/MCP-shared-graph-memory
-        python3 tools/validate_map.py --map tools/artifacts/refactoring-map-linux.json \
+        python3 tools/validate_map.py --map tools/artifacts/codegraph-linux.json \
           --cc "$GITHUB_WORKSPACE/_build-scan/compile_commands.json" --tus fixture
-        python3 tools/validate_map.py --map tools/artifacts/refactoring-map-linux.json \
+        python3 tools/validate_map.py --map tools/artifacts/codegraph-linux.json \
           --cc "$GITHUB_WORKSPACE/_build-scan/compile_commands.json" --tus full
     - name: upload linux artifact
       uses: actions/upload-artifact@v4
       with:
-        name: refactor-map-linux
+        name: codegraph-linux
         path: |
-          skynet/MCP-shared-graph-memory/tools/artifacts/refactoring-map-linux.json
+          skynet/MCP-shared-graph-memory/tools/artifacts/codegraph-linux.json
           skynet/MCP-shared-graph-memory/tools/artifacts/project-map.json
           skynet/MCP-shared-graph-memory/tools/artifacts/probes.json
 
@@ -110,14 +128,14 @@ jobs:
       run: |
         cd skynet/MCP-shared-graph-memory
         python3 tools/scan_symbols.py --config macos \
-          --out tools/artifacts/refactoring-map-macos.json
+          --out tools/artifacts/codegraph-macos.json
     - name: fail if macos scan is empty
       shell: bash
       run: |
         cd skynet/MCP-shared-graph-memory
         python3 - <<'PY'
         import json
-        with open("tools/artifacts/refactoring-map-macos.json") as f:
+        with open("tools/artifacts/codegraph-macos.json") as f:
             a = json.load(f)
         n = a["counts"]["functions"]
         print("macos functions:", n)
@@ -126,8 +144,8 @@ jobs:
     - name: upload macos artifact
       uses: actions/upload-artifact@v4
       with:
-        name: refactor-map-macos
-        path: skynet/MCP-shared-graph-memory/tools/artifacts/refactoring-map-macos.json
+        name: codegraph-macos
+        path: skynet/MCP-shared-graph-memory/tools/artifacts/codegraph-macos.json
 
   scan-win32:
     runs-on: ubuntu-24.04
@@ -158,7 +176,7 @@ jobs:
         cd skynet/MCP-shared-graph-memory
         python3 tools/scan_symbols.py --config win32 \
           --target x86_64-w64-windows-gnu \
-          --out tools/artifacts/refactoring-map-win32.json
+          --out tools/artifacts/codegraph-win32.json
         echo "scan exit: $?"
     - name: fail if win32 scan is empty
       shell: bash
@@ -166,7 +184,7 @@ jobs:
         cd skynet/MCP-shared-graph-memory
         python3 - <<'PY'
         import json
-        with open("tools/artifacts/refactoring-map-win32.json") as f:
+        with open("tools/artifacts/codegraph-win32.json") as f:
             a = json.load(f)
         n = a["counts"]["functions"]
         print("win32 functions:", n)
@@ -175,8 +193,8 @@ jobs:
     - name: upload win32 artifact
       uses: actions/upload-artifact@v4
       with:
-        name: refactor-map-win32
-        path: skynet/MCP-shared-graph-memory/tools/artifacts/refactoring-map-win32.json
+        name: codegraph-win32
+        path: skynet/MCP-shared-graph-memory/tools/artifacts/codegraph-win32.json
 
   sysdeps-linux:
     runs-on: ubuntu-24.04
@@ -400,14 +418,14 @@ jobs:
         cd skynet/MCP-shared-graph-memory
         mkdir -p tools/artifacts
         for c in linux macos win32; do
-          mv "$GITHUB_WORKSPACE/artifacts/refactoring-map-$c.json" \
-             "tools/artifacts/refactoring-map-$c.json"
+          mv "$GITHUB_WORKSPACE/artifacts/codegraph-$c.json" \
+             "tools/artifacts/codegraph-$c.json"
         done
         python3 - <<'PY'
         import json, sys
-        # fail-loudly: каждый конфиг обязан внести символы (см. REFACTORING-MAP.md)
+        # fail-loudly: каждый конфиг обязан внести символы (см. CODEGRAPH.md)
         for c in ("linux", "macos", "win32"):
-            with open("tools/artifacts/refactoring-map-%s.json" % c) as f:
+            with open("tools/artifacts/codegraph-%s.json" % c) as f:
                 a = json.load(f)
             n = a["counts"]["functions"]
             print("config %-6s functions=%d" % (c, n))
@@ -416,17 +434,17 @@ jobs:
                 sys.exit(2)
         PY
         python3 tools/scan_symbols.py --merge \
-          tools/artifacts/refactoring-map-linux.json \
-          tools/artifacts/refactoring-map-macos.json \
-          tools/artifacts/refactoring-map-win32.json \
-          --out tools/artifacts/refactoring-map.json
+          tools/artifacts/codegraph-linux.json \
+          tools/artifacts/codegraph-macos.json \
+          tools/artifacts/codegraph-win32.json \
+          --out tools/artifacts/codegraph.json
         python3 tools/scan_uncovered.py \
-          --map tools/artifacts/refactoring-map.json
+          --map tools/artifacts/codegraph.json
     - name: validate merged (fixture)
       shell: bash
       run: |
         cd skynet/MCP-shared-graph-memory
-        python3 tools/validate_map.py --map tools/artifacts/refactoring-map.json \
+        python3 tools/validate_map.py --map tools/artifacts/codegraph.json \
           --tus fixture
     - name: validate merged artifact (content)
       shell: bash
@@ -434,7 +452,7 @@ jobs:
         cd skynet/MCP-shared-graph-memory
         python3 - <<'PY'
         import json
-        p = "tools/artifacts/refactoring-map.json"
+        p = "tools/artifacts/codegraph.json"
         with open(p) as f:
             a = json.load(f)
         syms = a.get("symbols", {})
@@ -452,5 +470,5 @@ jobs:
     - name: upload merged map
       uses: actions/upload-artifact@v4
       with:
-        name: refactor-map-merged
-        path: skynet/MCP-shared-graph-memory/tools/artifacts/refactoring-map.json
+        name: codegraph-merged
+        path: skynet/MCP-shared-graph-memory/tools/artifacts/codegraph.json

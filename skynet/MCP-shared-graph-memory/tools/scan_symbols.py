@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""scan_symbols.py — карта исходников из clang AST (refactoring-map).
+"""scan_symbols.py — карта исходников из clang AST (codegraph).
 
 Использует `clang -Xclang -ast-dump=json -fsyntax-only` по записям
 compile_commands.json (генерируется configure-only build-диром `_build-scan/`).
@@ -9,7 +9,7 @@ compile_commands.json (генерируется configure-only build-диром 
     со структурным id `symbol#B<N>` и диапазонами строк;
   - call_edges(kind=syntax): вызываемые функции (резолв через DeclRefExpr).
 
-Выход: tools/artifacts/refactoring-map.json (вне git, перегенерируемый).
+Выход: tools/artifacts/codegraph.json (вне git, перегенерируемый).
 """
 
 import argparse
@@ -519,7 +519,7 @@ def resolve_edges(col: Collector, symbols=None) -> list:
 def canonicalize_symbols(symbols: dict) -> tuple:
     """Канонизация ключей функций: fn:{module}:{name} → fn:{qname}[#sig][@mod].
 
-    Модель идентичности (см. docs/REFACTORING-MAP.md):
+    Модель идентичности (см. docs/CODEGRAPH.md):
       - база: qname (квалифицированное имя; для C++ — из демангла mangledName);
       - перегрузки C++ (одинаковый qname, разные сигнатуры): суффикс #<sig-hash>;
       - TU-static (одинаковый qname+сигнатура в разных файлах): суффикс @<module>;
@@ -970,7 +970,7 @@ def _make_impl(sym: dict, cfg_name: str) -> dict:
 def merge_configs(scans: list) -> tuple:
     """Сливает per-config сканы в один словарь символов.
 
-    Правила (см. docs/REFACTORING-MAP.md, решение владельца + Алисы):
+    Правила (см. docs/CODEGRAPH.md, решение владельца + Алисы):
       - символ, увиденный в одном конфиге, остаётся плоским;
       - символ с телами в нескольких конфигах: общие поля наверху
         (kind/name/signature/cpp_status) + `implementations` — список
@@ -1029,7 +1029,7 @@ def merge_configs(scans: list) -> tuple:
             # semantic-рёбра: тела одного символа в разных конфигах
             # функционально эквивалентны (реализуют одну функциональность).
             # Оба конца — КАНОНИЧЕСКИЙ ключ (key@config endpoints не являются
-            # адресуемыми карточками): map_edges_of(key) вернёт ребро с
+            # адресуемыми карточками): cg_edges_of(key) вернёт ребро с
             # kind=semantic и перечнем configs — «эквивалентные конфиги».
             if len(impls) > 1:
                 # configs: distinct-тела (impls/configs) + конфиги с идентичным
@@ -1055,7 +1055,7 @@ def merge_configs(scans: list) -> tuple:
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--cc", default=os.path.join(REPO_ROOT, "_build-scan", "compile_commands.json"))
-    ap.add_argument("--out", default=os.path.join(TOOLS_DIR, "artifacts", "refactoring-map.json"))
+    ap.add_argument("--out", default=os.path.join(TOOLS_DIR, "artifacts", "codegraph.json"))
     ap.add_argument("--clang", default="clang")
     ap.add_argument("--config", default="linux", help="имя конфигурации")
     ap.add_argument("--target", default=None, help="clang --target (кросс-конфиг)")
@@ -1123,7 +1123,7 @@ def main():
                          no_detailed_preprocessing=True)
         # библиотечные символы для резолва тест→lib (coverage seed)
         lib_artifact = None
-        lib_path = os.path.join(TOOLS_DIR, "artifacts", "refactoring-map.json")
+        lib_path = os.path.join(TOOLS_DIR, "artifacts", "codegraph.json")
         if os.path.exists(lib_path):
             with open(lib_path) as f:
                 lib_artifact = json.load(f)

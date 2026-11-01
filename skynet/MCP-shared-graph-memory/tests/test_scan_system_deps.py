@@ -211,3 +211,50 @@ def test_mcp_sys_tools(tmp_path):
     r = call("sys_uses_of", {"file": "src/x.c"})
     assert r["uses"]["sys_refs"]["fake_common_probe"] == ["hdr:fake_common.h"]
     st.close()
+
+
+def test_mcp_sys_deps_load(tmp_path):
+    """MCP-инструмент sys_deps_load: батчевая загрузка через McpServer.handle."""
+    from mcp import Store
+    from mcp.mcp_server import McpServer
+    st = Store(os.path.join(str(tmp_path), "m.mdbx"))
+    srv = McpServer(st)
+
+    def call(method, params):
+        r = srv.handle({"jsonrpc": "2.0", "id": 1, "method": "tools/call",
+                        "params": {"name": method, "arguments": params}})
+        assert "result" in r, r
+        return r["result"].get("structuredContent") or json.loads(
+            r["result"]["content"][0]["text"])
+
+    headers = {"hdr:fake_common.h": {"name": "fake_common.h", "path": HDR_B,
+                                     "provides": {"fn": ["fake_common_probe"],
+                                                  "macro": ["FAKE_COMMON_VERSION"]},
+                                     "in_configs": ["linux", "win32"]}}
+    uses = {"src/x.c": {"sys_refs": {"fake_common_probe": ["hdr:fake_common.h"]},
+                        "unresolved": []}}
+    r = call("sys_deps_load", {"headers": headers, "uses": uses, "replace": True})
+    assert r["headers"] == 1 and r["files"] == 1
+
+    # данные читаются через соседние инструменты
+    assert call("sys_refs_of", {"symbol": "fake_common_probe"})["headers"] == \
+        ["hdr:fake_common.h"]
+    assert call("sys_headers_required_for", {"file": "src/x.c"})["headers"] == \
+        ["hdr:fake_common.h"]
+
+    # replace=False — аддитивное дополнение (без очистки)
+    headers2 = {"hdr:fake_linux_only.h": {"name": "fake_linux_only.h",
+                                          "path": HDR_A,
+                                          "provides": {"fn": ["fake_setmntent"]},
+                                          "in_configs": ["linux"]}}
+    r = call("sys_deps_load", {"headers": headers2, "uses": {}, "replace": False})
+    assert r["headers"] == 1
+    assert len(call("sys_refs_of", {"symbol": "fake_common_probe"})["headers"]) == 1
+    assert call("sys_refs_of", {"symbol": "fake_setmntent"})["headers"] == \
+        ["hdr:fake_linux_only.h"]
+
+    # replace=True — очистка sys-таблиц перед записью
+    r = call("sys_deps_load", {"headers": headers2, "uses": {}, "replace": True})
+    assert r["headers"] == 1
+    assert call("sys_refs_of", {"symbol": "fake_common_probe"})["headers"] == []
+    st.close()

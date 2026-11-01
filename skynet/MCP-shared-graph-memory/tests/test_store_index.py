@@ -103,7 +103,7 @@ def test_search_structural_hits(store):
     """search('fn:...') находит символы карты исходников, если они загружены."""
     setup(store)
     # загрузим один символ в структурный слой вручную
-    store.map_put_symbol("fn:crypto:my_handshake", {"kind": "function",
+    store.cg_put_symbol("fn:crypto:my_handshake", {"kind": "function",
                                                     "module": "crypto"})
     rows = store.search("fn:crypto:my_handshake", limit=5)
     symbols = [r for r in rows if r.get("kind") == "symbol"]

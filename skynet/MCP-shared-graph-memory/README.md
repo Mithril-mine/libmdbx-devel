@@ -29,7 +29,7 @@
 | `tools/scan_project.py` | Карта всего репозитория (cmake/scripts/docs/ci/config) → project-map.json |
 | `tools/scan_probes.py` | Реестр зондов: MPROBE_*/DEV_ASSERT из src/ + USDT из probe-bus.md |
 | `tools/scan_symbols.py --merge` | + semantic-рёбра из implementations (эквивалентность по конфигам) |
-| `tools/scan_system_deps.py` | Системный include-граф: PROVIDES (заголовок→символы), USES_SYS (файл→символы), multi-config категории. Ограничение: описывает доступность в конфигурации toolchain, «нет в ответе» ≠ «нет на платформе» (см. docs/REFACTORING-MAP.md) |
+| `tools/scan_system_deps.py` | Системный include-граф: PROVIDES (заголовок→символы), USES_SYS (файл→символы), multi-config категории. Ограничение: описывает доступность в конфигурации toolchain, «нет в ответе» ≠ «нет на платформе» (см. docs/CODEGRAPH.md) |
 | `tools/gcov_to_coverage.py` | Реальное покрытие из gcov (.gcda) → coverage + блочная детализация |
 
 ## Требования
@@ -63,13 +63,13 @@ ctest --test-dir build -L mcp-shared-graph-memory --output-on-failure
 - Альтернатива без CMake: `python3 tools/build_libmdbx.py && python3 -m pytest tests/`.
 
 Карта исходников и project-map собираются в CI: workflow
-`.github/workflows/ci-mcp-refactor-map.yml` (Linux + macOS + win32-cross)
+`.github/workflows/ci-codegraph.yml` (Linux + macOS + win32-cross)
 готовит `_build-scan`, запускает `scan_symbols.py` (linux/macos/win32 +
 merge), `scan_project.py`, `scan_probes.py` и валидатор против
 golden-счётчиков. Локально тот же конвейер воспроизводится одной командой:
 `python3 tools/scan_all.py --configs linux,win32 [--db <живая>]`
 (подробности, включая root-cause заметки про AppleClang и fuse против
-POSIX-кодов, — в `docs/REFACTORING-MAP.md`, секция «Многоплатформенное
+POSIX-кодов, — в `docs/CODEGRAPH.md`, секция «Многоплатформенное
 сканирование»).
 
 ## Запуск
@@ -124,9 +124,9 @@ writer-контеншена per-process), `db_stat(table?)`, `db_readers`, `db_f
 `db_set_mode`, `db_enable_utterly_nosync`, `db_backup` (pin), `db_export`,
 `db_backup_status`, `db_backup_cleanup`, `db_fileinfo`, `db_latency`,
 `db_recover`.
-Карта исходников (refactoring-map): `map_symbol(s)`, `map_edges_of`,
-`map_callers_of`, `map_group_members`, `map_regions`/`map_region`,
-`map_uncovered` (данные — `tools/load_map.py --db <живая> --replace`).
+Карта исходников (codegraph): `cg_symbol(s)`, `cg_edges_of`,
+`cg_callers_of`, `cg_group_members`, `cg_regions`/`cg_region`,
+`cg_uncovered` (данные — `tools/load_map.py --db <живая> --replace`).
 Слой тестов/CI: `test_metrics_insert/get/all` (окно длительностей),
 `coverage_insert/get/all` (тест → символы), `ci_jobs_insert/all`
 (коллектор — `tools/collect_test_metrics.py` из ctest XML).

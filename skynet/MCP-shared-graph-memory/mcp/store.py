@@ -109,8 +109,8 @@ PROBE_KINDS = ("usdt", "bookmark", "injected", "dev_assert", "collect", "watch")
 PROBE_STATUSES = ("candidate", "inserted", "validated")
 # Статусы портирования C→C++ (поле cpp_status тела символа карты):
 # none — не начат; mapped — есть C++-каркас/декларация; partial — частично
-# переписан; done — эквивалент подтверждён (cpp_eq). map_port_status и
-# map_put_symbol оперируют этим набором (N6: валидация на входе).
+# переписан; done — эквивалент подтверждён (cpp_eq). cg_port_status и
+# cg_put_symbol оперируют этим набором (N6: валидация на входе).
 CPP_STATUSES = ("none", "mapped", "partial", "done")
 # Версия модуля (дублирует mcp.__version__; здесь — без import-циклов).
 MODULE_VERSION = "0.2.0"
@@ -251,7 +251,7 @@ class Store:
          # --- слои веток (нелинейное версионирование БЗ) ---
         "branches": mdbx.DB_DEFAULTS,    # branch:{layer} -> JSON атрибутов слоя
         # --- системный include-граф (scan_system_deps.py) ---
-        # ВАЖНО (ограничение модели, см. docs/REFACTORING-MAP.md): описывается
+        # ВАЖНО (ограничение модели, см. docs/CODEGRAPH.md): описывается
         # доступность в КОНКРЕТНОЙ КОНФИГУРАЦИИ toolchain (linux-gcc,
         # win32-mingw, win32-clang-cl — наборы символов различаются даже на
         # одной ОС). Отсутствие записи НЕ означает отсутствия символа на
@@ -2367,15 +2367,15 @@ class Store:
         for fwd_key, sid in incoming:
             txn.delete(links_dbi, fwd_key, idb)
 
-    # --- refactoring-map (структурный слой) ---------------------------------
+    # --- codegraph (структурный слой) ---------------------------------
     def _map_symbol_locked(self, txn, pre: str, key: str) -> dict:
-        """map_symbol внутри УЖЕ открытой read-txn (без своей txn)."""
+        """cg_symbol внутри УЖЕ открытой read-txn (без своей txn)."""
         rc, val = txn.get(self.dbi(txn, "symbols"), (pre + key).encode())
         if val is None:
             return {}
         return json.loads(val.decode())
 
-    def map_symbol(self, key: str, layer: str = "") -> dict:
+    def cg_symbol(self, key: str, layer: str = "") -> dict:
         """Читает символ из structural-слоя (symbols).
 
         `layer` — слой ветки; базовый слой (""/ver) без префикса.
@@ -2396,7 +2396,7 @@ class Store:
         replace — числовые ссылки (links) остаются стабильными между
         регенерациями. При `branch_purge` пары id↔key слоя УДАЛЯЮТСЯ
         (иначе сироты); links curated-записей на символы purged-слоя
-        становятся висячими до `map_refresh_stale`.
+        становятся висячими до `cg_refresh_stale`.
         """
         with self._begin_write() as txn:
             sid_dbi = self.dbi(txn, "sym_ids")
@@ -2414,7 +2414,7 @@ class Store:
             rc, val = txn.get(self.dbi(txn, "sym_id2key"), _pack_u64(sid))
         return val.decode() if val else ""
 
-    def map_alias(self, old_key: str, new_key: str) -> dict:
+    def cg_alias(self, old_key: str, new_key: str) -> dict:
         """Фиксирует переименование символа карты (жизненный цикл).
 
         Старый ключ помечается алиасом нового. При `refresh_stale` связь
@@ -2434,16 +2434,16 @@ class Store:
             txn.put(al_dbi, old_key.encode(), new_key.encode())
         return {"result": "aliased"}
 
-    def map_alias_target(self, old_key: str) -> str:
+    def cg_alias_target(self, old_key: str) -> str:
         """Цель алиаса (с учётом цепочек) или пустая строка."""
         with self.env.begin(readonly=True) as txn:
             return self._alias_target_locked(txn,
                                              self.dbi(txn, "sym_aliases"),
                                              old_key.strip())
 
-    def _map_symbols_locked(self, txn, pre: str, prefix: str = "",
+    def _cg_symbols_locked(self, txn, pre: str, prefix: str = "",
                             limit: int = None) -> list:
-        """map_symbols внутри УЖЕ открытой read-txn (без своей txn)."""
+        """cg_symbols внутри УЖЕ открытой read-txn (без своей txn)."""
         sym_dbi = self.dbi(txn, "symbols")
         mod_pat = None
         if prefix.startswith("fn:") and ":" not in prefix[3:].lstrip(":"):
@@ -2486,7 +2486,7 @@ class Store:
                 rc, k, v = cur.get(mdbx.CURSOR_NEXT)
         return out
 
-    def map_symbols(self, prefix: str = "", limit: int = None,
+    def cg_symbols(self, prefix: str = "", limit: int = None,
                     layer: str = "") -> list:
         """Все ключи symbols по префиксу (детерминированная сортировка).
 
@@ -2501,25 +2501,25 @@ class Store:
         layer = self._effective_layer(layer)
         pre = self.layer_prefix(layer)
         with self.env.begin(readonly=True) as txn:
-            return self._map_symbols_locked(txn, pre, prefix, limit)
+            return self._cg_symbols_locked(txn, pre, prefix, limit)
 
-    def map_put_symbol(self, key: str, body: dict, layer: str = "") -> None:
+    def cg_put_symbol(self, key: str, body: dict, layer: str = "") -> None:
         """Аддитивная запись символа (перегенерируемый слой).
 
         Присваивает стабильный числовой id при первом появлении.
         Пустой layer — активная ветка.
         `cpp_status` в body валидируется против CPP_STATUSES (N6): статус
-        портирования C→C++ читает map_port_status — мусорное значение
+        портирования C→C++ читает cg_port_status — мусорное значение
         молча ушло бы в "none", поэтому лучше отклонить на входе.
         """
         key = (key or "").strip()
         if not key:
-            raise invalid("map_put_symbol: пустой ключ символа",
+            raise invalid("cg_put_symbol: пустой ключ символа",
                           "укажите fq-ключ fn:/type:/macro:")
         st = (body or {}).get("cpp_status")
         if st is not None and st not in CPP_STATUSES:
             raise invalid(
-                "map_put_symbol: cpp_status %r не из допустимого набора" % st,
+                "cg_put_symbol: cpp_status %r не из допустимого набора" % st,
                 "допустимые: %s" % ", ".join(CPP_STATUSES))
         layer = self._effective_layer(layer)
         pre = self.layer_prefix(layer)
@@ -2529,12 +2529,12 @@ class Store:
                     json.dumps(body, ensure_ascii=False).encode())
             self._sym_id_locked(txn, skey)
 
-    def map_edges_of(self, caller: str, layer: str = "") -> list:
+    def cg_edges_of(self, caller: str, layer: str = "") -> list:
         """callee-дубликаты из call_edges для caller (DUPSORT).
 
         `layer` — слой ветки: feature-слой адресуется через `layer/`-префикс;
         базовый слой (""/ver) — без префикса. Пустой — активная ветка.
-        Возвращает layer-local ключи (префикс слоя снят), как map_symbols.
+        Возвращает layer-local ключи (префикс слоя снят), как cg_symbols.
         """
         layer = self._effective_layer(layer)
         pre = self.layer_prefix(layer)
@@ -2557,7 +2557,7 @@ class Store:
                     rc, _, val = cur.get(mdbx.CURSOR_NEXT_DUP)
         return out
 
-    def map_callers_of(self, callee: str, layer: str = "") -> list:
+    def cg_callers_of(self, callee: str, layer: str = "") -> list:
         """Обратные рёбра: кто вызывает callee (DUPSORT call_edges_rev).
 
         Возвращает layer-local ключи (префикс слоя снят).
@@ -2578,7 +2578,7 @@ class Store:
                     rc, _, val = cur.get(mdbx.CURSOR_NEXT_DUP)
         return out
 
-    def map_put_edge(self, caller: str, callee: str, kind: str = "syntax",
+    def cg_put_edge(self, caller: str, callee: str, kind: str = "syntax",
                      layer: str = "", configs: list = None) -> None:
         layer = self._effective_layer(layer)
         pre = self.layer_prefix(layer)
@@ -2596,7 +2596,7 @@ class Store:
                 cur.put_nodupe((pre + callee).encode(),
                                (pre + caller).encode())
 
-    def map_groups_of(self, group_key: str, layer: str = "") -> list:
+    def cg_groups_of(self, group_key: str, layer: str = "") -> list:
         """Члены группы (DUPSORT-набор), layer-local ключи."""
         layer = self._effective_layer(layer)
         pre = self.layer_prefix(layer)
@@ -2614,7 +2614,7 @@ class Store:
                     rc, _, val = cur.get(mdbx.CURSOR_NEXT_DUP)
         return out
 
-    def map_group_members(self, prefix: str = "", layer: str = "") -> list:
+    def cg_group_members(self, prefix: str = "", layer: str = "") -> list:
         """Все группы с их членами по префиксу ключа группы (layer-local)."""
         layer = self._effective_layer(layer)
         pre = self.layer_prefix(layer)
@@ -2638,7 +2638,7 @@ class Store:
                     rc, k, val = cur.get(mdbx.CURSOR_NEXT)
         return out
 
-    def map_put_group(self, group_key: str, member: str, layer: str = "") -> None:
+    def cg_put_group(self, group_key: str, member: str, layer: str = "") -> None:
         layer = self._effective_layer(layer)
         pre = self.layer_prefix(layer)
         with self._begin_write() as txn:
@@ -2647,7 +2647,7 @@ class Store:
                 cur.put_nodupe((pre + group_key).encode(),
                                (pre + member).encode())
 
-    def map_load_batch(self, symbols: dict, edges: list, groups: dict,
+    def cg_load_batch(self, symbols: dict, edges: list, groups: dict,
                        chunk: int = 4096, replace: bool = False,
                        layer: str = "") -> dict:
         """Батчевая загрузка структурного слоя.
@@ -2674,7 +2674,7 @@ class Store:
         инкрементируется только в финальной txn). Поэтому `generation` — НЕ
         токен «всё-или-ничего» для содержимого во время загрузки: потребители
         кэша, ключующиеся только на generation, промежуточное состояние не
-        заметят; `map_snapshot.content_hash` меняется и корректен. Обрыв
+        заметят; `cg_snapshot.content_hash` меняется и корректен. Обрыв
         между чанками оставляет слой очищенным-но-недогруженным до перезапуска
         (идемпотентный перезапуск покрывает это). Монолитная загрузка
         (chunk >= числа элементов) сохраняет прежнюю атомарность контент+gen.
@@ -2769,21 +2769,21 @@ class Store:
         return {"symbols": put_sym, "edges": put_edge, "groups": put_grp}
 
     # --- canary (поколение карты / метки схемы) -------------------------
-    def map_canary_get(self) -> dict:
+    def cg_canary_get(self) -> dict:
         """Читает MDBX_canary env: x=magic схемы, y=поколение карты,
         z=резерв, v=номер транзакции последнего изменения."""
         with self.env.begin(readonly=True) as txn:
             return txn.canary_get()
 
-    def map_canary_put(self, x: int = 0, y: int = 0, z: int = 0) -> None:
+    def cg_canary_put(self, x: int = 0, y: int = 0, z: int = 0) -> None:
         with self._begin_write() as txn:
             txn.canary_put(x=x, y=y, z=z)
 
-    def map_refresh_stale(self) -> dict:
+    def cg_refresh_stale(self) -> dict:
         """Чистит висячие ссылки моста: объекты-символы в links, чьих ключей
         больше нет в symbols (после регенерации карты).
 
-        Ссылка на исчезнувший символ с алиасом (`map_alias`) перенаправляется
+        Ссылка на исчезнувший символ с алиасом (`cg_alias`) перенаправляется
         на цель алиаса; без алиаса — удаляется. Возвращает счётчики.
         """
         removed, redirected = 0, 0
@@ -2841,11 +2841,11 @@ class Store:
         return {"removed_links": removed, "redirected_links": redirected}
 
     # --- жизненный цикл: stale-пометка + поколения карты ----------------------
-    def map_mark_stale(self, live_keys: list, layer: str = "") -> dict:
+    def cg_mark_stale(self, live_keys: list, layer: str = "") -> dict:
         """Помечает символы, отсутствующие в live_keys, как stale.
 
         Работает ТОЛЬКО по активному/явному слою: не задевает чужие ветки.
-        В отличие от `map_refresh_stale` (удаляющего висячие ссылки), этот
+        В отличие от `cg_refresh_stale` (удаляющего висячие ссылки), этот
         метод НЕ удаляет записи symbols: проставляет `status: "stale"` в теле
         символа (идемпотентно). Живые символы получают `status: "alive"`.
         Удаление остаётся опцией (purge/refresh с удалением).
@@ -2878,8 +2878,8 @@ class Store:
                     rc, k, v = cur.get(mdbx.CURSOR_NEXT)
         return {"marked_stale": marked, "marked_alive": unmarked}
 
-    def map_generations(self) -> dict:
-        """Текущее поколение карты: canary.y (инкрементируется map_load_batch
+    def cg_generations(self) -> dict:
+        """Текущее поколение карты: canary.y (инкрементируется cg_load_batch
         при replace) + счётчики символов/рёбер."""
         with self.env.begin(readonly=True) as txn:
             syms = self.dbi(txn, "symbols")
@@ -2892,7 +2892,7 @@ class Store:
             canary = txn.canary_get()  # в той же txn (без вложенной)
             return {"generation": canary.get("y", 0), "symbols": n_syms}
 
-    def map_diff(self, other=None) -> dict:
+    def cg_diff(self, other=None) -> dict:
         """Разница текущего снимка карты с `other` (генерацией или списком).
 
         Если `other` — dict вида {"generation": G, "symbols": [keys],
@@ -2900,7 +2900,7 @@ class Store:
         добавленные/удалённые/общие символы. `content_hash` используется как
         быстрый путь: совпадение хэша означает идентичное содержимое.
         """
-        snap = self.map_snapshot()
+        snap = self.cg_snapshot()
         if isinstance(other, dict) and other.get("content_hash") \
                 and other["content_hash"] == snap["content_hash"]:
             return {"added": [], "removed": [], "common": snap["symbols"],
@@ -2921,7 +2921,7 @@ class Store:
         return {"added": added, "removed": removed, "common": common,
                 "added_count": len(added), "removed_count": len(removed)}
 
-    def map_port_status(self, module: str = "", layer: str = "") -> dict:
+    def cg_port_status(self, module: str = "", layer: str = "") -> dict:
         """Приборная панель миграции C→C++ по слою.
 
         Классифицирует функции по курируемому полю `cpp_status`
@@ -2936,7 +2936,7 @@ class Store:
         with self.env.begin(readonly=True) as txn:
             layer = self._effective_layer_locked(txn, layer)
             pre = self.layer_prefix(layer)
-            for key in self._map_symbols_locked(txn, pre, "fn:"):
+            for key in self._cg_symbols_locked(txn, pre, "fn:"):
                 body = self._map_symbol_locked(txn, pre, key)
                 mod_list = [i.get("module")
                             for i in body.get("implementations") or []
@@ -2970,7 +2970,7 @@ class Store:
         return {"layer": layer, "module": module, "modules": mods,
                 "total": total, "top_not_ported": not_ported[:20]}
 
-    def map_snapshot(self, layer: str = "") -> dict:
+    def cg_snapshot(self, layer: str = "") -> dict:
         """Атомарный снимок карты: поколение + ключи + content_hash.
 
         Всё читается в ОДНОЙ read-txn (canary и symbols), поэтому снимок
@@ -2979,7 +2979,7 @@ class Store:
 
         content_hash — sha1 отсортированных структурных атрибутов символов
         (key, l0, l1, signature, число блоков/implementations): позволяет
-        map_diff сравнивать снимки одним сравнением строк.
+        cg_diff сравнивать снимки одним сравнением строк.
         """
         keys = []
         parts = []
@@ -3015,7 +3015,7 @@ class Store:
         return {"generation": generation, "layer": layer,
                 "symbols": keys, "content_hash": content_hash}
 
-    def map_diff_branches(self, from_layer: str, to_layer: str,
+    def cg_diff_branches(self, from_layer: str, to_layer: str,
                           limit: int = 200) -> dict:
         """Структурный diff двух слоёв веток ПО СОДЕРЖИМОМУ карты.
 
@@ -3144,8 +3144,8 @@ class Store:
             "total_from": len(a_hash), "total_to": len(b_hash),
         }
 
-    # --- regions / uncovered (refactoring-map: #if-дерево и острова смысла) ---
-    def map_regions(self, prefix: str = "", limit: int = None) -> list:
+    # --- regions / uncovered (codegraph: #if-дерево и острова смысла) ---
+    def cg_regions(self, prefix: str = "", limit: int = None) -> list:
         """Сканирование таблицы regions (region:{module}:{n})."""
         out = []
         with self.env.begin(readonly=True) as txn:
@@ -3162,7 +3162,7 @@ class Store:
                     rc, k, v = cur.get(mdbx.CURSOR_NEXT)
         return out
 
-    def map_region(self, key: str) -> dict:
+    def cg_region(self, key: str) -> dict:
         """Один регион #if-дерева."""
         with self.env.begin(readonly=True) as txn:
             rc, v = txn.get(self.dbi(txn, "regions"), key.encode())
@@ -3170,7 +3170,7 @@ class Store:
                 return {}
             return json.loads(v)
 
-    def map_uncovered(self, prefix: str = "", limit: int = None) -> list:
+    def cg_uncovered(self, prefix: str = "", limit: int = None) -> list:
         """Сканирование uncovered-островов (uncovered:{module}:{n})."""
         out = []
         with self.env.begin(readonly=True) as txn:
@@ -4006,9 +4006,9 @@ class Store:
         return {"cbm": True, "tool": tool, "query": query,
                 "result": envelope}
 
-    def map_load_regions(self, regions: list, uncovered: list,
+    def cg_load_regions(self, regions: list, uncovered: list,
                          replace: bool = False) -> dict:
-        """Пакетная загрузка regions + uncovered (из артефакта refactoring-map).
+        """Пакетная загрузка regions + uncovered (из артефакта codegraph).
 
         Ключи: region:{module}:{n} (id из артефакта) / uncovered:{module}:{n}.
         При replace=True таблицы очищаются перед загрузкой.
@@ -4593,7 +4593,7 @@ class Store:
                         for s in body.get("symbols", []) or []:
                             covd_syms.add(s)
                     rc, k, v = cur.get(mdbx.CURSOR_NEXT)
-            all_syms = self._map_symbols_locked(txn, pre, "fn:")
+            all_syms = self._cg_symbols_locked(txn, pre, "fn:")
             mod_pat = module
             for sym in all_syms:
                 body = self._map_symbol_locked(txn, pre, sym)
@@ -4721,7 +4721,7 @@ class Store:
                                 agg[1].add(bid)
                         rc, k, v = cur.get(mdbx.CURSOR_NEXT)
             # символы слоя → по модулям (в той же txn)
-            for sym in self._map_symbols_locked(txn, pre, ""):
+            for sym in self._cg_symbols_locked(txn, pre, ""):
                 body = self._map_symbol_locked(txn, pre, sym)
                 mod_list = [i.get("module")
                             for i in body.get("implementations") or []
@@ -4873,7 +4873,7 @@ class Store:
             lib_ver = "?"
         st = self.stats()
         try:
-            gen = self.map_generations()
+            gen = self.cg_generations()
             data_gen = gen["generation"]
             data_symbols = gen["symbols"]
         except Exception:  # noqa: BLE001
@@ -4906,7 +4906,7 @@ class Store:
             "schema_outdated": schema_outdated,
             "branch": self.branch_current(),
             "data": {
-                "map_generation": data_gen,
+                "cg_generation": data_gen,
                 "records": st.get("records"),
                 "symbols": data_symbols,
                 "next_id": st.get("next_id"),
@@ -4952,7 +4952,7 @@ class Store:
     def _effective_layer_locked(self, txn, layer: str = "") -> str:
         """_effective_layer, читающий branch_current ВНУТРИ переданной txn.
 
-        Используется там, где снимок должен быть атомарным (map_snapshot):
+        Используется там, где снимок должен быть атомарным (cg_snapshot):
         иначе разрешение слоя открыло бы вторую read-txn (C-1).
         Env-уровень применяется до meta — в той же иерархии (N1).
         """
@@ -5101,7 +5101,7 @@ class Store:
         sym_ids/sym_id2key + строку реестра branches.
 
         Базовый слой (pre=="") purge ЗАПРЕЩЁН: он — корень карты/покрытия;
-        его обновление = replace-загрузка (map_load_batch/coverage_batch),
+        его обновление = replace-загрузка (cg_load_batch/coverage_batch),
         не удаление. АКТИВНЫЙ слой (branch_current) purge тоже ЗАПРЕЩЁН:
         иначе meta.branch_current укажет на мёртвый слой и все чтения с
         layer="" будут молча пусты — сначала переключите ветку.

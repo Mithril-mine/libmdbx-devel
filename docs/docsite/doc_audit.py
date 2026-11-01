@@ -10,18 +10,18 @@ Unifies the two prior dev tools:
      (they are stripped by `make dist` the same way as in C sources).
 
   2. `api_coverage.py` — coverage of the libmdbx public API by the RU
-     textbook. Requires an optional refactoring-map artifact produced by
+     textbook. Requires an optional codegraph artifact produced by
      `scan_symbols.py`; when absent the coverage report is skipped and the
      audit still succeeds (the dist-cutoff/refs check is the mandatory part).
 
 Usage:
   python3 doc_audit.py                # audit docs/{ru,en}/ against package
                                       # (dist-cutoff + refs); API coverage
-                                      # skipped unless refactoring-map found
+                                      # skipped unless codegraph found
   python3 doc_audit.py --map PATH     # also run API-coverage report
 
-The refactoring-map default is `${MAP_DIR}/MCP-shared-graph-memory/tools/
-artifacts/refactoring-map.json`.
+The codegraph default is `${MAP_DIR}/MCP-shared-graph-memory/tools/
+artifacts/codegraph.json`.
 """
 import argparse
 import json
@@ -338,7 +338,7 @@ def api_coverage_report(map_path: Path, repo: Path) -> int:
     try:
         symbols = load_map(map_path)
     except (OSError, ValueError, KeyError) as e:
-        print(f"  API-COVERAGE SKIP: refactoring-map unavailable ({e})")
+        print(f"  API-COVERAGE SKIP: codegraph unavailable ({e})")
         return 0
 
     c_functions, c_types, cpp_methods = inventory_from_map(symbols)
@@ -380,7 +380,7 @@ def api_coverage_report(map_path: Path, repo: Path) -> int:
 def main():
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--map", default=None,
-                    help="refactoring-map.json path (default: look in the "
+                    help="codegraph.json path (default: look in the "
                          "neighbouring skynet tree)")
     ap.add_argument("--package", default=".",
                     help="package root (default: the current directory)")
@@ -406,8 +406,8 @@ def main():
         else:
             print(f"  API-COVERAGE SKIP: {map_path} not found")
     else:
-        # optional: auto-detect the neighbouring refactoring-map artifact
-        default = pkg.parent / "skynet" / "MCP-shared-graph-memory" / "tools" / "artifacts" / "refactoring-map.json"
+        # optional: auto-detect the neighbouring codegraph artifact
+        default = pkg.parent / "skynet" / "MCP-shared-graph-memory" / "tools" / "artifacts" / "codegraph.json"
         if default.is_file() and (repo / "mdbx.h").is_file():
             bad += api_coverage_report(default, repo)
 

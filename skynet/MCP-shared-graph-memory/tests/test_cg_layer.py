@@ -1,4 +1,4 @@
-"""Тесты структурного слоя (refactoring-map): symbols/call_edges/groups."""
+"""Тесты структурного слоя (codegraph): symbols/call_edges/groups."""
 
 import json
 
@@ -8,51 +8,51 @@ from tests.conftest import seed_vocab
 def test_map_put_and_read_symbol(store):
     body = {"kind": "function", "name": "mdbx_env_open",
             "module": "api-env", "l0": 1, "l1": 10}
-    store.map_put_symbol("fn:api-env:mdbx_env_open", body)
-    got = store.map_symbol("fn:api-env:mdbx_env_open")
+    store.cg_put_symbol("fn:api-env:mdbx_env_open", body)
+    got = store.cg_symbol("fn:api-env:mdbx_env_open")
     assert got["name"] == "mdbx_env_open"
     assert got["module"] == "api-env"
-    assert store.map_symbol("missing") == {}
+    assert store.cg_symbol("missing") == {}
 
 
-def test_map_symbols_prefix(store):
+def test_cg_symbols_prefix(store):
     for k in ("fn:gc:defrag_cycle", "fn:gc:defrag_destroy",
               "type:gc:gc_state", "macro:gc:MDBX_GC"):
-        store.map_put_symbol(k, {"kind": "x", "name": k.rsplit(":", 1)[-1]})
-    fns = store.map_symbols(prefix="fn:gc:")
+        store.cg_put_symbol(k, {"kind": "x", "name": k.rsplit(":", 1)[-1]})
+    fns = store.cg_symbols(prefix="fn:gc:")
     assert len(fns) == 2
     assert "fn:gc:defrag_cycle" in fns
 
 
 def test_map_edges_dupsort(store):
-    store.map_put_edge("fn:a:caller", "fn:b:callee")
-    store.map_put_edge("fn:a:caller", "fn:c:other")
+    store.cg_put_edge("fn:a:caller", "fn:b:callee")
+    store.cg_put_edge("fn:a:caller", "fn:c:other")
     # повторная вставка не должна плодить дубликаты (put_nodupe)
-    store.map_put_edge("fn:a:caller", "fn:b:callee")
-    edges = [json.loads(e) for e in store.map_edges_of("fn:a:caller")]
+    store.cg_put_edge("fn:a:caller", "fn:b:callee")
+    edges = [json.loads(e) for e in store.cg_edges_of("fn:a:caller")]
     assert sorted(e["callee"] for e in edges) == ["fn:b:callee", "fn:c:other"]
-    assert store.map_edges_of("fn:zz:absent") == []
+    assert store.cg_edges_of("fn:zz:absent") == []
 
 
 def test_map_edges_kind_semantic(store):
-    store.map_put_edge("fn:a:f1", "fn:b:f2", kind="semantic")
-    edge = json.loads(store.map_edges_of("fn:a:f1")[0])
+    store.cg_put_edge("fn:a:f1", "fn:b:f2", kind="semantic")
+    edge = json.loads(store.cg_edges_of("fn:a:f1")[0])
     assert edge["kind"] == "semantic"
     assert edge["callee"] == "fn:b:f2"
 
 
 def test_map_groups_dupsort(store):
-    store.map_put_group("group:subsystem:gc", "fn:gc:defrag_cycle")
-    store.map_put_group("group:subsystem:gc", "fn:gc:defrag_destroy")
-    store.map_put_group("group:subsystem:gc", "fn:gc:defrag_destroy")  # дубль
-    store.map_put_group("group:subsystem:env", "fn:api-env:mdbx_env_open")
-    members = store.map_groups_of("group:subsystem:gc")
+    store.cg_put_group("group:subsystem:gc", "fn:gc:defrag_cycle")
+    store.cg_put_group("group:subsystem:gc", "fn:gc:defrag_destroy")
+    store.cg_put_group("group:subsystem:gc", "fn:gc:defrag_destroy")  # дубль
+    store.cg_put_group("group:subsystem:env", "fn:api-env:mdbx_env_open")
+    members = store.cg_groups_of("group:subsystem:gc")
     assert len(members) == 2
-    allpairs = store.map_group_members(prefix="group:subsystem:gc")
+    allpairs = store.cg_group_members(prefix="group:subsystem:gc")
     assert len(allpairs) == 2
 
 
-def test_map_load_batch(store):
+def test_cg_load_batch(store):
     symbols = {
         "fn:a:foo": {"kind": "function", "name": "foo", "module": "a"},
         "type:a:bar": {"kind": "type", "name": "bar", "module": "a"},
@@ -60,41 +60,41 @@ def test_map_load_batch(store):
     edges = [{"caller": "fn:a:foo", "callee": "fn:a:bar",
               "kind": "syntax", "resolved": True}]
     groups = {"group:subsystem:a": {"fn:a:foo", "type:a:bar"}}
-    loaded = store.map_load_batch(symbols, edges, groups)
+    loaded = store.cg_load_batch(symbols, edges, groups)
     assert loaded == {"symbols": 2, "edges": 1, "groups": 2}
-    assert store.map_symbols() == ["fn:a:foo", "type:a:bar"]
-    edge = json.loads(store.map_edges_of("fn:a:foo")[0])
+    assert store.cg_symbols() == ["fn:a:foo", "type:a:bar"]
+    edge = json.loads(store.cg_edges_of("fn:a:foo")[0])
     assert edge == {"kind": "syntax", "resolved": True, "ambiguous": False,
                     "callee": "fn:a:bar"}
-    assert store.map_groups_of("group:subsystem:a") == ["fn:a:foo",
+    assert store.cg_groups_of("group:subsystem:a") == ["fn:a:foo",
                                                         "type:a:bar"]
     # обратное ребро создано
-    assert store.map_callers_of("fn:a:bar") == ["fn:a:foo"]
+    assert store.cg_callers_of("fn:a:bar") == ["fn:a:foo"]
 
 
-def test_map_load_batch_replace(store):
+def test_cg_load_batch_replace(store):
     """replace=True очищает перегенерируемые таблицы (самоизлечение)."""
-    store.map_load_batch(
+    store.cg_load_batch(
         {"fn:a:foo": {"kind": "function", "name": "foo", "module": "a"}},
         [{"caller": "fn:a:foo", "callee": "fn:x", "kind": "syntax",
           "resolved": False}], {}, replace=True)
-    assert len(store.map_symbols()) == 1
+    assert len(store.cg_symbols()) == 1
     # повторная загрузка с меньшим набором удаляет исчезнувшие символы
-    store.map_load_batch({}, [], {}, replace=True)
-    assert store.map_symbols() == []
-    assert store.map_edges_of("fn:a:foo") == []
+    store.cg_load_batch({}, [], {}, replace=True)
+    assert store.cg_symbols() == []
+    assert store.cg_edges_of("fn:a:foo") == []
 
 
-def test_map_load_batch_replace_dupsort(store):
+def test_cg_load_batch_replace_dupsort(store):
     """replace очищает DUPSORT-таблицы (call_edges/groups) без сбоя."""
     edges = [{"caller": "fn:c:%d" % i, "callee": "fn:t:%d" % (i + j),
               "kind": "syntax", "resolved": True}
              for i in range(200) for j in range(3)]
-    store.map_load_batch({}, edges, {}, replace=True)
-    assert store.map_edges_of("fn:c:0")
-    store.map_load_batch({}, [], {}, replace=True)
-    assert store.map_edges_of("fn:c:0") == []
-    assert len(store.map_edges_of("fn:c:199")) == 0
+    store.cg_load_batch({}, edges, {}, replace=True)
+    assert store.cg_edges_of("fn:c:0")
+    store.cg_load_batch({}, [], {}, replace=True)
+    assert store.cg_edges_of("fn:c:0") == []
+    assert len(store.cg_edges_of("fn:c:199")) == 0
 
 
 def test_map_load_regions_replace(store):
@@ -102,30 +102,30 @@ def test_map_load_regions_replace(store):
     regions = [{"id": "region:a:%d" % i, "file": "src/a.c", "kind": "if",
                 "cond": "#if X", "l0": i, "l1": i + 1} for i in range(5)]
     uncovered = [{"file": "src/a.c", "l0": i, "l1": i + 1} for i in range(3)]
-    store.map_load_regions(regions, uncovered, replace=True)
-    assert len(store.map_regions(limit=10 ** 9)) == 5
-    assert len(store.map_uncovered(limit=10 ** 9)) == 3
-    store.map_load_regions([], [], replace=True)
-    assert store.map_regions(limit=10 ** 9) == []
-    assert store.map_uncovered(limit=10 ** 9) == []
+    store.cg_load_regions(regions, uncovered, replace=True)
+    assert len(store.cg_regions(limit=10 ** 9)) == 5
+    assert len(store.cg_uncovered(limit=10 ** 9)) == 3
+    store.cg_load_regions([], [], replace=True)
+    assert store.cg_regions(limit=10 ** 9) == []
+    assert store.cg_uncovered(limit=10 ** 9) == []
 
 
-def test_map_load_batch_replace_preserves_curated(store):
+def test_cg_load_batch_replace_preserves_curated(store):
     """replace трогает только структурные таблицы, не курируемый слой."""
     seed_vocab(store, [("meta", "test")])
     r = store.safe_store("fact:meta:test", "fact", "слой изолирован", 0.5)
-    store.map_load_batch({"fn:a:foo": {"kind": "function", "name": "foo",
+    store.cg_load_batch({"fn:a:foo": {"kind": "function", "name": "foo",
                                        "module": "a"}}, [], {}, replace=True)
     assert store.exists(r["key"])
     # и записи, и связи целы
-    assert store.map_symbols() == ["fn:a:foo"]
+    assert store.cg_symbols() == ["fn:a:foo"]
 
 
-def test_map_load_batch_preserves_curated(store):
+def test_cg_load_batch_preserves_curated(store):
     """Батч загрузки структурного слоя не должен трогать курируемый слой."""
     seed_vocab(store, [("meta", "test")])
     r = store.safe_store("fact:meta:test", "fact", "слой изолирован", 0.5)
-    store.map_load_batch({"fn:a:foo": {"name": "foo", "module": "a"}}, [], {})
+    store.cg_load_batch({"fn:a:foo": {"name": "foo", "module": "a"}}, [], {})
     assert store.exists(r["key"])
 
 
@@ -135,20 +135,20 @@ def test_map_symbol_json_roundtrip(store):
             "file": "src/api-env.c", "module": "api-env",
             "l0": 414, "l1": 524,
             "blocks": [{"id": "B1", "l0": 414, "l1": 524, "kind": "compoundstmt"}]}
-    store.map_put_symbol("fn:api-env:mdbx_env_open", body)
-    got = store.map_symbol("fn:api-env:mdbx_env_open")
+    store.cg_put_symbol("fn:api-env:mdbx_env_open", body)
+    got = store.cg_symbol("fn:api-env:mdbx_env_open")
     assert got == body  # полный round-trip без потерь
 
 
 def test_sym_id_stable_across_replace(store):
     """Числовые id символов стабильны: replace чистит symbols, но не sym_ids."""
-    store.map_put_symbol("fn:a:foo", {"kind": "function", "name": "foo",
+    store.cg_put_symbol("fn:a:foo", {"kind": "function", "name": "foo",
                                       "module": "a"})
     first = store.sym_id("fn:a:foo")
     second = store.sym_id("fn:a:foo")
     assert first == second
     # повторная загрузка карты (replace) не должна менять id
-    store.map_load_batch({"fn:a:foo": {"kind": "function", "name": "foo",
+    store.cg_load_batch({"fn:a:foo": {"kind": "function", "name": "foo",
                                        "module": "a"}}, [], {}, replace=True)
     assert store.sym_id("fn:a:foo") == first
     # новый символ получает новый id
@@ -180,7 +180,7 @@ def test_bridge_link_record_to_symbol(store):
     seed_vocab(store, [("crypto", "alignment")])
     store.safe_store("bug:crypto:alignment", "bug",
                      "Segfault in AES on arm64", 0.7)
-    store.map_put_symbol("fn:mdbx_env_open", {"kind": "function",
+    store.cg_put_symbol("fn:mdbx_env_open", {"kind": "function",
                                               "name": "mdbx_env_open"})
     res = store.link("bug:crypto:alignment", "related-to", "fn:mdbx_env_open")
     assert res["result"] == "linked"
@@ -205,8 +205,8 @@ def test_bridge_link_still_works_for_records(store):
 
 
 def test_canary_put_get(store):
-    store.map_canary_put(x=0x52464D4D, y=7, z=3)
-    g = store.map_canary_get()
+    store.cg_canary_put(x=0x52464D4D, y=7, z=3)
+    g = store.cg_canary_get()
     assert g["x"] == 0x52464D4D
     assert g["y"] == 7
     assert g["z"] == 3
@@ -217,14 +217,14 @@ def test_map_refresh_stale_removes_dangling_symbol_links(store):
     """refresh_stale удаляет ссылки на исчезнувшие символы."""
     seed_vocab(store, [("crypto", "alignment")])
     store.safe_store("bug:crypto:alignment", "bug", "AES issue", 0.5)
-    store.map_put_symbol("fn:gone", {"kind": "function", "name": "gone"})
+    store.cg_put_symbol("fn:gone", {"kind": "function", "name": "gone"})
     store.link("bug:crypto:alignment", "related-to", "fn:gone")
     # регенерация карты: fn:gone исчез, остался fn:alive
-    store.map_load_batch({"fn:alive": {"kind": "function", "name": "alive"}},
+    store.cg_load_batch({"fn:alive": {"kind": "function", "name": "alive"}},
                          [], {}, replace=True)
     # fn:alive получит id; fn:gone больше нет в symbols
     store.sym_id("fn:alive")
-    res = store.map_refresh_stale()
+    res = store.cg_refresh_stale()
     assert res["removed_links"] >= 1
     # связь к fn:gone удалена
     g = store.graph("bug:crypto:alignment", depth=1)
@@ -233,29 +233,29 @@ def test_map_refresh_stale_removes_dangling_symbol_links(store):
 
 
 def test_map_alias_set_and_target(store):
-    """map_alias фиксирует переименование, target разрешает цепочки."""
-    assert store.map_alias("fn:old", "fn:new")["result"] == "aliased"
-    assert store.map_alias("fn:old", "fn:new")["result"] == "exists"
-    assert store.map_alias_target("fn:old") == "fn:new"
-    assert store.map_alias_target("fn:missing") == ""
+    """cg_alias фиксирует переименование, target разрешает цепочки."""
+    assert store.cg_alias("fn:old", "fn:new")["result"] == "aliased"
+    assert store.cg_alias("fn:old", "fn:new")["result"] == "exists"
+    assert store.cg_alias_target("fn:old") == "fn:new"
+    assert store.cg_alias_target("fn:missing") == ""
     # цепочка old → mid → new
-    store.map_alias("fn:mid", "fn:new")
-    assert store.map_alias_target("fn:mid") == "fn:new"
+    store.cg_alias("fn:mid", "fn:new")
+    assert store.cg_alias_target("fn:mid") == "fn:new"
 
 
 def test_map_refresh_stale_redirects_via_alias(store):
     """Связь на исчезнувший символ с алиасом перенаправляется, не удаляется."""
     seed_vocab(store, [("crypto", "alignment")])
     store.safe_store("bug:crypto:alignment", "bug", "AES issue", 0.5)
-    store.map_put_symbol("fn:old_impl", {"kind": "function", "name": "old_impl"})
+    store.cg_put_symbol("fn:old_impl", {"kind": "function", "name": "old_impl"})
     store.link("bug:crypto:alignment", "related-to", "fn:old_impl")
     # переименование: old_impl → cpp::impl
-    store.map_alias("fn:old_impl", "fn:cpp::impl")
+    store.cg_alias("fn:old_impl", "fn:cpp::impl")
     # регенерация: старый символ исчез, новый появился
-    store.map_load_batch({"fn:cpp::impl": {"kind": "function",
+    store.cg_load_batch({"fn:cpp::impl": {"kind": "function",
                                            "name": "cpp::impl"}},
                          [], {}, replace=True)
-    res = store.map_refresh_stale()
+    res = store.cg_refresh_stale()
     assert res["redirected_links"] >= 1
     g = store.graph("bug:crypto:alignment", depth=1)
     outs = [rel.get("object") for rel in g.get("edges", [])]
@@ -263,17 +263,17 @@ def test_map_refresh_stale_redirects_via_alias(store):
     assert "fn:old_impl" not in str(outs)
 
 
-def test_map_symbols_module_filter(store):
-    """Кайдзен: map_symbols('fn:gc') находит функции из модулей gc-* даже
+def test_cg_symbols_module_filter(store):
+    """Кайдзен: cg_symbols('fn:gc') находит функции из модулей gc-* даже
     когда канонический ключ — fn:{qname} (module в теле, не в ключе)."""
-    store.map_put_symbol("fn:gc_alloc_ex", {"kind": "function",
+    store.cg_put_symbol("fn:gc_alloc_ex", {"kind": "function",
                                             "module": "gc-get", "name": "gc_alloc_ex"})
-    store.map_put_symbol("fn:spill_cycle", {"kind": "function",
+    store.cg_put_symbol("fn:spill_cycle", {"kind": "function",
                                             "module": "spill", "name": "spill_cycle"})
-    store.map_put_symbol("fn:mdbx_env_open", {"kind": "function",
+    store.cg_put_symbol("fn:mdbx_env_open", {"kind": "function",
                                               "module": "api-env", "name": "mdbx_env_open"})
-    got = store.map_symbols(prefix="fn:gc", limit=10)
+    got = store.cg_symbols(prefix="fn:gc", limit=10)
     assert "fn:gc_alloc_ex" in got
     assert "fn:spill_cycle" not in got
     # префиксный по ключу как раньше
-    assert store.map_symbols(prefix="fn:spill") == ["fn:spill_cycle"]
+    assert store.cg_symbols(prefix="fn:spill") == ["fn:spill_cycle"]

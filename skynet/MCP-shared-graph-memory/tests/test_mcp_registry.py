@@ -70,9 +70,9 @@ def _minimal_args(tool: dict) -> dict:
         args[req] = _dummy_for(prop)
     # отдельные инструменты требуют алиасы/специфику сверх required
     name = tool["name"]
-    if name == "map_edges_of":
+    if name == "cg_edges_of":
         args["caller"] = "fn:x"
-    if name == "map_callers_of":
+    if name == "cg_callers_of":
         args["callee"] = "fn:x"
     if name == "db_backup":
         args["skip"] = True  # простой путь без PROMPT-ветки

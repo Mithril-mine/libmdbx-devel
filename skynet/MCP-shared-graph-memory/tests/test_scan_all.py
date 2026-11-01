@@ -75,8 +75,8 @@ def _write_artifact(tmp_path, name, functions):
 
 def test_win32_scan_uses_mingw_target(fake_run, tmp_path):
     """win32-конфиг сканируется через clang --target=x86_64-w64-windows-gnu."""
-    _write_artifact(tmp_path, "refactoring-map-linux.json", 3)
-    _write_artifact(tmp_path, "refactoring-map-win32.json", 3)
+    _write_artifact(tmp_path, "codegraph-linux.json", 3)
+    _write_artifact(tmp_path, "codegraph-win32.json", 3)
     sa.main(_argv())
     win = [c for c in fake_run if "--config" in c and "win32" in c[c.index("--config") + 1:]]
     assert win, "нет вызова scan_symbols.py --config win32"
@@ -92,7 +92,7 @@ def test_macos_without_ci_artifact_fails(fake_run):
 
 def test_merge_requires_two_artifacts(fake_run, tmp_path):
     """<2 артефакта для merge — понятная ошибка (fail-loudly)."""
-    _write_artifact(tmp_path, "refactoring-map-linux.json", 3)
+    _write_artifact(tmp_path, "codegraph-linux.json", 3)
     with pytest.raises(SystemExit) as exc:
         sa.main(_argv(configs="linux,win32"))
     assert exc.value.code == 1
@@ -100,10 +100,10 @@ def test_merge_requires_two_artifacts(fake_run, tmp_path):
 
 def test_report_prints_merged_counts(fake_run, tmp_path):
     """После успешного merge report печатает счётчики merged-артефакта."""
-    _write_artifact(tmp_path, "refactoring-map-linux.json", 4)
-    _write_artifact(tmp_path, "refactoring-map-win32.json", 5)
+    _write_artifact(tmp_path, "codegraph-linux.json", 4)
+    _write_artifact(tmp_path, "codegraph-win32.json", 5)
     # merged-артефакт (оркестратор бы его создал; тут — вручную для отчёта)
-    merged = os.path.join(str(tmp_path), "refactoring-map.json")
+    merged = os.path.join(str(tmp_path), "codegraph.json")
     body = {"configs": ["linux", "win32"], "counts": {"functions": 7},
             "uncovered": [], "symbols": {}, "edges": [], "regions": []}
     with open(merged, "w") as f:
@@ -123,7 +123,7 @@ def test_merge_fails_loudly_on_missing_requested_config(fake_run, tmp_path, caps
     Раньше оркестратор фильтровал merge_inputs по os.path.exists() и молча
     терял запрошенную платформу из merged-артефакта.
     """
-    _write_artifact(tmp_path, "refactoring-map-linux.json", 3)
+    _write_artifact(tmp_path, "codegraph-linux.json", 3)
     # win32 запрошен, но его артефакта нет
     with pytest.raises(SystemExit) as exc:
         sa.main(_argv(configs="linux,win32"))
@@ -135,12 +135,12 @@ def test_load_makes_pin_backup_before_replace(fake_run, tmp_path, capsys):
     """load: pin-бэкап (mcp.cli backup) идёт ПЕРЕД load_map --replace.
 
     Защита от перезаписи структурного слоя без контрактной точки
-    сохранения — то, что обещает REFACTORING-MAP.md.
+    сохранения — то, что обещает CODEGRAPH.md.
     """
-    _write_artifact(tmp_path, "refactoring-map-linux.json", 3)
-    _write_artifact(tmp_path, "refactoring-map-win32.json", 3)
+    _write_artifact(tmp_path, "codegraph-linux.json", 3)
+    _write_artifact(tmp_path, "codegraph-win32.json", 3)
     # merged-артефакт для отчёта
-    merged = os.path.join(str(tmp_path), "refactoring-map.json")
+    merged = os.path.join(str(tmp_path), "codegraph.json")
     with open(merged, "w") as f:
         json.dump({"configs": ["linux", "win32"], "counts": {"functions": 7},
                    "uncovered": [], "symbols": {}, "edges": [], "regions": []}, f)
@@ -155,9 +155,9 @@ def test_load_makes_pin_backup_before_replace(fake_run, tmp_path, capsys):
 
 def test_load_skips_backup_with_skip_backup(fake_run, tmp_path):
     """--skip-backup отключает pin-бэкап, load_map остаётся."""
-    _write_artifact(tmp_path, "refactoring-map-linux.json", 3)
-    _write_artifact(tmp_path, "refactoring-map-win32.json", 3)
-    merged = os.path.join(str(tmp_path), "refactoring-map.json")
+    _write_artifact(tmp_path, "codegraph-linux.json", 3)
+    _write_artifact(tmp_path, "codegraph-win32.json", 3)
+    merged = os.path.join(str(tmp_path), "codegraph.json")
     with open(merged, "w") as f:
         json.dump({"configs": ["linux", "win32"], "counts": {"functions": 7},
                    "uncovered": [], "symbols": {}, "edges": [], "regions": []}, f)

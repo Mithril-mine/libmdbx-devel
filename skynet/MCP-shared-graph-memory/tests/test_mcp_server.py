@@ -267,41 +267,41 @@ def test_db_utterly_nosync_only_via_explicit_tool(store):
 
 
 def test_mcp_map_put_symbol_cpp_status(server):
-    """C2/N6: map_put_symbol через MCP с валидацией cpp_status."""
+    """C2/N6: cg_put_symbol через MCP с валидацией cpp_status."""
     # валидный статус → виден в приборной панели портирования
-    r = call(server, "tools/call", {"name": "map_put_symbol", "arguments": {
+    r = call(server, "tools/call", {"name": "cg_put_symbol", "arguments": {
         "key": "fn:api-env:mdbx_env_open",
         "body": {"module": "api-env", "kind": "function",
                  "cpp_status": "partial", "cpp_eq": ""},
         "layer": "0.15.base"}})
     assert r["result"]["structuredContent"]["result"] == "stored", r
-    ps = call(server, "tools/call", {"name": "map_port_status", "arguments": {
+    ps = call(server, "tools/call", {"name": "cg_port_status", "arguments": {
         "layer": "0.15.base"}})
     mods = ps["result"]["structuredContent"]["modules"]
     assert mods["api-env"]["partial"] == 1
     # невалидный статус → контрактная ошибка, запись НЕ появилась
-    r = call(server, "tools/call", {"name": "map_put_symbol", "arguments": {
+    r = call(server, "tools/call", {"name": "cg_put_symbol", "arguments": {
         "key": "fn:api-env:bogus", "body": {"cpp_status": "bogus"}}})
     assert r.get("error"), r
     assert "none, mapped, partial, done" in r["error"]["message"]
-    ps2 = call(server, "tools/call", {"name": "map_port_status", "arguments": {
+    ps2 = call(server, "tools/call", {"name": "cg_port_status", "arguments": {
         "layer": "0.15.base"}})
     assert ps2["result"]["structuredContent"]["modules"]["api-env"]["total"] \
         == 1
 
 
 def test_mcp_map_alias_and_refresh_stale(server):
-    """C2/N6: map_alias + map_refresh_stale через MCP."""
-    call(server, "tools/call", {"name": "map_put_symbol", "arguments": {
+    """C2/N6: cg_alias + cg_refresh_stale через MCP."""
+    call(server, "tools/call", {"name": "cg_put_symbol", "arguments": {
         "key": "fn:m:old_name", "body": {"module": "m"},
         "layer": "0.15.base"}})
-    call(server, "tools/call", {"name": "map_put_symbol", "arguments": {
+    call(server, "tools/call", {"name": "cg_put_symbol", "arguments": {
         "key": "fn:m:new_name", "body": {"module": "m"},
         "layer": "0.15.base"}})
-    r = call(server, "tools/call", {"name": "map_alias", "arguments": {
+    r = call(server, "tools/call", {"name": "cg_alias", "arguments": {
         "old_key": "fn:m:old_name", "new_key": "fn:m:new_name"}})
     assert r["result"]["structuredContent"]["result"] == "aliased"
-    r = call(server, "tools/call", {"name": "map_refresh_stale",
+    r = call(server, "tools/call", {"name": "cg_refresh_stale",
                                     "arguments": {}})
     sc = r["result"]["structuredContent"]
     assert "removed_links" in sc and "redirected_links" in sc
@@ -310,7 +310,7 @@ def test_mcp_map_alias_and_refresh_stale(server):
 def test_mcp_branch_purge_contract(server):
     """C1/N5: branch_purge через MCP — контракт ответа на JSON-RPC уровне.
 
-    Seed — coverage_insert (MCP-инструмент, доступный и в C1); map_put_symbol
+    Seed — coverage_insert (MCP-инструмент, доступный и в C1); cg_put_symbol
     появляется только в C2, поэтому здесь его не используем (порядок коммитов).
     """
     call(server, "tools/call", {"name": "coverage_insert", "arguments": {

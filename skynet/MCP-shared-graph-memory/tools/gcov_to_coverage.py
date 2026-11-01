@@ -3,12 +3,12 @@
 
 Запускает `gcov -b` по всем .gcda каталога, парсит .gcov-файлы
 (строки `N:` подсчёт>0 = покрыто; `#####:` = непокрыто), собирает
-{file → covered_lines}, затем через карту (refactoring-map) резолвит
+{file → covered_lines}, затем через карту (codegraph) резолвит
 символы и БЛОКИ и пишет в coverage/coverage_blocks (как один «тест»).
 
 Использование:
   python3 tools/gcov_to_coverage.py --gcda-dir build/CMakeFiles/mdbx-static.dir/src \\
-      --map tools/artifacts/refactoring-map-linux.json \\
+      --map tools/artifacts/codegraph-linux.json \\
       --test-id smoke_basic --layer 0.15 --db <path> [--store-blocks]
 """
 
@@ -86,7 +86,7 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--gcda-dir", required=True)
     ap.add_argument("--map", default=os.path.join(TOOLS_DIR, "artifacts",
-                                                  "refactoring-map-linux.json"))
+                                                  "codegraph-linux.json"))
     ap.add_argument("--test-id", required=True)
     ap.add_argument("--layer", default="")
     ap.add_argument("--db", default=os.path.join(

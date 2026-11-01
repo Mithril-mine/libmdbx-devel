@@ -40,7 +40,7 @@ def test_branch_purge_removes_layer_data(store):
     body = {"module": "m", "l0": 1, "l1": 2, "kind": "function",
             "blocks": [{"id": "B1"}]}
     # feature-слой: map + coverage + блоки + probe + трассы + реестр
-    store.map_load_batch(
+    store.cg_load_batch(
         {"fn:m:a": body, "fn:m:b": body},
         [{"caller": "fn:m:a", "callee": "fn:m:b"}],
         {"grp:m:all": ["fn:m:a"]}, replace=True, layer=L)
@@ -52,9 +52,9 @@ def test_branch_purge_removes_layer_data(store):
     store.trace_ingest("fn:m:a", "fn:m:b", count=2, layer=L)
     store.branch_register("0.15", "purge-me", n_commits=7)
     # базовый и соседний feature-слой — не должны пострадать
-    store.map_put_symbol("fn:base:x", body, layer="0.15.base")
+    store.cg_put_symbol("fn:base:x", body, layer="0.15.base")
     store.coverage_insert("ut/tb", ["fn:base:x"], pct=50.0, layer="0.15.base")
-    store.map_put_symbol("fn:nb:y", body, layer="0.15.other.3")
+    store.cg_put_symbol("fn:nb:y", body, layer="0.15.other.3")
     # P3: числовые id символов слоя и базового — до purge
     sid_feat = store.sym_id(L + "/fn:m:a")
     sid_base = store.sym_id("fn:base:x")
@@ -63,9 +63,9 @@ def test_branch_purge_removes_layer_data(store):
     r = store.branch_purge(L)
     assert r["result"] == "purged"
     # все семейства слоя пусты
-    assert store.map_symbols(layer=L) == []
-    assert store.map_edges_of("fn:m:a", layer=L) == []
-    assert store.map_group_members("grp:m:all", layer=L) == []
+    assert store.cg_symbols(layer=L) == []
+    assert store.cg_edges_of("fn:m:a", layer=L) == []
+    assert store.cg_group_members("grp:m:all", layer=L) == []
     assert store.coverage_all(layer=L) == []
     assert store.coverage_symbols("fn:m:a", layer=L) == []
     assert store.probe_get("purge_tag", layer=L) == {}
@@ -79,10 +79,10 @@ def test_branch_purge_removes_layer_data(store):
     # реестр очищен
     assert L not in [b["layer"] for b in store.branch_list()]
     # базовый слой и сосед целы
-    assert "fn:base:x" in store.map_symbols(layer="0.15.base")
+    assert "fn:base:x" in store.cg_symbols(layer="0.15.base")
     assert [c["test"] for c in store.coverage_all(layer="0.15.base")] == \
         ["ut/tb"]
-    assert "fn:nb:y" in store.map_symbols(layer="0.15.other.3")
+    assert "fn:nb:y" in store.cg_symbols(layer="0.15.other.3")
     # базовый purge запрещён
     with pytest.raises(ME):
         store.branch_purge("0.15.base")
@@ -95,19 +95,19 @@ def test_branch_purge_removes_layer_data(store):
 def test_branch_purge_dupsort_all_values(store):
     """C1: DUPSORT-таблицы чистятся по всем значениям ключа."""
     L = "0.15.dup.5"
-    store.map_load_batch(
+    store.cg_load_batch(
         {"fn:m:hub": {}, "fn:m:leaf1": {}, "fn:m:leaf2": {}},
         [{"caller": "fn:m:hub", "callee": "fn:m:leaf1"},
          {"caller": "fn:m:hub", "callee": "fn:m:leaf2"},
          {"caller": "fn:m:leaf1", "callee": "fn:m:leaf2"}],
         {}, replace=True, layer=L)
-    assert len(store.map_edges_of("fn:m:hub", layer=L)) == 2
+    assert len(store.cg_edges_of("fn:m:hub", layer=L)) == 2
     r = store.branch_purge(L)
     assert r["result"] == "purged"
     # 3 fwd-пары (hub→leaf1, hub→leaf2, leaf1→leaf2) + 3 rev-пары
     assert r["removed"]["call_edges"] == 3
     assert r["removed"]["call_edges_rev"] == 3
-    assert store.map_edges_of("fn:m:hub", layer=L) == []
+    assert store.cg_edges_of("fn:m:hub", layer=L) == []
 
 
 def test_branch_purge_prefix_collision(store):
@@ -118,8 +118,8 @@ def test_branch_purge_prefix_collision(store):
     layer_prefix/purge-скана (startswith без "/" затронул бы оба слоя).
     """
     body = {"module": "m", "kind": "function"}
-    store.map_put_symbol("fn:m:one", body, layer="0.15.feat.1")
-    store.map_put_symbol("fn:m:ten", body, layer="0.15.feat.10")
+    store.cg_put_symbol("fn:m:one", body, layer="0.15.feat.1")
+    store.cg_put_symbol("fn:m:ten", body, layer="0.15.feat.10")
     store.coverage_insert("ut/c1", ["fn:m:one"], pct=10.0,
                           layer="0.15.feat.1")
     store.coverage_insert("ut/c10", ["fn:m:ten"], pct=20.0,
@@ -127,7 +127,7 @@ def test_branch_purge_prefix_collision(store):
     store.trace_ingest("fn:m:one", "fn:m:ten", layer="0.15.feat.1")
     store.trace_ingest("fn:m:ten", "fn:m:one", layer="0.15.feat.10")
     # семейства, которые collision-тест раньше не покрывал:
-    store.map_load_batch({}, [{"caller": "fn:m:ten", "callee": "fn:m:one"}],
+    store.cg_load_batch({}, [{"caller": "fn:m:ten", "callee": "fn:m:one"}],
                          {"grp:m:g": ["fn:m:ten"]}, layer="0.15.feat.10")
     store.coverage_blocks_insert(
         "ut/c10",
@@ -140,17 +140,17 @@ def test_branch_purge_prefix_collision(store):
     r = store.branch_purge("0.15.feat.1")
     assert r["result"] == "purged"
     # слой .1 пуст
-    assert store.map_symbols(layer="0.15.feat.1") == []
+    assert store.cg_symbols(layer="0.15.feat.1") == []
     assert store.coverage_all(layer="0.15.feat.1") == []
     assert store.trace_observed("fn:m:one", layer="0.15.feat.1") == []
     # слой .10 ЦЕЛ во всех семействах (test_id в coverage_all с префиксом)
-    assert "fn:m:ten" in store.map_symbols(layer="0.15.feat.10")
+    assert "fn:m:ten" in store.cg_symbols(layer="0.15.feat.10")
     assert [c["test"] for c in
             store.coverage_all(layer="0.15.feat.10")] == \
         ["0.15.feat.10/ut/c10"]
     assert store.trace_observed("fn:m:ten", layer="0.15.feat.10")
-    assert store.map_edges_of("fn:m:ten", layer="0.15.feat.10")
-    assert store.map_group_members("grp:m:g", layer="0.15.feat.10") == \
+    assert store.cg_edges_of("fn:m:ten", layer="0.15.feat.10")
+    assert store.cg_group_members("grp:m:g", layer="0.15.feat.10") == \
         [("grp:m:g", "fn:m:ten")]
     assert [b["block_id"] for b in
             store.coverage_blocks_get("ut/c10", "fn:m:ten",
@@ -181,49 +181,49 @@ def test_branch_purge_active_layer_blocked(store):
     L = "0.15.active.8"
     store.branch_register("0.15", "active", n_commits=8)
     store.branch_activate(L)
-    store.map_put_symbol("fn:m:act", {"module": "m"}, layer=L)
+    store.cg_put_symbol("fn:m:act", {"module": "m"}, layer=L)
     # активный слой purge запрещён
     with pytest.raises(ME) as ei:
         store.branch_purge(L)
     assert "активным" in str(ei.value)
     # данные и активация целы
     assert store.branch_current()["layer"] == L
-    assert "fn:m:act" in store.map_symbols(layer=L)
+    assert "fn:m:act" in store.cg_symbols(layer=L)
     # после переключения на другой слой — purge проходит
     store.branch_activate("0.15")
     r = store.branch_purge(L)
     assert r["result"] == "purged"
-    assert store.map_symbols(layer=L) == []
+    assert store.cg_symbols(layer=L) == []
 
 
 def test_map_load_layers_isolated(store):
     """Feature-слой не затирает базовый (prefix в ключах)."""
-    store.map_load_batch({"fn:m1": {"module": "gc", "l0": 1, "l1": 5}},
+    store.cg_load_batch({"fn:m1": {"module": "gc", "l0": 1, "l1": 5}},
                          [], {}, replace=True, layer="0.15.base")
-    store.map_load_batch({"fn:m1": {"module": "gc", "l0": 1, "l1": 9},
+    store.cg_load_batch({"fn:m1": {"module": "gc", "l0": 1, "l1": 9},
                           "fn:m2": {"module": "gc", "l0": 2, "l1": 3}},
                          [], {}, replace=True, layer="0.15.gc.3")
-    base = store.map_symbols("fn:", layer="0.15.base")
-    feat = store.map_symbols("fn:", layer="0.15.gc.3")
+    base = store.cg_symbols("fn:", layer="0.15.base")
+    feat = store.cg_symbols("fn:", layer="0.15.gc.3")
     assert base == ["fn:m1"]
     assert feat == ["fn:m1", "fn:m2"]
     # базовый слой не видит чужие feature-ключи
-    assert store.map_symbol("fn:m2", layer="0.15.base") == {}
+    assert store.cg_symbol("fn:m2", layer="0.15.base") == {}
 
 
 def test_map_diff_branches_content(store):
-    store.map_load_batch({"fn:foo": {"module": "gc", "l0": 1, "l1": 5,
+    store.cg_load_batch({"fn:foo": {"module": "gc", "l0": 1, "l1": 5,
                                      "kind": "function",
                                      "blocks": [{"id": "B1"}]}},
                          [], {}, replace=True, layer="0.15.base")
-    store.map_load_batch({"fn:foo": {"module": "gc", "l0": 1, "l1": 9,
+    store.cg_load_batch({"fn:foo": {"module": "gc", "l0": 1, "l1": 9,
                                      "kind": "function",
                                      "blocks": [{"id": "B1"}, {"id": "B2"}]},
                           "fn:new": {"module": "gc", "l0": 20, "l1": 30,
                                      "kind": "function",
                                      "blocks": [{"id": "B1"}]}},
                          [], {}, replace=True, layer="0.15.gc.7")
-    d = store.map_diff_branches("0.15.base", "0.15.gc.7")
+    d = store.cg_diff_branches("0.15.base", "0.15.gc.7")
     c = d["counts"]
     assert c["added"] == 1 and c["changed"] == 1 and c["removed"] == 0
     assert c["added_functions"] == 1
@@ -241,16 +241,16 @@ def test_map_diff_branches_same_layer_is_empty(store):
     """
     body = {"module": "m", "l0": 1, "l1": 2, "kind": "function",
             "blocks": [{"id": "B1"}]}
-    store.map_load_batch({"fn:x": body, "fn:y": body}, [], {},
+    store.cg_load_batch({"fn:x": body, "fn:y": body}, [], {},
                          replace=True, layer="0.15.feat.1")
-    d = store.map_diff_branches("0.15.feat.1", "0.15.feat.1")
+    d = store.cg_diff_branches("0.15.feat.1", "0.15.feat.1")
     c = d["counts"]
     assert c["added"] == 0 and c["removed"] == 0 and c["changed"] == 0
     assert d["total_from"] == 2 and d["total_to"] == 2
     # и для базового слоя с самим собой
-    store.map_load_batch({"fn:b": body}, [], {}, replace=True,
+    store.cg_load_batch({"fn:b": body}, [], {}, replace=True,
                          layer="0.15.base")
-    d2 = store.map_diff_branches("0.15.base", "0.15.base")
+    d2 = store.cg_diff_branches("0.15.base", "0.15.base")
     assert d2["counts"]["removed"] == 0 and d2["total_to"] == 1
 
 
@@ -258,20 +258,20 @@ def test_effective_layer_active_branch_defaults(store):
     """После branch_activate слой используется инструментами по умолчанию."""
     store.branch_register("0.15", "base")
     store.branch_register("0.15", "feat", 3)
-    store.map_load_batch({"fn:base_only": {"module": "m", "l0": 1, "l1": 2}},
+    store.cg_load_batch({"fn:base_only": {"module": "m", "l0": 1, "l1": 2}},
                          [], {}, replace=True, layer="0.15.base")
-    store.map_load_batch({"fn:feat_only": {"module": "m", "l0": 1, "l1": 2}},
+    store.cg_load_batch({"fn:feat_only": {"module": "m", "l0": 1, "l1": 2}},
                          [], {}, replace=True, layer="0.15.feat.3")
     # до активации виден базовый слой
-    assert "fn:base_only" in store.map_symbols("fn:", layer="")
-    assert "fn:feat_only" not in store.map_symbols("fn:", layer="")
+    assert "fn:base_only" in store.cg_symbols("fn:", layer="")
+    assert "fn:feat_only" not in store.cg_symbols("fn:", layer="")
     # активируем feature-слой — дефолтные чтения переключаются
     store.branch_activate("0.15.feat.3")
-    syms = store.map_symbols("fn:")
+    syms = store.cg_symbols("fn:")
     assert "fn:feat_only" in syms
     assert "fn:base_only" not in syms
     # явный layer перебивает активную ветку
-    assert "fn:base_only" in store.map_symbols("fn:", layer="0.15.base")
+    assert "fn:base_only" in store.cg_symbols("fn:", layer="0.15.base")
 
 
 def test_env_layer_overrides_active_branch(store_path, monkeypatch):
@@ -280,18 +280,18 @@ def test_env_layer_overrides_active_branch(store_path, monkeypatch):
     from mcp import Store
     s = Store(store_path)
     try:
-        s.map_load_batch({"fn:mine": {"module": "m", "l0": 1, "l1": 2}},
+        s.cg_load_batch({"fn:mine": {"module": "m", "l0": 1, "l1": 2}},
                          [], {}, replace=True, layer="0.15.mine.1")
-        s.map_load_batch({"fn:theirs": {"module": "m", "l0": 1, "l1": 2}},
+        s.cg_load_batch({"fn:theirs": {"module": "m", "l0": 1, "l1": 2}},
                          [], {}, replace=True, layer="0.15.theirs.2")
         # другой агент активировал свою ветку — глобальный default переключён
         s.branch_activate("0.15.theirs.2")
         # мой процесс читает СВОЙ слой (env-override), а не активный чужой
-        syms = s.map_symbols("fn:")
+        syms = s.cg_symbols("fn:")
         assert "fn:mine" in syms
         assert "fn:theirs" not in syms
         # явный layer= побеждает env-override
-        assert "fn:theirs" in s.map_symbols("fn:", layer="0.15.theirs.2")
+        assert "fn:theirs" in s.cg_symbols("fn:", layer="0.15.theirs.2")
     finally:
         s.close()
 
@@ -445,18 +445,18 @@ def test_branch_purge_expected_current_cas(store):
     from mcp.errors import MemoryError as ME
     L1 = "0.15.cas.1"
     store.branch_register("0.15", "cas", n_commits=1)
-    store.map_put_symbol("fn:m:a", {"module": "m"}, layer=L1)
+    store.cg_put_symbol("fn:m:a", {"module": "m"}, layer=L1)
     # активный слой другой → CAS-ожидание не совпало
     with pytest.raises(ME) as ei:
         store.branch_purge(L1, expected_current="0.15.cas.X")
     assert "CONFLICT" in str(ei.value)
     # purge не выполнился (данные целы)
-    assert "fn:m:a" in store.map_symbols(layer=L1)
+    assert "fn:m:a" in store.cg_symbols(layer=L1)
     # корректный expected_current (текущий активный) — проходит
     cur = store.branch_current()["layer"]
     r = store.branch_purge(L1, expected_current=cur)
     assert r["result"] == "purged"
-    assert store.map_symbols(layer=L1) == []
+    assert store.cg_symbols(layer=L1) == []
 
 
 def test_branch_purge_cas_mcp_contract(store):
@@ -488,7 +488,7 @@ def test_branch_purge_cas_atomic_in_write_txn(store, monkeypatch):
     """
     L = "0.15.cas.9"
     store.branch_register("0.15", "cas9", n_commits=9)
-    store.map_put_symbol("fn:m:z", {"module": "m"}, layer=L)
+    store.cg_put_symbol("fn:m:z", {"module": "m"}, layer=L)
     calls = {"branch_current": 0, "write_txn": 0}
     real_bc = store.branch_current
     real_bw = store._begin_write
@@ -631,7 +631,7 @@ def test_branch_purge_vs_activate_race_no_corruption(tmp_path):
     # иначе оба процесса унаследуют LCK и env не откроется в потомке)
     s = Store(db, _skip_sync_thread=True)
     s.branch_register("0.15", "race", n_commits=3)
-    s.map_put_symbol("fn:m:r", {"module": "m"}, layer=L)
+    s.cg_put_symbol("fn:m:r", {"module": "m"}, layer=L)
     s.close()
     # Гонка через ОТДЕЛЬНЫЙ процесс (subprocess): fork в pytest-процессе
     # может унаследовать чужие env-fd (fixtures) → mdbx_env_open(11).
@@ -687,7 +687,7 @@ def test_branch_purge_vs_activate_race_no_corruption(tmp_path):
     # Запрещён ЛИШЬ случай: purge удалил данные слоя, КОТОРЫЙ был активен
     # В ТУ ЖЕ write-txn (guard бы отклонил) — это проверяет outcome.
     s4 = Store(db, _skip_sync_thread=True)
-    data = s4.map_symbols(layer=L)
+    data = s4.cg_symbols(layer=L)
     s4.close()
     assert child_ok, "потомок должен завершиться корректно (rc=%d)" % rc
     if outcome in ("conflict", "invalid-active"):

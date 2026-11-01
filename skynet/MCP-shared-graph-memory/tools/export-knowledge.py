@@ -194,7 +194,7 @@ def write_map(path: str, records, links, vocab) -> None:
         "- Архив роя `.archive/mcp-memory-dump.yaml` (25.09, 126 сущностей/104 связи) —",
         "  дистилляция в домены выполнена 27.09 (`proc:meta:archive-distillation`);",
         "  рабочее состояние роя (ящики/реестры/статусы) в знания не переносится.",
-        "- Данные refactoring-map верифицированы (`fact:meta:map-data-passport`).",
+        "- Данные codegraph верифицированы (`fact:meta:map-data-passport`).",
         "- События после дистилляции (CI-фикс, консолидация веток) — в живой памяти;",
         "  журнал ведётся также в `~/BOOTSTRAP.md`.",
         "",
