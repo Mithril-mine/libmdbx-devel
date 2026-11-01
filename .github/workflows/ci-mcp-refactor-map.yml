@@ -178,6 +178,151 @@ jobs:
         name: refactor-map-win32
         path: skynet/MCP-shared-graph-memory/tools/artifacts/refactoring-map-win32.json
 
+  sysdeps-linux:
+    runs-on: ubuntu-24.04
+    steps:
+    - uses: actions/checkout@v7
+      with:
+        fetch-depth: 0
+        submodules: true
+    - uses: actions/setup-python@v5
+      with:
+        python-version: "3.11"
+    - name: deps
+      run: python3 -m pip install --quiet cffi pytest pyyaml
+    - name: prepare build-scan
+      shell: bash
+      run: |
+        cmake -S . -B _build-scan -DCMAKE_BUILD_TYPE=Debug \
+          -DMDBX_BUILD_CXX=ON -DMDBX_ENABLE_TESTS=ON -DMDBX_BUILD_TOOLS=ON \
+          -DINTERPROCEDURAL_OPTIMIZATION=OFF \
+          -DCMAKE_EXPORT_COMPILE_COMMANDS=ON \
+          -DMDBX_ALLOY_BUILD=ON -DMDBX_USE_MINCORE=OFF
+    - name: scan system-deps (linux)
+      shell: bash
+      run: |
+        cd skynet/MCP-shared-graph-memory
+        python3 tools/scan_system_deps.py --mode scan-headers --config linux \
+          --cc "$GITHUB_WORKSPACE/_build-scan/compile_commands.json" \
+          --headers-list tests/fixtures/sysdeps/system-headers.txt \
+          --out tools/artifacts/system-deps-linux.json
+        python3 tools/scan_system_deps.py --mode scan-uses --config linux \
+          --cc "$GITHUB_WORKSPACE/_build-scan/compile_commands.json" \
+          --provides-from tools/artifacts/system-deps-linux.json \
+          --out tools/artifacts/system-deps-linux-uses.json
+    - name: upload sysdeps linux artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: system-deps-linux
+        path: |
+          skynet/MCP-shared-graph-memory/tools/artifacts/system-deps-linux.json
+          skynet/MCP-shared-graph-memory/tools/artifacts/system-deps-linux-uses.json
+
+  sysdeps-macos:
+    runs-on: macos-15
+    steps:
+    - uses: actions/checkout@v7
+      with:
+        fetch-depth: 0
+        submodules: true
+    - uses: actions/setup-python@v5
+      with:
+        python-version: "3.11"
+    - name: deps
+      run: python3 -m pip install --quiet cffi pytest pyyaml
+    - name: prepare build-scan
+      shell: bash
+      run: |
+        cmake -S . -B _build-scan -DCMAKE_BUILD_TYPE=Debug \
+          -DMDBX_BUILD_CXX=ON -DMDBX_ENABLE_TESTS=ON -DMDBX_BUILD_TOOLS=ON \
+          -DINTERPROCEDURAL_OPTIMIZATION=OFF \
+          -DCMAKE_EXPORT_COMPILE_COMMANDS=ON \
+          -DMDBX_ALLOY_BUILD=ON -DMDBX_USE_MINCORE=OFF
+    - name: scan system-deps (macos)
+      shell: bash
+      run: |
+        cd skynet/MCP-shared-graph-memory
+        python3 tools/scan_system_deps.py --mode scan-headers --config macos \
+          --cc "$GITHUB_WORKSPACE/_build-scan/compile_commands.json" \
+          --headers-list tests/fixtures/sysdeps/system-headers.txt \
+          --out tools/artifacts/system-deps-macos.json
+    - name: fail if macos sysdeps empty
+      shell: bash
+      run: |
+        cd skynet/MCP-shared-graph-memory
+        python3 - <<'PY'
+        import json
+        with open("tools/artifacts/system-deps-macos.json") as f:
+            a = json.load(f)
+        n = len(a["headers"])
+        absent = len(a.get("absent", []))
+        print("macos sys-deps: headers=%d absent=%d" % (n, absent))
+        assert n > 0, "macos sysdeps scan yielded 0 headers — aborting"
+        # sanity issue-#179-class: mach/mach_time.h must RESOLVE on macOS
+        assert any("mach_time" in k for k in a["headers"]), \
+            "mach/mach_time.h not resolved on macOS — platform facts broken"
+        assert any(a["name"] == "mntent.h" for a in a.get("absent", [])), \
+            "mntent.h must be ABSENT on macOS — platform facts broken"
+        PY
+    - name: upload sysdeps macos artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: system-deps-macos
+        path: skynet/MCP-shared-graph-memory/tools/artifacts/system-deps-macos.json
+
+  sysdeps-win32:
+    runs-on: windows-latest
+    steps:
+    - uses: actions/checkout@v7
+      with:
+        fetch-depth: 0
+        submodules: true
+    - uses: actions/setup-python@v5
+      with:
+        python-version: "3.11"
+    - name: deps
+      shell: bash
+      run: python3 -m pip install --quiet cffi pytest pyyaml
+    - name: prepare build-scan (msvc)
+      shell: bash
+      run: |
+        cmake -S . -B _build-scan -DCMAKE_BUILD_TYPE=Debug \
+          -DMDBX_BUILD_CXX=ON -DMDBX_BUILD_TOOLS=ON \
+          -DINTERPROCEDURAL_OPTIMIZATION=OFF \
+          -DCMAKE_EXPORT_COMPILE_COMMANDS=ON \
+          -DMDBX_ALLOY_BUILD=ON -DMDBX_USE_MINCORE=OFF
+    - name: scan system-deps (win32 msvc)
+      shell: bash
+      run: |
+        cd skynet/MCP-shared-graph-memory
+        python3 tools/scan_system_deps.py --mode scan-headers --config win32-msvc \
+          --cc "$GITHUB_WORKSPACE/_build-scan/compile_commands.json" \
+          --headers-list tests/fixtures/sysdeps/system-headers.txt \
+          --out tools/artifacts/system-deps-win32-msvc.json
+    - name: fail if win32 sysdeps empty
+      shell: bash
+      run: |
+        cd skynet/MCP-shared-graph-memory
+        python3 - <<'PY'
+        import json
+        with open("tools/artifacts/system-deps-win32-msvc.json") as f:
+            a = json.load(f)
+        n = len(a["headers"])
+        print("win32-msvc sys-deps: headers=%d absent=%d" % (
+            n, len(a.get("absent", []))))
+        assert n > 0, "win32 sysdeps scan yielded 0 headers — aborting"
+        # sanity: windows.h must RESOLVE with MSVC, mntent.h must be ABSENT
+        assert any("windows.h" in k for k in a["headers"]), \
+            "windows.h not resolved with MSVC — platform facts broken"
+        assert any(a["name"] == "mntent.h" for a in a.get("absent", [])), \
+            "mntent.h must be ABSENT on win32 — platform facts broken"
+        PY
+    - name: upload sysdeps win32 artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: system-deps-win32-msvc
+        path: skynet/MCP-shared-graph-memory/tools/artifacts/system-deps-win32-msvc.json
+
   merge-validate:
     needs: [scan-linux, scan-macos, scan-win32]
     runs-on: ubuntu-24.04

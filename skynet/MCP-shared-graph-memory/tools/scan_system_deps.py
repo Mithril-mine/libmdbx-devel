@@ -266,7 +266,7 @@ def main():
                     help="режим --scan-uses: артефакт(ы) PROVIDES (json, через запятую) "
                          "для резолва")
     ap.add_argument("--mode", required=True,
-                    choices=["scan-headers", "scan-uses", "merge"])
+                    choices=["scan-headers", "scan-uses", "merge", "collect-includes"])
     ap.add_argument("--scans", default=None,
                     help="merge: артефакты конфигов (json, через запятую)")
     ap.add_argument("--limit-headers", type=int, default=0,
@@ -282,21 +282,88 @@ def main():
     os.makedirs(os.path.dirname(out_path), exist_ok=True)
 
     if args.mode == "scan-headers":
+        # Источник списка:
+        #  - --headers-list (формат: путь [имя]) — для CI/повторяемости;
+        #  - иначе collect_header_marks по compile_commands.
+        # Записи, которых нет на этой платформе, фиксируются в artifact.absent
+        # (честно: платформенно-отсутствующий заголовок — тоже факт модели).
+        absent = []
+        headers = {}
         if args.headers_list:
-            # список задан явно: compile_commands не нужен
-            headers = {h.strip(): {"entry": None}
-                       for h in open(args.headers_list) if h.strip()}
-        else:
-            cc = json.load(open(args.cc)) if os.path.getsize(args.cc) else []
-            tu_list = select_tus(cc) if cc else []
-            headers = collect_header_marks(tu_list, clang, cfg)
+            entries = []  # (requested, display_name)
+            for line in open(args.headers_list):
+                line = line.strip()
+                if not line or line.startswith("#"):
+                    continue
+                parts = line.split()
+                hpath = parts[0]
+                hname = parts[1] if len(parts) > 1 else os.path.basename(hpath)
+                entries.append((hpath, hname))
+            # Резолв имён в абсолютные пути средствами clang целевой платформы.
+            # КАЖДЫЙ заголовок резолвится ОТДЕЛЬНЫМ мини-TU (`#include <name>`
+            # + `-H`): отказ одного (платформенно-отсутствующий) не влияет на
+            # остальные — общий TU оборвался бы fatal error'ом на первом же
+            # отсутствующем. Дополнительные флаги берутся из compile_commands
+            # (если существует; MSVC-генератор его не создаёт — clang на
+            # Windows находит MSVC-заголовки через auto-detect). Не найденные
+            # платформой честно фиксируются в absent (факт модели).
+            resolved_by_name = {}
+            if entries:
+                args0 = []
+                if args.cc and os.path.isfile(args.cc) and os.path.getsize(args.cc):
+                    cc = json.load(open(args.cc))
+                    tu_list = select_tus(cc) if cc else []
+                    if tu_list:
+                        args0 = sanitize_args(tu_list[0][1]["command"],
+                                              tu_list[0][1]["file"])
+                        if cfg._cross:
+                            args0 = cfg.args_for(tu_list[0][1],
+                                                 tu_list[0][1]["file"])
+                tmpdir_hdr = os.path.dirname(out_path) or "."
+                tree_re = re.compile(r'^[. ]*\s(\S+)$')
+                for hpath, hname in entries:
+                    probe = os.path.join(tmpdir_hdr,
+                                         "_sysdeps-probe-%s.c" % args.config)
+                    with open(probe, "w") as f:
+                        f.write("#include <%s>\n" % hpath)
+                    r = subprocess.run([clang, "-E", "-H"] + args0 + [probe],
+                                       capture_output=True, text=True,
+                                       errors="replace")
+                    os.unlink(probe)
+                    for line in (r.stderr or "").splitlines():
+                        m = tree_re.match(line)
+                        if not m:
+                            continue
+                        p = m.group(1)
+                        if os.path.basename(p) == hname or p.endswith("/" + hpath) \
+                           or p.endswith("\\" + hpath) or p == hpath:
+                            if hname not in resolved_by_name:
+                                resolved_by_name[hname] = p
+                            break
+            for hpath, hname in entries:
+                if os.path.isabs(hpath) and os.path.exists(hpath):
+                    headers[hpath] = {"name": hname, "entry": None}
+                    continue
+                resolved = resolved_by_name.get(hname) or resolved_by_name.get(hpath)
+                if resolved:
+                    headers[resolved] = {"name": hname, "entry": None}
+                else:
+                    # платформенно-отсутствующий: важный факт для категории
+                    absent.append({"name": hname, "path": hpath,
+                                   "reason": "header not found on this platform (clang include paths)"})
         if args.limit_headers:
             headers = dict(list(headers.items())[:args.limit_headers])
-        result = {"config": args.config, "headers": {}, "uses": {}}
+        result = {"config": args.config, "headers": {}, "uses": {},
+                  "absent": absent}
         for i, (path, meta) in enumerate(sorted(headers.items())):
             provides = scan_header_provides(clang, path,
                                             meta.get("args") if cfg._cross else None)
             if provides is None:
+                # заголовок найден, но не компилируется в этом конфиге
+                # (напр. C++-заголовок под -x c): честный факт, не молчание
+                absent.append({"name": os.path.basename(path), "path": path,
+                               "reason": "header exists but failed to compile "
+                                         "in this config (see scan stderr)"})
                 continue
             macros = scan_header_macros(clang, path,
                                         meta.get("args") if cfg._cross else None)
@@ -350,6 +417,82 @@ def main():
         json.dump(result, open(out_path, "w"), ensure_ascii=False, indent=1)
         print("scan_system_deps: merged %d configs, %d headers, %d files -> %s"
               % (len(scans), len(result["headers"]), len(result["uses"]), out_path))
+        return 0
+
+    if args.mode == "collect-includes":
+        """Угловые include из исходников проекта + резолв путей через clang.
+
+        Собирает все `#include <...>` из src/** и tests/**, резолвит каждый
+        через clang (`-E -H -fsyntax-only` на минимальном TU: путь из
+        preprocessed file-marks), выводит список «путь [имя]» для
+        --headers-list режима scan-headers. Заголовки, отсутствующие на этой
+        платформе, в список не попадают (их отсутствие фиксирует
+        scan-headers/absent на платформе, где они есть, либо merge).
+        """
+        cc = json.load(open(args.cc)) if os.path.getsize(args.cc) else []
+        tu_list = select_tus(cc) if cc else []
+        if not tu_list:
+            print("scan_system_deps: collect-includes: нет TU (compile_commands?)",
+                  file=sys.stderr)
+            return 1
+        name, entry = tu_list[0]
+        args0 = sanitize_args(entry["command"], entry["file"])
+        if cfg._cross:
+            args0 = cfg.args_for(entry, entry["file"])
+        # 1) угловые include из исходников проекта
+        angle = set()
+        inc_re = re.compile(r'^\s*#\s*include\s*<([^>]+)>')
+        roots = [os.path.join(REPO_ROOT, "src"),
+                 os.path.join(REPO_ROOT, "tests")]
+        for root in roots:
+            for dirpath, _, files in os.walk(root):
+                for fn in files:
+                    if not fn.endswith((".c", ".h", ".c++", ".h++", ".cxx")):
+                        continue
+                    try:
+                        with open(os.path.join(dirpath, fn), encoding="utf-8",
+                                  errors="replace") as f:
+                            for line in f:
+                                m = inc_re.match(line)
+                                if m:
+                                    angle.add(m.group(1))
+                    except OSError:
+                        continue
+        print("scan_system_deps: %d angle-includes from src/tests" % len(angle),
+              file=sys.stderr)
+        # 2) резолв: clang -E -H по минимальному TU, включающему их все
+        probe = os.path.join(os.path.dirname(out_path) or ".",
+                             "_sysdeps-probe-%s.c" % args.config)
+        with open(probe, "w") as f:
+            for inc in sorted(angle):
+                f.write("#include <%s>\n" % inc)
+        cmd = [clang, "-E", "-H"] + args0 + [probe]
+        r = subprocess.run(cmd, capture_output=True, text=True, errors="replace")
+        os.unlink(probe)
+        resolved, failed = [], []
+        for line in (r.stderr or "").splitlines():
+            # clang -H печатает дерево: ". ./path/header.h" / ".. ./path2..."
+            m = re.match(r'^[. ]*\s(\S+)$', line)
+            if not m:
+                continue
+            p = m.group(1)
+            base = os.path.basename(p)
+            if base in angle or p.endswith(tuple(angle)):
+                if os.path.exists(p):
+                    resolved.append(p)
+        for inc in sorted(angle):
+            if not any(inc == os.path.basename(p) or p.endswith("/" + inc)
+                       for p in resolved):
+                failed.append(inc)
+        lines = ["%s %s" % (p, os.path.basename(p)) for p in sorted(resolved)]
+        with open(out_path, "w") as f:
+            f.write("\n".join(lines) + ("\n" if lines else ""))
+        print("scan_system_deps: collect-includes: %d resolved, %d not-found "
+              "(%s) -> %s" % (len(resolved), len(failed),
+                              ", ".join(sorted(failed)[:6]) or "-", out_path))
+        # не-найденные на этой платформе печатаем явно (факт для другой платформы)
+        for inc in sorted(failed):
+            print("scan_system_deps:   absent here: <%s>" % inc, file=sys.stderr)
         return 0
 
     return 2
