@@ -43,7 +43,7 @@ def test_trace_path_lazy_no_full_adj(store):
 
 def test_trace_compare_static_vs_observed(store):
     # static-ребро в call_edges
-    store.map_put_edge("fn:lib:foo", "fn:lib:bar", kind="syntax")
+    store.cg_put_edge("fn:lib:foo", "fn:lib:bar", kind="syntax")
     # наблюдаем только одно из двух
     store.trace_ingest("fn:lib:foo", "fn:lib:bar")
     cmp = store.trace_compare("fn:lib:foo")
@@ -51,15 +51,15 @@ def test_trace_compare_static_vs_observed(store):
     assert cmp["observed"] == ["fn:lib:bar"]
     assert cmp["only_static"] == []
     # статическое ребро, которое НЕ наблюдалось
-    store.map_put_edge("fn:lib:foo", "fn:lib:unused", kind="syntax")
+    store.cg_put_edge("fn:lib:foo", "fn:lib:unused", kind="syntax")
     cmp2 = store.trace_compare("fn:lib:foo")
     assert "fn:lib:unused" in cmp2["only_static"]
 
 
 def test_map_put_edge_semantic_kind(store):
-    store.map_put_edge("fn:gc-get:gc_alloc_ex@linux",
+    store.cg_put_edge("fn:gc-get:gc_alloc_ex@linux",
                        "fn:gc-get:gc_alloc_ex@win32", kind="semantic")
-    edge = json.loads(store.map_edges_of("fn:gc-get:gc_alloc_ex@linux")[0])
+    edge = json.loads(store.cg_edges_of("fn:gc-get:gc_alloc_ex@linux")[0])
     assert edge["kind"] == "semantic"
     assert edge["callee"] == "fn:gc-get:gc_alloc_ex@win32"
 

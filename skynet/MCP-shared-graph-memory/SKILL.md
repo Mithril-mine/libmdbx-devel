@@ -47,11 +47,15 @@ shared-graph-memory.mdbx — персистентная память роя на
 | `db_fileinfo()` | fstat(fd): st_nlink/size/inode + признак удаления файла БД |
 | `db_latency()` | Commit-латентности последних записей по стадиям (µs) |
 | `db_recover(target_meta?)` | Диагностика меты для восстановления (безопасный probe) |
-| `map_symbol(key)` / `map_symbols(prefix?, limit?)` | Символ / префиксный список карты исходников |
-| `map_edges_of(caller)` / `map_callers_of(callee)` | Вызовы / обратные рёбра (impact) |
-| `map_group_members(group)` | Члены фасет-группы (`group:subsystem:{module}` и др.) |
-| `map_regions(prefix?, limit?)` / `map_region(key)` | #if-дерево (region:{module}:{n}) |
-| `map_uncovered(prefix?, limit?)` | Uncovered-острова смысла вне union-AST |
+| `cg_symbol(key)` / `cg_symbols(prefix?, limit?)` | Символ / префиксный список карты исходников |
+| `cg_edges_of(caller)` / `cg_callers_of(callee)` | Вызовы / обратные рёбра (impact) |
+| `cg_group_members(group)` | Члены фасет-группы (`group:subsystem:{module}` и др.) |
+| `cg_regions(prefix?, limit?)` / `cg_region(key)` | #if-дерево (region:{module}:{n}) |
+| `cg_uncovered(prefix?, limit?)` | Uncovered-острова смысла вне union-AST |
+| `sys_headers_required_for(file)` | Системные заголовки файла по подтверждённым сканами символам |
+| `sys_known_on(file, config)` | Sys-символы файла, известные в конфиге toolchain. ВАЖНО: «нет в ответе» ≠ «нет на платформе» (конфиг = toolchain: mingw/clang-cl/cygwin дают разные наборы на одной ОС) |
+| `sys_uses_of(file)` / `sys_refs_of(symbol)` | Полное sys-использование файла / заголовки системного символа |
+| `symbol_definitions(name)` | Все карточки идентификатора: декларации и тела по всем TU. Только факты (linkage/сигнатуры/конфиги); решение «конфликт ли это» — за вызывающим |
 | `test_metrics_insert(test, duration_ms, labels?, timeout_sec?)` | Окно истории длительностей тест-кейса (минутное: last/min/max/p90, флаки) |
 | `test_metrics_get(test)` / `test_metrics_all(prefix?)` | Метрики теста / всех |
 | `coverage_insert(test, symbols, pct?, layer?)` / `coverage_batch(tests, layer?)` | Покрытие теста (набор fn:/type:/macro:), батч |
@@ -73,13 +77,13 @@ shared-graph-memory.mdbx — персистентная память роя на
 | `trace_observed(caller?)` | Наблюдаемые вызовы (по префиксу caller) |
 | `trace_path(src, dst, depth?)` | Пути по observed-рёбрам (BFS) |
 | `trace_compare(symbol)` | **possible vs observed**: static (call_edges) vs runtime (traces) |
-| `map_put_edge(caller, callee, kind?)` | Записать ребро вызова (syntax/semantic) |
-| `map_put_symbol(key, body, layer?)` | Записать символ карты; `cpp_status` (none/mapped/partial/done) валидируется |
-| `map_alias(old_key, new_key)` / `map_refresh_stale()` | Фиксировать переименование / перецепить висячие ссылки |
-| `map_mark_stale(live_keys, layer?)` | Пометить отсутствующие символы stale (alive остальным) |
-| `map_port_status(module?, layer?)` | **Приборная панель C→C++**: cpp_status по модулям + топ непортированных (по блокам) |
-| `map_generations()` / `map_snapshot()` | Поколение карты (canary.y) / полный снимок |
-| `map_diff(other?)` | Разница текущего снимка с прошлым (added/removed/common) |
+| `cg_put_edge(caller, callee, kind?)` | Записать ребро вызова (syntax/semantic) |
+| `cg_put_symbol(key, body, layer?)` | Записать символ карты; `cpp_status` (none/mapped/partial/done) валидируется |
+| `cg_alias(old_key, new_key)` / `cg_refresh_stale()` | Фиксировать переименование / перецепить висячие ссылки |
+| `cg_mark_stale(live_keys, layer?)` | Пометить отсутствующие символы stale (alive остальным) |
+| `cg_port_status(module?, layer?)` | **Приборная панель C→C++**: cpp_status по модулям + топ непортированных (по блокам) |
+| `cg_generations()` / `cg_snapshot()` | Поколение карты (canary.y) / полный снимок |
+| `cg_diff(other?)` | Разница текущего снимка с прошлым (added/removed/common) |
 | `adr_update(name, ...)` / `adr_get(name)` | ADR: сохранить/прочитать архитектурное решение |
 | `adr_outline(prefix?)` / `adr_delete(name)` | Обзор ADR / удаление |
 | `cbm_link(our_key, cbm_node, cbm_project?)` / `cbm_unlink(our_key)` | Мост: наш fq-ключ ↔ узел codebase-memory-mcp |
@@ -114,15 +118,15 @@ shared-graph-memory.mdbx — персистентная память роя на
   было (опечатка?) ИЛИ он purge'нут другим агентом (данные не вернутся)».
   Для опечатки — исправьте slug; для purge'нутого — пересоздайте с нуля
   (branch_register не восстановит данные);
-- `map_diff_branches(from, to)` — **структурный diff по содержимому** карты
+- `cg_diff_branches(from, to)` — **структурный diff по содержимому** карты
   (не по коммитам): что реально изменилось между ветками;
 - `coverage_migrate(from, to, symbols?)` — копия coverage/blocks/traces
   слоя в другой (merge ветки): источник цел, конфликт test_id/caller →
   перезапись (для coverage — суженная фильтром; для traces — caller
   копируется целиком телом источника). Битые/несогласованные записи
   источника пропускаются с отчётом `skipped`;
-- `layer=` принимают map-инструменты (`map_symbol(s)`, `map_edges_of`,
-  `map_callers_of`); базовый слой (`0.15`) — без префикса;
+- `layer=` принимают map-инструменты (`cg_symbol(s)`, `cg_edges_of`,
+  `cg_callers_of`); базовый слой (`0.15`) — без префикса;
 - **Правило**: в feature-ветке работайте в СВОЁМ слое (передавайте `layer`),
   не затирая базовый. Знания (curated-слой) — общие; структурный слой —
   per-branch.
@@ -138,11 +142,11 @@ shared-graph-memory.mdbx — персистентная память роя на
   `meta.branch_current` (глобальный). В рое из нескольких агентов каждая
   ветвь выставляет свой `SHARED_GRAPH_MEMORY_LAYER` — и чужой
   `branch_activate` не переключит её записи в чужой слой.
-  Исключения (глобальные, БЕЗ слойной изоляции): `map_alias`
-  (таблица `sym_aliases`) и `map_refresh_stale` (сканирует `sym_id2key`/
+  Исключения (глобальные, БЕЗ слойной изоляции): `cg_alias`
+  (таблица `sym_aliases`) и `cg_refresh_stale` (сканирует `sym_id2key`/
   `links` целиком) — переименования и чистка висячих ссылок видны всем
   слоям. Curated-знания (records/links/vocab/adr) — тоже общие.
-- При слиянии: `map_diff_branches(base, feature)` → перенос новых символов в
+- При слиянии: `cg_diff_branches(base, feature)` → перенос новых символов в
   base → `coverage_migrate(feature, base)` → пересканировать base → feature
   `status=merged`; мёртвый слой после rebase — `branch_purge(feature)`.
 
@@ -186,15 +190,15 @@ shared-graph-memory.mdbx — персистентная память роя на
 - `__future__`: `db_readers check=true` — ручная чистка stale-слотов; рой
   без rw-писателя — явные `check=true` (libmdbx чистит читателей сам).
 
-### Карта исходников (refactoring-map)
+### Карта исходников (codegraph)
 
 - Структурный слой: `symbols` (fn:/type:/macro:), `call_edges(+rev)`, `groups`,
   `regions`, `uncovered`; наполняется `scan_symbols.py` → `load_map.py`.
 - **Ключи**: канонические fq-ключи функций — `fn:{qname}` (module в теле,
   `@<module>` для TU-static, `#<sig>` для перегрузок). **Не выдумывайте
-  ключи**: получайте их через `map_symbols(prefix)` / `map_symbol` перед
-  `map_edges_of`/`map_callers_of`/`coverage_symbols`. Поиск по модулю —
-  `map_symbols("fn:gc")` (фильтр по module-полю).
+  ключи**: получайте их через `cg_symbols(prefix)` / `cg_symbol` перед
+  `cg_edges_of`/`cg_callers_of`/`coverage_symbols`. Поиск по модулю —
+  `cg_symbols("fn:gc")` (фильтр по module-полю).
   `regions` (#if-дерево), `uncovered` (острова смысла вне union-AST всех конфигов).
 - Данные генерируются `tools/scan_symbols.py` (+scan_regions/uncovered),
   загружаются `tools/load_map.py --db <живая> --replace`, сверяются
@@ -203,12 +207,12 @@ shared-graph-memory.mdbx — персистентная память роя на
   Локально конвейер воспроизводится одной командой
   `python3 tools/scan_all.py --configs linux,win32 [--db <живая>]`
   (macos-артефакт — из CI). Подробности и root-cause заметки — в
-  `docs/REFACTORING-MAP.md`, секция «Многоплатформенное сканирование».
-- Использование для рефакторинга: `map_edges_of('fn:x')` — кто вызывается;
-  `map_callers_of('fn:x')` — impact; `map_uncovered('api-copy')` — непокрытые
-  острова в модуле; `map_regions('region:chk')` — платформенные ветки.
+  `docs/CODEGRAPH.md`, секция «Многоплатформенное сканирование».
+- Использование для рефакторинга: `cg_edges_of('fn:x')` — кто вызывается;
+  `cg_callers_of('fn:x')` — impact; `cg_uncovered('api-copy')` — непокрытые
+  острова в модуле; `cg_regions('region:chk')` — платформенные ветки.
 - Перегенерация/смена кода: ссылки на исчезнувшие символы чинятся
-  `map_refresh_stale()`.
+  `cg_refresh_stale()`.
 
 #### Динамическое покрытие (coverage layer)
 
@@ -222,7 +226,7 @@ union-AST), но не отвечает на вопрос «что реально
 - Хранение: одна запись на прогон
   `fact:testing:coverage-<branch>` (важность 0.3), внутри — дата, общий
   % строк/функций и список «худших» файлов (<55% строк) с процентами.
-- Интерпретация: `fact:testing:coverage-*` + `map_uncovered('<модуль>')`
+- Интерпретация: `fact:testing:coverage-*` + `cg_uncovered('<модуль>')`
   вместе дают карту недотестированности — структурные дыры (uncovered)
   поверх количественных цифр. Приоритет новых тестов:
   1) худшие покрытые модули (`api-cursor`, `mdbx.c++`, `coherency`,

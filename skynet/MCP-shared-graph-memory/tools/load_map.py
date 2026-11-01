@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
-"""load_map.py — загрузка refactoring-map.json в структурный слой Store.
+"""load_map.py — загрузка codegraph.json в структурный слой Store.
 
-Читает артефакт сканера (tools/artifacts/refactoring-map.json) и наполняет:
+Читает артефакт сканера (tools/artifacts/codegraph.json) и наполняет:
   - symbols:      ключ fq-имени -> JSON символа (функция/тип/макрос);
   - call_edges:   caller -> JSON {kind, resolved, ambiguous, callee} (DUPSORT);
   - call_edges_rev: callee -> caller (обратные рёбра для impact-анализа);
@@ -37,7 +37,7 @@ def iter_sorted(d):
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--map", default=os.path.join(TOOLS_DIR, "artifacts",
-                                                  "refactoring-map.json"))
+                                                  "codegraph.json"))
     ap.add_argument("--db", default=":memory:")
     ap.add_argument("--replace", action="store_true",
                     help="очистить структурные таблицы перед загрузкой")
@@ -48,6 +48,9 @@ def main():
                     help="не грузить regions/uncovered")
     ap.add_argument("--project", default=None,
                     help="дополнительно загрузить project-map.json (путь)")
+    ap.add_argument("--system-deps", default=None,
+                    help="дополнительно загрузить system-deps-<config>.json "
+                         "(артефакт scan_system_deps.py)")
     ap.add_argument("--dry-run", action="store_true",
                     help="сверка только: не писать в БД")
     args = ap.parse_args()
@@ -89,32 +92,32 @@ def _run_load(store, args, db, symbols, edges, regions, uncovered) -> int:
         groups.setdefault(gkey, set()).add(key)
 
     t0 = time.time()
-    loaded = store.map_load_batch(symbols, edges, groups,
+    loaded = store.cg_load_batch(symbols, edges, groups,
                                   replace=args.replace,
                                   layer=args.layer)
     # ВАЖНО: regions/uncovered и project-map пока НЕ слоистые — при загрузке
     # feature-слоя они очистили бы глобальные (base) таблицы. Режектим их до
     # записи. layer_is_base — через ТОТ ЖЕ effective-слой, что и
-    # map_load_batch (иначе при опущенном --layer, но активной feature-ветке
+    # cg_load_batch (иначе при опущенном --layer, но активной feature-ветке
     # символы лягут в feature, а regions — в base).
     eff = store._effective_layer(args.layer)
     layer_is_base = store.layer_prefix(eff) == ""
     if layer_is_base and not args.skip_regions and (regions or uncovered):
-        r = store.map_load_regions(regions, uncovered, replace=args.replace)
+        r = store.cg_load_regions(regions, uncovered, replace=args.replace)
         loaded.update(r)
     elif not layer_is_base and (regions or uncovered):
         print("warning: regions/uncovered пропущены для feature-слоя "
               "(пока не слоистые)", file=sys.stderr)
     dt = time.time() - t0
 
-    n_sym = len(store.map_symbols(layer=args.layer))
-    n_reg = len(store.map_regions(limit=10**9))
-    n_unc = len(store.map_uncovered(limit=10**9))
+    n_sym = len(store.cg_symbols(layer=args.layer))
+    n_reg = len(store.cg_regions(limit=10**9))
+    n_unc = len(store.cg_uncovered(limit=10**9))
     # проверка обратных рёбер: случайное разрешённое ребро
     n_rev = 0
     if edges:
         sample = next(e for e in edges if e.get("resolved"))
-        n_rev = len(store.map_callers_of(sample["callee"], layer=args.layer))
+        n_rev = len(store.cg_callers_of(sample["callee"], layer=args.layer))
     print("loaded: symbols=%d edges=%d groups=%d regions=%d uncovered=%d in %.1fs" % (
         loaded["symbols"], loaded["edges"], loaded["groups"],
         loaded.get("regions", 0), loaded.get("uncovered", 0), dt))
@@ -130,6 +133,18 @@ def _run_load(store, args, db, symbols, edges, regions, uncovered) -> int:
             r = store.project_load(pj.get("files") or {}, pj.get("edges") or [],
                                    replace=args.replace)
             print("project-map: files=%d edges=%d" % (r["files"], r["edges"]))
+    if args.system_deps:
+        if not layer_is_base:
+            print("warning: system-deps пропущены для feature-слоя "
+                  "(пока не слоистые)", file=sys.stderr)
+        else:
+            with open(args.system_deps) as f:
+                sd = json.load(f)
+            r = store.sys_deps_load(sd.get("headers") or {},
+                                    sd.get("uses") or {},
+                                    replace=args.replace)
+            print("system-deps: headers=%d files=%d refs=%d" % (
+                r["headers"], r["files"], r["refs"]))
     store.close()
     return 0
 

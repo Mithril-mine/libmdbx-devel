@@ -205,37 +205,37 @@ class McpServer:
              "Обычно предпочтителен mdbx_chk или восстановление из db_backup.",
              [], {"type": "object",
                   "properties": {"target_meta": {"type": "integer"}}}),
-            ("map_symbol", "Символ карты исходников по fq-ключу (fn:/type:/macro:).",
+            ("cg_symbol", "Символ карты исходников по fq-ключу (fn:/type:/macro:).",
              ["key"], {"type": "object",
                        "properties": {"key": {"type": "string"},
                                       "layer": {"type": "string"}},
                        "required": ["key"]}),
-            ("map_symbols", "Префиксный список символов карты (limit, layer).",
+            ("cg_symbols", "Префиксный список символов карты (limit, layer).",
              [], {"type": "object", "properties": {"prefix": {"type": "string"},
                                                    "limit": {"type": "integer"},
                                                    "layer": {"type": "string"}}}),
-            ("map_edges_of", "Исходящие вызовы символа (caller -> callee; "
+            ("cg_edges_of", "Исходящие вызовы символа (caller -> callee; "
              "принимает caller|symbol, layer).", [], {"type": "object",
                                                       "properties": {"caller": {"type": "string"},
                                                                      "symbol": {"type": "string"},
                                                                      "layer": {"type": "string"}}}),
-            ("map_callers_of", "Кто вызывает символ (callee|symbol, layer; impact).",
+            ("cg_callers_of", "Кто вызывает символ (callee|symbol, layer; impact).",
              [], {"type": "object",
                   "properties": {"callee": {"type": "string"},
                                  "symbol": {"type": "string"},
                                  "layer": {"type": "string"}}}),
-            ("map_group_members", "Члены фасет-группы (group:{kind}:{name}).",
+            ("cg_group_members", "Члены фасет-группы (group:{kind}:{name}).",
              ["group"], {"type": "object",
                          "properties": {"group": {"type": "string"}},
                          "required": ["group"]}),
-            ("map_regions", "#if-дерево: префиксный список регионов region:{module}:{n}.",
+            ("cg_regions", "#if-дерево: префиксный список регионов region:{module}:{n}.",
              [], {"type": "object", "properties": {"prefix": {"type": "string"},
                                                    "limit": {"type": "integer"}}}),
-            ("map_region", "Один регион #if-дерева по ключу.",
+            ("cg_region", "Один регион #if-дерева по ключу.",
              ["key"], {"type": "object",
                        "properties": {"key": {"type": "string"}},
                        "required": ["key"]}),
-            ("map_uncovered", "Uncovered-острова смысла (префикс модуля, limit).",
+            ("cg_uncovered", "Uncovered-острова смысла (префикс модуля, limit).",
              [], {"type": "object", "properties": {"prefix": {"type": "string"},
                                                    "limit": {"type": "integer"}}}),
             ("test_metrics_insert", "Зафиксировать длительность тест-кейса "
@@ -437,23 +437,23 @@ class McpServer:
                           "properties": {"symbol": {"type": "string"},
                                          "layer": {"type": "string"}},
                           "required": ["symbol"]}),
-            ("map_put_symbol", "Записать символ карты (cpp_status: "
+            ("cg_put_symbol", "Записать символ карты (cpp_status: "
              "none|mapped|partial|done).",
              ["key", "body"], {"type": "object",
                                "properties": {"key": {"type": "string"},
                                               "body": {"type": "object"},
                                               "layer": {"type": "string"}},
                                "required": ["key", "body"]}),
-            ("map_alias", "Фиксировать переименование символа "
+            ("cg_alias", "Фиксировать переименование символа "
              "(old_key -> new_key).",
              ["old_key", "new_key"], {"type": "object",
                                       "properties": {
                                           "old_key": {"type": "string"},
                                           "new_key": {"type": "string"}},
                                       "required": ["old_key", "new_key"]}),
-            ("map_refresh_stale", "Перецепить/удалить висячие ссылки "
+            ("cg_refresh_stale", "Перецепить/удалить висячие ссылки "
              "на исчезнувшие символы.", [], {"type": "object"}),
-            ("map_put_edge", "Записать ребро вызова (kind: syntax|semantic).",
+            ("cg_put_edge", "Записать ребро вызова (kind: syntax|semantic).",
              ["caller", "callee"], {"type": "object",
                                     "properties": {"caller": {"type": "string"},
                                                    "callee": {"type": "string"},
@@ -461,24 +461,60 @@ class McpServer:
                                                    "layer": {"type": "string"},
                                                    "configs": {"type": "array"}},
                                     "required": ["caller", "callee"]}),
-            ("map_mark_stale", "Пометить отсутствующие в live_keys символы "
+            ("cg_mark_stale", "Пометить отсутствующие в live_keys символы "
              "как stale (alive остальным).", ["live_keys"], {
                  "type": "object",
                  "properties": {"live_keys": {"type": "array"}},
                  "required": ["live_keys"]}),
-            ("map_generations", "Поколение карты (canary.y) + счётчики.", [],
+            ("cg_generations", "Поколение карты (canary.y) + счётчики.", [],
              {"type": "object"}),
-            ("map_snapshot", "Полный снимок карты (для diff поколений).", [],
+            ("cg_snapshot", "Полный снимок карты (для diff поколений).", [],
              {"type": "object",
               "properties": {"layer": {"type": "string"}}}),
-            ("map_port_status", "Приборная панель миграции C→C++ "
+            ("cg_port_status", "Приборная панель миграции C→C++ "
              "(cpp_status по модулям + топ непортированных).", [],
              {"type": "object",
               "properties": {"module": {"type": "string"},
                              "layer": {"type": "string"}}}),
-            ("map_diff", "Разница текущего снимка с other (keys/generation).",
-             [], {"type": "object",
-                  "properties": {"other": {"type": "object"}}}),
+             ("cg_diff", "Разница текущего снимка с other (keys/generation).",
+              [], {"type": "object",
+                   "properties": {"other": {"type": "object"}}}),
+             ("sys_headers_required_for", "Системные заголовки, требуемые файлу "
+              "по подтверждённым сканами символам.", ["file"],
+              {"type": "object", "required": ["file"],
+               "properties": {"file": {"type": "string"}}}),
+             ("sys_known_on", "Sys-символы файла, известные по сканам в конфиге "
+              "toolchain (config = toolchain: win32-mingw/clang-cl дают разные "
+              "наборы). ВАЖНО: отсутствие в ответе НЕ означает отсутствия "
+              "символа на платформе.", ["file", "config"],
+              {"type": "object", "required": ["file", "config"],
+               "properties": {"file": {"type": "string"},
+                              "config": {"type": "string"}}}),
+             ("sys_uses_of", "Полное sys-использование файла "
+              "(sys_refs + unresolved).", ["file"],
+              {"type": "object", "required": ["file"],
+               "properties": {"file": {"type": "string"}}}),
+             ("sys_refs_of", "Заголовки, объявляющие системный символ.",
+              ["symbol"],
+              {"type": "object", "required": ["symbol"],
+               "properties": {"symbol": {"type": "string"}}}),
+             ("sys_deps_load", "Батчевая загрузка артефакта scan_system_deps "
+              "(system-deps.json: headers + uses) в sys-таблицы. "
+              "headers: {hdr_key -> {name, path, provides{fn,type,macro}, "
+              "in_configs}}; uses: {rel_file -> {sys_refs{sym: [hdr_key]}, "
+              "unresolved}}. replace=true очищает sys-таблицы перед записью.",
+              ["headers", "uses"],
+              {"type": "object", "required": ["headers", "uses"],
+               "properties": {"headers": {"type": "object"},
+                              "uses": {"type": "object"},
+                              "replace": {"type": "boolean",
+                                          "default": True}}}),
+              ("symbol_definitions", "Все карточки идентификатора: декларации и "
+               "тела, по всем файлам/TU (факты; решение о конфликте — за "
+               "вызывающим).", ["name"],
+               {"type": "object", "required": ["name"],
+                "properties": {"name": {"type": "string"},
+                               "layer": {"type": "string"}}}),
             ("adr_update", "Сохранить/обновить ADR (context/decision/consequences).",
              ["name"], {"type": "object",
                         "properties": {"name": {"type": "string"},
@@ -558,7 +594,7 @@ class McpServer:
               "properties": {"layer": {"type": "string"},
                              "expected_current": {"type": "string"}},
               "required": ["layer"]}),
-            ("map_diff_branches", "Структурный diff двух слоёв (по содержимому).",
+            ("cg_diff_branches", "Структурный diff двух слоёв (по содержимому).",
              ["from_layer", "to_layer"], {"type": "object",
                                           "properties": {"from_layer": {"type": "string"},
                                                          "to_layer": {"type": "string"},
@@ -728,36 +764,36 @@ class McpServer:
         if name == "db_recover":
             target = int(args.get("target_meta", 0))
             return s.recover(target)
-        if name == "map_symbol":
-            return s.map_symbol(args["key"], layer=args.get("layer", ""))
-        if name == "map_symbols":
-            return {"symbols": s.map_symbols(args.get("prefix", ""),
+        if name == "cg_symbol":
+            return s.cg_symbol(args["key"], layer=args.get("layer", ""))
+        if name == "cg_symbols":
+            return {"symbols": s.cg_symbols(args.get("prefix", ""),
                                              limit=args.get("limit"),
                                              layer=args.get("layer", ""))}
-        if name == "map_edges_of":
+        if name == "cg_edges_of":
             # алиас: агент может передать caller или symbol (семант. имя)
             sym = args.get("caller") or args.get("symbol")
             if not sym:
                 raise MemoryError(
-                    "invalid", "invalid", "map_edges_of требует 'caller' или 'symbol'",
+                    "invalid", "invalid", "cg_edges_of требует 'caller' или 'symbol'",
                     "укажите символ", "none")
-            return {"edges": s.map_edges_of(sym, layer=args.get("layer", ""))}
-        if name == "map_callers_of":
+            return {"edges": s.cg_edges_of(sym, layer=args.get("layer", ""))}
+        if name == "cg_callers_of":
             sym = args.get("callee") or args.get("symbol")
             if not sym:
                 raise MemoryError(
-                    "invalid", "invalid", "map_callers_of требует 'callee' или 'symbol'",
+                    "invalid", "invalid", "cg_callers_of требует 'callee' или 'symbol'",
                     "укажите символ", "none")
-            return {"callers": s.map_callers_of(sym, layer=args.get("layer", ""))}
-        if name == "map_group_members":
-            return {"members": s.map_group_members(args["group"])}
-        if name == "map_regions":
-            return {"regions": s.map_regions(args.get("prefix", ""),
+            return {"callers": s.cg_callers_of(sym, layer=args.get("layer", ""))}
+        if name == "cg_group_members":
+            return {"members": s.cg_group_members(args["group"])}
+        if name == "cg_regions":
+            return {"regions": s.cg_regions(args.get("prefix", ""),
                                              limit=args.get("limit"))}
-        if name == "map_region":
-            return s.map_region(args["key"])
-        if name == "map_uncovered":
-            return {"uncovered": s.map_uncovered(args.get("prefix", ""),
+        if name == "cg_region":
+            return s.cg_region(args["key"])
+        if name == "cg_uncovered":
+            return {"uncovered": s.cg_uncovered(args.get("prefix", ""),
                                                  limit=args.get("limit"))}
         if name == "test_metrics_insert":
             return s.test_metrics_insert(args["test"],
@@ -874,31 +910,49 @@ class McpServer:
         if name == "trace_compare":
             return s.trace_compare(args["symbol"],
                                    layer=args.get("layer", ""))
-        if name == "map_put_symbol":
-            s.map_put_symbol(args["key"], args.get("body") or {},
+        if name == "cg_put_symbol":
+            s.cg_put_symbol(args["key"], args.get("body") or {},
                              layer=args.get("layer", ""))
             return {"result": "stored", "key": args["key"]}
-        if name == "map_alias":
-            return s.map_alias(args["old_key"], args["new_key"])
-        if name == "map_refresh_stale":
-            return s.map_refresh_stale()
-        if name == "map_put_edge":
-            s.map_put_edge(args["caller"], args["callee"],
+        if name == "cg_alias":
+            return s.cg_alias(args["old_key"], args["new_key"])
+        if name == "cg_refresh_stale":
+            return s.cg_refresh_stale()
+        if name == "cg_put_edge":
+            s.cg_put_edge(args["caller"], args["callee"],
                            kind=args.get("kind", "syntax"),
                            layer=args.get("layer", ""),
                            configs=args.get("configs"))
             return {"result": "ok"}
-        if name == "map_mark_stale":
-            return s.map_mark_stale(args.get("live_keys") or [])
-        if name == "map_generations":
-            return s.map_generations()
-        if name == "map_snapshot":
-            return s.map_snapshot(layer=args.get("layer", ""))
-        if name == "map_port_status":
-            return s.map_port_status(module=args.get("module", ""),
+        if name == "cg_mark_stale":
+            return s.cg_mark_stale(args.get("live_keys") or [])
+        if name == "cg_generations":
+            return s.cg_generations()
+        if name == "cg_snapshot":
+            return s.cg_snapshot(layer=args.get("layer", ""))
+        if name == "cg_port_status":
+            return s.cg_port_status(module=args.get("module", ""),
                                      layer=args.get("layer", ""))
-        if name == "map_diff":
-            return s.map_diff(other=args.get("other"))
+        if name == "cg_diff":
+            return s.cg_diff(other=args.get("other"))
+        if name == "sys_headers_required_for":
+            return {"file": args["file"],
+                    "headers": s.sys_headers_required_for(args["file"])}
+        if name == "sys_known_on":
+            return {"file": args["file"], "config": args["config"],
+                    "known": s.sys_known_on(args["file"], args["config"])}
+        if name == "sys_uses_of":
+            return {"file": args["file"], "uses": s.sys_uses_of(args["file"])}
+        if name == "sys_refs_of":
+            return {"symbol": args["symbol"],
+                    "headers": s.sys_refs_of(args["symbol"])}
+        if name == "sys_deps_load":
+            return s.sys_deps_load(args["headers"], args["uses"],
+                                   replace=bool(args.get("replace", True)))
+        if name == "symbol_definitions":
+            return {"name": args["name"],
+                    "definitions": s.symbol_definitions(
+                        args["name"], layer=args.get("layer", ""))}
         if name == "adr_update":
             return s.adr_update(args["name"], args)
         if name == "adr_get":
@@ -943,8 +997,8 @@ class McpServer:
         if name == "branch_purge":
             return s.branch_purge(args["layer"],
                                   expected_current=args.get("expected_current"))
-        if name == "map_diff_branches":
-            return s.map_diff_branches(args["from_layer"], args["to_layer"],
+        if name == "cg_diff_branches":
+            return s.cg_diff_branches(args["from_layer"], args["to_layer"],
                                        limit=args.get("limit"))
         raise MemoryError("NO_SUCH_TOOL", "invalid", "неизвестный инструмент %r" % name,
                           "проверьте tools/list", "none")

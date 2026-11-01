@@ -1,0 +1,474 @@
+name: ci-codegraph
+
+# Structural map scanning (codegraph + project-map) on Linux and macOS,
+# with the generator validator against the golden counts. Produces:
+#   - tools/artifacts/codegraph.json (linux, macos, merged on request)
+#   - tools/artifacts/project-map.json      (whole repo: cmake/scripts/docs/ci)
+#   - tools/artifacts/probes.json           (SystemMap from src + probe-bus)
+# Linux and macOS runs are independent; the merge job combines their symbols
+# into implementations (polymorphic bodies per config) and runs the validator.
+
+env:
+  CI: GITHUB
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.head_ref || github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+on:
+  push:
+  schedule:
+    - cron: "23 4 * * *"
+      timezone: "Europe/Moscow"
+  workflow_dispatch:
+
+jobs:
+  scan-linux:
+    runs-on: ubuntu-24.04
+    steps:
+    - uses: actions/checkout@v7
+      with:
+        fetch-depth: 0
+        fetch-tags: true
+        submodules: true
+    - uses: actions/setup-python@v5
+      with:
+        python-version: "3.11"
+    - name: deps
+      run: python3 -m pip install --quiet cffi pytest pytest-cov pyyaml
+    - name: build mcp host lib (for module tests + coverage)
+      shell: bash
+      run: python3 skynet/MCP-shared-graph-memory/tools/build_libmdbx.py
+    - name: module tests with coverage (mcp + tools)
+      shell: bash
+      run: |
+        cd skynet/MCP-shared-graph-memory
+        python3 -m pytest tests/ \
+          --cov=mcp --cov=tools --cov-report=xml:coverage/codegraph-python.xml \
+          --cov-report=term-missing:skip-covered -q
+    - name: codecov upload (codegraph python)
+      uses: codecov/codecov-action@v5
+      with:
+        files: skynet/MCP-shared-graph-memory/coverage/codegraph-python.xml
+        flags: codegraph-scan-python
+        token: ${{ secrets.CODECOV_TOKEN }}
+        fail_ci_if_error: false
+        verbose: true
+    - name: prepare build-scan
+      shell: bash
+      run: |
+        cmake -S . -B _build-scan -DCMAKE_BUILD_TYPE=Debug \
+          -DMDBX_BUILD_CXX=ON -DMDBX_ENABLE_TESTS=ON -DMDBX_BUILD_TOOLS=ON \
+          -DINTERPROCEDURAL_OPTIMIZATION=OFF \
+          -DCMAKE_EXPORT_COMPILE_COMMANDS=ON \
+          -DMDBX_ALLOY_BUILD=ON -DMDBX_USE_MINCORE=OFF
+    - name: scan symbols (linux)
+      shell: bash
+      run: |
+        cd skynet/MCP-shared-graph-memory
+        python3 tools/scan_symbols.py --config linux \
+          --out tools/artifacts/codegraph-linux.json
+        echo "scan exit: $?"
+    - name: scan project-map
+      shell: bash
+      run: |
+        cd skynet/MCP-shared-graph-memory
+        python3 tools/scan_project.py --repo "$GITHUB_WORKSPACE" \
+          --out tools/artifacts/project-map.json
+    - name: scan probes
+      shell: bash
+      run: |
+        cd skynet/MCP-shared-graph-memory
+        python3 tools/scan_probes.py --src "$GITHUB_WORKSPACE/src" \
+          --probe-bus "$GITHUB_WORKSPACE/docs/engineering/probe-bus.md" \
+          --out tools/artifacts/probes.json --dry-run
+    - name: validate generator (fixture + full)
+      shell: bash
+      run: |
+        cd skynet/MCP-shared-graph-memory
+        python3 tools/validate_map.py --map tools/artifacts/codegraph-linux.json \
+          --cc "$GITHUB_WORKSPACE/_build-scan/compile_commands.json" --tus fixture
+        python3 tools/validate_map.py --map tools/artifacts/codegraph-linux.json \
+          --cc "$GITHUB_WORKSPACE/_build-scan/compile_commands.json" --tus full
+    - name: upload linux artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: codegraph-linux
+        path: |
+          skynet/MCP-shared-graph-memory/tools/artifacts/codegraph-linux.json
+          skynet/MCP-shared-graph-memory/tools/artifacts/project-map.json
+          skynet/MCP-shared-graph-memory/tools/artifacts/probes.json
+
+  scan-macos:
+    runs-on: macos-15
+    steps:
+    - uses: actions/checkout@v7
+      with:
+        fetch-depth: 0
+        fetch-tags: true
+        submodules: true
+    - uses: actions/setup-python@v5
+      with:
+        python-version: "3.11"
+    - name: deps
+      run: python3 -m pip install --quiet cffi pytest pyyaml
+    - name: prepare build-scan
+      shell: bash
+      run: |
+        cmake -S . -B _build-scan -DCMAKE_BUILD_TYPE=Debug \
+          -DMDBX_BUILD_CXX=ON -DMDBX_ENABLE_TESTS=ON -DMDBX_BUILD_TOOLS=ON \
+          -DINTERPROCEDURAL_OPTIMIZATION=OFF \
+          -DCMAKE_EXPORT_COMPILE_COMMANDS=ON \
+          -DMDBX_ALLOY_BUILD=ON -DMDBX_USE_MINCORE=OFF
+    - name: scan symbols (macos)
+      shell: bash
+      run: |
+        cd skynet/MCP-shared-graph-memory
+        python3 tools/scan_symbols.py --config macos \
+          --out tools/artifacts/codegraph-macos.json
+    - name: fail if macos scan is empty
+      shell: bash
+      run: |
+        cd skynet/MCP-shared-graph-memory
+        python3 - <<'PY'
+        import json
+        with open("tools/artifacts/codegraph-macos.json") as f:
+            a = json.load(f)
+        n = a["counts"]["functions"]
+        print("macos functions:", n)
+        assert n > 0, "macos scan yielded 0 functions — aborting (AppleClang raw_decode?)"
+        PY
+    - name: upload macos artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: codegraph-macos
+        path: skynet/MCP-shared-graph-memory/tools/artifacts/codegraph-macos.json
+
+  scan-win32:
+    runs-on: ubuntu-24.04
+    steps:
+    - uses: actions/checkout@v7
+      with:
+        fetch-depth: 0
+        fetch-tags: true
+        submodules: true
+    - uses: actions/setup-python@v5
+      with:
+        python-version: "3.11"
+    - name: deps
+      run: |
+        sudo apt-get update && sudo apt-get install -y --no-install-recommends mingw-w64
+        python3 -m pip install --quiet cffi pytest pyyaml
+    - name: prepare build-scan
+      shell: bash
+      run: |
+        cmake -S . -B _build-scan -DCMAKE_BUILD_TYPE=Debug \
+          -DMDBX_BUILD_CXX=ON -DMDBX_ENABLE_TESTS=ON -DMDBX_BUILD_TOOLS=ON \
+          -DINTERPROCEDURAL_OPTIMIZATION=OFF \
+          -DCMAKE_EXPORT_COMPILE_COMMANDS=ON \
+          -DMDBX_ALLOY_BUILD=ON -DMDBX_USE_MINCORE=OFF
+    - name: scan symbols (win32, cross to mingw-w64)
+      shell: bash
+      run: |
+        cd skynet/MCP-shared-graph-memory
+        python3 tools/scan_symbols.py --config win32 \
+          --target x86_64-w64-windows-gnu \
+          --out tools/artifacts/codegraph-win32.json
+        echo "scan exit: $?"
+    - name: fail if win32 scan is empty
+      shell: bash
+      run: |
+        cd skynet/MCP-shared-graph-memory
+        python3 - <<'PY'
+        import json
+        with open("tools/artifacts/codegraph-win32.json") as f:
+            a = json.load(f)
+        n = a["counts"]["functions"]
+        print("win32 functions:", n)
+        assert n > 0, "win32 scan yielded 0 functions — aborting"
+        PY
+    - name: upload win32 artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: codegraph-win32
+        path: skynet/MCP-shared-graph-memory/tools/artifacts/codegraph-win32.json
+
+  sysdeps-linux:
+    runs-on: ubuntu-24.04
+    steps:
+    - uses: actions/checkout@v7
+      with:
+        fetch-depth: 0
+        submodules: true
+    - uses: actions/setup-python@v5
+      with:
+        python-version: "3.11"
+    - name: deps
+      run: python3 -m pip install --quiet cffi pytest pyyaml
+    - name: prepare build-scan
+      shell: bash
+      run: |
+        cmake -S . -B _build-scan -DCMAKE_BUILD_TYPE=Debug \
+          -DMDBX_BUILD_CXX=ON -DMDBX_ENABLE_TESTS=ON -DMDBX_BUILD_TOOLS=ON \
+          -DINTERPROCEDURAL_OPTIMIZATION=OFF \
+          -DCMAKE_EXPORT_COMPILE_COMMANDS=ON \
+          -DMDBX_ALLOY_BUILD=ON -DMDBX_USE_MINCORE=OFF
+    - name: scan system-deps (linux)
+      shell: bash
+      run: |
+        cd skynet/MCP-shared-graph-memory
+        python3 tools/scan_system_deps.py --mode scan-headers --config linux \
+          --cc "$GITHUB_WORKSPACE/_build-scan/compile_commands.json" \
+          --headers-list tests/fixtures/sysdeps/system-headers.txt \
+          --out tools/artifacts/system-deps-linux.json
+        python3 tools/scan_system_deps.py --mode scan-uses --config linux \
+          --cc "$GITHUB_WORKSPACE/_build-scan/compile_commands.json" \
+          --provides-from tools/artifacts/system-deps-linux.json \
+          --out tools/artifacts/system-deps-linux-uses.json
+    - name: upload sysdeps linux artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: system-deps-linux
+        path: |
+          skynet/MCP-shared-graph-memory/tools/artifacts/system-deps-linux.json
+          skynet/MCP-shared-graph-memory/tools/artifacts/system-deps-linux-uses.json
+
+  sysdeps-macos:
+    runs-on: macos-15
+    steps:
+    - uses: actions/checkout@v7
+      with:
+        fetch-depth: 0
+        submodules: true
+    - uses: actions/setup-python@v5
+      with:
+        python-version: "3.11"
+    - name: deps
+      run: python3 -m pip install --quiet cffi pytest pyyaml
+    - name: prepare build-scan
+      shell: bash
+      run: |
+        cmake -S . -B _build-scan -DCMAKE_BUILD_TYPE=Debug \
+          -DMDBX_BUILD_CXX=ON -DMDBX_ENABLE_TESTS=ON -DMDBX_BUILD_TOOLS=ON \
+          -DINTERPROCEDURAL_OPTIMIZATION=OFF \
+          -DCMAKE_EXPORT_COMPILE_COMMANDS=ON \
+          -DMDBX_ALLOY_BUILD=ON -DMDBX_USE_MINCORE=OFF
+    - name: scan system-deps (macos)
+      shell: bash
+      run: |
+        cd skynet/MCP-shared-graph-memory
+        python3 tools/scan_system_deps.py --mode scan-headers --config macos \
+          --cc "$GITHUB_WORKSPACE/_build-scan/compile_commands.json" \
+          --headers-list tests/fixtures/sysdeps/system-headers.txt \
+          --out tools/artifacts/system-deps-macos.json
+    - name: fail if macos sysdeps empty
+      shell: bash
+      run: |
+        cd skynet/MCP-shared-graph-memory
+        python3 - <<'PY'
+        import json
+        with open("tools/artifacts/system-deps-macos.json") as f:
+            a = json.load(f)
+        n = len(a["headers"])
+        absent = len(a.get("absent", []))
+        print("macos sys-deps: headers=%d absent=%d" % (n, absent))
+        assert n > 0, "macos sysdeps scan yielded 0 headers — aborting"
+        # sanity issue-#179-class: mach/mach_time.h must RESOLVE on macOS
+        assert any("mach_time" in k for k in a["headers"]), \
+            "mach/mach_time.h not resolved on macOS — platform facts broken"
+        assert any(a["name"] == "mntent.h" for a in a.get("absent", [])), \
+            "mntent.h must be ABSENT on macOS — platform facts broken"
+        PY
+    - name: upload sysdeps macos artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: system-deps-macos
+        path: skynet/MCP-shared-graph-memory/tools/artifacts/system-deps-macos.json
+
+  sysdeps-win32:
+    runs-on: windows-latest
+    steps:
+    - uses: actions/checkout@v7
+      with:
+        fetch-depth: 0
+        submodules: true
+    - uses: actions/setup-python@v5
+      with:
+        python-version: "3.11"
+    - name: deps
+      shell: bash
+      run: python3 -m pip install --quiet cffi pytest pyyaml
+    - name: prepare build-scan (msvc)
+      shell: bash
+      run: |
+        cmake -S . -B _build-scan -DCMAKE_BUILD_TYPE=Debug \
+          -DMDBX_BUILD_CXX=ON -DMDBX_BUILD_TOOLS=ON \
+          -DINTERPROCEDURAL_OPTIMIZATION=OFF \
+          -DCMAKE_EXPORT_COMPILE_COMMANDS=ON \
+          -DMDBX_ALLOY_BUILD=ON -DMDBX_USE_MINCORE=OFF
+    - name: scan system-deps (win32 msvc)
+      shell: bash
+      run: |
+        cd skynet/MCP-shared-graph-memory
+        python3 tools/scan_system_deps.py --mode scan-headers --config win32-msvc \
+          --cc "$GITHUB_WORKSPACE/_build-scan/compile_commands.json" \
+          --headers-list tests/fixtures/sysdeps/system-headers.txt \
+          --out tools/artifacts/system-deps-win32-msvc.json
+    - name: fail if win32 sysdeps empty
+      shell: bash
+      run: |
+        cd skynet/MCP-shared-graph-memory
+        python3 - <<'PY'
+        import json
+        with open("tools/artifacts/system-deps-win32-msvc.json") as f:
+            a = json.load(f)
+        n = len(a["headers"])
+        print("win32-msvc sys-deps: headers=%d absent=%d" % (
+            n, len(a.get("absent", []))))
+        assert n > 0, "win32 sysdeps scan yielded 0 headers — aborting"
+        # sanity: windows.h must RESOLVE with MSVC, mntent.h must be ABSENT
+        assert any("windows.h" in k for k in a["headers"]), \
+            "windows.h not resolved with MSVC — platform facts broken"
+        assert any(a["name"] == "mntent.h" for a in a.get("absent", [])), \
+            "mntent.h must be ABSENT on win32 — platform facts broken"
+        PY
+    - name: upload sysdeps win32 artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: system-deps-win32-msvc
+        path: skynet/MCP-shared-graph-memory/tools/artifacts/system-deps-win32-msvc.json
+
+  sysdeps-merge:
+    needs: [sysdeps-linux, sysdeps-macos, sysdeps-win32]
+    runs-on: ubuntu-24.04
+    steps:
+    - uses: actions/checkout@v7
+      with:
+        fetch-depth: 0
+    - uses: actions/setup-python@v5
+      with:
+        python-version: "3.11"
+    - name: deps
+      run: python3 -m pip install --quiet cffi pyyaml
+    - name: download artifacts
+      uses: actions/download-artifact@v4
+      with:
+        path: artifacts
+        pattern: system-deps-*
+        merge-multiple: true
+    - name: merge system-deps (platform categories)
+      shell: bash
+      run: |
+        cd skynet/MCP-shared-graph-memory
+        mkdir -p tools/artifacts
+        for c in linux macos win32-msvc; do
+          mv "$GITHUB_WORKSPACE/artifacts/system-deps-$c.json"              "tools/artifacts/system-deps-$c.json"
+        done
+        python3 tools/scan_system_deps.py --mode merge           --scans tools/artifacts/system-deps-linux.json,tools/artifacts/system-deps-macos.json,tools/artifacts/system-deps-win32-msvc.json           --out tools/artifacts/system-deps.json
+    - name: validate merged platform facts
+      shell: bash
+      run: |
+        cd skynet/MCP-shared-graph-memory
+        python3 - <<'PY'
+        import json
+        with open("tools/artifacts/system-deps.json") as f:
+            a = json.load(f)
+        configs = a.get("configs", [])
+        assert sorted(configs) == ["linux", "macos", "win32-msvc"], configs
+        hdrs = a.get("headers", {})
+        # each header carries in_configs — the platform-availability fact
+        assert all(h.get("in_configs") for h in hdrs.values())
+        mntent = hdrs.get("hdr:mntent.h", {}).get("in_configs", [])
+        assert mntent == ["linux"], "mntent.h in_configs=%r" % mntent
+        mach = [k for k in hdrs if "mach_time" in k]
+        assert mach and hdrs[mach[0]]["in_configs"] == ["macos"],             "mach_time in_configs broken"
+        print("merged system-deps OK: headers=%d configs=%s" % (
+            len(hdrs), configs))
+        PY
+    - name: upload merged system-deps
+      uses: actions/upload-artifact@v4
+      with:
+        name: system-deps-merged
+        path: skynet/MCP-shared-graph-memory/tools/artifacts/system-deps.json
+
+  merge-validate:
+    needs: [scan-linux, scan-macos, scan-win32]
+    runs-on: ubuntu-24.04
+    steps:
+    - uses: actions/checkout@v7
+      with:
+        fetch-depth: 0
+        submodules: true
+    - uses: actions/setup-python@v5
+      with:
+        python-version: "3.11"
+    - name: deps
+      run: python3 -m pip install --quiet cffi pyyaml
+    - name: download artifacts
+      uses: actions/download-artifact@v4
+      with:
+        path: artifacts
+        merge-multiple: true
+    - name: merge configs (implementations)
+      shell: bash
+      run: |
+        cd skynet/MCP-shared-graph-memory
+        mkdir -p tools/artifacts
+        for c in linux macos win32; do
+          mv "$GITHUB_WORKSPACE/artifacts/codegraph-$c.json" \
+             "tools/artifacts/codegraph-$c.json"
+        done
+        python3 - <<'PY'
+        import json, sys
+        # fail-loudly: каждый конфиг обязан внести символы (см. CODEGRAPH.md)
+        for c in ("linux", "macos", "win32"):
+            with open("tools/artifacts/codegraph-%s.json" % c) as f:
+                a = json.load(f)
+            n = a["counts"]["functions"]
+            print("config %-6s functions=%d" % (c, n))
+            if n == 0:
+                sys.stderr.write("merge: config '%s' contributed 0 symbols — aborting\n" % c)
+                sys.exit(2)
+        PY
+        python3 tools/scan_symbols.py --merge \
+          tools/artifacts/codegraph-linux.json \
+          tools/artifacts/codegraph-macos.json \
+          tools/artifacts/codegraph-win32.json \
+          --out tools/artifacts/codegraph.json
+        python3 tools/scan_uncovered.py \
+          --map tools/artifacts/codegraph.json
+    - name: validate merged (fixture)
+      shell: bash
+      run: |
+        cd skynet/MCP-shared-graph-memory
+        python3 tools/validate_map.py --map tools/artifacts/codegraph.json \
+          --tus fixture
+    - name: validate merged artifact (content)
+      shell: bash
+      run: |
+        cd skynet/MCP-shared-graph-memory
+        python3 - <<'PY'
+        import json
+        p = "tools/artifacts/codegraph.json"
+        with open(p) as f:
+            a = json.load(f)
+        syms = a.get("symbols", {})
+        edges = a.get("edges", [])
+        counts = a.get("counts", {})
+        assert len(syms) > 0, "artifact has no symbols"
+        assert counts.get("functions", 0) > 0, "artifact has no functions"
+        assert counts.get("blocks", 0) > 0, "artifact has no blocks"
+        assert counts.get("edges", 0) == len(edges), "edges count mismatch"
+        bad = [e for e in edges if not e.get("caller") or not e.get("callee")]
+        assert not bad, "edges with missing endpoints: %d" % len(bad)
+        print("artifact OK: functions=%d blocks=%d edges=%d" % (
+            counts.get("functions"), counts.get("blocks"), len(edges)))
+        PY
+    - name: upload merged map
+      uses: actions/upload-artifact@v4
+      with:
+        name: codegraph-merged
+        path: skynet/MCP-shared-graph-memory/tools/artifacts/codegraph.json

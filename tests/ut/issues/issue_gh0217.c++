@@ -168,8 +168,17 @@ bool wait_foreign_reader_slot(MDBX_env *env, mdbx_pid_t my_pid, int budget_ms) {
 }
 
 /* Child mode: open the foreign path read-only and hold a read transaction,
- * refreshing it occasionally, for `MDBX_TEST_GH217_STOP` ms (default 3000). */
+ * refreshing it occasionally, until the parent DELETES the release-file
+ * `<db-path>.gh217-release` (or a 30 s watchdog fires). A fixed lifespan is
+ * NOT enough: on a loaded CI runner the parent may take seconds to observe
+ * the child's reader slot and perform its shrink-warranted commit, and a
+ * child that exits early lets the foreign pid vanish from the reader table —
+ * the parent's shrink then succeeds and the test fails spuriously. The
+ * release-file is used instead of an inherited environment variable because
+ * a Windows child gets a COPY of the parent's environment at CreateProcess
+ * time and never sees later changes. */
 int foreign_reader_child() {
+  const std::string release_file = std::string(kTestPathFp) + ".gh217-release";
   MDBX_env *env = nullptr;
   if (mdbx_env_create(&env) != MDBX_SUCCESS)
     return 2;
@@ -182,13 +191,17 @@ int foreign_reader_child() {
     mdbx_env_close(env);
     return 2;
   }
-  const char *const stop = std::getenv("MDBX_TEST_GH217_STOP");
-  unsigned ms = stop ? (unsigned)std::strtoul(stop, nullptr, 10) : 3000;
-  const unsigned until_ms = ms;
+  /* Watchdog: generous enough for the slowest parent (its slot wait is up to
+   * 30 s plus the deferred-shrink commit); the release-file removal normally
+   * comes first, right after the parent checked the deferred shrink. */
   unsigned waited = 0;
-  while (waited < until_ms) {
+  while (waited < 30000) {
     std::this_thread::sleep_for(std::chrono::milliseconds(20));
     waited += 20;
+    FILE *f = std::fopen(release_file.c_str(), "r");
+    if (f == nullptr)
+      break; /* the parent removed the release-file: release the database */
+    std::fclose(f);
     /* re-issue the read txn to keep it fresh (a reader slot stays occupied). */
     mdbx_txn_abort(txn);
     if (mdbx_txn_begin(env, nullptr, MDBX_TXN_RDONLY, &txn) != MDBX_SUCCESS) {
@@ -198,6 +211,7 @@ int foreign_reader_child() {
   }
   mdbx_txn_abort(txn);
   mdbx_env_close(env);
+  std::remove(release_file.c_str());
   return 0;
 }
 
@@ -231,13 +245,22 @@ TEST(issue_gh0217, foreign_read_process_skips_shrink) {
   child += ".exe";
 #endif
   std::string filter = "--gtest_filter=issue_gh0217.foreign_read_process_skips_shrink";
-  std::string child_env = "MDBX_TEST_GH217_CHILD=1", stop_env = "MDBX_TEST_GH217_STOP=3000";
+  /* Release-file handshake: the child holds the reader while this file
+   * EXISTS; the parent removes it after the deferred-shrink check. An
+   * inherited environment variable is not usable as the signal: a Windows
+   * child gets a COPY of the parent's environment at CreateProcess time and
+   * never sees later changes. */
+  const std::string release_file = std::string(kTestPathFp) + ".gh217-release";
+  { /* create the release-file BEFORE spawning the child */
+    FILE *f = std::fopen(release_file.c_str(), "w");
+    ASSERT_NE(f, nullptr) << "cannot create the release-file " << release_file;
+    std::fclose(f);
+  }
+  std::string child_env = "MDBX_TEST_GH217_CHILD=1";
 #ifdef _WIN32
   _putenv(child_env.c_str());
-  _putenv(stop_env.c_str());
 #else
   setenv("MDBX_TEST_GH217_CHILD", "1", 1);
-  setenv("MDBX_TEST_GH217_STOP", "3000", 1);
 #endif
   const std::vector<std::string> args = {child, filter, "--gtest_brief=1"};
 
@@ -247,19 +270,23 @@ TEST(issue_gh0217, foreign_read_process_skips_shrink) {
   std::thread child_thread([&]() { child_rc = tool_runner::run(args); });
 
   /* Wait until the child actually registers its reader slot in the shared
-   * reader table (it spins for ~3 s once started). A fixed sleep is not
-   * enough: on loaded CI runners the child's process spawn + gtest startup +
-   * env open can easily exceed 400 ms, and then the shrink-warranted commit
-   * below runs with NO foreign reader registered — the shrink succeeds and
-   * the test fails spuriously (observed on win-msvc/win-cxx CI cells). */
+   * reader table. A fixed sleep is not enough: on loaded CI runners the
+   * child's process spawn + gtest startup + env open can easily exceed
+   * 400 ms, and then the shrink-warranted commit below runs with NO foreign
+   * reader registered — the shrink succeeds and the test fails spuriously. */
   const mdbx_pid_t my_pid = GetCurrentProcessId();
   ASSERT_TRUE(wait_foreign_reader_slot(env, my_pid, 30000))
       << "the foreign reader did not register its slot in time (child startup is too slow or it died)";
 
   /* The parent's shrink-warranted commit while the foreign reader is alive
-   * must be deferred: the file must NOT shrink. */
+   * must be deferred: the file must NOT shrink. The child is still holding
+   * the reader here: it exits only after the parent removes the release-file
+   * (below). */
   ASSERT_TRUE(commit_put(env, dbi, "while-foreign"));
   EXPECT_GE(dxb_fsize(env), grown) << "a shrink must be deferred while a foreign process keeps the file mapped";
+
+  /* The deferred-shrink check is done: tell the child to release the file. */
+  std::remove(release_file.c_str());
 
   /* Wait for the child to finish (it stops its reader and exits). */
   child_thread.join();
@@ -267,10 +294,8 @@ TEST(issue_gh0217, foreign_read_process_skips_shrink) {
 
 #ifdef _WIN32
   _putenv("MDBX_TEST_GH217_CHILD=");
-  _putenv("MDBX_TEST_GH217_STOP=");
 #else
   unsetenv("MDBX_TEST_GH217_CHILD");
-  unsetenv("MDBX_TEST_GH217_STOP");
 #endif
 
   /* After the foreign reader is gone, a subsequent shrink-warranted commit
