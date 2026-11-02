@@ -24,28 +24,53 @@ add_issue_test(gh0060 SOURCE "issue_gh0060.c++")
 add_issue_test(gh0063 SOURCE "issue_gh0063.c++")
 add_issue_test(gh0064 SOURCE "issue_gh0064.c++")
 add_issue_test(gh0065 SOURCE "issue_gh0065.c++" NO_PCH)
+add_issue_test(gh0066 SOURCE "issue_gh0066.c++")
 if(MDBX_PROBES)
   add_issue_test(gh0067 SOURCE "issue_gh0067.c++" NO_PCH)
   set_tests_properties(gh0067 PROPERTIES ENVIRONMENT "MDBX_PROBES=1")
 endif()
 add_issue_test(gh0068 SOURCE "issue_gh0068.c++")
 add_issue_test(gh0069 SOURCE "issue_gh0069.c++")
+if(MDBX_BUILD_TOOLS)
+  add_issue_test(gh0070 SOURCE "issue_gh0070.c++")
+  set_tests_properties(
+    gh0070
+    PROPERTIES
+      ENVIRONMENT
+        "MDBX_TOOL_DUMP=$<TARGET_FILE:mdbx_dump>;MDBX_TOOL_LOAD=$<TARGET_FILE:mdbx_load>")
+  add_issue_test(gh0071 SOURCE "issue_gh0071.c++")
+  set_tests_properties(gh0071 PROPERTIES
+                       ENVIRONMENT "MDBX_TOOL_DUMP=$<TARGET_FILE:mdbx_dump>")
+  add_issue_test(gh0072 SOURCE "issue_gh0072.c++")
+  set_tests_properties(
+    gh0072
+    PROPERTIES
+      ENVIRONMENT
+        "MDBX_TOOL_DUMP=$<TARGET_FILE:mdbx_dump>;MDBX_TOOL_LOAD=$<TARGET_FILE:mdbx_load>;MDBX_TOOL_STAT=$<TARGET_FILE:mdbx_stat>")
+endif()
 add_issue_test(gh0073 SOURCE "issue_gh0073.c++")
 add_issue_test(gh0074 SOURCE "issue_gh0074.c++")
 add_issue_test(gh0075 SOURCE "issue_gh0075.c++")
+if(MDBX_BUILD_TOOLS)
+  add_issue_test(gh0076 SOURCE "issue_gh0076.c++")
+endif()
+add_issue_test(gh0077 SOURCE "issue_gh0077.c++")
+add_issue_test(gh0078 SOURCE "issue_gh0078.c++")
 add_issue_test(gh0079 SOURCE "issue_gh0079.c++")
 if(NOT WIN32)
   # On Windows the environment keeps the lower region of the lock file (up to rdt_length) byte-range locked while open,
   # so no second handle in the process can write there and cached_oldest_txnid is not externally tamper-able.
   add_issue_test(gh0081 SOURCE "issue_gh0081.c++")
 endif()
+add_issue_test(gh0082 SOURCE "issue_gh0082.c++")
+add_issue_test(gh0083 SOURCE "issue_gh0083.c++")
+add_issue_test(gh0084 SOURCE "issue_gh0084.c++")
 add_issue_test(gh0085 SOURCE "issue_gh0085.c++")
 add_issue_test(gh0086 SOURCE "issue_gh0086.c++")
 add_issue_test(gh0087 SOURCE "issue_gh0087.c++")
 add_issue_test(gh0088 SOURCE "issue_gh0088.c++")
 add_issue_test(gh0089 SOURCE "issue_gh0089.c++")
 add_issue_test(gh0090 SOURCE "issue_gh0090.c++")
-add_issue_test(gh0066 SOURCE "issue_gh0066.c++")
 add_issue_test(gh0092 SOURCE "issue_gh0092.c++")
 add_issue_test(gh0093 SOURCE "issue_gh0093.c++")
 add_issue_test(gh0094 SOURCE "issue_gh0094.c++")
@@ -67,30 +92,16 @@ if(MDBX_PROBES)
   add_issue_test(gh0203 SOURCE "issue_gh0203.c++" NO_PCH)
   set_tests_properties(gh0203 PROPERTIES ENVIRONMENT "MDBX_PROBES=1")
 endif()
-add_issue_test(gh0179 SOURCE "issue_gh0179.c++" NO_PCH)
-add_issue_test(gh0116 SOURCE "issue_gh0116.c++")
-add_issue_test(gh0117 SOURCE "issue_gh0117.c++")
-add_issue_test(gh0084 SOURCE "issue_gh0084.c++")
-add_issue_test(gh0077 SOURCE "issue_gh0077.c++")
-add_issue_test(gh0078 SOURCE "issue_gh0078.c++")
-add_issue_test(gh0083 SOURCE "issue_gh0083.c++")
-add_issue_test(gh0176 SOURCE "issue_gh0176.c++")
 add_issue_test(gh0106 SOURCE "issue_gh0106.c++")
 if(NOT WIN32)
   add_issue_test(gh0107 SOURCE "issue_gh0107.c++")
 endif()
 add_issue_test(gh0108 SOURCE "issue_gh0108.c++")
-add_issue_test(gh0182 SOURCE "issue_gh0182.c++" NO_PCH)
-# gh0182 also carries the probe-bus lckless tests of issue #215 (they use
-# mdbx_probe_ctl to force the lck-open failure): the C++ TU does not see the
-# internal config-cmake.h define by itself, so propagate MDBX_PROBES and
-# activate the registry at runtime.
-if(MDBX_PROBES)
-  target_compile_definitions(issue_gh0182 PRIVATE MDBX_PROBES)
-  set_tests_properties(gh0182 PROPERTIES ENVIRONMENT "MDBX_PROBES=1")
-endif()
+add_issue_test(gh0112 SOURCE "issue_gh0112.c++")
+add_issue_test(gh0114 SOURCE "issue_gh0114.c++")
+add_issue_test(gh0116 SOURCE "issue_gh0116.c++")
+add_issue_test(gh0117 SOURCE "issue_gh0117.c++")
 add_issue_test(gh0154 SOURCE "issue_gh0154.c++")
-add_issue_test(gh0173 SOURCE "issue_gh0173.c++")
 add_issue_test(gh0170 SOURCE "issue_gh0170.c++")
 if(WIN32 AND MDBX_PROBES)
   # issue #170: Windows-only throttling of the datafile-shrink attempts,
@@ -102,6 +113,18 @@ if(WIN32 AND MDBX_PROBES)
   add_issue_test(gh0170_throttle SOURCE "issue_gh0170_throttle.c++")
   set_tests_properties(gh0170_throttle PROPERTIES ENVIRONMENT "MDBX_PROBES=1")
 endif()
+add_issue_test(gh0173 SOURCE "issue_gh0173.c++")
+add_issue_test(gh0176 SOURCE "issue_gh0176.c++")
+add_issue_test(gh0179 SOURCE "issue_gh0179.c++" NO_PCH)
+add_issue_test(gh0182 SOURCE "issue_gh0182.c++" NO_PCH)
+# gh0182 also carries the probe-bus lckless tests of issue #215 (they use
+# mdbx_probe_ctl to force the lck-open failure): the C++ TU does not see the
+# internal config-cmake.h define by itself, so propagate MDBX_PROBES and
+# activate the registry at runtime.
+if(MDBX_PROBES)
+  target_compile_definitions(issue_gh0182 PRIVATE MDBX_PROBES)
+  set_tests_properties(gh0182 PROPERTIES ENVIRONMENT "MDBX_PROBES=1")
+endif()
 if(WIN32)
   # issue #217: the shrink throttle must not rate-limit non-doomed shrinks
   # (single-process / MDBX_EXCLUSIVE), and a shrink must be deferred while a
@@ -109,24 +132,4 @@ if(WIN32)
   # test: no probe-bus dependency, so the regular Windows CI cells run it.
   add_issue_test(gh0217 SOURCE "issue_gh0217.c++")
 endif()
-add_issue_test(gh0112 SOURCE "issue_gh0112.c++")
-add_issue_test(gh0114 SOURCE "issue_gh0114.c++")
-add_issue_test(gh0082 SOURCE "issue_gh0082.c++")
-if(MDBX_BUILD_TOOLS)
-  add_issue_test(gh0070 SOURCE "issue_gh0070.c++")
-  add_issue_test(gh0076 SOURCE "issue_gh0076.c++")
-  set_tests_properties(
-    gh0070
-    PROPERTIES
-      ENVIRONMENT
-        "MDBX_TOOL_DUMP=$<TARGET_FILE:mdbx_dump>;MDBX_TOOL_LOAD=$<TARGET_FILE:mdbx_load>")
-  add_issue_test(gh0071 SOURCE "issue_gh0071.c++")
-  set_tests_properties(gh0071 PROPERTIES
-                       ENVIRONMENT "MDBX_TOOL_DUMP=$<TARGET_FILE:mdbx_dump>")
-  add_issue_test(gh0072 SOURCE "issue_gh0072.c++")
-  set_tests_properties(
-    gh0072
-    PROPERTIES
-      ENVIRONMENT
-        "MDBX_TOOL_DUMP=$<TARGET_FILE:mdbx_dump>;MDBX_TOOL_LOAD=$<TARGET_FILE:mdbx_load>;MDBX_TOOL_STAT=$<TARGET_FILE:mdbx_stat>")
-endif()
+add_issue_test(gh0217 SOURCE "issue_gh0217.c++")
