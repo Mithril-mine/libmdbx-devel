@@ -8,6 +8,8 @@
 
 
 
+#if defined(__linux__) || defined(__gnu_linux__)
+
 __cold static bool is_inside_lxc(void) {
   bool inside_lxc = false;
   FILE *mounted = setmntent("/proc/mounts", "r");
@@ -81,6 +83,7 @@ __cold static bool proc_read_uuid(const char *path, bin128_t *target) {
   }
   return false;
 }
+#endif /* Linux */
 
 bin128_t osal_guid(const MDBX_env *env) {
   struct {
