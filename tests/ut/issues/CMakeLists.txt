@@ -132,4 +132,4 @@ if(WIN32)
   # test: no probe-bus dependency, so the regular Windows CI cells run it.
   add_issue_test(gh0217 SOURCE "issue_gh0217.c++")
 endif()
-add_issue_test(gh0217 SOURCE "issue_gh0217.c++")
+add_issue_test(gh0301 SOURCE "issue_gh0301.c++")
