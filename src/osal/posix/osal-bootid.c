@@ -128,9 +128,13 @@ bin128_t osal_guid(const MDBX_env *env) {
     !defined(__APPLE__) && !defined(__ANDROID_API__)
   if (getrandom(&uuid, sizeof(uuid), 0) == sizeof(uuid) && check_uuid(uuid))
     return uuid;
-#elif defined(__OpenBSD__) || (defined(__sun) && defined(__SVR4)) ||                                                   \
-    (defined(__MAC_OS_X_VERSION_MIN_REQUIRED) && __MAC_OS_X_VERSION_MIN_REQUIRED >= 101200)
+#elif defined(__OpenBSD__) || (defined(__sun) && defined(__SVR4))
   if (getentropy(&uuid, sizeof(uuid)) == 0 && check_uuid(uuid))
+    return uuid;
+#elif defined(__APPLE__) && defined(__MAC_OS_X_VERSION_MIN_REQUIRED) &&                                                    \
+    __MAC_OS_X_VERSION_MIN_REQUIRED >= 101200
+  arc4random_buf(&uuid, sizeof(uuid));
+  if (check_uuid(uuid))
     return uuid;
 #endif /* getrandom() / getentropy() */
 #endif /* !Windows */
