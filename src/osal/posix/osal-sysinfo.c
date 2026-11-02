@@ -7,6 +7,7 @@
 #include "../details.h"
 
 
+#if defined(__linux__) || defined(__gnu_linux__)
 static intptr_t proc_meminfo_availpages(void) {
   intptr_t availpages = -1;
   FILE *const proc_meminfo = fopen("/proc/meminfo", "r");
@@ -34,6 +35,7 @@ static intptr_t proc_meminfo_availpages(void) {
   fclose(proc_meminfo);
   return availpages;
 }
+#endif /* Linux */
 
 __cold int mdbx_get_sysraminfo(intptr_t *page_size, intptr_t *total_pages, intptr_t *avail_pages) {
   if (!page_size && !total_pages && !avail_pages)
