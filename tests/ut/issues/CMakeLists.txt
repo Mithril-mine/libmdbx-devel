@@ -2,17 +2,9 @@ macro(add_issue_test)
   add_gtest(${ARGV} PREFIX "issue_" LABELS "ut;ut.issues")
 endmacro(add_issue_test)
 
+# The primary corpus: unconditional tests in the strict issue-number order.
 add_issue_test(gh0010 SOURCE "issue_gh0010.c++")
 add_issue_test(gh0011 SOURCE "issue_gh0011.c++")
-if(NOT WIN32)
-  add_issue_test(gh0016 SOURCE "issue_gh0016.c++")
-  add_issue_test(gh0058 SOURCE "issue_gh0058.c++")
-  add_issue_test(gh0059 SOURCE "issue_gh0059.c++")
-  add_issue_test(gh0171 SOURCE "issue_gh0171.c++")
-  add_issue_test(gh0309 SOURCE "issue_gh0309.c++")
-  add_issue_test(gh0310 SOURCE "issue_gh0310.c++")
-  add_issue_test(gh0339 SOURCE "issue_gh0339.c++")
-endif()
 add_issue_test(gh0017 SOURCE "issue_gh0017.c++" NO_PCH)
 add_issue_test(gh0023 SOURCE "issue_gh0023.c++")
 add_issue_test(gh0024 SOURCE "issue_gh0024.c++")
@@ -27,28 +19,24 @@ add_issue_test(gh0060 SOURCE "issue_gh0060.c++")
 add_issue_test(gh0063 SOURCE "issue_gh0063.c++")
 add_issue_test(gh0064 SOURCE "issue_gh0064.c++")
 add_issue_test(gh0065 SOURCE "issue_gh0065.c++" NO_PCH)
-if(MDBX_PROBES)
-  add_issue_test(gh0067 SOURCE "issue_gh0067.c++" NO_PCH)
-  set_tests_properties(gh0067 PROPERTIES ENVIRONMENT "MDBX_PROBES=1")
-endif()
+add_issue_test(gh0066 SOURCE "issue_gh0066.c++")
 add_issue_test(gh0068 SOURCE "issue_gh0068.c++")
 add_issue_test(gh0069 SOURCE "issue_gh0069.c++")
 add_issue_test(gh0073 SOURCE "issue_gh0073.c++")
 add_issue_test(gh0074 SOURCE "issue_gh0074.c++")
 add_issue_test(gh0075 SOURCE "issue_gh0075.c++")
+add_issue_test(gh0077 SOURCE "issue_gh0077.c++")
+add_issue_test(gh0078 SOURCE "issue_gh0078.c++")
 add_issue_test(gh0079 SOURCE "issue_gh0079.c++")
-if(NOT WIN32)
-  # On Windows the environment keeps the lower region of the lock file (up to rdt_length) byte-range locked while open,
-  # so no second handle in the process can write there and cached_oldest_txnid is not externally tamper-able.
-  add_issue_test(gh0081 SOURCE "issue_gh0081.c++")
-endif()
+add_issue_test(gh0082 SOURCE "issue_gh0082.c++")
+add_issue_test(gh0083 SOURCE "issue_gh0083.c++")
+add_issue_test(gh0084 SOURCE "issue_gh0084.c++")
 add_issue_test(gh0085 SOURCE "issue_gh0085.c++")
 add_issue_test(gh0086 SOURCE "issue_gh0086.c++")
 add_issue_test(gh0087 SOURCE "issue_gh0087.c++")
 add_issue_test(gh0088 SOURCE "issue_gh0088.c++")
 add_issue_test(gh0089 SOURCE "issue_gh0089.c++")
 add_issue_test(gh0090 SOURCE "issue_gh0090.c++")
-add_issue_test(gh0066 SOURCE "issue_gh0066.c++")
 add_issue_test(gh0092 SOURCE "issue_gh0092.c++")
 add_issue_test(gh0093 SOURCE "issue_gh0093.c++")
 add_issue_test(gh0094 SOURCE "issue_gh0094.c++")
@@ -62,66 +50,76 @@ add_issue_test(gh0102 SOURCE "issue_gh0102.c++")
 add_issue_test(gh0103 SOURCE "issue_gh0103.c++")
 add_issue_test(gh0104 SOURCE "issue_gh0104.c++")
 add_issue_test(gh0104_clone2 SOURCE "issue_gh0104_clone2.c++")
+add_issue_test(gh0106 SOURCE "issue_gh0106.c++")
+add_issue_test(gh0108 SOURCE "issue_gh0108.c++")
+add_issue_test(gh0112 SOURCE "issue_gh0112.c++")
+add_issue_test(gh0114 SOURCE "issue_gh0114.c++")
+add_issue_test(gh0116 SOURCE "issue_gh0116.c++")
+add_issue_test(gh0117 SOURCE "issue_gh0117.c++")
+add_issue_test(gh0154 SOURCE "issue_gh0154.c++")
+add_issue_test(gh0170 SOURCE "issue_gh0170.c++")
+add_issue_test(gh0173 SOURCE "issue_gh0173.c++")
+add_issue_test(gh0176 SOURCE "issue_gh0176.c++")
+add_issue_test(gh0179 SOURCE "issue_gh0179.c++" NO_PCH)
+add_issue_test(gh0182 SOURCE "issue_gh0182.c++" NO_PCH)
+add_issue_test(gh0318 SOURCE "issue_gh0318.c++")
+add_issue_test(gh0338 SOURCE "issue_gh0338.c++")
+add_issue_test(gh0342 SOURCE "issue_gh0342.c++")
+add_issue_test(gh0345 SOURCE "issue_gh0345.c++")
+
+# Platform-gated tests: Windows-only cases in the if-branch,
+# POSIX-only ones in the else-branch (numeric order within each).
+if(WIN32)
+  if(MDBX_PROBES)
+    # issue #170: Windows-only throttling of the datafile-shrink attempts,
+    # observed through the probe-bus (dxb_shrink_throttled / dxb_shrink_attempt).
+    # The test includes only the public mdbx.h++ (the probe-bus is reached via
+    # the exported mdbx_probe_ctl()), so it reuses the shared test PCH; the
+    # MDBX_PROBES=1 environment enables the probe-bus at runtime, not via a
+    # per-target compile definition, so the PCH flags still match.
+    add_issue_test(gh0170_throttle SOURCE "issue_gh0170_throttle.c++")
+    set_tests_properties(gh0170_throttle PROPERTIES ENVIRONMENT "MDBX_PROBES=1")
+  endif()
+  # issue #217: the shrink throttle must not rate-limit non-doomed shrinks
+  # (single-process / MDBX_EXCLUSIVE), and a shrink must be deferred while a
+  # FOREIGN process (spawned child) holds a read transaction. Plain Windows
+  # test: no probe-bus dependency, so the regular Windows CI cells run it.
+  add_issue_test(gh0217 SOURCE "issue_gh0217.c++")
+else()
+  add_issue_test(gh0016 SOURCE "issue_gh0016.c++")
+  add_issue_test(gh0058 SOURCE "issue_gh0058.c++")
+  add_issue_test(gh0059 SOURCE "issue_gh0059.c++")
+  # On Windows the environment keeps the lower region of the lock file (up to rdt_length) byte-range locked while open,
+  # so no second handle in the process can write there and cached_oldest_txnid is not externally tamper-able.
+  add_issue_test(gh0081 SOURCE "issue_gh0081.c++")
+  add_issue_test(gh0107 SOURCE "issue_gh0107.c++")
+  add_issue_test(gh0171 SOURCE "issue_gh0171.c++")
+  add_issue_test(gh0309 SOURCE "issue_gh0309.c++")
+  add_issue_test(gh0310 SOURCE "issue_gh0310.c++")
+  add_issue_test(gh0339 SOURCE "issue_gh0339.c++")
+endif()
+
+# Tests requiring the probe-bus (built with MDBX_PROBES=ON).
 if(MDBX_PROBES)
+  add_issue_test(gh0067 SOURCE "issue_gh0067.c++" NO_PCH)
+  set_tests_properties(gh0067 PROPERTIES ENVIRONMENT "MDBX_PROBES=1")
   add_issue_test(gh0103_restart SOURCE "issue_gh0103_restart.c++")
   set_tests_properties(gh0103_restart PROPERTIES ENVIRONMENT "MDBX_PROBES=1")
   add_issue_test(gh0104_clone SOURCE "issue_gh0104_clone.c++")
   set_tests_properties(gh0104_clone PROPERTIES ENVIRONMENT "MDBX_PROBES=1")
   add_issue_test(gh0203 SOURCE "issue_gh0203.c++" NO_PCH)
   set_tests_properties(gh0203 PROPERTIES ENVIRONMENT "MDBX_PROBES=1")
-endif()
-add_issue_test(gh0179 SOURCE "issue_gh0179.c++" NO_PCH)
-add_issue_test(gh0116 SOURCE "issue_gh0116.c++")
-add_issue_test(gh0117 SOURCE "issue_gh0117.c++")
-add_issue_test(gh0084 SOURCE "issue_gh0084.c++")
-add_issue_test(gh0077 SOURCE "issue_gh0077.c++")
-add_issue_test(gh0078 SOURCE "issue_gh0078.c++")
-add_issue_test(gh0083 SOURCE "issue_gh0083.c++")
-add_issue_test(gh0176 SOURCE "issue_gh0176.c++")
-add_issue_test(gh0106 SOURCE "issue_gh0106.c++")
-if(NOT WIN32)
-  add_issue_test(gh0107 SOURCE "issue_gh0107.c++")
-endif()
-add_issue_test(gh0108 SOURCE "issue_gh0108.c++")
-add_issue_test(gh0182 SOURCE "issue_gh0182.c++" NO_PCH)
-# gh0182 also carries the probe-bus lckless tests of issue #215 (they use
-# mdbx_probe_ctl to force the lck-open failure): the C++ TU does not see the
-# internal config-cmake.h define by itself, so propagate MDBX_PROBES and
-# activate the registry at runtime.
-if(MDBX_PROBES)
+  # gh0182 also carries the probe-bus lckless tests of issue #215 (they use
+  # mdbx_probe_ctl to force the lck-open failure): the C++ TU does not see the
+  # internal config-cmake.h define by itself, so propagate MDBX_PROBES and
+  # activate the registry at runtime.
   target_compile_definitions(issue_gh0182 PRIVATE MDBX_PROBES)
   set_tests_properties(gh0182 PROPERTIES ENVIRONMENT "MDBX_PROBES=1")
 endif()
-add_issue_test(gh0154 SOURCE "issue_gh0154.c++")
-add_issue_test(gh0173 SOURCE "issue_gh0173.c++")
-add_issue_test(gh0170 SOURCE "issue_gh0170.c++")
-if(WIN32 AND MDBX_PROBES)
-  # issue #170: Windows-only throttling of the datafile-shrink attempts,
-  # observed through the probe-bus (dxb_shrink_throttled / dxb_shrink_attempt).
-  # The test includes only the public mdbx.h++ (the probe-bus is reached via
-  # the exported mdbx_probe_ctl()), so it reuses the shared test PCH; the
-  # MDBX_PROBES=1 environment enables the probe-bus at runtime, not via a
-  # per-target compile definition, so the PCH flags still match.
-  add_issue_test(gh0170_throttle SOURCE "issue_gh0170_throttle.c++")
-  set_tests_properties(gh0170_throttle PROPERTIES ENVIRONMENT "MDBX_PROBES=1")
-endif()
-if(WIN32)
-  # issue #217: the shrink throttle must not rate-limit non-doomed shrinks
-  # (single-process / MDBX_EXCLUSIVE), and a shrink must be deferred while a
-  # FOREIGN process (spawned child) holds a read transaction. Plain Windows
-  # test: no probe-bus dependency, so the regular Windows CI cells run it.
-  add_issue_test(gh0217 SOURCE "issue_gh0217.c++")
-endif()
-add_issue_test(gh0112 SOURCE "issue_gh0112.c++")
-add_issue_test(gh0114 SOURCE "issue_gh0114.c++")
-add_issue_test(gh0082 SOURCE "issue_gh0082.c++")
-add_issue_test(gh0318 SOURCE "issue_gh0318.c++")
-add_issue_test(gh0338 SOURCE "issue_gh0338.c++")
-add_issue_test(gh0342 SOURCE "issue_gh0342.c++")
-add_issue_test(gh0345 SOURCE "issue_gh0345.c++")
+
+# Tests requiring the tools (MDBX_BUILD_TOOLS, the mdbx_dump/load/stat binaries).
 if(MDBX_BUILD_TOOLS)
   add_issue_test(gh0070 SOURCE "issue_gh0070.c++")
-  add_issue_test(gh0076 SOURCE "issue_gh0076.c++")
   set_tests_properties(
     gh0070
     PROPERTIES
@@ -136,5 +134,6 @@ if(MDBX_BUILD_TOOLS)
     PROPERTIES
       ENVIRONMENT
         "MDBX_TOOL_DUMP=$<TARGET_FILE:mdbx_dump>;MDBX_TOOL_LOAD=$<TARGET_FILE:mdbx_load>;MDBX_TOOL_STAT=$<TARGET_FILE:mdbx_stat>")
+  add_issue_test(gh0076 SOURCE "issue_gh0076.c++")
   add_issue_test(gh0312 SOURCE "issue_gh0312.c++")
 endif()
