@@ -3,6 +3,8 @@
 
 #pragma once
 
+#include "osal/platform-gate.h"
+
 /*----------------------------------------------------------------------------*/
 
 /** Disables using GNU/Linux libc extensions.
@@ -30,12 +32,6 @@
 #if (defined(__MINGW__) || defined(__MINGW32__) || defined(__MINGW64__)) && !defined(__USE_MINGW_ANSI_STDIO)
 #define __USE_MINGW_ANSI_STDIO 1
 #endif /* MinGW */
-
-#if defined(_WIN32) || defined(_WIN64) || defined(_WINDOWS)
-#define IS_WINDOWS 1
-#else
-#define IS_WINDOWS 0
-#endif
 
 #if IS_WINDOWS
 #ifndef _WIN32_WINNT

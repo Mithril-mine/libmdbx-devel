@@ -404,7 +404,7 @@ development-layout `elseif` branch, tests/examples wiring, `MDBX_ALLOY_BUILD` bl
 
 Strip recipes apply to every source that carries markers, including the raw-C concatenation
 recipe of `mdbx.c` (see §7.5) and `mdbx-internals.h` — so dev-only blocks such as the
-probe-bus implementation in `src/logging_and_debug.c` / `src/osal.h` never reach `dist/`.
+probe-bus implementation in `src/logging_and_debug.c` / `src/osal/osal.h` never reach `dist/`.
 The only probe leftovers in `dist/` are the `DEV_ASSERT[_T] → CHECK0` fallbacks and no-op
 `MPROBE_*` macros required for the amalgamated build.
 

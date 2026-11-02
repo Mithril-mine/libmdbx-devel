@@ -16,8 +16,9 @@
 
 #if IS_WINDOWS
 
-/* Map a result from an NTAPI call to WIN32 error code. */
-static int osal_ntstatus2errcode(NTSTATUS status) {
+/* Map a result from an NTAPI call to WIN32 error code (the test-framework
+ * local copy; the test TU does not include the library's internal headers). */
+MDBX_MAYBE_UNUSED static int test_ntstatus2errcode(NTSTATUS status) {
   DWORD dummy;
   OVERLAPPED ov;
   memset(&ov, 0, sizeof(ov));
@@ -40,7 +41,7 @@ int osal_waitstatus2errcode(DWORD result) {
   case WAIT_TIMEOUT:
     return ERROR_TIMEOUT;
   default:
-    return osal_ntstatus2errcode(result);
+    return test_ntstatus2errcode(result);
   }
 }
 
