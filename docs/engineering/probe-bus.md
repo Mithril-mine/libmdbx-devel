@@ -193,7 +193,7 @@ CI: `.github/workflows/ci-probes.yml` (ubuntu/windows/macos).
   `DEV_ASSERT*`/`MPROBE_*` вне cutoff (нужны для сборки амальгамы).
 - `src/logging_and_debug.c` — реализация (реестр, ctl, file-IPC, DTRACE,
   alloc-обёртки), внутри cutoff.
-- `src/osal.h` — redirect аллокаций под `MDBX_PROBES` + `osal_*_raw`, в cutoff.
+- `src/osal/osal.h` — redirect аллокаций под `MDBX_PROBES` + `osal_*_raw`, в cutoff.
 - `src/atomics-types.h` / `src/atomics-ops.h` — `mdbx_atomic_size_t` и helpers.
 - `CMakeLists.txt` — option `MDBX_PROBES` (OFF, dist-cutoff);
   `tests/CMakeLists.txt` — регистрация самопроверок.

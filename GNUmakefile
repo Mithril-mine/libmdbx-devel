@@ -19,7 +19,7 @@ endif
 make_ge_4_1   := $(shell expr "$(MAKE_VERx3)" ">=" "  4  1")
 make_ge_4_4   := $(shell expr "$(MAKE_VERx3)" ">=" "  4  4")
 bash_ge_4_3   := $(shell expr "$(BASH_VERx2)" ">=" "  4  3")
-SRC_PROBE_C   := $(shell [ -f mdbx.c ] && echo mdbx.c || echo src/osal.c)
+SRC_PROBE_C   := $(shell [ -f mdbx.c ] && echo mdbx.c || echo src/osal/details.c)
 SRC_PROBE_CXX := $(shell [ -f mdbx.c++ ] && echo mdbx.c++ || echo src/mdbx.c++)
 UNAME         := $(shell uname -s 2>/dev/null || echo Unknown)
 
@@ -712,7 +712,7 @@ endef
 
 $(eval $(call version-rule, src/version.c, src/version.c.in))
 
-$(eval $(call version-rule, $(DIST_DIR)/@tmp-amalgam.inc, src/amalgam.in))
+$(eval $(call version-rule, $(DIST_DIR)/@tmp-amalgam.h, src/amalgam.in))
 
 src/config-gnumake.h: @buildflags.tag src/version.c $(lastword $(MAKEFILE_LIST)) LICENSE NOTICE COPYRIGHT
 	@echo '  MAKE $@'
@@ -937,7 +937,7 @@ release-assets: libmdbx-amalgamated-$(MDBX_GIT_3DOT).zpaq \
 
 @dist-checked.tag: $(addprefix $(DIST_DIR)/, $(DIST_SRC) $(DIST_EXTRA))
 	@echo -n '  VERIFY amalgamated sources...'
-	$(QUIET)rm -rf $@ $(DIST_DIR)/@tmp-squashed.inc $(DIST_DIR)/@tmp-amalgam.inc \
+	$(QUIET)rm -rf $@ $(DIST_DIR)/@-tmp-headers.h $(DIST_DIR)/@-tmp-amalgam.h \
 	&& if grep -R "define xMDBX_ALLOY" dist | grep -q MDBX_BUILD_SOURCERY; then echo "sed output is WRONG!" >&2; exit 2; fi \
 	&& rm -rf @dist-check && cp -r -p $(DIST_DIR) @dist-check && ($(MAKE) -j IOARENA=false CXXSTD=$(CXXSTD) -C @dist-check all check ninja-assertions >@dist-check.log 2>@dist-check.err || (cat @dist-check.err && exit 1)) \
 	&& touch $@ || (echo " FAILED! See @dist-check.log and @dist-check.err" >&2; exit 2) && echo " Ok"
@@ -962,13 +962,13 @@ release-assets: libmdbx-amalgamated-$(MDBX_GIT_3DOT).zpaq \
 	@echo '  CREATE $@'
 	$(QUIET)rm -rf $@ && (cd dist && zpaq a ../$@ $(DIST_SRC) $(DIST_EXTRA) -m59) &>@zpaq.log
 
-$(DIST_DIR)/mdbx-internals.h: src/version.c $(DIST_DIR)/@tmp-amalgam.inc $(ALLOY_DEPS) $(lastword $(MAKEFILE_LIST))
+$(DIST_DIR)/mdbx-internals.h: src/version.c $(DIST_DIR)/@tmp-amalgam.h $(ALLOY_DEPS) $(lastword $(MAKEFILE_LIST))
 	@echo '  ALLOYING...'
 	$(QUIET)mkdir -p dist \
 	&& (grep -v '#include ' src/alloy.c && echo '#define MDBX_BUILD_SOURCERY $(MDBX_BUILD_SOURCERY)' \
 	&& $(SED) \
 		-e '/#include "preface.h"/r src/preface.h' \
-		-e '/#include "osal.h"/r src/osal.h' \
+		-e '/#include "osal\/osal.h"/r src/osal/osal.h' \
 		-e '/#include "options.h"/r src/options.h' \
 		-e '/#include "atomics-types.h"/r src/atomics-types.h' \
 		-e '/#include "layout-dxb.h"/r src/layout-dxb.h' \
@@ -978,16 +978,22 @@ $(DIST_DIR)/mdbx-internals.h: src/version.c $(DIST_DIR)/@tmp-amalgam.inc $(ALLOY
 		-e '/#include "pnl.h"/r src/pnl.h' \
 		src/essentials.h \
 	| $(SED) \
+		-e '/#include "osal\/platform-gate.h"/r src/osal/platform-gate.h' \
+		-e '/#include ".*windows\/public.h"/r src/osal/windows/public.h' \
+		-e '/#include ".*posix\/public.h"/r src/osal/posix/public.h' \
+	| $(SED) \
 		-e 's|#include "../mdbx.h"|@INCLUDE "mdbx.h"|' \
 		-e '/dist-cutoff-begin/,/dist-cutoff-end/d' \
+		-e '/#include "debug-begin.h"/r src/debug-begin.h' \
+		-e '/#include "debug-end.h"/r src/debug-end.h' \
 		-e '/#pragma once/d' \
 		-e '/#include "/d' \
 		-e 's|@INCLUDE|#include|' \
 		-e '/ clang-format o/d;/ \*INDENT-O/d' \
 	) \
-	| grep -v '^///' | cat -s $(DIST_DIR)/@tmp-amalgam.inc - >$@
+	| grep -v '^///' | cat -s $(DIST_DIR)/@tmp-amalgam.h - >$@
 
-$(DIST_DIR)/@tmp-squashed.inc: $(DIST_DIR)/mdbx-internals.h $(DIST_DIR)/@tmp-amalgam.inc src/version.c $(ALLOY_DEPS) $(lastword $(MAKEFILE_LIST))
+$(DIST_DIR)/@tmp-headers.h: $(DIST_DIR)/mdbx-internals.h $(DIST_DIR)/@tmp-amalgam.h $(ALLOY_DEPS) $(lastword $(MAKEFILE_LIST))
 	$(QUIET)($(SED) \
 		-e 's|#include "essentials.h"|@INCLUDE "mdbx-internals.h"|' \
 		-e '/#include "atomics-ops.h"/r src/atomics-ops.h' \
@@ -1011,7 +1017,7 @@ $(DIST_DIR)/@tmp-squashed.inc: $(DIST_DIR)/mdbx-internals.h $(DIST_DIR)/@tmp-ama
 		-e '/#include "sort.h"/r src/sort.h' \
 		-e '/#include "rthc.h"/r src/rthc.h' \
 		-e '/#include "walk.h"/r src/walk.h' \
-		-e '/#include "windows-import.h"/r src/windows-import.h' \
+		-e '/#include "chk-internal.h"/r src/chk-internal.h' \
 		src/internals.h \
 	| $(SED) \
 		-e '/#pragma once/d' \
@@ -1019,17 +1025,26 @@ $(DIST_DIR)/@tmp-squashed.inc: $(DIST_DIR)/mdbx-internals.h $(DIST_DIR)/@tmp-ama
 		-e '/ clang-format o/d;/ \*INDENT-O/d' \
 	| grep -v '^///') >$@
 
-$(DIST_DIR)/mdbx.c: $(DIST_DIR)/@tmp-squashed.inc $(DIST_DIR)/@tmp-amalgam.inc $(lastword $(MAKEFILE_LIST))
+$(DIST_DIR)/mdbx.c: $(DIST_DIR)/@tmp-headers.h $(DIST_DIR)/@tmp-amalgam.h src/version.c $(lastword $(MAKEFILE_LIST))
 	@echo '  MAKE $@'
-	$(QUIET)(cat $(DIST_DIR)/@tmp-squashed.inc $(shell git ls-files --deduplicate src/*.c | grep -v alloy) src/version.c | $(SED) \
+	$(QUIET)( \
+		cat $(DIST_DIR)/@tmp-headers.h && \
+		cat $(shell git ls-files --deduplicate src/osal/*.h | sort -u | grep -v osal.h) && \
+		echo '#if IS_WINDOWS' && \
+		cat src/osal/windows/private.h $(shell git ls-files --deduplicate src/osal/windows/ | sort -u | grep '?*.c$$' | grep -v public.h) && \
+		echo '#else /* IS_WINDOWS */' && \
+		cat src/osal/posix/private.h $(shell git ls-files --deduplicate src/osal/posix/ | sort -u | grep '?*.c$$' | grep -v public.h) && \
+		echo '#endif /* IS_WINDOWS */' && \
+		cat $(shell git ls-files --deduplicate src/osal/*.c | sort -u) && \
+		cat $(shell git ls-files --deduplicate src/*.c | sort -u | grep -v alloy) src/version.c \
+	) | $(SED) \
 		-e '/#include "debug-begin.h"/r src/debug-begin.h' \
 		-e '/#include "debug-end.h"/r src/debug-end.h' \
-	) | $(SED) \
 		-e '/#include "/d;/#pragma once/d' \
 		-e '/dist-cutoff-begin/,/dist-cutoff-end/d' \
 		-e 's|@INCLUDE|#include|' \
 		-e '/ clang-format o/d;/ \*INDENT-O/d' \
-	| grep -v '^///' | cat -s $(DIST_DIR)/@tmp-amalgam.inc - >$@
+	| grep -v '^///' | cat -s $(DIST_DIR)/@tmp-amalgam.h - >$@
 
 $(DIST_DIR)/mdbx.h++: $(filter %h++, $(HEADERS)) $(lastword $(MAKEFILE_LIST))
 	@echo '  MAKE $@'
@@ -1063,16 +1078,16 @@ $(DIST_DIR)/mdbx.h++: $(filter %h++, $(HEADERS)) $(lastword $(MAKEFILE_LIST))
 		-e 's|@INCLUDE|#include|' \
 	| cat -s >$@
 
-$(DIST_DIR)/mdbx.c++: $(DIST_DIR)/@tmp-squashed.inc $(DIST_DIR)/@tmp-amalgam.inc src/mdbx.c++ $(lastword $(MAKEFILE_LIST))
+$(DIST_DIR)/mdbx.c++: $(DIST_DIR)/@tmp-headers.h $(DIST_DIR)/@tmp-amalgam.h src/mdbx.c++ $(lastword $(MAKEFILE_LIST))
 	@echo '  MAKE $@'
-	$(QUIET)$(SED) -e '/#ifndef __cplusplus/,/#endif \/\* !__cplusplus \*\//d' $(DIST_DIR)/@tmp-squashed.inc | \
+	$(QUIET)$(SED) -e '/#ifndef __cplusplus/,/#endif \/\* !__cplusplus \*\//d' $(DIST_DIR)/@tmp-headers.h | \
 	cat - src/mdbx.c++ | \
 	$(SED) \
 		-e 's|#include "../mdbx.h++"|@INCLUDE "mdbx.h++"|' \
 		-e '/#include "/d' \
 		-e 's|@INCLUDE|#include|' \
 		-e '/ clang-format o/d;/ \*INDENT-O/d' \
-	| grep -v '^///' | cat -s $(DIST_DIR)/@tmp-amalgam.inc - >$@
+	| grep -v '^///' | cat -s $(DIST_DIR)/@tmp-amalgam.h - >$@
 
 $(DIST_DIR)/mdbx-wingetopt.h: src/tools/wingetopt.h src/tools/wingetopt.c
 	@echo '  MAKE $@'
@@ -1085,7 +1100,7 @@ $(DIST_DIR)/mdbx-wingetopt.h: src/tools/wingetopt.h src/tools/wingetopt.c
 
 define dist-tool-rule
 $(DIST_DIR)/mdbx_$(1).c: src/tools/$(1).c src/tools/common.h \
-		$(DIST_DIR)/mdbx-internals.h $(lastword $(MAKEFILE_LIST)) $(DIST_DIR)/@tmp-amalgam.inc
+		$(DIST_DIR)/mdbx-internals.h $(lastword $(MAKEFILE_LIST)) $(DIST_DIR)/@tmp-amalgam.h
 	@echo '  MAKE $$@'
 	$(QUIET)mkdir -p dist && \
 	$(SED) \
@@ -1099,7 +1114,7 @@ $(DIST_DIR)/mdbx_$(1).c: src/tools/$(1).c src/tools/common.h \
 		-e "s|@MDBX_GIT_TIMESTAMP@|$$(MDBX_GIT_TIMESTAMP)|" \
 		-e "s|@MDBX_GIT_DESCRIBE@|$$(MDBX_GIT_DESCRIBE)|" \
 		-e '/ clang-format o/d;/ \*INDENT-O/d' \
-	| grep -v '^///' | cat -s $(DIST_DIR)/@tmp-amalgam.inc - >$$@
+	| grep -v '^///' | cat -s $(DIST_DIR)/@tmp-amalgam.h - >$$@
 
 endef
 $(foreach file,$(TOOLS),$(eval $(call dist-tool-rule,$(file))))

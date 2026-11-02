@@ -379,7 +379,7 @@ DTRACE-маркер.
 // Включение: MDBX_PROBES (build) + MDBX_PROBES=1 либо MDBX_PROBE_CTL=<dir> (runtime).
 ```
 
-Реализация — в `src/logging_and_debug.{h,c}` + `src/osal.h` внутри
+Реализация — в `src/logging_and_debug.{h,c}` + `src/osal/osal.h` внутри
 dist-cutoff-маркеров; самопроверка — `tests/ut/api/probes.c` и
 `tests/ut/api/probes_ipc.c`.
 

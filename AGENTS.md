@@ -110,7 +110,7 @@ Canonical style guide: [docs/engineering/changelog-codex.md](docs/engineering/ch
   publishing).
 - Minimize preprocessor conditionals: do not introduce new
   `#if`/`#else`/`#endif`; migrate existing ones into system-dependent
-  modules (`src/osal.h`, platform files) gradually. Prefer fallback
+  modules (`src/osal/osal.h`, platform files) gradually. Prefer fallback
   `#define`s resolving to no-op functions/macros and runtime
   `MDBX_OPTION_*`-style branches over compile-time cuts (e.g. the
   `MPROBE_*` probes are no-op outside `MDBX_PROBES` builds without any
