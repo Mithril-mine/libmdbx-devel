@@ -4,6 +4,7 @@
 /// file writes. On POSIX this is currently a stub over pwrite/pwritev.
 
 #include "../../internals.h"
+#include "../posix/private.h"
 
 /*----------------------------------------------------------------------------*/
 

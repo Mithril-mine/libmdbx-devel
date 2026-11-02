@@ -3,11 +3,9 @@
 /// \file osal-sysinfo (POSIX part) — system RAM info (page size, total/available pages).
 
 #include "../../internals.h"
+#include "../posix/private.h"
 #include "../details.h"
 
-#if defined(__linux__) || defined(__gnu_linux__)
-#include <sys/sysinfo.h>
-#endif /* Linux */
 
 static intptr_t proc_meminfo_availpages(void) {
   intptr_t availpages = -1;

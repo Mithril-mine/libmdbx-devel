@@ -4,6 +4,7 @@
 /// incore (resident) probe and local/remoteness of the target filesystem.
 
 #include "../../internals.h"
+#include "../posix/private.h"
 #include "../details.h"
 
 int osal_check_fs_rdonly(mdbx_filehandle_t handle, const pathchar_t *pathname, int err) {

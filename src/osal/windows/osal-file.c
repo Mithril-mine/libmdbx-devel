@@ -4,6 +4,7 @@
 /// and filesystem checks.
 
 #include "../../internals.h"
+#include "osal/windows/private.h"
 #include "../details.h"
 
 /*----------------------------------------------------------------------------*/

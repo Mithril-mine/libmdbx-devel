@@ -3,18 +3,10 @@
 /// \file osal-bootid (POSIX part) — the boot-id determination (mashine instance identity).
 
 #include "../../internals.h"
+#include "../posix/private.h"
 #include "../details.h"
 
-#ifdef __FreeBSD__
-#include <sys/uuid.h>
-#endif /* FreeBSD */
 
-#ifdef __IPHONE_OS_VERSION_MIN_REQUIRED
-#include <CommonCrypto/CommonRandom.h>
-#elif __GLIBC_PREREQ(2, 25) || defined(__FreeBSD__) || defined(__NetBSD__) || defined(__BSD__) || defined(__bsdi__) || \
-    defined(__DragonFly__) || defined(__APPLE__) || __has_include(<sys/random.h>)
-#include <sys/random.h>
-#endif /* sys/random.h */
 
 __cold static bool is_inside_lxc(void) {
   bool inside_lxc = false;

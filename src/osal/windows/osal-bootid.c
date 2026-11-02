@@ -3,6 +3,7 @@
 /// \file osal-bootid (Windows part) — the boot-id determination (mashine instance identity).
 
 #include "../../internals.h"
+#include "osal/windows/private.h"
 #include "../details.h"
 
 __cold static uint64_t windows_systemtime_ms() {

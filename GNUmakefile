@@ -967,8 +967,10 @@ $(DIST_DIR)/@tmp-osal-platform.h: src/osal/osal.h src/osal/windows/osal.h src/os
 		echo '/* system-depended definitions (generated: platform OSAL types) */'; \
 		echo '#if IS_WINDOWS'; \
 		cat src/osal/windows/osal.h; echo; \
+		cat src/osal/windows/private.h; echo; \
 		echo '#else'; \
 		cat src/osal/posix/osal.h; echo; \
+		cat src/osal/posix/private.h; echo; \
 		echo '#endif /* Platform */'; \
 		echo; \
 		sed -e '/#include "windows\/osal.h"/d' -e '/#include "posix\/osal.h"/d' \

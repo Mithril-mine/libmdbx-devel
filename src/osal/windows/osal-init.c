@@ -3,6 +3,7 @@
 /// \file osal-init (Windows part) — process constructor/destructor: the environment prerequisites.
 
 #include "../../internals.h"
+#include "osal/windows/private.h"
 #include "../details.h"
 
 LARGE_INTEGER performance_frequency;

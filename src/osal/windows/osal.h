@@ -100,53 +100,6 @@ extern uint64_t monotime_limit;
 /* boot-id of the current OS instance (see osal-bootid.c) */
 __cold bin128_t osal_bootid(void);
 
-/* WOF/compressed-volume and NTSTATUS declarations used by osal-mmap.c and osal-fs.c */
-#ifndef WOF_CURRENT_VERSION
-typedef struct _WOF_EXTERNAL_INFO {
-  DWORD Version;
-  DWORD Provider;
-} WOF_EXTERNAL_INFO, *PWOF_EXTERNAL_INFO;
-#endif /* WOF_CURRENT_VERSION */
-
-#ifndef WIM_PROVIDER_CURRENT_VERSION
-#define WIM_PROVIDER_HASH_SIZE 20
-
-typedef struct _WIM_PROVIDER_EXTERNAL_INFO {
-  DWORD Version;
-  DWORD Flags;
-  LARGE_INTEGER DataSourceId;
-  BYTE ResourceHash[WIM_PROVIDER_HASH_SIZE];
-} WIM_PROVIDER_EXTERNAL_INFO, *PWIM_PROVIDER_EXTERNAL_INFO;
-#endif /* WIM_PROVIDER_CURRENT_VERSION */
-
-#ifndef FILE_PROVIDER_CURRENT_VERSION
-typedef struct _FILE_PROVIDER_EXTERNAL_INFO_V1 {
-  ULONG Version;
-  ULONG Algorithm;
-  ULONG Flags;
-} FILE_PROVIDER_EXTERNAL_INFO_V1, *PFILE_PROVIDER_EXTERNAL_INFO_V1;
-#endif /* FILE_PROVIDER_CURRENT_VERSION */
-
-#ifndef STATUS_OBJECT_NOT_EXTERNALLY_BACKED
-#define STATUS_OBJECT_NOT_EXTERNALLY_BACKED ((NTSTATUS)0xC000046DL)
-#endif
-#ifndef STATUS_INVALID_DEVICE_REQUEST
-#define STATUS_INVALID_DEVICE_REQUEST ((NTSTATUS)0xC0000010L)
-#endif
-#ifndef STATUS_NOT_SUPPORTED
-#define STATUS_NOT_SUPPORTED ((NTSTATUS)0xC00000BBL)
-#endif
-
-#ifndef FILE_DEVICE_FILE_SYSTEM
-#define FILE_DEVICE_FILE_SYSTEM 0x00000009
-#endif
-
-#ifndef FSCTL_GET_EXTERNAL_BACKING
-#define FSCTL_GET_EXTERNAL_BACKING CTL_CODE(FILE_DEVICE_FILE_SYSTEM, 196, METHOD_BUFFERED, FILE_ANY_ACCESS)
-#endif
-
-#ifndef ERROR_NOT_CAPABLE
-#define ERROR_NOT_CAPABLE 775L
-#endif
+/* WOF/STATUS/FSCTL declarations moved to windows/private.h */
 /* NTSTATUS -> errno mapping (see osal-misc.c) */
 __cold MDBX_INTERNAL int osal_ntstatus2errcode(NTSTATUS status);

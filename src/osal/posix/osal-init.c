@@ -3,6 +3,7 @@
 /// \file osal-init (POSIX part) — process constructor/destructor: the environment prerequisites.
 
 #include "../../internals.h"
+#include "../posix/private.h"
 #include "../details.h"
 
 uint64_t ratio_16dot16_to_monotonic;

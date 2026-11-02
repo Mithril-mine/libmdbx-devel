@@ -4,6 +4,7 @@
 /// and filesystem checks.
 
 #include "../../internals.h"
+#include "../posix/private.h"
 #include "../details.h"
 
 static const char osal_dev_null4file[] = "/dev/null";

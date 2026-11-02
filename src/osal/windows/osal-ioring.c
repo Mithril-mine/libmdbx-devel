@@ -4,6 +4,7 @@
 /// file writes.
 
 #include "../../internals.h"
+#include "osal/windows/private.h"
 
 /*----------------------------------------------------------------------------*/
 

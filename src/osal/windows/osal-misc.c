@@ -6,6 +6,7 @@
 /// monotonic clock, jitter, boot-id/guid, sysram info and ctor/dtor.
 
 #include "../../internals.h"
+#include "osal/windows/private.h"
 #include "../details.h"
 
 #include <psapi.h>

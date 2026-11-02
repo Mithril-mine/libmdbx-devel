@@ -4,6 +4,7 @@
 /// threads.
 
 #include "../../internals.h"
+#include "../posix/private.h"
 #include "../details.h"
 
 static const char dev_null[] = "/dev/null";

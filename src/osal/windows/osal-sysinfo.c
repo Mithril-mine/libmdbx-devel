@@ -3,6 +3,7 @@
 /// \file osal-sysinfo (Windows part) — system RAM info (page size, total/available pages).
 
 #include "../../internals.h"
+#include "osal/windows/private.h"
 #include "../details.h"
 
 __cold int mdbx_get_sysraminfo(intptr_t *page_size, intptr_t *total_pages, intptr_t *avail_pages) {

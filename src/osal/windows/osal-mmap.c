@@ -4,6 +4,7 @@
 /// and filesystem checks for a mapped device.
 
 #include "../../internals.h"
+#include "osal/windows/private.h"
 #include "../details.h"
 
 /* We use native NT APIs to setup the memory map, so that we can

@@ -4,6 +4,7 @@
 /// and filesystem checks for a mapped device.
 
 #include "../../internals.h"
+#include "../posix/private.h"
 #include "../details.h"
 
 int osal_msync(const osal_mmap_t *map, size_t length, enum osal_syncmode_bits mode_bits) {
