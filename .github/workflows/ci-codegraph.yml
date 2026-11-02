@@ -85,14 +85,11 @@ jobs:
         python3 tools/scan_probes.py --src "$GITHUB_WORKSPACE/src" \
           --probe-bus "$GITHUB_WORKSPACE/docs/engineering/probe-bus.md" \
           --out tools/artifacts/probes.json --dry-run
-    - name: validate generator (fixture + full)
+    - name: validate generator (fixture invariants)
       shell: bash
       run: |
         cd skynet/MCP-shared-graph-memory
-        python3 tools/validate_map.py --map tools/artifacts/codegraph-linux.json \
-          --cc "$GITHUB_WORKSPACE/_build-scan/compile_commands.json" --tus fixture
-        python3 tools/validate_map.py --map tools/artifacts/codegraph-linux.json \
-          --cc "$GITHUB_WORKSPACE/_build-scan/compile_commands.json" --tus full
+        python3 tools/validate_map.py --tus fixture
     - name: upload linux artifact
       uses: actions/upload-artifact@v4
       with:
@@ -440,12 +437,11 @@ jobs:
           --out tools/artifacts/codegraph.json
         python3 tools/scan_uncovered.py \
           --map tools/artifacts/codegraph.json
-    - name: validate merged (fixture)
+    - name: validate merged (fixture invariants)
       shell: bash
       run: |
         cd skynet/MCP-shared-graph-memory
-        python3 tools/validate_map.py --map tools/artifacts/codegraph.json \
-          --tus fixture
+        python3 tools/validate_map.py --tus fixture
     - name: validate merged artifact (content)
       shell: bash
       run: |

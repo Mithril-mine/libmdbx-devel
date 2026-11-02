@@ -190,17 +190,16 @@ group:task:B63            → {символы, тесты, записи, док�
    - `scan_regions.py`: **#if-дерево** (cond_regions) без компиляции +
      классификация (platform/option/technical, inner-function/gating) +
      визуализация `--tree`; привязка символов к регионам + фаcет `configs`;
-   - `validate_map.py`: сверка со статичным golden (`tests/golden/`);
+   - `validate_map.py`: инварианты генератора на фиксированных
+     fixture-файлах (независимо от объёма ядра; см. «Валидатор» ниже);
    - таблицы symbols/call_edges(+rev)/groups/sym_ids/sym_id2key + батчевый
      загрузчик `load_map.py --replace` (самоизлечение дрейфа);
    - **мост curated ↔ structural**: `link()` принимает символы
      (`fn:`/`type:`/`macro:`), id через `mdbx_dbi_sequence`, `refresh_stale`,
      `mdbx_canary_get/put` (magic/pоколение карты).
-   Текущие счётчики (Linux x86_64, clang 18.1.3, обновлено 29.09 после
-   порта C++ API/USDT-проб): functions 3309, types 376, macros 511,
-   blocks 31860, edges 20805 (unresolved 1100 — системные вызовы/
-   `__builtin_*`), regions 1133.
    (C++-перегрузки учитываются: один qname + сигнатура → `#sig-hash`.)
+   Текущие счётчики ядра — диагностические (`validate_map.py --tus full`)
+   и меняются при любом рефакторинге; эталоном НЕ являются.
    Подготовка `_build-scan` (важно, иначе сканер молча теряет C-ядро):
    `cmake -S . -B _build-scan -DCMAKE_BUILD_TYPE=Debug
     -DMDBX_BUILD_CXX=ON -DMDBX_ENABLE_TESTS=ON -DMDBX_BUILD_TOOLS=ON
@@ -376,6 +375,24 @@ POSIX-ветки `#if`.
   с `flags: <cell-id>`; пустые lines.info фильтруются guard-шагом
   (`codecov guard` в ci-run.yml). Конфиг — `.codecov.yml` (ignore tests/
   examples/skynet/docs; статусы informational).
+
+## Валидатор (`validate_map.py`)
+
+Гейт генератора — инварианты на **фиксированных fixture-файлах**
+(`tests/fixtures/scan_fixture.*`), не зависящих от ядра libmdbx:
+минимальные счётчики (функции/типы/макросы/блоки/рёбра) должны
+достигаться при каждом скане. Регрессия генератора (потеря символов,
+разъехавшиеся макросы) ловится даже если fixture-файлы не менялись;
+изменения ядра libmdbx на гейт не влияют.
+
+- `--tus fixture` (дефолт): скан фикстур + сверка инвариантов. CI-гейт
+  (`ci-codegraph`: scan-linux и merge-validate).
+- `--tus full`: **диагностический** скан ядра (вывод абсолютных
+  счётчиков без сверок). Легитимно меняется при любом рефакторинге;
+  исторический golden-файл (`tests/golden/map-counts.json`, правило
+  «текущее ≥ эталон») удалён: наказывал легитимное уменьшение ядра
+  (удаление мёртвого кода, перенос в osal-слой) и требовал ручного
+  `--refresh-golden` после каждого существенного изменения.
 
 ## Ограничения (зафиксированы)
 
