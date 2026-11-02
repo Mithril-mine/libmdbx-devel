@@ -8,24 +8,6 @@
 
 
 
-#if defined(__linux__) || defined(__gnu_linux__)
-
-__cold static bool is_inside_lxc(void) {
-  bool inside_lxc = false;
-  FILE *mounted = setmntent("/proc/mounts", "r");
-  if (mounted) {
-    const struct mntent *ent;
-    while (nullptr != (ent = getmntent(mounted))) {
-      if (strcmp(ent->mnt_fsname, "lxcfs") == 0 && strncmp(ent->mnt_dir, "/proc/", 6) == 0) {
-        inside_lxc = true;
-        break;
-      }
-    }
-    endmntent(mounted);
-  }
-  return inside_lxc;
-}
-
 MDBX_MAYBE_UNUSED __cold static bool bootid_parse_uuid(bin128_t *s, const void *p, const size_t n) {
   if (n > 31) {
     unsigned bits = 0;
@@ -65,6 +47,25 @@ MDBX_MAYBE_UNUSED __cold static bool bootid_parse_uuid(bin128_t *s, const void *
     bootid_collect(s, p, n);
   return false;
 }
+
+#if defined(__linux__) || defined(__gnu_linux__)
+
+__cold static bool is_inside_lxc(void) {
+  bool inside_lxc = false;
+  FILE *mounted = setmntent("/proc/mounts", "r");
+  if (mounted) {
+    const struct mntent *ent;
+    while (nullptr != (ent = getmntent(mounted))) {
+      if (strcmp(ent->mnt_fsname, "lxcfs") == 0 && strncmp(ent->mnt_dir, "/proc/", 6) == 0) {
+        inside_lxc = true;
+        break;
+      }
+    }
+    endmntent(mounted);
+  }
+  return inside_lxc;
+}
+
 
 __cold static bool proc_read_uuid(const char *path, bin128_t *target) {
   const int fd = open(path, O_RDONLY | O_NOFOLLOW);
