@@ -41,6 +41,7 @@ typedef struct _WOF_EXTERNAL_INFO {
 
 /* WOF/WIM/FILE_PROVIDER structures for osal-fs.c (some MinGW-w64 versions
  * don't declare them in winioctl.h). */
+#if defined(__MINGW__) || defined(__MINGW32__) || defined(__MINGW64__)
 #ifndef WIM_PROVIDER_EXTERNAL_INFO
 #define WIM_PROVIDER_HASH_SIZE 20
 typedef struct _WIM_PROVIDER_EXTERNAL_INFO {
