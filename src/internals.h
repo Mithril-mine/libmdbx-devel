@@ -666,8 +666,6 @@ MDBX_MAYBE_UNUSED static void static_checks(void) {
 }
 #endif /* Disabled for MSVC 19.0 (VisualStudio 2015) */
 
-/******************************************************************************/
-
 #ifndef __cplusplus
 
 #include "proto.h"
@@ -702,7 +700,14 @@ MDBX_MAYBE_UNUSED static void static_checks(void) {
 
 #include "walk.h"
 
+#include "chk-internal.h"
+
 #include "sort.h"
+
+/* cursor.c parts (cursor-setup.c / cursor-nav.c / cursor-mut.c / cursor-seek.c), assembled by the cursor.c umbrella. */
+MDBX_INTERNAL int __must_check_result unexpected_dupsort(MDBX_cursor *mc);
+MDBX_INTERNAL cdr_t cursor_forward_at(MDBX_cursor *iter, size_t amount, int level);
+MDBX_INTERNAL cdr_t cursor_backward_at(MDBX_cursor *iter, size_t amount, int level);
 
 /* The reader-table occupancy counter lives in the externally-writable lock
  * mapping, so a too-large value from a corrupt or hostile lock file must never

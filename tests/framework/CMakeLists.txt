@@ -46,7 +46,7 @@ set(LIBMDBX_TEST_SOURCES
     nested.c++
     fork.c++
     ../../src/essentials.h
-    ../../src/osal.h
+    ../../src/osal/osal.h
     ../../src/options.h
     ../../mdbx.h++)
 

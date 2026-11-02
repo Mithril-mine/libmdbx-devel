@@ -114,6 +114,36 @@ MDBX_INTERNAL char *ratio2digits(const uint64_t v, const uint64_t d, ratio2digit
                                  int precision);
 MDBX_INTERNAL char *ratio2percent(uint64_t v, uint64_t d, ratio2digits_buffer_t *buffer);
 
+/* Number of 1-bits in a word (population count, SWAR implementation). */
+MDBX_MAYBE_UNUSED static inline size_t hamming_weight(size_t v) {
+  const size_t m1 = (size_t)UINT64_C(0x5555555555555555);
+  const size_t m2 = (size_t)UINT64_C(0x3333333333333333);
+  const size_t m4 = (size_t)UINT64_C(0x0f0f0f0f0f0f0f0f);
+  const size_t h01 = (size_t)UINT64_C(0x0101010101010101);
+  v -= (v >> 1) & m1;
+  v = (v & m2) + ((v >> 2) & m2);
+  v = (v + (v >> 4)) & m4;
+  return (v * h01) >> (sizeof(v) * 8 - 8);
+}
+
+/* Same for a 64-bit value on the platforms where size_t is 32-bit. */
+MDBX_MAYBE_UNUSED static inline size_t hw64(uint64_t v) {
+  size_t r = hamming_weight((size_t)v);
+  if (sizeof(v) > sizeof(r))
+    r += hamming_weight((size_t)(v >> sizeof(r) * 4 >> sizeof(r) * 4));
+  return r;
+}
+
+/* Bob Jenkins's small PRNG: https://burtleburtle.net/bob/rand/smallprng.html.
+ * Mutates the given 128-bit state in-place, used to shake the boot id. */
+MDBX_MAYBE_UNUSED static inline void jenkins_prng(bin128_t *p) {
+  const uint32_t e = p->a - (p->b << 23 | p->b >> 9);
+  p->a = p->b ^ (p->c << 16 | p->c >> 16);
+  p->b = p->c + (p->d << 11 | p->d >> 21);
+  p->c = p->d + e;
+  p->d = e + p->a;
+}
+
 MDBX_INTERNAL bin128_t mul64x64_128_fallback(uint64_t x, uint64_t y);
 
 #if defined(_MSC_VER) && (defined(_M_X64) || defined(_M_IA64) || defined(_M_AMD64))

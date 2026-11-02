@@ -300,17 +300,6 @@ static bool bit(size_t set, size_t n) {
   return (set >> n) & 1;
 }
 
-static size_t hamming_weight(size_t v) {
-  const size_t m1 = (size_t)UINT64_C(0x5555555555555555);
-  const size_t m2 = (size_t)UINT64_C(0x3333333333333333);
-  const size_t m4 = (size_t)UINT64_C(0x0f0f0f0f0f0f0f0f);
-  const size_t h01 = (size_t)UINT64_C(0x0101010101010101);
-  v -= (v >> 1) & m1;
-  v = (v & m2) + ((v >> 2) & m2);
-  v = (v + (v >> 4)) & m4;
-  return (v * h01) >> (sizeof(v) * 8 - 8);
-}
-
 static bool check_hole(const size_t set, const rkl_hole_t hole, size_t *acc) {
   const size_t errors = tst_failed;
   ++tst_iterations;

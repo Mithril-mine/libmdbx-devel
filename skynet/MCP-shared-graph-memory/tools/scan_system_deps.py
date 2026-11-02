@@ -318,7 +318,20 @@ def main():
         # (честно: платформенно-отсутствующий заголовок — тоже факт модели).
         absent = []
         headers = {}
-        if args.headers_list:
+        if args.headers_list is None:
+            # Без --headers-list: собираем системные заголовки из
+            # препроцессорных file-marks всех TU (clang -E -dD).
+            cc_data = json.load(open(args.cc)) if os.path.getsize(args.cc) else []
+            tu_list = select_tus(cc_data) if cc_data else []
+            if not tu_list:
+                print("scan_system_deps: scan-headers: нет TU (compile_commands?)",
+                      file=sys.stderr)
+                return 1
+            headers.update(collect_header_marks(tu_list, clang, cfg))
+            if args.limit_headers:
+                headers = dict(list(headers.items())[:args.limit_headers])
+            absent = []
+        if args.headers_list is not None:
             entries = []  # (requested, display_name)
             for line in open(args.headers_list):
                 line = line.strip()
@@ -402,6 +415,9 @@ def main():
               % (len(headers), len(absent)), file=sys.stderr)
         result = {"config": args.config, "headers": {}, "uses": {},
                   "absent": absent}
+        import sys as _sys
+        print("scan_system_deps: DEBUG headers-before-loop=%d" % len(headers),
+              file=_sys.stderr)
         for i, (path, meta) in enumerate(sorted(headers.items())):
             provides = scan_header_provides(clang, path,
                                             meta.get("args") if cfg._cross else None)
@@ -430,6 +446,7 @@ def main():
         print("scan_system_deps: %d headers -> %s" % (len(result["headers"]), out_path))
         return 0
 
+
     if args.mode == "scan-uses":
         cc = json.load(open(args.cc))
         tu_list = select_tus(cc)
@@ -443,7 +460,14 @@ def main():
                             provides_index.setdefault(nm, set()).add(key)
         uses = scan_uses(tu_list, clang, cfg,
                          {k: list(v) for k, v in provides_index.items()})
-        result = {"config": args.config, "headers": {}, "uses": uses}
+        # Сохраняем headers из provides_from (это резолв-артефакт scan-headers),
+        # чтобы merge и sys_deps_load видели PROVIDES-таблицу.
+        carried_headers = {}
+        for p in (args.provides_from or "").split(","):
+            if p and os.path.exists(p):
+                for key, h in json.load(open(p)).get("headers", {}).items():
+                    carried_headers[key] = h
+        result = {"config": args.config, "headers": carried_headers, "uses": uses}
         json.dump(result, open(out_path, "w"), ensure_ascii=False, indent=1)
         n_res = sum(len(u["sys_refs"]) for u in uses.values())
         n_unres = sum(len(u["unresolved"]) for u in uses.values())
