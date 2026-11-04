@@ -561,7 +561,10 @@ int lck_upgrade(MDBX_env *env, bool dont_wait) {
   jitter4testing(false);
   int rc = flock_lck(env, dont_wait ? LCK_EXCLUSIVE | LCK_DONTWAIT : LCK_EXCLUSIVE, LCK_UPPER, 0);
   if (rc != MDBX_SUCCESS) {
-    /* 2) something went wrong, give up */;
+    /* 2) something went wrong, give up;
+     * map the contention to MDBX_BUSY so that callers can portably detect it */
+    if (rc == ERROR_LOCK_VIOLATION || rc == ERROR_SHARING_VIOLATION)
+      rc = MDBX_BUSY;
     VERBOSE("%s, err %u", "S-?(used) >> S-E(locked)", rc);
     return rc;
   }
@@ -575,7 +578,10 @@ int lck_upgrade(MDBX_env *env, bool dont_wait) {
   jitter4testing(false);
   rc = flock_lck(env, dont_wait ? LCK_EXCLUSIVE | LCK_DONTWAIT : LCK_EXCLUSIVE, LCK_LOWER, 0);
   if (rc != MDBX_SUCCESS) {
-    /* 5) something went wrong, give up */;
+    /* 5) something went wrong, give up;
+     * map the contention to MDBX_BUSY so that callers can portably detect it */
+    if (rc == ERROR_LOCK_VIOLATION || rc == ERROR_SHARING_VIOLATION)
+      rc = MDBX_BUSY;
     VERBOSE("%s, err %u", "?-E(middle) >> E-E(exclusive-write)", rc);
     return rc;
   }
