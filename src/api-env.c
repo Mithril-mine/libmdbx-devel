@@ -368,8 +368,25 @@ __cold int mdbx_env_deleteW(const wchar_t *pathname, MDBX_env_delete_mode_t mode
 
   STATIC_ASSERT(sizeof(dummy_env->flags) == sizeof(MDBX_env_flags_t));
   int rc = MDBX_RESULT_TRUE, err = env_handle_pathname(dummy_env, pathname, 0);
+  if (osal_is_pathname_absent_error(err)) {
+    /* The pathname does not exist, so it is not a directory, but the lock file
+     * of a MDBX_NOSUBDIR environment whose data file is gone may still be there.
+     * With MDBX_NOSUBDIR a non-zero mode creates nothing, it only lets the
+     * names be built for a pathname that does not exist. */
+    dummy_env->flags |= MDBX_NOSUBDIR;
+    err = env_handle_pathname(dummy_env, pathname, 0600);
+    if ((err == MDBX_SUCCESS || err == MDBX_DUPLICATED_LCK)) {
+      const int exists_rc = osal_fileexists(dummy_env->pathname.lck);
+      if (exists_rc != MDBX_RESULT_TRUE) {
+        /* no lock file either (whatever the shape of the pathname): nothing found,
+         * but a failed lookup is neither "nothing found" nor "deleted" */
+        err = (exists_rc == MDBX_RESULT_FALSE) ? MDBX_ENOFILE : exists_rc;
+      }
+    }
+  }
   if (likely(err == MDBX_SUCCESS)) {
     mdbx_filehandle_t lck_handle = INVALID_HANDLE_VALUE, dxb_handle = INVALID_HANDLE_VALUE;
+    bool dxb_absent = false, lck_absent = false;
     if (mode > MDBX_ENV_JUST_DELETE) {
       err = osal_openfile(MDBX_OPEN_DELETE, dummy_env, dummy_env->pathname.dxb, &dxb_handle, 0);
       err = osal_is_pathname_absent_error(err) ? MDBX_SUCCESS : err;
@@ -383,7 +400,7 @@ __cold int mdbx_env_deleteW(const wchar_t *pathname, MDBX_env_delete_mode_t mode
         err = osal_lockfile(dxb_handle, mode == MDBX_ENV_WAIT_FOR_UNUSED);
     }
 
-    if (err == MDBX_SUCCESS) {
+    if (err == MDBX_SUCCESS && !dxb_absent) {
       err = osal_removefile(dummy_env->pathname.dxb);
       if (err == MDBX_SUCCESS)
         rc = MDBX_SUCCESS;
@@ -391,7 +408,7 @@ __cold int mdbx_env_deleteW(const wchar_t *pathname, MDBX_env_delete_mode_t mode
         err = osal_is_pathname_absent_error(err) ? MDBX_SUCCESS : err;
     }
 
-    if (err == MDBX_SUCCESS) {
+    if (err == MDBX_SUCCESS && !lck_absent) {
       err = osal_removefile(dummy_env->pathname.lck);
       if (err == MDBX_SUCCESS)
         rc = MDBX_SUCCESS;
