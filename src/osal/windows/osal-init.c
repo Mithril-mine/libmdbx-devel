@@ -21,22 +21,22 @@ static void WINAPI stub_srwlock_AcquireShared(osal_srwlock_t *srwl) {
   while (true) {
     ASSERT(srwl->writerCount >= 0 && srwl->readerCount >= 0);
 
-           //  If there's a writer already, spin without unnecessarily
-           //  interlocking the CPUs
+    //  If there's a writer already, spin without unnecessarily
+    //  interlocking the CPUs
     if (srwl->writerCount != 0) {
       SwitchToThread();
       continue;
     }
 
-           //  Add to the readers list
+    //  Add to the readers list
     _InterlockedIncrement(&srwl->readerCount);
 
-           // Check for writers again (we may have been preempted). If
-           // there are no writers writing or waiting, then we're done.
+    // Check for writers again (we may have been preempted). If
+    // there are no writers writing or waiting, then we're done.
     if (srwl->writerCount == 0)
       break;
 
-           // Remove from the readers list, spin, try again
+    // Remove from the readers list, spin, try again
     _InterlockedDecrement(&srwl->readerCount);
     SwitchToThread();
   }
@@ -61,8 +61,8 @@ static bool stub_srwlock_AcquireExclusive_common(osal_srwlock_t *srwl, const boo
   while (true) {
     ASSERT(srwl->writerCount >= 0 && srwl->readerCount >= 0);
 
-           //  If there's a writer already, spin without unnecessarily
-           //  interlocking the CPUs
+    //  If there's a writer already, spin without unnecessarily
+    //  interlocking the CPUs
     if (srwl->writerCount != 0) {
       if (dont_wait)
         return false;
@@ -70,17 +70,17 @@ static bool stub_srwlock_AcquireExclusive_common(osal_srwlock_t *srwl, const boo
       continue;
     }
 
-           // See if we can become the writer (expensive, because it inter-
-           // locks the CPUs, so writing should be an infrequent process)
+    // See if we can become the writer (expensive, because it inter-
+    // locks the CPUs, so writing should be an infrequent process)
     if (_InterlockedExchange(&srwl->writerCount, 1) == 0)
       break;
     if (dont_wait)
       return false; /* another writer won the race */
   }
 
-         // Now we're the writer, but there may be outstanding readers.
-         // Spin until there aren't any more; new readers will wait now
-         // that we're the writer.
+  // Now we're the writer, but there may be outstanding readers.
+  // Spin until there aren't any more; new readers will wait now
+  // that we're the writer.
   while (srwl->readerCount != 0) {
     ASSERT(srwl->writerCount >= 0 && srwl->readerCount >= 0);
     if (dont_wait) {
@@ -108,8 +108,8 @@ static BOOLEAN WINAPI stub_srwlock_TryAcquireExclusive(osal_srwlock_t *srwl) {
 static uint64_t WINAPI stub_GetTickCount64(void) {
   LARGE_INTEGER Counter, Frequency;
   return (QueryPerformanceFrequency(&Frequency) && QueryPerformanceCounter(&Counter))
-           ? Counter.QuadPart * 1000ul / Frequency.QuadPart
-           : 0;
+             ? Counter.QuadPart * 1000ul / Frequency.QuadPart
+             : 0;
 }
 
 //------------------------------------------------------------------------------
@@ -150,7 +150,7 @@ void windows_import(void) {
   }
 
   const osal_srwlock_t_function srwlock_init =
-    (osal_srwlock_t_function)(hKernel32dll ? GetProcAddress(hKernel32dll, "InitializeSRWLock") : nullptr);
+      (osal_srwlock_t_function)(hKernel32dll ? GetProcAddress(hKernel32dll, "InitializeSRWLock") : nullptr);
   if (srwlock_init) {
     imports.srwl_Init = srwlock_init;
     imports.srwl_AcquireShared = (osal_srwlock_t_function)GetProcAddress(hKernel32dll, "AcquireSRWLockShared");
@@ -158,7 +158,7 @@ void windows_import(void) {
     imports.srwl_AcquireExclusive = (osal_srwlock_t_function)GetProcAddress(hKernel32dll, "AcquireSRWLockExclusive");
     imports.srwl_ReleaseExclusive = (osal_srwlock_t_function)GetProcAddress(hKernel32dll, "ReleaseSRWLockExclusive");
     imports.srwl_TryAcquireExclusive =
-      (osal_srwlock_t_try_function)GetProcAddress(hKernel32dll, "TryAcquireSRWLockExclusive");
+        (osal_srwlock_t_try_function)GetProcAddress(hKernel32dll, "TryAcquireSRWLockExclusive");
   } else {
     imports.srwl_Init = stub_srwlock_Init;
     imports.srwl_AcquireShared = stub_srwlock_AcquireShared;

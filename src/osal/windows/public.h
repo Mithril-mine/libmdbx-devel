@@ -127,7 +127,7 @@ typedef enum _FILE_INFO_BY_HANDLE_CLASS {
   FileRemoteProtocolInfo,
   MaximumFileInfoByHandleClass
 } FILE_INFO_BY_HANDLE_CLASS,
-  *PFILE_INFO_BY_HANDLE_CLASS;
+    *PFILE_INFO_BY_HANDLE_CLASS;
 
 typedef struct _FILE_END_OF_FILE_INFO {
   LARGE_INTEGER EndOfFile;
@@ -160,9 +160,9 @@ typedef BOOL(WINAPI *MDBX_GetFileInformationByHandleEx)(_In_ HANDLE hFile,
                                                         _Out_ LPVOID lpFileInformation, _In_ DWORD dwBufferSize);
 
 typedef BOOL(WINAPI *MDBX_GetVolumeInformationByHandleW)(
-  _In_ HANDLE hFile, _Out_opt_ LPWSTR lpVolumeNameBuffer, _In_ DWORD nVolumeNameSize,
-  _Out_opt_ LPDWORD lpVolumeSerialNumber, _Out_opt_ LPDWORD lpMaximumComponentLength,
-  _Out_opt_ LPDWORD lpFileSystemFlags, _Out_opt_ LPWSTR lpFileSystemNameBuffer, _In_ DWORD nFileSystemNameSize);
+    _In_ HANDLE hFile, _Out_opt_ LPWSTR lpVolumeNameBuffer, _In_ DWORD nVolumeNameSize,
+    _Out_opt_ LPDWORD lpVolumeSerialNumber, _Out_opt_ LPDWORD lpMaximumComponentLength,
+    _Out_opt_ LPDWORD lpFileSystemFlags, _Out_opt_ LPWSTR lpFileSystemNameBuffer, _In_ DWORD nFileSystemNameSize);
 
 typedef DWORD(WINAPI *MDBX_GetFinalPathNameByHandleW)(_In_ HANDLE hFile, _Out_ LPWSTR lpszFilePath,
                                                       _In_ DWORD cchFilePath, _In_ DWORD dwFlags);

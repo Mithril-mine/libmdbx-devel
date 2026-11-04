@@ -65,4 +65,3 @@
 
 /* posix misc: the clock choice for monotime (called from osal-init) */
 MDBX_INTERNAL void setup_monoclock(void);
-
