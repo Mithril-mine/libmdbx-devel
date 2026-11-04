@@ -19,8 +19,8 @@
 ///    of scope. Windows cannot delete a mapped file, so the environment must
 ///    be closed before the mdtest_db destructor runs: declare the mdtest_env
 ///    after the mdtest_db, and C++ destroys it first. To close the environment
-///    earlier, call env_owner.reset(), never mdbx_env_close(env) directly: the
-///    owner would close it a second time.
+///    earlier, declare the owner without const and call env_owner.reset(),
+///    never mdbx_env_close(env) directly: the owner would close it a second time.
 ///
 /// Usage:
 ///   const mdtest_db testdb("issue123.mdbx");
