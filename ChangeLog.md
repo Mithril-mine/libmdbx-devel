@@ -80,6 +80,7 @@ Cutting-edge release with new core features and internal refactoring.
     - A forked child treated a failed unlock of an inherited inter-process lock as fatal only at certain log levels; the failure is now always tolerated ([#111](https://github.com/Mithril-mine/libmdbx-devel/issues/111)).
 
  - Wrong results and API behavior:
+    - On Linux `mdbx_get_sysraminfo()` ignored `sysinfo.mem_unit`, so a 32-bit process on a host with 4 GiB of RAM or more got a far too small total RAM (which feeds the default dirty-page limit and related sizing), the `MemAvailable` parsing could wrap for such processes, and its `sscanf()` call wrote the unit token into the very buffer being parsed ([#339](https://github.com/Mithril-mine/libmdbx-devel/issues/339)).
     - `mdbx_cursor_get_batch()` with `MDBX_FIRST` on an already positioned cursor silently returned only the tail of the table instead of rewinding; `MDBX_FIRST` now always starts from the first pair ([#151](https://github.com/Mithril-mine/libmdbx-devel/issues/151)).
     - `mdbx_cursor_scroll()` and `mdbx_cursor_distribute()` returned wrong positions or counts on tables with duplicates near the tree height, and distribute corrupted one of the caller's cursors; distribution now uses a private iterator ([#84](https://github.com/Mithril-mine/libmdbx-devel/issues/84), [#123](https://github.com/Mithril-mine/libmdbx-devel/issues/123)).
     - `mdbx_env_stat_ex()` under-counted the totals once a named table was used in the transaction ([#108](https://github.com/Mithril-mine/libmdbx-devel/issues/108)).
