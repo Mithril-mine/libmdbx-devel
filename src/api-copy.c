@@ -742,7 +742,6 @@ __cold static int copy2pathname(MDBX_txn *txn, const pathchar_t *dest_path, MDBX
       ;
   mdbx_filehandle_t newfd = INVALID_HANDLE_VALUE;
   bool created_by_us = false;
-  bool pre_existing = false;
   uint64_t pre_size = 0;
   int rc;
   if (flags & MDBX_CP_OVERWRITE) {
@@ -756,7 +755,6 @@ __cold static int copy2pathname(MDBX_txn *txn, const pathchar_t *dest_path, MDBX
                || rc == ERROR_FILE_EXISTS || rc == ERROR_ALREADY_EXISTS
 #endif
     ) {
-      pre_existing = true;
       rc = osal_openfile(MDBX_OPEN_COPY_OVERWRITE, txn->env, dest_path, &newfd, mode);
       if (likely(rc == MDBX_SUCCESS)) {
         created_by_us = false;
@@ -768,24 +766,10 @@ __cold static int copy2pathname(MDBX_txn *txn, const pathchar_t *dest_path, MDBX
     rc = osal_openfile(MDBX_OPEN_COPY_EXCL, txn->env, dest_path, &newfd, mode);
     created_by_us = (rc == MDBX_SUCCESS);
   }
-  if (unlikely(rc != MDBX_SUCCESS)) {
-    if (rc != MDBX_EEXIST) {
-#if IS_WINDOWS
-      if (rc == ERROR_PATH_NOT_FOUND || rc == ERROR_INVALID_DRIVE || rc == ERROR_BAD_NETPATH ||
-          rc == ERROR_BAD_PATHNAME)
-        return rc;
-#endif
-      /* The exclusive create did not fail with EEXIST, so the file is either
-       * absent or was just created by it and then rejected (e.g. by the
-       * fd 0..2 safeguard) */
-      if (!pre_existing) {
-        int err = osal_removefile(dest_path);
-        if (err != MDBX_SUCCESS && err != MDBX_ENOFILE)
-          ERROR("unable remove incomplete copy destination `%" MDBX_PRIsPATH "`, error %d", dest_path, err);
-      }
-    }
+  if (unlikely(rc != MDBX_SUCCESS))
+    /* A failed open says nothing about the path (EMFILE, ENFILE or ENOMEM come before the existence check), so
+     * nothing is removed here; osal_openfile() removes a file it has just created exclusively and then rejected. */
     return rc;
-  }
 
 #if IS_WINDOWS
   /* no locking required since the file opened with ShareMode == 0 */
