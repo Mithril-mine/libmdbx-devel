@@ -22,6 +22,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <memory>
 
 #ifdef _MSC_VER
 #pragma warning(disable : 4702) /* unreachable code */
@@ -131,4 +132,76 @@ TEST(issue_gh0069, free_dbi_drop_is_rejected_and_gc_survives) {
   mdbx_txn_abort(txn);
   mdbx_env_close(env);
   remove_db(testdb);
+}
+
+// Follow-up https://github.com/Mithril-mine/libmdbx-devel/issues/308
+// mdbx_dbi_open(MDBX_CHK_GC, MDBX_CREATE) on an empty GC took the "re-create an
+// empty table" branch of dbi_bind(): it reset the GC flags to 0 and the commit
+// stored them in a steady meta, so every later write transaction failed with
+// MDBX_INCOMPATIBLE and the next open with MDBX_CORRUPTED. Like the drop above,
+// MDBX_CREATE must be refused for the GC.
+
+namespace {
+
+/* Deletes the database before the test and on every exit path of it. */
+struct db_remover {
+  const char *const path;
+  explicit db_remover(const char *pathname) : path(pathname) { remove_db(path); }
+  ~db_remover() { remove_db(path); }
+};
+
+struct env_closer {
+  void operator()(MDBX_env *env) const { mdbx_env_close(env); }
+};
+
+struct txn_aborter {
+  void operator()(MDBX_txn *txn) const { mdbx_txn_abort(txn); }
+};
+
+} // namespace
+
+TEST(issue_gh0069, gc_open_with_create_is_rejected) {
+  if (MDBX_GTEST_IS_EXECUTION_TIMEOUT()) {
+    GTEST_SKIP() << "SKIPPED by RUNTIME_LIMIT";
+    return;
+  }
+  const db_remover cleanup("issue308.mdbx");
+  char kb[] = "key", vb[] = "value";
+  {
+    MDBX_env *env = nullptr;
+    ASSERT_EQ(MDBX_SUCCESS, mdbx_env_create(&env));
+    const std::unique_ptr<MDBX_env, env_closer> env_owner(env);
+    ASSERT_EQ(MDBX_SUCCESS, mdbx_env_open(env, cleanup.path, MDBX_NOSUBDIR, 0644));
+
+    MDBX_txn *txn = nullptr;
+    ASSERT_EQ(MDBX_SUCCESS, mdbx_txn_begin(env, nullptr, MDBX_TXN_READWRITE, &txn));
+    std::unique_ptr<MDBX_txn, txn_aborter> txn_owner(txn);
+    MDBX_dbi dbi = MDBX_dbi(0xdeadbeef);
+    EXPECT_EQ(MDBX_EACCESS, mdbx_dbi_open(txn, (const char *)MDBX_CHK_GC, MDBX_CREATE, &dbi))
+        << "MDBX_CREATE must be refused for the GC";
+    /* A real change, so the commit writes a steady meta (with the GC flags). */
+    MDBX_dbi main_dbi = 0;
+    ASSERT_EQ(MDBX_SUCCESS, mdbx_dbi_open(txn, nullptr, MDBX_DB_DEFAULTS, &main_dbi));
+    MDBX_val key = {kb, sizeof(kb)}, data = {vb, sizeof(vb)};
+    ASSERT_EQ(MDBX_SUCCESS, mdbx_put(txn, main_dbi, &key, &data, MDBX_UPSERT));
+    ASSERT_EQ(MDBX_SUCCESS, mdbx_txn_commit(txn_owner.release()));
+
+    ASSERT_EQ(MDBX_SUCCESS, mdbx_txn_begin(env, nullptr, MDBX_TXN_READWRITE, &txn))
+        << "the next write transaction must start (the GC flags must be intact)";
+    mdbx_txn_abort(txn);
+  }
+
+  MDBX_env *env = nullptr;
+  ASSERT_EQ(MDBX_SUCCESS, mdbx_env_create(&env));
+  const std::unique_ptr<MDBX_env, env_closer> env_owner(env);
+  ASSERT_EQ(MDBX_SUCCESS, mdbx_env_open(env, cleanup.path, MDBX_NOSUBDIR, 0644))
+      << "the database must reopen (the steady meta must not be corrupted)";
+  MDBX_txn *reader = nullptr;
+  ASSERT_EQ(MDBX_SUCCESS, mdbx_txn_begin(env, nullptr, MDBX_TXN_RDONLY, &reader));
+  const std::unique_ptr<MDBX_txn, txn_aborter> reader_owner(reader);
+  MDBX_dbi main_dbi = 0;
+  ASSERT_EQ(MDBX_SUCCESS, mdbx_dbi_open(reader, nullptr, MDBX_DB_DEFAULTS, &main_dbi));
+  MDBX_val key = {kb, sizeof(kb)}, data;
+  ASSERT_EQ(MDBX_SUCCESS, mdbx_get(reader, main_dbi, &key, &data)) << "the last commit must not be lost";
+  EXPECT_EQ(sizeof(vb), data.iov_len);
 }

@@ -582,6 +582,8 @@ int dbi_open(MDBX_txn *txn, const MDBX_val *const name, unsigned user_flags, MDB
     return rc;
   }
   if (unlikely(pseudo == MDBX_CHK_GC)) {
+    if (user_flags & MDBX_CREATE)
+      return MDBX_EACCESS /* the GC table must never be re-created */;
     rc = dbi_bind(txn, FREE_DBI, user_flags, keycmp, datacmp);
     if (likely(rc == MDBX_SUCCESS))
       *dbi = FREE_DBI;
