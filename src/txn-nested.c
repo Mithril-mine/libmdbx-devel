@@ -449,6 +449,7 @@ int txn_nested_create(MDBX_txn *parent, bool readonly) {
         txn_spill(parent, nullptr, parent->wr.dirtylist->length / parent->env->options.spill_parent4child_denominator);
     if (unlikely(err != MDBX_SUCCESS))
       return LOG_IFERR(err);
+    flags |= parent->flags & MDBX_TXN_SPILLS /* this may have been the parent's first spill */;
   }
   tASSERT2(parent, audit_ex(parent, 0, false) == 0);
 
