@@ -17,6 +17,8 @@
 
 #include "../test-env.h"
 
+#include "../test-db.h"
+
 #include <cerrno>
 #include <csignal>
 #include <cstdio>
@@ -77,16 +79,14 @@ TEST(issue_gh0171, compacting_copy_to_stalled_pipe_does_not_hang) {
     GTEST_SKIP() << "SKIPPED by RUNTIME_LIMIT";
     return;
   }
-  const std::string testdb = "issue171-src.mdbx";
-  std::remove(testdb.c_str());
-  std::remove((testdb + "-lck").c_str());
+  const mdtest_db testdb("issue171-src.mdbx");
 
   {
     MDBX_env *env = nullptr;
     ASSERT_EQ(MDBX_SUCCESS, mdbx_env_create(&env));
+    const mdtest_env env_owner(env);
     ASSERT_EQ(MDBX_SUCCESS, mdbx_env_open(env, testdb.c_str(), MDBX_NOSUBDIR, 0644));
     fill_source(env, 4u << 20); /* ~4 MiB, well over two 1 MiB write buffers */
-    mdbx_env_close(env);
   }
 
   int pipefd[2];
@@ -132,8 +132,6 @@ TEST(issue_gh0171, compacting_copy_to_stalled_pipe_does_not_hang) {
     }
     usleep(100000);
   }
-  std::remove(testdb.c_str());
-  std::remove((testdb + "-lck").c_str());
   if (!exited) {
     kill(pid, SIGKILL);
     waitpid(pid, &status, 0);

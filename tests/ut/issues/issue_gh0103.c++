@@ -17,6 +17,8 @@
 
 #include "../test-env.h"
 
+#include "../test-db.h"
+
 #include <cstdint>
 #include <cstring>
 
@@ -36,13 +38,13 @@ TEST(issue_gh0103, nested_write_rollback_keeps_running) {
     GTEST_SKIP() << "SKIPPED by RUNTIME_LIMIT";
     return;
   }
-  const char *const testdb = "issue103.mdbx";
-  remove(testdb);
+  const mdtest_db testdb("issue103.mdbx");
 
   MDBX_env *env = nullptr;
   ASSERT_EQ(MDBX_SUCCESS, mdbx_env_create(&env));
+  const mdtest_env env_owner(env);
   ASSERT_EQ(MDBX_SUCCESS, mdbx_env_set_option(env, MDBX_opt_max_db, 4));
-  ASSERT_EQ(MDBX_SUCCESS, mdbx_env_open(env, testdb, MDBX_NOSUBDIR, 0644));
+  ASSERT_EQ(MDBX_SUCCESS, mdbx_env_open(env, testdb.c_str(), MDBX_NOSUBDIR, 0644));
 
   MDBX_txn *w = nullptr;
   ASSERT_EQ(MDBX_SUCCESS, mdbx_txn_begin(env, nullptr, MDBX_TXN_READWRITE, &w));
@@ -72,7 +74,4 @@ TEST(issue_gh0103, nested_write_rollback_keeps_running) {
 
   EXPECT_EQ(MDBX_SUCCESS, mdbx_get(w, main_dbi, &k2, &value)) << "the parent must see the nested commit";
   ASSERT_EQ(MDBX_SUCCESS, mdbx_txn_commit(w)) << "the parent must commit";
-
-  mdbx_env_close(env);
-  remove(testdb);
 }
