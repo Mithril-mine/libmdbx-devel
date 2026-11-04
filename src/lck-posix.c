@@ -438,6 +438,10 @@ int lck_upgrade(MDBX_env *env, bool dont_wait) {
       rc = MDBX_PANIC;
   }
   if (unlikely(rc != 0)) {
+    /* map the would-block class to MDBX_BUSY like lck_txn_lock() does,
+     * so that callers can portably detect the contention */
+    if (rc == EAGAIN || rc == EACCES || rc == EBUSY || rc == EWOULDBLOCK || rc == EDEADLK)
+      rc = MDBX_BUSY;
     ERROR("%s, err %u", "lck", rc);
     ASSERT(MDBX_IS_ERROR(rc));
   }
