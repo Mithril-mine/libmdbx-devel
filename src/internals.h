@@ -428,7 +428,12 @@ enum env_flags {
   ENV_USABLE_FLAGS = ENV_CHANGEABLE_FLAGS | ENV_CHANGELESS_FLAGS,
   /* A flag for checking any non-synchronous mode. The MDBX_SAFE_NOSYNC bit is sufficient here,
    * since it is included in MDBX_UTTERLY_NOSYNC. */
-  ENV_UNSYNC = MDBX_SAFE_NOSYNC
+  ENV_UNSYNC = MDBX_SAFE_NOSYNC,
+  /* The lazy (non-durable) mode flags recorded in lck->envmode. */
+  ENV_LAZY_MODE_FLAGS = MDBX_SAFE_NOSYNC | MDBX_UTTERLY_NOSYNC | MDBX_NOMETASYNC,
+  /* The mode flags recorded in lck->envmode by the first process
+   * that opened the database for writing. */
+  ENV_MODE_FLAGS = ENV_LAZY_MODE_FLAGS | MDBX_LIFORECLAIM | MDBX_NORDAHEAD | MDBX_RDONLY | MDBX_WRITEMAP
 };
 
 /* The database environment. */
