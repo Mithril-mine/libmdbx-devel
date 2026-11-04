@@ -51,6 +51,7 @@ Cutting-edge release with new core features and internal refactoring.
     - The writer trusted a forged snapshot-age hint from the shared lock file and could reuse pages still referenced by live readers; such a hint is now rejected ([#81](https://github.com/Mithril-mine/libmdbx-devel/issues/81)).
     - `mdbx_drop()` accepted the internal free-list handle and destroyed the garbage-collection tree, permanently leaking pages and corrupting accounting; such a call is now rejected ([#69](https://github.com/Mithril-mine/libmdbx-devel/issues/69)).
     - A failed second in-process open released the first handle's file locks, letting another process take exclusive access ([#59](https://github.com/Mithril-mine/libmdbx-devel/issues/59)).
+    - `mdbx_env_copy()` deleted an existing destination file when its open failed for another reason than its existence (e.g. at the open-file limit), even without `MDBX_CP_OVERWRITE` ([#310](https://github.com/Mithril-mine/libmdbx-devel/issues/310)).
     - A copy (`mdbx_env_copy()`, `mdbx_txn_copy2pathname()`) could delete a pre-existing destination database when its file lock failed, leave an orphan file blocking later copies, or keep the old file's tail after an overwrite ([#58](https://github.com/Mithril-mine/libmdbx-devel/issues/58), [#112](https://github.com/Mithril-mine/libmdbx-devel/issues/112)).
     - A compacting copy to a pipe (`mdbx_copy -c db | gzip`) reported success but wrote a wrong root page, so records were missing from the backup ([#309](https://github.com/Mithril-mine/libmdbx-devel/issues/309)).
 

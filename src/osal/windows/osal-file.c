@@ -133,6 +133,8 @@ int osal_openfile(const enum osal_openfile_purpose purpose, const MDBX_env *env,
     int err = (int)GetLastError();
     CloseHandle(*fd);
     *fd = INVALID_HANDLE_VALUE;
+    if (purpose == MDBX_OPEN_COPY_EXCL)
+      DeleteFileW(pathname) /* created here by CREATE_NEW, unknown to the caller */;
     return err;
   }
   const DWORD AttributesDiff =
