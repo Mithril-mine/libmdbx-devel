@@ -114,7 +114,9 @@ in a workflow matrix row: `runs-on`, toolchain env, cmake args, ctest args.
   - `workflow_dispatch` → inputs: `profile` (choice) or `cell` (choice/free), plus `ref`.
   - `repository_dispatch` (`types: [dispatch-event]`) → `client_payload`:
     `{"profile"|"cell": "...", "ref": "branch-or-sha"}`. For agents, `ref` is mandatory.
-  - `schedule` → profile `full` on `master` HEAD (00:30 UTC daily).
+  - `schedule` → profile `coverage` on `master` HEAD (05:00 Europe/Moscow daily,
+    fast scope): the gcov/llvm-instrumented cells run before the platform
+    nightlies, which own their platform profiles at 05:02–05:27 Europe/Moscow.
 - `job validate-config` (always, before resolve): runs
   `tests/ci/validate-config.py check-structure` + `check-coverage`, enforcing
   that the change-addressed gate covers every mandatory axis. It fails the run
@@ -143,7 +145,7 @@ in a workflow matrix row: `runs-on`, toolchain env, cmake args, ctest args.
 | `push` on any branch | `push-quick` profile (7 cells) |
 | `pull_request` (common change vs merge-base) | `change-addressed` = union(`push-quick`, `win-gate`) (~16 cells) |
 | `pull_request` (docs/skynet only) | `push-quick` profile |
-| `schedule` daily | `full` profile on `master` HEAD (190 cells, nightly depth) |
+| `schedule` daily | `coverage` profile on `master` HEAD (3 gcov/llvm-instr cells, fast scope, 05:00 Europe/Moscow); the platform nightlies run their own profiles separately (05:02–05:27 Europe/Moscow) |
 | `workflow_dispatch` with `cell=win-msvc-v145-arm64-...` | that single cell |
 | `workflow_dispatch` with `profile=mac-full` | all mac cells |
 | `repository_dispatch` `{profile, ref}` / `{cell, ref}` | resolved against `ref`'s registry |

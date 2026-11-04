@@ -6,9 +6,11 @@ name: ci-dispatch
 # Triggers:
 #   push        -> change-addressed cells (diff vs previous commit, capped to
 #                  CI_PUSH_CAP, fast scope). Branches: devel, master.
-#   (no schedule: nightly ownership belongs to the per-platform workflows
-#   ci-linux/ci-windows/ci-macos/ci-android; this dispatcher is the push gate
-#   and the manual/agent entry point for profiles/cells.)
+#   schedule    -> nightly `coverage` profile on master HEAD (05:00 Europe/
+#                  Moscow, fast scope): the gcov/llvm-instrumented cells run
+#                  before the platform nightlies (ci-linux/ci-windows/ci-macos/
+#                  ci-android, which own the platform nightly sets) start at
+#                  05:02+ Europe/Moscow.
 #   workflow_dispatch -> single cell or named profile on any ref (owner UI).
 #   repository_dispatch -> {profile|cell, ref} for agents; a bare event (no
 #                          payload) falls back to the push-quick profile so
@@ -38,6 +40,13 @@ on:
     branches: ['**']
   pull_request:
     branches: [devel, master]
+  schedule:
+    # Nightly coverage (05:00 Europe/Moscow): the gcov/llvm-instrumented
+    # registry cells against master HEAD, fast scope — matches the proven
+    # dispatch runs of the coverage profile. Starts before the platform
+    # nightlies (05:02+ Europe/Moscow) to keep the runner queue smooth.
+    - cron: "0 5 * * *"
+      timezone: "Europe/Moscow"
   workflow_dispatch:
     inputs:
       cell:
@@ -168,14 +177,14 @@ jobs:
               REF="$GITHUB_REF"
               ;;
             schedule)
-              echo "==> schedule: nightly full on master"
+              echo "==> schedule: nightly coverage on master"
               # Nightly marker: enables GTEST_SHUFFLE=1 (random gtest order)
               # in tests/ci/run-cell.py, so a different subset of the suite
               # runs each night under the GTEST_RUNTIME_LIMIT soft deadline.
               export CI_NIGHTLY=1
               echo "CI_NIGHTLY=1" >> "$GITHUB_ENV"
-              CELLS=$(tests/ci/select-cells.py --profile full)
-              SCOPE=full
+              CELLS=$(tests/ci/select-cells.py --profile coverage)
+              SCOPE=fast
               REF="master"
               ;;
             repository_dispatch)
