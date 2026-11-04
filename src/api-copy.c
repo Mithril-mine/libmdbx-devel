@@ -852,7 +852,7 @@ __cold static int copy2pathname(MDBX_txn *txn, const pathchar_t *dest_path, MDBX
     const bool remove_dest = touched || (created_by_us && !locked_by_other);
     if (remove_dest) {
       err = osal_removefile(dest_path);
-      if (err != MDBX_SUCCESS && err != MDBX_ENOFILE)
+      if (err != MDBX_SUCCESS && !osal_is_pathname_absent_error(err))
         ERROR("unable remove incomplete copy destination `%" MDBX_PRIsPATH "`, error %d", dest_path, err);
     }
   }

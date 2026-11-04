@@ -16,6 +16,8 @@
 
 int osal_removefile(const pathchar_t *pathname) { return DeleteFileW(pathname) ? MDBX_SUCCESS : (int)GetLastError(); }
 
+bool osal_is_pathname_absent_error(int err) { return err == ERROR_FILE_NOT_FOUND || err == ERROR_PATH_NOT_FOUND; }
+
 int osal_removedirectory(const pathchar_t *pathname) {
   return RemoveDirectoryW(pathname) ? MDBX_SUCCESS : (int)GetLastError();
 }
@@ -24,7 +26,7 @@ int osal_fileexists(const pathchar_t *pathname) {
   if (GetFileAttributesW(pathname) != INVALID_FILE_ATTRIBUTES)
     return MDBX_RESULT_TRUE;
   int err = GetLastError();
-  return (err == ERROR_FILE_NOT_FOUND || err == ERROR_PATH_NOT_FOUND) ? MDBX_RESULT_FALSE : err;
+  return osal_is_pathname_absent_error(err) ? MDBX_RESULT_FALSE : err;
 }
 
 pathchar_t *osal_fileext(const pathchar_t *pathname, size_t len) {
@@ -116,7 +118,7 @@ int osal_openfile(const enum osal_openfile_purpose purpose, const MDBX_env *env,
   if (*fd == INVALID_HANDLE_VALUE) {
     int err = (int)GetLastError();
     if (err == ERROR_ACCESS_DENIED && purpose == MDBX_OPEN_LCK) {
-      if (GetFileAttributesW(pathname) == INVALID_FILE_ATTRIBUTES && GetLastError() == ERROR_FILE_NOT_FOUND)
+      if (GetFileAttributesW(pathname) == INVALID_FILE_ATTRIBUTES && osal_is_pathname_absent_error(GetLastError()))
         err = ERROR_FILE_NOT_FOUND;
     }
     /* In exclusive mode a sharing/lock violation means exactly what
