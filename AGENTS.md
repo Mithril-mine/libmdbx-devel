@@ -72,6 +72,10 @@ Summary:
 ## 5. Issues workflow
 
 - When taking an issue, assign it to yourself.
+- Do not take an issue that is assigned to another developer/user without
+  an explicit instruction (from the owner or that assignee); in a
+  multi-agent collaboration pick only unassigned issues or ones explicitly
+  handed to you.
 - Test first: if the issue already has a reproduction scenario, add a test
   modeled on `tests/ut/issues/**` — it must fail.
 - Then implement the fix; the test must pass afterwards.
