@@ -18,21 +18,20 @@ static intptr_t proc_meminfo_availpages(void) {
   if (!proc_meminfo)
     return availpages;
 
-  char buf[64], *line;
+  char buf[64], unit[16] = {0}, *line;
   while ((line = fgets(buf, sizeof(buf), proc_meminfo)) != nullptr) {
     if (strncmp("MemAvailable:", line, 13))
       continue;
     size_t value = 0;
-    buf[0] = 0;
-    if (sscanf(line + 13, "%zu %s", &value, buf) < 1)
+    if (sscanf(line + 13, "%zu %15s", &value, unit) < 1)
       availpages = -1;
     else {
-      if (!buf[0] || strcasecmp(buf, "b") == 0 || strcasecmp(buf, "bytes") == 0)
+      if (!unit[0] || strcasecmp(unit, "b") == 0 || strcasecmp(unit, "bytes") == 0)
         availpages = value >> globals.sys_pagesize_ln2;
-      else if (strcasecmp(buf, "kb") == 0 || strcasecmp(buf, "kbytes") == 0)
-        availpages = (value << 10) >> globals.sys_pagesize_ln2;
-      else if (strcasecmp(buf, "mb") == 0 || strcasecmp(buf, "mbytes") == 0)
-        availpages = (value << 20) >> globals.sys_pagesize_ln2;
+      else if (strcasecmp(unit, "kb") == 0 || strcasecmp(unit, "kbytes") == 0)
+        availpages = (intptr_t)(((uint64_t)value << 10) >> globals.sys_pagesize_ln2);
+      else if (strcasecmp(unit, "mb") == 0 || strcasecmp(unit, "mbytes") == 0)
+        availpages = (intptr_t)(((uint64_t)value << 20) >> globals.sys_pagesize_ln2);
     }
     break;
   }
@@ -62,12 +61,14 @@ __cold int mdbx_get_sysraminfo(intptr_t *page_size, intptr_t *total_pages, intpt
 #if defined(__linux__) || defined(__gnu_linux__)
   struct sysinfo si;
   if (sysinfo(&si) == 0) {
+    /* both totalram and freeram are in units of mem_unit bytes, which is greater than 1
+     * when the corresponding values are too large to fit in 32 bits */
     if (total_pages)
-      *total_pages = si.totalram >> log2page;
+      *total_pages = (intptr_t)(((uint64_t)si.totalram * si.mem_unit) >> log2page);
     if (avail_pages) {
       *avail_pages = proc_meminfo_availpages();
       if (*avail_pages < 0)
-        *avail_pages = si.freeram >> log2page;
+        *avail_pages = (intptr_t)(((uint64_t)si.freeram * si.mem_unit) >> log2page);
     }
     return MDBX_SUCCESS;
   }
