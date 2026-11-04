@@ -22,11 +22,13 @@ static bool is_valid_fd(int fd) { return !(isatty(fd) < 0 && errno == EBADF); }
 
 int osal_removedirectory(const pathchar_t *pathname) { return rmdir(pathname) ? errno : MDBX_SUCCESS; }
 
+MDBX_INTERNAL bool osal_is_pathname_absent_error(int err) { return err == ENOENT || err == ENOTDIR; }
+
 int osal_fileexists(const pathchar_t *pathname) {
   if (access(pathname, F_OK) == 0)
     return MDBX_RESULT_TRUE;
   int err = errno;
-  return (err == ENOENT || err == ENOTDIR) ? MDBX_RESULT_FALSE : err;
+  return osal_is_pathname_absent_error(err) ? MDBX_RESULT_FALSE : err;
 }
 
 pathchar_t *osal_fileext(const pathchar_t *pathname, size_t len) {
@@ -142,7 +144,7 @@ int osal_openfile(const enum osal_openfile_purpose purpose, const MDBX_env *env,
     err = errno;
     if (err == EACCES && purpose == MDBX_OPEN_LCK) {
       struct stat unused;
-      if (stat(pathname, &unused) == 0 || (err = errno) != ENOENT)
+      if (stat(pathname, &unused) == 0 || !osal_is_pathname_absent_error(err = errno))
         err = EACCES /* restore error if file exists */;
     }
   }

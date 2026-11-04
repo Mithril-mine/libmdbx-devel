@@ -14,16 +14,16 @@
 
 int osal_check_fs_rdonly(mdbx_filehandle_t handle, const pathchar_t *pathname, int err) {
   struct statvfs info;
-  if (err != MDBX_ENOFILE) {
+  if (!osal_is_pathname_absent_error(err)) {
     if (statvfs(pathname, &info) == 0)
       return (info.f_flag & ST_RDONLY) ? MDBX_SUCCESS : err;
-    if (errno != MDBX_ENOFILE)
+    if (!osal_is_pathname_absent_error(errno))
       return errno;
   }
   if (fstatvfs(handle, &info))
     return errno;
   if ((info.f_flag & ST_RDONLY) == 0)
-    return (err == MDBX_ENOFILE) ? MDBX_EACCESS : err;
+    return osal_is_pathname_absent_error(err) ? MDBX_EACCESS : err;
   return MDBX_SUCCESS;
 }
 

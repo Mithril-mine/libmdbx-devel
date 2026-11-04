@@ -472,6 +472,7 @@ MDBX_INTERNAL int osal_openfile(const enum osal_openfile_purpose purpose, const 
 MDBX_INTERNAL int osal_closefile(mdbx_filehandle_t fd);
 MDBX_INTERNAL int osal_removefile(const pathchar_t *pathname);
 MDBX_INTERNAL int osal_removedirectory(const pathchar_t *pathname);
+MDBX_NOTHROW_CONST_FUNCTION MDBX_INTERNAL bool osal_is_pathname_absent_error(int err);
 MDBX_INTERNAL int osal_is_pipe(mdbx_filehandle_t fd);
 MDBX_INTERNAL int osal_lockfile(mdbx_filehandle_t fd, bool wait);
 
