@@ -973,14 +973,19 @@ static int osal_ipclock_lock(MDBX_env *env, osal_ipclock_t *ipc, const bool dont
       if (rc == EAGAIN)
         rc = MDBX_BUSY;
     }
-  } else if (sem_wait(ipc))
-    rc = errno;
+  } else {
+    do { /* a signal interrupts the wait with EINTR: wait again */
+      rc = sem_wait(ipc) ? errno : MDBX_SUCCESS;
+    } while (rc == EINTR);
+  }
 #elif MDBX_LOCKING == MDBX_LOCKING_SYSV
   struct sembuf op = {
       .sem_num = (ipc != &env->lck->wrt_lock), .sem_op = -1, .sem_flg = dont_wait ? IPC_NOWAIT | SEM_UNDO : SEM_UNDO};
   int rc;
-  if (semop(env->me_sysv_ipc.semid, &op, 1)) {
-    rc = errno;
+  do { /* a signal interrupts the wait with EINTR: wait again */
+    rc = semop(env->me_sysv_ipc.semid, &op, 1) ? errno : MDBX_SUCCESS;
+  } while (rc == EINTR);
+  if (rc != MDBX_SUCCESS) {
     if (dont_wait && rc == EAGAIN)
       rc = MDBX_BUSY;
   } else {
