@@ -45,6 +45,11 @@ __cold int mdbx_drop(MDBX_txn *txn, MDBX_dbi dbi, bool del) {
     return LOG_IFERR(rc);
 
   rc = tbl_purge(&cx.outer);
+  if (likely(rc == MDBX_SUCCESS) && unlikely(txn->dbs[dbi].sequence)) {
+    txn->dbs[dbi].sequence = 0;
+    txn->dbi_state[dbi] |= DBI_DIRTY;
+    txn->flags |= MDBX_TXN_DIRTY;
+  }
   if (unlikely(rc != MDBX_SUCCESS))
     return LOG_IFERR(rc);
 

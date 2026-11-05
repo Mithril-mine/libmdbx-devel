@@ -342,6 +342,7 @@ int main(int argc, char *argv[]) {
 
     switch (rc) {
     case MDBX_SUCCESS:
+    case MDBX_NOTFOUND: /* an empty GC, the info is still filled */
       break;
     case MDBX_EINTR:
       if (!quiet)

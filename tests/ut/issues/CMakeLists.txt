@@ -126,6 +126,12 @@ if(MDBX_BUILD_TOOLS)
   set_tests_properties(gh0071 PROPERTIES
                        ENVIRONMENT "MDBX_TOOL_DUMP=$<TARGET_FILE:mdbx_dump>")
   add_issue_test(gh0072 SOURCE "issue_gh0072.c++")
+  add_issue_test(gh0312 SOURCE "issue_gh0312.c++")
+  set_tests_properties(
+    gh0312
+    PROPERTIES
+      ENVIRONMENT
+        "MDBX_TOOL_LOAD=$<TARGET_FILE:mdbx_load>;MDBX_TOOL_DUMP=$<TARGET_FILE:mdbx_dump>;MDBX_TOOL_STAT=$<TARGET_FILE:mdbx_stat>;MDBX_TOOL_CHK=$<TARGET_FILE:mdbx_chk>")
   set_tests_properties(
     gh0072
     PROPERTIES
