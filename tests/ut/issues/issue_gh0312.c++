@@ -221,10 +221,11 @@ TEST(issue_gh0312, load_r_skips_a_bad_record_and_goes_on) {
   }
   const std::string db = "issue312-r.mdbx", dump = "issue312-r.txt";
   const files_remover cleanup{db, dump};
-  /* with 4 KiB pages a 3000-byte key is too long, so `-r` skips it with MDBX_BAD_VALSIZE */
+  /* with 4 KiB pages a 3000-byte key is too long, so `-r` skips it with MDBX_BAD_VALSIZE; `-G` sets the page size
+   * on every host (`db_pagesize=` alone is applied only together with `geometry=` or `mapsize=`) */
   const std::string long_key(3000, 'k');
-  ASSERT_TRUE(write_text(dump, section(nullptr, {"a", long_key.c_str(), "c"}, "db_pagesize=4096\n")));
-  EXPECT_EQ(0, load({"-r"}, dump, db));
+  ASSERT_TRUE(write_text(dump, section(nullptr, {"a", long_key.c_str(), "c"})));
+  EXPECT_EQ(0, load({"-r", "-G", "-1:-1:-1:-1:4096"}, dump, db));
   EXPECT_EQ(2, entries(db, nullptr)) << "`mdbx_load -r` must skip the bad record and load the rest";
 }
 
@@ -311,17 +312,20 @@ TEST(issue_gh0312, dump_of_a_damaged_table_is_not_complete) {
     ASSERT_EQ(MDBX_SUCCESS, mdbx_txn_commit(owner.release()));
   }
 
-  /* Damage the leaf page with the last key: the page header keeps the page flags at byte 10, and 0x02 is a leaf. */
+  /* Damage the leaf page with the last key: the page header keeps the page flags at byte 10 as a native-endian
+   * uint16_t, and 0x02 is a leaf. */
   std::string image = read_text(db);
-  const size_t page = 4096;
+  const size_t page = 4096, flags_offset = 10;
   size_t damaged = 0;
   for (size_t at = 3 * page; at + page <= image.size(); at += page) {
-    const uint16_t flags = uint16_t(uint8_t(image[at + 10]) | uint8_t(image[at + 11]) << 8);
+    uint16_t flags;
+    std::memcpy(&flags, &image[at + flags_offset], sizeof(flags));
     if (flags == 0x02 && std::string(image, at, page).find("k02999") != std::string::npos)
       damaged = at;
   }
   ASSERT_NE(0u, damaged) << "no leaf page with the last key";
-  image[damaged + 11] = char(0x7f);
+  const uint16_t bad_flags = 0x7f02;
+  std::memcpy(&image[damaged + flags_offset], &bad_flags, sizeof(bad_flags));
   ASSERT_TRUE(write_text(db, image));
 
   EXPECT_NE(0, tool_runner::run({dump_tool, "-q", "-n", "-p", "-f", dump, db}));
