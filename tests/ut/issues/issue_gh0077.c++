@@ -12,6 +12,7 @@
 ///
 /// \author Леонид Юрьев aka Leonid Yuriev <leo@yuriev.ru> \date 2026
 
+#include "../env-guard.h++"
 #include "mdbx.h++"
 #include <gtest/gtest.h>
 
@@ -31,6 +32,7 @@
 // txn stays a legitimate non-owning, copyable handle.
 
 TEST(issue_gh0077, txn_slicing_from_managed_is_a_compile_error) {
+  const env_files_guard guard({"issue77.mdbx"});
   if (MDBX_GTEST_IS_EXECUTION_TIMEOUT()) {
     GTEST_SKIP() << "SKIPPED by RUNTIME_LIMIT";
     return;
@@ -55,6 +57,7 @@ TEST(issue_gh0077, txn_slicing_from_managed_is_a_compile_error) {
 }
 
 TEST(issue_gh0077, managed_writer_releases_the_writer_lock) {
+  const env_files_guard guard({"issue77.mdbx"});
   if (MDBX_GTEST_IS_EXECUTION_TIMEOUT()) {
     GTEST_SKIP() << "SKIPPED by RUNTIME_LIMIT";
     return;

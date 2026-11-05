@@ -12,6 +12,7 @@
 ///
 /// \author Леонид Юрьев aka Leonid Yuriev <leo@yuriev.ru> \date 2015-2026
 
+#include "../env-guard.h++"
 #include "mdbx.h++"
 #include <gtest/gtest.h>
 
@@ -27,8 +28,7 @@ namespace {
 /// Полная навигация по таблице: exact-поиск всех ключей + first→next walk
 /// (основной вход в search_foliage_* — поиск и обход листовых страниц).
 template <typename KEYT>
-void probe_table(mdbx::txn_managed &txn, mdbx::map_handle map,
-                 const std::vector<KEYT> &keys, bool is_multi) {
+void probe_table(mdbx::txn_managed &txn, mdbx::map_handle map, const std::vector<KEYT> &keys, bool is_multi) {
   auto cur = txn.open_cursor(map);
   for (const auto &k : keys) {
     mdbx::slice key(&k, sizeof(k));
@@ -54,70 +54,64 @@ void probe_table(mdbx::txn_managed &txn, mdbx::map_handle map,
 /// ordinal-usual: INTEGERKEY, обычные значения (не dupfix) —
 /// search_foliage_ordinal_usual.
 TEST(ut_foliage_nav, ordinal_usual) {
+  const env_files_guard guard({"test-gap-fol-ord-usual"});
   if (MDBX_GTEST_IS_EXECUTION_TIMEOUT()) {
     GTEST_SKIP() << "SKIPPED by RUNTIME_LIMIT";
     return;
   }
   const mdbx::path testdb = "test-gap-fol-ord-usual";
   mdbx::env::remove(testdb);
-  mdbx::env_managed env(testdb, mdbx::create_parameters(),
-                        mdbx::operate_parameters().set_max_maps(8));
+  mdbx::env_managed env(testdb, mdbx::create_parameters(), mdbx::operate_parameters().set_max_maps(8));
   std::vector<uint32_t> keys;
   {
     auto txn = env.start_write();
     auto map = txn.create_map("ord", mdbx::key_mode::ordinal);
     // DUPSORT-значения переменной длины → обычно-листовые страницы
-    auto m2 = txn.create_map("ord_multi", mdbx::key_mode::ordinal,
-                             mdbx::value_mode::multi);
+    auto m2 = txn.create_map("ord_multi", mdbx::key_mode::ordinal, mdbx::value_mode::multi);
     for (uint32_t i = 0; i < 4000; ++i) {
       uint32_t k = i * 7 + 1;
       keys.push_back(k);
       txn.put(map, mdbx::slice(&k, sizeof(k)), mdbx::slice("v"), mdbx::upsert);
       // multi: несколько значений на ключ, значения РАЗНОЙ длины → не dupfix
-      txn.put(m2, mdbx::slice(&k, sizeof(k)), mdbx::slice("v-" + std::to_string(i)),
-              mdbx::upsert);
+      txn.put(m2, mdbx::slice(&k, sizeof(k)), mdbx::slice("v-" + std::to_string(i)), mdbx::upsert);
     }
     txn.commit();
   }
   auto txn = env.start_read();
   auto map = txn.open_map("ord", mdbx::key_mode::ordinal);
   probe_table(txn, map, keys, false);
-  auto m2 = txn.open_map("ord_multi", mdbx::key_mode::ordinal,
-                         mdbx::value_mode::multi);
+  auto m2 = txn.open_map("ord_multi", mdbx::key_mode::ordinal, mdbx::value_mode::multi);
   probe_table(txn, m2, keys, true);
 }
 
 /// ordinal-dupfix: INTEGERKEY + MDBX_DUPFIXED (значения фиксированной
 /// длины) — search_foliage_ordinal_dupfix/uint32_dupfix.
 TEST(ut_foliage_nav, ordinal_dupfix) {
+  const env_files_guard guard({"test-gap-fol-ord-dupfix"});
   if (MDBX_GTEST_IS_EXECUTION_TIMEOUT()) {
     GTEST_SKIP() << "SKIPPED by RUNTIME_LIMIT";
     return;
   }
   const mdbx::path testdb = "test-gap-fol-ord-dupfix";
   mdbx::env::remove(testdb);
-  mdbx::env_managed env(testdb, mdbx::create_parameters(),
-                        mdbx::operate_parameters().set_max_maps(8));
+  mdbx::env_managed env(testdb, mdbx::create_parameters(), mdbx::operate_parameters().set_max_maps(8));
   std::vector<uint32_t> keys;
   {
     auto txn = env.start_write();
     // DUPSORT + фиксированная длина значений → MDBX_DUPFIXED на листве
-    auto map = txn.create_map("dupfix", mdbx::key_mode::ordinal,
-                              mdbx::value_mode::multi);
+    auto map = txn.create_map("dupfix", mdbx::key_mode::ordinal, mdbx::value_mode::multi);
     for (uint32_t i = 0; i < 4000; ++i) {
       uint32_t k = i * 11 + 3;
       keys.push_back(k);
       for (int v = 0; v < 3; ++v) {
         uint32_t value = k * 10 + static_cast<uint32_t>(v); // 4 байта → DUPFIXED
-        txn.put(map, mdbx::slice(&k, sizeof(k)), mdbx::slice(&value, sizeof(value)),
-                mdbx::upsert);
+        txn.put(map, mdbx::slice(&k, sizeof(k)), mdbx::slice(&value, sizeof(value)), mdbx::upsert);
       }
     }
     txn.commit();
   }
   auto txn = env.start_read();
-  auto map = txn.open_map("dupfix", mdbx::key_mode::ordinal,
-                          mdbx::value_mode::multi);
+  auto map = txn.open_map("dupfix", mdbx::key_mode::ordinal, mdbx::value_mode::multi);
   // exact-поиск пар (dupfix-листовые страницы) + обход групп
   auto cur = txn.open_cursor(map);
   for (const auto &k : keys) {
@@ -138,28 +132,24 @@ TEST(ut_foliage_nav, ordinal_dupfix) {
 /// reverse/lexical-usual и dupfix: MDBX_REVERSEKEY и обычные ключи с
 /// DUPSORT — search_foliage_reverse/lexical_{usual,dupfix}.
 TEST(ut_foliage_nav, reverse_lexical_usual_dupfix) {
+  const env_files_guard guard({"test-gap-fol-rev-lex"});
   if (MDBX_GTEST_IS_EXECUTION_TIMEOUT()) {
     GTEST_SKIP() << "SKIPPED by RUNTIME_LIMIT";
     return;
   }
   const mdbx::path testdb = "test-gap-fol-rev-lex";
   mdbx::env::remove(testdb);
-  mdbx::env_managed env(testdb, mdbx::create_parameters(),
-                        mdbx::operate_parameters().set_max_maps(8));
+  mdbx::env_managed env(testdb, mdbx::create_parameters(), mdbx::operate_parameters().set_max_maps(8));
   {
     auto txn = env.start_write();
     // reverse + DUPSORT с фиксированной длиной → reverse_dupfix
-    auto rdup = txn.create_map("rev_dupfix", mdbx::key_mode::reverse,
-                               mdbx::value_mode::multi);
+    auto rdup = txn.create_map("rev_dupfix", mdbx::key_mode::reverse, mdbx::value_mode::multi);
     // reverse + обычные значения → reverse_usual
-    auto rus = txn.create_map("rev_usual", mdbx::key_mode::reverse,
-                              mdbx::value_mode::multi);
+    auto rus = txn.create_map("rev_usual", mdbx::key_mode::reverse, mdbx::value_mode::multi);
     // usual (lexical) + DUPSORT → lexical_usual
-    auto lus = txn.create_map("lex_usual", mdbx::key_mode::usual,
-                              mdbx::value_mode::multi);
+    auto lus = txn.create_map("lex_usual", mdbx::key_mode::usual, mdbx::value_mode::multi);
     // lexical + dupfix → lexical_dupfix
-    auto ldup = txn.create_map("lex_dupfix", mdbx::key_mode::usual,
-                               mdbx::value_mode::multi);
+    auto ldup = txn.create_map("lex_dupfix", mdbx::key_mode::usual, mdbx::value_mode::multi);
     for (int i = 0; i < 2500; ++i) {
       // строки живут в переменных: slice НЕ копирует данные временных
       std::string rs = "prefix-" + std::to_string(100000 + i);
@@ -179,14 +169,10 @@ TEST(ut_foliage_nav, reverse_lexical_usual_dupfix) {
   // с теми же флагами, что и создание — иначе MDBX_INCOMPATIBLE)
   {
     auto txn = env.start_read();
-    auto rdup = txn.open_map("rev_dupfix", mdbx::key_mode::reverse,
-                             mdbx::value_mode::multi);
-    auto rus = txn.open_map("rev_usual", mdbx::key_mode::reverse,
-                            mdbx::value_mode::multi);
-    auto lus = txn.open_map("lex_usual", mdbx::key_mode::usual,
-                            mdbx::value_mode::multi);
-    auto ldup = txn.open_map("lex_dupfix", mdbx::key_mode::usual,
-                             mdbx::value_mode::multi);
+    auto rdup = txn.open_map("rev_dupfix", mdbx::key_mode::reverse, mdbx::value_mode::multi);
+    auto rus = txn.open_map("rev_usual", mdbx::key_mode::reverse, mdbx::value_mode::multi);
+    auto lus = txn.open_map("lex_usual", mdbx::key_mode::usual, mdbx::value_mode::multi);
+    auto ldup = txn.open_map("lex_dupfix", mdbx::key_mode::usual, mdbx::value_mode::multi);
     for (auto *m : {&rdup, &rus, &lus, &ldup}) {
       MDBX_stat st;
       ASSERT_EQ(mdbx_dbi_stat(txn, *m, &st, sizeof(st)), MDBX_SUCCESS);
@@ -197,8 +183,7 @@ TEST(ut_foliage_nav, reverse_lexical_usual_dupfix) {
   auto txn = env.start_read();
   // reverse-dupfix
   {
-    auto map = txn.open_map("rev_dupfix", mdbx::key_mode::reverse,
-                            mdbx::value_mode::multi);
+    auto map = txn.open_map("rev_dupfix", mdbx::key_mode::reverse, mdbx::value_mode::multi);
     auto cur = txn.open_cursor(map);
     for (int i = 0; i < 2500; i += 17) {
       std::string rs = "prefix-" + std::to_string(100000 + i);
@@ -212,8 +197,7 @@ TEST(ut_foliage_nav, reverse_lexical_usual_dupfix) {
   }
   // reverse-usual
   {
-    auto map = txn.open_map("rev_usual", mdbx::key_mode::reverse,
-                            mdbx::value_mode::multi);
+    auto map = txn.open_map("rev_usual", mdbx::key_mode::reverse, mdbx::value_mode::multi);
     auto cur = txn.open_cursor(map);
     for (int i = 0; i < 2500; i += 23) {
       std::string rs = "prefix-" + std::to_string(100000 + i);
@@ -222,8 +206,7 @@ TEST(ut_foliage_nav, reverse_lexical_usual_dupfix) {
   }
   // lexical-usual
   {
-    auto map = txn.open_map("lex_usual", mdbx::key_mode::usual,
-                            mdbx::value_mode::multi);
+    auto map = txn.open_map("lex_usual", mdbx::key_mode::usual, mdbx::value_mode::multi);
     auto cur = txn.open_cursor(map);
     for (int i = 0; i < 2500; i += 29) {
       std::string ls = "key-" + std::to_string(100000 + i);
@@ -236,8 +219,7 @@ TEST(ut_foliage_nav, reverse_lexical_usual_dupfix) {
   }
   // lexical-dupfix
   {
-    auto map = txn.open_map("lex_dupfix", mdbx::key_mode::usual,
-                            mdbx::value_mode::multi);
+    auto map = txn.open_map("lex_dupfix", mdbx::key_mode::usual, mdbx::value_mode::multi);
     auto cur = txn.open_cursor(map);
     for (int i = 0; i < 2500; i += 31) {
       std::string ls = "key-" + std::to_string(100000 + i);
@@ -248,18 +230,17 @@ TEST(ut_foliage_nav, reverse_lexical_usual_dupfix) {
 
 /// lenfast-dupfix: обычные ключи (lenfast-компаратор) с DUPSORT+dupfix.
 TEST(ut_foliage_nav, lenfast_dupfix) {
+  const env_files_guard guard({"test-gap-fol-lenfast-dupfix"});
   if (MDBX_GTEST_IS_EXECUTION_TIMEOUT()) {
     GTEST_SKIP() << "SKIPPED by RUNTIME_LIMIT";
     return;
   }
   const mdbx::path testdb = "test-gap-fol-lenfast-dupfix";
   mdbx::env::remove(testdb);
-  mdbx::env_managed env(testdb, mdbx::create_parameters(),
-                        mdbx::operate_parameters().set_max_maps(8));
+  mdbx::env_managed env(testdb, mdbx::create_parameters(), mdbx::operate_parameters().set_max_maps(8));
   {
     auto txn = env.start_write();
-    auto map = txn.create_map("lfd", mdbx::key_mode::usual,
-                              mdbx::value_mode::multi);
+    auto map = txn.create_map("lfd", mdbx::key_mode::usual, mdbx::value_mode::multi);
     for (int i = 0; i < 3000; ++i) {
       auto k = "lf-" + std::to_string(50000 + i);
       uint32_t fixed = static_cast<uint32_t>(i * 3);

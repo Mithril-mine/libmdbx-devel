@@ -12,6 +12,7 @@
 ///
 /// \author Леонид Юрьев aka Leonid Yuriev <leo@yuriev.ru> \date 2015-2026
 
+#include "../env-guard.h++"
 #include "mdbx.h++"
 #include <gtest/gtest.h>
 
@@ -431,6 +432,7 @@ int doit() {
 }
 
 TEST(ut_cursor_closing, all) {
+  const env_files_guard guard({"test-cursor-closing"});
   if (MDBX_GTEST_IS_EXECUTION_TIMEOUT()) {
     GTEST_SKIP() << "SKIPPED by RUNTIME_LIMIT";
     return;

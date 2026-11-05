@@ -13,6 +13,7 @@
 /// \author Леонид Юрьев aka Leonid Yuriev <leo@yuriev.ru> \date 2026
 /// \author Andrea Lanfranchi (https://github.com/AndreaLanfranchi)
 
+#include "../env-guard.h++"
 #include "mdbx.h"
 #include <gtest/gtest.h>
 
@@ -80,6 +81,7 @@ uint64_t spill_count(MDBX_env *env, MDBX_txn *txn) {
 } // namespace
 
 TEST(issue_gh0342, grandchild_finds_pages_spilled_for_the_child) {
+  const env_files_guard guard({"issue342.mdbx"});
   if (MDBX_GTEST_IS_EXECUTION_TIMEOUT()) {
     GTEST_SKIP() << "SKIPPED by RUNTIME_LIMIT";
     return;

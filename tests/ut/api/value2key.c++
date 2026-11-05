@@ -12,6 +12,7 @@
 ///
 /// \author Леонид Юрьев aka Leonid Yuriev <leo@yuriev.ru> \date 2015-2026
 
+#include "../env-guard.h++"
 #include "mdbx.h++"
 #include <gtest/gtest.h>
 
@@ -39,6 +40,7 @@ static inline uint64_t bswap64_be(uint64_t key) {
 } // namespace
 
 TEST(ut_value2key, json_integer_roundtrip) {
+  const env_files_guard guard({"test-value2key"});
   if (MDBX_GTEST_IS_EXECUTION_TIMEOUT()) {
     GTEST_SKIP() << "SKIPPED by RUNTIME_LIMIT";
     return;
@@ -62,6 +64,7 @@ TEST(ut_value2key, json_integer_roundtrip) {
 }
 
 TEST(ut_value2key, json_integer_zero_roundtrips) {
+  const env_files_guard guard({"test-value2key"});
   if (MDBX_GTEST_IS_EXECUTION_TIMEOUT()) {
     GTEST_SKIP() << "SKIPPED by RUNTIME_LIMIT";
     return;
@@ -75,6 +78,7 @@ TEST(ut_value2key, json_integer_zero_roundtrips) {
 }
 
 TEST(ut_value2key, json_integer_clamping) {
+  const env_files_guard guard({"test-value2key"});
   if (MDBX_GTEST_IS_EXECUTION_TIMEOUT()) {
     GTEST_SKIP() << "SKIPPED by RUNTIME_LIMIT";
     return;
@@ -88,6 +92,7 @@ TEST(ut_value2key, json_integer_clamping) {
 }
 
 TEST(ut_value2key, json_integer_mixed_ordering) {
+  const env_files_guard guard({"test-value2key"});
   if (MDBX_GTEST_IS_EXECUTION_TIMEOUT()) {
     GTEST_SKIP() << "SKIPPED by RUNTIME_LIMIT";
     return;
@@ -126,6 +131,7 @@ TEST(ut_value2key, json_integer_mixed_ordering) {
 }
 
 TEST(ut_value2key, equivalent_to_ordinal) {
+  const env_files_guard guard({"test-value2key"});
   if (MDBX_GTEST_IS_EXECUTION_TIMEOUT()) {
     GTEST_SKIP() << "SKIPPED by RUNTIME_LIMIT";
     return;
@@ -183,6 +189,7 @@ TEST(ut_value2key, equivalent_to_ordinal) {
 }
 
 TEST(ut_value2key, in_dupsort) {
+  const env_files_guard guard({"test-value2key"});
   if (MDBX_GTEST_IS_EXECUTION_TIMEOUT()) {
     GTEST_SKIP() << "SKIPPED by RUNTIME_LIMIT";
     return;

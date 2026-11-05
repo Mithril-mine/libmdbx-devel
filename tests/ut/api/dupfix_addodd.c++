@@ -22,6 +22,7 @@
 #include <sys/stat.h>
 #include <sys/time.h>
 
+#include "../env-guard.h++"
 #include "mdbx.h"
 #include <assert.h>
 #include <gtest/gtest.h>
@@ -37,6 +38,7 @@
 #include <string.h>
 
 TEST(ut_dupfix_addodd, all) {
+  const env_files_guard guard({"./test-dupfix-addodd"});
   if (MDBX_GTEST_IS_EXECUTION_TIMEOUT()) {
     GTEST_SKIP() << "SKIPPED by RUNTIME_LIMIT";
     return;

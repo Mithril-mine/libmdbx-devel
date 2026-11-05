@@ -12,6 +12,7 @@
 ///
 /// \author Леонид Юрьев aka Leonid Yuriev <leo@yuriev.ru> \date 2015-2026
 
+#include "../env-guard.h++"
 #include "../probe-ctl.h"
 #include "mdbx.h++"
 #include <algorithm>
@@ -94,19 +95,26 @@ static intptr_t stress_upper_size() {
 namespace {
 class DupfixMultiple : public ::testing::TestWithParam<intptr_t> {
 protected:
+  std::string dbname;
   mdbx::env_managed env;
 
   void SetUp() override {
     seed_prng();
-    std::string name = "test-dupfix-multiple";
+    dbname = "test-dupfix-multiple";
     if (GetParam())
-      name += "-ps" + std::to_string(GetParam());
-    mdbx::env_managed::remove(mdbx::path(name));
+      dbname += "-ps" + std::to_string(GetParam());
+    mdbx::env_managed::remove(mdbx::path(dbname));
     mdbx::env_managed::create_parameters createParameters;
     createParameters.geometry.make_dynamic(16 * mdbx::env::geometry::MiB, stress_upper_size());
     if (GetParam())
       createParameters.geometry.set_pagesize(GetParam());
-    env = mdbx::env_managed(name, createParameters, mdbx::env::operate_parameters(4));
+    env = mdbx::env_managed(dbname, createParameters, mdbx::env::operate_parameters(4));
+  }
+
+  void TearDown() override {
+    env.close();
+    const int rc = mdbx_env_delete(dbname.c_str(), MDBX_ENV_JUST_DELETE);
+    EXPECT_TRUE(rc == MDBX_SUCCESS || rc == MDBX_RESULT_TRUE);
   }
 
   /// Conservative estimate of dupfix items per sub-page, used to size datasets

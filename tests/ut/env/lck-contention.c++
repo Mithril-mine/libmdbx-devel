@@ -17,6 +17,7 @@
 /// координация через MDBX_NOSTICKYTHREADS + fork-дети. Цели: error-ветви
 /// захвата (lck-posix 63.9%, 362 блока), osal_lockfile-fallback.
 
+#include "../env-guard.h++"
 #include "mdbx.h"
 #include <gtest/gtest.h>
 
@@ -83,6 +84,7 @@ void child_writer(const char *path, uint32_t base, uint32_t count, int seed) {
 /// lock-файл проходит через полный цикл захвата/освобождения между
 /// процессами, включая error-ветви (EAGAIN, BUSY).
 TEST(ut_lck_contention, multi_process_writers) {
+  const env_files_guard guard({"test-gap-lck-contention", "test-gap-lck-excl"});
   if (MDBX_GTEST_IS_EXECUTION_TIMEOUT()) {
     GTEST_SKIP() << "SKIPPED by RUNTIME_LIMIT";
     return;
@@ -163,6 +165,7 @@ TEST(ut_lck_contention, multi_process_writers) {
 /// EXCLUSIVE-доступ: пока родитель держит env открытым, ребёнок с
 /// MDBX_EXCLUSIVE должен получить MDBX_BUSY (ветвь отказа захвата).
 TEST(ut_lck_contention, exclusive_rejected_while_open) {
+  const env_files_guard guard({"test-gap-lck-contention", "test-gap-lck-excl"});
   if (MDBX_GTEST_IS_EXECUTION_TIMEOUT()) {
     GTEST_SKIP() << "SKIPPED by RUNTIME_LIMIT";
     return;

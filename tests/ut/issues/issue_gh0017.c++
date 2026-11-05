@@ -14,6 +14,7 @@
 
 /* offsetof(tree_t, root) == 8: u16 flags, u16 height, u32 dupfix_size, then pgno_t root */
 #include "../../../src/essentials.h"
+#include "../env-guard.h++"
 #include <gtest/gtest.h>
 
 #include "../test-env.h"
@@ -29,6 +30,7 @@ static void die(const char *what, int rc) {
 }
 
 TEST(issue_gh0017, all) {
+  const env_files_guard guard({"issue_gh0017"});
   if (MDBX_GTEST_IS_EXECUTION_TIMEOUT()) {
     GTEST_SKIP() << "SKIPPED by RUNTIME_LIMIT";
     return;

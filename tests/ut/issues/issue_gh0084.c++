@@ -12,6 +12,7 @@
 ///
 /// \author Леонид Юрьев aka Leonid Yuriev <leo@yuriev.ru> \date 2026
 
+#include "../env-guard.h++"
 #include "mdbx.h++"
 #include <gtest/gtest.h>
 
@@ -169,6 +170,7 @@ static void check_distribute(MDBX_cursor *begin, MDBX_cursor *end, MDBX_cursor *
 }
 
 TEST(issue_gh0084, subpage_dups_scroll_distance) {
+  const env_files_guard guard({"issue84a.mdbx", "issue84b.mdbx", "issue84c.mdbx", "issue84d.mdbx"});
   if (MDBX_GTEST_IS_EXECUTION_TIMEOUT()) {
     GTEST_SKIP() << "SKIPPED by RUNTIME_LIMIT";
     return;
@@ -205,6 +207,7 @@ TEST(issue_gh0084, subpage_dups_scroll_distance) {
 }
 
 TEST(issue_gh0084, subpage_dups_distribute) {
+  const env_files_guard guard({"issue84a.mdbx", "issue84b.mdbx", "issue84c.mdbx", "issue84d.mdbx"});
   if (MDBX_GTEST_IS_EXECUTION_TIMEOUT()) {
     GTEST_SKIP() << "SKIPPED by RUNTIME_LIMIT";
     return;
@@ -242,6 +245,7 @@ TEST(issue_gh0084, subpage_dups_distribute) {
 }
 
 TEST(issue_gh0084, nested_tree_scroll_distance) {
+  const env_files_guard guard({"issue84a.mdbx", "issue84b.mdbx", "issue84c.mdbx", "issue84d.mdbx"});
   if (MDBX_GTEST_IS_EXECUTION_TIMEOUT()) {
     GTEST_SKIP() << "SKIPPED by RUNTIME_LIMIT";
     return;
@@ -294,6 +298,7 @@ TEST(issue_gh0084, nested_tree_scroll_distance) {
 }
 
 TEST(issue_gh0084, nested_tree_distribute) {
+  const env_files_guard guard({"issue84a.mdbx", "issue84b.mdbx", "issue84c.mdbx", "issue84d.mdbx"});
   if (MDBX_GTEST_IS_EXECUTION_TIMEOUT()) {
     GTEST_SKIP() << "SKIPPED by RUNTIME_LIMIT";
     return;

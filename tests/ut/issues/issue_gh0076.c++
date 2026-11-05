@@ -12,6 +12,7 @@
 ///
 /// \author Леонид Юрьев aka Leonid Yuriev <leo@yuriev.ru> \date 2026
 
+#include "../env-guard.h++"
 #include "mdbx.h++"
 #include "tool_runner.h"
 #include <gtest/gtest.h>
@@ -142,6 +143,7 @@ static bool patch_first_gc_record(std::vector<uint8_t> &buf, size_t pagesize, ui
 }
 
 TEST(issue_gh0076, chk_survives_over_limit_gc_count) {
+  const env_files_guard guard({"issue76.mdbx"});
   if (MDBX_GTEST_IS_EXECUTION_TIMEOUT()) {
     GTEST_SKIP() << "SKIPPED by RUNTIME_LIMIT";
     return;

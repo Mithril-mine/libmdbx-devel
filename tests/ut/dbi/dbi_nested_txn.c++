@@ -12,6 +12,7 @@
 ///
 /// \author Леонид Юрьев aka Leonid Yuriev <leo@yuriev.ru> \date 2015-2026
 
+#include "../env-guard.h++"
 #include <gtest/gtest.h>
 
 #include "../test-env.h"
@@ -32,6 +33,7 @@
 #define check(rc) check_is(MDBX_SUCCESS, rc)
 
 TEST(ut_dbi_nested_txn, all) {
+  const env_files_guard guard({"./test-dbi-nested-txn"});
   if (MDBX_GTEST_IS_EXECUTION_TIMEOUT()) {
     GTEST_SKIP() << "SKIPPED by RUNTIME_LIMIT";
     return;

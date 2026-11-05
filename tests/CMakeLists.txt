@@ -220,7 +220,8 @@ else()
   if(MDBX_ENABLE_LONG_TESTS)
   add_test(NAME smoke_long COMMAND $<TARGET_FILE:mdbx_test> --duration=5m --loglevel=notice --prng-seed=${MDBX_TESTS_SEED}
                                    --progress --console=no --pathname=smoke-long.db --dont-cleanup-after basic)
-  set_tests_properties(smoke_long PROPERTIES LABELS "smoke-long;smoke-t3" TIMEOUT 1800 RUN_SERIAL OFF)
+  set_tests_properties(smoke_long PROPERTIES LABELS "smoke-long;smoke-t3" TIMEOUT 1800 RUN_SERIAL OFF
+                                             FIXTURES_SETUP smoke-long)
   if(MDBX_BUILD_TOOLS)
     add_test(NAME smoke_long_chk COMMAND $<TARGET_FILE:mdbx_chk> -nvv smoke-long.db)
     set_tests_properties(smoke_long_chk PROPERTIES
@@ -228,7 +229,8 @@ else()
       DEPENDS smoke_long
       TIMEOUT 60
       FAIL_REGULAR_EXPRESSION "cooperative mode"
-      REQUIRED_FILES smoke-long.db)
+      REQUIRED_FILES smoke-long.db
+      FIXTURES_REQUIRED smoke-long)
 
     add_test(NAME smoke_long_chk_copy COMMAND $<TARGET_FILE:mdbx_chk> -nvv smoke-long.db-copy)
     set_tests_properties(smoke_long_chk_copy PROPERTIES
@@ -236,22 +238,31 @@ else()
       DEPENDS smoke_long
       TIMEOUT 60
       FAIL_REGULAR_EXPRESSION "cooperative mode"
-      REQUIRED_FILES smoke-long.db-copy)
+      REQUIRED_FILES smoke-long.db-copy
+      FIXTURES_REQUIRED smoke-long)
 
     add_test(NAME smoke_long_copy_asis COMMAND $<TARGET_FILE:mdbx_copy> -f smoke-long.db copy_asis.db)
     set_tests_properties(smoke_long_copy_asis PROPERTIES
       LABELS "smoke-long;smoke-t3"
       DEPENDS smoke_long
       TIMEOUT 60
-      REQUIRED_FILES smoke-long.db)
+      REQUIRED_FILES smoke-long.db
+      FIXTURES_REQUIRED smoke-long)
 
     add_test(NAME smoke_long_copy_compactify COMMAND $<TARGET_FILE:mdbx_copy> -f -c smoke-long.db copy_compactify.db)
     set_tests_properties(smoke_long_copy_compactify PROPERTIES
       LABELS "smoke-long;smoke-t3"
       DEPENDS smoke_long
       TIMEOUT 60
-      REQUIRED_FILES smoke.db)
+      REQUIRED_FILES smoke-long.db
+      FIXTURES_REQUIRED smoke-long)
   endif()
+
+  add_test(NAME smoke_long_cleanup COMMAND $<TARGET_FILE:te_cleanup_tool>
+                                 smoke-long.db smoke-long.db-copy copy_asis.db copy_compactify.db)
+  set_tests_properties(smoke_long_cleanup PROPERTIES
+    LABELS "smoke-long;smoke-t3"
+    FIXTURES_CLEANUP smoke-long)
 
   add_test(
     NAME dupsort_writemap
@@ -259,7 +270,8 @@ else()
       $<TARGET_FILE:mdbx_test> --duration=5m --loglevel=notice --prng-seed=${MDBX_TESTS_SEED} --mode=+writemap
       --table=+data.fixed --keygen.split=29 --datalen=rnd --progress --console=no --repeat=2
       --pathname=dupsort_writemap.db --dont-cleanup-after basic)
-  set_tests_properties(dupsort_writemap PROPERTIES LABELS "smoke-long;smoke-t3" TIMEOUT 1800 RUN_SERIAL OFF)
+  set_tests_properties(dupsort_writemap PROPERTIES LABELS "smoke-long;smoke-t3" TIMEOUT 1800 RUN_SERIAL OFF
+                                                   FIXTURES_SETUP dupsort_writemap)
 
   if(MDBX_BUILD_TOOLS)
     add_test(NAME dupsort_writemap_chk COMMAND $<TARGET_FILE:mdbx_chk> -nvvwc dupsort_writemap.db)
@@ -267,7 +279,8 @@ else()
       LABELS "smoke-long;smoke-t3;chk"
       DEPENDS dupsort_writemap
       TIMEOUT 60
-      REQUIRED_FILES dupsort_writemap.db)
+      REQUIRED_FILES dupsort_writemap.db
+      FIXTURES_REQUIRED dupsort_writemap)
 
     add_test(NAME dupsort_writemap_chk_copy COMMAND $<TARGET_FILE:mdbx_chk> -nvvc dupsort_writemap.db-copy)
     set_tests_properties(dupsort_writemap_chk_copy PROPERTIES
@@ -275,13 +288,21 @@ else()
       DEPENDS dupsort_writemap
       TIMEOUT 60
       FAIL_REGULAR_EXPRESSION "monopolistic mode"
-      REQUIRED_FILES dupsort_writemap.db-copy)
+      REQUIRED_FILES dupsort_writemap.db-copy
+      FIXTURES_REQUIRED dupsort_writemap)
   endif()
+
+  add_test(NAME dupsort_writemap_cleanup COMMAND $<TARGET_FILE:te_cleanup_tool>
+                                       dupsort_writemap.db dupsort_writemap.db-copy)
+  set_tests_properties(dupsort_writemap_cleanup PROPERTIES
+    LABELS "smoke-long;smoke-t3"
+    FIXTURES_CLEANUP dupsort_writemap)
 
   add_test(NAME uniq_nested
            COMMAND $<TARGET_FILE:mdbx_test> --duration=5m --loglevel=notice --mode=-writemap,-nosync-safe,-lifo
                    --progress --console=no --repeat=2 --pathname=uniq_nested.db --dont-cleanup-after basic)
-  set_tests_properties(uniq_nested PROPERTIES LABELS "smoke-long;smoke-t3" TIMEOUT 1800 RUN_SERIAL OFF)
+  set_tests_properties(uniq_nested PROPERTIES LABELS "smoke-long;smoke-t3" TIMEOUT 1800 RUN_SERIAL OFF
+                                              FIXTURES_SETUP uniq_nested)
   if(MDBX_BUILD_TOOLS)
     add_test(NAME uniq_nested_chk COMMAND $<TARGET_FILE:mdbx_chk> -nvvw uniq_nested.db)
     set_tests_properties(uniq_nested_chk PROPERTIES
@@ -289,7 +310,8 @@ else()
       DEPENDS uniq_nested
       TIMEOUT 60
       FAIL_REGULAR_EXPRESSION "cooperative mode"
-      REQUIRED_FILES uniq_nested.db)
+      REQUIRED_FILES uniq_nested.db
+      FIXTURES_REQUIRED uniq_nested)
 
     add_test(NAME uniq_nested_chk_copy COMMAND $<TARGET_FILE:mdbx_chk> -nvv uniq_nested.db-copy)
     set_tests_properties(uniq_nested_chk_copy PROPERTIES
@@ -297,8 +319,14 @@ else()
       DEPENDS uniq_nested
       TIMEOUT 60
       FAIL_REGULAR_EXPRESSION "cooperative mode"
-      REQUIRED_FILES uniq_nested.db-copy)
+      REQUIRED_FILES uniq_nested.db-copy
+      FIXTURES_REQUIRED uniq_nested)
   endif()
+
+  add_test(NAME uniq_nested_cleanup COMMAND $<TARGET_FILE:te_cleanup_tool> uniq_nested.db uniq_nested.db-copy)
+  set_tests_properties(uniq_nested_cleanup PROPERTIES
+    LABELS "smoke-long;smoke-t3"
+    FIXTURES_CLEANUP uniq_nested)
 
   if(WIN32 AND MDBX_BUILD_TOOLS)
     set_tests_properties(smoke_long_chk PROPERTIES RESOURCE_LOCK smoke-long.db)
@@ -310,11 +338,23 @@ else()
   # Quick smoke scenarios (a-la `make smoke`).
   set(MDBX_SMOKE_EXTRA "" CACHE STRING "Extra command-line arguments for the quick smoke scenarios")
 
+  # The chained smoke scenarios below keep their databases on purpose
+  # (--dont-cleanup-after), because later tests of a chain consume them.
+  # CTest fixtures wire each chain: the producer FIXTURES_SETUPs it, the
+  # consumers FIXTURES_REQUIRE it, and the <chain>_cleanup test runs
+  # FIXTURES_CLEANUP at the end — deleting the chain's files even when an
+  # intermediate test failed (see issue #343).
+  add_executable(te_cleanup_tool ut/tools/cleanup-tool.c)
+  target_include_directories(te_cleanup_tool PRIVATE "${PROJECT_SOURCE_DIR}")
+  target_link_libraries(te_cleanup_tool ${TOOL_MDBX_LIB})
+  set_target_properties(te_cleanup_tool PROPERTIES SKIP_BUILD_RPATH FALSE BUILD_WITH_INSTALL_RPATH FALSE)
+
   add_test(NAME smoke_basic COMMAND $<TARGET_FILE:mdbx_test> --duration 100 --table=+data.integer
                                    --keygen.split=29 --datalen.min=min --datalen.max=max --progress --console=no
                                    --mode=+nosync-safe --repeat=${MDBX_TEST_ITER} --pathname=smoke.db
                                    --dont-cleanup-after ${MDBX_SMOKE_EXTRA} basic)
-  set_tests_properties(smoke_basic PROPERTIES LABELS "smoke;smoke-t2" TIMEOUT 600 RUN_SERIAL OFF)
+  set_tests_properties(smoke_basic PROPERTIES LABELS "smoke;smoke-t2" TIMEOUT 600 RUN_SERIAL OFF
+                                              FIXTURES_SETUP smoke-quick)
 
   set(SMOKE_WRITEMAP_SIZE_UPPER "2G")
   if(CMAKE_SIZEOF_VOID_P EQUAL 4)
@@ -327,7 +367,8 @@ else()
                                     --progress --console=no --repeat=${MDBX_TEST_ITER} --pathname=smoke.db
                                     --size-lower=64M --size=256M --size-upper=${SMOKE_WRITEMAP_SIZE_UPPER} --geometry-jitter=no
                                     --dont-cleanup-after ${MDBX_SMOKE_EXTRA} basic)
-  set_tests_properties(smoke_writemap PROPERTIES LABELS "smoke;smoke-t2" TIMEOUT 600 DEPENDS smoke_basic RUN_SERIAL OFF)
+  set_tests_properties(smoke_writemap PROPERTIES LABELS "smoke;smoke-t2" TIMEOUT 600 DEPENDS smoke_basic
+                                                 RUN_SERIAL OFF FIXTURES_REQUIRED smoke-quick)
 
   if(MDBX_BUILD_TOOLS)
     add_test(NAME smoke_chk COMMAND $<TARGET_FILE:mdbx_chk> -vvn smoke.db)
@@ -336,15 +377,22 @@ else()
       DEPENDS smoke_writemap
       TIMEOUT 60
       FAIL_REGULAR_EXPRESSION "cooperative mode"
-      REQUIRED_FILES smoke.db)
+      REQUIRED_FILES smoke.db
+      FIXTURES_REQUIRED smoke-quick)
     add_test(NAME smoke_chk_copy COMMAND $<TARGET_FILE:mdbx_chk> -vvn smoke.db-copy)
     set_tests_properties(smoke_chk_copy PROPERTIES
       LABELS "smoke;smoke-t2;chk"
       DEPENDS smoke_writemap
       TIMEOUT 60
       FAIL_REGULAR_EXPRESSION "cooperative mode"
-      REQUIRED_FILES smoke.db-copy)
+      REQUIRED_FILES smoke.db-copy
+      FIXTURES_REQUIRED smoke-quick)
   endif()
+
+  add_test(NAME smoke_cleanup COMMAND $<TARGET_FILE:te_cleanup_tool> smoke.db smoke.db-copy)
+  set_tests_properties(smoke_cleanup PROPERTIES
+    LABELS "smoke;smoke-t2"
+    FIXTURES_CLEANUP smoke-quick)
 
   if(WIN32)
     set_tests_properties(smoke_basic smoke_writemap PROPERTIES RESOURCE_LOCK smoke.db)
@@ -357,7 +405,8 @@ else()
     LABELS "smoke-fault;smoke-t2"
     TIMEOUT 240
     RUN_SERIAL OFF
-    WILL_FAIL TRUE)
+    WILL_FAIL TRUE
+    FIXTURES_SETUP smoke-fault)
   # The --timeout deadline is enforced by the OVERLORD main
   # thread (tests/framework/main.c++), with no worker threads, from the very
   # start including the setup/barrier phase. The writefault hits at op 42 and
@@ -369,7 +418,23 @@ else()
       LABELS "smoke-fault;smoke-t2;chk"
       DEPENDS smoke_fault
       TIMEOUT 60
-      REQUIRED_FILES fault.db)
+      REQUIRED_FILES fault.db
+      FIXTURES_REQUIRED smoke-fault)
+  endif()
+
+  add_test(NAME smoke_fault_cleanup COMMAND $<TARGET_FILE:te_cleanup_tool> fault.db fault.db-copy)
+  set_tests_properties(smoke_fault_cleanup PROPERTIES
+    LABELS "smoke-fault;smoke-t2"
+    FIXTURES_CLEANUP smoke-fault)
+
+  # Enforcement of the test hygiene (issue #343, item 4): fails when ANY
+  # database file is left in the build tree. Runs only via `ctest -L hygiene`
+  # AFTER the whole corpus (never in parallel with the tests), so it is not
+  # part of the default labels.
+  if(NOT WIN32)
+    # the --scan mode is POSIX-only (dirent-based)
+    add_test(NAME test_hygiene_check COMMAND $<TARGET_FILE:te_cleanup_tool> --scan ${CMAKE_BINARY_DIR})
+    set_tests_properties(test_hygiene_check PROPERTIES LABELS "hygiene" RUN_SERIAL ON)
   endif()
 
   if(MDBX_ENABLE_SINGLEPROCESS_TESTS)
@@ -380,14 +445,16 @@ else()
   set_tests_properties(smoke_sp_hill PROPERTIES
     LABELS "smoke-singleprocess;smoke-t2"
     TIMEOUT 600
-    RUN_SERIAL OFF)
+    RUN_SERIAL OFF
+    FIXTURES_SETUP smoke-singleprocess)
   add_test(NAME smoke_sp_copy COMMAND $<TARGET_FILE:mdbx_test> --duration 100 --progress --console=no --repeat=2
                                  --pathname=singleprocess.db --dont-cleanup-before --dont-cleanup-after ${MDBX_SMOKE_EXTRA} --copy)
   set_tests_properties(smoke_sp_copy PROPERTIES
     LABELS "smoke-singleprocess;smoke-t2"
     DEPENDS smoke_sp_hill
     TIMEOUT 600
-    RUN_SERIAL OFF)
+    RUN_SERIAL OFF
+    FIXTURES_REQUIRED smoke-singleprocess)
   add_test(NAME smoke_sp_nested COMMAND $<TARGET_FILE:mdbx_test> --duration 100 --mode=-writemap,-nosync-safe,-lifo
                                    --progress --console=no --repeat=42 --pathname=singleprocess.db
                                    --dont-cleanup-after ${MDBX_SMOKE_EXTRA} --nested)
@@ -395,21 +462,29 @@ else()
     LABELS "smoke-singleprocess;smoke-t2"
     DEPENDS smoke_sp_copy
     TIMEOUT 600
-    RUN_SERIAL OFF)
+    RUN_SERIAL OFF
+    FIXTURES_REQUIRED smoke-singleprocess)
   if(MDBX_BUILD_TOOLS)
     add_test(NAME smoke_sp_chk COMMAND $<TARGET_FILE:mdbx_chk> -vvn singleprocess.db)
     set_tests_properties(smoke_sp_chk PROPERTIES
       LABELS "smoke-singleprocess;chk"
       DEPENDS smoke_sp_nested
       TIMEOUT 60
-      REQUIRED_FILES singleprocess.db)
+      REQUIRED_FILES singleprocess.db
+      FIXTURES_REQUIRED smoke-singleprocess)
     add_test(NAME smoke_sp_chk_copy COMMAND $<TARGET_FILE:mdbx_chk> -vvn singleprocess.db-copy)
     set_tests_properties(smoke_sp_chk_copy PROPERTIES
       LABELS "smoke-singleprocess;chk"
       DEPENDS smoke_sp_nested
       TIMEOUT 60
-      REQUIRED_FILES singleprocess.db-copy)
+      REQUIRED_FILES singleprocess.db-copy
+      FIXTURES_REQUIRED smoke-singleprocess)
   endif()
+
+  add_test(NAME smoke_sp_cleanup COMMAND $<TARGET_FILE:te_cleanup_tool> singleprocess.db singleprocess.db-copy)
+  set_tests_properties(smoke_sp_cleanup PROPERTIES
+    LABELS "smoke-singleprocess;smoke-t2"
+    FIXTURES_CLEANUP smoke-singleprocess)
 
   if(WIN32)
     set_tests_properties(smoke_sp_hill smoke_sp_copy smoke_sp_nested PROPERTIES RESOURCE_LOCK singleprocess.db)
@@ -443,19 +518,37 @@ else()
            COMMAND $<TARGET_FILE:mdbx_test> --nops=1K --duration 60 --prng-seed=${MDBX_T1_SEED_HILL}
                    --mode=+nosync-safe --progress --console=no --repeat=1 --pathname=t1-hill.db
                    --cleanup-before --dont-cleanup-after ${MDBX_SMOKE_EXTRA} --hill)
-  set_tests_properties(smoke_t1_hill PROPERTIES LABELS "smoke;smoke-t1" TIMEOUT 300 RUN_SERIAL OFF)
+  set_tests_properties(smoke_t1_hill PROPERTIES LABELS "smoke;smoke-t1" TIMEOUT 300 RUN_SERIAL OFF
+                                                FIXTURES_SETUP smoke-t1-hill)
 
   add_test(NAME smoke_t1_nested
            COMMAND $<TARGET_FILE:mdbx_test> --nops=1K --duration 60 --prng-seed=${MDBX_T1_SEED_NESTED}
                    --mode=-writemap,-nosync-safe,-lifo --progress --console=no --repeat=1
                    --pathname=t1-nested.db --cleanup-before --dont-cleanup-after ${MDBX_SMOKE_EXTRA} --nested)
-  set_tests_properties(smoke_t1_nested PROPERTIES LABELS "smoke;smoke-t1" TIMEOUT 300 RUN_SERIAL OFF)
+  set_tests_properties(smoke_t1_nested PROPERTIES LABELS "smoke;smoke-t1" TIMEOUT 300 RUN_SERIAL OFF
+                                                  FIXTURES_SETUP smoke-t1-nested)
 
   add_test(NAME smoke_t1_copy
            COMMAND $<TARGET_FILE:mdbx_test> --nops=256 --duration 60 --prng-seed=${MDBX_T1_SEED_COPY}
                    --mode=+nosync-safe --progress --console=no --repeat=1 --pathname=t1-copy.db
                    --cleanup-before --dont-cleanup-after ${MDBX_SMOKE_EXTRA} --copy)
-  set_tests_properties(smoke_t1_copy PROPERTIES LABELS "smoke;smoke-t1" TIMEOUT 300 RUN_SERIAL OFF)
+  set_tests_properties(smoke_t1_copy PROPERTIES LABELS "smoke;smoke-t1" TIMEOUT 300 RUN_SERIAL OFF
+                                                FIXTURES_SETUP smoke-t1-copy)
+
+  add_test(NAME smoke_t1_hill_cleanup COMMAND $<TARGET_FILE:te_cleanup_tool> t1-hill.db)
+  set_tests_properties(smoke_t1_hill_cleanup PROPERTIES
+    LABELS "smoke;smoke-t1"
+    FIXTURES_CLEANUP smoke-t1-hill)
+
+  add_test(NAME smoke_t1_nested_cleanup COMMAND $<TARGET_FILE:te_cleanup_tool> t1-nested.db)
+  set_tests_properties(smoke_t1_nested_cleanup PROPERTIES
+    LABELS "smoke;smoke-t1"
+    FIXTURES_CLEANUP smoke-t1-nested)
+
+  add_test(NAME smoke_t1_copy_cleanup COMMAND $<TARGET_FILE:te_cleanup_tool> t1-copy.db t1-copy.db-copy)
+  set_tests_properties(smoke_t1_copy_cleanup PROPERTIES
+    LABELS "smoke;smoke-t1"
+    FIXTURES_CLEANUP smoke-t1-copy)
 
   if(UNIX AND MDBX_ENABLE_LONG_TESTS)
     add_test(NAME stochastic COMMAND ${CMAKE_CURRENT_SOURCE_DIR}/stochastic.sh --whole-duration 600 --probe-duration 60

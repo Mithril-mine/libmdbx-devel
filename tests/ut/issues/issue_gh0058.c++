@@ -17,6 +17,7 @@
  * The destination is not created by this call; it belongs to another live
  * environment. The failure happens before any write, so the file must
  * survive. */
+#include "../env-guard.h++"
 #include "mdbx.h"
 #include <gtest/gtest.h>
 
@@ -59,6 +60,8 @@ static int exists(const char *path) {
 }
 
 TEST(issue_gh0058, copy_overwrite_must_not_delete_live_destination) {
+  /* the directory itself is removed at the end of the test; nothing to guard:
+     the files live inside and the test already cleans them up */
   if (MDBX_GTEST_IS_EXECUTION_TIMEOUT()) {
     GTEST_SKIP() << "SKIPPED by RUNTIME_LIMIT";
     return;
@@ -72,6 +75,9 @@ TEST(issue_gh0058, copy_overwrite_must_not_delete_live_destination) {
   /* fresh state */
   unlink(src_db);
   unlink(dst_db);
+  snprintf(lck, sizeof(lck), "%s-lck", dst_db);
+  unlink(lck);
+  snprintf(lck, sizeof(lck), "%s-lck", src_db);
   unlink(lck);
   rmdir(dir);
   if (mkdir(dir, 0755) && access(dir, F_OK)) {
@@ -121,6 +127,9 @@ TEST(issue_gh0058, copy_overwrite_must_not_delete_live_destination) {
 
   unlink(src_db);
   unlink(dst_db);
+  snprintf(lck, sizeof(lck), "%s-lck", dst_db);
+  unlink(lck);
+  snprintf(lck, sizeof(lck), "%s-lck", src_db);
   unlink(lck);
   rmdir(dir);
   printf("RESULT: destination survived, holder still readable\n");

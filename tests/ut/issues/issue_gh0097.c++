@@ -12,6 +12,7 @@
 ///
 /// \author Леонид Юрьев aka Leonid Yuriev <leo@yuriev.ru> \date 2026
 
+#include "../env-guard.h++"
 #include "mdbx.h++"
 #include <gtest/gtest.h>
 
@@ -35,6 +36,7 @@
 // UB. The read-transaction cases are exercised here.
 
 TEST(issue_gh0097, getters_usable_inside_read_transaction) {
+  const env_files_guard guard({"issue97.mdbx", "issue97b.mdbx"});
   if (MDBX_GTEST_IS_EXECUTION_TIMEOUT()) {
     GTEST_SKIP() << "SKIPPED by RUNTIME_LIMIT";
     return;
@@ -76,6 +78,7 @@ TEST(issue_gh0097, getters_usable_inside_read_transaction) {
 }
 
 TEST(issue_gh0097, sync_period_double_rejects_out_of_range) {
+  const env_files_guard guard({"issue97.mdbx", "issue97b.mdbx"});
   if (MDBX_GTEST_IS_EXECUTION_TIMEOUT()) {
     GTEST_SKIP() << "SKIPPED by RUNTIME_LIMIT";
     return;

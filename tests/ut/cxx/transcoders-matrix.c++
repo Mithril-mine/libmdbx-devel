@@ -12,6 +12,7 @@
 ///
 /// \author Леонид Юрьев aka Leonid Yuriev <leo@yuriev.ru> \date 2015-2026
 
+#include "../env-guard.h++"
 #include "mdbx.h++"
 #include <gtest/gtest.h>
 
@@ -19,6 +20,7 @@
 
 /// SC-63: decl_transcoders — полное покрытие типов C++ (buffer/slice round-trip).
 TEST(ut_transcoders_matrix, pod_and_views_roundtrip) {
+  const env_files_guard guard({"test-gap-transcoders-err"});
   if (MDBX_GTEST_IS_EXECUTION_TIMEOUT()) {
     GTEST_SKIP() << "SKIPPED by RUNTIME_LIMIT";
     return;
@@ -58,6 +60,7 @@ TEST(ut_transcoders_matrix, pod_and_views_roundtrip) {
 }
 
 TEST(ut_transcoders_matrix, string_and_vector_modalities) {
+  const env_files_guard guard({"test-gap-transcoders-err"});
   if (MDBX_GTEST_IS_EXECUTION_TIMEOUT()) {
     GTEST_SKIP() << "SKIPPED by RUNTIME_LIMIT";
     return;
@@ -65,8 +68,7 @@ TEST(ut_transcoders_matrix, string_and_vector_modalities) {
   const std::string str = "hello transcoder";
   mdbx::buffer from_str(mdbx::slice(str), /*make_reference=*/false);
   EXPECT_EQ(from_str.size(), str.size());
-  EXPECT_EQ(std::string(reinterpret_cast<const char *>(from_str.byte_ptr()),
-                          from_str.length()), str);
+  EXPECT_EQ(std::string(reinterpret_cast<const char *>(from_str.byte_ptr()), from_str.length()), str);
 
   const std::vector<uint8_t> vec = {1, 2, 3, 4, 5};
   mdbx::buffer from_vec(mdbx::slice(vec.data(), vec.size()),
@@ -77,6 +79,7 @@ TEST(ut_transcoders_matrix, string_and_vector_modalities) {
 
 /// SC-64: decl_core — исключения ↔ коды C API.
 TEST(ut_transcoders_matrix, error_mapping) {
+  const env_files_guard guard({"test-gap-transcoders-err"});
   if (MDBX_GTEST_IS_EXECUTION_TIMEOUT()) {
     GTEST_SKIP() << "SKIPPED by RUNTIME_LIMIT";
     return;
@@ -97,11 +100,9 @@ TEST(ut_transcoders_matrix, error_mapping) {
   {
     auto txn = env.start_write();
     auto map = txn.open_map("main");
-    const size_t key_limit = mdbx::env::limits::key_max(
-        env, mdbx::key_mode::usual);
+    const size_t key_limit = mdbx::env::limits::key_max(env, mdbx::key_mode::usual);
     std::string big_key(key_limit + 1, 'x');
-    EXPECT_THROW(txn.put(map, mdbx::slice(big_key), mdbx::slice("v"), mdbx::upsert),
-                 mdbx::exception);
+    EXPECT_THROW(txn.put(map, mdbx::slice(big_key), mdbx::slice("v"), mdbx::upsert), mdbx::exception);
     txn.abort();
   }
 }

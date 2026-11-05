@@ -12,6 +12,7 @@
 ///
 /// \author Леонид Юрьев aka Leonid Yuriev <leo@yuriev.ru> \date 2015-2026
 
+#include "../env-guard.h++"
 #include "mdbx.h++"
 #include <gtest/gtest.h>
 
@@ -26,6 +27,7 @@ mdbx::env_managed make_env(const char *name) {
 } // namespace
 
 TEST(ut_cursor_multis, count_and_deepmask) {
+  const env_files_guard guard({"test-cursor-multis"});
   if (MDBX_GTEST_IS_EXECUTION_TIMEOUT()) {
     GTEST_SKIP() << "SKIPPED by RUNTIME_LIMIT";
     return;
@@ -58,6 +60,7 @@ TEST(ut_cursor_multis, count_and_deepmask) {
 }
 
 TEST(ut_cursor_multis, put_update_nodupdata_and_del) {
+  const env_files_guard guard({"test-cursor-multis"});
   if (MDBX_GTEST_IS_EXECUTION_TIMEOUT()) {
     GTEST_SKIP() << "SKIPPED by RUNTIME_LIMIT";
     return;
@@ -100,6 +103,7 @@ TEST(ut_cursor_multis, put_update_nodupdata_and_del) {
 }
 
 TEST(ut_cursor_multis, bind_unbind_rebind) {
+  const env_files_guard guard({"test-cursor-multis"});
   if (MDBX_GTEST_IS_EXECUTION_TIMEOUT()) {
     GTEST_SKIP() << "SKIPPED by RUNTIME_LIMIT";
     return;

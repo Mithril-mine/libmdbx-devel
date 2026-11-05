@@ -12,6 +12,7 @@
 ///
 /// \author Леонид Юрьев aka Leonid Yuriev <leo@yuriev.ru> \date 2026
 
+#include "../env-guard.h++"
 #include "mdbx.h++"
 #include <gtest/gtest.h>
 
@@ -34,6 +35,7 @@
 // through ctx, not as an exception.
 
 TEST(issue_gh0093, tables_is_reset_after_chk) {
+  const env_files_guard guard({"issue93.mdbx", "issue93b.mdbx"});
   if (MDBX_GTEST_IS_EXECUTION_TIMEOUT()) {
     GTEST_SKIP() << "SKIPPED by RUNTIME_LIMIT";
     return;
@@ -61,6 +63,7 @@ TEST(issue_gh0093, tables_is_reset_after_chk) {
 }
 
 TEST(issue_gh0093, chk_reports_problems_in_ctx_not_as_exception) {
+  const env_files_guard guard({"issue93.mdbx", "issue93b.mdbx"});
   if (MDBX_GTEST_IS_EXECUTION_TIMEOUT()) {
     GTEST_SKIP() << "SKIPPED by RUNTIME_LIMIT";
     return;

@@ -12,6 +12,7 @@
 ///
 /// \author Леонид Юрьев aka Leonid Yuriev <leo@yuriev.ru> \date 2026
 
+#include "../env-guard.h++"
 #include "mdbx.h"
 #include <gtest/gtest.h>
 
@@ -99,6 +100,8 @@ static long file_size(const char *path) {
 }
 
 TEST(issue_gh0112, copy_does_not_delete_locked_destination) {
+  const env_files_guard guard({"issue112-src.mdbx", "issue112-dest.mdbx", "issue112-src2.mdbx", "issue112-dest2.mdbx",
+                               "issue112-src3.mdbx", "issue112-dest3.mdbx"});
   if (MDBX_GTEST_IS_EXECUTION_TIMEOUT()) {
     GTEST_SKIP() << "SKIPPED by RUNTIME_LIMIT";
     return;
@@ -138,6 +141,8 @@ TEST(issue_gh0112, copy_does_not_delete_locked_destination) {
 }
 
 TEST(issue_gh0112, copy_overwrite_truncates_old_content) {
+  const env_files_guard guard({"issue112-src.mdbx", "issue112-dest.mdbx", "issue112-src2.mdbx", "issue112-dest2.mdbx",
+                               "issue112-src3.mdbx", "issue112-dest3.mdbx"});
   if (MDBX_GTEST_IS_EXECUTION_TIMEOUT()) {
     GTEST_SKIP() << "SKIPPED by RUNTIME_LIMIT";
     return;
@@ -179,6 +184,8 @@ TEST(issue_gh0112, copy_overwrite_truncates_old_content) {
 }
 
 TEST(issue_gh0112, rejected_copy_keeps_destination) {
+  const env_files_guard guard({"issue112-src.mdbx", "issue112-dest.mdbx", "issue112-src2.mdbx", "issue112-dest2.mdbx",
+                               "issue112-src3.mdbx", "issue112-dest3.mdbx"});
   if (MDBX_GTEST_IS_EXECUTION_TIMEOUT()) {
     GTEST_SKIP() << "SKIPPED by RUNTIME_LIMIT";
     return;

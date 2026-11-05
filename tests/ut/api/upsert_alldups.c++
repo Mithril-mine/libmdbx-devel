@@ -22,6 +22,7 @@
 #include "mdbx.h"
 #include <gtest/gtest.h>
 
+#include "../env-guard.h++"
 #include "../test-env.h"
 
 #include <stdio.h>
@@ -63,6 +64,9 @@ static int put(MDBX_txn *txn, MDBX_dbi dbi, const char *k, const char *v, MDBX_p
 }
 
 TEST(ut_upsert_alldups, all) {
+  /* the environment is a directory one at "." (./mdbx.dat + ./mdbx.lck),
+   * mdbx_env_delete(".") removes exactly those two files */
+  const env_files_guard guard({"."});
   if (MDBX_GTEST_IS_EXECUTION_TIMEOUT()) {
     GTEST_SKIP() << "SKIPPED by RUNTIME_LIMIT";
     return;

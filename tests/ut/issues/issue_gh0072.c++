@@ -12,6 +12,7 @@
 ///
 /// \author Леонид Юрьев aka Leonid Yuriev <leo@yuriev.ru> \date 2026
 
+#include "../env-guard.h++"
 #include "mdbx.h++"
 #include "tool_runner.h"
 #include <gtest/gtest.h>
@@ -76,6 +77,7 @@ static int run_tool(const std::vector<std::string> &args, const char *stdout_fil
 }
 
 TEST(issue_gh0072, dump_refuses_control_char_table_name) {
+  const env_files_guard guard({"issue72.mdbx", "issue72-list.mdbx", "issue72-stat.mdbx"});
   if (MDBX_GTEST_IS_EXECUTION_TIMEOUT()) {
     GTEST_SKIP() << "SKIPPED by RUNTIME_LIMIT";
     return;
@@ -90,6 +92,7 @@ TEST(issue_gh0072, dump_refuses_control_char_table_name) {
 }
 
 TEST(issue_gh0072, dump_list_sanitizes_control_chars) {
+  const env_files_guard guard({"issue72.mdbx", "issue72-list.mdbx", "issue72-stat.mdbx"});
   if (MDBX_GTEST_IS_EXECUTION_TIMEOUT()) {
     GTEST_SKIP() << "SKIPPED by RUNTIME_LIMIT";
     return;
@@ -113,6 +116,7 @@ TEST(issue_gh0072, dump_list_sanitizes_control_chars) {
 }
 
 TEST(issue_gh0072, stat_sanitizes_control_chars) {
+  const env_files_guard guard({"issue72.mdbx", "issue72-list.mdbx", "issue72-stat.mdbx"});
   if (MDBX_GTEST_IS_EXECUTION_TIMEOUT()) {
     GTEST_SKIP() << "SKIPPED by RUNTIME_LIMIT";
     return;
@@ -136,6 +140,7 @@ TEST(issue_gh0072, stat_sanitizes_control_chars) {
 }
 
 TEST(issue_gh0072, load_rejects_control_char_name) {
+  const env_files_guard guard({"issue72.mdbx", "issue72-list.mdbx", "issue72-stat.mdbx"});
   if (MDBX_GTEST_IS_EXECUTION_TIMEOUT()) {
     GTEST_SKIP() << "SKIPPED by RUNTIME_LIMIT";
     return;

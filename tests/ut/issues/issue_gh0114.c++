@@ -12,6 +12,7 @@
 ///
 /// \author Леонид Юрьев aka Leonid Yuriev <leo@yuriev.ru> \date 2026
 
+#include "../env-guard.h++"
 #include "mdbx.h++"
 #include <gtest/gtest.h>
 
@@ -45,6 +46,7 @@ static void remove_db(const char *path) {
 }
 
 TEST(issue_gh0114, warmup_requires_opened_env) {
+  const env_files_guard guard({"issue114.mdbx"});
   if (MDBX_GTEST_IS_EXECUTION_TIMEOUT()) {
     GTEST_SKIP() << "SKIPPED by RUNTIME_LIMIT";
     return;
@@ -60,6 +62,7 @@ TEST(issue_gh0114, warmup_requires_opened_env) {
 }
 
 TEST(issue_gh0114, gc_time_limit_keeps_rp_augment_limit) {
+  const env_files_guard guard({"issue114.mdbx"});
   if (MDBX_GTEST_IS_EXECUTION_TIMEOUT()) {
     GTEST_SKIP() << "SKIPPED by RUNTIME_LIMIT";
     return;

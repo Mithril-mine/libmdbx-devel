@@ -12,6 +12,7 @@
 ///
 /// \author Леонид Юрьев aka Leonid Yuriev <leo@yuriev.ru> \date 2026
 
+#include "../env-guard.h++"
 #include "mdbx.h++"
 #include <gtest/gtest.h>
 
@@ -45,6 +46,7 @@ static void put_key(MDBX_txn *txn, MDBX_dbi dbi, const std::string &key) {
 }
 
 TEST(issue_gh0107, pseudo_names_and_recreate) {
+  const env_files_guard guard({"issue107.mdbx", "issue107b.mdbx"});
   if (MDBX_GTEST_IS_EXECUTION_TIMEOUT()) {
     GTEST_SKIP() << "SKIPPED by RUNTIME_LIMIT";
     return;
@@ -106,6 +108,7 @@ TEST(issue_gh0107, pseudo_names_and_recreate) {
 }
 
 TEST(issue_gh0107, open_dropped_table_by_another_process) {
+  const env_files_guard guard({"issue107.mdbx", "issue107b.mdbx"});
   if (MDBX_GTEST_IS_EXECUTION_TIMEOUT()) {
     GTEST_SKIP() << "SKIPPED by RUNTIME_LIMIT";
     return;

@@ -12,6 +12,7 @@
 ///
 /// \author Леонид Юрьев aka Leonid Yuriev <leo@yuriev.ru> \date 2026
 
+#include "../env-guard.h++"
 #include "mdbx.h++"
 #include <gtest/gtest.h>
 
@@ -33,6 +34,7 @@
 // MDBX_LAGGARD_READER instead of reporting it in the result.
 
 TEST(issue_gh0102, thread_register_returns_false_when_already_registered) {
+  const env_files_guard guard({"issue102.mdbx", "issue102b.mdbx"});
   if (MDBX_GTEST_IS_EXECUTION_TIMEOUT()) {
     GTEST_SKIP() << "SKIPPED by RUNTIME_LIMIT";
     return;
@@ -55,6 +57,7 @@ TEST(issue_gh0102, thread_register_returns_false_when_already_registered) {
 }
 
 TEST(issue_gh0102, non_error_results_do_not_throw) {
+  const env_files_guard guard({"issue102.mdbx", "issue102b.mdbx"});
   if (MDBX_GTEST_IS_EXECUTION_TIMEOUT()) {
     GTEST_SKIP() << "SKIPPED by RUNTIME_LIMIT";
     return;

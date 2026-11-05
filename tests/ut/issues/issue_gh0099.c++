@@ -12,6 +12,7 @@
 ///
 /// \author Леонид Юрьев aka Leonid Yuriev <leo@yuriev.ru> \date 2026
 
+#include "../env-guard.h++"
 #include "mdbx.h++"
 #include <gtest/gtest.h>
 
@@ -33,6 +34,7 @@ using buffer = mdbx::buffer<>;
 // return a buffer that lost the caller's allocator.
 
 TEST(issue_gh0099, reserve_keeps_capacity_and_headroom) {
+  const env_files_guard guard({"issue99.mdbx", "issue99b.mdbx"});
   if (MDBX_GTEST_IS_EXECUTION_TIMEOUT()) {
     GTEST_SKIP() << "SKIPPED by RUNTIME_LIMIT";
     return;
@@ -50,6 +52,7 @@ TEST(issue_gh0099, reserve_keeps_capacity_and_headroom) {
 }
 
 TEST(issue_gh0099, reseve_with_headroom_does_not_trip_assertion) {
+  const env_files_guard guard({"issue99.mdbx", "issue99b.mdbx"});
   if (MDBX_GTEST_IS_EXECUTION_TIMEOUT()) {
     GTEST_SKIP() << "SKIPPED by RUNTIME_LIMIT";
     return;
@@ -63,6 +66,7 @@ TEST(issue_gh0099, reseve_with_headroom_does_not_trip_assertion) {
 }
 
 TEST(issue_gh0099, buffer_from_txn_accepts_user_memory_and_empty_slice) {
+  const env_files_guard guard({"issue99.mdbx", "issue99b.mdbx"});
   if (MDBX_GTEST_IS_EXECUTION_TIMEOUT()) {
     GTEST_SKIP() << "SKIPPED by RUNTIME_LIMIT";
     return;
@@ -93,6 +97,7 @@ TEST(issue_gh0099, buffer_from_txn_accepts_user_memory_and_empty_slice) {
 }
 
 TEST(issue_gh0099, extract_returns_buffer_with_caller_allocator) {
+  const env_files_guard guard({"issue99.mdbx", "issue99b.mdbx"});
   if (MDBX_GTEST_IS_EXECUTION_TIMEOUT()) {
     GTEST_SKIP() << "SKIPPED by RUNTIME_LIMIT";
     return;

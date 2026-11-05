@@ -12,12 +12,14 @@
 ///
 /// \author Леонид Юрьев aka Leonid Yuriev <leo@yuriev.ru> \date 2015-2026
 
+#include "../env-guard.h++"
 #include "mdbx.h++"
 #include <gtest/gtest.h>
 
 #include "../test-env.h"
 
 TEST(ut_env_params, geometry_value_types) {
+  const env_files_guard guard({"test-env-params"});
   if (MDBX_GTEST_IS_EXECUTION_TIMEOUT()) {
     GTEST_SKIP() << "SKIPPED by RUNTIME_LIMIT";
     return;
@@ -68,6 +70,7 @@ TEST(ut_env_params, geometry_value_types) {
 }
 
 TEST(ut_env_params, mode_and_durability_enums) {
+  const env_files_guard guard({"test-env-params"});
   if (MDBX_GTEST_IS_EXECUTION_TIMEOUT()) {
     GTEST_SKIP() << "SKIPPED by RUNTIME_LIMIT";
     return;
@@ -82,6 +85,7 @@ TEST(ut_env_params, mode_and_durability_enums) {
 }
 
 TEST(ut_env_params, reclaiming_and_operate_options) {
+  const env_files_guard guard({"test-env-params"});
   if (MDBX_GTEST_IS_EXECUTION_TIMEOUT()) {
     GTEST_SKIP() << "SKIPPED by RUNTIME_LIMIT";
     return;
@@ -118,6 +122,7 @@ TEST(ut_env_params, reclaiming_and_operate_options) {
 }
 
 TEST(ut_env_params, operate_and_create_parameters_fluent) {
+  const env_files_guard guard({"test-env-params"});
   if (MDBX_GTEST_IS_EXECUTION_TIMEOUT()) {
     GTEST_SKIP() << "SKIPPED by RUNTIME_LIMIT";
     return;
@@ -157,6 +162,7 @@ TEST(ut_env_params, operate_and_create_parameters_fluent) {
 }
 
 TEST(ut_env_params, env_roundtrip) {
+  const env_files_guard guard({"test-env-params"});
   if (MDBX_GTEST_IS_EXECUTION_TIMEOUT()) {
     GTEST_SKIP() << "SKIPPED by RUNTIME_LIMIT";
     return;

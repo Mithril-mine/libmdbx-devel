@@ -12,6 +12,7 @@
 ///
 /// \author Леонид Юрьев aka Leonid Yuriev <leo@yuriev.ru> \date 2026
 
+#include "../env-guard.h++"
 #include "mdbx.h++"
 #include <gtest/gtest.h>
 
@@ -89,6 +90,7 @@ static MDBX_env *open_env(const char *path, MDBX_dbi *dbi_out) {
 }
 
 TEST(issue_gh0085, scroll_with_unlimited_deepness_is_safe) {
+  const env_files_guard guard({"issue85.mdbx", "issue85b.mdbx"});
   if (MDBX_GTEST_IS_EXECUTION_TIMEOUT()) {
     GTEST_SKIP() << "SKIPPED by RUNTIME_LIMIT";
     return;
@@ -121,6 +123,7 @@ TEST(issue_gh0085, scroll_with_unlimited_deepness_is_safe) {
 }
 
 TEST(issue_gh0085, distance_with_unlimited_deepness_is_safe) {
+  const env_files_guard guard({"issue85.mdbx", "issue85b.mdbx"});
   if (MDBX_GTEST_IS_EXECUTION_TIMEOUT()) {
     GTEST_SKIP() << "SKIPPED by RUNTIME_LIMIT";
     return;

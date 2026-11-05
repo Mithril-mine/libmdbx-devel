@@ -12,6 +12,7 @@
 ///
 /// \author Леонид Юрьев aka Leonid Yuriev <leo@yuriev.ru> \date 2015-2026
 
+#include "../env-guard.h++"
 #include "mdbx.h++"
 #include <gtest/gtest.h>
 
@@ -25,6 +26,7 @@ static std::string to_std_string(const mdbx::slice &s) {
 }
 
 TEST(ut_defrag_cursors, txn_lock_unlock) {
+  const env_files_guard guard({"test-defrag-cursors"});
   if (MDBX_GTEST_IS_EXECUTION_TIMEOUT()) {
     GTEST_SKIP() << "SKIPPED by RUNTIME_LIMIT";
     return;
@@ -51,6 +53,7 @@ TEST(ut_defrag_cursors, txn_lock_unlock) {
 }
 
 TEST(ut_defrag_cursors, txn_refresh) {
+  const env_files_guard guard({"test-defrag-cursors"});
   if (MDBX_GTEST_IS_EXECUTION_TIMEOUT()) {
     GTEST_SKIP() << "SKIPPED by RUNTIME_LIMIT";
     return;
@@ -88,6 +91,7 @@ TEST(ut_defrag_cursors, txn_refresh) {
 }
 
 TEST(ut_defrag_cursors, cursor_reset) {
+  const env_files_guard guard({"test-defrag-cursors"});
   if (MDBX_GTEST_IS_EXECUTION_TIMEOUT()) {
     GTEST_SKIP() << "SKIPPED by RUNTIME_LIMIT";
     return;
@@ -117,6 +121,7 @@ TEST(ut_defrag_cursors, cursor_reset) {
 }
 
 TEST(ut_defrag_cursors, cursor_bunch_delete) {
+  const env_files_guard guard({"test-defrag-cursors"});
   if (MDBX_GTEST_IS_EXECUTION_TIMEOUT()) {
     GTEST_SKIP() << "SKIPPED by RUNTIME_LIMIT";
     return;
@@ -160,6 +165,7 @@ TEST(ut_defrag_cursors, cursor_bunch_delete) {
 }
 
 TEST(ut_defrag_cursors, cursor_delete_range) {
+  const env_files_guard guard({"test-defrag-cursors"});
   if (MDBX_GTEST_IS_EXECUTION_TIMEOUT()) {
     GTEST_SKIP() << "SKIPPED by RUNTIME_LIMIT";
     return;
@@ -192,6 +198,7 @@ TEST(ut_defrag_cursors, cursor_delete_range) {
 }
 
 TEST(ut_defrag_cursors, get_datacmp) {
+  const env_files_guard guard({"test-defrag-cursors"});
   if (MDBX_GTEST_IS_EXECUTION_TIMEOUT()) {
     GTEST_SKIP() << "SKIPPED by RUNTIME_LIMIT";
     return;
@@ -202,6 +209,7 @@ TEST(ut_defrag_cursors, get_datacmp) {
 }
 
 TEST(ut_defrag_cursors, defrag) {
+  const env_files_guard guard({"test-defrag-cursors"});
   if (MDBX_GTEST_IS_EXECUTION_TIMEOUT()) {
     GTEST_SKIP() << "SKIPPED by RUNTIME_LIMIT";
     return;

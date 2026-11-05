@@ -13,6 +13,7 @@
 /// \author Леонид Юрьев aka Leonid Yuriev <leo@yuriev.ru> \date 2026
 
 #include "../../../src/internals.h"
+#include "../env-guard.h++"
 #include <gtest/gtest.h>
 
 #include "../test-env.h"
@@ -44,6 +45,7 @@
 // Windows-with-AVOID_MSYNC path that the fix preserves.
 
 TEST(issue_gh0065, writemap_nosync_commits_do_not_flush_whole_mapping) {
+  const env_files_guard guard({"issue65.mdbx"});
   if (MDBX_GTEST_IS_EXECUTION_TIMEOUT()) {
     GTEST_SKIP() << "SKIPPED by RUNTIME_LIMIT";
     return;
@@ -53,6 +55,7 @@ TEST(issue_gh0065, writemap_nosync_commits_do_not_flush_whole_mapping) {
 
   const int N = 200;
   MDBX_env *env = nullptr;
+  env_handle_guard env_owner(&env);
   ASSERT_EQ(MDBX_SUCCESS, mdbx_env_create(&env));
   ASSERT_EQ(MDBX_SUCCESS, mdbx_env_set_geometry(env, -1, -1, 64 << 20, -1, -1, -1));
   ASSERT_EQ(MDBX_SUCCESS, mdbx_env_open(env, testdb, MDBX_NOSUBDIR | MDBX_WRITEMAP | MDBX_SAFE_NOSYNC, 0644));
@@ -96,7 +99,6 @@ TEST(issue_gh0065, writemap_nosync_commits_do_not_flush_whole_mapping) {
 
   /* sanity: all records must survive a clean close and a read-only reopen */
   ASSERT_EQ(MDBX_SUCCESS, mdbx_env_close(env));
-  env = nullptr;
   ASSERT_EQ(MDBX_SUCCESS, mdbx_env_create(&env));
   ASSERT_EQ(MDBX_SUCCESS, mdbx_env_open(env, testdb, MDBX_NOSUBDIR | MDBX_RDONLY, 0644));
   MDBX_txn *txn = nullptr;

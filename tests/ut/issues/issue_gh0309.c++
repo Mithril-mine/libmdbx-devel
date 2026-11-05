@@ -13,6 +13,7 @@
 /// \author Леонид Юрьев aka Leonid Yuriev <leo@yuriev.ru> \date 2026
 /// \author Andrea Lanfranchi (https://github.com/AndreaLanfranchi)
 
+#include "../env-guard.h++"
 #include "mdbx.h"
 #include <gtest/gtest.h>
 
@@ -73,6 +74,7 @@ std::string key_of(int i) {
 } // namespace
 
 TEST(issue_gh0309, compacting_copy_to_pipe_keeps_all_records) {
+  const env_files_guard guard({"issue309-src.mdbx", "issue309-copy.mdbx"});
   if (MDBX_GTEST_IS_EXECUTION_TIMEOUT()) {
     GTEST_SKIP() << "SKIPPED by RUNTIME_LIMIT";
     return;

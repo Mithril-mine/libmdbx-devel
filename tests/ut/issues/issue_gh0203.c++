@@ -13,6 +13,7 @@
 /// \author Леонид Юрьев aka Leonid Yuriev <leo@yuriev.ru> \date 2026
 
 #include "../../../src/internals.h"
+#include "../env-guard.h++"
 #include <gtest/gtest.h>
 
 #include "../test-env.h"
@@ -90,6 +91,7 @@ static void retire_overflow_page(MDBX_txn *txn, MDBX_dbi dbi, const char *key) {
 }
 
 TEST(issue_gh0203, page_kill_write_error_breaks_the_transaction) {
+  const env_files_guard guard({"issue203-prefault.mdbx", "issue203-kill.mdbx"});
   if (MDBX_GTEST_IS_EXECUTION_TIMEOUT()) {
     GTEST_SKIP() << "SKIPPED by RUNTIME_LIMIT";
     return;
@@ -97,6 +99,7 @@ TEST(issue_gh0203, page_kill_write_error_breaks_the_transaction) {
   std::remove(kDbKill);
 
   MDBX_env *env = nullptr;
+  env_handle_guard env_owner(&env);
   ASSERT_EQ(MDBX_SUCCESS, mdbx_env_create(&env));
   ASSERT_EQ(MDBX_SUCCESS, mdbx_env_set_geometry(env, -1, -1, 64 << 20, -1, -1, -1));
   /* MDBX_PAGEPERTURB forces page_kill() to run on every page retire regardless
@@ -150,6 +153,7 @@ TEST(issue_gh0203, page_kill_write_error_breaks_the_transaction) {
 }
 
 TEST(issue_gh0203, prefault_write_error_breaks_the_transaction) {
+  const env_files_guard guard({"issue203-prefault.mdbx", "issue203-kill.mdbx"});
   if (MDBX_GTEST_IS_EXECUTION_TIMEOUT()) {
     GTEST_SKIP() << "SKIPPED by RUNTIME_LIMIT";
     return;
@@ -157,6 +161,7 @@ TEST(issue_gh0203, prefault_write_error_breaks_the_transaction) {
   std::remove(kDbPrefault);
 
   MDBX_env *env = nullptr;
+  env_handle_guard env_owner(&env);
   ASSERT_EQ(MDBX_SUCCESS, mdbx_env_create(&env));
   ASSERT_EQ(MDBX_SUCCESS, mdbx_env_set_geometry(env, -1, -1, 256 << 20, -1, -1, -1));
   /* MDBX_NORDAHEAD disables the readahead window, otherwise the prefault-write

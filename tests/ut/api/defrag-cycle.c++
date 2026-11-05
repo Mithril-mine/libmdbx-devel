@@ -12,6 +12,7 @@
 ///
 /// \author Леонид Юрьев aka Leonid Yuriev <leo@yuriev.ru> \date 2015-2026
 
+#include "../env-guard.h++"
 #include "mdbx.h"
 #include <gtest/gtest.h>
 
@@ -42,6 +43,7 @@ struct progress_probe {
 } // namespace
 
 TEST(ut_defrag_cycle, full_cycle_with_metrics) {
+  const env_files_guard guard({"test-gap-defrag", "test-gap-defrag2"});
   if (MDBX_GTEST_IS_EXECUTION_TIMEOUT()) {
     GTEST_SKIP() << "SKIPPED by RUNTIME_LIMIT";
     return;
@@ -163,6 +165,7 @@ TEST(ut_defrag_cycle, full_cycle_with_metrics) {
 /// Ранний выход: defrag_enough=0 и time_limit=0 — либо полная уборка,
 /// либо останов по причине (метрика stopping_reasons заполняется).
 TEST(ut_defrag_cycle, stopping_reasons_reported) {
+  const env_files_guard guard({"test-gap-defrag", "test-gap-defrag2"});
   if (MDBX_GTEST_IS_EXECUTION_TIMEOUT()) {
     GTEST_SKIP() << "SKIPPED by RUNTIME_LIMIT";
     return;

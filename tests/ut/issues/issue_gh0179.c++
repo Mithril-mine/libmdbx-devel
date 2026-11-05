@@ -13,6 +13,7 @@
 /// \author Леонид Юрьев aka Leonid Yuriev <leo@yuriev.ru> \date 2026
 
 #include "../../../src/internals.h"
+#include "../env-guard.h++"
 #include <gtest/gtest.h>
 
 #include "../test-env.h"
@@ -126,6 +127,7 @@ static MDBX_dbi open_dbi(MDBX_env *env) {
 }
 
 TEST(issue_gh0179, exclusive_durable_keeps_the_fast_iopath) {
+  const env_files_guard guard({"issue179.mdbx", "issue179.mdbx.link"});
   if (MDBX_GTEST_IS_EXECUTION_TIMEOUT()) {
     GTEST_SKIP() << "SKIPPED by RUNTIME_LIMIT";
     return;
@@ -182,6 +184,7 @@ TEST(issue_gh0179, exclusive_durable_keeps_the_fast_iopath) {
 }
 
 TEST(issue_gh0179, second_exclusive_open_returns_busy) {
+  const env_files_guard guard({"issue179.mdbx", "issue179.mdbx.link"});
   if (MDBX_GTEST_IS_EXECUTION_TIMEOUT()) {
     GTEST_SKIP() << "SKIPPED by RUNTIME_LIMIT";
     return;
@@ -225,6 +228,7 @@ TEST(issue_gh0179, second_exclusive_open_returns_busy) {
 }
 
 TEST(issue_gh0179, weakened_txns_work_under_exclusive_durable_env) {
+  const env_files_guard guard({"issue179.mdbx", "issue179.mdbx.link"});
   if (MDBX_GTEST_IS_EXECUTION_TIMEOUT()) {
     GTEST_SKIP() << "SKIPPED by RUNTIME_LIMIT";
     return;
@@ -331,6 +335,7 @@ TEST(issue_gh0179, weakened_txns_work_under_exclusive_durable_env) {
 }
 
 TEST(issue_gh0179, exclusive_geometry_changes_work_under_constant_locks) {
+  const env_files_guard guard({"issue179.mdbx", "issue179.mdbx.link"});
   if (MDBX_GTEST_IS_EXECUTION_TIMEOUT()) {
     GTEST_SKIP() << "SKIPPED by RUNTIME_LIMIT";
     return;
@@ -372,6 +377,7 @@ TEST(issue_gh0179, exclusive_geometry_changes_work_under_constant_locks) {
  * not conflict with themselves, so this case is Windows-only (the behavior
  * there matches master, where the unshareable data file rejected it). */
 TEST(issue_gh0179, exclusive_via_hardlink_is_rejected_with_busy) {
+  const env_files_guard guard({"issue179.mdbx", "issue179.mdbx.link"});
   if (MDBX_GTEST_IS_EXECUTION_TIMEOUT()) {
     GTEST_SKIP() << "SKIPPED by RUNTIME_LIMIT";
     return;

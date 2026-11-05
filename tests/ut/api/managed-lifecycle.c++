@@ -12,6 +12,7 @@
 ///
 /// \author Леонид Юрьев aka Leonid Yuriev <leo@yuriev.ru> \date 2015-2026
 
+#include "../env-guard.h++"
 #include "mdbx.h++"
 #include <gtest/gtest.h>
 
@@ -24,6 +25,7 @@ const char *kTestPath = "test-managed-lifecycle";
 } // namespace
 
 TEST(ut_managed_lifecycle, txn_move_transfers_ownership) {
+  const env_files_guard guard({"test-managed-lifecycle"});
   if (MDBX_GTEST_IS_EXECUTION_TIMEOUT()) {
     GTEST_SKIP() << "SKIPPED by RUNTIME_LIMIT";
     return;
@@ -44,6 +46,7 @@ TEST(ut_managed_lifecycle, txn_move_transfers_ownership) {
 }
 
 TEST(ut_managed_lifecycle, cursor_withdraw_handle) {
+  const env_files_guard guard({"test-managed-lifecycle"});
   if (MDBX_GTEST_IS_EXECUTION_TIMEOUT()) {
     GTEST_SKIP() << "SKIPPED by RUNTIME_LIMIT";
     return;
@@ -68,6 +71,7 @@ TEST(ut_managed_lifecycle, cursor_withdraw_handle) {
 }
 
 TEST(ut_managed_lifecycle, context_roundtrip) {
+  const env_files_guard guard({"test-managed-lifecycle"});
   if (MDBX_GTEST_IS_EXECUTION_TIMEOUT()) {
     GTEST_SKIP() << "SKIPPED by RUNTIME_LIMIT";
     return;
@@ -95,6 +99,7 @@ TEST(ut_managed_lifecycle, context_roundtrip) {
 }
 
 TEST(ut_managed_lifecycle, destructor_order) {
+  const env_files_guard guard({"test-managed-lifecycle"});
   if (MDBX_GTEST_IS_EXECUTION_TIMEOUT()) {
     GTEST_SKIP() << "SKIPPED by RUNTIME_LIMIT";
     return;
@@ -120,6 +125,7 @@ TEST(ut_managed_lifecycle, destructor_order) {
   mdbx::env::remove(mdbx::path(kTestPath));
 }
 TEST(ut_managed_lifecycle, config_setters_throw_on_error) {
+  const env_files_guard guard({"test-managed-lifecycle"});
   if (MDBX_GTEST_IS_EXECUTION_TIMEOUT()) {
     GTEST_SKIP() << "SKIPPED by RUNTIME_LIMIT";
     return;
@@ -146,6 +152,7 @@ TEST(ut_managed_lifecycle, config_setters_throw_on_error) {
 }
 
 TEST(ut_managed_lifecycle, close_from_foreign_thread_best_effort) {
+  const env_files_guard guard({"test-managed-lifecycle"});
   if (MDBX_GTEST_IS_EXECUTION_TIMEOUT()) {
     GTEST_SKIP() << "SKIPPED by RUNTIME_LIMIT";
     return;

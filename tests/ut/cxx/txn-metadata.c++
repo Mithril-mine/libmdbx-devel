@@ -12,12 +12,14 @@
 ///
 /// \author Леонид Юрьев aka Leonid Yuriev <leo@yuriev.ru> \date 2015-2026
 
+#include "../env-guard.h++"
 #include "mdbx.h++"
 #include <gtest/gtest.h>
 
 #include "../test-env.h"
 
 TEST(ut_txn_metadata, canary) {
+  const env_files_guard guard({"test-txn-metadata"});
   if (MDBX_GTEST_IS_EXECUTION_TIMEOUT()) {
     GTEST_SKIP() << "SKIPPED by RUNTIME_LIMIT";
     return;
@@ -48,6 +50,7 @@ TEST(ut_txn_metadata, canary) {
 }
 
 TEST(ut_txn_metadata, sequence) {
+  const env_files_guard guard({"test-txn-metadata"});
   if (MDBX_GTEST_IS_EXECUTION_TIMEOUT()) {
     GTEST_SKIP() << "SKIPPED by RUNTIME_LIMIT";
     return;
@@ -76,6 +79,7 @@ TEST(ut_txn_metadata, sequence) {
 }
 
 TEST(ut_txn_metadata, compare_keys_and_values) {
+  const env_files_guard guard({"test-txn-metadata"});
   if (MDBX_GTEST_IS_EXECUTION_TIMEOUT()) {
     GTEST_SKIP() << "SKIPPED by RUNTIME_LIMIT";
     return;

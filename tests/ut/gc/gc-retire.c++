@@ -12,14 +12,15 @@
 ///
 /// \author Леонид Юрьев aka Leonid Yuriev <leo@yuriev.ru> \date 2015-2026
 
+#include "../env-guard.h++"
 #include "mdbx.h++"
 #include <gtest/gtest.h>
 
 #include "../test-env.h"
 
+#include <filesystem>
 #include <random>
 #include <system_error>
-#include <filesystem>
 
 /// SC-65 (test-coverage-gaps.md): gc-get/gc-put — цепочки ретирирования.
 /// Повторяющиеся массовые удаления/вставки формируют GC-записи (retire →
@@ -27,6 +28,7 @@
 /// файла стабилизируется, mdbx_chk-эквивалент (последовательные txn-инварианты
 /// под MDBX_DEBUG/AUDIT) не нарушается.
 TEST(ut_gc_retire, retire_reclaim_cycles) {
+  const env_files_guard guard({"test-gap-gc-retire"});
   if (MDBX_GTEST_IS_EXECUTION_TIMEOUT()) {
     GTEST_SKIP() << "SKIPPED by RUNTIME_LIMIT";
     return;

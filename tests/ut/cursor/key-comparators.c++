@@ -12,6 +12,7 @@
 ///
 /// \author Леонид Юрьев aka Leonid Yuriev <leo@yuriev.ru> \date 2015-2026
 
+#include "../env-guard.h++"
 #include "mdbx.h++"
 #include <gtest/gtest.h>
 
@@ -27,6 +28,7 @@
 /// ordinal-ветви: MDBX_INTEGERKEY (key_mode::ordinal), ключи 4 байта
 /// (uint32) и 8 байт (uint64) — search_branch_uint32/uint64 + ordinal.
 TEST(ut_key_comparators, ordinal_uint32) {
+  const env_files_guard guard({"test-gap-ord32"});
   if (MDBX_GTEST_IS_EXECUTION_TIMEOUT()) {
     GTEST_SKIP() << "SKIPPED by RUNTIME_LIMIT";
     return;
@@ -62,6 +64,7 @@ TEST(ut_key_comparators, ordinal_uint32) {
 }
 
 TEST(ut_key_comparators, ordinal_uint64) {
+  const env_files_guard guard({"test-gap-ord64"});
   if (MDBX_GTEST_IS_EXECUTION_TIMEOUT()) {
     GTEST_SKIP() << "SKIPPED by RUNTIME_LIMIT";
     return;
@@ -96,6 +99,7 @@ TEST(ut_key_comparators, ordinal_uint64) {
 /// reverse-ветвь: MDBX_REVERSEKEY (key_mode::reverse) — байты сравниваются
 /// от конца к началу.
 TEST(ut_key_comparators, reverse_keys) {
+  const env_files_guard guard({"test-gap-reverse"});
   if (MDBX_GTEST_IS_EXECUTION_TIMEOUT()) {
     GTEST_SKIP() << "SKIPPED by RUNTIME_LIMIT";
     return;
@@ -131,6 +135,7 @@ TEST(ut_key_comparators, reverse_keys) {
 /// lexical-ветвь: обычные (usual) ключи c ncmp_lexical — длинные ключи
 /// с общими префиксами разной длины (лексикографический цикл сравнения).
 TEST(ut_key_comparators, lexical_long_prefixes) {
+  const env_files_guard guard({"test-gap-lexical"});
   if (MDBX_GTEST_IS_EXECUTION_TIMEOUT()) {
     GTEST_SKIP() << "SKIPPED by RUNTIME_LIMIT";
     return;
@@ -186,14 +191,14 @@ static int gap_cmp(const MDBX_val *a, const MDBX_val *b) noexcept {
 #endif
 
 TEST(ut_key_comparators, custom_comparator) {
+  const env_files_guard guard({"test-gap-custom"});
   if (MDBX_GTEST_IS_EXECUTION_TIMEOUT()) {
     GTEST_SKIP() << "SKIPPED by RUNTIME_LIMIT";
     return;
   }
   const mdbx::path testdb = "test-gap-custom";
   mdbx::env::remove(testdb);
-  mdbx::env_managed env(testdb, mdbx::create_parameters(),
-                        mdbx::operate_parameters().set_max_maps(8));
+  mdbx::env_managed env(testdb, mdbx::create_parameters(), mdbx::operate_parameters().set_max_maps(8));
   MDBX_dbi dbi;
   {
     MDBX_txn *txn;
@@ -208,8 +213,7 @@ TEST(ut_key_comparators, custom_comparator) {
 #pragma warning(push)
 #pragma warning(disable : 4996)
 #endif
-    ASSERT_EQ(mdbx_dbi_open_ex(txn, "custom", MDBX_CREATE, &dbi,
-                               gap_cmp, nullptr), MDBX_SUCCESS);
+    ASSERT_EQ(mdbx_dbi_open_ex(txn, "custom", MDBX_CREATE, &dbi, gap_cmp, nullptr), MDBX_SUCCESS);
 #if defined(__clang__)
 #pragma clang diagnostic pop
 #elif defined(__GNUC__)

@@ -12,6 +12,7 @@
 ///
 /// \author Леонид Юрьев aka Leonid Yuriev <leo@yuriev.ru> \date 2015-2026
 
+#include "../env-guard.h++"
 #include "mdbx.h++"
 #include <gtest/gtest.h>
 
@@ -31,6 +32,7 @@ static std::string to_std_string(const mdbx::slice &s) {
 }
 
 TEST(ut_transforms, key_value_transforms) {
+  const env_files_guard guard({"test-transforms", "test-transforms-copy", "test-transforms-copy-fd"});
   if (MDBX_GTEST_IS_EXECUTION_TIMEOUT()) {
     GTEST_SKIP() << "SKIPPED by RUNTIME_LIMIT";
     return;
@@ -66,6 +68,7 @@ TEST(ut_transforms, key_value_transforms) {
 }
 
 TEST(ut_transforms, numeric_slice_adapters) {
+  const env_files_guard guard({"test-transforms", "test-transforms-copy", "test-transforms-copy-fd"});
   if (MDBX_GTEST_IS_EXECUTION_TIMEOUT()) {
     GTEST_SKIP() << "SKIPPED by RUNTIME_LIMIT";
     return;
@@ -94,6 +97,7 @@ TEST(ut_transforms, numeric_slice_adapters) {
 }
 
 TEST(ut_transforms, dump_val) {
+  const env_files_guard guard({"test-transforms", "test-transforms-copy", "test-transforms-copy-fd"});
   if (MDBX_GTEST_IS_EXECUTION_TIMEOUT()) {
     GTEST_SKIP() << "SKIPPED by RUNTIME_LIMIT";
     return;
@@ -109,6 +113,7 @@ TEST(ut_transforms, dump_val) {
 }
 
 TEST(ut_transforms, txn_copy) {
+  const env_files_guard guard({"test-transforms", "test-transforms-copy", "test-transforms-copy-fd"});
   if (MDBX_GTEST_IS_EXECUTION_TIMEOUT()) {
     GTEST_SKIP() << "SKIPPED by RUNTIME_LIMIT";
     return;
@@ -143,6 +148,7 @@ TEST(ut_transforms, txn_copy) {
 }
 
 TEST(ut_transforms, txn_copy_fd) {
+  const env_files_guard guard({"test-transforms", "test-transforms-copy", "test-transforms-copy-fd"});
   if (MDBX_GTEST_IS_EXECUTION_TIMEOUT()) {
     GTEST_SKIP() << "SKIPPED by RUNTIME_LIMIT";
     return;
@@ -184,6 +190,7 @@ TEST(ut_transforms, txn_copy_fd) {
 }
 
 TEST(ut_transforms, cursor_count_ex) {
+  const env_files_guard guard({"test-transforms", "test-transforms-copy", "test-transforms-copy-fd"});
   if (MDBX_GTEST_IS_EXECUTION_TIMEOUT()) {
     GTEST_SKIP() << "SKIPPED by RUNTIME_LIMIT";
     return;

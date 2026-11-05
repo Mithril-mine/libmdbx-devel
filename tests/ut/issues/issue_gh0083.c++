@@ -12,6 +12,7 @@
 ///
 /// \author Леонид Юрьев aka Leonid Yuriev <leo@yuriev.ru> \date 2026
 
+#include "../env-guard.h++"
 #include "mdbx.h++"
 #include <gtest/gtest.h>
 
@@ -252,6 +253,7 @@ static int craft_shared_page(const std::string &testdb, uint32_t pagesize) {
 }
 
 TEST(issue_gh0083, duplicated_page_across_gc_records_rejected) {
+  const env_files_guard guard({"issue83.mdbx"});
   if (MDBX_GTEST_IS_EXECUTION_TIMEOUT()) {
     GTEST_SKIP() << "SKIPPED by RUNTIME_LIMIT";
     return;

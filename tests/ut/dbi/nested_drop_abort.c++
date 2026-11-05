@@ -15,6 +15,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 
+#include "../env-guard.h++"
 #include "mdbx.h"
 #include <gtest/gtest.h>
 
@@ -34,6 +35,7 @@ static int get(MDBX_txn *txn, MDBX_dbi dbi) {
 }
 
 TEST(ut_nested_drop_abort, all) {
+  const env_files_guard guard({"nested_drop_abort"});
   if (MDBX_GTEST_IS_EXECUTION_TIMEOUT()) {
     GTEST_SKIP() << "SKIPPED by RUNTIME_LIMIT";
     return;

@@ -12,6 +12,7 @@
 ///
 /// \author Леонид Юрьев aka Leonid Yuriev <leo@yuriev.ru> \date 2026
 
+#include "../env-guard.h++"
 #include "mdbx.h++"
 #include <gtest/gtest.h>
 
@@ -47,6 +48,7 @@ static std::string dump_all(mdbx::txn &txn, mdbx::map_handle map) {
 }
 
 TEST(issue_gh0090, erase_literal_binds_to_key_not_bool) {
+  const env_files_guard guard({"issue90.mdbx", "issue90b.mdbx"});
   if (MDBX_GTEST_IS_EXECUTION_TIMEOUT()) {
     GTEST_SKIP() << "SKIPPED by RUNTIME_LIMIT";
     return;
@@ -102,6 +104,7 @@ static void fill_map(mdbx::txn &txn, mdbx::map_handle map) {
 }
 
 TEST(issue_gh0090, erase_c_string_key_and_slice_value) {
+  const env_files_guard guard({"issue90.mdbx", "issue90b.mdbx"});
   if (MDBX_GTEST_IS_EXECUTION_TIMEOUT()) {
     GTEST_SKIP() << "SKIPPED by RUNTIME_LIMIT";
     return;

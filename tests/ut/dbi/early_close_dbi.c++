@@ -12,6 +12,7 @@
 ///
 /// \author Леонид Юрьев aka Leonid Yuriev <leo@yuriev.ru> \date 2015-2026
 
+#include "../env-guard.h++"
 #include "mdbx.h++"
 #include <cstring>
 #include <gtest/gtest.h>
@@ -142,6 +143,7 @@ int doit() {
 }
 
 TEST(ut_early_close_dbi, all) {
+  const env_files_guard guard({"test-early_close_dbi"});
   if (MDBX_GTEST_IS_EXECUTION_TIMEOUT()) {
     GTEST_SKIP() << "SKIPPED by RUNTIME_LIMIT";
     return;

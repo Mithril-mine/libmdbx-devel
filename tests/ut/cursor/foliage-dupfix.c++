@@ -12,6 +12,7 @@
 ///
 /// \author Леонид Юрьев aka Leonid Yuriev <leo@yuriev.ru> \date 2015-2026
 
+#include "../env-guard.h++"
 #include "mdbx.h++"
 #include <gtest/gtest.h>
 
@@ -31,31 +32,28 @@ constexpr uint32_t VALS_PER_KEY = 2000;
 
 /// lexical_dupfix: usual-ключи + DUPSORT + фиксированные значения.
 TEST(ut_foliage_dupfix, lexical_dupfix) {
+  const env_files_guard guard({"test-gap-fld-lex"});
   if (MDBX_GTEST_IS_EXECUTION_TIMEOUT()) {
     GTEST_SKIP() << "SKIPPED by RUNTIME_LIMIT";
     return;
   }
   const mdbx::path testdb = "test-gap-fld-lex";
   mdbx::env::remove(testdb);
-  mdbx::env_managed env(testdb, mdbx::create_parameters(),
-                        mdbx::operate_parameters().set_max_maps(8));
+  mdbx::env_managed env(testdb, mdbx::create_parameters(), mdbx::operate_parameters().set_max_maps(8));
   {
     auto txn = env.start_write();
-    auto map = txn.create_map("lex-dupfix", mdbx::key_mode::usual,
-                              mdbx::value_mode::multi_samelength);
+    auto map = txn.create_map("lex-dupfix", mdbx::key_mode::usual, mdbx::value_mode::multi_samelength);
     for (uint32_t k = 0; k < KEYS; ++k) {
       std::string key = "lexd-" + std::to_string(100000 + k);
       for (uint32_t v = 0; v < VALS_PER_KEY; ++v) {
         uint32_t value = k * VALS_PER_KEY + v; // фиксированные 4 байта
-        txn.put(map, mdbx::slice(key), mdbx::slice(&value, sizeof(value)),
-                mdbx::upsert);
+        txn.put(map, mdbx::slice(key), mdbx::slice(&value, sizeof(value)), mdbx::upsert);
       }
     }
     txn.commit();
   }
   auto txn = env.start_read();
-  auto map = txn.open_map("lex-dupfix", mdbx::key_mode::usual,
-                          mdbx::value_mode::multi_samelength);
+  auto map = txn.open_map("lex-dupfix", mdbx::key_mode::usual, mdbx::value_mode::multi_samelength);
   auto cur = txn.open_cursor(map);
   // inner-cursor: outer find → dupsort_setup(N_TREE) → inner seek
   for (uint32_t k = 0; k < KEYS; ++k) {
@@ -69,8 +67,7 @@ TEST(ut_foliage_dupfix, lexical_dupfix) {
     EXPECT_EQ(n, VALS_PER_KEY);
     // точная пара внутри dupfix-листвы (SET_KEY/GET_BOTH на inner)
     uint32_t target = k * VALS_PER_KEY + 1234;
-    auto found = cur.find_multivalue(mdbx::slice(key),
-                                     mdbx::slice(&target, sizeof(target)), false);
+    auto found = cur.find_multivalue(mdbx::slice(key), mdbx::slice(&target, sizeof(target)), false);
     EXPECT_TRUE(found.done);
     EXPECT_EQ(found.value, mdbx::slice(&target, sizeof(target)));
   }
@@ -83,30 +80,27 @@ TEST(ut_foliage_dupfix, lexical_dupfix) {
 
 /// ordinal_dupfix: INTEGERKEY + DUPSORT + фиксированные значения.
 TEST(ut_foliage_dupfix, ordinal_dupfix) {
+  const env_files_guard guard({"test-gap-fld-ord"});
   if (MDBX_GTEST_IS_EXECUTION_TIMEOUT()) {
     GTEST_SKIP() << "SKIPPED by RUNTIME_LIMIT";
     return;
   }
   const mdbx::path testdb = "test-gap-fld-ord";
   mdbx::env::remove(testdb);
-  mdbx::env_managed env(testdb, mdbx::create_parameters(),
-                        mdbx::operate_parameters().set_max_maps(8));
+  mdbx::env_managed env(testdb, mdbx::create_parameters(), mdbx::operate_parameters().set_max_maps(8));
   {
     auto txn = env.start_write();
-    auto map = txn.create_map("ord-dupfix", mdbx::key_mode::ordinal,
-                              mdbx::value_mode::multi_samelength);
+    auto map = txn.create_map("ord-dupfix", mdbx::key_mode::ordinal, mdbx::value_mode::multi_samelength);
     for (uint32_t k = 0; k < KEYS; ++k) {
       for (uint32_t v = 0; v < VALS_PER_KEY; ++v) {
         uint32_t value = k * VALS_PER_KEY + v;
-        txn.put(map, mdbx::slice(&k, sizeof(k)), mdbx::slice(&value, sizeof(value)),
-                mdbx::upsert);
+        txn.put(map, mdbx::slice(&k, sizeof(k)), mdbx::slice(&value, sizeof(value)), mdbx::upsert);
       }
     }
     txn.commit();
   }
   auto txn = env.start_read();
-  auto map = txn.open_map("ord-dupfix", mdbx::key_mode::ordinal,
-                          mdbx::value_mode::multi_samelength);
+  auto map = txn.open_map("ord-dupfix", mdbx::key_mode::ordinal, mdbx::value_mode::multi_samelength);
   auto cur = txn.open_cursor(map);
   for (uint32_t k = 0; k < KEYS; ++k) {
     mdbx::slice key(&k, sizeof(k));

@@ -34,6 +34,7 @@ Observed with MDBX_DEBUG=1:
         * nested: child commit succeeds, then parent commit asserts.
 */
 
+#include "../env-guard.h++"
 #include "mdbx.h"
 #include <gtest/gtest.h>
 
@@ -110,6 +111,7 @@ static void run_nested(MDBX_env *env) {
 }
 
 TEST(ut_rename_dbi, all) {
+  const env_files_guard guard({"rename_repro"});
   if (MDBX_GTEST_IS_EXECUTION_TIMEOUT()) {
     GTEST_SKIP() << "SKIPPED by RUNTIME_LIMIT";
     return;

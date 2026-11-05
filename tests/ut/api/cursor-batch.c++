@@ -12,6 +12,7 @@
 ///
 /// \author Леонид Юрьев aka Leonid Yuriev <leo@yuriev.ru> \date 2015-2026
 
+#include "../env-guard.h++"
 #include "mdbx.h++"
 #include <gtest/gtest.h>
 
@@ -25,6 +26,7 @@ static std::string to_std_string(const mdbx::slice &s) {
 }
 
 TEST(ut_cursor_batch, get_batch) {
+  const env_files_guard guard({"test-cursor-batch"});
   if (MDBX_GTEST_IS_EXECUTION_TIMEOUT()) {
     GTEST_SKIP() << "SKIPPED by RUNTIME_LIMIT";
     return;
@@ -69,6 +71,7 @@ TEST(ut_cursor_batch, get_batch) {
 }
 
 TEST(ut_cursor_batch, first_rewinds_positioned_cursor) {
+  const env_files_guard guard({"test-cursor-batch"});
   if (MDBX_GTEST_IS_EXECUTION_TIMEOUT()) {
     GTEST_SKIP() << "SKIPPED by RUNTIME_LIMIT";
     return;
@@ -140,6 +143,7 @@ TEST(ut_cursor_batch, first_rewinds_positioned_cursor) {
 }
 
 TEST(ut_cursor_batch, ignore_key_order) {
+  const env_files_guard guard({"test-cursor-batch"});
   if (MDBX_GTEST_IS_EXECUTION_TIMEOUT()) {
     GTEST_SKIP() << "SKIPPED by RUNTIME_LIMIT";
     return;

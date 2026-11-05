@@ -12,6 +12,7 @@
 ///
 /// \author Леонид Юрьев aka Leonid Yuriev <leo@yuriev.ru> \date 2015-2026
 
+#include "../env-guard.h++"
 #include "mdbx.h++"
 #include <gtest/gtest.h>
 
@@ -23,6 +24,7 @@
 /// decl_txn (32%), decl_cursor (47%).
 
 TEST(ut_raii_lifecycles, txn_abort_then_restart) {
+  const env_files_guard guard({"test-gap-cxx-raii", "test-gap-cxx-raii-cur", "test-gap-cxx-raii-move"});
   if (MDBX_GTEST_IS_EXECUTION_TIMEOUT()) {
     GTEST_SKIP() << "SKIPPED by RUNTIME_LIMIT";
     return;
@@ -59,6 +61,7 @@ TEST(ut_raii_lifecycles, txn_abort_then_restart) {
 }
 
 TEST(ut_raii_lifecycles, env_move_and_scope) {
+  const env_files_guard guard({"test-gap-cxx-raii", "test-gap-cxx-raii-cur", "test-gap-cxx-raii-move"});
   if (MDBX_GTEST_IS_EXECUTION_TIMEOUT()) {
     GTEST_SKIP() << "SKIPPED by RUNTIME_LIMIT";
     return;
@@ -89,6 +92,7 @@ TEST(ut_raii_lifecycles, env_move_and_scope) {
 }
 
 TEST(ut_raii_lifecycles, cursor_outlives_txn_bounds) {
+  const env_files_guard guard({"test-gap-cxx-raii", "test-gap-cxx-raii-cur", "test-gap-cxx-raii-move"});
   if (MDBX_GTEST_IS_EXECUTION_TIMEOUT()) {
     GTEST_SKIP() << "SKIPPED by RUNTIME_LIMIT";
     return;

@@ -12,6 +12,7 @@
 ///
 /// \author Леонид Юрьев aka Leonid Yuriev <leo@yuriev.ru> \date 2015-2026
 
+#include "../env-guard.h++"
 #include "mdbx.h"
 #include <gtest/gtest.h>
 
@@ -32,8 +33,8 @@ namespace {
 MDBX_dbi open_main(MDBX_txn *txn) {
   MDBX_dbi dbi;
   int rc = mdbx_dbi_open(txn, "main", MDBX_DB_DEFAULTS, &dbi);
-  EXPECT_EQ(rc, MDBX_SUCCESS) << "dbi_open rc=" << rc << " errno=" << errno
-                              << " strerror=" << mdbx_strerror(rc) << "|errno_str=" << strerror(errno);
+  EXPECT_EQ(rc, MDBX_SUCCESS) << "dbi_open rc=" << rc << " errno=" << errno << " strerror=" << mdbx_strerror(rc)
+                              << "|errno_str=" << strerror(errno);
   return dbi;
 }
 
@@ -84,6 +85,7 @@ static MDBX_dbi dbi_glob;
 
 /// defrag → последующие GC-транзакции: dense-упаковка на ready4reuse.
 TEST(ut_defrag_gc_binding, defrag_then_dense_gc_cycles) {
+  const env_files_guard guard({"test-gap-dgc", "test-gap-dgc2"});
   if (MDBX_GTEST_IS_EXECUTION_TIMEOUT()) {
     GTEST_SKIP() << "SKIPPED by RUNTIME_LIMIT";
     return;
@@ -93,8 +95,7 @@ TEST(ut_defrag_gc_binding, defrag_then_dense_gc_cycles) {
   MDBX_env *env = nullptr;
   ASSERT_EQ(mdbx_env_create(&env), MDBX_SUCCESS);
   ASSERT_EQ(mdbx_env_set_maxdbs(env, 4), MDBX_SUCCESS);
-  ASSERT_EQ(mdbx_env_open(env, testdb.c_str(), MDBX_NOSTICKYTHREADS, 0644),
-            MDBX_SUCCESS);
+  ASSERT_EQ(mdbx_env_open(env, testdb.c_str(), MDBX_NOSTICKYTHREADS, 0644), MDBX_SUCCESS);
 
   // 0. создание таблицы (CREATE единожды)
   {
@@ -112,8 +113,7 @@ TEST(ut_defrag_gc_binding, defrag_then_dense_gc_cycles) {
 #ifndef SKIP_DEFRAG_PROBE
   MDBX_defrag_result_t result;
   memset(&result, 0, sizeof(result));
-  EXPECT_EQ(mdbx_env_defrag(env, 1, 0, 16, 0, 0, 4096, nullptr, nullptr, &result),
-            MDBX_SUCCESS);
+  EXPECT_EQ(mdbx_env_defrag(env, 1, 0, 16, 0, 0, 4096, nullptr, nullptr, &result), MDBX_SUCCESS);
 #endif /* SKIP_DEFRAG_PROBE */
 
   // 3. Последующие GC-нагруженные txn: вставки/удаления поверх
@@ -135,6 +135,7 @@ TEST(ut_defrag_gc_binding, defrag_then_dense_gc_cycles) {
 /// Двойной defrag с промежуточной нагрузкой: defrag_move_cost кэшируется
 /// (defrag_move_cost vs uncached) — повторный проход по окрестностям.
 TEST(ut_defrag_gc_binding, double_defrag_with_load) {
+  const env_files_guard guard({"test-gap-dgc", "test-gap-dgc2"});
   if (MDBX_GTEST_IS_EXECUTION_TIMEOUT()) {
     GTEST_SKIP() << "SKIPPED by RUNTIME_LIMIT";
     return;
@@ -144,8 +145,7 @@ TEST(ut_defrag_gc_binding, double_defrag_with_load) {
   MDBX_env *env = nullptr;
   ASSERT_EQ(mdbx_env_create(&env), MDBX_SUCCESS);
   ASSERT_EQ(mdbx_env_set_maxdbs(env, 4), MDBX_SUCCESS);
-  ASSERT_EQ(mdbx_env_open(env, testdb.c_str(), MDBX_NOSTICKYTHREADS, 0644),
-            MDBX_SUCCESS);
+  ASSERT_EQ(mdbx_env_open(env, testdb.c_str(), MDBX_NOSTICKYTHREADS, 0644), MDBX_SUCCESS);
   // создание 'main' (CREATE единожды; далее dbi_open с DB_DEFAULTS)
   {
     MDBX_txn *txn;
@@ -159,8 +159,7 @@ TEST(ut_defrag_gc_binding, double_defrag_with_load) {
 
   MDBX_defrag_result_t r1;
   memset(&r1, 0, sizeof(r1));
-  EXPECT_EQ(mdbx_env_defrag(env, 0, 0, 0, 0, 0, 2048, nullptr, nullptr, &r1),
-            MDBX_SUCCESS);
+  EXPECT_EQ(mdbx_env_defrag(env, 0, 0, 0, 0, 0, 2048, nullptr, nullptr, &r1), MDBX_SUCCESS);
 
   // нагрузка между defrag'ами: страницы в окрестностях moved-спанов
   fill(env, 200000, 1000, 170);
@@ -168,8 +167,7 @@ TEST(ut_defrag_gc_binding, double_defrag_with_load) {
 
   MDBX_defrag_result_t r2;
   memset(&r2, 0, sizeof(r2));
-  EXPECT_EQ(mdbx_env_defrag(env, 0, 0, 0, 0, 0, 2048, nullptr, nullptr, &r2),
-            MDBX_SUCCESS);
+  EXPECT_EQ(mdbx_env_defrag(env, 0, 0, 0, 0, 0, 2048, nullptr, nullptr, &r2), MDBX_SUCCESS);
   // второй проход: страницы_whole не уменьшаются некорректно
   EXPECT_GT(r2.pages_whole, 0u);
 

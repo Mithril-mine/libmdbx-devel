@@ -22,6 +22,7 @@
  *
  * Regression: after the failed second open, a forked child probing with
  * MDBX_EXCLUSIVE|MDBX_RDONLY must still get MDBX_BUSY (locks intact). */
+#include "../env-guard.h++"
 #include "mdbx.h"
 #include <gtest/gtest.h>
 
@@ -60,6 +61,7 @@ static void mkdb(const char *path) {
 }
 
 TEST(issue_gh0059, failed_second_open_must_not_drop_first_handle_locks) {
+  const env_files_guard guard({"issue_gh59"});
   if (MDBX_GTEST_IS_EXECUTION_TIMEOUT()) {
     GTEST_SKIP() << "SKIPPED by RUNTIME_LIMIT";
     return;

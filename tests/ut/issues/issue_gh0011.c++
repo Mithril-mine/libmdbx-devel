@@ -15,6 +15,7 @@
 /* transaction-lifecycle stress: multi-level nested write txns with
  * mixed commit/abort at each level, plus RO reset/renew/park/unpark cycles.
  * Non-writemap so nested txns are allowed. */
+#include "../env-guard.h++"
 #include "mdbx.h++"
 #include <chrono>
 #include <cstdio>
@@ -58,6 +59,7 @@ static void nest(mdbx::txn &parent, int depth, char *vbuf) {
 }
 
 TEST(issue_gh0011, all) {
+  const env_files_guard guard({"issue11"});
   if (MDBX_GTEST_IS_EXECUTION_TIMEOUT()) {
     GTEST_SKIP() << "SKIPPED by RUNTIME_LIMIT";
     return;

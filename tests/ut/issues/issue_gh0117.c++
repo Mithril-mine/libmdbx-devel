@@ -12,6 +12,7 @@
 ///
 /// \author Леонид Юрьев aka Leonid Yuriev <leo@yuriev.ru> \date 2026
 
+#include "../env-guard.h++"
 #include "mdbx.h"
 #include <gtest/gtest.h>
 
@@ -33,6 +34,7 @@
 //    uninitialized trailing byte.
 
 TEST(issue_gh0117, writemap_dirty_space_is_not_doubled) {
+  const env_files_guard guard({"issue117.mdbx"});
   if (MDBX_GTEST_IS_EXECUTION_TIMEOUT()) {
     GTEST_SKIP() << "SKIPPED by RUNTIME_LIMIT";
     return;
@@ -85,6 +87,7 @@ TEST(issue_gh0117, writemap_dirty_space_is_not_doubled) {
 }
 
 TEST(issue_gh0117, ratio2digits_zero_precision_has_no_stray_byte) {
+  const env_files_guard guard({"issue117.mdbx"});
   if (MDBX_GTEST_IS_EXECUTION_TIMEOUT()) {
     GTEST_SKIP() << "SKIPPED by RUNTIME_LIMIT";
     return;

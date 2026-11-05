@@ -12,6 +12,7 @@
 ///
 /// \author Леонид Юрьев aka Leonid Yuriev <leo@yuriev.ru> \date 2026
 
+#include "../env-guard.h++"
 #include "mdbx.h++"
 #include <gtest/gtest.h>
 
@@ -43,6 +44,7 @@ static void write_u16_le(uint8_t *p, uint16_t v) {
 }
 
 TEST(issue_gh0057, node_offset_below_upper_rejected) {
+  const env_files_guard guard({"issue57.mdbx"});
   if (MDBX_GTEST_IS_EXECUTION_TIMEOUT()) {
     GTEST_SKIP() << "SKIPPED by RUNTIME_LIMIT";
     return;

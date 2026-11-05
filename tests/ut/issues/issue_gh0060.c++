@@ -20,6 +20,7 @@
  *     close()/abort() from implicitly-noexcept context, so an error there
  *     (e.g. MDBX_THREAD_MISMATCH from mdbx_txn_abort() on a foreign thread)
  *     ended the process with std::terminate instead of being recoverable. */
+#include "../env-guard.h++"
 #include "mdbx.h++"
 #include <cstdio>
 #include <gtest/gtest.h>
@@ -34,6 +35,7 @@
 #include <thread>
 
 TEST(issue_gh0060, dtor_on_foreign_thread_must_not_terminate) {
+  const env_files_guard guard({"issue60.mdbx", "issue60b.mdbx"});
   if (MDBX_GTEST_IS_EXECUTION_TIMEOUT()) {
     GTEST_SKIP() << "SKIPPED by RUNTIME_LIMIT";
     return;
@@ -65,6 +67,7 @@ TEST(issue_gh0060, dtor_on_foreign_thread_must_not_terminate) {
 }
 
 TEST(issue_gh0060, close_busy_keeps_handle_alive) {
+  const env_files_guard guard({"issue60.mdbx", "issue60b.mdbx"});
   if (MDBX_GTEST_IS_EXECUTION_TIMEOUT()) {
     GTEST_SKIP() << "SKIPPED by RUNTIME_LIMIT";
     return;
@@ -100,10 +103,12 @@ TEST(issue_gh0060, close_busy_keeps_handle_alive) {
 #else /* !(optional available) */
 
 TEST(issue_gh0060, dtor_on_foreign_thread_must_not_terminate) {
+  const env_files_guard guard({"issue60.mdbx", "issue60b.mdbx"});
   GTEST_SKIP() << "requires <optional> (C++17), disabled since the requested standard is older";
 }
 
 TEST(issue_gh0060, close_busy_keeps_handle_alive) {
+  const env_files_guard guard({"issue60.mdbx", "issue60b.mdbx"});
   GTEST_SKIP() << "requires <optional> (C++17), disabled since the requested standard is older";
 }
 

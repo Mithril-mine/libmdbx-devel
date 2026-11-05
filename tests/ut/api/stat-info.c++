@@ -12,6 +12,7 @@
 ///
 /// \author Леонид Юрьев aka Leonid Yuriev <leo@yuriev.ru> \date 2015-2026
 
+#include "../env-guard.h++"
 #include "mdbx.h++"
 #include <gtest/gtest.h>
 
@@ -20,6 +21,7 @@
 #include <string>
 
 TEST(ut_stat_info, sysraminfo) {
+  const env_files_guard guard({"test-stat-info"});
   if (MDBX_GTEST_IS_EXECUTION_TIMEOUT()) {
     GTEST_SKIP() << "SKIPPED by RUNTIME_LIMIT";
     return;
@@ -33,6 +35,7 @@ TEST(ut_stat_info, sysraminfo) {
 }
 
 TEST(ut_stat_info, ratio_and_readahead) {
+  const env_files_guard guard({"test-stat-info"});
   if (MDBX_GTEST_IS_EXECUTION_TIMEOUT()) {
     GTEST_SKIP() << "SKIPPED by RUNTIME_LIMIT";
     return;
@@ -46,6 +49,7 @@ TEST(ut_stat_info, ratio_and_readahead) {
 }
 
 TEST(ut_stat_info, preopen_snapinfo) {
+  const env_files_guard guard({"test-stat-info"});
   if (MDBX_GTEST_IS_EXECUTION_TIMEOUT()) {
     GTEST_SKIP() << "SKIPPED by RUNTIME_LIMIT";
     return;
@@ -68,6 +72,7 @@ TEST(ut_stat_info, preopen_snapinfo) {
 }
 
 TEST(ut_stat_info, gc_info) {
+  const env_files_guard guard({"test-stat-info"});
   if (MDBX_GTEST_IS_EXECUTION_TIMEOUT()) {
     GTEST_SKIP() << "SKIPPED by RUNTIME_LIMIT";
     return;
@@ -129,6 +134,7 @@ TEST(ut_stat_info, gc_info) {
   mdbx::env::remove(testdb);
 }
 TEST(ut_stat_info, debug_and_threads) {
+  const env_files_guard guard({"test-stat-info"});
   if (MDBX_GTEST_IS_EXECUTION_TIMEOUT()) {
     GTEST_SKIP() << "SKIPPED by RUNTIME_LIMIT";
     return;

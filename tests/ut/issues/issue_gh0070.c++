@@ -12,6 +12,7 @@
 ///
 /// \author Леонид Юрьев aka Leonid Yuriev <leo@yuriev.ru> \date 2026
 
+#include "../env-guard.h++"
 #include "mdbx.h++"
 #include "tool_runner.h"
 #include <gtest/gtest.h>
@@ -77,6 +78,7 @@ static int run_tool(const std::vector<std::string> &args, const char *stdin_file
 }
 
 TEST(issue_gh0070, truncated_dump_is_rejected) {
+  const env_files_guard guard({"issue70.mdbx", "issue70b.mdbx"});
   if (MDBX_GTEST_IS_EXECUTION_TIMEOUT()) {
     GTEST_SKIP() << "SKIPPED by RUNTIME_LIMIT";
     return;
@@ -128,6 +130,7 @@ TEST(issue_gh0070, truncated_dump_is_rejected) {
 }
 
 TEST(issue_gh0070, dump_reports_write_errors) {
+  const env_files_guard guard({"issue70.mdbx", "issue70b.mdbx"});
   if (MDBX_GTEST_IS_EXECUTION_TIMEOUT()) {
     GTEST_SKIP() << "SKIPPED by RUNTIME_LIMIT";
     return;

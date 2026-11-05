@@ -12,6 +12,7 @@
 ///
 /// \author Леонид Юрьев aka Leonid Yuriev <leo@yuriev.ru> \date 2026
 
+#include "../env-guard.h++"
 #include "mdbx.h++"
 #include <gtest/gtest.h>
 
@@ -163,6 +164,7 @@ static int reopen_with_validation(const std::string &testdb) {
 }
 
 TEST(issue_gh0063, main_tree_height_rejected) {
+  const env_files_guard guard({"issue63main.mdbx", "issue63gc.mdbx"});
   if (MDBX_GTEST_IS_EXECUTION_TIMEOUT()) {
     GTEST_SKIP() << "SKIPPED by RUNTIME_LIMIT";
     return;
@@ -178,6 +180,7 @@ TEST(issue_gh0063, main_tree_height_rejected) {
 }
 
 TEST(issue_gh0063, gc_tree_height_rejected) {
+  const env_files_guard guard({"issue63main.mdbx", "issue63gc.mdbx"});
   if (MDBX_GTEST_IS_EXECUTION_TIMEOUT()) {
     GTEST_SKIP() << "SKIPPED by RUNTIME_LIMIT";
     return;

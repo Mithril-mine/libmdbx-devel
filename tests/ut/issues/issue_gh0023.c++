@@ -12,6 +12,7 @@
 ///
 /// \author Леонид Юрьев aka Leonid Yuriev <leo@yuriev.ru> \date 2026
 
+#include "../env-guard.h++"
 #include "mdbx.h++"
 #include <cstdio>
 #include <gtest/gtest.h>
@@ -19,6 +20,7 @@
 #include "../test-env.h"
 
 TEST(issue_gh0023, all) {
+  const env_files_guard guard({"issue_gh0023"});
   if (MDBX_GTEST_IS_EXECUTION_TIMEOUT()) {
     GTEST_SKIP() << "SKIPPED by RUNTIME_LIMIT";
     return;
