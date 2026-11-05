@@ -78,6 +78,7 @@ Cutting-edge release with new core features and internal refactoring.
     - An arithmetic overflow miscomputed the maximum database size on 32-bit builds with large RAM.
     - The `MDBX_TXN_TRY` flag leaked into the transaction state flags.
     - A forked child treated a failed unlock of an inherited inter-process lock as fatal only at certain log levels; the failure is now always tolerated ([#111](https://github.com/Mithril-mine/libmdbx-devel/issues/111)).
+    - `mdbx_txn_park()`, and `mdbx_env_copy()` with `MDBX_CP_THROTTLE_MVCC`, crashed on a database opened in without-lck mode (e.g. read-only files) ([#316](https://github.com/Mithril-mine/libmdbx-devel/issues/316)).
 
  - Wrong results and API behavior:
     - On Linux `mdbx_get_sysraminfo()` ignored `sysinfo.mem_unit`, so a 32-bit process on a host with 4 GiB of RAM or more got a far too small total RAM (which feeds the default dirty-page limit and related sizing), the `MemAvailable` parsing could wrap for such processes, and its `sscanf()` call wrote the unit token into the very buffer being parsed ([#339](https://github.com/Mithril-mine/libmdbx-devel/issues/339)).
