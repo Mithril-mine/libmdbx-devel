@@ -169,7 +169,9 @@ static int dump_tbl(MDBX_txn *txn, MDBX_dbi dbi, char *name) {
         break;
     }
   }
-  printf("DATA=END\n");
+  /* Without the trailer `mdbx_load` reports a truncated dump; rescue mode closes a damaged table to go on. */
+  if (rc == MDBX_NOTFOUND || (rescue && rc != MDBX_EINTR))
+    printf("DATA=END\n");
   if (rc == MDBX_NOTFOUND)
     rc = MDBX_SUCCESS;
   if (unlikely(rc != MDBX_SUCCESS))
