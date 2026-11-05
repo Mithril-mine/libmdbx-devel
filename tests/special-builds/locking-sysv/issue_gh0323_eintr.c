@@ -32,13 +32,16 @@
 
 #include <pthread.h>
 #include <signal.h>
+#include <stdatomic.h>
 #include <stdio.h>
 #include <string.h>
 #include <unistd.h>
 
 static const char db_path[] = "gh0323-eintr.mdbx";
 static MDBX_env *env;
-static volatile sig_atomic_t signals_handled, waiter_started;
+/* main() reads the signal counter only after pthread_join() */
+static volatile sig_atomic_t signals_handled;
+static atomic_int waiter_started;
 
 static void on_signal(int sig) {
   (void)sig;
@@ -47,7 +50,7 @@ static void on_signal(int sig) {
 
 static void *waiter(void *arg) {
   MDBX_txn *txn = NULL;
-  waiter_started = 1;
+  atomic_store(&waiter_started, 1);
   /* blocks on the write lock while main() holds a write transaction */
   int rc = mdbx_txn_begin(env, NULL, MDBX_TXN_READWRITE, &txn);
   if (rc == MDBX_SUCCESS)
@@ -99,7 +102,7 @@ int main(void) {
   }
   /* signal the waiter repeatedly once it is about to block, so that at least
    * one signal arrives while it waits for the write lock */
-  for (int i = 0; !waiter_started && i < 10000; ++i)
+  for (int i = 0; !atomic_load(&waiter_started) && i < 10000; ++i)
     usleep(1000);
   for (int i = 0; i < 10; ++i) {
     usleep(50 * 1000);
