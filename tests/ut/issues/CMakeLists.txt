@@ -97,6 +97,7 @@ else()
   add_issue_test(gh0171 SOURCE "issue_gh0171.c++")
   add_issue_test(gh0309 SOURCE "issue_gh0309.c++")
   add_issue_test(gh0310 SOURCE "issue_gh0310.c++")
+  add_issue_test(gh0324 SOURCE "issue_gh0324.c++")
   add_issue_test(gh0339 SOURCE "issue_gh0339.c++")
 endif()
 
