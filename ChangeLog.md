@@ -133,6 +133,7 @@ Cutting-edge release with new core features and internal refactoring.
     - Converting environment flags to `env::operate_options` silently dropped `MDBX_NOSTICKYTHREADS` when `MDBX_EXCLUSIVE` was also set, so code that stored its configuration as C flags got sticky threads and read transactions failed with `MDBX_TXN_OVERLAPPING`; the flag is now taken as it is ([#318](https://github.com/Mithril-mine/libmdbx-devel/issues/318)).
 
  - Performance:
+    - Ending a read-only transaction made a `getpid()` system call on Linux (regression since v0.14.2), making short read-only transactions about 8 times slower; the cached process id is now enough when the reader table cannot be inherited by a child process ([#348](https://github.com/Mithril-mine/libmdbx-devel/issues/348)).
     - Empty durable-mode commits still flushed the device, adding several milliseconds to every no-op commit ([#64](https://github.com/Mithril-mine/libmdbx-devel/issues/64)).
     - Every no-sync commit in write-map mode on Windows flushed the whole mapping ([#65](https://github.com/Mithril-mine/libmdbx-devel/issues/65)).
 
