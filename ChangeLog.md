@@ -100,6 +100,7 @@ Cutting-edge release with new core features and internal refactoring.
       database, could later hang, abort, or fail `mdbx_env_close()` with `MDBX_BUSY`; `fork()` now waits for such
       operations, so no libmdbx callback may call `fork()` or wait for a thread that calls it ([#329](https://github.com/Mithril-mine/libmdbx-devel/issues/329)).
     - A child process forked while another thread was inside `mdbx_env_open()`/`mdbx_env_close()` or writing a log message could hang forever in libmdbx, including at exit; `fork()` now waits for these to finish, so it must not be called from a logger or panic callback ([#324](https://github.com/Mithril-mine/libmdbx-devel/issues/324)).
+    - `mdbx_env_chk()` corrupted the heap or crashed when a callback stopped the check with an error from `scope_push` or `stage_begin`, as `mdbx.h` allows ([#314](https://github.com/Mithril-mine/libmdbx-devel/issues/314)).
 
  - Wrong results and API behavior:
     - `MDBX_TO_PAIR_EQUAL`/`MDBX_TO_EXACT_KEY_VALUE_EQUAL` returned the key's first multi-value instead of the positioned
