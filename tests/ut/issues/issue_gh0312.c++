@@ -93,7 +93,7 @@ std::string read_text(const std::string &path) {
 }
 
 /* A plain-text dump section; an empty `table` writes no `database=` line. */
-std::string section(const char *table, std::initializer_list<const char *> keys, const char *extra = "") {
+std::string dump_section(const char *table, std::initializer_list<const char *> keys, const char *extra = "") {
   std::string text = "VERSION=3\nformat=print\n";
   if (table)
     text += std::string("database=") + table + "\n";
@@ -179,9 +179,9 @@ TEST(issue_gh0312, load_s_with_purge_keeps_other_tables) {
   const std::string db = "issue312-s.mdbx", ab = "issue312-s-ab.txt", plain = "issue312-s-plain.txt",
                     named = "issue312-s-named.txt";
   const files_remover cleanup{db, ab, plain, named};
-  ASSERT_TRUE(write_text(ab, section("A", {"x"}) + section("B", {"y"})));
-  ASSERT_TRUE(write_text(plain, section(nullptr, {"k1"})));
-  ASSERT_TRUE(write_text(named, section("Other", {"k2", "k3"})));
+  ASSERT_TRUE(write_text(ab, dump_section("A", {"x"}) + dump_section("B", {"y"})));
+  ASSERT_TRUE(write_text(plain, dump_section(nullptr, {"k1"})));
+  ASSERT_TRUE(write_text(named, dump_section("Other", {"k2", "k3"})));
   ASSERT_EQ(0, load({}, ab, db));
 
   /* item 1: `-p -s T` must purge T only, not the main table that holds A and B */
@@ -207,8 +207,8 @@ TEST(issue_gh0312, load_n_skips_existing_keys_and_goes_on) {
   }
   const std::string db = "issue312-n.mdbx", pre = "issue312-n-pre.txt", all = "issue312-n-all.txt";
   const files_remover cleanup{db, pre, all};
-  ASSERT_TRUE(write_text(pre, section(nullptr, {"b"})));
-  ASSERT_TRUE(write_text(all, section(nullptr, {"a", "b", "c", "d", "e"})));
+  ASSERT_TRUE(write_text(pre, dump_section(nullptr, {"b"})));
+  ASSERT_TRUE(write_text(all, dump_section(nullptr, {"a", "b", "c", "d", "e"})));
   ASSERT_EQ(0, load({}, pre, db));
   EXPECT_EQ(0, load({"-N"}, all, db));
   EXPECT_EQ(5, entries(db, nullptr)) << "`mdbx_load -N` must skip the existing key and load the rest";
@@ -224,7 +224,7 @@ TEST(issue_gh0312, load_r_skips_a_bad_record_and_goes_on) {
   /* with 4 KiB pages a 3000-byte key is too long, so `-r` skips it with MDBX_BAD_VALSIZE; `-G` sets the page size
    * on every host (`db_pagesize=` alone is applied only together with `geometry=` or `mapsize=`) */
   const std::string long_key(3000, 'k');
-  ASSERT_TRUE(write_text(dump, section(nullptr, {"a", long_key.c_str(), "c"})));
+  ASSERT_TRUE(write_text(dump, dump_section(nullptr, {"a", long_key.c_str(), "c"})));
   EXPECT_EQ(0, load({"-r", "-G", "-1:-1:-1:-1:4096"}, dump, db));
   EXPECT_EQ(2, entries(db, nullptr)) << "`mdbx_load -r` must skip the bad record and load the rest";
 }
@@ -236,8 +236,8 @@ TEST(issue_gh0312, load_p_restores_the_sequence) {
   }
   const std::string db = "issue312-p.mdbx", first = "issue312-p-first.txt", second = "issue312-p-second.txt";
   const files_remover cleanup{db, first, second};
-  ASSERT_TRUE(write_text(first, section("S", {"p", "q"})));
-  ASSERT_TRUE(write_text(second, section("S", {"x", "y"}, "sequence=100\n")));
+  ASSERT_TRUE(write_text(first, dump_section("S", {"p", "q"})));
+  ASSERT_TRUE(write_text(second, dump_section("S", {"x", "y"}, "sequence=100\n")));
   ASSERT_EQ(0, load({}, first, db));
   EXPECT_EQ(0, load({"-p"}, second, db));
   EXPECT_EQ(2, entries(db, "S"));
@@ -258,7 +258,7 @@ TEST(issue_gh0312, load_b_accepts_an_unchanged_batch) {
   }
   const std::string db = "issue312-b.mdbx", dump = "issue312-b.txt";
   const files_remover cleanup{db, dump};
-  ASSERT_TRUE(write_text(dump, section(nullptr, {"a", "b"})));
+  ASSERT_TRUE(write_text(dump, dump_section(nullptr, {"a", "b"})));
   ASSERT_EQ(0, load({}, dump, db));
   EXPECT_EQ(0, load({"-b", "1"}, dump, db)) << "a batch that changes nothing is not an error";
   EXPECT_EQ(2, entries(db, nullptr));
@@ -342,7 +342,7 @@ TEST(issue_gh0312, stat_f_accepts_an_empty_gc) {
   }
   const std::string db = "issue312-f.mdbx", dump = "issue312-f.txt", out = "issue312-f.out";
   const files_remover cleanup{db, dump, out};
-  ASSERT_TRUE(write_text(dump, section(nullptr, {"a"})));
+  ASSERT_TRUE(write_text(dump, dump_section(nullptr, {"a"})));
   ASSERT_EQ(0, load({}, dump, db));
   EXPECT_EQ(0, tool_runner::run({stat_tool, "-n", "-f", db}, nullptr, out.c_str()));
   EXPECT_NE(std::string::npos, read_text(out).find("Total")) << "the page usage must be printed";
