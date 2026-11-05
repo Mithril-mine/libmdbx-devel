@@ -363,7 +363,7 @@ __hot MDBX_cache_result_t mdbx_cache_get(const MDBX_txn *txn, MDBX_dbi dbi, cons
 
       if (likely(safe64_reset_compare((mdbx_atomic_uint64_t *)&entry->last_confirmed_txnid, snap))) {
         entry->trunk_txnid = 0;
-        osal_compiler_barrier();
+        osal_fence_producer();
         entry->offset = local.offset;
         entry->length = local.length;
         entry->trunk_txnid = local.trunk_txnid;

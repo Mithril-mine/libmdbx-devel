@@ -27,6 +27,7 @@ Cutting-edge release with new core features and internal refactoring.
 
 ### Backward compatibility breaks:
 
+ - The `MDBX_CPU_WRITEBACK_INCOHERENT` build option was removed: without C11 atomics a weakly-ordered CPU is now always assumed, with the full hardware fence or the cheaper compiler/platform primitives where available ([#361](https://github.com/Mithril-mine/libmdbx-devel/issues/361)).
  - The `MDBX_ENABLE_REFUND` build option was removed; the zero-cost online auto-compactification it controlled is now always enabled ([#193](https://github.com/Mithril-mine/libmdbx-devel/issues/193)).
  - The C++ `mdbx::env::get_preopen_snapinfo()` overloads without an explicit mode argument were removed; the remaining overloads take `mode = MDBX_PREOPEN_PROPERLY` by default, so ordinary calls keep working, but code relying on the old overload set no longer compiles ([#182](https://github.com/Mithril-mine/libmdbx-devel/issues/182)).
  - The C++ `mdbx::env::mode`/`mdbx::env::durability` enums are now scoped (`enum class`); the former `env::`-level enumerator names are kept as deprecated `[[deprecated(...)]]` aliases, so existing code keeps compiling while new code should use the scoped form (e.g. `mdbx::env::mode::nested_transactions` instead of `mdbx::env::nested_transactions`).
@@ -66,6 +67,7 @@ Cutting-edge release with new core features and internal refactoring.
 
  - Crashes, hangs and undefined behavior in the core engine:
     - A racing writer could recycle the head meta page between the troika snapshot and the reader-slot publication in `ro_seize()`, so the slot transiently advertised an old transaction id paired with a newer meta's page counters and tripped the checking-build assertion in `mvcc_snapshot_oldest_rw()` for every writer sharing the lock file; the values now are re-checked against the meta before publication ([#347](https://github.com/Mithril-mine/libmdbx-devel/issues/347)).
+    - On builds without C11 atomics, the emulated atomic loads applied the hardware fence before the read and the emulated stores after the write, so the acquire/release ordering of the publication pattern was silently lost on weakly-ordered CPUs (ARM and friends); the fences are now applied after loads and before stores ([#361](https://github.com/Mithril-mine/libmdbx-devel/issues/361)).
     - `mdbx_replace()`/`mdbx_replace_ex()` and the C++ `txn::replace_reserve()` used with `MDBX_RESERVE` could crash the process or silently lose the new value; `MDBX_RESERVE` on a table with duplicates is now rejected upfront, as `mdbx_put()` already did ([#166](https://github.com/Mithril-mine/libmdbx-devel/issues/166)).
     - `mdbx_replace_ex()` with overlapping buffers could hang or crash the next operation on the same table ([#56](https://github.com/Mithril-mine/libmdbx-devel/issues/56)).
     - `mdbx_env_copy()` with `MDBX_CP_COMPACT` hung forever when the dedicated writer thread hit a write error (e.g. a closed destination pipe or a full disk); the error is now reported instead ([#171](https://github.com/Mithril-mine/libmdbx-devel/issues/171)).
