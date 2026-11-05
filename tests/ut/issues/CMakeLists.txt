@@ -131,4 +131,5 @@ if(MDBX_BUILD_TOOLS)
     PROPERTIES
       ENVIRONMENT
         "MDBX_TOOL_DUMP=$<TARGET_FILE:mdbx_dump>;MDBX_TOOL_LOAD=$<TARGET_FILE:mdbx_load>;MDBX_TOOL_STAT=$<TARGET_FILE:mdbx_stat>")
+  add_issue_test(gh0312 SOURCE "issue_gh0312.c++")
 endif()
