@@ -65,6 +65,7 @@ Cutting-edge release with new core features and internal refactoring.
     - `mdbx_cursor_scroll()` and `mdbx_cursor_distance()` indexed the cursor stack out of bounds when `deepness` was above `INT_MAX` ([#85](https://github.com/Mithril-mine/libmdbx-devel/issues/85)).
 
  - Crashes, hangs and undefined behavior in the core engine:
+    - A racing writer could recycle the head meta page between the troika snapshot and the reader-slot publication in `ro_seize()`, so the slot transiently advertised an old transaction id paired with a newer meta's page counters and tripped the checking-build assertion in `mvcc_snapshot_oldest_rw()` for every writer sharing the lock file; the values now are re-checked against the meta before publication ([#347](https://github.com/Mithril-mine/libmdbx-devel/issues/347)).
     - `mdbx_replace()`/`mdbx_replace_ex()` and the C++ `txn::replace_reserve()` used with `MDBX_RESERVE` could crash the process or silently lose the new value; `MDBX_RESERVE` on a table with duplicates is now rejected upfront, as `mdbx_put()` already did ([#166](https://github.com/Mithril-mine/libmdbx-devel/issues/166)).
     - `mdbx_replace_ex()` with overlapping buffers could hang or crash the next operation on the same table ([#56](https://github.com/Mithril-mine/libmdbx-devel/issues/56)).
     - `mdbx_env_copy()` with `MDBX_CP_COMPACT` hung forever when the dedicated writer thread hit a write error (e.g. a closed destination pipe or a full disk); the error is now reported instead ([#171](https://github.com/Mithril-mine/libmdbx-devel/issues/171)).

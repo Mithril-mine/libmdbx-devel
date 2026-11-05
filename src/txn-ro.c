@@ -148,9 +148,19 @@ static int ro_seize(MDBX_txn *txn) {
     reader_slot_t *const slot = txn->ro.slot;
     if (likely(slot != nullptr)) {
       safe64_reset(&slot->txnid, true);
-      atomic_store32(&slot->snapshot_pages_used, head.ptr_v->geometry.first_unallocated, mo_Relaxed);
-      atomic_store64(&slot->snapshot_pages_retired, unaligned_peek_u64_volatile(4, head.ptr_v->pages_retired),
-                     mo_Relaxed);
+      const pgno_t snap_pages_used = head.ptr_v->geometry.first_unallocated;
+      const uint64_t snap_pages_retired = unaligned_peek_u64_volatile(4, head.ptr_v->pages_retired);
+      /* the loads above must complete before the txnid re-check below, on weakly-ordered CPUs too */
+      osal_memory_fence(mo_AcquireRelease, false);
+      if (unlikely(meta_txnid(head.ptr_v) != head.txnid)) {
+        /* the head meta-page changed (recycled or being rewritten) since the troika was taken,
+         * so the values read above may not belong to head.txnid */
+        troika = meta_tap(env);
+        timestamp = 0;
+        continue;
+      }
+      atomic_store32(&slot->snapshot_pages_used, snap_pages_used, mo_Relaxed);
+      atomic_store64(&slot->snapshot_pages_retired, snap_pages_retired, mo_Relaxed);
       safe64_write(&slot->txnid, head.txnid);
       eASSERT1(env, ro_slot_pid(slot) == osal_getpid());
       eASSERT1(env, ro_slot_tid(slot) == ((env->flags & MDBX_NOSTICKYTHREADS) ? 0 : osal_thread_self()));
