@@ -479,19 +479,6 @@
 
 //------------------------------------------------------------------------------
 
-/** Indicates that the CPU requires explicit cache flush after write-back
- * to the memory-mapped region; zero for the architectures with coherent
- * caches. */
-#ifndef MDBX_CPU_WRITEBACK_INCOHERENT
-#if defined(__ia32__) || defined(__e2k__) || defined(__hppa) || defined(__hppa__) || defined(DOXYGEN)
-#define MDBX_CPU_WRITEBACK_INCOHERENT 0
-#else
-#define MDBX_CPU_WRITEBACK_INCOHERENT 1
-#endif
-#elif !(MDBX_CPU_WRITEBACK_INCOHERENT == 0 || MDBX_CPU_WRITEBACK_INCOHERENT == 1)
-#error MDBX_CPU_WRITEBACK_INCOHERENT must be defined as 0 or 1
-#endif /* MDBX_CPU_WRITEBACK_INCOHERENT */
-
 /** Indicates that writes to the memory-mapped region are not coherent with
  * the file, i.e. an explicit sync is required; known only on OpenBSD. */
 #ifndef MDBX_MMAP_INCOHERENT_FILE_WRITE

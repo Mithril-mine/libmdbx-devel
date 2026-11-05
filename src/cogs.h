@@ -495,13 +495,6 @@ MDBX_INTERNAL void munlock_all(const MDBX_env *env);
 
 /*----------------------------------------------------------------------------*/
 /* Cache coherence and mmap invalidation */
-#ifndef MDBX_CPU_WRITEBACK_INCOHERENT
-#error "The MDBX_CPU_WRITEBACK_INCOHERENT must be defined before"
-#elif MDBX_CPU_WRITEBACK_INCOHERENT
-#define osal_flush_incoherent_cpu_writeback() osal_memory_barrier()
-#else
-#define osal_flush_incoherent_cpu_writeback() osal_compiler_barrier()
-#endif /* MDBX_CPU_WRITEBACK_INCOHERENT */
 
 MDBX_MAYBE_UNUSED static inline void osal_flush_incoherent_mmap(const void *addr, size_t nbytes,
                                                                 const intptr_t pagesize) {

@@ -846,7 +846,7 @@ __must_check_result static int env_info_snap(const MDBX_env *env, const MDBX_txn
   out->mi_self_latter_reader_txnid = self_latter_reader_txnid;
   out->mi_latter_reader_txnid = overall_latter_reader_txnid;
 
-  osal_compiler_barrier();
+  osal_fence_producer();
   return MDBX_SUCCESS;
 }
 

@@ -176,12 +176,12 @@ int mdbx_dbi_close(MDBX_env *env, MDBX_dbi dbi) {
      * допускает, то точно не будет ожидать скрытых действий внутри
      * транзакции, и поэтому этот путь потенциально более опасен. */
     const MDBX_txn *const hazard = env->txn;
-    osal_compiler_barrier();
+    osal_fence_consumer();
     if ((dbi_state(env->basal_txn, dbi) & (DBI_LINDO | DBI_DIRTY | DBI_CREAT)) > DBI_LINDO) {
       rc = MDBX_DANGLING_DBI;
       goto bailout;
     }
-    osal_memory_barrier();
+    osal_fence_consumer();
     if (unlikely(hazard != env->txn))
       continue;
     if (hazard != env->basal_txn && hazard && (hazard->flags & MDBX_TXN_FINISHED) == 0 &&
@@ -190,7 +190,7 @@ int mdbx_dbi_close(MDBX_env *env, MDBX_dbi dbi) {
       rc = MDBX_DANGLING_DBI;
       goto bailout;
     }
-    osal_compiler_barrier();
+    osal_fence_consumer();
     if (likely(hazard == env->txn))
       break;
   }

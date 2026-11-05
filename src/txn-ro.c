@@ -466,7 +466,7 @@ int txn_ro_clone(const MDBX_txn *const origin, MDBX_txn *const clone) {
     err = MDBX_SUCCESS;
     if (clone->flags & MDBX_TXN_PARKED) {
       /* a parked origin may have been ousted meanwhile, then its snapshot may be recycled already */
-      osal_memory_barrier();
+      osal_fence_consumer();
       if (likely(origin->ro.slot) && unlikely(safe64_read(&origin->ro.slot->txnid) != clone->txnid))
         err = MDBX_OUSTED;
     } else if (likely(clone->ro.slot) && unlikely(clone->txnid != atomic_load64(&clone->ro.slot->txnid, mo_Relaxed)))
