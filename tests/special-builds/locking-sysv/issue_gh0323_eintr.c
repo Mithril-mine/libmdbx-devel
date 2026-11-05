@@ -93,8 +93,9 @@ int main(void) {
 
   int waiter_rc = -1;
   pthread_t thread;
-  if (pthread_create(&thread, NULL, waiter, &waiter_rc)) {
-    perror("pthread_create");
+  const int err = pthread_create(&thread, NULL, waiter, &waiter_rc);
+  if (err) {
+    fprintf(stderr, "pthread_create() failed: %s\n", strerror(err));
     mdbx_txn_abort(txn);
     mdbx_env_close(env);
     mdbx_env_delete(db_path, MDBX_ENV_JUST_DELETE);
