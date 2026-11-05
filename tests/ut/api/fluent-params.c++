@@ -12,6 +12,7 @@
 ///
 /// \author Леонид Юрьев aka Leonid Yuriev <leo@yuriev.ru> \date 2015-2026
 
+#include "../env-guard.h++"
 #include "mdbx.h++"
 #include <gtest/gtest.h>
 
@@ -37,6 +38,7 @@ uintmax_t file_size_of(const mdbx::path &p) {
 } // namespace
 
 TEST(ut_fluent_params, geometry_fluent_matches_c_api) {
+  const env_files_guard guard({"test-fluent-a", "test-fluent-b", "test-fluent-opt"});
   if (MDBX_GTEST_IS_EXECUTION_TIMEOUT()) {
     GTEST_SKIP() << "SKIPPED by RUNTIME_LIMIT";
     return;
@@ -72,16 +74,19 @@ TEST(ut_fluent_params, geometry_fluent_matches_c_api) {
 #else /* !(filesystem available) */
 
 TEST(ut_fluent_params, geometry_fluent_matches_c_api) {
+  const env_files_guard guard({"test-fluent-a", "test-fluent-b", "test-fluent-opt"});
   GTEST_SKIP() << "requires <filesystem> (C++17), disabled since the requested standard is older";
 }
 
 TEST(ut_fluent_params, runtime_options_roundtrip) {
+  const env_files_guard guard({"test-fluent-a", "test-fluent-b", "test-fluent-opt"});
   GTEST_SKIP() << "requires <filesystem> (C++17), disabled since the requested standard is older";
 }
 
 #endif /* __cpp_lib_filesystem >= 201703L */
 
 TEST(ut_fluent_params, runtime_options_roundtrip) {
+  const env_files_guard guard({"test-fluent-a", "test-fluent-b", "test-fluent-opt"});
   if (MDBX_GTEST_IS_EXECUTION_TIMEOUT()) {
     GTEST_SKIP() << "SKIPPED by RUNTIME_LIMIT";
     return;

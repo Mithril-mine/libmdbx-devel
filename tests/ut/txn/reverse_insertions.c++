@@ -12,6 +12,7 @@
 ///
 /// \author Леонид Юрьев aka Leonid Yuriev <leo@yuriev.ru> \date 2015-2026
 
+#include "../env-guard.h++"
 #include "mdbx.h++"
 #include <gtest/gtest.h>
 
@@ -139,6 +140,7 @@ static void logger_nofmt(MDBX_log_level_t loglevel, const char *function, int li
 }
 
 TEST(ut_reverse_insertions, all) {
+  const env_files_guard guard({"test-revins"});
   if (MDBX_GTEST_IS_EXECUTION_TIMEOUT()) {
     GTEST_SKIP() << "SKIPPED by RUNTIME_LIMIT";
     return;

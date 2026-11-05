@@ -14,6 +14,7 @@
 
 #include "mdbx.h++"
 #undef MDBX_DEPRECATED /* avoid redefinition by the internal headers below */
+#include "../env-guard.h++"
 #include "src/layout-lck.h"
 #include <gtest/gtest.h>
 
@@ -82,6 +83,7 @@ static MDBX_env *create_open_env(const std::string &testdb, const std::string &l
 }
 
 TEST(issue_gh0079, oversized_rdt_length_clamped) {
+  const env_files_guard guard({"issue79.mdbx", "issue79-envinfo.mdbx"});
   if (MDBX_GTEST_IS_EXECUTION_TIMEOUT()) {
     GTEST_SKIP() << "SKIPPED by RUNTIME_LIMIT";
     return;
@@ -104,6 +106,7 @@ TEST(issue_gh0079, oversized_rdt_length_clamped) {
 }
 
 TEST(issue_gh0079, env_info_clamps_rdt_length) {
+  const env_files_guard guard({"issue79.mdbx", "issue79-envinfo.mdbx"});
   if (MDBX_GTEST_IS_EXECUTION_TIMEOUT()) {
     GTEST_SKIP() << "SKIPPED by RUNTIME_LIMIT";
     return;

@@ -12,6 +12,7 @@
 ///
 /// \author Леонид Юрьев aka Leonid Yuriev <leo@yuriev.ru> \date 2015-2026
 
+#include "../env-guard.h++"
 #include "mdbx.h++"
 #include <gtest/gtest.h>
 
@@ -30,14 +31,14 @@ std::string paged_key(size_t i) {
 
 /// SC-61: tree-search — ветви перехода страницы (B+tree multi-level).
 TEST(ut_multi_page_nav, navigation_across_pages) {
+  const env_files_guard guard({"test-gap-tree-search"});
   if (MDBX_GTEST_IS_EXECUTION_TIMEOUT()) {
     GTEST_SKIP() << "SKIPPED by RUNTIME_LIMIT";
     return;
   }
   const mdbx::path testdb = "test-gap-tree-search";
   mdbx::env::remove(testdb);
-  mdbx::env_managed env(testdb, mdbx::create_parameters(),
-                        mdbx::operate_parameters().set_max_maps(8));
+  mdbx::env_managed env(testdb, mdbx::create_parameters(), mdbx::operate_parameters().set_max_maps(8));
   {
     auto txn = env.start_write();
     auto map = txn.create_map("main");
@@ -76,18 +77,17 @@ TEST(ut_multi_page_nav, navigation_across_pages) {
 
 /// SC-62: tree-search — DUP-границы (value_mode::multi).
 TEST(ut_multi_page_nav, dup_boundaries) {
+  const env_files_guard guard({"test-gap-tree-search-dup"});
   if (MDBX_GTEST_IS_EXECUTION_TIMEOUT()) {
     GTEST_SKIP() << "SKIPPED by RUNTIME_LIMIT";
     return;
   }
   const mdbx::path testdb = "test-gap-tree-search-dup";
   mdbx::env::remove(testdb);
-  mdbx::env_managed env(testdb, mdbx::create_parameters(),
-                        mdbx::operate_parameters().set_max_maps(8));
+  mdbx::env_managed env(testdb, mdbx::create_parameters(), mdbx::operate_parameters().set_max_maps(8));
   {
     auto txn = env.start_write();
-    auto map = txn.create_map("multi", mdbx::key_mode::usual,
-                              mdbx::value_mode::multi);
+    auto map = txn.create_map("multi", mdbx::key_mode::usual, mdbx::value_mode::multi);
     for (uint32_t k = 0; k < 400; ++k) {
       std::string key(32, 'k');
       memcpy(&key[0], &k, sizeof(k));
@@ -99,28 +99,23 @@ TEST(ut_multi_page_nav, dup_boundaries) {
     txn.commit();
   }
   auto txn = env.start_read();
-  auto map = txn.open_map("multi", mdbx::key_mode::usual,
-                          mdbx::value_mode::multi);
+  auto map = txn.open_map("multi", mdbx::key_mode::usual, mdbx::value_mode::multi);
   auto cur = txn.open_cursor(map);
 
   for (uint32_t k = 0; k < 400; ++k) {
     std::string key(32, 'k');
     memcpy(&key[0], &k, sizeof(k));
-    auto found = cur.find_multivalue(mdbx::slice(key),
-                                     mdbx::slice("v" + std::to_string(k * 10 + 2)), false);
+    auto found = cur.find_multivalue(mdbx::slice(key), mdbx::slice("v" + std::to_string(k * 10 + 2)), false);
     EXPECT_TRUE(found.done);
     if (found.done) {
-      EXPECT_EQ(found.value,
-                mdbx::slice("v" + std::to_string(k * 10 + 2)));
+      EXPECT_EQ(found.value, mdbx::slice("v" + std::to_string(k * 10 + 2)));
     }
 
     auto absent = mdbx::slice("v99999");
     EXPECT_FALSE(cur.find_multivalue(mdbx::slice(key), absent, false).done);
-    EXPECT_THROW((void)cur.find_multivalue(mdbx::slice(key), absent, true),
-                 mdbx::not_found);
+    EXPECT_THROW((void)cur.find_multivalue(mdbx::slice(key), absent, true), mdbx::not_found);
 
-    auto lb = cur.lower_bound_multivalue(mdbx::slice(key),
-                                         mdbx::slice("v" + std::to_string(k * 10 + 1)), false);
+    auto lb = cur.lower_bound_multivalue(mdbx::slice(key), mdbx::slice("v" + std::to_string(k * 10 + 1)), false);
     EXPECT_TRUE(lb.done);
     if (lb.done) {
       EXPECT_EQ(lb.value, mdbx::slice("v" + std::to_string(k * 10 + 1)));

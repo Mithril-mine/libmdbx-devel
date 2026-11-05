@@ -12,6 +12,7 @@
 ///
 /// \author Леонид Юрьев aka Leonid Yuriev <leo@yuriev.ru> \date 2015-2026
 
+#include "../env-guard.h++"
 #include "mdbx.h"
 #include <gtest/gtest.h>
 
@@ -35,8 +36,7 @@ MDBX_dbi open_main(MDBX_txn *txn) {
   // DBI-хэндлы кэшируются по txn: повторный open с теми же флагами —
   // no-op; в read-txn CREATE запрещён, поэтому пробуем по флагам txn.
   int rc = mdbx_dbi_open(txn, "main", MDBX_CREATE, &dbi);
-  if (rc != MDBX_SUCCESS &&
-      (mdbx_txn_flags(txn) & MDBX_TXN_READWRITE) == 0) {
+  if (rc != MDBX_SUCCESS && (mdbx_txn_flags(txn) & MDBX_TXN_READWRITE) == 0) {
     rc = mdbx_dbi_open(txn, "main", MDBX_DB_DEFAULTS, &dbi);
   }
   EXPECT_EQ(rc, MDBX_SUCCESS) << "rc=" << rc;
@@ -95,6 +95,7 @@ size_t count_entries(MDBX_env *env) {
 
 /// Плотная упаковка GC: большие span'ы смежных освобождённых страниц.
 TEST(ut_gc_dense_packing, span_reclaim_with_dense_packing) {
+  const env_files_guard guard({"test-gap-gc-dense", "test-gap-gc-mixed"});
   if (MDBX_GTEST_IS_EXECUTION_TIMEOUT()) {
     GTEST_SKIP() << "SKIPPED by RUNTIME_LIMIT";
     return;
@@ -151,6 +152,7 @@ TEST(ut_gc_dense_packing, span_reclaim_with_dense_packing) {
 /// Чередование крупных и мелких записей → фрагментированные chunk-запросы,
 /// dense_adjust_chunk binary-search путь (chunk > maxgc_large1page).
 TEST(ut_gc_dense_packing, mixed_sizes_force_chunk_adjustment) {
+  const env_files_guard guard({"test-gap-gc-dense", "test-gap-gc-mixed"});
   if (MDBX_GTEST_IS_EXECUTION_TIMEOUT()) {
     GTEST_SKIP() << "SKIPPED by RUNTIME_LIMIT";
     return;

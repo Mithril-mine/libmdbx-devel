@@ -12,6 +12,7 @@
 ///
 /// \author Леонид Юрьев aka Leonid Yuriev <leo@yuriev.ru> \date 2026
 
+#include "../env-guard.h++"
 #include "mdbx.h++"
 #include <gtest/gtest.h>
 
@@ -218,6 +219,7 @@ int foreign_reader_child() {
 } // namespace
 
 TEST(issue_gh0217, foreign_read_process_skips_shrink) {
+  const env_files_guard guard({"issue217-foreign.mdbx"});
   if (MDBX_GTEST_IS_EXECUTION_TIMEOUT()) {
     GTEST_SKIP() << "SKIPPED by RUNTIME_LIMIT";
     return;
@@ -309,6 +311,7 @@ TEST(issue_gh0217, foreign_read_process_skips_shrink) {
 
 #else
 TEST(issue_gh0217, windows_only) {
+  const env_files_guard guard({"issue217-foreign.mdbx"});
   if (MDBX_GTEST_IS_EXECUTION_TIMEOUT()) {
     GTEST_SKIP() << "SKIPPED by RUNTIME_LIMIT";
     return;

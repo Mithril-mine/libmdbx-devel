@@ -13,6 +13,7 @@
 /// \author Леонид Юрьев aka Leonid Yuriev <leo@yuriev.ru> \date 2026
 
 /* nested child spills, then is aborted -> spilled.list leaks. */
+#include "../env-guard.h++"
 #include "mdbx.h++"
 #include <cstdio>
 #include <cstdlib>
@@ -22,6 +23,7 @@
 #include "../test-env.h"
 
 TEST(issue_gh0010, all) {
+  const env_files_guard guard({"issue10"});
   if (MDBX_GTEST_IS_EXECUTION_TIMEOUT()) {
     GTEST_SKIP() << "SKIPPED by RUNTIME_LIMIT";
     return;

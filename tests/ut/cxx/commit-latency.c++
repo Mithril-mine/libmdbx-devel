@@ -12,6 +12,7 @@
 ///
 /// \author Леонид Юрьев aka Leonid Yuriev <leo@yuriev.ru> \date 2015-2026
 
+#include "../env-guard.h++"
 #include "mdbx.h++"
 #include <gtest/gtest.h>
 
@@ -23,6 +24,7 @@
 /// append_decoded_base64/hex — 471+153 непокрытых блока.
 
 TEST(ut_commit_latency, commit_latency_assign) {
+  const env_files_guard guard({"test-gap-cla"});
   if (MDBX_GTEST_IS_EXECUTION_TIMEOUT()) {
     GTEST_SKIP() << "SKIPPED by RUNTIME_LIMIT";
     return;
@@ -56,6 +58,7 @@ TEST(ut_commit_latency, commit_latency_assign) {
 }
 
 TEST(ut_commit_latency, base58_base64_roundtrip) {
+  const env_files_guard guard({"test-gap-cla"});
   if (MDBX_GTEST_IS_EXECUTION_TIMEOUT()) {
     GTEST_SKIP() << "SKIPPED by RUNTIME_LIMIT";
     return;
@@ -90,6 +93,7 @@ TEST(ut_commit_latency, base58_base64_roundtrip) {
 }
 
 TEST(ut_commit_latency, hex_append_paths) {
+  const env_files_guard guard({"test-gap-cla"});
   if (MDBX_GTEST_IS_EXECUTION_TIMEOUT()) {
     GTEST_SKIP() << "SKIPPED by RUNTIME_LIMIT";
     return;

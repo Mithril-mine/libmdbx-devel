@@ -12,6 +12,7 @@
 ///
 /// \author Леонид Юрьев aka Leonid Yuriev <leo@yuriev.ru> \date 2015-2026
 
+#include "../env-guard.h++"
 #include "mdbx.h++"
 #include <gtest/gtest.h>
 
@@ -26,6 +27,7 @@ mdbx::env_managed make_env(const char *name) {
 } // namespace
 
 TEST(ut_txn_dataops, insert_and_try_insert) {
+  const env_files_guard guard({"test-txn-dataops"});
   if (MDBX_GTEST_IS_EXECUTION_TIMEOUT()) {
     GTEST_SKIP() << "SKIPPED by RUNTIME_LIMIT";
     return;
@@ -51,6 +53,7 @@ TEST(ut_txn_dataops, insert_and_try_insert) {
 }
 
 TEST(ut_txn_dataops, upsert_update_erase) {
+  const env_files_guard guard({"test-txn-dataops"});
   if (MDBX_GTEST_IS_EXECUTION_TIMEOUT()) {
     GTEST_SKIP() << "SKIPPED by RUNTIME_LIMIT";
     return;
@@ -78,6 +81,7 @@ TEST(ut_txn_dataops, upsert_update_erase) {
 }
 
 TEST(ut_txn_dataops, extract_and_append) {
+  const env_files_guard guard({"test-txn-dataops"});
   if (MDBX_GTEST_IS_EXECUTION_TIMEOUT()) {
     GTEST_SKIP() << "SKIPPED by RUNTIME_LIMIT";
     return;
@@ -104,6 +108,7 @@ TEST(ut_txn_dataops, extract_and_append) {
 }
 
 TEST(ut_txn_dataops, get_default_and_try_start_write) {
+  const env_files_guard guard({"test-txn-dataops"});
   if (MDBX_GTEST_IS_EXECUTION_TIMEOUT()) {
     GTEST_SKIP() << "SKIPPED by RUNTIME_LIMIT";
     return;
@@ -130,6 +135,7 @@ TEST(ut_txn_dataops, get_default_and_try_start_write) {
 }
 
 TEST(ut_txn_dataops, amend_read_to_write) {
+  const env_files_guard guard({"test-txn-dataops"});
   if (MDBX_GTEST_IS_EXECUTION_TIMEOUT()) {
     GTEST_SKIP() << "SKIPPED by RUNTIME_LIMIT";
     return;

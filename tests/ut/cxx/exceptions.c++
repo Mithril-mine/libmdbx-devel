@@ -12,6 +12,7 @@
 ///
 /// \author Леонид Юрьев aka Leonid Yuriev <leo@yuriev.ru> \date 2015-2026
 
+#include "../env-guard.h++"
 #include "mdbx.h++"
 #include <gtest/gtest.h>
 
@@ -24,6 +25,7 @@
 /// env::copy, buffer::clone, env::silo.
 
 TEST(ut_exceptions, all_exception_classes_via_throw) {
+  const env_files_guard guard({"test-gap-cxx-defrag", "test-gap-cxx-structs", "test-gap-cxx-structs-copy"});
   if (MDBX_GTEST_IS_EXECUTION_TIMEOUT()) {
     GTEST_SKIP() << "SKIPPED by RUNTIME_LIMIT";
     return;
@@ -50,8 +52,7 @@ TEST(ut_exceptions, all_exception_classes_via_throw) {
     } catch (const std::exception &e) {
       // Системные коды (EPERM/EIO/EACCESS...) маппятся в std::system_error,
       // SUCCESS/RESULT_* — в std::logic_error; и то и другое допустимо.
-      EXPECT_TRUE(code == MDBX_EPERM || code == MDBX_EIO ||
-                  code == MDBX_EACCESS || code == MDBX_SUCCESS ||
+      EXPECT_TRUE(code == MDBX_EPERM || code == MDBX_EIO || code == MDBX_EACCESS || code == MDBX_SUCCESS ||
                   code == MDBX_RESULT_FALSE || code == MDBX_RESULT_TRUE)
           << "unexpected std::exception for code " << code << ": " << e.what();
     } catch (...) {
@@ -59,19 +60,42 @@ TEST(ut_exceptions, all_exception_classes_via_throw) {
     }
   };
   const MDBX_error_t codes[] = {
-      MDBX_BAD_DBI, MDBX_CORRUPTED, MDBX_MAP_FULL, MDBX_INCOMPATIBLE,
-      MDBX_NOTFOUND, MDBX_KEYEXIST, MDBX_PROBLEM, MDBX_DBS_FULL,
-      MDBX_BAD_TXN, MDBX_BAD_VALSIZE, MDBX_PAGE_NOTFOUND, MDBX_CURSOR_FULL,
-      MDBX_INVALID, MDBX_TOO_LARGE, MDBX_UNABLE_EXTEND_MAPSIZE,
-      MDBX_VERSION_MISMATCH, MDBX_WANNA_RECOVERY,
+      MDBX_BAD_DBI,
+      MDBX_CORRUPTED,
+      MDBX_MAP_FULL,
+      MDBX_INCOMPATIBLE,
+      MDBX_NOTFOUND,
+      MDBX_KEYEXIST,
+      MDBX_PROBLEM,
+      MDBX_DBS_FULL,
+      MDBX_BAD_TXN,
+      MDBX_BAD_VALSIZE,
+      MDBX_PAGE_NOTFOUND,
+      MDBX_CURSOR_FULL,
+      MDBX_INVALID,
+      MDBX_TOO_LARGE,
+      MDBX_UNABLE_EXTEND_MAPSIZE,
+      MDBX_VERSION_MISMATCH,
+      MDBX_WANNA_RECOVERY,
       // NOTE: MDBX_EBADSIGN/MDBX_PANIC бросают mdbx::fatal, чей деструктор
       // намеренно вызывает std::terminate() (неисправимые ошибки) — их
       // нельзя поймать в живом процессе, не тестируем.
-      MDBX_PAGE_FULL, MDBX_EKEYMISMATCH, MDBX_READERS_FULL,
-      MDBX_EMULTIVAL, MDBX_ENODATA, MDBX_BAD_RSLOT, MDBX_EREMOTE,
-      MDBX_BUSY, MDBX_THREAD_MISMATCH, MDBX_TXN_FULL,
-      MDBX_TXN_OVERLAPPING, MDBX_DUPLICATED_LCK, MDBX_DANGLING_DBI,
-      MDBX_OUSTED, MDBX_MVCC_RETARDED, MDBX_LAGGARD_READER,
+      MDBX_PAGE_FULL,
+      MDBX_EKEYMISMATCH,
+      MDBX_READERS_FULL,
+      MDBX_EMULTIVAL,
+      MDBX_ENODATA,
+      MDBX_BAD_RSLOT,
+      MDBX_EREMOTE,
+      MDBX_BUSY,
+      MDBX_THREAD_MISMATCH,
+      MDBX_TXN_FULL,
+      MDBX_TXN_OVERLAPPING,
+      MDBX_DUPLICATED_LCK,
+      MDBX_DANGLING_DBI,
+      MDBX_OUSTED,
+      MDBX_MVCC_RETARDED,
+      MDBX_LAGGARD_READER,
   };
   for (auto code : codes) {
     SCOPED_TRACE(code);
@@ -80,6 +104,7 @@ TEST(ut_exceptions, all_exception_classes_via_throw) {
 }
 
 TEST(ut_exceptions, exception_thunk_capture_rethrow) {
+  const env_files_guard guard({"test-gap-cxx-defrag", "test-gap-cxx-structs", "test-gap-cxx-structs-copy"});
   if (MDBX_GTEST_IS_EXECUTION_TIMEOUT()) {
     GTEST_SKIP() << "SKIPPED by RUNTIME_LIMIT";
     return;
@@ -111,14 +136,14 @@ TEST(ut_exceptions, exception_thunk_capture_rethrow) {
 }
 
 TEST(ut_exceptions, env_defrag_cxx_and_flags) {
+  const env_files_guard guard({"test-gap-cxx-defrag", "test-gap-cxx-structs", "test-gap-cxx-structs-copy"});
   if (MDBX_GTEST_IS_EXECUTION_TIMEOUT()) {
     GTEST_SKIP() << "SKIPPED by RUNTIME_LIMIT";
     return;
   }
   const mdbx::path testdb = "test-gap-cxx-defrag";
   mdbx::env::remove(testdb);
-  mdbx::env_managed env(testdb, mdbx::create_parameters(),
-                        mdbx::operate_parameters().set_max_maps(8));
+  mdbx::env_managed env(testdb, mdbx::create_parameters(), mdbx::operate_parameters().set_max_maps(8));
   {
     auto txn = env.start_write();
     auto map = txn.create_map("main");
@@ -126,8 +151,7 @@ TEST(ut_exceptions, env_defrag_cxx_and_flags) {
       uint32_t k = i * 5 + 1;
       char val[160];
       memset(val, 'd', sizeof(val));
-      txn.put(map, mdbx::slice(&k, sizeof(k)), mdbx::slice(val, sizeof(val)),
-              mdbx::upsert);
+      txn.put(map, mdbx::slice(&k, sizeof(k)), mdbx::slice(val, sizeof(val)), mdbx::upsert);
       if (i % 2 == 0)
         txn.erase(map, mdbx::slice(&k, sizeof(k)));
     }
@@ -146,14 +170,14 @@ TEST(ut_exceptions, env_defrag_cxx_and_flags) {
 }
 
 TEST(ut_exceptions, txn_clear_map_copy_and_structs) {
+  const env_files_guard guard({"test-gap-cxx-defrag", "test-gap-cxx-structs", "test-gap-cxx-structs-copy"});
   if (MDBX_GTEST_IS_EXECUTION_TIMEOUT()) {
     GTEST_SKIP() << "SKIPPED by RUNTIME_LIMIT";
     return;
   }
   const mdbx::path testdb = "test-gap-cxx-structs";
   mdbx::env::remove(testdb);
-  mdbx::env_managed env(testdb, mdbx::create_parameters(),
-                        mdbx::operate_parameters().set_max_maps(8));
+  mdbx::env_managed env(testdb, mdbx::create_parameters(), mdbx::operate_parameters().set_max_maps(8));
   {
     auto txn = env.start_write();
     auto map = txn.create_map("main");
@@ -184,8 +208,7 @@ TEST(ut_exceptions, txn_clear_map_copy_and_structs) {
   env.copy(copy_path, false);
   // копия открывается и пуста (после clear_map)
   {
-    mdbx::env_managed env2(copy_path, mdbx::create_parameters(),
-                           mdbx::operate_parameters().set_max_maps(8));
+    mdbx::env_managed env2(copy_path, mdbx::create_parameters(), mdbx::operate_parameters().set_max_maps(8));
     auto txn = env2.start_read();
     auto map = txn.open_map("main", mdbx::key_mode::usual);
     MDBX_stat st;

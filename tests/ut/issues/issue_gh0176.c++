@@ -12,6 +12,7 @@
 ///
 /// \author Леонид Юрьев aka Leonid Yuriev <leo@yuriev.ru> \date 2026
 
+#include "../env-guard.h++"
 #include "mdbx.h++"
 #include <gtest/gtest.h>
 
@@ -179,6 +180,7 @@ static void cleanup(const std::string &db) {
 } // namespace
 
 TEST(issue_gh0176, nested_offset_below_upper_rejected_by_validation) {
+  const env_files_guard guard({"issue176.mdbx"});
   if (MDBX_GTEST_IS_EXECUTION_TIMEOUT()) {
     GTEST_SKIP() << "SKIPPED by RUNTIME_LIMIT";
     return;
@@ -204,6 +206,7 @@ TEST(issue_gh0176, nested_offset_below_upper_rejected_by_validation) {
 }
 
 TEST(issue_gh0176, inflated_nested_upper_rejected_on_normal_path) {
+  const env_files_guard guard({"issue176.mdbx"});
   if (MDBX_GTEST_IS_EXECUTION_TIMEOUT()) {
     GTEST_SKIP() << "SKIPPED by RUNTIME_LIMIT";
     return;
@@ -222,6 +225,7 @@ TEST(issue_gh0176, inflated_nested_upper_rejected_on_normal_path) {
 }
 
 TEST(issue_gh0176, valid_dupsort_database_still_works) {
+  const env_files_guard guard({"issue176.mdbx"});
   if (MDBX_GTEST_IS_EXECUTION_TIMEOUT()) {
     GTEST_SKIP() << "SKIPPED by RUNTIME_LIMIT";
     return;

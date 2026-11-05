@@ -13,6 +13,7 @@
 /// \author Леонид Юрьев aka Leonid Yuriev <leo@yuriev.ru> \date 2026
 
 #include "../../../src/internals.h"
+#include "../env-guard.h++"
 #include <gtest/gtest.h>
 
 #include "../test-env.h"
@@ -72,6 +73,7 @@ static void accumulate_loose(MDBX_txn *txn, MDBX_dbi dbi, size_t base, size_t co
 }
 
 TEST(issue_gh0067, loose_count_stays_consistent_on_alloc_failure) {
+  const env_files_guard guard({"issue67-nested-loosen.mdbx"});
   if (MDBX_GTEST_IS_EXECUTION_TIMEOUT()) {
     GTEST_SKIP() << "SKIPPED by RUNTIME_LIMIT";
     return;

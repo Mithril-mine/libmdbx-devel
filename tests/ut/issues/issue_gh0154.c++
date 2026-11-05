@@ -12,6 +12,7 @@
 ///
 /// \author Леонид Юрьев aka Leonid Yuriev <leo@yuriev.ru> \date 2026
 
+#include "../env-guard.h++"
 #include "mdbx.h++"
 #include <gtest/gtest.h>
 
@@ -159,6 +160,7 @@ bool fill(MDBX_env *env, MDBX_dbi dbi, int from, int to, char filler) {
 } // namespace
 
 TEST(issue_gh0154, resize_with_open_reader_neither_hangs_nor_poisons_env) {
+  const env_files_guard guard({"issue154.mdbx", "issue154-defer.mdbx"});
   if (MDBX_GTEST_IS_EXECUTION_TIMEOUT()) {
     GTEST_SKIP() << "SKIPPED by RUNTIME_LIMIT";
     return;
@@ -237,6 +239,7 @@ TEST(issue_gh0154, resize_with_open_reader_neither_hangs_nor_poisons_env) {
  * that a deferred explicit resize leaves both the logical and the physical size
  * untouched (scenario C of issue #173). */
 TEST(issue_gh0154, explicit_resize_defers_while_reader_open_then_succeeds) {
+  const env_files_guard guard({"issue154.mdbx", "issue154-defer.mdbx"});
   if (MDBX_GTEST_IS_EXECUTION_TIMEOUT()) {
     GTEST_SKIP() << "SKIPPED by RUNTIME_LIMIT";
     return;

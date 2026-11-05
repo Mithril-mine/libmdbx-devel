@@ -12,6 +12,7 @@
 ///
 /// \author Леонид Юрьев aka Leonid Yuriev <leo@yuriev.ru> \date 2026
 
+#include "../env-guard.h++"
 #include "mdbx.h++"
 #include <gtest/gtest.h>
 
@@ -145,6 +146,7 @@ void rewrite_boot() {
 } // namespace
 
 TEST(issue_gh0182, preopen_modes_weak_checkpoint) {
+  const env_files_guard guard({"issue182.mdbx"});
   if (MDBX_GTEST_IS_EXECUTION_TIMEOUT()) {
     GTEST_SKIP() << "SKIPPED by RUNTIME_LIMIT";
     return;
@@ -182,6 +184,7 @@ TEST(issue_gh0182, preopen_modes_weak_checkpoint) {
 }
 
 TEST(issue_gh0182, readonly_open_weak_checkpoint_reports_recovery_needed) {
+  const env_files_guard guard({"issue182.mdbx"});
   if (MDBX_GTEST_IS_EXECUTION_TIMEOUT()) {
     GTEST_SKIP() << "SKIPPED by RUNTIME_LIMIT";
     return;
@@ -202,6 +205,7 @@ TEST(issue_gh0182, readonly_open_weak_checkpoint_reports_recovery_needed) {
 }
 
 TEST(issue_gh0182, readonly_open_other_boot_rolls_back_and_succeeds) {
+  const env_files_guard guard({"issue182.mdbx"});
   if (MDBX_GTEST_IS_EXECUTION_TIMEOUT()) {
     GTEST_SKIP() << "SKIPPED by RUNTIME_LIMIT";
     return;
@@ -276,6 +280,7 @@ TEST(issue_gh0182, readonly_open_other_boot_rolls_back_and_succeeds) {
 }
 
 TEST(issue_gh0182, writable_open_same_boot_promotes_weak_to_steady) {
+  const env_files_guard guard({"issue182.mdbx"});
   if (MDBX_GTEST_IS_EXECUTION_TIMEOUT()) {
     GTEST_SKIP() << "SKIPPED by RUNTIME_LIMIT";
     return;
@@ -307,6 +312,7 @@ TEST(issue_gh0182, writable_open_same_boot_promotes_weak_to_steady) {
  * data is live; read-only cannot steady-sync, so recovery is required) - it
  * must never silently roll back to the older steady checkpoint. */
 TEST(issue_gh0182, lckless_ro_exclusive_weak_requires_recovery) {
+  const env_files_guard guard({"issue182.mdbx"});
   if (MDBX_GTEST_IS_EXECUTION_TIMEOUT()) {
     GTEST_SKIP() << "SKIPPED by RUNTIME_LIMIT";
     return;
@@ -343,6 +349,7 @@ TEST(issue_gh0182, lckless_ro_exclusive_weak_requires_recovery) {
 }
 
 TEST(issue_gh0182, lckless_ro_weak_never_rolls_back_to_older_steady) {
+  const env_files_guard guard({"issue182.mdbx"});
   if (MDBX_GTEST_IS_EXECUTION_TIMEOUT()) {
     GTEST_SKIP() << "SKIPPED by RUNTIME_LIMIT";
     return;

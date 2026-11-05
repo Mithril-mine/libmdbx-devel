@@ -12,6 +12,7 @@
 ///
 /// \author Леонид Юрьев aka Leonid Yuriev <leo@yuriev.ru> \date 2026
 
+#include "../env-guard.h++"
 #include "mdbx.h"
 #include <gtest/gtest.h>
 
@@ -35,6 +36,7 @@ extern "C" int mdbx_probe_ctl(const char *request, char *reply, size_t reply_siz
 // and MDBX_PROBES=1.
 
 TEST(issue_gh0104, clone_bailout_after_publishing_the_snapshot) {
+  const env_files_guard guard({"issue104-clone.mdbx", "issue104-clone-sticky.mdbx"});
   if (MDBX_GTEST_IS_EXECUTION_TIMEOUT()) {
     GTEST_SKIP() << "SKIPPED by RUNTIME_LIMIT";
     return;
@@ -116,6 +118,7 @@ static int count_parked_idle_slots(MDBX_env *env) {
 }
 
 TEST(issue_gh0104, clone_bailout_of_parked_source_on_another_thread) {
+  const env_files_guard guard({"issue104-clone.mdbx", "issue104-clone-sticky.mdbx"});
   if (MDBX_GTEST_IS_EXECUTION_TIMEOUT()) {
     GTEST_SKIP() << "SKIPPED by RUNTIME_LIMIT";
     return;

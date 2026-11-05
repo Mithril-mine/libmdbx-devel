@@ -12,6 +12,7 @@
 ///
 /// \author Леонид Юрьев aka Leonid Yuriev <leo@yuriev.ru> \date 2026
 
+#include "../env-guard.h++"
 #include "mdbx.h++"
 #include <gtest/gtest.h>
 
@@ -156,6 +157,8 @@ static constexpr size_t tall_item_count = 200;
 static constexpr size_t shallow_item_count = 5;
 
 TEST(issue_gh0075, zero_leaf_pages_rejected) {
+  const env_files_guard guard(
+      {"issue75-leaf.mdbx", "issue75-height.mdbx", "issue75-branch.mdbx", "issue75-branchspur.mdbx"});
   if (MDBX_GTEST_IS_EXECUTION_TIMEOUT()) {
     GTEST_SKIP() << "SKIPPED by RUNTIME_LIMIT";
     return;
@@ -168,6 +171,8 @@ TEST(issue_gh0075, zero_leaf_pages_rejected) {
 }
 
 TEST(issue_gh0075, zero_height_with_valid_root_rejected) {
+  const env_files_guard guard(
+      {"issue75-leaf.mdbx", "issue75-height.mdbx", "issue75-branch.mdbx", "issue75-branchspur.mdbx"});
   if (MDBX_GTEST_IS_EXECUTION_TIMEOUT()) {
     GTEST_SKIP() << "SKIPPED by RUNTIME_LIMIT";
     return;
@@ -180,6 +185,8 @@ TEST(issue_gh0075, zero_height_with_valid_root_rejected) {
 }
 
 TEST(issue_gh0075, zero_branch_pages_tall_tree_rejected) {
+  const env_files_guard guard(
+      {"issue75-leaf.mdbx", "issue75-height.mdbx", "issue75-branch.mdbx", "issue75-branchspur.mdbx"});
   if (MDBX_GTEST_IS_EXECUTION_TIMEOUT()) {
     GTEST_SKIP() << "SKIPPED by RUNTIME_LIMIT";
     return;
@@ -192,6 +199,8 @@ TEST(issue_gh0075, zero_branch_pages_tall_tree_rejected) {
 }
 
 TEST(issue_gh0075, spurious_branch_pages_shallow_tree_rejected) {
+  const env_files_guard guard(
+      {"issue75-leaf.mdbx", "issue75-height.mdbx", "issue75-branch.mdbx", "issue75-branchspur.mdbx"});
   if (MDBX_GTEST_IS_EXECUTION_TIMEOUT()) {
     GTEST_SKIP() << "SKIPPED by RUNTIME_LIMIT";
     return;

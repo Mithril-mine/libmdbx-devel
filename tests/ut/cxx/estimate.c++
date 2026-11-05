@@ -12,6 +12,7 @@
 ///
 /// \author Леонид Юрьев aka Leonid Yuriev <leo@yuriev.ru> \date 2015-2026
 
+#include "../env-guard.h++"
 #include "mdbx.h++"
 #include <gtest/gtest.h>
 
@@ -32,6 +33,7 @@ std::string key_of(size_t i) {
 } // namespace
 
 TEST(ut_estimate, empty_map) {
+  const env_files_guard guard({"test-estimate"});
   if (MDBX_GTEST_IS_EXECUTION_TIMEOUT()) {
     GTEST_SKIP() << "SKIPPED by RUNTIME_LIMIT";
     return;
@@ -50,6 +52,7 @@ TEST(ut_estimate, empty_map) {
 }
 
 TEST(ut_estimate, single_key_exact) {
+  const env_files_guard guard({"test-estimate"});
   if (MDBX_GTEST_IS_EXECUTION_TIMEOUT()) {
     GTEST_SKIP() << "SKIPPED by RUNTIME_LIMIT";
     return;
@@ -78,6 +81,7 @@ TEST(ut_estimate, single_key_exact) {
 }
 
 TEST(ut_estimate, range_sign_and_monotonicity) {
+  const env_files_guard guard({"test-estimate"});
   if (MDBX_GTEST_IS_EXECUTION_TIMEOUT()) {
     GTEST_SKIP() << "SKIPPED by RUNTIME_LIMIT";
     return;
@@ -107,6 +111,7 @@ TEST(ut_estimate, range_sign_and_monotonicity) {
 }
 
 TEST(ut_estimate, dupsort_range_with_values) {
+  const env_files_guard guard({"test-estimate"});
   if (MDBX_GTEST_IS_EXECUTION_TIMEOUT()) {
     GTEST_SKIP() << "SKIPPED by RUNTIME_LIMIT";
     return;
@@ -131,6 +136,7 @@ TEST(ut_estimate, dupsort_range_with_values) {
 }
 
 TEST(ut_estimate, cursor_move_estimates) {
+  const env_files_guard guard({"test-estimate"});
   if (MDBX_GTEST_IS_EXECUTION_TIMEOUT()) {
     GTEST_SKIP() << "SKIPPED by RUNTIME_LIMIT";
     return;

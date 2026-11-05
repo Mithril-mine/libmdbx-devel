@@ -12,6 +12,7 @@
 ///
 /// \author Леонид Юрьев aka Leonid Yuriev <leo@yuriev.ru> \date 2015-2026
 
+#include "../env-guard.h++"
 #include "mdbx.h++"
 #include <gtest/gtest.h>
 
@@ -24,6 +25,7 @@ static std::string to_std_string(const mdbx::slice &s) {
 }
 
 TEST(ut_cache_get, cache_entry_type) {
+  const env_files_guard guard({"test-cache-get"});
   if (MDBX_GTEST_IS_EXECUTION_TIMEOUT()) {
     GTEST_SKIP() << "SKIPPED by RUNTIME_LIMIT";
     return;
@@ -45,6 +47,7 @@ TEST(ut_cache_get, cache_entry_type) {
 }
 
 TEST(ut_cache_get, get_cached) {
+  const env_files_guard guard({"test-cache-get"});
   if (MDBX_GTEST_IS_EXECUTION_TIMEOUT()) {
     GTEST_SKIP() << "SKIPPED by RUNTIME_LIMIT";
     return;
@@ -118,6 +121,7 @@ TEST(ut_cache_get, get_cached) {
 }
 
 TEST(ut_cache_get, open_for_recovery) {
+  const env_files_guard guard({"test-cache-get"});
   if (MDBX_GTEST_IS_EXECUTION_TIMEOUT()) {
     GTEST_SKIP() << "SKIPPED by RUNTIME_LIMIT";
     return;

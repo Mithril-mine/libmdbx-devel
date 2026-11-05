@@ -12,6 +12,7 @@
 ///
 /// \author Леонид Юрьев aka Leonid Yuriev <leo@yuriev.ru> \date 2026
 
+#include "../env-guard.h++"
 #include "mdbx.h++"
 #include <gtest/gtest.h>
 
@@ -31,6 +32,7 @@
 // instead of returning false/empty; get_batch(1) always threw MDBX_EINVAL.
 
 TEST(issue_gh0098, get_equal_or_great_exact_on_multimap) {
+  const env_files_guard guard({"issue98.mdbx", "issue98b.mdbx"});
   if (MDBX_GTEST_IS_EXECUTION_TIMEOUT()) {
     GTEST_SKIP() << "SKIPPED by RUNTIME_LIMIT";
     return;
@@ -72,6 +74,7 @@ TEST(issue_gh0098, get_equal_or_great_exact_on_multimap) {
 }
 
 TEST(issue_gh0098, scan_and_batch_on_empty_and_end) {
+  const env_files_guard guard({"issue98.mdbx", "issue98b.mdbx"});
   if (MDBX_GTEST_IS_EXECUTION_TIMEOUT()) {
     GTEST_SKIP() << "SKIPPED by RUNTIME_LIMIT";
     return;

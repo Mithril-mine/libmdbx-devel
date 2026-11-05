@@ -12,6 +12,7 @@
 ///
 /// \author Леонид Юрьев aka Leonid Yuriev <leo@yuriev.ru> \date 2026
 
+#include "../env-guard.h++"
 #include "mdbx.h++"
 #include <gtest/gtest.h>
 
@@ -101,6 +102,7 @@ static bool populate_gc(MDBX_env *env) {
 }
 
 TEST(issue_gh0069, free_dbi_drop_is_rejected_and_gc_survives) {
+  const env_files_guard guard({"issue69.mdbx", "issue308.mdbx"});
   if (MDBX_GTEST_IS_EXECUTION_TIMEOUT()) {
     GTEST_SKIP() << "SKIPPED by RUNTIME_LIMIT";
     return;
@@ -161,6 +163,7 @@ struct txn_aborter {
 } // namespace
 
 TEST(issue_gh0069, gc_open_with_create_is_rejected) {
+  const env_files_guard guard({"issue69.mdbx", "issue308.mdbx"});
   if (MDBX_GTEST_IS_EXECUTION_TIMEOUT()) {
     GTEST_SKIP() << "SKIPPED by RUNTIME_LIMIT";
     return;

@@ -12,6 +12,7 @@
 ///
 /// \author Леонид Юрьев aka Leonid Yuriev <leo@yuriev.ru> \date 2026
 
+#include "../env-guard.h++"
 #include "mdbx.h++"
 #include <gtest/gtest.h>
 
@@ -42,6 +43,7 @@ static void put_key(MDBX_txn *txn, MDBX_dbi dbi, const std::string &key) {
 }
 
 TEST(issue_gh0106, rename_after_aborted_write) {
+  const env_files_guard guard({"issue106.mdbx"});
   if (MDBX_GTEST_IS_EXECUTION_TIMEOUT()) {
     GTEST_SKIP() << "SKIPPED by RUNTIME_LIMIT";
     return;

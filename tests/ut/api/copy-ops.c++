@@ -12,6 +12,7 @@
 ///
 /// \author Леонид Юрьев aka Leonid Yuriev <leo@yuriev.ru> \date 2015-2026
 
+#include "../env-guard.h++"
 #include "mdbx.h++"
 #include <gtest/gtest.h>
 
@@ -36,6 +37,7 @@ uintmax_t file_size_of(const char *name) {
 } // namespace
 
 TEST(ut_copy_ops, env_copy_plain_and_compact) {
+  const env_files_guard guard({"test-copy-compact", "test-copy-plain", "test-copy-src"});
   if (MDBX_GTEST_IS_EXECUTION_TIMEOUT()) {
     GTEST_SKIP() << "SKIPPED by RUNTIME_LIMIT";
     return;
@@ -80,6 +82,7 @@ TEST(ut_copy_ops, env_copy_plain_and_compact) {
 }
 
 TEST(ut_copy_ops, txn_copy_snapshot) {
+  const env_files_guard guard({"test-copy-compact", "test-copy-plain", "test-copy-src"});
   if (MDBX_GTEST_IS_EXECUTION_TIMEOUT()) {
     GTEST_SKIP() << "SKIPPED by RUNTIME_LIMIT";
     return;
@@ -127,10 +130,12 @@ TEST(ut_copy_ops, txn_copy_snapshot) {
 #else /* !(filesystem available) */
 
 TEST(ut_copy_ops, env_copy_plain_and_compact) {
+  const env_files_guard guard({"test-copy-compact", "test-copy-plain", "test-copy-src"});
   GTEST_SKIP() << "requires <filesystem> (C++17), disabled since the requested standard is older";
 }
 
 TEST(ut_copy_ops, txn_copy_snapshot) {
+  const env_files_guard guard({"test-copy-compact", "test-copy-plain", "test-copy-src"});
   GTEST_SKIP() << "requires <filesystem> (C++17), disabled since the requested standard is older";
 }
 

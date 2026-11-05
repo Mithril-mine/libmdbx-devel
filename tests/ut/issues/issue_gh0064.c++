@@ -12,6 +12,7 @@
 ///
 /// \author Леонид Юрьев aka Leonid Yuriev <leo@yuriev.ru> \date 2026
 
+#include "../env-guard.h++"
 #include "mdbx.h++"
 #include <gtest/gtest.h>
 
@@ -84,6 +85,8 @@ static bool commit_empty(MDBX_env *env, unsigned txn_flags) {
 }
 
 TEST(issue_gh0064, empty_durable_commits_do_not_advance_txnid) {
+  const env_files_guard guard(
+      {"issue64-durable.mdbx", "issue64-nometa.mdbx", "issue64-nosync.mdbx", "issue64-txn-nosync.mdbx"});
   if (MDBX_GTEST_IS_EXECUTION_TIMEOUT()) {
     GTEST_SKIP() << "SKIPPED by RUNTIME_LIMIT";
     return;
@@ -114,6 +117,8 @@ TEST(issue_gh0064, empty_durable_commits_do_not_advance_txnid) {
 }
 
 TEST(issue_gh0064, empty_durable_commit_after_nometasync_keeps_meta_sync) {
+  const env_files_guard guard(
+      {"issue64-durable.mdbx", "issue64-nometa.mdbx", "issue64-nosync.mdbx", "issue64-txn-nosync.mdbx"});
   if (MDBX_GTEST_IS_EXECUTION_TIMEOUT()) {
     GTEST_SKIP() << "SKIPPED by RUNTIME_LIMIT";
     return;
@@ -155,6 +160,8 @@ TEST(issue_gh0064, empty_durable_commit_after_nometasync_keeps_meta_sync) {
 }
 
 TEST(issue_gh0064, empty_commits_in_safe_nosync_env_do_not_advance_txnid) {
+  const env_files_guard guard(
+      {"issue64-durable.mdbx", "issue64-nometa.mdbx", "issue64-nosync.mdbx", "issue64-txn-nosync.mdbx"});
   if (MDBX_GTEST_IS_EXECUTION_TIMEOUT()) {
     GTEST_SKIP() << "SKIPPED by RUNTIME_LIMIT";
     return;
@@ -182,6 +189,8 @@ TEST(issue_gh0064, empty_commits_in_safe_nosync_env_do_not_advance_txnid) {
 }
 
 TEST(issue_gh0064, empty_nosync_commits_do_not_advance_txnid) {
+  const env_files_guard guard(
+      {"issue64-durable.mdbx", "issue64-nometa.mdbx", "issue64-nosync.mdbx", "issue64-txn-nosync.mdbx"});
   if (MDBX_GTEST_IS_EXECUTION_TIMEOUT()) {
     GTEST_SKIP() << "SKIPPED by RUNTIME_LIMIT";
     return;

@@ -16,6 +16,7 @@
 #include <cstdio>
 #include <gtest/gtest.h>
 
+#include "../env-guard.h++"
 #include "../test-env.h"
 
 #ifdef _MSC_VER
@@ -30,6 +31,7 @@
 // Linux -O2 (self-referential next), stack-use-after-return/access-violation
 // under (address)sanitizers, or silently corrupted state on other layouts.
 TEST(issue_gh0056, aliased_old_new_buffers) {
+  const env_files_guard guard({"issue56.mdbx"});
   if (MDBX_GTEST_IS_EXECUTION_TIMEOUT()) {
     GTEST_SKIP() << "SKIPPED by RUNTIME_LIMIT";
     return;

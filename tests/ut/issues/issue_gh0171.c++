@@ -12,6 +12,7 @@
 ///
 /// \author Леонид Юрьев aka Leonid Yuriev <leo@yuriev.ru> \date 2026
 
+#include "../env-guard.h++"
 #include "mdbx.h"
 #include <gtest/gtest.h>
 
@@ -73,6 +74,7 @@ void fill_source(MDBX_env *env, size_t approx_bytes) {
 } // namespace
 
 TEST(issue_gh0171, compacting_copy_to_stalled_pipe_does_not_hang) {
+  const env_files_guard guard({"issue171-src.mdbx"});
   if (MDBX_GTEST_IS_EXECUTION_TIMEOUT()) {
     GTEST_SKIP() << "SKIPPED by RUNTIME_LIMIT";
     return;

@@ -12,6 +12,7 @@
 ///
 /// \author Леонид Юрьев aka Leonid Yuriev <leo@yuriev.ru> \date 2026
 
+#include "../env-guard.h++"
 #include "mdbx.h"
 #include <gtest/gtest.h>
 
@@ -84,6 +85,7 @@ MDBX_env *open_env(const char *dbname, MDBX_dbi *dbi) {
 } // namespace
 
 TEST(issue_gh0104, clone_of_ousted_parked_origin) {
+  const env_files_guard guard({"issue104-clone2.mdbx", "issue104-clone2a.mdbx", "issue104-clone2b.mdbx"});
   if (MDBX_GTEST_IS_EXECUTION_TIMEOUT()) {
     GTEST_SKIP() << "SKIPPED by RUNTIME_LIMIT";
     return;
@@ -134,6 +136,7 @@ TEST(issue_gh0104, clone_of_ousted_parked_origin) {
 }
 
 TEST(issue_gh0104, clone_into_foreign_or_origin_handle) {
+  const env_files_guard guard({"issue104-clone2.mdbx", "issue104-clone2a.mdbx", "issue104-clone2b.mdbx"});
   if (MDBX_GTEST_IS_EXECUTION_TIMEOUT()) {
     GTEST_SKIP() << "SKIPPED by RUNTIME_LIMIT";
     return;

@@ -12,6 +12,7 @@
 ///
 /// \author Леонид Юрьев aka Leonid Yuriev <leo@yuriev.ru> \date 2015-2026
 
+#include "../env-guard.h++"
 #include "mdbx.h++"
 #include <gtest/gtest.h>
 
@@ -26,6 +27,7 @@ mdbx::env_managed make_env(const char *name) {
 } // namespace
 
 TEST(ut_get_ex, values_count_for_dupsort) {
+  const env_files_guard guard({"test-get-ex"});
   if (MDBX_GTEST_IS_EXECUTION_TIMEOUT()) {
     GTEST_SKIP() << "SKIPPED by RUNTIME_LIMIT";
     return;
@@ -58,6 +60,7 @@ TEST(ut_get_ex, values_count_for_dupsort) {
 }
 
 TEST(ut_get_ex, values_count_for_single_value_table) {
+  const env_files_guard guard({"test-get-ex"});
   if (MDBX_GTEST_IS_EXECUTION_TIMEOUT()) {
     GTEST_SKIP() << "SKIPPED by RUNTIME_LIMIT";
     return;

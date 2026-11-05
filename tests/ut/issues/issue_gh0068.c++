@@ -12,6 +12,7 @@
 ///
 /// \author Леонид Юрьев aka Leonid Yuriev <leo@yuriev.ru> \date 2026
 
+#include "../env-guard.h++"
 #include "mdbx.h++"
 #include <gtest/gtest.h>
 
@@ -115,6 +116,8 @@ static MDBX_cursor *positioned_cursor(MDBX_env *env, MDBX_dbi dbi, MDBX_txn **tx
 }
 
 TEST(issue_gh0068, legacy_size_does_not_write_past_buffer) {
+  const env_files_guard guard(
+      {"issue68-full.mdbx", "issue68-heap.mdbx", "issue68-invalid.mdbx", "issue68-legacy.mdbx"});
   if (MDBX_GTEST_IS_EXECUTION_TIMEOUT()) {
     GTEST_SKIP() << "SKIPPED by RUNTIME_LIMIT";
     return;
@@ -154,6 +157,8 @@ TEST(issue_gh0068, legacy_size_does_not_write_past_buffer) {
 }
 
 TEST(issue_gh0068, exact_heap_buffer_is_not_overflowed) {
+  const env_files_guard guard(
+      {"issue68-full.mdbx", "issue68-heap.mdbx", "issue68-invalid.mdbx", "issue68-legacy.mdbx"});
   if (MDBX_GTEST_IS_EXECUTION_TIMEOUT()) {
     GTEST_SKIP() << "SKIPPED by RUNTIME_LIMIT";
     return;
@@ -188,6 +193,8 @@ TEST(issue_gh0068, exact_heap_buffer_is_not_overflowed) {
 }
 
 TEST(issue_gh0068, full_size_fills_all_fields_within_buffer) {
+  const env_files_guard guard(
+      {"issue68-full.mdbx", "issue68-heap.mdbx", "issue68-invalid.mdbx", "issue68-legacy.mdbx"});
   if (MDBX_GTEST_IS_EXECUTION_TIMEOUT()) {
     GTEST_SKIP() << "SKIPPED by RUNTIME_LIMIT";
     return;
@@ -220,6 +227,8 @@ TEST(issue_gh0068, full_size_fills_all_fields_within_buffer) {
 }
 
 TEST(issue_gh0068, invalid_bytes_are_rejected) {
+  const env_files_guard guard(
+      {"issue68-full.mdbx", "issue68-heap.mdbx", "issue68-invalid.mdbx", "issue68-legacy.mdbx"});
   if (MDBX_GTEST_IS_EXECUTION_TIMEOUT()) {
     GTEST_SKIP() << "SKIPPED by RUNTIME_LIMIT";
     return;

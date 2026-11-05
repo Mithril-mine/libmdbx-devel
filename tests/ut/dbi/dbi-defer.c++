@@ -12,6 +12,7 @@
 ///
 /// \author Леонид Юрьев aka Leonid Yuriev <leo@yuriev.ru> \date 2015-2026
 
+#include "../env-guard.h++"
 #include "mdbx.h++"
 #include <gtest/gtest.h>
 
@@ -26,6 +27,7 @@ mdbx::env_managed make_env(const char *name) {
 } // namespace
 
 TEST(ut_dbi_defer, drop_and_reuse_handle_in_same_txn) {
+  const env_files_guard guard({"test-dbi-defer"});
   if (MDBX_GTEST_IS_EXECUTION_TIMEOUT()) {
     GTEST_SKIP() << "SKIPPED by RUNTIME_LIMIT";
     return;
@@ -49,6 +51,7 @@ TEST(ut_dbi_defer, drop_and_reuse_handle_in_same_txn) {
 }
 
 TEST(ut_dbi_defer, drop_commit_then_reopen) {
+  const env_files_guard guard({"test-dbi-defer"});
   if (MDBX_GTEST_IS_EXECUTION_TIMEOUT()) {
     GTEST_SKIP() << "SKIPPED by RUNTIME_LIMIT";
     return;
@@ -75,6 +78,7 @@ TEST(ut_dbi_defer, drop_commit_then_reopen) {
 }
 
 TEST(ut_dbi_defer, drop_in_read_only_txn) {
+  const env_files_guard guard({"test-dbi-defer"});
   if (MDBX_GTEST_IS_EXECUTION_TIMEOUT()) {
     GTEST_SKIP() << "SKIPPED by RUNTIME_LIMIT";
     return;

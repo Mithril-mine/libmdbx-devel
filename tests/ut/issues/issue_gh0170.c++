@@ -12,6 +12,7 @@
 ///
 /// \author Леонид Юрьев aka Leonid Yuriev <leo@yuriev.ru> \date 2026
 
+#include "../env-guard.h++"
 #include "mdbx.h++"
 #include <gtest/gtest.h>
 
@@ -53,6 +54,7 @@ uint64_t get_period(MDBX_env *env) {
 } // namespace
 
 TEST(issue_gh0170, shrink_retry_period_defaults_to_5_seconds) {
+  const env_files_guard guard({"issue170-opt.mdbx"});
   if (MDBX_GTEST_IS_EXECUTION_TIMEOUT()) {
     GTEST_SKIP() << "SKIPPED by RUNTIME_LIMIT";
     return;
@@ -65,6 +67,7 @@ TEST(issue_gh0170, shrink_retry_period_defaults_to_5_seconds) {
 }
 
 TEST(issue_gh0170, shrink_retry_period_roundtrips) {
+  const env_files_guard guard({"issue170-opt.mdbx"});
   if (MDBX_GTEST_IS_EXECUTION_TIMEOUT()) {
     GTEST_SKIP() << "SKIPPED by RUNTIME_LIMIT";
     return;
@@ -94,6 +97,7 @@ TEST(issue_gh0170, shrink_retry_period_roundtrips) {
 }
 
 TEST(issue_gh0170, shrink_retry_period_settable_after_open_but_not_readonly) {
+  const env_files_guard guard({"issue170-opt.mdbx"});
   if (MDBX_GTEST_IS_EXECUTION_TIMEOUT()) {
     GTEST_SKIP() << "SKIPPED by RUNTIME_LIMIT";
     return;

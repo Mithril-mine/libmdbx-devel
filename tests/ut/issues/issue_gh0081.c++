@@ -14,6 +14,7 @@
 
 #include "mdbx.h++"
 #undef MDBX_DEPRECATED /* avoid redefinition by the internal headers below */
+#include "../env-guard.h++"
 #include "src/layout-lck.h"
 #include <gtest/gtest.h>
 
@@ -61,6 +62,7 @@ static void read_raw(std::fstream &f, std::streamoff off, void *data, size_t siz
 }
 
 TEST(issue_gh0081, poisoned_cached_oldest_reclamped) {
+  const env_files_guard guard({"issue81.mdbx"});
   if (MDBX_GTEST_IS_EXECUTION_TIMEOUT()) {
     GTEST_SKIP() << "SKIPPED by RUNTIME_LIMIT";
     return;

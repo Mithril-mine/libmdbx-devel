@@ -12,6 +12,7 @@
 ///
 /// \author Леонид Юрьев aka Leonid Yuriev <leo@yuriev.ru> \date 2015-2026
 
+#include "../env-guard.h++"
 #include "mdbx.h++"
 #include <gtest/gtest.h>
 
@@ -28,6 +29,7 @@ mdbx::env_managed make_env(const char *name) {
 } // namespace
 
 TEST(ut_put_flags, reserve_variants) {
+  const env_files_guard guard({"test-put-flags"});
   if (MDBX_GTEST_IS_EXECUTION_TIMEOUT()) {
     GTEST_SKIP() << "SKIPPED by RUNTIME_LIMIT";
     return;
@@ -77,6 +79,7 @@ TEST(ut_put_flags, reserve_variants) {
 }
 
 TEST(ut_put_flags, cursor_reserve_variants) {
+  const env_files_guard guard({"test-put-flags"});
   if (MDBX_GTEST_IS_EXECUTION_TIMEOUT()) {
     GTEST_SKIP() << "SKIPPED by RUNTIME_LIMIT";
     return;
@@ -140,6 +143,7 @@ TEST(ut_put_flags, cursor_reserve_variants) {
 }
 
 TEST(ut_put_flags, reserve_forbidden_on_dupsort) {
+  const env_files_guard guard({"test-put-flags"});
   if (MDBX_GTEST_IS_EXECUTION_TIMEOUT()) {
     GTEST_SKIP() << "SKIPPED by RUNTIME_LIMIT";
     return;
@@ -156,6 +160,7 @@ TEST(ut_put_flags, reserve_forbidden_on_dupsort) {
 }
 
 TEST(ut_put_flags, append_single_and_dupsort) {
+  const env_files_guard guard({"test-put-flags"});
   if (MDBX_GTEST_IS_EXECUTION_TIMEOUT()) {
     GTEST_SKIP() << "SKIPPED by RUNTIME_LIMIT";
     return;
@@ -208,6 +213,7 @@ TEST(ut_put_flags, append_single_and_dupsort) {
 }
 
 TEST(ut_put_flags, append_to_dupsort_last_key) {
+  const env_files_guard guard({"test-put-flags"});
   if (MDBX_GTEST_IS_EXECUTION_TIMEOUT()) {
     GTEST_SKIP() << "SKIPPED by RUNTIME_LIMIT";
     return;
@@ -230,6 +236,7 @@ TEST(ut_put_flags, append_to_dupsort_last_key) {
 }
 
 TEST(ut_put_flags, put_multiple_samelength_modes) {
+  const env_files_guard guard({"test-put-flags"});
   if (MDBX_GTEST_IS_EXECUTION_TIMEOUT()) {
     GTEST_SKIP() << "SKIPPED by RUNTIME_LIMIT";
     return;
@@ -260,6 +267,7 @@ TEST(ut_put_flags, put_multiple_samelength_modes) {
 }
 
 TEST(ut_put_flags, replace_and_get_equal_or_great) {
+  const env_files_guard guard({"test-put-flags"});
   if (MDBX_GTEST_IS_EXECUTION_TIMEOUT()) {
     GTEST_SKIP() << "SKIPPED by RUNTIME_LIMIT";
     return;
@@ -306,6 +314,7 @@ TEST(ut_put_flags, replace_and_get_equal_or_great) {
 }
 
 TEST(ut_put_flags, replace_reserve_ignores_caller_bytes) {
+  const env_files_guard guard({"test-put-flags"});
   if (MDBX_GTEST_IS_EXECUTION_TIMEOUT()) {
     GTEST_SKIP() << "SKIPPED by RUNTIME_LIMIT";
     return;
@@ -334,6 +343,7 @@ TEST(ut_put_flags, replace_reserve_ignores_caller_bytes) {
 }
 
 TEST(ut_put_flags, replace_reserve_same_length_in_dirty_page) {
+  const env_files_guard guard({"test-put-flags"});
   if (MDBX_GTEST_IS_EXECUTION_TIMEOUT()) {
     GTEST_SKIP() << "SKIPPED by RUNTIME_LIMIT";
     return;
@@ -357,6 +367,7 @@ TEST(ut_put_flags, replace_reserve_same_length_in_dirty_page) {
 }
 
 TEST(ut_put_flags, replace_reserve_forbidden_on_dupsort) {
+  const env_files_guard guard({"test-put-flags"});
   if (MDBX_GTEST_IS_EXECUTION_TIMEOUT()) {
     GTEST_SKIP() << "SKIPPED by RUNTIME_LIMIT";
     return;
@@ -388,6 +399,7 @@ TEST(ut_put_flags, replace_reserve_forbidden_on_dupsort) {
 }
 
 TEST(ut_put_flags, put_multiple_samelength_iovlen_on_keyexist) {
+  const env_files_guard guard({"test-put-flags"});
   if (MDBX_GTEST_IS_EXECUTION_TIMEOUT()) {
     GTEST_SKIP() << "SKIPPED by RUNTIME_LIMIT";
     return;
@@ -411,6 +423,7 @@ TEST(ut_put_flags, put_multiple_samelength_iovlen_on_keyexist) {
 }
 
 TEST(ut_put_flags, put_multiple_samelength_strict_failure) {
+  const env_files_guard guard({"test-put-flags"});
   if (MDBX_GTEST_IS_EXECUTION_TIMEOUT()) {
     GTEST_SKIP() << "SKIPPED by RUNTIME_LIMIT";
     return;

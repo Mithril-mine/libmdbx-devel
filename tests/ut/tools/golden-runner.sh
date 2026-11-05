@@ -25,6 +25,9 @@ GOLDEN="$SELF_DIR/golden"
 TOOL="${1:?tool}"; shift
 BIN="${1:?tool binary}"; shift
 WORK="${1:?workdir}"; shift
+# clean the whole runner work directory on ANY exit path, including the
+# fixture-build failures above (issue #343)
+trap 'rm -rf "$WORK"' EXIT
 UPDATE=0
 if [ "${1:-}" = "--update" ]; then UPDATE=1; shift; fi
 FILTER="$*"   # empty = all cases
@@ -497,6 +500,11 @@ for f in $tool_funcs; do
     case_stat_help_long) case_stat_help_long;;
   esac
 done
+
+# Remove the whole worktree of the runner: each case deletes its directory
+# before the run, but nothing removed it after (issue #343), so ~44 fixture
+# databases (about 2.7 GB) accumulated in the build tree on every run.
+rm -rf "$WORK"
 
 echo
 echo "== $TOOL: pass=$pass fail=$fail"

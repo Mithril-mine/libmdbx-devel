@@ -12,6 +12,7 @@
 ///
 /// \author Леонид Юрьев aka Leonid Yuriev <leo@yuriev.ru> \date 2015-2026
 
+#include "../env-guard.h++"
 #include "mdbx.h++"
 #include <gtest/gtest.h>
 
@@ -39,6 +40,7 @@ void seed_multi(mdbx::txn_managed &txn, mdbx::map_handle map) {
 } // namespace
 
 TEST(ut_multivalue_nav, find_and_bounds) {
+  const env_files_guard guard({"test-multivalue-nav"});
   if (MDBX_GTEST_IS_EXECUTION_TIMEOUT()) {
     GTEST_SKIP() << "SKIPPED by RUNTIME_LIMIT";
     return;
@@ -71,6 +73,7 @@ TEST(ut_multivalue_nav, find_and_bounds) {
 }
 
 TEST(ut_multivalue_nav, walk_multi_values) {
+  const env_files_guard guard({"test-multivalue-nav"});
   if (MDBX_GTEST_IS_EXECUTION_TIMEOUT()) {
     GTEST_SKIP() << "SKIPPED by RUNTIME_LIMIT";
     return;
@@ -106,6 +109,7 @@ TEST(ut_multivalue_nav, walk_multi_values) {
 }
 
 TEST(ut_multivalue_nav, erase_pair_and_whole) {
+  const env_files_guard guard({"test-multivalue-nav"});
   if (MDBX_GTEST_IS_EXECUTION_TIMEOUT()) {
     GTEST_SKIP() << "SKIPPED by RUNTIME_LIMIT";
     return;

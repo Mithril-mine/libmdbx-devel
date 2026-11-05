@@ -14,6 +14,7 @@
 
 /* rthc_lckless.c — rthc_thread_dtor() dereferences a null lck_mmap.lck for any
  * lck-less environment registered in the same process. */
+#include "../env-guard.h++"
 #include "mdbx.h"
 #include <gtest/gtest.h>
 
@@ -45,6 +46,7 @@ static void *reader_thread(void *arg) {
 }
 
 TEST(issue_gh0016, all) {
+  const env_files_guard guard({"issue_gh16.norm.db"});
   if (MDBX_GTEST_IS_EXECUTION_TIMEOUT()) {
     GTEST_SKIP() << "SKIPPED by RUNTIME_LIMIT";
     return;
@@ -127,5 +129,10 @@ TEST(issue_gh0016, all) {
   mdbx_env_close(lckless);
   mdbx_env_close(normal_env);
   chmod(buf, 0644);
+  /* remove the directory environment left by the test (rodb lives inside) */
+  unlink(rodb);
+  snprintf(buf, sizeof(buf), "%s/ro.db-lck", dir);
+  unlink(buf);
+  rmdir(dir);
   printf("RESULT: done\n");
 }

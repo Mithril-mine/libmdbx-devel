@@ -12,6 +12,7 @@
 ///
 /// \author Леонид Юрьев aka Leonid Yuriev <leo@yuriev.ru> \date 2015-2026
 
+#include "../env-guard.h++"
 #include "../probe-ctl.h"
 #include "mdbx.h++"
 #include <gtest/gtest.h>
@@ -1382,7 +1383,14 @@ int doit() {
   }
 }
 
+/* The same database-name override that doit() uses, for the file cleanup. */
+static std::string cached_db_name() {
+  const char *name = getenv_cstr("MDBX_GET_CACHED_DBNAME");
+  return (name && *name) ? std::string(name) : std::string("test-get-cached");
+}
+
 TEST(ut_get_cached, all) {
+  const env_files_guard guard({cached_db_name().c_str()});
   if (MDBX_GTEST_IS_EXECUTION_TIMEOUT()) {
     GTEST_SKIP() << "SKIPPED by RUNTIME_LIMIT";
     return;

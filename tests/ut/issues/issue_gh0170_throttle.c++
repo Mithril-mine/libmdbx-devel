@@ -12,6 +12,7 @@
 ///
 /// \author Леонид Юрьев aka Leonid Yuriev <leo@yuriev.ru> \date 2026
 
+#include "../env-guard.h++"
 #include "mdbx.h++"
 #include <gtest/gtest.h>
 
@@ -133,6 +134,7 @@ bool commit_put(MDBX_env *env, MDBX_dbi dbi, const char *key) {
 } // namespace
 
 TEST(issue_gh0170_throttle, doomed_shrink_attempts_are_rate_limited) {
+  const env_files_guard guard({"issue170-throttle.mdbx"});
   if (MDBX_GTEST_IS_EXECUTION_TIMEOUT()) {
     GTEST_SKIP() << "SKIPPED by RUNTIME_LIMIT";
     return;
@@ -198,6 +200,7 @@ TEST(issue_gh0170_throttle, doomed_shrink_attempts_are_rate_limited) {
 }
 #else
 TEST(issue_gh0170_throttle, windows_only) {
+  const env_files_guard guard({"issue170-throttle.mdbx"});
   if (MDBX_GTEST_IS_EXECUTION_TIMEOUT()) {
     GTEST_SKIP() << "SKIPPED by RUNTIME_LIMIT";
     return;

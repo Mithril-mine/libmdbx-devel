@@ -12,6 +12,7 @@
 ///
 /// \author Леонид Юрьев aka Leonid Yuriev <leo@yuriev.ru> \date 2026
 
+#include "../env-guard.h++"
 #include "mdbx.h"
 #include <gtest/gtest.h>
 
@@ -31,6 +32,7 @@
 // finished the transaction, hiding the problem from the caller.
 
 TEST(issue_gh0104, park_broken_read_then_abort_is_safe) {
+  const env_files_guard guard({"issue104.mdbx", "issue104b.mdbx"});
   if (MDBX_GTEST_IS_EXECUTION_TIMEOUT()) {
     GTEST_SKIP() << "SKIPPED by RUNTIME_LIMIT";
     return;
@@ -60,6 +62,7 @@ TEST(issue_gh0104, park_broken_read_then_abort_is_safe) {
 }
 
 TEST(issue_gh0104, unpark_broken_read_reports_bad_txn) {
+  const env_files_guard guard({"issue104.mdbx", "issue104b.mdbx"});
   if (MDBX_GTEST_IS_EXECUTION_TIMEOUT()) {
     GTEST_SKIP() << "SKIPPED by RUNTIME_LIMIT";
     return;

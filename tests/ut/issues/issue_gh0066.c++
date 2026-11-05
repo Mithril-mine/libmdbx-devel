@@ -12,6 +12,7 @@
 ///
 /// \author Леонид Юрьев aka Leonid Yuriev <leo@yuriev.ru> \date 2026
 
+#include "../env-guard.h++"
 #include "mdbx.h++"
 #include <gtest/gtest.h>
 
@@ -51,6 +52,7 @@ static uint64_t decode_key(const slice &key) {
 }
 
 TEST(issue_gh0066, append_builds_ordered_tree) {
+  const env_files_guard guard({"issue66.mdbx", "issue66b.mdbx"});
   if (MDBX_GTEST_IS_EXECUTION_TIMEOUT()) {
     GTEST_SKIP() << "SKIPPED by RUNTIME_LIMIT";
     return;
@@ -116,6 +118,7 @@ TEST(issue_gh0066, append_builds_ordered_tree) {
 }
 
 TEST(issue_gh0066, append_to_empty_and_exact_match) {
+  const env_files_guard guard({"issue66.mdbx", "issue66b.mdbx"});
   if (MDBX_GTEST_IS_EXECUTION_TIMEOUT()) {
     GTEST_SKIP() << "SKIPPED by RUNTIME_LIMIT";
     return;

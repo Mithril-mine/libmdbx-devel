@@ -12,6 +12,7 @@
 ///
 /// \author Леонид Юрьев aka Leonid Yuriev <leo@yuriev.ru> \date 2015-2026
 
+#include "../env-guard.h++"
 #include "mdbx.h++"
 #include <gtest/gtest.h>
 
@@ -22,6 +23,7 @@
 #include <vector>
 
 TEST(ut_tables_and_chk, enumerate_tables) {
+  const env_files_guard guard({"test-tables-and-chk"});
   if (MDBX_GTEST_IS_EXECUTION_TIMEOUT()) {
     GTEST_SKIP() << "SKIPPED by RUNTIME_LIMIT";
     return;
@@ -79,6 +81,7 @@ TEST(ut_tables_and_chk, enumerate_tables) {
 }
 
 TEST(ut_tables_and_chk, env_chk) {
+  const env_files_guard guard({"test-tables-and-chk"});
   if (MDBX_GTEST_IS_EXECUTION_TIMEOUT()) {
     GTEST_SKIP() << "SKIPPED by RUNTIME_LIMIT";
     return;

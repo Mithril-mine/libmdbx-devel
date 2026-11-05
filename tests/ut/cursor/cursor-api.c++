@@ -12,6 +12,7 @@
 ///
 /// \author Леонид Юрьев aka Leonid Yuriev <leo@yuriev.ru> \date 2015-2026
 
+#include "../env-guard.h++"
 #include "mdbx.h++"
 #include <gtest/gtest.h>
 
@@ -29,6 +30,7 @@ void fill(mdbx::txn_managed &txn, mdbx::map_handle map, size_t count = 1000) {
 } // namespace
 
 TEST(ut_cursor_api, navigation_and_estimate) {
+  const env_files_guard guard({"test-cursor-api"});
   if (MDBX_GTEST_IS_EXECUTION_TIMEOUT()) {
     GTEST_SKIP() << "SKIPPED by RUNTIME_LIMIT";
     return;
@@ -68,6 +70,7 @@ TEST(ut_cursor_api, navigation_and_estimate) {
 }
 
 TEST(ut_cursor_api, count_multivalue) {
+  const env_files_guard guard({"test-cursor-api"});
   if (MDBX_GTEST_IS_EXECUTION_TIMEOUT()) {
     GTEST_SKIP() << "SKIPPED by RUNTIME_LIMIT";
     return;
@@ -91,6 +94,7 @@ TEST(ut_cursor_api, count_multivalue) {
 }
 
 TEST(ut_map_ops, lifecycle) {
+  const env_files_guard guard({"test-cursor-api"});
   if (MDBX_GTEST_IS_EXECUTION_TIMEOUT()) {
     GTEST_SKIP() << "SKIPPED by RUNTIME_LIMIT";
     return;

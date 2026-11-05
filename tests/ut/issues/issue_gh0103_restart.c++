@@ -12,6 +12,7 @@
 ///
 /// \author Леонид Юрьев aka Leonid Yuriev <leo@yuriev.ru> \date 2026
 
+#include "../env-guard.h++"
 #include "mdbx.h"
 #include <gtest/gtest.h>
 
@@ -32,6 +33,7 @@ extern "C" int mdbx_probe_ctl(const char *request, char *reply, size_t reply_siz
 // `alloc-fault`, so this requires MDBX_PROBES=ON and MDBX_PROBES=1.
 
 TEST(issue_gh0103, failed_restart_keeps_parent_usable) {
+  const env_files_guard guard({"issue103-restart.mdbx"});
   if (MDBX_GTEST_IS_EXECUTION_TIMEOUT()) {
     GTEST_SKIP() << "SKIPPED by RUNTIME_LIMIT";
     return;

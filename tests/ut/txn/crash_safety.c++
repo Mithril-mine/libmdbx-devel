@@ -20,6 +20,7 @@
 /// into the disabled ut_crash_safety.crashed_child test, which dies via
 /// TerminateProcess().
 
+#include "../env-guard.h++"
 #include "mdbx.h++"
 #include <gtest/gtest.h>
 
@@ -209,11 +210,12 @@ static void run_mdbx_chk_best_effort(const std::string &path) {
 }
 
 TEST(ut_crash_safety, kill_mid_txn_recovers) {
+  const std::string path = "test-crash-safety-" + std::to_string(current_pid());
+  const env_files_guard guard({path.c_str()});
   if (MDBX_GTEST_IS_EXECUTION_TIMEOUT()) {
     GTEST_SKIP() << "SKIPPED by RUNTIME_LIMIT";
     return;
   }
-  const std::string path = "test-crash-safety-" + std::to_string(current_pid());
   mdbx::env::remove(path);
 
   write_baseline(path);
@@ -289,6 +291,9 @@ TEST(ut_crash_safety, DISABLED_crashed_child) {
     GTEST_SKIP() << "not spawned as crash child";
     return;
   }
+  /* NO guard here: this process is the spawned crash child, the file belongs
+     to the parent and must not be deleted by it (deleting it would break the
+     child's own reopen below). */
   crash_child_workload(path);
   TerminateProcess(GetCurrentProcess(), 42);
   FAIL() << "unreachable";
