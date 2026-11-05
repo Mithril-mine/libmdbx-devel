@@ -82,6 +82,7 @@ static bool valbool(char *line, const char *item, bool *value) {
 /*----------------------------------------------------------------------------*/
 
 static char *subname = nullptr;
+static const char *forced_subname = nullptr /* `-s`, takes priority over `database=` */;
 static int dbi_flags;
 static uint64_t sequence;
 static MDBX_canary canary;
@@ -115,6 +116,14 @@ static int readhdr(void) {
     free(subname);
     subname = nullptr;
   }
+  if (forced_subname) {
+    subname = osal_strdup(forced_subname);
+    if (!subname) {
+      if (!quiet)
+        perror("strdup()");
+      exit(EXIT_FAILURE);
+    }
+  }
   dbi_flags = 0;
   sequence = 0;
 
@@ -124,6 +133,22 @@ static int readhdr(void) {
       return errno ? errno : EOF;
     if (user_break)
       return MDBX_EINTR;
+
+    /* A full buffer without a newline: the line is longer, e.g. a long table name. */
+    for (size_t len = strlen(data_buf.iov_base);
+         len + 1 == data_buf.iov_len && ((char *)data_buf.iov_base)[len - 1] != '\n';) {
+      char *const line = osal_realloc(data_buf.iov_base, data_buf.iov_len * 2);
+      if (!line) {
+        if (!quiet)
+          fprintf(stderr, "%s: line %" PRIiSIZE ": out of memory, line too long\n", prog, lineno + 1);
+        return MDBX_ENOMEM;
+      }
+      data_buf.iov_base = line;
+      data_buf.iov_len *= 2;
+      if (fgets(line + len, (int)(data_buf.iov_len - len), stdin) == nullptr)
+        break;
+      len += strlen(line + len);
+    }
 
     lineno++;
     uint64_t u64;
@@ -169,7 +194,8 @@ static int readhdr(void) {
 
     str = valstr(data_buf.iov_base, "database");
     if (str) {
-      if (*str) {
+      /* `-s` wins over `database=`; an empty value names the table whose name is the empty string */
+      if (!forced_subname) {
         if (tool_name_has_control(str)) {
           if (!quiet)
             fprintf(stderr, "%s: line %" PRIiSIZE ": invalid database name containing control characters\n", prog,
@@ -532,6 +558,7 @@ int main(int argc, char *argv[]) {
       envflags |= MDBX_NOSUBDIR;
       break;
     case 's':
+      forced_subname = optarg;
       subname = osal_strdup(optarg);
       break;
     case 'N':
@@ -748,6 +775,18 @@ int main(int argc, char *argv[]) {
       goto bailout;
     }
 
+    /* Purge before the sequence is restored: a purge resets it. With `-s` every section loads into the same table,
+     * so it is purged only once. */
+    if (purge) {
+      err = mdbx_drop(txn, dbi, false);
+      if (unlikely(err != MDBX_SUCCESS)) {
+        error("mdbx_drop", err);
+        goto bailout;
+      }
+      if (forced_subname)
+        purge = false;
+    }
+
     uint64_t present_sequence;
     err = mdbx_dbi_sequence(txn, dbi, &present_sequence, 0);
     if (unlikely(err != MDBX_SUCCESS)) {
@@ -765,14 +804,6 @@ int main(int argc, char *argv[]) {
       err = mdbx_dbi_sequence(txn, dbi, nullptr, sequence - present_sequence);
       if (unlikely(err != MDBX_SUCCESS)) {
         error("mdbx_dbi_sequence", err);
-        goto bailout;
-      }
-    }
-
-    if (purge) {
-      err = mdbx_drop(txn, dbi, false);
-      if (unlikely(err != MDBX_SUCCESS)) {
-        error("mdbx_drop", err);
         goto bailout;
       }
     }
@@ -820,11 +851,15 @@ int main(int argc, char *argv[]) {
       }
 
       err = mdbx_cursor_put(mc, &key, &data, putflags);
-      if (err == MDBX_KEYEXIST && putflags)
+      /* A skipped record must not end the loop, which runs while `err` is MDBX_SUCCESS. */
+      if (err == MDBX_KEYEXIST && putflags) {
+        err = MDBX_SUCCESS;
         continue;
+      }
       if (err == MDBX_BAD_VALSIZE && rescue) {
         if (!quiet)
           fprintf(stderr, "%s: skip line %" PRIiSIZE ": due to %s\n", prog, lineno, mdbx_strerror(err));
+        err = MDBX_SUCCESS;
         continue;
       }
       if (unlikely(err != MDBX_SUCCESS)) {
@@ -847,6 +882,8 @@ int main(int argc, char *argv[]) {
 
       if (should_checkpoint) {
         err = mdbx_txn_checkpoint(txn, MDBX_TXN_NOMETASYNC, nullptr);
+        if (err == MDBX_RESULT_TRUE)
+          err = MDBX_SUCCESS /* the batch changed nothing */;
         if (unlikely(err != MDBX_SUCCESS)) {
           error("mdbx_txn_checkpoint", err);
           goto bailout;
