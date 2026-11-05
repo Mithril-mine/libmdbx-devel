@@ -11,6 +11,7 @@ This directory holds one subdirectory per required option set:
 tests/special-builds/
   locking-sysv/        # libmdbx built with MDBX_LOCKING=5 (System V IPC)
   c11-atomics-off/     # libmdbx built with C11 atomics disabled (__STDC_NO_ATOMICS__)
+  fallocate-range/     # libmdbx built with FALLOC_FL_ALLOCATE_RANGE defined
 ```
 
 Each subdirectory is a self-contained CMake project:
@@ -28,5 +29,5 @@ cmake --build @build-special
 ctest --test-dir @build-special --output-on-failure
 ```
 
-The `locking-sysv` tests need the probe-bus at run time (`MDBX_PROBES=1`),
-which `CMakeLists.txt` sets on the affected CTest tests.
+The `locking-sysv` and `fallocate-range` tests need the probe-bus at run time
+(`MDBX_PROBES=1`), which `CMakeLists.txt` sets on the affected CTest tests.
