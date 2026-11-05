@@ -432,7 +432,7 @@ __cold int rthc_remove(MDBX_env *const env) {
 
 #if !defined(_WIN32) && !defined(_WIN64)
 __cold void rthc_afterfork(void) {
-  NOTICE("drown %d rthc entries", rthc_count);
+  VERBOSE("drown %d rthc entries", rthc_count);
   for (size_t i = 0; i < rthc_count; ++i) {
     MDBX_env *const env = rthc_table[i].env;
     NOTICE("drown env %p", __Wpedantic_format_voidptr(env));

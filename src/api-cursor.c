@@ -27,7 +27,8 @@ MDBX_cursor *mdbx_cursor_create(void *context) {
 }
 
 int mdbx_cursor_renew(MDBX_txn *txn, MDBX_cursor *mc) {
-  return likely(mc) ? mdbx_cursor_bind(txn, mc, (MDBX_dbi)((kvx_t *)mc->clc - txn->env->kvs)) : LOG_IFERR(MDBX_EINVAL);
+  return likely(txn && mc) ? mdbx_cursor_bind(txn, mc, (MDBX_dbi)((kvx_t *)mc->clc - txn->env->kvs))
+                           : LOG_IFERR(MDBX_EINVAL);
 }
 
 int mdbx_cursor_reset(MDBX_cursor *mc) {
@@ -477,9 +478,9 @@ __hot static int scan_continue(MDBX_cursor *mc, MDBX_predicate_func predicate, v
           return rc;
         rc = inner_next(&mc->subcur->cursor, value);
         if (unlikely(rc != MDBX_SUCCESS))
-          return (rc == MDBX_NOTFOUND) ? MDBX_RESULT_FALSE : rc;
+          return (rc == MDBX_NOTFOUND || rc == MDBX_ENODATA) ? MDBX_RESULT_FALSE : rc;
       }
-    return MDBX_NOTFOUND;
+    return MDBX_RESULT_FALSE;
 
   case MDBX_PREV_DUP:
     if (mc->subcur)
@@ -489,9 +490,9 @@ __hot static int scan_continue(MDBX_cursor *mc, MDBX_predicate_func predicate, v
           return rc;
         rc = inner_prev(&mc->subcur->cursor, value);
         if (unlikely(rc != MDBX_SUCCESS))
-          return (rc == MDBX_NOTFOUND) ? MDBX_RESULT_FALSE : rc;
+          return (rc == MDBX_NOTFOUND || rc == MDBX_ENODATA) ? MDBX_RESULT_FALSE : rc;
       }
-    return MDBX_NOTFOUND;
+    return MDBX_RESULT_FALSE;
 
   default:
     for (;;) {
@@ -687,6 +688,10 @@ int mdbx_cursor_put(MDBX_cursor *mc, const MDBX_val *key, MDBX_val *data, MDBX_p
   if (unlikely(rc != MDBX_SUCCESS))
     return LOG_IFERR(rc);
 
+  /* N_TREE and N_DUP are internal, see mdbx_put() */
+  if (unlikely(flags & (N_TREE | N_DUP)))
+    return LOG_IFERR(MDBX_EINVAL);
+
   if (unlikely(flags & MDBX_MULTIPLE)) {
     rc = cursor_check_multiple(mc, key, data, flags);
     if (unlikely(rc != MDBX_SUCCESS))
@@ -706,6 +711,10 @@ int mdbx_cursor_del(MDBX_cursor *mc, MDBX_put_flags_t flags) {
   int rc = cursor_check_rw(mc);
   if (unlikely(rc != MDBX_SUCCESS))
     return LOG_IFERR(rc);
+
+  /* N_TREE and N_DUP are internal, see mdbx_put() */
+  if (unlikely(flags & (N_TREE | N_DUP)))
+    return LOG_IFERR(MDBX_EINVAL);
 
   return LOG_IFERR(cursor_del(mc, flags));
 }
