@@ -92,10 +92,16 @@ struct churn_guard {
       }
     });
   }
-  ~churn_guard() {
+  /* Stops the thread and returns its result, so that an open/close that is
+   * still in flight cannot fail after the result is checked. */
+  int finish() {
     stop.store(true);
     if (thread.joinable())
       thread.join();
+    return rc.load();
+  }
+  ~churn_guard() {
+    finish();
     if (where)
       munmap(const_cast<int *>(where), sizeof(int));
     mdbx_env_delete(kParentDb, MDBX_ENV_JUST_DELETE);
@@ -152,5 +158,5 @@ TEST(issue_gh0324, fork_while_another_thread_opens_and_closes) {
     usleep(1000);
   }
   EXPECT_GT(forks, 0);
-  EXPECT_EQ(churn.rc.load(), MDBX_SUCCESS) << "the open/close thread failed";
+  EXPECT_EQ(churn.finish(), MDBX_SUCCESS) << "the open/close thread failed";
 }
