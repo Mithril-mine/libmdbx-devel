@@ -11,8 +11,8 @@
 ///    again when it is destroyed. The destructor runs on every exit path of a
 ///    test: success, a failed ASSERT_*, GTEST_SKIP() or an exception. Deleting
 ///    at construction also removes the files a crashed or killed earlier run
-///    left behind, including a `-lck` file whose data file is gone (for an
-///    MDBX_NOSUBDIR file path and the default `-lck` suffix). A deletion
+///    left behind, including a lock file whose data file is gone, which
+///    mdbx_env_delete() removes as well. A deletion
 ///    that fails is reported as a test failure (with --gtest_throw_on_failure
 ///    that failure would throw from a destructor and terminate the process).
 ///  - mdtest_env: a std::unique_ptr that closes an MDBX_env when it goes out
@@ -39,8 +39,6 @@
 #include "mdbx.h"
 #include <gtest/gtest.h>
 
-#include <cerrno>
-#include <cstdio>
 #include <memory>
 #include <string>
 #include <utility>
@@ -49,17 +47,9 @@ class mdtest_db {
   const std::string path_;
 
   void erase() const {
+    /* MDBX_RESULT_TRUE: nothing found */
     const int rc = mdbx_env_delete(path_.c_str(), MDBX_ENV_JUST_DELETE);
-    if (rc == MDBX_RESULT_TRUE) {
-      /* Nothing found: mdbx_env_delete() looks for the data file first and
-       * leaves a lock file whose data file is gone. */
-      const std::string lck = path_ + "-lck";
-      if (std::remove(lck.c_str()) != 0) {
-        const int err = errno;
-        if (err != ENOENT)
-          ADD_FAILURE() << "cannot delete the lock file \"" << lck << "\": errno " << err;
-      }
-    } else if (rc != MDBX_SUCCESS)
+    if (rc != MDBX_SUCCESS && rc != MDBX_RESULT_TRUE)
       ADD_FAILURE() << "cannot delete the test database \"" << path_ << "\": " << mdbx_strerror(rc);
   }
 
