@@ -162,6 +162,8 @@ Cutting-edge release with new core features and internal refactoring.
     - With recent Linux headers, a failed file preallocation was ignored until write time ([#320](https://github.com/Mithril-mine/libmdbx-devel/issues/320)).
     - With older Linux headers, a copy without `fallocate()` failed with `EBADF` ([#330](https://github.com/Mithril-mine/libmdbx-devel/issues/330)).
     - `mdbx_env_copy()` to a new file on a filesystem without direct I/O failed with `EEXIST` ([#331](https://github.com/Mithril-mine/libmdbx-devel/issues/331)).
+    - With the POSIX-1988 semaphore locking (the default on FreeBSD, NetBSD and Solaris) or the System V one, a signal during a lock wait made the environment fatal, and the lock holder's commit failed with `MDB
+X_PANIC` ([#323](https://github.com/Mithril-mine/libmdbx-devel/issues/323)).
 
  - Build:
     - Fixed MSVC+AddressSanitizer builds failing to compile ([#62](https://github.com/Mithril-mine/libmdbx-devel/issues/62)).
