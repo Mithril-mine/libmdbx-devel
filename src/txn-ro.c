@@ -80,7 +80,10 @@ static void ro_slot_release(MDBX_txn *txn) {
   MDBX_env *const env = txn->env;
   eASSERT0(env, ro_slot_pid(slot) == osal_getpid());
   eASSERT0(env, slot->txnid.weak >= SAFE64_INVALID_THRESHOLD);
-  if (ro_slot_pid(slot) == osal_getpid()) {
+  /* the cached pid is enough unless a child process inherits the reader table after fork();
+   * in a child env->pid is zero (see rthc_afterfork), which must not match a free slot */
+  const mdbx_pid_t own_pid = MDBX_ENV_CHECKPID ? osal_getpid() : env->pid;
+  if (likely(own_pid != 0) && ro_slot_pid(slot) == own_pid) {
     safe64_reset(&slot->txnid, false);
     if ((env->flags & ENV_TXKEY) == 0)
       atomic_store32(&slot->pid, 0, mo_Relaxed);
