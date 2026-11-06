@@ -21,6 +21,7 @@
 #include <atomic>
 #include <cstdio>
 #include <cstring>
+#include <string>
 #include <thread>
 
 extern "C" int mdbx_probe_ctl(const char *request, char *reply, size_t reply_size);
@@ -100,22 +101,40 @@ size_t site_hits() {
   return (site && sscanf(site, "site %63s %u %u %zu %zu", name, &kind, &armed, &seen, &hits) == 5) ? hits : 0;
 }
 
-size_t count_records(const char *path) {
+/* Reads every record of the copy: all must be present and whole, written by one and the same rewrite round, and
+ * that round must be newer than round 0 of the snapshot the copy started with. Returns a description of the first
+ * problem, or an empty string. */
+std::string check_copy(const char *path) {
   env_guard copy;
   if (mdbx_env_create(&copy.env) != MDBX_SUCCESS ||
       mdbx_env_open(copy.env, path, MDBX_NOSUBDIR | MDBX_RDONLY, 0644) != MDBX_SUCCESS)
-    return 0;
+    return "the copy cannot be opened";
   MDBX_txn *txn = nullptr;
   if (mdbx_txn_begin(copy.env, nullptr, MDBX_TXN_RDONLY, &txn) != MDBX_SUCCESS)
-    return 0;
+    return "no read transaction on the copy";
+  std::string problem;
   MDBX_dbi dbi = 0;
-  MDBX_stat st;
-  size_t entries = 0;
-  if (mdbx_dbi_open(txn, nullptr, MDBX_DB_DEFAULTS, &dbi) == MDBX_SUCCESS &&
-      mdbx_dbi_stat(txn, dbi, &st, sizeof(st)) == MDBX_SUCCESS)
-    entries = st.ms_entries;
+  int rc = mdbx_dbi_open(txn, nullptr, MDBX_DB_DEFAULTS, &dbi);
+  char round_char = 0;
+  for (int i = 0; rc == MDBX_SUCCESS && problem.empty() && i < kRecords; ++i) {
+    char key[16];
+    snprintf(key, sizeof key, "k%06d", i);
+    MDBX_val k = {key, strlen(key)}, v = {nullptr, 0};
+    rc = mdbx_get(txn, dbi, &k, &v);
+    if (rc != MDBX_SUCCESS)
+      break;
+    const char *const bytes = static_cast<const char *>(v.iov_base);
+    if (i == 0)
+      round_char = (v.iov_len > 0) ? bytes[0] : 0;
+    if (v.iov_len != kValueLen || std::string(bytes, v.iov_len) != std::string(kValueLen, round_char))
+      problem = std::string("record ") + key + " differs from the others (a mixed or damaged snapshot)";
+  }
+  if (rc != MDBX_SUCCESS)
+    problem = std::string("reading the copy: ") + mdbx_strerror(rc);
+  else if (problem.empty() && round_char == 'a')
+    problem = "the copy holds the snapshot from before the restart";
   mdbx_txn_abort(txn);
-  return entries;
+  return problem;
 }
 
 } // namespace
@@ -149,6 +168,13 @@ TEST(issue_gh0337, renew_txn_restarts_an_ousted_parked_copy) {
   std::atomic<bool> stop{false};
   std::atomic<int> writer_rc{MDBX_SUCCESS};
   std::atomic<unsigned> rounds{0};
+  char reply[512];
+  /* reset (the hit counter too, e.g. with --gtest_repeat) and arm the site before the writer watches it */
+  rc = mdbx_probe_ctl("reset copy_parked_stall_ms", reply, sizeof reply);
+  if (rc == MDBX_SUCCESS)
+    rc = mdbx_probe_ctl("fault copy_parked_stall_ms 30000", reply, sizeof reply);
+  if (rc != MDBX_SUCCESS)
+    ADD_FAILURE() << "mdbx_probe_ctl(): " << reply;
   std::thread writer([&] {
     while (!stop.load() && site_hits() == 0)
       std::this_thread::yield();
@@ -164,14 +190,8 @@ TEST(issue_gh0337, renew_txn_restarts_an_ousted_parked_copy) {
     mdbx_probe_ctl("fault copy_parked_stall_ms none", ctl_reply, sizeof ctl_reply);
   });
 
-  char reply[512];
-  rc = mdbx_probe_ctl("reset copy_parked_stall_ms", reply, sizeof reply);
-  if (rc == MDBX_SUCCESS)
-    rc = mdbx_probe_ctl("fault copy_parked_stall_ms 30000", reply, sizeof reply);
   if (rc == MDBX_SUCCESS)
     rc = mdbx_txn_copy2pathname(txn, kCopy, MDBX_CP_THROTTLE_MVCC | MDBX_CP_RENEW_TXN);
-  else
-    ADD_FAILURE() << "mdbx_probe_ctl(): " << reply;
   mdbx_probe_ctl("fault copy_parked_stall_ms none", reply, sizeof reply);
   const uint64_t restarted = mdbx_txn_id(txn);
   stop.store(true);
@@ -184,5 +204,6 @@ TEST(issue_gh0337, renew_txn_restarts_an_ousted_parked_copy) {
   EXPECT_NE(restarted, UINT64_MAX) << "the transaction was left ousted";
   EXPECT_GT(restarted, snapshot) << "the parked copy was not ousted and restarted (the writer did " << rounds.load()
                                  << " rounds)";
-  EXPECT_EQ(count_records(kCopy), size_t(kRecords)) << "the copy does not hold every record";
+  const std::string problem = check_copy(kCopy);
+  EXPECT_TRUE(problem.empty()) << problem;
 }
