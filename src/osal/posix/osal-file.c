@@ -390,14 +390,29 @@ int osal_fsetsize(mdbx_filehandle_t fd, const uint64_t length) {
 
   const uint64_t allocated = UINT64_C(512) * info.st_blocks;
   if (length > allocated) {
-#if defined(FALLOC_FL_ALLOCATE_RANGE) && defined(FALLOC_FL_KEEP_SIZE)
+
+#ifdef FALLOC_FL_ALLOCATE_RANGE
+#define MDBX_FALLOC_FL_ALLOCATE_RANGE FALLOC_FL_ALLOCATE_RANGE
+#else
+#define MDBX_FALLOC_FL_ALLOCATE_RANGE 0
+#endif /* MDBX_FALLOC_FL_ALLOCATE_RANGE */
+
+#ifdef FALLOC_FL_KEEP_SIZE
+#define MDBX_FALLOC_FL_KEEP_SIZE FALLOC_FL_KEEP_SIZE
+#else
+#define MDBX_FALLOC_FL_KEEP_SIZE 0
+#endif /* MDBX_FALLOC_FL_KEEP_SIZE */
+
+#if defined(FALLOC_FL_KEEP_SIZE)
     /* prefer a low-level non-portable function to avoid glibc emulation
-     * if the file system does not support the operation. */
+     * if the file system does not support the operation: the emulation reads
+     * the file, which fails with EBADF on a write-only copy destination.
+     * FALLOC_FL_ALLOCATE_RANGE is 0 and missing from older headers. */
     int injected = 0;
     MPROBE_FAULT(fsetsize_fallocate_errno, injected); /* testing: fail as fallocate() with this errno */
     int rc = -1;
     if (likely(!injected))
-      rc = fallocate(fd, FALLOC_FL_ALLOCATE_RANGE | FALLOC_FL_KEEP_SIZE, 0, length);
+      rc = fallocate(fd, MDBX_FALLOC_FL_ALLOCATE_RANGE | MDBX_FALLOC_FL_KEEP_SIZE, 0, length);
     else
       errno = injected /* fail as fallocate() does, so the result goes through the same check */;
     /* fallocate() returns -1 and sets errno on failure */
@@ -417,7 +432,8 @@ int osal_fsetsize(mdbx_filehandle_t fd, const uint64_t length) {
     if (!err && length > (uint64_t)info.st_size)
       info.st_size = length /* posix_fallocate() extends the file */;
 #else
-    const int err = fallocate(fd, 0, 0, length) ? errno : MDBX_SUCCESS;
+    const int err =
+        fallocate(fd, MDBX_FALLOC_FL_ALLOCATE_RANGE | MDBX_FALLOC_FL_KEEP_SIZE, 0, length) ? errno : MDBX_SUCCESS;
     if (!err && length > (uint64_t)info.st_size)
       info.st_size = length /* fallocate() extends the file */;
 #endif

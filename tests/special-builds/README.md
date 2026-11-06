@@ -11,7 +11,7 @@ This directory holds one subdirectory per required option set:
 tests/special-builds/
   locking-sysv/        # libmdbx built with MDBX_LOCKING=5 (System V IPC)
   c11-atomics-off/     # libmdbx built with C11 atomics disabled (__STDC_NO_ATOMICS__)
-  fallocate-range/     # libmdbx built with FALLOC_FL_ALLOCATE_RANGE defined
+  fallocate-range/     # libmdbx built with the probe-bus, raw fallocate() branch
 ```
 
 Each subdirectory is a self-contained CMake project:
