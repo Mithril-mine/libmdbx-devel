@@ -183,7 +183,7 @@ TEST(issue_gh0333, DISABLED_child) {
       << reply;
   const int rc = mdbx_env_set_geometry(env, -1, -1, 128 << 20, -1, -1, -1); /* a new upper bound: remap */
   mdbx_probe_ctl("fault suspend_open_thread_error none", reply, sizeof reply);
-  if (site_hits() < 2)
+  if (site_hits() == 0) /* evaluated once per suspension, before any thread is suspended */
     child_exit(kSiteNotReached);
   EXPECT_NE(rc, MDBX_SUCCESS) << "the injected OpenThread() failure did not reach mdbx_env_set_geometry()";
 
