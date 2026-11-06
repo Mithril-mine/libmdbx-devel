@@ -62,9 +62,10 @@ void remove_both() {
   std::remove(kLck.c_str());
 }
 
-/* An unrelated file named "issue345.lck" (the alternative lock name without the
-   data-file suffix) must not be touched nor change the answer. */
-std::string alt_lck_path() { return std::string(kDb) + ".lck"; }
+/* An unrelated file named "issue345.lck" (the alternative lock name: the
+   extension of the pathname replaced by MDBX_LOCK_SUFFIX) must not be touched
+   nor change the answer. */
+std::string alt_lck_path() { return std::string("issue345.lck"); }
 
 } // namespace
 
@@ -90,6 +91,26 @@ TEST(issue_gh0345, just_delete_orphan_lock) {
   ASSERT_TRUE(lck_exists());
   EXPECT_EQ(mdbx_env_delete(kDb, MDBX_ENV_JUST_DELETE), MDBX_SUCCESS);
   EXPECT_FALSE(lck_exists());
+  remove_both();
+}
+
+/* An orphan data-file lock next to an alternative lock file: the delete must
+   report MDBX_DUPLICATED_LCK and keep both the orphan `-lck` and the
+   alternative lock file, not purge the orphan despite the alternative. */
+TEST(issue_gh0345, orphan_lock_with_alternative_lck) {
+  remove_both();
+  const std::string alt = alt_lck_path();
+  std::remove(alt.c_str());
+  make_db();
+  ASSERT_EQ(std::remove(kDb), 0);
+  FILE *f = fopen(alt.c_str(), "wb");
+  ASSERT_NE(f, nullptr);
+  fputs("alternative", f);
+  fclose(f);
+  EXPECT_EQ(mdbx_env_delete(kDb, MDBX_ENV_JUST_DELETE), MDBX_DUPLICATED_LCK);
+  EXPECT_TRUE(lck_exists()) << "the orphan lock file must be kept when an alternative lock file exists";
+  EXPECT_TRUE(exists(alt.c_str()));
+  std::remove(alt.c_str());
   remove_both();
 }
 
