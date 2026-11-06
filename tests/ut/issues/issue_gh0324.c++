@@ -22,8 +22,10 @@
 #include <cerrno>
 #include <chrono>
 #include <csignal>
+#include <cstdarg>
 #include <cstdio>
 #include <cstdlib>
+#include <pthread.h>
 #include <string>
 #include <sys/mman.h>
 #include <sys/wait.h>
@@ -159,4 +161,113 @@ TEST(issue_gh0324, fork_while_another_thread_opens_and_closes) {
   }
   EXPECT_GT(forks, 0);
   EXPECT_EQ(churn.finish(), MDBX_SUCCESS) << "the open/close thread failed";
+}
+
+namespace {
+
+const char *const kJoinDb = "issue324-join.mdbx";
+const char *const kJoinNewDb = "issue324-join-new.mdbx";
+
+/* Deletes a database before the test and on every exit path. */
+struct files_guard {
+  const char *const path;
+  explicit files_guard(const char *path) : path(path) { mdbx_env_delete(path, MDBX_ENV_JUST_DELETE); }
+  ~files_guard() { mdbx_env_delete(path, MDBX_ENV_JUST_DELETE); }
+};
+
+/* State of the scenario in the child process, shared with the logger and the atfork handler. */
+std::atomic<bool> logger_armed{false}, fork_now{false}, fork_started{false}, reader_may_exit{false};
+std::thread *reader_to_join = nullptr;
+
+/* Registered after libmdbx's handler, so it runs before it: libmdbx's prepare handler follows at once. */
+void note_fork_started() { fork_started.store(true); }
+
+bool wait_for(const std::atomic<bool> &flag) {
+  for (int i = 0; i < 5000 && !flag.load(); ++i)
+    usleep(1000);
+  return flag.load();
+}
+
+/* Runs under debug_lock: lets another thread fork, then joins a thread whose exit (rthc_thread_dtor) needs
+ * rthc_mutex. A fork handler that waits for debug_lock while holding rthc_mutex deadlocks with it. */
+void joining_logger(MDBX_log_level_t, const char *, int, const char *, va_list) MDBX_CXX17_NOEXCEPT {
+  if (!logger_armed.exchange(false))
+    return;
+  fork_now.store(true);
+  if (wait_for(fork_started))
+    usleep(100 * 1000); /* the fork is now in libmdbx's prepare handler */
+  reader_may_exit.store(true);
+  reader_to_join->join();
+}
+
+/* The scenario, in a child process without other threads; returns its exit status. */
+int join_scenario() {
+  MDBX_env *env = nullptr;
+  if (mdbx_env_create(&env) != MDBX_SUCCESS || mdbx_env_open(env, kJoinDb, MDBX_NOSUBDIR, 0644) != MDBX_SUCCESS)
+    return 10;
+  /* a thread that used libmdbx: its exit runs rthc_thread_dtor(), which takes rthc_mutex */
+  std::atomic<bool> reader_done{false};
+  std::thread reader([&] {
+    MDBX_txn *txn = nullptr;
+    if (mdbx_txn_begin(env, nullptr, MDBX_TXN_RDONLY, &txn) == MDBX_SUCCESS)
+      mdbx_txn_abort(txn);
+    reader_done.store(true);
+    while (!reader_may_exit.load())
+      usleep(1000);
+  });
+  if (!wait_for(reader_done))
+    return 11;
+  reader_to_join = &reader;
+  if (pthread_atfork(note_fork_started, nullptr, nullptr) != 0 ||
+      mdbx_setup_debug(MDBX_LOG_NOTICE, MDBX_DBG_DONTCHANGE, joining_logger) < 0)
+    return 12;
+
+  std::atomic<int> forked_status{-1};
+  std::thread forker([&] {
+    if (!wait_for(fork_now))
+      return;
+    const pid_t pid = fork();
+    if (pid == 0)
+      _exit(0);
+    int status = -1;
+    while (pid > 0 && waitpid(pid, &status, 0) < 0 && errno == EINTR) {
+    }
+    forked_status.store(status);
+  });
+  logger_armed.store(true);
+  /* opening a new database logs "read meta: empty file" at NOTICE level from this thread */
+  MDBX_env *fresh = nullptr;
+  if (mdbx_env_create(&fresh) == MDBX_SUCCESS && mdbx_env_open(fresh, kJoinNewDb, MDBX_NOSUBDIR, 0644) == MDBX_SUCCESS)
+    mdbx_env_close(fresh);
+  forker.join();
+  if (reader.joinable()) { /* the logger did not run */
+    reader_may_exit.store(true);
+    reader.join();
+    return 13;
+  }
+  mdbx_env_close(env);
+  return (forked_status.load() == 0) ? 0 : 14;
+}
+
+} // namespace
+
+/* The fork handler must not wait for debug_lock while it holds rthc_mutex: a logger callback (which runs under
+ * debug_lock) joins a thread that used libmdbx, whose exit needs rthc_mutex, while a third thread forks. Run in a
+ * child process, which counts as deadlocked after 15 seconds. */
+TEST(issue_gh0324, fork_while_a_logger_joins_a_thread) {
+  if (MDBX_GTEST_IS_EXECUTION_TIMEOUT()) {
+    GTEST_SKIP() << "SKIPPED by RUNTIME_LIMIT";
+  }
+  files_guard files(kJoinDb), new_files(kJoinNewDb);
+  fflush(nullptr);
+  const pid_t pid = fork();
+  ASSERT_GE(pid, 0) << "fork() failed";
+  if (pid == 0)
+    _exit(join_scenario());
+  int status = 0;
+  const bool exited = child_exits(pid, status);
+  ASSERT_TRUE(exited) << "deadlock: a fork() waited for debug_lock while holding rthc_mutex, which the exit of a "
+                         "thread joined by a logger needs";
+  EXPECT_TRUE(WIFEXITED(status) && WEXITSTATUS(status) == 0)
+      << "the scenario failed, wait status 0x" << std::hex << status;
 }
