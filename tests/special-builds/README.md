@@ -11,13 +11,15 @@ This directory holds one subdirectory per required option set:
 tests/special-builds/
   locking-sysv/        # libmdbx built with MDBX_LOCKING=5 (System V IPC)
   c11-atomics-off/     # libmdbx built with C11 atomics disabled (__STDC_NO_ATOMICS__)
+  locking-posix1988/   # libmdbx built with MDBX_LOCKING=1988 (POSIX semaphores)
 ```
 
 Each subdirectory is a self-contained CMake project:
 
 - `CMakeLists.txt` builds the libmdbx SDK from the repository root with the
   required options and registers the tests via CTest, and
-- the test sources live next to it.
+- the test sources live next to it (`locking-posix1988` reuses
+  `locking-sysv/issue_gh0323_eintr.c`, which runs with both locking modes).
 
 Run a special build locally, e.g.:
 
@@ -28,5 +30,5 @@ cmake --build @build-special
 ctest --test-dir @build-special --output-on-failure
 ```
 
-The `locking-sysv` tests need the probe-bus at run time (`MDBX_PROBES=1`),
+Most `locking-sysv` tests need the probe-bus at run time (`MDBX_PROBES=1`),
 which `CMakeLists.txt` sets on the affected CTest tests.

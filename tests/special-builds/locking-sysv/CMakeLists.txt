@@ -58,3 +58,12 @@ target_include_directories(issue_gh0159_idle_holder PRIVATE ${LIBMDBX_SOURCE_DIR
 target_link_libraries(issue_gh0159_idle_holder PRIVATE mdbx-static)
 add_test(NAME issue_gh0159_idle_holder COMMAND issue_gh0159_idle_holder)
 set_tests_properties(issue_gh0159_idle_holder PROPERTIES ENVIRONMENT "MDBX_PROBES=1")
+
+# Regression test for issue 323: a signal delivered to a thread that waits for
+# the write lock must not interrupt semop() into a fatal environment. The same
+# source is built by tests/special-builds/locking-posix1988 for sem_wait().
+add_executable(issue_gh0323_eintr issue_gh0323_eintr.c)
+target_include_directories(issue_gh0323_eintr PRIVATE ${LIBMDBX_SOURCE_DIR})
+target_link_libraries(issue_gh0323_eintr PRIVATE mdbx-static)
+add_test(NAME issue_gh0323_eintr COMMAND issue_gh0323_eintr)
+set_tests_properties(issue_gh0323_eintr PROPERTIES TIMEOUT 60)

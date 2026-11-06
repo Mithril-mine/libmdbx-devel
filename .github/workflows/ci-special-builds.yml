@@ -1,10 +1,10 @@
 name: ci-special-builds
 
 # Special libmdbx build configurations required by tests that cannot be
-# exercised by the default library build. Currently only the System V IPC
-# locking (issue #80 regression + the osal_ftok passthrough check); see
-# tests/special-builds/README.md and tests/special-builds/locking-sysv/.
-# SysV semaphores are a POSIX mechanism, so only the Linux cell is run.
+# exercised by the default library build: the System V IPC locking (issue 80
+# regression + the osal_ftok passthrough check) and the POSIX-1988 semaphore
+# locking; see tests/special-builds/README.md and its subdirectories.
+# Both are POSIX mechanisms, so only Linux cells are run.
 
 on:
   push:
@@ -46,3 +46,27 @@ jobs:
         shell: bash
         run: |
           ctest --test-dir @ci-special-locking-sysv --output-on-failure
+
+  locking-posix1988:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+          submodules: true
+
+      - name: configure
+        shell: bash
+        run: |
+          cmake -S tests/special-builds/locking-posix1988 -B @ci-special-locking-posix1988 \
+            -DCMAKE_BUILD_TYPE=Debug
+
+      - name: build
+        shell: bash
+        run: |
+          cmake --build @ci-special-locking-posix1988 -j 4
+
+      - name: test
+        shell: bash
+        run: |
+          ctest --test-dir @ci-special-locking-posix1988 --output-on-failure
