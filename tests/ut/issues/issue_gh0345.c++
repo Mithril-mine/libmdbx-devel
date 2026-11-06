@@ -121,9 +121,6 @@ TEST(issue_gh0345, missing_paths) {
   }
 }
 
-#ifndef _WIN32
-/* On Windows MDBX_ENV_ENSURE_UNUSED/MDBX_ENV_WAIT_FOR_UNUSED are broken
-   independently (#336), so these cases are POSIX-only. */
 TEST(issue_gh0345, ensure_unused_orphan_lock) {
   remove_both();
   make_db();
@@ -134,6 +131,7 @@ TEST(issue_gh0345, ensure_unused_orphan_lock) {
   remove_both();
 }
 
+#ifndef _WIN32
 /* Waits a single byte within the timeout, for the fork() handshake below. */
 static bool wait_byte(int fd, char *out) {
   struct pollfd pfd = {(decltype(pollfd::fd))fd, POLLIN, 0};
