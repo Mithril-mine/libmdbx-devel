@@ -55,6 +55,7 @@ Cutting-edge release with new core features and internal refactoring.
     - `mdbx_env_copy()` deleted an existing destination file when its open failed for another reason than its existence (e.g. at the open-file limit), even without `MDBX_CP_OVERWRITE` ([#310](https://github.com/Mithril-mine/libmdbx-devel/issues/310)).
     - A copy (`mdbx_env_copy()`, `mdbx_txn_copy2pathname()`) could delete a pre-existing destination database when its file lock failed, leave an orphan file blocking later copies, or keep the old file's tail after an overwrite ([#58](https://github.com/Mithril-mine/libmdbx-devel/issues/58), [#112](https://github.com/Mithril-mine/libmdbx-devel/issues/112)).
     - A compacting copy to a pipe (`mdbx_copy -c db | gzip`) reported success but wrote a wrong root page, so records were missing from the backup ([#309](https://github.com/Mithril-mine/libmdbx-devel/issues/309)).
+    - On Linux a non-compacting copy (`mdbx_env_copy()`, `mdbx_copy` without `-c`) could be silently corrupt when `copy_file_range()` failed after a partial copy, possibly on some network or FUSE filesystems ([#327](https://github.com/Mithril-mine/libmdbx-devel/issues/327)).
 
  - Resistance to corrupted or crafted "poisoned" data:
     - A crafted garbage-collection record listing one physical page twice got that page handed out to two b-tree nodes in a single write transaction, silently corrupting data; such records are now rejected ([#83](https://github.com/Mithril-mine/libmdbx-devel/issues/83)).
