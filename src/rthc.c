@@ -434,8 +434,21 @@ __cold int rthc_remove(MDBX_env *const env) {
 /* Hold the mutexes over fork(), so that the child neither sees a half-updated
  * rthc table nor inherits a mutex locked by a thread that does not exist there. */
 __cold static void rthc_beforefork(void) {
-  ENSURE(pthread_mutex_lock(&rthc_mutex) == 0);
-  ENSURE(pthread_mutex_lock(&globals.debug_lock) == 0);
+  /* Only rthc_mutex is waited for, while nothing else is held; debug_lock is only tried, and when it is busy
+   * everything is released and tried again. Waiting for debug_lock while holding rthc_mutex could deadlock with a
+   * logger callback (which runs under debug_lock) that joins a thread whose exit (rthc_thread_dtor) needs
+   * rthc_mutex. */
+  for (;;) {
+    ENSURE(pthread_mutex_lock(&rthc_mutex) == 0);
+    const int rc = pthread_mutex_trylock(&globals.debug_lock);
+    if (rc == 0)
+      return;
+    ENSURE(rc == EBUSY);
+    ENSURE(pthread_mutex_unlock(&rthc_mutex) == 0);
+    /* debug_lock lives as long as the library: wait for it while holding nothing */
+    ENSURE(pthread_mutex_lock(&globals.debug_lock) == 0);
+    ENSURE(pthread_mutex_unlock(&globals.debug_lock) == 0);
+  }
 }
 
 __cold static void rthc_afterfork_parent(void) {
