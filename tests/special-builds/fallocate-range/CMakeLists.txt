@@ -1,8 +1,9 @@
 cmake_minimum_required(VERSION 3.14)
 
-# Special-build test configuration for the fallocate(FALLOC_FL_ALLOCATE_RANGE)
-# branch of osal_fsetsize(), which is compiled only when the C headers define
-# FALLOC_FL_ALLOCATE_RANGE (recent kernel UAPI headers). See
+# Special-build test configuration for the raw fallocate() branch of
+# osal_fsetsize(), which the test reaches through a FAULT site of the probe-bus.
+# The branch is compiled whenever the C headers define FALLOC_FL_KEEP_SIZE
+# (issue 330), so the test also fails when it is not compiled. See
 # tests/special-builds/README.md and the test source for the rationale.
 project(libmdbx-fallocate-range C)
 enable_testing()
@@ -12,16 +13,6 @@ set(LIBMDBX_SOURCE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../../.."
 
 if(NOT CMAKE_SYSTEM_NAME STREQUAL "Linux")
   message(FATAL_ERROR "The fallocate-range special build is Linux-only")
-endif()
-
-# Older headers lack FALLOC_FL_ALLOCATE_RANGE: define it with its UAPI value
-# (0x00, i.e. the default mode of fallocate()) so the branch is compiled.
-include(CheckSymbolExists)
-set(CMAKE_REQUIRED_DEFINITIONS -D_GNU_SOURCE)
-check_symbol_exists(FALLOC_FL_ALLOCATE_RANGE "fcntl.h" HAVE_FALLOC_FL_ALLOCATE_RANGE)
-unset(CMAKE_REQUIRED_DEFINITIONS)
-if(NOT HAVE_FALLOC_FL_ALLOCATE_RANGE)
-  add_compile_definitions(FALLOC_FL_ALLOCATE_RANGE=0x00)
 endif()
 
 # The library must be built from this repository with the probe-bus enabled

@@ -102,6 +102,10 @@ else()
   add_issue_test(gh0309 SOURCE "issue_gh0309.c++")
   add_issue_test(gh0310 SOURCE "issue_gh0310.c++")
   add_issue_test(gh0324 SOURCE "issue_gh0324.c++")
+  if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
+    # mounts a ramfs in an unprivileged user namespace
+    add_issue_test(gh0330 SOURCE "issue_gh0330.c++")
+  endif()
   add_issue_test(gh0339 SOURCE "issue_gh0339.c++")
 endif()
 

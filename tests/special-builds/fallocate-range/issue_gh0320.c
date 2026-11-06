@@ -27,8 +27,9 @@
  * still be ignored.
  *
  * Requires the build from tests/special-builds/fallocate-range/CMakeLists.txt
- * (probe-bus on, FALLOC_FL_ALLOCATE_RANGE defined) and MDBX_PROBES=1 at run
- * time. */
+ * (probe-bus on) and MDBX_PROBES=1 at run time. The FAULT site must be
+ * reached: the raw fallocate() branch is compiled whenever the headers define
+ * FALLOC_FL_KEEP_SIZE (issue 330). */
 #include "mdbx.h"
 
 #include <errno.h>
@@ -96,7 +97,7 @@ static int check(const char *what, int injected_errno, int expected_rc) {
   if (rc == -1)
     return 2;
   if (hits == 0) {
-    fprintf(stderr, "%s: the fallocate() FAULT site was not reached, is FALLOC_FL_ALLOCATE_RANGE defined?\n", what);
+    fprintf(stderr, "%s: the fallocate() FAULT site was not reached, is the raw fallocate() branch compiled?\n", what);
     return 2;
   }
   if (rc != expected_rc) {
