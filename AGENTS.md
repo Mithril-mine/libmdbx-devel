@@ -15,8 +15,8 @@ Do not duplicate the structure descriptions here — they are maintained in:
   (`decl-*.h++` / `impl-*.h++` after the rename; see
   [docs/engineering/structure.md](docs/engineering/structure.md) and
   [docs/engineering/cxx-api.md](docs/engineering/cxx-api.md)).
-- `tests/` — unit tests under `tests/ut/<area>/`, issue regressions under
-  `tests/ut/issues/`, CI cells under `tests/ci/`.
+- `tests/` — the test suite; test-suite guidelines live in
+  [tests/AGENTS.md](tests/AGENTS.md) (layout, naming, hygiene/cleanup rules).
 - `docs/engineering/` — engineering documentation (canonical codexes:
   workflows, changelog, issues/PR, testing, coverage).
 - `skynet/` — agent infrastructure; `skynet/MCP-shared-graph-memory/` is the
@@ -26,19 +26,15 @@ Do not duplicate the structure descriptions here — they are maintained in:
 - `skills/{profiles,shared,superpowers}/` — canonical agent skills;
   `.opencode/skills/` holds active copies (sync rules in its README).
 
-## 2. File and test naming
+## 2. File naming
 
 - Use `-` (not `_`) in C/C++ source file names and directory names; use
   `.c++` / `.h++` extensions for C++ sources.
 - Use `_` (not `-`) in Python script names.
-- When adding tests, prefer extending existing files; split large files into
-  rational thematic parts consistent with the tests being added.
-- Do not add redundant prefixes/suffixes to test file names. All tests must
-  follow a single uniform style and form a coherent, tidy structure.
-- No tautology in test or test-file names, no serial numbers, no noise —
-  only a strict rational minimum and order.
 - Do not keep stale or duplicating documentation files; outdated content is
   merged into the canonical file and the duplicate is removed.
+- Test-file naming, structure and the test-suite guidelines live in
+  [tests/AGENTS.md](tests/AGENTS.md).
 
 ## 3. Git history
 
@@ -79,6 +75,8 @@ Summary:
 - Test first: if the issue already has a reproduction scenario, add a test
   modeled on `tests/ut/issues/**` — it must fail.
 - Then implement the fix; the test must pass afterwards.
+- The test-suite specifics (naming, hygiene/cleanup rules) live in
+  [tests/AGENTS.md](tests/AGENTS.md).
 - The fix includes an adequate ChangeLog entry in a user-facing form —
   see `docs/engineering/changelog-codex.md` and section 6 below.
 - External reporters are thanked in the ChangeLog `Appreciations` section
@@ -132,7 +130,8 @@ Canonical style guide: [docs/engineering/changelog-codex.md](docs/engineering/ch
 - Do not trigger unnecessary CI iterations; do not wait for red/failing
   runs — go fix them; cancel obsolete CI runs after merges.
 - Promptly remove temporary directories and other debris; monitor free
-  disk space before and after test runs.
+  disk space before and after test runs. Tests must clean up their own
+  database files — see [tests/AGENTS.md](tests/AGENTS.md) §3.
 
 ## 9. Documentation map
 
@@ -145,16 +144,9 @@ Canonical style guide: [docs/engineering/changelog-codex.md](docs/engineering/ch
   [docs/engineering/issues-pr-codex.md](docs/engineering/issues-pr-codex.md),
   [docs/engineering/news-codex.md](docs/engineering/news-codex.md) — comms and
   ChangeLog codexes.
-- [docs/engineering/testing-codex.md](docs/engineering/testing-codex.md),
-  [docs/engineering/testing-methodology.md](docs/engineering/testing-methodology.md),
-  [docs/engineering/test-scenarios.md](docs/engineering/test-scenarios.md) +
-  [test-scenarios-codex.md](docs/engineering/test-scenarios-codex.md),
-  [docs/engineering/test-coverage.md](docs/engineering/test-coverage.md) —
-  testing rules, scenario specs, coverage map (incl. white spots).
-- [docs/engineering/test-durability-strategy.md](docs/engineering/test-durability-strategy.md) —
-  durability modes and speed-up transports for tests.
-- [docs/engineering/testing-infra-design.md](docs/engineering/testing-infra-design.md) —
-  CI v2 infrastructure design.
+- Testing documentation (rules, methodology, scenario specs, coverage,
+  durability modes, CI v2 infrastructure design) lives in
+  [tests/AGENTS.md](tests/AGENTS.md) §5.
 - [docs/engineering/probe-bus.md](docs/engineering/probe-bus.md) — probe
   conventions.
 - [docs/engineering/libmdbx-invariants.md](docs/engineering/libmdbx-invariants.md),

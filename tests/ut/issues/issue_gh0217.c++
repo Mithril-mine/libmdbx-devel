@@ -219,13 +219,17 @@ int foreign_reader_child() {
 } // namespace
 
 TEST(issue_gh0217, foreign_read_process_skips_shrink) {
-  const env_files_guard guard({"issue217-foreign.mdbx"});
   if (MDBX_GTEST_IS_EXECUTION_TIMEOUT()) {
     GTEST_SKIP() << "SKIPPED by RUNTIME_LIMIT";
     return;
   }
+  /* NOTE: no env_files_guard here on purpose. This TEST body re-runs itself
+   * as the foreign reader child (via MDBX_TEST_GH217_CHILD), and on Windows
+   * a guard deleting a still-open/mapped database (left locked by a previous
+   * crashed run in the same cell) turns the cleanup failure into a test
+   * failure. The explicit env_remove()/mdbx_env_delete() calls below are the
+   * cleanup (the spawn/child mechanics make RAII ownership ambiguous). */
   if (std::getenv("MDBX_TEST_GH217_CHILD")) {
-    /* child: become the foreign reader */
     ASSERT_EQ(0, foreign_reader_child());
     return;
   }
@@ -311,7 +315,6 @@ TEST(issue_gh0217, foreign_read_process_skips_shrink) {
 
 #else
 TEST(issue_gh0217, windows_only) {
-  const env_files_guard guard({"issue217-foreign.mdbx"});
   if (MDBX_GTEST_IS_EXECUTION_TIMEOUT()) {
     GTEST_SKIP() << "SKIPPED by RUNTIME_LIMIT";
     return;
