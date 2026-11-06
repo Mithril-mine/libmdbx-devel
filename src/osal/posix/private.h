@@ -63,5 +63,10 @@
 #include <sys/utsname.h>
 #include <sys/wait.h>
 
+/* No direct I/O: osal_openfile() then skips setting it, with no conditional at the call site. */
+#ifndef O_DIRECT
+#define O_DIRECT 0
+#endif /* O_DIRECT */
+
 /* posix misc: the clock choice for monotime (called from osal-init) */
 MDBX_INTERNAL void setup_monoclock(void);
