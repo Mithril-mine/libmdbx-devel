@@ -24,6 +24,7 @@
 #include <csignal>
 #include <cstdarg>
 #include <cstdio>
+#include <cstring>
 #include <pthread.h>
 #include <string>
 #include <sys/wait.h>
@@ -161,14 +162,16 @@ void run_mode(mode m) {
     }
   });
 
-  int forks = 0, failure_status = 0;
+  int forks = 0, failure_status = 0, fork_errno = 0;
   bool hung = false;
   const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(2);
   for (; forks < 100 && std::chrono::steady_clock::now() < deadline; ++forks) {
     fflush(nullptr);
     const pid_t pid = fork();
-    if (pid < 0)
+    if (pid < 0) {
+      fork_errno = errno;
       break;
+    }
     if (pid == 0)
       _exit(child_step(m, db.env));
     int status = 0;
@@ -185,6 +188,7 @@ void run_mode(mode m) {
   stop.store(true);
   churn.join();
 
+  EXPECT_EQ(fork_errno, 0) << mode_name[m] << ": fork " << forks + 1 << " failed: " << strerror(fork_errno);
   EXPECT_FALSE(hung) << mode_name[m] << ": fork " << forks + 1 << ": the child hung";
   EXPECT_EQ(failure_status, 0) << mode_name[m] << ": fork " << forks + 1 << ": the child failed, wait status 0x"
                                << std::hex << failure_status;
