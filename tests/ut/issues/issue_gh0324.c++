@@ -194,8 +194,10 @@ void joining_logger(MDBX_log_level_t, const char *, int, const char *, va_list) 
   if (!logger_armed.exchange(false))
     return;
   fork_now.store(true);
-  if (wait_for(fork_started))
-    usleep(100 * 1000); /* the fork is now in libmdbx's prepare handler */
+  /* no overlap with the fork: return without joining, the reader stays joinable and the scenario fails */
+  if (!wait_for(fork_started))
+    return;
+  usleep(100 * 1000); /* the fork is now in libmdbx's prepare handler */
   reader_may_exit.store(true);
   reader_to_join->join();
 }
@@ -206,17 +208,20 @@ int join_scenario() {
   if (mdbx_env_create(&env) != MDBX_SUCCESS || mdbx_env_open(env, kJoinDb, MDBX_NOSUBDIR, 0644) != MDBX_SUCCESS)
     return 10;
   /* a thread that used libmdbx: its exit runs rthc_thread_dtor(), which takes rthc_mutex */
-  std::atomic<bool> reader_done{false};
+  std::atomic<bool> reader_done{false}, reader_ok{false};
   std::thread reader([&] {
     MDBX_txn *txn = nullptr;
     if (mdbx_txn_begin(env, nullptr, MDBX_TXN_RDONLY, &txn) == MDBX_SUCCESS)
-      mdbx_txn_abort(txn);
+      reader_ok.store(mdbx_txn_abort(txn) == MDBX_SUCCESS);
     reader_done.store(true);
     while (!reader_may_exit.load())
       usleep(1000);
   });
-  if (!wait_for(reader_done))
+  if (!wait_for(reader_done) || !reader_ok.load()) {
+    reader_may_exit.store(true);
+    reader.join();
     return 11;
+  }
   reader_to_join = &reader;
   if (pthread_atfork(note_fork_started, nullptr, nullptr) != 0 ||
       mdbx_setup_debug(MDBX_LOG_NOTICE, MDBX_DBG_DONTCHANGE, joining_logger) < 0)
@@ -240,7 +245,7 @@ int join_scenario() {
   if (mdbx_env_create(&fresh) == MDBX_SUCCESS && mdbx_env_open(fresh, kJoinNewDb, MDBX_NOSUBDIR, 0644) == MDBX_SUCCESS)
     mdbx_env_close(fresh);
   forker.join();
-  if (reader.joinable()) { /* the logger did not run */
+  if (reader.joinable()) { /* the logger did not run, or the fork did not start in time */
     reader_may_exit.store(true);
     reader.join();
     return 13;
