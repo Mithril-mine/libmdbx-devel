@@ -388,12 +388,12 @@
 #else
 #define MDBX_LOCKING MDBX_LOCKING_POSIX2001
 #endif
-#elif defined(__sun) || defined(__SVR4) || defined(__svr4__) || defined(__HAIKU__) ||                                  \
-    (defined(_POSIX_SEMAPHORES) && _POSIX_SEMAPHORES >= 200112L &&                                                     \
-     !defined(__OpenBSD__)) /* OpenBSD's sem_init() always fails with EPERM on pshared */
-/* Prefer POSIX shared anonymous semaphores (POSIX1988) over the legacy System V IPC
- * (SysV) whenever the platform provides process-shared semaphores, e.g. FreeBSD and
- * NetBSD where the pthread process-shared primitives are not usable but POSIX are. */
+#elif defined(__sun) || defined(__SVR4) || defined(__svr4__) || defined(__HAIKU__)
+/* POSIX shared anonymous semaphores (POSIX1988) cannot detect a dead lock owner,
+ * while System V IPC (SysV) can: SEM_UNDO releases the semaphore and the owner's pid
+ * stays in the lock word. So FreeBSD and the other platforms without usable
+ * process-shared mutexes use SysV. Solaris/SVR4 and Haiku keep POSIX1988 as before,
+ * so their lock-file format does not change. */
 #define MDBX_LOCKING MDBX_LOCKING_POSIX1988
 #else
 #define MDBX_LOCKING MDBX_LOCKING_SYSV
