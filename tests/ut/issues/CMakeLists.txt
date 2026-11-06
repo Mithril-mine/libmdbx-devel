@@ -64,6 +64,7 @@ add_issue_test(gh0179 SOURCE "issue_gh0179.c++" NO_PCH)
 add_issue_test(gh0182 SOURCE "issue_gh0182.c++" NO_PCH)
 add_issue_test(gh0318 SOURCE "issue_gh0318.c++")
 add_issue_test(gh0338 SOURCE "issue_gh0338.c++")
+add_issue_test(gh0341 SOURCE "issue_gh0341.c++")
 add_issue_test(gh0342 SOURCE "issue_gh0342.c++")
 add_issue_test(gh0345 SOURCE "issue_gh0345.c++")
 
