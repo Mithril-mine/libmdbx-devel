@@ -118,6 +118,8 @@ if(MDBX_PROBES)
   set_tests_properties(gh0182 PROPERTIES ENVIRONMENT "MDBX_PROBES=1")
   add_issue_test(gh0327 SOURCE "issue_gh0327.c++")
   set_tests_properties(gh0327 PROPERTIES ENVIRONMENT "MDBX_PROBES=1")
+  add_issue_test(gh0333 SOURCE "issue_gh0333.c++")
+  set_tests_properties(gh0333 PROPERTIES ENVIRONMENT "MDBX_PROBES=1")
 endif()
 
 # Tests requiring the tools (MDBX_BUILD_TOOLS, the mdbx_dump/load/stat binaries).
