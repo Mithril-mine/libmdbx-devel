@@ -121,6 +121,7 @@ Cutting-edge release with new core features and internal refactoring.
     - The non-printf logger passed the full formatted length to the callback even when the message did not fit the application's buffer; the truncated message is now properly terminated ([#116](https://github.com/Mithril-mine/libmdbx-devel/issues/116)).
     - `mdbx_env_warmup()` crashed on a created-but-not-opened environment (it now returns `MDBX_EPERM`), and setting a sensible `MDBX_opt_gc_time_limit` no longer drops the automatic `rp_augment_limit` to its minimum ([#114](https://github.com/Mithril-mine/libmdbx-devel/issues/114)).
     - With `MDBX_WRITEMAP`, `mdbx_txn_info()` reported doubled dirty space and lost the spilled pages (the counters shared one memory cell), and `mdbx_ratio2digits()` returned a string with an uninitialized trailing byte ([#117](https://github.com/Mithril-mine/libmdbx-devel/issues/117)).
+    - `MDBX_CP_RENEW_TXN` had no effect since v0.14.2; it now restarts a copy transaction ousted while parked before any data is copied, so `mdbx_env_copy()` with `MDBX_CP_THROTTLE_MVCC` no longer fails with `MDBX_OUSTED` there ([#337](https://github.com/Mithril-mine/libmdbx-devel/issues/337)).
     - With `MDBX_opt_spill_parent4child_denominator` set, a transaction nested two levels deep could fail with `MDBX_PROBLEM` ([#342](https://github.com/Mithril-mine/libmdbx-devel/issues/342)).
     - `mdbx_drop()` emptying a table that is already empty now resets its sequence, as for a non-empty table ([#312](https://github.com/Mithril-mine/libmdbx-devel/issues/312)).
 

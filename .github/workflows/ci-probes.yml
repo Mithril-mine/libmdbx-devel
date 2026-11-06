@@ -8,6 +8,7 @@ name: ci-probes
 # gh0327; the latter skips where copy_file_range() is not used).
 # gh0332; the latter runs on Windows only).
 # gh0333; the latter runs on Windows only).
+# gh0337).
 # Supersedes ci-tracing (mprobe v1, tests/tracing/): the engine-side
 # probe-bus unified the taxonomy with a process-wide registry, control channel
 # (in-process mdbx_probe_ctl + file IPC) and no external tracer dependencies.
@@ -56,9 +57,9 @@ jobs:
     - name: build
       shell: bash
       run: |
-        cmake --build @ci-probes --target te_probes te_probes_ipc issue_gh0103_restart issue_gh0104_clone issue_gh0327 issue_gh0332 issue_gh0333 -j 4
+        cmake --build @ci-probes --target te_probes te_probes_ipc issue_gh0103_restart issue_gh0104_clone issue_gh0327 issue_gh0332 issue_gh0333 issue_gh0337 -j 4
 
     - name: test
       shell: bash
       run: |
-        ctest --test-dir @ci-probes -R '^extra_probes(_ipc)?$|^gh0103_restart$|^gh0104_clone$|^gh0327$|^gh0332$|^gh0333$' --output-on-failure --schedule-random -j 4
+        ctest --test-dir @ci-probes -R '^extra_probes(_ipc)?$|^gh0103_restart$|^gh0104_clone$|^gh0327$|^gh0332$|^gh0333$|^gh0337$' --output-on-failure --schedule-random -j 4
