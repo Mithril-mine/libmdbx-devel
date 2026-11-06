@@ -334,6 +334,21 @@ __cold int mdbx_env_open_for_recoveryW(MDBX_env *env, const wchar_t *pathname, u
       (env, pathname, writeable ? MDBX_EXCLUSIVE : MDBX_EXCLUSIVE | MDBX_RDONLY, 0);
 }
 
+/* Removes a file of the environment. A process that closes the environment releases its file locks before it closes
+ * its handles, and Windows refuses to remove a file that another process still has open without FILE_SHARE_DELETE:
+ * so with `wait`, i.e. after the wait for the locks, a failed removal is retried for up to a second. */
+__cold static int env_delete_file(const pathchar_t *pathname, bool wait) {
+  int err = osal_removefile(pathname);
+  if (wait && err != MDBX_SUCCESS && !osal_is_pathname_absent_error(err)) {
+    const uint64_t deadline = osal_monotime() + osal_16dot16_to_monotime(65536 /* 1 second */);
+    do {
+      osal_yield();
+      err = osal_removefile(pathname);
+    } while (err != MDBX_SUCCESS && !osal_is_pathname_absent_error(err) && osal_monotime() < deadline);
+  }
+  return err;
+}
+
 __cold int mdbx_env_delete(const char *pathname, MDBX_env_delete_mode_t mode) {
 #if IS_WINDOWS
   wchar_t *pathnameW = nullptr;
@@ -401,7 +416,7 @@ __cold int mdbx_env_deleteW(const wchar_t *pathname, MDBX_env_delete_mode_t mode
     }
 
     if (err == MDBX_SUCCESS && !dxb_absent) {
-      err = osal_removefile(dummy_env->pathname.dxb);
+      err = env_delete_file(dummy_env->pathname.dxb, mode == MDBX_ENV_WAIT_FOR_UNUSED);
       if (err == MDBX_SUCCESS)
         rc = MDBX_SUCCESS;
       else
@@ -409,12 +424,19 @@ __cold int mdbx_env_deleteW(const wchar_t *pathname, MDBX_env_delete_mode_t mode
     }
 
     if (err == MDBX_SUCCESS && !lck_absent) {
-      err = osal_removefile(dummy_env->pathname.lck);
+      err = env_delete_file(dummy_env->pathname.lck, mode == MDBX_ENV_WAIT_FOR_UNUSED);
       if (err == MDBX_SUCCESS)
         rc = MDBX_SUCCESS;
       else
         err = osal_is_pathname_absent_error(err) ? MDBX_SUCCESS : err;
     }
+
+    /* Closed before the directory is removed: where a deletion is not POSIX-style (e.g. FAT, SMB, older Windows) a
+     * removed file stays "delete pending", and so in the directory, while a handle to it is open. */
+    if (dxb_handle != INVALID_HANDLE_VALUE)
+      osal_closefile(dxb_handle);
+    if (lck_handle != INVALID_HANDLE_VALUE)
+      osal_closefile(lck_handle);
 
     if (err == MDBX_SUCCESS && !(dummy_env->flags & MDBX_NOSUBDIR) &&
         (/* pathname != "." */ pathname[0] != '.' || pathname[1] != 0) &&
@@ -425,11 +447,6 @@ __cold int mdbx_env_deleteW(const wchar_t *pathname, MDBX_env_delete_mode_t mode
       else
         err = osal_is_pathname_absent_error(err) ? MDBX_SUCCESS : err;
     }
-
-    if (dxb_handle != INVALID_HANDLE_VALUE)
-      osal_closefile(dxb_handle);
-    if (lck_handle != INVALID_HANDLE_VALUE)
-      osal_closefile(lck_handle);
   } else if (osal_is_pathname_absent_error(err))
     err = MDBX_SUCCESS;
 

@@ -90,6 +90,7 @@ if(WIN32)
   # FOREIGN process (spawned child) holds a read transaction. Plain Windows
   # test: no probe-bus dependency, so the regular Windows CI cells run it.
   add_issue_test(gh0217 SOURCE "issue_gh0217.c++")
+  add_issue_test(gh0336 SOURCE "issue_gh0336.c++")
 else()
   add_issue_test(gh0016 SOURCE "issue_gh0016.c++")
   add_issue_test(gh0058 SOURCE "issue_gh0058.c++")
