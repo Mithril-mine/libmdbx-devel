@@ -4,7 +4,8 @@ name: ci-probes
 # (COLLECT/WATCH/FAULT + deterministic fault injection). Cross-platform check
 # that MDBX_PROBES builds cleanly and the probe-gated regression tests pass on
 # Linux, Windows and macOS. Lightweight: a single cell, the probe self-tests
-# plus the MDBX_PROBES-gated issue regressions (gh0103_restart, gh0104_clone).
+# plus the MDBX_PROBES-gated issue regressions (gh0103_restart, gh0104_clone,
+# gh0327; the latter skips where copy_file_range() is not used).
 # Supersedes ci-tracing (mprobe v1, tests/tracing/): the engine-side
 # probe-bus unified the taxonomy with a process-wide registry, control channel
 # (in-process mdbx_probe_ctl + file IPC) and no external tracer dependencies.
@@ -53,9 +54,9 @@ jobs:
     - name: build
       shell: bash
       run: |
-        cmake --build @ci-probes --target te_probes te_probes_ipc issue_gh0103_restart issue_gh0104_clone -j 4
+        cmake --build @ci-probes --target te_probes te_probes_ipc issue_gh0103_restart issue_gh0104_clone issue_gh0327 -j 4
 
     - name: test
       shell: bash
       run: |
-        ctest --test-dir @ci-probes -R '^extra_probes(_ipc)?$|^gh0103_restart$|^gh0104_clone$' --output-on-failure
+        ctest --test-dir @ci-probes -R '^extra_probes(_ipc)?$|^gh0103_restart$|^gh0104_clone$|^gh0327$' --output-on-failure

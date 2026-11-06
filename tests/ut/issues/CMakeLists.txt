@@ -115,6 +115,8 @@ if(MDBX_PROBES)
   # activate the registry at runtime.
   target_compile_definitions(issue_gh0182 PRIVATE MDBX_PROBES)
   set_tests_properties(gh0182 PROPERTIES ENVIRONMENT "MDBX_PROBES=1")
+  add_issue_test(gh0327 SOURCE "issue_gh0327.c++")
+  set_tests_properties(gh0327 PROPERTIES ENVIRONMENT "MDBX_PROBES=1")
 endif()
 
 # Tests requiring the tools (MDBX_BUILD_TOOLS, the mdbx_dump/load/stat binaries).
