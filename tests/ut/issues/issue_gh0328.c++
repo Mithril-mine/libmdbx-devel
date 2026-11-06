@@ -80,7 +80,8 @@ int open_env(env_ptr &env) {
   if (rc != MDBX_SUCCESS)
     return rc;
   env.reset(raw);
-  return mdbx_env_open(raw, kDb, MDBX_NOSUBDIR | MDBX_SAFE_NOSYNC, 0644);
+  /* MDBX_ACCEDE lets the library pick MDBX_WRITEMAP where it requires it (OpenBSD) */
+  return mdbx_env_open(raw, kDb, MDBX_NOSUBDIR | MDBX_SAFE_NOSYNC | MDBX_ACCEDE, 0644);
 }
 
 /* The child: opens the database, takes the write lock, reports and waits to be killed. */
