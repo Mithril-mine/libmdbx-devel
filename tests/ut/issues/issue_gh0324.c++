@@ -224,8 +224,11 @@ int join_scenario() {
   }
   reader_to_join = &reader;
   if (pthread_atfork(note_fork_started, nullptr, nullptr) != 0 ||
-      mdbx_setup_debug(MDBX_LOG_NOTICE, MDBX_DBG_DONTCHANGE, joining_logger) < 0)
+      mdbx_setup_debug(MDBX_LOG_NOTICE, MDBX_DBG_DONTCHANGE, joining_logger) < 0) {
+    reader_may_exit.store(true);
+    reader.join();
     return 12;
+  }
 
   std::atomic<int> forked_status{-1};
   std::thread forker([&] {
