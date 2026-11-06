@@ -336,15 +336,16 @@ __cold int mdbx_env_open_for_recoveryW(MDBX_env *env, const wchar_t *pathname, u
 
 /* Removes a file of the environment. A process that closes the environment releases its file locks before it closes
  * its handles, and Windows refuses to remove a file that another process still has open without FILE_SHARE_DELETE:
- * so with `wait`, i.e. after the wait for the locks, a failed removal is retried for up to a second. */
+ * so with `wait`, i.e. after the wait for the locks, a removal refused by such a sharing violation (never on POSIX) is
+ * retried for up to a second; any other error is reported at once. */
 __cold static int env_delete_file(const pathchar_t *pathname, bool wait) {
   int err = osal_removefile(pathname);
-  if (wait && err != MDBX_SUCCESS && !osal_is_pathname_absent_error(err)) {
+  if (wait && osal_is_sharing_violation_error(err)) {
     const uint64_t deadline = osal_monotime() + osal_16dot16_to_monotime(65536 /* 1 second */);
     do {
       osal_yield();
       err = osal_removefile(pathname);
-    } while (err != MDBX_SUCCESS && !osal_is_pathname_absent_error(err) && osal_monotime() < deadline);
+    } while (osal_is_sharing_violation_error(err) && osal_monotime() < deadline);
   }
   return err;
 }
