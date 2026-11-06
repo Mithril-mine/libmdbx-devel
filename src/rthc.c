@@ -432,7 +432,38 @@ __cold int rthc_remove(MDBX_env *const env) {
 }
 
 #if !defined(_WIN32) && !defined(_WIN64)
+/* Hold the mutexes over fork(), so that the child neither sees a half-updated
+ * rthc table nor inherits a mutex locked by a thread that does not exist there. */
+__cold static void rthc_beforefork(void) {
+  /* Only rthc_mutex is waited for, while nothing else is held; debug_lock is only tried, and when it is busy
+   * everything is released and tried again. Waiting for debug_lock while holding rthc_mutex could deadlock with a
+   * logger callback (which runs under debug_lock) that joins a thread whose exit (rthc_thread_dtor) needs
+   * rthc_mutex. */
+  for (;;) {
+    ENSURE(pthread_mutex_lock(&rthc_mutex) == 0);
+    const int rc = pthread_mutex_trylock(&globals.debug_lock);
+    if (rc == 0)
+      return;
+    ENSURE(rc == EBUSY);
+    ENSURE(pthread_mutex_unlock(&rthc_mutex) == 0);
+    /* debug_lock lives as long as the library: wait for it while holding nothing */
+    ENSURE(pthread_mutex_lock(&globals.debug_lock) == 0);
+    ENSURE(pthread_mutex_unlock(&globals.debug_lock) == 0);
+  }
+}
+
+__cold static void rthc_afterfork_parent(void) {
+  ENSURE(pthread_mutex_unlock(&globals.debug_lock) == 0);
+  ENSURE(pthread_mutex_unlock(&rthc_mutex) == 0);
+}
+
 __cold void rthc_afterfork(void) {
+  /* The child's only thread holds both mutexes, but they may be recorded under
+   * the parent's thread id, so an error-checking mutex cannot be unlocked here:
+   * reinitialize them, and the condition variable a parent's thread may wait on. */
+  ENSURE(osal_fastmutex_init(&globals.debug_lock) == 0);
+  ENSURE(pthread_mutex_init(&rthc_mutex, nullptr) == 0);
+  ENSURE(pthread_cond_init(&rthc_cond, nullptr) == 0);
   NOTICE("drown %d rthc entries", rthc_count);
   for (size_t i = 0; i < rthc_count; ++i) {
     MDBX_env *const env = rthc_table[i].env;
@@ -462,7 +493,7 @@ __cold void rthc_ctor(void) {
 #if IS_WINDOWS
   InitializeCriticalSection(&rthc_critical_section);
 #else
-  ENSURE(pthread_atfork(nullptr, nullptr, rthc_afterfork) == 0);
+  ENSURE(pthread_atfork(rthc_beforefork, rthc_afterfork_parent, rthc_afterfork) == 0);
   ENSURE(pthread_key_create(&rthc_key, rthc_thread_dtor) == 0);
   TRACE("pid %d, &mdbx_rthc_key = %p, value 0x%x", osal_getpid(), __Wpedantic_format_voidptr(&rthc_key),
         (unsigned)rthc_key);
