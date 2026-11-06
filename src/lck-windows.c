@@ -28,13 +28,17 @@ static int flock_ex(HANDLE fd, HANDLE event, unsigned flags, size_t offset, size
   ov.Offset = (DWORD)offset;
   ov.OffsetHigh = HIGH_DWORD(offset);
 
-  if (LockFileEx(fd, flags, 0, (DWORD)bytes, HIGH_DWORD(bytes), &ov)) {
+  int injected = 0;
+  /* testing: a failing lock request, e.g. an I/O error on the lock file
+   * (not ERROR_IO_PENDING nor MDBX_RESULT_TRUE: no request is made, so neither means a failure here) */
+  MPROBE_FAULT(flock_ex_error, injected);
+  if (likely(!injected) && LockFileEx(fd, flags, 0, (DWORD)bytes, HIGH_DWORD(bytes), &ov)) {
     TRACE("lock<<: fd %p, timeout %u ms, event %p, flags 0x%x offset %zu, bytes %zu << %s", fd, timeout_ms, event,
           flags, offset, bytes, "done");
     return MDBX_SUCCESS;
   }
 
-  DWORD rc = GetLastError(), unused;
+  DWORD rc = injected ? (DWORD)injected : GetLastError(), unused;
   if (rc == ERROR_IO_PENDING) {
     if (timeout_ms) {
       rc = osal_waitstatus2errcode(WaitForSingleObject(event, timeout_ms));
@@ -164,6 +168,7 @@ int lck_rdt_lock(MDBX_env *env) {
     MDBX_SUPPRESS_GOOFY_MSVC_ANALYZER(26115);
     return MDBX_SUCCESS;
   }
+  osal_fastmutex_release(&env->lck_event_cs);
 
 bailout:
   imports.srwl_ReleaseShared(&env->remap_lock);
