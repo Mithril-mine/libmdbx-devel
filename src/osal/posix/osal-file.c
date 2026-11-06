@@ -390,10 +390,20 @@ int osal_fsetsize(mdbx_filehandle_t fd, const uint64_t length) {
 
   const uint64_t allocated = UINT64_C(512) * info.st_blocks;
   if (length > allocated) {
-#if defined(FALLOC_FL_ALLOCATE_RANGE) && defined(FALLOC_FL_KEEP_SIZE)
+#if defined(FALLOC_FL_KEEP_SIZE)
     /* prefer a low-level non-portable function to avoid glibc emulation
-     * if the file system does not support the operation. */
-    int err = fallocate(fd, FALLOC_FL_ALLOCATE_RANGE | FALLOC_FL_KEEP_SIZE, 0, length);
+     * if the file system does not support the operation: the emulation reads
+     * the file, which fails with EBADF on a write-only copy destination.
+     * FALLOC_FL_ALLOCATE_RANGE is 0 and missing from older headers. */
+    int injected = 0;
+    MPROBE_FAULT(fsetsize_fallocate_errno, injected); /* testing: fail as fallocate() with this errno */
+    int rc = -1;
+    if (likely(!injected))
+      rc = fallocate(fd, FALLOC_FL_KEEP_SIZE, 0, length);
+    else
+      errno = injected /* fail as fallocate() does, so the result goes through the same check */;
+    /* fallocate() returns -1 and sets errno on failure */
+    const int err = rc ? errno : MDBX_SUCCESS;
 #elif defined(__APPLE__)
     fstore_t store = {
         .fst_flags = F_ALLOCATECONTIG, .fst_posmode = F_PEOFPOSMODE, .fst_offset = 0, .fst_length = length};

@@ -13,6 +13,11 @@ if(NOT WIN32)
   add_issue_test(gh0310 SOURCE "issue_gh0310.c++")
   add_issue_test(gh0339 SOURCE "issue_gh0339.c++")
 endif()
+if(CMAKE_SYSTEM_NAME STREQUAL "Linux" AND NOT MDBX_DISABLE_GNU_SOURCE)
+  # mounts a ramfs in an unprivileged user namespace; without _GNU_SOURCE glibc
+  # hides FALLOC_FL_KEEP_SIZE, so libmdbx keeps the posix_fallocate() path there
+  add_issue_test(gh0330 SOURCE "issue_gh0330.c++")
+endif()
 add_issue_test(gh0017 SOURCE "issue_gh0017.c++" NO_PCH)
 add_issue_test(gh0023 SOURCE "issue_gh0023.c++")
 add_issue_test(gh0024 SOURCE "issue_gh0024.c++")
