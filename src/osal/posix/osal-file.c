@@ -127,9 +127,11 @@ int osal_openfile(const enum osal_openfile_purpose purpose, const MDBX_env *env,
 #endif /* STDIN_FILENO == 0 && STDERR_FILENO == 2 */
 
   *fd = open(pathname, flags, unix_mode_bits);
+  const int open_errno = errno;
   int no_direct_io = 0;
   /* testing: a filesystem without direct I/O, which rejects O_DIRECT with EINVAL (open() after creating the file) */
   MPROBE_FAULT(fs_without_direct_io, no_direct_io);
+  errno = open_errno /* the probe bus may change errno (e.g. its control-file I/O) */;
   if (unlikely(no_direct_io) && *fd >= 0 && (flags & O_DIRECT)) {
     close(*fd);
     *fd = -1;
