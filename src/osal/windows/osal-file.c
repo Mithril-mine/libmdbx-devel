@@ -18,6 +18,8 @@ int osal_removefile(const pathchar_t *pathname) { return DeleteFileW(pathname) ?
 
 bool osal_is_pathname_absent_error(int err) { return err == ERROR_FILE_NOT_FOUND || err == ERROR_PATH_NOT_FOUND; }
 
+bool osal_is_sharing_violation_error(int err) { return err == ERROR_SHARING_VIOLATION || err == ERROR_LOCK_VIOLATION; }
+
 int osal_removedirectory(const pathchar_t *pathname) {
   return RemoveDirectoryW(pathname) ? MDBX_SUCCESS : (int)GetLastError();
 }
