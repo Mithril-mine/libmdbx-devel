@@ -24,6 +24,11 @@ int osal_removedirectory(const pathchar_t *pathname) { return rmdir(pathname) ? 
 
 MDBX_INTERNAL bool osal_is_pathname_absent_error(int err) { return err == ENOENT || err == ENOTDIR; }
 
+MDBX_INTERNAL bool osal_is_sharing_violation_error(int err) {
+  (void)err;
+  return false /* unlink() removes a file that other processes still have open */;
+}
+
 int osal_fileexists(const pathchar_t *pathname) {
   if (access(pathname, F_OK) == 0)
     return MDBX_RESULT_TRUE;
