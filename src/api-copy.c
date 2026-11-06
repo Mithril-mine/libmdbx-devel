@@ -692,8 +692,26 @@ __cold static int copy2fd(MDBX_txn *txn, mdbx_filehandle_t fd, MDBX_copy_flags_t
       rc = osal_write(fd, buffer, pgno2bytes(env, NUM_METAS));
   }
 
-  if (likely(rc == MDBX_SUCCESS))
-    rc = mdbx_txn_unpark(txn, false);
+  int stall_ms = 0;
+  /* testing: the parked copy stalls here, as on a slow destination, so a writer can oust it; the stall lasts while
+   * the site stays armed, at most the stall_ms it was armed with */
+  MPROBE_FAULT(copy_parked_stall_ms, stall_ms);
+  if (unlikely(stall_ms > 0) && rc == MDBX_SUCCESS) {
+    const uint64_t limit_16dot16 = (uint64_t)stall_ms * 65536u / 1000u;
+    const uint64_t deadline =
+        osal_monotime() + osal_16dot16_to_monotime((limit_16dot16 < UINT32_MAX) ? (uint32_t)limit_16dot16 : UINT32_MAX);
+    do {
+      osal_yield();
+      stall_ms = 0;
+      MPROBE_FAULT(copy_parked_stall_ms, stall_ms);
+    } while (stall_ms > 0 && osal_monotime() < deadline);
+  }
+
+  if (likely(rc == MDBX_SUCCESS)) {
+    /* nothing of the snapshot is copied yet, so an ousted transaction may be restarted here */
+    rc = mdbx_txn_unpark(txn, (flags & MDBX_CP_RENEW_TXN) != 0);
+    rc = (rc == MDBX_RESULT_TRUE) ? MDBX_SUCCESS : rc;
+  }
   if (likely(rc == MDBX_SUCCESS)) {
     memset(buffer, 0, pgno2bytes(env, NUM_METAS));
     rc = ((flags & MDBX_CP_COMPACT) ? copy_with_compacting : copy_asis)(env, txn, fd, buffer, dest_is_pipe, flags);
