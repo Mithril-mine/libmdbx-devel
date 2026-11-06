@@ -106,6 +106,7 @@ Cutting-edge release with new core features and internal refactoring.
     - `MDBX_DBG_*` switches given as an empty string were ignored ([#109](https://github.com/Mithril-mine/libmdbx-devel/issues/109)).
     - A spurious internal assertion failure during page allocation ([#52](https://github.com/Mithril-mine/libmdbx-devel/issues/52)).
     - The I/O ring merged only two contiguous write chunks instead of all of them ([#111](https://github.com/Mithril-mine/libmdbx-devel/issues/111)).
+    - After a failed lock-file request, other threads starting a read transaction hung forever ([#332](https://github.com/Mithril-mine/libmdbx-devel/issues/332)).
 
  - Tools:
     - `mdbx_chk` crashed on databases with named sub-tables when using the `-i`/`-s` options, and read out of bounds on a corrupted GC record ([#49](https://github.com/Mithril-mine/libmdbx-devel/issues/49), [#76](https://github.com/Mithril-mine/libmdbx-devel/issues/76)).

@@ -136,3 +136,7 @@ if(MDBX_BUILD_TOOLS)
       ENVIRONMENT
         "MDBX_TOOL_DUMP=$<TARGET_FILE:mdbx_dump>;MDBX_TOOL_LOAD=$<TARGET_FILE:mdbx_load>;MDBX_TOOL_STAT=$<TARGET_FILE:mdbx_stat>")
 endif()
+if(MDBX_PROBES)
+  add_issue_test(gh0332 SOURCE "issue_gh0332.c++")
+  set_tests_properties(gh0332 PROPERTIES ENVIRONMENT "MDBX_PROBES=1")
+endif()
