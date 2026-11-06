@@ -762,13 +762,16 @@ __cold static int copy2pathname(MDBX_txn *txn, const pathchar_t *dest_path, MDBX
   /* The destination path must exist, but the destination file must not.
    * We don't want the OS to cache the writes, since the source data is
    * already in the OS cache. */
-  const mdbx_mode_t mode =
 #if IS_WINDOWS
-      (mdbx_mode_t)-1
+  const mdbx_mode_t mode = (mdbx_mode_t)-1;
 #else
-      S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP
+  /* Read/write for the owner, as for the lock file; the group gets no more than it has on the source file, which
+   * may be private (0600). */
+  struct stat src_stat;
+  const mdbx_mode_t mode =
+      S_IRUSR | S_IWUSR |
+      (fstat(txn->env->lazy_fd, &src_stat) ? S_IRGRP | S_IWGRP : (src_stat.st_mode & (S_IRGRP | S_IWGRP)));
 #endif
-      ;
   mdbx_filehandle_t newfd = INVALID_HANDLE_VALUE;
   bool created_by_us = false;
   uint64_t pre_size = 0;
