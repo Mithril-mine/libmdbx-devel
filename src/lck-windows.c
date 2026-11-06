@@ -240,7 +240,14 @@ static int suspend_and_append(mdbx_handle_array_t **array, const DWORD ThreadId)
     (*array)->limit = limit * 2;
   }
 
-  HANDLE hThread = OpenThread(THREAD_SUSPEND_RESUME | THREAD_QUERY_INFORMATION, FALSE, ThreadId);
+  int injected = 0;
+  /* testing: OpenThread() fails for a later thread, e.g. one that has ended while its reader slot remained */
+  MPROBE_FAULT(suspend_open_thread_error, injected);
+  HANDLE hThread = nullptr;
+  if (likely(!injected) || (*array)->count == 0)
+    hThread = OpenThread(THREAD_SUSPEND_RESUME | THREAD_QUERY_INFORMATION, FALSE, ThreadId);
+  else
+    SetLastError((DWORD)injected);
   if (hThread == nullptr)
     return (int)GetLastError();
 
@@ -338,6 +345,8 @@ int osal_resume_threads_after_remap(mdbx_handle_array_t *array) {
     }
     CloseHandle(hThread);
   }
+  /* forget the closed handles: after a failed suspension the caller calls this again */
+  array->count = 0;
   return rc;
 }
 
