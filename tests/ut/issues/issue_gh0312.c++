@@ -200,6 +200,24 @@ TEST(issue_gh0312, load_s_with_purge_keeps_other_tables) {
   EXPECT_EQ(2, entries(db, "U")) << "`-p -s` must not purge the sections already loaded";
 }
 
+/* `-T -s T` loads a headerless dump: the forced table is created even without
+   a header, and `-p` purges it rather than the main table that holds A and B. */
+TEST(issue_gh0312, load_T_mode_forced_table) {
+  if (MDBX_GTEST_IS_EXECUTION_TIMEOUT()) {
+    GTEST_SKIP() << "SKIPPED by RUNTIME_LIMIT";
+    return;
+  }
+  const std::string db = "issue312-t.mdbx", ab = "issue312-t-ab.txt", plain = "issue312-t.txt";
+  const files_remover cleanup{db, ab, plain};
+  ASSERT_TRUE(write_text(ab, dump_section("A", {"x"}) + dump_section("B", {"y"})));
+  ASSERT_EQ(0, load({}, ab, db));
+  ASSERT_TRUE(write_text(plain, "k1\nv-k1\n"));
+  EXPECT_EQ(0, load({"-T", "-p", "-s", "T"}, plain, db));
+  EXPECT_EQ(1, entries(db, "T")) << "the forced table must be created even without a header";
+  EXPECT_EQ(1, entries(db, "A")) << "`-T -p -s T` must not delete the other tables";
+  EXPECT_EQ(1, entries(db, "B"));
+}
+
 TEST(issue_gh0312, load_n_skips_existing_keys_and_goes_on) {
   if (MDBX_GTEST_IS_EXECUTION_TIMEOUT()) {
     GTEST_SKIP() << "SKIPPED by RUNTIME_LIMIT";
