@@ -27,8 +27,17 @@
 - No tautology in test or test-file names, no serial numbers, no noise —
   only a strict rational minimum and order.
 - Issue regressions: `issue_ghNNNN.c++`, registered in
-  `tests/ut/issues/CMakeLists.txt` (mind the platform gates used there:
-  `if(NOT WIN32)`, `if(MDBX_BUILD_TOOLS)`, `NO_PCH`, etc.).
+  `tests/ut/issues/CMakeLists.txt` (mind the gates used there:
+  `if(WIN32)/else()`, `if(MDBX_PROBES)`, `if(MDBX_BUILD_TOOLS)`, `NO_PCH`,
+  etc.).
+- Keep the registration lists ordered and flat: unconditional tests go into
+  the primary section in strict numeric order; gated tests go into the few
+  dedicated `if()` blocks (`if(WIN32)/else()`, `if(MDBX_PROBES)`,
+  `if(MDBX_BUILD_TOOLS)`), preserving numeric order within each. A test
+  needing a compound gate nests as an inner `if()` in the most suitable
+  existing block instead of opening a new top-level one. Every test file
+  must have exactly one registration — after merges, check for orphans in
+  both directions (files without registration and vice versa).
 
 ## 3. Test hygiene & cleanup — MANDATORY
 
