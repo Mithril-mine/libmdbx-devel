@@ -83,7 +83,10 @@ __cold void MDBX_PRINTF_ARGS(2, 3) chk_scope_issue(MDBX_chk_scope_t *const scope
 }
 
 __cold int chk_scope_end(MDBX_chk_internal_t *chk, int err) {
-  ASSERT(chk->scope_depth > 0);
+  /* Only the root scope is left: chk_scope_begin() failed with the scope not entered, or already left, and the
+   * callers end it unconditionally. The root scope itself is never ended. */
+  if (unlikely(chk->scope_depth == 0))
+    return err;
   MDBX_chk_scope_t *const inner = chk->scope_stack + chk->scope_depth;
   MDBX_chk_scope_t *const outer = chk->scope_depth ? inner - 1 : nullptr;
   if (!outer || outer->stage != inner->stage) {
@@ -143,11 +146,11 @@ __cold static int chk_scope_begin_args(MDBX_chk_internal_t *chk, int verbosity_a
   chk->usr->scope_nesting = chk->scope_depth += 1;
 
   if (stage != outer->stage && chk->cb->stage_begin) {
-    int err = chk->cb->stage_begin(chk->usr, stage);
-    if (unlikely(err != MDBX_SUCCESS)) {
-      err = chk_scope_end(chk, err);
-      ASSERT(err != MDBX_SUCCESS);
-      return err ? err : MDBX_RESULT_TRUE;
+    const int rc = chk->cb->stage_begin(chk->usr, stage);
+    if (unlikely(rc != MDBX_SUCCESS)) {
+      /* `stage_end` and `scope_conclude` may turn the error into success; the scope is left anyway */
+      const int err = chk_scope_end(chk, rc);
+      return err ? err : rc;
     }
   }
   return MDBX_SUCCESS;
