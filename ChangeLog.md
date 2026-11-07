@@ -100,6 +100,7 @@ Cutting-edge release with new core features and internal refactoring.
     - `mdbx_env_warmup()` crashed on a created-but-not-opened environment (it now returns `MDBX_EPERM`), and setting a sensible `MDBX_opt_gc_time_limit` no longer drops the automatic `rp_augment_limit` to its minimum ([#114](https://github.com/Mithril-mine/libmdbx-devel/issues/114)).
     - With `MDBX_WRITEMAP`, `mdbx_txn_info()` reported doubled dirty space and lost the spilled pages (the counters shared one memory cell), and `mdbx_ratio2digits()` returned a string with an uninitialized trailing byte ([#117](https://github.com/Mithril-mine/libmdbx-devel/issues/117)).
     - With `MDBX_opt_spill_parent4child_denominator` set, a transaction nested two levels deep could fail with `MDBX_PROBLEM` ([#342](https://github.com/Mithril-mine/libmdbx-devel/issues/342)).
+    - `mdbx_drop()` emptying a table that is already empty now resets its sequence, as for a non-empty table ([#312](https://github.com/Mithril-mine/libmdbx-devel/issues/312)).
 
  - Windows:
     - A long-lived read transaction could deadlock a writer that grew the database file; the file is now grown in place, and a shrink or remap blocked by an active reader is deferred and retried instead of hanging or poisoning the environment ([#154](https://github.com/Mithril-mine/libmdbx-devel/issues/154)).
@@ -116,6 +117,8 @@ Cutting-edge release with new core features and internal refactoring.
     - `mdbx_dump`/`mdbx_load` silently lost data on round-trip when a key or value started with a space, `mdbx_dump` reported success even when writing the dump failed, and `mdbx_load` accepted a truncated dump as a complete database ([#61](https://github.com/Mithril-mine/libmdbx-devel/issues/61), [#70](https://github.com/Mithril-mine/libmdbx-devel/issues/70)).
     - `mdbx_dump -f` truncated the output file before the command line was validated ([#71](https://github.com/Mithril-mine/libmdbx-devel/issues/71)).
     - `mdbx_load` failed with a missing-file error when reading a dump from standard input ([#50](https://github.com/Mithril-mine/libmdbx-devel/issues/50)).
+    - `mdbx_load -p -s` with a dump that names no table deleted every named table, `-s` was ignored once a dump header was read, `-N` stopped at the first existing key and `-p` lost the table sequence, all with exit status 0 ([#312](https://github.com/Mithril-mine/libmdbx-devel/issues/312)).
+    - `mdbx_load -b` failed on a batch that changed nothing, a table with an empty or a very long name was restored wrongly, `mdbx_dump` closed a table that failed part-way as complete, and `mdbx_stat -f` failed on an empty GC ([#312](https://github.com/Mithril-mine/libmdbx-devel/issues/312)).
     - Table names containing control characters: dumping was refused, listing and stat output are now sanitized, and such a name in a `database=` header is rejected ([#72](https://github.com/Mithril-mine/libmdbx-devel/issues/72)).
 
  - C++ API:
