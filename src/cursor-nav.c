@@ -8,7 +8,7 @@
 
 #include "internals.h"
 
-static __always_inline int sibling(MDBX_cursor *mc, bool right) {
+static int sibling(MDBX_cursor *mc, bool right) {
   if (mc->top < 1) {
     /* root has no siblings */
     return MDBX_NOTFOUND;
@@ -20,7 +20,7 @@ static __always_inline int sibling(MDBX_cursor *mc, bool right) {
   int err;
   if (right ? (mc->ki[mc->top] + (size_t)1 >= page_numkeys(mc->pg[mc->top])) : (mc->ki[mc->top] == 0)) {
     DEBUG("no more keys aside, moving to next %s sibling", right ? "right" : "left");
-    err = right ? cursor_sibling_right(mc) : cursor_sibling_left(mc);
+    err = sibling(mc, right);
     if (unlikely(err != MDBX_SUCCESS)) {
       if (likely(err == MDBX_NOTFOUND)) {
         cursor_undo_enroot(mc, 1);
