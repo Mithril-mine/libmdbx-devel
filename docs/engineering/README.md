@@ -85,7 +85,7 @@ Author: Leonid Yuriev \<leo@yuriev.ru\>. Home site: <https://libmdbx.dqdkfa.ru>.
 | [`debugging-methodology.md`](debugging-methodology.md) | Debugging methodology: tools (`mdbx_chk`, PROFGC, `commit_latency`, sanitizers), step-by-step scenarios (growth, slow commit, MAP_FULL, corruption, long readers, fork, Windows, containers), internal debugging |
 | [`../ru/deep-dive/internals.md`](../ru/deep-dive/internals.md) | Deep dive on LCK layout/versions, RLT slots, HSR protocol, fork(), WRITEMAP/auto-sync and recovery modes |
 | [`glossary-compact.md`](glossary-compact.md) | Compact glossary of terms used in discussions/reformulations (writemap, WAF, overflow, subpage, stragglers, presync, etc.) |
-| [`libmdbx-invariants.md`](libmdbx-invariants.md) | **Invariants checklist (RU)**: subsystems S1–S14, 6 critical invariants, C/C++ ABI boundary, module-risk matrix — used in every review/test |
+| [`libmdbx-invariants.md`](libmdbx-invariants.md) | **Invariants checklist (RU)**: subsystems S1–S14, 7 critical invariants incl. cursor positioning determinism, C/C++ ABI boundary, module-risk matrix — used in every review/test |
 | [`subsystem-map.md`](subsystem-map.md) | Subsystem map S1–S14 with key `src/*` modules and refactoring risk levels (🔴🟠🟡) |
 | [`module-lock-matrix.md`](module-lock-matrix.md) | Pairwise subsystem conflict matrix (HIGH/MED/LOW) + high-risk `src/*` zones for parallel work planning |
 | [`test-durability-strategy.md`](test-durability-strategy.md) | Test durability strategy: `MDBX_SYNC_*` modes, speed-up transports (`/dev/shm`, RAM-disk), Quick/Full matrix |

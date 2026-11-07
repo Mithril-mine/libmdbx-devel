@@ -272,7 +272,12 @@ __hot int cursor_sibling_right(MDBX_cursor *mc) {
   size_t nkeys = page_numkeys(mc->pg[mc->top]);
   cASSERT0(mc, nkeys > 0);
   mc->ki[mc->top] = (indx_t)nkeys - 1;
-  mc->flags = z_eof_soft | z_eof_hard | (mc->flags & z_clear_mask);
+  /* Маркер хвоста удалённых мультизначений (только у внутреннего курсора)
+   * обязан пережить пересчёт eof-состояния, иначе повторное удаление
+   * перестанет быть no-op и удалит реальное значение (issue #301);
+   * у внешнего курсора маркер не устанавливается — бит просто не попадёт
+   * в маску. */
+  mc->flags = z_eof_soft | z_eof_hard | (mc->flags & (z_clear_mask | z_inner_tail_deleted));
   /* не очищаем состояние вложенного курсора, а остаёмся на предыдущей позиции */
   return MDBX_NOTFOUND;
 }
