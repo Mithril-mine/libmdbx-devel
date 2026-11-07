@@ -289,9 +289,16 @@ int mdbx_put(MDBX_txn *txn, MDBX_dbi dbi, const MDBX_val *key, MDBX_val *data, M
       /* LY: allows update (explicit overwrite) only for unique keys */
       node_t *node = page_node(cx.outer.pg[cx.outer.top], cx.outer.ki[cx.outer.top]);
       if (node_flags(node) & N_DUP) {
-        tASSERT0(txn, inner_pointed(&cx.outer) && cx.outer.subcur->nested_tree.items > 1);
+        tASSERT0(txn, !inner_pointed(&cx.outer) || cx.outer.subcur->nested_tree.items >= 1);
         rc = MDBX_EMULTIVAL;
         if ((flags & MDBX_NOOVERWRITE) == 0) {
+          /* LY: check the new value's size BEFORE deleting the multi-values,
+           * otherwise a size error would return MDBX_BAD_VALSIZE with all the
+           * values already gone and the transaction still committable
+           * (issue #313). */
+          if (unlikely(key->iov_len > cx.outer.clc->k.lmax || key->iov_len < cx.outer.clc->k.lmin ||
+                       data->iov_len > cx.outer.clc->v.lmax || data->iov_len < cx.outer.clc->v.lmin))
+            return LOG_IFERR(MDBX_BAD_VALSIZE);
           flags -= MDBX_CURRENT;
           rc = cursor_del(&cx.outer, MDBX_ALLDUPS);
         }

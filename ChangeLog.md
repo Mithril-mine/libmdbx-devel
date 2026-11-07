@@ -70,6 +70,15 @@ Cutting-edge release with new core features and internal refactoring.
  - Crashes, hangs and undefined behavior in the core engine:
     - `mdbx_enumerate_tables()` raced with other threads opening, closing, renaming or dropping table handles, or aborting a transaction that created a table, and could crash or read freed memory ([#341](https://github.com/Mithril-mine/libmdbx-devel/issues/341)).
     - A child process forked while another thread was inside `mdbx_env_open()`/`mdbx_env_close()` or writing a log message could hang forever in libmdbx, including at exit; `fork()` now waits for these to finish, so it must not be called from a logger or panic callback ([#324](https://github.com/Mithril-mine/libmdbx-devel/issues/324)).
+    - On a `MDBX_DUPSORT` table a second `mdbx_cursor_del()` after a key's last multi-value was deleted, and CRUD from a
+      cursor left past the tail of the multi-values by a failed seek, could use pages twice, corrupt entry counts, crash
+      or refuse a valid commit; the past-the-tail and deleted-tail cursor states are now explicitly marked and handled:
+      a repeated delete is a no-op success, `MDBX_GET_CURRENT`/`MDBX_NEXT` return the next record, and CRUD past a
+      seeked-to tail is refused ([#301](https://github.com/Mithril-mine/libmdbx-devel/issues/301),
+      [#305](https://github.com/Mithril-mine/libmdbx-devel/issues/305)).
+    - A write through one cursor left other cursors positioned on the same key with a stale nested-tree record, so a
+      later delete through such a cursor wrote the stale record back, lost committed values and reused pages; the
+      bystander cursors are now fixed up after inserts and deletes ([#304](https://github.com/Mithril-mine/libmdbx-devel/issues/304)).
     - A racing writer could recycle the head meta page between the troika snapshot and the reader-slot publication in `ro_seize()`, so the slot transiently advertised an old transaction id paired with a newer meta's page counters and tripped the checking-build assertion in `mvcc_snapshot_oldest_rw()` for every writer sharing the lock file; the values now are re-checked against the meta before publication ([#347](https://github.com/Mithril-mine/libmdbx-devel/issues/347)).
     - On builds without C11 atomics, the emulated atomic loads applied the hardware fence before the read and the emulated stores after the write, so the acquire/release ordering of the publication pattern was silently lost on weakly-ordered CPUs (ARM and friends); the fences are now applied after loads and before stores ([#340](https://github.com/Mithril-mine/libmdbx-devel/issues/340), [#361](https://github.com/Mithril-mine/libmdbx-devel/issues/361)).
     - `mdbx_replace()`/`mdbx_replace_ex()` and the C++ `txn::replace_reserve()` used with `MDBX_RESERVE` could crash the process or silently lose the new value; `MDBX_RESERVE` on a table with duplicates is now rejected upfront, as `mdbx_put()` already did ([#166](https://github.com/Mithril-mine/libmdbx-devel/issues/166)).
@@ -87,6 +96,11 @@ Cutting-edge release with new core features and internal refactoring.
     - A forked child treated a failed unlock of an inherited inter-process lock as fatal only at certain log levels; the failure is now always tolerated ([#111](https://github.com/Mithril-mine/libmdbx-devel/issues/111)).
 
  - Wrong results and API behavior:
+    - `MDBX_TO_PAIR_EQUAL`/`MDBX_TO_EXACT_KEY_VALUE_EQUAL` returned the key's first multi-value instead of the positioned
+      one when no further cursor move followed, and `mdbx_put(MDBX_CURRENT)` on a key with multi-values deleted them all
+      before checking the new value's size, returning `MDBX_BAD_VALSIZE` with the values already gone and the transaction
+      still committable; the value is now returned correctly and the size is checked before the deletion
+      ([#313](https://github.com/Mithril-mine/libmdbx-devel/issues/313)).
     - On Linux `mdbx_get_sysraminfo()` ignored `sysinfo.mem_unit`, so a 32-bit process on a host with 4 GiB of RAM or more got a far too small total RAM (which feeds the default dirty-page limit and related sizing), the `MemAvailable` parsing could wrap for such processes, and its `sscanf()` call wrote the unit token into the very buffer being parsed ([#339](https://github.com/Mithril-mine/libmdbx-devel/issues/339)).
     - `mdbx_env_delete()` left the lock file of a `MDBX_NOSUBDIR` database whose data file was gone, reported `MDBX_RESULT_TRUE` ("nothing was found") in every mode, and answered the same even with `MDBX_ENV_ENSURE_UNUSED` while another process still had the environment open; an orphan lock file is now removed and the in-use case is refused as with both files present ([#345](https://github.com/Mithril-mine/libmdbx-devel/issues/345)).
     - `mdbx_env_info_ex()` reported the first writer's mode from the lock file in the `mi_mode` field instead of the current flags promised by the documentation, missing both the changeable flags set at open and later `mdbx_env_set_flags()` changes ([#338](https://github.com/Mithril-mine/libmdbx-devel/issues/338)).
