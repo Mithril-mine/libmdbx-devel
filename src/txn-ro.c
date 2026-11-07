@@ -101,8 +101,10 @@ static inline int ro_slot_get(MDBX_txn *txn) {
 
 static int ro_slot_clean(MDBX_txn *txn) {
   reader_slot_t *const slot = txn->ro.slot;
-  if (unlikely(!slot))
+  if (unlikely(!slot)) {
+    txn->flags &= ~MDBX_TXN_PARKED /* without-lck mode, as below for a parked reader with a slot */;
     return MDBX_SUCCESS;
+  }
 
   MDBX_env *const env = txn->env;
   if (unlikely(!env->lck)) {
@@ -323,9 +325,17 @@ void txn_ro_free(MDBX_txn *txn) {
 int txn_ro_park(MDBX_txn *txn, bool autounpark) {
   reader_slot_t *const slot = txn->ro.slot;
   tASSERT0(txn, (txn->flags & (MDBX_TXN_FINISHED | txn_ro_flat | MDBX_TXN_PARKED)) == txn_ro_flat);
-  tASSERT0(txn, ro_slot_tid(slot) < MDBX_TID_TXN_OUSTED);
+  tASSERT0(txn, !slot || ro_slot_tid(slot) < MDBX_TID_TXN_OUSTED);
   if (unlikely((txn->flags & (MDBX_TXN_FINISHED | txn_ro_flat | MDBX_TXN_PARKED)) != txn_ro_flat))
     return MDBX_BAD_TXN;
+
+  if (unlikely(!slot)) {
+    /* without-lck mode: no reader slot, so nothing can oust this reader and only the flags change */
+    if (unlikely(txn->flags & MDBX_TXN_ERROR))
+      return txn_ro_reset(txn);
+    txn->flags += autounpark ? MDBX_TXN_PARKED | MDBX_TXN_AUTOUNPARK : MDBX_TXN_PARKED;
+    return MDBX_SUCCESS;
+  }
 
   const mdbx_pid_t pid = atomic_load_pid(&slot->pid, mo_Relaxed);
   const uint64_t tid = atomic_load64(&slot->tid, mo_Relaxed);
@@ -357,6 +367,12 @@ int txn_ro_unpark(MDBX_txn *txn) {
             (txn_ro_flat | MDBX_TXN_OUSTED))
                ? MDBX_OUSTED
                : MDBX_BAD_TXN;
+
+  if (unlikely(!txn->ro.slot && (txn->flags & MDBX_TXN_ERROR) == 0)) {
+    /* without-lck mode: see txn_ro_park() */
+    txn->flags &= ~(MDBX_TXN_PARKED | MDBX_TXN_AUTOUNPARK);
+    return MDBX_SUCCESS;
+  }
 
   for (reader_slot_t *const slot = txn->ro.slot; slot; atomic_yield()) {
     const mdbx_pid_t pid = atomic_load_pid(&slot->pid, mo_Relaxed);
