@@ -348,7 +348,11 @@ __cold int walk_tbl(walk_ctx_t *ctx, walk_tbl_t *tbl, pgno_t parent_page) {
   couple.outer.checking |= cursor_checking;
   couple.inner.cursor.checking |= cursor_checking;
   couple.outer.next = ctx->cursor;
-  couple.outer.combo_state = z_disable_tree_search_fastpath;
+  /* Прежде здесь присваивалась неиспользуемая заготовка
+   * z_disable_tree_search_fastpath: помимо мёртвого бита это приведение
+   * combo_state к plain-состоянию с top = 0, на котором и живёт фейковый
+   * курсор обхода. Сохраняем это состояние без заготовки. */
+  couple.outer.combo_state = 0;
   ctx->cursor = &couple.outer;
   txnid_t mod_txnid = db->mod_txnid;
   if (!mod_txnid || (db == &ctx->txn->dbs[FREE_DBI] && (ctx->txn->dbi_state[FREE_DBI] & DBI_DIRTY)) ||

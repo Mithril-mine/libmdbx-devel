@@ -286,6 +286,11 @@ __hot int cursor_ops(MDBX_cursor *mc, MDBX_val *key, MDBX_val *data, const MDBX_
       return outer_next(mc, key, data, MDBX_NEXT_NODUP);
     else if (inner_pointed(mc) && (mc->subcur->cursor.flags & z_after_delete))
       return outer_next(mc, key, data, MDBX_NEXT_DUP);
+    else if (inner_pointed(mc) && unlikely(inner_tail_deleted(&mc->subcur->cursor)))
+      /* the previous delete consumed the last multi-value of the key:
+       * GET_CURRENT returns the next record (issue #301); the tail-deleted
+       * mark implies the eof state, i.e. the inner is not filled */
+      return outer_next(mc, key, data, MDBX_NEXT);
     else {
       const page_t *mp = mc->pg[mc->top];
       const node_t *node = page_node(mp, mc->ki[mc->top]);
@@ -406,10 +411,11 @@ __hot int cursor_ops(MDBX_cursor *mc, MDBX_val *key, MDBX_val *data, const MDBX_
   case MDBX_NEXT_NODUP:
     rc = outer_next(mc, key, data, op);
     /* The z_eof_hard flag reflects internal intermediate state and must not be exposed to outer code after an next-ops.
-     * Elsewise a tree rebalance after deletion may going wrong. So just clear z_eof_hard flag in both cursors anyway.
-     */
-    mc->flags &= ~z_eof_hard;
-    ((cursor_couple_t *)mc)->inner.cursor.flags &= ~z_eof_hard;
+     * Elsewise a tree rebalance after deletion may going wrong. So just clear it in both cursors, but only when
+     * positioned on an element: a past-the-tail position (ki == page_numkeys) must keep z_eof_hard, otherwise it would
+     * read as positioned/filled and CRUD would go out of the data bounds (issue #305). */
+    eof_hard_clear(mc);
+    eof_hard_clear(&((cursor_couple_t *)mc)->inner.cursor);
     return rc;
 
   case MDBX_PREV_DUP:
@@ -528,6 +534,9 @@ __hot int cursor_ops(MDBX_cursor *mc, MDBX_val *key, MDBX_val *data, const MDBX_
           rc = csr.err;
           if (csr.exact) {
             cASSERT0(mc, csr.err == MDBX_SUCCESS);
+            /* copy the found value back, ops without further moves would
+             * return the stale first multi-value otherwise (issue #313) */
+            *data = save_data;
             if (op == MDBX_TO_EXACT_KEY_VALUE_LESSER_THAN)
               rc = inner_prev(mx, data);
             else if (op == MDBX_TO_EXACT_KEY_VALUE_GREATER_THAN)
@@ -536,6 +545,14 @@ __hot int cursor_ops(MDBX_cursor *mc, MDBX_val *key, MDBX_val *data, const MDBX_
             rc = inner_prev(mx, data);
           else if (op == MDBX_TO_EXACT_KEY_VALUE_EQUAL && rc == MDBX_SUCCESS)
             rc = MDBX_NOTFOUND;
+          if (op == MDBX_TO_EXACT_KEY_VALUE_EQUAL && rc == MDBX_NOTFOUND) {
+            /* The same uniform past-the-tail state as for TO_PAIR_EQUAL:
+             * the position yields no data and forbids CRUD (issue #305). */
+            if (is_pointed(mx) && mx->top >= 0) {
+              mx->ki[mx->top] = (indx_t)page_numkeys(mx->pg[mx->top]);
+              mx->flags = (mx->flags & z_inner) | z_eof_soft | z_eof_hard;
+            }
+          }
         } else {
           int cmp = mc->clc->v.cmp(data, &save_data);
           switch (op) {
@@ -581,6 +598,10 @@ __hot int cursor_ops(MDBX_cursor *mc, MDBX_val *key, MDBX_val *data, const MDBX_
           rc = csr.err;
           if (csr.exact) {
             cASSERT0(mc, csr.err == MDBX_SUCCESS);
+            /* the seek wrote the found value into save_data, but the user's
+             * *data still holds the first multi-value from the outer seek
+             * (issue #313): ops without further moves must copy it back */
+            *data = save_data;
             if (op == MDBX_TO_PAIR_LESSER_THAN)
               rc = outer_prev(mc, key, data, MDBX_PREV);
             else if (op == MDBX_TO_PAIR_GREATER_THAN)
@@ -591,6 +612,17 @@ __hot int cursor_ops(MDBX_cursor *mc, MDBX_val *key, MDBX_val *data, const MDBX_
             rc = MDBX_NOTFOUND;
           else if (op > MDBX_TO_PAIR_EQUAL && rc == MDBX_NOTFOUND)
             rc = outer_next(mc, key, data, MDBX_NEXT);
+          if (op == MDBX_TO_PAIR_EQUAL && rc == MDBX_NOTFOUND) {
+            /* A miss among the multi-values must leave the inner cursor in
+             * the one uniform past-the-tail state, regardless of where the
+             * seek landed and of whether the dupset is a sub-page or a
+             * nested tree: the position yields no data and forbids CRUD
+             * (issue #305). */
+            if (is_pointed(mx) && mx->top >= 0) {
+              mx->ki[mx->top] = (indx_t)page_numkeys(mx->pg[mx->top]);
+              mx->flags = (mx->flags & z_inner) | z_eof_soft | z_eof_hard;
+            }
+          }
         } else {
           int cmp = mc->clc->v.cmp(data, &save_data);
           switch (op) {

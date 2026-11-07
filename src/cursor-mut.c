@@ -760,6 +760,35 @@ insert_node:;
         void *db = node_data(node);
         mc->subcur->nested_tree.mod_txnid = mc->txn->txnid;
         memcpy(db, &mc->subcur->nested_tree, sizeof(tree_t));
+        /* LY: fix other cursors positioned at the same key: their cached
+         * copies of the nested tree record are stale after the insert
+         * (issue #304). */
+        for (MDBX_cursor *m2 = mc->txn->cursors[cursor_dbi(mc)]; m2; m2 = m2->next)
+          if (is_related(mc, m2) && m2->pg[mc->top] == mc->pg[mc->top] && m2->ki[mc->top] == mc->ki[mc->top])
+            *m2->subcur->cursor.tree = mc->subcur->nested_tree;
+      } else {
+        /* LY: the sub-page may grow, so the node's payload may shift within
+         * the page and the other cursors pointing to this page must be
+         * re-anchored (issue #304). */
+        page_t *const page = mc->pg[mc->top];
+        node = page_node(page, mc->ki[mc->top]);
+        for (MDBX_cursor *m2 = mc->txn->cursors[cursor_dbi(mc)]; m2; m2 = m2->next) {
+          if (!is_related(mc, m2) || m2->pg[mc->top] != page)
+            continue;
+          const node_t *inner = node;
+          if (unlikely(m2->ki[mc->top] >= page_numkeys(page))) {
+            m2->flags |= z_eof_hard | z_eof_soft | z_after_delete;
+            inner_gone_unconditional(m2);
+            continue;
+          }
+          if (m2->ki[mc->top] != mc->ki[mc->top]) {
+            inner = page_node(page, m2->ki[mc->top]);
+            if (node_flags(inner) != N_DUP)
+              continue;
+          } else
+            m2->subcur->nested_tree = mc->subcur->nested_tree;
+          m2->subcur->cursor.pg[0] = node_data(inner);
+        }
       }
       insert_data = (probe != (size_t)mc->subcur->nested_tree.items);
     }
@@ -919,6 +948,14 @@ __hot int cursor_del(MDBX_cursor *mc, unsigned flags) {
         sp->txnid = mp->txnid;
         mc->subcur->cursor.pg[0] = sp;
       }
+      if (unlikely(!is_filled(&mc->subcur->cursor))) {
+        /* The outer cursor is filled but the inner one is past the tail of
+         * the multi-values. A repeated delete after the last multi-value of
+         * the key was consumed is a legal no-op (issue #301), while a
+         * position reached by a seek forbids any CRUD (issue #305). */
+        PROBE_AGAINST_DANGLING_DBI(mc);
+        return inner_tail_deleted(&mc->subcur->cursor) ? MDBX_SUCCESS : MDBX_ENODATA;
+      }
       rc = cursor_del(&mc->subcur->cursor, 0);
       if (unlikely(rc != MDBX_SUCCESS))
         return rc;
@@ -955,8 +992,27 @@ __hot int cursor_del(MDBX_cursor *mc, unsigned flags) {
             } else
               m2->subcur->nested_tree = mc->subcur->nested_tree;
             m2->subcur->cursor.pg[0] = node_data(inner);
+            MDBX_cursor *const mi = &m2->subcur->cursor;
+            if (is_pointed(mi) && mi->ki[mi->top] >= page_numkeys(mi->pg[mi->top]))
+              mi->flags = z_inner | z_eof_soft | z_eof_hard | z_inner_tail_deleted;
           }
         }
+        /* After the delete the inner cursor may stay past the tail of the
+         * multi-values (ki == page_numkeys): mark the state explicitly, so a
+         * repeated delete is a legal no-op and CRUD may not go out of the
+         * data bounds (issues #301/#305). */
+        MDBX_cursor *const mi = &mc->subcur->cursor;
+        /* After the delete consumed the last multi-value of the key, the
+         * inner cursor stays on the last remaining value or past the tail
+         * of the multi-values with the eof state: mark it explicitly, so a
+         * repeated delete is a legal no-op, while CRUD from a seeked-to
+         * position may not go out of the data bounds (issues #301/#305).
+         * Not-filled implies the z_eof_hard eof-state (a hollow inner never
+         * reaches this point: the key survived, the nested tree is live) —
+         * a legitimate delete always finds the inner filled, so the no-op
+         * cannot mask one. */
+        if (!is_filled(mi))
+          mi->flags |= z_inner_tail_deleted;
         mc->tree->items -= 1;
         cASSERT0(mc, mc->tree->items > 0 && mc->tree->height > 0 && mc->tree->root != P_INVALID);
         cASSERT0(mc, mc->stash < 1);
