@@ -70,7 +70,6 @@ Cutting-edge release with new core features and internal refactoring.
 
  - Crashes, hangs and undefined behavior in the core engine:
     - `mdbx_enumerate_tables()` raced with other threads opening, closing, renaming or dropping table handles, or aborting a transaction that created a table, and could crash or read freed memory ([#341](https://github.com/Mithril-mine/libmdbx-devel/issues/341)).
-    - A child process forked while another thread was inside `mdbx_env_open()`/`mdbx_env_close()` or writing a log message could hang forever in libmdbx, including at exit; `fork()` now waits for these to finish, so it must not be called from a logger or panic callback ([#324](https://github.com/Mithril-mine/libmdbx-devel/issues/324)).
     - On a `MDBX_DUPSORT` table a second `mdbx_cursor_del()` after a key's last multi-value was deleted, and CRUD from a
       cursor left past the tail of the multi-values by a failed seek, could use pages twice, corrupt entry counts, crash
       or refuse a valid commit; the past-the-tail and deleted-tail cursor states are now explicitly marked and handled:
@@ -95,6 +94,10 @@ Cutting-edge release with new core features and internal refactoring.
     - An arithmetic overflow miscomputed the maximum database size on 32-bit builds with large RAM.
     - The `MDBX_TXN_TRY` flag leaked into the transaction state flags.
     - A forked child treated a failed unlock of an inherited inter-process lock as fatal only at certain log levels; the failure is now always tolerated ([#111](https://github.com/Mithril-mine/libmdbx-devel/issues/111)).
+    - A child forked while another thread of the parent was opening or closing a table handle, or resizing or syncing the
+      database, could later hang, abort, or fail `mdbx_env_close()` with `MDBX_BUSY`; `fork()` now waits for such
+      operations, so no libmdbx callback may call `fork()` or wait for a thread that calls it ([#329](https://github.com/Mithril-mine/libmdbx-devel/issues/329)).
+    - A child process forked while another thread was inside `mdbx_env_open()`/`mdbx_env_close()` or writing a log message could hang forever in libmdbx, including at exit; `fork()` now waits for these to finish, so it must not be called from a logger or panic callback ([#324](https://github.com/Mithril-mine/libmdbx-devel/issues/324)).
 
  - Wrong results and API behavior:
     - `MDBX_TO_PAIR_EQUAL`/`MDBX_TO_EXACT_KEY_VALUE_EQUAL` returned the key's first multi-value instead of the positioned

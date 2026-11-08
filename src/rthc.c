@@ -434,26 +434,67 @@ __cold int rthc_remove(MDBX_env *const env) {
 #if !defined(_WIN32) && !defined(_WIN64)
 /* Hold the mutexes over fork(), so that the child neither sees a half-updated
  * rthc table nor inherits a mutex locked by a thread that does not exist there. */
+static bool rthc_fork_trylock(pthread_mutex_t *mutex) {
+  const int rc = pthread_mutex_trylock(mutex);
+  ENSURE(rc == 0 || rc == EBUSY);
+  return rc == 0;
+}
+
 __cold static void rthc_beforefork(void) {
-  /* Only rthc_mutex is waited for, while nothing else is held; debug_lock is only tried, and when it is busy
-   * everything is released and tried again. Waiting for debug_lock while holding rthc_mutex could deadlock with a
-   * logger callback (which runs under debug_lock) that joins a thread whose exit (rthc_thread_dtor) needs
-   * rthc_mutex. */
-  for (;;) {
+  /* Also each registered environment's own mutexes, so that the child does not inherit the table-handle registry or
+   * the mapping half-updated by another thread. Order: rthc_mutex, then per environment dbi_lock before remap_lock
+   * (a table creation under dbi_lock may grow the map), then debug_lock (any of them may log).
+   * The locks are only tried, in this order, and on contention everything is released and tried again: nothing is
+   * waited for while another of them is held. Waiting while holding rthc_mutex could deadlock, e.g. with a logger
+   * (under debug_lock) or a slow-readers callback (under dbi_lock) that joins a thread whose exit (rthc_thread_dtor)
+   * needs rthc_mutex. */
+  for (unsigned attempt = 0;; ++attempt) {
     ENSURE(pthread_mutex_lock(&rthc_mutex) == 0);
-    const int rc = pthread_mutex_trylock(&globals.debug_lock);
-    if (rc == 0)
-      return;
-    ENSURE(rc == EBUSY);
+    size_t locked = 0;
+    while (locked < rthc_count) {
+      MDBX_env *const env = rthc_table[locked].env;
+      if (!rthc_fork_trylock(&env->dbi_lock))
+        break;
+      if (!rthc_fork_trylock(&env->remap_lock)) {
+        ENSURE(pthread_mutex_unlock(&env->dbi_lock) == 0);
+        break;
+      }
+      ++locked;
+    }
+    bool debug_lock_busy = false;
+    if (locked == rthc_count) {
+      if (rthc_fork_trylock(&globals.debug_lock))
+        return;
+      debug_lock_busy = true;
+    }
+    while (locked > 0) {
+      MDBX_env *const env = rthc_table[--locked].env;
+      ENSURE(pthread_mutex_unlock(&env->remap_lock) == 0);
+      ENSURE(pthread_mutex_unlock(&env->dbi_lock) == 0);
+    }
     ENSURE(pthread_mutex_unlock(&rthc_mutex) == 0);
-    /* debug_lock lives as long as the library: wait for it while holding nothing */
-    ENSURE(pthread_mutex_lock(&globals.debug_lock) == 0);
-    ENSURE(pthread_mutex_unlock(&globals.debug_lock) == 0);
+    if (debug_lock_busy) {
+      /* debug_lock lives as long as the library: wait for it while holding nothing */
+      ENSURE(pthread_mutex_lock(&globals.debug_lock) == 0);
+      ENSURE(pthread_mutex_unlock(&globals.debug_lock) == 0);
+    } else if (attempt < 8)
+      osal_yield();
+    else {
+      /* an environment's mutex is held for long (e.g. a sync or a resize): back off, up to 1 ms. The environment may
+       * be closed meanwhile, so its mutex cannot be waited for without rthc_mutex. */
+      const struct timespec pause = {0, (attempt < 18) ? 1000L << (attempt - 8) : 1000000L};
+      nanosleep(&pause, nullptr);
+    }
   }
 }
 
 __cold static void rthc_afterfork_parent(void) {
   ENSURE(pthread_mutex_unlock(&globals.debug_lock) == 0);
+  for (size_t i = rthc_count; i > 0; --i) {
+    MDBX_env *const env = rthc_table[i - 1].env;
+    ENSURE(pthread_mutex_unlock(&env->remap_lock) == 0);
+    ENSURE(pthread_mutex_unlock(&env->dbi_lock) == 0);
+  }
   ENSURE(pthread_mutex_unlock(&rthc_mutex) == 0);
 }
 
@@ -468,6 +509,13 @@ __cold void rthc_afterfork(void) {
   for (size_t i = 0; i < rthc_count; ++i) {
     MDBX_env *const env = rthc_table[i].env;
     NOTICE("drown env %p", __Wpedantic_format_voidptr(env));
+    /* The child's only thread holds the environment's own mutexes (see rthc_beforefork()), possibly recorded under
+     * the parent's thread id: reinitialize them, as above. The write-lock owner recorded by another thread is stale:
+     * a write txn of another thread is handed to this thread, so that mdbx_env_resurrect_after_fork() can abort it. */
+    ENSURE(osal_fastmutex_init(&env->dbi_lock) == 0);
+    ENSURE(osal_fastmutex_init(&env->remap_lock) == 0);
+    if (env->basal_txn)
+      env->basal_txn->owner = env->txn ? osal_thread_self() : 0;
     if (env->lck_mmap.lck)
       osal_munmap(&env->lck_mmap);
     if (env->dxb_mmap.base) {
