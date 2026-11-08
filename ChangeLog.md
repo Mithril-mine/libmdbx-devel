@@ -102,6 +102,7 @@ Cutting-edge release with new core features and internal refactoring.
       operations, so no libmdbx callback may call `fork()` or wait for a thread that calls it ([#329](https://github.com/Mithril-mine/libmdbx-devel/issues/329)).
     - A child process forked while another thread was inside `mdbx_env_open()`/`mdbx_env_close()` or writing a log message could hang forever in libmdbx, including at exit; `fork()` now waits for these to finish, so it must not be called from a logger or panic callback ([#324](https://github.com/Mithril-mine/libmdbx-devel/issues/324)).
     - `mdbx_env_chk()` corrupted the heap or crashed when a callback stopped the check with an error from `scope_push` or `stage_begin`, as `mdbx.h` allows; now a declined scope (`MDBX_RESULT_TRUE`) and any lost problem are accounted, a declined meta-scope stops the check with `MDBX_PROBLEM`, and a truncated database (fewer pages than the number of meta-pages) no longer leaks an open scope ([#314](https://github.com/Mithril-mine/libmdbx-devel/issues/314)).
+    - `mdbx_txn_park()` and `mdbx_txn_unpark()` for a read transaction without a reader slot (a database opened in without-lck mode, e.g. from read-only files) now return `MDBX_EPERM` instead of crashing, and `mdbx_env_copy()` with `MDBX_CP_THROTTLE_MVCC` silently skips the throttling in such mode ([#316](https://github.com/Mithril-mine/libmdbx-devel/issues/316)).
 
  - Wrong results and API behavior:
     - `MDBX_TO_PAIR_EQUAL`/`MDBX_TO_EXACT_KEY_VALUE_EQUAL` returned the key's first multi-value instead of the positioned
