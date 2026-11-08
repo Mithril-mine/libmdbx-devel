@@ -33,3 +33,13 @@ typedef pthread_mutex_t osal_fastmutex_t;
 
 typedef char pathchar_t;
 #define MDBX_PRIsPATH "s"
+
+MDBX_NOTHROW_CONST_FUNCTION static inline bool osal_is_pathname_absent_error(int err) {
+  return err == ENOENT || err == ENOTDIR;
+}
+
+MDBX_NOTHROW_CONST_FUNCTION static inline bool osal_is_sharing_violation_error(int err) {
+  /* LY: Legacy/Bogus NFS lock-managers could return EACCES in such cases.
+   * However, we need to move forward, not tinker with old, problematic systems. */
+  return err == EAGAIN || err == EBUSY || (EWOULDBLOCK != EAGAIN && err == EWOULDBLOCK) || err == EDEADLK;
+}

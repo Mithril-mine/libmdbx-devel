@@ -225,3 +225,11 @@ struct libmdbx_imports {
 #ifndef __cplusplus
 MDBX_INTERNAL void windows_import(void);
 #endif /* !__cplusplus */
+
+MDBX_NOTHROW_CONST_FUNCTION static inline bool osal_is_pathname_absent_error(int err) {
+  return err == ERROR_FILE_NOT_FOUND || err == ERROR_PATH_NOT_FOUND;
+}
+
+MDBX_NOTHROW_CONST_FUNCTION static inline bool osal_is_sharing_violation_error(int err) {
+  return err == ERROR_SHARING_VIOLATION || err == ERROR_LOCK_VIOLATION;
+}

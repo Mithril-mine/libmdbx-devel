@@ -16,10 +16,6 @@
 
 int osal_removefile(const pathchar_t *pathname) { return DeleteFileW(pathname) ? MDBX_SUCCESS : (int)GetLastError(); }
 
-bool osal_is_pathname_absent_error(int err) { return err == ERROR_FILE_NOT_FOUND || err == ERROR_PATH_NOT_FOUND; }
-
-bool osal_is_sharing_violation_error(int err) { return err == ERROR_SHARING_VIOLATION || err == ERROR_LOCK_VIOLATION; }
-
 int osal_removedirectory(const pathchar_t *pathname) {
   return RemoveDirectoryW(pathname) ? MDBX_SUCCESS : (int)GetLastError();
 }
@@ -129,7 +125,7 @@ int osal_openfile(const enum osal_openfile_purpose purpose, const MDBX_env *env,
      * mdbx_env_open() documents: the environment is in use by another process
      * (or another exclusive opener of this process). Report MDBX_BUSY instead
      * of the raw winerror. (issue #179) */
-    if ((env->flags & MDBX_EXCLUSIVE) && (err == ERROR_SHARING_VIOLATION || err == ERROR_LOCK_VIOLATION))
+    if ((env->flags & MDBX_EXCLUSIVE) && osal_is_sharing_violation_error(err))
       err = MDBX_BUSY;
     return err;
   }

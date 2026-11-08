@@ -119,6 +119,7 @@ static inline bool env_exclusive_fastpath(const MDBX_env *env) {
 MDBX_INTERNAL int windows_seize_exclusive(MDBX_env *env);
 #else
 #define windows_seize_exclusive(env) MDBX_SUCCESS
+MDBX_INTERNAL int lck_op(const mdbx_filehandle_t fd, int cmd, const int lck, const off_t offset, off_t len);
 #endif /* Windows */
 
 /// \brief Sets alive-flag of reader presence (indicative lock) for PID of

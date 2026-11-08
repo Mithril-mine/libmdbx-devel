@@ -22,12 +22,6 @@ static bool is_valid_fd(int fd) { return !(isatty(fd) < 0 && errno == EBADF); }
 
 int osal_removedirectory(const pathchar_t *pathname) { return rmdir(pathname) ? errno : MDBX_SUCCESS; }
 
-bool osal_is_pathname_absent_error(int err) { return err == ENOENT || err == ENOTDIR; }
-
-bool osal_is_sharing_violation_error(int err) {
-  return err == EAGAIN /* || err == EACCES */ || err == EBUSY || err == EWOULDBLOCK || err == EDEADLK;
-}
-
 int osal_fileexists(const pathchar_t *pathname) {
   if (access(pathname, F_OK) == 0)
     return MDBX_RESULT_TRUE;
