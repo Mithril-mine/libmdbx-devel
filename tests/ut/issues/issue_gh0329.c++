@@ -223,9 +223,9 @@ const char *const kJoinDb = "issue329-join.mdbx";
 std::atomic<bool> logger_armed{false}, fork_now{false}, fork_started{false}, reader_may_exit{false};
 std::thread *reader_to_join = nullptr;
 
-/* Prepare handlers run in registration order, so libmdbx's handler runs first:
- * this one then marks the fork as started while libmdbx's handler is in its
- * retry loop (its locks are contended in this scenario). */
+/* Prepare handlers run in the reverse order of registration (POSIX pthread_atfork()), so this one, registered after
+ * libmdbx's, runs first and marks the fork as started just before libmdbx's prepare handler starts on the same
+ * thread. */
 void note_fork_started() { fork_started.store(true); }
 
 bool wait_for(const std::atomic<bool> &flag) {
