@@ -41,6 +41,21 @@ TEST(ut_gc_retire, retire_reclaim_cycles) {
   const size_t records = 8000;
   const size_t val_size = 128; // крупные записи → страницы заполняются быстро
 
+  // Геометрия обязана быть явной: дефолтный шаг роста libmdbx составляет
+  // 1/64 size_upper (12288 страниц/48MiB на старте с 64 страниц), поэтому
+  // уже первый цикл доводит файл до размеров, недостижимых для лимита ниже.
+  // Задаём upper по той же формуле, которой лимитируется файл, а шаг роста —
+  // заметно меньше лимита: так проверка остаётся честной (при рабочем GC
+  // файл не достигает upper, при поломанном — упирается в него и FAIL-ит),
+  // и платформо-независимой (формула от фактической страницы).
+  const uintmax_t page = static_cast<uintmax_t>(env.get_pagesize());
+  const uintmax_t payload = records * (16 + val_size);
+  const uintmax_t data_pages = (payload * 8 + page - 1) / page;
+  const uintmax_t limit = ((data_pages + 4096) * page);
+  env.set_geometry(mdbx::geometry()
+                       .set_size_upper(static_cast<intptr_t>(limit))
+                       .set_growth_step(static_cast<intptr_t>(4 * mdbx::geometry::MiB)));
+
   // Цикл 1..3: наполнение → массовое удаление → commit.
   // Каждая итерация создаёт GC-записи (ретирированные страницы), которые
   // обязаны переиспользоваться в следующих итерациях.
@@ -106,18 +121,7 @@ TEST(ut_gc_retire, retire_reclaim_cycles) {
   // страница 16K (против 4K на Linux) — точная арифметика файла зависит
   // от платформы (см. замечание в test-coverage-gaps.md).
   {
-    // фактическая страница БД (macOS: 16K, Linux: 4K) — лимит обязан
-    // зависеть от неё, не от константы
-    const uintmax_t page = static_cast<uintmax_t>(env.get_pagesize());
-    // Размер файла определяется не только данными (~1.2МБ payload'а), но и
-    // динамикой роста: gc_alloc_ex резервирует growth-инкремент (по умолчанию
-    // до 4096 страниц), а shrink возвращается к нему же. Поэтому честный
-    // платформо-независимый ceiling — страницы-под-данные (×8 на накладные
-    // B+tree/GC) с округлением вверх до страниц файла.
-    const uintmax_t payload = records * (16 + val_size);
-    const uintmax_t data_pages = (payload * 8 + page - 1) / page;
-    const uintmax_t growth_pages = 4096; // дефолтный growth-инкремент libmdbx
-    const uintmax_t limit = ((data_pages + growth_pages) * page);
+    // лимит вычислен выше (та же формула), геометрия задана от неё
     uintmax_t fs = 0;
     std::error_code ec;
     for (const auto &p : std::filesystem::directory_iterator(".")) {
