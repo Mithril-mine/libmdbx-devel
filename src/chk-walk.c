@@ -283,7 +283,8 @@ __cold int chk_tree(MDBX_chk_scope_t *const scope) {
                          chk_v2a(chk, &tbl->name), tbl->pages.all);
       if (unlikely(!inner))
         continue /* the `scope_push` callback declined this report: skip it
-                  * for this table, the following ones still get theirs */;
+                  * for this table, the following ones still get theirs */
+            ;
       if (tbl->pages.all) {
         MDBX_chk_line_t *line = chk_line_begin(inner, MDBX_chk_info);
         if (line) {

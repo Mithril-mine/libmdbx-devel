@@ -38,6 +38,7 @@ Cutting-edge release with new core features and internal refactoring.
  - Added a new bilingual textbook and integrated it into the documentation site, with the accompanying example programs ported and restructured.
  - Added `mdbx_preopen_snapinfo_ex()` with an explicit mode (`MDBX_PREOPEN_LEGACY`, `MDBX_PREOPEN_PROPERLY`, `MDBX_PREOPEN_PESSIMISTIC`, `MDBX_PREOPEN_OPTIMISTIC`) of processing weak checkpoints during a preopen inspection; `mdbx_preopen_snapinfo()` now corresponds to `PROPERLY` ([#182](https://github.com/Mithril-mine/libmdbx-devel/issues/182)).
  - Added the man page for the `mdbx_defrag` utility and updated the other man pages.
+ - Extended the `mdbx_defrag` man page and the `mdbx_env_defrag()` reference with explanations of the stopping reasons and the large/overflow pages limitation; the `mdbx_defrag` utility now reports all stopping reasons by their names and hints on using `mdbx_copy -c` for a complete compaction.
  - Added the `MDBX_AVOID_FTOK` build option for the System V IPC locking: it replaces the system `ftok()` with a key derived from the full file identity, drastically lowering the chance of a key collision ([#80](https://github.com/Mithril-mine/libmdbx-devel/issues/80)).
  - Added the `-h`/`--help` options to all command-line utilities.
  - Clarification/refining README and doxygen API descriptions.
