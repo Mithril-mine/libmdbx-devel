@@ -8227,6 +8227,16 @@ typedef int (*MDBX_defrag_notify_func)(void *ctx, const MDBX_defrag_result_t *pr
  * committed and can be interrupted in any way while ensuring the durability of the database specified when it was
  * opened.
  *
+ * Defragmentation is an alternative to making a copy of the database with compaction (mdbx_env_copy() with
+ * \ref MDBX_CP_COMPACT, mdbx_copy -c), for cases where creating a copy is unacceptable, for instance due to
+ * insufficient space. A partial defragmentation of a few cycles is relatively quick, while the complete one almost
+ * always requires more page movements and I/O operations, like sorting without using additional memory. Moreover,
+ * when large/overflow pages are present (long values stored as runs of adjacent pages), the complete defragmentation
+ * may be unattainable at a reasonable cost: relocating such a run requires preliminary forming of an adjacent free
+ * run of the same size. In such cases the defragmentation stops after a few unproductive cycles with
+ * \ref MDBX_defrag_large_chunk among the stopping_reasons, while the database stays consistent since every cycle
+ * is committed transactionally.
+ *
  * \param [in] env                   A pointer to an instance of environment.
  *
  * \param [in] defrag_atleast        The required at least number of pages by which the database
