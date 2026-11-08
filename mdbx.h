@@ -6358,6 +6358,17 @@ LIBMDBX_API int mdbx_cursor_compare(const MDBX_cursor *left, const MDBX_cursor *
  * such modification will silently accepted and likely will lead to DB and/or
  * data corruption.
  *
+ * \note In a read-write transaction the returned values point to the pages of
+ * the database and remain valid only until the next modification of the
+ * database within this transaction: \ref mdbx_cursor_del(),
+ * \ref mdbx_cursor_put(), \ref mdbx_put(), or an update through another
+ * cursor may rewrite the underlying pages (CoW-copying, node packing and
+ * rebalancing). So the caller MUST re-retrieve or copy the values if they
+ * are needed after such modifications. For instance, reusing a \ref MDBX_val
+ * key returned by \ref mdbx_cursor_get() as the key argument of a following
+ * \ref MDBX_SET or \ref MDBX_GET_BOTH after a deletion searches for a
+ * clobbered bytes instead of the intended key.
+ *
  * \param [in] cursor    A cursor handle returned by \ref mdbx_cursor_open().
  * \param [in,out] key   The key for a retrieved item.
  * \param [in,out] data  The data of a retrieved item.
@@ -6686,6 +6697,14 @@ LIBMDBX_API int mdbx_cursor_put(MDBX_cursor *cursor, const MDBX_val *key, MDBX_v
  * does not invalidate the cursor, so operations such as \ref MDBX_NEXT can
  * still be used on it. Both \ref MDBX_NEXT and \ref MDBX_GET_CURRENT will
  * return the same record after this operation.
+ *
+ * \note The deletion rewrites the underlying pages (CoW-copying, node
+ * packing and rebalancing), therefore pointers to the database previously
+ * returned by \ref mdbx_cursor_get() (for this cursor or for any other
+ * cursor of the same write transaction) become stale and must not be used
+ * afterwards. In particular, an \ref MDBX_val key returned by
+ * \ref mdbx_cursor_get() must not be reused as a positioning argument
+ * without re-filling it from an application-owned buffer.
  *
  * \param [in] cursor  A cursor handle returned by mdbx_cursor_open().
  *
