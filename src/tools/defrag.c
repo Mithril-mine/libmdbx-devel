@@ -299,13 +299,7 @@ int main(int argc, char *argv[]) {
   rc = mdbx_env_create(&env);
   if (rc == MDBX_SUCCESS)
     rc = mdbx_env_open(env, db_pathname, env_flags, 0);
-  if ((env_flags & MDBX_EXCLUSIVE) && (rc == MDBX_BUSY ||
-#if IS_WINDOWS
-                                       rc == ERROR_LOCK_VIOLATION || rc == ERROR_SHARING_VIOLATION
-#else
-                                       rc == EBUSY || rc == EAGAIN
-#endif
-                                       )) {
+  if ((env_flags & MDBX_EXCLUSIVE) && (rc == MDBX_BUSY || osal_is_sharing_violation_error(rc))) {
     env_flags = (env_flags & ~MDBX_EXCLUSIVE) | MDBX_ACCEDE;
     rc = mdbx_env_open(env, db_pathname, env_flags, 0);
   }

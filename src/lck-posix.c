@@ -93,7 +93,7 @@ __cold static void choice_fcntl(void) {
 #define op_getlk MDBX_F_GETLK
 #endif /* MDBX_USE_OFDLOCKS */
 
-static int lck_op(const mdbx_filehandle_t fd, int cmd, const int lck, const off_t offset, off_t len) {
+int lck_op(const mdbx_filehandle_t fd, int cmd, const int lck, const off_t offset, off_t len) {
   STATIC_ASSERT(sizeof(off_t) >= sizeof(void *) && sizeof(off_t) >= sizeof(size_t));
 #if defined(__ANDROID_API__) && __ANDROID_API__ < 24
   STATIC_ASSERT_MSG((sizeof(off_t) * CHAR_BIT == MDBX_WORDBITS),
@@ -148,7 +148,8 @@ static int lck_op(const mdbx_filehandle_t fd, int cmd, const int lck, const off_
 #endif /* MDBX_USE_OFDLOCKS */
     if (rc != EINTR || cmd == op_setlkw) {
       ASSERT(MDBX_IS_ERROR(rc));
-      return rc;
+      /* EACCES from fcntl() means a lock contention, not a permission problem. */
+      return (rc == EACCES) ? EBUSY : rc;
     }
   }
 }
@@ -161,7 +162,7 @@ static int lck_setlk_with3retries(const mdbx_filehandle_t fd, const int lck, con
 #endif /* Android */
   while (true) {
     int rc = lck_op(fd, op_setlk, lck, offset, len);
-    if (!(rc == EAGAIN || rc == EACCES || rc == EBUSY || rc == EWOULDBLOCK || rc == EDEADLK) || --retry_left < 1)
+    if (!osal_is_sharing_violation_error(rc) || --retry_left < 1)
       return rc;
 #if defined(__ANDROID_API__)
     if (retry_left == 5 || retry_left == 3) {
@@ -179,7 +180,8 @@ int osal_lockfile(mdbx_filehandle_t fd, bool wait) {
   if (unlikely(op_setlk == 0))
     choice_fcntl();
 #endif /* MDBX_USE_OFDLOCKS */
-  return lck_op(fd, wait ? op_setlkw : op_setlk, F_WRLCK, 0, OFF_T_MAX);
+  const int rc = lck_op(fd, wait ? op_setlkw : op_setlk, F_WRLCK, 0, OFF_T_MAX);
+  return osal_is_sharing_violation_error(rc) ? MDBX_BUSY : rc;
 }
 
 int lck_rpid_set(MDBX_env *env) {
@@ -187,7 +189,8 @@ int lck_rpid_set(MDBX_env *env) {
   ASSERT(env->pid > 0);
   if (unlikely(osal_getpid() != env->pid))
     return MDBX_PANIC;
-  return lck_op(env->lck_mmap.fd, op_setlk, F_WRLCK, env->pid, 1);
+  const int rc = lck_op(env->lck_mmap.fd, op_setlk, F_WRLCK, env->pid, 1);
+  return osal_is_sharing_violation_error(rc) ? MDBX_BUSY : rc;
 }
 
 int lck_rpid_clear(MDBX_env *env) {
@@ -307,7 +310,7 @@ __cold int lck_seize(MDBX_env *env) {
     if (rc != MDBX_SUCCESS) {
       ERROR("%s, err %u", "without-lck", rc);
       eASSERT0(env, MDBX_IS_ERROR(rc));
-      return rc;
+      return osal_is_sharing_violation_error(rc) ? MDBX_BUSY : rc;
     }
     return MDBX_RESULT_TRUE /* Done: return with exclusive locking. */;
   }
@@ -339,14 +342,14 @@ retry:
       return err;
 
     /* the cause may be a collision with POSIX's file-lock recovery. */
-    if (!(rc == EAGAIN || rc == EACCES || rc == EBUSY || rc == EWOULDBLOCK || rc == EDEADLK)) {
+    if (!osal_is_sharing_violation_error(rc)) {
       ERROR("%s, err %u", "dxb-exclusive", rc);
       eASSERT0(env, MDBX_IS_ERROR(rc));
       return rc;
     }
 
     /* Fallback to lck-shared */
-  } else if (!(rc == EAGAIN || rc == EACCES || rc == EBUSY || rc == EWOULDBLOCK || rc == EDEADLK)) {
+  } else if (!osal_is_sharing_violation_error(rc)) {
     ERROR("%s, err %u", "try-exclusive", rc);
     eASSERT0(env, MDBX_IS_ERROR(rc));
     return rc;
@@ -382,7 +385,7 @@ retry:
   if (rc == MDBX_SUCCESS)
     goto continue_dxb_exclusive;
 
-  if (!(rc == EAGAIN || rc == EACCES || rc == EBUSY || rc == EWOULDBLOCK || rc == EDEADLK)) {
+  if (!osal_is_sharing_violation_error(rc)) {
     ERROR("%s, err %u", "try-exclusive", rc);
     eASSERT0(env, MDBX_IS_ERROR(rc));
     return rc;
@@ -393,7 +396,7 @@ retry:
   if (rc != MDBX_SUCCESS) {
     ERROR("%s, err %u", "lock-against-without-lck", rc);
     eASSERT0(env, MDBX_IS_ERROR(rc));
-    return rc;
+    return osal_is_sharing_violation_error(rc) ? MDBX_BUSY : rc;
   }
 
   /* Done: return with shared locking. */
@@ -416,6 +419,8 @@ int lck_downgrade(MDBX_env *env) {
   if (unlikely(rc != 0)) {
     ERROR("%s, err %u", "lck", rc);
     ASSERT(MDBX_IS_ERROR(rc));
+    if (osal_is_sharing_violation_error(rc))
+      rc = MDBX_BUSY;
   }
   return rc;
 }
@@ -440,7 +445,7 @@ int lck_upgrade(MDBX_env *env, bool dont_wait) {
   if (unlikely(rc != 0)) {
     /* map the would-block class to MDBX_BUSY like lck_txn_lock() does,
      * so that callers can portably detect the contention */
-    if (rc == EAGAIN || rc == EACCES || rc == EBUSY || rc == EWOULDBLOCK || rc == EDEADLK)
+    if (osal_is_sharing_violation_error(rc))
       rc = MDBX_BUSY;
     ERROR("%s, err %u", "lck", rc);
     ASSERT(MDBX_IS_ERROR(rc));

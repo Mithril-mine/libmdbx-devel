@@ -648,10 +648,7 @@ __cold int mdbx_env_close_ex(MDBX_env *env, bool dont_sync) {
       rc = errno;
     else if (st.st_nlink > 0 /* don't sync deleted files */) {
       rc = env_sync(env, true, true);
-      rc = (rc == MDBX_BUSY || rc == EAGAIN || rc == EACCES || rc == EBUSY || rc == EWOULDBLOCK ||
-            rc == MDBX_RESULT_TRUE)
-               ? MDBX_SUCCESS
-               : rc;
+      rc = (rc == MDBX_BUSY || osal_is_sharing_violation_error(rc) || rc == MDBX_RESULT_TRUE) ? MDBX_SUCCESS : rc;
     }
 #endif /* Windows */
   }
