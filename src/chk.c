@@ -121,8 +121,11 @@ __cold int chk_scope_end(MDBX_chk_internal_t *chk, int err) {
 
 __cold static int chk_scope_begin_args(MDBX_chk_internal_t *chk, int verbosity_adjustment, enum MDBX_chk_stage stage,
                                        const void *object, size_t *problems, const char *fmt, va_list args) {
-  if (unlikely(chk->scope_depth + 1u >= ARRAY_LENGTH(chk->scope_stack)))
-    return MDBX_BACKLOG_DEPLETED;
+  if (unlikely(chk->scope_depth + 1u >= ARRAY_LENGTH(chk->scope_stack))) {
+    ERROR("too many nested scopes %u >= %d, %s", chk->scope_depth + 1, (int)ARRAY_LENGTH(chk->scope_stack),
+          "the check is aborted");
+    return MDBX_PROBLEM;
+  }
 
   MDBX_chk_scope_t *const outer = chk->scope_stack + chk->scope_depth;
   const int verbosity = outer->verbosity + (verbosity_adjustment - 1) * (1 << MDBX_chk_severity_prio_shift);
@@ -139,8 +142,16 @@ __cold static int chk_scope_begin_args(MDBX_chk_internal_t *chk, int verbosity_a
 
   if (chk->cb->scope_push) {
     const int err = chk->cb->scope_push(chk->usr, outer, inner, fmt, args);
-    if (unlikely(err != MDBX_SUCCESS))
+    if (unlikely(err != MDBX_SUCCESS)) {
+      /* Either a decline (MDBX_RESULT_TRUE) or an error: the scope is not
+       * entered, but the refusal/failure must be counted, not lost. */
+      mdbx_env_chk_encount_problem(chk->usr);
+      if (chk->problem_counter != &chk->usr->result.total_problems) {
+        chk->usr->result.total_problems += *chk->problem_counter;
+        chk->problem_counter = &chk->usr->result.total_problems;
+      }
       return err;
+    }
   }
   chk->usr->scope = inner;
   chk->usr->scope_nesting = chk->scope_depth += 1;
@@ -439,7 +450,10 @@ __cold static int env_chk(MDBX_chk_scope_t *const scope) {
       chk_scope_issue(inner, "backed-pages %zu > dxb-file-pages %" PRIu64, usr->result.backed_pages, dxbfile_pages);
     if (unlikely(usr->result.backed_pages < NUM_METAS)) {
       chk_scope_issue(inner, "backed-pages %zu < num-metas %u", usr->result.backed_pages, NUM_METAS);
-      return MDBX_CORRUPTED;
+      /* Let stage_end()/scope_conclude() decide whether to ignore this error
+       * and keep checking: the rest of the section is safe with the degraded
+       * values, and the problem is counted either way. */
+      err = MDBX_CORRUPTED;
     }
     if (unlikely(usr->result.backed_pages > (size_t)MAX_PAGENO + 1)) {
       chk_scope_issue(inner, "backed-pages %zu > max-pages %zu", usr->result.backed_pages, (size_t)MAX_PAGENO + 1);
@@ -579,6 +593,11 @@ __cold static int env_chk(MDBX_chk_scope_t *const scope) {
     }
   }
   err = chk_scope_restore(scope, err);
+  if (unlikely(err))
+    /* The meta-scope was declined by the callback or failed: without its data
+     * none of the checks below could be performed properly. The refusal/failure
+     * has been counted already. */
+    return err;
 
   //--------------------------------------------------------------------------
 
@@ -588,6 +607,9 @@ __cold static int env_chk(MDBX_chk_scope_t *const scope) {
   else {
     err = chk_scope_begin(chk, -1, MDBX_chk_tree, nullptr, &usr->result.tree_problems,
                           "Traversal %s by txn#%" PRIaTXN "...", subj_tree, txn->txnid);
+    if (unlikely(err == MDBX_RESULT_TRUE))
+      chk_line_end(
+          chk_print(chk_line_begin(scope, MDBX_chk_processing), "Declined traversal %s by the callback...", subj_tree));
     if (likely(!err))
       err = chk_tree(usr->scope);
     if (usr->result.tree_problems && usr->result.gc_tree_problems == 0)
@@ -620,6 +642,9 @@ __cold static int env_chk(MDBX_chk_scope_t *const scope) {
   else {
     err = chk_scope_begin(chk, -1, MDBX_chk_gc, &chk->table_gc, &usr->result.problems_gc,
                           "Processing %s by txn#%" PRIaTXN "...", subj_gc, txn->txnid);
+    if (unlikely(err == MDBX_RESULT_TRUE))
+      chk_line_end(
+          chk_print(chk_line_begin(scope, MDBX_chk_processing), "Declined processing %s by the callback...", subj_gc));
     if (likely(!err))
       err = chk_db(usr->scope, FREE_DBI, &chk->table_gc, chk_handle_gc);
     line = chk_line_begin(scope, MDBX_chk_info);
@@ -640,6 +665,8 @@ __cold static int env_chk(MDBX_chk_scope_t *const scope) {
   //--------------------------------------------------------------------------
 
   err = chk_scope_begin(chk, 1, MDBX_chk_space, nullptr, nullptr, "Page allocation:");
+  /* The report is printed regardless: a declined scope only means that the
+   * callback wants no dedicated nesting for it, the refusal is counted. */
   const size_t backed = usr->result.backed_pages;
   const size_t boundary = txn->geo.upper;
   const size_t detained = usr->result.gc_pages - usr->result.reclaimable_pages;
@@ -699,6 +726,9 @@ __cold static int env_chk(MDBX_chk_scope_t *const scope) {
   else {
     err = chk_scope_begin(chk, 0, MDBX_chk_maindb, &chk->table_main, &usr->result.problems_kv, "Processing %s...",
                           subj_main);
+    if (unlikely(err == MDBX_RESULT_TRUE))
+      chk_line_end(chk_print(chk_line_begin(scope, MDBX_chk_processing), "Declined processing %s by the callback...",
+                             subj_main));
     if (likely(!err))
       err = chk_db(usr->scope, MAIN_DBI, &chk->table_main, chk_handle_kv);
     chk_scope_restore(scope, err);
@@ -711,6 +741,9 @@ __cold static int env_chk(MDBX_chk_scope_t *const scope) {
     else if (usr->result.problems_kv == 0 && usr->result.table_total) {
       err = chk_scope_begin(chk, 1, MDBX_chk_tables, nullptr, &usr->result.problems_kv,
                             "Processing %s by txn#%" PRIaTXN "...", subj_tables, txn->txnid);
+      if (unlikely(err == MDBX_RESULT_TRUE))
+        chk_line_end(chk_print(chk_line_begin(scope, MDBX_chk_processing), "Declined processing %s by the callback...",
+                               subj_tables));
       if (!err)
         err = chk_db(usr->scope, MAIN_DBI, &chk->table_main, nullptr);
       if (usr->scope->subtotal_issues)
@@ -768,6 +801,10 @@ __cold int mdbx_env_chk(MDBX_env *env, const struct MDBX_chk_callbacks *cb, MDBX
   MDBX_chk_scope_t *const top = chk->scope_stack;
   top->verbosity = verbosity;
   top->internal = chk;
+  /* Publish the root scope immediately: mdbx_env_chk_encount_problem() (the
+   * accounting of declined scopes and lost problems) requires a non-null
+   * ctx->scope, which is otherwise set only by the first scope_begin. */
+  chk->usr->scope = top;
 
   // init
   rc = chk_scope_end(chk, chk_scope_begin(chk, 0, MDBX_chk_init, nullptr, nullptr, nullptr));
@@ -813,7 +850,15 @@ __cold int mdbx_env_chk(MDBX_env *env, const struct MDBX_chk_callbacks *cb, MDBX
 
   // finalize
   err = chk_scope_begin(chk, 0, MDBX_chk_finalize, nullptr, nullptr, nullptr);
-  rc = chk_scope_end(chk, err ? err : rc);
+  if (likely(err == MDBX_SUCCESS))
+    rc = chk_scope_end(chk, rc);
+  /* A declined/failed finalize scope must not mask the accumulated result:
+   * the refusal/failure itself has been counted by chk_scope_begin_args(). */
+  else if (rc == MDBX_SUCCESS)
+    rc = err;
   chk_dispose(chk);
+  if (unlikely(rc == MDBX_RESULT_TRUE))
+    /* A top-level declined scope: the check did not fully run, which is a problem. */
+    rc = MDBX_PROBLEM;
   return LOG_IFERR(rc);
 }
