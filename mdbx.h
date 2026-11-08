@@ -236,7 +236,7 @@ typedef mode_t mdbx_mode_t;
 
 /** \brief Transparent adding string literal `L` for wchar_t pathnames on Windows. */
 #if defined(_WIN32) || defined(_WIN64) || defined(_WINDOWS)
-#define MDBX_PATHNAME_T(path) L ## path
+#define MDBX_PATHNAME_T(path) L##path
 #else
 #define MDBX_PATHNAME_T(path) path
 #endif /* MDBX_PATHNAME_T */
@@ -1779,7 +1779,9 @@ typedef enum MDBX_copy_flags {
   MDBX_CP_DONT_FLUSH = 4u,
 
   /** Use read transaction parking during copying MVCC-snapshot
-   * \see mdbx_txn_park() */
+   * \see mdbx_txn_park(). In without-lck mode (e.g. for a database opened
+   * from read-only files) the parking is impossible and the throttling
+   * silently skipped. */
   MDBX_CP_THROTTLE_MVCC = 8u,
 
   /** Abort/dispose passed transaction after copy
@@ -4971,6 +4973,13 @@ LIBMDBX_API int mdbx_txn_reset(MDBX_txn *txn);
  * A parked transaction without "un-parking" can be aborted, reset, or restarted at any time by using
  * \ref mdbx_txn_abort(), \ref mdbx_txn_reset(), and \ref mdbx_txn_renew(), respectively.
  *
+ * \note Parking a read transaction requires the reader slot, which is created and tracked via the
+ * lock file. When the environment runs in without-lck mode (e.g. opened from read-only files), such
+ * a slot does not exist and there is nowhere to store the transaction's MVCC snapshot in a way
+ * visible outside the transaction, so parking is impossible in principle. In such a case
+ * \ref mdbx_txn_park() returns \ref MDBX_EPERM and leaves the transaction in its current working
+ * state, and \ref mdbx_txn_unpark() returns \ref MDBX_EPERM too.
+ *
  * \see mdbx_txn_unpark()
  * \see mdbx_txn_flags()
  * \see mdbx_env_set_hsr()
@@ -4982,7 +4991,9 @@ LIBMDBX_API int mdbx_txn_reset(MDBX_txn *txn);
  * \param [in] autounpark   Allows you to enable automatic un-parking/restoring of a transaction
  * when calling API functions that involve reading data.
  *
- * \returns A non-zero error value on failure and 0 on success. */
+ * \returns A non-zero error value on failure and 0 on success.
+ * \retval MDBX_EPERM  The environment runs in without-lck mode and the read transaction has no
+ *                      reader slot, so parking is impossible (issue #316). */
 LIBMDBX_API int mdbx_txn_park(MDBX_txn *txn, bool autounpark);
 
 /** \brief Unparks a previously parked reading transaction.
@@ -4991,6 +5002,13 @@ LIBMDBX_API int mdbx_txn_park(MDBX_txn *txn, bool autounpark);
  * The function tries to restore a previously parked transaction. If a parked transaction has been ousted in order to
  * recycle old MVCC snapshots, then depending on the `restart_if_ousted` argument, it is restarted in the same way as
  * \ref mdbx_txn_renew(), either the transaction is reset and the error code \ref MDBX_OUSTED is returned.
+ *
+ * \note Unparking applies only to a transaction that was actually parked.
+ * When the environment runs in without-lck mode (e.g. opened from read-only
+ * files), the reader slot does not exist, parking is impossible in principle
+ * and \ref mdbx_txn_park() refuses with \ref MDBX_EPERM (issue #316).
+ * \ref mdbx_txn_unpark() for a non-parked transaction is a quiet no-op and
+ * returns \ref MDBX_SUCCESS.
  *
  * \see mdbx_txn_park()
  * \see mdbx_txn_flags()
@@ -5016,7 +5034,12 @@ LIBMDBX_API int mdbx_txn_park(MDBX_txn *txn, bool autounpark);
  *                           MVCC-snapshot, since `restart_if_ousted` was set to `true`.
  *
  * \retval MDBX_BAD_TXN      The transaction has already been finished either it has not been started,
- *                           or it is not a reading transaction. */
+ *                           or it is not a reading transaction.
+ *
+ * \retval MDBX_EPERM        The environment runs in without-lck mode and the read transaction
+ *                           has no reader slot, so unparking is impossible (only possible for
+ *                           internal/legacy paths; the public API returns MDBX_SUCCESS for a
+ *                           non-parked transaction). */
 LIBMDBX_API int mdbx_txn_unpark(MDBX_txn *txn, bool restart_if_ousted);
 
 /** \brief Renew a read-only transaction.
