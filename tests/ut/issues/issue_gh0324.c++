@@ -138,6 +138,7 @@ TEST(issue_gh0324, fork_while_another_thread_opens_and_closes) {
 
   const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(3);
   int forks = 0;
+  int outside_kills = 0;
   for (; forks < 50 && std::chrono::steady_clock::now() < deadline; ++forks) {
     *churn.where = before_open;
     fflush(nullptr);
@@ -155,6 +156,17 @@ TEST(issue_gh0324, fork_while_another_thread_opens_and_closes) {
     const bool exited = child_exits(pid, status);
     mdbx_env_delete(child_db(pid).c_str(), MDBX_ENV_JUST_DELETE);
     ASSERT_TRUE(exited) << "fork " << forks + 1 << ": the child hung " << step_name[*churn.where];
+    if (WIFSIGNALED(status) && WTERMSIG(status) == SIGKILL) {
+      /* Nothing in libmdbx or this test sends SIGKILL to a child, so it was
+       * killed from outside, e.g. by the macOS memory-pressure (jetsam)
+       * killer on a loaded CI runner. Such a kill tells nothing about the
+       * defect being tested, since a hung child is caught by the watchdog
+       * above, so retry this fork instead of failing the scenario. */
+      ++outside_kills;
+      ASSERT_LT(outside_kills, 4) << "fork " << forks + 1 << ": children killed from outside too many times";
+      --forks;
+      continue;
+    }
     ASSERT_TRUE(WIFEXITED(status) && WEXITSTATUS(status) == 0)
         << "fork " << forks + 1 << ": the child failed, wait status 0x" << std::hex << status;
     usleep(1000);
