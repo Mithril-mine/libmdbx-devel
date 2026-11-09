@@ -311,3 +311,27 @@ TEST(issue_gh0319, pp7_readers_full_after_dead_cleanup) {
   remove_db();
 }
 #endif /* !_WIN32 */
+
+/* Item 8: the internal node flags N_TREE (2) and N_DUP (4) must be rejected
+   by mdbx_cursor_put()/mdbx_cursor_del(). */
+TEST(issue_gh0319, pp8_internal_node_flags_rejected) {
+  db_remover guard(kDb);
+  MDBX_env *env = open_env(kDb, MDBX_env_flags_t(0));
+  ASSERT_NE(env, nullptr);
+  MDBX_txn *txn = nullptr;
+  MDBX_dbi dbi;
+  ASSERT_EQ(mdbx_txn_begin(env, nullptr, (MDBX_txn_flags_t)0, &txn), MDBX_SUCCESS);
+  ASSERT_EQ(mdbx_dbi_open(txn, "t", MDBX_CREATE, &dbi), MDBX_SUCCESS);
+  must_put(txn, dbi, "x", "y");
+  MDBX_cursor *cursor = nullptr;
+  ASSERT_EQ(mdbx_cursor_open(txn, kMainDbi, &cursor), MDBX_SUCCESS);
+  MDBX_val key = val_of("t"), data;
+  ASSERT_EQ(mdbx_cursor_get(cursor, &key, &data, MDBX_SET_KEY), MDBX_SUCCESS);
+  EXPECT_EQ(mdbx_cursor_del(cursor, (MDBX_put_flags_t)2), MDBX_EINVAL);
+  key = val_of("a");
+  data = val_of("b");
+  EXPECT_EQ(mdbx_cursor_put(cursor, &key, &data, (MDBX_put_flags_t)4), MDBX_EINVAL);
+  mdbx_cursor_close(cursor);
+  mdbx_txn_abort(txn);
+  mdbx_env_close(env);
+}
