@@ -207,3 +207,107 @@ TEST(issue_gh0319, pp6_dp_initial_not_truncated) {
   EXPECT_EQ(got, 4096u);
   EXPECT_EQ(mdbx_env_close(env), MDBX_SUCCESS);
 }
+
+#ifndef _WIN32
+/* Item 7: mvcc_bind_slot() must not return MDBX_READERS_FULL after it has
+   just freed dead slots. The reader table's effective capacity is rounded
+   up by the lock file setup (src/lck.c), so enough children are spawned to
+   occupy every slot; the parent verifies MDBX_READERS_FULL while the
+   children are alive and holds its environment open across the kills.
+   POSIX-only (fork + kill). */
+
+/* Waits a single byte within the timeout, for the fork() handshake below. */
+static bool wait_byte(int fd, char *out) {
+  struct pollfd pfd = {(decltype(pollfd::fd))fd, POLLIN, 0};
+  if (poll(&pfd, 1, 10000) != 1)
+    return false;
+  return read(fd, out, 1) == 1;
+}
+
+TEST(issue_gh0319, pp7_readers_full_after_dead_cleanup) {
+  db_remover guard(kDb);
+  MDBX_env *parent = nullptr;
+  ASSERT_EQ(mdbx_env_create(&parent), MDBX_SUCCESS);
+  ASSERT_EQ(mdbx_env_set_maxreaders(parent, 2), MDBX_SUCCESS);
+  ASSERT_EQ(mdbx_env_open(parent, kDb, MDBX_NOSUBDIR, 0644), MDBX_SUCCESS);
+  mdbx_env_close(parent);
+
+  /* The lock file rounds its size up to the system page, so the effective
+   * slot capacity may be well above maxreaders; 512 children are enough to
+   * occupy the whole table at any plausible rounding. */
+  constexpr int kChildren = 512;
+  int ready[2], done[2];
+  ASSERT_NE(pipe(ready), -1);
+  ASSERT_NE(pipe(done), -1);
+  fflush(nullptr);
+  pid_t pids[kChildren];
+  int started = 0;
+  for (int i = 0; i < kChildren; ++i) {
+    const pid_t pid = fork();
+    ASSERT_GE(pid, 0);
+    if (pid == 0) {
+      MDBX_env *child = nullptr;
+      char c = 0;
+      const bool opened = mdbx_env_create(&child) == MDBX_SUCCESS && child != nullptr &&
+                          mdbx_env_set_maxreaders(child, 2) == MDBX_SUCCESS &&
+                          mdbx_env_open(child, kDb, MDBX_NOSUBDIR, 0644) == MDBX_SUCCESS;
+      MDBX_txn *txn = nullptr;
+      if (opened && mdbx_txn_begin(child, nullptr, (MDBX_txn_flags_t)MDBX_TXN_RDONLY, &txn) == MDBX_SUCCESS) {
+        c = 1;
+        if (write(ready[1], &c, 1) != 1)
+          _exit(3);
+        /* the parent kills us while we hold the reader slot; do not exit */
+        if (read(done[0], &c, 1) < 0)
+          _exit(3);
+        mdbx_txn_abort(txn);
+      } else {
+        c = 0;
+        if (write(ready[1], &c, 1) != 1)
+          _exit(3);
+      }
+      if (child)
+        mdbx_env_close(child);
+      _exit(opened ? 0 : 2);
+    }
+    pids[i] = pid;
+    char c = 0;
+    if (wait_byte(ready[0], &c) && c == 1)
+      ++started;
+  }
+
+  /* the parent's environment must be opened while the children are alive
+     and hold the reader slots */
+  MDBX_env *env = nullptr;
+  ASSERT_GT(started, 4) << "not enough children started their read transactions";
+  ASSERT_EQ(mdbx_env_create(&env), MDBX_SUCCESS);
+  ASSERT_EQ(mdbx_env_set_maxreaders(env, 2), MDBX_SUCCESS);
+  ASSERT_EQ(mdbx_env_open(env, kDb, MDBX_NOSUBDIR, 0644), MDBX_SUCCESS);
+  MDBX_txn *probe = nullptr;
+  EXPECT_EQ(mdbx_txn_begin(env, nullptr, (MDBX_txn_flags_t)MDBX_TXN_RDONLY, &probe), MDBX_READERS_FULL)
+      << "precondition: every reader slot must be occupied by the alive children";
+  if (probe) {
+    mdbx_txn_abort(probe);
+    probe = nullptr;
+  }
+
+  /* kill all the readers while the completion pipe stays unsignaled, then
+     reap them: their slots become dead-but-taken */
+  for (int i = 0; i < kChildren; ++i)
+    kill(pids[i], SIGKILL);
+  ASSERT_EQ(close(done[1]), 0);
+  for (int i = 0; i < kChildren; ++i) {
+    int wstatus = 0;
+    EXPECT_EQ(waitpid(pids[i], &wstatus, 0), pids[i]);
+  }
+  ASSERT_EQ(close(done[0]), 0);
+
+  /* before the fix: the first txn_begin() returned MDBX_READERS_FULL after
+     mvcc_cleanup_dead() had just freed the dead slots */
+  MDBX_txn *txn = nullptr;
+  EXPECT_EQ(mdbx_txn_begin(env, nullptr, (MDBX_txn_flags_t)MDBX_TXN_RDONLY, &txn), MDBX_SUCCESS);
+  if (txn)
+    mdbx_txn_abort(txn);
+  mdbx_env_close(env);
+  remove_db();
+}
+#endif /* !_WIN32 */
