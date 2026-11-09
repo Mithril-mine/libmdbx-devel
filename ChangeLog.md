@@ -189,6 +189,7 @@ X_PANIC` ([#323](https://github.com/Mithril-mine/libmdbx-devel/issues/323)).
     - On POSIX a copy of a private database was readable by its group ([#331](https://github.com/Mithril-mine/libmdbx-devel/issues/331)).
     - A copy could delete a pre-existing destination on a lock failure or keep its old tail ([#58](https://github.com/Mithril-mine/libmdbx-devel/issues/58), [#112](https://github.com/Mithril-mine/libmdbx-devel/issues/112)).
     - `mdbx_env_copy()` deleted an existing destination on an unrelated open failure ([#310](https://github.com/Mithril-mine/libmdbx-devel/issues/310)).
+    - Per-fork internal cleanup logging was demoted from NOTICE to VERBOSE ([9/15 of #319](https://github.com/Mithril-mine/libmdbx-devel/issues/319)).
 
 
 --------------------------------------------------------------------------------
