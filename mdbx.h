@@ -7028,12 +7028,21 @@ MDBX_NOTHROW_PURE_FUNCTION LIBMDBX_API int mdbx_cursor_eof(const MDBX_cursor *cu
  * or not.
  * \ingroup c_cursors
  *
+ * In fact, the function tells whether it makes sense to move the cursor
+ * backward: \ref MDBX_RESULT_FALSE means that there are items before the
+ * current position and moving backward is reasonable, otherwise there is
+ * no such sense.
+ *
  * \param [in] cursor    A cursor handle returned by \ref mdbx_cursor_open().
  *
  * \returns A MDBX_RESULT_TRUE or MDBX_RESULT_FALSE value,
  *          otherwise the error code.
- * \retval MDBX_RESULT_TRUE   Cursor positioned to the first key-value pair
- * \retval MDBX_RESULT_FALSE  Cursor NOT positioned to the first key-value pair
+ * \retval MDBX_RESULT_TRUE   Cursor positioned to the first key-value pair,
+ *                           or not positioned at all (e.g. the table is empty
+ *                           or the cursor has been reset), i.e. there is no
+ *                           sense to move it backward.
+ * \retval MDBX_RESULT_FALSE  Cursor NOT positioned to the first key-value
+ *                           pair, i.e. moving backward makes sense.
  * \retval OTHERWISE the error code */
 MDBX_NOTHROW_PURE_FUNCTION LIBMDBX_API int mdbx_cursor_on_first(const MDBX_cursor *cursor);
 
@@ -7041,13 +7050,24 @@ MDBX_NOTHROW_PURE_FUNCTION LIBMDBX_API int mdbx_cursor_on_first(const MDBX_curso
  *
  * \ingroup c_cursors
  *
+ * In fact, the function tells whether it makes sense to move the cursor
+ * backward within the current key's multi-values: \ref MDBX_RESULT_FALSE
+ * means that there are multi-values before the current one and moving
+ * backward (\ref MDBX_PREV_DUP) is reasonable, otherwise there is no such
+ * sense. Always \ref MDBX_RESULT_TRUE for a table without \ref MDBX_DUPSORT.
+ *
  * \param [in] cursor    A cursor handle returned by \ref mdbx_cursor_open().
  *
  * \returns A \ref MDBX_RESULT_TRUE or \ref MDBX_RESULT_FALSE value, otherwise the error code.
  *
- * \retval MDBX_RESULT_TRUE   The cursor is positioned to the first or single multi-value corresponding to the key.
+ * \retval MDBX_RESULT_TRUE   The cursor is positioned to the first or single
+ *                           multi-value corresponding to the key, or not
+ *                           positioned at all, i.e. there is no sense to move
+ *                           it backward.
  *
- * \retval MDBX_RESULT_FALSE  The cursor is NOT positioned to the first or single multi-value corresponding to the key.
+ * \retval MDBX_RESULT_FALSE  The cursor is NOT positioned to the first or
+ *                           single multi-value corresponding to the key, i.e.
+ *                           moving backward makes sense.
  *
  * \retval OTHERWISE the error code */
 MDBX_NOTHROW_PURE_FUNCTION LIBMDBX_API int mdbx_cursor_on_first_dup(const MDBX_cursor *cursor);
@@ -7055,24 +7075,44 @@ MDBX_NOTHROW_PURE_FUNCTION LIBMDBX_API int mdbx_cursor_on_first_dup(const MDBX_c
 /** \brief Determines whether the cursor is pointed to the last key-value pair or not.
  * \ingroup c_cursors
  *
+ * In fact, the function tells whether it makes sense to move the cursor
+ * forward: \ref MDBX_RESULT_FALSE means that there are items after the
+ * current position and moving forward is reasonable, otherwise there is
+ * no such sense.
+ *
  * \param [in] cursor    A cursor handle returned by \ref mdbx_cursor_open().
  *
  * \returns A \ref MDBX_RESULT_TRUE or \ref MDBX_RESULT_FALSE value, otherwise the error code.
- * \retval MDBX_RESULT_TRUE   Cursor positioned to the last key-value pair
- * \retval MDBX_RESULT_FALSE  Cursor NOT positioned to the last key-value pair
+ * \retval MDBX_RESULT_TRUE   Cursor positioned to the last key-value pair,
+ *                           or not positioned at all (e.g. the table is empty
+ *                           or the cursor has been reset), i.e. there is no
+ *                           sense to move it forward.
+ * \retval MDBX_RESULT_FALSE  Cursor NOT positioned to the last key-value
+ *                           pair, i.e. moving forward makes sense.
  * \retval OTHERWISE the error code */
 MDBX_NOTHROW_PURE_FUNCTION LIBMDBX_API int mdbx_cursor_on_last(const MDBX_cursor *cursor);
 
 /** \brief Determines whether the cursor is on the last or single multi-value corresponding to the key.
  * \ingroup c_cursors
  *
+ * In fact, the function tells whether it makes sense to move the cursor
+ * forward within the current key's multi-values: \ref MDBX_RESULT_FALSE
+ * means that there are multi-values after the current one and moving
+ * forward (\ref MDBX_NEXT_DUP) is reasonable, otherwise there is no such
+ * sense. Always \ref MDBX_RESULT_TRUE for a table without \ref MDBX_DUPSORT.
+ *
  * \param [in] cursor    A cursor handle returned by \ref mdbx_cursor_open().
  *
  * \returns A \ref MDBX_RESULT_TRUE or \ref MDBX_RESULT_FALSE value, otherwise the error code.
  *
- * \retval MDBX_RESULT_TRUE   The cursor is positioned to the last or single multi-value corresponding to the key.
+ * \retval MDBX_RESULT_TRUE   The cursor is positioned to the last or single
+ *                           multi-value corresponding to the key, or not
+ *                           positioned at all, i.e. there is no sense to move
+ *                           it forward.
  *
- * \retval MDBX_RESULT_FALSE  The cursor is NOT positioned to the last or single multi-value corresponding to the key.
+ * \retval MDBX_RESULT_FALSE  The cursor is NOT positioned to the last or
+ *                           single multi-value corresponding to the key, i.e.
+ *                           moving forward makes sense.
  *
  * \retval OTHERWISE the error code */
 MDBX_NOTHROW_PURE_FUNCTION LIBMDBX_API int mdbx_cursor_on_last_dup(const MDBX_cursor *cursor);
