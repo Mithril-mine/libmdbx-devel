@@ -420,3 +420,54 @@ TEST(issue_gh0319, pp11_replace_flags_validation) {
   mdbx_txn_abort(txn);
   mdbx_env_close(env);
 }
+
+/* Item 12: MDBX_GET_MULTIPLE returns a whole page of the current key's
+   duplicates from its beginning, regardless of the inner cursor position
+   (in accord with LMDB), and prepares the cursor for MDBX_NEXT_MULTIPLE. */
+TEST(issue_gh0319, pp12_get_multiple_positioning) {
+  db_remover guard(kDb);
+  MDBX_env *env = open_env(kDb, MDBX_env_flags_t(0));
+  ASSERT_NE(env, nullptr);
+  MDBX_txn *txn = nullptr;
+  MDBX_dbi dbi;
+  ASSERT_EQ(mdbx_txn_begin(env, nullptr, (MDBX_txn_flags_t)0, &txn), MDBX_SUCCESS);
+  ASSERT_EQ(mdbx_dbi_open(txn, "fixed", MDBX_CREATE | MDBX_DUPSORT | MDBX_DUPFIXED, &dbi), MDBX_SUCCESS);
+  must_put(txn, dbi, "k", "00000001");
+  must_put(txn, dbi, "k", "00000002");
+  must_put(txn, dbi, "k", "00000003");
+  must_put(txn, dbi, "k", "00000004");
+  must_put(txn, dbi, "k", "00000005");
+  must_put(txn, dbi, "m", "msingle!");
+
+  MDBX_cursor *cursor = nullptr;
+  ASSERT_EQ(mdbx_cursor_open(txn, dbi, &cursor), MDBX_SUCCESS);
+  MDBX_val key = val_of("k"), data = val_of("00000003");
+
+  /* position at the 3rd duplicate of "k", then take the batch */
+  ASSERT_EQ(mdbx_cursor_get(cursor, &key, &data, MDBX_GET_BOTH), MDBX_SUCCESS);
+  EXPECT_EQ(memcmp(data.iov_base, "00000003", 8), 0);
+  ASSERT_EQ(mdbx_cursor_get(cursor, &key, &data, MDBX_GET_MULTIPLE), MDBX_SUCCESS);
+  EXPECT_EQ(data.iov_len, 5u * 8u);
+  EXPECT_EQ(memcmp(data.iov_base, "00000001", 8), 0);
+  /* the batch has consumed the whole key */
+  EXPECT_EQ(mdbx_cursor_get(cursor, &key, &data, MDBX_NEXT_MULTIPLE), MDBX_NOTFOUND);
+
+  /* SEEK_AND_GET_MULTIPLE positions at the key and returns its first page */
+  key = val_of("k");
+  ASSERT_EQ(mdbx_cursor_get(cursor, &key, &data, MDBX_SEEK_AND_GET_MULTIPLE), MDBX_SUCCESS);
+  EXPECT_EQ(data.iov_len, 5u * 8u);
+  EXPECT_EQ(memcmp(data.iov_base, "00000001", 8), 0);
+
+  /* a single-value key yields the single value */
+  key = val_of("m");
+  ASSERT_EQ(mdbx_cursor_get(cursor, &key, &data, MDBX_SET), MDBX_SUCCESS);
+  data.iov_base = nullptr;
+  data.iov_len = 0;
+  ASSERT_EQ(mdbx_cursor_get(cursor, &key, &data, MDBX_GET_MULTIPLE), MDBX_SUCCESS);
+  EXPECT_EQ(data.iov_len, 8u);
+  EXPECT_EQ(memcmp(data.iov_base, "msingle!", 8), 0);
+
+  mdbx_cursor_close(cursor);
+  mdbx_txn_abort(txn);
+  mdbx_env_close(env);
+}
