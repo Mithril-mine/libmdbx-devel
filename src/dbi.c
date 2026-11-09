@@ -177,6 +177,57 @@ int dbi_defer_release(MDBX_env *const env, defer_free_item_t *const chain) {
   return chain ? MDBX_SUCCESS : MDBX_BAD_DBI;
 }
 
+void dbi_rename_undo_apply(MDBX_txn *txn) {
+  dbi_rename_undo_t *undo = (dbi_rename_undo_t *)txn->dbi_rename_undo;
+  if (unlikely(!undo))
+    return;
+  MDBX_env *const env = txn->env;
+  txn->dbi_rename_undo = nullptr;
+  ENSURE_OBJ(env, osal_fastmutex_acquire(&env->dbi_lock) == MDBX_SUCCESS);
+  while (undo) {
+    dbi_rename_undo_t *next = undo->next;
+    if (likely(undo->dbi < env->n_dbi)) {
+      /* переименованное имя не дожило до commit и не покидало транзакцию */
+      osal_free(env->kvs[undo->dbi].name.iov_base);
+      env->kvs[undo->dbi].name.iov_base = undo->name_item;
+      env->kvs[undo->dbi].name.iov_len = undo->name_len;
+    } else
+      osal_free(undo->name_item);
+    osal_free(undo);
+    undo = next;
+  }
+  ENSURE_OBJ(env, osal_fastmutex_release(&env->dbi_lock) == MDBX_SUCCESS);
+}
+
+void dbi_rename_undo_release(MDBX_env *env, dbi_rename_undo_t *chain) {
+  defer_free_item_t *names = nullptr;
+  while (chain) {
+    dbi_rename_undo_t *undo = chain;
+    chain = undo->next;
+    undo->name_item->next = names;
+    names = undo->name_item;
+    osal_free(undo);
+  }
+  if (names) {
+    /* dbi_defer_release() takes and releases env->dbi_lock itself */
+    ENSURE_OBJ(env, osal_fastmutex_acquire(&env->dbi_lock) == MDBX_SUCCESS);
+    dbi_defer_release(env, names);
+  }
+}
+
+void dbi_rename_undo_transfer(MDBX_txn *parent, MDBX_txn *nested) {
+  dbi_rename_undo_t *list = (dbi_rename_undo_t *)nested->dbi_rename_undo;
+  nested->dbi_rename_undo = nullptr;
+  if (!list)
+    return;
+  /* undo вложенной предшествует по времени и применяется раньше undo родителя */
+  dbi_rename_undo_t *last = list;
+  while (last->next)
+    last = last->next;
+  last->next = (dbi_rename_undo_t *)parent->dbi_rename_undo;
+  parent->dbi_rename_undo = list;
+}
+
 /* Export or close DBI handles opened in this txn. */
 int dbi_update(MDBX_txn *txn, bool commit) {
   MDBX_env *const env = txn->env;
@@ -710,6 +761,7 @@ slowpath_locking:
 __cold struct dbi_rename_result dbi_rename_locked(MDBX_txn *txn, MDBX_dbi dbi, MDBX_val new_name) {
   struct dbi_rename_result pair;
   pair.defer = nullptr;
+  pair.old_len = 0;
   pair.err = dbi_check(txn, dbi);
   if (unlikely(pair.err != MDBX_SUCCESS))
     return pair;
@@ -746,7 +798,10 @@ __cold struct dbi_rename_result dbi_rename_locked(MDBX_txn *txn, MDBX_dbi dbi, M
     if (likely(pair.err == MDBX_SUCCESS))
       pair.err = cursor_del(&cx.outer, N_TREE);
     if (likely(pair.err == MDBX_SUCCESS)) {
+      /* старое имя отдаётся вызывающему для отката при abort транзакции
+       * (issue #307), новое публикуется сразу */
       pair.defer = env->kvs[dbi].name.iov_base;
+      pair.old_len = old_name.iov_len;
       env->kvs[dbi].name = new_name;
     } else
       txn->flags |= MDBX_TXN_ERROR;

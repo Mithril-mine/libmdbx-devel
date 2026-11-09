@@ -538,6 +538,7 @@ int txn_nested_abort(MDBX_txn *nested) {
   tASSERT1(nested, memcmp(&nested->wr.troika, &nested->parent->wr.troika, sizeof(troika_t)) == 0);
 
   int rc = nested_undo(nested);
+  dbi_rename_undo_apply(nested);
   nested_free(nested);
   return rc;
 }
@@ -658,8 +659,14 @@ static int nested_join(MDBX_txn *nested, struct commit_timestamp *ts) {
 
 int txn_nested_commit(MDBX_txn *nested, struct commit_timestamp *ts) {
   int rc = nested_join(nested, ts);
-  if (unlikely(rc != MDBX_SUCCESS))
+  if (likely(rc == MDBX_SUCCESS)) {
+    /* имена переименований применены этим commit'ом, обязательства их отката
+       переходят к родителю вместе с изменениями */
+    dbi_rename_undo_transfer(nested->parent, nested);
+  } else {
+    dbi_rename_undo_apply(nested);
     nested_undo(nested);
+  }
   nested_free(nested);
   return rc;
 }
@@ -719,6 +726,7 @@ int txn_nested_rollback(MDBX_txn *nested) {
   const unsigned flags =
       nested->flags & (txn_rw_begin_flags | MDBX_NOSTICKYTHREADS | MDBX_WRITEMAP | MDBX_TXN_RDONLY | txn_ro_nested);
   int rc = nested_undo(nested);
+  dbi_rename_undo_apply(nested);
   if (likely(rc == MDBX_SUCCESS)) {
     /* release what the previous nested_start() allocated, as nested_free() does, but keep the handle */
     rkl_clear_and_shrink(&nested->wr.gc.reclaimed);

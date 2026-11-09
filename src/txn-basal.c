@@ -269,6 +269,16 @@ int txn_basal_end(MDBX_txn *txn, bool unlock) {
 
   /* Export or close DBI handles created in this txn */
   int rc = (preserved_flags & MDBX_TXN_DIRTY) ? dbi_update(txn, !(preserved_flags & MDBX_TXN_ERROR)) : MDBX_SUCCESS;
+  /* Undo переименований таблиц: при abort восстановить старые имена, при
+     commit — освободить их (новые уже опубликованы в kvs). */
+  if (txn->dbi_rename_undo) {
+    if (preserved_flags & MDBX_TXN_ERROR)
+      dbi_rename_undo_apply(txn);
+    else {
+      dbi_rename_undo_release(env, (dbi_rename_undo_t *)txn->dbi_rename_undo);
+      txn->dbi_rename_undo = nullptr;
+    }
+  }
   if (likely(unlock) || unlikely(rc != MDBX_SUCCESS)) {
     /* The writer mutex was locked in mdbx_txn_begin. */
     lck_txn_unlock(env);

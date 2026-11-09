@@ -130,9 +130,33 @@ __cold int mdbx_dbi_rename2(MDBX_txn *txn, MDBX_dbi dbi, const MDBX_val *new_nam
   rc = osal_fastmutex_acquire(&txn->env->dbi_lock);
   if (likely(rc == MDBX_SUCCESS)) {
     struct dbi_rename_result pair = dbi_rename_locked(txn, dbi, *new_name);
-    if (pair.defer)
-      pair.defer->next = nullptr;
-    dbi_defer_release(txn->env, pair.defer);
+    if (pair.defer) {
+      /* старое имя остаётся живым и восстанавливается при abort транзакции
+       * (issue #307): прикрепляем undo вместо освобождения буфера */
+      if (likely(pair.err == MDBX_SUCCESS)) {
+        dbi_rename_undo_t *undo = osal_malloc(sizeof(dbi_rename_undo_t));
+        if (likely(undo)) {
+          undo->next = (dbi_rename_undo_t *)txn->dbi_rename_undo;
+          undo->name_item = pair.defer;
+          undo->name_len = pair.old_len;
+          undo->dbi = dbi;
+          txn->dbi_rename_undo = undo;
+          pair.defer = nullptr;
+        }
+      }
+      if (pair.defer) {
+        /* undo не создан (out-of-memory): имя будет потеряно на abort, как
+         * и прежде, но буфер освободим корректно. dbi_defer_release()
+         * освобождает dbi_lock — больше unlocking не требуется. */
+        pair.defer->next = nullptr;
+        dbi_defer_release(txn->env, pair.defer);
+        return LOG_IFERR(pair.err);
+      }
+      /* буфер старого имени переехал в undo — освобождать нечего */
+    }
+    /* dbi_defer_release() здесь не вызывался: отпираем dbi_lock явно
+     * (для no-op переименования «в то же имя» pair.defer == nullptr) */
+    ENSURE_OBJ(txn->env, osal_fastmutex_release(&txn->env->dbi_lock) == MDBX_SUCCESS);
     rc = pair.err;
   }
   return LOG_IFERR(rc);

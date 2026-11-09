@@ -189,11 +189,13 @@ enum txn_flags {
   txn_gc_drained = 0x100 /* GC was depleted up to oldest reader */,
   txn_may_have_cursors = 0x400,
   txn_state_flags = MDBX_TXN_FINISHED | MDBX_TXN_ERROR | MDBX_TXN_DIRTY | MDBX_TXN_SPILLS | MDBX_TXN_HAS_CHILD |
-                    MDBX_TXN_INVALID | txn_gc_drained
+      MDBX_TXN_INVALID | txn_gc_drained
 };
 
 /* A database transaction.
  * Every operation requires a transaction handle. */
+struct dbi_rename_undo;
+
 struct MDBX_txn {
   int32_t signature;
   uint32_t flags; /* Transaction Flags */
@@ -228,6 +230,10 @@ struct MDBX_txn {
 
   /* Массив с головами односвязных списков отслеживания курсоров. */
   MDBX_cursor **cursors;
+
+  /* Отложенный undo переименований таблиц, выполненных в этой транзакции
+     (см. dbi_rename_undo_t в dbi.h). */
+  struct dbi_rename_undo *dbi_rename_undo;
 
   /* "Канареечные" маркеры/счетчики */
   MDBX_canary canary;
@@ -422,9 +428,9 @@ enum env_flags {
    * at runtime. Changing other flags requires closing the
    * environment and re-opening it with the new flags. */
   ENV_CHANGEABLE_FLAGS = MDBX_SAFE_NOSYNC | MDBX_NOMETASYNC | DEPRECATED_MAPASYNC | MDBX_NOMEMINIT |
-                         DEPRECATED_COALESCE | MDBX_PAGEPERTURB | MDBX_ACCEDE | MDBX_VALIDATION,
+      DEPRECATED_COALESCE | MDBX_PAGEPERTURB | MDBX_ACCEDE | MDBX_VALIDATION,
   ENV_CHANGELESS_FLAGS = MDBX_NOSUBDIR | MDBX_RDONLY | MDBX_WRITEMAP | MDBX_NOSTICKYTHREADS | MDBX_NORDAHEAD |
-                         MDBX_LIFORECLAIM | MDBX_EXCLUSIVE,
+      MDBX_LIFORECLAIM | MDBX_EXCLUSIVE,
   ENV_USABLE_FLAGS = ENV_CHANGEABLE_FLAGS | ENV_CHANGELESS_FLAGS,
   /* A flag for checking any non-synchronous mode. The MDBX_SAFE_NOSYNC bit is sufficient here,
    * since it is included in MDBX_UTTERLY_NOSYNC. */
@@ -614,8 +620,8 @@ struct MDBX_env {
 #define DEFAULT_READERS 61
 
 enum db_flags {
-  DB_PERSISTENT_FLAGS =
-      MDBX_REVERSEKEY | MDBX_DUPSORT | MDBX_INTEGERKEY | MDBX_DUPFIXED | MDBX_INTEGERDUP | MDBX_REVERSEDUP,
+  DB_PERSISTENT_FLAGS = MDBX_REVERSEKEY | MDBX_DUPSORT | MDBX_INTEGERKEY | MDBX_DUPFIXED | MDBX_INTEGERDUP |
+      MDBX_REVERSEDUP,
 
   /* mdbx_dbi_open() flags */
   DB_USABLE_FLAGS = DB_PERSISTENT_FLAGS | MDBX_CREATE | MDBX_DB_ACCEDE,

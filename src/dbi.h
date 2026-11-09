@@ -114,8 +114,23 @@ MDBX_INTERNAL const tree_t *dbi_dig(const MDBX_txn *txn, const size_t dbi, tree_
 MDBX_INTERNAL int dbi_enumerate(const MDBX_txn *txn, MDBX_table_enum_func func, void *ctx, bool dbi_locked);
 
 struct dbi_rename_result {
-  defer_free_item_t *defer;
+  defer_free_item_t *defer; /* the old name buffer, to be kept for the abort-undo */
+  size_t old_len;           /* the old name length, valid when defer != nullptr */
   int err;
 };
 
+/* Отложенный undo переименования таблицы: узлы списка хранят старое имя и
+ * восстанавливаются в kvs при abort транзакции, в которой выполнено
+ * переименование, либо переносятся в родителя при commit вложенной. */
+typedef struct dbi_rename_undo {
+  struct dbi_rename_undo *next;
+  defer_free_item_t *name_item; /* буфер старого имени (с defer-заголовком) */
+  size_t name_len;              /* длина строки старого имени */
+  unsigned dbi;
+} dbi_rename_undo_t;
+
 MDBX_INTERNAL struct dbi_rename_result dbi_rename_locked(MDBX_txn *txn, MDBX_dbi dbi, MDBX_val new_name);
+
+MDBX_INTERNAL void dbi_rename_undo_apply(MDBX_txn *txn);
+MDBX_INTERNAL void dbi_rename_undo_release(MDBX_env *env, dbi_rename_undo_t *chain);
+MDBX_INTERNAL void dbi_rename_undo_transfer(MDBX_txn *parent, MDBX_txn *nested);
