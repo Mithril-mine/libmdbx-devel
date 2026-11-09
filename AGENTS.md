@@ -92,7 +92,12 @@ Canonical style guide: [docs/engineering/changelog-codex.md](docs/engineering/ch
   `ChangeLog.md`; anything else only in exceptional cases, agreed with the
   owner.
 - User-facing wording: no internal jargon, no low-level details — describe
-  what the user would have observed.
+  what the user would have observed; a brief mention of the fixed problem
+  as the user could see it is welcome, "bird language" and detailed
+  explanations of minutiae are not.
+- An entry is a single sentence of up to 100 characters. Longer entries
+  (2–3 sentences or a short structural note) are allowed only for large
+  reworks and only with the owner's direction or confirmation.
 - Prefer a single line up to 100 characters; 2–3 sentences or a short
   structural note in rare cases. Every entry must be semantically complete
   and end with a period.
