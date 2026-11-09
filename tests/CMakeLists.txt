@@ -438,11 +438,15 @@ else()
   # AFTER the whole corpus (never in parallel with the tests), so it is not
   # part of the default labels.
   add_test(NAME test_hygiene_check COMMAND $<TARGET_FILE:te_cleanup_tool> --scan ${CMAKE_BINARY_DIR})
-  # The scan must run after every fixture-cleanup test (e.g. smoke_cleanup
-  # deletes the intentionally leftover smoke.db* of the smoke suite):
-  # otherwise the parallel check trips on the not-yet-cleaned fixtures. */
-  set_tests_properties(test_hygiene_check PROPERTIES LABELS "hygiene" RUN_SERIAL ON
-                                                     DEPENDS smoke_cleanup)
+  # The scan must run after EVERY fixture-cleanup test (each chain deletes
+  # its intentionally leftover files at the end, e.g. smoke_cleanup removes
+  # the smoke.db* of the quick-smoke suite and smoke_t1_*_cleanup the t1
+  # ones): otherwise the parallel check trips on the not-yet-cleaned
+  # fixtures, e.g. when the slowest producer of another chain has just
+  # finished but its cleanup has not started yet. */
+  set_tests_properties(test_hygiene_check
+    PROPERTIES LABELS "hygiene" RUN_SERIAL ON
+               DEPENDS "smoke_cleanup;smoke_fault_cleanup;smoke_long_cleanup;dupsort_writemap_cleanup;uniq_nested_cleanup;smoke_sp_cleanup;smoke_t1_hill_cleanup;smoke_t1_nested_cleanup;smoke_t1_copy_cleanup")
 
   if(MDBX_ENABLE_SINGLEPROCESS_TESTS)
   # Single-process scenario chain: only for cross-qemu/cross-toolchain runs
