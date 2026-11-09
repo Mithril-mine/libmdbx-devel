@@ -5295,6 +5295,7 @@ MDBX_DEPRECATED LIBMDBX_API int mdbx_dbi_open_ex2(MDBX_txn *txn, const MDBX_val 
  * \ingroup c_dbi
  *
  * Renames the user's named table associated with the given DBI descriptor.
+ * Renaming to the same name is a no-op and \ref MDBX_SUCCESS is returned.
  *
  * \param [in,out] txn   A writing transaction started by \ref mdbx_txn_begin().
  *
