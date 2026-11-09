@@ -86,6 +86,7 @@ Cutting-edge release with new core features and internal refactoring.
     - A child forked during another thread's database call could hang at exit; `fork()` now waits ([#324](https://github.com/Mithril-mine/libmdbx-devel/issues/324), [#329](https://github.com/Mithril-mine/libmdbx-devel/issues/329)).
     - `mdbx_env_chk()` corrupted the heap or crashed when a callback stopped the check early ([#314](https://github.com/Mithril-mine/libmdbx-devel/issues/314)).
     - `mdbx_txn_park()`/`unpark()` crashed on a transaction without a reader slot; now `MDBX_EPERM` ([#316](https://github.com/Mithril-mine/libmdbx-devel/issues/316)).
+    - `mdbx_cursor_renew()` crashed on a wrong cursor or transaction handle ([1/15 of #319](https://github.com/Mithril-mine/libmdbx-devel/issues/319)).
 
  - Wrong results and API behavior:
     - `MDBX_TO_PAIR_*` returned the key's first multi-value instead of the positioned one ([#313](https://github.com/Mithril-mine/libmdbx-devel/issues/313)).
