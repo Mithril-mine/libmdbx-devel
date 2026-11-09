@@ -20,6 +20,9 @@ permissions:
 
 on:
   push:
+  pull_request:
+    paths:
+      - "src/**"
   schedule:
     - cron: "23 1 * * *"
       timezone: "Europe/Moscow"

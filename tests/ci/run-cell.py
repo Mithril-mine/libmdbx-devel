@@ -191,8 +191,8 @@ def run(argv, cwd=None, env=None, capture=False):
 def main() -> int:
     parser = argparse.ArgumentParser(description="Infra v3 single-cell runner")
     parser.add_argument("cell", help="registry cell id (tests/ci/config.json)")
-    parser.add_argument("--scope", choices=("fast", "full"), default="fast",
-                        help="ctest scope: fast (smoke-t1|ut.* minus heavy) or full")
+    parser.add_argument("--scope", choices=("fast", "fast+hygiene", "full"), default="fast",
+                        help="ctest scope: fast (smoke-t1|ut.* minus heavy), fast+hygiene (adds test_hygiene_check) or full")
     parser.add_argument("--build-dir", default=None,
                         help="build directory (default @ci-cmake-build/<cell>)")
     args = parser.parse_args()
@@ -331,7 +331,10 @@ def main() -> int:
         by_label = False
     else:
         # Fast tier: select by CTest labels (smoke-t1|ut.* minus ut.heavy).
-        ctest_regex = "smoke-t1|ut\\."
+        # The "fast+hygiene" scope additionally includes the hygiene label
+        # (test_hygiene_check) — set by the dispatcher when a change touches
+        # tests/.
+        ctest_regex = "smoke-t1|ut\\.|hygiene" if args.scope == "fast+hygiene" else "smoke-t1|ut\\."
         ctest_exclude = "ut\\.heavy"
         by_label = True
 

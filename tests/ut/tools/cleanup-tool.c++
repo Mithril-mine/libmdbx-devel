@@ -11,18 +11,22 @@
 /// error: every listed path is deleted when present, with its `-lck`
 /// companion and the directory environment form.
 ///
-/// `--scan` mode (enforcement, item 4 of #343, POSIX-only): recursively walks
-/// the given directories and reports/fails on ANY leftover database file
-/// (`*.mdbx`, `*.mdbx-lck`, `*.db`, `*.db-lck`, `*.db-copy`, `mdbx.dat`,
-/// `mdbx.lck`). Intended to run as a separate `ctest -L hygiene` invocation
-/// after the whole corpus, when no test is running in parallel.
+/// `--scan` mode (enforcement, item 4 of #343): recursively walks the given
+/// directories and reports/fails on ANY leftover database file (`*.mdbx`,
+/// `*.mdbx-lck`, `*.db`, `*.db-lck`, `*.db-copy`, `*.db-copy-lck`,
+/// `mdbx.dat`, `mdbx.lck`). Intended to run as a separate `ctest -L hygiene`
+/// invocation after the whole corpus, when no test is running in parallel.
+/// Symbolic-directory links are not followed to avoid scan cycles.
 
 #include "mdbx.h"
 
-#include <stdio.h>
-#include <string.h>
+#include <cstdio>
+#include <cstring>
+#include <string>
 
-#ifndef _WIN32
+#ifdef _WIN32
+#include <windows.h>
+#else
 #include <dirent.h>
 #include <sys/stat.h>
 #endif /* !_WIN32 */
@@ -39,9 +43,71 @@ static int delete_mode(int argc, const char *const argv[]) {
   return failures ? 1 : 0;
 }
 
-#ifndef _WIN32
-
 static int scan_failures = 0;
+
+#ifdef _WIN32
+
+static bool is_database_leftover_w(const wchar_t *name) {
+  static const wchar_t *const suffixes[] = {L".mdbx", L".mdbx-lck", L".db", L".db-lck", L".db-copy", L".db-copy-lck"};
+  for (const wchar_t *suffix : suffixes) {
+    const size_t suffix_length = wcslen(suffix);
+    if (wcslen(name) >= suffix_length && wcscmp(name + wcslen(name) - suffix_length, suffix) == 0)
+      return true;
+  }
+  return wcscmp(name, L"mdbx.dat") == 0 || wcscmp(name, L"mdbx.lck") == 0;
+}
+
+static bool is_skipped_dir_w(const wchar_t *name) {
+  static const wchar_t *const scan_skip_dirs[] = {L"Testing", L"googletest-src", L"googletest-build", L"_deps"};
+  for (const wchar_t *skip : scan_skip_dirs)
+    if (wcscmp(name, skip) == 0)
+      return true;
+  return false;
+}
+
+static void scan_dir_w(const wchar_t *path) {
+  const std::wstring pattern = std::wstring(path) + L"\\*";
+  WIN32_FIND_DATAW ffd;
+  const HANDLE handle = FindFirstFileW(pattern.c_str(), &ffd);
+  if (handle == INVALID_HANDLE_VALUE) {
+    fwprintf(stderr, L"cleanup-tool: unable scan `%ls`\n", path);
+    ++scan_failures;
+    return;
+  }
+  do {
+    if (wcscmp(ffd.cFileName, L".") == 0 || wcscmp(ffd.cFileName, L"..") == 0)
+      continue;
+    const std::wstring full = std::wstring(path) + L"\\" + ffd.cFileName;
+    if (ffd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) {
+      if (!is_skipped_dir_w(ffd.cFileName))
+        scan_dir_w(full.c_str());
+    } else if (is_database_leftover_w(ffd.cFileName)) {
+      fwprintf(stderr, L"cleanup-tool: leftover database file `%ls`\n", full.c_str());
+      ++scan_failures;
+    }
+  } while (FindNextFileW(handle, &ffd) != 0);
+  FindClose(handle);
+}
+
+static int scan_mode(int argc, const char *const argv[]) {
+  for (int i = 2; i < argc; ++i) { /* argv[1] is the --scan flag itself */
+    wchar_t path_wide[4096];
+    if (MultiByteToWideChar(CP_UTF8, 0, argv[i], -1, path_wide, sizeof(path_wide) / sizeof(path_wide[0])) == 0) {
+      fprintf(stderr, "cleanup-tool: unable convert `%s` to the wide path\n", argv[i]);
+      ++scan_failures;
+      continue;
+    }
+    scan_dir_w(path_wide);
+  }
+  if (scan_failures) {
+    fprintf(stderr, "cleanup-tool: %d leftover database file(s), see above\n", scan_failures);
+    return 1;
+  }
+  printf("cleanup-tool: no leftover database files\n");
+  return 0;
+}
+
+#else /* POSIX */
 
 static bool is_database_leftover(const char *name, size_t length) {
   static const char *const suffixes[] = {".mdbx", ".mdbx-lck", ".db", ".db-lck", ".db-copy", ".db-copy-lck"};
@@ -102,16 +168,9 @@ static int scan_mode(int argc, const char *const argv[]) {
   return 0;
 }
 
-#endif /* !_WIN32 */
-
+#endif /* _WIN32 */
 int main(int argc, const char *const argv[]) {
-  if (argc > 1 && strcmp(argv[1], "--scan") == 0) {
-#if defined(_WIN32)
-    fprintf(stderr, "cleanup-tool: --scan is not supported on this platform\n");
-    return 1;
-#else
+  if (argc > 1 && strcmp(argv[1], "--scan") == 0)
     return scan_mode(argc, argv);
-#endif /* !_WIN32 */
-  }
   return delete_mode(argc, argv);
 }

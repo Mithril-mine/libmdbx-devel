@@ -115,6 +115,17 @@ jobs:
           set -euo pipefail
           SCOPE="${EVENT_SCOPE:-fast}"
           REF=""
+          # A change touching tests/ extends the fast scope with the
+          # hygiene label (test_hygiene_check) for this run (issue-backed:
+          # the check guards against leftover database files in the build
+          # directory, see tests/CMakeLists.txt). */
+          tests_changed() {
+            local base="$1" head_sha="$2"
+            if [ -z "$base" ] || [ -z "$head_sha" ] || [ "$base" = "0000000000000000000000000000000000000000" ]; then
+              return 1
+            fi
+            git diff --name-only "$base" "$head_sha" 2>/dev/null | grep -q '^tests/'
+          }
           case "$GITHUB_EVENT_NAME" in
             pull_request)
               # Orchestrated gate: diff against the nearest successful base run
@@ -137,6 +148,10 @@ jobs:
                 CELLS=$(echo "$ORCH" | python3 -c 'import json,sys; print(json.load(sys.stdin)["cells"])')
               fi
               SCOPE=fast
+              if tests_changed "${PR_BASE_SHA}" "${PR_HEAD_SHA}"; then
+                echo "==> pull_request: tests/ changed, adding the hygiene check"
+                SCOPE="fast+hygiene"
+              fi
               REF="${PR_HEAD_SHA:-${GITHUB_REF}}"
               ;;
             push)
@@ -165,6 +180,10 @@ jobs:
                 CELLS=$(echo "$ORCH" | python3 -c 'import json,sys; print(json.load(sys.stdin)["cells"])')
               fi
               SCOPE=fast
+              if tests_changed "${PUSH_BEFORE}" "${PUSH_SHA}"; then
+                echo "==> push: tests/ changed, adding the hygiene check"
+                SCOPE="fast+hygiene"
+              fi
               REF="$GITHUB_REF"
               ;;
             schedule)
