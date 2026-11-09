@@ -699,16 +699,20 @@ public:
   /// \returns `true` if the cursor is not positioned on any item.
   inline bool eof() const;
   /// \brief Checks whether the cursor is on the first item of the table.
-  /// \returns `true` if the cursor is on the first item.
+  /// \returns `true` if the cursor is on the first item or not positioned at
+  /// all, i.e. there is no sense to move it backward.
   inline bool on_first() const;
   /// \brief Checks whether the cursor is on the last item of the table.
-  /// \returns `true` if the cursor is on the last item.
+  /// \returns `true` if the cursor is on the last item or not positioned at
+  /// all, i.e. there is no sense to move it forward.
   inline bool on_last() const;
   /// \brief Checks whether the cursor is on the first multi-value of the current key.
-  /// \returns `true` if the cursor is on the first multi-value.
+  /// \returns `true` if the cursor is on the first multi-value or there is no
+  /// sense to move it backward within the current key's multi-values.
   inline bool on_first_multival() const;
   /// \brief Checks whether the cursor is on the last multi-value of the current key.
-  /// \returns `true` if the cursor is on the last multi-value.
+  /// \returns `true` if the cursor is on the last multi-value or there is no
+  /// sense to move it forward within the current key's multi-values.
   inline bool on_last_multival() const;
   /// \brief Estimates the number of items between the current position and the given key-value pair.
   /// \param key    The boundary key.

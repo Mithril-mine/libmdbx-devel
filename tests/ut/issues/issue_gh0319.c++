@@ -529,3 +529,81 @@ TEST(issue_gh0319, pp13_get_batch_end_of_data) {
   mdbx_txn_abort(txn);
   mdbx_env_close(env);
 }
+
+/* Item 14: mdbx_cursor_on_first()/on_last() (and the _dup variants) report
+   MDBX_RESULT_TRUE for a not positioned cursor, i.e. the result tells whether
+   moving in the corresponding direction makes sense. */
+TEST(issue_gh0319, pp14_on_first_last_unpositioned) {
+  db_remover guard(kDb);
+  MDBX_env *env = open_env(kDb, MDBX_env_flags_t(0));
+  ASSERT_NE(env, nullptr);
+  MDBX_txn *txn = nullptr;
+  MDBX_dbi dup, plain;
+  ASSERT_EQ(mdbx_txn_begin(env, nullptr, (MDBX_txn_flags_t)0, &txn), MDBX_SUCCESS);
+  ASSERT_EQ(mdbx_dbi_open(txn, "dup", MDBX_CREATE | MDBX_DUPSORT, &dup), MDBX_SUCCESS);
+  ASSERT_EQ(mdbx_dbi_open(txn, "plain", MDBX_CREATE, &plain), MDBX_SUCCESS);
+
+  /* a fresh cursor on an empty table is on the first and the last simultaneously */
+  MDBX_cursor *cursor = nullptr;
+  ASSERT_EQ(mdbx_cursor_open(txn, dup, &cursor), MDBX_SUCCESS);
+  EXPECT_EQ(mdbx_cursor_on_first(cursor), MDBX_RESULT_TRUE);
+  EXPECT_EQ(mdbx_cursor_on_last(cursor), MDBX_RESULT_TRUE);
+  EXPECT_EQ(mdbx_cursor_on_first_dup(cursor), MDBX_RESULT_TRUE);
+  EXPECT_EQ(mdbx_cursor_on_last_dup(cursor), MDBX_RESULT_TRUE);
+  EXPECT_EQ(mdbx_cursor_eof(cursor), MDBX_RESULT_TRUE);
+  /* after reset: the same */
+  ASSERT_EQ(mdbx_cursor_reset(cursor), MDBX_SUCCESS);
+  EXPECT_EQ(mdbx_cursor_on_first(cursor), MDBX_RESULT_TRUE);
+  EXPECT_EQ(mdbx_cursor_on_last(cursor), MDBX_RESULT_TRUE);
+
+  must_put(txn, dup, "k", "1");
+  must_put(txn, dup, "k", "2");
+  must_put(txn, dup, "k", "3");
+  must_put(txn, dup, "z", "9");
+  must_put(txn, plain, "a", "1");
+  must_put(txn, plain, "b", "2");
+  must_put(txn, plain, "c", "3");
+
+  MDBX_val key, data;
+  /* positioned on the first pair: backward makes no sense, forward does */
+  ASSERT_EQ(mdbx_cursor_get(cursor, &key, &data, MDBX_FIRST), MDBX_SUCCESS);
+  EXPECT_EQ(mdbx_cursor_on_first(cursor), MDBX_RESULT_TRUE);
+  EXPECT_EQ(mdbx_cursor_on_last(cursor), MDBX_RESULT_FALSE);
+  EXPECT_EQ(mdbx_cursor_on_first_dup(cursor), MDBX_RESULT_TRUE);
+  EXPECT_EQ(mdbx_cursor_on_last_dup(cursor), MDBX_RESULT_FALSE);
+
+  /* a middle multi-value: moving makes sense in neither dup-direction,
+     and on_first == MDBX_RESULT_FALSE implies a successful backward move */
+  ASSERT_EQ(mdbx_cursor_get(cursor, &key, &data, MDBX_NEXT_DUP), MDBX_SUCCESS);
+  EXPECT_EQ(mdbx_cursor_on_first_dup(cursor), MDBX_RESULT_FALSE);
+  EXPECT_EQ(mdbx_cursor_on_last_dup(cursor), MDBX_RESULT_FALSE);
+  ASSERT_EQ(mdbx_cursor_get(cursor, &key, &data, MDBX_PREV_DUP), MDBX_SUCCESS);
+  EXPECT_EQ(memcmp(data.iov_base, "1", 1), 0);
+
+  /* the last pair: forward makes no sense */
+  ASSERT_EQ(mdbx_cursor_get(cursor, &key, &data, MDBX_LAST), MDBX_SUCCESS);
+  EXPECT_EQ(mdbx_cursor_on_first(cursor), MDBX_RESULT_FALSE);
+  EXPECT_EQ(mdbx_cursor_on_last(cursor), MDBX_RESULT_TRUE);
+  EXPECT_EQ(mdbx_cursor_on_first_dup(cursor), MDBX_RESULT_TRUE);
+  EXPECT_EQ(mdbx_cursor_on_last_dup(cursor), MDBX_RESULT_TRUE);
+  mdbx_cursor_close(cursor);
+
+  /* a plain table: the same for the outer levels, while the _dup variants
+     are always MDBX_RESULT_TRUE without MDBX_DUPSORT */
+  ASSERT_EQ(mdbx_cursor_open(txn, plain, &cursor), MDBX_SUCCESS);
+  ASSERT_EQ(mdbx_cursor_get(cursor, &key, &data, MDBX_FIRST), MDBX_SUCCESS);
+  EXPECT_EQ(mdbx_cursor_on_first(cursor), MDBX_RESULT_TRUE);
+  EXPECT_EQ(mdbx_cursor_on_last(cursor), MDBX_RESULT_FALSE);
+  ASSERT_EQ(mdbx_cursor_get(cursor, &key, &data, MDBX_NEXT), MDBX_SUCCESS);
+  EXPECT_EQ(mdbx_cursor_on_first(cursor), MDBX_RESULT_FALSE);
+  EXPECT_EQ(mdbx_cursor_on_last(cursor), MDBX_RESULT_FALSE);
+  EXPECT_EQ(mdbx_cursor_on_first_dup(cursor), MDBX_RESULT_TRUE);
+  EXPECT_EQ(mdbx_cursor_on_last_dup(cursor), MDBX_RESULT_TRUE);
+  ASSERT_EQ(mdbx_cursor_get(cursor, &key, &data, MDBX_LAST), MDBX_SUCCESS);
+  EXPECT_EQ(mdbx_cursor_on_first(cursor), MDBX_RESULT_FALSE);
+  EXPECT_EQ(mdbx_cursor_on_last(cursor), MDBX_RESULT_TRUE);
+
+  mdbx_cursor_close(cursor);
+  mdbx_txn_abort(txn);
+  mdbx_env_close(env);
+}
