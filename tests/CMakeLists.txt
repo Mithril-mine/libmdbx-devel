@@ -344,10 +344,16 @@ else()
   # consumers FIXTURES_REQUIRE it, and the <chain>_cleanup test runs
   # FIXTURES_CLEANUP at the end — deleting the chain's files even when an
   # intermediate test failed (see issue #343).
-  add_executable(te_cleanup_tool ut/tools/cleanup-tool.c)
+  add_executable(te_cleanup_tool ut/tools/cleanup-tool.c++)
   target_include_directories(te_cleanup_tool PRIVATE "${PROJECT_SOURCE_DIR}")
   target_link_libraries(te_cleanup_tool ${TOOL_MDBX_LIB})
-  set_target_properties(te_cleanup_tool PROPERTIES SKIP_BUILD_RPATH FALSE BUILD_WITH_INSTALL_RPATH FALSE)
+  # the C++17 standard is pinned for this tool regardless of the cell's
+  # MDBX_CXX_STANDARD: std::filesystem is used for the portable `--scan` mode
+  set_target_properties(te_cleanup_tool PROPERTIES SKIP_BUILD_RPATH FALSE BUILD_WITH_INSTALL_RPATH FALSE
+                                                    CXX_STANDARD 17 CXX_STANDARD_REQUIRED ON)
+  if(MDBX_BUILD_CXX AND MDBX_CXX_STANDARD)
+    set_target_properties(te_cleanup_tool PROPERTIES CXX_STANDARD ${MDBX_CXX_STANDARD} CXX_STANDARD_REQUIRED ON)
+  endif()
 
   add_test(NAME smoke_basic COMMAND $<TARGET_FILE:mdbx_test> --duration 100 --table=+data.integer
                                    --keygen.split=29 --datalen.min=min --datalen.max=max --progress --console=no
@@ -431,11 +437,12 @@ else()
   # database file is left in the build tree. Runs only via `ctest -L hygiene`
   # AFTER the whole corpus (never in parallel with the tests), so it is not
   # part of the default labels.
-  if(NOT WIN32)
-    # the --scan mode is POSIX-only (dirent-based)
-    add_test(NAME test_hygiene_check COMMAND $<TARGET_FILE:te_cleanup_tool> --scan ${CMAKE_BINARY_DIR})
-    set_tests_properties(test_hygiene_check PROPERTIES LABELS "hygiene" RUN_SERIAL ON)
-  endif()
+  add_test(NAME test_hygiene_check COMMAND $<TARGET_FILE:te_cleanup_tool> --scan ${CMAKE_BINARY_DIR})
+  # The scan must run after every fixture-cleanup test (e.g. smoke_cleanup
+  # deletes the intentionally leftover smoke.db* of the smoke suite):
+  # otherwise the parallel check trips on the not-yet-cleaned fixtures. */
+  set_tests_properties(test_hygiene_check PROPERTIES LABELS "hygiene" RUN_SERIAL ON
+                                                     DEPENDS smoke_cleanup)
 
   if(MDBX_ENABLE_SINGLEPROCESS_TESTS)
   # Single-process scenario chain: only for cross-qemu/cross-toolchain runs
