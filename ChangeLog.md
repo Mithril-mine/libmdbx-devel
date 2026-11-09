@@ -95,6 +95,7 @@ Cutting-edge release with new core features and internal refactoring.
     - `mdbx_cursor_scan()` returned `MDBX_ENODATA` instead of `MDBX_RESULT_FALSE` on single-value keys ([5/15 of #319](https://github.com/Mithril-mine/libmdbx-devel/issues/319)).
     - `MDBX_opt_txn_dp_initial` set before opening was truncated to 32 bits ([6/15 of #319](https://github.com/Mithril-mine/libmdbx-devel/issues/319)).
     - A spurious `MDBX_READERS_FULL` was returned right after dead reader slots were freed; now retried ([7/15 of #319](https://github.com/Mithril-mine/libmdbx-devel/issues/319)).
+    - Internal `N_TREE`/`N_DUP` flags in `mdbx_cursor_put()`/`del()` could corrupt or crash; now rejected ([8/15 of #319](https://github.com/Mithril-mine/libmdbx-devel/issues/319)).
     - `MDBX_TO_PAIR_*` returned the key's first multi-value instead of the positioned one ([#313](https://github.com/Mithril-mine/libmdbx-devel/issues/313)).
     - `mdbx_put(MDBX_CURRENT)` deleted all multi-values before checking the new value's size ([#313](https://github.com/Mithril-mine/libmdbx-devel/issues/313)).
     - On Linux, a 32-bit process got a far too small total RAM on hosts with 4 GiB or more ([#339](https://github.com/Mithril-mine/libmdbx-devel/issues/339)).

@@ -699,6 +699,10 @@ int mdbx_cursor_put(MDBX_cursor *mc, const MDBX_val *key, MDBX_val *data, MDBX_p
   if (unlikely(key == nullptr || data == nullptr))
     return LOG_IFERR(MDBX_EINVAL);
 
+  if (unlikely(flags & ~(MDBX_UPSERT | MDBX_NOOVERWRITE | MDBX_NODUPDATA | MDBX_CURRENT | MDBX_ALLDUPS | MDBX_RESERVE |
+                         MDBX_APPEND | MDBX_APPENDDUP | MDBX_MULTIPLE)))
+    return LOG_IFERR(MDBX_EINVAL);
+
   int rc = cursor_check_rw(mc);
   if (unlikely(rc != MDBX_SUCCESS))
     return LOG_IFERR(rc);
@@ -719,6 +723,9 @@ int mdbx_cursor_put(MDBX_cursor *mc, const MDBX_val *key, MDBX_val *data, MDBX_p
 }
 
 int mdbx_cursor_del(MDBX_cursor *mc, MDBX_put_flags_t flags) {
+  if (unlikely(flags & ~(MDBX_CURRENT | MDBX_NODUPDATA | MDBX_ALLDUPS)))
+    return LOG_IFERR(MDBX_EINVAL);
+
   int rc = cursor_check_rw(mc);
   if (unlikely(rc != MDBX_SUCCESS))
     return LOG_IFERR(rc);
