@@ -607,3 +607,37 @@ TEST(issue_gh0319, pp14_on_first_last_unpositioned) {
   mdbx_txn_abort(txn);
   mdbx_env_close(env);
 }
+
+/* Item 15: mdbx_dbi_rename() to the same name is a no-op success in all
+   build flavors, while renaming to another existing table's name still
+   fails with MDBX_KEYEXIST. */
+TEST(issue_gh0319, pp15_dbi_rename_same_name) {
+  db_remover guard(kDb);
+  MDBX_env *env = open_env(kDb, MDBX_env_flags_t(0));
+  ASSERT_NE(env, nullptr);
+  MDBX_txn *txn = nullptr;
+  MDBX_dbi t1, t2, check;
+  ASSERT_EQ(mdbx_txn_begin(env, nullptr, (MDBX_txn_flags_t)0, &txn), MDBX_SUCCESS);
+  ASSERT_EQ(mdbx_dbi_open(txn, "t1", MDBX_CREATE, &t1), MDBX_SUCCESS);
+  ASSERT_EQ(mdbx_dbi_open(txn, "t2", MDBX_CREATE, &t2), MDBX_SUCCESS);
+  must_put(txn, t1, "k", "v");
+
+  /* renaming to the same name is a no-op success */
+  EXPECT_EQ(mdbx_dbi_rename(txn, t1, "t1"), MDBX_SUCCESS);
+  MDBX_val key = val_of("k"), data;
+  ASSERT_EQ(mdbx_get(txn, t1, &key, &data), MDBX_SUCCESS);
+  EXPECT_EQ(memcmp(data.iov_base, "v", 1), 0);
+
+  /* renaming to another existing table's name still fails */
+  EXPECT_EQ(mdbx_dbi_rename(txn, t1, "t2"), MDBX_KEYEXIST);
+
+  /* a real rename, then the same-name no-op again */
+  EXPECT_EQ(mdbx_dbi_rename(txn, t1, "t3"), MDBX_SUCCESS);
+  ASSERT_EQ(mdbx_get(txn, t1, &key, &data), MDBX_SUCCESS);
+  EXPECT_EQ(memcmp(data.iov_base, "v", 1), 0);
+  EXPECT_EQ(mdbx_dbi_open(txn, "t1", (MDBX_db_flags_t)0, &check), MDBX_NOTFOUND);
+  EXPECT_EQ(mdbx_dbi_rename(txn, t1, "t3"), MDBX_SUCCESS);
+
+  mdbx_txn_abort(txn);
+  mdbx_env_close(env);
+}
