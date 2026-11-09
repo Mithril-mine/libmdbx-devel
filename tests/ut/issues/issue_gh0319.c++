@@ -471,3 +471,61 @@ TEST(issue_gh0319, pp12_get_multiple_positioning) {
   mdbx_txn_abort(txn);
   mdbx_env_close(env);
 }
+
+/* Item 13: mdbx_cursor_get_batch() end-of-data codes as documented:
+   MDBX_NOTFOUND when there are no pairs after the position or the table is
+   empty, MDBX_ENODATA when the cursor has no position to continue from,
+   MDBX_RESULT_TRUE for the last chunk. */
+TEST(issue_gh0319, pp13_get_batch_end_of_data) {
+  db_remover guard(kDb);
+  MDBX_env *env = open_env(kDb, MDBX_env_flags_t(0));
+  ASSERT_NE(env, nullptr);
+  MDBX_txn *txn = nullptr;
+  MDBX_dbi dbi;
+  ASSERT_EQ(mdbx_txn_begin(env, nullptr, (MDBX_txn_flags_t)0, &txn), MDBX_SUCCESS);
+  ASSERT_EQ(mdbx_dbi_open(txn, "t", MDBX_CREATE, &dbi), MDBX_SUCCESS);
+  MDBX_cursor *cursor = nullptr;
+  ASSERT_EQ(mdbx_cursor_open(txn, dbi, &cursor), MDBX_SUCCESS);
+  MDBX_val pairs[8], key, data;
+  size_t count = 7;
+
+  /* a fresh cursor has no position to continue from */
+  EXPECT_EQ(mdbx_cursor_get_batch(cursor, &count, pairs, 8, MDBX_NEXT), MDBX_ENODATA);
+  EXPECT_EQ(count, 0u);
+  /* FIRST on an empty table */
+  EXPECT_EQ(mdbx_cursor_get_batch(cursor, &count, pairs, 8, MDBX_FIRST), MDBX_NOTFOUND);
+  EXPECT_EQ(count, 0u);
+
+  must_put(txn, dbi, "a", "1");
+  must_put(txn, dbi, "b", "2");
+  must_put(txn, dbi, "c", "3");
+
+  /* a limited chunk with more pairs left */
+  EXPECT_EQ(mdbx_cursor_get_batch(cursor, &count, pairs, 4, MDBX_FIRST), MDBX_SUCCESS);
+  EXPECT_EQ(count, 4u);
+  EXPECT_EQ(memcmp(pairs[0].iov_base, "a", 1), 0);
+  EXPECT_EQ(memcmp(pairs[2].iov_base, "b", 1), 0);
+
+  /* the last chunk reaching the end of data */
+  EXPECT_EQ(mdbx_cursor_get_batch(cursor, &count, pairs, 8, MDBX_NEXT), MDBX_RESULT_TRUE);
+  EXPECT_EQ(count, 2u);
+  EXPECT_EQ(memcmp(pairs[0].iov_base, "c", 1), 0);
+
+  /* nothing after the position */
+  EXPECT_EQ(mdbx_cursor_get_batch(cursor, &count, pairs, 8, MDBX_NEXT), MDBX_NOTFOUND);
+  EXPECT_EQ(count, 0u);
+
+  /* right after MDBX_LAST, the issue's case */
+  ASSERT_EQ(mdbx_cursor_get(cursor, &key, &data, MDBX_LAST), MDBX_SUCCESS);
+  EXPECT_EQ(mdbx_cursor_get_batch(cursor, &count, pairs, 8, MDBX_NEXT), MDBX_NOTFOUND);
+  EXPECT_EQ(count, 0u);
+
+  /* a reset cursor has no position to continue from */
+  ASSERT_EQ(mdbx_cursor_reset(cursor), MDBX_SUCCESS);
+  EXPECT_EQ(mdbx_cursor_get_batch(cursor, &count, pairs, 8, MDBX_NEXT), MDBX_ENODATA);
+  EXPECT_EQ(count, 0u);
+
+  mdbx_cursor_close(cursor);
+  mdbx_txn_abort(txn);
+  mdbx_env_close(env);
+}
