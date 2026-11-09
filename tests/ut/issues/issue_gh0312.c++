@@ -353,6 +353,28 @@ TEST(issue_gh0312, dump_of_a_damaged_table_is_not_complete) {
   EXPECT_NE(0, load({}, dump, restored)) << "loading a truncated dump must fail";
 }
 
+TEST(issue_gh0312, load_of_a_dump_truncated_inside_a_header_fails) {
+  if (MDBX_GTEST_IS_EXECUTION_TIMEOUT()) {
+    GTEST_SKIP() << "SKIPPED by RUNTIME_LIMIT";
+    return;
+  }
+  const std::string db = "issue312-h.mdbx";
+
+  { /* the next section's header cut mid-way: `database=Na` without a newline at EOF */
+    const std::string dump = "issue312-h1.txt";
+    const files_remover cleanup{dump, db};
+    ASSERT_TRUE(write_text(dump, dump_section(nullptr, {"a"}) + "VERSION=3\nformat=print\ndatabase=Na"));
+    EXPECT_NE(0, load({}, dump, db)) << "a dump that ends inside a table header is truncated";
+  }
+
+  { /* EOF right after `VERSION=` of the next section's header */
+    const std::string dump = "issue312-h2.txt";
+    const files_remover cleanup{dump, db};
+    ASSERT_TRUE(write_text(dump, dump_section(nullptr, {"a"}) + "VERSION=3\n"));
+    EXPECT_NE(0, load({}, dump, db)) << "a dump that ends right after `VERSION=` of a header is truncated";
+  }
+}
+
 TEST(issue_gh0312, stat_f_accepts_an_empty_gc) {
   if (MDBX_GTEST_IS_EXECUTION_TIMEOUT()) {
     GTEST_SKIP() << "SKIPPED by RUNTIME_LIMIT";
