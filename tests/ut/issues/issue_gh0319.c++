@@ -135,3 +135,41 @@ TEST(issue_gh0319, pp3_multiple_requires_dupfixed) {
   mdbx_txn_abort(txn);
   mdbx_env_close(env);
 }
+
+/* Item 4: mdbx_estimate_range() must honor begin_data/end_data, and
+   mdbx_estimate_move() must treat MDBX_RESULT_TRUE as success. */
+TEST(issue_gh0319, pp4_estimate_honors_data_bounds) {
+  db_remover guard(kDb);
+  MDBX_env *env = open_env(kDb, MDBX_env_flags_t(0));
+  ASSERT_NE(env, nullptr);
+  MDBX_txn *txn = nullptr;
+  MDBX_dbi dbi;
+  ASSERT_EQ(mdbx_txn_begin(env, nullptr, (MDBX_txn_flags_t)0, &txn), MDBX_SUCCESS);
+  ASSERT_EQ(mdbx_dbi_open(txn, "t", MDBX_CREATE | MDBX_DUPSORT, &dbi), MDBX_SUCCESS);
+  char buf[32];
+  for (int i = 0; i < 1000; ++i) {
+    snprintf(buf, sizeof(buf), "%06dxxxxxxxxxxxxx", i);
+    must_put(txn, dbi, "k", buf);
+  }
+  must_put(txn, dbi, "m", "1");
+
+  ptrdiff_t distance = -7;
+  MDBX_val begin_key = val_of("k"), end_key = val_of("k");
+  MDBX_val begin_data = val_of("000000"), end_data = val_of("000900");
+  EXPECT_EQ(mdbx_estimate_range(txn, dbi, &begin_key, &begin_data, &end_key, &end_data, &distance), MDBX_SUCCESS);
+  EXPECT_GT(distance, 0) << "the data bounds were ignored";
+  EXPECT_LT(distance, 1000);
+
+  MDBX_cursor *cursor = nullptr;
+  ASSERT_EQ(mdbx_cursor_open(txn, dbi, &cursor), MDBX_SUCCESS);
+  MDBX_val key = val_of("a"), data = val_of("1");
+  ASSERT_EQ(mdbx_cursor_get(cursor, &key, &data, MDBX_FIRST), MDBX_SUCCESS);
+  distance = -7;
+  key = val_of("l");
+  data = val_of("");
+  EXPECT_EQ(mdbx_estimate_move(cursor, &key, &data, MDBX_SET_LOWERBOUND, &distance), MDBX_SUCCESS);
+  EXPECT_EQ(distance, 1) << "MDBX_RESULT_TRUE of the move was treated as a failure";
+  mdbx_cursor_close(cursor);
+  mdbx_txn_abort(txn);
+  mdbx_env_close(env);
+}
