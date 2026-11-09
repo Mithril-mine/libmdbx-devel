@@ -16,10 +16,11 @@
 #include "mdbx.h"
 #include <gtest/gtest.h>
 
+#include <cstdint>
 #include <cstdio>
 #include <cstring>
 #include <string>
-
+#include <vector>
 #ifndef _WIN32
 #include <poll.h>
 #include <signal.h>
@@ -333,6 +334,82 @@ TEST(issue_gh0319, pp8_internal_node_flags_rejected) {
   EXPECT_EQ(mdbx_cursor_put(cursor, &key, &data, (MDBX_put_flags_t)4), MDBX_EINVAL);
   mdbx_cursor_close(cursor);
   mdbx_txn_abort(txn);
+  mdbx_env_close(env);
+}
+
+/* Item 10: an oversized MDBX_MULTIPLE batch must spill dirty pages on the
+   fly, like the same values put one by one, rather than fail with
+   MDBX_TXN_FULL once the dirty-page limit is reached mid-batch. */
+TEST(issue_gh0319, pp10_multiple_batch_spills) {
+  db_remover guard(kDb);
+  MDBX_env *env = nullptr;
+  ASSERT_EQ(mdbx_env_create(&env), MDBX_SUCCESS);
+  ASSERT_EQ(mdbx_env_set_maxdbs(env, 4), MDBX_SUCCESS);
+  /* a low dirty-page limit; the batch below spans twice the limit,
+     so it can only fit by spilling while the batch runs */
+  ASSERT_EQ(mdbx_env_set_option(env, MDBX_opt_txn_dp_limit, 128), MDBX_SUCCESS);
+  uint64_t dp_limit = 0;
+  ASSERT_EQ(mdbx_env_get_option(env, MDBX_opt_txn_dp_limit, &dp_limit), MDBX_SUCCESS);
+  EXPECT_EQ(dp_limit, 128u);
+/* a 1 GiB upper bound is beyond the win32 limits */
+#if MDBX_WORDBITS >= 64
+  const size_t geometry_upper = 1024u << 20;
+#else
+  const size_t geometry_upper = 256u << 20;
+#endif
+  ASSERT_EQ(mdbx_env_set_geometry(env, -1, 1 << 20, geometry_upper, 1 << 20, -1, 4096), MDBX_SUCCESS);
+  ASSERT_EQ(mdbx_env_open(env, kDb, MDBX_NOSUBDIR, 0644), MDBX_SUCCESS);
+
+  /* enough values to occupy several times the dirty-page limit; the
+     per-page estimate stays below the real dupfix leaf capacity */
+  MDBX_envinfo info;
+  ASSERT_EQ(mdbx_env_info_ex(env, nullptr, &info, sizeof(info)), MDBX_SUCCESS);
+  const size_t page_size = info.mi_dxb_pagesize;
+  const size_t per_page = (page_size - 512) / sizeof(uint32_t);
+  const size_t count = per_page * (size_t)dp_limit * 2;
+  std::vector<uint32_t> values(count);
+  for (size_t i = 0; i < count; ++i)
+    values[i] = (uint32_t)i;
+
+  MDBX_txn *txn = nullptr;
+  ASSERT_EQ(mdbx_txn_begin(env, nullptr, (MDBX_txn_flags_t)0, &txn), MDBX_SUCCESS);
+  MDBX_dbi dbi;
+  ASSERT_EQ(mdbx_dbi_open(txn, "fixed", MDBX_CREATE | MDBX_DUPSORT | MDBX_DUPFIXED, &dbi), MDBX_SUCCESS);
+  MDBX_val key = val_of("k"), data[2];
+  data[0].iov_base = values.data();
+  data[0].iov_len = sizeof(uint32_t);
+  data[1].iov_len = count;
+  /* before the fix: MDBX_TXN_FULL with a partial count in data[1].iov_len */
+  EXPECT_EQ(mdbx_put(txn, dbi, &key, data, MDBX_MULTIPLE), MDBX_SUCCESS);
+  EXPECT_EQ(data[1].iov_len, count) << "the whole batch must be consumed";
+  ASSERT_EQ(mdbx_txn_commit(txn), MDBX_SUCCESS);
+
+  /* the spilled data must be all there: the total count and sampled values */
+  ASSERT_EQ(mdbx_txn_begin(env, nullptr, (MDBX_txn_flags_t)MDBX_TXN_RDONLY, &txn), MDBX_SUCCESS);
+  MDBX_stat stat;
+  ASSERT_EQ(mdbx_dbi_stat(txn, dbi, &stat, sizeof(stat)), MDBX_SUCCESS);
+  EXPECT_EQ(stat.ms_entries, count);
+  MDBX_cursor *cursor = nullptr;
+  ASSERT_EQ(mdbx_cursor_open(txn, dbi, &cursor), MDBX_SUCCESS);
+  const size_t probes[] = {0, count / 2, count - 1};
+  for (size_t i = 0; i < sizeof(probes) / sizeof(probes[0]); ++i) {
+    key = val_of("k");
+    MDBX_val probe = {&values[probes[i]], sizeof(uint32_t)};
+    EXPECT_EQ(mdbx_cursor_get(cursor, &key, &probe, MDBX_GET_BOTH), MDBX_SUCCESS) << "probe #" << probes[i];
+  }
+  mdbx_cursor_close(cursor);
+  mdbx_txn_abort(txn);
+
+  /* sanity: with this limit the same volume put one by one also succeeds,
+     i.e. the limit itself is workable and the batch is not special-cased */
+  ASSERT_EQ(mdbx_txn_begin(env, nullptr, (MDBX_txn_flags_t)0, &txn), MDBX_SUCCESS);
+  ASSERT_EQ(mdbx_dbi_open(txn, "fixed", MDBX_CREATE | MDBX_DUPSORT | MDBX_DUPFIXED, &dbi), MDBX_SUCCESS);
+  key = val_of("s");
+  for (size_t i = 0; i < count / 2; ++i) {
+    MDBX_val item = {&values[i], sizeof(uint32_t)};
+    ASSERT_EQ(mdbx_put(txn, dbi, &key, &item, MDBX_UPSERT), MDBX_SUCCESS) << "single put #" << i;
+  }
+  ASSERT_EQ(mdbx_txn_commit(txn), MDBX_SUCCESS);
   mdbx_env_close(env);
 }
 

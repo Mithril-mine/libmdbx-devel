@@ -96,6 +96,7 @@ Cutting-edge release with new core features and internal refactoring.
     - `MDBX_opt_txn_dp_initial` set before opening was truncated to 32 bits ([6/15 of #319](https://github.com/Mithril-mine/libmdbx-devel/issues/319)).
     - A spurious `MDBX_READERS_FULL` was returned right after dead reader slots were freed; now retried ([7/15 of #319](https://github.com/Mithril-mine/libmdbx-devel/issues/319)).
     - Internal `N_TREE`/`N_DUP` flags in `mdbx_cursor_put()`/`del()` could corrupt or crash; now rejected ([8/15 of #319](https://github.com/Mithril-mine/libmdbx-devel/issues/319)).
+    - A huge `mdbx_put(MDBX_MULTIPLE)` batch failed with `MDBX_TXN_FULL` instead of spilling ([10/15 of #319](https://github.com/Mithril-mine/libmdbx-devel/issues/319)).
     - `mdbx_replace()` now rejects `MDBX_ALLDUPS` and aliased data buffers with `MDBX_EINVAL` ([11/15 of #319](https://github.com/Mithril-mine/libmdbx-devel/issues/319)).
     - `MDBX_GET_MULTIPLE` docs clarified: a batch is a whole page of the current key's duplicates ([12/15 of #319](https://github.com/Mithril-mine/libmdbx-devel/issues/319)).
     - `mdbx_cursor_get_batch()` docs clarified: which end-of-data code to expect in each case ([13/15 of #319](https://github.com/Mithril-mine/libmdbx-devel/issues/319)).
