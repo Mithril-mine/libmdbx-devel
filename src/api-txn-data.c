@@ -347,14 +347,23 @@ int mdbx_replace_ex(MDBX_txn *txn, MDBX_dbi dbi, const MDBX_val *key, MDBX_val *
   if (unlikely(old_data->iov_base == nullptr && old_data->iov_len))
     return LOG_IFERR(MDBX_EINVAL);
 
-  if (unlikely(new_data == nullptr && (flags & (MDBX_CURRENT | MDBX_RESERVE)) != MDBX_CURRENT))
+  if (unlikely(new_data && old_data->iov_len && old_data->iov_base == new_data->iov_base))
+    /* the same buffer cannot serve both for the new data and for retrieve the old one */
     return LOG_IFERR(MDBX_EINVAL);
 
   if (unlikely(dbi <= FREE_DBI))
     return LOG_IFERR(MDBX_BAD_DBI);
 
-  if (unlikely(flags & ~(MDBX_NOOVERWRITE | MDBX_NODUPDATA | MDBX_ALLDUPS | MDBX_RESERVE | MDBX_APPEND |
-                         MDBX_APPENDDUP | MDBX_CURRENT)))
+  /* The MDBX_ALLDUPS is meaningless here, as well as the appending flags
+   * in combination with MDBX_CURRENT: mdbx_put() is for replacing all
+   * multi-values and for appending. In turn, the deletion (new_data is null)
+   * accepts nothing except MDBX_CURRENT. */
+  unsigned bad =
+      flags & ~(MDBX_NOOVERWRITE | MDBX_NODUPDATA | MDBX_CURRENT | MDBX_RESERVE | MDBX_APPEND | MDBX_APPENDDUP);
+  bad |= (flags & MDBX_CURRENT) ? flags & (MDBX_APPEND | MDBX_APPENDDUP) : 0;
+  if (new_data == nullptr)
+    bad |= ((flags & MDBX_CURRENT) ^ MDBX_CURRENT) | (flags & (MDBX_RESERVE | MDBX_NODUPDATA));
+  if (unlikely(bad))
     return LOG_IFERR(MDBX_EINVAL);
 
   int rc = check_txn_rw(txn, MDBX_TXN_BLOCKED);
@@ -387,10 +396,6 @@ int mdbx_replace_ex(MDBX_txn *txn, MDBX_dbi dbi, const MDBX_val *key, MDBX_val *
       goto bailout;
   } else {
     /* в old_data буфер для сохранения предыдущего значения */
-    if (unlikely(new_data && old_data->iov_len && old_data->iov_base == new_data->iov_base)) {
-      rc = MDBX_EINVAL;
-      goto bailout;
-    }
     MDBX_val present_data;
     rc = cursor_seek(&cx.outer, &present_key, &present_data, MDBX_SET_KEY).err;
     if (unlikely(rc != MDBX_SUCCESS)) {
@@ -442,7 +447,7 @@ int mdbx_replace_ex(MDBX_txn *txn, MDBX_dbi dbi, const MDBX_val *key, MDBX_val *
   if (likely(new_data))
     rc = cursor_put_checklen(&cx.outer, key, new_data, flags);
   else
-    rc = cursor_del(&cx.outer, flags & MDBX_ALLDUPS);
+    rc = cursor_del(&cx.outer, 0);
 
 bailout:
   txn->cursors[dbi] = cx.outer.next;
