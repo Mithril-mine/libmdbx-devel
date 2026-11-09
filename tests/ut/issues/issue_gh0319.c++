@@ -173,3 +173,26 @@ TEST(issue_gh0319, pp4_estimate_honors_data_bounds) {
   mdbx_txn_abort(txn);
   mdbx_env_close(env);
 }
+
+/* Item 5: mdbx_cursor_scan() with MDBX_NEXT_DUP over keys with a single value
+   each must return MDBX_RESULT_FALSE, not MDBX_ENODATA. */
+static int scan_predicate_never_matches(void *, MDBX_val *, MDBX_val *, void *) noexcept { return MDBX_RESULT_FALSE; }
+
+TEST(issue_gh0319, pp5_scan_next_dup_single_values) {
+  db_remover guard(kDb);
+  MDBX_env *env = open_env(kDb, MDBX_env_flags_t(0));
+  ASSERT_NE(env, nullptr);
+  MDBX_txn *txn = nullptr;
+  MDBX_dbi dbi;
+  ASSERT_EQ(mdbx_txn_begin(env, nullptr, (MDBX_txn_flags_t)0, &txn), MDBX_SUCCESS);
+  ASSERT_EQ(mdbx_dbi_open(txn, "t", MDBX_CREATE | MDBX_DUPSORT, &dbi), MDBX_SUCCESS);
+  must_put(txn, dbi, "a", "1");
+  must_put(txn, dbi, "b", "1");
+  MDBX_cursor *cursor = nullptr;
+  ASSERT_EQ(mdbx_cursor_open(txn, dbi, &cursor), MDBX_SUCCESS);
+  EXPECT_EQ(mdbx_cursor_scan(cursor, scan_predicate_never_matches, nullptr, MDBX_FIRST, MDBX_NEXT_DUP, nullptr),
+            MDBX_RESULT_FALSE);
+  mdbx_cursor_close(cursor);
+  mdbx_txn_abort(txn);
+  mdbx_env_close(env);
+}
