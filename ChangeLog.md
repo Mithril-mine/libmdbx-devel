@@ -122,6 +122,7 @@ Cutting-edge release with new core features and internal refactoring.
     - `mdbx_env_delete()` with `MDBX_ENV_ENSURE_UNUSED`/`WAIT_FOR_UNUSED` never deleted anything ([#336](https://github.com/Mithril-mine/libmdbx-devel/issues/336)).
 
  - Tools:
+    - `mdbx_load` reports a dump truncated inside a table header instead of silently loading it ([#384](https://github.com/Mithril-mine/libmdbx-devel/issues/384)).
     - `mdbx_chk` crashed with `-i`/`-s` on named tables and over-read a corrupt GC record ([#49](https://github.com/Mithril-mine/libmdbx-devel/issues/49), [#76](https://github.com/Mithril-mine/libmdbx-devel/issues/76)).
     - `mdbx_dump`/`mdbx_load` lost data silently on round-trip; a truncated dump passed as complete ([#61](https://github.com/Mithril-mine/libmdbx-devel/issues/61), [#70](https://github.com/Mithril-mine/libmdbx-devel/issues/70)).
     - `mdbx_dump -f` truncated the output file before the command line was validated ([#71](https://github.com/Mithril-mine/libmdbx-devel/issues/71)).
