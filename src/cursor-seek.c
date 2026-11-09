@@ -378,7 +378,7 @@ __hot int cursor_ops(MDBX_cursor *mc, MDBX_val *key, MDBX_val *data, const MDBX_
     MPROBE_WATCH(cursor_multiple_next, 1);
     if (unlikely(!data))
       return MDBX_EINVAL;
-    if (unlikely(mc->subcur == nullptr))
+    if (unlikely(mc->subcur == nullptr || (mc->tree->flags & MDBX_DUPFIXED) == 0))
       return MDBX_INCOMPATIBLE;
     rc = outer_next(mc, key, data, MDBX_NEXT_DUP);
     if (unlikely(rc != MDBX_SUCCESS))
@@ -397,7 +397,7 @@ __hot int cursor_ops(MDBX_cursor *mc, MDBX_val *key, MDBX_val *data, const MDBX_
     MPROBE_WATCH(cursor_multiple_prev, 1);
     if (unlikely(!data))
       return MDBX_EINVAL;
-    if (unlikely(mc->subcur == nullptr))
+    if (unlikely(mc->subcur == nullptr || (mc->tree->flags & MDBX_DUPFIXED) == 0))
       return MDBX_INCOMPATIBLE;
     if (unlikely(!is_filled(mc) || !inner_filled(mc)))
       return MDBX_ENODATA;
