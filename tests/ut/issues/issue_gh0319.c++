@@ -196,3 +196,14 @@ TEST(issue_gh0319, pp5_scan_next_dup_single_values) {
   mdbx_txn_abort(txn);
   mdbx_env_close(env);
 }
+
+/* Item 6: MDBX_opt_txn_dp_initial set before open must not be truncated. */
+TEST(issue_gh0319, pp6_dp_initial_not_truncated) {
+  MDBX_env *env = nullptr;
+  ASSERT_EQ(mdbx_env_create(&env), MDBX_SUCCESS);
+  ASSERT_EQ(mdbx_env_set_option(env, MDBX_opt_txn_dp_initial, 4096), MDBX_SUCCESS);
+  uint64_t got = 0;
+  ASSERT_EQ(mdbx_env_get_option(env, MDBX_opt_txn_dp_initial, &got), MDBX_SUCCESS);
+  EXPECT_EQ(got, 4096u);
+  EXPECT_EQ(mdbx_env_close(env), MDBX_SUCCESS);
+}
