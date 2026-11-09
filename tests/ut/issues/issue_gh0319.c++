@@ -335,3 +335,88 @@ TEST(issue_gh0319, pp8_internal_node_flags_rejected) {
   mdbx_txn_abort(txn);
   mdbx_env_close(env);
 }
+
+/* Item 11: mdbx_replace() must reject MDBX_ALLDUPS and other meaningless
+   flags combinations, while the multi-value mode (MDBX_CURRENT |
+   MDBX_NOOVERWRITE with the value filled in old_data) keeps working. */
+TEST(issue_gh0319, pp11_replace_flags_validation) {
+  db_remover guard(kDb);
+  MDBX_env *env = open_env(kDb, MDBX_env_flags_t(0));
+  ASSERT_NE(env, nullptr);
+  MDBX_txn *txn = nullptr;
+  MDBX_dbi dup, plain;
+  ASSERT_EQ(mdbx_txn_begin(env, nullptr, (MDBX_txn_flags_t)0, &txn), MDBX_SUCCESS);
+  ASSERT_EQ(mdbx_dbi_open(txn, "dup", MDBX_CREATE | MDBX_DUPSORT, &dup), MDBX_SUCCESS);
+  ASSERT_EQ(mdbx_dbi_open(txn, "plain", MDBX_CREATE, &plain), MDBX_SUCCESS);
+  must_put(txn, dup, "k", "1");
+  must_put(txn, dup, "k", "2");
+  must_put(txn, dup, "k", "3");
+  must_put(txn, dup, "s", "a");
+  must_put(txn, plain, "p", "v");
+
+  char buffer[16];
+  MDBX_val key = val_of("k"), data = val_of("9");
+  MDBX_val old;
+  old.iov_base = buffer;
+  old.iov_len = sizeof(buffer);
+
+  /* MDBX_ALLDUPS is rejected: with several values, a single one and alone. */
+  EXPECT_EQ(mdbx_replace(txn, dup, &key, &data, &old, (MDBX_put_flags_t)(MDBX_CURRENT | MDBX_ALLDUPS)), MDBX_EINVAL);
+  EXPECT_EQ(mdbx_replace(txn, dup, &key, &data, &old, MDBX_ALLDUPS), MDBX_EINVAL);
+  key = val_of("s");
+  EXPECT_EQ(mdbx_replace(txn, dup, &key, &data, &old, (MDBX_put_flags_t)(MDBX_CURRENT | MDBX_ALLDUPS)), MDBX_EINVAL);
+
+  /* The internal node flags (see item 8) and other unknown bits. */
+  key = val_of("k");
+  EXPECT_EQ(mdbx_replace(txn, dup, &key, &data, &old, (MDBX_put_flags_t)2), MDBX_EINVAL);
+  EXPECT_EQ(mdbx_replace(txn, dup, &key, &data, &old, (MDBX_put_flags_t)4), MDBX_EINVAL);
+
+  /* No appending while updating, no extras for deletion. */
+  EXPECT_EQ(mdbx_replace(txn, dup, &key, &data, &old, (MDBX_put_flags_t)(MDBX_CURRENT | MDBX_APPEND)), MDBX_EINVAL);
+  EXPECT_EQ(mdbx_replace(txn, dup, &key, &data, &old, (MDBX_put_flags_t)(MDBX_CURRENT | MDBX_APPENDDUP)), MDBX_EINVAL);
+  EXPECT_EQ(mdbx_replace(txn, dup, &key, nullptr, &old, (MDBX_put_flags_t)(MDBX_CURRENT | MDBX_NODUPDATA)),
+            MDBX_EINVAL);
+  /* Extraction requires MDBX_CURRENT, as documented. */
+  key = val_of("p");
+  EXPECT_EQ(mdbx_replace(txn, plain, &key, nullptr, &old, (MDBX_put_flags_t)0), MDBX_EINVAL);
+
+  /* The same buffer cannot serve both for the old and the new data. */
+  MDBX_val aliased_new;
+  aliased_new.iov_base = buffer;
+  aliased_new.iov_len = sizeof(buffer);
+  MDBX_val aliased_old = aliased_new;
+  EXPECT_EQ(mdbx_replace(txn, plain, &key, &aliased_new, &aliased_old, MDBX_CURRENT), MDBX_EINVAL);
+
+  /* The multi-value mode: update/delete a particular value selected by old_data. */
+  key = val_of("k");
+  old = val_of("2");
+  EXPECT_EQ(mdbx_replace(txn, dup, &key, &data, &old, (MDBX_put_flags_t)(MDBX_CURRENT | MDBX_NOOVERWRITE)),
+            MDBX_SUCCESS);
+  old = val_of("3");
+  EXPECT_EQ(mdbx_replace(txn, dup, &key, nullptr, &old, (MDBX_put_flags_t)(MDBX_CURRENT | MDBX_NOOVERWRITE)),
+            MDBX_SUCCESS);
+  MDBX_cursor *cursor = nullptr;
+  ASSERT_EQ(mdbx_cursor_open(txn, dup, &cursor), MDBX_SUCCESS);
+  MDBX_val probe = val_of("9");
+  EXPECT_EQ(mdbx_cursor_get(cursor, &key, &probe, MDBX_GET_BOTH), MDBX_SUCCESS);
+  probe = val_of("1");
+  EXPECT_EQ(mdbx_cursor_get(cursor, &key, &probe, MDBX_GET_BOTH), MDBX_SUCCESS);
+  probe = val_of("3");
+  EXPECT_EQ(mdbx_cursor_get(cursor, &key, &probe, MDBX_GET_BOTH), MDBX_NOTFOUND);
+  mdbx_cursor_close(cursor);
+
+  /* The plain update of multi-values is still refused, extraction works. */
+  old.iov_base = buffer;
+  old.iov_len = sizeof(buffer);
+  EXPECT_EQ(mdbx_replace(txn, dup, &key, &data, &old, MDBX_CURRENT), MDBX_EMULTIVAL);
+  key = val_of("p");
+  EXPECT_EQ(mdbx_replace(txn, plain, &key, nullptr, &old, MDBX_CURRENT), MDBX_SUCCESS);
+  EXPECT_EQ(old.iov_len, 1u);
+  EXPECT_EQ(memcmp(old.iov_base, "v", 1), 0);
+  must_put(txn, plain, "p", "v"); /* the extraction above deleted it */
+  data = val_of("w");
+  EXPECT_EQ(mdbx_replace(txn, plain, &key, &data, &old, MDBX_CURRENT), MDBX_SUCCESS);
+
+  mdbx_txn_abort(txn);
+  mdbx_env_close(env);
+}
