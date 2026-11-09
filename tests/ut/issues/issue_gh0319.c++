@@ -65,7 +65,20 @@ MDBX_env *open_env(const char *path, MDBX_env_flags_t extra_flags) {
   }
   return env;
 }
+
+MDBX_val val_of(const char *s) {
+  MDBX_val v = {(void *)s, strlen(s)};
+  return v;
+}
+
+void must_put(MDBX_txn *txn, MDBX_dbi dbi, const char *k, const char *v) {
+  MDBX_val key = val_of(k), data = val_of(v);
+  ASSERT_EQ(mdbx_put(txn, dbi, &key, &data, MDBX_UPSERT), MDBX_SUCCESS);
+}
+
 } // namespace
+
+//-----------------------------------------------------------------------------
 
 /* Item 1: mdbx_cursor_renew(NULL, mc) must not dereference the null txn. */
 TEST(issue_gh0319, pp1_renew_with_null_txn) {
@@ -94,4 +107,31 @@ TEST(issue_gh0319, pp2_info_of_unopened_env) {
   EXPECT_EQ(info.mi_recent_txnid, 0u);
   EXPECT_EQ(info.mi_mode, 0u);
   EXPECT_EQ(mdbx_env_close(env), MDBX_SUCCESS);
+}
+
+/* Item 3: MDBX_NEXT_MULTIPLE/PREV_MULTIPLE require MDBX_DUPFIXED. */
+TEST(issue_gh0319, pp3_multiple_requires_dupfixed) {
+  db_remover guard(kDb);
+  MDBX_env *env = open_env(kDb, MDBX_env_flags_t(0));
+  ASSERT_NE(env, nullptr);
+  MDBX_txn *txn = nullptr;
+  MDBX_dbi dbi;
+  ASSERT_EQ(mdbx_txn_begin(env, nullptr, (MDBX_txn_flags_t)0, &txn), MDBX_SUCCESS);
+  ASSERT_EQ(mdbx_dbi_open(txn, "t", MDBX_CREATE | MDBX_DUPSORT, &dbi), MDBX_SUCCESS);
+  for (int i = 0; i < 5; ++i) {
+    char v[16];
+    snprintf(v, sizeof(v), "v%d", i);
+    must_put(txn, dbi, "k", v);
+  }
+  MDBX_cursor *cursor = nullptr;
+  ASSERT_EQ(mdbx_cursor_open(txn, dbi, &cursor), MDBX_SUCCESS);
+  MDBX_val key = val_of("k"), data = val_of("v0");
+  ASSERT_EQ(mdbx_cursor_get(cursor, &key, &data, MDBX_SET), MDBX_SUCCESS);
+  EXPECT_EQ(mdbx_cursor_get(cursor, &key, &data, MDBX_NEXT_MULTIPLE), MDBX_INCOMPATIBLE);
+  EXPECT_EQ(mdbx_cursor_get(cursor, &key, &data, MDBX_PREV_MULTIPLE), MDBX_INCOMPATIBLE);
+  /* the cursor must stay usable for the documented single-value ops */
+  EXPECT_EQ(mdbx_cursor_get(cursor, &key, &data, MDBX_NEXT_DUP), MDBX_SUCCESS);
+  mdbx_cursor_close(cursor);
+  mdbx_txn_abort(txn);
+  mdbx_env_close(env);
 }
