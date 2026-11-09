@@ -82,3 +82,16 @@ TEST(issue_gh0319, pp1_renew_with_null_txn) {
   mdbx_cursor_close(cursor);
   mdbx_env_close(env);
 }
+
+/* Item 2: mdbx_env_info_ex() on an environment that is not open must zero
+   the fields it does not fill. */
+TEST(issue_gh0319, pp2_info_of_unopened_env) {
+  MDBX_env *env = nullptr;
+  ASSERT_EQ(mdbx_env_create(&env), MDBX_SUCCESS);
+  MDBX_envinfo info;
+  memset(&info, -1, sizeof(info)); /* fill with 0xFF bytes */
+  EXPECT_EQ(mdbx_env_info_ex(env, nullptr, &info, sizeof(info)), MDBX_SUCCESS);
+  EXPECT_EQ(info.mi_recent_txnid, 0u);
+  EXPECT_EQ(info.mi_mode, 0u);
+  EXPECT_EQ(mdbx_env_close(env), MDBX_SUCCESS);
+}
