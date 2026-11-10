@@ -70,7 +70,7 @@ A maintenance release of the stable line: backported fixes for data safety, corr
  - Wrong results and API behavior:
     - Fixed `mdbx_cursor_scroll()`/`distribute()` wrong results near the tree height on DUPSORT tables ([#84](https://github.com/Mithril-mine/libmdbx-devel/issues/84)) (backport).
     - Fixed `mdbx_dbi_rename()` on a stale handle storing a stale record, corrupting the database ([#106](https://github.com/Mithril-mine/libmdbx-devel/issues/106)) (backport).
-    - Fixed table open/rename mishandling pseudo-names and cross-process drops, up to a crash ([#107](https://github.com/Mithril-mine/libmdbx-devel/issues/107)) (backport).
+    - Fixed table open/rename mishandling pseudo-names and cross-process drops, up to a crash ([#107](https://github.com/Mithril-mine/libmdbx-devel/issues/107), [#308](https://github.com/Mithril-mine/libmdbx-devel/issues/308)) (backport).
     - Fixed `mdbx_env_chk()` leaving a dangling `result.tables` pointer after the check ([#93](https://github.com/Mithril-mine/libmdbx-devel/issues/93)) (backport).
     - Fixed `mdbx_estimate_distance()` returning a negated result on one key's duplicates ([#86](https://github.com/Mithril-mine/libmdbx-devel/issues/86)) (backport).
     - Fixed `mdbx_jsonInteger_from_key()` decoding the stored integer `0` as `INT64_MAX` ([#87](https://github.com/Mithril-mine/libmdbx-devel/issues/87)) (backport).
@@ -102,6 +102,7 @@ A maintenance release of the stable line: backported fixes for data safety, corr
  - Performance:
     - Fixed empty durable-mode commits still flushing the device, adding milliseconds to every no-op ([#64](https://github.com/Mithril-mine/libmdbx-devel/issues/64)) (backport).
     - Fixed every no-sync write-map commit on Windows flushing the whole mapping ([#65](https://github.com/Mithril-mine/libmdbx-devel/issues/65)) (backport).
+    - Fixed the ~8x slowdown of short reads on Linux: ending a read-only transaction called `getpid()` ([#348](https://github.com/Mithril-mine/libmdbx-devel/issues/348)) (backport).
 
  - C++ API:
     - Fixed the `*_managed` wrappers terminating the process on a failed close, with a use-after-free ([#60](https://github.com/Mithril-mine/libmdbx-devel/issues/60)) (backport).

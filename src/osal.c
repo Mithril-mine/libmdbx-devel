@@ -1287,17 +1287,25 @@ int osal_removedirectory(const pathchar_t *pathname) {
 #endif
 }
 
+MDBX_NOTHROW_CONST_FUNCTION bool osal_is_pathname_absent_error(int err) {
+#if IS_WINDOWS
+  return err == ERROR_FILE_NOT_FOUND || err == ERROR_PATH_NOT_FOUND;
+#else
+  return err == ENOENT || err == ENOTDIR;
+#endif
+}
+
 int osal_fileexists(const pathchar_t *pathname) {
 #if IS_WINDOWS
   if (GetFileAttributesW(pathname) != INVALID_FILE_ATTRIBUTES)
     return MDBX_RESULT_TRUE;
   int err = GetLastError();
-  return (err == ERROR_FILE_NOT_FOUND || err == ERROR_PATH_NOT_FOUND) ? MDBX_RESULT_FALSE : err;
+  return osal_is_pathname_absent_error(err) ? MDBX_RESULT_FALSE : err;
 #else
   if (access(pathname, F_OK) == 0)
     return MDBX_RESULT_TRUE;
   int err = errno;
-  return (err == ENOENT || err == ENOTDIR) ? MDBX_RESULT_FALSE : err;
+  return osal_is_pathname_absent_error(err) ? MDBX_RESULT_FALSE : err;
 #endif
 }
 
@@ -1395,7 +1403,7 @@ int osal_openfile(const enum osal_openfile_purpose purpose, const MDBX_env *env,
   if (*fd == INVALID_HANDLE_VALUE) {
     int err = (int)GetLastError();
     if (err == ERROR_ACCESS_DENIED && purpose == MDBX_OPEN_LCK) {
-      if (GetFileAttributesW(pathname) == INVALID_FILE_ATTRIBUTES && GetLastError() == ERROR_FILE_NOT_FOUND)
+      if (GetFileAttributesW(pathname) == INVALID_FILE_ATTRIBUTES && osal_is_pathname_absent_error(GetLastError()))
         err = ERROR_FILE_NOT_FOUND;
     }
     /* In exclusive mode a sharing/lock violation means exactly what
@@ -1518,7 +1526,7 @@ int osal_openfile(const enum osal_openfile_purpose purpose, const MDBX_env *env,
     err = errno;
     if (err == EACCES && purpose == MDBX_OPEN_LCK) {
       struct stat unused;
-      if (stat(pathname, &unused) == 0 || (err = errno) != ENOENT)
+      if (stat(pathname, &unused) == 0 || !osal_is_pathname_absent_error(err = errno))
         err = EACCES /* restore error if file exists */;
     }
   }
@@ -2039,16 +2047,16 @@ int osal_check_fs_rdonly(mdbx_filehandle_t handle, const pathchar_t *pathname, i
     return MDBX_EACCESS;
 #else
   struct statvfs info;
-  if (err != MDBX_ENOFILE) {
+  if (!osal_is_pathname_absent_error(err)) {
     if (statvfs(pathname, &info) == 0)
       return (info.f_flag & ST_RDONLY) ? MDBX_SUCCESS : err;
-    if (errno != MDBX_ENOFILE)
+    if (!osal_is_pathname_absent_error(errno))
       return errno;
   }
   if (fstatvfs(handle, &info))
     return errno;
   if ((info.f_flag & ST_RDONLY) == 0)
-    return (err == MDBX_ENOFILE) ? MDBX_EACCESS : err;
+    return osal_is_pathname_absent_error(err) ? MDBX_EACCESS : err;
 #endif /* !Windows */
   return MDBX_SUCCESS;
 }
