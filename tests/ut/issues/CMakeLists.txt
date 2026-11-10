@@ -68,6 +68,13 @@ add_issue_test(gh0305 SOURCE "issue_gh0305.c++")
 add_issue_test(gh0314 SOURCE "issue_gh0314.c++")
 add_issue_test(gh0318 SOURCE "issue_gh0318.c++")
 add_issue_test(gh0319 SOURCE "issue_gh0319.c++")
+if(NOT WIN32 AND NOT APPLE)
+  # the pwrite-family wrapping requires the GNU ld --wrap feature
+  add_issue_test(gh0321 SOURCE "issue_gh0321.c++" LIBRARY mdbx-static)
+  target_compile_definitions(issue_gh0321 PRIVATE MDBX_TEST_PWRITE_WRAP=1)
+  target_link_options(issue_gh0321 PRIVATE "-Wl,--wrap=pwrite" "-Wl,--wrap=pwrite64" "-Wl,--wrap=pwritev"
+                      "-Wl,--wrap=pwritev64")
+endif()
 add_issue_test(gh0338 SOURCE "issue_gh0338.c++")
 add_issue_test(gh0341 SOURCE "issue_gh0341.c++")
 add_issue_test(gh0342 SOURCE "issue_gh0342.c++")
