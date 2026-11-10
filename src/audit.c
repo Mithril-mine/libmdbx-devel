@@ -72,7 +72,7 @@ __cold static int audit_ex_locked(MDBX_txn *txn, const size_t retired_stored, co
   ctx.used =
       NUM_METAS + audit_db_used(dbi_dig(txn, FREE_DBI, nullptr)) + audit_db_used(dbi_dig(txn, MAIN_DBI, nullptr));
 
-  rc = mdbx_enumerate_tables(txn, audit_dbi, &ctx);
+  rc = dbi_enumerate(txn, audit_dbi, &ctx, true /* audit_ex() holds dbi_lock */);
   tASSERT0(txn, rc == MDBX_SUCCESS);
 
   for (size_t dbi = CORE_DBS; dbi < txn->n_dbi; ++dbi) {
