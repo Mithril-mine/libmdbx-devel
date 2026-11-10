@@ -194,4 +194,59 @@ TEST(issue_gh0311, pp2_range_delete_all_keeps_sequence) {
   mdbx_txn_abort(txn.release());
 }
 
+/* pp10: mdbx_drop() для MAIN_DBI отказывает, пока в MAIN есть именованные
+ * таблицы: их записи — N_TREE-узлы, их удаление оставляет страницы таблиц
+ * потерянными. Явный дроп каждой таблицы работает и не оставляет утечки. */
+TEST(issue_gh0311, pp10_drop_main_with_named_tables_refused) {
+  const std::string db = "issue0311m.mdbx";
+  const env_files_guard guard({db.c_str()});
+  if (MDBX_GTEST_IS_EXECUTION_TIMEOUT()) {
+    GTEST_SKIP() << "SKIPPED by RUNTIME_LIMIT";
+    return;
+  }
+  env_ptr env;
+  ASSERT_EQ(mdbx_env_create(&env), MDBX_SUCCESS);
+  ASSERT_EQ(mdbx_env_set_maxdbs(env.get(), 4), MDBX_SUCCESS);
+  ASSERT_EQ(mdbx_env_open(env.get(), db.c_str(), MDBX_NOSUBDIR, 0644), MDBX_SUCCESS);
+
+  txn_ptr txn;
+  MDBX_dbi u = 0, main_dbi = 0;
+  ASSERT_EQ(mdbx_txn_begin(env.get(), nullptr, MDBX_TXN_READWRITE, &txn), MDBX_SUCCESS);
+  ASSERT_EQ(mdbx_dbi_open(txn.get(), "u", MDBX_CREATE, &u), MDBX_SUCCESS);
+  ASSERT_EQ(mdbx_dbi_open(txn.get(), nullptr, MDBX_DB_ACCEDE, &main_dbi), MDBX_SUCCESS);
+  char key[32], val[64];
+  for (int i = 0; i < 500; ++i) {
+    snprintf(key, sizeof(key), "k%08d", i);
+    snprintf(val, sizeof(val), "value-%08d", i);
+    MDBX_val k = {key, strlen(key)}, v = {val, strlen(val)};
+    ASSERT_EQ(mdbx_put(txn.get(), u, &k, &v, MDBX_UPSERT), MDBX_SUCCESS);
+    ASSERT_EQ(mdbx_put(txn.get(), main_dbi, &k, &v, MDBX_UPSERT), MDBX_SUCCESS);
+  }
+  ASSERT_EQ(mdbx_txn_commit(txn.release()), MDBX_SUCCESS);
+
+  ASSERT_EQ(mdbx_txn_begin(env.get(), nullptr, MDBX_TXN_READWRITE, &txn), MDBX_SUCCESS);
+  ASSERT_EQ(mdbx_dbi_open(txn.get(), "u", MDBX_DB_ACCEDE, &u), MDBX_SUCCESS);
+  ASSERT_EQ(mdbx_dbi_open(txn.get(), nullptr, MDBX_DB_ACCEDE, &main_dbi), MDBX_SUCCESS);
+  EXPECT_EQ(mdbx_drop(txn.get(), main_dbi, false), MDBX_INCOMPATIBLE);
+  EXPECT_EQ(mdbx_drop(txn.get(), main_dbi, true), MDBX_INCOMPATIBLE);
+  /* транзакция остаётся работоспособной после отказа */
+  MDBX_val k = {const_cast<void *>(static_cast<const void *>("k00000000")), 9}, v;
+  ASSERT_EQ(mdbx_get(txn.get(), u, &k, &v), MDBX_SUCCESS);
+
+  /* явный путь: дроп каждой именованной таблицы, затем очистка MAIN */
+  ASSERT_EQ(mdbx_drop(txn.get(), u, true), MDBX_SUCCESS);
+  ASSERT_EQ(mdbx_drop(txn.get(), main_dbi, false), MDBX_SUCCESS);
+  ASSERT_EQ(mdbx_txn_commit(txn.release()), MDBX_SUCCESS);
+
+  ASSERT_EQ(mdbx_txn_begin(env.get(), nullptr, MDBX_TXN_RDONLY, &txn), MDBX_SUCCESS);
+  ASSERT_EQ(mdbx_dbi_open(txn.get(), "u", MDBX_DB_ACCEDE, &u), MDBX_NOTFOUND);
+  ASSERT_EQ(mdbx_dbi_open(txn.get(), nullptr, MDBX_DB_ACCEDE, &main_dbi), MDBX_SUCCESS);
+  MDBX_cursor *cursor = nullptr;
+  ASSERT_EQ(mdbx_cursor_open(txn.get(), main_dbi, &cursor), MDBX_SUCCESS);
+  MDBX_val rk, rv;
+  EXPECT_EQ(mdbx_cursor_get(cursor, &rk, &rv, MDBX_FIRST), MDBX_NOTFOUND) << "MAIN must be empty";
+  mdbx_cursor_close(cursor);
+  mdbx_txn_abort(txn.release());
+}
+
 } /* namespace */
