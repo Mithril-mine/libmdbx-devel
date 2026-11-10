@@ -212,7 +212,7 @@ int windows_seize_exclusive(MDBX_env *env) {
   int rc = flock_ex(env->fd4meta, env->dxb_lock_event, LCK_EXCLUSIVE | LCK_DONTWAIT, 0, meta_bytes, 0);
   if (rc != MDBX_SUCCESS) {
     ERROR("%s, err %u", "seize-exclusive(meta)", rc);
-    return (rc == ERROR_LOCK_VIOLATION || rc == ERROR_SHARING_VIOLATION) ? MDBX_BUSY : rc;
+    return osal_is_sharing_violation_error(rc) ? MDBX_BUSY : rc;
   }
 
   jitter4testing(false);
@@ -222,7 +222,7 @@ int windows_seize_exclusive(MDBX_env *env) {
     const int err = funlock(env->fd4meta, 0, meta_bytes);
     if (err != MDBX_SUCCESS)
       panic_fmt(env, "dxb/%s-unlock error %u", "seize-exclusive(meta) rollback", err);
-    return (rc == ERROR_LOCK_VIOLATION || rc == ERROR_SHARING_VIOLATION) ? MDBX_BUSY : rc;
+    return osal_is_sharing_violation_error(rc) ? MDBX_BUSY : rc;
   }
 
   DEBUG("%s", "seize-exclusive: constant meta+body locks acquired");
@@ -466,7 +466,7 @@ static int internal_seize_lck(MDBX_env *env) {
 
   /* 5) still on ?-E (middle) */
   jitter4testing(false);
-  if (rc != ERROR_SHARING_VIOLATION && rc != ERROR_LOCK_VIOLATION) {
+  if (!osal_is_sharing_violation_error(rc)) {
     /* 6) something went wrong, give up */
     rc = funlock(env->lck_mmap.fd, LCK_UPPER);
     if (rc != MDBX_SUCCESS)
@@ -574,7 +574,7 @@ int lck_upgrade(MDBX_env *env, bool dont_wait) {
   if (rc != MDBX_SUCCESS) {
     /* 2) something went wrong, give up;
      * map the contention to MDBX_BUSY so that callers can portably detect it */
-    if (rc == ERROR_LOCK_VIOLATION || rc == ERROR_SHARING_VIOLATION)
+    if (osal_is_sharing_violation_error(rc))
       rc = MDBX_BUSY;
     VERBOSE("%s, err %u", "S-?(used) >> S-E(locked)", rc);
     return rc;
@@ -591,7 +591,7 @@ int lck_upgrade(MDBX_env *env, bool dont_wait) {
   if (rc != MDBX_SUCCESS) {
     /* 5) something went wrong, give up;
      * map the contention to MDBX_BUSY so that callers can portably detect it */
-    if (rc == ERROR_LOCK_VIOLATION || rc == ERROR_SHARING_VIOLATION)
+    if (osal_is_sharing_violation_error(rc))
       rc = MDBX_BUSY;
     VERBOSE("%s, err %u", "?-E(middle) >> E-E(exclusive-write)", rc);
     return rc;

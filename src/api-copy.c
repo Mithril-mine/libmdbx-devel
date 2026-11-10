@@ -780,13 +780,7 @@ __cold static int copy2pathname(MDBX_txn *txn, const pathchar_t *dest_path, MDBX
 #if IS_WINDOWS
   /* no locking required since the file opened with ShareMode == 0 */
 #else
-  MDBX_STRUCT_FLOCK lock_op;
-  memset(&lock_op, 0, sizeof(lock_op));
-  lock_op.l_type = F_WRLCK;
-  lock_op.l_whence = SEEK_SET;
-  lock_op.l_start = 0;
-  lock_op.l_len = OFF_T_MAX;
-  const int err_fcntl = MDBX_FCNTL(newfd, MDBX_F_SETLK, &lock_op) ? errno : MDBX_SUCCESS;
+  const int err_fcntl = lck_op(newfd, MDBX_F_SETLK, F_WRLCK, 0, OFF_T_MAX);
 
   const int err_flock =
 #ifdef LOCK_EX
@@ -812,7 +806,7 @@ __cold static int copy2pathname(MDBX_txn *txn, const pathchar_t *dest_path, MDBX
 #endif /* Linux */
 
   if (!err_fcntl &&
-      (err_flock == EWOULDBLOCK || err_flock == EAGAIN || ignore_enosys_and_eremote(err_flock) == MDBX_RESULT_TRUE)) {
+      (osal_is_sharing_violation_error(err_flock) || ignore_enosys_and_eremote(err_flock) == MDBX_RESULT_TRUE)) {
     rc = err_flock;
     if (flock_may_fail) {
       WARNING("ignore %s(%" MDBX_PRIsPATH ") error %d: since %s done, local/remote-fs check %d", "flock", dest_path,
@@ -828,6 +822,8 @@ __cold static int copy2pathname(MDBX_txn *txn, const pathchar_t *dest_path, MDBX
           err_fcntl, err_flock, err_check_fs_local);
     if (err_fcntl == ENOLCK || err_flock == ENOLCK)
       rc = ENOLCK;
+    else if (err_fcntl == EBUSY || err_flock == EBUSY)
+      rc = EBUSY;
     else if (err_fcntl == EWOULDBLOCK || err_flock == EWOULDBLOCK)
       rc = EWOULDBLOCK;
     else if (EWOULDBLOCK != EAGAIN && (err_fcntl == EAGAIN || err_flock == EAGAIN))
@@ -839,7 +835,7 @@ __cold static int copy2pathname(MDBX_txn *txn, const pathchar_t *dest_path, MDBX
 
   /* A lock conflict means that another process (e.g. a concurrent copy) owns
    * the file, even if this call has just created it. */
-  const bool locked_by_other = rc == EWOULDBLOCK || rc == EAGAIN;
+  const bool locked_by_other = osal_is_sharing_violation_error(rc);
   bool touched = false;
   if (rc == MDBX_SUCCESS)
     rc = copy2fd(txn, newfd, flags, &touched, pre_size > 0);
