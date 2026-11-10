@@ -226,7 +226,7 @@ int windows_seize_exclusive(MDBX_env *env) {
   return MDBX_SUCCESS;
 }
 
-static int suspend_and_append(mdbx_handle_array_t **array, const DWORD ThreadId) {
+static int suspend_and_append(mdbx_handle_array_t **array, const DWORD ThreadId, const int injected) {
   const unsigned limit = (*array)->limit;
   if ((*array)->count == limit) {
     mdbx_handle_array_t *const ptr = osal_realloc(
@@ -240,7 +240,11 @@ static int suspend_and_append(mdbx_handle_array_t **array, const DWORD ThreadId)
     (*array)->limit = limit * 2;
   }
 
-  HANDLE hThread = OpenThread(THREAD_SUSPEND_RESUME | THREAD_QUERY_INFORMATION, FALSE, ThreadId);
+  HANDLE hThread = nullptr;
+  if (likely(!injected) || (*array)->count == 0)
+    hThread = OpenThread(THREAD_SUSPEND_RESUME | THREAD_QUERY_INFORMATION, FALSE, ThreadId);
+  else
+    SetLastError((DWORD)injected);
   if (hThread == nullptr)
     return (int)GetLastError();
 
@@ -261,6 +265,8 @@ static int suspend_and_append(mdbx_handle_array_t **array, const DWORD ThreadId)
 int osal_suspend_threads_before_remap(MDBX_env *env, mdbx_handle_array_t **array) {
   eASSERT0(env, (env->flags & MDBX_NOSTICKYTHREADS) == 0);
   const uintptr_t CurrentTid = GetCurrentThreadId();
+  int injected = 0;
+  (void)injected; /* no MPROBE_FAULT in stable */
   int rc;
   if (env->lck_mmap.lck) {
     /* Scan LCK for threads of the current process */
@@ -275,7 +281,7 @@ int osal_suspend_threads_before_remap(MDBX_env *env, mdbx_handle_array_t **array
       if (reader->tid.weak == CurrentTid || reader->tid.weak == WriteTxnOwner)
         goto skip_lck;
 
-      rc = suspend_and_append(array, (mdbx_tid_t)reader->tid.weak);
+      rc = suspend_and_append(array, (mdbx_tid_t)reader->tid.weak, injected);
       if (rc != MDBX_SUCCESS) {
       bailout_lck:
         (void)osal_resume_threads_after_remap(*array);
@@ -283,7 +289,7 @@ int osal_suspend_threads_before_remap(MDBX_env *env, mdbx_handle_array_t **array
       }
     }
     if (WriteTxnOwner && WriteTxnOwner != CurrentTid) {
-      rc = suspend_and_append(array, (mdbx_tid_t)WriteTxnOwner);
+      rc = suspend_and_append(array, (mdbx_tid_t)WriteTxnOwner, injected);
       if (rc != MDBX_SUCCESS)
         goto bailout_lck;
     }
@@ -310,7 +316,7 @@ int osal_suspend_threads_before_remap(MDBX_env *env, mdbx_handle_array_t **array
       if (entry.th32OwnerProcessID != env->pid || entry.th32ThreadID == CurrentTid)
         continue;
 
-      rc = suspend_and_append(array, entry.th32ThreadID);
+      rc = suspend_and_append(array, entry.th32ThreadID, injected);
       if (rc != MDBX_SUCCESS)
         goto bailout_toolhelp;
 
@@ -338,6 +344,8 @@ int osal_resume_threads_after_remap(mdbx_handle_array_t *array) {
     }
     CloseHandle(hThread);
   }
+  /* forget the closed handles: after a failed suspension the caller calls this again */
+  array->count = 0;
   return rc;
 }
 
