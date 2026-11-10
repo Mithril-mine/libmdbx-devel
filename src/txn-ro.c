@@ -101,8 +101,10 @@ static inline int ro_slot_get(MDBX_txn *txn) {
 
 static int ro_slot_clean(MDBX_txn *txn) {
   reader_slot_t *const slot = txn->ro.slot;
-  if (unlikely(!slot))
+  if (unlikely(!slot)) {
+    txn->flags &= ~MDBX_TXN_PARKED /* without-lck mode, as below for a parked reader with a slot */;
     return MDBX_SUCCESS;
+  }
 
   MDBX_env *const env = txn->env;
   if (unlikely(!env->lck)) {
@@ -323,9 +325,18 @@ void txn_ro_free(MDBX_txn *txn) {
 int txn_ro_park(MDBX_txn *txn, bool autounpark) {
   reader_slot_t *const slot = txn->ro.slot;
   tASSERT0(txn, (txn->flags & (MDBX_TXN_FINISHED | txn_ro_flat | MDBX_TXN_PARKED)) == txn_ro_flat);
-  tASSERT0(txn, ro_slot_tid(slot) < MDBX_TID_TXN_OUSTED);
+  tASSERT0(txn, !slot || ro_slot_tid(slot) < MDBX_TID_TXN_OUSTED);
   if (unlikely((txn->flags & (MDBX_TXN_FINISHED | txn_ro_flat | MDBX_TXN_PARKED)) != txn_ro_flat))
     return MDBX_BAD_TXN;
+
+  if (unlikely(!slot)) {
+    /* without-lck mode: there is no reader slot, and parking is impossible
+     * in principle. There is nowhere to store and track the transaction's
+     * MVCC snapshot in a way visible outside the transaction, and while a
+     * write transaction is running (in exclusive mode) no read transaction
+     * can hold a different snapshot, so no ousting can occur (issue #316). */
+    return MDBX_EPERM;
+  }
 
   const mdbx_pid_t pid = atomic_load_pid(&slot->pid, mo_Relaxed);
   const uint64_t tid = atomic_load64(&slot->tid, mo_Relaxed);
@@ -357,6 +368,11 @@ int txn_ro_unpark(MDBX_txn *txn) {
             (txn_ro_flat | MDBX_TXN_OUSTED))
                ? MDBX_OUSTED
                : MDBX_BAD_TXN;
+
+  if (unlikely(!txn->ro.slot))
+    /* without-lck mode: see txn_ro_park() — parking is impossible in
+     * principle, so there is nothing to unpark (issue #316). */
+    return MDBX_EPERM;
 
   for (reader_slot_t *const slot = txn->ro.slot; slot; atomic_yield()) {
     const mdbx_pid_t pid = atomic_load_pid(&slot->pid, mo_Relaxed);
