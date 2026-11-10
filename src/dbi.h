@@ -113,9 +113,9 @@ MDBX_INTERNAL const tree_t *dbi_dig(const MDBX_txn *txn, const size_t dbi, tree_
 /* mdbx_enumerate_tables() without the argument checks; `dbi_locked` tells that the caller holds env->dbi_lock */
 MDBX_INTERNAL int dbi_enumerate(const MDBX_txn *txn, MDBX_table_enum_func func, void *ctx, bool dbi_locked);
 
-struct dbi_rename_result {
-  defer_free_item_t *defer;
-  int err;
-};
-
-MDBX_INTERNAL struct dbi_rename_result dbi_rename_locked(MDBX_txn *txn, MDBX_dbi dbi, MDBX_val new_name);
+/* Выполняет переименование и разряжает dbi_lock на всех исходах: прикрепляет
+ * undo-узел старого имени при успехе, при out-of-memory освобождает буфер
+ * старого имени через dbi_defer_release(), иначе явно отпирает dbi_lock
+ * (для no-op переименования «в то же имя» defer не возникает).
+ * Вызывается с уже захваченным dbi_lock. */
+MDBX_INTERNAL int dbi_rename_locked_and_release(MDBX_txn *txn, MDBX_dbi dbi, MDBX_val new_name);
