@@ -87,28 +87,62 @@ Summary:
 ## 6. ChangeLog rules
 
 Canonical style guide: [docs/engineering/changelog-codex.md](docs/engineering/changelog-codex.md).
+The format follows [Keep a Changelog 2.0.0](https://keepachangelog.com/en/2.0.0/)
+with the house deviations listed here.
+
+Scope and curation:
 
 - Only user-affecting changes (reaching the amalgamated build) go into
   `ChangeLog.md`; anything else only in exceptional cases, agreed with the
-  owner.
+  owner. Curate, don't accumulate: the ChangeLog is a summary of notable
+  changes for readers, not a record of commits.
+- One cause — one entry: related fixes from one issue or one rework are a
+  single entry listing the affected APIs, not a line per function.
+
+Structure:
+
+- A version section uses only the Keep-a-Changelog types: `Added`,
+  `Changed`, `Deprecated`, `Removed`, `Fixed`, `Security`, plus the house
+  `Appreciations` section. No other top-level sections; an empty type is
+  omitted.
+- Every entry begins with the verb of its type: `Added …`, `Changed …`,
+  `Deprecated …`, `Removed …`, `Fixed …`; a `Security` entry begins with
+  its CVE identifier when present.
+- `Fixed` keeps thematic subsections (a house deviation users asked for);
+  subsections exist only inside `Fixed`, follow the established taxonomy
+  and stay few and stable.
+- A version opens with a summary of one or two plain sentences: what the
+  release gives the user.
+- Breaking changes are marked `**Breaking:**` on the entry itself, within
+  its type — never collected into a separate section.
+- The version under development is the upcoming version's section with the
+  `at a deep development stage` date placeholder; a released version is
+  `## vX.Y.Z at YYYY-MM-DD`.
+
+Wording:
+
 - User-facing wording: no internal jargon, no low-level details — describe
   what the user would have observed; a brief mention of the fixed problem
   as the user could see it is welcome, "bird language" and detailed
   explanations of minutiae are not.
-- An entry is a single sentence of up to 100 characters. Longer entries
-  (2–3 sentences or a short structural note) are allowed only for large
-  reworks and only with the owner's direction or confirmation.
-- Prefer a single line up to 100 characters; 2–3 sentences or a short
-  structural note in rare cases. Every entry must be semantically complete
-  and end with a period.
+- An entry is a single sentence of up to 100 characters, not counting the
+  trailing issue links. Longer entries (2–3 sentences or a short
+  structural note) are allowed only for large reworks and only with the
+  owner's direction or confirmation. Every entry must be semantically
+  complete and end with a period.
 - Backports get ` (backport)` immediately before the final period.
 - Issues must be referenced only as markdown links (GitHub, SourceCraft or
   third-party); bare `#N` mentions are noise and must not appear anywhere,
   including commits and code.
 - Internal identifiers, field names and abbreviations are not acceptable
   (rare exceptions allowed).
-- Place a new entry in the appropriate existing section; propose a new
-  section when nothing fits, and ask when in doubt.
+
+House deviations from Keep a Changelog: the `Appreciations` section;
+thematic subsections inside `Fixed`; issue links inline at the end of
+entries; `at a deep development stage` instead of `[Unreleased]`. Place a
+new entry in the appropriate existing type (or an existing `Fixed`
+subsection); when nothing fits, propose a new `Fixed` subsection and ask
+when in doubt.
 
 ## 7. Code style
 
