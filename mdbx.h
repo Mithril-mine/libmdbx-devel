@@ -116,7 +116,7 @@ are only a few cases of changing data.
 |Key exist → Delete by key                    |\ref mdbx_del() with the parameter `data = NULL`|Deletion|
 |Key exist → Delete by key with data matching check|\ref mdbx_del() with the parameter `data` filled with the value which should be match for deletion|Deletion or \ref MDBX_NOTFOUND if the value does not match|
 |Delete at the current cursor position        |\ref mdbx_cursor_del() with \ref MDBX_CURRENT flag|Deletion|
-|Extract (read & delete) value by the key     |\ref mdbx_replace() with zero flag and parameter `new_data = NULL`|Returning a deleted value|
+|Extract (read & delete) value by the key     |\ref mdbx_replace() with \ref MDBX_CURRENT and parameter `new_data = NULL`|Returning a deleted value|
 
 
 ## Tables with NON-UNIQUE keys
@@ -138,7 +138,7 @@ as a duplicates or as like a multiple values corresponds to keys.
 |  _UPDATING_|||
 |Key is absent → Error since no such key      |\ref MDBX_CURRENT    |Error \ref MDBX_NOTFOUND|
 |Key exist, Single value → Update             |\ref MDBX_CURRENT    |Update single value    |
-|Key exist, Multiple values → Replace all values with a new one|\ref MDBX_CURRENT + \ref MDBX_ALLDUPS|Overwrite by single new value|
+|Key exist, Multiple values → Replace all values with a new one|\ref mdbx_put() with \ref MDBX_CURRENT + \ref MDBX_ALLDUPS|Overwrite by single new value|
 |Key exist, Multiple values → Error since it is unclear which of the values should be updated|\ref mdbx_put() with \ref MDBX_CURRENT|Error \ref MDBX_EMULTIVAL|
 |Key exist, Multiple values → Update particular entry of multi-value|\ref mdbx_replace() with \ref MDBX_CURRENT + \ref MDBX_NOOVERWRITE and the parameter `old_value` filled with the value that wanna to update|Update one multi-value entry|
 |Key exist, Multiple values → Update the current entry of multi-value|\ref mdbx_cursor_put() with \ref MDBX_CURRENT|Update one multi-value entry|
@@ -1694,7 +1694,8 @@ typedef enum MDBX_put_flags {
 
   /** Has effect only for \ref MDBX_DUPSORT tables.
    * For deletion: remove all multi-values (aka duplicates) for given key.
-   * For upsertion: replace all multi-values for given key with a new one. */
+   * For upsertion: replace all multi-values for given key with a new one.
+   * Not applicable to \ref mdbx_replace() which rejects it. */
   MDBX_ALLDUPS = UINT32_C(0x80),
 
   /** For upsertion: Just reserve space for data, don't copy it.
@@ -5692,6 +5693,12 @@ LIBMDBX_API int mdbx_put(MDBX_txn *txn, MDBX_dbi dbi, const MDBX_val *key, MDBX_
  *                           (\ref MDBX_CURRENT | \ref MDBX_NOOVERWRITE)
  *                           combination for selection particular item from
  *                           multi-value/duplicates.
+ *                           The flags are a subset of those of \ref mdbx_put():
+ *                           \ref MDBX_ALLDUPS is not applicable here and rejected
+ *                           with \ref MDBX_EINVAL, as well as \ref MDBX_APPEND
+ *                           and \ref MDBX_APPENDDUP together with
+ *                           \ref MDBX_CURRENT; the deletion (new_data = NULL)
+ *                           requires \ref MDBX_CURRENT and forbids the rest.
  *
  * \see mdbx_replace_ex()
  * \see \ref c_crud_hints "Quick reference for Insert/Update/Delete operations"
@@ -5748,6 +5755,12 @@ typedef int (*MDBX_preserve_func)(void *context, MDBX_val *target, const void *s
  *                           (\ref MDBX_CURRENT | \ref MDBX_NOOVERWRITE)
  *                           combination for selection particular item from
  *                           multi-value/duplicates.
+ *                           The flags are a subset of those of \ref mdbx_put():
+ *                           \ref MDBX_ALLDUPS is not applicable here and rejected
+ *                           with \ref MDBX_EINVAL, as well as \ref MDBX_APPEND
+ *                           and \ref MDBX_APPENDDUP together with
+ *                           \ref MDBX_CURRENT; the deletion (new_data = NULL)
+ *                           requires \ref MDBX_CURRENT and forbids the rest.
  * \param [in] preserver     The callback to preserve an original data in case
  *                           it is on a dirty page and could be overwritten.
  * \param [in] preserver_context The optional context pointer for use within the preserving callback.
