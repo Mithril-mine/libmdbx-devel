@@ -758,6 +758,7 @@ __must_check_result static int env_info_snap(const MDBX_env *env, const MDBX_txn
     /* environment not yet opened */
 #if 1
     /* default behavior: returns the available info but zeroed the rest */
+    memset(out, 0, sizeof(*out));
     out->mi_geo.lower = env->geo_in_bytes.lower;
     out->mi_geo.upper = env->geo_in_bytes.upper;
     out->mi_geo.shrink = env->geo_in_bytes.shrink;
