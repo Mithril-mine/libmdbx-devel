@@ -557,9 +557,14 @@ int tree_cutoff_range(MDBX_cursor *begin, MDBX_cursor *end, bool end_including) 
     if (is_inner(begin))
       /* специфический случай когда функция была вызвана для вложенного dupsort-дерева */
       return cutoff_leaf(cursor_outer(begin), MDBX_ALLDUPS);
-    else if (!begin->subcur || (cursor_on_first(&begin->subcur->cursor) && cursor_on_last(&end->subcur->cursor)))
-      /* удаляем дерево целиком */
-      return tbl_purge(begin);
+    else if (!begin->subcur || (cursor_on_first(&begin->subcur->cursor) && cursor_on_last(&end->subcur->cursor))) {
+      /* удаляем дерево целиком, сохраняя sequence */
+      const uint64_t sequence = begin->tree->sequence;
+      int err = tbl_purge(begin);
+      if (likely(err == MDBX_SUCCESS))
+        begin->tree->sequence = sequence;
+      return err;
+    }
   }
 
   intptr_t cmp = -1;

@@ -90,6 +90,7 @@ A hardening and refinement release: data-safety and corruption-resistance fixes 
     - Fixed `mdbx_cursor_renew()` crashing on a wrong cursor or transaction handle ([1/15 of #319](https://github.com/Mithril-mine/libmdbx-devel/issues/319)).
 
  - Wrong results and API behavior:
+    - Fixed a whole-table range delete resetting the table's sequence ([#311](https://github.com/Mithril-mine/libmdbx-devel/issues/311)).
     - Fixed `mdbx_env_info_ex()` leaving the output unset on a not-open environment; zeroed now ([2/15 of #319](https://github.com/Mithril-mine/libmdbx-devel/issues/319)).
     - Fixed `MDBX_NEXT/PREV_MULTIPLE` without `MDBX_DUPFIXED` giving empty data and moving past the end ([3/15 of #319](https://github.com/Mithril-mine/libmdbx-devel/issues/319)).
     - Fixed `mdbx_estimate_range()` ignoring `begin_data`/`end_data`; `estimate_move()` erred on success ([4/15 of #319](https://github.com/Mithril-mine/libmdbx-devel/issues/319)).
