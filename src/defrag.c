@@ -471,7 +471,11 @@ static int defrag_move(dfc_t *dfc, da_t *arc) {
       return err;
 
     dfc->cycle_pages_moved += arc->npages;
-    return defrag_fixup_page(dfc, dst, arc->mapped);
+    err = defrag_fixup_page(dfc, dst, arc->mapped);
+    /* The page stays in the dirty list, so it must keep the txnid of a
+     * modifiable page, otherwise the commit will not write it. */
+    dst->txnid = txn->front_txnid;
+    return err;
   }
   tASSERT0(txn, !txn->wr.dirtylist || arc->npages < 2 || !txn_dpl_intersect(txn, arc->key_or_pgno, arc->npages));
 
