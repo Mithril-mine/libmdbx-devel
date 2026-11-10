@@ -4,8 +4,11 @@
 #include "internals.h"
 
 static pgno_t env_max_pgno(const MDBX_env *env) {
-  return env->ps ? bytes2pgno(env, env->geo_in_bytes.upper ? env->geo_in_bytes.upper : globals.mmap_limit)
-                 : PAGELIST_LIMIT;
+  if (!env->ps)
+    return PAGELIST_LIMIT;
+  /* the result of the shift may not fit in pgno_t */
+  const size_t pages = (env->geo_in_bytes.upper ? env->geo_in_bytes.upper : globals.mmap_limit) >> env->ps2ln;
+  return (pages < PAGELIST_LIMIT) ? (pgno_t)pages : PAGELIST_LIMIT;
 }
 
 __cold pgno_t default_dp_limit(const MDBX_env *env) {
