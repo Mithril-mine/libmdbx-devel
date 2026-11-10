@@ -537,6 +537,9 @@ int txn_nested_abort(MDBX_txn *nested) {
   tASSERT1(nested, pnl_check_allocated(nested->wr.repnl, nested->geo.first_unallocated - 1));
   tASSERT1(nested, memcmp(&nested->wr.troika, &nested->parent->wr.troika, sizeof(troika_t)) == 0);
 
+  /* Restore the parent's cursors from their backups instead of merging the
+   * nested transaction's state. */
+  nested->flags |= MDBX_TXN_ERROR;
   int rc = nested_undo(nested);
   nested_free(nested);
   return rc;
@@ -552,6 +555,13 @@ static int nested_join(MDBX_txn *nested, struct commit_timestamp *ts) {
   tASSERT1(nested, pnl_check_allocated(nested->wr.repnl, nested->geo.first_unallocated - 1));
   tASSERT1(nested, memcmp(&nested->wr.troika, &parent->wr.troika, sizeof(troika_t)) == 0);
   tASSERT0(nested, rkl_empty(&nested->wr.gc.comeback));
+
+  /* The fault site allows tests to fail any nested commit/checkpoint
+   * deterministically, at a point where nothing has been mutated yet. */
+  int injected = MDBX_SUCCESS;
+  MPROBE_FAULT(nested_join_entry_enomem, injected);
+  if (unlikely(injected != MDBX_SUCCESS))
+    return injected;
 
   //-------------------------------------------------------------------------
   // Preserve space for page lists in the parent transaction.
@@ -661,8 +671,14 @@ static int nested_join(MDBX_txn *nested, struct commit_timestamp *ts) {
 
 int txn_nested_commit(MDBX_txn *nested, struct commit_timestamp *ts) {
   int rc = nested_join(nested, ts);
-  if (unlikely(rc != MDBX_SUCCESS))
+  if (unlikely(rc != MDBX_SUCCESS)) {
+    /* Restore the parent's cursors from their backups instead of merging the
+     * failed nested transaction's state, exactly as txn_abort() does. The
+     * flag is safe here: the caller gets the error and the handle is released
+     * by nested_free() below, so there is no way to run nested_undo() twice. */
+    nested->flags |= MDBX_TXN_ERROR;
     nested_undo(nested);
+  }
   nested_free(nested);
   return rc;
 }
@@ -721,6 +737,9 @@ int txn_nested_rollback(MDBX_txn *nested) {
 
   const unsigned flags =
       nested->flags & (txn_rw_begin_flags | MDBX_NOSTICKYTHREADS | MDBX_WRITEMAP | MDBX_TXN_RDONLY | txn_ro_nested);
+  /* Restore the parent's cursors from their backups instead of merging the
+   * nested transaction's state. */
+  nested->flags |= MDBX_TXN_ERROR;
   int rc = nested_undo(nested);
   if (likely(rc == MDBX_SUCCESS)) {
     /* release what the previous nested_start() allocated, as nested_free() does, but keep the handle */
