@@ -695,8 +695,11 @@ __cold static int copy2fd(MDBX_txn *txn, mdbx_filehandle_t fd, MDBX_copy_flags_t
       rc = osal_write(fd, buffer, pgno2bytes(env, NUM_METAS));
   }
 
-  if (likely(rc == MDBX_SUCCESS))
-    rc = mdbx_txn_unpark(txn, false);
+  if (likely(rc == MDBX_SUCCESS)) {
+    /* nothing of the snapshot is copied yet, so an ousted transaction may be restarted here */
+    rc = mdbx_txn_unpark(txn, (flags & MDBX_CP_RENEW_TXN) != 0);
+    rc = (rc == MDBX_RESULT_TRUE) ? MDBX_SUCCESS : rc;
+  }
   if (likely(rc == MDBX_SUCCESS)) {
     memset(buffer, 0, pgno2bytes(env, NUM_METAS));
     rc = ((flags & MDBX_CP_COMPACT) ? copy_with_compacting : copy_asis)(env, txn, fd, buffer, dest_is_pipe, flags);
