@@ -40,6 +40,7 @@ A hardening and refinement release: data-safety and corruption-resistance fixes 
 ### Fixed:
 
  - Data safety and durability:
+    - Fixed a table rename staying applied after its transaction aborts, corrupting data ([#307](https://github.com/Mithril-mine/libmdbx-devel/issues/307)).
     - Fixed `mdbx_env_defrag()` inside a write transaction losing committed data ([#306](https://github.com/Mithril-mine/libmdbx-devel/issues/306)).
     - Fixed failed disk writes silently passing as success, and a Windows crash on a large durable commit ([#47](https://github.com/Mithril-mine/libmdbx-devel/issues/47)).
     - Fixed silently ignored auxiliary page-write errors that masked a failing disk ([#203](https://github.com/Mithril-mine/libmdbx-devel/issues/203)).
