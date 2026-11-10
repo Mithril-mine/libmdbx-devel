@@ -6363,10 +6363,16 @@ LIBMDBX_API int mdbx_cursor_scan_from(MDBX_cursor *cursor, MDBX_predicate_func p
  *          some possible errors are:
  * \retval MDBX_THREAD_MISMATCH  Given transaction is not owned
  *                               by current thread.
- * \retval MDBX_NOTFOUND         No any key-value pairs are available.
- * \retval MDBX_ENODATA          The cursor is already at the end of data.
+ * \retval MDBX_SUCCESS          A chunk of key-value pairs has been returned,
+ *                               and more pairs may be available.
  * \retval MDBX_RESULT_TRUE      The returned chunk is the last one,
  *                               and there are no pairs left.
+ * \retval MDBX_NOTFOUND         No any key-value pairs are available: the
+ *                               table is empty (MDBX_FIRST), or there are no
+ *                               pairs after the cursor position (MDBX_NEXT).
+ * \retval MDBX_ENODATA          The cursor has no position to continue from,
+ *                               i.e. it has never been positioned or was reset
+ *                               (MDBX_NEXT).
  * \retval MDBX_EINVAL           An invalid parameter was specified. */
 LIBMDBX_API int mdbx_cursor_get_batch(MDBX_cursor *cursor, size_t *count, MDBX_val *pairs, size_t limit,
                                       MDBX_cursor_op op);
