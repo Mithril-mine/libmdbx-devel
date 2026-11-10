@@ -359,6 +359,9 @@ int txn_basal_commit(MDBX_txn *txn, struct commit_timestamp *ts) {
     else {
       int err = meta_sync(env, head);
       if (unlikely(err != MDBX_SUCCESS)) {
+        /* as in dxb_sync_locked(): a retry could record a meta page as synced
+         * although it never reached the disk */
+        env->flags |= ENV_FATAL_ERROR;
         ERROR("txn-%s: error %d", "presync-meta", err);
         return err;
       }
