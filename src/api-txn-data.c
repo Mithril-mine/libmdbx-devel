@@ -254,7 +254,7 @@ int mdbx_put(MDBX_txn *txn, MDBX_dbi dbi, const MDBX_val *key, MDBX_val *data, M
   if (unlikely(dbi <= FREE_DBI))
     return LOG_IFERR(MDBX_BAD_DBI);
 
-  if (unlikely(flags & ~(MDBX_NOOVERWRITE | MDBX_NODUPDATA | MDBX_ALLDUPS | MDBX_ALLDUPS | MDBX_RESERVE | MDBX_APPEND |
+  if (unlikely(flags & ~(MDBX_NOOVERWRITE | MDBX_NODUPDATA | MDBX_ALLDUPS | MDBX_RESERVE | MDBX_APPEND |
                          MDBX_APPENDDUP | MDBX_CURRENT | MDBX_MULTIPLE)))
     return LOG_IFERR(MDBX_EINVAL);
 
