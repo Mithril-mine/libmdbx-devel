@@ -1287,14 +1287,6 @@ int osal_removedirectory(const pathchar_t *pathname) {
 #endif
 }
 
-MDBX_NOTHROW_CONST_FUNCTION bool osal_is_pathname_absent_error(int err) {
-#if IS_WINDOWS
-  return err == ERROR_FILE_NOT_FOUND || err == ERROR_PATH_NOT_FOUND;
-#else
-  return err == ENOENT || err == ENOTDIR;
-#endif
-}
-
 int osal_fileexists(const pathchar_t *pathname) {
 #if IS_WINDOWS
   if (GetFileAttributesW(pathname) != INVALID_FILE_ATTRIBUTES)
@@ -1386,7 +1378,9 @@ int osal_openfile(const enum osal_openfile_purpose purpose, const MDBX_env *env,
   case MDBX_OPEN_DELETE:
     CreationDisposition = OPEN_EXISTING;
     ShareMode |= FILE_SHARE_DELETE;
-    DesiredAccess = FILE_READ_ATTRIBUTES | FILE_WRITE_ATTRIBUTES | DELETE | SYNCHRONIZE;
+    /* LockFileEx() needs data access; DELETE is not needed (the file is removed by name) and would conflict
+     * with the handles of processes that still use the database, so WAIT_FOR_UNUSED could never wait */
+    DesiredAccess = FILE_READ_DATA | FILE_READ_ATTRIBUTES | FILE_WRITE_ATTRIBUTES | SYNCHRONIZE;
     break;
   case MDBX_OPEN_COPY_EXCL:
     CreationDisposition = CREATE_NEW;

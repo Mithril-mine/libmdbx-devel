@@ -542,7 +542,24 @@ MDBX_INTERNAL key_t osal_ftok(int fd, const char *pathname);
 #endif /* !Windows */
 MDBX_INTERNAL int osal_removefile(const pathchar_t *pathname);
 MDBX_INTERNAL int osal_removedirectory(const pathchar_t *pathname);
-MDBX_NOTHROW_CONST_FUNCTION MDBX_INTERNAL bool osal_is_pathname_absent_error(int err);
+MDBX_NOTHROW_CONST_FUNCTION static inline bool osal_is_pathname_absent_error(int err) {
+#if IS_WINDOWS
+  return err == ERROR_FILE_NOT_FOUND || err == ERROR_PATH_NOT_FOUND;
+#else
+  return err == ENOENT || err == ENOTDIR;
+#endif
+}
+
+/* A removal refused only because another process still has the file open (Windows); never on POSIX. */
+MDBX_NOTHROW_CONST_FUNCTION static inline bool osal_is_sharing_violation_error(int err) {
+#if IS_WINDOWS
+  return err == ERROR_SHARING_VIOLATION || err == ERROR_LOCK_VIOLATION;
+#else
+  /* LY: Legacy/Bogus NFS lock-managers could return EACCES in such cases.
+   * However, we need to move forward, not tinker with old, problematic systems. */
+  return err == EAGAIN || err == EBUSY || (EWOULDBLOCK != EAGAIN && err == EWOULDBLOCK) || err == EDEADLK;
+#endif
+}
 MDBX_INTERNAL int osal_is_pipe(mdbx_filehandle_t fd);
 MDBX_INTERNAL int osal_lockfile(mdbx_filehandle_t fd, bool wait);
 
