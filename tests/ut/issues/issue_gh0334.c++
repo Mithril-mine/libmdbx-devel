@@ -200,10 +200,15 @@ TEST(issue_gh0334, read_only_size_stays_within_mapping) {
   ASSERT_EQ(MDBX_SUCCESS, mdbx_env_open(env, kPath, MDBX_NOSUBDIR | MDBX_RDONLY, 0644));
   ASSERT_NO_FATAL_FAILURE(read_all(env));
 
+  /* CTest passes the path of this executable, since executable_dir() falls back to "." where /proc/self/exe is
+   * missing (e.g. FreeBSD); a direct run without it looks next to the running executable */
+  const char *const self = std::getenv("MDBX_TEST_GH334_SELF");
   std::string child = tool_runner::executable_dir() + "/issue_gh0334";
 #if defined(_WIN32)
   child += ".exe";
 #endif
+  if (self && *self)
+    child = self;
   {
     const child_var_scope child_var;
     ASSERT_EQ(0, tool_runner::run({child, "--gtest_filter=issue_gh0334.DISABLED_grow_database",
