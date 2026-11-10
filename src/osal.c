@@ -1889,7 +1889,8 @@ int osal_fsetsize(mdbx_filehandle_t fd, const uint64_t length) {
 #if defined(FALLOC_FL_ALLOCATE_RANGE) && defined(FALLOC_FL_KEEP_SIZE)
     /* prefer a low-level non-portable function to avoid glibc emulation
      * if the file system does not support the operation. */
-    int err = fallocate(fd, FALLOC_FL_ALLOCATE_RANGE | FALLOC_FL_KEEP_SIZE, 0, length);
+    /* fallocate() returns -1 and sets errno on failure */
+    int err = fallocate(fd, FALLOC_FL_ALLOCATE_RANGE | FALLOC_FL_KEEP_SIZE, 0, length) ? errno : MDBX_SUCCESS;
 #elif defined(__APPLE__)
     fstore_t store = {
         .fst_flags = F_ALLOCATECONTIG, .fst_posmode = F_PEOFPOSMODE, .fst_offset = 0, .fst_length = length};
