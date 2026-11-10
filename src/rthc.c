@@ -506,7 +506,7 @@ __cold void rthc_afterfork(void) {
   ENSURE(osal_fastmutex_init(&globals.debug_lock) == 0);
   ENSURE(pthread_mutex_init(&rthc_mutex, nullptr) == 0);
   ENSURE(pthread_cond_init(&rthc_cond, nullptr) == 0);
-  NOTICE("drown %d rthc entries", rthc_count);
+  VERBOSE("drown %d rthc entries", rthc_count);
   for (size_t i = 0; i < rthc_count; ++i) {
     MDBX_env *const env = rthc_table[i].env;
     NOTICE("drown env %p", __Wpedantic_format_voidptr(env));
