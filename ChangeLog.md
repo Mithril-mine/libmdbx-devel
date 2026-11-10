@@ -64,6 +64,7 @@ Cutting-edge release with new core features and internal refactoring.
     - `mdbx_cursor_scroll()`/`mdbx_cursor_distance()` read out of bounds on a huge `deepness` ([#85](https://github.com/Mithril-mine/libmdbx-devel/issues/85)).
 
  - Crashes, hangs and undefined behavior in the core engine:
+    - A write error during a large commit caused double free and a crash; now it is reported ([#321](https://github.com/Mithril-mine/libmdbx-devel/issues/321)).
     - `mdbx_enumerate_tables()` could crash or read freed memory when racing with table operations ([#341](https://github.com/Mithril-mine/libmdbx-devel/issues/341)).
     - Deleting a key's last duplicate and repeating the delete could corrupt data or crash; now a no-op ([#301](https://github.com/Mithril-mine/libmdbx-devel/issues/301), [#305](https://github.com/Mithril-mine/libmdbx-devel/issues/305)).
     - After a failed seek among duplicates, a delete corrupted memory; now safely refused ([#305](https://github.com/Mithril-mine/libmdbx-devel/issues/305)).
