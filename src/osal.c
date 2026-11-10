@@ -1412,6 +1412,8 @@ int osal_openfile(const enum osal_openfile_purpose purpose, const MDBX_env *env,
     int err = (int)GetLastError();
     CloseHandle(*fd);
     *fd = INVALID_HANDLE_VALUE;
+    if (purpose == MDBX_OPEN_COPY_EXCL)
+      DeleteFileW(pathname) /* created here by CREATE_NEW, unknown to the caller */;
     return err;
   }
   const DWORD AttributesDiff =
@@ -1509,6 +1511,8 @@ int osal_openfile(const enum osal_openfile_purpose purpose, const MDBX_env *env,
   }
 #endif /* O_DIRECT */
 
+  /* A file created here and then rejected below is removed here: the caller cannot tell it from a pre-existing one. */
+  const bool created_exclusively = *fd >= 0 && (flags & (O_CREAT | O_EXCL)) == (O_CREAT | O_EXCL);
   int err = MDBX_SUCCESS;
   if (unlikely(*fd < 0)) {
     err = errno;
@@ -1551,6 +1555,8 @@ int osal_openfile(const enum osal_openfile_purpose purpose, const MDBX_env *env,
           "STDIN_FILENO/%d..STDERR_FILENO/%d to prevent database corruption",
           STDIN_FILENO, STDERR_FILENO);
     close(*fd);
+    if (created_exclusively)
+      unlink(pathname);
     return EBADF;
   }
 #else
@@ -1560,6 +1566,8 @@ int osal_openfile(const enum osal_openfile_purpose purpose, const MDBX_env *env,
   if (unlikely(err != 0)) {
     if (*fd >= 0)
       close(*fd);
+    if (created_exclusively)
+      unlink(pathname);
     return err;
   }
 
