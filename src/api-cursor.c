@@ -493,9 +493,9 @@ __hot static int scan_continue(MDBX_cursor *mc, MDBX_predicate_func predicate, v
           return rc;
         rc = inner_next(&mc->subcur->cursor, value);
         if (unlikely(rc != MDBX_SUCCESS))
-          return (rc == MDBX_NOTFOUND) ? MDBX_RESULT_FALSE : rc;
+          return (rc == MDBX_NOTFOUND || rc == MDBX_ENODATA) ? MDBX_RESULT_FALSE : rc;
       }
-    return MDBX_NOTFOUND;
+    return MDBX_RESULT_FALSE;
 
   case MDBX_PREV_DUP:
     if (mc->subcur)
@@ -505,9 +505,9 @@ __hot static int scan_continue(MDBX_cursor *mc, MDBX_predicate_func predicate, v
           return rc;
         rc = inner_prev(&mc->subcur->cursor, value);
         if (unlikely(rc != MDBX_SUCCESS))
-          return (rc == MDBX_NOTFOUND) ? MDBX_RESULT_FALSE : rc;
+          return (rc == MDBX_NOTFOUND || rc == MDBX_ENODATA) ? MDBX_RESULT_FALSE : rc;
       }
-    return MDBX_NOTFOUND;
+    return MDBX_RESULT_FALSE;
 
   default:
     for (;;) {
