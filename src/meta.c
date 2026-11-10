@@ -255,6 +255,11 @@ __cold int meta_wipe_steady(MDBX_env *env, txnid_t inclusive_upto) {
 
 int meta_sync(const MDBX_env *env, const meta_ptr_t head) {
   eASSERT0(env, atomic_load32(&env->lck->meta_sync_txnid, mo_Relaxed) != (uint32_t)head.txnid);
+  int injected = MDBX_SUCCESS;
+  /* The fault site allows tests to fail the meta-pages flush deterministically. */
+  MPROBE_FAULT(meta_sync_flush_err, injected);
+  if (unlikely(injected != MDBX_SUCCESS))
+    return injected;
   /* Функция может вызываться (в том числе) при (env->flags & MDBX_NOMETASYNC) == 0 и env->fd4meta == env->dsync_fd,
    * например если предыдущая транзакция была выполненна с флагом MDBX_NOMETASYNC. */
 
