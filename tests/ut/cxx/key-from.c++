@@ -107,8 +107,12 @@ TEST(ut_key_from, append_u8_to_u64) {
     return;
   }
   mdbx::buffer<> b;
-  b.append_u8(0x11).append_u16(0x2222).append_u24(0x333333).append_u32(0x44444444u).append_u48(
-      0x555555555555ull).append_u64(0x6666666666666666ull);
+  b.append_u8(0x11)
+      .append_u16(0x2222)
+      .append_u24(0x333333)
+      .append_u32(0x44444444u)
+      .append_u48(0x555555555555ull)
+      .append_u64(0x6666666666666666ull);
   // суммарный размер: 1+2+3+4+6+8 = 24
   EXPECT_EQ(b.size(), 24u);
   EXPECT_EQ(*b.byte_ptr(), 0x11);

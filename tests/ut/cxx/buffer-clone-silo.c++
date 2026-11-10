@@ -146,10 +146,8 @@ TEST(ut_buffer_clone_silo, reference_forms_and_pointers) {
   EXPECT_NE(cr.byte_ptr(), nullptr);
   EXPECT_NE(cr.char_ptr(), nullptr);
   EXPECT_EQ(cr.end_byte_ptr(), cr.byte_ptr() + cr.size());
-  EXPECT_EQ(static_cast<const void *>(cr.end_char_ptr()),
-            static_cast<const void *>(cr.end_byte_ptr()));
-  EXPECT_EQ(static_cast<const void *>(cr.const_end()),
-            static_cast<const void *>(cr.end_byte_ptr()));
+  EXPECT_EQ(static_cast<const void *>(cr.end_char_ptr()), static_cast<const void *>(cr.end_byte_ptr()));
+  EXPECT_EQ(static_cast<const void *>(cr.const_end()), static_cast<const void *>(cr.end_byte_ptr()));
   // после make_freestanding() mutable-пути валидны
   r1.make_freestanding();
   EXPECT_TRUE(r1.is_freestanding());
