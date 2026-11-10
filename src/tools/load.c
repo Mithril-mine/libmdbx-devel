@@ -598,6 +598,7 @@ int main(int argc, char *argv[]) {
       envflags |= MDBX_NOSUBDIR;
       break;
     case 's':
+      free(subname);
       forced_subname = optarg;
       subname = osal_strdup(optarg);
       break;
