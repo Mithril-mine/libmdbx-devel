@@ -584,7 +584,9 @@ __cold static int copy_asis(MDBX_env *env, MDBX_txn *txn, mdbx_filehandle_t fd, 
 #if MDBX_USE_COPYFILERANGE
     if (!dest_is_pipe && !not_the_same_filesystem && likely(!copyfilerange_unavailable)) {
       off_t in_offset = offset, out_offset = offset;
-      ssize_t bytes_copied = copy_file_range(env->lazy_fd, &in_offset, fd, &out_offset, used_size - offset, 0);
+      size_t bytes = used_size - offset;
+      ssize_t bytes_copied = -1;
+      bytes_copied = copy_file_range(env->lazy_fd, &in_offset, fd, &out_offset, bytes, 0);
       if (likely(bytes_copied > 0)) {
         offset = in_offset;
         if (flags & MDBX_CP_THROTTLE_MVCC)
@@ -616,7 +618,8 @@ __cold static int copy_asis(MDBX_env *env, MDBX_txn *txn, mdbx_filehandle_t fd, 
       if (unlikely(rc != MDBX_SUCCESS))
         break;
     }
-    rc = osal_write(fd, data_buffer, chunk);
+    /* copy_file_range() above does not move the file position, so a file is written at the offset explicitly */
+    rc = dest_is_pipe ? osal_write(fd, data_buffer, chunk) : osal_pwrite(fd, data_buffer, chunk, offset);
     offset += chunk;
   }
 
