@@ -343,8 +343,10 @@ int main(int argc, char *argv[]) {
 
   MDBX_gc_info_t info_gc;
   memset(&info_gc, 0, sizeof(info_gc)); /* zap `uninitialized` warning */
-  if (rc == MDBX_SUCCESS)
+  if (rc == MDBX_SUCCESS) {
     rc = mdbx_gc_info(txn, &info_gc, sizeof(info_gc), nullptr, nullptr);
+    rc = (rc == MDBX_NOTFOUND) ? MDBX_SUCCESS : rc;
+  }
 
   char ratio_buffer[42];
   if (rc == MDBX_SUCCESS) {
