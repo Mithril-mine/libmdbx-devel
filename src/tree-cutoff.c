@@ -350,6 +350,9 @@ bailout:
   VERBOSE(">> %s", cursor_dump_position(begin, "begin", false, false));
   VERBOSE(">> %s", cursor_dump_position(end, end_including ? "end-including" : "end-excluding", false, false));
 #endif /* NDEBUG */
+  if (unlikely(MDBX_IS_ERROR(err)))
+    /* a partial cut cannot be undone, so the transaction must not be committed */
+    mc->txn->flags |= MDBX_TXN_ERROR;
   mc->txn->cursors[cursor_dbi(mc)] = dozer.outer.next;
   if (is_inner(mc)) {
     *begin->tree = *mc->tree;
