@@ -380,6 +380,9 @@ int main(int argc, char *argv[]) {
     rc = mdbx_gc_info(txn, &info, sizeof(info), gc_list_func, nullptr);
 
     switch (rc) {
+    case MDBX_NOTFOUND /* the GC is empty, the info is filled */:
+      rc = MDBX_SUCCESS;
+      break;
     case MDBX_SUCCESS:
       break;
     case MDBX_EINTR:
