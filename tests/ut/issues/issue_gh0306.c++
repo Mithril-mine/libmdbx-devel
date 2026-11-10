@@ -10,29 +10,17 @@
 /// reached the file. After a reopen most keys were gone and the tree was
 /// broken. Now a moved dirty page keeps the txnid of a modifiable page.
 
+#include "../env-guard.h++"
 #include "mdbx.h"
 #include <gtest/gtest.h>
 
 #include <cstdio>
 #include <cstring>
 #include <string>
-#include <vector>
 
 #include "../test-env.h"
 
 namespace {
-
-struct files_remover {
-  const std::vector<std::string> paths;
-  explicit files_remover(std::initializer_list<std::string> list) : paths(list) {
-    for (const auto &path : paths)
-      std::remove(path.c_str());
-  }
-  ~files_remover() {
-    for (const auto &path : paths)
-      std::remove(path.c_str());
-  }
-};
 
 struct env_ptr {
   MDBX_env *env = nullptr;
@@ -65,12 +53,12 @@ struct txn_ptr {
 };
 
 TEST(issue_gh0306, defrag_inside_dirty_write_txn_commits_moved_pages) {
+  const std::string db = "issue0306.mdbx";
+  const env_files_guard guard({db.c_str()});
   if (MDBX_GTEST_IS_EXECUTION_TIMEOUT()) {
     GTEST_SKIP() << "SKIPPED by RUNTIME_LIMIT";
     return;
   }
-  const std::string db = "issue0306.mdbx";
-  const files_remover cleanup{db};
   env_ptr env;
   ASSERT_EQ(mdbx_env_create(&env), MDBX_SUCCESS);
   ASSERT_EQ(mdbx_env_set_geometry(env.get(), -1, INT64_C(1) << 20, INT64_C(1) << 28, INT64_C(1) << 20, -1, 4096),

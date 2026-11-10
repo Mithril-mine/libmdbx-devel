@@ -12,6 +12,7 @@
 /// The pwrite family is wrapped at link time (--wrap), so every write fails with EIO while the test
 /// flag is set. Requires the static libmdbx link, skipped for other configurations.
 
+#include "../env-guard.h++"
 #include "mdbx.h"
 #include <gtest/gtest.h>
 
@@ -19,23 +20,10 @@
 #include <cstdio>
 #include <cstring>
 #include <string>
-#include <vector>
 
 #include "../test-env.h"
 
 namespace {
-
-struct files_remover {
-  const std::vector<std::string> paths;
-  explicit files_remover(std::initializer_list<std::string> list) : paths(list) {
-    for (const auto &path : paths)
-      std::remove(path.c_str());
-  }
-  ~files_remover() {
-    for (const auto &path : paths)
-      std::remove(path.c_str());
-  }
-};
 
 struct env_ptr {
   MDBX_env *env = nullptr;
@@ -115,12 +103,12 @@ TEST(issue_gh0321, commit_reports_write_error_without_heap_corruption) {
 #if !defined(MDBX_TEST_PWRITE_WRAP)
   GTEST_SKIP() << "SKIPPED: the GNU ld --wrap feature is unavailable on this platform/linker";
 #else
+  const std::string db = "issue0321.mdbx";
+  const env_files_guard guard({db.c_str()});
   if (MDBX_GTEST_IS_EXECUTION_TIMEOUT()) {
     GTEST_SKIP() << "SKIPPED by RUNTIME_LIMIT";
     return;
   }
-  const std::string db = "issue0321.mdbx";
-  const files_remover cleanup{db};
   env_ptr env;
   ASSERT_EQ(mdbx_env_create(&env), MDBX_SUCCESS);
   ASSERT_EQ(mdbx_env_set_geometry(env.get(), -1, -1, INT64_C(1) << 30, INT64_C(1) << 24, -1, 256), MDBX_SUCCESS);
