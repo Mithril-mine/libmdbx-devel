@@ -3244,6 +3244,12 @@ LIBMDBX_INLINE_API(int, mdbx_env_close, (MDBX_env * env)) { return mdbx_env_clos
  * \note This function is not available in the Windows OS family due to the lack of process forking functionality in the
  * operating system API.
  *
+ * \note `fork()` waits (retrying) while another thread of the process opens, closes, renames or drops a table handle,
+ * resizes or pre-syncs an environment, or runs a libmdbx callback while holding a lock of one of these, so that the
+ * child does not inherit them half-done. Therefore `fork()` must not be called from any libmdbx callback (logger,
+ * panic, handle-slow-readers), and no libmdbx callback may wait for a thread that may call `fork()`: such a `fork()`
+ * keeps retrying forever.
+ *
  * Forking does not affect the state of the MDBX environment in the parent process. All transactions that were in the
  * parent process at the moment of forking will continue to be performed without interference after forking in the
  * parent process. However, in a child process, all relevant transactions are no longer valid, and an attempt to use
