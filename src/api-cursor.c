@@ -26,8 +26,49 @@ MDBX_cursor *mdbx_cursor_create(void *context) {
   return &couple->outer;
 }
 
+static int cursor_rebind(MDBX_txn *txn, MDBX_cursor *mc, MDBX_dbi dbi) {
+  if (unlikely(dbi == FREE_DBI) && ((txn->flags & txn_ro_both) == 0 || txn->parent))
+    return LOG_IFERR(MDBX_EACCESS);
+
+  int rc = dbi_check(txn, dbi);
+  if (unlikely(rc != MDBX_SUCCESS))
+    return LOG_IFERR(rc);
+
+  if (mc->signature == cur_signature_live) {
+    if (mc->txn == txn && cursor_dbi(mc) == dbi)
+      return MDBX_SUCCESS;
+    if (unlikely(mc->backup)) /* Cursor from parent transaction */
+      return LOG_IFERR(MDBX_EINVAL);
+    rc = mdbx_cursor_unbind(mc);
+    if (unlikely(rc != MDBX_SUCCESS))
+      return (rc == MDBX_BAD_TXN) ? MDBX_EINVAL : rc;
+  }
+  cASSERT0(mc, mc->next == mc);
+
+  rc = cursor_init(mc, txn, dbi);
+  if (unlikely(rc != MDBX_SUCCESS))
+    return LOG_IFERR(rc);
+
+  mc->next = txn->cursors[dbi];
+  txn->cursors[dbi] = mc;
+  txn->flags |= txn_may_have_cursors;
+  return MDBX_SUCCESS;
+}
+
 int mdbx_cursor_renew(MDBX_txn *txn, MDBX_cursor *mc) {
-  return likely(mc) ? mdbx_cursor_bind(txn, mc, (MDBX_dbi)((kvx_t *)mc->clc - txn->env->kvs)) : LOG_IFERR(MDBX_EINVAL);
+  if (unlikely(!mc))
+    return LOG_IFERR(MDBX_EINVAL);
+
+  if (unlikely(mc->signature != cur_signature_ready4dispose && mc->signature != cur_signature_live)) {
+    int rc = (mc->signature == cur_signature_wait4eot) ? MDBX_EINVAL : MDBX_EBADSIGN;
+    return LOG_IFERR(rc);
+  }
+
+  int rc = check_txn(txn, MDBX_TXN_FINISHED | MDBX_TXN_HAS_CHILD);
+  if (unlikely(rc != MDBX_SUCCESS))
+    return LOG_IFERR(rc);
+
+  return cursor_rebind(txn, mc, (MDBX_dbi)((kvx_t *)mc->clc - txn->env->kvs));
 }
 
 int mdbx_cursor_reset(MDBX_cursor *mc) {
@@ -52,32 +93,7 @@ int mdbx_cursor_bind(MDBX_txn *txn, MDBX_cursor *mc, MDBX_dbi dbi) {
   if (unlikely(rc != MDBX_SUCCESS))
     return LOG_IFERR(rc);
 
-  if (unlikely(dbi == FREE_DBI) && ((txn->flags & txn_ro_both) == 0 || txn->parent))
-    return LOG_IFERR(MDBX_EACCESS);
-
-  rc = dbi_check(txn, dbi);
-  if (unlikely(rc != MDBX_SUCCESS))
-    return LOG_IFERR(rc);
-
-  if (mc->signature == cur_signature_live) {
-    if (mc->txn == txn && cursor_dbi(mc) == dbi)
-      return MDBX_SUCCESS;
-    if (unlikely(mc->backup)) /* Cursor from parent transaction */
-      return LOG_IFERR(MDBX_EINVAL);
-    rc = mdbx_cursor_unbind(mc);
-    if (unlikely(rc != MDBX_SUCCESS))
-      return (rc == MDBX_BAD_TXN) ? MDBX_EINVAL : rc;
-  }
-  cASSERT0(mc, mc->next == mc);
-
-  rc = cursor_init(mc, txn, dbi);
-  if (unlikely(rc != MDBX_SUCCESS))
-    return LOG_IFERR(rc);
-
-  mc->next = txn->cursors[dbi];
-  txn->cursors[dbi] = mc;
-  txn->flags |= txn_may_have_cursors;
-  return MDBX_SUCCESS;
+  return cursor_rebind(txn, mc, dbi);
 }
 
 int mdbx_cursor_unbind(MDBX_cursor *mc) {
