@@ -1779,9 +1779,10 @@ typedef enum MDBX_cursor_op {
   /** Return key/data at current cursor position */
   MDBX_GET_CURRENT,
 
-  /** \ref MDBX_DUPFIXED -only: Return up to a page of duplicate data items
-   * from current cursor position. Move cursor to prepare
-   * for \ref MDBX_NEXT_MULTIPLE. \see MDBX_SEEK_AND_GET_MULTIPLE */
+  /** \ref MDBX_DUPFIXED -only: Return a batch of up to a page of duplicate
+   * data items of the current key, from the page containing the current
+   * cursor position. Move cursor to prepare for \ref MDBX_NEXT_MULTIPLE.
+   * \see MDBX_SEEK_AND_GET_MULTIPLE */
   MDBX_GET_MULTIPLE,
 
   /** Position at last key/data item */
@@ -1878,8 +1879,8 @@ typedef enum MDBX_cursor_op {
   MDBX_TO_PAIR_GREATER_OR_EQUAL /** \copydoc MDBX_TO_PAIR_LESSER_THAN */,
   MDBX_TO_PAIR_GREATER_THAN /** \copydoc MDBX_TO_PAIR_LESSER_THAN */,
 
-  /** \ref MDBX_DUPFIXED -only: Seek to given key and return up to a page of
-   * duplicate data items from current cursor position. Move cursor to prepare
+  /** \ref MDBX_DUPFIXED -only: Seek to given key and return a batch of up to
+   * a page of the duplicate data items of this key. Move cursor to prepare
    * for \ref MDBX_NEXT_MULTIPLE. \see MDBX_GET_MULTIPLE */
   MDBX_SEEK_AND_GET_MULTIPLE
 } MDBX_cursor_op;
