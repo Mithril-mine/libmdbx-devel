@@ -76,6 +76,10 @@ leave nothing behind on success either. This is enforced, not encouraged.
 
 - Never compare page-size or derived values against constants — it is
   platform-dependent (use the actual values from the environment/library).
+- A test's runtime must not grow with the page size: size bulk-data
+  scenarios in pages and let the element size (not the element count)
+  absorb the page-size difference (see `issue_gh0319.c++`), so a
+  16 KiB-page CI cell runs as fast as a 4 KiB one.
 - Build and test on **at least Linux and Windows**; on Windows mind the
   narrow-vs-wide literals (`MDBX_LOCK_SUFFIX` and friends are wide in unicode
   builds) and the absence of POSIX headers (`dirent.h` and friends must stay
