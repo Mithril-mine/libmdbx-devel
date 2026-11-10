@@ -419,7 +419,8 @@ __cold int rthc_remove(MDBX_env *const env) {
         void *tmp = rthc_table;
         rthc_table = rthc_table_static;
         rthc_limit = RTHC_INITIAL_LIMIT;
-        osal_memory_barrier();
+        /* publish the static table before giving the dynamic one away */
+        osal_fence_full();
         osal_free(tmp);
       }
       break;

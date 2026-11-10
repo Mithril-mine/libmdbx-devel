@@ -473,16 +473,6 @@
 
 //------------------------------------------------------------------------------
 
-#ifndef MDBX_CPU_WRITEBACK_INCOHERENT
-#if defined(__ia32__) || defined(__e2k__) || defined(__hppa) || defined(__hppa__) || defined(DOXYGEN)
-#define MDBX_CPU_WRITEBACK_INCOHERENT 0
-#else
-#define MDBX_CPU_WRITEBACK_INCOHERENT 1
-#endif
-#elif !(MDBX_CPU_WRITEBACK_INCOHERENT == 0 || MDBX_CPU_WRITEBACK_INCOHERENT == 1)
-#error MDBX_CPU_WRITEBACK_INCOHERENT must be defined as 0 or 1
-#endif /* MDBX_CPU_WRITEBACK_INCOHERENT */
-
 #ifndef MDBX_MMAP_INCOHERENT_FILE_WRITE
 #ifdef __OpenBSD__
 #define MDBX_MMAP_INCOHERENT_FILE_WRITE 1
