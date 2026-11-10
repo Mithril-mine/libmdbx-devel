@@ -138,6 +138,11 @@ typedef struct _FILE_PROVIDER_EXTERNAL_INFO_V1 {
 
 #else  /* Windows */
 static const char dev_null[] = "/dev/null";
+
+/* No direct I/O: osal_openfile() then skips setting it, with no conditional at the call site. */
+#ifndef O_DIRECT
+#define O_DIRECT 0
+#endif /* O_DIRECT */
 #endif /* !Windows */
 
 /*----------------------------------------------------------------------------*/
@@ -1460,9 +1465,6 @@ int osal_openfile(const enum osal_openfile_purpose purpose, const MDBX_env *env,
 
   const bool direct_nocache_for_copy = env->ps >= globals.sys_pagesize && purpose >= MDBX_OPEN_COPY_EXCL;
   if (direct_nocache_for_copy) {
-#if defined(O_DIRECT)
-    flags |= O_DIRECT;
-#endif /* O_DIRECT */
 #if defined(O_NOCACHE)
     flags |= O_NOCACHE;
 #endif /* O_NOCACHE */
@@ -1506,12 +1508,13 @@ int osal_openfile(const enum osal_openfile_purpose purpose, const MDBX_env *env,
 #endif /* STDIN_FILENO == 0 && STDERR_FILENO == 2 */
 
   *fd = open(pathname, flags, unix_mode_bits);
-#if defined(O_DIRECT)
-  if (*fd < 0 && (flags & O_DIRECT) && (errno == EINVAL || errno == EAFNOSUPPORT)) {
-    flags &= ~O_DIRECT;
-    *fd = open(pathname, flags, unix_mode_bits);
+  /* O_DIRECT is set after the open: a filesystem without direct I/O rejects it with EINVAL only after O_CREAT|O_EXCL
+   * has created the file, so a retry without it would fail with EEXIST on that empty file. */
+  if (O_DIRECT != 0 && *fd >= 0 && direct_nocache_for_copy) {
+    const int fl_flags = fcntl(*fd, F_GETFL);
+    if (fl_flags != -1)
+      (void)fcntl(*fd, F_SETFL, fl_flags | O_DIRECT) /* without direct I/O the writes go through the cache */;
   }
-#endif /* O_DIRECT */
 
   /* A file created here and then rejected below is removed here: the caller cannot tell it from a pre-existing one. */
   const bool created_exclusively = *fd >= 0 && (flags & (O_CREAT | O_EXCL)) == (O_CREAT | O_EXCL);
