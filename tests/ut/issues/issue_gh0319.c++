@@ -361,15 +361,25 @@ TEST(issue_gh0319, pp10_multiple_batch_spills) {
   ASSERT_EQ(mdbx_env_open(env, kDb, MDBX_NOSUBDIR, 0644), MDBX_SUCCESS);
 
   /* enough values to occupy several times the dirty-page limit; the
-     per-page estimate stays below the real dupfix leaf capacity */
+     per-page estimate stays below the real dupfix leaf capacity. The
+     elements are 64-byte sized to bound the number of elements (the
+     per-element overhead dominates the runtime on the slow debug cells,
+     e.g. the 16K-page ARM64 ones) regardless of the page size */
   MDBX_envinfo info;
   ASSERT_EQ(mdbx_env_info_ex(env, nullptr, &info, sizeof(info)), MDBX_SUCCESS);
   const size_t page_size = info.mi_dxb_pagesize;
-  const size_t per_page = (page_size - 512) / sizeof(uint32_t);
+  struct elem_t {
+    uint64_t id;
+    uint8_t pad[56];
+  };
+  const size_t elem_size = sizeof(elem_t);
+  const size_t per_page = (page_size - 512) / elem_size;
   const size_t count = per_page * (size_t)dp_limit * 2;
-  std::vector<uint32_t> values(count);
-  for (size_t i = 0; i < count; ++i)
-    values[i] = (uint32_t)i;
+  std::vector<elem_t> values(count);
+  for (size_t i = 0; i < count; ++i) {
+    values[i].id = (uint64_t)i;
+    memset(values[i].pad, (uint8_t)i, sizeof(values[i].pad));
+  }
 
   MDBX_txn *txn = nullptr;
   ASSERT_EQ(mdbx_txn_begin(env, nullptr, (MDBX_txn_flags_t)0, &txn), MDBX_SUCCESS);
@@ -377,7 +387,7 @@ TEST(issue_gh0319, pp10_multiple_batch_spills) {
   ASSERT_EQ(mdbx_dbi_open(txn, "fixed", MDBX_CREATE | MDBX_DUPSORT | MDBX_DUPFIXED, &dbi), MDBX_SUCCESS);
   MDBX_val key = val_of("k"), data[2];
   data[0].iov_base = values.data();
-  data[0].iov_len = sizeof(uint32_t);
+  data[0].iov_len = elem_size;
   data[1].iov_len = count;
   /* before the fix: MDBX_TXN_FULL with a partial count in data[1].iov_len */
   EXPECT_EQ(mdbx_put(txn, dbi, &key, data, MDBX_MULTIPLE), MDBX_SUCCESS);
@@ -394,7 +404,7 @@ TEST(issue_gh0319, pp10_multiple_batch_spills) {
   const size_t probes[] = {0, count / 2, count - 1};
   for (size_t i = 0; i < sizeof(probes) / sizeof(probes[0]); ++i) {
     key = val_of("k");
-    MDBX_val probe = {&values[probes[i]], sizeof(uint32_t)};
+    MDBX_val probe = {&values[probes[i]], elem_size};
     EXPECT_EQ(mdbx_cursor_get(cursor, &key, &probe, MDBX_GET_BOTH), MDBX_SUCCESS) << "probe #" << probes[i];
   }
   mdbx_cursor_close(cursor);
@@ -406,7 +416,7 @@ TEST(issue_gh0319, pp10_multiple_batch_spills) {
   ASSERT_EQ(mdbx_dbi_open(txn, "fixed", MDBX_CREATE | MDBX_DUPSORT | MDBX_DUPFIXED, &dbi), MDBX_SUCCESS);
   key = val_of("s");
   for (size_t i = 0; i < count / 2; ++i) {
-    MDBX_val item = {&values[i], sizeof(uint32_t)};
+    MDBX_val item = {&values[i], elem_size};
     ASSERT_EQ(mdbx_put(txn, dbi, &key, &item, MDBX_UPSERT), MDBX_SUCCESS) << "single put #" << i;
   }
   ASSERT_EQ(mdbx_txn_commit(txn), MDBX_SUCCESS);
