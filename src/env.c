@@ -175,7 +175,7 @@ retry:;
     DEBUG("meta-head %" PRIaPGNO ", %s, sync_pending %" PRIu64, payload2page(head.ptr_c)->pgno,
           durable_caption(head.ptr_c), unsynced_pages);
     meta_t meta = *head.ptr_c;
-    osal_memory_barrier();
+    osal_fence_consumer();
     if (unlikely(memcmp(&meta, head.ptr_c, sizeof(meta)))) {
       ERROR("The metapage #%u is volatile and changes unexpectedly", troika.recent);
       rc = MDBX_PROBLEM;
