@@ -40,6 +40,7 @@ A hardening and refinement release: data-safety and corruption-resistance fixes 
 ### Fixed:
 
  - Data safety and durability:
+    - Fixed a failed flush in the pre-sync and meta-sync paths leaving the environment usable ([#322](https://github.com/Mithril-mine/libmdbx-devel/issues/322)).
     - Fixed failed disk writes silently passing as success, and a Windows crash on a large durable commit ([#47](https://github.com/Mithril-mine/libmdbx-devel/issues/47)).
     - Fixed silently ignored auxiliary page-write errors that masked a failing disk ([#203](https://github.com/Mithril-mine/libmdbx-devel/issues/203)).
     - Fixed a forged snapshot-age hint letting the writer reuse pages still read by live transactions ([#81](https://github.com/Mithril-mine/libmdbx-devel/issues/81)).
