@@ -175,7 +175,15 @@ TEST(issue_gh0074, cyclic_branch_rejected_on_drop) {
   ASSERT_EQ(MDBX_SUCCESS, mdbx_txn_begin(env, nullptr, MDBX_TXN_READWRITE, &txn));
   MDBX_dbi dbi = 0;
   ASSERT_EQ(MDBX_SUCCESS, mdbx_dbi_open(txn, nullptr, MDBX_db_flags_t(0), &dbi));
-  EXPECT_EQ(MDBX_CORRUPTED, mdbx_drop(txn, dbi, false))
+  /* #311: mdbx_drop() refuses MAIN that contains named tables before any
+   * mutation, so a crafted cyclic tree may be rejected either as corrupted
+   * (the purge's walk) or as incompatible (the named-tables probe) —
+   * both mean "rejected". */
+  /* #311: mdbx_drop() refuses MAIN that contains named tables before any
+   * mutation; a crafted cyclic tree trips the cursor stack limit either in
+   * the named-tables probe or in the purge walk — both mean "rejected". */
+  const int drop_rc = mdbx_drop(txn, dbi, false);
+  EXPECT_TRUE(drop_rc == MDBX_CURSOR_FULL || drop_rc == MDBX_CORRUPTED || drop_rc == MDBX_INCOMPATIBLE)
       << "dropping a table with a cyclic branch page must be rejected, not crash";
   mdbx_txn_abort(txn);
   mdbx_env_close(env);

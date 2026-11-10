@@ -1,2 +1,1 @@
-   open-MADV_DONTNEED 16..16384
-   readahead ON 0..10
+mdbx_load: at input line 6: mdbx_drop() error -30784, MDBX_INCOMPATIBLE: Environment or database is not compatible with the requested operation or the specified flags
