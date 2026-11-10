@@ -71,12 +71,12 @@ struct files_remover {
   const std::vector<std::string> paths;
   files_remover(std::initializer_list<std::string> list) : paths(list) {
     for (const auto &path : paths)
-      for (const char *suffix : {"", "-lock"})
+      for (const char *suffix : {"", "-lck"})
         remove((path + suffix).c_str());
   }
   ~files_remover() {
     for (const auto &path : paths)
-      for (const char *suffix : {"", "-lock"})
+      for (const char *suffix : {"", "-lck"})
         remove((path + suffix).c_str());
   }
 };
@@ -201,6 +201,123 @@ TEST(issue_gh0307, rename_commit_is_unchanged) {
   MDBX_val k = {const_cast<void *>(static_cast<const void *>("k00000001")), 9}, v;
   ASSERT_EQ(mdbx_get(rd.get(), d2, &k, &v), MDBX_SUCCESS);
   ASSERT_EQ(mdbx_dbi_open(rd.get(), "t", MDBX_DB_ACCEDE, &d2), MDBX_NOTFOUND);
+}
+
+/* Checks the "present"/"absent" naming from a fresh read-only transaction:
+ * the expected-present name must resolve to the table with its first row
+ * readable, the expected-absent one must not open. */
+void verify_two_names(const std::string &db, const char *present, const char *absent) {
+  env_ptr env;
+  ASSERT_EQ(mdbx_env_create(&env), MDBX_SUCCESS);
+  ASSERT_EQ(mdbx_env_set_maxdbs(env.get(), 4), MDBX_SUCCESS);
+  ASSERT_EQ(mdbx_env_open(env.get(), db.c_str(), MDBX_NOSUBDIR, 0644), MDBX_SUCCESS);
+  txn_ptr txn;
+  ASSERT_EQ(mdbx_txn_begin(env.get(), nullptr, MDBX_TXN_RDONLY, &txn), MDBX_SUCCESS);
+  MDBX_dbi d = 0;
+  ASSERT_EQ(mdbx_dbi_open(txn.get(), present, MDBX_DB_ACCEDE, &d), MDBX_SUCCESS);
+  MDBX_val k = {const_cast<void *>(static_cast<const void *>("k00000001")), 9}, v;
+  ASSERT_EQ(mdbx_get(txn.get(), d, &k, &v), MDBX_SUCCESS);
+  ASSERT_EQ(mdbx_dbi_open(txn.get(), absent, MDBX_DB_ACCEDE, &d), MDBX_NOTFOUND)
+      << "the absent name must not resolve after the aborted renames";
+}
+
+TEST(issue_gh0307, top_level_double_rename_abort) {
+  if (MDBX_GTEST_IS_EXECUTION_TIMEOUT()) {
+    GTEST_SKIP() << "SKIPPED by RUNTIME_LIMIT";
+    return;
+  }
+  const std::string db = "issue0307-d.mdbx";
+  const files_remover cleanup{db};
+  env_ptr env;
+  ASSERT_EQ(mdbx_env_create(&env), MDBX_SUCCESS);
+  ASSERT_EQ(mdbx_env_set_maxdbs(env.get(), 4), MDBX_SUCCESS);
+  ASSERT_EQ(mdbx_env_open(env.get(), db.c_str(), MDBX_NOSUBDIR, 0644), MDBX_SUCCESS);
+  MDBX_dbi dbi = 0;
+  fill_and_commit(env.get(), dbi);
+
+  /* two renames of the same slot in one transaction, then abort: the undo
+   * chain must unwind in reverse chronological order, leaving the original
+   * name with its data and neither interim name behind */
+  txn_ptr txn;
+  ASSERT_EQ(mdbx_txn_begin(env.get(), nullptr, MDBX_TXN_READWRITE, &txn), MDBX_SUCCESS);
+  ASSERT_EQ(mdbx_dbi_rename(txn.get(), dbi, "u"), MDBX_SUCCESS);
+  ASSERT_EQ(mdbx_dbi_rename(txn.get(), dbi, "v"), MDBX_SUCCESS);
+  ASSERT_EQ(mdbx_txn_abort(txn.release()), MDBX_SUCCESS);
+  env.close();
+  verify_two_names(db, "t", "u");
+  verify_two_names(db, "t", "v");
+}
+
+TEST(issue_gh0307, nested_rename_commit_parent_abort) {
+  if (MDBX_GTEST_IS_EXECUTION_TIMEOUT()) {
+    GTEST_SKIP() << "SKIPPED by RUNTIME_LIMIT";
+    return;
+  }
+  const std::string db = "issue0307-e.mdbx";
+  const files_remover cleanup{db};
+  env_ptr env;
+  ASSERT_EQ(mdbx_env_create(&env), MDBX_SUCCESS);
+  ASSERT_EQ(mdbx_env_set_maxdbs(env.get(), 4), MDBX_SUCCESS);
+  ASSERT_EQ(mdbx_env_open(env.get(), db.c_str(), MDBX_NOSUBDIR, 0644), MDBX_SUCCESS);
+  MDBX_dbi dbi = 0;
+  fill_and_commit(env.get(), dbi);
+
+  /* the nested transaction renames and commits, transferring the undo to
+   * the parent; the parent then aborts — the whole timeline rolls back,
+   * so the old name must survive */
+  txn_ptr parent;
+  ASSERT_EQ(mdbx_txn_begin(env.get(), nullptr, MDBX_TXN_READWRITE, &parent), MDBX_SUCCESS);
+  ASSERT_EQ(mdbx_dbi_open(parent.get(), "t", MDBX_DB_ACCEDE, &dbi), MDBX_SUCCESS);
+  txn_ptr child;
+  ASSERT_EQ(mdbx_txn_begin(env.get(), parent.get(), MDBX_TXN_READWRITE, &child), MDBX_SUCCESS);
+  ASSERT_EQ(mdbx_dbi_rename(child.get(), dbi, "u"), MDBX_SUCCESS);
+  ASSERT_EQ(mdbx_txn_commit(child.release()), MDBX_SUCCESS);
+  ASSERT_EQ(mdbx_txn_abort(parent.release()), MDBX_SUCCESS);
+  env.close();
+  verify_two_names(db, "t", "u");
+}
+
+TEST(issue_gh0307, create_rename_abort_recreate) {
+  if (MDBX_GTEST_IS_EXECUTION_TIMEOUT()) {
+    GTEST_SKIP() << "SKIPPED by RUNTIME_LIMIT";
+    return;
+  }
+  const std::string db = "issue0307-f.mdbx";
+  const files_remover cleanup{db};
+  env_ptr env;
+  ASSERT_EQ(mdbx_env_create(&env), MDBX_SUCCESS);
+  ASSERT_EQ(mdbx_env_set_maxdbs(env.get(), 4), MDBX_SUCCESS);
+  ASSERT_EQ(mdbx_env_open(env.get(), db.c_str(), MDBX_NOSUBDIR, 0644), MDBX_SUCCESS);
+
+  /* a table created and renamed in one aborted transaction: the slot is
+   * slain on abort, the rename undo must not break the later re-create of
+   * the original name */
+  txn_ptr txn;
+  ASSERT_EQ(mdbx_txn_begin(env.get(), nullptr, MDBX_TXN_READWRITE, &txn), MDBX_SUCCESS);
+  MDBX_dbi dbi = 0;
+  ASSERT_EQ(mdbx_dbi_open(txn.get(), "s", MDBX_CREATE, &dbi), MDBX_SUCCESS);
+  must_put(txn.get(), dbi, "row", "1");
+  ASSERT_EQ(mdbx_dbi_rename(txn.get(), dbi, "s2"), MDBX_SUCCESS);
+  ASSERT_EQ(mdbx_txn_abort(txn.release()), MDBX_SUCCESS);
+
+  ASSERT_EQ(mdbx_txn_begin(env.get(), nullptr, MDBX_TXN_READWRITE, &txn), MDBX_SUCCESS);
+  ASSERT_EQ(mdbx_dbi_open(txn.get(), "s", MDBX_CREATE, &dbi), MDBX_SUCCESS);
+  must_put(txn.get(), dbi, "row", "2");
+  ASSERT_EQ(mdbx_txn_commit(txn.release()), MDBX_SUCCESS);
+  env.close(); /* the second env cannot share the NOSUBDIR lock */
+
+  env_ptr env2;
+  ASSERT_EQ(mdbx_env_create(&env2), MDBX_SUCCESS);
+  ASSERT_EQ(mdbx_env_set_maxdbs(env2.get(), 4), MDBX_SUCCESS);
+  ASSERT_EQ(mdbx_env_open(env2.get(), db.c_str(), MDBX_NOSUBDIR, 0644), MDBX_SUCCESS);
+  ASSERT_EQ(mdbx_txn_begin(env2.get(), nullptr, MDBX_TXN_READWRITE, &txn), MDBX_SUCCESS);
+  ASSERT_EQ(mdbx_dbi_open(txn.get(), "s", MDBX_DB_ACCEDE, &dbi), MDBX_SUCCESS);
+  MDBX_val k = {const_cast<void *>(static_cast<const void *>("row")), 3}, v;
+  ASSERT_EQ(mdbx_get(txn.get(), dbi, &k, &v), MDBX_SUCCESS);
+  EXPECT_EQ(v.iov_len, strlen("2"));
+  must_put(txn.get(), dbi, "row", "3");
+  ASSERT_EQ(mdbx_dbi_open(txn.get(), "s2", MDBX_DB_ACCEDE, &dbi), MDBX_NOTFOUND);
+  ASSERT_EQ(mdbx_txn_commit(txn.release()), MDBX_SUCCESS);
 }
 
 } // namespace

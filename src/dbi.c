@@ -187,7 +187,10 @@ void dbi_rename_undo_apply(MDBX_txn *txn) {
   while (undo) {
     dbi_rename_undo_t *next = undo->next;
     if (likely(undo->dbi < env->n_dbi)) {
-      /* переименованное имя не дожило до commit и не покидало транзакцию */
+      /* переименованное имя не дожило до commit и не покидало транзакцию.
+       * Слот мог быть уже slain dbi_update() (таблица создана и переименована
+       * в одной abort-транзакции) — установка старого имени в slain-слот
+       * намеренна, освобождение нулевого текущего буфера безвредно. */
       osal_free(env->kvs[undo->dbi].name.iov_base);
       env->kvs[undo->dbi].name.iov_base = undo->name_item;
       env->kvs[undo->dbi].name.iov_len = undo->name_len;
@@ -209,10 +212,28 @@ void dbi_rename_undo_release(MDBX_env *env, dbi_rename_undo_t *chain) {
     osal_free(undo);
   }
   if (names) {
-    /* dbi_defer_release() takes and releases env->dbi_lock itself */
+    /* dbi_defer_release() only RELEASES env->dbi_lock: the caller must hold
+     * it, so it is acquired above and freed by the deferred call */
     ENSURE_OBJ(env, osal_fastmutex_acquire(&env->dbi_lock) == MDBX_SUCCESS);
     dbi_defer_release(env, names);
   }
+}
+
+defer_free_item_t *dbi_rename_undo_attach(MDBX_txn *txn, MDBX_dbi dbi, defer_free_item_t *name_item, size_t name_len) {
+  dbi_rename_undo_t *undo = osal_malloc(sizeof(dbi_rename_undo_t));
+  if (likely(undo)) {
+    undo->next = (dbi_rename_undo_t *)txn->dbi_rename_undo;
+    undo->name_item = name_item;
+    undo->name_len = name_len;
+    undo->dbi = (unsigned)dbi;
+    txn->dbi_rename_undo = undo;
+    /* Гарантирует вызов dbi_update() при завершении транзакции, а в нём —
+     * обработку undo (issue #307). */
+    txn->flags |= MDBX_TXN_DIRTY;
+    return nullptr;
+  }
+  /* out-of-memory: буфер возвращается вызывающему для обычного освобождения */
+  return name_item;
 }
 
 void dbi_rename_undo_transfer(MDBX_txn *parent, MDBX_txn *nested) {
@@ -279,6 +300,18 @@ int dbi_update(MDBX_txn *txn, bool commit) {
     }
     env->n_dbi = (unsigned)i;
     dbi_defer_release(env, defer_chain);
+  }
+
+  /* Отложенный undo переименований таблиц (issue #307): при commit
+   * обязательства сняты — буферы старых имён уходят в deferred-free;
+   * при abort — имена восстанавливаются в kvs. Выполняется после
+   * освобождения dbi_lock выше. */
+  if (txn->dbi_rename_undo) {
+    if (commit)
+      dbi_rename_undo_release(env, (dbi_rename_undo_t *)txn->dbi_rename_undo);
+    else
+      dbi_rename_undo_apply(txn);
+    txn->dbi_rename_undo = nullptr;
   }
   return MDBX_SUCCESS;
 }

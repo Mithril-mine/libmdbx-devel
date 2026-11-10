@@ -133,17 +133,8 @@ __cold int mdbx_dbi_rename2(MDBX_txn *txn, MDBX_dbi dbi, const MDBX_val *new_nam
     if (pair.defer) {
       /* старое имя остаётся живым и восстанавливается при abort транзакции
        * (issue #307): прикрепляем undo вместо освобождения буфера */
-      if (likely(pair.err == MDBX_SUCCESS)) {
-        dbi_rename_undo_t *undo = osal_malloc(sizeof(dbi_rename_undo_t));
-        if (likely(undo)) {
-          undo->next = (dbi_rename_undo_t *)txn->dbi_rename_undo;
-          undo->name_item = pair.defer;
-          undo->name_len = pair.old_len;
-          undo->dbi = dbi;
-          txn->dbi_rename_undo = undo;
-          pair.defer = nullptr;
-        }
-      }
+      if (likely(pair.err == MDBX_SUCCESS))
+        pair.defer = dbi_rename_undo_attach(txn, dbi, pair.defer, pair.old_len);
       if (pair.defer) {
         /* undo не создан (out-of-memory): имя будет потеряно на abort, как
          * и прежде, но буфер освободим корректно. dbi_defer_release()

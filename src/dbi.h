@@ -131,6 +131,11 @@ typedef struct dbi_rename_undo {
 
 MDBX_INTERNAL struct dbi_rename_result dbi_rename_locked(MDBX_txn *txn, MDBX_dbi dbi, MDBX_val new_name);
 
+/* Прикрепляет узел undo переименования к транзакции. Возвращает name_item
+ * обратно вызывающему, если узел создать не удалось (out-of-memory). */
+MDBX_INTERNAL defer_free_item_t *dbi_rename_undo_attach(MDBX_txn *txn, MDBX_dbi dbi, defer_free_item_t *name_item,
+                                                        size_t name_len);
+
 MDBX_INTERNAL void dbi_rename_undo_apply(MDBX_txn *txn);
 MDBX_INTERNAL void dbi_rename_undo_release(MDBX_env *env, dbi_rename_undo_t *chain);
 MDBX_INTERNAL void dbi_rename_undo_transfer(MDBX_txn *parent, MDBX_txn *nested);

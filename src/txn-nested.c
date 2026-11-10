@@ -482,6 +482,10 @@ static int nested_undo(MDBX_txn *nested) {
 
   nested->flags = MDBX_TXN_FINISHED;
   MDBX_env *const env = nested->env;
+  /* откат имён переименований этой вложенной транзакции: все пути здесь
+     терминальны (abort/rollback/неудавшийся commit), поэтому применяем
+     прямо здесь — единообразно для всех вызывающих */
+  dbi_rename_undo_apply(nested);
   if (unlikely(parent->geo.upper != nested->geo.upper || parent->geo.now != nested->geo.now) &&
       !(parent->flags & MDBX_TXN_ERROR) && !(env->flags & ENV_FATAL_ERROR)) {
     /* undo resize performed by nested txn */
@@ -538,7 +542,6 @@ int txn_nested_abort(MDBX_txn *nested) {
   tASSERT1(nested, memcmp(&nested->wr.troika, &nested->parent->wr.troika, sizeof(troika_t)) == 0);
 
   int rc = nested_undo(nested);
-  dbi_rename_undo_apply(nested);
   nested_free(nested);
   return rc;
 }
@@ -654,19 +657,16 @@ static int nested_join(MDBX_txn *nested, struct commit_timestamp *ts) {
 
   nested->flags = MDBX_TXN_FINISHED;
   tASSERT2(parent, audit_ex(parent, 0, false) == 0);
+  /* имена переименований применены этим commit'ом: обязательства их отката
+   * переходят к родителю вместе с изменениями вложенной транзакции */
+  dbi_rename_undo_transfer(nested->parent, nested);
   return MDBX_SUCCESS;
 }
 
 int txn_nested_commit(MDBX_txn *nested, struct commit_timestamp *ts) {
   int rc = nested_join(nested, ts);
-  if (likely(rc == MDBX_SUCCESS)) {
-    /* имена переименований применены этим commit'ом, обязательства их отката
-       переходят к родителю вместе с изменениями */
-    dbi_rename_undo_transfer(nested->parent, nested);
-  } else {
-    dbi_rename_undo_apply(nested);
+  if (unlikely(rc != MDBX_SUCCESS))
     nested_undo(nested);
-  }
   nested_free(nested);
   return rc;
 }
@@ -726,7 +726,6 @@ int txn_nested_rollback(MDBX_txn *nested) {
   const unsigned flags =
       nested->flags & (txn_rw_begin_flags | MDBX_NOSTICKYTHREADS | MDBX_WRITEMAP | MDBX_TXN_RDONLY | txn_ro_nested);
   int rc = nested_undo(nested);
-  dbi_rename_undo_apply(nested);
   if (likely(rc == MDBX_SUCCESS)) {
     /* release what the previous nested_start() allocated, as nested_free() does, but keep the handle */
     rkl_clear_and_shrink(&nested->wr.gc.reclaimed);
