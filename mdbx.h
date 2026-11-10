@@ -1740,8 +1740,11 @@ typedef enum MDBX_copy_flags {
    * \see mdbx_txn_copy2fd() \see mdbx_txn_copy2pathname() */
   MDBX_CP_DISPOSE_TXN = 16u,
 
-  /** Enable renew/restart read transaction in case it use outdated
-   * MVCC snapshot, otherwise the \ref MDBX_MVCC_RETARDED will be returned
+  /** Restart the read transaction of a copy with \ref MDBX_CP_THROTTLE_MVCC
+   * if it was ousted while parked before any data is copied; the copy then
+   * reflects the recent MVCC snapshot, and a caller's transaction is moved
+   * to it as by \ref mdbx_txn_renew(). Without this flag, or when the
+   * transaction is ousted later, \ref MDBX_OUSTED is returned.
    * \see mdbx_txn_copy2fd() \see mdbx_txn_copy2pathname() */
   MDBX_CP_RENEW_TXN = 32u,
 
@@ -2732,6 +2735,8 @@ LIBMDBX_API int mdbx_env_deleteW(const wchar_t *pathname, MDBX_env_delete_mode_t
  *      allows copy the database without interfering with write
  *      transactions and a threat of database overflow, but at the cost
  *      that copying will be aborted to prevent such conditions.
+ *      \ref mdbx_env_copy() always applies \ref MDBX_CP_RENEW_TXN, so its
+ *      transaction ousted before any data is copied is restarted instead.
  *      \see mdbx_txn_park()
  *
  * \returns A non-zero error value on failure and 0 on success. */
@@ -2786,6 +2791,8 @@ LIBMDBX_API int mdbx_env_copy(MDBX_env *env, const char *dest, MDBX_copy_flags_t
  *      allows copy the database without interfering with write
  *      transactions and a threat of database overflow, but at the cost
  *      that copying will be aborted to prevent such conditions.
+ *      With \ref MDBX_CP_RENEW_TXN a transaction ousted before any data is
+ *      copied is restarted instead, and the recent MVCC snapshot is copied.
  *      \see mdbx_txn_park()
  *
  * \returns A non-zero error value on failure and 0 on success. */
