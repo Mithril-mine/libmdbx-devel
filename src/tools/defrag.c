@@ -119,24 +119,32 @@ static void defrag_report_progress(const MDBX_defrag_result_t *progress, unsigne
   }
 }
 
-static const char *stop_reason(const MDBX_defrag_result_t *progress) {
-  if (progress->stopping_reasons & MDBX_defrag_error)
-    return "error";
-  if (progress->stopping_reasons & MDBX_defrag_aborted)
-    return "aborted by user";
-  if (progress->stopping_reasons & MDBX_defrag_discontinued)
-    return "discontinued by user";
-  if (progress->stopping_reasons & MDBX_defrag_enough_threshold)
-    return "enough threshold";
-  if (progress->stopping_reasons & MDBX_defrag_time_limit)
-    return "time limit reached";
-  if (progress->stopping_reasons & MDBX_defrag_laggard_reader)
-    return "laggard reader";
-  if (progress->stopping_reasons & MDBX_defrag_large_chunk)
-    return "large chunk";
-  if (progress->stopping_reasons & MDBX_defrag_step_size)
-    return "step size";
-  return "done";
+static const char *stop_reasons_list(const MDBX_defrag_result_t *progress, char *buf, size_t size) {
+  static const struct {
+    unsigned bit;
+    const char *name;
+  } reasons[] = {
+      {MDBX_defrag_error, "error"},
+      {MDBX_defrag_aborted, "aborted by user"},
+      {MDBX_defrag_discontinued, "discontinued by user"},
+      {MDBX_defrag_enough_threshold, "enough threshold"},
+      {MDBX_defrag_time_limit, "time limit reached"},
+      {MDBX_defrag_laggard_reader, "laggard reader"},
+      {MDBX_defrag_large_chunk, "large chunk"},
+      {MDBX_defrag_step_size, "step size"},
+  };
+  size_t off = 0;
+  for (unsigned i = 0; i < ARRAY_LENGTH(reasons); ++i) {
+    if (progress->stopping_reasons & reasons[i].bit) {
+      const int written = snprintf(buf + off, size - off, "%s%s", off ? ", " : "", reasons[i].name);
+      if (written < 0 || (size_t)written >= size - off)
+        break;
+      off += (size_t)written;
+    }
+  }
+  if (!off)
+    snprintf(buf, size, "done");
+  return buf;
 }
 
 static int defrag_notify(void *ctx, const MDBX_defrag_result_t *progress) {
@@ -147,11 +155,12 @@ static int defrag_notify(void *ctx, const MDBX_defrag_result_t *progress) {
     bool tick = progress->spent_time_dot16 - last_report_spenttime > 65536 / 8;
     if (!ctx || last_progress.cycles != progress->cycles) {
       if (progress_dots) {
+        char reasons[128];
         if (last_progress.cycles == progress->cycles)
           last_progress.stopping_reasons = progress->stopping_reasons;
         defrag_report_progress(&last_progress, progress_dots);
         progress_dots = 0;
-        printf(" %s%s\n", stop_reason(&last_progress), is_console ? "\033[K" : "");
+        printf(" %s%s\n", stop_reasons_list(&last_progress, reasons, sizeof(reasons)), is_console ? "\033[K" : "");
         fflush(nullptr);
       }
       tick = true;
@@ -391,14 +400,19 @@ int main(int argc, char *argv[]) {
 
     if (!MDBX_IS_ERROR(rc)) {
       if (!quiet) {
+        char reasons[128];
+        if (result.stopping_reasons & MDBX_defrag_large_chunk) {
+          printf(" = large chunk: the remaining fragmentation is caused by large/overflow pages.\n");
+          printf("   use mdbx_copy -c for a complete compaction.\n");
+        }
         printf("Defragmentation%s: shrink %zi pages, %u passes, moved %zu pages",
                (rc == MDBX_SUCCESS) ? " done" : " incomplete", result.pages_shrinked, result.cycles,
                result.pages_moved);
         if (result.stopping_reasons)
-          printf(", stopping reasons bits 0x%x", result.stopping_reasons);
-        printf(", took %s seconds, %s\n",
-               mdbx_ratio2digits(result.spent_time_dot16, 65536, 3, ratio_buffer, sizeof(ratio_buffer)),
-               stop_reason(&result));
+          printf(", stopping reasons: %s (0x%x)", stop_reasons_list(&result, reasons, sizeof(reasons)),
+                 result.stopping_reasons);
+        printf(", took %s seconds.\n",
+               mdbx_ratio2digits(result.spent_time_dot16, 65536, 3, ratio_buffer, sizeof(ratio_buffer)));
       }
       rc = MDBX_SUCCESS;
     }
