@@ -195,6 +195,32 @@ bailout:
   return rc;
 }
 
+/* Ранее упущенный не очевидный момент: При работе БД в режимах
+ * не-синхронной/отложенной фиксации на диске, все процессы-писатели должны
+ * иметь одинаковый режим MDBX_WRITEMAP.
+ *
+ * В противном случае, сброс на диск следует выполнять дважды: сначала
+ * msync(), затем fdatasync(). При этом msync() не обязан отрабатывать
+ * в процессах без MDBX_WRITEMAP, так как файл в память отображен только
+ * для чтения. Поэтому, в общем случае, различия по MDBX_WRITEMAP не
+ * позволяют выполнить фиксацию данных на диск, после их изменения в другом
+ * процессе.
+ *
+ * В режиме MDBX_UTTERLY_NOSYNC позволять совместную работу с MDBX_WRITEMAP
+ * также не следует, поскольку никакой процесс (в том числе последний) не
+ * может гарантированно сбросить данные на диск, а следовательно не должен
+ * помечать какую-либо транзакцию как steady.
+ *
+ * В результате, требуется либо запретить совместную работу процессам с
+ * разным MDBX_WRITEMAP в режиме отложенной записи, либо отслеживать такое
+ * смешивание и блокировать steady-пометки - что контрпродуктивно. */
+__cold MDBX_env_flags_t env_rigorous_envmode_diff(const MDBX_env_flags_t snap_flags, const MDBX_env_flags_t flags) {
+  const MDBX_env_flags_t rigorous_flags = (snap_flags & ENV_LAZY_MODE_FLAGS)
+                                              ? MDBX_SAFE_NOSYNC | MDBX_UTTERLY_NOSYNC | MDBX_WRITEMAP
+                                              : MDBX_SAFE_NOSYNC | MDBX_UTTERLY_NOSYNC;
+  return (snap_flags ^ flags) & rigorous_flags;
+}
+
 __cold int env_open(MDBX_env *env, mdbx_mode_t mode) {
   /* Использование O_DSYNC или FILE_FLAG_WRITE_THROUGH:
    *
@@ -408,8 +434,8 @@ __cold int env_open(MDBX_env *env, mdbx_mode_t mode) {
     }
   }
 
-  const MDBX_env_flags_t lazy_flags = MDBX_SAFE_NOSYNC | MDBX_UTTERLY_NOSYNC | MDBX_NOMETASYNC;
-  const MDBX_env_flags_t mode_flags = lazy_flags | MDBX_LIFORECLAIM | MDBX_NORDAHEAD | MDBX_RDONLY | MDBX_WRITEMAP;
+  const MDBX_env_flags_t lazy_flags = (MDBX_env_flags_t)ENV_LAZY_MODE_FLAGS;
+  const MDBX_env_flags_t mode_flags = (MDBX_env_flags_t)ENV_MODE_FLAGS;
 
   lck_t *const lck = env->lck_mmap.lck;
   if (lck && lck_rc != MDBX_RESULT_TRUE && (env->flags & MDBX_RDONLY) == 0) {
@@ -440,33 +466,10 @@ __cold int env_open(MDBX_env *env, mdbx_mode_t mode) {
       NOTICE("accede mode-flags: 0x%X, 0x%X -> 0x%X", diff, env->flags ^ diff, env->flags);
     }
 
-    /* Ранее упущенный не очевидный момент: При работе БД в режимах
-     * не-синхронной/отложенной фиксации на диске, все процессы-писатели должны
-     * иметь одинаковый режим MDBX_WRITEMAP.
-     *
-     * В противном случае, сброс на диск следует выполнять дважды: сначала
-     * msync(), затем fdatasync(). При этом msync() не обязан отрабатывать
-     * в процессах без MDBX_WRITEMAP, так как файл в память отображен только
-     * для чтения. Поэтому, в общем случае, различия по MDBX_WRITEMAP не
-     * позволяют выполнить фиксацию данных на диск, после их изменения в другом
-     * процессе.
-     *
-     * В режиме MDBX_UTTERLY_NOSYNC позволять совместную работу с MDBX_WRITEMAP
-     * также не следует, поскольку никакой процесс (в том числе последний) не
-     * может гарантированно сбросить данные на диск, а следовательно не должен
-     * помечать какую-либо транзакцию как steady.
-     *
-     * В результате, требуется либо запретить совместную работу процессам с
-     * разным MDBX_WRITEMAP в режиме отложенной записи, либо отслеживать такое
-     * смешивание и блокировать steady-пометки - что контрпродуктивно. */
-    const MDBX_env_flags_t rigorous_flags = (snap_flags & lazy_flags)
-                                                ? MDBX_SAFE_NOSYNC | MDBX_UTTERLY_NOSYNC | MDBX_WRITEMAP
-                                                : MDBX_SAFE_NOSYNC | MDBX_UTTERLY_NOSYNC;
-    const MDBX_env_flags_t rigorous_diff = (snap_flags ^ env->flags) & rigorous_flags;
-    if (rigorous_diff) {
-      ERROR("current mode/flags 0x%X incompatible with requested 0x%X, "
-            "rigorous diff 0x%X",
-            env->flags, snap_flags, rigorous_diff);
+    const MDBX_env_flags_t rigorous_diff = env_rigorous_envmode_diff(snap_flags, env->flags);
+    if (unlikely(rigorous_diff)) {
+      ERROR("current mode/flags 0x%X incompatible with requested 0x%X, rigorous diff 0x%X", env->flags, snap_flags,
+            rigorous_diff);
       return MDBX_INCOMPATIBLE;
     }
   }

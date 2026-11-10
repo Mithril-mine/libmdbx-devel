@@ -115,6 +115,8 @@ MDBX_INTERNAL int txn_ro_reset(MDBX_txn *txn);
 MDBX_INTERNAL void txn_ro_free(MDBX_txn *txn);
 
 MDBX_INTERNAL int env_open(MDBX_env *env, mdbx_mode_t mode);
+MDBX_INTERNAL MDBX_env_flags_t env_rigorous_envmode_diff(const MDBX_env_flags_t snap_flags,
+                                                         const MDBX_env_flags_t flags);
 MDBX_INTERNAL int env_info(const MDBX_env *env, const MDBX_txn *txn, MDBX_envinfo *out, troika_t *troika);
 MDBX_INTERNAL int env_sync(MDBX_env *env, bool force, bool nonblock);
 MDBX_INTERNAL int env_close(MDBX_env *env, bool resurrect_after_fork);
