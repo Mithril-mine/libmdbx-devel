@@ -110,6 +110,9 @@ MDBX_INTERNAL int dbi_defer_release(MDBX_env *const env, defer_free_item_t *cons
 MDBX_INTERNAL int dbi_close_release(MDBX_env *env, MDBX_dbi dbi);
 MDBX_INTERNAL const tree_t *dbi_dig(const MDBX_txn *txn, const size_t dbi, tree_t *fallback);
 
+/* mdbx_enumerate_tables() without the argument checks; `dbi_locked` tells that the caller holds env->dbi_lock */
+MDBX_INTERNAL int dbi_enumerate(const MDBX_txn *txn, MDBX_table_enum_func func, void *ctx, bool dbi_locked);
+
 struct dbi_rename_result {
   defer_free_item_t *defer;
   int err;
