@@ -42,12 +42,12 @@ CMAKE_CONFIGURE = [
 ]
 
 
-def _sh(cmd, step, dry_run=False):
+def _sh(cmd, step, dry_run=False, cwd=REPO_ROOT):
     if dry_run:
         print("  [dry-run] %s" % " ".join(str(c) for c in cmd))
         return 0
     print("  → %s" % " ".join(str(c) for c in cmd))
-    r = subprocess.run(cmd, cwd=REPO_ROOT)
+    r = subprocess.run(cmd, cwd=cwd)
     if r.returncode != 0:
         sys.stderr.write("scan_all: step '%s' failed (exit %d)\n" % (step, r.returncode))
         raise SystemExit(r.returncode)
@@ -215,9 +215,19 @@ def main(argv=None):
     # load into DB
     if not args.skip_load and os.path.exists(merged):
         if not args.skip_backup and not args.dry_run:
-            # pin-точка перед перезаписью структурного слоя: контрактный бэкап
+            # pin-точка перед перезаписью структурного слоя: контрактный бэкап.
+            # cwd = MODULE_DIR: пакет mcp живёт в skynet/MCP-shared-graph-memory/mcp/,
+            # и "-m mcp.cli" резолвится только при запуске из этого каталога
+            # (issue gh0372: cwd=REPO_ROOT не попадает в sys.path).
+            # Библиотека для mcp.cli гарантируется штатным build_libmdbx.py
+            # (кладёт её в mcp/_lib/, откуда её находит порядок поиска mcp),
+            # если ни MDBX_SO_PATH, ни пакетная сборка ещё не заданы.
+            pkg_lib = os.path.join(MODULE_DIR, "mcp", "_lib", "libmdbx.so")
+            if not os.environ.get("MDBX_SO_PATH") and not os.path.isfile(pkg_lib):
+                _sh([sys.executable, _tool("build_libmdbx.py"), "--src", REPO_ROOT],
+                    "backup-pin-lib", args.dry_run)
             _sh([sys.executable, "-m", "mcp.cli", "--path", args.db, "backup"],
-                "backup-pin", args.dry_run)
+                "backup-pin", args.dry_run, cwd=MODULE_DIR)
         project = _artifact("project-map.json")
         cmd = [sys.executable, _tool("load_map.py"), "--map", merged, "--db", args.db,
                "--replace"]
