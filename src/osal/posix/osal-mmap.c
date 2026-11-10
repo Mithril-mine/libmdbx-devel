@@ -174,7 +174,9 @@ int osal_mresize(const int flags, osal_mmap_t *map, size_t size, size_t limit) {
       rc = MDBX_UNABLE_EXTEND_MAPSIZE;
     else if (size < map->filesize && map->filesize > limit)
       rc = MDBX_EPERM;
-    map->current = (map->filesize > limit) ? limit : (size_t)map->filesize;
+    /* not beyond the mapping as it is now, since growing it below may fail */
+    const size_t mapped = (limit < map->limit) ? limit : map->limit;
+    map->current = (map->filesize > mapped) ? mapped : (size_t)map->filesize;
   } else {
     if (map->filesize != size) {
       if (size > map->filesize) {
@@ -224,11 +226,17 @@ int osal_mresize(const int flags, osal_mmap_t *map, size_t size, size_t limit) {
   void *ptr = MAP_FAILED;
 
 #if (defined(__linux__) || defined(__gnu_linux__)) && defined(_GNU_SOURCE)
-  ptr = mremap(map->base, map->limit, limit,
+  int mremap_injected = 0;
+  /* testing: fail as mremap() with this errno, e.g. EFAULT when the mapping spans several areas */
+  MPROBE_FAULT(mresize_mremap_errno, mremap_injected);
+  if (unlikely(mremap_injected))
+    errno = mremap_injected;
+  else
+    ptr = mremap(map->base, map->limit, limit,
 #if defined(MREMAP_MAYMOVE)
-               (flags & MDBX_MRESIZE_MAY_MOVE) ? MREMAP_MAYMOVE :
+                 (flags & MDBX_MRESIZE_MAY_MOVE) ? MREMAP_MAYMOVE :
 #endif /* MREMAP_MAYMOVE */
-                                               0);
+                                                 0);
   if (ptr == MAP_FAILED) {
     err = errno;
     ASSERT(err != 0);
@@ -288,16 +296,24 @@ int osal_mresize(const int flags, osal_mmap_t *map, size_t size, size_t limit) {
       return MDBX_UNABLE_EXTEND_MAPSIZE;
     }
 
+    int mmap_injected = 0;
+    /* testing: fail as mmap() of the whole range with this errno, e.g. ENOMEM without address space for it;
+     * evaluated before the munmap(), so the probe bus cannot take the unmapped range */
+    MPROBE_FAULT(mresize_mmap_errno, mmap_injected);
+
     if (unlikely(munmap(map->base, map->limit))) {
       ASSERT(errno != 0);
       return errno;
     }
 
-    // coverity[pass_freed_arg : FALSE]
-    ptr = mmap(map->base, limit, mmap_prot,
-               (flags & MDBX_MRESIZE_MAY_MOVE) ? mmap_flags
-                                               : mmap_flags | (MAP_FIXED_NOREPLACE ? MAP_FIXED_NOREPLACE : MAP_FIXED),
-               map->fd, 0);
+    if (unlikely(mmap_injected))
+      errno = mmap_injected;
+    else
+      // coverity[pass_freed_arg : FALSE]
+      ptr = mmap(map->base, limit, mmap_prot,
+                 (flags & MDBX_MRESIZE_MAY_MOVE) ? mmap_flags
+                                                 : mmap_flags | (MAP_FIXED_NOREPLACE ? MAP_FIXED_NOREPLACE : MAP_FIXED),
+                 map->fd, 0);
     if (MAP_FIXED_NOREPLACE != 0 && MAP_FIXED_NOREPLACE != MAP_FIXED && unlikely(ptr == MAP_FAILED) &&
         !(flags & MDBX_MRESIZE_MAY_MOVE) && errno == /* kernel don't support MAP_FIXED_NOREPLACE */ EINVAL)
       // coverity[pass_freed_arg : FALSE]
@@ -328,6 +344,7 @@ int osal_mresize(const int flags, osal_mmap_t *map, size_t size, size_t limit) {
       }
       rc = MDBX_UNABLE_EXTEND_MAPSIZE;
       limit = map->limit;
+      size = map->current /* clamped to the old limit above, the mapping did not grow */;
     }
   }
 
