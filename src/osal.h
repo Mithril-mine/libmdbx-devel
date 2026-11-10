@@ -521,6 +521,7 @@ MDBX_INTERNAL key_t osal_ftok(int fd, const char *pathname);
 #endif /* !Windows */
 MDBX_INTERNAL int osal_removefile(const pathchar_t *pathname);
 MDBX_INTERNAL int osal_removedirectory(const pathchar_t *pathname);
+MDBX_NOTHROW_CONST_FUNCTION MDBX_INTERNAL bool osal_is_pathname_absent_error(int err);
 MDBX_INTERNAL int osal_is_pipe(mdbx_filehandle_t fd);
 MDBX_INTERNAL int osal_lockfile(mdbx_filehandle_t fd, bool wait);
 
