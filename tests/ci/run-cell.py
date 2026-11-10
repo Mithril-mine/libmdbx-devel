@@ -192,7 +192,8 @@ def main() -> int:
     parser = argparse.ArgumentParser(description="Infra v3 single-cell runner")
     parser.add_argument("cell", help="registry cell id (tests/ci/config.json)")
     parser.add_argument("--scope", choices=("fast", "fast+hygiene", "full"), default="fast",
-                        help="ctest scope: fast (smoke-t1|ut.* minus heavy), fast+hygiene (adds test_hygiene_check) or full")
+                        help="ctest scope: fast (smoke-t1|ut.*|hygiene minus heavy) or full; "
+                             "fast+hygiene is a deprecated alias of fast")
     parser.add_argument("--build-dir", default=None,
                         help="build directory (default @ci-cmake-build/<cell>)")
     args = parser.parse_args()
@@ -330,11 +331,13 @@ def main() -> int:
         ctest_exclude = ""
         by_label = False
     else:
-        # Fast tier: select by CTest labels (smoke-t1|ut.* minus ut.heavy).
-        # The "fast+hygiene" scope additionally includes the hygiene label
-        # (test_hygiene_check) — set by the dispatcher when a change touches
-        # tests/.
-        ctest_regex = "smoke-t1|ut\\.|hygiene" if args.scope == "fast+hygiene" else "smoke-t1|ut\\."
+        # Fast tier: select by CTest labels (smoke-t1|ut.*|hygiene minus
+        # ut.heavy). The hygiene label (test_hygiene_check) runs
+        # unconditionally: it costs a fraction of a second and guards against
+        # leftover database files in the build directory on every CI cell,
+        # not only on the master pushes (see issue #417 and the
+        # tests_changed() escalation this replaces).
+        ctest_regex = "smoke-t1|ut\\.|hygiene"
         ctest_exclude = "ut\\.heavy"
         by_label = True
 
