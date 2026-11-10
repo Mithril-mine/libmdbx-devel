@@ -210,7 +210,7 @@ static int meta_unsteady(MDBX_env *env, const txnid_t inclusive_upto, const pgno
   size_t bytes = sizeof(meta->sign), offset = ptr_dist(&meta->sign, env->dxb_mmap.base);
   if (env->flags & MDBX_WRITEMAP) {
     unaligned_poke_u64(4, meta->sign, wipe);
-    osal_flush_incoherent_cpu_writeback();
+    osal_fence_producer();
     if (!MDBX_AVOID_MSYNC)
       return MDBX_RESULT_TRUE;
     ptr = payload2page(meta);
@@ -392,7 +392,7 @@ __cold int __must_check_result meta_override(MDBX_env *env, size_t target, txnid
      * lock of a DB file. So meta-page could be updated directly without
      * clearing consistency flag by mdbx_meta_update_begin() */
     memcpy(pgno2page(env, target), page, env->ps);
-    osal_flush_incoherent_cpu_writeback();
+    osal_fence_producer();
     rc = dxb_msync(env, target + 1, MDBX_SYNC_DATA | MDBX_SYNC_IODQ);
   } else {
     if (MDBX_ENABLE_PGOP_STAT)

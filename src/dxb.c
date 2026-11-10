@@ -1536,7 +1536,7 @@ int dxb_sync_locked(MDBX_env *env, unsigned flags, meta_t *const pending, troika
       eASSERT0(env, legal4overwrite && !head.is_steady && meta_is_steady(pending));
     }
     memcpy(target->sign, pending->sign, 8);
-    osal_flush_incoherent_cpu_writeback();
+    osal_fence_producer();
     jitter4testing(true);
     if (!env->incore) {
       if (!MDBX_AVOID_MSYNC)

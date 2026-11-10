@@ -208,7 +208,7 @@ int dbi_update(MDBX_txn *txn, bool commit) {
         env->kvs[dbi].name.iov_len = 0;
         env->kvs[dbi].name.iov_base = nullptr;
         atomic_store32(&env->dbi_seqs[dbi], seq, mo_AcquireRelease);
-        osal_flush_incoherent_cpu_writeback();
+        osal_fence_producer();
         item->next = defer_chain;
         defer_chain = item;
       } else {
@@ -625,7 +625,8 @@ int dbi_open(MDBX_txn *txn, const MDBX_val *const name, unsigned user_flags, MDB
     if (!name_match)
       continue;
 
-    osal_flush_incoherent_cpu_writeback();
+    /* re-validate the slot against a possibly stale writeback, both sides */
+    osal_fence_full();
     if (user_flags != MDBX_ACCEDE &&
         (((user_flags ^ snap.flags) & DB_PERSISTENT_FLAGS) || (keycmp && keycmp != env->kvs[slot].clc.k.cmp) ||
          (datacmp && datacmp != env->kvs[slot].clc.v.cmp)))
@@ -767,7 +768,7 @@ static defer_free_item_t *dbi_close_locked(MDBX_env *env, size_t dbi) {
     env->kvs[dbi].name.iov_len = 0;
     env->kvs[dbi].name.iov_base = nullptr;
     atomic_store32(&env->dbi_seqs[dbi], seq, mo_AcquireRelease);
-    osal_flush_incoherent_cpu_writeback();
+    osal_fence_producer();
     defer_item->next = nullptr;
 
     if (env->n_dbi == dbi + 1) {
