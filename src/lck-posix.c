@@ -621,8 +621,11 @@ __cold int lck_init(MDBX_env *env, MDBX_env *inprocess_neighbor, int global_uniq
    * loss, nor database corruption, nor other fatal troubles. Thus, the code
    * below I am inclined to think the workaround for erroneous platforms (like
    * FreeBSD), rather than a defect of libmdbx. */
-#if defined(__FreeBSD__)
-  /* seems that shared mutexes on FreeBSD required in-process initialization */
+#if defined(__FreeBSD__) && MDBX_LOCKING != MDBX_LOCKING_POSIX2008
+  /* seems that shared mutexes on FreeBSD required in-process initialization
+   * for the non-robust mutexes; in the robust case (MDBX_LOCKING_POSIX2008)
+   * the kernel maintains the umtx robust lists by itself, no such workaround
+   * is needed */
   (void)global_uniqueness_flag;
 #else
   /* shared mutexes on many other platforms (including Darwin and Linux's
