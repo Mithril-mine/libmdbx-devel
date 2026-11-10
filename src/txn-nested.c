@@ -653,7 +653,10 @@ static int nested_join(MDBX_txn *nested, struct commit_timestamp *ts) {
 
   nested->flags = MDBX_TXN_FINISHED;
   tASSERT2(parent, audit_ex(parent, 0, false) == 0);
-  return MDBX_SUCCESS;
+  /* имена переименований применены этим commit'ом: обязательство их отката
+   * переходит к родителю вместе с изменениями вложенной транзакции —
+   * разряжается в dbi_update() при завершении родителя */
+  return dbi_update(nested, true);
 }
 
 int txn_nested_commit(MDBX_txn *nested, struct commit_timestamp *ts) {
