@@ -813,8 +813,8 @@ int mdbx_cursor_bunch_delete(MDBX_cursor *mc, MDBX_bunch_action_t action, uint64
   case MDBX_DELETE_CURRENT_MULTIVAL_AFTER_EXCLUDING:
     while (rc == MDBX_SUCCESS) {
       rc = outer_next(mc, nullptr, nullptr, MDBX_NEXT_DUP);
-      mc->flags &= ~z_eof_hard;
-      ((cursor_couple_t *)mc)->inner.cursor.flags &= ~z_eof_hard;
+      eof_hard_clear(mc);
+      eof_hard_clear(&((cursor_couple_t *)mc)->inner.cursor);
       if (rc != MDBX_SUCCESS) {
         rc = (rc == MDBX_NOTFOUND) ? MDBX_SUCCESS : rc;
         break;
@@ -875,8 +875,8 @@ int mdbx_cursor_bunch_delete(MDBX_cursor *mc, MDBX_bunch_action_t action, uint64
   case MDBX_DELETE_AFTER_EXCLUDING:
     while (rc == MDBX_SUCCESS) {
       rc = outer_next(mc, nullptr, nullptr, MDBX_NEXT);
-      mc->flags &= ~z_eof_hard;
-      ((cursor_couple_t *)mc)->inner.cursor.flags &= ~z_eof_hard;
+      eof_hard_clear(mc);
+      eof_hard_clear(&((cursor_couple_t *)mc)->inner.cursor);
       if (rc != MDBX_SUCCESS) {
         rc = (rc == MDBX_NOTFOUND) ? MDBX_SUCCESS : rc;
         break;

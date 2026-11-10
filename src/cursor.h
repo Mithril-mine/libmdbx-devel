@@ -84,6 +84,33 @@
  *     - Когда установлен z_eof_hard, чтение данных в текущей позиции
  *       не допускается, и mdbx_cursor_eof() также возвращает true,
  *       а prev() устанавливает курсора на последюю строку. */
+
+/* Кодирование состояния: контракт зон младшего байта flags (менять нельзя —
+ * зафиксировано STATIC_ASSERT-ом после enum).
+ *
+ * Значения битов образуют 4 монотонные зоны, каждая определяет класс
+ * обработки курсора; два порога — z_after_delete (0x08) и z_eof_hard (0x40) —
+ * совпадают с границами классов:
+ *
+ *   0x00..0x07  | 0x08..0x3F  | 0x40..0x7F | 0x80..0xFF / combo_state < 0
+ *   Z0 plain    | Z1 edge     | Z2 eof     | Z3 hollow/poor
+ *
+ *  - Z0 plain: позиция на данных, без отложенных эффектов — fastpath,
+ *    прямой доступ к pg[top]/ki[top] без проверок состояния
+ *    (is_filled подразумевается);
+ *  - Z1 edge: краевое, но читаемое и CRUD-способное — z_after_delete
+ *    (позиция перенесена на следующий элемент), z_inner_tail_deleted
+ *    (хвост мультизначений удалён), z_eof_soft (физически на последней
+ *    строке);
+ *  - Z2 eof: логически за концом данных, CRUD запрещён;
+ *  - Z3 hollow/poor: позиция не определена или курсор сброшен.
+ *
+ * Разделение fastpath/slowpath — одно сравнение классификационного байта
+ * cursor_state_byte() (см. ниже): fastpath <=> байт < z_after_delete.
+ *
+ * Младший байт занят полностью (8 флагов). Новые флаги размещаются только
+ * в битах старше 7-го: байт остаётся 8-битным для бэкпорта в stable
+ * и lts/0.13, а односравнительный гейт зон не ломается. */
 enum cursor_state {
   /* Это вложенный курсор для вложенного дерева/страницы и является
      inner-элементом struct cursor_couple. */
@@ -102,8 +129,17 @@ enum cursor_state {
      игнорироваться. */
   z_after_delete = 0x08,
 
-  /* */
-  z_disable_tree_search_fastpath = 0x10,
+  /* Неиспользуемая заготовка, ранее занимавшая бит 0x10: не была реализована
+     ни в путях поиска, ни в путях обработки; присваивание в walk_tbl() было
+     лишь напоминанием и не влияло на поведение. При возобновлении этой
+     функциональности использовать биты старше 7-го. */
+  /* z_disable_tree_search_fastpath = 0x10, */
+
+  /* (внутренний) курсор логически стоит на «хвосте» удалённых мультизначений:
+     позиция за последним значением ключа после удаления последнего значения.
+     Повторное удаление в этом состоянии легально и является no-op,
+     а GET_CURRENT/NEXT обязаны вернуть следующую запись. */
+  z_inner_tail_deleted = 0x10,
 
   /* Курсор логически в конце данных, но физически на последней строке,
      ki[top] == page_numkeys(pg[top]) - 1 и может читать данные в текущей позиции. */
@@ -121,9 +157,18 @@ enum cursor_state {
 
   /* Маски для сброса/установки состояния. */
   z_clear_mask = z_inner | z_gcu_preparation,
-  z_poor_mark = z_eof_hard | z_hollow | z_disable_tree_search_fastpath,
+  /* Сброс состояния: одна запись отрицательного combo_state (top = stash = -1).
+     Бит z_inner_tail_deleted не включается: сброс не должен claim'ить
+     краевые состояния Z1. */
+  z_poor_mark = z_eof_hard | z_hollow,
   z_fresh_mark = z_poor_mark | z_fresh
 };
+
+/* Контракт зон кодирования состояния (см. комментарий перед enum): значения
+ * и порядок битов зафиксированы, так как пороги z_after_delete/z_eof_hard
+ * задают границы классов обработки, а z_hollow — трюк сброса одной записью. */
+STATIC_ASSERT(z_after_delete == 0x08 && z_inner_tail_deleted == 0x10 && z_eof_soft == 0x20 && z_eof_hard == 0x40 &&
+              z_hollow == -128);
 
 MDBX_MAYBE_UNUSED static inline bool has_inner(const MDBX_cursor *mc) { return mc->subcur != nullptr; }
 
@@ -167,12 +212,51 @@ MDBX_MAYBE_UNUSED MDBX_NOTHROW_PURE_FUNCTION static inline bool is_filled(const 
   return r;
 }
 
+/* Классификационный байт состояния: младший байт flags + знак top (бит 23
+ * combo_state) в бите 7. Одно сравнение решает всё:
+ *   <  z_after_delete — fastpath: Z0 plain, проверки состояния не нужны;
+ *   >= z_after_delete — slowpath: краевое/eof/hollow/poor состояние.
+ * Знак top покрывает транзитные состояния перепозиционирования, в которых
+ * установлен только top, а байт flags выглядит plain. */
+MDBX_MAYBE_UNUSED MDBX_NOTHROW_PURE_FUNCTION static inline uint8_t cursor_state_byte(const MDBX_cursor *mc) {
+  return (uint8_t)mc->flags | (uint8_t)(((uint32_t)mc->combo_state >> 16) & 0x80);
+}
+
+/* Для couple: OR внешнего и внутреннего до сравнения — та же одна условная
+ * ветвь на весь fast/slow. */
+MDBX_MAYBE_UNUSED MDBX_NOTHROW_PURE_FUNCTION static inline uint8_t couple_state_byte(const cursor_couple_t *couple) {
+  return cursor_state_byte(&couple->outer) | cursor_state_byte(&couple->inner.cursor);
+}
+
+/* Сбрасывает z_eof_hard только когда курсор стоит на элементе; z_eof_soft
+ * сохраняется — он документирует «логически в конце, но читаемо в текущей
+ * позиции». Позиция за хвостом (ki == page_numkeys) обязана сохранить
+ * z_eof_hard, иначе она читалась бы как заполненная и CRUD-операции уходили
+ * бы за пределы данных (issue #305). Курсор с маркером хвоста удалённых
+ * мультизначений не очищается вовсе: иначе после отвергнутого NEXT_DUP
+ * повторное удаление перестало бы быть no-op и удалило бы реальное значение
+ * (issue #301). */
+MDBX_MAYBE_UNUSED static inline void eof_hard_clear(MDBX_cursor *mc) {
+  if (!(mc->flags & z_inner_tail_deleted) && is_pointed(mc) && mc->ki[mc->top] < page_numkeys(mc->pg[mc->top]))
+    mc->flags &= ~z_eof_hard;
+}
+
 MDBX_MAYBE_UNUSED MDBX_NOTHROW_PURE_FUNCTION static inline bool inner_filled(const MDBX_cursor *mc) {
   return has_inner(mc) && is_filled(&mc->subcur->cursor);
 }
 
 MDBX_MAYBE_UNUSED MDBX_NOTHROW_PURE_FUNCTION static inline bool inner_pointed(const MDBX_cursor *mc) {
   return has_inner(mc) && is_pointed(&mc->subcur->cursor);
+}
+
+/* (внутренний) курсор логически стоит на «хвосте» удалённых мультизначений:
+ * позиция за последним значением ключа. Guard по маске отличает это
+ * состояние от сброшенного курсора (z_poor_mark не включает этот бит) и от
+ * позиции с отложенным z_after_delete (логическая позиция уже перенесена на
+ * следующий элемент — no-op хвоста не должен срабатывать для продвинутой
+ * позиции). */
+MDBX_MAYBE_UNUSED MDBX_NOTHROW_PURE_FUNCTION static inline bool inner_tail_deleted(const MDBX_cursor *mc) {
+  return (mc->flags & (z_hollow | z_after_delete | z_inner_tail_deleted)) == z_inner_tail_deleted;
 }
 
 MDBX_MAYBE_UNUSED MDBX_NOTHROW_PURE_FUNCTION static inline bool inner_hollow(const MDBX_cursor *mc) {
