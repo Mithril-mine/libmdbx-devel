@@ -810,7 +810,7 @@ __must_check_result static int env_info_snap(const MDBX_env *env, const MDBX_txn
       osal_monotime_to_16dot16_noUnderflow(atomic_load64(&lck->autosync_period, mo_Relaxed));
   out->mi_bootid.current.x = globals.bootid.x;
   out->mi_bootid.current.y = globals.bootid.y;
-  out->mi_mode = env->lck_mmap.lck ? lck->envmode.weak : env->flags;
+  out->mi_mode = env->flags & ENV_USABLE_FLAGS;
 
   out->mi_pgop_stat.newly = atomic_load64(&lck->pgops.newly, mo_Relaxed);
   out->mi_pgop_stat.cow = atomic_load64(&lck->pgops.cow, mo_Relaxed);
