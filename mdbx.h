@@ -7496,6 +7496,10 @@ typedef struct MDBX_chk_context {
  * \see mdbx_env_chk() */
 typedef struct MDBX_chk_callbacks {
   bool (*check_break)(MDBX_chk_context_t *ctx);
+  /** \brief Called when a new nested scope is pushed.
+   * \returns Zero on success, \ref MDBX_RESULT_TRUE to decline entering the
+   * scope (counted as a problem, the corresponding checks of the stage are
+   * skipped), otherwise an error code that will be propagated. */
   int (*scope_push)(MDBX_chk_context_t *ctx, MDBX_chk_scope_t *outer, MDBX_chk_scope_t *inner, const char *fmt,
                     va_list args);
   int (*scope_conclude)(MDBX_chk_context_t *ctx, MDBX_chk_scope_t *outer, MDBX_chk_scope_t *inner, int err);
