@@ -26,7 +26,7 @@ MDBX_INTERNAL bool mvcc_kick_laggards(MDBX_txn *txn, const txnid_t laggard,
 typedef struct rw_oldest_read_snapshot_into {
   txnid_t oldest_txnid, steady_txnid;
 } orsi_rw_t;
-MDBX_INTERNAL orsi_rw_t mvcc_snapshot_oldest_rw(const MDBX_txn *const txn);
+MDBX_INTERNAL orsi_rw_t mvcc_snapshot_oldest_rw(const MDBX_txn *const txn, const bool may_lag);
 
 typedef struct ro_oldest_read_snapshot_into {
   txnid_t oldest_txnid, thisprocess_oldest_txnid;
