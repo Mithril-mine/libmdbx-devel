@@ -21,6 +21,7 @@ A maintenance release of the stable line: backported fixes for data safety, corr
 
  - **Breaking:** Changed the C++ `env::mode`/`env::durability` enums to scoped; old names stay static aliases (backport).
  - Changed `MDBX_APPEND` with a persistent cursor to read the last key from the leaf, not the root ([#66](https://github.com/Mithril-mine/libmdbx-devel/issues/66)) (backport).
+ - Changed the oldest-reader scan to bound retries under heavy reader churn ([#325](https://github.com/Mithril-mine/libmdbx-devel/issues/325)) (backport).
  - Changed the README and the doxygen API descriptions (backport).
  - Changed `mdbx_defrag` to name every stopping reason and suggest `mdbx_copy -c` for full compaction (backport).
  - Changed the `MDBX_GET_MULTIPLE` docs: a batch is a whole page of the current key's duplicates ([12/15 of #319](https://github.com/Mithril-mine/libmdbx-devel/issues/319)) (backport).
