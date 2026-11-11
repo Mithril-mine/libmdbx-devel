@@ -127,8 +127,14 @@ __cold int dxb_resize(MDBX_env *const env, const pgno_t allocated_pgno, const pg
   eASSERT0(env, bytes2pgno(env, limit_bytes) >= limit_pgno);
 
   unsigned mresize_flags = env->flags & (MDBX_RDONLY | MDBX_WRITEMAP | MDBX_UTTERLY_NOSYNC);
+  /* Requesting a shrink is platform-specific: on POSIX the datafile is just truncated in place (ftruncate) with
+   * the mapping kept at the same base address, but on Windows the OS kernel is unable to shrink a file while it
+   * is mapped (a mapped section cannot be truncated). Therefore on Windows a shrink requires to suspend the
+   * local threads, un-map and re-create the mapping (the MDBX_MRESIZE_MAY_UNMAP flag is added below on this
+   * path), or must be deferred while readers pin the remap-lock. See also
+   * https://libmdbx.dqdkfa.ru/dead-github/issues/170 and https://libmdbx.dqdkfa.ru/dead-github/issues/154. */
   if (mode >= implicit_shrink)
-    mresize_flags |= txn_unmap_allowed;
+    mresize_flags |= txn_shrink_allowed;
 
   if (limit_bytes == env->dxb_mmap.limit && size_bytes == env->dxb_mmap.current && size_bytes == env->dxb_mmap.filesize)
     goto bailout;

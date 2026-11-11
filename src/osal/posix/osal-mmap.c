@@ -180,7 +180,7 @@ int osal_mresize(const int flags, osal_mmap_t *map, size_t size, size_t limit) {
       if (size > map->filesize) {
         rc = osal_fsetsize(map->fd, size);
         VERBOSE("osal_fsetsize-%s %zu, err %d", "extend", size, rc);
-      } else if (flags & txn_unmap_allowed) {
+      } else if (flags & MDBX_MRESIZE_MAY_SHRINK) {
         rc = osal_fsetsize(map->fd, size);
         VERBOSE("osal_fsetsize-%s %zu, err %d", "shrink", size, rc);
       }

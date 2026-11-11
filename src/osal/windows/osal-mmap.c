@@ -242,7 +242,10 @@ int osal_mresize(const int flags, osal_mmap_t *map, size_t size, size_t limit) {
   }
 
   /* Windows unable:
-   *  - shrink a mapped file;
+   *  - shrink a mapped file: this is a limitation of the OS kernel itself, which cannot truncate a file while
+   *    it is mapped (a mapped section cannot be resized or re-created in place), so no flag combination other
+   *    than un-mapping can perform a shrink, see https://libmdbx.dqdkfa.ru/dead-github/issues/170 and
+   *    https://libmdbx.dqdkfa.ru/dead-github/issues/154;
    *  - change size of mapped view;
    *  - extend read-only mapping;
    * Therefore we should unmap/map entire section. */

@@ -176,18 +176,23 @@ enum dbi_state {
 
 enum txn_flags {
   txn_ro_flat = MDBX_TXN_RDONLY,
-  txn_ro_nested = UINT32_C(0x0800),
+  txn_parked = MDBX_TXN_PARKED,
+  txn_shrink_allowed = UINT32_C(0x200),
+  txn_unmap_allowed = UINT32_C(0x400),
+  txn_mapmove_allowed = UINT32_C(0x800),
+  /* The transaction may unmap/remap the database mapping (possibly with an
+   * address change) for resize; see dxb_resize()/osal_mresize(). */
+  txn_unmap_or_move_allowed = txn_unmap_allowed | txn_mapmove_allowed,
+  txn_ro_nested = UINT32_C(0x1000),
   txn_ro_both = txn_ro_flat | txn_ro_nested,
+  txn_gc_drained = UINT32_C(0x02000000) /* GC was depleted up to oldest reader */,
+  txn_nipped = UINT32_C(0x04000000),
+  txn_may_have_cursors = UINT32_C(0x08000000),
+  txn_remap_locked = UINT32_C(0x20000000),
   txn_ro_begin_flags = MDBX_TXN_RDONLY | MDBX_TXN_RDONLY_PREPARE,
   txn_rw_begin_flags = MDBX_TXN_NOMETASYNC | MDBX_TXN_NOSYNC | MDBX_TXN_TRY,
   txn_rw_already_locked = MDBX_TXN_RDONLY_PREPARE & ~MDBX_TXN_RDONLY,
-  txn_nipped = UINT32_C(0x1000),
-  /* The transaction may unmap/remap the database mapping (possibly with an
-   * address change) for resize; see dxb_resize()/osal_mresize(). */
-  txn_unmap_allowed = UINT32_C(0x40000000),
-  txn_parked = MDBX_TXN_PARKED,
-  txn_gc_drained = 0x100 /* GC was depleted up to oldest reader */,
-  txn_may_have_cursors = 0x400,
+  txn_mresize_flags = txn_shrink_allowed | txn_unmap_allowed | txn_mapmove_allowed | txn_remap_locked,
   txn_state_flags = MDBX_TXN_FINISHED | MDBX_TXN_ERROR | MDBX_TXN_DIRTY | MDBX_TXN_SPILLS | MDBX_TXN_HAS_CHILD |
                     MDBX_TXN_INVALID | txn_gc_drained
 };
@@ -646,8 +651,18 @@ MDBX_MAYBE_UNUSED static void static_checks(void) {
 
   STATIC_ASSERT_MSG((txn_state_flags & (txn_rw_begin_flags | txn_ro_begin_flags)) == 0,
                     "Oops, some txn flags overlapped or wrong");
-  STATIC_ASSERT_MSG(((txn_rw_begin_flags | txn_ro_begin_flags | txn_state_flags) & txn_unmap_allowed) == 0,
-                    "Oops, some txn flags overlapped or wrong");
+  /* The mresize request bits travel within the txn-flags space and are mixed with the env-flags when passed to
+   * dxb_resize()/osal_mresize(), so any overlap would corrupt one flags-domain through another (historically
+   * txn_unmap_allowed collided with MDBX_ACCEDE this way). The explicit (unsigned) casts keep MSVC happy with
+   * the mixed signed/unsigned enum arithmetics. */
+  STATIC_ASSERT_MSG(
+      ((unsigned)txn_mresize_flags &
+       (unsigned)(txn_state_flags | txn_rw_begin_flags | txn_ro_begin_flags | txn_ro_nested | txn_may_have_cursors |
+                  txn_nipped | txn_parked | MDBX_TXN_AUTOUNPARK | MDBX_TXN_OUSTED | MDBX_TXN_TRY)) == 0,
+      "Oops, the mresize request bits overlap another txn-flags domain");
+  STATIC_ASSERT_MSG(((unsigned)txn_mresize_flags &
+                     (unsigned)(MDBX_RDONLY | MDBX_WRITEMAP | MDBX_UTTERLY_NOSYNC | MDBX_NOSTICKYTHREADS)) == 0,
+                    "Oops, the mresize request bits overlap the env-flags mixed into mresize_flags");
 
   STATIC_ASSERT(sizeof(reader_slot_t) == 32);
 #if MDBX_LOCKING > 0
