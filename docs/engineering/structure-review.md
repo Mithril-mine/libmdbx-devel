@@ -31,7 +31,7 @@
 | `mdbx.h`, `mdbx.h++`, `mdbx++/` (17 `h++`) | Публичный C/C++ API | upstream (канон) |
 | `src/` (119 файлов) | Ядро движка + инструменты + man | upstream (канон) |
 | `CMakeLists.txt`, `GNUmakefile`, `Makefile`, `conanfile.py`, `cmake/` | Сборка | upstream |
-| `ChangeLog.md`, `ChangeLog-0.09…0.14.md`, `ChangeLog-Old.md` (8 шт.) | Ченджлоги версий | upstream (канон, на `master`) |
+| `ChangeLog.md`, `docs/changelog-history/ChangeLog-0.09…0.14.md`, `ChangeLog-Old.md` (8 шт.) | Ченджлоги версий | upstream (канон, на `master`) |
 | `COPYRIGHT`, `LICENSE`, `NOTICE`, `TODO.md`, `README.md`, `AGENTS.md` | Правовые/README | upstream (AGENTS.md — на `master`) |
 | `.le.ini`, `.clang-format`, `.cmake-format.yaml`, `valgrind.supp`, `.gitignore` | Дотфайлы | upstream (`.le.ini` есть на `master`) |
 | `docs/` (13 файлов) | Doxygen: `Doxyfile.in`, `_*.md`, CSS/HTML, `ld+json`, `title`, `sitemap.add` | upstream (канон) |

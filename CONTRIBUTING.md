@@ -138,7 +138,7 @@ If you add third‑party components:
 
 #### Requirements
 
-- CMake ≥ 3.20
+- CMake ≥ 3.12
 - Compiler: GCC ≥ 11, Clang ≥ 14, MSVC ≥ 19.30 (VS 2022)
 - Python 3.8+ (if build/test scripts are used)
 - Git
@@ -164,7 +164,7 @@ cmake --build . --config Release
 
 ```bash
 mkdir build && cd build
-cmake -DBUILD_TESTING=ON -DCMAKE_BUILD_TYPE=Debug ..
+cmake -DMDBX_ENABLE_TESTS=ON -DCMAKE_BUILD_TYPE=Debug ..
 cmake --build .
 ctest --output-on-failure
 ```

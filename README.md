@@ -114,16 +114,9 @@ On the other hand, if you make something suboptimally, you can notice its detrim
 
 ## Durability and synchronization modes
 
-_libmdbx_ provides a set of trade-offs between durability and write performance, selected per environment via `mdbx_env_set_option()`:
+_libmdbx_ provides a set of trade-offs between durability and write performance, selected per environment via `mdbx_env_set_option()`: from `MDBX_DURABLE` (the default — every commit syncs both the data and the meta pages) through `MDBX_NOMETASYNC` and `MDBX_SAFE_NOSYNC` (lazy self-managed syncing with guaranteed integrity) to `MDBX_UTTERLY_NOSYNC` (speed over guarantees, matching LMDB `MDB_NOSYNC`). In addition, `MDBX_WRITEMAP` maps data pages and writes through `mmap`, which combines with the modes above (typically with `MDBX_NOMETASYNC`) to reduce data copying.
 
-| Mode | DB data synced to disk | Meta-page synced | Survives OS crash | Survives power loss |
-| --- | --- | --- | --- | --- |
-| `MDBX_DURABLE` (default) | each commit | each commit | yes | yes |
-| `MDBX_NOMETASYNC` | each commit | no | yes | last commits may roll back |
-| `MDBX_SAFE_NOSYNC` | lazy (thresholds/timeout) | lazy | yes | recent commits may be lost, integrity guaranteed |
-| `MDBX_UTTERLY_NOSYNC` | no explicit sync | no | no | possible corruption (matches LMDB `MDB_NOSYNC`) |
-
-In addition, `MDBX_WRITEMAP` maps data pages and writes through `mmap`, which can be combined with the modes above (typically with `MDBX_NOMETASYNC`) to reduce data copying at the cost of more memory-mapped I/O. See the [API reference](https://libmdbx.dqdkfa.ru/docs/en/reference/api/group__c__opening.html) for the exact semantics.
+The full comparison table, the exact semantics of every mode, the auto-sync thresholds and recommendations are in [docs/en/getting-started/durability-modes.md](docs/en/getting-started/durability-modes.md) (also published on the [site](https://libmdbx.dqdkfa.ru/docs/en/getting-started/durability-modes.html)).
 
 ## Comparison with other databases
 For now please refer to [chapter of "BoltDB comparison with other databases"](https://github.com/coreos/bbolt#comparison-with-other-databases) which is also (mostly) applicable to _libmdbx_ with minor clarification:
@@ -332,7 +325,7 @@ the requirement will apply to every consumer of a prebuilt package.
 
 ## API description
 
-Please refer to the online [_libmdbx_ API reference](https://libmdbx.dqdkfa.ru/docs) and/or see the [mdbx.h++](mdbx.h%2B%2B) and [mdbx.h](mdbx.h) headers.
+Please refer to the online [_libmdbx_ API reference](https://libmdbx.dqdkfa.ru/docs) and/or see the [mdbx.h++](mdbx.h%2B%2B) and [mdbx.h](mdbx.h) headers — the headers are self-documented and serve as the offline reference. The amalgamated package also ships an offline copy of the guides and the textbook in `docs/`.
 
 ## Textbook
 
@@ -346,7 +339,7 @@ Both localizations are built into HTML + PDF with `make books` (requires `pip in
 <!-- dist-cutoff-begin -->
 ## Contributing
 
-Contributions are welcome. The project uses [CMake](https://cmake.org/)+[CTest](https://cmake.org/cmake/help/latest/module/CTest.html) for building and testing and [LLVM](https://llvm.org/) code style; build support for at least Linux and Windows is expected for any change. Please keep the amalgamated build green (`make dist`), avoid enabling link-time optimization in test builds, and add/update tests together with your change. For the project structure, build details and workflows, see `docs/` and the [home site](https://libmdbx.dqdkfa.ru).
+Contributions are welcome. The project uses [CMake](https://cmake.org/)+[CTest](https://cmake.org/cmake/help/latest/module/CTest.html) for building and testing and [LLVM](https://llvm.org/) code style; build support for at least Linux and Windows is expected for any change. Please keep the amalgamated build green (`make dist`), avoid enabling link-time optimization in test builds, and add/update tests together with your change. For the project structure, build details and workflows, see `docs/` and the [home site](https://libmdbx.dqdkfa.ru). For agents and contributors, the entry points are the [AGENTS.md](AGENTS.md) guide and the [engineering documentation](docs/engineering/README.md).
 <!-- dist-cutoff-end -->
 
 --------------------------------------------------------------------------------
@@ -360,7 +353,7 @@ Historically, _libmdbx_ is a deeply revised and extended descendant of the [Ligh
 Since 2017 _libmdbx_ is used in [Fast Positive Tables](https://sourcecraft.dev/dqdkfa/libfpta), and until 2025 development was funded by [Positive Technologies](https://www.ptsecurity.com). Since 2020 _libmdbx_ is used in Ethereum: [Erigon](https://github.com/erigontech/erigon), [Akula](https://github.com/akula-bft/akula), [Silkworm](https://github.com/erigontech/silkworm), [Reth](https://github.com/paradigmxyz/reth), etc.
 
 On 2022-04-15 the GitHub administration, without any warning nor explanation, deleted _libmdbx_ along with a lot of other projects, simultaneously blocking access for many developers. Therefore on 2022-04-21 I have migrated to a reliable trusted infrastructure.
-The origin for now is at [SourceCraft](https://sourcecraft.dev/dqdkfa/libmdbx) and ~~GitHub~~ is blacklisted forever to play this role.
+The origin since then is [SourceCraft](https://sourcecraft.dev/dqdkfa/libmdbx) and will remain so; [GitHub](https://github.com/Mithril-mine/libmdbx) serves only as a mirror of the amalgamated sources and as an additional issue tracker.
 
 Since May 2024 and version 0.13 _libmdbx_ was re-licensed under Apache-2.0 license. Please refer to the [`COPYRIGHT` file](https://sourcecraft.dev/dqdkfa/libmdbx/blob/raw?file=COPYRIGHT) for license change explanation.
 

@@ -1127,6 +1127,8 @@ $(1): $(2) src/version.c $(lastword $(MAKEFILE_LIST))
 		-e '/^\s*\/\/\s*> dist-cutoff-begin/,/^\s*\/\/\s*< dist-cutoff-end/d' \
 		-e '/^\s*\/\*\s*> dist-cutoff-begin/,/^\s*\/\*\s*< dist-cutoff-end/d' \
 		-e '/^\s*<!-- dist-cutoff-begin -->/,/^\s*<!-- dist-cutoff-end -->/d' \
+		-e '/^\s*<!-- section-begin/d' \
+		-e '/^\s*<!-- section-end/d' \
 		-e "s|@MDBX_GIT_TIMESTAMP@|$$(MDBX_GIT_TIMESTAMP)|" \
 		-e "s|@MDBX_GIT_DESCRIBE@|$$(MDBX_GIT_DESCRIBE)|" \
 	$$< | cat -s >$$@
