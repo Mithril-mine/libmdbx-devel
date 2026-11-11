@@ -191,6 +191,8 @@ enum txn_flags {
                     MDBX_TXN_INVALID | txn_gc_drained
 };
 
+struct dbi_rename_undo;
+
 /* A database transaction.
  * Every operation requires a transaction handle. */
 struct MDBX_txn {
@@ -227,6 +229,10 @@ struct MDBX_txn {
 
   /* Массив с головами односвязных списков отслеживания курсоров. */
   MDBX_cursor **cursors;
+
+  /* Отложенный undo переименований таблиц, выполненных в этой транзакции
+     (см. dbi_rename_undo_t в dbi.c). */
+  struct dbi_rename_undo *dbi_rename_undo;
 
   /* "Канареечные" маркеры/счетчики */
   MDBX_canary canary;
