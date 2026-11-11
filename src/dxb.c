@@ -201,15 +201,21 @@ __cold int dxb_read_header(MDBX_env *env, meta_t *dest, const int lck_exclusive,
 }
 
 #if defined(ENABLE_MEMCHECK) || defined(__SANITIZE_ADDRESS__)
+void dxb_sanitize_head(MDBX_env *env, pgno_t used) {
+  if (!RUNNING_ON_ASAN && !mdbx_running_on_Valgrind())
+    return;
+  if (env->poison_edge < used)
+    env->poison_edge = used;
+  VALGRIND_MAKE_MEM_DEFINED(env->dxb_mmap.base, pgno2bytes(env, used));
+  MDBX_ASAN_UNPOISON_MEMORY_REGION(env->dxb_mmap.base, pgno2bytes(env, used));
+  /* don't touch more, it should be already poisoned */
+}
+
 void dxb_sanitize_tail(MDBX_env *env, MDBX_txn *txn) {
   if (!RUNNING_ON_ASAN && !mdbx_running_on_Valgrind())
     return;
   if (txn) { /* transaction start */
-    if (env->poison_edge < txn->geo.first_unallocated)
-      env->poison_edge = txn->geo.first_unallocated;
-    VALGRIND_MAKE_MEM_DEFINED(env->dxb_mmap.base, pgno2bytes(env, txn->geo.first_unallocated));
-    MDBX_ASAN_UNPOISON_MEMORY_REGION(env->dxb_mmap.base, pgno2bytes(env, txn->geo.first_unallocated));
-    /* don't touch more, it should be already poisoned */
+    dxb_sanitize_head(env, txn->geo.first_unallocated);
   } else { /* transaction end */
     bool should_unlock = false;
     pgno_t last = MAX_PAGENO + 1;
