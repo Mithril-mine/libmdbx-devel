@@ -174,7 +174,7 @@ All build ways are completely traditional and have minimal prerequisites like `b
 So just use CMake or GNU Make in your habitual manner, and feel free to file an issue in case something is unexpected or breaks down.
 
 ### Testing
-Amalgamated source code does not contain most of the tests and other internal components for several reasons. You can find explanations of the reasons in the comments to the presentation of [_libmdbx_ roadmap](https://libmdbx.dqdkfa.ru/release/libmdbx-roadmap-HNY2026-english.pdf) on the eve of 2026. However, an extended example of using the C++ API will be added soon, which can also be used as a simple smoke-test.
+Amalgamated source code does not contain most of the tests and other internal components for several reasons. You can find explanations of the reasons in the comments to the presentation of [_libmdbx_ roadmap](https://libmdbx.dqdkfa.ru/release/libmdbx-roadmap-HNY2026-english.pdf) on the eve of 2026. However, runnable examples are included (see [`examples/`](examples/README.md), including the extended `example-mdbx.c++` tour of the C++ API), which can also be used as a simple smoke-test.
 
 <!-- dist-cutoff-begin -->
 > **Note on licensing.** The test suite and other internal development components in the [`tests/`](tests/README.md) directory are distributed under a **non-free proprietary license**, which differs from the Apache-2.0 license of the _libmdbx_ library itself. Please refer to the [`tests/LICENCE`](tests/LICENCE) file for the full license text. These components are not included into the amalgamated distribution.
@@ -338,7 +338,10 @@ Please refer to the online [_libmdbx_ API reference](https://libmdbx.dqdkfa.ru/d
 
 A complete practical guide to libmdbx — six volumes from the first steps to expert topics and bindings — is available online in [Russian](https://libmdbx.dqdkfa.ru/docs/ru/textbook/) and [English](https://libmdbx.dqdkfa.ru/docs/en/textbook/); each online version links a downloadable PDF.
 
-The textbook's source (markdown, in `docs/textbook/ru` and `docs/textbook/en`) and all code examples (`examples/` — compilable C11/C++17 programs, exercised by CTest) are part of this repository. Both localizations are built into HTML + PDF with `make books` (requires `pip install mkdocs mkdocs-material mkdocs-with-pdf`).
+The textbook's source (markdown, in [`docs/ru/textbook/`](docs/ru/textbook/index.md) and [`docs/en/textbook/`](docs/en/textbook/index.md)) and all code examples (`examples/` — compilable C11/C++17 programs, exercised by CTest) are part of this repository.
+<!-- dist-cutoff-begin -->
+Both localizations are built into HTML + PDF with `make books` (requires `pip install mkdocs mkdocs-material mkdocs-with-pdf`).
+<!-- dist-cutoff-end -->
 
 ## Contributing
 

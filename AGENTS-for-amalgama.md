@@ -31,7 +31,7 @@ Build files: `CMakeLists.txt`, `GNUmakefile`, `Makefile`, `config.h.in`,
 Windows-specific assembly sources (`windows-safeseh-*`) and `valgrind.supp`.
 
 Documentation and metadata: `README.md` (full documentation),
-`ChangeLog.md`, `TODO.md`, `LICENSE`, `NOTICE`, `COPYRIGHT`,
+`ChangeLog.md`, `LICENSE`, `NOTICE`, `COPYRIGHT`, `SECURITY.md`,
 `FUNDING.json`, `CONTRIBUTING.md`, `VERSION.json`, `AGENTS.md` (this file).
 
 Distributed documentation site content: `docs/en/` and `docs/ru/` —
@@ -190,6 +190,8 @@ The package ships the complete documentation site content:
   the issue tracker; fixes land in the upstream
   [libmdbx-devel](https://github.com/Mithril-mine/libmdbx-devel) repository
   and reach this package in the next release.
+- For security vulnerabilities **do not** use the issue tracker — see
+  [SECURITY.md](SECURITY.md) for how to report one.
 - Never edit the generated `mdbx.c`/`mdbx.c++` in place — such edits are
   overwritten by the next amalgamation.
 
