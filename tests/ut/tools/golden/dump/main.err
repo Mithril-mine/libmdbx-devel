@@ -1,4 +1,2 @@
 mdbx_dump vVERSION (BUILD, T-HASH)
 Running for /base.db...
-   open-MADV_DONTNEED 16..16384
-   readahead ON 0..10
