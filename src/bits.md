@@ -8,11 +8,11 @@ N |   MASK  | ENV       | TXN          | DB       | PUT       | DBI        | NOD
 5 |0000 0020|           |TXN_PARKED    |INTEGERDUP|NODUPDATA  |DBI_SLAIN   |         |P_DUPFIX  |         |
 6 |0000 0040|           |TXN_AUTOUNPARK|REVERSEDUP|CURRENT    |DBI_OLDEN   |         |P_SUBP    |         |
 7 |0000 0080|           |TXN_OUSTED    |DB_VALID  |ALLDUPS    |DBI_LINDO   |         |          |         |
-8 |0000 0100| _MAY_MOVE |TXN_DRAINED_GC|          |           |            |         |          | <=      |
-9 |0000 0200| _MAY_UNMAP|              |          |           |            |         |          | <=      |
-10|0000 0400|           |TXN_CURSORS   |          |           |            |         |          |         |
-11|0000 0800|           |TXN_RO_ACCESS |          |           |            |         |          |         |
-12|0000 1000|           |TXN_NIPPED    |          |           |            |         |          |         |
+8 |0000 0100|           |              |          |           |            |         |          | <=      |
+9 |0000 0200|           |SHRINK_ALLOWED|          |           |            |         |          | <=      |
+10|0000 0400|           |_MAY_MOVE     |          |           |            |         |          |         |
+11|0000 0800|           |_MAY_UNMAP    |          |           |            |         |          |         |
+12|0000 1000|           |TXN_RO_NESTED |          |           |            |         |          |         |
 13|0000 2000|VALIDATION |              |          |           |            |         |P_SPILLED |         |
 14|0000 4000|NOSUBDIR   |              |          |           |            |         |P_LOOSE   |         |
 15|0000 8000|           |              |          |           |            |         |P_FROZEN  |         |
@@ -25,12 +25,12 @@ N |   MASK  | ENV       | TXN          | DB       | PUT       | DBI        | NOD
 22|0040 0000|EXCLUSIVE  |              |          |           |            |         |          |         |
 23|0080 0000|NORDAHEAD  |              |          |           |            |         |          |         |
 24|0100 0000|NOMEMINIT  |TXN_PREPARE   |          |           |            |         |          |         |
-25|0200 0000|COALESCE   |              |          |           |            |         |          |         |
-26|0400 0000|LIFORECLAIM|              |          |           |            |         |          |         |
-27|0800 0000|PAGEPERTURB|              |          |           |            |         |          |         |
+25|0200 0000|COALESCE   |TXN_DRAINED_GC|          |           |            |         |          |         |
+26|0400 0000|LIFORECLAIM|TXN_NIPPED    |          |           |            |         |          |         |
+27|0800 0000|PAGEPERTURB|TXN_CURSORS   |          |           |            |         |          |         |
 28|1000 0000|ENV_TXKEY  |TXN_TRY       |          |           |            |         |          |         |
-29|2000 0000|ENV_ACTIVE |              |          |           |            |         |          |         |
-30|4000 0000|ACCEDE     |SHRINK_ALLOWED|DB_ACCEDE |           |            |         |          |         |
+29|2000 0000|ENV_ACTIVE |REMAP_LOCKED  |          |           |            |         |          |         |
+30|4000 0000|ACCEDE     |              |DB_ACCEDE |           |            |         |          |         |
 31|8000 0000|FATAL_ERROR|              |          |           |            |         |          |         |
 
 
