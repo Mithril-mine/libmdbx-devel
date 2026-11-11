@@ -264,6 +264,7 @@ int txn_ro_start(MDBX_txn *txn, bool prepare_only) {
 
   eASSERT0(env, pgno2bytes(env, txn->geo.first_unallocated) <= env->dxb_mmap.current);
   eASSERT0(env, env->dxb_mmap.limit >= env->dxb_mmap.current);
+  txn->ro.base = env->dxb_mmap.base;
 #if IS_WINDOWS
   const size_t used_bytes = pgno2bytes(env, txn->geo.first_unallocated);
   if (((used_bytes > env->geo_in_bytes.lower && env->geo_in_bytes.shrink) ||
@@ -393,6 +394,11 @@ int txn_ro_unpark(MDBX_txn *txn) {
     }
     if (unlikely((txn->flags & MDBX_TXN_ERROR)))
       break;
+    if (unlikely(txn->ro.base != txn->env->dxb_mmap.base)) {
+      /* the mapping was moved/recreated while parked: the held pointers are
+       * stale, the transaction must be ousted (issue #315) */
+      break;
+    }
 
 #if MDBX_64BIT_CAS
     if (unlikely(!atomic_cas64(&slot->tid, MDBX_TID_TXN_PARKED, txn->owner)))
@@ -456,6 +462,7 @@ int txn_ro_clone(const MDBX_txn *const origin, MDBX_txn *const clone) {
       /* exclusive mode without lck */
       eASSERT0(env, !env->lck_mmap.lck && env->lck == lckless_stub(env));
     }
+    clone->ro.base = env->dxb_mmap.base;
 
     /* Setup db info */
     clone->geo = origin->geo;
