@@ -35,8 +35,9 @@ Documentation and metadata: `README.md` (full documentation),
 `FUNDING.json`, `CONTRIBUTING.md`, `VERSION.json`, `AGENTS.md` (this file).
 
 Distributed documentation site content: `docs/en/` and `docs/ru/` —
-guides, textbook ("deep dive" articles), overview and the full C/C++ API
-reference; `man1/` — man pages for every command-line tool.
+guides, textbook ("deep dive" articles), overview and tooling pages; the
+full C/C++ API reference is generated from the headers and published on
+the website; `man1/` — man pages for every command-line tool.
 
 Runnable examples: `examples/` — C and C++ sample programs with their own
 CMake build.
@@ -172,10 +173,12 @@ development repository — here it is amalgamated into the single
 
 ## 6. Local documentation
 
-The package ships the complete documentation site content:
+The package ships the documentation site content:
 
-- `docs/en/` — English guides, textbook, overview, API reference
-  (`docs/en/reference/`); `docs/ru/` — the Russian counterpart.
+- `docs/en/` — English guides, textbook, overview and tooling pages
+  (`docs/en/reference/` links to the online C/C++ API reference; offline,
+  the `mdbx.h`/`mdbx.h++` headers are self-documented); `docs/ru/` — the
+  Russian counterpart.
 - `man1/*.1` — man pages: `mdbx_stat`, `mdbx_copy`, `mdbx_dump`,
   `mdbx_load`, `mdbx_chk`, `mdbx_drop`, `mdbx_defrag`.
 - `README.md` — characteristics, platform notes, durability/sync modes,

@@ -34,7 +34,7 @@ Historically, _libmdbx_ is a deeply revised and extended descendant of the legen
 
 [![Telegram: Support | Discussions | News](https://img.shields.io/endpoint?color=scarlet&logo=telegram&label=Support%20%7C%20Discussions%20%7C%20News&url=https%3A%2F%2Ftg.sumanjay.workers.dev%2Flibmdbx)](https://t.me/libmdbx)
 
-> Please rely on  the [libmdbx.dqdkfa.ru](https://libmdbx.dqdkfa.ru) site with [FAQ](https://libmdbx.dqdkfa.ru/#sec-faq), [Tips](https://libmdbx.dqdkfa.ru/#sec-tips), [Rules/Checklists](https://libmdbx.dqdkfa.ru/#sec-rules), [Knowledge base](https://libmdbx.dqdkfa.ru/#sec-knowledge), references for [`C++`](https://libmdbx.dqdkfa.ru/docs/en/reference/api/group__cxx__api.html) and [`C`](https://libmdbx.dqdkfa.ru/docs/en/reference/api/group__c__api.html) API, etc.
+> Please rely on the [libmdbx.dqdkfa.ru](https://libmdbx.dqdkfa.ru) site with [FAQ](https://libmdbx.dqdkfa.ru/#sec-faq), [Tips](https://libmdbx.dqdkfa.ru/#sec-tips), [Rules/Checklists](https://libmdbx.dqdkfa.ru/#sec-rules), [Knowledge base](https://libmdbx.dqdkfa.ru/#sec-knowledge), references for [`C++`](https://libmdbx.dqdkfa.ru/docs/en/reference/api/group__cxx__api.html) and [`C`](https://libmdbx.dqdkfa.ru/docs/en/reference/api/group__c__api.html) API, etc.
 
 -----
 
@@ -145,12 +145,12 @@ The full list of all bindings (several dozen) is available in the [Bindings and 
 | Runtime |  Repo  | Author |
 | ------- | ------ | ------ |
 | Rust    | [libmdbx-rs](https://github.com/vorot93/libmdbx-rs)   | [Artem Vorotnikov](https://github.com/vorot93) |
-| Go      | [mdbx-go](https://github.com/torquem-ch/mdbx-go)      | [Alex Sharov](https://github.com/AskAlexSharov) |
+| Go      | [mdbx-go](https://github.com/erigontech/mdbx-go)      | [Alex Sharov](https://github.com/AskAlexSharov) |
 | .NET    | [libmdbx-dotnet](https://public.git.amsoft.spb.ru/libmdbx/libmdbx-dotnet) | [Anton Maisak](mailto:anton@maisak.ru) |
 | CPython | [PyPi/clibmdbx](https://pypi.org/project/clibmdbx/)   | [`@jyj117`](https://github.com/jyj117) |
 | Python  | [PyPi/libmdbx](https://pypi.org/project/libmdbx/)     | [Lazymio](https://github.com/wtdcode) |
 | NodeJS  | [mdbxmou](https://github.com/ikonopistsev/mdbxmou)    | [Igor Ikonopistsev](https://github.com/ikonopistsev) |
-| Zig     | [mdbx-zig](https://github.com/theseyan/lmdbx-zig)     | [Sayan J. Das](https://github.com/theseyan) |
+| Zig     | [lmdbx-zig](https://github.com/theseyan/lmdbx-zig)    | [Sayan J. Das](https://github.com/theseyan) |
 
 <!-- section-end -->
 
@@ -343,9 +343,11 @@ The textbook's source (markdown, in [`docs/ru/textbook/`](docs/ru/textbook/index
 Both localizations are built into HTML + PDF with `make books` (requires `pip install mkdocs mkdocs-material mkdocs-with-pdf`).
 <!-- dist-cutoff-end -->
 
+<!-- dist-cutoff-begin -->
 ## Contributing
 
 Contributions are welcome. The project uses [CMake](https://cmake.org/)+[CTest](https://cmake.org/cmake/help/latest/module/CTest.html) for building and testing and [LLVM](https://llvm.org/) code style; build support for at least Linux and Windows is expected for any change. Please keep the amalgamated build green (`make dist`), avoid enabling link-time optimization in test builds, and add/update tests together with your change. For the project structure, build details and workflows, see `docs/` and the [home site](https://libmdbx.dqdkfa.ru).
+<!-- dist-cutoff-end -->
 
 --------------------------------------------------------------------------------
 
