@@ -91,7 +91,7 @@ retry:;
       rc = MDBX_RESULT_TRUE;
     } else {
       rc = dxb_resize(env, head.ptr_c->geometry.first_unallocated, head.ptr_c->geometry.now, head.ptr_c->geometry.upper,
-                      implicit_grow);
+                      0);
       if (unlikely(rc != MDBX_SUCCESS))
         goto bailout;
     }

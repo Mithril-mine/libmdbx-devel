@@ -6,8 +6,8 @@
 
 #if IS_WINDOWS
 /* Acquire the exclusive remap-lock for a resize that requires un-mapping the
- * mapping (a shrink, or a grow beyond the current mapping limit, or an
- * explicit geometry change) on Windows.
+ * mapping (a shrink, or a grow beyond the current mapping limit, or any other
+ * request that permits re-creating the mapping) on Windows.
  *
  * A reader may hold the lock shared for an unbounded time, so we must not wait
  * indefinitely — that is exactly the #154 deadlock. A few bounded attempts
@@ -22,22 +22,21 @@
  * is needed to decide whether to defer.
  *
  * On failure the resize is deferred and the return code is chosen per the
- * resize mode (issue #154):
- *  - implicit_shrink → MDBX_EPERM, which dxb_sync_locked() and the nested
- *    rollback path in txn-nested.c treat as "regular on Windows": the commit
- *    still succeeds and the shrink is re-attempted later, since the shrink
- *    predicate is based on the real file size (see dxb_shrink_maybe() and
- *    dxb_shrink_bottom()).
- *  - implicit_grow (the file was grown by another process beyond this
- *    process's mapping limit, so a remap is needed) and explicit_resize →
+ * requested flags (issue #154):
+ *  - a shrink request without the un-map/move permission → MDBX_EPERM, i.e.
+ *    "deferred": the commit still succeeds and the shrink is re-attempted
+ *    later by a subsequent commit, since the shrink predicate is based on the
+ *    real file size (see dxb_shrink_maybe() and dxb_shrink_bottom());
+ *  - any other request that needs the mapping to be un-mapped and re-created
+ *    (a shrink with the un-map/move permission, a grow beyond this process's
+ *    mapping limit when the file was grown by another process, and so on) →
  *    MDBX_UNABLE_EXTEND_MAPSIZE, the documented code for "the requested
  *    mapping size could not be applied right now"; it is returned to the
- *    caller of mdbx_txn_begin()/mdbx_env_set_geometry() without poisoning the
- *    env, and the operation may be retried once the readers are gone (or the
- *    environment is reopened).
+ *    caller without poisoning the env, and the operation may be retried once
+ *    the readers are gone (or the environment is reopened).
  * The message is a WARNING, not an ERROR: this is an expected, recoverable
  * condition while a read transaction is open. */
-static int windows_remap_lock_exclusive(MDBX_env *env, const enum resize_mode mode) {
+static int windows_remap_lock_exclusive(MDBX_env *env, const unsigned mresize_flags) {
   for (int attempt = 0; attempt < 5; ++attempt) {
     if (imports.srwl_TryAcquireExclusive(&env->remap_lock))
       return MDBX_SUCCESS;
@@ -46,14 +45,24 @@ static int windows_remap_lock_exclusive(MDBX_env *env, const enum resize_mode mo
   }
   WARNING("%s", "unable to acquire the exclusive remap-lock for a database shrink/remap: "
                 "another reader holds it shared, cannot unmap and remap safely");
-  /* an implicit shrink is deferred silently by the commit path, everything else
-   * is reported as "the mapping size could not be applied right now" */
-  return (mode == implicit_shrink) ? MDBX_EPERM : MDBX_UNABLE_EXTEND_MAPSIZE;
+  /* a shrink that is not allowed to un-map is deferred silently by the commit
+   * path, everything else is reported as "the mapping size could not be
+   * applied right now" */
+  return (mresize_flags & txn_shrink_allowed) && !(mresize_flags & txn_unmap_or_move_allowed)
+             ? MDBX_EPERM
+             : MDBX_UNABLE_EXTEND_MAPSIZE;
 }
 #endif /* Windows */
 
 __cold int dxb_resize(MDBX_env *const env, const pgno_t allocated_pgno, const pgno_t size_pgno, pgno_t limit_pgno,
-                      const enum resize_mode mode) {
+                      unsigned mresize_flags) {
+  /* the request as passed by the caller, before the platform-specific
+   * escalation below may add or clear bits */
+  const unsigned requested = mresize_flags;
+  /* whether the request permits to un-map and re-create the mapping (possibly
+   * moving it): this defines the limit-clamping below, the reader-scan/veto
+   * path and the exact-size expectations */
+  const bool remap_requested = (requested & txn_unmap_or_move_allowed) != 0;
   /* Acquire guard to avoid collision between read and write txns
    * around geo_in_bytes and dxb_mmap */
 #if IS_WINDOWS
@@ -76,10 +85,11 @@ __cold int dxb_resize(MDBX_env *const env, const pgno_t allocated_pgno, const pg
    * under Wine, where NtExtendSection is unavailable and every resize needs
    * unmap+remap). Such a grow needs no exclusive remap-lock and no thread
    * suspension, so it cannot deadlock with long-lived readers (issue #154).
-   * A grow beyond the limit, a shrink, or an explicit resize all need the
-   * mapping to be unmapped and remapped, hence the exclusive remap-lock. */
-  const bool no_remap_needed =
-      (mode == implicit_grow) && imports.NtExtendSection && pgno_ceil2os_bytes(env, size_pgno) <= env->dxb_mmap.limit;
+   * Everything else — a grow beyond the limit, a shrink, or any request that
+   * permits un-mapping/remapping — needs the mapping to be unmapped and
+   * remapped, hence the exclusive remap-lock. */
+  const bool no_remap_needed = (requested & txn_mresize_flags) == 0 && imports.NtExtendSection &&
+                               pgno_ceil2os_bytes(env, size_pgno) <= env->dxb_mmap.limit;
   bool have_exclusive = false;
   if (no_remap_needed) {
     imports.srwl_AcquireShared(&env->remap_lock);
@@ -87,7 +97,7 @@ __cold int dxb_resize(MDBX_env *const env, const pgno_t allocated_pgno, const pg
     /* NOTE: deliberately no fallback to the blocking srwl_AcquireExclusive()
      * here — that is exactly the #154 deadlock, since a reader may hold the
      * lock shared for an unbounded time. Deferring is always safe. */
-    rc = windows_remap_lock_exclusive(env, mode);
+    rc = windows_remap_lock_exclusive(env, mresize_flags);
     if (unlikely(rc != MDBX_SUCCESS)) {
       osal_fastmutex_release(&env->resize_mutex);
       return rc;
@@ -108,7 +118,7 @@ __cold int dxb_resize(MDBX_env *const env, const pgno_t allocated_pgno, const pg
   const pgno_t prev_limit_pgno = bytes2pgno(env, prev_limit);
   eASSERT0(env, limit_pgno >= size_pgno);
   eASSERT0(env, size_pgno >= allocated_pgno);
-  if (mode < explicit_resize && size_pgno <= prev_limit_pgno) {
+  if (!remap_requested && size_pgno <= prev_limit_pgno) {
     /* The actual mapsize may be less since the geo.upper may be changed
      * by other process. Avoids remapping until it necessary. */
     limit_pgno = prev_limit_pgno;
@@ -117,24 +127,16 @@ __cold int dxb_resize(MDBX_env *const env, const pgno_t allocated_pgno, const pg
   const size_t size_bytes = pgno_ceil2os_bytes(env, size_pgno);
   const void *const prev_map = env->dxb_mmap.base;
 
-  VERBOSE("resize(env-flags 0x%x, mode %d) datafile/mapping: "
+  VERBOSE("resize(env-flags 0x%x, request 0x%x) datafile/mapping: "
           "present %" PRIuPTR " -> %" PRIuPTR ", "
           "limit %" PRIuPTR " -> %" PRIuPTR,
-          env->flags, mode, prev_size, size_bytes, prev_limit, limit_bytes);
+          env->flags, requested, prev_size, size_bytes, prev_limit, limit_bytes);
 
   eASSERT0(env, limit_bytes >= size_bytes);
   eASSERT0(env, bytes2pgno(env, size_bytes) >= size_pgno);
   eASSERT0(env, bytes2pgno(env, limit_bytes) >= limit_pgno);
 
-  unsigned mresize_flags = env->flags & (MDBX_RDONLY | MDBX_WRITEMAP | MDBX_UTTERLY_NOSYNC);
-  /* Requesting a shrink is platform-specific: on POSIX the datafile is just truncated in place (ftruncate) with
-   * the mapping kept at the same base address, but on Windows the OS kernel is unable to shrink a file while it
-   * is mapped (a mapped section cannot be truncated). Therefore on Windows a shrink requires to suspend the
-   * local threads, un-map and re-create the mapping (the MDBX_MRESIZE_MAY_UNMAP flag is added below on this
-   * path), or must be deferred while readers pin the remap-lock. See also
-   * https://libmdbx.dqdkfa.ru/dead-github/issues/170 and https://libmdbx.dqdkfa.ru/dead-github/issues/154. */
-  if (mode >= implicit_shrink)
-    mresize_flags |= txn_shrink_allowed;
+  mresize_flags |= env->flags & (MDBX_RDONLY | MDBX_WRITEMAP | MDBX_UTTERLY_NOSYNC);
 
   if (limit_bytes == env->dxb_mmap.limit && size_bytes == env->dxb_mmap.current && size_bytes == env->dxb_mmap.filesize)
     goto bailout;
@@ -144,8 +146,13 @@ __cold int dxb_resize(MDBX_env *const env, const pgno_t allocated_pgno, const pg
    * выполнить remap-действия требующие приостановки работающих с БД потоков. */
   if ((env->flags & MDBX_NOSTICKYTHREADS) == 0) {
 #if IS_WINDOWS
-    if (have_exclusive &&
-        ((size_bytes < env->dxb_mmap.current && mode > implicit_grow) || limit_bytes != env->dxb_mmap.limit)) {
+    /* A shrink is platform-specific: on POSIX the datafile is just truncated in place (ftruncate) with the
+     * mapping kept at the same base address, but on Windows the OS kernel is unable to shrink a file while it
+     * is mapped (a mapped section cannot be truncated), so there a shrink needs the un-map/remap, which must
+     * be deferred while readers pin the remap-lock. See also
+     * https://libmdbx.dqdkfa.ru/dead-github/issues/170 and https://libmdbx.dqdkfa.ru/dead-github/issues/154. */
+    if (have_exclusive && ((size_bytes < env->dxb_mmap.current && (mresize_flags & txn_shrink_allowed)) ||
+                           (limit_bytes != env->dxb_mmap.limit && (mresize_flags & txn_unmap_or_move_allowed)))) {
       /* Local threads must be suspended whenever the mapping is UNMAPPED and
        * re-created (a shrink, or a grow past the mapping limit), because the
        * base address may change and any thread touching the old view would
@@ -176,13 +183,13 @@ __cold int dxb_resize(MDBX_env *const env, const pgno_t allocated_pgno, const pg
         ERROR("failed suspend-for-remap: errcode %d", rc);
         goto bailout;
       }
-      mresize_flags |=
-          (mode < explicit_resize) ? MDBX_MRESIZE_MAY_UNMAP : MDBX_MRESIZE_MAY_UNMAP | MDBX_MRESIZE_MAY_MOVE;
+      /* the OS kernel is unable to shrink a mapped file, so the un-map/remap is required here; a move stays
+       * allowed only when it was requested */
+      mresize_flags |= txn_unmap_allowed;
     }
 #else  /* Windows */
     lck_t *const lck = env->lck_mmap.lck;
-    if (mode == explicit_resize && limit_bytes != env->dxb_mmap.limit) {
-      mresize_flags |= MDBX_MRESIZE_MAY_UNMAP | MDBX_MRESIZE_MAY_MOVE;
+    if (remap_requested && limit_bytes != env->dxb_mmap.limit) {
       if (env->txn)
         /* the base address of the mapping can't be changed since
          * the write transaction of the caller holds pointers into it.
@@ -205,7 +212,6 @@ __cold int dxb_resize(MDBX_env *const env, const pgno_t allocated_pgno, const pg
         /* looking for readers from this process */
         const reader_slot_t *const own = thread_rthc_get(env->me_txkey);
         const size_t snap_nreaders = rdt_count(env, lck);
-        eASSERT0(env, mode == explicit_resize);
         for (size_t i = 0; i < snap_nreaders; ++i) {
           if (lck->rdt[i].pid.weak == (size_t)env->registered_reader_pid &&
               (&lck->rdt[i] != own || safe64_read(&lck->rdt[i].txnid) < SAFE64_INVALID_THRESHOLD)) {
@@ -235,7 +241,7 @@ __cold int dxb_resize(MDBX_env *const env, const pgno_t allocated_pgno, const pg
   }
   munlock_after(env, aligned_munlock_pgno, size_bytes);
 
-  if (size_bytes < prev_size && mode > implicit_grow) {
+  if (size_bytes < prev_size && (mresize_flags & txn_shrink_allowed)) {
     NOTICE("resize-MADV_%s %u..%u", (env->flags & MDBX_WRITEMAP) ? "REMOVE" : "DONTNEED", size_pgno,
            bytes2pgno(env, prev_size));
     const uint32_t munlocks_before = atomic_load32(&env->lck->mlcnt[1], mo_Relaxed);
@@ -283,7 +289,7 @@ __cold int dxb_resize(MDBX_env *const env, const pgno_t allocated_pgno, const pg
   if (rc == MDBX_SUCCESS) {
     eASSERT0(env, limit_bytes == env->dxb_mmap.limit);
     eASSERT0(env, size_bytes <= env->dxb_mmap.filesize);
-    if (mode == explicit_resize)
+    if (remap_requested)
       eASSERT0(env, size_bytes == env->dxb_mmap.current);
     else
       eASSERT0(env, size_bytes <= env->dxb_mmap.current);
@@ -303,7 +309,7 @@ bailout:
     eASSERT0(env, env->dxb_mmap.limit >= env->dxb_mmap.current);
     eASSERT0(env, limit_bytes == env->dxb_mmap.limit);
     eASSERT0(env, size_bytes <= env->dxb_mmap.filesize);
-    if (mode == explicit_resize)
+    if (remap_requested)
       eASSERT0(env, size_bytes == env->dxb_mmap.current);
     else
       eASSERT0(env, size_bytes <= env->dxb_mmap.current);

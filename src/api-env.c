@@ -1335,7 +1335,8 @@ __cold int mdbx_env_set_geometry(MDBX_env *env, intptr_t size_lower, intptr_t si
 #endif /* Windows */
 
       if (new_geo.now != current_geo->now || new_geo.upper != current_geo->upper) {
-        rc = dxb_resize(env, current_geo->first_unallocated, new_geo.now, new_geo.upper, explicit_resize);
+        rc = dxb_resize(env, current_geo->first_unallocated, new_geo.now, new_geo.upper,
+                        txn_shrink_allowed | txn_unmap_or_move_allowed);
         if (unlikely(rc != MDBX_SUCCESS))
           goto bailout;
       }
