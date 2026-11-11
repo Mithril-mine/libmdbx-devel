@@ -32,12 +32,34 @@ int mdbx_dbi_open_ex(MDBX_txn *txn, const char *name, MDBX_db_flags_t flags, MDB
   return LOG_IFERR(dbi_open_cstr(txn, name, flags, dbi, keycmp, datacmp));
 }
 
+static int named_table_probe(void *context, const MDBX_txn *txn, const MDBX_val *name, MDBX_db_flags_t flags,
+                             const MDBX_stat *stat, MDBX_dbi table) {
+  (void)context;
+  (void)txn;
+  (void)name;
+  (void)flags;
+  (void)stat;
+  (void)table;
+  /* any named table in MAIN */
+  return MDBX_INCOMPATIBLE;
+}
+
 __cold int mdbx_drop(MDBX_txn *txn, MDBX_dbi dbi, bool del) {
   int rc = check_txn_rw(txn, MDBX_TXN_BLOCKED);
   if (unlikely(rc != MDBX_SUCCESS))
     return LOG_IFERR(rc);
   if (unlikely(dbi == FREE_DBI))
     return LOG_IFERR(MDBX_EACCESS); /* the GC table must never be dropped or cleared */
+
+  if (dbi == MAIN_DBI) {
+    /* Refuse to drop/clear MAIN when it contains any named tables: such
+     * records are N_TREE nodes and removing them leaves the named tables'
+     * pages orphaned, i.e. leaked (issue #311). The named tables must be
+     * dropped explicitly, one by one, before dropping/clearing MAIN. */
+    rc = dbi_enumerate(txn, named_table_probe, nullptr, false);
+    if (unlikely(rc != MDBX_SUCCESS))
+      return LOG_IFERR(rc);
+  }
 
   cursor_couple_t cx;
   rc = cursor_init(&cx.outer, txn, dbi);
