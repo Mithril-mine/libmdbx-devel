@@ -913,7 +913,7 @@ bailout:
 
 static txnid_t snapshot_oldest_force_rescan(MDBX_txn *const txn) {
   atomic_store32(&txn->env->lck->rdt_refresh_flag, true, mo_AcquireRelease);
-  return mvcc_snapshot_oldest_rw(txn).oldest_txnid;
+  return mvcc_snapshot_oldest_rw(txn, false).oldest_txnid;
 }
 
 const char *gc_check_keylen(size_t const key_len) {
