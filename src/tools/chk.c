@@ -243,14 +243,19 @@ static void scope_pop(MDBX_chk_context_t *ctx, MDBX_chk_scope_t *scope, MDBX_chk
   flush();
 }
 
+static bool table_matched;
+
 static MDBX_chk_user_table_cookie_t *table_filter(MDBX_chk_context_t *ctx, const MDBX_val *name,
                                                   MDBX_db_flags_t flags) {
   (void)ctx;
   (void)flags;
-  return (!only_table.iov_base ||
-          (only_table.iov_len == name->iov_len && memcmp(only_table.iov_base, name->iov_base, name->iov_len) == 0))
-             ? (void *)(intptr_t)-1
-             : nullptr;
+  if (!only_table.iov_base)
+    return (void *)(intptr_t)-1;
+  const bool match =
+      (only_table.iov_len == name->iov_len && memcmp(only_table.iov_base, name->iov_base, name->iov_len) == 0);
+  /* issue #386: an unknown -s target must not silently pass as success */
+  table_matched |= match;
+  return match ? (void *)(intptr_t)-1 : nullptr;
 }
 
 static int stage_begin(MDBX_chk_context_t *ctx, enum MDBX_chk_stage stage) {
@@ -598,6 +603,12 @@ int main(int argc, char *argv[]) {
       error_fn("mdbx_env_chk", rc);
     else if (rc != MDBX_EINTR && rc != MDBX_RESULT_TRUE && !user_break)
       rc = 0;
+  }
+
+  if (only_table.iov_base && !table_matched) {
+    /* issue #386: a mistyped -s target must not silently "check nothing" */
+    error_fmt("table `%.*s` is not found.", (int)only_table.iov_len, (char *)only_table.iov_base);
+    rc = MDBX_NOTFOUND;
   }
 
 bailout:
