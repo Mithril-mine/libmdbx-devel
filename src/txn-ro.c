@@ -274,7 +274,7 @@ int txn_ro_start(MDBX_txn *txn, bool prepare_only) {
         used_bytes < env->geo_in_bytes.upper && env->geo_in_bytes.grow)) &&
       /* avoid recursive use SRW */ (txn->flags & MDBX_NOSTICKYTHREADS) == 0) {
     imports.srwl_AcquireShared(&env->remap_lock);
-    txn->flags |= txn_unmap_allowed;
+    txn->flags |= txn_remap_locked | txn_shrink_allowed | txn_unmap_or_move_allowed;
   }
 #endif /* Windows */
 
@@ -299,8 +299,10 @@ int txn_ro_reset(MDBX_txn *txn) {
   txn->n_dbi = 0; /* prevent further DBI activity */
 
 #if IS_WINDOWS
-  if ((txn->flags & (MDBX_TXN_FINISHED | txn_unmap_allowed)) == txn_unmap_allowed)
+  if (txn->flags & txn_remap_locked) {
     imports.srwl_ReleaseShared(&txn->env->remap_lock);
+    txn->flags &= ~(txn_remap_locked | txn_shrink_allowed | txn_unmap_or_move_allowed);
+  }
 #endif /* Windows */
 
   int rc = ro_slot_clean(txn);

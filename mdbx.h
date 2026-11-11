@@ -3666,6 +3666,15 @@ LIBMDBX_API int mdbx_env_get_fd(const MDBX_env *env, mdbx_filehandle_t *fd);
  *                               "minimal acceptable", and negative means
  *                               "keep current or use default".
  *
+ * \note The shrinking of the database file is platform-specific: on POSIX
+ *       the file is truncated in place with the mapping kept at the same
+ *       base address, but on Windows the OS kernel is unable to shrink a
+ *       file while it is mapped (a mapped section cannot be truncated).
+ *       Therefore on Windows a shrink requires to suspend the local threads,
+ *       un-map and re-create the mapping, is deferred while readers exist,
+ *       and reports \ref MDBX_EPERM when un-mapping is not permitted
+ *       (e.g. the \ref MDBX_NOSTICKYTHREADS mode is used).
+ *
  * \returns A non-zero error value on failure and 0 on success,
  *          some possible errors are:
  * \retval MDBX_EINVAL    An invalid parameter was specified,
