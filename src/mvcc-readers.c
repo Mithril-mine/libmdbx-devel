@@ -105,7 +105,7 @@ MDBX_MAYBE_UNUSED __hot orsi_ro_t mvcc_snapshot_oldest_ro(const MDBX_txn *const 
   return result;
 }
 
-__hot orsi_rw_t mvcc_snapshot_oldest_rw(const MDBX_txn *const txn) {
+__hot orsi_rw_t mvcc_snapshot_oldest_rw(const MDBX_txn *const txn, const bool may_lag) {
   const uint32_t nothing_changed_signature = NOTHING_CHANGED_SIGNATURE;
   tASSERT0(txn, (txn->flags & txn_ro_flat) == 0);
   lck_t *const lck = txn->env->lck;
@@ -128,7 +128,21 @@ __hot orsi_rw_t mvcc_snapshot_oldest_rw(const MDBX_txn *const txn) {
     NOTICE("cached oldest-reader %" PRIaTXN " beyond steady %" PRIaTXN ", forcing rescan", prev_oldest, steady.txnid);
 
   bool rescan_forced = distrust_cached_oldest;
+  size_t passes = 0;
   while (rescan_forced || nothing_changed_signature != atomic_load32(&lck->rdt_refresh_flag, mo_AcquireRelease)) {
+    if (may_lag && unlikely(++passes > 4) && !distrust_cached_oldest && prev_oldest >= MIN_TXNID) {
+      /* Readers keep starting and ending, so no pass saw a stable table, and
+       * each further pass costs the whole table again. A few passes absorb a
+       * single change; after that, return the previous oldest. A full scan
+       * never returns less (the pass below skips readers older than it), so
+       * it is a safe lower bound, only not the newest one. The cache and the
+       * refresh flag stay as they are, so the next call scans again. A fresh
+       * lock file has no previous oldest yet (zero), then the scan goes on
+       * without a bound, as before. */
+      result.oldest_txnid = prev_oldest;
+      return result;
+    }
+    MPROBE_WATCH(mvcc_oldest_scan_pass, passes);
     rescan_forced = false;
     lck->rdt_refresh_flag.weak = nothing_changed_signature;
     jitter4testing(false);
@@ -379,7 +393,7 @@ __cold bool mvcc_kick_laggards(MDBX_txn *txn, const txnid_t straggler,
 
   do {
     env->lck->rdt_refresh_flag.weak = /* force refresh */ true;
-    orsi = mvcc_snapshot_oldest_rw(txn);
+    orsi = mvcc_snapshot_oldest_rw(txn, false);
     eASSERT0(env, orsi.oldest_txnid < env->basal_txn->txnid);
     eASSERT0(env, orsi.oldest_txnid >= straggler);
     eASSERT0(env, orsi.oldest_txnid >= env->lck->cached_oldest_txnid.weak);
