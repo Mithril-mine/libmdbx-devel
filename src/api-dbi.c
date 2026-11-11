@@ -150,13 +150,8 @@ __cold int mdbx_dbi_rename2(MDBX_txn *txn, MDBX_dbi dbi, const MDBX_val *new_nam
   }
 
   rc = osal_fastmutex_acquire(&txn->env->dbi_lock);
-  if (likely(rc == MDBX_SUCCESS)) {
-    struct dbi_rename_result pair = dbi_rename_locked(txn, dbi, *new_name);
-    if (pair.defer)
-      pair.defer->next = nullptr;
-    dbi_defer_release(txn->env, pair.defer);
-    rc = pair.err;
-  }
+  if (likely(rc == MDBX_SUCCESS))
+    rc = dbi_rename_locked_and_release(txn, dbi, *new_name);
   return LOG_IFERR(rc);
 }
 
