@@ -666,7 +666,7 @@ __cold int dxb_setup(MDBX_env *env, const int lck_rc, const mdbx_mode_t mode_bit
           return MDBX_PROBLEM;
         }
         meta_set_txnid(env, &header, next_txnid);
-        err = dxb_sync_locked(env, env->flags | txn_unmap_allowed, &header, &troika);
+        err = dxb_sync_locked(env, env->flags | txn_shrink_allowed, &header, &troika);
         if (err) {
           ERROR("error %d, while updating meta.geo: "
                 "from l%" PRIaPGNO "-n%" PRIaPGNO "-u%" PRIaPGNO "/s%u-g%u (txn#%" PRIaTXN "), "
@@ -819,11 +819,11 @@ int dxb_sync_locked(MDBX_env *env, unsigned flags, meta_t *const pending, troika
     if ((autosync_threshold && atomic_load64(&env->lck->unsynced_pages, mo_Relaxed) >= autosync_threshold) ||
         (autosync_period && (eoos_timestamp = atomic_load64(&env->lck->eoos_timestamp, mo_Relaxed)) &&
          osal_monotime() - eoos_timestamp >= autosync_period))
-      flags &= MDBX_WRITEMAP | txn_unmap_allowed; /* force steady */
+      flags &= MDBX_WRITEMAP | txn_mresize_flags; /* force steady */
   }
 
   size_t shrink = 0;
-  if (flags & txn_unmap_allowed) {
+  if (flags & txn_shrink_allowed) {
     const size_t filesize_pgno = (size_t)(env->dxb_mmap.filesize >> env->ps2ln);
 
     /* LY: check conditions to discard unused pages via MADV_DONTNEED (POSIX
@@ -840,8 +840,10 @@ int dxb_sync_locked(MDBX_env *env, unsigned flags, meta_t *const pending, troika
      * remap-lock, so the mapping cannot be unmapped right now) is re-attempted
      * by a later commit because the predicate reads the real file size.
      *
-     * On Windows the shrink also needs the exclusive remap-lock, which an
-     * in-process reader may hold shared for an unbounded time (issue #154), so
+     * On Windows the OS kernel is unable to shrink a mapped file (a mapped
+     * section cannot be truncated), so the shrink has to un-map/remap and thus
+     * needs the exclusive remap-lock, which an in-process reader may hold
+     * shared for an unbounded time (issue #154), so
      * the attempt can be deferred in dxb_resize(). To keep such a deferral
      * cheap, the `force steady` below is additionally gated on the steady
      * checkpoint's allocated pages being beyond the new end of the file: once a
@@ -882,7 +884,7 @@ int dxb_sync_locked(MDBX_env *env, unsigned flags, meta_t *const pending, troika
            *
            * However, if the file cannot be shrinked (for instance, due to Windows limitations), then a second attempt
            * will not require a new fsync(), since `prev_steady->geometry.first_unallocated > bottom` will be false. */
-          flags &= MDBX_WRITEMAP | txn_unmap_allowed;
+          flags &= MDBX_WRITEMAP | txn_mresize_flags;
         shrink = filesize_pgno - bottom;
         pending->geometry.now = bottom;
         if (unlikely(head.txnid == pending->unsafe_txnid)) {
