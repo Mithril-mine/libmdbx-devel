@@ -147,8 +147,13 @@ __cold int mdbx_env_warmup(const MDBX_env *env, const MDBX_txn *txn, MDBX_warmup
     int err = check_env(env, true);
     if (unlikely(err != MDBX_SUCCESS))
       return LOG_IFERR(err);
-    if (txn && unlikely(txn->env != env))
-      return LOG_IFERR(MDBX_EINVAL);
+    if (txn) {
+      if (unlikely(txn->env != env))
+        return LOG_IFERR(MDBX_EINVAL);
+    } else {
+      if (env->txn && env->basal_txn->owner == osal_thread_self())
+        txn = env->txn;
+    }
   } else {
     env = txn->env;
   }
@@ -166,6 +171,13 @@ __cold int mdbx_env_warmup(const MDBX_env *env, const MDBX_txn *txn, MDBX_warmup
   } else {
     const troika_t troika = meta_tap(env);
     used_pgno = meta_recent(env, &troika).ptr_v->geometry.first_unallocated;
+    /* another process may have grown the database beyond the mapping of this process,
+     * which only a transaction start extends */
+    if (pgno2bytes(env, used_pgno) > env->dxb_mmap.current)
+      used_pgno = bytes2pgno(env, env->dxb_mmap.current);
+    /* sanitizer builds poison the pages beyond the snapshots of this process, including those another process
+     * allocated meanwhile: unpoison the range to touch, as a transaction start does */
+    dxb_sanitize_head((MDBX_env *)env, used_pgno);
   }
   const size_t used_range = pgno_ceil2os_bytes(env, used_pgno);
   const pgno_t mlock_pgno = bytes2pgno(env, used_range);

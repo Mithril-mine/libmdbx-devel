@@ -243,6 +243,12 @@ struct MDBX_txn {
     struct {
       /* For read txns: This thread/txn's slot table slot, or nullptr. */
       reader_slot_t *slot;
+      /* The mapped database body base as seen by this transaction: saved at
+       * start, checked at unpark to detect a mapping move while parked, when
+       * the held pointers become stale (issue #315). The per-transaction
+       * base for forming page addresses is the subject of the refactoring
+       * (issue #424). */
+      void *base;
     } ro;
     struct {
       troika_t troika;

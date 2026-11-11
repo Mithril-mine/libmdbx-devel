@@ -3601,6 +3601,9 @@ LIBMDBX_API int mdbx_env_get_fd(const MDBX_env *env, mdbx_filehandle_t *fd);
  * \ref MDBX_UNABLE_EXTEND_MAPSIZE if the new mapping size could not be applied
  * for the current process, in particular:
  *  - the address space for the larger mapping is busy;
+ *  - for \ref mdbx_env_set_geometry() only, the mapping cannot grow in place and
+ *    must not move, since a transaction of this process (a parked one included)
+ *    holds pointers into it;
  *  - on Windows, a read transaction of this process currently holds the
  *    remap-lock shared, so the mapping cannot be re-created right now. In this
  *    case the operation should simply be retried once the read transactions
@@ -3692,10 +3695,12 @@ LIBMDBX_API int mdbx_env_get_fd(const MDBX_env *env, mdbx_filehandle_t *fd);
  *                        The requested geometry change needs the mapping to be
  *                        re-created, but it could not be applied right now:
  *                        either the address space for the new mapping is busy,
- *                        or a read transaction of this process holds the
- *                        remap-lock shared (Windows). Retry once the read
- *                        transactions are closed, or close and reopen the
- *                        environment.
+ *                        or the mapping cannot grow in place and must not move
+ *                        while a transaction of this process (a parked one
+ *                        included) is running, or a read transaction of this
+ *                        process holds the remap-lock shared (Windows). Retry
+ *                        once the transactions are closed, or close and reopen
+ *                        the environment.
  * \retval MDBX_EACCESS   The environment opened in read-only.
  * \retval MDBX_MAP_FULL  Specified size smaller than the space already
  *                        consumed by the environment.

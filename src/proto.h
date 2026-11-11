@@ -51,8 +51,13 @@ MDBX_INTERNAL int dxb_fsync(const MDBX_env *env, enum osal_syncmode_bits mode_bi
 MDBX_INTERNAL int __must_check_result dxb_sync_locked(MDBX_env *env, unsigned flags, meta_t *const pending,
                                                       troika_t *const troika);
 #if defined(ENABLE_MEMCHECK) || defined(__SANITIZE_ADDRESS__)
+MDBX_INTERNAL void dxb_sanitize_head(MDBX_env *env, pgno_t used);
 MDBX_INTERNAL void dxb_sanitize_tail(MDBX_env *env, MDBX_txn *txn);
 #else
+MDBX_MAYBE_UNUSED static inline void dxb_sanitize_head(MDBX_env *env, pgno_t used) {
+  (void)env;
+  (void)used;
+}
 MDBX_MAYBE_UNUSED static inline void dxb_sanitize_tail(MDBX_env *env, MDBX_txn *txn) {
   (void)env;
   (void)txn;
