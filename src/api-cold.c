@@ -147,8 +147,13 @@ __cold int mdbx_env_warmup(const MDBX_env *env, const MDBX_txn *txn, MDBX_warmup
     int err = check_env(env, true);
     if (unlikely(err != MDBX_SUCCESS))
       return LOG_IFERR(err);
-    if (txn && unlikely(txn->env != env))
-      return LOG_IFERR(MDBX_EINVAL);
+    if (txn) {
+      if (unlikely(txn->env != env))
+        return LOG_IFERR(MDBX_EINVAL);
+    } else {
+      if (env->txn && env->basal_txn->owner == osal_thread_self())
+        txn = env->txn;
+    }
   } else {
     env = txn->env;
   }
