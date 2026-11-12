@@ -1010,6 +1010,14 @@ macro(setup_compile_flags)
       add_compile_flags("C;CXX" "/fsanitize=address")
     endif()
     add_definitions(-DASAN_ENABLED=1)
+    # The tests link the ASan-instrumented code against the system
+    # (uninstrumented) libstdc++: the inline globals (e.g.
+    # std::piecewise_construct) differ in size/section between the
+    # instrumented copies and the library ones, so the ODR detector fires
+    # at the startup and kills the test before it runs. This is the
+    # documented ASan false-positive class for C++ programs (seen with
+    # GCC 15 and -O3 codegen, silent at other optimization levels).
+    set(MDBX_TESTS_ASAN_OPTIONS "ASAN_OPTIONS=detect_odr_violation=0")
   endif()
 
   if(ENABLE_UBSAN)
