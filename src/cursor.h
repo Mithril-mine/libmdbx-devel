@@ -232,10 +232,10 @@ MDBX_MAYBE_UNUSED MDBX_NOTHROW_PURE_FUNCTION static inline uint8_t couple_state_
  * сохраняется — он документирует «логически в конце, но читаемо в текущей
  * позиции». Позиция за хвостом (ki == page_numkeys) обязана сохранить
  * z_eof_hard, иначе она читалась бы как заполненная и CRUD-операции уходили
- * бы за пределы данных (issue #305). Курсор с маркером хвоста удалённых
+ * бы за пределы данных. Курсор с маркером хвоста удалённых
  * мультизначений не очищается вовсе: иначе после отвергнутого NEXT_DUP
  * повторное удаление перестало бы быть no-op и удалило бы реальное значение
- * (issue #301). */
+ *. */
 MDBX_MAYBE_UNUSED static inline void eof_hard_clear(MDBX_cursor *mc) {
   if (!(mc->flags & z_inner_tail_deleted) && is_pointed(mc) && mc->ki[mc->top] < page_numkeys(mc->pg[mc->top]))
     mc->flags &= ~z_eof_hard;

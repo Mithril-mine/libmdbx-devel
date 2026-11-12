@@ -116,7 +116,7 @@ int main(void) {
     mdbx_env_close(env_a);
     cleanup_files((const char *[]){db_a, lck_a, db_b, lck_b}, 4);
     mdbx_probe_ctl("fault ftok_key_collide none", reply, sizeof reply);
-    fprintf(stderr, "BUG PRESENT (issue #80): opening B succeeded despite the live colliding database A\n");
+    fprintf(stderr, "BUG PRESENT: opening B succeeded despite the live colliding database A\n");
     return 1;
   }
 
@@ -127,7 +127,7 @@ int main(void) {
     mdbx_env_close(env_a);
     cleanup_files((const char *[]){db_a, lck_a, db_b, lck_b}, 4);
     mdbx_probe_ctl("fault ftok_key_collide none", reply, sizeof reply);
-    fprintf(stderr, "BUG PRESENT (issue #80): opening the colliding database B broke database A: %d\n", rc);
+    fprintf(stderr, "BUG PRESENT: opening the colliding database B broke database A: %d\n", rc);
     return 1;
   }
   rc = mdbx_txn_commit(txn);
@@ -135,7 +135,7 @@ int main(void) {
   cleanup_files((const char *[]){db_a, lck_a, db_b, lck_b}, 4);
   mdbx_probe_ctl("fault ftok_key_collide none", reply, sizeof reply);
   if (rc != MDBX_SUCCESS) {
-    fprintf(stderr, "BUG PRESENT (issue #80): commit on database A failed after the collision: %d\n", rc);
+    fprintf(stderr, "BUG PRESENT: commit on database A failed after the collision: %d\n", rc);
     return 1;
   }
   printf("OK: database A survived the colliding database B (B was refused)\n");

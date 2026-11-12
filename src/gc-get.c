@@ -1372,7 +1372,7 @@ depleted_gc:
        * was skipped. Both are legitimate: fall through to allocate from the
        * unallocated part of the file. Do NOT assert env->incore here —
        * osal_check_fs_incore() returns MDBX_RESULT_FALSE unconditionally on
-       * Windows, so env->incore is always false there (issue #52). */
+       * Windows, so env->incore is always false there. */
     }
   }
 

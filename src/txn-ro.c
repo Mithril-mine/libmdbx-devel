@@ -337,7 +337,7 @@ int txn_ro_park(MDBX_txn *txn, bool autounpark) {
      * in principle. There is nowhere to store and track the transaction's
      * MVCC snapshot in a way visible outside the transaction, and while a
      * write transaction is running (in exclusive mode) no read transaction
-     * can hold a different snapshot, so no ousting can occur (issue #316). */
+     * can hold a different snapshot, so no ousting can occur. */
     return MDBX_EPERM;
   }
 
@@ -374,7 +374,7 @@ int txn_ro_unpark(MDBX_txn *txn) {
 
   if (unlikely(!txn->ro.slot))
     /* without-lck mode: see txn_ro_park() — parking is impossible in
-     * principle, so there is nothing to unpark (issue #316). */
+     * principle, so there is nothing to unpark. */
     return MDBX_EPERM;
 
   for (reader_slot_t *const slot = txn->ro.slot; slot; atomic_yield()) {
@@ -396,7 +396,7 @@ int txn_ro_unpark(MDBX_txn *txn) {
       break;
     if (unlikely(txn->ro.base != txn->env->dxb_mmap.base)) {
       /* the mapping was moved/recreated while parked: the held pointers are
-       * stale, the transaction must be ousted (issue #315) */
+       * stale, the transaction must be ousted */
       break;
     }
 

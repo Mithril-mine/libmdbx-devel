@@ -46,8 +46,8 @@ public:
   inline ~txn() noexcept;
   /* The base handle must never be move-initialized from the owning
    * txn_managed: the move would silently drop ownership, so the transaction
-   * (and for a writer, the environment's writer lock) would never be released
-   * (issue #77). The exact-match deleted overloads win over the base upcast
+   * (and for a writer, the environment's writer lock) would never be released.
+   * The exact-match deleted overloads win over the base upcast
    * and turn `mdbx::txn t = env.start_write();` into a compile error.
    * Copying from an lvalue txn_managed stays allowed: the copy is a
    * non-owning view and does not change the source's ownership. */
@@ -226,7 +226,7 @@ public:
   // списки курсоров.
   // \brief Close all cursors.
   // Опасный API: освобождает C-хендлы курсоров, которыми могут ещё
-  // владеть живые mdbx::cursor_managed (issue #91).
+  // владеть живые mdbx::cursor_managed.
   // inline size_t close_all_cursors() const { return release_all_cursors(false); }
 
   /// \brief Unbind all cursors.
@@ -240,7 +240,7 @@ public:
   ///   To keep using a cursor after this call, re-bind it explicitly via
   ///   \ref cursor::bind() / \ref cursor::renew() (the cursor's `unbind()`
   ///   makes the detachment explicit and is the recommended way to invalidate
-  ///   a wrapper you intend to re-use) (issue #146).
+  ///   a wrapper you intend to re-use).
   /// \returns The number of unbound cursors.
   inline size_t unbind_all_cursors() const { return release_all_cursors(true); }
 

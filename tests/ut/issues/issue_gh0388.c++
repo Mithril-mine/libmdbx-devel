@@ -116,7 +116,7 @@ TEST(issue_gh0388, reduced_single_value) {
   for (int round = 1; round <= 3; ++round) {
     /* correct usage: the key must be re-filled before every positioning,
      * since the pointers returned by mdbx_cursor_get() point into the
-     * database pages and a delete rewrites them (issue #388) */
+     * database pages and a delete rewrites them */
     key = val_of("A");
     ASSERT_EQ(mdbx_cursor_get(cursor, &key, &data, MDBX_SET), MDBX_SUCCESS)
         << "round " << round << ": MDBX_SET must succeed while the key exists";

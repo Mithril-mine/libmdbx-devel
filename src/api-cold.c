@@ -375,7 +375,7 @@ __cold int mdbx_env_set_flags(MDBX_env *env, MDBX_env_flags_t flags, bool onoff)
     if (lck) {
       /* The mode recorded in the lock file is what the open-time rigorous
        * check compares against: a runtime change must neither violate it
-       * nor leave it stale (issue #338). A rigorous difference is only
+       * nor leave it stale. A rigorous difference is only
        * allowed when no other process is working with the database, which
        * lck_upgrade(dont_wait) detects by taking the exclusive lock. */
       MDBX_env_flags_t snap_flags;

@@ -54,7 +54,7 @@ __cold int mdbx_drop(MDBX_txn *txn, MDBX_dbi dbi, bool del) {
   if (dbi == MAIN_DBI) {
     /* Refuse to drop/clear MAIN when it contains any named tables: such
      * records are N_TREE nodes and removing them leaves the named tables'
-     * pages orphaned, i.e. leaked (issue #311). The named tables must be
+     * pages orphaned, i.e. leaked. The named tables must be
      * dropped explicitly, one by one, before dropping/clearing MAIN. */
     rc = dbi_enumerate(txn, named_table_probe, nullptr, false);
     if (unlikely(rc != MDBX_SUCCESS))
@@ -143,7 +143,7 @@ __cold int mdbx_dbi_rename2(MDBX_txn *txn, MDBX_dbi dbi, const MDBX_val *new_nam
     /* dbi_rename_locked() stores txn->dbs[dbi] under the new name, so it must
      * be the current record, not one left by an aborted transaction or an
      * older snapshot; otherwise the commit persists a tree whose root points
-     * to pages that were never committed (see issue #106). */
+     * to pages that were never committed. */
     rc = tbl_refresh_absent2baddbi(txn, dbi);
     if (unlikely(rc != MDBX_SUCCESS))
       return LOG_IFERR(rc);

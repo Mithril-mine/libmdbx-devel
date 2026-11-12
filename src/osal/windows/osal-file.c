@@ -73,7 +73,7 @@ int osal_openfile(const enum osal_openfile_purpose purpose, const MDBX_env *env,
     break;
   case MDBX_OPEN_DXB_LAZY:
     DesiredAccess |= GENERIC_READ | GENERIC_WRITE;
-    /* With the exclusive fast i/o path (issue #179) the data file is opened
+    /* With the exclusive fast i/o path the data file is opened
      * shareable even in MDBX_EXCLUSIVE, so that the overlapped write-through
      * and dsync handles below can be created from this same process; the
      * exclusivity is then enforced by the constant byte-range locks taken in
@@ -124,7 +124,7 @@ int osal_openfile(const enum osal_openfile_purpose purpose, const MDBX_env *env,
     /* In exclusive mode a sharing/lock violation means exactly what
      * mdbx_env_open() documents: the environment is in use by another process
      * (or another exclusive opener of this process). Report MDBX_BUSY instead
-     * of the raw winerror. (issue #179) */
+     * of the raw winerror. */
     if ((env->flags & MDBX_EXCLUSIVE) && osal_is_sharing_violation_error(err))
       err = MDBX_BUSY;
     return err;

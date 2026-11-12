@@ -1,7 +1,7 @@
 /// \copyright SPDX-License-Identifier: Apache-2.0
 /// \author Леонид Юрьев aka Leonid Yuriev <leo@yuriev.ru> \date 2026
 ///
-/// \file Two modes for the test-suite hygiene (issue #343).
+/// \file Two modes for the test-suite hygiene.
 ///
 /// Default mode: deletes the listed paths through mdbx_env_delete(), for the
 /// CTest FIXTURES_CLEANUP tests of the chained smoke scenarios: each chain

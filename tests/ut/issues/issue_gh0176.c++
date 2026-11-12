@@ -143,7 +143,7 @@ public:
   /* Plant a fabricated but internally-consistent node header + key starting at
    * sub_off + PAGEHDRSZ + offset (i.e. where entries[offset/2] would alias it
    * through page_node()). This is the same technique the main-page test
-   * (issue #57) uses: the node is valid enough to pass every content check
+   * uses: the node is valid enough to pass every content check
    * except the entries-offset (vs upper) one. */
   void plant_node(size_t offset, const char *key, size_t ksize) {
     const size_t base = sub_off + PAGEHDRSZ + offset;

@@ -185,7 +185,7 @@ CMake-опции (`cmake/profile.cmake`):
 6. `mdbx_stat -p` → msync/fsync счётчики: много мелких синков.
 
 Решение: режим sync, dp_limit/спилл-знаменатели, prefault, батчинг,
-дефрагментация, проверка `incoherence` (issue #269).
+дефрагментация, проверка `incoherence`.
 
 ### 2.3. `MDBX_MAP_FULL`
 

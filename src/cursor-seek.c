@@ -181,7 +181,7 @@ got_node:
     if (unlikely(ret.err != MDBX_SUCCESS)) {
       /* The sub-page could not be materialized (corruption): the positioned
        * match is not a usable exact match, keep the exact/exact-implies-success
-       * invariant. (issue #176) */
+       * invariant. */
       ret.exact = false;
       return ret;
     }
@@ -288,7 +288,7 @@ __hot int cursor_ops(MDBX_cursor *mc, MDBX_val *key, MDBX_val *data, const MDBX_
       return outer_next(mc, key, data, MDBX_NEXT_DUP);
     else if (inner_pointed(mc) && unlikely(inner_tail_deleted(&mc->subcur->cursor)))
       /* the previous delete consumed the last multi-value of the key:
-       * GET_CURRENT returns the next record (issue #301); the tail-deleted
+       * GET_CURRENT returns the next record; the tail-deleted
        * mark implies the eof state, i.e. the inner is not filled */
       return outer_next(mc, key, data, MDBX_NEXT);
     else {
@@ -413,7 +413,7 @@ __hot int cursor_ops(MDBX_cursor *mc, MDBX_val *key, MDBX_val *data, const MDBX_
     /* The z_eof_hard flag reflects internal intermediate state and must not be exposed to outer code after an next-ops.
      * Elsewise a tree rebalance after deletion may going wrong. So just clear it in both cursors, but only when
      * positioned on an element: a past-the-tail position (ki == page_numkeys) must keep z_eof_hard, otherwise it would
-     * read as positioned/filled and CRUD would go out of the data bounds (issue #305). */
+     * read as positioned/filled and CRUD would go out of the data bounds. */
     eof_hard_clear(mc);
     eof_hard_clear(&((cursor_couple_t *)mc)->inner.cursor);
     return rc;
@@ -535,7 +535,7 @@ __hot int cursor_ops(MDBX_cursor *mc, MDBX_val *key, MDBX_val *data, const MDBX_
           if (csr.exact) {
             cASSERT0(mc, csr.err == MDBX_SUCCESS);
             /* copy the found value back, ops without further moves would
-             * return the stale first multi-value otherwise (issue #313) */
+             * return the stale first multi-value otherwise */
             *data = save_data;
             if (op == MDBX_TO_EXACT_KEY_VALUE_LESSER_THAN)
               rc = inner_prev(mx, data);
@@ -547,7 +547,7 @@ __hot int cursor_ops(MDBX_cursor *mc, MDBX_val *key, MDBX_val *data, const MDBX_
             rc = MDBX_NOTFOUND;
           if (op == MDBX_TO_EXACT_KEY_VALUE_EQUAL && rc == MDBX_NOTFOUND) {
             /* The same uniform past-the-tail state as for TO_PAIR_EQUAL:
-             * the position yields no data and forbids CRUD (issue #305). */
+             * the position yields no data and forbids CRUD. */
             if (is_pointed(mx) && mx->top >= 0) {
               mx->ki[mx->top] = (indx_t)page_numkeys(mx->pg[mx->top]);
               mx->flags = (mx->flags & z_inner) | z_eof_soft | z_eof_hard;
@@ -600,7 +600,7 @@ __hot int cursor_ops(MDBX_cursor *mc, MDBX_val *key, MDBX_val *data, const MDBX_
             cASSERT0(mc, csr.err == MDBX_SUCCESS);
             /* the seek wrote the found value into save_data, but the user's
              * *data still holds the first multi-value from the outer seek
-             * (issue #313): ops without further moves must copy it back */
+             *: ops without further moves must copy it back */
             *data = save_data;
             if (op == MDBX_TO_PAIR_LESSER_THAN)
               rc = outer_prev(mc, key, data, MDBX_PREV);
@@ -617,7 +617,7 @@ __hot int cursor_ops(MDBX_cursor *mc, MDBX_val *key, MDBX_val *data, const MDBX_
              * the one uniform past-the-tail state, regardless of where the
              * seek landed and of whether the dupset is a sub-page or a
              * nested tree: the position yields no data and forbids CRUD
-             * (issue #305). */
+             *. */
             if (is_pointed(mx) && mx->top >= 0) {
               mx->ki[mx->top] = (indx_t)page_numkeys(mx->pg[mx->top]);
               mx->flags = (mx->flags & z_inner) | z_eof_soft | z_eof_hard;

@@ -211,7 +211,7 @@ __hot void node_del(MDBX_cursor *mc, size_t ksize) {
   void *const base = ptr_disp(mp, mp->upper + PAGEHDRSZ);
   /* Defense-in-depth: hole_offset must sit at or above upper, otherwise the
    * memmove() length below underflows to ~SIZE_MAX. The primary guard is the
-   * corresponding entries-offset check in page_check(). (issue #57) */
+   * corresponding entries-offset check in page_check(). */
   cASSERT0(mc, hole_offset >= mp->upper);
   memmove(ptr_disp(base, hole_size), base, hole_offset - mp->upper);
 

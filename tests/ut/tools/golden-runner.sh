@@ -26,7 +26,7 @@ TOOL="${1:?tool}"; shift
 BIN="${1:?tool binary}"; shift
 WORK="${1:?workdir}"; shift
 # clean the whole runner work directory on ANY exit path, including the
-# fixture-build failures above (issue #343)
+# fixture-build failures above
 trap 'rm -rf "$WORK"' EXIT
 UPDATE=0
 if [ "${1:-}" = "--update" ]; then UPDATE=1; shift; fi
@@ -367,7 +367,7 @@ case_load_leading_space() {
   diff -q "$d/stderr.norm" "$d/golden.err.norm" >/dev/null 2>&1 || ok=0
   local want_rc="$(cat "$GOLDEN/$TOOL/$name.rc")"
   [ "$rc" = "$want_rc" ] || ok=0
-  [ "$data_ok" = 1 ] || { ok=0; log "  $TOOL/$name: round-trip data mismatch (issue #61)"; diff "$d/src.dump" "$d/reloaded.dump" 2>&1 | head -8 | sed 's/^/      /'; }
+  [ "$data_ok" = 1 ] || { ok=0; log "  $TOOL/$name: round-trip data mismatch"; diff "$d/src.dump" "$d/reloaded.dump" 2>&1 | head -8 | sed 's/^/      /'; }
   if [ "$ok" = 1 ]; then pass=$((pass+1)); log "PASS $TOOL/$name"
   else
     fail=$((fail+1)); FAILED_CASES+=("$TOOL/$name"); log "FAIL $TOOL/$name (rc=$rc want=$want_rc)"
@@ -502,7 +502,7 @@ for f in $tool_funcs; do
 done
 
 # Remove the whole worktree of the runner: each case deletes its directory
-# before the run, but nothing removed it after (issue #343), so ~44 fixture
+# before the run, but nothing removed it after, so ~44 fixture
 # databases (about 2.7 GB) accumulated in the build tree on every run.
 rm -rf "$WORK"
 

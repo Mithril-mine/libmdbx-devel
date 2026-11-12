@@ -24,7 +24,7 @@ static int txn_write(MDBX_txn *txn, iov_ctx_t *ctx) {
          * The failed page itself was never queued, so release its shadow too.
          * These entries are dropped from the dirty list by the tail loop
          * below, otherwise they would be released a second time at the
-         * transaction end (issue #321). */
+         * transaction end. */
         page_shadow_release(txn->env, dp, npages);
         ++r; /* the failed page is dropped as well */
         break;

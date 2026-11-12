@@ -253,7 +253,7 @@ static defer_free_item_t *dbi_rename_undo_attach(MDBX_txn *txn, MDBX_dbi dbi, de
     undo->dbi = (unsigned)dbi;
     txn->dbi_rename_undo = undo;
     /* Гарантирует вызов dbi_update() при завершении транзакции, а в нём —
-     * обработку undo (issue #307). */
+     * обработку undo. */
     txn->flags |= MDBX_TXN_DIRTY;
     return nullptr;
   }
@@ -313,7 +313,7 @@ int dbi_update(MDBX_txn *txn, bool commit) {
     dbi_defer_release(env, defer_chain);
   }
 
-  /* Отложенный undo переименований таблиц (issue #307): при abort имена
+  /* Отложенный undo переименований таблиц: при abort имена
    * восстанавливаются в kvs, при commit базовой транзакции буферы уходят
    * в deferred-free, при commit вложенной — долг отката переходит к родителю. */
   if (unlikely(txn->dbi_rename_undo != nullptr))
@@ -837,7 +837,7 @@ __cold static struct dbi_rename_result dbi_rename_locked(MDBX_txn *txn, MDBX_dbi
       pair.err = cursor_del(&cx.outer, N_TREE);
     if (likely(pair.err == MDBX_SUCCESS)) {
       /* старое имя отдаётся вызывающему для отката при abort транзакции
-       * (issue #307), новое публикуется сразу */
+       *, новое публикуется сразу */
       pair.defer = env->kvs[dbi].name.iov_base;
       pair.old_len = old_name.iov_len;
       env->kvs[dbi].name = new_name;
@@ -853,7 +853,7 @@ __cold int dbi_rename_locked_and_release(MDBX_txn *txn, MDBX_dbi dbi, MDBX_val n
   struct dbi_rename_result pair = dbi_rename_locked(txn, dbi, new_name);
   if (pair.defer) {
     /* старое имя остаётся живым и восстанавливается при abort транзакции
-     * (issue #307): прикрепляем undo вместо освобождения буфера */
+     *: прикрепляем undo вместо освобождения буфера */
     if (likely(pair.err == MDBX_SUCCESS))
       pair.defer = dbi_rename_undo_attach(txn, dbi, pair.defer, pair.old_len);
     if (pair.defer) {

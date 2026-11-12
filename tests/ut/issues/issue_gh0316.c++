@@ -184,7 +184,7 @@ int scan_count(void *context, MDBX_val *, MDBX_val *, void *) noexcept {
 }
 
 /* The core regression: park and unpark must refuse a read transaction
- * without a reader slot (issue #316), the transaction must stay usable. */
+ * without a reader slot, the transaction must stay usable. */
 TEST(issue_gh0316, park_unpark_eperm) {
   if (MDBX_GTEST_IS_EXECUTION_TIMEOUT()) {
     GTEST_SKIP() << "SKIPPED by RUNTIME_LIMIT";

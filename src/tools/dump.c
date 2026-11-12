@@ -393,7 +393,7 @@ int main(int argc, char *argv[]) {
     int count = 0;
     MDBX_val key;
     /* The named tables' records are dumped as their own sections below, so
-     * the trailing main-table section must skip them (issue #385). */
+     * the trailing main-table section must skip them. */
     char **table_names = nullptr;
     unsigned n_table_names = 0;
     while (MDBX_SUCCESS == (err = mdbx_cursor_get(cursor, &key, nullptr, MDBX_NEXT_NODUP))) {
@@ -477,7 +477,7 @@ int main(int argc, char *argv[]) {
     /* The plain main-table records are dumped as a trailing section with an
      * explicitly empty `database=` value, which names the main table (see the
      * `database=` handling in mdbx_load); the named-table records are skipped
-     * here as they belong to the tables' own sections above (issue #385). */
+     * here as they belong to the tables' own sections above. */
     if (!list && have_raw && (err == MDBX_SUCCESS || err == MDBX_NOTFOUND)) {
       /* name = nullptr: the section carries no `database=` line, so mdbx_load
        * (which resets the name at every section header) restores the records

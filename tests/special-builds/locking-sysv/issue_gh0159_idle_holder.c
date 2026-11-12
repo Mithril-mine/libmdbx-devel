@@ -162,7 +162,7 @@ int main(void) {
   if (open_b_rc == 0) {
     mdbx_env_close(env_b);
     env_b = NULL;
-    fprintf(stderr, "BUG PRESENT (issue #159): opening B succeeded while database A is open but idle\n");
+    fprintf(stderr, "BUG PRESENT: opening B succeeded while database A is open but idle\n");
   }
 
   /* A must still begin and commit a write transaction. */
@@ -173,11 +173,11 @@ int main(void) {
   mdbx_env_close(env_a);
   cleanup_files(cleanup, 4);
   if (rc != MDBX_SUCCESS) {
-    fprintf(stderr, "BUG PRESENT (issue #159): database A broke after the colliding open: %d\n", rc);
+    fprintf(stderr, "BUG PRESENT: database A broke after the colliding open: %d\n", rc);
     return 1;
   }
   if (open_b_rc == 0) {
-    fprintf(stderr, "BUG PRESENT (issue #159): opening B was not refused even before A broke\n");
+    fprintf(stderr, "BUG PRESENT: opening B was not refused even before A broke\n");
     return 1;
   }
   printf("OK: an idle-open database A survived a colliding open of B (B was refused)\n");

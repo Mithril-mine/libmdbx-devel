@@ -626,7 +626,7 @@ int main(int argc, char *argv[]) {
     /* The man page promises the standard input by default and requires
      * dbpath as the last argument. When '-f' consumed the only remaining
      * argument as its file, treat that argument as the dbpath and fall
-     * back to stdin (issue #50). */
+     * back to stdin. */
     if (input_file && optind == argc) {
       envname = input_file;
       input_file = nullptr;

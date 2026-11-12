@@ -389,7 +389,7 @@ int cursor_dupsort_setup(MDBX_cursor *mc, const node_t *node, const page_t *mp) 
     if (!MDBX_DISABLE_VALIDATION && unlikely(!subpage_geometry_ok(sp, dsize))) {
       /* Crafted nested-page lower/upper make node_del()/cursor_put()
        * underflow their memmove()/memcpy() lengths even on the normal
-       * (non-MDBX_VALIDATION) path. (issue #176) */
+       * (non-MDBX_VALIDATION) path. */
       return bad_page(sp, "invalid nested %s-page lower(%u)/upper(%u) for size %zu\n",
                       is_dupfix_leaf(sp) ? "leaf2" : "leaf", sp->lower, sp->upper, node_ds(node) - PAGEHDRSZ);
     }

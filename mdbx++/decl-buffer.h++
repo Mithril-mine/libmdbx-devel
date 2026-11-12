@@ -1320,7 +1320,7 @@ public:
   /// \returns A reference to this instance.
   buffer &assign(const void *ptr, size_t bytes, bool make_reference = false) {
     /* assign_freestanding() would memcpy from `ptr` before any slice guard can
-     * fire, so reject a null pointer with a non-zero length up front (issue #142). */
+     * fire, so reject a null pointer with a non-zero length up front. */
     if (MDBX_UNLIKELY(ptr == nullptr))
       MDBX_CXX20_UNLIKELY check_nullptr_length(bytes);
     return make_reference ? assign_reference(ptr, bytes) : assign_freestanding(ptr, bytes);
@@ -1456,7 +1456,7 @@ public:
   /// \returns A reference to this instance.
   template <class CHAR, class T> buffer &operator=(const ::std::basic_string_view<CHAR, T> &view) {
     /* assigning a string_view copies the bytes into owned storage, so this
-     * allocates and must be allowed to throw on out-of-memory (issue #78) */
+     * allocates and must be allowed to throw on out-of-memory */
     return assign(inherited(view));
   }
 

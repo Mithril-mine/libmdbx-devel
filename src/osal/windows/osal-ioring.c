@@ -295,7 +295,7 @@ osal_ioring_write_result_t osal_ioring_write(osal_ioring_t *ior, mdbx_filehandle
      * MAXIMUM_WAIT_OBJECTS handles. Without this, a MIXED batch that has no
      * gather events waits on the gather events alone and returns while
      * WriteFileEx APCs are still in flight -> STATUS_PENDING read as an error,
-     * ring reset under a live APC (issue #47 defect 2). */
+     * ring reset under a live APC. */
     ASSERT(wait_for > ior->event_pool + ior->event_stack);
     *--wait_for = ior->async_done;
   }

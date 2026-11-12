@@ -333,8 +333,8 @@ int txn_setup_primal(MDBX_txn *txn) {
 #if IS_WINDOWS
     /* This block writes env->dxb_mmap.filesize/current, so it must be
      * serialized against dxb_resize() the same way resizers are serialized
-     * among themselves: since issue #154 both this path and a plain grow hold
-     * remap_lock only SHARED, and shared holders are mutually compatible.
+     * among themselves: both this path and a plain grow hold remap_lock only
+     * SHARED, and shared holders are mutually compatible.
      * resize_mutex is the leaf lock that provides the missing mutual exclusion
      * (see dxb_resize()); readers never take it. */
     err = osal_fastmutex_acquire(&env->resize_mutex);

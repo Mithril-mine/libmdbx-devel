@@ -257,7 +257,7 @@ int osal_mresize(const int flags, osal_mmap_t *map, size_t size, size_t limit) {
      * OS/system limitation, NOT a shortage of resources (address space
      * exhaustion is reported separately as MDBX_UNABLE_EXTEND_MAPSIZE, and a
      * deferred shrink/remap caused by readers holding the remap-lock shared is
-     * decided by the caller in dxb_resize(); see issue #154). */
+     * decided by the caller in dxb_resize()). */
     return MDBX_EPERM;
   }
 

@@ -365,7 +365,7 @@ __cold static int page_kill(MDBX_txn *txn, page_t *mp, pgno_t pgno, size_t npage
      * mp->txnid == txn->front_txnid, so is_frozen() (mp->txnid < txn->txnid) is
      * always false. This frozen scatter-gather branch is kept for symmetry and
      * future call sites; the live scatter-gather coverage comes from the
-     * prefault path in page_alloc_finalize(). (issue #203) */
+     * prefault path in page_alloc_finalize(). */
     struct iovec iov[MDBX_AUXILARY_IOV_MAX];
     /* Using the same pattern/buffer to write each page of npages. */
     iov[0].iov_len = env->ps;
@@ -634,7 +634,7 @@ status_done:
          * media/filesystem here. Note the page has already been scrubbed with
          * a stub by page_kill(), so it MUST still be washed off the dirty list
          * and reclaimed below to keep the transaction state consistent; the
-         * error is surfaced only at the very end. (issue #203) */
+         * error is surfaced only at the very end. */
         const int kill_err = page_kill(txn, mp, pgno, npages);
         if (unlikely(kill_err != MDBX_SUCCESS)) {
           txn->flags |= MDBX_TXN_ERROR;

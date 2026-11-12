@@ -367,7 +367,7 @@ __cold int chk_handle_kv(MDBX_chk_scope_t *const scope, MDBX_chk_table_t *tbl, c
    * table_filter callback, e.g. `mdbx_chk -s <table>`); no per-record user
    * processing for such tables. In particular the MAIN table always carries a
    * cookie only when it passes the filter, so this is not an invariant to
-   * assert on (issue #49: ASSERT(tbl->cookie) crashed mdbx_chk -s on DBs
+   * ASSERT(tbl->cookie) crashed `mdbx_chk -s` on DBs
    * whose main table holds ordinary records). */
   if (!tbl->cookie)
     return err;

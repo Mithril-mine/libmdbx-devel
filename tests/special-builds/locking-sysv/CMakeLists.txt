@@ -30,7 +30,7 @@ target_include_directories(issue_gh0080_ftok PRIVATE ${LIBMDBX_SOURCE_DIR})
 target_link_libraries(issue_gh0080_ftok PRIVATE mdbx-static)
 add_test(NAME issue_gh0080_ftok COMMAND issue_gh0080_ftok)
 
-# Regression test for the ftok() key collision defect (issue #80): a colliding
+# Regression test for the ftok() key collision defect: a colliding
 # open of a live database must be refused instead of reclaiming (removing) the
 # live semaphore set. The collision is injected via the ftok_key_collide FAULT
 # site, so the probe-bus must be active at run time (MDBX_PROBES=1).

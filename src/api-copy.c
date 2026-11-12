@@ -86,7 +86,7 @@ __cold static int compacting_toggle_write_buffers(ctx_t *ctx) {
   osal_condpair_signal(&ctx->condpair, true);
   while (!ctx->error && ctx->head - ctx->tail == 2 /* both buffers in use */) {
     /* In without-lck mode a read transaction has no reader slot and the
-     * parking is impossible (issue #316): the throttling silently skipped. */
+     * parking is impossible: the throttling silently skipped. */
     if (ctx->flags & MDBX_CP_THROTTLE_MVCC)
       mdbx_txn_park(ctx->txn, false);
     int err = osal_condpair_wait(&ctx->condpair, false);
@@ -878,7 +878,7 @@ __cold static int copy2pathname(MDBX_txn *txn, const pathchar_t *dest_path, MDBX
     /* Remove the destination only when this call damaged it: either we started
      * writing to the file, or we created it and no other process holds it. A
      * pre-existing file that we failed before writing to it (e.g. a live
-     * database we could not lock, issue #58), or a file locked by another
+     * database we could not lock), or a file locked by another
      * process (e.g. a concurrent copy that has just created it), must survive. */
     const bool remove_dest = touched || (created_by_us && !locked_by_other);
     if (remove_dest) {
@@ -897,7 +897,7 @@ __cold int mdbx_txn_copy2fd(MDBX_txn *txn, mdbx_filehandle_t fd, MDBX_copy_flags
   if (likely(rc == MDBX_SUCCESS)) {
     if (unlikely(!txn->ro.slot))
       /* In without-lck mode a read transaction has no reader slot and the
-       * parking is impossible (issue #316): the throttling silently
+       * parking is impossible: the throttling silently
        * skipped. */
       flags &= ~MDBX_CP_THROTTLE_MVCC;
     rc = copy2fd(txn, fd, flags, nullptr, false);
@@ -916,7 +916,7 @@ __cold int mdbx_env_copy2fd(MDBX_env *env, mdbx_filehandle_t fd, MDBX_copy_flags
     return LOG_IFERR(rc);
   if (unlikely(!env->lck_mmap.lck))
     /* In without-lck mode a read transaction has no reader slot and the
-     * parking is impossible (issue #316): the throttling silently
+     * parking is impossible: the throttling silently
      * skipped. */
     flags &= ~MDBX_CP_THROTTLE_MVCC;
 
@@ -947,7 +947,7 @@ __cold int mdbx_txn_copy2pathnameW(MDBX_txn *txn, const wchar_t *dest_path, MDBX
   if (likely(rc == MDBX_SUCCESS)) {
     if (unlikely(!txn->ro.slot))
       /* In without-lck mode a read transaction has no reader slot and the
-       * parking is impossible (issue #316): the throttling silently
+       * parking is impossible: the throttling silently
        * skipped. */
       flags &= ~MDBX_CP_THROTTLE_MVCC;
     rc = copy2pathname(txn, dest_path, flags);
@@ -978,7 +978,7 @@ __cold int mdbx_env_copyW(MDBX_env *env, const wchar_t *dest_path, MDBX_copy_fla
     return LOG_IFERR(rc);
   if (unlikely(!env->lck_mmap.lck))
     /* In without-lck mode a read transaction has no reader slot and the
-     * parking is impossible (issue #316): the throttling silently
+     * parking is impossible: the throttling silently
      * skipped. */
     flags &= ~MDBX_CP_THROTTLE_MVCC;
 

@@ -253,7 +253,7 @@ static MDBX_chk_user_table_cookie_t *table_filter(MDBX_chk_context_t *ctx, const
     return (void *)(intptr_t)-1;
   const bool match =
       (only_table.iov_len == name->iov_len && memcmp(only_table.iov_base, name->iov_base, name->iov_len) == 0);
-  /* issue #386: an unknown -s target must not silently pass as success */
+  /* an unknown -s target must not silently pass as success */
   table_matched |= match;
   return match ? (void *)(intptr_t)-1 : nullptr;
 }
@@ -606,7 +606,7 @@ int main(int argc, char *argv[]) {
   }
 
   if (only_table.iov_base && !table_matched) {
-    /* issue #386: a mistyped -s target must not silently "check nothing" */
+    /* a mistyped -s target must not silently "check nothing" */
     error_fmt("table `%.*s` is not found.", (int)only_table.iov_len, (char *)only_table.iov_base);
     rc = MDBX_NOTFOUND;
   }

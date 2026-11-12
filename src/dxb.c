@@ -76,7 +76,7 @@ __cold int dxb_read_header(MDBX_env *env, meta_t *dest, const int lck_exclusive,
          * file is held by another exclusive env — possibly one reached through
          * a different hard-link, hence with its own lock file, so lck_setup()
          * could not detect the contention. Report the documented MDBX_BUSY
-         * rather than the raw winerror. (issue #179) */
+         * rather than the raw winerror. */
         if (err == ERROR_LOCK_VIOLATION && env_exclusive_fastpath(env))
           return MDBX_BUSY;
       }
@@ -131,7 +131,7 @@ __cold int dxb_read_header(MDBX_env *env, meta_t *dest, const int lck_exclusive,
        * a boot-id match means the data is live, a writable open can
        * steady-sync/promote it, a read-only one requires recovery. The
        * presence of a lock file must not steer this choice: lckless and
-       * with-lck opens behave identically here. (issue #215) */
+       * with-lck opens behave identically here. */
       latch = meta_bootid_match(meta) ? meta_choice_recent(meta->unsafe_txnid, SIGN_IS_STEADY(meta->unsafe_sign),
                                                            dest->unsafe_txnid, SIGN_IS_STEADY(dest->unsafe_sign))
                                       : meta_choice_steady(meta->unsafe_txnid, SIGN_IS_STEADY(meta->unsafe_sign),
@@ -337,7 +337,7 @@ __cold int dxb_setup(MDBX_env *env, const int lck_rc, const mdbx_mode_t mode_bit
    * A conflicting lock (another exclusive env — including one reached through a
    * different hard-link with its own lock file — or a without-lck reader) makes
    * this fail with MDBX_BUSY before the existing database is resized/remapped.
-   * No-op unless env_exclusive_fastpath(). (issue #179) */
+   * No-op unless env_exclusive_fastpath(). */
   err = windows_seize_exclusive(env);
   if (unlikely(MDBX_IS_ERROR(err)))
     return LOG_IFERR(err);
@@ -418,7 +418,7 @@ __cold int dxb_setup(MDBX_env *env, const int lck_rc, const mdbx_mode_t mode_bit
     expected_filesize = env->geo_in_bytes.now;
   const uint64_t filesize_before = env->dxb_mmap.filesize;
   if (unlikely(filesize_before != env->geo_in_bytes.now)) {
-    /* Two directions are possible and must not be conflated (issue #154):
+    /* Two directions are possible and must not be conflated:
      *  - `filesize > geo.now`: another process has grown the file, OR our own
      *    earlier commit deferred a shrink (on Windows the mapping cannot be
      *    un-mapped while readers exist, so the meta was written with the
@@ -757,7 +757,7 @@ __cold int dxb_setup(MDBX_env *env, const int lck_rc, const mdbx_mode_t mode_bit
   return rc;
 }
 
-/* Decide whether and how far the datafile can be shrunk (issue #154).
+/* Decide whether and how far the datafile can be shrunk.
  *
  * Two-phase: Phase A (`dxb_shrink_maybe`) is pure arithmetic and needs no
  * reader-table scan, so the common "nothing to shrink" case skips the
@@ -849,7 +849,7 @@ int dxb_sync_locked(MDBX_env *env, unsigned flags, meta_t *const pending, troika
      * On Windows the OS kernel is unable to shrink a mapped file (a mapped
      * section cannot be truncated), so the shrink has to un-map/remap and thus
      * needs the exclusive remap-lock, which an in-process reader may hold
-     * shared for an unbounded time (issue #154), so
+     * shared for an unbounded time, so
      * the attempt can be deferred in dxb_resize(). To keep such a deferral
      * cheap, the `force steady` below is additionally gated on the steady
      * checkpoint's allocated pages being beyond the new end of the file: once a
@@ -1178,7 +1178,7 @@ int dxb_sync_locked(MDBX_env *env, unsigned flags, meta_t *const pending, troika
     if (rc == MDBX_SUCCESS) {
       /* The shrink actually succeeded: clear the rate-limit timestamp, so a
        * FOLLOW-UP shrink-warranted commit is not throttled just because it
-       * falls inside the MDBX_opt_shrink_retry_period window (issue #217).
+       * falls inside the MDBX_opt_shrink_retry_period window.
        * The throttle is meant for DOOMED attempts (a foreign process keeps the
        * file mapped, or the remap-lock was not obtainable); one that succeeded
        * proves there is no obstacle, so the very next warranted commit must be
@@ -1189,7 +1189,7 @@ int dxb_sync_locked(MDBX_env *env, unsigned flags, meta_t *const pending, troika
 #endif /* IS_WINDOWS */
     }
     if (rc != MDBX_SUCCESS) {
-      /* The shrink was DEFERRED (issue #154): on Windows an in-process reader
+      /* The shrink was DEFERRED: on Windows an in-process reader
        * holds the remap-lock shared, so the mapping cannot be un-mapped and the
        * file keeps its larger size for now. The meta-page above was written with
        * the reduced `geometry.now` (the logical size), while the physical file

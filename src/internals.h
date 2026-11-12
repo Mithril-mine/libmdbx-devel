@@ -257,9 +257,9 @@ struct MDBX_txn {
       reader_slot_t *slot;
       /* The mapped database body base as seen by this transaction: saved at
        * start, checked at unpark to detect a mapping move while parked, when
-       * the held pointers become stale (issue #315). The per-transaction
+       * the held pointers become stale. The per-transaction
        * base for forming page addresses is the subject of the refactoring
-       * (issue #424). */
+       *. */
       void *base;
     } ro;
     struct {
@@ -516,7 +516,7 @@ struct MDBX_env {
     uint16_t split_reserve_dot16;
     /* Minimal period between attempts to shrink the datafile, in monotonic
      * units (see osal_monotime()); zero means no throttling. Affects the
-     * current process only (issue #170). */
+     * current process only. */
     uint64_t shrink_retry_period;
 #if !IS_WINDOWS
     unsigned writethrough_threshold;
@@ -595,12 +595,12 @@ struct MDBX_env {
 
 #if IS_WINDOWS
   /* Monotonic timestamp of the last datafile-shrink attempt, for the
-   * per-process throttling of shrink-through-un-map (issue #170). Kept here
+   * per-process throttling of shrink-through-un-map. Kept here
    * (a per-process field) rather than in the shared lck_t, so no lock-file
    * format/version change is required. */
   uint64_t shrink_last_attempt;
   osal_srwlock_t remap_lock;
-  /* Leaf lock serializing concurrent resizers (issue #154). remap_lock is now
+  /* Leaf lock serializing concurrent resizers. remap_lock is now
    * taken shared for a plain grow, so two growers (a read txn noticing the file
    * grew by another process, and the writer growing it) could otherwise mutate
    * env->dxb_mmap and call NtExtendSection() concurrently. This mutex makes

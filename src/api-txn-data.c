@@ -295,7 +295,7 @@ int mdbx_put(MDBX_txn *txn, MDBX_dbi dbi, const MDBX_val *key, MDBX_val *data, M
           /* LY: check the new value's size BEFORE deleting the multi-values,
            * otherwise a size error would return MDBX_BAD_VALSIZE with all the
            * values already gone and the transaction still committable
-           * (issue #313). */
+           *. */
           if (unlikely(key->iov_len > cx.outer.clc->k.lmax || key->iov_len < cx.outer.clc->k.lmin ||
                        data->iov_len > cx.outer.clc->v.lmax || data->iov_len < cx.outer.clc->v.lmin))
             return LOG_IFERR(MDBX_BAD_VALSIZE);

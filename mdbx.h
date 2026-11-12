@@ -5010,7 +5010,7 @@ LIBMDBX_API int mdbx_txn_reset(MDBX_txn *txn);
  *
  * \returns A non-zero error value on failure and 0 on success.
  * \retval MDBX_EPERM  The environment runs in without-lck mode and the read transaction has no
- *                      reader slot, so parking is impossible (issue #316). */
+ *                      reader slot, so parking is impossible. */
 LIBMDBX_API int mdbx_txn_park(MDBX_txn *txn, bool autounpark);
 
 /** \brief Unparks a previously parked reading transaction.
@@ -5023,7 +5023,7 @@ LIBMDBX_API int mdbx_txn_park(MDBX_txn *txn, bool autounpark);
  * \note Unparking applies only to a transaction that was actually parked.
  * When the environment runs in without-lck mode (e.g. opened from read-only
  * files), the reader slot does not exist, parking is impossible in principle
- * and \ref mdbx_txn_park() refuses with \ref MDBX_EPERM (issue #316).
+ * and \ref mdbx_txn_park() refuses with \ref MDBX_EPERM.
  * \ref mdbx_txn_unpark() for a non-parked transaction is a quiet no-op and
  * returns \ref MDBX_SUCCESS.
  *
@@ -6285,7 +6285,7 @@ LIBMDBX_API int mdbx_cursor_close2(MDBX_cursor *cursor);
  *
  * \warning These functions must NOT be used when the transaction is used
  * through the C++ \ref mdbx::cursor_managed wrappers: releasing a cursor
- * behind the wrapper's back leaves it owning a freed handle (issue #91).
+ * behind the wrapper's back leaves it owning a freed handle.
  *
  * \see mdbx_cursor_unbind()
  * \see mdbx_cursor_close()
@@ -6313,7 +6313,7 @@ LIBMDBX_API int mdbx_txn_release_all_cursors_ex(const MDBX_txn *txn, bool unbind
  *
  * \warning These functions must NOT be used when the transaction is used
  * through the C++ \ref mdbx::cursor_managed wrappers: releasing a cursor
- * behind the wrapper's back leaves it owning a freed handle (issue #91).
+ * behind the wrapper's back leaves it owning a freed handle.
  *
  * \see mdbx_cursor_unbind()
  * \see mdbx_cursor_close()

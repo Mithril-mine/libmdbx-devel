@@ -593,7 +593,7 @@ __cold int lck_destroy(MDBX_env *env, MDBX_env *inprocess_neighbor, const mdbx_p
  * leftover (safe to reclaim) or a foreign collision — a live database that
  * happens to share the key (must not be touched). Liveness is not judged from
  * the semop() history (GETPID/sem_otime), which does not reflect a database
- * that is open but idle or whose last locking process has exited (issue #159);
+ * that is open but idle or whose last locking process has exited;
  * instead every set created by libmdbx carries a signature in the semval of
  * its extra semaphores (see lck_ftok()). The signature is set once by SETALL
  * at set creation and never changed by semop(), so it is stable and precise:
@@ -1105,7 +1105,7 @@ void lck_txn_unlock(MDBX_env *env) {
 
 /* Shrinking the datafile never needs un-mapping on POSIX (ftruncate works with
  * the mapping in place), so an attempt is never deferred for exclusivity or
- * throttling reasons — see the Windows implementation for issue #170. */
+ * throttling reasons — see the Windows implementation. */
 bool dxb_shrink_attempt_allowed(MDBX_env *env) {
   (void)env;
   return true;

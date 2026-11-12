@@ -189,7 +189,7 @@ static void child_swarm(const char *path, const bool writer, const unsigned nops
  * the recovery of a process-shared owner death does not work there in practice
  * (the lock stays BUSY forever, see issue #402), so __APPLE__ is excluded.
  * For POSIX2001 the permanent BUSY after a dead owner is the documented
- * limitation (issue #201), so it is excluded as well. */
+ * limitation, so it is excluded as well. */
 #if MDBX_LOCKING == MDBX_LOCKING_POSIX2008 && !defined(__APPLE__)
 #define MDBX_TEST_OWNER_DEATH_RECOVERY 1
 #else

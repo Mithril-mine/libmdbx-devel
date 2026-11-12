@@ -22,7 +22,7 @@
  * is needed to decide whether to defer.
  *
  * On failure the resize is deferred and the return code is chosen per the
- * requested flags (issue #154):
+ * requested flags:
  *  - a shrink request without the un-map/move permission → MDBX_EPERM, i.e.
  *    "deferred": the commit still succeeds and the shrink is re-attempted
  *    later by a subsequent commit, since the shrink predicate is based on the
@@ -84,7 +84,7 @@ __cold int dxb_resize(MDBX_env *const env, const pgno_t allocated_pgno, const pg
    * current mapping limit AND the platform supports section extending (not
    * under Wine, where NtExtendSection is unavailable and every resize needs
    * unmap+remap). Such a grow needs no exclusive remap-lock and no thread
-   * suspension, so it cannot deadlock with long-lived readers (issue #154).
+   * suspension, so it cannot deadlock with long-lived readers.
    * Everything else — a grow beyond the limit, a shrink, or any request that
    * permits un-mapping/remapping — needs the mapping to be unmapped and
    * remapped, hence the exclusive remap-lock. */
@@ -160,7 +160,7 @@ __cold int dxb_resize(MDBX_env *const env, const pgno_t allocated_pgno, const pg
        * a corresponding mapped view, so a remap is the only way to grow past the
        * limit or to shrink.
        *
-       * NOTE (issue #154): a PLAIN in-place grow (NtExtendSection within the
+       * NOTE: a PLAIN in-place grow (NtExtendSection within the
        * current limit) deliberately does NOT come here and does NOT suspend
        * threads — it takes the remap-lock only SHARED so it cannot deadlock
        * with a long-lived reader. It keeps the base address and the existing

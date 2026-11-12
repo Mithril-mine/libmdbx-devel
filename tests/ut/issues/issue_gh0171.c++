@@ -140,7 +140,7 @@ TEST(issue_gh0171, compacting_copy_to_stalled_pipe_does_not_hang) {
     kill(pid, SIGKILL);
     waitpid(pid, &status, 0);
     FAIL() << "mdbx_env_copy2fd() hung: the writer thread's bailout did not signal "
-              "the producer sleeping in the part=false wait (issue #171)";
+              "the producer sleeping in the part=false wait";
   }
 
   /* The child must have terminated on its own: either returning EPIPE from the

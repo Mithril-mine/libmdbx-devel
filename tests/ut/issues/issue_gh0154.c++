@@ -30,7 +30,7 @@
 #endif
 
 // Regression coverage for the Windows `remap_lock` deadlock and its fix
-// (issue #154). Runs on every platform, but only the Windows CI cells exercise
+//. Runs on every platform, but only the Windows CI cells exercise
 // the deferral path itself — see "Portability" below.
 //
 // The bug: a long-lived read-only transaction holds `remap_lock` SHARED for its
@@ -181,7 +181,7 @@ TEST(issue_gh0154, resize_with_open_reader_neither_hangs_nor_poisons_env) {
 
   /* Writes while the reader is open must keep succeeding: this is the grow path
    * (shared remap-lock, in-place section extension) that gh0083 deadlocked on. */
-  ASSERT_TRUE(fill(env, dbi, 2000, 4000, 'y')) << "growth with an open reader must not deadlock (issue #154)";
+  ASSERT_TRUE(fill(env, dbi, 2000, 4000, 'y')) << "growth with an open reader must not deadlock";
 
   /* Force a resize that needs the mapping unmapped: an explicit geometry change
    * shrinking `upper`. On Windows with the reader open the exclusive remap-lock

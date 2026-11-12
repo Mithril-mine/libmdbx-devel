@@ -80,7 +80,7 @@ static uint16_t default_subpage_reserve_limit(const MDBX_env *env) {
 }
 
 /* Default minimal period between datafile-shrink attempts: 5 seconds, in
- * 1/65536-of-second units (issue #170). */
+ * 1/65536-of-second units. */
 static uint32_t default_shrink_retry_period_16dot16(void) { return /* 5 seconds */ 5 << 16; }
 
 static uint16_t default_merge_threshold_dot16(const MDBX_env *env) {

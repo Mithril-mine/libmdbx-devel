@@ -158,7 +158,7 @@ __cold int lck_setup(MDBX_env *env, mdbx_mode_t mode) {
    * EACCES, turning the environment into lckless mode regardless of the
    * filesystem/permissions (instead of relying on a read-only lock file or a
    * chmod side-effect). Necessary to verify that the meta-pages verdict does
-   * not depend on the lock file being present. (issue #215) */
+   * not depend on the lock file being present. */
   MPROBE_FAULT(lck_setup_eacces, err);
   if (err != MDBX_SUCCESS) {
     switch (err) {

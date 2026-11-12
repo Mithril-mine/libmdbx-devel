@@ -190,7 +190,7 @@ __cold int mdbx_env_defrag(MDBX_env *env, size_t defrag_atleast, size_t time_atl
     }
 
     if (dfc.completed)
-      /* всё reclaimable возвращено в свободные страницы: работа завершена (issue #55) */
+      /* всё reclaimable возвращено в свободные страницы: работа завершена */
       break;
 
     /* Адаптивный размер батча: при заданном лимите времени подстраиваем
@@ -243,7 +243,7 @@ bailout:
 
   if (!MDBX_IS_ERROR(rc)) {
     if (dfc.completed)
-      /* всё reclaimable возвращено: работа выполнена полностью (issue #55) */
+      /* всё reclaimable возвращено: работа выполнена полностью */
       rc = MDBX_SUCCESS;
     else if (dfc.stopping_reasons)
       rc = (dfc.stopping_reasons == MDBX_defrag_laggard_reader) ? MDBX_LAGGARD_READER : MDBX_RESULT_TRUE;

@@ -454,7 +454,7 @@ __hot int cursor_put(MDBX_cursor *mc, const MDBX_val *key, MDBX_val *data, unsig
           if (!MDBX_DISABLE_VALIDATION && unlikely(!subpage_geometry_ok(fp, old_data.iov_len))) {
             /* The nested upper/lower are crafted: the copy at
              * "fp->upper + PAGEHDRSZ" below would underflow its memcpy/memmove
-             * length. (issue #176) */
+             * length. */
             return bad_page(fp, "invalid nested %s-page lower(%u)/upper(%u) for size %zu\n",
                             is_dupfix_leaf(fp) ? "leaf2" : "leaf", fp->lower, fp->upper, old_data.iov_len - PAGEHDRSZ);
           }
@@ -762,14 +762,14 @@ insert_node:;
         memcpy(db, &mc->subcur->nested_tree, sizeof(tree_t));
         /* LY: fix other cursors positioned at the same key: their cached
          * copies of the nested tree record are stale after the insert
-         * (issue #304). */
+         *. */
         for (MDBX_cursor *m2 = mc->txn->cursors[cursor_dbi(mc)]; m2; m2 = m2->next)
           if (is_related(mc, m2) && m2->pg[mc->top] == mc->pg[mc->top] && m2->ki[mc->top] == mc->ki[mc->top])
             *m2->subcur->cursor.tree = mc->subcur->nested_tree;
       } else {
         /* LY: the sub-page may grow, so the node's payload may shift within
          * the page and the other cursors pointing to this page must be
-         * re-anchored (issue #304). */
+         * re-anchored. */
         page_t *const page = mc->pg[mc->top];
         node = page_node(page, mc->ki[mc->top]);
         for (MDBX_cursor *m2 = mc->txn->cursors[cursor_dbi(mc)]; m2; m2 = m2->next) {
@@ -814,8 +814,8 @@ insert_node:;
           insert_key = insert_data = false;
           old_singledup.iov_base = nullptr;
           sub_root = nullptr;
-          /* Re-check the dirty room between the batch elements (issue #319,
-           * item 10): a long batch must spill on the fly, exactly like the
+          /* Re-check the dirty room between the batch elements:
+           * a long batch must spill on the fly, exactly like the
            * same values put one by one, instead of running out of pages
            * with MDBX_TXN_FULL somewhere in the middle. */
           err = cursor_touch(mc, key, data);
@@ -958,8 +958,8 @@ __hot int cursor_del(MDBX_cursor *mc, unsigned flags) {
       if (unlikely(!is_filled(&mc->subcur->cursor))) {
         /* The outer cursor is filled but the inner one is past the tail of
          * the multi-values. A repeated delete after the last multi-value of
-         * the key was consumed is a legal no-op (issue #301), while a
-         * position reached by a seek forbids any CRUD (issue #305). */
+         * the key was consumed is a legal no-op, while a
+         * position reached by a seek forbids any CRUD. */
         PROBE_AGAINST_DANGLING_DBI(mc);
         return inner_tail_deleted(&mc->subcur->cursor) ? MDBX_SUCCESS : MDBX_ENODATA;
       }

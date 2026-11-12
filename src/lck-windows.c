@@ -191,7 +191,7 @@ int osal_lockfile(mdbx_filehandle_t fd, bool wait) {
 }
 
 /* Acquire the constant byte-range locks that enforce exclusivity when the
- * data file is opened shareable (env_exclusive_fastpath(), issue #179).
+ * data file is opened shareable (see env_exclusive_fastpath()).
  *
  * The whole file is covered by two locks, each taken through the very handle
  * that writes the corresponding region, since Windows byte-range locks are
@@ -434,7 +434,7 @@ static void lck_unlock(MDBX_env *env) {
    * beforehand) and env->ps/env->fd4meta are still valid at that point, so the
    * predicate and pgno2bytes() below evaluate exactly as when the lock was
    * taken. env_close() resets fd4meta after closing the fds, guarding the
-   * failed-open/retry path against unlocking a stale handle. (issue #179) */
+   * failed-open/retry path against unlocking a stale handle. */
   if (env_exclusive_fastpath(env) && env->fd4meta != INVALID_HANDLE_VALUE) {
     do
       err = funlock(env->fd4meta, 0, pgno2bytes(env, NUM_METAS));
@@ -696,7 +696,7 @@ int lck_rpid_check(MDBX_env *env, uint32_t pid) {
 }
 
 /*----------------------------------------------------------------------------*/
-/* gating of datafile shrink attempts (issue #170) */
+/* gating of datafile shrink attempts */
 
 bool dxb_shrink_attempt_allowed(MDBX_env *env) {
   /* Rate-limit the attempts: shrinking through un-map is expensive (suspending

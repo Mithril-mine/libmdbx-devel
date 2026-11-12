@@ -730,7 +730,7 @@ struct LIBMDBX_API_TYPE slice : public ::MDBX_val {
   /// fills in on return from `txn::insert_reserve()`,
   /// `txn::upsert_reserve()` and friends.
   /// \details Since a null pointer with a non-zero length is rejected by the
-  /// ordinary \ref slice() constructor and `assign()` (issue #142), this
+  /// ordinary \ref slice() constructor and `assign()`, this
   /// explicit factory is the only way to spell the reserve form; it builds the
   /// blank via the special private constructor (like \ref invalid()) but still
   /// validates `length` against \ref MDBX_MAXDATASIZE, so an oversize request
@@ -762,7 +762,7 @@ struct LIBMDBX_API_TYPE slice : public ::MDBX_val {
   /// \brief Non-throwing counterpart of `as_pod()`: returns `std::nullopt`
   /// when the slice length does not exactly match `sizeof(POD)`.
   /// \note The returned object is a copy of the referenced bytes, so the slice
-  /// need not outlive the result (issue #144).
+  /// need not outlive the result.
   /// \returns The object of type `POD` or `std::nullopt` on a size mismatch.
   template <typename POD> MDBX_CXX14_CONSTEXPR ::std::optional<POD> try_as_pod() const {
     static_assert(::std::is_standard_layout<POD>::value && !::std::is_pointer<POD>::value,

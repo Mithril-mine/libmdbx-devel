@@ -392,7 +392,7 @@
 /* The process-shared robust mutexes are supported since 11.0 (2016): the kernel
  * maintains the per-thread umtx robust lists and performs the dead-owner recovery
  * in the shared memory by itself. Without the robust attribute the mutexes hang
- * forever on a dead owner (issue #328), so SysV is the only safe fallback. */
+ * forever on a dead owner, so SysV is the only safe fallback. */
 #if defined(EOWNERDEAD) && _POSIX_THREAD_PROCESS_SHARED >= 200809L &&                                                  \
     (defined(_POSIX_THREAD_ROBUST_PRIO_INHERIT) || defined(_POSIX_THREAD_ROBUST_PRIO_PROTECT) ||                       \
      defined(PTHREAD_MUTEX_ROBUST) || defined(PTHREAD_MUTEX_ROBUST_NP))

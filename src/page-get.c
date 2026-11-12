@@ -163,7 +163,7 @@ __cold int page_check(const MDBX_cursor *const mc, const page_t *const mp) {
       if (unlikely(off < mp->upper || off > env->ps - PAGEHDRSZ || (off & 1))) {
         /* Below upper the offset points into the header/free-gap area: the node
          * header/body would alias the index and node_del()/node_shrink() would
-         * underflow the shift length of memmove(). (issue #57) */
+         * underflow the shift length of memmove(). */
         rc = bad_page(mp, "node[%zu] offset (%u) outside [upper(%u), %zu]\n", i, off, mp->upper,
                       (size_t)env->ps - PAGEHDRSZ);
         continue;
@@ -339,8 +339,8 @@ __cold int page_check(const MDBX_cursor *const mc, const page_t *const mp) {
                 /* Below upper the offset points into the header/index area of
                  * the sub-page: the node would alias it and node_del() would
                  * underflow the shift length of memmove(). Mirror of the
-                 * main-page loop check (issue #57); for a sub-page the outer
-                 * bound is dsize, not env->ps. (issue #176) */
+                 * main-page loop check; for a sub-page the outer
+                 * bound is dsize, not env->ps. */
                 rc = bad_page(sp, "nested-node[%zu] offset (%u) outside [upper(%u), %zu]\n", (size_t)ii, sub_off,
                               (unsigned)sp->upper, dsize - PAGEHDRSZ);
                 continue;

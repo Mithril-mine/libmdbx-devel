@@ -98,7 +98,7 @@ int main(void) {
   if (open_db(db, &env) != 0) {
     unlink(db);
     unlink(lck);
-    fprintf(stderr, "BUG PRESENT (issue #80): reopen after a crashed owner was refused (stale set not reclaimed)\n");
+    fprintf(stderr, "BUG PRESENT: reopen after a crashed owner was refused (stale set not reclaimed)\n");
     return 1;
   }
   MDBX_txn *txn = NULL;
@@ -109,7 +109,7 @@ int main(void) {
   unlink(db);
   unlink(lck);
   if (rc != MDBX_SUCCESS) {
-    fprintf(stderr, "BUG PRESENT (issue #80): reopen after a crashed owner failed to work: %d\n", rc);
+    fprintf(stderr, "BUG PRESENT: reopen after a crashed owner failed to work: %d\n", rc);
     return 1;
   }
   printf("OK: stale semaphore set with a dead owner was reclaimed and the database reopened\n");

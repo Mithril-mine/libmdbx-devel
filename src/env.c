@@ -625,7 +625,7 @@ __cold int env_close(MDBX_env *env, bool resurrect_after_fork) {
    * must be invalidated once those are closed. Otherwise a failed open that
    * already reached the handle setup, followed by a retry that fails before
    * reassigning fd4meta, would leave it dangling and lck_unlock() would call
-   * UnlockFile() on a closed handle. (issue #179) */
+   * UnlockFile() on a closed handle. */
   env->fd4meta = INVALID_HANDLE_VALUE;
 
   if (env->lck_mmap.fd != INVALID_HANDLE_VALUE) {

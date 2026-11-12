@@ -144,7 +144,7 @@ MDBX_INTERNAL int lck_rpid_clear(MDBX_env *env);
 ///   Otherwise (not 0 and not -1) - error code.
 MDBX_INTERNAL int lck_rpid_check(MDBX_env *env, uint32_t pid);
 
-/// \brief Decides whether an attempt to shrink the database file should be made right now (issue #170).
+/// \brief Decides whether an attempt to shrink the database file should be made right now.
 ///   On Windows the shrinking requires un-mapping the file, which is doomed while another process keeps the file
 ///   mapped, so such an attempt is skipped entirely; repeated attempts are also rate-limited by the
 ///   \ref MDBX_opt_shrink_retry_period option to avoid the expensive path on every commit.

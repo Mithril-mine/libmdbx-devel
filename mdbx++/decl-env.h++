@@ -41,7 +41,7 @@ public:
   /// since the environment is non-owning.
   inline ~env() noexcept;
   /* Slicing an owning env_managed temporary into the base handle would drop
-   * ownership and never close the environment (issue #77), so these exact-match
+   * ownership and never close the environment, so these exact-match
    * overloads turn `mdbx::env e = mdbx::env_managed(...);` into a compile error,
    * while a non-owning view of an env_managed lvalue is still allowed. */
   env(env_managed &&) = delete;
@@ -188,7 +188,7 @@ public:
     /// resulting geometry is applied via \ref env::set_geometry(), which
     /// throws \ref mdbx::error on any invalid/inapplicable value (e.g. a size
     /// below the current file size or a late call after open), so configuration
-    /// errors are never silently swallowed (issue #143).
+    /// errors are never silently swallowed.
     /// \param size_lower  The `size_lower` argument.
     /// \param size_now  The `size_now` argument.
     /// \param size_upper  The `size_upper` argument.

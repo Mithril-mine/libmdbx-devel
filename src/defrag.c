@@ -1207,7 +1207,7 @@ int defrag_init(dfc_t *dfc, MDBX_txn *txn, size_t defrag_atleast_pages, size_t s
   err = pnl_reserve(&txn->wr.repnl, max_defrag);
   if (unlikely(err != MDBX_SUCCESS))
     return err;
-  /* для ограниченных целей retired-список пропорционален объёму работы (issue #55) */
+  /* для ограниченных целей retired-список пропорционален объёму работы */
   const size_t retired_reserve =
       (defrag_enough_pages && defrag_enough_pages < max_defrag) ? defrag_enough_pages : max_defrag;
   err = pnl_reserve(&txn->wr.retired_pages, retired_reserve);

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Regression test for MDBX_ATTRIBUTE_NO_SANITIZE_ADDRESS (issue #62).
+# Regression test for MDBX_ATTRIBUTE_NO_SANITIZE_ADDRESS.
 #
 # Under __SANITIZE_ADDRESS__ the macro must expand to a spelling the active
 # compiler accepts: __declspec(no_sanitize_address) for MSVC (cl.exe does not

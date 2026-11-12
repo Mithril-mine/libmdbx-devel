@@ -876,7 +876,7 @@ add_ut(reverse_insertions SOURCE ut/txn/reverse_insertions.c++)
 
   # MDBX_ATTRIBUTE_NO_SANITIZE_ADDRESS must pick a compiler-specific spelling
   # under __SANITIZE_ADDRESS__ (__declspec for MSVC, __attribute__ for
-  # GCC/Clang). Preprocessor-only regression (issue #62); runs on any UNIX
+  # GCC/Clang). Preprocessor-only regression; runs on any UNIX
   # host with a C compiler available.
   if(UNIX AND NOT CMAKE_CROSSCOMPILING)
     add_test(NAME check_asan_macro

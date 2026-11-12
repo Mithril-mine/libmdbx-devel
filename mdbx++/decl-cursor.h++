@@ -40,7 +40,7 @@ public:
   /// since the cursor is non-owning.
   inline ~cursor() noexcept;
   /* Slicing an owning cursor_managed temporary into the base handle would drop
-   * ownership and leak the cursor (issue #77), so these exact-match overloads
+   * ownership and leak the cursor, so these exact-match overloads
    * turn `mdbx::cursor c = txn.open_cursor(map);` into a compile error, while
    * a non-owning view of a cursor_managed lvalue is still allowed. */
   cursor(cursor_managed &&) = delete;
@@ -815,7 +815,7 @@ public:
   /// \brief Bind/renew a cursor with a new transaction and specified key-value map handle.
   /// \param txn          The new transaction to attach the cursor to.
   /// \param map_handle   The key-value map (table) handle.
-  /// \throws mdbx::error on failure (issue #146).
+  /// \throws mdbx::error on failure.
   inline void bind(::mdbx::txn &txn, ::mdbx::map_handle map_handle);
 
   /// \brief Unbind cursor from a transaction.
@@ -823,7 +823,7 @@ public:
   ///   underlying C object: the wrapper keeps the handle and the destructor
   ///   still closes it. While unbound, any seek/move/read operation fails with
   ///   \ref MDBX_EBADSIGN or \ref MDBX_EINVAL; call \ref renew() / \ref bind()
-  ///   to attach the cursor to a transaction again (issue #146).
+  ///   to attach the cursor to a transaction again.
   inline void unbind();
 
   /// \brief Returns the cursor's transaction.
