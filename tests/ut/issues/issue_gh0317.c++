@@ -283,6 +283,9 @@ TEST(issue_gh0317, sibling_open_refused_preserves_holder) {
     ASSERT_EQ(MDBX_SUCCESS, mdbx_env_create(&dup));
     ASSERT_EQ(MDBX_BUSY, mdbx_env_open(dup, kDbPath, MDBX_env_flags_t(MDBX_NOSUBDIR), 0644));
     ASSERT_EQ(MDBX_SUCCESS, mdbx_env_close(dup));
+    /* the dup_handle_guard still owns the handle: clear it after the close,
+     * or the guard would close the dangling pointer once again (UAF) */
+    dup = nullptr;
   }
   /* the holder survived the refusal and remains usable */
   MDBX_txn *txn = nullptr;
@@ -369,6 +372,9 @@ TEST(issue_gh0317, exclusive_refused_against_lckless_sibling) {
     ASSERT_EQ(MDBX_BUSY, mdbx_env_open(dup, kDbPath, MDBX_env_flags_t(MDBX_NOSUBDIR | MDBX_RDONLY | MDBX_EXCLUSIVE), 0))
         << "an exclusive opener must be refused by the without-lck sibling";
     ASSERT_EQ(MDBX_SUCCESS, mdbx_env_close(dup));
+    /* the dup_handle_guard still owns the handle: clear it after the close,
+     * or the guard would close the dangling pointer once again (UAF) */
+    dup = nullptr;
   }
   /* the holder survived the refusal and remains usable */
   MDBX_txn *txn = nullptr;
@@ -403,6 +409,9 @@ TEST(issue_gh0317, same_dxb_another_lck_refused) {
     ASSERT_EQ(MDBX_BUSY, mdbx_env_open(dup, copy_path, MDBX_env_flags_t(MDBX_NOSUBDIR), 0644))
         << "the same datafile via another pathname must be refused";
     ASSERT_EQ(MDBX_SUCCESS, mdbx_env_close(dup));
+    /* the dup_handle_guard still owns the handle: clear it after the close,
+     * or the guard would close the dangling pointer once again (UAF) */
+    dup = nullptr;
   }
   /* the holder survived and remains usable */
   MDBX_txn *txn = nullptr;

@@ -150,7 +150,14 @@ TEST(issue_gh0324, fork_while_another_thread_opens_and_closes) {
       *churn.where = in_delete;
       mdbx_env_delete(db.c_str(), MDBX_ENV_JUST_DELETE);
       *churn.where = in_exit;
-      exit(rc == MDBX_SUCCESS ? 0 : 1); /* a normal exit runs the library destructor */
+      /* _exit(), not exit(): the child inherits the parent's in-flight
+       * allocations (the churn thread is inside open/close at the fork, that
+       * overlap is the essence of the issue #324 regression), and LSan in the
+       * child reports those unreachable-inherited blocks as leaks, overriding
+       * the exit status. The exit-path interplay with the rthc machinery is
+       * exercised by fork_while_a_logger_joins_a_thread via its reader
+       * thread, not by the child's atexit here. */
+      _exit(rc == MDBX_SUCCESS ? 0 : 1);
     }
     int status = 0;
     const bool exited = child_exits(pid, status);
@@ -257,8 +264,12 @@ int join_scenario() {
   logger_armed.store(true);
   /* opening a new database logs "read meta: empty file" at NOTICE level from this thread */
   MDBX_env *fresh = nullptr;
-  if (mdbx_env_create(&fresh) == MDBX_SUCCESS && mdbx_env_open(fresh, kJoinNewDb, MDBX_NOSUBDIR, 0644) == MDBX_SUCCESS)
+  /* a created env must be closed regardless of the open outcome, or a
+   * failed open leaks the whole env with its structures */
+  if (mdbx_env_create(&fresh) == MDBX_SUCCESS) {
+    mdbx_env_open(fresh, kJoinNewDb, MDBX_NOSUBDIR, 0644);
     mdbx_env_close(fresh);
+  }
   forker.join();
   if (reader.joinable()) { /* the logger did not run, or the fork did not start in time */
     reader_may_exit.store(true);
