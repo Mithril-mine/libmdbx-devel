@@ -27,11 +27,13 @@
   per-platform workflows, not to the dispatcher.
 - **Orchestrator** — `tests/ci/orchestrate.py`, the sole owner of run cancellation
   (no native `concurrency` group by design): the diff anchor is the nearest
-  successful base run (temporary `ci-ok-<run_number>` tags); linear-history runs are
-  superseded, force-pushed (history-rewritten) runs cancelled, same-SHA push/PR
-  duplicates deduplicated (PR wins); a follow-up diff that touches no common prefix
-  preserves the superseded run in flight and spawns only the complement
-  (issue #224). Branch names are normalized before the Actions API call.
+  successful base run (temporary `ci-ok-<run_number>` tags, searched within the
+  last 30 days; shas rewritten away by history rewrites are skipped quietly);
+  linear-history runs are superseded, force-pushed (history-rewritten) runs
+  cancelled, same-SHA push/PR duplicates deduplicated (PR wins); a follow-up diff
+  that touches no common prefix preserves the superseded run in flight and spawns
+  only the complement (issue #224). Branch names are normalized before the Actions
+  API call.
 - **Runner** — `.github/workflows/ci-run.yml` (`workflow_call`): exactly one registry
   cell per call, scope `fast`|`fast+hygiene`|`full`, per-cell env/cmake/ctest
   semantics (build-only, emulator, NDK), `cell-metrics-<cell>` metrics artifact,

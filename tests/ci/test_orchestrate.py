@@ -305,5 +305,43 @@ def test_preserved_only_run_emits_empty_matrix(monkeypatch, capsys):
     assert out["cells"] == "[]"
 
 
+# ---------------------------------------------------------------------------
+# Anchor hygiene: dead shas (rewritten history) and the recency window.
+# ---------------------------------------------------------------------------
+
+DEAD_SHA = "1234567890abcdef1234567890abcdef12345678"
+
+
+def test_tag_successful_runs_skips_dead_shas(monkeypatch, capsys):
+    """Successful runs whose shas were rewritten away cannot be tagged and
+    cannot anchor the diff: skip them with one summary line, not a per-sha
+    git error dump."""
+    head, _ = head_shas()
+    runs = [{"run_number": 1, "head_sha": head},
+            {"run_number": 2, "head_sha": DEAD_SHA}]
+    made = orchestrate.tag_successful_runs(runs, dry_run=False)
+    assert ("ci-ok-1", head) in made
+    assert all(t != "ci-ok-2" for t, _ in made)
+    err = capsys.readouterr().err
+    assert "skipped 1" in err and "failed" not in err
+
+
+def test_list_runs_restricts_successful_queries_to_recency(monkeypatch):
+    """Anchor queries search recent successful runs only: ancient shas are
+    almost always rewritten away on this repo."""
+    captured = []
+
+    def fake_api(repo, path, token, method="GET", payload=None):
+        captured.append(path)
+        return {"workflow_runs": []}
+
+    monkeypatch.setattr(orchestrate, "api", fake_api)
+    orchestrate.list_runs("r", "t", "ci-dispatch.yml",
+                          branch="master", event="push", status="success")
+    assert "created=" in captured[-1]
+    orchestrate.list_runs("r", "t", "ci-dispatch.yml", branch="feature/x")
+    assert "created=" not in captured[-1]
+
+
 if __name__ == "__main__":
     sys.exit(pytest.main([__file__, "-v"]))

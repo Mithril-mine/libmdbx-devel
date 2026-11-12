@@ -29,6 +29,7 @@
 # --dry-run prints the plan without tagging/cancelling.
 
 import argparse
+import datetime
 import importlib.util
 import json
 import subprocess
@@ -41,6 +42,10 @@ from pathlib import Path
 REPO_ROOT = Path(__file__).resolve().parent.parent.parent
 TAG_PREFIX = "ci-ok-"
 REGISTRY = REPO_ROOT / "tests" / "ci" / "config.json"
+# Anchor search window: successful runs older than this are almost always
+# rewritten away on this repo (history rewrites are routine), so their shas
+# cannot be tagged and would only pollute the search.
+ANCHOR_MAX_AGE_DAYS = 30
 
 
 def _load_select_cells():
@@ -86,6 +91,10 @@ def list_runs(repo, token, workflow_id, branch=None, event=None, status=None, pe
         path += f"&event={event}"
     if status:
         path += f"&status={status}"
+        if status == "success":
+            since = (datetime.datetime.now(datetime.timezone.utc)
+                     - datetime.timedelta(days=ANCHOR_MAX_AGE_DAYS)).strftime("%Y-%m-%d")
+            path += f"&created={since}..*"
     data = api(repo, path, token)
     return data.get("workflow_runs", [])
 
@@ -108,16 +117,26 @@ def cancel_runs(repo, token, run_ids, dry_run):
 def tag_successful_runs(successful, dry_run):
     """Create temporary lightweight tags ci-ok-<run_number> on successful base runs."""
     made = []
+    dead = 0
     for run in successful:
         tag = f"{TAG_PREFIX}{run['run_number']}"
+        sha = run["head_sha"]
         if dry_run:
-            made.append((tag, run["head_sha"]))
+            made.append((tag, sha))
             continue
-        r = git(["tag", tag, run["head_sha"]])
+        if git(["cat-file", "-e", f"{sha}^{{commit}}"]).returncode != 0:
+            # rewritten away (routine on this repo): it cannot anchor the
+            # diff — skip quietly, one summary line at the end.
+            dead += 1
+            continue
+        r = git(["tag", tag, sha])
         if r.returncode != 0:
             print(f"orchestrate: tag {tag} failed: {r.stderr.strip()}", file=sys.stderr)
             continue
-        made.append((tag, run["head_sha"]))
+        made.append((tag, sha))
+    if dead:
+        print(f"orchestrate: skipped {dead} successful-run shas missing from the "
+              f"checkout (rewritten history)", file=sys.stderr)
     return made
 
 
