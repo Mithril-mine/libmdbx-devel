@@ -69,6 +69,7 @@ A hardening and refinement release: data-safety and corruption-resistance fixes 
     - Fixed an out-of-bounds read in `mdbx_cursor_scroll()`/`distance()` on a huge `deepness` ([#85](https://github.com/Mithril-mine/libmdbx-devel/issues/85)).
 
  - Crashes, hangs and undefined behavior:
+    - Fixed `mdbx_env_open()` hangs, wrong mode inheritance and a missed duplicate-open refusal ([#317](https://github.com/Mithril-mine/libmdbx-devel/issues/317)).
     - Fixed the parent's cursors left on freed pages after a failed nested commit or checkpoint ([#326](https://github.com/Mithril-mine/libmdbx-devel/issues/326)).
     - Fixed a double free and crash on a write error during a large commit; now reported ([#321](https://github.com/Mithril-mine/libmdbx-devel/issues/321)).
     - Fixed `mdbx_enumerate_tables()` crashing or reading freed memory when racing with table operations ([#341](https://github.com/Mithril-mine/libmdbx-devel/issues/341)).

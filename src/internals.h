@@ -468,6 +468,9 @@ struct MDBX_env {
 #endif                  /* Windows */
   osal_mmap_t lck_mmap; /* The lock file */
   lck_t *lck;
+  /* The cached identities of the opened files: used by the
+   * neighbors-check in lck_setup(), which requires no opening of the lck-file. */
+  osal_fileid_t lck_fileid, dxb_fileid;
 
   uint16_t leaf_nodemax;   /* max size of a leaf-node */
   uint16_t branch_nodemax; /* max size of a branch-node */

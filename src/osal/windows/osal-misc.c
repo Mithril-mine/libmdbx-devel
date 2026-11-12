@@ -136,6 +136,15 @@ uint32_t osal_monotime_to_16dot16(uint64_t monotime) {
   return ret;
 }
 
+int osal_fileid_by_fd(mdbx_filehandle_t fd, osal_fileid_t *id) {
+  BY_HANDLE_FILE_INFORMATION info;
+  if (unlikely(!GetFileInformationByHandle(fd, &info)))
+    return (int)GetLastError();
+  id->a = info.dwVolumeSerialNumber;
+  id->b = ((uint64_t)info.nFileIndexHigh << 32) | info.nFileIndexLow;
+  return MDBX_SUCCESS;
+}
+
 uint64_t osal_monotime(void) {
   LARGE_INTEGER counter;
   if (QueryPerformanceCounter(&counter))
