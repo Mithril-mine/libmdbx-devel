@@ -1,7 +1,7 @@
 name: ci-linux
 
 # Infra v3 platform gate for Linux (migrated from the legacy `make check`
-# matrix; see .skynet/plans/testing-infra-v3-plan.md). Runs the linux-full
+# matrix; see docs/engineering/testing-infra-v3.md). Runs the linux-nightly
 # profile (8 registry cells: ubuntu-24.04 + ubuntu-26.04-arm, Debug/Release,
 # CXX on/off) with the fast ctest scope (smoke-t1 | ut.* minus ut.heavy).
 #

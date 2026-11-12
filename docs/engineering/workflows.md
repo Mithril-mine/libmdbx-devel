@@ -72,10 +72,12 @@ CI check for fixable doxygen warnings is welcome; it must NOT be added to GitHub
   cxx-msvc/android) — informational for the dev repo.
 - Required locally per `AGENTS.md`: Linux **and** Windows builds/tests (CMake + CTest).
 
-## 4a. Testing-infra-v2 (addressable cells, TASK-28)
+## 4a. Testing-infra-v3 (addressable cells, orchestrator)
 
-Parallel infrastructure built on top of the same CTest labels; the legacy 7 GitHub workflows +
-`tests/ci/ci.sh` remain the fallback until rollout completes.
+Implemented on `master` (design: [testing-infra-v3.md](testing-infra-v3.md); the v2
+background: [testing-infra-design.md](testing-infra-design.md)); the legacy 7 GitHub
+workflows + `tests/ci/ci.sh` remain the documented fallback until the rollout is
+declared complete.
 
 - **Registry** — `tests/ci/config.json`: single source of truth for every build configuration
   ("cell"). Cell fields: `id`, `runs-on`, `env` (toolchain), `cmake[]` (args, `flag|value` form),
@@ -124,19 +126,20 @@ Parallel infrastructure built on top of the same CTest labels; the legacy 7 GitH
   not pin `-G`/`-A`/`-T`), ctest per-cell regex/exclude and `-C` config (skipped for
   `build_only`), artifacts on failure. Emulator cells (`emulator` field) run the whole build +
   test replay inside `reactivecircus/android-emulator-runner` instead of the plain build step.
-- **Profile table**:
+- **Profile table** (from `tests/ci/config.json`; keep in sync with the registry):
 
   | Profile | Cells | Use |
   |---|---|---|
-  | `push-quick` | 5 | every push/merge to devel/master |
-  | `linux-full` | 8 | linux matrix |
-  | `win-full` | 148 | windows matrix (msvc+mscl+mingw+cxx-msvc) |
-  | `mac-full` | 6 | macos matrix |
-  | `android-build` | 15 | android build-only matrix |
+  | `push-quick` | 7 | every push / PR gate baseline |
+  | `win-gate` | 9 | added on common-code changes (Windows axis matrix, full scope nightly) |
+  | `full` | 24 | fallback when no successful base anchor exists in ancestry |
+  | `coverage` | 3 | coverage-export cells |
   | `linux-locking` | 8 | MDBX_LOCKING flavors (SYSV/1988/2001/2008 x gcc/clang) |
   | `win-arm64` | 24 | native ARM64-Windows cells |
-  | `android-emulator` | 1 | android emulator pilot (B5) |
-  | `full` | 186 | nightly on master HEAD |
+  | `android-emulator` | 1 | android emulator pilot |
+  | `linux-nightly` | 9 | `ci-linux` schedule |
+  | `mac-nightly` | 3 | `ci-macos` schedule |
+  | `android-nightly` | 4 | `ci-android` schedule |
 
 - **master-config rule**: GitHub `repository_dispatch`/`schedule` fire only if the workflow file
   exists on the default branch and run against its HEAD; SourceCraft reads CI config from
