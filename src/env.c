@@ -321,10 +321,28 @@ __cold int env_open(MDBX_env *env, mdbx_mode_t mode) {
    */
 
   env->pid = osal_getpid();
+#if !IS_WINDOWS
+  /* The file identities are formed early by the pathname stat, strictly before any
+   * file is opened and before the rthc-registration (so no descriptors are opened/closed in
+   * vain, and the identities are visible to the neighbors-check through the rthc_lock()).
+   * The actuality is re-verified after the files are opened: a concurrent rename/replace could
+   * swap the files in-between. */
+  (void)osal_fileid_by_path(env->pathname.dxb, &env->dxb_fileid);
+  (void)osal_fileid_by_path(env->pathname.lck, &env->lck_fileid);
+#endif /* !Windows */
+
   int rc = osal_openfile((env->flags & MDBX_RDONLY) ? MDBX_OPEN_DXB_READ : MDBX_OPEN_DXB_LAZY, env, env->pathname.dxb,
                          &env->lazy_fd, mode);
   if (unlikely(rc != MDBX_SUCCESS))
     return LOG_IFERR(rc);
+
+  /* Re-verify/cache the dxb-file identity for the neighbors-check in lck_setup() and other uses. */
+  const osal_fileid_t previous = env->dxb_fileid;
+  rc = osal_fileid_by_fd(env->lazy_fd, &env->dxb_fileid);
+  if (unlikely(rc != MDBX_SUCCESS))
+    return LOG_IFERR(rc);
+  if (osal_fileid_is_set(&previous) && !osal_fileid_eq(&env->dxb_fileid, &previous))
+    WARNING("%s", "the dxb-file has been replaced after its identity was captured, using the opened one");
 
 #if MDBX_LOCKING == MDBX_LOCKING_SYSV
   env->me_sysv_ipc.key = osal_ftok(env->lazy_fd, env->pathname.dxb);
@@ -356,8 +374,7 @@ __cold int env_open(MDBX_env *env, mdbx_mode_t mode) {
    * for MDBX_EXCLUSIVE unless the fast i/o path is enabled — with
    * env_exclusive_fastpath() the data file was opened shareable (see
    * osal_openfile()), so the handle can be created and exclusivity is
-   * enforced later by windows_seize_exclusive() with constant byte-range locks.
-   * (issue #179) */
+   * enforced later by windows_seize_exclusive() with constant byte-range locks. */
   const bool durable_iopath = !(env->flags & (MDBX_RDONLY | MDBX_SAFE_NOSYNC | MDBX_NOMETASYNC)) &&
                               ((env->flags & MDBX_EXCLUSIVE) == 0 || env_exclusive_fastpath(env));
   if (durable_iopath) {
@@ -451,8 +468,9 @@ __cold int env_open(MDBX_env *env, mdbx_mode_t mode) {
   lck_t *const lck = env->lck_mmap.lck;
   if (lck && lck_rc != MDBX_RESULT_TRUE && (env->flags & MDBX_RDONLY) == 0) {
     MDBX_env_flags_t snap_flags;
-    while ((snap_flags = atomic_load32(&lck->envmode, mo_AcquireRelease)) == MDBX_RDONLY) {
-      if (atomic_cas32(&lck->envmode, MDBX_RDONLY, (snap_flags = (env->flags & mode_flags)))) {
+    while ((snap_flags = atomic_load32(&lck->envmode, mo_AcquireRelease)) & MDBX_RDONLY) {
+      const MDBX_env_flags_t expected = snap_flags;
+      if (atomic_cas32(&lck->envmode, expected, (snap_flags = (env->flags & mode_flags)))) {
         /* The case:
          *  - let's assume that for some reason the DB file is smaller
          *    than it should be according to the geometry,

@@ -333,7 +333,27 @@ MDBX_MAYBE_UNUSED static inline uintptr_t osal_thread_self(void) {
   return (uintptr_t)thunk;
 }
 
+/* The identity of a file: on POSIX the dev+inode pair from fstat()/stat(), on Windows the volume
+ * serial number with the file index from BY_HANDLE_FILE_INFORMATION. A zeroed structure denotes
+ * "not set/unknown". Note: this is a system-level identity of the given file, but NOT a content
+ * identity: a copy/backup of a database has another fileid, and a hardlink shares it. */
+typedef struct osal_fileid {
+  uint64_t a, b;
+} osal_fileid_t;
+
+MDBX_NOTHROW_CONST_FUNCTION MDBX_MAYBE_UNUSED static inline bool osal_fileid_eq(const osal_fileid_t *a,
+                                                                                const osal_fileid_t *b) {
+  return a->a == b->a && a->b == b->b;
+}
+MDBX_NOTHROW_CONST_FUNCTION MDBX_MAYBE_UNUSED static inline bool osal_fileid_is_set(const osal_fileid_t *id) {
+  return id->a || id->b;
+}
+
 #ifndef __cplusplus
+#if !IS_WINDOWS /* by_path is used on POSIX only: the neighbors-check runs before the files are opened */
+MDBX_INTERNAL int osal_fileid_by_path(const pathchar_t *pathname, osal_fileid_t *id);
+#endif /* !Windows */
+MDBX_INTERNAL int osal_fileid_by_fd(mdbx_filehandle_t fd, osal_fileid_t *id);
 
 /* Actually this is not ioring for now, but on the way. */
 MDBX_INTERNAL int osal_ioring_create(osal_ioring_t *

@@ -87,7 +87,6 @@ MDBX_MAYBE_UNUSED MDBX_NOTHROW_CONST_FUNCTION static inline size_t ceil_powerof2
 
 MDBX_MAYBE_UNUSED MDBX_NOTHROW_CONST_FUNCTION MDBX_INTERNAL size_t ceil_log2n(size_t value_uintptr);
 
-MDBX_NOTHROW_CONST_FUNCTION MDBX_INTERNAL uint64_t rrxmrrxmsx_0(uint64_t v);
 
 struct monotime_cache {
   uint64_t value;
