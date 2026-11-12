@@ -88,8 +88,7 @@ static void defrag_progress(dfc_t *dfc, size_t progress_increment) {
     if (dfc->defrag_enough >= dfc->txn->geo.first_unallocated) {
       if (!dfc->wallclock_atleast || (now_cache = defrag_now(now_cache)) >= dfc->wallclock_atleast)
         dfc->stopping_reasons |= MDBX_defrag_enough_threshold;
-    } else if (dfc->wallclock_detent && ++dfc->wallclock_trottle % 64 == 0 &&
-               (now_cache = defrag_now(now_cache)) >= dfc->wallclock_detent)
+    } else if (dfc->wallclock_detent && (now_cache = defrag_now(now_cache)) >= dfc->wallclock_detent)
       dfc->stopping_reasons |= MDBX_defrag_time_limit;
   }
 }
@@ -842,8 +841,13 @@ int defrag_cycle(dfc_t *dfc) {
   uint64_t score = defrag_score(dfc, dfc->txn->geo.first_unallocated);
   VERBOSE("after-%s: %u => %u (%i), GC-score %" PRIu64, "GC-clean", dfc->before_defrag, dfc->txn->geo.first_unallocated,
           dfc->before_defrag - dfc->txn->geo.first_unallocated, score);
-  if (dfc->payload_pages == 0 || !pnl_size(txn->wr.repnl))
-    return defrag_gc_empty(dfc) ? MDBX_RESULT_TRUE : MDBX_LAGGARD_READER;
+  if (dfc->payload_pages == 0 || !pnl_size(txn->wr.repnl)) {
+    if (!defrag_gc_empty(dfc))
+      return MDBX_LAGGARD_READER;
+    /* всё reclaimable возвращено в свободные страницы: работа завершена */
+    dfc->completed = true;
+    return MDBX_SUCCESS;
+  }
 
   if (!dfc->lp_backlog && (txn->dbi_state[MAIN_DBI] & DBI_DIRTY) == 0 && score < dfc->cycle_initial_score) {
     NOTICE("bailout since the GC-score after load and clear 0x%" PRIx64 " is worse than before 0x%" PRIx64, score,
@@ -1169,17 +1173,10 @@ int defrag_init(dfc_t *dfc, MDBX_txn *txn, size_t defrag_atleast_pages, size_t s
                 size_t defrag_enough_pages, size_t limit_spend_wallclock_dot16, intptr_t preferred_move_batch_size) {
   memset(dfc, 0, sizeof(*dfc));
   dfc->start_timestamp = osal_monotime();
-  if (preferred_move_batch_size < 0) {
+  if (preferred_move_batch_size < 0)
+    /* автопилот: размер батча выводится из лимита времени и доуточняется
+     * адаптивно в mdbx_env_defrag() по фактической длительности циклов */
     preferred_move_batch_size = 0;
-    if (limit_spend_wallclock_dot16) {
-      /* TODO: подстроить размер (возможно динамически на каждом цикле) так,
-               чтобы время записи порции не превышало 5-10% от таймаута. */
-      preferred_move_batch_size = bytes2pgno(txn->env, 64 * MEGABYTE);
-    }
-  }
-  dfc->move_batch_size = (preferred_move_batch_size && (size_t)preferred_move_batch_size < MAX_PAGENO)
-                             ? (pgno_t)preferred_move_batch_size
-                             : MAX_PAGENO;
 
   dfc->txn = txn;
   dfc->before_defrag = txn->geo.first_unallocated;
@@ -1210,7 +1207,10 @@ int defrag_init(dfc_t *dfc, MDBX_txn *txn, size_t defrag_atleast_pages, size_t s
   err = pnl_reserve(&txn->wr.repnl, max_defrag);
   if (unlikely(err != MDBX_SUCCESS))
     return err;
-  err = pnl_reserve(&txn->wr.retired_pages, max_defrag);
+  /* для ограниченных целей retired-список пропорционален объёму работы (issue #55) */
+  const size_t retired_reserve =
+      (defrag_enough_pages && defrag_enough_pages < max_defrag) ? defrag_enough_pages : max_defrag;
+  err = pnl_reserve(&txn->wr.retired_pages, retired_reserve);
   if (unlikely(err != MDBX_SUCCESS))
     return err;
   if (txn->dbs[FREE_DBI].items) {
@@ -1227,6 +1227,16 @@ int defrag_init(dfc_t *dfc, MDBX_txn *txn, size_t defrag_atleast_pages, size_t s
   dfc->defrag_enough = (pgno_t)dfc->payload_pages;
   if (defrag_enough_pages && defrag_enough_pages < max_defrag)
     dfc->defrag_enough = (pgno_t)(txn->geo.first_unallocated - defrag_enough_pages);
+
+  /* Размер порции: явный приоритет пользователя; на автопилоте при заданном
+   * лимите времени — 1/8 работы, чтобы цикл с чекпоинтом укладывался в
+   * небольшую долю лимита (далее размер уточняется адаптивно). */
+  if (preferred_move_batch_size && (size_t)preferred_move_batch_size < MAX_PAGENO)
+    dfc->move_batch_size = (pgno_t)preferred_move_batch_size;
+  else if (dfc->wallclock_detent)
+    dfc->move_batch_size = (pgno_t)(max_defrag >> 3) + 1;
+  else
+    dfc->move_batch_size = MAX_PAGENO;
 
   /* Необходимо найти в структуре дерева страницы расположенные близко к концу файла БД, а затем переместить их
    * содержимое в страницы ближе к началу БД. При этом для каждой дочерней страницы придеться делать также копию её
