@@ -119,12 +119,10 @@ _libmdbx_ provides a set of trade-offs between durability and write performance,
 The full comparison table, the exact semantics of every mode, the auto-sync thresholds and recommendations are in [docs/en/getting-started/durability-modes.md](docs/en/getting-started/durability-modes.md) (also published on the [site](https://libmdbx.dqdkfa.ru/docs/en/getting-started/durability-modes.html)).
 
 ## Comparison with other databases
-For now please refer to [chapter of "BoltDB comparison with other databases"](https://github.com/coreos/bbolt#comparison-with-other-databases) which is also (mostly) applicable to _libmdbx_ with minor clarification:
- - a database could be shared by multiple processes, i.e. no multi-process issues;
- - no issues with moving a cursor(s) after the deletion;
- - _libmdbx_ provides zero-overhead database compactification, so a database file could be shrunk/truncated in particular cases;
- - excluding disk I/O time _libmdbx_ could be ≈3 times faster than BoltDB and up to 10–100,000× faster than both BoltDB and LMDB in specific edge cases;
- - _libmdbx_ provides even more features compared to BoltDB and/or LMDB.
+
+_libmdbx_ belongs to the same family of copy-on-write B+tree engines as LMDB and BoltDB/bbolt: a single serialized writer, non-blocking snapshot readers, no WAL. Compared with them it adds multi-process access, on-the-fly auto-resizing, longer keys, safe asynchronous durability modes, zero-overhead compactification, stable cursor navigation over deletions, and a larger feature set — excluding disk I/O time it is ≈3 times faster than BoltDB and up to 10–100,000× faster than both BoltDB and LMDB in specific edge cases. LSM-based engines (RocksDB) and SQL databases (SQLite) answer different trade-offs.
+
+The detailed comparison table — licensing, durability, concurrency, limits, compactification, tooling, platform support — is in [docs/en/overview/comparison.md](docs/en/overview/comparison.md) (also published on the [site](https://libmdbx.dqdkfa.ru/docs/en/overview/comparison.html)).
 
 <!-- section-end -->
 

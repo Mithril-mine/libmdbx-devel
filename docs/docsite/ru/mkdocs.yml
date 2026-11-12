@@ -25,6 +25,7 @@ nav:
   - Обзор:
       - Что такое libmdbx: overview/index.md
       - Ограничения и подводные камни: overview/restrictions.md
+      - Сравнение с другими СУБД: overview/comparison.md
   - Начало работы:
       - Установка и сборка: getting-started/install-build.md
       - Первые шаги: getting-started/first-steps.md
