@@ -123,7 +123,9 @@ def write_yaml(path: str, records, links, vocab) -> None:
         if r["importance"] is not None:
             lines.append(f"  importance: {r['importance']}")
         summary = (r["summary"] or "").strip().replace("\n", " ")
-        lines.append(f"  summary: \"{summary}\"")
+        # yaml-двойные кавычки требуют экранирования: '"', '\', управляющие —
+        # json.dumps даёт совместимый с YAML double-quoted скаляр (gh0433)
+        lines.append("  summary: " + json.dumps(summary, ensure_ascii=False))
     lines.append("")
     lines.append("links:")
     for e in links:
