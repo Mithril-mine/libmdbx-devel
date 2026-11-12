@@ -2693,7 +2693,8 @@ LIBMDBX_API int mdbx_env_get_option(const MDBX_env *env, const MDBX_option_t opt
  * \retval MDBX_BUSY          The \ref MDBX_EXCLUSIVE flag was specified and the
  *                            environment is in use by another process,
  *                            or the current process tries to open environment
- *                            more than once.
+ *                            more than once, or another process holds the
+ *                            database file in the without-lck mode.
  * \retval MDBX_INCOMPATIBLE  Environment is already opened by another process,
  *                            but with different set of \ref MDBX_SAFE_NOSYNC,
  *                            \ref MDBX_UTTERLY_NOSYNC flags.

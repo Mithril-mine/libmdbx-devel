@@ -315,6 +315,10 @@ __cold int lck_seize(MDBX_env *env) {
     return MDBX_RESULT_TRUE /* Done: return with exclusive locking. */;
   }
 
+  /* The deadline for the dxb-collision retries: we hold the LCK exclusively, so a holder of the dxb is
+   * either transient, such as a neighbour restoring its locks, or a process in without-lck mode, which will
+   * not go away by retrying. */
+  uint64_t dxb_collision_since = 0;
 retry:
   if (rc == MDBX_RESULT_TRUE) {
     rc = lck_op(env->lck_mmap.fd, op_setlk, F_UNLCK, 0, 1);
@@ -348,6 +352,14 @@ retry:
       return rc;
     }
 
+    /* Bound the retries: a without-lck holder of the dxb never goes away, so spinning forever here would
+     * freeze the whole process (the whole flow runs under rthc_lock()). */
+    const uint64_t now = osal_monotime();
+    if (!dxb_collision_since)
+      dxb_collision_since = now;
+    else if (now - dxb_collision_since > osal_16dot16_to_monotime(2 * 65536))
+      return MDBX_BUSY;
+
     /* Fallback to lck-shared */
   } else if (!osal_is_sharing_violation_error(rc)) {
     ERROR("%s, err %u", "try-exclusive", rc);
@@ -362,9 +374,11 @@ retry:
    *    lock and doing initialization.
    * For distinguish these cases will use size of the lck-file later. */
 
-  /* Wait for lck-shared now. */
-  /* Here may be await during transient processes, for instance until another
-   * competing process doesn't call lck_downgrade(). */
+  /* Wait for lck-shared now. Here may be await during transient processes, for instance until another
+   * competing process doesn't call lck_downgrade(). This blocking wait cannot deadlock:
+   * the seize is performed without rthc_lock(), so the exclusive holder of the lck is either another
+   * process, or a sibling thread that completes its failing open and releases the lck without
+   * rthc_lock(). */
   rc = lck_op(env->lck_mmap.fd, op_setlkw, F_RDLCK, 0, 1);
   if (rc != MDBX_SUCCESS) {
     ERROR("%s, err %u", "try-shared", rc);

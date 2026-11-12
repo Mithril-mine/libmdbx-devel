@@ -17,80 +17,21 @@ static unsigned rthc_count, rthc_limit = RTHC_INITIAL_LIMIT;
 static rthc_entry_t rthc_table_static[RTHC_INITIAL_LIMIT];
 static rthc_entry_t *rthc_table = rthc_table_static;
 
-static int uniq_peek(const osal_mmap_t *pending, osal_mmap_t *scan) {
-  int rc;
-  uint64_t bait;
-  lck_t *const pending_lck = pending->lck;
-  lck_t *const scan_lck = scan->lck;
-  if (pending_lck) {
-    bait = atomic_load64(&pending_lck->bait_uniqueness, mo_AcquireRelease);
-    rc = MDBX_SUCCESS;
-  } else {
-    bait = 0 /* hush MSVC warning */;
-    rc = osal_msync(scan, sizeof(lck_t), MDBX_SYNC_DATA);
-    if (rc == MDBX_SUCCESS)
-      rc = osal_pread(pending->fd, &bait, sizeof(scan_lck->bait_uniqueness), offsetof(lck_t, bait_uniqueness));
-  }
-  if (likely(rc == MDBX_SUCCESS) && bait == atomic_load64(&scan_lck->bait_uniqueness, mo_AcquireRelease))
-    rc = MDBX_RESULT_TRUE;
-
-  TRACE("uniq-peek: %s, bait 0x%016" PRIx64 ",%s rc %d", pending_lck ? "mem" : "file", bait,
-        (rc == MDBX_RESULT_TRUE) ? " found," : (rc ? " FAILED," : ""), rc);
-  return rc;
-}
-
-static int uniq_poke(const osal_mmap_t *pending, osal_mmap_t *scan, uint64_t *abra) {
-  if (*abra == 0) {
-    const uintptr_t tid = osal_thread_self();
-    uintptr_t uit = 0;
-    memcpy(&uit, &tid, (sizeof(tid) < sizeof(uit)) ? sizeof(tid) : sizeof(uit));
-    *abra = nasam(osal_monotime() + UINT64_C(5873865991930747) * uit);
-  }
-  const uint64_t cadabra = nasam(*abra + UINT64_C(7680760450171793) * (unsigned)osal_getpid()) << 24 | *abra >> 40;
-  lck_t *const scan_lck = scan->lck;
-  atomic_store64(&scan_lck->bait_uniqueness, cadabra, mo_AcquireRelease);
-  *abra = *abra * UINT64_C(6364136223846793005) + 1;
-  return uniq_peek(pending, scan);
-}
-
-__cold int rthc_uniq_check(const osal_mmap_t *pending, MDBX_env **found) {
-  *found = nullptr;
-  uint64_t salt = 0;
+/* The in-process sibling search by the file identities (dev+inode on POSIX, volume-serial+file-index
+ * on Windows) of the lck-files. Returns the neighbor that still uses the same lck-file,
+ * or nullptr. Must be called with rthc_lock() held. */
+__cold static MDBX_env *rthc_sibling_find(const MDBX_env *const env) {
+  eASSERT0(env, osal_fileid_is_set(&env->lck_fileid));
   for (size_t i = 0; i < rthc_count; ++i) {
     MDBX_env *const scan = rthc_table[i].env;
-    if (!scan->lck_mmap.lck || &scan->lck_mmap == pending)
+    if (scan == env || scan->lck_mmap.fd == INVALID_HANDLE_VALUE)
       continue;
-    int err = atomic_load64(&scan->lck_mmap.lck->bait_uniqueness, mo_AcquireRelease)
-                  ? uniq_peek(pending, &scan->lck_mmap)
-                  : uniq_poke(pending, &scan->lck_mmap, &salt);
-    if (err == MDBX_ENODATA) {
-      uint64_t length = 0;
-      if (likely(osal_filesize(pending->fd, &length) == MDBX_SUCCESS && length == 0)) {
-        /* LY: skip checking since LCK-file is empty, i.e. just created. */
-        DEBUG("%s", "unique (new/empty lck)");
-        return MDBX_SUCCESS;
-      }
-    }
-    if (err == MDBX_RESULT_TRUE)
-      err = uniq_poke(pending, &scan->lck_mmap, &salt);
-    if (err == MDBX_RESULT_TRUE) {
-      (void)osal_msync(&scan->lck_mmap, sizeof(lck_t), MDBX_SYNC_KICK);
-      err = uniq_poke(pending, &scan->lck_mmap, &salt);
-    }
-    if (err == MDBX_RESULT_TRUE) {
-      err = uniq_poke(pending, &scan->lck_mmap, &salt);
-      *found = scan;
-      DEBUG("found %p", __Wpedantic_format_voidptr(*found));
-      return MDBX_SUCCESS;
-    }
-    if (unlikely(err != MDBX_SUCCESS)) {
-      DEBUG("failed rc %d", err);
-      return err;
-    }
+    /* the fileid is published before the descriptor, see lck_setup() */
+    eASSERT0(env, osal_fileid_is_set(&scan->lck_fileid));
+    if (osal_fileid_eq(&scan->lck_fileid, &env->lck_fileid))
+      return scan;
   }
-
-  DEBUG("%s", "unique");
-  return MDBX_SUCCESS;
+  return nullptr;
 }
 
 //------------------------------------------------------------------------------
@@ -328,6 +269,52 @@ __cold void rthc_thread_dtor(void *rthc) {
 #endif
 }
 
+/* The neighbors-check by the file identities (dev+inode on POSIX, volume-serial+file-index on
+ * Windows) of the lck/dxb files:
+ *  - a registered neighbor with the same lck-file is an in-process sibling and must be refused
+ *    (MDBX_BUSY) by the caller unless the legacy multi-open is enabled or the neighbor is in
+ *    the exclusive mode;
+ *  - a registered neighbor with the same dxb-file but another/absent lck-file means the same
+ *    database is opened through another pathname, i.e. without any mutual exclusion between
+ *    these openings, and is refused unconditionally.
+ * Must be called with rthc_lock() held. Note: the check is performed both before
+ * the lck-file is opened/locked (by its pathname stat, with pending_lck_id zeroed/unknown) and
+ * after the seize, since closing any descriptor of the lck-file releases all classic
+ * (non-OFD) fcntl-locks of the whole process, thus a refused open must not open the lck at all. */
+__cold int rthc_neighbor_check(MDBX_env *const env, MDBX_env **const out_neighbor) {
+  *out_neighbor = nullptr;
+  eASSERT0(env, osal_fileid_is_set(&env->dxb_fileid));
+  /* The neighbors' fileids are formed before their rthc-registration, so their
+   * visibility is ordered by the rthc_lock() of this check. The acquire fence pairs with the
+   * producers' fences at the neighbors' fileid/descriptor publication. */
+  osal_fence_consumer();
+  for (size_t i = 0; i < rthc_count; ++i) {
+    MDBX_env *const scan = rthc_table[i].env;
+    if (scan == env)
+      continue;
+    /* the dxb-fileid is formed before the rthc-registration */
+    eASSERT0(env, osal_fileid_is_set(&scan->dxb_fileid));
+    if (!osal_fileid_eq(&scan->dxb_fileid, &env->dxb_fileid))
+      continue;
+    const bool scan_has_lck = scan->lck_mmap.fd != INVALID_HANDLE_VALUE;
+    /* the fileid is published before the descriptor, see lck_setup() */
+    eASSERT0(env, !scan_has_lck || osal_fileid_is_set(&scan->lck_fileid));
+    if (scan_has_lck && osal_fileid_is_set(&env->lck_fileid)) {
+      /* both use lck-files: siblings iff the same lck-file, otherwise (one dxb-file with
+       * different lck-files) there is no mutual exclusion between them */
+      if (!osal_fileid_eq(&scan->lck_fileid, &env->lck_fileid))
+        return MDBX_BUSY;
+      *out_neighbor = scan;
+    } else if (scan_has_lck || (env->flags & MDBX_EXCLUSIVE) != 0) {
+      /* the neighbor holds an lck-file while ours is not formed yet (an opening via another
+         pathname), or the exclusive opener must be alone instead of a second lck-less env */
+      return MDBX_BUSY;
+    }
+    /* otherwise both are lck-less and conflict with nobody */
+  }
+  return MDBX_SUCCESS;
+}
+
 __cold int rthc_register(MDBX_env *const env) {
   TRACE(">> env %p, rthc_count %u, rthc_limit %u", __Wpedantic_format_voidptr(env), rthc_count, rthc_limit);
 
@@ -374,7 +361,7 @@ __cold static int rthc_drown(MDBX_env *const env) {
   int rc = MDBX_SUCCESS;
   MDBX_env *inprocess_neighbor = nullptr;
   if (likely(env->lck_mmap.fd != INVALID_HANDLE_VALUE && current_pid == env->pid)) {
-    rc = rthc_uniq_check(&env->lck_mmap, &inprocess_neighbor);
+    inprocess_neighbor = rthc_sibling_find(env);
     if (!inprocess_neighbor && env->lck_mmap.lck) {
       reader_slot_t *const begin = &env->lck_mmap.lck->rdt[0];
       reader_slot_t *const end = &env->lck_mmap.lck->rdt[env->max_readers];

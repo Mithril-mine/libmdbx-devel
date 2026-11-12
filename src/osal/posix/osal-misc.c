@@ -19,6 +19,8 @@
 #include "../details.h"
 #include "../posix/private.h"
 
+#include <sys/stat.h>
+
 /*----------------------------------------------------------------------------*/
 
 #if defined(__ANDROID_API__)
@@ -149,6 +151,24 @@ uint32_t osal_monotime_to_16dot16(uint64_t monotime) {
       (uint32_t)((monotime << 7) / 1953125);
 #endif
   return ret;
+}
+
+int osal_fileid_by_fd(mdbx_filehandle_t fd, osal_fileid_t *id) {
+  struct stat st;
+  if (unlikely(fstat(fd, &st) != 0))
+    return errno;
+  id->a = (uint64_t)st.st_dev;
+  id->b = (uint64_t)st.st_ino;
+  return MDBX_SUCCESS;
+}
+
+int osal_fileid_by_path(const pathchar_t *pathname, osal_fileid_t *id) {
+  struct stat st;
+  if (unlikely(stat(pathname, &st) != 0))
+    return errno;
+  id->a = (uint64_t)st.st_dev;
+  id->b = (uint64_t)st.st_ino;
+  return MDBX_SUCCESS;
 }
 
 uint64_t osal_monotime(void) {
