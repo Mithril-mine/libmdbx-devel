@@ -725,6 +725,9 @@ int txn_nested_rollback(MDBX_txn *nested) {
 
   const unsigned flags =
       nested->flags & (txn_rw_begin_flags | MDBX_NOSTICKYTHREADS | MDBX_WRITEMAP | MDBX_TXN_RDONLY | txn_ro_nested);
+  /* Restore the parent's cursors from their backups instead of merging the
+   * nested transaction's state. */
+  nested->flags |= MDBX_TXN_ERROR;
   int rc = nested_undo(nested);
   if (likely(rc == MDBX_SUCCESS)) {
     /* release what the previous nested_start() allocated, as nested_free() does, but keep the handle */
