@@ -75,10 +75,11 @@ def test_vocab_refs_lifecycle_and_gc(store):
     """C-7: авто-тема с refs==0 вычищается gc(); ручная — защищена."""
     import json as _json
     # авто-регистрация: запись создаёт refs для модуля и темы
+    # (каноничная форма модуль:тема, gh0432 — не полный ключ записи)
     store.safe_store("fact:autozone:widget", "fact", "text", 0.05)
     with store.env.begin(readonly=True) as txn:
         voc = store.dbi(txn, "vocab")
-        _, v = txn.get(voc, b"fact:autozone:widget")
+        _, v = txn.get(voc, b"autozone:widget")
         meta = _json.loads(v.decode())
     assert meta["refs"] == 1 and meta["auto"] is True
     # ручная тема — auto=False (legacy-формат b"{}" трактуется как ручная)
@@ -90,14 +91,14 @@ def test_vocab_refs_lifecycle_and_gc(store):
     # purge → refs=0
     store.purge(["fact:autozone:widget"])
     with store.env.begin(readonly=True) as txn:
-        _, v = txn.get(store.dbi(txn, "vocab"), b"fact:autozone:widget")
+        _, v = txn.get(store.dbi(txn, "vocab"), b"autozone:widget")
         assert _json.loads(v.decode())["refs"] == 0
     # gc чистит auto с refs==0; ручные не трогает
     res = store.gc(dry_run=False)
     assert res["vocab_removed"] >= 1
     with store.env.begin(readonly=True) as txn:
         voc = store.dbi(txn, "vocab")
-        assert txn.get(voc, b"fact:autozone:widget")[1] is None
+        assert txn.get(voc, b"autozone:widget")[1] is None
         assert txn.get(voc, b"module:autozone")[1] is None
         assert txn.get(voc, b"manualmod:manualtopic")[1] is not None
 

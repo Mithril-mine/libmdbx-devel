@@ -112,6 +112,12 @@ def test_safe_store_unknown_key(store):
         voc = store.dbi(txn, "vocab")
         rc, _ = txn.get(voc, b"module:nosuchmod")
         assert rc == 0  # персистентность в vocab
+        # тема персистентна в каноничной форме модуль:тема (gh0432)
+        rc, _ = txn.get(voc, b"nosuchmod:alignment")
+        assert rc == 0
+        # полная форма ключа тип:модуль:тема в словарь не попадает
+        rc, _ = txn.get(voc, b"bug:nosuchmod:alignment")
+        assert rc != 0
     # явный отказ от авто-регистрации сохраняет строгость словаря
     with pytest.raises(MemoryError):
         store.safe_store("bug:othermod:alignment", "bug", "text", 0.5,

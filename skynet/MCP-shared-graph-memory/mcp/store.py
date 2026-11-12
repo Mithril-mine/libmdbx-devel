@@ -1596,9 +1596,12 @@ class Store:
                 mkey = b"module:" + _m.encode()
                 if txn.get(voc_dbi, mkey)[1] is None:
                     txn.put(voc_dbi, mkey, b"{}")
-                if txn.get(voc_dbi, key.encode())[1] is None:
-                    txn.put(voc_dbi, key.encode(), b"{}")
-            self._vocab_bump_locked(txn, ["module:" + _m, key], +1,
+                # тема персистентна в каноничной форме модуль:тема,
+                # а не полным ключом тип:модуль:тема (gh0432)
+                tkey = (_m + ":" + _tm).encode()
+                if txn.get(voc_dbi, tkey)[1] is None:
+                    txn.put(voc_dbi, tkey, b"{}")
+            self._vocab_bump_locked(txn, ["module:" + _m, _m + ":" + _tm], +1,
                                     auto=bool(auto_vocab))
 
             record_id = self._alloc_id_locked(txn)
@@ -2323,7 +2326,9 @@ class Store:
         if vocab_refs:
             try:
                 _t, _m, _tm = key.split(":", 2)
-                self._vocab_bump_locked(txn, ["module:" + _m, key], -1)
+                # симметрично safe_store: декремент по каноничной форме
+                # модуль:тема (gh0432), а не по полному ключу записи
+                self._vocab_bump_locked(txn, ["module:" + _m, _m + ":" + _tm], -1)
             except ValueError:
                 pass  # неканонический ключ — vocab не трогаем
 
