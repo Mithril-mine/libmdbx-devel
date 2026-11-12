@@ -73,6 +73,7 @@ A maintenance release of the stable line: backported fixes for data safety, corr
     - Fixed a page-list merge listing one page twice, aliasing two b-tree nodes; now squeezed ([#83](https://github.com/Mithril-mine/libmdbx-devel/issues/83)) (backport).
     - Fixed `mdbx_cursor_scroll()`/`distance()` indexing out of bounds on a huge `deepness` ([#85](https://github.com/Mithril-mine/libmdbx-devel/issues/85)) (backport).
     - Fixed crafted duplicate-value offsets crashing or corrupting memory; now rejected ([#176](https://github.com/Mithril-mine/libmdbx-devel/issues/176)) (backport).
+    - Fixed `mdbx_gc_info()` looping forever while holding the writer lock ([#88](https://github.com/Mithril-mine/libmdbx-devel/issues/88)) (backport).
 
  - Crashes, hangs and undefined behavior:
     - Fixed `mdbx_env_open()` hangs, wrong mode inheritance and a missed duplicate-open refusal ([#317](https://github.com/Mithril-mine/libmdbx-devel/issues/317)) (backport).
@@ -102,6 +103,9 @@ A maintenance release of the stable line: backported fixes for data safety, corr
     - Fixed the parent's cursors left on freed pages after a failed nested commit or checkpoint ([#326](https://github.com/Mithril-mine/libmdbx-devel/issues/326)) (backport).
     - Fixed a crash or memory corruption after a resize failed with `MDBX_UNABLE_EXTEND_MAPSIZE` ([#334](https://github.com/Mithril-mine/libmdbx-devel/issues/334)) (backport).
     - Fixed crashes in open transactions or `mdbx_env_warmup()` after the database size limit was raised ([#315](https://github.com/Mithril-mine/libmdbx-devel/issues/315)) (backport).
+    - Fixed `mdbx_replace()` with `MDBX_RESERVE` crashing; now rejected on tables with duplicates ([#166](https://github.com/Mithril-mine/libmdbx-devel/issues/166)) (backport).
+    - Fixed `mdbx_txn_rollback()` of a nested transaction corrupting the parent ([#103](https://github.com/Mithril-mine/libmdbx-devel/issues/103), [#124](https://github.com/Mithril-mine/libmdbx-devel/issues/124)) (backport).
+    - Fixed cloning a read transaction crashing on cleanup or reading recycled pages; fails cleanly now ([#128](https://github.com/Mithril-mine/libmdbx-devel/issues/128), [#148](https://github.com/Mithril-mine/libmdbx-devel/issues/148)) (backport).
 
  - Wrong results and API behavior:
     - Fixed `mdbx_cursor_scroll()`/`distribute()` wrong results near the tree height on DUPSORT tables ([#84](https://github.com/Mithril-mine/libmdbx-devel/issues/84)) (backport).
@@ -163,6 +167,7 @@ A maintenance release of the stable line: backported fixes for data safety, corr
     - Fixed `mdbx_stat -f` failing on an empty GC and `mdbx_dump` closing a failed table as complete ([#312](https://github.com/Mithril-mine/libmdbx-devel/issues/312)) (backport).
     - Fixed `mdbx_load` silently loading a dump truncated inside a table header; now reported ([#384](https://github.com/Mithril-mine/libmdbx-devel/issues/384)) (backport).
     - Fixed `mdbx_chk -s` silently succeeding when the named table is absent; now an error ([#386](https://github.com/Mithril-mine/libmdbx-devel/issues/386)) (backport).
+    - Fixed `mdbx_cursor_get_batch(MDBX_FIRST)` returning only the tail of an already positioned cursor ([#151](https://github.com/Mithril-mine/libmdbx-devel/issues/151)) (backport).
 
  - Performance:
     - Fixed empty durable-mode commits still flushing the device, adding milliseconds to every no-op ([#64](https://github.com/Mithril-mine/libmdbx-devel/issues/64)) (backport).
@@ -189,6 +194,7 @@ A maintenance release of the stable line: backported fixes for data safety, corr
 
  - Minor:
     - Fixed the non-printf logger passing the full length on truncation; now terminated ([#116](https://github.com/Mithril-mine/libmdbx-devel/issues/116)) (backport).
+    - Fixed `mdbx_strerror()` having no message for `MDBX_BACKLOG_DEPLETED`, crashing error handlers ([#96](https://github.com/Mithril-mine/libmdbx-devel/issues/96)) (backport).
     - etc...
 
 ### Appreciations:
