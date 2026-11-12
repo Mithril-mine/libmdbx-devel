@@ -55,15 +55,6 @@ size_t ceil_log2n(size_t value_uintptr) {
   return log2n_powerof2(value_uintptr + 1);
 }
 
-uint64_t rrxmrrxmsx_0(uint64_t v) {
-  /* Pelle Evensen's mixer, https://bit.ly/2HOfynt */
-  v ^= (v << 39 | v >> 25) ^ (v << 14 | v >> 50);
-  v *= UINT64_C(0xA24BAED4963EE407);
-  v ^= (v << 40 | v >> 24) ^ (v << 15 | v >> 49);
-  v *= UINT64_C(0x9FB21C651E98DF25);
-  return v ^ v >> 28;
-}
-
 __cold char *ratio2digits(const uint64_t v, const uint64_t d, ratio2digits_buffer_t *const buffer, int precision) {
   ASSERT(d > 0 && precision < 20);
   char *const dot = buffer->string + 21;

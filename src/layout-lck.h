@@ -7,7 +7,10 @@
 #include "essentials.h"
 
 /* The version number for a database's lockfile format. */
-#define MDBX_LOCK_VERSION 7
+/* The lockfile format version. Bumped to 8: the bait_uniqueness field was removed from
+ * the region layout after the bait/poke neighbors-check was replaced by the fileid-based
+ * one. */
+#define MDBX_LOCK_VERSION 8
 
 #if MDBX_LOCKING == MDBX_LOCKING_WIN32FILES
 
@@ -214,9 +217,6 @@ typedef struct shared_lck {
    * example clock_gettime(CLOCK_BOOTTIME) or clock_gettime(CLOCK_MONOTONIC).
    * Zero means timed auto-sync is disabled. */
   mdbx_atomic_uint64_t autosync_period;
-
-  /* Marker to distinguish uniqueness of DB/CLK. */
-  mdbx_atomic_uint64_t bait_uniqueness;
 
   /* Paired counter of processes that have mlock()ed part of mmapped DB.
    * The (mlcnt[0] - mlcnt[1]) > 0 means at least one process

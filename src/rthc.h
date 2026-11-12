@@ -10,9 +10,12 @@ MDBX_INTERNAL void rthc_dtor(const mdbx_pid_t current_pid);
 MDBX_INTERNAL void rthc_lock(void);
 MDBX_INTERNAL void rthc_unlock(void);
 
+/* The neighbors-check by the file identities, see the definition
+ * in rthc.c for the refusal semantics. Must be called with rthc_lock() held. */
+MDBX_INTERNAL int rthc_neighbor_check(MDBX_env *env, MDBX_env **out_neighbor);
+
 MDBX_INTERNAL int rthc_register(MDBX_env *const env);
 MDBX_INTERNAL int rthc_remove(MDBX_env *const env);
-MDBX_INTERNAL int rthc_uniq_check(const osal_mmap_t *pending, MDBX_env **found);
 
 /* dtor called for thread, i.e. for all mdbx's environment objects */
 MDBX_INTERNAL void rthc_thread_dtor(void *rthc);

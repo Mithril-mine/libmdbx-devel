@@ -3079,6 +3079,34 @@ uint32_t osal_monotime_to_16dot16(uint64_t monotime) {
   return ret;
 }
 
+int osal_fileid_by_fd(mdbx_filehandle_t fd, osal_fileid_t *id) {
+#if IS_WINDOWS
+  BY_HANDLE_FILE_INFORMATION info;
+  if (unlikely(!GetFileInformationByHandle(fd, &info)))
+    return (int)GetLastError();
+  id->a = info.dwVolumeSerialNumber;
+  id->b = ((uint64_t)info.nFileIndexHigh << 32) | info.nFileIndexLow;
+#else
+  struct stat st;
+  if (unlikely(fstat(fd, &st) != 0))
+    return errno;
+  id->a = (uint64_t)st.st_dev;
+  id->b = (uint64_t)st.st_ino;
+#endif /* Windows */
+  return MDBX_SUCCESS;
+}
+
+#if !IS_WINDOWS /* by_path is used on POSIX only: the neighbors-check runs before the files are opened */
+int osal_fileid_by_path(const pathchar_t *pathname, osal_fileid_t *id) {
+  struct stat st;
+  if (unlikely(stat(pathname, &st) != 0))
+    return errno;
+  id->a = (uint64_t)st.st_dev;
+  id->b = (uint64_t)st.st_ino;
+  return MDBX_SUCCESS;
+}
+#endif /* !Windows */
+
 uint64_t osal_monotime(void) {
 #if IS_WINDOWS
   LARGE_INTEGER counter;
