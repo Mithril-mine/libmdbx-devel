@@ -792,6 +792,13 @@ int main() { return 0; }
 
       if(NOT params_DISABLED AND NOT (CMAKE_CROSSCOMPILING AND NOT CMAKE_CROSSCOMPILING_EMULATOR))
         add_test(NAME ${name} COMMAND $<TARGET_FILE:${target}>)
+        if(MDBX_TESTS_ASAN_OPTIONS)
+          # APPENDed here; the callers that (re)define ENVIRONMENT for their
+          # knobs must APPEND too, or they would drop it (see
+          # tests/CMakeLists.txt).
+          set_property(TEST ${name} APPEND PROPERTY
+            ENVIRONMENT "${MDBX_TESTS_ASAN_OPTIONS}")
+        endif()
         if(params_LABELS)
           set_tests_properties(${name} PROPERTIES LABELS "${params_LABELS}")
         endif()
