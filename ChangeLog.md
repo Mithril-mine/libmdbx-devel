@@ -26,6 +26,7 @@ A hardening and refinement release: data-safety and corruption-resistance fixes 
  - Changed `mdbx_defrag` to name every stopping reason and suggest `mdbx_copy -c` for full compaction.
  - Changed Windows commit handling: doomed datafile-shrink attempts are skipped and rate-limited ([#170](https://github.com/Mithril-mine/libmdbx-devel/issues/170)).
  - Changed the oldest-reader scan to bound retries under heavy reader churn ([#325](https://github.com/Mithril-mine/libmdbx-devel/issues/325)).
+ - Changed `mdbx_env_defrag()` to adapt the movement batch to the time limit and to report full completion as success ([#55](https://github.com/Mithril-mine/libmdbx-devel/issues/55)).
  - Changed the `MDBX_GET_MULTIPLE` docs: a batch is a whole page of the current key's duplicates ([12/15 of #319](https://github.com/Mithril-mine/libmdbx-devel/issues/319)).
  - Changed the `mdbx_cursor_get_batch()` docs: which end-of-data code to expect in each case ([13/15 of #319](https://github.com/Mithril-mine/libmdbx-devel/issues/319)).
  - Changed the `mdbx_cursor_on_first()`/`on_last()` docs: whether moving in the direction makes sense ([14/15 of #319](https://github.com/Mithril-mine/libmdbx-devel/issues/319)).
