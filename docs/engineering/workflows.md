@@ -99,11 +99,24 @@ Parallel infrastructure built on top of the same CTest labels; the legacy 7 GitH
   sets `GTEST_SHUFFLE=1` only when `CI_NIGHTLY=1` (set by the `schedule` branch of the
   orchestrator); on Windows CI the env `CI`/`MDBX_TEST_NO_CRT_POPUP` additionally silences
   CRT assert popups in the test binaries.
-- **Orchestrator** — `.github/workflows/ci-dispatch.yml`: `push` on devel/master → `push-quick`;
-  `workflow_dispatch` → `profile`|`cell` + `ref`; `repository_dispatch` (`profile`/`cell` + `ref`;
-  bare event falls back to `push-quick`) → addressed runs for agents; `schedule` (00:30 UTC) →
-  `full` on master HEAD.
+- **Orchestrator** — `.github/workflows/ci-dispatch.yml`: `push` on any branch → the
+  orchestrated change-addressed gate (diff vs the nearest successful base run anchored by
+  temporary `ci-ok-*` tags; no successful anchor in ancestry → full gate); `pull_request`
+  (devel/master) → the orchestrated gate on the PR head; `workflow_dispatch` →
+  `profile`|`cell` + `ref`; `repository_dispatch` (`profile`/`cell` + `ref`; bare event falls
+  back to `push-quick`) → addressed runs for agents. Nightly `full` runs belong to the
+  per-platform workflows (`ci-linux`/`ci-windows`/`ci-macos`/`ci-android`), not to the
+  dispatcher.
   `resolve` job reads the registry from the requested ref and fails fast on unknown ids.
+  **Supersede & preservation** — `tests/ci/orchestrate.py` is the sole owner of run
+  cancellation (there is deliberately no native `concurrency` group, which would blindly
+  cancel on every event). A new run on a branch cancels in-progress runs superseded by
+  linear history and runs invalidated by a force-push, and deduplicates same-SHA push/PR
+  runs (PR wins). A follow-up commit that touches no common-prefix file keeps the superseded
+  run alive — its in-flight cells are provably unaffected — and spawns only the complement
+  of the preserved selection; any common-code change still cancels-and-reruns. Branch names
+  are normalized (`refs/heads/` stripped) before the Actions API call, so supersede works
+  for pushes too, not only for PRs.
 - **Runner** — `.github/workflows/ci-run.yml` (`workflow_call`): checkout ref (fetch-depth 0 +
   tags), optional `setup-ndk` (Android `ndk` field) with NDK_PATH/ANDROID_NDK_HOME export,
   toolchain env (a registry `PATH` entry prepends to the runner PATH via `$GITHUB_PATH`),
@@ -111,8 +124,6 @@ Parallel infrastructure built on top of the same CTest labels; the legacy 7 GitH
   not pin `-G`/`-A`/`-T`), ctest per-cell regex/exclude and `-C` config (skipped for
   `build_only`), artifacts on failure. Emulator cells (`emulator` field) run the whole build +
   test replay inside `reactivecircus/android-emulator-runner` instead of the plain build step.
-  `ci-dispatch` concurrency-cancels overlapping runs and
-  tests the exact push SHA for `push` events.
 - **Profile table**:
 
   | Profile | Cells | Use |
