@@ -110,9 +110,15 @@ class FakeRuns:
 
 
 def run_main(monkeypatch, capsys, fake, head_ref, head_sha, run_id="999",
-             base_ref="origin/master", event="push", cells="cell-a\ncell-b"):
+             base_ref="origin/master", event="push", cells="cell-a\ncell-b",
+             tip=None):
     monkeypatch.setattr(orchestrate, "list_runs", fake.list_runs)
     monkeypatch.setattr(orchestrate, "cancel_runs", fake.cancel_runs)
+    monkeypatch.setattr(orchestrate, "api",
+                        lambda repo, path, token, method="GET", payload=None:
+                        {"commit": {"sha": tip or head_sha}}
+                        if path.startswith("branches/")
+                        else {"workflow_runs": []})
     monkeypatch.setattr(orchestrate, "select_cells",
                         lambda base_sha=None, profile=None: cells)
     rc = orchestrate.main([
@@ -174,6 +180,23 @@ def test_rewritten_history_run_is_cancelled(monkeypatch, capsys):
     out = run_main(monkeypatch, capsys, fake, "feature/x", head)
     assert out["cancel_ids"] == [303]
     assert out["skip"] is False
+
+
+def test_stale_queued_run_skips_instead_of_cancelling(monkeypatch, capsys):
+    """A queued run waking after the branch tip moved (push or force-push)
+    is stale: it must skip itself and never cancel the current lineage's
+    runs. Without this, a stale run from a rewritten-away lineage sees the
+    current tip as 'rewritten history' and cancels the authoritative gate."""
+    head, _ = head_shas()
+    other = git("rev-parse", "stable").stdout.strip()
+    if not other or git("merge-base", "--is-ancestor", other, "HEAD").returncode == 0:
+        pytest.skip("no non-ancestor commit available")
+    fake = FakeRuns({"feature/x": [staged_run(601, head, status="in_progress")]})
+    # this run's head is `other`, the branch tip is already `head`
+    out = run_main(monkeypatch, capsys, fake, "feature/x", other, tip=head)
+    assert out["skip"] is True
+    assert fake.cancelled == []
+    assert out["cancel_ids"] == []
 
 
 def test_own_run_is_never_a_cancel_candidate(monkeypatch, capsys):
