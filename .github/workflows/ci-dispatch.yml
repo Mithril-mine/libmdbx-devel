@@ -107,7 +107,10 @@ jobs:
           PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
           PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
           PR_BASE_REF: ${{ github.event.pull_request.base.ref }}
-          HEAD_REF: ${{ github.head_ref || github.ref }}
+          # Bare branch name for the Actions API `branch=` filter: head_ref is
+          # bare on PRs, ref_name is bare on pushes (github.ref would carry the
+          # refs/heads/ prefix and silently match no runs at all).
+          HEAD_REF: ${{ github.head_ref || github.ref_name }}
           PUSH_SHA: ${{ github.sha }}
           RUN_ID: ${{ github.run_id }}
           GITHUB_TOKEN: ${{ github.token }}

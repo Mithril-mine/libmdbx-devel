@@ -138,8 +138,39 @@ def cleanup_tags(dry_run):
         git(["tag", "-d", *tags])
 
 
-def main():
+def normalize_branch(ref):
+    """Bare branch name for the Actions API `branch=` filter.
+
+    Push events carry the full ref (`refs/heads/<branch>`); the API expects
+    the bare name and silently matches nothing otherwise — which used to
+    disable supersede/dedup on every push.
+    """
+    if ref.startswith("refs/heads/"):
+        return ref[len("refs/heads/"):]
+    return ref
+
+
+def select_cells(base_sha=None, profile=None):
+    """Run tests/ci/select-cells.py and return newline-joined cell ids.
+
+    Raises RuntimeError on failure (caller decides the fallback). This is a
+    seam: tests monkeypatch it instead of spawning the subprocess.
+    """
+    cmd = [sys.executable, str(REPO_ROOT / "tests/ci/select-cells.py")]
+    if profile:
+        cmd += ["--profile", profile]
+    else:
+        cmd += ["--base", base_sha]
+    r = subprocess.run(cmd, capture_output=True, text=True, cwd=REPO_ROOT)
+    if r.returncode != 0:
+        print(f"orchestrate: select-cells failed: {r.stderr.strip()}", file=sys.stderr)
+        raise RuntimeError(f"select-cells failed (profile={profile}, base={base_sha})")
+    return "\n".join(l for l in r.stdout.splitlines() if l)
+
+
+def main(argv=None):
     parser = argparse.ArgumentParser(add_help=False)
+    # argv=None -> sys.argv (script use); a list -> injected (tests).
     parser.add_argument("--repo", required=True)
     parser.add_argument("--workflow-id", required=True)
     parser.add_argument("--token", default="")
@@ -149,7 +180,7 @@ def main():
     parser.add_argument("--event", required=True)
     parser.add_argument("--run-id", default="")
     parser.add_argument("--dry-run", action="store_true")
-    args = parser.parse_args()
+    args = parser.parse_args(argv)
 
     out = {"base_sha": "", "cells": "", "skip": False, "cancel_ids": []}
     try:
@@ -184,72 +215,70 @@ def main():
 
         # 3. head-branch runs: cancel in-progress superseded/rewritten runs;
         #    resolve duplicate SHA between push and pull_request.
-        head_runs = list_runs(args.repo, args.token, args.workflow_id,
-                              branch=args.head_ref)
-        current_run_id = args.run_id
-        for run in head_runs:
-            # Same-content dedup: a live same-SHA run (still running or already
-            # finished successfully) makes this run a duplicate — the first one
-            # is authoritative, so skip. A *cancelled* same-SHA run must NOT
-            # lead to a skip: it produced no result, and skipping on top of it
-            # would leave the gate empty; there is nothing to cancel either.
-            if run["head_sha"] == args.head_sha and run["id"] != current_run_id:
-                if run.get("conclusion") == "cancelled":
-                    print(f"orchestrate: same-SHA run {run['id']} ({run['event']}) "
-                          f"is cancelled; proceeding", file=sys.stderr)
+        #    With no branch context at all (bare repository_dispatch) skip
+        #    supersede/dedup entirely: an unfiltered listing would see runs
+        #    of other branches and could cancel or skip on foreign runs.
+        args.head_ref = normalize_branch(args.head_ref)
+        if args.head_ref:
+            head_runs = list_runs(args.repo, args.token, args.workflow_id,
+                                  branch=args.head_ref)
+            # github.run_id arrives as a string, the API returns int ids:
+            # compare in one type, or the own-run exemption never matches
+            # and the run dedups/cancels against itself.
+            current_run_id = str(args.run_id) if args.run_id else ""
+            for run in head_runs:
+                # Same-content dedup: a live same-SHA run (still running or already
+                # finished successfully) makes this run a duplicate — the first one
+                # is authoritative, so skip. A *cancelled* same-SHA run must NOT
+                # lead to a skip: it produced no result, and skipping on top of it
+                # would leave the gate empty; there is nothing to cancel either.
+                if run["head_sha"] == args.head_sha and str(run["id"]) != current_run_id:
+                    if run.get("conclusion") == "cancelled":
+                        print(f"orchestrate: same-SHA run {run['id']} ({run['event']}) "
+                              f"is cancelled; proceeding", file=sys.stderr)
+                        continue
+                    print(f"orchestrate: duplicate {run['event']} run {run['id']} "
+                          f"on the same SHA; skip this {args.event} run",
+                          file=sys.stderr)
+                    out["skip"] = True
                     continue
-                print(f"orchestrate: duplicate {run['event']} run {run['id']} "
-                      f"on the same SHA; skip this {args.event} run",
-                      file=sys.stderr)
-                out["skip"] = True
-                continue
-            # Only unfinished runs can/need to be cancelled.
-            if run["status"] not in ("in_progress", "queued", "pending", "waiting"):
-                continue
-            # different head: superseded (ancestor) or rewritten (not ancestor)
-            anc = git(["merge-base", "--is-ancestor", run["head_sha"], "HEAD"])
-            kind = "superseded" if anc.returncode == 0 else "rewritten-history"
-            print(f"orchestrate: cancelling {kind} {run['event']} run {run['id']} "
-                  f"({run['head_sha'][:12]})", file=sys.stderr)
-            cancel_runs(args.repo, args.token, [run["id"]], args.dry_run)
-            out["cancel_ids"].append(run["id"])
+                # Only unfinished runs can/need to be cancelled.
+                if run["status"] not in ("in_progress", "queued", "pending", "waiting"):
+                    continue
+                # Never cancel this run itself: its own entry is listed while
+                # it is in_progress, and the same-SHA dedup above passes it by
+                # (id == current_run_id) straight into this branch.
+                if str(run["id"]) == current_run_id:
+                    continue
+                # different head: superseded (ancestor) or rewritten (not ancestor)
+                anc = git(["merge-base", "--is-ancestor", run["head_sha"], "HEAD"])
+                kind = "superseded" if anc.returncode == 0 else "rewritten-history"
+                print(f"orchestrate: cancelling {kind} {run['event']} run {run['id']} "
+                      f"({run['head_sha'][:12]})", file=sys.stderr)
+                cancel_runs(args.repo, args.token, [run["id"]], args.dry_run)
+                out["cancel_ids"].append(run["id"])
 
         # 4. cells
         if out["skip"]:
             out["cells"] = ""
         elif base_sha:
-            r = subprocess.run(
-                [sys.executable, str(REPO_ROOT / "tests/ci/select-cells.py"),
-                 "--base", base_sha],
-                capture_output=True, text=True, cwd=REPO_ROOT)
-            if r.returncode == 0:
-                out["cells"] = "\n".join(l for l in r.stdout.splitlines() if l)
-                print(f"orchestrate: selected {len(out['cells'].splitlines())} cells "
-                      f"(diff vs {base_sha[:12]})", file=sys.stderr)
-            else:
-                print(f"orchestrate: select-cells failed: {r.stderr.strip()}", file=sys.stderr)
-                raise RuntimeError("select-cells --base failed")
+            out["cells"] = select_cells(base_sha=base_sha)
+            print(f"orchestrate: selected {len(out['cells'].splitlines())} cells "
+                  f"(diff vs {base_sha[:12]})", file=sys.stderr)
         else:
-            r = subprocess.run(
-                [sys.executable, str(REPO_ROOT / "tests/ci/select-cells.py"),
-                 "--profile", "full"],
-                capture_output=True, text=True, cwd=REPO_ROOT)
-            if r.returncode == 0:
-                out["cells"] = "\n".join(l for l in r.stdout.splitlines() if l)
-                print(f"orchestrate: selected full gate ({len(out['cells'].splitlines())} cells)",
-                      file=sys.stderr)
-            else:
-                print(f"orchestrate: select-cells --profile full failed: {r.stderr.strip()}",
-                      file=sys.stderr)
-                raise RuntimeError("select-cells --profile full failed")
+            out["cells"] = select_cells(profile="full")
+            print(f"orchestrate: selected full gate ({len(out['cells'].splitlines())} cells)",
+                  file=sys.stderr)
     except Exception as e:
         print(f"orchestrate: fatal: {e}", file=sys.stderr)
         # Fail-safe: report skip=false, no cancellations, and request the full
         # gate so coverage is never silently reduced.
-        out = {"base_sha": "", "cells": subprocess.run(
-            [sys.executable, str(REPO_ROOT / "tests/ci/select-cells.py"), "--profile", "full"],
-            capture_output=True, text=True, cwd=REPO_ROOT).stdout,
-            "skip": False, "cancel_ids": []}
+        try:
+            cells = select_cells(profile="full")
+        except Exception as e2:  # noqa: BLE001 — fail-safe must not raise
+            print(f"orchestrate: full-gate selection failed too: {e2}", file=sys.stderr)
+            cells = ""
+        out = {"base_sha": "", "cells": cells, "skip": False, "cancel_ids": []}
     finally:
         cleanup_tags(args.dry_run)
 
