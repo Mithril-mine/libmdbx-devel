@@ -279,5 +279,8 @@ TEST(issue_gh0305, second_del_entry_counts) {
   EXPECT_EQ(dupcount(txn, dbi, "B"), 200u);
   EXPECT_EQ(dupcount(txn, dbi, "C"), 3u);
   mdbx_txn_abort(txn);
+  /* cursors survive the transaction end and must be closed explicitly
+   * (mdbx.h: such cursor(s) must be closed explicitly), or they leak */
+  mdbx_cursor_close(cursor);
   mdbx_env_close(env);
 }

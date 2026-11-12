@@ -99,6 +99,10 @@ TEST(issue_gh0065, writemap_nosync_commits_do_not_flush_whole_mapping) {
 
   /* sanity: all records must survive a clean close and a read-only reopen */
   ASSERT_EQ(MDBX_SUCCESS, mdbx_env_close(env));
+  /* the env_handle_guard still owns the handle: clear it after each close,
+   * or the guard would close the dangling pointer once again (use-after-free
+   * under ASan, silent UB otherwise) */
+  env = nullptr;
   ASSERT_EQ(MDBX_SUCCESS, mdbx_env_create(&env));
   ASSERT_EQ(MDBX_SUCCESS, mdbx_env_open(env, testdb, MDBX_NOSUBDIR | MDBX_RDONLY, 0644));
   MDBX_txn *txn = nullptr;
@@ -114,6 +118,7 @@ TEST(issue_gh0065, writemap_nosync_commits_do_not_flush_whole_mapping) {
   mdbx_cursor_close(cursor);
   mdbx_txn_abort(txn);
   mdbx_env_close(env);
+  env = nullptr;
   EXPECT_EQ(N, count);
   remove(testdb);
 }
