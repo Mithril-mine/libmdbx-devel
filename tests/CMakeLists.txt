@@ -130,6 +130,10 @@ function(add_simple_test name)
 
   if(NOT params_DISABLED AND NOT (CMAKE_CROSSCOMPILING AND NOT CMAKE_CROSSCOMPILING_EMULATOR))
     add_test(NAME extra_${name} COMMAND $<TARGET_FILE:${target}>)
+    if(MDBX_TESTS_ASAN_OPTIONS)
+      set_property(TEST extra_${name} APPEND PROPERTY
+        ENVIRONMENT "${MDBX_TESTS_ASAN_OPTIONS}")
+    endif()
     set_tests_properties(extra_${name} PROPERTIES LABELS "ut")
     if(params_TIMEOUT)
       if(MEMORYCHECK_COMMAND
@@ -649,7 +653,8 @@ else()
     add_extra_test(details_pnl SOURCE ut/api/details_pnl.c)
     set_tests_properties(extra_details_pnl PROPERTIES LABELS "ut;ut.api;ut.gc")
     add_extra_test(details_rkl SOURCE ut/api/details_rkl.c)
-    set_tests_properties(extra_details_rkl PROPERTIES LABELS "ut;ut.api;ut.gc"
+    set_tests_properties(extra_details_rkl PROPERTIES LABELS "ut;ut.api;ut.gc")
+    set_property(TEST extra_details_rkl APPEND PROPERTY
       # Routine profile: bounded stochastic scale + deterministic edge-cases
       # covers the same rkl/txl branches as the full stress at ~1.4s vs ~30s
       # (measured 2026-09-30, Debug+gcov). Full stress lives in the
@@ -657,14 +662,20 @@ else()
       # активирует probe-bus аттестацию покрытия (edge_cases_probes).
       ENVIRONMENT "MDBX_RKL_CASES=64;MDBX_RKL_LOOPS=8;MDBX_RKL_HOLE_PROBES=512;MDBX_RKL_EDGES=1;MDBX_PROBES=1")
     add_test(NAME extra_details_rkl_full COMMAND $<TARGET_FILE:te_details_rkl>)
+    if(MDBX_TESTS_ASAN_OPTIONS)
+      set_property(TEST extra_details_rkl_full APPEND PROPERTY
+        ENVIRONMENT "${MDBX_TESTS_ASAN_OPTIONS}")
+    endif()
     set_tests_properties(extra_details_rkl_full PROPERTIES
       LABELS "ut;ut.api;ut.gc;ut.heavy"
-      TIMEOUT 3600
+      TIMEOUT 3600)
+    set_property(TEST extra_details_rkl_full APPEND PROPERTY
       ENVIRONMENT "MDBX_RKL_EDGES=1")
 
     if(MDBX_PROBES)
       add_extra_test(probes SOURCE ut/api/probes.c)
-      set_tests_properties(extra_probes PROPERTIES LABELS "ut;ut.api"
+      set_tests_properties(extra_probes PROPERTIES LABELS "ut;ut.api")
+      set_property(TEST extra_probes APPEND PROPERTY
         ENVIRONMENT "MDBX_PROBES=1")
 
       # File-IPC round-trip: the driver writes requests to <dir>/cmd and reads
@@ -704,7 +715,8 @@ else()
           # guards (probe_watch self-attestation), and activate the registry
           # at runtime.
           target_compile_definitions(ut_dupfix_multiple PRIVATE MDBX_PROBES)
-          set_tests_properties(dupfix_multiple PROPERTIES ENVIRONMENT "MDBX_PROBES=1")
+          set_tests_properties(dupfix_multiple PROPERTIES APPEND PROPERTY
+            ENVIRONMENT "MDBX_PROBES=1")
         endif()
         add_ut(doubtless_positioning SOURCE ut/cursor/doubtless_positioning.c++ TIMEOUT 10800)
         set_tests_properties(doubtless_positioning PROPERTIES LABELS "ut;ut.cursor;ut.heavy")
@@ -749,7 +761,8 @@ else()
         if(MDBX_PROBES)
           target_compile_definitions(ut_bunches_removal PRIVATE MDBX_PROBES)
         endif()
-        set_tests_properties(bunches_removal PROPERTIES LABELS "ut;ut.gc"
+        set_tests_properties(bunches_removal PROPERTIES LABELS "ut;ut.gc")
+        set_property(TEST bunches_removal APPEND PROPERTY
           # DEEP=1 exercises all bunch-delete paths and covers the SAME
           # gc-get/gc-put + page-split/node/tree-ops/pnl/dpl branches as
           # DEEP=4..5 at ~0.4s vs ~24s+ (measured 2026-09-30 with fixed
@@ -763,7 +776,8 @@ else()
           # case3_error_paths attestation). C test TUs already get it via config.
           target_compile_definitions(ut_get_cached PRIVATE MDBX_PROBES)
         endif()
-        set_tests_properties(get_cached PROPERTIES LABELS "ut;ut.api;ut.txn"
+        set_tests_properties(get_cached PROPERTIES LABELS "ut;ut.api;ut.txn")
+        set_property(TEST get_cached APPEND PROPERTY
           # Trimmed timeouts: case1 stairway + case2 multithread reach the same
           # cache branches at ~2.7s vs ~15.6s (measured 2026-09-30); the
           # extended profile is get_cached_full below. MDBX_PROBES=1 включает
@@ -780,9 +794,14 @@ else()
         # requires a newer C++ standard than requested (see cmake/testing.cmake).
         if(TARGET ut_get_cached)
           add_test(NAME get_cached_full COMMAND $<TARGET_FILE:ut_get_cached>)
+          if(MDBX_TESTS_ASAN_OPTIONS)
+            set_property(TEST get_cached_full APPEND PROPERTY
+              ENVIRONMENT "${MDBX_TESTS_ASAN_OPTIONS}")
+          endif()
           set_tests_properties(get_cached_full PROPERTIES
               LABELS "ut;ut.api;ut.txn;ut.heavy"
-              TIMEOUT 600
+              TIMEOUT 600)
+          set_property(TEST get_cached_full APPEND PROPERTY
               ENVIRONMENT "MDBX_PROBES=1;MDBX_GET_CACHED_DBNAME=test-get-cached-full;MDBX_GET_CACHED_TABLES=4;MDBX_GET_CACHED_DEEP=5;MDBX_GET_CACHED_ORDERS=5;MDBX_GET_CACHED_TIMEOUT_SEC=3600;MDBX_GET_CACHED_CASE2_TIMEOUT_SEC=20;MDBX_GET_CACHED_THREADS=0")
         endif()
 add_ut(reverse_insertions SOURCE ut/txn/reverse_insertions.c++)
