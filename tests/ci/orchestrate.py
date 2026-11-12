@@ -16,13 +16,20 @@
 # Exit codes: 0 = ok, 1 = fatal error (caller should fall back to full).
 # Output (stdout, JSON):
 #   {"base_sha": "<sha or ''>", "cells": "<ids>", "skip": bool,
-#    "cancel_ids": [ids]}
+#    "cancel_ids": [ids], "preserved": [ids], "preserved_cells": [ids]}
 #   cells may be empty only when skip=true (duplicate superseded by another
-#   run on the same SHA); otherwise empty cells is a fatal signal.
+#   run on the same SHA); otherwise empty cells is a fatal signal. The
+#   literal "[]" is emitted when preserved runs keep the whole selection in
+#   flight and nothing new is spawned (the run job is skipped, dist still
+#   runs). "preserved" lists the kept runs: superseded runs whose follow-up
+#   diff touches no common_prefixes file (issue #224, coarse model) — their
+#   in-flight cells are provably unaffected, and preserved_cells estimates
+#   their selection so the new run spawns only the complement.
 #
 # --dry-run prints the plan without tagging/cancelling.
 
 import argparse
+import importlib.util
 import json
 import subprocess
 import sys
@@ -33,6 +40,19 @@ from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parent.parent.parent
 TAG_PREFIX = "ci-ok-"
+REGISTRY = REPO_ROOT / "tests" / "ci" / "config.json"
+
+
+def _load_select_cells():
+    """Import tests/ci/select-cells.py (the dash blocks a plain import)."""
+    spec = importlib.util.spec_from_file_location(
+        "select_cells_mod", Path(__file__).resolve().parent / "select-cells.py")
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    return mod
+
+
+sc = _load_select_cells()  # hits_common / change_addressed_cells / profile_cells
 
 
 def git(args):
@@ -150,6 +170,25 @@ def normalize_branch(ref):
     return ref
 
 
+def diff_paths(a, b):
+    """Files changed a...b (three-dot, the same form select-cells uses)."""
+    return [p for p in git(["diff", "--name-only", f"{a}...{b}"]).stdout.splitlines() if p]
+
+
+def cells_for_paths(paths):
+    """Two-tier trigger model over an explicit path list (select-cells logic).
+
+    common_prefixes hit -> change-addressed gate (push-quick ∪ win-gate),
+    otherwise push-quick. Used to estimate a preserved run's selection.
+    """
+    if not paths:
+        return []
+    cfg = json.loads(REGISTRY.read_text(encoding="utf-8"))
+    if sc.hits_common(cfg, paths):
+        return sc.change_addressed_cells(cfg)
+    return sc.profile_cells(cfg, "push-quick") or []
+
+
 def select_cells(base_sha=None, profile=None):
     """Run tests/ci/select-cells.py and return newline-joined cell ids.
 
@@ -182,7 +221,8 @@ def main(argv=None):
     parser.add_argument("--dry-run", action="store_true")
     args = parser.parse_args(argv)
 
-    out = {"base_sha": "", "cells": "", "skip": False, "cancel_ids": []}
+    out = {"base_sha": "", "cells": "", "skip": False, "cancel_ids": [],
+           "preserved": [], "preserved_cells": []}
     try:
         if not args.token:
             raise RuntimeError("GITHUB_TOKEN is empty")
@@ -252,6 +292,26 @@ def main(argv=None):
                     continue
                 # different head: superseded (ancestor) or rewritten (not ancestor)
                 anc = git(["merge-base", "--is-ancestor", run["head_sha"], "HEAD"])
+                # Preserve-unaffected supersede (issue #224, coarse model):
+                # a superseded run stays alive when the follow-up diff touches
+                # no common_prefixes file — its in-flight cells are provably
+                # unaffected, and the new run only spawns the complement. Any
+                # common-code change (or a rewritten-history run, or a run
+                # without a base anchor) still cancels-and-reruns as before.
+                if (anc.returncode == 0 and base_sha
+                        and not sc.hits_common(
+                            json.loads(REGISTRY.read_text(encoding="utf-8")),
+                            diff_paths(run["head_sha"], args.head_sha))):
+                    est = cells_for_paths(diff_paths(base_sha, run["head_sha"]))
+                    out["preserved"].append(run["id"])
+                    for cid in est:
+                        if cid not in out["preserved_cells"]:
+                            out["preserved_cells"].append(cid)
+                    print(f"orchestrate: preserving {run['event']} run {run['id']} "
+                          f"({run['head_sha'][:12]}): follow-up diff touches no "
+                          f"common code, ~{len(est)} cells stay in flight",
+                          file=sys.stderr)
+                    continue
                 kind = "superseded" if anc.returncode == 0 else "rewritten-history"
                 print(f"orchestrate: cancelling {kind} {run['event']} run {run['id']} "
                       f"({run['head_sha'][:12]})", file=sys.stderr)
@@ -262,9 +322,22 @@ def main(argv=None):
         if out["skip"]:
             out["cells"] = ""
         elif base_sha:
-            out["cells"] = select_cells(base_sha=base_sha)
-            print(f"orchestrate: selected {len(out['cells'].splitlines())} cells "
-                  f"(diff vs {base_sha[:12]})", file=sys.stderr)
+            cells = select_cells(base_sha=base_sha)
+            if out["preserved_cells"]:
+                sel = [l for l in cells.splitlines() if l]
+                spawn = [c for c in sel if c not in set(out["preserved_cells"])]
+                print(f"orchestrate: preserve metrics: selected {len(sel)}, "
+                      f"spawn {len(spawn)}, duplicated {len(sel) - len(spawn)} "
+                      f"(kept in-flight runs: {len(out['preserved'])})",
+                      file=sys.stderr)
+                # literal [] keeps the run job skipped while the preserved
+                # runs carry the coverage; an empty string would read as the
+                # fatal-selection signal instead.
+                out["cells"] = "\n".join(spawn) if spawn else "[]"
+            else:
+                out["cells"] = cells
+                print(f"orchestrate: selected {len(cells.splitlines())} cells "
+                      f"(diff vs {base_sha[:12]})", file=sys.stderr)
         else:
             out["cells"] = select_cells(profile="full")
             print(f"orchestrate: selected full gate ({len(out['cells'].splitlines())} cells)",
@@ -278,7 +351,8 @@ def main(argv=None):
         except Exception as e2:  # noqa: BLE001 — fail-safe must not raise
             print(f"orchestrate: full-gate selection failed too: {e2}", file=sys.stderr)
             cells = ""
-        out = {"base_sha": "", "cells": cells, "skip": False, "cancel_ids": []}
+        out = {"base_sha": "", "cells": cells, "skip": False, "cancel_ids": [],
+               "preserved": [], "preserved_cells": []}
     finally:
         cleanup_tags(args.dry_run)
 
