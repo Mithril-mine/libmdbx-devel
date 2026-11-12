@@ -57,6 +57,7 @@ nav:
   - Overview:
       - What is libmdbx: overview/index.md
       - Restrictions & gotchas: overview/restrictions.md
+      - Comparison with other databases: overview/comparison.md
   - Getting started:
       - Install & build: getting-started/install-build.md
       - First steps: getting-started/first-steps.md
