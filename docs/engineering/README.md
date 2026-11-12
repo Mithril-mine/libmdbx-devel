@@ -97,7 +97,8 @@ Author: Leonid Yuriev \<leo@yuriev.ru\>. Home site: <https://libmdbx.dqdkfa.ru>.
 | [`probe-bus.md`](probe-bus.md) | Probe-инструментарий: probe-bus (mdbx-probes) — in-process registry, `MPROBE_COLLECT/WATCH/FAULT` macros, `mdbx_probe_ctl()`, file-IPC transport, fault injection, self-tests; и каталог USDT/DTrace-маркеров (naming, enable, per-marker table, SystemTap fault injection, platform validation status) |
 | [`systemtap-reference.md`](systemtap-reference.md) | SystemTap reference: user-space/kernel domains, session architecture, statement-probe syntax, target variables, observation vs injection, examples, error checklist |
 | [`coverage-pilot-inventory.md`](coverage-pilot-inventory.md) | Coverage-pilot (B68-P3) inventory: per-test → module/function mapping, reachable-target accounting, success metric |
-| [`testing-infra-design.md`](testing-infra-design.md) | Testing Infrastructure esign: registry (`tests/ci/config.json`), orchestrator/runner workflows, request→cell mapping, flaky policy, rollout |
+| [`testing-infra-design.md`](testing-infra-design.md) | Testing Infrastructure v2 design (background): registry (`tests/ci/config.json`), orchestrator/runner workflows, request→cell mapping, flaky policy, rollout |
+| [`testing-infra-v3.md`](testing-infra-v3.md) | Testing Infrastructure v3 (implemented): two-tier change addressing, orchestrator supersede/preservation, runner, profiles, validation gates |
 | [`techdebt.md`](techdebt.md) | Tech-debt inventory from source scan: 86 TODO/FIXME/workaround markers by category with file:line refs |
 | [`workflows.md`](workflows.md) | Git branching, PR/review flow, CI triggers, release & amalgamation process |
 | [`skills/README.md`](skills/README.md) | SKILLS-иерархия L0–L4: superpowers/shared/roles/orchestrator, references (subsystem-map, module-lock-matrix) |

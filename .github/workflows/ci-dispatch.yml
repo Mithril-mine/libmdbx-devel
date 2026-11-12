@@ -1,7 +1,7 @@
 name: ci-dispatch
 
 # Infra v3 orchestrator (Testing Infrastructure v3, see
-# .skynet/plans/testing-infra-v3-plan.md).
+# docs/engineering/testing-infra-v3.md).
 #
 # Triggers:
 #   push        -> change-addressed cells (diff vs previous commit, capped to

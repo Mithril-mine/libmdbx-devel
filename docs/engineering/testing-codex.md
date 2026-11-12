@@ -2,7 +2,7 @@
 
 > Операционный кодекс роя. Черновик: Этап 1 Infra v3 (2026-09-28).
 > Полные версии C0–C6 — по итогам Этапа 2 (после переноса всего корпуса из
-> poc1-failed и первых метрик). План: `.skynet/plans/testing-infra-v3-plan.md`.
+> poc1-failed и первых метрик). Дизайн: `docs/engineering/testing-infra-v3.md`.
 > Источники правил: решения владельца 28.09, факты `fact:testing:*`,
 > memory-codex (`double-loop`, Кайдзен).
 
