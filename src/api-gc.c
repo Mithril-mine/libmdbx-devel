@@ -140,11 +140,13 @@ __cold int mdbx_env_defrag(MDBX_env *env, size_t defrag_atleast, size_t time_atl
   rc = defrag_init(&dfc, txn, defrag_atleast, time_atleast_dot16, defrag_enough, time_limit_dot16, preferred_batch);
   dfc.user_ctx = ctx;
   dfc.user_callback = progress_callback;
+  dfc.batch_adaptive = (dfc.wallclock_detent != 0 && preferred_batch == 0);
   if (unlikely(rc != MDBX_SUCCESS))
     goto bailout;
 
   while ((size_t)acceptable_backlash + dfc.payload_pages < txn->geo.first_unallocated && !defrag_discontinued(&dfc)) {
     const pgno_t prev_stumble = dfc.stumble_pgno;
+    dfc.cycle_started_timestamp = osal_monotime();
     rc = defrag_cycle(&dfc);
 
 #if MDBX_CHECKING > 1
@@ -183,6 +185,34 @@ __cold int mdbx_env_defrag(MDBX_env *env, size_t defrag_atleast, size_t time_atl
       dfc.stopping_reasons |= MDBX_defrag_error;
       break;
     }
+
+    if (dfc.completed)
+      /* всё reclaimable возвращено в свободные страницы: работа завершена (issue #55) */
+      break;
+
+    /* Адаптивный размер батча: при заданном лимите времени подстраиваем
+     * порцию так, чтобы цикл занимал около 1/8 оставшегося времени. Это
+     * делает остановку по лимиту граничной между циклами и сохраняет
+     * промежуточный результат через чекпоинт каждого цикла. */
+    if (dfc.batch_adaptive && dfc.cycle != 0) {
+      const uint64_t now = osal_monotime();
+      const uint64_t cycle_spent = now - dfc.cycle_started_timestamp;
+      if (cycle_spent && dfc.wallclock_detent > now) {
+        /* aim: a cycle takes about 1/8 of the remaining time budget */
+        const uint64_t remaining = dfc.wallclock_detent - now;
+        uint64_t target;
+        if (cycle_spent > (remaining >> 3))
+          target = dfc.move_batch_size >> 1;
+        else
+          target =
+              dfc.move_batch_size + (dfc.move_batch_size * ((remaining >> 3) - cycle_spent)) / ((cycle_spent << 2) + 1);
+        if (target < 1024)
+          target = 1024;
+        if (target > dfc.payload_pages)
+          target = dfc.payload_pages;
+        dfc.move_batch_size = (pgno_t)target;
+      }
+    }
   }
 
   if (txn && txn->userctx == &dfc) {
@@ -209,7 +239,10 @@ bailout:
     txn_basal_end(txn, true);
 
   if (!MDBX_IS_ERROR(rc)) {
-    if (dfc.stopping_reasons)
+    if (dfc.completed)
+      /* всё reclaimable возвращено: работа выполнена полностью (issue #55) */
+      rc = MDBX_SUCCESS;
+    else if (dfc.stopping_reasons)
       rc = (dfc.stopping_reasons == MDBX_defrag_laggard_reader) ? MDBX_LAGGARD_READER : MDBX_RESULT_TRUE;
     if (dfc.last_allocated <= dfc.defrag_enough)
       rc = MDBX_SUCCESS;
