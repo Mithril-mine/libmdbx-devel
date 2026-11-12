@@ -72,10 +72,12 @@ CI check for fixable doxygen warnings is welcome; it must NOT be added to GitHub
   cxx-msvc/android) — informational for the dev repo.
 - Required locally per `AGENTS.md`: Linux **and** Windows builds/tests (CMake + CTest).
 
-## 4a. Testing-infra-v2 (addressable cells, TASK-28)
+## 4a. Testing-infra-v3 (addressable cells, orchestrator)
 
-Parallel infrastructure built on top of the same CTest labels; the legacy 7 GitHub workflows +
-`tests/ci/ci.sh` remain the fallback until rollout completes.
+Implemented on `master` (design: [testing-infra-v3.md](testing-infra-v3.md); the v2
+background: [testing-infra-design.md](testing-infra-design.md)); the legacy 7 GitHub
+workflows + `tests/ci/ci.sh` remain the documented fallback until the rollout is
+declared complete.
 
 - **Registry** — `tests/ci/config.json`: single source of truth for every build configuration
   ("cell"). Cell fields: `id`, `runs-on`, `env` (toolchain), `cmake[]` (args, `flag|value` form),
@@ -99,11 +101,25 @@ Parallel infrastructure built on top of the same CTest labels; the legacy 7 GitH
   sets `GTEST_SHUFFLE=1` only when `CI_NIGHTLY=1` (set by the `schedule` branch of the
   orchestrator); on Windows CI the env `CI`/`MDBX_TEST_NO_CRT_POPUP` additionally silences
   CRT assert popups in the test binaries.
-- **Orchestrator** — `.github/workflows/ci-dispatch.yml`: `push` on devel/master → `push-quick`;
-  `workflow_dispatch` → `profile`|`cell` + `ref`; `repository_dispatch` (`profile`/`cell` + `ref`;
-  bare event falls back to `push-quick`) → addressed runs for agents; `schedule` (00:30 UTC) →
-  `full` on master HEAD.
+- **Orchestrator** — `.github/workflows/ci-dispatch.yml`: `push` on any branch → the
+  orchestrated change-addressed gate (diff vs the nearest successful base run anchored by
+  temporary `ci-ok-*` tags; no successful anchor in ancestry → full gate); `pull_request`
+  (devel/master) → the orchestrated gate on the PR head; `workflow_dispatch` →
+  `profile`|`cell` + `ref`; `repository_dispatch` (`profile`/`cell` + `ref`; bare event falls
+  back to `push-quick`) → addressed runs for agents. Nightly `full` runs belong to the
+  per-platform workflows (`ci-linux`/`ci-windows`/`ci-macos`/`ci-android`), not to the
+  dispatcher.
   `resolve` job reads the registry from the requested ref and fails fast on unknown ids.
+  **Supersede & preservation** — `tests/ci/orchestrate.py` is the sole owner of run
+  cancellation (there is deliberately no native `concurrency` group, which would blindly
+  cancel on every event); the full requirement list lives in
+  [ci-orchestrator-requirements.md](ci-orchestrator-requirements.md). A new run on a branch cancels in-progress runs superseded by
+  linear history and runs invalidated by a force-push, and deduplicates same-SHA push/PR
+  runs (PR wins). A follow-up commit that touches no common-prefix file keeps the superseded
+  run alive — its in-flight cells are provably unaffected — and spawns only the complement
+  of the preserved selection; any common-code change still cancels-and-reruns. Branch names
+  are normalized (`refs/heads/` stripped) before the Actions API call, so supersede works
+  for pushes too, not only for PRs.
 - **Runner** — `.github/workflows/ci-run.yml` (`workflow_call`): checkout ref (fetch-depth 0 +
   tags), optional `setup-ndk` (Android `ndk` field) with NDK_PATH/ANDROID_NDK_HOME export,
   toolchain env (a registry `PATH` entry prepends to the runner PATH via `$GITHUB_PATH`),
@@ -111,21 +127,20 @@ Parallel infrastructure built on top of the same CTest labels; the legacy 7 GitH
   not pin `-G`/`-A`/`-T`), ctest per-cell regex/exclude and `-C` config (skipped for
   `build_only`), artifacts on failure. Emulator cells (`emulator` field) run the whole build +
   test replay inside `reactivecircus/android-emulator-runner` instead of the plain build step.
-  `ci-dispatch` concurrency-cancels overlapping runs and
-  tests the exact push SHA for `push` events.
-- **Profile table**:
+- **Profile table** (from `tests/ci/config.json`; keep in sync with the registry):
 
   | Profile | Cells | Use |
   |---|---|---|
-  | `push-quick` | 5 | every push/merge to devel/master |
-  | `linux-full` | 8 | linux matrix |
-  | `win-full` | 148 | windows matrix (msvc+mscl+mingw+cxx-msvc) |
-  | `mac-full` | 6 | macos matrix |
-  | `android-build` | 15 | android build-only matrix |
+  | `push-quick` | 7 | every push / PR gate baseline |
+  | `win-gate` | 9 | added on common-code changes (Windows axis matrix, full scope nightly) |
+  | `full` | 24 | fallback when no successful base anchor exists in ancestry |
+  | `coverage` | 3 | coverage-export cells |
   | `linux-locking` | 8 | MDBX_LOCKING flavors (SYSV/1988/2001/2008 x gcc/clang) |
   | `win-arm64` | 24 | native ARM64-Windows cells |
-  | `android-emulator` | 1 | android emulator pilot (B5) |
-  | `full` | 186 | nightly on master HEAD |
+  | `android-emulator` | 1 | android emulator pilot |
+  | `linux-nightly` | 9 | `ci-linux` schedule |
+  | `mac-nightly` | 3 | `ci-macos` schedule |
+  | `android-nightly` | 4 | `ci-android` schedule |
 
 - **master-config rule**: GitHub `repository_dispatch`/`schedule` fire only if the workflow file
   exists on the default branch and run against its HEAD; SourceCraft reads CI config from

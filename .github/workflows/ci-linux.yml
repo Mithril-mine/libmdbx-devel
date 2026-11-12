@@ -1,7 +1,7 @@
 name: ci-linux
 
 # Infra v3 platform gate for Linux (migrated from the legacy `make check`
-# matrix; see .skynet/plans/testing-infra-v3-plan.md). Runs the linux-full
+# matrix; see docs/engineering/testing-infra-v3.md). Runs the linux-nightly
 # profile (8 registry cells: ubuntu-24.04 + ubuntu-26.04-arm, Debug/Release,
 # CXX on/off) with the fast ctest scope (smoke-t1 | ut.* minus ut.heavy).
 #
@@ -19,7 +19,7 @@ env:
   CI: GITHUB
 
 concurrency:
-  group: ${{ github.workflow }}-${{ github.head_ref || github.ref }}
+  group: ${{ github.workflow }}-${{ github.head_ref || github.ref_name }}
   cancel-in-progress: true
 
 permissions:
@@ -30,6 +30,11 @@ on:
     - cron: "42 0 * * *"
       timezone: "Europe/Moscow"
   workflow_dispatch:
+  # Agent fan-out signal (shared with ci-dispatch): payload {ref} is
+  # honored by the resolve step; a bare event runs the nightly profile
+  # against the default ref (see the EVENT_REF consumption below).
+  repository_dispatch:
+    types: [dispatch-event]
 
 jobs:
   resolve:

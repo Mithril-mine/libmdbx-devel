@@ -1,7 +1,7 @@
 name: ci-run
 
 # Infra v3 reusable single-cell runner (Testing Infrastructure v3, see
-# .skynet/plans/testing-infra-v3-plan.md). Runs exactly one registry cell
+# docs/engineering/testing-infra-v3.md). Runs exactly one registry cell
 # (tests/ci/config.json): configure + build + ctest with the fast/full scope,
 # uploads metrics + fault artifacts on failure. No ci.sh involved.
 #

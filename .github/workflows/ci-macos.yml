@@ -1,7 +1,7 @@
 name: ci-macos
 
 # Infra v3 platform gate for macOS (migrated from the legacy `make test`
-# matrix; see .skynet/plans/testing-infra-v3-plan.md). Runs the mac-full
+# matrix; see docs/engineering/testing-infra-v3.md). Runs the mac-nightly
 # profile (6 registry cells: macos-15, xcode-27, macos-26-intel, Debug/
 # Release, CXX on) with the fast ctest scope (smoke-t1 | ut.* minus
 # ut.heavy).
@@ -16,7 +16,7 @@ env:
   CI: GITHUB
 
 concurrency:
-  group: ${{ github.workflow }}-${{ github.head_ref || github.ref }}
+  group: ${{ github.workflow }}-${{ github.head_ref || github.ref_name }}
   cancel-in-progress: true
 
 permissions:
@@ -27,6 +27,11 @@ on:
     - cron: "47 0 * * *"
       timezone: "Europe/Moscow"
   workflow_dispatch:
+  # Agent fan-out signal (shared with ci-dispatch): payload {ref} is
+  # honored by the resolve step; a bare event runs the nightly profile
+  # against the default ref (see the EVENT_REF consumption below).
+  repository_dispatch:
+    types: [dispatch-event]
 
 jobs:
   resolve:

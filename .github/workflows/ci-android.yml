@@ -13,7 +13,7 @@ env:
   CI: GITHUB
 
 concurrency:
-  group: ${{ github.workflow }}-${{ github.head_ref || github.ref }}
+  group: ${{ github.workflow }}-${{ github.head_ref || github.ref_name }}
   cancel-in-progress: true
 
 permissions:
@@ -24,6 +24,11 @@ on:
     - cron: "52 0 * * *"
       timezone: "Europe/Moscow"
   workflow_dispatch:
+  # Agent fan-out signal (shared with ci-dispatch): payload {ref} is
+  # honored by the resolve step; a bare event runs the nightly profile
+  # against the default ref (see the EVENT_REF consumption below).
+  repository_dispatch:
+    types: [dispatch-event]
 
 jobs:
   resolve:

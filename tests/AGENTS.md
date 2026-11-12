@@ -96,6 +96,8 @@ leave nothing behind on success either. This is enforced, not encouraged.
 - [docs/engineering/test-durability-strategy.md](../docs/engineering/test-durability-strategy.md) —
   durability modes and speed-up transports for tests.
 - [docs/engineering/testing-infra-design.md](../docs/engineering/testing-infra-design.md) —
-  CI v2 infrastructure design.
+  CI v2 infrastructure design (background).
+- [docs/engineering/testing-infra-v3.md](../docs/engineering/testing-infra-v3.md) —
+  CI v3 infrastructure (implemented): registry, addressing, orchestrator, profiles.
 - [docs/engineering/probe-bus.md](../docs/engineering/probe-bus.md) — probe
   conventions.

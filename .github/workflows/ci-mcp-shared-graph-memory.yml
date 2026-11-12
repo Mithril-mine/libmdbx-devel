@@ -9,14 +9,19 @@ env:
   CI: GITHUB
 
 concurrency:
-  group: ${{ github.workflow }}-${{ github.head_ref || github.ref }}
+  group: ${{ github.workflow }}-${{ github.head_ref || github.ref_name }}
   cancel-in-progress: true
 
 permissions:
   contents: read
 
 on:
+  # Feature branches are covered by the pull_request trigger: a bare push
+  # trigger would fire this workflow twice for a PR branch (push + PR share
+  # the concurrency group), and the cancelled duplicate surfaces as red
+  # checks on the PR.
   push:
+    branches: [devel, master]
   pull_request:
   schedule:
     - cron: "42 0 * * *"

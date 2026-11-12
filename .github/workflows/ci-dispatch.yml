@@ -1,11 +1,16 @@
 name: ci-dispatch
 
 # Infra v3 orchestrator (Testing Infrastructure v3, see
-# .skynet/plans/testing-infra-v3-plan.md).
+# docs/engineering/testing-infra-v3.md).
 #
 # Triggers:
-#   push        -> change-addressed cells (diff vs previous commit, capped to
-#                  CI_PUSH_CAP, fast scope). Branches: devel, master.
+#   push        -> change-addressed cells (diff vs the nearest successful
+#                  base run, fast scope). Branches: devel, master — a feature
+#                  branch with an open PR is covered by its pull_request run
+#                  (firing both for the same branch made the runs supersede
+#                  each other, and the cancelled duplicate surfaced as red
+#                  checks on the PR); a branch without a PR can be gated on
+#                  demand via workflow_dispatch/repository_dispatch.
 #   (no schedule: nightly ownership belongs to the per-platform workflows
 #   ci-linux/ci-windows/ci-macos/ci-android; this dispatcher is the push gate
 #   and the manual/agent entry point for profiles/cells.)
@@ -30,12 +35,15 @@ permissions:
   contents: read
 
 on:
-  # Push on ANY branch runs the compact push-quick gate (CI v3.5): a breakage
-  # in common code (src/, CMakeLists.txt, mdbx.h, .github/...) must be caught on
-  # feature branches too, not only after merge. The nightly 190-cell full gate
-  # still owns repeated stochastic coverage on master via the platform workflows.
+  # Push on the main lines runs the compact push-quick gate (CI v3.5). A
+  # feature branch with an open pull request is covered by its pull_request
+  # run below — firing both for the same branch made the runs supersede each
+  # other, and the cancelled duplicate surfaced as red checks on the PR.
+  # A branch without a PR can be gated on demand via workflow_dispatch or
+  # repository_dispatch. The nightly 190-cell full gate still owns repeated
+  # stochastic coverage on master via the platform workflows.
   push:
-    branches: ['**']
+    branches: [devel, master]
   pull_request:
     branches: [devel, master]
   workflow_dispatch:
@@ -107,7 +115,10 @@ jobs:
           PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
           PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
           PR_BASE_REF: ${{ github.event.pull_request.base.ref }}
-          HEAD_REF: ${{ github.head_ref || github.ref }}
+          # Bare branch name for the Actions API `branch=` filter: head_ref is
+          # bare on PRs, ref_name is bare on pushes (github.ref would carry the
+          # refs/heads/ prefix and silently match no runs at all).
+          HEAD_REF: ${{ github.head_ref || github.ref_name }}
           PUSH_SHA: ${{ github.sha }}
           RUN_ID: ${{ github.run_id }}
           GITHUB_TOKEN: ${{ github.token }}
