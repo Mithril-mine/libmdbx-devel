@@ -110,11 +110,11 @@ class FakeRuns:
 
 
 def run_main(monkeypatch, capsys, fake, head_ref, head_sha, run_id="999",
-             base_ref="origin/master", event="push"):
+             base_ref="origin/master", event="push", cells="cell-a\ncell-b"):
     monkeypatch.setattr(orchestrate, "list_runs", fake.list_runs)
     monkeypatch.setattr(orchestrate, "cancel_runs", fake.cancel_runs)
     monkeypatch.setattr(orchestrate, "select_cells",
-                        lambda base_sha=None, profile=None: "cell-a\ncell-b")
+                        lambda base_sha=None, profile=None: cells)
     rc = orchestrate.main([
         "--repo", "acme/repo", "--workflow-id", "ci-dispatch.yml",
         "--token", "fake-token", "--head-ref", head_ref, "--head-sha", head_sha,
@@ -200,6 +200,109 @@ def test_plain_push_does_not_skip_on_own_entry(monkeypatch, capsys):
     assert out["skip"] is False
     assert fake.cancelled == []
     assert out["cells"] != ""
+
+
+# ---------------------------------------------------------------------------
+# Preserve-unaffected supersede (issue #224, coarse conservative model).
+# ---------------------------------------------------------------------------
+
+def make_commit(parent, edits):
+    """Throwaway commit on top of `parent` (unreachable from any branch).
+
+    edits: {path: bytes}. Built via plumbing so tests control the diff
+    without touching branches or the index.
+    """
+    def write_blob(data):
+        r = subprocess.run(["git", "-C", str(REPO), "hash-object", "-w", "--stdin"],
+                           input=data, capture_output=True)
+        assert r.returncode == 0, r.stderr
+        return r.stdout.decode().strip()
+
+    def mktree(entries):
+        lines = [f"{m} {t} {s}\t{n}" for n, (m, t, s) in entries.items()]
+        r = subprocess.run(["git", "-C", str(REPO), "mktree"],
+                           input="\n".join(lines) + ("\n" if lines else ""),
+                           capture_output=True, text=True)
+        assert r.returncode == 0, r.stderr
+        return r.stdout.strip()
+
+    def update_tree(tree, parts, blob):
+        entries = {}
+        for ln in git("ls-tree", tree).stdout.splitlines():
+            meta, name = ln.split("\t", 1)
+            m, t, s = meta.split()
+            entries[name] = (m, t, s)
+        name = parts[0]
+        if len(parts) == 1:
+            entries[name] = ("100644", "blob", blob)
+        else:
+            sub = entries.get(name)
+            sub_tree = sub[2] if sub else mktree({})
+            entries[name] = ("040000", "tree", update_tree(sub_tree, parts[1:], blob))
+        return mktree(entries)
+
+    tree = git("rev-parse", f"{parent}^{{tree}}").stdout.strip()
+    for path, data in edits.items():
+        tree = update_tree(tree, path.split("/"), write_blob(data))
+    r = git("commit-tree", tree, "-p", parent, "-m", "ci-test: throwaway supersede commit")
+    assert r.returncode == 0, r.stderr
+    return r.stdout.strip()
+
+
+def test_docs_only_followup_push_preserves_inprogress_run(monkeypatch, capsys):
+    """A follow-up commit touching no common code must keep the in-flight
+    run alive (its cells are provably unaffected) and spawn only the
+    complement of the preserved selection (issue #224)."""
+    head, _ = head_shas()
+    base = git("rev-parse", "HEAD~1").stdout.strip()
+    old = head                                   # the in-flight run's SHA
+    new = make_commit(head, {"docs/supersede-probe.md": b"probe note\n"})
+    git("tag", "ci-ok-77", base)
+    fake = FakeRuns({"feature/x": [staged_run(401, old)]})
+    new_sel = ["cell-a", "cell-b", "cell-c"]
+    out = run_main(monkeypatch, capsys, fake, "feature/x", new,
+                   cells="\n".join(new_sel))
+    assert out["preserved"] == [401]
+    assert 401 not in out["cancel_ids"]
+    preserved_cells = set(out["preserved_cells"])
+    assert preserved_cells, "the estimator must classify the old selection"
+    spawn = set(out["cells"].splitlines()) if out["cells"] not in ("", "[]") else set()
+    assert spawn == set(new_sel) - preserved_cells          # complement math
+    assert spawn | preserved_cells >= set(new_sel)          # coverage invariant
+
+
+def test_common_code_followup_push_cancels_all(monkeypatch, capsys):
+    """A follow-up commit touching common code invalidates the in-flight
+    cells: cancel-and-rerun as before (regression guard)."""
+    head, _ = head_shas()
+    base = git("rev-parse", "HEAD~1").stdout.strip()
+    old = head
+    new = make_commit(head, {"src/probe-supersede.h": b"/* probe */\n"})
+    git("tag", "ci-ok-78", base)
+    fake = FakeRuns({"feature/x": [staged_run(402, old)]})
+    out = run_main(monkeypatch, capsys, fake, "feature/x", new,
+                   cells="cell-a\ncell-b")
+    assert out["cancel_ids"] == [402]
+    assert out["preserved"] == []
+    assert set(out["cells"].splitlines()) == {"cell-a", "cell-b"}
+
+
+def test_preserved_only_run_emits_empty_matrix(monkeypatch, capsys):
+    """When everything selected is already in flight, the cells output must
+    be the literal [] (run job skipped), never an empty string (which the
+    workflow treats as a fatal selection signal)."""
+    head, _ = head_shas()
+    base = git("rev-parse", "HEAD~1").stdout.strip()
+    old = head
+    new = make_commit(head, {"docs/supersede-probe.md": b"probe note\n"})
+    git("tag", "ci-ok-79", base)
+    est = orchestrate.cells_for_paths(
+        [p for p in git("diff", "--name-only", f"{base}...{old}").stdout.splitlines() if p])
+    fake = FakeRuns({"feature/x": [staged_run(403, old)]})
+    out = run_main(monkeypatch, capsys, fake, "feature/x", new,
+                   cells="\n".join(est))
+    assert out["preserved"] == [403]
+    assert out["cells"] == "[]"
 
 
 if __name__ == "__main__":
