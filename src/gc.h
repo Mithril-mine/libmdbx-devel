@@ -120,9 +120,10 @@ typedef struct defract_context {
   pgno_t move_batch_size;
   size_t payload_items;
   size_t progress_counter;
-  uint8_t wallclock_trottle;
   uint8_t stumble_retry;
   uint8_t stopping_reasons;
+  bool completed;
+  bool batch_adaptive;
   unsigned cycle;
   size_t payload_pages;
   pgno_t largepage_max, largepage_amountleft, largepage_count;
@@ -141,6 +142,7 @@ typedef struct defract_context {
   pgno_t defrag_atleast, defrag_enough, before_defrag, last_allocated;
   pgno_t gc_tree_pages, gc_retained_pages;
   uint64_t start_timestamp;
+  uint64_t cycle_started_timestamp;
   uint64_t wallclock_atleast;
   uint64_t wallclock_detent;
   uint64_t cycle_initial_score;

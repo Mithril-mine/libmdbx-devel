@@ -8358,11 +8358,17 @@ typedef int (*MDBX_defrag_notify_func)(void *ctx, const MDBX_defrag_result_t *pr
  *                                   defragment. When the specified limit is reached, defragmentation will not
  *                                   continue, but the stage of writing the moved pages that has already begun
  *                                   will be completed. Must be greater or equal to `time_atleast_dot16`.
+ *                                   The limit stops scheduling new movements; the moving phase of the current cycle
+ *                                   completes within the auto-sized batch, and the intermediate result is saved by
+ *                                   the cycle's checkpoint.
  *                                   Specify zero if in doubt or not known, this will mean no limit.
  *
  * \param [in] acceptable_backlash   Defragmentation stops if a next cycle will unable to shrink database by the
  *                                   number of pages more than the specified value. This avoids the last few
  *                                   defragmentation cycles, which do not significantly reduce the size of the database.
+ *                                   Values greater than `maxgc_large1page` (the maximum number of page-numbers that
+ *                                   fits a single GC record) are silently reduced to it, since the residual slack
+ *                                   below this threshold cannot be reclaimed by moving individual pages.
  *                                   Specify `-1` if in doubt or not known, this will mean autopilot.
  *
  * \param [in] preferred_batch       The preferred maximum number of pages to be moved per defragmentation cycle.
