@@ -278,7 +278,29 @@ def main(argv=None):
         #    supersede/dedup entirely: an unfiltered listing would see runs
         #    of other branches and could cancel or skip on foreign runs.
         args.head_ref = normalize_branch(args.head_ref)
+        stale = False
         if args.head_ref:
+            # A run may sit in the runner queue while the branch moves on
+            # (push or force-push). When this run's head is no longer the
+            # branch tip, the run is stale: the current-tip run owns
+            # supersede/dedup for the branch, and this run must neither
+            # cancel it (the stale run would classify the current tip as
+            # "rewritten history" and kill the authoritative gate) nor run
+            # a gate for the abandoned content.
+            try:
+                tip = api(args.repo,
+                          f"branches/{urllib.parse.quote(args.head_ref)}",
+                          args.token)["commit"]["sha"]
+                stale = tip != args.head_sha
+            except Exception as e:  # noqa: BLE001 — no verdict, keep old behavior
+                print(f"orchestrate: branch-tip lookup failed ({e}); "
+                      f"assuming this run is current", file=sys.stderr)
+            if stale:
+                print(f"orchestrate: stale run: branch {args.head_ref} tip is "
+                      f"{tip[:12]}, not {args.head_sha[:12]}; skipping the gate",
+                      file=sys.stderr)
+                out["skip"] = True
+        if args.head_ref and not stale:
             head_runs = list_runs(args.repo, args.token, args.workflow_id,
                                   branch=args.head_ref)
             # github.run_id arrives as a string, the API returns int ids:
