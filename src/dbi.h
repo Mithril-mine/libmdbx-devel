@@ -141,4 +141,5 @@ struct dbi_rename_result {
 };
 
 MDBX_INTERNAL int dbi_rename_locked_and_release(MDBX_txn *txn, MDBX_dbi dbi, MDBX_val new_name);
+MDBX_INTERNAL int dbi_enumerate(const MDBX_txn *txn, MDBX_table_enum_func *func, void *ctx, const bool dbi_locked);
 MDBX_INTERNAL void dbi_rename_undo_discharge(MDBX_env *const env, MDBX_txn *const txn, const bool commit);
