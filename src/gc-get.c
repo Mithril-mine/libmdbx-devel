@@ -788,6 +788,27 @@ static inline pgr_t page_alloc_finalize(MDBX_env *const env, MDBX_txn *const txn
   ENSURE_OBJ(env, pgno >= NUM_METAS);
 
   pgr_t ret;
+
+  /* A reused page (below the first-unallocated boundary) must never be
+   * already taken in this transaction, otherwise two b-tree nodes would
+   * alias one page. This catches, among others, a page listed by two GC
+   * records when the second record is merged after the page was already
+   * allocated from the first one (see the issues
+   * <https://github.com/Mithril-mine/libmdbx-devel/issues/83> and
+   * <https://github.com/Mithril-mine/libmdbx-devel/issues/452>).
+   * The dirty-page list is the registry of taken pages, and is maintained
+   * only for non-WRITEMAP or AVOID_MSYNC configurations. */
+  if (pgno < txn->geo.first_unallocated && ((txn->flags & MDBX_WRITEMAP) == 0 || MDBX_AVOID_MSYNC)) {
+    for (size_t i = 0; i < num; ++i) {
+      if (txn_dpl_exist(txn, pgno + (pgno_t)i)) {
+        ERROR("%s/%d: %s page #%" PRIaPGNO, "MDBX_CORRUPTED", MDBX_CORRUPTED,
+              "page is already used in the current txn:", pgno + (pgno_t)i);
+        ret.page = nullptr;
+        ret.err = MDBX_CORRUPTED;
+        goto bailout;
+      }
+    }
+  }
   bool need_clean = (env->flags & MDBX_PAGEPERTURB) != 0;
   if (env->flags & MDBX_WRITEMAP) {
     ret.page = pgno2page(env, pgno);
@@ -1199,16 +1220,11 @@ next_gc:
    *  - when MDBX_VALIDATION is enabled, a full check is performed using pnl_check_full() with items order checking.
    *
    * Next, here we check that the length after merge is equal to the total length of the source pnls.
-   * Thus, depending on MDBX_VALIDATION, we get two situations:
-   *   - without MDBX_VALIDATION, a minimum of O(1) checks is performed,
-   *     but if the order is violated within pnl from GC, we may not notice duplicates;
-   *   - with MDBX_VALIDATION enabled, the cost of checks is O(n),
-   *     but we will notice both order violations and duplicates.
-   *
-   * Overall, we get a manageable compromise:
-   *  - without MDBX_VALIDATION, there are minimal checks and performance is optimized,
-   *    but control can be enabled via build options;
-   *  - with MDBX_VALIDATION enabled, full checks are performed for maximum resilience against untrusted data. */
+   * The merge itself collapses an equal pair of items (the same page listed by two GC records,
+   * see <https://github.com/Mithril-mine/libmdbx-devel/issues/83> and
+   * <https://github.com/Mithril-mine/libmdbx-devel/issues/452>) and returns the number of stored
+   * items, so this always-on comparison catches such duplicates regardless of MDBX_VALIDATION,
+   * while the per-record checks above catch order violations depending on it. */
   if (unlikely(has_duplicates)) {
     ERROR("%s/%d: %s", "MDBX_CORRUPTED", MDBX_CORRUPTED, "duplicate page in the retired-pages list");
     ret.err = MDBX_CORRUPTED;

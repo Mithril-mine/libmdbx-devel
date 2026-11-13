@@ -202,6 +202,10 @@ MDBX_NOTHROW_PURE_FUNCTION MDBX_MAYBE_UNUSED static inline bool pnl_contains_spa
 #endif /* MDBX_PNL_ASCENDING */
 }
 
+/* Merge two descending-sorted lists. Returns the number of items stored,
+ * which is less than the sum of the source lengths iff an equal pair was
+ * collapsed (the same page listed by both sources, see
+ * <https://github.com/Mithril-mine/libmdbx-devel/issues/452>). */
 MDBX_INTERNAL size_t pnl_merge(pnl_t dst, const const_pnl_t src);
 
 MDBX_MAYBE_UNUSED MDBX_NOTHROW_PURE_FUNCTION MDBX_INTERNAL bool pnl_intersect(const const_pnl_t a, const const_pnl_t b);

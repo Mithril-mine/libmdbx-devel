@@ -306,3 +306,79 @@ TEST(issue_gh0083, duplicated_page_across_gc_records_rejected) {
 
   EXPECT_EQ(MDBX_PROBLEM, rc) << "a page listed by two GC records must be rejected, not double-allocated";
 }
+// The reclaiming path merges each GC record into txn->wr.repnl by
+// pnl_merge() while page allocation consumes the records (gc_alloc_ex),
+// which is what every regular write transaction runs at commit. The merge
+// must detect a page presented by both records (previously the only
+// cross-record check there was a length tautology that never fired, see
+// https://github.com/Mithril-mine/libmdbx-devel/issues/452) and let the
+// caller reject the list with MDBX_CORRUPTED. The defrag case above
+// assembles the whole list in one go and is checked separately.
+TEST(issue_gh0083, duplicated_page_across_gc_records_rejected_at_reclaiming) {
+  const env_files_guard guard({"issue83-reclaim.mdbx"});
+  if (MDBX_GTEST_IS_EXECUTION_TIMEOUT()) {
+    GTEST_SKIP() << "SKIPPED by RUNTIME_LIMIT";
+    return;
+  }
+  const std::string testdb = "issue83-reclaim.mdbx";
+  env_remove(testdb.c_str());
+  ASSERT_TRUE(create_gc_db(testdb)) << "must be able to create a GC with several records";
+
+  uint32_t pagesize = 0;
+  {
+    MDBX_env *env = nullptr;
+    ASSERT_EQ(MDBX_SUCCESS, mdbx_env_create(&env));
+    ASSERT_EQ(MDBX_SUCCESS, mdbx_env_set_maxdbs(env, 2));
+    ASSERT_EQ(MDBX_SUCCESS, mdbx_env_open(env, testdb.c_str(), MDBX_RDONLY | MDBX_NOSUBDIR, 0644));
+    MDBX_envinfo info;
+    std::memset(&info, 0, sizeof info);
+    ASSERT_EQ(MDBX_SUCCESS, mdbx_env_info_ex(env, nullptr, &info, sizeof info));
+    pagesize = info.mi_dxb_pagesize;
+    mdbx_env_close(env);
+    ASSERT_GE(pagesize, 256u);
+  }
+
+  const int crafted = craft_shared_page(testdb, pagesize);
+  if (crafted == 0)
+    GTEST_SKIP() << "GC holds fewer than two records; crafted scenario not applicable";
+  ASSERT_GT(crafted, 0) << "must be able to craft two records sharing a page";
+
+  MDBX_env *env = nullptr;
+  ASSERT_EQ(MDBX_SUCCESS, mdbx_env_create(&env));
+  ASSERT_EQ(MDBX_SUCCESS, mdbx_env_set_maxdbs(env, 2));
+  ASSERT_EQ(MDBX_SUCCESS, mdbx_env_open(env, testdb.c_str(), MDBX_NOSUBDIR, 0644));
+
+  MDBX_dbi dbi = 0;
+  MDBX_txn *txn = nullptr;
+  ASSERT_EQ(MDBX_SUCCESS, mdbx_txn_begin(env, nullptr, MDBX_TXN_READWRITE, &txn));
+  ASSERT_EQ(MDBX_SUCCESS, mdbx_dbi_open(txn, nullptr, MDBX_DB_DEFAULTS, &dbi));
+
+  /* Consume the crafted records by allocating enough pages within one
+   * transaction: churn retires pages, and the flood's allocations pull
+   * both records into the retired list. */
+  int rc = MDBX_SUCCESS;
+  char key[16], val[128];
+  for (int i = 0; rc == MDBX_SUCCESS && i < 200; ++i) {
+    std::snprintf(key, sizeof key, "k%02d", i);
+    std::memset(val, 'r', sizeof val);
+    MDBX_val k = {key, std::strlen(key)};
+    MDBX_val v = {val, sizeof val};
+    rc = mdbx_put(txn, dbi, &k, &v, MDBX_UPSERT);
+  }
+  for (int i = 0; rc == MDBX_SUCCESS && i < 2000; ++i) {
+    std::snprintf(key, sizeof key, "flood%04d", i);
+    std::memset(val, 'q', sizeof val);
+    MDBX_val k = {key, std::strlen(key)};
+    MDBX_val v = {val, sizeof val};
+    rc = mdbx_put(txn, dbi, &k, &v, MDBX_UPSERT);
+  }
+  if (rc == MDBX_SUCCESS)
+    rc = mdbx_txn_commit(txn);
+  else
+    mdbx_txn_abort(txn);
+  mdbx_env_close(env);
+  env_remove(testdb.c_str());
+
+  EXPECT_EQ(MDBX_CORRUPTED, rc)
+      << "a page listed by two GC records must be rejected during reclaiming, not double-allocated";
+}

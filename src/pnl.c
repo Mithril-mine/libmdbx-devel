@@ -181,12 +181,23 @@ __hot __noinline bool pnl_check_full(const const_pnl_t pnl, const size_t limit) 
   return true;
 }
 
-static __always_inline void pnl_merge_inner(pgno_t *__restrict dst, const pgno_t *__restrict src_a,
-                                            const pgno_t *__restrict src_b,
-                                            const pgno_t *__restrict const src_b_detent) {
+/* Merge two descending runs backward into dst, writing the result in-place
+ * exactly as a plain merge does. Each source is duplicate-free by its own
+ * check, so an equal pair of items means the same page is listed by both
+ * runs (a page listed by two GC records, see the issues
+ * <https://github.com/Mithril-mine/libmdbx-devel/issues/83> and
+ * <https://github.com/Mithril-mine/libmdbx-devel/issues/452>). Such pairs
+ * are written as-is (they are adjacent in the merged output) and counted,
+ * so the caller can squeeze them and reject the too-short result. */
+static __always_inline size_t pnl_merge_inner(pgno_t *__restrict dst, const pgno_t *__restrict src_a,
+                                              const pgno_t *__restrict src_b,
+                                              const pgno_t *__restrict const src_b_detent) {
+  size_t duplicates = 0;
   do {
 #if MDBX_HAVE_CMOV
     const bool flag = MDBX_PNL_ORDERED(*src_b, *src_a);
+    /* an equal pair is only possible with !flag, when *src_b is taken */
+    const bool twice = !flag && *src_a == *src_b;
 #if defined(__LCC__) || __CLANG_PREREQ(13, 0)
     // lcc 1.26: 13ШК (подготовка и первая итерация) + 7ШК (цикл), БЕЗ loop-mode
     // gcc>=7: cmp+jmp с возвратом в тело цикла (WTF?)
@@ -203,12 +214,15 @@ static __always_inline void pnl_merge_inner(pgno_t *__restrict dst, const pgno_t
     src_a -= flag;
 #endif
     --dst;
+    duplicates += twice;
 #else  /* MDBX_HAVE_CMOV */
     while (MDBX_PNL_ORDERED(*src_b, *src_a))
       *dst-- = *src_a--;
+    duplicates += *src_a == *src_b;
     *dst-- = *src_b--;
 #endif /* !MDBX_HAVE_CMOV */
   } while (likely(src_b > src_b_detent));
+  return duplicates;
 }
 
 __hot size_t pnl_merge(pnl_t dst, const const_pnl_t src) {
@@ -230,7 +244,25 @@ __hot size_t pnl_merge(pnl_t dst, const const_pnl_t src) {
     } else {
     avoid_call_libc_for_short_cases:
       dst[0] = /* the detent */ (MDBX_PNL_ASCENDING ? 0 : P_INVALID);
-      pnl_merge_inner(dst + total, dst + dst_len, src + src_len, src);
+      /* the ordered cases above are disjoint, so duplicates are only
+       * possible in the interleaved merge, where equal pairs are adjacent
+       * and could be squeezed in one pass */
+      const size_t duplicates = pnl_merge_inner(dst + total, dst + dst_len, src + src_len, src);
+      if (unlikely(duplicates != 0)) {
+        /* squeeze the duplicated items: a page listed by two GC records (see
+         * <https://github.com/Mithril-mine/libmdbx-devel/issues/83> and
+         * <https://github.com/Mithril-mine/libmdbx-devel/issues/452>) must
+         * not stay in the list, and the length becomes less than the sum of
+         * the source lengths */
+        pgno_t *const end = dst + total;
+        pgno_t *in = dst + 1, *out = dst + 1;
+        do {
+          const pgno_t item = *in++;
+          if (out == dst + 1 || out[-1] != item)
+            *out++ = item;
+        } while (in <= end);
+        total = (size_t)(out - dst - 1);
+      }
     }
     pnl_setsize(dst, total);
   }
