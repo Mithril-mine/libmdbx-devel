@@ -29,17 +29,22 @@ static int flock_with_event(HANDLE fd, HANDLE event, unsigned flags, size_t offs
     return MDBX_SUCCESS;
   }
 
-  DWORD rc = GetLastError();
+  DWORD rc = GetLastError(), unused;
   if (rc == ERROR_IO_PENDING) {
     if (event) {
-      if (GetOverlappedResult(fd, &ov, &rc, true)) {
+      if (GetOverlappedResult(fd, &ov, &unused, true)) {
         TRACE("lock<<: fd %p, event %p, flags 0x%x offset %zu, bytes %zu << %s", fd, event, flags, offset, bytes,
               "overlapped-done");
         return MDBX_SUCCESS;
       }
       rc = GetLastError();
-    } else
+    } else {
       CancelIo(fd);
+      /* `ov` is on the stack: wait until the cancelled request is completed,
+       * and release the lock if it was granted before the cancellation took effect */
+      if (GetOverlappedResult(fd, &ov, &unused, true))
+        UnlockFile(fd, (DWORD)offset, HIGH_DWORD(offset), (DWORD)bytes, HIGH_DWORD(bytes));
+    }
   }
   TRACE("lock<<: fd %p, event %p, flags 0x%x offset %zu, bytes %zu << err %d", fd, event, flags, offset, bytes,
         (int)rc);
