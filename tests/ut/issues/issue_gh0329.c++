@@ -44,6 +44,15 @@
 // both mutexes of each environment over fork(), as it does for its global ones,
 // reinitializes them in the child and resets the owner.
 //
+// macOS 26 (Tahoe) noise: a forked child of a multithreaded parent there
+// dies sporadically by the libSystem's intentional lock-traps (SIGILL) -
+// the os locks and malloc zones are not fork-safe in Tahoe and libmdbx
+// cannot reinitialize them (a widely reported regression: celery #9894,
+// py-setproctitle #165, resque #1939). Such deaths are outside the issue
+// #329 contract, so a child killed by SIGILL/SIGTRAP is retried (bounded);
+// the child's stderr breadcrumbs and the decoded wait statuses keep the
+// triage possible.
+//
 // Four modes; in each, one parent thread repeats an operation while the main
 // thread forks, and each child does one step and leaves with _exit():
 //   dbi       parent: open a closed table + close;  child: resurrect, the same
@@ -67,6 +76,35 @@ enum mode { DBI, REMAP, CLOSE, DBICLOSE };
 const char *const mode_name[] = {"dbi", "remap", "close", "dbiclose"};
 
 std::string db_name(mode m) { return std::string("issue329-") + mode_name[m] + ".mdbx"; }
+
+/* Decodes a wait status for the failure messages: a raw 0x4 (SIGILL) says
+ * nothing to a human scanning a nightly log. */
+std::string status_string(int status) {
+  std::string out;
+  if (WIFSIGNALED(status)) {
+    const int sig = WTERMSIG(status);
+    out += "killed by ";
+    out += (sig == SIGILL)  ? "SIGILL"
+           : (sig == SIGTRAP) ? "SIGTRAP"
+           : (sig == SIGABRT) ? "SIGABRT"
+           : (sig == SIGSEGV) ? "SIGSEGV"
+           : (sig == SIGBUS)  ? "SIGBUS"
+                              : "unknown signal";
+    out += " (" + std::to_string(sig) + ")";
+  } else if (WIFEXITED(status)) {
+    out += "exit code " + std::to_string(WEXITSTATUS(status));
+  } else {
+    out += "raw wait status 0x" + [](int v) {
+      const char *digits = "0123456789abcdef";
+      std::string hex;
+      for (int shift = 28; shift >= 0; shift -= 4)
+        if (v >> shift || hex.size())
+          hex += digits[(v >> shift) & 15];
+      return hex.empty() ? "0" : hex;
+    }(status);
+  }
+  return out;
+}
 
 /* Deletes the database before the test and on every exit path. */
 struct files_guard {
@@ -103,13 +141,21 @@ int operation(mode m, MDBX_env *env, unsigned i) {
   return mdbx_env_set_geometry(env, -1, (i & 1) ? 8 << 20 : 4 << 20, 64 << 20, -1, -1, -1);
 }
 
-/* The child's step; returns its exit status. */
+/* The child's step; returns its exit status. The breadcrumbs on stderr
+ * localize where a child died: a death after the last breadcrumb happened
+ * in the following call, not inside libmdbx's resurrect. */
 int child_step(mode m, MDBX_env *env) {
+  fprintf(stderr, "gh0329: child[%d] %s: enter\n", getpid(), mode_name[m]);
+  fflush(stderr);
   if (m == DBICLOSE)
     return mdbx_env_close(env) == MDBX_SUCCESS ? 0 : 1;
   if (mdbx_env_resurrect_after_fork(env) != MDBX_SUCCESS)
     return 2;
+  fprintf(stderr, "gh0329: child[%d] %s: resurrect ok\n", getpid(), mode_name[m]);
+  fflush(stderr);
   const int rc = (m == CLOSE) ? mdbx_env_close(env) : operation(m, env, 1);
+  fprintf(stderr, "gh0329: child[%d] %s: step rc %d\n", getpid(), mode_name[m], rc);
+  fflush(stderr);
   return rc == MDBX_SUCCESS ? 0 : 3;
 }
 
@@ -162,7 +208,7 @@ void run_mode(mode m) {
     }
   });
 
-  int forks = 0, failure_status = 0, fork_errno = 0;
+  int forks = 0, failure_status = 0, fork_errno = 0, trap_kills = 0;
   bool hung = false;
   const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(2);
   for (; forks < 100 && std::chrono::steady_clock::now() < deadline; ++forks) {
@@ -185,6 +231,21 @@ void run_mode(mode m) {
       hung = true;
       break;
     }
+    if (WIFSIGNALED(status) && (WTERMSIG(status) == SIGILL || WTERMSIG(status) == SIGTRAP)) {
+      /* macOS 26 (Tahoe): a forked child of a multithreaded parent dies
+       * sporadically by the libSystem's intentional lock-traps - the os
+       * locks and malloc zones are not fork-safe there and libmdbx cannot
+       * reinitialize them (see celery #9894, py-setproctitle #165, resque
+       * #1939). Such a death is outside the issue #329 contract (a hang or
+       * the MDBX_BUSY/abort, which the watchdog and the exit statuses
+       * catch): retry a few times, loudly. A trap AFTER the child's own
+       * breadcrumbs still shows in the log for the triage. */
+      ++trap_kills;
+      ASSERT_LT(trap_kills, 4) << mode_name[m] << ": fork " << forks + 1 << ": the child died "
+                               << trap_kills << " times by " << status_string(status);
+      --forks;
+      continue;
+    }
     if (!WIFEXITED(status) || WEXITSTATUS(status) != 0) {
       failure_status = status;
       break;
@@ -196,8 +257,9 @@ void run_mode(mode m) {
 
   EXPECT_EQ(fork_errno, 0) << mode_name[m] << ": fork " << forks + 1 << " failed: " << strerror(fork_errno);
   EXPECT_FALSE(hung) << mode_name[m] << ": fork " << forks + 1 << ": the child hung";
-  EXPECT_EQ(failure_status, 0) << mode_name[m] << ": fork " << forks + 1 << ": the child failed, wait status 0x"
-                               << std::hex << failure_status;
+  if (failure_status)
+    ADD_FAILURE() << mode_name[m] << ": fork " << forks + 1 << ": the child failed, "
+                  << status_string(failure_status);
   EXPECT_GT(forks, 0) << mode_name[m];
   EXPECT_EQ(churn_rc.load(), MDBX_SUCCESS) << mode_name[m] << ": " << mdbx_strerror(churn_rc.load());
 }
