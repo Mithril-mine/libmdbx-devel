@@ -84,8 +84,9 @@ int main(void) {
   char reply[256], cmd[128];
 
   /* Arm the FAULT site: lck_ftok() will return the same injected key for
-   * every database, forcing a deterministic System V IPC key collision. */
-  snprintf(cmd, sizeof cmd, "fault ftok_key_collide %d", (int)0x00712345);
+   * every database, forcing a deterministic System V IPC key collision. The
+   * key is derived from the pid, so concurrent test processes never share it. */
+  snprintf(cmd, sizeof cmd, "fault ftok_key_collide %d", (int)(0x40000000 | getpid()));
   if (mdbx_probe_ctl(cmd, reply, sizeof reply) != 0) {
     fprintf(stderr, "mdbx_probe_ctl(arm ftok_key_collide) failed: %s\n", reply);
     return 2;
