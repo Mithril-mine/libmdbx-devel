@@ -287,8 +287,8 @@
 #define MDBX_LOCKING MDBX_LOCKING_WIN32FILES
 #else
 #ifndef MDBX_LOCKING
-#if defined(_POSIX_THREAD_PROCESS_SHARED) && _POSIX_THREAD_PROCESS_SHARED >= 200112L && !defined(__FreeBSD__)
-
+#if defined(_POSIX_THREAD_PROCESS_SHARED) && _POSIX_THREAD_PROCESS_SHARED >= 200112L
+#if !defined(__FreeBSD__)
 /* Some platforms define the EOWNERDEAD error code even though they
  * don't support Robust Mutexes. If doubt compile with -MDBX_LOCKING=2001. */
 #if defined(EOWNERDEAD) && _POSIX_THREAD_PROCESS_SHARED >= 200809L &&                                                  \
@@ -301,12 +301,24 @@
 #else
 #define MDBX_LOCKING MDBX_LOCKING_POSIX2001
 #endif
-#elif defined(__sun) || defined(__SVR4) || defined(__svr4__) ||                                                        \
-    (defined(_POSIX_SEMAPHORES) && _POSIX_SEMAPHORES >= 200112L &&                                                     \
-     !defined(__OpenBSD__)) /* OpenBSD's sem_init() always fails with EPERM on pshared */
-/* Prefer POSIX shared anonymous semaphores (POSIX1988) over the legacy System V IPC
- * (SysV) whenever the platform provides process-shared semaphores, e.g. FreeBSD and
- * NetBSD where the pthread process-shared primitives are not usable but POSIX are. */
+#else /* FreeBSD: the __GLIBC_PREREQ() macro is unavailable there, so the robust check is separate. */
+/* The process-shared robust mutexes are supported since 11.0 (2016): the kernel
+ * maintains the per-thread umtx robust lists and performs the dead-owner recovery
+ * in the shared memory by itself. Without the robust attribute the mutexes hang
+ * forever on a dead owner, so SysV is the only safe fallback. */
+#if defined(EOWNERDEAD) && _POSIX_THREAD_PROCESS_SHARED >= 200809L &&                                                  \
+    (defined(_POSIX_THREAD_ROBUST_PRIO_INHERIT) || defined(_POSIX_THREAD_ROBUST_PRIO_PROTECT) ||                       \
+     defined(PTHREAD_MUTEX_ROBUST) || defined(PTHREAD_MUTEX_ROBUST_NP))
+#define MDBX_LOCKING MDBX_LOCKING_POSIX2008
+#else
+#define MDBX_LOCKING MDBX_LOCKING_SYSV
+#endif
+#endif
+#elif defined(__sun) || defined(__SVR4) || defined(__svr4__) || defined(__HAIKU__)
+/* POSIX shared anonymous semaphores (POSIX1988) cannot detect a dead lock owner,
+ * while System V IPC (SysV) can: SEM_UNDO releases the semaphore and the owner's
+ * pid stays in the lock word. Solaris/SVR4 and Haiku keep POSIX1988 as before,
+ * so their lock-file format does not change. */
 #define MDBX_LOCKING MDBX_LOCKING_POSIX1988
 #else
 #define MDBX_LOCKING MDBX_LOCKING_SYSV
