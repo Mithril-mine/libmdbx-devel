@@ -75,7 +75,7 @@ MDBX_NOTHROW_CONST_FUNCTION static inline size_t keysize_max(size_t pagesize, MD
   return max_branch_key;
 }
 
-MDBX_NOTHROW_CONST_FUNCTION static inline size_t env_keysize_max(const MDBX_env *env, MDBX_db_flags_t flags) {
+MDBX_NOTHROW_PURE_FUNCTION static inline size_t env_keysize_max(const MDBX_env *env, MDBX_db_flags_t flags) {
   size_t size_max;
   if (flags & MDBX_INTEGERKEY)
     size_max = 8 /* sizeof(uint64_t) */;
@@ -125,7 +125,7 @@ MDBX_NOTHROW_CONST_FUNCTION static inline size_t valsize_max(size_t pagesize, MD
   return (limit < globals.mmap_limit / 2) ? limit : globals.mmap_limit / 2;
 }
 
-MDBX_NOTHROW_CONST_FUNCTION static inline size_t env_valsize_max(const MDBX_env *env, MDBX_db_flags_t flags) {
+MDBX_NOTHROW_PURE_FUNCTION static inline size_t env_valsize_max(const MDBX_env *env, MDBX_db_flags_t flags) {
   size_t size_max;
   if (flags & MDBX_INTEGERDUP)
     size_max = 8 /* sizeof(uint64_t) */;
@@ -476,7 +476,7 @@ static inline int check_txn_rw(const MDBX_txn *txn, int bad_bits) {
   return check_txn(txn, (bad_bits | txn_ro_both) & ~MDBX_TXN_PARKED);
 }
 
-MDBX_NOTHROW_CONST_FUNCTION static inline txnid_t txn_basis_snapshot(const MDBX_txn *txn) {
+MDBX_NOTHROW_PURE_FUNCTION static inline txnid_t txn_basis_snapshot(const MDBX_txn *txn) {
   STATIC_ASSERT(((txn_ro_flat >> ((xMDBX_TXNID_STEP == 2) ? 16 : 17)) & xMDBX_TXNID_STEP) == xMDBX_TXNID_STEP);
   const txnid_t committed_txnid =
       txn->txnid - xMDBX_TXNID_STEP + ((txn->flags >> ((xMDBX_TXNID_STEP == 2) ? 16 : 17)) & xMDBX_TXNID_STEP);
