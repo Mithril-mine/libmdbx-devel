@@ -667,6 +667,8 @@ int txn_renew(MDBX_txn *txn, unsigned flags) {
     MDBX_PNL_SETSIZE(txn->tw.retired_pages, 0);
     txn->tw.spilled.list = nullptr;
     txn->tw.spilled.least_removed = 0;
+    txn->tw.writemap.dirty_npages = 0;
+    txn->tw.writemap.spilled_npages = 0;
     txn->tw.gc.time_acc = 0;
     txn->tw.gc.last_reclaimed = 0;
     if (txn->tw.gc.retxl)
@@ -854,8 +856,8 @@ int txn_renew(MDBX_txn *txn, unsigned flags) {
         txn->tw.dirtyroom = MAX_PAGENO;
         txn->tw.dirtylru = 0;
       }
-      eASSERT(env, txn->tw.writemap_dirty_npages == 0);
-      eASSERT(env, txn->tw.writemap_spilled_npages == 0);
+      eASSERT(env, txn->tw.writemap.dirty_npages == 0);
+      eASSERT(env, txn->tw.writemap.spilled_npages == 0);
 
       MDBX_cursor *const gc = ptr_disp(txn, sizeof(MDBX_txn));
       rc = cursor_init(gc, txn, FREE_DBI);
