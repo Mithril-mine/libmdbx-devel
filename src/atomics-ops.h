@@ -14,11 +14,19 @@
 #ifdef MDBX_HAVE_C11ATOMICS
 #define osal_memory_fence(order, write) atomic_thread_fence((write) ? mo_c11_store(order) : mo_c11_load(order))
 #else /* MDBX_HAVE_C11ATOMICS */
+/* Without C11 atomics nothing is known about the target memory model,
+ * so a weakly-ordered CPU must be assumed and only the compiler/platform
+ * primitives may lower the cost of the ordering. On the load side the fence
+ * must be applied after the access, on the store side before it (see the
+ * fallbacks of the atomic_load and atomic_store helpers below). */
 #define osal_memory_fence(order, write)                                                                                \
   do {                                                                                                                 \
-    osal_compiler_barrier();                                                                                           \
-    if (write && order > (MDBX_CPU_WRITEBACK_INCOHERENT ? mo_Relaxed : mo_AcquireRelease))                             \
-      osal_memory_barrier();                                                                                           \
+    if ((order) > mo_Relaxed) {                                                                                        \
+      if (write)                                                                                                       \
+        osal_fence_producer();                                                                                         \
+      else                                                                                                             \
+        osal_fence_consumer();                                                                                         \
+    }                                                                                                                  \
   } while (0)
 #endif /* MDBX_HAVE_C11ATOMICS */
 
@@ -47,10 +55,8 @@ MDBX_MAYBE_UNUSED static __always_inline uint32_t atomic_store32(mdbx_atomic_uin
   assert(atomic_is_lock_free(MDBX_c11a_rw(uint32_t, p)));
   atomic_store_explicit(MDBX_c11a_rw(uint32_t, p), value, mo_c11_store(order));
 #else  /* MDBX_HAVE_C11ATOMICS */
-  if (order != mo_Relaxed)
-    osal_compiler_barrier();
-  p->weak = value;
   osal_memory_fence(order, true);
+  p->weak = value;
 #endif /* MDBX_HAVE_C11ATOMICS */
   return value;
 }
@@ -64,10 +70,8 @@ MDBX_MAYBE_UNUSED static __always_inline uint32_t atomic_load32(const volatile m
   assert(atomic_is_lock_free(MDBX_c11a_ro(uint32_t, p)));
   return atomic_load_explicit(MDBX_c11a_ro(uint32_t, p), mo_c11_load(order));
 #else  /* MDBX_HAVE_C11ATOMICS */
-  osal_memory_fence(order, false);
   const uint32_t value = p->weak;
-  if (order != mo_Relaxed)
-    osal_compiler_barrier();
+  osal_memory_fence(order, false);
   return value;
 #endif /* MDBX_HAVE_C11ATOMICS */
 }
@@ -98,13 +102,11 @@ MDBX_MAYBE_UNUSED static __always_inline uint64_t atomic_store64(mdbx_atomic_uin
   assert(atomic_is_lock_free(MDBX_c11a_rw(uint64_t, p)));
   atomic_store_explicit(MDBX_c11a_rw(uint64_t, p), value, mo_c11_store(order));
 #else  /* MDBX_HAVE_C11ATOMICS */
-  if (order != mo_Relaxed)
-    osal_compiler_barrier();
-  p->weak = value;
   osal_memory_fence(order, true);
+  p->weak = value;
 #endif /* MDBX_HAVE_C11ATOMICS */
 #else  /* !MDBX_64BIT_ATOMIC */
-  osal_compiler_barrier();
+  osal_fence_producer();
   atomic_store32(&p->low, (uint32_t)value, mo_Relaxed);
   jitter4testing(true);
   atomic_store32(&p->high, (uint32_t)(value >> 32), order);
@@ -126,20 +128,18 @@ MDBX_MAYBE_UNUSED static
   assert(atomic_is_lock_free(MDBX_c11a_ro(uint64_t, p)));
   return atomic_load_explicit(MDBX_c11a_ro(uint64_t, p), mo_c11_load(order));
 #else  /* MDBX_HAVE_C11ATOMICS */
-  osal_memory_fence(order, false);
   const uint64_t value = p->weak;
-  if (order != mo_Relaxed)
-    osal_compiler_barrier();
+  osal_memory_fence(order, false);
   return value;
 #endif /* MDBX_HAVE_C11ATOMICS */
 #else  /* !MDBX_64BIT_ATOMIC */
-  osal_compiler_barrier();
+  osal_fence_consumer();
   uint64_t value = (uint64_t)atomic_load32(&p->high, order) << 32;
   jitter4testing(true);
   value |= atomic_load32(&p->low, (order == mo_Relaxed) ? mo_Relaxed : mo_AcquireRelease);
   jitter4testing(true);
   for (;;) {
-    osal_compiler_barrier();
+    osal_fence_consumer();
     uint64_t again = (uint64_t)atomic_load32(&p->high, order) << 32;
     jitter4testing(true);
     again |= atomic_load32(&p->low, (order == mo_Relaxed) ? mo_Relaxed : mo_AcquireRelease);
@@ -301,7 +301,7 @@ MDBX_MAYBE_UNUSED static __always_inline void safe64_write(mdbx_atomic_uint64_t 
 #if MDBX_64BIT_ATOMIC && MDBX_64BIT_CAS
   atomic_store64(p, v, mo_AcquireRelease);
 #else  /* MDBX_64BIT_ATOMIC */
-  osal_compiler_barrier();
+  osal_fence_producer();
   /* update low-part but still value >= SAFE64_INVALID_THRESHOLD */
   atomic_store32(&p->low, (uint32_t)v, mo_Relaxed);
   assert(p->weak >= SAFE64_INVALID_THRESHOLD);
