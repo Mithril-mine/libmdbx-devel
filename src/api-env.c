@@ -999,7 +999,7 @@ __cold int mdbx_env_set_geometry(MDBX_env *env, intptr_t size_lower, intptr_t si
       env->basal_txn->tw.troika = meta_tap(env);
       eASSERT(env, !env->txn && !env->basal_txn->nested);
       env->basal_txn->txnid = env->basal_txn->tw.troika.txnid[env->basal_txn->tw.troika.recent];
-      txn_snapshot_oldest(env->basal_txn);
+      txn_snapshot_oldest(env->basal_txn, false);
     }
 
     /* get untouched params from current TXN or DB */

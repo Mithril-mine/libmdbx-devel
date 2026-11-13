@@ -3,8 +3,8 @@
 
 #include "internals.h"
 
-__hot txnid_t txn_snapshot_oldest(const MDBX_txn *const txn) {
-  return mvcc_snapshot_oldest(txn->env, txn->tw.troika.txnid[txn->tw.troika.prefer_steady]);
+__hot txnid_t txn_snapshot_oldest(const MDBX_txn *const txn, const bool may_lag) {
+  return mvcc_snapshot_oldest(txn->env, txn->tw.troika.txnid[txn->tw.troika.prefer_steady], may_lag);
 }
 
 void txn_done_cursors(MDBX_txn *txn, const bool merge) {
