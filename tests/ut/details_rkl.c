@@ -189,7 +189,7 @@ static bool flipcoin(void) { return (bool)prng() & 1; }
 static bool stochastic_pass(const unsigned start, const unsigned width, const unsigned n) {
   rkl_t k, c;
   txl_t l = txl_alloc();
-  if (!CHECK_TRUE(l))
+  if (!CHECK_TRUE(l != nullptr))
     return false;
 
   rkl_init(&k);
