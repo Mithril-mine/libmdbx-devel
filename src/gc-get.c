@@ -928,7 +928,7 @@ pgr_t gc_alloc_ex(const MDBX_cursor *const mc, const size_t num, uint8_t flags) 
   }
 
 retry_gc_refresh_oldest:;
-  txnid_t oldest = txn_snapshot_oldest(txn);
+  txnid_t oldest = txn_snapshot_oldest(txn, true);
 retry_gc_have_oldest:
   if (unlikely(oldest >= txn->txnid)) {
     ERROR("unexpected/invalid oldest-readed txnid %" PRIaTXN " for current-txnid %" PRIaTXN, oldest, txn->txnid);
@@ -1239,7 +1239,7 @@ depleted_gc:
   }
 
   if (unlikely(true == atomic_load32(&env->lck->rdt_refresh_flag, mo_AcquireRelease))) {
-    oldest = txn_snapshot_oldest(txn);
+    oldest = txn_snapshot_oldest(txn, false);
     if (oldest >= detent)
       goto retry_gc_have_oldest;
   }

@@ -16,7 +16,7 @@ MDBX_INTERNAL int audit_ex(MDBX_txn *txn, size_t retired_stored, bool dont_filte
 /* mvcc-readers.c */
 MDBX_INTERNAL bsr_t mvcc_bind_slot(MDBX_env *env);
 MDBX_MAYBE_UNUSED MDBX_INTERNAL pgno_t mvcc_largest_this(MDBX_env *env, pgno_t largest);
-MDBX_INTERNAL txnid_t mvcc_snapshot_oldest(MDBX_env *const env, const txnid_t steady);
+MDBX_INTERNAL txnid_t mvcc_snapshot_oldest(MDBX_env *const env, const txnid_t steady, const bool may_lag);
 MDBX_INTERNAL pgno_t mvcc_snapshot_largest(const MDBX_env *env, pgno_t last_used_page);
 MDBX_INTERNAL txnid_t mvcc_kick_laggards(MDBX_env *env, const txnid_t straggler);
 MDBX_INTERNAL int mvcc_cleanup_dead(MDBX_env *env, int rlocked, int *dead);
@@ -43,7 +43,7 @@ static inline void dxb_sanitize_tail(MDBX_env *env, MDBX_txn *txn) {
 
 /* txn.c */
 MDBX_INTERNAL bool txn_refund(MDBX_txn *txn);
-MDBX_INTERNAL txnid_t txn_snapshot_oldest(const MDBX_txn *const txn);
+MDBX_INTERNAL txnid_t txn_snapshot_oldest(const MDBX_txn *const txn, const bool may_lag);
 MDBX_INTERNAL int txn_abort(MDBX_txn *txn);
 MDBX_INTERNAL int txn_renew(MDBX_txn *txn, unsigned flags);
 MDBX_INTERNAL int txn_park(MDBX_txn *txn, bool autounpark);

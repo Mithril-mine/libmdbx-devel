@@ -904,7 +904,7 @@ int mdbx_txn_info(const MDBX_txn *txn, MDBX_txn_info *info, bool scan_rlt) {
       txnid_t oldest_snapshot = txn->txnid;
       const size_t snap_nreaders = rdt_count(env, lck);
       if (snap_nreaders) {
-        oldest_snapshot = txn_snapshot_oldest(txn);
+        oldest_snapshot = txn_snapshot_oldest(txn, false);
         if (oldest_snapshot == txn->txnid - 1) {
           /* check if there is at least one reader */
           bool exists = false;

@@ -165,7 +165,7 @@ retry:;
     }
     eASSERT(env, head.txnid == recent_committed_txnid(env));
     env->basal_txn->txnid = head.txnid;
-    txn_snapshot_oldest(env->basal_txn);
+    txn_snapshot_oldest(env->basal_txn, false);
     flags |= txn_shrink_allowed;
   }
 

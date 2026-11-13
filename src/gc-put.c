@@ -390,7 +390,7 @@ static rid_t get_rid_for_reclaimed(MDBX_txn *txn, gcu_t *ctx, const size_t left)
         ctx->rid = MDBX_PNL_LAST(txn->tw.gc.retxl);
       } else {
         tASSERT(txn, txn->tw.gc.last_reclaimed == 0);
-        if (unlikely(txn_snapshot_oldest(txn) != snap_oldest))
+        if (unlikely(txn_snapshot_oldest(txn, false) != snap_oldest))
           /* should retry gc_alloc_ex()
            * if the oldest reader changes since the last attempt */
           goto retry_rid;
@@ -468,7 +468,7 @@ static rid_t get_rid_for_reclaimed(MDBX_txn *txn, gcu_t *ctx, const size_t left)
   } else {
     tASSERT(txn, txn->tw.gc.retxl == nullptr);
     if (unlikely(ctx->rid == 0)) {
-      ctx->rid = txn_snapshot_oldest(txn);
+      ctx->rid = txn_snapshot_oldest(txn, false);
       MDBX_val key;
       r.err = outer_first(&ctx->cursor, &key, nullptr);
       if (likely(r.err == MDBX_SUCCESS)) {
