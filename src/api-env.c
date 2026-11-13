@@ -792,7 +792,7 @@ static int env_info_snap(const MDBX_env *env, const MDBX_txn *txn, MDBX_envinfo 
         osal_monotime_to_16dot16_noUnderflow(atomic_load64(&lck->autosync_period, mo_Relaxed));
     out->mi_bootid.current.x = globals.bootid.x;
     out->mi_bootid.current.y = globals.bootid.y;
-    out->mi_mode = env->lck_mmap.lck ? lck->envmode.weak : env->flags;
+    out->mi_mode = env->flags & ENV_USABLE_FLAGS;
   }
 
   if (likely(bytes > size_before_pgop_stat)) {

@@ -3327,6 +3327,19 @@ LIBMDBX_API int mdbx_env_warmup(const MDBX_env *env, const MDBX_txn *txn, MDBX_w
  * transaction running by other thread, or \ref MDBX_BUSY will be returned if
  * function called within a write transaction.
  *
+ * \note For an environment with a lock file, a runtime change of the flags
+ * defining the sync/durability mode is checked against the mode recorded
+ * in the lock file, in the same way as at \ref mdbx_env_open(). If such a
+ * change would create the mode mixing refused at \ref mdbx_env_open()
+ * and other processes are working with the database, \ref MDBX_INCOMPATIBLE
+ * is returned. Otherwise the change is applied and the recorded mode is
+ * updated, so that the open-time check of later processes accounts for
+ * runtime durability changes.
+ * Please also note, that the durable i/o paths (e.g. the write-through
+ * handles) are established at \ref mdbx_env_open() depending on the initial
+ * flags, so making an environment more durable at runtime is correct
+ * but may be less optimized than opening it with the durable flags.
+ *
  * \param [in] env      An environment handle returned
  *                      by \ref mdbx_env_create().
  * \param [in] flags    The \ref env_flags to change, bitwise OR'ed together.
@@ -3334,7 +3347,13 @@ LIBMDBX_API int mdbx_env_warmup(const MDBX_env *env, const MDBX_txn *txn, MDBX_w
  *
  * \returns A non-zero error value on failure and 0 on success,
  *          some possible errors are:
- * \retval MDBX_EINVAL  An invalid parameter was specified. */
+ * \retval MDBX_EINVAL     An invalid parameter was specified.
+ * \retval MDBX_EPERM      The specified flags cannot be changed at runtime.
+ * \retval MDBX_EACCESS    The environment is open in read-only mode.
+ * \retval MDBX_INCOMPATIBLE The requested change of the sync/durability mode
+ *                          would create the mode mixing refused at
+ *                          \ref mdbx_env_open(), while other processes
+ *                          are working with the database. */
 LIBMDBX_API int mdbx_env_set_flags(MDBX_env *env, MDBX_env_flags_t flags, bool onoff);
 
 /** \brief Get environment flags.
