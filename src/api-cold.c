@@ -341,6 +341,10 @@ __cold int mdbx_env_set_flags(MDBX_env *env, MDBX_env_flags_t flags, bool onoff)
   if (unlikely(env->flags & MDBX_RDONLY))
     return LOG_IFERR(MDBX_EACCESS);
 
+  /* pre-check before locking */
+  if (env->flags == (onoff ? combine_durability_flags(env->flags, flags) : (env->flags & ~flags)))
+    return MDBX_SUCCESS;
+
   const bool lock_needed = (env->flags & ENV_ACTIVE) && !env_owned_wrtxn(env);
   bool should_unlock = false;
   if (lock_needed) {
@@ -350,14 +354,72 @@ __cold int mdbx_env_set_flags(MDBX_env *env, MDBX_env_flags_t flags, bool onoff)
     should_unlock = true;
   }
 
-  if (onoff)
-    env->flags = combine_durability_flags(env->flags, flags);
-  else
-    env->flags &= ~flags;
+  /* re-read flags after locking */
+  const uint32_t new_flags = onoff ? combine_durability_flags(env->flags, flags) : (env->flags & ~flags);
 
+  if (new_flags != env->flags) {
+    lck_t *const lck = (env->flags & ENV_ACTIVE) ? env->lck_mmap.lck : nullptr;
+    if (lck) {
+      /* The mode recorded in the lock file is what the open-time rigorous
+       * check compares against: a runtime change must neither violate it
+       * nor leave it stale (issue #338). A rigorous difference is only
+       * allowed when no other process is working with the database, which
+       * lck_upgrade(dont_wait) detects by taking the exclusive lock. */
+      const MDBX_env_flags_t lazy_flags = MDBX_SAFE_NOSYNC | MDBX_UTTERLY_NOSYNC | MDBX_NOMETASYNC;
+      MDBX_env_flags_t snap_flags;
+      while ((snap_flags = atomic_load32(&lck->envmode, mo_AcquireRelease)) == MDBX_RDONLY) {
+        if (atomic_cas32(&lck->envmode, MDBX_RDONLY, env->flags & (lazy_flags | MDBX_LIFORECLAIM |
+                                                                   MDBX_NORDAHEAD | MDBX_RDONLY | MDBX_WRITEMAP)))
+          snap_flags = env->flags & (lazy_flags | MDBX_LIFORECLAIM | MDBX_NORDAHEAD | MDBX_RDONLY | MDBX_WRITEMAP);
+        else
+          atomic_yield();
+      }
+      const MDBX_env_flags_t rigorous_flags =
+          (snap_flags & lazy_flags) ? MDBX_SAFE_NOSYNC | MDBX_UTTERLY_NOSYNC | MDBX_WRITEMAP
+                                    : MDBX_SAFE_NOSYNC | MDBX_UTTERLY_NOSYNC;
+      const MDBX_env_flags_t rigorous_diff = (snap_flags ^ new_flags) & rigorous_flags;
+      bool upgrade_held = false;
+      if (unlikely(rigorous_diff)) {
+        if (env->flags & MDBX_EXCLUSIVE) {
+          /* exclusive access: no other process can be affected */
+        } else {
+          rc = lck_upgrade(env, /* dont_wait */ true);
+          if (unlikely(rc != MDBX_SUCCESS)) {
+            /* lck_upgrade() reports contention with MDBX_BUSY */
+            if (rc != MDBX_BUSY)
+              goto bailout;
+            /* another process is working with the database and the change
+             * would create the mode mixing refused at mdbx_env_open() */
+            ERROR("mdbx_env_set_flags(): 0x%X -> 0x%X would mix the modes with other processes, "
+                  "rigorous diff 0x%X",
+                  env->flags, new_flags, rigorous_diff);
+            rc = MDBX_INCOMPATIBLE;
+            goto bailout;
+          }
+          upgrade_held = true;
+        }
+      }
+      env->flags = new_flags;
+      /* Publish the new mode so that the open-time rigorous check of later
+       * processes accounts for runtime durability changes. */
+      while (!atomic_cas32(&lck->envmode, snap_flags, new_flags & (lazy_flags | MDBX_LIFORECLAIM | MDBX_NORDAHEAD |
+                                                                   MDBX_RDONLY | MDBX_WRITEMAP))) {
+        snap_flags = atomic_load32(&lck->envmode, mo_AcquireRelease);
+        atomic_yield();
+      }
+      if (unlikely(upgrade_held)) {
+        rc = lck_downgrade(env);
+        if (unlikely(rc != MDBX_SUCCESS))
+          goto bailout;
+      }
+    } else
+      env->flags = new_flags;
+  }
+
+bailout:
   if (should_unlock)
     lck_txn_unlock(env);
-  return MDBX_SUCCESS;
+  return LOG_IFERR(rc);
 }
 
 __cold int mdbx_env_get_flags(const MDBX_env *env, unsigned *flags) {
