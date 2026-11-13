@@ -758,13 +758,17 @@ __cold static int copy2pathname(MDBX_txn *txn, const pathchar_t *dest_path, MDBX
    * We don't want the OS to cache the writes, since the source data is
    * already in the OS cache. */
   mdbx_filehandle_t newfd = INVALID_HANDLE_VALUE;
-  int rc = osal_openfile(MDBX_OPEN_COPY, txn->env, dest_path, &newfd,
 #if defined(_WIN32) || defined(_WIN64)
-                         (mdbx_mode_t)-1
+  const mdbx_mode_t mode = (mdbx_mode_t)-1;
 #else
-                         S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP
+  /* Read/write for the owner, as for the lock file; the group gets no more than it has on the source file, which
+   * may be private (0600). */
+  struct stat src_stat;
+  const mdbx_mode_t mode = S_IRUSR | S_IWUSR | (fstat(txn->env->lazy_fd, &src_stat)
+                                                    ? S_IRGRP | S_IWGRP
+                                                    : (src_stat.st_mode & (S_IRGRP | S_IWGRP)));
 #endif
-  );
+  int rc = osal_openfile(MDBX_OPEN_COPY, txn->env, dest_path, &newfd, mode);
   if (unlikely(rc != MDBX_SUCCESS))
     /* A failed open says nothing about the path (EMFILE, ENFILE or ENOMEM come before the existence check), so
      * nothing is removed here; osal_openfile() removes a file it has just created exclusively and then rejected. */

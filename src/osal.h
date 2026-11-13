@@ -252,6 +252,11 @@ typedef wchar_t pathchar_t;
 #else
 typedef char pathchar_t;
 #define MDBX_PRIsPATH "s"
+
+/* No direct I/O: osal_openfile() then skips setting it, with no conditional at the call site. */
+#ifndef O_DIRECT
+#define O_DIRECT 0
+#endif /* O_DIRECT */
 #endif
 
 MDBX_MAYBE_UNUSED static inline bool osal_yield(void) {
