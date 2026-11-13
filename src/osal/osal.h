@@ -293,11 +293,11 @@ typedef struct osal_fileid {
   uint64_t a, b;
 } osal_fileid_t;
 
-MDBX_NOTHROW_CONST_FUNCTION MDBX_MAYBE_UNUSED static inline bool osal_fileid_eq(const osal_fileid_t *a,
-                                                                                const osal_fileid_t *b) {
+MDBX_NOTHROW_PURE_FUNCTION MDBX_MAYBE_UNUSED static inline bool osal_fileid_eq(const osal_fileid_t *a,
+                                                                               const osal_fileid_t *b) {
   return a->a == b->a && a->b == b->b;
 }
-MDBX_NOTHROW_CONST_FUNCTION MDBX_MAYBE_UNUSED static inline bool osal_fileid_is_set(const osal_fileid_t *id) {
+MDBX_NOTHROW_PURE_FUNCTION MDBX_MAYBE_UNUSED static inline bool osal_fileid_is_set(const osal_fileid_t *id) {
   return id->a || id->b;
 }
 

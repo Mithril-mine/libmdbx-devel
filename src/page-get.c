@@ -38,7 +38,7 @@ __cold void MDBX_PRINTF_ARGS(2, 3) poor_page(const page_t *mp, const char *fmt, 
   }
 }
 
-MDBX_CONST_FUNCTION static clc_t value_clc(const MDBX_cursor *mc) {
+MDBX_NOTHROW_PURE_FUNCTION static clc_t value_clc(const MDBX_cursor *mc) {
   if (likely((mc->flags & z_inner) == 0))
     return mc->clc->v;
   else {
