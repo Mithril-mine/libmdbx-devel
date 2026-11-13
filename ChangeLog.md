@@ -63,7 +63,7 @@ A maintenance release of the stable line: backported fixes for data safety, corr
 
  - Resistance to corrupted or crafted data:
     - Fixed a crafted database passing validation and later corrupting data or crashing on delete ([#57](https://github.com/Mithril-mine/libmdbx-devel/issues/57)) (backport).
-    - Fixed a crafted database driving the engine out of bounds when deleting records ([#63](https://github.com/Mithril-mine/libmdbx-devel/issues/63)) (backport).
+    - Fixed a crafted database corrupting on delete, and UB of an in-place zero-length duplicate update ([#63](https://github.com/Mithril-mine/libmdbx-devel/issues/63)) (backport).
     - Fixed a divide-by-zero in `mdbx_cursor_put(MDBX_MULTIPLE)` on a zero element size; now rejected ([#73](https://github.com/Mithril-mine/libmdbx-devel/issues/73)) (backport).
     - Fixed unbounded recursion on a crafted branch page forming a cycle when dropping a table ([#74](https://github.com/Mithril-mine/libmdbx-devel/issues/74)) (backport).
     - Fixed a divide-by-zero in `mdbx_estimate_*()` on a crafted tree with zero leaf/branch counts ([#75](https://github.com/Mithril-mine/libmdbx-devel/issues/75)) (backport).
