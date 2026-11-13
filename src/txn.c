@@ -33,8 +33,22 @@ int txn_write(MDBX_txn *txn, iov_ctx_t *ctx) {
     unsigned npages = dpl_npages(dl, r);
     total_npages += npages;
     rc = iov_page(txn, ctx, dp, npages);
-    if (unlikely(rc != MDBX_SUCCESS))
+    if (unlikely(rc != MDBX_SUCCESS)) {
+      if ((txn->env->flags & MDBX_WRITEMAP) == 0) {
+        /* The mid-commit flush has failed and iov_complete() already released
+         * the shadow pages queued before the failure, i.e. the entries 1..r-1.
+         * The failed page itself was never queued, so release its shadow too.
+         * These entries are dropped from the dirty list by the tail loop
+         * below, otherwise they would be released a second time at the
+         * transaction end (issue #321). */
+        page_shadow_release(txn->env, dp, npages);
+        ++r; /* the failed page is dropped as well */
+        break;
+      }
+      /* For MDBX_WRITEMAP nothing was released by iov_complete() (its walk is
+       * skipped), so the plain early return is safe here. */
       return rc;
+    }
   }
 
   if (!iov_empty(ctx)) {
@@ -56,8 +70,12 @@ int txn_write(MDBX_txn *txn, iov_ctx_t *ctx) {
   txn->tw.dirtyroom += r - 1 - w;
   tASSERT(txn, txn->tw.dirtyroom + txn->tw.dirtylist->length ==
                    (txn->parent ? txn->parent->tw.dirtyroom : txn->env->options.dp_limit));
-  tASSERT(txn, txn->tw.dirtylist->length == txn->tw.loose_count);
-  tASSERT(txn, txn->tw.dirtylist->pages_including_loose == txn->tw.loose_count);
+  if (likely(rc == MDBX_SUCCESS)) {
+    /* after a fully successful write only the loose pages remain in the list;
+     * on a mid-commit flush failure the not-written pages stay for the abort */
+    tASSERT(txn, txn->tw.dirtylist->length == txn->tw.loose_count);
+    tASSERT(txn, txn->tw.dirtylist->pages_including_loose == txn->tw.loose_count);
+  }
   return rc;
 }
 
