@@ -667,7 +667,7 @@ __hot int __must_check_result page_dirty(MDBX_txn *txn, page_t *mp, size_t npage
   mp->txnid = txn->front_txnid;
   if (!txn->tw.dirtylist) {
     tASSERT(txn, (txn->flags & MDBX_WRITEMAP) != 0 && !MDBX_AVOID_MSYNC);
-    txn->tw.writemap_dirty_npages += npages;
+    txn->tw.writemap.dirty_npages += npages;
     tASSERT(txn, txn->tw.spilled.list == nullptr);
     return MDBX_SUCCESS;
   }

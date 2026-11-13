@@ -182,12 +182,12 @@ __cold int spill_slowpath(MDBX_txn *const txn, MDBX_cursor *const m0, const intp
 
   int rc = MDBX_SUCCESS;
   if (unlikely(txn->tw.loose_count >=
-               (txn->tw.dirtylist ? txn->tw.dirtylist->pages_including_loose : txn->tw.writemap_dirty_npages)))
+               (txn->tw.dirtylist ? txn->tw.dirtylist->pages_including_loose : txn->tw.writemap.dirty_npages)))
     goto done;
 
   const size_t dirty_entries = txn->tw.dirtylist ? (txn->tw.dirtylist->length - txn->tw.loose_count) : 1;
   const size_t dirty_npages =
-      (txn->tw.dirtylist ? txn->tw.dirtylist->pages_including_loose : txn->tw.writemap_dirty_npages) -
+      (txn->tw.dirtylist ? txn->tw.dirtylist->pages_including_loose : txn->tw.writemap.dirty_npages) -
       txn->tw.loose_count;
   const size_t need_spill_entries = spill_gate(txn->env, wanna_spill_entries, dirty_entries);
   const size_t need_spill_npages = spill_gate(txn->env, wanna_spill_npages, dirty_npages);
@@ -221,9 +221,9 @@ __cold int spill_slowpath(MDBX_txn *const txn, MDBX_cursor *const m0, const intp
     tASSERT(txn, dpl_check(txn));
 #else
     tASSERT(txn, txn->tw.dirtylist == nullptr);
-    env->lck->unsynced_pages.weak += txn->tw.writemap_dirty_npages;
-    txn->tw.writemap_spilled_npages += txn->tw.writemap_dirty_npages;
-    txn->tw.writemap_dirty_npages = 0;
+    env->lck->unsynced_pages.weak += txn->tw.writemap.dirty_npages;
+    txn->tw.writemap.spilled_npages += txn->tw.writemap.dirty_npages;
+    txn->tw.writemap.dirty_npages = 0;
 #endif /* MDBX_AVOID_MSYNC */
     goto done;
   }

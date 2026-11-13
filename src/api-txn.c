@@ -748,7 +748,7 @@ int mdbx_txn_commit_ex(MDBX_txn *txn, MDBX_commit_latency *latency) {
     }
   } else {
     tASSERT(txn, (txn->flags & MDBX_WRITEMAP) != 0 && !MDBX_AVOID_MSYNC);
-    env->lck->unsynced_pages.weak += txn->tw.writemap_dirty_npages;
+    env->lck->unsynced_pages.weak += txn->tw.writemap.dirty_npages;
     if (!env->lck->eoos_timestamp.weak)
       env->lck->eoos_timestamp.weak = osal_monotime();
   }
@@ -897,7 +897,7 @@ int mdbx_txn_info(const MDBX_txn *txn, MDBX_txn_info *info, bool scan_rlt) {
     info->txn_space_leftover = pgno2bytes(env, txn->tw.dirtyroom);
     info->txn_space_dirty =
         pgno2bytes(env, txn->tw.dirtylist ? txn->tw.dirtylist->pages_including_loose
-                                          : (txn->tw.writemap_dirty_npages + txn->tw.writemap_spilled_npages));
+                                          : (txn->tw.writemap.dirty_npages + txn->tw.writemap.spilled_npages));
     info->txn_reader_lag = INT64_MAX;
     lck_t *const lck = env->lck_mmap.lck;
     if (scan_rlt && lck) {
