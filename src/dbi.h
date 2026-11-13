@@ -136,7 +136,9 @@ MDBX_INTERNAL const tree_t *dbi_dig(const MDBX_txn *txn, const size_t dbi, tree_
 
 struct dbi_rename_result {
   defer_free_item_t *defer;
+  size_t old_len; /* the old name length, valid when defer != nullptr */
   int err;
 };
 
-MDBX_INTERNAL struct dbi_rename_result dbi_rename_locked(MDBX_txn *txn, MDBX_dbi dbi, MDBX_val new_name);
+MDBX_INTERNAL int dbi_rename_locked_and_release(MDBX_txn *txn, MDBX_dbi dbi, MDBX_val new_name);
+MDBX_INTERNAL void dbi_rename_undo_discharge(MDBX_env *const env, MDBX_txn *const txn, const bool commit);

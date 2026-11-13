@@ -694,6 +694,7 @@ int txn_renew(MDBX_txn *txn, unsigned flags) {
   txn->dbi_state[MAIN_DBI] = DBI_LINDO | DBI_VALID;
   txn->cursors[FREE_DBI] = nullptr;
   txn->cursors[MAIN_DBI] = nullptr;
+  txn->dbi_rename_undo = nullptr;
   txn->dbi_seqs[FREE_DBI] = 0;
   txn->dbi_seqs[MAIN_DBI] = atomic_load32(&env->dbi_seqs[MAIN_DBI], mo_AcquireRelease);
 
@@ -953,6 +954,10 @@ int txn_end(MDBX_txn *txn, unsigned mode) {
 
       if ((mode & TXN_END_UPDATE) == 0)
         dbi_update(txn, false);
+      else if (unlikely(txn->dbi_rename_undo != nullptr))
+        /* commit вложенной транзакции: обязательство отката переименований
+         * переходит к родителю вместе с изменениями вложенной (issue #307) */
+        dbi_rename_undo_discharge(env, txn, true);
 
       txn->owner = 0;
       if (txn->tw.gc.retxl) {
