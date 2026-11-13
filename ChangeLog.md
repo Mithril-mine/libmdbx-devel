@@ -89,6 +89,7 @@ A long-term support release with accumulated backported fixes for data safety, c
     - Fixed `mdbx_drop()` for MAIN_DBI with named tables now refused up-front, before any changes ([#311](https://github.com/Mithril-mine/libmdbx-devel/issues/311)) (backport).
 
  - Performance:
+    - Added skipping the root-to-leaf re-descent on `MDBX_APPEND` for a cursor at the right edge ([#66](https://github.com/Mithril-mine/libmdbx-devel/issues/66)) (backport).
     - Fixed losing disk-cache hints after erase/overwrite inserts (backport).
     - Fixed the GC prefault writing page runs at wrong offsets, so intended pages were not prefaulted ([#108](https://github.com/Mithril-mine/libmdbx-devel/issues/108)) (backport).
     - Fixed every no-sync write-map commit on Windows flushing the whole mapping ([#65](https://github.com/Mithril-mine/libmdbx-devel/issues/65)) (backport).
