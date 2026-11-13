@@ -709,6 +709,9 @@ int mdbx_txn_commit_ex(MDBX_txn *txn, MDBX_commit_latency *latency) {
     else {
       rc = meta_sync(env, head);
       if (unlikely(rc != MDBX_SUCCESS)) {
+        /* as in dxb_sync_locked(): a retry could record a meta page as synced
+         * although it never reached the disk */
+        env->flags |= ENV_FATAL_ERROR;
         ERROR("txn-%s: error %d", "presync-meta", rc);
         goto fail;
       }

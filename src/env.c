@@ -136,8 +136,13 @@ retry:;
         } else
           err = osal_fsync(env->lazy_fd, MDBX_SYNC_DATA);
 
-        if (unlikely(err != MDBX_SUCCESS))
+        if (unlikely(err != MDBX_SUCCESS)) {
+          /* As in dxb_sync_locked(): after a failed flush the OS may drop the
+           * unwritten pages and report the error only once (Linux does), so a
+           * retry would succeed and sign a steady meta over the lost pages. */
+          env->flags |= ENV_FATAL_ERROR;
           return err;
+        }
 
 #if MDBX_ENABLE_PGOP_STAT
         wops = 1;
@@ -184,8 +189,14 @@ retry:;
 
   /* LY: sync meta-pages if MDBX_NOMETASYNC enabled
    *     and someone was not synced above. */
-  if (atomic_load32(&env->lck->meta_sync_txnid, mo_Relaxed) != (uint32_t)head.txnid)
+  if (atomic_load32(&env->lck->meta_sync_txnid, mo_Relaxed) != (uint32_t)head.txnid) {
     rc = meta_sync(env, head);
+    if (unlikely(rc != MDBX_SUCCESS)) {
+      /* as below in dxb_sync_locked(): a retry could record the meta page
+       * as synced although it never reached the disk */
+      env->flags |= ENV_FATAL_ERROR;
+    }
+  }
 
 bailout:
   if (should_unlock)
