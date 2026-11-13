@@ -3145,6 +3145,12 @@ LIBMDBX_API int mdbx_env_close_ex(MDBX_env *env, bool dont_sync);
  * \ingroup c_opening */
 LIBMDBX_INLINE_API(int, mdbx_env_close, (MDBX_env * env)) { return mdbx_env_close_ex(env, false); }
 
+/* \note `fork()` waits (retrying) while another thread of the process opens, closes, renames or drops a table handle,
+ * resizes or pre-syncs an environment, or runs a libmdbx callback while holding a lock of one of these, so that the
+ * child does not inherit them half-done. Therefore `fork()` must not be called from any libmdbx callback (logger,
+ * panic, handle-slow-readers), and no libmdbx callback may wait for a thread that may call `fork()`: such a `fork()`
+ * keeps retrying forever. */
+
 #if defined(DOXYGEN) || !(defined(_WIN32) || defined(_WIN64))
 /** \brief Восстанавливает экземпляр среды в дочернем процессе после ветвления
  * родительского процесса посредством `fork()` и родственных системных вызовов.
