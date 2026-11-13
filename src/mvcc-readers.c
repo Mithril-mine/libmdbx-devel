@@ -93,6 +93,8 @@ __hot txnid_t mvcc_snapshot_oldest(MDBX_env *const env, const txnid_t steady, co
    * every legitimately-old reader would look "stuck" and be demoted). */
   const bool distrust_cached_oldest = (prev_oldest > steady);
   const txnid_t trusted_oldest = distrust_cached_oldest ? MIN_TXNID : prev_oldest;
+  if (unlikely(distrust_cached_oldest))
+    NOTICE("cached oldest-reader %" PRIaTXN " beyond steady %" PRIaTXN ", forcing rescan", prev_oldest, steady);
 
   txnid_t new_oldest = prev_oldest;
   bool rescan_forced = distrust_cached_oldest;
