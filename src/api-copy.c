@@ -759,19 +759,10 @@ __cold static int copy2pathname(MDBX_txn *txn, const pathchar_t *dest_path, MDBX
                          S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP
 #endif
   );
-  if (unlikely(rc != MDBX_SUCCESS)) {
-    if (rc != MDBX_EEXIST) {
-#if defined(_WIN32) || defined(_WIN64)
-      if (rc == ERROR_PATH_NOT_FOUND || rc == ERROR_INVALID_DRIVE || rc == ERROR_BAD_NETPATH ||
-          rc == ERROR_BAD_PATHNAME)
-        return rc;
-#endif
-      int err = osal_removefile(dest_path);
-      if (err != MDBX_SUCCESS && err != MDBX_ENOFILE)
-        ERROR("unable remove incomplete copy destination `%" MDBX_PRIsPATH "`, error %d", dest_path, err);
-    }
+  if (unlikely(rc != MDBX_SUCCESS))
+    /* A failed open says nothing about the path (EMFILE, ENFILE or ENOMEM come before the existence check), so
+     * nothing is removed here; osal_openfile() removes a file it has just created exclusively and then rejected. */
     return rc;
-  }
 
 #if defined(_WIN32) || defined(_WIN64)
   /* no locking required since the file opened with ShareMode == 0 */
