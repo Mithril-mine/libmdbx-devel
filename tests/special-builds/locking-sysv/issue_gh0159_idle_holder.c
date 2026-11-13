@@ -92,8 +92,10 @@ int main(void) {
   }
 
   /* Arm the FAULT site before fork(): the probe-bus state is inherited by the
-   * child, so both processes derive the very same key for any database. */
-  if (arm_collision(0x00712345) != 0) {
+   * child, so both processes derive the very same key for any database. The
+   * key is derived from the parent's pid, so concurrent test processes never
+   * share it. */
+  if (arm_collision(0x40000000 | getpid()) != 0) {
     fprintf(stderr, "cannot arm ftok_key_collide\n");
     return 2;
   }
