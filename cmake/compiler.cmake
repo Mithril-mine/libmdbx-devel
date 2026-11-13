@@ -992,6 +992,21 @@ macro(setup_compile_flags)
     endif()
   endif()
 
+  # GCC 14-16 false-reports -Wmaybe-uninitialized for the values whose
+  # initialization relation is established before an intervening call that
+  # writes the same object through another pointer (verified false for
+  # src/lck.c:190-206 `previous = env->lck_fileid` + `osal_fileid_by_fd()`,
+  # and for the by-value parameters passed by address at
+  # src/api-key-transform.c:48,52), and for the callee-filled stat
+  # structures (src/tools/dump.c:134, src/tools/load.c:889). Seen at -Os
+  # with and without LTO (gcc 14, 15.2, 15.3, 16.2.0; gcc 13 is clean).
+  # Keep these warnings visible, but not fatal (-Werror above), until GCC
+  # ships the fix.
+  if(CMAKE_COMPILER_IS_GNUCC
+     AND CMAKE_C_COMPILER_VERSION VERSION_GREATER_EQUAL 14)
+    add_compile_flags("C;CXX" "-Wno-error=maybe-uninitialized")
+  endif()
+
   if(CMAKE_COMPILER_IS_GNU${CMAKE_PRIMARY_LANG} AND CMAKE_${CMAKE_PRIMARY_LANG}_COMPILER_VERSION VERSION_LESS 5)
     # G++ bug. http://gcc.gnu.org/bugzilla/show_bug.cgi?id=31488
     add_compile_flags("CXX" "-Wno-invalid-offsetof")

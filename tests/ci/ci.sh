@@ -26,15 +26,48 @@ set -euxo pipefail
 
 function provide_toolchain {
 	set +ex
+	# The Docker-image ENV may not reach the cube runtime: the images ship
+	# their LLVM toolchains in /usr/lib/llvm-*/bin via PATH (e.g.
+	# cpp-devbox:forky-latest with LLVM_VERSION=22), and without it the
+	# requested clang is "unavailable" while /usr/bin/gcc is found - so a
+	# clang-intended workflow silently builds with gcc (SourceCraft run 596).
+	for llvm_bin in /usr/lib/llvm-*/bin; do
+		if [ -x "${llvm_bin}/clang" -o -x "${llvm_bin}/clang++" ]; then
+			export PATH="${llvm_bin}:${PATH}"
+		fi
+	done
+	unset llvm_bin
+	# Resolves the requested compiler to an absolute path, falling back to
+	# the well-known alternatives with a LOUD warning: a silent substitution
+	# (e.g. gcc instead of the requested clang) makes a workflow build with
+	# the wrong toolchain and hides the image drift. Gives up (via `failure`)
+	# when nothing usable is found - the ancient `|| which true` tail made
+	# CC resolve to /usr/bin/true, which is absurd.
 	if [[ "${CC:=cc}" =~ [\ /] ]]; then
 		true
+	elif CC_BIN="$(which "$CC" 2>/dev/null)"; then
+		export CC="$CC_BIN"
+	elif CC_BIN="$(which gcc 2>/dev/null)"; then
+		echo "WARNING: the requested CC='${CC}' is unavailable, falling back to gcc (${CC_BIN})" >&2
+		export CC="$CC_BIN"
+	elif CC_BIN="$(which clang 2>/dev/null)"; then
+		echo "WARNING: the requested CC='${CC}' is unavailable, falling back to clang (${CC_BIN})" >&2
+		export CC="$CC_BIN"
 	else
-		export CC="$(which \"$CC\" || which gcc || which clang || which true)"
+		failure "neither the requested CC='${CC}' nor gcc nor clang are available in PATH"
 	fi
 	if [[ "${CXX:=c++}" =~ [\ /] ]]; then
 		true
+	elif CXX_BIN="$(which "$CXX" 2>/dev/null)"; then
+		export CXX="$CXX_BIN"
+	elif CXX_BIN="$(which g++ 2>/dev/null)"; then
+		echo "WARNING: the requested CXX='${CXX}' is unavailable, falling back to g++ (${CXX_BIN})" >&2
+		export CXX="$CXX_BIN"
+	elif CXX_BIN="$(which clang++ 2>/dev/null)"; then
+		echo "WARNING: the requested CXX='${CXX}' is unavailable, falling back to clang++ (${CXX_BIN})" >&2
+		export CXX="$CXX_BIN"
 	else
-		export CXX="$(which \"$CXX\" || which g++ || which clang++ || which true)"
+		failure "neither the requested CXX='${CXX}' nor g++ nor clang++ are available in PATH"
 	fi
 	CC_INFO=$("$CC" --version | head -1)
 	echo "CC: ${CC} => ${CC_INFO}"
