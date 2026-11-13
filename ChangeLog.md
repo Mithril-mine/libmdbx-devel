@@ -73,6 +73,7 @@ A long-term support release with accumulated backported fixes for data safety, c
 
  - Platform-specific:
     - Fixed a spurious internal assertion failure during page allocation on Windows ([#52](https://github.com/Mithril-mine/libmdbx-devel/issues/52)) (backport).
+    - Fixed `MDBX_EXCLUSIVE` with durable modes failing to open on Windows; keeps the slow flush path ([#179](https://github.com/Mithril-mine/libmdbx-devel/issues/179)) (backport).
     - Fixed Windows crashes when committing large write-mapped durable transactions (backport).
     - Fixed the `writethrough_threshold` option rejecting its default value on Windows (backport).
     - Fixed the `_except_handler4 not found` error in 32-bit builds with `MDBX_WITHOUT_MSVC_CRT` (backport).
