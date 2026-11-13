@@ -1122,6 +1122,13 @@ __hot int cursor_put(MDBX_cursor *mc, const MDBX_val *key, MDBX_val *data, unsig
         } else {
           /* Data is on sub-page */
           fp = old_data.iov_base;
+          if (!MDBX_DISABLE_VALIDATION && unlikely(!subpage_geometry_ok(fp, old_data.iov_len))) {
+            /* Crafted nested-page lower/upper make node_del()/cursor_put()
+             * underflow the memmove()/memcpy() lengths even on the normal
+             * (non-MDBX_VALIDATION) path. (issue #176) */
+            return bad_page(fp, "invalid nested %s-page lower(%u)/upper(%u) for size %zu\n",
+                            is_dupfix_leaf(fp) ? "leaf2" : "leaf", fp->lower, fp->upper, old_data.iov_len - PAGEHDRSZ);
+          }
           switch (flags) {
           default:
             growth = is_dupfix_leaf(fp) ? fp->dupfix_ksize : (node_size(data, nullptr) + sizeof(indx_t));
@@ -1953,8 +1960,13 @@ got_node:
 
   if (node_flags(node) & N_DUP) {
     ret.err = cursor_dupsort_setup(mc, node, mp);
-    if (unlikely(ret.err != MDBX_SUCCESS))
+    if (unlikely(ret.err != MDBX_SUCCESS)) {
+      /* the sub-page could not be materialized (corruption): the positioned
+       * match is not a usable exact match, keep the exact-implies-success
+       * invariant. (issue #176) */
+      ret.exact = false;
       return ret;
+    }
     if (op >= MDBX_SET) {
       MDBX_ANALYSIS_ASSUME(mc->subcur != nullptr);
       if (node_flags(node) & N_TREE) {
