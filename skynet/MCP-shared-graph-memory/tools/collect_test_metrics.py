@@ -41,7 +41,7 @@ def parse_ctest_xml(path: str) -> list:
                 try:
                     dur_ms = float(nm.findtext("Value")) * 1000.0
                 except ValueError:
-                    pass
+                    pass  # кривое Value — оставляем dur_ms по умолчанию
         out.append({"name": name, "ms": dur_ms, "status": status})
     return out
 
@@ -70,7 +70,7 @@ def parse_last_test_log(path: str) -> list:
                         out.append({"name": name_part, "ms": sec * 1000.0,
                                     "status": status})
     except OSError:
-        pass
+        pass  # листинг отсутствует или нечитаем — метрик из этого источника нет
     return out
 
 

@@ -162,7 +162,9 @@ def _git_date(config, src_path) -> str:
                 capture_output=True, text=True, check=True, cwd=repo).stdout.strip()
             if out:
                 return out
-        except Exception:
+        except (OSError, subprocess.SubprocessError):
+            # no git, or the path is outside the repository: try the next
+            # candidate, then fall back to the file mtime below
             pass
     try:
         stamp = datetime.datetime.fromtimestamp(

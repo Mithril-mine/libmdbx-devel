@@ -1080,7 +1080,7 @@ def main(argv=None):
         try:
             store.flush_sync()
         except Exception:
-            pass
+            pass  # best-effort при завершении: close() ниже всё равно снимет лок
         store.close()
         sys.exit(0)
 
@@ -1090,7 +1090,7 @@ def main(argv=None):
             try:
                 signal.signal(sig, _shutdown)
             except (ValueError, OSError):
-                pass
+                pass  # signal.signal() доступен только в главном потоке
         server = McpServer(store)
         server.loop()
     finally:
