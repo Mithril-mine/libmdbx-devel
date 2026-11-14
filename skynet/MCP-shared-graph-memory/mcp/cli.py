@@ -19,8 +19,7 @@ def _open(path: str) -> Store:
 
 
 def cmd_dump(args) -> None:
-    s = _open(args.path)
-    try:
+    with _open(args.path) as s:
         if args.key:
             rec = s.get_record(args.key)
             print(json.dumps(rec, ensure_ascii=False, indent=2) if rec else "NOTFOUND")
@@ -34,16 +33,11 @@ def cmd_dump(args) -> None:
             rec = s.get_record(k)
             print("%s\t%s\t%s\t%s" % (k, rec.get("type"), rec.get("importance"),
                                       rec.get("summary", "")[:80]))
-    finally:
-        s.close()
 
 
 def cmd_stats(args) -> None:
-    s = _open(args.path)
-    try:
+    with _open(args.path) as s:
         print(json.dumps(s.stats(), ensure_ascii=False, indent=2))
-    finally:
-        s.close()
 
 
 def cmd_version(args) -> None:
@@ -52,8 +46,7 @@ def cmd_version(args) -> None:
 
 
 def cmd_graph(args) -> None:
-    s = _open(args.path)
-    try:
+    with _open(args.path) as s:
         g = s.graph(args.key, args.depth)
         if args.format == "dot":
             print("digraph memory {")
@@ -63,33 +56,24 @@ def cmd_graph(args) -> None:
             print("}")
         else:
             print(json.dumps(g, ensure_ascii=False, indent=2))
-    finally:
-        s.close()
 
 
 def cmd_audit(args) -> None:
-    s = _open(args.path)
-    try:
+    with _open(args.path) as s:
         print(json.dumps({"note": "audit: см. gc --dry-run и stats",
                           "records": len(s.keys(""))},
                          ensure_ascii=False, indent=2))
-    finally:
-        s.close()
 
 
 def cmd_gc(args) -> None:
-    s = _open(args.path)
-    try:
+    with _open(args.path) as s:
         res = s.gc(dry_run=not args.execute, archive=args.archive,
                    threshold=args.threshold)
         print(json.dumps(res, ensure_ascii=False, indent=2))
-    finally:
-        s.close()
 
 
 def cmd_vocab(args) -> None:
-    s = _open(args.path)
-    try:
+    with _open(args.path) as s:
         if args.add == "module":
             print(s.vocab_add(args.value))
         elif args.add == "topic":
@@ -99,50 +83,36 @@ def cmd_vocab(args) -> None:
             print(json.dumps(s.vocab_find(args.find), ensure_ascii=False, indent=2))
         else:
             print(json.dumps(s.vocab_list(), ensure_ascii=False, indent=2))
-    finally:
-        s.close()
 
 
 def cmd_purge(args) -> None:
-    s = _open(args.path)
-    try:
+    with _open(args.path) as s:
         print(json.dumps(s.purge(args.keys), ensure_ascii=False, indent=2))
-    finally:
-        s.close()
 
 
 def cmd_test_metrics(args) -> None:
-    s = _open(args.path)
-    try:
+    with _open(args.path) as s:
         if args.test:
             res = s.test_metrics_get(args.test)
             print(json.dumps(res, ensure_ascii=False, indent=2) if res else "NOTFOUND")
         else:
             print(json.dumps(s.test_metrics_all(args.prefix, args.limit),
                              ensure_ascii=False, indent=2))
-    finally:
-        s.close()
 
 
 def cmd_coverage(args) -> None:
-    s = _open(args.path)
-    try:
+    with _open(args.path) as s:
         if args.test:
             res = s.coverage_get(args.test)
             print(json.dumps(res, ensure_ascii=False, indent=2) if res else "NOTFOUND")
         else:
             print(json.dumps(s.coverage_all(args.limit), ensure_ascii=False, indent=2))
-    finally:
-        s.close()
 
 
 def cmd_ci_jobs(args) -> None:
-    s = _open(args.path)
-    try:
+    with _open(args.path) as s:
         print(json.dumps(s.ci_jobs_all(args.prefix, args.limit),
                          ensure_ascii=False, indent=2))
-    finally:
-        s.close()
 
 
 def cmd_backup(args) -> None:

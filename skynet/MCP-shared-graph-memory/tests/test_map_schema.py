@@ -21,8 +21,7 @@ TOOLS = os.path.join(MODULE_DIR, "tools")
 
 def test_regions_uncovered_load_and_query(tmp_path):
     db = str(tmp_path / "t.mdbx")
-    s = Store(db, _skip_sync_thread=True)
-    try:
+    with Store(db, _skip_sync_thread=True) as s:
         regions = [
             {"id": "region:api-cold:1", "file": "src/api-cold.c",
              "module": "api-cold", "cond": "IS_WINDOWS", "kind": "if",
@@ -50,8 +49,6 @@ def test_regions_uncovered_load_and_query(tmp_path):
         unc = s.cg_uncovered("api-copy")
         assert len(unc) == 2
         assert all(x["key"].startswith("uncovered:api-copy:") for x in unc)
-    finally:
-        s.close()
 
 
 def test_load_map_cli_real_artifact(tmp_path):
@@ -67,8 +64,7 @@ def test_load_map_cli_real_artifact(tmp_path):
          "--db", db, "--replace"],
         capture_output=True, text=True, env=env, timeout=300)
     assert p.returncode == 0, p.stderr[-2000:]
-    s = Store(db, readonly=True, _skip_sync_thread=True)
-    try:
+    with Store(db, readonly=True, _skip_sync_thread=True) as s:
         assert len(s.cg_symbols()) >= 4000
         # пол 900, а не 1000: в merged-артефакте id регионов нумеруются
         # по-модульно и коллизируют между конфигами (scan 12.11: 41 дубль,
@@ -78,8 +74,6 @@ def test_load_map_cli_real_artifact(tmp_path):
         assert len(s.cg_regions(limit=10 ** 9)) >= 900
         assert len(s.cg_uncovered(limit=10 ** 9)) >= 400
         assert len(s.cg_regions("region:api-", limit=10)) > 0
-    finally:
-        s.close()
 
 
 def test_reopen_reloads_vocab(tmp_path):

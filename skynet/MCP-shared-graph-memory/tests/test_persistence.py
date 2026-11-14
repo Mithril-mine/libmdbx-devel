@@ -17,16 +17,13 @@ def _seed(path):
 
 def test_persistence_full(store_path):
     _seed(store_path)
-    s = Store(store_path)
-    try:
+    with Store(store_path) as s:
         assert s.exists("bug:crypto:alignment")
         assert s.lookup("segfault") == ["bug:crypto:alignment"]
         assert len(s.graph("bug:crypto:alignment", depth=1)["edges"]) == 1
         assert s.stats()["next_id"] == 3
         # vocab сохранён
         assert "android-abi" in s.norm.topics
-    finally:
-        s.close()
 
 
 def test_persistence_after_write(store_path):

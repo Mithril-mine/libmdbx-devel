@@ -93,8 +93,7 @@ def test_env_create_open_close(tmp_path):
 def test_put_get_delete(tmp_path):
     d = str(tmp_path)
     p = os.path.join(d, "e.mdbx")
-    env = mdbx.Env(p, maxdbs=8)
-    try:
+    with mdbx.Env(p, maxdbs=8) as env:
         with env.begin() as txn:
             dbi = txn.open_dbi("t", mdbx.DB_DEFAULTS | mdbx.CREATE)
         with env.begin() as txn:
@@ -108,14 +107,11 @@ def test_put_get_delete(tmp_path):
         with env.begin(readonly=True) as txn:
             rc, val = txn.get(dbi, b"k1")
             assert rc == mdbx.RC_NOTFOUND and val is None
-    finally:
-        env.close()
 
 
 def test_put_nooverwrite(tmp_path):
     d = str(tmp_path)
-    env = mdbx.Env(os.path.join(d, "e.mdbx"), maxdbs=8)
-    try:
+    with mdbx.Env(os.path.join(d, "e.mdbx"), maxdbs=8) as env:
         with env.begin() as txn:
             dbi = txn.open_dbi("t", mdbx.DB_DEFAULTS | mdbx.CREATE)
         with env.begin() as txn:
@@ -123,15 +119,12 @@ def test_put_nooverwrite(tmp_path):
             with pytest.raises(mdbx.LibmdbxError) as ei:
                 txn.put(dbi, b"k", b"b", mdbx.PUT_NOOVERWRITE)
             assert ei.value.rc == mdbx.RC_KEYEXIST
-    finally:
-        env.close()
 
 
 def test_dupsort_integerdup_postings(tmp_path):
     """Постинг-список: term -> множество uint64 id (INTEGERDUP)."""
     d = str(tmp_path)
-    env = mdbx.Env(os.path.join(d, "e.mdbx"), maxdbs=8)
-    try:
+    with mdbx.Env(os.path.join(d, "e.mdbx"), maxdbs=8) as env:
         flags = mdbx.DUPSORT | mdbx.DUPFIXED | mdbx.INTEGERDUP | mdbx.CREATE
         with env.begin() as txn:
             dbi = txn.open_dbi("inv", flags)
@@ -155,15 +148,12 @@ def test_dupsort_integerdup_postings(tmp_path):
             first = txn.delete(dbi, b"term", _pack_u64(1))
             second = txn.delete(dbi, b"term", _pack_u64(1))
             assert first is True and second is False
-    finally:
-        env.close()
 
 
 def test_integerkey_table(tmp_path):
     """INTEGERKEY: числовые ключи, range-поиск."""
     d = str(tmp_path)
-    env = mdbx.Env(os.path.join(d, "e.mdbx"), maxdbs=8)
-    try:
+    with mdbx.Env(os.path.join(d, "e.mdbx"), maxdbs=8) as env:
         with env.begin() as txn:
             dbi = txn.open_dbi("id2k", mdbx.INTEGERKEY | mdbx.CREATE)
         with env.begin() as txn:
@@ -175,14 +165,11 @@ def test_integerkey_table(tmp_path):
             with txn.cursor(dbi) as cur:
                 rc, k, v = cur.get(mdbx.CURSOR_FIRST)
                 assert _unpack_u64(k) == 1
-    finally:
-        env.close()
 
 
 def test_cursor_count_all(tmp_path):
     d = str(tmp_path)
-    env = mdbx.Env(os.path.join(d, "e.mdbx"), maxdbs=8)
-    try:
+    with mdbx.Env(os.path.join(d, "e.mdbx"), maxdbs=8) as env:
         with env.begin() as txn:
             dbi = txn.open_dbi("t", mdbx.DB_DEFAULTS | mdbx.CREATE)
         with env.begin() as txn:
@@ -190,14 +177,11 @@ def test_cursor_count_all(tmp_path):
                 txn.put(dbi, b"k%d" % i, b"v")
         with env.begin(readonly=True) as txn:
             assert txn.count(dbi) == 20
-    finally:
-        env.close()
 
 
 def test_get_empty_value(tmp_path):
     d = str(tmp_path)
-    env = mdbx.Env(os.path.join(d, "e.mdbx"), maxdbs=8)
-    try:
+    with mdbx.Env(os.path.join(d, "e.mdbx"), maxdbs=8) as env:
         with env.begin() as txn:
             dbi = txn.open_dbi("t", mdbx.DB_DEFAULTS | mdbx.CREATE)
         with env.begin() as txn:
@@ -205,8 +189,6 @@ def test_get_empty_value(tmp_path):
         with env.begin(readonly=True) as txn:
             rc, val = txn.get(dbi, b"k")
             assert rc == mdbx.RC_SUCCESS and val == b""
-    finally:
-        env.close()
 
 
 def test_env_context_manager(tmp_path):
@@ -218,8 +200,7 @@ def test_env_context_manager(tmp_path):
 
 def test_cursor_put_direct(tmp_path):
     d = str(tmp_path)
-    env = mdbx.Env(os.path.join(d, "e.mdbx"), maxdbs=8)
-    try:
+    with mdbx.Env(os.path.join(d, "e.mdbx"), maxdbs=8) as env:
         with env.begin() as txn:
             dbi = txn.open_dbi("t", mdbx.DB_DEFAULTS | mdbx.CREATE)
         with env.begin() as txn:
@@ -229,8 +210,6 @@ def test_cursor_put_direct(tmp_path):
         with env.begin(readonly=True) as txn:
             rc, val = txn.get(dbi, b"b")
             assert val == b"2"
-    finally:
-        env.close()
 
 
 def test_load_library_fallback():
