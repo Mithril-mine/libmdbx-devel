@@ -88,6 +88,7 @@ A long-term support release with accumulated backported fixes for data safety, c
     - Fixed `mdbx_env_set_flags()` creating a forbidden `MDBX_WRITEMAP` and lazy-mode mix; now refused ([#338](https://github.com/Mithril-mine/libmdbx-devel/issues/338)) (backport).
     - Fixed `mdbx_chk -s` silently succeeding when the named table is absent; now an error ([#386](https://github.com/Mithril-mine/libmdbx-devel/issues/386)) (backport).
     - Fixed `mdbx_drop()` for MAIN_DBI with named tables now refused up-front, before any changes ([#311](https://github.com/Mithril-mine/libmdbx-devel/issues/311)) (backport).
+    - Fixed `mdbx_dbi_rename()` to the same name returning `MDBX_KEYEXIST` in debug builds; a no-op now ([15/15 of #319](https://github.com/Mithril-mine/libmdbx-devel/issues/319)) (backport).
 
  - Performance:
     - Added skipping the root-to-leaf re-descent on `MDBX_APPEND` for a cursor at the right edge ([#66](https://github.com/Mithril-mine/libmdbx-devel/issues/66)) (backport).
