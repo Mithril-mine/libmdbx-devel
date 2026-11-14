@@ -251,6 +251,13 @@ else()
       add_extra_test(dbi_nested_txn SOURCE ut/dbi_nested_txn.c)
     endif()
     add_extra_test(details_rkl SOURCE ut/details_rkl.c)
+    add_extra_test(details_pnl SOURCE ut/api/details_pnl.c)
+    if(MSVC_C11_MAD_ATOMICS)
+      # the white-box test includes src/pnl.c, so it needs the same C11
+      # atomics flags as the library itself on MSVC non-x86 targets
+      target_compile_options(test_extra_details_pnl
+                             PRIVATE "$<$<COMPILE_LANGUAGE:CXX,C>:/std:clatest;/experimental:c11atomics>")
+    endif()
     if(MSVC_C11_MAD_ATOMICS)
       target_compile_options(test_extra_details_rkl
                              PRIVATE "$<$<COMPILE_LANGUAGE:CXX,C>:/std:clatest;/experimental:c11atomics>")
