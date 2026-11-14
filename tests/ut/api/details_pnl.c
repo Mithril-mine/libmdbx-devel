@@ -83,7 +83,7 @@ static void test_intersect(void) {
   CHECK_TRUE(pnl_intersect(a, b));
 
   /* empty lists never intersect; MSVC rejects an empty compound literal
-   * `(pgno_t[]){}`, and an empty pnl is just a zero size word */
+   * `(pgno_t[]){0}`, and an empty pnl is just a zero size word */
   a[0] = 0;
   make_pnl(b, (pgno_t[]){4, 3}, 2);
   CHECK_FALSE(pnl_intersect(a, b));
@@ -168,7 +168,7 @@ static void test_merge(void) {
   CHECK_EQ(pnl_merge(dst, hb + 1), 2);
 
   /* merging into an empty destination takes the source as-is */
-  dst = make_pnl_headed(merged, (pgno_t[]){}, 0, 64);
+  dst = make_pnl_headed(merged, (pgno_t[]){0}, 0, 64);
   b = make_pnl_headed(hb, (pgno_t[]){6, 3}, 2, 64);
   CHECK_EQ(pnl_merge(dst, b), 2);
 }
