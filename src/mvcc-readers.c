@@ -42,8 +42,9 @@ bsr_t mvcc_bind_slot(MDBX_env *env) {
     if (likely(slot < env->max_readers))
       break;
 
-    result.err = mvcc_cleanup_dead(env, true, nullptr);
-    if (result.err != MDBX_RESULT_TRUE) {
+    int dead = 0;
+    result.err = mvcc_cleanup_dead(env, true, &dead);
+    if (result.err != MDBX_RESULT_TRUE && !(result.err == MDBX_SUCCESS && dead > 0)) {
       lck_rdt_unlock(env);
       result.err = (result.err == MDBX_SUCCESS) ? MDBX_READERS_FULL : result.err;
       return result;
