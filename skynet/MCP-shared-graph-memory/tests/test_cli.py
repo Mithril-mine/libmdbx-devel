@@ -52,7 +52,7 @@ def test_cli_dump_key(seeded):
 
 
 def test_cli_graph_json(seeded):
-    run(["--path", seeded, "purge"] if False else ["--path", seeded, "dump"])
+    run(["--path", seeded, "dump"])
     # нужна связь — создадим через Store напрямую
     from mcp import Store
     s = Store(seeded)
