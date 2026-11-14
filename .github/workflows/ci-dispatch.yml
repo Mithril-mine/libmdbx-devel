@@ -86,8 +86,30 @@ jobs:
           python3 tests/ci/validate-config.py check-structure
           python3 tests/ci/validate-config.py check-coverage
 
+  clang-format:
+    # Enforce the AGENTS.md §7 "run clang-format before publishing" rule on
+    # every commit: the tracked C/C++ sources must conform to the repository
+    # .clang-format style. On violations the job prints the corrective patch.
+    # The style is version-robust; the binary is pinned for deterministic
+    # rendering.
+    name: clang-format
+    runs-on: ubuntu-latest
+    steps:
+      - name: checkout
+        uses: actions/checkout@v7
+      - name: install the pinned clang-format
+        run: |
+          python3 -m venv .cf-venv
+          .cf-venv/bin/pip install --quiet clang-format==21.1.8
+          echo "$GITHUB_WORKSPACE/.cf-venv/bin" >> "$GITHUB_PATH"
+      - name: check formatting
+        shell: bash
+        run: |
+          set -euo pipefail
+          tests/ci/check-clang-format.sh
+
   resolve:
-    needs: validate-config
+    needs: [validate-config, clang-format]
     runs-on: ubuntu-24.04
     outputs:
       cells: ${{ steps.resolve.outputs.cells }}
@@ -278,7 +300,7 @@ jobs:
 
   dist:
     name: dist (linux)
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-latest
     if: ${{ github.event_name == 'pull_request' || github.event_name == 'push' }}
     steps:
       - name: checkout
