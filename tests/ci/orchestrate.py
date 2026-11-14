@@ -308,15 +308,52 @@ def main(argv=None):
             # and the run dedups/cancels against itself.
             current_run_id = str(args.run_id) if args.run_id else ""
             for run in head_runs:
-                # Same-content dedup: a live same-SHA run (still running or already
-                # finished successfully) makes this run a duplicate — the first one
-                # is authoritative, so skip. A *cancelled* same-SHA run must NOT
-                # lead to a skip: it produced no result, and skipping on top of it
-                # would leave the gate empty; there is nothing to cancel either.
+                # Same-content dedup between the push and pull_request gates of
+                # the same SHA. The pull_request gate outranks the push one
+                # (ci-dispatch: "PR wins"):
+                #   - a live same-SHA push run is superseded (cancelled) by the
+                #     PR gate instead of the PR run skipping itself;
+                #   - a push run finished successfully means the coverage is
+                #     already provided, so the PR run skips;
+                #   - a push run finished with a failure leaves the gate empty,
+                #     so the PR run proceeds to provide the signal;
+                #   - the push leg defers to a live or successful pull_request
+                #     run, and reruns after a failed one.
+                # A *cancelled* same-SHA run must NOT lead to a skip: it produced
+                # no result, and skipping on top of it would leave the gate
+                # empty; there is nothing to cancel either.
                 if run["head_sha"] == args.head_sha and str(run["id"]) != current_run_id:
                     if run.get("conclusion") == "cancelled":
                         print(f"orchestrate: same-SHA run {run['id']} ({run['event']}) "
                               f"is cancelled; proceeding", file=sys.stderr)
+                        continue
+                    alive = run["status"] in ("in_progress", "queued", "pending", "waiting")
+                    finished_ok = run.get("conclusion") == "success"
+                    gate_pair = (args.event, run["event"])
+                    if gate_pair == ("pull_request", "push"):
+                        if finished_ok:
+                            print(f"orchestrate: duplicate push run {run['id']} "
+                                  f"finished successfully; skip this pull_request run",
+                                  file=sys.stderr)
+                            out["skip"] = True
+                        elif alive:
+                            print(f"orchestrate: superseding the live push run {run['id']} "
+                                  f"on the same SHA (PR wins)", file=sys.stderr)
+                            cancel_runs(args.repo, args.token, [run["id"]], args.dry_run)
+                            out["cancel_ids"].append(run["id"])
+                        else:
+                            print(f"orchestrate: duplicate push run {run['id']} failed; "
+                                  f"this pull_request run provides the signal", file=sys.stderr)
+                        continue
+                    if gate_pair == ("push", "pull_request"):
+                        if finished_ok or alive:
+                            print(f"orchestrate: duplicate {run['event']} run {run['id']} "
+                                  f"on the same SHA; skip this {args.event} run",
+                                  file=sys.stderr)
+                            out["skip"] = True
+                        else:
+                            print(f"orchestrate: duplicate pull_request run {run['id']} failed; "
+                                  f"this push run provides the signal", file=sys.stderr)
                         continue
                     print(f"orchestrate: duplicate {run['event']} run {run['id']} "
                           f"on the same SHA; skip this {args.event} run",

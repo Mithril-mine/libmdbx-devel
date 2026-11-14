@@ -171,6 +171,60 @@ def test_same_sha_duplicate_skips(monkeypatch, capsys):
     assert out["cells"] == ""
 
 
+# ---------------------------------------------------------------------------
+# PR-wins same-SHA dedup between the push and pull_request gates.
+# ---------------------------------------------------------------------------
+
+def test_pr_run_supersedes_alive_push_duplicate(monkeypatch, capsys):
+    """The PR gate outranks the push one: a PR run facing a live same-SHA
+    push run supersedes (cancels) it and runs the gate itself, instead of
+    both runs skipping each other into a zero-coverage deadlock (the
+    post-merge Windows failure of gh0463)."""
+    head, _ = head_shas()
+    fake = FakeRuns({"feature/x": [staged_run(701, head, event="push")]})
+    out = run_main(monkeypatch, capsys, fake, "feature/x", head, event="pull_request")
+    assert out["skip"] is False
+    assert out["cancel_ids"] == [701]
+    assert fake.cancelled == [701]
+    assert out["cells"] == "cell-a\ncell-b"
+
+
+def test_pr_run_skips_on_successful_push_duplicate(monkeypatch, capsys):
+    head, _ = head_shas()
+    fake = FakeRuns({"feature/x": [staged_run(702, head, event="push",
+                                              status="completed", conclusion="success")]})
+    out = run_main(monkeypatch, capsys, fake, "feature/x", head, event="pull_request")
+    assert out["skip"] is True
+    assert out["cancel_ids"] == []
+
+
+def test_pr_run_provides_signal_after_failed_push_duplicate(monkeypatch, capsys):
+    head, _ = head_shas()
+    fake = FakeRuns({"feature/x": [staged_run(703, head, event="push",
+                                              status="completed", conclusion="failure")]})
+    out = run_main(monkeypatch, capsys, fake, "feature/x", head, event="pull_request")
+    assert out["skip"] is False
+    assert out["cancel_ids"] == []
+    assert out["cells"] == "cell-a\ncell-b"
+
+
+def test_push_run_defers_to_alive_pr_run(monkeypatch, capsys):
+    head, _ = head_shas()
+    fake = FakeRuns({"feature/x": [staged_run(704, head, event="pull_request")]})
+    out = run_main(monkeypatch, capsys, fake, "feature/x", head, event="push")
+    assert out["skip"] is True
+    assert fake.cancelled == []
+
+
+def test_push_run_provides_signal_after_failed_pr_run(monkeypatch, capsys):
+    head, _ = head_shas()
+    fake = FakeRuns({"feature/x": [staged_run(705, head, event="pull_request",
+                                              status="completed", conclusion="failure")]})
+    out = run_main(monkeypatch, capsys, fake, "feature/x", head, event="push")
+    assert out["skip"] is False
+    assert out["cells"] == "cell-a\ncell-b"
+
+
 def test_rewritten_history_run_is_cancelled(monkeypatch, capsys):
     head, _ = head_shas()
     other = git("rev-parse", "stable").stdout.strip()
