@@ -14,7 +14,6 @@ Usage:
 
 import argparse
 import glob
-import os
 import re
 
 _COVERED_RE = re.compile(r"^\s*(\d+)\*?:\s*(\d+):")

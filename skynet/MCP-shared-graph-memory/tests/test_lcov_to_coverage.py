@@ -4,11 +4,8 @@
 непокрытых строк, и привязку к карте через symbol_hits.
 """
 
-import json
 import os
 import sys
-
-import pytest
 
 TOOLS = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
                      "tools")
