@@ -28,7 +28,8 @@ def main() -> int:
         ids = [l.strip() for l in sys.stdin if l.strip()]
     else:
         ids = [l for l in cells_txt.splitlines() if l.strip()]
-    reg = json.load(open(registry))
+    with open(registry) as fh:
+        reg = json.load(fh)
     by_id = {c["id"]: c for c in reg["cells"]}
     missing = [i for i in ids if i not in by_id]
     if missing:
