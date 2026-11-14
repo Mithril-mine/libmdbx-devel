@@ -77,7 +77,7 @@ class OffsetIndex:
                 self._starts.append(pos)
                 pos += len(chunk) + 1
         except OSError:
-            pass
+            pass  # источник нечитаем — оффсеты строк неизвестны, line() вернёт 0
 
     def line(self, offset):
         if not self._starts:
