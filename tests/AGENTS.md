@@ -84,6 +84,14 @@ leave nothing behind on success either. This is enforced, not encouraged.
   narrow-vs-wide literals (`MDBX_LOCK_SUFFIX` and friends are wide in unicode
   builds) and the absence of POSIX headers (`dirent.h` and friends must stay
   behind `#ifndef _WIN32` gates).
+- MSVC (C mode) rejects an empty initializer for an array of unknown size —
+  `(pgno_t[]){}` is error C7757; use `{0}` or spell the size out (the
+  element is not read when the count is 0).
+- SourceCraft CI cubes run their steps as root, and root bypasses file
+  permissions: inductions via `chmod` (e.g. forcing the lck-less mode with
+  `0444`) silently degrade to a normal locked open there. Gate such
+  scenarios on the effective uid (`geteuid()`) or verify the induced state
+  behaviorally (see `issue_gh0317.c++`).
 
 ## 5. Documentation map (testing)
 
@@ -99,5 +107,9 @@ leave nothing behind on success either. This is enforced, not encouraged.
   CI v2 infrastructure design (background).
 - [docs/engineering/testing-infra-v3.md](../docs/engineering/testing-infra-v3.md) —
   CI v3 infrastructure (implemented): registry, addressing, orchestrator, profiles.
+- [docs/engineering/ci-orchestrator-requirements.md](../docs/engineering/ci-orchestrator-requirements.md) —
+  authoritative requirements & design of the ci-dispatch orchestrator
+  (ORCH-*/INV-*); read before changing `tests/ci/orchestrate.py` or
+  `ci-dispatch.yml`.
 - [docs/engineering/probe-bus.md](../docs/engineering/probe-bus.md) — probe
   conventions.
