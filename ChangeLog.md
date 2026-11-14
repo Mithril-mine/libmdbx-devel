@@ -136,6 +136,7 @@ A maintenance release of the stable line: backported fixes for data safety, corr
     - Fixed a whole-table range delete resetting the table's sequence ([#311](https://github.com/Mithril-mine/libmdbx-devel/issues/311)) (backport).
 
  - Platform-specific:
+    - Fixed the batched writes on Windows after a mid-batch write failure: the cancelled requests are now drained before the ring's resources are reused ([#449](https://github.com/Mithril-mine/libmdbx-devel/issues/449)).
     - Fixed a spurious internal assertion failure during page allocation on Windows ([#52](https://github.com/Mithril-mine/libmdbx-devel/issues/52)) (backport).
     - Fixed Windows crashes when committing large write-mapped durable transactions (backport).
     - Fixed Windows rejecting long environment values, e.g. long build paths (backport).
