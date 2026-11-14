@@ -212,7 +212,9 @@ def collect_source_files(include_tests=False):
     files = []
     alloy = os.path.join(SRC_DIR, "alloy.c")
     if os.path.exists(alloy):
-        for m in re.finditer(r'#include "([^"]+)"', open(alloy).read()):
+        with open(alloy) as fh:
+            alloy_src = fh.read()
+        for m in re.finditer(r'#include "([^"]+)"', alloy_src):
             files.append(os.path.join(SRC_DIR, m.group(1)))
     else:
         for root, _, fs in os.walk(SRC_DIR):

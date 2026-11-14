@@ -321,7 +321,10 @@ def main():
         if args.headers_list is None:
             # Без --headers-list: собираем системные заголовки из
             # препроцессорных file-marks всех TU (clang -E -dD).
-            cc_data = json.load(open(args.cc)) if os.path.getsize(args.cc) else []
+            cc_data = []
+            if os.path.getsize(args.cc):
+                with open(args.cc) as fh:
+                    cc_data = json.load(fh)
             tu_list = select_tus(cc_data) if cc_data else []
             if not tu_list:
                 print("scan_system_deps: scan-headers: нет TU (compile_commands?)",
@@ -332,14 +335,15 @@ def main():
                 headers = dict(list(headers.items())[:args.limit_headers])
         else:
             entries = []  # (requested, display_name)
-            for line in open(args.headers_list):
-                line = line.strip()
-                if not line or line.startswith("#"):
-                    continue
-                parts = line.split()
-                hpath = parts[0]
-                hname = parts[1] if len(parts) > 1 else os.path.basename(hpath)
-                entries.append((hpath, hname))
+            with open(args.headers_list) as fh:
+                for line in fh:
+                    line = line.strip()
+                    if not line or line.startswith("#"):
+                        continue
+                    parts = line.split()
+                    hpath = parts[0]
+                    hname = parts[1] if len(parts) > 1 else os.path.basename(hpath)
+                    entries.append((hpath, hname))
             # Резолв имён в абсолютные пути средствами clang целевой платформы.
             # КАЖДЫЙ заголовок резолвится ОТДЕЛЬНЫМ мини-TU (`#include <name>`
             # + `-H`): отказ одного (платформенно-отсутствующий) не влияет на
@@ -353,7 +357,8 @@ def main():
             if entries:
                 args0 = []
                 if args.cc and os.path.isfile(args.cc) and os.path.getsize(args.cc):
-                    cc = json.load(open(args.cc))
+                    with open(args.cc) as fh:
+                        cc = json.load(fh)
                     tu_list = select_tus(cc) if cc else []
                     if tu_list:
                         args0 = sanitize_args(tu_list[0][1]["command"],
@@ -438,18 +443,21 @@ def main():
             }
             if args.limit_headers and (i + 1) >= args.limit_headers:
                 break
-        json.dump(result, open(out_path, "w"), ensure_ascii=False, indent=1)
+        with open(out_path, "w") as fh:
+            json.dump(result, fh, ensure_ascii=False, indent=1)
         print("scan_system_deps: %d headers -> %s" % (len(result["headers"]), out_path))
         return 0
 
 
     if args.mode == "scan-uses":
-        cc = json.load(open(args.cc))
+        with open(args.cc) as fh:
+            cc = json.load(fh)
         tu_list = select_tus(cc)
         provides_index = {}
         for p in (args.provides_from or "").split(","):
             if p and os.path.exists(p):
-                art = json.load(open(p))
+                with open(p) as fh:
+                    art = json.load(fh)
                 for key, h in art.get("headers", {}).items():
                     for kind, names in h.get("provides", {}).items():
                         for nm in names:
@@ -461,10 +469,13 @@ def main():
         carried_headers = {}
         for p in (args.provides_from or "").split(","):
             if p and os.path.exists(p):
-                for key, h in json.load(open(p)).get("headers", {}).items():
+                with open(p) as fh:
+                    art = json.load(fh)
+                for key, h in art.get("headers", {}).items():
                     carried_headers[key] = h
         result = {"config": args.config, "headers": carried_headers, "uses": uses}
-        json.dump(result, open(out_path, "w"), ensure_ascii=False, indent=1)
+        with open(out_path, "w") as fh:
+            json.dump(result, fh, ensure_ascii=False, indent=1)
         n_res = sum(len(u["sys_refs"]) for u in uses.values())
         n_unres = sum(len(u["unresolved"]) for u in uses.values())
         print("scan_system_deps: %d files, %d resolved refs, %d unresolved -> %s"
@@ -475,13 +486,15 @@ def main():
         scans = []
         for p in (args.scans or "").split(","):
             if p and os.path.exists(p):
-                scans.append(json.load(open(p)))
+                with open(p) as fh:
+                    scans.append(json.load(fh))
         if len(scans) < 2:
             print("scan_system_deps: merge требует ≥2 артефактов", file=sys.stderr)
             return 1
         result = merge_configs(scans)
         result["configs"] = [s["config"] for s in scans]
-        json.dump(result, open(out_path, "w"), ensure_ascii=False, indent=1)
+        with open(out_path, "w") as fh:
+            json.dump(result, fh, ensure_ascii=False, indent=1)
         print("scan_system_deps: merged %d configs, %d headers, %d files -> %s"
               % (len(scans), len(result["headers"]), len(result["uses"]), out_path))
         return 0
@@ -496,7 +509,10 @@ def main():
         платформе, в список не попадают (их отсутствие фиксирует
         scan-headers/absent на платформе, где они есть, либо merge).
         """
-        cc = json.load(open(args.cc)) if os.path.getsize(args.cc) else []
+        cc = []
+        if os.path.getsize(args.cc):
+            with open(args.cc) as fh:
+                cc = json.load(fh)
         tu_list = select_tus(cc) if cc else []
         if not tu_list:
             print("scan_system_deps: collect-includes: нет TU (compile_commands?)",
