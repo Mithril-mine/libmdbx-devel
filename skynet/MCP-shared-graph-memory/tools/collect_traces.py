@@ -60,7 +60,7 @@ def parse_dump(path: str) -> list:
                     pairs.append(obj)
                 continue
             except ValueError:
-                pass
+                pass  # строка не JSON — разбираем её как трассу ниже
         parts = line.replace("\t", " ").split()
         if len(parts) < 2:
             continue
