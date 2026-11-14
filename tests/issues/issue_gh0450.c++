@@ -10,6 +10,11 @@
  * Runs with MDBX_DBG_LEGACY_MULTIOPEN=1 to exercise the per-process locking
  * (POSIX only; the flag is consumed at the library initialization, so it is
  * set before the first mdbx call). */
+/* the file-access helpers below use the classic CRT file API,
+ * which MSVC deprecates unless explicitly allowed */
+#ifndef _CRT_SECURE_NO_WARNINGS
+#define _CRT_SECURE_NO_WARNINGS
+#endif /* _CRT_SECURE_NO_WARNINGS */
 #include "mdbx.h++"
 #include <cstdio>
 #include <cstring>

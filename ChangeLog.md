@@ -64,6 +64,7 @@ A maintenance release of the stable line: backported fixes for data safety, corr
     - Fixed a table rename staying applied after its transaction aborts, corrupting data ([#307](https://github.com/Mithril-mine/libmdbx-devel/issues/307)) (backport).
 
  - Resistance to corrupted or crafted data:
+    - Fixed a crafted database aborting the assert-enabled builds on a DUPSORT cursor positioning; now rejected with `MDBX_CORRUPTED` ([#454](https://github.com/Mithril-mine/libmdbx-devel/issues/454)).
     - Fixed a crafted database passing validation and later corrupting data or crashing on delete ([#57](https://github.com/Mithril-mine/libmdbx-devel/issues/57)) (backport).
     - Fixed a crafted database corrupting on delete, and UB of an in-place zero-length duplicate update ([#63](https://github.com/Mithril-mine/libmdbx-devel/issues/63)) (backport).
     - Fixed a divide-by-zero in `mdbx_cursor_put(MDBX_MULTIPLE)` on a zero element size; now rejected ([#73](https://github.com/Mithril-mine/libmdbx-devel/issues/73)) (backport).
