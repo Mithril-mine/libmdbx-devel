@@ -135,6 +135,7 @@ A hardening and refinement release: data-safety and corruption-resistance fixes 
     - Fixed `mdbx_drop()` on an already empty table not resetting its sequence, as for a non-empty one ([#312](https://github.com/Mithril-mine/libmdbx-devel/issues/312)).
 
  - Platform-specific:
+    - Fixed the batched writes on Windows after a mid-batch write failure: the cancelled requests are now drained before the ring's resources are reused ([#449](https://github.com/Mithril-mine/libmdbx-devel/issues/449)).
     - Fixed a long-lived read transaction deadlocking writers growing the file on Windows; now in place ([#154](https://github.com/Mithril-mine/libmdbx-devel/issues/154)).
     - Fixed exclusive-mode commits using the slow flush path; they are as fast as usual now ([#179](https://github.com/Mithril-mine/libmdbx-devel/issues/179)).
     - Fixed `MDBX_NOMETASYNC`/`SAFE_NOSYNC` degrading to full durable syncs on every commit on Windows ([#154](https://github.com/Mithril-mine/libmdbx-devel/issues/154)).
