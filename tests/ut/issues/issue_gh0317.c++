@@ -306,6 +306,13 @@ TEST(issue_gh0317, lckless_readers_coexist) {
     GTEST_SKIP() << "SKIPPED by RUNTIME_LIMIT";
     return;
   }
+  /* The without-lck mode is induced here by making the lock file unwritable
+   * (chmod 0444), which root bypasses: under root the "lckless" reader
+   * opens the lock file normally, and then the subsequent reader is refused
+   * with MDBX_BUSY as an in-process sibling instead of coexisting. Skip
+   * rather than test nothing meaningfully. */
+  if (::geteuid() == 0)
+    GTEST_SKIP() << "the without-lck mode cannot be induced via file permissions under root";
   make_db(kDbPath);
   char lck_path[512];
   std::snprintf(lck_path, sizeof(lck_path), "%s-lck", kDbPath);
