@@ -746,7 +746,7 @@ __cold static struct dbi_rename_result dbi_rename_locked(MDBX_txn *txn, MDBX_dbi
 
   MDBX_env *const env = txn->env;
   MDBX_val old_name = env->kvs[dbi].name;
-  if (env->kvs[MAIN_DBI].clc.k.cmp(&new_name, &old_name) == 0 && MDBX_DEBUG == 0)
+  if (env->kvs[MAIN_DBI].clc.k.cmp(&new_name, &old_name) == 0)
     return pair;
 
   cursor_couple_t cx;
