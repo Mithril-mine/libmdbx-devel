@@ -25,7 +25,8 @@
   (a bare event falls back to `push-quick`). The `validate-config` job blocks the
   whole dispatch on registry inconsistency. Nightly ownership belongs to the
   per-platform workflows, not to the dispatcher.
-- **Orchestrator** — `tests/ci/orchestrate.py`, the sole owner of run cancellation
+- **Orchestrator** — `tests/ci/orchestrate.py` (requirements:
+  [ci-orchestrator-requirements.md](ci-orchestrator-requirements.md)), the sole owner of run cancellation
   (no native `concurrency` group by design): the diff anchor is the nearest
   successful base run (temporary `ci-ok-<run_number>` tags, searched within the
   last 30 days; shas rewritten away by history rewrites are skipped quietly);
