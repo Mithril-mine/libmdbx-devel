@@ -112,7 +112,8 @@ declared complete.
   `resolve` job reads the registry from the requested ref and fails fast on unknown ids.
   **Supersede & preservation** — `tests/ci/orchestrate.py` is the sole owner of run
   cancellation (there is deliberately no native `concurrency` group, which would blindly
-  cancel on every event). A new run on a branch cancels in-progress runs superseded by
+  cancel on every event); the full requirement list lives in
+  [ci-orchestrator-requirements.md](ci-orchestrator-requirements.md). A new run on a branch cancels in-progress runs superseded by
   linear history and runs invalidated by a force-push, and deduplicates same-SHA push/PR
   runs (PR wins). A follow-up commit that touches no common-prefix file keeps the superseded
   run alive — its in-flight cells are provably unaffected — and spawns only the complement

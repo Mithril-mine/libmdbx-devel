@@ -4,8 +4,13 @@ name: ci-dispatch
 # docs/engineering/testing-infra-v3.md).
 #
 # Triggers:
-#   push        -> change-addressed cells (diff vs previous commit, capped to
-#                  CI_PUSH_CAP, fast scope). Branches: devel, master.
+#   push        -> change-addressed cells (diff vs the nearest successful
+#                  base run, fast scope). Branches: devel, master — a feature
+#                  branch with an open PR is covered by its pull_request run
+#                  (firing both for the same branch made the runs supersede
+#                  each other, and the cancelled duplicate surfaced as red
+#                  checks on the PR); a branch without a PR can be gated on
+#                  demand via workflow_dispatch/repository_dispatch.
 #   (no schedule: nightly ownership belongs to the per-platform workflows
 #   ci-linux/ci-windows/ci-macos/ci-android; this dispatcher is the push gate
 #   and the manual/agent entry point for profiles/cells.)
@@ -30,12 +35,15 @@ permissions:
   contents: read
 
 on:
-  # Push on ANY branch runs the compact push-quick gate (CI v3.5): a breakage
-  # in common code (src/, CMakeLists.txt, mdbx.h, .github/...) must be caught on
-  # feature branches too, not only after merge. The nightly 190-cell full gate
-  # still owns repeated stochastic coverage on master via the platform workflows.
+  # Push on the main lines runs the compact push-quick gate (CI v3.5). A
+  # feature branch with an open pull request is covered by its pull_request
+  # run below — firing both for the same branch made the runs supersede each
+  # other, and the cancelled duplicate surfaced as red checks on the PR.
+  # A branch without a PR can be gated on demand via workflow_dispatch or
+  # repository_dispatch. The nightly 190-cell full gate still owns repeated
+  # stochastic coverage on master via the platform workflows.
   push:
-    branches: ['**']
+    branches: [devel, master]
   pull_request:
     branches: [devel, master]
   workflow_dispatch:
