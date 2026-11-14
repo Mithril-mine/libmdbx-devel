@@ -103,7 +103,8 @@ def test_put_get_delete(tmp_path):
             rc, val = txn.get(dbi, b"k1")
             assert rc == mdbx.RC_SUCCESS and val == b"v1"
         with env.begin() as txn:
-            assert txn.delete(dbi, b"k1") is True
+            deleted = txn.delete(dbi, b"k1")
+            assert deleted is True
         with env.begin(readonly=True) as txn:
             rc, val = txn.get(dbi, b"k1")
             assert rc == mdbx.RC_NOTFOUND and val is None
@@ -151,8 +152,9 @@ def test_dupsort_integerdup_postings(tmp_path):
                     rc, _, dval = cur.get(mdbx.CURSOR_NEXT_DUP)
                 assert got == [1, 5]  # сортировка по возрастанию
         with env.begin() as txn:
-            assert txn.delete(dbi, b"term", _pack_u64(1)) is True
-            assert txn.delete(dbi, b"term", _pack_u64(1)) is False
+            first = txn.delete(dbi, b"term", _pack_u64(1))
+            second = txn.delete(dbi, b"term", _pack_u64(1))
+            assert first is True and second is False
     finally:
         env.close()
 
