@@ -68,7 +68,7 @@ def main():
         file=sys.stderr)
 
     if args.dry_run:
-        return
+        return 0
 
     db = args.db
     _tmpdir = None
