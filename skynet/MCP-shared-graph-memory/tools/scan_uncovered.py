@@ -35,10 +35,6 @@ except ImportError:
     from tools.scan_regions import collect_source_files
 
 
-_COMMENT_OR_PP = re.compile(
-    r'^\s*(#|//|/\*|\*|/\*.*\*/\s*$|$)')
-
-
 def _code_like(line: str) -> bool:
     """Строка «кодовая»: не пустая, не комментарий, не препроцессор."""
     s = line.strip()
