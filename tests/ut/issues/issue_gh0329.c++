@@ -84,7 +84,7 @@ std::string status_string(int status) {
   if (WIFSIGNALED(status)) {
     const int sig = WTERMSIG(status);
     out += "killed by ";
-    out += (sig == SIGILL)  ? "SIGILL"
+    out += (sig == SIGILL)    ? "SIGILL"
            : (sig == SIGTRAP) ? "SIGTRAP"
            : (sig == SIGABRT) ? "SIGABRT"
            : (sig == SIGSEGV) ? "SIGSEGV"
@@ -241,8 +241,8 @@ void run_mode(mode m) {
        * catch): retry a few times, loudly. A trap AFTER the child's own
        * breadcrumbs still shows in the log for the triage. */
       ++trap_kills;
-      ASSERT_LT(trap_kills, 4) << mode_name[m] << ": fork " << forks + 1 << ": the child died "
-                               << trap_kills << " times by " << status_string(status);
+      ASSERT_LT(trap_kills, 4) << mode_name[m] << ": fork " << forks + 1 << ": the child died " << trap_kills
+                               << " times by " << status_string(status);
       --forks;
       continue;
     }
@@ -258,8 +258,7 @@ void run_mode(mode m) {
   EXPECT_EQ(fork_errno, 0) << mode_name[m] << ": fork " << forks + 1 << " failed: " << strerror(fork_errno);
   EXPECT_FALSE(hung) << mode_name[m] << ": fork " << forks + 1 << ": the child hung";
   if (failure_status)
-    ADD_FAILURE() << mode_name[m] << ": fork " << forks + 1 << ": the child failed, "
-                  << status_string(failure_status);
+    ADD_FAILURE() << mode_name[m] << ": fork " << forks + 1 << ": the child failed, " << status_string(failure_status);
   EXPECT_GT(forks, 0) << mode_name[m];
   EXPECT_EQ(churn_rc.load(), MDBX_SUCCESS) << mode_name[m] << ": " << mdbx_strerror(churn_rc.load());
 }

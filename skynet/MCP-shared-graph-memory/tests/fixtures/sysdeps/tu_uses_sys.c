@@ -2,8 +2,8 @@
  * плюс один не-объявленный (unresolved-класс, ловится сканером как
  * unresolved, а компилятором — как warning; тестируется через walk AST,
  * где implicit declaration всё равно порождает DeclRefExpr). */
-#include "fake_linux_only.h"
 #include "fake_common.h"
+#include "fake_linux_only.h"
 
 int tu_uses_sys(void) {
   void *s = fake_setmntent(FAKE_MOUNTED, "r");

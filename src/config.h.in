@@ -114,6 +114,3 @@
 #cmakedefine MDBX_BUILD_METADATA "@MDBX_BUILD_METADATA@"
 #endif
 #cmakedefine MDBX_BUILD_SOURCERY @MDBX_BUILD_SOURCERY@
-
-/* *INDENT-ON* */
-/* clang-format on */

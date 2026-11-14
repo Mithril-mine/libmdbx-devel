@@ -190,15 +190,15 @@ TEST(issue_gh0324, fork_while_another_thread_opens_and_closes) {
     }
     ASSERT_TRUE(WIFEXITED(status) && WEXITSTATUS(status) == 0)
         << "fork " << forks + 1 << ": the child failed, wait status 0x" << std::hex << status
-        << (WIFSIGNALED(status)
-                ? (std::string(" (killed by ") + (WTERMSIG(status) == SIGILL  ? "SIGILL"
-                                                  : WTERMSIG(status) == SIGTRAP ? "SIGTRAP"
-                                                  : WTERMSIG(status) == SIGABRT ? "SIGABRT"
-                                                  : WTERMSIG(status) == SIGSEGV ? "SIGSEGV"
-                                                  : WTERMSIG(status) == SIGBUS  ? "SIGBUS"
-                                                                                : "unknown signal") +
-                   ")")
-                  : std::string());
+        << (WIFSIGNALED(status) ? (std::string(" (killed by ") +
+                                   (WTERMSIG(status) == SIGILL    ? "SIGILL"
+                                    : WTERMSIG(status) == SIGTRAP ? "SIGTRAP"
+                                    : WTERMSIG(status) == SIGABRT ? "SIGABRT"
+                                    : WTERMSIG(status) == SIGSEGV ? "SIGSEGV"
+                                    : WTERMSIG(status) == SIGBUS  ? "SIGBUS"
+                                                                  : "unknown signal") +
+                                   ")")
+                                : std::string());
     usleep(1000);
   }
   EXPECT_GT(forks, 0);
