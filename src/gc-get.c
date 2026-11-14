@@ -1221,6 +1221,15 @@ next_gc:
    * and the mdbx_chk utility). Adding more checks in the gc-alloc paths would multiply the
    * amount of work without giving guarantees, so this one is deliberately kept cheap. */
   if (unlikely(has_duplicates)) {
+    fprintf(stderr, "[DBG-DUP] record txnid %" PRIu64 ", gc_len %zu, repnl_len %zu\n", id, gc_len,
+            pnl_size(txn->wr.repnl));
+    fprintf(stderr, "[DBG-DUP] gc_pnl:");
+    for (size_t i = gc_len; i; i--)
+      fprintf(stderr, " %u", gc_pnl[i]);
+    fprintf(stderr, "\n[DBG-DUP] repnl:");
+    for (size_t i = pnl_size(txn->wr.repnl); i; i--)
+      fprintf(stderr, " %u", txn->wr.repnl[i]);
+    fprintf(stderr, "\n");
     ERROR("%s/%d: %s", "MDBX_CORRUPTED", MDBX_CORRUPTED, "duplicate page in the retired-pages list");
     ret.err = MDBX_CORRUPTED;
     goto fail;
