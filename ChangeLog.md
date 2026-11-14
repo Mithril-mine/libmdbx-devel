@@ -38,6 +38,7 @@ A maintenance release of the stable line: backported fixes for data safety, corr
 
  - Data safety and durability:
     - Fixed a failed begin of a nested transaction corrupting the parent's geometry with a spurious resize-undo ([#448](https://github.com/Mithril-mine/libmdbx-devel/issues/448)).
+    - Fixed `mdbx_env_copy()` destroying a live database when the destination is the database's own file ([#450](https://github.com/Mithril-mine/libmdbx-devel/issues/450)).
     - Fixed `mdbx_dump -a` omitting the main table's records when named tables exist ([#385](https://github.com/Mithril-mine/libmdbx-devel/issues/385)) (backport).
     - Fixed a failed disk write silently reported as success during a commit (backport).
     - Fixed auxiliary page-write errors silently ignored, masking a failing disk ([#203](https://github.com/Mithril-mine/libmdbx-devel/issues/203)) (backport).
