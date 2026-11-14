@@ -157,7 +157,8 @@ def test_cleanup_without_confirm_is_noop(tmp_path):
         os.makedirs(s.backup_dir, exist_ok=True)
         for i in range(s.backup_keep + 2):
             name = "auto-20200101-0000%02d_txnid%d.mdbx" % (i, i)
-            open(os.path.join(s.backup_dir, name), "wb").write(b"y")
+            with open(os.path.join(s.backup_dir, name), "wb") as fh:
+                fh.write(b"y")
         n_before = len(_files(s, "auto-"))
         r = s.cleanup(dry_run=False, confirm=False)  # без подтверждения
         assert r["dry_run"] is True and r["removed"] == []

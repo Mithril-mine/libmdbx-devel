@@ -1114,7 +1114,8 @@ def main():
         print("written:", args.out)
         return
 
-    cc = json.load(open(args.cc))
+    with open(args.cc) as fh:
+        cc = json.load(fh)
     tus = select_tus(cc)
     if args.tests:
         tus = select_test_tus(args.tests)

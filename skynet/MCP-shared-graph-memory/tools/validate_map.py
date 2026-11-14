@@ -97,7 +97,8 @@ def main():
     if args.tus == "full":
         # Диагностический режим: те же счётчики по ядру, что раньше
         # сверялись с golden. Зависят от объёма ядра, поэтому сверок нет.
-        cc = json.load(open(args.cc))
+        with open(args.cc) as fh:
+            cc = json.load(fh)
         tus = s.select_tus(cc)
         cfg = s.ScanConfig()
         col = s.Collector()

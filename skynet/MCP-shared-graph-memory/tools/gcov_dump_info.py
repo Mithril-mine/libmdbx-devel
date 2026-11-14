@@ -29,13 +29,14 @@ def main():
     out = []
     for gcov in sorted(glob.glob(args.gcov_glob)):
         src, covered = None, set()
-        for ln in open(gcov, errors="replace"):
-            if ln.startswith("-:0:Source:"):
-                src = ln.split("Source:", 1)[1].strip()
-                continue
-            m = _COVERED_RE.match(ln)
-            if m and int(m.group(1)) > 0:
-                covered.add(int(m.group(2)))
+        with open(gcov, errors="replace") as fh:
+            for ln in fh:
+                if ln.startswith("-:0:Source:"):
+                    src = ln.split("Source:", 1)[1].strip()
+                    continue
+                m = _COVERED_RE.match(ln)
+                if m and int(m.group(1)) > 0:
+                    covered.add(int(m.group(2)))
         if not src:
             continue
         if args.root and src.startswith(args.root):

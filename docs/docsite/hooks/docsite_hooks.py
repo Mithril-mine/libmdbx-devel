@@ -181,7 +181,8 @@ def on_post_build(*, config, **_kwargs):
     path = os.path.join(docsite_root, "tmp", _MANIFEST)
     os.makedirs(os.path.dirname(path), exist_ok=True)
     try:
-        merged = dict(json.load(open(path, encoding="utf-8")))
+        with open(path, encoding="utf-8") as fh:
+            merged = dict(json.load(fh))
     except Exception:
         merged = {}
     merged.update(_LASTMOD)
