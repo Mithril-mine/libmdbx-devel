@@ -109,12 +109,77 @@ static void test_check_full(void) {
   CHECK_TRUE(pnl_check_lite(a, 1 << 20));
 }
 
+/* Build a headed pnl (the alloclen word precedes the size word), as the
+ * merging functions assert the allocated length of the destination. The
+ * buffer is oversized, so the merge always has room. */
+static pgno_t *make_pnl_headed(pgno_t *buf, const pgno_t *src, size_t n, size_t alloclen) {
+  buf[0] = (pgno_t)alloclen;
+  buf[1] = (pgno_t)n;
+  for (size_t i = 1; i <= n; ++i)
+    buf[1 + i] = src[i - 1];
+  return buf + 1;
+}
+
+static void test_merge(void) {
+  /* pnl_merge() reports the duplicate-page detection by shrinking the
+   * resulting length: pnl_merge_inner() sets a flag (not a counter, which is
+   * cheaper) when an equal pair of items is seen, i.e. the same page is
+   * listed by both lists, and the length shrinks by exactly one regardless
+   * of the number of such pairs. This is what makes the "length after
+   * merge" comparison in gc_alloc_ex() a real always-on cross-record check
+   * (issues 83/452: a page listed by two GC records). Note the buffer
+   * content is unspecified once duplicates are detected, since the only
+   * caller (gc_alloc_ex) rejects the list immediately and never consumes it. */
+
+  pgno_t hb[16], merged[64];
+  pgno_t *b, *dst;
+
+  /* disjoint lists: the plain concatenation keeps the full length */
+  b = make_pnl_headed(hb, (pgno_t[]){20, 10}, 2, 64);
+  dst = make_pnl_headed(merged, (pgno_t[]){50, 40, 30}, 3, 64);
+  CHECK_EQ(pnl_merge(dst, b), 5);
+
+  /* the shared page at the tails of both lists (the issue #83 case: page 3
+   * listed by two GC records) */
+  b = make_pnl_headed(hb, (pgno_t[]){6, 3}, 2, 64);
+  dst = make_pnl_headed(merged, (pgno_t[]){12, 11, 3}, 3, 64);
+  CHECK_EQ(pnl_merge(dst, b), 4);
+
+  /* the shared page in the middle of both lists */
+  b = make_pnl_headed(hb, (pgno_t[]){40, 30, 10}, 3, 64);
+  dst = make_pnl_headed(merged, (pgno_t[]){50, 30, 20}, 3, 64);
+  CHECK_EQ(pnl_merge(dst, b), 5);
+
+  /* several duplicated pairs: the flag is not a counter, the length shrinks
+   * by exactly one */
+  b = make_pnl_headed(hb, (pgno_t[]){50, 40, 30}, 3, 64);
+  dst = make_pnl_headed(merged, (pgno_t[]){50, 30}, 2, 64);
+  CHECK_EQ(pnl_merge(dst, b), 4);
+
+  /* interleaved lists without duplicates are not flagged */
+  b = make_pnl_headed(hb, (pgno_t[]){45, 35, 5}, 3, 64);
+  dst = make_pnl_headed(merged, (pgno_t[]){50, 40, 10}, 3, 64);
+  CHECK_EQ(pnl_merge(dst, b), 6);
+
+  /* an empty source is trivially clean */
+  hb[0] = 64;
+  hb[1] = 0; /* an empty list is just the zero size word */
+  dst = make_pnl_headed(merged, (pgno_t[]){9, 8}, 2, 64);
+  CHECK_EQ(pnl_merge(dst, hb + 1), 2);
+
+  /* merging into an empty destination takes the source as-is */
+  dst = make_pnl_headed(merged, (pgno_t[]){}, 0, 64);
+  b = make_pnl_headed(hb, (pgno_t[]){6, 3}, 2, 64);
+  CHECK_EQ(pnl_merge(dst, b), 2);
+}
+
 int main(int argc, const char *argv[]) {
   (void)argc;
   (void)argv;
 
   test_intersect();
   test_check_full();
+  test_merge();
 
   if (tst_failed == 0) {
     fprintf(stdout, "Ok: %zu checks passed\n", tst_ok);

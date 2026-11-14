@@ -1199,6 +1199,9 @@ next_gc:
    *  - when MDBX_VALIDATION is enabled, a full check is performed using pnl_check_full() with items order checking.
    *
    * Next, here we check that the length after merge is equal to the total length of the source pnls.
+   * pnl_merge() shrinks the resulting length by one when an equal pair has been seen, i.e. the
+   * same page is listed by both lists (pnl_merge_inner() reports a flag rather than a counter,
+   * which is cheaper), so this comparison is a real always-on check for such duplicates.
    * Thus, depending on MDBX_VALIDATION, we get two situations:
    *   - without MDBX_VALIDATION, a minimum of O(1) checks is performed,
    *     but if the order is violated within pnl from GC, we may not notice duplicates;
@@ -1208,7 +1211,15 @@ next_gc:
    * Overall, we get a manageable compromise:
    *  - without MDBX_VALIDATION, there are minimal checks and performance is optimized,
    *    but control can be enabled via build options;
-   *  - with MDBX_VALIDATION enabled, full checks are performed for maximum resilience against untrusted data. */
+   *  - with MDBX_VALIDATION enabled, full checks are performed for maximum resilience against untrusted data.
+   *
+   * Note this check is best-effort and only sees a page listed by two records when both are
+   * co-present in wr.repnl at the merge moment (as well as duplicates adjacent within one
+   * record). A page already allocated from a previously merged record is out of its scope.
+   * Full verification of the duplicate-freedom requires analysis of the whole b-tree with all
+   * GC data loaded, which is exactly what the chk functionality does (the mdbx_env_chk() API
+   * and the mdbx_chk utility). Adding more checks in the gc-alloc paths would multiply the
+   * amount of work without giving guarantees, so this one is deliberately kept cheap. */
   if (unlikely(has_duplicates)) {
     ERROR("%s/%d: %s", "MDBX_CORRUPTED", MDBX_CORRUPTED, "duplicate page in the retired-pages list");
     ret.err = MDBX_CORRUPTED;
