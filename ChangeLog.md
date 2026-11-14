@@ -31,6 +31,7 @@ A long-term support release with accumulated backported fixes for data safety, c
     - Fixed `mdbx_drop()` on the internal free-list handle destroying the GC tree; now rejected ([#69](https://github.com/Mithril-mine/libmdbx-devel/issues/69)) (backport).
     - Fixed a forged snapshot-age hint letting the writer reuse pages of live readers ([#81](https://github.com/Mithril-mine/libmdbx-devel/issues/81)) (backport).
     - Fixed a failed disk write silently reported as success during a commit (backport).
+    - Fixed a failed checkpoint/error path wiping steady metas being overwritten with success ([#105](https://github.com/Mithril-mine/libmdbx-devel/issues/105), partial) (backport).
     - Fixed a failed flush in the pre-sync and meta-sync paths leaving the environment usable ([#322](https://github.com/Mithril-mine/libmdbx-devel/issues/322)) (backport).
     - Fixed a table rename staying applied after its transaction aborts, corrupting data ([#307](https://github.com/Mithril-mine/libmdbx-devel/issues/307)) (backport).
     - Fixed a compacting copy to a pipe reporting success but writing a wrong root page, losing records ([#309](https://github.com/Mithril-mine/libmdbx-devel/issues/309)) (backport).
