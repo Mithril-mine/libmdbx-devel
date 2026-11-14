@@ -217,8 +217,7 @@ def test_db_tools_readonly_contract(store_path):
     s0 = Store(store_path)
     seed_vocab(s0, [("practice", "durability-ro"), ("practice", "durability-rw")])
     s0.close()
-    s = Store(store_path, readonly=True)
-    try:
+    with Store(store_path, readonly=True) as s:
         serv = McpServer(s)
         r = call(serv, "tools/call", {"name": "db_status", "arguments": {}})
         assert "env" in r["result"]["structuredContent"]
@@ -243,8 +242,6 @@ def test_db_tools_readonly_contract(store_path):
         # db_flush теперь работает
         r = call(serv, "tools/call", {"name": "db_flush", "arguments": {}})
         assert r["result"]["structuredContent"]["flushed"] is True
-    finally:
-        s.close()
 
 
 def test_db_utterly_nosync_only_via_explicit_tool(store):

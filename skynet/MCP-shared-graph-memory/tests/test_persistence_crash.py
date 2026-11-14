@@ -322,13 +322,10 @@ def test_kill9_nosync_readonly_wants_recovery(tmp_path):
     text = str(ei.value)
     assert "WANNA_RECOVERY" in text and "recover" in text.lower(), text
 
-    s = Store(db, readonly=False, _skip_sync_thread=True)
-    try:
+    with Store(db, readonly=False, _skip_sync_thread=True) as s:
         got = sum(1 for k in s.recall("fact:practice:durability-", limit=200)
                   if k.get("key", "").startswith("fact:practice:durability-"))
         assert got == N_RECORDS
-    finally:
-        s.close()
 
 
 def test_server_main_sigterm_flushes(tmp_path):

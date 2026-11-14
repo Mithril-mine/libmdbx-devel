@@ -82,13 +82,10 @@ def test_vocab_add_empty_module(store):
 
 
 def test_stats_empty(store_path):
-    s = Store(store_path)
-    try:
+    with Store(store_path) as s:
         st = s.stats()
         assert st["records"] == 0
         assert st["avg_importance"] == 0.0
-    finally:
-        s.close()
 
 
 def test_begin_write_busy_retry(store, monkeypatch):
@@ -324,11 +321,8 @@ def test_store_context_manager(store_path):
         s.safe_store("bug:crypto:alignment", "bug", "some bug", 0.5)
         assert s.exists("bug:crypto:alignment")
     # после выхода из контекста повторное открытие возможно
-    s2 = Store(store_path)
-    try:
+    with Store(store_path) as s2:
         assert s2.exists("bug:crypto:alignment")
-    finally:
-        s2.close()
 
 
 def test_search_flushes_one_txn(store, monkeypatch):
@@ -392,23 +386,17 @@ def test_close_final_sync(store, monkeypatch):
 
 def test_close_flushes_pending_touches(store_path):
     """Отложенные касания сбрасываются при close (переживают переоткрытие)."""
-    s = Store(store_path)
-    try:
+    with Store(store_path) as s:
         seed_vocab(s, [("crypto", "alignment")])
         s.safe_store("bug:crypto:alignment", "bug", "some bug", 0.5)
         s._lru_last.clear()
         s._bump_access("bug:crypto:alignment", force=True)  # в буфер, без flush
         assert s._touch_ids  # касание отложено
-    finally:
-        s.close()
-    s2 = Store(store_path)
-    try:
+    with Store(store_path) as s2:
         with s2.env.begin(readonly=True) as txn:
             _, packed = txn.get(s2.dbi(txn, "access"), _pack_u64(1))
             assert packed is not None
             assert unpack_access(packed)[2] == 1
-    finally:
-        s2.close()
 
 
 def test_recall_all_rate_limited_zero_txn(store, monkeypatch):
@@ -472,16 +460,13 @@ def test_enable_utterly_nosync_separate(store):
 def test_set_sync_mode_readonly_rejected(store_path):
     s0 = Store(store_path)
     s0.close()
-    s = Store(store_path, readonly=True)
-    try:
+    with Store(store_path, readonly=True) as s:
         with pytest.raises(MemoryError) as ei:
             s.set_sync_mode("durable")
         assert "read-only" in str(ei.value), ei.value
         with pytest.raises(MemoryError) as ei:
             s.enable_utterly_nosync()
         assert "read-only" in str(ei.value), ei.value
-    finally:
-        s.close()
 
 
 def test_links_in_denormalized_counter(store):
