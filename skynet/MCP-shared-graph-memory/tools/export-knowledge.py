@@ -217,11 +217,8 @@ def main() -> int:
     ap.add_argument("--out", default=DEFAULT_OUT)
     args = ap.parse_args()
     out = os.path.abspath(args.out)
-    store = Store(args.db, readonly=True, _skip_sync_thread=True)
-    try:
+    with Store(args.db, readonly=True, _skip_sync_thread=True) as store:
         records, links, vocab = collect(store)
-    finally:
-        store.close()
     os.makedirs(out, exist_ok=True)
     write_yaml(os.path.join(out, "knowledge-records.yaml"), records, links, vocab)
     write_map(os.path.join(out, "knowledge-map.md"), records, links, vocab)

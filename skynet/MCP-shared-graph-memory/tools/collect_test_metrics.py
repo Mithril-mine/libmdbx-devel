@@ -125,8 +125,7 @@ def main():
         print("parsed %d test rows" % len(rows))
         return 0
 
-    store = Store(args.db)
-    try:
+    with Store(args.db) as store:
         t0 = time.time()
         # одна write-txn на весь прогон вместо txn на каждый тест (A3)
         metrics = {r["name"]: {"duration_ms": r["ms"],
@@ -153,8 +152,6 @@ def main():
             for j in jobs:
                 store.ci_jobs_insert("%s/%s" % (j["workflow"], j["job"]), j)
             print("ci_jobs: %d jobs" % len(jobs))
-    finally:
-        store.close()
     return 0
 
 

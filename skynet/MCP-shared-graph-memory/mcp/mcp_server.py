@@ -1084,7 +1084,7 @@ def main(argv=None):
         store.close()
         sys.exit(0)
 
-    try:
+    with store:
         import signal
         for sig in (signal.SIGTERM, signal.SIGINT):
             try:
@@ -1093,8 +1093,6 @@ def main(argv=None):
                 pass  # signal.signal() доступен только в главном потоке
         server = McpServer(store)
         server.loop()
-    finally:
-        store.close()
     return 0
 
 

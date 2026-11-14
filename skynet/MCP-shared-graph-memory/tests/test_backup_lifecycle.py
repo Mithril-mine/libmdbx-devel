@@ -35,8 +35,7 @@ def _files(store, prefix=""):
 
 def test_lifeline_created_on_open(tmp_path):
     db = str(tmp_path / "t.mdbx")
-    s = Store(db, _skip_sync_thread=True)
-    try:
+    with Store(db, _skip_sync_thread=True) as s:
         fi = s.fileinfo()
         assert fi["lifeline_ok"] is True, fi
         assert os.path.isfile(os.path.join(s.backup_dir, "current.mdbx"))
@@ -48,14 +47,11 @@ def test_lifeline_created_on_open(tmp_path):
             assert os.path.getsize(fi["lifeline"]) >= fi["size"], fi
         else:
             assert fi["nlink"] >= 2, fi
-    finally:
-        s.close()
 
 
 def test_backup_pin_compact_snapshot(tmp_path):
     db = str(tmp_path / "t.mdbx")
-    s = Store(db, _skip_sync_thread=True)
-    try:
+    with Store(db, _skip_sync_thread=True) as s:
         s.vocab_add("practice", "durability-aa")
         s.safe_store("fact:practice:durability-aa", "fact", "bk", 0.5)
         r = s.backup(kind="pin")
@@ -67,16 +63,13 @@ def test_backup_pin_compact_snapshot(tmp_path):
         # дефолт backup() — pin (внутренняя точка сохранения)
         r2 = s.backup()
         assert r2["kind"] == "pin"
-    finally:
-        s.close()
 
 
 def test_auto_backup_timer_and_state(tmp_path, monkeypatch):
     monkeypatch.setenv("SHARED_GRAPH_MEMORY_BACKUP_DIR", str(tmp_path / "bk"))
     monkeypatch.setenv("SHARED_GRAPH_MEMORY_AUTO_BACKUP_SECONDS", "1")
     db = str(tmp_path / "t.mdbx")
-    s = Store(db, _skip_sync_thread=True)
-    try:
+    with Store(db, _skip_sync_thread=True) as s:
         assert s.auto_backup_seconds == 1
         # первый вызов before_call срабатывает (last_auto пусто)
         out = s.before_call()
@@ -89,15 +82,12 @@ def test_auto_backup_timer_and_state(tmp_path, monkeypatch):
         n_before = len(_files(s, "auto-"))
         s.before_call()
         assert len(_files(s, "auto-")) == n_before
-    finally:
-        s.close()
 
 
 def test_prompt_backup_pending_and_approve(tmp_path, monkeypatch):
     monkeypatch.setenv("SHARED_GRAPH_MEMORY_PROMPT_BACKUP_SECONDS", "1")
     db = str(tmp_path / "t.mdbx")
-    s = Store(db, _skip_sync_thread=True)
-    try:
+    with Store(db, _skip_sync_thread=True) as s:
         out = s.before_call()
         assert out.get("backup_pending") is True, out
         assert "спросите пользователя" in out.get("backup_prompt", "")
@@ -107,27 +97,21 @@ def test_prompt_backup_pending_and_approve(tmp_path, monkeypatch):
         assert _files(s, "pin-")
         # pending снят
         assert s.before_call().get("backup_pending") is None
-    finally:
-        s.close()
 
 
 def test_prompt_backup_skip(tmp_path, monkeypatch):
     monkeypatch.setenv("SHARED_GRAPH_MEMORY_PROMPT_BACKUP_SECONDS", "1")
     db = str(tmp_path / "t.mdbx")
-    s = Store(db, _skip_sync_thread=True)
-    try:
+    with Store(db, _skip_sync_thread=True) as s:
         s.before_call()  # pending установлен
         r = s.run_prompt_backup(approve=False)
         assert r["approved"] is False
         assert _files(s, "pin-") == []
-    finally:
-        s.close()
 
 
 def test_rotation_candidates_and_cleanup(tmp_path):
     db = str(tmp_path / "t.mdbx")
-    s = Store(db, _skip_sync_thread=True)
-    try:
+    with Store(db, _skip_sync_thread=True) as s:
         os.makedirs(s.backup_dir, exist_ok=True)
         # старые AUTO-копии (не реальные бэкапы — только для ротации)
         for i in range(s.backup_keep + 3):
@@ -146,14 +130,11 @@ def test_rotation_candidates_and_cleanup(tmp_path):
         s.backup(kind="pin")
         assert _files(s, "pin-")
         assert s.cleanup(dry_run=True)["candidates"] == []
-    finally:
-        s.close()
 
 
 def test_cleanup_without_confirm_is_noop(tmp_path):
     db = str(tmp_path / "t.mdbx")
-    s = Store(db, _skip_sync_thread=True)
-    try:
+    with Store(db, _skip_sync_thread=True) as s:
         os.makedirs(s.backup_dir, exist_ok=True)
         for i in range(s.backup_keep + 2):
             name = "auto-20200101-0000%02d_txnid%d.mdbx" % (i, i)
@@ -163,16 +144,13 @@ def test_cleanup_without_confirm_is_noop(tmp_path):
         r = s.cleanup(dry_run=False, confirm=False)  # без подтверждения
         assert r["dry_run"] is True and r["removed"] == []
         assert len(_files(s, "auto-")) == n_before
-    finally:
-        s.close()
 
 
 def test_deletion_detected_snapshot_and_blocked(tmp_path):
     if os.name == "nt":
         pytest.skip("st_nlink механизм только не-Windows")
     db = str(tmp_path / "t.mdbx")
-    s = Store(db, _skip_sync_thread=True)
-    try:
+    with Store(db, _skip_sync_thread=True) as s:
         s.vocab_add("practice", "durability-aa")
         s.safe_store("fact:practice:durability-aa", "fact", "x", 0.5)
         os.unlink(db)  # удаляем файл из-под процесса
@@ -186,14 +164,12 @@ def test_deletion_detected_snapshot_and_blocked(tmp_path):
         with pytest.raises(MemoryError) as ei:
             s.safe_store("fact:practice:durability-aa", "fact", "y", 0.5)
         assert "DB_FILE_DELETED" in str(ei.value), ei.value
-    finally:
-        s.close()  # close на удалённом inode не должен падать
+    # close на удалённом inode не должен падать
 
 
 def test_commit_latency_collected(tmp_path):
     db = str(tmp_path / "t.mdbx")
-    s = Store(db, _skip_sync_thread=True)
-    try:
+    with Store(db, _skip_sync_thread=True) as s:
         assert s.commit_latency()["count"] == 0
         s.vocab_add("practice", "durability-aa")
         for _ in range(3):
@@ -202,8 +178,6 @@ def test_commit_latency_collected(tmp_path):
         assert lat["count"] >= 3, lat
         assert lat["last_us"]["whole"] > 0, lat
         assert lat["window_whole_us"]["mean"] > 0
-    finally:
-        s.close()
 
 
 def test_mcp_new_tools_and_prompt_notice(store, tmp_path, monkeypatch):

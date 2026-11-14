@@ -54,12 +54,9 @@ def test_vocab_persists(store_path):
     s1 = Store(store_path)
     s1.vocab_add("custom", "theme")
     s1.close()
-    s2 = Store(store_path)
-    try:
+    with Store(store_path) as s2:
         assert "custom" in s2.norm.modules
         assert "theme" in s2.norm.topics
-    finally:
-        s2.close()
 
 
 def test_normalize_uses_persisted_vocab(store_path):

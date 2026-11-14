@@ -278,8 +278,7 @@ def test_env_layer_overrides_active_branch(store_path, monkeypatch):
     """SHARED_GRAPH_MEMORY_LAYER изолирует процесс от чужой активации (N1)."""
     monkeypatch.setenv("SHARED_GRAPH_MEMORY_LAYER", "0.15.mine.1")
     from mcp import Store
-    s = Store(store_path)
-    try:
+    with Store(store_path) as s:
         s.cg_load_batch({"fn:mine": {"module": "m", "l0": 1, "l1": 2}},
                          [], {}, replace=True, layer="0.15.mine.1")
         s.cg_load_batch({"fn:theirs": {"module": "m", "l0": 1, "l1": 2}},
@@ -292,8 +291,6 @@ def test_env_layer_overrides_active_branch(store_path, monkeypatch):
         assert "fn:theirs" not in syms
         # явный layer= побеждает env-override
         assert "fn:theirs" in s.cg_symbols("fn:", layer="0.15.theirs.2")
-    finally:
-        s.close()
 
 
 def test_branch_activate_expected_prev_cas(store):
