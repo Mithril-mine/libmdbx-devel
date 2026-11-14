@@ -872,7 +872,11 @@ __cold static int chk_tree(MDBX_chk_scope_t *const scope) {
   /* always skip key ordering checking
    * to avoid MDBX_CORRUPTED in case custom comparators were used */
   usr->result.processed_pages = NUM_METAS;
-  int err = walk_pages(txn, chk_pgvisitor, scope, dont_check_keys_ordering);
+  /* Keep the pre-#82 `chk` behavior: it has its own loop/dup detection and
+   * must inspect reconverging or cyclic trees whole (a future solver will try
+   * to salvage the conflicting branch) instead of failing at the first
+   * revisit, so the walk revisit guard is disabled here. */
+  int err = walk_pages(txn, chk_pgvisitor, scope, dont_check_keys_ordering | dont_check_revisit);
   if (MDBX_IS_ERROR(err) && err != MDBX_EINTR)
     chk_error_rc(scope, err, "walk_pages");
 
