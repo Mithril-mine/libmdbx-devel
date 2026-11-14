@@ -43,6 +43,7 @@ A hardening and refinement release: data-safety and corruption-resistance fixes 
 
  - Data safety and durability:
     - Fixed a failed begin of a nested transaction corrupting the parent's geometry with a spurious resize-undo ([#448](https://github.com/Mithril-mine/libmdbx-devel/issues/448)).
+    - Fixed `mdbx_env_copy()` destroying a live database when the destination is the database's own file ([#450](https://github.com/Mithril-mine/libmdbx-devel/issues/450)).
     - Fixed `mdbx_dump -a` omitting the main table's records when named tables exist ([#385](https://github.com/Mithril-mine/libmdbx-devel/issues/385)).
     - Fixed a failed flush in the pre-sync and meta-sync paths leaving the environment usable ([#322](https://github.com/Mithril-mine/libmdbx-devel/issues/322)).
     - Fixed a failed range delete leaving a committable half-cut tree ([#311](https://github.com/Mithril-mine/libmdbx-devel/issues/311)).
