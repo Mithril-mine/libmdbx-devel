@@ -62,6 +62,7 @@ A hardening and refinement release: data-safety and corruption-resistance fixes 
     - Fixed a copy of a private database being readable by its group on POSIX ([#331](https://github.com/Mithril-mine/libmdbx-devel/issues/331)).
 
  - Resistance to corrupted or crafted data:
+    - Fixed a crafted database aborting the assert-enabled builds on a DUPSORT cursor positioning; now rejected with `MDBX_CORRUPTED` ([#454](https://github.com/Mithril-mine/libmdbx-devel/issues/454)).
     - Fixed a crafted garbage-collection record handing one page to two b-tree nodes; now rejected ([#83](https://github.com/Mithril-mine/libmdbx-devel/issues/83)).
     - Fixed crafted databases crashing or corrupting on delete, drop, estimate or check; now rejected ([#57](https://github.com/Mithril-mine/libmdbx-devel/issues/57), [#63](https://github.com/Mithril-mine/libmdbx-devel/issues/63), [#74](https://github.com/Mithril-mine/libmdbx-devel/issues/74), [#75](https://github.com/Mithril-mine/libmdbx-devel/issues/75)).
     - Fixed a crafted tree making the defragmentation walk exponential, a denial of service ([#82](https://github.com/Mithril-mine/libmdbx-devel/issues/82)).
