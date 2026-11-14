@@ -3,8 +3,8 @@
 
 #include "internals.h"
 
-__hot txnid_t txn_snapshot_oldest(const MDBX_txn *const txn) {
-  return mvcc_snapshot_oldest(txn->env, txn->tw.troika.txnid[txn->tw.troika.prefer_steady]);
+__hot txnid_t txn_snapshot_oldest(const MDBX_txn *const txn, const bool may_lag) {
+  return mvcc_snapshot_oldest(txn->env, txn->tw.troika.txnid[txn->tw.troika.prefer_steady], may_lag);
 }
 
 void txn_done_cursors(MDBX_txn *txn, const bool merge) {
@@ -33,8 +33,22 @@ int txn_write(MDBX_txn *txn, iov_ctx_t *ctx) {
     unsigned npages = dpl_npages(dl, r);
     total_npages += npages;
     rc = iov_page(txn, ctx, dp, npages);
-    if (unlikely(rc != MDBX_SUCCESS))
+    if (unlikely(rc != MDBX_SUCCESS)) {
+      if ((txn->env->flags & MDBX_WRITEMAP) == 0) {
+        /* The mid-commit flush has failed and iov_complete() already released
+         * the shadow pages queued before the failure, i.e. the entries 1..r-1.
+         * The failed page itself was never queued, so release its shadow too.
+         * These entries are dropped from the dirty list by the tail loop
+         * below, otherwise they would be released a second time at the
+         * transaction end (issue #321). */
+        page_shadow_release(txn->env, dp, npages);
+        ++r; /* the failed page is dropped as well */
+        break;
+      }
+      /* For MDBX_WRITEMAP nothing was released by iov_complete() (its walk is
+       * skipped), so the plain early return is safe here. */
       return rc;
+    }
   }
 
   if (!iov_empty(ctx)) {
@@ -56,8 +70,12 @@ int txn_write(MDBX_txn *txn, iov_ctx_t *ctx) {
   txn->tw.dirtyroom += r - 1 - w;
   tASSERT(txn, txn->tw.dirtyroom + txn->tw.dirtylist->length ==
                    (txn->parent ? txn->parent->tw.dirtyroom : txn->env->options.dp_limit));
-  tASSERT(txn, txn->tw.dirtylist->length == txn->tw.loose_count);
-  tASSERT(txn, txn->tw.dirtylist->pages_including_loose == txn->tw.loose_count);
+  if (likely(rc == MDBX_SUCCESS)) {
+    /* after a fully successful write only the loose pages remain in the list;
+     * on a mid-commit flush failure the not-written pages stay for the abort */
+    tASSERT(txn, txn->tw.dirtylist->length == txn->tw.loose_count);
+    tASSERT(txn, txn->tw.dirtylist->pages_including_loose == txn->tw.loose_count);
+  }
   return rc;
 }
 
@@ -649,6 +667,8 @@ int txn_renew(MDBX_txn *txn, unsigned flags) {
     MDBX_PNL_SETSIZE(txn->tw.retired_pages, 0);
     txn->tw.spilled.list = nullptr;
     txn->tw.spilled.least_removed = 0;
+    txn->tw.writemap.dirty_npages = 0;
+    txn->tw.writemap.spilled_npages = 0;
     txn->tw.gc.time_acc = 0;
     txn->tw.gc.last_reclaimed = 0;
     if (txn->tw.gc.retxl)
@@ -676,6 +696,7 @@ int txn_renew(MDBX_txn *txn, unsigned flags) {
   txn->dbi_state[MAIN_DBI] = DBI_LINDO | DBI_VALID;
   txn->cursors[FREE_DBI] = nullptr;
   txn->cursors[MAIN_DBI] = nullptr;
+  txn->dbi_rename_undo = nullptr;
   txn->dbi_seqs[FREE_DBI] = 0;
   txn->dbi_seqs[MAIN_DBI] = atomic_load32(&env->dbi_seqs[MAIN_DBI], mo_AcquireRelease);
 
@@ -835,8 +856,8 @@ int txn_renew(MDBX_txn *txn, unsigned flags) {
         txn->tw.dirtyroom = MAX_PAGENO;
         txn->tw.dirtylru = 0;
       }
-      eASSERT(env, txn->tw.writemap_dirty_npages == 0);
-      eASSERT(env, txn->tw.writemap_spilled_npages == 0);
+      eASSERT(env, txn->tw.writemap.dirty_npages == 0);
+      eASSERT(env, txn->tw.writemap.spilled_npages == 0);
 
       MDBX_cursor *const gc = ptr_disp(txn, sizeof(MDBX_txn));
       rc = cursor_init(gc, txn, FREE_DBI);
@@ -935,6 +956,10 @@ int txn_end(MDBX_txn *txn, unsigned mode) {
 
       if ((mode & TXN_END_UPDATE) == 0)
         dbi_update(txn, false);
+      else if (unlikely(txn->dbi_rename_undo != nullptr))
+        /* commit вложенной транзакции: обязательство отката переименований
+         * переходит к родителю вместе с изменениями вложенной (issue #307) */
+        dbi_rename_undo_discharge(env, txn, true);
 
       txn->owner = 0;
       if (txn->tw.gc.retxl) {

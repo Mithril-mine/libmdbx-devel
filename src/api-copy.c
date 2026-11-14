@@ -425,9 +425,13 @@ __cold static int copy_with_compacting(MDBX_env *env, MDBX_txn *txn, mdbx_fileha
     osal_thread_t thread;
     int thread_err = osal_thread_create(&thread, compacting_write_thread, &ctx);
     if (likely(thread_err == MDBX_SUCCESS)) {
+      tree_t main_tree = meta->trees.main /* the walk reads the source root from here */;
       if (dest_is_pipe) {
         if (!meta->trees.main.mod_txnid)
           meta->trees.main.mod_txnid = txn->txnid;
+        /* The meta goes out before the walk. The walk writes the root last, so its page number is known
+         * in advance; a wrong guess means a used-pages mismatch, which fails the pipe copy below. */
+        meta->trees.main.root = meta->geometry.first_unallocated - 1;
         compacting_fixup_meta(env, meta);
         if (flags & MDBX_CP_THROTTLE_MVCC)
           mdbx_txn_park(txn, false);
@@ -436,7 +440,9 @@ __cold static int copy_with_compacting(MDBX_env *env, MDBX_txn *txn, mdbx_fileha
           rc = mdbx_txn_unpark(txn, false);
       }
       if (likely(rc == MDBX_SUCCESS))
-        rc = compacting_walk_tree(&ctx, &meta->trees.main);
+        rc = compacting_walk_tree(&ctx, &main_tree);
+      if (!dest_is_pipe)
+        meta->trees.main = main_tree;
       if (ctx.write_len[ctx.head & 1])
         /* toggle to flush non-empty buffers */
         compacting_toggle_write_buffers(&ctx);
@@ -752,26 +758,21 @@ __cold static int copy2pathname(MDBX_txn *txn, const pathchar_t *dest_path, MDBX
    * We don't want the OS to cache the writes, since the source data is
    * already in the OS cache. */
   mdbx_filehandle_t newfd = INVALID_HANDLE_VALUE;
-  int rc = osal_openfile(MDBX_OPEN_COPY, txn->env, dest_path, &newfd,
 #if defined(_WIN32) || defined(_WIN64)
-                         (mdbx_mode_t)-1
+  const mdbx_mode_t mode = (mdbx_mode_t)-1;
 #else
-                         S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP
+  /* Read/write for the owner, as for the lock file; the group gets no more than it has on the source file, which
+   * may be private (0600). */
+  struct stat src_stat;
+  const mdbx_mode_t mode = S_IRUSR | S_IWUSR | (fstat(txn->env->lazy_fd, &src_stat)
+                                                    ? S_IRGRP | S_IWGRP
+                                                    : (src_stat.st_mode & (S_IRGRP | S_IWGRP)));
 #endif
-  );
-  if (unlikely(rc != MDBX_SUCCESS)) {
-    if (rc != MDBX_EEXIST) {
-#if defined(_WIN32) || defined(_WIN64)
-      if (rc == ERROR_PATH_NOT_FOUND || rc == ERROR_INVALID_DRIVE || rc == ERROR_BAD_NETPATH ||
-          rc == ERROR_BAD_PATHNAME)
-        return rc;
-#endif
-      int err = osal_removefile(dest_path);
-      if (err != MDBX_SUCCESS && err != MDBX_ENOFILE)
-        ERROR("unable remove incomplete copy destination `%" MDBX_PRIsPATH "`, error %d", dest_path, err);
-    }
+  int rc = osal_openfile(MDBX_OPEN_COPY, txn->env, dest_path, &newfd, mode);
+  if (unlikely(rc != MDBX_SUCCESS))
+    /* A failed open says nothing about the path (EMFILE, ENFILE or ENOMEM come before the existence check), so
+     * nothing is removed here; osal_openfile() removes a file it has just created exclusively and then rejected. */
     return rc;
-  }
 
 #if defined(_WIN32) || defined(_WIN64)
   /* no locking required since the file opened with ShareMode == 0 */

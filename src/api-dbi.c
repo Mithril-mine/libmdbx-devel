@@ -34,12 +34,34 @@ int mdbx_dbi_open_ex(MDBX_txn *txn, const char *name, MDBX_db_flags_t flags, MDB
   return LOG_IFERR(dbi_open_cstr(txn, name, flags, dbi, keycmp, datacmp));
 }
 
+static int named_table_probe(void *context, const MDBX_txn *txn, const MDBX_val *name, MDBX_db_flags_t flags,
+                             const MDBX_stat *stat, MDBX_dbi table) {
+  (void)context;
+  (void)txn;
+  (void)name;
+  (void)flags;
+  (void)stat;
+  (void)table;
+  /* any named table in MAIN */
+  return MDBX_INCOMPATIBLE;
+}
+
 __cold int mdbx_drop(MDBX_txn *txn, MDBX_dbi dbi, bool del) {
   int rc = check_txn_rw(txn, MDBX_TXN_BLOCKED);
   if (unlikely(rc != MDBX_SUCCESS))
     return LOG_IFERR(rc);
   if (unlikely(dbi == FREE_DBI))
     return LOG_IFERR(MDBX_EACCESS); /* the GC table must never be dropped or cleared */
+
+  if (dbi == MAIN_DBI) {
+    /* Refuse to drop/clear MAIN when it contains any named tables: such
+     * records are N_TREE nodes and removing them leaves the named tables'
+     * pages orphaned, i.e. leaked (issue #311). The named tables must be
+     * dropped explicitly, one by one, before dropping/clearing MAIN. */
+    rc = mdbx_enumerate_tables(txn, named_table_probe, nullptr);
+    if (unlikely(rc != MDBX_SUCCESS))
+      return LOG_IFERR(rc);
+  }
 
   cursor_couple_t cx;
   rc = cursor_init(&cx.outer, txn, dbi);
@@ -141,13 +163,8 @@ __cold int mdbx_dbi_rename2(MDBX_txn *txn, MDBX_dbi dbi, const MDBX_val *new_nam
   }
 
   rc = osal_fastmutex_acquire(&txn->env->dbi_lock);
-  if (likely(rc == MDBX_SUCCESS)) {
-    struct dbi_rename_result pair = dbi_rename_locked(txn, dbi, *new_name);
-    if (pair.defer)
-      pair.defer->next = nullptr;
-    dbi_defer_release(txn->env, pair.defer);
-    rc = pair.err;
-  }
+  if (likely(rc == MDBX_SUCCESS))
+    rc = dbi_rename_locked_and_release(txn, dbi, *new_name);
   return LOG_IFERR(rc);
 }
 
@@ -280,18 +297,11 @@ __cold int mdbx_dbi_stat(const MDBX_txn *txn, MDBX_dbi dbi, MDBX_stat *dest, siz
   return MDBX_SUCCESS;
 }
 
-__cold int mdbx_enumerate_tables(const MDBX_txn *txn, MDBX_table_enum_func *func, void *ctx) {
-  if (unlikely(!func))
-    return LOG_IFERR(MDBX_EINVAL);
-
-  int rc = check_txn(txn, MDBX_TXN_BLOCKED);
-  if (unlikely(rc != MDBX_SUCCESS))
-    return LOG_IFERR(rc);
-
+__cold int dbi_enumerate(const MDBX_txn *txn, MDBX_table_enum_func *func, void *ctx, const bool dbi_locked) {
   cursor_couple_t cx;
-  rc = cursor_init(&cx.outer, txn, MAIN_DBI);
+  int rc = cursor_init(&cx.outer, txn, MAIN_DBI);
   if (unlikely(rc != MDBX_SUCCESS))
-    return LOG_IFERR(rc);
+    return rc;
 
   cx.outer.next = txn->cursors[MAIN_DBI];
   txn->cursors[MAIN_DBI] = &cx.outer;
@@ -310,18 +320,27 @@ __cold int mdbx_enumerate_tables(const MDBX_txn *txn, MDBX_table_enum_func *func
     tree_t reside;
     const tree_t *tree = memcpy(&reside, node_data(node), sizeof(reside));
     const MDBX_val name = {node_key(node), node_ks(node)};
-    const MDBX_env *const env = txn->env;
+    MDBX_env *const env = txn->env;
+    /* The table-handle registry of the process (names, flags, n_dbi) is changed under dbi_lock by other threads:
+     * a table created and aborted, renamed or dropped, a handle opened for the first time or closed. */
+    if (!dbi_locked) {
+      rc = osal_fastmutex_acquire(&env->dbi_lock);
+      if (unlikely(rc != MDBX_SUCCESS))
+        break;
+    }
     MDBX_dbi dbi = 0;
     for (size_t i = CORE_DBS; i < env->n_dbi; ++i) {
       if (i >= txn->n_dbi || !(env->dbs_flags[i] & DB_VALID))
         continue;
       if (env->kvs[MAIN_DBI].clc.k.cmp(&name, &env->kvs[i].name))
         continue;
-
-      tree = dbi_dig(txn, i, &reside);
       dbi = (MDBX_dbi)i;
       break;
     }
+    if (!dbi_locked)
+      ENSURE(env, osal_fastmutex_release(&env->dbi_lock) == MDBX_SUCCESS);
+    if (dbi)
+      tree = dbi_dig(txn, dbi, &reside);
 
     MDBX_stat stat;
     stat_get(tree, &stat, sizeof(stat));
@@ -334,5 +353,16 @@ __cold int mdbx_enumerate_tables(const MDBX_txn *txn, MDBX_table_enum_func *func
 
 bailout:
   txn->cursors[MAIN_DBI] = cx.outer.next;
-  return LOG_IFERR(rc);
+  return rc;
+}
+
+__cold int mdbx_enumerate_tables(const MDBX_txn *txn, MDBX_table_enum_func *func, void *ctx) {
+  if (unlikely(!func))
+    return LOG_IFERR(MDBX_EINVAL);
+
+  int rc = check_txn(txn, MDBX_TXN_BLOCKED);
+  if (unlikely(rc != MDBX_SUCCESS))
+    return LOG_IFERR(rc);
+
+  return LOG_IFERR(dbi_enumerate(txn, func, ctx, false));
 }

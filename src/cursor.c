@@ -811,7 +811,36 @@ __hot int cursor_put(MDBX_cursor *mc, const MDBX_val *key, MDBX_val *data, unsig
     if ((flags & MDBX_APPEND) && mc->tree->items > 0) {
       old_data.iov_base = nullptr;
       old_data.iov_len = 0;
-      rc = (mc->flags & z_inner) ? inner_last(mc, &last_key) : outer_last(mc, &last_key, &old_data);
+      /* Issue #66: a persistent cursor parked at the rightmost leaf after the
+       * previous append already holds the whole right edge of the tree in its
+       * stack, so the last key is read from that leaf directly instead of
+       * re-descending from the root via outer_last()/inner_last(). The extra
+       * descent was pure overhead: one full tree_search per appended key. */
+      bool fast_end = false;
+      if (unlikely(is_pointed(mc) && !(mc->flags & (z_inner | z_hollow)))) {
+        intptr_t i;
+        for (i = 0; i < mc->top; i++)
+          if ((size_t)mc->ki[i] + 1 < page_numkeys(mc->pg[i]))
+            break;
+        if (i == mc->top) {
+          const size_t nkeys = page_numkeys(mc->pg[mc->top]);
+          cASSERT(mc, nkeys > 0);
+          const node_t *const last = page_node(mc->pg[mc->top], nkeys - 1);
+          last_key = get_key(last);
+          const int cmp = mc->clc->k.cmp(key, &last_key);
+          if (likely(cmp > 0)) {
+            mc->ki[mc->top] = (indx_t)page_numkeys(mc->pg[mc->top]); /* step forward for appending */
+            rc = MDBX_NOTFOUND;
+            inner_gone(mc);
+            goto append_done;
+          }
+          /* exact or smaller: the generic path must see the true last value */
+          old_data.iov_base = nullptr;
+          old_data.iov_len = 0;
+        }
+      }
+      if (!fast_end)
+        rc = (mc->flags & z_inner) ? inner_last(mc, &last_key) : outer_last(mc, &last_key, &old_data);
       if (likely(rc == MDBX_SUCCESS)) {
         const int cmp = mc->clc->k.cmp(key, &last_key);
         if (likely(cmp > 0)) {
@@ -825,6 +854,7 @@ __hot int cursor_put(MDBX_cursor *mc, const MDBX_val *key, MDBX_val *data, unsig
           exact = true;
         }
       }
+    append_done:;
     } else {
       csr_t csr =
           /* old_data may not be updated in case DUPFIX-page of dupfix-table */
@@ -1122,6 +1152,13 @@ __hot int cursor_put(MDBX_cursor *mc, const MDBX_val *key, MDBX_val *data, unsig
         } else {
           /* Data is on sub-page */
           fp = old_data.iov_base;
+          if (!MDBX_DISABLE_VALIDATION && unlikely(!subpage_geometry_ok(fp, old_data.iov_len))) {
+            /* Crafted nested-page lower/upper make node_del()/cursor_put()
+             * underflow the memmove()/memcpy() lengths even on the normal
+             * (non-MDBX_VALIDATION) path. (issue #176) */
+            return bad_page(fp, "invalid nested %s-page lower(%u)/upper(%u) for size %zu\n",
+                            is_dupfix_leaf(fp) ? "leaf2" : "leaf", fp->lower, fp->upper, old_data.iov_len - PAGEHDRSZ);
+          }
           switch (flags) {
           default:
             growth = is_dupfix_leaf(fp) ? fp->dupfix_ksize : (node_size(data, nullptr) + sizeof(indx_t));
@@ -1443,6 +1480,13 @@ insert_node:;
           insert_key = insert_data = false;
           old_singledup.iov_base = nullptr;
           sub_root = nullptr;
+          /* Re-check the dirty room between the batch elements (issue #319,
+           * item 10): a long batch must spill on the fly, exactly like the
+           * same values put one by one, instead of running out of pages
+           * with MDBX_TXN_FULL somewhere in the middle. */
+          rc = cursor_touch(mc, key, data);
+          if (unlikely(rc))
+            return rc;
           goto more;
         }
       }
@@ -1953,8 +1997,13 @@ got_node:
 
   if (node_flags(node) & N_DUP) {
     ret.err = cursor_dupsort_setup(mc, node, mp);
-    if (unlikely(ret.err != MDBX_SUCCESS))
+    if (unlikely(ret.err != MDBX_SUCCESS)) {
+      /* the sub-page could not be materialized (corruption): the positioned
+       * match is not a usable exact match, keep the exact-implies-success
+       * invariant. (issue #176) */
+      ret.exact = false;
       return ret;
+    }
     if (op >= MDBX_SET) {
       MDBX_ANALYSIS_ASSUME(mc->subcur != nullptr);
       if (node_flags(node) & N_TREE) {
@@ -2141,7 +2190,7 @@ __hot int cursor_ops(MDBX_cursor *mc, MDBX_val *key, MDBX_val *data, const MDBX_
   case MDBX_NEXT_MULTIPLE:
     if (unlikely(!data))
       return MDBX_EINVAL;
-    if (unlikely(mc->subcur == nullptr))
+    if (unlikely(mc->subcur == nullptr || (mc->tree->flags & MDBX_DUPFIXED) == 0))
       return MDBX_INCOMPATIBLE;
     rc = outer_next(mc, key, data, MDBX_NEXT_DUP);
     if (unlikely(rc != MDBX_SUCCESS))
@@ -2159,7 +2208,7 @@ __hot int cursor_ops(MDBX_cursor *mc, MDBX_val *key, MDBX_val *data, const MDBX_
   case MDBX_PREV_MULTIPLE:
     if (unlikely(!data))
       return MDBX_EINVAL;
-    if (unlikely(mc->subcur == nullptr))
+    if (unlikely(mc->subcur == nullptr || (mc->tree->flags & MDBX_DUPFIXED) == 0))
       return MDBX_INCOMPATIBLE;
     if (unlikely(!is_filled(mc) || !inner_filled(mc)))
       return MDBX_ENODATA;

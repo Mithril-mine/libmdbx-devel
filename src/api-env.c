@@ -792,7 +792,7 @@ static int env_info_snap(const MDBX_env *env, const MDBX_txn *txn, MDBX_envinfo 
         osal_monotime_to_16dot16_noUnderflow(atomic_load64(&lck->autosync_period, mo_Relaxed));
     out->mi_bootid.current.x = globals.bootid.x;
     out->mi_bootid.current.y = globals.bootid.y;
-    out->mi_mode = env->lck_mmap.lck ? lck->envmode.weak : env->flags;
+    out->mi_mode = env->flags & ENV_USABLE_FLAGS;
   }
 
   if (likely(bytes > size_before_pgop_stat)) {
@@ -999,7 +999,7 @@ __cold int mdbx_env_set_geometry(MDBX_env *env, intptr_t size_lower, intptr_t si
       env->basal_txn->tw.troika = meta_tap(env);
       eASSERT(env, !env->txn && !env->basal_txn->nested);
       env->basal_txn->txnid = env->basal_txn->tw.troika.txnid[env->basal_txn->tw.troika.recent];
-      txn_snapshot_oldest(env->basal_txn);
+      txn_snapshot_oldest(env->basal_txn, false);
     }
 
     /* get untouched params from current TXN or DB */

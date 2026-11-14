@@ -1281,6 +1281,8 @@ int osal_openfile(const enum osal_openfile_purpose purpose, const MDBX_env *env,
     int err = (int)GetLastError();
     CloseHandle(*fd);
     *fd = INVALID_HANDLE_VALUE;
+    if (purpose == MDBX_OPEN_COPY)
+      DeleteFileW(pathname) /* created here by CREATE_NEW, unknown to the caller */;
     return err;
   }
   const DWORD AttributesDiff =
@@ -1323,9 +1325,6 @@ int osal_openfile(const enum osal_openfile_purpose purpose, const MDBX_env *env,
 
   const bool direct_nocache_for_copy = env->ps >= globals.sys_pagesize && purpose == MDBX_OPEN_COPY;
   if (direct_nocache_for_copy) {
-#if defined(O_DIRECT)
-    flags |= O_DIRECT;
-#endif /* O_DIRECT */
 #if defined(O_NOCACHE)
     flags |= O_NOCACHE;
 #endif /* O_NOCACHE */
@@ -1356,13 +1355,16 @@ int osal_openfile(const enum osal_openfile_purpose purpose, const MDBX_env *env,
 #endif /* STDIN_FILENO == 0 && STDERR_FILENO == 2 */
 
   *fd = open(pathname, flags, unix_mode_bits);
-#if defined(O_DIRECT)
-  if (*fd < 0 && (flags & O_DIRECT) && (errno == EINVAL || errno == EAFNOSUPPORT)) {
-    flags &= ~O_DIRECT;
-    *fd = open(pathname, flags, unix_mode_bits);
+  /* O_DIRECT is set after the open: a filesystem without direct I/O rejects it with EINVAL only after
+   * O_CREAT|O_EXCL has created the file, so a retry without it would fail with EEXIST on that empty file. */
+  if (O_DIRECT != 0 && *fd >= 0 && direct_nocache_for_copy) {
+    const int fl_flags = fcntl(*fd, F_GETFL);
+    if (fl_flags != -1)
+      (void)fcntl(*fd, F_SETFL, fl_flags | O_DIRECT) /* without direct I/O the writes go through the cache */;
   }
-#endif /* O_DIRECT */
 
+  /* A file created here and then rejected below is removed here: the caller cannot tell it from a pre-existing one. */
+  const bool created_exclusively = *fd >= 0 && (flags & (O_CREAT | O_EXCL)) == (O_CREAT | O_EXCL);
   int err = MDBX_SUCCESS;
   if (*fd < 0) {
     err = errno;
@@ -1405,6 +1407,8 @@ int osal_openfile(const enum osal_openfile_purpose purpose, const MDBX_env *env,
           "STDIN_FILENO/%d..STDERR_FILENO/%d to prevent database corruption",
           STDIN_FILENO, STDERR_FILENO);
     close(*fd);
+    if (created_exclusively)
+      unlink(pathname);
     return EBADF;
   }
 #else
@@ -1414,6 +1418,8 @@ int osal_openfile(const enum osal_openfile_purpose purpose, const MDBX_env *env,
   if (unlikely(err != 0)) {
     if (*fd >= 0)
       close(*fd);
+    if (created_exclusively)
+      unlink(pathname);
     return err;
   }
 
@@ -1674,10 +1680,25 @@ int osal_fsetsize(mdbx_filehandle_t fd, const uint64_t length) {
 
   const uint64_t allocated = UINT64_C(512) * info.st_blocks;
   if (length > allocated) {
-#if defined(FALLOC_FL_ALLOCATE_RANGE) && defined(FALLOC_FL_KEEP_SIZE)
+#ifdef FALLOC_FL_ALLOCATE_RANGE
+#define MDBX_FALLOC_FL_ALLOCATE_RANGE FALLOC_FL_ALLOCATE_RANGE
+#else
+#define MDBX_FALLOC_FL_ALLOCATE_RANGE 0
+#endif /* FALLOC_FL_ALLOCATE_RANGE */
+
+#ifdef FALLOC_FL_KEEP_SIZE
+#define MDBX_FALLOC_FL_KEEP_SIZE FALLOC_FL_KEEP_SIZE
+#else
+#define MDBX_FALLOC_FL_KEEP_SIZE 0
+#endif /* FALLOC_FL_KEEP_SIZE */
+
+#if defined(FALLOC_FL_KEEP_SIZE)
     /* prefer a low-level non-portable function to avoid glibc emulation if the file system does not support the
-     * operation. */
-    int err = fallocate(fd, FALLOC_FL_ALLOCATE_RANGE | FALLOC_FL_KEEP_SIZE, 0, length);
+     * operation: the emulation reads the file, which fails with EBADF on a write-only copy destination.
+     * FALLOC_FL_ALLOCATE_RANGE is 0 and missing from older headers. */
+    /* fallocate() returns -1 and sets errno on failure */
+    int err =
+        fallocate(fd, MDBX_FALLOC_FL_ALLOCATE_RANGE | MDBX_FALLOC_FL_KEEP_SIZE, 0, length) ? errno : MDBX_SUCCESS;
 #elif defined(__APPLE__)
     fstore_t store = {
         .fst_flags = F_ALLOCATECONTIG, .fst_posmode = F_PEOFPOSMODE, .fst_offset = 0, .fst_length = length};
@@ -1693,7 +1714,8 @@ int osal_fsetsize(mdbx_filehandle_t fd, const uint64_t length) {
     if (!err && length > (uint64_t)info.st_size)
       info.st_size = length /* posix_fallocate() extends the file */;
 #else
-    const int err = fallocate(fd, 0, 0, length) ? errno : MDBX_SUCCESS;
+    const int err =
+        fallocate(fd, MDBX_FALLOC_FL_ALLOCATE_RANGE | MDBX_FALLOC_FL_KEEP_SIZE, 0, length) ? errno : MDBX_SUCCESS;
     if (!err && length > (uint64_t)info.st_size)
       info.st_size = length /* fallocate() extends the file */;
 #endif

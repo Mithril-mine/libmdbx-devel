@@ -224,7 +224,7 @@ __hot int mdbx_estimate_move(const MDBX_cursor *cursor, MDBX_val *key, MDBX_val 
 
   next.outer.signature = cur_signature_live;
   rc = cursor_ops(&next.outer, key, data, move_op);
-  if (unlikely(rc != MDBX_SUCCESS && (rc != MDBX_NOTFOUND || !is_pointed(&next.outer))))
+  if (unlikely(MDBX_IS_ERROR(rc) && (rc != MDBX_NOTFOUND || !is_pointed(&next.outer))))
     return LOG_IFERR(rc);
 
   if (move_op == MDBX_LAST) {
@@ -310,11 +310,11 @@ __hot int mdbx_estimate_range(const MDBX_txn *txn, MDBX_dbi dbi, const MDBX_val 
       MDBX_val proxy_data = {nullptr, 0};
       if (begin_data)
         proxy_data = *begin_data;
-      rc = LOG_IFERR(cursor_seek(&begin.outer, &proxy_key, &proxy_data, MDBX_SET_LOWERBOUND).err);
+      rc = LOG_IFERR(cursor_ops(&begin.outer, &proxy_key, &proxy_data, MDBX_SET_LOWERBOUND));
     }
   }
 
-  if (unlikely(rc != MDBX_SUCCESS)) {
+  if (unlikely(MDBX_IS_ERROR(rc))) {
     if (rc != MDBX_NOTFOUND || !is_pointed(&begin.outer))
       return LOG_IFERR(rc);
   }
@@ -332,9 +332,9 @@ __hot int mdbx_estimate_range(const MDBX_txn *txn, MDBX_dbi dbi, const MDBX_val 
     MDBX_val proxy_data = {nullptr, 0};
     if (end_data)
       proxy_data = *end_data;
-    rc = cursor_seek(&end.outer, &proxy_key, &proxy_data, MDBX_SET_LOWERBOUND).err;
+    rc = cursor_ops(&end.outer, &proxy_key, &proxy_data, MDBX_SET_LOWERBOUND);
   }
-  if (unlikely(rc != MDBX_SUCCESS)) {
+  if (unlikely(MDBX_IS_ERROR(rc))) {
     if (rc != MDBX_NOTFOUND || !is_pointed(&end.outer))
       return LOG_IFERR(rc);
   }

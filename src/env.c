@@ -136,8 +136,13 @@ retry:;
         } else
           err = osal_fsync(env->lazy_fd, MDBX_SYNC_DATA);
 
-        if (unlikely(err != MDBX_SUCCESS))
+        if (unlikely(err != MDBX_SUCCESS)) {
+          /* As in dxb_sync_locked(): after a failed flush the OS may drop the
+           * unwritten pages and report the error only once (Linux does), so a
+           * retry would succeed and sign a steady meta over the lost pages. */
+          env->flags |= ENV_FATAL_ERROR;
           return err;
+        }
 
 #if MDBX_ENABLE_PGOP_STAT
         wops = 1;
@@ -160,7 +165,7 @@ retry:;
     }
     eASSERT(env, head.txnid == recent_committed_txnid(env));
     env->basal_txn->txnid = head.txnid;
-    txn_snapshot_oldest(env->basal_txn);
+    txn_snapshot_oldest(env->basal_txn, false);
     flags |= txn_shrink_allowed;
   }
 
@@ -184,8 +189,14 @@ retry:;
 
   /* LY: sync meta-pages if MDBX_NOMETASYNC enabled
    *     and someone was not synced above. */
-  if (atomic_load32(&env->lck->meta_sync_txnid, mo_Relaxed) != (uint32_t)head.txnid)
+  if (atomic_load32(&env->lck->meta_sync_txnid, mo_Relaxed) != (uint32_t)head.txnid) {
     rc = meta_sync(env, head);
+    if (unlikely(rc != MDBX_SUCCESS)) {
+      /* as below in dxb_sync_locked(): a retry could record the meta page
+       * as synced although it never reached the disk */
+      env->flags |= ENV_FATAL_ERROR;
+    }
+  }
 
 bailout:
   if (should_unlock)
@@ -302,7 +313,7 @@ __cold int env_open(MDBX_env *env, mdbx_mode_t mode) {
 #if defined(_WIN32) || defined(_WIN64)
   eASSERT(env, env->ioring.overlapped_fd == 0);
   bool ior_direct = false;
-  if (!(env->flags & (MDBX_RDONLY | MDBX_SAFE_NOSYNC | MDBX_NOMETASYNC))) {
+  if (!(env->flags & (MDBX_RDONLY | MDBX_SAFE_NOSYNC | MDBX_NOMETASYNC | MDBX_EXCLUSIVE))) {
     if (MDBX_AVOID_MSYNC && (env->flags & MDBX_WRITEMAP)) {
       /* Запрошен режим MDBX_SYNC_DURABLE | MDBX_WRITEMAP при активной опции
        * MDBX_AVOID_MSYNC.
@@ -366,7 +377,11 @@ __cold int env_open(MDBX_env *env, mdbx_mode_t mode) {
     osal_fseek(env->lck_mmap.fd, safe_parking_lot_offset);
 
   eASSERT(env, env->dsync_fd == INVALID_HANDLE_VALUE);
-  if (!(env->flags & (MDBX_RDONLY | MDBX_SAFE_NOSYNC | DEPRECATED_MAPASYNC))) {
+  if (!(env->flags & (MDBX_RDONLY | MDBX_SAFE_NOSYNC | DEPRECATED_MAPASYNC
+#if defined(_WIN32) || defined(_WIN64)
+                      | MDBX_EXCLUSIVE
+#endif /* !Windows */
+                      ))) {
     rc = osal_openfile(MDBX_OPEN_DXB_DSYNC, env, env->pathname.dxb, &env->dsync_fd, 0);
     if (unlikely(MDBX_IS_ERROR(rc)))
       return rc;

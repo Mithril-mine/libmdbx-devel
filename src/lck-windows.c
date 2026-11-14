@@ -29,17 +29,22 @@ static int flock_with_event(HANDLE fd, HANDLE event, unsigned flags, size_t offs
     return MDBX_SUCCESS;
   }
 
-  DWORD rc = GetLastError();
+  DWORD rc = GetLastError(), unused;
   if (rc == ERROR_IO_PENDING) {
     if (event) {
-      if (GetOverlappedResult(fd, &ov, &rc, true)) {
+      if (GetOverlappedResult(fd, &ov, &unused, true)) {
         TRACE("lock<<: fd %p, event %p, flags 0x%x offset %zu, bytes %zu << %s", fd, event, flags, offset, bytes,
               "overlapped-done");
         return MDBX_SUCCESS;
       }
       rc = GetLastError();
-    } else
+    } else {
       CancelIo(fd);
+      /* `ov` is on the stack: wait until the cancelled request is completed,
+       * and release the lock if it was granted before the cancellation took effect */
+      if (GetOverlappedResult(fd, &ov, &unused, true))
+        UnlockFile(fd, (DWORD)offset, HIGH_DWORD(offset), (DWORD)bytes, HIGH_DWORD(bytes));
+    }
   }
   TRACE("lock<<: fd %p, event %p, flags 0x%x offset %zu, bytes %zu << err %d", fd, event, flags, offset, bytes,
         (int)rc);
@@ -490,7 +495,10 @@ int lck_upgrade(MDBX_env *env, bool dont_wait) {
   jitter4testing(false);
   int rc = flock(env->lck_mmap.fd, dont_wait ? LCK_EXCLUSIVE | LCK_DONTWAIT : LCK_EXCLUSIVE, LCK_UPPER);
   if (rc != MDBX_SUCCESS) {
-    /* 2) something went wrong, give up */;
+    /* 2) something went wrong, give up;
+     * map the contention to MDBX_BUSY so that callers can portably detect it */
+    if (rc == ERROR_LOCK_VIOLATION || rc == ERROR_SHARING_VIOLATION)
+      rc = MDBX_BUSY;
     VERBOSE("%s, err %u", "S-?(used) >> S-E(locked)", rc);
     return rc;
   }
@@ -504,7 +512,10 @@ int lck_upgrade(MDBX_env *env, bool dont_wait) {
   jitter4testing(false);
   rc = flock(env->lck_mmap.fd, dont_wait ? LCK_EXCLUSIVE | LCK_DONTWAIT : LCK_EXCLUSIVE, LCK_LOWER);
   if (rc != MDBX_SUCCESS) {
-    /* 5) something went wrong, give up */;
+    /* 5) something went wrong, give up;
+     * map the contention to MDBX_BUSY so that callers can portably detect it */
+    if (rc == ERROR_LOCK_VIOLATION || rc == ERROR_SHARING_VIOLATION)
+      rc = MDBX_BUSY;
     VERBOSE("%s, err %u", "?-E(middle) >> E-E(exclusive-write)", rc);
     return rc;
   }

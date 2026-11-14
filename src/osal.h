@@ -66,6 +66,75 @@ MDBX_MAYBE_UNUSED static inline void osal_memory_barrier(void) {
 #endif
 }
 
+MDBX_MAYBE_UNUSED static inline void osal_fence_full(void) {
+#ifdef MDBX_HAVE_C11ATOMICS
+  atomic_thread_fence(memory_order_seq_cst);
+#elif defined(__ATOMIC_SEQ_CST)
+#ifdef __clang__
+  __c11_atomic_thread_fence(__ATOMIC_SEQ_CST);
+#else
+  __atomic_thread_fence(__ATOMIC_SEQ_CST);
+#endif
+#elif defined(__clang__) || defined(__GNUC__)
+  __sync_synchronize();
+#elif defined(_WIN32) || defined(_WIN64)
+  MemoryBarrier();
+#elif defined(__INTEL_COMPILER) /* LY: Intel Compiler may mimic GCC and MSC */
+#if defined(__ia32__)
+  _mm_mfence();
+#else
+  __mf();
+#endif
+#elif defined(__SUNPRO_C) || defined(__sun) || defined(sun)
+  __machine_rw_barrier();
+#elif (defined(_HPUX_SOURCE) || defined(__hpux) || defined(__HP_aCC)) && (defined(HP_IA64) || defined(__ia64))
+  _Asm_mf();
+#elif defined(_AIX) || defined(__ppc__) || defined(__powerpc__) || defined(__ppc64__) || defined(__powerpc64__)
+  __lwsync();
+#else
+#error "Could not guess the kind of compiler, please report to us."
+#endif
+}
+
+/* A consumer (acquire-side) fence: no later load/store may be reordered
+ * before the prior reads. Must be applied after the access being ordered. */
+MDBX_MAYBE_UNUSED static inline void osal_fence_consumer(void) {
+#ifdef MDBX_HAVE_C11ATOMICS
+  atomic_thread_fence(memory_order_acquire);
+#elif defined(__ATOMIC_ACQUIRE) && (defined(__clang__) || defined(__GNUC__))
+#ifdef __clang__
+  __c11_atomic_thread_fence(__ATOMIC_ACQUIRE);
+#else
+  __atomic_thread_fence(__ATOMIC_ACQUIRE);
+#endif
+#elif defined(_MSC_VER) && (defined(_M_IX86) || defined(_M_X64))
+  /* TSO: acquire ordering only requires the compiler barrier */
+  _ReadWriteBarrier();
+#else
+  osal_fence_full();
+#endif
+}
+
+/* A producer (release-side) fence: no earlier load/store may be reordered
+ * after the subsequent writes. Must be applied before the access being
+ * ordered. */
+MDBX_MAYBE_UNUSED static inline void osal_fence_producer(void) {
+#ifdef MDBX_HAVE_C11ATOMICS
+  atomic_thread_fence(memory_order_release);
+#elif defined(__ATOMIC_RELEASE) && (defined(__clang__) || defined(__GNUC__))
+#ifdef __clang__
+  __c11_atomic_thread_fence(__ATOMIC_RELEASE);
+#else
+  __atomic_thread_fence(__ATOMIC_RELEASE);
+#endif
+#elif defined(_MSC_VER) && (defined(_M_IX86) || defined(_M_X64))
+  /* TSO: release ordering only requires the compiler barrier */
+  _ReadWriteBarrier();
+#else
+  osal_fence_full();
+#endif
+}
+
 /*----------------------------------------------------------------------------*/
 /* system-depended definitions */
 
@@ -183,6 +252,11 @@ typedef wchar_t pathchar_t;
 #else
 typedef char pathchar_t;
 #define MDBX_PRIsPATH "s"
+
+/* No direct I/O: osal_openfile() then skips setting it, with no conditional at the call site. */
+#ifndef O_DIRECT
+#define O_DIRECT 0
+#endif /* O_DIRECT */
 #endif
 
 MDBX_MAYBE_UNUSED static inline bool osal_yield(void) {

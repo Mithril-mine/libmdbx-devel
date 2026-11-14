@@ -441,6 +441,10 @@ int lck_upgrade(MDBX_env *env, bool dont_wait) {
       rc = MDBX_PANIC;
   }
   if (unlikely(rc != 0)) {
+    /* map the would-block class to MDBX_BUSY like lck_txn_lock() does,
+     * so that callers can portably detect the contention */
+    if (rc == EAGAIN || rc == EACCES || rc == EBUSY || rc == EWOULDBLOCK || rc == EDEADLK)
+      rc = MDBX_BUSY;
     ERROR("%s, err %u", "lck", rc);
     assert(MDBX_IS_ERROR(rc));
   }
@@ -618,8 +622,11 @@ __cold int lck_init(MDBX_env *env, MDBX_env *inprocess_neighbor, int global_uniq
    * loss, nor database corruption, nor other fatal troubles. Thus, the code
    * below I am inclined to think the workaround for erroneous platforms (like
    * FreeBSD), rather than a defect of libmdbx. */
-#if defined(__FreeBSD__)
-  /* seems that shared mutexes on FreeBSD required in-process initialization */
+#if defined(__FreeBSD__) && MDBX_LOCKING != MDBX_LOCKING_POSIX2008
+  /* seems that shared mutexes on FreeBSD required in-process initialization
+   * for the non-robust mutexes; in the robust case (MDBX_LOCKING_POSIX2008)
+   * the kernel maintains the umtx robust lists by itself, no such workaround
+   * is needed */
   (void)global_uniqueness_flag;
 #else
   /* shared mutexes on many other platforms (including Darwin and Linux's
@@ -778,14 +785,19 @@ static int osal_ipclock_lock(MDBX_env *env, osal_ipclock_t *ipc, const bool dont
       if (rc == EAGAIN)
         rc = MDBX_BUSY;
     }
-  } else if (sem_wait(ipc))
-    rc = errno;
+  } else {
+    do { /* a signal interrupts the wait with EINTR: wait again */
+      rc = sem_wait(ipc) ? errno : MDBX_SUCCESS;
+    } while (rc == EINTR);
+  }
 #elif MDBX_LOCKING == MDBX_LOCKING_SYSV
   struct sembuf op = {
       .sem_num = (ipc != &env->lck->wrt_lock), .sem_op = -1, .sem_flg = dont_wait ? IPC_NOWAIT | SEM_UNDO : SEM_UNDO};
   int rc;
-  if (semop(env->me_sysv_ipc.semid, &op, 1)) {
-    rc = errno;
+  do { /* a signal interrupts the wait with EINTR: wait again */
+    rc = semop(env->me_sysv_ipc.semid, &op, 1) ? errno : MDBX_SUCCESS;
+  } while (rc == EINTR);
+  if (rc != MDBX_SUCCESS) {
     if (dont_wait && rc == EAGAIN)
       rc = MDBX_BUSY;
   } else {

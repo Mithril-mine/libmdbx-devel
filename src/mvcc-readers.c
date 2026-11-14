@@ -42,8 +42,9 @@ bsr_t mvcc_bind_slot(MDBX_env *env) {
     if (likely(slot < env->max_readers))
       break;
 
-    result.err = mvcc_cleanup_dead(env, true, nullptr);
-    if (result.err != MDBX_RESULT_TRUE) {
+    int dead = 0;
+    result.err = mvcc_cleanup_dead(env, true, &dead);
+    if (result.err != MDBX_RESULT_TRUE && !(result.err == MDBX_SUCCESS && dead > 0)) {
       lck_rdt_unlock(env);
       result.err = (result.err == MDBX_SUCCESS) ? MDBX_READERS_FULL : result.err;
       return result;
@@ -71,7 +72,7 @@ bsr_t mvcc_bind_slot(MDBX_env *env) {
   return result;
 }
 
-__hot txnid_t mvcc_snapshot_oldest(MDBX_env *const env, const txnid_t steady) {
+__hot txnid_t mvcc_snapshot_oldest(MDBX_env *const env, const txnid_t steady, const bool may_lag) {
   const uint32_t nothing_changed = MDBX_STRING_TETRAD("None");
   eASSERT(env, steady <= env->basal_txn->txnid);
 
@@ -93,10 +94,24 @@ __hot txnid_t mvcc_snapshot_oldest(MDBX_env *const env, const txnid_t steady) {
    * every legitimately-old reader would look "stuck" and be demoted). */
   const bool distrust_cached_oldest = (prev_oldest > steady);
   const txnid_t trusted_oldest = distrust_cached_oldest ? MIN_TXNID : prev_oldest;
+  if (unlikely(distrust_cached_oldest))
+    NOTICE("cached oldest-reader %" PRIaTXN " beyond steady %" PRIaTXN ", forcing rescan", prev_oldest, steady);
 
   txnid_t new_oldest = prev_oldest;
   bool rescan_forced = distrust_cached_oldest;
+  size_t passes = 0;
   while (rescan_forced || nothing_changed != atomic_load32(&lck->rdt_refresh_flag, mo_AcquireRelease)) {
+    if (may_lag && unlikely(++passes > 4) && !distrust_cached_oldest && prev_oldest >= MIN_TXNID) {
+      /* Readers keep starting and ending, so no pass saw a stable table, and
+       * each further pass costs the whole table again. A few passes absorb a
+       * single change; after that, return the previous oldest. A full scan
+       * never returns less (the pass below skips readers older than it), so
+       * it is a safe lower bound, only not the newest one. The cache and the
+       * refresh flag stay as they are, so the next call scans again. A fresh
+       * lock file has no previous oldest yet (zero), then the scan goes on
+       * without a bound, as before. */
+      return prev_oldest;
+    }
     rescan_forced = false;
     lck->rdt_refresh_flag.weak = nothing_changed;
     jitter4testing(false);
@@ -321,7 +336,7 @@ __cold txnid_t mvcc_kick_laggards(MDBX_env *env, const txnid_t straggler) {
   do {
     const txnid_t steady = env->txn->tw.troika.txnid[env->txn->tw.troika.prefer_steady];
     env->lck->rdt_refresh_flag.weak = /* force refresh */ true;
-    oldest = mvcc_snapshot_oldest(env, steady);
+    oldest = mvcc_snapshot_oldest(env, steady, false);
     eASSERT(env, oldest < env->basal_txn->txnid);
     eASSERT(env, oldest >= straggler);
     eASSERT(env, oldest >= env->lck->cached_oldest.weak);

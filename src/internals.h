@@ -161,6 +161,8 @@ enum txn_flags {
 
 /* A database transaction.
  * Every operation requires a transaction handle. */
+struct dbi_rename_undo;
+
 struct MDBX_txn {
   int32_t signature;
   uint32_t flags; /* Transaction Flags */
@@ -195,6 +197,10 @@ struct MDBX_txn {
 
   /* Массив с головами односвязных списков отслеживания курсоров. */
   MDBX_cursor **cursors;
+
+  /* Отложенный undo переименования таблицы (issue #307, см.
+   * dbi_rename_undo_t в dbi.c). */
+  struct dbi_rename_undo *dbi_rename_undo;
 
   /* "Канареечные" маркеры/счетчики */
   MDBX_canary canary;
@@ -244,9 +250,12 @@ struct MDBX_txn {
            * shifted left by 1, deleted slots have the LSB set. */
           pnl_t __restrict list;
         } spilled;
-        size_t writemap_dirty_npages;
-        size_t writemap_spilled_npages;
       };
+      /* WRITEMAP mode keeps two counters instead of the spilled dirty list above */
+      struct {
+        size_t dirty_npages;
+        size_t spilled_npages;
+      } writemap;
       /* In write txns, next is located the array of cursors for each DB */
     } tw;
   };

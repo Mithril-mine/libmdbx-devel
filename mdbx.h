@@ -116,7 +116,7 @@ are only a few cases of changing data.
 |Key exist → Delete by key                    |\ref mdbx_del() with the parameter `data = NULL`|Deletion|
 |Key exist → Delete by key with data matching check|\ref mdbx_del() with the parameter `data` filled with the value which should be match for deletion|Deletion or \ref MDBX_NOTFOUND if the value does not match|
 |Delete at the current cursor position        |\ref mdbx_cursor_del() with \ref MDBX_CURRENT flag|Deletion|
-|Extract (read & delete) value by the key     |\ref mdbx_replace() with zero flag and parameter `new_data = NULL`|Returning a deleted value|
+|Extract (read & delete) value by the key     |\ref mdbx_replace() with \ref MDBX_CURRENT and parameter `new_data = NULL`|Returning a deleted value|
 
 
 ## Tables with NON-UNIQUE keys
@@ -138,7 +138,7 @@ as a duplicates or as like a multiple values corresponds to keys.
 |  _UPDATING_|||
 |Key is absent → Error since no such key      |\ref MDBX_CURRENT    |Error \ref MDBX_NOTFOUND|
 |Key exist, Single value → Update             |\ref MDBX_CURRENT    |Update single value    |
-|Key exist, Multiple values → Replace all values with a new one|\ref MDBX_CURRENT + \ref MDBX_ALLDUPS|Overwrite by single new value|
+|Key exist, Multiple values → Replace all values with a new one|\ref mdbx_put() with \ref MDBX_CURRENT + \ref MDBX_ALLDUPS|Overwrite by single new value|
 |Key exist, Multiple values → Error since it is unclear which of the values should be updated|\ref mdbx_put() with \ref MDBX_CURRENT|Error \ref MDBX_EMULTIVAL|
 |Key exist, Multiple values → Update particular entry of multi-value|\ref mdbx_replace() with \ref MDBX_CURRENT + \ref MDBX_NOOVERWRITE and the parameter `old_value` filled with the value that wanna to update|Update one multi-value entry|
 |Key exist, Multiple values → Update the current entry of multi-value|\ref mdbx_cursor_put() with \ref MDBX_CURRENT|Update one multi-value entry|
@@ -1668,7 +1668,8 @@ typedef enum MDBX_put_flags {
 
   /** Has effect only for \ref MDBX_DUPSORT tables.
    * For deletion: remove all multi-values (aka duplicates) for given key.
-   * For upsertion: replace all multi-values for given key with a new one. */
+   * For upsertion: replace all multi-values for given key with a new one.
+   * Not applicable to \ref mdbx_replace() which rejects it. */
   MDBX_ALLDUPS = UINT32_C(0x80),
 
   /** For upsertion: Just reserve space for data, don't copy it.
@@ -3144,6 +3145,12 @@ LIBMDBX_API int mdbx_env_close_ex(MDBX_env *env, bool dont_sync);
  * \ingroup c_opening */
 LIBMDBX_INLINE_API(int, mdbx_env_close, (MDBX_env * env)) { return mdbx_env_close_ex(env, false); }
 
+/* \note `fork()` waits (retrying) while another thread of the process opens, closes, renames or drops a table handle,
+ * resizes or pre-syncs an environment, or runs a libmdbx callback while holding a lock of one of these, so that the
+ * child does not inherit them half-done. Therefore `fork()` must not be called from any libmdbx callback (logger,
+ * panic, handle-slow-readers), and no libmdbx callback may wait for a thread that may call `fork()`: such a `fork()`
+ * keeps retrying forever. */
+
 #if defined(DOXYGEN) || !(defined(_WIN32) || defined(_WIN64))
 /** \brief Восстанавливает экземпляр среды в дочернем процессе после ветвления
  * родительского процесса посредством `fork()` и родственных системных вызовов.
@@ -3320,6 +3327,19 @@ LIBMDBX_API int mdbx_env_warmup(const MDBX_env *env, const MDBX_txn *txn, MDBX_w
  * transaction running by other thread, or \ref MDBX_BUSY will be returned if
  * function called within a write transaction.
  *
+ * \note For an environment with a lock file, a runtime change of the flags
+ * defining the sync/durability mode is checked against the mode recorded
+ * in the lock file, in the same way as at \ref mdbx_env_open(). If such a
+ * change would create the mode mixing refused at \ref mdbx_env_open()
+ * and other processes are working with the database, \ref MDBX_INCOMPATIBLE
+ * is returned. Otherwise the change is applied and the recorded mode is
+ * updated, so that the open-time check of later processes accounts for
+ * runtime durability changes.
+ * Please also note, that the durable i/o paths (e.g. the write-through
+ * handles) are established at \ref mdbx_env_open() depending on the initial
+ * flags, so making an environment more durable at runtime is correct
+ * but may be less optimized than opening it with the durable flags.
+ *
  * \param [in] env      An environment handle returned
  *                      by \ref mdbx_env_create().
  * \param [in] flags    The \ref env_flags to change, bitwise OR'ed together.
@@ -3327,7 +3347,13 @@ LIBMDBX_API int mdbx_env_warmup(const MDBX_env *env, const MDBX_txn *txn, MDBX_w
  *
  * \returns A non-zero error value on failure and 0 on success,
  *          some possible errors are:
- * \retval MDBX_EINVAL  An invalid parameter was specified. */
+ * \retval MDBX_EINVAL     An invalid parameter was specified.
+ * \retval MDBX_EPERM      The specified flags cannot be changed at runtime.
+ * \retval MDBX_EACCESS    The environment is open in read-only mode.
+ * \retval MDBX_INCOMPATIBLE The requested change of the sync/durability mode
+ *                          would create the mode mixing refused at
+ *                          \ref mdbx_env_open(), while other processes
+ *                          are working with the database. */
 LIBMDBX_API int mdbx_env_set_flags(MDBX_env *env, MDBX_env_flags_t flags, bool onoff);
 
 /** \brief Get environment flags.
@@ -5061,6 +5087,12 @@ LIBMDBX_API int mdbx_put(MDBX_txn *txn, MDBX_dbi dbi, const MDBX_val *key, MDBX_
  *                           (\ref MDBX_CURRENT | \ref MDBX_NOOVERWRITE)
  *                           combination for selection particular item from
  *                           multi-value/duplicates.
+ *                           The flags are a subset of those of \ref mdbx_put():
+ *                           \ref MDBX_ALLDUPS is not applicable here and rejected
+ *                           with \ref MDBX_EINVAL, as well as \ref MDBX_APPEND
+ *                           and \ref MDBX_APPENDDUP together with
+ *                           \ref MDBX_CURRENT; the deletion (new_data = NULL)
+ *                           requires \ref MDBX_CURRENT and forbids the rest.
  *
  * \see mdbx_replace_ex()
  * \see \ref c_crud_hints "Quick reference for Insert/Update/Delete operations"
@@ -5117,6 +5149,12 @@ typedef int (*MDBX_preserve_func)(void *context, MDBX_val *target, const void *s
  *                           (\ref MDBX_CURRENT | \ref MDBX_NOOVERWRITE)
  *                           combination for selection particular item from
  *                           multi-value/duplicates.
+ *                           The flags are a subset of those of \ref mdbx_put():
+ *                           \ref MDBX_ALLDUPS is not applicable here and rejected
+ *                           with \ref MDBX_EINVAL, as well as \ref MDBX_APPEND
+ *                           and \ref MDBX_APPENDDUP together with
+ *                           \ref MDBX_CURRENT; the deletion (new_data = NULL)
+ *                           requires \ref MDBX_CURRENT and forbids the rest.
  * \param [in] preserver     The callback to preserve an original data in case
  *                           it is on a dirty page and could be overwritten.
  * \param [in] preserver_context The optional context pointer for use within the preserving callback.
@@ -5753,6 +5791,9 @@ LIBMDBX_API int mdbx_cursor_scan_from(MDBX_cursor *cursor, MDBX_predicate_func *
  *                        but not a pairs.
  * \param [in] op         A cursor operation \ref MDBX_cursor_op (only
  *                        \ref MDBX_FIRST and \ref MDBX_NEXT are supported).
+ *                        \ref MDBX_FIRST always starts from the first pair,
+ *                        whatever the cursor position; \ref MDBX_NEXT
+ *                        continues from the current position.
  *
  * \returns A non-zero error value on failure and 0 on success,
  *          some possible errors are:
