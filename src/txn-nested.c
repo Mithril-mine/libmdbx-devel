@@ -351,17 +351,41 @@ static int nested_start(MDBX_txn *const nested, MDBX_txn *parent) {
   nested->owner = parent->owner;
   nested->wr.troika = parent->wr.troika;
 
-  const size_t len = pnl_size(parent->wr.repnl) + parent->wr.loose_count;
-  tASSERT0(nested, !nested->wr.repnl);
-  nested->wr.repnl = pnl_alloc((len > MDBX_PNL_INITIAL) ? len : MDBX_PNL_INITIAL);
-  if (unlikely(!nested->wr.repnl))
-    return LOG_IFERR(MDBX_ENOMEM);
-
+  /* The geometry and DBI-related state must be snapshotted before the first
+   * fallible allocation: when the begin fails here, nested_undo() of the
+   * never-started nested transaction compares nested->geo with the parent's
+   * one to detect "a resize performed by the nested transaction". Against a
+   * zeroed geo such comparison is always true, so the undo ran a spurious
+   * dxb_resize() and, when refused (regular for Windows with an active
+   * reader holding the remap lock), promoted the zeroed geometry into the
+   * parent, corrupting it (see
+   * <https://github.com/Mithril-mine/libmdbx-devel/issues/448>). */
+  /* The geometry and DBI-related state must be snapshotted before the first
+   * fallible allocation: when the begin fails here, nested_undo() of the
+   * never-started nested transaction compares nested->geo with the parent's
+   * one to detect "a resize performed by the nested transaction". Against a
+   * zeroed geo such comparison is always true, so the undo ran a spurious
+   * dxb_resize() and, when refused (regular for Windows with an active
+   * reader holding the remap lock), promoted the zeroed geometry into the
+   * parent, corrupting it (see
+   * <https://github.com/Mithril-mine/libmdbx-devel/issues/448>). */
 #if MDBX_ENABLE_DBI_SPARSE
   nested->dbi_sparse = parent->dbi_sparse;
 #endif /* MDBX_ENABLE_DBI_SPARSE */
   nested->dbi_seqs = parent->dbi_seqs;
   nested->geo = parent->geo;
+
+  const size_t len = pnl_size(parent->wr.repnl) + parent->wr.loose_count;
+  tASSERT0(nested, !nested->wr.repnl);
+  nested->wr.repnl = pnl_alloc((len > MDBX_PNL_INITIAL) ? len : MDBX_PNL_INITIAL);
+  /* the fault site observes (and, when armed, fails) the begin at its first
+   * allocation, where nothing has been mutated yet */
+  int injected = MDBX_SUCCESS;
+  MPROBE_FAULT(txn_nested_start_enomem, injected);
+  if (unlikely(injected != MDBX_SUCCESS))
+    return injected;
+  if (unlikely(!nested->wr.repnl))
+    return LOG_IFERR(MDBX_ENOMEM);
 
   int err = txn_dpl_alloc(nested);
   if (unlikely(err != MDBX_SUCCESS))
@@ -459,8 +483,12 @@ int txn_nested_create(MDBX_txn *parent, bool readonly) {
 
   rkl_init(&nested->wr.gc.comeback);
   int rc = nested_start(nested, parent);
-  if (unlikely(rc != MDBX_SUCCESS))
+  if (unlikely(rc != MDBX_SUCCESS)) {
+    /* a failed begin leaves the nested transaction partially initialized,
+     * legitimately inconsistent for the abort-path state checks */
+    nested->flags |= MDBX_TXN_ERROR;
     txn_nested_abort(nested);
+  }
   return rc;
 }
 
@@ -485,6 +513,9 @@ static int nested_undo(MDBX_txn *nested) {
   if (unlikely(parent->geo.upper != nested->geo.upper || parent->geo.now != nested->geo.now) &&
       !(parent->flags & MDBX_TXN_ERROR) && !(env->flags & ENV_FATAL_ERROR)) {
     /* undo resize performed by nested txn */
+    int injected = MDBX_SUCCESS;
+    MPROBE_FAULT(txn_nested_geo_undo, injected);
+    (void)injected;
     int err = dxb_resize(env, parent->geo.first_unallocated, parent->geo.now, parent->geo.upper, txn_shrink_allowed);
     if (err == MDBX_EPERM) {
       /* unable undo resize (it is regular for Windows),
@@ -533,8 +564,9 @@ static void nested_free(MDBX_txn *nested) {
 int txn_nested_abort(MDBX_txn *nested) {
   tASSERT0(nested, nested != nested->env->basal_txn);
   tASSERT0(nested, nested->parent->nested == nested && (nested->parent->flags & MDBX_TXN_HAS_CHILD) != 0);
-  tASSERT1(nested, txn_dpl_check(nested));
-  tASSERT1(nested, pnl_check_allocated(nested->wr.repnl, nested->geo.first_unallocated - 1));
+  tASSERT1(nested, (nested->flags & MDBX_TXN_ERROR) || txn_dpl_check(nested));
+  tASSERT1(nested, (nested->flags & MDBX_TXN_ERROR) ||
+                       pnl_check_allocated(nested->wr.repnl, nested->geo.first_unallocated - 1));
   tASSERT1(nested, memcmp(&nested->wr.troika, &nested->parent->wr.troika, sizeof(troika_t)) == 0);
 
   /* Restore the parent's cursors from their backups instead of merging the

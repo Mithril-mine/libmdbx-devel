@@ -176,6 +176,9 @@ if(MDBX_PROBES)
   set_tests_properties(gh0334_remap PROPERTIES ENVIRONMENT "MDBX_PROBES=1")
   add_issue_test(gh0337 SOURCE "issue_gh0337.c++")
   set_tests_properties(gh0337 PROPERTIES ENVIRONMENT "MDBX_PROBES=1")
+  add_issue_test(gh0448 SOURCE "issue_gh0448.c++")
+  target_compile_definitions(issue_gh0448 PRIVATE MDBX_PROBES)
+  set_tests_properties(gh0448 PROPERTIES ENVIRONMENT "MDBX_PROBES=1")
 endif()
 
 # Tests requiring the tools (MDBX_BUILD_TOOLS, the mdbx_dump/load/stat binaries).
