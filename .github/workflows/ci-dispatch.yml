@@ -4,8 +4,9 @@ name: ci-dispatch
 # docs/engineering/testing-infra-v3.md).
 #
 # Triggers:
-#   push        -> change-addressed cells (diff vs previous commit, capped to
-#                  CI_PUSH_CAP, fast scope). Branches: devel, master.
+#   push        -> change-addressed cells (diff vs the nearest successful
+#                  base run, fast scope). Branches: any — the orchestrator
+#                  deduplicates the run against an open PR's gate (PR wins).
 #   (no schedule: nightly ownership belongs to the per-platform workflows
 #   ci-linux/ci-windows/ci-macos/ci-android; this dispatcher is the push gate
 #   and the manual/agent entry point for profiles/cells.)
