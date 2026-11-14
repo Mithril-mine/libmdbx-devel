@@ -17,7 +17,6 @@ Usage:
 
 import argparse
 import json
-import os
 
 
 def covered_lines_from_segments(segments) -> set:
