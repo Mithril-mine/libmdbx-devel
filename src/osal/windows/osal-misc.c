@@ -145,6 +145,19 @@ int osal_fileid_by_fd(mdbx_filehandle_t fd, osal_fileid_t *id) {
   return MDBX_SUCCESS;
 }
 
+int osal_fileid_by_path(const pathchar_t *pathname, osal_fileid_t *id) {
+  /* FILE_FLAG_BACKUP_SEMANTICS allows to stat a directory as well;
+   * FILE_READ_ATTRIBUTES requires no more than the right to query metadata. */
+  const HANDLE hFile =
+      CreateFileW(pathname, FILE_READ_ATTRIBUTES, FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE, nullptr,
+                  OPEN_EXISTING, FILE_FLAG_BACKUP_SEMANTICS, nullptr);
+  if (unlikely(hFile == INVALID_HANDLE_VALUE))
+    return (int)GetLastError();
+  const int rc = osal_fileid_by_fd(hFile, id);
+  CloseHandle(hFile);
+  return rc;
+}
+
 uint64_t osal_monotime(void) {
   LARGE_INTEGER counter;
   if (QueryPerformanceCounter(&counter))

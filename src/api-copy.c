@@ -762,6 +762,19 @@ __cold static int copy2pathname(MDBX_txn *txn, const pathchar_t *dest_path, MDBX
   if (unlikely(!dest_path || *dest_path == '\0'))
     return MDBX_EINVAL;
 
+  /* The destination must not be the source database's own file or its lock
+   * file: copying onto a live database destroys it, and per-process locks
+   * cannot detect this under the legacy F_SETLK locking (no conflicts within
+   * one process, and no flock is held on a data file in the operational
+   * mode), see <https://github.com/Mithril-mine/libmdbx-devel/issues/450>. */
+  osal_fileid_t dst_fileid;
+  if (likely(osal_fileid_by_path(dest_path, &dst_fileid) == MDBX_SUCCESS)) {
+    if (unlikely(osal_fileid_is_set(&txn->env->dxb_fileid) && osal_fileid_eq(&dst_fileid, &txn->env->dxb_fileid)))
+      return MDBX_EINVAL;
+    if (unlikely(osal_fileid_is_set(&txn->env->lck_fileid) && osal_fileid_eq(&dst_fileid, &txn->env->lck_fileid)))
+      return MDBX_EINVAL;
+  }
+
   /* The destination path must exist, but the destination file must not.
    * We don't want the OS to cache the writes, since the source data is
    * already in the OS cache. */

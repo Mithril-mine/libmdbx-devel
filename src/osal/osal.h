@@ -302,9 +302,7 @@ MDBX_NOTHROW_PURE_FUNCTION MDBX_MAYBE_UNUSED static inline bool osal_fileid_is_s
 }
 
 #ifndef __cplusplus
-#if !IS_WINDOWS /* by_path is used on POSIX only: the neighbors-check runs before the files are opened */
 MDBX_INTERNAL int osal_fileid_by_path(const pathchar_t *pathname, osal_fileid_t *id);
-#endif /* !Windows */
 MDBX_INTERNAL int osal_fileid_by_fd(mdbx_filehandle_t fd, osal_fileid_t *id);
 
 /* Actually this is not ioring for now, but on the way. */
