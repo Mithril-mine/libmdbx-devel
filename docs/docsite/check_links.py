@@ -24,7 +24,6 @@ Offline mode is part of `make docsite`; `make check-links-live` runs the
 online pass.
 """
 
-import json
 import os
 import re
 import subprocess

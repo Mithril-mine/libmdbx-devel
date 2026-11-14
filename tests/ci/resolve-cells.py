@@ -9,7 +9,6 @@
 # Output: JSON array of {"cell": id, "runs-on": ..., "scope": ...} on stdout;
 # stats on stderr. Exit 1 on unknown cells.
 import json
-import os
 import sys
 
 
