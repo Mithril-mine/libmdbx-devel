@@ -1,5 +1,53 @@
 # Cursor contract: states and the full list of cases
 
+## Summary: marks for the `MDBX_SET` family
+
+The `MDBX_SET` family has 40 rows: SET-1..6, SETK-1..6, SR-1..8, LB-1..11, UB-1..8, and C-1 for this family.
+Marks: **20 keep, 11 change, 9 ask**. Rows, rules and reasons are in 4.3.1; the questions are in section 5.
+
+| Row | Mark | Why, in one line |
+|---|---|---|
+| SR-3 | change | Past the last key from N or P: Xb (plain) or Xv (DUPSORT), while SR-4 gives Xa; proposed: always Xa. |
+| SR-5 | change | Past the last key from an anchor on another leaf: Xb or Xv, while SR-4 gives Xa. |
+| SR-8 | change | Over-long key: the state follows SR-3 and SR-5; the `MDBX_NOTFOUND` code is kept. |
+| LB-4 | change | As SR-3. |
+| LB-5 | change | As SR-5 for the other-leaf case; the rightmost-leaf case is already Xa. |
+| LB-6 | change | Value above all values of the last key: reads as Xa, but `GET_CURRENT` without data returns the last key. |
+| LB-11 | change | As SR-8. |
+| UB-3 | change | Exact match on the last record: Xb, `GET_CURRENT` returns the bound itself; proposed: Xa. |
+| UB-4 | change | As SR-3. |
+| UB-5 | change | As LB-5. |
+| UB-8 | change | As SR-8. |
+| SET-2 | ask | A10: after a failed exact search `on_first`/`on_last` read a stale index; `mdbx.h` says TRUE. |
+| SET-3 | ask | A10, as SET-2. |
+| SET-6 | ask | A10 for the state; the `MDBX_NOTFOUND` code for an over-long key is a keep (M-2). |
+| SETK-2 | ask | A10, as SET-2. |
+| SETK-3 | ask | A10, as SET-2. |
+| SETK-6 | ask | A10, as SET-6. |
+| LB-9 | ask | A9: plain table, NULL data: `mdbx.h` says "as `MDBX_SET_RANGE`", which accepts it; the code returns `MDBX_EINVAL`. |
+| UB-7 | ask | A9, as LB-9, for NULL data on a plain table. |
+| LB-10 | ask | A11: DUPSORT, NULL value pointer: always `MDBX_RESULT_TRUE`, even for an exact key; or `MDBX_SUCCESS`. |
+
+All eleven change rows get one rule: when nothing is found at or after the key, the cursor is past the end (Xa).
+Today the same outcome leaves Xa, Xb or Xv, by the starting state, the table kind and the code path.
+Xv looks like a defect: the cursor is past the end and `PREV` works, but `GET_CURRENT` says `MDBX_ENODATA`.
+
+Corrections to the state model from the measurement:
+
+- **New state Xv** (2.1, M-1): past the end on a DUPSORT table whose last key has several values, reached by a
+  path that resets the values cursor first. It is the Xb encoding with the values cursor reset, so
+  `GET_CURRENT` returns `MDBX_ENODATA` instead of the last record.
+- **2.4 point 4 corrected:** deleting the last key of a DUPSORT table gives Xv, not Xb, when the new last key has
+  several values.
+- **2.2 corrected (M-5):** after a value delete (Vd, and Vt on a key that is not the last key) the outer probes
+  read like D: `GET_CURRENT` and `NEXT` return the same record. The Vt row itself holds where measured; my first note misread its `NEXT_DUP` column.
+- **Probe limits, not one state (2.4 point 8):** P and H on a one-key page (M-3), and N on an empty table against
+  D0. Other calls separate them for the user.
+- **M-2:** on tables with variable-length keys an over-long key gives `MDBX_NOTFOUND`, never `MDBX_BAD_VALSIZE`,
+  for every read in this family. I read it as deliberate; I mark the return code keep.
+- **M-11:** the program labels a few DUPSORT lines by intent, not by result; their states fit other rows, no
+  mark changes.
+
 Working draft for Leonid. It holds sections 4 to 6 of the approved proposal
 ("The cursor contract: how I propose to write it", 2026-11-13) for every call in scope:
 the user-visible cursor states, and one row per call, starting state and outcome.
@@ -8,9 +56,9 @@ Status of this draft:
 
 - Only the `MDBX_SET` family (4.3.1) and the SET part of C-1 are measured, on Windows and on Linux.
   Every other row of the column "State today (measured)" says "not measured".
-- The column "Proposed rule" is empty. I fill it in a later step, family by family.
-- The column "Mark" is empty, except "ask?" where `mdbx.h` and the code visibly disagree.
-  Each "ask?" has a note with the code reference. Section 5 lists all of them.
+- The columns "Proposed rule" and "Mark" are filled for the `MDBX_SET` family and the SET part of C-1.
+  Elsewhere "Proposed rule" is empty, and "Mark" is empty except "ask?" where `mdbx.h` and the code
+  visibly disagree. Each "ask?" has a note with the code reference. Section 5 lists all of them.
 - Notes marked "inferred" come from reading the code. They are not findings.
   The measuring program confirms or refutes each of them.
 
@@ -61,12 +109,14 @@ The probe columns show what I expect from reading the code. The measuring progra
 | E | at the end, still readable | TRUE | the last record | `MDBX_NOTFOUND` | the record before the last | `z_eof_soft` | `MDBX_LAST` (plain table), `MDBX_NEXT` that returns `MDBX_NOTFOUND` at the end |
 | Xa | past the end, nothing readable | TRUE | `MDBX_NOTFOUND` | `MDBX_NOTFOUND` | the last record | `z_eof_soft` + `z_eof_hard`, index = number of keys | `MDBX_SET_RANGE` miss past the last key, from a cursor already on the rightmost leaf page |
 | Xb | past the end, last record still readable | TRUE | the last record | `MDBX_NOTFOUND` | the last record | `z_eof_soft` + `z_eof_hard`, index = last key | `MDBX_SET_RANGE` miss past the last key through a tree search; delete of the last record; see notes |
+| Xv | past the end, the last key has several values (`MDBX_DUPSORT` only) | TRUE | `MDBX_ENODATA` | `MDBX_NOTFOUND` | the last value of the last key | the Xb encoding, but the last key has several values and the inner (values) cursor is reset | a path to Xb that resets the values cursor first, on a last key with several values: `MDBX_SET_RANGE`, `MDBX_SET_LOWERBOUND`, `MDBX_SET_UPPERBOUND` past the last key through a tree search; delete of the last key (M-1) |
 | D | after a delete | FALSE | the record after the deleted one | the same record | the record before the deleted one | `z_after_delete` | `mdbx_cursor_del()`; a delete of the record under the cursor through another cursor or `mdbx_del()` |
 | D0 | after a delete that emptied the table | TRUE | `MDBX_ENODATA` | `MDBX_NOTFOUND` once, then P | `MDBX_NOTFOUND` once, then P | stack empty, `z_after_delete` | delete of the only record |
 
 `mdbx_cursor_on_first()` and `mdbx_cursor_on_last()` return TRUE for N, P and D0, because the stack is empty
 (`src/cursor-nav.c:331-346 @ c26d8d4b`). For H they are computed from a stale index (see 2.5).
-For the other states they follow the index.
+For the other states they follow the index. For Xv (measured): `on_first` FALSE, `on_last` TRUE,
+`on_first_dup` and `on_last_dup` TRUE.
 
 Code references for the table:
 
@@ -78,12 +128,18 @@ Code references for the table:
 - E, Xa, Xb: `src/cursor.h:55-86 @ c26d8d4b`, `src/cursor-nav.c:207-217 @ c26d8d4b`,
   `src/cursor-nav.c:266-283 @ c26d8d4b`, `src/cursor-seek.c:99-117 @ c26d8d4b`,
   `src/cursor-seek.c:279-284 @ c26d8d4b`.
+- Xv: `src/cursor-seek.c:42 @ c26d8d4b`, `src/cursor-seek.c:150-154 @ c26d8d4b`, `src/cursor-nav.c:274-281 @ c26d8d4b`,
+  `src/cursor-seek.c:300-306 @ c26d8d4b`, `src/cursor-mut.c:1112-1117 @ c26d8d4b`; the path is in M-1 (4.3.1).
 - D, D0: `src/cursor-mut.c:1067-1097 @ c26d8d4b`, `src/cursor-nav.c:207-210 @ c26d8d4b`.
 
 ### 2.2 Position among the values of a key (`MDBX_DUPSORT` tables only)
 
 On a `MDBX_DUPSORT` table the cursor has a second position: which value of the current key.
-I write it after the main state, for example `R·Vm`. The main state is R or E.
+I write it after the main state, for example `R·Vm`. The main state is R or E, with one exception
+(measured, M-5): after a value delete (Vd, and Vt on a key that is not the last key) the main probes read
+like D. `GET_CURRENT` and `NEXT` return the same record, as the `mdbx.h` delete note promises
+(`mdbx.h:6769-6771 @ c26d8d4b`), and `eof` is FALSE. So I write these positions as `D·Vd` and `D·Vt`;
+rows below that say `R·Vd` or `R·Vt` mean the same position.
 
 | Code | Position | `on_first_dup` / `on_last_dup` | `GET_CURRENT` | `NEXT_DUP` | `PREV_DUP` | Internal encoding |
 |---|---|---|---|---|---|---|
@@ -94,6 +150,11 @@ I write it after the main state, for example `R·Vm`. The main state is R or E.
 | Vd | after deleting a value; more values follow | by index | the value after the deleted one | that same value | the value before the deleted one | inner `z_after_delete` |
 | Vt | after deleting the last value; other values remain | FALSE / TRUE | the first value of the next key | `MDBX_NOTFOUND` | the last remaining value (inferred) | inner `z_inner_tail_deleted` + `z_eof_soft` + `z_eof_hard` |
 | Vx | past the last value after a failed pair search | FALSE / TRUE | `MDBX_NOTFOUND` | `MDBX_NOTFOUND` | the last value (inferred) | inner `z_eof_soft` + `z_eof_hard`, index = number of values |
+
+Measured for Vt (M-5): on a key that is not the last key, `on_first_dup` FALSE, `on_last_dup` TRUE,
+`GET_CURRENT` and `NEXT` the first value of the next key, `PREV` the last remaining value. On the last key,
+`GET_CURRENT` and `NEXT` return `MDBX_NOTFOUND`, `PREV` the last remaining value, `eof` FALSE.
+The `NEXT_DUP` and `PREV_DUP` columns are not in the probe set; they stay inferred.
 
 Vt and Vx look alike, but two calls tell them apart.
 `MDBX_GET_CURRENT` returns the next record from Vt and `MDBX_NOTFOUND` from Vx
@@ -125,13 +186,17 @@ Vx is set at `src/cursor-seek.c:548-555 @ c26d8d4b` and `src/cursor-seek.c:615-6
    They differ in two visible ways. `on_first`/`on_last` read the stale index of H.
    And `mdbx_cursor_scroll()`, `mdbx_cursor_delete_range()`, `mdbx_cursor_distribute()` and the range
    actions of `mdbx_cursor_bunch_delete()` accept H but reject P with `MDBX_ENODATA` (section 5, A6).
-3. **"past the end" is two states, Xa and Xb.** Both have the same flags (`z_eof_soft` + `z_eof_hard`).
-   They differ only in the stored index. `GET_CURRENT` returns `MDBX_NOTFOUND` in Xa and the last
-   record in Xb (`src/cursor-seek.c:279-284 @ c26d8d4b`). Which one the user gets depends on the
-   starting state and the tree shape (rows SR-3 to SR-5). Inferred, to measure.
+3. **"past the end" is three states for the user: Xa, Xb and Xv.** All have the same flags (`z_eof_soft` +
+   `z_eof_hard`). Xa and Xb differ only in the stored index. `GET_CURRENT` returns `MDBX_NOTFOUND` in Xa and
+   the last record in Xb (`src/cursor-seek.c:279-284 @ c26d8d4b`). Xv is the Xb encoding on a last key with
+   several values whose values cursor was reset on the way: `GET_CURRENT` returns `MDBX_ENODATA` (M-1). Which one the user gets depends on the
+   starting state, the tree shape and the number of values of the last key (rows SR-3 to SR-5). Measured.
 4. **"after a delete" is D and D0, plus Vd and Vt.** Deleting the last record of a non-empty table
    does not give D. It gives Xb, because `cursor_sibling_right()` overwrites `z_after_delete`
-   (`src/cursor-mut.c:1112-1117 @ c26d8d4b`, `src/cursor-nav.c:280 @ c26d8d4b`). Deleting the only
+   (`src/cursor-mut.c:1112-1117 @ c26d8d4b`, `src/cursor-nav.c:280 @ c26d8d4b`). On a `MDBX_DUPSORT` table
+   whose new last key has several values it gives Xv, not Xb: the same code then resets the inner cursor
+   (`src/cursor-mut.c:1115 @ c26d8d4b`). Measured: Xb on the plain tables and on the DUPSORT multi table
+   (new last key with one value), Xv on the DUPSORT small table (M-1). Deleting the only
    record gives D0: the first relative move returns `MDBX_NOTFOUND`, the second `MDBX_ENODATA`
    (`src/cursor-nav.c:161-170 @ c26d8d4b`).
 5. **"forbidden" is U.** "Unbound" and "transaction ended" look identical to the user: the end of a
@@ -142,7 +207,16 @@ Vx is set at `src/cursor-seek.c:548-555 @ c26d8d4b` and `src/cursor-seek.c:615-6
 7. **Two states are named but left to other contracts (2.3).**
 8. **Pairs the probe set cannot separate, or separates by one probe only:** E and "R on the last record"
    differ only by `eof`. P and N differ only by `NEXT`/`PREV`. P and H differ only by
-   `on_first`/`on_last` (inferred).
+   `on_first`/`on_last` (measured, M-6).
+   Two pairs read the same in the measurement. Both are limits of the probe set, not one state for the user:
+   - **P and H on a one-key page (M-3).** After a miss below the only key, the stale index is on that key, and
+     `on_first` and `on_last` are TRUE for H too. The user still sees a difference: `mdbx_cursor_scroll()`, `mdbx_cursor_delete_range()`,
+     `mdbx_cursor_distribute()` and the range actions of `mdbx_cursor_bunch_delete()` accept H and reject P
+     (A6, inferred). If A6 and A10 follow `mdbx.h`, P and H become one state for the user.
+   - **N on an empty table and D0.** One move on a copy cannot separate them. A second `MDBX_NEXT` on the same
+     copy does: N answers `MDBX_NOTFOUND` again, because it keeps acting as `MDBX_FIRST`; D0 became P after the
+     first move and answers `MDBX_ENODATA` (`src/cursor-nav.c:161-170 @ c26d8d4b`,
+     `src/tree-search.c:45-49 @ c26d8d4b`). Inferred, not measured.
 
 ### 2.5 State-level disagreements
 
@@ -158,7 +232,7 @@ These are about the probe calls, not about one row. Section 5 lists them with th
 - **A10. `on_first`/`on_last` on H.** `mdbx.h` promises TRUE for a cursor "not positioned at all"
   (`mdbx.h:7056-7059 @ c26d8d4b`, `mdbx.h:7102-7105 @ c26d8d4b`). An H cursor keeps its stack and
   index (`src/cursor-seek.c:100-110 @ c26d8d4b`), and both calls read that index
-  (`src/cursor-nav.c:331-346 @ c26d8d4b`). So they can return FALSE. Inferred, to measure.
+  (`src/cursor-nav.c:331-346 @ c26d8d4b`). So they can return FALSE. Measured (M-6).
 
 ## 3. Table format and outcomes
 
@@ -195,7 +269,7 @@ Rules I used to group starting states. A row says which rule applies.
 
 | ID | Call | Starting state | Outcome | What `mdbx.h` promises | State today (measured) | Proposed rule | Mark |
 |---|---|---|---|---|---|---|---|
-| C-1 | every `mdbx_cursor_get()` operation, `mdbx_cursor_put()`, `mdbx_cursor_del()`, `mdbx_cursor_delete_range()`, `mdbx_cursor_bunch_delete()`, `mdbx_cursor_get_batch()`, `mdbx_cursor_scan()`, `mdbx_cursor_scan_from()`, `mdbx_cursor_scroll()`, `mdbx_cursor_distribute()`, `mdbx_cursor_copy()` as source | U | `MDBX_EINVAL` | "A cursor cannot be used ... when its transaction has ended, except with mdbx_cursor_bind() and mdbx_cursor_renew()" `mdbx.h:6090-6092 @ c26d8d4b` | SET family only: all five `MDBX_SET*` operations return `MDBX_EINVAL` on a created (unbound) cursor; same on both. The other calls: not measured | | |
+| C-1 | every `mdbx_cursor_get()` operation, `mdbx_cursor_put()`, `mdbx_cursor_del()`, `mdbx_cursor_delete_range()`, `mdbx_cursor_bunch_delete()`, `mdbx_cursor_get_batch()`, `mdbx_cursor_scan()`, `mdbx_cursor_scan_from()`, `mdbx_cursor_scroll()`, `mdbx_cursor_distribute()`, `mdbx_cursor_copy()` as source | U | `MDBX_EINVAL` | "A cursor cannot be used ... when its transaction has ended, except with mdbx_cursor_bind() and mdbx_cursor_renew()" `mdbx.h:6090-6092 @ c26d8d4b` | SET family only: all five `MDBX_SET*` operations return `MDBX_EINVAL` on a created (unbound) cursor; same on both. The other calls: not measured | SET family: every operation on an unbound cursor returns `MDBX_EINVAL`; the cursor stays unbound (by code, not probed) | SET family: **keep**: matches `mdbx.h`, same on both. Other calls: not marked yet |
 | C-2 | `mdbx_cursor_get()` with a value outside `MDBX_cursor_op` | any bound | `MDBX_EINVAL` | "MDBX_EINVAL An invalid parameter was specified." `mdbx.h:6448 @ c26d8d4b` | not measured | | |
 | C-3 | any call | transaction unusable (2.3) | `MDBX_BAD_TXN` or `MDBX_OUSTED` | failure-model contract, not covered here | not measured | | |
 | C-4 | any call | closed (2.3) | use after free | "must not be used again after this call" `mdbx.h:6238-6239 @ c26d8d4b` | not measured (cannot be measured safely) | | |
@@ -322,45 +396,45 @@ Grouping: G-seek, G-arg. The "rightmost leaf page" split matters only for a miss
 
 | ID | Call | Starting state | Outcome | What `mdbx.h` promises | State today (measured) | Proposed rule | Mark |
 |---|---|---|---|---|---|---|---|
-| SET-1 | `MDBX_SET` | any bound | success | "Position at specified key" `mdbx.h:1863 @ c26d8d4b` | R (DUPSORT: R·V1 on a key with several values, R·Vs on a one-value key); same on both; every starting state | | |
-| SET-2 | `MDBX_SET` | no anchor, key absent, table not empty | `MDBX_NOTFOUND` | "MDBX_NOTFOUND No matching key found." `mdbx.h:6447 @ c26d8d4b` | H; same on both. On a leaf page with one key the probes cannot tell it from P (M-3) | | |
-| SET-3 | `MDBX_SET` | anchored, key absent | `MDBX_NOTFOUND` | `mdbx.h:6447 @ c26d8d4b` | H; same on both; every anchored starting state | | |
-| SET-4 | `MDBX_SET` | any bound, empty table | `MDBX_NOTFOUND` | `mdbx.h:6447 @ c26d8d4b` | cursor unchanged (N stays N, D0 stays D0; all probes equal the start); same on both | | |
-| SET-5 | `MDBX_SET` | any bound | `MDBX_EINVAL` (key is NULL) | `mdbx.h:6448 @ c26d8d4b` | rc `MDBX_EINVAL`, cursor unchanged in every starting state; same on both | | |
-| SET-6 | `MDBX_SET` | any bound | `MDBX_BAD_VALSIZE` (key length outside the table limits) | mdbx.h is silent | rc `MDBX_NOTFOUND`, not `MDBX_BAD_VALSIZE`: the long key is searched like any absent key (M-2). State: H as in SET-2 and SET-3; unchanged on an empty table; same on both | | |
-| SETK-1 | `MDBX_SET_KEY` | any bound | success | "Position at specified key, return both key and data" `mdbx.h:1866 @ c26d8d4b` | R (DUPSORT: R·V1 on a key with several values, R·Vs on a one-value key); same on both; every starting state | | |
-| SETK-2 | `MDBX_SET_KEY` | no anchor, key absent, table not empty | `MDBX_NOTFOUND` | `mdbx.h:6447 @ c26d8d4b` | H; same on both. On a leaf page with one key the probes cannot tell it from P (M-3) | | |
-| SETK-3 | `MDBX_SET_KEY` | anchored, key absent | `MDBX_NOTFOUND` | `mdbx.h:6447 @ c26d8d4b` | H; same on both; every anchored starting state | | |
-| SETK-4 | `MDBX_SET_KEY` | any bound, empty table | `MDBX_NOTFOUND` | `mdbx.h:6447 @ c26d8d4b` | cursor unchanged (N stays N, D0 stays D0; all probes equal the start); same on both | | |
-| SETK-5 | `MDBX_SET_KEY` | any bound | `MDBX_EINVAL` (key is NULL) | `mdbx.h:6448 @ c26d8d4b` | rc `MDBX_EINVAL`, cursor unchanged in every starting state; same on both | | |
-| SETK-6 | `MDBX_SET_KEY` | any bound | `MDBX_BAD_VALSIZE` | mdbx.h is silent | rc `MDBX_NOTFOUND`, not `MDBX_BAD_VALSIZE`: the long key is searched like any absent key (M-2). State: H as in SETK-2 and SETK-3; unchanged on an empty table; same on both | | |
-| SR-1 | `MDBX_SET_RANGE` | any bound | success (exact key) | "Position at first key greater than or equal to specified key." `mdbx.h:1869 @ c26d8d4b` | R (DUPSORT: R·V1 or R·Vs); same on both | | |
-| SR-2 | `MDBX_SET_RANGE` | any bound | success (greater key) | `mdbx.h:1869 @ c26d8d4b` | R on the first greater key (DUPSORT: R·V1 or R·Vs); same on both | | |
-| SR-3 | `MDBX_SET_RANGE` | no anchor, key past the last key | `MDBX_NOTFOUND` | mdbx.h is silent on the state | plain: Xb (as inferred); DUPSORT: unmatched (M-1); same on both. Measured from N and from P | | |
-| SR-4 | `MDBX_SET_RANGE` | anchored on the rightmost leaf page, key past the last key | `MDBX_NOTFOUND` | mdbx.h is silent on the state | Xa, plain and DUPSORT (as inferred); same on both | | |
-| SR-5 | `MDBX_SET_RANGE` | anchored on another leaf page, key past the last key | `MDBX_NOTFOUND` | mdbx.h is silent on the state | plain: Xb (as inferred); DUPSORT: unmatched (M-1); same on both | | |
-| SR-6 | `MDBX_SET_RANGE` | any bound, empty table | `MDBX_NOTFOUND` | `mdbx.h:6447 @ c26d8d4b` | cursor unchanged (N stays N, D0 stays D0); same on both | | |
-| SR-7 | `MDBX_SET_RANGE` | any bound | `MDBX_EINVAL` (key is NULL) | `mdbx.h:6448 @ c26d8d4b` | rc `MDBX_EINVAL`, cursor unchanged in every starting state; same on both | | |
-| SR-8 | `MDBX_SET_RANGE` | any bound | `MDBX_BAD_VALSIZE` | mdbx.h is silent | rc `MDBX_NOTFOUND`, not `MDBX_BAD_VALSIZE` (M-2). State as for a key past the last key (SR-3, SR-4, SR-5); unchanged on an empty table; same on both | | |
-| LB-1 | `MDBX_SET_LOWERBOUND` | any bound | `MDBX_SUCCESS` (exact key; DUPSORT: exact pair) | "returns MDBX_SUCCESS if key found exactly or MDBX_RESULT_TRUE if greater key was found" `mdbx.h:1881-1888 @ c26d8d4b` | R, rc success (DUPSORT: R·V1, R·Vm, R·Vn or R·Vs by the pair found); same on both | | |
-| LB-2 | `MDBX_SET_LOWERBOUND` | any bound | `MDBX_RESULT_TRUE` (greater key or pair) | `mdbx.h:1881-1888 @ c26d8d4b` | R, rc `MDBX_RESULT_TRUE`; same on both. DUPSORT: also when the key exists and the value is below all its values (first value comes back with `MDBX_RESULT_TRUE`) | | |
-| LB-3 | `MDBX_SET_LOWERBOUND` (DUPSORT) | any bound; key found, value greater than all its values, a next key exists | `MDBX_RESULT_TRUE` (first value of the next key) | "the next pair was returned" `mdbx.h:1887-1888 @ c26d8d4b` | R·Vs (the first value of the next key), rc `MDBX_RESULT_TRUE`; same on both | | |
-| LB-4 | `MDBX_SET_LOWERBOUND` | no anchor, key past the last key | `MDBX_NOTFOUND` | mdbx.h is silent on this outcome | plain: Xb; DUPSORT: unmatched (M-1); same on both | | |
-| LB-5 | `MDBX_SET_LOWERBOUND` | anchored on the rightmost leaf page, key past the last key | `MDBX_NOTFOUND` | mdbx.h is silent on this outcome | Xa, plain and DUPSORT. From an anchor on another leaf page: plain Xb, DUPSORT: unmatched (M-1); same on both | | |
-| LB-6 | `MDBX_SET_LOWERBOUND` (DUPSORT) | any bound; key is the last key, value greater than all its values | `MDBX_NOTFOUND` | mdbx.h is silent on this outcome | Xa from every starting state, N included (a key past the last key from N gives Xb, LB-4); same on both | | |
-| LB-7 | `MDBX_SET_LOWERBOUND` | any bound, empty table | `MDBX_NOTFOUND` | mdbx.h is silent on this outcome | cursor unchanged (N stays N, D0 stays D0); same on both | | |
-| LB-8 | `MDBX_SET_LOWERBOUND` | any bound | `MDBX_EINVAL` (key is NULL) | `mdbx.h:6448 @ c26d8d4b` | rc `MDBX_EINVAL`, cursor unchanged in every starting state; same on both | | |
-| LB-9 | `MDBX_SET_LOWERBOUND` (plain) | any bound | `MDBX_EINVAL` (data is NULL) | "For non DUPSORT-ed collections this work the same to MDBX_SET_RANGE" `mdbx.h:1881-1883 @ c26d8d4b` | rc `MDBX_EINVAL`, cursor unchanged in every starting state (confirms A9); same on both | | ask? |
-| LB-10 | `MDBX_SET_LOWERBOUND` (DUPSORT) | any bound; data given with a NULL pointer | success or `MDBX_RESULT_TRUE`, value ignored | mdbx.h is silent | rc `MDBX_RESULT_TRUE`, not success: R·V1 on the first value of the key, the NULL pointer acts as a value below all values; same on both | | |
-| LB-11 | `MDBX_SET_LOWERBOUND` | any bound | `MDBX_BAD_VALSIZE` | mdbx.h is silent | rc `MDBX_NOTFOUND`, not `MDBX_BAD_VALSIZE` (M-2). State as for a key past the last key (LB-4, LB-5); unchanged on an empty table; same on both | | |
-| UB-1 | `MDBX_SET_UPPERBOUND` | any bound | success (greater key or pair found) | "returns MDBX_SUCCESS if the greater key was found or MDBX_NOTFOUND otherwise" `mdbx.h:1895-1902 @ c26d8d4b` | R, rc success (DUPSORT: R·Vs, R·V1 or R·Vn); same on both | | |
-| UB-2 | `MDBX_SET_UPPERBOUND` | any bound; exact match, a next record exists | success (the next record) | `mdbx.h:1895-1902 @ c26d8d4b` | R on the next record, rc success (DUPSORT: the next value, or the first value of the next key); same on both | | |
-| UB-3 | `MDBX_SET_UPPERBOUND` | any bound; exact match on the last record | `MDBX_NOTFOUND` | `mdbx.h:1895-1902 @ c26d8d4b` | plain: Xb (as inferred); DUPSORT: Xb·Vs when the pair is the last record; Xa when the value is above all values of the last key (the case of LB-6); same on both | | |
-| UB-4 | `MDBX_SET_UPPERBOUND` | no anchor, key past the last key | `MDBX_NOTFOUND` | `mdbx.h:1895-1902 @ c26d8d4b` | plain: Xb; DUPSORT: unmatched (M-1); same on both | | |
-| UB-5 | `MDBX_SET_UPPERBOUND` | anchored on the rightmost leaf page, key past the last key | `MDBX_NOTFOUND` | `mdbx.h:1895-1902 @ c26d8d4b` | Xa, plain and DUPSORT. From an anchor on another leaf page: plain Xb, DUPSORT: unmatched (M-1); same on both | | |
-| UB-6 | `MDBX_SET_UPPERBOUND` | any bound, empty table | `MDBX_NOTFOUND` | `mdbx.h:1895-1902 @ c26d8d4b` | cursor unchanged (N stays N, D0 stays D0); same on both | | |
-| UB-7 | `MDBX_SET_UPPERBOUND` | any bound | `MDBX_EINVAL` (key or data is NULL) | `mdbx.h:6448 @ c26d8d4b` | rc `MDBX_EINVAL` (key NULL or data NULL), cursor unchanged in every starting state; same on both | | |
-| UB-8 | `MDBX_SET_UPPERBOUND` | any bound | `MDBX_BAD_VALSIZE` | mdbx.h is silent | rc `MDBX_NOTFOUND`, not `MDBX_BAD_VALSIZE` (M-2). State as for a key past the last key (UB-4, UB-5); unchanged on an empty table; same on both | | |
+| SET-1 | `MDBX_SET` | any bound | success | "Position at specified key" `mdbx.h:1863 @ c26d8d4b` | R (DUPSORT: R·V1 on a key with several values, R·Vs on a one-value key); same on both; every starting state | The cursor is on the key (DUPSORT: on its first value), whatever the starting state | **keep**: matches `mdbx.h`; one result from every start, on both platforms |
+| SET-2 | `MDBX_SET` | no anchor, key absent, table not empty | `MDBX_NOTFOUND` | "MDBX_NOTFOUND No matching key found." `mdbx.h:6447 @ c26d8d4b` | H; same on both. On a leaf page with one key the probes cannot tell it from P (M-3) | `MDBX_NOTFOUND`; the cursor is unpositioned (H): `eof` TRUE; `GET_CURRENT`, `NEXT`, `PREV` return `MDBX_ENODATA` | **ask** (A10): `mdbx.h` says `on_first`/`on_last` are TRUE when not positioned; on H they read a stale index and can be FALSE (M-6) |
+| SET-3 | `MDBX_SET` | anchored, key absent | `MDBX_NOTFOUND` | `mdbx.h:6447 @ c26d8d4b` | H; same on both; every anchored starting state | As SET-2 (H), from every anchored start | **ask** (A10): `mdbx.h` says `on_first`/`on_last` are TRUE when not positioned; on H they read a stale index and can be FALSE (M-6) |
+| SET-4 | `MDBX_SET` | any bound, empty table | `MDBX_NOTFOUND` | `mdbx.h:6447 @ c26d8d4b` | cursor unchanged (N stays N, D0 stays D0; all probes equal the start); same on both | `MDBX_NOTFOUND`; the cursor is not changed (N stays N, D0 stays D0) | **keep**: there is nothing to position on; matches `mdbx.h` |
+| SET-5 | `MDBX_SET` | any bound | `MDBX_EINVAL` (key is NULL) | `mdbx.h:6448 @ c26d8d4b` | rc `MDBX_EINVAL`, cursor unchanged in every starting state; same on both | `MDBX_EINVAL`; the cursor is not changed | **keep**: the argument check runs before any move; matches `mdbx.h` |
+| SET-6 | `MDBX_SET` | any bound | `MDBX_BAD_VALSIZE` (key length outside the table limits) | mdbx.h is silent | rc `MDBX_NOTFOUND`, not `MDBX_BAD_VALSIZE`: the long key is searched like any absent key (M-2). State: H as in SET-2 and SET-3; unchanged on an empty table; same on both | A key longer than the table limit is searched like any absent key: `MDBX_NOTFOUND`, state as SET-2, SET-3, SET-4. A wrong length for a fixed-size or `MDBX_INTEGERKEY` key stays `MDBX_BAD_VALSIZE` | **ask** (A10) for the state, as SET-2; the return code is a keep (M-2) |
+| SETK-1 | `MDBX_SET_KEY` | any bound | success | "Position at specified key, return both key and data" `mdbx.h:1866 @ c26d8d4b` | R (DUPSORT: R·V1 on a key with several values, R·Vs on a one-value key); same on both; every starting state | As SET-1; the key and its (first) value are returned | **keep**: matches `mdbx.h`; one result from every start, on both platforms |
+| SETK-2 | `MDBX_SET_KEY` | no anchor, key absent, table not empty | `MDBX_NOTFOUND` | `mdbx.h:6447 @ c26d8d4b` | H; same on both. On a leaf page with one key the probes cannot tell it from P (M-3) | As SET-2 (H) | **ask** (A10): `mdbx.h` says `on_first`/`on_last` are TRUE when not positioned; on H they read a stale index and can be FALSE (M-6) |
+| SETK-3 | `MDBX_SET_KEY` | anchored, key absent | `MDBX_NOTFOUND` | `mdbx.h:6447 @ c26d8d4b` | H; same on both; every anchored starting state | As SET-3 (H) | **ask** (A10): `mdbx.h` says `on_first`/`on_last` are TRUE when not positioned; on H they read a stale index and can be FALSE (M-6) |
+| SETK-4 | `MDBX_SET_KEY` | any bound, empty table | `MDBX_NOTFOUND` | `mdbx.h:6447 @ c26d8d4b` | cursor unchanged (N stays N, D0 stays D0; all probes equal the start); same on both | As SET-4: the cursor is not changed | **keep**: there is nothing to position on; matches `mdbx.h` |
+| SETK-5 | `MDBX_SET_KEY` | any bound | `MDBX_EINVAL` (key is NULL) | `mdbx.h:6448 @ c26d8d4b` | rc `MDBX_EINVAL`, cursor unchanged in every starting state; same on both | `MDBX_EINVAL`; the cursor is not changed | **keep**: the argument check runs before any move; matches `mdbx.h` |
+| SETK-6 | `MDBX_SET_KEY` | any bound | `MDBX_BAD_VALSIZE` | mdbx.h is silent | rc `MDBX_NOTFOUND`, not `MDBX_BAD_VALSIZE`: the long key is searched like any absent key (M-2). State: H as in SETK-2 and SETK-3; unchanged on an empty table; same on both | As SET-6 | **ask** (A10) for the state, as SET-2; the return code is a keep (M-2) |
+| SR-1 | `MDBX_SET_RANGE` | any bound | success (exact key) | "Position at first key greater than or equal to specified key." `mdbx.h:1869 @ c26d8d4b` | R (DUPSORT: R·V1 or R·Vs); same on both | The cursor is on the key (DUPSORT: on its first value) | **keep**: matches `mdbx.h` |
+| SR-2 | `MDBX_SET_RANGE` | any bound | success (greater key) | `mdbx.h:1869 @ c26d8d4b` | R on the first greater key (DUPSORT: R·V1 or R·Vs); same on both | The cursor is on the first greater key (DUPSORT: on its first value) | **keep**: matches `mdbx.h` |
+| SR-3 | `MDBX_SET_RANGE` | no anchor, key past the last key | `MDBX_NOTFOUND` | mdbx.h is silent on the state | plain: Xb (as inferred); DUPSORT: Xv (M-1); same on both. Measured from N and from P | `MDBX_NOTFOUND`; past the end (Xa): `eof` TRUE, `GET_CURRENT` and `NEXT` `MDBX_NOTFOUND`, `PREV` the last record (DUPSORT: the last value of the last key). The same from every starting state, tree shape and table kind | **change**: today Xb or Xv by table kind and the last key's values, while SR-4 gives Xa; Xv is a defect (`GET_CURRENT` says `MDBX_ENODATA` on a positioned cursor) |
+| SR-4 | `MDBX_SET_RANGE` | anchored on the rightmost leaf page, key past the last key | `MDBX_NOTFOUND` | mdbx.h is silent on the state | Xa, plain and DUPSORT (as inferred); same on both | As SR-3 (Xa) | **keep**: already the proposed state, on both table kinds |
+| SR-5 | `MDBX_SET_RANGE` | anchored on another leaf page, key past the last key | `MDBX_NOTFOUND` | mdbx.h is silent on the state | plain: Xb (as inferred); DUPSORT: Xv (M-1); same on both | As SR-3 (Xa) | **change**: today Xb (plain) or Xv (DUPSORT), while SR-4 gives Xa for the same key |
+| SR-6 | `MDBX_SET_RANGE` | any bound, empty table | `MDBX_NOTFOUND` | `mdbx.h:6447 @ c26d8d4b` | cursor unchanged (N stays N, D0 stays D0); same on both | `MDBX_NOTFOUND`; the cursor is not changed | **keep**: there is nothing to position on; matches `mdbx.h` |
+| SR-7 | `MDBX_SET_RANGE` | any bound | `MDBX_EINVAL` (key is NULL) | `mdbx.h:6448 @ c26d8d4b` | rc `MDBX_EINVAL`, cursor unchanged in every starting state; same on both | `MDBX_EINVAL`; the cursor is not changed | **keep**: the argument check runs before any move; matches `mdbx.h` |
+| SR-8 | `MDBX_SET_RANGE` | any bound | `MDBX_BAD_VALSIZE` | mdbx.h is silent | rc `MDBX_NOTFOUND`, not `MDBX_BAD_VALSIZE` (M-2). State as for a key past the last key (SR-3, SR-4, SR-5); unchanged on an empty table; same on both | A key longer than the limit is searched like any other key: the first greater key if one exists (inferred, not measured), else `MDBX_NOTFOUND` and Xa as SR-3. Fixed-size and `MDBX_INTEGERKEY` keys: as SET-6 | **change** for the state, as SR-3 and SR-5; the return code is a keep (M-2) |
+| LB-1 | `MDBX_SET_LOWERBOUND` | any bound | `MDBX_SUCCESS` (exact key; DUPSORT: exact pair) | "returns MDBX_SUCCESS if key found exactly or MDBX_RESULT_TRUE if greater key was found" `mdbx.h:1881-1888 @ c26d8d4b` | R, rc success (DUPSORT: R·V1, R·Vm, R·Vn or R·Vs by the pair found); same on both | `MDBX_SUCCESS`; the cursor is on the key (DUPSORT: on the pair) | **keep**: matches `mdbx.h` |
+| LB-2 | `MDBX_SET_LOWERBOUND` | any bound | `MDBX_RESULT_TRUE` (greater key or pair) | `mdbx.h:1881-1888 @ c26d8d4b` | R, rc `MDBX_RESULT_TRUE`; same on both. DUPSORT: also when the key exists and the value is below all its values (first value comes back with `MDBX_RESULT_TRUE`) | `MDBX_RESULT_TRUE`; the cursor is on the first greater key or pair (DUPSORT: a value below all values of the key gives its first value) | **keep**: matches `mdbx.h` |
+| LB-3 | `MDBX_SET_LOWERBOUND` (DUPSORT) | any bound; key found, value greater than all its values, a next key exists | `MDBX_RESULT_TRUE` (first value of the next key) | "the next pair was returned" `mdbx.h:1887-1888 @ c26d8d4b` | R·Vs (the first value of the next key), rc `MDBX_RESULT_TRUE`; same on both | `MDBX_RESULT_TRUE`; the cursor is on the first value of the next key | **keep**: "the next pair was returned", as `mdbx.h` says |
+| LB-4 | `MDBX_SET_LOWERBOUND` | no anchor, key past the last key | `MDBX_NOTFOUND` | mdbx.h is silent on this outcome | plain: Xb; DUPSORT: Xv (M-1); same on both | `MDBX_NOTFOUND`; Xa, as SR-3 | **change**: today Xb or Xv, as SR-3 |
+| LB-5 | `MDBX_SET_LOWERBOUND` | anchored (on the rightmost leaf page, or on another leaf page), key past the last key | `MDBX_NOTFOUND` | mdbx.h is silent on this outcome | Xa, plain and DUPSORT. From an anchor on another leaf page: plain Xb, DUPSORT: Xv (M-1); same on both | `MDBX_NOTFOUND`; Xa from every anchor, as SR-4 and SR-5 | **change**: the other-leaf case in this cell gives Xb or Xv; the rightmost case is already Xa |
+| LB-6 | `MDBX_SET_LOWERBOUND` (DUPSORT) | any bound; key is the last key, value greater than all its values | `MDBX_NOTFOUND` | mdbx.h is silent on this outcome | Xa from every starting state, N included (a key past the last key from N gives Xb, LB-4); same on both | `MDBX_NOTFOUND`; Xa from every start | **change**: the probes read Xa, but the encoding is Xb with the values cursor past its end: `GET_CURRENT` with a NULL data pointer returns the last key (Xa: `MDBX_NOTFOUND`) |
+| LB-7 | `MDBX_SET_LOWERBOUND` | any bound, empty table | `MDBX_NOTFOUND` | mdbx.h is silent on this outcome | cursor unchanged (N stays N, D0 stays D0); same on both | `MDBX_NOTFOUND`; the cursor is not changed | **keep**: there is nothing to position on |
+| LB-8 | `MDBX_SET_LOWERBOUND` | any bound | `MDBX_EINVAL` (key is NULL) | `mdbx.h:6448 @ c26d8d4b` | rc `MDBX_EINVAL`, cursor unchanged in every starting state; same on both | `MDBX_EINVAL`; the cursor is not changed | **keep**: the argument check runs before any move; matches `mdbx.h` |
+| LB-9 | `MDBX_SET_LOWERBOUND` (plain) | any bound | `MDBX_EINVAL` (data is NULL) | "For non DUPSORT-ed collections this work the same to MDBX_SET_RANGE" `mdbx.h:1881-1883 @ c26d8d4b` | rc `MDBX_EINVAL`, cursor unchanged in every starting state (confirms A9); same on both | Version 1: NULL data is allowed on a plain table, as the code allows it for `MDBX_SET_RANGE`. Version 2 (code): `MDBX_EINVAL`, cursor not changed, and `mdbx.h` says so | **ask** (A9): `mdbx.h` says "the same to `MDBX_SET_RANGE`" but also "return both key and data"; the code rejects NULL data (M-7) |
+| LB-10 | `MDBX_SET_LOWERBOUND` (DUPSORT) | any bound; data given with a NULL pointer | success or `MDBX_RESULT_TRUE`, value ignored | mdbx.h is silent | rc `MDBX_RESULT_TRUE`, not success: R·V1 on the first value of the key, the NULL pointer acts as a value below all values; same on both | Version 1 (code): a NULL value pointer is below all values: the first value of the key, always `MDBX_RESULT_TRUE`. Version 2: it means "any value": `MDBX_SUCCESS` when the key matches exactly, as on a plain table | **ask** (A11, M-8): `mdbx.h` is silent; the row expected success for an exact key, the code never returns it |
+| LB-11 | `MDBX_SET_LOWERBOUND` | any bound | `MDBX_BAD_VALSIZE` | mdbx.h is silent | rc `MDBX_NOTFOUND`, not `MDBX_BAD_VALSIZE` (M-2). State as for a key past the last key (LB-4, LB-5); unchanged on an empty table; same on both | As SR-8: searched like any other key; on a miss past the last key, Xa as LB-4 and LB-5 | **change** for the state, as LB-4 and LB-5; the return code is a keep (M-2) |
+| UB-1 | `MDBX_SET_UPPERBOUND` | any bound | success (greater key or pair found) | "returns MDBX_SUCCESS if the greater key was found or MDBX_NOTFOUND otherwise" `mdbx.h:1895-1902 @ c26d8d4b` | R, rc success (DUPSORT: R·Vs, R·V1 or R·Vn); same on both | `MDBX_SUCCESS`; the cursor is on the first greater key or pair | **keep**: matches `mdbx.h` |
+| UB-2 | `MDBX_SET_UPPERBOUND` | any bound; exact match, a next record exists | success (the next record) | `mdbx.h:1895-1902 @ c26d8d4b` | R on the next record, rc success (DUPSORT: the next value, or the first value of the next key); same on both | `MDBX_SUCCESS`; the cursor is on the next record (DUPSORT: the next value, or the first value of the next key) | **keep**: matches `mdbx.h` |
+| UB-3 | `MDBX_SET_UPPERBOUND` | any bound; exact match on the last record | `MDBX_NOTFOUND` | `mdbx.h:1895-1902 @ c26d8d4b` | plain: Xb (as inferred); DUPSORT: Xb·Vs when the pair is the last record ("Vs" is a probe artefact: the `_dup` probes are TRUE when the outer cursor is not filled; the last key has three values); Xa when the value is above all values of the last key (the case of LB-6); same on both | `MDBX_NOTFOUND`; Xa, as SR-3 | **change**: today Xb (the internal next step keeps `z_eof_hard`), so `GET_CURRENT` returns the record equal to the bound, while UB-5 gives Xa for the same "nothing greater" |
+| UB-4 | `MDBX_SET_UPPERBOUND` | no anchor, key past the last key | `MDBX_NOTFOUND` | `mdbx.h:1895-1902 @ c26d8d4b` | plain: Xb; DUPSORT: Xv (M-1); same on both | `MDBX_NOTFOUND`; Xa, as SR-3 | **change**: today Xb or Xv, as SR-3 |
+| UB-5 | `MDBX_SET_UPPERBOUND` | anchored (on the rightmost leaf page, or on another leaf page), key past the last key | `MDBX_NOTFOUND` | `mdbx.h:1895-1902 @ c26d8d4b` | Xa, plain and DUPSORT. From an anchor on another leaf page: plain Xb, DUPSORT: Xv (M-1); same on both | `MDBX_NOTFOUND`; Xa from every anchor, as SR-4 and SR-5 | **change**: the other-leaf case in this cell gives Xb or Xv; the rightmost case is already Xa |
+| UB-6 | `MDBX_SET_UPPERBOUND` | any bound, empty table | `MDBX_NOTFOUND` | `mdbx.h:1895-1902 @ c26d8d4b` | cursor unchanged (N stays N, D0 stays D0); same on both | `MDBX_NOTFOUND`; the cursor is not changed | **keep**: there is nothing to position on; matches `mdbx.h` |
+| UB-7 | `MDBX_SET_UPPERBOUND` | any bound | `MDBX_EINVAL` (key or data is NULL) | `mdbx.h:6448 @ c26d8d4b` | rc `MDBX_EINVAL` (key NULL or data NULL), cursor unchanged in every starting state; same on both | Key NULL: `MDBX_EINVAL`, cursor not changed. Data NULL on a plain table: as LB-9 (two versions) | **ask** (A9) for NULL data on a plain table: `mdbx.h` says "like `MDBX_SET_RANGE`" but also "return both key and data"; key NULL and DUPSORT data NULL are a keep |
+| UB-8 | `MDBX_SET_UPPERBOUND` | any bound | `MDBX_BAD_VALSIZE` | mdbx.h is silent | rc `MDBX_NOTFOUND`, not `MDBX_BAD_VALSIZE` (M-2). State as for a key past the last key (UB-4, UB-5); unchanged on an empty table; same on both | As SR-8: on a miss past the last key, Xa as UB-4 and UB-5 | **change** for the state, as UB-4 and UB-5; the return code is a keep (M-2) |
 
 Notes:
 
@@ -370,6 +444,18 @@ Notes:
 - UB-3, inferred: Xb. The cursor moves with an internal next step that, unlike `MDBX_NEXT`, does not clear `z_eof_hard` (`src/cursor-seek.c:485-487 @ c26d8d4b` against `src/cursor-seek.c:413-418 @ c26d8d4b`). `MDBX_NEXT` from the same record gives E (REL-5).
 - LB-9, ask? (A9): the code returns `MDBX_EINVAL` for a NULL data pointer on every table (`src/cursor-seek.c:451-452 @ c26d8d4b`); `MDBX_SET_RANGE` accepts it (`src/cursor-seek.c:333-334 @ c26d8d4b`).
 - LB-10: the code comment says this changes the meaning on purpose (`src/cursor-seek.c:459-462 @ c26d8d4b`).
+- Marks, the change rows (SR-3, SR-5, SR-8, LB-4, LB-5, LB-6, LB-11, UB-3, UB-4, UB-5, UB-8) share one rule: a call
+  that finds nothing at or after the given key or pair leaves one "past the end" state. Today it is Xa, Xb or Xv,
+  through three code paths: the fast path (Xa), the tree search and `cursor_sibling_right()` (Xb, Xv), and an
+  internal next step that keeps `z_eof_hard` (UB-3: Xb; LB-6: Xb with the values cursor past its end, which reads
+  as Xa). I propose Xa for all of them. The code's own design says so: after a
+  failed range search the cursor "may/should" stand after the last row (`src/cursor.h:72-74 @ c26d8d4b`), and with
+  `z_eof_hard` no read at the current position is allowed (`src/cursor.h:84-86 @ c26d8d4b`). SR-4 and LB-6 already
+  give Xa for the probe set. Xb lets `GET_CURRENT`, and by inference `mdbx_cursor_put(MDBX_CURRENT)` (PUT-8), act on a record that did
+  not match the search. Xv is a defect in any reading. The alternative, Xb everywhere, would make `GET_CURRENT` read
+  the last record from Xa and Xv too; I do not propose it.
+- Marks, the ask rows: A10 (SET-2, SET-3, SET-6, SETK-2, SETK-3, SETK-6), A9 (LB-9, UB-7), A11 (LB-10). Section 5
+  gives both versions of each.
 
 ##### Measurement notes (the `MDBX_SET` family)
 
@@ -386,7 +472,9 @@ Tables. The page size is read from the environment (4096 on both platforms); no 
 - DUPSORT table, small: 5 keys, depth 1. DUPSORT table, multi: 60 keys, depth 2. Every odd-index key and the
   last key have three values (`a`, `b`, `c`, padded); the other keys have one value.
   I did not check whether any value set became a nested tree.
-- One-record tables (plain, DUPSORT): used only for D0 (delete the only record) and for N and R on the only record.
+- One-key tables (plain, DUPSORT): used only for D0 (delete the only key) and for N and R on the only key.
+  The plain one holds one record; the DUPSORT one holds one key with three values, because the last key of
+  every DUPSORT table has three values.
 - Empty tables (plain, DUPSORT): N on an empty table.
 - Keys in a table are `k00010`, `k00020`, ...; absent keys are `k00005` (below), a key between, `k99999` (above).
   The key too long is one byte over `mdbx_env_get_maxkeysize_ex()`.
@@ -402,14 +490,14 @@ The program prints the state it recognises before the call, so a recipe that mis
 | R first, mid, near last, last | `MDBX_SET` on that key | R (DUPSORT: R·Vs or R·V1) |
 | E after LAST | `MDBX_LAST` | plain: E. DUPSORT: R·Vn (M-4) |
 | E after NEXT | `MDBX_LAST`, then `MDBX_NEXT` returns `MDBX_NOTFOUND`; variant: `MDBX_SET` on the last key (DUPSORT: then `MDBX_LAST_DUP`), then `MDBX_NEXT` | E (DUPSORT: E·Vn) |
-| Xr from N, from R last, from R first | `MDBX_SET_RANGE` on `k99999` | plain multi: Xb, Xa, Xb; plain small: Xb, Xa, Xa. DUPSORT multi: unmatched (M-1), Xa, unmatched; DUPSORT small: unmatched, Xa, Xa |
+| Xr from N, from R last, from R first | `MDBX_SET_RANGE` on `k99999` | plain multi: Xb, Xa, Xb; plain small: Xb, Xa, Xa. DUPSORT multi: Xv (M-1), Xa, Xv; DUPSORT small: Xv, Xa, Xa |
 | Xub last record | `MDBX_SET_UPPERBOUND` on the last pair | Xb |
 | D mid, first | `MDBX_SET`, `mdbx_cursor_del()` (DUPSORT: `MDBX_ALLDUPS`) | D |
-| D last | the same on the last key | plain: Xb. DUPSORT multi: Xb·Vs. DUPSORT small: unmatched (M-1) |
+| D last | the same on the last key | plain: Xb. DUPSORT multi: Xb·Vs. DUPSORT small: Xv (M-1) |
 | D0 | the same on the only record | D0 |
 | DUPSORT Rv1, Rvm, Rvn, Rvs | `MDBX_SET`, then `MDBX_NEXT_DUP` or `MDBX_LAST_DUP` | R·V1, R·Vm, R·Vn, R·Vs |
 | Vd | on the second value, `mdbx_cursor_del(MDBX_CURRENT)` | D·Vn (the value after the deleted one, as 2.2 says) |
-| Vt | on the last value of a non-last key, `mdbx_cursor_del(MDBX_CURRENT)` | D·Vn, not Vt (M-5) |
+| Vt | on the last value of a non-last key, `mdbx_cursor_del(MDBX_CURRENT)` | printed D·Vn; it is D·Vt (M-5) |
 | Vt on the last key | the same on the last key | `GET_CURRENT` `MDBX_NOTFOUND`, `NEXT` `MDBX_NOTFOUND`, `PREV` the last remaining value, `eof` FALSE |
 | Vx | `MDBX_TO_PAIR_EQUAL` on a value that is absent between two values | Vx (`GET_CURRENT` `MDBX_NOTFOUND`, `NEXT` the first value of the next key, `PREV` the last value) |
 
@@ -431,22 +519,62 @@ Contradictions with the state model, with the "ask?" inferences, and with the ou
   `GET_CURRENT` `MDBX_ENODATA`, `NEXT` `MDBX_NOTFOUND`, `PREV` the last record.
   Xa answers `MDBX_NOTFOUND` to `GET_CURRENT`, Xb returns the last record; this state answers `MDBX_ENODATA`.
   The same state appears after deleting the last key of the small DUPSORT table (D last), where 2.4 point 4
-  says Xb. The plain table follows the model in all these rows (inferences for SR-3, SR-4, SR-5, UB-3 confirmed).
+  said Xb. The plain table follows the model in all these rows (inferences for SR-3, SR-4, SR-5, UB-3 confirmed).
+  I name the state **Xv** and added it to 2.1. For the user: the cursor is past the end and `PREV` returns the
+  last value of the last key, but `GET_CURRENT` answers `MDBX_ENODATA`, the code of an unpositioned cursor,
+  where Xa answers `MDBX_NOTFOUND` and Xb the last record.
+  How the code produces it. Xv is the Xb encoding on a last key with several values, with the inner (values)
+  cursor reset before the cursor reached the end. The number of values alone is not enough: UB-3 on the same
+  last key gives Xb, because there the inner cursor is still on the last value. From N or P the inner cursor is already reset; from an anchor the fast path resets it
+  (`src/cursor-seek.c:42 @ c26d8d4b`) and then leaves the page for the tree search
+  (`src/cursor-seek.c:95-97 @ c26d8d4b`, `src/cursor-seek.c:131-132 @ c26d8d4b`). The leaf has no greater key,
+  so `cursor_sibling_right()` runs (`src/cursor-seek.c:150-154 @ c26d8d4b`). At the last page it puts the index
+  on the last key, sets `z_eof_soft` + `z_eof_hard` and leaves the inner cursor as it is
+  (`src/cursor-nav.c:274-281 @ c26d8d4b`). `MDBX_GET_CURRENT` then passes the outer checks, because the index
+  is on a key (`src/cursor-seek.c:279-284 @ c26d8d4b`), finds a node with several values and a reset inner
+  cursor, and returns `MDBX_ENODATA` (`src/cursor-seek.c:300-306 @ c26d8d4b`). With one value on the last key
+  the same position reads the record (`src/cursor-seek.c:316-318 @ c26d8d4b`): that is Xb. The `_dup` probes
+  are TRUE because the outer cursor is not filled (`src/api-cursor.c:427 @ c26d8d4b`,
+  `src/api-cursor.c:443 @ c26d8d4b`). The delete path is `src/cursor-mut.c:1112-1117 @ c26d8d4b`:
+  `cursor_sibling_right()`, then the inner cursor is reset. The fast path on the rightmost leaf gives Xa
+  instead: index = number of keys (`src/cursor-seek.c:99-117 @ c26d8d4b`).
+  In the measured DUPSORT tables the last key always has three values, so every tree-search path past the end
+  gave Xv; Xb there on a one-value last key is inferred, not measured (except D last on the multi table).
+  The probe set reads `GET_CURRENT` with a data pointer. With a NULL data pointer, `GET_CURRENT` returns
+  `MDBX_SUCCESS` and the last key in Xb, Xv and LB-6, and `MDBX_NOTFOUND` only in Xa
+  (`src/cursor-seek.c:282-283 @ c26d8d4b`, `src/cursor-seek.c:297-299 @ c26d8d4b`). Inferred, not measured.
 - **M-2. Too long key.** `MDBX_SET`, `MDBX_SET_KEY`, `MDBX_SET_RANGE`, `MDBX_SET_LOWERBOUND`,
   `MDBX_SET_UPPERBOUND` with a key one byte over the limit return `MDBX_NOTFOUND`, not `MDBX_BAD_VALSIZE`
   (SET-6, SETK-6, SR-8, LB-11, UB-8). The key is searched like any absent key. The outcome column of these
   rows lists `MDBX_BAD_VALSIZE`; that outcome does not occur for reads. This is not in A1 to A10.
+  The code returns `MDBX_BAD_VALSIZE` only for a key shorter than the minimum, longer than a fixed key size
+  (`src/cogs.h:252-254 @ c26d8d4b`), or of a length other than 4 or 8 on an `MDBX_INTEGERKEY` table
+  (`src/cogs.h:257-267 @ c26d8d4b`). So "never `MDBX_BAD_VALSIZE`" holds for tables with variable-length keys,
+  as measured. Commit `78df707c` ("rework assertion checking at all") removed a debug-build branch that returned
+  `MDBX_BAD_VALSIZE` with an assertion here, so today every build answers the same. I read this as deliberate;
+  that is my inference, the commit message does not say it. A range search with a long key can be meaningful
+  (a greater key may exist; not measured: the measured long key sorts above every key). I mark the return code
+  keep; the state follows the miss rows.
 - **M-3. P and H on a one-key page.** The probes separate P from H only by `on_first`/`on_last`.
   On a page with one key both are TRUE after an H, so SET-2 (key below the first key, from N) and
   SET-3 on the one-record table read as P. They are H by the code path; I could not separate them with the probe set.
+  This is a limit of the probe set, not one state for the user (2.4 point 8). It holds only for a miss below the
+  only key; a miss above it leaves the index past the key, `on_first` is FALSE and the program prints H.
 - **M-4. A2 confirmed for DUPSORT.** After `MDBX_LAST` on a DUPSORT table whose last key has several values,
   `eof` is FALSE and the state is R·Vn. On the plain table `MDBX_LAST` gives E (`eof` TRUE).
   So `eof` after `MDBX_LAST` depends on the table kind.
-- **M-5. Vt (2.2) does not match.** After deleting the last value of a key that is not the last key,
+- **M-5. Vt reads as D on the outer level.** After deleting the last value of a key that is not the last key,
   the cursor shows `eof` FALSE, `GET_CURRENT` the first value of the next key, `NEXT` the same value,
-  `PREV` the last remaining value: this is D·Vn, not Vt (the document expects `NEXT` `MDBX_NOTFOUND`).
+  `PREV` the last remaining value, `on_first_dup` FALSE, `on_last_dup` TRUE. The program prints D·Vn.
   On the last key it shows `GET_CURRENT` and `NEXT` `MDBX_NOTFOUND`, `eof` FALSE.
-  This affects the later families that start from Vt, not the SET rows.
+  Correction to my first reading: the 2.2 row Vt holds where measured. Its `MDBX_NOTFOUND` is in the
+  `NEXT_DUP` column, which the probe set does not run, not in `NEXT`. "Vn" is the classifier's reading of the
+  `_dup` probes; a real R·Vn returns its own value from `GET_CURRENT`. What was wrong is the 2.2 sentence
+  "the main state is R or E": after a value delete the outer probes read as D. 2.2 is corrected.
+  Rows that start from R·Vd, or from R·Vt on a key that is not the last key, keep their expectations but mean
+  D·Vd and D·Vt: REL-14, REL-15, REL-29, REL-33, REL-34, REL-41, REL-66, REL-67, GM-4, PM-3, PUT-14, DEL-10,
+  DEL-11, OUT-13. Vt on the last key does not read as D (`GET_CURRENT` and `NEXT` return `MDBX_NOTFOUND`), so
+  REL-16 and REL-68 stay as written. The SET rows are not affected.
 - **M-6. A10 confirmed.** An H cursor reads its stale index: after `MDBX_SET` on a key between two keys,
   `on_first` and `on_last` are both FALSE. After a miss below the first key `on_first` is TRUE, above the
   last key `on_last` is TRUE. `mdbx.h` promises TRUE for a cursor that is not positioned.
@@ -458,6 +586,13 @@ Contradictions with the state model, with the "ask?" inferences, and with the ou
 - **M-9. LB-3 and LB-6 differ.** A value above all values of a key that has a next key returns the first value of the
   next key (LB-3). The same on the last key returns `MDBX_NOTFOUND` and gives Xa from every start, N included,
   while a key past the last key from N gives Xb (LB-4). Same state names as SR-3/SR-4, reached differently.
+- **M-11. Row labels in the program (found in review).** `row_id()` labels some DUPSORT pair calls by their
+  intent, not by their result. On the one-key DUPSORT table and from the VtLastKey start, lines labelled LB-2,
+  LB-3, UB-1 and UB-2 return `MDBX_NOTFOUND`: the pair is past the end there. Their states (Xa, Xb, Xv) are those
+  of LB-4, LB-6, UB-3 and UB-4, so no mark changes. The measured cells of LB-2, LB-3, UB-1 and UB-2 describe the
+  correctly labelled lines. `key_hit_value_below_all` is labelled LB-1 and UB-2; its LB result is in LB-2 by
+  hand. LB with NULL data on a DUPSORT table is labelled LB-9: `MDBX_EINVAL`, cursor not changed, as on a plain
+  table. The labels get fixed when the program becomes a regression test.
 - **M-10. Not contradicted.** SET-2 and SET-3 (H), SET-4, SR-6, LB-7, UB-6 (cursor unchanged), the success rows
   (R), and the argument errors (`MDBX_EINVAL`, cursor unchanged) match the inferences.
 
@@ -1067,8 +1202,9 @@ Each item: what `mdbx.h` says, what the code does, and the rows that carry the m
 | A6 | "not positioned to a data" check | `MDBX_ENODATA` when the cursor is not positioned to a data (`mdbx.h:6828 @ c26d8d4b`, `mdbx.h:6894 @ c26d8d4b`, `mdbx.h:6932 @ c26d8d4b`, `mdbx.h:6980 @ c26d8d4b`) | checks only "has a stack", so H and Xa pass (`src/api-cursor.c:936-945 @ c26d8d4b`, `src/api-cursor.c:1001-1010 @ c26d8d4b`, `src/api-cursor.c:1071-1072 @ c26d8d4b`, `src/tree-cutoff.c:518-519 @ c26d8d4b`) | RNG-7, BUN-7, BUN-12, BUN-16, BUN-21, SCR-6, DIS-4 |
 | A7 | "after, excluding" actions from N | `MDBX_ENODATA` when not positioned (`mdbx.h:6980 @ c26d8d4b`) | inferred: the internal next step acts as `MDBX_FIRST` from N, so the call deletes data (`src/api-cursor.c:816-822 @ c26d8d4b`, `src/api-cursor.c:879-885 @ c26d8d4b`) | BUN-11, BUN-20 |
 | A8 | copy from a created cursor | the source may come from `mdbx_cursor_create()` (`mdbx.h:6378-6379 @ c26d8d4b`) | a created cursor is unbound and is rejected with `MDBX_EINVAL` (`src/api-cursor.c:226-228 @ c26d8d4b`) | LC-27 |
-| A9 | `MDBX_SET_LOWERBOUND` on a plain table | works "the same to MDBX_SET_RANGE" (`mdbx.h:1881-1883 @ c26d8d4b`) | requires a data pointer, unlike `MDBX_SET_RANGE` (`src/cursor-seek.c:451-452 @ c26d8d4b`) | LB-9 |
-| A10 | `on_first`/`on_last` on H | TRUE when not positioned (`mdbx.h:7056-7059 @ c26d8d4b`, `mdbx.h:7102-7105 @ c26d8d4b`) | inferred: computed from the stale index of H (`src/cursor-nav.c:331-346 @ c26d8d4b`) | state-level (2.5) |
+| A9 | `MDBX_SET_LOWERBOUND` and `MDBX_SET_UPPERBOUND` on a plain table | work "the same to" / "like" `MDBX_SET_RANGE` (`mdbx.h:1881-1883 @ c26d8d4b`, `mdbx.h:1895-1897 @ c26d8d4b`) | require a data pointer, unlike `MDBX_SET_RANGE` (`src/cursor-seek.c:451-452 @ c26d8d4b`); measured (M-7). `mdbx.h` itself does not say that `MDBX_SET_RANGE` accepts NULL data (the code does, `src/cursor-seek.c:333-334 @ c26d8d4b`), and it says both operations "return both key and data" (`mdbx.h:1876-1877 @ c26d8d4b`, `mdbx.h:1890-1891 @ c26d8d4b`). Version 1: accept NULL data on a plain table, as `MDBX_SET_RANGE` does. Version 2: keep `MDBX_EINVAL` and document it | LB-9, UB-7 |
+| A10 | `on_first`/`on_last` on H | TRUE when not positioned (`mdbx.h:7056-7059 @ c26d8d4b`, `mdbx.h:7102-7105 @ c26d8d4b`); "tells whether it makes sense to move the cursor backward" (`mdbx.h:7047-7050 @ c26d8d4b`) | computed from the stale index of H (`src/cursor-nav.c:331-346 @ c26d8d4b`); measured (M-6). Version 1: TRUE on H, as `mdbx.h` says (no move from H works). Version 2: keep the code and document that they are meaningful only when `GET_CURRENT` succeeds. I lean to version 1 | state-level (2.5); SET-2, SET-3, SET-6, SETK-2, SETK-3, SETK-6 |
+| A11 | `MDBX_SET_LOWERBOUND` on a DUPSORT table, a value with a NULL pointer | mdbx.h is silent | skips the value search and always returns `MDBX_RESULT_TRUE` with the first value, even when the key matches exactly (`src/cursor-seek.c:457-462 @ c26d8d4b`, `src/cursor-seek.c:478-479 @ c26d8d4b`); measured (M-8). Version 1: keep, the NULL value is below all values. Version 2: the NULL value means "any value", `MDBX_SUCCESS` for an exact key, as on a plain table | LB-10 |
 
 ## 6. Row count
 
