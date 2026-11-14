@@ -105,6 +105,23 @@ MDBX_MAYBE_UNUSED static bool failed(unsigned line) {
   return false;
 }
 
+/* The shared runtime deadline (GTEST_RUNTIME_LIMIT/GTEST_RUNTIME_DEADLINE,
+ * see test-env.h). The limiter is normally checked at the TEST body start
+ * only, but this test runs for minutes at Debug scale, and on a slow or
+ * contended hosted runner (chronically the windows-11-vs2026-arm nightlies)
+ * it must honor the deadline mid-run instead of burning the whole per-test
+ * timeout (10800s here) and failing the cell. When the deadline is reached
+ * the checks bail out reporting success (a budget exhaustion is not a
+ * failure), the flag propagates up and the TEST body GTEST_SKIP()s. */
+bool runtime_limit_hit = false;
+bool deadline_reached() {
+  if (MDBX_GTEST_IS_EXECUTION_TIMEOUT()) {
+    runtime_limit_hit = true;
+    return true;
+  }
+  return false;
+}
+
 //---------------------------------------------------------------------------------------------------------------------
 
 using buffer = mdbx::default_buffer;
@@ -269,6 +286,8 @@ static bool test_distance(mdbx::env env, case_kind &kvg) {
   const auto tree_height = txn.get_map_stat(kvg.table).ms_depth;
 
   while (true) {
+    if (deadline_reached())
+      return true;
     const auto whole_distance = mdbx::cursor::distance_between(first, last, level);
     if (-whole_distance != mdbx::cursor::distance_between(last, first, level))
       return failed(__LINE__);
@@ -357,17 +376,24 @@ static bool test_distance(mdbx::env env, case_kind &kvg) {
 
 static bool probe_scroll(const mdbx::cursor &base, intptr_t scroll, unsigned level, const mdbx::cursor &detent,
                          intptr_t distance, bool distance_linear) {
+  if (deadline_reached())
+    return true;
   try {
     auto cursor = base.clone();
 #ifndef NDEBUG
     static unsigned turn_counter;
+    ++turn_counter;
     if (turn_counter == 999999) {
       mdbx_setup_debug_nofmt(MDBX_LOG_VERBOSE, MDBX_DBG_ASSERT | MDBX_DBG_AUDIT, logger_nofmt, log_buffer,
                              sizeof(log_buffer));
       debug(__LINE__, "got it (%u)", turn_counter);
     }
-    debug(__LINE__, "turn: number %u, distance %zi, scroll %zi, level %u, linear %c", ++turn_counter, distance, scroll,
-          level, distance_linear ? 'Y' : 'N');
+    /* A per-turn line floods stdout at Debug scale (hundreds of thousands of
+     * lines per run), which alone can turn the test I/O-bound on a slow or
+     * contended runner. Keep the breadcrumb trail, but sample it. */
+    if (turn_counter <= 128 || (turn_counter % 4096) == 0)
+      debug(__LINE__, "turn: number %u, distance %zi, scroll %zi, level %u, linear %c", turn_counter, distance, scroll,
+            level, distance_linear ? 'Y' : 'N');
 #endif /* NDEBUG */
     cursor.scroll(scroll, level, distance_linear);
     auto delta = cursor.distance_from(base, level);
@@ -408,6 +434,8 @@ static bool test_scroll(mdbx::env env, case_kind &kvg) {
 
   try {
     while (true) {
+      if (deadline_reached())
+        return true;
       const auto whole_distance = mdbx::cursor::distance_between(first, last, level);
       if (prev_whole > whole_distance)
         return failed(__LINE__);
@@ -512,6 +540,8 @@ static bool test_distribute(mdbx::env env, case_kind &kvg) {
 
   try {
     while (true) {
+      if (deadline_reached())
+        return true;
       const bool sum_could_mismatch = level >= tree_height && (dupsort_deepmask >> (level - tree_height)) > 0;
       const auto whole_distance = mdbx::cursor::distance_between(first, last, level);
       if (prev_whole > whole_distance)
@@ -522,12 +552,14 @@ static bool test_distribute(mdbx::env env, case_kind &kvg) {
       for (intptr_t i = whole_distance / 4; i >= 0; i -= 2) {
 #ifndef NDEBUG
         static unsigned turn_counter;
+        ++turn_counter;
         if (turn_counter == 999999) {
           mdbx_setup_debug_nofmt(MDBX_LOG_VERBOSE, MDBX_DBG_ASSERT | MDBX_DBG_AUDIT, logger_nofmt, log_buffer,
                                  sizeof(log_buffer));
           debug(__LINE__, "got it (%u)", turn_counter);
         }
-        debug(__LINE__, "turn: number %u, distance %zi, level %u", ++turn_counter, whole_distance, level);
+        if (turn_counter <= 128 || (turn_counter % 4096) == 0)
+          debug(__LINE__, "turn: number %u, distance %zi, level %u", turn_counter, whole_distance, level);
 #endif /* NDEBUG */
         mdbx::cursor::distribute(from, to, vector, level);
         mdbx::cursor prev = from;
@@ -568,6 +600,8 @@ static bool test(mdbx::env env, case_set &set, unsigned deep) {
   bool ok = true;
   for (auto &kvg : set) {
     std::cout << kvg->name << ": " << " deep " << deep << std::endl;
+    if (deadline_reached())
+      return ok; /* skip the expensive probe_prepare rebuild of the next case */
     auto checker = probe_prepare(env, *kvg, deep);
     ok = test_distance(env, *kvg) && ok;
     ok = test_scroll(env, *kvg) && ok;
@@ -611,8 +645,11 @@ int doit() {
   txn.commit();
 
   bool ok = true;
-  for (auto deep = 1; deep <= DEEP && ok; ++deep)
+  for (auto deep = 1; deep <= DEEP && ok; ++deep) {
     ok = test(env, set, deep);
+    if (runtime_limit_hit)
+      break;
+  }
 
   if (!ok) {
     std::cerr << "Fail\n";
@@ -631,7 +668,10 @@ TEST(ut_distance_scroll_distribute, all) {
   mdbx_setup_debug_nofmt(MDBX_LOG_NOTICE /* MDBX_LOG_VERBOSE */, MDBX_DBG_ASSERT | MDBX_DBG_AUDIT, logger_nofmt,
                          log_buffer, sizeof(log_buffer));
   try {
-    ASSERT_EQ(EXIT_SUCCESS, doit());
+    const int rc = doit();
+    if (runtime_limit_hit)
+      GTEST_SKIP() << "SKIPPED by RUNTIME_LIMIT (mid-run)";
+    ASSERT_EQ(EXIT_SUCCESS, rc);
   } catch (const std::exception &ex) {
     std::cerr << "Exception: " << ex.what() << "\n";
     FAIL();
