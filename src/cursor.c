@@ -1480,6 +1480,13 @@ insert_node:;
           insert_key = insert_data = false;
           old_singledup.iov_base = nullptr;
           sub_root = nullptr;
+          /* Re-check the dirty room between the batch elements (issue #319,
+           * item 10): a long batch must spill on the fly, exactly like the
+           * same values put one by one, instead of running out of pages
+           * with MDBX_TXN_FULL somewhere in the middle. */
+          rc = cursor_touch(mc, key, data);
+          if (unlikely(rc))
+            return rc;
           goto more;
         }
       }

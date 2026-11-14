@@ -93,6 +93,7 @@ A long-term support release with accumulated backported fixes for data safety, c
     - Fixed internal `N_TREE`/`N_DUP` flags in `mdbx_cursor_put()`/`del()` corrupting; now rejected ([8/15 of #319](https://github.com/Mithril-mine/libmdbx-devel/issues/319)) (backport).
     - Fixed `MDBX_NEXT/PREV_MULTIPLE` without `MDBX_DUPFIXED` giving empty data and moving past the end ([3/15 of #319](https://github.com/Mithril-mine/libmdbx-devel/issues/319)) (backport).
     - Fixed a spurious `MDBX_READERS_FULL` right after dead reader slots were freed; now retried ([7/15 of #319](https://github.com/Mithril-mine/libmdbx-devel/issues/319)) (backport).
+    - Fixed a huge `mdbx_put(MDBX_MULTIPLE)` batch failing with `MDBX_TXN_FULL` instead of spilling ([10/15 of #319](https://github.com/Mithril-mine/libmdbx-devel/issues/319)) (backport).
 
  - Performance:
     - Added skipping the root-to-leaf re-descent on `MDBX_APPEND` for a cursor at the right edge ([#66](https://github.com/Mithril-mine/libmdbx-devel/issues/66)) (backport).
