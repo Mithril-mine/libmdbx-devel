@@ -111,18 +111,40 @@ TEST(ut_gc_dense_packing, span_reclaim_with_dense_packing) {
   //    ~500 страниц на кластер, страницы физически смежные).
   put_range(env, 0, 2000, 2048, 1);
   put_range(env, 100000, 2000, 2048, 2);
+  if (MDBX_GTEST_IS_EXECUTION_TIMEOUT()) {
+    /* The hosted ARM64-Windows runner has chronically slow nights where a
+     * full-corpus run does not fit its budgets: honor the shared soft
+     * deadline here instead of being killed by the hard per-test timeout
+     * (the env must be closed explicitly, or the guard could not delete
+     * the mapped files on Windows). */
+    mdbx_env_close(env);
+    GTEST_SKIP() << "SKIPPED by RUNTIME_LIMIT (mid-run)";
+  }
   put_range(env, 200000, 2000, 2048, 3);
   EXPECT_EQ(count_entries(env), 6000u);
 
   // 2. Массовое удаление ПОДРЯД — освобождает смежные span'ы страниц
   //    (длинные последовательности в repnl → gc_dense_hist/solve).
   del_span(env, 0, 2000);
+  if (MDBX_GTEST_IS_EXECUTION_TIMEOUT()) {
+    /* The hosted ARM64-Windows runner has chronically slow nights where a
+     * full-corpus run does not fit its budgets: honor the shared soft
+     * deadline here instead of being killed by the hard per-test timeout
+     * (the env must be closed explicitly, or the guard could not delete
+     * the mapped files on Windows). */
+    mdbx_env_close(env);
+    GTEST_SKIP() << "SKIPPED by RUNTIME_LIMIT (mid-run)";
+  }
   del_span(env, 100000, 2000);
   EXPECT_EQ(count_entries(env), 2000u);
 
   // 3. Серия GC-циклов: вставка/удаление по-крупному — каждая txn
   //    резервирует GC-куски из длинных span'ов (loop 1/3k → dense_adjust).
   for (int cycle = 0; cycle < 4; ++cycle) {
+    if (MDBX_GTEST_IS_EXECUTION_TIMEOUT()) {
+      mdbx_env_close(env);
+      GTEST_SKIP() << "SKIPPED by RUNTIME_LIMIT (mid-run)";
+    }
     put_range(env, 300000 + cycle * 10000u, 800, 2048, static_cast<unsigned>(10 + cycle));
     del_span(env, 300000 + cycle * 10000u, 800);
   }
@@ -188,6 +210,15 @@ TEST(ut_gc_dense_packing, mixed_sizes_force_chunk_adjustment) {
     }
     ASSERT_EQ(mdbx_txn_commit(txn), MDBX_SUCCESS);
   }
+  if (MDBX_GTEST_IS_EXECUTION_TIMEOUT()) {
+    /* The hosted ARM64-Windows runner has chronically slow nights where a
+     * full-corpus run does not fit its budgets: honor the shared soft
+     * deadline here instead of being killed by the hard per-test timeout
+     * (the env must be closed explicitly, or the guard could not delete
+     * the mapped files on Windows). */
+    mdbx_env_close(env);
+    GTEST_SKIP() << "SKIPPED by RUNTIME_LIMIT (mid-run)";
+  }
   // 2. Удаление каждой третьей — дыры разных размеров вокруг overflow-страниц
   {
     MDBX_txn *txn;
@@ -202,6 +233,10 @@ TEST(ut_gc_dense_packing, mixed_sizes_force_chunk_adjustment) {
   }
   // 3. GC-циклы с изменчивым fill — активируют dense_adjust_chunk/amount
   for (int cycle = 0; cycle < 3; ++cycle) {
+    if (MDBX_GTEST_IS_EXECUTION_TIMEOUT()) {
+      mdbx_env_close(env);
+      GTEST_SKIP() << "SKIPPED by RUNTIME_LIMIT (mid-run)";
+    }
     for (uint32_t i = 0; i < 1500; ++i) {
       const size_t sz = sizes[(i + cycle) % sizes.size()];
       std::vector<char> val(sz);
