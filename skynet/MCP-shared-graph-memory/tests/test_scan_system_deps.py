@@ -32,11 +32,8 @@ def _clang():
 
 def _scan_headers(headers, config="linux", tmpdir=None):
     """Прогоняет per-header скан для списка заголовков, возвращает артефакт."""
-    scan = sys.executable, os.path.join(TOOLS, "scan_system_deps.py")
     out = os.path.join(tmpdir, "system-deps-%s.json" % config)
     args = ["--mode", "scan-headers", "--config", config, "--out", out]
-    for h in headers:
-        args += ["--headers-list", h] if False else []
     # headers_list: построчный список — собираем одноразовый файл
     lst = os.path.join(tmpdir, "headers.txt")
     with open(lst, "w") as f:
@@ -80,7 +77,7 @@ def test_uses_resolution(tmp_path):
 
     uses_out = os.path.join(tmp_path, "uses-linux.json")
     inc = "-I" + FIX_SYS
-    r = subprocess.run([
+    subprocess.run([
         sys.executable, os.path.join(TOOLS, "scan_system_deps.py"),
         "--mode", "scan-uses", "--config", "linux",
         "--cc", os.devnull,  # TU задаём через фикстуру ниже — см. _uses_direct

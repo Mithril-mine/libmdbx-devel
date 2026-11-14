@@ -1032,7 +1032,6 @@ class McpServer:
 
 
 def main(argv=None):
-    argv = list(sys.argv[1:] if argv is None else argv)
     path = _default_db_path()
     readonly = os.environ.get("SHARED_GRAPH_MEMORY_READONLY", "1") not in ("0", "false", "")
     created = False
