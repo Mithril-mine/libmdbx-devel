@@ -95,6 +95,7 @@ add_issue_test(gh0345 SOURCE "issue_gh0345.c++")
 add_issue_test(gh0388 SOURCE "issue_gh0388.c++")
 add_issue_test(gh0450 SOURCE "issue_gh0450.c++")
 add_issue_test(gh0453 SOURCE "issue_gh0453.c++")
+add_issue_test(gh0454 SOURCE "issue_gh0454.c++")
 
 # Platform-gated tests: Windows-only cases in the if-branch,
 # POSIX-only ones in the else-branch (numeric order within each).

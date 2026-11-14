@@ -181,7 +181,12 @@ got_node:
     if (unlikely(ret.err != MDBX_SUCCESS)) {
       /* The sub-page could not be materialized (corruption): the positioned
        * match is not a usable exact match, keep the exact/exact-implies-success
-       * invariant. */
+       * invariant. The cursor must be left poor, as any other error path
+       * leaves it: otherwise the callers' postconditions (e.g. the one
+       * asserted by cursor_ops()) are violated and a crafted database
+       * aborts the checked builds (see
+       * <https://github.com/Mithril-mine/libmdbx-devel/issues/454>). */
+      be_poor(mc);
       ret.exact = false;
       return ret;
     }
