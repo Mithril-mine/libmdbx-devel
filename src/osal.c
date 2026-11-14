@@ -3096,16 +3096,27 @@ int osal_fileid_by_fd(mdbx_filehandle_t fd, osal_fileid_t *id) {
   return MDBX_SUCCESS;
 }
 
-#if !IS_WINDOWS /* by_path is used on POSIX only: the neighbors-check runs before the files are opened */
 int osal_fileid_by_path(const pathchar_t *pathname, osal_fileid_t *id) {
+#if IS_WINDOWS
+  /* FILE_FLAG_BACKUP_SEMANTICS allows to stat a directory as well;
+   * FILE_READ_ATTRIBUTES requires no more than the right to query metadata. */
+  const HANDLE hFile =
+      CreateFileW(pathname, FILE_READ_ATTRIBUTES, FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE, nullptr,
+                  OPEN_EXISTING, FILE_FLAG_BACKUP_SEMANTICS, nullptr);
+  if (unlikely(hFile == INVALID_HANDLE_VALUE))
+    return (int)GetLastError();
+  const int rc = osal_fileid_by_fd(hFile, id);
+  CloseHandle(hFile);
+  return rc;
+#else
   struct stat st;
   if (unlikely(stat(pathname, &st) != 0))
     return errno;
   id->a = (uint64_t)st.st_dev;
   id->b = (uint64_t)st.st_ino;
   return MDBX_SUCCESS;
+#endif /* Windows */
 }
-#endif /* !Windows */
 
 uint64_t osal_monotime(void) {
 #if IS_WINDOWS
