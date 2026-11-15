@@ -158,7 +158,7 @@ static int dump_tbl(MDBX_txn *txn, MDBX_dbi dbi, char *name, const char *const *
       /* the records of named tables are dumped as their own sections */
       bool skipped = false;
       for (unsigned i = 0; i < skip_count; ++i) {
-        if (key.iov_len == strlen(skip_names[i]) && memcmp(key.iov_base, skip_names[i], key.iov_len) == 0) {
+        if (key.iov_len == strlen(skip_names[i]) && memcmp_checklen(key.iov_base, skip_names[i], key.iov_len) == 0) {
           skipped = true;
           break;
         }
@@ -226,7 +226,7 @@ static void help(void) {
 }
 
 static int equal_or_greater(const MDBX_val *a, const MDBX_val *b) {
-  return (a->iov_len == b->iov_len && memcmp(a->iov_base, b->iov_base, a->iov_len) == 0) ? 0 : 1;
+  return (a->iov_len == b->iov_len && memcmp_checklen(a->iov_base, b->iov_base, a->iov_len) == 0) ? 0 : 1;
 }
 
 int main(int argc, char *argv[]) {
@@ -411,7 +411,7 @@ int main(int argc, char *argv[]) {
       }
 
       buf4free = subname;
-      memcpy(subname, key.iov_base, key.iov_len);
+      memcpy_checklen(subname, key.iov_base, key.iov_len);
       subname[key.iov_len] = '\0';
 
       MDBX_dbi sub_dbi;

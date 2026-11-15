@@ -563,7 +563,7 @@ __cold int chk_db(MDBX_chk_scope_t *const scope, MDBX_dbi dbi, MDBX_chk_table_t 
           if ((tbl->flags & MDBX_DUPSORT) == 0) {
             chk_object_issue(scope, "entry", record_count, "duplicated entries", nullptr);
             if (prev_data.iov_base && data.iov_len == prev_data.iov_len &&
-                memcmp(data.iov_base, prev_data.iov_base, data.iov_len) == 0)
+                memcmp_checklen(data.iov_base, prev_data.iov_base, data.iov_len) == 0)
               chk_object_issue(scope, "entry", record_count, "complete duplicate", nullptr);
           } else if (!bad_data && prev_data.iov_base) {
             cmp = mdbx_dcmp(txn, dbi, &data, &prev_data);

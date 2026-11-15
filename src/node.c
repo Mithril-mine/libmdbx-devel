@@ -77,9 +77,9 @@ int __must_check_result node_add_branch(MDBX_cursor *mc, size_t indx, const MDBX
   node_set_flags(node, 0);
   UNALIGNED_POKE_8(node, node_t, extra, 0);
   node_set_ks(node, 0);
-  if (likely(key != nullptr && key->iov_len)) {
+  if (likely(key != nullptr)) {
     node_set_ks(node, key->iov_len);
-    memcpy(node_key(node), key->iov_base, key->iov_len);
+    memcpy_checklen(node_key(node), key->iov_base, key->iov_len);
   }
   return MDBX_SUCCESS;
 }
@@ -152,8 +152,7 @@ __hot int __must_check_result node_add_leaf(MDBX_cursor *mc, size_t indx, const 
   node_set_flags(node, (uint8_t)flags);
   UNALIGNED_POKE_8(node, node_t, extra, 0);
   node_set_ds(node, data->iov_len);
-  if (likely(key->iov_len))
-    memcpy(node_key(node), key->iov_base, key->iov_len);
+  memcpy_checklen(node_key(node), key->iov_base, key->iov_len);
 
   void *nodedata = node_data(node);
   if (likely(largepage == nullptr)) {
@@ -167,8 +166,8 @@ __hot int __must_check_result node_add_leaf(MDBX_cursor *mc, size_t indx, const 
   }
   if (unlikely(flags & MDBX_RESERVE))
     data->iov_base = nodedata;
-  else if (likely(data->iov_len /* to avoid UBSAN traps */))
-    memcpy(nodedata, data->iov_base, data->iov_len);
+  else
+    memcpy_checklen(nodedata, data->iov_base, data->iov_len);
   return MDBX_SUCCESS;
 }
 

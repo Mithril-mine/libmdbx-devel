@@ -952,6 +952,6 @@ int tree_propagate_key(MDBX_cursor *mc, const MDBX_val *key) {
 
   /* But even if no shift was needed, update key size */
   node_set_ks(node, key->iov_len);
-  memcpy(node_key(node), key->iov_base, key->iov_len);
+  memcpy_checklen(node_key(node), key->iov_base, key->iov_len);
   return MDBX_SUCCESS;
 }
