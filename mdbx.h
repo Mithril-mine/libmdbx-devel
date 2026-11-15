@@ -3158,6 +3158,13 @@ typedef struct MDBX_envinfo MDBX_envinfo;
  * Legacy \ref mdbx_env_info() correspond to calling \ref mdbx_env_info_ex()
  * with the null `txn` argument.
  *
+ * For a not-yet-opened environment the call succeeds and reports only what
+ * is known before the open: the geometry limits set via
+ * \ref mdbx_env_set_geometry(), the readers limit and the page size (zero
+ * if not yet determined). Everything else - including `mi_recent_txnid`,
+ * the meta-pages troika fields, `mi_bootid` and the `mi_sys_*` system
+ * information - is zeroed rather than filled with guesses.
+ *
  * \param [in] env     An environment handle returned by \ref mdbx_env_create()
  * \param [in] txn     A transaction handle returned by \ref mdbx_txn_begin()
  * \param [out] info   The address of an \ref MDBX_envinfo structure
