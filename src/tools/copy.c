@@ -57,45 +57,60 @@ int main(int argc, char *argv[]) {
   bool quiet = false;
   bool warmup = false;
   MDBX_warmup_flags_t warmup_flags = MDBX_warmup_default;
+  int opt;
 
   prog = argv[0];
   if (tool_help_requested(argc, argv, "VqcfdpnuUnh"))
     help();
 
-  for (; argc > 1 && argv[1][0] == '-'; argc--, argv++) {
-    if (argv[1][1] == 'n' && argv[1][2] == '\0')
-      flags |= MDBX_NOSUBDIR;
-    else if (argv[1][1] == 'c' && argv[1][2] == '\0')
-      cpflags |= MDBX_CP_COMPACT;
-    else if (argv[1][1] == 'd' && argv[1][2] == '\0')
-      cpflags |= MDBX_CP_FORCE_DYNAMIC_SIZE;
-    else if (argv[1][1] == 'p' && argv[1][2] == '\0')
-      cpflags |= MDBX_CP_THROTTLE_MVCC;
-    else if (argv[1][1] == 'f' && argv[1][2] == '\0')
-      cpflags |= MDBX_CP_OVERWRITE;
-    else if (argv[1][1] == 'q' && argv[1][2] == '\0')
-      quiet = true;
-    else if (argv[1][1] == 'u' && argv[1][2] == '\0')
-      warmup = true;
-    else if (argv[1][1] == 'U' && argv[1][2] == '\0') {
-      warmup = true;
-      warmup_flags = MDBX_warmup_force | MDBX_warmup_touchlimit | MDBX_warmup_lock;
-    } else if (argv[1][1] == 'V' && argv[1][2] == '\0') {
+  while ((opt = getopt(argc, argv, "VqcfdpnuUnh")) != -1)
+    switch (opt) {
+    case 'V':
       tool_version_print("copy");
       return EXIT_SUCCESS;
-    } else
-      argc = 0;
-  }
+    case 'q':
+      quiet = true;
+      break;
+    case 'c':
+      cpflags |= MDBX_CP_COMPACT;
+      break;
+    case 'd':
+      cpflags |= MDBX_CP_FORCE_DYNAMIC_SIZE;
+      break;
+    case 'p':
+      cpflags |= MDBX_CP_THROTTLE_MVCC;
+      break;
+    case 'f':
+      cpflags |= MDBX_CP_OVERWRITE;
+      break;
+    case 'n':
+      flags |= MDBX_NOSUBDIR;
+      break;
+    case 'u':
+      warmup = true;
+      break;
+    case 'U':
+      warmup = true;
+      warmup_flags = MDBX_warmup_force | MDBX_warmup_touchlimit | MDBX_warmup_lock;
+      break;
+    case 'h':
+      help();
+      break; /* noreturn */
+    default:
+      usage();
+    }
 
-  if (argc < 2 || argc > 3)
+  argc -= optind;
+  argv += optind;
+  if (argc < 1 || argc > 2)
     usage();
 
   tool_break_setup();
 
   if (!quiet) {
-    fprintf((argc == 2) ? stderr : stdout, "mdbx_copy %s (%s, T-%s)\nRunning for copy %s to %s...\n",
-            mdbx_version.git.describe, mdbx_version.git.datetime, mdbx_version.git.tree, argv[1],
-            (argc == 2) ? "stdout" : argv[2]);
+    fprintf((argc == 1) ? stderr : stdout, "mdbx_copy %s (%s, T-%s)\nRunning for copy %s to %s...\n",
+            mdbx_version.git.describe, mdbx_version.git.datetime, mdbx_version.git.tree, argv[0],
+            (argc == 1) ? "stdout" : argv[1]);
     fflush(nullptr);
     mdbx_setup_debug(MDBX_LOG_NOTICE, MDBX_DBG_DONTCHANGE, tool_logger_default);
   }
@@ -103,16 +118,23 @@ int main(int argc, char *argv[]) {
   act = "opening environment";
   rc = mdbx_env_create(&env);
   if (rc == MDBX_SUCCESS)
-    rc = mdbx_env_open(env, argv[1], flags, 0);
+    rc = mdbx_env_open(env, argv[0], flags, 0);
 
   if (rc == MDBX_SUCCESS && warmup) {
     act = "warming up";
     rc = mdbx_env_warmup(env, nullptr, warmup_flags, 3600 * 65536);
   }
 
+  if (user_break) {
+    /* the break handlers are installed, so SIGINT/SIGTERM must not be
+     * swallowed silently between the stages (V-072) */
+    act = "interrupted";
+    rc = MDBX_EINTR;
+  }
+
   if (!MDBX_IS_ERROR(rc)) {
     act = "copying";
-    if (argc == 2) {
+    if (argc == 1) {
       mdbx_filehandle_t fd;
 #if IS_WINDOWS
       fd = GetStdHandle(STD_OUTPUT_HANDLE);
@@ -121,10 +143,12 @@ int main(int argc, char *argv[]) {
 #endif
       rc = mdbx_env_copy2fd(env, fd, cpflags);
     } else
-      rc = mdbx_env_copy(env, argv[2], cpflags);
+      rc = mdbx_env_copy(env, argv[1], cpflags);
   }
   if (rc)
     fprintf(stderr, "%s: %s failed, error %d (%s)\n", prog, act, rc, mdbx_strerror(rc));
+  else if (user_break)
+    fprintf(stderr, "%s: interrupted by signal after copying\n", prog);
   mdbx_env_close(env);
 
   return rc ? EXIT_FAILURE : EXIT_SUCCESS;
