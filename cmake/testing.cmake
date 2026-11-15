@@ -857,8 +857,10 @@ int main() { return 0; }
         if(MEMORYCHECK_COMMAND OR CMAKE_MEMORYCHECK_COMMAND)
           # FIXME: unless there are any other ideas how to fix the timeouts problem when testing under Valgrind.
           math(EXPR params_TIMEOUT "${params_TIMEOUT} * 42")
+          set_tests_properties(${name} PROPERTIES TIMEOUT ${params_TIMEOUT} MDBX_TIMEOUT_SCALED4MEMCHECK TRUE)
+        else()
+          set_tests_properties(${name} PROPERTIES TIMEOUT ${params_TIMEOUT})
         endif()
-        set_tests_properties(${name} PROPERTIES TIMEOUT ${params_TIMEOUT})
         if(params_DLLPATH)
           # Compose DLL's path in the ENVIRONMENT property
           if(CMAKE_SYSTEM_NAME STREQUAL "Windows")
