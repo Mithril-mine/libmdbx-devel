@@ -461,7 +461,7 @@ static int default_value_preserver(void *context, MDBX_val *target, const void *
     target->iov_len = bytes;
     return MDBX_RESULT_TRUE;
   }
-  memcpy(target->iov_base, src, target->iov_len = bytes);
+  memcpy_checklen(target->iov_base, src, target->iov_len = bytes);
   return MDBX_SUCCESS;
 }
 

@@ -83,6 +83,15 @@ MDBX_MAYBE_UNUSED MDBX_NOTHROW_CONST_FUNCTION static inline size_t ceil_powerof2
   return floor_powerof2(value + granularity - 1, granularity);
 }
 
+MDBX_MAYBE_UNUSED static inline void *memcpy_checklen(void *dst, const void *src, ptrdiff_t bytes) {
+  return (!MDBX_CHECK_MEMZEROLEN || likely(bytes > 0)) ? memcpy(dst, src, bytes) : dst;
+}
+
+MDBX_NOTHROW_PURE_FUNCTION MDBX_MAYBE_UNUSED static inline int memcmp_checklen(const void *s1, const void *s2,
+                                                                               ptrdiff_t bytes) {
+  return (!MDBX_CHECK_MEMZEROLEN || likely(bytes > 0)) ? memcmp(s1, s2, bytes) : 0;
+}
+
 #ifndef __cplusplus
 
 MDBX_MAYBE_UNUSED MDBX_NOTHROW_CONST_FUNCTION MDBX_INTERNAL size_t ceil_log2n(size_t value_uintptr);

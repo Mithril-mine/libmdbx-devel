@@ -630,7 +630,7 @@ __hot int cursor_put(MDBX_cursor *mc, const MDBX_val *key, MDBX_val *data, unsig
         if (flags & MDBX_RESERVE)
           data->iov_base = old_data.iov_base;
         else if (!(mc->flags & z_inner))
-          memcpy(old_data.iov_base, data->iov_base, data->iov_len);
+          memcpy_checklen(old_data.iov_base, data->iov_base, data->iov_len);
         else {
           cASSERT0(mc, page_numkeys(mc->pg[mc->top]) == 1);
           cASSERT0(mc, page_type_compat(mc->pg[mc->top]) == P_LEAF);
@@ -638,7 +638,7 @@ __hot int cursor_put(MDBX_cursor *mc, const MDBX_val *key, MDBX_val *data, unsig
           cASSERT0(mc, node_flags(node) == 0);
           cASSERT0(mc, key->iov_len < UINT16_MAX);
           node_set_ks(node, key->iov_len);
-          memcpy(node_key(node), key->iov_base, key->iov_len);
+          memcpy_checklen(node_key(node), key->iov_base, key->iov_len);
           cASSERT0(mc, ptr_disp(node_key(node), node_ds(node)) < ptr_disp(mc->pg[mc->top], env->ps));
           goto fix_parent;
         }

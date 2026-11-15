@@ -162,7 +162,7 @@ MDBX_NOTHROW_PURE_FUNCTION static __always_inline intptr_t cmp_len(size_t a, siz
 MDBX_NOTHROW_PURE_FUNCTION static __always_inline intptr_t cmp_lexical(const MDBX_val *a, const MDBX_val *b) {
   const intptr_t diff_len = cmp_len(a->iov_len, b->iov_len);
   const size_t shortest = (a->iov_len < b->iov_len) ? a->iov_len : b->iov_len;
-  int diff_data = likely(shortest) ? memcmp(a->iov_base, b->iov_base, shortest) : 0;
+  int diff_data = memcmp_checklen(a->iov_base, b->iov_base, shortest);
   return likely(diff_data) ? diff_data : diff_len;
 }
 
@@ -231,7 +231,7 @@ MDBX_NOTHROW_PURE_FUNCTION static __always_inline intptr_t cmp_reverse(const MDB
 /* Fast non-lexically comparator */
 MDBX_NOTHROW_PURE_FUNCTION static __always_inline intptr_t cmp_lenfast(const MDBX_val *a, const MDBX_val *b) {
   int diff = cmp_len(a->iov_len, b->iov_len);
-  return (likely(diff) || a->iov_len == 0) ? diff : memcmp(a->iov_base, b->iov_base, a->iov_len);
+  return likely(diff) ? diff : memcmp_checklen(a->iov_base, b->iov_base, a->iov_len);
 }
 
 /*----------------------------------------------------------------------------*/

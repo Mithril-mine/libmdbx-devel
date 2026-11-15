@@ -586,8 +586,7 @@ static int dbi_open_locked(MDBX_txn *txn, cursor_couple_t *maindb_cx, unsigned u
     rc = MDBX_ENOMEM;
     goto bailout;
   }
-  memcpy(clone, name.iov_base, name.iov_len);
-  name.iov_base = clone;
+  name.iov_base = memcpy_checklen(clone, name.iov_base, name.iov_len);
 
 create:
   tASSERT0(txn, rc == MDBX_SUCCESS || rc == MDBX_NOTFOUND);
@@ -824,7 +823,7 @@ __cold static struct dbi_rename_result dbi_rename_locked(MDBX_txn *txn, MDBX_dbi
     pair.err = MDBX_ENOMEM;
     return pair;
   }
-  new_name.iov_base = memcpy(pair.defer, new_name.iov_base, new_name.iov_len);
+  new_name.iov_base = memcpy_checklen(pair.defer, new_name.iov_base, new_name.iov_len);
 
   cx.outer.next = txn->cursors[MAIN_DBI];
   txn->cursors[MAIN_DBI] = &cx.outer;

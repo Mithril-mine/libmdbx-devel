@@ -291,6 +291,24 @@
 #ifndef MDBX_HAVE_C11ATOMICS
 #endif /* MDBX_HAVE_C11ATOMICS */
 
+/** MDBX_CHECK_MEMZEROLEN controls guards for mem(...)-family calls with a
+ * possibly-zero length: ASAN/UBSAN/MEMCHECK tools treat such calls as UB,
+ * while the actual platforms handle the zero-length case internally. */
+#ifndef MDBX_CHECK_MEMZEROLEN
+#if defined(ENABLE_MEMCHECK) || defined(ENABLE_UBSAN) || defined(ENABLE_ASAN) || defined(__SANITIZE_ADDRESS__) ||      \
+    defined(__SANITIZE_UNDEFINED__)
+#define MDBX_CHECK_MEMZEROLEN 1
+#elif defined(__GLIBC__) || defined(_MSC_VER) || defined(__MINGW__) || defined(__ANDROID_API__) ||                     \
+    defined(__APPLE__) || defined(_DARWIN_C_SOURCE) || defined(__FreeBSD__) || defined(__NetBSD__) ||                  \
+    defined(__OpenBSD__) || defined(__BSD__)
+#define MDBX_CHECK_MEMZEROLEN 0
+#else
+#define MDBX_CHECK_MEMZEROLEN 1
+#endif
+#elif !(MDBX_CHECK_MEMZEROLEN == 0 || MDBX_CHECK_MEMZEROLEN == 1)
+#error MDBX_CHECK_MEMZEROLEN must be defined as 0 or 1
+#endif /* MDBX_CHECK_MEMZEROLEN */
+
 /** If defined then enables use the GCC's `__builtin_cpu_supports()`
  * for runtime dispatching depending on the CPU's capabilities.
  * \note Defining `MDBX_HAVE_BUILTIN_CPU_SUPPORTS` to `0` should avoided unless

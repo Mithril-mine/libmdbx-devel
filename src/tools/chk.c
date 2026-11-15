@@ -252,7 +252,7 @@ static MDBX_chk_user_table_cookie_t *table_filter(MDBX_chk_context_t *ctx, const
   if (!only_table.iov_base)
     return (void *)(intptr_t)-1;
   const bool match =
-      (only_table.iov_len == name->iov_len && memcmp(only_table.iov_base, name->iov_base, name->iov_len) == 0);
+      (only_table.iov_len == name->iov_len && memcmp_checklen(only_table.iov_base, name->iov_base, name->iov_len) == 0);
   /* an unknown -s target must not silently pass as success */
   table_matched |= match;
   return match ? (void *)(intptr_t)-1 : nullptr;

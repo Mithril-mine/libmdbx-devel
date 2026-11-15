@@ -40,7 +40,7 @@ pathchar_t *osal_fileext(const pathchar_t *pathname, size_t len) {
 }
 
 bool osal_pathequal(const pathchar_t *l, const pathchar_t *r, size_t len) {
-  return memcmp(l, r, len * sizeof(pathchar_t)) == 0;
+  return memcmp_checklen(l, r, len * sizeof(pathchar_t)) == 0;
 }
 
 int osal_openfile(const enum osal_openfile_purpose purpose, const MDBX_env *env, const pathchar_t *pathname,
