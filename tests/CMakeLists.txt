@@ -678,6 +678,8 @@ else()
     set_tests_properties(extra_details_troika_fsm PROPERTIES LABELS "ut;ut.api;ut.env")
     add_extra_test(meta_validate_corpus SOURCE ut/api/meta_validate_corpus.c)
     set_tests_properties(extra_meta_validate_corpus PROPERTIES LABELS "ut;ut.api;ut.env")
+    add_ut(walk_contracts SOURCE ut/api/walk_contracts.c++)
+    set_tests_properties(walk_contracts PROPERTIES LABELS "ut;ut.api;ut.gc;ut.cursor")
     set_property(TEST extra_details_rkl APPEND PROPERTY
       # Routine profile: bounded stochastic scale + deterministic edge-cases
       # covers the same rkl/txl branches as the full stress at ~1.4s vs ~30s
