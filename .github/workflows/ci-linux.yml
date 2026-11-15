@@ -2,8 +2,9 @@ name: ci-linux
 
 # Infra v3 platform gate for Linux (migrated from the legacy `make check`
 # matrix; see docs/engineering/testing-infra-v3.md). Runs the linux-nightly
-# profile (8 registry cells: ubuntu-24.04 + ubuntu-26.04-arm, Debug/Release,
-# CXX on/off) with the fast ctest scope (smoke-t1 | ut.* minus ut.heavy).
+# profile (ubuntu-24.04 + ubuntu-26.04-arm cells: Debug/Release, CXX on/off,
+# clang/profgc, lock variants and the AddressSanitizer cell) with the full
+# ctest scope.
 #
 # The legacy `make check` also invoked `test-stochastic` (multi-process
 # mdbx_test, 600s), which has been unstable since the TASK-43 port
