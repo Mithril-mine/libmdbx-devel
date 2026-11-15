@@ -478,6 +478,21 @@ void testcase::txn_inject_writefault(MDBX_txn *txn) {
         (MDBX_txn_flags_t(mdbx_txn_flags(txn)) & MDBX_TXN_RDONLY) == 0) {
       log_verbose("== txn_inject_writefault(): got %u nops or more, inject FAULT", config.params.inject_writefaultn);
       log_flush();
+      if (RUNNING_ON_VALGRIND) {
+        /* The hard kill (SIGKILL/TerminateProcess) mimics the writer's crash,
+         * but Valgrind performs the leak-check for the killed process too and
+         * then reports the killed transaction's dirty pages and the rest of
+         * its in-flight resources as definitely/possibly lost. So under
+         * Valgrind the fault is emulated by aborting the transaction,
+         * closing the environment and quitting with the non-zero status:
+         * the database stays uncommitted at the last steady meta and the
+         * OS-locks are released, which gives the same recovery scenario for
+         * the subsequent actors, but without the false-positive leaks. */
+        MDBX_env *const env = mdbx_txn_env(txn);
+        mdbx_txn_abort(txn);
+        mdbx_env_close(env);
+        _exit(42);
+      }
 #if IS_WINDOWS
       TerminateProcess(GetCurrentProcess(), 42);
 #else
