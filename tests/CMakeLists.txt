@@ -192,6 +192,8 @@ else()
   endif()
   message(STATUS "The ${MDBX_TESTS_SEED} will be used for seeding tests. Re-run cmake to re-seed it.")
 
+
+
   if(WIN32 OR APPLE)
     set(MDBX_TEST_ITER 2)
   elseif(DEFINED ENV{CI} AND NOT "$ENV{CI}" STREQUAL "")

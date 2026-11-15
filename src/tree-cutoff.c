@@ -637,10 +637,10 @@ int tree_cutoff_range(MDBX_cursor *begin, MDBX_cursor *end, bool end_including) 
 
 #else /* MDBX_ENABLE_BUNCHES_REMOVAL */
 
-  intptr_t cmp = tree_cmp(begin, end);
+  intptr_t cmp = cursor_cmp(begin, end);
   if (unlikely(cmp > 0))
     return MDBX_ENODATA;
-  if (cmp == 0 && inner_pointed(begin) && unlikely(tree_cmp(&begin->subcur->cursor, &end->subcur->cursor) > 0))
+  if (cmp == 0 && inner_pointed(begin) && unlikely(cursor_cmp(&begin->subcur->cursor, &end->subcur->cursor) > 0))
     return MDBX_ENODATA;
 
   int err;
@@ -654,18 +654,18 @@ int tree_cutoff_range(MDBX_cursor *begin, MDBX_cursor *end, bool end_including) 
       if (unlikely(err != MDBX_SUCCESS) && err != MDBX_NOTFOUND)
         return err;
     }
-    cmp = tree_cmp(begin, end);
+    cmp = cursor_cmp(begin, end);
   }
 
   if (cmp == 0 && inner_pointed(begin)) {
-    cmp = tree_cmp(&begin->subcur->cursor, &end->subcur->cursor);
+    cmp = cursor_cmp(&begin->subcur->cursor, &end->subcur->cursor);
     while (cmp < 0) {
       err = cutoff_leaf(begin, 0);
       if (unlikely(err != MDBX_SUCCESS))
         return err;
-      cmp = tree_cmp(begin, end);
+      cmp = cursor_cmp(begin, end);
       if (cmp == 0 && inner_pointed(begin))
-        cmp = tree_cmp(&begin->subcur->cursor, &end->subcur->cursor);
+        cmp = cursor_cmp(&begin->subcur->cursor, &end->subcur->cursor);
     }
   }
 
