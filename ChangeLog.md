@@ -101,6 +101,7 @@ A hardening and refinement release: data-safety and corruption-resistance fixes 
     - Fixed `mdbx_txn_park()`/`unpark()` crashing without a reader slot; now `MDBX_EPERM` ([#316](https://github.com/Mithril-mine/libmdbx-devel/issues/316)).
     - Fixed `mdbx_cursor_renew()` crashing on a wrong cursor or transaction handle ([1/15 of #319](https://github.com/Mithril-mine/libmdbx-devel/issues/319)).
     - Fixed crashes in open transactions or `mdbx_env_warmup()` after the database size limit was raised ([#315](https://github.com/Mithril-mine/libmdbx-devel/issues/315)).
+    - Fixed a use of uninitialized cursor memory reported by MSan/Valgrind for non-dupsort tables.
 
  - Wrong results and API behavior:
     - Fixed `mdbx_chk -s` silently succeeding when the named table is absent; now an error ([#386](https://github.com/Mithril-mine/libmdbx-devel/issues/386)).
