@@ -46,6 +46,29 @@ MDBX_MAYBE_UNUSED static __always_inline void atomic_yield(void) {
 #error "Something wrong: C11 atomics are required with MSVC for non-x86 platform/target. Please use CMake with Ninja."
 #endif /* MDBX_HAVE_C11ATOMICS */
 
+/* The compiler-only barrier is needed only for the non-C11 atomic fallback
+ * below: with C11 atomics the compiler itself handles the ordering at the
+ * fence. It has exactly one user: the beginning of the memory fence, where
+ * it keeps the compiler from moving memory accesses across the fence's
+ * lowering. */
+MDBX_MAYBE_UNUSED static inline void osal_compiler_barrier(void) {
+#if defined(__clang__) || defined(__GNUC__)
+  __asm__ __volatile__("" ::: "memory");
+#elif defined(_MSC_VER)
+  _ReadWriteBarrier();
+#elif defined(__INTEL_COMPILER) /* LY: Intel Compiler may mimic GCC and MSC */
+  __memory_barrier();
+#elif defined(__SUNPRO_C) || defined(__sun) || defined(sun)
+  __compiler_barrier();
+#elif (defined(_HPUX_SOURCE) || defined(__hpux) || defined(__HP_aCC)) && (defined(HP_IA64) || defined(__ia64))
+  _Asm_sched_fence(/* LY: no-arg meaning 'all expect ALU', e.g. 0x3D3D */);
+#elif defined(_AIX) || defined(__ppc__) || defined(__powerpc__) || defined(__ppc64__) || defined(__powerpc64__)
+  __fence();
+#else
+#error "Could not guess the kind of compiler, please report to us."
+#endif
+}
+
 #ifdef MDBX_HAVE_C11ATOMICS
 #define osal_memory_fence(order, write) atomic_thread_fence((write) ? mo_c11_store(order) : mo_c11_load(order))
 #else /* MDBX_HAVE_C11ATOMICS */
@@ -56,6 +79,7 @@ MDBX_MAYBE_UNUSED static __always_inline void atomic_yield(void) {
  * fallbacks of the atomic_load and atomic_store helpers below). */
 #define osal_memory_fence(order, write)                                                                                \
   do {                                                                                                                 \
+    osal_compiler_barrier();                                                                                           \
     if ((order) > mo_Relaxed) {                                                                                        \
       if (write)                                                                                                       \
         osal_fence_producer();                                                                                         \
