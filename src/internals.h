@@ -272,7 +272,12 @@ struct MDBX_txn {
         rkl_t comeback;    /* The list of ids of records returned into GC during commit, etc */
       } gc;
       bool prefault_write_activated;
-      pgno_t loose_refund_wl /* FIXME: describe */;
+      /* Loose-refund waterline: the topmost extent of the loose pages list
+       * (max loose pgno + 2) since the last refund. A waterline above
+       * the first_unallocated edge means there are loose pages at/near
+       * the edge which refund_loose() may return to shrink the geometry.
+       * Consulted by txn_refund() and gc_alloc_single(). */
+      pgno_t loose_refund_wl;
       /* a sequence to spilling dirty page with LRU policy */
       unsigned dirtylru;
       /* dirtylist room: Dirty array size - dirty pages visible to this txn.
