@@ -360,15 +360,6 @@ static int nested_start(MDBX_txn *const nested, MDBX_txn *parent) {
    * reader holding the remap lock), promoted the zeroed geometry into the
    * parent, corrupting it (see
    * <https://github.com/Mithril-mine/libmdbx-devel/issues/448>). */
-  /* The geometry and DBI-related state must be snapshotted before the first
-   * fallible allocation: when the begin fails here, nested_undo() of the
-   * never-started nested transaction compares nested->geo with the parent's
-   * one to detect "a resize performed by the nested transaction". Against a
-   * zeroed geo such comparison is always true, so the undo ran a spurious
-   * dxb_resize() and, when refused (regular for Windows with an active
-   * reader holding the remap lock), promoted the zeroed geometry into the
-   * parent, corrupting it (see
-   * <https://github.com/Mithril-mine/libmdbx-devel/issues/448>). */
 #if MDBX_ENABLE_DBI_SPARSE
   nested->dbi_sparse = parent->dbi_sparse;
 #endif /* MDBX_ENABLE_DBI_SPARSE */
