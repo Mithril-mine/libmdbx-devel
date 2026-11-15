@@ -1038,8 +1038,10 @@ $(DIST_DIR)/mdbx.c: $(DIST_DIR)/@tmp-headers.h $(DIST_DIR)/@tmp-amalgam.h src/ve
 		cat $(shell git ls-files --deduplicate src/osal/*.c | sort -u) && \
 		cat $(shell git ls-files --deduplicate src/*.c | sort -u | grep -v alloy) src/version.c \
 	) | $(SED) \
+		-e '/#include "gc-scan4seq.h"/r src/gc-scan4seq.h' \
 		-e '/#include "debug-begin.h"/r src/debug-begin.h' \
 		-e '/#include "debug-end.h"/r src/debug-end.h' \
+	| $(SED) \
 		-e '/#include "/d;/#pragma once/d' \
 		-e '/dist-cutoff-begin/,/dist-cutoff-end/d' \
 		-e 's|@INCLUDE|#include|' \
