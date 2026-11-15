@@ -690,6 +690,13 @@ else()
         set_tests_properties(extra_crafted_meta_v023 PROPERTIES LABELS "ut;ut.api;ut.env")
     add_ut(walk_contracts SOURCE ut/api/walk_contracts.c++)
     set_tests_properties(walk_contracts PROPERTIES LABELS "ut;ut.api;ut.gc;ut.cursor")
+    if(MDBX_ENABLE_BIGFOOT)
+      # the store-slicing contract under test is BIGFOOT-specific
+      add_extra_test(details_gc_store_retired SOURCE ut/api/details_gc_store_retired.c)
+      set_tests_properties(extra_details_gc_store_retired PROPERTIES LABELS "ut;ut.api;ut.gc")
+    endif()
+    add_extra_test(details_gc_dense_solve SOURCE ut/api/details_gc_dense_solve.c)
+    set_tests_properties(extra_details_gc_dense_solve PROPERTIES LABELS "ut;ut.api;ut.gc")
     set_property(TEST extra_details_rkl APPEND PROPERTY
       # Routine profile: bounded stochastic scale + deterministic edge-cases
       # covers the same rkl/txl branches as the full stress at ~1.4s vs ~30s
