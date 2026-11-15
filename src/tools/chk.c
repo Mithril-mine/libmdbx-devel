@@ -169,20 +169,23 @@ static void logger(MDBX_log_level_t level, const char *function, int line, const
   enum MDBX_chk_severity severity = prio + kind;
   FILE *out = prefix(severity);
   if (out) {
-    vfprintf(out, fmt, args);
-    const size_t fmt_len = strlen(fmt);
-    const bool have_lf = (fmt_len > 0 && fmt[fmt_len - 1] == '\n');
-    if (level == MDBX_LOG_FATAL && function && line) {
-      if (have_lf)
-        for (size_t i = 0; i < line_struct.scope_depth; ++i)
-          fputs("   ", out);
-      fprintf(out, have_lf ? "          %s(), %u" : " (%s:%u)", function + (strncmp(function, "mdbx_", 5) ? 0 : 5),
-              line);
-      lf();
-    } else if (have_lf) {
-      line_struct.empty = true;
-      line_struct.severity = LINE_SEVERITY_NONE;
-      line_count += 1;
+    if (fmt) {
+      vfprintf(out, fmt, args);
+      const size_t fmt_len = strlen(fmt);
+      const bool have_lf = (fmt_len > 0 && fmt[fmt_len - 1] == '\n');
+      if (level == MDBX_LOG_FATAL && function && line) {
+        if (have_lf)
+          for (size_t i = 0; i < line_struct.scope_depth; ++i)
+            fputs("   ", out);
+        fprintf(out, have_lf ? "          %s(), %u" : " (%s:%u)", function + (strncmp(function, "mdbx_", 5) ? 0 : 5),
+                line);
+        lf();
+      } else if (have_lf) {
+        line_struct.empty = true;
+        line_struct.severity = LINE_SEVERITY_NONE;
+        line_count += 1;
+      } else
+        lf();
     } else
       lf();
   }
