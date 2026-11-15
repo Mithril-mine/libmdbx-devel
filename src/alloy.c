@@ -91,3 +91,13 @@
 #include "utils.c"
 #include "version.c"
 #include "walk.c"
+
+/*> dist-cutoff-begin */
+/* The testing API (introspection, testing and debugging extensions):
+ * compiled into the library in development builds, stripped by the
+ * amalgamation together with the MDBX_ENABLE_TESTS default (see
+ * src/options.h and src/config.h.in). See tests/api.h and tests/AGENTS.md. */
+#if MDBX_ENABLE_TESTS
+#include "../tests/api.c"
+#endif /* MDBX_ENABLE_TESTS */
+/*< dist-cutoff-end */

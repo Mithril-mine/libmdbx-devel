@@ -40,6 +40,7 @@ set(MDBX_TEST_TIMEOUTS
   "exceptions=30"
   "extra_details_pnl=30"
   "extra_details_rkl=30"
+  "extra_details_scan4seq=30"
   "extra_probes=30"
   "extra_probes_ipc=30"
   "fluent-params=30"
