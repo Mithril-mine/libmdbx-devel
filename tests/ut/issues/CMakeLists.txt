@@ -154,6 +154,13 @@ else()
   endif()
   add_issue_test(gh0331 SOURCE "issue_gh0331.c++")
   add_issue_test(gh0339 SOURCE "issue_gh0339.c++")
+  if(MDBX_BUILD_SHARED_LIBRARY)
+    # V-076 of #485: the legacy inline API must keep its exported
+    # non-inline fallback in the shared library (dlsym-visible).
+    add_issue_test(gh0485_release_cursors_export SOURCE "issue_gh0485_release_cursors_export.c++")
+    set_tests_properties(gh0485_release_cursors_export
+                         PROPERTIES ENVIRONMENT "MDBX_LIB_PATH=$<TARGET_FILE:mdbx>")
+  endif()
 endif()
 
 # Tests requiring the probe-bus (built with MDBX_PROBES=ON).

@@ -183,6 +183,7 @@ set(MDBX_TEST_TIMEOUTS
   "gh0485_load_nul_line=30"
   "gh0485_load_purge_multitable=30"
   "gh0485_stat_readers_lckless=30"
+  "gh0485_release_cursors_export=30"
   "gh0485_sync_bytes_range=30"
   "global_init=30"
   "hex_base64_base58=30"
