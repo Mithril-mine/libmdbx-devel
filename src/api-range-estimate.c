@@ -76,6 +76,23 @@ __hot static int cursor_diff(const MDBX_cursor *const __restrict x, const MDBX_c
   return MDBX_SUCCESS;
 }
 
+/* Scales the item count by the cursor difference over the page count,
+ * guarding the signed product: a crafted tree may claim item counts whose
+ * product with the difference does not fit into ptrdiff_t, and the signed
+ * overflow would be UB. The result is clamped instead, which only affects
+ * the approximation quality for such crafted values (V-058). */
+__hot static ptrdiff_t estimate_scaled(uint64_t items, ptrdiff_t diff, uint64_t pages) {
+  if (diff > 0) {
+    if (items > (uint64_t)PTRDIFF_MAX / (uint64_t)diff)
+      return PTRDIFF_MAX;
+  } else if (diff < 0) {
+    const uint64_t magnitude = (uint64_t)(-(diff + 1)) + 1;
+    if (items > (uint64_t)PTRDIFF_MAX / magnitude)
+      return PTRDIFF_MIN;
+  }
+  return (ptrdiff_t)items * diff / (ptrdiff_t)pages;
+}
+
 __hot static ptrdiff_t estimate(const tree_t *tree, diff_t *const __restrict dr) {
   /*        root: branch-page    => scale = leaf-factor * branch-factor^(N-1)
    *     level-1: branch-page(s) => scale = leaf-factor * branch-factor^2
@@ -93,13 +110,13 @@ __hot static ptrdiff_t estimate(const tree_t *tree, diff_t *const __restrict dr)
   if (unlikely(tree->leaf_pages == 0 || (tree->height > 1 && tree->branch_pages == 0)))
     return dr->diff;
 
-  ptrdiff_t estimated = (ptrdiff_t)tree->items * dr->diff / (ptrdiff_t)tree->leaf_pages;
+  ptrdiff_t estimated = estimate_scaled(tree->items, dr->diff, tree->leaf_pages);
   if (btree_power == 0)
     return estimated;
 
   if (tree->height < 4) {
     ASSERT(dr->level == 0 && btree_power == 1);
-    return (ptrdiff_t)tree->items * dr->diff / (ptrdiff_t)dr->root_nkeys;
+    return estimate_scaled(tree->items, dr->diff, dr->root_nkeys);
   }
 
   /* average_branchpage_fillfactor = total(branch_entries) / branch_pages
