@@ -22,7 +22,7 @@ int tree_drop(MDBX_cursor *mc) {
      * Also if the DB doesn't have sub-DBs and has no large/overflow
      * pages, omit scanning leaves. */
     if (!(may_have_subtrees | mc->tree->large_pages))
-      cursor_pop(mc);
+      cursor_eject(mc);
 
     rc = pnl_need(&mc->txn->wr.retired_pages,
                   (size_t)mc->tree->branch_pages + (size_t)mc->tree->leaf_pages + (size_t)mc->tree->large_pages);
@@ -84,7 +84,7 @@ int tree_drop(MDBX_cursor *mc) {
           goto bailout;
         /* no more siblings, go back to beginning of previous level. */
       popup:
-        cursor_pop(mc);
+        cursor_eject(mc);
         mc->ki[0] = 0;
         for (intptr_t i = 1; i <= mc->top; i++) {
           mc->pg[i] = stack[i];
