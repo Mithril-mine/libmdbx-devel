@@ -105,6 +105,10 @@ add_issue_test(gh0485_open_damaged_meta0 SOURCE "issue_gh0485_open_damaged_meta0
 if(MDBX_BUILD_TOOLS)
   add_issue_test(gh0485_load_nul_line SOURCE "issue_gh0485_load_nul_line.c++")
   set_tests_properties(gh0485_load_nul_line PROPERTIES ENVIRONMENT "MDBX_TOOL_LOAD=$<TARGET_FILE:mdbx_load>")
+  add_issue_test(gh0485_load_purge_multitable SOURCE "issue_gh0485_load_purge_multitable.c++")
+  set_tests_properties(
+    gh0485_load_purge_multitable
+    PROPERTIES ENVIRONMENT "MDBX_TOOL_DUMP=$<TARGET_FILE:mdbx_dump>;MDBX_TOOL_LOAD=$<TARGET_FILE:mdbx_load>")
 endif()
 
 # Platform-gated tests: Windows-only cases in the if-branch,
