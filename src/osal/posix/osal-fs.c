@@ -15,13 +15,19 @@
 int osal_check_fs_rdonly(mdbx_filehandle_t handle, const pathchar_t *pathname, int err) {
   struct statvfs info;
   if (!osal_is_pathname_absent_error(err)) {
-    if (statvfs(pathname, &info) == 0)
+    if (statvfs(pathname, &info) == 0) {
+      /* Test-only fault site: inject the "filesystem is read-only" answer
+       * (e.g. ST_RDONLY) so the lckless fallback can be exercised
+       * deterministically, without a real read-only mount. */
+      MPROBE_FAULT(fs_rdonly_flag, info.f_flag);
       return (info.f_flag & ST_RDONLY) ? MDBX_SUCCESS : err;
+    }
     if (!osal_is_pathname_absent_error(errno))
       return errno;
   }
   if (fstatvfs(handle, &info))
     return errno;
+  MPROBE_FAULT(fs_rdonly_flag, info.f_flag);
   if ((info.f_flag & ST_RDONLY) == 0)
     return osal_is_pathname_absent_error(err) ? MDBX_EACCESS : err;
   return MDBX_SUCCESS;

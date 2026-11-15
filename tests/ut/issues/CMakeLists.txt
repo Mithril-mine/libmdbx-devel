@@ -158,6 +158,14 @@ endif()
 
 # Tests requiring the probe-bus (built with MDBX_PROBES=ON).
 if(MDBX_PROBES)
+  if(MDBX_BUILD_TOOLS AND NOT WIN32)
+    # V-069 of #485: the real mdbx_stat under the dual probe-bus fault
+    # (lck_setup_eacces + fs_rdonly_flag) opens without-lck, so the reader
+    # table is reported absent; the informational outcome must not fail.
+    # POSIX-only: both fault sites live in the POSIX osal.
+    add_issue_test(gh0485_stat_readers_lckless SOURCE "issue_gh0485_stat_readers_lckless.c++")
+    set_tests_properties(gh0485_stat_readers_lckless PROPERTIES ENVIRONMENT "MDBX_PROBES=1")
+  endif()
   add_issue_test(gh0067 SOURCE "issue_gh0067.c++" NO_PCH)
   set_tests_properties(gh0067 PROPERTIES ENVIRONMENT "MDBX_PROBES=1")
   add_issue_test(gh0103_restart SOURCE "issue_gh0103_restart.c++")
