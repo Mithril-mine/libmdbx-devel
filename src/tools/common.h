@@ -140,6 +140,8 @@ MDBX_MAYBE_UNUSED static inline void tool_logger_default(MDBX_log_level_t level,
       "   ",        // 3 notice
       "   //",      // 4 verbose
   };
+  if (!fmt)
+    return;
   if (level >= 0 && level < MDBX_LOG_DEBUG) {
     if (function && line && (size_t)level < ARRAY_LENGTH(prefixes))
       fprintf(stderr, "%s", prefixes[level]);
