@@ -534,3 +534,89 @@
    ...
    fun:iov_write*
 }
+
+# msync() flushes whole pages of the mapped datafile, including the gaps
+# between nodes inside the touched pages, which are never written/initialized.
+# Such gaps are never read back, so the valgrind's complaint about the
+# uninitialised msync() argument is a false positive.
+{
+   msync-uninit-page-holes
+   Memcheck:Param
+   msync(start)
+   ...
+   fun:osal_msync*
+}
+
+# The forked-children of the multithreaded tests (lck-contention, gh0201,
+# gh0324, gh0329, and so on) intentionally terminate without any cleanup
+# to exercise the post-fork/recovery scenarios, e.g. with the environment's
+# locks still held. Valgrind performs the leak-check for such processes
+# and then reports the leftovers as "possibly lost".
+
+# TLS-blocks of the parent's threads that died at fork in the child,
+# which is exactly the "possibly lost" signature of a fork-child.
+{
+   fork-child-thread-tls
+   Memcheck:Leak
+   match-leak-kinds: possible
+   fun:calloc
+   ...
+   fun:allocate_stack*
+   ...
+   fun:pthread_create*
+}
+
+# The basal transaction's retired/repnl lists: pnl_alloc() returns an
+# interior pointer (pnl+1), so these blocks are always reported as
+# "possibly lost" when a process exits with an open environment.
+{
+   fork-child-basal-pnl
+   Memcheck:Leak
+   match-leak-kinds: possible
+   fun:malloc
+   fun:pnl_alloc*
+   fun:txn_basal_create*
+   ...
+}
+
+# A data page allocated (and filled) while creating a table, in a
+# fork-child that exits without closing the environment.
+{
+   fork-child-page-from-tbl-create
+   Memcheck:Leak
+   match-leak-kinds: possible
+   fun:malloc
+   fun:page_shadow_alloc*
+   ...
+   fun:tbl_create*
+   ...
+}
+
+# The dbi-name clones that the parent's churn-thread is freeing (outside the
+# dbi_lock) at the moment of fork(): such a block is referenced only by the
+# forking-away thread's stack/registers, which don't exist in the child,
+# so the child reports it as definitely lost. The parent frees the block
+# momentarily, and the main process leaves no such leftovers at all.
+{
+   fork-child-dbi-name-clone
+   Memcheck:Leak
+   match-leak-kinds: definite
+   fun:malloc
+   fun:dbi_open_locked*
+   ...
+   fun:dbi_open_close*
+   ...
+}
+
+# The shell-scripted tests (the tools' golden-runners and friends) are
+# executed by bash, which is instrumented by valgrind as a traced child.
+# Bash leaks some of its own parse/execute structures at exit - not our
+# business, but such reports would fail the test.
+{
+   bash-self-leaks
+   Memcheck:Leak
+   match-leak-kinds: definite
+   fun:*alloc
+   obj:/usr/bin/bash*
+   ...
+}
