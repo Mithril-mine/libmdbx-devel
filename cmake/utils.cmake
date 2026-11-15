@@ -538,3 +538,27 @@ macro(semver_provide name source_root_directory build_directory_for_json_output 
 endmacro(semver_provide)
 
 cmake_policy(POP)
+
+# Scales the explicitly set TIMEOUT properties of all already-registered tests
+# of the current directory by the valgrind factor, for the tests that are
+# registered directly (the smoke chains, the tools, the examples) and thus
+# bypass the add_gtest()/add_simple_test() manifest resolution.
+function(mdbx_scale_timeouts4memcheck)
+  if(NOT (MEMORYCHECK_COMMAND
+          OR CMAKE_MEMORYCHECK_COMMAND
+          OR ENABLE_MEMCHECK))
+    return()
+  endif()
+  get_property(mdbx_scale_timeouts_tests DIRECTORY PROPERTY TESTS)
+  foreach(mdbx_scale_timeouts_name IN LISTS mdbx_scale_timeouts_tests)
+    get_property(mdbx_scale_timeouts_current TEST ${mdbx_scale_timeouts_name} PROPERTY TIMEOUT)
+    if(mdbx_scale_timeouts_current)
+      get_property(mdbx_scale_timeouts_marked TEST ${mdbx_scale_timeouts_name} PROPERTY MDBX_TIMEOUT_SCALED4MEMCHECK)
+      if(NOT mdbx_scale_timeouts_marked)
+        math(EXPR mdbx_scale_timeouts_scaled "${mdbx_scale_timeouts_current} * 42")
+        set_tests_properties(${mdbx_scale_timeouts_name} PROPERTIES TIMEOUT ${mdbx_scale_timeouts_scaled}
+                                                                    MDBX_TIMEOUT_SCALED4MEMCHECK TRUE)
+      endif()
+    endif()
+  endforeach()
+endfunction()

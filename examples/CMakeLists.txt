@@ -246,3 +246,6 @@ if(UNIX)
   add_executable(pcrf_simulator c/pcrf/pcrf_simulator.c)
   target_link_libraries(pcrf_simulator ${MDBX_LIBRARY})
 endif()
+
+# Scale the examples' TIMEOUTs for the valgrind/memcheck runs.
+mdbx_scale_timeouts4memcheck()
