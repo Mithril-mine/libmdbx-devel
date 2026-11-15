@@ -48,6 +48,7 @@ set(MDBX_TEST_TIMEOUTS
   "extra_details_scan4seq=30"
   "extra_details_troika_fsm=30"
   "extra_meta_validate_corpus=30"
+  "extra_crafted_meta_v039=30"
   "extra_crafted_meta_v023=30"
   "extra_probes=30"
   "extra_probes_ipc=30"

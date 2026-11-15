@@ -508,8 +508,9 @@ __hot int page_split(MDBX_cursor *mc, const MDBX_val *const newkey, MDBX_val *co
       /* sub cursors may be on different DB */
       if (m3->pg[0] != mp)
         continue;
-      /* root split */
-      for (intptr_t k = root_split_height; k >= 0; k--) {
+      /* root split: cover the related cursor's whole tracked stack
+       * (top + stash), never trusting the stored tree height */
+      for (intptr_t k = m3->top + m3->stash; k >= 0; k--) {
         m3->ki[k + 1] = m3->ki[k];
         m3->pg[k + 1] = m3->pg[k];
       }

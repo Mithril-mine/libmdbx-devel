@@ -682,6 +682,9 @@ else()
     set_tests_properties(extra_details_troika_fsm PROPERTIES LABELS "ut;ut.api;ut.env")
     add_extra_test(meta_validate_corpus SOURCE ut/api/meta_validate_corpus.c)
     set_tests_properties(extra_meta_validate_corpus PROPERTIES LABELS "ut;ut.api;ut.env")
+    # the #485 crafted-meta regression: crafted_meta_v039
+        add_extra_test(crafted_meta_v039 SOURCE ut/api/crafted_meta_v039.c)
+        set_tests_properties(extra_crafted_meta_v039 PROPERTIES LABELS "ut;ut.api;ut.cursor")
     # the #485 crafted-meta regression: crafted_meta_v023
         add_extra_test(crafted_meta_v023 SOURCE ut/api/crafted_meta_v023.c)
         set_tests_properties(extra_crafted_meta_v023 PROPERTIES LABELS "ut;ut.api;ut.env")
