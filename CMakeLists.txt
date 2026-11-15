@@ -1103,6 +1103,7 @@ elseif(TRUE)
       "${MDBX_SOURCE_DIR}/refund.c"
       "${MDBX_SOURCE_DIR}/rkl.c"
       "${MDBX_SOURCE_DIR}/rkl.h"
+      "${MDBX_SOURCE_DIR}/scan4seq.h"
       "${MDBX_SOURCE_DIR}/sort.h"
       "${MDBX_SOURCE_DIR}/spill.c"
       "${MDBX_SOURCE_DIR}/spill.h"
