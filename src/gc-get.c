@@ -101,8 +101,6 @@ bool env_is_page_incore(MDBX_env *const env, const pgno_t pgno) {
 
 #include "scan4seq.h"
 
-
-
 /*----------------------------------------------------------------------------*/
 
 static inline bool is_reclaimable(MDBX_txn *txn, const MDBX_cursor *mc, const uint8_t flags) {
