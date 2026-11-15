@@ -97,6 +97,7 @@ add_issue_test(gh0444 SOURCE "issue_gh0444.c++")
 add_issue_test(gh0450 SOURCE "issue_gh0450.c++")
 add_issue_test(gh0453 SOURCE "issue_gh0453.c++")
 add_issue_test(gh0454 SOURCE "issue_gh0454.c++")
+add_issue_test(gh0485_put_dangling_cursor SOURCE "issue_gh0485_put_dangling_cursor.c++")
 
 # Platform-gated tests: Windows-only cases in the if-branch,
 # POSIX-only ones in the else-branch (numeric order within each).
