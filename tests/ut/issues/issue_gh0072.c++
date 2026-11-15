@@ -57,6 +57,11 @@ static void create_hostile_db(const char *path) {
   MDBX_env *env = nullptr;
   ASSERT_EQ(MDBX_SUCCESS, mdbx_env_create(&env));
   ASSERT_EQ(MDBX_SUCCESS, mdbx_env_set_maxdbs(env, 8));
+  /* A modest 16 MiB upper bound (the issue_gh0058/59/71 idiom): the default
+   * ~8 GiB geometry cannot be mapped by the spawned tools in the ASan cells
+   * (the sanitizer's shadow accounting), and the table-name sanitization
+   * under test does not depend on the size. */
+  ASSERT_EQ(MDBX_SUCCESS, mdbx_env_set_geometry(env, -1, -1, 16 << 20, -1, -1, -1));
   ASSERT_EQ(MDBX_SUCCESS, mdbx_env_open(env, path, MDBX_NOSUBDIR, 0644));
 
   MDBX_txn *txn = nullptr;
