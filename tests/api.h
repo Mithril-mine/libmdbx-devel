@@ -22,9 +22,6 @@
  * the monolithic tests/api.c will be split into per-area parts in the
  * tests/api/ directory. */
 
-
-
-
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -130,6 +127,23 @@ LIBMDBX_API int mdbx_tst_walk_pages(MDBX_txn *txn, MDBX_tst_walk_func *visitor, 
  * \param limit  The limit in bytes to install.
  * \return The previous limit, to pass to mdbx_tst_restore_mmap_limit(). */
 LIBMDBX_API uint64_t mdbx_tst_override_mmap_limit(uint64_t limit);
+
+/** \brief Runs the internal troika-FSM self-proof (src/meta.c).
+ *
+ * Exhaustively re-derives the packed troika byte for every combination of
+ * the three meta comparison states and asserts the unpacked decisions
+ * equal the reference computation. Normally runs only under
+ * MDBX_CHECKING; dead code in release builds - this wrapper makes it
+ * runnable everywhere. \return true when the proof holds. */
+LIBMDBX_API bool mdbx_tst_troika_verify_fsm(void);
+
+/** \brief Runs the internal pv2pages round-trip self-proof (src/cogs.c).
+ *
+ * Exhaustively checks the 16-bit packed (exponential quantized)
+ * page-count round-trip for all 65536 packed values. Normally runs only
+ * under MDBX_CHECKING; dead code in release builds - this wrapper makes
+ * it runnable everywhere. \return true when the proof holds. */
+LIBMDBX_API bool mdbx_tst_pv2pages_verify(void);
 
 /** \brief Reads the transaction's first-unallocated page number.
  *
