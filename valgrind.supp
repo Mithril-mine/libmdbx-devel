@@ -534,3 +534,28 @@
    ...
    fun:iov_write*
 }
+
+# msync() flushes whole pages of the mapped datafile, including the gaps
+# between nodes inside the touched pages, which are never written/initialized.
+# Such gaps are never read back, so the valgrind's complaint about the
+# uninitialised msync() argument is a false positive.
+{
+   msync-uninit-page-holes
+   Memcheck:Param
+   msync(start)
+   ...
+   fun:osal_msync*
+}
+
+# The shell-scripted tests (the tools' golden-runners and friends) are
+# executed by bash, which is instrumented by valgrind as a traced child.
+# Bash leaks some of its own parse/execute structures at exit - not our
+# business, but such reports would fail the test.
+{
+   bash-self-leaks
+   Memcheck:Leak
+   match-leak-kinds: definite
+   fun:*alloc
+   obj:/usr/bin/bash*
+   ...
+}
