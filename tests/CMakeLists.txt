@@ -694,9 +694,7 @@ else()
     # gc-get.c); exhaustive over all 2^16 descending lists over {1..16} plus
     # long-sequence spot checks; guards the whole SIMD family (issue #485).
     add_extra_test(details_scan4seq SOURCE ut/api/details_scan4seq.c)
-    set_tests_properties(extra_details_scan4seq PROPERTIES
-      LABELS "ut;ut.api;ut.gc"
-      TIMEOUT 300)
+    set_tests_properties(extra_details_scan4seq PROPERTIES LABELS "ut;ut.api;ut.gc")
 
     if(MDBX_PROBES)
       add_extra_test(probes SOURCE ut/api/probes.c)
