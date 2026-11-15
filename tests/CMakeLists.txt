@@ -135,15 +135,15 @@ function(add_simple_test name)
         ENVIRONMENT "${MDBX_TESTS_ASAN_OPTIONS}")
     endif()
     set_tests_properties(extra_${name} PROPERTIES LABELS "ut")
-    if(params_TIMEOUT)
-      if(MEMORYCHECK_COMMAND
-         OR CMAKE_MEMORYCHECK_COMMAND
-         OR ENABLE_MEMCHECK)
-        # FIXME: unless there are any other ideas how to fix the timeouts problem when testing under Valgrind.
-        math(EXPR params_TIMEOUT "${params_TIMEOUT} * 42")
-      endif()
-      set_tests_properties(extra_${name} PROPERTIES TIMEOUT ${params_TIMEOUT})
+    # The manifest is keyed by the registered ctest name ("extra_<name>").
+    mdbx_resolve_test_timeout(extra_${name} params_TIMEOUT)
+    if(MEMORYCHECK_COMMAND
+       OR CMAKE_MEMORYCHECK_COMMAND
+       OR ENABLE_MEMCHECK)
+      # FIXME: unless there are any other ideas how to fix the timeouts problem when testing under Valgrind.
+      math(EXPR params_TIMEOUT "${params_TIMEOUT} * 42")
     endif()
+    set_tests_properties(extra_${name} PROPERTIES TIMEOUT ${params_TIMEOUT})
     if(params_DLLPATH)
       # Compose DLL's path in the ENVIRONMENT property
       if(WIN32)
@@ -267,6 +267,8 @@ else()
   set_tests_properties(smoke_long_cleanup PROPERTIES
     LABELS "smoke-long;smoke-t3"
     FIXTURES_CLEANUP smoke-long)
+  # the cleanup itself runs in well under a second (the ~3x rule floor)
+  set_tests_properties(smoke_long_cleanup PROPERTIES TIMEOUT 30)
 
   add_test(
     NAME dupsort_writemap
@@ -301,6 +303,8 @@ else()
   set_tests_properties(dupsort_writemap_cleanup PROPERTIES
     LABELS "smoke-long;smoke-t3"
     FIXTURES_CLEANUP dupsort_writemap)
+  # the cleanup itself runs in well under a second (the ~3x rule floor)
+  set_tests_properties(dupsort_writemap_cleanup PROPERTIES TIMEOUT 30)
 
   add_test(NAME uniq_nested
            COMMAND $<TARGET_FILE:mdbx_test> --duration=5m --loglevel=notice --mode=-writemap,-nosync-safe,-lifo
@@ -331,6 +335,8 @@ else()
   set_tests_properties(uniq_nested_cleanup PROPERTIES
     LABELS "smoke-long;smoke-t3"
     FIXTURES_CLEANUP uniq_nested)
+  # the cleanup itself runs in well under a second (the ~3x rule floor)
+  set_tests_properties(uniq_nested_cleanup PROPERTIES TIMEOUT 30)
 
   if(WIN32 AND MDBX_BUILD_TOOLS)
     set_tests_properties(smoke_long_chk PROPERTIES RESOURCE_LOCK smoke-long.db)
@@ -403,6 +409,8 @@ else()
   set_tests_properties(smoke_cleanup PROPERTIES
     LABELS "smoke;smoke-t2"
     FIXTURES_CLEANUP smoke-quick)
+  # the cleanup itself runs in well under a second (the ~3x rule floor)
+  set_tests_properties(smoke_cleanup PROPERTIES TIMEOUT 30)
 
   if(WIN32)
     set_tests_properties(smoke_basic smoke_writemap PROPERTIES RESOURCE_LOCK smoke.db)
@@ -436,6 +444,8 @@ else()
   set_tests_properties(smoke_fault_cleanup PROPERTIES
     LABELS "smoke-fault;smoke-t2"
     FIXTURES_CLEANUP smoke-fault)
+  # the cleanup itself runs in well under a second (the ~3x rule floor)
+  set_tests_properties(smoke_fault_cleanup PROPERTIES TIMEOUT 30)
 
   # Enforcement of the test hygiene (issue #343, item 4): fails when ANY
   # database file is left in the build tree. Runs only via `ctest -L hygiene`
@@ -449,7 +459,7 @@ else()
   # fixtures, e.g. when the slowest producer of another chain has just
   # finished but its cleanup has not started yet. */
   set_tests_properties(test_hygiene_check
-    PROPERTIES LABELS "hygiene" RUN_SERIAL ON
+    PROPERTIES LABELS "hygiene" RUN_SERIAL ON TIMEOUT 30
                DEPENDS "smoke_cleanup;smoke_fault_cleanup;smoke_long_cleanup;dupsort_writemap_cleanup;uniq_nested_cleanup;smoke_sp_cleanup;smoke_t1_hill_cleanup;smoke_t1_nested_cleanup;smoke_t1_copy_cleanup")
 
   if(MDBX_ENABLE_SINGLEPROCESS_TESTS)
@@ -500,6 +510,8 @@ else()
   set_tests_properties(smoke_sp_cleanup PROPERTIES
     LABELS "smoke-singleprocess;smoke-t2"
     FIXTURES_CLEANUP smoke-singleprocess)
+  # the cleanup itself runs in well under a second (the ~3x rule floor)
+  set_tests_properties(smoke_sp_cleanup PROPERTIES TIMEOUT 30)
 
   if(WIN32)
     set_tests_properties(smoke_sp_hill smoke_sp_copy smoke_sp_nested PROPERTIES RESOURCE_LOCK singleprocess.db)
@@ -554,16 +566,22 @@ else()
   set_tests_properties(smoke_t1_hill_cleanup PROPERTIES
     LABELS "smoke;smoke-t1"
     FIXTURES_CLEANUP smoke-t1-hill)
+  # the cleanup itself runs in well under a second (the ~3x rule floor)
+  set_tests_properties(smoke_t1_hill_cleanup PROPERTIES TIMEOUT 30)
 
   add_test(NAME smoke_t1_nested_cleanup COMMAND $<TARGET_FILE:te_cleanup_tool> t1-nested.db)
   set_tests_properties(smoke_t1_nested_cleanup PROPERTIES
     LABELS "smoke;smoke-t1"
     FIXTURES_CLEANUP smoke-t1-nested)
+  # the cleanup itself runs in well under a second (the ~3x rule floor)
+  set_tests_properties(smoke_t1_nested_cleanup PROPERTIES TIMEOUT 30)
 
   add_test(NAME smoke_t1_copy_cleanup COMMAND $<TARGET_FILE:te_cleanup_tool> t1-copy.db t1-copy.db-copy)
   set_tests_properties(smoke_t1_copy_cleanup PROPERTIES
     LABELS "smoke;smoke-t1"
     FIXTURES_CLEANUP smoke-t1-copy)
+  # the cleanup itself runs in well under a second (the ~3x rule floor)
+  set_tests_properties(smoke_t1_copy_cleanup PROPERTIES TIMEOUT 30)
 
   if(UNIX AND MDBX_ENABLE_LONG_TESTS)
     add_test(NAME stochastic COMMAND ${CMAKE_CURRENT_SOURCE_DIR}/stochastic.sh --whole-duration 600 --probe-duration 60
@@ -688,7 +706,7 @@ else()
       file(MAKE_DIRECTORY "${probes_ipc_dir}")
       add_test(NAME extra_probes_ipc
                COMMAND $<TARGET_FILE:te_probes_ipc> "${probes_ipc_dir}")
-      set_tests_properties(extra_probes_ipc PROPERTIES LABELS "ut;ut.api"
+      set_tests_properties(extra_probes_ipc PROPERTIES LABELS "ut;ut.api" TIMEOUT 30
         WORKING_DIRECTORY "${probes_ipc_dir}")
     endif()
 
@@ -701,13 +719,13 @@ else()
     set_tests_properties(nested_drop_abort PROPERTIES LABELS "ut;ut.dbi;ut.txn")
     if(MDBX_BUILD_CXX)
       if(NOT WIN32 OR NOT MDBX_CXX_STANDARD LESS 17)
-        add_ut(cursor_closing SOURCE ut/cursor/cursor_closing.c++ TIMEOUT 10800)
+        add_ut(cursor_closing SOURCE ut/cursor/cursor_closing.c++)
         set_tests_properties(cursor_closing PROPERTIES LABELS "ut;ut.cursor;ut.heavy")
         add_ut(early_close_dbi SOURCE ut/dbi/early_close_dbi.c++)
         set_tests_properties(early_close_dbi PROPERTIES LABELS "ut;ut.dbi;ut.env")
         add_ut(maindb_ordinal SOURCE ut/dbi/maindb_ordinal.c++)
         set_tests_properties(maindb_ordinal PROPERTIES LABELS "ut;ut.dbi")
-        add_ut(dupfix_multiple SOURCE ut/dbi/dupfix_multiple.c++ TIMEOUT 600)
+        add_ut(dupfix_multiple SOURCE ut/dbi/dupfix_multiple.c++)
         set_tests_properties(dupfix_multiple PROPERTIES LABELS "ut;ut.dbi")
         if(MDBX_PROBES)
           # Same as ut_get_cached: C++ test TUs do not see the internal
@@ -718,11 +736,11 @@ else()
           set_tests_properties(dupfix_multiple PROPERTIES APPEND PROPERTY
             ENVIRONMENT "MDBX_PROBES=1")
         endif()
-        add_ut(doubtless_positioning SOURCE ut/cursor/doubtless_positioning.c++ TIMEOUT 10800)
+        add_ut(doubtless_positioning SOURCE ut/cursor/doubtless_positioning.c++)
         set_tests_properties(doubtless_positioning PROPERTIES LABELS "ut;ut.cursor;ut.heavy")
-        add_ut(crunched_delete SOURCE ut/txn/crunched_delete.c++ TIMEOUT 10800)
+        add_ut(crunched_delete SOURCE ut/txn/crunched_delete.c++)
         set_tests_properties(crunched_delete PROPERTIES LABELS "ut;ut.txn;ut.heavy")
-        add_ut(distance_scroll_distribute SOURCE ut/cursor/distance_scroll_distribute.c++ TIMEOUT 10800)
+        add_ut(distance_scroll_distribute SOURCE ut/cursor/distance_scroll_distribute.c++)
         set_tests_properties(distance_scroll_distribute PROPERTIES LABELS "ut;ut.cursor;ut.heavy")
         add_ut(dbi SOURCE ut/dbi/dbi.c++)
         set_tests_properties(dbi PROPERTIES LABELS "ut;ut.dbi")
