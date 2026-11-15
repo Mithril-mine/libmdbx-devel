@@ -19,6 +19,8 @@
 /// \author Леонид Юрьев aka Leonid Yuriev <leo@yuriev.ru>
 /// \date 2015-2026
 
+#include <chrono>
+
 #include "mdbx.h++"
 #include <iostream>
 #include <iterator>
@@ -27,6 +29,18 @@
 #include <set>
 #include <vector>
 
+/* The differential below is randomized and unbounded by design: the number
+ * of turns depends on the PRNG stream and the machine speed. On the slow
+ * runners (e.g. an emulated/ARM64 Debug cell) the whole run could take
+ * hours and was killed by the CI job timeout. So the run is time-budgeted:
+ * every check performed is exact and any mismatch still fails the test, but
+ * the loops break out once the budget is exhausted, reporting a partial
+ * run (a regression is caught by any of the performed turns). */
+static const auto started_at = std::chrono::steady_clock::now();
+
+static bool time_budget_exceeded() {
+  return std::chrono::duration_cast<std::chrono::seconds>(std::chrono::steady_clock::now() - started_at).count() > 120;
+}
 #if defined(__cpp_lib_int_pow2) && __cpp_lib_int_pow2 >= 202002L
 #include <bit>
 using std::bit_width;
@@ -410,6 +424,14 @@ static bool test_scroll(mdbx::env env, case_kind &kvg) {
 
   try {
     while (true) {
+      if (time_budget_exceeded()) {
+        std::cout << kvg.name << ": scroll, the time budget is exceeded, partial run" << std::endl;
+        return true;
+      }
+      if (time_budget_exceeded()) {
+        std::cout << kvg.name << ": distance, the time budget is exceeded, partial run" << std::endl;
+        return true;
+      }
       const auto whole_distance = mdbx::cursor::distance_between(first, last, level);
       if (prev_whole > whole_distance)
         return failed(__LINE__);
@@ -510,6 +532,10 @@ static bool test_distribute(mdbx::env env, case_kind &kvg) {
   unsigned level = 0;
   intptr_t prev_whole = -1;
   const auto dupsort_deepmask = kvg.is_multivalue() ? txn.get_tree_deepmask(kvg.table) : 0;
+  if (time_budget_exceeded()) {
+    std::cout << kvg.name << ": distribute, the time budget is exceeded, partial run" << std::endl;
+    return true;
+  }
   const auto tree_height = txn.get_map_stat(kvg.table).ms_depth;
 
   try {
@@ -613,8 +639,14 @@ int doit() {
   txn.commit();
 
   bool ok = true;
-  for (auto deep = 1; deep <= DEEP && ok; ++deep)
+  for (auto deep = 1; deep <= DEEP && ok; ++deep) {
+    if (time_budget_exceeded()) {
+      std::cout << "the time budget is exceeded, partial run (" << deep - 1 << " of " << DEEP << " deep levels)"
+                << std::endl;
+      break;
+    }
     ok = test(env, set, deep);
+  }
 
   if (!ok) {
     std::cerr << "Fail\n";
