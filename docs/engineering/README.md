@@ -99,6 +99,7 @@ Author: Leonid Yuriev \<leo@yuriev.ru\>. Home site: <https://libmdbx.dqdkfa.ru>.
 | [`coverage-pilot-inventory.md`](coverage-pilot-inventory.md) | Coverage-pilot (B68-P3) inventory: per-test → module/function mapping, reachable-target accounting, success metric |
 | [`testing-infra-design.md`](testing-infra-design.md) | Testing Infrastructure v2 design (background): registry (`tests/ci/config.json`), orchestrator/runner workflows, request→cell mapping, flaky policy, rollout |
 | [`testing-infra-v3.md`](testing-infra-v3.md) | Testing Infrastructure v3 (implemented): two-tier change addressing, orchestrator supersede/preservation, runner, profiles, validation gates |
+| [`../verification/LEDGER.md`](../verification/LEDGER.md) | **Verification campaign 2026-11** (statement-level, 155/155 files): master ledger of verdicts/findings/lemmas, wave reports, per-tranche ledgers, primitive contracts, repro harnesses; distilled additions live in this directory (invariants §7, module-interfaces §6, test-coverage §8) |
 | [`techdebt.md`](techdebt.md) | Tech-debt inventory from source scan: 86 TODO/FIXME/workaround markers by category with file:line refs |
 | [`workflows.md`](workflows.md) | Git branching, PR/review flow, CI triggers, release & amalgamation process |
 | [`skills/README.md`](skills/README.md) | SKILLS-иерархия L0–L4: superpowers/shared/roles/orchestrator, references (subsystem-map, module-lock-matrix) |
