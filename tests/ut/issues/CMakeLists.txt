@@ -101,6 +101,12 @@ add_issue_test(gh0485_put_dangling_cursor SOURCE "issue_gh0485_put_dangling_curs
 add_issue_test(gh0485_sync_bytes_range SOURCE "issue_gh0485_sync_bytes_range.c++")
 add_issue_test(gh0485_open_damaged_meta0 SOURCE "issue_gh0485_open_damaged_meta0.c++")
 
+# V-067/V-068 of #485 need the dump/load tool binaries (the gh0070 pattern).
+if(MDBX_BUILD_TOOLS)
+  add_issue_test(gh0485_load_nul_line SOURCE "issue_gh0485_load_nul_line.c++")
+  set_tests_properties(gh0485_load_nul_line PROPERTIES ENVIRONMENT "MDBX_TOOL_LOAD=$<TARGET_FILE:mdbx_load>")
+endif()
+
 # Platform-gated tests: Windows-only cases in the if-branch,
 # POSIX-only ones in the else-branch (numeric order within each).
 if(WIN32)
