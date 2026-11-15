@@ -1,0 +1,41 @@
+# Профиль "knowledge": общая память знаний для любого проекта.
+# Скрыты libmdbx-специфичные слои: карта исходников (cg_*), системные
+# заголовки (sys_*), покрытие, тест-метрики, CI-джобы, project-map, зонды,
+# runtime-трассы и слои веток.
+
+# записи и поиск
+normalize_key
+safe_store
+recall
+search
+lookup
+exists
+link
+unlink
+graph
+vocab_add
+vocab_find
+
+# обслуживание
+gc
+purge
+stats
+dump_context
+restore_context
+
+# ADR
+adr_update
+adr_get
+adr_outline
+adr_delete
+
+# мост с codebase-memory-mcp
+cbm_link
+cbm_unlink
+cbm_linked
+cbm_search
+
+# режим записи и бэкапы
+db_set_mode
+db_backup
+db_export

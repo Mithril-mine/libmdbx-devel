@@ -25,10 +25,40 @@ def _default_db_path() -> str:
                         "shared-graph-memory", "db.mdbx")
 
 
+PROFILES_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "profiles")
+
+
+def load_tool_profile(profile: str) -> set:
+    """Имена инструментов профиля: имя из ``profiles/`` или путь к файлу.
+
+    Формат файла: одно имя на строку, ``#`` — комментарий до конца строки.
+    """
+    is_path = os.path.basename(profile) != profile or profile.endswith(".txt")
+    path = profile if is_path else os.path.join(PROFILES_DIR, profile + ".txt")
+    try:
+        with open(path, encoding="utf-8") as fh:
+            names = {line.split("#", 1)[0].strip() for line in fh}
+    except OSError as e:
+        known = sorted(f[:-4] for f in os.listdir(PROFILES_DIR) if f.endswith(".txt"))
+        raise MemoryError("TOOL_PROFILE", "invalid",
+                          "профиль инструментов %r не найден (%s)" % (profile, e),
+                          "SHARED_GRAPH_MEMORY_TOOL_PROFILE: одно из %s или путь к файлу"
+                          % ", ".join(known), "none") from None
+    names.discard("")
+    return names
+
+
 class McpServer:
-    def __init__(self, store: Store):
+    def __init__(self, store: Store, allowed_tools=None):
         self.store = store
         self.tools = self._build_tools()
+        if allowed_tools is not None:
+            unknown = set(allowed_tools) - self.tools.keys()
+            if unknown:
+                raise MemoryError("TOOL_PROFILE", "invalid",
+                                  "в профиле неизвестные инструменты: %s" % ", ".join(sorted(unknown)),
+                                  "исправьте имена в профиле (см. tools/list без профиля)", "none")
+            self.tools = {n: t for n, t in self.tools.items() if n in allowed_tools}
 
     # --- инструменты ---------------------------------------------------------
     def _build_tools(self) -> dict:
@@ -1034,6 +1064,13 @@ class McpServer:
 def main(argv=None):
     path = _default_db_path()
     readonly = os.environ.get("SHARED_GRAPH_MEMORY_READONLY", "1") not in ("0", "false", "")
+    profile = os.environ.get("SHARED_GRAPH_MEMORY_TOOL_PROFILE", "")
+    try:
+        allowed_tools = load_tool_profile(profile) if profile else None
+        McpServer(None, allowed_tools=allowed_tools)
+    except MemoryError as e:
+        print("shared-graph-memory: %s" % e, file=sys.stderr)
+        return 2
     created = False
     # БД ещё не существует — создаём (readonly старт бессмыслен без файла);
     # иначе открываем в read-only и переключаемся в rw по запросу агента.
@@ -1070,9 +1107,10 @@ def main(argv=None):
     except Exception:  # noqa: BLE001
         diag = {}
     print("shared-graph-memory started: path=%s readonly=%s sync_mode=%s "
-          "next_id=%s meta_txnid=%s%s" % (
+          "next_id=%s meta_txnid=%s%s%s" % (
               path, readonly, store.sync_mode, store.next_id,
-              diag.get("meta_txnid"), " CREATED-NEW" if created else ""),
+              diag.get("meta_txnid"), " CREATED-NEW" if created else "",
+              " tool_profile=%s(%d)" % (profile, len(allowed_tools)) if profile else ""),
           file=sys.stderr, flush=True)
 
     def _shutdown(signum=None, frame=None):
@@ -1090,7 +1128,7 @@ def main(argv=None):
                 signal.signal(sig, _shutdown)
             except (ValueError, OSError):
                 pass  # signal.signal() доступен только в главном потоке
-        server = McpServer(store)
+        server = McpServer(store, allowed_tools=allowed_tools)
         server.loop()
     return 0
 

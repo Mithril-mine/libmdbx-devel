@@ -83,12 +83,22 @@ python3 -m mcp.cli --path ~/mem.mdbx gc --dry-run # тиринг hot/warm/cold
 **Дефолт сервера — read-only**: запись только после явного
 `db_set_mode(readonly=false)`; агент свободно переключается обратно.
 
+**Профили инструментов.** Полный набор (100+ инструментов) нужен для работы
+над libmdbx; в других проектах карта исходников, покрытие, CI, зонды, трассы
+и слои веток пусты и только занимают контекст агента.
+`SHARED_GRAPH_MEMORY_TOOL_PROFILE=knowledge` оставляет общую память знаний
+(записи, поиск, связи, ADR, мост с CBM, `db_set_mode`/`db_backup`/`db_export`).
+Скрытые инструменты не публикуются в `tools/list` и не вызываются. Профиль —
+файл с одним именем на строку (`#` — комментарий); неизвестное имя или
+профиль — ошибка при старте, а не молча урезанный набор.
+
 Переменные окружения:
 
 | Переменная | Значение | Дефолт |
 |---|---|---|
 | `SHARED_GRAPH_MEMORY_PATH` | путь к `db.mdbx` | `~/.local/share/shared-graph-memory/db.mdbx` |
 | `SHARED_GRAPH_MEMORY_READONLY` | `1` — старт read-only | `1` |
+| `SHARED_GRAPH_MEMORY_TOOL_PROFILE` | профиль инструментов: имя из `mcp/profiles/` или путь к файлу | пусто (все инструменты) |
 | `SHARED_GRAPH_MEMORY_BACKUP_DIR` | каталог бэкапов (та же ФС!) | `<каталог БД>/backups` |
 | `SHARED_GRAPH_MEMORY_AUTO_BACKUP_SECONDS` | тихий интервал бэкапа | `0` (выкл) |
 | `SHARED_GRAPH_MEMORY_PROMPT_BACKUP_SECONDS` | интервал бэкапа с запросом | `0` (выкл) |
