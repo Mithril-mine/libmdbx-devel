@@ -674,6 +674,8 @@ else()
     set_tests_properties(extra_details_pnl PROPERTIES LABELS "ut;ut.api;ut.gc")
     add_extra_test(details_rkl SOURCE ut/api/details_rkl.c)
     set_tests_properties(extra_details_rkl PROPERTIES LABELS "ut;ut.api;ut.gc")
+    add_extra_test(details_troika_fsm SOURCE ut/api/details_troika_fsm.c)
+    set_tests_properties(extra_details_troika_fsm PROPERTIES LABELS "ut;ut.api;ut.env")
     set_property(TEST extra_details_rkl APPEND PROPERTY
       # Routine profile: bounded stochastic scale + deterministic edge-cases
       # covers the same rkl/txl branches as the full stress at ~1.4s vs ~30s
