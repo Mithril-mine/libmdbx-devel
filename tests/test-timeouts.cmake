@@ -177,6 +177,7 @@ set(MDBX_TEST_TIMEOUTS
   "gh0453=30"
   "gh0454=30"
   "gh0485_put_dangling_cursor=30"
+  "gh0485_open_damaged_meta0=30"
   "global_init=30"
   "hex_base64_base58=30"
   "key-comparators=30"
