@@ -22,6 +22,7 @@ A maintenance release of the stable line: backported fixes for data safety, corr
  - **Breaking:** Changed the C++ `env::mode`/`env::durability` enums to scoped; old names stay static aliases (backport).
  - Changed `MDBX_APPEND` with a persistent cursor to read the last key from the leaf, not the root ([#66](https://github.com/Mithril-mine/libmdbx-devel/issues/66)) (backport).
  - Changed the oldest-reader scan to bound retries under heavy reader churn ([#325](https://github.com/Mithril-mine/libmdbx-devel/issues/325)) (backport).
+ - Changed the locking auto-selection to prefer POSIX anonymous semaphores over the legacy System V IPC ([#80](https://github.com/Mithril-mine/libmdbx-devel/issues/80)) (backport).
  - Changed `mdbx_env_defrag()` to adapt the movement batch to the time limit and to report full completion as success ([#55](https://github.com/Mithril-mine/libmdbx-devel/issues/55)) (backport).
  - Changed the README and the doxygen API descriptions (backport).
  - Changed `mdbx_defrag` to name every stopping reason and suggest `mdbx_copy -c` for full compaction (backport).
@@ -40,7 +41,7 @@ A maintenance release of the stable line: backported fixes for data safety, corr
     - Fixed a failed begin of a nested transaction corrupting the parent's geometry with a spurious resize-undo ([#448](https://github.com/Mithril-mine/libmdbx-devel/issues/448)).
     - Fixed `mdbx_env_copy()` destroying a live database when the destination is the database's own file ([#450](https://github.com/Mithril-mine/libmdbx-devel/issues/450)).
     - Fixed `mdbx_dump -a` omitting the main table's records when named tables exist ([#385](https://github.com/Mithril-mine/libmdbx-devel/issues/385)) (backport).
-    - Fixed a failed disk write silently reported as success during a commit (backport).
+    - Fixed failed disk writes silently passing as success, and a Windows crash on a large durable commit ([#47](https://github.com/Mithril-mine/libmdbx-devel/issues/47)) (backport).
     - Fixed auxiliary page-write errors silently ignored, masking a failing disk ([#203](https://github.com/Mithril-mine/libmdbx-devel/issues/203)) (backport).
     - Fixed a failed second in-process open releasing the first handle's file locks ([#59](https://github.com/Mithril-mine/libmdbx-devel/issues/59)) (backport).
     - Fixed `mdbx_env_copy()` possibly deleting a pre-existing destination it could not lock ([#58](https://github.com/Mithril-mine/libmdbx-devel/issues/58)) (backport).
@@ -111,7 +112,7 @@ A maintenance release of the stable line: backported fixes for data safety, corr
     - Fixed cloning a read transaction crashing on cleanup or reading recycled pages; fails cleanly now ([#128](https://github.com/Mithril-mine/libmdbx-devel/issues/128), [#148](https://github.com/Mithril-mine/libmdbx-devel/issues/148)) (backport).
 
  - Wrong results and API behavior:
-    - Fixed `mdbx_cursor_scroll()`/`distribute()` wrong results near the tree height on DUPSORT tables ([#84](https://github.com/Mithril-mine/libmdbx-devel/issues/84)) (backport).
+    - Fixed `mdbx_cursor_scroll()`/`distribute()` wrong results near the tree height on DUPSORT tables ([#84](https://github.com/Mithril-mine/libmdbx-devel/issues/84), [#123](https://github.com/Mithril-mine/libmdbx-devel/issues/123)) (backport).
     - Fixed `mdbx_dbi_rename()` on a stale handle storing a stale record, corrupting the database ([#106](https://github.com/Mithril-mine/libmdbx-devel/issues/106)) (backport).
     - Fixed table open/rename mishandling pseudo-names and cross-process drops, up to a crash ([#107](https://github.com/Mithril-mine/libmdbx-devel/issues/107), [#308](https://github.com/Mithril-mine/libmdbx-devel/issues/308)) (backport).
     - Fixed `mdbx_env_chk()` leaving a dangling `result.tables` pointer after the check ([#93](https://github.com/Mithril-mine/libmdbx-devel/issues/93)) (backport).
@@ -128,6 +129,8 @@ A maintenance release of the stable line: backported fixes for data safety, corr
     - Fixed a huge `mdbx_put(MDBX_MULTIPLE)` batch failing with `MDBX_TXN_FULL` instead of spilling ([10/15 of #319](https://github.com/Mithril-mine/libmdbx-devel/issues/319)) (backport).
     - Fixed `mdbx_replace()` accepting `MDBX_ALLDUPS` and aliased data buffers; now `MDBX_EINVAL` ([11/15 of #319](https://github.com/Mithril-mine/libmdbx-devel/issues/319)) (backport).
     - Fixed `mdbx_dbi_rename()` to the same name returning `MDBX_KEYEXIST` in debug builds; a no-op now ([15/15 of #319](https://github.com/Mithril-mine/libmdbx-devel/issues/319)) (backport).
+    - Fixed `MDBX_TO_PAIR_*` returning the key's first multi-value instead of the positioned one ([#313](https://github.com/Mithril-mine/libmdbx-devel/issues/313)) (backport).
+    - Fixed `mdbx_put(MDBX_CURRENT)` deleting all multi-values before checking the new value's size ([#313](https://github.com/Mithril-mine/libmdbx-devel/issues/313)) (backport).
     - Fixed a 32-bit Linux process getting a far too small total RAM on hosts with 4 GiB or more ([#339](https://github.com/Mithril-mine/libmdbx-devel/issues/339)) (backport).
     - Fixed `mdbx_env_delete()` leaving an orphan lock file and reporting success while still in use ([#345](https://github.com/Mithril-mine/libmdbx-devel/issues/345)) (backport).
     - Fixed `mdbx_env_info_ex()` reporting the first writer's open-time mode instead of the current flags ([#338](https://github.com/Mithril-mine/libmdbx-devel/issues/338)) (backport).
@@ -183,7 +186,9 @@ A maintenance release of the stable line: backported fixes for data safety, corr
     - Fixed `mdbx::buffer` assignment from `std::string_view` allocating despite `noexcept`; now throws ([#78](https://github.com/Mithril-mine/libmdbx-devel/issues/78)) (backport).
     - Fixed `mdbx::txn` slicing from `txn_managed` leaking the writer lock; now a compile error ([#77](https://github.com/Mithril-mine/libmdbx-devel/issues/77)) (backport).
     - Fixed `cursor::erase("key")` erasing every value at the cursor instead of the named key ([#90](https://github.com/Mithril-mine/libmdbx-devel/issues/90), [#120](https://github.com/Mithril-mine/libmdbx-devel/issues/120)) (backport).
-    - Fixed `buffer` append functions reading freed storage on self-referencing sources ([#94](https://github.com/Mithril-mine/libmdbx-devel/issues/94), [#95](https://github.com/Mithril-mine/libmdbx-devel/issues/95), [#122](https://github.com/Mithril-mine/libmdbx-devel/issues/122)) (backport).
+    - Fixed `buffer` append functions reading freed storage on self-referencing sources ([#94](https://github.com/Mithril-mine/libmdbx-devel/issues/94), [#95](https://github.com/Mithril-mine/libmdbx-devel/issues/95), [#122](https://github.com/Mithril-mine/libmdbx-devel/issues/122), [#125](https://github.com/Mithril-mine/libmdbx-devel/issues/125), [#152](https://github.com/Mithril-mine/libmdbx-devel/issues/152)) (backport).
+    - Fixed a `0`/`NULL` pointer with a length building a reference to address zero; now a compile error ([#137](https://github.com/Mithril-mine/libmdbx-devel/issues/137), [#142](https://github.com/Mithril-mine/libmdbx-devel/issues/142), [#162](https://github.com/Mithril-mine/libmdbx-devel/issues/162)) (backport).
+    - Fixed `txn_managed::checkpoint()` dropping the handle on a core rejection, leaking the writer lock ([#89](https://github.com/Mithril-mine/libmdbx-devel/issues/89)) (backport).
     - Fixed `cursor`/`env` slicing from owning temporaries leaking them; now a compile error ([#121](https://github.com/Mithril-mine/libmdbx-devel/issues/121)) (backport).
     - Fixed wrappers throwing logic-error for non-error results, e.g. committing a broken txn ([#102](https://github.com/Mithril-mine/libmdbx-devel/issues/102)) (backport).
     - Fixed overload-resolution traps: `if (slice)`, `move(op, key, value)`, `buffer(p, n)`, `hex()` ([#101](https://github.com/Mithril-mine/libmdbx-devel/issues/101)) (backport).
@@ -194,6 +199,7 @@ A maintenance release of the stable line: backported fixes for data safety, corr
     - Fixed flags conversion dropping `MDBX_NOSTICKYTHREADS` used with `MDBX_EXCLUSIVE` ([#318](https://github.com/Mithril-mine/libmdbx-devel/issues/318)) (backport).
 
  - Resource leaks:
+    - Fixed four transaction error paths leaking table handles or promoting wrong geometry values ([#105](https://github.com/Mithril-mine/libmdbx-devel/issues/105)) (backport).
     - Fixed the memory leak caused by a table name with zero length (backport).
 
  - Minor:
