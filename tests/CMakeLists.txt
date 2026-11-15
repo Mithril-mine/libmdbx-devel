@@ -690,6 +690,14 @@ else()
     set_property(TEST extra_details_rkl_full APPEND PROPERTY
       ENVIRONMENT "MDBX_RKL_EDGES=1")
 
+    # SIMD scan4seq differential (white-box: src/scan4seq.h, extracted from
+    # gc-get.c); exhaustive over all 2^16 descending lists over {1..16} plus
+    # long-sequence spot checks; guards the whole SIMD family (issue #485).
+    add_extra_test(details_scan4seq SOURCE ut/api/details_scan4seq.c)
+    set_tests_properties(extra_details_scan4seq PROPERTIES
+      LABELS "ut;ut.api;ut.gc"
+      TIMEOUT 300)
+
     if(MDBX_PROBES)
       add_extra_test(probes SOURCE ut/api/probes.c)
       set_tests_properties(extra_probes PROPERTIES LABELS "ut;ut.api")
