@@ -142,8 +142,10 @@ function(add_simple_test name)
        OR ENABLE_MEMCHECK)
       # FIXME: unless there are any other ideas how to fix the timeouts problem when testing under Valgrind.
       math(EXPR params_TIMEOUT "${params_TIMEOUT} * 42")
+      set_tests_properties(extra_${name} PROPERTIES TIMEOUT ${params_TIMEOUT} MDBX_TIMEOUT_SCALED4MEMCHECK TRUE)
+    else()
+      set_tests_properties(extra_${name} PROPERTIES TIMEOUT ${params_TIMEOUT})
     endif()
-    set_tests_properties(extra_${name} PROPERTIES TIMEOUT ${params_TIMEOUT})
     if(params_DLLPATH)
       # Compose DLL's path in the ENVIRONMENT property
       if(WIN32)
@@ -937,3 +939,8 @@ add_ut(reverse_insertions SOURCE ut/txn/reverse_insertions.c++)
   endif()
 
 endif()
+
+# Scale the directly-registered tests' TIMEOUTs for the valgrind/memcheck runs
+# (the smoke chains, the tools' golden-runners, the hygiene/probes) - the ones
+# that bypass the add_gtest()/add_simple_test() resolution.
+mdbx_scale_timeouts4memcheck()
