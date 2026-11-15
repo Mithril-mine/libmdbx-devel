@@ -1082,7 +1082,10 @@ int mdbx_cursor_scroll(MDBX_cursor *mc, intptr_t amount, unsigned deepness) {
   if (amount > 0)
     rc = cursor_scroll_forward(mc, amount, (deepness < CURSOR_STACK_SIZE) ? deepness : CURSOR_STACK_SIZE);
   else if (amount < 0)
-    rc = cursor_scroll_backward(mc, -amount, (deepness < CURSOR_STACK_SIZE) ? deepness : CURSOR_STACK_SIZE);
+    /* negating INTPTR_MIN would overflow (UB); clamping the magnitude only
+     * turns the request into "scroll as far back as possible" */
+    rc = cursor_scroll_backward(mc, (amount == INTPTR_MIN) ? INTPTR_MAX : -amount,
+                                (deepness < CURSOR_STACK_SIZE) ? deepness : CURSOR_STACK_SIZE);
 
   return LOG_IFERR(rc);
 }
