@@ -50,8 +50,15 @@ static void check_case(pgno_t *pnl, size_t len, size_t seq, size_t num) {
   pgno_t *const refs[5] = {scan4seq_fallback(edge, len, seq), scan4seq_impl(edge, len, seq), nullptr, nullptr, nullptr};
   const pgno_t *const ck = scan4range_checker(pnl, seq);
   pgno_t *const brute = scan4seq_bruteforce(edge, len, seq);
-  assert(refs[0] == brute);
-  assert((ck == nullptr && refs[0] == nullptr) || (ck && refs[0] && ck - pnl == refs[0] - pnl));
+  /* Not assert(): under -DNDEBUG the references must still be checked, and
+   * the locals must stay used for the -Werror CI cells. */
+  const int mismatch =
+      (refs[0] != brute) || ((ck == nullptr) != (refs[0] == nullptr)) || (ck && refs[0] && ck - pnl != refs[0] - pnl);
+  if (mismatch) {
+    n_dives[0] += 1;
+    printf("MISMATCH reference: len=%zu num=%zu seq=%zu fallback=%ld brute=%ld ck=%ld\n", len, num, seq,
+           (long)(refs[0] - pnl), (long)(brute - pnl), (long)(ck - pnl));
+  }
   n_cases += 1;
   if (refs[0])
     n_match += 1;
