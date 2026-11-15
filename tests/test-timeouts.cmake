@@ -27,6 +27,7 @@ set(MDBX_TEST_TIMEOUTS
   "dbi-defer=30"
   "dbi_nested_txn=30"
   "defrag-cursors=150"
+  "delete_after_tail=30"
   "defrag-cycle=90"
   "defrag-gc-binding=510"
   "distance_scroll_distribute=90"
