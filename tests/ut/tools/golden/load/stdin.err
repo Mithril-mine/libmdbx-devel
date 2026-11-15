@@ -1,3 +1,1 @@
-   read meta: empty file (61, No data available)
-...
-   readahead ON 0..3
+   read meta: empty file (ERRNO)
