@@ -47,8 +47,7 @@ static const char *const variant_names[5] = {"fallback", "impl(dispatch)", "sse2
 
 static void check_case(pgno_t *pnl, size_t len, size_t seq, size_t num) {
   pgno_t *const edge = pnl + len;
-  pgno_t *const refs[5] = {scan4seq_fallback(edge, len, seq), scan4seq_impl(edge, len, seq),
-                           nullptr, nullptr, nullptr};
+  pgno_t *const refs[5] = {scan4seq_fallback(edge, len, seq), scan4seq_impl(edge, len, seq), nullptr, nullptr, nullptr};
   const pgno_t *const ck = scan4range_checker(pnl, seq);
   pgno_t *const brute = scan4seq_bruteforce(edge, len, seq);
   assert(refs[0] == brute);
@@ -60,21 +59,22 @@ static void check_case(pgno_t *pnl, size_t len, size_t seq, size_t num) {
     n_nomatch += 1;
   /* the dispatch target, and every variant the CPU provides, one by one */
   const pgno_t *const alts[3] = {
-  #if defined(MDBX_ATTRIBUTE_TARGET_SSE2)
+#if defined(MDBX_ATTRIBUTE_TARGET_SSE2)
       __builtin_cpu_supports("sse2") ? scan4seq_sse2(edge, len, seq) : nullptr,
-  #else
+#else
       nullptr,
-  #endif
-  #if defined(MDBX_ATTRIBUTE_TARGET_AVX2)
+#endif
+#if defined(MDBX_ATTRIBUTE_TARGET_AVX2)
       (__builtin_cpu_supports("avx2") && __builtin_cpu_supports("sse2")) ? scan4seq_avx2(edge, len, seq) : nullptr,
-  #else
+#else
       nullptr,
-  #endif
-  #if defined(MDBX_ATTRIBUTE_TARGET_AVX512BW)
-      (__builtin_cpu_supports("avx512bw") && __builtin_cpu_supports("avx2")) ? scan4seq_avx512bw(edge, len, seq) : nullptr,
-  #else
+#endif
+#if defined(MDBX_ATTRIBUTE_TARGET_AVX512BW)
+      (__builtin_cpu_supports("avx512bw") && __builtin_cpu_supports("avx2")) ? scan4seq_avx512bw(edge, len, seq)
+                                                                             : nullptr,
+#else
       nullptr
-  #endif
+#endif
   };
   for (unsigned i = 1; i < 5; ++i) {
     const pgno_t *res = (i == 1) ? refs[1] : alts[i - 2];
@@ -143,8 +143,7 @@ static void run_longseq(void) {
       pgno_t *const impl = scan4seq_impl(edge, LONG_LEN, seq);
       const pgno_t *const ck = scan4range_checker(pnl, seq);
       checks += 1;
-      const int mismatch = (fb != impl) || ((ck == nullptr) != (fb == nullptr)) ||
-                           (ck && fb && ck - pnl != fb - pnl);
+      const int mismatch = (fb != impl) || ((ck == nullptr) != (fb == nullptr)) || (ck && fb && ck - pnl != fb - pnl);
       if (mismatch) {
         n_dives[1] += 1;
         printf("MISMATCH impl(long): trial=%zu num=%zu seq=%zu fallback=%ld impl=%ld\n", trial, num, seq,
