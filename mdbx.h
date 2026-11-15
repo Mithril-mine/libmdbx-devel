@@ -8462,6 +8462,18 @@ LIBMDBX_API int mdbx_env_defrag(MDBX_env *env, size_t defrag_atleast, size_t tim
 
 /** end of c_api @} */
 
+/*> dist-cutoff-begin */
+/* The testing API (introspection, testing and debugging extensions):
+ * present in development builds only, stripped by the amalgamation.
+ * Honors the MDBX_ENABLE_TESTS gate when the build config defines it
+ * (src/config.h.in, with the src/options.h default); a plain public-header
+ * consumer has the macro undefined and sees the declarations. See
+ * tests/api.h and tests/AGENTS.md. */
+#if !defined(MDBX_ENABLE_TESTS) || MDBX_ENABLE_TESTS
+#include "tests/api.h"
+#endif /* !defined(MDBX_ENABLE_TESTS) || MDBX_ENABLE_TESTS */
+/*< dist-cutoff-end */
+
 #ifdef __cplusplus
 } /* extern "C" */
 #endif
