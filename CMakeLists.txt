@@ -1324,6 +1324,24 @@ endif()
 set_target_properties(mdbx-static PROPERTIES PUBLIC_HEADER "${LIBMDBX_PUBLIC_HEADERS}")
 target_compile_definitions(mdbx-static PRIVATE MDBX_BUILD_SHARED_LIBRARY=0)
 target_setup_options(mdbx-static)
+
+# Compile-cell for the MDBX_ENABLE_BUNCHES_REMOVAL=0 build option (the
+# verification campaign defect V-038, issue #485): a build-only library
+# target, never linked into anything and not part of the default build.
+# The option is defective on master (src/tree-ops.c still calls the
+# cursor_pop() function renamed to cursor_eject()), so the cell is opt-in:
+# a dedicated CI configuration enables it and builds the
+# mdbx-bunches-removal-off target, which turns green together with the
+# V-038 fix and then guards the option permanently.
+option(MDBX_CHECK_BUNCHES_REMOVAL_OFF
+       "Compile-check the library with MDBX_ENABLE_BUNCHES_REMOVAL=0 (build-only, guards the V-038 fix)" OFF)
+mark_as_advanced(MDBX_CHECK_BUNCHES_REMOVAL_OFF)
+if(MDBX_CHECK_BUNCHES_REMOVAL_OFF)
+  add_library(mdbx-bunches-removal-off STATIC EXCLUDE_FROM_ALL ${LIBMDBX_SOURCES})
+  target_compile_definitions(mdbx-bunches-removal-off PRIVATE MDBX_BUILD_SHARED_LIBRARY=0
+                                                                MDBX_ENABLE_BUNCHES_REMOVAL=0)
+  target_setup_options(mdbx-bunches-removal-off)
+endif()
 libmdbx_setup_libs(mdbx-static INTERFACE)
 if(MDBX_BUILD_SHARED_LIBRARY)
   set_target_properties(mdbx-static PROPERTIES OUTPUT_NAME mdbx-static)
