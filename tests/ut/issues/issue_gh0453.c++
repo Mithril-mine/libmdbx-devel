@@ -236,22 +236,29 @@ TEST(issue_gh0453, distance_fulldepth_nested_dupset) {
    * mdbx_cursor_distribute() reports a shortage for such ranges. This is
    * documented by the code comment in cursor_distance(); this case asserts
    * nothing and just reports the current behavior, so it turns into exact
-   * checks once the limitation is resolved. */
+   * checks once the limitation is resolved. The skip/success verdict is
+   * deferred until after the cleanup: GTEST_SKIP() unwinds the test body and
+   * would bypass the cursor/txn/env release, which LeakSanitizer reports as
+   * leaks in ASan builds (an explicit env close here would also leave the
+   * env_ptr destructor closing the freed handle once again). */
+  int limit_rc = MDBX_SUCCESS;
+  intptr_t limit_distance = 0;
+  ptrdiff_t limit_want = 0;
   {
     ASSERT_EQ(MDBX_SUCCESS, goto_pair(c1, 2, 1));
     ASSERT_EQ(MDBX_SUCCESS, goto_pair(c2, 2, big_count - 1));
-    intptr_t distance = 0;
-    const int rc = mdbx_cursor_distance(c1, c2, &distance, 64);
-    const ptrdiff_t want = naive_distance(c1, 2, 1, 2, big_count - 1);
-    ASSERT_NE(want, LONG_MIN);
-    if (rc == MDBX_SUCCESS && distance == want)
-      SUCCEED() << "the limitation is resolved: exact full-depth distance inside a multi-page dupset";
-    else
-      GTEST_SKIP() << "known limitation #453: distance " << distance << " instead of " << want << " (rc " << rc << ")";
+    limit_rc = mdbx_cursor_distance(c1, c2, &limit_distance, 64);
+    limit_want = naive_distance(c1, 2, 1, 2, big_count - 1);
+    ASSERT_NE(limit_want, LONG_MIN);
   }
 
   mdbx_cursor_close(c1);
   mdbx_cursor_close(c2);
   mdbx_txn_abort(txn);
-  mdbx_env_close(env.get());
+
+  if (limit_rc == MDBX_SUCCESS && limit_distance == limit_want)
+    SUCCEED() << "the limitation is resolved: exact full-depth distance inside a multi-page dupset";
+  else
+    GTEST_SKIP() << "known limitation #453: distance " << limit_distance << " instead of " << limit_want << " (rc "
+                 << limit_rc << ")";
 }
