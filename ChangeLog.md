@@ -63,6 +63,7 @@ A hardening and refinement release: data-safety and corruption-resistance fixes 
 
  - Resistance to corrupted or crafted data:
     - Fixed a crafted database aborting the assert-enabled builds on a DUPSORT cursor positioning; now rejected with `MDBX_CORRUPTED` ([#454](https://github.com/Mithril-mine/libmdbx-devel/issues/454)).
+    - Fixed a crafted database silently aliasing a page listed by two garbage-collection records; now rejected ([#452](https://github.com/Mithril-mine/libmdbx-devel/issues/452)).
     - Fixed a crafted garbage-collection record handing one page to two b-tree nodes; now rejected ([#83](https://github.com/Mithril-mine/libmdbx-devel/issues/83)).
     - Fixed crafted databases crashing or corrupting on delete, drop, estimate or check; now rejected ([#57](https://github.com/Mithril-mine/libmdbx-devel/issues/57), [#63](https://github.com/Mithril-mine/libmdbx-devel/issues/63), [#74](https://github.com/Mithril-mine/libmdbx-devel/issues/74), [#75](https://github.com/Mithril-mine/libmdbx-devel/issues/75)).
     - Fixed the same-size in-place replacement of a zero-length duplicate value passing a null pointer to `memcpy()` (undefined behavior, trapped by UBSan) ([#444](https://github.com/Mithril-mine/libmdbx-devel/issues/444)).
