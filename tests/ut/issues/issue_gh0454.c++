@@ -149,7 +149,9 @@ TEST(issue_gh0454, crafted_dupset_height_returns_corrupted) {
   const int rc = mdbx_cursor_get(mc, &key, &data, MDBX_SET);
   mdbx_cursor_close(mc);
   mdbx_txn_abort(txn);
-  mdbx_env_close(env.get());
+  /* the env is closed exactly once, by the env_ptr destructor: an explicit
+   * close here would leave the destructor closing the freed handle again
+   * (use-after-free under ASan, silent UB otherwise) */
 
   ASSERT_EQ(MDBX_CORRUPTED, rc)
       << "a crafted dupset height must be rejected with MDBX_CORRUPTED, not abort the process";
