@@ -5,6 +5,23 @@
 #include "internals.h"
 
 #if !defined(NDEBUG)
+/* Appends to the dump buffer, clamping the tail back into it after every
+ * call: snprintf() returns the untruncated length, so accumulating the raw
+ * return values would push the tail beyond the buffer end once a call is
+ * truncated, wrapping the next end - tail size to ~SIZE_MAX (V-053a). */
+MDBX_MAYBE_UNUSED MDBX_ATTRIBUTE_NO_SANITIZE_ADDRESS(MDBX_NOTHING) static void cursor_dump_append(char **tail,
+                                                                                                  char *const end,
+                                                                                                  const char *fmt,
+                                                                                                  ...) {
+  va_list ap;
+  va_start(ap, fmt);
+  const int len = vsnprintf(*tail, (size_t)(end - *tail), fmt, ap);
+  va_end(ap);
+  *tail += (len > 0) ? (size_t)len : 0;
+  if (*tail > end)
+    *tail = end;
+}
+
 MDBX_MAYBE_UNUSED MDBX_ATTRIBUTE_NO_SANITIZE_ADDRESS(MDBX_NOTHING) static char *cursor_dump_position(
     const MDBX_cursor *mc, const char *caption, bool print_subcursor, bool print_pageptr) {
   static char buf[1024];
@@ -12,23 +29,22 @@ MDBX_MAYBE_UNUSED MDBX_ATTRIBUTE_NO_SANITIZE_ADDRESS(MDBX_NOTHING) static char *
   char *tail = buf;
 
 loop:
-  tail += snprintf(tail, end - tail, "%s[%i]", caption, mc->top);
+  cursor_dump_append(&tail, end, "%s[%i]", caption, mc->top);
   for (intptr_t i = 0; i <= mc->top; ++i)
     if (print_pageptr)
-      tail +=
-          snprintf(tail, end - tail, ".%p#%u->%u", __Wpedantic_format_voidptr(mc->pg[i]), mc->pg[i]->pgno, mc->ki[i]);
+      cursor_dump_append(&tail, end, ".%p#%u->%u", __Wpedantic_format_voidptr(mc->pg[i]), mc->pg[i]->pgno, mc->ki[i]);
     else
-      tail += snprintf(tail, end - tail, ".%u", mc->ki[i]);
+      cursor_dump_append(&tail, end, ".%u", mc->ki[i]);
   if (mc->flags & z_inner)
-    tail += snprintf(tail, end - tail, "%s", "-inner");
+    cursor_dump_append(&tail, end, "%s", "-inner");
   if (mc->flags & z_after_delete)
-    tail += snprintf(tail, end - tail, "%s", "-after.delete");
+    cursor_dump_append(&tail, end, "%s", "-after.delete");
   if (mc->flags & z_hollow)
-    tail += snprintf(tail, end - tail, "%s", "-hollow");
+    cursor_dump_append(&tail, end, "%s", "-hollow");
   else if (mc->flags & z_eof_hard)
-    tail += snprintf(tail, end - tail, "%s", "-eof.hard");
+    cursor_dump_append(&tail, end, "%s", "-eof.hard");
   else if (mc->flags & z_eof_soft)
-    tail += snprintf(tail, end - tail, "%s", "-eof.soft");
+    cursor_dump_append(&tail, end, "%s", "-eof.soft");
 
   if (print_subcursor && mc->subcur) {
     caption = "->subcur";
