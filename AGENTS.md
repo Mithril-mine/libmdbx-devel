@@ -183,9 +183,9 @@ when in doubt.
   [docs/engineering/issues-pr-codex.md](docs/engineering/issues-pr-codex.md),
   [docs/engineering/news-codex.md](docs/engineering/news-codex.md) — comms and
   ChangeLog codexes.
-- Testing documentation (rules, methodology, scenario specs, coverage,
-  durability modes, CI v2 infrastructure design) lives in
-  [tests/AGENTS.md](tests/AGENTS.md) §5.
+- Testing documentation (rules, timeouts, hygiene, methodology, scenario
+  specs, coverage, durability modes, CI v2 infrastructure design) lives in
+  [tests/AGENTS.md](tests/AGENTS.md) §6.
 - [docs/engineering/probe-bus.md](docs/engineering/probe-bus.md) — probe
   conventions.
 - [docs/engineering/libmdbx-invariants.md](docs/engineering/libmdbx-invariants.md),

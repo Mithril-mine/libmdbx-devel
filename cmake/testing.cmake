@@ -661,6 +661,51 @@ int main() { return 0; }
     endmacro()
   endif()
 
+  # The per-test CTest TIMEOUT registry (see tests/AGENTS.md, "Test timeouts"):
+  # every registered test must carry an explicit timeout, ~3x its runtime in
+  # the slowest configuration across the CI cells. add_gtest() and
+  # add_simple_test() look the value up here and FAIL the configure step when
+  # an entry is missing, so a new test cannot sneak in without one.
+  # NOTE: this file lives in cmake/ of the repository root (dev-only, cut off
+  # from the dist), so the manifest path is resolved relative to it - and NOT
+  # via MDBX_SOURCE_DIR, which points to src/ within the library build.
+  if(NOT DEFINED MDBX_TEST_TIMEOUTS
+     AND EXISTS "${CMAKE_CURRENT_LIST_DIR}/../tests/test-timeouts.cmake")
+    include("${CMAKE_CURRENT_LIST_DIR}/../tests/test-timeouts.cmake")
+  endif()
+
+  # Looks up the test's timeout in the MDBX_TEST_TIMEOUTS manifest
+  # ("name=seconds" entries); sets <out_var> to "" when there is no entry.
+  function(mdbx_test_timeout name out_var)
+    set(mdbx_test_timeout_value "")
+    foreach(entry IN LISTS MDBX_TEST_TIMEOUTS)
+      string(FIND "${entry}" "=" mdbx_test_timeout_sep)
+      if(mdbx_test_timeout_sep EQUAL -1)
+        continue()
+      endif()
+      string(SUBSTRING "${entry}" 0 ${mdbx_test_timeout_sep} mdbx_test_timeout_name)
+      if(mdbx_test_timeout_name STREQUAL "${name}")
+        math(EXPR mdbx_test_timeout_off "${mdbx_test_timeout_sep} + 1")
+        string(SUBSTRING "${entry}" ${mdbx_test_timeout_off} "-1" mdbx_test_timeout_value)
+        break()
+      endif()
+    endforeach()
+    set(${out_var} "${mdbx_test_timeout_value}" PARENT_SCOPE)
+  endfunction()
+
+  # Resolves the effective TIMEOUT for a test: the explicit value given by the
+  # caller wins, otherwise the manifest entry; FATAL_ERROR when neither exists.
+  macro(mdbx_resolve_test_timeout test_name timeout_var)
+    if(NOT ${timeout_var})
+      mdbx_test_timeout(${test_name} ${timeout_var})
+    endif()
+    if(NOT ${timeout_var})
+      message(FATAL_ERROR "add_gtest(${test_name}): no ctest TIMEOUT - add \"${test_name}=<seconds>\" to"
+                " tests/test-timeouts.cmake (~3x the runtime in the slowest configuration,"
+                " see tests/AGENTS.md, \"Test timeouts\")")
+    endif()
+  endmacro()
+
   function(add_gtest name)
     set(options DISABLED NO_PCH)
     set(oneValueArgs TIMEOUT PREFIX)
@@ -808,13 +853,12 @@ int main() { return 0; }
           # via a ctest fixture so it is honored even with -R/-L test selection.
           set_tests_properties(${name} PROPERTIES FIXTURES_REQUIRED ut-dlls)
         endif()
-        if(params_TIMEOUT)
-          if(MEMORYCHECK_COMMAND OR CMAKE_MEMORYCHECK_COMMAND)
-            # FIXME: unless there are any other ideas how to fix the timeouts problem when testing under Valgrind.
-            math(EXPR params_TIMEOUT "${params_TIMEOUT} * 42")
-          endif()
-          set_tests_properties(${name} PROPERTIES TIMEOUT ${params_TIMEOUT})
+        mdbx_resolve_test_timeout(${name} params_TIMEOUT)
+        if(MEMORYCHECK_COMMAND OR CMAKE_MEMORYCHECK_COMMAND)
+          # FIXME: unless there are any other ideas how to fix the timeouts problem when testing under Valgrind.
+          math(EXPR params_TIMEOUT "${params_TIMEOUT} * 42")
         endif()
+        set_tests_properties(${name} PROPERTIES TIMEOUT ${params_TIMEOUT})
         if(params_DLLPATH)
           # Compose DLL's path in the ENVIRONMENT property
           if(CMAKE_SYSTEM_NAME STREQUAL "Windows")
@@ -846,6 +890,8 @@ int main() { return 0; }
       endif()
       add_test(NAME ${name} COMMAND ${CMAKE_COMMAND} -E echo "SKIPPED: ${name}: ${gtest_skip_reason}")
       set_tests_properties(${name} PROPERTIES SKIP_RETURN_CODE 0)
+      mdbx_resolve_test_timeout(${name} params_TIMEOUT)
+      set_tests_properties(${name} PROPERTIES TIMEOUT ${params_TIMEOUT})
       if(params_LABELS)
         set_tests_properties(${name} PROPERTIES LABELS "${params_LABELS}")
       endif()

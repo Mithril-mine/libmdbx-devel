@@ -13,6 +13,8 @@
 - `tests/ut/env-guard.h++` — the `env_files_guard` RAII helper and the
   `env_handle_guard` / `txn_handle_guard` scoped-ownership helpers (see the
   "Test hygiene & cleanup" section below).
+- [`tests/test-timeouts.cmake`](test-timeouts.cmake) — the per-test CTest
+  `TIMEOUT` registry (see the "Test timeouts" section below).
 - `tests/ut/tools/cleanup-tool.c` — `te_cleanup_tool`: FIXTURES_CLEANUP driver
   for the chained smoke scenarios and the `--scan` enforcement mode.
 - `tests/framework/` — the stochastic test framework (`mdbx_test`); `tests/ci/`
@@ -72,7 +74,34 @@ leave nothing behind on success either. This is enforced, not encouraged.
   the whole corpus, never in parallel with the tests. If it goes red, the
   culprit test is missing its guard or its cleanup arguments.
 
-## 4. Cross-platform correctness
+## 4. Test timeouts — MANDATORY
+
+Every registered test must carry an explicit CTest `TIMEOUT` — roughly 3× the
+test's runtime in its **slowest configuration** across the CI cells (the
+per-cell per-test metrics artifacts of the nightly/gate runs are the data
+source; the ASan builds and the Windows/ARM64 runners are usually the
+slowest). A runaway test must burn its timeout budget, not the CI cell's.
+
+- **gtest-family tests** (`add_gtest()`/`add_ut()`/`add_issue_test()`) and
+  the `extra_*` tests (`add_extra_test()`): add a `"name=seconds"` entry to
+  the [`tests/test-timeouts.cmake`](test-timeouts.cmake) manifest (kept
+  sorted). The helpers resolve the timeout from the manifest automatically
+  and **fail the configure step** when an entry is missing, so a new test
+  cannot be registered without one. An explicit `TIMEOUT` argument to the
+  helper still wins over the manifest — use it only with a good reason.
+- **Directly registered tests** (plain `add_test()` in `tests/CMakeLists.txt`
+  and `examples/CMakeLists.txt` — the smoke chains and their cleanups,
+  `ut_tools_*`, `test_hygiene_check`, the examples): set the `TIMEOUT`
+  property explicitly at the registration site.
+- Values are rounded up to a 30s boundary (the floor for tests running well
+  under a second); update an entry when a test or a configuration grows
+  slower. The valgrind/memcheck runs scale timeouts automatically (×42).
+- The per-test hard timeouts back up the soft gtest deadline
+  (`GTEST_RUNTIME_LIMIT`, see `tests/ci/run-cell.py`): the soft limit bounds
+  how deep a gtest binary digs within a run, the hard timeout kills a
+  runaway binary regardless.
+
+## 5. Cross-platform correctness
 
 - Never compare page-size or derived values against constants — it is
   platform-dependent (use the actual values from the environment/library).
@@ -93,7 +122,7 @@ leave nothing behind on success either. This is enforced, not encouraged.
   scenarios on the effective uid (`geteuid()`) or verify the induced state
   behaviorally (see `issue_gh0317.c++`).
 
-## 5. Documentation map (testing)
+## 6. Documentation map (testing)
 
 - [docs/engineering/testing-codex.md](../docs/engineering/testing-codex.md),
   [docs/engineering/testing-methodology.md](../docs/engineering/testing-methodology.md),
