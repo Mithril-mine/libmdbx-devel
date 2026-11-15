@@ -22,7 +22,6 @@ import argparse
 import bisect
 import json
 import os
-import re
 import sys
 
 TOOLS_DIR = os.path.dirname(os.path.abspath(__file__))
