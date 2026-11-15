@@ -15,6 +15,7 @@ set(MDBX_TEST_TIMEOUTS
   "buffers=30"
   "bunches_removal=30"
   "cache-get=30"
+  "chk-verdicts=90"
   "commit-latency=30"
   "copy-ops=30"
   "crash_safety=30"
