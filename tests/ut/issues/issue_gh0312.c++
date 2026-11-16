@@ -116,8 +116,13 @@ env_ptr open_env(const std::string &db, intptr_t pagesize = -1) {
   if (mdbx_env_create(&env) != MDBX_SUCCESS)
     return env_ptr();
   env_ptr owner(env);
-  if (mdbx_env_set_maxdbs(env, 8) != MDBX_SUCCESS ||
-      (pagesize > 0 && mdbx_env_set_geometry(env, -1, 1 << 20, 256 << 20, 1 << 20, -1, pagesize) != MDBX_SUCCESS) ||
+  /* A modest 256 MiB upper bound (the issue_gh0058/59/71/72 idiom): the
+   * default ~8 GiB geometry cannot be mapped in the ASan/Valgrind cells
+   * (check_mmap_limit()), and the dump/load/stat round-trips under test
+   * hold only 3000 tiny records. */
+  const int geometry_rc = pagesize > 0 ? mdbx_env_set_geometry(env, -1, 1 << 20, 256 << 20, 1 << 20, -1, pagesize)
+                                       : mdbx_env_set_geometry(env, -1, -1, 256 << 20, -1, -1, -1);
+  if (mdbx_env_set_maxdbs(env, 8) != MDBX_SUCCESS || geometry_rc != MDBX_SUCCESS ||
       mdbx_env_open(env, db.c_str(), MDBX_NOSUBDIR, 0644) != MDBX_SUCCESS)
     return env_ptr();
   return owner;
