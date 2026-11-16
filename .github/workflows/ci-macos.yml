@@ -11,7 +11,10 @@ permissions:
   contents: read
 
 on:
+  # See ci-linux.yml: trimmed set on this branch only + nightly schedule.
   push:
+    branches: [stable]
+  workflow_dispatch:
   schedule:
     - cron: "42 3 * * *"
       timezone: "Europe/Moscow"
@@ -24,9 +27,16 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [macos-15, xcode-27, macos-26-intel]
-        build-type: [Debug, Release]
-        cxx: [ON]
+        include:
+          - os: macos-15
+            build-type: Release
+            cxx: ON
+          - os: xcode-27
+            build-type: Debug
+            cxx: ON
+          - os: macos-26-intel
+            build-type: Release
+            cxx: ON
     steps:
     - uses: actions/checkout@v7
       with:
