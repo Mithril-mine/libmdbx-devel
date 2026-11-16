@@ -21,7 +21,7 @@
 | S8 | Долговечность / синхронизация | `dxb.c`, `osal.h`, `coherency.c` | DURABLE/NOMETASYNC/SAFE_NOSYNC/UTTERLY_NOSYNC/WRITEMAP | 🟠 средний |
 | S9 | Параллелизм / координация | `lck.c`, `lck-posix.c`, `lck-windows.c`, `rthc.c`, `txl.c` | RLT, HSR, файл блокировок, TLS, fork | 🔴 высокий |
 | S10 | Рост и переполнение | `dxb.c`, `gc-put.c`, `global.c` | MAP_FULL, auto-compaction, непереиспользуемые страницы | 🟠 средний |
-| S11 | Курсоры / трекинг | `cursor.c`, `cursor.h`, `cursor-setup.c`, `cursor-seek.c`, `cursor-nav.c`, `cursor-mut.c`, `api-cursor.c` | repoint, lazy repositioning, shadow/couple, dangling | 🔴 высокий |
+| S11 | Курсоры / трекинг | `cursor.c`, `cursor.h`, `api-cursor.c` | repoint, lazy repositioning, shadow/couple, dangling | 🔴 высокий |
 | S12 | Сервисные механизмы | `chk.c`, `defrag.c`, `backup`, `histogram.c`, `api-extra.c` | читающие пути, online | 🟡 низкий |
 | S13 | Get-cached (ленивый кэш) | `api-get-cached.c` | 7 статусов: HIT/CONFIRMED/REFRESHED/DIRTY/BEHIND/UNABLE/RACE | 🟠 средний |
 | S14 | WAF / оптимизация записи | `dml.c`, `page-*.c`, `prefer_waf_insteadof_balance` | path-to-root, батчинг, баланс vs WAF | 🟠 средний |
