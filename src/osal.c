@@ -778,6 +778,45 @@ void osal_ioring_walk(osal_ioring_t *ior, iov_ctx_t *ctx,
   }
 }
 
+#if defined(_WIN32) || defined(_WIN64)
+/* Drains the batch's cancelled/in-flight requests: waits (with a generous
+ * bounded timeout) until every OVERLAPPED reaches the completed state, so
+ * the late completions of a failed batch cannot fire into the reused
+ * OVERLAPPEDs/events of a next batch. CancelIo/CancelIoEx alone is not
+ * enough: the cancellation completions are delivered asynchronously (see
+ * <https://github.com/Mithril-mine/libmdbx-devel/issues/449>). */
+static void ior_drain(osal_ioring_t *ior, mdbx_filehandle_t fd) {
+  if (ior->last == nullptr)
+    return;
+  for (unsigned spins = 0;; ++spins) {
+    bool pending = false;
+    for (ior_item_t *item = ior->pool; item <= ior->last;) {
+      if (!HasOverlappedIoCompleted(&item->ov)) {
+        pending = true;
+        if (fd != INVALID_HANDLE_VALUE)
+          CancelIoEx(fd, &item->ov);
+      }
+      size_t i = 1;
+      if ((item->single.iov_len & ior_WriteFile_flag) == 0) {
+        /* Zap: Reading invalid data from 'item->sgv' */
+        MDBX_SUPPRESS_GOOFY_MSVC_ANALYZER(6385);
+        while (item->sgv[i].Buffer)
+          ++i;
+      }
+      item = ior_next(item, i);
+    }
+    if (!pending)
+      return;
+    if (spins >= 10000) {
+      WARNING("%s: %s for %u spins, some completions may be lost", "ior_drain", "waiting", spins);
+      return;
+    }
+    /* alertable: let the WriteFileEx completion APCs run */
+    SleepEx(1, true);
+  }
+}
+#endif /* Windows */
+
 osal_ioring_write_result_t osal_ioring_write(osal_ioring_t *ior, mdbx_filehandle_t fd) {
   osal_ioring_write_result_t r = {MDBX_SUCCESS, 0};
 
@@ -807,6 +846,9 @@ osal_ioring_write_result_t osal_ioring_write(osal_ioring_t *ior, mdbx_filehandle
       bailout_rc:
         assert(r.err != MDBX_SUCCESS);
         CancelIo(fd);
+        /* the cancelled requests complete asynchronously: drain the batch to
+         * avoid late completions into the reused OVERLAPPEDs/events */
+        ior_drain(ior, fd);
         return r;
       }
       if (WriteFileGather(fd, item->sgv, (DWORD)bytes, nullptr, &item->ov)) {
@@ -1008,11 +1050,27 @@ osal_ioring_write_result_t osal_ioring_write(osal_ioring_t *ior, mdbx_filehandle
 void osal_ioring_reset(osal_ioring_t *ior) {
 #if defined(_WIN32) || defined(_WIN64)
   if (ior->last) {
+    /* first pass: cancel the still-outstanding requests */
     for (ior_item_t *item = ior->pool; item <= ior->last;) {
       if (!HasOverlappedIoCompleted(&item->ov)) {
         assert(ior->overlapped_fd);
         CancelIoEx(ior->overlapped_fd, &item->ov);
       }
+      size_t i = 1;
+      if ((item->single.iov_len & ior_WriteFile_flag) == 0) {
+        /* Zap: Reading invalid data from 'item->sgv' */
+        MDBX_SUPPRESS_GOOFY_MSVC_ANALYZER(6385);
+        while (item->sgv[i].Buffer)
+          ++i;
+      }
+      item = ior_next(item, i);
+    }
+    /* the cancellation completions are delivered asynchronously: drain the
+     * batch before returning the events to the pool, so the late completions
+     * cannot fire into the reused OVERLAPPEDs/events of a next batch */
+    ior_drain(ior, ior->overlapped_fd);
+    /* second pass: return the events to the pool */
+    for (ior_item_t *item = ior->pool; item <= ior->last;) {
       if (item->ov.hEvent && item->ov.hEvent != ior)
         ior_put_event(ior, item->ov.hEvent);
       size_t i = 1;
