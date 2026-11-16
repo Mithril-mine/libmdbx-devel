@@ -1998,9 +1998,14 @@ got_node:
   if (node_flags(node) & N_DUP) {
     ret.err = cursor_dupsort_setup(mc, node, mp);
     if (unlikely(ret.err != MDBX_SUCCESS)) {
-      /* the sub-page could not be materialized (corruption): the positioned
-       * match is not a usable exact match, keep the exact-implies-success
-       * invariant. (issue #176) */
+      /* The sub-page could not be materialized (corruption): the positioned
+       * match is not a usable exact match, keep the exact/exact-implies-success
+       * invariant. The cursor must be left poor, as any other error path
+       * leaves it: otherwise the callers' postconditions (e.g. the one
+       * asserted by cursor_ops()) are violated and a crafted database
+       * aborts the checked builds (see
+       * <https://github.com/Mithril-mine/libmdbx-devel/issues/454>). */
+      be_poor(mc);
       ret.exact = false;
       return ret;
     }
