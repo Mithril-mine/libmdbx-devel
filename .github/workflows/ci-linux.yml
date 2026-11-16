@@ -11,7 +11,12 @@ permissions:
   contents: read
 
 on:
+  # The trimmed gate set runs on this maintenance branch only; a daily
+  # schedule keeps the nightly coverage (mirrors the master's per-OS
+  # nightlies: 6 cells incl the ASAN one).
   push:
+    branches: [lts/0.13]
+  workflow_dispatch:
   schedule:
     - cron: "42 3 * * *"
       timezone: "Europe/Moscow"
@@ -24,9 +29,26 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-26.04-arm, ubuntu-24.04]
-        build-type: [Debug, Release]
-        cxx: [ON, OFF]
+        include:
+          - os: ubuntu-24.04
+            build-type: Debug
+            cxx: ON
+          - os: ubuntu-24.04
+            build-type: Debug
+            cxx: OFF
+          - os: ubuntu-24.04
+            build-type: Release
+            cxx: ON
+          - os: ubuntu-24.04
+            build-type: Release
+            cxx: OFF
+          - os: ubuntu-26.04-arm
+            build-type: Release
+            cxx: ON
+          - os: ubuntu-24.04
+            build-type: RelWithDebInfo
+            cxx: ON
+            extra-options: "|-DENABLE_ASAN:BOOL=ON"
     steps:
     - uses: actions/checkout@v7
       with:
@@ -39,4 +61,4 @@ jobs:
         export CI_MAKE_TARGET=$(if [ "$(uname)" = 'Linux' ]; then echo 'check'; elif [ "${{ matrix.build-type }}" != 'Debug' ]; then echo 'test'; else echo 'smoke'; fi) && \
         export MDBX_BUILD_OPTIONS=$(if [ "${{ matrix.build-type }}" = 'Debug' ]; then echo '-DMDBX_FORCE_ASSERTIONS=1 -DMDBX_DEBUG=1'; else echo '-DMDBX_CHECKING=0 -DMDBX_DEBUG=0'; fi) && \
         export MDBX_BUILD_CXX=$(if [ "${{ matrix.cxx }}" = 'ON' ]; then echo 'YES'; else echo 'NO'; fi) && \
-        . test/ci/ci.sh "-DCMAKE_BUILD_TYPE=${{ matrix.build-type }}|-DMDBX_BUILD_CXX:BOOL=${{ matrix.cxx }}"
+        . test/ci/ci.sh "-DCMAKE_BUILD_TYPE=${{ matrix.build-type }}|-DMDBX_BUILD_CXX:BOOL=${{ matrix.cxx }}${{ matrix.extra-options }}"
