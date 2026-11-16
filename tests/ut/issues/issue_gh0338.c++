@@ -15,6 +15,16 @@
 
 #include "mdbx.h"
 #include <gtest/gtest.h>
+/* The child-opens waits below scale their budgets under Valgrind, in line
+ * with the ctest timeouts' scaling. */
+#if defined(__has_include)
+#if __has_include(<valgrind/valgrind.h>)
+#include <valgrind/valgrind.h>
+#endif
+#endif
+#if !defined(RUNNING_ON_VALGRIND)
+#define RUNNING_ON_VALGRIND (0)
+#endif
 
 #include <cstdio>
 #include <cstring>
@@ -141,7 +151,12 @@ holder_child spawn_holder(const char *tag, MDBX_env_flags_t flags) {
     }
     _exit(rc == MDBX_SUCCESS ? 0 : 4);
   }
-  for (int i = 0; i < 10000 && access(c.ready.c_str(), F_OK) != 0; ++i)
+  /* 10 seconds natively, scaled to 10*42 under Valgrind (in line with the
+   * ctest timeouts' scaling), since the child's env_open() takes tens of
+   * seconds there under a loaded machine. */
+  const auto ready_deadline =
+      std::chrono::steady_clock::now() + std::chrono::seconds(RUNNING_ON_VALGRIND ? 10 * 42 : 10);
+  while (access(c.ready.c_str(), F_OK) != 0 && std::chrono::steady_clock::now() < ready_deadline)
     usleep(1000);
   if (FILE *f = fopen(c.ready.c_str(), "rb")) {
     if (fread(&c.open_rc, sizeof(c.open_rc), 1, f) != 1)
