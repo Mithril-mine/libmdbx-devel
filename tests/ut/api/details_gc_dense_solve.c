@@ -12,26 +12,26 @@
 ///
 /// \author Леонид Юрьев aka Leonid Yuriev <leo@yuriev.ru> \date 2026
 
-/// V-004 regression test (issue reference: see the PR description).
+/// V-004 regression test (issue #497, see the PR description).
 ///
-/// Contract: the dense-solver's binary search predicate must stay BOUNDED in
-/// work. solve_recursive() uses a full recursive descent as its binary-search
-/// predicate, so the work is multiplicative across the histogram levels; on
-/// adversarial/malformed shapes the FALSE outcome takes an exploding number of
-/// invocations (measured: 71,895,998 calls, ~50 seconds, inside one
-/// gc_rerere call - the ctx->loop bound never applies and the commit thread
-/// holds the writer mutex).
-///
-/// The fix puts a shared work budget into the recursion; on exhaustion the
-/// predicate returns false ("infeasible"), which is fail-safe: the caller
-/// falls back to the legacy reservation paths, and the solution self-check
-/// still guards whatever is produced.
+/// Contracts under test:
+/// 1. BOUNDED WORK: the dense solver must never explode (the pre-fix
+///    exponential binary-search predicate took 71,895,998 invocations, ~50s
+///    at -O2, on the counterexample below - inside a single gc_rerere call,
+///    with the writer mutex held). The closed-form solver is O(hist^2).
+/// 2. FEASIBILITY EQUIVALENCE: the solver's found/not-found verdict must
+///    match an independent exact oracle (per-run partition dynamic
+///    programming) over a deterministic corpus - the solver is never
+///    false-negative (a missed feasible shape sends gc_handle_dense() to the
+///    legacy fallback, degrading GC slot usage) and never false-positive
+///    (the solution self-check would fail the transaction).
+/// 3. SOLUTION SOUNDNESS: any found solution covers the volume with no more
+///    than the available slots.
 ///
 /// This is a verbatim-extraction test in the details_scan4seq.c style: the
-/// solver below (consume_stack, consume_remaining, solve_recursive and the
-/// gc_dense_solve core) is copied from src/gc-put.c @ the fix commit, with
-/// the txn/env-derived values hoisted into stand-in constants and a call
-/// counter added. Keep the extraction in sync when refactoring the solver.
+/// solver below is copied from src/gc-put.c @ the fix commit with the
+/// txn/env-derived values hoisted into stand-in constants. Keep the
+/// extraction in sync when refactoring the solver.
 
 #include <assert.h>
 #include <stdarg.h>
@@ -50,7 +50,7 @@ typedef uint32_t pgno_t;
 static const size_t tst_ps = 4096;
 static const size_t tst_maxgc_large1page = (4096u - PAGEHDRSZ) / sizeof(pgno_t) - 1;
 
-/* the work counter: the contract under test */
+/* the work counter for the bounded-work contract (a test-only seam) */
 static unsigned long long tst_calls;
 
 /* --- dense histogram (verbatim shape, src/gc.h) --- */
@@ -60,163 +60,171 @@ typedef struct gc_dense_histogram {
 } gc_dense_histogram_t;
 
 /* --- VERBATIM from src/gc-put.c @ the fix commit: keep in sync --- */
-typedef struct sr_state {
-  size_t left_slots;
-  size_t left_volume;
-  gc_dense_histogram_t hist;
-} sr_state_t;
 
-/* Пытается отъесть n кусков длиной len, двигаясь по гистограмме от больших элементов к меньшим. */
-static bool consume_stack(sr_state_t *const st, const size_t len, size_t n) {
-  ASSERT(len > 1 && n > 0);
-  while (st->hist.end >= len) {
-    if (st->hist.array[st->hist.end - 1] < 1)
-      st->hist.end -= 1;
-    else {
-      if (st->hist.end > len)
-        st->hist.array[st->hist.end - len - 1] += 1;
-      st->hist.array[st->hist.end - 1] -= 1;
-      if (--n == 0)
-        return true;
-    }
-  }
-  return false;
-}
-
-typedef struct sr_context {
-  /* расход страниц / ёмкость кусков */
-  pgno_t first_page, other_pages;
-  /* длина последовательностей смежных страниц, при нарезке на куски соответствующей длины, имеющихся
-   * слотов/идентификаторов хватит для размещения возвращаемых страниц. Нарезать куски большего размера, есть смысл
-   * только если недостаточно последовательностей такой длины (с учетом более длинных, в том числе кратно длиннее). */
-  pgno_t factor;
-  /* результирующее решение */
-  gc_dense_histogram_t *solution;
-  /* общий на всю рекурсию остаток бюджета работы (см. GC_DENSE_SOLVE_BUDGET) */
-  size_t *budget;
-} sr_context_t;
-
-/* Пытается покрыть остаток объёма и слотов, кусками длиной не более factor,
- * двигаясь по гистограмме от больших элементов к меньшим. */
-static bool consume_remaining(const sr_context_t *const ct, sr_state_t *const st, size_t len) {
-  pgno_t *const solution = ct->solution->array;
-  while (len > ct->factor)
-    solution[--len] = 0;
-  solution[len - 1] = 0;
-  if (unlikely(0 >= (int)st->left_volume))
-    goto done;
-
-  size_t per_chunk = ct->first_page + ct->other_pages * (len - 1);
-  while (st->hist.end > 0 && st->left_slots > 0) {
-    if (st->hist.array[st->hist.end - 1]) {
-      solution[len - 1] += 1;
-      if (st->hist.end > len)
-        st->hist.array[st->hist.end - len - 1] += 1;
-      st->hist.array[st->hist.end - 1] -= 1;
-      st->left_slots -= 1;
-      st->left_volume -= (pgno_t)per_chunk;
-      if (0 >= (int)st->left_volume) {
-      done:
-        while (--len)
-          solution[len - 1] = 0;
-        return true;
-      }
-    } else {
-      st->hist.end -= 1;
-      if (len > st->hist.end) {
-        ASSERT(len == st->hist.end + 1);
-        len = st->hist.end;
-        per_chunk -= ct->other_pages;
-        solution[len - 1] = 0;
-      }
-    }
-  }
-  return false;
-}
-
-/* Поиск оптимального решения путем жадного бинарного деления и рекурсивного спуска по уже посчитанной гистограмме. */
-static bool solve_recursive(const sr_context_t *const ct, sr_state_t *const st, size_t len) {
-  if (unlikely(0 == *ct->budget))
-    return false; /* budget exhausted: treat as infeasible (see GC_DENSE_SOLVE_BUDGET in src/gc-put.c) */
-  *ct->budget -= 1;
-  ++tst_calls; /* the counting seam (not in the source) */
-  ASSERT(st->left_slots >= 1);
-  size_t per_chunk = ct->first_page + ct->other_pages * (len - 1);
-  if (len > ct->factor && st->left_slots > 1 && st->left_volume > per_chunk) {
-    size_t lo = 0, hi = st->left_slots - 1, n = lo;
-    do {
-      sr_state_t local = *st;
-      if (n) {
-        if (!consume_stack(&local, len, n)) {
-          hi = n - 1;
-          n = (hi + lo) / 2;
-          continue;
-        }
-        ASSERT(local.left_slots > n);
-        local.left_slots -= n;
-        local.left_volume = (pgno_t)(local.left_volume > n * per_chunk) ? local.left_volume - n * per_chunk : 0;
-      }
-      if (!solve_recursive(ct, &local, len - 1)) {
-        lo = n + 1;
-      } else if (n > lo && n < hi) {
-        hi = n;
-      } else {
-        ct->solution->array[len - 1] = (pgno_t)n;
-        *st = local;
-        return true;
-      }
-      n = (hi + lo + 1) / 2;
-    } while (hi >= lo);
-    return false;
-  }
-
-  return consume_remaining(ct, st, len);
-}
-
-/* --- the gc_dense_solve core with the txn/env values hoisted (see provenance) --- */
-static size_t tst_bytes2pgno(size_t bytes) { return bytes / tst_ps; }
-static size_t tst_largechunk_npages(size_t bytes) { return tst_bytes2pgno(PAGEHDRSZ - 1 + bytes) + 1; }
-static size_t tst_gc_chunk_pages(const size_t chunk) { return tst_largechunk_npages((chunk + 1) * sizeof(pgno_t)); }
-
-/* returns 0 with *found set, -1 on violated preconditions, -2 on the self-check failure */
-static int tst_dense_solve(size_t left_slots, size_t left_volume, const gc_dense_histogram_t *hist,
+/* Решение задачи плотной упаковки: покрыть объём return_left страниц, используя не более
+ * slots доступных слотов/идентификаторов, вырезая куски (GC-записи со спаном len, т.е. размещённые
+ * на len смежных страницах) из прогонов смежных страниц гистограммы gc_dense_hist().
+ *
+ * Ключевое наблюдение, сводящее задачу к закрытой форме:
+ *  1. Вместимость куска строго линейна по спану: per_chunk(len) = first_page + other_pages*(len-1),
+ *     т.е. other_pages*len - (other_pages - first_page). Следовательно, покрытие любого набора кусков
+ *     есть other_pages*sum(len_i) - (other_pages-first_page)*k, где k - число кусков.
+ *  2. Прогон длиной L можно нарезать на любые куски с суммой спанов <= L (остатки нарезки остаются
+ *     смежными и пригодны для дальнейших кусков). Поэтому любые k кусков покрывают не более
+ *     other_pages*P(k) - (other_pages-first_page)*k, где P(k) - сумма длин k наибольших прогонов,
+ *     и эта величина достигается взятием прогонов целиком.
+ *
+ * Отсюда точный критерий разрешимости: задача разрешима тогда и только тогда, когда существует
+ * k <= slots с other_pages*P(k) - (other_pages-first_page)*k >= объёма. Проверяется сканом префиксных
+ * сумм отсортированных (подсчётом) длин прогонов - без какого-либо перебора.
+ *
+ * Решение строится в двух режимах:
+ *  - Равномерный (предпочтительный): минимальный спан m, при котором объём покрывается n(m) =
+ *    ceil(объём / per_chunk(m)) кусками спана m, размещаемыми в прогонах (floor(len/m) кусков из
+ *    прогона длиной len) с учётом числа слотов. Такие записи однородны и максимально коротки, что
+ *    упрощает их последующую переработку. Может не существовать при дефиците слотов.
+ *  - Минимум слотов (точный): жадно от самых длинных прогонов целыми кусками, последний кусок
+ *    подрезается до минимально необходимого спана. Существует всегда, когда задача разрешима.
+ * Если ни один режим не дал решения - задача неразрешима, возвращаем MDBX_RESULT_FALSE и вызывающий
+ * gc_handle_dense() откатывается на штатные пути резервирования. */
+static int tst_dense_solve(size_t slots, size_t volume, const gc_dense_histogram_t *hist,
                            gc_dense_histogram_t *const solution, bool *found) {
-  sr_state_t st = {.left_slots = left_slots, .left_volume = left_volume, .hist = *hist};
-  ASSERT(left_slots > 0 && left_volume > 0);
-  if (!st.left_slots || !st.left_volume)
+  ASSERT(slots > 0 && volume > 0);
+  if (!slots || !volume)
     return -1;
 
-  size_t budget = 262144; /* GC_DENSE_SOLVE_BUDGET (src/gc-put.c) */
-  const sr_context_t ct = {.factor = (pgno_t)tst_gc_chunk_pages((st.left_volume + st.left_slots - 1) / st.left_slots),
-                           .first_page = /* на первой странице */ tst_maxgc_large1page +
-                                         /* сама страница также будет израсходована */ 1,
-                           .other_pages = /* на второй и последующих страницах */ tst_ps / sizeof(pgno_t) +
-                                          /* каждая страница также будет израсходована */ 1,
-                           .solution = solution,
-                           .budget = &budget};
+  const size_t first_page = /* на первой странице */ tst_maxgc_large1page +
+                            /* сама страница также будет израсходована */ 1;
+  const size_t other_pages = /* на второй и последующих страницах */ tst_ps / sizeof(pgno_t) +
+                             /* каждая страница также будет израсходована */ 1;
 
   memset(solution, 0, sizeof(*solution));
-  tst_calls = 0;
-  if (solve_recursive(&ct, &st, st.hist.end)) {
+  ++tst_calls;
+
+  /* Режим А (равномерный): сканируем спаны от коротких к длинам прогонов. */
+  unsigned span = 0;
+  for (unsigned m = 1; m <= 31; ++m) {
+    const size_t per_chunk = first_page + other_pages * (m - 1);
+    const size_t n = (volume + per_chunk - 1) / per_chunk;
+    if (n > slots)
+      continue;
+    size_t pieces = 0;
+    for (unsigned len = m; len <= hist->end; ++len)
+      pieces += (size_t)hist->array[len - 1] * (len / m);
+    if (n <= pieces) {
+      span = m;
+      solution->array[m - 1] = (pgno_t)n;
+      break;
+    }
+  }
+
+  if (!span) {
+    /* Режим Б (минимум слотов): точный, существует всегда при разрешимости задачи. */
+    size_t remaining = volume, used_slots = 0;
+    unsigned max_span = 0;
+    for (unsigned len = hist->end; len >= 1 && remaining > 0; --len) {
+      ++tst_calls;
+      const size_t per_chunk = first_page + other_pages * (len - 1);
+      for (pgno_t c = hist->array[len - 1]; c > 0 && remaining > 0; --c) {
+        unsigned cut = len;
+        if (per_chunk > remaining) {
+          /* подрезаем последний кусок до минимально необходимого спана */
+          cut = (unsigned)(1 + (remaining > first_page ? (remaining - first_page + other_pages - 1) / other_pages : 0));
+          ASSERT(cut >= 1 && cut <= len);
+        }
+        solution->array[cut - 1] += 1;
+        if (cut > max_span)
+          max_span = cut;
+        remaining -= (per_chunk < remaining) ? per_chunk : remaining;
+        used_slots += 1;
+      }
+    }
+    if (remaining > 0 || used_slots > slots)
+      /* решение НЕ найдено */
+      return 1;
+    span = max_span;
+  }
+
+  {
     const pgno_t *end = solution->array + 31;
     while (end > solution->array && end[-1] == 0)
       --end;
     solution->end = (unsigned)(end - solution->array);
-
-    /* проверяем решение */
-    size_t items = 0, volume = 0;
-    for (size_t i = 0, chunk = ct.first_page; i < solution->end; ++i) {
-      items += solution->array[i];
-      volume += solution->array[i] * chunk;
-      chunk += ct.other_pages;
-    }
-    if (volume < (size_t)left_volume || items > left_slots)
-      return -2;
-    *found = true;
-    return 0;
+    (void)span;
   }
-  *found = false;
+
+  /* проверяем решение */
+  size_t items = 0, covered = 0;
+  for (size_t i = 0, chunk = first_page; i < solution->end; ++i) {
+    items += solution->array[i];
+    covered += solution->array[i] * chunk;
+    chunk += other_pages;
+  }
+  if (covered < volume || items > slots)
+    return -2;
+  *found = true;
   return 0;
+}
+
+/*-----------------------------------------------------------------------------*/
+
+/* --- the independent exact oracle: per-run partition DP ---
+ * For every run, all partitions into pieces (compositions of lengths <= L)
+ * are enumerated; the DP keeps the Pareto-max coverage per used-slots count.
+ * This is exact (any allocation is a per-run partition, coverage and slots
+ * are additive over runs) and completely independent of the solver's math. */
+static bool tst_oracle(const gc_dense_histogram_t *h, size_t slots, size_t volume, size_t first_page,
+                       size_t other_pages, size_t *min_slots) {
+  static size_t dp[64 + 1], next[64 + 1];
+  const size_t cap = slots < 64 ? slots : 64;
+  for (size_t k = 0; k <= cap; ++k)
+    dp[k] = 0;
+  unsigned runs[64], nruns = 0;
+  for (unsigned len = 1; len <= h->end; ++len)
+    for (pgno_t c = 0; c < h->array[len - 1] && nruns < 64; ++c)
+      runs[nruns++] = len;
+  for (unsigned r = 0; r < nruns; ++r) {
+    const unsigned L = runs[r];
+    for (size_t k = 0; k <= cap; ++k)
+      next[k] = dp[k];
+    /* enumerate all partitions of L into pieces >= 1 */
+    unsigned rest = L, first_piece = 1;
+    unsigned pieces[16];
+    unsigned depth = 0;
+    while (true) {
+      if (rest == 0) {
+        /* a complete partition of exactly L */
+        const size_t count = depth;
+        size_t cov = 0;
+        for (unsigned i = 0; i < depth; ++i)
+          cov += first_page + other_pages * (pieces[i] - 1);
+        for (size_t k = 0; k + count <= cap; ++k)
+          if (dp[k] + cov > next[k + count])
+            next[k + count] = dp[k] + cov;
+      }
+      if (first_piece > rest) {
+        if (depth == 0)
+          break;
+        depth -= 1;
+        rest += pieces[depth];
+        first_piece = pieces[depth] + 1;
+        continue;
+      }
+      pieces[depth] = first_piece;
+      rest -= first_piece;
+      depth += 1;
+      first_piece = 1;
+      assert(depth < 16);
+    }
+    memcpy(dp, next, (cap + 1) * sizeof(dp[0]));
+  }
+  for (size_t k = 0; k <= cap; ++k)
+    if (dp[k] >= volume) {
+      if (min_slots)
+        *min_slots = k;
+      return true;
+    }
+  return false;
 }
 
 /*-----------------------------------------------------------------------------*/
@@ -240,9 +248,11 @@ static void tst_report(const char *what, bool ok, const char *fmt, ...) {
   fprintf(stderr, "\n");
 }
 
-/* The work cap asserted by the contract. Loose against the solver's own
- * budget (see src/gc-put.c), tight against the unfixed explosion. */
+/* the work cap asserted by the contract (loose; the closed form is O(31^2)) */
 static const unsigned long long tst_work_cap = 1000000ull;
+
+static size_t tst_first_page(void) { return tst_maxgc_large1page + 1; }
+static size_t tst_other_pages(void) { return tst_ps / sizeof(pgno_t) + 1; }
 
 static void tst_solve(const char *name, size_t left_slots, size_t left_volume, const gc_dense_histogram_t *hist,
                       bool expect_found) {
@@ -252,18 +262,22 @@ static void tst_solve(const char *name, size_t left_slots, size_t left_volume, c
   const int rc = tst_dense_solve(left_slots, left_volume, hist, &solution, &found);
   char what[96];
   snprintf(what, sizeof(what), "%s: rc", name);
-  tst_report(what, rc == 0, "rc %d", rc);
+  tst_report(what, rc == 0 || rc == 1, "rc %d", rc); /* 0 = found, 1 = infeasible, else error */
   snprintf(what, sizeof(what), "%s: outcome", name);
-  tst_report(what, rc == 0 && found == expect_found, "found %d, want %d", (int)found, (int)expect_found);
+  tst_report(what, (rc == 0 || rc == 1) && found == expect_found, "found %d, want %d", (int)found,
+             (int)expect_found);
   snprintf(what, sizeof(what), "%s: bounded work", name);
   tst_report(what, tst_calls <= tst_work_cap, "calls %llu > cap %llu", tst_calls, tst_work_cap);
   if (found) {
-    /* the self-check equivalents: a solution, if returned, must be sound */
-    size_t items = 0;
-    for (unsigned i = 0; i < solution.end; ++i)
+    size_t items = 0, covered = 0, chunk = tst_first_page();
+    for (unsigned i = 0; i < solution.end; ++i) {
       items += solution.array[i];
+      covered += solution.array[i] * chunk;
+      chunk += tst_other_pages();
+    }
     snprintf(what, sizeof(what), "%s: solution sane", name);
-    tst_report(what, items >= 1 && items <= left_slots && solution.end <= 31, "items %zu", (size_t)items);
+    tst_report(what, items >= 1 && items <= left_slots && covered >= left_volume, "items %zu covered %zu", items,
+               (size_t)covered);
   }
 }
 
@@ -271,12 +285,11 @@ int main(int argc, char **argv) {
   (void)argc;
   (void)argv;
 
-  /* 1) the wave-campaign counterexample: hist {2x42, 7x143, 17x87, 18x17,
-   * 24x9}, 1021 slots, volume 3557022. Pre-fix this explores ~72 million
-   * predicate invocations (~50 seconds at -O2) before returning FALSE -
-   * inside a single gc_rerere call, holding the writer mutex. The outcome
-   * itself is FALSE both before and after the fix; the contract under test
-   * is the bounded work. */
+  /* 1) the wave-campaign counterexample: pre-fix this took 71,895,998
+   * predicate invocations (~50s at -O2) before returning FALSE; the outcome
+   * itself is FALSE (the material, 3086 pages, cannot cover the volume)
+   * both before and after - the contracts under test are the bounded work
+   * and the correct verdict. */
   {
     gc_dense_histogram_t h = {0};
     h.end = 24;
@@ -288,8 +301,8 @@ int main(int argc, char **argv) {
     tst_solve("counterexample", 1021, 3557022, &h, false);
   }
 
-  /* 2) the author's own TRUE example (gc_solve_test, commented in gc-put.c):
-   * a legit solve must stay found and cheap. */
+  /* 2) the author's own TRUE example (gc_solve_test, the pre-fix commented
+   * code): a legit solve must stay found and cheap. */
   {
     gc_dense_histogram_t h = {0};
     h.end = 31;
@@ -299,8 +312,7 @@ int main(int argc, char **argv) {
     tst_solve("author-example", 5, 8463, &h, true);
   }
 
-  /* 3) deep-but-feasible shapes: the binary search does real per-level work
-   * and still must stay found and cheap. */
+  /* 3) deep-but-feasible and boundary-infeasible shapes */
   {
     gc_dense_histogram_t h = {0};
     h.end = 20;
@@ -308,15 +320,63 @@ int main(int argc, char **argv) {
     memcpy(h.array, src, sizeof(src));
     tst_solve("deep-feasible", 80, 150000, &h, true);
   }
-
-  /* 4) a boundary-infeasible shape: FALSE is expected, but via bounded work
-   * (measured 742 predicate calls), not via an exploding search. */
   {
     gc_dense_histogram_t h = {0};
     h.end = 12;
     const pgno_t src[12] = {0, 8, 0, 21, 0, 0, 5, 0, 9, 0, 3, 1};
     memcpy(h.array, src, sizeof(src));
     tst_solve("boundary-infeasible", 60, 270000, &h, false);
+  }
+
+  /* 4) the deterministic corpus vs the independent exact oracle: the
+   * solver's verdict must match feasibility exactly (never false-negative:
+   * that would silently degrade to the legacy fallback; never
+   * false-positive: the self-check would fail the transaction). */
+  {
+    unsigned long long seed = 20261116;
+    unsigned agree = 0, mismatch = 0;
+    for (int it = 0; it < 800; ++it) {
+      seed = seed * 6364136223846793005ull + 1442695040888963407ull;
+      const unsigned end = 1 + (unsigned)((seed >> 40) % 6u);
+      gc_dense_histogram_t h = {0};
+      h.end = end;
+      for (unsigned i = 0; i < end; ++i) {
+        seed = seed * 6364136223846793005ull + 1442695040888963407ull;
+        h.array[i] = (pgno_t)((seed >> 45) % 3u);
+      }
+      seed = seed * 6364136223846793005ull + 1442695040888963407ull;
+      const size_t slots = 1 + (seed >> 60) % 10u;
+      seed = seed * 6364136223846793005ull + 1442695040888963407ull;
+      const size_t volume = 1 + (seed >> 50) % 120000u;
+      size_t oracle_min = 0;
+      const bool oracle = tst_oracle(&h, slots, volume, tst_first_page(), tst_other_pages(), &oracle_min);
+      gc_dense_histogram_t solution;
+      bool found = false;
+      const int rc = tst_dense_solve(slots, volume, &h, &solution, &found);
+      const bool solver_ok = (rc == 0) && found;
+      ++tst_cases;
+      char what[80];
+      snprintf(what, sizeof(what), "corpus#%d: verdict matches the oracle", it);
+      tst_report(what, (rc == 0 || rc == 1) && solver_ok == oracle,
+                 "solver %d oracle %d (end=%u slots=%zu volume=%zu)", (int)solver_ok, (int)oracle, h.end, slots,
+                 volume);
+      if ((rc == 0 || rc == 1) && solver_ok == oracle) {
+        ++agree;
+        if (solver_ok) {
+          size_t items = 0;
+          for (unsigned i = 0; i < solution.end; ++i)
+            items += solution.array[i];
+          snprintf(what, sizeof(what), "corpus#%d: items sane", it);
+          tst_report(what, items >= oracle_min && items <= slots, "items %zu, oracle min %zu", items, oracle_min);
+        }
+      } else {
+        ++mismatch;
+        if (mismatch <= 5)
+          fprintf(stderr, "    mismatch: end=%u slots=%zu volume=%zu solver=%d oracle=%d\n", h.end, slots, volume,
+                  (int)solver_ok, (int)oracle);
+      }
+    }
+    printf("corpus: agree=%u mismatch=%u\n", agree, mismatch);
   }
 
   printf("cases=%zu ok=%zu failed=%zu\n", tst_cases, tst_ok, tst_failed);

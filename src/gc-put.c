@@ -563,258 +563,116 @@ static void gc_dense_hist(MDBX_txn *txn, gcu_t *ctx) {
   ctx->dense_histogram.end = (unsigned)((seqmax > seqlen) ? seqmax : seqlen + 1);
 }
 
-/* Оптимальным решением является использование всех доступных слотов/идентификаторов, при максимальном использовании
- * последовательностей длиной ближе к целевой средней длине, необходимой для размещения всех возвращаемых страниц.
+/* Решение задачи плотной упаковки: покрыть объём return_left страниц, используя не более
+ * slots доступных слотов/идентификаторов, вырезая куски (GC-записи со спаном len, т.е. размещённые
+ * на len смежных страницах) из прогонов смежных страниц гистограммы gc_dense_hist().
  *
- * Если последовательностей нужной или большей длины хватает, то достаточно просто выполнить соответствующую нарезку.
- * Иначе поиск решения можно рассматривать как необходимую замену в наборе коротких (в том числе нулевых)
- * последовательностей/кусков более длинными. Сложность в том, что нужно учитывать возможность разбиения/деления длинных
- * последовательностей на несколько более коротких.
+ * Ключевое наблюдение, сводящее задачу к закрытой форме:
+ *  1. Вместимость куска строго линейна по спану: per_chunk(len) = first_page + other_pages*(len-1),
+ *     т.е. other_pages*len - (other_pages - first_page). Следовательно, покрытие любого набора кусков
+ *     есть other_pages*sum(len_i) - (other_pages-first_page)*k, где k - число кусков.
+ *  2. Прогон длиной L можно нарезать на любые куски с суммой спанов <= L (остатки нарезки остаются
+ *     смежными и пригодны для дальнейших кусков). Поэтому любые k кусков покрывают не более
+ *     other_pages*P(k) - (other_pages-first_page)*k, где P(k) - сумма длин k наибольших прогонов,
+ *     и эта величина достигается взятием прогонов целиком.
  *
- * Поэтому алгоритмически поиск решения выглядит как попытка сначала нарезать N кусков по L, а в случае неуспеха
- * попробовать комбинации X=1..N-1 кусков по L+1 и Y=N-X кусков длины L и меньше (при достижении объёма/суммы),
- * затем комбинаций X=1..N-1 кусков по L+2, Y=0..N-X кусков длины L-1 и Z=N-(X+Y) кусков длины L и меньше:
- *  - a=0..(V/(L+1)) кусков L+1, плюс хвост N-a длиной до L включительно;
- *  - b=0..(V/(L+2)) кусков L+2, a=0..(V/(L+1)) кусков L+1, плюс хвост N-b-a длиной до L включительно;
- *  - c=0..(V/(L+3)) кусков L+3, b=0..(V/(L+2)) кусков L+2, a=0..(V/(L+1)) кусков L+1,
- *    плюс хвост N-c-b-a длиной до L включительно;
- *  - и т.д.
+ * Отсюда точный критерий разрешимости: задача разрешима тогда и только тогда, когда существует
+ * k <= slots с other_pages*P(k) - (other_pages-first_page)*k >= объёма. Проверяется сканом префиксных
+ * сумм отсортированных (подсчётом) длин прогонов - без какого-либо перебора.
  *
- * 1. начинаем с максимальной длины из гистограммы и спускаемся до L
- *    для каждого уровня начинаем с 0 кусков и одного из условий:
- *     - исчерпание/отсутствие кусков нужной длины,
- *     - либо до достижения объёма (что должно привести к возврату решения);
- * 2. сначала спускаемся рекурсивно вглубь, затем идем двоичным поиском 0 --> hi на каждом уровне;
- * 3. поиск/выделение кусков и восстановление/откат:
- *     - каждое выделение может быть дробным, т.е. образовывать осколки меньшего размера, которые могут использовать
- *       последующие шаги;
- *     - на каждом уровне нужна своя актуальная гистограмма;
- *     - два варианта: локальная копия гистограммы, либо "дельта" для отката
- *     - с "дельтой" очень много возни, в том числе условных переходов,
- *       поэтому проще делать локальные копии и целиком их откатывать.
- *
- * Максимальная потребность памяти на стеке sizeof(pgno_t)*L*L, где L = максимальная длина последовательности
- * учитываемой в гистограмме. Для L=31 получается порядка 4 Кб на стеке, что представляется допустимым, а отслеживание
- * более длинных последовательностей не представляется рациональным.
- *
- * Сложность можно оценить как O(H*N*log(N)), либо как O(H*V*log(N)), где:
- *  - H = высота гистограммы,
- *  - N = количество имеющихся слотов/идентификаторов,
- *  - V = объем/количество не помещающихся номеров страниц. */
-
-/* Ограничение работы предиката solve_recursive(): бинарный поиск на каждом уровне использует полный рекурсивный
- * спуск в качестве предиката, поэтому работа мультипликативна по уровням гистограммы. На заведомо неразрешимых
- * и "пограничных" формах это даёт взрыв до десятков миллионов вызовов (измерено: 71'895'998 вызовов, ~50 сек)
- * внутри одного gc_rerere(), когда граница ctx->loop > 42 не действует, а writer-mutex удерживается коммитом.
- * Поэтому вводим бюджет: при его исчерпании предикат возвращает false ("неразрешимо"), что безопасно - вызывающий
- * gc_handle_dense() откатывается на штатные пути резервирования, а самопроверка решения по-прежнему защищает
- * любой возвращённый результат. Наблюдаемая работа на разрешимых формах не превышает десятков вызовов. */
-#define GC_DENSE_SOLVE_BUDGET 262144
-
-typedef struct sr_state {
-  size_t left_slots;
-  size_t left_volume;
-  gc_dense_histogram_t hist;
-} sr_state_t;
-
-/* Пытается отъесть n кусков длиной len, двигаясь по гистограмме от больших элементов к меньшим. */
-static bool consume_stack(sr_state_t *const st, const size_t len, size_t n) {
-  ASSERT(len > 1 && n > 0);
-  while (st->hist.end >= len) {
-    if (st->hist.array[st->hist.end - 1] < 1)
-      st->hist.end -= 1;
-    else {
-      if (st->hist.end > len)
-        st->hist.array[st->hist.end - len - 1] += 1;
-      st->hist.array[st->hist.end - 1] -= 1;
-      if (--n == 0)
-        return true;
-    }
-  }
-  return false;
-}
-
-typedef struct sr_context {
-  /* расход страниц / ёмкость кусков */
-  pgno_t first_page, other_pages;
-  /* длина последовательностей смежных страниц, при нарезке на куски соответствующей длины, имеющихся
-   * слотов/идентификаторов хватит для размещения возвращаемых страниц. Нарезать куски большего размера, есть смысл
-   * только если недостаточно последовательностей такой длины (с учетом более длинных, в том числе кратно длиннее). */
-  pgno_t factor;
-  /* результирующее решение */
-  gc_dense_histogram_t *solution;
-  /* общий на всю рекурсию остаток бюджета работы (см. GC_DENSE_SOLVE_BUDGET) */
-  size_t *budget;
-} sr_context_t;
-
-/* Пытается покрыть остаток объёма и слотов, кусками длиной не более factor,
- * двигаясь по гистограмме от больших элементов к меньшим. */
-static bool consume_remaining(const sr_context_t *const ct, sr_state_t *const st, size_t len) {
-  pgno_t *const solution = ct->solution->array;
-  while (len > ct->factor)
-    solution[--len] = 0;
-  solution[len - 1] = 0;
-  if (unlikely(0 >= (int)st->left_volume))
-    goto done;
-
-  size_t per_chunk = ct->first_page + ct->other_pages * (len - 1);
-  while (st->hist.end > 0 && st->left_slots > 0) {
-    if (st->hist.array[st->hist.end - 1]) {
-      solution[len - 1] += 1;
-      if (st->hist.end > len)
-        st->hist.array[st->hist.end - len - 1] += 1;
-      st->hist.array[st->hist.end - 1] -= 1;
-      st->left_slots -= 1;
-      st->left_volume -= (pgno_t)per_chunk;
-      if (0 >= (int)st->left_volume) {
-      done:
-        while (--len)
-          solution[len - 1] = 0;
-        return true;
-      }
-    } else {
-      st->hist.end -= 1;
-      if (len > st->hist.end) {
-        ASSERT(len == st->hist.end + 1);
-        len = st->hist.end;
-        per_chunk -= ct->other_pages;
-        solution[len - 1] = 0;
-      }
-    }
-  }
-  return false;
-}
-
-/* Поиск оптимального решения путем жадного бинарного деления и рекурсивного спуска по уже посчитанной гистограмме. */
-static bool solve_recursive(const sr_context_t *const ct, sr_state_t *const st, size_t len) {
-  if (unlikely(0 == *ct->budget))
-    return false; /* бюджет исчерпан: трактуем как неразрешимо, чтобы ограничить работу (см. GC_DENSE_SOLVE_BUDGET) */
-  *ct->budget -= 1;
-  ASSERT(st->left_slots >= 1);
-  size_t per_chunk = ct->first_page + ct->other_pages * (len - 1);
-  if (len > ct->factor && st->left_slots > 1 && st->left_volume > per_chunk) {
-    size_t lo = 0, hi = st->left_slots - 1, n = lo;
-    do {
-      sr_state_t local = *st;
-      if (n) {
-        if (!consume_stack(&local, len, n)) {
-          hi = n - 1;
-          n = (hi + lo) / 2;
-          continue;
-        }
-        ASSERT(local.left_slots > n);
-        local.left_slots -= n;
-        local.left_volume = (pgno_t)(local.left_volume > n * per_chunk) ? local.left_volume - n * per_chunk : 0;
-      }
-      if (!solve_recursive(ct, &local, len - 1)) {
-        lo = n + 1;
-      } else if (n > lo && n < hi) {
-        hi = n;
-      } else {
-        ct->solution->array[len - 1] = (pgno_t)n;
-        *st = local;
-        return true;
-      }
-      n = (hi + lo + 1) / 2;
-    } while (hi >= lo);
-    return false;
-  }
-
-  return consume_remaining(ct, st, len);
-}
-
+ * Решение строится в двух режимах:
+ *  - Равномерный (предпочтительный): минимальный спан m, при котором объём покрывается n(m) =
+ *    ceil(объём / per_chunk(m)) кусками спана m, размещаемыми в прогонах (floor(len/m) кусков из
+ *    прогона длиной len) с учётом числа слотов. Такие записи однородны и максимально коротки, что
+ *    упрощает их последующую переработку. Может не существовать при дефиците слотов.
+ *  - Минимум слотов (точный): жадно от самых длинных прогонов целыми кусками, последний кусок
+ *    подрезается до минимально необходимого спана. Существует всегда, когда задача разрешима.
+ * Если ни один режим не дал решения - задача неразрешима, возвращаем MDBX_RESULT_FALSE и вызывающий
+ * gc_handle_dense() откатывается на штатные пути резервирования. */
 static int gc_dense_solve(MDBX_txn *txn, gcu_t *ctx, gc_dense_histogram_t *const solution) {
-  sr_state_t st = {
-      .left_slots = rkl_len(&txn->wr.gc.ready4reuse), .left_volume = ctx->return_left, .hist = ctx->dense_histogram};
-  ASSERT(st.left_slots > 0 && st.left_volume > 0 && pnl_size(txn->wr.repnl) > 0);
-  if (unlikely(!st.left_slots || !st.left_volume)) {
+  const size_t slots = rkl_len(&txn->wr.gc.ready4reuse);
+  ASSERT(slots > 0 && ctx->return_left > 0 && pnl_size(txn->wr.repnl) > 0);
+  if (unlikely(!slots || !ctx->return_left)) {
     ERROR("%s/%d: %s", "MDBX_PROBLEM", MDBX_PROBLEM, "recursive-solving preconditions violated");
     return MDBX_PROBLEM;
   }
 
-  size_t budget = GC_DENSE_SOLVE_BUDGET;
-  const sr_context_t ct = {.factor = (pgno_t)gc_chunk_pages(txn, (st.left_volume + st.left_slots - 1) / st.left_slots),
-                           .first_page = /* на первой странице */ txn->env->maxgc_large1page +
-                                         /* сама страница также будет израсходована */ 1,
-                           .other_pages = /* на второй и последующих страницах */ txn->env->ps / sizeof(pgno_t) +
-                                          /* каждая страница также будет израсходована */ 1,
-                           .solution = solution,
-                           .budget = &budget};
+  const size_t first_page = /* на первой странице */ txn->env->maxgc_large1page +
+                            /* сама страница также будет израсходована */ 1;
+  const size_t other_pages = /* на второй и последующих страницах */ txn->env->ps / sizeof(pgno_t) +
+                             /* каждая страница также будет израсходована */ 1;
+  const gc_dense_histogram_t *const hist = &ctx->dense_histogram;
+  const size_t volume = (size_t)ctx->return_left;
 
   memset(solution, 0, sizeof(*solution));
-  if (solve_recursive(&ct, &st, st.hist.end)) {
-    const pgno_t *end = ARRAY_END(solution->array);
+
+  /* Режим А (равномерный): сканируем спаны от коротких к длинам прогонов. */
+  unsigned span = 0;
+  for (unsigned m = 1; m <= ARRAY_LENGTH(hist->array); ++m) {
+    const size_t per_chunk = first_page + other_pages * (m - 1);
+    const size_t n = (volume + per_chunk - 1) / per_chunk;
+    if (n > slots)
+      continue;
+    size_t pieces = 0;
+    for (unsigned len = (unsigned)m; len <= hist->end; ++len)
+      pieces += (size_t)hist->array[len - 1] * (len / m);
+    if (n <= pieces) {
+      span = m;
+      solution->array[m - 1] = (pgno_t)n;
+      break;
+    }
+  }
+
+  if (!span) {
+    /* Режим Б (минимум слотов): точный, существует всегда при разрешимости задачи. */
+    size_t remaining = volume, used_slots = 0;
+    unsigned max_span = 0;
+    for (unsigned len = hist->end; len >= 1 && remaining > 0; --len) {
+      const size_t per_chunk = first_page + other_pages * (len - 1);
+      for (pgno_t c = hist->array[len - 1]; c > 0 && remaining > 0; --c) {
+        unsigned cut = len;
+        if (per_chunk > remaining) {
+          /* подрезаем последний кусок до минимально необходимого спана */
+          cut = (unsigned)(1 + (remaining > first_page ? (remaining - first_page + other_pages - 1) / other_pages : 0));
+          tASSERT0(txn, cut >= 1 && cut <= len);
+        }
+        solution->array[cut - 1] += 1;
+        if (cut > max_span)
+          max_span = cut;
+        remaining -= (per_chunk < remaining) ? per_chunk : remaining;
+        used_slots += 1;
+      }
+    }
+    if (remaining > 0 || used_slots > slots)
+      /* решение НЕ найдено */
+      return MDBX_RESULT_FALSE;
+    span = max_span;
+  }
+
+  {
+    const pgno_t *end = solution->array + ARRAY_LENGTH(solution->array);
     while (end > solution->array && end[-1] == 0)
       --end;
     solution->end = (unsigned)(end - solution->array);
-
-    /* проверяем решение */
-    size_t items = 0, volume = 0;
-    for (size_t i = 0, chunk = ct.first_page; i < solution->end; ++i) {
-      items += solution->array[i];
-      volume += solution->array[i] * chunk;
-      chunk += ct.other_pages;
-    }
-
-    if (unlikely(volume < (size_t)ctx->return_left || items > rkl_len(&txn->wr.gc.ready4reuse))) {
-      ASSERT(!"recursive-solving failure");
-      ERROR("%s/%d: %s", "MDBX_PROBLEM", MDBX_PROBLEM, "recursive-solving failure");
-      return MDBX_PROBLEM;
-    }
-    return MDBX_RESULT_TRUE;
+    (void)span;
   }
 
-  /* решение НЕ найдено */
-  return MDBX_RESULT_FALSE;
+  /* проверяем решение */
+  size_t items = 0, covered = 0;
+  for (size_t i = 0, chunk = first_page; i < solution->end; ++i) {
+    items += solution->array[i];
+    covered += solution->array[i] * chunk;
+    chunk += other_pages;
+  }
+
+  if (unlikely(covered < (size_t)ctx->return_left || items > slots)) {
+    ASSERT(!"recursive-solving failure");
+    ERROR("%s/%d: %s", "MDBX_PROBLEM", MDBX_PROBLEM, "recursive-solving failure");
+    return MDBX_PROBLEM;
+  }
+  return MDBX_RESULT_TRUE;
 }
 
-// int gc_solve_test(MDBX_txn *txn, gcu_t *ctx) {
-//   gc_dense_histogram_t r;
-//   gc_dense_histogram_t *const solution = &r;
-//
-//   sr_state_t st = {.left_slots = 5,
-//                    .left_volume = 8463,
-//                    .hist = {.end = 31, .array = {6493, 705, 120, 14, 2, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0,
-//                                                  0,    0,   0,   0,  0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 4}}};
-//   ASSERT(st.left_slots > 0 && st.left_volume > 0 && pnl_size(txn->wr.repnl) > 0);
-//   if (unlikely(!st.left_slots || !st.left_volume)) {
-//     ERROR("%s/%d: %s", "MDBX_PROBLEM", MDBX_PROBLEM, "recursive-solving preconditions violated");
-//     return MDBX_PROBLEM;
-//   }
-//
-//   const sr_context_t ct = {.factor = gc_chunk_pages(txn, (st.left_volume + st.left_slots - 1) / st.left_slots),
-//                            .first_page = /* на первой странице */ txn->env->maxgc_large1page +
-//                                          /* сама страница также будет израсходована */ 1,
-//                            .other_pages = /* на второй и последующих страницах */ txn->env->ps / sizeof(pgno_t) +
-//                                           /* каждая страница также будет израсходована */ 1,
-//                            .solution = solution};
-//
-//   memset(solution, 0, sizeof(*solution));
-//   if (solve_recursive(&ct, &st, st.hist.end)) {
-//     const pgno_t *end = ARRAY_END(solution->array);
-//     while (end > solution->array && end[-1] == 0)
-//       --end;
-//     solution->end = (unsigned)(end - solution->array);
-//
-//     /* проверяем решение */
-//     size_t items = 0, volume = 0;
-//     for (size_t i = 0, chunk = ct.first_page; i < solution->end; ++i) {
-//       items += solution->array[i];
-//       volume += solution->array[i] * chunk;
-//       chunk += ct.other_pages;
-//     }
-//
-//     if (unlikely(volume < (size_t)ctx->return_left || items > rkl_len(&txn->wr.gc.ready4reuse))) {
-//       ASSERT(!"recursive-solving failure");
-//       ERROR("%s/%d: %s", "MDBX_PROBLEM", MDBX_PROBLEM, "recursive-solving failure");
-//       return MDBX_PROBLEM;
-//     }
-//     return MDBX_RESULT_TRUE;
-//   }
-//
-//   /* решение НЕ найдено */
-//   return MDBX_RESULT_FALSE;
-// }
 
 /* Ищем свободные/неиспользуемые id в GC, чтобы затем использовать эти идентификаторы для возврата неиспользованных
  * остатков номеров страниц ранее изъятых из GC.
