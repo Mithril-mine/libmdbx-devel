@@ -872,6 +872,11 @@ __cold int mdbx_env_copy2fd(MDBX_env *env, mdbx_filehandle_t fd, MDBX_copy_flags
   if (unlikely(rc != MDBX_SUCCESS))
     return LOG_IFERR(rc);
 
+  /* In without-lck mode a read transaction has no reader slot and the
+   * parking is impossible (issue #316): the throttling silently skipped. */
+  if (unlikely(!txn->to.reader))
+    flags &= ~MDBX_CP_THROTTLE_MVCC;
+
   rc = copy2fd(txn, fd, flags | MDBX_CP_DISPOSE_TXN | MDBX_CP_RENEW_TXN);
   mdbx_txn_abort(txn);
   return LOG_IFERR(rc);
@@ -891,6 +896,10 @@ __cold int mdbx_txn_copy2pathname(MDBX_txn *txn, const char *dest_path, MDBX_cop
 __cold int mdbx_txn_copy2pathnameW(MDBX_txn *txn, const wchar_t *dest_path, MDBX_copy_flags_t flags) {
 #endif /* Windows */
   int rc = check_txn(txn, MDBX_TXN_BLOCKED);
+  /* In without-lck mode a read transaction has no reader slot and the
+   * parking is impossible (issue #316): the throttling silently skipped. */
+  if (likely(rc == MDBX_SUCCESS) && !txn->to.reader)
+    flags &= ~MDBX_CP_THROTTLE_MVCC;
   if (likely(rc == MDBX_SUCCESS))
     rc = copy2pathname(txn, dest_path, flags);
   if (flags & MDBX_CP_DISPOSE_TXN)
@@ -922,6 +931,11 @@ __cold int mdbx_env_copyW(MDBX_env *env, const wchar_t *dest_path, MDBX_copy_fla
   rc = mdbx_txn_begin(env, nullptr, MDBX_TXN_RDONLY, &txn);
   if (unlikely(rc != MDBX_SUCCESS))
     return LOG_IFERR(rc);
+
+  /* In without-lck mode a read transaction has no reader slot and the
+   * parking is impossible (issue #316): the throttling silently skipped. */
+  if (unlikely(!txn->to.reader))
+    flags &= ~MDBX_CP_THROTTLE_MVCC;
 
   rc = copy2pathname(txn, dest_path, flags | MDBX_CP_DISPOSE_TXN | MDBX_CP_RENEW_TXN);
   mdbx_txn_abort(txn);
