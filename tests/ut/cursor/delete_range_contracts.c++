@@ -33,7 +33,9 @@
  *  - a range across keys removes full bushes in the middle and the covered
  *    parts at the edges; NULL begin/end mean the first/last item;
  *  - the argument contract: both-NULL is EINVAL, an unpositioned cursor is
- *    ENODATA, cursors of different tables are EINVAL;
+ *    ENODATA (both for delete_range and bunch_delete - the latter refused
+ *    up front since the issue #503 fix), cursors of different tables are
+ *    EINVAL;
  *  - a neighbor cursor positioned inside/near the deleted range survives
  *    the cutoff and stays iterable to the exact remaining model
  *    (the SAFE-A restore of the internal clone list).
@@ -310,15 +312,23 @@ TEST(delete_range_contracts, dupsort_axes) {
       }
       EXPECT_EQ(MDBX_EINVAL, mdbx_cursor_delete_range(foreign.mc, positioned.mc, true, &affected))
           << "cursors of different tables are refused";
-      /* NOT asserted: a bunch action on an unpositioned cursor returns
-       * MDBX_ENODATA, but on assert-enabled builds the refusal poisons the
-       * transaction cursor state and the NEXT range operation aborts on the
-       * tree_cutoff_range() invariant (assert at src/tree-cutoff.c:513;
-       * release builds proceed). Reproduced with an unpositioned cursor,
-       * MDBX_DELETE_AFTER_INCLUDING, then any later delete_range - the
-       * scenario is excluded here until the library side is fixed; see the
-       * finding in the PR description (SAFE-A restore family). */
-      expect_content(txn.txn, dbi, model_all()); /* the refused calls removed nothing */
+      /* a bunch action on an unpositioned cursor is refused up front, with
+       * no clone/registration work (issue #503: the refusal used to reach
+       * tree_cutoff_range() with a mismatched axe stack and abort the
+       * assert-enabled builds) */
+      EXPECT_EQ(MDBX_ENODATA, mdbx_cursor_bunch_delete(fresh.mc, MDBX_DELETE_AFTER_INCLUDING, &affected))
+          << "a bunch action on an unpositioned cursor is refused";
+      /* and the refusal leaves the cursor list consistent: a subsequent
+       * range operation on the same table still works */
+      cursor_ptr begin2, end2;
+      ASSERT_EQ(MDBX_SUCCESS, mdbx_cursor_open(txn.txn, dbi, &begin2.mc));
+      ASSERT_EQ(MDBX_SUCCESS, mdbx_cursor_open(txn.txn, dbi, &end2.mc));
+      must_position(begin2.mc, 6, 0);
+      must_position(end2.mc, 6, 2);
+      uint64_t affected2 = 0;
+      ASSERT_EQ(MDBX_SUCCESS, mdbx_cursor_delete_range(begin2.mc, end2.mc, true, &affected2));
+      EXPECT_EQ(3u, affected2);
+      expect_content(txn.txn, dbi, model_drop_range(model_all(), 6, 0, 6, 2, true));
     }
 
     /* --- a neighbor cursor survives the cutoff ------------------------- */
