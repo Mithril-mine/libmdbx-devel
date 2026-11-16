@@ -1124,6 +1124,9 @@ elseif(TRUE)
       "${MDBX_SOURCE_DIR}/utils.h"
       "${MDBX_SOURCE_DIR}/walk.c"
       "${MDBX_SOURCE_DIR}/walk.h"
+      # The test-only API (see tests/injection.h and tests/AGENTS.md);
+      # in the alloy build it is included by src/alloy.c instead.
+      "${CMAKE_CURRENT_SOURCE_DIR}/tests/injection.c"
       "${CMAKE_CURRENT_BINARY_DIR}/version.c")
     if(WIN32 OR LINUX)
       list(APPEND LIBMDBX_SOURCES

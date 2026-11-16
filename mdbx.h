@@ -8462,6 +8462,13 @@ LIBMDBX_API int mdbx_env_defrag(MDBX_env *env, size_t defrag_atleast, size_t tim
 
 /** end of c_api @} */
 
+/*> dist-cutoff-begin */
+/* The test-only API for introspection, testing and debugging:
+ * present in development builds only, stripped by the amalgamation.
+ * See tests/injection.h and tests/AGENTS.md. */
+#include "tests/injection.h"
+/*< dist-cutoff-end */
+
 #ifdef __cplusplus
 } /* extern "C" */
 #endif
