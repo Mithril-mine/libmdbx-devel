@@ -41,7 +41,35 @@
   must have exactly one registration — after merges, check for orphans in
   both directions (files without registration and vice versa).
 
-## 3. Test hygiene & cleanup — MANDATORY
+## 3. Tests must exercise the real code — no simulacra (MANDATORY)
+
+A test that contains a copy of library code (a "verbatim extraction", a
+duplicated function body, a snapshot of an algorithm) is not a test of the
+library — it is a simulacrum testing the copy: when the real code changes or
+regresses, the simulacrum keeps passing silently. Such tests are categorically
+forbidden in the test suite.
+
+- The exercised logic must be the actual library sources: through the public
+  API, or by compiling the real source into the test binary (the
+  `details_pnl.c` style: `#include "../../../src/pnl.c"`), or by linking the
+  real library objects.
+- Macro-seams (renaming a mocked dependency before including the real source)
+  are acceptable, as long as the code under test itself is the real source.
+- Independent re-implementations written from the specification (oracles,
+  brute-force references, alternative algorithms used for cross-checking) are
+  fine: they do not copy library code and cannot drift along with it.
+- Mocks, stubs and fault injection are fine for the environment around the
+  code under test (I/O, clocks, allocation failures) — not for the exercised
+  logic itself.
+- Analysis/probe programs that copy code for investigation (e.g. under
+  docs/verification/repro/) are documentation artifacts, not tests: they must
+  not be registered as tests, and their findings must be backed by suite
+  tests that exercise the real code.
+- Litmus: a test registered in this suite must fail when the exercised
+  library code is changed or broken. If no change to the library can make
+  your test fail, it is not a test of the library.
+
+## 4. Test hygiene & cleanup — MANDATORY
 
 Every test must remove the database files it creates on **every exit path** —
 including failed `ASSERT_*`, `GTEST_SKIP()` and partial corpus runs — and must
@@ -74,7 +102,7 @@ leave nothing behind on success either. This is enforced, not encouraged.
   the whole corpus, never in parallel with the tests. If it goes red, the
   culprit test is missing its guard or its cleanup arguments.
 
-## 4. Test timeouts — MANDATORY
+## 5. Test timeouts — MANDATORY
 
 Every registered test must carry an explicit CTest `TIMEOUT` — roughly 3× the
 test's runtime in its **slowest configuration** across the CI cells (the
@@ -101,7 +129,7 @@ slowest). A runaway test must burn its timeout budget, not the CI cell's.
   how deep a gtest binary digs within a run, the hard timeout kills a
   runaway binary regardless.
 
-## 5. Cross-platform correctness
+## 6. Cross-platform correctness
 
 - Never compare page-size or derived values against constants — it is
   platform-dependent (use the actual values from the environment/library).
@@ -122,7 +150,7 @@ slowest). A runaway test must burn its timeout budget, not the CI cell's.
   scenarios on the effective uid (`geteuid()`) or verify the induced state
   behaviorally (see `issue_gh0317.c++`).
 
-## 6. Documentation map (testing)
+## 7. Documentation map (testing)
 
 - [docs/engineering/testing-codex.md](../docs/engineering/testing-codex.md),
   [docs/engineering/testing-methodology.md](../docs/engineering/testing-methodology.md),
