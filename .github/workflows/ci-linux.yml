@@ -48,7 +48,10 @@ jobs:
           - os: ubuntu-24.04
             build-type: RelWithDebInfo
             cxx: ON
-            extra-options: "|-DENABLE_ASAN:BOOL=ON"
+            # The sanitizer build skips LTO (as on master): GCC's LTO-stage
+            # stringop-overflow false positive in dxb.c meta_tap handling
+            # breaks the -Werror link otherwise.
+            extra-options: "|-DENABLE_ASAN:BOOL=ON|-DINTERPROCEDURAL_OPTIMIZATION=OFF"
     steps:
     - uses: actions/checkout@v7
       with:
