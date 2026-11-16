@@ -1058,12 +1058,14 @@ $(DIST_DIR)/@tmp-headers.h: $(DIST_DIR)/mdbx-internals.h $(DIST_DIR)/@tmp-amalga
 		-e '/#include "dml.h"/r src/dml.h' \
 		-e '/#include "dpl.h"/r src/dpl.h' \
 		-e '/#include "gc.h"/r src/gc.h' \
+		-e '/#include "gc-dense.h"/r src/gc-dense.h' \
 		-e '/#include "lck.h"/r src/lck.h' \
 		-e '/#include "meta.h"/r src/meta.h' \
 		-e '/#include "node.h"/r src/node.h' \
 		-e '/#include "page-iov.h"/r src/page-iov.h' \
 		-e '/#include "page-ops.h"/r src/page-ops.h' \
 		-e '/#include "spill.h"/r src/spill.h' \
+		-e '/#include "gc-store-retired.h"/r src/store-retired.h' \
 		-e '/#include "sort.h"/r src/sort.h' \
 		-e '/#include "rthc.h"/r src/rthc.h' \
 		-e '/#include "walk.h"/r src/walk.h' \
