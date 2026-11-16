@@ -213,8 +213,12 @@ if(MDBX_TEXTBOOK_CXX_AVAILABLE)
 
   # eg_28 is the heaviest textbook scenario (~55s on the slowest CI runner,
   # the win-cxx ARM64 debug cell): ~3x here, the helper's default 30s is not
-  # enough (see tests/AGENTS.md, "Test timeouts").
-  set_tests_properties(eg_28-waf-batching PROPERTIES TIMEOUT 180)
+  # enough (see tests/AGENTS.md, "Test timeouts"). Guarded: on cross-compiled
+  # builds without an emulator (e.g. Android) the test is not registered, so
+  # the same MDBX_EXAMPLES_RUN_TESTS condition as the registrations above.
+  if(MDBX_EXAMPLES_RUN_TESTS)
+    set_tests_properties(eg_28-waf-batching PROPERTIES TIMEOUT 180)
+  endif()
 
   # Сквозной проект config-store: срезы 02–12 (C++17).
   set(MDBX_TEXTBOOK_CONFIG_STORE
