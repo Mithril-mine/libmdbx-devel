@@ -559,3 +559,14 @@
    obj:/usr/bin/bash*
    ...
 }
+
+# The shadow-pages parked in the env's shadow_reserve (an interior-pointers
+# chain) at the exit of a faulted actor, which leaves its environment open.
+{
+   faulted-actor-shadow-pages
+   Memcheck:Leak
+   match-leak-kinds: possible
+   fun:malloc
+   fun:page_shadow_alloc*
+   ...
+}

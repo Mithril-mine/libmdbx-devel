@@ -482,16 +482,17 @@ void testcase::txn_inject_writefault(MDBX_txn *txn) {
         /* The hard kill (SIGKILL/TerminateProcess) mimics the writer's crash,
          * but Valgrind performs the leak-check for the killed process too and
          * then reports the killed transaction's dirty pages and the rest of
-         * its in-flight resources as definitely/possibly lost. So under
-         * Valgrind the fault is emulated by aborting the transaction,
-         * closing the environment and quitting with the non-zero status:
-         * the database stays uncommitted at the last steady meta and the
-         * OS-locks are released, which gives the same recovery scenario for
+         * its in-flight resources as definitely/possibly lost. Besides, the
+         * environment must NOT be closed here, since lck_destroy() may drown
+         * the ipc-locks shared with the other live processes. So under
+         * Valgrind the fault is emulated by aborting the transaction only
+         * and returning, to let the caller's commit fail with an error:
+         * the database stays uncommitted at the last steady meta, the actor
+         * fails through the regular failure path and the OS-locks are
+         * released at its exit, which gives the same recovery scenario for
          * the subsequent actors, but without the false-positive leaks. */
-        MDBX_env *const env = mdbx_txn_env(txn);
         mdbx_txn_abort(txn);
-        mdbx_env_close(env);
-        _exit(42);
+        return;
       }
 #if IS_WINDOWS
       TerminateProcess(GetCurrentProcess(), 42);
