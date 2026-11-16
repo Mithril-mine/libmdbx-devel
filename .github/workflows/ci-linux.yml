@@ -11,9 +11,12 @@ permissions:
   contents: read
 
 on:
-  # The trimmed gate set runs on this maintenance branch only; a daily
-  # schedule keeps the nightly coverage (mirrors the master's per-OS
-  # nightlies: 6 cells incl the ASAN one).
+  # The trimmed gate set runs for pull requests (whatever their base is,
+  # hence no branches filter here), for pushes to this maintenance branch,
+  # and on the daily schedule (the nightly coverage). A new push to a PR
+  # head - including a force-push - cancels the previous run of this
+  # workflow via the concurrency group above.
+  pull_request:
   push:
     branches: [stable]
   workflow_dispatch:
