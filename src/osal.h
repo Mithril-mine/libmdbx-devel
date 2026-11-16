@@ -559,6 +559,13 @@ MDBX_MAYBE_UNUSED static inline bool osal_isdirsep(pathchar_t c) {
 MDBX_INTERNAL bool osal_pathequal(const pathchar_t *l, const pathchar_t *r, size_t len);
 MDBX_INTERNAL pathchar_t *osal_fileext(const pathchar_t *pathname, size_t len);
 MDBX_INTERNAL int osal_fileexists(const pathchar_t *pathname);
+MDBX_NOTHROW_CONST_FUNCTION static inline bool osal_is_pathname_absent_error(int err) {
+#if defined(_WIN32) || defined(_WIN64)
+  return err == ERROR_FILE_NOT_FOUND || err == ERROR_PATH_NOT_FOUND;
+#else
+  return err == ENOENT || err == ENOTDIR;
+#endif
+}
 MDBX_INTERNAL int osal_openfile(const enum osal_openfile_purpose purpose, const MDBX_env *env,
                                 const pathchar_t *pathname, mdbx_filehandle_t *fd, mdbx_mode_t unix_mode_bits);
 MDBX_INTERNAL int osal_closefile(mdbx_filehandle_t fd);
