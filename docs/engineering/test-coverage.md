@@ -112,12 +112,6 @@
 
 ### 6a. White spots (measured, merged map linux+win32+macos)
 
-> **Historical snapshot (2026-11).** The shared-graph-memory codegraph was
-> regenerated since this measurement (current generation: 5566 symbols,
-> no coverage ingested), so the numbers below are NOT queryable from the
-> Store right now. Restore the measured coverage via `scan_all.py` +
-> `load_map.py` + `run_coverage.py` before relying on per-symbol queries.
-
 Источник: `coverage_summary` из shared-graph-memory DB
 (6612 symbols / 40172 blocks; TOTAL 77.1%, non-debug 78.2%).
 
