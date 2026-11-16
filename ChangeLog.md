@@ -134,6 +134,7 @@ A long-term support release with accumulated backported fixes for data safety, c
     - Fixed `mdbx_load` consuming up to 2 GB of memory due to leftover debugging code (backport).
     - Fixed `mdbx_dump -f` truncating the output file before the arguments were validated ([#71](https://github.com/Mithril-mine/libmdbx-devel/issues/71)) (backport).
     - Fixed `mdbx_dump` reporting success on failed writes; `mdbx_load` took a truncated dump as complete ([#70](https://github.com/Mithril-mine/libmdbx-devel/issues/70)) (backport).
+    - Fixed `mdbx_load` treating a dump truncated inside a table's header as complete; now reported ([#384](https://github.com/Mithril-mine/libmdbx-devel/issues/384)) (backport).
     - Fixed `mdbx_dump`/`mdbx_load`/`mdbx_stat` mishandling table names with control characters ([#72](https://github.com/Mithril-mine/libmdbx-devel/issues/72)) (backport).
     - Fixed `mdbx_chk` over-reading a corrupted GC record; the page count is clamped ([#76](https://github.com/Mithril-mine/libmdbx-devel/issues/76)) (backport).
     - Fixed `mdbx_env_chk()` heap corruption or a crash when a callback stopped the check early ([#314](https://github.com/Mithril-mine/libmdbx-devel/issues/314)) (backport).
