@@ -138,6 +138,7 @@ A long-term support release with accumulated backported fixes for data safety, c
     - Fixed `mdbx_load` treating a dump truncated inside a table's header as complete; now reported ([#384](https://github.com/Mithril-mine/libmdbx-devel/issues/384)) (backport).
     - Fixed `mdbx_dump`/`mdbx_load`/`mdbx_stat` mishandling table names with control characters ([#72](https://github.com/Mithril-mine/libmdbx-devel/issues/72)) (backport).
     - Fixed `mdbx_chk` over-reading a corrupted GC record; the page count is clamped ([#76](https://github.com/Mithril-mine/libmdbx-devel/issues/76)) (backport).
+    - Fixed `mdbx_env_chk()` heap corruption or a crash when a callback stopped the check early ([#314](https://github.com/Mithril-mine/libmdbx-devel/issues/314)) (backport).
     - Fixed `mdbx_load -p -s` deleting every named table; `-s` after a header and `-N`/`-p` misbehaved ([#312](https://github.com/Mithril-mine/libmdbx-devel/issues/312)) (backport).
     - Fixed `mdbx_dump` closing a failed table as complete; the `DATA=END` trailer is written accordingly ([#312](https://github.com/Mithril-mine/libmdbx-devel/issues/312)) (backport).
 
