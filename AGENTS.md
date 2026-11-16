@@ -185,7 +185,7 @@ when in doubt.
   ChangeLog codexes.
 - Testing documentation (rules, timeouts, hygiene, methodology, scenario
   specs, coverage, durability modes, CI v2 infrastructure design) lives in
-  [tests/AGENTS.md](tests/AGENTS.md) §7.
+  [tests/AGENTS.md](tests/AGENTS.md) §8.
 - [docs/engineering/probe-bus.md](docs/engineering/probe-bus.md) — probe
   conventions.
 - [docs/engineering/libmdbx-invariants.md](docs/engineering/libmdbx-invariants.md),
