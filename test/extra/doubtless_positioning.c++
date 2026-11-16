@@ -97,7 +97,7 @@ static bool probe(mdbx::txn txn, mdbx::map_handle dbi, mdbx::cursor::move_operat
                              op == mdbx::cursor::multi_exactkey_value_lesser_or_equal ||
                              op == mdbx::cursor::pair_lesser_than || op == mdbx::cursor::pair_lesser_or_equal;
 
-  const bool is_multi = mdbx::is_multi(txn.get_handle_info(dbi).value_mode());
+  const bool is_multi = mdbx::is_multi(txn.get_map_flags(dbi).value_mode());
 
   auto seek_result = seeker.move(op, pair.key, pair.value, false);
   auto scan_result =
