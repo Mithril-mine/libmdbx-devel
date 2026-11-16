@@ -106,30 +106,3 @@ internals.h ◄── каждый модуль src/*.c
    по мере необходимости, не хранить в репозитории.
 5. После перемещения кода сверять `techdebt.md` (упразднённые ветки pnl/gc/defrag) — часто
    рефакторинг интерфейса и чистка мёртвых веток идут вместе.
-
-## 6. Контракты примитивов, проверенные верификацией (2026-11)
-
-Кампания постанционной верификации (см.
-[`docs/verification/LEDGER.md`](../verification/LEDGER.md)) сняла
-pre/post-контракты с ключевых внутренних примитивов. Ниже — индекс по
-подсистемам; полные таблицы контракт-сайтов (каждый call-site с проверкой
-предусловий) — в файлах [`docs/verification/doc-additions-*.md`](../verification/):
-
-| Подсистема/примитив | Контракты | Полные таблицы |
-|---|---|---|
-| PNL/DML/TXL | `pnl_merge` (флаг дубликата = сумма−1; мусор при флаге), `pnl_cut` (границы proof by call-sites), `pnl_need/append*` (reserve-first), `dml_*` | [doc-additions-v2.md](../verification/doc-additions-v2.md) §G1 |
-| DPL/RKL | `txn_dpl_append` (pivot-эвристика 42), `dpl_setlen` (сентинелл, НЕ клампит sorted), `rkl_push/pop/hole` (I1–I5) | [doc-additions-v7-…](../verification/doc-additions-v7-gc.md), G1-dpl-rkl.md |
-| Мета/dxb | `meta_snap/meta_update_begin/end` (двухфазный протокол), `meta_validate` (14 reject-ветвей), `dxb_sync_locked` (полная карта выходов), `dxb_shrink_*` (two-phase) | [doc-additions-v2.md](../verification/doc-additions-v2.md) §A |
-| Страницы/node | `page_new/dirty/touch*/unspill/retire_ex/shadow_*`, `page_check` (полнота иUnchecked-список), `iov_*`, `node_add*/del/shrink` | [doc-additions-v3.md](../verification/doc-additions-v3.md) |
-| Дерево/dbi/table | `tree_search/rebalance/propagate_key/drop`, `tree_cutoff_*`, `walk_pages/tbl/pgno`, `dbi_open/update/import/rename`, `tbl_*` | [doc-additions-v4.md](../verification/doc-additions-v4.md) |
-| Курсоры | `cursor_seek/ops` (таблица исходов R1–R5), `cursor_put(MULTIPLE)/del`, `cursor_distance/distribute`, предикаты `cursor.h` | [doc-additions-v5-b.md](../verification/doc-additions-v5-b.md), v3c |
-| Транзакции | `txn_commit/abort` (4 формы), `nested_start/join/merge/undo`, `txn_basal_commit` (окно без падающих операций), `txn_ro_park/unpark` | [doc-additions-v6-b.md](../verification/doc-additions-v6-b.md) |
-| Координация | `mvcc_bind_slot/cleanup_dead/kick_laggards`, `lck_*` (flavors), `rthc_*` (TLS/fork) | [doc-additions-v8-b.md](../verification/doc-additions-v8-b.md) |
-| API-поверхность | Матрица `MDBX_opt_*` (24 случая), лестницы env create/open/close, park/clone/info, get-cached (7-статусная машина) | [doc-additions-v9.md](../verification/doc-additions-v9.md), v4c |
-| OSAL | mmap/mresize/sync/fsync/ioring/thread — posix+windows парно | [doc-additions-v11c.md](../verification/doc-additions-v11c.md) |
-| C++ | `slice/buffer` (модальности), `env/txn/cursor` (exception-семантика), inline-API/ODR | [doc-additions-v13a/b.md](../verification/doc-additions-v13a.md) |
-| Perf | Горячие пути: pnl/dpl/rkl/gc/tree-search/mvcc/iov/comparators — вердикты и рекомендации | [doc-additions-perf-engine.md](../verification/doc-additions-perf-engine.md), perf-api.md |
-
-Правило сопровождения: при изменении контракта примитива обновить
-соответствующую таблицу в `docs/verification/doc-additions-*.md` (или
-перегенерировать кампанию) — они являются эталоном pre/post для ревью.
