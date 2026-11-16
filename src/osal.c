@@ -2579,7 +2579,9 @@ retry_mapview:;
       rc = MDBX_UNABLE_EXTEND_MAPSIZE;
     else if (size < map->filesize && map->filesize > limit)
       rc = MDBX_EPERM;
-    map->current = (map->filesize > limit) ? limit : (size_t)map->filesize;
+    /* not beyond the mapping as it is now, since growing it below may fail */
+    const size_t mapped = (limit < map->limit) ? limit : map->limit;
+    map->current = (map->filesize > mapped) ? mapped : (size_t)map->filesize;
   } else {
     if (map->filesize != size) {
       if (size > map->filesize) {
@@ -2733,6 +2735,7 @@ retry_mapview:;
       }
       rc = MDBX_UNABLE_EXTEND_MAPSIZE;
       limit = map->limit;
+      size = map->current /* clamped to the old limit above, the mapping did not grow */;
     }
   }
 
