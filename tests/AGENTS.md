@@ -102,7 +102,32 @@ leave nothing behind on success either. This is enforced, not encouraged.
   the whole corpus, never in parallel with the tests. If it goes red, the
   culprit test is missing its guard or its cleanup arguments.
 
-## 5. Test timeouts — MANDATORY
+## 5. Root-cause fixes over suppressions — MANDATORY
+
+When a sanitizer or an analysis tool (Valgrind/Memcheck, ASan, UBSan, static
+analyzers) reports a failure **caused by our code or our tests**, the cause
+must be fixed — the report must not be silenced by adding an exception to the
+tool's suppression file. A suppression hides the defect from every future run
+and turns the tool into a rubber stamp.
+
+- **Acceptable**: a suppression for a defect in *foreign, unfixable-here*
+  code — e.g. the `bash-self-leaks` entry for the `/usr/bin/bash` internals
+  that the golden-runner scripts drag through the tool as traced children.
+- **Acceptable**: a suppression for a *tool false positive* that our code
+  cannot express otherwise — and only with a comment proving it (e.g. the
+  `msync-uninit-page-holes` entry: `msync()` flushes whole mapped pages
+  including the never-written gaps between nodes, which nothing reads back).
+- **Unacceptable**: a suppression that masks a defect of our own — a memory
+  leak, a use-after-free, an uninitialized read. Fix the leak/free/init, then
+  delete the failure report. An exit-path cleanup (close the environment,
+  release the handles) is a root-cause fix too; `_exit()` + a suppression is
+  not.
+- **A fork() child that exits without cleanup is still our code**: close the
+  inherited environments and free the inherited handles before `_exit()`, or
+  restructure the test so the child has nothing to leak. "The child dies
+  anyway" does not make the leak disappear — it makes it permanent.
+
+## 6. Test timeouts — MANDATORY
 
 Every registered test must carry an explicit CTest `TIMEOUT` — roughly 3× the
 test's runtime in its **slowest configuration** across the CI cells (the
@@ -129,7 +154,7 @@ slowest). A runaway test must burn its timeout budget, not the CI cell's.
   how deep a gtest binary digs within a run, the hard timeout kills a
   runaway binary regardless.
 
-## 6. Cross-platform correctness
+## 7. Cross-platform correctness
 
 - Never compare page-size or derived values against constants — it is
   platform-dependent (use the actual values from the environment/library).
@@ -150,8 +175,7 @@ slowest). A runaway test must burn its timeout budget, not the CI cell's.
   scenarios on the effective uid (`geteuid()`) or verify the induced state
   behaviorally (see `issue_gh0317.c++`).
 
-<<<<<<< HEAD
-## 7. The testing API (`tests/api.{h,c}`)
+## 8. The testing API (`tests/api.{h,c}`)
 
 The official name of this facility is the **testing API**: the uniform
 place for the additional API needed exclusively for introspection,
@@ -212,7 +236,7 @@ with fault injection (the probe-bus/MPROBE family).
   internal state over exposing raw internals; keep the surface small -
   each entry must be justified by a concrete test or debugging need.
 
-## 8. Documentation map (testing)
+## 9. Documentation map (testing)
 
 - [docs/engineering/testing-codex.md](../docs/engineering/testing-codex.md),
   [docs/engineering/testing-methodology.md](../docs/engineering/testing-methodology.md),
