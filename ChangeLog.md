@@ -44,7 +44,7 @@ A long-term support release with accumulated backported fixes for data safety, c
  - Resistance to corrupted or crafted data:
     - Fixed an unclamped reader-table counter driving out-of-bounds reads and a heap overflow ([#79](https://github.com/Mithril-mine/libmdbx-devel/issues/79)) (backport).
     - Fixed `mdbx_env_info_ex()`/`mdbx_env_chk()` scanning the reader table unclamped; now clamped ([#113](https://github.com/Mithril-mine/libmdbx-devel/issues/113)) (backport).
-    - Fixed a page listed by two GC records handed out twice to b-tree nodes; now rejected (backport).
+    - Fixed a page listed by two GC records handed out twice to b-tree nodes; now rejected ([#83](https://github.com/Mithril-mine/libmdbx-devel/issues/83), [#452](https://github.com/Mithril-mine/libmdbx-devel/issues/452)) (backport).
     - Fixed crafted duplicate-value offsets crashing or corrupting memory; now rejected ([#176](https://github.com/Mithril-mine/libmdbx-devel/issues/176)) (backport).
     - Fixed a crash, including in `mdbx_chk`, when working with a corrupted database (backport).
     - Fixed a possible crash when checking a corrupted database (backport).
