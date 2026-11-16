@@ -115,7 +115,6 @@ A long-term support release with accumulated backported fixes for data safety, c
     - Fixed a scan-code path bug on ARM64-Windows with LLP64 (backport).
     - Fixed the batched writes on Windows after a mid-batch write failure: the cancelled requests are now drained before the ring's resources are reused ([#449](https://github.com/Mithril-mine/libmdbx-devel/issues/449)) (backport).
     - Fixed `mdbx_env_delete()` `ENSURE_UNUSED`/`WAIT_FOR_UNUSED` modes that never worked on Windows ([#336](https://github.com/Mithril-mine/libmdbx-devel/issues/336)) (backport).
-    - Fixed `mdbx_env_delete()` for a NOSUBDIR database with an absent data file leaving the lock file orphaned ([#345](https://github.com/Mithril-mine/libmdbx-devel/issues/345)) (backport).
     - Fixed the Windows I/O ring merging only two contiguous write chunks instead of all of them ([#111](https://github.com/Mithril-mine/libmdbx-devel/issues/111)) (backport).
     - Fixed lost global-initialization and thread-local destructors in static builds with MinGW (backport).
     - Fixed the lock auto-selection on FreeBSD back to System V IPC, POSIX2008 when robust mutexes are usable ([#328](https://github.com/Mithril-mine/libmdbx-devel/issues/328)) (backport).

@@ -559,6 +559,17 @@ MDBX_INTERNAL int osal_removedirectory(const pathchar_t *pathname);
 MDBX_INTERNAL int osal_is_pipe(mdbx_filehandle_t fd);
 MDBX_INTERNAL int osal_lockfile(mdbx_filehandle_t fd, bool wait);
 
+/* A removal refused only because another process still has the file open (Windows); never on POSIX. */
+MDBX_NOTHROW_CONST_FUNCTION static inline bool osal_is_sharing_violation_error(int err) {
+#if defined(_WIN32) || defined(_WIN64)
+  return err == ERROR_SHARING_VIOLATION || err == ERROR_LOCK_VIOLATION;
+#else
+  /* LY: Legacy/Bogus NFS lock-managers could return EACCES in such cases.
+   * However, we need to move forward, not tinker with old, problematic systems. */
+  return err == EAGAIN || err == EBUSY || (EWOULDBLOCK != EAGAIN && err == EWOULDBLOCK) || err == EDEADLK;
+#endif
+}
+
 #define MMAP_OPTION_SETLENGTH 1
 #define MMAP_OPTION_SEMAPHORE 2
 MDBX_INTERNAL int osal_mmap(const int flags, osal_mmap_t *map, size_t size, const size_t limit, const unsigned options,
