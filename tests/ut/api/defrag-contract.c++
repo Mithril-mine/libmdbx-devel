@@ -302,3 +302,101 @@ TEST(defrag_contract, adopted_txn_checkpoint_commits_and_detaches) {
         << "the pending write survives the abort: committed by the defrag checkpoint";
   }
 }
+
+TEST(defrag_contract, stuck_retry_reports_success) {
+  if (MDBX_GTEST_IS_EXECUTION_TIMEOUT()) {
+    GTEST_SKIP() << "SKIPPED by RUNTIME_LIMIT";
+    return;
+  }
+  const env_files_guard guard({"defrag-contract-stuck.mdbx"});
+  const char *kDb = "defrag-contract-stuck.mdbx";
+  env_ptr env;
+  ASSERT_EQ(MDBX_SUCCESS, mdbx_env_create(&env));
+  ASSERT_EQ(MDBX_SUCCESS, mdbx_env_set_geometry(env.get(), -1, 1024 * 1024, 64 * 1024 * 1024, -1, -1, 4096));
+  ASSERT_EQ(MDBX_SUCCESS, mdbx_env_set_maxdbs(env.get(), 8));
+  ASSERT_EQ(MDBX_SUCCESS, mdbx_env_open(env.get(), kDb, MDBX_NOSUBDIR, 0644));
+
+  auto put_key = [](MDBX_txn *txn, MDBX_dbi dbi, unsigned k, unsigned seed) {
+    char keybuf[16], valbuf[256];
+    const unsigned n = 8 + (seed % 200);
+    MDBX_val key = {keybuf, (size_t)std::snprintf(keybuf, sizeof keybuf, "k-%08u", k)};
+    std::memset(valbuf, (int)(k & 0xFF), sizeof valbuf);
+    MDBX_val val = {valbuf, n};
+    ASSERT_EQ(MDBX_SUCCESS, mdbx_put(txn, dbi, &key, &val, MDBX_UPSERT));
+  };
+  {
+    txn_ptr txn;
+    ASSERT_EQ(MDBX_SUCCESS, mdbx_txn_begin(env.get(), nullptr, MDBX_TXN_READWRITE, &txn));
+    MDBX_dbi main_dbi, named_dbi;
+    ASSERT_EQ(MDBX_SUCCESS, mdbx_dbi_open(txn.txn, nullptr, MDBX_DB_DEFAULTS, &main_dbi));
+    ASSERT_EQ(MDBX_SUCCESS, mdbx_dbi_open(txn.txn, "named", MDBX_CREATE, &named_dbi));
+    for (unsigned i = 0; i < 12000; ++i)
+      put_key(txn.txn, main_dbi, i, i * 31 + 7);
+    for (unsigned i = 0; i < 12000; ++i)
+      put_key(txn.txn, named_dbi, i, i * 17 + 3);
+    ASSERT_EQ(MDBX_SUCCESS, mdbx_txn_commit(txn.release()));
+  }
+  { /* fragment: delete every other key in both tables */
+    txn_ptr txn;
+    ASSERT_EQ(MDBX_SUCCESS, mdbx_txn_begin(env.get(), nullptr, MDBX_TXN_READWRITE, &txn));
+    MDBX_dbi main_dbi, named_dbi;
+    ASSERT_EQ(MDBX_SUCCESS, mdbx_dbi_open(txn.txn, nullptr, MDBX_DB_DEFAULTS, &main_dbi));
+    ASSERT_EQ(MDBX_SUCCESS, mdbx_dbi_open(txn.txn, "named", MDBX_DB_DEFAULTS, &named_dbi));
+    for (unsigned i = 0; i < 12000; i += 2) {
+      char keybuf[16];
+      MDBX_val key = {keybuf, (size_t)std::snprintf(keybuf, sizeof keybuf, "k-%08u", i)};
+      EXPECT_EQ(MDBX_SUCCESS, mdbx_del(txn.txn, main_dbi, &key, nullptr));
+      EXPECT_EQ(MDBX_SUCCESS, mdbx_del(txn.txn, named_dbi, &key, nullptr));
+    }
+    ASSERT_EQ(MDBX_SUCCESS, mdbx_txn_commit(txn.release()));
+  }
+
+  /* the campaign repro shape: no user txn, a tight backlash and a small
+   * preferred_batch force many small cycles; on the 4 KiB reference the
+   * defrag gets STUCK retrying the same obstacle page and stops */
+  MDBX_defrag_result_t result;
+  std::memset(&result, 0, sizeof result);
+  const int rc = mdbx_env_defrag(env.get(), 0, 0, 0, 0, 4, 400, nullptr, nullptr, &result);
+  ASSERT_TRUE(rc == MDBX_SUCCESS || rc == MDBX_RESULT_TRUE) << "rc=" << rc;
+  EXPECT_GE(result.cycles, 1u);
+  EXPECT_GT(result.pages_moved, 0u);
+  EXPECT_LE(result.rough_estimation_cycle_progress_permille, 1000u);
+
+  if (result.obstructed_pgno != 0) {
+    /* the stuck-retry stop (V-060): rc may be SUCCESS with
+     * stopping_reasons == noobstacles(0) despite the named obstacle -
+     * the residual work is visible only via pages_left / obstructed_*
+     * (known contract gap V-060 from issue #485, fix/docs pending) */
+    EXPECT_EQ(MDBX_defrag_noobstacles, result.stopping_reasons)
+        << "known contract gap V-060: the stuck stop reports no obstacles";
+    EXPECT_EQ(MDBX_SUCCESS, rc) << "the enough-goal override masks the stuck stop";
+  } else {
+    EXPECT_EQ(0u, result.stopping_reasons & MDBX_defrag_error);
+  }
+
+  /* the data is intact after the multi-cycle defrag */
+  {
+    txn_ptr txn;
+    ASSERT_EQ(MDBX_SUCCESS, mdbx_txn_begin(env.get(), nullptr, MDBX_TXN_RDONLY, &txn));
+    MDBX_dbi named_dbi;
+    ASSERT_EQ(MDBX_SUCCESS, mdbx_dbi_open(txn.txn, "named", MDBX_DB_DEFAULTS, &named_dbi));
+    MDBX_stat stat;
+    std::memset(&stat, 0, sizeof stat);
+    ASSERT_EQ(MDBX_SUCCESS, mdbx_dbi_stat(txn.txn, named_dbi, &stat, sizeof stat));
+    EXPECT_EQ(6000u, stat.ms_entries);
+    MDBX_cursor *cur = nullptr;
+    ASSERT_EQ(MDBX_SUCCESS, mdbx_cursor_open(txn.txn, named_dbi, &cur));
+    MDBX_val key, data;
+    unsigned count = 0;
+    int crc = mdbx_cursor_get(cur, &key, &data, MDBX_FIRST);
+    while (crc == MDBX_SUCCESS) {
+      ++count;
+      ASSERT_LT(count, 6001u);
+      EXPECT_EQ(0, std::memcmp(key.iov_base, "k-", 2));
+      crc = mdbx_cursor_get(cur, &key, &data, MDBX_NEXT);
+    }
+    mdbx_cursor_close(cur);
+    EXPECT_EQ(MDBX_NOTFOUND, crc);
+    EXPECT_EQ(6000u, count);
+  }
+}
