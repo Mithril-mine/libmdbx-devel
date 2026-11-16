@@ -189,7 +189,18 @@ __cold int dxb_resize(MDBX_env *const env, const pgno_t used_pgno, const pgno_t 
     lck_t *const lck = env->lck_mmap.lck;
     if (mode == explicit_resize && limit_bytes != env->dxb_mmap.limit) {
       mresize_flags |= MDBX_MRESIZE_MAY_UNMAP | MDBX_MRESIZE_MAY_MOVE;
-      if (lck) {
+      if (env->txn)
+        /* the base address of the mapping can't be changed since
+         * the write transaction of the caller holds pointers into it.
+         *
+         * NOTE: this veto is a temporary workaround treating the symptom;
+         * it must be removed during the refactoring per
+         * https://github.com/Mithril-mine/libmdbx-devel/issues/424, when
+         * dxb_resize() will check the base address change after resizing
+         * and adjust the cursor stacks (including the on-stack cursors)
+         * instead of prohibiting the move. */
+        mresize_flags &= ~(MDBX_MRESIZE_MAY_UNMAP | MDBX_MRESIZE_MAY_MOVE);
+      else if (lck) {
         int err = lck_rdt_lock(env) /* lock readers table until remap done */;
         if (unlikely(MDBX_IS_ERROR(err))) {
           rc = err;
@@ -198,12 +209,15 @@ __cold int dxb_resize(MDBX_env *const env, const pgno_t used_pgno, const pgno_t 
         should_unlock_rdt = true;
 
         /* looking for readers from this process */
+        const reader_slot_t *const own = thread_rthc_get(env->me_txkey);
         const size_t snap_nreaders = rdt_count(env, lck);
         eASSERT(env, mode == explicit_resize);
         for (size_t i = 0; i < snap_nreaders; ++i) {
-          if (lck->rdt[i].pid.weak == env->pid && lck->rdt[i].tid.weak != osal_thread_self()) {
-            /* the base address of the mapping can't be changed since
-             * the other reader thread from this process exists. */
+          if (lck->rdt[i].pid.weak == env->pid &&
+              (&lck->rdt[i] != own || safe64_read(&lck->rdt[i].txnid) < SAFE64_INVALID_THRESHOLD)) {
+            /* the base address of the mapping can't be changed since the other
+             * reader thread of this process exists, or the own reader of the
+             * calling thread holds a live snapshot */
             lck_rdt_unlock(env);
             should_unlock_rdt = false;
             mresize_flags &= ~(MDBX_MRESIZE_MAY_UNMAP | MDBX_MRESIZE_MAY_MOVE);
@@ -356,6 +370,14 @@ bailout:
 }
 
 #if defined(ENABLE_MEMCHECK) || defined(__SANITIZE_ADDRESS__)
+void dxb_sanitize_head(MDBX_env *env, pgno_t used) {
+  if (env->poison_edge < used)
+    env->poison_edge = used;
+  VALGRIND_MAKE_MEM_DEFINED(env->dxb_mmap.base, pgno2bytes(env, used));
+  MDBX_ASAN_UNPOISON_MEMORY_REGION(env->dxb_mmap.base, pgno2bytes(env, used));
+  /* don't touch more, it should be already poisoned */
+}
+
 void dxb_sanitize_tail(MDBX_env *env, MDBX_txn *txn) {
 #if !defined(__SANITIZE_ADDRESS__)
   if (!RUNNING_ON_VALGRIND)
