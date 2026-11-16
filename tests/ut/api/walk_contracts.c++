@@ -30,7 +30,7 @@
  * sized in pages, so the scenario is page-size independent:
  *
  *  - raw_visitor_byte_accounting drives the internal walk engine directly
- *    through the test-only mdbx_injection_walk_pages() (tests/injection.h):
+ *    through the test-only mdbx_tst_walk_pages() (tests/api.h):
  *    every visit must satisfy payload + header + unused == page_size,
  *    every page is visited exactly once, the sum of the visited spans plus
  *    the three meta pages equals first_unallocated, and the five planted
@@ -285,7 +285,7 @@ TEST(walk_contracts, raw_visitor_byte_accounting) {
       s->bad_sum = true;
     if (number == 0) {
       ++s->subpage_visits;
-      if (page_type == MDBX_INJECTION_PAGE_SUB_DUPFIX_LEAF)
+      if (page_type == MDBX_TST_PAGE_SUB_DUPFIX_LEAF)
         ++s->sub_dupfix_visits;
       return 0;
     }
@@ -298,19 +298,19 @@ TEST(walk_contracts, raw_visitor_byte_accounting) {
     if (number > 1) {
       ++s->large_visits;
       s->large_pages += number;
-      if (page_type != MDBX_INJECTION_PAGE_LARGE || page_size != number * s->ps)
+      if (page_type != MDBX_TST_PAGE_LARGE || page_size != number * s->ps)
         s->bad_span_bytes = true;
     } else {
-      if (page_type == MDBX_INJECTION_PAGE_BRANCH)
+      if (page_type == MDBX_TST_PAGE_BRANCH)
         ++s->branch_visits;
-      if (page_type == MDBX_INJECTION_PAGE_DUPFIX_LEAF)
+      if (page_type == MDBX_TST_PAGE_DUPFIX_LEAF)
         ++s->dupfix_visits;
     }
     return 0;
   };
 
-  const int rc = mdbx_injection_walk_pages(txn, visitor, &st, 0 /* full checks */);
-  const uint64_t fua = mdbx_injection_geo_first_unallocated(txn);
+  const int rc = mdbx_tst_walk_pages(txn, visitor, &st, 0 /* full checks */);
+  const uint64_t fua = mdbx_tst_geo_first_unallocated(txn);
   mdbx_txn_abort(txn);
 
   ASSERT_EQ(MDBX_SUCCESS, rc);

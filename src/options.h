@@ -120,6 +120,16 @@
 #error MDBX_ENABLE_BIGFOOT must be defined as 0 or 1
 #endif /* MDBX_ENABLE_BIGFOOT */
 
+/*> dist-cutoff-begin */
+/** Gates the testing API (tests/api.{h,c}, the mdbx_tst_* extensions):
+ * defaults to on for the development builds; the CMake config provides
+ * the exact value and the amalgamated sources strip this default, so the
+ * testing API is never present in the distributed code. */
+#ifndef MDBX_ENABLE_TESTS
+#define MDBX_ENABLE_TESTS 1
+#endif /* MDBX_ENABLE_TESTS */
+/*< dist-cutoff-end */
+
 /** Enables fast deletion by whole b-tree branches feature. */
 #ifndef MDBX_ENABLE_BUNCHES_REMOVAL
 #define MDBX_ENABLE_BUNCHES_REMOVAL 1

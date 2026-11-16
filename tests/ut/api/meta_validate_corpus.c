@@ -24,7 +24,7 @@
  * wave 2): magic/version, page-pgno, page-flags, pagesize, txnid_a != txnid_b,
  * steady-sign, gc-flags, main-flags, txnid range, geo.lower, geo.upper,
  * first_unallocated, allocated-vs-filesize, the mmap_limit bound (made
- * always-reachable through the test-only mdbx_injection_override_mmap_limit),
+ * always-reachable through the test-only mdbx_tst_override_mmap_limit),
  * the #454 height/root/leaf/branch equivalences, false-empty trees and
  * mod_txnid.
  *
@@ -410,13 +410,13 @@ static void case_trees(void) {
 }
 
 /* The mmap_limit bound (MDBX_TOO_LARGE): always reachable through the
- * test-only mdbx_injection_override_mmap_limit() (see the call site). */
+ * test-only mdbx_tst_override_mmap_limit() (see the call site). */
 static void case_mmap_limit(void) {
   /* the default 64-bit limit (MAX_MAPSIZE) cannot be exceeded by a file
    * that fits on disk, so the test-only override lowers it below the
    * database's own size: the case runs on every platform/configuration
    * (previously a >limit sparse file, reachable only under Valgrind) */
-  const uint64_t saved = mdbx_injection_override_mmap_limit((uint64_t)file_pages * g_ps / 2);
+  const uint64_t saved = mdbx_tst_override_mmap_limit((uint64_t)file_pages * g_ps / 2);
   page_t *page = copy_page();
   meta_t *m = page_meta(page);
   m->geometry.first_unallocated = file_pages;
@@ -424,7 +424,7 @@ static void case_mmap_limit(void) {
   m->geometry.now = file_pages;
   meta_sign_as_steady(m);
   expect_rc("allocated-above-mmap-limit", MDBX_TOO_LARGE, meta_validate(g_env, m, page, baseline_pgno, nullptr));
-  mdbx_injection_restore_mmap_limit(saved);
+  mdbx_tst_restore_mmap_limit(saved);
 }
 
 /*-----------------------------------------------------------------------------*/

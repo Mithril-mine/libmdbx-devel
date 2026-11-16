@@ -315,11 +315,11 @@ TEST(cursor_contracts, past_end_dual_encoding_characterized) {
   unsigned zone = 0;
   int top = -1;
   unsigned ki_top = 0;
-  ASSERT_EQ(MDBX_SUCCESS, mdbx_injection_cursor_state(a, &zone, &top, &ki_top));
+  ASSERT_EQ(MDBX_SUCCESS, mdbx_tst_cursor_state(a, &zone, &top, &ki_top));
   EXPECT_GE(top, 0) << "the past-end fast-path cursor stays pointed";
-  EXPECT_NE(0u, zone & MDBX_INJECTION_Z_EOF_SOFT);
-  EXPECT_NE(0u, zone & MDBX_INJECTION_Z_EOF_HARD);
-  EXPECT_EQ(0u, zone & MDBX_INJECTION_Z_HOLLOW);
+  EXPECT_NE(0u, zone & MDBX_TST_Z_EOF_SOFT);
+  EXPECT_NE(0u, zone & MDBX_TST_Z_EOF_HARD);
+  EXPECT_EQ(0u, zone & MDBX_TST_Z_HOLLOW);
   EXPECT_EQ(9u, ki_top) << "ki == nkeys on the fast-path encoding";
 
   /* cursor B: the last row */

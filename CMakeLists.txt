@@ -1124,10 +1124,12 @@ elseif(TRUE)
       "${MDBX_SOURCE_DIR}/utils.h"
       "${MDBX_SOURCE_DIR}/walk.c"
       "${MDBX_SOURCE_DIR}/walk.h"
-      # The test-only API (see tests/injection.h and tests/AGENTS.md);
-      # in the alloy build it is included by src/alloy.c instead.
-      "${CMAKE_CURRENT_SOURCE_DIR}/tests/injection.c"
       "${CMAKE_CURRENT_BINARY_DIR}/version.c")
+    # The testing API (see tests/api.h and tests/AGENTS.md); in the alloy
+    # build it is included by src/alloy.c instead (under #if MDBX_ENABLE_TESTS).
+    if(MDBX_ENABLE_TESTS)
+      list(APPEND LIBMDBX_SOURCES "${CMAKE_CURRENT_SOURCE_DIR}/tests/api.c")
+    endif()
     if(WIN32 OR LINUX)
       list(APPEND LIBMDBX_SOURCES
         "${MDBX_SOURCE_DIR}/osal/windows/public.h"
