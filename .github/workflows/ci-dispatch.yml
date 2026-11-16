@@ -44,8 +44,12 @@ on:
   # stochastic coverage on master via the platform workflows.
   push:
     branches: [devel, master]
+  # No branches filter here, deliberately: a PR temporarily retargeted to a
+  # non-main base (stacked integrations) silently lost its whole gate — the
+  # filter stopped matching, the sibling unfiltered workflows kept running,
+  # and the base's automatic return fired no event to revive the matrix
+  # (PR #492). The gate must follow the PR, whatever its current base is.
   pull_request:
-    branches: [devel, master]
   workflow_dispatch:
     inputs:
       cell:

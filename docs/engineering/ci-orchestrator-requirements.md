@@ -163,6 +163,15 @@ its branch and skips itself green — the PR gate covers the same SHA. A
 failed open-PR lookup keeps the previous behavior. (INV-1: the coverage is
 provided by the PR gate.)
 
+ORCH-27. **The pull_request leg is unfiltered.** Only the push leg is
+restricted to the main lines (ORCH-26); the pull_request trigger carries no
+`branches` filter. A filtered pull_request leg silently disabled the whole
+gate when a PR was temporarily retargeted to a non-main base (a stacked
+integration): the sibling unfiltered workflows kept running, the base's
+later automatic return fired no event, and the PR head stayed without any
+dispatch run or matrix (observed on PR #492). The gate must follow the PR
+whatever its current base is; a stacked base gets gated the same way.
+
 ## 8. Contradictions resolved (from the source inventory)
 
 | # | Contradiction | Resolution |
