@@ -695,7 +695,7 @@ $(MDBX_GIT_DIR)/HEAD $(MDBX_GIT_DIR)/index $(MDBX_GIT_DIR)/refs/tags:
 define version-rule
 $(1): $(2) $(lastword $(MAKEFILE_LIST)) $(MDBX_GIT_DIR)/HEAD $(MDBX_GIT_DIR)/index $(MDBX_GIT_DIR)/refs/tags LICENSE NOTICE COPYRIGHT
 	@echo '  MAKE $$@'
-	$(QUIET)$$(SED) \
+	$(QUIET)mkdir -p $$(dir $$@) && $$(SED) \
 		-e "s|@MDBX_GIT_TIMESTAMP@|$$(MDBX_GIT_TIMESTAMP)|" \
 		-e "s|@MDBX_GIT_TREE@|$$(shell git show --no-patch --format=%T HEAD || echo 'Please install latest git version')|" \
 		-e "s|@MDBX_GIT_COMMIT@|$$(shell git show --no-patch --format=%H HEAD || echo 'Please install latest git version')|" \
@@ -1050,7 +1050,7 @@ $(DIST_DIR)/mdbx.c: $(DIST_DIR)/@tmp-headers.h $(DIST_DIR)/@tmp-amalgam.h src/ve
 
 $(DIST_DIR)/mdbx.h++: $(filter %h++, $(HEADERS)) $(lastword $(MAKEFILE_LIST))
 	@echo '  MAKE $@'
-	$(QUIET)cat mdbx.h++ | $(SED) \
+	$(QUIET)mkdir -p $(DIST_DIR)/ && cat mdbx.h++ | $(SED) \
 		-e '/#include "mdbx++\/begin.h++"/r mdbx++/begin.h++' \
 		-e '/#include "mdbx++\/decl-exceptions.h++"/r mdbx++/decl-exceptions.h++' \
 		-e '/#include "mdbx++\/decl-slice.h++"/r mdbx++/decl-slice.h++' \
