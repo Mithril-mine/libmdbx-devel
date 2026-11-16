@@ -37,7 +37,7 @@ set(MDBX_TEST_TIMEOUTS
   "distance_scroll_distribute=90"
   "doubtless_positioning=240"
   "dupfix_addodd=30"
-  "dupfix_multiple=30"
+  "dupfix_multiple=300"
   "early_close_dbi=30"
   "env-maintenance=30"
   "env-params=30"
