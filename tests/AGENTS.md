@@ -150,7 +150,40 @@ slowest). A runaway test must burn its timeout budget, not the CI cell's.
   scenarios on the effective uid (`geteuid()`) or verify the induced state
   behaviorally (see `issue_gh0317.c++`).
 
-## 7. Documentation map (testing)
+## 7. Test-only injection API (`tests/injection.{h,c}`)
+
+Additional API needed exclusively for introspection, testing and debugging
+lives in one uniform place instead of ad-hoc hooks scattered over the
+sources:
+
+- declare the entry point in `tests/injection.h` with a doc comment and
+  the `mdbx_injection_` name prefix; the header includes its own
+  `extern "C"` guard and include guard, and is grouped under
+  `c_injection`;
+- implement it in `tests/injection.c` (`#include "../src/internals.h"`),
+  which is compiled **into the library**: `src/alloy.c` includes it (so
+  the implementation reaches internal interfaces inside the same
+  translation unit - no link-time acrobatics), and the non-alloy CMake
+  source list appends it. There is nothing per-test to wire up: every
+  consumer of `mdbx.h` sees the declarations;
+- every inclusion point is wrapped into `dist-cutoff` markers
+  (the tail of `mdbx.h`, the tail of `src/alloy.c`, the non-alloy branch
+  of `CMakeLists.txt`), so the amalgamation (`make dist`) strips the API
+  from the distributed sources entirely - it is dev-tree-only, is not
+  part of the ABI and carries no stability promises;
+- an implementation must be **inert unless explicitly called** and must
+  not be gated by `#if` conditionals (see AGENTS.md §7): the no-op-when-
+  unused rule replaces compile-time cuts;
+- when mirroring internal constants (zone flags, walk options, page
+  types), define the public `MDBX_INJECTION_*` value in the header and
+  pin the correspondence with a `STATIC_ASSERT_MSG` in `tests/injection.c`
+  (a drift is a build break, not a silent test skew);
+- prefer exposing a *behavioral* seam (run the internal engine, force a
+  rare-but-legal internal condition) or a *read-only introspection* of
+  internal state over exposing raw internals; keep the surface small -
+  each entry must be justified by a concrete test or debugging need.
+
+## 8. Documentation map (testing)
 
 - [docs/engineering/testing-codex.md](../docs/engineering/testing-codex.md),
   [docs/engineering/testing-methodology.md](../docs/engineering/testing-methodology.md),
