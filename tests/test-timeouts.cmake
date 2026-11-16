@@ -43,6 +43,7 @@ set(MDBX_TEST_TIMEOUTS
   "env-params=30"
   "estimate=30"
   "exceptions=30"
+  "extra_details_gc_dense_solve=60"
   "extra_details_gc_store_retired=30"
   "extra_details_pnl=30"
   "extra_details_rkl=30"

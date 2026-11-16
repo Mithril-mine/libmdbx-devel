@@ -602,6 +602,15 @@ static void gc_dense_hist(MDBX_txn *txn, gcu_t *ctx) {
  *  - N = количество имеющихся слотов/идентификаторов,
  *  - V = объем/количество не помещающихся номеров страниц. */
 
+/* Ограничение работы предиката solve_recursive(): бинарный поиск на каждом уровне использует полный рекурсивный
+ * спуск в качестве предиката, поэтому работа мультипликативна по уровням гистограммы. На заведомо неразрешимых
+ * и "пограничных" формах это даёт взрыв до десятков миллионов вызовов (измерено: 71'895'998 вызовов, ~50 сек)
+ * внутри одного gc_rerere(), когда граница ctx->loop > 42 не действует, а writer-mutex удерживается коммитом.
+ * Поэтому вводим бюджет: при его исчерпании предикат возвращает false ("неразрешимо"), что безопасно - вызывающий
+ * gc_handle_dense() откатывается на штатные пути резервирования, а самопроверка решения по-прежнему защищает
+ * любой возвращённый результат. Наблюдаемая работа на разрешимых формах не превышает десятков вызовов. */
+#define GC_DENSE_SOLVE_BUDGET 262144
+
 typedef struct sr_state {
   size_t left_slots;
   size_t left_volume;
@@ -634,6 +643,8 @@ typedef struct sr_context {
   pgno_t factor;
   /* результирующее решение */
   gc_dense_histogram_t *solution;
+  /* общий на всю рекурсию остаток бюджета работы (см. GC_DENSE_SOLVE_BUDGET) */
+  size_t *budget;
 } sr_context_t;
 
 /* Пытается покрыть остаток объёма и слотов, кусками длиной не более factor,
@@ -676,6 +687,9 @@ static bool consume_remaining(const sr_context_t *const ct, sr_state_t *const st
 
 /* Поиск оптимального решения путем жадного бинарного деления и рекурсивного спуска по уже посчитанной гистограмме. */
 static bool solve_recursive(const sr_context_t *const ct, sr_state_t *const st, size_t len) {
+  if (unlikely(0 == *ct->budget))
+    return false; /* бюджет исчерпан: трактуем как неразрешимо, чтобы ограничить работу (см. GC_DENSE_SOLVE_BUDGET) */
+  *ct->budget -= 1;
   ASSERT(st->left_slots >= 1);
   size_t per_chunk = ct->first_page + ct->other_pages * (len - 1);
   if (len > ct->factor && st->left_slots > 1 && st->left_volume > per_chunk) {
@@ -718,12 +732,14 @@ static int gc_dense_solve(MDBX_txn *txn, gcu_t *ctx, gc_dense_histogram_t *const
     return MDBX_PROBLEM;
   }
 
+  size_t budget = GC_DENSE_SOLVE_BUDGET;
   const sr_context_t ct = {.factor = (pgno_t)gc_chunk_pages(txn, (st.left_volume + st.left_slots - 1) / st.left_slots),
                            .first_page = /* на первой странице */ txn->env->maxgc_large1page +
                                          /* сама страница также будет израсходована */ 1,
                            .other_pages = /* на второй и последующих страницах */ txn->env->ps / sizeof(pgno_t) +
                                           /* каждая страница также будет израсходована */ 1,
-                           .solution = solution};
+                           .solution = solution,
+                           .budget = &budget};
 
   memset(solution, 0, sizeof(*solution));
   if (solve_recursive(&ct, &st, st.hist.end)) {
