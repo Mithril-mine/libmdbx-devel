@@ -170,7 +170,7 @@ when in doubt.
   runs — go fix them; cancel obsolete CI runs after merges.
 - Promptly remove temporary directories and other debris; monitor free
   disk space before and after test runs. Tests must clean up their own
-  database files — see [tests/AGENTS.md](tests/AGENTS.md) §3.
+  database files — see [tests/AGENTS.md](tests/AGENTS.md) §4.
 
 ## 9. Documentation map
 
@@ -185,7 +185,7 @@ when in doubt.
   ChangeLog codexes.
 - Testing documentation (rules, timeouts, hygiene, methodology, scenario
   specs, coverage, durability modes, CI v2 infrastructure design) lives in
-  [tests/AGENTS.md](tests/AGENTS.md) §6.
+  [tests/AGENTS.md](tests/AGENTS.md) §7.
 - [docs/engineering/probe-bus.md](docs/engineering/probe-bus.md) — probe
   conventions.
 - [docs/engineering/libmdbx-invariants.md](docs/engineering/libmdbx-invariants.md),
