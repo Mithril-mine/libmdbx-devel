@@ -596,7 +596,10 @@ retry_snap_meta:
 
   for (size_t offset = meta_bytes; rc == MDBX_SUCCESS && offset < used_size;) {
     if (flags & MDBX_CP_THROTTLE_MVCC) {
-      rc = mdbx_txn_unpark(txn, false);
+      /* nothing of the snapshot is copied yet, so an ousted transaction may be
+       * restarted here when MDBX_CP_RENEW_TXN is given (issue #337) */
+      rc = mdbx_txn_unpark(txn, (flags & MDBX_CP_RENEW_TXN) != 0);
+      rc = (rc == MDBX_RESULT_TRUE) ? MDBX_SUCCESS : rc;
       if (unlikely(rc != MDBX_SUCCESS))
         break;
     }
