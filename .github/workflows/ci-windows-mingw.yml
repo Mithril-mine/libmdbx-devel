@@ -11,7 +11,10 @@ permissions:
   contents: read
 
 on:
+  # See ci-linux.yml: trimmed set on this branch only + nightly schedule.
   push:
+    branches: [lts/0.13]
+  workflow_dispatch:
   schedule:
     - cron: "42 3 * * *"
       timezone: "Europe/Moscow"
@@ -24,16 +27,17 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        build-type: [Debug, Release]
-        dll: [ON, OFF]
-        without_crt: [ON, OFF]
-        bitness: [64, 32]
-        os: [windows-latest]
-        exclude:
+        include:
           - build-type: Debug
-            dll: OFF
+            dll: ON
+            without_crt: OFF
+            bitness: 64
+            os: windows-latest
           - build-type: Release
+            dll: ON
             without_crt: ON
+            bitness: 64
+            os: windows-latest
     steps:
     - uses: actions/checkout@v7
       with:
