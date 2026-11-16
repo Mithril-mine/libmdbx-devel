@@ -559,6 +559,13 @@ int mdbx_txn_commit_ex(MDBX_txn *txn, MDBX_commit_latency *latency) {
       }
     }
 
+    /* имена переименований применены этим commit'ом: обязательство их отката
+     * переходит к родителю вместе с изменениями вложенной транзакции —
+     * разряжается в dbi_update() при завершении родителя (issue #307) */
+    rc = dbi_update(txn, true);
+    if (unlikely(rc != MDBX_SUCCESS))
+      parent->flags |= MDBX_TXN_ERROR;
+
     if (latency) {
       ts_1 = osal_monotime();
       ts_2 = /* no gc-update */ ts_1;
