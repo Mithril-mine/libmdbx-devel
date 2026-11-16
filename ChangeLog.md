@@ -76,6 +76,7 @@ A long-term support release with accumulated backported fixes for data safety, c
     - Fixed a signal during a POSIX/SysV lock wait making the environment fatal with `MDBX_PANIC` ([#323](https://github.com/Mithril-mine/libmdbx-devel/issues/323)) (backport).
     - Fixed the non-printf logger passing the full length on truncation; the message is terminated now ([#116](https://github.com/Mithril-mine/libmdbx-devel/issues/116)) (backport).
     - Fixed `mdbx_env_chk()` leaving a dangling `result.tables` pointer after the check ([#93](https://github.com/Mithril-mine/libmdbx-devel/issues/93)) (backport).
+    - Fixed `mdbx_txn_park()`/`unpark()` crashing without a reader slot; now `MDBX_EPERM` ([#316](https://github.com/Mithril-mine/libmdbx-devel/issues/316)) (backport).
 
  - Wrong results and API behavior:
     - Fixed the default write-transaction size limit (`rp_augment_limit`) computed too low (backport).
