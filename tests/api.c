@@ -90,6 +90,10 @@ __cold void mdbx_tst_restore_mmap_limit(uint64_t previous) { globals.mmap_limit 
 
 /*----------------------------------------------------------------------------*/
 
+__cold bool mdbx_tst_troika_verify_fsm(void) { return troika_verify_fsm(); }
+
+__cold bool mdbx_tst_pv2pages_verify(void) { return pv2pages_verify(); }
+
 __cold uint64_t mdbx_tst_geo_first_unallocated(const MDBX_txn *txn) {
   if (unlikely(!txn))
     return 0;
