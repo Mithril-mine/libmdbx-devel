@@ -14,6 +14,22 @@
 /// \author Andrea Lanfranchi (https://github.com/AndreaLanfranchi)
 
 #include "mdbx.h"
+/* The child-wait budgets below scale x42 under Valgrind, in line with the
+ * ctest timeouts' scaling. The include is intentionally AFTER the library
+ * headers: preface.h defines its RUNNING_ON_VALGRIND fallbacks first, and
+ * including <valgrind/valgrind.h> before them would suppress those stub
+ * definitions, breaking the non-memcheck builds. */
+#if !defined(RUNNING_ON_VALGRIND) && defined(__has_include)
+#if __has_include(<valgrind/valgrind.h>)
+#include <valgrind/valgrind.h>
+#endif
+#endif
+#if !defined(RUNNING_ON_VALGRIND)
+#define RUNNING_ON_VALGRIND (0)
+#endif
+MDBX_MAYBE_UNUSED static unsigned scaled_wait_seconds(unsigned native_seconds) {
+  return RUNNING_ON_VALGRIND ? native_seconds * 42 : native_seconds;
+}
 #include <gtest/gtest.h>
 
 #include <cstdio>
@@ -153,10 +169,12 @@ TEST(issue_gh0345, ensure_unused_orphan_lock) {
 }
 
 #ifndef _WIN32
-/* Waits a single byte within the timeout, for the fork() handshake below. */
+/* Waits a single byte within the timeout, for the fork() handshake below.
+ * The 10-seconds native budget scales under Valgrind, since the child's
+ * env_open() there takes tens of seconds under a loaded machine. */
 static bool wait_byte(int fd, char *out) {
   struct pollfd pfd = {(decltype(pollfd::fd))fd, POLLIN, 0};
-  if (poll(&pfd, 1, 10000) != 1)
+  if (poll(&pfd, 1, int(scaled_wait_seconds(10) * 1000)) != 1)
     return false;
   return read(fd, out, 1) == 1;
 }
