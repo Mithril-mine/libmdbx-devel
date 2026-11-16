@@ -764,6 +764,14 @@ int mdbx_cursor_bunch_delete(MDBX_cursor *mc, MDBX_bunch_action_t action, uint64
   if (unlikely((unsigned)action > MDBX_DELETE_WHOLE))
     return LOG_IFERR(MDBX_EINVAL);
 
+  if (unlikely(!is_pointed(mc) && action != MDBX_DELETE_WHOLE))
+    /* Refuse up front, before any clone/registration work: the axe-family
+     * paths would otherwise enter tree_cutoff_range() with the cloned
+     * stack of the unpositioned cursor against the repositioned original,
+     * tripping the invariant assert on assert-enabled builds (issue #503).
+     * MDBX_DELETE_WHOLE (tbl_purge) is position-independent and legal. */
+    return LOG_IFERR(MDBX_ENODATA);
+
 #if MDBX_ENABLE_BUNCHES_REMOVAL
   cursor_couple_t couple;
   MDBX_cursor *axe = nullptr;
