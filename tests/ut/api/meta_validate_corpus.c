@@ -23,8 +23,10 @@
  * Verification campaign item SC-94 (the reject branches enumerated by
  * wave 2): magic/version, page-pgno, page-flags, pagesize, txnid_a != txnid_b,
  * steady-sign, gc-flags, main-flags, txnid range, geo.lower, geo.upper,
- * first_unallocated, allocated-vs-filesize, the mmap_limit bound, the #454
- * height/root/leaf/branch equivalences, false-empty trees and mod_txnid.
+ * first_unallocated, allocated-vs-filesize, the mmap_limit bound (made
+ * always-reachable through the test-only mdbx_tst_override_mmap_limit),
+ * the #454 height/root/leaf/branch equivalences, false-empty trees and
+ * mod_txnid.
  *
  * NOTE: format-dependent (the on-disk meta layout is touched directly through
  * internals.h); must be revisited together with any on-disk format change. */
@@ -407,31 +409,22 @@ static void case_trees(void) {
   }
 }
 
-/* The mmap_limit bound (MDBX_TOO_LARGE) is reachable only when
- * globals.mmap_limit is close enough to dwarf it with a sparse file (e.g.
- * the 32 GiB cap under Valgrind); skipped on 64-bit defaults, where the
- * limit is MAX_MAPSIZE. POSIX-only: no portable sparse-file primitive. */
+/* The mmap_limit bound (MDBX_TOO_LARGE): always reachable through the
+ * test-only mdbx_tst_override_mmap_limit() (see the call site). */
 static void case_mmap_limit(void) {
-#if !defined(_WIN32) && !defined(MDBX_NO_MMAP_LIMIT_CASE)
-  if (globals.mmap_limit > UINT64_C(64) << 30)
-    return;
-  mdbx_env_close(g_env);
-  g_env = nullptr;
-  if (truncate(kDbPath, (off_t)globals.mmap_limit + (off_t)2 * g_ps) != 0)
-    return;
-  if (mdbx_env_create(&g_env) != MDBX_SUCCESS)
-    return;
-  if (mdbx_env_open(g_env, kDbPath, MDBX_NOSUBDIR | MDBX_RDONLY, 0644) != MDBX_SUCCESS)
-    return;
+  /* the default 64-bit limit (MAX_MAPSIZE) cannot be exceeded by a file
+   * that fits on disk, so the test-only override lowers it below the
+   * database's own size: the case runs on every platform/configuration
+   * (previously a >limit sparse file, reachable only under Valgrind) */
+  const uint64_t saved = mdbx_tst_override_mmap_limit((uint64_t)file_pages * g_ps / 2);
   page_t *page = copy_page();
   meta_t *m = page_meta(page);
-  const pgno_t sparse_pages = (pgno_t)(globals.mmap_limit / g_ps) + 1;
-  m->geometry.first_unallocated = sparse_pages;
-  m->geometry.upper = sparse_pages;
-  m->geometry.now = sparse_pages;
+  m->geometry.first_unallocated = file_pages;
+  m->geometry.upper = file_pages;
+  m->geometry.now = file_pages;
   meta_sign_as_steady(m);
   expect_rc("allocated-above-mmap-limit", MDBX_TOO_LARGE, meta_validate(g_env, m, page, baseline_pgno, nullptr));
-#endif
+  mdbx_tst_restore_mmap_limit(saved);
 }
 
 /*-----------------------------------------------------------------------------*/
