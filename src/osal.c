@@ -1318,9 +1318,11 @@ int osal_openfile(const enum osal_openfile_purpose purpose, const MDBX_env *env,
       FlagsAndAttributes |= FILE_FLAG_NO_BUFFERING;
     break;
   case MDBX_OPEN_DELETE:
+    /* LockFileEx() needs data access; DELETE is not needed (the file is removed by name) and would conflict
+     * with the handles of processes that still use the database, so WAIT_FOR_UNUSED could never wait (issue #336) */
     CreationDisposition = OPEN_EXISTING;
     ShareMode |= FILE_SHARE_DELETE;
-    DesiredAccess = FILE_READ_ATTRIBUTES | FILE_WRITE_ATTRIBUTES | DELETE | SYNCHRONIZE;
+    DesiredAccess = FILE_READ_DATA | FILE_READ_ATTRIBUTES | FILE_WRITE_ATTRIBUTES | SYNCHRONIZE;
     break;
   }
 
