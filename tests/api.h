@@ -230,6 +230,37 @@ LIBMDBX_API uint32_t *mdbx_tst_scan4seq_variant(unsigned variant, uint32_t *rang
  * \ingroup c_testing */
 LIBMDBX_API const uint32_t *mdbx_tst_scan4seq_checker(const uint32_t *pnl, size_t seq);
 
+/* The GC dense-packing solver (src/gc-dense.h): the closed-form solution
+ * covering a `volume` of pages with at most `slots` GC records, cutting
+ * chunks from the runs of the page-usage histogram. The differential test
+ * (tests/ut/api/details_gc_dense_solve.c) drives it against an
+ * independent exact per-run partition DP oracle. */
+
+/** \brief The library's page header size in bytes (the layout constant
+ * the GC slot-capacity arithmetic derives from). Pinned to the internal
+ * PAGEHDRSZ by a STATIC_ASSERT in tests/api.c.
+ * \ingroup c_testing */
+#define MDBX_TST_PAGEHDRSZ 20u
+
+/** \brief Runs the GC dense-packing solver (the V-004 closed form).
+ *
+ * \param slots           The available GC records/identifiers.
+ * \param volume          The pages to cover.
+ * \param hist_counts     The page-usage histogram: hist_counts[i] = the
+ *                        runs of length i+1.
+ * \param hist_end        The histogram boundary (the number of counters).
+ * \param first_page      The capacity of a single-page-span chunk.
+ * \param other_pages     The per-extra-page capacity of longer chunks.
+ * \param solution_counts Out: the chunks per span (at least 31 entries).
+ * \param solution_end    Out: the number of used span kinds.
+ * \param found           Out: true when the volume is fully covered.
+ * \return 0 on a completed solve, -2 when the internal solution
+ *         self-check fails (never with correct inputs).
+ * \ingroup c_testing */
+LIBMDBX_API int mdbx_tst_gc_dense_pack(size_t slots, size_t volume, const uint32_t *hist_counts, unsigned hist_end,
+                                       size_t first_page, size_t other_pages, uint32_t *solution_counts,
+                                       unsigned *solution_end, bool *found);
+
 #ifdef __cplusplus
 } /* extern "C" */
 #endif
