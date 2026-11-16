@@ -8,7 +8,10 @@ concurrency:
   cancel-in-progress: true
 
 on:
+  # See ci-linux.yml: trimmed set on this branch only + nightly schedule.
   push:
+    branches: [lts/0.13]
+  workflow_dispatch:
   schedule:
     - cron: "42 3 * * *"
       timezone: "Europe/Moscow"
@@ -24,13 +27,23 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        ndk: [r26d, r27d, r29]
-        target: [arm64-v8a, "armeabi-v7a with NEON", x86_64]
-        build-type: [Debug, Release]
-        os: [ubuntu-latest]
-        exclude:
-          - ndk: r26d
+        include:
+          - ndk: r27d
+            target: arm64-v8a
             build-type: Debug
+            os: ubuntu-latest
+          - ndk: r29
+            target: arm64-v8a
+            build-type: Release
+            os: ubuntu-latest
+          - ndk: r26d
+            target: armeabi-v7a with NEON
+            build-type: Release
+            os: ubuntu-latest
+          - ndk: r27d
+            target: x86_64
+            build-type: Debug
+            os: ubuntu-latest
     steps:
     - uses: actions/checkout@v7
       with:
