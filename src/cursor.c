@@ -1329,9 +1329,15 @@ __hot int cursor_put(MDBX_cursor *mc, const MDBX_val *key, MDBX_val *data, unsig
          * but instead we opt to shrink the node in that case. */
         if (flags & MDBX_RESERVE)
           data->iov_base = old_data.iov_base;
-        else if (!(mc->flags & z_inner))
-          memcpy(old_data.iov_base, data->iov_base, data->iov_len);
-        else {
+        else if (!(mc->flags & z_inner)) {
+          /* same size as the old data, so a zero length with a null
+           * `data->iov_base` is legitimate and memcpy(dst, nullptr, 0) is
+           * undefined behavior per C11 7.24.1p2 (trapped by UBSan); guard it
+           * as the z_inner branch below and the node.c sites (#63) already do
+           * (see <https://github.com/Mithril-mine/libmdbx-devel/issues/444>). */
+          if (likely(data->iov_len))
+            memcpy(old_data.iov_base, data->iov_base, data->iov_len);
+        } else {
           cASSERT(mc, page_numkeys(mc->pg[mc->top]) == 1);
           cASSERT(mc, page_type_compat(mc->pg[mc->top]) == P_LEAF);
           cASSERT(mc, node_ds(node) == 0);
