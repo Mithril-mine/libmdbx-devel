@@ -535,9 +535,19 @@ int txn_renew(MDBX_txn *txn, unsigned flags) {
                                                           : /* recovery mode */ meta_ptr(env, env->stuck_meta);
       if (likely(r != nullptr)) {
         safe64_reset(&r->txnid, true);
-        atomic_store32(&r->snapshot_pages_used, head.ptr_v->geometry.first_unallocated, mo_Relaxed);
-        atomic_store64(&r->snapshot_pages_retired, unaligned_peek_u64_volatile(4, head.ptr_v->pages_retired),
-                       mo_Relaxed);
+        const pgno_t snap_pages_used = head.ptr_v->geometry.first_unallocated;
+        const uint64_t snap_pages_retired = unaligned_peek_u64_volatile(4, head.ptr_v->pages_retired);
+        /* the loads above must complete before the txnid re-check below, on weakly-ordered CPUs too */
+        osal_memory_fence(mo_AcquireRelease, false);
+        if (unlikely(meta_txnid(head.ptr_v) != head.txnid)) {
+          /* the head meta-page changed (recycled or being rewritten) since the troika was taken,
+           * so the values read above may not belong to head.txnid (issue #347) */
+          troika = meta_tap(env);
+          timestamp = 0;
+          continue;
+        }
+        atomic_store32(&r->snapshot_pages_used, snap_pages_used, mo_Relaxed);
+        atomic_store64(&r->snapshot_pages_retired, snap_pages_retired, mo_Relaxed);
         safe64_write(&r->txnid, head.txnid);
         eASSERT(env, r->pid.weak == osal_getpid());
         eASSERT(env, r->tid.weak == ((env->flags & MDBX_NOSTICKYTHREADS) ? 0 : osal_thread_self()));
