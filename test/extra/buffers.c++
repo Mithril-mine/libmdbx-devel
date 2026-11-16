@@ -25,6 +25,10 @@
 #include <unordered_set>
 #include <vector>
 
+// skynet here: the source data must be a real 1764-byte array, since the original
+// literal-based slice Construction read out of the 18-byte string literal bounds.
+static const char emplace_allocate_data[42 * 42] = "emplace, allocate";
+
 template <typename buffer> bool case1() {
   try {
     bool ok = true;
@@ -34,7 +38,7 @@ template <typename buffer> bool case1() {
     vector.push_back(buffer(42, mdbx::slice("allocate"), 42 * 42));
     vector.emplace_back("emplace, reference=false", false);
     vector.emplace_back("emplace, reference=true", true);
-    vector.emplace_back(42, mdbx::slice("emplace, allocate", 42 * 42));
+    vector.emplace_back(42, mdbx::slice(emplace_allocate_data, sizeof(emplace_allocate_data)), 0);
     {
       auto copy = vector;
     }

@@ -58,7 +58,7 @@ bool case0_trivia_sticky_threads(const mdbx::path &path, bool nested = false) {
 
   mdbx::env::operate_parameters operateParameters(100, 10);
   operateParameters.options.no_sticky_threads = false;
-  operateParameters.options.nested_write_transactions = nested;
+  operateParameters.options.nested_transactions = nested;
   mdbx::env_managed env(path, createParameters, operateParameters);
   auto txn = env.start_write(false);
   const auto map = txn.create_map("xyz", mdbx::key_mode::usual, mdbx::value_mode::single);
@@ -232,7 +232,7 @@ bool case0_trivia_sticky_threads(const mdbx::path &path, bool nested = false) {
 bool case1_trivia_NO_sticky_threads(const mdbx::path &path, bool nested = true) {
   mdbx::env::operate_parameters operateParameters(100, 10);
   operateParameters.options.no_sticky_threads = true;
-  operateParameters.options.nested_write_transactions = nested;
+  operateParameters.options.nested_transactions = nested;
   mdbx::env_managed env(path, operateParameters);
 
   //-------------------------------------
