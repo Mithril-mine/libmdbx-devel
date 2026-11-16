@@ -175,34 +175,62 @@ slowest). A runaway test must burn its timeout budget, not the CI cell's.
   scenarios on the effective uid (`geteuid()`) or verify the induced state
   behaviorally (see `issue_gh0317.c++`).
 
-## 8. Test-only injection API (`tests/injection.{h,c}`)
+## 8. The testing API (`tests/api.{h,c}`)
 
-Additional API needed exclusively for introspection, testing and debugging
-lives in one uniform place instead of ad-hoc hooks scattered over the
-sources:
+The official name of this facility is the **testing API**: the uniform
+place for the additional API needed exclusively for introspection,
+testing and debugging - instead of ad-hoc hooks scattered over the
+sources. The former "injection" name was rejected to avoid confusion
+with fault injection (the probe-bus/MPROBE family).
 
-- declare the entry point in `tests/injection.h` with a doc comment and
-  the `mdbx_injection_` name prefix; the header includes its own
-  `extern "C"` guard and include guard, and is grouped under
-  `c_injection`;
-- implement it in `tests/injection.c` (`#include "../src/internals.h"`),
-  which is compiled **into the library**: `src/alloy.c` includes it (so
-  the implementation reaches internal interfaces inside the same
-  translation unit - no link-time acrobatics), and the non-alloy CMake
-  source list appends it. There is nothing per-test to wire up: every
-  consumer of `mdbx.h` sees the declarations;
-- every inclusion point is wrapped into `dist-cutoff` markers
-  (the tail of `mdbx.h`, the tail of `src/alloy.c`, the non-alloy branch
-  of `CMakeLists.txt`), so the amalgamation (`make dist`) strips the API
-  from the distributed sources entirely - it is dev-tree-only, is not
-  part of the ABI and carries no stability promises;
+- declare the entry point in `tests/api.h` with a doc comment; the header
+  is included from the tail of `mdbx.h`, so every consumer of the public
+  header sees the declarations in development builds;
+- **naming rules**: every public function is prefixed with `mdbx_tst_`,
+  every private (implementation-internal) function/type with `tst_`; the
+  public mirror constants follow the same `MDBX_TST_*` pattern; the
+  doc-group is `c_testing`;
+- implement it in `tests/api.c` (`#include "../src/internals.h"`), which
+  is compiled **into the library**: `src/alloy.c` includes it under
+  `#if MDBX_ENABLE_TESTS` (so the implementation reaches internal
+  interfaces inside the same translation unit - no link-time acrobatics),
+  and the non-alloy CMake source list appends it under the same gate.
+  There is nothing per-test to wire up: every consumer of `mdbx.h` sees
+  the declarations;
+- as this API grows, the monolithic `tests/api.c` will be split into
+  per-area parts in the `tests/api/` directory;
+- **no direct `#include` of the implementation**: tests must not
+  `#include` library implementation code (`src/*.c`) or implementation
+  headers (`internals.h`) to reach internals - such access goes through
+  the testing API extensions. Three reasons, in short:
+    1. a direct `#include` couples the test to the internal scope and
+       makes the planned refactorings harder (every include site must be
+       re-accounted when the internals move);
+    2. it obstructs using different languages for the core and the tests
+       (implementation inclusion is compile-time C-only - tests could not
+       be lua/tcl/python);
+    3. it forces fragmenting the code into separate include files that
+       have to be included into common headers and/or handled separately
+       during the amalgamation.
+  (Legacy white-box units - `details_rkl/pnl/scan4seq`, the
+  `meta_validate_corpus` format corpus - predate the rule and are
+  grandfathered; migrating them is separate work.)
+- the wiring is gated by `MDBX_ENABLE_TESTS`: the exact value comes from
+  the CMake config (`src/config.h.in`, `#cmakedefine01`), the default for
+  config-less development builds from `src/options.h` - and both snippets
+  are wrapped into `dist-cutoff` markers, so the amalgamated sources have
+  the macro undefined and every gated region (the tails of `mdbx.h` and
+  `src/alloy.c`, the non-alloy `CMakeLists.txt` branch, also
+  dist-cutoff-wrapped) compiles out: the testing API is never present in
+  the distributed sources, is not part of the ABI and carries no
+  stability promises;
 - an implementation must be **inert unless explicitly called** and must
-  not be gated by `#if` conditionals (see AGENTS.md §7): the no-op-when-
-  unused rule replaces compile-time cuts;
+  not be gated by `#if` conditionals (see AGENTS.md §7 of the root
+  instructions): the no-op-when-unused rule replaces compile-time cuts;
 - when mirroring internal constants (zone flags, walk options, page
-  types), define the public `MDBX_INJECTION_*` value in the header and
-  pin the correspondence with a `STATIC_ASSERT_MSG` in `tests/injection.c`
-  (a drift is a build break, not a silent test skew);
+  types), define the public `MDBX_TST_*` value in the header and pin the
+  correspondence with a `STATIC_ASSERT_MSG` in `tests/api.c` (a drift is
+  a build break, not a silent test skew);
 - prefer exposing a *behavioral* seam (run the internal engine, force a
   rare-but-legal internal condition) or a *read-only introspection* of
   internal state over exposing raw internals; keep the surface small -
