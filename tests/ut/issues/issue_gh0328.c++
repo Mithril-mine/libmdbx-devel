@@ -14,11 +14,28 @@
 /// \author Andrea Lanfranchi (https://github.com/AndreaLanfranchi)
 
 #include "mdbx.h"
+/* The child-wait budgets below scale x42 under Valgrind, in line with the
+ * ctest timeouts' scaling. The include is intentionally AFTER the library
+ * headers: preface.h defines its RUNNING_ON_VALGRIND fallbacks first, and
+ * including <valgrind/valgrind.h> before them would suppress those stub
+ * definitions, breaking the non-memcheck builds. */
+#if !defined(RUNNING_ON_VALGRIND) && defined(__has_include)
+#if __has_include(<valgrind/valgrind.h>)
+#include <valgrind/valgrind.h>
+#endif
+#endif
+#if !defined(RUNNING_ON_VALGRIND)
+#define RUNNING_ON_VALGRIND (0)
+#endif
+MDBX_MAYBE_UNUSED static unsigned scaled_wait_seconds(unsigned native_seconds) {
+  return RUNNING_ON_VALGRIND ? native_seconds * 42 : native_seconds;
+}
 #include <gtest/gtest.h>
 
 #include "../test-env.h"
 
 #include <cerrno>
+#include <chrono>
 #include <csignal>
 #include <cstring>
 #include <memory>
@@ -157,7 +174,7 @@ TEST(issue_gh0328, killed_writer_does_not_block_other_processes) {
   /* this process keeps the database open while the child holds and loses the write lock */
   ASSERT_EQ(open_env(env), MDBX_SUCCESS);
   struct pollfd report = {child.report_fd, POLLIN, 0};
-  ASSERT_EQ(poll(&report, 1, 10000), 1) << "the child did not report within 10 s";
+  ASSERT_EQ(poll(&report, 1, int(scaled_wait_seconds(10) * 1000)), 1) << "the child did not report within its budget";
   int child_rc = -1;
   ASSERT_EQ(read(child.report_fd, &child_rc, sizeof(child_rc)), static_cast<ssize_t>(sizeof(child_rc)));
   ASSERT_EQ(child_rc, MDBX_SUCCESS) << "the child could not take the write lock";
@@ -165,12 +182,13 @@ TEST(issue_gh0328, killed_writer_does_not_block_other_processes) {
 
   int rc = MDBX_BUSY;
   MDBX_txn *txn = nullptr;
-  for (int i = 0; i < 50 && rc == MDBX_BUSY; ++i) {
+  const auto recovery_deadline = std::chrono::steady_clock::now() + std::chrono::seconds(scaled_wait_seconds(5));
+  while (rc == MDBX_BUSY && std::chrono::steady_clock::now() < recovery_deadline) {
     rc = mdbx_txn_begin(env.get(), nullptr, MDBX_TXN_READWRITE | MDBX_TXN_TRY, &txn);
     if (rc == MDBX_BUSY)
       usleep(100000);
   }
-  ASSERT_EQ(rc, MDBX_SUCCESS) << "the write lock of the killed process was not recovered within 5 s, locking "
+  ASSERT_EQ(rc, MDBX_SUCCESS) << "the write lock of the killed process was not recovered within its budget, locking "
                               << locking << ": " << mdbx_strerror(rc);
 
   MDBX_dbi dbi = 0;

@@ -220,6 +220,15 @@ if(MDBX_TEXTBOOK_CXX_AVAILABLE)
     set_tests_properties(eg_28-waf-batching PROPERTIES TIMEOUT 180)
   endif()
 
+  # eg_26/eg_27 fork a child process, which - under Valgrind - runs as its
+  # own instrumented instance: the whole scenario there takes ~20 minutes
+  # under a loaded machine, exceeding the 30s x42 scaling. Native runtime
+  # is milliseconds, so 60s is ample (~3x).
+  if(MDBX_EXAMPLES_RUN_TESTS)
+    set_tests_properties(eg_26-two-processes PROPERTIES TIMEOUT 60)
+    set_tests_properties(eg_27-recovery PROPERTIES TIMEOUT 60)
+  endif()
+
   # Сквозной проект config-store: срезы 02–12 (C++17).
   set(MDBX_TEXTBOOK_CONFIG_STORE
       config-store-02.c++
