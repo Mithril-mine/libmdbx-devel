@@ -91,3 +91,10 @@
 #include "utils.c"
 #include "version.c"
 #include "walk.c"
+
+/*> dist-cutoff-begin */
+/* The test-only API for introspection, testing and debugging: compiled
+ * into the library in development builds, stripped by the amalgamation.
+ * See tests/injection.h and tests/AGENTS.md. */
+#include "../tests/injection.c"
+/*< dist-cutoff-end */
