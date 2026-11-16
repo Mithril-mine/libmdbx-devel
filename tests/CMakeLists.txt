@@ -385,7 +385,9 @@ else()
                                     --progress --console=no --repeat=${MDBX_TEST_ITER} --pathname=smoke.db
                                     --size-lower=64M --size=256M --size-upper=${SMOKE_WRITEMAP_SIZE_UPPER} --geometry-jitter=no
                                     --dont-cleanup-after ${MDBX_SMOKE_EXTRA} basic)
-  set_tests_properties(smoke_writemap PROPERTIES LABELS "smoke;smoke-t2" TIMEOUT 600 DEPENDS smoke_basic
+  # The win-msvc full cells observed the 600s ctest timeout exceeded under
+  # runner load; ~3x of the ~200s worst-case runtime (see tests/AGENTS.md).
+  set_tests_properties(smoke_writemap PROPERTIES LABELS "smoke;smoke-t2" TIMEOUT 900 DEPENDS smoke_basic
                                                  RUN_SERIAL OFF FIXTURES_REQUIRED smoke-quick)
 
   if(MDBX_BUILD_TOOLS)
