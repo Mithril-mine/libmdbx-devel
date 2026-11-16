@@ -10,6 +10,8 @@ Please use the `stable` branch or the latest release for production environments
 
 A long-term support release with accumulated backported fixes for data safety, corruption resistance, crashes, tools, the C++ API and Windows. Since v0.14.3 the 0.14.x line is the stable one — please plan the migration from 0.13.x.
 
+Known defects deliberately left unfixed (their fixes require file-identity bookkeeping whose porting was declined to minimize regression risk): `mdbx_env_copy()` may destroy a live database when the destination names the database's own data or lock file ([#450](https://github.com/Mithril-mine/libmdbx-devel/issues/450)); `mdbx_env_open()` may hang, inherit wrong modes and miss a duplicate-open refusal ([#317](https://github.com/Mithril-mine/libmdbx-devel/issues/317)).
+
 ### Added:
 
  - Added the re-created [project website](https://libmdbx.dqdkfa.ru/) with a knowledge base and the Doxygen docs under /doxygen.
@@ -117,6 +119,7 @@ A long-term support release with accumulated backported fixes for data safety, c
     - Fixed the `_except_handler4 not found` error in 32-bit builds with `MDBX_WITHOUT_MSVC_CRT` (backport).
     - Fixed building with CLANG/LLVM on Windows, including the Microsoft Clang from Visual Studio (backport).
     - Fixed a scan-code path bug on ARM64-Windows with LLP64 (backport).
+    - Fixed spurious `Overlapped I/O operation is in progress` errors from writes on Windows (backport).
     - Fixed the batched writes on Windows after a mid-batch write failure: the cancelled requests are now drained before the ring's resources are reused ([#449](https://github.com/Mithril-mine/libmdbx-devel/issues/449)) (backport).
     - Fixed `mdbx_env_delete()` `ENSURE_UNUSED`/`WAIT_FOR_UNUSED` modes that never worked on Windows ([#336](https://github.com/Mithril-mine/libmdbx-devel/issues/336)) (backport).
     - Fixed `mdbx_env_delete()` for a NOSUBDIR database with an absent data file leaving the lock file orphaned ([#345](https://github.com/Mithril-mine/libmdbx-devel/issues/345)) (backport).
