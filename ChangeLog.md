@@ -109,6 +109,7 @@ Known defects deliberately left unfixed (their fixes require file-identity bookk
     - Added skipping the root-to-leaf re-descent on `MDBX_APPEND` for a cursor at the right edge ([#66](https://github.com/Mithril-mine/libmdbx-devel/issues/66)) (backport).
     - Fixed losing disk-cache hints after erase/overwrite inserts (backport).
     - Fixed the GC prefault writing page runs at wrong offsets, so intended pages were not prefaulted ([#108](https://github.com/Mithril-mine/libmdbx-devel/issues/108)) (backport).
+    - Fixed empty durable-mode commits still flushing the device, adding milliseconds to every no-op ([#64](https://github.com/Mithril-mine/libmdbx-devel/issues/64)) (backport).
     - Fixed every no-sync write-map commit on Windows flushing the whole mapping ([#65](https://github.com/Mithril-mine/libmdbx-devel/issues/65)) (backport).
 
  - Platform-specific:
