@@ -220,8 +220,10 @@ with fault injection (the probe-bus/MPROBE family).
        have to be included into common headers and/or handled separately
        during the amalgamation.
   (Legacy white-box units - `details_rkl/pnl/scan4seq`, the
-  `meta_validate_corpus` format corpus - predate the rule and are
-  grandfathered; migrating them is separate work.)
+  `meta_validate_corpus` format corpus, and the `details_gc_store_retired`
+  hook-replacement GC state unit - are registered exceptions; their staged
+  rework is tracked in issue #519. `details_gc_dense_solve` and
+  `details_troika_fsm` already use the API.)
 - the wiring is gated by `MDBX_ENABLE_TESTS`: the exact value comes from
   the CMake config (`src/config.h.in`, `#cmakedefine01`), the default for
   config-less development builds from `src/options.h` - and both snippets

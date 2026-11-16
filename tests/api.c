@@ -16,6 +16,8 @@
 
 #include "../src/gc-scan4seq.h"
 
+#include "../src/gc-dense.h"
+
 /* The public mirror of the list-element type must stay in sync with the
  * internal one; a drift here is a build break, not a silent test skew. */
 STATIC_ASSERT_MSG(sizeof(uint32_t) == sizeof(pgno_t), "scan4seq element type");
@@ -167,6 +169,15 @@ __cold uint32_t *mdbx_tst_scan4seq_variant(unsigned variant, uint32_t *range, si
 #endif /* MDBX_ATTRIBUTE_TARGET_AVX512BW */
   }
   return tst_scan4seq_unavailable(range, len, seq);
+}
+
+__cold int mdbx_tst_gc_dense_pack(size_t slots, size_t volume, const uint32_t *hist_counts, unsigned hist_end,
+                                  size_t first_page, size_t other_pages, uint32_t *solution_counts,
+                                  unsigned *solution_end, bool *found) {
+  /* the histogram/solution element type is the internal pgno_t, pinned to
+   * uint32_t by the STATIC_ASSERT above */
+  return gc_dense_pack(slots, volume, (const pgno_t *)hist_counts, hist_end, first_page, other_pages,
+                       (pgno_t *)solution_counts, solution_end, found);
 }
 
 __cold const uint32_t *mdbx_tst_scan4seq_checker(const uint32_t *pnl, size_t seq) {

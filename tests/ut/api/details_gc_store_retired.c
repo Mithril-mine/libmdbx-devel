@@ -12,71 +12,74 @@
 ///
 /// \author Леонид Юрьев aka Leonid Yuriev <leo@yuriev.ru> \date 2026
 
-/// V-003 regression test (issue reference: see the PR description).
+/// V-003 regression test (issue #494, see the PR description).
 ///
-/// Contract: in gc_store_retired (BIGFOOT mode) ANY growth of wr.retired_pages
-/// inside a chunk's cursor_put(RESERVE) - what the engine performs when a
-/// frozen page is CoW'd during the put (page-ops.c:177 -> pnl_append) - must
-/// not break the FIFO arm's `at = left_before - chunk` slicing:
-/// the stored GC records must jointly contain exactly the crafted pages plus
-/// the appended ones (no junk, nothing dropped), each record must be a valid
-/// strictly-descending PNL, and no memory outside the pnl may be written.
+/// The exercised logic is the REAL gc_store_retired() from src/gc-store-retired.h
+/// (included below - not a copy, per tests/AGENTS.md §3); src/pnl.c is
+/// compiled in for the pnl machinery (the details_pnl.c style). The only
+/// seams are the mocked ENVIRONMENT around the store loop (allowed by §3):
+/// - cursor_put(): plays MDBX_RESERVE (returns a record buffer) and, on the
+///   configured call, tail-appends g pages to wr.retired_pages - the same
+///   growth the engine performs when a frozen page is CoW'd inside the put
+///   (page-ops.c:177 -> pnl_append);
+/// - gc_prepare_stockpile4retired()/gc_clean_stored_retired(): the stockpile
+///   prep/cleanup machinery, mocked as always-succeeding (their real bodies
+///   drive the cursor machinery which is not the contract under test).
 ///
-/// The window: growth g >= 1 during the FIRST chunk (retired_stored == 0) with
-/// `chunk_hi >= left_after` (the grown list still fits the chunk, so
-/// should_retry stays false). Then `at = N - (N+g) = (size_t)-g`, i.e. a
-/// transient negative-index write before the pnl allocation and a corrupted
-/// record: `[chunk][foreign/len/alloclen words as pgno][...tail pages]` with
-/// the boundary pages dropped. Both chunk_hi branches host such windows:
-/// the endgame `(left|3)` branch and the goodchunk branch (goodchunk ≡ 2 mod 4).
+/// Contract: for ANY growth timing the FIFO arm's slicing must stay
+/// consistent - the stored GC records must jointly contain exactly the
+/// crafted pages plus the appended ones (no junk: the length/alloclen counts
+/// and foreign heap words must never appear as page numbers, no boundary
+/// pages dropped), every record must be a valid strictly-descending PNL, and
+/// no memory before the pnl may be written (canaries).
 ///
-/// This is a verbatim-extraction test in the details_scan4seq.c style: the
-/// gc_store_retired BIGFOOT body below is copied verbatim from src/gc-put.c
-/// (@ the fix commit, lines 363-475), the pnl helpers reproduce the pnl.h/pnl.c
-/// formulas, and cursor_put is a stub which plays MDBX_RESERVE and injects the
-/// growth on the configured call. Keep the extraction in sync when refactoring
-/// src/gc-put.c - this test guards the store-slicing contract for refactoring.
+/// The window this guards (pre-fix defect, V-003): growth g >= 1 during the
+/// FIRST chunk (retired_stored == 0) with `chunk_hi >= left_after` made
+/// `at = left_before - chunk` underflow to (size_t)-g - a transient
+/// negative-index write before the pnl allocation and a corrupted record.
 
 #include <assert.h>
 #include <stdarg.h>
-#include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
-typedef uint32_t pgno_t;
-typedef uint64_t txnid_t;
-typedef struct MDBX_val {
-  void *iov_base;
-  size_t iov_len;
-} MDBX_val;
+/* The seams are renamed BEFORE the dependency chain is pulled, so the stubs
+ * get declared exactly where the library declares the real counterparts:
+ *  - cursor_put(): plays MDBX_RESERVE (returns a record buffer) and, on the
+ *    configured call, tail-appends g pages to wr.retired_pages - the same
+ *    growth the engine performs when a frozen page is CoW'd inside the put
+ *    (page-ops.c:177 -> pnl_append);
+ *  - debug_log(): silenced (the pnl.c logging sink). */
+#define debug_log debug_log_sub
+#define cursor_put tst_cursor_put_stub
+/* renaming the two stockpile hooks too: their REAL definitions live in
+ * gc-put.c, and this TU must not collide with them (the archive member gets
+ * pulled transitively by the logging symbols) */
+#define gc_prepare_stockpile4retired tst_prep_stockpile4stub
+#define gc_clean_stored_retired tst_clean_stored_stub
 
-#define MDBX_SUCCESS 0
-#define MDBX_PNL_ASCENDING 0 /* is_lifo() == 0 => the FIFO arm (`left_before - chunk`) */
-#define MDBX_ENABLE_BIGFOOT 1
-#define MDBX_DEBUG_GCU 0
-#define MDBX_DEBUG 0
-#define MDBX_LIFORECLAIM 0x4000u
-#define MAX_TXNID 0xFFFFFFFEFFFFFFFFull
-#define MIN_PAGENO 3
-typedef struct MDBX_env {
-  unsigned flags;
-} MDBX_env;
-typedef struct MDBX_cursor {
-  int dummy;
-} MDBX_cursor;
-typedef struct MDBX_txn {
-  MDBX_env *env;
-  txnid_t txnid;
-  struct {
-    pgno_t first_unallocated;
-  } geo;
-  struct {
-    pgno_t *__restrict retired_pages;
-  } wr;
-} MDBX_txn;
+/* src/pnl.c for the real pnl machinery (pnl_sort -> pnl_sort_nochk) */
+#include "../../../src/pnl.c"
 
-/* --- stub state (the single seam) --- */
+/* the REAL store loop (src/gc-store-retired.h) */
+#include "../../../src/gc-store-retired.h"
+
+#undef cursor_put
+#undef gc_prepare_stockpile4retired
+#undef gc_clean_stored_retired
+#undef debug_log
+
+MDBX_MAYBE_UNUSED __cold void debug_log_sub(int level, const char *function, int line, const char *fmt, ...) {
+  (void)level;
+  (void)function;
+  (void)line;
+  (void)fmt;
+}
+
+/*-----------------------------------------------------------------------------*/
+
+/* --- stub state (the mocked environment) --- */
 static MDBX_txn *tst_txn;
 static unsigned tst_put_counter;
 static unsigned tst_grow_at_put; /* the cursor_put call (0-based) to grow at */
@@ -88,79 +91,24 @@ static size_t tst_record_slots[64];
 static bool tst_abandoned[64]; /* records deleted by gc_clean_stored_retired on retry passes */
 static unsigned tst_nrecords;
 
-/* --- pnl.h/pnl.c formulas (see provenance note above) --- */
-#define pnl_size(pl) ((pl)[0])
-static int tst_pgno_cmp_desc(const void *a, const void *b) {
-  const pgno_t x = *(const pgno_t *)a, y = *(const pgno_t *)b;
-  return (x < y) - (x > y); /* descending: larger pgno first (FIFO invariant) */
-}
-static void pnl_sort(pgno_t *pnl, pgno_t limit) {
-  /* pnl.h:161 pnl_sort -> pnl_sort_nochk: sorts per the PNL order */
-  (void)limit;
-  if (pnl[0])
-    qsort(pnl + 1, pnl[0], sizeof(pgno_t), tst_pgno_cmp_desc);
-}
-static void pnl_append_real(pgno_t *__restrict pnl, pgno_t pgno) {
-  /* pnl.h tail-append over pre-reserved alloclen */
-  const size_t n = pnl[0];
-  pnl[n + 1] = pgno;
-  pnl[0] = (pgno_t)(n + 1);
-}
-#define gc_chunk_bytes(length) (((length) + 1) * sizeof(pgno_t))
-static inline bool is_lifo(const MDBX_txn *txn) { return (txn->env->flags & MDBX_LIFORECLAIM) != 0; }
-
-/* gcu_t stand-in: exactly the fields the verbatim body touches */
-typedef struct gcu_t {
-  MDBX_cursor cursor;
-  size_t goodchunk;
-  size_t retired_stored;
-  txnid_t bigfoot;
-} gcu_t;
-
-#define tASSERT0(ctx, expr) assert(expr)
-#define unlikely(c) __builtin_expect(!!(c), 0)
-#define likely(c) __builtin_expect(!!(c), 1)
-#define TRACE(...) ((void)0)
-#define DEBUG(...) ((void)0)
-#define ERROR(...) ((void)0)
-#define DEBUG_EXTRA(...) ((void)0)
-#define DEBUG_EXTRA_PRINT(...) ((void)0)
-#define LOG_ENABLED(lvl) (0)
-#define PRIaTXN "lu"
-#define PRIaPGNO "u"
-
-/* stubs for the store-loop neighbours (outside the tested contract) */
-static int gc_prepare_stockpile4retired(MDBX_txn *txn, gcu_t *ctx) {
-  (void)txn;
-  (void)ctx;
-  return MDBX_SUCCESS;
-}
-static int gc_clean_stored_retired(MDBX_txn *txn, gcu_t *ctx) {
-  /* mirrors the real one: deletes the stored records, rewinds below txnid;
-   * the deleted records are marked abandoned so the validators skip them */
-  for (unsigned r = 0; r < tst_nrecords; ++r)
-    tst_abandoned[r] = true;
-  ctx->retired_stored = 0;
-  ctx->bigfoot = txn->txnid - 1;
-  return MDBX_SUCCESS;
-}
-
-/* The single seam: MDBX_RESERVE returns a record buffer; on the configured
- * call the frozen-page CoW appends g pages (tail-append, page-ops.c:177).
- * Named exactly as the library's one: the verbatim body calls cursor_put(). */
-static int cursor_put(MDBX_cursor *mc, const MDBX_val *key, MDBX_val *data, unsigned flags) {
+int tst_cursor_put_stub(MDBX_cursor *mc, const MDBX_val *key, MDBX_val *data, unsigned flags) {
   (void)mc;
   (void)key;
   (void)flags;
-  assert(tst_txn);
+  assert(tst_txn && mc->txn == tst_txn);
   if (tst_put_counter == tst_grow_at_put && tst_grow_amount) {
-    for (unsigned i = 0; i < tst_grow_amount; ++i)
-      pnl_append_real(tst_txn->wr.retired_pages, (pgno_t)(tst_appended_hi - i));
+    /* the engine's frozen-page CoW: pnl_append tail-appends (page-ops.c:177);
+     * the crafted pnl has alloclen headroom, so no realloc happens */
+    for (unsigned i = 0; i < tst_grow_amount; ++i) {
+      const int rc = pnl_append(&tst_txn->wr.retired_pages, (pgno_t)(tst_appended_hi - i));
+      assert(rc == MDBX_SUCCESS);
+      (void)rc;
+    }
   }
   tst_put_counter += 1;
   data->iov_base = malloc(data->iov_len);
   assert(data->iov_base != nullptr);
-  memset(data->iov_base, 0, data->iov_len);
+  memset(data->iov_base, 0, data->iov_len); /* RESERVE leaves the buffer uninitialized */
   assert(tst_nrecords < sizeof(tst_records) / sizeof(tst_records[0]));
   tst_records[tst_nrecords] = (pgno_t *)data->iov_base;
   tst_record_slots[tst_nrecords] = data->iov_len / sizeof(pgno_t);
@@ -168,70 +116,19 @@ static int cursor_put(MDBX_cursor *mc, const MDBX_val *key, MDBX_val *data, unsi
   return MDBX_SUCCESS;
 }
 
-/*-----------------------------------------------------------------------------*/
+MDBX_MAYBE_UNUSED int tst_prep_stockpile4stub(MDBX_txn *txn, gcu_t *ctx) {
+  (void)txn;
+  (void)ctx;
+  return MDBX_SUCCESS;
+}
 
-/* VERBATIM from src/gc-put.c @ the fix commit (lines 363-475), BIGFOOT branch:
- * keep in sync with the source when refactoring. */
-static int gc_store_retired(MDBX_txn *txn, gcu_t *ctx) {
-  int err;
-  MDBX_val key, data;
-
-#if MDBX_ENABLE_BIGFOOT
-  size_t retired_before;
-  bool should_retry;
-  do {
-    if (ctx->bigfoot > txn->txnid) {
-      err = gc_clean_stored_retired(txn, ctx);
-      if (unlikely(err != MDBX_SUCCESS))
-        return err;
-      tASSERT0(txn, ctx->bigfoot <= txn->txnid);
-    }
-
-    err = gc_prepare_stockpile4retired(txn, ctx);
-    if (unlikely(err != MDBX_SUCCESS))
-      return err;
-
-    pnl_sort(txn->wr.retired_pages, txn->geo.first_unallocated);
-    retired_before = pnl_size(txn->wr.retired_pages);
-    should_retry = false;
-    ctx->retired_stored = 0;
-    ctx->bigfoot = txn->txnid;
-    do {
-      if (ctx->retired_stored) {
-        err = gc_prepare_stockpile4retired(txn, ctx);
-        if (unlikely(err != MDBX_SUCCESS))
-          return err;
-      }
-      key.iov_len = sizeof(txnid_t);
-      key.iov_base = &ctx->bigfoot;
-      const size_t left_before = retired_before - ctx->retired_stored;
-      const size_t chunk_hi = ((left_before | 3) > ctx->goodchunk && ctx->bigfoot < (MAX_TXNID - UINT32_MAX))
-                                  ? ctx->goodchunk
-                                  : (left_before | 3);
-      data.iov_len = gc_chunk_bytes(chunk_hi);
-      err = cursor_put(&ctx->cursor, &key, &data, 0 /* MDBX_RESERVE */);
-      if (unlikely(err != MDBX_SUCCESS))
-        return err;
-
-      const size_t retired_after = pnl_size(txn->wr.retired_pages);
-      const size_t left_after = retired_after - ctx->retired_stored;
-      const size_t chunk = (left_after < chunk_hi) ? left_after : chunk_hi;
-      should_retry = retired_before != retired_after;
-      if (likely(!should_retry)) {
-        const size_t at = (is_lifo(txn) == MDBX_PNL_ASCENDING) ? left_before - chunk : ctx->retired_stored;
-        pgno_t *const begin = txn->wr.retired_pages + at;
-        const pgno_t save = *begin;
-        *begin = (pgno_t)chunk;
-        memcpy(data.iov_base, begin, data.iov_len);
-        *begin = save;
-        (void)at;
-      }
-      ctx->retired_stored += chunk;
-    } while (ctx->retired_stored < pnl_size(txn->wr.retired_pages) && (++ctx->bigfoot, true));
-  } while (unlikely(should_retry));
-#else
-#error "the test targets the BIGFOOT mode"
-#endif /* MDBX_ENABLE_BIGFOOT */
+MDBX_MAYBE_UNUSED int tst_clean_stored_stub(MDBX_txn *txn, gcu_t *ctx) {
+  /* mirrors the real one: deletes the stored records, rewinds below txnid;
+   * the deleted records are marked abandoned so the validators skip them */
+  for (unsigned r = 0; r < tst_nrecords; ++r)
+    tst_abandoned[r] = true;
+  ctx->retired_stored = 0;
+  ctx->bigfoot = txn->txnid - 1;
   return MDBX_SUCCESS;
 }
 
@@ -256,13 +153,19 @@ static void tst_report(const char *what, bool ok, const char *fmt, ...) {
   fprintf(stderr, "\n");
 }
 
+static int tst_pgno_cmp_desc(const void *a, const void *b) {
+  const pgno_t x = *(const pgno_t *)a, y = *(const pgno_t *)b;
+  return (x < y) - (x > y); /* descending: larger pgno first (FIFO invariant) */
+}
+
 /* One scenario: N crafted retired pages, growth g pages appended inside the
  * configured cursor_put, FIFO or LIFO arm, goodchunk as given. The pnl is
- * owned by the test with a canary prefix (the negative-index writes land
- * there), alloclen headroom, and descending crafted pages. */
+ * owned by the test with a canary prefix (negative-index writes land there),
+ * alloclen headroom, and descending crafted pages. */
 static void tst_scenario(size_t N, unsigned g, unsigned grow_at_put, bool lifo, size_t goodchunk) {
   ++tst_cases;
   static MDBX_env env;
+  memset(&env, 0, sizeof(env));
   env.flags = lifo ? MDBX_LIFORECLAIM : 0u;
   MDBX_txn txn;
   memset(&txn, 0, sizeof(txn));
@@ -272,12 +175,16 @@ static void tst_scenario(size_t N, unsigned g, unsigned grow_at_put, bool lifo, 
   txn.geo.first_unallocated = fu;
   tst_txn = &txn;
 
-  pgno_t *const raw = (pgno_t *)malloc((40 + N + 8) * sizeof(pgno_t));
+  /* The pnl is allocated per the real engine's conventions: the radix-sort
+   * scratch of the real pnl_sort lives in the tail beyond the data, so the
+   * allocation must be ~2x the size (see pnl_size2bytes' doubling) plus the
+   * headroom for the appended pages and the canary prefix. */
+  pgno_t *const raw = (pgno_t *)malloc((32 + 2 + 2 * N + 64) * sizeof(pgno_t));
   assert(raw != nullptr);
   for (unsigned i = 0; i < 32; ++i)
-    raw[i] = 0xA5C3A5C3u; /* canaries before the alloclen slot */
-  raw[32] = (pgno_t)(N + 8); /* pnl[-1] = alloclen slot, headroom for appends */
-  pgno_t *const pnl = raw + 33; /* pnl[0] = length */
+    raw[i] = 0xA5C3A5C3u;         /* canaries before the alloclen slot */
+  raw[32] = (pgno_t)(2 * N + 64); /* pnl[-1] = alloclen slot (radix scratch + growth headroom) */
+  pgno_t *const pnl = raw + 33;   /* pnl[0] = length */
   pnl[0] = (pgno_t)N;
   for (size_t i = 0; i < N; ++i)
     pnl[1 + i] = (pgno_t)(fu - 100 - 2 * i); /* descending, distinct, far from junk values */
@@ -292,7 +199,8 @@ static void tst_scenario(size_t N, unsigned g, unsigned grow_at_put, bool lifo, 
 
   gcu_t ctx;
   memset(&ctx, 0, sizeof(ctx));
-  ctx.goodchunk = goodchunk;
+  ctx.cursor.txn = &txn;               /* the real flow sets it via cursor_init() */
+  ctx.goodchunk = (unsigned)goodchunk; /* gcu_t stores it as unsigned */
   ctx.bigfoot = txn.txnid;
   const int rc = gc_store_retired(&txn, &ctx);
 
@@ -302,13 +210,13 @@ static void tst_scenario(size_t N, unsigned g, unsigned grow_at_put, bool lifo, 
   tst_report(what, rc == MDBX_SUCCESS, "rc %d", rc);
   tst_report("retired_stored == N+g", ctx.retired_stored == N + g, "got %zu, want %zu", (size_t)ctx.retired_stored,
              N + g);
-  tst_report("pnl length == N+g", pnl_size(pnl) == N + g, "got %u, want %zu", pnl_size(pnl), N + g);
+  tst_report("pnl length == N+g", pnl_size(pnl) == N + g, "got %u, want %zu", (unsigned)pnl_size(pnl), N + g);
 
   bool canaries_ok = true;
   for (unsigned i = 0; i < 32; ++i)
     canaries_ok &= raw[i] == 0xA5C3A5C3u;
   tst_report("canaries intact", canaries_ok, nullptr);
-  tst_report("alloclen slot intact", raw[32] == (pgno_t)(N + 8), "got %u", raw[32]);
+  tst_report("alloclen slot intact", raw[32] == (pgno_t)(2 * N + 64), "got %u, want %u", raw[32], (pgno_t)(2 * N + 64));
 
   /* The stored records must jointly hold exactly the crafted pages plus the
    * appended ones - no junk, nothing dropped. */
@@ -393,11 +301,12 @@ int main(int argc, char **argv) {
   const size_t G = 955;  /* ≡ 3 (mod 4): the endgame (left|3) branch hosts windows */
   const size_t GG = 958; /* ≡ 2 (mod 4): the goodchunk branch hosts windows */
 
-  static const size_t small[] = {2, 3, 4, 5, 20, 100, 500};
-  for (unsigned s = 0; s < sizeof(small) / sizeof(small[0]); ++s)
+  /* NOT named `small`: the Windows SDK macro rpcndr.h defines small as char */
+  static const size_t tst_small[] = {2, 3, 4, 5, 20, 100, 500};
+  for (unsigned s = 0; s < sizeof(tst_small) / sizeof(tst_small[0]); ++s)
     for (unsigned g = 1; g <= 3; ++g)
       for (unsigned lifo = 0; lifo <= 1; ++lifo)
-        tst_scenario(small[s], g, 0, lifo != 0, G);
+        tst_scenario(tst_small[s], g, 0, lifo != 0, G);
 
   /* the endgame (left|3) branch: every residue except 3 opens for some g */
   for (size_t d = 0; d <= 4; ++d)
