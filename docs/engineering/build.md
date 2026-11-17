@@ -84,9 +84,9 @@ executables (see §6).
 | `all` | libs + tools |
 | `lib` / `lib-static` / `lib-shared` | library only |
 | `tools` / `tools-static` | tools (`.static`, `.static-lto` variants) |
-| `check` | smoke + amalgamation/install check (`DESTDIR=@check-install`, `CMAKE_OPT += -Werror=dev`; runs `smoke-assertion ninja-assertions dist install test ctest`) |
+| `check` | smoke + amalgamation/install check (`DESTDIR=@check-install`, `-Werror=dev`); a recursive sequential run: `clean` → `smoke-assertion ninja-assertions dist install test ctest test-doxygen` — so `clean` never races with the builds under `make -j` |
 | `smoke`, `smoke-singleprocess`, `smoke-fault`, `smoke-assertion`, `smoke-memcheck` | fast scenarios (§6.4) |
-| `test`, `test-assertion`, `test-singleprocess`, `test-long`, `test-ci`, `test-ci-extra` | scenarios (§6.4) |
+| `test`, `test-assertion`/`test-assertions`, `test-singleprocess`, `test-long`, `test-ci`, `test-ci-extra` | scenarios (§6.4) |
 | `test-asan`, `test-ubsan`, `test-leak`, `test-memcheck` | sanitizer/valgrind (§6.4) |
 | `build-stochastic` | build `mdbx_test` + libs |
 | `ctest` | `cmake-build` (ninja) + `ctest --parallel nproc --schedule-random` |
@@ -259,7 +259,7 @@ variant uses `--delay $((3+n*7))`. If multiple NUMA nodes exist, commands cycle 
 | `test-singleprocess` | `tests/stochastic.sh --single --loops 2 --whole-duration 600 --probe-duration 60 --dont-check-ram-size --db-upto-mb 256 --skip-make --taillog` |
 | `test-ci` | loop: `check smoke-singleprocess smoke-fault smoke-memcheck test-leak test-asan test-ubsan test-singleprocess test-memcheck` |
 | `test-ci-extra` | `test-ci` + `cross-gcc` + `cross-qemu` |
-| `check` | `clean | smoke-assertion ninja-assertions dist install test ctest` with `DESTDIR=@check-install` |
+| `check` | recursive sequential: `clean` → `smoke-assertion ninja-assertions dist install test ctest test-doxygen` with `DESTDIR=@check-install` |
 
 Sanitizer env defaults: `ASAN_OPTIONS=log_path=asan.log:poison_history_size=42`,
 `UBSAN_OPTIONS=log_path=ubsan.log:print_stacktrace=1`. Valgrind suppressions file: `valgrind.supp`.

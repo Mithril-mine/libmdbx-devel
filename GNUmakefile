@@ -58,6 +58,13 @@ CMAKE	?= "$(shell which cmake 2>&-)"
 CMAKE_OPT ?= $(MDBX_BUILD_OPTIONS)
 CTEST	?= ctest
 CTEST_OPT ?=
+# The number of parallel ctest jobs: the actual CPU cores, or 3 when undetectable.
+NPROC	?= $(shell nproc 2>/dev/null || sysctl -n hw.ncpu 2>/dev/null || echo 3)
+# The flavor of the CMake build tree: empty for the default @cmake-ninja-build,
+# or a suffix like "asan"/"ubsan"/"memcheck"/"assertions" to configure and build
+# a dedicated @cmake-ninja-<flavor> tree (see the sanitizer/memcheck flavors).
+FLAVOR	?=
+FLAVOR_DIR = $(if $(FLAVOR),@cmake-ninja-$(FLAVOR),@cmake-ninja-build)
 # target directory for `make dist`
 DIST_DIR ?= dist
 # sanitizers
@@ -212,6 +219,7 @@ help:
 	@echo "  make build-test          - build test(s) executable(s)"
 	@echo "  make test-asan           - build with AddressSanitizer and run basic test"
 	@echo "  make test-leak           - build with LeakSanitizer and run basic test"
+	@echo "  make test-assertions     - the whole test suite with MDBX_CHECKING=2 assertions"
 	@echo "  make test-ubsan          - build with UndefinedBehaviourSanitizer and run basic test"
 	@echo "  make test-memcheck       - build with Valgrind support and run basic test under memcheck tool"
 #> dist-cutoff-begin
@@ -324,18 +332,22 @@ lib-shared libmdbx.$(SO_SUFFIX): mdbx-dylib.o $(call select_by,MDBX_BUILD_CXX,md
 	@echo '  LD $@'
 	$(QUIET)$(call select_by,MDBX_BUILD_CXX,$(CXX) $(CXXFLAGS),$(CC) $(CFLAGS)) $^ -pthread -shared $(LDFLAGS) $(call select_by,MDBX_BUILD_CXX,$(LIB_STDCXXFS)) $(LIBS) -o $@
 
-ninja-assertions: MDBX_CHECKING=2
-ninja-assertions: cmake-build
+# The assertions flavor: a dedicated @cmake-ninja-assertions tree, so the
+# MDBX_CHECKING=2 build neither re-configures the shared @cmake-ninja-build
+# nor races with it under `make -j`.
+ninja-assertions:
+	$(QUIET)$(MAKE) --no-print-directory IOARENA=false FLAVOR=assertions MDBX_CHECKING=2 \
+		MDBX_BUILD_OPTIONS='$(MDBX_BUILD_OPTIONS) -DMDBX_CHECKING=2' ninja
 ninja-debug: CMAKE_OPT += -DCMAKE_BUILD_TYPE=Debug
 ninja-debug: cmake-build
 ninja: cmake-build
 cmake-build:
-	@echo "  RUN: cmake -G Ninja && cmake --build"
-	$(QUIET)mkdir -p @cmake-ninja-build && ASAN_OPTIONS=$(ASAN_OPTIONS) UBSAN_OPTIONS=$(UBSAN_OPTIONS) $(CMAKE) $(CMAKE_OPT) -G Ninja -S . -B @cmake-ninja-build && $(CMAKE) --build @cmake-ninja-build
+	@echo "  RUN: cmake -G Ninja && cmake --build in $(FLAVOR_DIR)"
+	$(QUIET)mkdir -p $(FLAVOR_DIR) && ASAN_OPTIONS=$(ASAN_OPTIONS) UBSAN_OPTIONS=$(UBSAN_OPTIONS) $(CMAKE) $(CMAKE_OPT) -G Ninja -S . -B $(FLAVOR_DIR) && $(CMAKE) --build $(FLAVOR_DIR)
 
 ctest: cmake-build
-	@echo "  RUN: ctest .."
-	$(QUIET)ASAN_OPTIONS=$(ASAN_OPTIONS) UBSAN_OPTIONS=$(UBSAN_OPTIONS) $(CTEST) --test-dir @cmake-ninja-build --parallel `(nproc | sysctl -n hw.ncpu | echo 2) 2>/dev/null` --schedule-random $(CTEST_OPT)
+	@echo "  RUN: ctest .. in $(FLAVOR_DIR)"
+	$(QUIET)ASAN_OPTIONS=$(ASAN_OPTIONS) UBSAN_OPTIONS=$(UBSAN_OPTIONS) $(CTEST) --test-dir $(FLAVOR_DIR) --parallel $(NPROC) --schedule-random $(CTEST_OPT)
 
 run-ut: mdbx_legacy_example $(call select_by,MDBX_BUILD_CXX,mdbx_modern_example,)
 	$(QUIET)for UT in $^; do echo "  Running $$UT" && ASAN_OPTIONS=$(ASAN_OPTIONS) UBSAN_OPTIONS=$(UBSAN_OPTIONS) ./$${UT} || exit -1; done
@@ -352,36 +364,51 @@ TEST_TARGETS += test-stochastic
 TEST_BUILD_TARGETS += build-stochastic
 #< dist-cutoff-end
 
-.PHONY: ninja-assertions ninja-debug ninja $(TEST_TARGETS) $(TEST_BUILD_TARGETS) test-ubsan test-asan test-memcheck test-leak test-assertion test build-test smoke check
+.PHONY: ninja-assertions ninja-debug ninja $(TEST_TARGETS) $(TEST_BUILD_TARGETS) test-ubsan test-asan test-memcheck test-leak test-assertion test-assertions test build-test smoke check
 test: $(TEST_TARGETS)
 build-test: $(TEST_BUILD_TARGETS)
 
 test-valgrind: test-memcheck
 smoke-valgrind: smoke-memcheck
-smoke-memcheck test-memcheck: CFLAGS_EXTRA += -Ofast -DENABLE_MEMCHECK
-smoke-memcheck test-memcheck: MDBX_CHECKING=1
-smoke-memcheck test-memcheck: CMAKE_OPT += -DENABLE_UBSAN:BOOL=OFF -DENABLE_ASAN:BOOL=OFF -DENABLE_MEMCHECK:BOOL=ON
-smoke-memcheck test-memcheck: CTEST_OPT += -T memcheck
-test-memcheck: build-test build-stochastic ctest
+
+# The sanitizer/memcheck/assertions test flavors run as recursive makes:
+# each configures and builds its own @cmake-ninja-<flavor> tree (see FLAVOR)
+# instead of re-configuring the shared @cmake-ninja-build back and forth,
+# so the flavors neither thrash nor race under `make test-asan test-memcheck -j`.
+
+smoke-ubsan: CFLAGS_EXTRA += -DENABLE_UBSAN -Ofast -fsanitize=undefined -fsanitize-undefined-trap-on-error -fno-sanitize-recover=all
+smoke-ubsan: MDBX_CHECKING=2
+smoke-ubsan: smoke
+test-ubsan:
+	$(QUIET)$(MAKE) --no-print-directory IOARENA=false FLAVOR=ubsan MDBX_CHECKING=2 \
+		CMAKE_OPT='$(CMAKE_OPT) -DMDBX_CHECKING=2 -DENABLE_UBSAN:BOOL=ON -DENABLE_ASAN:BOOL=OFF -DENABLE_MEMCHECK:BOOL=OFF' \
+		CFLAGS_EXTRA='$(CFLAGS_EXTRA) -DENABLE_UBSAN -Ofast -fsanitize=undefined -fsanitize-undefined-trap-on-error -fno-sanitize-recover=all' \
+		test
+
+smoke-asan: CFLAGS_EXTRA += -Os -fsanitize=address
+smoke-asan: MDBX_CHECKING=2
+smoke-asan: smoke
+test-asan:
+	$(QUIET)$(MAKE) --no-print-directory IOARENA=false FLAVOR=asan MDBX_CHECKING=2 \
+		CMAKE_OPT='$(CMAKE_OPT) -DMDBX_CHECKING=2 -DENABLE_UBSAN:BOOL=OFF -DENABLE_ASAN:BOOL=ON -DENABLE_MEMCHECK:BOOL=OFF' \
+		CFLAGS_EXTRA='$(CFLAGS_EXTRA) -Os -fsanitize=address' \
+		test
+
+smoke-memcheck: CFLAGS_EXTRA += -Ofast -DENABLE_MEMCHECK
+smoke-memcheck: MDBX_CHECKING=1
+smoke-memcheck: smoke
+test-memcheck:
+	$(QUIET)$(MAKE) --no-print-directory IOARENA=false FLAVOR=memcheck MDBX_CHECKING=1 \
+		CMAKE_OPT='$(CMAKE_OPT) -DMDBX_CHECKING=1 -DENABLE_UBSAN:BOOL=OFF -DENABLE_ASAN:BOOL=OFF -DENABLE_MEMCHECK:BOOL=ON' \
+		CFLAGS_EXTRA='$(CFLAGS_EXTRA) -Ofast -DENABLE_MEMCHECK' \
+		CTEST_OPT='$(CTEST_OPT) -T memcheck' build-test build-stochastic ctest
 	@echo '  RUNNING `tests/stochastic.sh --with-valgrind --loops 2`...'
 	$(QUIET)$(STOCHASTIC) --with-valgrind --loops 2 --pagesize min --db-upto-mb 256 --skip-make >$(TEST_LOG) || (cat $(TEST_LOG) && false)
-smoke-memcheck: smoke
 
-smoke-assertion test-assertion: MDBX_CHECKING=2
-test-assertion: test
-smoke-assertion: smoke
-
-smoke-ubsan test-ubsan: CFLAGS_EXTRA += -DENABLE_UBSAN -Ofast -fsanitize=undefined -fsanitize-undefined-trap-on-error -fno-sanitize-recover=all
-smoke-ubsan test-ubsan: CMAKE_OPT += -DENABLE_UBSAN:BOOL=ON -DENABLE_ASAN:BOOL=OFF -DENABLE_MEMCHECK:BOOL=OFF
-smoke-ubsan test-ubsan: MDBX_CHECKING=2
-test-ubsan: test
-smoke-ubsan: smoke
-
-smoke-asan test-asan: CFLAGS_EXTRA += -Os -fsanitize=address
-smoke-asan test-asan: CMAKE_OPT += -DENABLE_UBSAN:BOOL=OFF -DENABLE_ASAN:BOOL=ON -DENABLE_MEMCHECK:BOOL=OFF
-smoke-asan test-asan: MDBX_CHECKING=2
-test-asan: test
-smoke-asan: smoke
+test-assertions: test-assertion
+test-assertion:
+	$(QUIET)$(MAKE) --no-print-directory IOARENA=false FLAVOR=assertions \
+		MDBX_BUILD_OPTIONS='$(MDBX_BUILD_OPTIONS) -DMDBX_CHECKING=2' test
 
 test-leak:
 	@echo '  RE-TEST with `-fsanitize=leak` option...'
@@ -537,9 +564,16 @@ MDBX_DIST_DIR = libmdbx-$(MDBX_VERSION_NODOT)
 # Extra options mdbx_test utility
 MDBX_SMOKE_EXTRA ?=
 
-check: DESTDIR = $(shell pwd)/@check-install
-check: CMAKE_OPT += -Werror=dev
-check: clean | smoke-assertion ninja-assertions dist install test ctest test-doxygen
+# The whole check sequence runs as a recursive make, strictly sequentially:
+# `clean` first (it must not race with the builds under `make -j`), then the
+# steps in their order. The DESTDIR/CMAKE_OPT overrides are inherited by
+# every step.
+check:
+	@echo '  CHECK: clean, smoke+assertions, dist, install, tests, ctest, doxygen...'
+	$(QUIET)$(MAKE) --no-print-directory IOARENA=false clean
+	$(QUIET)$(MAKE) --no-print-directory IOARENA=false DESTDIR=$(shell pwd)/@check-install \
+		CMAKE_OPT='$(MDBX_BUILD_OPTIONS) -Werror=dev' \
+		smoke-assertion ninja-assertions dist install test ctest test-doxygen
 smoke-assertion: MDBX_CHECKING=2
 smoke-assertion: smoke
 long-test-assertion: MDBX_CHECKING=2
@@ -585,7 +619,7 @@ smoke-fault: build-stochastic
 define ctest-scenario-run
 	@echo '  RUN: ctest --label-regex $(2) in $(1)'
 	$(QUIET)ASAN_OPTIONS=$(ASAN_OPTIONS) UBSAN_OPTIONS=$(UBSAN_OPTIONS) $(CTEST) --test-dir $(1) \
-		--label-regex '$(2)' --output-on-failure --parallel `(nproc | sysctl -n hw.ncpu | echo 2) 2>/dev/null` $(3) $(CTEST_OPT)
+		--label-regex '$(2)' --output-on-failure --parallel $(NPROC) --schedule-random $(3) $(CTEST_OPT)
 endef
 
 cmake-stochastic-build:
@@ -965,7 +999,8 @@ release-assets: libmdbx-amalgamated-$(MDBX_GIT_3DOT).zpaq \
 $(DIST_DIR)/mdbx-internals.h: src/version.c $(DIST_DIR)/@tmp-amalgam.h $(ALLOY_DEPS) $(lastword $(MAKEFILE_LIST))
 	@echo '  ALLOYING...'
 	$(QUIET)mkdir -p dist \
-	&& (grep -v '#include ' src/alloy.c && echo '#define MDBX_BUILD_SOURCERY $(MDBX_BUILD_SOURCERY)' \
+	&& (grep -v '#include ' src/alloy.c | $(SED) -e '/dist-cutoff-begin/,/dist-cutoff-end/d' \
+	&& echo '#define MDBX_BUILD_SOURCERY $(MDBX_BUILD_SOURCERY)' \
 	&& $(SED) \
 		-e '/#include "preface.h"/r src/preface.h' \
 		-e '/#include "osal\/osal.h"/r src/osal/osal.h' \
