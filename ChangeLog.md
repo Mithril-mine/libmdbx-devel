@@ -63,7 +63,6 @@ A long-term support release with accumulated backported fixes for data safety, c
     - Fixed assertion failures in creating and renaming tables within nested transactions (backport).
     - Fixed an unbalanced lock release in the environment-resize failure path (backport).
     - Fixed a crash or memory corruption after a resize failed with `MDBX_UNABLE_EXTEND_MAPSIZE` ([#334](https://github.com/Mithril-mine/libmdbx-devel/issues/334)) (backport).
-    - Fixed crashes in open transactions or `mdbx_env_warmup()` after the database size limit was raised ([#315](https://github.com/Mithril-mine/libmdbx-devel/issues/315)) (backport).
     - Fixed a forked child treating a failed unlock of an inherited lock as fatal at some log levels ([#111](https://github.com/Mithril-mine/libmdbx-devel/issues/111)) (backport).
     - Fixed `mdbx_env_warmup()` crashing on a created-but-not-opened environment; now `MDBX_EPERM` ([#114](https://github.com/Mithril-mine/libmdbx-devel/issues/114)) (backport).
     - Fixed a compacting copy hanging forever when its writer thread hit a write error; now reported ([#171](https://github.com/Mithril-mine/libmdbx-devel/issues/171)) (backport).
