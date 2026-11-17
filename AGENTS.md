@@ -65,7 +65,23 @@ Summary:
   Comment on related issues, close fixed ones, answer comments, and thank
   contributors for clarifications.
 
-## 5. Issues workflow
+## 5. Work organization — worktrees, session scope, PR lifecycle (MANDATORY)
+
+- Work only inside your own worktree/workset; never modify anything
+  outside it — other agents' worktrees, foreign session directories, or
+  the main checkout's working files.
+- A worktree/workset you create must live **inside the session's main
+  directory**, not alongside it or anywhere else.
+- When the work is finished, clean up everything: remove the temporary
+  worktree, delete its temporary branches, and remove any temporary files
+  it produced.
+- Every pull request is opened as a **draft** and moved to
+  **ready-for-review** only after the work is complete and its CI is
+  green.
+- A `ready-for-review` PR that violates any rule of this AGENTS.md may
+  be deleted by the bot together with its branch.
+
+## 6. Issues workflow
 
 - When taking an issue, assign it to yourself.
 - Do not take an issue that is assigned to another developer/user without
@@ -84,7 +100,7 @@ Summary:
   mention a user more than once — merge mentions logically.
 - External communications rules: [docs/engineering/issues-pr-codex.md](docs/engineering/issues-pr-codex.md).
 
-## 6. ChangeLog rules
+## 7. ChangeLog rules
 
 Canonical style guide: [docs/engineering/changelog-codex.md](docs/engineering/changelog-codex.md).
 The format follows [Keep a Changelog 2.0.0](https://keepachangelog.com/en/2.0.0/)
@@ -144,7 +160,7 @@ new entry in the appropriate existing type (or an existing `Fixed`
 subsection); when nothing fits, propose a new `Fixed` subsection and ask
 when in doubt.
 
-## 7. Code style
+## 8. Code style
 
 - LLVM code style, **2-space indent**, `ColumnLimit: 120` (see
   [.clang-format](.clang-format) in the repository root; run it before
@@ -160,7 +176,7 @@ when in doubt.
 - Cross-platform correctness, including tests: never compare page-size or
   derived values against constants — it is platform-dependent.
 
-## 8. Build & CI hygiene
+## 9. Build & CI hygiene
 
 - Build and test on **at least Linux and Windows** — build support for both
   platforms is expected for any change (see also
@@ -172,7 +188,7 @@ when in doubt.
   disk space before and after test runs. Tests must clean up their own
   database files — see [tests/AGENTS.md](tests/AGENTS.md) §4.
 
-## 9. Documentation map
+## 10. Documentation map
 
 - [docs/engineering/README.md](docs/engineering/README.md) — documentation index.
 - [docs/engineering/workflows.md](docs/engineering/workflows.md) — branching,
@@ -198,7 +214,7 @@ when in doubt.
 - [skynet/knowledge-map.md](skynet/knowledge-map.md) — knowledge index and
   memory procedures.
 
-## 10. Agent skills profiles
+## 11. Agent skills profiles
 
 Skills live in [`skills/`](skills/README.md) with active copies in
 `.opencode/skills/` (usable through the `skill` tool). Pick a profile by
@@ -218,7 +234,7 @@ Every profile's mandatory context references `docs/engineering/*`
 `test-durability-strategy.md`); read them by link, do not duplicate
 content.
 
-## 11. Skills update & session restart
+## 12. Skills update & session restart
 
 Skills are loaded into opencode sessions at startup. When you change
 `skills/*` or `.opencode/skills/*`:
