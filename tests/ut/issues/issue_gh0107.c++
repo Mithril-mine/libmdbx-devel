@@ -45,6 +45,13 @@ static void put_key(MDBX_txn *txn, MDBX_dbi dbi, const std::string &key) {
   ASSERT_EQ(MDBX_SUCCESS, mdbx_put(txn, dbi, &key_val, &val_val, MDBX_UPSERT));
 }
 
+/* A modest upper bound (the issue_gh0058/59/71/72 idiom): the default ~8 GiB
+ * geometry cannot be mapped in the ASan/Valgrind cells (the sanitizer's
+ * shadow accounting), and the tests here hold only a few tiny records. */
+static bool set_modest_geometry(MDBX_env *env) {
+  return mdbx_env_set_geometry(env, -1, -1, 16 << 20, -1, -1, -1) == MDBX_SUCCESS;
+}
+
 TEST(issue_gh0107, pseudo_names_and_recreate) {
   const env_files_guard guard({"issue107.mdbx", "issue107b.mdbx"});
   if (MDBX_GTEST_IS_EXECUTION_TIMEOUT()) {
@@ -60,6 +67,7 @@ TEST(issue_gh0107, pseudo_names_and_recreate) {
   MDBX_env *env = nullptr;
   ASSERT_EQ(MDBX_SUCCESS, mdbx_env_create(&env));
   ASSERT_EQ(MDBX_SUCCESS, mdbx_env_set_maxdbs(env, 8));
+  EXPECT_TRUE(set_modest_geometry(env));
   ASSERT_EQ(MDBX_SUCCESS, mdbx_env_open(env, testdb.c_str(), MDBX_NOSUBDIR, 0644));
 
   /* The pseudo-name pointers must be recognized without being dereferenced. */
@@ -124,6 +132,7 @@ TEST(issue_gh0107, open_dropped_table_by_another_process) {
   MDBX_env *env = nullptr;
   ASSERT_EQ(MDBX_SUCCESS, mdbx_env_create(&env));
   ASSERT_EQ(MDBX_SUCCESS, mdbx_env_set_maxdbs(env, 8));
+  EXPECT_TRUE(set_modest_geometry(env));
   ASSERT_EQ(MDBX_SUCCESS, mdbx_env_open(env, testdb.c_str(), MDBX_NOSUBDIR, 0644));
 
   {
@@ -144,7 +153,8 @@ TEST(issue_gh0107, open_dropped_table_by_another_process) {
   if (pid == 0) {
     close(pipefd[0]);
     MDBX_env *child_env = nullptr;
-    int rc = (mdbx_env_create(&child_env) == MDBX_SUCCESS && mdbx_env_set_maxdbs(child_env, 8) == MDBX_SUCCESS)
+    int rc = (mdbx_env_create(&child_env) == MDBX_SUCCESS && mdbx_env_set_maxdbs(child_env, 8) == MDBX_SUCCESS &&
+              set_modest_geometry(child_env))
                  ? mdbx_env_open(child_env, testdb.c_str(), MDBX_NOSUBDIR, 0644)
                  : MDBX_PROBLEM;
     if (rc == MDBX_SUCCESS) {
