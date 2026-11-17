@@ -416,23 +416,12 @@ bool simple(mdbx::env env) {
 }
 
 int doit() {
-  // skynet here: temporary breadcrumbs to localize a silent abort on macOS CI (remove after diagnosis).
-#define CRUNCH_TRACE(msg)                                                                                              \
-  do {                                                                                                                 \
-    ::fprintf(stderr, "crunched: %s\n", msg);                                                                          \
-    ::fflush(stderr);                                                                                                  \
-  } while (0)
   mdbx::path db_filename = "test-crunched-del";
   mdbx::env::remove(db_filename);
-  CRUNCH_TRACE("env-remove done");
 
   mdbx::env_managed env(db_filename, mdbx::env_managed::create_parameters(), mdbx::env::operate_parameters(42));
-  CRUNCH_TRACE("env-created");
-  if (!simple(env) || !next_prev_current(env) || !outofrange_prev(env)) {
-    CRUNCH_TRACE("basic-case failed");
+  if (!simple(env) || !next_prev_current(env) || !outofrange_prev(env))
     return EXIT_FAILURE;
-  }
-  CRUNCH_TRACE("basic-cases passed");
 
   std::vector<acase> testset;
   // Там ключи разной длины - от 1 до 64 байт.
@@ -450,8 +439,7 @@ int doit() {
   testset.emplace_back(8, 8, 32, 36, 9);
 
   auto txn = env.start_write();
-  for (unsigned i = 0; i < testset.size(); ++i) {
-    CRUNCH_TRACE("create_and_fill begin");
+  for (unsigned i = 0; i < testset.size(); ++i)
     create_and_fill(txn, testset[i], i);
     CRUNCH_TRACE("create_and_fill done");
   }
@@ -463,20 +451,13 @@ int doit() {
     ::fflush(stderr);
   }
   txn.commit();
-  CRUNCH_TRACE("fill commit done");
 
   txn = env.start_write();
   // mdbx_setup_debug_nofmt(MDBX_LOG_TRACE, MDBX_DBG_AUDIT | MDBX_DBG_ASSERT,
   //                       logger_nofmt, log_buffer, sizeof(log_buffer));
-  for (unsigned i = 0; i < testset.size(); ++i) {
-    CRUNCH_TRACE("chunched_delete begin");
+  for (unsigned i = 0; i < testset.size(); ++i)
     chunched_delete(txn, testset[i], i);
-    CRUNCH_TRACE("chunched_delete done");
-  }
-  CRUNCH_TRACE("delete commit begin");
   txn.commit();
-  CRUNCH_TRACE("delete commit done");
-#undef CRUNCH_TRACE
 
   std::cout << "OK\n";
   return EXIT_SUCCESS;
