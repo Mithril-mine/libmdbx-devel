@@ -247,10 +247,7 @@ __cold static void MDBX_PRINTF_ARGS(2, 3) chk_scope_issue(MDBX_chk_scope_t *cons
 }
 
 __cold static int chk_scope_end(MDBX_chk_internal_t *chk, int err) {
-  /* Only the root scope is left: chk_scope_begin() failed with the scope not entered, or already left, and the
-   * callers end it unconditionally. The root scope itself is never ended. */
-  if (unlikely(chk->scope_depth == 0))
-    return err;
+  assert(chk->scope_depth > 0);
   MDBX_chk_scope_t *const inner = chk->scope_stack + chk->scope_depth;
   MDBX_chk_scope_t *const outer = chk->scope_depth ? inner - 1 : nullptr;
   if (!outer || outer->stage != inner->stage) {
@@ -285,11 +282,8 @@ __cold static int chk_scope_end(MDBX_chk_internal_t *chk, int err) {
 
 __cold static int chk_scope_begin_args(MDBX_chk_internal_t *chk, int verbosity_adjustment, enum MDBX_chk_stage stage,
                                        const void *object, size_t *problems, const char *fmt, va_list args) {
-  if (unlikely(chk->scope_depth + 1u >= ARRAY_LENGTH(chk->scope_stack))) {
-    ERROR("too many nested scopes %u >= %d, %s", chk->scope_depth + 1, (int)ARRAY_LENGTH(chk->scope_stack),
-          "the check is aborted");
-    return MDBX_PROBLEM;
-  }
+  if (unlikely(chk->scope_depth + 1u >= ARRAY_LENGTH(chk->scope_stack)))
+    return MDBX_BACKLOG_DEPLETED;
 
   MDBX_chk_scope_t *const outer = chk->scope_stack + chk->scope_depth;
   const int verbosity = outer->verbosity + (verbosity_adjustment - 1) * (1 << MDBX_chk_severity_prio_shift);
@@ -306,26 +300,18 @@ __cold static int chk_scope_begin_args(MDBX_chk_internal_t *chk, int verbosity_a
 
   if (chk->cb->scope_push) {
     const int err = chk->cb->scope_push(chk->usr, outer, inner, fmt, args);
-    if (unlikely(err != MDBX_SUCCESS)) {
-      /* Either a decline (MDBX_RESULT_TRUE) or an error: the scope is not
-       * entered, but the refusal/failure must be counted, not lost. */
-      mdbx_env_chk_encount_problem(chk->usr);
-      if (chk->problem_counter != &chk->usr->result.total_problems) {
-        chk->usr->result.total_problems += *chk->problem_counter;
-        chk->problem_counter = &chk->usr->result.total_problems;
-      }
+    if (unlikely(err != MDBX_SUCCESS))
       return err;
-    }
   }
   chk->usr->scope = inner;
   chk->usr->scope_nesting = chk->scope_depth += 1;
 
   if (stage != outer->stage && chk->cb->stage_begin) {
-    const int rc = chk->cb->stage_begin(chk->usr, stage);
-    if (unlikely(rc != MDBX_SUCCESS)) {
-      /* `stage_end` and `scope_conclude` may turn the error into success; the scope is left anyway */
-      const int err = chk_scope_end(chk, rc);
-      return err ? err : rc;
+    int err = chk->cb->stage_begin(chk->usr, stage);
+    if (unlikely(err != MDBX_SUCCESS)) {
+      err = chk_scope_end(chk, err);
+      assert(err != MDBX_SUCCESS);
+      return err ? err : MDBX_RESULT_TRUE;
     }
   }
   return MDBX_SUCCESS;
@@ -928,9 +914,6 @@ __cold static int chk_tree(MDBX_chk_scope_t *const scope) {
     for (size_t i = 0; i < ARRAY_LENGTH(chk->table) && chk->table[i]; ++i) {
       MDBX_chk_table_t *const tbl = chk->table[i];
       MDBX_chk_scope_t *inner = chk_scope_push(scope, 0, "tree %s:", chk_v2a(chk, &tbl->name));
-      if (unlikely(!inner))
-        continue /* the `scope_push` callback declined this report: skip it
-                  * for this table, the following ones still get theirs */;
       if (tbl->pages.all == 0)
         chk_line_end(chk_print(chk_line_begin(inner, MDBX_chk_resolution), "empty"));
       else {
@@ -1456,10 +1439,7 @@ __cold static int env_chk(MDBX_chk_scope_t *const scope) {
       chk_scope_issue(inner, "backed-pages %zu > dxb-file-pages %" PRIu64, usr->result.backed_pages, dxbfile_pages);
     if (unlikely(usr->result.backed_pages < NUM_METAS)) {
       chk_scope_issue(inner, "backed-pages %zu < num-metas %u", usr->result.backed_pages, NUM_METAS);
-      /* Let stage_end()/scope_conclude() decide whether to ignore this error
-       * and keep checking: the rest of the section is safe with the degraded
-       * values, and the problem is counted either way. */
-      err = MDBX_CORRUPTED;
+      return MDBX_CORRUPTED;
     }
     if (unlikely(usr->result.backed_pages > (size_t)MAX_PAGENO + 1)) {
       chk_scope_issue(inner, "backed-pages %zu > max-pages %zu", usr->result.backed_pages, (size_t)MAX_PAGENO + 1);
@@ -1584,11 +1564,6 @@ __cold static int env_chk(MDBX_chk_scope_t *const scope) {
     }
   }
   err = chk_scope_restore(scope, err);
-  if (unlikely(err))
-    /* The meta-scope was declined by the callback or failed: without its data
-     * none of the checks below could be performed properly. The refusal/failure
-     * has been counted already. */
-    return err;
 
   //--------------------------------------------------------------------------
 
@@ -1598,9 +1573,6 @@ __cold static int env_chk(MDBX_chk_scope_t *const scope) {
   else {
     err = chk_scope_begin(chk, -1, MDBX_chk_tree, nullptr, &usr->result.tree_problems,
                           "Traversal %s by txn#%" PRIaTXN "...", subj_tree, txn->txnid);
-    if (unlikely(err == MDBX_RESULT_TRUE))
-      chk_line_end(
-          chk_print(chk_line_begin(scope, MDBX_chk_processing), "Declined traversal %s by the callback...", subj_tree));
     if (likely(!err))
       err = chk_tree(usr->scope);
     if (usr->result.tree_problems && usr->result.gc_tree_problems == 0)
@@ -1618,9 +1590,6 @@ __cold static int env_chk(MDBX_chk_scope_t *const scope) {
   else {
     err = chk_scope_begin(chk, -1, MDBX_chk_gc, &chk->table_gc, &usr->result.problems_gc,
                           "Processing %s by txn#%" PRIaTXN "...", subj_gc, txn->txnid);
-    if (unlikely(err == MDBX_RESULT_TRUE))
-      chk_line_end(
-          chk_print(chk_line_begin(scope, MDBX_chk_processing), "Declined processing %s by the callback...", subj_gc));
     if (likely(!err))
       err = chk_db(usr->scope, FREE_DBI, &chk->table_gc, chk_handle_gc);
     line = chk_line_begin(scope, MDBX_chk_info);
