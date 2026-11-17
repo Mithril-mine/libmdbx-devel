@@ -219,11 +219,14 @@ with fault injection (the probe-bus/MPROBE family).
     3. it forces fragmenting the code into separate include files that
        have to be included into common headers and/or handled separately
        during the amalgamation.
-  (Legacy white-box units - `details_rkl/pnl/scan4seq`, the
-  `meta_validate_corpus` format corpus, and the `details_gc_store_retired`
-  hook-replacement GC state unit - are registered exceptions; their staged
-  rework is tracked in issue #519. `details_gc_dense_solve` and
-  `details_troika_fsm` already use the API.)
+  (Legacy white-box units and their staged rework are tracked in issue
+  #519 - no permanent exceptions: `details_scan4seq`, `details_troika_fsm`,
+  `details_gc_dense_solve` and `details_gc_store_retired` already use the
+  API (the latter via the `gc-store-retired.h` multi-instance pattern:
+  gc-put.c includes it for the REAL instance, tests/api.c - for the
+  instrumented one with the stub-renamed callees); the remaining ones -
+  `details_rkl/pnl`, the `meta_validate_corpus` format corpus, the
+  `meta_validate` corpus - are being reworked in stages.)
 - the wiring is gated by `MDBX_ENABLE_TESTS`: the exact value comes from
   the CMake config (`src/config.h.in`, `#cmakedefine01`), the default for
   config-less development builds from `src/options.h` - and both snippets

@@ -1068,7 +1068,6 @@ elseif(TRUE)
       "${MDBX_SOURCE_DIR}/dxb-resize.c"
       "${MDBX_SOURCE_DIR}/env.c"
       "${MDBX_SOURCE_DIR}/essentials.h"
-      "${MDBX_SOURCE_DIR}/gc-dense.h"
       "${MDBX_SOURCE_DIR}/gc-get.c"
       "${MDBX_SOURCE_DIR}/gc-put.c"
       "${MDBX_SOURCE_DIR}/gc-scan4seq.h"

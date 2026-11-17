@@ -2,13 +2,15 @@
 /// \note Please refer to the COPYRIGHT file for explanation of license change, credits and acknowledgments.
 /// \author Леонид Юрьев aka Leonid Yuriev <leo@yuriev.ru> \date 2015-2026
 
-#pragma once
-
 /** \file gc-store-retired.h — сохранение retired-списка в GC: gc_store_retired() с нарезкой BIGFOOT-кусков
- * (извлечено из gc-put.c, 2026-11, кампания верификации — для white-box тестирования
- * tests/ut/api/details_gc_store_retired.c). Требует internals.h (MDBX_txn/cursor, gcu_t из gc.h,
+ * (извлечено из gc-put.c, 2026-11, кампания верификации). Требует internals.h (MDBX_txn/cursor, gcu_t из gc.h,
  * pnl.h, logging). Хуки gc_prepare_stockpile4retired()/gc_clean_stored_retired() объявлены здесь и
- * определены в gc-put.c; тесты подменяют их (и cursor_put) стабами перед включением заголовка. */
+ * определены в gc-put.c.
+ *
+ * Включается дважды в одной единице трансляции alloy-сборки: gc-put.c получает реальный
+ * экземпляр, а tests/api.c — инструментированный (каллеи и вход заменяются макросами
+ * на tst_*-стабы перед включением). Поэтому здесь НЕТ #pragma once: каждый включающий
+ * определяет свои макросы-переименования до вставки содержимого. */
 
 #include "internals.h"
 

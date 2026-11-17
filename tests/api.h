@@ -230,11 +230,22 @@ LIBMDBX_API uint32_t *mdbx_tst_scan4seq_variant(unsigned variant, uint32_t *rang
  * \ingroup c_testing */
 LIBMDBX_API const uint32_t *mdbx_tst_scan4seq_checker(const uint32_t *pnl, size_t seq);
 
-/* The GC dense-packing solver (src/gc-dense.h): the closed-form solution
+/** \brief Runs the gc_store_retired hook-replacement case matrix (the
+ * V-003 regression scenario): crafted retired lists with an in-window
+ * retired-pages growth injected by a cursor_put stub, FIFO/LIFO arms,
+ * goodchunk windows - the REAL store loop from src/gc-store-retired.h is
+ * compiled into the testing API unit with its callees stubbed.
+ *
+ * \return The number of failed internal checks (0 = pass).
+ * \ingroup c_testing */
+LIBMDBX_API int mdbx_tst_gc_store_retired_cases(void);
+
+/* The GC dense-packing solver (src/gc-dense.h — dissolved back into
+ * gc-put.c, the entry is MDBX_INTERNAL there): the closed-form solution
  * covering a `volume` of pages with at most `slots` GC records, cutting
  * chunks from the runs of the page-usage histogram. The differential test
- * (tests/ut/api/details_gc_dense_solve.c) drives it against an
- * independent exact per-run partition DP oracle. */
+ * (tests/ut/api/details_gc_dense_solve.c) drives it against an independent
+ * exact per-run partition DP oracle. */
 
 /** \brief The library's page header size in bytes (the layout constant
  * the GC slot-capacity arithmetic derives from). Pinned to the internal
