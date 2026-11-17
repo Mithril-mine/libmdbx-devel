@@ -105,6 +105,7 @@ A hardening and refinement release: data-safety and corruption-resistance fixes 
     - Fixed a use of uninitialized cursor memory reported by MSan/Valgrind for non-dupsort tables.
 
  - Wrong results and API behavior:
+    - Fixed a spurious `MDBX_EINVAL` on opening under Valgrind in builds without the memcheck support ([#525](https://github.com/Mithril-mine/libmdbx-devel/pull/525)).
     - Fixed `mdbx_chk -s` silently succeeding when the named table is absent; now an error ([#386](https://github.com/Mithril-mine/libmdbx-devel/issues/386)).
     - Fixed a whole-table range delete resetting the table's sequence ([#311](https://github.com/Mithril-mine/libmdbx-devel/issues/311)).
     - Fixed `mdbx_env_info_ex()` leaving the output unset on a not-open environment; zeroed now ([2/15 of #319](https://github.com/Mithril-mine/libmdbx-devel/issues/319)).

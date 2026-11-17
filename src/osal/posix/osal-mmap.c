@@ -115,7 +115,12 @@ retry:
   if (unlikely(map->base == MAP_FAILED)) {
     err = errno;
     ASSERT(err != 0);
-    if ((RUNNING_ON_ASAN || mdbx_running_on_Valgrind()) && err == EINVAL && map->limit - map->current > MEGABYTE) {
+    /* EINVAL for a large length means the address space is too tight for the mapping: e.g. Valgrind's
+     * aspacem synthesizes it for lengths beyond the client space, and in builds without the memcheck
+     * support the sanitizer's presence is undetectable (no ENABLE_MEMCHECK, thus RUNNING_ON_VALGRIND
+     * is unavailable). So there is no reason to require the sanitizer's detection here, and halving
+     * toward the current size is the graceful degradation (see the "reduced" NOTICE below). */
+    if (err == EINVAL && map->limit - map->current > MEGABYTE) {
       map->limit -= (map->limit - map->current) / 2;
       map->limit = max_unsigned(size, floor_powerof2(map->limit, MEGABYTE));
       goto retry;
@@ -125,9 +130,9 @@ retry:
     map->base = nullptr;
     return LOG_IFERR(err);
   }
-  if (unlikely(map->limit < limit) && (RUNNING_ON_ASAN || mdbx_running_on_Valgrind()))
+  if (unlikely(map->limit < limit))
     NOTICE("Mapping size has been reduced from %zu to %zu for compatibility with %s", limit, map->limit,
-           RUNNING_ON_VALGRIND ? "Valgrind" : "AddressSanitizer");
+           RUNNING_ON_VALGRIND ? "Valgrind" : (RUNNING_ON_ASAN ? "AddressSanitizer" : "the address space limits"));
 
 #ifdef MADV_DONTFORK
   if (unlikely(madvise(map->base, map->limit, MADV_DONTFORK) != 0)) {
