@@ -109,6 +109,11 @@ TEST(issue_gh0059, failed_second_open_must_not_drop_first_handle_locks) {
                  : MDBX_PROBLEM;
     const ssize_t n = write(pipefd[1], &rc, sizeof(rc));
     (void)n;
+    /* Release the inherited parent's environment: at the child's exit its
+     * basal-txn allocations would be reported as possibly lost. The forced
+     * close skips the lck-ops, so neither the parent's environment nor its
+     * file locks are touched - the very subject of this check. */
+    mdbx_env_close_ex(first, 1);
     _exit(0);
   }
   close(pipefd[1]);

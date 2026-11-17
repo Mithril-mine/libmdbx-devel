@@ -163,6 +163,11 @@ TEST(issue_gh0107, open_dropped_table_by_another_process) {
       }
     }
     mdbx_env_close(child_env);
+    /* Release the inherited parent's environment: at the child's exit its
+     * basal-txn and shadow-page allocations would be reported as possibly
+     * lost. The forced close skips the lck-ops, so the parent's shared
+     * locks and the environment itself are untouched. */
+    mdbx_env_close_ex(env, 1);
     const ssize_t n = write(pipefd[1], &rc, sizeof(rc));
     (void)n;
     _exit(0);
