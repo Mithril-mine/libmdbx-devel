@@ -22,15 +22,6 @@
 
 #include "../mdbx.h++"
 
-// skynet here: stable's preface.h defines IS_WINDOWS, but it is not a part of the lts/0.13 build.
-#if !defined(IS_WINDOWS)
-#if defined(_WIN32) || defined(_WIN64) || defined(_WINDOWS)
-#define IS_WINDOWS 1
-#else
-#define IS_WINDOWS 0
-#endif
-#endif /* IS_WINDOWS */
-
 #include <array>
 #include <atomic>
 #include <cctype> // for isxdigit(), etc
@@ -290,7 +281,7 @@ namespace mdbx {
 
 [[noreturn]] __cold void throw_bad_value_size() { throw bad_value_size(MDBX_BAD_VALSIZE); }
 
-__cold exception::exception(const ::mdbx::error &error) : base(error.what()), error_(error) {}
+__cold exception::exception(const ::mdbx::error &error) noexcept : base(error.what()), error_(error) {}
 
 __cold exception::~exception() noexcept {}
 
@@ -339,7 +330,6 @@ DEFINE_EXCEPTION(duplicated_lck_file)
 DEFINE_EXCEPTION(dangling_map_id)
 DEFINE_EXCEPTION(transaction_ousted)
 DEFINE_EXCEPTION(mvcc_retarded)
-DEFINE_EXCEPTION(laggard_reader)
 #undef DEFINE_EXCEPTION
 
 __cold const char *error::what() const noexcept {
@@ -372,6 +362,12 @@ __cold std::string error::message() const {
   char buf[1024];
   const char *msg = ::mdbx_strerror_r(code(), buf, sizeof(buf));
   return std::string(msg ? msg : "unknown");
+}
+
+[[noreturn]] __cold void error::panic(const char *context, const char *func) const noexcept {
+  assert(code() != MDBX_SUCCESS);
+  ::mdbx_panic("mdbx::%s.%s(): \"%s\" (%d)", context, func, what(), code());
+  std::terminate();
 }
 
 __cold void error::throw_exception() const {
@@ -652,7 +648,7 @@ char *to_hex::write_bytes(char *__restrict const dest, size_t dest_size) const {
 
   auto ptr = dest;
   auto src = source.byte_ptr();
-  const char alpha_offset = (uppercase ? 'A' : 'a') - '9' - 1;
+  const char alpha_shift = (uppercase ? 'A' : 'a') - '9' - 1;
   auto line = ptr;
   for (const auto end = source.end_byte_ptr(); src != end; ++src) {
     if (wrap_width && size_t(ptr - line) >= wrap_width) {
@@ -661,8 +657,8 @@ char *to_hex::write_bytes(char *__restrict const dest, size_t dest_size) const {
     }
     const int8_t hi = *src >> 4;
     const int8_t lo = *src & 15;
-    ptr[0] = char('0' + hi + (((9 - hi) >> 7) & alpha_offset));
-    ptr[1] = char('0' + lo + (((9 - lo) >> 7) & alpha_offset));
+    ptr[0] = char('0' + hi + (((9 - hi) >> 7) & alpha_shift));
+    ptr[1] = char('0' + lo + (((9 - lo) >> 7) & alpha_shift));
     ptr += 2;
     assert(ptr <= dest + dest_size);
   }
@@ -674,7 +670,7 @@ char *to_hex::write_bytes(char *__restrict const dest, size_t dest_size) const {
     MDBX_CXX20_LIKELY {
       ::std::ostream::sentry sentry(out);
       auto src = source.byte_ptr();
-      const char alpha_offset = (uppercase ? 'A' : 'a') - '9' - 1;
+      const char alpha_shift = (uppercase ? 'A' : 'a') - '9' - 1;
       unsigned width = 0;
       for (const auto end = source.end_byte_ptr(); src != end; ++src) {
         if (wrap_width && width >= wrap_width) {
@@ -683,8 +679,8 @@ char *to_hex::write_bytes(char *__restrict const dest, size_t dest_size) const {
         }
         const int8_t hi = *src >> 4;
         const int8_t lo = *src & 15;
-        out.put(char('0' + hi + (((9 - hi) >> 7) & alpha_offset)));
-        out.put(char('0' + lo + (((9 - lo) >> 7) & alpha_offset)));
+        out.put(char('0' + hi + (((9 - hi) >> 7) & alpha_shift)));
+        out.put(char('0' + lo + (((9 - lo) >> 7) & alpha_shift)));
         width += 2;
       }
     }
@@ -953,11 +949,12 @@ char *from_base58::write_bytes(char *__restrict const dest, size_t dest_size) co
   auto ptr = dest;
   auto begin = source.byte_ptr();
   auto const end = source.end_byte_ptr();
-  while (begin < end && *begin <= /* '0' and other chars less are invalid here */ '1') {
+  while (begin < end && *begin <= '1') {
     if (MDBX_LIKELY(*begin == '1'))
       MDBX_CXX20_LIKELY *ptr++ = 0;
     else if (MDBX_UNLIKELY(!ignore_spaces || !isspace(*begin)))
-      MDBX_CXX20_UNLIKELY throw std::domain_error("mdbx::from_base58:: invalid base58 string");
+      MDBX_CXX20_UNLIKELY
+    throw std::domain_error("mdbx::from_base58:: invalid base58 string");
     ++begin;
   }
 
@@ -1224,9 +1221,11 @@ __cold MDBX_env_flags_t env::operate_parameters::make_flags(bool accede, bool us
   if (options.enable_validation)
     flags |= MDBX_VALIDATION;
 
-  if (mode != env::mode::readonly) {
-    if (options.nested_transactions)
+  if (mode != readonly) {
+    if (options.nested_write_transactions)
       flags &= ~MDBX_WRITEMAP;
+    if (reclaiming.coalesce)
+      flags |= MDBX_COALESCE;
     if (reclaiming.lifo)
       flags |= MDBX_LIFORECLAIM;
     switch (durability) {
@@ -1238,6 +1237,7 @@ __cold MDBX_env_flags_t env::operate_parameters::make_flags(bool accede, bool us
       flags |= MDBX_NOMETASYNC;
       break;
     case env::durability::lazy_weak_tail:
+      static_assert(MDBX_MAPASYNC == MDBX_SAFE_NOSYNC, "WTF? Obsolete C API?");
       flags |= MDBX_SAFE_NOSYNC;
       break;
     case env::durability::whole_fragile:
@@ -1265,11 +1265,11 @@ env::durability env::operate_parameters::durability_from_flags(MDBX_env_flags_t 
 }
 
 env::reclaiming_options::reclaiming_options(MDBX_env_flags_t flags) noexcept
-    : lifo((flags & MDBX_LIFORECLAIM) ? true : false) {}
+    : lifo((flags & MDBX_LIFORECLAIM) ? true : false), coalesce((flags & MDBX_COALESCE) ? true : false) {}
 
 env::operate_options::operate_options(MDBX_env_flags_t flags) noexcept
-    : no_sticky_threads((flags & MDBX_NOSTICKYTHREADS) ? true : false),
-      nested_transactions((flags & (MDBX_WRITEMAP | MDBX_RDONLY)) ? false : true),
+    : no_sticky_threads(((flags & (MDBX_NOSTICKYTHREADS | MDBX_EXCLUSIVE)) == MDBX_NOSTICKYTHREADS) ? true : false),
+      nested_write_transactions((flags & (MDBX_WRITEMAP | MDBX_RDONLY)) ? false : true),
       exclusive((flags & MDBX_EXCLUSIVE) ? true : false), disable_readahead((flags & MDBX_NORDAHEAD) ? true : false),
       disable_clear_memory((flags & MDBX_NOMEMINIT) ? true : false),
       enable_validation((flags & MDBX_VALIDATION) ? true : false) {}
@@ -1296,7 +1296,7 @@ __cold env &env::copy(const ::std::string &destination, bool compactify, bool fo
   return copy(destination.c_str(), compactify, force_dynamic_size);
 }
 
-#if IS_WINDOWS
+#if defined(_WIN32) || defined(_WIN64)
 __cold env &env::copy(const wchar_t *destination, bool compactify, bool force_dynamic_size) {
   error::success_or_throw(::mdbx_env_copyW(handle_, destination,
                                            (compactify ? MDBX_CP_COMPACT : MDBX_CP_DEFAULTS) |
@@ -1315,18 +1315,18 @@ __cold env &env::copy(const MDBX_STD_FILESYSTEM_PATH &destination, bool compacti
 }
 #endif /* MDBX_STD_FILESYSTEM_PATH */
 
-__cold const mdbx::path_char *env::get_path() const {
-#if IS_WINDOWS
+__cold path env::get_path() const {
+#if defined(_WIN32) || defined(_WIN64)
   const wchar_t *c_wstr = nullptr;
   error::success_or_throw(::mdbx_env_get_pathW(handle_, &c_wstr));
   static_assert(sizeof(path::value_type) == sizeof(wchar_t), "Oops");
-  return c_wstr;
+  return path(c_wstr);
 #else
   const char *c_str = nullptr;
   error::success_or_throw(::mdbx_env_get_path(handle_, &c_str));
   static_assert(sizeof(path::value_type) == sizeof(char), "Oops");
-  return c_str;
-#endif /* Windows */
+  return path(c_str);
+#endif
 }
 
 __cold bool env::remove(const char *pathname, const remove_mode mode) {
@@ -1337,7 +1337,7 @@ __cold bool env::remove(const ::std::string &pathname, const remove_mode mode) {
   return remove(pathname.c_str(), mode);
 }
 
-#if IS_WINDOWS
+#if defined(_WIN32) || defined(_WIN64)
 __cold bool env::remove(const wchar_t *pathname, const remove_mode mode) {
   return !error::boolean_or_throw(::mdbx_env_deleteW(pathname, MDBX_env_delete_mode_t(mode)));
 }
@@ -1362,24 +1362,9 @@ static inline MDBX_env *create_env() {
   return ptr;
 }
 
-env_managed &env_managed::operator=(env_managed &&other) noexcept {
-  if (this != &other) {
-    if (MDBX_UNLIKELY(handle_))
-      MDBX_CXX20_UNLIKELY {
-        assert(handle_ != other.handle_);
-        /* best-effort release: never throw from a noexcept move-assignment
-         * (issue #60) */
-        (void)::mdbx_env_close(handle_);
-      }
-    inherited::operator=(static_cast<env &&>(std::move(other)));
-  }
-  return *this;
-}
-
-__cold env_managed::~env_managed() {
+__cold env_managed::~env_managed() noexcept {
   if (MDBX_UNLIKELY(handle_))
-    /* best-effort release: never throw from a destructor (issue #60) */
-    (void)::mdbx_env_close(handle_);
+    MDBX_CXX20_UNLIKELY error::success_or_panic(::mdbx_env_close(handle_), "mdbx::~env()", "mdbx_env_close");
 }
 
 __cold void env_managed::close(bool dont_sync) {
@@ -1419,7 +1404,7 @@ __cold env_managed::env_managed(const char *pathname, const operate_parameters &
   setup(op.max_maps, op.max_readers);
   error::success_or_throw(::mdbx_env_open(handle_, pathname, op.make_flags(accede), 0));
 
-  if (op.options.nested_transactions && !get_options().nested_transactions)
+  if (op.options.nested_write_transactions && !get_options().nested_write_transactions)
     MDBX_CXX20_UNLIKELY error::throw_exception(MDBX_INCOMPATIBLE);
 }
 
@@ -1431,7 +1416,7 @@ __cold env_managed::env_managed(const char *pathname, const env_managed::create_
   error::success_or_throw(
       ::mdbx_env_open(handle_, pathname, op.make_flags(accede, cp.use_subdirectory), cp.file_mode_bits));
 
-  if (op.options.nested_transactions && !get_options().nested_transactions)
+  if (op.options.nested_write_transactions && !get_options().nested_write_transactions)
     MDBX_CXX20_UNLIKELY error::throw_exception(MDBX_INCOMPATIBLE);
 }
 
@@ -1442,13 +1427,13 @@ __cold env_managed::env_managed(const ::std::string &pathname, const env_managed
                                 const env::operate_parameters &op, bool accede)
     : env_managed(pathname.c_str(), cp, op, accede) {}
 
-#if IS_WINDOWS
+#if defined(_WIN32) || defined(_WIN64)
 __cold env_managed::env_managed(const wchar_t *pathname, const operate_parameters &op, bool accede)
     : env_managed(create_env()) {
   setup(op.max_maps, op.max_readers);
   error::success_or_throw(::mdbx_env_openW(handle_, pathname, op.make_flags(accede), 0));
 
-  if (op.options.nested_transactions && !get_options().nested_transactions)
+  if (op.options.nested_write_transactions && !get_options().nested_write_transactions)
     MDBX_CXX20_UNLIKELY error::throw_exception(MDBX_INCOMPATIBLE);
 }
 
@@ -1460,7 +1445,7 @@ __cold env_managed::env_managed(const wchar_t *pathname, const env_managed::crea
   error::success_or_throw(
       ::mdbx_env_openW(handle_, pathname, op.make_flags(accede, cp.use_subdirectory), cp.file_mode_bits));
 
-  if (op.options.nested_transactions && !get_options().nested_transactions)
+  if (op.options.nested_write_transactions && !get_options().nested_write_transactions)
     MDBX_CXX20_UNLIKELY error::throw_exception(MDBX_INCOMPATIBLE);
 }
 
@@ -1483,149 +1468,43 @@ __cold env_managed::env_managed(const MDBX_STD_FILESYSTEM_PATH &pathname, const 
 
 //------------------------------------------------------------------------------
 
-__cold env_managed env_managed::open_for_recovery(const char *pathname, unsigned target_meta, bool writeable,
-                                                  unsigned max_maps) {
-  env_managed result(create_env());
-  if (max_maps > 0)
-    error::success_or_throw(::mdbx_env_set_maxdbs(result.handle_, max_maps));
-  error::success_or_throw(::mdbx_env_open_for_recovery(result.handle_, pathname, target_meta, writeable));
-  return result;
-}
-
-__cold env_managed env_managed::open_for_recovery(const ::std::string &pathname, unsigned target_meta, bool writeable,
-                                                  unsigned max_maps) {
-  return open_for_recovery(pathname.c_str(), target_meta, writeable, max_maps);
-}
-
-#if defined(_WIN32) || defined(_WIN64)
-__cold env_managed env_managed::open_for_recovery(const wchar_t *pathname, unsigned target_meta, bool writeable,
-                                                  unsigned max_maps) {
-  env_managed result(create_env());
-  if (max_maps > 0)
-    error::success_or_throw(::mdbx_env_set_maxdbs(result.handle_, max_maps));
-  error::success_or_throw(::mdbx_env_open_for_recoveryW(result.handle_, pathname, target_meta, writeable));
-  return result;
-}
-
-__cold env_managed env_managed::open_for_recovery(const ::std::wstring &pathname, unsigned target_meta, bool writeable,
-                                                  unsigned max_maps) {
-  return open_for_recovery(pathname.c_str(), target_meta, writeable, max_maps);
-}
-#endif /* Windows */
-
-#ifdef MDBX_STD_FILESYSTEM_PATH
-__cold env_managed env_managed::open_for_recovery(const MDBX_STD_FILESYSTEM_PATH &pathname, unsigned target_meta,
-                                                  bool writeable, unsigned max_maps) {
-  return open_for_recovery(pathname.native(), target_meta, writeable, max_maps);
-}
-#endif /* MDBX_STD_FILESYSTEM_PATH */
-
-//------------------------------------------------------------------------------
-
-void cursor_managed::close() {
-  error::success_or_throw(::mdbx_cursor_close2(handle_));
-  handle_ = nullptr;
-}
-
-// skynet here: lts/0.13 has no mdbx_cursor_clone(), the position is duplicated by mdbx_cursor_copy().
-cursor_managed cursor::clone(void *your_context) const {
-  cursor_managed clone(your_context);
-  error::success_or_throw(::mdbx_cursor_copy(handle_, clone.handle_));
-  return clone;
-}
-
-cursor_managed &cursor_managed::operator=(cursor_managed &&other) noexcept {
-  if (this != &other) {
-    if (MDBX_UNLIKELY(handle_))
-      MDBX_CXX20_UNLIKELY {
-        assert(handle_ != other.handle_);
-        /* best-effort release: never throw from a noexcept move-assignment
-         * (issue #60) */
-        (void)::mdbx_cursor_close2(handle_);
-      }
-    inherited::operator=(static_cast<cursor &&>(std::move(other)));
-  }
-  return *this;
-}
-
-cursor_managed::~cursor_managed() {
-  if (handle_)
-    /* best-effort release: never throw from a destructor (issue #60) */
-    (void)::mdbx_cursor_close2(handle_);
-}
-
-//------------------------------------------------------------------------------
-
-txn_managed txn::start_nested() { return start_nested(false); }
-
-txn_managed txn::start_nested(bool readonly) {
+txn_managed txn::start_nested() {
   MDBX_txn *nested;
   error::throw_on_nullptr(handle_, MDBX_BAD_TXN);
-  error::success_or_throw(
-      ::mdbx_txn_begin(mdbx_txn_env(handle_), handle_, readonly ? MDBX_TXN_RDONLY : MDBX_TXN_READWRITE, &nested));
+  error::success_or_throw(::mdbx_txn_begin(mdbx_txn_env(handle_), handle_, MDBX_TXN_READWRITE, &nested));
   assert(nested != nullptr);
   return txn_managed(nested);
 }
 
-txn_managed &txn_managed::operator=(txn_managed &&other) noexcept {
-  if (this != &other) {
-    if (MDBX_UNLIKELY(handle_))
-      MDBX_CXX20_UNLIKELY {
-        assert(handle_ != other.handle_);
-        /* best-effort release: never throw from a noexcept move-assignment
-         * (issue #60) */
-        (void)::mdbx_txn_abort(handle_);
-      }
-    inherited::operator=(static_cast<txn &&>(std::move(other)));
-  }
-  return *this;
-}
-
-txn_managed::~txn_managed() {
+txn_managed::~txn_managed() noexcept {
   if (MDBX_UNLIKELY(handle_))
-    /* best-effort release: never throw from a destructor (issue #60) */
-    (void)::mdbx_txn_abort(handle_);
+    MDBX_CXX20_UNLIKELY error::success_or_panic(::mdbx_txn_abort(handle_), "mdbx::~txn", "mdbx_txn_abort");
 }
 
-void txn_managed::abort() { abort(nullptr); }
-
-void txn_managed::commit() { commit(nullptr); }
-
-void txn_managed::abort(finalization_latency *latency) {
-  (void)latency /* no latency-parameter in the lts/0.13 C API */;
-  if (handle_ && (::mdbx_txn_flags(handle_) & MDBX_TXN_HAS_CHILD))
-    /* the C API would also abort and free the child, which a txn_managed may still own */
-    MDBX_CXX20_UNLIKELY error::throw_exception(MDBX_BAD_TXN);
+void txn_managed::abort() {
   const error err = static_cast<MDBX_error_t>(::mdbx_txn_abort(handle_));
   if (MDBX_LIKELY(err.code() != MDBX_THREAD_MISMATCH))
-    /* do not reset the handle in case of errors that do not change the transaction state. */
     MDBX_CXX20_LIKELY handle_ = nullptr;
   if (MDBX_UNLIKELY(err.code() != MDBX_SUCCESS))
     MDBX_CXX20_UNLIKELY err.throw_exception();
 }
 
-void txn_managed::commit(finalization_latency *latency) {
-  if (handle_ && (::mdbx_txn_flags(handle_) & MDBX_TXN_HAS_CHILD))
-    /* the C API would also commit and free the child, which a txn_managed may still own */
-    MDBX_CXX20_UNLIKELY error::throw_exception(MDBX_BAD_TXN);
-  const bool was_errored = (::mdbx_txn_flags(handle_) & MDBX_TXN_ERROR) != 0;
-  const error err = static_cast<MDBX_error_t>(::mdbx_txn_commit_ex(handle_, latency));
+void txn_managed::commit() {
+  const error err = static_cast<MDBX_error_t>(::mdbx_txn_commit(handle_));
   if (MDBX_LIKELY(err.code() != MDBX_THREAD_MISMATCH))
-    /* do not reset the handle in case of errors that do not change the transaction state. */
     MDBX_CXX20_LIKELY handle_ = nullptr;
-  if (MDBX_UNLIKELY(err.code() != MDBX_SUCCESS)) {
-    /* MDBX_RESULT_TRUE: aborted instead of committed, either due to previous errors
-     * or as an empty transaction with MDBX_NOSUCCESS_PURE_COMMIT */
-    if (err.code() == MDBX_RESULT_TRUE) {
-      if (!was_errored)
-        return;
-      error::throw_exception(MDBX_BAD_TXN);
-    }
+  if (MDBX_UNLIKELY(err.code() != MDBX_SUCCESS))
     MDBX_CXX20_UNLIKELY err.throw_exception();
-  }
 }
 
-// skynet here: lts/0.13 has no mdbx_txn_commit_embark_read(), so the read transaction is started explicitly.
+void txn_managed::commit(commit_latency *latency) {
+  const error err = static_cast<MDBX_error_t>(::mdbx_txn_commit_ex(handle_, latency));
+  if (MDBX_LIKELY(err.code() != MDBX_THREAD_MISMATCH))
+    MDBX_CXX20_LIKELY handle_ = nullptr;
+  if (MDBX_UNLIKELY(err.code() != MDBX_SUCCESS))
+    MDBX_CXX20_UNLIKELY err.throw_exception();
+}
+
 void txn_managed::commit_embark_read() {
   auto env = this->env();
   commit();
@@ -1742,27 +1621,7 @@ __cold bool txn::rename_map(const ::std::string &old_name, const ::std::string &
 
 //------------------------------------------------------------------------------
 
-void cursor::update_current(const slice &value) {
-  default_buffer holder;
-  auto key = current().key;
-  if (error::boolean_or_throw(mdbx_is_dirty(mdbx_cursor_txn(handle_), key.iov_base)))
-    key = holder.assign(key).slice();
-
-  update(key, value);
-}
-
-slice cursor::reserve_current(size_t value_length) {
-  default_buffer holder;
-  auto key = current().key;
-  if (error::boolean_or_throw(mdbx_is_dirty(mdbx_cursor_txn(handle_), key.iov_base)))
-    key = holder.assign(key).slice();
-
-  return update_reserve(key, value_length);
-}
-
-//------------------------------------------------------------------------------
-
-__cold ::std::ostream &operator<<(::std::ostream &out, const slice &it) {
+__cold::std::ostream &operator<<(::std::ostream &out, const slice &it) {
   out << "{";
   if (!it.is_valid())
     out << "INVALID." << it.length();
@@ -1783,15 +1642,15 @@ __cold ::std::ostream &operator<<(::std::ostream &out, const slice &it) {
   return out << "}";
 }
 
-__cold ::std::ostream &operator<<(::std::ostream &out, const pair &it) {
+__cold::std::ostream &operator<<(::std::ostream &out, const pair &it) {
   return out << "{" << it.key << " => " << it.value << "}";
 }
 
-__cold ::std::ostream &operator<<(::std::ostream &out, const pair_result &it) {
+__cold::std::ostream &operator<<(::std::ostream &out, const pair_result &it) {
   return out << "{" << (it.done ? "done: " : "non-done: ") << it.key << " => " << it.value << "}";
 }
 
-__cold ::std::ostream &operator<<(::std::ostream &out, const ::mdbx::env::geometry::size &it) {
+__cold::std::ostream &operator<<(::std::ostream &out, const ::mdbx::env::geometry::size &it) {
   switch (it.bytes) {
   case ::mdbx::env::geometry::default_value:
     return out << "default";
@@ -1831,7 +1690,7 @@ __cold ::std::ostream &operator<<(::std::ostream &out, const ::mdbx::env::geomet
   return out;
 }
 
-__cold ::std::ostream &operator<<(::std::ostream &out, const env::geometry &it) {
+__cold::std::ostream &operator<<(::std::ostream &out, const env::geometry &it) {
   return                                                                //
       out << "\tlower " << env::geometry::size(it.size_lower)           //
           << ",\n\tnow " << env::geometry::size(it.size_now)            //
@@ -1841,7 +1700,7 @@ __cold ::std::ostream &operator<<(::std::ostream &out, const env::geometry &it) 
           << ",\n\tpagesize " << env::geometry::size(it.pagesize) << "\n";
 }
 
-__cold ::std::ostream &operator<<(::std::ostream &out, const env::operate_parameters &it) {
+__cold::std::ostream &operator<<(::std::ostream &out, const env::operate_parameters &it) {
   return out << "{\n"                                 //
              << "\tmax_maps " << it.max_maps          //
              << ",\n\tmax_readers " << it.max_readers //
@@ -1852,7 +1711,7 @@ __cold ::std::ostream &operator<<(::std::ostream &out, const env::operate_parame
              << "\n}";
 }
 
-__cold ::std::ostream &operator<<(::std::ostream &out, const env::mode &it) {
+__cold::std::ostream &operator<<(::std::ostream &out, const env::mode &it) {
   switch (it) {
   case env::mode::readonly:
     return out << "readonly";
@@ -1865,7 +1724,7 @@ __cold ::std::ostream &operator<<(::std::ostream &out, const env::mode &it) {
   }
 }
 
-__cold ::std::ostream &operator<<(::std::ostream &out, const env::durability &it) {
+__cold::std::ostream &operator<<(::std::ostream &out, const env::durability &it) {
   switch (it) {
   case env::durability::robust_synchronous:
     return out << "robust_synchronous";
@@ -1880,11 +1739,14 @@ __cold ::std::ostream &operator<<(::std::ostream &out, const env::durability &it
   }
 }
 
-__cold ::std::ostream &operator<<(::std::ostream &out, const env::reclaiming_options &it) {
-  return out << "{" << "lifo: " << (it.lifo ? "yes" : "no") << "}";
+__cold::std::ostream &operator<<(::std::ostream &out, const env::reclaiming_options &it) {
+  return out << "{"                                            //
+             << "lifo: " << (it.lifo ? "yes" : "no")           //
+             << ", coalesce: " << (it.coalesce ? "yes" : "no") //
+             << "}";
 }
 
-__cold ::std::ostream &operator<<(::std::ostream &out, const env::operate_options &it) {
+__cold::std::ostream &operator<<(::std::ostream &out, const env::operate_options &it) {
   static const char comma[] = ", ";
   const char *delimiter = "";
   out << "{";
@@ -1892,8 +1754,8 @@ __cold ::std::ostream &operator<<(::std::ostream &out, const env::operate_option
     out << delimiter << "no_sticky_threads";
     delimiter = comma;
   }
-  if (it.nested_transactions) {
-    out << delimiter << "nested_transactions";
+  if (it.nested_write_transactions) {
+    out << delimiter << "nested_write_transactions";
     delimiter = comma;
   }
   if (it.exclusive) {
@@ -1917,7 +1779,7 @@ __cold ::std::ostream &operator<<(::std::ostream &out, const env::operate_option
   return out << "}";
 }
 
-__cold ::std::ostream &operator<<(::std::ostream &out, const env_managed::create_parameters &it) {
+__cold::std::ostream &operator<<(::std::ostream &out, const env_managed::create_parameters &it) {
   return out << "{\n"                                                        //
              << "\tfile_mode " << std::oct << it.file_mode_bits << std::dec  //
              << ",\n\tsubdirectory " << (it.use_subdirectory ? "yes" : "no") //
@@ -1925,7 +1787,7 @@ __cold ::std::ostream &operator<<(::std::ostream &out, const env_managed::create
              << it.geometry << "}";
 }
 
-__cold ::std::ostream &operator<<(::std::ostream &out, const MDBX_log_level_t &it) {
+__cold::std::ostream &operator<<(::std::ostream &out, const MDBX_log_level_t &it) {
   switch (it) {
   case MDBX_LOG_FATAL:
     return out << "LOG_FATAL";
@@ -1950,7 +1812,7 @@ __cold ::std::ostream &operator<<(::std::ostream &out, const MDBX_log_level_t &i
   }
 }
 
-__cold ::std::ostream &operator<<(::std::ostream &out, const MDBX_debug_flags_t &it) {
+__cold::std::ostream &operator<<(::std::ostream &out, const MDBX_debug_flags_t &it) {
   if (it == MDBX_DBG_DONTCHANGE)
     return out << "DBG_DONTCHANGE";
 
@@ -1994,7 +1856,7 @@ __cold ::std::ostream &operator<<(::std::ostream &out, const MDBX_debug_flags_t 
   return out << "}";
 }
 
-__cold ::std::ostream &operator<<(::std::ostream &out, const ::mdbx::error &err) {
+__cold::std::ostream &operator<<(::std::ostream &out, const ::mdbx::error &err) {
   return out << err.what() << " (" << long(err.code()) << ")";
 }
 

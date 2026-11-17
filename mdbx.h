@@ -505,36 +505,6 @@ typedef mode_t mdbx_mode_t;
 #define MDBX_NORETURN
 #endif /* MDBX_NORETURN */
 
-#ifndef MDBX_LIKELY
-#if defined(DOXYGEN) || (defined(__GNUC__) || __has_builtin(__builtin_expect)) && !defined(__COVERITY__)
-#define MDBX_LIKELY(cond) __builtin_expect(!!(cond), 1)
-#else
-#define MDBX_LIKELY(x) (x)
-#endif
-#endif /* MDBX_LIKELY */
-
-#ifndef MDBX_UNLIKELY
-#if defined(DOXYGEN) || (defined(__GNUC__) || __has_builtin(__builtin_expect)) && !defined(__COVERITY__)
-#define MDBX_UNLIKELY(cond) __builtin_expect(!!(cond), 0)
-#else
-#define MDBX_UNLIKELY(x) (x)
-#endif
-#endif /* MDBX_UNLIKELY */
-
-#ifndef MDBX_INLINE_API_ASSERT
-#if defined(DOXYGEN) || (defined(MDBX_CHECKING) && MDBX_CHECKING > 0) || (defined(MDBX_DEBUG) && MDBX_DEBUG > 0)
-#define MDBX_INLINE_API_ASSERT(expr)                                                                                   \
-  do {                                                                                                                 \
-    if (MDBX_UNLIKELY(!(expr)))                                                                                        \
-      mdbx_assert_fail(nullptr, #expr, __func__, __LINE__);                                                            \
-  } while (0)
-#else
-#define MDBX_INLINE_API_ASSERT(expr)                                                                                   \
-  do {                                                                                                                 \
-  } while (0)
-#endif /* MDBX_INLINE_API_ASSERT */
-#endif /* MDBX_INLINE_API_ASSERT */
-
 #ifndef MDBX_PRINTF_ARGS
 #if defined(__GNUC__) || __has_attribute(__format__) || defined(DOXYGEN)
 #if defined(__MINGW__) || defined(__MINGW32__) || defined(__MINGW64__)

@@ -46,7 +46,7 @@ static bool doit(const mdbx::path &database_pathname) {
   mdbx::env::remove(database_pathname);
   auto operate_parameters = mdbx::env::operate_parameters();
   operate_parameters.max_maps = 11;
-  operate_parameters.options.nested_transactions = true;
+  operate_parameters.options.nested_write_transactions = true;
   mdbx::env_managed env(database_pathname, mdbx::env_managed::create_parameters(), operate_parameters);
 
   auto txn = env.start_write();
