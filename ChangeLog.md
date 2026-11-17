@@ -112,7 +112,6 @@ A long-term support release with accumulated backported fixes for data safety, c
     - Fixed the `_except_handler4 not found` error in 32-bit builds with `MDBX_WITHOUT_MSVC_CRT` (backport).
     - Fixed building with CLANG/LLVM on Windows, including the Microsoft Clang from Visual Studio (backport).
     - Fixed a scan-code path bug on ARM64-Windows with LLP64 (backport).
-    - Fixed the batched writes on Windows after a mid-batch write failure: the cancelled requests are now drained before the ring's resources are reused ([#449](https://github.com/Mithril-mine/libmdbx-devel/issues/449)) (backport).
     - Fixed the Windows I/O ring merging only two contiguous write chunks instead of all of them ([#111](https://github.com/Mithril-mine/libmdbx-devel/issues/111)) (backport).
     - Fixed lost global-initialization and thread-local destructors in static builds with MinGW (backport).
     - Fixed the lock auto-selection on FreeBSD back to System V IPC, POSIX2008 when robust mutexes are usable ([#328](https://github.com/Mithril-mine/libmdbx-devel/issues/328)) (backport).
