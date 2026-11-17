@@ -1708,9 +1708,7 @@ typedef enum MDBX_copy_flags {
   MDBX_CP_DONT_FLUSH = 4u,
 
   /** Use read transaction parking during copying MVCC-snapshot
-   * \see mdbx_txn_park(). In without-lck mode (e.g. for a database opened
-   * from read-only files) the parking is impossible and the throttling
-   * silently skipped. */
+   * \see mdbx_txn_park() */
   MDBX_CP_THROTTLE_MVCC = 8u,
 
   /** Abort/dispose passed transaction after copy
@@ -4393,18 +4391,7 @@ LIBMDBX_API int mdbx_txn_reset(MDBX_txn *txn);
  *                          распарковку/восстановление транзакции при вызове
  *                          функций API предполагающих чтение данных.
  *
- * \note Парковка читающей транзакции требует слота читателя, который
- *       создаётся и отслеживается посредством lock-файла. Если окружение
- *       работает в режиме without-lck (например, открыто из read-only
- *       файлов), такой слот не существует и парковка невозможна в принципе.
- *       В этом случае \ref mdbx_txn_park() возвращает \ref MDBX_EPERM и
- *       оставляет транзакцию в текущем рабочем состоянии, а
- *       \ref mdbx_txn_unpark() также возвращает \ref MDBX_EPERM (issue #316).
- *
- * \returns Ненулевое значение кода ошибки, либо 0 при успешном выполнении.
- * \retval MDBX_EPERM  Окружение работает в режиме without-lck, у читающей
- *                     транзакции нет слота читателя — парковка невозможна
- *                     (issue #316). */
+ * \returns Ненулевое значение кода ошибки, либо 0 при успешном выполнении. */
 LIBMDBX_API int mdbx_txn_park(MDBX_txn *txn, bool autounpark);
 
 /** \brief Распарковывает ранее припаркованную читающую транзакцию.
@@ -4447,17 +4434,7 @@ LIBMDBX_API int mdbx_txn_park(MDBX_txn *txn, bool autounpark);
  *                           MVCC-снимка, так как restart_if_ousted` был задан
  *                           `true`.
  *
- * \retval MDBX_BAD_TXN      Транзакция уже завершена, либо не была запущена.
- *
- * \note Распарковка применима только к фактически припаркованной транзакции.
- *       В режиме without-lck слот читателя не существует, парковка невозможна
- *       в принципе, а \ref mdbx_txn_park() отказывает с \ref MDBX_EPERM
- *       (issue #316). \ref mdbx_txn_unpark() для неприпаркованной транзакции
- *       является тихой no-op операцией и возвращает \ref MDBX_SUCCESS.
- *
- * \retval MDBX_EPERM        Окружение работает в режиме without-lck, у читающей
- *                           транзакции нет слота читателя — распарковка
- *                           невозможна (issue #316). */
+ * \retval MDBX_BAD_TXN      Транзакция уже завершена, либо не была запущена. */
 LIBMDBX_API int mdbx_txn_unpark(MDBX_txn *txn, bool restart_if_ousted);
 
 /** \brief Renew a read-only transaction.
