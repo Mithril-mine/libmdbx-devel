@@ -22,7 +22,6 @@
 #include "mdbx.h++"
 
 #include <array>
-#include <cinttypes>
 #include <iostream>
 #include <random>
 #include <vector>
@@ -418,15 +417,6 @@ int doit() {
   auto txn = env.start_write();
   for (unsigned i = 0; i < testset.size(); ++i)
     create_and_fill(txn, testset[i], i);
-    CRUNCH_TRACE("create_and_fill done");
-  }
-  CRUNCH_TRACE("fill commit begin");
-  {
-    // skynet here: temporary breadcrumb to size the commit at the macOS crash point.
-    const auto info = txn.get_info();
-    ::fprintf(stderr, "crunched: txn txnid=%" PRIu64 ", space used=%" PRIu64 "\n", info.txn_id, info.txn_space_used);
-    ::fflush(stderr);
-  }
   txn.commit();
 
   txn = env.start_write();
@@ -443,9 +433,7 @@ int doit() {
 int main(int argc, char *argv[]) {
   (void)argc;
   (void)argv;
-  // skynet here: temporary DEBUG/AUDIT logging to localize a silent abort on macOS CI (remove after diagnosis).
-  mdbx_setup_debug_nofmt(MDBX_LOG_DEBUG, MDBX_DBG_ASSERT | MDBX_DBG_AUDIT, logger_nofmt, log_buffer,
-                         sizeof(log_buffer));
+  mdbx_setup_debug_nofmt(MDBX_LOG_NOTICE, MDBX_DBG_ASSERT, logger_nofmt, log_buffer, sizeof(log_buffer));
   try {
     return doit();
   } catch (const std::exception &ex) {
