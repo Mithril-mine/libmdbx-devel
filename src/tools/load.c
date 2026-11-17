@@ -171,18 +171,10 @@ static int readhdr(void) {
   dbi_flags = 0;
   sequence = 0;
 
-  const size_t lineno_at_start = lineno;
   while (true) {
     errno = 0;
-    if (fgets(dbuf.iov_base, (int)dbuf.iov_len, stdin) == nullptr) {
-      if (lineno != lineno_at_start) {
-        /* the input ended in the middle of a table's header: a truncated dump */
-        if (!quiet)
-          fprintf(stderr, "%s: line %" PRIiSIZE ": unexpected end of input (dump truncated)\n", prog, lineno);
-        return MDBX_ENODATA;
-      }
+    if (fgets(dbuf.iov_base, (int)dbuf.iov_len, stdin) == nullptr)
       return errno ? errno : EOF;
-    }
     if (user_break)
       return MDBX_EINTR;
 
@@ -893,9 +885,6 @@ int main(int argc, char *argv[]) {
   case EOF:
     err = MDBX_SUCCESS;
   case MDBX_SUCCESS:
-    break;
-  case MDBX_ENODATA:
-    /* readhdr() already reported the truncated dump */
     break;
   case MDBX_EINTR:
     if (!quiet)
