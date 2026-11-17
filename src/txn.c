@@ -1050,15 +1050,9 @@ int txn_check_badbits_parked(const MDBX_txn *txn, int bad_bits) {
 int txn_park(MDBX_txn *txn, bool autounpark) {
   reader_slot_t *const rslot = txn->to.reader;
   tASSERT(txn, (txn->flags & (MDBX_TXN_FINISHED | MDBX_TXN_RDONLY | MDBX_TXN_PARKED)) == MDBX_TXN_RDONLY);
-  tASSERT(txn, !rslot || rslot->tid.weak < MDBX_TID_TXN_OUSTED);
+  tASSERT(txn, txn->to.reader->tid.weak < MDBX_TID_TXN_OUSTED);
   if (unlikely((txn->flags & (MDBX_TXN_FINISHED | MDBX_TXN_RDONLY | MDBX_TXN_PARKED)) != MDBX_TXN_RDONLY))
     return MDBX_BAD_TXN;
-  if (unlikely(!rslot)) {
-    /* without-lck mode: there is no reader slot, and parking is impossible
-     * in principle. There is nowhere to store and track the transaction's
-     * MVCC snapshot in a way visible outside the transaction (issue #316). */
-    return MDBX_EPERM;
-  }
 
   const uint32_t pid = atomic_load32(&rslot->pid, mo_Relaxed);
   const uint64_t tid = atomic_load64(&rslot->tid, mo_Relaxed);
@@ -1085,10 +1079,6 @@ int txn_unpark(MDBX_txn *txn) {
                (MDBX_TXN_RDONLY | MDBX_TXN_PARKED)))
     return ((txn->flags & (MDBX_TXN_FINISHED | MDBX_TXN_OUSTED | MDBX_TXN_ERROR)) == MDBX_TXN_OUSTED) ? MDBX_OUSTED
                                                                                                       : MDBX_BAD_TXN;
-  if (unlikely(!txn->to.reader))
-    /* without-lck mode: see txn_park() — parking is impossible in principle,
-     * so there is nothing to unpark (issue #316) */
-    return MDBX_EPERM;
 
   for (reader_slot_t *const rslot = txn->to.reader; rslot; atomic_yield()) {
     const uint32_t pid = atomic_load32(&rslot->pid, mo_Relaxed);
