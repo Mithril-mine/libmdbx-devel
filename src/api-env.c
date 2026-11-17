@@ -436,7 +436,7 @@ __cold int mdbx_env_deleteW(const wchar_t *pathname, MDBX_env_delete_mode_t mode
     }
 
     if (err == MDBX_SUCCESS && !dxb_absent) {
-      err = osal_removefile(dummy_env->pathname.dxb);
+      err = env_delete_file(dummy_env->pathname.dxb, mode == MDBX_ENV_WAIT_FOR_UNUSED);
       if (err == MDBX_SUCCESS)
         rc = MDBX_SUCCESS;
       else
@@ -444,7 +444,7 @@ __cold int mdbx_env_deleteW(const wchar_t *pathname, MDBX_env_delete_mode_t mode
     }
 
     if (err == MDBX_SUCCESS && !lck_absent) {
-      err = osal_removefile(dummy_env->pathname.lck);
+      err = env_delete_file(dummy_env->pathname.lck, mode == MDBX_ENV_WAIT_FOR_UNUSED);
       if (err == MDBX_SUCCESS)
         rc = MDBX_SUCCESS;
       else
