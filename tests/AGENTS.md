@@ -17,6 +17,13 @@
   `TIMEOUT` registry (see the "Test timeouts" section below).
 - `tests/ut/tools/cleanup-tool.c` — `te_cleanup_tool`: FIXTURES_CLEANUP driver
   for the chained smoke scenarios and the `--scan` enforcement mode.
+- `tests/ut/tools/golden_runner.py` — the `ut_tools_*` golden characterization
+  runner. Golden files may carry line markers for environment-dependent log
+  lines: a line `...` matches zero or more consecutive actual lines, a line
+  `~ TEXT` matches exactly one actual line where each `...` in TEXT stands
+  for any run of characters; everything else is byte-exact. Mark the
+  variance at its observed position (e.g. the tmpfs-only `in-core database`
+  NOTICE), never strip such lines globally — see the runner's header.
 - `tests/framework/` — the stochastic test framework (`mdbx_test`); `tests/ci/`
   — CI cells and orchestration.
 
@@ -112,7 +119,7 @@ and turns the tool into a rubber stamp.
 
 - **Acceptable**: a suppression for a defect in *foreign, unfixable-here*
   code — e.g. the `bash-self-leaks` entry for the `/usr/bin/bash` internals
-  that the golden-runner scripts drag through the tool as traced children.
+  that the script-driven cells drag through the tool as traced children.
 - **Acceptable**: a suppression for a *tool false positive* that our code
   cannot express otherwise — and only with a comment proving it (e.g. the
   `msync-uninit-page-holes` entry: `msync()` flushes whole mapped pages
