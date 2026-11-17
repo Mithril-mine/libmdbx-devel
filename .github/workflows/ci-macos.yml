@@ -2,9 +2,6 @@ name: ci-macos
 
 env:
   CI: GITHUB
-  # skynet here: temporary malloc diagnostics to localize the crunched_delete crash on macOS arm64.
-  MallocGuardEdges: 1
-  MallocScribble: 1
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.head_ref || github.ref }}
