@@ -18,6 +18,24 @@
 #include <sys/cachectl.h>
 #endif
 
+MDBX_MAYBE_UNUSED static inline void osal_compiler_barrier(void) {
+#if defined(__clang__) || defined(__GNUC__)
+  __asm__ __volatile__("" ::: "memory");
+#elif defined(_MSC_VER)
+  _ReadWriteBarrier();
+#elif defined(__INTEL_COMPILER) /* LY: Intel Compiler may mimic GCC and MSC */
+  __memory_barrier();
+#elif defined(__SUNPRO_C) || defined(__sun) || defined(sun)
+  __compiler_barrier();
+#elif (defined(_HPUX_SOURCE) || defined(__hpux) || defined(__HP_aCC)) && (defined(HP_IA64) || defined(__ia64))
+  _Asm_sched_fence(/* LY: no-arg meaning 'all expect ALU', e.g. 0x3D3D */);
+#elif defined(_AIX) || defined(__ppc__) || defined(__powerpc__) || defined(__ppc64__) || defined(__powerpc64__)
+  __fence();
+#else
+#error "Could not guess the kind of compiler, please report to us."
+#endif
+}
+
 MDBX_MAYBE_UNUSED static inline void osal_memory_barrier(void) {
 #ifdef MDBX_HAVE_C11ATOMICS
   atomic_thread_fence(memory_order_seq_cst);
