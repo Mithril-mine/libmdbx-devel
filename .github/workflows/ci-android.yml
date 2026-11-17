@@ -8,7 +8,9 @@ concurrency:
   cancel-in-progress: true
 
 on:
-  # See ci-linux.yml: trimmed set on this branch only + nightly schedule.
+  # See ci-linux.yml: the same gate for pull requests, for this branch
+  # and for the nightly schedule.
+  pull_request:
   push:
     branches: [lts/0.13]
   workflow_dispatch:
