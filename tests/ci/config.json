@@ -110,6 +110,22 @@
       "note": "AddressSanitizer gate: push-quick (fast scope on every PR and devel/master push) + linux-nightly (full scope); RelWithDebInfo keeps the ASan slowdown bounded, the sanitizer itself is the invariant checker; ASAN_OPTIONS=detect_odr_violation=0 is wired by the build (compiler.cmake)"
     },
     {
+      "id": "linux-clang-ubuntu-latest-relwithdebinfo-ubsan",
+      "runs-on": "ubuntu-latest",
+      "env": {
+        "CC": "clang",
+        "CXX": "clang++",
+        "MDBX_BUILD_OPTIONS": "-DMDBX_CHECKING=0 -DMDBX_DEBUG=0"
+      },
+      "cmake": [
+        "-DCMAKE_BUILD_TYPE=RelWithDebInfo",
+        "-DMDBX_BUILD_CXX:BOOL=ON",
+        "-DENABLE_UBSAN:BOOL=ON"
+      ],
+      "ctest": null,
+      "note": "UndefinedBehaviorSanitizer gate (clang; issue #485, defect V-039): push-quick (fast scope on every PR and devel/master push) + linux-nightly (full scope); the bounds checker traps (fsanitize-undefined-trap-on-error) on the crafted maximal-height root split (crafted_meta_v039) and institutionalizes the bounds coverage (#485 RF-4)"
+    },
+    {
       "id": "linux-gcc-ubuntu24-debug-cxx-off",
       "runs-on": "ubuntu-24.04",
       "env": {
@@ -2928,6 +2944,7 @@
   "profiles": {
     "push-quick": [
       "linux-gcc-ubuntu24-debug-cxx-off",
+      "linux-clang-ubuntu-latest-relwithdebinfo-ubsan",
       "linux-gcc-ubuntu-latest-relwithdebinfo-asan",
       "linux-gcc-ubuntu24-release-cxx-on-avoid-msync-on",
       "linux-gcc-ubuntu24-release-cxx-on-alt-options",
@@ -3019,6 +3036,7 @@
     ],
     "linux-nightly": [
       "linux-gcc-ubuntu24-debug-cxx-on",
+      "linux-clang-ubuntu-latest-relwithdebinfo-ubsan",
       "linux-gcc-ubuntu-latest-relwithdebinfo-asan",
       "linux-gcc-ubuntu24-release-cxx-off",
       "linux-gcc-ubuntu26-arm-release-cxx-on",
