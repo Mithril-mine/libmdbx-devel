@@ -2,9 +2,68 @@
 ## Testing instructions
  - use CMake for build and CTest for testing
  - use at least Linux and Windows both environments for build and testing
+ - tests must exercise the real library code: no copies of library code
+   inside tests ("simulacra"); independent from-specification oracles and
+   environment mocks are fine
+ - cross-platform correctness: never compare page-size or derived values
+   against constants — use the actual values from the environment/library
 
 ## Code style
  - use LLVM codestyle
+
+## General workflow
+
+- Work by git-flow: branch → PR → review/CI. Clean the history before
+  merging: fold fix commits into their sources, and resolve **all**
+  reviewer/bot comments before merging.
+- Merging: prefer rebase/fast-forward; a merge commit is acceptable only
+  when the PR carries several independent, non-trivial changes.
+- A PR must reference every related item/issue; when it fully fixes an
+  issue, include a GitHub-recognized closing signature (e.g. `Closes #N`).
+- When taking an issue/backport task, assign it to yourself; do not take
+  issues assigned to others without an explicit hand-off. Backports
+  reference the original issue as a markdown link; external reporters are
+  thanked in the ChangeLog `Appreciations` section (never mention a user
+  more than once). Comments posted to issues/PRs start with the line
+  `// skynet here`.
+
+## Git history
+
+- Every commit must be working and CI-green, so `git bisect` never follows
+  false paths: fixes are folded into their originating commits (amend/
+  fixup), not stacked on top as separate "fix the CI" commits.
+- Do not rewrite history across git tags or release branches; rewriting
+  deeper than a few recent commits requires the owner's approval. Before a
+  force-push: create a backup branch, verify every rewritten point
+  locally, and push with `--force-with-lease`.
+
+## Work organization — worktrees, session scope, PR lifecycle (MANDATORY)
+
+- Work only inside your own worktree/workset; never modify anything
+  outside it — other agents' worktrees, foreign session directories, or
+  the main checkout's working files.
+- A worktree/workset you create must live **inside the session's main
+  directory**, not alongside it or anywhere else.
+- When the work is finished, clean up everything: remove the temporary
+  worktree, delete its temporary branches, and remove any temporary files
+  it produced.
+- Every pull request is opened as a **draft** and moved to
+  **ready-for-review** only after the work is complete and its CI is
+  green.
+- A `ready-for-review` PR that violates any rule of this AGENTS.md may
+  be deleted by the bot together with its branch.
+
+## Testing rules
+
+- Tests must exercise the real library code: copies of library code inside
+  a test ("simulacra", e.g. verbatim extractions) are forbidden — the
+  exercised logic must be the actual library sources (public API,
+  compiling the real source into the test binary, or linking the real
+  objects). Independent from-specification oracles and environment mocks
+  are fine.
+- Cross-platform correctness: never compare page-size or derived values
+  against constants — it is platform-dependent; use the actual values from
+  the environment/library.
 
 ## ChangeLog rules
 
