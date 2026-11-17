@@ -149,19 +149,12 @@ __hot __noinline bool pnl_check(const const_pnl_t pnl, const size_t limit) {
   return true;
 }
 
-/* Merge two descending runs backward into dst, reporting whether an equal
- * pair of items has been seen, i.e. the same page is listed by both lists
- * (a page listed by two GC records). Such a pair is always adjacent in the
- * merged output, and only a flag is reported rather than a counter of
- * duplicates, which is cheaper in the hot loop. */
-static __always_inline bool pnl_merge_inner(pgno_t *__restrict dst, const pgno_t *__restrict src_a,
+static __always_inline void pnl_merge_inner(pgno_t *__restrict dst, const pgno_t *__restrict src_a,
                                             const pgno_t *__restrict src_b,
                                             const pgno_t *__restrict const src_b_detent) {
-  bool duplicates = false;
   do {
 #if MDBX_HAVE_CMOV
     const bool flag = MDBX_PNL_ORDERED(*src_b, *src_a);
-    duplicates |= !MDBX_DISABLE_VALIDATION && *src_a == *src_b;
 #if defined(__LCC__) || __CLANG_PREREQ(13, 0)
     // lcc 1.26: 13ШК (подготовка и первая итерация) + 7ШК (цикл), БЕЗ loop-mode
     // gcc>=7: cmp+jmp с возвратом в тело цикла (WTF?)
@@ -181,18 +174,11 @@ static __always_inline bool pnl_merge_inner(pgno_t *__restrict dst, const pgno_t
 #else  /* MDBX_HAVE_CMOV */
     while (MDBX_PNL_ORDERED(*src_b, *src_a))
       *dst-- = *src_a--;
-    duplicates |= !MDBX_DISABLE_VALIDATION && *src_a == *src_b;
     *dst-- = *src_b--;
 #endif /* !MDBX_HAVE_CMOV */
   } while (likely(src_b > src_b_detent));
-  return duplicates;
 }
 
-/* Merge two descending-sorted lists. Returns the resulting length, which is
- * one less than the sum of the source lengths regardless of the actual
- * number of duplicates: pnl_merge_inner() only reports a flag, not a
- * counter, and shrinking by one is enough for the caller to reject a list
- * with any duplicates. */
 __hot size_t pnl_merge(pnl_t dst, const pnl_t src) {
   assert(pnl_check_allocated(dst, MAX_PAGENO + 1));
   assert(pnl_check(src, MAX_PAGENO + 1));
@@ -212,7 +198,7 @@ __hot size_t pnl_merge(pnl_t dst, const pnl_t src) {
     } else {
     avoid_call_libc_for_short_cases:
       dst[0] = /* the detent */ (MDBX_PNL_ASCENDING ? 0 : P_INVALID);
-      total -= pnl_merge_inner(dst + total, dst + dst_len, src + src_len, src);
+      pnl_merge_inner(dst + total, dst + dst_len, src + src_len, src);
     }
     MDBX_PNL_SETSIZE(dst, total);
   }
