@@ -263,9 +263,7 @@ static defer_free_item_t *dbi_rename_undo_attach(MDBX_txn *txn, MDBX_dbi dbi, de
 /* Export or close DBI handles opened in this txn. */
 int dbi_update(MDBX_txn *txn, int keep) {
   MDBX_env *const env = txn->env;
-  /* keep=true for a nested txn commits its DBI-changes into the parent
-   * (following the stable's txn_nested_commit() flow) */
-  tASSERT(txn, keep || (!txn->parent && txn == env->basal_txn) || !txn->parent || txn != env->basal_txn);
+  tASSERT(txn, (!txn->parent && txn == env->basal_txn) || !keep);
   bool locked = false;
   defer_free_item_t *defer_chain = nullptr;
   TXN_FOREACH_DBI_USER(txn, dbi) {
