@@ -100,6 +100,7 @@ add_issue_test(gh0454 SOURCE "issue_gh0454.c++")
 add_issue_test(gh0485_put_dangling_cursor SOURCE "issue_gh0485_put_dangling_cursor.c++")
 add_issue_test(gh0485_sync_bytes_range SOURCE "issue_gh0485_sync_bytes_range.c++")
 add_issue_test(gh0485_open_damaged_meta0 SOURCE "issue_gh0485_open_damaged_meta0.c++")
+add_issue_test(gh0485_depthmask_height SOURCE "issue_gh0485_depthmask_height.c++")
 
 # V-067/V-068 of #485 need the dump/load tool binaries (the gh0070 pattern).
 if(MDBX_BUILD_TOOLS)

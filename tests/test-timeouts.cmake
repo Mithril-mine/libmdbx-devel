@@ -180,6 +180,7 @@ set(MDBX_TEST_TIMEOUTS
   "gh0454=30"
   "gh0485_put_dangling_cursor=30"
   "gh0485_open_damaged_meta0=30"
+  "gh0485_depthmask_height=30"
   "gh0485_load_nul_line=30"
   "gh0485_load_purge_multitable=30"
   "gh0485_stat_readers_lckless=30"
