@@ -1511,8 +1511,6 @@ int osal_pread(mdbx_filehandle_t fd, void *buf, size_t bytes, uint64_t offset) {
     return MDBX_EINVAL;
 #if defined(_WIN32) || defined(_WIN64)
   OVERLAPPED ov;
-  ov.Internal = 0;
-  ov.InternalHigh = 0;
   ov.hEvent = 0;
   ov.Offset = (DWORD)offset;
   ov.OffsetHigh = HIGH_DWORD(offset);
@@ -1543,23 +1541,13 @@ int osal_pwrite(mdbx_filehandle_t fd, const void *buf, size_t bytes, uint64_t of
   while (true) {
 #if defined(_WIN32) || defined(_WIN64)
     OVERLAPPED ov;
-    ov.Internal = 0;
-    ov.InternalHigh = 0;
     ov.hEvent = 0;
     ov.Offset = (DWORD)offset;
     ov.OffsetHigh = HIGH_DWORD(offset);
 
     DWORD written;
-    if (unlikely(!WriteFile(fd, buf, likely(bytes <= MAX_WRITE) ? (DWORD)bytes : MAX_WRITE, &written, &ov))) {
-      int err = (int)GetLastError();
-      if (err != ERROR_IO_PENDING)
-        return (err == MDBX_SUCCESS) ? /* paranoia */ ERROR_WRITE_FAULT : err;
-      if (!GetOverlappedResult(fd, &ov, &written, true)) {
-        err = (int)GetLastError();
-        CancelIo(fd);
-        return (err == MDBX_SUCCESS) ? /* paranoia */ ERROR_WRITE_FAULT : err;
-      }
-    }
+    if (unlikely(!WriteFile(fd, buf, likely(bytes <= MAX_WRITE) ? (DWORD)bytes : MAX_WRITE, &written, &ov)))
+      return (int)GetLastError();
     if (likely(bytes == written))
       return MDBX_SUCCESS;
 #else
