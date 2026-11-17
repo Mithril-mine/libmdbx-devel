@@ -91,7 +91,7 @@ jobs:
           python3 tests/ci/validate-config.py check-coverage
 
   clang-format:
-    # Enforce the AGENTS.md §7 "run clang-format before publishing" rule on
+    # Enforce the AGENTS.md §8 "run clang-format before publishing" rule on
     # every commit: the tracked C/C++ sources must conform to the repository
     # .clang-format style. On violations the job prints the corrective patch.
     # The style is version-robust; the binary is pinned for deterministic
