@@ -1,5 +1,6 @@
 mdbx_chk vVERSION (BUILD, T-HASH)
 Running for /base.db in 'read-only' mode with verbosity level 1 (of 0..9)...
+...
    open-MADV_DONTNEED 16..16384
    readahead ON 0..10
  - Taking lock... done
