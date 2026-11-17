@@ -28,7 +28,6 @@ STATIC_ASSERT_MSG(MDBX_TST_WALK_DONT_WALK_MAIN == (unsigned)dont_walk_MAIN, "wal
 STATIC_ASSERT_MSG(MDBX_TST_WALK_DONT_CHECK_REVISIT == (unsigned)dont_check_revisit, "walk options");
 /* the scan4seq wrappers expose the list element as a plain uint32_t */
 
-
 STATIC_ASSERT_MSG(MDBX_TST_PAGE_BROKEN == (int)page_broken, "page type");
 STATIC_ASSERT_MSG(MDBX_TST_PAGE_LARGE == (int)page_large, "page type");
 STATIC_ASSERT_MSG(MDBX_TST_PAGE_BRANCH == (int)page_branch, "page type");

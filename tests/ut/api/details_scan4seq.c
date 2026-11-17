@@ -54,18 +54,17 @@ static const char *const variant_names[5] = {"fallback", "impl(dispatch)", "sse2
 
 static void check_case(page_no *pnl, size_t len, size_t seq, size_t num) {
   page_no *const edge = pnl + len;
-  page_no *const refs[5] = {
-      mdbx_tst_scan4seq_variant(MDBX_TST_SCAN4SEQ_FALLBACK, edge, len, seq),
-      mdbx_tst_scan4seq_variant(MDBX_TST_SCAN4SEQ_IMPL, edge, len, seq),
-      (mdbx_tst_scan4seq_variants_mask() & (1u << MDBX_TST_SCAN4SEQ_SSE2))
-          ? mdbx_tst_scan4seq_variant(MDBX_TST_SCAN4SEQ_SSE2, edge, len, seq)
-          : nullptr,
-      (mdbx_tst_scan4seq_variants_mask() & (1u << MDBX_TST_SCAN4SEQ_AVX2))
-          ? mdbx_tst_scan4seq_variant(MDBX_TST_SCAN4SEQ_AVX2, edge, len, seq)
-          : nullptr,
-      (mdbx_tst_scan4seq_variants_mask() & (1u << MDBX_TST_SCAN4SEQ_AVX512BW))
-          ? mdbx_tst_scan4seq_variant(MDBX_TST_SCAN4SEQ_AVX512BW, edge, len, seq)
-          : nullptr};
+  page_no *const refs[5] = {mdbx_tst_scan4seq_variant(MDBX_TST_SCAN4SEQ_FALLBACK, edge, len, seq),
+                            mdbx_tst_scan4seq_variant(MDBX_TST_SCAN4SEQ_IMPL, edge, len, seq),
+                            (mdbx_tst_scan4seq_variants_mask() & (1u << MDBX_TST_SCAN4SEQ_SSE2))
+                                ? mdbx_tst_scan4seq_variant(MDBX_TST_SCAN4SEQ_SSE2, edge, len, seq)
+                                : nullptr,
+                            (mdbx_tst_scan4seq_variants_mask() & (1u << MDBX_TST_SCAN4SEQ_AVX2))
+                                ? mdbx_tst_scan4seq_variant(MDBX_TST_SCAN4SEQ_AVX2, edge, len, seq)
+                                : nullptr,
+                            (mdbx_tst_scan4seq_variants_mask() & (1u << MDBX_TST_SCAN4SEQ_AVX512BW))
+                                ? mdbx_tst_scan4seq_variant(MDBX_TST_SCAN4SEQ_AVX512BW, edge, len, seq)
+                                : nullptr};
   const page_no *const ck = mdbx_tst_scan4seq_checker(pnl, seq);
   page_no *const brute = scan4seq_bruteforce(edge, len, seq);
   /* Not assert(): under -DNDEBUG the references must still be checked, and
