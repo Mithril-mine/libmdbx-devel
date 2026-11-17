@@ -198,29 +198,6 @@ static void chunched_delete(mdbx::txn &txn, const acase &thecase, const unsigned
 
 static char log_buffer[1024];
 
-// skynet here: temporary crash backtracer to localize a silent abort on macOS CI (remove after diagnosis).
-#if !defined(_WIN32) && !defined(_WIN64)
-#include <csignal>
-#include <cstdlib>
-#include <unistd.h>
-#if defined(__APPLE__) || defined(__GLIBC__)
-#include <execinfo.h>
-static void crunched_crash_handler(int sig) {
-  void *bt[32];
-  const int n = ::backtrace(bt, 32);
-  static const char head[] = "\n=== crunched crash, signal ";
-  (void)!::write(STDERR_FILENO, head, sizeof(head) - 1);
-  const char digit = static_cast<char>('0' + sig % 10);
-  (void)!::write(STDERR_FILENO, &digit, 1);
-  (void)!::write(STDERR_FILENO, " ===\n", 5);
-  ::backtrace_symbols_fd(bt, n, STDERR_FILENO);
-  static const char tail[] = "=== crunched crash end ===\n";
-  (void)!::write(STDERR_FILENO, tail, sizeof(tail) - 1);
-  ::_exit(104);
-}
-#endif /* __APPLE__ || __GLIBC__ */
-#endif /* !_WIN32 */
-
 static void logger_nofmt(MDBX_log_level_t loglevel, const char *function, int line, const char *msg,
                          unsigned length) noexcept {
   (void)length;
@@ -469,12 +446,6 @@ int main(int argc, char *argv[]) {
   // skynet here: temporary DEBUG/AUDIT logging to localize a silent abort on macOS CI (remove after diagnosis).
   mdbx_setup_debug_nofmt(MDBX_LOG_DEBUG, MDBX_DBG_ASSERT | MDBX_DBG_AUDIT, logger_nofmt, log_buffer,
                          sizeof(log_buffer));
-#if defined(__APPLE__) || defined(__GLIBC__)
-  ::signal(SIGABRT, crunched_crash_handler);
-  ::signal(SIGBUS, crunched_crash_handler);
-  ::signal(SIGSEGV, crunched_crash_handler);
-  ::signal(SIGILL, crunched_crash_handler);
-#endif /* __APPLE__ || __GLIBC__ */
   try {
     return doit();
   } catch (const std::exception &ex) {
