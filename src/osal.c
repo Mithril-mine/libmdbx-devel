@@ -1666,27 +1666,6 @@ int osal_fsync(mdbx_filehandle_t fd, enum osal_syncmode_bits mode_bits) {
 #endif
 }
 
-/* Write an auxiliary (stub) buffer to the database body through the handle that
- * holds the per-txn body lock: overlapped_fd on Windows when present, otherwise
- * the memory-mapped (lazy) handle.  On Windows byte-range locks are per-handle,
- * so writing a locked region through a different handle fails with
- * ERROR_LOCK_VIOLATION; routing through the lock owner avoids that (issue #203). */
-int osal_dxb_write_stub(const MDBX_env *env, const void *buf, size_t bytes, uint64_t offset) {
-#if defined(_WIN32) || defined(_WIN64)
-  if (env->ioring.overlapped_fd)
-    return osal_pwrite(env->ioring.overlapped_fd, buf, bytes, offset);
-#endif
-  return osal_pwrite(env->lazy_fd, buf, bytes, offset);
-}
-
-int osal_dxb_write_stubv(const MDBX_env *env, struct iovec *iov, size_t sgvcnt, uint64_t offset) {
-#if defined(_WIN32) || defined(_WIN64)
-  if (env->ioring.overlapped_fd)
-    return osal_pwritev(env->ioring.overlapped_fd, iov, sgvcnt, offset);
-#endif
-  return osal_pwritev(env->lazy_fd, iov, sgvcnt, offset);
-}
-
 int osal_filesize(mdbx_filehandle_t fd, uint64_t *length) {
 #if defined(_WIN32) || defined(_WIN64)
   BY_HANDLE_FILE_INFORMATION info;

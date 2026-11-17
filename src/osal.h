@@ -512,10 +512,6 @@ MDBX_INTERNAL int osal_fastmutex_destroy(osal_fastmutex_t *fastmutex);
 MDBX_INTERNAL int osal_pwritev(mdbx_filehandle_t fd, struct iovec *iov, size_t sgvcnt, uint64_t offset);
 MDBX_INTERNAL int osal_pread(mdbx_filehandle_t fd, void *buf, size_t count, uint64_t offset);
 MDBX_INTERNAL int osal_pwrite(mdbx_filehandle_t fd, const void *buf, size_t count, uint64_t offset);
-/* Auxiliary (stub) writes routed through the handle that owns the per-txn body
- * lock; see the comment at the definitions in osal.c. */
-MDBX_INTERNAL int osal_dxb_write_stub(const MDBX_env *env, const void *buf, size_t bytes, uint64_t offset);
-MDBX_INTERNAL int osal_dxb_write_stubv(const MDBX_env *env, struct iovec *iov, size_t sgvcnt, uint64_t offset);
 MDBX_INTERNAL int osal_write(mdbx_filehandle_t fd, const void *buf, size_t count);
 
 MDBX_INTERNAL int osal_thread_create(osal_thread_t *thread, THREAD_RESULT(THREAD_CALL *start_routine)(void *),

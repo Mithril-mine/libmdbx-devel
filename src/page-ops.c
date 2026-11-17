@@ -337,7 +337,7 @@ void page_shadow_release(MDBX_env *env, page_t *dp, size_t npages) {
   }
 }
 
-__cold static int page_kill(MDBX_txn *txn, page_t *mp, pgno_t pgno, size_t npages) {
+__cold static void page_kill(MDBX_txn *txn, page_t *mp, pgno_t pgno, size_t npages) {
   MDBX_env *const env = txn->env;
   DEBUG("kill %zu page(s) %" PRIaPGNO, npages, pgno);
   eASSERT(env, pgno >= NUM_METAS && npages);
@@ -345,21 +345,9 @@ __cold static int page_kill(MDBX_txn *txn, page_t *mp, pgno_t pgno, size_t npage
     const size_t bytes = pgno2bytes(env, npages);
     memset(mp, -1, bytes);
     mp->pgno = pgno;
-    if ((txn->flags & MDBX_WRITEMAP) == 0) {
-      int err = osal_dxb_write_stub(env, mp, bytes, pgno2bytes(env, pgno));
-      if (unlikely(err != MDBX_SUCCESS)) {
-        err = stub_write_errdecide(env, txn, pgno, bytes, err);
-        if (unlikely(err != MDBX_SUCCESS))
-          return err;
-      }
-    }
+    if ((txn->flags & MDBX_WRITEMAP) == 0)
+      osal_pwrite(env->lazy_fd, mp, bytes, pgno2bytes(env, pgno));
   } else {
-    /* Defensive/unreachable as called today: page_kill() is invoked only for a
-     * modifiable page (status == modifiable), where is_modifiable() implies
-     * mp->txnid == txn->front_txnid, so is_frozen() is always false. This
-     * frozen scatter-gather branch is kept for symmetry and future call
-     * sites; the live scatter-gather coverage comes from the prefault path
-     * in page_alloc_finalize(). (issue #203) */
     struct iovec iov[MDBX_AUXILARY_IOV_MAX];
     /* Using the same pattern/buffer to write each page of npages. */
     iov[0].iov_len = env->ps;
@@ -369,27 +357,15 @@ __cold static int page_kill(MDBX_txn *txn, page_t *mp, pgno_t pgno, size_t npage
       /* clone first iov item and overwrite itself on a next batch-cycle */
       iov[n] = iov[0];
       if (++n == MDBX_AUXILARY_IOV_MAX) {
-        int err = osal_dxb_write_stubv(env, iov, MDBX_AUXILARY_IOV_MAX, iov_off);
-        if (unlikely(err != MDBX_SUCCESS)) {
-          /* pgno/bytes describe this failed write: its first page and size */
-          err = stub_write_errdecide(env, txn, bytes2pgno(env, iov_off), pgno2bytes(env, MDBX_AUXILARY_IOV_MAX), err);
-          if (unlikely(err != MDBX_SUCCESS))
-            return err;
-        }
+        osal_pwritev(env->lazy_fd, iov, MDBX_AUXILARY_IOV_MAX, iov_off);
         /* advance offset to next batch-cycle and reset the n as counter of iov-items */
         iov_off += pgno2bytes(env, MDBX_AUXILARY_IOV_MAX);
         n = 0;
       }
     }
     /* osal_pwritev() accepts n = 0 */
-    int err = osal_dxb_write_stubv(env, iov, n, iov_off);
-    if (unlikely(err != MDBX_SUCCESS)) {
-      err = stub_write_errdecide(env, txn, bytes2pgno(env, iov_off), pgno2bytes(env, n), err);
-      if (unlikely(err != MDBX_SUCCESS))
-        return err;
-    }
+    osal_pwritev(env->lazy_fd, iov, n, iov_off);
   }
-  return MDBX_SUCCESS;
 }
 
 static inline bool suitable4loose(const MDBX_txn *txn, pgno_t pgno) {
@@ -621,13 +597,10 @@ status_done:
           goto skip_invalidate;
       }
 
-      int err = MDBX_SUCCESS;
 #if defined(ENABLE_MEMCHECK) || defined(__SANITIZE_ADDRESS__)
       if (MDBX_DEBUG != 0 || unlikely(txn->env->flags & MDBX_PAGEPERTURB))
 #endif
-        err = page_kill(txn, mp, pgno, npages);
-      if (unlikely(err != MDBX_SUCCESS))
-        return err;
+        page_kill(txn, mp, pgno, npages);
       if ((txn->flags & MDBX_WRITEMAP) == 0) {
         VALGRIND_MAKE_MEM_NOACCESS(page_data(pgno2page(txn->env, pgno)), pgno2bytes(txn->env, npages) - PAGEHDRSZ);
         MDBX_ASAN_POISON_MEMORY_REGION(page_data(pgno2page(txn->env, pgno)), pgno2bytes(txn->env, npages) - PAGEHDRSZ);

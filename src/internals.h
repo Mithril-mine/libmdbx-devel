@@ -602,19 +602,3 @@ static inline size_t rdt_count(const MDBX_env *env, const lck_t *lck) {
   const size_t n = atomic_load32(&lck->rdt_length, mo_AcquireRelease);
   return (n < env->max_readers) ? n : env->max_readers;
 }
-
-/* Decision point for a failed auxiliary (stub) page write, i.e. the writes that
- * store a placeholder rather than database data: scrubbing a freed page in
- * page_kill() and the best-effort prefault-write in page_alloc_finalize().
- * Such a failure never corrupts the database, but it is the only indication of
- * a failing media/filesystem on these paths, so it must not be dropped (issue #203).
- * For now it just returns the original error code unchanged (i.e. the caller
- * surfaces it and breaks the transaction). */
-static inline int stub_write_errdecide(const MDBX_env *env, const MDBX_txn *txn, pgno_t pgno, size_t bytes,
-                                       int errcode) {
-  (void)env;
-  (void)txn;
-  (void)pgno;
-  (void)bytes;
-  return errcode;
-}
