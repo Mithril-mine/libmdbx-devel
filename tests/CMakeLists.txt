@@ -925,16 +925,22 @@ add_ut(reverse_insertions SOURCE ut/txn/reverse_insertions.c++)
 
   # Golden characterization tests for the src/tools CLI utilities
   # Deterministic: fixtures come from the checked-in base.dump stream + fixed
-  # geometry, no stochastic runs. Runner: tests/ut/tools/golden-runner.sh;
+  # geometry, no stochastic runs. Runner: tests/ut/tools/golden_runner.py;
   # goldens are committed next to it.
   if(UNIX AND MDBX_BUILD_TOOLS)
-    set(UT_TOOLS_RUNNER "${CMAKE_CURRENT_SOURCE_DIR}/ut/tools/golden-runner.sh")
+    set(UT_TOOLS_RUNNER "${CMAKE_CURRENT_SOURCE_DIR}/ut/tools/golden_runner.py")
     foreach(UT_TOOL chk copy defrag drop dump load stat)
       add_test(NAME ut_tools_${UT_TOOL}
-               COMMAND bash ${UT_TOOLS_RUNNER} ${UT_TOOL} $<TARGET_FILE:mdbx_${UT_TOOL}>
+               COMMAND python3 ${UT_TOOLS_RUNNER} ${UT_TOOL} $<TARGET_FILE:mdbx_${UT_TOOL}>
                        "${MDBX_OUTPUT_DIR}/tools-golden/${UT_TOOL}")
       set_tests_properties(ut_tools_${UT_TOOL} PROPERTIES LABELS "ut;ut.tools" TIMEOUT 300)
     endforeach()
+    # The matcher behind the goldens' line markers ("..." block wildcard and
+    # "~ " pattern lines, see the golden_runner.py header): guards both the
+    # semantics and the diagnostics of the allowance mechanism itself.
+    add_test(NAME ut_tools_golden_matcher
+             COMMAND python3 ${UT_TOOLS_RUNNER} --selftest)
+    set_tests_properties(ut_tools_golden_matcher PROPERTIES LABELS "ut;ut.tools" TIMEOUT 30)
   endif()
 
   # MDBX_ATTRIBUTE_NO_SANITIZE_ADDRESS must pick a compiler-specific spelling
