@@ -113,6 +113,7 @@ A hardening and refinement release: data-safety and corruption-resistance fixes 
     - Fixed negating `INT64_MIN` (formal undefined behavior) in the scroll and readahead heuristics ([#485](https://github.com/Mithril-mine/libmdbx-devel/issues/485)).
 
  - Wrong results and API behavior:
+    - Fixed the default geometry upper reaching the mappable limit exactly, breaking tool pipelines with `MDBX_TOO_LARGE`.
     - Fixed `mdbx_chk -s` silently succeeding when the named table is absent; now an error ([#386](https://github.com/Mithril-mine/libmdbx-devel/issues/386)).
     - Fixed a whole-table range delete resetting the table's sequence ([#311](https://github.com/Mithril-mine/libmdbx-devel/issues/311)).
     - Fixed `mdbx_env_info_ex()` leaving the output unset on a not-open environment; zeroed now ([2/15 of #319](https://github.com/Mithril-mine/libmdbx-devel/issues/319)).
