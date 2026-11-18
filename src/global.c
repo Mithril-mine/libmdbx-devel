@@ -255,12 +255,19 @@ __cold static size_t mmap_limit(void) {
 
 __cold static size_t reasonable_db_maxsize(void) {
   ASSERT(globals.assume_ram_pages > 0 && globals.sys_pagesize_ln2 && globals.mmap_limit);
-  /* Suggesting should not be more than golden ratio of the size of RAM. */
-  size_t result = globals.assume_ram_pages * 207 >> 7;
-  const size_t limit = globals.mmap_limit >> (globals.sys_pagesize_ln2 + (MDBX_WORDBITS < 64));
-  if (result > limit)
-    result = limit;
-  result <<= globals.sys_pagesize_ln2;
+  /* Not more than the inverse golden ratio (79/128) of the mappable limit:
+   * this guarantees a substantial headroom below the limit, which is
+   * essential since its RAM-derived value may differ between processes
+   * (e.g. the tools of a dump/load pipeline compute it at their own start,
+   * so a database created with the default geometry could be refused with
+   * MDBX_TOO_LARGE by the next tool). Also not more than the golden ratio
+   * (207/128) of the estimated RAM: without sanitizers the limit is the
+   * platform's MAX_MAPSIZE constant, and the default should stay
+   * RAM-reasonable. */
+  size_t result = (globals.mmap_limit >> 7) * 79;
+  const uint64_t ram_golden = ((uint64_t)globals.assume_ram_pages * 207 >> 7) << globals.sys_pagesize_ln2;
+  if ((uint64_t)result > ram_golden)
+    result = (size_t)ram_golden;
 
   /* Round to the nearest human-readable granulation. */
   for (size_t unit = MEGABYTE; unit; unit <<= 5) {
