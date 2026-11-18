@@ -75,7 +75,7 @@ jobs:
     # Guarantee the registry is consistent and the change-addressed gate covers
     # the full axis matrix (CI v3.5, see tests/ci/validate-config.py). A
     # failure here blocks the whole dispatch, including nightly.
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-latest
     timeout-minutes: 60
     steps:
       - name: checkout
@@ -116,7 +116,7 @@ jobs:
 
   resolve:
     needs: [validate-config, clang-format]
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-latest
     timeout-minutes: 60
     outputs:
       cells: ${{ steps.resolve.outputs.cells }}
