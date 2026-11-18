@@ -36,6 +36,7 @@ on:
 jobs:
   resolve:
     runs-on: ubuntu-24.04
+    timeout-minutes: 60
     outputs:
       cells: ${{ steps.resolve.outputs.cells }}
       ref: ${{ steps.resolve.outputs.ref }}
