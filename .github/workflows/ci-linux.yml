@@ -40,6 +40,7 @@ on:
 jobs:
   resolve:
     runs-on: ubuntu-24.04
+    timeout-minutes: 60
     outputs:
       cells: ${{ steps.resolve.outputs.cells }}
       ref: ${{ steps.resolve.outputs.ref }}
@@ -66,6 +67,7 @@ jobs:
           echo "scope=full" >> "$GITHUB_OUTPUT"
 
   run:
+    timeout-minutes: 60
     needs: resolve
     strategy:
       fail-fast: false
@@ -85,6 +87,7 @@ jobs:
     # amalgamated dist/ sources with no dev-only leftovers (probe-bus,
     # skynet/, etc.). Mirrors the former `make check` -> `dist install` leg.
     runs-on: ubuntu-24.04
+    timeout-minutes: 60
     steps:
       - name: checkout
         uses: actions/checkout@v7

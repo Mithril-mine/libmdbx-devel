@@ -36,13 +36,14 @@ on:
 jobs:
   scan-linux:
     runs-on: ubuntu-24.04
+    timeout-minutes: 60
     steps:
     - uses: actions/checkout@v7
       with:
         fetch-depth: 0
         fetch-tags: true
         submodules: true
-    - uses: actions/setup-python@v5
+    - uses: actions/setup-python@v7
       with:
         python-version: "3.11"
     - name: deps
@@ -99,7 +100,7 @@ jobs:
         cd skynet/MCP-shared-graph-memory
         python3 tools/validate_map.py --tus fixture
     - name: upload linux artifact
-      uses: actions/upload-artifact@v4
+      uses: actions/upload-artifact@v7
       with:
         name: codegraph-linux
         path: |
@@ -109,13 +110,14 @@ jobs:
 
   scan-macos:
     runs-on: macos-15
+    timeout-minutes: 60
     steps:
     - uses: actions/checkout@v7
       with:
         fetch-depth: 0
         fetch-tags: true
         submodules: true
-    - uses: actions/setup-python@v5
+    - uses: actions/setup-python@v7
       with:
         python-version: "3.11"
     - name: deps
@@ -147,20 +149,21 @@ jobs:
         assert n > 0, "macos scan yielded 0 functions — aborting (AppleClang raw_decode?)"
         PY
     - name: upload macos artifact
-      uses: actions/upload-artifact@v4
+      uses: actions/upload-artifact@v7
       with:
         name: codegraph-macos
         path: skynet/MCP-shared-graph-memory/tools/artifacts/codegraph-macos.json
 
   scan-win32:
     runs-on: ubuntu-24.04
+    timeout-minutes: 60
     steps:
     - uses: actions/checkout@v7
       with:
         fetch-depth: 0
         fetch-tags: true
         submodules: true
-    - uses: actions/setup-python@v5
+    - uses: actions/setup-python@v7
       with:
         python-version: "3.11"
     - name: deps
@@ -196,19 +199,20 @@ jobs:
         assert n > 0, "win32 scan yielded 0 functions — aborting"
         PY
     - name: upload win32 artifact
-      uses: actions/upload-artifact@v4
+      uses: actions/upload-artifact@v7
       with:
         name: codegraph-win32
         path: skynet/MCP-shared-graph-memory/tools/artifacts/codegraph-win32.json
 
   sysdeps-linux:
     runs-on: ubuntu-24.04
+    timeout-minutes: 60
     steps:
     - uses: actions/checkout@v7
       with:
         fetch-depth: 0
         submodules: true
-    - uses: actions/setup-python@v5
+    - uses: actions/setup-python@v7
       with:
         python-version: "3.11"
     - name: deps
@@ -234,7 +238,7 @@ jobs:
           --provides-from tools/artifacts/system-deps-linux.json \
           --out tools/artifacts/system-deps-linux-uses.json
     - name: upload sysdeps linux artifact
-      uses: actions/upload-artifact@v4
+      uses: actions/upload-artifact@v7
       with:
         name: system-deps-linux
         path: |
@@ -243,12 +247,13 @@ jobs:
 
   sysdeps-macos:
     runs-on: macos-15
+    timeout-minutes: 60
     steps:
     - uses: actions/checkout@v7
       with:
         fetch-depth: 0
         submodules: true
-    - uses: actions/setup-python@v5
+    - uses: actions/setup-python@v7
       with:
         python-version: "3.11"
     - name: deps
@@ -288,19 +293,20 @@ jobs:
             "mntent.h must be ABSENT on macOS — platform facts broken"
         PY
     - name: upload sysdeps macos artifact
-      uses: actions/upload-artifact@v4
+      uses: actions/upload-artifact@v7
       with:
         name: system-deps-macos
         path: skynet/MCP-shared-graph-memory/tools/artifacts/system-deps-macos.json
 
   sysdeps-win32:
     runs-on: windows-latest
+    timeout-minutes: 60
     steps:
     - uses: actions/checkout@v7
       with:
         fetch-depth: 0
         submodules: true
-    - uses: actions/setup-python@v5
+    - uses: actions/setup-python@v7
       with:
         python-version: "3.11"
     - name: deps
@@ -341,7 +347,7 @@ jobs:
             "mntent.h must be ABSENT on win32 — platform facts broken"
         PY
     - name: upload sysdeps win32 artifact
-      uses: actions/upload-artifact@v4
+      uses: actions/upload-artifact@v7
       with:
         name: system-deps-win32-msvc
         path: skynet/MCP-shared-graph-memory/tools/artifacts/system-deps-win32-msvc.json
@@ -349,17 +355,18 @@ jobs:
   sysdeps-merge:
     needs: [sysdeps-linux, sysdeps-macos, sysdeps-win32]
     runs-on: ubuntu-24.04
+    timeout-minutes: 60
     steps:
     - uses: actions/checkout@v7
       with:
         fetch-depth: 0
-    - uses: actions/setup-python@v5
+    - uses: actions/setup-python@v7
       with:
         python-version: "3.11"
     - name: deps
       run: python3 -m pip install --quiet cffi pyyaml
     - name: download artifacts
-      uses: actions/download-artifact@v4
+      uses: actions/download-artifact@v8
       with:
         path: artifacts
         pattern: system-deps-*
@@ -394,7 +401,7 @@ jobs:
             len(hdrs), configs))
         PY
     - name: upload merged system-deps
-      uses: actions/upload-artifact@v4
+      uses: actions/upload-artifact@v7
       with:
         name: system-deps-merged
         path: skynet/MCP-shared-graph-memory/tools/artifacts/system-deps.json
@@ -402,18 +409,19 @@ jobs:
   merge-validate:
     needs: [scan-linux, scan-macos, scan-win32]
     runs-on: ubuntu-24.04
+    timeout-minutes: 60
     steps:
     - uses: actions/checkout@v7
       with:
         fetch-depth: 0
         submodules: true
-    - uses: actions/setup-python@v5
+    - uses: actions/setup-python@v7
       with:
         python-version: "3.11"
     - name: deps
       run: python3 -m pip install --quiet cffi pyyaml
     - name: download artifacts
-      uses: actions/download-artifact@v4
+      uses: actions/download-artifact@v8
       with:
         path: artifacts
         merge-multiple: true
@@ -472,7 +480,7 @@ jobs:
             counts.get("functions"), counts.get("blocks"), len(edges)))
         PY
     - name: upload merged map
-      uses: actions/upload-artifact@v4
+      uses: actions/upload-artifact@v7
       with:
         name: codegraph-merged
         path: skynet/MCP-shared-graph-memory/tools/artifacts/codegraph.json

@@ -32,6 +32,7 @@ on:
 jobs:
   ci-job:
     runs-on: ${{ matrix.os }}
+    timeout-minutes: 60
     strategy:
       fail-fast: false
       matrix:
@@ -42,7 +43,7 @@ jobs:
         fetch-depth: 0
         fetch-tags: true
         submodules: true
-    - uses: actions/setup-python@v5
+    - uses: actions/setup-python@v7
       with:
         python-version: "3.11"
     - name: deps
