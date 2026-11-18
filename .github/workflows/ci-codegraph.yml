@@ -53,6 +53,10 @@ jobs:
       run: python3 skynet/MCP-shared-graph-memory/tools/build_libmdbx.py
     - name: module tests with coverage (mcp + tools)
       shell: bash
+      env:
+        # glibc heap hardening (see ci-run.yml): tests-only, never global
+        MALLOC_CHECK_: "7"
+        MALLOC_PERTURB_: "42"
       run: |
         cd skynet/MCP-shared-graph-memory
         python3 -m pytest tests/ \

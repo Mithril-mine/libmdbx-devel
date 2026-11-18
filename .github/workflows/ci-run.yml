@@ -140,6 +140,12 @@ jobs:
         if: ${{ steps.detect.outputs.emulator != 'true' }}
         shell: bash
         env:
+          # glibc heap hardening for the tests (Linux cells): freed chunks are
+          # filled with the inverted perturbation byte and allocation
+          # inconsistencies abort, so use-after-free fails fast instead of
+          # leaking through allocator reuse luck. No-op on other platforms.
+          MALLOC_CHECK_: ${{ runner.os == 'Linux' && '7' || '' }}
+          MALLOC_PERTURB_: ${{ runner.os == 'Linux' && '42' || '' }}
           # LTO stays off in test builds (skynet/build.md §6.7). ccache is
           # enabled with an actions/cache-backed CCACHE_DIR so warm hits carry
           # across runs of the same cell (the ephemeral hosted runner discards

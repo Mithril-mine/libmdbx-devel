@@ -47,6 +47,10 @@ jobs:
 
       - name: test
         shell: bash
+        env:
+          # glibc heap hardening (see ci-run.yml): tests-only, never global
+          MALLOC_CHECK_: "7"
+          MALLOC_PERTURB_: "42"
         run: |
           ctest --test-dir @ci-special-locking-sysv --output-on-failure
 
@@ -72,6 +76,10 @@ jobs:
 
       - name: test
         shell: bash
+        env:
+          # glibc heap hardening (see ci-run.yml): tests-only, never global
+          MALLOC_CHECK_: "7"
+          MALLOC_PERTURB_: "42"
         run: |
           ctest --test-dir @ci-special-locking-posix1988 --output-on-failure
 
@@ -97,5 +105,9 @@ jobs:
 
       - name: test
         shell: bash
+        env:
+          # glibc heap hardening (see ci-run.yml): tests-only, never global
+          MALLOC_CHECK_: "7"
+          MALLOC_PERTURB_: "42"
         run: |
           ctest --test-dir @ci-special-fallocate-range --output-on-failure
