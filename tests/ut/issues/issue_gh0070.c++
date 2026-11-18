@@ -55,6 +55,10 @@ static void create_dumpable_db(const char *path, size_t count) {
   MDBX_env *env = nullptr;
   ASSERT_EQ(MDBX_SUCCESS, mdbx_env_create(&env));
   ASSERT_EQ(MDBX_SUCCESS, mdbx_env_set_maxdbs(env, 8));
+  /* the issue_gh0072 idiom: an explicit modest upper bound, since the
+   * default ~8 GiB geometry cannot be mapped by the spawned tools in the
+   * ASan cells (check_mmap_limit()) and is runner-RAM-dependent */
+  ASSERT_EQ(MDBX_SUCCESS, mdbx_env_set_geometry(env, -1, -1, 16 << 20, -1, -1, -1));
   ASSERT_EQ(MDBX_SUCCESS, mdbx_env_open(env, path, MDBX_NOSUBDIR, 0644));
 
   MDBX_txn *txn = nullptr;
@@ -120,7 +124,10 @@ TEST(issue_gh0070, truncated_dump_is_rejected) {
     out.write(data.data(), (std::streamsize)pos);
   }
 
-  /* The truncated dump must not be reported as a successful restore. */
+  /* The truncated dump must not be reported as a successful restore: the
+   * source database carries a modest upper bound (see create_dumpable_db),
+   * whose geometry line the load applies, so a nonzero exit can only come
+   * from the truncation check - not from a too-large-for-RAM refusal. */
   EXPECT_NE(run_tool({load_tool, "-f", truncname, loadname}), 0) << "restoring a truncated dump must fail";
 
   remove_env(loadname);
