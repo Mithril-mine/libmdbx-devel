@@ -365,6 +365,17 @@ TEST_BUILD_TARGETS += build-stochastic
 #< dist-cutoff-end
 
 .PHONY: ninja-assertions ninja-debug ninja $(TEST_TARGETS) $(TEST_BUILD_TARGETS) test-ubsan test-asan test-memcheck test-leak test-assertion test-assertions test build-test smoke check
+
+# glibc heap hardening for the test runs (Linux/glibc only; the vars are
+# no-ops elsewhere): freed chunks are filled with the inverted perturbation
+# byte and allocation inconsistencies abort, so use-after-free fails fast
+# instead of leaking through allocator reuse luck. Target-specific exports
+# propagate to the recursive make invocations, and stay local to the test
+# targets - benchmarks and third-party tools (ioarena) are not affected.
+test: export MALLOC_CHECK_ := 7
+test: export MALLOC_PERTURB_ := 42
+test-ci: export MALLOC_CHECK_ := 7
+test-ci: export MALLOC_PERTURB_ := 42
 test: $(TEST_TARGETS)
 build-test: $(TEST_BUILD_TARGETS)
 
@@ -568,6 +579,8 @@ MDBX_SMOKE_EXTRA ?=
 # `clean` first (it must not race with the builds under `make -j`), then the
 # steps in their order. The DESTDIR/CMAKE_OPT overrides are inherited by
 # every step.
+check: export MALLOC_CHECK_ := 7
+check: export MALLOC_PERTURB_ := 42
 check:
 	@echo '  CHECK: clean, smoke+assertions, dist, install, tests, ctest, doxygen...'
 	$(QUIET)$(MAKE) --no-print-directory IOARENA=false clean
@@ -591,6 +604,8 @@ check-posix-locking-2008: check
 check-posix-locking:
 	$(QUIET)for LCK in sysv 1988 2001 2008; do $(MAKE) check-posix-locking-$${LCK} || break; done;
 
+smoke: export MALLOC_CHECK_ := 7
+smoke: export MALLOC_PERTURB_ := 42
 smoke: build-stochastic
 	@echo '  SMOKE `mdbx_test basic`...'
 	$(QUIET)rm -f $(TEST_DB) $(TEST_DB)-copy $(TEST_LOG).gz && (set -o pipefail; export ASAN_OPTIONS=$(ASAN_OPTIONS) UBSAN_OPTIONS=$(UBSAN_OPTIONS); \
