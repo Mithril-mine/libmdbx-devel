@@ -7,6 +7,16 @@ name: ci-mcp-shared-graph-memory
 
 env:
   CI: GITHUB
+  # glibc heap hardening for the module tests: freed chunks are filled with
+  # ~MALLOC_PERTURB_ and allocation inconsistencies abort, so use-after-free
+  # of the binding's marshalled buffers fails fast (see conftest.py for the
+  # in-process mallopt() equivalent used by plain pytest runs).
+  MALLOC_CHECK_: "7"
+  MALLOC_PERTURB_: "42"
+  # the pymalloc-level complement: cffi allocates its cdata through the raw
+  # allocator, and the debug variant poisons freed blocks with 0xDD, so
+  # use-after-free of a marshalled buffer reads poison instead of stale data
+  PYTHONMALLOC: "debug"
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.head_ref || github.ref_name }}

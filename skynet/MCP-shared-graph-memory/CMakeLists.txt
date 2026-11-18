@@ -29,7 +29,7 @@ if(Python3_FOUND AND MDBX_CAN_RUN_HOST_TESTS)
                    ${CMAKE_CURRENT_SOURCE_DIR}/tests/)
   set_tests_properties(mcp_pytest PROPERTIES
                        FIXTURES_REQUIRED mcp_fixture
-                       ENVIRONMENT "PYTHONPATH=${CMAKE_CURRENT_SOURCE_DIR}"
+                       ENVIRONMENT "PYTHONPATH=${CMAKE_CURRENT_SOURCE_DIR};MALLOC_CHECK_=7;MALLOC_PERTURB_=42"
                        LABELS "mcp-shared-graph-memory"
                        TIMEOUT 600)
 else()
