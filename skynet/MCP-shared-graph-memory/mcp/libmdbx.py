@@ -961,8 +961,8 @@ class Txn:
 
     def delete(self, dbi: int, key: bytes, value: Optional[bytes] = None) -> bool:
         kval = _val_from_bytes(key)
-        vval = ffi.NULL if value is None else _val_from_bytes(value).ptr
-        rc = _get_lib().mdbx_del(self.ptr, dbi, kval.ptr, vval)
+        vref = _val_from_bytes(value) if value is not None else None
+        rc = _get_lib().mdbx_del(self.ptr, dbi, kval.ptr, vref.ptr if vref is not None else ffi.NULL)
         if rc == RC_NOTFOUND:
             return False
         check(rc, "mdbx_del")
@@ -1028,12 +1028,13 @@ class Cursor:
 
     def get(self, op: int, key: Optional[bytes] = None,
             value: Optional[bytes] = None) -> Tuple[int, Optional[bytes], Optional[bytes]]:
-        kval = ffi.new("MDBX_val *")
-        dval = ffi.new("MDBX_val *")
-        if key is not None:
-            kval = _val_from_bytes(key).ptr
-        if value is not None:
-            dval = _val_from_bytes(value).ptr
+        # MVal must stay referenced for the whole call: extracting .ptr from a
+        # temporary frees the buffer before mdbx_cursor_get reads it (the
+        # dangling-iov_base UB that hit the ubuntu-latest runners).
+        kref = _val_from_bytes(key) if key is not None else None
+        vref = _val_from_bytes(value) if value is not None else None
+        kval = kref.ptr if kref is not None else ffi.new("MDBX_val *")
+        dval = vref.ptr if vref is not None else ffi.new("MDBX_val *")
         rc = _get_lib().mdbx_cursor_get(self._cur, kval, dval, op)
         if rc in (RC_NOTFOUND, RC_RESULT_TRUE):
             return rc, None, None
