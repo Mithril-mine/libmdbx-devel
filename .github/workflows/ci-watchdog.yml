@@ -1,0 +1,57 @@
+name: ci-watchdog
+
+# Wall-clock control for the CI runs. The reusable-workflow caller jobs
+# cannot carry `timeout-minutes` (the GitHub schema rejects it for `uses:`
+# jobs, see the ci-caller-timeouts hotfix), and a job-level timeout counts
+# from the moment the job starts on a runner - queue time is invisible to
+# it. The historic 5-6-hour CI blockages were exactly this class: the
+# 360-minute default job timeout of the pre-hardening era. This watchdog
+# closes the gap at the run level: every 20 minutes it cancels in-progress
+# runs older than the budget (6h) and queued-only runs older than the
+# stuck budget (24h), see tests/ci/watchdog.py.
+
+on:
+  schedule:
+    - cron: "*/20 * * * *"
+  workflow_dispatch:
+    inputs:
+      budget-hours:
+        description: "Cancel in-progress runs older than this many hours"
+        required: false
+        default: "6"
+      stuck-hours:
+        description: "Cancel queued-only runs older than this many hours"
+        required: false
+        default: "24"
+      dry-run:
+        description: "Report without cancelling"
+        required: false
+        default: "false"
+        type: boolean
+
+permissions:
+  actions: write
+  contents: read
+
+concurrency:
+  group: ci-watchdog
+  cancel-in-progress: true
+
+jobs:
+  watchdog:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: checkout
+        uses: actions/checkout@v7
+
+      - name: sweep
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+        run: |
+          python3 tests/ci/watchdog.py \
+            --budget-hours "${{ inputs.budget-hours || '6' }}" \
+            --stuck-hours "${{ inputs.stuck-hours || '24' }}" \
+            ${{ inputs.dry-run == true && '--dry-run' || '' }}
