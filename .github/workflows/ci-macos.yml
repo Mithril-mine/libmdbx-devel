@@ -63,7 +63,6 @@ jobs:
           echo "scope=full" >> "$GITHUB_OUTPUT"
 
   run:
-    timeout-minutes: 60
     needs: resolve
     strategy:
       fail-fast: false

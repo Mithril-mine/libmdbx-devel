@@ -286,7 +286,6 @@ jobs:
           echo "scope=${SCOPE}" >> "$GITHUB_OUTPUT"
 
   run:
-    timeout-minutes: 60
     needs: resolve
     if: ${{ needs.resolve.outputs.cells != '[]' && needs.resolve.outputs.cells != '' }}
     strategy:
