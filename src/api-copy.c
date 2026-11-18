@@ -20,18 +20,46 @@ typedef struct compacting_context {
   mdbx_filehandle_t fd;
 } ctx_t;
 
-__cold static int compacting_walk_tree(ctx_t *ctx, tree_t *tree);
+static int compacting_walk_tree(ctx_t *ctx, tree_t *tree);
+
+#if defined(EPIPE) && !IS_WINDOWS
+/* Blocks SIGPIPE on the current thread. A thread spawned while SIGPIPE is
+ * blocked inherits the mask, so this single block at mdbx_env_copy2fd()'s
+ * dispatch - the entry of both the compacting and the as-is copy, for both
+ * the file and the pipe destinations - covers the calling thread's writes
+ * and every helper thread spawned within. */
+static int copy_block_sigpipe(sigset_t *saved_mask) {
+  sigset_t block_set;
+  sigemptyset(&block_set);
+  sigaddset(&block_set, SIGPIPE);
+  const int err = pthread_sigmask(SIG_BLOCK, &block_set, saved_mask);
+  return err ? err : MDBX_SUCCESS;
+}
+
+/* Collects the pending SIGPIPE, if any. Restoring the mask, as well as a
+ * thread's exit, with the signal pending would deliver it and kill the
+ * process (at least OS X gives it to the process at a thread's exit, while
+ * Linux simply discards a thread-directed pending signal). */
+static void copy_sigpipe_collect(void) {
+  sigset_t block_set;
+  sigemptyset(&block_set);
+  sigaddset(&block_set, SIGPIPE);
+  int pending_signal = 0;
+  if (sigpending(&block_set) == 0 && sigismember(&block_set, SIGPIPE))
+    sigwait(&block_set, &pending_signal);
+}
+
+/* Collects a pending SIGPIPE, if any, and restores the saved mask. */
+static void copy_sigpipe_done(const sigset_t *saved_mask) {
+  copy_sigpipe_collect();
+  pthread_sigmask(SIG_SETMASK, saved_mask, nullptr);
+}
+#endif /* EPIPE && !IS_WINDOWS */
 
 /* Dedicated writer thread for compacting copy. */
 __cold static THREAD_RESULT THREAD_CALL compacting_write_thread(void *arg) {
   ctx_t *const ctx = arg;
-
-#if defined(EPIPE) && !IS_WINDOWS
-  sigset_t sigset;
-  sigemptyset(&sigset);
-  sigaddset(&sigset, SIGPIPE);
-  ctx->error = pthread_sigmask(SIG_BLOCK, &sigset, nullptr);
-#endif /* EPIPE */
+  /* SIGPIPE is already blocked here, inherited from copy2fd(). */
 
   osal_condpair_lock(&ctx->condpair);
   while (!ctx->error) {
@@ -53,14 +81,6 @@ __cold static THREAD_RESULT THREAD_CALL compacting_write_thread(void *arg) {
     if (!ctx->error) {
       int err = osal_write(ctx->fd, ptr, wsize);
       if (err != MDBX_SUCCESS) {
-#if defined(EPIPE) && !IS_WINDOWS
-        if (err == EPIPE) {
-          /* Collect the pending SIGPIPE,
-           * otherwise at least OS X gives it to the process on thread-exit. */
-          int unused;
-          sigwait(&sigset, &unused);
-        }
-#endif /* EPIPE */
         ctx->error = err;
         goto bailout;
       }
@@ -75,6 +95,11 @@ bailout:
    * issued while holding the lock, exactly as the normal loop does. */
   osal_condpair_signal(&ctx->condpair, false);
   osal_condpair_unlock(&ctx->condpair);
+#if defined(EPIPE) && !IS_WINDOWS
+  /* Collect the pending SIGPIPE, if its write was the one broken: at least
+   * OS X gives a thread's pending signal to the process at the exit. */
+  copy_sigpipe_collect();
+#endif /* EPIPE */
   return (THREAD_RESULT)0;
 }
 
@@ -339,7 +364,7 @@ __cold static void compacting_fixup_meta(MDBX_env *env, meta_t *meta) {
 }
 
 /* Make resizable */
-__cold static void meta_make_sizeable(meta_t *meta) {
+static void meta_make_sizeable(meta_t *meta) {
   meta->geometry.lower = MIN_PAGENO;
   if (meta->geometry.grow_pv == 0) {
     const pgno_t step = 1 + (meta->geometry.upper - meta->geometry.lower) / 42;
@@ -728,7 +753,20 @@ __cold static int copy2fd(MDBX_txn *txn, mdbx_filehandle_t fd, MDBX_copy_flags_t
   }
   if (likely(rc == MDBX_SUCCESS)) {
     memset(buffer, 0, pgno2bytes(env, NUM_METAS));
+#if defined(EPIPE) && !IS_WINDOWS
+    /* The reader could close the destination pipe at any moment - including
+     * during the slow startup under a debugger/sanitizer - so the whole copy,
+     * including the calling thread's own writes, runs with SIGPIPE blocked
+     * (the helper threads spawned within inherit the mask), and a failure
+     * takes the bailout path with EPIPE instead of killing the process. */
+    sigset_t saved_mask;
+    const int mask_err = copy_block_sigpipe(&saved_mask);
+#endif /* EPIPE */
     rc = ((flags & MDBX_CP_COMPACT) ? copy_with_compacting : copy_asis)(env, txn, fd, buffer, dest_is_pipe, flags);
+#if defined(EPIPE) && !IS_WINDOWS
+    if (likely(mask_err == MDBX_SUCCESS))
+      copy_sigpipe_done(&saved_mask);
+#endif /* EPIPE */
 
     if (likely(rc == MDBX_SUCCESS))
       rc = mdbx_txn_unpark(txn, false);
