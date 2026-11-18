@@ -282,7 +282,11 @@ TEST(issue_gh0312, load_b_accepts_an_unchanged_batch) {
   const std::string db = "issue312-b.mdbx", dump = "issue312-b.txt";
   const files_remover cleanup{db, dump};
   ASSERT_TRUE(write_text(dump, dump_section(nullptr, {"a", "b"})));
-  ASSERT_EQ(0, load({}, dump, db));
+  /* the hand-written dump carries no geometry line, so the tool would create
+   * the database with the default ~8 GiB upper: a modest explicit bound keeps
+   * the ASan/Valgrind cells (check_mmap_limit) and low-RAM runners away from
+   * the MDBX_TOO_LARGE refusal (the issue_gh0058/59/71/72 idiom) */
+  ASSERT_EQ(0, load({"-G", "-1:1048576:-1:-1:-1"}, dump, db));
   EXPECT_EQ(0, load({"-b", "1"}, dump, db)) << "a batch that changes nothing is not an error";
   EXPECT_EQ(2, entries(db, nullptr));
 }
