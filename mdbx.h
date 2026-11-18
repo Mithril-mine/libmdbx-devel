@@ -377,7 +377,8 @@ typedef mode_t mdbx_mode_t;
 #elif defined(DOXYGEN) || ((!defined(__GNUC__) || (defined(__clang__) && __clang__ > 19) || __GNUC__ > 5) &&           \
                            ((defined(__cplusplus) && __cplusplus >= 201403L && __has_cpp_attribute(deprecated) &&      \
                              __has_cpp_attribute(deprecated) >= 201309L) ||                                            \
-                            (!defined(__cplusplus) && defined(__STDC_VERSION__) && __STDC_VERSION__ >= 202304L)))
+                            (!defined(__cplusplus) && !defined(_MSC_VER) && defined(__STDC_VERSION__) &&                \
+                             __STDC_VERSION__ >= 202304L)))
 #define MDBX_DEPRECATED [[deprecated]]
 #elif (defined(__GNUC__) && __GNUC__ > 5) ||                                                                           \
     (__has_attribute(__deprecated__) && (!defined(__GNUC__) || defined(__clang__) || __GNUC__ > 5))
