@@ -71,7 +71,12 @@ TEST(issue_gh0485, load_purge_multitable_dump) {
     ASSERT_EQ(sizeof(dump) - 1, fwrite(dump, 1, sizeof(dump) - 1, file));
     ASSERT_EQ(0, fclose(file));
   }
-  ASSERT_EQ(0, tool_runner::run({load_tool, "-f", dumpname, dbname}));
+  /* the issue_gh0058/59/71/72 idiom: an explicit modest upper bound, since
+   * the default ~8 GiB geometry cannot be mapped in the ASan/Valgrind cells
+   * (check_mmap_limit()) and the too-large-for-RAM upper is runner-dependent.
+   * Only the source-creation load carries it: the `load -p` below must apply
+   * the geometry line from the dump text, which is part of the contract. */
+  ASSERT_EQ(0, tool_runner::run({load_tool, "-G", "-1:1048576:-1:-1:-1", "-f", dumpname, dbname}));
 
   /* the canonical round trip: dump -a, then load -p into a fresh database
    * (was: exit 1 with MDBX_INCOMPATIBLE on the trailing MAIN section) */

@@ -59,8 +59,10 @@ TEST(issue_gh0485, load_rejects_nul_inside_line) {
   write_dump(dumpname, content);
 
   /* the malformed line must be a format error, not a silently truncated
-   * record followed by a successful exit */
-  const int rc = tool_runner::run({load_tool, "-f", dumpname, dbname});
+   * record followed by a successful exit; the modest geometry (-G, the
+   * issue_gh0058/59/71/72 idiom) keeps the TOO_LARGE-for-RAM refusal out
+   * of the way, so the nonzero exit can only come from the format check */
+  const int rc = tool_runner::run({load_tool, "-G", "-1:1048576:-1:-1:-1", "-f", dumpname, dbname});
   EXPECT_NE(0, rc) << "a dump line with an embedded NUL must be rejected";
 
   remove(dumpname);
