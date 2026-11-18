@@ -60,6 +60,7 @@ jobs:
             without_crt: OFF
             os: windows-11-vs2026-arm
     runs-on: ${{ matrix.os }}
+    timeout-minutes: 60
     steps:
     - uses: actions/checkout@v7
       with:

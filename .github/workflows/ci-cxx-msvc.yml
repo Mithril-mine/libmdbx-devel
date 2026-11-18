@@ -50,6 +50,7 @@ jobs:
             build-type: Debug
             os: windows-2022
     runs-on: ${{ matrix.os }}
+    timeout-minutes: 60
     steps:
     - uses: actions/checkout@v7
       with:
