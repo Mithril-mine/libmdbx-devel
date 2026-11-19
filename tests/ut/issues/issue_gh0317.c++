@@ -34,7 +34,9 @@
 #include "../env-guard.h++"
 #include <gtest/gtest.h>
 
+#include <cerrno>
 #include <fcntl.h>
+#include <glob.h>
 #include <signal.h>
 #include <sys/stat.h>
 #include <sys/wait.h>
@@ -46,6 +48,17 @@
 #include <cstdlib>
 #include <cstring>
 #include <thread>
+
+/* The watchdogs below scale their budgets under Valgrind, in line with the
+ * ctest timeouts' scaling. */
+#if defined(__has_include)
+#if __has_include(<valgrind/valgrind.h>)
+#include <valgrind/valgrind.h>
+#endif
+#endif
+#if !defined(RUNNING_ON_VALGRIND)
+#define RUNNING_ON_VALGRIND (0)
+#endif
 
 namespace {
 
@@ -113,6 +126,124 @@ void opener_thread(const int n) {
   }
 }
 
+/* Best-effort dump of the threads' state of the given process, to turn a stall
+ * occurrence into a diagnosable event: per-thread backtraces via `sample` on
+ * macOS, the current syscall and the kernel wait-channel of each task via
+ * /proc elsewhere. */
+void dump_threads_state(const pid_t target, const char *why) {
+  char cmd[512];
+  char sample_path[] = "issue317-sample-XXXXXX";
+#if defined(__APPLE__)
+  /* `sample <pid> <seconds> -file <path>` provides per-thread backtraces on every macOS. */
+  const int fd = ::mkstemp(sample_path);
+  if (fd >= 0)
+    ::close(fd);
+  std::snprintf(cmd, sizeof(cmd), "sample %d 2 -file '%s' >/dev/null 2>&1", (int)target, sample_path);
+  if (::system(cmd) == 0) {
+    FILE *f = std::fopen(sample_path, "r");
+    if (f) {
+      fprintf(stderr, "---- threads sample (%s) ----\n", why);
+      char line[512];
+      for (int lines = 0; lines < 200 && std::fgets(line, sizeof(line), f); ++lines)
+        fputs(line, stderr);
+      std::fclose(f);
+    }
+  } else
+    fprintf(stderr, "the `sample` of pid %d failed (%s)\n", (int)target, why);
+#else
+  char taskdir[64];
+  fprintf(stderr, "---- threads syscall/wchan (%s) ----\n", why);
+  std::snprintf(taskdir, sizeof(taskdir), "/proc/%d/task", (int)target);
+  std::snprintf(cmd, sizeof(cmd), "%s/*", taskdir);
+  glob_t gl;
+  if (::glob(cmd, 0, nullptr, &gl) == 0) {
+    for (size_t i = 0; i < gl.gl_pathc; ++i) {
+      char sub[128], buf[256];
+      FILE *f;
+      std::snprintf(sub, sizeof(sub), "%s/syscall", gl.gl_pathv[i]);
+      if ((f = std::fopen(sub, "r")) != nullptr) {
+        if (std::fgets(buf, sizeof(buf), f)) {
+          buf[strcspn(buf, "\n")] = 0;
+          fprintf(stderr, "tid %s syscall: %s\n", gl.gl_pathv[i] + strlen(taskdir) + 1, buf);
+        }
+        std::fclose(f);
+      }
+      std::snprintf(sub, sizeof(sub), "%s/wchan", gl.gl_pathv[i]);
+      if ((f = std::fopen(sub, "r")) != nullptr) {
+        if (std::fgets(buf, sizeof(buf), f)) {
+          buf[strcspn(buf, "\n")] = 0;
+          fprintf(stderr, "tid %s wchan: %s\n", gl.gl_pathv[i] + strlen(taskdir) + 1, buf);
+        }
+        std::fclose(f);
+      }
+    }
+    globfree(&gl);
+  }
+#endif
+  ::unlink(sample_path);
+}
+
+/* The scenario, in a child process without other threads; returns its exit status. */
+int two_threads_scenario() {
+  g_done[0].store(0);
+  g_done[1].store(0);
+  std::thread a(opener_thread, 0);
+  std::thread b(opener_thread, 1);
+  const unsigned stall_limit = RUNNING_ON_VALGRIND ? 5 * 42 : 5;
+  const unsigned total_limit = RUNNING_ON_VALGRIND ? 60 * 42 : 60;
+  int last0 = -1, last1 = -1, stalled = 0;
+  bool reported_stall = false;
+  for (unsigned second = 0;; ++second) {
+    std::this_thread::sleep_for(std::chrono::seconds(1));
+    if (g_done[0].load() >= kOpenIterations && g_done[1].load() >= kOpenIterations) {
+      if (reported_stall)
+        fprintf(stderr, "the progress resumed after the stall, done %d/%d of %d\n", g_done[0].load(), g_done[1].load(),
+                kOpenIterations);
+      break;
+    }
+    if (g_done[0].load() == last0 && g_done[1].load() == last1) {
+      ++stalled;
+      if (stalled == stall_limit && !reported_stall) {
+        /* Capture the diagnostics at the first stall, but let the scenario
+         * continue: a slow/loaded runner may legitimately pause a thread for
+         * seconds, while a real deadlock hits the total limit below. */
+        reported_stall = true;
+        dump_threads_state(::getpid(), "stall detected");
+      }
+    } else {
+      stalled = 0;
+      last0 = g_done[0].load();
+      last1 = g_done[1].load();
+    }
+    if (second >= total_limit) {
+      fprintf(stderr, "deadlocked: done %d/%d of %d after %u s\n", g_done[0].load(), g_done[1].load(), kOpenIterations,
+              second);
+      dump_threads_state(::getpid(), "the total limit reached");
+      _exit(6);
+    }
+  }
+  a.join();
+  b.join();
+  _exit(0);
+}
+
+/* Waits up to the given seconds for the child, scaled under Valgrind in line
+ * with the ctest timeouts' scaling. Returns true and its wait status when it
+ * exits, or false when it hangs (the caller kills it). */
+bool bounded_child_wait(pid_t pid, int &status, unsigned seconds) {
+  const auto deadline =
+      std::chrono::steady_clock::now() + std::chrono::seconds(RUNNING_ON_VALGRIND ? seconds * 42 : seconds);
+  while (std::chrono::steady_clock::now() < deadline) {
+    const pid_t got = waitpid(pid, &status, WNOHANG);
+    if (got == pid)
+      return true;
+    if (got < 0 && errno != EINTR)
+      break;
+    usleep(1000);
+  }
+  return false;
+}
+
 } // namespace
 
 /* Case 1: a read-write open against a without-lck holder must return MDBX_BUSY in a bounded time
@@ -171,7 +302,11 @@ TEST(issue_gh0317, open_bounded_against_without_lck_holder) {
 }
 
 /* Case 2: two threads opening the same non-database path must make progress instead of deadlocking
- * (the second one waits for the lock file while the first needs rthc_lock() to release it). */
+ * (the second one waits for the lock file while the first needs rthc_lock() to release it).
+ *
+ * The scenario runs in a forked child: a detected stall must not terminate the whole test binary
+ * (joinable std::threads left behind by a failing gtest would std::terminate it), and a truly hung
+ * child is bounded by the parent's watchdog, which samples the child before killing it. */
 TEST(issue_gh0317, two_threads_open_close_progress) {
   const env_files_guard guard({kDbPath});
   if (MDBX_GTEST_IS_EXECUTION_TIMEOUT()) {
@@ -187,28 +322,22 @@ TEST(issue_gh0317, two_threads_open_close_progress) {
     ASSERT_EQ(0, ::close(fd));
   }
   g_junk_path = kDbPath;
-  g_done[0].store(0);
-  g_done[1].store(0);
 
-  std::thread a(opener_thread, 0);
-  std::thread b(opener_thread, 1);
-  int stalled = 0, last0 = -1, last1 = -1;
-  for (int second = 0;; ++second) {
-    std::this_thread::sleep_for(std::chrono::seconds(1));
-    if (g_done[0].load() >= kOpenIterations && g_done[1].load() >= kOpenIterations)
-      break;
-    if (g_done[0].load() == last0 && g_done[1].load() == last1) {
-      if (++stalled >= 5)
-        FAIL() << "deadlocked: the threads made no progress for " << stalled << " s, done " << g_done[0].load() << "/"
-               << g_done[1].load() << " of " << kOpenIterations;
-    } else
-      stalled = 0;
-    last0 = g_done[0].load();
-    last1 = g_done[1].load();
-    ASSERT_LT(second, 60) << "timeout";
+  fflush(nullptr);
+  const pid_t pid = fork();
+  ASSERT_GE(pid, 0) << "fork() failed";
+  if (pid == 0)
+    _exit(two_threads_scenario());
+  int status = 0;
+  if (!bounded_child_wait(pid, status, 75)) {
+    dump_threads_state(pid, "the child hung, sampled before kill");
+    ::kill(pid, SIGKILL);
+    while (waitpid(pid, &status, 0) < 0 && errno == EINTR) {
+    }
+    FAIL() << "deadlock: the scenario made no progress within the watchdog budget";
   }
-  a.join();
-  b.join();
+  EXPECT_TRUE(WIFEXITED(status) && WEXITSTATUS(status) == 0)
+      << "the scenario failed, wait status 0x" << std::hex << status;
 }
 
 /* Case 3: a first opener with MDBX_RDONLY|MDBX_NORDAHEAD must not make a later MDBX_ACCEDE writer
