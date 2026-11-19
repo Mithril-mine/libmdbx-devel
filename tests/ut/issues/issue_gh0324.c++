@@ -298,7 +298,17 @@ int join_scenario() {
     forked_status.store(status);
   });
   logger_armed.store(true);
-  /* opening a new database logs "read meta: empty file" at NOTICE level from this thread */
+  /* The stub file is smaller than a page and is not a database, so opening
+   * it logs a long "read meta[...]" ERROR through debug_log_va() from this
+   * thread. The ERROR level is always compiled in, so the logger fires in
+   * every build configuration, while the routine open-time messages of a
+   * fresh database are compiled out of release builds entirely. */
+  {
+    static const char stub[] = "not a database stub";
+    FILE *file = fopen(kJoinNewDb, "wb");
+    if (!file || fwrite(stub, 1, sizeof(stub) - 1, file) != sizeof(stub) - 1 || fclose(file) != 0)
+      return 15;
+  }
   MDBX_env *fresh = nullptr;
   /* a created env must be closed regardless of the open outcome, or a
    * failed open leaks the whole env with its structures */

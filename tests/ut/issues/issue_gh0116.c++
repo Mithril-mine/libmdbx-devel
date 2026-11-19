@@ -60,12 +60,18 @@ TEST(issue_gh0116, nofmt_logger_receives_truncated_bounded_message) {
   ::mdbx_setup_debug_nofmt(MDBX_LOG_DEBUG, MDBX_DBG_DONTCHANGE, nofmt_logger, buffer, sizeof(buffer));
 
   /* The library formats the message through the same path the issue reports:
-   * a message that does not fit the user buffer. Force it by opening a plain
-   * non-database file as an environment, which logs a long error. */
-  MDBX_env *env = nullptr;
-  ASSERT_EQ(MDBX_SUCCESS, mdbx_env_create(&env));
-  (void)mdbx_env_open(env, "issue116-notadb.mdbx", MDBX_ENV_DEFAULTS, 0644);
-  mdbx_env_close(env);
+   * a message that does not fit the user buffer. Force it by probing a plain
+   * non-database file: an existing empty file hits the ENODATA path, which
+   * logs a long message at a level that reaches the logger in every build
+   * configuration. Relying on a routine open/creation message would be
+   * fragile, since VERBOSE and DEBUG levels are compiled out of release
+   * builds entirely. */
+  FILE *junk = fopen("issue116-notadb.mdbx", "wb");
+  ASSERT_NE(junk, nullptr);
+  ASSERT_EQ(0, fclose(junk));
+  MDBX_envinfo info;
+  memset(&info, 0, sizeof(info));
+  (void)mdbx_preopen_snapinfo("issue116-notadb.mdbx", &info, sizeof(info));
 
   /* The message must actually reach the nofmt logger: on Windows the old code
    * dropped an over-long message, leaving length 0 and passing every check. */

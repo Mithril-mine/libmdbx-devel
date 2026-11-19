@@ -32,6 +32,7 @@ A hardening and refinement release: data-safety and corruption-resistance fixes 
  - Changed the `mdbx_cursor_on_first()`/`on_last()` docs: whether moving in the direction makes sense ([14/15 of #319](https://github.com/Mithril-mine/libmdbx-devel/issues/319)).
  - Changed the C++ docs for cursor unbinding, `chk()` tables lifetime and `append_producer()` ([#91](https://github.com/Mithril-mine/libmdbx-devel/issues/91), [#143](https://github.com/Mithril-mine/libmdbx-devel/issues/143), [#145](https://github.com/Mithril-mine/libmdbx-devel/issues/145), [#146](https://github.com/Mithril-mine/libmdbx-devel/issues/146)).
  - Changed the per-fork internal cleanup logging from NOTICE to VERBOSE ([9/15 of #319](https://github.com/Mithril-mine/libmdbx-devel/issues/319)).
+ - Changed the routine open-time and database-creation logging from NOTICE to VERBOSE ([#535](https://github.com/Mithril-mine/libmdbx-devel/issues/535)).
  - Changed the `MDBX_ENABLE_BUNCHES_REMOVAL=0` build to compile again; a CI compile check added ([#485](https://github.com/Mithril-mine/libmdbx-devel/issues/485)).
 
 ### Removed:
