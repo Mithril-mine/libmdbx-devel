@@ -6,7 +6,7 @@
 ///
 /// \author Леонид Юрьев aka Leonid Yuriev <leo@yuriev.ru> \date 2026
 
-/* Regression for the defect V-023 of the verification campaign
+/* Regression for the defect geometry-from-db-32bit-wrap of the verification campaign
  * (https://github.com/Mithril-mine/libmdbx-devel/issues/485):
  * the geometry-from-db byte values (page-count x pagesize) were formed in
  * size_t and wrap modulo 2^32 on 32-bit hosts, because meta_validate()
@@ -63,7 +63,8 @@ static void cleanup(void) {
 
 int main(void) {
   if (sizeof(size_t) > 4) {
-    printf("V-023: SKIPPED on a %u-bit host (the wrap needs a 32-bit size_t)\n", (unsigned)(sizeof(void *) * 8));
+    printf("geometry-from-db-32bit-wrap: SKIPPED on a %u-bit host (the wrap needs a 32-bit size_t)\n",
+           (unsigned)(sizeof(void *) * 8));
     return 0;
   }
 
@@ -131,7 +132,7 @@ int main(void) {
   }
   mdbx_env_close(env);
   if (!found) {
-    printf("V-023: FAIL - no valid meta page in the fresh database\n");
+    printf("geometry-from-db-32bit-wrap: FAIL - no valid meta page in the fresh database\n");
     cleanup();
     return 1;
   }
@@ -168,7 +169,7 @@ int main(void) {
   fclose(f);
 
   /* the reopen must keep the growth usable: the crafted over-range grow
-   * step is clamped (V-023) instead of silently wrapping to zero */
+   * step is clamped (geometry-from-db-32bit-wrap) instead of silently wrapping to zero */
   if (mdbx_env_create(&env)) {
     cleanup();
     return 1;
@@ -187,10 +188,10 @@ int main(void) {
   cleanup();
 
   if (info.mi_geo.grow == 0) {
-    printf("V-023: FAIL - the 2^32-byte grow step silently wrapped to zero (growth disabled)\n");
+    printf("geometry-from-db-32bit-wrap: FAIL - the 2^32-byte grow step silently wrapped to zero (growth disabled)\n");
     return 1;
   }
-  printf("V-023: PASS - the over-range grow step is preserved, mi_geo_grow = %llu bytes\n",
+  printf("geometry-from-db-32bit-wrap: PASS - the over-range grow step is preserved, mi_geo_grow = %llu bytes\n",
          (unsigned long long)info.mi_geo.grow);
   return 0;
 }

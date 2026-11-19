@@ -231,7 +231,7 @@ LIBMDBX_API uint32_t *mdbx_tst_scan4seq_variant(unsigned variant, uint32_t *rang
 LIBMDBX_API const uint32_t *mdbx_tst_scan4seq_checker(const uint32_t *pnl, size_t seq);
 
 /** \brief Runs the gc_store_retired hook-replacement case matrix (the
- * V-003 regression scenario): crafted retired lists with an in-window
+ * gc-store-retired-growth-corruption regression scenario): crafted retired lists with an in-window
  * retired-pages growth injected by a cursor_put stub, FIFO/LIFO arms,
  * goodchunk windows - the REAL store loop from src/gc-store-retired.h is
  * compiled into the testing API unit with its callees stubbed.
@@ -253,7 +253,7 @@ LIBMDBX_API int mdbx_tst_gc_store_retired_cases(void);
  * \ingroup c_testing */
 #define MDBX_TST_PAGEHDRSZ 20u
 
-/** \brief Runs the GC dense-packing solver (the V-004 closed form).
+/** \brief Runs the GC dense-packing solver (the gc-dense-solver-unbounded-stall closed form).
  *
  * \param slots           The available GC records/identifiers.
  * \param volume          The pages to cover.

@@ -289,7 +289,7 @@ TEST(delete_after_tail, dupsort_contract) {
       EXPECT_EQ(MDBX_SUCCESS, mdbx_cursor_del(mc.mc, MDBX_CURRENT));
       /* no next key: MDBX_NOTFOUND at the end of the table */
       EXPECT_EQ(MDBX_NOTFOUND, mdbx_cursor_get(mc.mc, &key, &data, MDBX_NEXT));
-      /* known contract gap V-029 (SET_RANGE past-end dual encoding): the
+      /* known contract gap set-range-past-end-dual-encoding (SET_RANGE past-end dual encoding): the
        * exact GET_CURRENT outcome from the past-end state depends on the
        * internal path that produced it - deliberately not asserted here */
       MDBX_stat stat_after;

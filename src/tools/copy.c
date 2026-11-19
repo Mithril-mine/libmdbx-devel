@@ -127,7 +127,7 @@ int main(int argc, char *argv[]) {
 
   if (user_break) {
     /* the break handlers are installed, so SIGINT/SIGTERM must not be
-     * swallowed silently between the stages (V-072) */
+     * swallowed silently between the stages (chk-interrupt-exit-code) */
     act = "interrupted";
     rc = MDBX_EINTR;
   }

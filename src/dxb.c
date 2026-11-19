@@ -376,7 +376,7 @@ __cold int dxb_setup(MDBX_env *env, const int lck_rc, const mdbx_mode_t mode_bit
     /* use present params from db, but form the byte values in 64 bits:
      * meta_validate bounds the page counts only by MAX_PAGENO, so the
      * page-count-by-pagesize products may exceed the address space of a
-     * 32-bit host and would silently wrap there (V-023), distorting the
+     * 32-bit host and would silently wrap there (geometry-from-db-32bit-wrap), distorting the
      * geometry or disabling the growth. Refuse such a database cleanly
      * instead, the same way an EINVAL from mdbx_env_set_geometry() is
      * reported for the other geometry incompatibilities. */

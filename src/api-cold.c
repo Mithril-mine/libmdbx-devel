@@ -539,7 +539,7 @@ LIBMDBX_API int mdbx_txn_abort(MDBX_txn *txn) { return __inline_mdbx_txn_abort(t
 /* the only one of the 27 LIBMDBX_INLINE_API entries that had no exported
  * fallback: without it the legacy two-argument inline is unavailable to
  * applications linking the shared library non-inline (an ODR hazard for
- * user builds) - V-076 */
+ * user builds) - txn-release-all-cursors-export-gap */
 LIBMDBX_API int mdbx_txn_release_all_cursors(const MDBX_txn *txn, bool unbind) {
   return __inline_mdbx_txn_release_all_cursors(txn, unbind);
 }

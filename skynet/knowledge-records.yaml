@@ -1,19 +1,50 @@
 # Экспорт проектных знаний живой MCP-памяти (генерируется).
 # Регенерация: python3 skynet/MCP-shared-graph-memory/tools/export-knowledge.py
-# generated_at: 2026-11-12 14:55 UTC
+# generated_at: 2026-11-20 00:41 UTC
 
 vocab:
   modules:
+    - api-cursor
+    - api-env
+    - api-get-cached
+    - api-txn-data
     - build
     - core
+    - cursor
+    - cursor-mut
+    - cxx
+    - defrag
+    - delegation
+    - dxb
+    - gc
+    - global
+    - issue485
+    - issue485-fix-campaign
+    - lck
     - memory
     - meta
+    - mvcc
+    - mvcc-readers
+    - node
+    - osal
+    - page-iov
+    - page-ops
+    - page-split
+    - pnl
     - practice
     - swarm
     - testing
     - todo
     - tools
+    - tree-cutoff
+    - tree-ops
+    - txn
+    - verification
   topics:
+    - api-cursor:bunch-unpositioned-poison
+    - api-env:syncbytes-truncation
+    - api-get-cached:offset-unbounded
+    - api-txn-data:put-dangling-cursor
     - build:cmake-notes
     - build:options-gates
     - core:cpp-api-layer
@@ -26,6 +57,38 @@ vocab:
     - core:reader-slots-rthc
     - core:sync-modes
     - core:usdt-probes
+    - core:verification-state
+    - cursor-mut:fix-parent-cursor
+    - cursor:distance-eof-hard
+    - cursor:distance-multipage-hive
+    - cursor:estimate-past-end
+    - cursor:key-equal-miss
+    - cursor:set-range-past
+    - cxx:erroneous-empty-source
+    - cxx:get-batch-staging
+    - cxx:inline-api-missing
+    - cxx:printable-ascii
+    - defrag:adopted-txn-midtxn
+    - defrag:stuck-retry-noobstacles
+    - defrag:timelimit-goal-gate
+    - delegation:protocol
+    - dxb:geo-wrap
+    - dxb:pagesize-discovery-blindspot
+    - dxb:readahead-anchor-overflow
+    - dxb:sync-locked-exception
+    - gc:crafted-interior-disorder
+    - gc:dense-solver-liveness
+    - gc:gc-store-retired
+    - gc:neon-clz-shift
+    - gc:store-retired-fifo
+    - global:rthc-postfini-reuse
+    - issue485-fix-campaign:final-state
+    - issue485-fix-campaign:reproduced
+    - issue485-fix-campaign:stash-lesson
+    - issue485-fix-campaign:summary
+    - issue485-fix-campaign:unreproduced
+    - issue485:final-rollup
+    - lck:replaced-lck-copy
     - memory:backup-tiers-deletion
     - memory:data-loss-rootcause
     - memory:durability-policy
@@ -38,6 +101,7 @@ vocab:
     - meta:ci-fix-rewrite
     - meta:context-breadcrumbs
     - meta:devel-consolidation
+    - meta:dxb-bootid-geo
     - meta:history-rewrite-policy
     - meta:knowledge-map
     - meta:lru-sync-design
@@ -48,6 +112,20 @@ vocab:
     - meta:refactor-map-scanner
     - meta:schema-refactor-map
     - meta:state
+    - meta:troika-dump-tail
+    - mvcc-readers:cleanup-dead-negative
+    - mvcc:cached-oldest-forged
+    - mvcc:hsr-decline-loop
+    - node:crafted-offset-guard
+    - osal:win-ior-drain
+    - osal:win-readonly-grow
+    - page-iov:max-io-bytes
+    - page-ops:subpage-threshold-assert
+    - page-ops:unspill-error-flag
+    - page-split:root-shift-oob
+    - pnl:cut-tail-shift
+    - pnl:insert-span-front
+    - pnl:merge-cmov-dependency
     - practice:alice-consult-implementations
     - practice:alice-consult-schema
     - practice:clang-ast-dump
@@ -58,16 +136,110 @@ vocab:
     - swarm:mission-protocol
     - testing:ci-state
     - testing:corpus-organization
+    - testing:gc-details-rework
+    - testing:no-simulacrum
     - testing:perf-profile
+    - testing:windows-macro-landmines
     - todo:mcpx-diagnostics
+    - tools:cli-exit-message
+    - tools:copy-signal-options
+    - tools:drop-abort-terminated
+    - tools:dump-locked-stdio
+    - tools:load-isxdigit-signed
+    - tools:load-nul-swallow
+    - tools:load-purge-multitable
     - tools:load-stdin-fix
+    - tools:logger-null-fmt
+    - tools:stat-reader-exit
+    - tree-cutoff:dump-position-latent
+    - tree-cutoff:dump-position-overshoot
+    - tree-ops:bunches-removal-build
+    - txn:dbi-update-lock
+    - txn:rename-undo-nested
+    - verification:api-surface
+    - verification:audit-identity-model
+    - verification:basal-commit-failure
+    - verification:bind-poison-publish
+    - verification:cached-oldest-discipline
+    - verification:chk-gc-record
+    - verification:chk-problem-accounting
+    - verification:clc-pin-discipline
+    - verification:commit-path-perf
+    - verification:coord-perfunction
+    - verification:crafted-page-rebalance
+    - verification:cursor-batch-accounting
+    - verification:cursor-bound-invariants
+    - verification:cursor-shadow-restore
+    - verification:cxx-api
+    - verification:cxx-checkpoint-guard
+    - verification:cxx-core
+    - verification:dbi-state-machine
+    - verification:defrag-arcs-accounting
+    - verification:defrag-move-containment
+    - verification:doc-gaps-hsr
+    - verification:dpl-setlen-no
+    - verification:f-isset-allbits
+    - verification:fetch-head-protocol
+    - verification:fork-child-isolation
+    - verification:foundation-holds
+    - verification:front-txnid-state
+    - verification:full-collapse-nav
+    - verification:gc-statement-ledger
+    - verification:histogram-packing
+    - verification:info-findings
+    - verification:iov-page-disk
+    - verification:lckless-gate
+    - verification:low-findings
+    - verification:merge-garbage-flag
+    - verification:meta-validate-branches
+    - verification:methodology-effectiveness
+    - verification:neon-correct
+    - verification:nested-begin-fault
+    - verification:nested-join-infallible
+    - verification:nested-merge-stamp
+    - verification:nometasync-txnid-dist
+    - verification:osal
+    - verification:osal-mresize-shrink
+    - verification:page-check-outofmap
+    - verification:page-check-space
+    - verification:page-get-ill
+    - verification:page-get-unchecked
+    - verification:page-split-splitpoint
+    - verification:page-split-stash
+    - verification:perf-api-invariants
+    - verification:pid-reuse-retention
+    - verification:pnl-allocation-slack
+    - verification:ptr-disp-byte
+    - verification:pv-pages-roundtrip
+    - verification:rdt-length-single
+    - verification:repro
+    - verification:search-branchless-codegen
+    - verification:shrink-two-phase
+    - verification:spill-lsb-abort
+    - verification:sync-locked-exit
+    - verification:tail-refund-reader
+    - verification:temp-cursor-self
+    - verification:tmp-signature
+    - verification:tools-contracts
+    - verification:tree-ops-contracts
+    - verification:tree-ops-lemmas
+    - verification:tree-search-lower
+    - verification:troika-fsm-proof
+    - verification:troika-tie-rule
+    - verification:two-phase-reader
+    - verification:txn-layout-drift
+    - verification:txn-ledger
+    - verification:unpark-base-aba
+    - verification:unsafe-meta-read
+    - verification:walk-accounting-exact
+    - verification:walk-containment-chain
 
 records:
 - key: bug:core:incore-assert
   type: bug
   date: 2026-09-27
   importance: 0.8
-  summary: "Дефект B54 (#52): incore-assert (проверка вхождения страницы в файл). Фикс: fix/b54-incore-assert@9dac859c (от devel@e7232d5e); бэкпорт master/stable/lts. Ассерт есть и на lts/0.13 (gc-get.c:1208)."
+  summary: "Дефект incore-assert (#52): проверка вхождения страницы в файл падала ассертом. Фикс: коммит 9dac859c (на базе devel e7232d5e); бэкпорт master/stable/lts. Ассерт есть и на lts/0.13 (gc-get.c:1208)."
 - key: decision:memory:backup-tiers-deletion
   type: decision
   date: 2026-09-27
@@ -163,6 +335,11 @@ records:
   date: 2026-09-27
   importance: 0.7
   summary: "Пробники (проверено 12.11): USDT/SystemTap/DTrace гейтится ENABLE_SYSTEMTAP/ENABLE_DTRACE + sys/sdt.h, иначе no-op (preface.h:914) — добавление пробников безопасно. Постоянные точки — механизм MPROBE_*/MDBX_PROBES (src/logging_and_debug.h) без #if на call-site, конвенции в docs/engineering/probe-bus.md. Временные/отладочные зонды в реестр probes не попадают (чистка — probe_remove или перескан scan_probes.py)."
+- key: fact:core:verification-state
+  type: fact
+  date: 2026-11-19
+  importance: 0.9
+  summary: "Verification state of the codebase after the campaign (what is proven good, what to watch next). PROVEN GOOD (statement-level, all P1-P7 verdicts, no open refuted findings): the PNL family (pnl.h pnl-slack/capacity/order lemmas, DPL cap/order, RKL-I1..I5 reclaim invariants, SORT search/quicksort/radix lemmas) — the arithmetic cores survived the adversarial review and the structure-to-consumer pair audit (PAIR-N1..N6 call-site contracts); tree.c/tree-search.c (zero refuted in that tranche), the transactional core (zero new refuted in the final lens), dxb/meta durability format, gc-get/gc-put after the gc-store-retired-growth-corruption and gc-dense-solver-unbounded-stall fixes. ~8900 of 9711 obligations verified across 155/155 files; 9 real defects found and all fixed (scan4seq-units-false-claim retracted). WATCH NEXT (the follow-up issues from the campaign): (1) Windows-only RDONLY mmap growth paths (#549) — windows-lck-restored-copy-opener-race and windows-readonly-mmap-extent-fixed-at-open, never confirmed at runtime on Windows, major-if-confirmed; (2) fix-vs-docs decisions on the defrag contract trio (#550): defrag-stuck-retry-success-verdict (pinned by ut defrag-contract with a known-gap marker), defrag-time-limit-unreachable-goal, defrag-adopted-txn-mid-commit-user-writes; (3) cxx API minors (#551): cxx-decoder-empty-source-predicate, cxx-is-printable-ascii-mask-aliasing, cxx-map-handle-slice-minors; (4) infra (#552): the Windows RDONLY test and the tools round-trip fuzz; (5) #553: the chk-interrupt-exit-code suite test (shell probe only today). The UBSan CI gate cell (#530) institutionalizes the root-split-cursor-stack-shift-bound bounds-trap family; the BUNCHES=0 compile cell institutionalizes bunches-removal-off-build-break; the details_scan4seq differential guards the scan4seq family after the scan4seq-units-false-claim retraction. Carriers: bug:issue485:final-rollup, this record, and the engineering docs on master (libmdbx-invariants.md §7, verification-state.md)."
 - key: fact:memory:data-loss-rootcause
   type: fact
   date: 2026-09-27
@@ -185,9 +362,9 @@ records:
   summary: "Схема знаний MCP-памяти (домен = модуль словаря). meta — нулевой обязательный раздел: знания о знаниях, карта и процедуры. practice — общие практики (Кайдзен, методологии). swarm и coordination — рой и протоколы, доки в skynet-draft/devel. Прочие модули — project (libmdbx, master). todo — неклассифицированное ждёт разбора; archive — устаревшее/legacy (хранить, не импортировать). Правила: devel НЕ правим до конца задачи, полезное извлекаем рядом в память; знания преимущественно про master; бэкпорты — по месту, каждый фикс отдельная ситуация. Рецепты выборок: recall('{тип}:{модуль-домена}:*') и search(терм). Процедуры и double-loop — SKILL.md в skynet/MCP-shared-graph-memory/. Дистилляция архива памяти роя (dump 25.09, 126/104) в домены выполнена 27.09: технические знания -> fact:core:*, сборка/тесты -> fact:build:*, fact:testing:*, практики -> proc:practice:*, рой -> fact:swarm:*, инвентарь и double-loop -> fact:meta:archive-index / proc:meta:archive-distillation (рабочее состояние роя: ящики/письма/реестры — в память НЕ переносится)."
 - key: fact:meta:map-data-passport
   type: fact
-  date: 2026-11-12
-  importance: 0.9
-  summary: "ПАСПОРТ ДАННЫХ codegraph (регенерация 12.11: scan_all linux+win32 → pin-бэкап → load_map --replace): merged codegraph.json — functions 4579, types 408, macros 579, blocks 36296, edges 13072 unique (+216 semantic, unresolved 1326), regions 1028, uncovered-острова 485 (1713 строк), symbols 5566, coverage_pct 94.91, cg_generation=2; project-map 1705 файлов, system-deps 655 заголовков. Предыдущий паспорт 26.09 (4087/398/580/33264/11810/2018/96.17%/433 острова) заменён. Конвейер: python3 skynet/MCP-shared-graph-memory/tools/scan_all.py --configs linux,win32 --db <живая>."
+  date: 2026-11-19
+  importance: 0.7
+  summary: "CODEGRAPH+COVERAGE PASSPORT (2026-11-19, post-#485): structural map regenerated from master 34141f323 by scan_all.py (linux+win32 local, macos merged from the nightly CI artifact run 44452512943) — cg_generation 5, symbols 6732 (was 5566 at gen 2), edges 13202, regions 992, uncovered islands 469/1654 lines, map coverage_pct 95.05. Coverage tables populated from the CI coverage-profile run 44608982010 (cells linux-gcc-ubuntu24-debug-coverage + win-mscl-x64-debug-coverage via collect_coverage.py --lcov lines.info; win-mingw cell empty — the known mingw gcov mystery): union 6732 symbols total / 3913 covered = 58.1% (109-111 files, 1598+3591 symbols per cell, block records 32-33k). test_id format: ut/<cell>. Per-module breakdown via coverage_summary(module=''). The knowledge records of the #485 campaign are in bug:issue485:final-rollup, fact:core:verification-state, proc:verification:methodology-effectiveness (+ earlier bug:issue485-fix-campaign:*, bug:gc:*, proc:verification:ptr-disp-byte); ADR verification-campaign-protocol updated to closed."
 - key: fact:practice:clang-ast-dump
   type: fact
   date: 2026-09-25
@@ -227,7 +404,7 @@ records:
   type: proc
   date: 2026-09-27
   importance: 0.85
-  summary: "Double-loop по дистилляции архива роя (27.09): процедура — инвентаризация дампа (типы/назначение) -> отбор устойчивых знаний -> консолидация в записи по 4 доменам (core/build/testing/practice/swarm/meta) -> link'и. Наблюдения: (1) «знания != память роя» — майлбоксы/реестры/статусы это рабочее состояние, не знания; (2) 40+ технических сущностей консолидированы в ~20 записей без потери сути; (3) ценное из письменных отчётов (B54, #50, B56) уже частично в решениях/фактах — проверено пересечение. Следующий шаг — верификация парсера (паспорт данных), затем схема."
+  summary: "Double-loop по дистилляции архива роя (27.09): процедура — инвентаризация дампа (типы/назначение) -> отбор устойчивых знаний -> консолидация в записи по 4 доменам (core/build/testing/practice/swarm/meta) -> link'и. Наблюдения: (1) «знания != память роя» — майлбоксы/реестры/статусы это рабочее состояние, не знания; (2) 40+ технических сущностей консолидированы в ~20 записей без потери сути; (3) ценное из письменных отчётов сессий того периода уже частично в решениях/фактах — проверено пересечение. Следующий шаг — верификация парсера (паспорт данных), затем схема."
 - key: proc:meta:ast-data-lifecycle
   type: proc
   date: 2026-09-26

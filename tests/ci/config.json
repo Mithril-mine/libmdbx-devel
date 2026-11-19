@@ -123,7 +123,7 @@
         "-DENABLE_UBSAN:BOOL=ON"
       ],
       "ctest": null,
-      "note": "UndefinedBehaviorSanitizer gate (clang; issue #485, defect V-039): push-quick (fast scope on every PR and devel/master push) + linux-nightly (full scope); the bounds checker traps (fsanitize-undefined-trap-on-error) on the crafted maximal-height root split (crafted_meta_v039) and institutionalizes the bounds coverage (#485 RF-4)"
+      "note": "UndefinedBehaviorSanitizer gate (clang; issue #485, defect root-split-cursor-stack-shift-bound): push-quick (fast scope on every PR and devel/master push) + linux-nightly (full scope); the bounds checker traps (fsanitize-undefined-trap-on-error) on the crafted maximal-height root split (crafted_meta_v039) and institutionalizes the bounds coverage (a #485 recommendation)"
     },
     {
       "id": "linux-gcc-ubuntu24-debug-cxx-off",

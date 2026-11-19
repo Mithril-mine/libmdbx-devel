@@ -12,7 +12,7 @@
 ///
 /// \author Леонид Юрьев aka Leonid Yuriev <leo@yuriev.ru> \date 2026
 
-/// V-004 regression test (issue #497, see the PR description).
+/// gc-dense-solver-unbounded-stall regression test (issue #497, see the PR description).
 ///
 /// The dense solver is exercised through the testing API
 /// (mdbx_tst_gc_dense_pack(), tests/api.h): the REAL src/gc-dense.h closed

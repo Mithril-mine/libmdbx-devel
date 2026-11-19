@@ -86,6 +86,7 @@ Author: Leonid Yuriev \<leo@yuriev.ru\>. Home site: <https://libmdbx.dqdkfa.ru>.
 | [`../ru/deep-dive/internals.md`](../ru/deep-dive/internals.md) | Deep dive on LCK layout/versions, RLT slots, HSR protocol, fork(), WRITEMAP/auto-sync and recovery modes |
 | [`glossary-compact.md`](glossary-compact.md) | Compact glossary of terms used in discussions/reformulations (writemap, WAF, overflow, subpage, stragglers, presync, etc.) |
 | [`libmdbx-invariants.md`](libmdbx-invariants.md) | **Invariants checklist (RU)**: subsystems S1–S14, 7 critical invariants incl. cursor positioning determinism, C/C++ ABI boundary, module-risk matrix — used in every review/test |
+| [`verification-state.md`](verification-state.md) | **Verification state (RU)**: what the 2026-11 verification campaign proved good per subsystem, and the follow-up watch-list with the issue links — the compact entry point for the campaign knowledge |
 | [`subsystem-map.md`](subsystem-map.md) | Subsystem map S1–S14 with key `src/*` modules and refactoring risk levels (🔴🟠🟡) |
 | [`module-lock-matrix.md`](module-lock-matrix.md) | Pairwise subsystem conflict matrix (HIGH/MED/LOW) + high-risk `src/*` zones for parallel work planning |
 | [`test-durability-strategy.md`](test-durability-strategy.md) | Test durability strategy: `MDBX_SYNC_*` modes, speed-up transports (`/dev/shm`, RAM-disk), Quick/Full matrix |
@@ -125,6 +126,7 @@ Depending on the task, start from:
 - **Test scenarios as specs for test writers** → [`test-scenarios.md`](test-scenarios.md)
 - **Managed fault injection / probing in tests** → [`probe-bus.md`](probe-bus.md)
 - **Critical invariants to check in reviews/tests** → [`libmdbx-invariants.md`](libmdbx-invariants.md), [`subsystem-map.md`](subsystem-map.md)
+- **What the verification proved / what to watch next** → [`verification-state.md`](verification-state.md), campaign #485
 - **Subsystem conflict zones for parallel work** → [`module-lock-matrix.md`](module-lock-matrix.md)
 - **Test durability modes / speed-up transports** → [`test-durability-strategy.md`](test-durability-strategy.md)
 - **What to refactor first / known debt** → [`techdebt.md`](techdebt.md)

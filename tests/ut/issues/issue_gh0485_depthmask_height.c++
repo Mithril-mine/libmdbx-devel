@@ -16,7 +16,7 @@
 #include <string>
 #include <vector>
 
-/* Regression for the finding F-V9-7 of the verification campaign
+/* Regression for the finding dupsort-depthmask-shift-unreachable of the verification campaign
  * (https://github.com/Mithril-mine/libmdbx-devel/issues/485):
  * mdbx_dbi_dupsort_depthmask() read the nested-tree height raw from the
  * sub-tree's on-disk record and built the mask as `1u << height`: a crafted

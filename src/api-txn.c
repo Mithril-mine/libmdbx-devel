@@ -448,7 +448,7 @@ int mdbx_txn_checkpoint(MDBX_txn *txn, MDBX_txn_flags_t weakening_durability, MD
 
   if ((txn->flags & MDBX_TXN_DIRTY) == 0) {
     /* a successful nothing-to-checkpoint return: the latency snapshot must
-     * be closed the same way as on the real checkpoint path (F-V9-2) */
+     * be closed the same way as on the real checkpoint path (checkpoint-noop-latency-snapshot) */
     rc = MDBX_RESULT_TRUE;
     goto done;
   }

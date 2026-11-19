@@ -178,7 +178,7 @@ __cold const uint32_t *mdbx_tst_scan4seq_checker(const uint32_t *pnl, size_t seq
 }
 
 /* ------------------------------------------------------------------------ */
-/* The gc_store_retired hook-replacement harness (the V-003 regression
+/* The gc_store_retired hook-replacement harness (the gc-store-retired-growth-corruption regression
  * scenario, issue #495): the REAL src/gc-store-retired.h store loop is
  * compiled into this unit with its callees replaced by the stubs below - a
  * stack MDBX_env/MDBX_txn with a crafted retired list (canary prefix +

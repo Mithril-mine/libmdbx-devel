@@ -12,7 +12,7 @@
 #include <cstdlib>
 #include <dlfcn.h>
 
-/* Regression for the defect V-076 of the verification campaign
+/* Regression for the defect txn-release-all-cursors-export-gap of the verification campaign
  * (https://github.com/Mithril-mine/libmdbx-devel/issues/485):
  * mdbx_txn_release_all_cursors() — the legacy two-argument
  * LIBMDBX_INLINE_API wrapper — was the only one of the 27 inline APIs

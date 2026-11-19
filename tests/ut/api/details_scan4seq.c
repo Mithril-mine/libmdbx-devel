@@ -23,7 +23,7 @@
 /* One might be tempted to re-implement the SIMD returns in the harness.
  * Do not: the x86 variants return via element arithmetic while the
  * checker's displacements are in BYTES - mixing the units is the exact
- * trap that produced a false critical finding (issue #485, V-002
+ * trap that produced a false critical finding (issue #485, scan4seq-units-false-claim
  * retraction, docs/verification/v002-retraction.md). This test drives the
  * verbatim library code through the testing API wrappers. */
 

@@ -106,3 +106,33 @@ internals.h ◄── каждый модуль src/*.c
    по мере необходимости, не хранить в репозитории.
 5. После перемещения кода сверять `techdebt.md` (упразднённые ветки pnl/gc/defrag) — часто
    рефакторинг интерфейса и чистка мёртвых веток идут вместе.
+## 6. Контракты примитивов, проверенные верификацией (2026-11, issue #485)
+
+Кампания постанционной верификации сняла pre/post-контракты с ключевых
+внутренних примитивов. Ниже — индекс по подсистемам; детальные таблицы
+контракт-сайтов (каждый call-site с проверкой предусловий) были в архиве
+кампании (`docs/verification/` ветки `docs/engineering-verification`),
+который расформирован после переноса знаний — носители знания сейчас:
+база знаний shared-graph-memory (`fact:core:verification-state`,
+`bug:issue485:final-rollup`) и итог issue
+[#485](https://github.com/Mithril-mine/libmdbx-devel/issues/485).
+
+| Подсистема/примитив | Контракты |
+|---|---|
+| PNL/DML/TXL | `pnl_merge` (флаг дубликата = сумма−1; мусор при флаге), `pnl_cut` (границы proof by call-sites), `pnl_need/append*` (reserve-first), `dml_*` |
+| DPL/RKL | `txn_dpl_append` (pivot-эвристика 42), `dpl_setlen` (сентинелл, НЕ клампит sorted), `rkl_push/pop/hole` (I1–I5) |
+| Мета/dxb | `meta_snap/meta_update_begin/end` (двухфазный протокол), `meta_validate` (14 reject-ветвей), `dxb_sync_locked` (полная карта выходов), `dxb_shrink_*` (two-phase) |
+| Страницы/node | `page_new/dirty/touch*/unspill/retire_ex/shadow_*`, `page_check` (полнота и unchecked-список), `iov_*`, `node_add*/del/shrink` |
+| Дерево/dbi/table | `tree_search/rebalance/propagate_key/drop`, `tree_cutoff_*`, `walk_pages/tbl/pgno`, `dbi_open/update/import/rename`, `tbl_*` |
+| Курсоры | `cursor_seek/ops` (таблица исходов R1–R5), `cursor_put(MULTIPLE)/del`, `cursor_distance/distribute`, предикаты `cursor.h` |
+| Транзакции | `txn_commit/abort` (4 формы), `nested_start/join/merge/undo`, `txn_basal_commit` (окно без падающих операций), `txn_ro_park/unpark` |
+| Координация | `mvcc_bind_slot/cleanup_dead/kick_laggards`, `lck_*` (flavors), `rthc_*` (TLS/fork) |
+| API-поверхность | Матрица `MDBX_opt_*` (24 случая), лестницы env create/open/close, park/clone/info, get-cached (7-статусная машина) |
+| OSAL | mmap/mresize/sync/fsync/ioring/thread — posix+windows парно |
+| C++ | `slice/buffer` (модальности), `env/txn/cursor` (exception-семантика), inline-API/ODR |
+| Perf | Горячие пути: pnl/dpl/rkl/gc/tree-search/mvcc/iov/comparators — вердикты и рекомендации |
+
+Правило сопровождения: при изменении контракта примитива обновить
+соответствующую строку этой секции и
+[`libmdbx-invariants.md`](libmdbx-invariants.md) §7 — они являются
+эталоном pre/post для ревью.

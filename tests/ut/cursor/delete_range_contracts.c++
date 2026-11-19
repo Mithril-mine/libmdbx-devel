@@ -40,9 +40,9 @@
  *    the cutoff and stays iterable to the exact remaining model
  *    (the SAFE-A restore of the internal clone list).
  *
- * known contract gap V-029 (SET_RANGE past-end leaves two encodings of the
- * same logical state) and V-030 (a TO_KEY_EQUAL miss fills the cursor on
- * the neighbor record): range endpoints here are always positioned on real
+ * known contract gap set-range-past-end-dual-encoding (SET_RANGE past-end leaves two encodings of the
+ * same logical state) and delete-range-tokey-equal-cursor-fill (a TO_KEY_EQUAL miss fills
+ * the cursor on the neighbor record): range endpoints here are always positioned on real
  * pairs via SET_KEY/GET_BOTH, so the path-dependent follow-ups of those
  * states are deliberately not asserted. */
 

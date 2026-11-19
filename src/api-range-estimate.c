@@ -80,7 +80,7 @@ __hot static int cursor_diff(const MDBX_cursor *const __restrict x, const MDBX_c
  * guarding the signed product: a crafted tree may claim item counts whose
  * product with the difference does not fit into ptrdiff_t, and the signed
  * overflow would be UB. The result is clamped instead, which only affects
- * the approximation quality for such crafted values (V-058). */
+ * the approximation quality for such crafted values (estimate-count-signed-product-wrap). */
 __hot static ptrdiff_t estimate_scaled(uint64_t items, ptrdiff_t diff, uint64_t pages) {
   if (diff > 0) {
     if (items > (uint64_t)PTRDIFF_MAX / (uint64_t)diff)

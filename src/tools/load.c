@@ -122,7 +122,7 @@ static int badend(void) {
 #define LINE_SENTINEL '\x01'
 
 /* fgets() stops at an embedded NUL byte and hides the tail of the physical
- * line from every strlen()-based consumer, silently swallowing it (V-067):
+ * line from every strlen()-based consumer, silently swallowing it (load-nul-byte-silent-truncation):
  * a dump line " \0JUNK" loaded as the empty value with the rest dropped,
  * and `database=na\0me` created the table `na`. To make the exact amount
  * read by fgets() recoverable, the untouched buffer tail is pre-filled with
@@ -867,7 +867,7 @@ int main(int argc, char *argv[]) {
          * records: the named tables' descriptors are MAIN records too, so
          * mdbx_drop() refuses MAIN while any named table exists, and a real
          * drop would also destroy the tables loaded by the earlier sections
-         * (V-068: -p failed with MDBX_INCOMPATIBLE on the trailing MAIN
+         * (load-purge-multitable-trailing-main: -p failed with MDBX_INCOMPATIBLE on the trailing MAIN
          * section of every multi-table dump, leaving a partial load).
          * Purge the raw remainder instead: delete every MAIN record that
          * does not name a table, using the same ACCEDE probe mdbx_dump

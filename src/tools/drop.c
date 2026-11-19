@@ -149,7 +149,7 @@ int main(int argc, char *argv[]) {
   rc = mdbx_txn_commit(txn);
   /* mdbx_txn_commit() terminates the handle whatever it returns
    * (except MDBX_THREAD_MISMATCH), so the handle must not be aborted
-   * afterwards - the failed-commit path did exactly that (V-070) */
+   * afterwards - the failed-commit path did exactly that (drop-abort-terminated-txn-handle) */
   txn = nullptr;
   if (unlikely(rc != MDBX_SUCCESS)) {
     error("mdbx_txn_commit", rc);

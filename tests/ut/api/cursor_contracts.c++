@@ -38,11 +38,10 @@
  *    a DUPSORT single-key range yields the duplicate count, and a reversed
  *    range yields a negative distance.
  *
- * known contract gaps V-043/V-058 (the past-end dual encoding makes
- * estimate_distance = -1 / cursor_distance = -2 / estimate_range = 0 for
- * one logical range, and the items*diff multiplication wraps past
- * PTRDIFF_MAX on huge tables) - the ambiguous past-end inputs are
- * deliberately not asserted. */
+ * known contract gaps estimate-past-end-dual-response/estimate-count-signed-product-wrap (the past-end dual encoding
+ * makes estimate_distance = -1 / cursor_distance = -2 / estimate_range = 0 for one logical range, and the items*diff
+ * multiplication wraps past PTRDIFF_MAX on huge tables) - the ambiguous past-end inputs are deliberately not asserted.
+ */
 
 namespace {
 
@@ -264,9 +263,8 @@ TEST(cursor_contracts, estimate_first_last_single_key) {
   ASSERT_EQ(MDBX_SUCCESS, mdbx_estimate_range(txn.txn, plain, &hi, nullptr, &lo, nullptr, &distance));
   EXPECT_GT(0, distance);
 
-  /* known contract gaps V-043/V-058 (issue #485): the past-end dual
-   * encoding and the items*diff wrap - the ambiguous past-end inputs are
-   * deliberately not asserted here. */
+  /* known contract gaps estimate-past-end-dual-response/estimate-count-signed-product-wrap (issue #485): the past-end
+   * dual encoding and the items*diff wrap - the ambiguous past-end inputs are deliberately not asserted here. */
 }
 
 TEST(cursor_contracts, past_end_dual_encoding_characterized) {
@@ -311,7 +309,7 @@ TEST(cursor_contracts, past_end_dual_encoding_characterized) {
   /* the zone introspection pins the dual encoding itself: a pointed,
    * eof-marked cursor with ki == nkeys on the fast path
    * (the sibling-failure path instead lands on ki == nkeys - 1:
-   * known contract gap V-029, the two encodings are not unified) */
+   * known contract gap set-range-past-end-dual-encoding, the two encodings are not unified) */
   unsigned zone = 0;
   int top = -1;
   unsigned ki_top = 0;
@@ -328,24 +326,26 @@ TEST(cursor_contracts, past_end_dual_encoding_characterized) {
   /* One logical range (begin past-end, end LAST), true signed rank -1.
    * The observed answers across the public rank/estimate APIs - pinned
    * as the CURRENT behavior, to be updated together with the fix:
-   * known contract gaps V-043/V-037 (R1-uniformity at the estimate layer). */
+   * known contract gaps estimate-past-end-dual-response/cursor-put-current-dangling-registration (R1-uniformity at the
+   * estimate layer). */
   ptrdiff_t est = 0;
   ASSERT_EQ(MDBX_SUCCESS, mdbx_estimate_distance(a, b, &est));
-  EXPECT_EQ(-1, est) << "literal ki delta - correct by coincidence (V-043)";
+  EXPECT_EQ(-1, est) << "literal ki delta - correct by coincidence (estimate-past-end-dual-response)";
 
   intptr_t dist0 = 0;
   ASSERT_EQ(MDBX_SUCCESS, mdbx_cursor_distance(a, b, &dist0, 0));
   /* the eof_hard rank adjust stacks on the ki==nkeys encoding: -2 */
-  EXPECT_EQ(intptr_t(-2), dist0) << "known contract gap V-043: the wrap-around answer";
+  EXPECT_EQ(intptr_t(-2), dist0) << "known contract gap estimate-past-end-dual-response: the wrap-around answer";
 
   intptr_t dist1 = 0;
   ASSERT_EQ(MDBX_SUCCESS, mdbx_cursor_distance(a, b, &dist1, 1));
-  EXPECT_TRUE(dist1 == -1 || dist1 == 1) << "deepness=1 skips the adjust (V-043)";
+  EXPECT_TRUE(dist1 == -1 || dist1 == 1) << "deepness=1 skips the adjust (estimate-past-end-dual-response)";
 
   ptrdiff_t rng = 0;
   MDBX_val beginkey = {(void *)"zzz", 3};
   ASSERT_EQ(MDBX_SUCCESS, mdbx_estimate_range(txn, dbi, &beginkey, nullptr, nullptr, nullptr, &rng));
-  EXPECT_EQ(0, rng) << "a fresh begin cursor takes the sibling-failure encoding (V-029/V-043)";
+  EXPECT_EQ(0, rng) << "a fresh begin cursor takes the sibling-failure encoding "
+                       "(set-range-past-end-dual-encoding/estimate-past-end-dual-response)";
 
   mdbx_cursor_close(a);
   mdbx_cursor_close(b);

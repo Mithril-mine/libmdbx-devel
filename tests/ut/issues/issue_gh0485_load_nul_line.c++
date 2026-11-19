@@ -16,7 +16,7 @@
 #include <string>
 #include <vector>
 
-/* Regression for the defect V-067 of the verification campaign
+/* Regression for the defect load-nul-byte-silent-truncation of the verification campaign
  * (https://github.com/Mithril-mine/libmdbx-devel/issues/485):
  * fgets() stops at an embedded NUL byte, so the strlen()-based line readers
  * of mdbx_load saw only the prefix of a physical line: a dump line
