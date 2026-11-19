@@ -20,13 +20,11 @@
  * every page size / geometry combination. White-box: the test compiles
  * src/meta.c into the unit (the details_rkl.c pattern).
  *
- * Verification campaign item SC-94 (the reject branches enumerated by
- * wave 2): magic/version, page-pgno, page-flags, pagesize, txnid_a != txnid_b,
- * steady-sign, gc-flags, main-flags, txnid range, geo.lower, geo.upper,
- * first_unallocated, allocated-vs-filesize, the mmap_limit bound (made
- * always-reachable through the test-only mdbx_tst_override_mmap_limit),
- * the #454 height/root/leaf/branch equivalences, false-empty trees and
- * mod_txnid.
+ * The meta_validate reject-branch corpus (the reject branches enumerated
+ * by the 2026-11 verification campaign, issue #485): magic/version, page-pgno, page-flags, pagesize, txnid_a !=
+ * txnid_b, steady-sign, gc-flags, main-flags, txnid range, geo.lower, geo.upper, first_unallocated,
+ * allocated-vs-filesize, the mmap_limit bound (made always-reachable through the test-only
+ * mdbx_tst_override_mmap_limit), the #454 height/root/leaf/branch equivalences, false-empty trees and mod_txnid.
  *
  * NOTE: format-dependent (the on-disk meta layout is touched directly through
  * internals.h); must be revisited together with any on-disk format change. */

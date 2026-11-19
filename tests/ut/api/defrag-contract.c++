@@ -38,11 +38,10 @@
  *
  * Known contract gaps of the verification campaign (#485) are pinned with
  * `known contract gap V-0xx` comments instead of the documented wording:
- * V-060 (a stuck-retry stop still reports SUCCESS + noobstacles), V-061
- * (time_limit is only evaluated once the defrag_atleast goal edge is
- * reached - here atleast=0 keeps the gate open, so the limit applies),
- * V-064 (the adopted-txn per-cycle checkpoint commits the user's pending
- * writes mid-transaction and detaches the user's cursors). */
+ * defrag-stuck-retry-success-verdict (a stuck-retry stop still reports SUCCESS + noobstacles),
+ * defrag-time-limit-unreachable-goal (time_limit is only evaluated once the defrag_atleast goal edge is reached - here
+ * atleast=0 keeps the gate open, so the limit applies), defrag-adopted-txn-mid-commit-user-writes (the adopted-txn
+ * per-cycle checkpoint commits the user's pending writes mid-transaction and detaches the user's cursors). */
 
 namespace {
 
@@ -207,7 +206,7 @@ TEST(defrag_contract, completion_reports_success) {
   EXPECT_LE(result.rough_estimation_cycle_progress_permille, 1000u);
   EXPECT_GE(result.cycles, 1u);
   EXPECT_GE(probe.calls, result.cycles) << "the callback fires at the beginning and the end of every cycle";
-  /* known contract gap V-060: a stuck-retry stop would also report
+  /* known contract gap defrag-stuck-retry-success-verdict: a stuck-retry stop would also report
    * MDBX_SUCCESS with stopping_reasons == noobstacles despite the named
    * obstacle - not driven here (nondeterministic to construct). */
 
@@ -242,7 +241,7 @@ TEST(defrag_contract, time_limit_stop_with_adaptive_batch) {
    * (the cycle size aims at a fraction of the remaining time budget).
    * With defrag_atleast = 0 the goal edge is pre-reached, so the limit
    * gate is open.
-   * known contract gap V-061: with an unreachable defrag_atleast goal the
+   * known contract gap defrag-time-limit-unreachable-goal: with an unreachable defrag_atleast goal the
    * time limit would never be evaluated (defrag_progress gating) - that
    * side is deliberately not asserted. */
   const int rc = mdbx_env_defrag(env.get(), 0, 0, 0, 65536 / 4, 0, 0, nullptr, nullptr, &result);
@@ -253,7 +252,7 @@ TEST(defrag_contract, time_limit_stop_with_adaptive_batch) {
     EXPECT_TRUE(result.stopping_reasons & MDBX_defrag_time_limit)
         << "stopping with work left must name the time limit, got " << result.stopping_reasons;
   }
-  /* known contract gap V-061: the docs promise an unconditional time limit. */
+  /* known contract gap defrag-time-limit-unreachable-goal: the docs promise an unconditional time limit. */
 }
 
 TEST(defrag_contract, adopted_txn_checkpoint_commits_and_detaches) {
@@ -286,7 +285,7 @@ TEST(defrag_contract, adopted_txn_checkpoint_commits_and_detaches) {
   const int rc = mdbx_env_defrag(env.get(), 1, 0, 16, 0, 0, 4096, nullptr, nullptr, &result);
   ASSERT_EQ(MDBX_SUCCESS, rc);
 
-  /* known contract gap V-064: the per-cycle checkpoint committed the user's
+  /* known contract gap defrag-adopted-txn-mid-commit-user-writes: the per-cycle checkpoint committed the user's
    * pending write mid-transaction and detached the user's cursors: any
    * further cursor operation is refused with MDBX_EINVAL ... */
   EXPECT_EQ(MDBX_EINVAL, mdbx_cursor_get(mc, &k, &d, MDBX_GET_CURRENT));
@@ -363,12 +362,12 @@ TEST(defrag_contract, stuck_retry_reports_success) {
   EXPECT_LE(result.rough_estimation_cycle_progress_permille, 1000u);
 
   if (result.obstructed_pgno != 0) {
-    /* the stuck-retry stop (V-060): rc may be SUCCESS with
+    /* the stuck-retry stop (defrag-stuck-retry-success-verdict): rc may be SUCCESS with
      * stopping_reasons == noobstacles(0) despite the named obstacle -
      * the residual work is visible only via pages_left / obstructed_*
-     * (known contract gap V-060 from issue #485, fix/docs pending) */
+     * (known contract gap defrag-stuck-retry-success-verdict from issue #485, fix/docs pending) */
     EXPECT_EQ(MDBX_defrag_noobstacles, result.stopping_reasons)
-        << "known contract gap V-060: the stuck stop reports no obstacles";
+        << "known contract gap defrag-stuck-retry-success-verdict: the stuck stop reports no obstacles";
     EXPECT_EQ(MDBX_SUCCESS, rc) << "the enough-goal override masks the stuck stop";
   } else {
     EXPECT_EQ(0u, result.stopping_reasons & MDBX_defrag_error);

@@ -219,7 +219,7 @@ __cold int mdbx_env_set_option(MDBX_env *env, const MDBX_option_t option, uint64
       /* the threshold is stored as a page count in a uint32 atom
        * (lck->autosync_threshold), so a larger value would be silently
        * truncated by bytes2pgno() and drive the autosync at a radically
-       * different threshold than the requested one (V-055) */
+       * different threshold than the requested one (sync-bytes-threshold-truncation) */
       return LOG_IFERR(MDBX_EINVAL);
     value = bytes2pgno(env, (size_t)value + env->ps - 1);
     if ((uint32_t)value != atomic_load32(&env->lck->autosync_threshold, mo_AcquireRelease) &&

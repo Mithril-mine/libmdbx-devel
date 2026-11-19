@@ -6,7 +6,7 @@
 ///
 /// \author Леонид Юрьев aka Leonid Yuriev <leo@yuriev.ru> \date 2026
 
-/* Regression for the defect V-039 of the verification campaign
+/* Regression for the defect root-split-cursor-stack-shift-bound of the verification campaign
  * (https://github.com/Mithril-mine/libmdbx-devel/issues/485):
  * page_split()'s root-split adjustment of the other cursors shifted their
  * stacks over levels 0..root_split_height, where root_split_height is the
@@ -71,12 +71,12 @@ static MDBX_env *env_create_open(const char *path, MDBX_env_flags_t flags) {
   MDBX_env *env = nullptr;
   int rc = mdbx_env_create(&env);
   if (rc) {
-    printf("V-039: env_create rc=%d\n", rc);
+    printf("root-split-cursor-stack-shift-bound: env_create rc=%d\n", rc);
     return nullptr;
   }
   rc = mdbx_env_open(env, path, flags, 0644);
   if (rc) {
-    printf("V-039: env_open rc=%d (%s)\n", rc, mdbx_strerror(rc));
+    printf("root-split-cursor-stack-shift-bound: env_open rc=%d (%s)\n", rc, mdbx_strerror(rc));
     mdbx_env_close(env);
     return nullptr;
   }
@@ -196,7 +196,9 @@ static bool write_crafted_meta(unsigned *baseline_pgno) {
         meta_validate(env, page_meta((page_t *)(void *)work), (const page_t *)work, *baseline_pgno, nullptr);
     debug_verbose = 0;
     if (crafted_rc != MDBX_SUCCESS) {
-      printf("V-039: FAIL - the crafted meta does not validate, rc=%d (see the reject above)\n", crafted_rc);
+      printf("root-split-cursor-stack-shift-bound: FAIL - the crafted meta does not validate, rc=%d (see the reject "
+             "above)\n",
+             crafted_rc);
       mdbx_env_close(env);
       return false;
     }
@@ -205,13 +207,13 @@ static bool write_crafted_meta(unsigned *baseline_pgno) {
 
   FILE *f = fopen(kDbPath, "r+b");
   if (!f) {
-    printf("V-039: FAIL - could not reopen the file for the crafted meta\n");
+    printf("root-split-cursor-stack-shift-bound: FAIL - could not reopen the file for the crafted meta\n");
     return false;
   }
   fseek(f, (long)*baseline_pgno * (long)ps, SEEK_SET);
   if (fwrite(work, 1, ps, f) != ps) {
     fclose(f);
-    printf("V-039: FAIL - could not write the crafted meta\n");
+    printf("root-split-cursor-stack-shift-bound: FAIL - could not write the crafted meta\n");
     return false;
   }
   fclose(f);
@@ -221,7 +223,7 @@ static bool write_crafted_meta(unsigned *baseline_pgno) {
 int main(void) {
   unsigned record_count = 0;
   if (!build_nearly_full_leaf_root(&record_count)) {
-    printf("V-039: FAIL - could not build the nearly-full leaf-root database\n");
+    printf("root-split-cursor-stack-shift-bound: FAIL - could not build the nearly-full leaf-root database\n");
     {
       cleanup();
       return 1;
@@ -229,17 +231,19 @@ int main(void) {
   }
   unsigned final_depth = 0;
   if (!build_database(record_count, true, &final_depth)) {
-    printf("V-039: FAIL - could not commit the final database\n");
+    printf("root-split-cursor-stack-shift-bound: FAIL - could not commit the final database\n");
     {
       cleanup();
       return 1;
     }
   }
-  printf("V-039: the real database: %u records, MAIN root is a nearly-full leaf (depth 1)\n", record_count);
+  printf(
+      "root-split-cursor-stack-shift-bound: the real database: %u records, MAIN root is a nearly-full leaf (depth 1)\n",
+      record_count);
 
   unsigned baseline_pgno = 0;
   if (!write_crafted_meta(&baseline_pgno)) {
-    printf("V-039: FAIL - could not craft the maximal-height meta\n");
+    printf("root-split-cursor-stack-shift-bound: FAIL - could not craft the maximal-height meta\n");
     {
       cleanup();
       return 1;
@@ -249,7 +253,7 @@ int main(void) {
   /* reopen: the crafted meta is accepted, the root leaf is walkable */
   MDBX_env *env = env_create_open(kDbPath, MDBX_NOSUBDIR);
   if (!env) {
-    printf("V-039: FAIL - the crafted database did not reopen\n");
+    printf("root-split-cursor-stack-shift-bound: FAIL - the crafted database did not reopen\n");
     {
       cleanup();
       return 1;
@@ -257,7 +261,7 @@ int main(void) {
   }
   MDBX_txn *txn = nullptr;
   if (mdbx_txn_begin(env, nullptr, MDBX_TXN_READWRITE, &txn)) {
-    printf("V-039: FAIL - no write transaction on the crafted database\n");
+    printf("root-split-cursor-stack-shift-bound: FAIL - no write transaction on the crafted database\n");
     mdbx_env_close(env);
     {
       cleanup();
@@ -266,7 +270,7 @@ int main(void) {
   }
   MDBX_dbi dbi;
   if (mdbx_dbi_open(txn, nullptr, MDBX_DB_DEFAULTS, &dbi)) {
-    printf("V-039: FAIL - the crafted MAIN table did not open\n");
+    printf("root-split-cursor-stack-shift-bound: FAIL - the crafted MAIN table did not open\n");
     mdbx_env_close(env);
     {
       cleanup();
@@ -277,7 +281,7 @@ int main(void) {
   /* an anchored other cursor: the root-split shift loop walks it */
   MDBX_cursor *anchor = nullptr;
   if (mdbx_cursor_open(txn, dbi, &anchor)) {
-    printf("V-039: FAIL - the anchor cursor did not open\n");
+    printf("root-split-cursor-stack-shift-bound: FAIL - the anchor cursor did not open\n");
     mdbx_env_close(env);
     {
       cleanup();
@@ -286,7 +290,7 @@ int main(void) {
   }
   MDBX_val key = {nullptr, 0}, value = {nullptr, 0};
   if (mdbx_cursor_get(anchor, &key, &value, MDBX_FIRST)) {
-    printf("V-039: FAIL - the anchor cursor did not position\n");
+    printf("root-split-cursor-stack-shift-bound: FAIL - the anchor cursor did not position\n");
     mdbx_env_close(env);
     {
       cleanup();
@@ -306,7 +310,7 @@ int main(void) {
   value.iov_len = sizeof(big);
   const int put_rc = mdbx_put(txn, dbi, &key, &value, 0);
   if (put_rc != MDBX_SUCCESS) {
-    printf("V-039: the crafted insert reported %d (%s)\n", put_rc, mdbx_strerror(put_rc));
+    printf("root-split-cursor-stack-shift-bound: the crafted insert reported %d (%s)\n", put_rc, mdbx_strerror(put_rc));
     mdbx_env_close(env);
     {
       cleanup();
@@ -317,7 +321,8 @@ int main(void) {
   txn = nullptr;
   mdbx_cursor_close(anchor);
   if (commit_rc != MDBX_SUCCESS) {
-    printf("V-039: the crafted-split commit reported %d (%s)\n", commit_rc, mdbx_strerror(commit_rc));
+    printf("root-split-cursor-stack-shift-bound: the crafted-split commit reported %d (%s)\n", commit_rc,
+           mdbx_strerror(commit_rc));
     mdbx_env_close(env);
     {
       cleanup();
@@ -336,7 +341,7 @@ int main(void) {
   remove(kDbPath);
   remove(kLckPath);
 
-  printf("V-039: PASS - the crafted maximal-height root split completed "
+  printf("root-split-cursor-stack-shift-bound: PASS - the crafted maximal-height root split completed "
          "(reopen after the split: %s, the campaign's availability note)\n",
          reopen_ok ? "ok" : "refused as expected");
   return 0;

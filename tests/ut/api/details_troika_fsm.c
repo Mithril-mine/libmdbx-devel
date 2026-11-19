@@ -34,7 +34,7 @@
  * test calls them through the testing API (mdbx_tst_troika_verify_fsm(),
  * mdbx_tst_pv2pages_verify()) instead of the former white-box inclusion of
  * the sources (tests/AGENTS.md, "no direct #include of the implementation").
- * Verification campaign item V-001 / SC-93. */
+ * Activates the troika-fsm-proof-unused machine proof (issue #485). */
 
 #include "mdbx.h"
 

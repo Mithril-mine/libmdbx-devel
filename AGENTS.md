@@ -248,3 +248,29 @@ Skills are loaded into opencode sessions at startup. When you change
 - the coordinator restarts canonical sessions afterwards.
 
 Full workflow: [skynet/skill-tree.md](skynet/skill-tree.md).
+
+## 13. Campaign findings: expressive slugs, no session-scoped identifiers in tracked files
+
+Findings, lemmas, work-items and tests introduced by a verification/audit
+campaign or an agent session (e.g. `V-042`, `F-V9-3`, `wave-5`, `SC-97`,
+`RF-4`, `B54`) are session-scoped: they are meaningful only within that
+session's materials and turn the documentation into a puzzle once several
+campaigns have accumulated.
+
+- Repository-tracked files MUST NOT use such identifiers. Name a finding
+  by an expressive slug (e.g. `windows-readonly-mmap-extent-fixed-at-open`,
+  `load-nul-byte-silent-truncation`) and give it a self-contained
+  description at the place of use — the reader must understand the item
+  without access to the campaign materials or GitHub issues;
+- The session-scoped identifiers may live in the campaign's working
+  artifacts (temporary branches/ledgers) and in GitHub
+  issues/discussions. An issue that survives the campaign must be
+  self-contained in the same way: full descriptions, slugs for handles,
+  and at most a historical cross-reference to the campaign's materials;
+- The shared-graph-memory store summaries are exported into git
+  (`skynet/knowledge-map.md`, `skynet/knowledge-records.yaml`) and
+  therefore follow the same rule — write store summaries in the slug
+  language, not in campaign-internal ids;
+- A permanent rule of the engineering docs: a proven invariant or a
+  contract enters `libmdbx-invariants.md` / `module-interfaces.md` under
+  its own descriptive lemma name, never under a campaign id.

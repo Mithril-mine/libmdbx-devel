@@ -8,7 +8,7 @@
 /* Appends to the dump buffer, clamping the tail back into it after every
  * call: snprintf() returns the untruncated length, so accumulating the raw
  * return values would push the tail beyond the buffer end once a call is
- * truncated, wrapping the next end - tail size to ~SIZE_MAX (V-053a). */
+ * truncated, wrapping the next end - tail size to ~SIZE_MAX (cursor-dump-position-snprintf-accumulation). */
 MDBX_MAYBE_UNUSED MDBX_ATTRIBUTE_NO_SANITIZE_ADDRESS(MDBX_NOTHING) static void cursor_dump_append(char **tail,
                                                                                                   char *const end,
                                                                                                   const char *fmt,

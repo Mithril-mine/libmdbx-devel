@@ -22,7 +22,7 @@
 #pragma warning(disable : 4702) /* unreachable code */
 #endif
 
-/* Regression for the defect V-069 of the verification campaign
+/* Regression for the defect stat-readers-lckless-exit-codes of the verification campaign
  * (https://github.com/Mithril-mine/libmdbx-devel/issues/485):
  * mdbx_stat -r exited FAILURE when mdbx_reader_list() returned
  * MDBX_RESULT_TRUE ("Reader Table is absent"): the raw RESULT_TRUE flowed

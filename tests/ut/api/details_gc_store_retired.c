@@ -12,7 +12,7 @@
 ///
 /// \author Леонид Юрьев aka Leonid Yuriev <leo@yuriev.ru> \date 2026
 
-/* V-003 regression (issue #495, the PR description): the gc_store_retired
+/* gc-store-retired-growth-corruption regression (issue #495, the PR description): the gc_store_retired
  * store loop must tolerate the retired-pages growth that happens inside the
  * RESERVE window of a GC write - the chunk accounting must use the
  * post-growth state and never underflow. The hook-replacement harness (the

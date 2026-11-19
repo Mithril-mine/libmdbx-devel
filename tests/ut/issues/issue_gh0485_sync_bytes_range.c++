@@ -13,7 +13,7 @@
 
 #include <cstdint>
 
-/* Regression for the defect V-055 of the verification campaign
+/* Regression for the defect sync-bytes-threshold-truncation of the verification campaign
  * (https://github.com/Mithril-mine/libmdbx-devel/issues/485):
  * mdbx_env_set_option(MDBX_opt_sync_bytes) validated the byte value only
  * against SIZE_MAX and stored bytes2pgno() of it into the uint32

@@ -57,7 +57,7 @@ static inline void tool_break_setup(void) {
  * argument (per `optstring`), so e.g. `-s --help` is NOT treated as a help
  * request. The scan stops at the first positional like getopt() does: a `-h`
  * after a positional is an extra operand for getopt to reject, not a help
- * request (V-072). */
+ * request (chk-interrupt-exit-code). */
 static inline bool tool_help_requested(int argc, char *const argv[], const char *optstring) {
   bool consume_next = false;
   for (int i = 1; i < argc; ++i) {

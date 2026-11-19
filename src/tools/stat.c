@@ -332,7 +332,7 @@ int main(int argc, char *argv[]) {
     }
     if (rc == MDBX_RESULT_TRUE)
       /* "Reader Table is absent"/"Now Reader Table is empty" are informational
-       * outcomes, not failures: RESULT_TRUE must not reach the exit code (V-069) */
+       * outcomes, not failures: RESULT_TRUE must not reach the exit code (stat-readers-lckless-exit-codes) */
       rc = MDBX_SUCCESS;
     if (!(table || alltbl || show_gc))
       goto txn_abort;

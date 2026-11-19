@@ -623,7 +623,7 @@ bailout:
   if (rc) {
     /* an interruption must win over the error-code mapping: every mdbx
      * error is negative, so MDBX_EINTR from a signal used to fall through
-     * to EXIT_FAILURE_MDBX and EXIT_INTERRUPTED was unreachable (V-072) */
+     * to EXIT_FAILURE_MDBX and EXIT_INTERRUPTED was unreachable (chk-interrupt-exit-code) */
     if (user_break)
       return EXIT_INTERRUPTED;
     if (rc > 0)

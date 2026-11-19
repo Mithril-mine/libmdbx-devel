@@ -16,7 +16,7 @@
 #include <string>
 #include <vector>
 
-/* Regression for the defect V-068 of the verification campaign
+/* Regression for the defect load-purge-multitable-trailing-main of the verification campaign
  * (https://github.com/Mithril-mine/libmdbx-devel/issues/485):
  * `mdbx_load -p` ran mdbx_drop() on MAIN for the trailing section of every
  * multi-table dump, but MAIN holds the named tables' descriptors, so the

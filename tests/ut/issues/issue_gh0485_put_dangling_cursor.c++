@@ -5,7 +5,7 @@
 
 #include <cstdint>
 
-/* Regression for the defect V-037 of the verification campaign
+/* Regression for the defect cursor-put-current-dangling-registration of the verification campaign
  * (https://github.com/Mithril-mine/libmdbx-devel/issues/485):
  * mdbx_put(MDBX_CURRENT) pre-checked the new value's size on a multi-value
  * key and bailed out with MDBX_BAD_VALSIZE without unregistering its stack

@@ -375,3 +375,28 @@ locking, overlapped I/O):
 *См. также: [`deep-dive.ru.md`](../ru/deep-dive/internals.md) (LCK/RLT/HSR/fork/WRITEMAP/recovery),
 [`deep-dive.ru.md`](../ru/deep-dive/internals.md) (механика),
 [`architecture.md`](../en/deep-dive/architecture.md) (инварианты рефакторинга).*
+## 4. Опыт верификационной кампании (2026-11, issue #485)
+
+- **Изоляция многопоточных сценариев в fork-ребёнке** (issue_gh0324/
+  issue_gh0317): падение сценария не должно терминировать весь тестовый
+  бинарник (joinable std::threads → std::terminate), а висящий ребёнок
+  ограничивается родительским watchdog, который снимает стеки ребёнка
+  (macOS `sample`, Linux `/proc/*/task/*/syscall`+`wchan`) **до** SIGKILL —
+  каждое возникновение диагностируемо;
+- **Детекторы «нет прогресса» должны допускать продолжение**: фиксация
+  сталла с диагностикой и продолжением сценария; фейл — только по
+  полному лимиту времени, тогда загруженный runner не даёт ложных
+  красных, а реальный дедлок ловится с данными;
+- **Probe-bus fault injection для недостижимых путей** (см.
+  [probe-bus.md](probe-bus.md)): `MPROBE_FAULT` сайты (`lck_setup_eacces`,
+  `fs_rdonly_flag`) делают достижимыми ветки без-lck/read-only, которые
+  иначе требуют реального readonly-файлхостинга; инъекции через file-IPC
+  управляются тестом;
+- **Кламп-ловушки в отчетах профилировщика**: debug-only код (`#ifndef
+  NDEBUG`) не воспроизводится в release — для таких путей fortify/gcov
+  пробы, а не ut-тесты (cursor-dump-position-snprintf-accumulation);
+- **Многопроцессный доступ к диагностической БД** — таблицы
+  coverage/test_metrics/cg-карты обновляются и CI-пайплайном
+  (артефакты `coverage-<cell>`, `cell-metrics-<cell>` →
+  `collect_coverage.py`/`collect_test_metrics.py`), и локально;
+  libmdbx допускает конкурентные процессы.

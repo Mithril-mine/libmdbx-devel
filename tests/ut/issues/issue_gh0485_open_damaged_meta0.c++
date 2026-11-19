@@ -16,7 +16,7 @@
 #include <fstream>
 #include <vector>
 
-/* Regression for the defect V-024 of the verification campaign
+/* Regression for the defect pagesize-discovery-damaged-meta-blindspot of the verification campaign
  * (https://github.com/Mithril-mine/libmdbx-devel/issues/485):
  * dxb_read_header() probes meta-1/meta-2 at multiples of the system page
  * size until a meta latches the real one. With a damaged meta-0 and a
