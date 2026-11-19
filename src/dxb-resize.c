@@ -390,7 +390,7 @@ __cold int dxb_set_readahead(const MDBX_env *env, const pgno_t edge, const bool 
   if (length == 0)
     return MDBX_SUCCESS;
 
-  NOTICE("readahead %s %u..%u", enable ? "ON" : "OFF", bytes2pgno(env, offset), bytes2pgno(env, offset + length));
+  VERBOSE("readahead %s %u..%u", enable ? "ON" : "OFF", bytes2pgno(env, offset), bytes2pgno(env, offset + length));
 
 #if defined(F_RDAHEAD)
   if (toggle && unlikely(fcntl(env->lazy_fd, F_RDAHEAD, enable) == -1))

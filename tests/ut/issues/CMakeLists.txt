@@ -101,6 +101,13 @@ add_issue_test(gh0485_put_dangling_cursor SOURCE "issue_gh0485_put_dangling_curs
 add_issue_test(gh0485_sync_bytes_range SOURCE "issue_gh0485_sync_bytes_range.c++")
 add_issue_test(gh0485_open_damaged_meta0 SOURCE "issue_gh0485_open_damaged_meta0.c++")
 add_issue_test(gh0485_depthmask_height SOURCE "issue_gh0485_depthmask_height.c++")
+add_issue_test(gh0535 SOURCE "issue_gh0535.c++")
+if(TARGET issue_gh0535)
+  # the test distinguishes debug builds (they dump meta-page diagnostics at
+  # the NOTICE level on every open, beyond the issue's scope) from release
+  # ones, where a routine open must keep stderr completely quiet
+  target_compile_definitions(issue_gh0535 PRIVATE "MDBX_DEBUG_FOR_TEST=${MDBX_DEBUG}")
+endif()
 
 # V-067/V-068 of #485 need the dump/load tool binaries (the gh0070 pattern).
 if(MDBX_BUILD_TOOLS)

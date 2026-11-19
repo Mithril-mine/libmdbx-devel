@@ -82,9 +82,11 @@ __cold int dxb_read_header(MDBX_env *env, meta_t *dest, const int lck_exclusive,
     while (1) {
       TRACE("reading meta[%d]: offset %u, bytes %u, retry-left %u", meta_number, offset, MDBX_MIN_PAGESIZE, retryleft);
       int err = osal_pread(env->lazy_fd, buffer, MDBX_MIN_PAGESIZE, offset);
-      if (err == MDBX_ENODATA && offset == 0 && loop_count == 0 && env->dxb_mmap.filesize == 0 &&
-          mode_bits /* non-zero for DB creation */ != 0) {
-        NOTICE("read meta: empty file (%d, %s)", err, mdbx_strerror(err));
+      if (err == MDBX_ENODATA && offset == 0 && loop_count == 0 && env->dxb_mmap.filesize == 0) {
+        if (mode_bits /* non-zero for DB creation */ != 0)
+          VERBOSE("%sexpected empty file (%d, %s)", "", err, mdbx_strerror(err));
+        else
+          NOTICE("%sexpected empty file (%d, %s)", "un", err, mdbx_strerror(err));
         return err;
       }
 #if IS_WINDOWS
@@ -761,8 +763,8 @@ __cold int dxb_setup(MDBX_env *env, const int lck_rc, const mdbx_mode_t mode_bit
 #if defined(MADV_REMOVE)
     if (lck_rc && (env->flags & MDBX_WRITEMAP) != 0 &&
         /* not recovery mode */ env->stuck_meta < 0) {
-      NOTICE("open-MADV_%s %u..%u", "REMOVE (deallocate file space)", env->lck->discarded_tail.weak,
-             bytes2pgno(env, env->dxb_mmap.current));
+      VERBOSE("open-MADV_%s %u..%u", "REMOVE (deallocate file space)", env->lck->discarded_tail.weak,
+              bytes2pgno(env, env->dxb_mmap.current));
       err = madvise(ptr_disp(env->dxb_mmap.base, allocated_aligned2os_bytes),
                     env->dxb_mmap.current - allocated_aligned2os_bytes, MADV_REMOVE)
                 ? ignore_enosys_and_eagain(errno)
@@ -772,7 +774,7 @@ __cold int dxb_setup(MDBX_env *env, const int lck_rc, const mdbx_mode_t mode_bit
     }
 #endif /* MADV_REMOVE */
 #if defined(MADV_DONTNEED)
-    NOTICE("open-MADV_%s %u..%u", "DONTNEED", env->lck->discarded_tail.weak, bytes2pgno(env, env->dxb_mmap.current));
+    VERBOSE("open-MADV_%s %u..%u", "DONTNEED", env->lck->discarded_tail.weak, bytes2pgno(env, env->dxb_mmap.current));
     err = madvise(ptr_disp(env->dxb_mmap.base, allocated_aligned2os_bytes),
                   env->dxb_mmap.current - allocated_aligned2os_bytes, MADV_DONTNEED)
               ? ignore_enosys_and_eagain(errno)
