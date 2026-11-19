@@ -392,7 +392,7 @@ smoke-ubsan: MDBX_CHECKING=2
 smoke-ubsan: smoke
 test-ubsan:
 	$(QUIET)$(MAKE) --no-print-directory IOARENA=false FLAVOR=ubsan MDBX_CHECKING=2 \
-		MDBX_BUILD_OPTIONS='$(MDBX_BUILD_OPTIONS) -DMDBX_CHECKING=2 -DENABLE_UBSAN:BOOL=ON -DENABLE_ASAN:BOOL=OFF -DENABLE_MEMCHECK:BOOL=OFF' \
+		CMAKE_OPT='$(CMAKE_OPT) -DMDBX_CHECKING=2 -DENABLE_UBSAN:BOOL=ON -DENABLE_ASAN:BOOL=OFF -DENABLE_MEMCHECK:BOOL=OFF' \
 		CFLAGS_EXTRA='$(CFLAGS_EXTRA) -DENABLE_UBSAN -Ofast -fsanitize=undefined -fsanitize-undefined-trap-on-error -fno-sanitize-recover=all' \
 		test
 
@@ -401,7 +401,7 @@ smoke-asan: MDBX_CHECKING=2
 smoke-asan: smoke
 test-asan:
 	$(QUIET)$(MAKE) --no-print-directory IOARENA=false FLAVOR=asan MDBX_CHECKING=2 \
-		MDBX_BUILD_OPTIONS='$(MDBX_BUILD_OPTIONS) -DMDBX_CHECKING=2 -DENABLE_UBSAN:BOOL=OFF -DENABLE_ASAN:BOOL=ON -DENABLE_MEMCHECK:BOOL=OFF' \
+		CMAKE_OPT='$(CMAKE_OPT) -DMDBX_CHECKING=2 -DENABLE_UBSAN:BOOL=OFF -DENABLE_ASAN:BOOL=ON -DENABLE_MEMCHECK:BOOL=OFF' \
 		CFLAGS_EXTRA='$(CFLAGS_EXTRA) -Os -fsanitize=address' \
 		test
 
@@ -410,7 +410,7 @@ smoke-memcheck: MDBX_CHECKING=1
 smoke-memcheck: smoke
 test-memcheck:
 	$(QUIET)$(MAKE) --no-print-directory IOARENA=false FLAVOR=memcheck MDBX_CHECKING=1 \
-		MDBX_BUILD_OPTIONS='$(MDBX_BUILD_OPTIONS) -DMDBX_CHECKING=1 -DENABLE_UBSAN:BOOL=OFF -DENABLE_ASAN:BOOL=OFF -DENABLE_MEMCHECK:BOOL=ON' \
+		CMAKE_OPT='$(CMAKE_OPT) -DMDBX_CHECKING=1 -DENABLE_UBSAN:BOOL=OFF -DENABLE_ASAN:BOOL=OFF -DENABLE_MEMCHECK:BOOL=ON' \
 		CFLAGS_EXTRA='$(CFLAGS_EXTRA) -Ofast -DENABLE_MEMCHECK' \
 		CTEST_OPT='$(CTEST_OPT) -T memcheck' build-test build-stochastic ctest
 	@echo '  RUNNING `tests/stochastic.sh --with-valgrind --loops 2`...'
@@ -1014,7 +1014,8 @@ release-assets: libmdbx-amalgamated-$(MDBX_GIT_3DOT).zpaq \
 $(DIST_DIR)/mdbx-internals.h: src/version.c $(DIST_DIR)/@tmp-amalgam.h $(ALLOY_DEPS) $(lastword $(MAKEFILE_LIST))
 	@echo '  ALLOYING...'
 	$(QUIET)mkdir -p dist \
-	&& (grep -v '#include ' src/alloy.c && echo '#define MDBX_BUILD_SOURCERY $(MDBX_BUILD_SOURCERY)' \
+	&& (grep -v '#include ' src/alloy.c | $(SED) -e '/dist-cutoff-begin/,/dist-cutoff-end/d' \
+	&& echo '#define MDBX_BUILD_SOURCERY $(MDBX_BUILD_SOURCERY)' \
 	&& $(SED) \
 		-e '/#include "preface.h"/r src/preface.h' \
 		-e '/#include "osal\/osal.h"/r src/osal/osal.h' \
