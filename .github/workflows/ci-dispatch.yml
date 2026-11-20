@@ -332,3 +332,9 @@ jobs:
             exit 1
           fi
           echo "dist archive ok: $DIST_TARBALL"
+      - name: upload amalgamated tarball
+        uses: actions/upload-artifact@v7
+        with:
+          name: amalgamated-tarball
+          path: libmdbx-sources-*.tar.gz
+          if-no-files-found: error

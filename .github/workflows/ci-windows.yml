@@ -50,10 +50,14 @@ jobs:
         shell: bash
         env:
           EVENT_REF: ${{ github.event.client_payload.ref }}
+          # workflow_dispatch fires with github.ref = the dispatched branch:
+          # honor it, so a UI/API dispatch on a branch builds THAT branch
+          # (the bare master fallback only applies to the schedule).
+          GITHUB_REF_NAME: ${{ github.ref_name }}
         run: |
           set -euo pipefail
           CELLS=$(tests/ci/select-cells.py --profile win-gate)
-          REF="${EVENT_REF:-master}"
+          REF="${EVENT_REF:-${GITHUB_REF_NAME:-master}}"
           JSON=$(tests/ci/resolve-cells.py "$CELLS" full 2> >(sed 's/^/==> /' >&2) || { echo "resolve-cells failed" >&2; exit 1; })
           echo "cells=${JSON}" >> "$GITHUB_OUTPUT"
           echo "ref=${REF}" >> "$GITHUB_OUTPUT"
@@ -74,3 +78,95 @@ jobs:
       coverage: ${{ matrix.coverage }}
       ndk: ${{ matrix.ndk }}
       ref: ${{ needs.resolve.outputs.ref }}
+
+  # Produce the amalgamated-sources tarball (the same `make dist` the
+  # ci-dispush PR/push gate runs), for the amalgamated Windows cell below.
+  dist:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - name: checkout
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+          fetch-tags: true
+          submodules: true
+          # The payload ref for the dispatch-event fan-out; github.ref for
+          # schedule (the default branch) and workflow_dispatch (the
+          # dispatched branch, whose workflow file version is executing).
+          ref: ${{ github.event.client_payload.ref || github.ref }}
+      - name: make dist
+        shell: bash
+        run: |
+          set -euo pipefail
+          make dist V=1
+      - name: check dist archive
+        shell: bash
+        run: |
+          set -euo pipefail
+          DIST_TARBALL=$(ls libmdbx-sources-*.tar.gz 2>/dev/null || true)
+          if [ -z "$DIST_TARBALL" ]; then
+            echo "dist tarball (libmdbx-sources-*.tar.gz) not produced" >&2
+            exit 1
+          fi
+          echo "dist archive ok: $DIST_TARBALL"
+      - name: upload amalgamated tarball
+        uses: actions/upload-artifact@v7
+        with:
+          name: amalgamated-tarball
+          path: libmdbx-sources-*.tar.gz
+          if-no-files-found: error
+
+  # The amalgamated (dist) Windows cell: unpack the tarball produced by the
+  # `dist` job and build it the way a user would - on windows-latest with the
+  # default generator and no explicit options - then smoke the tools on a
+  # real database. This is the guard for the amalgamated-only Windows build
+  # problems (e.g. the POSIX errno/E*-macros poison that once leaked into
+  # the flattened mdbx.c++/mdbx-internals.h and broke the public header and
+  # the STL there).
+  amalgamated:
+    needs: [resolve, dist]
+    runs-on: windows-latest
+    timeout-minutes: 60
+    env:
+      CI: GITHUB
+      REF: ${{ needs.resolve.outputs.ref }}
+    steps:
+      - name: download amalgamated tarball
+        uses: actions/download-artifact@v8
+        with:
+          name: amalgamated-tarball
+          path: amalgamated
+      - name: unpack
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p src-tree
+          tar -xzf amalgamated/libmdbx-sources-*.tar.gz -C src-tree
+          ls src-tree/mdbx.h src-tree/mdbx.c src-tree/mdbx.h++ src-tree/mdbx.c++
+      - name: configure (default generator, default options)
+        shell: bash
+        run: |
+          set -euo pipefail
+          cmake -S src-tree -B src-tree/build
+      - name: build
+        shell: bash
+        run: |
+          set -euo pipefail
+          cmake --build src-tree/build --config Release --parallel
+      - name: smoke the tools on a real database
+        shell: bash
+        run: |
+          set -euo pipefail
+          TOOL=$(ls src-tree/build/*/mdbx_load.exe 2>/dev/null | head -1 || true)
+          STAT=$(ls src-tree/build/*/mdbx_stat.exe 2>/dev/null | head -1 || true)
+          DUMP=$(ls src-tree/build/*/mdbx_dump.exe 2>/dev/null | head -1 || true)
+          test -n "$TOOL" && test -n "$STAT" && test -n "$DUMP"
+          # the classic bytevalue dump format: keys/values as hex runs
+          printf 'VERSION=3\nformat=bytevalue\ntype=btree\nHEADER=END\n 6161\n 3130\n 6262\n 3230\n 6363\n 3330\nDATA=END\n' \
+            | "$TOOL" amalgam-smoke.db
+          "$STAT" amalgam-smoke.db
+          "$DUMP" amalgam-smoke.db > amalgam-smoke.dump
+          grep -q '^ 6161$' amalgam-smoke.dump
+          grep -q '^DATA=END$' amalgam-smoke.dump
+          echo "the amalgamated Windows build works: load/stat/dump are functional"
