@@ -17,7 +17,7 @@
  * <dir>/rep, while the library drains them lazily on the next mdbx_probe_ctl()
  * call ("sync" is the deterministic barrier). */
 
-#include "src/essentials.h"
+#include "../../../src/essentials.h"
 #if !defined(MDBX_PROBES)
 #error "probes_ipc.c must be built with MDBX_PROBES defined"
 #endif

@@ -14,8 +14,8 @@
 
 #include "mdbx.h++"
 #undef MDBX_DEPRECATED /* avoid redefinition by the internal headers below */
+#include "../../../src/layout-lck.h"
 #include "../env-guard.h++"
-#include "src/layout-lck.h"
 #include <gtest/gtest.h>
 
 #include "../test-env.h++"

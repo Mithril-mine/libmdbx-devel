@@ -48,8 +48,10 @@ void must_put(MDBX_txn *txn, MDBX_dbi dbi, const char *key, const char *value) {
  * SIZE_MAX when the probe-bus is unavailable. A site that was never
  * evaluated is absent from the reply, i.e. zero. */
 size_t site_seen(const char *site) {
+  char request[128];
+  std::snprintf(request, sizeof request, "query %s", site);
   char reply[512];
-  if (mdbx_probe_ctl((std::string("query ") + site).c_str(), reply, sizeof reply) != 0)
+  if (mdbx_probe_ctl(request, reply, sizeof reply) != 0)
     return SIZE_MAX;
   const char *const found = strstr(reply, site);
   if (!found)
@@ -96,8 +98,9 @@ TEST(issue_gh0448, failed_nested_begin_keeps_parent_geometry) {
    * has been mutated yet */
   char reply[256];
   ASSERT_EQ(0, mdbx_probe_ctl("reset txn_nested_start_enomem", reply, sizeof reply));
-  ASSERT_EQ(0, mdbx_probe_ctl((std::string("fault txn_nested_start_enomem ") + std::to_string(MDBX_ENOMEM)).c_str(),
-                              reply, sizeof reply));
+  char fault_cmd[128];
+  std::snprintf(fault_cmd, sizeof fault_cmd, "fault txn_nested_start_enomem %d", (int)MDBX_ENOMEM);
+  ASSERT_EQ(0, mdbx_probe_ctl(fault_cmd, reply, sizeof reply));
   txn_ptr nested;
   const int begin_rc = mdbx_txn_begin(env.get(), parent.get(), MDBX_TXN_READWRITE, &nested);
   ASSERT_EQ(0, mdbx_probe_ctl("fault txn_nested_start_enomem none", reply, sizeof reply));

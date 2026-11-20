@@ -111,15 +111,15 @@ TEST(issue_gh0311, pp1_failed_range_delete_makes_txn_uncommittable) {
 
   static char large[20000];
   memset(large, 'L', sizeof(large));
-  const char small[] = "valuevaluevaluevaluevaluevaluevaluevaluevaluevalue";
+  const char smallbuf[] = "valuevaluevaluevaluevaluevaluevaluevaluevaluevalue";
   char key[32];
   txn_ptr txn;
   ASSERT_EQ(mdbx_txn_begin(env.get(), nullptr, MDBX_TXN_READWRITE, &txn), MDBX_SUCCESS);
   for (int i = 0; i < 2000; ++i) {
     snprintf(key, sizeof(key), "a%05d", i);
-    must_put(txn.get(), main_table, key, small, sizeof(small) - 1);
+    must_put(txn.get(), main_table, key, smallbuf, sizeof(smallbuf) - 1);
     snprintf(key, sizeof(key), "z%05d", i);
-    must_put(txn.get(), main_table, key, small, sizeof(small) - 1);
+    must_put(txn.get(), main_table, key, smallbuf, sizeof(smallbuf) - 1);
   }
   /* a large page makes the cutoff take the guarded path */
   must_put(txn.get(), main_table, "k1-large", large, sizeof(large));
