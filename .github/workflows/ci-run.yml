@@ -180,6 +180,13 @@ jobs:
         if: ${{ steps.detect.outputs.emulator == 'true' }}
         uses: reactivecircus/android-emulator-runner@v2
         timeout-minutes: 40
+        env:
+          # The hosted runners have no KVM, so the action falls back to
+          # "-accel off" (TCG software emulation). The emulator 37.3.x
+          # refuses TCG without an explicit opt-in: the process dies at
+          # start ("Software CPU emulation (-accel off) is not supported")
+          # and the boot wait times out (the 2026-11-20 nightly failure).
+          ANDROID_I_WANT_MY_TCG: "yes"
         with:
           api-level: ${{ steps.detect.outputs.api-level }}
           arch: ${{ steps.detect.outputs.arch }}
