@@ -16,7 +16,7 @@
 #include "mdbx.h++"
 #include <gtest/gtest.h>
 
-#include "../test-env.h"
+#include "../test-env.h++"
 
 /// SC-68 (test-coverage-gaps.md): редкие жизненные циклы C++ RAII-обёрток —
 /// moved-from состояния, abort/commit в необычном порядке, cursor при

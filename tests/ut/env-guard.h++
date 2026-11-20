@@ -3,7 +3,7 @@
 ///
 /// \file RAII guard that removes a test's database files on every exit path.
 ///
-/// Unlike test-env.h this header includes "mdbx.h" and therefore must NOT be
+/// Unlike test-env.h++ this header includes "mdbx.h" and therefore must NOT be
 /// precompiled into the shared PCH (see pch.h++ for why the libmdbx public
 /// headers stay out of it). Include it after "mdbx.h" in the tests that open
 /// environments, then construct the guard as the first statement of every
@@ -24,7 +24,7 @@
 #pragma once
 
 #ifdef _WIN32
-/* Windows-header hygiene, the same set test-env.h uses before <windows.h>:
+/* Windows-header hygiene, the same set test-env.h++ uses before <windows.h>:
  * mdbx.h pulls <windows.h> on Windows (mdbx.h:177) and without NOMINMAX its
  * min/max macros break the mdbx++ headers parsed right after us (the
  * env-guard include often precedes "mdbx.h++" in the test). When this header

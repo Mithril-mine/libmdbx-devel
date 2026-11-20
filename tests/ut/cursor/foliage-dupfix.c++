@@ -16,7 +16,7 @@
 #include "mdbx.h++"
 #include <gtest/gtest.h>
 
-#include "../test-env.h"
+#include "../test-env.h++"
 
 /// SC-81 (цель ≥90%): search_foliage_lexical/ordinal_dupfix —
 /// inner-cursor dupfix-листва с lexical/ordinal-компараторами.

@@ -17,7 +17,7 @@
 #include "../env-guard.h++"
 #include <gtest/gtest.h>
 
-#include "../test-env.h"
+#include "../test-env.h++"
 #include "tool_runner.h"
 
 #include <cstdio>

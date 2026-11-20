@@ -28,8 +28,8 @@
 #include <thread>
 #include <vector>
 
-#include "../probe-ctl.h"
-#include "../test-env.h"
+#include "../probe-ctl.h++"
+#include "../test-env.h++"
 
 namespace {
 

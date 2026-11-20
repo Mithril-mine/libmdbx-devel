@@ -7,7 +7,7 @@
 /// CRT-попапов, чтобы он выполнялся ровно один раз на тестовый бинарь
 /// (а не по одному на TU, если бы объект был объявлен в заголовке).
 
-#include "test-env.h"
+#include "test-env.h++"
 
 runtime_limiter ci_runtime_limiter;
 

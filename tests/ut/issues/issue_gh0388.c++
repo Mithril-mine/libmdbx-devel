@@ -19,7 +19,7 @@
 #include <cstring>
 #include <string>
 
-#include "../test-env.h"
+#include "../test-env.h++"
 
 // Regression tests for https://github.com/Mithril-mine/libmdbx-devel/issues/388
 // The issue's scenario: the table holds the key "A" with three multi-values

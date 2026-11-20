@@ -823,7 +823,7 @@ else()
         add_ut(get_cached SOURCE ut/api/get_cached.c++)
         if(MDBX_PROBES)
           # C++ test TUs (public mdbx.h++) do not see the internal config-cmake.h
-          # define; propagate MDBX_PROBES for the probe-bus guards (probe-ctl.h,
+          # define; propagate MDBX_PROBES for the probe-bus guards (probe-ctl.h++,
           # case3_error_paths attestation). C test TUs already get it via config.
           target_compile_definitions(ut_get_cached PRIVATE MDBX_PROBES)
         endif()

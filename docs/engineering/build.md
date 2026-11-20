@@ -297,7 +297,7 @@ Two build-time optimisations keep the ~120 single-TU gtest binaries cheap to bui
   deliberately: its object always reaches the link line, so the linker cannot drop
   it from binaries that never reference the limiter (which would silently disable
   the popup suppression). Verify with `nm <test-binary> | grep ci_runtime_limiter`.
-- **`mdbx_test_pch` shared PCH** — `tests/ut/pch.h++` (GoogleTest via `test-env.h`
+- **`mdbx_test_pch` shared PCH** — `tests/ut/pch.h++` (GoogleTest via `test-env.h++`
   + the common standard headers) is precompiled once into the `mdbx_test_pch`
   anchor library, and every gtest target reuses it through
   `target_precompile_headers(<target> REUSE_FROM mdbx_test_pch)` (applied by the

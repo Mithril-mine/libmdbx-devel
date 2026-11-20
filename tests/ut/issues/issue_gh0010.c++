@@ -20,7 +20,7 @@
 #include <cstring>
 #include <gtest/gtest.h>
 
-#include "../test-env.h"
+#include "../test-env.h++"
 
 TEST(issue_gh0010, all) {
   const env_files_guard guard({"issue10"});

@@ -16,7 +16,7 @@
 #include <cstdio>
 #include <gtest/gtest.h>
 
-#include "../test-env.h"
+#include "../test-env.h++"
 
 #ifdef _MSC_VER
 #pragma warning(disable : 4702) /* unreachable code */

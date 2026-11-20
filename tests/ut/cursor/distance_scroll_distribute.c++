@@ -16,7 +16,7 @@
 #include "mdbx.h++"
 #include <gtest/gtest.h>
 
-#include "../test-env.h"
+#include "../test-env.h++"
 
 #include <iostream>
 #include <iterator>
@@ -106,7 +106,7 @@ MDBX_MAYBE_UNUSED static bool failed(unsigned line) {
 }
 
 /* The shared runtime deadline (GTEST_RUNTIME_LIMIT/GTEST_RUNTIME_DEADLINE,
- * see test-env.h). The limiter is normally checked at the TEST body start
+ * see test-env.h++). The limiter is normally checked at the TEST body start
  * only, but this test runs for minutes at Debug scale, and on a slow or
  * contended hosted runner (chronically the windows-11-vs2026-arm nightlies)
  * it must honor the deadline mid-run instead of burning the whole per-test

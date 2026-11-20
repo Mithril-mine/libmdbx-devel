@@ -17,7 +17,7 @@
 #include "tool_runner.h"
 #include <gtest/gtest.h>
 
-#include "../test-env.h"
+#include "../test-env.h++"
 
 #include <cstdint>
 #include <cstdio>

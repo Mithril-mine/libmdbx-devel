@@ -16,7 +16,7 @@
 #include "mdbx.h++"
 #include <gtest/gtest.h>
 
-#include "../test-env.h"
+#include "../test-env.h++"
 
 namespace {
 void fill(mdbx::txn_managed &txn, mdbx::map_handle map, size_t count = 1000) {

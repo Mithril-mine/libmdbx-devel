@@ -13,7 +13,7 @@
 /// \author Леонид Юрьев aka Leonid Yuriev <leo@yuriev.ru> \date 2015-2026
 
 #include "../env-guard.h++"
-#include "../probe-ctl.h"
+#include "../probe-ctl.h++"
 #include "mdbx.h++"
 #include <algorithm>
 #include <chrono>
@@ -21,7 +21,7 @@
 #include <cstring>
 #include <gtest/gtest.h>
 
-#include "../test-env.h"
+#include "../test-env.h++"
 
 #include <iostream>
 #include <iterator>

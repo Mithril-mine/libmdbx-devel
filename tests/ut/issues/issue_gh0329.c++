@@ -26,7 +26,7 @@
 #define RUNNING_ON_VALGRIND (0)
 #endif
 
-#include "../test-env.h"
+#include "../test-env.h++"
 
 #include <atomic>
 #include <cerrno>

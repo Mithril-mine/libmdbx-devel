@@ -36,8 +36,8 @@
 #pragma once
 
 /* GoogleTest and the shared test environment (runtime limiter, CI popup
- * suppression). test-env.h already includes <gtest/gtest.h>. */
-#include "test-env.h"
+ * suppression). test-env.h++ already includes <gtest/gtest.h>. */
+#include "test-env.h++"
 
 /* The common part of the standard library used across the tests. */
 #include <algorithm>

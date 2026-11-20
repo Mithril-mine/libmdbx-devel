@@ -16,7 +16,7 @@
 #include "mdbx.h++"
 #include <gtest/gtest.h>
 
-#include "../test-env.h"
+#include "../test-env.h++"
 
 TEST(ut_env_params, geometry_value_types) {
   const env_files_guard guard({"test-env-params"});

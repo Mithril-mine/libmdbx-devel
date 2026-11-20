@@ -14,10 +14,11 @@
 /// \author Andrea Lanfranchi (https://github.com/AndreaLanfranchi)
 
 #include "../../../src/internals.h"
+
 #include "../env-guard.h++"
+#include "../test-env.h++"
 #include <gtest/gtest.h>
 
-#include "../test-env.h"
 #include "tool_runner.h"
 
 #include <cstdio>

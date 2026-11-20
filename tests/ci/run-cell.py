@@ -23,7 +23,7 @@
 #                         flags like -DINTERPROCEDURAL_OPTIMIZATION=OFF)
 #   CI_CTEST_TIMEOUT      ctest per-test timeout override (default 600)
 #   GTEST_RUNTIME_LIMIT   relative in-test soft deadline in seconds (default
-#                         CI_CTEST_TIMEOUT-60), see tests/ut/test-env.h
+#                         CI_CTEST_TIMEOUT-60), see tests/ut/test-env.h++
 #   GTEST_RUNTIME_DEADLINE absolute in-test deadline in UTC epoch seconds;
 #                         passed through when set, so a whole parallel run can
 #                         share one stop instant (the earliest of the two wins)
@@ -341,7 +341,7 @@ def main() -> int:
         ctest_exclude = "ut\\.heavy"
         by_label = True
 
-    # Runtime limiter for the gtest binaries (tests/ut/test-env.h): a soft
+    # Runtime limiter for the gtest binaries (tests/ut/test-env.h++): a soft
     # in-test deadline with a 60s margin under CI_CTEST_TIMEOUT (default 600),
     # so long suites GTEST_SKIP() the remainder instead of being killed by the
     # hard ctest timeout. GTEST_RUNTIME_DEADLINE (an absolute UTC-epoch

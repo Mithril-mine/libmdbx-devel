@@ -16,7 +16,7 @@
 #include "mdbx.h++"
 #include <gtest/gtest.h>
 
-#include "../test-env.h"
+#include "../test-env.h++"
 
 /// SC-75 (цель ≥90%): mdbx:: — все 35 классов исключений (ctor/dtor
 /// через error::throw_exception + что()), exception_thunk

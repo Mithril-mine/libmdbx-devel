@@ -15,7 +15,7 @@
 #include "mdbx.h++"
 #include <gtest/gtest.h>
 
-#include "../test-env.h"
+#include "../test-env.h++"
 
 TEST(ut_slice_pod, as_pod_typed) {
   if (MDBX_GTEST_IS_EXECUTION_TIMEOUT()) {

@@ -32,7 +32,7 @@ MDBX_MAYBE_UNUSED static unsigned scaled_wait_seconds(unsigned native_seconds) {
 }
 #include <gtest/gtest.h>
 
-#include "../test-env.h"
+#include "../test-env.h++"
 
 #include <cerrno>
 #include <chrono>

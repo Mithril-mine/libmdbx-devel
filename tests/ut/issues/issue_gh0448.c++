@@ -7,8 +7,8 @@
 #include <cstring>
 #include <string>
 
-#include "../probe-ctl.h"
-#include "../test-env.h"
+#include "../probe-ctl.h++"
+#include "../test-env.h++"
 
 namespace {
 

@@ -16,7 +16,7 @@
 #include "mdbx.h++"
 #include <gtest/gtest.h>
 
-#include "../test-env.h"
+#include "../test-env.h++"
 
 #if defined(MDBX_PROBES)
 /* The probe-bus control entry point (src/logging_and_debug.h). Declared here

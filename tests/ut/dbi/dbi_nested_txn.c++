@@ -15,7 +15,7 @@
 #include "../env-guard.h++"
 #include <gtest/gtest.h>
 
-#include "../test-env.h"
+#include "../test-env.h++"
 
 #include <mdbx.h>
 #include <stdio.h>

@@ -16,7 +16,7 @@
 #include <array>
 #include <gtest/gtest.h>
 
-#include "../test-env.h"
+#include "../test-env.h++"
 
 #include <iostream>
 

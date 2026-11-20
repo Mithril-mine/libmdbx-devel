@@ -16,7 +16,7 @@
 #include "mdbx.h++"
 #include <gtest/gtest.h>
 
-#include "../test-env.h"
+#include "../test-env.h++"
 
 /// SC-69 (test-coverage-gaps.md): tree-search comparator branches.
 /// cursor_to_search_branch() выбирает специализированные циклы поиска по

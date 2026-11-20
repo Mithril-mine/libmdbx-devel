@@ -16,7 +16,7 @@
 #include "mdbx.h++"
 #include <gtest/gtest.h>
 
-#include "../test-env.h"
+#include "../test-env.h++"
 
 /// SC-74 (test-coverage-gaps.md, цель ≥90%): search_foliage_* — 16
 /// специализированных циклов поиска на листву (компаратор ×

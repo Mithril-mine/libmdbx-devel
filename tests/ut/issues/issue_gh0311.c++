@@ -24,7 +24,7 @@
 #include <cstring>
 #include <string>
 
-#include "../test-env.h"
+#include "../test-env.h++"
 
 namespace {
 

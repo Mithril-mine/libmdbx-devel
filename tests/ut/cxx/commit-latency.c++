@@ -16,7 +16,7 @@
 #include "mdbx.h++"
 #include <gtest/gtest.h>
 
-#include "../test-env.h"
+#include "../test-env.h++"
 
 /// SC-72 (test-coverage-gaps.md): хвосты C++ decl_buffer/decl_transcoders —
 /// MDBX_commit_latency::operator= (вложенные анонимные структуры, C-only

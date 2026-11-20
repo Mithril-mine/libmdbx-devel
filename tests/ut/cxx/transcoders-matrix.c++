@@ -16,7 +16,7 @@
 #include "mdbx.h++"
 #include <gtest/gtest.h>
 
-#include "../test-env.h"
+#include "../test-env.h++"
 
 /// SC-63: decl_transcoders — полное покрытие типов C++ (buffer/slice round-trip).
 TEST(ut_transcoders_matrix, pod_and_views_roundtrip) {

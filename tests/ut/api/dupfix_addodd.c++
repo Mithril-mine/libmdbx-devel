@@ -27,7 +27,7 @@
 #include <assert.h>
 #include <gtest/gtest.h>
 
-#include "../test-env.h"
+#include "../test-env.h++"
 
 #include <inttypes.h>
 #include <limits.h>

@@ -12,14 +12,14 @@
 ///
 /// \author Леонид Юрьев aka Leonid Yuriev <leo@yuriev.ru> \date 2026
 
-#include "test-env.h"
+#include "test-env.h++"
 
 #include <gtest/gtest.h>
 
 #include <chrono>
 #include <ctime>
 
-// Self-test for the shared test-environment pieces (tests/ut/test-env.h):
+// Self-test for the shared test-environment pieces (tests/ut/test-env.h++):
 // the runtime_limiter transitions and the global ci_runtime_limiter instance.
 // The limiter is exercised through the for_testing constructor (a steady-clock
 // offset) and through compute_edge() (the same deadline math the default

@@ -59,7 +59,7 @@
   `--nops`, таймауты) или явно перевести в `ut.heavy`.
 - Тяжёлые/флак-тесты — вне быстрого тайера (метки `ut.heavy`, `chk`).
 
-### C2.1 — Мягкий лимит выполнения (runtime limiter, `tests/ut/test-env.h`)
+### C2.1 — Мягкий лимит выполнения (runtime limiter, `tests/ut/test-env.h++`)
 
 Общий TU `tests/ut/test-env.{h,c++}` собирается **один раз** в объектную
 библиотеку `mdbx_test_env` и её объект линкуется в **каждый** gtest-таргет
@@ -100,7 +100,7 @@ CI-обвязка: `tests/ci/run-cell.py` экспортирует
    (иначе deadline вычисляется один раз вместо per-test).
 2. Паттерн (образец: `tests/ut/issues/issue_gh0083.c++`):
    ```c++
-   #include "../test-env.h"   // единая форма; каталог tests/ut добавлен в include-путь add_gtest()
+   #include "../test-env.h++"   // единая форма; каталог tests/ut добавлен в include-путь add_gtest()
    TEST(suite, name) {
      if (MDBX_GTEST_IS_EXECUTION_TIMEOUT()) {
        GTEST_SKIP() << "SKIPPED by RUNTIME_LIMIT";

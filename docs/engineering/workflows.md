@@ -97,7 +97,7 @@ declared complete.
   locally on Linux-capable cells. Exports `GTEST_RUNTIME_LIMIT` (default `CI_CTEST_TIMEOUT − 60`,
   i.e. 540s) for the in-test soft deadline and passes through `GTEST_RUNTIME_DEADLINE` (an absolute
   UTC-epoch deadline so a whole parallel run stops at one shared instant; the earliest of the two
-  wins) — see `tests/ut/test-env.h` and testing-codex C2.1 — and
+  wins) — see `tests/ut/test-env.h++` and testing-codex C2.1 — and
   sets `GTEST_SHUFFLE=1` only when `CI_NIGHTLY=1` (set by the `schedule` branch of the
   orchestrator); on Windows CI the env `CI`/`MDBX_TEST_NO_CRT_POPUP` additionally silences
   CRT assert popups in the test binaries.

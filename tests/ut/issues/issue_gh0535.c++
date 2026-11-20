@@ -23,7 +23,7 @@
  */
 
 #include "../env-guard.h++"
-#include "../test-env.h"
+#include "../test-env.h++"
 #include <gtest/gtest.h>
 
 #include <stdio.h>

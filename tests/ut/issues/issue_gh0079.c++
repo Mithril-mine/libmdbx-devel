@@ -18,7 +18,7 @@
 #include "src/layout-lck.h"
 #include <gtest/gtest.h>
 
-#include "../test-env.h"
+#include "../test-env.h++"
 
 #include <cstdint>
 #include <cstdio>

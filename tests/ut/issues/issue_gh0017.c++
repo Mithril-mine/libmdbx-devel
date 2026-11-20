@@ -17,7 +17,7 @@
 #include "../env-guard.h++"
 #include <gtest/gtest.h>
 
-#include "../test-env.h"
+#include "../test-env.h++"
 
 #include <stdint.h>
 #include <stdio.h>

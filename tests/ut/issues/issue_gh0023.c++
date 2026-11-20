@@ -17,7 +17,7 @@
 #include <cstdio>
 #include <gtest/gtest.h>
 
-#include "../test-env.h"
+#include "../test-env.h++"
 
 TEST(issue_gh0023, all) {
   const env_files_guard guard({"issue_gh0023"});

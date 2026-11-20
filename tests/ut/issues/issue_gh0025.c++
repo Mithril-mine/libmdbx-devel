@@ -16,7 +16,7 @@
 #include <cstdio>
 #include <gtest/gtest.h>
 
-#include "../test-env.h"
+#include "../test-env.h++"
 
 TEST(issue_gh0025, all) {
   if (MDBX_GTEST_IS_EXECUTION_TIMEOUT()) {

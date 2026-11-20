@@ -1430,7 +1430,7 @@ CORRUPTED, ...) маппится на соответствующее C++ иск�
 **Hypothesis:** редкие жизненные циклы C++ обёрток (move, moved-from, abort при
 открытом txn, исключение в деструкторе) корректны.
 
-**Preconditions:** C++-сборка; модуль `test-env.h` (runtime-limiter) подключён.
+**Preconditions:** C++-сборка; модуль `test-env.h++` (runtime-limiter) подключён.
 
 **Сценарий:**
 1. `env_managed` move/swap; доступ к moved-from → `invalid`.

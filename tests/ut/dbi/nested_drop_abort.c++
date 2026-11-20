@@ -19,7 +19,7 @@
 #include "mdbx.h"
 #include <gtest/gtest.h>
 
-#include "../test-env.h"
+#include "../test-env.h++"
 
 static void check(int rc, const char *op) {
   if (rc != MDBX_SUCCESS) {

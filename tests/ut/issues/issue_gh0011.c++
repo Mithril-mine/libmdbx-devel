@@ -24,7 +24,7 @@
 #include <exception>
 #include <gtest/gtest.h>
 
-#include "../test-env.h"
+#include "../test-env.h++"
 
 static MDBX_dbi dbi;
 static unsigned r;

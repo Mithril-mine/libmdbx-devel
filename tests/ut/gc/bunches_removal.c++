@@ -17,7 +17,7 @@
 #include <cstdlib>
 #include <gtest/gtest.h>
 
-#include "../test-env.h"
+#include "../test-env.h++"
 
 #include <iostream>
 #include <iterator>

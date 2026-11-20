@@ -21,7 +21,7 @@
 #include "mdbx.h"
 #include <gtest/gtest.h>
 
-#include "../test-env.h"
+#include "../test-env.h++"
 
 #include <errno.h>
 #include <stdio.h>

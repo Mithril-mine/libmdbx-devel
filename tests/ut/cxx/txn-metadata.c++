@@ -16,7 +16,7 @@
 #include "mdbx.h++"
 #include <gtest/gtest.h>
 
-#include "../test-env.h"
+#include "../test-env.h++"
 
 TEST(ut_txn_metadata, canary) {
   const env_files_guard guard({"test-txn-metadata"});

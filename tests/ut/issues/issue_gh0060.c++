@@ -25,7 +25,7 @@
 #include <cstdio>
 #include <gtest/gtest.h>
 
-#include "../test-env.h"
+#include "../test-env.h++"
 
 /* The RAII foreign-thread scenarios below need std::optional (C++17). Under
  * older standards the test is compiled as a stub that reports the skip reason.

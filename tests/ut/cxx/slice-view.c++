@@ -15,7 +15,7 @@
 #include "mdbx.h++"
 #include <gtest/gtest.h>
 
-#include "../test-env.h"
+#include "../test-env.h++"
 
 TEST(ut_slice_view, iterators_and_front_back) {
   if (MDBX_GTEST_IS_EXECUTION_TIMEOUT()) {
