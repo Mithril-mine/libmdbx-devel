@@ -887,14 +887,14 @@ static bool edge_cases_probes(void) {
 
   /* --- R: txl_reserve "too long" -> MDBX_TXN_FULL --- */
   l = txl_alloc();
-  if (!CHECK_TRUE(l))
+  if (!CHECK_TRUE(l != NULL))
     return false;
   CHECK_EQ((uint64_t)txl_reserve(&l, (size_t)txl_max + 1), (uint64_t)MDBX_TXN_FULL);
   txl_free(l);
 
   /* --- R: txl_contain возвращает true (дубликат) --- */
   l = txl_alloc();
-  if (!CHECK_TRUE(l))
+  if (!CHECK_TRUE(l != NULL))
     return false;
   CHECK_EQ((uint64_t)txl_append(&l, 7), (uint64_t)MDBX_SUCCESS);
   CHECK_TRUE(txl_contain(l, 7));
@@ -902,7 +902,7 @@ static bool edge_cases_probes(void) {
 
   /* --- F+R: txl_append проброс ошибки (L87) + realloc ENOMEM (L63) --- */
   l = txl_alloc();
-  if (!CHECK_TRUE(l))
+  if (!CHECK_TRUE(l != NULL))
     return false;
   {
     txnid_t id = 1;

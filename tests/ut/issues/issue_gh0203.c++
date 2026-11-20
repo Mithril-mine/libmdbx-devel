@@ -152,6 +152,7 @@ TEST(issue_gh0203, page_kill_write_error_breaks_the_transaction) {
   ASSERT_EQ(MDBX_SUCCESS, mdbx_txn_commit(txn));
 
   mdbx_env_close(env);
+  env_owner.release();
   std::remove(kDbKill);
 }
 
@@ -240,6 +241,7 @@ TEST(issue_gh0203, prefault_write_error_breaks_the_transaction) {
     const long hits = probe_site_hits("stub_write_prefault");
     ASSERT_EQ(0, mdbx_probe_ctl("fault stub_write_prefault none", reply, sizeof reply));
     mdbx_env_close(env);
+    env_owner.release();
     std::remove(kDbPrefault);
     ASSERT_EQ(0, hits) << "the prefault fault was injected but the error got swallowed (regression)";
     GTEST_SKIP() << "the prefault site was not reached (all pages in-core)";
@@ -260,6 +262,7 @@ TEST(issue_gh0203, prefault_write_error_breaks_the_transaction) {
   ASSERT_EQ(MDBX_SUCCESS, mdbx_txn_commit(txn));
 
   mdbx_env_close(env);
+  env_owner.release();
   std::remove(kDbPrefault);
 }
 

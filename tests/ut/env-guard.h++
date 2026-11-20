@@ -48,6 +48,9 @@
 #ifdef max
 #undef max
 #endif
+#ifdef small
+#undef small /* rpcndr.h: #define small char - breaks test-local variables */
+#endif
 #endif /* _WIN32 */
 
 #include "mdbx.h"

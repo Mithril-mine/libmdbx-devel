@@ -28,22 +28,11 @@
 #include <thread>
 #include <vector>
 
+#include "../env-guard.h++"
 #include "../probe-ctl.h++"
 #include "../test-env.h++"
 
 namespace {
-
-struct files_remover {
-  const std::vector<std::string> paths;
-  explicit files_remover(std::initializer_list<std::string> list) : paths(list) {
-    for (const auto &path : paths)
-      std::remove(path.c_str());
-  }
-  ~files_remover() {
-    for (const auto &path : paths)
-      std::remove(path.c_str());
-  }
-};
 
 struct env_ptr {
   MDBX_env *env = nullptr;
@@ -79,7 +68,7 @@ TEST(issue_gh0325, oldest_reader_scan_is_bounded_under_reader_churn) {
     return;
   }
   const std::string db = "issue0325.mdbx";
-  const files_remover cleanup{db};
+  const env_files_guard guard({db.c_str()});
   env_ptr env;
   ASSERT_EQ(mdbx_env_create(&env), MDBX_SUCCESS);
   ASSERT_EQ(mdbx_env_set_maxreaders(env.get(), 64), MDBX_SUCCESS);

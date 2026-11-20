@@ -18,7 +18,7 @@
  * time; the probe machinery itself is activated by setting MDBX_PROBES=1 in
  * the environment before the first probe fires. */
 
-#include "src/essentials.h" /* entry header: pulls mdbx.h (via preface.h) and
+#include "../../../src/essentials.h" /* entry header: pulls mdbx.h (via preface.h) and
                                logging_and_debug.h in the correct order */
 #if !defined(MDBX_PROBES)
 #error "probes.c must be built with MDBX_PROBES defined"
