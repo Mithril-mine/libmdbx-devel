@@ -986,7 +986,7 @@ release-assets: libmdbx-amalgamated-$(MDBX_GIT_3DOT).zpaq \
 
 @dist-checked.tag: $(addprefix $(DIST_DIR)/, $(DIST_SRC) $(DIST_EXTRA))
 	@echo -n '  VERIFY amalgamated sources...'
-	$(QUIET)rm -rf $@ $(DIST_DIR)/@-tmp-headers.h $(DIST_DIR)/@-tmp-amalgam.h \
+	$(QUIET)rm -rf $@ $(DIST_DIR)/@tmp-*.h \
 	&& if grep -R "define xMDBX_ALLOY" dist | grep -q MDBX_BUILD_SOURCERY; then echo "sed output is WRONG!" >&2; exit 2; fi \
 	&& rm -rf @dist-check && cp -r -p $(DIST_DIR) @dist-check && ($(MAKE) -j IOARENA=false CXXSTD=$(CXXSTD) -C @dist-check all check ninja-assertions >@dist-check.log 2>@dist-check.err || (cat @dist-check.err && exit 1)) \
 	&& touch $@ || (echo " FAILED! See @dist-check.log and @dist-check.err" >&2; exit 2) && echo " Ok"
