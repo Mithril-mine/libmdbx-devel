@@ -14,6 +14,9 @@
 /// \author Andrea Lanfranchi (https://github.com/AndreaLanfranchi)
 
 #include "../../../src/internals.h"
+#if IS_WINDOWS
+#include "../../../src/osal/windows/pop-posix-macros.h"
+#endif /* Windows */
 #include "../env-guard.h++"
 #include <gtest/gtest.h>
 

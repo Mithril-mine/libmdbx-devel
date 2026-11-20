@@ -13,6 +13,9 @@
 /// \author Леонид Юрьев aka Leonid Yuriev <leo@yuriev.ru> \date 2026
 
 #include "../../../src/internals.h"
+#if IS_WINDOWS
+#include "../../../src/osal/windows/pop-posix-macros.h"
+#endif /* Windows */
 #include "../env-guard.h++"
 #include <gtest/gtest.h>
 

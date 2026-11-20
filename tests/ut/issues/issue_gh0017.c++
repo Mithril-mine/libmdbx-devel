@@ -14,6 +14,9 @@
 
 /* offsetof(tree_t, root) == 8: u16 flags, u16 height, u32 dupfix_size, then pgno_t root */
 #include "../../../src/essentials.h"
+#if IS_WINDOWS
+#include "../../../src/osal/windows/pop-posix-macros.h"
+#endif /* Windows */
 #include "../env-guard.h++"
 #include <gtest/gtest.h>
 

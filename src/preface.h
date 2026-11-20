@@ -3,6 +3,16 @@
 
 #pragma once
 
+#ifndef MDBX_PRAGMA_PUSHPOP_MACRO
+#if defined(_MSC_VER) || (defined(__GNUC__) && !defined(__LCC__))
+#define MDBX_PRAGMA_PUSHPOP_MACRO 1
+#else
+#define MDBX_PRAGMA_PUSHPOP_MACRO 0
+#endif
+#elif !(MDBX_PRAGMA_PUSHPOP_MACRO == 0 || MDBX_PRAGMA_PUSHPOP_MACRO == 1)
+#error MDBX_PRAGMA_PUSHPOP_MACRO must be defined as 0 or 1
+#endif /* MDBX_PRAGMA_PUSHPOP_MACRO */
+
 #include "osal/platform-gate.h"
 
 /*----------------------------------------------------------------------------*/

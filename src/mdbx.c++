@@ -20,14 +20,18 @@
 #endif /* #define _SILENCE_EXPERIMENTAL_FILESYSTEM_DEPRECATION_WARNING */
 #endif /* _MSC_VER */
 
+#include "internals.h"
+
+#if IS_WINDOWS
+#include "osal/windows/pop-posix-macros.h"
+#endif /* Windows */
+
 #include "../mdbx.h++"
 
 #include <array>
 #include <atomic>
 #include <cctype> // for isxdigit(), etc
 #include <system_error>
-
-#include "internals.h"
 
 namespace {
 

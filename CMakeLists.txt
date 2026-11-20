@@ -1135,6 +1135,8 @@ elseif(TRUE)
       list(APPEND LIBMDBX_SOURCES
         "${MDBX_SOURCE_DIR}/osal/windows/public.h"
         "${MDBX_SOURCE_DIR}/osal/windows/private.h"
+        "${MDBX_SOURCE_DIR}/osal/windows/push-posix-macros.h"
+        "${MDBX_SOURCE_DIR}/osal/windows/pop-posix-macros.h"
         "${MDBX_SOURCE_DIR}/osal/windows/osal-init.c"
         "${MDBX_SOURCE_DIR}/osal/windows/osal-fs.c"
         "${MDBX_SOURCE_DIR}/osal/windows/osal-sysinfo.c"

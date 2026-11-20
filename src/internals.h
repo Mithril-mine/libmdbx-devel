@@ -8,6 +8,20 @@
 
 #include "essentials.h"
 
+#if IS_WINDOWS
+/* The POSIX errno/E*-macros poison (the dev-tree tripwire against using
+ * POSIX codes outside OSAL) is pushed HERE, in the library-internal entry
+ * header, and NOT in essentials.h: essentials is also included by the
+ * library's consumers (tests, tools, examples) together with the STL and
+ * other non-library headers, which the poison would break. Everything
+ * that includes internals.h is library code, for which the poison is
+ * intended; a consumer-side unit (e.g. the C++ API in mdbx.c++ or a
+ * white-box test) pops the macros right before its non-library headers.
+ * The amalgamated (dist) sources carry no poison at all: the dist rules
+ * strip the push/pop include lines. */
+#include "osal/windows/push-posix-macros.h"
+#endif /* Windows */
+
 #ifdef _MSC_VER
 #pragma warning(push, 1)
 #if _MSC_VER > 1913
