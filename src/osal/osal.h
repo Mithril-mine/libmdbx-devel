@@ -430,6 +430,14 @@ MDBX_MAYBE_UNUSED static inline int osal_get_errno(void) {
   return rc;
 }
 
+MDBX_MAYBE_UNUSED static inline void osal_set_errno(int err) {
+#if IS_WINDOWS
+  SetLastError(err);
+#else
+  errno = err;
+#endif
+}
+
 #ifndef osal_memalign_alloc
 MDBX_INTERNAL int osal_memalign_alloc(size_t alignment, size_t bytes, void **result);
 #endif

@@ -119,7 +119,7 @@ int osal_vasprintf(char **strp, const char *fmt, va_list ap) {
 
   *strp = osal_malloc(needed + (size_t)1);
   if (unlikely(*strp == nullptr)) {
-    errno = MDBX_ENOMEM;
+    osal_set_errno(MDBX_ENOMEM);
     return -1;
   }
 
