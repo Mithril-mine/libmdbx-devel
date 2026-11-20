@@ -14,6 +14,33 @@
 
 /*----------------------------------------------------------------------------*/
 
+int osal_mb2w(const char *const src, wchar_t **const pdst) {
+  const size_t dst_wlen = MultiByteToWideChar(CP_THREAD_ACP, MB_ERR_INVALID_CHARS, src, -1, nullptr, 0);
+  wchar_t *dst = *pdst;
+  int rc = ERROR_INVALID_NAME;
+  if (unlikely(dst_wlen < 2 || dst_wlen > /* MAX_PATH */ INT16_MAX))
+    goto bailout;
+
+  dst = osal_realloc(dst, dst_wlen * sizeof(wchar_t));
+  rc = MDBX_ENOMEM;
+  if (unlikely(!dst))
+    goto bailout;
+
+  *pdst = dst;
+  if (likely(dst_wlen == (size_t)MultiByteToWideChar(CP_THREAD_ACP, MB_ERR_INVALID_CHARS, src, -1, dst, (int)dst_wlen)))
+    return MDBX_SUCCESS;
+
+  rc = ERROR_INVALID_NAME;
+bailout:
+  if (*pdst) {
+    osal_free(*pdst);
+    *pdst = nullptr;
+  }
+  return rc;
+}
+
+/*----------------------------------------------------------------------------*/
+
 int osal_removefile(const pathchar_t *pathname) { return DeleteFileW(pathname) ? MDBX_SUCCESS : (int)GetLastError(); }
 
 int osal_removedirectory(const pathchar_t *pathname) {

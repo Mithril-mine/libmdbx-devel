@@ -94,8 +94,6 @@ static inline void osal_free(void *ptr) { HeapFree(GetProcessHeap(), 0, ptr); }
 typedef wchar_t pathchar_t;
 #define MDBX_PRIsPATH "ls"
 
-MDBX_INTERNAL int osal_mb2w(const char *const src, wchar_t **const pdst);
-
 /*----------------------------------------------------------------------------*/
 
 typedef union osal_srwlock {
@@ -224,6 +222,7 @@ struct libmdbx_imports {
 
 #ifndef __cplusplus
 MDBX_INTERNAL void windows_import(void);
+MDBX_INTERNAL int osal_mb2w(const char *const src, wchar_t **const pdst);
 #endif /* !__cplusplus */
 
 MDBX_NOTHROW_CONST_FUNCTION static inline bool osal_is_pathname_absent_error(int err) {
