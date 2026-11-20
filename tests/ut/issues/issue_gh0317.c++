@@ -189,11 +189,11 @@ int two_threads_scenario() {
   g_done[1].store(0);
   std::thread a(opener_thread, 0);
   std::thread b(opener_thread, 1);
-  const unsigned stall_limit = RUNNING_ON_VALGRIND ? 5 * 42 : 5;
-  const unsigned total_limit = RUNNING_ON_VALGRIND ? 60 * 42 : 60;
+  const int stall_limit = RUNNING_ON_VALGRIND ? 5 * 42 : 5;
+  const int total_limit = RUNNING_ON_VALGRIND ? 60 * 42 : 60;
   int last0 = -1, last1 = -1, stalled = 0;
   bool reported_stall = false;
-  for (unsigned second = 0;; ++second) {
+  for (int second = 0;; ++second) {
     std::this_thread::sleep_for(std::chrono::seconds(1));
     if (g_done[0].load() >= kOpenIterations && g_done[1].load() >= kOpenIterations) {
       if (reported_stall)
