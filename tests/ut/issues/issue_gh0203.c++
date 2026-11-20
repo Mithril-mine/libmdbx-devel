@@ -13,6 +13,9 @@
 /// \author Леонид Юрьев aka Leonid Yuriev <leo@yuriev.ru> \date 2026
 
 #include "../../../src/internals.h"
+#if IS_WINDOWS
+#include "../../../src/osal/windows/pop-posix-macros.h"
+#endif /* Windows */
 #include "../env-guard.h++"
 #include <gtest/gtest.h>
 
@@ -250,8 +253,8 @@ TEST(issue_gh0203, prefault_write_error_breaks_the_transaction) {
     char kbuf[32];
     int kn = std::snprintf(kbuf, sizeof kbuf, "k%07zu", size_t(9));
     MDBX_val k{kbuf, size_t(kn)};
-    char small[4] = {'o', 'k', '!', 0};
-    MDBX_val v{small, sizeof small};
+    char smallbuf[4] = {'o', 'k', '!', 0};
+    MDBX_val v{smallbuf, sizeof smallbuf};
     ASSERT_EQ(MDBX_SUCCESS, mdbx_put(txn, dbi, &k, &v, MDBX_UPSERT));
   }
   ASSERT_EQ(MDBX_SUCCESS, mdbx_txn_commit(txn));
