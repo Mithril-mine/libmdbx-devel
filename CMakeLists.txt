@@ -895,7 +895,7 @@ mark_as_advanced(MDBX_DEBUG_GCU)
 # Dev-only: injectable probes (COLLECT/WATCH/FAULT) + deterministic error
 # injection (alloc failures via osal_* redirect). OFF in dist builds; see
 # docs/engineering/probe-bus.md.
-add_option(MDBX PROBES "Enable probe-bus (mdbx-probes) testing instrumentation" OFF)
+add_option(MDBX PROBES "Enable probe-bus (mdbx-probes) testing instrumentation" ${MDBX_ENABLE_TESTS})
 mark_as_advanced(MDBX_PROBES)
 #< dist-cutoff-end
 
