@@ -1024,6 +1024,11 @@ static int osal_ipclock_lock(MDBX_env *env, osal_ipclock_t *ipc, const bool dont
 
   if (unlikely(rc != MDBX_SUCCESS && rc != MDBX_BUSY))
     rc = osal_ipclock_failed(env, ipc, rc);
+  /* The call-time outcome of the lock attempt, for the ordering evidence
+   * (issue #562): 0 = acquired, MDBX_RESULT_TRUE = acquired with the
+   * dead-owner recovery, MDBX_BUSY = the try-lock found it busy, otherwise
+   * the error code. */
+  MPROBE_WATCH(ipclock_lock_result, rc);
   return rc;
 }
 
@@ -1047,13 +1052,21 @@ static int osal_ipclock_unlock(MDBX_env *env, osal_ipclock_t *ipc) {
   int rc = err;
   if (unlikely(rc != MDBX_SUCCESS)) {
     const mdbx_pid_t current_pid = osal_getpid();
-    if (current_pid != env->pid)
+    if (current_pid != env->pid) {
       rc = MDBX_SUCCESS /* a forked child: the lock belongs to the parent */;
+      /* The swallowed failure of a forked child's unlock (issue #562): the
+       * value is the raw error code, most often the EPERM. */
+      MPROBE_WATCH(ipclock_unlock_forkswallow, err);
+    }
     if (current_pid == env->pid || LOG_ENABLED(MDBX_LOG_NOTICE))
       debug_log((current_pid == env->pid) ? MDBX_LOG_FATAL : MDBX_LOG_NOTICE, "ipc-unlock()", __LINE__,
                 "failed: env %p, lck-%s %p, err %d\n", __Wpedantic_format_voidptr(env),
                 (env->lck == env->lck_mmap.lck) ? "mmap" : "stub", __Wpedantic_format_voidptr(env->lck), err);
   }
+  /* The caller-visible outcome, evaluated on every path and thus before any
+   * failure-to-panic conversion at the call sites (issue #562): 0 = unlocked,
+   * otherwise the error code. */
+  MPROBE_WATCH(ipclock_unlock_result, rc);
   return rc;
 }
 
