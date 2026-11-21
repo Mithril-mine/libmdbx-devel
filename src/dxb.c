@@ -841,11 +841,30 @@ __cold int dxb_setup(MDBX_env *env, const int lck_rc, const mdbx_mode_t mode_bit
   if ((env->flags & MDBX_RDONLY)    /* readonly */
       || lck_rc != MDBX_RESULT_TRUE /* not exclusive */
       || /* recovery mode */ env->stuck_meta >= 0) {
-    /* use present params from db */
-    const size_t pagesize = header.pagesize;
-    err = mdbx_env_set_geometry(env, header.geometry.lower * pagesize, header.geometry.now * pagesize,
-                                header.geometry.upper * pagesize, pv2pages(header.geometry.grow_pv) * pagesize,
-                                pv2pages(header.geometry.shrink_pv) * pagesize, header.pagesize);
+    /* use present params from db, but form the byte values in 64 bits:
+     * meta_validate bounds the page counts only by MAX_PAGENO, so the
+     * page-count-by-pagesize products may exceed the address space of a
+     * 32-bit host and would silently wrap there, distorting the
+     * geometry or disabling the growth. Refuse such a database cleanly
+     * instead, the same way an EINVAL from mdbx_env_set_geometry() is
+     * reported for the other geometry incompatibilities. */
+    const uint64_t pagesize64 = header.pagesize;
+    const uint64_t geo_bytes[] = {
+        (uint64_t)header.geometry.lower * pagesize64,
+        (uint64_t)header.geometry.now * pagesize64,
+        (uint64_t)header.geometry.upper * pagesize64,
+        (uint64_t)pv2pages(header.geometry.grow_pv) * pagesize64,
+        (uint64_t)pv2pages(header.geometry.shrink_pv) * pagesize64,
+    };
+    for (size_t i = 0; i < ARRAY_LENGTH(geo_bytes); ++i) {
+      if (unlikely(geo_bytes[i] > (uint64_t)INTPTR_MAX)) {
+        ERROR("geometry-from-db: %" PRIu64 " bytes does not fit the address space (part %u)", geo_bytes[i],
+              (unsigned)i);
+        return LOG_IFERR(MDBX_INCOMPATIBLE);
+      }
+    }
+    err = mdbx_env_set_geometry(env, (intptr_t)geo_bytes[0], (intptr_t)geo_bytes[1], (intptr_t)geo_bytes[2],
+                                (intptr_t)geo_bytes[3], (intptr_t)geo_bytes[4], header.pagesize);
     if (unlikely(err != MDBX_SUCCESS)) {
       ERROR("%s: err %d", "could not apply geometry from db", err);
       return (err == MDBX_EINVAL) ? MDBX_INCOMPATIBLE : err;
