@@ -21,19 +21,20 @@ MDBX_CXX14_CONSTEXPR slice::slice(MDBX_val &&src) : slice(src) { src.iov_base = 
 
 MDBX_CXX14_CONSTEXPR slice::slice(slice &&src) noexcept : slice(src) { src.invalidate(); }
 
-inline slice &slice::assign(const void *ptr, size_t bytes) {
+MDBX_CXX14_CONSTEXPR slice &slice::assign_unchecked(const void *ptr, size_t bytes) noexcept {
+  MDBX_CONSTEXPR_ASSERT(bytes <= size_t(MDBX_MAXDATASIZE) || (!ptr && bytes == ~size_t(0)));
   iov_base = const_cast<void *>(ptr);
-  iov_len = ptr ? check_length(bytes) : check_nullptr_length(bytes);
+  iov_len = bytes;
   return *this;
 }
 
-inline slice &slice::assign(const slice &src) noexcept {
-  iov_base = src.iov_base;
-  iov_len = src.iov_len;
-  return *this;
+inline slice &slice::assign(const void *ptr, size_t bytes) {
+  return assign_unchecked(ptr, MDBX_LIKELY(ptr) ? check_length(bytes) : check_nullptr_length(bytes));
 }
 
-inline slice &slice::assign(const ::MDBX_val &src) { return assign(src.iov_base, src.iov_len); }
+inline slice &slice::assign(const slice &src) noexcept { return assign_unchecked(src.iov_base, src.length()); }
+
+inline slice &slice::assign(const ::MDBX_val &src) { return assign(slice(src)); }
 
 slice &slice::assign(slice &&src) noexcept {
   assign(src);
@@ -41,17 +42,11 @@ slice &slice::assign(slice &&src) noexcept {
   return *this;
 }
 
-inline slice &slice::assign(::MDBX_val &&src) {
-  assign(src.iov_base, src.iov_len);
-  src.iov_base = nullptr;
-  return *this;
-}
+inline slice &slice::assign(::MDBX_val &&src) { return assign(slice(::std::move(src))); }
 
-inline slice &slice::assign(const void *begin, const void *end) {
-  return assign(begin, static_cast<const byte *>(end) - static_cast<const byte *>(begin));
-}
+inline slice &slice::assign(const void *begin, const void *end) { return assign(slice(begin, end)); }
 
-inline slice &slice::assign(const char *c_str) { return assign(c_str, strlen(c_str)); }
+inline slice &slice::assign(const char *c_str) { return assign(slice(c_str)); }
 
 inline slice &slice::operator=(slice &&src) noexcept { return assign(::std::move(src)); }
 

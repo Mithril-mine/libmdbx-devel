@@ -17,6 +17,27 @@
 
 #include "../test-env.h++"
 
+namespace {
+/* An allocator whose copy constructor throws, to probe the conditional
+ * noexcept of the allocator-aware constructions. */
+template <typename T> struct throwing_copy_allocator {
+  using value_type = T;
+  throwing_copy_allocator() noexcept = default;
+  throwing_copy_allocator(const throwing_copy_allocator &) { throw ::std::runtime_error("copy is not allowed"); }
+  template <typename U> throwing_copy_allocator(const throwing_copy_allocator<U> &) noexcept {}
+  T *allocate(size_t n) { return static_cast<T *>(::operator new(n * sizeof(T))); }
+  void deallocate(T *ptr, size_t) noexcept { ::operator delete(ptr); }
+};
+template <typename A, typename B>
+bool operator==(const throwing_copy_allocator<A> &, const throwing_copy_allocator<B> &) noexcept {
+  return true;
+}
+template <typename A, typename B>
+bool operator!=(const throwing_copy_allocator<A> &, const throwing_copy_allocator<B> &) noexcept {
+  return false;
+}
+} // namespace
+
 TEST(ut_buffer_extra, modality_transitions) {
   if (MDBX_GTEST_IS_EXECUTION_TIMEOUT()) {
     GTEST_SKIP() << "SKIPPED by RUNTIME_LIMIT";
@@ -52,6 +73,47 @@ TEST(ut_buffer_extra, modality_transitions) {
   EXPECT_TRUE(big.is_freestanding());
   EXPECT_FALSE(big.is_inplace());
   EXPECT_EQ(big.content_modality(), buffer::modality::allocated);
+}
+
+TEST(ut_buffer_extra, clear_and_reserve_and_assign_reference_validation) {
+  if (MDBX_GTEST_IS_EXECUTION_TIMEOUT()) {
+    GTEST_SKIP() << "SKIPPED by RUNTIME_LIMIT";
+    return;
+  }
+  mdbx::buffer<> b(mdbx::slice("Hello"), mdbx::default_allocator());
+  ASSERT_EQ(b.size(), 5u);
+  /* clear_and_reserve(): an oversize capacity and an inverted headroom
+   * relation must throw and leave the buffer untouched */
+  EXPECT_THROW(b.clear_and_reserve(mdbx::slice::max_length + 1), std::length_error);
+  EXPECT_THROW(b.clear_and_reserve(64, 65), mdbx::bad_value_size);
+  EXPECT_EQ(b.size(), 5u);
+  EXPECT_EQ(b, mdbx::buffer<>(mdbx::slice("Hello"), mdbx::default_allocator()));
+  /* a valid reservation works and keeps the buffer empty */
+  b.clear_and_reserve(64, 8);
+  EXPECT_EQ(b.size(), 0u);
+  /* assign_reference(): a rejected oversize length must throw and leave
+   * the buffer untouched */
+  EXPECT_THROW(b.assign_reference(static_cast<const void *>("data"), mdbx::slice::max_length + 1), std::length_error);
+  EXPECT_EQ(b.size(), 0u);
+  b.assign_reference(static_cast<const void *>("data"), 4);
+  EXPECT_EQ(b, mdbx::buffer<>(mdbx::slice("data"), mdbx::default_allocator()));
+}
+
+TEST(ut_buffer_extra, buffer_pair_spec_alloc_noexcept) {
+  if (MDBX_GTEST_IS_EXECUTION_TIMEOUT()) {
+    GTEST_SKIP() << "SKIPPED by RUNTIME_LIMIT";
+    return;
+  }
+  /* The allocator-aware constructor is noexcept exactly when copying the
+   * allocator cannot throw. */
+  using default_pair = mdbx::buffer_pair_spec<mdbx::default_allocator, mdbx::default_capacity_policy>;
+  EXPECT_TRUE((::std::is_nothrow_copy_constructible<default_pair::allocator_type>::value));
+  EXPECT_TRUE(noexcept(default_pair(default_pair::allocator_type())));
+
+  using throwing_alloc = throwing_copy_allocator<uint64_t>;
+  static_assert(!::std::is_nothrow_copy_constructible<throwing_alloc>::value, "the probe allocator must throw on copy");
+  using throwing_pair = mdbx::buffer_pair_spec<throwing_copy_allocator<char>, mdbx::default_capacity_policy>;
+  EXPECT_FALSE(noexcept(throwing_pair(throwing_alloc())));
 }
 
 TEST(ut_buffer_extra, stl_members) {

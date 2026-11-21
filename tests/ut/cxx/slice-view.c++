@@ -122,3 +122,65 @@ TEST(ut_slice_view, prefix_suffix) {
   EXPECT_TRUE(s.starts_with(mdbx::slice()));
   EXPECT_TRUE(s.ends_with(mdbx::slice()));
 }
+
+TEST(ut_slice_view, invalid_sentinel_flows_freely) {
+  if (MDBX_GTEST_IS_EXECUTION_TIMEOUT()) {
+    GTEST_SKIP() << "SKIPPED by RUNTIME_LIMIT";
+    return;
+  }
+  /* The deliberately-corrupted INVALID() sentinel is a legit state: it must
+   * flow through the whole assignment/copy/move machinery without exceptions
+   * and assert-failures (its null + max length is accepted by the internal
+   * unchecked primitives), staying invalid in every copy. */
+  mdbx::slice sentinel = mdbx::slice::invalid();
+  EXPECT_FALSE(sentinel.is_valid());
+
+  mdbx::slice dst(mdbx::slice("Hello"));
+  ASSERT_TRUE(dst.is_valid());
+  dst = sentinel; /* move-assign of the sentinel */
+  EXPECT_FALSE(dst.is_valid());
+
+  mdbx::slice copied = sentinel; /* copy of the sentinel */
+  EXPECT_FALSE(copied.is_valid());
+
+  mdbx::slice moved(::std::move(sentinel)); /* move-ctor of the sentinel */
+  EXPECT_FALSE(moved.is_valid());
+
+  /* a valid slice re-assigned from an invalid one stays valid */
+  mdbx::slice valid(mdbx::slice("data"));
+  valid.assign(sentinel);
+  EXPECT_FALSE(valid.is_valid());
+  valid.assign(mdbx::slice("restored"));
+  EXPECT_TRUE(valid.is_valid());
+}
+
+TEST(ut_slice_view, assign_exception_safety) {
+  if (MDBX_GTEST_IS_EXECUTION_TIMEOUT()) {
+    GTEST_SKIP() << "SKIPPED by RUNTIME_LIMIT";
+    return;
+  }
+  static const char data[] = "Hello";
+  mdbx::slice s(data);
+  /* an oversize length must throw and leave the slice unchanged */
+  EXPECT_THROW(s.assign(::MDBX_val{const_cast<char *>(data), mdbx::slice::max_length + 1}), std::length_error);
+  EXPECT_EQ(s.size(), 5u);
+  EXPECT_EQ(s.data(), static_cast<const void *>(data));
+  EXPECT_EQ(s, mdbx::slice("Hello"));
+  /* a null base with a non-zero length must throw and leave the slice unchanged */
+  EXPECT_THROW(s.assign(::MDBX_val{nullptr, 3}), mdbx::bad_value_size);
+  EXPECT_EQ(s.size(), 5u);
+  EXPECT_EQ(s.data(), static_cast<const void *>(data));
+  EXPECT_EQ(s, mdbx::slice("Hello"));
+  /* a valid assignment still works */
+  s.assign(::MDBX_val{const_cast<char *>(data + 1), 3});
+  EXPECT_EQ(s, mdbx::slice("ell"));
+  /* the direct ptr/bytes overload: the same contract */
+  EXPECT_THROW(s.assign(static_cast<const void *>(data), mdbx::slice::max_length + 1), std::length_error);
+  EXPECT_EQ(s.size(), 3u);
+  EXPECT_EQ(s, mdbx::slice("ell"));
+  s.assign(static_cast<const void *>(data), 5);
+  EXPECT_EQ(s, mdbx::slice("Hello"));
+  /* re-binding via the string overloads must work equally well */
+  EXPECT_NO_THROW(s.assign(::std::string_view("xyz")));
+  EXPECT_EQ(s, mdbx::slice("xyz"));
+}

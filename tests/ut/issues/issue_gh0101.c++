@@ -249,7 +249,7 @@ TEST(issue_gh0101, invalidated_slice_can_rebind) {
   ASSERT_EQ(3u, s.length());
   s.invalidate();
   EXPECT_FALSE(s.is_valid()) << "invalidate() keeps the length but nulls the address";
-  EXPECT_NO_THROW(s.assign("xyz", 3)) << "a nulled slice must be re-bindable via assign()";
+  EXPECT_NO_THROW(s.assign(mdbx::slice("xyz"))) << "a nulled slice must be re-bindable via assign()";
   EXPECT_EQ(0, memcmp(s.data(), "xyz", 3));
 }
 
