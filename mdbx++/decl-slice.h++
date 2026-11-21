@@ -356,7 +356,7 @@ struct LIBMDBX_API_TYPE slice : public ::MDBX_val {
   /// \param [in] ignore_spaces If `true` function will skips spaces surrounding
   /// (before, between and after) a encoded bytes. However, spaces should not
   /// break a pair of characters encoding a single byte.
-  /// \returns `true` if the content is a valid hexadecimal dump.
+  /// \returns `true` if the content is a valid hexadecimal dump, including the empty one.
   MDBX_NOTHROW_PURE_FUNCTION inline bool is_hex(bool ignore_spaces = false) const noexcept;
 
   /// \brief Checks whether the content of the slice is a
@@ -364,7 +364,7 @@ struct LIBMDBX_API_TYPE slice : public ::MDBX_val {
   /// \param [in] ignore_spaces If `true` function will skips spaces surrounding
   /// (before, between and after) a encoded bytes. However, spaces should not
   /// break a code group of characters.
-  /// \returns `true` if the content is a valid Base58 dump.
+  /// \returns `true` if the content is a valid Base58 dump, including the empty one.
   MDBX_NOTHROW_PURE_FUNCTION inline bool is_base58(bool ignore_spaces = false) const noexcept;
 
   /// \brief Checks whether the content of the slice is a
@@ -372,7 +372,7 @@ struct LIBMDBX_API_TYPE slice : public ::MDBX_val {
   /// \param [in] ignore_spaces If `true` function will skips spaces surrounding
   /// (before, between and after) a encoded bytes. However, spaces should not
   /// break a code group of characters.
-  /// \returns `true` if the content is a valid Base64 dump.
+  /// \returns `true` if the content is a valid Base64 dump, including the empty one.
   MDBX_NOTHROW_PURE_FUNCTION inline bool is_base64(bool ignore_spaces = false) const noexcept;
 
 #if defined(DOXYGEN) || (defined(__cpp_lib_string_view) && __cpp_lib_string_view >= 201606L)
