@@ -23,6 +23,10 @@ A hardening and refinement release: data-safety and corruption-resistance fixes 
 ### Changed:
 
  - **Breaking:** Changed the C++ `env::mode`/`env::durability` enums to scoped; old names stay deprecated aliases.
+ - Changed the locking auto-selection to fallback to System V semaphores instead of the POSIX-2001
+   mutexes, which have no recovery from a dead lock owner
+   ([#565](https://github.com/Mithril-mine/libmdbx-devel/issues/565),
+   [#402](https://github.com/Mithril-mine/libmdbx-devel/issues/402)).
  - Changed `mdbx_defrag` to name every stopping reason and suggest `mdbx_copy -c` for full compaction.
  - Changed Windows commit handling: doomed datafile-shrink attempts are skipped and rate-limited ([#170](https://github.com/Mithril-mine/libmdbx-devel/issues/170)).
  - Changed the oldest-reader scan to bound retries under heavy reader churn ([#325](https://github.com/Mithril-mine/libmdbx-devel/issues/325)).
