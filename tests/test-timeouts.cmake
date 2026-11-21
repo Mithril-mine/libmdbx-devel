@@ -1,9 +1,19 @@
 # Per-test CTest TIMEOUT values, in seconds (the hard runaway cap).
 #
-# The value is ~3x the test's runtime in its slowest configuration across
-# the CI cells (the per-test metrics artifacts of the nightly/gate runs),
-# rounded up to a 30s boundary; tests never measured in CI get a generous
-# default. add_gtest()/add_extra_test() look the timeout up here and FAIL
+# Reference calibration: the value is ~3x the test's runtime in its slowest
+# REFERENCE configuration - the x86-64 Linux cells (the per-test metrics
+# artifacts of the nightly/gate runs; the ASan builds are usually the
+# slowest of them) - rounded up to a 30s boundary; tests never measured in
+# CI get a generous default. The systematically slower setups (the
+# ARM64/ARM runners, Darwin, the Debug builds) are NOT bumped here: at the
+# configure step their TIMEOUTs are multiplied by the
+# MDBX_TEST_TIMEOUT_SCALE platform/configuration factor
+# (applied by mdbx_scale_dir_test_timeouts() from cmake/utils.cmake), so a
+# platform-specific need is resolved
+# by that scale (or its -DMDBX_TEST_TIMEOUT_SCALE override) and never by
+# inflating the reference values - the two mechanisms are one scheme and
+# must not double-count (see tests/AGENTS.md, "Test timeouts").
+# add_gtest()/add_extra_test() look the timeout up here and FAIL
 # the configure step when an entry is missing - every registered test must
 # carry an explicit TIMEOUT (see tests/AGENTS.md, "Test timeouts").
 #
@@ -148,6 +158,11 @@ set(MDBX_TEST_TIMEOUTS
   "gh0310=30"
   "gh0311=120"
   "gh0312=90"
+  # gh0314: 0.14s in the slowest reference cell (the linux-x86-64 ASan
+  # per-test metrics of the nightly run), ~0.01s in the local x86-64
+  # Release/Debug runs; 3x of that sits far below the 30s floor. The slow
+  # windows-arm64 runner (~60s there in the killed nightly) is covered by
+  # the ARM64 x2 scale, not by this value (see the header above).
   "gh0314=30"
   "gh0315=30"
   "gh0316=30"
@@ -159,6 +174,12 @@ set(MDBX_TEST_TIMEOUTS
   "gh0324=30"
   "gh0325=30"
   "gh0326=30"
+  # gh0327: 0.21s in the slowest reference cell (the linux-x86-64 ASan
+  # per-test metrics of the nightly run; needs the MDBX_PROBES=ON build and
+  # the MDBX_PROBES=1 environment), ~0.13s in the local x86-64 Release/Debug
+  # runs; 3x of that sits far below the 30s floor. The slow windows-arm64
+  # runner (>30s there in the killed nightly) is covered by the ARM64 x2
+  # scale, not by this value (see the header above).
   "gh0327=30"
   "gh0328=30"
   "gh0329=30"

@@ -137,10 +137,14 @@ and turns the tool into a rubber stamp.
 ## 6. Test timeouts — MANDATORY
 
 Every registered test must carry an explicit CTest `TIMEOUT` — roughly 3× the
-test's runtime in its **slowest configuration** across the CI cells (the
-per-cell per-test metrics artifacts of the nightly/gate runs are the data
-source; the ASan builds and the Windows/ARM64 runners are usually the
-slowest). A runaway test must burn its timeout budget, not the CI cell's.
+test's runtime in its slowest **reference** configuration, i.e. the x86-64
+Linux cells (the per-cell per-test metrics artifacts of the nightly/gate
+runs are the data source; the ASan builds are usually the slowest of them).
+The systematically slower setups — the ARM64/ARM runners, Darwin, the Debug
+builds — are covered by the configure-time platform scale (see the
+"Reference calibration + platform scale" bullet below), not by larger
+manifest values. A runaway test must burn its timeout budget, not the CI
+cell's.
 
 - **gtest-family tests** (`add_gtest()`/`add_ut()`/`add_issue_test()`) and
   the `extra_*` tests (`add_extra_test()`): add a `"name=seconds"` entry to
@@ -154,23 +158,27 @@ slowest). A runaway test must burn its timeout budget, not the CI cell's.
   `ut_tools_*`, `test_hygiene_check`, the examples): set the `TIMEOUT`
   property explicitly at the registration site.
 - Values are rounded up to a 30s boundary (the floor for tests running well
-  under a second); update an entry when a test or a configuration grows
-  slower.
-- **Scaling at the configure step**: every registered test's `TIMEOUT` is
-  multiplied by `MDBX_TEST_TIMEOUT_SCALE` — ×2 for ARM64/ARM runners, ×2 for
-  Darwin, ×2 for the Debug build type, composed multiplicatively and
-  overridable, e.g. `-DMDBX_TEST_TIMEOUT_SCALE=4` — and, when the
-  valgrind/memcheck runs are enabled, additionally by ×42. Both factors are
-  applied by the `mdbx_scale_dir_test_timeouts()` call
-  ([cmake/utils.cmake](../cmake/utils.cmake)) at the end of each registering
-  CMakeLists (`tests/CMakeLists.txt`, `tests/ut/issues/CMakeLists.txt`,
-  `examples/CMakeLists.txt`); repeated calls are idempotent, each applied
-  factor leaves its own mark on the test. The manifest values and the
-  explicit `TIMEOUT`s stay calibrated for the reference x86-64 Linux
-  configuration; the scale lifts them for the setups whose runners are
-  systematically slower (the macOS/ARM64 nightly cells needed 2-10× the
-  budgets that the x86-64 cells fit into). Keep that call in place when
-  adding a new registering CMakeLists.
+  under a second); update an entry when a test or a *reference*
+  configuration grows slower.
+- **Reference calibration + platform scale — one scheme, no
+  double-counting**: the manifest values (and the explicit registration-site
+  `TIMEOUT`s) are the reference calibration only — ~3× the slowest reference
+  (x86-64 Linux) runtime, rounded up to a 30s boundary. At the configure
+  step every registered test's `TIMEOUT` is multiplied by
+  `MDBX_TEST_TIMEOUT_SCALE` — ×2 for ARM64/ARM runners, ×2 for Darwin, ×2
+  for the Debug build type, composed multiplicatively and overridable, e.g.
+  `-DMDBX_TEST_TIMEOUT_SCALE=4` — and, when the valgrind/memcheck runs are
+  enabled, additionally by ×42. Both factors are applied by the
+  `mdbx_scale_dir_test_timeouts()` call ([cmake/utils.cmake](../cmake/utils.cmake))
+  at the end of each registering CMakeLists (`tests/CMakeLists.txt`,
+  `tests/ut/issues/CMakeLists.txt`, `examples/CMakeLists.txt`); repeated
+  calls are idempotent, each applied factor leaves its own mark on the test.
+  Never raise a manifest value (or a registration-site `TIMEOUT`) because a
+  slower platform/configuration kills a test — that double-counts with the
+  scale and inflates every other cell; a higher value there is justified
+  only when the slowest *reference* configuration itself needs it, otherwise
+  the scale (or its per-cell override) handles the slower setup. Keep the
+  call in place when adding a new registering CMakeLists.
 - The per-test hard timeouts back up the soft gtest deadline
   (`GTEST_RUNTIME_LIMIT`, see `tests/ci/run-cell.py`): the soft limit bounds
   how deep a gtest binary digs within a run, the hard timeout kills a
