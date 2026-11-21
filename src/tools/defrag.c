@@ -125,6 +125,7 @@ static const char *stop_reasons_list(const MDBX_defrag_result_t *progress, char 
       {MDBX_defrag_enough_threshold, "enough threshold"},
       {MDBX_defrag_time_limit, "time limit reached"},
       {MDBX_defrag_laggard_reader, "laggard reader"},
+      {MDBX_defrag_stuck, "stuck at obstacle"},
       {MDBX_defrag_large_chunk, "large chunk"},
       {MDBX_defrag_step_size, "step size"},
   };
