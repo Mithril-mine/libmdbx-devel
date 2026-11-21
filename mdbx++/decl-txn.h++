@@ -725,6 +725,19 @@ public:
   inline bool erase(map_handle map, const slice &key, const slice &value);
 
   /// \brief Replaces the particular multi-value of the key with a new value.
+  ///
+  /// On input the `old_value` argument selects the particular multi-value
+  /// to be replaced, as for `mdbx_replace_ex()` with the
+  /// `MDBX_CURRENT | MDBX_NOOVERWRITE` combination.
+  ///
+  /// \note Unlike the template \ref replace() overloads, there is no way to
+  /// preserve the old value's content when it resides on a dirty page which
+  /// will be overwritten by the update: the core does not invoke a
+  /// preservation callback in this selection mode, and the returned data
+  /// would refer to the transaction-owned page with no owner to keep a
+  /// private copy. Use the template `replace()`/`extract()` overloads to
+  /// reliably obtain the old value.
+  ///
   /// \param map  The table (map) handle.
   /// \param key  The key.
   /// \param old_value  The `old_value` argument.

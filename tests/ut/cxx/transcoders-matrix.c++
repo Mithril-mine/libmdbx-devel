@@ -59,6 +59,34 @@ TEST(ut_transcoders_matrix, pod_and_views_roundtrip) {
   EXPECT_EQ(s_back.as_pod<uint64_t>(), u64);
 }
 
+TEST(ut_transcoders_matrix, envisage_result_length_64bit_safe) {
+  if (MDBX_GTEST_IS_EXECUTION_TIMEOUT()) {
+    GTEST_SKIP() << "SKIPPED by RUNTIME_LIMIT";
+    return;
+  }
+  /* A slice of the maximal allowed length is enough to expose a 32-bit
+   * wrap of the estimate arithmetic, both by the multiplier (Base58) and
+   * by the wrapping addition (a small wrap_width). The slice's memory is
+   * never dereferenced here, so no allocation is needed. */
+  const mdbx::slice huge("", mdbx::slice::max_length);
+  const auto clamped = [](uint64_t exact) -> size_t { return exact <= SIZE_MAX ? size_t(exact) : SIZE_MAX; };
+
+  /* the plain estimate must stay exact on any platform */
+  EXPECT_EQ(mdbx::to_hex(huge).envisage_result_length(), size_t(2) * mdbx::slice::max_length);
+  EXPECT_EQ(mdbx::to_base58(huge).envisage_result_length(), size_t((uint64_t(huge.length()) * 11 + 7) / 8));
+
+  /* the wrapped estimate must not silently wrap a 32-bit size_t */
+  const mdbx::to_hex hex_wrapped(huge, /*uppercase=*/false, /*wrap_width=*/1);
+  const uint64_t hex_exact = uint64_t(4) * mdbx::slice::max_length;
+  EXPECT_EQ(hex_wrapped.envisage_result_length(), clamped(hex_exact));
+  EXPECT_GE(hex_wrapped.envisage_result_length(), mdbx::to_hex(huge).envisage_result_length());
+
+  const mdbx::to_base58 b58_wrapped(huge, /*wrap_width=*/1);
+  const uint64_t b58_exact = ((uint64_t(huge.length()) * 11 + 7) / 8) * 2;
+  EXPECT_EQ(b58_wrapped.envisage_result_length(), clamped(b58_exact));
+  EXPECT_GE(b58_wrapped.envisage_result_length(), mdbx::to_base58(huge).envisage_result_length());
+}
+
 TEST(ut_transcoders_matrix, string_and_vector_modalities) {
   const env_files_guard guard({"test-gap-transcoders-err"});
   if (MDBX_GTEST_IS_EXECUTION_TIMEOUT()) {

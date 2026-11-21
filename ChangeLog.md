@@ -156,6 +156,11 @@ A hardening and refinement release: data-safety and corruption-resistance fixes 
     - Fixed `MDBX_opt_sync_bytes` silently truncating an over-large threshold; now `MDBX_EINVAL` ([#485](https://github.com/Mithril-mine/libmdbx-devel/issues/485)).
     - Fixed `mdbx_txn_checkpoint()` leaving the latency report zeroed on the nothing-to-do path ([#485](https://github.com/Mithril-mine/libmdbx-devel/issues/485)).
     - Fixed the legacy `mdbx_txn_release_all_cursors()` symbol missing from the shared library ([#485](https://github.com/Mithril-mine/libmdbx-devel/issues/485)).
+    - Fixed the C++ `slice::assign()` leaving a partially updated slice on a rejected length; the raw
+      pointer/length variant is no longer public ([#551](https://github.com/Mithril-mine/libmdbx-devel/issues/551)).
+    - Fixed the C++ `map_handle::info` mode accessors producing undeclared `key_mode`/`value_mode` values ([#551](https://github.com/Mithril-mine/libmdbx-devel/issues/551)).
+    - Fixed 32-bit overflow of the C++ hex and Base58 encoders' length estimation ([#551](https://github.com/Mithril-mine/libmdbx-devel/issues/551)).
+    - Fixed the C++ `buffer_pair_spec` allocator constructor being unconditionally `noexcept` ([#551](https://github.com/Mithril-mine/libmdbx-devel/issues/551)).
 
  - Platform-specific:
     - Fixed the batched writes on Windows after a mid-batch write failure: the cancelled requests are now drained before the ring's resources are reused ([#449](https://github.com/Mithril-mine/libmdbx-devel/issues/449)).

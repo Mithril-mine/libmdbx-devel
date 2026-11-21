@@ -1192,8 +1192,11 @@ public:
   /// \param bytes  The number of bytes of the source data.
   /// \returns A reference to this instance.
   buffer &assign_reference(const void *ptr, size_t bytes) {
+    /* the length is checked before any change, so a rejected input leaves
+     * the buffer untouched */
+    const size_t checked = MDBX_LIKELY(ptr) ? check_length(bytes) : check_nullptr_length(bytes);
     silo_.clear();
-    inherited::assign(ptr, bytes);
+    inherited::assign_unchecked(ptr, checked);
     return *this;
   }
 
@@ -1202,7 +1205,8 @@ public:
   /// \param bytes  The number of bytes of the source data.
   /// \returns A reference to this instance.
   buffer &assign_freestanding(const void *ptr, size_t bytes) {
-    inherited::assign(silo_.assign(static_cast<const typename silo::value_type *>(ptr), check_length(bytes)), bytes);
+    inherited::assign_unchecked(silo_.assign(static_cast<const typename silo::value_type *>(ptr), check_length(bytes)),
+                                bytes);
     return *this;
   }
 
@@ -1483,13 +1487,16 @@ public:
   }
 
   /// \brief Clears the contents and storage.
-  void clear() noexcept { inherited::assign(silo_.clear(), size_t(0)); }
+  void clear() noexcept { inherited::assign_unchecked(silo_.clear(), size_t(0)); }
 
   /// \brief Clears the contents and reserve storage.
   /// \param whole_capacity  The whole capacity to reserve.
   /// \param headroom  The number of bytes to reserve in front of the data.
   void clear_and_reserve(size_t whole_capacity, size_t headroom = 0) {
-    inherited::assign(silo_.clear_and_reserve(whole_capacity, headroom), size_t(0));
+    check_length(whole_capacity);
+    if (MDBX_UNLIKELY(headroom > whole_capacity))
+      throw_bad_value_size();
+    inherited::assign_unchecked(silo_.clear_and_reserve(whole_capacity, headroom), size_t(0));
   }
 
   /// \brief Reduces memory usage by freeing unused storage space.
@@ -1939,7 +1946,8 @@ template <typename ALLOCATOR, typename CAPACITY_POLICY> struct buffer_pair_spec 
   /// \brief Constructs an empty pair with the given allocator.
   /// \param alloc  The allocator for both buffers.
   MDBX_CXX20_CONSTEXPR
-  buffer_pair_spec(const allocator_type &alloc) noexcept : key(alloc), value(alloc) {}
+  buffer_pair_spec(const allocator_type &alloc) noexcept(::std::is_nothrow_copy_constructible<allocator_type>::value)
+      : key(alloc), value(alloc) {}
 
   /// \brief Constructs the pair from the given key and value buffers.
   /// \param key    The key buffer.
