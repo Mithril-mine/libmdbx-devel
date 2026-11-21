@@ -989,6 +989,15 @@ add_ut(reverse_insertions SOURCE ut/txn/reverse_insertions.c++)
     add_test(NAME ut_tools_golden_matcher
              COMMAND python3 ${UT_TOOLS_RUNNER} --selftest)
     set_tests_properties(ut_tools_golden_matcher PROPERTIES LABELS "ut;ut.tools" TIMEOUT 30)
+    # The SIGINT-exit-code contract of mdbx_chk (the chk-interrupt-exit-code
+    # suite test, see the URL in tests/ut/tools/chk-exit.c++): a SIGINT
+    # delivered while mdbx_env_chk() traverses must exit 5 (EXIT_INTERRUPTED),
+    # not the pre-fix 3 (EXIT_FAILURE_MDBX); the clean run of the same database
+    # is the negative control (usage errors also exit 5). fork+exec of the
+    # tool binary, so it requires both UNIX and the tools.
+    add_ut(chk-exit SOURCE ut/tools/chk-exit.c++)
+    set_tests_properties(chk-exit PROPERTIES LABELS "ut;ut.tools")
+    set_property(TEST chk-exit APPEND PROPERTY ENVIRONMENT "MDBX_TOOL_CHK=$<TARGET_FILE:mdbx_chk>")
   endif()
 
   # MDBX_ATTRIBUTE_NO_SANITIZE_ADDRESS must pick a compiler-specific spelling
