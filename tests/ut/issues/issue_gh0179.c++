@@ -12,10 +12,6 @@
 ///
 /// \author Леонид Юрьев aka Leonid Yuriev <leo@yuriev.ru> \date 2026
 
-#include "../../../src/internals.h"
-#if IS_WINDOWS
-#include "../../../src/osal/windows/pop-posix-macros.h"
-#endif /* Windows */
 #include "../env-guard.h++"
 #include <gtest/gtest.h>
 
@@ -145,14 +141,15 @@ TEST(issue_gh0179, exclusive_durable_keeps_the_fast_iopath) {
    * durable env must open the very same handles as a non-exclusive one:
    * the overlapped write-through handle for the body and the dsync handle for
    * meta. On unfixed code both are skipped in exclusive mode. */
-  if (MDBX_ENABLE_EXCLUSIVE_FASTPATH && !running_under_wine()) {
-    EXPECT_NE(0u, (unsigned)(uintptr_t)env->ioring.overlapped_fd)
-        << "exclusive durable must keep the overlapped write-through handle";
-    EXPECT_NE(INVALID_HANDLE_VALUE, env->dsync_fd) << "exclusive durable must keep the dsync handle";
+  if (mdbx_tst_config_exclusive_fastpath() && !running_under_wine()) {
+    mdbx_filehandle_t overlapped_fd = 0, dsync_fd = 0, fd4meta = 0;
+    ASSERT_EQ(MDBX_SUCCESS, mdbx_tst_env_io_fds(env, &overlapped_fd, &dsync_fd, &fd4meta));
+    EXPECT_NE(nullptr, overlapped_fd) << "exclusive durable must keep the overlapped write-through handle";
+    EXPECT_NE(INVALID_HANDLE_VALUE, dsync_fd) << "exclusive durable must keep the dsync handle";
     /* fd4meta aliases dsync_fd only while MDBX_NOMETASYNC is off (env_open
      * points it back to lazy_fd otherwise); this env is opened durable without
      * NOMETASYNC, so meta must go through the dsync handle. */
-    EXPECT_EQ(env->dsync_fd, env->fd4meta) << "meta must be written through the dsync handle";
+    EXPECT_EQ(dsync_fd, fd4meta) << "meta must be written through the dsync handle";
   }
 #endif
 
@@ -165,7 +162,7 @@ TEST(issue_gh0179, exclusive_durable_keeps_the_fast_iopath) {
   /* Just check that data pages were allocated beyond the meta pages; the exact
    * count is pagesize-dependent, so it must not be compared to a constant. The
    * real integrity is verified by the VALIDATION re-open below. */
-  EXPECT_GT(info.mi_last_pgno, (pgno_t)(NUM_METAS - 1)) << "the batch must have allocated data pages";
+  EXPECT_GT(info.mi_last_pgno, uint64_t(MDBX_TST_NUM_METAS - 1)) << "the batch must have allocated data pages";
 
   ASSERT_EQ(MDBX_SUCCESS, mdbx_env_close(env));
 

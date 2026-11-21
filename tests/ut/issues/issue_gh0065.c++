@@ -12,10 +12,6 @@
 ///
 /// \author Леонид Юрьев aka Leonid Yuriev <leo@yuriev.ru> \date 2026
 
-#include "../../../src/internals.h"
-#if IS_WINDOWS
-#include "../../../src/osal/windows/pop-posix-macros.h"
-#endif /* Windows */
 #include "../env-guard.h++"
 #include <gtest/gtest.h>
 
@@ -91,7 +87,7 @@ TEST(issue_gh0065, writemap_nosync_commits_do_not_flush_whole_mapping) {
    * Windows; after it the real syncs are routed through fsync (os mdbx_fsync)
    * and osal_msync/SYNC_NONE is a no-op, so both deltas only reflect the
    * legitimate size/data syncs on the few file-growth events. */
-  if (MDBX_AVOID_MSYNC == 0 && MDBX_MMAP_NEEDS_JOLT != 0) {
+  if (mdbx_tst_config_avoid_msync() == 0 && mdbx_tst_config_mmap_needs_jolt() != 0) {
     /* jolt platforms (e.g. macOS/BSD): the per-commit async msync "kick" is
      * by design and cheap, but the durability syncs must stay small. */
     EXPECT_LE(fsync_delta, uint64_t(N / 4));
