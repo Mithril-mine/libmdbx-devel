@@ -355,6 +355,9 @@ enum mprobe_action_mode {
  *   mode <panic|log|count>                   - global action mode
  *   fault <tag-pattern> <code>|<none>        - inject error return at FAULT sites
  *   alloc-fault <count>|<none>               - fail next N allocations
+ *   kill <tag-pattern> <N>|<none>            - crash the process at the N-th hit
+ *                                              of the matched sites (the crash-window
+ *                                              test machinery)
  *   query <tag-pattern>                      - dump site state
  *   reset <tag-pattern>                      - zero counters
  *   sync                                     - drain file-IPC, then ack
