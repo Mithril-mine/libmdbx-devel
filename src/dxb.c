@@ -1161,11 +1161,14 @@ int dxb_sync_locked(MDBX_env *env, unsigned flags, meta_t *const pending, troika
         if (MDBX_ENABLE_PGOP_STAT)
           env->lck->pgops.wops.weak += 1;
         const page_t *page = payload2page(target);
+        MPROBE_COLLECT(commit_meta_sync_begin, 0);
         rc = osal_pwrite(env->fd4meta, page, env->ps, ptr_dist(page, env->dxb_mmap.base));
         if (likely(rc == MDBX_SUCCESS)) {
           osal_flush_incoherent_mmap(target, sizeof(meta_t), globals.sys_pagesize);
           if ((flags & MDBX_NOMETASYNC) == 0 && env->fd4meta == env->lazy_fd)
             rc = dxb_fsync(env, MDBX_SYNC_DATA | MDBX_SYNC_IODQ);
+          if (likely(rc == MDBX_SUCCESS))
+            MPROBE_COLLECT(commit_meta_sync_done, 0);
         }
       }
       if (unlikely(rc != MDBX_SUCCESS))
