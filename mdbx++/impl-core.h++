@@ -55,11 +55,42 @@ MDBX_CXX11_CONSTEXPR map_handle::info::info(map_handle::flags flags, map_handle:
     : flags(flags), state(state) {}
 
 MDBX_CXX11_CONSTEXPR_ENUM mdbx::key_mode map_handle::info::key_mode() const noexcept {
-  return ::mdbx::key_mode(flags & (MDBX_REVERSEKEY | MDBX_INTEGERKEY));
+  /* Only the combinations accepted by the core (see check_table_flags()) are
+   * the declared members; the both-bits combination is rejected by the core
+   * and mapped to the ordinal fallback to never produce an undeclared value.
+   * The mask is switched as an integer to avoid -Wswitch on the combined
+   * cases which are not declared enumerators of MDBX_db_flags_t. */
+  switch (unsigned(flags) & unsigned(MDBX_REVERSEKEY | MDBX_INTEGERKEY)) {
+  case unsigned(MDBX_REVERSEKEY):
+    return mdbx::key_mode::reverse;
+  default /* MDBX_DB_DEFAULTS, MDBX_INTEGERKEY, or the rejected both-bits combination */:
+    return (flags & MDBX_INTEGERKEY) ? mdbx::key_mode::ordinal : mdbx::key_mode::usual;
+  }
 }
 
 MDBX_CXX11_CONSTEXPR_ENUM mdbx::value_mode map_handle::info::value_mode() const noexcept {
-  return ::mdbx::value_mode(flags & (MDBX_DUPSORT | MDBX_REVERSEDUP | MDBX_DUPFIXED | MDBX_INTEGERDUP));
+  /* Only the combinations accepted by the core (see check_table_flags()) are
+   * the declared members, except the reversed-ordinal one which has no
+   * dedicated member; any other combination is invalid and mapped to the
+   * closest defined mode to never produce an undeclared value. The mask is
+   * switched as an integer to avoid -Wswitch on the combined cases which
+   * are not declared enumerators of MDBX_db_flags_t. */
+  switch (unsigned(flags) & unsigned(MDBX_DUPSORT | MDBX_REVERSEDUP | MDBX_DUPFIXED | MDBX_INTEGERDUP)) {
+  case unsigned(MDBX_DUPSORT):
+    return mdbx::value_mode::multi;
+  case unsigned(MDBX_DUPSORT | MDBX_REVERSEDUP):
+    return mdbx::value_mode::multi_reverse;
+  case unsigned(MDBX_DUPSORT | MDBX_DUPFIXED):
+    return mdbx::value_mode::multi_samelength;
+  case unsigned(MDBX_DUPSORT | MDBX_DUPFIXED | MDBX_REVERSEDUP):
+    return mdbx::value_mode::multi_reverse_samelength;
+  case unsigned(MDBX_DUPSORT | MDBX_DUPFIXED | MDBX_INTEGERDUP):
+  case unsigned(MDBX_DUPSORT | MDBX_DUPFIXED | MDBX_INTEGERDUP | MDBX_REVERSEDUP):
+    return mdbx::value_mode::multi_ordinal;
+  default /* invalid combinations: duplicate-related flags are meaningless
+             without MDBX_DUPSORT, MDBX_INTEGERDUP requires MDBX_DUPFIXED */:
+    return (flags & MDBX_DUPSORT) ? mdbx::value_mode::multi : mdbx::value_mode::single;
+  }
 }
 
 // > dist-cutoff-begin

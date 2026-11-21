@@ -110,3 +110,76 @@ TEST(ut_txn_metadata, compare_keys_and_values) {
   env.close();
   mdbx::env::remove(testdb);
 }
+
+TEST(ut_txn_metadata, map_info_modes_from_flags) {
+  if (MDBX_GTEST_IS_EXECUTION_TIMEOUT()) {
+    GTEST_SKIP() << "SKIPPED by RUNTIME_LIMIT";
+    return;
+  }
+  using info = mdbx::map_handle::info;
+  const mdbx::map_handle::state state{};
+
+  /* declared members map to themselves */
+  EXPECT_EQ(info(MDBX_db_flags_t(MDBX_DB_DEFAULTS), state).key_mode(), mdbx::key_mode::usual);
+  EXPECT_EQ(info(MDBX_db_flags_t(MDBX_REVERSEKEY), state).key_mode(), mdbx::key_mode::reverse);
+  EXPECT_EQ(info(MDBX_db_flags_t(MDBX_INTEGERKEY), state).key_mode(), mdbx::key_mode::ordinal);
+  EXPECT_EQ(info(MDBX_db_flags_t(MDBX_DB_DEFAULTS), state).value_mode(), mdbx::value_mode::single);
+  EXPECT_EQ(info(MDBX_db_flags_t(MDBX_DUPSORT), state).value_mode(), mdbx::value_mode::multi);
+  EXPECT_EQ(info(MDBX_db_flags_t(MDBX_DUPSORT | MDBX_REVERSEDUP), state).value_mode(), mdbx::value_mode::multi_reverse);
+  EXPECT_EQ(info(MDBX_db_flags_t(MDBX_DUPSORT | MDBX_DUPFIXED), state).value_mode(),
+            mdbx::value_mode::multi_samelength);
+  EXPECT_EQ(info(MDBX_db_flags_t(MDBX_DUPSORT | MDBX_DUPFIXED | MDBX_REVERSEDUP), state).value_mode(),
+            mdbx::value_mode::multi_reverse_samelength);
+  EXPECT_EQ(info(MDBX_db_flags_t(MDBX_DUPSORT | MDBX_DUPFIXED | MDBX_INTEGERDUP), state).value_mode(),
+            mdbx::value_mode::multi_ordinal);
+  /* the reversed-ordinal combination is accepted by the core but has no
+   * dedicated member; it must not produce an undeclared enum value */
+  EXPECT_EQ(info(MDBX_db_flags_t(MDBX_DUPSORT | MDBX_DUPFIXED | MDBX_INTEGERDUP | MDBX_REVERSEDUP), state).value_mode(),
+            mdbx::value_mode::multi_ordinal);
+  /* masked combinations which the core rejects must map to declared members
+   * instead of undeclared scoped-enum values */
+  EXPECT_EQ(info(MDBX_db_flags_t(MDBX_REVERSEKEY | MDBX_INTEGERKEY), state).key_mode(), mdbx::key_mode::ordinal);
+  EXPECT_EQ(info(MDBX_db_flags_t(MDBX_REVERSEDUP), state).value_mode(), mdbx::value_mode::single);
+  EXPECT_EQ(info(MDBX_db_flags_t(MDBX_INTEGERDUP), state).value_mode(), mdbx::value_mode::single);
+  EXPECT_EQ(info(MDBX_db_flags_t(MDBX_REVERSEDUP | MDBX_DUPFIXED | MDBX_INTEGERDUP), state).value_mode(),
+            mdbx::value_mode::single);
+  EXPECT_EQ(info(MDBX_db_flags_t(MDBX_DUPSORT | MDBX_INTEGERDUP), state).value_mode(), mdbx::value_mode::multi);
+  EXPECT_EQ(info(MDBX_db_flags_t(MDBX_DUPSORT | MDBX_REVERSEDUP | MDBX_INTEGERDUP), state).value_mode(),
+            mdbx::value_mode::multi);
+}
+
+TEST(ut_txn_metadata, map_info_modes_of_created_tables) {
+  const env_files_guard guard({"test-txn-metadata"});
+  if (MDBX_GTEST_IS_EXECUTION_TIMEOUT()) {
+    GTEST_SKIP() << "SKIPPED by RUNTIME_LIMIT";
+    return;
+  }
+  const mdbx::path testdb = "test-txn-metadata";
+  mdbx::env::remove(testdb);
+  mdbx::env_managed env(testdb, mdbx::create_parameters(), mdbx::operate_parameters().set_max_maps(8));
+  {
+    auto txn = env.start_write();
+    auto usual = txn.create_map("usual");
+    EXPECT_EQ(txn.get_map_flags(usual).key_mode(), mdbx::key_mode::usual);
+    EXPECT_EQ(txn.get_map_flags(usual).value_mode(), mdbx::value_mode::single);
+
+    auto reverse = txn.create_map("reverse", mdbx::key_mode::reverse);
+    EXPECT_EQ(txn.get_map_flags(reverse).key_mode(), mdbx::key_mode::reverse);
+
+    auto ordinal = txn.create_map("ordinal", mdbx::key_mode::ordinal);
+    EXPECT_EQ(txn.get_map_flags(ordinal).key_mode(), mdbx::key_mode::ordinal);
+
+    auto multi = txn.create_map("multi", mdbx::key_mode::usual, mdbx::value_mode::multi);
+    EXPECT_EQ(txn.get_map_flags(multi).value_mode(), mdbx::value_mode::multi);
+
+    auto multi_ordinal = txn.create_map("multi-ordinal", mdbx::key_mode::usual, mdbx::value_mode::multi_ordinal);
+    EXPECT_EQ(txn.get_map_flags(multi_ordinal).value_mode(), mdbx::value_mode::multi_ordinal);
+
+    auto multi_reverse_samelength =
+        txn.create_map("multi-reverse-samelength", mdbx::key_mode::usual, mdbx::value_mode::multi_reverse_samelength);
+    EXPECT_EQ(txn.get_map_flags(multi_reverse_samelength).value_mode(), mdbx::value_mode::multi_reverse_samelength);
+    txn.commit();
+  }
+  env.close();
+  mdbx::env::remove(testdb);
+}
