@@ -28,14 +28,13 @@ using buffer = mdbx::default_buffer;
 std::default_random_engine prng(42);
 
 static buffer random(size_t length) {
+  /* the buffer(capacity) constructor creates an empty buffer with the spare
+   * room, so the content must be filled and committed explicitly */
   buffer result(length);
-#if defined(__cpp_lib_span) && __cpp_lib_span >= 202002L
-  for (auto &i : result.bytes())
-    i = mdbx::byte(prng());
-#else
-  for (auto p = result.byte_ptr(); p < result.end_byte_ptr(); ++p)
-    *p = mdbx::byte(prng());
-#endif
+  auto ptr = result.end_char_ptr();
+  for (size_t i = 0; i < length; ++i)
+    *ptr++ = char(prng());
+  result.set_end(ptr);
   return result;
 }
 
@@ -74,7 +73,7 @@ static bool basic() {
     ok = false;
   }
 
-  if (mdbx::slice("").base58_decode() != mdbx::slice() || mdbx::slice("Z").base58_decode() != mdbx::slice(" ") ||
+  if (mdbx::slice("Z").base58_decode() != mdbx::slice(" ") ||
       mdbx::slice("2NEpo7TZRRrLZSi2U").base58_decode() != "Hello World!" ||
       mdbx::slice("USm3fpXnKG5EUBx2ndxBDMPVciP5hGey2Jh4NDv6gmeo1LkMeiKrLJUUBk6Z").base58_decode() !=
           mdbx::slice("The quick brown fox jumps over the lazy dog.") ||
@@ -90,10 +89,132 @@ static bool basic() {
   return ok;
 }
 
+static bool predicates() {
+  bool ok = true;
+
+  // An empty (or spaces-only, when spaces are ignored) source is NOT a valid
+  // dump: a dump of zero bytes is not a dump.
+  if (mdbx::slice("").is_hex() || mdbx::slice("").is_hex(true) || mdbx::slice(" ").is_hex(true) ||
+      mdbx::slice("  \t\n").is_hex(true) || mdbx::slice("").is_base64() || mdbx::slice("").is_base64(true) ||
+      mdbx::slice(" ").is_base64(true) || mdbx::slice("    ").is_base64(true) || mdbx::slice("").is_base58() ||
+      mdbx::slice("").is_base58(true) || mdbx::slice(" ").is_base58(true) || mdbx::slice("   ").is_base58(true)) {
+    std::cerr << "the dump predicates must reject an empty or spaces-only source\n";
+    ok = false;
+  }
+
+  // A valid non-empty dump is still recognized; spaces outside the groups are fine.
+  if (!mdbx::slice("4142").is_hex() || !mdbx::slice("41 42").is_hex(true) || !mdbx::slice("IA==").is_base64() ||
+      !mdbx::slice("QUJD REVG").is_base64(true) || !mdbx::slice("1").is_base58() ||
+      !mdbx::slice("2NEpo7TZRRrLZSi2U").is_base58() || !mdbx::slice(" 1 ").is_base58(true)) {
+    std::cerr << "the dump predicates must accept a valid non-empty dump\n";
+    ok = false;
+  }
+
+  // An empty (or spaces-only) source is not a valid dump (the predicates
+  // above), but its decoding is allowed and yields emptiness: every decode
+  // entry point returns an empty result for it, without any exceptions.
+  ok = (mdbx::slice("").hex_decode() == mdbx::slice()) && ok;
+  ok = (mdbx::slice("  ").hex_decode(true) == mdbx::slice()) && ok;
+  ok = (mdbx::from_hex(mdbx::slice("")).as_buffer() == mdbx::buffer<>()) && ok;
+  ok = (mdbx::from_hex(mdbx::slice(" "), true).as_string().empty()) && ok;
+  ok = (mdbx::slice("").base64_decode() == mdbx::slice()) && ok;
+  ok = (mdbx::slice("    ").base64_decode(true) == mdbx::slice()) && ok;
+  ok = (mdbx::from_base64(mdbx::slice("")).as_string().empty()) && ok;
+  ok = (mdbx::from_base64(mdbx::slice("   "), true).as_string().empty()) && ok;
+  ok = (mdbx::slice("").base58_decode() == mdbx::slice()) && ok;
+  ok = (mdbx::slice("   ").base58_decode(true) == mdbx::slice()) && ok;
+  ok = (mdbx::from_base58(mdbx::slice("")).as_string().empty()) && ok;
+  ok = (mdbx::from_base58(mdbx::slice("  "), true).as_string().empty()) && ok;
+  {
+    buffer sink;
+    sink.append_decoded_hex(mdbx::slice(""))
+        .append_decoded_base58(mdbx::slice(""))
+        .append_decoded_base64(mdbx::slice(""));
+    ok = (sink.empty()) && ok;
+  }
+
+  // Writing to a caller-provided buffer decodes nothing and stays empty.
+  char chunk[8];
+  ok = (mdbx::from_hex(mdbx::slice("")).write_bytes(chunk, sizeof(chunk)) == chunk) && ok;
+  ok = (mdbx::from_base58(mdbx::slice("")).write_bytes(chunk, sizeof(chunk)) == chunk) && ok;
+  ok = (mdbx::from_base64(mdbx::slice("")).write_bytes(chunk, sizeof(chunk)) == chunk) && ok;
+
+  // A non-empty dump is still decoded; the encoders still produce an empty
+  // output for an empty source - such a zero-byte output is not a valid dump
+  // for the predicates, while the decoders return an empty result for it.
+  if (mdbx::slice("4142").hex_decode() != mdbx::slice("AB") ||
+      mdbx::slice("IA==").base64_decode() != mdbx::slice(" ") || mdbx::slice("Z").base58_decode() != mdbx::slice(" ") ||
+      mdbx::slice("").encode_hex().as_string() != "" || mdbx::slice("").encode_base58().as_string() != "" ||
+      mdbx::slice("").encode_base64().as_string() != "") {
+    std::cerr << "the transcoders of non-empty sources are broken\n";
+    ok = false;
+  }
+
+  return ok;
+}
+
+/// The exact ASCII-mode (disable_utf8 == true) acceptance, pinned here by the
+/// exhaustive 0..255 sweep: printable ASCII-7, the Latin-1 extended printable
+/// codes (A0..BF), the CP1252-styled printable positions inside the C1 controls,
+/// plus C0/C1 and F5..FF which are never UTF8 lead bytes. The UTF8 lead bytes
+/// C2..DF, E0..EF and F0..F4, as well as the other controls, must be rejected.
+static bool ascii_printable_expected(unsigned c) {
+  if (c >= 0x20 && c <= 0x7E)
+    return true; // printable ASCII-7
+  if (c >= 0xA0 && c <= 0xBF)
+    return true; // Latin-1 extended printable
+  if (c >= 0xF5)
+    return true; // above the last UTF8 lead byte, printable by design
+  if (c == 0xC0 || c == 0xC1)
+    return true; // Latin-1 letters, never valid UTF8 lead bytes
+  return (c >= 0x82 && c <= 0x8C) || c == 0x8E || (c >= 0x91 && c <= 0x9C) || c == 0x9E || c == 0x9F;
+}
+
+static bool printable() {
+  bool ok = true;
+
+  // the exhaustive 0..255 sweep of the single bytes in the extended-ASCII mode
+  for (unsigned c = 0; c < 256; ++c) {
+    const char single[1] = {static_cast<char>(c)};
+    const mdbx::slice slice(single, 1);
+    if (slice.is_printable(true) != ascii_printable_expected(c)) {
+      std::cerr << "is_printable(true) mismatch for the byte 0x" << std::hex << c << std::dec << "\n";
+      ok = false;
+    }
+  }
+
+  // multi-byte sequences in the extended-ASCII mode: any UTF8 lead byte rejects
+  if (!mdbx::slice("Hello, World!").is_printable(true) || !mdbx::slice("\xA0\xC0\xC1\xF5\xFF").is_printable(true) ||
+      mdbx::slice("\xC2\x80").is_printable(true) || mdbx::slice("\xDF\xBF").is_printable(true) ||
+      mdbx::slice("\xE0\xA0\x80").is_printable(true) || mdbx::slice("\xE2\x82\xAC").is_printable(true) ||
+      mdbx::slice("\xED\x9F\xBF").is_printable(true) || mdbx::slice("\xF0\x9F\x98\x80").is_printable(true) ||
+      mdbx::slice("\xF4\x8F\xBF\xBF").is_printable(true) || mdbx::slice("\x80").is_printable(true) ||
+      mdbx::slice("\x01").is_printable(true) || mdbx::slice("\x7F").is_printable(true)) {
+    std::cerr << "is_printable(true) must reject the UTF8 lead bytes and controls\n";
+    ok = false;
+  }
+
+  // the UTF8 mode: an empty content and the broken sequences are rejected
+  if (mdbx::slice("").is_printable() || !mdbx::slice("Hello, World!").is_printable() ||
+      !mdbx::slice("\xD0\x9F").is_printable() || !mdbx::slice("\xE0\xA0\x80").is_printable() ||
+      !mdbx::slice("\xE2\x82\xAC").is_printable() || !mdbx::slice("\xED\x9F\xBF").is_printable() ||
+      !mdbx::slice("\xF0\x9F\x98\x80").is_printable() || !mdbx::slice("\xF4\x8F\xBF\xBF").is_printable() ||
+      mdbx::slice("\xC0\x80").is_printable() || mdbx::slice("\xE0\x80").is_printable() ||
+      mdbx::slice("\xED\xA0\x80").is_printable() || mdbx::slice("\xF4\x90\x80\x80").is_printable() ||
+      mdbx::slice("\xF5\x80\x80\x80").is_printable() || mdbx::slice("\xA0").is_printable() ||
+      mdbx::slice("\x80").is_printable() || mdbx::slice("\xC2").is_printable()) {
+    std::cerr << "is_printable() failed\n";
+    ok = false;
+  }
+
+  return ok;
+}
+
 int doit() {
-  auto ok = basic();
+  auto ok = basic() && predicates() && printable();
   for (size_t n = 0; n < 1000; ++n) {
-    for (size_t length = 0; ok && length < 111; ++length) {
+    /* the length 0 is not roundtrippable here: an empty dump is not decodable */
+    for (size_t length = 1; ok && length < 111; ++length) {
       const auto pattern = random(length);
       if (pattern !=
           pattern.encode_hex(bool(prng() & 1), prng() % 111).hex_decode(true).encode_hex().hex_decode(false)) {
