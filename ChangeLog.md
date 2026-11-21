@@ -212,6 +212,8 @@ A hardening and refinement release: data-safety and corruption-resistance fixes 
     - Fixed several wrappers throwing on documented non-error results or returning wrong values ([#97](https://github.com/Mithril-mine/libmdbx-devel/issues/97), [#102](https://github.com/Mithril-mine/libmdbx-devel/issues/102)).
     - Fixed the C++ API not compiling in several documented configurations ([#100](https://github.com/Mithril-mine/libmdbx-devel/issues/100)).
     - Fixed overload resolution silently picking the wrong function (`if (slice)`, `move()`, `hex()`) ([#101](https://github.com/Mithril-mine/libmdbx-devel/issues/101)).
+    - Fixed the C++ dumps API treating an empty source as a valid dump; now uniformly rejected ([#551](https://github.com/Mithril-mine/libmdbx-devel/issues/551)).
+    - Fixed the C++ `slice::is_printable(true)` treating UTF-8 lead bytes as printable extended-ASCII ([#551](https://github.com/Mithril-mine/libmdbx-devel/issues/551)).
     - Fixed flags conversion dropping `MDBX_NOSTICKYTHREADS` used with `MDBX_EXCLUSIVE` ([#318](https://github.com/Mithril-mine/libmdbx-devel/issues/318)).
 
  - Performance:

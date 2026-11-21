@@ -1662,7 +1662,12 @@ public:
   /// \param data           The hexadecimal dump to be decoded.
   /// \param ignore_spaces  Skip whitespaces while decoding.
   /// \returns A reference to this instance.
+  /// \throws std::domain_error if the given dump is not valid,
+  /// in particular an empty (or spaces-only) one.
   buffer &append_decoded_hex(const struct slice &data, bool ignore_spaces = false) {
+    if (MDBX_UNLIKELY(data.empty()))
+      /* a dump of zero bytes is not a dump */
+      MDBX_CXX20_UNLIKELY throw_empty_dump_source();
     if (MDBX_UNLIKELY(reaches_tailroom(data)))
       return append_decoded_hex(buffer(data, get_allocator()), ignore_spaces);
     return append_producer(from_hex(data, ignore_spaces));
@@ -1672,7 +1677,12 @@ public:
   /// \param data           The Base58 dump to be decoded.
   /// \param ignore_spaces  Skip whitespaces while decoding.
   /// \returns A reference to this instance.
+  /// \throws std::domain_error if the given dump is not valid,
+  /// in particular an empty (or spaces-only) one.
   buffer &append_decoded_base58(const struct slice &data, bool ignore_spaces = false) {
+    if (MDBX_UNLIKELY(data.empty()))
+      /* a dump of zero bytes is not a dump */
+      MDBX_CXX20_UNLIKELY throw_empty_dump_source();
     if (MDBX_UNLIKELY(reaches_tailroom(data)))
       return append_decoded_base58(buffer(data, get_allocator()), ignore_spaces);
     return append_producer(from_base58(data, ignore_spaces));
@@ -1682,7 +1692,12 @@ public:
   /// \param data           The Base64 dump to be decoded.
   /// \param ignore_spaces  Skip whitespaces while decoding.
   /// \returns A reference to this instance.
+  /// \throws std::domain_error if the given dump is not valid,
+  /// in particular an empty (or spaces-only) one.
   buffer &append_decoded_base64(const struct slice &data, bool ignore_spaces = false) {
+    if (MDBX_UNLIKELY(data.empty()))
+      /* a dump of zero bytes is not a dump */
+      MDBX_CXX20_UNLIKELY throw_empty_dump_source();
     if (MDBX_UNLIKELY(reaches_tailroom(data)))
       return append_decoded_base64(buffer(data, get_allocator()), ignore_spaces);
     return append_producer(from_base64(data, ignore_spaces));

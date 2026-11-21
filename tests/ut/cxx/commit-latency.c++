@@ -65,11 +65,10 @@ TEST(ut_commit_latency, base58_base64_roundtrip) {
   }
   // данные с разными паттернами байт (нули, границы, повторения)
   const std::string payloads[] = {
-      "",                       // пустой
-      "\x00\x01\x02",           // ведущие нули
-      "The quick brown fox",    // текст
-      "\xff\xfe\xfd\xfc\xfb",   // старшие байты
-      std::string(300, '\x5a'), // длинный одинаковый (wrap_width путь)
+      std::string("\x00\x01\x02", 3), // ведущие нули
+      "The quick brown fox",          // текст
+      "\xff\xfe\xfd\xfc\xfb",         // старшие байты
+      std::string(300, '\x5a'),       // длинный одинаковый (wrap_width путь)
   };
   for (const auto &payload : payloads) {
     mdbx::slice src(payload);
@@ -86,6 +85,13 @@ TEST(ut_commit_latency, base58_base64_roundtrip) {
     auto dec64n = mdbx::buffer().append_decoded_base64(b64n, false);
     EXPECT_EQ(mdbx::slice(dec64n), src);
   }
+  // пустой источник кодируется в пустой вывод, который не является дампом
+  // и поэтому декодируется с ошибкой (#551)
+  const auto empty58 = mdbx::buffer().append_base58(mdbx::slice(""));
+  const auto empty64 = mdbx::buffer().append_base64(mdbx::slice(""), 40);
+  EXPECT_TRUE(empty58.empty() && empty64.empty());
+  EXPECT_THROW((void)mdbx::buffer().append_decoded_base58(empty58), std::domain_error);
+  EXPECT_THROW((void)mdbx::buffer().append_decoded_base64(empty64, true), std::domain_error);
   // base64 с пробелами/переносами внутри (ignore_spaces=true)
   auto spaced = mdbx::buffer().append_base64(mdbx::slice("foobar"), 4);
   auto dec = mdbx::buffer().append_decoded_base64(spaced, true);

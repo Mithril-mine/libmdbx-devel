@@ -314,6 +314,11 @@ MDBX_DECLARE_EXCEPTION(laggard_reader);
 #undef MDBX_DECLARE_EXCEPTION
 
 [[noreturn]] LIBMDBX_API void throw_too_small_target_buffer();
+/// \brief Throws std::domain_error, since an empty (or spaces-only, when
+/// spaces are ignored) source is a dump of zero bytes, i.e. not a dump at all,
+/// and therefore cannot be decoded.
+/// \see from_hex::write_bytes(), from_base58::write_bytes(), from_base64::write_bytes()
+[[noreturn]] LIBMDBX_API void throw_empty_dump_source();
 [[noreturn]] LIBMDBX_API void throw_max_length_exceeded();
 [[noreturn]] LIBMDBX_API void throw_out_range();
 [[noreturn]] LIBMDBX_API void throw_allocators_mismatch();

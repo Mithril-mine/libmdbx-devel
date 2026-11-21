@@ -72,6 +72,8 @@ struct LIBMDBX_API to_hex {
   }
 
   /// \brief Fills the buffer by hexadecimal dump of a passed slice.
+  /// \note An empty source produces an empty output, which is a valid result
+  /// of encoding but NOT a valid dump: it cannot be decoded back.
   /// \param dest       The destination buffer to be filled.
   /// \param dest_size  The size of the destination buffer.
   /// \returns The pointer just after the last written byte.
@@ -131,6 +133,8 @@ struct LIBMDBX_API to_base58 {
   }
 
   /// \brief Fills the buffer by [Base58](https://en.wikipedia.org/wiki/Base58) dump of passed slice.
+  /// \note An empty source produces an empty output, which is a valid result
+  /// of encoding but NOT a valid dump: it cannot be decoded back.
   /// \param dest       The destination buffer to be filled.
   /// \param dest_size  The size of the destination buffer.
   /// \returns The pointer just after the last written byte.
@@ -190,6 +194,8 @@ struct LIBMDBX_API to_base64 {
 
   /// \brief Fills the buffer by [Base64](https://en.wikipedia.org/wiki/Base64)
   /// dump of passed slice.
+  /// \note An empty source produces an empty output, which is a valid result
+  /// of encoding but NOT a valid dump: it cannot be decoded back.
   /// \param dest       The destination buffer to be filled.
   /// \param dest_size  The size of the destination buffer.
   /// \returns The pointer just after the last written byte.
@@ -229,12 +235,18 @@ struct LIBMDBX_API from_hex {
   /// \brief Decodes hexadecimal dump from a passed slice to returned string.
   /// \param alloc  The allocator for the resulting string.
   /// \returns The string with the decoded data.
+  /// \throws std::domain_error if the content is not a valid hexadecimal dump,
+  /// in particular an empty (or spaces-only) one, since a dump of zero bytes
+  /// is not a dump.
   template <class ALLOCATOR = default_allocator>
   inline string<ALLOCATOR> as_string(const ALLOCATOR &alloc = ALLOCATOR()) const;
 
   /// \brief Decodes hexadecimal dump from a passed slice to returned buffer.
   /// \param alloc  The allocator for the resulting buffer.
   /// \returns The buffer with the decoded data.
+  /// \throws std::domain_error if the content is not a valid hexadecimal dump,
+  /// in particular an empty (or spaces-only) one, since a dump of zero bytes
+  /// is not a dump.
   template <class ALLOCATOR = default_allocator, typename CAPACITY_POLICY = default_capacity_policy>
   inline buffer<ALLOCATOR, CAPACITY_POLICY> as_buffer(const ALLOCATOR &alloc = ALLOCATOR()) const;
 
@@ -248,6 +260,9 @@ struct LIBMDBX_API from_hex {
   /// \param dest_size  The size of the destination buffer.
   /// \returns The pointer just after the last written byte.
   /// \throws std::length_error if given buffer is too small.
+  /// \throws std::domain_error if the content is not a valid hexadecimal dump,
+  /// in particular an empty (or spaces-only) one, since a dump of zero bytes
+  /// is not a dump.
   char *write_bytes(char *dest, size_t dest_size) const;
 
   /// \brief Checks whether a passed slice is empty, and therefore there will be no output bytes.
@@ -255,7 +270,9 @@ struct LIBMDBX_API from_hex {
   bool is_empty() const noexcept { return source.empty(); }
 
   /// \brief Checks whether the content of a passed slice is a valid hexadecimal
-  /// dump, and therefore can be decoded without errors.
+  /// dump, and therefore can be decoded without errors. An empty (or
+  /// spaces-only, when spaces are ignored) source is NOT a valid dump,
+  /// since a dump of zero bytes is not a dump.
   /// \returns `true` if the source slice is NOT a valid hexadecimal dump.
   bool is_erroneous() const noexcept;
 };
@@ -277,6 +294,9 @@ struct LIBMDBX_API from_base58 {
   /// passed slice to returned string.
   /// \param alloc  The allocator for the resulting string.
   /// \returns The string with the decoded data.
+  /// \throws std::domain_error if the content is not a valid Base58 dump,
+  /// in particular an empty (or spaces-only) one, since a dump of zero bytes
+  /// is not a dump.
   template <class ALLOCATOR = default_allocator>
   inline string<ALLOCATOR> as_string(const ALLOCATOR &alloc = ALLOCATOR()) const;
 
@@ -284,6 +304,9 @@ struct LIBMDBX_API from_base58 {
   /// passed slice to returned buffer.
   /// \param alloc  The allocator for the resulting buffer.
   /// \returns The buffer with the decoded data.
+  /// \throws std::domain_error if the content is not a valid Base58 dump,
+  /// in particular an empty (or spaces-only) one, since a dump of zero bytes
+  /// is not a dump.
   template <class ALLOCATOR = default_allocator, typename CAPACITY_POLICY = default_capacity_policy>
   inline buffer<ALLOCATOR, CAPACITY_POLICY> as_buffer(const ALLOCATOR &alloc = ALLOCATOR()) const;
 
@@ -300,6 +323,9 @@ struct LIBMDBX_API from_base58 {
   /// \param dest_size  The size of the destination buffer.
   /// \returns The pointer just after the last written byte.
   /// \throws std::length_error if given buffer is too small.
+  /// \throws std::domain_error if the content is not a valid Base58 dump,
+  /// in particular an empty (or spaces-only) one, since a dump of zero bytes
+  /// is not a dump.
   char *write_bytes(char *dest, size_t dest_size) const;
 
   /// \brief Checks whether a passed slice is empty, and therefore there will be no output bytes.
@@ -308,7 +334,9 @@ struct LIBMDBX_API from_base58 {
 
   /// \brief Checks whether the content of a passed slice is a valid
   /// [Base58](https://en.wikipedia.org/wiki/Base58) dump, and therefore can be
-  /// decoded without errors.
+  /// decoded without errors. An empty (or spaces-only, when spaces are
+  /// ignored) source is NOT a valid dump, since a dump of zero bytes
+  /// is not a dump.
   /// \returns `true` if the source slice is NOT a valid Base58 dump.
   bool is_erroneous() const noexcept;
 };
@@ -330,6 +358,9 @@ struct LIBMDBX_API from_base64 {
   /// passed slice to returned string.
   /// \param alloc  The allocator for the resulting string.
   /// \returns The string with the decoded data.
+  /// \throws std::domain_error if the content is not a valid Base64 dump,
+  /// in particular an empty (or spaces-only) one, since a dump of zero bytes
+  /// is not a dump.
   template <class ALLOCATOR = default_allocator>
   inline string<ALLOCATOR> as_string(const ALLOCATOR &alloc = ALLOCATOR()) const;
 
@@ -337,6 +368,9 @@ struct LIBMDBX_API from_base64 {
   /// passed slice to returned buffer.
   /// \param alloc  The allocator for the resulting buffer.
   /// \returns The buffer with the decoded data.
+  /// \throws std::domain_error if the content is not a valid Base64 dump,
+  /// in particular an empty (or spaces-only) one, since a dump of zero bytes
+  /// is not a dump.
   template <class ALLOCATOR = default_allocator, typename CAPACITY_POLICY = default_capacity_policy>
   inline buffer<ALLOCATOR, CAPACITY_POLICY> as_buffer(const ALLOCATOR &alloc = ALLOCATOR()) const;
 
@@ -351,6 +385,9 @@ struct LIBMDBX_API from_base64 {
   /// \param dest_size  The size of the destination buffer.
   /// \returns The pointer just after the last written byte.
   /// \throws std::length_error if given buffer is too small.
+  /// \throws std::domain_error if the content is not a valid Base64 dump,
+  /// in particular an empty (or spaces-only) one, since a dump of zero bytes
+  /// is not a dump.
   char *write_bytes(char *dest, size_t dest_size) const;
 
   /// \brief Checks whether a passed slice is empty,
@@ -360,7 +397,9 @@ struct LIBMDBX_API from_base64 {
 
   /// \brief Checks whether the content of a passed slice is a valid
   /// [Base64](https://en.wikipedia.org/wiki/Base64) dump, and therefore can be
-  /// decoded without errors.
+  /// decoded without errors. An empty (or spaces-only, when spaces are
+  /// ignored) source is NOT a valid dump, since a dump of zero bytes
+  /// is not a dump.
   /// \returns `true` if the source slice is NOT a valid Base64 dump.
   bool is_erroneous() const noexcept;
 };

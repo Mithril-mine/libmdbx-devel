@@ -271,6 +271,10 @@ namespace mdbx {
   throw std::length_error("mdbx:: The target buffer is too small.");
 }
 
+[[noreturn]] __cold void throw_empty_dump_source() {
+  throw std::domain_error("mdbx:: An empty (or spaces-only) source is not a valid dump.");
+}
+
 [[noreturn]] __cold void throw_out_range() {
   throw std::out_of_range("mdbx:: Slice or buffer method was called with "
                           "an argument that exceeds the length.");
@@ -433,10 +437,13 @@ __cold void error::throw_exception() const {
 //------------------------------------------------------------------------------
 
 bool slice::is_printable(bool disable_utf8) const noexcept {
+  /* The tag respacing keeps the ASCII-mode test `((P_ | X_) & map[c]) == 0`
+   * exact: the length-lead tags (2..4) << LS occupy bits 5 and above, whereas
+   * P_ and X_ sit at bits 4 and 3, i.e. never alias the lead tags. */
   enum : byte {
-    LS = 4,                // shift for UTF8 sequence length
-    P_ = 1 << LS,          // printable ASCII flag
-    X_ = 1 << (LS - 1),    // printable extended ASCII flag
+    LS = 5,                // shift for UTF8 sequence length
+    P_ = 1 << (LS - 1),    // printable ASCII flag
+    X_ = 1 << (LS - 2),    // printable extended ASCII flag
     N_ = 0,                // non-printable ASCII
     r80_BF = 0,            // flag for UTF8 2nd byte range
     rA0_BF = 1,            // flag for UTF8 2nd byte range
@@ -459,6 +466,14 @@ bool slice::is_printable(bool disable_utf8) const noexcept {
     F1 = 4 << LS | r80_BF, // U+040000..U+0FFFFF | F1..F3 | 80..BF | 80..BF |...
     F4 = 4 << LS | r80_8F, // U+100000..U+10FFFF | F4     | 80..8F | 80..BF |...
   };
+
+  /* the ASCII-mode mask must not alias any of the UTF8 length-lead tags,
+   * including their second-byte range flags, and vice versa the dispatch
+   * below separates N_, X_ and P_ by the shift (LS - 2) */
+  static_assert(((P_ | X_) & (2 << LS | 3 << LS | 4 << LS)) == 0 && ((P_ | X_) & second_range_mask) == 0 &&
+                    (P_ >> (LS - 2)) == 2 && (X_ >> (LS - 2)) == 1 && ((2 << LS) >> (LS - 2)) == 2 * 4 &&
+                    ((3 << LS) >> (LS - 2)) == 3 * 4 && ((4 << LS) >> (LS - 2)) == 4 * 4 && F4 <= 255,
+                "is_printable() tag encoding is broken");
 
   static const byte range_from[] = {0x80, 0xA0, 0x80, 0x90, 0x80};
   static const byte range_to[] = {0xBF, 0xBF, 0x9F, 0xBF, 0x8F};
@@ -500,20 +515,20 @@ bool slice::is_printable(bool disable_utf8) const noexcept {
     const auto bits = map[*src];
     const auto second_from = range_from[bits & second_range_mask];
     const auto second_to = range_to[bits & second_range_mask];
-    switch (bits >> LS) {
+    switch (bits >> (LS - 2)) {
     default:
       MDBX_CXX20_UNLIKELY return false;
-    case 1:
+    case P_ >> (LS - 2): /* single-byte printable ASCII */
       src += 1;
       continue;
-    case 2:
+    case 2 << 2: /* 2-byte sequence lead, C2..DF */
       if (MDBX_UNLIKELY(src + 1 >= end))
         MDBX_CXX20_UNLIKELY return false;
       if (MDBX_UNLIKELY(src[1] < second_from || src[1] > second_to))
         MDBX_CXX20_UNLIKELY return false;
       src += 2;
       continue;
-    case 3:
+    case 3 << 2: /* 3-byte sequence lead, E0..EF */
       if (MDBX_UNLIKELY(src + 2 >= end))
         MDBX_CXX20_UNLIKELY return false;
       if (MDBX_UNLIKELY(src[1] < second_from || src[1] > second_to))
@@ -522,7 +537,7 @@ bool slice::is_printable(bool disable_utf8) const noexcept {
         MDBX_CXX20_UNLIKELY return false;
       src += 3;
       continue;
-    case 4:
+    case 4 << 2: /* 4-byte sequence lead, F0..F4 */
       if (MDBX_UNLIKELY(src + 3 >= end))
         MDBX_CXX20_UNLIKELY return false;
       if (MDBX_UNLIKELY(src[1] < second_from || src[1] > second_to))
@@ -720,6 +735,9 @@ char *from_hex::write_bytes(char *__restrict const dest, size_t dest_size) const
     left -= 2;
     ASSERT(ptr <= dest + dest_size);
   }
+  if (MDBX_UNLIKELY(ptr == dest))
+    /* nothing has been decoded, i.e. a dump of zero bytes is not a dump */
+    MDBX_CXX20_UNLIKELY throw_empty_dump_source();
   return ptr;
 }
 
@@ -960,20 +978,26 @@ char *from_base58::write_bytes(char *__restrict const dest, size_t dest_size) co
   }
 
   b58_buffer buf(end - begin, 47, 64);
-  auto slice = b58_decode(buf, begin, end, ignore_spaces);
-  memcpy(ptr, slice.data(), slice.length());
-  return ptr + slice.length();
+  const auto decoded = b58_decode(buf, begin, end, ignore_spaces);
+  memcpy(ptr, decoded.data(), decoded.length());
+  ptr += decoded.length();
+  if (MDBX_UNLIKELY(ptr == dest))
+    /* nothing has been decoded, i.e. a dump of zero bytes is not a dump */
+    MDBX_CXX20_UNLIKELY throw_empty_dump_source();
+  return ptr;
 }
 
 bool from_base58::is_erroneous() const noexcept {
+  bool got = false;
   auto begin = source.byte_ptr();
   auto const end = source.end_byte_ptr();
   while (begin < end) {
-    if (MDBX_UNLIKELY(b58_map[*begin] < 0 && !(ignore_spaces && isspace(*begin))))
-      return true;
-    ++begin;
+    const auto value = b58_map[*begin++];
+    got |= value >= 0;
+    if (MDBX_UNLIKELY(value < 0 && !(ignore_spaces && isspace(begin[-1]))))
+      MDBX_CXX20_UNLIKELY return true;
   }
-  return false;
+  return !got;
 }
 
 //------------------------------------------------------------------------------
@@ -1130,6 +1154,9 @@ char *from_base64::write_bytes(char *__restrict const dest, size_t dest_size) co
     ptr += 3;
     ASSERT(ptr <= dest + dest_size);
   }
+  if (MDBX_UNLIKELY(ptr == dest))
+    /* nothing has been decoded, i.e. a dump of zero bytes is not a dump */
+    MDBX_CXX20_UNLIKELY throw_empty_dump_source();
   return ptr;
 }
 

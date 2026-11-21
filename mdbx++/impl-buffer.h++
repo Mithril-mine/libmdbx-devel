@@ -111,6 +111,28 @@ inline string<ALLOCATOR> make_string(const PRODUCER &producer, const ALLOCATOR &
   return result;
 }
 
+/// \brief Produces a buffer by decoding a dump with the given decoder
+/// (see `from_hex`, `from_base58` and `from_base64`).
+/// \details Unlike \ref make_buffer(), the empty-source case is not skipped
+/// here but delegated to `write_bytes()` which rejects it, since a dump
+/// of zero bytes is not a dump and cannot be decoded.
+template <class ALLOCATOR, class CAPACITY_POLICY, MDBX_CXX20_CONCEPT(ImmutableByteProducer, DECODER)>
+inline buffer<ALLOCATOR, CAPACITY_POLICY> make_decode_buffer(const DECODER &decoder, const ALLOCATOR &alloc) {
+  buffer<ALLOCATOR, CAPACITY_POLICY> result(decoder.envisage_result_length(), alloc);
+  result.set_end(decoder.write_bytes(result.end_char_ptr(), result.tailroom()));
+  return result;
+}
+
+/// \brief Produces a string by decoding a dump with the given decoder,
+/// see \ref make_decode_buffer() for the empty-source handling.
+template <class ALLOCATOR, MDBX_CXX20_CONCEPT(ImmutableByteProducer, DECODER)>
+inline string<ALLOCATOR> make_decode_string(const DECODER &decoder, const ALLOCATOR &alloc) {
+  string<ALLOCATOR> result(alloc);
+  result.resize(decoder.envisage_result_length());
+  result.resize(decoder.write_bytes(const_cast<char *>(result.data()), result.capacity()) - result.data());
+  return result;
+}
+
 template <class ALLOCATOR> string<ALLOCATOR> to_hex::as_string(const ALLOCATOR &alloc) const {
   return make_string<ALLOCATOR>(*this, alloc);
 }
@@ -139,30 +161,30 @@ buffer<ALLOCATOR, CAPACITY_POLICY> to_base64::as_buffer(const ALLOCATOR &alloc) 
 }
 
 template <class ALLOCATOR> string<ALLOCATOR> from_hex::as_string(const ALLOCATOR &alloc) const {
-  return make_string<ALLOCATOR>(*this, alloc);
+  return make_decode_string<ALLOCATOR>(*this, alloc);
 }
 
 template <class ALLOCATOR, typename CAPACITY_POLICY>
 buffer<ALLOCATOR, CAPACITY_POLICY> from_hex::as_buffer(const ALLOCATOR &alloc) const {
-  return make_buffer<ALLOCATOR, CAPACITY_POLICY>(*this, alloc);
+  return make_decode_buffer<ALLOCATOR, CAPACITY_POLICY>(*this, alloc);
 }
 
 template <class ALLOCATOR> string<ALLOCATOR> from_base58::as_string(const ALLOCATOR &alloc) const {
-  return make_string<ALLOCATOR>(*this, alloc);
+  return make_decode_string<ALLOCATOR>(*this, alloc);
 }
 
 template <class ALLOCATOR, typename CAPACITY_POLICY>
 buffer<ALLOCATOR, CAPACITY_POLICY> from_base58::as_buffer(const ALLOCATOR &alloc) const {
-  return make_buffer<ALLOCATOR, CAPACITY_POLICY>(*this, alloc);
+  return make_decode_buffer<ALLOCATOR, CAPACITY_POLICY>(*this, alloc);
 }
 
 template <class ALLOCATOR> string<ALLOCATOR> from_base64::as_string(const ALLOCATOR &alloc) const {
-  return make_string<ALLOCATOR>(*this, alloc);
+  return make_decode_string<ALLOCATOR>(*this, alloc);
 }
 
 template <class ALLOCATOR, typename CAPACITY_POLICY>
 buffer<ALLOCATOR, CAPACITY_POLICY> from_base64::as_buffer(const ALLOCATOR &alloc) const {
-  return make_buffer<ALLOCATOR, CAPACITY_POLICY>(*this, alloc);
+  return make_decode_buffer<ALLOCATOR, CAPACITY_POLICY>(*this, alloc);
 }
 
 template <class ALLOCATOR>
