@@ -301,11 +301,14 @@ static __always_inline int couple_init(cursor_couple_t *couple, const MDBX_txn *
 
   subcur_t *const mx = &couple->inner;
   mx->cursor.combo_state = z_fresh_mark | z_inner;
+  /* Инициализируется безусловно (не только для DUPSORT): state-машинерия
+   * cursor_ops() читает subcur внутреннего курсора независимо от
+   * наличия вложенного дерева, например eof_hard_clear(). */
+  mx->cursor.subcur = nullptr;
   mx->nested_tree.root = 0;
   if (tree->flags & MDBX_DUPSORT) {
     mx->cursor.signature = cur_signature_live;
     couple->outer.subcur = mx;
-    mx->cursor.subcur = nullptr;
     mx->cursor.next = &mx->cursor;
     mx->cursor.txn = (MDBX_txn *)txn;
     mx->cursor.tree = &mx->nested_tree;
