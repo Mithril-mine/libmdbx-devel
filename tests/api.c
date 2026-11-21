@@ -46,6 +46,8 @@ STATIC_ASSERT_MSG(MDBX_TST_Z_EOF_SOFT == (unsigned)z_eof_soft, "cursor zone");
 STATIC_ASSERT_MSG(MDBX_TST_Z_EOF_HARD == (unsigned)z_eof_hard, "cursor zone");
 STATIC_ASSERT_MSG(MDBX_TST_Z_HOLLOW == (unsigned)(uint8_t)z_hollow, "cursor zone");
 
+STATIC_ASSERT_MSG(MDBX_TST_NUM_METAS == NUM_METAS, "meta pages count");
+
 /*----------------------------------------------------------------------------*/
 
 struct tst_walk_ctx {
@@ -472,4 +474,72 @@ __cold int mdbx_tst_gc_dense_pack(size_t slots, size_t volume, const uint32_t *h
    * uint32_t by the STATIC_ASSERT above */
   return gc_dense_pack(slots, volume, (const pgno_t *)hist_counts, hist_end, first_page, other_pages,
                        (pgno_t *)solution_counts, solution_end, found);
+}
+
+/*----------------------------------------------------------------------------*/
+/* The white-box migration seams (issue #519): read-only introspection of the
+ * internal state and the build-configuration values; see tests/api.h. */
+
+__cold int mdbx_tst_config_avoid_msync(void) { return MDBX_AVOID_MSYNC; }
+
+__cold int mdbx_tst_config_mmap_needs_jolt(void) { return MDBX_MMAP_NEEDS_JOLT; }
+
+__cold int mdbx_tst_config_exclusive_fastpath(void) { return MDBX_ENABLE_EXCLUSIVE_FASTPATH; }
+
+__cold int mdbx_tst_env_mapping(const MDBX_env *env, void **base, size_t *limit, size_t *current) {
+  if (unlikely(!env))
+    return MDBX_EINVAL;
+  if (base)
+    *base = env->dxb_mmap.base;
+  if (limit)
+    *limit = env->dxb_mmap.limit;
+  if (current)
+    *current = env->dxb_mmap.current;
+  return MDBX_SUCCESS;
+}
+
+__cold uint64_t mdbx_tst_env_readahead_bytes(const MDBX_env *env) {
+  if (unlikely(!env))
+    return 0;
+  /* the anchor packs the readahead enable-bit in its LSB and the edge page
+   * number shifted left by one (see the dxb-resize.c readahead toggle) */
+  return (uint64_t)(env->lck->readahead_anchor >> 1) * env->ps;
+}
+
+__cold int mdbx_tst_env_io_fds(const MDBX_env *env, mdbx_filehandle_t *overlapped_fd, mdbx_filehandle_t *dsync_fd,
+                               mdbx_filehandle_t *fd4meta) {
+  if (unlikely(!env))
+    return MDBX_EINVAL;
+#if IS_WINDOWS
+  if (overlapped_fd)
+    *overlapped_fd = env->ioring.overlapped_fd;
+#else
+  /* the overlapped i/o handle exists only in the Windows osal; reporting
+   * the neutral zero keeps the seam cross-platform without cutting the API
+   * off on the platform of the caller */
+  if (overlapped_fd)
+    *overlapped_fd = 0;
+#endif /* Windows */
+  if (dsync_fd)
+    *dsync_fd = env->dsync_fd;
+  if (fd4meta)
+    *fd4meta = env->fd4meta;
+  return MDBX_SUCCESS;
+}
+
+__cold int mdbx_tst_txn_loose_pages(const MDBX_txn *txn, size_t *counter, size_t *linked) {
+  if (unlikely(!txn))
+    return MDBX_EINVAL;
+  if (counter)
+    *counter = txn->wr.loose_count;
+  if (linked) {
+    /* the chain is threaded through the engine's page_next() link at the
+     * start of the entries - the linkage the test-side hand replicas
+     * duplicated */
+    size_t count = 0;
+    for (page_t *lp = txn->wr.loose_pages; lp; lp = page_next(lp))
+      ++count;
+    *linked = count;
+  }
+  return MDBX_SUCCESS;
 }

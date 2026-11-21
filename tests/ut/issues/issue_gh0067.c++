@@ -12,10 +12,6 @@
 ///
 /// \author Леонид Юрьев aka Leonid Yuriev <leo@yuriev.ru> \date 2026
 
-#include "../../../src/internals.h"
-#if IS_WINDOWS
-#include "../../../src/osal/windows/pop-posix-macros.h"
-#endif /* Windows */
 #include "../env-guard.h++"
 #include <gtest/gtest.h>
 
@@ -44,12 +40,6 @@ extern "C" int mdbx_probe_ctl(const char *request, char *reply, size_t reply_siz
 // "warmed up" by one successful nested begin before it can be armed.
 
 namespace {
-
-// Exact equivalent of the engine's page_next() link (page-ops.h): the loose
-// chain is threaded through the freed space at the start of the entries.
-static page_t *loose_link(page_t *lp) {
-  return *(page_t **)((char *)lp + PAGEHDRSZ + (sizeof(void *) - sizeof(uint32_t)));
-}
 
 /* Accumulate loose pages: store values large enough to spawn single-page
  * overflow, then overwrite them with tiny values — the released overflow
@@ -114,12 +104,10 @@ TEST(issue_gh0067, loose_count_stays_consistent_on_alloc_failure) {
   /* Accumulate loose pages in the parent again. */
   accumulate_loose(parent, main_dbi, batch, batch);
 
-  const size_t loose = parent->wr.loose_count;
-  ASSERT_GE(loose, 2u);
+  size_t loose = 0, prelinked = 0;
+  ASSERT_EQ(MDBX_SUCCESS, mdbx_tst_txn_loose_pages(parent, &loose, &prelinked));
+  ASSERT_GE(loose, size_t(2));
   /* sanity: the counter already matches the list before any failure */
-  size_t prelinked = 0;
-  for (page_t *lp = parent->wr.loose_pages; lp; lp = loose_link(lp))
-    prelinked++;
   EXPECT_EQ(loose, prelinked);
 
   char reply[512];
@@ -146,11 +134,10 @@ TEST(issue_gh0067, loose_count_stays_consistent_on_alloc_failure) {
 
   /* The parent is not aborted on this failure: its loose accounting must stay
    * consistent — loose_count equal to the number of pages still linked. */
-  size_t linked = 0;
-  for (page_t *lp = parent->wr.loose_pages; lp; lp = loose_link(lp))
-    linked++;
+  size_t counter = 0, linked = 0;
+  ASSERT_EQ(MDBX_SUCCESS, mdbx_tst_txn_loose_pages(parent, &counter, &linked));
   EXPECT_EQ(loose - 1, linked) << "one page was already moved into repnl";
-  EXPECT_EQ(linked, parent->wr.loose_count);
+  EXPECT_EQ(linked, counter);
 
   /* Disarm the fault; the parent must remain open and usable. */
   ASSERT_EQ(0, mdbx_probe_ctl("fault txn_nested_loose_move none", reply, sizeof reply));

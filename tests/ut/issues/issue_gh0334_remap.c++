@@ -13,11 +13,8 @@
 /// \author Леонид Юрьев aka Leonid Yuriev <leo@yuriev.ru> \date 2026
 /// \author Andrea Lanfranchi (https://github.com/AndreaLanfranchi)
 
-#include "../../../src/internals.h"
-#if IS_WINDOWS
-#include "../../../src/osal/windows/pop-posix-macros.h"
-#endif /* Windows */
 #include "../env-guard.h++"
+#include "../probe-ctl.h++"
 #include <gtest/gtest.h>
 
 #include "../test-env.h++"
@@ -26,12 +23,13 @@
 #include <cstdio>
 #include <cstring>
 #include <string>
+#if !defined(_WIN32)
+#include <sys/mman.h>
+#endif /* !_WIN32 */
 
 #ifdef _MSC_VER
 #pragma warning(disable : 4702) /* unreachable code */
 #endif
-
-extern "C" int mdbx_probe_ctl(const char *request, char *reply, size_t reply_size);
 
 // Regression test for https://github.com/Mithril-mine/libmdbx-devel/issues/334 (read-write part)
 //
@@ -55,6 +53,14 @@ const char *const kPath = "issue334-remap.mdbx";
 #if !defined(_WIN32)
 constexpr intptr_t kMiB = intptr_t(1) << 20;
 const char *const kSites[] = {"mresize_mremap_errno", "mresize_mmap_errno"};
+
+/* Opens the unnamed (main) table per the public API: the same handle the
+ * internal MAIN_DBI refers to. */
+MDBX_dbi main_dbi(MDBX_txn *txn) {
+  MDBX_dbi dbi = 0;
+  EXPECT_EQ(MDBX_SUCCESS, mdbx_dbi_open(txn, nullptr, MDBX_db_flags_t(0), &dbi));
+  return dbi;
+}
 
 /* Disarms the FAULT sites on every exit path. */
 struct faults_guard {
@@ -89,7 +95,11 @@ public:
   static constexpr unsigned char kPattern = 0xAB;
 
   neighbour_mapping(const MDBX_env *env, size_t length) : len(length) {
-    void *const want = static_cast<char *>(env->dxb_mmap.base) + env->dxb_mmap.limit;
+    void *base = nullptr;
+    size_t limit = 0;
+    if (mdbx_tst_env_mapping(env, &base, &limit, nullptr) != MDBX_SUCCESS)
+      return;
+    void *const want = static_cast<char *>(base) + limit;
     int flags = MAP_PRIVATE | MAP_ANONYMOUS;
 #ifdef MAP_FIXED_NOREPLACE
     flags |= MAP_FIXED_NOREPLACE;
@@ -140,7 +150,7 @@ TEST(issue_gh0334_remap, failed_remap_keeps_size_within_mapping) {
     txn_handle_guard txn_owner(&txn);
     ASSERT_EQ(MDBX_SUCCESS, mdbx_txn_begin(env, nullptr, MDBX_TXN_READWRITE, &txn));
     MDBX_val k = {const_cast<char *>("key"), 3}, v = {const_cast<char *>("value"), 5};
-    ASSERT_EQ(MDBX_SUCCESS, mdbx_put(txn, MAIN_DBI, &k, &v, MDBX_UPSERT));
+    ASSERT_EQ(MDBX_SUCCESS, mdbx_put(txn, main_dbi(txn), &k, &v, MDBX_UPSERT));
     txn_owner.release();
     ASSERT_EQ(MDBX_SUCCESS, mdbx_txn_commit(txn));
   }
@@ -163,12 +173,15 @@ TEST(issue_gh0334_remap, failed_remap_keeps_size_within_mapping) {
     EXPECT_EQ(MDBX_UNABLE_EXTEND_MAPSIZE, rc) << mdbx_strerror(rc);
   }
   ASSERT_GT(site_hits("mresize_mmap_errno"), size_t(0)) << "the whole-range remap was not reached";
-  ASSERT_LE(env->dxb_mmap.current, env->dxb_mmap.limit) << "the recorded size exceeds the restored mapping";
+  size_t limit = 0, current = 0;
+  ASSERT_EQ(MDBX_SUCCESS, mdbx_tst_env_mapping(env, nullptr, &limit, &current));
+  ASSERT_LE(current, limit) << "the recorded size exceeds the restored mapping";
 
   /* the shrink discards pages from the recorded size down to the new one */
   const int rc = mdbx_env_set_geometry(env, -1, 2 * kMiB, 8 * kMiB, -1, -1, -1);
   EXPECT_EQ(MDBX_SUCCESS, rc) << mdbx_strerror(rc);
-  EXPECT_LE(env->dxb_mmap.current, env->dxb_mmap.limit);
+  ASSERT_EQ(MDBX_SUCCESS, mdbx_tst_env_mapping(env, nullptr, &limit, &current));
+  EXPECT_LE(current, limit);
   if (neighbour.placed()) {
     EXPECT_EQ(size_t(0), neighbour.changed_bytes()) << "the shrink discarded memory after the mapping";
   }
@@ -177,7 +190,7 @@ TEST(issue_gh0334_remap, failed_remap_keeps_size_within_mapping) {
   txn_handle_guard txn_owner(&txn);
   ASSERT_EQ(MDBX_SUCCESS, mdbx_txn_begin(env, nullptr, MDBX_TXN_RDONLY, &txn));
   MDBX_val k = {const_cast<char *>("key"), 3}, v;
-  ASSERT_EQ(MDBX_SUCCESS, mdbx_get(txn, MAIN_DBI, &k, &v));
+  ASSERT_EQ(MDBX_SUCCESS, mdbx_get(txn, main_dbi(txn), &k, &v));
   EXPECT_EQ(0, std::memcmp(v.iov_base, "value", 5));
 #endif /* !_WIN32 */
 }
