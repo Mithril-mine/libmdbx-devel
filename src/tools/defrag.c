@@ -71,6 +71,8 @@ static void logger(MDBX_log_level_t level, const char *function, int line, const
       "   ////// ",   // 6 verbose
       "   //////// ", // 7 verbose
   };
+  if (!fmt)
+    return;
   if (!quiet && level < MDBX_LOG_DEBUG) {
     if (progress_dots) {
       putchar(' ');
