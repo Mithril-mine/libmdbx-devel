@@ -233,6 +233,7 @@ set(MDBX_TEST_TIMEOUTS
   "raii-lifecycles=30"
   "rename_dbi=30"
   "reverse_insertions=600"
+  "roundtrip-fuzz=90"
   "slice-pod=30"
   "slice-view=30"
   "stat-info=30"

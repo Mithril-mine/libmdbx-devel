@@ -1017,6 +1017,15 @@ add_ut(reverse_insertions SOURCE ut/txn/reverse_insertions.c++)
     add_ut(chk-exit SOURCE ut/tools/chk-exit.c++)
     set_tests_properties(chk-exit PROPERTIES LABELS "ut;ut.tools")
     set_property(TEST chk-exit APPEND PROPERTY ENVIRONMENT "MDBX_TOOL_CHK=$<TARGET_FILE:mdbx_chk>")
+
+    # The deterministic dump/load/copy round-trip family (#552, SC-97): a
+    # shape x seed matrix feeding byte-exact scans of the reloaded and copied
+    # databases, with the dump->load leg through real stdin/stdout pipes where
+    # load-nul-byte-silent-truncation lived. POSIX-only (pipes and fork); the
+    # tools are passed to the test via the environment, the gh0485 pattern.
+    add_ut(roundtrip-fuzz SOURCE ut/tools/roundtrip-fuzz.c++)
+    set_tests_properties(roundtrip-fuzz PROPERTIES LABELS "ut;ut.tools"
+                         ENVIRONMENT "MDBX_TOOL_DUMP=$<TARGET_FILE:mdbx_dump>;MDBX_TOOL_LOAD=$<TARGET_FILE:mdbx_load>;MDBX_TOOL_COPY=$<TARGET_FILE:mdbx_copy>")
   endif()
 
   # MDBX_ATTRIBUTE_NO_SANITIZE_ADDRESS must pick a compiler-specific spelling
