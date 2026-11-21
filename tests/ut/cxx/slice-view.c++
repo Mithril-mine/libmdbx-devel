@@ -122,3 +122,25 @@ TEST(ut_slice_view, prefix_suffix) {
   EXPECT_TRUE(s.starts_with(mdbx::slice()));
   EXPECT_TRUE(s.ends_with(mdbx::slice()));
 }
+
+TEST(ut_slice_view, assign_exception_safety) {
+  if (MDBX_GTEST_IS_EXECUTION_TIMEOUT()) {
+    GTEST_SKIP() << "SKIPPED by RUNTIME_LIMIT";
+    return;
+  }
+  static const char data[] = "Hello";
+  mdbx::slice s(data);
+  /* an oversize length must throw and leave the slice unchanged */
+  EXPECT_THROW(s.assign(data, mdbx::slice::max_length + 1), std::length_error);
+  EXPECT_EQ(s.size(), 5u);
+  EXPECT_EQ(s.data(), static_cast<const void *>(data));
+  EXPECT_EQ(s, mdbx::slice("Hello"));
+  /* a null base with a non-zero length must throw and leave the slice unchanged */
+  EXPECT_THROW(s.assign(nullptr, 3), mdbx::bad_value_size);
+  EXPECT_EQ(s.size(), 5u);
+  EXPECT_EQ(s.data(), static_cast<const void *>(data));
+  EXPECT_EQ(s, mdbx::slice("Hello"));
+  /* a valid assignment still works */
+  s.assign(data + 1, 3);
+  EXPECT_EQ(s, mdbx::slice("ell"));
+}

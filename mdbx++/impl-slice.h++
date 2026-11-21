@@ -22,8 +22,11 @@ MDBX_CXX14_CONSTEXPR slice::slice(MDBX_val &&src) : slice(src) { src.iov_base = 
 MDBX_CXX14_CONSTEXPR slice::slice(slice &&src) noexcept : slice(src) { src.invalidate(); }
 
 inline slice &slice::assign(const void *ptr, size_t bytes) {
+  /* the length is checked before storing the base to keep the slice
+   * untouched on a throw */
+  const size_t length = ptr ? check_length(bytes) : check_nullptr_length(bytes);
   iov_base = const_cast<void *>(ptr);
-  iov_len = ptr ? check_length(bytes) : check_nullptr_length(bytes);
+  iov_len = length;
   return *this;
 }
 

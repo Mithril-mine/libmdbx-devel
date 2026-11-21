@@ -67,8 +67,15 @@ struct LIBMDBX_API to_hex {
   /// dump of a passed slice.
   /// \returns The required buffer size in bytes.
   MDBX_CXX11_CONSTEXPR size_t envisage_result_length() const noexcept {
-    const size_t bytes = source.length() << 1;
-    return wrap_width ? bytes + bytes / wrap_width : bytes;
+    /* The math is done in 64 bits to avoid a 32-bit size_t overflow: the
+     * source length is limited by MDBX_MAXDATASIZE, so on 64-bit targets the
+     * result always fits in size_t, while on 32-bit ones only a small
+     * wrap_width could make it exceed size_t. Such demand is unsatisfiable
+     * in practice (it would require an absurd wrap_width for a 2 Gb source),
+     * so the maximal size_t value is returned instead of a wrapped estimate. */
+    const uint64_t bytes = uint64_t(source.length()) << 1;
+    const uint64_t whole = wrap_width ? bytes + bytes / wrap_width : bytes;
+    return whole < SIZE_MAX ? size_t(whole) : SIZE_MAX;
   }
 
   /// \brief Fills the buffer by hexadecimal dump of a passed slice.
@@ -126,8 +133,11 @@ struct LIBMDBX_API to_base58 {
   /// [Base58](https://en.wikipedia.org/wiki/Base58) dump of passed slice.
   /// \returns The required buffer size in bytes.
   MDBX_CXX11_CONSTEXPR size_t envisage_result_length() const noexcept {
-    const size_t bytes = (source.length() * 11 + 7) / 8;
-    return wrap_width ? bytes + bytes / wrap_width : bytes;
+    /* The math is done in 64 bits to avoid a 32-bit size_t overflow, see
+     * the same-named method of to_hex for the details. */
+    const uint64_t bytes = (uint64_t(source.length()) * 11 + 7) / 8;
+    const uint64_t whole = wrap_width ? bytes + bytes / wrap_width : bytes;
+    return whole < SIZE_MAX ? size_t(whole) : SIZE_MAX;
   }
 
   /// \brief Fills the buffer by [Base58](https://en.wikipedia.org/wiki/Base58) dump of passed slice.

@@ -1930,7 +1930,8 @@ template <typename ALLOCATOR, typename CAPACITY_POLICY> struct buffer_pair_spec 
   /// \brief Constructs an empty pair with the given allocator.
   /// \param alloc  The allocator for both buffers.
   MDBX_CXX20_CONSTEXPR
-  buffer_pair_spec(const allocator_type &alloc) noexcept : key(alloc), value(alloc) {}
+  buffer_pair_spec(const allocator_type &alloc) noexcept(::std::is_nothrow_copy_constructible<allocator_type>::value)
+      : key(alloc), value(alloc) {}
 
   /// \brief Constructs the pair from the given key and value buffers.
   /// \param key    The key buffer.
