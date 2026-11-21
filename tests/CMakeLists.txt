@@ -959,6 +959,11 @@ add_ut(reverse_insertions SOURCE ut/txn/reverse_insertions.c++)
             set_tests_properties(crash-windows PROPERTIES APPEND PROPERTY
               ENVIRONMENT "MDBX_PROBES=1")
           endif()
+          # The dead-writer recovery matrix: the white-box include of
+          # src/essentials.h (to learn the resolved MDBX_LOCKING, as opposed
+          # to the AUTO cmake value) requires the NO_PCH setup.
+          add_ut(dead-owner SOURCE ut/durability/dead-owner.c++ NO_PCH)
+          set_tests_properties(dead-owner PROPERTIES LABELS "ut;ut.durability")
         endif()
       endif()
       add_ut(hex_base64_base58 SOURCE ut/api/hex_base64_base58.c++)
