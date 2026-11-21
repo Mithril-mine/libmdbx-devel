@@ -1133,9 +1133,11 @@ typedef enum MDBX_env_flags {
    *
    * - with `MDBX_RDONLY` = open environment in read-only mode.
    *   MDBX supports pure read-only mode (i.e. without opening LCK-file) only
-   *   when environment directory and/or both files are not writable (and the
-   *   LCK-file may be missing). In such case allowing file(s) to be placed
-   *   on a network read-only share.
+   *   when the filesystem with the database files is mounted read-only
+   *   (and the LCK-file may be missing). A non-writable directory or files
+   *   on a writable filesystem don't give the pure read-only mode: opening
+   *   such an environment requires the LCK-file to be writable.
+   *   In such case allowing file(s) to be placed on a network read-only share.
    *
    * - without `MDBX_RDONLY` = open environment in read-write mode.
    *
@@ -2588,6 +2590,16 @@ LIBMDBX_API int mdbx_env_get_option(const MDBX_env *env, const MDBX_option_t opt
  *       You can try to combine the \ref MDBX_ACCEDE flag to opend a database/environment which is already
  *       used by another process(es) with unknown mode/flags.
  *
+ * \note Known limitation: do not rename/replace or restore the LCK-file of a live environment, since such
+ *       manipulation may split the coordination domain and, in a two-opener restart race, lead to two independent
+ *       environments over the same data file with concurrent write transactions (known limitation, see
+ *       [issue #485](https://github.com/Mithril-mine/libmdbx-devel/issues/485)).
+ *
+ * \note Known limitation on Windows: with \ref MDBX_RDONLY the mapping extent is fixed by the data file size
+ *       at the opening moment. If the database is grown beyond this extent, starting a read transaction may
+ *       fail with \ref MDBX_EPERM until the environment is re-opened (known limitation, see
+ *       [issue #485](https://github.com/Mithril-mine/libmdbx-devel/issues/485)).
+ *
  * If the database is already exist and parameters specified early by \ref mdbx_env_set_geometry() are incompatible
  * (i.e. for instance, different page size) then \ref mdbx_env_open() will return \ref MDBX_INCOMPATIBLE or \ref
  * MDBX_TOO_LARGE error.
@@ -3015,6 +3027,12 @@ typedef struct MDBX_envinfo MDBX_envinfo;
  * Otherwise, if txn is null, then stat will be populated by a snapshot from
  * the last committed write transaction, and at next time, other information
  * can be returned.
+ *
+ * If the environment is not open yet (i.e. \ref mdbx_env_open() has not been
+ * called or has failed), the available info is returned with the rest zeroed:
+ * the `mi_bootid.current` and `mi_sys_*` fields are reported as zeros, while
+ * the geometry (`mi_geo`), `mi_maxreaders` and `mi_dxb_pagesize` are still
+ * filled from the handle's settings.
  *
  * Legacy \ref mdbx_env_info() correspond to calling \ref mdbx_env_info_ex()
  * with the null `txn` argument.
@@ -5202,16 +5220,46 @@ MDBX_NOTHROW_CONST_FUNCTION LIBMDBX_INLINE_API(uint32_t, mdbx_key_from_int32, (c
  * \ref avoid_custom_comparators "avoid using custom comparators"
  * \see value2key
  * @{ */
-MDBX_NOTHROW_PURE_FUNCTION LIBMDBX_API int64_t mdbx_jsonInteger_from_key(const MDBX_val);
+/** \brief Get a `int64_t` JSON-number value from a 8-byte key.
+ * \warning There is a Undefined behavior if the key is invalid, i.e. its
+ * length is not the expected 8 bytes, since the conversion reads a fixed
+ * number of bytes regardless of the key's actual `iov_len`.
+ * \param [in] key  The key made by \ref mdbx_key_from_jsonInteger().
+ * \returns The original `int64_t` value. */
+MDBX_NOTHROW_PURE_FUNCTION LIBMDBX_API int64_t mdbx_jsonInteger_from_key(const MDBX_val key);
 
-MDBX_NOTHROW_PURE_FUNCTION LIBMDBX_API double mdbx_double_from_key(const MDBX_val);
+/** \brief Get a `double` value from a 8-byte key.
+ * \warning There is a Undefined behavior if the key is invalid, i.e. its
+ * length is not the expected 8 bytes, since the conversion reads a fixed
+ * number of bytes regardless of the key's actual `iov_len`.
+ * \param [in] key  The key made by \ref mdbx_key_from_double().
+ * \returns The original `double` value. */
+MDBX_NOTHROW_PURE_FUNCTION LIBMDBX_API double mdbx_double_from_key(const MDBX_val key);
 
-MDBX_NOTHROW_PURE_FUNCTION LIBMDBX_API float mdbx_float_from_key(const MDBX_val);
+/** \brief Get a `float` value from a 4-byte key.
+ * \warning There is a Undefined behavior if the key is invalid, i.e. its
+ * length is not the expected 4 bytes, since the conversion reads a fixed
+ * number of bytes regardless of the key's actual `iov_len`.
+ * \param [in] key  The key made by \ref mdbx_key_from_float().
+ * \returns The original `float` value. */
+MDBX_NOTHROW_PURE_FUNCTION LIBMDBX_API float mdbx_float_from_key(const MDBX_val key);
 
-MDBX_NOTHROW_PURE_FUNCTION LIBMDBX_API int32_t mdbx_int32_from_key(const MDBX_val);
+/** \brief Get a `int32_t` value from a 4-byte key.
+ * \warning There is a Undefined behavior if the key is invalid, i.e. its
+ * length is not the expected 4 bytes, since the conversion reads a fixed
+ * number of bytes regardless of the key's actual `iov_len`.
+ * \param [in] key  The key made by \ref mdbx_key_from_int32().
+ * \returns The original `int32_t` value. */
+MDBX_NOTHROW_PURE_FUNCTION LIBMDBX_API int32_t mdbx_int32_from_key(const MDBX_val key);
 
-MDBX_NOTHROW_PURE_FUNCTION LIBMDBX_API int64_t mdbx_int64_from_key(const MDBX_val);
-/** end of value2key @} */
+/** \brief Get a `int64_t` value from a 8-byte key.
+ * \warning There is a Undefined behavior if the key is invalid, i.e. its
+ * length is not the expected 8 bytes, since the conversion reads a fixed
+ * number of bytes regardless of the key's actual `iov_len`.
+ * \param [in] key  The key made by \ref mdbx_key_from_int64().
+ * \returns The original `int64_t` value. */
+MDBX_NOTHROW_PURE_FUNCTION LIBMDBX_API int64_t mdbx_int64_from_key(const MDBX_val key);
+/** end of key2value @} */
 
 /** \brief Retrieve statistics for a table.
  * \ingroup c_statinfo
@@ -7197,6 +7245,17 @@ LIBMDBX_API int mdbx_thread_unregister(const MDBX_env *env);
  * some other action. In doing so it is important that the returned code always
  * corresponds to the performed action.
  *
+ * The callback is invoked with the write transaction lock held by the calling
+ * thread. Therefore, the callback must not call mdbx functions on the same
+ * environment (in particular, must not start or end a write transaction),
+ * otherwise:
+ *  - on POSIX.1-2001/2008 systems the recursive acquisition of the write
+ *    transaction lock fails safely with \ref MDBX_EDEADLK error;
+ *  - on POSIX.1-1988/SysV systems with semaphore-based locking such a call
+ *    hangs waiting for itself;
+ *  - on Windows the recursive acquisition likely succeeds and results in
+ *    a re-entrant entry into libmdbx.
+ *
  * \param [in] env     An environment handle returned by \ref mdbx_env_create().
  * \param [in] txn     The current write transaction which internally at
  *                     the \ref MDBX_MAP_FULL condition.
@@ -7930,6 +7989,12 @@ typedef int (*MDBX_defrag_notify_func)(void *ctx, const MDBX_defrag_result_t *pr
  * committed and can be interrupted in any way while ensuring the durability of the database specified when it was
  * opened.
  *
+ * \note If a write transaction is already started by the caller for the given environment, it is adopted and the
+ * defragmentation proceeds within it. In this case each cycle ends with a checkpoint of this transaction, i.e. the
+ * caller's pending changes are committed in the middle of the defragmentation and will survive a subsequent
+ * \ref mdbx_txn_abort(). The caller's cursors are detached at such intermediate commits and a further use of ones
+ * safely returns \ref MDBX_EINVAL.
+ *
  * Defragmentation is an alternative to making a copy of the database with compaction (mdbx_env_copy() with
  * \ref MDBX_CP_COMPACT, mdbx_copy -c), for cases where creating a copy is unacceptable, for instance due to
  * insufficient space. A partial defragmentation of a few cycles is relatively quick, while the complete one almost
@@ -7966,6 +8031,11 @@ typedef int (*MDBX_defrag_notify_func)(void *ctx, const MDBX_defrag_result_t *pr
  *                                   The limit stops scheduling new movements; the moving phase of the current cycle
  *                                   completes within the auto-sized batch, and the intermediate result is saved by
  *                                   the cycle's checkpoint.
+ *                                   The limit is best-effort: it is checked between cycles and only after
+ *                                   the `defrag_atleast` goal edge is reached but before the `defrag_enough` edge,
+ *                                   since the goal-based stopping conditions take precedence. If the `defrag_atleast`
+ *                                   goal is unreachable, the time limit may not stop defragmentation and the cycles
+ *                                   will continue until another stopping condition applies.
  *                                   Specify zero if in doubt or not known, this will mean no limit.
  *
  * \param [in] acceptable_backlash   Defragmentation stops if a next cycle will unable to shrink database by the
