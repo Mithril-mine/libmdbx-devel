@@ -1779,6 +1779,16 @@ if(MDBX_BUILD_MCP_MEMORY AND NOT MDBX_AMALGAMATED_SOURCE AND NOT_SUBPROJECT)
   add_subdirectory(skynet/MCP-shared-graph-memory)
 endif()
 #< dist-cutoff-end
+
+#> dist-cutoff-begin
+# The TIMEOUT platform/configuration scale (see cmake/test-timeout-scale.cmake):
+# the values in the tests/test-timeouts.cmake manifest and the smoke/examples
+# blocks are calibrated for the reference x86-64 Linux configuration, while the
+# ARM64/Darwin/Debug setups need proportionally larger budgets. The tests/
+# and examples/ CMakeLists call mdbx_scale_dir_test_timeouts() at their ends.
+include(cmake/test-timeout-scale.cmake)
+message(STATUS "MDBX_TEST_TIMEOUT_SCALE: ${MDBX_TEST_TIMEOUT_SCALE}")
+#< dist-cutoff-end
 # ######################################################################################################################
 
 if(NOT SUBPROJECT)

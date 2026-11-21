@@ -260,5 +260,16 @@ if(UNIX)
   target_link_libraries(pcrf_simulator ${MDBX_LIBRARY})
 endif()
 
-# Scale the examples' TIMEOUTs for the valgrind/memcheck runs.
-mdbx_scale_timeouts4memcheck()
+# The TIMEOUT platform/configuration scale (see cmake/test-timeout-scale.cmake;
+# guarded because this file also ships within the amalgamated dist without
+# cmake/, where the factor stays 1).
+if(NOT MDBX_AMALGAMATED_SOURCE)
+  include(${CMAKE_CURRENT_LIST_DIR}/../cmake/test-timeout-scale.cmake)
+endif()
+
+# Scale the examples' TIMEOUTs by the platform/configuration factor (see
+# cmake/test-timeout-scale.cmake; guarded because this file also ships within
+# the amalgamated dist without cmake/, where the factor stays 1).
+if(COMMAND mdbx_scale_dir_test_timeouts)
+  mdbx_scale_dir_test_timeouts()
+endif()

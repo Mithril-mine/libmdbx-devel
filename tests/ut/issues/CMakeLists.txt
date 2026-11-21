@@ -241,3 +241,7 @@ if(MDBX_BUILD_TOOLS)
   add_issue_test(gh0076 SOURCE "issue_gh0076.c++")
   add_issue_test(gh0312 SOURCE "issue_gh0312.c++")
 endif()
+
+# Scale the registered tests' TIMEOUTs by the platform/configuration factor
+# (see cmake/test-timeout-scale.cmake).
+mdbx_scale_dir_test_timeouts()
