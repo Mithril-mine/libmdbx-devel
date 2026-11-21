@@ -85,8 +85,9 @@ def join_path_list(value: str) -> str:
 def run_emulator_tests(cell, build_dir, scope) -> int:
     """Run the cross-compiled Android test binaries on a booted emulator (B5).
 
-    Expected to be invoked from CI under reactivecircus/android-emulator-runner
-    (the device is already booted); pushes the binaries into /data/local/tmp/mdbx
+    Expected to be invoked from CI after the emulator boot step
+    (tests/ci/android-emulator-boot.sh, the device is already booted); pushes
+    the binaries into /data/local/tmp/mdbx
     and replays the quick-smoke scenarios through `adb shell`, recording
     per-test metrics the same way the ctest path does.
     """

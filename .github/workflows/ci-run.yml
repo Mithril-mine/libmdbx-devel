@@ -190,25 +190,37 @@ jobs:
 
       - name: build + run tests on Android emulator (B5 pilot)
         if: ${{ steps.detect.outputs.emulator == 'true' }}
-        uses: reactivecircus/android-emulator-runner@v2
-        timeout-minutes: 40
+        shell: bash
+        # The step covers the emulator boot (two bounded attempts, see
+        # tests/ci/android-emulator-boot.sh) plus the build and the test
+        # replay; worst-case boot (~31 min) leaves the rest for the build,
+        # and the job cap (60m) still bounds the whole cell. The retry is
+        # inside the boot script: a transient boot flake (#561) retries the
+        # boot only, never the build or the tests.
+        timeout-minutes: 50
         env:
-          # The hosted runners have no KVM, so the action falls back to
-          # "-accel off" (TCG software emulation). The emulator 37.3.x
-          # refuses TCG without an explicit opt-in: the process dies at
-          # start ("Software CPU emulation (-accel off) is not supported")
-          # and the boot wait times out (the 2026-11-20 nightly failure).
+          # The hosted runners have no KVM, so the emulator runs TCG software
+          # emulation ("-accel off", see tests/ci/android-emulator-boot.sh).
+          # The emulator 37.3.x refuses TCG without an explicit opt-in: the
+          # process dies at start ("Software CPU emulation (-accel off) is
+          # not supported") and the boot wait times out (the 2026-11-20
+          # nightly failure).
           ANDROID_I_WANT_MY_TCG: "yes"
-        with:
-          api-level: ${{ steps.detect.outputs.api-level }}
-          arch: ${{ steps.detect.outputs.arch }}
-          target: default
-          disable-animations: true
-          # NOTE: android-emulator-runner feeds the script to /bin/sh (dash)
-          # LINE BY LINE (one `sh -c` per line), so this must stay a single
-          # logical line: no multi-line if/fi, no \-continuations, no cross-
-          # line exports (each line is a separate shell).
-          script: EXTRA="-DINTERPROCEDURAL_OPTIMIZATION=OFF"; if [ "${{ inputs.coverage }}" != "true" ] && command -v ccache >/dev/null 2>&1; then EXTRA="$EXTRA -DCMAKE_C_COMPILER_LAUNCHER=ccache -DCMAKE_CXX_COMPILER_LAUNCHER=ccache"; fi; export RUN_CELL_EXTRA_CMAKE="$EXTRA"; export CCACHE_DIR="${{ runner.temp }}/ccache" CCACHE_MAXSIZE=1G NDK_PATH="${{ steps.setup-ndk.outputs.ndk-path }}" ANDROID_NDK_HOME="${{ steps.setup-ndk.outputs.ndk-path }}"; tests/ci/run-cell.py "${{ inputs.cell }}" --scope "${{ inputs.scope }}" --build-dir @ci-cmake-build 2>&1
+          EMU_API_LEVEL: ${{ steps.detect.outputs.api-level }}
+          EMU_ARCH: ${{ steps.detect.outputs.arch }}
+        run: |
+          set -euo pipefail
+          tests/ci/android-emulator-boot.sh
+          EXTRA="-DINTERPROCEDURAL_OPTIMIZATION=OFF"
+          if [ "${{ inputs.coverage }}" != "true" ] && command -v ccache >/dev/null 2>&1; then
+            EXTRA="$EXTRA -DCMAKE_C_COMPILER_LAUNCHER=ccache -DCMAKE_CXX_COMPILER_LAUNCHER=ccache"
+          fi
+          export RUN_CELL_EXTRA_CMAKE="$EXTRA"
+          export CCACHE_DIR="${{ runner.temp }}/ccache" CCACHE_MAXSIZE=1G
+          export NDK_PATH="${{ steps.setup-ndk.outputs.ndk-path }}"
+          export ANDROID_NDK_HOME="${{ steps.setup-ndk.outputs.ndk-path }}"
+          tests/ci/run-cell.py "${{ inputs.cell }}" --scope "${{ inputs.scope }}" \
+            --build-dir @ci-cmake-build 2>&1
 
       - name: coverage report
         if: ${{ inputs.coverage }}
