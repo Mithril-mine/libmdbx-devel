@@ -46,6 +46,29 @@ __cold int dxb_read_header(MDBX_env *env, meta_t *dest, const int lck_exclusive,
   /* We don't know the page size on first time. So, just guess it. */
   unsigned guess_pagesize = 0;
   for (unsigned loop_count = 0; loop_count < loop_limit; ++loop_count) {
+    if (!guess_pagesize && loop_count == NUM_METAS) {
+      /* The first pass failed to latch a pagesize: with a damaged meta-0
+       * and a DB pagesize other than the system one, every offset probed
+       * above landed mid-page, so the intact meta-1/meta-2 were never
+       * really read. Probe the alternative layouts before re-reading:
+       * meta-1 always sits exactly one page past the file start, so
+       * validating a page read at each power-of-2 candidate offset
+       * either latches the true pagesize or leaves the CORRUPTED verdict
+       * of the plain schedule unchanged. */
+      for (unsigned candidate = MDBX_MIN_PAGESIZE; candidate <= MDBX_MAX_PAGESIZE; candidate <<= 1) {
+        if (candidate == globals.sys_pagesize || candidate == env->ps)
+          continue; /* such a layout was already probed above */
+        char probe[MDBX_MIN_PAGESIZE];
+        if (osal_pread(env->lazy_fd, probe, MDBX_MIN_PAGESIZE, candidate) != MDBX_SUCCESS)
+          continue; /* beyond the file, such a layout cannot exist */
+        page_t *const probe_page = (page_t *)probe;
+        const int err = meta_validate(env, page_meta(probe_page), probe_page, 1, &guess_pagesize);
+        if (err == MDBX_SUCCESS || guess_pagesize) {
+          NOTICE("meta-pages layout discovered, pagesize %u", guess_pagesize);
+          break;
+        }
+      }
+    }
     const unsigned meta_number = loop_count % NUM_METAS;
     const unsigned offset = (guess_pagesize             ? guess_pagesize
                              : (loop_count > NUM_METAS) ? env->ps
