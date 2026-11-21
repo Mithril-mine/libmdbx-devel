@@ -97,6 +97,7 @@ fault_code  инъектируемый код (0 = нет)
 | `arm` / `disarm` | `<pattern>` | взвести/снять ARMED на совпавших тегах (`*` = суффикс-глоб) |
 | `mode` | `panic`\|`log`\|`count` | глобальный режим действия для assert |
 | `fault` | `<pattern> <code>\|<none>` | задать/снять инъекцию кода возврата на FAULT-точках |
+| `kill` | `<pattern> <N>\|<none>` | убить процесс (SIGKILL/`TerminateProcess`, как крах писателя) на N-м хите совпавших точек — механизм тестов «окон краха» коммита |
 | `alloc-fault` | `<count>\|<none>` | провалить следующие N аллокаций (redirect `osal_*`) |
 | `query` | `<pattern>` | dump: `site <name> <kind> <armed> <seen> <hits> <suppressed> <value> <file>:<line>` |
 | `reset` | `<pattern>` | обнулить счётчики |
