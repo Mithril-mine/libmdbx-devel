@@ -152,6 +152,51 @@ static const flagbit dbflags[] = {{MDBX_REVERSEKEY, S("reversekey")}, {MDBX_DUPS
                                   {MDBX_DUPFIXED, S("dupfix")},       {MDBX_INTEGERDUP, S("integerdup")},
                                   {MDBX_REVERSEDUP, S("reversedup")}, {0, 0, nullptr}};
 
+static int badend(void) {
+  if (!quiet)
+    fprintf(stderr, "%s: line %" PRIiSIZE ": unexpected end of input\n", prog, lineno);
+  return errno ? errno : MDBX_ENODATA;
+}
+
+/* A byte that cannot occur inside a well-formed dump line: the bytevalue
+ * format is hex only and the print format escapes everything outside
+ * isprint(), so a raw control byte is always a malformed line. */
+#define LINE_SENTINEL '\x01'
+
+/* fgets() stops at an embedded NUL byte and hides the tail of the physical
+ * line from every strlen()-based consumer, silently swallowing it:
+ * a dump line " \0JUNK" loaded as the empty value with the rest dropped,
+ * and `database=na\0me` created the table `na`. To make the exact amount
+ * read by fgets() recoverable, the untouched buffer tail is pre-filled with
+ * the sentinel byte (line_sentinel_fill()); every fetched fragment is then
+ * verified to be NUL-free and to end exactly at the terminator written by
+ * fgets() itself (line_fetched_length()). */
+static void line_sentinel_fill(char *line, size_t capacity, size_t from) {
+  memset(line + from, LINE_SENTINEL, capacity - from);
+}
+
+static int line_fetched_length(const char *line, size_t capacity, size_t *fetched) {
+  const char *const sentinel = memchr(line, LINE_SENTINEL, capacity);
+  if (unlikely(sentinel == line))
+    /* a raw control byte right at the fragment start */
+    goto badline;
+  /* no sentinel left: fgets() filled the whole buffer, the line continues */
+  const size_t len = (sentinel == nullptr) ? capacity - 1 : (size_t)(sentinel - line) - 1;
+  if (unlikely(memchr(line, 0, len) != nullptr))
+    /* an embedded NUL: fgets() stopped at it, the line tail is untrusted */
+    goto badline;
+  if (unlikely(sentinel != nullptr && line[len] != 0))
+    /* not the fgets() terminator: a raw control byte mimics the sentinel */
+    goto badline;
+  *fetched = len;
+  return MDBX_SUCCESS;
+
+badline:
+  if (!quiet)
+    fprintf(stderr, "%s: line %" PRIiSIZE ": NUL or control byte inside the line\n", prog, lineno);
+  return MDBX_ENODATA;
+}
+
 static int readhdr(void) {
   /* reset parameters */
   if (subname) {
@@ -172,6 +217,7 @@ static int readhdr(void) {
 
   while (true) {
     errno = 0;
+    line_sentinel_fill(data_buf.iov_base, data_buf.iov_len, 0);
     if (fgets(data_buf.iov_base, (int)data_buf.iov_len, stdin) == nullptr) {
       if (lineno != lineno_at_start) {
         /* the input ended in the middle of a table's header: a truncated dump */
@@ -184,23 +230,36 @@ static int readhdr(void) {
     if (user_break)
       return MDBX_EINTR;
 
+    lineno++;
+
+    size_t len;
+    int err = line_fetched_length(data_buf.iov_base, data_buf.iov_len, &len);
+    if (unlikely(err != MDBX_SUCCESS))
+      return err;
+
     /* A full buffer without a newline: the line is longer, e.g. a long table name. */
-    for (size_t len = strlen(data_buf.iov_base);
-         len + 1 == data_buf.iov_len && ((char *)data_buf.iov_base)[len - 1] != '\n';) {
+    while (len + 1 == data_buf.iov_len && ((char *)data_buf.iov_base)[len - 1] != '\n') {
       char *const line = osal_realloc(data_buf.iov_base, data_buf.iov_len * 2);
       if (!line) {
         if (!quiet)
-          fprintf(stderr, "%s: line %" PRIiSIZE ": out of memory, line too long\n", prog, lineno + 1);
+          fprintf(stderr, "%s: line %" PRIiSIZE ": out of memory, line too long\n", prog, lineno);
         return MDBX_ENOMEM;
       }
       data_buf.iov_base = line;
       data_buf.iov_len *= 2;
+      /* keep the line terminated in case the fgets() below hits EOF */
+      line[len] = 0;
+      line_sentinel_fill(line, data_buf.iov_len, len + 1);
+      errno = 0;
       if (fgets(line + len, (int)(data_buf.iov_len - len), stdin) == nullptr)
         break;
-      len += strlen(line + len);
+      size_t more;
+      err = line_fetched_length(line + len, data_buf.iov_len - len, &more);
+      if (unlikely(err != MDBX_SUCCESS))
+        return err;
+      len += more;
     }
 
-    lineno++;
     uint64_t u64;
 
     if (valnum(data_buf.iov_base, "VERSION", &u64)) {
@@ -388,12 +447,6 @@ static int readhdr(void) {
   return EOF;
 }
 
-static int badend(void) {
-  if (!quiet)
-    fprintf(stderr, "%s: line %" PRIiSIZE ": unexpected end of input\n", prog, lineno);
-  return errno ? errno : MDBX_ENODATA;
-}
-
 static inline uint8_t unhex(const char *hex) {
   int8_t hi = hex[0];
   hi = (hi | 0x20) - 'a';
@@ -440,11 +493,22 @@ __hot static int readline(MDBX_val *out, MDBX_val *buf, bool *concise) {
   char *line = buf->iov_base;
   line[0] = (char)c;
   line[1] = 0;
-  if (c != '\n' && fgets(line + 1, (int)buf->iov_len - 1, stdin) == nullptr)
-    return errno ? errno : EOF;
+  if (c != '\n') {
+    line_sentinel_fill(line, buf->iov_len, 1);
+    errno = 0;
+    if (fgets(line + 1, (int)buf->iov_len - 1, stdin) == nullptr)
+      return errno ? errno : EOF;
+  }
   lineno++;
 
-  size_t len = strlen(line);
+  size_t len;
+  if (c == '\n') {
+    len = 1;
+  } else {
+    int err = line_fetched_length(line, buf->iov_len, &len);
+    if (unlikely(err != MDBX_SUCCESS))
+      return err;
+  }
   if (len > 0) {
     /* Is buffer too short? */
     while (line[len - 1] != '\n') {
@@ -457,12 +521,17 @@ __hot static int readline(MDBX_val *out, MDBX_val *buf, bool *concise) {
       }
       buf->iov_base = line;
       buf->iov_len *= 2;
+      line_sentinel_fill(line, buf->iov_len, len);
 
       /* continue read line */
       errno = 0;
       if (fgets(line + len, (int)(buf->iov_len - len), stdin) == nullptr)
         return errno ? errno : EOF;
-      len += strlen(line + len);
+      size_t more;
+      const int err = line_fetched_length(line + len, buf->iov_len - len, &more);
+      if (unlikely(err != MDBX_SUCCESS))
+        return err;
+      len += more;
     }
     /* strip '\n' at the end */
     line[--len] = '\0';
