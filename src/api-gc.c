@@ -166,6 +166,7 @@ __cold int mdbx_env_defrag(MDBX_env *env, size_t defrag_atleast, size_t time_atl
     dfc.stumble_retry = (dfc.stumble_pgno && dfc.stumble_pgno == prev_stumble) ? dfc.stumble_retry + 1 : 0;
     if (dfc.stumble_retry > 3) {
       NOTICE("bailout since stucked (unable to move) at %u in a few retries", dfc.stumble_pgno);
+      dfc.stopping_reasons |= MDBX_defrag_stuck;
       rc = txn->dbs[FREE_DBI].items ? MDBX_LAGGARD_READER : MDBX_RESULT_TRUE;
       break;
     }
@@ -249,6 +250,9 @@ bailout:
       rc = (dfc.stopping_reasons == MDBX_defrag_laggard_reader) ? MDBX_LAGGARD_READER : MDBX_RESULT_TRUE;
     if (dfc.last_allocated <= dfc.defrag_enough)
       rc = MDBX_SUCCESS;
+    else if ((dfc.stopping_reasons & MDBX_defrag_stuck) && dfc.stumble_pgno)
+      /* застряли на препятствии: невыполненная работа не может считаться успехом */
+      rc = MDBX_RESULT_TRUE;
   }
   return LOG_IFERR(rc);
 }

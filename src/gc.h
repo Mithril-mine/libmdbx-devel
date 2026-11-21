@@ -121,7 +121,7 @@ typedef struct defract_context {
   size_t payload_items;
   size_t progress_counter;
   uint8_t stumble_retry;
-  uint8_t stopping_reasons;
+  unsigned stopping_reasons;
   bool completed;
   bool batch_adaptive;
   unsigned cycle;

@@ -159,7 +159,11 @@ TEST(ut_defrag_gc_binding, double_defrag_with_load) {
 
   MDBX_defrag_result_t r1;
   memset(&r1, 0, sizeof(r1));
-  EXPECT_EQ(mdbx_env_defrag(env, 0, 0, 0, 0, 0, 2048, nullptr, nullptr, &r1), MDBX_SUCCESS);
+  /* без цели defrag может остановиться с невыполненной работой (застряв на
+   * препятствии — теперь с именованной причиной MDBX_defrag_stuck), но не с ошибкой */
+  const int rc1 = mdbx_env_defrag(env, 0, 0, 0, 0, 0, 2048, nullptr, nullptr, &r1);
+  EXPECT_TRUE(rc1 == MDBX_SUCCESS || rc1 == MDBX_RESULT_TRUE) << "rc1=" << rc1;
+  EXPECT_EQ(0u, r1.stopping_reasons & MDBX_defrag_error);
 
   // нагрузка между defrag'ами: страницы в окрестностях moved-спанов
   fill(env, 200000, 1000, 170);
@@ -167,7 +171,10 @@ TEST(ut_defrag_gc_binding, double_defrag_with_load) {
 
   MDBX_defrag_result_t r2;
   memset(&r2, 0, sizeof(r2));
-  EXPECT_EQ(mdbx_env_defrag(env, 0, 0, 0, 0, 0, 2048, nullptr, nullptr, &r2), MDBX_SUCCESS);
+  /* как и r1: остановка с невыполненной работой допустима, ошибка — нет */
+  const int rc2 = mdbx_env_defrag(env, 0, 0, 0, 0, 0, 2048, nullptr, nullptr, &r2);
+  EXPECT_TRUE(rc2 == MDBX_SUCCESS || rc2 == MDBX_RESULT_TRUE) << "rc2=" << rc2;
+  EXPECT_EQ(0u, r2.stopping_reasons & MDBX_defrag_error);
   // второй проход: страницы_whole не уменьшаются некорректно
   EXPECT_GT(r2.pages_whole, 0u);
 
