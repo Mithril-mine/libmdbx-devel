@@ -942,6 +942,7 @@ add_ut(reverse_insertions SOURCE ut/txn/reverse_insertions.c++)
         add_ut(get-ex SOURCE ut/cxx/get-ex.c++)
         set_tests_properties(get-ex PROPERTIES LABELS "ut;ut.cxx;ut.txn")
         add_subdirectory(ut/issues)
+        add_subdirectory(ut/durability)
         # The durability program (issue #564): the crash-window matrix kills a
         # fork()-based victim at the armed probe-bus site of the commit
         # pipeline, so the corpus is POSIX-only; the multi-actor Windows
