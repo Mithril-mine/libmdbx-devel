@@ -1113,6 +1113,7 @@ int dxb_sync_locked(MDBX_env *env, unsigned flags, meta_t *const pending, troika
     jitter4testing(true);
     if (likely(target != head.ptr_c)) {
       /* LY: 'invalidate' the meta. */
+      MPROBE_COLLECT(commit_meta_update_begin, 0);
       meta_update_begin(env, target, pending->unsafe_txnid);
       unaligned_poke_u64(4, target->sign, DATASIGN_WEAK);
 #if MDBX_CHECKING > 0 || MDBX_DEBUG > 0
@@ -1138,27 +1139,36 @@ int dxb_sync_locked(MDBX_env *env, unsigned flags, meta_t *const pending, troika
       meta_update_end(env, target, unaligned_peek_u64(4, pending->txnid_b));
       jitter4testing(true);
       eASSERT1(env, coherency_check_meta(env, target, true));
+      MPROBE_COLLECT(commit_meta_update_done, 0);
     } else {
       /* dangerous case (target == head), only sign could
        * me updated, check assertions once again */
       eASSERT0(env, legal4overwrite && !head.is_steady && meta_is_steady(pending));
+      MPROBE_COLLECT(commit_meta_update_begin, 0);
     }
     memcpy(target->sign, pending->sign, 8);
     osal_fence_producer();
+    MPROBE_COLLECT(commit_meta_update_done, 0);
     jitter4testing(true);
     if (!env->incore) {
-      if (!MDBX_AVOID_MSYNC)
+      if (!MDBX_AVOID_MSYNC) {
         /* sync meta-pages */
+        MPROBE_COLLECT(commit_meta_sync_begin, 0);
         rc = dxb_msync(env, NUM_METAS, (flags & MDBX_NOMETASYNC) ? MDBX_SYNC_NONE : MDBX_SYNC_DATA | MDBX_SYNC_IODQ);
-      else {
+        if (likely(rc == MDBX_SUCCESS))
+          MPROBE_COLLECT(commit_meta_sync_done, 0);
+      } else {
         if (MDBX_ENABLE_PGOP_STAT)
           env->lck->pgops.wops.weak += 1;
         const page_t *page = payload2page(target);
+        MPROBE_COLLECT(commit_meta_sync_begin, 0);
         rc = osal_pwrite(env->fd4meta, page, env->ps, ptr_dist(page, env->dxb_mmap.base));
         if (likely(rc == MDBX_SUCCESS)) {
           osal_flush_incoherent_mmap(target, sizeof(meta_t), globals.sys_pagesize);
           if ((flags & MDBX_NOMETASYNC) == 0 && env->fd4meta == env->lazy_fd)
             rc = dxb_fsync(env, MDBX_SYNC_DATA | MDBX_SYNC_IODQ);
+          if (likely(rc == MDBX_SUCCESS))
+            MPROBE_COLLECT(commit_meta_sync_done, 0);
         }
       }
       if (unlikely(rc != MDBX_SUCCESS))
@@ -1170,6 +1180,7 @@ int dxb_sync_locked(MDBX_env *env, unsigned flags, meta_t *const pending, troika
     const meta_t undo_meta = *target;
     eASSERT0(env, pending->trees.gc.flags == MDBX_INTEGERKEY);
     eASSERT0(env, check_table_flags(pending->trees.main.flags));
+    MPROBE_COLLECT(commit_meta_update_begin, 0);
     rc = osal_pwrite(env->fd4meta, pending, sizeof(meta_t), ptr_dist(target, env->dxb_mmap.base));
     if (unlikely(rc != MDBX_SUCCESS)) {
     undo:
@@ -1180,12 +1191,16 @@ int dxb_sync_locked(MDBX_env *env, unsigned flags, meta_t *const pending, troika
       goto fail;
     }
     osal_flush_incoherent_mmap(target, sizeof(meta_t), globals.sys_pagesize);
+    MPROBE_COLLECT(commit_meta_update_done, 0);
     /* sync meta-pages */
     if (env->fd4meta == env->lazy_fd && !env->incore) {
       if (flags & MDBX_NOMETASYNC)
         env->lck->unsynced_pages.weak += 1;
       else {
+        MPROBE_COLLECT(commit_meta_sync_begin, 0);
         rc = dxb_fsync(env, MDBX_SYNC_DATA | MDBX_SYNC_IODQ);
+        if (likely(rc == MDBX_SUCCESS))
+          MPROBE_COLLECT(commit_meta_sync_done, 0);
         if (rc != MDBX_SUCCESS)
           goto undo;
       }

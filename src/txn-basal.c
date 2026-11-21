@@ -16,6 +16,7 @@ static int txn_write(MDBX_txn *txn, iov_ctx_t *ctx) {
     }
     unsigned npages = dpl_npages(dl, r);
     total_npages += npages;
+    MPROBE_COLLECT(commit_write_page, (intptr_t)r);
     rc = iov_page(txn, ctx, dp, npages);
     if (unlikely(rc != MDBX_SUCCESS)) {
       if ((txn->env->flags & MDBX_WRITEMAP) == 0) {
@@ -457,11 +458,13 @@ int txn_basal_commit(MDBX_txn *txn, struct commit_timestamp *ts) {
       return rc;
     }
 
+    MPROBE_COLLECT(commit_write_pages_begin, 0);
     rc = txn_write(txn, &write_ctx);
     if (unlikely(rc != MDBX_SUCCESS)) {
       ERROR("txn-%s: error %d", "write", rc);
       return rc;
     }
+    MPROBE_COLLECT(commit_write_pages_done, 0);
   } else {
     tASSERT0(txn, (txn->flags & MDBX_WRITEMAP) != 0 && !MDBX_AVOID_MSYNC);
     env->lck->unsynced_pages.weak += txn->wr.writemap.dirty_npages;
