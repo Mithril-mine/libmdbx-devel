@@ -156,6 +156,19 @@ slowest). A runaway test must burn its timeout budget, not the CI cell's.
 - Values are rounded up to a 30s boundary (the floor for tests running well
   under a second); update an entry when a test or a configuration grows
   slower. The valgrind/memcheck runs scale timeouts automatically (×42).
+- **Platform/configuration scaling**: at the configure step every registered
+  test's `TIMEOUT` is multiplied by `MDBX_TEST_TIMEOUT_SCALE`
+  ([cmake/test-timeout-scale.cmake](../cmake/test-timeout-scale.cmake)):
+  ×2 for ARM64/ARM runners, ×2 for Darwin, ×2 for the Debug build type —
+  composed multiplicatively and overridable, e.g.
+  `-DMDBX_TEST_TIMEOUT_SCALE=4`. The manifest values and the explicit
+  `TIMEOUT`s stay calibrated for the reference x86-64 Linux configuration;
+  the scale lifts them for the setups whose runners are systematically
+  slower (the observed Nov-20/21 nightlies: the macOS/ARM64 cells needed
+  2-10× the budgets that the x86-64 cells fit into). Each registering
+  CMakeLists applies the scale to its own tests at its end via
+  `mdbx_scale_dir_test_timeouts()` — keep that call in place when adding a
+  new registering CMakeLists.
 - The per-test hard timeouts back up the soft gtest deadline
   (`GTEST_RUNTIME_LIMIT`, see `tests/ci/run-cell.py`): the soft limit bounds
   how deep a gtest binary digs within a run, the hard timeout kills a

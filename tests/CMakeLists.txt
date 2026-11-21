@@ -998,3 +998,8 @@ endif()
 # (the smoke chains, the tools' golden-runners, the hygiene/probes) - the ones
 # that bypass the add_gtest()/add_simple_test() resolution.
 mdbx_scale_timeouts4memcheck()
+
+# Scale every registered test's TIMEOUT by the platform/configuration factor
+# (see cmake/test-timeout-scale.cmake): the ARM64/Darwin/Debug setups need
+# proportionally larger budgets than the reference x86-64 Linux calibration.
+mdbx_scale_dir_test_timeouts()

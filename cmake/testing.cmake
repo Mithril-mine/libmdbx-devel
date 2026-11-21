@@ -674,6 +674,9 @@ int main() { return 0; }
     include("${CMAKE_CURRENT_LIST_DIR}/../tests/test-timeouts.cmake")
   endif()
 
+  # The TIMEOUT scale factor (see cmake/test-timeout-scale.cmake).
+  include("${CMAKE_CURRENT_LIST_DIR}/test-timeout-scale.cmake")
+
   # Looks up the test's timeout in the MDBX_TEST_TIMEOUTS manifest
   # ("name=seconds" entries); sets <out_var> to "" when there is no entry.
   function(mdbx_test_timeout name out_var)
