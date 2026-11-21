@@ -12,6 +12,9 @@ if(NOT WIN32)
     target_compile_definitions(durability_crash-windows PRIVATE MDBX_PROBES)
     set_tests_properties(crash-windows PROPERTIES ENVIRONMENT "MDBX_PROBES=1")
   endif()
+  # The white-box include of src/essentials.h (to learn the resolved
+  # MDBX_LOCKING) requires the NO_PCH setup.
+  add_durability_test(dead-owner SOURCE "dead-owner.c++" NO_PCH)
 endif()
 
 # Scale the registered tests' TIMEOUTs by the platform/configuration factor
