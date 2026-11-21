@@ -545,7 +545,7 @@ __hot static int readline(MDBX_val *out, MDBX_val *buf, bool *concise) {
         if (r[1] == '\\') {
           *w++ = '\\';
         } else {
-          if (r + 3 > end || !isxdigit(r[1]) || !isxdigit(r[2]))
+          if (r + 3 > end || !isxdigit((unsigned char)r[1]) || !isxdigit((unsigned char)r[2]))
             return badend();
           *w++ = unhex(++r);
         }
@@ -560,7 +560,7 @@ __hot static int readline(MDBX_val *out, MDBX_val *buf, bool *concise) {
     if (len & 1)
       return badend();
     while (r < end) {
-      if (!isxdigit(r[0]) || !isxdigit(r[1]))
+      if (!isxdigit((unsigned char)r[0]) || !isxdigit((unsigned char)r[1]))
         return badend();
       *w++ = unhex(r);
       r += 2;
