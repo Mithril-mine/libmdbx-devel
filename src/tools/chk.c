@@ -639,8 +639,13 @@ bailout:
   }
   flush();
   if (rc) {
+    /* an interruption must win over the error-code mapping: every mdbx
+     * error is negative, so MDBX_EINTR from a signal used to fall through
+     * to EXIT_FAILURE_MDBX and EXIT_INTERRUPTED was unreachable */
+    if (user_break)
+      return EXIT_INTERRUPTED;
     if (rc > 0)
-      return user_break ? EXIT_INTERRUPTED : EXIT_FAILURE_SYS;
+      return EXIT_FAILURE_SYS;
     return EXIT_FAILURE_MDBX;
   }
 
