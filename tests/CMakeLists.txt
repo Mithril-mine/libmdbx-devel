@@ -964,6 +964,19 @@ add_ut(reverse_insertions SOURCE ut/txn/reverse_insertions.c++)
           # to the AUTO cmake value) requires the NO_PCH setup.
           add_ut(dead-owner SOURCE ut/durability/dead-owner.c++ NO_PCH)
           set_tests_properties(dead-owner PROPERTIES LABELS "ut;ut.durability")
+          # The lock-events smoke (the #562 follow-up): the call-time ordering
+          # capture of the write-lock lifecycle via the ipclock_* probe sites,
+          # with the same fork-based multi-process choreography (hence NO_PCH).
+          # The MDBX_PROBES macro comes from config-cmake.h (pulled by
+          # essentials.h), so no compile definition is added here (unlike the
+          # crash-windows block above); the ENVIRONMENT activates the registry
+          # at runtime.
+          add_ut(lock-events SOURCE ut/durability/lock-events.c++ NO_PCH)
+          set_tests_properties(lock-events PROPERTIES LABELS "ut;ut.durability")
+          if(MDBX_PROBES)
+            set_tests_properties(lock-events PROPERTIES APPEND PROPERTY
+              ENVIRONMENT "MDBX_PROBES=1")
+          endif()
         endif()
       endif()
       add_ut(hex_base64_base58 SOURCE ut/api/hex_base64_base58.c++)
