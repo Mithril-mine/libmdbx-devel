@@ -18,6 +18,7 @@ set(MDBX_TEST_TIMEOUTS
   "chk-verdicts=90"
   "commit-latency=30"
   "copy-ops=30"
+  "crash-windows=60"
   "crash_safety=30"
   "crunched_delete=1800"
   "cursor-api=30"

@@ -663,6 +663,7 @@ else()
     #   |- ut.txn           - transactions (incl. nested, cache, ordering)
     #   |- ut.cursor        - cursors (positioning, iteration, closing)
     #   |- ut.gc            - garbage collection / reclaim
+    #   |- ut.durability    - the durability program (crash-window, dead-writer matrices)
     #   |- ut.issues        - regression tests for reported issues
     #   |- ut.tools         - src/tools CLI utilities (golden characterization)
     #   Attribute labels (orthogonal): ut.heavy for slow/stress tests.
@@ -941,6 +942,24 @@ add_ut(reverse_insertions SOURCE ut/txn/reverse_insertions.c++)
         add_ut(get-ex SOURCE ut/cxx/get-ex.c++)
         set_tests_properties(get-ex PROPERTIES LABELS "ut;ut.cxx;ut.txn")
         add_subdirectory(ut/issues)
+        # The durability program (issue #564): the crash-window matrix kills a
+        # fork()-based victim at the armed probe-bus site of the commit
+        # pipeline, so the corpus is POSIX-only; the multi-actor Windows
+        # coverage stays with the mdbx_test framework's --inject-writefault
+        # smoke scenarios.
+        if(NOT WIN32)
+          add_ut(crash-windows SOURCE ut/durability/crash-windows.c++)
+          set_tests_properties(crash-windows PROPERTIES LABELS "ut;ut.durability")
+          if(MDBX_PROBES)
+            # C++ test TUs (public mdbx.h++) do not see the internal
+            # config-cmake.h define; propagate MDBX_PROBES for the probe-bus
+            # guards (probe-ctl.h++, the kill-rule arming), and activate the
+            # registry at runtime.
+            target_compile_definitions(ut_crash-windows PRIVATE MDBX_PROBES)
+            set_tests_properties(crash-windows PROPERTIES APPEND PROPERTY
+              ENVIRONMENT "MDBX_PROBES=1")
+          endif()
+        endif()
       endif()
       add_ut(hex_base64_base58 SOURCE ut/api/hex_base64_base58.c++)
       set_tests_properties(hex_base64_base58 PROPERTIES LABELS "ut;ut.api")
