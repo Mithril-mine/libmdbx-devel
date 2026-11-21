@@ -29,6 +29,7 @@ set(MDBX_TEST_TIMEOUTS
   "dbi=30"
   "dbi-defer=30"
   "dbi_nested_txn=30"
+  "dead-owner=60"
   "defrag-contract=600"
   "defrag-cursors=240"
   "defrag-cycle=330"
