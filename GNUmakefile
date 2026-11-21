@@ -522,7 +522,12 @@ MDBX_DIST_DIR = libmdbx-$(MDBX_VERSION_NODOT)
 MDBX_SMOKE_EXTRA ?=
 
 check: DESTDIR = $(shell pwd)/@check-install
-check: CMAKE_OPT += -Werror=dev
+# The CMake 4.5+ emits the non-target-directive author-warning for every
+# directory-scope definitions/include command (add_definitions, add_compile_
+# definitions, include_directories), which the library legitimately uses for
+# the config it shares with the examples/tests sub-directories. Keep such
+# advisories visible but not fatal, as they are outside the -Werror=dev scope.
+check: CMAKE_OPT += -Werror=dev -Wno-error=non-target-directive
 check: clean | smoke-assertion ninja-assertions dist install test ctest
 smoke-assertion: MDBX_CHECKING=2
 smoke-assertion: smoke
