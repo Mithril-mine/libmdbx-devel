@@ -492,6 +492,8 @@ __hot void txn_probe_all_cursors_against_dangling(MDBX_txn *txn, const char *fun
 /*> dist-cutoff-begin */
 #if defined(MDBX_PROBES)
 
+#include <signal.h>
+
 /* ---------------------------------------------------------------------------
  * Probe-bus implementation (mdbx-probes). See logging_and_debug.h for the
  * contract and the control protocol. All symbols in this block are exported
@@ -515,6 +517,7 @@ struct mprobe_record {
   mdbx_atomic_size_t suppressed; /* would-fire but disarmed */
   mdbx_atomic_size_t value;      /* last captured value */
   mdbx_atomic_size_t fault_code; /* injected code or 0 */
+  mdbx_atomic_size_t kill_at;    /* crash the process at the N-th hit, 0 = none */
   struct mprobe_record *next;
 };
 
@@ -654,6 +657,28 @@ static void mprobe_emit(const struct mprobe_record *rec) {
 static void mprobe_drain_ipc(void);
 static int mdbx_probe_ctl_apply(const char *request, char *reply, size_t reply_size);
 
+/* Mimics a writer's crash: kills the current process the same way the test
+ * framework's --inject-writefault does, so the recovery paths observe a real
+ * death rather than a handled abort. Dev-only probe machinery (MDBX_PROBES),
+ * reached only via the explicitly armed "kill" rule. */
+MDBX_NORETURN static void mprobe_crash(void) {
+#if IS_WINDOWS
+  TerminateProcess(GetCurrentProcess(), 42);
+#else
+  raise(SIGKILL);
+#endif /* IS_WINDOWS */
+  for (;;)
+    osal_yield();
+}
+
+/* The kill-rule tail shared by both evaluation paths: crashes the process
+ * when the site's evaluation counter reaches the armed threshold. */
+MDBX_MAYBE_UNUSED static void mprobe_kill_check(const struct mprobe_record *rec) {
+  const size_t kill_at = atomic_load_size(&rec->kill_at, mo_Relaxed);
+  if (unlikely(kill_at) && atomic_load_size(&rec->seen, mo_Relaxed) >= kill_at)
+    mprobe_crash();
+}
+
 void mdbx_probe_fire(struct mprobe_site *site, intptr_t value) {
   if (unlikely(!mprobe_is_active()))
     return;
@@ -665,6 +690,7 @@ void mdbx_probe_fire(struct mprobe_site *site, intptr_t value) {
   atomic_add_size(&rec->hits, 1);
   atomic_store_size(&rec->value, (size_t)(intptr_t)value, mo_Relaxed);
   mprobe_emit(rec);
+  mprobe_kill_check(rec);
 }
 
 void mdbx_probe_fault(struct mprobe_site *site, void *var) {
@@ -691,6 +717,7 @@ void mdbx_probe_fault(struct mprobe_site *site, void *var) {
   } else {
     atomic_add_size(&rec->suppressed, 1);
   }
+  mprobe_kill_check(rec);
 }
 
 void mdbx_probe_assert_failed(struct mprobe_site *site, const char *expr) {
@@ -966,6 +993,37 @@ static int mdbx_probe_ctl_apply(const char *request, char *reply, size_t reply_s
         if (endptr == code_str || *endptr)
           continue;
         atomic_store_size(&rec->fault_code, (size_t)(intptr_t)code, mo_AcquireRelease);
+      }
+    }
+    mprobe_unlock();
+    out = mprobe_reply(out, end, "ok\n");
+  } else if (strcmp(op, "kill") == 0) {
+    mprobe_lazy_init();
+    /* kill <pattern> <N>|<none>: crash the process at the N-th hit of the
+     * matched sites (the crash-window test machinery), "none" disarms. */
+    const char *sp2 = strchr(arg, ' ');
+    if (!sp2)
+      return -1;
+    char pattern[128];
+    const size_t plen = (size_t)(sp2 - arg);
+    if (plen >= sizeof(pattern))
+      return -1;
+    memcpy(pattern, arg, plen);
+    pattern[plen] = 0;
+    const char *n_str = sp2 + 1;
+    mprobe_lock();
+    mprobe_precreate_locked(pattern);
+    for (struct mprobe_record *rec = mprobe_registry; rec; rec = rec->next) {
+      if (!mprobe_match(pattern, rec->name))
+        continue;
+      if (strcmp(n_str, "none") == 0) {
+        atomic_store_size(&rec->kill_at, 0, mo_AcquireRelease);
+      } else {
+        char *endptr;
+        const long n = strtol(n_str, &endptr, 0);
+        if (endptr == n_str || *endptr || n <= 0)
+          continue;
+        atomic_store_size(&rec->kill_at, (size_t)n, mo_AcquireRelease);
       }
     }
     mprobe_unlock();
