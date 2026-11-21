@@ -1018,7 +1018,8 @@ add_ut(reverse_insertions SOURCE ut/txn/reverse_insertions.c++)
 
 endif()
 
-# Scale the directly-registered tests' TIMEOUTs for the valgrind/memcheck runs
-# (the smoke chains, the tools' golden-runners, the hygiene/probes) - the ones
-# that bypass the add_gtest()/add_simple_test() resolution.
-mdbx_scale_timeouts4memcheck()
+# Scale the registered tests' TIMEOUTs by the platform/configuration factor
+# and, when the memcheck runs are enabled, by the valgrind factor (the smoke
+# chains, the tools' golden-runners, the hygiene/probes - the ones that bypass
+# the add_gtest()/add_simple_test() resolution; see cmake/utils.cmake).
+mdbx_scale_dir_test_timeouts()

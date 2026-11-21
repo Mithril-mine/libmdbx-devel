@@ -540,24 +540,60 @@ endmacro(semver_provide)
 cmake_policy(POP)
 
 # Scales the explicitly set TIMEOUT properties of all already-registered tests
-# of the current directory by the valgrind factor, for the tests that are
-# registered directly (the smoke chains, the tools, the examples) and thus
-# bypass the add_gtest()/add_simple_test() manifest resolution.
-function(mdbx_scale_timeouts4memcheck)
-  if(NOT (MEMORYCHECK_COMMAND
-          OR CMAKE_MEMORYCHECK_COMMAND
-          OR ENABLE_MEMCHECK))
-    return()
+# of the current directory: by the platform/configuration factor, and
+# additionally by the valgrind/memcheck factor when the memcheck runs are
+# enabled. Call it at the end of every CMakeLists.txt that registers tests -
+# the per-directory calls keep the directory-scoped tests visible, and cover
+# the ones registered directly (the smoke chains, the tools, the examples)
+# which bypass the add_gtest()/add_simple_test() manifest resolution (the
+# helpers scale their results themselves at registration time). Each applied
+# factor leaves its mark (MDBX_TIMEOUT_SCALED, MDBX_TIMEOUT_SCALED4MEMCHECK)
+# on the test, so repeated calls never double-apply.
+#
+# The platform/configuration factor MDBX_TEST_TIMEOUT_SCALE lifts the per-test
+# budgets for the setups whose runners are systematically slower than the
+# reference x86-64 Linux configuration: the manifest
+# (tests/test-timeouts.cmake) and the explicit smoke/examples values are
+# calibrated for that reference ("~3x the runtime in the slowest
+# configuration", see tests/AGENTS.md, "Test timeouts"). The factors compose
+# multiplicatively (the macOS runners are ARM64 and their hosted storage
+# crawls under load, the Debug builds slow every scenario down by several
+# times). The factor is computed at the call below, when the platform and the
+# build type are already settled - so an override must be set beforehand,
+# e.g. `-DMDBX_TEST_TIMEOUT_SCALE=4`.
+function(mdbx_scale_dir_test_timeouts)
+  if(NOT DEFINED MDBX_TEST_TIMEOUT_SCALE)
+    set(MDBX_TEST_TIMEOUT_SCALE 1)
+    if(CMAKE_SYSTEM_PROCESSOR MATCHES "^(aarch64|arm64|armv[67]l?)$")
+      math(EXPR MDBX_TEST_TIMEOUT_SCALE "${MDBX_TEST_TIMEOUT_SCALE} * 2")
+    endif()
+    if(CMAKE_SYSTEM_NAME STREQUAL "Darwin")
+      math(EXPR MDBX_TEST_TIMEOUT_SCALE "${MDBX_TEST_TIMEOUT_SCALE} * 2")
+    endif()
+    if(CMAKE_BUILD_TYPE_UPPERCASE STREQUAL "DEBUG")
+      math(EXPR MDBX_TEST_TIMEOUT_SCALE "${MDBX_TEST_TIMEOUT_SCALE} * 2")
+    endif()
   endif()
   get_property(mdbx_scale_timeouts_tests DIRECTORY PROPERTY TESTS)
   foreach(mdbx_scale_timeouts_name IN LISTS mdbx_scale_timeouts_tests)
     get_property(mdbx_scale_timeouts_current TEST ${mdbx_scale_timeouts_name} PROPERTY TIMEOUT)
     if(mdbx_scale_timeouts_current)
-      get_property(mdbx_scale_timeouts_marked TEST ${mdbx_scale_timeouts_name} PROPERTY MDBX_TIMEOUT_SCALED4MEMCHECK)
+      set(mdbx_scale_timeouts_scaled "${mdbx_scale_timeouts_current}")
+      get_property(mdbx_scale_timeouts_marked TEST ${mdbx_scale_timeouts_name} PROPERTY MDBX_TIMEOUT_SCALED)
       if(NOT mdbx_scale_timeouts_marked)
-        math(EXPR mdbx_scale_timeouts_scaled "${mdbx_scale_timeouts_current} * 42")
+        math(EXPR mdbx_scale_timeouts_scaled "${mdbx_scale_timeouts_scaled} * ${MDBX_TEST_TIMEOUT_SCALE}")
         set_tests_properties(${mdbx_scale_timeouts_name} PROPERTIES TIMEOUT ${mdbx_scale_timeouts_scaled}
-                                                                    MDBX_TIMEOUT_SCALED4MEMCHECK TRUE)
+                                                                    MDBX_TIMEOUT_SCALED TRUE)
+      endif()
+      if(MEMORYCHECK_COMMAND
+         OR CMAKE_MEMORYCHECK_COMMAND
+         OR ENABLE_MEMCHECK)
+        get_property(mdbx_scale_timeouts_marked TEST ${mdbx_scale_timeouts_name} PROPERTY MDBX_TIMEOUT_SCALED4MEMCHECK)
+        if(NOT mdbx_scale_timeouts_marked)
+          math(EXPR mdbx_scale_timeouts_scaled "${mdbx_scale_timeouts_scaled} * 42")
+          set_tests_properties(${mdbx_scale_timeouts_name} PROPERTIES TIMEOUT ${mdbx_scale_timeouts_scaled}
+                                                                      MDBX_TIMEOUT_SCALED4MEMCHECK TRUE)
+        endif()
       endif()
     endif()
   endforeach()
