@@ -19,6 +19,7 @@
 #include "../test-env.h++"
 
 #include <atomic>
+#include <chrono>
 #include <cstdio>
 #include <cstring>
 #include <string>
@@ -143,6 +144,15 @@ TEST(issue_gh0337, renew_txn_restarts_an_ousted_parked_copy) {
   if (MDBX_GTEST_IS_EXECUTION_TIMEOUT()) {
     GTEST_SKIP() << "SKIPPED by RUNTIME_LIMIT";
   }
+  /* Phase timestamps for the CI logs: a ctest kill leaves no other trace of
+   * how far the test got, so the writer's disarm and the copy's resume are
+   * logged with the elapsed time (the stall is armed for 30000 ms and must
+   * outlast all of the writer's rounds, which are disk-bound on slow
+   * runners). */
+  const auto started_at = std::chrono::steady_clock::now();
+  const auto elapsed_ms = [started_at] {
+    return std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now() - started_at).count();
+  };
   files_guard files;
   env_guard src;
   ASSERT_EQ(mdbx_env_create(&src.env), MDBX_SUCCESS);
@@ -188,12 +198,15 @@ TEST(issue_gh0337, renew_txn_restarts_an_ousted_parked_copy) {
     }
     char ctl_reply[256]; /* the writer is done: the copy goes on */
     mdbx_probe_ctl("fault copy_parked_stall_ms none", ctl_reply, sizeof ctl_reply);
+    std::cout << "gh0337: the writer disarmed the stall after " << rounds.load() << " rounds, " << elapsed_ms()
+              << " ms since the start" << std::endl;
   });
 
   if (rc == MDBX_SUCCESS)
     rc = mdbx_txn_copy2pathname(txn, kCopy, MDBX_CP_THROTTLE_MVCC | MDBX_CP_RENEW_TXN);
   mdbx_probe_ctl("fault copy_parked_stall_ms none", reply, sizeof reply);
   const uint64_t restarted = mdbx_txn_id(txn);
+  std::cout << "gh0337: the copy resumed (txn " << restarted << ") after " << elapsed_ms() << " ms" << std::endl;
   stop.store(true);
   writer.join();
   mdbx_txn_abort(txn);
