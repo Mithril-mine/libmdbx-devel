@@ -90,8 +90,43 @@ static bool basic() {
   return ok;
 }
 
+static bool predicates() {
+  bool ok = true;
+
+  // An empty (or spaces-only with the skip-spaces flag) source is a valid dump:
+  // the decoders accept it and produce an empty result.
+  if (!mdbx::slice("").is_hex() || !mdbx::slice("").is_hex(true) || !mdbx::slice(" ").is_hex(true) ||
+      !mdbx::slice("").is_base64() || !mdbx::slice("").is_base64(true) || !mdbx::slice(" ").is_base64(true) ||
+      !mdbx::slice("").is_base58() || !mdbx::slice(" ").is_base58(true)) {
+    std::cerr << "is_hex()/is_base64()/is_base58() failed for an empty or spaces-only source\n";
+    ok = false;
+  }
+
+  // The extended-ASCII mode must reject UTF-8 lead bytes, but still accept
+  // the printable extended-ASCII codes (0xA0, 0xC0, 0xF5-0xFF per the table).
+  if (mdbx::slice("\xE0").is_printable(true) || mdbx::slice("\xE1\xA0").is_printable(true) ||
+      mdbx::slice("\xEE\xBF").is_printable(true) || mdbx::slice("\xF0").is_printable(true) ||
+      mdbx::slice("\xE0\x80").is_printable(true) || !mdbx::slice("ASCII text").is_printable(true) ||
+      !mdbx::slice("\xA0").is_printable(true) || !mdbx::slice("\xC0").is_printable(true) ||
+      !mdbx::slice("\xF5").is_printable(true) || !mdbx::slice("\xFF").is_printable(true)) {
+    std::cerr << "is_printable(true) failed\n";
+    ok = false;
+  }
+
+  // The UTF-8 mode must accept valid sequences and reject invalid lead bytes.
+  if (!mdbx::slice("Hello, World!").is_printable() || !mdbx::slice("\xD0\x9F").is_printable() ||
+      !mdbx::slice("\xE2\x82\xAC").is_printable() || !mdbx::slice("\xF0\x9F\x98\x80").is_printable() ||
+      mdbx::slice("\xE0\x80").is_printable() || mdbx::slice("\xC0").is_printable() ||
+      mdbx::slice("\xF5").is_printable()) {
+    std::cerr << "is_printable() failed\n";
+    ok = false;
+  }
+
+  return ok;
+}
+
 int doit() {
-  auto ok = basic();
+  auto ok = basic() && predicates();
   for (size_t n = 0; n < 1000; ++n) {
     for (size_t length = 0; ok && length < 111; ++length) {
       const auto pattern = random(length);
