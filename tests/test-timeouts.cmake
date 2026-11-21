@@ -21,6 +21,7 @@ set(MDBX_TEST_TIMEOUTS
   "crash-windows=60"
   "crash_safety=30"
   "crunched_delete=1800"
+  "dead-owner=60"
   "cursor-api=30"
   "cursor-batch=30"
   "cursor-multis=30"
