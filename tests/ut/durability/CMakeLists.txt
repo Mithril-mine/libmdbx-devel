@@ -15,6 +15,16 @@ if(NOT WIN32)
   # The white-box include of src/essentials.h (to learn the resolved
   # MDBX_LOCKING) requires the NO_PCH setup.
   add_durability_test(dead-owner SOURCE "dead-owner.c++" NO_PCH)
+  # The lock-events smoke (the #562 follow-up): the call-time ordering
+  # capture of the write-lock lifecycle via the ipclock_* probe sites, with
+  # the same fork-based multi-process choreography (hence NO_PCH too). The
+  # MDBX_PROBES macro comes from config-cmake.h (pulled by essentials.h), so
+  # no compile definition is added here; the ENVIRONMENT is APPENDed per the
+  # add_gtest() comment about the ASAN options.
+  add_durability_test(lock-events SOURCE "lock-events.c++" NO_PCH)
+  if(MDBX_PROBES)
+    set_property(TEST lock-events APPEND PROPERTY ENVIRONMENT "MDBX_PROBES=1")
+  endif()
 endif()
 
 # Scale the registered tests' TIMEOUTs by the platform/configuration factor
