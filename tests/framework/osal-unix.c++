@@ -621,9 +621,13 @@ void osal_udelay(size_t us) {
   do {
     if (us > threshold_us) {
       if (nanosleep(&ts, &ts)) {
-        int rc = errno;
-        /* if (rc == EINTR) { ... } ? */
-        failure_perror("usleep()", rc);
+        const int rc = errno;
+        /* EINTR is normal here: on macOS process-directed signals (SIGCHLD,
+         * SIGALRM, SIGUSR1/2 progress canary) interrupt nanosleep frequently;
+         * POSIX nanosleep() writes the REMAINING time back into ts, so just
+         * continue the loop. Any other error is real. */
+        if (rc != EINTR)
+          failure_perror("nanosleep()", rc);
       }
       us = ts.tv_sec * 1000000u + ts.tv_nsec / 1000u;
     }
