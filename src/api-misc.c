@@ -14,8 +14,15 @@ __cold int mdbx_is_readahead_reasonable(size_t volume, intptr_t redundancy) {
 
   const int log2page = globals.sys_pagesize_ln2;
   const intptr_t volume_pages = (volume + pagesize - 1) >> log2page;
-  const intptr_t redundancy_pages = (redundancy < 0) ? -(intptr_t)((-redundancy + pagesize - 1) >> log2page)
-                                                     : (intptr_t)(redundancy + pagesize - 1) >> log2page;
+  /* negating INTPTR_MIN (and rounding it up to pages) would overflow: clamp
+   * the magnitude first, which only makes the verdict more conservative */
+  const size_t redundancy_magnitude = (redundancy < 0)
+                                          ? ((redundancy == INTPTR_MIN) ? (size_t)INTPTR_MAX >> 1 : (size_t)-redundancy)
+                                          : (size_t)redundancy;
+  const size_t redundancy_rounded = (redundancy_magnitude > (size_t)INTPTR_MAX >> 1)
+                                        ? (size_t)INTPTR_MAX >> 1
+                                        : (redundancy_magnitude + (size_t)pagesize - 1) >> log2page;
+  const intptr_t redundancy_pages = (redundancy < 0) ? -(intptr_t)redundancy_rounded : (intptr_t)redundancy_rounded;
   if (volume_pages >= total_ram_pages || volume_pages + redundancy_pages >= total_ram_pages)
     return MDBX_RESULT_FALSE;
 
