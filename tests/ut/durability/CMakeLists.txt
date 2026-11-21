@@ -17,6 +17,13 @@ if(NOT WIN32)
   add_durability_test(dead-owner SOURCE "dead-owner.c++" NO_PCH)
 endif()
 
+# The Windows RDONLY mapping-extent reproducer (issue #549): the reader's
+# section extent is pinned to the open-time file size (NtCreateSection
+# MaximumSize), so a fresh snapshot beyond it fails with MDBX_EPERM. The body
+# gates itself with #ifdef _WIN32 and skips elsewhere, so the suite stays
+# green on the non-Windows cells.
+add_durability_test(windows-mmap-extent SOURCE "windows-mmap-extent.c++")
+
 # Scale the registered tests' TIMEOUTs by the platform/configuration factor
 # (see cmake/test-timeout-scale.cmake).
 mdbx_scale_dir_test_timeouts()
