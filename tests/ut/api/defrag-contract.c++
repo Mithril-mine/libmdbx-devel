@@ -34,14 +34,17 @@
  *    (pages_moved > 0, pages_whole > 0, permille <= 1000, cycles >= 1) and
  *    the progress callback firing at least once per begun cycle;
  *  - the time-limit stop through the adaptive-batch path
- *    (time_limit set, preferred_batch = 0).
- *
- * Known contract gaps of the verification campaign (#485) are pinned with
- * `known contract gap V-0xx` comments instead of the documented wording:
- * defrag-stuck-retry-success-verdict (a stuck-retry stop still reports SUCCESS + noobstacles),
- * defrag-time-limit-unreachable-goal (time_limit is only evaluated once the defrag_atleast goal edge is reached - here
- * atleast=0 keeps the gate open, so the limit applies), defrag-adopted-txn-mid-commit-user-writes (the adopted-txn
- * per-cycle checkpoint commits the user's pending writes mid-transaction and detaches the user's cursors). */
+ *    (time_limit set, preferred_batch = 0);
+ *  - the stuck-retry stop (defrag-stuck-verdict): a stop stuck at an
+ *    unmovable obstacle page names its cause - a laggard reader holding the
+ *    GC, or MDBX_defrag_error when nothing external blocks the movement -
+ *    and never reports a plain success while work remains;
+ *  - the unconditional time limit (defrag-time-limit-unreachable-goal):
+ *    the limit is evaluated regardless of the defrag_atleast goal
+ *    reachability and stops an unreachable-goal run;
+ *  - the adopted-txn mid-commit semantics documented in mdbx.h: the
+ *    per-cycle checkpoint commits the caller's pending writes mid-transaction
+ *    and detaches the caller's cursors (further use returns MDBX_EINVAL). */
 
 namespace {
 
@@ -206,9 +209,9 @@ TEST(defrag_contract, completion_reports_success) {
   EXPECT_LE(result.rough_estimation_cycle_progress_permille, 1000u);
   EXPECT_GE(result.cycles, 1u);
   EXPECT_GE(probe.calls, result.cycles) << "the callback fires at the beginning and the end of every cycle";
-  /* known contract gap defrag-stuck-retry-success-verdict: a stuck-retry stop would also report
-   * MDBX_SUCCESS with stopping_reasons == noobstacles despite the named
-   * obstacle - not driven here (nondeterministic to construct). */
+  /* a stop stuck at an obstacle must name its cause in stopping_reasons/rc
+   * and never be a plain success: pinned by the stuck_retry_names_cause
+   * test below */
 
   /* the data is intact after the defrag cycles */
   txn_ptr txn;
@@ -239,20 +242,50 @@ TEST(defrag_contract, time_limit_stop_with_adaptive_batch) {
   std::memset(&result, 0, sizeof result);
   /* time_limit set with preferred_batch = 0 selects the adaptive batch
    * (the cycle size aims at a fraction of the remaining time budget).
-   * With defrag_atleast = 0 the goal edge is pre-reached, so the limit
-   * gate is open.
-   * known contract gap defrag-time-limit-unreachable-goal: with an unreachable defrag_atleast goal the
-   * time limit would never be evaluated (defrag_progress gating) - that
-   * side is deliberately not asserted. */
-  const int rc = mdbx_env_defrag(env.get(), 0, 0, 0, 65536 / 4, 0, 0, nullptr, nullptr, &result);
+   * The scenario may stop before the limit on a fast host (an obstacle
+   * stops the run first), so the time-limit assertion is conditional. */
+  const size_t kLimitDot16 = 65536 / 4;
+  const int rc = mdbx_env_defrag(env.get(), 0, 0, 0, kLimitDot16, 0, 0, nullptr, nullptr, &result);
   ASSERT_TRUE(rc == MDBX_SUCCESS || rc == MDBX_RESULT_TRUE) << "rc=" << rc;
   EXPECT_GE(result.cycles, 1u);
   EXPECT_LE(result.rough_estimation_cycle_progress_permille, 1000u);
   if (rc == MDBX_RESULT_TRUE) {
-    EXPECT_TRUE(result.stopping_reasons & MDBX_defrag_time_limit)
-        << "stopping with work left must name the time limit, got " << result.stopping_reasons;
+    EXPECT_NE(0u, result.stopping_reasons) << "a partial stop must name its reason, got noobstacles";
   }
-  /* known contract gap defrag-time-limit-unreachable-goal: the docs promise an unconditional time limit. */
+  if (result.spent_time_dot16 >= kLimitDot16) {
+    EXPECT_TRUE(result.stopping_reasons & MDBX_defrag_time_limit)
+        << "the reached time limit must be named, got " << result.stopping_reasons;
+  }
+}
+
+TEST(defrag_contract, time_limit_stop_with_unreachable_goal) {
+  const env_files_guard guard({"defrag-contract-unreachable.mdbx"});
+  if (MDBX_GTEST_IS_EXECUTION_TIMEOUT()) {
+    GTEST_SKIP() << "SKIPPED by RUNTIME_LIMIT";
+    return;
+  }
+  const char *kDb = "defrag-contract-unreachable.mdbx";
+  churn_fragment(kDb, "main");
+
+  env_ptr env;
+  ASSERT_EQ(MDBX_SUCCESS, mdbx_env_create(&env));
+  ASSERT_EQ(MDBX_SUCCESS, mdbx_env_set_maxdbs(env.get(), 2));
+  ASSERT_EQ(MDBX_SUCCESS, mdbx_env_open(env.get(), kDb, MDBX_NOSUBDIR, 0644));
+
+  MDBX_defrag_result_t result;
+  std::memset(&result, 0, sizeof result);
+  /* the defrag_atleast goal exceeds any achievable shrink: the goal edge is
+   * clamped to the payload (the complete-defrag edge) and stays unreachable.
+   * The limit (65536/8192 dot16, i.e. ~1/8 of a millisecond - far below the
+   * few-milliseconds of cycles this scenario grinds) must stop the run
+   * regardless of the goal, naming MDBX_defrag_time_limit, instead of
+   * grinding the cycles to a stuck-retry. */
+  const int rc = mdbx_env_defrag(env.get(), 1 << 20, 0, 0, 65536 / 8192, 0, 4096, nullptr, nullptr, &result);
+  EXPECT_EQ(MDBX_RESULT_TRUE, rc) << "rc=" << rc << ", stopping_reasons=" << result.stopping_reasons;
+  EXPECT_NE(0u, result.stopping_reasons & MDBX_defrag_time_limit)
+      << "an unreachable goal must not disable the time limit, stopping_reasons=" << result.stopping_reasons;
+  EXPECT_EQ(0u, result.stopping_reasons & MDBX_defrag_error);
+  EXPECT_GT(result.pages_whole, 0u);
 }
 
 TEST(defrag_contract, adopted_txn_checkpoint_commits_and_detaches) {
@@ -285,9 +318,10 @@ TEST(defrag_contract, adopted_txn_checkpoint_commits_and_detaches) {
   const int rc = mdbx_env_defrag(env.get(), 1, 0, 16, 0, 0, 4096, nullptr, nullptr, &result);
   ASSERT_EQ(MDBX_SUCCESS, rc);
 
-  /* known contract gap defrag-adopted-txn-mid-commit-user-writes: the per-cycle checkpoint committed the user's
-   * pending write mid-transaction and detached the user's cursors: any
-   * further cursor operation is refused with MDBX_EINVAL ... */
+  /* the documented adopted-txn semantics (see the note in mdbx.h): the
+   * per-cycle checkpoint committed the user's pending write mid-transaction
+   * and detached the user's cursors: any further cursor operation is refused
+   * with MDBX_EINVAL ... */
   EXPECT_EQ(MDBX_EINVAL, mdbx_cursor_get(mc, &k, &d, MDBX_GET_CURRENT));
   mdbx_cursor_close(mc);
   mdbx_txn_abort(txn.release());
@@ -302,7 +336,7 @@ TEST(defrag_contract, adopted_txn_checkpoint_commits_and_detaches) {
   }
 }
 
-TEST(defrag_contract, stuck_retry_reports_success) {
+TEST(defrag_contract, stuck_retry_names_cause) {
   if (MDBX_GTEST_IS_EXECUTION_TIMEOUT()) {
     GTEST_SKIP() << "SKIPPED by RUNTIME_LIMIT";
     return;
@@ -350,25 +384,27 @@ TEST(defrag_contract, stuck_retry_reports_success) {
     ASSERT_EQ(MDBX_SUCCESS, mdbx_txn_commit(txn.release()));
   }
 
-  /* the campaign repro shape: no user txn, a tight backlash and a small
+  /* the stuck shape: no user txn, a tight backlash and a small
    * preferred_batch force many small cycles; on the 4 KiB reference the
    * defrag gets STUCK retrying the same obstacle page and stops */
   MDBX_defrag_result_t result;
   std::memset(&result, 0, sizeof result);
   const int rc = mdbx_env_defrag(env.get(), 0, 0, 0, 0, 4, 400, nullptr, nullptr, &result);
-  ASSERT_TRUE(rc == MDBX_SUCCESS || rc == MDBX_RESULT_TRUE) << "rc=" << rc;
+  ASSERT_TRUE(rc == MDBX_SUCCESS || rc == MDBX_RESULT_TRUE || rc == MDBX_LAGGARD_READER) << "rc=" << rc;
   EXPECT_GE(result.cycles, 1u);
   EXPECT_GT(result.pages_moved, 0u);
   EXPECT_LE(result.rough_estimation_cycle_progress_permille, 1000u);
 
   if (result.obstructed_pgno != 0) {
-    /* the stuck-retry stop (defrag-stuck-retry-success-verdict): rc may be SUCCESS with
-     * stopping_reasons == noobstacles(0) despite the named obstacle -
-     * the residual work is visible only via pages_left / obstructed_*
-     * (known contract gap defrag-stuck-retry-success-verdict from issue #485, fix/docs pending) */
-    EXPECT_EQ(MDBX_defrag_noobstacles, result.stopping_reasons)
-        << "known contract gap defrag-stuck-retry-success-verdict: the stuck stop reports no obstacles";
-    EXPECT_EQ(MDBX_SUCCESS, rc) << "the enough-goal override masks the stuck stop";
+    /* the stuck-retry stop (defrag-stuck-verdict) must name its cause:
+     * a laggard reader holding the GC, or the internal-error bit when
+     * nothing external blocks the movement (an algorithm defect) - and
+     * while work remains it is never a plain success (the residual work is
+     * also visible via pages_left / obstructed_*) */
+    EXPECT_NE(MDBX_SUCCESS, rc) << "a stuck stop with work remaining must not report success, stopping_reasons="
+                                << result.stopping_reasons;
+    EXPECT_TRUE((result.stopping_reasons & (MDBX_defrag_laggard_reader | MDBX_defrag_error)) != 0)
+        << "the stuck stop must name its cause, got " << result.stopping_reasons;
   } else {
     EXPECT_EQ(0u, result.stopping_reasons & MDBX_defrag_error);
   }

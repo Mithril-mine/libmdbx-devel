@@ -166,7 +166,13 @@ __cold int mdbx_env_defrag(MDBX_env *env, size_t defrag_atleast, size_t time_atl
     dfc.stumble_retry = (dfc.stumble_pgno && dfc.stumble_pgno == prev_stumble) ? dfc.stumble_retry + 1 : 0;
     if (dfc.stumble_retry > 3) {
       NOTICE("bailout since stucked (unable to move) at %u in a few retries", dfc.stumble_pgno);
-      rc = txn->dbs[FREE_DBI].items ? MDBX_LAGGARD_READER : MDBX_RESULT_TRUE;
+      if (txn->dbs[FREE_DBI].items)
+        rc = MDBX_LAGGARD_READER;
+      else {
+        /* застряли не по вине читателя: внешнего препятствия нет, это изъян алгоритма */
+        dfc.stopping_reasons |= MDBX_defrag_error;
+        rc = MDBX_RESULT_TRUE;
+      }
       break;
     }
 
