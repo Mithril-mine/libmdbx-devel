@@ -15,6 +15,9 @@ if(NOT WIN32)
   # The white-box include of src/essentials.h (to learn the resolved
   # MDBX_LOCKING) requires the NO_PCH setup.
   add_durability_test(dead-owner SOURCE "dead-owner.c++" NO_PCH)
+  # The lck-less read-only guarantees (#564, cluster E1): the induction is
+  # chmod(2) on the lck-file, meaningless where permissions are bypassed.
+  add_durability_test(lck-less SOURCE "lck-less.c++")
 endif()
 
 # Scale the registered tests' TIMEOUTs by the platform/configuration factor
