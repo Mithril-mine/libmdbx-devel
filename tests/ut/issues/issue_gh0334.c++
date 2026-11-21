@@ -13,11 +13,6 @@
 /// \author Леонид Юрьев aka Leonid Yuriev <leo@yuriev.ru> \date 2026
 /// \author Andrea Lanfranchi (https://github.com/AndreaLanfranchi)
 
-#include "../../../src/internals.h"
-#if IS_WINDOWS
-#include "../../../src/osal/windows/pop-posix-macros.h"
-#endif /* Windows */
-
 #include "../env-guard.h++"
 #include <gtest/gtest.h>
 
@@ -29,6 +24,10 @@
 #include <cstring>
 #include <string>
 #include <vector>
+#if !defined(_WIN32)
+#include <sys/mman.h>
+#include <unistd.h>
+#endif /* !_WIN32 */
 
 #ifdef _MSC_VER
 #pragma warning(disable : 4702) /* unreachable code */
@@ -65,7 +64,11 @@ class block_after_mapping {
 
 public:
   explicit block_after_mapping(const MDBX_env *env) {
-    void *const want = static_cast<char *>(env->dxb_mmap.base) + env->dxb_mmap.limit;
+    void *base = nullptr;
+    size_t limit = 0;
+    if (mdbx_tst_env_mapping(env, &base, &limit, nullptr) != MDBX_SUCCESS)
+      return;
+    void *const want = static_cast<char *>(base) + limit;
 #if defined(_WIN32)
     SYSTEM_INFO si;
     GetSystemInfo(&si);
@@ -117,6 +120,14 @@ struct child_var_scope {
   child_var_scope &operator=(const child_var_scope &) = delete;
 };
 
+/* Opens the unnamed (main) table per the public API: the same handle the
+ * internal MAIN_DBI refers to. */
+MDBX_dbi main_dbi(MDBX_txn *txn) {
+  MDBX_dbi dbi = 0;
+  EXPECT_EQ(MDBX_SUCCESS, mdbx_dbi_open(txn, nullptr, MDBX_db_flags_t(0), &dbi));
+  return dbi;
+}
+
 void create_database() {
   MDBX_env *env = nullptr;
   env_handle_guard env_owner(&env);
@@ -126,11 +137,12 @@ void create_database() {
   MDBX_txn *txn = nullptr;
   txn_handle_guard txn_owner(&txn);
   ASSERT_EQ(MDBX_SUCCESS, mdbx_txn_begin(env, nullptr, MDBX_TXN_READWRITE, &txn));
+  const MDBX_dbi dbi = main_dbi(txn);
   for (int i = 0; i < kRecords; ++i) {
     char key[16];
     const int n = std::snprintf(key, sizeof(key), "k%08d", i);
     MDBX_val k = {key, size_t(n)}, v = {const_cast<char *>(kValue), sizeof(kValue)};
-    ASSERT_EQ(MDBX_SUCCESS, mdbx_put(txn, MAIN_DBI, &k, &v, MDBX_UPSERT));
+    ASSERT_EQ(MDBX_SUCCESS, mdbx_put(txn, dbi, &k, &v, MDBX_UPSERT));
   }
   txn_owner.release();
   ASSERT_EQ(MDBX_SUCCESS, mdbx_txn_commit(txn));
@@ -143,11 +155,13 @@ void read_all(MDBX_env *env) {
   txn_handle_guard txn_owner(&txn);
   const int rc = mdbx_txn_begin(env, nullptr, MDBX_TXN_RDONLY, &txn);
   ASSERT_TRUE(rc == MDBX_SUCCESS || rc == MDBX_UNABLE_EXTEND_MAPSIZE) << rc << " " << mdbx_strerror(rc);
-  ASSERT_LE(env->dxb_mmap.current, env->dxb_mmap.limit) << "the recorded size exceeds the mapping";
+  size_t limit = 0, current = 0;
+  ASSERT_EQ(MDBX_SUCCESS, mdbx_tst_env_mapping(env, nullptr, &limit, &current));
+  ASSERT_LE(current, limit) << "the recorded size exceeds the mapping";
   if (rc != MDBX_SUCCESS)
     return;
   MDBX_cursor *cursor = nullptr;
-  ASSERT_EQ(MDBX_SUCCESS, mdbx_cursor_open(txn, MAIN_DBI, &cursor));
+  ASSERT_EQ(MDBX_SUCCESS, mdbx_cursor_open(txn, main_dbi(txn), &cursor));
   MDBX_val key, value;
   size_t count = 0;
   for (int err = mdbx_cursor_get(cursor, &key, &value, MDBX_FIRST); err == MDBX_SUCCESS;
@@ -180,11 +194,12 @@ TEST(issue_gh0334, DISABLED_grow_database) {
   MDBX_txn *txn = nullptr;
   txn_handle_guard txn_owner(&txn);
   ASSERT_EQ(MDBX_SUCCESS, mdbx_txn_begin(env, nullptr, MDBX_TXN_READWRITE, &txn));
+  const MDBX_dbi dbi = main_dbi(txn);
   for (int i = 0; i < count; ++i) {
     char key[16];
     const int n = std::snprintf(key, sizeof(key), "g%08d", i);
     MDBX_val k = {key, size_t(n)}, v = {const_cast<char *>(value.data()), value.size()};
-    ASSERT_EQ(MDBX_SUCCESS, mdbx_put(txn, MAIN_DBI, &k, &v, MDBX_UPSERT));
+    ASSERT_EQ(MDBX_SUCCESS, mdbx_put(txn, dbi, &k, &v, MDBX_UPSERT));
   }
   txn_owner.release();
   ASSERT_EQ(MDBX_SUCCESS, mdbx_txn_commit(txn));

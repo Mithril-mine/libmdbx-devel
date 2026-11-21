@@ -272,6 +272,111 @@ LIBMDBX_API int mdbx_tst_gc_dense_pack(size_t slots, size_t volume, const uint32
                                        size_t first_page, size_t other_pages, uint32_t *solution_counts,
                                        unsigned *solution_end, bool *found);
 
+/* The white-box migration seams (issue #519): read-only introspection of the
+ * internal state and the build-configuration values that the legacy
+ * white-box units reached by including src/internals.h. The derived/layout
+ * values are computed inside tests/api.c from the real definitions
+ * (drift-proof by construction); the semantic mirrors are the MDBX_TST_*
+ * macros pinned by STATIC_ASSERT_MSG in tests/api.c. */
+
+/** \brief The number of the meta pages in the data file (the internal
+ * NUM_METAS). Pinned to the internal value by a STATIC_ASSERT in tests/api.c.
+ * \ingroup c_testing */
+#define MDBX_TST_NUM_METAS 3
+
+/** \brief Reports the build configuration's MDBX_AVOID_MSYNC option.
+ *
+ * Non-zero when the persistence of write-mapped dirty pages is routed
+ * through explicit writes instead of msync() - the mode where per-commit
+ * whole-mapping flushes must not happen.
+ * \return The option's value, 0 or 1.
+ * \ingroup c_testing */
+LIBMDBX_API int mdbx_tst_config_avoid_msync(void);
+
+/** \brief Reports the build configuration's MDBX_MMAP_NEEDS_JOLT option.
+ *
+ * Non-zero when write-mapped memory needs an explicit MS_ASYNC "jolt" to
+ * become visible/persistable (e.g. macOS/BSD/Windows), so one cheap async
+ * msync per no-sync commit is the designed behavior there.
+ * \return The option's value, 0 or 1.
+ * \ingroup c_testing */
+LIBMDBX_API int mdbx_tst_config_mmap_needs_jolt(void);
+
+/** \brief Reports the build configuration's MDBX_ENABLE_EXCLUSIVE_FASTPATH
+ * option.
+ *
+ * Non-zero when the MDBX_EXCLUSIVE mode keeps the normal (shareable) i/o
+ * handles - the overlapped write-through and dsync ones - and enforces
+ * exclusivity by the constant byte-range locks.
+ * \return The option's value, 0 or 1.
+ * \ingroup c_testing */
+LIBMDBX_API int mdbx_tst_config_exclusive_fastpath(void);
+
+/** \brief Reads the data-file mapping's geometry.
+ *
+ * A read-only introspection of the internal dxb_mmap: the base address,
+ * the mapping length (NOT a size of the file nor DB) and the currently
+ * recorded/mapped size. The address-range seams (reserving the range right
+ * after the mapping, checking that a resize moved nothing) need the base
+ * and the limit; the "recorded size must not exceed the mapping" contract
+ * compares the current size against the limit.
+ *
+ * \param env      The environment to inspect.
+ * \param base     Optional, receives the mapping base address.
+ * \param limit    Optional, receives the mapping length in bytes.
+ * \param current  Optional, receives the recorded (mapped) size in bytes.
+ * \return MDBX_SUCCESS or MDBX_EINVAL for a null handle.
+ * \ingroup c_testing */
+LIBMDBX_API int mdbx_tst_env_mapping(const MDBX_env *env, void **base, size_t *limit, size_t *current);
+
+/** \brief Reads the readahead anchor edge in bytes.
+ *
+ * The internal readahead anchor packs the enable-bit in its LSB and the
+ * edge page number shifted left by one; this accessor returns the edge
+ * (the anchor shifted right by one) multiplied by the page size - the
+ * value the test's "the readahead edge must lie within the mapping"
+ * checks compare against the mapping's current size.
+ *
+ * \param env  The environment to inspect.
+ * \return The edge in bytes, or 0 for a null handle / no lock table.
+ * \ingroup c_testing */
+LIBMDBX_API uint64_t mdbx_tst_env_readahead_bytes(const MDBX_env *env);
+
+/** \brief Reads the environment's data-file i/o handles.
+ *
+ * The overlapped write-through handle (Windows only: on the other platforms
+ * the internal field does not exist and 0 is reported), the dsync handle
+ * and the handle the meta pages are written through. The exclusive-fastpath
+ * characterization checks that a durable exclusive environment opens the
+ * very same handles as a non-exclusive one (the overlapped and the dsync
+ * ones) and that meta goes through the dsync handle.
+ *
+ * \param env            The environment to inspect.
+ * \param overlapped_fd  Optional, receives the overlapped write-through
+ *                       handle (always 0 on non-Windows platforms).
+ * \param dsync_fd       Optional, receives the dsync handle.
+ * \param fd4meta        Optional, receives the meta-write handle.
+ * \return MDBX_SUCCESS or MDBX_EINVAL for a null handle.
+ * \ingroup c_testing */
+LIBMDBX_API int mdbx_tst_env_io_fds(const MDBX_env *env, mdbx_filehandle_t *overlapped_fd, mdbx_filehandle_t *dsync_fd,
+                                    mdbx_filehandle_t *fd4meta);
+
+/** \brief Reads the write transaction's loose-page accounting in one call.
+ *
+ * The internal loose counter and the actual length of the loose-pages
+ * chain (walked through the engine's own page_next() linkage at the start
+ * of the entries): the characterization seam for the loose-counter
+ * contract - the counter must always equal the number of the linked
+ * pages, at every exit point of a nested-transaction begin.
+ *
+ * \param txn      The write transaction to inspect.
+ * \param counter  Optional, receives the internal loose-pages counter.
+ * \param linked   Optional, receives the number of pages actually linked
+ *                 in the transaction's loose-pages chain.
+ * \return MDBX_SUCCESS or MDBX_EINVAL for a null handle.
+ * \ingroup c_testing */
+LIBMDBX_API int mdbx_tst_txn_loose_pages(const MDBX_txn *txn, size_t *counter, size_t *linked);
+
 #ifdef __cplusplus
 } /* extern "C" */
 #endif
