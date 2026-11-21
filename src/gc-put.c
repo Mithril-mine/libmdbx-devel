@@ -415,7 +415,7 @@ static int gc_store_retired(MDBX_txn *txn, gcu_t *ctx) {
       const size_t retired_after = pnl_size(txn->wr.retired_pages);
       const size_t left_after = retired_after - ctx->retired_stored;
       const size_t chunk = (left_after < chunk_hi) ? left_after : chunk_hi;
-      should_retry = retired_before != retired_after && chunk < retired_after;
+      should_retry = retired_before != retired_after;
       if (likely(!should_retry)) {
         const size_t at = (is_lifo(txn) == MDBX_PNL_ASCENDING) ? left_before - chunk : ctx->retired_stored;
         pgno_t *const begin = txn->wr.retired_pages + at;
