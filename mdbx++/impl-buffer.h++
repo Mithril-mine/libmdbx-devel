@@ -116,6 +116,11 @@ inline string<ALLOCATOR> make_string(const PRODUCER &producer, const ALLOCATOR &
 /// \details Unlike \ref make_buffer(), the empty-source case is not skipped
 /// here but delegated to `write_bytes()` which rejects it, since a dump
 /// of zero bytes is not a dump and cannot be decoded.
+/// \param [in] decoder The dump decoder to produce the source bytes with.
+/// \param [in] alloc The allocator for the resulting buffer.
+/// \return The buffer with the decoded bytes.
+/// \throws std::domain_error when the decoded dump is empty or spaces-only
+/// with the ignoring-spaces decoder flag set.
 template <class ALLOCATOR, class CAPACITY_POLICY, MDBX_CXX20_CONCEPT(ImmutableByteProducer, DECODER)>
 inline buffer<ALLOCATOR, CAPACITY_POLICY> make_decode_buffer(const DECODER &decoder, const ALLOCATOR &alloc) {
   buffer<ALLOCATOR, CAPACITY_POLICY> result(decoder.envisage_result_length(), alloc);
@@ -125,6 +130,11 @@ inline buffer<ALLOCATOR, CAPACITY_POLICY> make_decode_buffer(const DECODER &deco
 
 /// \brief Produces a string by decoding a dump with the given decoder,
 /// see \ref make_decode_buffer() for the empty-source handling.
+/// \param [in] decoder The dump decoder to produce the source characters with.
+/// \param [in] alloc The allocator for the resulting string.
+/// \return The string with the decoded characters.
+/// \throws std::domain_error when the decoded dump is empty or spaces-only
+/// with the ignoring-spaces decoder flag set.
 template <class ALLOCATOR, MDBX_CXX20_CONCEPT(ImmutableByteProducer, DECODER)>
 inline string<ALLOCATOR> make_decode_string(const DECODER &decoder, const ALLOCATOR &alloc) {
   string<ALLOCATOR> result(alloc);
