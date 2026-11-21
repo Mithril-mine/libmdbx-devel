@@ -24,6 +24,11 @@ endif()
 # green on the non-Windows cells.
 add_durability_test(windows-mmap-extent SOURCE "windows-mmap-extent.c++")
 
+# The best-effort stress of the windows-lck-restored-copy-opener-race finding
+# (#549): Windows-only at runtime (the spawn/handshake machinery is Win32),
+# registered unconditionally so the non-Windows cells carry the skip evidence.
+add_durability_test(windows-lck-race SOURCE "windows-lck-race.c++")
+
 # Scale the registered tests' TIMEOUTs by the platform/configuration factor
 # (see cmake/test-timeout-scale.cmake).
 mdbx_scale_dir_test_timeouts()
