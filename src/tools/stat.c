@@ -369,6 +369,10 @@ int main(int argc, char *argv[]) {
       } else
         printf("  No stale readers.\n");
     }
+    if (rc == MDBX_RESULT_TRUE)
+      /* "Reader Table is absent"/"Now Reader Table is empty" are informational
+       * outcomes, not failures: RESULT_TRUE must not reach the exit code */
+      rc = MDBX_SUCCESS;
     if (!(table || alltbl || show_gc))
       goto txn_abort;
   }
