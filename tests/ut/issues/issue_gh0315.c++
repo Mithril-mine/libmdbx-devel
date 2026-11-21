@@ -13,10 +13,6 @@
 /// \author Леонид Юрьев aka Leonid Yuriev <leo@yuriev.ru> \date 2026
 /// \author Andrea Lanfranchi (https://github.com/AndreaLanfranchi)
 
-#include "../../../src/internals.h"
-#if IS_WINDOWS
-#include "../../../src/osal/windows/pop-posix-macros.h"
-#endif /* Windows */
 #include "../env-guard.h++"
 #include <gtest/gtest.h>
 
@@ -28,6 +24,10 @@
 #include <cstring>
 #include <string>
 #include <vector>
+#if !defined(_WIN32)
+#include <sys/mman.h>
+#include <unistd.h>
+#endif /* !_WIN32 */
 
 #ifdef _MSC_VER
 #pragma warning(disable : 4702) /* unreachable code */
@@ -66,7 +66,11 @@ class block_after_mapping {
 
 public:
   explicit block_after_mapping(const MDBX_env *env) {
-    void *const want = static_cast<char *>(env->dxb_mmap.base) + env->dxb_mmap.limit;
+    void *base = nullptr;
+    size_t limit = 0;
+    if (mdbx_tst_env_mapping(env, &base, &limit, nullptr) != MDBX_SUCCESS)
+      return;
+    void *const want = static_cast<char *>(base) + limit;
 #if defined(_WIN32)
     SYSTEM_INFO si;
     GetSystemInfo(&si);
@@ -107,6 +111,14 @@ struct cursor_guard {
   }
 };
 
+/* Opens the unnamed (main) table per the public API: the same handle the
+ * internal MAIN_DBI refers to. */
+MDBX_dbi main_dbi(MDBX_txn *txn) {
+  MDBX_dbi dbi = 0;
+  EXPECT_EQ(MDBX_SUCCESS, mdbx_dbi_open(txn, nullptr, MDBX_db_flags_t(0), &dbi));
+  return dbi;
+}
+
 void open_env(const char *path, intptr_t upper, MDBX_env **env) {
   ASSERT_EQ(MDBX_SUCCESS, mdbx_env_create(env));
   ASSERT_EQ(MDBX_SUCCESS, mdbx_env_set_geometry(*env, -1, kMiB, upper, kMiB, -1, -1));
@@ -127,11 +139,12 @@ void seed(MDBX_env *env) {
   MDBX_txn *txn = nullptr;
   txn_handle_guard txn_owner(&txn);
   ASSERT_EQ(MDBX_SUCCESS, mdbx_txn_begin(env, nullptr, MDBX_TXN_READWRITE, &txn));
+  const MDBX_dbi dbi = main_dbi(txn);
   for (int i = 0; i < kRecords; ++i) {
     char key[16];
     const int n = std::snprintf(key, sizeof(key), "k%08d", i);
     MDBX_val k = {key, size_t(n)}, v = {const_cast<char *>(kValue), sizeof(kValue)};
-    ASSERT_EQ(MDBX_SUCCESS, mdbx_put(txn, MAIN_DBI, &k, &v, MDBX_UPSERT));
+    ASSERT_EQ(MDBX_SUCCESS, mdbx_put(txn, dbi, &k, &v, MDBX_UPSERT));
   }
   txn_owner.release();
   ASSERT_EQ(MDBX_SUCCESS, mdbx_txn_commit(txn));
@@ -139,7 +152,7 @@ void seed(MDBX_env *env) {
 
 /* Opens a cursor in `txn`, positions it at the first record and returns the value it points to. */
 void position_first(MDBX_txn *txn, cursor_guard &cursor, MDBX_val *held) {
-  ASSERT_EQ(MDBX_SUCCESS, mdbx_cursor_open(txn, MAIN_DBI, &cursor.cursor));
+  ASSERT_EQ(MDBX_SUCCESS, mdbx_cursor_open(txn, main_dbi(txn), &cursor.cursor));
   MDBX_val key;
   ASSERT_EQ(MDBX_SUCCESS, mdbx_cursor_get(cursor.cursor, &key, held, MDBX_FIRST));
   ASSERT_EQ(sizeof(kValue), held->iov_len);
@@ -149,7 +162,8 @@ void position_first(MDBX_txn *txn, cursor_guard &cursor, MDBX_val *held) {
  * is, and both must remain usable afterwards. */
 void resize_under_live_txn(MDBX_env *env, MDBX_txn *txn, cursor_guard &cursor, const MDBX_val &held, bool park) {
   const block_after_mapping block(env);
-  const void *const base = env->dxb_mmap.base;
+  void *base = nullptr;
+  ASSERT_EQ(MDBX_SUCCESS, mdbx_tst_env_mapping(env, &base, nullptr, nullptr));
   if (park) {
     ASSERT_EQ(MDBX_SUCCESS, mdbx_txn_park(txn, false));
   }
@@ -158,7 +172,9 @@ void resize_under_live_txn(MDBX_env *env, MDBX_txn *txn, cursor_guard &cursor, c
   if (park) {
     ASSERT_EQ(MDBX_SUCCESS, mdbx_txn_unpark(txn, false));
   }
-  ASSERT_EQ(base, env->dxb_mmap.base) << "the mapping moved under a live transaction";
+  void *base_after = nullptr;
+  ASSERT_EQ(MDBX_SUCCESS, mdbx_tst_env_mapping(env, &base_after, nullptr, nullptr));
+  ASSERT_EQ(base, base_after) << "the mapping moved under a live transaction";
   EXPECT_EQ(0, std::memcmp(held.iov_base, kValue, sizeof(kValue)));
   MDBX_val key, value;
   EXPECT_EQ(MDBX_SUCCESS, mdbx_cursor_get(cursor.cursor, &key, &value, MDBX_NEXT));
@@ -263,7 +279,7 @@ TEST(issue_gh0315, geometry_keeps_mapping_of_write_txn_in_calling_thread) {
     }
     /* the write transaction stays usable */
     MDBX_val k = {const_cast<char *>("after"), 5}, v = {const_cast<char *>(kValue), sizeof(kValue)};
-    ASSERT_EQ(MDBX_SUCCESS, mdbx_put(txn, MAIN_DBI, &k, &v, MDBX_UPSERT));
+    ASSERT_EQ(MDBX_SUCCESS, mdbx_put(txn, main_dbi(txn), &k, &v, MDBX_UPSERT));
     txn_owner.release();
     ASSERT_EQ(MDBX_SUCCESS, mdbx_txn_commit(txn));
   }
@@ -283,27 +299,30 @@ TEST(issue_gh0315, commit_shrinks_file) {
   ASSERT_NO_FATAL_FAILURE(open_env_fine("issue315-shrink.mdbx", kUpper, &env));
   const MDBX_envinfo grown = measure_env(env);
   ASSERT_GT(uint64_t(grown.mi_dxb_fsize), uint64_t(kUpper) * 3 / 4) << "the datafile was not created oversized";
-  const void *const base = env->dxb_mmap.base;
+  void *base = nullptr;
+  ASSERT_EQ(MDBX_SUCCESS, mdbx_tst_env_mapping(env, &base, nullptr, nullptr));
   {
     MDBX_txn *txn = nullptr;
     txn_handle_guard txn_owner(&txn);
     ASSERT_EQ(MDBX_SUCCESS, mdbx_txn_begin(env, nullptr, MDBX_TXN_READWRITE, &txn));
     MDBX_val k = {const_cast<char *>("kept"), 4}, v = {const_cast<char *>(kValue), sizeof(kValue)};
-    ASSERT_EQ(MDBX_SUCCESS, mdbx_put(txn, MAIN_DBI, &k, &v, MDBX_UPSERT));
+    ASSERT_EQ(MDBX_SUCCESS, mdbx_put(txn, main_dbi(txn), &k, &v, MDBX_UPSERT));
     txn_owner.release();
     ASSERT_EQ(MDBX_SUCCESS, mdbx_txn_commit(txn));
   }
   const MDBX_envinfo shrunk = measure_env(env);
   EXPECT_LT(uint64_t(shrunk.mi_dxb_fsize), uint64_t(grown.mi_dxb_fsize) - 8 * kMiB)
       << "the committing transaction did not truncate the datafile";
-  EXPECT_EQ(base, env->dxb_mmap.base) << "the shrink moved the mapping base";
+  void *base_after = nullptr;
+  ASSERT_EQ(MDBX_SUCCESS, mdbx_tst_env_mapping(env, &base_after, nullptr, nullptr));
+  EXPECT_EQ(base, base_after) << "the shrink moved the mapping base";
   const MDBX_val key = {const_cast<char *>("kept"), 4};
   MDBX_val value;
   {
     MDBX_txn *txn = nullptr;
     txn_handle_guard txn_owner(&txn);
     ASSERT_EQ(MDBX_SUCCESS, mdbx_txn_begin(env, nullptr, MDBX_TXN_RDONLY, &txn));
-    ASSERT_EQ(MDBX_SUCCESS, mdbx_get(txn, MAIN_DBI, &key, &value));
+    ASSERT_EQ(MDBX_SUCCESS, mdbx_get(txn, main_dbi(txn), &key, &value));
     EXPECT_EQ(sizeof(kValue), value.iov_len);
     EXPECT_EQ(0, std::memcmp(value.iov_base, kValue, sizeof(kValue)));
   }
@@ -316,7 +335,7 @@ TEST(issue_gh0315, commit_shrinks_file) {
     MDBX_txn *txn = nullptr;
     txn_handle_guard txn_owner(&txn);
     ASSERT_EQ(MDBX_SUCCESS, mdbx_txn_begin(env, nullptr, MDBX_TXN_RDONLY, &txn));
-    ASSERT_EQ(MDBX_SUCCESS, mdbx_get(txn, MAIN_DBI, &key, &value));
+    ASSERT_EQ(MDBX_SUCCESS, mdbx_get(txn, main_dbi(txn), &key, &value));
     EXPECT_EQ(sizeof(kValue), value.iov_len);
     EXPECT_EQ(0, std::memcmp(value.iov_base, kValue, sizeof(kValue)));
   }
@@ -346,7 +365,7 @@ TEST(issue_gh0315, commit_shrink_with_parked_reader) {
       txn_handle_guard txn_owner(&txn);
       ASSERT_EQ(MDBX_SUCCESS, mdbx_txn_begin(env, nullptr, MDBX_TXN_READWRITE, &txn));
       MDBX_val k = {const_cast<char *>("kept"), 4}, v = {const_cast<char *>(kValue), sizeof(kValue)};
-      ASSERT_EQ(MDBX_SUCCESS, mdbx_put(txn, MAIN_DBI, &k, &v, MDBX_UPSERT));
+      ASSERT_EQ(MDBX_SUCCESS, mdbx_put(txn, main_dbi(txn), &k, &v, MDBX_UPSERT));
       txn_owner.release();
       ASSERT_EQ(MDBX_SUCCESS, mdbx_txn_commit(txn));
     }
@@ -366,7 +385,7 @@ TEST(issue_gh0315, commit_shrink_with_parked_reader) {
     txn_handle_guard txn_owner(&txn);
     ASSERT_EQ(MDBX_SUCCESS, mdbx_txn_begin(env, nullptr, MDBX_TXN_READWRITE, &txn));
     MDBX_val k = {const_cast<char *>("touch"), 5}, v = {const_cast<char *>(kValue), sizeof(kValue)};
-    ASSERT_EQ(MDBX_SUCCESS, mdbx_put(txn, MAIN_DBI, &k, &v, MDBX_UPSERT));
+    ASSERT_EQ(MDBX_SUCCESS, mdbx_put(txn, main_dbi(txn), &k, &v, MDBX_UPSERT));
     txn_owner.release();
     ASSERT_EQ(MDBX_SUCCESS, mdbx_txn_commit(txn));
   }
@@ -395,11 +414,12 @@ TEST(issue_gh0315, DISABLED_grow_database) {
   MDBX_txn *txn = nullptr;
   txn_handle_guard txn_owner(&txn);
   ASSERT_EQ(MDBX_SUCCESS, mdbx_txn_begin(env, nullptr, MDBX_TXN_READWRITE, &txn));
+  const MDBX_dbi dbi = main_dbi(txn);
   for (int i = 0; i < count; ++i) {
     char key[16];
     const int n = std::snprintf(key, sizeof(key), "g%08d", i);
     MDBX_val k = {key, size_t(n)}, v = {const_cast<char *>(value.data()), value.size()};
-    ASSERT_EQ(MDBX_SUCCESS, mdbx_put(txn, MAIN_DBI, &k, &v, MDBX_UPSERT));
+    ASSERT_EQ(MDBX_SUCCESS, mdbx_put(txn, dbi, &k, &v, MDBX_UPSERT));
   }
   txn_owner.release();
   ASSERT_EQ(MDBX_SUCCESS, mdbx_txn_commit(txn));
@@ -440,5 +460,7 @@ TEST(issue_gh0315, warmup_stays_within_mapping) {
   EXPECT_EQ(MDBX_SUCCESS, mdbx_env_warmup(env, nullptr, MDBX_warmup_force, 0));
   /* the readahead edge set before touching the pages must lie within the mapping, so the test does not depend on
    * the touch past the mapping to fault */
-  EXPECT_LE(uint64_t(env->lck->readahead_anchor >> 1) * env->ps, uint64_t(env->dxb_mmap.current));
+  size_t current = 0;
+  ASSERT_EQ(MDBX_SUCCESS, mdbx_tst_env_mapping(env, nullptr, nullptr, &current));
+  EXPECT_LE(mdbx_tst_env_readahead_bytes(env), uint64_t(current));
 }
