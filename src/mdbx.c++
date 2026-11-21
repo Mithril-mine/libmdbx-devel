@@ -490,7 +490,7 @@ bool slice::is_printable(bool disable_utf8) const noexcept {
   const auto end = src + length();
   if (MDBX_UNLIKELY(disable_utf8)) {
     do
-      if (MDBX_UNLIKELY(map[*src] != P_ && map[*src] != X_))
+      if (MDBX_UNLIKELY(((P_ | X_) & map[*src]) == 0))
         MDBX_CXX20_UNLIKELY return false;
     while (++src < end);
     return true;
@@ -727,6 +727,7 @@ bool from_hex::is_erroneous() const noexcept {
   if (MDBX_UNLIKELY(source.length() % 2 && !ignore_spaces))
     MDBX_CXX20_UNLIKELY return true;
 
+  bool got = false;
   auto src = source.byte_ptr();
   for (auto left = source.length(); left > 0;) {
     if (MDBX_UNLIKELY(*src <= ' ') && MDBX_LIKELY(ignore_spaces && isspace(*src))) {
@@ -738,10 +739,11 @@ bool from_hex::is_erroneous() const noexcept {
     if (MDBX_UNLIKELY(left < 2 || !isxdigit(src[0]) || !isxdigit(src[1])))
       MDBX_CXX20_UNLIKELY return true;
 
+    got = true;
     src += 2;
     left -= 2;
   }
-  return false;
+  return !got;
 }
 
 //------------------------------------------------------------------------------
@@ -1135,6 +1137,7 @@ bool from_base64::is_erroneous() const noexcept {
   if (MDBX_UNLIKELY(source.length() % 4 && !ignore_spaces))
     MDBX_CXX20_UNLIKELY return true;
 
+  bool got = false;
   auto src = source.byte_ptr();
   for (auto left = source.length(); left > 0;) {
     if (MDBX_UNLIKELY(*src <= ' ') && MDBX_LIKELY(ignore_spaces && isspace(*src))) {
@@ -1152,10 +1155,11 @@ bool from_base64::is_erroneous() const noexcept {
           return false;
         return true;
       }
+    got = true;
     src += 4;
     left -= 4;
   }
-  return false;
+  return !got;
 }
 
 //------------------------------------------------------------------------------
