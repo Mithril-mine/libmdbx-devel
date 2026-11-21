@@ -126,7 +126,8 @@ declared complete.
   configure+build (with `--config` for multi-config generators; Ninja only when the cell does
   not pin `-G`/`-A`/`-T`), ctest per-cell regex/exclude and `-C` config (skipped for
   `build_only`), artifacts on failure. Emulator cells (`emulator` field) run the whole build +
-  test replay inside `reactivecircus/android-emulator-runner` instead of the plain build step.
+  test replay after the emulator boot step (`tests/ci/android-emulator-boot.sh`: two bounded
+  boot attempts, the emulator log tail on failure) instead of the plain build step.
 - **Profile table** (from `tests/ci/config.json`; keep in sync with the registry):
 
   | Profile | Cells | Use |
