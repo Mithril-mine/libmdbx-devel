@@ -22,8 +22,8 @@ name: ci-dispatch
 # Each selected cell fans out to the reusable ci-run.yml which runs the exact
 # registry entry (tests/ci/config.json) with --scope fast/full.
 #
-# NOTE: repository_dispatch/schedule fire only from the default branch, so this
-# workflow must live on master before agents/nightly can use it (design §3).
+# NOTE: repository_dispatch fires only from the default branch, so this
+# workflow must live on master before agents can use it (design §3).
 
 # No native concurrency group: the orchestrator (tests/ci/orchestrate.py) is the
 # sole owner of run cancellation/dedup. A native cancel-in-progress group would
@@ -40,8 +40,9 @@ on:
   # run below — firing both for the same branch made the runs supersede each
   # other, and the cancelled duplicate surfaced as red checks on the PR.
   # A branch without a PR can be gated on demand via workflow_dispatch or
-  # repository_dispatch. The nightly 190-cell full gate still owns repeated
-  # stochastic coverage on master via the platform workflows.
+  # repository_dispatch. The repeated stochastic coverage on master belongs to
+  # the nightly full-scope gates of the platform workflows
+  # (ci-linux/ci-windows/ci-macos/ci-android).
   push:
     branches: [devel, master]
   # No branches filter here, deliberately: a PR temporarily retargeted to a
@@ -195,11 +196,12 @@ jobs:
               REF="${PR_HEAD_SHA:-${GITHUB_REF}}"
               ;;
             push)
-              # Push on ANY branch runs the orchestrated change-addressed gate:
-              # diff against the nearest successful run of the base branch
-              # (origin/devel, fallback origin/master). A push to a feature
-              # branch with an open PR is deduplicated against the pull_request
-              # gate (PR wins); without a PR the push gate is authoritative.
+              # Push on the main lines (the trigger is branches: [devel, master])
+              # runs the orchestrated change-addressed gate: diff against the
+              # nearest successful run of the base branch (origin/devel,
+              # fallback origin/master). A feature-branch push does not fire
+              # this workflow: the branch is covered by its pull_request gate,
+              # or is gated on demand via repository_dispatch.
               echo "==> push: orchestrator on $GITHUB_REF"
               # Base branch for the diff anchor: prefer origin/master (the main
               # line whose successful runs are in the ancestry of most feature
@@ -225,17 +227,6 @@ jobs:
                 SCOPE="fast+hygiene"
               fi
               REF="$GITHUB_REF"
-              ;;
-            schedule)
-              echo "==> schedule: nightly full on master"
-              # Nightly marker: enables GTEST_SHUFFLE=1 (random gtest order)
-              # in tests/ci/run-cell.py, so a different subset of the suite
-              # runs each night under the GTEST_RUNTIME_LIMIT soft deadline.
-              export CI_NIGHTLY=1
-              echo "CI_NIGHTLY=1" >> "$GITHUB_ENV"
-              CELLS=$(tests/ci/select-cells.py --profile full)
-              SCOPE=full
-              REF="master"
               ;;
             repository_dispatch)
               PROF="${EVENT_PROFILE:-}"
@@ -290,9 +281,10 @@ jobs:
     if: ${{ needs.resolve.outputs.cells != '[]' && needs.resolve.outputs.cells != '' }}
     strategy:
       fail-fast: false
-      # Throttle the number of concurrently-spawned cells: launching the whole
-      # 149-cell win-full matrix at once overwhelmed the runner queue and
-      # silently dropped jobs (empty steps, no metrics) as infra failures.
+      # Throttle the number of concurrently-spawned cells: launching a whole
+      # large matrix at once (the legacy win-full profile peaked at ~150 cells)
+      # overwhelmed the runner queue and silently dropped jobs (empty steps,
+      # no metrics) as infra failures.
       max-parallel: 40
       matrix:
         include: ${{ fromJson(needs.resolve.outputs.cells) }}

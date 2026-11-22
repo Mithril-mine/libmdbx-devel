@@ -2834,14 +2834,14 @@
     ]
   },
   "notes": [
-    "TASK-28 testing-infra-v2 registry; mirrors 7 legacy workflows as-is (no matrix redesign).",
-    "cell counts: linux=17, macos=6, msvc=40, mscl=16, mingw=8, cxx-msvc=100, android=15+buildonly, emu=1; total=203.",
-    "full = union of domain cells (no duplicate ids); known-flaky cells (macOS smoke_fault, B13 WIP) kept in full for now, flagged via known_flaky.",
-    "ARM64 Windows cells historically carried ctest.exclude=smoke_sp_ (B14/TASK-27); the exclusion was removed (2026-10-07) after the smoke framework fixes.",
-    "Android cells are build-only except the emulator pilot (android-r27d-x86-64-emu): boots an API-30 x86_64 AVD and runs smoke_basic/smoke_chk via adb. Kept in nightly full for stability signal; not part of the change-addressed gate.",
-    "push-quick profile: 2 linux + 1 macos + 3 windows (v142 win2022, v145 winlatest, mingw) = 7 cells, fast scope, on any push."
+    "cell counts: linux=23 (15 domain incl. the sanitizer/alt-options/coverage cells + 8 MDBX_LOCKING flavors), macos=6, win-msvc=44, win-cxx=78, win-mscl=18, win-mingw=9, android=15 build-only + 1 emulator; total=194.",
+    "full = union of the domain cells (no duplicate ids).",
+    "ARM64 Windows cells historically carried a ctest.exclude=smoke_sp_ quarantine; the exclusion was removed (2026-10-07) after the smoke framework fixes.",
+    "Android cells are build-only except the emulator pilot (android-r27d-x86-64-emu): boots an API-30 x86_64 AVD and runs smoke_basic/smoke_chk via adb. Kept in the nightly profiles for the stability signal; not part of the change-addressed gate.",
+    "push-quick profile: 5 linux + 1 macos + 3 windows (v142 win2022, v145 winlatest, mingw) = 9 cells, fast scope, on every push to devel/master and on every pull_request.",
+    "the nightly profiles belong to the platform workflows (ci-linux/ci-windows/ci-macos/ci-android, full scope); the CI_NIGHTLY marker (GTEST_SHUFFLE) travels via the ci-run.yml nightly input."
   ],
-  "zones_notes": "CI v3.5 model: change-addressed gate = union(push-quick, win-gate). push on ANY branch runs push-quick (7 surface cells, fast scope; Windows = v142 on win2022 + v145 on winlatest + mingw). A change touching any common_prefix (src/, CMakeLists.txt, mdbx.h, .github/workflows/, ...) is addressed by change-addressed = push-quick∪win-gate (~16 cells), which covers the full Windows axis matrix (v142/v143/v145, mscl, mingw, x64/win32/arm64, mscrt on/off, shared on/off, debug/release), Linux, macos. Nightly full (schedule on master) keeps the 190-cell repeated stochastic coverage. Consistency and axis coverage are enforced by tests/ci/validate-config.py (CI job + make test-ci-config).",
+  "zones_notes": "CI v3.5 model: change-addressed gate = union(push-quick, win-gate). Push on devel/master and every pull_request run push-quick (9 cells, fast scope; Windows = v142 on win2022 + v145 on winlatest + mingw). A change touching any common_prefix (src/, CMakeLists.txt, mdbx.h, .github/workflows/, ...) is addressed by change-addressed = push-quick∪win-gate (18 cells), which covers the full Windows axis matrix (v142/v143/v145, mscl, mingw, x64/win32/arm64, mscrt on/off, shared on/off, debug/release), Linux, macos. The repeated stochastic coverage belongs to the platform-nightly full-scope profiles (linux-nightly 11 + win-gate 9 + mac-nightly 3 + android-nightly 4). Consistency and axis coverage are enforced by tests/ci/validate-config.py (CI job + make test-ci-config).",
   "common_prefixes": [
     "src/",
     "cmake/",
