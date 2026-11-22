@@ -219,6 +219,7 @@ set(MDBX_TEST_TIMEOUTS
   "key-comparators=30"
   "key-from=30"
   "lck-contention=30"
+  "lck-less=60"
   "lock-events=60"
   "maindb_ordinal=30"
   "managed-lifecycle=30"
