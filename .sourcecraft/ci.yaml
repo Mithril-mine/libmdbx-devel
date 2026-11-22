@@ -13,8 +13,11 @@ on:
 # mirrors GitHub Infra v3: fast scope on push, full corpus on schedule.
 # Workflows use the cmake-only CI_ACTION=sourcecraft_ci (no `make all`
 # round) to stay well inside the cube duration limit.
-env:
-  MDBX_BUILD_OPTIONS: -DMDBX_CHECKING=2 -DMDBX_DEBUG=0 -DMDBX_FORCE_ASSERTIONS=1 -DxMDBX_DEBUG_SPILLING=1 -DMDBX_DEBUG_SPILLING=1
+#
+# The MDBX build options are passed as explicit ci.sh/cmake args, NOT as env:
+# the cmake-only path (sourcecraft_ci) never reads the MDBX_* env (CMake does
+# not consume arbitrary env vars; the GNUmakefile CMAKE_OPT bridge is out of
+# this path), so an env-borne option silently degrades to the default.
 
 workflows:
   ci-linux-gcc-fast:
@@ -31,7 +34,7 @@ workflows:
           - name: ci-step
             image: dh-mirror.gitverse.ru/jakoch/cpp-devbox:forky-latest
             script:
-              - CC=gcc CXX=g++ test*/ci/ci.sh "-DCMAKE_BUILD_TYPE=Devel|-DMDBX_BUILD_CXX:BOOL=OFF"
+              - CC=gcc CXX=g++ test*/ci/ci.sh "-DCMAKE_BUILD_TYPE=Devel|-DMDBX_BUILD_CXX:BOOL=OFF|-DMDBX_CHECKING=2|-DMDBX_DEBUG=0|-DMDBX_DEBUG_SPILLING=1"
   ci-linux-clang-fast:
     settings:
       max_cube_duration: 60m
@@ -46,7 +49,7 @@ workflows:
           - name: ci-step
             image: dh-mirror.gitverse.ru/jakoch/cpp-devbox:forky-latest
             script:
-              - CC=clang CXX=clang++ test*/ci/ci.sh "-DCMAKE_BUILD_TYPE=MinSizeRel|-DMDBX_BUILD_CXX:BOOL=ON"
+              - CC=clang CXX=clang++ test*/ci/ci.sh "-DCMAKE_BUILD_TYPE=MinSizeRel|-DMDBX_BUILD_CXX:BOOL=ON|-DMDBX_CHECKING=2|-DMDBX_DEBUG=0|-DMDBX_DEBUG_SPILLING=1"
   ci-linux-nightly-full:
     settings:
       max_cube_duration: 60m
@@ -59,4 +62,4 @@ workflows:
           - name: ci-step
             image: dh-mirror.gitverse.ru/jakoch/cpp-devbox:forky-latest
             script:
-              - CC=clang CXX=clang++ test*/ci/ci.sh "-DCMAKE_BUILD_TYPE=MinSizeRel|-DMDBX_BUILD_CXX:BOOL=ON|-DENABLE_GCOV:BOOL=ON"
+              - CC=clang CXX=clang++ test*/ci/ci.sh "-DCMAKE_BUILD_TYPE=MinSizeRel|-DMDBX_BUILD_CXX:BOOL=ON|-DENABLE_GCOV:BOOL=ON|-DMDBX_CHECKING=2|-DMDBX_DEBUG=0|-DMDBX_DEBUG_SPILLING=1"
