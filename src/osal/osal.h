@@ -373,7 +373,12 @@ MDBX_INTERNAL int osal_vasprintf(char **strp, const char *fmt, va_list ap);
 #define MADV_DONTDUMP MADV_NOCORE
 #endif /* MADV_NOCORE -> MADV_DONTDUMP */
 
-MDBX_MAYBE_UNUSED MDBX_INTERNAL void osal_jitter(bool tiny);
+/* No MDBX_INTERNAL here, deliberately: the header-inlined jitter4testing()
+ * references osal_jitter() in every TU compiled with MDBX_DEBUG > 0,
+ * including the foreign TUs (the white-box tests), so the definition must
+ * stay externally linkable although the alloyed build makes the other
+ * internals static. */
+MDBX_MAYBE_UNUSED void osal_jitter(bool tiny);
 
 /* max bytes to write in one call */
 #if defined(_WIN64)

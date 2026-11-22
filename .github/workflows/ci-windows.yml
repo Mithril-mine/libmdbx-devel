@@ -125,7 +125,9 @@ jobs:
   # real database. This is the guard for the amalgamated-only Windows build
   # problems (e.g. the POSIX errno/E*-macros poison that once leaked into
   # the flattened mdbx.c++/mdbx-internals.h and broke the public header and
-  # the STL there).
+  # the STL there). It is also the designated Windows check with the debug
+  # fully off (Release, no explicit options): the registry cells run their
+  # tests with MDBX_CHECKING > 0, only this job builds CHECKING=0.
   amalgamated:
     needs: [resolve, dist]
     runs-on: windows-latest
