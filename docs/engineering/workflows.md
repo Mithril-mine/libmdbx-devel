@@ -133,14 +133,14 @@ remains only as the SourceCraft cube runner.
 
   | Profile | Cells | Use |
   |---|---|---|
-  | `push-quick` | 9 | every push (devel/master) / PR gate baseline |
+  | `push-quick` | 10 | every push (devel/master) / PR gate baseline |
   | `win-gate` | 9 | added on common-code changes (Windows axis matrix, full scope nightly) |
-  | `full` | 24 | fallback when no successful base anchor exists in ancestry |
+  | `full` | 25 | fallback when no successful base anchor exists in ancestry |
   | `coverage` | 3 | coverage-export cells |
-  | `linux-locking` | 8 | MDBX_LOCKING flavors (SYSV/1988/2001/2008 x gcc/clang) |
+  | `linux-locking` | 8 | MDBX_LOCKING flavors (SYSV/1988/2001/2008 x gcc/clang, Linux-only — fixed on Windows) |
   | `win-arm64` | 24 | native ARM64-Windows cells |
   | `android-emulator` | 1 | android emulator pilot |
-  | `linux-nightly` | 11 | `ci-linux` schedule |
+  | `linux-nightly` | 12 | `ci-linux` schedule (+ the classic `make check` gate) |
   | `mac-nightly` | 3 | `ci-macos` schedule |
   | `android-nightly` | 4 | `ci-android` schedule |
 

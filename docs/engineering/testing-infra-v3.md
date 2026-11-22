@@ -10,12 +10,22 @@
 
 ## 1. Components
 
-- **Registry** — `tests/ci/config.json`, single source of truth: 194 build/test cells
+- **Registry** — `tests/ci/config.json`, single source of truth: 191 build/test cells
   (`id`, `runs-on`, `cmake` args incl. the `flag|value` pair form, `ctest`
   regex/exclude/runtime, `env`, optional `coverage`/`build_only`/`ndk`/`emulator`/
   `expected_sec`/`build_parallel`), profiles, and `common_prefixes` (12 entries).
   All MDBX build options are explicit `cmake` args — an `MDBX_*` env key is
   forbidden by the structure check (CMake never reads env; the runner is cmake-based).
+  Every test-running cell carries an explicit `MDBX_CHECKING > 0` (the checked tier:
+  `RelWithDebInfo` + `CHECKING=2` + `DEBUG=1`); the only exceptions are the designated
+  Release cells with the debug fully off (the all-warnings gate, the old-image compat
+  cell, the arm pair, `macos-macos15-release`, the ci-windows amalgamated job). The
+  `Debug` build type differs from the rest only on Windows with
+  `MDBX_WITHOUT_MSVC_CRT=OFF` (the CRT runtime choice) — elsewhere the checked tier
+  trades optimization for speed and sets `CHECKING`/`DEBUG` explicitly. Runner policy:
+  prefer the latest images (ubuntu-latest; a single ubuntu-24.04 compat cell, the
+  `make dist` job keeps ubuntu-24.04). `MDBX_LOCKING` is fixed on Windows (a platform
+  limitation), so the LOCKING flavors are Linux-only.
 - **Two-tier change addressing** — `tests/ci/select-cells.py`: a diff touching any
   `common_prefixes` entry selects the change-addressed gate
   (`push-quick` ∪ `win-gate`, covering the full Windows axis matrix), otherwise
@@ -55,14 +65,14 @@
 
 | Profile | Cells | Consumed by |
 |---|---|---|
-| `push-quick` | 9 | every push (devel/master) / PR gate baseline |
+| `push-quick` | 10 | every push (devel/master) / PR gate baseline |
 | `win-gate` | 9 | added on common-code changes (Windows axis matrix) |
-| `full` | 24 | fallback when no successful base anchor exists in ancestry |
+| `full` | 25 | fallback when no successful base anchor exists in ancestry |
 | `coverage` | 3 | coverage-export cells |
 | `linux-locking` | 8 | `MDBX_LOCKING` flavors |
 | `win-arm64` | 24 | native ARM64-Windows cells |
 | `android-emulator` | 1 | emulator pilot |
-| `linux-nightly` | 11 | `ci-linux` schedule |
+| `linux-nightly` | 12 | `ci-linux` schedule (+ the classic `make check` gate) |
 | `mac-nightly` | 3 | `ci-macos` schedule |
 | `android-nightly` | 4 | `ci-android` schedule |
 
