@@ -51,10 +51,15 @@ jobs:
         shell: bash
         env:
           EVENT_REF: ${{ github.event.client_payload.ref }}
+          # workflow_dispatch fires with github.ref = the dispatched branch:
+          # honor it, so a UI/API dispatch on a branch builds THAT branch
+          # (the bare master fallback only applies to the schedule and to a
+          # bare repository_dispatch).
+          GITHUB_REF_NAME: ${{ github.ref_name }}
         run: |
           set -euo pipefail
           CELLS=$(tests/ci/select-cells.py --profile android-nightly)
-          REF="${EVENT_REF:-master}"
+          REF="${EVENT_REF:-${GITHUB_REF_NAME:-master}}"
           JSON=$(tests/ci/resolve-cells.py "$CELLS" full 2> >(sed 's/^/==> /' >&2) || { echo "resolve-cells failed" >&2; exit 1; })
           echo "cells=${JSON}" >> "$GITHUB_OUTPUT"
           echo "ref=${REF}" >> "$GITHUB_OUTPUT"

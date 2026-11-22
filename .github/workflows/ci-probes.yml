@@ -5,12 +5,9 @@ name: ci-probes
 # that MDBX_PROBES builds cleanly and the probe-gated regression tests pass on
 # Linux, Windows and macOS. Lightweight: a single cell, the probe self-tests
 # plus the MDBX_PROBES-gated issue regressions (gh0103_restart, gh0104_clone,
-# gh0327; the latter skips where copy_file_range() is not used).
-# gh0332; the latter runs on Windows only).
-# gh0333; the latter runs on Windows only).
-# gh0337).
-# gh0331_direct; the latter skips on Windows).
-# gh0334_remap; the latter skips on Windows).
+# gh0327, gh0332, gh0333, gh0337, gh0331_direct, gh0334_remap — the
+# inapplicable ones skip themselves: the Windows-only regressions skip
+# elsewhere, the POSIX-side ones skip on Windows).
 # Supersedes ci-tracing (mprobe v1, tests/tracing/): the engine-side
 # probe-bus unified the taxonomy with a process-wide registry, control channel
 # (in-process mdbx_probe_ctl + file IPC) and no external tracer dependencies.

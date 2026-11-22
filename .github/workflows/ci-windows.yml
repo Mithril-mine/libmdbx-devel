@@ -1,10 +1,10 @@
 name: ci-windows
 
 # Infra v3 platform nightly gate for Windows (compact matrix, see
-# tests/ci/config.json zones_notes). Runs the win-gate profile (10 registry
-# cells: msvc v142/v143/v145 x64/win32/arm64 diagonals, clang-cl (mscl),
-# mingw; build-only cells cover the toolset x std x arch x crt compile grid)
-# at the FULL ctest scope on run cells.
+# tests/ci/config.json zones_notes). Runs the win-gate profile (9 registry
+# cells: the cxx-v142/v143/v145 diagonals, an msvc-v145 static run cell,
+# clang-cl (mscl) and mingw run cells, including the non-default option
+# deviations nodbisp/nobigfoot/nativeseh-off) at the FULL ctest scope.
 #
 # NOT a duplicate: ci-dispatch handles push-quick and manual/agent profile
 # dispatches; the nightly ownership belongs to the four platform workflows.
@@ -132,7 +132,6 @@ jobs:
     timeout-minutes: 60
     env:
       CI: GITHUB
-      REF: ${{ needs.resolve.outputs.ref }}
     steps:
       - name: download amalgamated tarball
         uses: actions/download-artifact@v8

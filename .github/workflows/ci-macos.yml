@@ -2,15 +2,14 @@ name: ci-macos
 
 # Infra v3 platform gate for macOS (migrated from the legacy `make test`
 # matrix; see docs/engineering/testing-infra-v3.md). Runs the mac-nightly
-# profile (6 registry cells: macos-15, xcode-27, macos-26-intel, Debug/
-# Release, CXX on) with the fast ctest scope (smoke-t1 | ut.* minus
-# ut.heavy).
+# profile (3 registry cells: macos-15/macos-26-intel Release, xcode-27 Debug,
+# CXX on) with the full ctest scope.
 #
 # The legacy `make check`/`test` also invoked `test-stochastic`
 # (multi-process mdbx_test, 600s), unstable since the TASK-43 port
 # (bad75821) — DB grows into MDBX_MAP_FULL / MDBX_UNABLE_EXTEND_MAPSIZE.
-# Stochastic coverage is provided by ci-dispatch nightly (full profile +
-# full scope) instead.
+# Stochastic coverage is owned by the nightly full-scope gates of the
+# platform workflows (including this one).
 
 env:
   CI: GITHUB
@@ -54,10 +53,15 @@ jobs:
         shell: bash
         env:
           EVENT_REF: ${{ github.event.client_payload.ref }}
+          # workflow_dispatch fires with github.ref = the dispatched branch:
+          # honor it, so a UI/API dispatch on a branch builds THAT branch
+          # (the bare master fallback only applies to the schedule and to a
+          # bare repository_dispatch).
+          GITHUB_REF_NAME: ${{ github.ref_name }}
         run: |
           set -euo pipefail
           CELLS=$(tests/ci/select-cells.py --profile mac-nightly)
-          REF="${EVENT_REF:-master}"
+          REF="${EVENT_REF:-${GITHUB_REF_NAME:-master}}"
           JSON=$(tests/ci/resolve-cells.py "$CELLS" full 2> >(sed 's/^/==> /' >&2) || { echo "resolve-cells failed" >&2; exit 1; })
           echo "cells=${JSON}" >> "$GITHUB_OUTPUT"
           echo "ref=${REF}" >> "$GITHUB_OUTPUT"
