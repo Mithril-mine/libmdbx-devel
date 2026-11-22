@@ -5,7 +5,8 @@ name: ci-run
 # (tests/ci/config.json): configure + build + ctest with the fast/full scope,
 # uploads metrics + fault artifacts on failure. No ci.sh involved.
 #
-# Callers: ci-dispatch.yml (push / schedule / dispatch), or ad-hoc
+# Callers: ci-dispatch.yml (push / PR / dispatch), the platform nightlies
+# (ci-linux / ci-windows / ci-macos / ci-android), or ad-hoc
 # workflow_dispatch with an explicit cell id.
 #
 # All cell fields (runs-on/env/cmake/build_only) are read from
