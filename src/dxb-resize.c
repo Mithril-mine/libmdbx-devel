@@ -54,7 +54,7 @@ static int windows_remap_lock_exclusive(MDBX_env *env, const unsigned mresize_fl
 }
 #endif /* Windows */
 
-__cold int dxb_resize(MDBX_env *const env, const pgno_t allocated_pgno, const pgno_t size_pgno, pgno_t limit_pgno,
+__cold int dxb_resize(MDBX_env *const env, const pgno_t allocated_pgno, pgno_t size_pgno, pgno_t limit_pgno,
                       unsigned mresize_flags) {
   /* the request as passed by the caller, before the platform-specific
    * escalation below may add or clear bits */
@@ -122,6 +122,15 @@ __cold int dxb_resize(MDBX_env *const env, const pgno_t allocated_pgno, const pg
     /* The actual mapsize may be less since the geo.upper may be changed
      * by other process. Avoids remapping until it necessary. */
     limit_pgno = prev_limit_pgno;
+  }
+  if ((requested & txn_shrink_allowed) == 0) {
+    /* A grow request must never reduce the mapping. Such a request may be decided by a check made before acquiring the
+     * remap-lock, e.g. in txn_setup_primal() at the start of a read txn whose snapshot is larger than the mapping it
+     * saw. Meanwhile another thread of this process may grow the mapping even further: a write txn that allocates pages
+     * at the end of the datafile. Shrinking the mapping back to the size requested by the reader leaves the pages of
+     * that write txn beyond dxb_mmap.current, which breaks the invariant all the write paths rely on, e.g.
+     * mincore_fetch() then gets a negative length and alloca() overflows. */
+    size_pgno = (pgno_t)max_unsigned(size_pgno, bytes2pgno(env, prev_size));
   }
   const size_t limit_bytes = pgno_ceil2os_bytes(env, limit_pgno);
   const size_t size_bytes = pgno_ceil2os_bytes(env, size_pgno);
@@ -313,6 +322,9 @@ bailout:
       eASSERT0(env, size_bytes == env->dxb_mmap.current);
     else
       eASSERT0(env, size_bytes <= env->dxb_mmap.current);
+    /* a request without the shrink permission never reduces the mapping below the pages it had */
+    eASSERT0(env,
+             (requested & txn_shrink_allowed) || env->dxb_mmap.current >= pgno2bytes(env, bytes2pgno(env, prev_size)));
     /* update env-geo to avoid influences */
     env->geo_in_bytes.now = env->dxb_mmap.current;
     env->geo_in_bytes.upper = env->dxb_mmap.limit;
