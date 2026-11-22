@@ -949,6 +949,15 @@ add_ut(reverse_insertions SOURCE ut/txn/reverse_insertions.c++)
         # coverage stays with the mdbx_test framework's --inject-writefault
         # smoke scenarios.
         if(NOT WIN32)
+        # The Windows-only reproducer/stress corpus (#549): the bodies gate
+        # themselves with #ifdef _WIN32 and skip elsewhere, so the non-Windows
+        # cells carry the skip evidence. The fork-based corpus above (the
+        # crash-window matrix, the dead-writer matrix, the lock-events smoke)
+        # is POSIX-only for the same reason in reverse.
+        add_ut(windows-mmap-extent SOURCE ut/durability/windows-mmap-extent.c++)
+        set_tests_properties(windows-mmap-extent PROPERTIES LABELS "ut;ut.durability")
+        add_ut(windows-lck-race SOURCE ut/durability/windows-lck-race.c++)
+        set_tests_properties(windows-lck-race PROPERTIES LABELS "ut;ut.durability")
           add_ut(crash-windows SOURCE ut/durability/crash-windows.c++)
           set_tests_properties(crash-windows PROPERTIES LABELS "ut;ut.durability")
           if(MDBX_PROBES)

@@ -248,4 +248,6 @@ set(MDBX_TEST_TIMEOUTS
   "upsert_alldups=30"
   "value2key=30"
   "walk_contracts=30"
+  "windows-lck-race=900"
+  "windows-mmap-extent=60"
 )
