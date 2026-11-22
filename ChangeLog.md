@@ -84,7 +84,6 @@ A hardening and refinement release: data-safety and corruption-resistance fixes 
     - Fixed an out-of-bounds read in `mdbx_cursor_scroll()`/`distance()` on a huge `deepness` ([#85](https://github.com/Mithril-mine/libmdbx-devel/issues/85)).
     - Fixed a damaged first meta-page failing the open with two intact ones at another page size ([#485](https://github.com/Mithril-mine/libmdbx-devel/issues/485)).
     - Fixed a crafted maximal-height tree writing one slot past the cursor stack in a root split ([#485](https://github.com/Mithril-mine/libmdbx-devel/issues/485)).
-    - Fixed `mdbx_dbi_dupsort_depthmask()` performing an undefined shift on a crafted nested-tree height ([#485](https://github.com/Mithril-mine/libmdbx-devel/issues/485)).
     - Fixed crafted huge item counts overflowing the estimate arithmetic; the result is clamped now ([#485](https://github.com/Mithril-mine/libmdbx-devel/issues/485)).
 
  - Crashes, hangs and undefined behavior:
