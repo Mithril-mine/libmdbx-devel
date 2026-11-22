@@ -299,7 +299,8 @@ int mdbx_put(MDBX_txn *txn, MDBX_dbi dbi, const MDBX_val *key, MDBX_val *data, M
           if (unlikely(key->iov_len > cx.outer.clc->k.lmax || key->iov_len < cx.outer.clc->k.lmin ||
                        data->iov_len > cx.outer.clc->v.lmax || data->iov_len < cx.outer.clc->v.lmin)) {
             /* the cursor couple is already registered in txn->cursors[dbi],
-             * so it must be unregistered before leaving (INV-CC4) */
+             * so it must be unregistered before leaving
+             * (cursor-couple-must-be-unregistered-before-bailout) */
             txn->cursors[dbi] = cx.outer.next;
             return LOG_IFERR(MDBX_BAD_VALSIZE);
           }
