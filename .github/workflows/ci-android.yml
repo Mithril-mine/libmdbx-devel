@@ -38,6 +38,7 @@ jobs:
       cells: ${{ steps.resolve.outputs.cells }}
       ref: ${{ steps.resolve.outputs.ref }}
       scope: ${{ steps.resolve.outputs.scope }}
+      nightly: ${{ github.event_name == 'schedule' }}
     steps:
       - name: checkout
         uses: actions/checkout@v7
@@ -74,3 +75,4 @@ jobs:
       coverage: ${{ matrix.coverage }}
       ndk: ${{ matrix.ndk }}
       ref: ${{ needs.resolve.outputs.ref }}
+      nightly: ${{ needs.resolve.outputs.nightly == 'true' }}

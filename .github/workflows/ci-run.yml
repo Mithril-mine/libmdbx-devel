@@ -42,6 +42,14 @@ on:
         required: false
         default: ''
         description: Android NDK version for android cells (empty for non-android)
+      nightly:
+        type: boolean
+        required: false
+        default: false
+        description: >-
+          Nightly marker (schedule runs): enables GTEST_SHUFFLE=1 in run-cell.py,
+          so a different subset of the suite runs each night under the
+          GTEST_RUNTIME_LIMIT soft deadline
 
 permissions:
   contents: read
@@ -52,6 +60,9 @@ jobs:
     timeout-minutes: 60
     env:
       CI_CTEST_TIMEOUT: "600"
+      # NOTE: a GITHUB_ENV export in the caller's resolve job does not reach
+      # this reusable-workflow job, so the marker travels as an explicit input.
+      CI_NIGHTLY: ${{ inputs.nightly == true && '1' || '' }}
     steps:
       - name: checkout
         uses: actions/checkout@v7
