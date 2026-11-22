@@ -3150,21 +3150,16 @@ typedef struct MDBX_envinfo MDBX_envinfo;
  * the last committed write transaction, and at next time, other information
  * can be returned.
  *
- * If the environment is not open yet (i.e. \ref mdbx_env_open() has not been
- * called or has failed), the available info is returned with the rest zeroed:
- * the `mi_bootid.current` and `mi_sys_*` fields are reported as zeros, while
- * the geometry (`mi_geo`), `mi_maxreaders` and `mi_dxb_pagesize` are still
- * filled from the handle's settings.
+ * For a not-yet-opened environment (i.e. \ref mdbx_env_open() has not been
+ * called or has failed) the call succeeds and reports only what is known
+ * before the open: the geometry (`mi_geo`, the limits set via
+ * \ref mdbx_env_set_geometry()), `mi_maxreaders` and `mi_dxb_pagesize`
+ * (zero if not yet determined). Everything else - including `mi_recent_txnid`,
+ * the meta-pages troika fields, `mi_bootid` and the `mi_sys_*` system
+ * information - is zeroed rather than filled with guesses.
  *
  * Legacy \ref mdbx_env_info() correspond to calling \ref mdbx_env_info_ex()
  * with the null `txn` argument.
- *
- * For a not-yet-opened environment the call succeeds and reports only what
- * is known before the open: the geometry limits set via
- * \ref mdbx_env_set_geometry(), the readers limit and the page size (zero
- * if not yet determined). Everything else - including `mi_recent_txnid`,
- * the meta-pages troika fields, `mi_bootid` and the `mi_sys_*` system
- * information - is zeroed rather than filled with guesses.
  *
  * \param [in] env     An environment handle returned by \ref mdbx_env_create()
  * \param [in] txn     A transaction handle returned by \ref mdbx_txn_begin()
