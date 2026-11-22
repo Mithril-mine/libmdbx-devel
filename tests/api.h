@@ -329,6 +329,23 @@ LIBMDBX_API int mdbx_tst_config_exclusive_fastpath(void);
  * \ingroup c_testing */
 LIBMDBX_API int mdbx_tst_env_mapping(const MDBX_env *env, void **base, size_t *limit, size_t *current);
 
+/** \brief Issues the plain grow request of the datafile mapping, exactly as
+ * txn_setup_primal() does when a read txn starts with a snapshot larger than
+ * the mapping it saw.
+ *
+ * txn_setup_primal() checks the snapshot against the mapping without the
+ * remap-lock, so by the time this request runs, another thread may have grown
+ * the mapping past the requested size; such a stale request must not reduce
+ * the mapping.
+ *
+ * \param env        The environment, opened.
+ * \param used_pgno  The first unallocated page of the snapshot.
+ * \param size_pgno  The datafile size of the snapshot, in pages.
+ * \return The result of the internal dxb_resize(), or MDBX_EINVAL for a bad
+ *         handle, used_pgno > size_pgno or a size beyond the mapping limit.
+ * \ingroup c_testing */
+LIBMDBX_API int mdbx_tst_dxb_grow(MDBX_env *env, uint64_t used_pgno, uint64_t size_pgno);
+
 /** \brief Reads the readahead anchor edge in bytes.
  *
  * The internal readahead anchor packs the enable-bit in its LSB and the

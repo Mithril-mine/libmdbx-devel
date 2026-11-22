@@ -498,6 +498,15 @@ __cold int mdbx_tst_env_mapping(const MDBX_env *env, void **base, size_t *limit,
   return MDBX_SUCCESS;
 }
 
+__cold int mdbx_tst_dxb_grow(MDBX_env *env, uint64_t used_pgno, uint64_t size_pgno) {
+  if (unlikely(!env || !env->dxb_mmap.base || used_pgno > size_pgno))
+    return MDBX_EINVAL;
+  const pgno_t limit_pgno = bytes2pgno(env, env->dxb_mmap.limit);
+  if (unlikely(size_pgno > limit_pgno))
+    return MDBX_EINVAL;
+  return dxb_resize(env, (pgno_t)used_pgno, (pgno_t)size_pgno, limit_pgno, 0);
+}
+
 __cold uint64_t mdbx_tst_env_readahead_bytes(const MDBX_env *env) {
   if (unlikely(!env))
     return 0;

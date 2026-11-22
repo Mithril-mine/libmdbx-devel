@@ -87,6 +87,7 @@ A hardening and refinement release: data-safety and corruption-resistance fixes 
     - Fixed crafted huge item counts overflowing the estimate arithmetic; the result is clamped now ([#485](https://github.com/Mithril-mine/libmdbx-devel/issues/485)).
 
  - Crashes, hangs and undefined behavior:
+    - Fixed a writer crashing with `SIGBUS` while another thread of its process starts a read transaction ([#592](https://github.com/Mithril-mine/libmdbx-devel/issues/592)).
     - Fixed `mdbx_env_open()` hangs, wrong mode inheritance and a missed duplicate-open refusal ([#317](https://github.com/Mithril-mine/libmdbx-devel/issues/317)).
     - Fixed the parent's cursors left on freed pages after a failed nested commit or checkpoint ([#326](https://github.com/Mithril-mine/libmdbx-devel/issues/326)).
     - Fixed a double free and crash on a write error during a large commit; now reported ([#321](https://github.com/Mithril-mine/libmdbx-devel/issues/321)).
@@ -241,6 +242,7 @@ A hardening and refinement release: data-safety and corruption-resistance fixes 
  - [Omar Gylyjov](https://github.com/dahiAbi) for reporting and fixing the Android database-open failure.
  - [wangkaiyi](https://github.com/wangkaiyi) for reporting the compacting-copy hang.
  - [Mohsin Ismail](https://github.com/mibaloch) for reporting the preopen-inspection defect.
+ - [SSE4](https://github.com/SSE4) for reporting and fixing the writer crash on a concurrent start of a read transaction.
 
 --------------------------------------------------------------------------------
 
