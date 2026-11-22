@@ -10,21 +10,26 @@
 
 ## 1. Components
 
-- **Registry** — `tests/ci/config.json`, single source of truth: 192 build/test cells
-  (`id`, `runs-on`, `cmake` flags incl. the `flag|value` pair form, `ctest`
+- **Registry** — `tests/ci/config.json`, single source of truth: 194 build/test cells
+  (`id`, `runs-on`, `cmake` args incl. the `flag|value` pair form, `ctest`
   regex/exclude/runtime, `env`, optional `coverage`/`build_only`/`ndk`/`emulator`/
   `expected_sec`/`build_parallel`), profiles, and `common_prefixes` (12 entries).
+  All MDBX build options are explicit `cmake` args — an `MDBX_*` env key is
+  forbidden by the structure check (CMake never reads env; the runner is cmake-based).
 - **Two-tier change addressing** — `tests/ci/select-cells.py`: a diff touching any
   `common_prefixes` entry selects the change-addressed gate
   (`push-quick` ∪ `win-gate`, covering the full Windows axis matrix), otherwise
   `push-quick`. Explicit path lists, fixed profiles (`--profile`) and a diversity-
   preserving cap (`--cap N`) are supported.
-- **Dispatcher** — `.github/workflows/ci-dispatch.yml`: `push` on any branch and
-  `pull_request` (devel/master) run the orchestrated change-addressed gate;
-  `workflow_dispatch`/`repository_dispatch` carry `profile`/`cell` + `ref` for agents
-  (a bare event falls back to `push-quick`). The `validate-config` job blocks the
-  whole dispatch on registry inconsistency. Nightly ownership belongs to the
-  per-platform workflows, not to the dispatcher.
+- **Dispatcher** — `.github/workflows/ci-dispatch.yml`: `push` (devel/master) and
+  `pull_request` (unfiltered: the gate must follow the PR whatever its current base,
+  [#492](https://github.com/Mithril-mine/libmdbx-devel/issues/492)) run the
+  orchestrated change-addressed gate; `workflow_dispatch`/`repository_dispatch` carry
+  `profile`/`cell` + `ref` for agents (a bare event falls back to `push-quick`). A
+  feature branch without a PR gets no automatic gate — gate it on demand via
+  `repository_dispatch`. The `validate-config` job blocks the whole dispatch on
+  registry inconsistency. Nightly ownership belongs to the per-platform workflows,
+  not to the dispatcher.
 - **Orchestrator** — `tests/ci/orchestrate.py` (requirements:
   [ci-orchestrator-requirements.md](ci-orchestrator-requirements.md)), the sole owner of run cancellation
   (no native `concurrency` group by design): the diff anchor is the nearest
@@ -33,12 +38,15 @@
   linear-history runs are superseded, force-pushed (history-rewritten) runs
   cancelled, same-SHA push/PR duplicates deduplicated (PR wins); a follow-up diff
   that touches no common prefix preserves the superseded run in flight and spawns
-  only the complement (issue #224). Branch names are normalized before the Actions
-  API call.
+  only the complement
+  ([#224](https://github.com/Mithril-mine/libmdbx-devel/issues/224)). Branch names are
+  normalized before the Actions API call.
 - **Runner** — `.github/workflows/ci-run.yml` (`workflow_call`): exactly one registry
   cell per call, scope `fast`|`fast+hygiene`|`full`, per-cell env/cmake/ctest
-  semantics (build-only, emulator, NDK), `cell-metrics-<cell>` metrics artifact,
-  coverage export and failure artifacts.
+  semantics (build-only, emulator, NDK), the `nightly` input (the platform schedules
+  pass `CI_NIGHTLY=1` through it, enabling `GTEST_SHUFFLE` so a different subset of
+  the suite runs each night under the soft deadline), `cell-metrics-<cell>` metrics
+  artifact, coverage export and failure artifacts.
 - **Matrix resolution** — `tests/ci/resolve-cells.py`: registry ids → matrix rows
   `{cell, runs-on, scope, coverage, ndk}`, stably ordered slowest-first
   (`expected_sec`) to cut the makespan under the runner-queue throttle.
@@ -47,14 +55,14 @@
 
 | Profile | Cells | Consumed by |
 |---|---|---|
-| `push-quick` | 7 | every push / PR gate baseline |
+| `push-quick` | 9 | every push (devel/master) / PR gate baseline |
 | `win-gate` | 9 | added on common-code changes (Windows axis matrix) |
 | `full` | 24 | fallback when no successful base anchor exists in ancestry |
 | `coverage` | 3 | coverage-export cells |
 | `linux-locking` | 8 | `MDBX_LOCKING` flavors |
 | `win-arm64` | 24 | native ARM64-Windows cells |
 | `android-emulator` | 1 | emulator pilot |
-| `linux-nightly` | 9 | `ci-linux` schedule |
+| `linux-nightly` | 11 | `ci-linux` schedule |
 | `mac-nightly` | 3 | `ci-macos` schedule |
 | `android-nightly` | 4 | `ci-android` schedule |
 

@@ -65,48 +65,50 @@ CI check for fixable doxygen warnings is welcome; it must NOT be added to GitHub
 
 ## 4. CI gates
 
-- **SourceCraft** (primary): `ci-linux-debug-gcc` (smoke, no C++), `ci-linux-debug-clang`
-  (test, C++ ON), `ci-linux-release-spilling` (check, incl. amalgamation & install). Runs on
-  push and daily at 03:42 UTC. Cube timeout 30m — keep smoke/test within budget.
-- **GitHub Actions** (mirror): cross-platform matrix (linux/macos/windows-msvc/mingw/mscl/
-  cxx-msvc/android) — informational for the dev repo.
+- **SourceCraft** (primary): `ci-linux-gcc-fast` (gcc, Devel, no C++, fast ctest scope),
+  `ci-linux-clang-fast` (clang, MinSizeRel, C++ ON, fast ctest scope),
+  `ci-linux-nightly-full` (clang, MinSizeRel, C++ ON + gcov). Runs on push and daily at
+  03:42 UTC. Cube limit 60m — keep smoke/test within budget.
+- **GitHub Actions**: the testing-infra-v3 gates — the change-addressed gate
+  (`ci-dispatch` → `ci-run`) on push/PR, the per-platform nightly full-scope profiles,
+  plus the dedicated `ci-probes`/`ci-special-builds`/`ci-docs`/`ci-codegraph` workflows.
 - Required locally per `AGENTS.md`: Linux **and** Windows builds/tests (CMake + CTest).
 
 ## 4a. Testing-infra-v3 (addressable cells, orchestrator)
 
 Implemented on `master` (design: [testing-infra-v3.md](testing-infra-v3.md); the v2
-background: [testing-infra-design.md](testing-infra-design.md)); the legacy 7 GitHub
-workflows + `tests/ci/ci.sh` remain the documented fallback until the rollout is
-declared complete.
+background: [testing-infra-design.md](testing-infra-design.md)). `tests/ci/ci.sh`
+remains only as the SourceCraft cube runner.
 
 - **Registry** — `tests/ci/config.json`: single source of truth for every build configuration
-  ("cell"). Cell fields: `id`, `runs-on`, `env` (toolchain), `cmake[]` (args, `flag|value` form),
+  ("cell"). Cell fields: `id`, `runs-on`, `env` (toolchain: `CC`/`CXX`/`PATH`/coverage
+  transport; MDBX build options must be `cmake[]` args — an `MDBX_*` env key is forbidden,
+  CMake never reads env), `cmake[]` (args, `flag|value` form),
   `ctest` (`regex`/`exclude`/null), `build_only` (Android), `ndk` (Android NDK version, consumed
   by `setup-ndk` in ci-run.yml), `emulator` (B5 pilot: `{api-level, arch}` — the cell is built
   and its tests are replayed on a booted Android emulator via adb instead of ctest), `note`.
   The historical ARM64 Windows
-  `ctest.exclude=smoke_sp_` (B14/TASK-27) was removed in 2026-10 after the smoke-framework
+  `ctest.exclude=smoke_sp_` quarantine was removed in 2026-10 after the smoke-framework
   fixes. Generator pinning: a cell that passes `-G`/`-A`/`-T`
   is never overridden with Ninja; cells without them default to Ninja when available.
-- **Profiles**: `push-quick` (5 cells), `linux-full` (8), `win-full` (148), `mac-full` (6),
-  `android-build` (15, build-only), `linux-locking` (8, MDBX_LOCKING flavor matrix),
-  `win-arm64` (24, native ARM64-Win), `android-emulator` (1, B5 pilot), `full` (186,
-  no duplicate ids).
  - **Local runner** — `tests/ci/run-cell.py <cell-id> [--scope fast|full] [--build-dir <dir>]`: pure CMake/CTest,
   no `ci.sh`; rc 0 = ok, 1 = build/test fail, 2 = unknown id/usage. Reproduces a failing cell
   locally on Linux-capable cells. Exports `GTEST_RUNTIME_LIMIT` (default `CI_CTEST_TIMEOUT − 60`,
   i.e. 540s) for the in-test soft deadline and passes through `GTEST_RUNTIME_DEADLINE` (an absolute
   UTC-epoch deadline so a whole parallel run stops at one shared instant; the earliest of the two
   wins) — see `tests/ut/test-env.h++` and testing-codex C2.1 — and
-  sets `GTEST_SHUFFLE=1` only when `CI_NIGHTLY=1` (set by the `schedule` branch of the
-  orchestrator); on Windows CI the env `CI`/`MDBX_TEST_NO_CRT_POPUP` additionally silences
+  sets `GTEST_SHUFFLE=1` only when `CI_NIGHTLY=1` (the platform schedules pass it via the
+  ci-run.yml `nightly` input); on Windows CI the env `CI`/`MDBX_TEST_NO_CRT_POPUP` additionally silences
   CRT assert popups in the test binaries.
-- **Orchestrator** — `.github/workflows/ci-dispatch.yml`: `push` on any branch → the
+- **Orchestrator** — `.github/workflows/ci-dispatch.yml`: `push` (devel/master) → the
   orchestrated change-addressed gate (diff vs the nearest successful base run anchored by
   temporary `ci-ok-*` tags; no successful anchor in ancestry → full gate); `pull_request`
-  (devel/master) → the orchestrated gate on the PR head; `workflow_dispatch` →
-  `profile`|`cell` + `ref`; `repository_dispatch` (`profile`/`cell` + `ref`; bare event falls
-  back to `push-quick`) → addressed runs for agents. Nightly `full` runs belong to the
+  (unfiltered: the gate follows the PR whatever its current base,
+  [#492](https://github.com/Mithril-mine/libmdbx-devel/issues/492)) → the orchestrated gate
+  on the PR head; `workflow_dispatch` → `profile`|`cell` + `ref`; `repository_dispatch`
+  (`profile`/`cell` + `ref`; bare event falls back to `push-quick`) → addressed runs for
+  agents. A feature branch without a PR gets no automatic gate — gate it on demand via
+  `repository_dispatch`. Nightly `full` runs belong to the
   per-platform workflows (`ci-linux`/`ci-windows`/`ci-macos`/`ci-android`), not to the
   dispatcher.
   `resolve` job reads the registry from the requested ref and fails fast on unknown ids.
@@ -122,8 +124,8 @@ declared complete.
   for pushes too, not only for PRs.
 - **Runner** — `.github/workflows/ci-run.yml` (`workflow_call`): checkout ref (fetch-depth 0 +
   tags), optional `setup-ndk` (Android `ndk` field) with NDK_PATH/ANDROID_NDK_HOME export,
-  toolchain env (a registry `PATH` entry prepends to the runner PATH via `$GITHUB_PATH`),
-  configure+build (with `--config` for multi-config generators; Ninja only when the cell does
+  toolchain env (a registry `PATH` entry is prepended to the runner PATH in-process by
+  `run-cell.py`), configure+build (with `--config` for multi-config generators; Ninja only when the cell does
   not pin `-G`/`-A`/`-T`), ctest per-cell regex/exclude and `-C` config (skipped for
   `build_only`), artifacts on failure. Emulator cells (`emulator` field) run the whole build +
   test replay inside `reactivecircus/android-emulator-runner` instead of the plain build step.
@@ -131,14 +133,14 @@ declared complete.
 
   | Profile | Cells | Use |
   |---|---|---|
-  | `push-quick` | 7 | every push / PR gate baseline |
+  | `push-quick` | 9 | every push (devel/master) / PR gate baseline |
   | `win-gate` | 9 | added on common-code changes (Windows axis matrix, full scope nightly) |
   | `full` | 24 | fallback when no successful base anchor exists in ancestry |
   | `coverage` | 3 | coverage-export cells |
   | `linux-locking` | 8 | MDBX_LOCKING flavors (SYSV/1988/2001/2008 x gcc/clang) |
   | `win-arm64` | 24 | native ARM64-Windows cells |
   | `android-emulator` | 1 | android emulator pilot |
-  | `linux-nightly` | 9 | `ci-linux` schedule |
+  | `linux-nightly` | 11 | `ci-linux` schedule |
   | `mac-nightly` | 3 | `ci-macos` schedule |
   | `android-nightly` | 4 | `ci-android` schedule |
 
@@ -203,7 +205,7 @@ declared complete.
   (see [`build.md`](build.md) §6 and the `test-driven-development` skill).
 - Issue numbers in `tests/ut/issues/issue_gh00XX.c++` map to SourceCraft/GitHub issue numbers;
   new bug reports should add a regression there.
-- `MDBX_CHECKING=2` + `MDBX_FORCE_ASSERTIONS=1` (as CI does) surfaces internal invariant
+- `MDBX_CHECKING=2` (as CI does) surfaces internal invariant
   violations (`ENSURE`, `CHECKS0/1/2`, panic points) early.
 - The `mdbx_chk -vvn[w]` step after every stochastic probe validates on-disk integrity —
   never skip it when developing engine changes.
