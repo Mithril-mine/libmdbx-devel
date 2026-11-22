@@ -218,14 +218,12 @@ def main() -> int:
     print(f"==> build dir: {build_dir}")
 
     # Report every explicit MDBX_* build option so the effective configuration
-    # of a cell is visible at a glance in the CI log (cmake flags + env).
+    # of a cell is visible at a glance in the CI log. Only the cmake[] args
+    # are authoritative (see validate-config.py: MDBX_* env is forbidden —
+    # CMake never reads it).
     mdbx_options = sorted(
         arg for arg in (cell.get("cmake") or [])
         if arg.replace("-D", "", 1).startswith("MDBX_")
-    )
-    mdbx_options += sorted(
-        v for k, v in (cell.get("env") or {}).items()
-        if k.startswith("MDBX_")
     )
     if mdbx_options:
         print(f"==> mdbx-options: {' '.join(mdbx_options)}")

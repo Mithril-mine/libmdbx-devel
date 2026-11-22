@@ -115,6 +115,14 @@ def check_structure(cfg, errors):
                           f"'{c.get('runs-on')}'")
         if c.get("build_only") and c.get("ctest"):
             errors.append(f"cell {c['id']}: build_only with non-null ctest")
+        # MDBX_* build options must be explicit cmake[] args: the runner is
+        # cmake-based and never reads env (CMake does not consume arbitrary
+        # env vars; the legacy GNUmakefile CMAKE_OPT bridge is out of the v3
+        # path), so an env-borne option silently degrades to the default.
+        for env_key in c.get("env") or {}:
+            if env_key.startswith("MDBX_"):
+                errors.append(f"cell {c['id']}: env '{env_key}' — MDBX_* build "
+                              f"options must be explicit cmake[] args")
 
     # profile references valid
     for pname, ids in cfg.get("profiles", {}).items():
