@@ -1,20 +1,28 @@
 name: ci-linux
 
-# Infra v3 platform gate for Linux (migrated from the legacy `make check`
-# matrix; see docs/engineering/testing-infra-v3.md). Runs the linux-nightly
-# profile (11 registry cells: ubuntu-24.04 + ubuntu-26.04-arm Debug/Release
-# diagonals, the clang surface and profgc cells, the AddressSanitizer and
-# UBSan gates, and the MDBX_LOCKING flavors) with the full ctest scope.
+# Infra v3 platform gate for Linux (see docs/engineering/testing-infra-v3.md).
+# The nightly resolve runs the linux-nightly profile (12 registry cells) with
+# the full ctest scope: the RelWithDebInfo checked tier (CHECKING=2, DEBUG=1 —
+# RelWithDebInfo keeps the tests fast where the Debug build type carries no
+# platform meaning), the clang surface + profgc, the AddressSanitizer/UBSan
+# gates with CHECKING=2, the MDBX_LOCKING flavors, and the designated
+# Release exceptions with the debug fully off — incl. the `make all`-style
+# all-warnings Release cell. Per the runner policy the cells live on
+# ubuntu-latest (the single ubuntu-24.04 cell is the old-image compatibility
+# spot-check); the `dist` job below keeps ubuntu-24.04.
+#
+# The nightly also runs the classic `make check` gate (the `check` job):
+# clean, the CHECKING=2 smoke-assertion + the ninja-assertions build, dist +
+# the DESTDIR install validation, the deterministic tests, ctest and the
+# doxygen audit — the legs the registry cells do not replicate.
 #
 # The legacy `make check` also invoked `test-stochastic` (multi-process
 # mdbx_test, 600s), which has been unstable since the TASK-43 port
 # (bad75821): with an explicit --duration the default nops=1000 bound no
 # longer truncates runs, so the DB grows into MDBX_MAP_FULL /
-# MDBX_UNABLE_EXTEND_MAPSIZE. Stochastic coverage is owned by the nightly
-# full-scope gates of the platform workflows (including this one).
-#
-# dist/amalgamation check (the former `make check` -> `dist install`) is
-# kept as a dedicated job below.
+# MDBX_UNABLE_EXTEND_MAPSIZE. The current `make check` target does not run
+# it; stochastic coverage is owned by the nightly full-scope gates of the
+# platform workflows (including this one).
 
 env:
   CI: GITHUB
@@ -87,6 +95,45 @@ jobs:
       ndk: ${{ matrix.ndk }}
       ref: ${{ needs.resolve.outputs.ref }}
       nightly: ${{ needs.resolve.outputs.nightly == 'true' }}
+
+  check:
+    # The classic `make check` gate: a strictly-sequential recursive make
+    # (clean -> the CHECKING=2 smoke-assertion -> the ninja-assertions build
+    # -> dist -> the DESTDIR install validation -> test -> ctest ->
+    # test-doxygen). Needs ninja and doxygen >= 1.18 (the apt one is too old
+    # and mis-attaches \param/\returns).
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    steps:
+      - name: checkout
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+          fetch-tags: true
+          submodules: true
+          # The payload ref for the dispatch-event fan-out; github.ref for
+          # schedule (the default branch) and workflow_dispatch (the
+          # dispatched branch).
+          ref: ${{ github.event.client_payload.ref || github.ref }}
+      - name: install ninja and doxygen 1.18
+        shell: bash
+        run: |
+          set -euo pipefail
+          if ! command -v ninja >/dev/null 2>&1; then
+            sudo apt-get update -qq && sudo apt-get install -y -qq ninja-build
+          fi
+          ninja --version
+          VER=1.18.0
+          curl -sSL -o /tmp/doxygen.tar.gz \
+            "https://github.com/doxygen/doxygen/releases/download/Release_${VER//./_}/doxygen-${VER}.linux.bin.tar.gz"
+          sudo tar xzf /tmp/doxygen.tar.gz -C /opt
+          sudo ln -sf "/opt/doxygen-${VER}/bin/doxygen" /usr/local/bin/doxygen
+          doxygen --version
+      - name: make check
+        shell: bash
+        run: |
+          set -euo pipefail
+          make check
 
   dist:
     # Amalgamation gate: `make dist` must produce the tarball and the
