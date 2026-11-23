@@ -12,10 +12,11 @@
         "-DCMAKE_BUILD_TYPE=RelWithDebInfo",
         "-DMDBX_BUILD_CXX:BOOL=ON",
         "-DMDBX_CHECKING=2",
-        "-DMDBX_DEBUG=1"
+        "-DMDBX_DEBUG=1",
+        "-DMDBX_TEST_TIMEOUT_SCALE=4"
       ],
       "ctest": null,
-      "note": "linux-nightly ubuntu-26.04-arm RelWithDebInfo cxx=ON checking=2 (checked tier)"
+      "note": "linux-nightly ubuntu-26.04-arm RelWithDebInfo cxx=ON checking=2 (checked tier); TEST_TIMEOUT_SCALE=4: the arm runners exceed the auto x2 budgets under the full-scope load (the 2026-11-23 nightly overruns: open 66.7s vs 60, chk-exit 123.4s vs 120)"
     },
     {
       "id": "linux-gcc-ubuntu26-arm-relwithdebinfo-cxx-off",
@@ -28,10 +29,11 @@
         "-DCMAKE_BUILD_TYPE=RelWithDebInfo",
         "-DMDBX_BUILD_CXX:BOOL=OFF",
         "-DMDBX_CHECKING=2",
-        "-DMDBX_DEBUG=1"
+        "-DMDBX_DEBUG=1",
+        "-DMDBX_TEST_TIMEOUT_SCALE=4"
       ],
       "ctest": null,
-      "note": "linux-nightly ubuntu-26.04-arm RelWithDebInfo cxx=OFF checking=2 (checked tier)"
+      "note": "linux-nightly ubuntu-26.04-arm RelWithDebInfo cxx=OFF checking=2 (checked tier); TEST_TIMEOUT_SCALE=4: the arm runners exceed the auto x2 budgets under the full-scope load (the 2026-11-23 nightly overruns: open 66.7s vs 60, chk-exit 123.4s vs 120)"
     },
     {
       "id": "linux-gcc-ubuntu26-arm-release-cxx-on",
@@ -44,10 +46,11 @@
         "-DCMAKE_BUILD_TYPE=Release",
         "-DMDBX_BUILD_CXX:BOOL=ON",
         "-DMDBX_CHECKING=0",
-        "-DMDBX_DEBUG=0"
+        "-DMDBX_DEBUG=0",
+        "-DMDBX_TEST_TIMEOUT_SCALE=4"
       ],
       "ctest": null,
-      "note": "the designated arm Release exception (debug fully off: builds warning-free and works), one of the pair with the cxx-off variant"
+      "note": "the designated arm Release exception (debug fully off: builds warning-free and works), one of the pair with the cxx-off variant; TEST_TIMEOUT_SCALE=4: the arm runners exceed the auto x2 budgets under the full-scope load (the 2026-11-23 nightly overruns: open 66.7s vs 60, chk-exit 123.4s vs 120)"
     },
     {
       "id": "linux-gcc-ubuntu26-arm-release-cxx-off",
@@ -60,10 +63,11 @@
         "-DCMAKE_BUILD_TYPE=Release",
         "-DMDBX_BUILD_CXX:BOOL=OFF",
         "-DMDBX_CHECKING=0",
-        "-DMDBX_DEBUG=0"
+        "-DMDBX_DEBUG=0",
+        "-DMDBX_TEST_TIMEOUT_SCALE=4"
       ],
       "ctest": null,
-      "note": "the designated arm Release exception (debug fully off), one of the pair with the cxx-on variant"
+      "note": "the designated arm Release exception (debug fully off), one of the pair with the cxx-on variant; TEST_TIMEOUT_SCALE=4: the arm runners exceed the auto x2 budgets under the full-scope load (the 2026-11-23 nightly overruns: open 66.7s vs 60, chk-exit 123.4s vs 120)"
     },
     {
       "id": "linux-gcc-ubuntu-latest-relwithdebinfo-cxx-on",
@@ -173,10 +177,11 @@
         "-DCMAKE_BUILD_TYPE=Release",
         "-DMDBX_BUILD_CXX:BOOL=ON",
         "-DMDBX_CHECKING=0",
-        "-DMDBX_DEBUG=0"
+        "-DMDBX_DEBUG=0",
+        "-DMDBX_TEST_TIMEOUT_SCALE=6"
       ],
       "ctest": null,
-      "note": "the designated mac Release exception (debug fully off: builds warning-free and works); crash-safety covered by ut.txn.crash_safety",
+      "note": "the designated mac Release exception (debug fully off: builds warning-free and works); crash-safety covered by ut.txn.crash_safety; TEST_TIMEOUT_SCALE=6: the mac runners exceed the auto x4 (arm64 x2 * darwin x2) budgets (the 2026-11-23 nightly overruns: transforms 123.6s vs 120, put-flags 163.5s vs 120)",
       "expected_sec": 136
     },
     {
@@ -186,10 +191,11 @@
         "-DCMAKE_BUILD_TYPE=RelWithDebInfo",
         "-DMDBX_BUILD_CXX:BOOL=ON",
         "-DMDBX_CHECKING=2",
-        "-DMDBX_DEBUG=1"
+        "-DMDBX_DEBUG=1",
+        "-DMDBX_TEST_TIMEOUT_SCALE=6"
       ],
       "ctest": null,
-      "note": "ci-macos macos-26/xcode RelWithDebInfo checking=2 (checked tier); crash-safety covered by ut.txn.crash_safety"
+      "note": "ci-macos macos-26/xcode RelWithDebInfo checking=2 (checked tier); crash-safety covered by ut.txn.crash_safety; TEST_TIMEOUT_SCALE=6: the mac runners exceed the auto x4 (arm64 x2 * darwin x2) budgets (the 2026-11-23 nightly overruns: transforms 123.6s vs 120, put-flags 163.5s vs 120)"
     },
     {
       "id": "macos-macos26-intel-relwithdebinfo",
@@ -198,10 +204,11 @@
         "-DCMAKE_BUILD_TYPE=RelWithDebInfo",
         "-DMDBX_BUILD_CXX:BOOL=ON",
         "-DMDBX_CHECKING=2",
-        "-DMDBX_DEBUG=1"
+        "-DMDBX_DEBUG=1",
+        "-DMDBX_TEST_TIMEOUT_SCALE=6"
       ],
       "ctest": null,
-      "note": "ci-macos macos-26-intel RelWithDebInfo checking=2 (checked tier); crash-safety covered by ut.txn.crash_safety"
+      "note": "ci-macos macos-26-intel RelWithDebInfo checking=2 (checked tier); crash-safety covered by ut.txn.crash_safety; TEST_TIMEOUT_SCALE=6: the mac runners exceed the auto x4 (arm64 x2 * darwin x2) budgets (the 2026-11-23 nightly overruns: transforms 123.6s vs 120, put-flags 163.5s vs 120)"
     },
     {
       "id": "win-msvc-v143-x64-debug-shared-on-mscrt-off",
