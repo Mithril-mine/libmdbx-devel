@@ -38,7 +38,7 @@ resolve_tool() { # resolve_tool <name> <sdk-relative-fallback>
 ADB="$(resolve_tool adb platform-tools/adb)"
 SDKMANAGER="$(resolve_tool sdkmanager cmdline-tools/latest/bin/sdkmanager)"
 AVDMANAGER="$(resolve_tool avdmanager cmdline-tools/latest/bin/avdmanager)"
-for tool in "$ADB" "$SDKMANAGER" "$AVDMANAGER" "$SDK/emulator/emulator"; do
+for tool in "$ADB" "$SDKMANAGER" "$AVDMANAGER"; do
   if [ ! -x "$tool" ]; then
     echo "error: required Android SDK tool not found: $tool" >&2
     exit 2
@@ -47,11 +47,21 @@ done
 
 echo "==> android emulator boot: api=${API} arch=${ARCH} sdk=${SDK}"
 
-# Preinstalled on the hosted runners; sdkmanager no-ops in that case.
+# Install BEFORE the emulator-binary check: the hosted images may ship
+# without the emulator package (the 2026-11-23 nightly: the ubuntu-24.04
+# image dropped it), and the sdkmanager below is exactly what restores it -
+# demanding the binary up front was a chicken-and-egg failure. The licenses
+# are accepted non-interactively first: a fresh $SDK without the acceptance
+# markers would make the install fail silently.
+yes | "$SDKMANAGER" --licenses >/dev/null 2>&1 || true
 if ! "$SDKMANAGER" --install "platform-tools" "emulator" \
      "system-images;android-${API};default;${ARCH}" >/dev/null 2>&1; then
   echo "error: sdkmanager failed to install the emulator packages" >&2
   exit 1
+fi
+if [ ! -x "$SDK/emulator/emulator" ]; then
+  echo "error: the emulator binary is still missing after the sdkmanager install: $SDK/emulator/emulator" >&2
+  exit 2
 fi
 
 EMU_OPTS=(-no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim)
