@@ -154,6 +154,46 @@ flagbit dbflags[] = {{MDBX_REVERSEKEY, S("reversekey")}, {MDBX_DUPSORT, S("dupli
                      {MDBX_DUPFIXED, S("dupfix")},       {MDBX_INTEGERDUP, S("integerdup")},
                      {MDBX_REVERSEDUP, S("reversedup")}, {0, 0, nullptr}};
 
+/* A byte that cannot occur inside a well-formed dump line: the bytevalue
+ * format is hex only and the print format escapes everything outside
+ * isprint(), so a raw control byte is always a malformed line. */
+#define LINE_SENTINEL '\x01'
+
+/* fgets() stops at an embedded NUL byte and hides the tail of the physical
+ * line from every strlen()-based consumer, silently swallowing it:
+ * a dump line " \0JUNK" loaded as the empty value with the rest dropped,
+ * and `database=na\0me` created the table `na`. To make the exact amount
+ * read by fgets() recoverable, the untouched buffer tail is pre-filled with
+ * the sentinel byte (line_sentinel_fill()); every fetched fragment is then
+ * verified to be NUL-free and to end exactly at the terminator written by
+ * fgets() itself (line_fetched_length()). */
+static void line_sentinel_fill(char *line, size_t capacity, size_t from) {
+  memset(line + from, LINE_SENTINEL, capacity - from);
+}
+
+static int line_fetched_length(const char *line, size_t capacity, size_t *fetched) {
+  const char *const sentinel = memchr(line, LINE_SENTINEL, capacity);
+  if (unlikely(sentinel == line))
+    /* a raw control byte right at the fragment start */
+    goto badline;
+  /* no sentinel left: fgets() filled the whole buffer, the line continues */
+  const size_t len = (sentinel == nullptr) ? capacity - 1 : (size_t)(sentinel - line) - 1;
+  if (unlikely(memchr(line, 0, len) != nullptr))
+    /* an embedded NUL: fgets() stopped at it, the line tail is untrusted */
+    goto badline;
+  if (unlikely(sentinel != nullptr && line[len] != 0))
+    /* not the fgets() terminator: a raw control byte mimics the sentinel */
+    goto badline;
+  *fetched = len;
+  return MDBX_SUCCESS;
+
+badline:
+  if (!quiet)
+    fprintf(stderr, "%s: line %" PRIiSIZE ": NUL or control byte inside the line\n", prog, lineno);
+  return MDBX_ENODATA;
+}
+
+
 static int readhdr(void) {
   /* reset parameters */
   if (subname) {
@@ -174,6 +214,7 @@ static int readhdr(void) {
   const size_t lineno_at_start = lineno;
   while (true) {
     errno = 0;
+    line_sentinel_fill(dbuf.iov_base, dbuf.iov_len, 0);
     if (fgets(dbuf.iov_base, (int)dbuf.iov_len, stdin) == nullptr) {
       if (lineno != lineno_at_start) {
         /* the input ended in the middle of a table's header: a truncated dump */
@@ -186,22 +227,36 @@ static int readhdr(void) {
     if (user_break)
       return MDBX_EINTR;
 
+    lineno++;
+
+    size_t len;
+    int err = line_fetched_length(dbuf.iov_base, dbuf.iov_len, &len);
+    if (unlikely(err != MDBX_SUCCESS))
+      return err;
+
     /* A full buffer without a newline: the line is longer, e.g. a long table name. */
-    for (size_t len = strlen(dbuf.iov_base); len + 1 == dbuf.iov_len && ((char *)dbuf.iov_base)[len - 1] != '\n';) {
+    while (len + 1 == dbuf.iov_len && ((char *)dbuf.iov_base)[len - 1] != '\n') {
       char *const line = osal_realloc(dbuf.iov_base, dbuf.iov_len * 2);
       if (!line) {
         if (!quiet)
-          fprintf(stderr, "%s: line %" PRIiSIZE ": out of memory, line too long\n", prog, lineno + 1);
+          fprintf(stderr, "%s: line %" PRIiSIZE ": out of memory, line too long\n", prog, lineno);
         return MDBX_ENOMEM;
       }
       dbuf.iov_base = line;
       dbuf.iov_len *= 2;
+      /* keep the line terminated in case the fgets() below hits EOF */
+      line[len] = 0;
+      line_sentinel_fill(line, dbuf.iov_len, len + 1);
+      errno = 0;
       if (fgets(line + len, (int)(dbuf.iov_len - len), stdin) == nullptr)
         break;
-      len += strlen(line + len);
+      size_t more;
+      err = line_fetched_length(line + len, dbuf.iov_len - len, &more);
+      if (unlikely(err != MDBX_SUCCESS))
+        return err;
+      len += more;
     }
 
-    lineno++;
     uint64_t u64;
 
     if (valnum(dbuf.iov_base, "VERSION", &u64)) {
@@ -432,12 +487,19 @@ __hot static int readline(MDBX_val *out, MDBX_val *buf) {
       return badend();
     }
   }
+  line_sentinel_fill(buf->iov_base, buf->iov_len, 0);
+  errno = 0;
   if (fgets(buf->iov_base, (int)buf->iov_len, stdin) == nullptr)
     return errno ? errno : EOF;
   lineno++;
 
+  size_t fetched;
+  int err = line_fetched_length(buf->iov_base, buf->iov_len, &fetched);
+  if (unlikely(err != MDBX_SUCCESS))
+    return err;
+
   c1 = buf->iov_base;
-  len = strlen((char *)c1);
+  len = fetched;
   l2 = len;
 
   /* Is buffer too short? */
@@ -450,12 +512,16 @@ __hot static int readline(MDBX_val *out, MDBX_val *buf) {
     }
     c1 = buf->iov_base;
     c1 += l2;
+    line_sentinel_fill((char *)c1, buf->iov_len + 1, 0);
     errno = 0;
     if (fgets((char *)c1, (int)buf->iov_len + 1, stdin) == nullptr)
       return errno ? errno : EOF;
     buf->iov_len *= 2;
-    len = strlen((char *)c1);
-    l2 += len;
+    size_t more;
+    err = line_fetched_length((char *)c1, buf->iov_len + 1, &more);
+    if (unlikely(err != MDBX_SUCCESS))
+      return err;
+    l2 += more;
   }
   c1 = c2 = buf->iov_base;
   len = l2;
