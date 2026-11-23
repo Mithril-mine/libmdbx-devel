@@ -159,17 +159,14 @@ TEST(ut_defrag_gc_binding, double_defrag_with_load) {
 
   MDBX_defrag_result_t r1;
   memset(&r1, 0, sizeof(r1));
-  /* без цели defrag может остановиться и с невыполненной работой; остановка
-   * обязана именовать причину: застрявание без читателя взводит
-   * MDBX_defrag_error (defrag-stall-exhausted-target-space-below-enough-edge,
-   * issue #589) и не маскируется успехом */
+  /* без цели defrag доводит сжатие до конца: перемещает в том числе в
+   * свободные страницы между краем цели и данными и завершается без
+   * препятствий и застреваний (issue #589
+   * defrag-stall-exhausted-target-space-below-enough-edge) */
   const int rc1 = mdbx_env_defrag(env, 0, 0, 0, 0, 0, 2048, nullptr, nullptr, &r1);
   EXPECT_TRUE(rc1 == MDBX_SUCCESS || rc1 == MDBX_RESULT_TRUE) << "rc1=" << rc1;
-  if (r1.stopping_reasons & MDBX_defrag_error) {
-    EXPECT_EQ(MDBX_RESULT_TRUE, rc1)
-        << "a stopped-with-work-remaining defrag must not be reported as success, stopping_reasons="
-        << r1.stopping_reasons;
-  }
+  EXPECT_EQ(0u, r1.stopping_reasons) << "stopping_reasons=" << r1.stopping_reasons;
+  EXPECT_GT(r1.pages_moved, 0u);
 
   // нагрузка между defrag'ами: страницы в окрестностях moved-спанов
   fill(env, 200000, 1000, 170);
@@ -177,14 +174,12 @@ TEST(ut_defrag_gc_binding, double_defrag_with_load) {
 
   MDBX_defrag_result_t r2;
   memset(&r2, 0, sizeof(r2));
-  /* как и r1: остановка с невыполненной работой обязана именовать причину */
+  /* как и r1: завершение без препятствий и застреваний; на крупных страницах
+   * после первого прохода двигать может быть уже нечего (не зависит от
+   * размера страницы - см. tests/AGENTS.md) */
   const int rc2 = mdbx_env_defrag(env, 0, 0, 0, 0, 0, 2048, nullptr, nullptr, &r2);
   EXPECT_TRUE(rc2 == MDBX_SUCCESS || rc2 == MDBX_RESULT_TRUE) << "rc2=" << rc2;
-  if (r2.stopping_reasons & MDBX_defrag_error) {
-    EXPECT_EQ(MDBX_RESULT_TRUE, rc2)
-        << "a stopped-with-work-remaining defrag must not be reported as success, stopping_reasons="
-        << r2.stopping_reasons;
-  }
+  EXPECT_EQ(0u, r2.stopping_reasons) << "stopping_reasons=" << r2.stopping_reasons;
   // второй проход: страницы_whole не уменьшаются некорректно
   EXPECT_GT(r2.pages_whole, 0u);
 

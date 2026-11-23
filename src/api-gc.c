@@ -147,6 +147,13 @@ __cold int mdbx_env_defrag(MDBX_env *env, size_t defrag_atleast, size_t time_atl
   if (unlikely(rc != MDBX_SUCCESS))
     goto bailout;
 
+  /* Защитный предел числа циклов: в корректной работе каждый цикл либо
+   * перемещает страницы, либо разрешается гардом за несколько повторов,
+   * поэтому число циклов ограничено. Превышение - сигнал изъяна (issue #589,
+   * R4). Запас восьмикратный, чтобы не срабатывать на легитимных сочетаниях
+   * застреваний и дозагрузок GC. */
+  const size_t cycle_cap = (size_t)dfc.payload_pages * 8 + 64;
+
   while ((size_t)acceptable_backlash + dfc.payload_pages < txn->geo.first_unallocated && !defrag_discontinued(&dfc)) {
     const pgno_t prev_stumble = dfc.stumble_pgno;
     dfc.cycle_started_timestamp = osal_monotime();
@@ -163,14 +170,40 @@ __cold int mdbx_env_defrag(MDBX_env *env, size_t defrag_atleast, size_t time_atl
       break;
     }
 
+    if (unlikely((size_t)dfc.cycle > cycle_cap)) {
+      /* в корректной работе недостижимо: сигнал изъяна алгоритма/реализации */
+      ERROR("defrag cycles %u exceeded the sanity limit %zu (payload %zu pages)", (unsigned)dfc.cycle, cycle_cap,
+            dfc.payload_pages);
+      dfc.stopping_reasons |= MDBX_defrag_error;
+      break;
+    }
+
     dfc.stumble_retry = (dfc.stumble_pgno && dfc.stumble_pgno == prev_stumble) ? dfc.stumble_retry + 1 : 0;
     if (dfc.stumble_retry > 3) {
       NOTICE("bailout since stucked (unable to move) at %u in a few retries", dfc.stumble_pgno);
-      if (txn->dbs[FREE_DBI].items)
-        rc = MDBX_LAGGARD_READER;
-      else {
-        /* застряли не по вине читателя: внешнего препятствия нет, это изъян алгоритма */
+      if (txn->dbs[FREE_DBI].items) {
+        if (dfc.gc_obstacle.txnid) {
+          rc = MDBX_LAGGARD_READER;
+        } else {
+          /* GC-записи остались, но читатель не идентифицирован: detent не
+           * продвинулся ни steady-чекпоинтом, ни кикком. Причина "читатель"
+           * не доказана - не сообщаем ложную (issue #589, R1). */
+          ERROR("defrag stalled with %" PRIu64 " pending GC entries, but no reader was identified "
+                "(detent %" PRIaTXN ", first-pending %" PRIaTXN ")",
+                (uint64_t)txn->dbs[FREE_DBI].items, txn->env->gc.detent, dfc.stopor);
+          dfc.stopping_reasons &= ~MDBX_defrag_laggard_reader;
+          rc = MDBX_RESULT_TRUE;
+        }
+      } else if (dfc.stumble_from_schedule && pnl_size(txn->wr.repnl) != 0 &&
+                 MDBX_PNL_LEAST(txn->wr.repnl) < dfc.stumble_pgno) {
+        /* попытка планирования была, и цели ниже препятствия есть, но движение
+         * так и не удалось - это изъян алгоритма (#589) */
         dfc.stopping_reasons |= MDBX_defrag_error;
+        rc = MDBX_RESULT_TRUE;
+      } else {
+        /* попытки планирования не было (отказ порядка обхода хвоста) либо целей
+         * нет вовсе: геометрический предел сжатия, это не ошибка (#589
+         * defrag-stall-exhausted-target-space-below-enough-edge) */
         rc = MDBX_RESULT_TRUE;
       }
       break;
@@ -251,8 +284,19 @@ bailout:
     if (dfc.completed)
       /* всё reclaimable возвращено: работа выполнена полностью */
       rc = MDBX_SUCCESS;
-    else if (dfc.stopping_reasons)
-      rc = (dfc.stopping_reasons == MDBX_defrag_laggard_reader) ? MDBX_LAGGARD_READER : MDBX_RESULT_TRUE;
+    else if (dfc.stopping_reasons) {
+      if (dfc.stopping_reasons == MDBX_defrag_laggard_reader && dfc.gc_obstacle.txnid)
+        rc = MDBX_LAGGARD_READER;
+      else {
+        if (dfc.stopping_reasons == MDBX_defrag_laggard_reader) {
+          /* причина "читатель" не доказана (R1) - см. комментарии выше */
+          WARNING("defrag stopped with pending GC entries but no identified reader, first-pending %" PRIaTXN,
+                  dfc.stopor);
+          dfc.stopping_reasons &= ~MDBX_defrag_laggard_reader;
+        }
+        rc = MDBX_RESULT_TRUE;
+      }
+    }
     if (dfc.last_allocated <= dfc.defrag_enough)
       rc = MDBX_SUCCESS;
   }
