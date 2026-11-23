@@ -150,11 +150,6 @@ struct LIBMDBX_API_TYPE slice : public ::MDBX_val {
     return slice(&pod, sizeof(pod));
   }
 
-  /// \brief Assigns the slice to reference [0,bytes-1] of memory pointed by ptr.
-  /// \param ptr    The address of the data to be referenced.
-  /// \param bytes  The number of bytes to be referenced.
-  /// \returns A reference to this instance.
-  inline slice &assign(const void *ptr, size_t bytes);
   /// \brief Assigns the slice to reference the same data as the source slice.
   /// \param src  The source slice.
   /// \returns A reference to this instance.
@@ -171,6 +166,14 @@ struct LIBMDBX_API_TYPE slice : public ::MDBX_val {
   /// \param src  The source \ref MDBX_val to be moved from.
   /// \returns A reference to this instance.
   inline slice &assign(::MDBX_val &&src);
+  /// \brief Assigns the slice to reference [0,bytes-1] of memory pointed by ptr.
+  /// \param ptr    The address of the data to be referenced.
+  /// \param bytes  The number of bytes to be referenced.
+  /// \returns A reference to this instance.
+  /// \throws `std::length_error` for an oversize length and
+  /// `mdbx::bad_value_size` for a null pointer with a non-zero length;
+  /// the slice is left untouched in these cases.
+  inline slice &assign(const void *ptr, size_t bytes);
   /// \brief Assigns the slice to reference the [begin,end) memory range.
   /// \param begin  The address of the first byte to be referenced.
   /// \param end    The address just after the last byte to be referenced.
@@ -180,7 +183,7 @@ struct LIBMDBX_API_TYPE slice : public ::MDBX_val {
   /// \param str  The source string.
   /// \returns A reference to this instance.
   template <class CHAR, class T, class ALLOCATOR> slice &assign(const ::std::basic_string<CHAR, T, ALLOCATOR> &str) {
-    return assign(str.data(), str.size() * sizeof(CHAR));
+    return assign(slice(str));
   }
   /// \brief Assigns the slice to reference a null-terminated string.
   /// \param c_str  The source null-terminated string.
@@ -191,7 +194,7 @@ struct LIBMDBX_API_TYPE slice : public ::MDBX_val {
   /// \param view  The source string view.
   /// \returns A reference to this instance.
   template <class CHAR, class T> slice &assign(const ::std::basic_string_view<CHAR, T> &view) {
-    return assign(view.data(), view.size() * sizeof(CHAR));
+    return assign(slice(view));
   }
   /// \brief Takes over a temporary string view and assigns the slice to its contents.
   /// \param view  The source string view to be moved from.
@@ -733,8 +736,11 @@ struct LIBMDBX_API_TYPE slice : public ::MDBX_val {
   /// \returns `true` if the slice is valid.
   MDBX_CXX11_CONSTEXPR bool is_valid() const noexcept { return !(iov_base == nullptr && iov_len != 0); }
 
-  /// \brief Builds an invalid slice that has a non-zero length and refers to
-  /// a null address.
+  /// \brief Builds an invalid slice that refers to a null address and has
+  /// the maximal length. The deliberately corrupted state flows through all
+  /// the assignment/copy/move paths without exceptions and assert-failures:
+  /// the length fits the maximal data size, so the internal unchecked
+  /// primitives accept it as a legit "null + length" blank-like state.
   /// \returns The invalid slice instance.
   MDBX_CXX14_CONSTEXPR static slice invalid() noexcept {
     return slice(/* using special constructor without length checking */ ~size_t(0));
@@ -880,6 +886,16 @@ protected:
   /// and \ref blank_for_put_reserve().
   /// \param invalid_length  The length to be set with a null data pointer.
   MDBX_CXX11_CONSTEXPR slice(size_t invalid_length) noexcept : ::MDBX_val({nullptr, invalid_length}) {}
+
+  /// \brief The unchecked low-level assignment primitive: binds the given data
+  /// pointer and length as-is, without any validation or rejection. Only the
+  /// checked `assign()` overloads and the \ref buffer internals may call it,
+  /// and they must ensure the validity of arguments, i.e. that the expression
+  /// `ptr ? check_length(bytes) : check_nullptr_length(bytes)` would pass.
+  /// \param ptr    The address of the data to be referenced.
+  /// \param bytes  The number of bytes to be referenced.
+  /// \returns A reference to this instance.
+  MDBX_CXX14_CONSTEXPR slice &assign_unchecked(const void *ptr, size_t bytes) noexcept;
 };
 
 /// \brief Combines data slice with boolean flag to represent result of certain operations.
