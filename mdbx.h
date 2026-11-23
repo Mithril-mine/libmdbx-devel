@@ -1095,10 +1095,13 @@ typedef enum MDBX_env_flags {
    * filesystems, where MDBX does not use locks.
    *
    * - with `MDBX_RDONLY` = open environment in read-only mode.
+   * - with `MDBX_RDONLY` = open environment in read-only mode.
    *   MDBX supports pure read-only mode (i.e. without opening LCK-file) only
-   *   when environment directory and/or both files are not writable (and the
-   *   LCK-file may be missing). In such case allowing file(s) to be placed
-   *   on a network read-only share.
+   *   when the filesystem with the database files is mounted read-only
+   *   (and the LCK-file may be missing). A non-writable directory or files
+   *   on a writable filesystem don't give the pure read-only mode: opening
+   *   such an environment requires the LCK-file to be writable.
+   *   In such case allowing file(s) to be placed on a network read-only share.
    *
    * - without `MDBX_RDONLY` = open environment in read-write mode.
    *
@@ -2564,6 +2567,15 @@ LIBMDBX_API int mdbx_env_get_option(const MDBX_env *env, const MDBX_option_t opt
  *                             inconsistent state after a system crash.
  *
  * \retval MDBX_TOO_LARGE      Database is too large for this process,
+ *       You can try to combine the \ref MDBX_ACCEDE flag to opend a database/environment which is already
+ *       used by another process(es) with unknown mode/flags.
+ *
+ * \note Known limitation: do not rename/replace or restore the LCK-file of a live environment, since such
+ *       manipulation may split the coordination domain and, in a two-opener restart race, lead to two independent
+ *       environments over the same data file with concurrent write transactions (known limitation, see
+ *       [issue #485](https://github.com/Mithril-mine/libmdbx-devel/issues/485)).
+ *
+ * \note Known limitation on Windows: with \ref MDBX_RDONLY the mapping extent is fixed by the data file size
  *                             i.e. 32-bit process tries to open >4Gb database.
  */
 LIBMDBX_API int mdbx_env_open(MDBX_env *env, const char *pathname, MDBX_env_flags_t flags, mdbx_mode_t mode);
@@ -4820,16 +4832,46 @@ MDBX_NOTHROW_CONST_FUNCTION LIBMDBX_INLINE_API(uint32_t, mdbx_key_from_int32, (c
  * assertion-enabled builds check that `key.iov_len` matches the key size
  * made by the corresponding \ref value2key function.
  * @{ */
-MDBX_NOTHROW_PURE_FUNCTION LIBMDBX_API int64_t mdbx_jsonInteger_from_key(const MDBX_val);
+/** \brief Get a `int64_t` JSON-number value from a 8-byte key.
+ * \warning There is a Undefined behavior if the key is invalid, i.e. its
+ * length is not the expected 8 bytes, since the conversion reads a fixed
+ * number of bytes regardless of the key's actual `iov_len`.
+ * \param [in] key  The key made by \ref mdbx_key_from_jsonInteger().
+ * \returns The original `int64_t` value. */
+MDBX_NOTHROW_PURE_FUNCTION LIBMDBX_API int64_t mdbx_jsonInteger_from_key(const MDBX_val key);
 
-MDBX_NOTHROW_PURE_FUNCTION LIBMDBX_API double mdbx_double_from_key(const MDBX_val);
+/** \brief Get a `double` value from a 8-byte key.
+ * \warning There is a Undefined behavior if the key is invalid, i.e. its
+ * length is not the expected 8 bytes, since the conversion reads a fixed
+ * number of bytes regardless of the key's actual `iov_len`.
+ * \param [in] key  The key made by \ref mdbx_key_from_double().
+ * \returns The original `double` value. */
+MDBX_NOTHROW_PURE_FUNCTION LIBMDBX_API double mdbx_double_from_key(const MDBX_val key);
 
-MDBX_NOTHROW_PURE_FUNCTION LIBMDBX_API float mdbx_float_from_key(const MDBX_val);
+/** \brief Get a `float` value from a 4-byte key.
+ * \warning There is a Undefined behavior if the key is invalid, i.e. its
+ * length is not the expected 4 bytes, since the conversion reads a fixed
+ * number of bytes regardless of the key's actual `iov_len`.
+ * \param [in] key  The key made by \ref mdbx_key_from_float().
+ * \returns The original `float` value. */
+MDBX_NOTHROW_PURE_FUNCTION LIBMDBX_API float mdbx_float_from_key(const MDBX_val key);
 
-MDBX_NOTHROW_PURE_FUNCTION LIBMDBX_API int32_t mdbx_int32_from_key(const MDBX_val);
+/** \brief Get a `int32_t` value from a 4-byte key.
+ * \warning There is a Undefined behavior if the key is invalid, i.e. its
+ * length is not the expected 4 bytes, since the conversion reads a fixed
+ * number of bytes regardless of the key's actual `iov_len`.
+ * \param [in] key  The key made by \ref mdbx_key_from_int32().
+ * \returns The original `int32_t` value. */
+MDBX_NOTHROW_PURE_FUNCTION LIBMDBX_API int32_t mdbx_int32_from_key(const MDBX_val key);
 
-MDBX_NOTHROW_PURE_FUNCTION LIBMDBX_API int64_t mdbx_int64_from_key(const MDBX_val);
-/** end of value2key @} */
+/** \brief Get a `int64_t` value from a 8-byte key.
+ * \warning There is a Undefined behavior if the key is invalid, i.e. its
+ * length is not the expected 8 bytes, since the conversion reads a fixed
+ * number of bytes regardless of the key's actual `iov_len`.
+ * \param [in] key  The key made by \ref mdbx_key_from_int64().
+ * \returns The original `int64_t` value. */
+MDBX_NOTHROW_PURE_FUNCTION LIBMDBX_API int64_t mdbx_int64_from_key(const MDBX_val key);
+/** end of key2value @} */
 
 /** \brief Retrieve statistics for a table.
  * \ingroup c_statinfo
@@ -6434,6 +6476,16 @@ LIBMDBX_API int mdbx_thread_unregister(const MDBX_env *env);
  * some other action. In doing so it is important that the returned code always
  * corresponds to the performed action.
  *
+ * The callback is invoked with the write transaction lock held by the calling
+ * thread. Therefore, the callback must not call mdbx functions on the same
+ * environment (in particular, must not start or end a write transaction),
+ * otherwise:
+ *  - on POSIX.1-2001/2008 systems the recursive acquisition of the write
+ *    transaction lock fails safely with \ref MDBX_EDEADLK error;
+ *  - on POSIX.1-1988/SysV systems with semaphore-based locking such a call
+ *    hangs waiting for itself;
+ *  - on Windows the recursive acquisition likely succeeds and results in
+ *    a re-entrant entry into libmdbx.
  * \param [in] env     An environment handle returned by \ref mdbx_env_create().
  * \param [in] txn     The current write transaction which internally at
  *                     the \ref MDBX_MAP_FULL condition.
