@@ -60,6 +60,8 @@ static void logger(MDBX_log_level_t level, const char *function, int line, const
       "   ",        // 3 notice
       "   //",      // 4 verbose
   };
+  if (!fmt)
+    return;
   if (level < MDBX_LOG_DEBUG) {
     if (function && line)
       fprintf(stderr, "%s", prefixes[level]);

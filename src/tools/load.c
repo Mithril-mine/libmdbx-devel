@@ -468,7 +468,7 @@ __hot static int readline(MDBX_val *out, MDBX_val *buf) {
         if (c2[1] == '\\') {
           *c1++ = '\\';
         } else {
-          if (c2 + 3 > end || !isxdigit(c2[1]) || !isxdigit(c2[2]))
+          if (c2 + 3 > end || !isxdigit((unsigned char)c2[1]) || !isxdigit((unsigned char)c2[2]))
             return badend();
           *c1++ = (char)unhex(++c2);
         }
@@ -483,7 +483,7 @@ __hot static int readline(MDBX_val *out, MDBX_val *buf) {
     if (len & 1)
       return badend();
     while (c2 < end) {
-      if (!isxdigit(*c2) || !isxdigit(c2[1]))
+      if (!isxdigit((unsigned char)*c2) || !isxdigit((unsigned char)c2[1]))
         return badend();
       *c1++ = (char)unhex(c2);
       c2 += 2;
