@@ -298,7 +298,12 @@ int txn_setup_primal(MDBX_txn *txn) {
     /* Размер БД (для пишущих транзакций) или используемых данных (для
      * читающих транзакций) больше предыдущего/текущего размера внутри
      * процесса, увеличиваем. Сюда также попадает случай увеличения верхней
-     * границы размера БД и отображения. */
+     * границы размера БД и отображения.
+     *
+     * The check is made without the remap-lock, so by the time dxb_resize()
+     * acquires it another thread may have grown the mapping beyond this size
+     * (a write txn allocating at the end of the datafile); dxb_resize() never
+     * reduces the mapping for such a plain grow request. */
     if (txn->geo.upper > MAX_PAGENO + 1 || bytes2pgno(env, pgno2bytes(env, txn->geo.upper)) != txn->geo.upper)
       return MDBX_UNABLE_EXTEND_MAPSIZE;
     err = dxb_resize(env, txn->geo.first_unallocated, txn->geo.end_pgno, txn->geo.upper, 0);
