@@ -8041,11 +8041,6 @@ typedef int (*MDBX_defrag_notify_func)(void *ctx, const MDBX_defrag_result_t *pr
  *                                   The limit stops scheduling new movements; the moving phase of the current cycle
  *                                   completes within the auto-sized batch, and the intermediate result is saved by
  *                                   the cycle's checkpoint.
- *                                   The limit is best-effort: it is checked between cycles and only after
- *                                   the `defrag_atleast` goal edge is reached but before the `defrag_enough` edge,
- *                                   since the goal-based stopping conditions take precedence. If the `defrag_atleast`
- *                                   goal is unreachable, the time limit may not stop defragmentation and the cycles
- *                                   will continue until another stopping condition applies.
  *                                   Specify zero if in doubt or not known, this will mean no limit.
  *
  * \param [in] acceptable_backlash   Defragmentation stops if a next cycle will unable to shrink database by the
