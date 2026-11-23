@@ -551,6 +551,13 @@ LIBMDBX_API int mdbx_txn_begin(MDBX_env *env, MDBX_txn *parent, MDBX_txn_flags_t
 
 LIBMDBX_API int mdbx_txn_commit(MDBX_txn *txn) { return __inline_mdbx_txn_commit(txn); }
 
+/* the legacy two-argument flavor: the only one of the inline-API entries
+ * that had no exported fallback in this file, so the symbol was missing
+ * from the shared library */
+LIBMDBX_API int mdbx_txn_release_all_cursors(const MDBX_txn *txn, bool unbind) {
+  return __inline_mdbx_txn_release_all_cursors(txn, unbind);
+}
+
 LIBMDBX_API __cold int mdbx_env_stat(const MDBX_env *env, MDBX_stat *stat, size_t bytes) {
   return __inline_mdbx_env_stat(env, stat, bytes);
 }
