@@ -128,6 +128,8 @@ A maintenance release of the stable line: backported fixes for data safety, corr
     - Fixed cloning a read transaction crashing on cleanup or reading recycled pages; fails cleanly now ([#128](https://github.com/Mithril-mine/libmdbx-devel/issues/128), [#148](https://github.com/Mithril-mine/libmdbx-devel/issues/148)) (backport).
 
  - Wrong results and API behavior:
+    - Fixed `mdbx_env_defrag()` stalling while free pages lie between the shrink goal edge and the data ([#589](https://github.com/Mithril-mine/libmdbx-devel/issues/589)) (backport).
+    - Fixed a writer crashing with `SIGBUS` while another thread of its process starts a read transaction ([#592](https://github.com/Mithril-mine/libmdbx-devel/issues/592)) (backport).
     - Fixed `mdbx_env_defrag()` reporting success and no obstacles when stuck at an unmovable page ([#550](https://github.com/Mithril-mine/libmdbx-devel/issues/550)) (backport).
     - Fixed `mdbx_env_defrag()` ignoring the time limit when the shrink goal is unreachable ([#550](https://github.com/Mithril-mine/libmdbx-devel/issues/550)) (backport).
     - Fixed a rare SIGPIPE process-death on copying to a pipe closed by the reader; the `EPIPE` error is returned now ([#529](https://github.com/Mithril-mine/libmdbx-devel/pull/529)) (backport).
@@ -246,6 +248,7 @@ A maintenance release of the stable line: backported fixes for data safety, corr
 
 ### Appreciations:
 
+ - [SSE4](https://github.com/SSE4) for reporting and fixing the writer crash on a concurrent start of a read transaction.
  - [Andrea Lanfranchi](https://github.com/AndreaLanfranchi) for bug reporting and assistance with fixing ones.
 
 --------------------------------------------------------------------------------
