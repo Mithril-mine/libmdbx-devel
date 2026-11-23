@@ -17,6 +17,30 @@ __cold int dxb_read_header(MDBX_env *env, meta_t *dest, const int lck_exclusive,
   /* We don't know the page size on first time. So, just guess it. */
   unsigned guess_pagesize = 0;
   for (unsigned loop_count = 0; loop_count < loop_limit; ++loop_count) {
+    if (!guess_pagesize && loop_count == NUM_METAS) {
+      /* Первый проход не смог зафиксировать размер страницы: при поврежденной
+       * meta-0 и размере страницы БД, отличном от системного, каждое
+       * смещение, проверенное выше, попадало в середину страницы, поэтому
+       * неповрежденные meta-1/meta-2 никогда не читались по-настоящему.
+       * Проверяем альтернативные раскладки перед повторным чтением:
+       * meta-1 всегда находится ровно на одну страницу после начала файла,
+       * поэтому валидация страницы, прочитанной по каждому кандидату со
+       * степенью 2, либо фиксирует истинный размер страницы, либо оставляет
+       * вердикт CORRUPTED обычного расписания без изменений. */
+      for (unsigned candidate = MDBX_MIN_PAGESIZE; candidate <= MDBX_MAX_PAGESIZE; candidate <<= 1) {
+        if (candidate == globals.sys_pagesize || candidate == env->ps)
+          continue; /* такая раскладка уже была проверена выше */
+        char probe[MDBX_MIN_PAGESIZE];
+        if (osal_pread(env->lazy_fd, probe, MDBX_MIN_PAGESIZE, candidate) != MDBX_SUCCESS)
+          continue; /* за пределами файла такая раскладка не может существовать */
+        page_t *const probe_page = (page_t *)probe;
+        const int err = meta_validate(env, page_meta(probe_page), probe_page, 1, &guess_pagesize);
+        if (err == MDBX_SUCCESS || guess_pagesize) {
+          NOTICE("meta-pages layout discovered, pagesize %u", guess_pagesize);
+          break;
+        }
+      }
+    }
     const unsigned meta_number = loop_count % NUM_METAS;
     const unsigned offset = (guess_pagesize             ? guess_pagesize
                              : (loop_count > NUM_METAS) ? env->ps
