@@ -1087,7 +1087,8 @@ int dxb_sync_locked(MDBX_env *env, unsigned flags, meta_t *const pending, troika
             } else {
               ERROR("%s-madvise(%s, %zu, +%zu), %u/%u mlcnt-processes, err %d", "shrink", "DONTNEED",
                     discard_edge_bytes, prev_discarded_bytes - discard_edge_bytes, mlocks_after, munlocks_before, err);
-              return err;
+              rc = err;
+              goto fail;
             }
           } else
             env->lck->discarded_tail.weak = discard_edge_pgno;
