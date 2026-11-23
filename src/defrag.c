@@ -1071,22 +1071,54 @@ int defrag_cycle(dfc_t *dfc) {
     }
 
     if (dfc->defrag_edge - i->npages != i->key_or_pgno) {
-      const pgno_t tail = dfc->defrag_edge - 1;
-      if (most_retired == tail) {
-        defrag_stumble(dfc, i, "the adjacent page ", most_retired, " is in the retired list");
+      /* Разрыв между страницей и текущим хвостом: страницы разрыва свободны,
+       * но ещё не возвращены в свободные либо удерживаются GC/retired.
+       * Завершаем проход, когда разрешить разрыв в этом цикле невозможно. */
+      int resolve_rc = MDBX_SUCCESS;
+      while (dfc->defrag_edge - i->npages != i->key_or_pgno) {
+        const pgno_t tail = dfc->defrag_edge - 1;
+        if (pnl_size(txn->wr.repnl) > 0 && pnl_contains(txn->wr.repnl, tail)) {
+          /* страницы разрыва уже reclaimed: срезаем рун, заканчивающийся на
+           * хвосте, в retired и подвигаем границу хвоста вниз - тем самым
+           * приближаем страницу к хвосту и продолжаем (issue #589) */
+          size_t pos = pnl_search_exact(txn->wr.repnl, tail);
+          size_t k = 1;
+          while (pos + k <= pnl_size(txn->wr.repnl) &&
+                 MDBX_PNL_CONTIGUOUS(txn->wr.repnl[pos], txn->wr.repnl[pos + k], k))
+            ++k;
+          pnl_cut(txn->wr.repnl, pos, k);
+          resolve_rc = pnl_append_span(&txn->wr.retired_pages, tail - (pgno_t)k + 1, (pgno_t)k);
+          if (unlikely(resolve_rc != MDBX_SUCCESS))
+            return resolve_rc;
+          dfc->defrag_edge -= (pgno_t)k;
+          VERBOSE("turn-%s %+i, %u => %u", "crop", k, tail + 1, dfc->defrag_edge);
+          continue;
+        }
+        if (most_retired == tail) {
+          defrag_stumble(dfc, i, "the adjacent page ", most_retired, " is in the retired list");
+          resolve_rc = MDBX_RESULT_TRUE;
+          break;
+        }
+        int err = defrag_gc_lookup_page(dfc, tail, &dfc->stopor);
+        if (unlikely(err != MDBX_SUCCESS)) {
+          if (err != MDBX_NOTFOUND) {
+            ERROR("unexpected missing page %" PRIaPGNO, tail);
+            return err;
+          }
+          /* страницы разрыва нет ни в reclaimed, ни в retired, ни в GC:
+           * вероятно, loose-страница текущей транзакции - разрешится слиянием
+           * loose в начале следующего цикла */
+          defrag_stumble(dfc, i, "the gap-page ", tail, " is not ready for defragmentation yet");
+          resolve_rc = MDBX_RESULT_TRUE;
+          break;
+        }
+        defrag_stumble(dfc, i, "the gap-page is located in the ", dfc->stopor, " GC-entry which is used/read");
+        resolve_rc = MDBX_RESULT_TRUE;
         break;
       }
-      if (pnl_size(txn->wr.repnl) && MDBX_PNL_LEAST(txn->wr.repnl) == tail) {
-        defrag_stumble(dfc, i, "the available reclaimed pages are beyond the defragmentation tail (page #", tail, ")");
+      if (resolve_rc != MDBX_SUCCESS)
+        /* разрыв разрешён stumble'ом - прерываем проход */
         break;
-      }
-      int err = defrag_gc_lookup_page(dfc, dfc->defrag_edge - 1, &dfc->stopor);
-      if (unlikely(err != MDBX_SUCCESS)) {
-        ERROR("unexpected missing page %" PRIaPGNO, tail);
-        return (err == MDBX_NOTFOUND) ? MDBX_PROBLEM : err;
-      }
-      defrag_stumble(dfc, i, "the gap-page is located in the ", dfc->stopor, " GC-entry which is used/read");
-      break;
     }
 
     if (!i->mapped) {
