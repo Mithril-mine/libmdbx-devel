@@ -290,18 +290,22 @@ static __always_inline int couple_init(cursor_couple_t *couple, const MDBX_txn *
                 (int)z_dupfix == P_DUPFIX);
   couple->outer.checking = (AUDIT_ENABLED() || (txn->env->flags & MDBX_VALIDATION)) ? z_pagecheck | z_leaf : z_leaf;
   couple->outer.subcur = nullptr;
+  /* Инициализируется безусловно (не только для DUPSORT): state-машинерия
+   * cursor_ops() читает subcur внутреннего курсора независимо от
+   * наличия вложенного дерева. */
+  couple->inner.cursor.subcur = nullptr;
+  couple->inner.cursor.top_and_flags = z_fresh_mark | z_inner;
+  couple->inner.nested_tree.root = 0;
 
   if (tree->flags & MDBX_DUPSORT) {
     couple->inner.cursor.signature = cur_signature_live;
     subcur_t *const mx = couple->outer.subcur = &couple->inner;
-    mx->cursor.subcur = nullptr;
     mx->cursor.next = &mx->cursor;
     mx->cursor.txn = (MDBX_txn *)txn;
     mx->cursor.tree = &mx->nested_tree;
     mx->cursor.clc = ptr_disp(couple->outer.clc, sizeof(clc_t));
     tASSERT(txn, &mx->cursor.clc->k == &kvx->clc.v);
     mx->cursor.dbi_state = dbi_state;
-    mx->cursor.top_and_flags = z_fresh_mark | z_inner;
     STATIC_ASSERT(MDBX_DUPFIXED * 2 == P_DUPFIX);
     mx->cursor.checking = couple->outer.checking + ((tree->flags & MDBX_DUPFIXED) << 1);
   }
