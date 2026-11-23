@@ -83,12 +83,15 @@ static void defrag_progress(dfc_t *dfc, size_t progress_increment) {
                            ? 0
                            : defrag_notify(dfc);
 
-  if (dfc->stopping_reasons < MDBX_defrag_discontinued && dfc->txn &&
-      dfc->defrag_atleast >= dfc->txn->geo.first_unallocated) {
-    if (dfc->defrag_enough >= dfc->txn->geo.first_unallocated) {
-      if (!dfc->wallclock_atleast || (now_cache = defrag_now(now_cache)) >= dfc->wallclock_atleast)
-        dfc->stopping_reasons |= MDBX_defrag_enough_threshold;
-    } else if (dfc->wallclock_detent && (now_cache = defrag_now(now_cache)) >= dfc->wallclock_detent)
+  if (dfc->stopping_reasons < MDBX_defrag_discontinued && dfc->txn) {
+    /* достижение цели "enough" сообщает об остановке, но с учётом минимального
+     * времени, которое должно быть потрачено; заметим, что достижимость края
+     * "enough" (он ниже края "atleast") подразумевает достижимость края "atleast". */
+    if (dfc->defrag_enough >= dfc->txn->geo.first_unallocated &&
+        (!dfc->wallclock_atleast || (now_cache = defrag_now(now_cache)) >= dfc->wallclock_atleast))
+      dfc->stopping_reasons |= MDBX_defrag_enough_threshold;
+    /* лимит времени проверяется безусловно, независимо от достижимости целей */
+    if (dfc->wallclock_detent && (now_cache = defrag_now(now_cache)) >= dfc->wallclock_detent)
       dfc->stopping_reasons |= MDBX_defrag_time_limit;
   }
 }
