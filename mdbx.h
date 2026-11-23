@@ -4813,6 +4813,12 @@ MDBX_NOTHROW_CONST_FUNCTION LIBMDBX_INLINE_API(uint32_t, mdbx_key_from_int32, (c
  * \brief Key-to-Value functions to
  * \ref avoid_custom_comparators "avoid using custom comparators"
  * \see value2key
+ *
+ * \warning There is a Undefined behavior if one of arguments is invalid.
+ * In particular, each function of this group reads as many bytes from
+ * `key.iov_base` as the resulting type needs (4 or 8), and only
+ * assertion-enabled builds check that `key.iov_len` matches the key size
+ * made by the corresponding \ref value2key function.
  * @{ */
 MDBX_NOTHROW_PURE_FUNCTION LIBMDBX_API int64_t mdbx_jsonInteger_from_key(const MDBX_val);
 
