@@ -1157,6 +1157,10 @@ struct LIBMDBX_API_TYPE slice : public ::MDBX_val {
   /// \param ignore_spaces  Skip whitespaces while decoding.
   /// \param alloc          The allocator for the resulting buffer.
   /// \returns The buffer with the decoded data.
+  /// \throws std::domain_error if the content is malformed (not decodable).
+  /// An empty (or spaces-only) content is not an error: it decodes to an
+  /// empty result, but such a zero-byte dump is not a valid dump for the
+  /// dump predicates.
   template <class ALLOCATOR = default_allocator, class CAPACITY_POLICY = default_capacity_policy>
   inline buffer<ALLOCATOR, CAPACITY_POLICY> hex_decode(bool ignore_spaces = false,
                                                        const ALLOCATOR &alloc = ALLOCATOR()) const;
@@ -1166,6 +1170,10 @@ struct LIBMDBX_API_TYPE slice : public ::MDBX_val {
   /// \param ignore_spaces  Skip whitespaces while decoding.
   /// \param alloc          The allocator for the resulting buffer.
   /// \returns The buffer with the decoded data.
+  /// \throws std::domain_error if the content is malformed (not decodable).
+  /// An empty (or spaces-only) content is not an error: it decodes to an
+  /// empty result, but such a zero-byte dump is not a valid dump for the
+  /// dump predicates.
   template <class ALLOCATOR = default_allocator, class CAPACITY_POLICY = default_capacity_policy>
   inline buffer<ALLOCATOR, CAPACITY_POLICY> base58_decode(bool ignore_spaces = false,
                                                           const ALLOCATOR &alloc = ALLOCATOR()) const;
@@ -1175,6 +1183,10 @@ struct LIBMDBX_API_TYPE slice : public ::MDBX_val {
   /// \param ignore_spaces  Skip whitespaces while decoding.
   /// \param alloc          The allocator for the resulting buffer.
   /// \returns The buffer with the decoded data.
+  /// \throws std::domain_error if the content is malformed (not decodable).
+  /// An empty (or spaces-only) content is not an error: it decodes to an
+  /// empty result, but such a zero-byte dump is not a valid dump for the
+  /// dump predicates.
   template <class ALLOCATOR = default_allocator, class CAPACITY_POLICY = default_capacity_policy>
   inline buffer<ALLOCATOR, CAPACITY_POLICY> base64_decode(bool ignore_spaces = false,
                                                           const ALLOCATOR &alloc = ALLOCATOR()) const;
@@ -1183,7 +1195,8 @@ struct LIBMDBX_API_TYPE slice : public ::MDBX_val {
   /// \param [in] disable_utf8 By default if `disable_utf8` is `false` function
   /// checks that content bytes are printable ASCII-7 characters or a valid UTF8
   /// sequences. Otherwise, if `disable_utf8` is `true` function checks that
-  /// content bytes are printable extended 8-bit ASCII codes.
+  /// content bytes are printable extended 8-bit ASCII codes, but never the
+  /// UTF8 lead bytes (C2..DF, E0..EF and F0..F4).
   /// \returns `true` if the content is printable.
   MDBX_NOTHROW_PURE_FUNCTION bool is_printable(bool disable_utf8 = false) const noexcept;
 
@@ -1191,7 +1204,9 @@ struct LIBMDBX_API_TYPE slice : public ::MDBX_val {
   /// \param [in] ignore_spaces If `true` function will skips spaces surrounding
   /// (before, between and after) a encoded bytes. However, spaces should not
   /// break a pair of characters encoding a single byte.
-  /// \returns `true` if the content is a valid hexadecimal dump.
+  /// \returns `true` if the content is a valid hexadecimal dump, i.e. encodes
+  /// at least one byte; `false` for an empty (or spaces-only, when spaces
+  /// are ignored) content, since a dump of zero bytes is not a dump.
   MDBX_NOTHROW_PURE_FUNCTION inline bool is_hex(bool ignore_spaces = false) const noexcept;
 
   /// \brief Checks whether the content of the slice is a
@@ -1199,7 +1214,9 @@ struct LIBMDBX_API_TYPE slice : public ::MDBX_val {
   /// \param [in] ignore_spaces If `true` function will skips spaces surrounding
   /// (before, between and after) a encoded bytes. However, spaces should not
   /// break a code group of characters.
-  /// \returns `true` if the content is a valid Base58 dump.
+  /// \returns `true` if the content is a valid Base58 dump, i.e. encodes
+  /// at least one byte; `false` for an empty (or spaces-only, when spaces
+  /// are ignored) content, since a dump of zero bytes is not a dump.
   MDBX_NOTHROW_PURE_FUNCTION inline bool is_base58(bool ignore_spaces = false) const noexcept;
 
   /// \brief Checks whether the content of the slice is a
@@ -1207,7 +1224,9 @@ struct LIBMDBX_API_TYPE slice : public ::MDBX_val {
   /// \param [in] ignore_spaces If `true` function will skips spaces surrounding
   /// (before, between and after) a encoded bytes. However, spaces should not
   /// break a code group of characters.
-  /// \returns `true` if the content is a valid Base64 dump.
+  /// \returns `true` if the content is a valid Base64 dump, i.e. encodes
+  /// at least one byte; `false` for an empty (or spaces-only, when spaces
+  /// are ignored) content, since a dump of zero bytes is not a dump.
   MDBX_NOTHROW_PURE_FUNCTION inline bool is_base64(bool ignore_spaces = false) const noexcept;
 
 #if defined(DOXYGEN) || (defined(__cpp_lib_string_view) && __cpp_lib_string_view >= 201606L)
@@ -2133,6 +2152,10 @@ struct LIBMDBX_API from_hex {
   /// \brief Decodes hexadecimal dump from a passed slice to returned buffer.
   /// \param alloc  The allocator for the resulting buffer.
   /// \returns The buffer with the decoded data.
+  /// \throws std::domain_error if the content is malformed (not decodable).
+  /// An empty (or spaces-only) content is not an error: it decodes to an
+  /// empty result, but such a zero-byte dump is not a valid dump for the
+  /// dump predicates.
   template <class ALLOCATOR = default_allocator, typename CAPACITY_POLICY = default_capacity_policy>
   inline buffer<ALLOCATOR, CAPACITY_POLICY> as_buffer(const ALLOCATOR &alloc = ALLOCATOR()) const;
 
@@ -2153,7 +2176,9 @@ struct LIBMDBX_API from_hex {
   bool is_empty() const noexcept { return source.empty(); }
 
   /// \brief Checks whether the content of a passed slice is a valid hexadecimal
-  /// dump, and therefore can be decoded without errors.
+  /// dump, and therefore can be decoded without errors. An empty (or
+  /// spaces-only, when spaces are ignored) source is NOT a valid dump,
+  /// since a dump of zero bytes is not a dump.
   /// \returns `true` if the source slice is NOT a valid hexadecimal dump.
   bool is_erroneous() const noexcept;
 };
@@ -2182,6 +2207,10 @@ struct LIBMDBX_API from_base58 {
   /// passed slice to returned buffer.
   /// \param alloc  The allocator for the resulting buffer.
   /// \returns The buffer with the decoded data.
+  /// \throws std::domain_error if the content is malformed (not decodable).
+  /// An empty (or spaces-only) content is not an error: it decodes to an
+  /// empty result, but such a zero-byte dump is not a valid dump for the
+  /// dump predicates.
   template <class ALLOCATOR = default_allocator, typename CAPACITY_POLICY = default_capacity_policy>
   inline buffer<ALLOCATOR, CAPACITY_POLICY> as_buffer(const ALLOCATOR &alloc = ALLOCATOR()) const;
 
@@ -2206,7 +2235,9 @@ struct LIBMDBX_API from_base58 {
 
   /// \brief Checks whether the content of a passed slice is a valid
   /// [Base58](https://en.wikipedia.org/wiki/Base58) dump, and therefore can be
-  /// decoded without errors.
+  /// decoded without errors. An empty (or spaces-only, when spaces are
+  /// ignored) source is NOT a valid dump, since a dump of zero bytes
+  /// is not a dump.
   /// \returns `true` if the source slice is NOT a valid Base58 dump.
   bool is_erroneous() const noexcept;
 };
@@ -2235,6 +2266,10 @@ struct LIBMDBX_API from_base64 {
   /// passed slice to returned buffer.
   /// \param alloc  The allocator for the resulting buffer.
   /// \returns The buffer with the decoded data.
+  /// \throws std::domain_error if the content is malformed (not decodable).
+  /// An empty (or spaces-only) content is not an error: it decodes to an
+  /// empty result, but such a zero-byte dump is not a valid dump for the
+  /// dump predicates.
   template <class ALLOCATOR = default_allocator, typename CAPACITY_POLICY = default_capacity_policy>
   inline buffer<ALLOCATOR, CAPACITY_POLICY> as_buffer(const ALLOCATOR &alloc = ALLOCATOR()) const;
 
@@ -2258,7 +2293,9 @@ struct LIBMDBX_API from_base64 {
 
   /// \brief Checks whether the content of a passed slice is a valid
   /// [Base64](https://en.wikipedia.org/wiki/Base64) dump, and therefore can be
-  /// decoded without errors.
+  /// decoded without errors. An empty (or spaces-only, when spaces are
+  /// ignored) source is NOT a valid dump, since a dump of zero bytes
+  /// is not a dump.
   /// \returns `true` if the source slice is NOT a valid Base64 dump.
   bool is_erroneous() const noexcept;
 };
@@ -3920,6 +3957,9 @@ public:
   /// \param data           The hexadecimal dump to be decoded.
   /// \param ignore_spaces  Skip whitespaces while decoding.
   /// \returns A reference to this instance.
+  /// \throws std::domain_error if the given dump is malformed (not
+  /// decodable). An empty (or spaces-only) dump is not an error: nothing
+  /// is appended.
   buffer &append_decoded_hex(const struct slice &data, bool ignore_spaces = false) {
     if (MDBX_UNLIKELY(reaches_tailroom(data)))
       return append_decoded_hex(buffer(data, get_allocator()), ignore_spaces);
@@ -3930,6 +3970,9 @@ public:
   /// \param data           The Base58 dump to be decoded.
   /// \param ignore_spaces  Skip whitespaces while decoding.
   /// \returns A reference to this instance.
+  /// \throws std::domain_error if the given dump is malformed (not
+  /// decodable). An empty (or spaces-only) dump is not an error: nothing
+  /// is appended.
   buffer &append_decoded_base58(const struct slice &data, bool ignore_spaces = false) {
     if (MDBX_UNLIKELY(reaches_tailroom(data)))
       return append_decoded_base58(buffer(data, get_allocator()), ignore_spaces);
@@ -3940,6 +3983,9 @@ public:
   /// \param data           The Base64 dump to be decoded.
   /// \param ignore_spaces  Skip whitespaces while decoding.
   /// \returns A reference to this instance.
+  /// \throws std::domain_error if the given dump is malformed (not
+  /// decodable). An empty (or spaces-only) dump is not an error: nothing
+  /// is appended.
   buffer &append_decoded_base64(const struct slice &data, bool ignore_spaces = false) {
     if (MDBX_UNLIKELY(reaches_tailroom(data)))
       return append_decoded_base64(buffer(data, get_allocator()), ignore_spaces);
