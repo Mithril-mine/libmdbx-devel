@@ -581,11 +581,16 @@ MDBX_SMOKE_EXTRA ?=
 # every step.
 check: export MALLOC_CHECK_ := 7
 check: export MALLOC_PERTURB_ := 42
+# The -Werror=dev keeps the developer warnings fatal; the
+# -Wno-error=non-target-directive tail tolerates the add_definitions/
+# include_directories style of our own CMake code and of the googletest
+# submodule - without it the configure step of the `check` legs fails
+# before anything runs (the nightly ci-linux `check` job, 2026-11-23).
 check:
 	@echo '  CHECK: clean, smoke+assertions, dist, install, tests, ctest, doxygen...'
 	$(QUIET)$(MAKE) --no-print-directory IOARENA=false clean
 	$(QUIET)$(MAKE) --no-print-directory IOARENA=false DESTDIR=$(shell pwd)/@check-install \
-		CMAKE_OPT='$(MDBX_BUILD_OPTIONS) -Werror=dev' \
+		CMAKE_OPT='$(MDBX_BUILD_OPTIONS) -Werror=dev -Wno-error=non-target-directive' \
 		smoke-assertion ninja-assertions dist install test ctest test-doxygen
 smoke-assertion: MDBX_CHECKING=2
 smoke-assertion: smoke
