@@ -128,6 +128,8 @@ A maintenance release of the stable line: backported fixes for data safety, corr
     - Fixed cloning a read transaction crashing on cleanup or reading recycled pages; fails cleanly now ([#128](https://github.com/Mithril-mine/libmdbx-devel/issues/128), [#148](https://github.com/Mithril-mine/libmdbx-devel/issues/148)) (backport).
 
  - Wrong results and API behavior:
+    - Fixed `mdbx_env_defrag()` reporting success and no obstacles when stuck at an unmovable page ([#550](https://github.com/Mithril-mine/libmdbx-devel/issues/550)) (backport).
+    - Fixed `mdbx_env_defrag()` ignoring the time limit when the shrink goal is unreachable ([#550](https://github.com/Mithril-mine/libmdbx-devel/issues/550)) (backport).
     - Fixed a rare SIGPIPE process-death on copying to a pipe closed by the reader; the `EPIPE` error is returned now ([#529](https://github.com/Mithril-mine/libmdbx-devel/pull/529)) (backport).
     - Fixed the default geometry upper reaching the mappable limit exactly, breaking tool pipelines with `MDBX_TOO_LARGE` (backport).
     - Fixed `MDBX_opt_sync_bytes` silently truncating an over-large threshold; now `MDBX_EINVAL` ([#485](https://github.com/Mithril-mine/libmdbx-devel/issues/485)) (backport).
@@ -210,6 +212,13 @@ A maintenance release of the stable line: backported fixes for data safety, corr
     - Fixed the ~8x slowdown of short reads on Linux: ending a read-only transaction called `getpid()` ([#348](https://github.com/Mithril-mine/libmdbx-devel/issues/348)) (backport).
 
  - C++ API:
+    - Fixed the C++ dumps API treating an empty source as a valid dump: the dump predicates now uniformly reject it ([#551](https://github.com/Mithril-mine/libmdbx-devel/issues/551)) (backport).
+    - Fixed the C++ `slice::is_printable(true)` treating UTF-8 lead bytes as printable extended-ASCII ([#551](https://github.com/Mithril-mine/libmdbx-devel/issues/551)) (backport).
+    - Fixed the C++ `slice::assign()` leaving a partially updated slice on a rejected length; the raw
+      pointer/length variant is no longer public ([#551](https://github.com/Mithril-mine/libmdbx-devel/issues/551)) (backport).
+    - Fixed the C++ `map_handle::info` mode accessors producing undeclared `key_mode`/`value_mode` values ([#551](https://github.com/Mithril-mine/libmdbx-devel/issues/551)) (backport).
+    - Fixed 32-bit overflow of the C++ hex and Base58 encoders' length estimation ([#551](https://github.com/Mithril-mine/libmdbx-devel/issues/551)) (backport).
+    - Fixed the C++ `buffer_pair_spec` allocator constructor being unconditionally `noexcept` ([#551](https://github.com/Mithril-mine/libmdbx-devel/issues/551)) (backport).
     - Fixed the `*_managed` wrappers terminating the process on a failed close, with a use-after-free ([#60](https://github.com/Mithril-mine/libmdbx-devel/issues/60)) (backport).
     - Fixed `mdbx::buffer` assignment from `std::string_view` allocating despite `noexcept`; now throws ([#78](https://github.com/Mithril-mine/libmdbx-devel/issues/78)) (backport).
     - Fixed `mdbx::txn` slicing from `txn_managed` leaking the writer lock; now a compile error ([#77](https://github.com/Mithril-mine/libmdbx-devel/issues/77)) (backport).
