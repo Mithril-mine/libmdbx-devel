@@ -985,11 +985,6 @@ struct LIBMDBX_API_TYPE slice : public ::MDBX_val {
     return slice(&pod, sizeof(pod));
   }
 
-  /// \brief Assigns the slice to reference [0,bytes-1] of memory pointed by ptr.
-  /// \param ptr    The address of the data to be referenced.
-  /// \param bytes  The number of bytes to be referenced.
-  /// \returns A reference to this instance.
-  inline slice &assign(const void *ptr, size_t bytes);
   /// \brief Assigns the slice to reference the same data as the source slice.
   /// \param src  The source slice.
   /// \returns A reference to this instance.
@@ -1006,6 +1001,14 @@ struct LIBMDBX_API_TYPE slice : public ::MDBX_val {
   /// \param src  The source \ref MDBX_val to be moved from.
   /// \returns A reference to this instance.
   inline slice &assign(::MDBX_val &&src);
+  /// \brief Assigns the slice to reference [0,bytes-1] of memory pointed by ptr.
+  /// \param ptr    The address of the data to be referenced.
+  /// \param bytes  The number of bytes to be referenced.
+  /// \returns A reference to this instance.
+  /// \throws `std::length_error` for an oversize length and
+  /// `mdbx::bad_value_size` for a null pointer with a non-zero length;
+  /// the slice is left untouched in these cases.
+  inline slice &assign(const void *ptr, size_t bytes);
   /// \brief Assigns the slice to reference the [begin,end) memory range.
   /// \param begin  The address of the first byte to be referenced.
   /// \param end    The address just after the last byte to be referenced.
@@ -1015,7 +1018,7 @@ struct LIBMDBX_API_TYPE slice : public ::MDBX_val {
   /// \param str  The source string.
   /// \returns A reference to this instance.
   template <class CHAR, class T, class ALLOCATOR> slice &assign(const ::std::basic_string<CHAR, T, ALLOCATOR> &str) {
-    return assign(str.data(), str.size() * sizeof(CHAR));
+    return assign(slice(str));
   }
   /// \brief Assigns the slice to reference a null-terminated string.
   /// \param c_str  The source null-terminated string.
@@ -1026,7 +1029,7 @@ struct LIBMDBX_API_TYPE slice : public ::MDBX_val {
   /// \param view  The source string view.
   /// \returns A reference to this instance.
   template <class CHAR, class T> slice &assign(const ::std::basic_string_view<CHAR, T> &view) {
-    return assign(view.data(), view.size() * sizeof(CHAR));
+    return assign(slice(view));
   }
   /// \brief Takes over a temporary string view and assigns the slice to its contents.
   /// \param view  The source string view to be moved from.
@@ -1569,8 +1572,11 @@ struct LIBMDBX_API_TYPE slice : public ::MDBX_val {
   MDBX_CXX11_CONSTEXPR bool is_valid() const noexcept { return !(iov_base == nullptr && iov_len != 0); }
 
   /// \brief Builds an invalid slice that has a non-zero length and refers to
-  /// a null address.
-  /// \returns The invalid slice instance.
+  /// brief Builds an invalid slice that refers to a null address and has
+  /// the maximal length. The deliberately corrupted state flows through all
+  /// the assignment/copy/move paths without exceptions and assert-failures:
+  /// the length fits the maximal data size, so the internal unchecked
+  /// primitives accept it as a legit "null + length" blank-like state.
   MDBX_CXX14_CONSTEXPR static slice invalid() noexcept {
     return slice(/* using special constructor without length checking */ ~size_t(0));
   }
@@ -1715,6 +1721,15 @@ protected:
   /// and \ref blank_for_put_reserve().
   /// \param invalid_length  The length to be set with a null data pointer.
   MDBX_CXX11_CONSTEXPR slice(size_t invalid_length) noexcept : ::MDBX_val({nullptr, invalid_length}) {}
+  /// \brief The unchecked low-level assignment primitive: binds the given data
+  /// pointer and length as-is, without any validation or rejection. Only the
+  /// checked `assign()` overloads and the \ref buffer internals may call it,
+  /// and they must ensure the validity of arguments, i.e. that the expression
+  /// `ptr ? check_length(bytes) : check_nullptr_length(bytes)` would pass.
+  /// \param ptr    The address of the data to be referenced.
+  /// \param bytes  The number of bytes to be referenced.
+  /// \returns A reference to this instance.
+  MDBX_CXX14_CONSTEXPR slice &assign_unchecked(const void *ptr, size_t bytes) noexcept;
 };
 
 /// \brief Combines data slice with boolean flag to represent result of certain operations.
@@ -1984,8 +1999,15 @@ struct LIBMDBX_API to_hex {
   /// dump of a passed slice.
   /// \returns The required buffer size in bytes.
   MDBX_CXX11_CONSTEXPR size_t envisage_result_length() const noexcept {
-    const size_t bytes = source.length() << 1;
-    return wrap_width ? bytes + bytes / wrap_width : bytes;
+    /* The math is done in 64 bits to avoid a 32-bit size_t overflow: the
+     * source length is limited by MDBX_MAXDATASIZE, so on 64-bit targets the
+     * result always fits in size_t, while on 32-bit ones only a small
+     * wrap_width could make it exceed size_t. Such demand is unsatisfiable
+     * in practice (it would require an absurd wrap_width for a 2 Gb source),
+     * so the maximal size_t value is returned instead of a wrapped estimate. */
+    const uint64_t bytes = uint64_t(source.length()) << 1;
+    const uint64_t whole = wrap_width ? bytes + bytes / wrap_width : bytes;
+    return whole < SIZE_MAX ? size_t(whole) : SIZE_MAX;
   }
 
   /// \brief Fills the buffer by hexadecimal dump of a passed slice.
@@ -2043,8 +2065,11 @@ struct LIBMDBX_API to_base58 {
   /// [Base58](https://en.wikipedia.org/wiki/Base58) dump of passed slice.
   /// \returns The required buffer size in bytes.
   MDBX_CXX11_CONSTEXPR size_t envisage_result_length() const noexcept {
-    const size_t bytes = (source.length() * 11 + 7) / 8;
-    return wrap_width ? bytes + bytes / wrap_width : bytes;
+    /* The math is done in 64 bits to avoid a 32-bit size_t overflow, see
+     * the same-named method of to_hex for the details. */
+    const uint64_t bytes = (uint64_t(source.length()) * 11 + 7) / 8;
+    const uint64_t whole = wrap_width ? bytes + bytes / wrap_width : bytes;
+    return whole < SIZE_MAX ? size_t(whole) : SIZE_MAX;
   }
 
   /// \brief Fills the buffer by [Base58](https://en.wikipedia.org/wiki/Base58) dump of passed slice.
@@ -3487,8 +3512,11 @@ public:
   /// \param bytes  The number of bytes of the source data.
   /// \returns A reference to this instance.
   buffer &assign_reference(const void *ptr, size_t bytes) {
+    /* the length is checked before any change, so a rejected input leaves
+     * the buffer untouched */
+    const size_t checked = MDBX_LIKELY(ptr) ? check_length(bytes) : check_nullptr_length(bytes);
     silo_.clear();
-    inherited::assign(ptr, bytes);
+    inherited::assign_unchecked(ptr, checked);
     return *this;
   }
 
@@ -3497,7 +3525,8 @@ public:
   /// \param bytes  The number of bytes of the source data.
   /// \returns A reference to this instance.
   buffer &assign_freestanding(const void *ptr, size_t bytes) {
-    inherited::assign(silo_.assign(static_cast<const typename silo::value_type *>(ptr), check_length(bytes)), bytes);
+    inherited::assign_unchecked(silo_.assign(static_cast<const typename silo::value_type *>(ptr), check_length(bytes)),
+                                bytes);
     return *this;
   }
 
@@ -3778,13 +3807,16 @@ public:
   }
 
   /// \brief Clears the contents and storage.
-  void clear() noexcept { inherited::assign(silo_.clear(), size_t(0)); }
+  void clear() noexcept { inherited::assign_unchecked(silo_.clear(), size_t(0)); }
 
   /// \brief Clears the contents and reserve storage.
   /// \param whole_capacity  The whole capacity to reserve.
   /// \param headroom  The number of bytes to reserve in front of the data.
   void clear_and_reserve(size_t whole_capacity, size_t headroom = 0) {
-    inherited::assign(silo_.clear_and_reserve(whole_capacity, headroom), size_t(0));
+    check_length(whole_capacity);
+    if (MDBX_UNLIKELY(headroom > whole_capacity))
+      throw_bad_value_size();
+    inherited::assign_unchecked(silo_.clear_and_reserve(whole_capacity, headroom), size_t(0));
   }
 
   /// \brief Reduces memory usage by freeing unused storage space.
@@ -4234,7 +4266,8 @@ template <typename ALLOCATOR, typename CAPACITY_POLICY> struct buffer_pair_spec 
   /// \brief Constructs an empty pair with the given allocator.
   /// \param alloc  The allocator for both buffers.
   MDBX_CXX20_CONSTEXPR
-  buffer_pair_spec(const allocator_type &alloc) noexcept : key(alloc), value(alloc) {}
+  buffer_pair_spec(const allocator_type &alloc) noexcept(::std::is_nothrow_copy_constructible<allocator_type>::value)
+      : key(alloc), value(alloc) {}
 
   /// \brief Constructs the pair from the given key and value buffers.
   /// \param key    The key buffer.
@@ -6854,6 +6887,18 @@ public:
   inline bool erase(map_handle map, const slice &key, const slice &value);
 
   /// \brief Replaces the particular multi-value of the key with a new value.
+  ///
+  /// On input the `old_value` argument selects the particular multi-value
+  /// to be replaced, as for `mdbx_replace_ex()` with the
+  /// `MDBX_CURRENT | MDBX_NOOVERWRITE` combination.
+  ///
+  /// \note Unlike the template \ref replace() overloads, there is no way to
+  /// preserve the old value's content when it resides on a dirty page which
+  /// will be overwritten by the update: the core does not invoke a
+  /// preservation callback in this selection mode, and the returned data
+  /// would refer to the transaction-owned page with no owner to keep a
+  /// private copy. Use the template `replace()`/`extract()` overloads to
+  /// reliably obtain the old value.
   /// \param map  The table (map) handle.
   /// \param key  The key.
   /// \param old_value  The `old_value` argument.
@@ -8090,12 +8135,44 @@ MDBX_CXX11_CONSTEXPR map_handle::info::info(map_handle::flags flags, map_handle:
     : flags(flags), state(state) {}
 
 MDBX_CXX11_CONSTEXPR_ENUM mdbx::key_mode map_handle::info::key_mode() const noexcept {
-  return ::mdbx::key_mode(flags & (MDBX_REVERSEKEY | MDBX_INTEGERKEY));
+  /* Only the combinations accepted by the core (see check_table_flags()) are
+   * the declared members; the both-bits combination is rejected by the core
+   * and mapped to the ordinal fallback to never produce an undeclared value.
+   * The mask is switched as an integer to avoid -Wswitch on the combined
+   * cases which are not declared enumerators of MDBX_db_flags_t. */
+  switch (unsigned(flags) & unsigned(MDBX_REVERSEKEY | MDBX_INTEGERKEY)) {
+  case unsigned(MDBX_REVERSEKEY):
+    return mdbx::key_mode::reverse;
+  default /* MDBX_DB_DEFAULTS, MDBX_INTEGERKEY, or the rejected both-bits combination */:
+    return (flags & MDBX_INTEGERKEY) ? mdbx::key_mode::ordinal : mdbx::key_mode::usual;
+  }
 }
 
 MDBX_CXX11_CONSTEXPR_ENUM mdbx::value_mode map_handle::info::value_mode() const noexcept {
-  return ::mdbx::value_mode(flags & (MDBX_DUPSORT | MDBX_REVERSEDUP | MDBX_DUPFIXED | MDBX_INTEGERDUP));
+  /* Only the combinations accepted by the core (see check_table_flags()) are
+   * the declared members, except the reversed-ordinal one which has no
+   * dedicated member; any other combination is invalid and mapped to the
+   * closest defined mode to never produce an undeclared value. The mask is
+   * switched as an integer to avoid -Wswitch on the combined cases which
+   * are not declared enumerators of MDBX_db_flags_t. */
+  switch (unsigned(flags) & unsigned(MDBX_DUPSORT | MDBX_REVERSEDUP | MDBX_DUPFIXED | MDBX_INTEGERDUP)) {
+  case unsigned(MDBX_DUPSORT):
+    return mdbx::value_mode::multi;
+  case unsigned(MDBX_DUPSORT | MDBX_REVERSEDUP):
+    return mdbx::value_mode::multi_reverse;
+  case unsigned(MDBX_DUPSORT | MDBX_DUPFIXED):
+    return mdbx::value_mode::multi_samelength;
+  case unsigned(MDBX_DUPSORT | MDBX_DUPFIXED | MDBX_REVERSEDUP):
+    return mdbx::value_mode::multi_reverse_samelength;
+  case unsigned(MDBX_DUPSORT | MDBX_DUPFIXED | MDBX_INTEGERDUP):
+  case unsigned(MDBX_DUPSORT | MDBX_DUPFIXED | MDBX_INTEGERDUP | MDBX_REVERSEDUP):
+    return mdbx::value_mode::multi_ordinal;
+  default /* invalid combinations: duplicate-related flags are meaningless
+             without MDBX_DUPSORT, MDBX_INTEGERDUP requires MDBX_DUPFIXED */:
+    return (flags & MDBX_DUPSORT) ? mdbx::value_mode::multi : mdbx::value_mode::single;
+  }
 }
+
 
 inline bool exception_thunk::is_clean() const noexcept { return !captured_; }
 
@@ -8215,19 +8292,20 @@ MDBX_CXX14_CONSTEXPR slice::slice(MDBX_val &&src) : slice(src) { src.iov_base = 
 
 MDBX_CXX14_CONSTEXPR slice::slice(slice &&src) noexcept : slice(src) { src.invalidate(); }
 
-inline slice &slice::assign(const void *ptr, size_t bytes) {
+MDBX_CXX14_CONSTEXPR slice &slice::assign_unchecked(const void *ptr, size_t bytes) noexcept {
+  MDBX_CONSTEXPR_ASSERT(bytes <= size_t(MDBX_MAXDATASIZE) || (!ptr && bytes == ~size_t(0)));
   iov_base = const_cast<void *>(ptr);
-  iov_len = ptr ? check_length(bytes) : check_nullptr_length(bytes);
+  iov_len = bytes;
   return *this;
 }
 
-inline slice &slice::assign(const slice &src) noexcept {
-  iov_base = src.iov_base;
-  iov_len = src.iov_len;
-  return *this;
+inline slice &slice::assign(const void *ptr, size_t bytes) {
+  return assign_unchecked(ptr, MDBX_LIKELY(ptr) ? check_length(bytes) : check_nullptr_length(bytes));
 }
 
-inline slice &slice::assign(const ::MDBX_val &src) { return assign(src.iov_base, src.iov_len); }
+inline slice &slice::assign(const slice &src) noexcept { return assign_unchecked(src.iov_base, src.length()); }
+
+inline slice &slice::assign(const ::MDBX_val &src) { return assign(slice(src)); }
 
 slice &slice::assign(slice &&src) noexcept {
   assign(src);
@@ -8235,17 +8313,11 @@ slice &slice::assign(slice &&src) noexcept {
   return *this;
 }
 
-inline slice &slice::assign(::MDBX_val &&src) {
-  assign(src.iov_base, src.iov_len);
-  src.iov_base = nullptr;
-  return *this;
-}
+inline slice &slice::assign(::MDBX_val &&src) { return assign(slice(::std::move(src))); }
 
-inline slice &slice::assign(const void *begin, const void *end) {
-  return assign(begin, static_cast<const byte *>(end) - static_cast<const byte *>(begin));
-}
+inline slice &slice::assign(const void *begin, const void *end) { return assign(slice(begin, end)); }
 
-inline slice &slice::assign(const char *c_str) { return assign(c_str, strlen(c_str)); }
+inline slice &slice::assign(const char *c_str) { return assign(slice(c_str)); }
 
 inline slice &slice::operator=(slice &&src) noexcept { return assign(::std::move(src)); }
 
