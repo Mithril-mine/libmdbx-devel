@@ -122,6 +122,9 @@ typedef struct defract_context {
   size_t progress_counter;
   uint8_t stumble_retry;
   uint8_t stopping_reasons;
+  /* obstacle заступлен попыткой планирования (defrag_schedule), а не порядком
+   * обхода хвоста: различает изъян алгоритма от предела геометрии (issue #589) */
+  bool stumble_from_schedule;
   bool completed;
   bool batch_adaptive;
   unsigned cycle;

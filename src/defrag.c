@@ -566,12 +566,19 @@ static int defrag_move(dfc_t *dfc, da_t *arc) {
   return err;
 }
 
-static pgno_t defrag_repnl_get(dfc_t *dfc, size_t npages) {
-  if (likely(pnl_size(dfc->txn->wr.repnl) >= npages &&
-             dfc->defrag_enough >= MDBX_PNL_LEAST(dfc->txn->wr.repnl) + npages)) {
-    pgno_t pgno = dfc->largepage_amountleft ? pnl_get_best_sequence(dfc->txn->wr.repnl, npages, dfc->defrag_enough)
+/* Целью размещения служит край enough (цель сжатия). Если же ниже него
+ * свободных страниц нет, но они есть ниже самой перемещаемой страницы,
+ * то используем их: строго нисходящее перемещение уменьшает геометрию БД
+ * даже при недостижимой цели, а не оставляет дефрагментацию без движения
+ * (issue #589 defrag-stall-exhausted-target-space-below-enough-edge). */
+static pgno_t defrag_repnl_get(dfc_t *dfc, const da_t *arc, size_t npages) {
+  pgno_t ceiling = dfc->defrag_enough;
+  if (likely(pnl_size(dfc->txn->wr.repnl) > 0) && unlikely(ceiling < MDBX_PNL_LEAST(dfc->txn->wr.repnl) + npages))
+    ceiling = arc->key_or_pgno;
+  if (likely(pnl_size(dfc->txn->wr.repnl) >= npages && ceiling >= MDBX_PNL_LEAST(dfc->txn->wr.repnl) + npages)) {
+    pgno_t pgno = dfc->largepage_amountleft ? pnl_get_best_sequence(dfc->txn->wr.repnl, npages, ceiling)
                                             : gc_repnl_get_single(dfc->txn);
-    ASSERT(pgno == 0 || pgno + npages <= dfc->defrag_enough);
+    ASSERT(pgno == 0 || pgno + npages <= ceiling);
     return pgno;
   }
   return 0;
@@ -581,31 +588,40 @@ static int defrag_schedule(dfc_t *dfc, da_t *arc, pgno_t assigned) {
   da_t *stack_of_parents[CURSOR_STACK_SIZE * 2];
   size_t depth = 0;
   const size_t npages = arc->npages;
+  /* страница-препятствие: сама арка либо неспособная следовать страница цепочки */
+  pgno_t stuck_pgno = arc->key_or_pgno;
+  bool chain_stuck = false;
 
-  ASSERT(dfc->remapped_edge < dfc->defrag_enough);
+  ASSERT(dfc->remapped_edge < dfc->defrag_edge);
   for (da_t *chain = arc; chain->parent;) {
     chain = dml_search_exact(dfc->arcs, chain->parent);
     ASSERT(chain && chain->npages == 1);
     if (chain->mapped)
       break;
 
-    chain->mapped = defrag_repnl_get(dfc, 1);
+    chain->mapped = defrag_repnl_get(dfc, chain, 1);
     VERBOSE("map%s %u pages %u/%u => %u", "-parent", 1, chain->parent, chain->key_or_pgno, chain->mapped);
-    if (!chain->mapped)
+    if (!chain->mapped) {
+      /* не смогла страница цепочки, а не сама арка - учитываем в классификации */
+      stuck_pgno = chain->key_or_pgno;
+      chain_stuck = true;
       goto bailout;
+    }
 
-    ASSERT((size_t)chain->mapped + 1 <= dfc->defrag_enough);
+    ASSERT((size_t)chain->mapped + 1 <=
+           (chain->key_or_pgno >= dfc->defrag_enough ? chain->key_or_pgno : (pgno_t)dfc->defrag_enough));
     stack_of_parents[depth++] = chain;
   }
 
   ASSERT(!arc->mapped);
   if (!assigned)
-    assigned = defrag_repnl_get(dfc, npages);
+    assigned = defrag_repnl_get(dfc, arc, npages);
   arc->mapped = assigned;
   VERBOSE("map%s %zu pages %u/%u => %u", "", npages, arc->parent, arc->key_or_pgno, arc->mapped);
 
   if (arc->mapped) {
-    ASSERT(arc->mapped + npages <= dfc->retreat_edge);
+    ASSERT(arc->mapped + npages <=
+           (arc->key_or_pgno >= dfc->defrag_enough ? arc->key_or_pgno : (pgno_t)dfc->defrag_enough));
     if (npages > 1 && arc->key_or_pgno >= dfc->defrag_enough) {
       ASSERT(dfc->largepage_amountleft >= npages);
       dfc->largepage_amountleft -= (pgno_t)npages;
@@ -617,28 +633,65 @@ static int defrag_schedule(dfc_t *dfc, da_t *arc, pgno_t assigned) {
       if (dfc->remapped_edge < chain->mapped)
         dfc->remapped_edge = chain->mapped;
     }
-    if (likely(dfc->remapped_edge < dfc->retreat_edge)) {
-      dfc->cycle_pages_scheduled += (pgno_t)(npages + depth);
-      DEBUG("scheduled %zu+%zu=%zu pages %u -> %u", npages, depth, npages + depth, arc->key_or_pgno, arc->mapped);
-      return MDBX_SUCCESS;
-    }
+    /* найденное отображение валидно (цель ниже источника): планируем перемещение
+     * независимо от положения фронта целей (issue #589) */
+    dfc->cycle_pages_scheduled += (pgno_t)(npages + depth);
+    DEBUG("scheduled %zu+%zu=%zu pages %u -> %u", npages, depth, npages + depth, arc->key_or_pgno, arc->mapped);
+    return MDBX_SUCCESS;
   }
 
 bailout:
   VERBOSE("unable find/assign remapping for %zu-pages span, chain-depth %zu, repnl-len %zu, repnl-least %u, detent %u",
           npages, depth, pnl_size(dfc->txn->wr.repnl),
           pnl_size(dfc->txn->wr.repnl) ? MDBX_PNL_LEAST(dfc->txn->wr.repnl) : P_INVALID, dfc->defrag_enough);
-  if (pnl_size(dfc->txn->wr.repnl) == 0)
-    defrag_stumble(dfc, arc, "are not enough reclaimable pages available in GC (count ", 0, ")");
-  else if (MDBX_PNL_LEAST(dfc->txn->wr.repnl) + npages >= dfc->defrag_enough)
-    defrag_stumble(dfc, arc, "the next reclaimable page ", MDBX_PNL_LEAST(dfc->txn->wr.repnl),
-                   " is beyond target edge");
-  else {
-    ASSERT(npages > 1);
+  /* Страница-препятствие: сама арка, либо - при провале в цепочке - неспособная
+   * следовать страница цепочки (она ниже всех свободных страниц, и арка не может
+   * уйти без неё). Классифицируем именно по ней, чтобы честный "геометрический
+   * предел" не превратился в ложную ошибку (issue #589). */
+  const pgno_t floor_pgno = chain_stuck ? stuck_pgno : arc->key_or_pgno;
+  if (pnl_size(dfc->txn->wr.repnl) == 0) {
+    if (dfc->txn->dbs[FREE_DBI].items) {
+      /* свободных страниц пока нет, но GC ещё не исчерпан - ждём пополнения
+       * в следующих циклах */
+      dfc->stumble_from_schedule = true;
+      defrag_stumble(dfc, arc, "are not enough reclaimable pages available in GC (count ", 0, ")");
+    }
+    /* иначе: GC исчерпан и свободных страниц нет вовсе - геометрический предел,
+     * завершаем цикл без застревания (issue #589) */
+  } else if (MDBX_PNL_LEAST(dfc->txn->wr.repnl) + npages >= floor_pgno) {
+    /* Все свободные страницы лежат не ниже страницы-препятствия: нисходящее
+     * перемещение сейчас невозможно. Если GC ещё не исчерпан - ждём пополнения,
+     * иначе для арки с цепочкой это окончательно (пропускаем её, другие арки
+     * могут быть перемещены), а для одиночной арки - геометрический предел
+     * (issue #589). */
+    if (dfc->txn->dbs[FREE_DBI].items) {
+      dfc->stumble_from_schedule = true;
+      defrag_stumble(dfc, arc, "the next reclaimable page ", MDBX_PNL_LEAST(dfc->txn->wr.repnl),
+                     " is not below the moving page");
+    } else
+      VERBOSE("no free pages below %u and GC exhausted, the compaction reached its geometry floor", floor_pgno);
+  } else if (npages > 1) {
     if ((dfc->stopping_reasons & MDBX_defrag_large_chunk) == 0) {
       dfc->stopping_reasons |= MDBX_defrag_large_chunk;
+      dfc->stumble_from_schedule = true;
       defrag_stumble(dfc, arc, "is no span of ", npages, " consecutive/adjacent reclaimable pages");
     }
+  } else if (chain_stuck) {
+    /* Цели ниже самой арки есть, но цепочка не может следовать. Если GC исчерпан,
+     * положение неизменяемо - геометрический предел; иначе ждём пополнения
+     * (issue #589). */
+    if (dfc->txn->dbs[FREE_DBI].items) {
+      dfc->stumble_from_schedule = true;
+      defrag_stumble(dfc, arc, "unable to move the chain of page ", arc->key_or_pgno, " yet");
+    } else
+      VERBOSE("no free pages below the chain page %u for the page %u and GC exhausted, the compaction reached its "
+              "geometry floor",
+              stuck_pgno, arc->key_or_pgno);
+  } else {
+    /* цели ниже арки есть, но арка не получила цель - сюда попадать не должно */
+    ERROR("unexpected defrag_schedule bailout for %u-pages span %u with repnl-least %u", (unsigned)npages,
+          arc->key_or_pgno, MDBX_PNL_LEAST(dfc->txn->wr.repnl));
+    ASSERT(false);
   }
 
   /* Не получилось, возвращаем всё выделенное для родительских страниц */
@@ -797,6 +850,7 @@ int defrag_cycle(dfc_t *dfc) {
     dfc->cycle_pages_scheduled = 0;
     dfc->cycle_pages_moved = 0;
     dfc->cycle_preprogress = 0;
+    dfc->stumble_from_schedule = false;
     dfc->cycle += 1;
   }
   if (!defrag_should_continue(dfc, 0))
@@ -986,14 +1040,33 @@ int defrag_cycle(dfc_t *dfc) {
         else if (err != MDBX_RESULT_TRUE)
           return err;
       }
+      if (lp && !lp->mapped)
+        /* последовательность для отложенной large/overflow-страницы пока не
+         * найдена: именуем препятствие в результате (issue #589, R2) */
+        defrag_stumble(dfc, lp, "unable to find the sequence of ", (int64_t)lp->npages, " adjacent free pages yet");
     }
   }
 
   for (da_t *i = begin; !defrag_discontinued(dfc) && i != end && i->key_or_pgno >= dfc->retreat_edge && !lp; ++i) {
     if (i->key_or_pgno < dfc->remapped_edge) {
-      defrag_stumble(dfc, i,
-                     "all the unused pages suitable for defragmentation have been used up, the re-mapped edge is ",
-                     dfc->remapped_edge, "");
+      /* Фронт целей дошёл до страницы. Завершаем проход, если целей ниже
+       * страницы нет и не появится (состояние неизменяемо в этом цикле),
+       * иначе - используем появившиеся цели: заполнение дыр ниже фронта
+       * такое же строго нисходящее перемещение (issue #589). Это не
+       * препятствие, поэтому stumble не взводим. */
+      if (pnl_size(txn->wr.repnl) == 0 || MDBX_PNL_LEAST(txn->wr.repnl) >= i->key_or_pgno) {
+        VERBOSE("all the unused pages suitable for defragmentation have been used up, the re-mapped edge is %u",
+                dfc->remapped_edge);
+        break;
+      }
+    }
+
+    if (pnl_size(txn->wr.repnl) == 0 && !txn->dbs[FREE_DBI].items) {
+      /* Свободных страниц нет и GC исчерпан: целей для нисходящего перемещения
+       * уже не появится, состояние неизменяемо - геометрический предел сжатия
+       * достигнут. Завершаем цикл без застревания, чтобы не крутить впустую
+       * оставшиеся попытки (issue #589). */
+      VERBOSE("no free pages below %u and GC exhausted, the compaction reached its geometry floor", i->key_or_pgno);
       break;
     }
 
@@ -1150,7 +1223,9 @@ int defrag_cycle(dfc_t *dfc) {
       }
     }
   } else {
-    ASSERT(dfc->defrag_edge == txn->geo.first_unallocated);
+    /* граница хвоста могла быть подвинута пропущенными неперемещаемыми
+     * арками (issue #589), поэтому равенство здесь не требуется */
+    ASSERT(dfc->defrag_edge <= txn->geo.first_unallocated);
     ASSERT(dfc->cycle_pages_scheduled == 0);
   }
 
@@ -1159,9 +1234,12 @@ int defrag_cycle(dfc_t *dfc) {
   VERBOSE("after-%s: %u => %u (%i), GC-score %" PRIu64, "move-pages", dfc->before_defrag, txn->geo.first_unallocated,
           dfc->before_defrag - txn->geo.first_unallocated, score);
 
-  return (dfc->stumble_pgno || (txn->dbi_state[MAIN_DBI] & DBI_DIRTY) || score > dfc->cycle_initial_score)
-             ? MDBX_SUCCESS
-             : MDBX_RESULT_TRUE;
+  /* Продолжать циклы стоит только при фактическом прогрессе (перемещения) или
+   * при препятствии, которое может разрешиться (заступ в guard). Прежняя
+   * проверка "DIRTY-флага и улучшения GC-счёта" могла крутить циклы бесконечно
+   * без какого-либо прогресса: флаг персистентен, а счёт дрейфует от
+   * пер-цикловой перегрузки GC (issue #589). */
+  return (dfc->stumble_pgno || dfc->cycle_pages_moved) ? MDBX_SUCCESS : MDBX_RESULT_TRUE;
 }
 
 void defrag_destroy(dfc_t *dfc) {

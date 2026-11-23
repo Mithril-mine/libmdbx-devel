@@ -8259,7 +8259,11 @@ typedef enum MDBX_defrag_stopping_reasons {
   MDBX_defrag_step_size = 1,         /**< Step transaction size limit reached */
   MDBX_defrag_large_chunk = 2,       /**< Preliminary movement is necessary to form
                                           a sufficient sequence of adjacent free pages in order to
-                                          then move the revealed Large/Overflow page on a next cycle */
+                                          then move the revealed Large/Overflow page on a next cycle.
+                                          This is a per-cycle marker: it reflects the last cycle's
+                                          shape and may be present in the final result when the run
+                                          ended on such an obstacle. The Large/Overflow obstacle is
+                                          always visible as obstructed_span greater than one. */
   MDBX_defrag_discontinued = 4,      /**< Discontinued by user */
   MDBX_defrag_laggard_reader = 8,    /**< At least one process performing a reading transaction
                                           prevents further defragmentation */
@@ -8395,6 +8399,11 @@ typedef int (*MDBX_defrag_notify_func)(void *ctx, const MDBX_defrag_result_t *pr
  * run of the same size. In such cases the defragmentation stops after a few unproductive cycles with
  * \ref MDBX_defrag_large_chunk among the stopping_reasons, while the database stays consistent since every cycle
  * is committed transactionally.
+ *
+ * Besides, the reachable floor of defragmentation may exceed the goal: when no admissible move remains (for
+ * instance, all free pages lie beyond the data pages that could move into them) the defragmentation stops with
+ * \ref MDBX_RESULT_TRUE, zero stopping_reasons and the named or zero `obstructed_pgno`, while `pages_left` reflects
+ * the remaining distance to the goal. Repeating the call does not overcome such a floor.
  *
  * \param [in] env                   A pointer to an instance of environment.
  *
