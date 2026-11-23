@@ -519,7 +519,7 @@ MDBX_DIST_DIR = libmdbx-$(MDBX_VERSION_NODOT)
 MDBX_SMOKE_EXTRA ?=
 
 check: DESTDIR = $(shell pwd)/@check-install
-check: CMAKE_OPT += -Werror=dev
+check: CMAKE_OPT += -Werror=dev -Wno-error=non-target-directive
 check: clean | smoke-assertion ninja-assertions dist install test ctest
 smoke-assertion: MDBX_FORCE_ASSERTIONS=1
 smoke-assertion: smoke
