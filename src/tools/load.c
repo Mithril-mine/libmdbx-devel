@@ -821,10 +821,68 @@ int main(int argc, char *argv[]) {
     /* Purge before the sequence is read and restored: a purge resets it. With `-s` every section loads into the
      * same table, so it is purged only once. */
     if (purge) {
-      err = mdbx_drop(txn, dbi, false);
-      if (unlikely(err != MDBX_SUCCESS)) {
-        error("mdbx_drop", err);
-        goto bailout;
+      if (subname) {
+        err = mdbx_drop(txn, dbi, false);
+        if (unlikely(err != MDBX_SUCCESS)) {
+          error("mdbx_drop", err);
+          goto bailout;
+        }
+      } else {
+        /* The MAIN section of a multi-table dump carries only the raw
+         * records: the named tables' descriptors are MAIN records too, so
+         * mdbx_drop() refuses MAIN while any named table exists, and a real
+         * drop would also destroy the tables loaded by the earlier sections
+         * (that is how -p failed with MDBX_INCOMPATIBLE on the trailing MAIN
+         * section of every multi-table dump, leaving a partial load).
+         * Purge the raw remainder instead: delete every MAIN record that
+         * does not name a table, using the same ACCEDE probe mdbx_dump
+         * uses to split a database into sections. */
+        /* The probes bind a dbi slot per probed key and log a NOTICE for
+         * every raw record that merely looks like a table name; raise the
+         * threshold for the scan so the purge stays silent. */
+        if (!quiet)
+          mdbx_setup_debug(MDBX_LOG_WARN, MDBX_DBG_DONTCHANGE, MDBX_LOGGER_DONTCHANGE);
+        MDBX_cursor *purge_cursor;
+        err = mdbx_cursor_open(txn, dbi, &purge_cursor);
+        if (unlikely(err != MDBX_SUCCESS)) {
+          error("mdbx_cursor_open", err);
+          goto bailout;
+        }
+        MDBX_val purge_key;
+        err = mdbx_cursor_get(purge_cursor, &purge_key, nullptr, MDBX_FIRST);
+        while (err == MDBX_SUCCESS) {
+          if (user_break) {
+            err = MDBX_EINTR;
+            break;
+          }
+          MDBX_dbi named_dbi;
+          const int probe_rc = mdbx_dbi_open_ex2(txn, &purge_key, MDBX_DB_ACCEDE, &named_dbi, nullptr, nullptr);
+          if (probe_rc != MDBX_INCOMPATIBLE) {
+            /* a table descriptor (or a probe error): never a raw record */
+            if (unlikely(probe_rc != MDBX_SUCCESS)) {
+              err = probe_rc;
+              break;
+            }
+            /* release the slot so a long MAIN section cannot exhaust maxdbs */
+            mdbx_dbi_close(env, named_dbi);
+            err = mdbx_cursor_get(purge_cursor, &purge_key, nullptr, MDBX_NEXT);
+            continue;
+          }
+          err = mdbx_cursor_del(purge_cursor, 0);
+          if (unlikely(err != MDBX_SUCCESS))
+            break;
+          err = mdbx_cursor_get(purge_cursor, &purge_key, nullptr, MDBX_NEXT);
+        }
+        if (err == MDBX_NOTFOUND)
+          err = MDBX_SUCCESS;
+        mdbx_cursor_close(purge_cursor);
+        if (!quiet)
+          mdbx_setup_debug(MDBX_LOG_NOTICE, MDBX_DBG_DONTCHANGE, MDBX_LOGGER_DONTCHANGE);
+        if (unlikely(err != MDBX_SUCCESS)) {
+          if (err != MDBX_EINTR)
+            error("purge-maindb", err);
+          goto bailout;
+        }
       }
       if (forced_subname)
         purge = false;
