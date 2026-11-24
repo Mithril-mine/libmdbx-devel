@@ -1810,7 +1810,18 @@ MDBX_DEFINE_ENUM_FLAG_OPERATORS(MDBX_copy_flags)
 /** \brief Cursor operations
  * \ingroup c_cursors
  * This is the set of all operations for retrieving data using a cursor.
- * \see mdbx_cursor_get() */
+ *
+ * Every operation is accepted by \ref mdbx_cursor_get(); subsets are
+ * accepted as the `start_op`/`turn_op` arguments of \ref mdbx_cursor_scan()
+ * and the `from_op` argument of \ref mdbx_cursor_scan_from() (see the
+ * corresponding parameter docs for the acceptable values), while
+ * \ref mdbx_cursor_get_batch() supports only \ref MDBX_FIRST and
+ * \ref MDBX_NEXT.
+ *
+ * \see mdbx_cursor_get()
+ * \see mdbx_cursor_scan()
+ * \see mdbx_cursor_scan_from()
+ * \see mdbx_cursor_get_batch() */
 typedef enum MDBX_cursor_op {
   /** Position at first key/data item */
   MDBX_FIRST,
@@ -1818,14 +1829,22 @@ typedef enum MDBX_cursor_op {
   /** \ref MDBX_DUPSORT -only: Position at first data item of current key. */
   MDBX_FIRST_DUP,
 
-  /** \ref MDBX_DUPSORT -only: Position at key/data pair. */
+  /** \ref MDBX_DUPSORT -only: Position at key/data pair. Both the `key`
+   * and `data` arguments must carry the sought values, and \ref MDBX_NOTFOUND
+   * is returned when no such pair exists. */
   MDBX_GET_BOTH,
 
   /** \ref MDBX_DUPSORT -only: Position at given key and at first data greater
-   * than or equal to specified data. */
+   * than or equal to specified data. The `data` argument is updated with the
+   * value found; \ref MDBX_NOTFOUND is returned when the key is absent or
+   * has no such duplicates. */
   MDBX_GET_BOTH_RANGE,
 
-  /** Return key/data at current cursor position */
+  /** Return key/data at current cursor position, without any movement.
+   * Returns \ref MDBX_ENODATA when the cursor has no position at all
+   * (fresh or reset), and \ref MDBX_NOTFOUND when it points past the last
+   * item. Usable as the start operation of \ref mdbx_cursor_scan()
+   * to scan from the current position. */
   MDBX_GET_CURRENT,
 
   /** \ref MDBX_DUPFIXED -only: Return a batch of up to a page of duplicate
@@ -1863,13 +1882,18 @@ typedef enum MDBX_cursor_op {
   /** Position at last data item of previous key */
   MDBX_PREV_NODUP,
 
-  /** Position at specified key */
+  /** Position at specified key. On success the `key`/`data` arguments
+   * receive the found pair; \ref MDBX_NOTFOUND is returned when the key
+   * is absent. */
   MDBX_SET,
 
-  /** Position at specified key, return both key and data */
+  /** Position at specified key, return both key and data.
+   * \ref MDBX_NOTFOUND is returned when the key is absent. */
   MDBX_SET_KEY,
 
-  /** Position at first key greater than or equal to specified key. */
+  /** Position at first key greater than or equal to specified key.
+   * The `key` argument is updated with the key found; \ref MDBX_NOTFOUND
+   * is returned when there is no such key. */
   MDBX_SET_RANGE,
 
   /** \ref MDBX_DUPFIXED -only: Position at previous page and return up to
@@ -1905,7 +1929,11 @@ typedef enum MDBX_cursor_op {
    * \ref MDBX_NOTFOUND otherwise. */
   MDBX_SET_UPPERBOUND,
 
-  /** Doubtless cursor positioning at a specified key. */
+  /** Doubtless cursor positioning at a specified key: the cursor lands at
+   * the nearest key satisfying the requested bound (the `key`/`data`
+   * arguments receive the found pair), and these operations never fail
+   * on a missing key. \ref MDBX_NOTFOUND is returned only when no key
+   * satisfies the bound at all. */
   MDBX_TO_KEY_LESSER_THAN,
   MDBX_TO_KEY_LESSER_OR_EQUAL /** \copydoc MDBX_TO_KEY_LESSER_THAN */,
   MDBX_TO_KEY_EQUAL /** \copydoc MDBX_TO_KEY_LESSER_THAN */,
@@ -1913,7 +1941,11 @@ typedef enum MDBX_cursor_op {
   MDBX_TO_KEY_GREATER_THAN /** \copydoc MDBX_TO_KEY_LESSER_THAN */,
 
   /** Doubtless cursor positioning at a specified key-value pair
-   * for dupsort/multi-value hives. */
+   * for dupsort/multi-value hives: the exact key match is required and
+   * the `data` argument positions among the key's duplicates, then the
+   * requested bound is applied within them. As with the
+   * \ref MDBX_TO_KEY_LESSER_THAN family, \ref MDBX_NOTFOUND is returned
+   * only when no pair satisfies the bound. */
   MDBX_TO_EXACT_KEY_VALUE_LESSER_THAN,
   MDBX_TO_EXACT_KEY_VALUE_LESSER_OR_EQUAL /** \copydoc MDBX_TO_EXACT_KEY_VALUE_LESSER_THAN */,
   MDBX_TO_EXACT_KEY_VALUE_EQUAL /** \copydoc MDBX_TO_EXACT_KEY_VALUE_LESSER_THAN */,
@@ -1921,7 +1953,10 @@ typedef enum MDBX_cursor_op {
   MDBX_TO_EXACT_KEY_VALUE_GREATER_THAN /** \copydoc MDBX_TO_EXACT_KEY_VALUE_LESSER_THAN */,
 
   /** Doubtless cursor positioning at a specified key-value pair
-   * for dupsort/multi-value hives. */
+   * for dupsort/multi-value hives: unlike the
+   * \ref MDBX_TO_EXACT_KEY_VALUE_LESSER_THAN family the exact key match
+   * is not required - the bound is applied over pairs with the `data`
+   * value participating in the comparison. */
   MDBX_TO_PAIR_LESSER_THAN,
   MDBX_TO_PAIR_LESSER_OR_EQUAL /** \copydoc MDBX_TO_PAIR_LESSER_THAN */,
   MDBX_TO_PAIR_EQUAL /** \copydoc MDBX_TO_PAIR_LESSER_THAN */,
