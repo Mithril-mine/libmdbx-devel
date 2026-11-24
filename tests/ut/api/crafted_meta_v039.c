@@ -62,8 +62,11 @@ static void cleanup(void) {
   remove(kLckPath);
 }
 
-static uint8_t baseline[MDBX_MAX_PAGESIZE];
-static uint8_t work[MDBX_MAX_PAGESIZE];
+/* MDBX_ALIGNAS: the page-cast of a plain uint8_t array relies on the
+ * placement the compiler/linker grants, which a strict layout does not
+ * (a static uint8_t array may sit at any byte address). */
+static MDBX_ALIGNAS(8) uint8_t baseline[MDBX_MAX_PAGESIZE];
+static MDBX_ALIGNAS(8) uint8_t work[MDBX_MAX_PAGESIZE];
 
 static const unsigned kMaxHeight = CURSOR_STACK_SIZE - 1; /* 31: the maximal height meta_validate accepts */
 

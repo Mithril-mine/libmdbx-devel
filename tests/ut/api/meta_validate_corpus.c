@@ -49,8 +49,11 @@ static const char kLckPath[] = "meta-validate-corpus.mdbx-lck";
 static unsigned failed, passed;
 
 static MDBX_env *g_env;
-static uint8_t baseline[MDBX_MAX_PAGESIZE];
-static uint8_t work[MDBX_MAX_PAGESIZE];
+/* MDBX_ALIGNAS: the page-cast of a plain uint8_t array relies on the
+ * placement the compiler/linker grants, which a strict layout does not
+ * (a static uint8_t array may sit at any byte address). */
+static MDBX_ALIGNAS(8) uint8_t baseline[MDBX_MAX_PAGESIZE];
+static MDBX_ALIGNAS(8) uint8_t work[MDBX_MAX_PAGESIZE];
 static uint32_t g_ps;
 static pgno_t file_pages;
 static unsigned baseline_pgno;

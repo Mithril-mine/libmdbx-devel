@@ -49,8 +49,11 @@ MDBX_MAYBE_UNUSED __cold void debug_log_sub(int level, const char *function, int
 static const char kDbPath[] = "crafted-v023.mdbx";
 static const char kLckPath[] = "crafted-v023.mdbx-lck";
 
-static uint8_t baseline[MDBX_MAX_PAGESIZE];
-static uint8_t work[MDBX_MAX_PAGESIZE];
+/* MDBX_ALIGNAS: the page-cast of a plain uint8_t array relies on the
+ * placement the compiler/linker grants, which a strict layout does not
+ * (a static uint8_t array may sit at any byte address). */
+static MDBX_ALIGNAS(8) uint8_t baseline[MDBX_MAX_PAGESIZE];
+static MDBX_ALIGNAS(8) uint8_t work[MDBX_MAX_PAGESIZE];
 
 /* the pv encoding of exactly 65536 pages: pagesize 65536 x 65536 pages is
  * the byte value 2^32, which does not fit the 32-bit intptr_t */
