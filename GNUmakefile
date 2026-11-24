@@ -865,6 +865,7 @@ DOCSITE_SRCS := $(sort $(shell git ls-files --cached --others --exclude-standard
 	docs/docsite/en/mkdocs.yml docs/docsite/ru/mkdocs.yml docs/docsite/base.yml \
 	docs/docsite/hooks/docsite_hooks.py docs/docsite/localize_examples.py \
 	docs/docsite/normalize_site.py docs/docsite/check_links.py \
+	$(wildcard docs/docsite/mkdoxy-templates/*.jinja2) \
 	docs/docsite/verify_contract.py docs/docsite/doc_audit.py docs/docsite/contract-amendment.md)
 
 build/tmp/.stamp: $(DOCSITE_SRCS) build/tmp/docsite-inputs/Doxyfile build/tmp/docsite-inputs/mdbx.h build/tmp/docsite-inputs/mdbx.h++ build/tmp/docsite-inputs/options.h docs/en/reference/changelog.md $(lastword $(MAKEFILE_LIST))

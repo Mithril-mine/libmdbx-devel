@@ -31,19 +31,20 @@ nav:
       - Первые шаги: getting-started/first-steps.md
       - Шпаргалка CRUD: getting-started/crud-quick.md
       - Режимы durability: getting-started/durability-modes.md
-  - Учебник:
-      - Об учебнике: textbook/index.md
-      - Каркас: textbook/00-karkas.md
-      - Том I. Основы: textbook/01-tom-i-osnovy.md
-      - Том II. Практика: textbook/02-tom-ii-praktika.md
-      - Том III. Механизмы: textbook/03-tom-iii-mehanizmy.md
-      - Том IV. Производительность: textbook/04-tom-iv-proizvoditelnost.md
-      - Том V. Экспертные темы: textbook/05-tom-v-ekspertnye-temy.md
-      - Том VI. Биндинги: textbook/06-tom-vi-bindings.md
+  - Справочник:
+      - Справочник по API: reference/index.md
+      - Утилиты командной строки: reference/tooling.md
   - Погружение:
       - Архитектура: deep-dive/architecture.md
       - Внутренние механизмы: deep-dive/internals.md
       - Улучшения относительно LMDB: deep-dive/improvements.md
-  - Справочник:
-      - Справочник по API: reference/index.md
-      - Утилиты командной строки: reference/tooling.md
+  - Учебник:
+      - Об учебнике: textbook/index.md
+      - Каркас: textbook/00-karkas.md
+      - Тома:
+          - Том I. Основы: textbook/01-tom-i-osnovy.md
+          - Том II. Практика: textbook/02-tom-ii-praktika.md
+          - Том III. Механизмы: textbook/03-tom-iii-mehanizmy.md
+          - Том IV. Производительность: textbook/04-tom-iv-proizvoditelnost.md
+          - Том V. Экспертные темы: textbook/05-tom-v-ekspertnye-temy.md
+          - Том VI. Биндинги: textbook/06-tom-vi-bindings.md
