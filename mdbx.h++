@@ -1571,12 +1571,12 @@ struct LIBMDBX_API_TYPE slice : public ::MDBX_val {
   /// \returns `true` if the slice is valid.
   MDBX_CXX11_CONSTEXPR bool is_valid() const noexcept { return !(iov_base == nullptr && iov_len != 0); }
 
-  /// \brief Builds an invalid slice that has a non-zero length and refers to
-  /// brief Builds an invalid slice that refers to a null address and has
+  /// \brief Builds an invalid slice that refers to a null address and has
   /// the maximal length. The deliberately corrupted state flows through all
   /// the assignment/copy/move paths without exceptions and assert-failures:
   /// the length fits the maximal data size, so the internal unchecked
   /// primitives accept it as a legit "null + length" blank-like state.
+  /// \returns The invalid slice instance.
   MDBX_CXX14_CONSTEXPR static slice invalid() noexcept {
     return slice(/* using special constructor without length checking */ ~size_t(0));
   }

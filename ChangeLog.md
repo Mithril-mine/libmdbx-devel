@@ -64,7 +64,7 @@ Known defects deliberately left unfixed (their fixes require file-identity bookk
     - Fixed a divide-by-zero in `mdbx_estimate_*()` on a crafted tree with zero leaf/branch counts ([#75](https://github.com/Mithril-mine/libmdbx-devel/issues/75)) (backport).
 
  - Crashes, hangs and undefined behavior:
-    - Fixed the use of an uninitialized inner-cursor pointer reported by MSan/Valgrind for non-DUPSORT tables (backport).
+    - Fixed an uninitialized inner-cursor pointer use reported by MSan/Valgrind (backport).
     - Fixed a formal INT64_MIN negation overflow in mdbx_is_readahead_reasonable() ([#485](https://github.com/Mithril-mine/libmdbx-devel/issues/485)) (backport).
     - Fixed undefined behavior in the JSON-integer key encoding for huge magnitudes (backport).
     - Fixed `mdbx_replace_ex()` with overlapping buffers hanging or crashing the next operation ([#56](https://github.com/Mithril-mine/libmdbx-devel/issues/56)) (backport).
@@ -148,9 +148,9 @@ Known defects deliberately left unfixed (their fixes require file-identity bookk
     - Fixed mdbx_stat -r/-rr exiting with FAILURE for the informational reader-table outcomes ([#485](https://github.com/Mithril-mine/libmdbx-devel/issues/485)) (backport).
     - Fixed mdbx_drop aborting a transaction handle already terminated by a failed commit ([#485](https://github.com/Mithril-mine/libmdbx-devel/issues/485)) (backport).
     - Fixed mdbx_load dropping the rest of a dump line at an embedded NUL byte; now an error ([#485](https://github.com/Mithril-mine/libmdbx-devel/issues/485)) (backport).
-    - Fixed mdbx_load -p failing with MDBX_INCOMPATIBLE on the trailing MAIN section of a multi-table dump ([#485](https://github.com/Mithril-mine/libmdbx-devel/issues/485)) (backport).
+    - Fixed mdbx_load -p failing with MDBX_INCOMPATIBLE on the trailing MAIN section ([#485](https://github.com/Mithril-mine/libmdbx-devel/issues/485)) (backport).
     - Fixed the tool loggers crashing on a null format and mdbx_load ctype calls on high-bit bytes ([#485](https://github.com/Mithril-mine/libmdbx-devel/issues/485)) (backport).
-    - Fixed mdbx_copy not clustering options and silently swallowing SIGINT/SIGTERM; the mdbx_chk interrupted exit code ([#485](https://github.com/Mithril-mine/libmdbx-devel/issues/485)) (backport).
+    - Fixed mdbx_copy not clustering options and silently swallowing SIGINT/SIGTERM ([#485](https://github.com/Mithril-mine/libmdbx-devel/issues/485)) (backport).
     - Fixed `mdbx_load` failing with a missing-file error when reading a dump from standard input ([#50](https://github.com/Mithril-mine/libmdbx-devel/issues/50)) (backport).
     - Fixed `mdbx_dump -p`/`mdbx_load` silently losing data when a key or value starts with a space ([#61](https://github.com/Mithril-mine/libmdbx-devel/issues/61)) (backport).
     - Fixed `mdbx_chk` crashing on named sub-tables with the `-i`/`-s` options ([#49](https://github.com/Mithril-mine/libmdbx-devel/issues/49), [#51](https://github.com/Mithril-mine/libmdbx-devel/issues/51)) (backport).

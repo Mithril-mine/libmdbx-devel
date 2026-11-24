@@ -298,7 +298,7 @@
  * on a process death and the owner's pid stays detectable in the lock
  * word. The POSIX-2001 mutexes remain available opt-in, for the setups
  * where the System V IPC is unusable, but they provide no dead-writer
- * recovery (see #565). */
+ * recovery ([#565](https://github.com/Mithril-mine/libmdbx-devel/issues/565)). */
 #if defined(EOWNERDEAD) && _POSIX_THREAD_PROCESS_SHARED >= 200809L &&                                                  \
     ((defined(_POSIX_THREAD_ROBUST_PRIO_INHERIT) && _POSIX_THREAD_ROBUST_PRIO_INHERIT > 0) ||                          \
      (defined(_POSIX_THREAD_ROBUST_PRIO_PROTECT) && _POSIX_THREAD_ROBUST_PRIO_PROTECT > 0) ||                          \
@@ -315,7 +315,7 @@
  * without giving the dead-owner recovery there.
  * For both platforms the POSIX-2001 mutexes remain the fallback, as they
  * were before the SYSV-fallback change, with their dead-owner limitation
- * (see #565) accepted as the platform-specific trade-off. */
+ * ([#565](https://github.com/Mithril-mine/libmdbx-devel/issues/565)) accepted as the platform-specific trade-off. */
 #define MDBX_LOCKING MDBX_LOCKING_POSIX2001
 #else
 #define MDBX_LOCKING MDBX_LOCKING_SYSV
