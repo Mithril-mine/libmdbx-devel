@@ -2913,7 +2913,7 @@
     "full": [
       "android-r26d-armeabi-v7a-with-neon-release",
       "android-r27d-arm64-v8a-debug",
-      "android-r27d-x86-64-emu",
+      "android-r30-x86-64-emu",
       "android-r29-arm64-v8a-release",
       "linux-clang-ubuntu-latest-relwithdebinfo-cxx-on",
       "linux-gcc-ubuntu-latest-relwithdebinfo-cxx-on",
@@ -3025,7 +3025,7 @@
     "cell counts: linux=23 (14 domain incl. the sanitizer/warnings/coverage cells + 8 MDBX_LOCKING flavors + the warnings gate), macos=3, win-msvc=44, win-cxx=78, win-mscl=18, win-mingw=9, android=15 build-only + 1 emulator; total=191.",
     "Runner policy: prefer the latest GitHub runner images; a minimal set of compat configs stays on old ones (exactly one ubuntu-24.04 cell; the `make dist` job keeps ubuntu-24.04). MDBX_LOCKING is fixed on Windows (a platform limitation), so the LOCKING flavors are Linux-only.",
     "full = union of the domain cells (no duplicate ids).",
-    "Android cells are build-only except the emulator pilot (android-r27d-x86-64-emu): boots an API-30 x86_64 AVD and runs smoke_basic/smoke_chk via adb. Kept in the nightly profiles for the stability signal; not part of the change-addressed gate.",
+    "Android cells are build-only except the emulator pilot (android-r30-x86-64-emu): boots an API-30 x86_64 AVD and runs smoke_basic/smoke_chk via adb. Kept in the nightly profiles for the stability signal; not part of the change-addressed gate.",
     "push-quick profile: 6 linux + 1 macos + 3 windows (v142 win2022, v145 winlatest, mingw) = 10 cells, fast scope, on every push to devel/master and on every pull_request.",
     "the nightly profiles belong to the platform workflows (ci-linux/ci-windows/ci-macos/ci-android, full scope); the CI_NIGHTLY marker (GTEST_SHUFFLE) travels via the ci-run.yml nightly input; ci-linux additionally runs the classic `make check` gate."
   ],

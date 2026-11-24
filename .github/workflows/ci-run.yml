@@ -217,6 +217,11 @@ jobs:
           EMU_ARCH: ${{ steps.detect.outputs.arch }}
         run: |
           set -euo pipefail
+          # The test replay drives the emulator through `adb shell`, and
+          # run-cell.py demands adb on the PATH: the hosted images do not
+          # export the platform-tools directory (the 2026-11-24 run: the
+          # emulator booted, then the cell died at the run-cell.py probe).
+          export PATH="${ANDROID_SDK_ROOT:-${ANDROID_HOME:-/usr/local/lib/android/sdk}}/platform-tools:$PATH"
           tests/ci/android-emulator-boot.sh
           EXTRA="-DINTERPROCEDURAL_OPTIMIZATION=OFF"
           if [ "${{ inputs.coverage }}" != "true" ] && command -v ccache >/dev/null 2>&1; then
