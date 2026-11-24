@@ -600,16 +600,23 @@ def build_cases(r: Runner):
             # (the last positional arg), not mis-bind it to '-f'. The loaded
             # database must be identical to one loaded from the same stream
             # via '-f file'.
+            # The FIXED geometry pins the default-mapping choice out of the
+            # comparison: without it each load process derives the upper from
+            # its own RAM estimate (reasonable_db_maxsize()), so on a loaded
+            # runner the two processes may round to different GiB boundaries
+            # and the round-trip comparison fails spuriously (observed as the
+            # 23 vs 24 GiB mismatch on the 2026-11-24 nightly's profgc cell).
+            pinned_geometry = ["-G", "67108864:67108864:0:0:4096"]
             d = r.work / "load_si"
             shutil.rmtree(d, ignore_errors=True)
             d.mkdir(parents=True)
             with open(FIXTURES / "base.dump", "rb") as dump_in:
-                proc = subprocess.run([B, "-nf", str(d / "base.db")], stdin=dump_in,
-                                      stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+                proc = subprocess.run([B, "-nf", str(d / "base.db")] + pinned_geometry,
+                                      stdin=dump_in, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
             rc, stdout, stderr = proc.returncode, proc.stdout, proc.stderr
             data_ok = True
-            subprocess.run([r.load_bin, "-nq", "-f", str(FIXTURES / "base.dump"), str(d / "ref.db")],
-                           stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            subprocess.run([r.load_bin, "-nq", "-f", str(FIXTURES / "base.dump")] + pinned_geometry
+                           + [str(d / "ref.db")], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
             reloaded = subprocess.run([r.dump_bin, "-q", str(d / "base.db")],
                                       stdout=subprocess.PIPE, stderr=subprocess.DEVNULL).stdout
             ref = subprocess.run([r.dump_bin, "-q", str(d / "ref.db")],
