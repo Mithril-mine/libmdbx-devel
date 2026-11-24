@@ -245,18 +245,29 @@ jobs:
               if [ -n "$PROFS" ]; then
                 # Windows clang (msvc-triple): LLVM instrumentation, не gcov.
                 # llvm-profdata/llvm-cov идут из состава VS LLVM; env клетки в
-                # этот шаг НЕ пробрасывается, поэтому путь ищем: STUDIO_CLANG_DIR
-                # (если задан в окружении шага), иначе — установленный LLVM.
+                # этот шаг НЕ пробрасывается, поэтому STUDIO_CLANG_DIR здесь
+                # обычно пуст — пробуем известные расположения (LLVM из состава
+                # VS 18/17, отдельный LLVM), затем PATH.
                 LLVMTOOL="${STUDIO_CLANG_DIR-}"
                 if [ -z "$LLVMTOOL" ] || [ ! -x "$LLVMTOOL/llvm-profdata.exe" ]; then
-                  if command -v llvm-profdata >/dev/null 2>&1; then
+                  LLVMTOOL=""
+                  for LLVMCAND in \
+                    "C:/Program Files/Microsoft Visual Studio/18/Enterprise/VC/Tools/Llvm/x64/bin" \
+                    "C:/Program Files/Microsoft Visual Studio/18/Community/VC/Tools/Llvm/x64/bin" \
+                    "C:/Program Files/Microsoft Visual Studio/17/Enterprise/VC/Tools/Llvm/x64/bin" \
+                    "C:/Program Files/LLVM/bin"
+                  do
+                    if [ -x "$LLVMCAND/llvm-profdata.exe" ]; then
+                      LLVMTOOL="$LLVMCAND"
+                      break
+                    fi
+                  done
+                  if [ -z "$LLVMTOOL" ] && command -v llvm-profdata >/dev/null 2>&1; then
                     LLVMTOOL="$(dirname "$(command -v llvm-profdata)")"
-                  elif [ -x "C:/Program Files/LLVM/bin/llvm-profdata.exe" ]; then
-                    LLVMTOOL="C:/Program Files/LLVM/bin"
-                  else
-                    echo "mscl coverage: llvm-profdata not found — skipping" >&2
-                    LLVMTOOL=""
                   fi
+                fi
+                if [ -z "$LLVMTOOL" ]; then
+                  echo "mscl coverage: llvm-profdata not found — skipping" >&2
                 fi
                 if [ -n "$LLVMTOOL" ]; then
                   "$LLVMTOOL/llvm-profdata.exe" merge -sparse $PROFS \
@@ -276,10 +287,27 @@ jobs:
                 # tools/gcov_dump_info.py (git-относительные пути).
                 TMPGCOV="$(mktemp -d)"
                 # mingw-gcov пишет .gcda в текущий каталог ctest-процесса
-                # (Testing/Temporary), не рядом с .o в build — ищем по workspace.
-                for gcda in $(find "$ROOT" -name '*.gcda' | head -200); do
-                  (cd "$TMPGCOV" && gcov -b "$gcda") >/dev/null 2>&1 || true
-                done
+                # (Testing/Temporary), не рядом с .o в build — ищем по workspace
+                # (GCOV_PREFIX клетку больше не задает: он уводил .gcda за
+                # пределы workspace и делал сбор невозможным).
+                # gcov тоже ищем сами: env клетки (PATH mingw64) в этот шаг не
+                # пробрасывается — сначала PATH, затем известные расположения.
+                GCOV="$(command -v gcov || true)"
+                if [ -z "$GCOV" ]; then
+                  for GCOVCAND in /c/programdata/mingw64/mingw64/bin /c/mingw64/bin /c/msys64/mingw64/bin; do
+                    if [ -x "$GCOVCAND/gcov.exe" ]; then
+                      GCOV="$GCOVCAND/gcov.exe"
+                      break
+                    fi
+                  done
+                fi
+                if [ -n "$GCOV" ]; then
+                  for gcda in $(find "$ROOT" -name '*.gcda' | head -200); do
+                    (cd "$TMPGCOV" && "$GCOV" -b "$gcda") >/dev/null 2>&1 || true
+                  done
+                else
+                  echo "mingw coverage: gcov not found — skipping" >&2
+                fi
                 python3 "$GITHUB_WORKSPACE/skynet/MCP-shared-graph-memory/tools/gcov_dump_info.py" \
                   --gcov-glob "$TMPGCOV/*.gcov" --root "$ROOT" > coverage/lines.info || true
                 rm -rf "$TMPGCOV"

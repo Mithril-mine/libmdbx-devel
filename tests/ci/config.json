@@ -1120,9 +1120,7 @@
       "id": "win-mingw-64-debug-coverage",
       "runs-on": "windows-latest",
       "env": {
-        "PATH": "/c/mingw64/bin:/c/programdata/mingw64/mingw64/bin",
-        "GCOV_PREFIX": "C:\\a\\gcda",
-        "GCOV_PREFIX_STRIP": "3"
+        "PATH": "/c/mingw64/bin:/c/programdata/mingw64/mingw64/bin"
       },
       "cmake": [
         "-G|MinGW Makefiles",
@@ -1135,7 +1133,7 @@
         "-DMDBX_BUILD_CXX:BOOL=OFF"
       ],
       "ctest": null,
-      "note": "ci-windows-mingw Debug static (gcov flush via exe exit) + coverage windows-import/lck-windows",
+      "note": "ci-windows-mingw Debug static (gcov flush via exe exit) + coverage windows-import/lck-windows; deliberately no GCOV_PREFIX — the mingw runtime writes the .gcda into the test process cwd (the build tree, inside the workspace) and the ci-run collector finds them there, an out-of-workspace GCOV_PREFIX hides them from it",
       "coverage": true,
       "build_parallel": 4
     },
