@@ -187,6 +187,9 @@ A hardening and refinement release: data-safety and corruption-resistance fixes 
     - Fixed `mdbx_env_copy()` failing with `EEXIST` on a filesystem without direct I/O ([#331](https://github.com/Mithril-mine/libmdbx-devel/issues/331)).
     - Fixed MSVC+AddressSanitizer builds failing to compile ([#62](https://github.com/Mithril-mine/libmdbx-devel/issues/62)).
     - Fixed linking with compiler-rt for `__builtin_cpu_supports()` by Clang.
+    - Fixed Android NDK builds failing to compile with the auto-selected System V locking below API 26.
+    - Fixed C++ API compilation where `<compare>` is not pulled transitively (Android NDK).
+    - Fixed a spurious opening assertion on the platforms packing local buffers loosely (macOS/arm64).
 
  - Tools:
     - Fixed `mdbx_load` silently loading a dump truncated inside a table header; now reported ([#384](https://github.com/Mithril-mine/libmdbx-devel/issues/384)).

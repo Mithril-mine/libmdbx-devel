@@ -60,7 +60,11 @@ __cold int dxb_read_header(MDBX_env *env, meta_t *dest, const int lck_exclusive,
       for (unsigned candidate = MDBX_MIN_PAGESIZE; candidate <= MDBX_MAX_PAGESIZE; candidate <<= 1) {
         if (candidate == globals.sys_pagesize || candidate == env->ps)
           continue; /* such a layout was already probed above */
-        char probe[MDBX_MIN_PAGESIZE];
+        /* MDBX_ALIGNAS: casting a plain char array to a page relies on the
+         * compiler's goodwill for the meta_validate() peeks, which the
+         * stack-packing Clang on macOS/arm64 did not grant (the buffer
+         * landed 4-misaligned and tripped the unaligned_peek assertion). */
+        MDBX_ALIGNAS(8) char probe[MDBX_MIN_PAGESIZE];
         if (osal_pread(env->lazy_fd, probe, MDBX_MIN_PAGESIZE, candidate) != MDBX_SUCCESS)
           continue; /* beyond the file, such a layout cannot exist */
         page_t *const probe_page = (page_t *)probe;
@@ -77,7 +81,8 @@ __cold int dxb_read_header(MDBX_env *env, meta_t *dest, const int lck_exclusive,
                                                         : globals.sys_pagesize) *
                             meta_number;
 
-    char buffer[MDBX_MIN_PAGESIZE];
+    /* MDBX_ALIGNAS: see the probe above, the same page-cast below. */
+    MDBX_ALIGNAS(8) char buffer[MDBX_MIN_PAGESIZE];
     unsigned retryleft = 42;
     while (1) {
       TRACE("reading meta[%d]: offset %u, bytes %u, retry-left %u", meta_number, offset, MDBX_MIN_PAGESIZE, retryleft);
@@ -111,7 +116,8 @@ __cold int dxb_read_header(MDBX_env *env, meta_t *dest, const int lck_exclusive,
         return err;
       }
 
-      char again[MDBX_MIN_PAGESIZE];
+      /* MDBX_ALIGNAS: see the probe above, the same page-cast below. */
+      MDBX_ALIGNAS(8) char again[MDBX_MIN_PAGESIZE];
       err = osal_pread(env->lazy_fd, again, MDBX_MIN_PAGESIZE, offset);
 #if IS_WINDOWS
       if (err == ERROR_LOCK_VIOLATION) {
