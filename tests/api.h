@@ -230,6 +230,19 @@ LIBMDBX_API uint32_t *mdbx_tst_scan4seq_variant(unsigned variant, uint32_t *rang
  * \ingroup c_testing */
 LIBMDBX_API const uint32_t *mdbx_tst_scan4seq_checker(const uint32_t *pnl, size_t seq);
 
+/** \brief Runs the exact-length sequence search over a headed page-number
+ * list (the size word at index 0, the descending pages after it).
+ *
+ * Unlike \ref mdbx_tst_scan4seq_variant, this returns only a sequence of
+ * exactly `seq + 1` pages: a longer contiguous run is skipped as a whole, so
+ * that it stays available to a larger request (the ALLOC_EXACTLY mode of the
+ * page-sequence allocator).
+ *
+ * \return The address of the sequence's tail (the lowest page number), or
+ *         nullptr when the list holds no sequence of exactly that length.
+ * \ingroup c_testing */
+LIBMDBX_API const uint32_t *mdbx_tst_scan4seq_exact(const uint32_t *pnl, size_t seq);
+
 /** \brief Runs the gc_store_retired hook-replacement case matrix (the
  * gc-store-retired-growth-corruption regression scenario): crafted retired lists with an in-window
  * retired-pages growth injected by a cursor_put stub, FIFO/LIFO arms,

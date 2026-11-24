@@ -93,21 +93,12 @@ static __always_inline int __must_check_result pnl_append_stepped(const unsigned
     return MDBX_SUCCESS;
   }
 
-#if MDBX_PNL_ASCENDING
-  size_t w = pnl_size(pnl);
-  do {
-    pnl[++w] = pgno;
-    pgno += step;
-  } while (--n);
-  pnl_setsize(pnl, w);
-#else
   size_t w = pnl_size(pnl) + n;
   pnl_setsize(pnl, w);
   do {
     pnl[w--] = pgno;
     pgno += step;
   } while (--n);
-#endif
   return MDBX_SUCCESS;
 }
 
@@ -144,8 +135,8 @@ __hot int __must_check_result pnl_insert_span(__restrict pnl_t *ppnl, pgno_t pgn
   while (r && MDBX_PNL_DISORDERED(pnl[r], pgno))
     pnl[w--] = pnl[r--];
 
-  for (pgno_t fill = MDBX_PNL_ASCENDING ? pgno + n : pgno; w > r; --w)
-    pnl[w] = MDBX_PNL_ASCENDING ? --fill : fill++;
+  for (pgno_t fill = pgno; w > r; --w)
+    pnl[w] = fill++;
 
   return MDBX_SUCCESS;
 }
@@ -245,7 +236,7 @@ __hot size_t pnl_merge(pnl_t dst, const const_pnl_t src) {
       memcpy(MDBX_PNL_BEGIN(dst), MDBX_PNL_BEGIN(src), src_len * sizeof(pgno_t));
     } else {
     avoid_call_libc_for_short_cases:
-      dst[0] = /* the detent */ (MDBX_PNL_ASCENDING ? 0 : P_INVALID);
+      dst[0] = /* the detent */ P_INVALID;
       total -= pnl_merge_inner(dst + total, dst + dst_len, src + src_len, src);
     }
     pnl_setsize(dst, total);
@@ -281,11 +272,7 @@ __hot __noinline bool pnl_intersect(const const_pnl_t a, const const_pnl_t b) {
   return false;
 }
 
-#if MDBX_PNL_ASCENDING
-#define MDBX_PNL_EXTRACT_KEY(ptr) (*(ptr))
-#else
 #define MDBX_PNL_EXTRACT_KEY(ptr) (P_INVALID - *(ptr))
-#endif
 RADIXSORT_IMPL(pgno, pgno_t, MDBX_PNL_EXTRACT_KEY, MDBX_PNL_PREALLOC_FOR_RADIXSORT, 0)
 
 SORT_IMPL(pgno_sort, false, pgno_t, MDBX_PNL_ORDERED)
@@ -329,9 +316,6 @@ __hot pgno_t pnl_get_best_sequence(const pnl_t pnl, const size_t seq, const pgno
   size_t best_pos = 0;
   size_t best_extra = MAX_PAGENO;
 
-#if MDBX_PNL_ASCENDING
-#error "FIXME: Since 2026-04-01 alternatives to MDBX_PNL_ASCENDING = 0 are no longer supported."
-#else
   size_t len = pnl_size(pnl);
   for (size_t span, i = len; i >= seq && pnl[i] <= defrag_detent - seq; i -= span) {
     span = 1;
@@ -356,21 +340,16 @@ __hot pgno_t pnl_get_best_sequence(const pnl_t pnl, const size_t seq, const pgno
     ASSERT(pgno + seq <= defrag_detent);
     pnl_cut(pnl, best_pos - seq + 1, seq);
   }
-#endif /* MDBX_PNL_ASCENDING */
   return pgno;
 }
 
 pgno_t pnl_crop_tail_sequence(const pnl_t pnl) {
   const size_t len = pnl_size(pnl);
   ASSERT(len > 0);
-#if MDBX_PNL_ASCENDING
-#error "FIXME: Since 2026-04-01 alternatives to MDBX_PNL_ASCENDING = 0 are no longer supported."
-#else
   size_t span = 1;
   while (1 + span <= len && MDBX_PNL_CONTIGUOUS(pnl[1], pnl[1 + span], span))
     ++span;
   pnl_cut(pnl, 1, span);
-#endif /* MDBX_PNL_ASCENDING */
   return (pgno_t)span;
 }
 
@@ -432,12 +411,12 @@ void pnl_sift(__restrict pnl_t pnl, const __restrict const_pnl_t fo) {
 
 int pnl_cut_range(__restrict pnl_t pnl, __restrict pnl_t *const pdest, pgno_t range_begin, pgno_t range_end) {
   ASSERT(range_begin < range_end && pnl_size(pnl) && range_end > 0);
-  const size_t from = pnl_search(pnl, MDBX_PNL_ASCENDING ? range_begin : range_end - 1, MAX_PAGENO);
+  const size_t from = pnl_search(pnl, range_end - 1, MAX_PAGENO);
   const size_t len = pnl_size(pnl);
   size_t to;
   for (to = from; to <= len; ++to) {
     pgno_t pgno = pnl[to];
-    if (MDBX_PNL_ASCENDING ? (pgno >= range_end) : (pgno < range_begin))
+    if (pgno < range_begin)
       break;
     int err = pnl_append(pdest, pgno);
     if (unlikely(err != MDBX_SUCCESS))

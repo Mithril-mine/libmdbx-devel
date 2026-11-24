@@ -299,7 +299,7 @@ records:
   type: fact
   date: 2026-09-27
   importance: 0.8
-  summary: "Структуры данных (архив роя): pnl — массив pgno DESCENDING, pl[0]=count, MDBX_PNL_ASCENDING=0 зафиксирован (2026-04-01); rkl (Reclaimed Key List) — сортированный набор txnid как интервал [solid_begin,solid_end) + массив, используется для GC-потоков reclamation (rkl_push, rkl_hole для дыр); dpl — lazy-сортированный список грязных страниц txn->wr.dirtylist (radix/quicksort, границы 42/142/256)."
+  summary: "Структуры данных (архив роя): pnl — массив pgno DESCENDING, pl[0]=count (2026-04-01 порядок зафиксирован нисходящим, опция переключения удалена из options.h в 2026-11); rkl (Reclaimed Key List) — сортированный набор txnid как интервал [solid_begin,solid_end) + массив, используется для GC-потоков reclamation (rkl_push, rkl_hole для дыр); dpl — lazy-сортированный список грязных страниц txn->wr.dirtylist (radix/quicksort, границы 42/142/256)."
 - key: fact:core:engine-invariants
   type: fact
   date: 2026-09-27

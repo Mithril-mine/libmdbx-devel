@@ -5,44 +5,16 @@
 #pragma once
 
 /** \file gc-scan4seq.h — SIMD search for a contiguous descending run (sequence of
- * `seq+1` pages) within a page-number list. Extracted verbatim from gc-get.c
- * (2026-11, verification campaign) to allow standalone white-box testing
- * (tests/ut/details_scan4seq.c). Requires essentials.h (pgno_t, ptr_disp,
- * clz_uintptr, ASSERT, arm_neon.h/immintrin via preface.h) and pnl.h. */
+ * `seq+1` pages) within a page-number list, plus the exact-length variant used
+ * by the experimental ALLOC_EXACTLY allocation mode. Extracted verbatim from
+ * gc-get.c (2026-11, verification campaign) to allow standalone white-box
+ * testing (tests/ut/api/details_scan4seq.c). Requires essentials.h (pgno_t,
+ * ptr_disp, clz_uintptr, ASSERT, arm_neon.h/immintrin via preface.h) and pnl.h. */
 
 #include "essentials.h"
 
 MDBX_MAYBE_UNUSED __hot static pgno_t *scan4seq_fallback(pgno_t *range, const size_t len, const size_t seq) {
   ASSERT(seq > 0 && len > seq);
-#if MDBX_PNL_ASCENDING
-  ASSERT(range[-1] == len);
-  const pgno_t *const detent = range + len - seq;
-  const ptrdiff_t offset = (ptrdiff_t)seq;
-  const pgno_t target = (pgno_t)offset;
-  if (likely(len > seq + 3)) {
-    do {
-      const pgno_t diff0 = range[offset + 0] - range[0];
-      const pgno_t diff1 = range[offset + 1] - range[1];
-      const pgno_t diff2 = range[offset + 2] - range[2];
-      const pgno_t diff3 = range[offset + 3] - range[3];
-      if (diff0 == target)
-        return range + 0;
-      if (diff1 == target)
-        return range + 1;
-      if (diff2 == target)
-        return range + 2;
-      if (diff3 == target)
-        return range + 3;
-      range += 4;
-    } while (range + 3 < detent);
-    if (range == detent)
-      return nullptr;
-  }
-  do
-    if (range[offset] - *range == target)
-      return range;
-  while (++range < detent);
-#else
   ASSERT(range[-(ptrdiff_t)len] == len);
   const pgno_t *const detent = range - len + seq;
   const ptrdiff_t offset = -(ptrdiff_t)seq;
@@ -72,29 +44,42 @@ MDBX_MAYBE_UNUSED __hot static pgno_t *scan4seq_fallback(pgno_t *range, const si
     if (*range - range[offset] == target)
       return range;
   while (--range > detent);
-#endif /* pnl_t sort-order */
+  return nullptr;
+}
+
+/* The exact-length variant: unlike scan4seq_impl(), which returns the first
+ * sequence of at least seq+1 pages, this one returns only a sequence of exactly
+ * seq+1 pages and skips a longer contiguous run as a whole, so that the run
+ * stays available to a larger request. A descending list ends a sequence at its
+ * lowest page number (the tail side), so the run is measured upward from the
+ * window's tail. The linear pass is deliberate: the tail-anchored contract of
+ * scan4seq_impl() (range[-len] == len) does not fit a re-scan of an inner
+ * sub-range, and this path is not the default one. */
+MDBX_MAYBE_UNUSED static pgno_t *scan4seq_exact(pgno_t *range, const size_t len, const size_t seq) {
+  ASSERT(seq > 0 && len > seq);
+  ASSERT(range[-(ptrdiff_t)len] == len);
+  const pgno_t *const head = range - (ptrdiff_t)(len - 1);
+  const ptrdiff_t offset = -(ptrdiff_t)seq;
+  for (pgno_t *end = range; end >= head + (ptrdiff_t)seq; --end) {
+    if (end[offset] != *end + seq)
+      continue;
+    /* The window is contiguous; measure the whole maximal run upward. */
+    pgno_t *top = end + offset;
+    while (top > head && top[-1] == *top + 1)
+      --top;
+    if (top == end + offset)
+      return end; /* exactly seq+1 pages */
+    end = top;    /* a longer run: skip it as a whole */
+  }
   return nullptr;
 }
 
 MDBX_MAYBE_UNUSED static const pgno_t *scan4range_checker(const pnl_t pnl, const size_t seq) {
-  size_t begin = MDBX_PNL_ASCENDING ? 1 : pnl_size(pnl);
-#if MDBX_PNL_ASCENDING
-  while (seq <= pnl_size(pnl) - begin) {
-    if (pnl[begin + seq] - pnl[begin] == seq)
-      return pnl + begin;
-    ++begin;
-  }
-#else
-  while (begin > seq) {
+  for (size_t begin = pnl_size(pnl); begin > seq; --begin)
     if (pnl[begin - seq] - pnl[begin] == seq)
       return pnl + begin;
-    --begin;
-  }
-#endif /* pnl_t sort-order */
   return nullptr;
 }
-
-#if !MDBX_PNL_ASCENDING
 
 #if !defined(MDBX_ATTRIBUTE_TARGET) && (__has_attribute(__target__) || __GNUC_PREREQ(5, 0))
 #define MDBX_ATTRIBUTE_TARGET(target) __attribute__((__target__(target)))
@@ -149,9 +134,6 @@ diffcmp2mask_sse2(const pgno_t *const ptr, const ptrdiff_t offset, const __m128i
 MDBX_MAYBE_UNUSED __hot MDBX_ATTRIBUTE_TARGET_SSE2 static pgno_t *scan4seq_sse2(pgno_t *range, const size_t len,
                                                                                 const size_t seq) {
   ASSERT(seq > 0 && len > seq);
-#if MDBX_PNL_ASCENDING
-#error "FIXME: Not implemented"
-#endif /* MDBX_PNL_ASCENDING */
   ASSERT(range[-(ptrdiff_t)len] == len);
   pgno_t *const detent = range - len + seq;
   const ptrdiff_t offset = -(ptrdiff_t)seq;
@@ -220,9 +202,6 @@ diffcmp2mask_sse2avx(const pgno_t *const ptr, const ptrdiff_t offset, const __m1
 MDBX_MAYBE_UNUSED __hot MDBX_ATTRIBUTE_TARGET_AVX2 static pgno_t *scan4seq_avx2(pgno_t *range, const size_t len,
                                                                                 const size_t seq) {
   ASSERT(seq > 0 && len > seq);
-#if MDBX_PNL_ASCENDING
-#error "FIXME: Since 2026-04-01 alternatives to MDBX_PNL_ASCENDING = 0 are no longer supported."
-#endif /* MDBX_PNL_ASCENDING */
   ASSERT(range[-(ptrdiff_t)len] == len);
   pgno_t *const detent = range - len + seq;
   const ptrdiff_t offset = -(ptrdiff_t)seq;
@@ -286,9 +265,6 @@ diffcmp2mask_avx512bw(const pgno_t *const ptr, const ptrdiff_t offset, const __m
 MDBX_MAYBE_UNUSED __hot MDBX_ATTRIBUTE_TARGET_AVX512BW static pgno_t *scan4seq_avx512bw(pgno_t *range, const size_t len,
                                                                                         const size_t seq) {
   ASSERT(seq > 0 && len > seq);
-#if MDBX_PNL_ASCENDING
-#error "FIXME: Since 2026-04-01 alternatives to MDBX_PNL_ASCENDING = 0 are no longer supported."
-#endif /* MDBX_PNL_ASCENDING */
   ASSERT(range[-(ptrdiff_t)len] == len);
   pgno_t *const detent = range - len + seq;
   const ptrdiff_t offset = -(ptrdiff_t)seq;
@@ -361,9 +337,6 @@ static __always_inline size_t diffcmp2mask_neon(const pgno_t *const ptr, const p
 
 __hot static pgno_t *scan4seq_neon(pgno_t *range, const size_t len, const size_t seq) {
   ASSERT(seq > 0 && len > seq);
-#if MDBX_PNL_ASCENDING
-#error "FIXME: Since 2026-04-01 alternatives to MDBX_PNL_ASCENDING = 0 are no longer supported."
-#endif /* MDBX_PNL_ASCENDING */
   ASSERT(range[-(ptrdiff_t)len] == len);
   pgno_t *const detent = range - len + seq;
   const ptrdiff_t offset = -(ptrdiff_t)seq;
@@ -422,8 +395,6 @@ __hot static pgno_t *scan4seq_neon(pgno_t *range, const size_t len, const size_t
 #define scan4seq_default scan4seq_neon
 /* Choosing of another variants should be added here. */
 #endif /* scan4seq_default */
-
-#endif /* MDBX_PNL_ASCENDING */
 
 #ifndef scan4seq_default
 #define scan4seq_default scan4seq_fallback

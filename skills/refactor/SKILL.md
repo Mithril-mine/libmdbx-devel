@@ -126,7 +126,7 @@ When refactoring this repository, the generic process above is layered onto proj
    - L3+: `make check`, sanitizer builds (`test-ubsan`/`test-asan`), `test-memcheck`, `stochastic.sh`, and human-controlled `battery-tmux.sh` for increasingly broad/expensive verification. Use CMake + CTest for builds (primary build system); GNU Make is legacy.
    - Never skip tests "just this once"; a failing step means revert, not fix-forward.
 7. **Amalgamation guard**: Keep build-file changes out of the amalgamated `dist/` output (`dist-cutoff-begin/end` markers, `DIST_SRC`/`DIST_EXTRA`); see [`build.md`](../../docs/engineering/build.md) §7. Do not add files between cutoff markers unless the amalgamation pipeline is updated.
-8. **Known debt is a target list, not a fix list**: [`techdebt.md`](../../docs/engineering/techdebt.md) inventories 86 TODO/FIXME/workaround markers (e.g. `PNL_ASCENDING=0` deprecated branches, io_uring stub in `osal.c`, incoherent page cache #269 cluster). Use it to pick refactoring candidates, but do not fix bugs while refactoring — separate concerns per the core contract.
+8. **Known debt is a target list, not a fix list**: [`techdebt.md`](../../docs/engineering/techdebt.md) inventories the TODO/FIXME/workaround markers (e.g. the io_uring stub in `osal.c`, the incoherent page-cache cluster). Use it to pick refactoring candidates, but do not fix bugs while refactoring — separate concerns per the core contract.
 9. **Disk format and ABI are frozen**: behavior-preserving changes must not alter the on-disk layout (`MDBX_DATA_VERSION`) or the public C/C++ API surface without explicit user opt-in.
 
 ---

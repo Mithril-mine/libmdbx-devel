@@ -20,14 +20,9 @@ void spill_remove(MDBX_txn *txn, size_t idx, size_t npages) {
 
   while (unlikely(npages > 1)) {
     const pgno_t pgno = (txn->wr.spilled.list[idx] >> 1) + 1;
-    if (MDBX_PNL_ASCENDING) {
-      if (++idx > pnl_size(txn->wr.spilled.list) || (txn->wr.spilled.list[idx] >> 1) != pgno)
-        break;
-    } else {
-      if (--idx < 1 || (txn->wr.spilled.list[idx] >> 1) != pgno)
-        break;
-      txn->wr.spilled.least_removed = (idx < txn->wr.spilled.least_removed) ? idx : txn->wr.spilled.least_removed;
-    }
+    if (--idx < 1 || (txn->wr.spilled.list[idx] >> 1) != pgno)
+      break;
+    txn->wr.spilled.least_removed = (idx < txn->wr.spilled.least_removed) ? idx : txn->wr.spilled.least_removed;
     txn->wr.spilled.list[idx] |= 1;
     pnl_setsize(txn->wr.spilled.list, pnl_size(txn->wr.spilled.list) - (idx == pnl_size(txn->wr.spilled.list)));
     --npages;

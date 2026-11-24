@@ -80,14 +80,12 @@ MDBX_MAYBE_UNUSED static int gc_store_retired(MDBX_txn *txn, gcu_t *ctx) {
       const size_t chunk = (left_after < chunk_hi) ? left_after : chunk_hi;
       should_retry = retired_before != retired_after;
       if (likely(!should_retry)) {
-        const size_t at = (gc_is_lifo(txn) == MDBX_PNL_ASCENDING) ? left_before - chunk : ctx->retired_stored;
+        /* The PNL order is fixed descending: with FIFO reclaiming
+         * (LIFO == false) the larger pgno is at the beginning of the retired
+         * list and the chunk is stored there with the larger txnid,
+         * otherwise (LIFO == true) - at the retired_stored offset. */
+        const size_t at = !gc_is_lifo(txn) ? left_before - chunk : ctx->retired_stored;
         pgno_t *const begin = txn->wr.retired_pages + at;
-        /* MDBX_PNL_ASCENDING == false && LIFO == false:
-         *  - the larger pgno is at the beginning of retired list
-         *    and should be placed with the larger txnid.
-         * MDBX_PNL_ASCENDING == true && LIFO == true:
-         *  - the larger pgno is at the ending of retired list
-         *    and should be placed with the smaller txnid. */
         const pgno_t save = *begin;
         *begin = (pgno_t)chunk;
         memcpy(data.iov_base, begin, data.iov_len);

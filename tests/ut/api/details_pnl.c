@@ -53,8 +53,8 @@ static bool check_bool(bool v, bool expect, const char *fn, unsigned line) {
 
 /* Build a bare page-number list (not an allocated pnl: we only need the data
  * part, size word included). Page numbers are stored in descending order, as
- * unconditionally used by the library since MDBX_PNL_ASCENDING = 0; the
- * caller supplies the numbers already in that order. */
+ * unconditionally used by the library; the caller supplies the numbers
+ * already in that order. */
 static pgno_t make_pnl(pgno_t *arr, const pgno_t *src, size_t n) {
   arr[0] = (pgno_t)n;
   for (size_t i = 1; i <= n; ++i)

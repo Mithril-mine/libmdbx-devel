@@ -445,24 +445,22 @@ void txn_dpl_sift(MDBX_txn *const txn, pnl_t pl, const bool spilled) {
     tASSERT1(txn, pnl_check_allocated(pl, (size_t)txn->geo.first_unallocated << spilled));
     dpl_t *dl = txn_dpl_sort(txn);
 
-    /* Scanning in ascend order */
-    const intptr_t step = MDBX_PNL_ASCENDING ? 1 : -1;
-    const intptr_t begin = MDBX_PNL_ASCENDING ? 1 : pnl_size(pl);
-    const intptr_t end = MDBX_PNL_ASCENDING ? pnl_size(pl) + 1 : 0;
-    tASSERT0(txn, pl[begin] <= pl[end - step]);
+    /* Scanning in ascending pgno order: from the list tail (the lowest pgno) to the head (the highest) */
+    const intptr_t begin = pnl_size(pl);
+    tASSERT0(txn, pl[begin] <= pl[1]);
 
     size_t w, r = txn_dpl_search(txn, pl[begin] >> spilled);
     tASSERT0(txn, dl->sorted == dl->length);
     for (intptr_t i = begin; r <= dl->length;) { /* scan loop */
-      ASSERT(i != end);
+      ASSERT(i != 0);
       tASSERT0(txn, !spilled || (pl[i] & 1) == 0);
       pgno_t pl_pgno = pl[i] >> spilled;
       pgno_t dp_pgno = dl->items[r].pgno;
       if (likely(dp_pgno != pl_pgno)) {
         const bool cmp = dp_pgno < pl_pgno;
         r += cmp;
-        i += cmp ? 0 : step;
-        if (likely(i != end))
+        i -= !cmp;
+        if (likely(i != 0))
           continue;
         return;
       }
@@ -477,13 +475,13 @@ void txn_dpl_sift(MDBX_txn *const txn, pnl_t pl, const bool spilled) {
         page_shadow_release(txn->env, dl->items[r].ptr, npages);
       ++r;
     next_i:
-      i += step;
-      if (unlikely(i == end)) {
+      --i;
+      if (unlikely(i == 0)) {
         while (r <= dl->length)
           dl->items[w++] = dl->items[r++];
       } else {
         while (r <= dl->length) {
-          ASSERT(i != end);
+          ASSERT(i != 0);
           tASSERT0(txn, !spilled || (pl[i] & 1) == 0);
           pl_pgno = pl[i] >> spilled;
           dp_pgno = dl->items[r].pgno;
