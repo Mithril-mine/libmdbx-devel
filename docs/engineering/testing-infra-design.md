@@ -18,7 +18,7 @@ Build a **new test infrastructure in parallel** with the current ad-hoc one, tha
   set (~5 cells), not the full ~130–160-cell matrix.
 - **Nightly full**: the complete matrix runs on schedule against `master` HEAD.
 - **Honest platform coverage**: Android cells are build-only except the emulator pilot
-  (`android-r27d-x86-64-emu`, B5) which replays the quick-smoke scenarios on an API-30 x86_64
+  (`android-r30-x86-64-emu`, B5) which replays the quick-smoke scenarios on an API-30 x86_64
   AVD via adb; cells that are known-slow/flaky (e.g. ARM64 Windows beta-runner `smoke_sp_*`)
   are declared per-cell so the nightly full matrix doesn't burn minutes on them.
 
