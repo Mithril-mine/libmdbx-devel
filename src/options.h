@@ -422,7 +422,15 @@
     !defined(__OHOS__) /* Harmony OS doesn't support robust mutexes at the end of 2025 */
 #define MDBX_LOCKING MDBX_LOCKING_POSIX2008
 #else
+/* Bionic declares the System V semaphore functions only since the API
+ * level 26, so below it the SYSV fallback is unbuildable and the
+ * POSIX-2001 process-shared mutexes are the only choice (without the
+ * dead-owner recovery, see #565). */
+#if !defined(__ANDROID_API__) || __ANDROID_API__ >= 26
 #define MDBX_LOCKING MDBX_LOCKING_SYSV
+#else
+#define MDBX_LOCKING MDBX_LOCKING_POSIX2001
+#endif
 #endif
 #else /* FreeBSD: the __GLIBC_PREREQ() macro is unavailable there, so the robust check is separate. */
 /* The process-shared robust mutexes are supported since 11.0 (2016): the kernel
