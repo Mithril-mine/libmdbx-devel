@@ -355,13 +355,24 @@ jobs:
           fi
 
       - name: upload to codecov
+        # The explicit slug is required when the secret carries an org-level
+        # (global) upload token instead of the repo token: without it codecov
+        # resolves the repo from the CI env and rejects the upload with a
+        # deliberately-opaque HTTP 404 "Repository not found" (its way of
+        # hiding the repo existence for any token mismatch). With a repo
+        # token the slug is harmless redundancy. plugins: noop — the reports
+        # are pre-built by the coverage step above; the CLI auto-plugins would
+        # rescan the whole workspace (stray examples/ .gcov files, duplicate
+        # coverage.xml) and slow every upload down.
         if: ${{ inputs.coverage && steps.codecov-guard.outputs.has_coverage == 'true' }}
-        uses: codecov/codecov-action@v5
+        uses: codecov/codecov-action@v7
         with:
           files: coverage/lines.info
           flags: ${{ inputs.cell }}
+          slug: Mithril-mine/libmdbx-devel
           token: ${{ secrets.CODECOV_TOKEN }}
-          fail_ci_if_error: false
+          plugins: noop
+          fail_ci_if_error: true
           verbose: true
 
       - name: upload metrics

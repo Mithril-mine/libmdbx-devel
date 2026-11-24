@@ -1,13 +1,19 @@
 # Codecov configuration for libmdbx-devel
-# Coverage reports come from the CI `coverage` profile cells:
-#   - linux-gcc-ubuntu24-debug-coverage (gcov/lcov)
-#   - win-mscl-x64-debug-coverage       (clang/LLVM instrumentation)
-# The win-mingw cell is present but currently produces no usable data
-# (mingw gcda mystery) — its empty lines.info is filtered out by the
-# codecov guard step in ci-run.yml.
+# C/C++ coverage reports come from the CI `coverage` profile cells, run
+# weekly by the ci-dispatch schedule (Sunday) and on demand via
+# workflow_dispatch/repository_dispatch {profile: coverage}:
+#   - linux-gcc-ubuntu-latest-debug-coverage (gcov/lcov)
+#   - win-mscl-x64-debug-coverage            (clang/LLVM instrumentation)
+#   - win-mingw-64-debug-coverage            (gcov; currently yields no
+#     usable lines.info, so its empty reports are filtered out by the codecov
+#     guard step in ci-run.yml)
 # Python coverage of the codegraph module (skynet/MCP-shared-graph-memory)
 # comes from the ci-codegraph scan-linux job (pytest-cov, flag
 # codegraph-scan-python), so skynet/ is NOT in the ignore list.
+#
+# Uploads REQUIRE the CODECOV_TOKEN repository secret: codecov.io rejects
+# tokenless reports for protected branches with HTTP 400 ("Token required
+# because branch is protected").
 codecov:
   require_ci_to_pass: false
   notify:
@@ -21,8 +27,11 @@ comment:
 
 coverage:
   status:
-    # Не красим PR порогами на первое время: растим покрытие сценариев
-    # из docs/engineering/test-coverage-gaps.md постепенно.
+    # Keep this file ASCII-only: the codecov CLI on Windows decodes it with
+    # the legacy cp1252 codec and dies on any UTF-8 non-ASCII byte (observed
+    # as UnicodeDecodeError in load_cli_config on the win-mscl cell).
+    # Statuses stay informational for now: no thresholds, grow the coverage
+    # gradually.
     project:
       default:
         informational: true
