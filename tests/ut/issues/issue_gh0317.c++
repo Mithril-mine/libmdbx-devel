@@ -189,8 +189,16 @@ int two_threads_scenario() {
   g_done[1].store(0);
   std::thread a(opener_thread, 0);
   std::thread b(opener_thread, 1);
+  /* The total budget is wall-clock and calibrated for the reference x86-64
+   * setup: on the systematically slower runners (the arm cells, see the
+   * 2026-11-24 nightly: one thread starved the other at 1079 of 3000
+   * iterations, while the parent's own watchdog expired at its unscaled
+   * 75 s) the iteration target is reached later in wall time, so it scales
+   * by the same MDBX_TEST_TIMEOUT_SCALE factor the CTest TIMEOUTs use -
+   * the two mechanisms are one scheme. The stall limit stays unscaled: it
+   * is diagnostics-only and must fire early on a slow runner too. */
   const int stall_limit = RUNNING_ON_VALGRIND ? 5 * 42 : 5;
-  const int total_limit = RUNNING_ON_VALGRIND ? 60 * 42 : 60;
+  const int total_limit = RUNNING_ON_VALGRIND ? 60 * 42 : 60 * static_cast<int>(mdtest_timeout_scale());
   int last0 = -1, last1 = -1, stalled = 0;
   bool reported_stall = false;
   for (int second = 0;; ++second) {
@@ -329,7 +337,10 @@ TEST(issue_gh0317, two_threads_open_close_progress) {
   if (pid == 0)
     _exit(two_threads_scenario());
   int status = 0;
-  if (!bounded_child_wait(pid, status, 75)) {
+  /* The watchdog must outlive the scenario's own scaled budget (60 s), the
+   * same MDBX_TEST_TIMEOUT_SCALE factor applies (see the scenario above);
+   * bounded_child_wait() adds the Valgrind factor on its own. */
+  if (!bounded_child_wait(pid, status, 75u * mdtest_timeout_scale())) {
     dump_threads_state(pid, "the child hung, sampled before kill");
     ::kill(pid, SIGKILL);
     while (waitpid(pid, &status, 0) < 0 && errno == EINTR) {
