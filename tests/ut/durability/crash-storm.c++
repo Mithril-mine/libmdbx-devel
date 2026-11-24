@@ -52,6 +52,11 @@
 /// clamped to 4..8), CRASH_STORM_ROUNDS (default 2). POSIX-only (fork),
 /// like the crash-windows corpus; requires the probe-bus build (MDBX_PROBES).
 
+/// The white-box include of the internals is required to learn the build's
+/// resolved MDBX_LOCKING (the same as dead-owner.c++ does), hence the
+/// NO_PCH registration.
+#include "../../../src/essentials.h"
+
 #include "mdbx.h"
 #include <gtest/gtest.h>
 
@@ -358,6 +363,19 @@ void run_storm_round(const bool writemap, const unsigned writers) {
 
 /* The whole storm: the rounds, each rebuilding the environment. */
 void run_storm(const bool writemap) {
+  /* The storm requires the dead-owner recovery for the surviving writers
+   * (see the header comment): the POSIX-1988/2001 modes strand the lock on
+   * the killed writer - the documented #565 limitation makes the scenario
+   * unwinnable beyond its first in-commit death, and under the Windows
+   * locking there is no fork at all. The skip enumerates exactly the
+   * modes the scenario cannot work in: a newly added locking mode falls
+   * through to the honest run-or-fail, never to a silent skip (the
+   * dead-owner.c++ corpus carries the strand characterization for these
+   * modes). */
+#if MDBX_LOCKING == MDBX_LOCKING_POSIX1988 || MDBX_LOCKING == MDBX_LOCKING_POSIX2001 ||                                \
+    MDBX_LOCKING == MDBX_LOCKING_WIN32FILES
+  GTEST_SKIP() << "SKIPPED: the dead-owner recovery is unavailable with this locking mode (see #565)";
+#endif
   if (MDBX_GTEST_IS_EXECUTION_TIMEOUT()) {
     GTEST_SKIP() << "SKIPPED by RUNTIME_LIMIT";
   }

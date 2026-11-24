@@ -964,14 +964,15 @@ add_ut(reverse_insertions SOURCE ut/txn/reverse_insertions.c++)
         set_tests_properties(windows-mmap-extent PROPERTIES LABELS "ut;ut.durability")
         add_ut(windows-lck-race SOURCE ut/durability/windows-lck-race.c++)
         set_tests_properties(windows-lck-race PROPERTIES LABELS "ut;ut.durability")
-          add_ut(crash-windows SOURCE ut/durability/crash-windows.c++)
+          # NO_PCH: the white-box essentials.h include (the resolved
+          # MDBX_LOCKING for the strand-modes skip) clashes with the shared
+          # precompiled header; it pulls config-cmake.h, which defines
+          # MDBX_PROBES in the probes build, so no compile definition is
+          # added here (a redefinition under -Werror, the same as the
+          # lock-events block below).
+          add_ut(crash-windows SOURCE ut/durability/crash-windows.c++ NO_PCH)
           set_tests_properties(crash-windows PROPERTIES LABELS "ut;ut.durability")
           if(MDBX_PROBES)
-            # C++ test TUs (public mdbx.h++) do not see the internal
-            # config-cmake.h define; propagate MDBX_PROBES for the probe-bus
-            # guards (probe-ctl.h++, the kill-rule arming), and activate the
-            # registry at runtime.
-            target_compile_definitions(ut_crash-windows PRIVATE MDBX_PROBES)
             set_tests_properties(crash-windows PROPERTIES APPEND PROPERTY
               ENVIRONMENT "MDBX_PROBES=1")
           endif()
