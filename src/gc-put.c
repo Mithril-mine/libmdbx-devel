@@ -382,7 +382,8 @@ MDBX_INTERNAL int gc_prepare_stockpile4retired(MDBX_txn *txn, gcu_t *ctx) {
       for (size_t entries = for_retired; entries > 1; for_retired += entries)
         entries = (entries + per_branch_page - 1) / per_branch_page;
     } else
-      for_retired += largechunk_npages(txn->env, retired_whole);
+      /* The whole list is stored as one value, which takes a page for each gc_chunk_bytes() of it. */
+      for_retired += gc_chunk_pages(txn, retired_whole);
   }
 
   return gc_prepare_stockpile(txn, ctx, for_retired);
