@@ -333,6 +333,13 @@ jobs:
               # lcov пишет абсолютные SF-пути; codecov и загрузчик в БЗ
               # требуют git-relative — срезаем префикс repo-root.
               sed -i "s|^SF:$ROOT/|SF:|" coverage/lines.info
+              # lcov 2.x emits the FNL:/FNA: function records that codecov's
+              # ingestion does not consume: the report is accepted with HTTP
+              # 200 and then silently dropped during processing (observed
+              # 2026-11-24). Line coverage (SF/DA) is everything codecov
+              # merges, so strip the function records to keep the tracefile
+              # in the classic shape.
+              sed -i '/^FNL:/d;/^FNA:/d' coverage/lines.info
               lcov --summary coverage/lines.info 2>&1 | tail -6
               genhtml coverage/lines.info --output-directory coverage/html \
                 --legend --quiet --title "libmdbx devel (${{ inputs.cell }})"
