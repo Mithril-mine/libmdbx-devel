@@ -1095,7 +1095,6 @@ typedef enum MDBX_env_flags {
    * filesystems, where MDBX does not use locks.
    *
    * - with `MDBX_RDONLY` = open environment in read-only mode.
-   * - with `MDBX_RDONLY` = open environment in read-only mode.
    *   MDBX supports pure read-only mode (i.e. without opening LCK-file) only
    *   when the filesystem with the database files is mounted read-only
    *   (and the LCK-file may be missing). A non-writable directory or files
@@ -2567,7 +2566,8 @@ LIBMDBX_API int mdbx_env_get_option(const MDBX_env *env, const MDBX_option_t opt
  *                             inconsistent state after a system crash.
  *
  * \retval MDBX_TOO_LARGE      Database is too large for this process,
- *       You can try to combine the \ref MDBX_ACCEDE flag to opend a database/environment which is already
+ *                             i.e. 32-bit process tries to open >4Gb database.
+ *       You can try to combine the \ref MDBX_ACCEDE flag to opened a database/environment which is already
  *       used by another process(es) with unknown mode/flags.
  *
  * \note Known limitation: do not rename/replace or restore the LCK-file of a live environment, since such
@@ -2576,7 +2576,9 @@ LIBMDBX_API int mdbx_env_get_option(const MDBX_env *env, const MDBX_option_t opt
  *       [issue #485](https://github.com/Mithril-mine/libmdbx-devel/issues/485)).
  *
  * \note Known limitation on Windows: with \ref MDBX_RDONLY the mapping extent is fixed by the data file size
- *                             i.e. 32-bit process tries to open >4Gb database.
+ *       at the opening moment. If the database is grown beyond this extent, starting a read transaction may
+ *       fail with \ref MDBX_EPERM until the environment is re-opened (known limitation, see
+ *       [issue #485](https://github.com/Mithril-mine/libmdbx-devel/issues/485)).
  */
 LIBMDBX_API int mdbx_env_open(MDBX_env *env, const char *pathname, MDBX_env_flags_t flags, mdbx_mode_t mode);
 
