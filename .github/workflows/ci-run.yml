@@ -51,6 +51,13 @@ on:
           Nightly marker (schedule runs): enables GTEST_SHUFFLE=1 in run-cell.py,
           so a different subset of the suite runs each night under the
           GTEST_RUNTIME_LIMIT soft deadline
+    secrets:
+      CODECOV_TOKEN:
+        required: false
+        description: >-
+          codecov.io upload token. Secrets do NOT reach a reusable workflow
+          unless the caller passes them explicitly; every caller forwards
+          this one and the coverage upload consumes it.
 
 permissions:
   contents: read

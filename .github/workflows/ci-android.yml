@@ -81,3 +81,5 @@ jobs:
       ndk: ${{ matrix.ndk }}
       ref: ${{ needs.resolve.outputs.ref }}
       nightly: ${{ needs.resolve.outputs.nightly == 'true' }}
+    secrets:
+      CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}

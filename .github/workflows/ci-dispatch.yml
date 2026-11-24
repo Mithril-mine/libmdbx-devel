@@ -316,6 +316,8 @@ jobs:
       coverage: ${{ matrix.coverage }}
       ndk: ${{ matrix.ndk }}
       ref: ${{ needs.resolve.outputs.ref }}
+    secrets:
+      CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
 
   dist:
     name: dist (linux)

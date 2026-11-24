@@ -80,6 +80,8 @@ jobs:
       ndk: ${{ matrix.ndk }}
       ref: ${{ needs.resolve.outputs.ref }}
       nightly: ${{ needs.resolve.outputs.nightly == 'true' }}
+    secrets:
+      CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
 
   # Produce the amalgamated-sources tarball (the same `make dist` the
   # ci-dispush PR/push gate runs), for the amalgamated Windows cell below.
