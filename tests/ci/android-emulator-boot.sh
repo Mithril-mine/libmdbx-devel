@@ -80,12 +80,15 @@ if [ ! -x "$SDK/emulator/emulator" ]; then
 fi
 
 EMU_OPTS=(-no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim)
-if [ ! -e /dev/kvm ]; then
-  # No KVM on the hosted runners: TCG software emulation. Needs both the
-  # explicit -accel off and the ANDROID_I_WANT_MY_TCG env opt-in (set by
-  # the caller), see the emulator 37.3.x refusal note in ci-run.yml.
-  EMU_OPTS+=(-accel off)
-fi
+# TCG software emulation, unconditionally: the hosted runners have no
+# WORKING KVM - the ubuntu-24.04 image exposes /dev/kvm, but the nested
+# virtualization is disabled and the emulator dies at start with "x86_64
+# emulation currently requires hardware acceleration" (the 2026-11-24
+# run: the AVD finally found, the acceleration check tripped). The
+# emulator 37.3.x refuses TCG without the explicit env opt-in, so it is
+# set here too, not only by the caller (see ci-run.yml).
+export ANDROID_I_WANT_MY_TCG="yes"
+EMU_OPTS+=(-accel off)
 
 kill_emulator() { # kill_emulator <pid>
   "$ADB" -s "emulator-5554" emu kill >/dev/null 2>&1 || true

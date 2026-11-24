@@ -178,10 +178,10 @@
         "-DMDBX_BUILD_CXX:BOOL=ON",
         "-DMDBX_CHECKING=0",
         "-DMDBX_DEBUG=0",
-        "-DMDBX_TEST_TIMEOUT_SCALE=6"
+        "-DMDBX_TEST_TIMEOUT_SCALE=10"
       ],
       "ctest": null,
-      "note": "the designated mac Release exception (debug fully off: builds warning-free and works); crash-safety covered by ut.txn.crash_safety; TEST_TIMEOUT_SCALE=6: the mac runners exceed the auto x4 (arm64 x2 * darwin x2) budgets (the 2026-11-23 nightly overruns: transforms 123.6s vs 120, put-flags 163.5s vs 120)",
+      "note": "the designated mac Release exception (debug fully off: builds warning-free and works); crash-safety covered by ut.txn.crash_safety; TEST_TIMEOUT_SCALE=6: the mac runners exceed the auto x4 (arm64 x2 * darwin x2) budgets (the 2026-11-23 nightly overruns: transforms 123.6s vs 120, put-flags 163.5s vs 120); bumped 6 -> 10: the 2026-11-24 run - gh0317 two-threads at 3000/2389 of the x6 budget (thread-b needs ~455s at its 6.6 it/s starvation rate on the 3-core hosted arm64)",
       "expected_sec": 136
     },
     {
@@ -192,10 +192,10 @@
         "-DMDBX_BUILD_CXX:BOOL=ON",
         "-DMDBX_CHECKING=2",
         "-DMDBX_DEBUG=1",
-        "-DMDBX_TEST_TIMEOUT_SCALE=6"
+        "-DMDBX_TEST_TIMEOUT_SCALE=10"
       ],
       "ctest": null,
-      "note": "ci-macos macos-26/xcode RelWithDebInfo checking=2 (checked tier); crash-safety covered by ut.txn.crash_safety; TEST_TIMEOUT_SCALE=6: the mac runners exceed the auto x4 (arm64 x2 * darwin x2) budgets (the 2026-11-23 nightly overruns: transforms 123.6s vs 120, put-flags 163.5s vs 120)"
+      "note": "ci-macos macos-26/xcode RelWithDebInfo checking=2 (checked tier); crash-safety covered by ut.txn.crash_safety; TEST_TIMEOUT_SCALE=10: the mac runners exceed the auto x4 (arm64 x2 * darwin x2) budgets (the 2026-11-23 nightly overruns: transforms 123.6s vs 120, put-flags 163.5s vs 120)"
     },
     {
       "id": "macos-macos26-intel-relwithdebinfo",
@@ -205,10 +205,10 @@
         "-DMDBX_BUILD_CXX:BOOL=ON",
         "-DMDBX_CHECKING=2",
         "-DMDBX_DEBUG=1",
-        "-DMDBX_TEST_TIMEOUT_SCALE=6"
+        "-DMDBX_TEST_TIMEOUT_SCALE=10"
       ],
       "ctest": null,
-      "note": "ci-macos macos-26-intel RelWithDebInfo checking=2 (checked tier); crash-safety covered by ut.txn.crash_safety; TEST_TIMEOUT_SCALE=6: the mac runners exceed the auto x4 (arm64 x2 * darwin x2) budgets (the 2026-11-23 nightly overruns: transforms 123.6s vs 120, put-flags 163.5s vs 120)"
+      "note": "ci-macos macos-26-intel RelWithDebInfo checking=2 (checked tier); crash-safety covered by ut.txn.crash_safety; TEST_TIMEOUT_SCALE=10: the mac runners exceed the auto x4 (arm64 x2 * darwin x2) budgets (the 2026-11-23 nightly overruns: transforms 123.6s vs 120, put-flags 163.5s vs 120)"
     },
     {
       "id": "win-msvc-v143-x64-debug-shared-on-mscrt-off",
