@@ -22,8 +22,9 @@ extra:
 # doxygen inputs; all paths are relative to the build CWD (repo root). The
 # generated XML is cached in the site dir (assets/.doxy) and stripped by
 # normalize_site.py. The API pages are reachable from the reference landing
-# (reference/index.md) and cross-linked from the class/function listings;
-# keeping them out of the sidebar makes the navigation readable.
+# (reference/index.md), from the "API modules" nav entry (the groups index)
+# and cross-linked from the class/function listings; keeping the bulk of them
+# out of the sidebar (not_in_nav below) makes the navigation readable.
 plugins:
   - search
   - mkdoxy:
@@ -33,6 +34,9 @@ plugins:
           src-dirs: "build/tmp/docsite-inputs/mdbx.h build/tmp/docsite-inputs/mdbx.h++ build/tmp/docsite-inputs/options.h"
           api-path: reference/api
           doxy-cfg-file: "build/tmp/docsite-inputs/Doxyfile"
+          # custom memDef template (enum values with their descriptions);
+          # tracked sources, path relative to the build CWD (repo root)
+          template-dir: "docs/docsite/mkdoxy-templates"
           doxy-cfg:
             GENERATE_XML: true
             GENERATE_HTML: false
@@ -49,6 +53,9 @@ plugins:
             HTML_HEADER: ""
             HTML_FOOTER: ""
 
+# not_in_nav keeps the bulk of the ~180 generated API pages out of the sidebar.
+# The groups index (reference/api/modules.md) is explicitly listed in the nav
+# below: an explicit nav entry wins over not_in_nav, so it stays visible.
 not_in_nav: |
   reference/api/
 
@@ -63,20 +70,22 @@ nav:
       - First steps: getting-started/first-steps.md
       - Quick CRUD: getting-started/crud-quick.md
       - Durability modes: getting-started/durability-modes.md
-  - Textbook:
-      - About the textbook: textbook/index.md
-      - Outline (skeleton): textbook/00-karkas.md
-      - Volume I. Fundamentals: textbook/01-tom-i-osnovy.md
-      - Volume II. Practice: textbook/02-tom-ii-praktika.md
-      - Volume III. Mechanisms: textbook/03-tom-iii-mehanizmy.md
-      - Volume IV. Performance: textbook/04-tom-iv-proizvoditelnost.md
-      - Volume V. Expert topics: textbook/05-tom-v-ekspertnye-temy.md
-      - Volume VI. Bindings: textbook/06-tom-vi-bindings.md
+  - Reference:
+      - API reference: reference/index.md
+      - API modules: reference/api/modules.md
+      - Command-line tools: reference/tooling.md
+      - Change log: reference/changelog.md
   - Deep dive:
       - Architecture: deep-dive/architecture.md
       - Internals deep dive: deep-dive/internals.md
       - Improvements over LMDB: deep-dive/improvements.md
-  - Reference:
-      - API reference: reference/index.md
-      - Command-line tools: reference/tooling.md
-      - Change log: reference/changelog.md
+  - Textbook:
+      - About the textbook: textbook/index.md
+      - Outline (skeleton): textbook/00-karkas.md
+      - Volumes:
+          - Volume I. Fundamentals: textbook/01-tom-i-osnovy.md
+          - Volume II. Practice: textbook/02-tom-ii-praktika.md
+          - Volume III. Mechanisms: textbook/03-tom-iii-mehanizmy.md
+          - Volume IV. Performance: textbook/04-tom-iv-proizvoditelnost.md
+          - Volume V. Expert topics: textbook/05-tom-v-ekspertnye-temy.md
+          - Volume VI. Bindings: textbook/06-tom-vi-bindings.md

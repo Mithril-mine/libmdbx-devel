@@ -1,0 +1,57 @@
+---
+brief: True
+details: True
+enum_values: True
+implements: True
+url_source: True
+---
+
+{# This template is used inside of member.py #}
+{# Custom copy for the libmdbx docsite (mkdoxy project option "template-dir"), #}
+{# derived from mkdoxy 1.2.8 - keep in sync when bumping the pinned version.  #}
+{# The only change is the "enum_values" block below: mkdoxy renders enum      #}
+{# values as a bare code block and never extracts their <briefdescription>/   #}
+{# <detaileddescription>, so this block renders them via the parser used by   #}
+{# the built-in Brief/Details properties. The "_"-attributes are mkdoxy        #}
+{# internals; the toolchain is pinned in docs/docsite/requirements.txt.       #}
+{% filter indent(config.get('indent_level', 0), True) %}
+
+### {{node.kind.value}} {{node.name_long if node.is_group else node.name_short}} {{node.overload_suffix}}
+
+{% if configMemDef.get('brief') -%}
+{% if node.has_brief -%}
+{{node.brief + "\n"}}
+{%- endif -%}
+{%- endif -%}
+
+{{node.codeblock | use_code_language(node.code_language)}}
+
+
+{% if configMemDef.get('details') -%}
+{% if node.has_details -%}
+{{node.details | use_code_language(node.code_language)}}
+{%- endif -%}
+{%- endif -%}
+
+{% if configMemDef.get('enum_values', true) -%}
+{% if node.is_enum -%}
+{% for enumvalue in node._xml.findall('enumvalue') %}
+{% set enumvalue_brief = node._parser.paras_as_str(enumvalue.find('briefdescription')) %}
+{% set enumvalue_details = node._parser.paras_as_str(enumvalue.find('detaileddescription')) %}
+{% if (enumvalue_brief ~ enumvalue_details) | trim %}
+**{{ enumvalue.find('name').text }}** {{ (enumvalue_brief ~ enumvalue_details) | trim }}
+
+{% endif -%}
+{% endfor -%}
+{%- endif -%}
+{%- endif -%}
+
+{% if configMemDef.get('implements') -%}
+{% if node.reimplements %}
+Implements [*{{node.reimplements.name_long}}*]({{node.reimplements.url}})
+{% endif %}
+{%- endif -%}
+
+{% endfilter %}
+
+<hr>
