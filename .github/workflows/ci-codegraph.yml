@@ -63,12 +63,20 @@ jobs:
           --cov=mcp --cov=tools --cov-report=xml:coverage/codegraph-python.xml \
           --cov-report=term-missing:skip-covered -q
     - name: codecov upload (codegraph python)
-      uses: codecov/codecov-action@v5
+      # fail_ci_if_error: a rejected upload must be visible, not swallowed by
+      # a green job. The explicit slug is required when the secret carries an
+      # org-level (global) upload token instead of the repo token; with a
+      # repo token it is harmless redundancy. plugins: noop — the pytest-cov
+      # XML is pre-built; the CLI auto-plugins would only add a duplicate
+      # coverage.xml and extra scanning.
+      uses: codecov/codecov-action@v7
       with:
         files: skynet/MCP-shared-graph-memory/coverage/codegraph-python.xml
         flags: codegraph-scan-python
+        slug: Mithril-mine/libmdbx-devel
         token: ${{ secrets.CODECOV_TOKEN }}
-        fail_ci_if_error: false
+        plugins: noop
+        fail_ci_if_error: true
         verbose: true
     - name: prepare build-scan
       shell: bash
