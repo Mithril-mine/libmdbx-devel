@@ -121,7 +121,7 @@ When refactoring this repository, the generic process above is layered onto proj
 4. **Interface refactoring rules**: Cross-module exports go through `src/proto.h` and module headers; read [`module-interfaces.md`](../../docs/engineering/module-interfaces.md) §5 before moving/deleting/renaming exported symbols or changing include dependencies (known cycles are listed there).
 5. **C ↔ C++ bridge**: The C++ API (`mdbx.h++`, `mdbx++/`) wraps the C core; exceptions must never cross the C boundary (`error::success_or_throw`, `exception_thunk`). See [`cxx-api.md`](../../docs/engineering/cxx-api.md) §4 before refactoring the bridge.
 6. **Tests gate every step — with the repo's verification levels** (see `AGENTS.md`):
-   - L1: the specific test guarding the touched module (find it via [`test-coverage.md`](../../docs/engineering/test-coverage.md) §7);
+   - L1: the specific test guarding the touched module (find it via [`CODEGRAPH.md`](../../skynet/MCP-shared-graph-memory/docs/CODEGRAPH.md));
    - L2: full `ctest` when the change touches more than one module;
    - L3+: `make check`, sanitizer builds (`test-ubsan`/`test-asan`), `test-memcheck`, `stochastic.sh`, and human-controlled `battery-tmux.sh` for increasingly broad/expensive verification. Use CMake + CTest for builds (primary build system); GNU Make is legacy.
    - Never skip tests "just this once"; a failing step means revert, not fix-forward.

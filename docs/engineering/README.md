@@ -90,14 +90,12 @@ Author: Leonid Yuriev \<leo@yuriev.ru\>. Home site: <https://libmdbx.dqdkfa.ru>.
 | [`subsystem-map.md`](subsystem-map.md) | Subsystem map S1–S14 with key `src/*` modules and refactoring risk levels (🔴🟠🟡) |
 | [`module-lock-matrix.md`](module-lock-matrix.md) | Pairwise subsystem conflict matrix (HIGH/MED/LOW) + high-risk `src/*` zones for parallel work planning |
 | [`test-durability-strategy.md`](test-durability-strategy.md) | Test durability strategy: `MDBX_SYNC_*` modes, speed-up transports (`/dev/shm`, RAM-disk), Quick/Full matrix |
-| [`test-coverage.md`](test-coverage.md) | Tests → modules coverage map: which test guards which module/feature, coverage gaps |
-| [`../../skynet/MCP-shared-graph-memory/docs/CODEGRAPH.md`](../../skynet/MCP-shared-graph-memory/docs/CODEGRAPH.md) | Structural refactoring map: clang-AST symbols/blocks/edges, `#if`-regions, multi-config merge (linux+win32+macos), uncovered islands, coverage/traces/probes; оркестратор `scan_all.py` (см. секцию «Многоплатформенное сканирование») |
+| [`../../skynet/MCP-shared-graph-memory/docs/CODEGRAPH.md`](../../skynet/MCP-shared-graph-memory/docs/CODEGRAPH.md) | Structural refactoring map: clang-AST symbols/blocks/edges, `#if`-regions, multi-config merge (linux+win32+macos), uncovered islands, coverage/traces/probes; оркестратор `scan_all.py` (см. секцию «Многоплатформенное сканирование»); tests → modules coverage map (ex-`test-coverage.md`) + the codecov upload flow |
 | [`testing-methodology.md`](testing-methodology.md) | Managed/controlled testing methodology: three instrumentation channels (COLLECT/WATCH/FAULT), coverage axes, tool taxonomy, Kaizen iterations, concrete macro implementation (probe-bus) |
 | [`testing-codex.md`](testing-codex.md) | **Operational codex C0–C6**: double-loop/Kaizen, test addressing (diff→labels/cells), tiering & budgets (P0–heavy), flake management, metrics/SLA, local/CI parity, corpus hygiene, temp-cleanup |
 | [`test-scenarios-codex.md`](test-scenarios-codex.md) | Quality standard for `test-scenarios.md` (SC-*): mandatory fields, review checklist, verdicts, process |
 | [`probe-bus.md`](probe-bus.md) | Probe-инструментарий: probe-bus (mdbx-probes) — in-process registry, `MPROBE_COLLECT/WATCH/FAULT` macros, `mdbx_probe_ctl()`, file-IPC transport, fault injection, self-tests; и каталог USDT/DTrace-маркеров (naming, enable, per-marker table, SystemTap fault injection, platform validation status) |
 | [`systemtap-reference.md`](systemtap-reference.md) | SystemTap reference: user-space/kernel domains, session architecture, statement-probe syntax, target variables, observation vs injection, examples, error checklist |
-| [`coverage-pilot-inventory.md`](coverage-pilot-inventory.md) | Coverage-pilot (B68-P3) inventory: per-test → module/function mapping, reachable-target accounting, success metric |
 | [`testing-infra-design.md`](testing-infra-design.md) | Testing Infrastructure v2 design (background): registry (`tests/ci/config.json`), orchestrator/runner workflows, request→cell mapping, flaky policy, rollout |
 | [`testing-infra-v3.md`](testing-infra-v3.md) | Testing Infrastructure v3 (implemented): two-tier change addressing, orchestrator supersede/preservation, runner, profiles, validation gates |
 | [`techdebt.md`](techdebt.md) | Tech-debt inventory from source scan: 86 TODO/FIXME/workaround markers by category with file:line refs |
@@ -120,7 +118,7 @@ Depending on the task, start from:
 - **Debugging a slow/corrupt/growing DB, tools and scenarios** → [`debugging-methodology.md`](debugging-methodology.md)
 - **How libmdbx works (functional view, RU, reader Q&A + deep dives)** → [`../ru/deep-dive/internals.md`](../ru/deep-dive/internals.md)
 - **C++ API / classes / wrappers** → [`cxx-api.md`](cxx-api.md)
-- **What tests guard a module / coverage gaps** → [`test-coverage.md`](test-coverage.md)
+- **What tests guard a module / coverage gaps** → [`../../skynet/MCP-shared-graph-memory/docs/CODEGRAPH.md`](../../skynet/MCP-shared-graph-memory/docs/CODEGRAPH.md)
 - **How to write tests / achieve full coverage (channels, axes)** → [`testing-methodology.md`](testing-methodology.md)
 - **Operational test rules & CI budgets (tiers, flaky, SLA)** → [`testing-codex.md`](testing-codex.md)
 - **Test scenarios as specs for test writers** → [`test-scenarios.md`](test-scenarios.md)

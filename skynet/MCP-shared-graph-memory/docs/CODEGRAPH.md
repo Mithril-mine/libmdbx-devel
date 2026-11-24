@@ -371,10 +371,13 @@ POSIX-ветки `#if`.
   win-mscl (clang/LLVM instrumentation: profraw → llvm-profdata → llvm-cov
   → конвертер `llvm_cov_to_lcov.py`), win-mingw (gcov; сейчас пуст — см.
   «Многоплатформенное сканирование»).
-- Каждый источник выгружается в **codecov** (`codecov/codecov-action@v5`)
-  с `flags: <cell-id>`; пустые lines.info фильтруются guard-шагом
-  (`codecov guard` в ci-run.yml). Конфиг — `.codecov.yml` (ignore tests/
-  examples/skynet/docs; статусы informational).
+- Каждый источник выгружается в **codecov** (`codecov/codecov-action@v7`,
+  требует секрет `CODECOV_TOKEN` — без него codecov.io отвергает отчёты для
+  защищённых веток с HTTP 400) с `flags: <cell-id>`; пустые lines.info
+  фильтруются guard-шагом (`codecov guard` в ci-run.yml), отказ codecov.io
+  красит job (`fail_ci_if_error`). Профиль `coverage` запускается еженедельным
+  schedule ci-dispatch. Конфиг — `.codecov.yml` (ignore tests/ examples/ docs;
+  статусы informational).
 
 ## Валидатор (`validate_map.py`)
 

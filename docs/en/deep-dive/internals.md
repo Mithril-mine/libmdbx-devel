@@ -7,8 +7,8 @@
 > A functional view of the architecture: subsystems, mechanisms, API entities and their interplay —
 > "how it works" — **without binding to source-code files and modules**.
 > Companion documents: [`architecture.md`](architecture.md) (internal structure and invariants,
-> module-bound), `structure.md` (file map),
-> `test-coverage.md`.
+> module-bound), `structure.md` (file map), CODEGRAPH.md (tests → modules
+> coverage attestation).
 
 ---
 

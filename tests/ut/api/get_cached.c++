@@ -1111,7 +1111,7 @@ static bool probe_arm_fault(const char *tag, unsigned code) {
 #endif /* MDBX_PROBES */
 
 /* Пилот B68-P3: error-path'и mdbx_cache_get + fault-инъекция (probe-bus).
- * Классы R (crafted) и F (fault). Инвентарь: docs/engineering/coverage-pilot-inventory.md. */
+ * Классы R (crafted) и F (fault). Инвентарь: testing-methodology.md, глава «Пилот coverage-аттестации». */
 static bool case3_error_paths(mdbx::env env, get_cached_t get_cached) {
   bool ok = true;
   auto txn = env.start_write();

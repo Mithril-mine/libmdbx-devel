@@ -276,9 +276,9 @@ with fault injection (the probe-bus/MPROBE family).
 - [docs/engineering/testing-codex.md](../docs/engineering/testing-codex.md),
   [docs/engineering/testing-methodology.md](../docs/engineering/testing-methodology.md),
   [docs/engineering/test-scenarios.md](../docs/engineering/test-scenarios.md) +
-  [test-scenarios-codex.md](../docs/engineering/test-scenarios-codex.md),
-  [docs/engineering/test-coverage.md](../docs/engineering/test-coverage.md) —
-  testing rules, scenario specs, coverage map (incl. white spots).
+  [test-scenarios-codex.md](../docs/engineering/test-scenarios-codex.md) —
+  testing rules, scenario specs; the coverage attestation maps live in
+  [CODEGRAPH.md](../skynet/MCP-shared-graph-memory/docs/CODEGRAPH.md).
 - [docs/engineering/test-durability-strategy.md](../docs/engineering/test-durability-strategy.md) —
   durability modes and speed-up transports for tests.
 - [docs/engineering/testing-infra-design.md](../docs/engineering/testing-infra-design.md) —

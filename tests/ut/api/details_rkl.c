@@ -745,8 +745,8 @@ static void probe_activate(void) {
 }
 #endif /* MDBX_PROBES */
 
-/* Классы непокрытых веток rkl.c/txl.c (инвентарь: docs/engineering/
- * coverage-pilot-inventory.md). Каждый кейс изолирован (arm/disarm/reset). */
+/* Классы непокрытых веток rkl.c/txl.c (инвентарь: testing-methodology.md,
+ * глава «Пилот coverage-аттестации»). Каждый кейс изолирован (arm/disarm/reset). */
 static bool edge_cases_probes(void) {
 #if defined(MDBX_PROBES)
   const size_t errors = tst_failed;

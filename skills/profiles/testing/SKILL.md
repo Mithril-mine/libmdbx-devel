@@ -13,7 +13,8 @@ description: Profile for testing libmdbx — monolithic test decomposition, char
 > [`docs/engineering/testing-codex.md`](../../../docs/engineering/testing-codex.md)
 > (операционные правила C0–C6: тайеры, флаки, бюджеты),
 > [`docs/engineering/test-scenarios.md`](../../../docs/engineering/test-scenarios.md)
-> (ТЗ сценариев SC-*), [`docs/engineering/test-coverage.md`](../../../docs/engineering/test-coverage.md)
+> (ТЗ сценариев SC-*),
+> [`skynet/MCP-shared-graph-memory/docs/CODEGRAPH.md`](../../../skynet/MCP-shared-graph-memory/docs/CODEGRAPH.md)
 > (карта «тесты → модули», дыры), [`docs/engineering/probe-bus.md`](../../../docs/engineering/probe-bus.md)
 > (движок инъекций mdbx-probes и каталог USDT/DTrace-маркеров),
 > [`docs/engineering/testing-infra-design.md`](../../../docs/engineering/testing-infra-design.md)

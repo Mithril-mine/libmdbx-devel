@@ -355,13 +355,18 @@ jobs:
           fi
 
       - name: upload to codecov
+        # codecov.io rejects tokenless reports for the protected branches
+        # (HTTP 400 "Token required because branch is protected"), so the
+        # CODECOV_TOKEN repository secret must exist; a missing/invalid token
+        # fails the job instead of a silently-green run without data
+        # (fail_ci_if_error).
         if: ${{ inputs.coverage && steps.codecov-guard.outputs.has_coverage == 'true' }}
-        uses: codecov/codecov-action@v5
+        uses: codecov/codecov-action@v7
         with:
           files: coverage/lines.info
           flags: ${{ inputs.cell }}
           token: ${{ secrets.CODECOV_TOKEN }}
-          fail_ci_if_error: false
+          fail_ci_if_error: true
           verbose: true
 
       - name: upload metrics

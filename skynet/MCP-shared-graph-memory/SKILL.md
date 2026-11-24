@@ -220,7 +220,7 @@ shared-graph-memory.mdbx — персистентная память роя на
 union-AST), но не отвечает на вопрос «что реально выполняется тестами».
 Для этого используется слой динамического покрытия (lcov/gcov):
 
-- Источник: GitHub клетка `linux-gcc-ubuntu24-debug-coverage`
+- Источник: GitHub клетка `linux-gcc-ubuntu-latest-debug-coverage`
   (артефакт `coverage-lines.info`, `lcov --include src/`); SourceCraft
   `ci-linux-nightly-full` печатает summary в лог куба.
 - Хранение: одна запись на прогон

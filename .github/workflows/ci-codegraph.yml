@@ -63,12 +63,15 @@ jobs:
           --cov=mcp --cov=tools --cov-report=xml:coverage/codegraph-python.xml \
           --cov-report=term-missing:skip-covered -q
     - name: codecov upload (codegraph python)
-      uses: codecov/codecov-action@v5
+      # fail_ci_if_error: a missing/invalid CODECOV_TOKEN makes codecov.io
+      # reject the report with HTTP 400 ("Token required because branch is
+      # protected") — that must be visible, not swallowed by a green job.
+      uses: codecov/codecov-action@v7
       with:
         files: skynet/MCP-shared-graph-memory/coverage/codegraph-python.xml
         flags: codegraph-scan-python
         token: ${{ secrets.CODECOV_TOKEN }}
-        fail_ci_if_error: false
+        fail_ci_if_error: true
         verbose: true
     - name: prepare build-scan
       shell: bash
