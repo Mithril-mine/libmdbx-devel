@@ -779,7 +779,11 @@ else()
           # config-cmake.h define; propagate MDBX_PROBES for the probe-bus
           # guards (probe_watch self-attestation), and activate the registry
           # at runtime.
-          target_compile_definitions(ut_dupfix_multiple PRIVATE MDBX_PROBES)
+          if(TARGET ut_dupfix_multiple)
+            # no target without GoogleTest (the requested C++ standard below
+            # its minimum)
+            target_compile_definitions(ut_dupfix_multiple PRIVATE MDBX_PROBES)
+          endif()
           set_tests_properties(dupfix_multiple PROPERTIES APPEND PROPERTY
             ENVIRONMENT "MDBX_PROBES=1")
         endif()
@@ -826,7 +830,11 @@ else()
         add_ut(defrag-contract SOURCE ut/api/defrag-contract.c++)
         set_tests_properties(defrag-contract PROPERTIES LABELS "ut;ut.api;ut.gc")
         if(MDBX_PROBES)
-          target_compile_definitions(ut_bunches_removal PRIVATE MDBX_PROBES)
+          if(TARGET ut_bunches_removal)
+            # no target without GoogleTest (the requested C++ standard below
+            # its minimum)
+            target_compile_definitions(ut_bunches_removal PRIVATE MDBX_PROBES)
+          endif()
         endif()
         set_tests_properties(bunches_removal PROPERTIES LABELS "ut;ut.gc")
         set_property(TEST bunches_removal APPEND PROPERTY
@@ -841,7 +849,11 @@ else()
           # C++ test TUs (public mdbx.h++) do not see the internal config-cmake.h
           # define; propagate MDBX_PROBES for the probe-bus guards (probe-ctl.h++,
           # case3_error_paths attestation). C test TUs already get it via config.
-          target_compile_definitions(ut_get_cached PRIVATE MDBX_PROBES)
+          if(TARGET ut_get_cached)
+            # no target without GoogleTest (the requested C++ standard below
+            # its minimum)
+            target_compile_definitions(ut_get_cached PRIVATE MDBX_PROBES)
+          endif()
         endif()
         set_tests_properties(get_cached PROPERTIES LABELS "ut;ut.api;ut.txn")
         set_property(TEST get_cached APPEND PROPERTY
