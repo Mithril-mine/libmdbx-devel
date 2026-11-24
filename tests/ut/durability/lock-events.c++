@@ -351,7 +351,10 @@ bool collect_child(pid_t pid, int &status, unsigned deadline_seconds) {
   return false;
 }
 
-bool parse_writer_status(const char *status_flag, unsigned &txns, bool &recovered) {
+/* Used only in the dead-owner recovery configurations (the POSIX-1988/2001
+ * cells strand their writers instead, see the caller below), so mark it to
+ * stay buildable with -Werror in those configurations. */
+MDBX_MAYBE_UNUSED bool parse_writer_status(const char *status_flag, unsigned &txns, bool &recovered) {
   char line[96];
   if (!coord_read_line(status_flag, line, sizeof line))
     return false;
