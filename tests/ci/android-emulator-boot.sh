@@ -10,7 +10,7 @@
 # the emulator's own log are dumped on each failed attempt.
 #
 # Launch parameters mirror what android-emulator-runner did for the
-# android-r27d-x86-64-emu cell: the hosted runners have no KVM, so the
+# android-r30-x86-64-emu cell: the hosted runners have no KVM, so the
 # emulator runs TCG software emulation (-accel off) with the
 # ANDROID_I_WANT_MY_TCG opt-in (the emulator 37.3.x refuses TCG without it),
 # animations disabled, no window/audio/snapshots.

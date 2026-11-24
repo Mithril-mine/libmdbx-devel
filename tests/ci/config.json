@@ -2435,7 +2435,7 @@
       "note": "MDBX_LOCKING matrix: 2008 x clang; RelWithDebInfo checked tier (LOCKING is fixed on Windows, a platform limitation)"
     },
     {
-      "id": "android-r27d-x86-64-emu",
+      "id": "android-r30-x86-64-emu",
       "runs-on": "ubuntu-24.04",
       "cmake": [
         "-DANDROID_ABI=x86_64",
@@ -2447,8 +2447,8 @@
         "api-level": 30,
         "arch": "x86_64"
       },
-      "note": "android ndk=r27d abi=x86_64 Release on an API-30 x86_64 emulator; B5 pilot (replaces build-only for this ABI)",
-      "ndk": "r27d"
+      "note": "android ndk=r30 abi=x86_64 Release on an API-30 x86_64 emulator; B5 pilot (replaces build-only for this ABI); the NDK bumped from r27d after the 2026-11-22..24 nightly streak of the emulator boot timeouts",
+      "ndk": "r30"
     },
     {
       "id": "linux-clang-ubuntu-latest-relwithdebinfo-cxx-on",
@@ -2979,7 +2979,7 @@
       "win-cxx-v143-win2022-arm64-release-std20"
     ],
     "android-emulator": [
-      "android-r27d-x86-64-emu"
+      "android-r30-x86-64-emu"
     ],
     "win-gate": [
       "win-cxx-v142-win2022-x64-debug-std11",
@@ -3015,7 +3015,7 @@
       "android-r27d-arm64-v8a-debug",
       "android-r29-arm64-v8a-release",
       "android-r26d-armeabi-v7a-with-neon-release",
-      "android-r27d-x86-64-emu"
+      "android-r30-x86-64-emu"
     ]
   },
   "notes": [

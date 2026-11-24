@@ -3,7 +3,7 @@ name: ci-android
 # Infra v3 platform nightly gate for Android (compact matrix, see
 # tests/ci/config.json zones_notes). Runs the android-nightly profile
 # (3 build-only cells: NDK r26d/r27d/r29 x oldest/newest ABI surface, plus
-# the r27d x86_64 emulator pilot running smoke_basic/smoke_chk via adb).
+# the r30 x86_64 emulator pilot running smoke_basic/smoke_chk via adb).
 #
 # NDK builds are clang by definition (Bionic toolchain); deeper ABI coverage
 # (15 legacy combinations) stays available via ci-dispatch manual profile
