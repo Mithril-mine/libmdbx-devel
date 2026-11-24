@@ -287,6 +287,12 @@ jobs:
                 python3 "$GITHUB_WORKSPACE/skynet/MCP-shared-graph-memory/tools/llvm_cov_to_lcov.py" \
                   --json coverage/llvm.json --root "$ROOT" > coverage/lines.info
                 echo "llvm coverage: $(grep -c '^DA:' coverage/lines.info || true) lines"
+                  # Для codecov llvm-cov отдаёт cobertura напрямую — формат,
+                  # который codecov проглатывает стабильно (lcov-варианты
+                  # принимаются с HTTP 200 и молча теряются при обработке).
+                  "$LLVMTOOL/llvm-cov.exe" export "$TESTEXE" \
+                    -instr-profile=coverage/merged.profdata -format=cobertura \
+                    > coverage/coverage.xml
                 fi
               else
                 # Windows (mingw): lcov apt-пакета нет, но gcov (из mingw-w64)
@@ -343,6 +349,15 @@ jobs:
               lcov --summary coverage/lines.info 2>&1 | tail -6
               genhtml coverage/lines.info --output-directory coverage/html \
                 --legend --quiet --title "libmdbx devel (${{ inputs.cell }})"
+              # codecov ingests cobertura reliably (the python report of
+              # ci-codegraph goes through end-to-end) while its lcov
+              # ingestion silently drops the reports even after they are
+              # reduced to the classic SF/DA shape (observed 2026-11-24:
+              # HTTP 200 on upload, no report produced). lcov 2.x converts
+              # to cobertura directly; the lcov tracefile stays in the
+              # artifact for the knowledge-base loader.
+              lcov --to-cobertura coverage/lines.info \
+                --output-file coverage/coverage.xml
               ;;
           esac
 
@@ -381,7 +396,7 @@ jobs:
         if: ${{ inputs.coverage && steps.codecov-guard.outputs.has_coverage == 'true' }}
         uses: codecov/codecov-action@v7
         with:
-          files: coverage/lines.info
+          files: coverage/coverage.xml
           flags: ${{ inputs.cell }}
           slug: Mithril-mine/libmdbx-devel
           token: ${{ secrets.CODECOV_TOKEN }}
