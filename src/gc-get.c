@@ -124,7 +124,6 @@ __hot static pgno_t repnl_get_single(MDBX_txn *txn) {
   const size_t len = pnl_size(txn->wr.repnl);
   ASSERT(len > 0);
   pgno_t *target = MDBX_PNL_EDGE(txn->wr.repnl);
-  const ptrdiff_t dir = MDBX_PNL_ASCENDING ? 1 : -1;
 
   /* Есть ТРИ потенциально выигрышные, но противо-направленные тактики:
    *
@@ -177,18 +176,14 @@ __hot static pgno_t repnl_get_single(MDBX_txn *txn) {
 #ifndef MDBX_ENABLE_SAVING_SEQUENCES
 #define MDBX_ENABLE_SAVING_SEQUENCES 0
 #endif
-  if (MDBX_ENABLE_SAVING_SEQUENCES && unlikely(target[dir] == *target + 1) && len > 2) {
+  if (MDBX_ENABLE_SAVING_SEQUENCES && unlikely(target[-1] == *target + 1) && len > 2) {
     /* Пытаемся пропускать последовательности при наличии одиночных элементов.
      * TODO: необходимо кэшировать пропускаемые последовательности
      * чтобы не сканировать список сначала при каждом выделении. */
-    pgno_t *scan = target + dir + dir;
+    pgno_t *scan = target - 2;
     size_t left = len;
     do {
-      if (likely(scan[-dir] != *scan - 1 && *scan + 1 != scan[dir])) {
-#if MDBX_PNL_ASCENDING
-        target = scan;
-        break;
-#else
+      if (likely(scan[1] != *scan - 1 && *scan + 1 != scan[-1])) {
         /* вырезаем элемент с перемещением хвоста */
         const pgno_t pgno = *scan;
         pnl_setsize(txn->wr.repnl, len - 1);
@@ -196,22 +191,14 @@ __hot static pgno_t repnl_get_single(MDBX_txn *txn) {
           scan[-1] = *scan;
         ASSERT(pgno >= NUM_METAS);
         return pgno;
-#endif
       }
-      scan += dir;
+      --scan;
     } while (--left > 2);
   }
 
   const pgno_t pgno = *target;
-#if MDBX_PNL_ASCENDING
-  /* вырезаем элемент с перемещением хвоста */
-  pnl_setsize(txn->wr.repnl, len - 1);
-  for (const pgno_t *const end = txn->wr.repnl + len - 1; target <= end; ++target)
-    *target = target[1];
-#else
   /* перемещать хвост не нужно, просто усекаем список */
   pnl_setsize(txn->wr.repnl, len - 1);
-#endif /* MDBX_PNL_ASCENDING */
   ASSERT(pgno >= NUM_METAS);
   return pgno;
 }
@@ -227,40 +214,16 @@ static pgno_t gc_repnl_scan_sequence_reserve(const MDBX_txn *txn, const size_t n
   ASSERT(len >= num && num > 1);
   ASSERT((flags & ALLOC_RESERVE) != 0);
   const size_t seq = num - 1;
-#if defined(ALLOC_EXACTLY) && !MDBX_PNL_ASCENDING
-  if (edge[-(ptrdiff_t)seq] - *edge == seq &&
-      (likely((flags & ALLOC_EXACTLY) == 0) || len == num || edge[-(ptrdiff_t)num] - *edge != num)) {
+  const bool exactly = (flags & ALLOC_EXACTLY) != 0;
+  /* The tail sequence is usable when it is not shorter than requested and,
+   * in the ALLOC_EXACTLY mode, does not continue above (len == num guards the
+   * counter slot at pnl[0] from being read as a page number). */
+  if (edge[-(ptrdiff_t)seq] - *edge == seq && (!exactly || len == num || edge[-(ptrdiff_t)num] - *edge != num))
     return *edge;
-  }
-#endif /* defined(ALLOC_EXACTLY) && !MDBX_PNL_ASCENDING */
-  pgno_t *target = scan4seq_impl(edge, len, seq);
-  ASSERT(target == scan4range_checker(txn->wr.repnl, seq));
-  while (target) {
-#if defined(ALLOC_EXACTLY)
-    if (unlikely(flags & ALLOC_EXACTLY) && len > num) {
-      const ptrdiff_t step = MDBX_PNL_ASCENDING ? -1 : 1;
-      if (target[step] - target[0] == 1) {
-        /* последовательность продолжается, пропускаем её */
-        size_t left =
-            MDBX_PNL_ASCENDING ? target - &MDBX_PNL_FIRST(txn->wr.repnl) : &MDBX_PNL_LAST(txn->wr.repnl) - target;
-        do {
-          target += step;
-          if (--left < num)
-            /* осталось меньше чем нужно, последовательности целевой длины быть не может */
-            return 0;
-        } while (target[step] - target[0] == 1);
-        /* продолжаем поиск дальше */
-        target = scan4seq_impl(target, left, seq);
-        ASSERT(target == scan4range_checker(txn->wr.repnl, seq));
-        continue;
-      }
-      /* найденная последовательность ровно необходимой длины */
-    }
-#endif /* defined(ALLOC_EXACTLY) */
-    const pgno_t pgno = *target;
-    return pgno;
-  }
-  return 0;
+
+  pgno_t *target = exactly ? scan4seq_exact(edge, len, seq) : scan4seq_impl(edge, len, seq);
+  ASSERT(exactly || target == scan4range_checker(txn->wr.repnl, seq));
+  return target ? *target : 0;
 }
 
 __hot pgno_t gc_repnl_get_sequence(MDBX_txn *txn, const size_t num, uint8_t flags) {
@@ -272,49 +235,22 @@ __hot pgno_t gc_repnl_get_sequence(MDBX_txn *txn, const size_t num, uint8_t flag
   ASSERT(len >= num && num > 1);
   ASSERT((flags & ALLOC_RESERVE) == 0);
   const size_t seq = num - 1;
-#if defined(ALLOC_EXACTLY) && !MDBX_PNL_ASCENDING
-  if (edge[-(ptrdiff_t)seq] - *edge == seq &&
-      (likely((flags & ALLOC_EXACTLY) == 0) || len == num || edge[-(ptrdiff_t)num] - *edge != num)) {
-    ASSERT(edge == scan4range_checker(txn->wr.repnl, seq));
+  const bool exactly = (flags & ALLOC_EXACTLY) != 0;
+  /* See the reserve variant above for the tail-sequence condition. */
+  if (edge[-(ptrdiff_t)seq] - *edge == seq && (!exactly || len == num || edge[-(ptrdiff_t)num] - *edge != num)) {
+    ASSERT(exactly || edge == scan4range_checker(txn->wr.repnl, seq));
     /* перемещать хвост не нужно, просто усекаем список */
     pnl_setsize(txn->wr.repnl, len - num);
     return *edge;
   }
-#endif /* defined(ALLOC_EXACTLY) && !MDBX_PNL_ASCENDING */
-  pgno_t *target = scan4seq_impl(edge, len, seq);
-  ASSERT(target == scan4range_checker(txn->wr.repnl, seq));
-  while (target) {
-#if defined(ALLOC_EXACTLY)
-    if (unlikely(flags & ALLOC_EXACTLY) && len > num) {
-      const ptrdiff_t step = MDBX_PNL_ASCENDING ? -1 : 1;
-      if (target[step] - target[0] == 1) {
-        /* последовательность продолжается, пропускаем её */
-        size_t left =
-            MDBX_PNL_ASCENDING ? target - &MDBX_PNL_FIRST(txn->wr.repnl) : &MDBX_PNL_LAST(txn->wr.repnl) - target;
-        do {
-          target += step;
-          if (--left < num)
-            /* осталось меньше чем нужно, последовательности целевой длины быть не может */
-            return 0;
-        } while (target[step] - target[0] == 1);
-        /* продолжаем поиск дальше */
-        target = scan4seq_impl(target, left, seq);
-        ASSERT(target == scan4range_checker(txn->wr.repnl, seq));
-        continue;
-      }
-      /* найденная последовательность ровно необходимой длины */
-    }
-#endif /* defined(ALLOC_EXACTLY) */
+
+  pgno_t *target = exactly ? scan4seq_exact(edge, len, seq) : scan4seq_impl(edge, len, seq);
+  ASSERT(exactly || target == scan4range_checker(txn->wr.repnl, seq));
+  if (target) {
     const pgno_t pgno = *target;
     /* вырезаем найденную последовательность с перемещением хвоста */
     pnl_setsize(txn->wr.repnl, len - num);
-#if MDBX_PNL_ASCENDING
-    for (const pgno_t *const end = txn->wr.repnl + len - num; target <= end; ++target)
-      *target = target[num];
-#else
-    for (const pgno_t *const end = txn->wr.repnl + len; ++target <= end;)
-      target[-(ptrdiff_t)num] = *target;
-#endif /* MDBX_PNL_ASCENDING */
+    memmove(target - (ptrdiff_t)num + 1, target + 1, (size_t)(txn->wr.repnl + len - target) * sizeof(pgno_t));
     return pgno;
   }
   return 0;

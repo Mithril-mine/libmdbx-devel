@@ -43,6 +43,26 @@ static page_no *scan4seq_bruteforce(page_no *range, const size_t len, const size
   return NULL;
 }
 
+/* The written-from-spec oracle for the exact-length variant: walk the maximal
+ * descending-consecutive runs from the tail upward and take the first one of
+ * exactly seq+1 pages; a longer run is skipped as a whole (it must stay
+ * available to a larger request), a shorter one cannot qualify. */
+static page_no *scan4seq_exact_bruteforce(page_no *range, const size_t len, const size_t seq) {
+  page_no *const pnl = range - (ptrdiff_t)len;
+  const size_t num = seq + 1;
+  for (size_t end = len; end >= 1;) {
+    size_t top = end;
+    while (top > 1 && pnl[top - 1] == pnl[top] + 1)
+      --top;
+    if (end - top + 1 == num)
+      return pnl + end;
+    if (top <= 1)
+      break;
+    end = top - 1;
+  }
+  return NULL;
+}
+
 #define SCRATCH_SLOTS 16384u
 #define PAD_SLOTS 64u /* SIMD tails may over-read up to a window; keep it inside the scratch */
 
@@ -50,6 +70,7 @@ static page_no scratch[SCRATCH_SLOTS + PAD_SLOTS];
 
 static unsigned long n_cases, n_match, n_nomatch;
 static unsigned long n_dives[5]; /* per-variant divergence counter */
+static unsigned long n_dives_exact;
 static const char *const variant_names[5] = {"fallback", "impl(dispatch)", "sse2", "avx2", "avx512bw"};
 
 static void check_case(page_no *pnl, size_t len, size_t seq, size_t num) {
@@ -90,6 +111,14 @@ static void check_case(page_no *pnl, size_t len, size_t seq, size_t num) {
       printf("MISMATCH %s: len=%zu num=%zu seq=%zu fallback=%ld variant=%ld\n", variant_names[i], len, num, seq,
              (long)(refs[0] - pnl), refs[i] ? (long)(refs[i] - pnl) : -9999);
     }
+  }
+  /* the exact-length variant: only sequences of exactly num pages qualify */
+  const page_no *const ex = mdbx_tst_scan4seq_exact(pnl, seq);
+  page_no *const ex_brute = scan4seq_exact_bruteforce(edge, len, seq);
+  if (ex != ex_brute) {
+    n_dives_exact += 1;
+    printf("MISMATCH exact: len=%zu num=%zu seq=%zu exact=%ld brute=%ld\n", len, num, seq,
+           ex ? (long)(ex - pnl) : -9999, ex_brute ? (long)(ex_brute - pnl) : -9999);
   }
 }
 
@@ -169,14 +198,60 @@ static void run_longseq(void) {
   printf("long-seq: %lu checks\n", checks);
 }
 
+/* Long-list counterpart of the exact-length check: a strictly descending list
+ * of runs of 2..8 consecutive pages separated by gaps, so a request either
+ * matches one of the runs exactly or has no sequence at all. The oracle is the
+ * independent written-from-spec walk above, not a copy of the library code. */
+static void run_exact_long(void) {
+  enum { EXACT_LEN = 1200 };
+  static page_no raw[EXACT_LEN + 1 + PAD_SLOTS];
+  page_no *const pnl = raw + 1;
+  unsigned long checks = 0;
+  for (size_t trial = 0; trial < 40; ++trial) {
+    page_no next = (page_no)(200000 + trial * 1000);
+    size_t i = 1, k = 0;
+    while (i <= EXACT_LEN) {
+      const size_t run_len = 2 + (trial + k) % 7; /* 2..8 consecutive pages */
+      for (size_t j = 0; j < run_len && i <= EXACT_LEN; ++j, ++i)
+        pnl[i] = next--;
+      next -= 3; /* a gap, so the next run is a separate sequence */
+      k += 1;
+    }
+    pnl[0] = (page_no)EXACT_LEN;
+    for (size_t idx = 1; idx < EXACT_LEN; ++idx)
+      if (pnl[idx] <= pnl[idx + 1]) {
+        n_dives_exact += 1;
+        printf("MISMATCH exact(long): trial=%zu not strictly descending at %zu\n", trial, idx);
+        break;
+      }
+    const size_t nums[] = {2, 3, 5, 8, 9, 40, 1000};
+    for (unsigned ni = 0; ni < sizeof(nums) / sizeof(nums[0]); ++ni) {
+      const size_t num = nums[ni];
+      const size_t seq = num - 1;
+      const page_no *const ex = mdbx_tst_scan4seq_exact(pnl, seq);
+      page_no *const brute = scan4seq_exact_bruteforce(pnl + EXACT_LEN, EXACT_LEN, seq);
+      checks += 1;
+      if (ex != brute) {
+        n_dives_exact += 1;
+        printf("MISMATCH exact(long): trial=%zu num=%zu seq=%zu exact=%ld brute=%ld\n", trial, num, seq,
+               ex ? (long)(ex - pnl) : -9999, brute ? (long)(brute - pnl) : -9999);
+      }
+    }
+  }
+  n_cases += checks;
+  printf("exact long-seq: %lu checks\n", checks);
+}
+
 int main(void) {
   memset(scratch, 0xAA, sizeof(scratch)); /* poison: junk lanes must never be selected */
   run_exhaustive();
   run_longseq();
+  run_exact_long();
   printf("cases=%lu (matches=%lu nomatch=%lu)\n", n_cases, n_match, n_nomatch);
   for (unsigned i = 0; i < 5; ++i)
     printf("%-16s divergences: %lu\n", variant_names[i], n_dives[i]);
-  const unsigned long total = n_dives[0] + n_dives[1] + n_dives[2] + n_dives[3] + n_dives[4];
+  printf("%-16s divergences: %lu\n", "exact", n_dives_exact);
+  const unsigned long total = n_dives[0] + n_dives[1] + n_dives[2] + n_dives[3] + n_dives[4] + n_dives_exact;
   if (total) {
     printf("FAILED: %lu divergences\n", total);
     return 1;

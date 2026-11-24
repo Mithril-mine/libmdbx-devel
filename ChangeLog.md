@@ -43,6 +43,7 @@ A hardening and refinement release: data-safety and corruption-resistance fixes 
 
  - **Breaking:** Removed the `MDBX_CPU_WRITEBACK_INCOHERENT` build option; weakly-ordered CPUs are always assumed ([#361](https://github.com/Mithril-mine/libmdbx-devel/issues/361)).
  - **Breaking:** Removed the `MDBX_ENABLE_REFUND` build option; online auto-compactification is always enabled ([#193](https://github.com/Mithril-mine/libmdbx-devel/issues/193)).
+ - **Breaking:** Removed the `MDBX_PNL_ASCENDING` build option; descending page order is always used ([#485](https://github.com/Mithril-mine/libmdbx-devel/issues/485)).
  - **Breaking:** Removed the C++ `env::get_preopen_snapinfo()` overloads without an explicit mode argument ([#182](https://github.com/Mithril-mine/libmdbx-devel/issues/182)).
 
 ### Fixed:

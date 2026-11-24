@@ -1,4 +1,4 @@
-/* Фикстура условной компиляции для scan_regions.py. */
+/* Фикстура условной компиляции для scan_regions.py: MDBX_FIXTURE_SORT_ASCENDING — локальное имя, не опция сборки. */
 #ifndef SCAN_REGIONS_GUARD
 #define SCAN_REGIONS_GUARD 1
 
@@ -21,7 +21,7 @@ static int profgc_helper(int x) {
 #endif
 
 static int always_here(void) {
-#if MDBX_PNL_ASCENDING
+#if MDBX_FIXTURE_SORT_ASCENDING
   return 10;
 #else
   return 20;

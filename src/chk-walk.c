@@ -735,7 +735,7 @@ __cold int chk_handle_gc(MDBX_chk_scope_t *const scope, MDBX_chk_table_t *tbl, c
       if (chk->envinfo.mi_latter_reader_txnid >= txnid)
         usr->result.reclaimable_pages += number;
 
-      size_t prev = MDBX_PNL_ASCENDING ? NUM_METAS - 1 : usr->txn->geo.first_unallocated;
+      size_t prev = usr->txn->geo.first_unallocated;
       for (size_t i = 1; i <= number; ++i) {
         const size_t pgno = pnl[i];
         histogram_acc(pgno, (chk->envinfo.mi_latter_reader_txnid > txnid)
@@ -755,7 +755,7 @@ __cold int chk_handle_gc(MDBX_chk_scope_t *const scope, MDBX_chk_table_t *tbl, c
           if (unlikely(MDBX_PNL_DISORDERED(prev, pgno))) {
             bad = " [bad sequence]";
             chk_object_issue(scope, "entry", txnid, "bad sequence", "%" PRIuSIZE " %c [%" PRIuSIZE "].%" PRIuSIZE, prev,
-                             (prev == pgno) ? '=' : (MDBX_PNL_ASCENDING ? '>' : '<'), i, pgno);
+                             (prev == pgno) ? '=' : '<', i, pgno);
           }
           if (chk->pagemap) {
             const intptr_t id = chk->pagemap[pgno];

@@ -179,6 +179,12 @@ __cold const uint32_t *mdbx_tst_scan4seq_checker(const uint32_t *pnl, size_t seq
   return (const uint32_t *)scan4range_checker(list, seq);
 }
 
+__cold const uint32_t *mdbx_tst_scan4seq_exact(const uint32_t *pnl, size_t seq) {
+  /* same const-cast confinement as in the checker above */
+  pgno_t *const list = (pgno_t *)((uintptr_t)pnl);
+  return (const uint32_t *)scan4seq_exact(MDBX_PNL_EDGE(list), pnl_size(list), seq);
+}
+
 /* ------------------------------------------------------------------------ */
 /* The gc_store_retired hook-replacement harness (the gc-store-retired-growth-corruption regression
  * scenario, issue #495): the REAL src/gc-store-retired.h store loop is

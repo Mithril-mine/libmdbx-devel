@@ -16,8 +16,12 @@
 /* FROZEN: The version number for a database's datafile format. */
 #define MDBX_DATA_VERSION 3
 
-#define MDBX_DATA_MAGIC ((MDBX_MAGIC << 8) + MDBX_PNL_ASCENDING * 64 + MDBX_DATA_VERSION)
-#define MDBX_DATA_MAGIC_LEGACY_COMPAT ((MDBX_MAGIC << 8) + MDBX_PNL_ASCENDING * 64 + 2)
+/* FROZEN: the magic encodes the datafile layout generation. The ascending
+ * PNL order used to contribute its own flag (scaled by 64), which has been
+ * fixed to zero (descending) since 2026-04-01 - the formula below yields
+ * the very same values as before. */
+#define MDBX_DATA_MAGIC ((MDBX_MAGIC << 8) + MDBX_DATA_VERSION)
+#define MDBX_DATA_MAGIC_LEGACY_COMPAT ((MDBX_MAGIC << 8) + 2)
 #define MDBX_DATA_MAGIC_LEGACY_DEVEL ((MDBX_MAGIC << 8) + 255)
 
 /* handle for the DB used to track free pages. */

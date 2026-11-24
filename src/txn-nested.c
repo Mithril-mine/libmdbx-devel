@@ -54,21 +54,12 @@ static void nested_merge(MDBX_txn *const parent, MDBX_txn *const nested, const s
          * а все осколки будут учтены отдельно. */
 
         /* Список retired страниц не сортирован, но для ускорения сортировки
-         * дополняется в соответствии с MDBX_PNL_ASCENDING */
-#if MDBX_PNL_ASCENDING
-        const size_t len = pnl_size(parent->wr.retired_pages);
-        while (r < len && parent->wr.retired_pages[r + 1] == pgno + l) {
-          ++r;
-          if (++l == npages)
-            break;
-        }
-#else
+         * дополняется в порядке убывания (descending PNL) */
         while (w > parent_retired_len && parent->wr.retired_pages[w - 1] == pgno + l) {
           --w;
           if (++l == npages)
             break;
         }
-#endif
       }
     } else if (unlikely(si)) {
       l = npages = 1;
@@ -93,17 +84,6 @@ static void nested_merge(MDBX_txn *const parent, MDBX_txn *const nested, const s
     if (len) {
       /* Remove refunded pages from parent's spill list */
       if (MDBX_PNL_MOST(sl) >= (parent->geo.first_unallocated << 1)) {
-#if MDBX_PNL_ASCENDING
-        size_t i = pnl_size(sl);
-        ASSERT(MDBX_PNL_MOST(sl) == MDBX_PNL_LAST(sl));
-        do {
-          if ((sl[i] & 1) == 0)
-            DEBUG("refund parent's spilled page %" PRIaPGNO, sl[i] >> 1);
-          i -= 1;
-        } while (i && sl[i] >= (parent->geo.first_unallocated << 1));
-        pnl_setsize(sl, i);
-#else
-        ASSERT(MDBX_PNL_MOST(sl) == MDBX_PNL_FIRST(sl));
         size_t i = 0;
         do {
           ++i;
@@ -112,7 +92,6 @@ static void nested_merge(MDBX_txn *const parent, MDBX_txn *const nested, const s
         } while (i < len && sl[i + 1] >= (parent->geo.first_unallocated << 1));
         pnl_setsize(sl, len -= i);
         memmove(sl + 1, sl + 1 + i, len * sizeof(sl[0]));
-#endif
       }
       tASSERT1(nested, pnl_check_allocated(sl, (size_t)parent->geo.first_unallocated << 1));
 
@@ -139,13 +118,12 @@ static void nested_merge(MDBX_txn *const parent, MDBX_txn *const nested, const s
       }
 
       /* Remove anything in our dirty list from parent's spill list */
-      /* Scanning spill list in descend order */
-      const intptr_t step = MDBX_PNL_ASCENDING ? -1 : 1;
-      s = MDBX_PNL_ASCENDING ? pnl_size(sl) : 1;
+      /* Scanning spill list in descending pgno order, from the head to the tail */
+      s = 1;
       d = src->length;
-      while (d && (MDBX_PNL_ASCENDING ? s > 0 : s <= pnl_size(sl))) {
+      while (d && s <= pnl_size(sl)) {
         if (sl[s] & 1) {
-          s += step;
+          ++s;
           continue;
         }
         const pgno_t spilled_pgno = sl[s] >> 1;
@@ -157,13 +135,13 @@ static void nested_merge(MDBX_txn *const parent, MDBX_txn *const nested, const s
           continue;
         }
         if (dirty_pgno_to <= spilled_pgno) {
-          s += step;
+          ++s;
           continue;
         }
 
         DEBUG("remove dirtied parent's spilled %u page %" PRIaPGNO, npages, dirty_pgno_form);
         spill_remove(parent, s, 1);
-        s += step;
+        ++s;
       }
 
       /* Squash deleted pagenums if we deleted any */

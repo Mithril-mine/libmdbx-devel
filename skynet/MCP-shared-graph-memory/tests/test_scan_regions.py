@@ -98,7 +98,7 @@ def test_location_detection():
     regs = _parse("scan_regions_fixture.h")
     by_cond = {r["cond"]: r for r in regs}
     assert by_cond["IS_WINDOWS"]["location"] == "definition-gating"
-    assert by_cond["MDBX_PNL_ASCENDING"]["location"] == "inner-function"
+    assert by_cond["MDBX_FIXTURE_SORT_ASCENDING"]["location"] == "inner-function"
     assert by_cond["MDBX_DEBUG"]["location"] == "inner-function"
     assert by_cond["defined(__GNUC__)"]["location"] == "definition-gating"
 

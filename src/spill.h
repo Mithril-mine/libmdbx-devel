@@ -34,15 +34,9 @@ static inline bool spill_intersect(const MDBX_txn *txn, pgno_t pgno, size_t npag
   }
   const pgno_t spilled_range_begin = pgno << 1;
   const pgno_t spilled_range_last = ((pgno + (pgno_t)npages) << 1) - 1;
-#if MDBX_PNL_ASCENDING
-  const size_t n = pnl_search(pnl, spilled_range_begin, (size_t)(MAX_PAGENO + 1) << 1);
-  tASSERT0(txn, n && (n == pnl_size(pnl) + 1 || spilled_range_begin <= pnl[n]));
-  const bool rc = n <= pnl_size(pnl) && pnl[n] <= spilled_range_last;
-#else
   const size_t n = pnl_search(pnl, spilled_range_last, (size_t)MAX_PAGENO + MAX_PAGENO + 1);
   tASSERT0(txn, n && (n == pnl_size(pnl) + 1 || spilled_range_last >= pnl[n]));
   const bool rc = n <= pnl_size(pnl) && pnl[n] >= spilled_range_begin;
-#endif
   if (CHECKS1_ENABLED()) {
     bool check = false;
     for (size_t i = 0; i < npages; ++i)

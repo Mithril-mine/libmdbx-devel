@@ -9,9 +9,8 @@
 /* An PNL is an Page Number List, a sorted array of IDs.
  *
  * The first element of the array is a counter for how many actual page-numbers
- * are in the list. By default PNLs are sorted in descending order, this allow
- * cut off a page with lowest pgno (at the tail) just truncating the list. The
- * sort order of PNLs is controlled by the MDBX_PNL_ASCENDING build option. */
+ * are in the list. PNLs are sorted in descending order, this allow cut off a
+ * page with lowest pgno (at the tail) just truncating the list. */
 typedef pgno_t *pnl_t;
 typedef const pgno_t *const_pnl_t;
 
@@ -20,15 +19,6 @@ typedef const pgno_t *const_pnl_t;
 #define MDBX_PNL_BEGIN(pl) (&(pl)[1])
 #define MDBX_PNL_END(pl) (&(pl)[pnl_size(pl) + 1])
 
-#if MDBX_PNL_ASCENDING
-#define MDBX_PNL_ORDERED(first, last) ((first) < (last))
-#define MDBX_PNL_DISORDERED(first, last) ((first) >= (last))
-#define MDBX_PNL_REVERSED(first, last) ((first) > (last))
-#define MDBX_PNL_EDGE(pl) ((pl) + 1)
-#define MDBX_PNL_LEAST(pl) MDBX_PNL_FIRST(pl)
-#define MDBX_PNL_MOST(pl) MDBX_PNL_LAST(pl)
-#define MDBX_PNL_CONTIGUOUS(prev, next, span) (((next) - (prev)) == (span))
-#else
 #define MDBX_PNL_ORDERED(first, last) ((first) > (last))
 #define MDBX_PNL_DISORDERED(first, last) ((first) <= (last))
 #define MDBX_PNL_REVERSED(first, last) ((first) < (last))
@@ -36,7 +26,6 @@ typedef const pgno_t *const_pnl_t;
 #define MDBX_PNL_LEAST(pl) MDBX_PNL_LAST(pl)
 #define MDBX_PNL_MOST(pl) MDBX_PNL_FIRST(pl)
 #define MDBX_PNL_CONTIGUOUS(prev, next, span) (((prev) - (next)) == (span))
-#endif /* MDBX_PNL_ASCENDING */
 
 #ifndef __cplusplus
 
@@ -195,11 +184,7 @@ MDBX_NOTHROW_PURE_FUNCTION MDBX_MAYBE_UNUSED static inline bool pnl_contains(con
 MDBX_NOTHROW_PURE_FUNCTION MDBX_MAYBE_UNUSED static inline bool pnl_contains_span(const const_pnl_t pnl, pgno_t pgno,
                                                                                   pgno_t span) {
   size_t n = pnl_search_nochk(pnl, pgno);
-#if MDBX_PNL_ASCENDING
-#error "FIXME: Since 2026-04-01 alternatives to MDBX_PNL_ASCENDING = 0 are no longer supported."
-#else
   return n >= span && pnl[n] == pgno && MDBX_PNL_CONTIGUOUS(pnl[n - span + 1], pnl[n], span - 1);
-#endif /* MDBX_PNL_ASCENDING */
 }
 
 MDBX_INTERNAL size_t pnl_merge(pnl_t dst, const const_pnl_t src);

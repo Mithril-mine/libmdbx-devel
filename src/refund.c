@@ -8,22 +8,13 @@ static void refund_reclaimed(MDBX_txn *txn) {
   pgno_t first_unallocated = txn->geo.first_unallocated;
   const pnl_t pnl = txn->wr.repnl;
   tASSERT0(txn, pnl_size(pnl) && MDBX_PNL_MOST(pnl) == first_unallocated - 1);
-#if MDBX_PNL_ASCENDING
-  size_t i = pnl_size(pnl);
-  tASSERT0(txn, pnl[i] == first_unallocated - 1);
-  while (--first_unallocated, --i > 0 && pnl[i] == first_unallocated - 1)
-    ;
-  pnl_setsize(pnl, i);
-#else
   size_t i = 1;
   tASSERT0(txn, pnl[i] == first_unallocated - 1);
   size_t len = pnl_size(pnl);
   while (--first_unallocated, ++i <= len && pnl[i] == first_unallocated - 1)
     ;
   pnl_setsize(pnl, len -= i - 1);
-  for (size_t move = 0; move < len; ++move)
-    pnl[1 + move] = pnl[i + move];
-#endif
+  memmove(pnl + 1, pnl + i, len * sizeof(pgno_t));
   VERBOSE("refunded %" PRIaPGNO " pages: %" PRIaPGNO " -> %" PRIaPGNO, txn->geo.first_unallocated - first_unallocated,
           txn->geo.first_unallocated, first_unallocated);
   txn->geo.first_unallocated = first_unallocated;
@@ -74,14 +65,12 @@ static void refund_loose(MDBX_txn *txn) {
       pnl_setsize(suitable, w);
       pnl_sort(suitable, MAX_PAGENO + 1);
 
-      /* Scanning in descend order */
-      const intptr_t step = MDBX_PNL_ASCENDING ? -1 : 1;
-      const intptr_t begin = MDBX_PNL_ASCENDING ? pnl_size(suitable) : 1;
-      const intptr_t end = MDBX_PNL_ASCENDING ? 0 : pnl_size(suitable) + 1;
-      tASSERT0(txn, suitable[begin] >= suitable[end - step]);
-      tASSERT0(txn, most == suitable[begin]);
+      /* Scanning in descending pgno order, from the head to the tail */
+      const size_t len = pnl_size(suitable);
+      tASSERT0(txn, suitable[1] >= suitable[len]);
+      tASSERT0(txn, most == suitable[1]);
 
-      for (intptr_t i = begin + step; i != end; i += step) {
+      for (size_t i = 2; i <= len; ++i) {
         if (suitable[i] != most - 1)
           break;
         most -= 1;

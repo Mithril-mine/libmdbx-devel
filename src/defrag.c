@@ -770,9 +770,6 @@ __hot static int defrag_provide_span(dfc_t *const dfc, const da_t *lp) {
   for (;;) {
     best_begin = MAX_PAGENO;
     best_cost = len;
-#if MDBX_PNL_ASCENDING
-#error "FIXME: Since 2026-04-01 alternatives to MDBX_PNL_ASCENDING = 0 are no longer supported."
-#else
     for (size_t span, i = len; i > 0 && pnl[i] < limit;) {
       span = 1;
       while (unlikely(MDBX_PNL_CONTIGUOUS(pnl[i - span], pnl[i], span)) &&
@@ -810,7 +807,6 @@ __hot static int defrag_provide_span(dfc_t *const dfc, const da_t *lp) {
           break;
       }
     }
-#endif /* MDBX_PNL_ASCENDING */
     if (best_begin != MAX_PAGENO || limit >= below_page || !dfc->in_region)
       break;
     /* The costs depend on the edge, so they are computed anew. */
