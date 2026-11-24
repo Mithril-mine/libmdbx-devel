@@ -784,7 +784,7 @@ else()
             # its minimum)
             target_compile_definitions(ut_dupfix_multiple PRIVATE MDBX_PROBES)
           endif()
-          set_tests_properties(dupfix_multiple PROPERTIES APPEND PROPERTY
+          set_property(TEST dupfix_multiple APPEND PROPERTY
             ENVIRONMENT "MDBX_PROBES=1")
         endif()
         add_ut(doubtless_positioning SOURCE ut/cursor/doubtless_positioning.c++)
@@ -985,7 +985,7 @@ add_ut(reverse_insertions SOURCE ut/txn/reverse_insertions.c++)
           add_ut(crash-windows SOURCE ut/durability/crash-windows.c++ NO_PCH)
           set_tests_properties(crash-windows PROPERTIES LABELS "ut;ut.durability")
           if(MDBX_PROBES)
-            set_tests_properties(crash-windows PROPERTIES APPEND PROPERTY
+            set_property(TEST crash-windows APPEND PROPERTY
               ENVIRONMENT "MDBX_PROBES=1")
           endif()
           # The dead-writer recovery matrix: the white-box include of
@@ -1008,7 +1008,7 @@ add_ut(reverse_insertions SOURCE ut/txn/reverse_insertions.c++)
           add_ut(lock-events SOURCE ut/durability/lock-events.c++ NO_PCH)
           set_tests_properties(lock-events PROPERTIES LABELS "ut;ut.durability")
           if(MDBX_PROBES)
-            set_tests_properties(lock-events PROPERTIES APPEND PROPERTY
+            set_property(TEST lock-events APPEND PROPERTY
               ENVIRONMENT "MDBX_PROBES=1")
           endif()
         endif()
