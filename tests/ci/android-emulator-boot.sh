@@ -28,6 +28,21 @@ AVD_NAME="mdbx-ci-emu-${API}-${ARCH}"
 SDK="${ANDROID_SDK_ROOT:-${ANDROID_HOME:-/usr/local/lib/android/sdk}}"
 EMU_LOG="$(mktemp "${RUNNER_TEMP:-${TMPDIR:-/tmp}}/android-emulator-boot-XXXXXX.log")"
 
+# Pin the AVD home for BOTH sides of the creation/lookup pair: the
+# cmdline-tools' avdmanager writes the AVD under ANDROID_USER_HOME
+# (defaulting to ~/.android/avd), while the emulator searches
+# ANDROID_AVD_HOME, ANDROID_SDK_HOME/avd and HOME/.android/avd - and on the
+# hosted runners these resolve differently, so the freshly created AVD was
+# not found ("Unknown AVD name [mdbx-ci-emu-30-x86_64]", the 2026-11-22..24
+# nightly streak: the emulator process died after 5s of its 900s budget).
+# A dedicated directory under RUNNER_TEMP makes the tools agree. The legacy
+# ANDROID_SDK_HOME is deliberately NOT set: some tool generations read it
+# as the SDK root, which breaks the image lookup ("AVD not created").
+AVD_HOME="${RUNNER_TEMP:-${TMPDIR:-/tmp}}/android-avd"
+export ANDROID_USER_HOME="$AVD_HOME"
+export ANDROID_AVD_HOME="$AVD_HOME/avd"
+mkdir -p "$ANDROID_AVD_HOME"
+
 resolve_tool() { # resolve_tool <name> <sdk-relative-fallback>
   if command -v "$1" >/dev/null 2>&1; then
     command -v "$1"
@@ -91,6 +106,10 @@ while :; do
   echo "==> emulator boot attempt ${attempt}/${ATTEMPTS}"
   echo no | "$AVDMANAGER" create avd --force --name "$AVD_NAME" \
     --package "system-images;android-${API};default;${ARCH}" >/dev/null
+  if [ ! -f "$ANDROID_AVD_HOME/$AVD_NAME.ini" ]; then
+    echo "error: avdmanager did not create the AVD at $ANDROID_AVD_HOME/$AVD_NAME.ini" >&2
+    exit 1
+  fi
   "$ADB" start-server >/dev/null 2>&1 || true
   # ANDROID_EMULATOR_USE_SYSTEM_LIBS mirrors android-emulator-runner on Linux.
   ANDROID_EMULATOR_USE_SYSTEM_LIBS=1 \
