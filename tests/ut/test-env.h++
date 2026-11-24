@@ -104,6 +104,26 @@ static inline const char *mdtest_getenv(const char *name) {
   return value;
 }
 
+/* The platform/configuration test-timeout factor, exported by the CMake test
+ * registration into the MDBX_TEST_TIMEOUT_SCALE environment (see
+ * mdbx_test_timeout_scale_factor() in cmake/utils.cmake and the same-named
+ * CMake variable). It multiplies the CTest TIMEOUTs for the setups whose
+ * runners are systematically slower than the reference x86-64 Linux one; the
+ * in-test wall-clock budgets (fork-scenario watchdogs and the like) must
+ * scale by the same factor, for they are calibrated for that reference and
+ * the two mechanisms are one scheme (see tests/AGENTS.md, "Test timeouts").
+ * Defaults to 1 when unset; clamped to keep a typo from inflating a budget
+ * absurdly. */
+static inline unsigned mdtest_timeout_scale() {
+  const char *env = mdtest_getenv("MDBX_TEST_TIMEOUT_SCALE");
+  if (env) {
+    const long parsed = std::atol(env);
+    if (parsed > 0)
+      return static_cast<unsigned>(parsed < 64 ? parsed : 64);
+  }
+  return 1;
+}
+
 /* Ограничитель по времени выполнения (образец: libfpta fpta_test.h).
  * Нужен для предотвращения таймаута тестов в CI. Предполагается, что он
  * используется вместе с установкой GTEST_SHUFFLE=1, что в сумме дает

@@ -877,6 +877,15 @@ int main() { return 0; }
           endif()
           set_tests_properties(${name} PROPERTIES ENVIRONMENT "PATH=${params_DLLPATH_ENV}")
         endif()
+        # Export the platform/configuration factor so the test processes can
+        # scale their in-test wall-clock budgets (e.g. the fork-scenario
+        # watchdogs) in the same way the CTest TIMEOUTs are scaled. APPENDed
+        # last, so the DLL's PATH set above does not drop it; as with the
+        # ASAN options, the callers that (re)define ENVIRONMENT for their
+        # own knobs must APPEND too, or they would drop it.
+        mdbx_test_timeout_scale_factor(mdbx_gtest_scale)
+        set_property(TEST ${name} APPEND PROPERTY
+          ENVIRONMENT "MDBX_TEST_TIMEOUT_SCALE=${mdbx_gtest_scale}")
       endif()
     else()
       # GoogleTest is unavailable, or requires a newer C++ standard than the one

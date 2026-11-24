@@ -162,6 +162,12 @@ function(add_simple_test name)
       endif()
       set_tests_properties(extra_${name} PROPERTIES ENVIRONMENT "PATH=${params_DLLPATH_ENV}")
     endif()
+    # Export the platform/configuration factor so the test processes can
+    # scale their in-test wall-clock budgets in the same way the CTest
+    # TIMEOUTs are scaled (see the same APPEND in add_gtest).
+    mdbx_test_timeout_scale_factor(mdbx_extra_scale)
+    set_property(TEST extra_${name} APPEND PROPERTY
+      ENVIRONMENT "MDBX_TEST_TIMEOUT_SCALE=${mdbx_extra_scale}")
   endif()
 endfunction(add_simple_test)
 

@@ -558,22 +558,36 @@ cmake_policy(POP)
 # configuration", see tests/AGENTS.md, "Test timeouts"). The factors compose
 # multiplicatively (the macOS runners are ARM64 and their hosted storage
 # crawls under load, the Debug builds slow every scenario down by several
-# times). The factor is computed at the call below, when the platform and the
-# build type are already settled - so an override must be set beforehand,
+# times). The factor is computed when the platform and the build type are
+# already settled - so an override must be set beforehand,
 # e.g. `-DMDBX_TEST_TIMEOUT_SCALE=4`.
-function(mdbx_scale_dir_test_timeouts)
+#
+# mdbx_test_timeout_scale_factor() resolves the factor once for both of its
+# consumers: the directory-wide CTest TIMEOUT lift below and the
+# MDBX_TEST_TIMEOUT_SCALE environment exported to the gtest/extra test
+# processes (which scale their in-test wall-clock budgets by it, in the same
+# way the CTest TIMEOUTs are scaled - the two mechanisms are one scheme and
+# must not double-count).
+function(mdbx_test_timeout_scale_factor out_var)
   if(NOT DEFINED MDBX_TEST_TIMEOUT_SCALE)
-    set(MDBX_TEST_TIMEOUT_SCALE 1)
+    set(${out_var} 1)
     if(CMAKE_SYSTEM_PROCESSOR MATCHES "^(aarch64|arm64|armv[67]l?)$")
-      math(EXPR MDBX_TEST_TIMEOUT_SCALE "${MDBX_TEST_TIMEOUT_SCALE} * 2")
+      math(EXPR ${out_var} "${${out_var}} * 2")
     endif()
     if(CMAKE_SYSTEM_NAME STREQUAL "Darwin")
-      math(EXPR MDBX_TEST_TIMEOUT_SCALE "${MDBX_TEST_TIMEOUT_SCALE} * 2")
+      math(EXPR ${out_var} "${${out_var}} * 2")
     endif()
     if(CMAKE_BUILD_TYPE_UPPERCASE STREQUAL "DEBUG")
-      math(EXPR MDBX_TEST_TIMEOUT_SCALE "${MDBX_TEST_TIMEOUT_SCALE} * 2")
+      math(EXPR ${out_var} "${${out_var}} * 2")
     endif()
+  else()
+    set(${out_var} ${MDBX_TEST_TIMEOUT_SCALE})
   endif()
+  set(${out_var} ${${out_var}} PARENT_SCOPE)
+endfunction()
+
+function(mdbx_scale_dir_test_timeouts)
+  mdbx_test_timeout_scale_factor(MDBX_TEST_TIMEOUT_SCALE)
   get_property(mdbx_scale_timeouts_tests DIRECTORY PROPERTY TESTS)
   foreach(mdbx_scale_timeouts_name IN LISTS mdbx_scale_timeouts_tests)
     get_property(mdbx_scale_timeouts_current TEST ${mdbx_scale_timeouts_name} PROPERTY TIMEOUT)
