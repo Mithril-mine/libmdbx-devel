@@ -8332,7 +8332,8 @@ typedef struct MDBX_defrag_result {
   size_t pages_whole;
 
   /** The number of the page where the defragmentation stumbled,
-   *  according to the reasons given in the `stopping_reasons` field. */
+   *  according to the reasons given in the `stopping_reasons` field,
+   *  or the page that the structure of the trees keeps in place. */
   size_t obstructed_pgno;
 
   /** The length of the large/overflow-page span where the defragmentation stumbled,
@@ -8430,6 +8431,14 @@ typedef int (*MDBX_defrag_notify_func)(void *ctx, const MDBX_defrag_result_t *pr
  * run of the same size. In such cases the defragmentation stops after a few unproductive cycles with
  * \ref MDBX_defrag_large_chunk among the stopping_reasons, while the database stays consistent since every cycle
  * is committed transactionally.
+ *
+ * The defragmentation may also stop because no page can be moved any more. A moving page needs a free page for itself
+ * and for a copy of each of its parents that has no new place yet, and a large page needs a run of adjacent free pages
+ * of its own length; when the free pages do not suffice for that, the structure of the trees is the limit. This is not
+ * an error: \ref MDBX_RESULT_TRUE is returned, \ref MDBX_defrag_error is not set, no reason is given in the
+ * `stopping_reasons` field (except \ref MDBX_defrag_large_chunk for large pages) and the page is named in the
+ * `obstructed_pgno` field. A copy of the database with compaction is the way to reclaim the remaining pages in this
+ * case too.
  *
  * \param [in] env                   A pointer to an instance of environment.
  *

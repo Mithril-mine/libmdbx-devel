@@ -105,6 +105,21 @@ typedef struct gc_pnl_result {
 } glr_t;
 MDBX_INTERNAL glr_t gc_row_pnl(const MDBX_txn *const txn, const MDBX_val data);
 
+/* What made the walk of a defragmentation cycle stumble. */
+typedef enum defrag_stumble_kind {
+  /* A page that the walk can neither move nor pass: one retired in this cycle, or one held by a reading transaction.
+   * Such a page clears by itself; if it does not, the walk is stuck. */
+  defrag_stumble_obstacle,
+  /* No free page below the goal edge for the moving page and for the copies of its parents: the structure of the trees
+   * allows no more single pages to be moved as long as places are taken below the goal edge only. */
+  defrag_stumble_no_place,
+  /* No free pages at all for the moving page and for the copies of its parents: the structure of the trees allows no
+   * more single pages to be moved. */
+  defrag_stumble_no_stock,
+  /* No run of adjacent free pages for a large page below the goal edge. */
+  defrag_stumble_no_span
+} defrag_stumble_kind_t;
+
 typedef struct defract_context {
   MDBX_txn *txn;
   dml_t *arcs;
@@ -113,6 +128,11 @@ typedef struct defract_context {
   pgno_t cycle_preprogress;
   pgno_t cycle_pages_scheduled;
   pgno_t cycle_pages_moved;
+  /* The cycle reserved a run of free pages for a large page that had none: the page takes the run in the next cycle. */
+  bool cycle_span_reserved;
+  /* The cycle moved pages and reserved no run, and whether it made no progress as mdbx_env_defrag() judges it. */
+  bool cycle_moved;
+  bool cycle_idle;
   pgno_t stumble_pgno, stumble_span, lp_backlog;
   pgno_t remapped_edge;
   pgno_t defrag_edge;
@@ -120,10 +140,22 @@ typedef struct defract_context {
   pgno_t move_batch_size;
   size_t payload_items;
   size_t progress_counter;
+  /* Idle cycles in a row at the page the walk stumbles, all the cycles in a row at it, and all the cycles in a row
+   * that moved nothing. */
   uint8_t stumble_retry;
+  uint16_t stumble_cycles;
+  uint16_t unmoved_cycles;
   uint8_t stopping_reasons;
+  /* What made the walk stumble at stumble_pgno, how many pages were free at that moment, and the best state of the
+   * trees at the start of a cycle while the walk stumbles there. */
+  uint8_t stumble_kind;
+  pgno_t stumble_stock;
+  uint64_t stumble_best_score;
   bool completed;
   bool batch_adaptive;
+  /* Two idle cycles in a row at the same page found no place below the goal edge for it: the pages also take places
+   * between the goal edge and themselves. */
+  bool in_region;
   unsigned cycle;
   size_t payload_pages;
   pgno_t largepage_max, largepage_amountleft, largepage_count;
@@ -140,6 +172,11 @@ typedef struct defract_context {
   pnl_t repnl_clone;
 #endif /* MDBX_CHECKING > 1 */
   pgno_t defrag_atleast, defrag_enough, before_defrag, last_allocated;
+  /* The residual of pages that the caller accepts. */
+  size_t acceptable_backlash;
+  /* The pages at the end of the database that the cycle vacated. The commit stores them in the GC, and the next cycle
+   * loads them and cuts them off, although the residual without them is within what the caller accepts. */
+  pgno_t tail_in_gc;
   pgno_t gc_tree_pages, gc_retained_pages;
   uint64_t start_timestamp;
   uint64_t cycle_started_timestamp;

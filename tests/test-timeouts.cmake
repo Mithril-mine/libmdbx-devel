@@ -215,6 +215,7 @@ set(MDBX_TEST_TIMEOUTS
   "gh0485_sync_bytes_range=30"
   "gh0535=30"
   "gh0592=30"
+  "gh0600=30"
   "gh0605=30"
   "global_init=30"
   "hex_base64_base58=30"

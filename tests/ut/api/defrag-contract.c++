@@ -35,10 +35,10 @@
  *    the progress callback firing at least once per begun cycle;
  *  - the time-limit stop through the adaptive-batch path
  *    (time_limit set, preferred_batch = 0);
- *  - the stuck-retry stop (defrag-stuck-verdict): a stop stuck at an
- *    unmovable obstacle page names its cause - a laggard reader holding the
- *    GC, or MDBX_defrag_error when nothing external blocks the movement -
- *    and never reports a plain success while work remains;
+ *  - the stop where the trees allow no more pages to be moved (a page has no
+ *    free page for itself and the copies of its parents): MDBX_RESULT_TRUE
+ *    with no stopping reason, the page in obstructed_pgno and no
+ *    MDBX_defrag_error, since a limit of the structure is not an error;
  *  - the unconditional time limit (defrag-time-limit-unreachable-goal):
  *    the limit is evaluated regardless of the defrag_atleast goal
  *    reachability and stops an unreachable-goal run;
@@ -209,9 +209,9 @@ TEST(defrag_contract, completion_reports_success) {
   EXPECT_LE(result.rough_estimation_cycle_progress_permille, 1000u);
   EXPECT_GE(result.cycles, 1u);
   EXPECT_GE(probe.calls, result.cycles) << "the callback fires at the beginning and the end of every cycle";
-  /* a stop stuck at an obstacle must name its cause in stopping_reasons/rc
-   * and never be a plain success: pinned by the stuck_retry_names_cause
-   * test below */
+  /* a stop that leaves more free pages than the backlash accepts is no success
+   * and names the page where it stopped: pinned by the
+   * structure_limit_is_not_an_error test below */
 
   /* the data is intact after the defrag cycles */
   txn_ptr txn;
@@ -242,15 +242,18 @@ TEST(defrag_contract, time_limit_stop_with_adaptive_batch) {
   std::memset(&result, 0, sizeof result);
   /* time_limit set with preferred_batch = 0 selects the adaptive batch
    * (the cycle size aims at a fraction of the remaining time budget).
-   * The scenario may stop before the limit on a fast host (an obstacle
-   * stops the run first), so the time-limit assertion is conditional. */
+   * The scenario may stop before the limit, where the trees allow no more
+   * pages to be moved, so the time-limit assertion is conditional. */
   const size_t kLimitDot16 = 65536 / 4;
   const int rc = mdbx_env_defrag(env.get(), 0, 0, 0, kLimitDot16, 0, 0, nullptr, nullptr, &result);
   ASSERT_TRUE(rc == MDBX_SUCCESS || rc == MDBX_RESULT_TRUE) << "rc=" << rc;
   EXPECT_GE(result.cycles, 1u);
   EXPECT_LE(result.rough_estimation_cycle_progress_permille, 1000u);
   if (rc == MDBX_RESULT_TRUE) {
-    EXPECT_NE(0u, result.stopping_reasons) << "a partial stop must name its reason, got noobstacles";
+    /* A partial stop says what stopped it: a reason, or the page that the structure of the trees keeps in place. */
+    EXPECT_TRUE(result.stopping_reasons != 0 || result.obstructed_pgno != 0)
+        << "a partial stop must say what stopped it, got noobstacles and no page";
+    EXPECT_EQ(0u, result.stopping_reasons & MDBX_defrag_error);
   }
   if (result.spent_time_dot16 >= kLimitDot16) {
     EXPECT_TRUE(result.stopping_reasons & MDBX_defrag_time_limit)
@@ -336,7 +339,7 @@ TEST(defrag_contract, adopted_txn_checkpoint_commits_and_detaches) {
   }
 }
 
-TEST(defrag_contract, stuck_retry_names_cause) {
+TEST(defrag_contract, structure_limit_is_not_an_error) {
   if (MDBX_GTEST_IS_EXECUTION_TIMEOUT()) {
     GTEST_SKIP() << "SKIPPED by RUNTIME_LIMIT";
     return;
@@ -384,30 +387,19 @@ TEST(defrag_contract, stuck_retry_names_cause) {
     ASSERT_EQ(MDBX_SUCCESS, mdbx_txn_commit(txn.release()));
   }
 
-  /* the stuck shape: no user txn, a tight backlash and a small
-   * preferred_batch force many small cycles; on the 4 KiB reference the
-   * defrag gets STUCK retrying the same obstacle page and stops */
+  /* Two tables with every other key deleted, no reading transaction and no
+   * large pages. The defragmentation goes on until the topmost pages have no
+   * free page left for themselves and for the copies of their parents: the
+   * structure of the trees allows no more, which is a limit and not an error. */
   MDBX_defrag_result_t result;
   std::memset(&result, 0, sizeof result);
   const int rc = mdbx_env_defrag(env.get(), 0, 0, 0, 0, 4, 400, nullptr, nullptr, &result);
-  ASSERT_TRUE(rc == MDBX_SUCCESS || rc == MDBX_RESULT_TRUE || rc == MDBX_LAGGARD_READER) << "rc=" << rc;
+  EXPECT_EQ(MDBX_RESULT_TRUE, rc) << "the residual is above the backlash, so the work is not a success";
+  EXPECT_EQ(0u, result.stopping_reasons) << "a limit of the structure names no reason and is no error";
+  EXPECT_NE(0u, result.obstructed_pgno) << "the page that can not be moved any more is named";
   EXPECT_GE(result.cycles, 1u);
   EXPECT_GT(result.pages_moved, 0u);
   EXPECT_LE(result.rough_estimation_cycle_progress_permille, 1000u);
-
-  if (result.obstructed_pgno != 0) {
-    /* the stuck-retry stop (defrag-stuck-verdict) must name its cause:
-     * a laggard reader holding the GC, or the internal-error bit when
-     * nothing external blocks the movement (an algorithm defect) - and
-     * while work remains it is never a plain success (the residual work is
-     * also visible via pages_left / obstructed_*) */
-    EXPECT_NE(MDBX_SUCCESS, rc) << "a stuck stop with work remaining must not report success, stopping_reasons="
-                                << result.stopping_reasons;
-    EXPECT_TRUE((result.stopping_reasons & (MDBX_defrag_laggard_reader | MDBX_defrag_error)) != 0)
-        << "the stuck stop must name its cause, got " << result.stopping_reasons;
-  } else {
-    EXPECT_EQ(0u, result.stopping_reasons & MDBX_defrag_error);
-  }
 
   /* the data is intact after the multi-cycle defrag */
   {

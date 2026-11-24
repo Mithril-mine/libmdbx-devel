@@ -63,11 +63,15 @@ static uint64_t defrag_notify(dfc_t *dfc) {
   return now_cache;
 }
 
-static void defrag_stumble(dfc_t *dfc, const da_t *at, const char *reason_prefix, int64_t reason_value,
-                           const char *reason_suffix) {
-  if (dfc->stumble_pgno < at->key_or_pgno) {
+/* Records where and why the walk stopped. The kind and the number of the free pages let mdbx_env_defrag() tell a limit
+ * of the structure, which no next cycle can change, from an obstacle that must clear. */
+static void defrag_stumble(dfc_t *dfc, const da_t *at, defrag_stumble_kind_t kind, size_t stock,
+                           const char *reason_prefix, int64_t reason_value, const char *reason_suffix) {
+  if (dfc->stumble_pgno <= at->key_or_pgno) {
     dfc->stumble_pgno = at->key_or_pgno;
     dfc->stumble_span = at->npages;
+    dfc->stumble_kind = kind;
+    dfc->stumble_stock = (pgno_t)stock;
   }
   NOTICE("defragmentation cycle %u (moved %+i pages, %+i scheduled), stumbled on the page/chunk %" PRIaPGNO
          "[%u], because %s%" PRIi64 "%s.",
@@ -77,6 +81,18 @@ static void defrag_stumble(dfc_t *dfc, const da_t *at, const char *reason_prefix
 }
 
 void defrag_milestone(dfc_t *dfc) { defrag_notify(dfc); }
+
+/* The walk has done what it can in this cycle and has met no obstacle: it goes on from here in the next cycle, after
+ * the scheduled pages are moved and committed. */
+static void defrag_wait_next_cycle(dfc_t *dfc, const char *reason_prefix, pgno_t reason_value,
+                                   const char *reason_suffix) {
+  NOTICE("defragmentation cycle %u (moved %+i pages, %+i scheduled), %s%" PRIaPGNO "%s, continue on the next cycle",
+         dfc->cycle, dfc->cycle_pages_moved, dfc->cycle_pages_scheduled, reason_prefix, reason_value, reason_suffix);
+  defrag_milestone(dfc);
+  dfc->stumble_pgno = 0;
+  dfc->stumble_span = 0;
+  dfc->stumble_kind = defrag_stumble_obstacle;
+}
 
 static void defrag_progress(dfc_t *dfc, size_t progress_increment) {
   uint64_t now_cache = (progress_increment && ((dfc->progress_counter += progress_increment) & dfc->notify_watchmask))
@@ -566,12 +582,36 @@ static int defrag_move(dfc_t *dfc, da_t *arc) {
   return err;
 }
 
-static pgno_t defrag_repnl_get(dfc_t *dfc, size_t npages) {
-  if (likely(pnl_size(dfc->txn->wr.repnl) >= npages &&
-             dfc->defrag_enough >= MDBX_PNL_LEAST(dfc->txn->wr.repnl) + npages)) {
-    pgno_t pgno = dfc->largepage_amountleft ? pnl_get_best_sequence(dfc->txn->wr.repnl, npages, dfc->defrag_enough)
-                                            : gc_repnl_get_single(dfc->txn);
-    ASSERT(pgno == 0 || pgno + npages <= dfc->defrag_enough);
+/* The upper bound of a place for the moving page: the goal edge. When the walk has stalled for two cycles at a page
+ * that has no place below the goal edge, the bound becomes the page itself: a place is then taken below the goal edge
+ * while there is one, otherwise between the goal edge and the page, which is still closer to the beginning of the
+ * database. Such a place lies inside the region that the walk of the current cycle has not passed yet, therefore the
+ * walk stops when it reaches the places taken in this cycle; on the next cycle the page is an ordinary one and may
+ * move further. */
+static inline pgno_t defrag_target_edge(const dfc_t *dfc, const da_t *arc) {
+  const pgno_t bound = dfc->in_region ? arc->key_or_pgno : dfc->defrag_enough;
+  return (dfc->defrag_enough > bound) ? dfc->defrag_enough : bound;
+}
+
+static pgno_t defrag_repnl_search(const dfc_t *dfc, size_t npages, pgno_t limit) {
+  /* A large page always gets a run of its own length, so that the single pages spare the runs while any large page
+   * is left to move. Otherwise a single page takes the lowest free page. The caller asks for that only while the
+   * lowest free page fits below the `limit`, so the result never lies beyond the edge. */
+  return (npages > 1 || dfc->largepage_amountleft) ? pnl_get_best_sequence(dfc->txn->wr.repnl, npages, limit)
+                                                   : gc_repnl_get_single(dfc->txn);
+}
+
+static pgno_t defrag_repnl_get(dfc_t *dfc, size_t npages, pgno_t limit) {
+  if (likely(pnl_size(dfc->txn->wr.repnl) >= npages && limit >= MDBX_PNL_LEAST(dfc->txn->wr.repnl) + npages)) {
+    /* Below the goal edge first. A single page also takes a place between the goal edge and itself when nothing fits
+     * below. A large page gets a run in between only from defrag_provide_span(), and only when no run can be made
+     * below: a run below the goal edge puts the page closer to the beginning of the database. */
+    pgno_t pgno = 0;
+    if (limit > dfc->defrag_enough && dfc->defrag_enough >= MDBX_PNL_LEAST(dfc->txn->wr.repnl) + npages)
+      pgno = defrag_repnl_search(dfc, npages, dfc->defrag_enough);
+    if (!pgno && (npages < 2 || limit <= dfc->defrag_enough))
+      pgno = defrag_repnl_search(dfc, npages, limit);
+    ASSERT(pgno == 0 || pgno + npages <= limit);
     return pgno;
   }
   return 0;
@@ -581,43 +621,48 @@ static int defrag_schedule(dfc_t *dfc, da_t *arc, pgno_t assigned) {
   da_t *stack_of_parents[CURSOR_STACK_SIZE * 2];
   size_t depth = 0;
   const size_t npages = arc->npages;
+  const size_t stock = pnl_size(dfc->txn->wr.repnl);
+  /* The page and the copies of its parents are placed below the same edge. */
+  const pgno_t limit = defrag_target_edge(dfc, arc);
 
-  ASSERT(dfc->remapped_edge < dfc->defrag_enough);
+  ASSERT(!assigned || assigned + npages <= limit);
   for (da_t *chain = arc; chain->parent;) {
     chain = dml_search_exact(dfc->arcs, chain->parent);
     ASSERT(chain && chain->npages == 1);
     if (chain->mapped)
       break;
 
-    chain->mapped = defrag_repnl_get(dfc, 1);
+    chain->mapped = defrag_repnl_get(dfc, 1, limit);
     VERBOSE("map%s %u pages %u/%u => %u", "-parent", 1, chain->parent, chain->key_or_pgno, chain->mapped);
     if (!chain->mapped)
       goto bailout;
 
-    ASSERT((size_t)chain->mapped + 1 <= dfc->defrag_enough);
+    ASSERT((size_t)chain->mapped + 1 <= limit);
     stack_of_parents[depth++] = chain;
   }
 
   ASSERT(!arc->mapped);
   if (!assigned)
-    assigned = defrag_repnl_get(dfc, npages);
+    assigned = defrag_repnl_get(dfc, npages, limit);
   arc->mapped = assigned;
   VERBOSE("map%s %zu pages %u/%u => %u", "", npages, arc->parent, arc->key_or_pgno, arc->mapped);
 
   if (arc->mapped) {
-    ASSERT(arc->mapped + npages <= dfc->retreat_edge);
-    if (npages > 1 && arc->key_or_pgno >= dfc->defrag_enough) {
-      ASSERT(dfc->largepage_amountleft >= npages);
-      dfc->largepage_amountleft -= (pgno_t)npages;
-    }
-    if (dfc->remapped_edge < arc->mapped)
-      dfc->remapped_edge = arc->mapped + (pgno_t)npages - 1;
+    ASSERT(arc->mapped + npages <= limit);
+    pgno_t remapped_edge = dfc->remapped_edge;
+    if (remapped_edge < arc->mapped)
+      remapped_edge = arc->mapped + (pgno_t)npages - 1;
     for (size_t i = 0; i < depth; ++i) {
-      da_t *chain = stack_of_parents[i];
-      if (dfc->remapped_edge < chain->mapped)
-        dfc->remapped_edge = chain->mapped;
+      if (remapped_edge < stack_of_parents[i]->mapped)
+        remapped_edge = stack_of_parents[i]->mapped;
     }
-    if (likely(dfc->remapped_edge < dfc->retreat_edge)) {
+    /* Every place must lie below the edge of the walk, or the walk steps onto the places it has just taken. */
+    if (likely(remapped_edge < dfc->defrag_edge)) {
+      if (npages > 1 && arc->key_or_pgno >= dfc->retreat_edge) {
+        ASSERT(dfc->largepage_amountleft >= npages);
+        dfc->largepage_amountleft -= (pgno_t)npages;
+      }
+      dfc->remapped_edge = remapped_edge;
       dfc->cycle_pages_scheduled += (pgno_t)(npages + depth);
       DEBUG("scheduled %zu+%zu=%zu pages %u -> %u", npages, depth, npages + depth, arc->key_or_pgno, arc->mapped);
       return MDBX_SUCCESS;
@@ -627,19 +672,23 @@ static int defrag_schedule(dfc_t *dfc, da_t *arc, pgno_t assigned) {
 bailout:
   VERBOSE("unable find/assign remapping for %zu-pages span, chain-depth %zu, repnl-len %zu, repnl-least %u, detent %u",
           npages, depth, pnl_size(dfc->txn->wr.repnl),
-          pnl_size(dfc->txn->wr.repnl) ? MDBX_PNL_LEAST(dfc->txn->wr.repnl) : P_INVALID, dfc->defrag_enough);
+          pnl_size(dfc->txn->wr.repnl) ? MDBX_PNL_LEAST(dfc->txn->wr.repnl) : P_INVALID, limit);
   if (pnl_size(dfc->txn->wr.repnl) == 0)
-    defrag_stumble(dfc, arc, "are not enough reclaimable pages available in GC (count ", 0, ")");
-  else if (MDBX_PNL_LEAST(dfc->txn->wr.repnl) + npages >= dfc->defrag_enough)
-    defrag_stumble(dfc, arc, "the next reclaimable page ", MDBX_PNL_LEAST(dfc->txn->wr.repnl),
-                   " is beyond target edge");
-  else {
-    ASSERT(npages > 1);
+    defrag_stumble(dfc, arc, defrag_stumble_no_stock, stock, "are not enough reclaimable pages available in GC (count ",
+                   0, ")");
+  else if (MDBX_PNL_LEAST(dfc->txn->wr.repnl) + npages >= limit)
+    defrag_stumble(dfc, arc, defrag_stumble_no_place, stock, "the next reclaimable page ",
+                   MDBX_PNL_LEAST(dfc->txn->wr.repnl), " is beyond target edge");
+  else if (npages > 1) {
     if ((dfc->stopping_reasons & MDBX_defrag_large_chunk) == 0) {
       dfc->stopping_reasons |= MDBX_defrag_large_chunk;
-      defrag_stumble(dfc, arc, "is no span of ", npages, " consecutive/adjacent reclaimable pages");
+      defrag_stumble(dfc, arc, defrag_stumble_no_span, stock, "is no span of ", npages,
+                     " consecutive/adjacent reclaimable pages");
     }
-  }
+  } else
+    /* The only free place lies where the walk of this cycle has passed. */
+    defrag_stumble(dfc, arc, defrag_stumble_no_place, stock, "the place for the page lies above the edge of the walk ",
+                   dfc->defrag_edge, "");
 
   /* Не получилось, возвращаем всё выделенное для родительских страниц */
   while (depth > 0) {
@@ -659,8 +708,9 @@ bailout:
   return MDBX_RESULT_TRUE;
 }
 
-__hot __noinline static size_t defrag_move_cost_uncached(dfc_t *dfc, pgno_t pgno, pgno_t span) {
-  if (pgno < NUM_METAS || pgno + span >= dfc->retreat_edge)
+/* The cost of moving the page `pgno` away to free a run of `span` pages below the page `limit`. */
+__hot __noinline static size_t defrag_move_cost_uncached(dfc_t *dfc, pgno_t pgno, pgno_t span, pgno_t limit) {
+  if (pgno < NUM_METAS || pgno >= limit)
     return INT_MAX;
 
   da_t *arc = dml_search_exact(dfc->arcs, pgno);
@@ -686,62 +736,92 @@ __hot __noinline static size_t defrag_move_cost_uncached(dfc_t *dfc, pgno_t pgno
   return cost;
 }
 
-static inline unsigned defrag_move_cost(dfc_t *dfc, pgno_t pgno, pgno_t span) {
+static inline unsigned defrag_move_cost(dfc_t *dfc, pgno_t pgno, pgno_t span, pgno_t limit) {
   struct cache_item *cache = &dfc->cache_cost[pgno % ARRAY_LENGTH(dfc->cache_cost)];
   if (cache->pgno == pgno)
     return cache->cost;
   cache->pgno = pgno;
-  return cache->cost = (unsigned)defrag_move_cost_uncached(dfc, pgno, span);
+  return cache->cost = (unsigned)defrag_move_cost_uncached(dfc, pgno, span, limit);
 }
 
-__hot static int defrag_provide_span(dfc_t *const dfc, const size_t npages) {
+/* Prepares a run of lp->npages adjacent free pages below the large page `lp`: the cheapest such run is found and the
+ * pages that occupy it are scheduled to move away. The run is kept free for the next cycle, when the large page is
+ * placed into it. */
+__hot static int defrag_provide_span(dfc_t *const dfc, const da_t *lp) {
+  const size_t npages = lp->npages;
   ASSERT(npages > 1);
+  /* The run must lie below the large page, so that the page moves toward the beginning of the database, and must not
+   * reach the page `limit`. It is formed below the goal edge first, and between the goal edge and the large page only
+   * when no run can be formed there. */
+  const pgno_t below_page = lp->key_or_pgno;
+  /* Below the goal edge the run ends a page-length before the edge. */
+  const pgno_t below_goal = dfc->defrag_enough - (pgno_t)npages;
   const pnl_t pnl = dfc->txn->wr.repnl;
   const size_t len = pnl_size(pnl);
 
   if (len < npages)
     return MDBX_RESULT_TRUE;
 
+  pgno_t limit = (below_goal < below_page) ? below_goal : below_page;
+  size_t best_begin, best_cost;
+  /* The lowest run of free pages that is long enough already. */
+  pgno_t ready = MAX_PAGENO;
   memset(dfc->cache_cost, 0, sizeof(dfc->cache_cost));
-  size_t best_begin = MAX_PAGENO, best_cost = len;
+  for (;;) {
+    best_begin = MAX_PAGENO;
+    best_cost = len;
 #if MDBX_PNL_ASCENDING
 #error "FIXME: Since 2026-04-01 alternatives to MDBX_PNL_ASCENDING = 0 are no longer supported."
 #else
-  for (size_t span, i = len; i > 0 && pnl[i] <= dfc->defrag_enough - npages;) {
-    span = 1;
-    while (unlikely(MDBX_PNL_CONTIGUOUS(pnl[i - span], pnl[i], span)) &&
-           likely((intptr_t)(i - span) > 0 && pnl[i - span] < dfc->defrag_enough))
-      ++span;
+    for (size_t span, i = len; i > 0 && pnl[i] < limit;) {
+      span = 1;
+      while (unlikely(MDBX_PNL_CONTIGUOUS(pnl[i - span], pnl[i], span)) &&
+             likely((intptr_t)(i - span) > 0 && pnl[i - span] < limit))
+        ++span;
 
-    pgno_t begin = pnl[i], end = begin + (pgno_t)span;
-    i -= span;
-    size_t cost = 0;
-    size_t cost_left = defrag_move_cost(dfc, begin - 1, (pgno_t)npages);
-    size_t cost_right = defrag_move_cost(dfc, end, (pgno_t)npages);
-    do {
-      if (cost_left < cost_right) {
-        cost += cost_left;
-        cost_left = defrag_move_cost(dfc, --begin - 1, (pgno_t)npages);
-      } else if (cost_right < INT_MAX) {
-        cost += cost_right;
-        cost_right = defrag_move_cost(dfc, ++end, (pgno_t)npages);
-      } else {
-        while (pnl[i] < end && likely(i > 0))
-          --i;
-        break;
+      pgno_t begin = pnl[i], end = begin + (pgno_t)span;
+      i -= span;
+      /* Such a run is taken only when no run can be formed: it often lies right under the large page and would keep
+       * the page there. Below the goal edge a large page takes a ready run before one is formed for it, so one is
+       * remembered here between the goal edge and the large page only. */
+      if (span >= npages && ready == MAX_PAGENO)
+        ready = begin;
+      size_t cost = 0;
+      size_t cost_left = defrag_move_cost(dfc, begin - 1, (pgno_t)npages, limit);
+      size_t cost_right = defrag_move_cost(dfc, end, (pgno_t)npages, limit);
+      do {
+        if (cost_left < cost_right) {
+          cost += cost_left;
+          cost_left = defrag_move_cost(dfc, --begin - 1, (pgno_t)npages, limit);
+        } else if (cost_right < INT_MAX) {
+          cost += cost_right;
+          cost_right = defrag_move_cost(dfc, ++end, (pgno_t)npages, limit);
+        } else {
+          while (pnl[i] < end && likely(i > 0))
+            --i;
+          break;
+        }
+      } while (cost < best_cost && end - begin < npages);
+
+      if (unlikely(end - begin == npages && cost < best_cost)) {
+        best_cost = cost;
+        best_begin = begin;
+        if (!best_cost)
+          break;
       }
-    } while (cost < best_cost && end - begin < npages);
-
-    if (unlikely(end - begin == npages && cost < best_cost)) {
-      best_cost = cost;
-      best_begin = begin;
-      if (!best_cost)
-        break;
     }
-  }
 #endif /* MDBX_PNL_ASCENDING */
+    if (best_begin != MAX_PAGENO || limit >= below_page || !dfc->in_region)
+      break;
+    /* The costs depend on the edge, so they are computed anew. */
+    limit = below_page;
+    memset(dfc->cache_cost, 0, sizeof(dfc->cache_cost));
+  }
 
-  if (/* paranoia */ best_begin + npages >= dfc->retreat_edge || best_begin + npages >= dfc->defrag_edge)
+  if (best_begin == MAX_PAGENO)
+    best_begin = ready;
+
+  if (/* paranoia */ best_begin + npages > limit || best_begin + npages >= dfc->defrag_edge)
     return MDBX_RESULT_TRUE;
 
   /* Сначала убираем из repnl выбранные страницы, чтобы не использовать их на перемещение остальных. */
@@ -754,7 +834,10 @@ __hot static int defrag_provide_span(dfc_t *const dfc, const size_t npages) {
   for (pgno_t pgno = (pgno_t)(best_begin + npages); --pgno >= best_begin;) {
     if (!pnl_contains(dfc->temp, pgno)) {
       da_t *arc = dml_search_exact(dfc->arcs, pgno);
-      ASSERT(arc != nullptr);
+      /* The pages of the run were chosen by their cost. The cost of a page that is not scheduled to move away is
+       * infinite for the first page of a large page of the length of the run or longer, and for any other page of a
+       * large page, since those are neither in the map nor free: the run never cuts a large page. The check is kept as
+       * a precaution. */
       if (unlikely(!arc || arc->npages >= npages))
         return MDBX_PROBLEM;
       if (!arc->mapped) {
@@ -791,10 +874,15 @@ __hot static int defrag_provide_span(dfc_t *const dfc, const size_t npages) {
 
 int defrag_cycle(dfc_t *dfc) {
   MDBX_txn *const txn = dfc->txn;
+  /* Whether the cycle runs only to cut off the free tail that the previous one left in the GC: the residual without
+   * the tail is within what the caller accepts. */
+  const bool tail_only = dfc->tail_in_gc && dfc->payload_pages + dfc->acceptable_backlash >= txn->geo.first_unallocated;
   if (dfc->cycle) {
     dfc->stopping_reasons &= ~(MDBX_defrag_large_chunk | MDBX_defrag_step_size);
     dfc->progress_counter = 0;
     dfc->cycle_pages_scheduled = 0;
+    dfc->cycle_span_reserved = false;
+    dfc->tail_in_gc = 0;
     dfc->cycle_pages_moved = 0;
     dfc->cycle_preprogress = 0;
     dfc->cycle += 1;
@@ -848,6 +936,12 @@ int defrag_cycle(dfc_t *dfc) {
     if (!defrag_gc_empty(dfc))
       return MDBX_LAGGARD_READER;
     /* всё reclaimable возвращено в свободные страницы: работа завершена */
+    dfc->completed = true;
+    return MDBX_SUCCESS;
+  }
+
+  if (tail_only) {
+    /* The garbage collection is loaded and the free tail is cut off: the residual is within what the caller accepts. */
     dfc->completed = true;
     return MDBX_SUCCESS;
   }
@@ -959,7 +1053,38 @@ int defrag_cycle(dfc_t *dfc) {
   ASSERT(MDBX_PNL_MOST(txn->wr.repnl) < txn->geo.first_unallocated - 1);
   dfc->retreat_edge = dfc->defrag_enough;
   dfc->defrag_edge = txn->geo.first_unallocated;
+  const size_t whole_at_walk = dfc->defrag_edge;
   da_t *const begin = dfc->arcs->items, *const end = begin + dfc->arcs->length;
+
+  if (begin->key_or_pgno + begin->npages <= MDBX_PNL_LEAST(txn->wr.repnl)) {
+    /* All the free pages lie above the data: no page can move closer to the beginning of the database. */
+    defrag_stumble(dfc, begin, defrag_stumble_no_place, pnl_size(txn->wr.repnl), "the lowest free page ",
+                   MDBX_PNL_LEAST(txn->wr.repnl), " is above the data");
+    return MDBX_SUCCESS;
+  }
+
+  if (begin->key_or_pgno < dfc->retreat_edge &&
+      dfc->payload_pages + dfc->acceptable_backlash < txn->geo.first_unallocated) {
+    /* No page reaches the goal edge as its number, but free pages remain below the data, so the data spreads beyond
+     * the goal edge, and the residual exceeds what the caller accepts. What lies above the lowest free page can still
+     * move closer to the beginning: the walk goes down to it, and the large pages of that region are counted as well.
+     */
+    const pgno_t lowest_free = MDBX_PNL_LEAST(txn->wr.repnl);
+    if (lowest_free + 1 < dfc->retreat_edge) {
+      dfc->retreat_edge = lowest_free + 1;
+      dfc->largepage_count = 0;
+      dfc->largepage_amountleft = 0;
+      dfc->largepage_max = 0;
+      for (da_t *r = begin; r != end; ++r) {
+        if (r->npages > 1 && r->key_or_pgno >= dfc->retreat_edge) {
+          dfc->largepage_count += 1;
+          dfc->largepage_amountleft += (pgno_t)r->npages;
+          if (r->npages > dfc->largepage_max)
+            dfc->largepage_max = (pgno_t)r->npages;
+        }
+      }
+    }
+  }
 
   if (dfc->largepage_count > 0) {
     /* Есть large/overflow-страницы длиной больше 1, для которых требует много дополнительных действий */
@@ -978,7 +1103,7 @@ int defrag_cycle(dfc_t *dfc) {
     ASSERT(lp != nullptr);
     if (lp) {
       ASSERT(lp->npages > 1);
-      pgno_t pgno = pnl_get_best_sequence(dfc->txn->wr.repnl, lp->npages, dfc->defrag_enough);
+      pgno_t pgno = pnl_get_best_sequence(dfc->txn->wr.repnl, lp->npages, defrag_target_edge(dfc, lp));
       if (pgno) {
         int err = defrag_schedule(dfc, lp, pgno);
         if (err == MDBX_SUCCESS)
@@ -989,22 +1114,28 @@ int defrag_cycle(dfc_t *dfc) {
     }
   }
 
+  bool next_cycle = false;
   for (da_t *i = begin; !defrag_discontinued(dfc) && i != end && i->key_or_pgno >= dfc->retreat_edge && !lp; ++i) {
     if (i->key_or_pgno < dfc->remapped_edge) {
-      defrag_stumble(dfc, i,
-                     "all the unused pages suitable for defragmentation have been used up, the re-mapped edge is ",
-                     dfc->remapped_edge, "");
+      /* The walk has reached the places taken earlier in this cycle. Nothing can be scheduled below them until the
+       * scheduled pages are moved and committed. */
+      defrag_wait_next_cycle(dfc, "the re-mapped edge ", dfc->remapped_edge, " is reached");
+      next_cycle = true;
       break;
     }
 
     if (dfc->defrag_edge - i->npages != i->key_or_pgno) {
       const pgno_t tail = dfc->defrag_edge - 1;
       if (most_retired == tail) {
-        defrag_stumble(dfc, i, "the adjacent page ", most_retired, " is in the retired list");
+        defrag_stumble(dfc, i, defrag_stumble_obstacle, pnl_size(txn->wr.repnl), "the adjacent page ", most_retired,
+                       " is in the retired list");
         break;
       }
       if (pnl_size(txn->wr.repnl) && MDBX_PNL_LEAST(txn->wr.repnl) == tail) {
-        defrag_stumble(dfc, i, "the available reclaimed pages are beyond the defragmentation tail (page #", tail, ")");
+        /* The lowest free page is right above this one: nothing below it is free, and the free pages above are cut off
+         * with the tail when the cycle is committed. */
+        defrag_stumble(dfc, i, defrag_stumble_no_place, pnl_size(txn->wr.repnl),
+                       "the available reclaimed pages are beyond the defragmentation tail (page #", tail, ")");
         break;
       }
       int err = defrag_gc_lookup_page(dfc, dfc->defrag_edge - 1, &dfc->stopor);
@@ -1012,7 +1143,8 @@ int defrag_cycle(dfc_t *dfc) {
         ERROR("unexpected missing page %" PRIaPGNO, tail);
         return (err == MDBX_NOTFOUND) ? MDBX_PROBLEM : err;
       }
-      defrag_stumble(dfc, i, "the gap-page is located in the ", dfc->stopor, " GC-entry which is used/read");
+      defrag_stumble(dfc, i, defrag_stumble_obstacle, pnl_size(txn->wr.repnl), "the gap-page is located in the ",
+                     dfc->stopor, " GC-entry which is used/read");
       break;
     }
 
@@ -1069,6 +1201,8 @@ int defrag_cycle(dfc_t *dfc) {
       if (!i->mapped && i->npages > 1) {
         ASSERT(dfc->largepage_amountleft >= i->npages);
         if (i != lp) {
+          /* A ready run below the goal edge; one between the goal edge and the page is taken only by the formation
+           * below, when no run can be formed below the goal edge. */
           pgno_t pgno = pnl_get_best_sequence(dfc->txn->wr.repnl, i->npages, dfc->defrag_enough);
           if (pgno) {
             int err = defrag_schedule(dfc, i, pgno);
@@ -1080,14 +1214,18 @@ int defrag_cycle(dfc_t *dfc) {
           }
         }
         if (!i->mapped) {
-          int err = defrag_provide_span(dfc, i->npages);
+          int err = defrag_provide_span(dfc, i);
           if (err != MDBX_SUCCESS) {
             if (unlikely(err != MDBX_RESULT_TRUE))
               return err;
             break;
           }
           dfc->largepage_amountleft -= i->npages;
-          dfc->lp_backlog = (dfc->lp_backlog < i->key_or_pgno) ? i->key_or_pgno : dfc->lp_backlog;
+          if (dfc->lp_backlog < i->key_or_pgno) {
+            /* The run is reserved for a page that had none: the next cycle, in which the page takes it, has work. */
+            dfc->lp_backlog = i->key_or_pgno;
+            dfc->cycle_span_reserved = true;
+          }
         }
         defrag_progress(dfc, i->npages);
         if (dfc->cycle_pages_scheduled >= dfc->move_batch_size) {
@@ -1159,7 +1297,10 @@ int defrag_cycle(dfc_t *dfc) {
   VERBOSE("after-%s: %u => %u (%i), GC-score %" PRIu64, "move-pages", dfc->before_defrag, txn->geo.first_unallocated,
           dfc->before_defrag - txn->geo.first_unallocated, score);
 
-  return (dfc->stumble_pgno || (txn->dbi_state[MAIN_DBI] & DBI_DIRTY) || score > dfc->cycle_initial_score)
+  /* The commit stores the pages that the walk vacated at the end of the database in the GC. */
+  dfc->tail_in_gc = (pgno_t)(whole_at_walk - dfc->defrag_edge);
+
+  return (next_cycle || dfc->stumble_pgno || (txn->dbi_state[MAIN_DBI] & DBI_DIRTY) || score > dfc->cycle_initial_score)
              ? MDBX_SUCCESS
              : MDBX_RESULT_TRUE;
 }

@@ -109,6 +109,7 @@ if(TARGET issue_gh0535)
   target_compile_definitions(issue_gh0535 PRIVATE "MDBX_DEBUG_FOR_TEST=${MDBX_DEBUG}")
 endif()
 add_issue_test(gh0592 SOURCE "issue_gh0592.c++")
+add_issue_test(gh0600 SOURCE "issue_gh0600.c++")
 add_issue_test(gh0605 SOURCE "issue_gh0605.c++")
 
 # load-nul-byte-silent-truncation/load-purge-multitable-trailing-main of #485 need the dump/load tool binaries (the gh0070 pattern).
