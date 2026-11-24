@@ -157,6 +157,19 @@ static MDBX_db_flags_t shape_flags(shape_id shape) {
   }
 }
 
+/* The byte-lexicographic order of libmdbx's default comparator: memcmp over
+ * the common prefix, then the length. The explicit comparison avoids the
+ * GCC-13 -Wstringop-overread false positive, which the synthesized
+ * vector<uint8_t> spaceship triggers by misestimating the bound of its
+ * __builtin_memcmp (an out-of-range [2^63, 2^64) length). */
+static int bytes_lexical_cmp(const std::vector<uint8_t> &a, const std::vector<uint8_t> &b) {
+  const size_t common = std::min(a.size(), b.size());
+  const int rc = common ? std::memcmp(a.data(), b.data(), common) : 0;
+  if (rc)
+    return rc;
+  return (a.size() < b.size()) ? -1 : (a.size() > b.size()) ? +1 : 0;
+}
+
 static void sort_records(shape_id shape, std::vector<rec> &recs) {
   if (shape == shape_id::ints) {
     /* the integerkey comparator: native-order uint32 keys of equal size */
@@ -166,14 +179,13 @@ static void sort_records(shape_id shape, std::vector<rec> &recs) {
       memcpy(&kb, b.key.data(), sizeof(kb));
       if (ka != kb)
         return ka < kb;
-      return a.val < b.val;
+      return bytes_lexical_cmp(a.val, b.val) < 0;
     });
     return;
   }
   std::sort(recs.begin(), recs.end(), [](const rec &a, const rec &b) {
-    if (a.key != b.key)
-      return a.key < b.key;
-    return a.val < b.val;
+    const int rc = bytes_lexical_cmp(a.key, b.key);
+    return rc ? rc < 0 : bytes_lexical_cmp(a.val, b.val) < 0;
   });
 }
 
