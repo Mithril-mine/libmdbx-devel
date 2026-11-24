@@ -68,7 +68,7 @@
 | `push-quick` | 10 | every push (devel/master) / PR gate baseline |
 | `win-gate` | 9 | added on common-code changes (Windows axis matrix) |
 | `full` | 25 | fallback when no successful base anchor exists in ancestry |
-| `coverage` | 3 | coverage-export cells |
+| `coverage` | 3 | weekly `ci-dispatch` schedule (Sunday, the codecov export) + on-demand dispatch |
 | `linux-locking` | 8 | `MDBX_LOCKING` flavors |
 | `win-arm64` | 24 | native ARM64-Windows cells |
 | `android-emulator` | 1 | emulator pilot |
@@ -79,6 +79,17 @@
 `ci-windows` nightly runs the `win-gate` profile; the platform workflows also
 consume `repository_dispatch {dispatch-event}` (payload `ref`) — the shared agent
 fan-out signal (together with `ci-dispatch` and `ci-mcp-shared-graph-memory`).
+
+**codecov export** — the cells flagged `"coverage": true` build with
+`ENABLE_GCOV` (or the clang/LLVM instrumentation on `win-mscl`), and the runner's
+coverage legs normalize the reports to lcov `coverage/lines.info` (git-relative
+`SF:` paths), reject empty reports (the guard step), and upload via
+`codecov/codecov-action` with the per-cell flag and the `CODECOV_TOKEN`
+repository secret. codecov.io rejects tokenless reports for the protected
+branches (HTTP 400), and the uploads run with `fail_ci_if_error: true` — a
+missing/invalid token fails the job visibly instead of a silently-green run
+without data. The Python coverage of the codegraph module comes from the daily
+`ci-codegraph` scan (flag `codegraph-scan-python`).
 
 ## 3. Validation gates
 
