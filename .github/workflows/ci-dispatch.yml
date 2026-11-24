@@ -11,9 +11,13 @@ name: ci-dispatch
 #                  each other, and the cancelled duplicate surfaced as red
 #                  checks on the PR); a branch without a PR can be gated on
 #                  demand via workflow_dispatch/repository_dispatch.
-#   (no schedule: nightly ownership belongs to the per-platform workflows
-#   ci-linux/ci-windows/ci-macos/ci-android; this dispatcher is the push gate
-#   and the manual/agent entry point for profiles/cells.)
+#   schedule    -> the weekly coverage export: the `coverage` profile (the
+#                  three codecov-report cells) with the full test scope. The
+#                  only scheduled job here — the nightlies belong to the
+#                  per-platform workflows (ci-linux/ci-windows/ci-macos/
+#                  ci-android), and the coverage cells are deliberately kept
+#                  out of them (the instrumented Debug builds are too costly
+#                  to repeat daily).
 #   workflow_dispatch -> single cell or named profile on any ref (owner UI).
 #   repository_dispatch -> {profile|cell, ref} for agents; a bare event (no
 #                          payload) falls back to the push-quick profile so
@@ -51,6 +55,12 @@ on:
   # and the base's automatic return fired no event to revive the matrix
   # (PR #492). The gate must follow the PR, whatever its current base is.
   pull_request:
+  schedule:
+    # Weekly (Sunday) coverage export: the `coverage` profile cells build with
+    # the gcov/LLVM instrumentation and upload the reports to codecov.io
+    # (see the resolve step and the ci-run.yml coverage legs).
+    - cron: "0 4 * * 0"
+      timezone: "Europe/Moscow"
   workflow_dispatch:
     inputs:
       cell:
@@ -246,6 +256,16 @@ jobs:
                 echo "==> dispatch: no profile/cell, falling back to push-quick"
                 CELLS=$(tests/ci/select-cells.py --profile push-quick)
               fi
+              ;;
+            schedule)
+              # The weekly coverage export (see the trigger comment): the
+              # codecov-report cells on the default branch, full scope — the
+              # fast scope strips exactly the test legs the coverage is
+              # measured on.
+              echo "==> schedule: the coverage profile (codecov export)"
+              CELLS=$(tests/ci/select-cells.py --profile coverage)
+              SCOPE=full
+              REF="${GITHUB_REF_NAME:-master}"
               ;;
             workflow_dispatch)
               PROF="${EVENT_PROFILE:-push-quick}"
