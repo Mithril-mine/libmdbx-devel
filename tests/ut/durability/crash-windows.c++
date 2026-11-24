@@ -29,6 +29,11 @@
 /// for non-Windows targets only (the multi-actor Windows coverage stays with
 /// the mdbx_test framework's --inject-writefault smoke scenarios).
 
+/// The white-box include of the internals is required to learn the build's
+/// resolved MDBX_LOCKING (the same as dead-owner.c++ does), hence the
+/// NO_PCH registration.
+#include "../../../src/essentials.h"
+
 #include "mdbx.h"
 #include <gtest/gtest.h>
 
@@ -208,6 +213,19 @@ void expect_recovery_state(bool victim_first_present) {
 /* One crash-window scenario end-to-end. */
 void run_crash_window(bool writemap, const char *kill_rule, unsigned kill_at, bool victim_first_present) {
   const env_files_guard files({kDb});
+  /* The matrix requires the dead-owner recovery: the killed victim leaves
+   * the write lock dead-owned and every subsequent commit/open strands -
+   * the documented #565 limitation turns the rounds into watchdog timeouts
+   * (as observed on the 2026-11-24 nightly, once the lock-1988/2001 cells
+   * ran this corpus for the first time); under the Windows locking there
+   * is no fork at all. The skip enumerates exactly the modes the scenario
+   * cannot work in: a newly added locking mode falls through to the honest
+   * run-or-fail, never to a silent skip (the dead-owner.c++ corpus carries
+   * the strand characterization for these modes). */
+#if MDBX_LOCKING == MDBX_LOCKING_POSIX1988 || MDBX_LOCKING == MDBX_LOCKING_POSIX2001 ||                                \
+    MDBX_LOCKING == MDBX_LOCKING_WIN32FILES
+  GTEST_SKIP() << "SKIPPED: the dead-owner recovery is unavailable with this locking mode (see #565)";
+#endif
   if (MDBX_GTEST_IS_EXECUTION_TIMEOUT()) {
     GTEST_SKIP() << "SKIPPED by RUNTIME_LIMIT";
   }
