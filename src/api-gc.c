@@ -152,12 +152,6 @@ __cold int mdbx_env_defrag(MDBX_env *env, size_t defrag_atleast, size_t time_atl
    * free pages at the end of the database: they are cut off when the next cycle loads the GC. */
   while (!defrag_discontinued(&dfc) &&
          ((size_t)acceptable_backlash + dfc.payload_pages < txn->geo.first_unallocated || dfc.tail_in_gc)) {
-    const pgno_t prev_stumble = dfc.stumble_pgno;
-    const pgno_t prev_stock = dfc.stumble_stock;
-    /* Whether the previous cycle made no progress: the counters and the stumble still hold its values. */
-    const bool prev_idle = dfc.cycle != 0 && dfc.cycle_idle;
-    const bool prev_unnamed = prev_idle && !dfc.stumble_pgno;
-    const bool prev_structural = dfc.stumble_kind != defrag_stumble_obstacle;
     dfc.cycle_started_timestamp = osal_monotime();
     rc = defrag_cycle(&dfc);
 
@@ -172,64 +166,61 @@ __cold int mdbx_env_defrag(MDBX_env *env, size_t defrag_atleast, size_t time_atl
       break;
     }
 
-    /* The walk stumbles at the page of the previous cycle again. A cycle that moved nothing made no progress, and so
-     * did a cycle after which the state of the trees at the start of the next one is not better than the best state
-     * seen while the walk stumbles at this page: pages that move from one place to another and back are no progress,
-     * although the state of the trees shows the effect of a cycle only when the next one loads the GC. A cycle that
-     * reserved a run for a large page that had none made progress as well. */
-    const bool same_stumble = dfc.stumble_pgno && dfc.stumble_pgno == prev_stumble;
-    const bool better = dfc.cycle_initial_score > dfc.stumble_best_score;
-    if (!same_stumble || better)
-      dfc.stumble_best_score = dfc.cycle_initial_score;
-    const bool idle =
-        (dfc.cycle_pages_scheduled == 0 && !dfc.cycle_span_reserved) || (same_stumble && dfc.cycle_moved && !better);
-    dfc.stumble_retry = (same_stumble && idle) ? dfc.stumble_retry + 1 : 0;
-    dfc.cycle_moved = dfc.cycle_pages_scheduled != 0 && !dfc.cycle_span_reserved;
-    dfc.cycle_idle = idle;
-    dfc.unmoved_cycles = (dfc.cycle_pages_scheduled == 0) ? dfc.unmoved_cycles + 1 : 0;
+    /* The end of the data at the start of the cycle is the effect of the cycles before it, and a cycle that reserved a
+     * run of free pages for a large page prepared the move of that page in the next cycle: while any of these is new,
+     * the walk makes progress. The effect of a cycle shows at the start of the next one, so the second cycle in a row
+     * without progress may still bring the effect of the first, and the third one confirms the stall. */
+    if (rc == MDBX_SUCCESS) {
+      if (txn->geo.first_unallocated < dfc.least_allocated) {
+        dfc.least_allocated = txn->geo.first_unallocated;
+        dfc.no_progress = 0;
+        dfc.idle_cycles = 0;
+        dfc.no_progress_stumbles = 0;
+      } else if (dfc.cycle_span_reserved) {
+        dfc.no_progress = 0;
+        dfc.idle_cycles = 0;
+        dfc.no_progress_stumbles = 0;
+      } else {
+        dfc.no_progress += 1;
+        dfc.idle_cycles = (dfc.cycle_pages_scheduled == 0) ? dfc.idle_cycles + 1 : 0;
+        dfc.no_progress_stumbles |= dfc.cycle_stumbles;
+      }
+    }
 
-    const bool no_span = dfc.stumble_kind == defrag_stumble_no_span;
-    /* Places between the goal edge and the pages can cure what made the walk stumble: there is no place or no run
-     * below the goal edge, although free pages remain. */
-    const bool between_edges = dfc.stumble_pgno && (no_span || dfc.stumble_kind == defrag_stumble_no_place);
-    /* The structure of the trees allows no more pages to be moved: there is no free page below the goal edge for the
-     * page and for the copies of its parents, or there are no free pages at all, or there is no run for a large page
-     * and none can be formed. Such a stop is not an error. An obstacle that nothing clears is one, and so is a large
-     * page with a run already formed for it that still does not move. */
-    const bool structural =
-        dfc.stumble_pgno && ((dfc.stumble_kind == defrag_stumble_no_place) ||
-                             (dfc.stumble_kind == defrag_stumble_no_stock) || (no_span && !dfc.lp_backlog));
     /* The residual is within what the caller accepts: the defragmentation ends after the commit of the cycle, as after
      * any cycle, and the walk of this one is not judged. */
     const bool accepted = (size_t)acceptable_backlash + dfc.payload_pages >= txn->geo.first_unallocated;
-    /* Two idle cycles in a row that name no page: the walk found nothing to move and named no obstacle, although the
-     * goal is not reached. */
-    const bool unnamed = rc == MDBX_SUCCESS && !dfc.completed && idle && !dfc.stumble_pgno;
-    /* Two idle cycles in a row at the same page, both stopped by the structure, with no more free pages in the second
-     * one than in the first: a cycle changes nothing more for the next one. */
-    const bool structural_idle =
-        structural && dfc.stumble_retry > 0 && prev_idle && prev_structural && idle && dfc.stumble_stock <= prev_stock;
-    const bool endless = dfc.stumble_cycles > 1000 || dfc.unmoved_cycles > 64;
-    const bool stalled = dfc.stumble_retry > 3 || endless || structural_idle || (unnamed && prev_unnamed);
-    if (!accepted && structural_idle && between_edges && !dfc.in_region) {
-      NOTICE("no place below the goal edge for the page %u in %u cycles, the pages also take places between the goal "
-             "edge and themselves",
-             dfc.stumble_pgno, dfc.stumble_retry + 1);
-      dfc.in_region = true;
-    } else if (stalled && !accepted) {
-      NOTICE("bailout at %u after %u retries, since %s", dfc.stumble_pgno, dfc.stumble_retry,
-             structural ? "the structure of the trees allows no more pages to be moved" : "unable to move");
-      /* The cycle has loaded the GC and cleared the records it could reclaim, so the ones left are kept by reading
-       * transactions: their pages are free, but cannot be used yet. */
-      if (txn->dbs[FREE_DBI].items)
-        rc = MDBX_LAGGARD_READER;
-      else {
-        if (!structural || endless)
-          /* No reader holds the pages, but the walk does not get through: a defect of the walk. */
-          dfc.stopping_reasons |= MDBX_defrag_error;
-        rc = MDBX_RESULT_TRUE;
+    if (rc == MDBX_SUCCESS && !accepted && (dfc.no_progress >= 3 || dfc.idle_cycles >= 2)) {
+      if (!dfc.in_region && (dfc.no_progress_stumbles & defrag_stumbles_between_edges)) {
+        /* Places between the goal edge and the pages can cure what the cycles stumbled on: there is no place or no run
+         * below the goal edge, although free pages remain. */
+        NOTICE("no place below the goal edge in %u cycles without progress, the pages also take places between the "
+               "goal edge and themselves",
+               dfc.no_progress);
+        dfc.in_region = true;
+        dfc.no_progress = 0;
+        dfc.idle_cycles = 0;
+        dfc.no_progress_stumbles = 0;
+      } else {
+        /* What the cycles stumbled on tells a limit of the trees from an obstacle that must clear. */
+        const bool held_by_limit = (dfc.no_progress_stumbles & defrag_stumbles_limit) != 0;
+        NOTICE("bailout after %u cycles without progress, since %s", dfc.no_progress,
+               held_by_limit ? "the structure of the trees allows no more pages to be moved"
+                             : "the walk does not get through or the pages move and come back");
+        /* The cycles have loaded the GC and cleared the records they could reclaim, so the ones left are kept by
+         * reading transactions: their pages are free, but cannot be used yet. */
+        if (txn->dbs[FREE_DBI].items)
+          rc = MDBX_LAGGARD_READER;
+        else {
+          if (!held_by_limit)
+            /* No reader holds the pages, and the trees allow more pages to be moved, but the walk does not get
+             * through, or the pages move and come back: the walk can go on so for ever, and no limit of the trees
+             * would stop it. A defect of the walk. */
+            dfc.stopping_reasons |= MDBX_defrag_error;
+          rc = MDBX_RESULT_TRUE;
+        }
+        break;
       }
-      break;
     }
 
     if ((dfc.stopping_reasons & MDBX_defrag_laggard_reader) != 0 && txn_gc_detent(txn))
