@@ -9,6 +9,23 @@
 
 #include "test-env.h++"
 
+/* The Valgrind detection for the tests' wall-clock budgets (see the comment
+ * in test-env.h++ for why this is a function in a dedicated translation
+ * unit): valgrind.h is included HERE and nowhere else, so its macros can
+ * never collide with the library's preface.h stubs in the test translation
+ * units. The valgrind headers are a build-time requirement only when they
+ * are installed; otherwise the detection is a plain false. */
+#if defined(__has_include)
+#if __has_include(<valgrind/valgrind.h>)
+#include <valgrind/valgrind.h>
+bool mdbx_tst_running_on_valgrind() { return RUNNING_ON_VALGRIND != 0; }
+#else
+bool mdbx_tst_running_on_valgrind() { return false; }
+#endif
+#else
+bool mdbx_tst_running_on_valgrind() { return false; }
+#endif
+
 runtime_limiter ci_runtime_limiter;
 
 namespace detail {

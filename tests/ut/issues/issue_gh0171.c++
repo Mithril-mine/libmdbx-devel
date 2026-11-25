@@ -14,22 +14,10 @@
 
 #include "../env-guard.h++"
 #include "mdbx.h"
-/* The child-wait budgets below scale x42 under Valgrind, in line with the
- * ctest timeouts' scaling. The include is intentionally AFTER the library
- * headers: preface.h defines its RUNNING_ON_VALGRIND fallbacks first, and
- * including <valgrind/valgrind.h> before them would suppress those stub
- * definitions, breaking the non-memcheck builds. */
-#if !defined(RUNNING_ON_VALGRIND) && defined(__has_include)
-#if __has_include(<valgrind/valgrind.h>)
-#include <valgrind/valgrind.h>
-#endif
-#endif
-#if !defined(RUNNING_ON_VALGRIND)
-#define RUNNING_ON_VALGRIND (0)
-#endif
-MDBX_MAYBE_UNUSED static unsigned scaled_wait_seconds(unsigned native_seconds) {
-  return RUNNING_ON_VALGRIND ? native_seconds * 42 : native_seconds;
-}
+/* The deadlines scale through the shared mdbx_tst_scaled_wait_seconds()
+ * (tests/ut/test-env.h++, included below, which also provides the
+ * RUNNING_ON_VALGRIND fallbacks with the preface.h include-order
+ * caveat handled in one place). */
 #include <gtest/gtest.h>
 
 #include "../test-env.h++"
@@ -143,7 +131,7 @@ TEST(issue_gh0171, compacting_copy_to_stalled_pipe_does_not_hang) {
   /* Bounded wait: a hang (the bug) is caught here instead of stalling ctest. */
   int status = 0;
   bool exited = false;
-  const auto exit_deadline = std::chrono::steady_clock::now() + std::chrono::seconds(scaled_wait_seconds(15));
+  const auto exit_deadline = std::chrono::steady_clock::now() + std::chrono::seconds(mdbx_tst_scaled_wait_seconds(15));
   while (!exited && std::chrono::steady_clock::now() < exit_deadline) {
     const pid_t r = waitpid(pid, &status, WNOHANG);
     if (r == pid || (r < 0 && errno == ECHILD)) {

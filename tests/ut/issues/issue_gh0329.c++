@@ -15,17 +15,8 @@
 
 #include "mdbx.h"
 #include <gtest/gtest.h>
-/* The watchdogs below scale their budgets under Valgrind, in line with the
- * ctest timeouts' scaling. */
-#if defined(__has_include)
-#if __has_include(<valgrind/valgrind.h>)
-#include <valgrind/valgrind.h>
-#endif
-#endif
-#if !defined(RUNNING_ON_VALGRIND)
-#define RUNNING_ON_VALGRIND (0)
-#endif
-
+/* The watchdogs below scale their budgets under Valgrind through the shared
+ * mdbx_tst_scaled_wait_seconds() and mdbx_tst_running_on_valgrind() (test-env.h++). */
 #include "../test-env.h++"
 
 #include <atomic>
@@ -174,7 +165,8 @@ int child_step(mode m, MDBX_env *env) {
  * tens of seconds there under a loaded machine. Returns true and its wait
  * status when it exits, or kills it and returns false when it hangs. */
 bool child_exits(pid_t pid, int &status) {
-  const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(RUNNING_ON_VALGRIND ? 15 * 42 : 15);
+  const auto deadline =
+      std::chrono::steady_clock::now() + std::chrono::seconds(mdbx_tst_running_on_valgrind() ? 15 * 42 : 15);
   while (std::chrono::steady_clock::now() < deadline) {
     const pid_t got = waitpid(pid, &status, WNOHANG);
     if (got == pid)
