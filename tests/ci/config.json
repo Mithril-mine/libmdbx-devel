@@ -2344,10 +2344,11 @@
         "-DMDBX_LOCKING=1988",
         "-DMDBX_BUILD_CXX:BOOL=ON",
         "-DMDBX_CHECKING=2",
-        "-DMDBX_DEBUG=1"
+        "-DMDBX_DEBUG=1",
+        "-DMDBX_SMOKE_EXTRA=--loglevel=notice"
       ],
       "ctest": null,
-      "note": "MDBX_LOCKING matrix: 1988 x gcc; RelWithDebInfo checked tier (LOCKING is fixed on Windows, a platform limitation)"
+      "note": "MDBX_LOCKING matrix: 1988 x gcc; RelWithDebInfo checked tier (LOCKING is fixed on Windows, a platform limitation); the smoke scenarios log at notice level (MDBX_SMOKE_EXTRA): the DEBUG-verbosity flood through the shared stdout pipe froze the whole actor family at the duration boundary (issue #613, the 2026-11-25 nightly)"
     },
     {
       "id": "linux-lock-1988-clang",
@@ -2361,10 +2362,11 @@
         "-DMDBX_LOCKING=1988",
         "-DMDBX_BUILD_CXX:BOOL=ON",
         "-DMDBX_CHECKING=2",
-        "-DMDBX_DEBUG=1"
+        "-DMDBX_DEBUG=1",
+        "-DMDBX_SMOKE_EXTRA=--loglevel=notice"
       ],
       "ctest": null,
-      "note": "MDBX_LOCKING matrix: 1988 x clang; RelWithDebInfo checked tier (LOCKING is fixed on Windows, a platform limitation)"
+      "note": "MDBX_LOCKING matrix: 1988 x clang; RelWithDebInfo checked tier (LOCKING is fixed on Windows, a platform limitation); the smoke scenarios log at notice level (MDBX_SMOKE_EXTRA): the DEBUG-verbosity flood through the shared stdout pipe froze the whole actor family at the duration boundary (issue #613, the 2026-11-25 nightly)"
     },
     {
       "id": "linux-lock-2001-gcc",
@@ -2378,10 +2380,11 @@
         "-DMDBX_LOCKING=2001",
         "-DMDBX_BUILD_CXX:BOOL=ON",
         "-DMDBX_CHECKING=2",
-        "-DMDBX_DEBUG=1"
+        "-DMDBX_DEBUG=1",
+        "-DMDBX_SMOKE_EXTRA=--loglevel=notice"
       ],
       "ctest": null,
-      "note": "MDBX_LOCKING matrix: 2001 x gcc; RelWithDebInfo checked tier (LOCKING is fixed on Windows, a platform limitation)"
+      "note": "MDBX_LOCKING matrix: 2001 x gcc; RelWithDebInfo checked tier (LOCKING is fixed on Windows, a platform limitation); the smoke scenarios log at notice level (MDBX_SMOKE_EXTRA): the DEBUG-verbosity flood through the shared stdout pipe froze the whole actor family at the duration boundary (issue #613, the 2026-11-25 nightly)"
     },
     {
       "id": "linux-lock-2001-clang",
@@ -2395,10 +2398,11 @@
         "-DMDBX_LOCKING=2001",
         "-DMDBX_BUILD_CXX:BOOL=ON",
         "-DMDBX_CHECKING=2",
-        "-DMDBX_DEBUG=1"
+        "-DMDBX_DEBUG=1",
+        "-DMDBX_SMOKE_EXTRA=--loglevel=notice"
       ],
       "ctest": null,
-      "note": "MDBX_LOCKING matrix: 2001 x clang; RelWithDebInfo checked tier (LOCKING is fixed on Windows, a platform limitation)"
+      "note": "MDBX_LOCKING matrix: 2001 x clang; RelWithDebInfo checked tier (LOCKING is fixed on Windows, a platform limitation); the smoke scenarios log at notice level (MDBX_SMOKE_EXTRA): the DEBUG-verbosity flood through the shared stdout pipe froze the whole actor family at the duration boundary (issue #613, the 2026-11-25 nightly)"
     },
     {
       "id": "linux-lock-2008-gcc",

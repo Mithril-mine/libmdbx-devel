@@ -356,6 +356,10 @@ else()
   endif() # MDBX_ENABLE_LONG_TESTS
 
   # Quick smoke scenarios (a-la `make smoke`).
+  # MDBX_SMOKE_EXTRA is a per-cell overridable knob: a `-DMDBX_SMOKE_EXTRA=...`
+  # in a registry cell's cmake args (tests/ci/config.json) wins over this
+  # default, since set(CACHE) without FORCE does not overwrite an existing
+  # cache entry (e.g. the strand-mode lock cells pass --loglevel=notice here).
   set(MDBX_SMOKE_EXTRA "" CACHE STRING "Extra command-line arguments for the quick smoke scenarios")
 
   # The chained smoke scenarios below keep their databases on purpose
