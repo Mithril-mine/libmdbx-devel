@@ -183,6 +183,18 @@ cell's.
   (`GTEST_RUNTIME_LIMIT`, see `tests/ci/run-cell.py`): the soft limit bounds
   how deep a gtest binary digs within a run, the hard timeout kills a
   runaway binary regardless.
+- **In-test wall-clock budgets follow the same scheme**: every
+  `alarm()` watchdog, spin/deadline and transaction-count cap inside a test
+  is calibrated for the reference configuration and must scale by the same
+  factors as the CTest timeouts — the `MDBX_TEST_TIMEOUT_SCALE` env (via
+  `mdtest_timeout_scale()`) and ×42 under Valgrind
+  (the shared `mdbx_tst_scaled_wait_seconds()` helper of
+  `tests/ut/test-env.h++` is the pattern). An unscaled in-test budget fires
+  long before a scaled CTest timeout would, turning a slow-but-correct run
+  into false failures (observed as the SIGALRM deaths of the durability
+  children in the 2026-11-24 memcheck sweep). `usleep()` and other sleeping
+  waits are wall-clock and are NOT inflated by Valgrind, but every
+  stat()/transaction between them is.
 
 ## 7. Cross-platform correctness
 
@@ -219,7 +231,11 @@ with fault injection (the probe-bus/MPROBE family).
 - **naming rules**: every public function is prefixed with `mdbx_tst_`,
   every private (implementation-internal) function/type with `tst_`; the
   public mirror constants follow the same `MDBX_TST_*` pattern; the
-  doc-group is `c_testing`;
+  doc-group is `c_testing`. The same `mdbx_tst_` prefix is also carried by
+  the shared test-environment utilities of `tests/ut/test-env.*`
+  (`mdtest_getenv/setenv/unsetenv/timeout_scale/running_on_valgrind/
+  mdbx_tst_scaled_wait_seconds/...`) - do not confuse them with the `c_testing`
+  API entry points;
 - implement it in `tests/api.c` (`#include "../src/internals.h"`), which
   is compiled **into the library**: `src/alloy.c` includes it under
   `#if MDBX_ENABLE_TESTS` (so the implementation reaches internal

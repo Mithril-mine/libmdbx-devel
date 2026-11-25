@@ -138,6 +138,32 @@ CMake-опции (`cmake/profile.cmake`):
 гонок используйте стресс-тесты под `ENABLE_ASAN`/`ENABLE_UBSAN` или ручную
 инструментацию.
 
+Оговорки memcheck-прогонов (запуск: `cmake -DENABLE_MEMCHECK=ON` + `ctest -T memcheck`
+либо `make test-memcheck`; valgrind 3.26, 2026-11). Детект valgrind в
+тестах — runtime-функция `mdbx_tst_running_on_valgrind()` из
+`tests/ut/test-env.c++` (клиентский запрос; valgrind.h включается только
+там, чтобы его макросы не сталкивались с заглушками `preface.h` в
+white-box TU); `ENABLE_MEMCHECK`-гейт остаётся только у самой библиотеки
+(без него `mdbx_running_on_Valgrind()` компилируется нулём и
+golden-section retry в `osal-mmap.c` мёртв):
+
+- Все «утечки» тестов — это «possibly lost»-артефакты fork-детей, умерших
+  с открытым env по сценарию (crash/durability), унаследованные блоки TLS
+  fork'а многопоточного родителя и LTO-склейки кадров стеков; они
+  подавляются в `valgrind.supp` (класс `faulted-actor-*`), definite-утечки
+  собственного кода — не подавляются никогда.
+- Дефолтная RAM-derived геометрия (терабайты) не помещается в адресное
+  пространство клиента valgrind — движок повторяет `osal_mmap` вплоть до
+  EINVAL (`osal-mmap.c`, golden-section retry под `RUNNING_ON_VALGRIND`),
+  а без `ENABLE_MEMCHECK` детект compile-time нулевой и retry мёртв.
+  Примеры задают разумный upper явно (см. `examples/common/common.h++`).
+- WRITEMAP-сценарии fork/kill-recovery (crash-windows/crash-storm) и
+  много-поточный churn из gh0317 заклинивают сам valgrind: процесс крутит
+  100% CPU в шторме `rt_sigprocmask`/`gettid` (обёртка syscalls vg) без
+  единого клиентски-осмысленного вызова — вне libmdbx, поэтому эти
+  сценарии скипаются по runtime-детекту `mdbx_tst_running_on_valgrind()`
+  с позитивной формулировкой.
+
 ---
 
 ## 2. Пошаговые сценарии отладки
