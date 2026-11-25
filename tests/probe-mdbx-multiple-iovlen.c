@@ -12,7 +12,8 @@
 ///
 /// \author Леонид Юрьев aka Leonid Yuriev <leo@yuriev.ru> \date 2015-2026
 
-/* REGRESSION REPRODUCER (standalone diagnostic, not wired into CTest).
+/* REGRESSION REPRODUCER (the standalone diagnostic, registered as the
+ * probe_multiple_iovlen ctest entry).
  *
  * Plain-C reproducer of the fixed MDBX_MULTIPLE batch-insert defect:
  * when mdbx_put(MDBX_NOOVERWRITE | MDBX_MULTIPLE) hits an already existing
@@ -79,7 +80,11 @@ int main(void) {
   int rc = step(txn, dbi, "k1", extra, 3, MDBX_NOOVERWRITE);
   if (rc != MDBX_KEYEXIST) {
     fprintf(stderr, "unexpected rc: %s\n", mdbx_strerror(rc));
+    mdbx_env_close(env);
     return 1;
   }
+  /* Close before exit: otherwise the memcheck sweeps drown the still-open
+   * environment's pools into possibly-lost reports. */
+  mdbx_env_close(env);
   return (0);
 }
