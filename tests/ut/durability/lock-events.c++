@@ -83,6 +83,11 @@ const char *const kStop = "stop";
 const char *const kStatusA = "status-writer-a";
 const char *const kStatusB = "status-writer-b";
 
+/* The wall-clock budgets (the alarms, the spin deadlines, the transactions
+ * cap) scale through the shared mdbx_tst_scaled_wait_seconds() (tests/ut/test-env.h++),
+ * whose Valgrind detection is a runtime function - accurate whether or not
+ * the build carries ENABLE_MEMCHECK. */
+
 /* --- the coordination files ----------------------------------------------- */
 
 void write_all(int fd, const char *data, size_t len) {
@@ -237,7 +242,7 @@ inline void log_lock_events(const char *, const char *, bool *) {}
  * post-mortem by construction. The summary goes through the status file
  * "writer-status|<role>|<txns>|<recovered>". */
 void run_writer(const char *role, const char *ready_flag, const char *status_flag) {
-  alarm(kWatchdogSeconds);
+  alarm(mdbx_tst_scaled_wait_seconds(kWatchdogSeconds));
 #if defined(MDBX_PROBES)
   setenv("MDBX_PROBES", "1", 1); /* per-process probe activation, must precede the first site hit */
 #endif                           /* MDBX_PROBES */
@@ -264,6 +269,11 @@ void run_writer(const char *role, const char *ready_flag, const char *status_fla
   coord_touch(ready_flag);
 
   char phase[32];
+  /* The txns hard-cap scales under Valgrind along with the alarms: the
+   * writers must not exhaust it before the victim gets through its own
+   * slow begin/hold/kill sequence, otherwise nobody is left to observe
+   * the dead-owner recovery. */
+  const unsigned txns_cap = mdbx_tst_scaled_wait_seconds(kTxnsHardCap);
   while (!coord_exists(kStop)) {
     MDBX_txn *txn = nullptr;
     if (mdbx_txn_begin(env, nullptr, MDBX_TXN_READWRITE, &txn) != MDBX_SUCCESS)
@@ -275,7 +285,7 @@ void run_writer(const char *role, const char *ready_flag, const char *status_fla
     snprintf(phase, sizeof phase, "commit#%u", txns);
     log_lock_events(role, phase, nullptr);
     ++txns;
-    if (txns >= kTxnsHardCap)
+    if (txns >= txns_cap)
       break;
     usleep(1000u);
   }
@@ -305,12 +315,12 @@ void run_writer(const char *role, const char *ready_flag, const char *status_fla
  * SIGKILL - the write lock is left owned by a dead process while the writers
  * keep contending. */
 void run_victim() {
-  alarm(kVictimWatchdogSeconds);
+  alarm(mdbx_tst_scaled_wait_seconds(kVictimWatchdogSeconds));
 #if defined(MDBX_PROBES)
   setenv("MDBX_PROBES", "1", 1); /* per-process probe activation, must precede the first site hit */
 #endif                           /* MDBX_PROBES */
   bool ready = false;
-  for (unsigned spin = 0; spin < kReadyDeadlineSeconds * 1000; ++spin) {
+  for (unsigned spin = 0; spin < mdbx_tst_scaled_wait_seconds(kReadyDeadlineSeconds) * 1000u; ++spin) {
     if (coord_exists(kReadyA) && coord_exists(kReadyB)) {
       ready = true;
       break;
@@ -336,9 +346,10 @@ void run_victim() {
   _exit(124); /* unreachable */
 }
 
-/* Collects the child with a deadline; on a timeout kills it and returns false. */
+/* Collects the child with a deadline; on a timeout kills it and returns false.
+ * The deadline is wall-clock and scales under Valgrind like the other budgets. */
 bool collect_child(pid_t pid, int &status, unsigned deadline_seconds) {
-  for (unsigned spin = 0; spin < deadline_seconds * 100; ++spin) {
+  for (unsigned spin = 0; spin < mdbx_tst_scaled_wait_seconds(deadline_seconds) * 100u; ++spin) {
     const pid_t got = waitpid(pid, &status, WNOHANG);
     if (got == pid)
       return true;
@@ -395,7 +406,8 @@ TEST(lock_events, contention_capture) {
   /* Wait for the victim's hold: the coordination flag appears while the
    * writers are mid-contention, right before the SIGKILL. */
   bool holding = false;
-  for (unsigned spin = 0; spin < (kReadyDeadlineSeconds + kVictimWatchdogSeconds) * 100; ++spin) {
+  for (unsigned spin = 0; spin < mdbx_tst_scaled_wait_seconds(kReadyDeadlineSeconds + kVictimWatchdogSeconds) * 100u;
+       ++spin) {
     if (coord_exists(kHolding)) {
       holding = true;
       break;

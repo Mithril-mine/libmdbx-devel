@@ -41,6 +41,10 @@ namespace {
 constexpr int kAttemptWatchdogSeconds = 15;
 const char *const kDb = "dead-owner.mdbx";
 
+/* The wall-clock watchdogs scale through the shared mdbx_tst_scaled_wait_seconds()
+ * (tests/ut/test-env.h++), whose Valgrind detection is a runtime function -
+ * accurate whether or not the build carries ENABLE_MEMCHECK. */
+
 enum attempt_outcome {
   attempt_succeeded = 0, /* the write txn began (dead-owner recovery or free lock) */
   attempt_stranded,      /* the attempt was still waiting when the watchdog fired */
@@ -68,7 +72,7 @@ void run_victim_writer() {
 /* The forked attempter: joins the environment and tries to begin a write
  * transaction, with a watchdog so a stranded lock cannot hang the test. */
 void run_lock_attempt() {
-  alarm(kAttemptWatchdogSeconds);
+  alarm(mdbx_tst_scaled_wait_seconds(kAttemptWatchdogSeconds));
   MDBX_env *env = nullptr;
   if (mdbx_env_create(&env) != MDBX_SUCCESS)
     _exit(111);
@@ -78,11 +82,16 @@ void run_lock_attempt() {
   const int rc = mdbx_txn_begin(env, nullptr, MDBX_TXN_READWRITE, &txn);
   fprintf(stderr, "dead-owner: the lock attempt returned %d\n", rc);
   fflush(stderr);
-  if (rc == MDBX_SUCCESS) {
-    mdbx_txn_abort(txn);
-    _exit(0); /* attempt_succeeded */
+  if (rc != MDBX_SUCCESS) {
+    mdbx_env_close(env);
+    _exit(113); /* attempt_failed, the code is not transported */
   }
-  _exit(113); /* attempt_failed, the code is not transported */
+  mdbx_txn_abort(txn);
+  /* Close the environment before _exit: the attempter exits by design, and
+   * Valgrind's leak-check would otherwise drown the still-open env's pools
+   * into possibly-lost reports (the tests/AGENTS.md hygiene rule). */
+  mdbx_env_close(env);
+  _exit(0); /* attempt_succeeded */
 }
 
 attempt_outcome run_attempt() {

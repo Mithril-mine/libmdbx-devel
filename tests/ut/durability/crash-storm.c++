@@ -96,6 +96,11 @@ constexpr unsigned kRoundsDefault = 2;
 constexpr unsigned kRoundsHigh = 32;
 constexpr unsigned kChildWatchdogSeconds = 20;
 
+/* The wall-clock child watchdog scales through the shared
+ * mdbx_tst_scaled_wait_seconds() (tests/ut/test-env.h++), whose Valgrind detection is
+ * a runtime function - accurate whether or not the build carries
+ * ENABLE_MEMCHECK. */
+
 const char *const kDb = "crash-storm.mdbx";
 const char *const kKillRule = "commit_meta_update_begin";
 
@@ -146,17 +151,28 @@ struct child_summary {
 };
 
 /* Reaps any not-yet-waited children on every exit path, so an ASSERT in the
- * parent cannot leave the storm running behind the file cleanup. */
+ * parent cannot leave the storm running behind the file cleanup. The pids
+ * live in a fixed-size array: every heap allocation made around the fork()
+ * loop would be inherited by the forked children and drowned into the
+ * memcheck reports (the fork hygiene rule), and the writers count is
+ * clamped to a small compile-time bound anyway. */
 struct child_reaper {
-  std::vector<pid_t> pids;
+  static constexpr unsigned kPidsMax = 16; /* above the writers' clamp of 8 */
+  pid_t pids[kPidsMax] = {};
+  unsigned count = 0;
+  void push(const pid_t pid) {
+    ASSERT_LT(count, kPidsMax);
+    pids[count++] = pid;
+  }
   ~child_reaper() {
-    for (const pid_t pid : pids) {
+    for (unsigned i = 0; i < count; ++i) {
       int status = 0;
-      while (waitpid(pid, &status, 0) < 0 && errno == EINTR) {
+      while (waitpid(pids[i], &status, 0) < 0 && errno == EINTR) {
       }
     }
   }
 };
+static_assert(kWritersHigh <= child_reaper::kPidsMax, "the reaper's fixed array must hold the clamped writers count");
 
 /* The forked writer child: opens its own environment, arms the kill-rule at
  * its own offset (dying children only), then commits its key-ranges in a
@@ -165,7 +181,8 @@ struct child_reaper {
  * the test. A completing child closes the environment and exits zero. */
 [[noreturn]] void run_storm_child(const bool writemap, const unsigned child, const unsigned writers) {
   setenv("MDBX_PROBES", "1", 1); /* per-process probe activation, must precede the first site hit */
-  alarm(kChildWatchdogSeconds);  /* the runaway cap: a stranded lock must not hang the whole test */
+  alarm(mdbx_tst_scaled_wait_seconds(
+      kChildWatchdogSeconds)); /* the runaway cap: a stranded lock must not hang the test */
 
   MDBX_env *env = nullptr;
   if (mdbx_env_create(&env) != MDBX_SUCCESS)
@@ -330,7 +347,7 @@ void run_storm_round(const bool writemap, const unsigned writers) {
     ASSERT_GE(children[c].pid, 0) << "fork() failed";
     if (children[c].pid == 0)
       run_storm_child(writemap, c, writers); /* never returns */
-    reaper.pids.push_back(children[c].pid);
+    reaper.push(children[c].pid);
   }
   for (unsigned c = 0; c < writers; ++c) {
     int status = 0;
@@ -355,7 +372,7 @@ void run_storm_round(const bool writemap, const unsigned writers) {
           << (children[c].signaled ? children[c].termsig : children[c].exit_code);
     }
   }
-  reaper.pids.clear();
+  reaper.count = 0; /* reaped explicitly, the destructor must not wait again */
 
   /* Phase 3 - the end-to-end verification on the recovered database. */
   ASSERT_NO_FATAL_FAILURE(verify_aftermath(writemap, writers));
@@ -376,6 +393,15 @@ void run_storm(const bool writemap) {
     MDBX_LOCKING == MDBX_LOCKING_WIN32FILES
   GTEST_SKIP() << "SKIPPED: the dead-owner recovery is unavailable with this locking mode (see #565)";
 #endif
+  /* The WRITEMAP storm wedges the Valgrind-instrumented process the same
+   * way the crash-windows WRITEMAP scenarios do: after the dying children
+   * are killed, the surviving processes spin at 100% CPU (the strace
+   * histogram shows nothing but valgrind's own rt_sigprocmask/gettid
+   * syscall-wrapping pairs, no futex, no I/O), while the forked writers
+   * wait forever in rt_mutex_schedule. The non-WRITEMAP storm passes. */
+  if (writemap && mdbx_tst_running_on_valgrind()) {
+    GTEST_SKIP() << "SKIPPED under Valgrind: the WRITEMAP storm wedges the instrumented process";
+  }
   if (MDBX_GTEST_IS_EXECUTION_TIMEOUT()) {
     GTEST_SKIP() << "SKIPPED by RUNTIME_LIMIT";
   }
