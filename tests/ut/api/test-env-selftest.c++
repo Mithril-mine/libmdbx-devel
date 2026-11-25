@@ -117,8 +117,8 @@ TEST(test_env_selftest, scaled_wait_seconds_composes_the_scheme) {
     const bool had_saved;
     const std::string saved;
     env_guard()
-        : had_saved(mdtest_getenv("MDBX_TEST_TIMEOUT_SCALE") != nullptr),
-          saved(mdtest_getenv("MDBX_TEST_TIMEOUT_SCALE") ? std::string(mdtest_getenv("MDBX_TEST_TIMEOUT_SCALE"))
+        : had_saved(mdbx_tst_getenv("MDBX_TEST_TIMEOUT_SCALE") != nullptr),
+          saved(mdbx_tst_getenv("MDBX_TEST_TIMEOUT_SCALE") ? std::string(mdbx_tst_getenv("MDBX_TEST_TIMEOUT_SCALE"))
                                                            : std::string()) {}
     ~env_guard() {
       if (had_saved)

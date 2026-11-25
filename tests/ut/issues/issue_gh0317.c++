@@ -348,7 +348,7 @@ TEST(issue_gh0317, two_threads_open_close_progress) {
   /* The watchdog must outlive the scenario's own scaled budget (60 s), the
    * same MDBX_TEST_TIMEOUT_SCALE factor applies (see the scenario above);
    * bounded_child_wait() adds the Valgrind factor on its own. */
-  if (!bounded_child_wait(pid, status, 75u * mdtest_timeout_scale())) {
+  if (!bounded_child_wait(pid, status, 75u * mdbx_tst_timeout_scale())) {
     dump_threads_state(pid, "the child hung, sampled before kill");
     ::kill(pid, SIGKILL);
     while (waitpid(pid, &status, 0) < 0 && errno == EINTR) {
