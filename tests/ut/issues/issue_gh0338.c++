@@ -15,16 +15,10 @@
 
 #include "mdbx.h"
 #include <gtest/gtest.h>
-/* The child-opens waits below scale their budgets under Valgrind, in line
- * with the ctest timeouts' scaling. */
-#if defined(__has_include)
-#if __has_include(<valgrind/valgrind.h>)
-#include <valgrind/valgrind.h>
-#endif
-#endif
-#if !defined(RUNNING_ON_VALGRIND)
-#define RUNNING_ON_VALGRIND (0)
-#endif
+
+#include "../test-env.h++"
+/* The child-opens waits below scale their budgets through the shared
+ * mdbx_tst_scaled_wait_seconds(), in line with the ctest timeouts' scaling. */
 
 #include <cstdio>
 #include <cstring>
@@ -92,21 +86,53 @@ MDBX_env *open_env(MDBX_env_flags_t extra) {
  * made the file visible (and thus readable) while still empty, so under CI
  * scheduling the parent could get a short read and mistake it for a timeout.
  *
- * The holder releases the child on every exit path of a test, including
- * gtest ASSERT failures, otherwise an orphaned child would hold the
- * environment and its locks forever. */
+ * The fork happens in spawn_holder(), which the callers invoke BEFORE
+ * opening their own environment (the fork hygiene rule, tests/AGENTS.md
+ * §5): the child waits for the "arm" file and only then opens its
+ * environment, so the fork image carries no parent's env allocations for
+ * Valgrind to drown into possibly-lost reports. The holder is released on
+ * every exit path of a test, including gtest ASSERT failures, otherwise an
+ * orphaned child would hold the environment and its locks forever. */
 struct holder_child {
   pid_t pid = -1;
-  std::string ready, pending, go;
+  std::string arm_path, ready, pending, go;
   int open_rc = MDBX_EIO;
 
   holder_child() = default;
   holder_child(holder_child &&o)
-      : pid(o.pid), ready(std::move(o.ready)), pending(std::move(o.pending)), go(std::move(o.go)), open_rc(o.open_rc) {
+      : pid(o.pid), arm_path(std::move(o.arm_path)), ready(std::move(o.ready)), pending(std::move(o.pending)),
+        go(std::move(o.go)), open_rc(o.open_rc) {
     o.pid = -1;
   }
   holder_child(const holder_child &) = delete;
   holder_child &operator=(const holder_child &) = delete;
+
+  /* Allows the child to open its environment and waits for the readiness
+   * report. 10 seconds natively, scaled to 10*42 under Valgrind (in line
+   * with the ctest timeouts' scaling), since the child's env_open() takes
+   * tens of seconds there under a loaded machine. */
+  void arm() {
+    if (pid == -1)
+      return;
+    if (FILE *f = fopen(arm_path.c_str(), "wb"))
+      fclose(f);
+    else {
+      /* The child waits for this file forever - a failure to create it is
+       * reported immediately instead of the guaranteed deadline drift. */
+      open_rc = MDBX_EIO;
+      fprintf(stderr, "issue_gh0338: cannot create the arm file %s\n", arm_path.c_str());
+      return;
+    }
+    const auto ready_deadline =
+        std::chrono::steady_clock::now() + std::chrono::seconds(mdbx_tst_scaled_wait_seconds(10));
+    while (access(ready.c_str(), F_OK) != 0 && std::chrono::steady_clock::now() < ready_deadline)
+      usleep(1000);
+    if (FILE *f = fopen(ready.c_str(), "rb")) {
+      if (fread(&open_rc, sizeof(open_rc), 1, f) != 1)
+        open_rc = MDBX_EIO;
+      fclose(f);
+    }
+  }
 
   void release() {
     if (pid != -1) {
@@ -116,6 +142,7 @@ struct holder_child {
       waitpid(pid, &status, 0);
       pid = -1;
     }
+    std::remove(arm_path.c_str());
     std::remove(ready.c_str());
     std::remove(pending.c_str());
     std::remove(go.c_str());
@@ -126,14 +153,27 @@ struct holder_child {
 
 holder_child spawn_holder(const char *tag, MDBX_env_flags_t flags) {
   holder_child c;
+  c.arm_path = std::string(kPath) + "." + tag + ".arm";
   c.ready = std::string(kPath) + "." + tag + ".ready";
   c.pending = c.ready + ".pending";
   c.go = std::string(kPath) + "." + tag + ".go";
+  std::remove(c.arm_path.c_str());
   std::remove(c.ready.c_str());
   std::remove(c.pending.c_str());
   std::remove(c.go.c_str());
   c.pid = fork();
   if (c.pid == 0) {
+    /* Wait for the arm signal; the go file doubles as the abort signal for
+     * the case the test bails out before arming (the RAII release). The
+     * deadline bounds an orphaned child: a hard parent death must not leave
+     * an eternal poller behind. */
+    const auto arm_deadline =
+        std::chrono::steady_clock::now() + std::chrono::seconds(mdbx_tst_scaled_wait_seconds(120));
+    while (access(c.arm_path.c_str(), F_OK) != 0 && access(c.go.c_str(), F_OK) != 0 &&
+           std::chrono::steady_clock::now() < arm_deadline)
+      usleep(1000);
+    if (access(c.arm_path.c_str(), F_OK) != 0)
+      _exit(5); /* released before armed, or orphaned past the deadline */
     MDBX_env *env = nullptr;
     int rc =
         mdbx_env_create(&env) == MDBX_SUCCESS ? mdbx_env_open(env, kPath, MDBX_NOSUBDIR | flags, 0640) : MDBX_EBADSIGN;
@@ -150,18 +190,6 @@ holder_child spawn_holder(const char *tag, MDBX_env_flags_t flags) {
       mdbx_env_close(env);
     }
     _exit(rc == MDBX_SUCCESS ? 0 : 4);
-  }
-  /* 10 seconds natively, scaled to 10*42 under Valgrind (in line with the
-   * ctest timeouts' scaling), since the child's env_open() takes tens of
-   * seconds there under a loaded machine. */
-  const auto ready_deadline =
-      std::chrono::steady_clock::now() + std::chrono::seconds(RUNNING_ON_VALGRIND ? 10 * 42 : 10);
-  while (access(c.ready.c_str(), F_OK) != 0 && std::chrono::steady_clock::now() < ready_deadline)
-    usleep(1000);
-  if (FILE *f = fopen(c.ready.c_str(), "rb")) {
-    if (fread(&c.open_rc, sizeof(c.open_rc), 1, f) != 1)
-      c.open_rc = MDBX_EIO;
-    fclose(f);
   }
   return c;
 }
@@ -208,6 +236,12 @@ TEST(issue_gh0338, mi_mode_tracks_set_flags) {
  * lazy mode was set at open (the original complaint of the issue). */
 TEST(issue_gh0338, set_flags_sync_mode_switch_when_alone) {
   db_remover guard;
+#if !defined(_WIN32)
+  /* The holder is forked before the parent's environment is opened (the
+   * fork hygiene rule): it waits for the arm signal below, so it attaches
+   * only after the lazy mode is published. */
+  holder_child refused = spawn_holder("writemap", MDBX_WRITEMAP);
+#endif
   MDBX_env *env = open_env(kDurable);
   ASSERT_NE(env, nullptr);
   ASSERT_EQ(mdbx_env_set_flags(env, MDBX_SAFE_NOSYNC, true), MDBX_SUCCESS);
@@ -218,7 +252,7 @@ TEST(issue_gh0338, set_flags_sync_mode_switch_when_alone) {
   /* while the environment is still open, another process with MDBX_WRITEMAP
    * must be refused: the lazy mode published by the runtime switch is what
    * the open-time check compares against (the original complaint) */
-  holder_child refused = spawn_holder("writemap", MDBX_WRITEMAP);
+  refused.arm();
   EXPECT_EQ(refused.open_rc, MDBX_INCOMPATIBLE);
   refused.release();
 #endif
@@ -243,11 +277,15 @@ TEST(issue_gh0338, set_flags_sync_mode_switch_when_alone) {
 TEST(issue_gh0338, set_flags_refuses_switch_with_other_process) {
 #if !defined(_WIN32)
   db_remover guard;
+  /* Both holders are forked before any environment is opened (the fork
+   * hygiene rule); each waits for its arm signal below. */
+  holder_child holder = spawn_holder("holder", kDurable);
+  holder_child lazy_holder = spawn_holder("lazy-holder", MDBX_SAFE_NOSYNC);
   MDBX_env *env = open_env(kDurable);
   ASSERT_NE(env, nullptr);
   const unsigned before = get_flags(env);
 
-  holder_child holder = spawn_holder("holder", kDurable);
+  holder.arm();
   ASSERT_EQ(holder.open_rc, MDBX_SUCCESS);
   EXPECT_EQ(mdbx_env_set_flags(env, MDBX_SAFE_NOSYNC, true), MDBX_INCOMPATIBLE);
   EXPECT_EQ(get_flags(env), before);
@@ -259,7 +297,7 @@ TEST(issue_gh0338, set_flags_refuses_switch_with_other_process) {
    * lazy process must refuse to become durable at runtime */
   env = open_env(MDBX_SAFE_NOSYNC);
   ASSERT_NE(env, nullptr);
-  holder_child lazy_holder = spawn_holder("lazy-holder", MDBX_SAFE_NOSYNC);
+  lazy_holder.arm();
   ASSERT_EQ(lazy_holder.open_rc, MDBX_SUCCESS);
   EXPECT_EQ(mdbx_env_set_flags(env, MDBX_SAFE_NOSYNC, false), MDBX_INCOMPATIBLE);
   lazy_holder.release();
