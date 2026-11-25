@@ -115,6 +115,7 @@ endif()
 add_issue_test(gh0592 SOURCE "issue_gh0592.c++")
 add_issue_test(gh0600 SOURCE "issue_gh0600.c++")
 add_issue_test(gh0605 SOURCE "issue_gh0605.c++")
+add_issue_test(gh0614 SOURCE "issue_gh0614.c++")
 
 # load-nul-byte-silent-truncation/load-purge-multitable-trailing-main of #485 need the dump/load tool binaries (the gh0070 pattern).
 if(MDBX_BUILD_TOOLS)

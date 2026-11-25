@@ -122,6 +122,24 @@ typedef enum defrag_stumble_kind {
   defrag_stumble_no_span
 } defrag_stumble_kind_t;
 
+/* What a cycle, or the cycles from one state to its repeat, stumbled on: the kinds of defrag_stumble_kind_t as bits,
+ * with the one kind that depends on the moment split in two. */
+enum defrag_stumbles {
+  defrag_stumbles_obstacle = 1 << defrag_stumble_obstacle,
+  defrag_stumbles_no_place = 1 << defrag_stumble_no_place,
+  defrag_stumbles_no_stock = 1 << defrag_stumble_no_stock,
+  /* No run for a large page, and none is made for it. */
+  defrag_stumbles_no_span = 1 << defrag_stumble_no_span,
+  /* No run for a large page, although one is already made for it. It takes the highest bit of the byte, apart from the
+   * kinds, so that a new kind of stumble does not collide with it. */
+  defrag_stumbles_no_span_reserved = 0x80,
+  /* What holds the pages is a limit of the trees, and what places between the goal edge and the pages can cure. */
+  defrag_stumbles_limit = defrag_stumbles_no_place | defrag_stumbles_no_stock | defrag_stumbles_no_span,
+  defrag_stumbles_between_edges = defrag_stumbles_no_place | defrag_stumbles_no_span
+};
+
+STATIC_ASSERT(defrag_stumble_no_span < 7);
+
 typedef struct defract_context {
   MDBX_txn *txn;
   dml_t *arcs;
@@ -132,9 +150,6 @@ typedef struct defract_context {
   pgno_t cycle_pages_moved;
   /* The cycle reserved a run of free pages for a large page that had none: the page takes the run in the next cycle. */
   bool cycle_span_reserved;
-  /* The cycle moved pages and reserved no run, and whether it made no progress as mdbx_env_defrag() judges it. */
-  bool cycle_moved;
-  bool cycle_idle;
   pgno_t stumble_pgno, stumble_span, lp_backlog;
   pgno_t remapped_edge;
   pgno_t defrag_edge;
@@ -142,20 +157,12 @@ typedef struct defract_context {
   pgno_t move_batch_size;
   size_t payload_items;
   size_t progress_counter;
-  /* Idle cycles in a row at the page the walk stumbles, all the cycles in a row at it, and all the cycles in a row
-   * that moved nothing. */
-  uint8_t stumble_retry;
-  uint16_t stumble_cycles;
-  uint16_t unmoved_cycles;
   uint8_t stopping_reasons;
-  /* What made the walk stumble at stumble_pgno, how many pages were free at that moment, and the best state of the
-   * trees at the start of a cycle while the walk stumbles there. */
+  /* What made the walk stumble at stumble_pgno. */
   uint8_t stumble_kind;
-  pgno_t stumble_stock;
-  uint64_t stumble_best_score;
   bool completed;
   bool batch_adaptive;
-  /* Two idle cycles in a row at the same page found no place below the goal edge for it: the pages also take places
+  /* The cycles without progress found no place below the goal edge for their pages: the pages also take places
    * between the goal edge and themselves. */
   bool in_region;
   unsigned cycle;
@@ -165,6 +172,18 @@ typedef struct defract_context {
   void *user_ctx;
   MDBX_defrag_notify_func user_callback;
   size_t total_pages_moved;
+  /* The shortest datafile the cycles started from, and the cycles in a row that started from no shorter one: pages that
+   * move from one place to another and back do not cut the end of the data, and a state the defragmentation has already
+   * had means the cycles from then on would repeat without end. What the cycles without progress stumbled on tells a
+   * limit of the trees from an obstacle. */
+  pgno_t least_allocated;
+  uint8_t no_progress;
+  /* The cycles of that run that scheduled nothing: a cycle that moved nothing changed nothing, so two of them in a row
+   * are enough. */
+  uint8_t idle_cycles;
+  uint8_t no_progress_stumbles;
+  /* What the current cycle stumbled on. */
+  uint8_t cycle_stumbles;
 
   pgno_t walk_stack[32];
   pgno_t walk_cutoff;

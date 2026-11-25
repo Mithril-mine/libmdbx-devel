@@ -63,16 +63,17 @@ static uint64_t defrag_notify(dfc_t *dfc) {
   return now_cache;
 }
 
-/* Records where and why the walk stopped. The kind and the number of the free pages let mdbx_env_defrag() tell a limit
- * of the structure, which no next cycle can change, from an obstacle that must clear. */
-static void defrag_stumble(dfc_t *dfc, const da_t *at, defrag_stumble_kind_t kind, size_t stock,
-                           const char *reason_prefix, int64_t reason_value, const char *reason_suffix) {
+/* Records where and why the walk stopped. The kind lets mdbx_env_defrag() tell a limit of the structure, which no next
+ * cycle can change, from an obstacle that must clear, when the cycles stop making progress. */
+static void defrag_stumble(dfc_t *dfc, const da_t *at, defrag_stumble_kind_t kind, const char *reason_prefix,
+                           int64_t reason_value, const char *reason_suffix) {
   if (dfc->stumble_pgno <= at->key_or_pgno) {
     dfc->stumble_pgno = at->key_or_pgno;
     dfc->stumble_span = at->npages;
     dfc->stumble_kind = kind;
-    dfc->stumble_stock = (pgno_t)stock;
   }
+  dfc->cycle_stumbles |=
+      (uint8_t)((kind == defrag_stumble_no_span && dfc->lp_backlog) ? defrag_stumbles_no_span_reserved : (1u << kind));
   NOTICE("defragmentation cycle %u (moved %+i pages, %+i scheduled), stumbled on the page/chunk %" PRIaPGNO
          "[%u], because %s%" PRIi64 "%s.",
          dfc->cycle, dfc->cycle_pages_moved, dfc->cycle_pages_scheduled, at->key_or_pgno, at->npages, reason_prefix,
@@ -621,7 +622,6 @@ static int defrag_schedule(dfc_t *dfc, da_t *arc, pgno_t assigned) {
   da_t *stack_of_parents[CURSOR_STACK_SIZE * 2];
   size_t depth = 0;
   const size_t npages = arc->npages;
-  const size_t stock = pnl_size(dfc->txn->wr.repnl);
   /* The page and the copies of its parents are placed below the same edge. */
   const pgno_t limit = defrag_target_edge(dfc, arc);
 
@@ -674,20 +674,20 @@ bailout:
           npages, depth, pnl_size(dfc->txn->wr.repnl),
           pnl_size(dfc->txn->wr.repnl) ? MDBX_PNL_LEAST(dfc->txn->wr.repnl) : P_INVALID, limit);
   if (pnl_size(dfc->txn->wr.repnl) == 0)
-    defrag_stumble(dfc, arc, defrag_stumble_no_stock, stock, "are not enough reclaimable pages available in GC (count ",
-                   0, ")");
+    defrag_stumble(dfc, arc, defrag_stumble_no_stock, "are not enough reclaimable pages available in GC (count ", 0,
+                   ")");
   else if (MDBX_PNL_LEAST(dfc->txn->wr.repnl) + npages >= limit)
-    defrag_stumble(dfc, arc, defrag_stumble_no_place, stock, "the next reclaimable page ",
-                   MDBX_PNL_LEAST(dfc->txn->wr.repnl), " is beyond target edge");
+    defrag_stumble(dfc, arc, defrag_stumble_no_place, "the next reclaimable page ", MDBX_PNL_LEAST(dfc->txn->wr.repnl),
+                   " is beyond target edge");
   else if (npages > 1) {
     if ((dfc->stopping_reasons & MDBX_defrag_large_chunk) == 0) {
       dfc->stopping_reasons |= MDBX_defrag_large_chunk;
-      defrag_stumble(dfc, arc, defrag_stumble_no_span, stock, "is no span of ", npages,
+      defrag_stumble(dfc, arc, defrag_stumble_no_span, "is no span of ", npages,
                      " consecutive/adjacent reclaimable pages");
     }
   } else
     /* The only free place lies where the walk of this cycle has passed. */
-    defrag_stumble(dfc, arc, defrag_stumble_no_place, stock, "the place for the page lies above the edge of the walk ",
+    defrag_stumble(dfc, arc, defrag_stumble_no_place, "the place for the page lies above the edge of the walk ",
                    dfc->defrag_edge, "");
 
   /* Не получилось, возвращаем всё выделенное для родительских страниц */
@@ -881,6 +881,7 @@ int defrag_cycle(dfc_t *dfc) {
     dfc->tail_in_gc = 0;
     dfc->cycle_pages_moved = 0;
     dfc->cycle_preprogress = 0;
+    dfc->cycle_stumbles = 0;
     dfc->cycle += 1;
   }
   if (!defrag_should_continue(dfc, 0))
@@ -1054,8 +1055,8 @@ int defrag_cycle(dfc_t *dfc) {
 
   if (begin->key_or_pgno + begin->npages <= MDBX_PNL_LEAST(txn->wr.repnl)) {
     /* All the free pages lie above the data: no page can move closer to the beginning of the database. */
-    defrag_stumble(dfc, begin, defrag_stumble_no_place, pnl_size(txn->wr.repnl), "the lowest free page ",
-                   MDBX_PNL_LEAST(txn->wr.repnl), " is above the data");
+    defrag_stumble(dfc, begin, defrag_stumble_no_place, "the lowest free page ", MDBX_PNL_LEAST(txn->wr.repnl),
+                   " is above the data");
     return MDBX_SUCCESS;
   }
 
@@ -1123,14 +1124,13 @@ int defrag_cycle(dfc_t *dfc) {
     if (dfc->defrag_edge - i->npages != i->key_or_pgno) {
       const pgno_t tail = dfc->defrag_edge - 1;
       if (most_retired == tail) {
-        defrag_stumble(dfc, i, defrag_stumble_obstacle, pnl_size(txn->wr.repnl), "the adjacent page ", most_retired,
-                       " is in the retired list");
+        defrag_stumble(dfc, i, defrag_stumble_obstacle, "the adjacent page ", most_retired, " is in the retired list");
         break;
       }
       if (pnl_size(txn->wr.repnl) && MDBX_PNL_LEAST(txn->wr.repnl) == tail) {
         /* The lowest free page is right above this one: nothing below it is free, and the free pages above are cut off
          * with the tail when the cycle is committed. */
-        defrag_stumble(dfc, i, defrag_stumble_no_place, pnl_size(txn->wr.repnl),
+        defrag_stumble(dfc, i, defrag_stumble_no_place,
                        "the available reclaimed pages are beyond the defragmentation tail (page #", tail, ")");
         break;
       }
@@ -1139,8 +1139,8 @@ int defrag_cycle(dfc_t *dfc) {
         ERROR("unexpected missing page %" PRIaPGNO, tail);
         return (err == MDBX_NOTFOUND) ? MDBX_PROBLEM : err;
       }
-      defrag_stumble(dfc, i, defrag_stumble_obstacle, pnl_size(txn->wr.repnl), "the gap-page is located in the ",
-                     dfc->stopor, " GC-entry which is used/read");
+      defrag_stumble(dfc, i, defrag_stumble_obstacle, "the gap-page is located in the ", dfc->stopor,
+                     " GC-entry which is used/read");
       break;
     }
 
@@ -1312,6 +1312,7 @@ void defrag_destroy(dfc_t *dfc) {
 int defrag_init(dfc_t *dfc, MDBX_txn *txn, size_t defrag_atleast_pages, size_t spend_atleast_wallclock_dot16,
                 size_t defrag_enough_pages, size_t limit_spend_wallclock_dot16, intptr_t preferred_move_batch_size) {
   memset(dfc, 0, sizeof(*dfc));
+  dfc->least_allocated = MAX_PAGENO;
   dfc->start_timestamp = osal_monotime();
   if (preferred_move_batch_size < 0)
     /* автопилот: размер батча выводится из лимита времени и доуточняется
