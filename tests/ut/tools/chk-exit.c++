@@ -16,6 +16,7 @@
 #include <gtest/gtest.h>
 
 #include "../env-guard.h++"
+#include "../test-env.h++"
 
 #include <cstddef>
 #include <cstdint>
@@ -71,21 +72,10 @@ constexpr char kNoErrorMark[] = "No error is detected";
  * the C runtime defines EXIT_FAILURE as 1. */
 constexpr int kExitInterrupted = 5;
 
-/* The 10..300-seconds native deadlines scale under Valgrind, where the
- * child's bulk-database open/walk takes tens of seconds (the same pattern
- * as issue_gh0345.c++). */
-#if !defined(RUNNING_ON_VALGRIND) && defined(__has_include)
-#if __has_include(<valgrind/valgrind.h>)
-#include <valgrind/valgrind.h>
-#endif
-#endif
-#if !defined(RUNNING_ON_VALGRIND)
-#define RUNNING_ON_VALGRIND (0)
-#endif
-unsigned scaled_wait_seconds(unsigned native_seconds) {
-  return RUNNING_ON_VALGRIND ? native_seconds * 42 : native_seconds;
-}
-
+/* The 10..300-seconds native deadlines scale through the shared
+ * mdbx_tst_scaled_wait_seconds() (tests/ut/test-env.h++, provided to every gtest
+ * translation unit through the shared PCH), where the child's bulk-database
+ * open/walk takes tens of seconds under Valgrind. */
 double monotonic_seconds() {
   struct timespec ts;
   clock_gettime(CLOCK_MONOTONIC, &ts);
@@ -310,7 +300,7 @@ TEST(chk_exit, interrupted_and_clean_runs) {
   /* SIGINT while mdbx_env_chk() traverses: the tool must exit normally with
    * EXIT_INTERRUPTED (5), not the pre-fix EXIT_FAILURE_MDBX (3) and not a
    * signal death, with the "interrupted by signal" verdict in the output. */
-  chk_run interrupted = run_mdbx_chk(tool, true, scaled_wait_seconds(60), scaled_wait_seconds(60));
+  chk_run interrupted = run_mdbx_chk(tool, true, mdbx_tst_scaled_wait_seconds(60), mdbx_tst_scaled_wait_seconds(60));
   ASSERT_TRUE(interrupted.exited) << "mdbx_chk must exit normally (not die by a signal), status " << interrupted.termsig
                                   << ", output:\n"
                                   << interrupted.output;
@@ -329,7 +319,7 @@ TEST(chk_exit, interrupted_and_clean_runs) {
   /* The negative control: the very same database checked to completion
    * without a signal must exit 0 - this separates the signal path above from
    * the usage/argument errors, which also exit 5. */
-  chk_run clean = run_mdbx_chk(tool, false, scaled_wait_seconds(60), scaled_wait_seconds(300));
+  chk_run clean = run_mdbx_chk(tool, false, mdbx_tst_scaled_wait_seconds(60), mdbx_tst_scaled_wait_seconds(300));
   ASSERT_TRUE(clean.exited) << "the clean run must exit normally, output:\n" << clean.output;
   EXPECT_EQ(clean.exit_code, 0) << "tool output:\n" << clean.output;
   EXPECT_NE(clean.output.find(kNoErrorMark), std::string::npos) << "no completed-check verdict in the output:\n"

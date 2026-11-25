@@ -104,6 +104,39 @@ static inline const char *mdtest_getenv(const char *name) {
   return value;
 }
 
+/* The setters pair with mdtest_getenv() for the tests that manipulate the
+ * environment (the selftest of the budgets scheme); wrapped for the same
+ * CRT-deprecation reason. */
+static inline void mdbx_tst_setenv(const char *name, const char *value) {
+#if defined(_MSC_VER)
+#pragma warning(push)
+#pragma warning(disable : 4996)
+#endif
+#if defined(_WIN32)
+  (value ? ::_putenv_s(name, value) : ::_putenv_s(name, ""));
+#else
+  ::setenv(name, value, 1 /* override */);
+#endif
+#if defined(_MSC_VER)
+#pragma warning(pop)
+#endif
+}
+
+static inline void mdbx_tst_unsetenv(const char *name) {
+#if defined(_MSC_VER)
+#pragma warning(push)
+#pragma warning(disable : 4996)
+#endif
+#if defined(_WIN32)
+  ::_putenv_s(name, "");
+#else
+  ::unsetenv(name);
+#endif
+#if defined(_MSC_VER)
+#pragma warning(pop)
+#endif
+}
+
 /* The platform/configuration test-timeout factor, exported by the CMake test
  * registration into the MDBX_TEST_TIMEOUT_SCALE environment (see
  * mdbx_test_timeout_scale_factor() in cmake/utils.cmake and the same-named
@@ -122,6 +155,30 @@ static inline unsigned mdtest_timeout_scale() {
       return static_cast<unsigned>(parsed < 64 ? parsed : 64);
   }
   return 1;
+}
+
+/* The single shared copy of the wall-clock budget scaler (the tests/AGENTS.md
+ * "Test timeouts" scheme): the platform/config scale of MDBX_TEST_TIMEOUT_SCALE
+ * times the x42 Valgrind factor, exactly as mdbx_scale_dir_test_timeouts()
+ * composes them for the CTest TIMEOUTs.
+ *
+ * The Valgrind detection is a FUNCTION defined in tests/ut/test-env.c++ - NOT
+ * the RUNNING_ON_VALGRIND macro. The macro belongs to the library's
+ * preface.h, whose no-op stubs (non-ENABLE_MEMCHECK builds) collide with the
+ * real valgrind.h definitions: this header is included by every gtest test
+ * (directly, or through the shared PCH - which is optional,
+ * -DMDBX_ENABLE_PCH=OFF is a supported configuration), covering the
+ * white-box TUs that pull preface.h later and the public-header-only TUs
+ * that never do - leaking valgrind.h from here breaks one side or the
+ * other (observed as "VALGRIND_CHECK_MEM_IS_ADDRESSABLE was not declared"
+ * in the issue tests). Every consumer includes this header explicitly; the
+ * runtime client request is just as accurate for a wall-clock budget. */
+bool mdbx_tst_running_on_valgrind();
+
+/* [[maybe_unused]] and no library macros: this header is also compiled
+ * standalone (tests/ut/test-env.c++) without the library's preface.h. */
+[[maybe_unused]] static inline unsigned mdbx_tst_scaled_wait_seconds(unsigned native_seconds) {
+  return native_seconds * mdtest_timeout_scale() * (mdbx_tst_running_on_valgrind() ? 42u : 1u);
 }
 
 /* Ограничитель по времени выполнения (образец: libfpta fpta_test.h).

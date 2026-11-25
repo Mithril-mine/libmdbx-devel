@@ -18,6 +18,7 @@
 
 #include <chrono>
 #include <ctime>
+#include <string>
 
 // Self-test for the shared test-environment pieces (tests/ut/test-env.h++):
 // the runtime_limiter transitions and the global ci_runtime_limiter instance.
@@ -97,6 +98,46 @@ TEST(test_env_selftest, edge_is_the_earliest_of_both_limits) {
   const auto after2 = steady_clock::now();
   EXPECT_GE(edge2, before2 + std::chrono::seconds(60));
   EXPECT_LE(edge2, after2 + std::chrono::seconds(60));
+}
+
+TEST(test_env_selftest, scaled_wait_seconds_composes_the_scheme) {
+  /* The "one scheme" composition of tests/AGENTS.md: the wall-clock budgets
+   * are the native seconds times the MDBX_TEST_TIMEOUT_SCALE scale times the
+   * Valgrind x42 factor. The helper re-reads the environment on every call,
+   * so the scale factor is exercised through it (the Valgrind factor is
+   * whatever the runtime detection reports here - 42 on the memcheck sweeps,
+   * 1 natively). */
+  constexpr unsigned kSeconds = 10;
+  const bool on_valgrind = mdbx_tst_running_on_valgrind();
+  const unsigned vg = on_valgrind ? 42u : 1u;
+  /* The saved value must be a COPY: POSIX does not promise that the pointer
+   * returned by getenv() survives a setenv(), and the MSVC CRT reallocates
+   * its environ table on _putenv_s(). */
+  struct env_guard {
+    const bool had_saved;
+    const std::string saved;
+    env_guard()
+        : had_saved(mdtest_getenv("MDBX_TEST_TIMEOUT_SCALE") != nullptr),
+          saved(mdtest_getenv("MDBX_TEST_TIMEOUT_SCALE") ? std::string(mdtest_getenv("MDBX_TEST_TIMEOUT_SCALE"))
+                                                           : std::string()) {}
+    ~env_guard() {
+      if (had_saved)
+        mdbx_tst_setenv("MDBX_TEST_TIMEOUT_SCALE", saved.c_str());
+      else
+        mdbx_tst_unsetenv("MDBX_TEST_TIMEOUT_SCALE");
+    }
+  } guard;
+
+  mdbx_tst_setenv("MDBX_TEST_TIMEOUT_SCALE", "4");
+  EXPECT_EQ(mdbx_tst_scaled_wait_seconds(kSeconds), kSeconds * 4u * vg)
+      << "the scale from the environment must compose with the Valgrind factor";
+  mdbx_tst_setenv("MDBX_TEST_TIMEOUT_SCALE", "2");
+  EXPECT_EQ(mdbx_tst_scaled_wait_seconds(kSeconds), kSeconds * 2u * vg);
+  /* The clamp keeps a typo from inflating a budget absurdly. */
+  mdbx_tst_setenv("MDBX_TEST_TIMEOUT_SCALE", "64");
+  EXPECT_EQ(mdbx_tst_scaled_wait_seconds(kSeconds), kSeconds * 64u * vg);
+  mdbx_tst_setenv("MDBX_TEST_TIMEOUT_SCALE", "65");
+  EXPECT_EQ(mdbx_tst_scaled_wait_seconds(kSeconds), kSeconds * 64u * vg) << "values above 64 must clamp";
 }
 
 TEST(test_env_selftest, default_ctor_reads_environment) {
