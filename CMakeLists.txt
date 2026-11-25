@@ -308,11 +308,11 @@ if(NOT WIN32)
     set(MEMORYCHECK_SUPPRESSIONS_FILE
         "${CMAKE_CURRENT_SOURCE_DIR}/valgrind.supp"
         CACHE FILEPATH "Suppressions file for Valgrind" FORCE)
+    # Note: CTest appends `--suppressions=${MEMORYCHECK_SUPPRESSIONS_FILE}`
+    # on its own (from the DartConfiguration's MemoryCheckSuppressionFile),
+    # so the option must NOT be repeated here.
     set(MEMORYCHECK_COMMAND_OPTIONS
-        "--trace-children=yes --leak-check=full --track-origins=yes --expensive-definedness-checks=yes --error-exitcode=42 --error-markers=@VALGRIND --errors-for-leak-kinds=definite --fair-sched=yes --suppressions=${MEMORYCHECK_SUPPRESSIONS_FILE}"
-        CACHE STRING "Valgrind options" FORCE)
-    set(MEMORYCHECK_COMMAND_OPTIONS
-        "${MEMORYCHECK_COMMAND_OPTIONS}"
+        "--trace-children=yes --leak-check=full --track-origins=yes --expensive-definedness-checks=yes --error-exitcode=42 --error-markers=@VALGRIND --errors-for-leak-kinds=definite --fair-sched=yes"
         CACHE STRING "Valgrind options" FORCE)
   endif()
 endif()
