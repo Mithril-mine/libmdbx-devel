@@ -30,7 +30,7 @@ runtime_limiter ci_runtime_limiter;
 
 namespace detail {
 struct ci_crt_popup_suppressor {
-  ci_crt_popup_suppressor() { mdtest_ci_crt_suppress_popup(); }
+  ci_crt_popup_suppressor() { mdbx_tst_ci_crt_suppress_popup(); }
 };
 } /* namespace detail */
 

@@ -112,7 +112,7 @@ unsigned dying_children(const unsigned writers) { return (writers + 1) / 2; }
 /* An env-var knob with a CI-safe default, clamped to the sane range. */
 unsigned env_unsigned(const char *name, const unsigned fallback, const unsigned low, const unsigned high) {
   unsigned value = fallback;
-  const char *const raw = mdtest_getenv(name);
+  const char *const raw = mdbx_tst_getenv(name);
   if (raw && raw[0]) {
     const long parsed = std::atol(raw);
     if (parsed > 0)

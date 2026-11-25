@@ -27,7 +27,7 @@
 ///        (CI_NIGHTLY=1), so routine cells execute in the deterministic gtest
 ///        order and the limiter skips the same tail of the suite every time.
 ///
-///  - mdtest_ci_crt_suppress_popup(): on Windows and ONLY on CI (env CI or
+///  - mdbx_tst_ci_crt_suppress_popup(): on Windows and ONLY on CI (env CI or
 ///    MDBX_TEST_NO_CRT_POPUP is set) redirects the CRT debug/assert popups to
 ///    stderr so a debug assertion does not hang the headless runner waiting
 ///    for a dialog; the OS error dialogs are suppressed for every _WIN32
@@ -85,7 +85,7 @@
 /* MSVC (/W4 /WX) and clang-cl (-Werror) promote the CRT C4996 'getenv is
  * unsafe' deprecation to a hard error; wrap the lookup exactly like
  * get_cached.c++/crash_safety.c++ do (see f383ac96). */
-static inline const char *mdtest_getenv(const char *name) {
+static inline const char *mdbx_tst_getenv(const char *name) {
 #if defined(_MSC_VER)
 #pragma warning(push)
 #pragma warning(disable : 4996)
@@ -104,7 +104,7 @@ static inline const char *mdtest_getenv(const char *name) {
   return value;
 }
 
-/* The setters pair with mdtest_getenv() for the tests that manipulate the
+/* The setters pair with mdbx_tst_getenv() for the tests that manipulate the
  * environment (the selftest of the budgets scheme); wrapped for the same
  * CRT-deprecation reason. */
 static inline void mdbx_tst_setenv(const char *name, const char *value) {
@@ -147,8 +147,8 @@ static inline void mdbx_tst_unsetenv(const char *name) {
  * the two mechanisms are one scheme (see tests/AGENTS.md, "Test timeouts").
  * Defaults to 1 when unset; clamped to keep a typo from inflating a budget
  * absurdly. */
-static inline unsigned mdtest_timeout_scale() {
-  const char *env = mdtest_getenv("MDBX_TEST_TIMEOUT_SCALE");
+static inline unsigned mdbx_tst_timeout_scale() {
+  const char *env = mdbx_tst_getenv("MDBX_TEST_TIMEOUT_SCALE");
   if (env) {
     const long parsed = std::atol(env);
     if (parsed > 0)
@@ -178,7 +178,7 @@ bool mdbx_tst_running_on_valgrind();
 /* [[maybe_unused]] and no library macros: this header is also compiled
  * standalone (tests/ut/test-env.c++) without the library's preface.h. */
 [[maybe_unused]] static inline unsigned mdbx_tst_scaled_wait_seconds(unsigned native_seconds) {
-  return native_seconds * mdtest_timeout_scale() * (mdbx_tst_running_on_valgrind() ? 42u : 1u);
+  return native_seconds * mdbx_tst_timeout_scale() * (mdbx_tst_running_on_valgrind() ? 42u : 1u);
 }
 
 /* Ограничитель по времени выполнения (образец: libfpta fpta_test.h).
@@ -218,11 +218,11 @@ class runtime_limiter {
 
   static std::chrono::steady_clock::time_point fetch() {
     std::int64_t limit_seconds = 0;
-    const char *const limit = mdtest_getenv("GTEST_RUNTIME_LIMIT");
+    const char *const limit = mdbx_tst_getenv("GTEST_RUNTIME_LIMIT");
     if (limit)
       limit_seconds = std::atoll(limit);
     std::int64_t utc_deadline = 0;
-    const char *const deadline = mdtest_getenv("GTEST_RUNTIME_DEADLINE");
+    const char *const deadline = mdbx_tst_getenv("GTEST_RUNTIME_DEADLINE");
     if (deadline)
       utc_deadline = std::atoll(deadline);
     return compute(limit_seconds, utc_deadline);
@@ -268,12 +268,12 @@ extern runtime_limiter ci_runtime_limiter;
 
 #define MDBX_GTEST_IS_EXECUTION_TIMEOUT() ci_runtime_limiter.is_timeout()
 
-static inline void mdtest_ci_crt_suppress_popup() {
+static inline void mdbx_tst_ci_crt_suppress_popup() {
 #ifdef _WIN32
   /* Keep the interactive CRT popups for local debugging: suppress them only
    * on CI (env CI is set by the runners) or when explicitly requested via
    * MDBX_TEST_NO_CRT_POPUP. */
-  if (!mdtest_getenv("CI") && !mdtest_getenv("MDBX_TEST_NO_CRT_POPUP"))
+  if (!mdbx_tst_getenv("CI") && !mdbx_tst_getenv("MDBX_TEST_NO_CRT_POPUP"))
     return;
 #ifdef _MSC_VER
   _CrtSetReportMode(_CRT_ASSERT, _CRTDBG_MODE_FILE);

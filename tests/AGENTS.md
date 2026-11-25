@@ -187,7 +187,7 @@ cell's.
   `alarm()` watchdog, spin/deadline and transaction-count cap inside a test
   is calibrated for the reference configuration and must scale by the same
   factors as the CTest timeouts — the `MDBX_TEST_TIMEOUT_SCALE` env (via
-  `mdtest_timeout_scale()`) and ×42 under Valgrind
+  `mdbx_tst_timeout_scale()`) and ×42 under Valgrind
   (the shared `mdbx_tst_scaled_wait_seconds()` helper of
   `tests/ut/test-env.h++` is the pattern). An unscaled in-test budget fires
   long before a scaled CTest timeout would, turning a slow-but-correct run
@@ -233,7 +233,7 @@ with fault injection (the probe-bus/MPROBE family).
   public mirror constants follow the same `MDBX_TST_*` pattern; the
   doc-group is `c_testing`. The same `mdbx_tst_` prefix is also carried by
   the shared test-environment utilities of `tests/ut/test-env.*`
-  (`mdtest_getenv/setenv/unsetenv/timeout_scale/running_on_valgrind/
+  (`mdbx_tst_getenv/setenv/unsetenv/timeout_scale/running_on_valgrind/
   mdbx_tst_scaled_wait_seconds/...`) - do not confuse them with the `c_testing`
   API entry points;
 - implement it in `tests/api.c` (`#include "../src/internals.h"`), which
