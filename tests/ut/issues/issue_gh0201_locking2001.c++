@@ -92,9 +92,12 @@ static MDBX_dbi open_main_dbi(MDBX_env *env) {
 }
 
 /* Ожидание SIGSTOP-ребёнка или сигнала «held» по pipe. Возвращает true, если
- * ребёнок готов, false по таймауту. */
+ * ребёнок готов, false по таймауту. Бюджет — wall-clock, масштабируется
+ * тем же фактором, что и CTest-таймауты (под Valgrind ребёнку нужно
+ * «tens of seconds» только на собственный env_open). */
 static bool wait_ready(const int fd, const unsigned timeout_ms) {
-  const auto deadline = std::chrono::steady_clock::now() + std::chrono::milliseconds(timeout_ms);
+  const auto deadline =
+      std::chrono::steady_clock::now() + std::chrono::milliseconds(timeout_ms * mdbx_tst_scaled_wait_seconds(1));
   char c = 0;
   while (std::chrono::steady_clock::now() < deadline) {
     ssize_t n = read(fd, &c, 1);
@@ -249,14 +252,14 @@ TEST(issue_gh0201_locking2001, B1_wrt_serializes_writers) {
     return;
   }
   cleanup(kTestPath);
-  MDBX_env *env = open_env(kTestPath);
-  ASSERT_NE(nullptr, env);
-  const MDBX_dbi dbi = open_main_dbi(env);
-  ASSERT_NE(0u, dbi);
 
   int held_fd[2], release_fd[2];
   ASSERT_EQ(0, pipe(held_fd));
   ASSERT_EQ(0, pipe(release_fd));
+  /* fork() выполняется до открытия родительского env (правило гигиены
+   * форка, tests/AGENTS.md §5): ребёнок держит блокировку своим
+   * собственным окружением, а родитель подключается к базе уже после
+   * захвата. */
   const pid_t pid = fork();
   ASSERT_GE(pid, 0);
   if (pid == 0) {
@@ -269,6 +272,9 @@ TEST(issue_gh0201_locking2001, B1_wrt_serializes_writers) {
 
   ASSERT_TRUE(wait_ready(held_fd[0], 10000)) << "child must take the write lock in time";
   close(held_fd[0]);
+
+  MDBX_env *env = open_env(kTestPath);
+  ASSERT_NE(nullptr, env);
 
   /* Пока ребёнок держит write-txn, попытка начать ещё одну WR-txn должна
    * дать MDBX_BUSY (wrt_lock сериализует писателей). */
@@ -296,14 +302,12 @@ TEST(issue_gh0201_locking2001, B2_rdt_does_not_block_readers) {
     return;
   }
   cleanup(kTestPath);
-  MDBX_env *env = open_env(kTestPath);
-  ASSERT_NE(nullptr, env);
-  const MDBX_dbi dbi = open_main_dbi(env);
-  ASSERT_NE(0u, dbi);
 
   int held_fd[2], release_fd[2];
   ASSERT_EQ(0, pipe(held_fd));
   ASSERT_EQ(0, pipe(release_fd));
+  /* fork() до открытия родительского env - правило гигиены форка
+   * (tests/AGENTS.md §5), см. B1. */
   const pid_t pid = fork();
   ASSERT_GE(pid, 0);
   if (pid == 0) {
@@ -316,6 +320,9 @@ TEST(issue_gh0201_locking2001, B2_rdt_does_not_block_readers) {
 
   ASSERT_TRUE(wait_ready(held_fd[0], 10000)) << "child must register as reader in time";
   close(held_fd[0]);
+
+  MDBX_env *env = open_env(kTestPath);
+  ASSERT_NE(nullptr, env);
 
   /* Пока ребёнок — активный читатель, ещё один читатель не должен
    * блокироваться rdt_lock: read-only begin не берёт wrt_lock вовсе, и
@@ -382,25 +389,28 @@ TEST(issue_gh0201_locking2001, B3_process_swarm) {
  * MDBX_EBADSIGN(-30785)-подобную инфраструктурную ошибку <0, если установка
  * провалилась (pipe/fork/готовность). */
 static int kill_owner_and_trylock(const char *path, const bool writer) {
-  MDBX_env *env = open_env(path);
-  if (!env)
-    return -2;
-  const MDBX_dbi dbi = open_main_dbi(env);
-  if (!dbi) {
-    mdbx_env_close(env);
-    return -3;
+  /* Создаём базу короткоживущим окружением и закрываем его: после этого
+   * fork() делает ребёнка с чистой кучей (правило гигиены форка,
+   * tests/AGENTS.md §5), а родительский env открывается ниже, уже после
+   * захвата блокировки ребёнком. */
+  {
+    MDBX_env *seed = open_env(path);
+    if (!seed)
+      return -2;
+    if (!open_main_dbi(seed)) {
+      mdbx_env_close(seed);
+      return -3;
+    }
+    mdbx_env_close(seed);
   }
 
   int held_fd[2];
-  if (pipe(held_fd) != 0) {
-    mdbx_env_close(env);
+  if (pipe(held_fd) != 0)
     return -4;
-  }
   const pid_t pid = fork();
   if (pid < 0) {
     close(held_fd[0]);
     close(held_fd[1]);
-    mdbx_env_close(env);
     return -5;
   }
   if (pid == 0) {
@@ -424,10 +434,13 @@ static int kill_owner_and_trylock(const char *path, const bool writer) {
     kill(pid, SIGKILL);
     waitpid(pid, nullptr, 0);
     close(held_fd[0]);
-    mdbx_env_close(env);
     return -6;
   }
   close(held_fd[0]);
+
+  MDBX_env *env = open_env(path);
+  if (!env)
+    return -9;
 
   /* Зафиксировать "печать" владельца до kill — для C2 диагностики. */
   const mdbx_pid_t killed_pid = (mdbx_pid_t)pid;

@@ -164,6 +164,12 @@ TEST(ut_lck_contention, multi_process_writers) {
 
 /// EXCLUSIVE-доступ: пока родитель держит env открытым, ребёнок с
 /// MDBX_EXCLUSIVE должен получить MDBX_BUSY (ветвь отказа захвата).
+///
+/// fork() выполняется ДО того, как родитель откроет свой env (правило
+/// гигиены форка, tests/AGENTS.md §5): ребёнок ждёт сигнала по pipe, иначе
+/// его попытка могла бы завершиться успехом до появления держателя, а его
+/// куча унаследовала бы родительские env-пулы, которые Valgrind утопил бы
+/// в possibly-lost отчётах.
 TEST(ut_lck_contention, exclusive_rejected_while_open) {
   const env_files_guard guard({"test-gap-lck-contention", "test-gap-lck-excl"});
   if (MDBX_GTEST_IS_EXECUTION_TIMEOUT()) {
@@ -172,6 +178,36 @@ TEST(ut_lck_contention, exclusive_rejected_while_open) {
   }
   const char *testdb = "test-gap-lck-excl";
   mdbx_env_delete(testdb, MDBX_ENV_JUST_DELETE);
+  int attached_fd[2];
+  ASSERT_EQ(0, pipe(attached_fd));
+  pid_t pid = fork();
+  ASSERT_GE(pid, 0);
+  if (pid == 0) {
+    close(attached_fd[1]);
+    /* Дедлайн-страж: осиротевший ребёнок (родитель умер до сигнала) обязан
+     * завершиться, а не остаться навсегда — EOF/ошибка чтения тоже выход,
+     * иначе это вечный busy-spin после смерти тестового процесса. */
+    alarm(mdbx_tst_scaled_wait_seconds(120));
+    char attached = 0;
+    ssize_t n;
+    while ((n = read(attached_fd[0], &attached, 1)) < 0 && errno == EINTR) {
+      /* сигнал прервал read — ждать сигнал родителя дальше */
+    }
+    if (n != 1) {
+      /* EOF (родитель умер) или ошибка: некому открыть держатель */
+      fprintf(stderr, "lck-contention: the child got EOF/error from the parent pipe (%zd), exiting\n", n);
+      exit(6);
+    }
+    close(attached_fd[0]);
+    MDBX_env *child = NULL;
+    int rc = 0;
+    if (mdbx_env_create(&child) != MDBX_SUCCESS)
+      exit(5);
+    rc = mdbx_env_open(child, testdb, MDBX_EXCLUSIVE | MDBX_RDONLY, 0444);
+    mdbx_env_close(child);
+    exit(rc == MDBX_BUSY ? 0 : 7);
+  }
+  close(attached_fd[0]);
   MDBX_env *env = NULL;
   CHK(mdbx_env_create(&env));
   CHK(mdbx_env_open(env, testdb, MDBX_NOSTICKYTHREADS, 0644));
@@ -182,17 +218,8 @@ TEST(ut_lck_contention, exclusive_rejected_while_open) {
     CHK(mdbx_dbi_open(txn, NULL, MDBX_CREATE, &dbi));
     CHK(mdbx_txn_commit(txn));
   }
-  pid_t pid = fork();
-  ASSERT_GE(pid, 0);
-  if (pid == 0) {
-    MDBX_env *child = NULL;
-    int rc = 0;
-    if (mdbx_env_create(&child) != MDBX_SUCCESS)
-      exit(5);
-    rc = mdbx_env_open(child, testdb, MDBX_EXCLUSIVE | MDBX_RDONLY, 0444);
-    mdbx_env_close(child);
-    exit(rc == MDBX_BUSY ? 0 : 7);
-  }
+  ASSERT_EQ(1, (int)write(attached_fd[1], "a", 1));
+  close(attached_fd[1]);
   int status = 0;
   ASSERT_EQ(waitpid(pid, &status, 0), pid);
   EXPECT_TRUE(WIFEXITED(status) && WEXITSTATUS(status) == 0)
