@@ -1123,10 +1123,6 @@ int defrag_cycle(dfc_t *dfc) {
 
     if (dfc->defrag_edge - i->npages != i->key_or_pgno) {
       const pgno_t tail = dfc->defrag_edge - 1;
-      if (most_retired == tail) {
-        defrag_stumble(dfc, i, defrag_stumble_obstacle, "the adjacent page ", most_retired, " is in the retired list");
-        break;
-      }
       if (pnl_size(txn->wr.repnl) && MDBX_PNL_LEAST(txn->wr.repnl) == tail) {
         /* The lowest free page is right above this one: nothing below it is free, and the free pages above are cut off
          * with the tail when the cycle is committed. */
@@ -1134,14 +1130,24 @@ int defrag_cycle(dfc_t *dfc) {
                        "the available reclaimed pages are beyond the defragmentation tail (page #", tail, ")");
         break;
       }
-      int err = defrag_gc_lookup_page(dfc, dfc->defrag_edge - 1, &dfc->stopor);
-      if (unlikely(err != MDBX_SUCCESS)) {
-        ERROR("unexpected missing page %" PRIaPGNO, tail);
-        return (err == MDBX_NOTFOUND) ? MDBX_PROBLEM : err;
+      if (most_retired == tail) {
+        /* The pages above are retired by this transaction: the GC keeps its own list there, and the commit stores it
+         * anew, so they do not block the pages below. */
+        DEBUG("retired pages above the page %u: the walk goes on", i->key_or_pgno);
+      } else {
+        int err = defrag_gc_lookup_page(dfc, tail, &dfc->stopor);
+        if (err == MDBX_NOTFOUND) {
+          /* The page is not held by the GC: it is free, so it does not block the pages below either. */
+          DEBUG("free pages above the page %u: the walk goes on", i->key_or_pgno);
+        } else if (unlikely(err != MDBX_SUCCESS)) {
+          ERROR("unexpected missing page %" PRIaPGNO, tail);
+          return err;
+        } else {
+          defrag_stumble(dfc, i, defrag_stumble_obstacle, "the gap-page is located in the ", dfc->stopor,
+                         " GC-entry which is used/read");
+          break;
+        }
       }
-      defrag_stumble(dfc, i, defrag_stumble_obstacle, "the gap-page is located in the ", dfc->stopor,
-                     " GC-entry which is used/read");
-      break;
     }
 
     if (!i->mapped) {
