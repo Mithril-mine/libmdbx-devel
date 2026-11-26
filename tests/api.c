@@ -492,6 +492,26 @@ __cold int mdbx_tst_config_mmap_needs_jolt(void) { return MDBX_MMAP_NEEDS_JOLT; 
 
 __cold int mdbx_tst_config_exclusive_fastpath(void) { return MDBX_ENABLE_EXCLUSIVE_FASTPATH; }
 
+__cold int mdbx_tst_config_locking_scheme(void) { return MDBX_LOCKING; }
+
+__cold size_t mdbx_tst_tree_offset_root(void) { return offsetof(tree_t, root); }
+
+__cold size_t mdbx_tst_lck_offset_rdt_length(void) { return offsetof(lck_t, rdt_length); }
+
+__cold size_t mdbx_tst_lck_offset_cached_oldest_txnid(void) { return offsetof(lck_t, cached_oldest_txnid); }
+
+__cold size_t mdbx_tst_lck_offset_rdt_refresh_flag(void) { return offsetof(lck_t, rdt_refresh_flag); }
+
+__cold uint32_t mdbx_tst_lck_refresh_none(void) { return MDBX_TETRAD('N', 'o', 'n', 'e'); }
+
+__cold ptrdiff_t mdbx_tst_lck_wrt_lock_bytes(const MDBX_env *env, void *buf, size_t cap) {
+  if (unlikely(!env || !env->lck_mmap.lck))
+    return -1;
+  const size_t n = (cap < sizeof(env->lck_mmap.lck->wrt_lock)) ? cap : sizeof(env->lck_mmap.lck->wrt_lock);
+  memcpy(buf, &env->lck_mmap.lck->wrt_lock, n);
+  return (ptrdiff_t)n;
+}
+
 __cold int mdbx_tst_env_mapping(const MDBX_env *env, void **base, size_t *limit, size_t *current) {
   if (unlikely(!env))
     return MDBX_EINVAL;

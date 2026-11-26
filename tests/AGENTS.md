@@ -260,10 +260,14 @@ with fault injection (the probe-bus/MPROBE family).
        during the amalgamation.
   (Legacy white-box units and their staged rework are tracked in issue
   #519 - no permanent exceptions: `details_scan4seq`, `details_troika_fsm`,
-  `details_gc_dense_solve` and `details_gc_store_retired` already use the
-  API (the latter via the `gc-store-retired.h` multi-instance pattern:
-  gc-put.c includes it for the REAL instance, tests/api.c - for the
-  instrumented one with the stub-renamed callees); the remaining ones -
+  `details_gc_dense_solve`, `details_gc_store_retired` (the latter via the
+  `gc-store-retired.h` multi-instance pattern: gc-put.c includes it for
+  the REAL instance, tests/api.c - for the instrumented one with the
+  stub-renamed callees) and the stage-3 issue tests `gh0017`, `gh0079`,
+  `gh0081`, `gh0201` already use the API (the lck/tree layout offsets, the
+  reader-refresh signature and the opaque write-lock bytes are exposed
+  through the computed accessors and the locking-scheme accessor; the
+  NO_PCH flags of these four are dropped); the remaining ones -
   `details_rkl/pnl`, the `meta_validate_corpus` format corpus, the
   `meta_validate` corpus - are being reworked in stages.)
 - the wiring is gated by `MDBX_ENABLE_TESTS`: the exact value comes from
