@@ -33,7 +33,12 @@ nav:
       - Режимы durability: getting-started/durability-modes.md
   - Справочник:
       - Справочник по API: reference/index.md
+      # API-модули и журнал изменений существуют только в EN-локализации
+      # (в этой сборке нет mkdoxy), поэтому пункты sidebar ведут на EN-страницы
+      # напрямую — структура «Справочника» зеркалит английскую, а не обрезана
+      - API-модули: https://libmdbx.dqdkfa.ru/docs/en/reference/api/modules.html
       - Утилиты командной строки: reference/tooling.md
+      - Журнал изменений: https://libmdbx.dqdkfa.ru/docs/en/reference/changelog.html
   - Погружение:
       - Архитектура: deep-dive/architecture.md
       - Внутренние механизмы: deep-dive/internals.md
