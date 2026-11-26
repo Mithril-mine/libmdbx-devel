@@ -51,6 +51,16 @@ on:
           Nightly marker (schedule runs): enables GTEST_SHUFFLE=1 in run-cell.py,
           so a different subset of the suite runs each night under the
           GTEST_RUNTIME_LIMIT soft deadline
+      codecov-upload:
+        type: boolean
+        required: false
+        default: false
+        description: >-
+          Upload the coverage report to codecov.io. Opt-in, because the
+          codecov.io upload quota is limited: only the weekly coverage
+          schedule and the dispatches that explicitly set the codecov flag
+          upload; the PR and push gates never do (they never select
+          coverage cells anyway).
     secrets:
       CODECOV_TOKEN:
         required: false
@@ -400,7 +410,11 @@ jobs:
         # are pre-built by the coverage step above; the CLI auto-plugins would
         # rescan the whole workspace (stray examples/ .gcov files, duplicate
         # coverage.xml) and slow every upload down.
-        if: ${{ inputs.coverage && steps.codecov-guard.outputs.has_coverage == 'true' }}
+        # The upload is opt-in (inputs.codecov-upload): the codecov.io upload
+        # quota is limited, so only the weekly coverage schedule and the
+        # dispatches that explicitly set the codecov flag upload; the PR and
+        # push gates never do.
+        if: ${{ inputs.coverage && inputs.codecov-upload && steps.codecov-guard.outputs.has_coverage == 'true' }}
         uses: codecov/codecov-action@v7
         with:
           files: coverage/coverage.xml
