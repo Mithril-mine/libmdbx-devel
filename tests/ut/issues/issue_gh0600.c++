@@ -195,9 +195,11 @@ void stops_at_the_limit_of_the_structure(const database &db) {
   EXPECT_NE(0u, result.obstructed_pgno) << "the page that can not be moved is named";
   db.check();
 
-  /* nothing is left to move: a repeated call moves no page and meets the same limit */
+  /* nothing is left to move: a repeated call moves no page and reports no error; it either meets the same limit or
+   * finds that the tail the first call left in the GC has been cut off and the goal is reached */
   MDBX_defrag_result_t again;
-  EXPECT_EQ(MDBX_RESULT_TRUE, defrag(db, 0, &again));
+  const int again_rc = defrag(db, 0, &again);
+  EXPECT_TRUE(again_rc == MDBX_SUCCESS || again_rc == MDBX_RESULT_TRUE) << "rc " << again_rc;
   EXPECT_EQ(0u, again.stopping_reasons & MDBX_defrag_error);
   EXPECT_EQ(0u, again.pages_moved) << "the first defragmentation left nothing to move";
   EXPECT_GE(result.pages_shrinked, intptr_t(0));

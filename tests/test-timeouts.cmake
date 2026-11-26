@@ -218,6 +218,7 @@ set(MDBX_TEST_TIMEOUTS
   "gh0600=30"
   "gh0605=30"
   "gh0614=30"
+  "gh0619=30"
   "global_init=30"
   "hex_base64_base58=30"
   "key-comparators=30"
