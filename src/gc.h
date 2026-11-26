@@ -162,6 +162,9 @@ typedef struct defract_context {
   uint8_t stumble_kind;
   bool completed;
   bool batch_adaptive;
+  /* The meta-pages held a steady checkpoint at the start of the call: the datafile is truncated only at the end, after
+   * a steady checkpoint that covers the new end, and the call leaves a steady checkpoint behind. */
+  bool steady_at_start;
   /* The cycles without progress found no place below the goal edge for their pages: the pages also take places
    * between the goal edge and themselves. */
   bool in_region;

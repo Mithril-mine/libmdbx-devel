@@ -342,6 +342,20 @@ LIBMDBX_API int mdbx_tst_config_exclusive_fastpath(void);
  * \ingroup c_testing */
 LIBMDBX_API int mdbx_tst_env_mapping(const MDBX_env *env, void **base, size_t *limit, size_t *current);
 
+/** \brief Reads the steady checkpoint of the environment's meta-pages.
+ *
+ * Reports the checkpoint recovery would prefer and whether it is steady — the
+ * durability state a defragmentation must not degrade: if the meta-pages held a
+ * steady checkpoint when it started, it leaves one behind, and the truncation
+ * of the datafile follows a steady checkpoint while it runs.
+ *
+ * \param env        The environment to inspect.
+ * \param txnid      Optional, receives the txnid of the preferred checkpoint.
+ * \param is_steady  Optional, receives non-zero when that checkpoint is steady.
+ * \return MDBX_SUCCESS or MDBX_EINVAL for a null handle.
+ * \ingroup c_testing */
+LIBMDBX_API int mdbx_tst_env_steady_checkpoint(const MDBX_env *env, uint64_t *txnid, int *is_steady);
+
 /** \brief Issues the plain grow request of the datafile mapping, exactly as
  * txn_setup_primal() does when a read txn starts with a snapshot larger than
  * the mapping it saw.

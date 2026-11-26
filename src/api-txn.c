@@ -314,12 +314,12 @@ int mdbx_txn_begin_ex(MDBX_env *env, MDBX_txn *parent, MDBX_txn_flags_t flags, M
     eASSERT0(env, (txn->flags & ~(MDBX_NOSTICKYTHREADS | txn_ro_flat | MDBX_WRITEMAP | txn_mresize_flags)) == 0);
   else {
     if (MDBX_ENABLE_FAKE_NESTED_READONLY_TRANSACTIONS)
-      eASSERT0(env, (txn->flags & ~(MDBX_NOSTICKYTHREADS | MDBX_WRITEMAP | txn_mresize_flags | txn_may_have_cursors |
-                                    MDBX_NOMETASYNC | MDBX_SAFE_NOSYNC | MDBX_TXN_SPILLS | txn_ro_nested |
-                                    MDBX_TXN_DIRTY | txn_gc_drained)) == 0);
+      eASSERT0(env, (txn->flags &
+                     ~(MDBX_NOSTICKYTHREADS | MDBX_WRITEMAP | txn_mresize_flags | txn_may_have_cursors |
+                       ENV_DURABILITY_FLAGS | MDBX_TXN_SPILLS | txn_ro_nested | MDBX_TXN_DIRTY | txn_gc_drained)) == 0);
     else {
       eASSERT0(env, (txn->flags & ~(MDBX_NOSTICKYTHREADS | MDBX_WRITEMAP | txn_mresize_flags | txn_may_have_cursors |
-                                    MDBX_NOMETASYNC | MDBX_SAFE_NOSYNC | MDBX_TXN_SPILLS | txn_ro_nested)) == 0);
+                                    ENV_DURABILITY_FLAGS | MDBX_TXN_SPILLS | txn_ro_nested)) == 0);
       eASSERT0(env, !txn->wr.spilled.list && !txn->wr.spilled.least_removed);
     }
     if (CHECKS2_ENABLED())

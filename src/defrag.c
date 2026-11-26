@@ -163,15 +163,30 @@ static int defrag_load_gc(dfc_t *dfc) {
     if (id > txn->env->gc.detent) {
       if (!dfc->stopor) {
         if (id <= txn_basis_snapshot(txn)) {
-          if (meta_prefer_steady(txn->env, &txn->wr.troika).txnid == txn->env->gc.detent) {
-            /* make steady checkpoint. */
-#if MDBX_ENABLE_PROFGC
-            txn->env->lck->pgops.gc_prof.flushes += 1;
-#endif /* MDBX_ENABLE_PROFGC */
+          const meta_ptr_t prefer_steady = meta_prefer_steady(txn->env, &txn->wr.troika);
+          if (prefer_steady.txnid == txn->env->gc.detent) {
             const meta_ptr_t recent = meta_recent(txn->env, &txn->wr.troika);
             ASSERT(recent.txnid > txn->env->gc.detent);
-            meta_t meta = *recent.ptr_c;
-            rc = dxb_sync_locked(txn->env, txn->env->flags & (MDBX_WRITEMAP | MDBX_NOMETASYNC), &meta, &txn->wr.troika);
+            const pgno_t autosync_threshold = atomic_load32(&txn->env->lck->autosync_threshold, mo_Relaxed);
+            const uint64_t autosync_period = atomic_load64(&txn->env->lck->autosync_period, mo_Relaxed);
+            if (F_ISSET(txn->env->flags, MDBX_UTTERLY_NOSYNC) &&
+                ((autosync_threshold | autosync_period) == 0 ||
+                 txn->geo.first_unallocated >= prefer_steady.ptr_c->geometry.now)) {
+              /* The utterly-nosync mode keeps no steady checkpoint: the pages of the records at and below the detent
+               * can be reused once the checkpoint is wiped, and wiping it flushes the meta-pages alone instead of all
+               * the data pages. This is what gc_alloc_ex() does. */
+              MPROBE_COLLECT(defrag_wipe_steady, txn->env->gc.detent);
+              rc = meta_wipe_steady(txn->env, txn->env->gc.detent);
+            } else {
+              /* make steady checkpoint. */
+#if MDBX_ENABLE_PROFGC
+              txn->env->lck->pgops.gc_prof.flushes += 1;
+#endif /* MDBX_ENABLE_PROFGC */
+              MPROBE_COLLECT(defrag_make_steady, txn->env->gc.detent);
+              meta_t meta = *recent.ptr_c;
+              rc = dxb_sync_locked(txn->env, txn->env->flags & (MDBX_WRITEMAP | MDBX_NOMETASYNC), &meta,
+                                   &txn->wr.troika);
+            }
             if (unlikely(rc != MDBX_SUCCESS))
               break;
           }
