@@ -421,6 +421,67 @@ LIBMDBX_API int mdbx_tst_env_io_fds(const MDBX_env *env, mdbx_filehandle_t *over
  * \ingroup c_testing */
 LIBMDBX_API int mdbx_tst_txn_loose_pages(const MDBX_txn *txn, size_t *counter, size_t *linked);
 
+/** \brief The resolved locking scheme of this build.
+ *
+ * Returns the internal `MDBX_LOCKING` value (1988, 2001, 2008, SYSV or
+ * WIN32FILES): the runtime counterpart of the compile-time configuration,
+ * for the tests whose scenario depends on the locking flavor.
+ * \ingroup c_testing */
+LIBMDBX_API int mdbx_tst_config_locking_scheme(void);
+
+/** \brief The offset of the subtable root field inside a `tree_t` record.
+ *
+ * Computed via `offsetof()` from the live definition, so a layout drift
+ * is impossible by construction (the gh0017 corruption diagnostic writes
+ * through this offset).
+ * \ingroup c_testing */
+LIBMDBX_API size_t mdbx_tst_tree_offset_root(void);
+
+/** \brief The offset of `rdt_length` inside the lock file's `lck_t`.
+ *
+ * Computed via `offsetof()` from the live definition (the gh0079
+ * corruption diagnostic writes through this offset).
+ * \ingroup c_testing */
+LIBMDBX_API size_t mdbx_tst_lck_offset_rdt_length(void);
+
+/** \brief The offset of `cached_oldest_txnid` inside the lock file's `lck_t`.
+ *
+ * Computed via `offsetof()` from the live definition (the gh0081
+ * corruption diagnostic writes through this offset).
+ * \ingroup c_testing */
+LIBMDBX_API size_t mdbx_tst_lck_offset_cached_oldest_txnid(void);
+
+/** \brief The offset of `rdt_refresh_flag` inside the lock file's `lck_t`.
+ *
+ * Computed via `offsetof()` from the live definition (the gh0081
+ * corruption diagnostic writes through this offset).
+ * \ingroup c_testing */
+LIBMDBX_API size_t mdbx_tst_lck_offset_rdt_refresh_flag(void);
+
+/** \brief The "nothing changed" refresh signature of the reader table.
+ *
+ * Returns the internal `MDBX_TETRAD('N','o','n','e')` value - computed
+ * from the live definition, so a signature drift is impossible by
+ * construction.
+ * \ingroup c_testing */
+LIBMDBX_API uint32_t mdbx_tst_lck_refresh_none(void);
+
+/** \brief Copies the opaque bytes of the environment's write-lock mutex.
+ *
+ * A read-only introspection for the dead-owner diagnostics: the contents
+ * of `lck->wrt_lock` (a process-shared pthread mutex or a semaphore, by
+ * the locking scheme) are copied into the caller's buffer, up to `cap`
+ * bytes, and the number of actually copied bytes is returned. A negative
+ * value means there is no lock mapping to read from.
+ *
+ * \param env  The environment to inspect.
+ * \param buf  The destination buffer, at least `cap` bytes.
+ * \param cap  The buffer capacity.
+ * \return The number of copied bytes, or a negative value when the
+ *   environment has no lock mapping.
+ * \ingroup c_testing */
+LIBMDBX_API ptrdiff_t mdbx_tst_lck_wrt_lock_bytes(const MDBX_env *env, void *buf, size_t cap);
+
 #ifdef __cplusplus
 } /* extern "C" */
 #endif

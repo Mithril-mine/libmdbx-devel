@@ -12,11 +12,10 @@
 ///
 /// \author Леонид Юрьев aka Leonid Yuriev <leo@yuriev.ru> \date 2026
 
-/* offsetof(tree_t, root) == 8: u16 flags, u16 height, u32 dupfix_size, then pgno_t root */
-#include "../../../src/essentials.h"
-#if IS_WINDOWS
-#include "../../../src/osal/windows/pop-posix-macros.h"
-#endif /* Windows */
+/* The subtable root field sits at offset 8 inside a tree_t record:
+ * u16 flags, u16 height, u32 dupfix_size, then pgno_t root. The offset is
+ * provided by the testing API (mdbx_tst_tree_offset_root()), computed from
+ * the live definition - see tests/AGENTS.md §8 and issue #519 stage 3. */
 #include "../env-guard.h++"
 #include <gtest/gtest.h>
 
@@ -42,33 +41,42 @@ TEST(issue_gh0017, all) {
   mdbx_env_delete(path, MDBX_ENV_JUST_DELETE);
   int rc;
   MDBX_env *env = NULL;
-  if ((rc = mdbx_env_create(&env)))
+  rc = mdbx_env_create(&env);
+  if (rc)
     die("env_create", rc);
-  if ((rc = mdbx_env_set_maxdbs(env, 4)))
+  rc = mdbx_env_set_maxdbs(env, 4);
+  if (rc)
     die("set_maxdbs", rc);
-  if ((rc = mdbx_env_open(env, path, MDBX_NOSUBDIR | MDBX_WRITEMAP | MDBX_EXCLUSIVE, 0664)))
+  rc = mdbx_env_open(env, path, MDBX_NOSUBDIR | MDBX_WRITEMAP | MDBX_EXCLUSIVE, 0664);
+  if (rc)
     die("env_open", rc);
 
   MDBX_txn *txn = NULL;
-  if ((rc = mdbx_txn_begin(env, NULL, (MDBX_txn_flags_t)0, &txn)))
+  rc = mdbx_txn_begin(env, NULL, (MDBX_txn_flags_t)0, &txn);
+  if (rc)
     die("txn_begin(w)", rc);
   MDBX_dbi sub;
-  if ((rc = mdbx_dbi_open(txn, "s", MDBX_CREATE, &sub)))
+  rc = mdbx_dbi_open(txn, "s", MDBX_CREATE, &sub);
+  if (rc)
     die("dbi_open(s)", rc);
   MDBX_val k = {(void *)"k", 1}, v = {(void *)"v", 1};
-  if ((rc = mdbx_put(txn, sub, &k, &v, (MDBX_put_flags_t)0)))
+  rc = mdbx_put(txn, sub, &k, &v, (MDBX_put_flags_t)0);
+  if (rc)
     die("put", rc);
-  if ((rc = mdbx_txn_commit(txn)))
+  rc = mdbx_txn_commit(txn);
+  if (rc)
     die("commit", rc);
 
-  if ((rc = mdbx_txn_begin(env, NULL, MDBX_TXN_RDONLY, &txn)))
+  rc = mdbx_txn_begin(env, NULL, MDBX_TXN_RDONLY, &txn);
+  if (rc)
     die("txn_begin(r)", rc);
   MDBX_val name = {(void *)"s", 1}, treerec;
-  if ((rc = mdbx_get(txn, 1 /*MAIN_DBI*/, &name, &treerec)))
+  rc = mdbx_get(txn, 1 /*MAIN_DBI*/, &name, &treerec);
+  if (rc)
     die("get(MAIN,'s')", rc);
   uint32_t old_root, bad_root = 0x40000000u; /* far beyond first_unallocated, not P_INVALID */
-  memcpy(&old_root, (char *)treerec.iov_base + offsetof(tree_t, root), 4);
-  memcpy((char *)treerec.iov_base + offsetof(tree_t, root), &bad_root, 4);
+  memcpy(&old_root, (char *)treerec.iov_base + mdbx_tst_tree_offset_root(), 4);
+  memcpy((char *)treerec.iov_base + mdbx_tst_tree_offset_root(), &bad_root, 4);
   printf("corrupted subtable root pgno: %u -> %u\n", old_root, bad_root);
   mdbx_txn_abort(txn);
 

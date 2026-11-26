@@ -12,10 +12,8 @@
 ///
 /// \author Леонид Юрьев aka Leonid Yuriev <leo@yuriev.ru> \date 2026
 
-#include "mdbx.h++"
-#undef MDBX_DEPRECATED /* avoid redefinition by the internal headers below */
-#include "../../../src/layout-lck.h"
 #include "../env-guard.h++"
+#include "mdbx.h++"
 #include <gtest/gtest.h>
 
 #include "../test-env.h++"
@@ -54,7 +52,7 @@ static void poison_rdt_length(const std::string &lck_path) {
   /* The lock file is memory-mapped MAP_SHARED, so a write to the file is
    * visible in the environment's mapping. Poison rdt_length with a value far
    * beyond max_readers. */
-  const size_t rdt_length_off = offsetof(lck_t, rdt_length);
+  const size_t rdt_length_off = mdbx_tst_lck_offset_rdt_length();
   std::fstream f(lck_path, std::ios::in | std::ios::out | std::ios::binary);
   ASSERT_TRUE(f.is_open()) << "must be able to open the lock file";
   f.seekp((std::streamoff)(rdt_length_off), std::ios::beg);

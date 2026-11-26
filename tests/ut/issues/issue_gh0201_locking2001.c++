@@ -12,10 +12,8 @@
 ///
 /// \author Леонид Юрьев aka Leonid Yuriev <leo@yuriev.ru> \date 2026
 
-#include "../../../src/internals.h"
-#if IS_WINDOWS
-#include "../../../src/osal/windows/pop-posix-macros.h"
-#endif /* Windows */
+#include "mdbx.h"
+
 #include <gtest/gtest.h>
 
 #include "../test-env.h++"
@@ -196,13 +194,24 @@ static void child_swarm(const char *path, const bool writer, const unsigned nops
  * (the lock stays BUSY forever, see issue #402), so __APPLE__ is excluded.
  * For POSIX2001 the permanent BUSY after a dead owner is the documented
  * limitation, so it is excluded as well. */
-#if MDBX_LOCKING == MDBX_LOCKING_POSIX2008 && !defined(__APPLE__)
-#define MDBX_TEST_OWNER_DEATH_RECOVERY 1
+/* The owner-death recovery (the robust POSIX2008 mutexes) is exercised on
+ * POSIX2008 builds only: SYSV provides its own recovery invisible at the
+ * mutex level, POSIX2001/1988 strand by the documented #565 limitation, and
+ * Apple declares PTHREAD_MUTEX_ROBUST in the macOS 15+ headers but the
+ * recovery of a process-shared owner death does not work there in practice
+ * (the lock stays BUSY forever, see issue #402). The C1/C2 scenarios below
+ * check the resolved scheme at runtime (via mdbx_tst_config_locking_scheme()
+ * from the testing API) and skip otherwise. */
+static bool owner_death_recovery_supported() {
+  return mdbx_tst_config_locking_scheme() == 2008 && ![]() {
+#if defined(__APPLE__)
+    return true;
 #else
-#define MDBX_TEST_OWNER_DEATH_RECOVERY 0
+    return false;
 #endif
+  }();
+}
 
-#if MDBX_TEST_OWNER_DEATH_RECOVERY
 // ---------------------------------------------------------------------------
 // A/C2: diagnostic probe of the opaque pthread_mutex_t
 // ---------------------------------------------------------------------------
@@ -241,8 +250,6 @@ static owner_probe probe_opaque_owner(const void *bytes, const size_t size, cons
     return owner_probe::other_pid;
   return owner_probe::zero; /* все глянутые слоты нулевые */
 }
-
-#endif /* MDBX_TEST_OWNER_DEATH_RECOVERY */
 
 } // namespace
 
@@ -382,7 +389,6 @@ TEST(issue_gh0201_locking2001, B3_process_swarm) {
   cleanup(kTestPath);
 }
 
-#if MDBX_TEST_OWNER_DEATH_RECOVERY
 /* Обна-механика для C1: ребёнок держит WR-txn (или регистрацию читателя),
  * родитель убивает его, затем проверяет MDBX_TXN_TRY recovery.
  * Возвращает: rc самого recovery (MDBX_SUCCESS при успехе), или
@@ -445,10 +451,9 @@ static int kill_owner_and_trylock(const char *path, const bool writer) {
   /* Зафиксировать "печать" владельца до kill — для C2 диагностики. */
   const mdbx_pid_t killed_pid = (mdbx_pid_t)pid;
   owner_probe probe_before = owner_probe::no_owner_slot;
-  if (env->lck_mmap.lck) {
-    const void *mutex_bytes = (const void *)&env->lck_mmap.lck->wrt_lock;
-    probe_before = probe_opaque_owner(mutex_bytes, sizeof(env->lck_mmap.lck->wrt_lock), killed_pid);
-  }
+  unsigned char mutex_bytes[128];
+  const ptrdiff_t got = mdbx_tst_lck_wrt_lock_bytes(env, mutex_bytes, sizeof(mutex_bytes));
+  probe_before = (got > 0) ? probe_opaque_owner(mutex_bytes, (size_t)got, killed_pid) : owner_probe::no_owner_slot;
 
   /* SIGKILL владельца. */
   kill(pid, SIGKILL);
@@ -477,10 +482,9 @@ static int kill_owner_and_trylock(const char *path, const bool writer) {
 
   /* C2 диагностика после восстановления/попытки. */
   owner_probe probe_after = owner_probe::no_owner_slot;
-  if (env->lck_mmap.lck) {
-    const void *mutex_bytes = (const void *)&env->lck_mmap.lck->wrt_lock;
-    probe_after = probe_opaque_owner(mutex_bytes, sizeof(env->lck_mmap.lck->wrt_lock), killed_pid);
-  }
+  const ptrdiff_t after_got = mdbx_tst_lck_wrt_lock_bytes(env, mutex_bytes, sizeof(mutex_bytes));
+  if (after_got > 0)
+    probe_after = probe_opaque_owner(mutex_bytes, (size_t)after_got, killed_pid);
   SCOPED_TRACE("C2 probe: before=" + std::to_string((int)probe_before) + " after=" + std::to_string((int)probe_after) +
                " killed_pid=" + std::to_string(killed_pid));
   /* Диагностика всегда печатается в stderr (не только gtest-trace) — это
@@ -497,6 +501,10 @@ TEST(issue_gh0201_locking2001, C1_kill_owner_wrt_recovered) {
     GTEST_SKIP() << "SKIPPED by RUNTIME_LIMIT";
     return;
   }
+  if (!owner_death_recovery_supported()) {
+    GTEST_SKIP() << "SKIPPED: the kill-owner recovery is POSIX2008-specific and unavailable on this scheme/platform";
+    return;
+  }
   cleanup(kTestPath);
   const int rc = kill_owner_and_trylock(kTestPath, /* writer */ true);
   EXPECT_EQ(MDBX_SUCCESS, rc) << "a killed writer must not leave the DB permanently write-locked; got " << rc;
@@ -508,18 +516,15 @@ TEST(issue_gh0201_locking2001, C1_kill_owner_rdt_recovered) {
     GTEST_SKIP() << "SKIPPED by RUNTIME_LIMIT";
     return;
   }
+  if (!owner_death_recovery_supported()) {
+    GTEST_SKIP() << "SKIPPED: the kill-owner recovery is POSIX2008-specific and unavailable on this scheme/platform";
+    return;
+  }
   cleanup(kTestPath);
   const int rc = kill_owner_and_trylock(kTestPath, /* reader-registration */ false);
   EXPECT_EQ(MDBX_SUCCESS, rc) << "a killed reader must not leave the reader-table lock permanently busy; got " << rc;
   cleanup(kTestPath);
 }
-#else
-TEST(issue_gh0201_locking2001, C_recovery_is_scheme_specific) {
-  if (MDBX_GTEST_IS_EXECUTION_TIMEOUT()) {
-    GTEST_SKIP() << "SKIPPED by RUNTIME_LIMIT";
-    return;
-  } /* SYSV / POSIX1988: semaphores survive owner death differently; the kill-recovery
-     * scenarios above are scheme-specific (2001/2008). */
-  GTEST_SKIP() << "C1 kill-owner recovery is POSIX2001/2008-specific; skipping on this Locking scheme";
-}
-#endif /* MDBX_LOCKING */
+/* On the locking schemes without the dead-owner recovery (the legacy
+ * POSIX2001/1988 and SYSV) the C1 tests runtime-skip: the recovery is
+ * scheme-specific, per the #565 characterization. */

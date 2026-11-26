@@ -12,10 +12,8 @@
 ///
 /// \author Леонид Юрьев aka Leonid Yuriev <leo@yuriev.ru> \date 2026
 
-#include "mdbx.h++"
-#undef MDBX_DEPRECATED /* avoid redefinition by the internal headers below */
-#include "../../../src/layout-lck.h"
 #include "../env-guard.h++"
+#include "mdbx.h++"
 #include <gtest/gtest.h>
 
 #include "../test-env.h++"
@@ -46,8 +44,9 @@
 // handle in the same process cannot write to cached_oldest_txnid at all.
 
 // The reader-table refresh flag value that forces skipping the reader-table
-// rescan is the 'None' tetra: MDBX_TETRAD('N','o','n','e').
-static const uint32_t nothing_changed_signature = MDBX_TETRAD('N', 'o', 'n', 'e');
+// rescan is the 'None' tetra, provided by the testing API (computed from the
+// live definition, so a signature drift is impossible by construction).
+static const uint32_t nothing_changed_signature = mdbx_tst_lck_refresh_none();
 
 static void write_raw(std::fstream &f, std::streamoff off, const void *data, size_t size) {
   f.seekp(off, std::ios::beg);
@@ -106,8 +105,8 @@ TEST(issue_gh0081, poisoned_cached_oldest_reclamped) {
    * the "nothing changed" signature so the unchanged-table fast-path, which
    * blindly trusts the poisoned cache, is taken. */
   const uint64_t poisoned = UINT64_C(0x7FFFFFFFFFFFFFFF);
-  const size_t oldest_off = offsetof(lck_t, cached_oldest_txnid);
-  const size_t flag_off = offsetof(lck_t, rdt_refresh_flag);
+  const size_t oldest_off = mdbx_tst_lck_offset_cached_oldest_txnid();
+  const size_t flag_off = mdbx_tst_lck_offset_rdt_refresh_flag();
   {
     std::fstream f(lck_path, std::ios::in | std::ios::out | std::ios::binary);
     ASSERT_TRUE(f.is_open()) << "must be able to open the lock file";
