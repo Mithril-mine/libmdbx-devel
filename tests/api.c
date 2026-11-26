@@ -507,9 +507,16 @@ __cold uint32_t mdbx_tst_lck_refresh_none(void) { return MDBX_TETRAD('N', 'o', '
 __cold ptrdiff_t mdbx_tst_lck_wrt_lock_bytes(const MDBX_env *env, void *buf, size_t cap) {
   if (unlikely(!env || !env->lck_mmap.lck))
     return -1;
+#if MDBX_LOCKING > 0
   const size_t n = (cap < sizeof(env->lck_mmap.lck->wrt_lock)) ? cap : sizeof(env->lck_mmap.lck->wrt_lock);
   memcpy(buf, &env->lck_mmap.lck->wrt_lock, n);
   return (ptrdiff_t)n;
+#else
+  /* WIN32FILES carries no opaque mutex: the report is "nothing to read". */
+  (void)buf;
+  (void)cap;
+  return -1;
+#endif /* MDBX_LOCKING > 0 */
 }
 
 __cold int mdbx_tst_env_mapping(const MDBX_env *env, void **base, size_t *limit, size_t *current) {

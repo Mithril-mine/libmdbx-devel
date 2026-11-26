@@ -468,6 +468,12 @@ else()
   # AFTER the whole corpus (never in parallel with the tests), so it is not
   # part of the default labels.
   add_test(NAME test_hygiene_check COMMAND $<TARGET_FILE:te_cleanup_tool> --scan ${CMAKE_BINARY_DIR})
+  # The testing-API regulation lint (tests/AGENTS.md §8, issue #519): the
+  # MDBX_TST_* mirror pins and the sanctioned src/-includes of the gtest
+  # units. Pure python, no build artifacts - wired into the same hygiene
+  # label as the leftovers scan.
+  add_test(NAME test_testing_api_lint COMMAND python3
+           ${CMAKE_CURRENT_SOURCE_DIR}/ci/check-testing-api.py ${CMAKE_SOURCE_DIR})
   # The scan must run after EVERY fixture-cleanup test (each chain deletes
   # its intentionally leftover files at the end, e.g. smoke_cleanup removes
   # the smoke.db* of the quick-smoke suite and smoke_t1_*_cleanup the t1
@@ -476,7 +482,9 @@ else()
   # finished but its cleanup has not started yet. */
   set_tests_properties(test_hygiene_check
     PROPERTIES LABELS "hygiene" RUN_SERIAL ON TIMEOUT 30
-               DEPENDS "smoke_cleanup;smoke_fault_cleanup;smoke_long_cleanup;dupsort_writemap_cleanup;uniq_nested_cleanup;smoke_sp_cleanup;smoke_t1_hill_cleanup;smoke_t1_nested_cleanup;smoke_t1_copy_cleanup")
+    DEPENDS "smoke_cleanup;smoke_fault_cleanup;smoke_long_cleanup;dupsort_writemap_cleanup;uniq_nested_cleanup;smoke_sp_cleanup;smoke_t1_hill_cleanup;smoke_t1_nested_cleanup;smoke_t1_copy_cleanup")
+  set_tests_properties(test_testing_api_lint
+    PROPERTIES LABELS "hygiene" TIMEOUT 30)
 
   if(MDBX_ENABLE_SINGLEPROCESS_TESTS)
   # Single-process scenario chain: only for cross-qemu/cross-toolchain runs
