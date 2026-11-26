@@ -128,6 +128,7 @@ A maintenance release of the stable line: backported fixes for data safety, corr
     - Fixed cloning a read transaction crashing on cleanup or reading recycled pages; fails cleanly now ([#128](https://github.com/Mithril-mine/libmdbx-devel/issues/128), [#148](https://github.com/Mithril-mine/libmdbx-devel/issues/148)) (backport).
 
  - Wrong results and API behavior:
+    - Fixed large transactions growing the datafile with `MDBX_ENABLE_BIGFOOT` disabled ([#605](https://github.com/Mithril-mine/libmdbx-devel/issues/605)) (backport).
     - Fixed `mdbx_env_defrag()` stalling while free pages lie between the shrink goal edge and the data ([#589](https://github.com/Mithril-mine/libmdbx-devel/issues/589)) (backport).
     - Fixed a writer crashing with `SIGBUS` while another thread of its process starts a read transaction ([#592](https://github.com/Mithril-mine/libmdbx-devel/issues/592)) (backport).
     - Fixed `mdbx_env_defrag()` reporting success and no obstacles when stuck at an unmovable page ([#550](https://github.com/Mithril-mine/libmdbx-devel/issues/550)) (backport).
@@ -164,6 +165,8 @@ A maintenance release of the stable line: backported fixes for data safety, corr
     - Fixed a whole-table range delete resetting the table's sequence ([#311](https://github.com/Mithril-mine/libmdbx-devel/issues/311)) (backport).
 
  - Platform-specific:
+    - Fixed a spurious opening assertion on the platforms packing local buffers loosely (macOS/arm64) (backport).
+    - Fixed C++ API compilation where `<compare>` is not pulled transitively (Android NDK) (backport).
     - Fixed the batched writes on Windows after a mid-batch write failure: the cancelled requests are now drained before the ring's resources are reused ([#449](https://github.com/Mithril-mine/libmdbx-devel/issues/449)).
     - Fixed a spurious internal assertion failure during page allocation on Windows ([#52](https://github.com/Mithril-mine/libmdbx-devel/issues/52)) (backport).
     - Fixed Windows crashes when committing large write-mapped durable transactions (backport).
