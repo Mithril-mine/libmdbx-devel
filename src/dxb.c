@@ -826,13 +826,16 @@ __cold int dxb_setup(MDBX_env *env, const int lck_rc, const mdbx_mode_t mode_bit
  * lag far behind or run ahead of the shrink threshold, so gating the datafile
  * shrink on it is incorrect.
  */
-static bool dxb_shrink_maybe(const meta_t *const pending, const size_t filesize_pgno) {
-  if (!pending->geometry.shrink_pv)
+bool dxb_shrink_wanted(const geo_t *const geo, const pgno_t gc_height, const size_t filesize_pgno) {
+  if (!geo->shrink_pv)
     return false;
-  const pgno_t stockpile_gap = 3 + pending->trees.gc.height * 3;
-  const pgno_t shrink_step = pv2pages(pending->geometry.shrink_pv);
-  return filesize_pgno > pending->geometry.first_unallocated &&
-         filesize_pgno - pending->geometry.first_unallocated > shrink_step + stockpile_gap;
+  const pgno_t stockpile_gap = 3 + gc_height * 3;
+  const pgno_t shrink_step = pv2pages(geo->shrink_pv);
+  return filesize_pgno > geo->first_unallocated && filesize_pgno - geo->first_unallocated > shrink_step + stockpile_gap;
+}
+
+static bool dxb_shrink_maybe(const meta_t *const pending, const size_t filesize_pgno) {
+  return dxb_shrink_wanted(&pending->geometry, pending->trees.gc.height, filesize_pgno);
 }
 
 /* Phase B: the exact shrink target ("bottom") given the largest live snapshot.

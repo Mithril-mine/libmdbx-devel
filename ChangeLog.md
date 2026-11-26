@@ -130,6 +130,7 @@ A hardening and refinement release: data-safety and corruption-resistance fixes 
     - Fixed large transactions growing the datafile with `MDBX_ENABLE_BIGFOOT` disabled ([#605](https://github.com/Mithril-mine/libmdbx-devel/issues/605)).
     - Fixed `mdbx_env_defrag()` never returning when the pages it moves come back to their places ([#614](https://github.com/Mithril-mine/libmdbx-devel/issues/614)).
     - Fixed `mdbx_env_defrag()` moving nothing and reporting an error when the GC keeps a long list of free pages ([#619](https://github.com/Mithril-mine/libmdbx-devel/issues/619)).
+    - Fixed `mdbx_env_defrag()` flushing the data pages of every cycle in the `MDBX_NOSYNC` and `MDBX_UTTERLY_NOSYNC` modes, where the GC makes do with wiping the steady checkpoint; the datafile is truncated at the end of the call now, after a steady checkpoint, and a call that found a steady checkpoint leaves one behind.
     - Fixed a rare SIGPIPE process-death on copying to a pipe closed by the reader; the `EPIPE` error is returned now ([#529](https://github.com/Mithril-mine/libmdbx-devel/pull/529)).
     - Fixed the default geometry upper reaching the mappable limit exactly, breaking tool pipelines with `MDBX_TOO_LARGE`.
     - Fixed `mdbx_chk -s` silently succeeding when the named table is absent; now an error ([#386](https://github.com/Mithril-mine/libmdbx-devel/issues/386)).

@@ -148,6 +148,16 @@ __cold int mdbx_env_defrag(MDBX_env *env, size_t defrag_atleast, size_t time_atl
   if (unlikely(rc != MDBX_SUCCESS))
     goto bailout;
 
+  /* The datafile is truncated only at the end of the call, and only after a steady checkpoint that covers the new end:
+   * pages above the new end must not be referenced by a checkpoint that recovery can pick. The call also keeps the
+   * durability it found, so if the meta-pages held a steady checkpoint at the start, it leaves one behind. */
+  dfc.steady_at_start = TROIKA_HAVE_STEADY(&txn->wr.troika) != 0;
+  /* In a non-sync mode a truncation in the middle of the call would have to force a durable checkpoint: the tail is
+   * cut at the end of the call instead. In a durable mode the cycles commit the data durably anyway, and the checkpoint
+   * that precedes a truncation is made of the pages they wrote. The mode here is that of the transaction, which may be
+   * relaxed of its own if the caller has started it. */
+  const bool defer_shrink = (txn->flags & ENV_UNSYNC) != 0;
+
   /* The cycles go on while the residual exceeds what the caller accepts, and one more time when the last cycle left
    * free pages at the end of the database: they are cut off when the next cycle loads the GC. */
   while (!defrag_discontinued(&dfc) &&
@@ -235,6 +245,9 @@ __cold int mdbx_env_defrag(MDBX_env *env, size_t defrag_atleast, size_t time_atl
       ASSERT(dfc.cycle_pages_scheduled == dfc.cycle_pages_moved);
     }
 
+    if (defer_shrink)
+      /* the intermediate results are saved by the cycle's checkpoint, but the datafile is truncated only at the end */
+      txn->flags &= ~txn_shrink_allowed;
     rc = txn_basal_checkpoint(txn, MDBX_TXN_NOMETASYNC, nullptr);
     if (unlikely(rc != MDBX_SUCCESS)) {
       dfc.txn = txn = nullptr;
@@ -271,16 +284,62 @@ __cold int mdbx_env_defrag(MDBX_env *env, size_t defrag_atleast, size_t time_atl
     }
   }
 
-  if (txn && txn->userctx == &dfc) {
-    if ((txn->flags & MDBX_TXN_ERROR) == 0) {
+  if (txn && (txn->flags & MDBX_TXN_ERROR) == 0 && dfc.cycle) {
+    /* A transaction of the caller is checkpointed by the cycles as well, so the guarantees above are the same for it;
+     * its sync flags are restored after the call. */
+    const bool own_txn = (txn->userctx == &dfc);
+    const unsigned own_mode = txn->flags & ENV_DURABILITY_FLAGS;
+    const bool was_dirty = (txn->flags & MDBX_TXN_DIRTY) != 0;
+    bool committed = false;
+    if (defer_shrink) {
+      if (dfc.steady_at_start) {
+        /* In a non-sync mode the truncation below cannot leave a steady checkpoint behind itself: one is made first,
+         * with the shrink still deferred, so that recovery picks a checkpoint whose pages are not above the new end. */
+        txn->flags &= ~(txn_shrink_allowed | ENV_DURABILITY_FLAGS);
+        const int err = txn_basal_checkpoint(txn, MDBX_TXN_NOWEAKING, nullptr);
+        committed = true;
+        if (unlikely(err != MDBX_SUCCESS)) {
+          txn->flags |= MDBX_TXN_ERROR;
+          rc = err;
+        }
+      }
+      if ((txn->flags & MDBX_TXN_ERROR) == 0) {
+        /* The datafile is truncated with this commit, and only with it. */
+        const bool truncate_pending =
+            dxb_shrink_wanted(&txn->geo, txn->dbs[FREE_DBI].height, bytes2pgno(env, (size_t)env->dxb_mmap.filesize));
+        txn->flags |= txn_shrink_allowed;
+        if (dfc.steady_at_start)
+          txn->flags &= ~ENV_DURABILITY_FLAGS;
+        if (truncate_pending) {
+          /* MDBX_TXN_DIRTY makes the commit go the full way even if the last cycle left nothing to write. */
+          txn->flags |= MDBX_TXN_DIRTY;
+          const int err = txn_basal_commit(txn, nullptr);
+          dfc.last_allocated = txn->geo.first_unallocated;
+          committed = true;
+          if (unlikely(err != MDBX_SUCCESS))
+            rc = err;
+        }
+      }
+    }
+    if (own_txn && !committed && (txn->flags & MDBX_TXN_ERROR) == 0) {
+      /* The success of this commit is not the verdict of the defragmentation: the verdict of the last cycle stays. */
+      if (dfc.steady_at_start)
+        txn->flags &= ~ENV_DURABILITY_FLAGS;
       if (defrag_score(&dfc, dfc.last_allocated = txn->geo.first_unallocated) > dfc.cycle_initial_score) {
-        /* The success of this commit is not the verdict of the defragmentation: the verdict of the last cycle stays. */
         const int err = txn_basal_commit(txn, nullptr);
         dfc.last_allocated = txn->geo.first_unallocated;
         if (unlikely(err != MDBX_SUCCESS))
           rc = err;
       }
     }
+    if (!own_txn)
+      /* the transaction belongs to the caller: leave it with the durability mode and the state it had before the final
+       * commits */
+      txn->flags = (txn->flags & ~(ENV_DURABILITY_FLAGS | txn_shrink_allowed | MDBX_TXN_DIRTY)) | own_mode |
+                   txn_shrink_allowed | (was_dirty ? MDBX_TXN_DIRTY : 0u);
+  }
+
+  if (txn && txn->userctx == &dfc) {
     int err = txn_basal_end(txn, true);
     dfc.txn = txn = nullptr;
     rc = (err != MDBX_SUCCESS && !MDBX_IS_ERROR(rc)) ? err : rc;

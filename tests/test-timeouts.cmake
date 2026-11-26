@@ -46,6 +46,7 @@ set(MDBX_TEST_TIMEOUTS
   "defrag-cursors=240"
   "defrag-cycle=330"
   "defrag-gc-binding=510"
+  "defrag-steady=90"
   "delete_after_tail=30"
   "delete_range_contracts=300"
   "distance_scroll_distribute=90"

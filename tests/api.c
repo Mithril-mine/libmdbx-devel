@@ -504,6 +504,25 @@ __cold int mdbx_tst_env_mapping(const MDBX_env *env, void **base, size_t *limit,
   return MDBX_SUCCESS;
 }
 
+__cold int mdbx_tst_env_steady_checkpoint(const MDBX_env *env, uint64_t *txnid, int *is_steady) {
+  if (unlikely(!env))
+    return MDBX_EINVAL;
+  if (txnid)
+    *txnid = 0;
+  if (is_steady)
+    *is_steady = 0;
+  /* the troika of the central transaction is refreshed by the transactions; at rest the meta-pages are tapped */
+  troika_t troika = env->basal_txn ? env->basal_txn->wr.troika : meta_tap(env);
+  if (!troika.txnid[0] && !troika.txnid[1] && !troika.txnid[2])
+    troika = meta_tap(env);
+  const meta_ptr_t prefer = meta_prefer_steady(env, &troika);
+  if (txnid)
+    *txnid = prefer.txnid;
+  if (is_steady)
+    *is_steady = prefer.is_steady ? 1 : 0;
+  return MDBX_SUCCESS;
+}
+
 __cold int mdbx_tst_dxb_grow(MDBX_env *env, uint64_t used_pgno, uint64_t size_pgno) {
   if (unlikely(!env || !env->dxb_mmap.base || used_pgno > size_pgno))
     return MDBX_EINVAL;

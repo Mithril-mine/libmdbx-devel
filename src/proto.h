@@ -52,6 +52,11 @@ MDBX_INTERNAL int __must_check_result dxb_resize(MDBX_env *const env, const pgno
 MDBX_INTERNAL int dxb_set_readahead(const MDBX_env *env, const pgno_t edge, const bool enable, const bool force_whole);
 MDBX_INTERNAL int dxb_msync(const MDBX_env *env, size_t length_pages, enum osal_syncmode_bits mode_bits);
 MDBX_INTERNAL int dxb_fsync(const MDBX_env *env, enum osal_syncmode_bits mode_bits);
+/* Whether the datafile is worth shrinking: the same predicate the commit uses before it truncates the tail, but taken
+ * from the geometry of a transaction that has not committed yet. It is a "maybe": the truncation may still be deferred
+ * by the platform (Windows unmaps the file, so a reader or another process can postpone it). */
+MDBX_INTERNAL bool dxb_shrink_wanted(const geo_t *geo, pgno_t gc_height, size_t filesize_pgno);
+
 MDBX_INTERNAL int __must_check_result dxb_sync_locked(MDBX_env *env, unsigned flags, meta_t *const pending,
                                                       troika_t *const troika);
 #if defined(ENABLE_MEMCHECK) || defined(__SANITIZE_ADDRESS__)

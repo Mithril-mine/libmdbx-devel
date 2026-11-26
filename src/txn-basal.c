@@ -216,7 +216,11 @@ int txn_basal_start(MDBX_txn *txn, unsigned flags) {
                            txn_rw_already_locked)) == 0);
   MDBX_env *const env = txn->env;
   tASSERT0(txn, txn == env->basal_txn);
-  flags |= env->flags & (MDBX_NOSTICKYTHREADS | MDBX_WRITEMAP);
+  /* The durability mode of the transaction is the mode of the environment at its start, and a commit may clear these
+   * bits to make the checkpoint steady: the next start resumes with the mode of the environment. The transaction is
+   * allowed to shrink the datafile unless a caller that knows better removes the flag. */
+  flags |= env->flags & (MDBX_NOSTICKYTHREADS | MDBX_WRITEMAP | ENV_DURABILITY_FLAGS);
+  flags |= txn_shrink_allowed;
   if ((flags & txn_rw_already_locked) == 0) {
     const uintptr_t tid = osal_thread_self();
     if (unlikely(txn->owner == tid ||
@@ -378,7 +382,7 @@ int txn_basal_commit(MDBX_txn *txn, struct commit_timestamp *ts) {
    * upgrades the weak head to steady. */
   if ((!txn->wr.dirtylist || txn->wr.dirtylist->length == 0) &&
       (txn->flags & (MDBX_TXN_DIRTY | MDBX_TXN_SPILLS)) == 0 && !need_flush_for_nometasync &&
-      (head.is_steady || ((env->flags | txn->flags) & (MDBX_SAFE_NOSYNC | MDBX_NOMETASYNC))) && !CHECKS2_ENABLED()) {
+      (head.is_steady || (txn->flags & (MDBX_SAFE_NOSYNC | MDBX_NOMETASYNC))) && !CHECKS2_ENABLED()) {
     TXN_FOREACH_DBI_ALL(txn, i) { tASSERT0(txn, !(txn->dbi_state[i] & (DBI_DIRTY | DBI_SLAIN))); }
     /* fast completion of pure transaction */
     return MDBX_NOSUCCESS_PURE_COMMIT ? MDBX_RESULT_TRUE : MDBX_SUCCESS;
@@ -492,7 +496,8 @@ int txn_basal_commit(MDBX_txn *txn, struct commit_timestamp *ts) {
   meta.unsafe_sign = DATASIGN_NONE;
   meta_set_txnid(env, &meta, commit_txnid);
 
-  rc = dxb_sync_locked(env, env->flags | txn->flags | txn_shrink_allowed, &meta, &txn->wr.troika);
+  /* The durability mode of the transaction overrides the mode of the environment when its bits are cleared. */
+  rc = dxb_sync_locked(env, (env->flags & ~ENV_DURABILITY_FLAGS) | txn->flags, &meta, &txn->wr.troika);
 
   if (ts)
     ts->sync = osal_monotime();
