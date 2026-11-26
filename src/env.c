@@ -227,7 +227,7 @@ bailout:
  * разным MDBX_WRITEMAP в режиме отложенной записи, либо отслеживать такое
  * смешивание и блокировать steady-пометки - что контрпродуктивно. */
 __cold MDBX_env_flags_t env_rigorous_envmode_diff(const MDBX_env_flags_t snap_flags, const MDBX_env_flags_t flags) {
-  const MDBX_env_flags_t rigorous_flags = (snap_flags & ENV_LAZY_MODE_FLAGS)
+  const MDBX_env_flags_t rigorous_flags = (snap_flags & ENV_DURABILITY_FLAGS)
                                               ? MDBX_SAFE_NOSYNC | MDBX_UTTERLY_NOSYNC | MDBX_WRITEMAP
                                               : MDBX_SAFE_NOSYNC | MDBX_UTTERLY_NOSYNC;
   return (snap_flags ^ flags) & rigorous_flags;
@@ -463,7 +463,7 @@ __cold int env_open(MDBX_env *env, mdbx_mode_t mode) {
     }
   }
 
-  const MDBX_env_flags_t lazy_flags = (MDBX_env_flags_t)ENV_LAZY_MODE_FLAGS;
+  const MDBX_env_flags_t lazy_flags = (MDBX_env_flags_t)ENV_DURABILITY_FLAGS;
   const MDBX_env_flags_t mode_flags = (MDBX_env_flags_t)ENV_MODE_FLAGS;
 
   lck_t *const lck = env->lck_mmap.lck;
