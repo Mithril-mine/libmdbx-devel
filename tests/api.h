@@ -478,7 +478,8 @@ LIBMDBX_API uint32_t mdbx_tst_lck_refresh_none(void);
  * \param buf  The destination buffer, at least `cap` bytes.
  * \param cap  The buffer capacity.
  * \return The number of copied bytes, or a negative value when the
- *   environment has no lock mapping.
+ *   environment has no lock mapping (always so on the WIN32FILES locking
+ *   scheme, where no opaque mutex exists).
  * \ingroup c_testing */
 LIBMDBX_API ptrdiff_t mdbx_tst_lck_wrt_lock_bytes(const MDBX_env *env, void *buf, size_t cap);
 
