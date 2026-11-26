@@ -69,6 +69,11 @@ jobs:
       # repo token it is harmless redundancy. plugins: noop — the pytest-cov
       # XML is pre-built; the CLI auto-plugins would only add a duplicate
       # coverage.xml and extra scanning.
+      #
+      # Opt-in (the codecov.io upload quota is limited): the daily schedule
+      # and the explicit workflow_dispatch upload; the push and pull_request
+      # runs keep scanning but never upload.
+      if: ${{ github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' }}
       uses: codecov/codecov-action@v7
       with:
         files: skynet/MCP-shared-graph-memory/coverage/codegraph-python.xml

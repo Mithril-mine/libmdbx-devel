@@ -78,6 +78,15 @@ on:
         required: false
         default: fast
         description: ctest scope (fast/full)
+      codecov:
+        type: boolean
+        required: false
+        default: false
+        description: >-
+          Upload the coverage reports of the coverage-profile cells to
+          codecov.io (the upload quota is limited; without this flag the
+          dispatch runs the cells and keeps the reports in the artifacts
+          only)
   repository_dispatch:
     types: [dispatch-event]
 
@@ -133,6 +142,7 @@ jobs:
       cells: ${{ steps.resolve.outputs.cells }}
       ref: ${{ steps.resolve.outputs.ref }}
       scope: ${{ steps.resolve.outputs.scope }}
+      codecov-upload: ${{ steps.resolve.outputs.codecov-upload }}
     steps:
       - name: checkout
         uses: actions/checkout@v7
@@ -151,6 +161,7 @@ jobs:
           EVENT_CELL: ${{ github.event.inputs.cell || github.event.client_payload.cell }}
           EVENT_REF: ${{ github.event.inputs.ref || github.event.client_payload.ref }}
           EVENT_SCOPE: ${{ github.event.inputs.scope || github.event.client_payload.scope }}
+          EVENT_CODECOV: ${{ github.event.inputs.codecov || github.event.client_payload.codecov }}
           PUSH_BEFORE: ${{ github.event.before }}
           PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
           PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
@@ -166,6 +177,21 @@ jobs:
           set -euo pipefail
           SCOPE="${EVENT_SCOPE:-fast}"
           REF=""
+          # The codecov upload is opt-in (the codecov.io upload quota is
+          # limited): the weekly schedule uploads, and so do the explicit
+          # dispatches that set the codecov flag; the PR and push gates
+          # never upload, even when they happen to select a coverage cell.
+          CODECOV_UPLOAD=false
+          case "$GITHUB_EVENT_NAME" in
+            schedule)
+              CODECOV_UPLOAD=true
+              ;;
+            workflow_dispatch|repository_dispatch)
+              if [ "${EVENT_CODECOV:-}" = "true" ]; then
+                CODECOV_UPLOAD=true
+              fi
+              ;;
+          esac
           # A change touching tests/ extends the fast scope with the
           # hygiene label (test_hygiene_check) for this run (issue-backed:
           # the check guards against leftover database files in the build
@@ -295,6 +321,7 @@ jobs:
           echo "cells=${JSON}" >> "$GITHUB_OUTPUT"
           echo "ref=${REF}" >> "$GITHUB_OUTPUT"
           echo "scope=${SCOPE}" >> "$GITHUB_OUTPUT"
+          echo "codecov-upload=${CODECOV_UPLOAD}" >> "$GITHUB_OUTPUT"
 
   run:
     needs: resolve
@@ -316,6 +343,7 @@ jobs:
       coverage: ${{ matrix.coverage }}
       ndk: ${{ matrix.ndk }}
       ref: ${{ needs.resolve.outputs.ref }}
+      codecov-upload: ${{ needs.resolve.outputs.codecov-upload == 'true' }}
     secrets:
       CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
 

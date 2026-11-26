@@ -83,13 +83,20 @@ fan-out signal (together with `ci-dispatch` and `ci-mcp-shared-graph-memory`).
 **codecov export** — the cells flagged `"coverage": true` build with
 `ENABLE_GCOV` (or the clang/LLVM instrumentation on `win-mscl`), and the runner's
 coverage legs normalize the reports to lcov `coverage/lines.info` (git-relative
-`SF:` paths), reject empty reports (the guard step), and upload via
-`codecov/codecov-action` with the per-cell flag and the `CODECOV_TOKEN`
-repository secret. codecov.io rejects tokenless reports for the protected
-branches (HTTP 400), and the uploads run with `fail_ci_if_error: true` — a
-missing/invalid token fails the job visibly instead of a silently-green run
-without data. The Python coverage of the codegraph module comes from the daily
-`ci-codegraph` scan (flag `codegraph-scan-python`).
+`SF:` paths), reject empty reports (the guard step), convert them to cobertura
+(tests/ci/lcov_to_cobertura.py — codecov's ingestion silently drops lcov
+tracefiles even in the classic shape, while cobertura processes reliably),
+and upload via `codecov/codecov-action` with the per-cell flag and the
+`CODECOV_TOKEN` repository secret. codecov.io rejects tokenless reports for
+the protected branches (HTTP 400), and the uploads run with
+`fail_ci_if_error: true` — a missing/invalid token fails the job visibly
+instead of a silently-green run without data.
+
+**The uploads are opt-in** (the codecov.io upload quota is limited): only the
+scheduled runs — the weekly `ci-dispatch` coverage export and the daily
+`ci-codegraph` scan (flag `codegraph-scan-python`) — and the dispatches that
+explicitly set the `codecov` flag upload. The PR and push gates never upload,
+even when a run happens to select a coverage cell.
 
 ## 3. Validation gates
 

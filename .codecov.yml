@@ -1,7 +1,7 @@
 # Codecov configuration for libmdbx-devel
 # C/C++ coverage reports come from the CI `coverage` profile cells, run
 # weekly by the ci-dispatch schedule (Sunday) and on demand via
-# workflow_dispatch/repository_dispatch {profile: coverage}:
+# workflow_dispatch/repository_dispatch {profile: coverage, codecov: true}:
 #   - linux-gcc-ubuntu-latest-debug-coverage (gcov/lcov)
 #   - win-mscl-x64-debug-coverage            (clang/LLVM instrumentation)
 #   - win-mingw-64-debug-coverage            (gcov; currently yields no
@@ -10,6 +10,11 @@
 # Python coverage of the codegraph module (skynet/MCP-shared-graph-memory)
 # comes from the ci-codegraph scan-linux job (pytest-cov, flag
 # codegraph-scan-python), so skynet/ is NOT in the ignore list.
+#
+# The uploads are OPT-IN (the codecov.io upload quota is limited): only the
+# scheduled runs (the weekly coverage export, the daily codegraph scan) and
+# the dispatches that explicitly set the codecov flag upload. The PR and
+# push gates never upload.
 #
 # Uploads REQUIRE the CODECOV_TOKEN repository secret: codecov.io rejects
 # tokenless reports for protected branches with HTTP 400 ("Token required
