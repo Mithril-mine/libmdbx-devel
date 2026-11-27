@@ -7662,7 +7662,6 @@ MDBX_NOTHROW_PURE_FUNCTION LIBMDBX_API MDBX_hsr_func mdbx_env_get_hsr(const MDBX
 /** \defgroup chk Checking and Recovery
  * Basically this is internal API for `mdbx_chk` tool, etc.
  * You should avoid to use it, except some extremal special cases.
- * \ingroup c_extra
  * @{ */
 
 /** \brief Acquires write-transaction lock.
