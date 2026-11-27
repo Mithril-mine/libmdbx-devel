@@ -395,19 +395,16 @@
     (!defined(__GLIBC__) || __GLIBC_PREREQ(2, 10) /* troubles with Robust mutexes before 2.10 */) &&                  \
     !defined(__OHOS__) /* Harmony OS doesn't support robust mutexes at the end of 2025 */
 #define MDBX_LOCKING MDBX_LOCKING_POSIX2008
-#elif defined(__ANDROID_API__) || defined(ANDROID) || defined(__BIONIC__) || defined(__APPLE__)
-/* Bionic: the System V semaphore declarations are hidden before the API
- * level 24 (the NDK's CMake toolchain defaults to an API below it), and
- * the System V IPC is not available to applications on Android at all.
- * Darwin: has no robust mutexes at all, so this branch is reached on
- * every macOS build, and the System V fallback breaks the locking flavors
- * without giving the dead-owner recovery there.
- * For both platforms the POSIX-2001 mutexes remain the fallback, as they
- * were before the SYSV-fallback change, with their dead-owner limitation
- * (see #565) accepted as the platform-specific trade-off. */
-#define MDBX_LOCKING MDBX_LOCKING_POSIX2001
 #else
+/* Bionic declares the System V semaphore functions only since the API
+ * level 26, so below it the SYSV fallback is unbuildable and the
+ * POSIX-2001 process-shared mutexes are the only choice (without the
+ * dead-owner recovery, see #565). */
+#if !defined(__ANDROID_API__) || __ANDROID_API__ >= 26
 #define MDBX_LOCKING MDBX_LOCKING_SYSV
+#else
+#define MDBX_LOCKING MDBX_LOCKING_POSIX2001
+#endif
 #endif
 #else /* FreeBSD: the __GLIBC_PREREQ() macro is unavailable there, so the robust check is separate. */
 /* The process-shared robust mutexes are supported since 11.0 (2016): the kernel
