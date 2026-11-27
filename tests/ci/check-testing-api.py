@@ -1,12 +1,19 @@
 #!/usr/bin/env python3
 """The testing-API regulation lint (tests/AGENTS.md §8, issue #519).
 
-Checks two invariants of the staged "no direct inclusion" campaign:
+Checks three invariants of the staged "no direct inclusion" campaign:
 
 (a) every `MDBX_TST_*` mirror macro defined in `tests/api.h` is pinned with
     a `STATIC_ASSERT`/`STATIC_ASSERT_MSG` in `tests/api.c` - a drift of a
     mirrored constant is a build break, not a silent test skew;
-(b) the direct `#include`s of library sources (`src/...`) within `tests/ut`
+(b) every type declared in `tests/api.h` (an opaque instance handle, a
+    mirrored struct, a value-mirror enum, a forwarded function-type
+    typedef) is pinned with a `STATIC_ASSERT` in `tests/api.c` that
+    references the type - the size (and, for the mirrored structs, the
+    offsets of the fields the tests read) must be checked against the
+    live internal definition, so a layout drift is a build break, not a
+    silent test skew;
+(c) the direct `#include`s of library sources (`src/...`) within `tests/ut`
     and `tests/framework` stay inside the sanctioned list of issue #519 -
     the list shrinks to empty as the rework stages land, and any new
     direct inclusion outside it fails the lint.
@@ -46,6 +53,11 @@ SANCTIONED = {
 
 INCLUDE_RE = re.compile(r'^\s*#\s*include\s+"([^"]*)"', re.M)
 MIRROR_RE = re.compile(r'^#\s*define\s+(MDBX_TST_[A-Za-z0-9_]+)', re.M)
+# The types declared in tests/api.h: everything spelled `MDBX_tst_*` there is
+# a type (struct/union/enum tags, their typedefs, function-type typedefs) -
+# the API functions are lowercase `mdbx_tst_*` and the macro mirrors are
+# uppercase `MDBX_TST_*`.
+TYPES_RE = re.compile(r'\bMDBX_tst_[A-Za-z0-9_]+\b')
 PIN_RE = re.compile(r'STATIC_ASSERT(?:_MSG)?\s*\([^;]*\b({})\b'.format(r"[A-Za-z0-9_]+"))
 
 
@@ -62,6 +74,34 @@ def check_mirror_pins():
         if not pattern.search(impl):
             problems.append("the mirror macro {} has no STATIC_ASSERT pin in tests/api.c".format(name))
     return mirrors, problems
+
+
+def check_type_pins():
+    """Every type declared in tests/api.h has a STATIC_ASSERT in tests/api.c.
+
+    A `typedef struct MDBX_tst_foo {...} MDBX_tst_foo_t;` declaration is one
+    type: the pin may reference either spelling, so the bare tag is satisfied
+    by a pin on its typedef alias (and vice versa)."""
+    with open(API_H, encoding="utf-8") as f:
+        header = f.read()
+    with open(API_C, encoding="utf-8") as f:
+        impl = f.read()
+    # the tag -> typedef-alias pairs of the struct/union declarations
+    pairs = {}
+    for tag, alias in re.findall(
+            r'typedef\s+(?:struct|union)\s+(MDBX_tst_\w+)\s*\{[^}]*\}\s*(MDBX_tst_\w+)\s*;', header, re.S):
+        pairs[tag] = alias
+    names = set(TYPES_RE.findall(header))
+    # one pin per declaration: the bare tag is the same type as its typedef
+    required = sorted(n for n in names if n not in pairs)
+    problems = []
+    for name in required:
+        pattern = re.compile(r'STATIC_ASSERT(?:_MSG)?\s*\([^;]*\b{}\b'.format(name))
+        if not pattern.search(impl):
+            problems.append("the testing-API type {} has no STATIC_ASSERT pin in tests/api.c "
+                            "(the size and, for a mirrored struct, the offsets of the fields "
+                            "the tests read must be pinned against the live definition)".format(name))
+    return required, problems
 
 
 def check_sanctioned_includes():
@@ -93,15 +133,18 @@ def check_sanctioned_includes():
 
 def main():
     mirrors, problems = check_mirror_pins()
+    types, type_problems = check_type_pins()
+    problems += type_problems
     problems += check_sanctioned_includes()
     if problems:
         print("testing-API regulation violations (tests/AGENTS.md §8, issue #519):")
         for item in problems:
             print("  - " + item)
         print("mirrors found in tests/api.h: " + (", ".join(mirrors) if mirrors else "(none)"))
+        print("types found in tests/api.h: " + (", ".join(types) if types else "(none)"))
         return 1
-    print("testing-API regulation: clean ({} mirror(s) pinned, the src/-includes within the sanctioned list)".format(
-        len(mirrors)))
+    print("testing-API regulation: clean ({} mirror(s) and {} type(s) pinned, "
+          "the src/-includes within the sanctioned list)".format(len(mirrors), len(types)))
     return 0
 
 
