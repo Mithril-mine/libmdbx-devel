@@ -272,13 +272,18 @@ with fault injection (the probe-bus/MPROBE family).
   `details_gc_dense_solve`, `details_gc_store_retired` (the latter via the
   `gc-store-retired.h` multi-instance pattern: gc-put.c includes it for
   the REAL instance, tests/api.c - for the instrumented one with the
-  stub-renamed callees) and the stage-3 issue tests `gh0017`, `gh0079`,
-  `gh0081`, `gh0201` already use the API (the lck/tree layout offsets, the
-  reader-refresh signature and the opaque write-lock bytes are exposed
-  through the computed accessors and the locking-scheme accessor; the
-  NO_PCH flags of these four are dropped); the remaining ones -
-  `details_rkl/pnl`, the `meta_validate_corpus` format corpus, the
-  `meta_validate` corpus - are being reworked in stages.)
+  stub-renamed callees), the stage-3 issue tests `gh0017`, `gh0079`,
+  `gh0081`, `gh0201` (the lck/tree layout offsets, the reader-refresh
+  signature and the opaque write-lock bytes are exposed through the
+  computed accessors and the locking-scheme accessor; the NO_PCH flags
+  of these four are dropped) and the stage-4 algorithm selftests
+  `details_pnl`/`details_rkl` (the pnl/rkl/txl engines through the thin
+  forwards, the opaque instance handles and the narrow corruption
+  accessors; the file-static `rkl_resize()`/`extend_solid()` (un-hidden
+  as `rkl_extend_solid()`)/`txl_reserve()` are un-hidden through the
+  engine headers) already use
+  the API; the remaining ones - the `meta_validate_corpus` format
+  corpus, the `meta_validate` corpus - are being reworked in stages.)
 - the wiring is gated by `MDBX_ENABLE_TESTS`: the exact value comes from
   the CMake config (`src/config.h.in`, `#cmakedefine01`), the default for
   config-less development builds from `src/options.h` - and both snippets

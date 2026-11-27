@@ -12,27 +12,32 @@
 ///
 /// \author Леонид Юрьев aka Leonid Yuriev <leo@yuriev.ru> \date 2026
 
-#define debug_log debug_log_sub
+/* The pnl intersect/merge/check characterization: every internal access
+ * goes through the testing API (tests/AGENTS.md §8, issue #519 stage 4).
+ * The engine functions are the live linked ones, and the list layout is
+ * encoded by mdbx_tst_pnl_make() inside the testing API, so this test
+ * carries no representation knowledge of its own. */
 
-#include "../../../src/pnl.c"
+#include "mdbx.h"
 
-MDBX_MAYBE_UNUSED __cold void debug_log_sub(int level, const char *function, int line, const char *fmt, ...) {
-  (void)level;
-  (void)function;
-  (void)line;
-  (void)fmt;
-}
+/* NB: no <stdbool.h> here - the library's mdbx.h defines bool/true/false
+ * for the C mode, and the MSVC/mingw stdbool.h defines them unconditionally,
+ * so a later inclusion would redefinition-warn under -Werror. */
+
+#include <stdint.h>
+#include <stdio.h>
+#include <stdlib.h>
 
 /*-----------------------------------------------------------------------------*/
 
 static size_t tst_failed, tst_ok;
 
 static bool check_bool(bool v, bool expect, const char *fn, unsigned line) {
-  if (unlikely(v != expect)) {
+  if (v != expect) {
     ++tst_failed;
-    fflush(nullptr);
+    fflush(NULL);
     fprintf(stderr, "got %s, expected %s, at %s:%u\n", v ? "true" : "false", expect ? "true" : "false", fn, line);
-    fflush(nullptr);
+    fflush(NULL);
     return false;
   }
   ++tst_ok;
@@ -44,80 +49,66 @@ static bool check_bool(bool v, bool expect, const char *fn, unsigned line) {
 #define CHECK_EQ(v, exp)                                                                                               \
   do {                                                                                                                 \
     const size_t got = (size_t)(v), want = (size_t)(exp);                                                              \
-    if (unlikely(got != want)) {                                                                                       \
+    if (got != want) {                                                                                                 \
       ++tst_failed;                                                                                                    \
       fprintf(stderr, "got %zi, expected %zi, at %s:%u\n", got, want, __func__, __LINE__);                             \
     } else                                                                                                             \
       ++tst_ok;                                                                                                        \
   } while (0)
 
-/* Build a bare page-number list (not an allocated pnl: we only need the data
- * part, size word included). Page numbers are stored in descending order, as
- * unconditionally used by the library; the caller supplies the numbers
- * already in that order. */
-static pgno_t make_pnl(pgno_t *arr, const pgno_t *src, size_t n) {
-  arr[0] = (pgno_t)n;
-  for (size_t i = 1; i <= n; ++i)
-    arr[i] = src[i - 1];
-  return (pgno_t)n;
-}
+/* Page numbers are stored in descending order, as unconditionally used by
+ * the library; the caller supplies the numbers already in that order and
+ * mdbx_tst_pnl_make() copies them verbatim. The alloclen word is the
+ * buffer's capacity claim: the merge checks below use deliberately tight
+ * values, and the intersect/check ones just pass the full capacity. */
 
 static void test_intersect(void) {
-  pgno_t a[16], b[16];
+  uint32_t buf_a[17], buf_b[17];
+  const uint32_t *a, *b;
 
   /* disjoint ranges */
-  make_pnl(a, (pgno_t[]){4, 3}, 2);
-  make_pnl(b, (pgno_t[]){12, 11, 6}, 3);
-  CHECK_FALSE(pnl_intersect(a, b));
-  CHECK_FALSE(pnl_intersect(b, a));
+  a = mdbx_tst_pnl_make(buf_a, 15, 2, (const uint32_t[]){4, 3});
+  b = mdbx_tst_pnl_make(buf_b, 15, 3, (const uint32_t[]){12, 11, 6});
+  CHECK_FALSE(mdbx_tst_pnl_intersect(a, b));
+  CHECK_FALSE(mdbx_tst_pnl_intersect(b, a));
 
   /* one shared page (the issue #83 case: two records both listing page 3) */
-  make_pnl(a, (pgno_t[]){4, 3}, 2);
-  make_pnl(b, (pgno_t[]){12, 11, 3}, 3);
-  CHECK_TRUE(pnl_intersect(a, b));
-  CHECK_TRUE(pnl_intersect(b, a));
+  a = mdbx_tst_pnl_make(buf_a, 15, 2, (const uint32_t[]){4, 3});
+  b = mdbx_tst_pnl_make(buf_b, 15, 3, (const uint32_t[]){12, 11, 3});
+  CHECK_TRUE(mdbx_tst_pnl_intersect(a, b));
+  CHECK_TRUE(mdbx_tst_pnl_intersect(b, a));
 
   /* exact duplicate lists */
-  make_pnl(a, (pgno_t[]){4, 3}, 2);
-  make_pnl(b, (pgno_t[]){4, 3}, 2);
-  CHECK_TRUE(pnl_intersect(a, b));
+  a = mdbx_tst_pnl_make(buf_a, 15, 2, (const uint32_t[]){4, 3});
+  b = mdbx_tst_pnl_make(buf_b, 15, 2, (const uint32_t[]){4, 3});
+  CHECK_TRUE(mdbx_tst_pnl_intersect(a, b));
 
   /* empty lists never intersect; MSVC rejects an empty compound literal
-   * `(pgno_t[]){}`, and an empty pnl is just a zero size word */
-  a[0] = 0;
-  make_pnl(b, (pgno_t[]){4, 3}, 2);
-  CHECK_FALSE(pnl_intersect(a, b));
-  CHECK_FALSE(pnl_intersect(b, a));
+   * `(uint32_t[]){}`, and an empty pnl is just a zero size word */
+  a = mdbx_tst_pnl_make(buf_a, 15, 0, NULL);
+  b = mdbx_tst_pnl_make(buf_b, 15, 2, (const uint32_t[]){4, 3});
+  CHECK_FALSE(mdbx_tst_pnl_intersect(a, b));
+  CHECK_FALSE(mdbx_tst_pnl_intersect(b, a));
 }
 
 static void test_check_full(void) {
-  pgno_t a[16];
+  uint32_t buf_a[17];
+  const uint32_t *a;
 
   /* strictly descending (expected internal order) passes */
-  make_pnl(a, (pgno_t[]){12, 11, 6}, 3);
-  CHECK_TRUE(pnl_check_full(a, 1 << 20));
+  a = mdbx_tst_pnl_make(buf_a, 15, 3, (const uint32_t[]){12, 11, 6});
+  CHECK_TRUE(mdbx_tst_pnl_check_full(a, 1 << 20));
 
   /* duplicated page inside one record fails the full check */
-  make_pnl(a, (pgno_t[]){12, 11, 6, 6}, 4);
-  CHECK_FALSE(pnl_check_full(a, 1 << 20));
+  a = mdbx_tst_pnl_make(buf_a, 15, 4, (const uint32_t[]){12, 11, 6, 6});
+  CHECK_FALSE(mdbx_tst_pnl_check_full(a, 1 << 20));
 
   /* out-of-order record fails the full check */
-  make_pnl(a, (pgno_t[]){11, 12, 6}, 3);
-  CHECK_FALSE(pnl_check_full(a, 1 << 20));
+  a = mdbx_tst_pnl_make(buf_a, 15, 3, (const uint32_t[]){11, 12, 6});
+  CHECK_FALSE(mdbx_tst_pnl_check_full(a, 1 << 20));
 
   /* the same malformed list passes the lightweight check */
-  CHECK_TRUE(pnl_check_lite(a, 1 << 20));
-}
-
-/* Build a headed pnl (the alloclen word precedes the size word), as the
- * merging functions assert the allocated length of the destination. The
- * buffer is oversized, so the merge always has room. */
-static pgno_t *make_pnl_headed(pgno_t *buf, const pgno_t *src, size_t n, size_t alloclen) {
-  buf[0] = (pgno_t)alloclen;
-  buf[1] = (pgno_t)n;
-  for (size_t i = 1; i <= n; ++i)
-    buf[1 + i] = src[i - 1];
-  return buf + 1;
+  CHECK_TRUE(mdbx_tst_pnl_check_lite(a, 1 << 20));
 }
 
 static void test_merge(void) {
@@ -131,48 +122,47 @@ static void test_merge(void) {
    * content is unspecified once duplicates are detected, since the only
    * caller (gc_alloc_ex) rejects the list immediately and never consumes it. */
 
-  pgno_t hb[16], merged[64];
-  pgno_t *b, *dst;
+  uint32_t hb[16], merged[64];
+  uint32_t *b, *dst;
 
   /* disjoint lists: the plain concatenation keeps the full length */
-  b = make_pnl_headed(hb, (pgno_t[]){20, 10}, 2, 64);
-  dst = make_pnl_headed(merged, (pgno_t[]){50, 40, 30}, 3, 64);
-  CHECK_EQ(pnl_merge(dst, b), 5);
+  b = mdbx_tst_pnl_make(hb, 64, 2, (const uint32_t[]){20, 10});
+  dst = mdbx_tst_pnl_make(merged, 64, 3, (const uint32_t[]){50, 40, 30});
+  CHECK_EQ(mdbx_tst_pnl_merge(dst, b), 5);
 
   /* the shared page at the tails of both lists (the issue #83 case: page 3
    * listed by two GC records) */
-  b = make_pnl_headed(hb, (pgno_t[]){6, 3}, 2, 64);
-  dst = make_pnl_headed(merged, (pgno_t[]){12, 11, 3}, 3, 64);
-  CHECK_EQ(pnl_merge(dst, b), 4);
+  b = mdbx_tst_pnl_make(hb, 64, 2, (const uint32_t[]){6, 3});
+  dst = mdbx_tst_pnl_make(merged, 64, 3, (const uint32_t[]){12, 11, 3});
+  CHECK_EQ(mdbx_tst_pnl_merge(dst, b), 4);
 
   /* the shared page in the middle of both lists */
-  b = make_pnl_headed(hb, (pgno_t[]){40, 30, 10}, 3, 64);
-  dst = make_pnl_headed(merged, (pgno_t[]){50, 30, 20}, 3, 64);
-  CHECK_EQ(pnl_merge(dst, b), 5);
+  b = mdbx_tst_pnl_make(hb, 64, 3, (const uint32_t[]){40, 30, 10});
+  dst = mdbx_tst_pnl_make(merged, 64, 3, (const uint32_t[]){50, 30, 20});
+  CHECK_EQ(mdbx_tst_pnl_merge(dst, b), 5);
 
   /* several duplicated pairs: the flag is not a counter, the length shrinks
    * by exactly one */
-  b = make_pnl_headed(hb, (pgno_t[]){50, 40, 30}, 3, 64);
-  dst = make_pnl_headed(merged, (pgno_t[]){50, 30}, 2, 64);
-  CHECK_EQ(pnl_merge(dst, b), 4);
+  b = mdbx_tst_pnl_make(hb, 64, 3, (const uint32_t[]){50, 40, 30});
+  dst = mdbx_tst_pnl_make(merged, 64, 2, (const uint32_t[]){50, 30});
+  CHECK_EQ(mdbx_tst_pnl_merge(dst, b), 4);
 
   /* interleaved lists without duplicates are not flagged */
-  b = make_pnl_headed(hb, (pgno_t[]){45, 35, 5}, 3, 64);
-  dst = make_pnl_headed(merged, (pgno_t[]){50, 40, 10}, 3, 64);
-  CHECK_EQ(pnl_merge(dst, b), 6);
+  b = mdbx_tst_pnl_make(hb, 64, 3, (const uint32_t[]){45, 35, 5});
+  dst = mdbx_tst_pnl_make(merged, 64, 3, (const uint32_t[]){50, 40, 10});
+  CHECK_EQ(mdbx_tst_pnl_merge(dst, b), 6);
 
-  /* an empty source is trivially clean */
-  hb[0] = 64;
-  hb[1] = 0; /* an empty list is just the zero size word */
-  dst = make_pnl_headed(merged, (pgno_t[]){9, 8}, 2, 64);
-  CHECK_EQ(pnl_merge(dst, hb + 1), 2);
+  /* an empty source is trivially clean; an empty list is just the zero
+   * size word */
+  b = mdbx_tst_pnl_make(hb, 64, 0, NULL);
+  dst = mdbx_tst_pnl_make(merged, 64, 2, (const uint32_t[]){9, 8});
+  CHECK_EQ(mdbx_tst_pnl_merge(dst, b), 2);
 
   /* merging into an empty destination takes the source as-is; an empty
-   * list is just the zero size word, and an empty compound literal must be
-   * avoided for the sake of MSVC (C7757) */
-  dst = make_pnl_headed(merged, (pgno_t[]){9, 8}, 0, 64);
-  b = make_pnl_headed(hb, (pgno_t[]){6, 3}, 2, 64);
-  CHECK_EQ(pnl_merge(dst, b), 2);
+   * compound literal must be avoided for the sake of MSVC (C7757) */
+  dst = mdbx_tst_pnl_make(merged, 64, 0, NULL);
+  b = mdbx_tst_pnl_make(hb, 64, 2, (const uint32_t[]){6, 3});
+  CHECK_EQ(mdbx_tst_pnl_merge(dst, b), 2);
 }
 
 int main(int argc, const char *argv[]) {
