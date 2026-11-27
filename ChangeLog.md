@@ -21,7 +21,8 @@ A maintenance release of the stable line: backported fixes for data safety, corr
 
  - **Breaking:** Changed the C++ `env::mode`/`env::durability` enums to scoped; old names stay static aliases (backport).
  - Changed the locking auto-selection to fallback to System V semaphores instead of the POSIX-2001
-   mutexes, which have no recovery from a dead lock owner
+   mutexes, which have no recovery from a dead lock owner, on all platforms including Android (the API
+   level 26 and above) and macOS
    ([#565](https://github.com/Mithril-mine/libmdbx-devel/issues/565),
    [#402](https://github.com/Mithril-mine/libmdbx-devel/issues/402)) (backport).
  - Changed the routine open-time and database-creation logging from NOTICE to VERBOSE ([#535](https://github.com/Mithril-mine/libmdbx-devel/issues/535)) (backport).
