@@ -35,6 +35,7 @@ typedef struct MDBX_rkl {
 
 MDBX_MAYBE_UNUSED MDBX_INTERNAL void rkl_init(rkl_t *rkl);
 MDBX_MAYBE_UNUSED MDBX_INTERNAL int rkl_reserve(rkl_t *rkl, size_t wanna_size);
+MDBX_MAYBE_UNUSED MDBX_INTERNAL __must_check_result int rkl_resize(rkl_t *rkl, size_t wanna_size);
 MDBX_MAYBE_UNUSED MDBX_INTERNAL void rkl_clear(rkl_t *rkl);
 MDBX_MAYBE_UNUSED MDBX_INTERNAL void rkl_clear_and_shrink(rkl_t *rkl);
 MDBX_MAYBE_UNUSED MDBX_INTERNAL void rkl_destroy(rkl_t *rkl);
@@ -55,6 +56,8 @@ MDBX_MAYBE_UNUSED MDBX_INTERNAL __must_check_result int rkl_push(rkl_t *rkl, con
 MDBX_MAYBE_UNUSED MDBX_INTERNAL txnid_t rkl_pop(rkl_t *rkl, const bool highest_not_lowest);
 MDBX_MAYBE_UNUSED MDBX_INTERNAL __must_check_result int rkl_merge(const rkl_t *src, rkl_t *dst, bool ignore_duplicates);
 MDBX_MAYBE_UNUSED MDBX_INTERNAL int rkl_destructive_merge(rkl_t *src, rkl_t *dst, bool ignore_duplicates);
+MDBX_MAYBE_UNUSED MDBX_INTERNAL __must_check_result int rkl_extend_solid(rkl_t *rkl, txnid_t solid_begin,
+                                                                         txnid_t solid_end, const txnid_t id);
 
 /* Итератор для rkl.
  * Обеспечивает изоляцию внутреннего устройства rkl от остального кода, чем существенно его упрощает.

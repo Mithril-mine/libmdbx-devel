@@ -68,7 +68,7 @@ void rkl_destructive_move(rkl_t *src, rkl_t *dst) {
   rkl_init(src);
 }
 
-static int rkl_resize(rkl_t *rkl, size_t wanna_size) {
+int rkl_resize(rkl_t *rkl, size_t wanna_size) {
   /* Девиантное предусловие вызывающего: в probe-сборке может быть снято,
    * чтобы достичь ветки "unable shrink" (MDBX_PROBLEM) ниже. */
   DEV_ASSERT_T("rkl:resize:wanna_gt_length", wanna_size > rkl->list_length);
@@ -202,7 +202,7 @@ static inline txnid_t after_cut(rkl_t *rkl, const txnid_t out) {
   return out;
 }
 
-static int extend_solid(rkl_t *rkl, txnid_t solid_begin, txnid_t solid_end, const txnid_t id) {
+int rkl_extend_solid(rkl_t *rkl, txnid_t solid_begin, txnid_t solid_end, const txnid_t id) {
   if (rkl->list_length) {
     const txnid_t *i = rkl_bsearch(rkl->list, rkl->list_length, id);
     const txnid_t *const end = rkl->list + rkl->list_length;
@@ -246,15 +246,15 @@ int rkl_push(rkl_t *rkl, const txnid_t id) {
 
   if (rkl->solid_begin >= rkl->solid_end) {
     /* непрерывный интервал пуст */
-    return extend_solid(rkl, id, id + 1, id);
+    return rkl_extend_solid(rkl, id, id + 1, id);
   } else if (id < rkl->solid_begin) {
     if (known_continuous || id + 1 == rkl->solid_begin)
       /* id примыкает к solid_begin */
-      return extend_solid(rkl, id, rkl->solid_end, id);
+      return rkl_extend_solid(rkl, id, rkl->solid_end, id);
   } else if (id >= rkl->solid_end) {
     if (known_continuous || id == rkl->solid_end)
       /* id примыкает к solid_end */
-      return extend_solid(rkl, rkl->solid_begin, id + 1, id);
+      return rkl_extend_solid(rkl, rkl->solid_begin, id + 1, id);
   } else {
     /* id входит в интервал между solid_begin и solid_end, т.е. подан дубликат */
     return MDBX_RESULT_TRUE;
