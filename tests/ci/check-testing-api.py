@@ -30,8 +30,10 @@ API_C = os.path.join(ROOT, "tests", "api.c")
 # API-corpus entries shrink as the #519 stages land; the durability-corpus
 # and framework entries are the stage-6 items.
 SANCTIONED = {
-    "ut/api/details_pnl.c": {"src/pnl.c"},
-    "ut/api/details_rkl.c": {"src/rkl.c", "src/txl.c"},
+    # The stage-4 algorithm selftests live in the testing-API family
+    # (tests/api/) with sanctioned internals access (tests/AGENTS.md §8).
+    "api/details_pnl_selftest.c": {"src/pnl.c"},
+    "api/details_rkl_selftest.c": {"src/rkl.c", "src/txl.c"},
     "ut/api/meta_validate_corpus.c": {"src/cogs.c", "src/meta.c"},
     "ut/api/crafted_meta_v023.c": {"src/cogs.c", "src/meta.c"},
     "ut/api/crafted_meta_v039.c": {"src/cogs.c", "src/meta.c"},

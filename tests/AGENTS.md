@@ -267,8 +267,12 @@ with fault injection (the probe-bus/MPROBE family).
   `gh0081`, `gh0201` already use the API (the lck/tree layout offsets, the
   reader-refresh signature and the opaque write-lock bytes are exposed
   through the computed accessors and the locking-scheme accessor; the
-  NO_PCH flags of these four are dropped); the remaining ones -
-  `details_rkl/pnl`, the `meta_validate_corpus` format corpus, the
+  NO_PCH flags of these four are dropped); the stage-4 algorithm
+  selftests `tests/api/details_pnl_selftest.c`/`details_rkl_selftest.c`
+  joined the testing-API implementation family (the pnl/rkl/txl
+  characterizations need the statics and the struct layout that the
+  public API cannot expose); the remaining ones - the
+  `meta_validate_corpus` format corpus, the
   `meta_validate` corpus - are being reworked in stages.)
 - the wiring is gated by `MDBX_ENABLE_TESTS`: the exact value comes from
   the CMake config (`src/config.h.in`, `#cmakedefine01`), the default for

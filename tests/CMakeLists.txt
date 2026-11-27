@@ -55,7 +55,10 @@ function(add_simple_test name)
   set_target_properties(${target} PROPERTIES SKIP_BUILD_RPATH FALSE BUILD_WITH_INSTALL_RPATH FALSE)
 
   if(MSVC AND MSVC_C11_MAD_ATOMICS)
-    # Plain-C test programs compile library sources directly (details_rkl.c pulls
+    # Plain-C test programs compile library sources directly; the pnl/rkl
+    # selftests live under tests/api/ - the testing-API implementation family
+    # with sanctioned internals access (tests/AGENTS.md §8, issue #519 stage 4).
+    # details_rkl.c pulls
     # in src/rkl.c and src/txl.c) and therefore need C11 atomics on MSVC for
     # non-x86 targets. Use the plain flag, not a COMPILE_LANGUAGE generator
     # expression: the latter was observed to silently no-op for these subdirectory
@@ -693,9 +696,9 @@ else()
       add_ut(dbi_nested_txn SOURCE ut/dbi/dbi_nested_txn.c++)
       set_tests_properties(dbi_nested_txn PROPERTIES LABELS "ut;ut.dbi;ut.txn")
     endif()
-    add_extra_test(details_pnl SOURCE ut/api/details_pnl.c)
+    add_extra_test(details_pnl SOURCE api/details_pnl_selftest.c)
     set_tests_properties(extra_details_pnl PROPERTIES LABELS "ut;ut.api;ut.gc")
-    add_extra_test(details_rkl SOURCE ut/api/details_rkl.c)
+    add_extra_test(details_rkl SOURCE api/details_rkl_selftest.c)
     set_tests_properties(extra_details_rkl PROPERTIES LABELS "ut;ut.api;ut.gc")
     add_extra_test(details_troika_fsm SOURCE ut/api/details_troika_fsm.c)
     set_tests_properties(extra_details_troika_fsm PROPERTIES LABELS "ut;ut.api;ut.env")
