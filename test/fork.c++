@@ -153,7 +153,14 @@ bool testcase_smoke4fork::run() {
     txn_end(false);
 
   int status = 0xdeadbeef;
-  if (waitpid(child, &status, 0) != child)
+  mdbx_pid_t waited;
+  do {
+    /* Retry on EINTR: on macOS process-directed signals interrupt waitpid()
+     * even for a specific child, and failing here would kill the whole
+     * fork-write/fork-read actor spuriously. */
+    waited = waitpid(child, &status, 0);
+  } while (waited < 0 && errno == EINTR);
+  if (waited != child)
     failure_perror("waitpid()", errno);
 
   if (WIFEXITED(status)) {
