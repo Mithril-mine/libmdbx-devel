@@ -57,11 +57,16 @@ regresses, the simulacrum keeps passing silently. Such tests are categorically
 forbidden in the test suite.
 
 - The exercised logic must be the actual library sources: through the public
-  API, or by compiling the real source into the test binary (the
-  `details_pnl.c` style: `#include "../../../src/pnl.c"`), or by linking the
-  real library objects.
+  API, through the testing API (`tests/api.{h,c}` - its wrappers call the
+  live linked functions), or by linking the real library objects. Direct
+  `#include` of the sources into a test binary is not allowed: the single
+  sanctioned consumer of `src/` headers is `tests/api.c` (see §8), and a
+  compiled-in copy inevitably drifts into a simulacrum.
 - Macro-seams (renaming a mocked dependency before including the real source)
-  are acceptable, as long as the code under test itself is the real source.
+  are acceptable only where source inclusion itself is still sanctioned (i.e.
+  inside the testing API implementation, such as the `gc-store-retired.h`
+  multi-instance pattern of `tests/api.c`), as long as the code under test
+  itself is the real source.
 - Independent re-implementations written from the specification (oracles,
   brute-force references, alternative algorithms used for cross-checking) are
   fine: they do not copy library code and cannot drift along with it.
@@ -245,10 +250,14 @@ with fault injection (the probe-bus/MPROBE family).
   the declarations;
 - as this API grows, the monolithic `tests/api.c` will be split into
   per-area parts in the `tests/api/` directory;
-- **no direct `#include` of the implementation**: tests must not
-  `#include` library implementation code (`src/*.c`) or implementation
-  headers (`internals.h`) to reach internals - such access goes through
-  the testing API extensions. Three reasons, in short:
+- **no direct `#include` from `src/**` in tests**: neither tests nor the
+  framework `#include` anything from `src/` - not the implementation code
+  (`src/*.c`) and not the headers. The single exception is `tests/api.c`,
+  the implementation of the testing API: it may `#include` **headers**
+  from `src/` (`internals.h` and the per-area engine headers such as
+  `pnl.h`/`rkl.h`/`txl.h`) - never `.c` files. Every other access to the
+  internals goes through the testing API extensions. Three reasons, in
+  short:
     1. a direct `#include` couples the test to the internal scope and
        makes the planned refactorings harder (every include site must be
        re-accounted when the internals move);
@@ -280,12 +289,52 @@ with fault injection (the probe-bus/MPROBE family).
   the distributed sources, is not part of the ABI and carries no
   stability promises;
 - an implementation must be **inert unless explicitly called** and must
-  not be gated by `#if` conditionals (see AGENTS.md §7 of the root
+  not be gated by `#if` conditionals (see AGENTS.md §8 of the root
   instructions): the no-op-when-unused rule replaces compile-time cuts;
 - when mirroring internal constants (zone flags, walk options, page
   types), define the public `MDBX_TST_*` value in the header and pin the
   correspondence with a `STATIC_ASSERT_MSG` in `tests/api.c` (a drift is
   a build break, not a silent test skew);
+- **no copies of the implementation**: neither a test nor the testing API
+  may duplicate, re-implement or clone engine code - a wrapper calls the
+  live linked function, a test exercises the real implementation. A copy
+  inevitably drifts from the original and turns the test into a
+  simulacrum checking the clone (the litmus of §3); copying the body of
+  a file-static function into a wrapper is explicitly forbidden;
+- **every type declared in `tests/api.h` is pinned**: each such type
+  (an opaque instance handle, a mirrored struct, a value-mirror enum, a
+  forwarded function-type typedef) must be referenced by a
+  `STATIC_ASSERT`/`STATIC_ASSERT_MSG` in `tests/api.c` that checks it
+  against the live internal definition - the `sizeof` (equality, or
+  "at least as large" for the storage handles where the internal record
+  may be smaller on some targets), and for the mirrored structs also the
+  `offsetof` of every field the tests read (e.g. `MDBX_tst_rkl_t` against
+  `sizeof(rkl_t)`, `MDBX_tst_rkl_hole_t` against `sizeof(rkl_hole_t)` and
+  the `begin`/`end` offsets). The layout knowledge stays inside the
+  testing API and a drift is a build break, not a silent test skew.
+  The regulation lint (`tests/ci/check-testing-api.py`) enforces the
+  presence of such pins for every declared type;
+- **file-static engine functions are un-hidden, never copied**: when a
+  test must exercise a function that is file-static in an engine module,
+  drop the `static` and declare it in the engine header as
+  `MDBX_INTERNAL` - the code itself does not change. A function made
+  visible outside its module carries the module prefix in its name (e.g.
+  `extend_solid()` becomes `rkl_extend_solid()`). Each un-hidden function
+  must be justified by a concrete branch that is unreachable otherwise
+  (e.g. the `rkl_resize()` shrink-failure path is not reachable through
+  `rkl_reserve()`);
+- **surface design**: prefer narrow reusable accessors over
+  snapshot-style functions; group tightly coupled fields into one
+  accessor (e.g. the solid interval bounds are always written together)
+  instead of one accessor per field; do not add per-field readers for
+  fields that only one or two tests use together. A thin one-to-one
+  forward of an engine function is the canonical form of a call wrapper
+  (zero logic, no duplication), and every entry must be justified by an
+  existing call of the reworked unit - nothing is added "in reserve";
+- tests do not hijack the library logging (the `#define debug_log ...`
+  seams disappear together with the engine inclusions): logging behavior
+  belongs to the library, and probes/instrumentation are reached through
+  generic testing-API accessors following the MPROBE no-`#if` idiom;
 - prefer exposing a *behavioral* seam (run the internal engine, force a
   rare-but-legal internal condition) or a *read-only introspection* of
   internal state over exposing raw internals; keep the surface small -

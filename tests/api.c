@@ -48,6 +48,18 @@ STATIC_ASSERT_MSG(MDBX_TST_Z_HOLLOW == (unsigned)(uint8_t)z_hollow, "cursor zone
 
 STATIC_ASSERT_MSG(MDBX_TST_NUM_METAS == NUM_METAS, "meta pages count");
 
+/* The public mirrors of the testing-API types are pinned to the live
+ * definitions - a drift here is a build break, not a silent test skew. */
+/* The public walk-visitor type mirrors the internal walk_func (src/walk.h):
+ * a signature drift is impossible by construction, since the adapter below
+ * is assigned to the internal function-pointer type. */
+STATIC_ASSERT_MSG(sizeof(MDBX_tst_walk_func *) == sizeof(walk_func *), "walk visitor signature");
+STATIC_ASSERT_MSG(sizeof(enum MDBX_tst_page_type) == sizeof(page_type_t), "page type mirror");
+/* The scan4seq variant identifiers index the public dispatch/mask bit (a
+ * `1u << variant` position); the engine's implementations map one-to-one
+ * through the wrapper's switch, a missing case is caught at runtime. */
+STATIC_ASSERT_MSG(sizeof(enum MDBX_tst_scan4seq_variant) == sizeof(unsigned), "scan4seq variant index type");
+
 /*----------------------------------------------------------------------------*/
 
 struct tst_walk_ctx {
