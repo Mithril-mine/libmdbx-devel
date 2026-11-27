@@ -55,9 +55,11 @@ function(add_simple_test name)
   set_target_properties(${target} PROPERTIES SKIP_BUILD_RPATH FALSE BUILD_WITH_INSTALL_RPATH FALSE)
 
   if(MSVC AND MSVC_C11_MAD_ATOMICS)
-    # Plain-C test programs compile library sources directly (details_rkl.c pulls
-    # in src/rkl.c and src/txl.c) and therefore need C11 atomics on MSVC for
-    # non-x86 targets. Use the plain flag, not a COMPILE_LANGUAGE generator
+    # Plain-C test programs compile library sources directly (the meta_validate
+    # format corpus - meta_validate_corpus.c and the crafted_meta_*.c units -
+    # pulls in src/cogs.c and src/meta.c until the stage-5 of issue #519) and
+    # therefore need C11 atomics on MSVC for non-x86 targets. Use the plain
+    # flag, not a COMPILE_LANGUAGE generator
     # expression: the latter was observed to silently no-op for these subdirectory
     # targets under the Visual Studio generator.
     # C_STANDARD is required too: without /std:c11+ cl.exe keeps __STDC_VERSION__
