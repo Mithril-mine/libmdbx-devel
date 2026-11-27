@@ -123,6 +123,8 @@ Known defects deliberately left unfixed (their fixes require file-identity bookk
     - Fixed every no-sync write-map commit on Windows flushing the whole mapping ([#65](https://github.com/Mithril-mine/libmdbx-devel/issues/65)) (backport).
 
  - Platform-specific:
+    - Fixed a spurious opening assertion on the platforms packing local buffers loosely (macOS/arm64) (backport).
+    - Fixed C++ API compilation where `<compare>` is not pulled transitively (Android NDK) (backport).
     - Fixed a spurious internal assertion failure during page allocation on Windows ([#52](https://github.com/Mithril-mine/libmdbx-devel/issues/52)) (backport).
     - Fixed `MDBX_EXCLUSIVE` with durable modes failing to open on Windows; keeps the slow flush path ([#179](https://github.com/Mithril-mine/libmdbx-devel/issues/179)) (backport).
     - Fixed Windows crashes when committing large write-mapped durable transactions (backport).
