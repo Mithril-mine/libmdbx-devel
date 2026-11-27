@@ -16,7 +16,11 @@ C API организован в группы документации («мод�
 несёт полную документацию своих функций, макросов и типов. Обзорная страница
 [C API](https://libmdbx.dqdkfa.ru/docs/en/reference/api/group__c__api.html)
 содержит базовые дескрипторы (`MDBX_env`, `MDBX_val`, ...) и общие
-определения.
+определения, а модуль
+[Create/Read/Update/Delete](https://libmdbx.dqdkfa.ru/docs/en/reference/api/group__c__crud.html)
+— [Quick Reference](https://libmdbx.dqdkfa.ru/docs/en/reference/api/group__c__crud.html)
+с таблицами решений для операций вставки/обновления/удаления
+(таблицы для уникальных ключей и для DUPSORT).
 
 - [C API](https://libmdbx.dqdkfa.ru/docs/en/reference/api/group__c__api.html) — базовые дескрипторы и общие определения
 - [Открытие и закрытие](https://libmdbx.dqdkfa.ru/docs/en/reference/api/group__c__opening.html) — создание/открытие/закрытие окружения: `mdbx_env_create()`, `mdbx_env_open()`, ...
