@@ -10,7 +10,10 @@ truth.
 The C API is organized into documentation groups ("modules"); each module
 page below carries the full documentation of its functions, macros and
 types. The [C API overview](api/group__c__api.md) holds the core handles
-(`MDBX_env`, `MDBX_val`, ...) and common definitions.
+(`MDBX_env`, `MDBX_val`, ...) and common definitions, while the
+[Create/Read/Update/Delete](api/group__c__crud.md) module carries the
+[Quick Reference](api/group__c__crud.md) decision tables for the
+insert/update/delete cases (unique-key and DUPSORT tables).
 
 - [C API](api/group__c__api.md) — core handles and common definitions
 - [Opening & Closing](api/group__c__opening.md) — environment
