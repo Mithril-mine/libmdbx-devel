@@ -92,8 +92,16 @@ void osal_wait4barrier(void) {
     failure_perror("semop(dec)", errno);
   op.sem_op = 0;
   op.sem_flg = 0;
-  if (semop(ipc, &op, 1))
-    failure_perror("semop(wait)", errno);
+  while (semop(ipc, &op, 1)) {
+    const int err = errno;
+    /* Retry on EINTR: the process-directed signals (SIGCHLD from the forked
+     * children, SIGALRM, SIGUSR1/2 progress canary) interrupt the blocking
+     * zero-wait frequently during the fork-storm scenarios, and failing here
+     * would kill the whole actor spuriously. The barrier is a latch: the
+     * children already arrived, so just re-enter the wait. */
+    if (err != EINTR)
+      failure_perror("semop(wait)", err);
+  }
 #elif MDBX_LOCKING == MDBX_LOCKING_POSIX2001 || MDBX_LOCKING == MDBX_LOCKING_POSIX2008
   assert(shared != nullptr && shared != MAP_FAILED);
   int err = pthread_barrier_wait(&shared->barrier);
