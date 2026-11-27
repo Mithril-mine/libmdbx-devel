@@ -483,6 +483,344 @@ LIBMDBX_API uint32_t mdbx_tst_lck_refresh_none(void);
  * \ingroup c_testing */
 LIBMDBX_API ptrdiff_t mdbx_tst_lck_wrt_lock_bytes(const MDBX_env *env, void *buf, size_t cap);
 
+/* ------------------------------------------------------------------------ */
+/* The pnl/rkl/txl algorithm engines (issue #519 stage 4).
+ *
+ * The deepest white-box characterizations (details_pnl.c, details_rkl.c)
+ * exercise the pnl/rkl/txl engines through this mirror: thin one-to-one
+ * forwards of the live linked functions, opaque instance handles for the
+ * internal record types, and narrow accessors for the corruption-pokes
+ * that drive the defensive branches. No implementation code is copied -
+ * every call reaches the real engine (see tests/AGENTS.md §8). */
+
+/** \brief The mirror of the internal `MAX_TXNID`.
+ * Pinned to the live definition by a STATIC_ASSERT in tests/api.c.
+ * \ingroup c_testing */
+#define MDBX_TST_MAX_TXNID UINT64_C(0xFFFFFFFEFFFFFFFF)
+
+/** \brief The mirror of the internal `MIN_TXNID`.
+ * Pinned to the live definition by a STATIC_ASSERT in tests/api.c.
+ * \ingroup c_testing */
+#define MDBX_TST_MIN_TXNID UINT64_C(1)
+
+/** \brief The mirror of the internal `INVALID_TXNID`.
+ * Pinned to the live definition by a STATIC_ASSERT in tests/api.c.
+ * \ingroup c_testing */
+#define MDBX_TST_INVALID_TXNID UINT64_MAX
+
+/** \brief Opaque storage for an instance of the internal `rkl_t` record.
+ *
+ * The payload is pinned to the internal type's `sizeof` by a STATIC_ASSERT
+ * in tests/api.c, so a layout drift is a build break; the layout knowledge
+ * itself stays inside the testing API (see tests/AGENTS.md §8). Instances
+ * are created and initialized by \ref mdbx_tst_rkl_init and released by
+ * \ref mdbx_tst_rkl_destroy - no engine state is allocated by the handle
+ * itself.
+ * \ingroup c_testing */
+typedef struct MDBX_tst_rkl {
+  uint64_t aligned_opaque[16];
+} MDBX_tst_rkl_t;
+
+/** \brief Opaque storage for an instance of the internal `rkl_iter_t`.
+ *
+ * The payload is pinned to the internal type's `sizeof` by a STATIC_ASSERT
+ * in tests/api.c. Iterators are produced by \ref mdbx_tst_rkl_iterator and
+ * \ref mdbx_tst_rkl_find.
+ * \ingroup c_testing */
+typedef struct MDBX_tst_rkl_iter {
+  uint64_t aligned_opaque[2];
+} MDBX_tst_rkl_iter_t;
+
+/** \brief The mirror of the internal `rkl_hole_t` result.
+ *
+ * The internal type is returned by value from \ref mdbx_tst_rkl_hole and
+ * read field-wise by the hole-scan characterizations; the mirror is pinned
+ * to the internal type's `sizeof` and field offsets by STATIC_ASSERTs in
+ * tests/api.c.
+ * \ingroup c_testing */
+typedef struct MDBX_tst_rkl_hole {
+  uint64_t begin;
+  uint64_t end;
+} MDBX_tst_rkl_hole_t;
+
+/** \brief Forwards the live rkl_init(): brings a handle to the empty state.
+ * \ingroup c_testing */
+LIBMDBX_API void mdbx_tst_rkl_init(MDBX_tst_rkl_t *rkl);
+
+/** \brief Forwards the live rkl_destroy(): releases the list's resources.
+ * \ingroup c_testing */
+LIBMDBX_API void mdbx_tst_rkl_destroy(MDBX_tst_rkl_t *rkl);
+
+/** \brief Forwards the live rkl_clear_and_shrink(): empties the list and
+ * collapses an external buffer back to the inplace one.
+ * \ingroup c_testing */
+LIBMDBX_API void mdbx_tst_rkl_clear_and_shrink(MDBX_tst_rkl_t *rkl);
+
+/** \brief Forwards the live rkl_empty() (the solid-interval emptiness).
+ * \ingroup c_testing */
+LIBMDBX_API bool mdbx_tst_rkl_empty(const MDBX_tst_rkl_t *rkl);
+
+/** \brief Forwards the live rkl_check(): the defensive validity invariant.
+ * \ingroup c_testing */
+LIBMDBX_API bool mdbx_tst_rkl_check(const MDBX_tst_rkl_t *rkl);
+
+/** \brief Forwards the live rkl_len(): the number of the list elements.
+ * \ingroup c_testing */
+LIBMDBX_API size_t mdbx_tst_rkl_len(const MDBX_tst_rkl_t *rkl);
+
+/** \brief Forwards the live rkl_lowest().
+ * \ingroup c_testing */
+LIBMDBX_API uint64_t mdbx_tst_rkl_lowest(const MDBX_tst_rkl_t *rkl);
+
+/** \brief Forwards the live rkl_highest().
+ * \ingroup c_testing */
+LIBMDBX_API uint64_t mdbx_tst_rkl_highest(const MDBX_tst_rkl_t *rkl);
+
+/** \brief Forwards the live rkl_push(): adds an id, extends solid/list.
+ * \ingroup c_testing */
+LIBMDBX_API int mdbx_tst_rkl_push(MDBX_tst_rkl_t *rkl, uint64_t id);
+
+/** \brief Forwards the live rkl_pop(): removes and returns the extreme id.
+ * \ingroup c_testing */
+LIBMDBX_API uint64_t mdbx_tst_rkl_pop(MDBX_tst_rkl_t *rkl, bool highest_not_lowest);
+
+/** \brief Forwards the live rkl_reserve(): grows the list's buffer.
+ * \ingroup c_testing */
+LIBMDBX_API int mdbx_tst_rkl_reserve(MDBX_tst_rkl_t *rkl, size_t wanna_size);
+
+/** \brief Forwards the live rkl_resize().
+ *
+ * The file-static engine function is un-hidden (declared in src/rkl.h)
+ * for this mirror: the shrink-failure (MDBX_PROBLEM) path and the
+ * inplace-buffer collapses are unreachable through \ref
+ * mdbx_tst_rkl_reserve, which guards `wanna_size` by the length.
+ * \ingroup c_testing */
+LIBMDBX_API int mdbx_tst_rkl_resize(MDBX_tst_rkl_t *rkl, size_t wanna_size);
+
+/** \brief Forwards the live rkl_merge(): merges src into dst.
+ * \ingroup c_testing */
+LIBMDBX_API int mdbx_tst_rkl_merge(const MDBX_tst_rkl_t *src, MDBX_tst_rkl_t *dst, bool ignore_duplicates);
+
+/** \brief Forwards the live rkl_destructive_merge().
+ * \ingroup c_testing */
+LIBMDBX_API int mdbx_tst_rkl_destructive_merge(MDBX_tst_rkl_t *src, MDBX_tst_rkl_t *dst, bool ignore_duplicates);
+
+/** \brief Forwards the live rkl_copy(): copies src to a fresh dst.
+ * \ingroup c_testing */
+LIBMDBX_API int mdbx_tst_rkl_copy(const MDBX_tst_rkl_t *src, MDBX_tst_rkl_t *dst);
+
+/** \brief Forwards the live rkl_destructive_move().
+ * \ingroup c_testing */
+LIBMDBX_API void mdbx_tst_rkl_destructive_move(MDBX_tst_rkl_t *src, MDBX_tst_rkl_t *dst);
+
+/** \brief Forwards the live rkl_iterator(): makes a forward/reverse cursor.
+ * \ingroup c_testing */
+LIBMDBX_API MDBX_tst_rkl_iter_t mdbx_tst_rkl_iterator(const MDBX_tst_rkl_t *rkl, bool reverse);
+
+/** \brief Forwards the live rkl_turn(): the iterator's next element.
+ * \ingroup c_testing */
+LIBMDBX_API uint64_t mdbx_tst_rkl_turn(MDBX_tst_rkl_iter_t *iter, bool reverse);
+
+/** \brief Forwards the live rkl_left(): elements remaining.
+ * \ingroup c_testing */
+LIBMDBX_API size_t mdbx_tst_rkl_left(MDBX_tst_rkl_iter_t *iter, bool reverse);
+
+/** \brief Forwards the live rkl_find(): positions the iterator at the id.
+ * \ingroup c_testing */
+LIBMDBX_API bool mdbx_tst_rkl_find(const MDBX_tst_rkl_t *rkl, uint64_t id, MDBX_tst_rkl_iter_t *iter);
+
+/** \brief Forwards the live rkl_contain().
+ * \ingroup c_testing */
+LIBMDBX_API bool mdbx_tst_rkl_contain(const MDBX_tst_rkl_t *rkl, uint64_t id);
+
+/** \brief Forwards the live rkl_hole(): the next hole interval.
+ * \ingroup c_testing */
+LIBMDBX_API MDBX_tst_rkl_hole_t mdbx_tst_rkl_hole(MDBX_tst_rkl_iter_t *iter, bool reverse);
+
+/** \brief Forwards the live rkl_extend_solid().
+ *
+ * The file-static engine function is un-hidden (declared in src/rkl.h)
+ * for this mirror: the defensive gap_head/gap_tail branches are exercised
+ * only through the crafted inconsistent states that \ref
+ * mdbx_tst_rkl_set_solid, \ref mdbx_tst_rkl_set_length and \ref
+ * mdbx_tst_rkl_set_inplace provide.
+ * \ingroup c_testing */
+LIBMDBX_API int mdbx_tst_rkl_extend_solid(MDBX_tst_rkl_t *rkl, uint64_t solid_begin, uint64_t solid_end, uint64_t id);
+
+/** \brief Reports whether the list's buffer is the inplace one.
+ *
+ * The pointer-identity introspection for the inplace-to-external buffer
+ * transitions: a grow moves the buffer out of the handle's inplace
+ * storage, a shrink may return it back.
+ *
+ * \param rkl  The list to inspect.
+ * \return True when the list lives in the inplace storage.
+ * \ingroup c_testing */
+LIBMDBX_API bool mdbx_tst_rkl_is_inplace(const MDBX_tst_rkl_t *rkl);
+
+/** \brief The inplace storage capacity, computed from the live definition.
+ * \ingroup c_testing */
+LIBMDBX_API size_t mdbx_tst_rkl_inplace_capacity(void);
+
+/** \brief Writes both solid-interval bounds (always a pair in the tests).
+ *
+ * The corruption-poke for the rkl_check/rkl_extend_solid defensive branches:
+ * the bounds are meaningless separately, so a single accessor covers the
+ * pair (see tests/AGENTS.md §8, the surface design rule).
+ *
+ * \param rkl    The list to corrupt.
+ * \param begin  The new solid_begin value.
+ * \param end    The new solid_end value.
+ * \ingroup c_testing */
+LIBMDBX_API void mdbx_tst_rkl_set_solid(MDBX_tst_rkl_t *rkl, uint64_t begin, uint64_t end);
+
+/** \brief Writes the list_length field (the corruption-poke).
+ * \ingroup c_testing */
+LIBMDBX_API void mdbx_tst_rkl_set_length(MDBX_tst_rkl_t *rkl, size_t length);
+
+/** \brief Writes the list_limit field (the corruption-poke for the
+ * limit-below-inplace and the external-limit branches of rkl_check).
+ * \ingroup c_testing */
+LIBMDBX_API void mdbx_tst_rkl_set_limit(MDBX_tst_rkl_t *rkl, size_t limit);
+
+/** \brief Writes one element of the inplace storage (the corruption-poke).
+ *
+ * \param rkl    The list to corrupt; `index` must be less than \ref
+ *               mdbx_tst_rkl_inplace_capacity.
+ * \param index  The element's position.
+ * \param id     The new value.
+ * \ingroup c_testing */
+LIBMDBX_API void mdbx_tst_rkl_set_inplace(MDBX_tst_rkl_t *rkl, size_t index, uint64_t id);
+
+/** \brief Points the list's buffer at the inplace storage.
+ *
+ * The corruption-poke for the limit-below-inplace branch of rkl_check,
+ * which requires an inplace-resident list with a spoiled limit - a state
+ * no engine path produces deliberately.
+ * \ingroup c_testing */
+LIBMDBX_API void mdbx_tst_rkl_list_to_inplace(MDBX_tst_rkl_t *rkl);
+
+/** \brief Steps the iterator's position back by one.
+ *
+ * The re-dereference semantics check: after a pop that shrinks the list
+ * behind a positioned iterator, the stale position must still be
+ * serviceable by \ref mdbx_tst_rkl_hole - stepping the position is the
+ * only way to reach that path.
+ * \ingroup c_testing */
+LIBMDBX_API void mdbx_tst_rkl_iter_stepback(MDBX_tst_rkl_iter_t *iter);
+
+/** \brief Forwards the live pnl_intersect().
+ * \ingroup c_testing */
+LIBMDBX_API bool mdbx_tst_pnl_intersect(const uint32_t *a, const uint32_t *b);
+
+/** \brief Forwards the live pnl_check_lite().
+ * \ingroup c_testing */
+LIBMDBX_API bool mdbx_tst_pnl_check_lite(const uint32_t *pnl, size_t limit);
+
+/** \brief Forwards the live pnl_check_full().
+ * \ingroup c_testing */
+LIBMDBX_API bool mdbx_tst_pnl_check_full(const uint32_t *pnl, size_t limit);
+
+/** \brief Forwards the live pnl_merge(): merges src into dst.
+ * \ingroup c_testing */
+LIBMDBX_API size_t mdbx_tst_pnl_merge(uint32_t *dst, const uint32_t *src);
+
+/** \brief Reads the size word of a pnl (the number of the pages).
+ * \ingroup c_testing */
+LIBMDBX_API size_t mdbx_tst_pnl_size(const uint32_t *pnl);
+
+/** \brief Builds a pnl in the caller's buffer, encoding the live layout.
+ *
+ * The representation constructor for the merge/check characterizations:
+ * writes the alloclen word, the size word and the (already ordered by the
+ * caller) items exactly as the engine's layout expects - the layout
+ * knowledge stays here, not in the tests. The items are copied verbatim,
+ * so malformed lists (duplicates, disorder) are constructible for the
+ * check-failure paths.
+ *
+ * \param buf       The caller's buffer, at least `alloclen + 1 + count`
+ *                  32-bit words.
+ * \param alloclen  The capacity to encode (the merge's alloclen ASSERT is
+ *                  exercised through deliberately tight values).
+ * \param count     The number of the items, may be zero.
+ * \param items     The items to copy, may be null for a zero count.
+ * \return The pnl pointer into the buffer.
+ * \ingroup c_testing */
+LIBMDBX_API uint32_t *mdbx_tst_pnl_make(uint32_t *buf, size_t alloclen, size_t count, const uint32_t *items);
+
+/** \brief The internal `txl_max` length limit, computed from the live
+ * definition (build-config dependent, so it is an accessor, not a mirror).
+ * \ingroup c_testing */
+LIBMDBX_API size_t mdbx_tst_txl_max(void);
+
+/** \brief Forwards the live txl_alloc().
+ * \ingroup c_testing */
+LIBMDBX_API uint64_t *mdbx_tst_txl_alloc(void);
+
+/** \brief Forwards the live txl_free().
+ * \ingroup c_testing */
+LIBMDBX_API void mdbx_tst_txl_free(uint64_t *txl);
+
+/** \brief Forwards the live txl_size() inline.
+ * \ingroup c_testing */
+LIBMDBX_API size_t mdbx_tst_txl_size(const uint64_t *txl);
+
+/** \brief Forwards the live txl_alloclen() inline.
+ * \ingroup c_testing */
+LIBMDBX_API size_t mdbx_tst_txl_alloclen(const uint64_t *txl);
+
+/** \brief Forwards the live txl_append().
+ * \ingroup c_testing */
+LIBMDBX_API int mdbx_tst_txl_append(uint64_t **ptxl, uint64_t id);
+
+/** \brief Forwards the live txl_contain().
+ * \ingroup c_testing */
+LIBMDBX_API bool mdbx_tst_txl_contain(const uint64_t *txl, uint64_t id);
+
+/** \brief Forwards the live txl_sort().
+ * \ingroup c_testing */
+LIBMDBX_API void mdbx_tst_txl_sort(uint64_t *txl);
+
+/** \brief Forwards the live txl_reserve().
+ *
+ * The file-static engine function is un-hidden (declared in src/txl.h)
+ * for this mirror: the "too long" MDBX_TXN_FULL branch is unreachable
+ * through \ref mdbx_tst_txl_append, which guards by the current size.
+ * \ingroup c_testing */
+LIBMDBX_API int mdbx_tst_txl_reserve(uint64_t **ptxl, size_t wanna);
+
+/** \brief Forwards the live hamming_weight() (the population count).
+ * \ingroup c_testing */
+LIBMDBX_API size_t mdbx_tst_hamming_weight(uint64_t v);
+
+/** \brief Reports the internal cursor_couple_t's size and the word bits.
+ *
+ * The auxiliary diagnostic of the rkl characterization: the model's
+ * footprint reference. Both out-params are optional.
+ *
+ * \param couple_size  Optional, receives sizeof(cursor_couple_t).
+ * \param word_bits    Optional, receives the internal MDBX_WORDBITS.
+ * \return MDBX_SUCCESS or MDBX_EINVAL for a null couple_size.
+ * \ingroup c_testing */
+LIBMDBX_API int mdbx_tst_cursor_couple_layout(size_t *couple_size, unsigned *word_bits);
+
+/** \brief Reports whether the probe-bus is compiled into this build.
+ *
+ * The positive availability query for the probe-driven edge cases: the
+ * scenarios check it at runtime instead of compile-time cuts, and skip
+ * with a "cannot work here" rationale when the probe-bus is absent.
+ * \ingroup c_testing */
+LIBMDBX_API int mdbx_tst_probes_active(void);
+
+/** \brief Forwards the live mdbx_probe_ctl() request/reply exchange.
+ *
+ * The generic probe-bus seam: activation, disarming of the dev-asserts,
+ * the alloc-fault injection and the per-site counters are all driven by
+ * the request strings; the reply buffer is the caller's. Returns
+ * MDBX_ENOSYS when the probe-bus is not compiled into this build.
+ * \ingroup c_testing */
+LIBMDBX_API int mdbx_tst_probe_ctl(const char *request, char *reply, size_t capacity);
+
 #ifdef __cplusplus
 } /* extern "C" */
 #endif

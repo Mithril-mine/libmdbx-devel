@@ -48,8 +48,14 @@ STATIC_ASSERT_MSG(MDBX_TST_Z_HOLLOW == (unsigned)(uint8_t)z_hollow, "cursor zone
 
 STATIC_ASSERT_MSG(MDBX_TST_NUM_METAS == NUM_METAS, "meta pages count");
 
-/* The public mirrors of the testing-API types are pinned to the live
- * definitions - a drift here is a build break, not a silent test skew. */
+/* The pnl/rkl/txl mirrors (issue #519 stage 4): the element types, the
+ * opaque instance handles and the by-value result mirrors must stay in
+ * sync with the live definitions - a drift here is a build break, not a
+ * silent test skew. */
+STATIC_ASSERT_MSG(MDBX_TST_MAX_TXNID == MAX_TXNID, "max txnid");
+STATIC_ASSERT_MSG(MDBX_TST_MIN_TXNID == MIN_TXNID, "min txnid");
+STATIC_ASSERT_MSG(MDBX_TST_INVALID_TXNID == INVALID_TXNID, "invalid txnid");
+STATIC_ASSERT_MSG(sizeof(uint64_t) == sizeof(txnid_t), "txnid element type");
 /* The public walk-visitor type mirrors the internal walk_func (src/walk.h):
  * a signature drift is impossible by construction, since the adapter below
  * is assigned to the internal function-pointer type. */
@@ -59,6 +65,13 @@ STATIC_ASSERT_MSG(sizeof(enum MDBX_tst_page_type) == sizeof(page_type_t), "page 
  * `1u << variant` position); the engine's implementations map one-to-one
  * through the wrapper's switch, a missing case is caught at runtime. */
 STATIC_ASSERT_MSG(sizeof(enum MDBX_tst_scan4seq_variant) == sizeof(unsigned), "scan4seq variant index type");
+STATIC_ASSERT_MSG(sizeof(MDBX_tst_rkl_t) == sizeof(rkl_t), "rkl handle size");
+/* the iterator's record holds a pointer, so it is smaller on the 32-bit
+ * targets; the handle must be at least as large, its tail stays unused */
+STATIC_ASSERT_MSG(sizeof(MDBX_tst_rkl_iter_t) >= sizeof(rkl_iter_t), "rkl iter handle size");
+STATIC_ASSERT_MSG(sizeof(MDBX_tst_rkl_hole_t) == sizeof(rkl_hole_t), "rkl hole mirror size");
+STATIC_ASSERT_MSG(offsetof(MDBX_tst_rkl_hole_t, begin) == offsetof(rkl_hole_t, begin), "rkl hole mirror begin");
+STATIC_ASSERT_MSG(offsetof(MDBX_tst_rkl_hole_t, end) == offsetof(rkl_hole_t, end), "rkl hole mirror end");
 
 /*----------------------------------------------------------------------------*/
 
@@ -615,4 +628,208 @@ __cold int mdbx_tst_txn_loose_pages(const MDBX_txn *txn, size_t *counter, size_t
     *linked = count;
   }
   return MDBX_SUCCESS;
+}
+
+/* ------------------------------------------------------------------------ */
+/* The pnl/rkl/txl algorithm engines (issue #519 stage 4).
+ *
+ * Thin one-to-one forwards of the live linked functions, the opaque
+ * instance handles and the narrow corruption/introspection accessors.
+ * The preconditions are the engine's own (ASSERTs included): a wrapper
+ * never masks a malformed state that the engine is supposed to reject,
+ * because the characterizations exist to exercise those very paths. */
+
+__cold void mdbx_tst_rkl_init(MDBX_tst_rkl_t *rkl) { rkl_init((rkl_t *)rkl); }
+
+__cold void mdbx_tst_rkl_destroy(MDBX_tst_rkl_t *rkl) { rkl_destroy((rkl_t *)rkl); }
+
+__cold void mdbx_tst_rkl_clear_and_shrink(MDBX_tst_rkl_t *rkl) { rkl_clear_and_shrink((rkl_t *)rkl); }
+
+__cold bool mdbx_tst_rkl_empty(const MDBX_tst_rkl_t *rkl) { return rkl_empty((const rkl_t *)rkl); }
+
+__cold bool mdbx_tst_rkl_check(const MDBX_tst_rkl_t *rkl) { return rkl_check((const rkl_t *)rkl); }
+
+__cold size_t mdbx_tst_rkl_len(const MDBX_tst_rkl_t *rkl) { return rkl_len((const rkl_t *)rkl); }
+
+__cold uint64_t mdbx_tst_rkl_lowest(const MDBX_tst_rkl_t *rkl) { return rkl_lowest((const rkl_t *)rkl); }
+
+__cold uint64_t mdbx_tst_rkl_highest(const MDBX_tst_rkl_t *rkl) { return rkl_highest((const rkl_t *)rkl); }
+
+__cold int mdbx_tst_rkl_push(MDBX_tst_rkl_t *rkl, uint64_t id) { return rkl_push((rkl_t *)rkl, id); }
+
+__cold uint64_t mdbx_tst_rkl_pop(MDBX_tst_rkl_t *rkl, bool highest_not_lowest) {
+  return rkl_pop((rkl_t *)rkl, highest_not_lowest);
+}
+
+__cold int mdbx_tst_rkl_reserve(MDBX_tst_rkl_t *rkl, size_t wanna_size) {
+  return rkl_reserve((rkl_t *)rkl, wanna_size);
+}
+
+__cold int mdbx_tst_rkl_resize(MDBX_tst_rkl_t *rkl, size_t wanna_size) { return rkl_resize((rkl_t *)rkl, wanna_size); }
+
+__cold int mdbx_tst_rkl_merge(const MDBX_tst_rkl_t *src, MDBX_tst_rkl_t *dst, bool ignore_duplicates) {
+  return rkl_merge((const rkl_t *)src, (rkl_t *)dst, ignore_duplicates);
+}
+
+__cold int mdbx_tst_rkl_destructive_merge(MDBX_tst_rkl_t *src, MDBX_tst_rkl_t *dst, bool ignore_duplicates) {
+  return rkl_destructive_merge((rkl_t *)src, (rkl_t *)dst, ignore_duplicates);
+}
+
+__cold int mdbx_tst_rkl_copy(const MDBX_tst_rkl_t *src, MDBX_tst_rkl_t *dst) {
+  return rkl_copy((const rkl_t *)src, (rkl_t *)dst);
+}
+
+__cold void mdbx_tst_rkl_destructive_move(MDBX_tst_rkl_t *src, MDBX_tst_rkl_t *dst) {
+  rkl_destructive_move((rkl_t *)src, (rkl_t *)dst);
+}
+
+__cold MDBX_tst_rkl_iter_t mdbx_tst_rkl_iterator(const MDBX_tst_rkl_t *rkl, bool reverse) {
+  const rkl_iter_t inner = rkl_iterator((const rkl_t *)rkl, reverse);
+  MDBX_tst_rkl_iter_t outer;
+  memcpy(&outer, &inner, sizeof(inner));
+  return outer;
+}
+
+__cold uint64_t mdbx_tst_rkl_turn(MDBX_tst_rkl_iter_t *iter, bool reverse) {
+  return rkl_turn((rkl_iter_t *)iter, reverse);
+}
+
+__cold size_t mdbx_tst_rkl_left(MDBX_tst_rkl_iter_t *iter, bool reverse) {
+  return rkl_left((rkl_iter_t *)iter, reverse);
+}
+
+__cold bool mdbx_tst_rkl_find(const MDBX_tst_rkl_t *rkl, uint64_t id, MDBX_tst_rkl_iter_t *iter) {
+  return rkl_find((const rkl_t *)rkl, id, (rkl_iter_t *)iter);
+}
+
+__cold bool mdbx_tst_rkl_contain(const MDBX_tst_rkl_t *rkl, uint64_t id) { return rkl_contain((const rkl_t *)rkl, id); }
+
+__cold MDBX_tst_rkl_hole_t mdbx_tst_rkl_hole(MDBX_tst_rkl_iter_t *iter, bool reverse) {
+  const rkl_hole_t inner = rkl_hole((rkl_iter_t *)iter, reverse);
+  const MDBX_tst_rkl_hole_t outer = {inner.begin, inner.end};
+  return outer;
+}
+
+__cold int mdbx_tst_rkl_extend_solid(MDBX_tst_rkl_t *rkl, uint64_t solid_begin, uint64_t solid_end, uint64_t id) {
+  return rkl_extend_solid((rkl_t *)rkl, solid_begin, solid_end, id);
+}
+
+__cold bool mdbx_tst_rkl_is_inplace(const MDBX_tst_rkl_t *rkl) {
+  const rkl_t *const inner = (const rkl_t *)rkl;
+  return inner->list == inner->inplace;
+}
+
+__cold size_t mdbx_tst_rkl_inplace_capacity(void) {
+  /* the sizeof-based ARRAY_LENGTH of the live definition, not a literal */
+  return ARRAY_LENGTH(((const rkl_t *)nullptr)->inplace);
+}
+
+__cold void mdbx_tst_rkl_set_solid(MDBX_tst_rkl_t *rkl, uint64_t begin, uint64_t end) {
+  rkl_t *const inner = (rkl_t *)rkl;
+  inner->solid_begin = begin;
+  inner->solid_end = end;
+}
+
+__cold void mdbx_tst_rkl_set_length(MDBX_tst_rkl_t *rkl, size_t length) {
+  ((rkl_t *)rkl)->list_length = (unsigned)length;
+}
+
+__cold void mdbx_tst_rkl_set_limit(MDBX_tst_rkl_t *rkl, size_t limit) { ((rkl_t *)rkl)->list_limit = (unsigned)limit; }
+
+__cold void mdbx_tst_rkl_set_inplace(MDBX_tst_rkl_t *rkl, size_t index, uint64_t id) {
+  rkl_t *const inner = (rkl_t *)rkl;
+  ASSERT(index < ARRAY_LENGTH(inner->inplace));
+  inner->inplace[index] = id;
+}
+
+__cold void mdbx_tst_rkl_list_to_inplace(MDBX_tst_rkl_t *rkl) {
+  rkl_t *const inner = (rkl_t *)rkl;
+  inner->list = inner->inplace;
+}
+
+__cold void mdbx_tst_rkl_iter_stepback(MDBX_tst_rkl_iter_t *iter) { ((rkl_iter_t *)iter)->pos += 1; }
+
+__cold bool mdbx_tst_pnl_intersect(const uint32_t *a, const uint32_t *b) {
+  return pnl_intersect((const pgno_t *)a, (const pgno_t *)b);
+}
+
+__cold bool mdbx_tst_pnl_check_lite(const uint32_t *pnl, size_t limit) {
+  return pnl_check_lite((const pgno_t *)pnl, limit);
+}
+
+__cold bool mdbx_tst_pnl_check_full(const uint32_t *pnl, size_t limit) {
+  return pnl_check_full((const pgno_t *)pnl, limit);
+}
+
+__cold size_t mdbx_tst_pnl_merge(uint32_t *dst, const uint32_t *src) {
+  return pnl_merge((pgno_t *)dst, (const pgno_t *)src);
+}
+
+__cold size_t mdbx_tst_pnl_size(const uint32_t *pnl) { return pnl_size((const pgno_t *)pnl); }
+
+__cold uint32_t *mdbx_tst_pnl_make(uint32_t *buf, size_t alloclen, size_t count, const uint32_t *items) {
+  ASSERT(buf != nullptr);
+  ASSERT(alloclen >= count);
+  /* the live layout: the alloclen word precedes the size word, the data
+   * follows it - encoded here, never in the tests; the items are copied
+   * verbatim, so the malformed lists stay constructible for the
+   * check-failure paths */
+  buf[0] = (uint32_t)alloclen;
+  pgno_t *const pnl = (pgno_t *)(buf + 1);
+  pnl[0] = (pgno_t)count;
+  for (size_t i = 0; i < count; ++i)
+    pnl[1 + i] = (pgno_t)items[i];
+  return (uint32_t *)pnl;
+}
+
+__cold size_t mdbx_tst_txl_max(void) { return (size_t)txl_max; }
+
+__cold uint64_t *mdbx_tst_txl_alloc(void) { return (uint64_t *)txl_alloc(); }
+
+__cold void mdbx_tst_txl_free(uint64_t *txl) { txl_free((txnid_t *)txl); }
+
+__cold size_t mdbx_tst_txl_size(const uint64_t *txl) { return txl_size((const_txl_t)txl); }
+
+__cold size_t mdbx_tst_txl_alloclen(const uint64_t *txl) { return txl_alloclen((const_txl_t)txl); }
+
+__cold int mdbx_tst_txl_append(uint64_t **ptxl, uint64_t id) { return txl_append((txnid_t **)ptxl, id); }
+
+__cold bool mdbx_tst_txl_contain(const uint64_t *txl, uint64_t id) {
+  /* the internal parameter is `const txl_t` - a const-qualified pointer,
+   * not a pointer-to-const */
+  return txl_contain((txnid_t *)txl, id);
+}
+
+__cold void mdbx_tst_txl_sort(uint64_t *txl) { txl_sort((txnid_t *)txl); }
+
+__cold int mdbx_tst_txl_reserve(uint64_t **ptxl, size_t wanna) { return txl_reserve((txnid_t **)ptxl, wanna); }
+
+__cold size_t mdbx_tst_hamming_weight(uint64_t v) { return hamming_weight((size_t)v); }
+
+__cold int mdbx_tst_cursor_couple_layout(size_t *couple_size, unsigned *word_bits) {
+  if (unlikely(!couple_size))
+    return MDBX_EINVAL;
+  *couple_size = sizeof(cursor_couple_t);
+  if (word_bits)
+    *word_bits = (unsigned)MDBX_WORDBITS;
+  return MDBX_SUCCESS;
+}
+
+__cold int mdbx_tst_probes_active(void) {
+#if defined(MDBX_PROBES) /* the probe-bus availability, an existing config gate */
+  return 1;
+#else
+  return 0;
+#endif /* MDBX_PROBES */
+}
+
+__cold int mdbx_tst_probe_ctl(const char *request, char *reply, size_t capacity) {
+#if defined(MDBX_PROBES)
+  return mdbx_probe_ctl(request, reply, capacity);
+#else
+  (void)request;
+  (void)reply;
+  (void)capacity;
+  return MDBX_ENOSYS;
+#endif /* MDBX_PROBES */
 }
