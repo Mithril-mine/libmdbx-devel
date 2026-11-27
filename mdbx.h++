@@ -66,6 +66,15 @@
 #include <version>
 #endif /* <version> */
 
+/* The <compare> header is C++20-only and is not always pulled transitively
+ * (Bionic's libc++ requires it explicitly), while the C++20-comparing
+ * operations below need std::strong_ordering and the like. */
+#if defined(__cpp_impl_three_way_comparison) && __cpp_impl_three_way_comparison >= 201907L
+#if __has_include(<compare>)
+#include <compare>
+#endif /* <compare> */
+#endif /* C++20 three-way comparison */
+
 /* Disable min/max macros from C' headers */
 #ifndef NOMINMAX
 #define NOMINMAX
