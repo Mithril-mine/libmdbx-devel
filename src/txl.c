@@ -37,7 +37,7 @@ void txl_free(txl_t txl) {
     osal_free(txl - 1);
 }
 
-static int txl_reserve(txl_t __restrict *__restrict ptxl, const size_t wanna) {
+int txl_reserve(txl_t __restrict *__restrict ptxl, const size_t wanna) {
   const size_t allocated = txl_alloclen(*ptxl);
   ASSERT(txl_size(*ptxl) <= txl_max && txl_alloclen(*ptxl) >= txl_size(*ptxl));
   if (likely(allocated >= wanna))
