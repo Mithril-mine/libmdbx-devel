@@ -804,7 +804,7 @@ __cold void mdbx_tst_txl_sort(uint64_t *txl) { txl_sort((txnid_t *)txl); }
 
 __cold int mdbx_tst_txl_reserve(uint64_t **ptxl, size_t wanna) { return txl_reserve((txnid_t **)ptxl, wanna); }
 
-__cold size_t mdbx_tst_hamming_weight(uint64_t v) { return hamming_weight((size_t)v); }
+__cold size_t mdbx_tst_hamming_weight(size_t v) { return hamming_weight(v); }
 
 __cold int mdbx_tst_cursor_couple_layout(size_t *couple_size, unsigned *word_bits) {
   if (unlikely(!couple_size))

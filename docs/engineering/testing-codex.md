@@ -121,7 +121,7 @@ CI-обвязка: `tests/ci/run-cell.py` экспортирует
    `runtime_limiter` обновляйте self-test.
 5. При достижении лимита каждый раз скипается один и тот же «хвост» набора
    (детерминированный порядок в рутинных ячейках) — это ожидаемо.
-6. Plain-C тесты (`add_simple_test`: `details_pnl`, `details_rkl`, `probes`)
+6. gtest-юниты (`add_ut`: `details_pnl`, `details_rkl`) и plain-C (`add_simple_test`: `probes`)
    `test-env.c++` **не** получают — они не gtest-овые, лимитер им не нужен.
 
 ## C3 — Флак-менеджмент

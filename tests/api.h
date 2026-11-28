@@ -178,7 +178,7 @@ LIBMDBX_API int mdbx_tst_cursor_state(const MDBX_cursor *mc, unsigned *zone_flag
 /* The scan4seq family (src/gc-scan4seq.h): the descending-list search for
  * a page number N whose neighbor N - seq is also in the list - the GC
  * reclaim candidate probe. The differential test
- * (tests/ut/api/details_scan4seq.c) drives every compiled variant through
+ * (tests/ut/details/details_scan4seq.c) drives every compiled variant through
  * these wrappers and cross-checks them against each other, the internal
  * checker and a written-from-spec oracle. */
 
@@ -257,7 +257,7 @@ LIBMDBX_API int mdbx_tst_gc_store_retired_cases(void);
  * gc-put.c, the entry is MDBX_INTERNAL there): the closed-form solution
  * covering a `volume` of pages with at most `slots` GC records, cutting
  * chunks from the runs of the page-usage histogram. The differential test
- * (tests/ut/api/details_gc_dense_solve.c) drives it against an independent
+ * (tests/ut/details/details_gc_dense_solve.c) drives it against an independent
  * exact per-run partition DP oracle. */
 
 /** \brief The library's page header size in bytes (the layout constant
@@ -486,7 +486,7 @@ LIBMDBX_API ptrdiff_t mdbx_tst_lck_wrt_lock_bytes(const MDBX_env *env, void *buf
 /* ------------------------------------------------------------------------ */
 /* The pnl/rkl/txl algorithm engines (issue #519 stage 4).
  *
- * The deepest white-box characterizations (details_pnl.c, details_rkl.c)
+ * The deepest white-box characterizations (details_pnl.c++, details_rkl.c++)
  * exercise the pnl/rkl/txl engines through this mirror: thin one-to-one
  * forwards of the live linked functions, opaque instance handles for the
  * internal record types, and narrow accessors for the corruption-pokes
@@ -790,8 +790,13 @@ LIBMDBX_API void mdbx_tst_txl_sort(uint64_t *txl);
 LIBMDBX_API int mdbx_tst_txl_reserve(uint64_t **ptxl, size_t wanna);
 
 /** \brief Forwards the live hamming_weight() (the population count).
+ *
+ * The parameter mirrors the internal function's own `size_t` width, so the
+ * callers pass the same-width complements (`~set` of a `size_t` set) as-is -
+ * without the implicit widening to a wider parameter (which trips the MSVC
+ * C4319 warning; the population count itself would not change).
  * \ingroup c_testing */
-LIBMDBX_API size_t mdbx_tst_hamming_weight(uint64_t v);
+LIBMDBX_API size_t mdbx_tst_hamming_weight(size_t v);
 
 /** \brief Reports the internal cursor_couple_t's size and the word bits.
  *

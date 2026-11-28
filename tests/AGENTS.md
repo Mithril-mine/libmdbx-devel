@@ -7,9 +7,18 @@
 
 ## 1. Layout
 
-- `tests/ut/<area>/` — unit tests by area (`api/`, `cursor/`, `dbi/`, `txn/`,
-  `env/`, `cxx/`, `gc/`, `issues/`, `tools/`); issue regressions live under
-  `tests/ut/issues/` and are modeled on the existing files there.
+- `tests/ut/<area>/` — unit tests by area (`api/`, `details/`, `cursor/`,
+  `dbi/`, `txn/`, `env/`, `cxx/`, `gc/`, `issues/`, `tools/`); issue
+  regressions live under `tests/ut/issues/` and are modeled on the existing
+  files there. The `tests/ut/api/` directory holds the tests of the libmdbx
+  API surface only: the internal-component characterizations (the
+  `details_*` engine units, the on-disk format corpus, the probe units)
+  belong to `tests/ut/details/` with the `ut.details` label. The gtest-based
+  units run where GoogleTest is usable at the requested C++ standard (C++17+);
+  the old-standard cells register them as skips, so the pnl/rkl/txl engine
+  branches and the format-corpus regressions (incl. the 32-bit
+  crafted_meta_v023) are not covered there until a plain-C fallback for those
+  cells is decided on; the plain-C units (the probes) keep running.
 - `tests/ut/env-guard.h++` — the `env_files_guard` RAII helper and the
   `env_handle_guard` / `txn_handle_guard` scoped-ownership helpers (see the
   "Test hygiene & cleanup" section below).

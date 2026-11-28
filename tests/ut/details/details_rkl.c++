@@ -37,13 +37,10 @@
 #include <windows.h>
 #endif /* _WIN32 */
 
-#include "mdbx.h"
+#include "../env-guard.h++"
+#include <gtest/gtest.h>
 
-/* NB: no <stdbool.h> here - the library's mdbx.h defines bool/true/false
- * for the C mode, and the MSVC/mingw stdbool.h defines them unconditionally,
- * so a later inclusion would redefinition-warn under -Werror. */
-
-#include <assert.h>
+#include <cassert>
 #include <inttypes.h>
 #include <limits.h>
 #include <stdint.h>
@@ -55,17 +52,21 @@
 /*-----------------------------------------------------------------------------*/
 
 static size_t tst_failed, tst_ok, tst_iterations, tst_cases, tst_cases_hole;
+/* The CI shuffles the TEST order (GTEST_SHUFFLE=1), so every stochastic
+ * TEST seeds the prng and resets the counters itself - no order- and
+ * shuffle-dependent state. */
+static void tst_reset(void) { tst_failed = tst_ok = tst_iterations = tst_cases = tst_cases_hole = 0; }
 #ifndef NDEBUG
 static size_t tst_target;
 #endif
 
+/* The failures report through gtest (ADD_FAILURE), while the counters stay:
+ * the stochastic bailout and the pass-scoped verdicts are counter-driven. */
 static bool check_bool(bool v, bool expect, const char *fn, unsigned line) {
-  if ((v != expect)) {
+  if (v != expect) {
     ++tst_failed;
-    fflush(NULL);
-    fprintf(stderr, "iteration %zi: got %s, expected %s, at %s:%u\n", tst_iterations, v ? "true" : "false",
-            expect ? "true" : "false", fn, line);
-    fflush(NULL);
+    ADD_FAILURE() << "iteration " << tst_iterations << ": got " << (v ? "true" : "false") << ", expected "
+                  << (expect ? "true" : "false") << ", at " << fn << ":" << line;
     return false;
   }
   ++tst_ok;
@@ -73,12 +74,10 @@ static bool check_bool(bool v, bool expect, const char *fn, unsigned line) {
 }
 
 static bool check_eq(uint64_t v, uint64_t expect, const char *fn, unsigned line) {
-  if ((v != expect)) {
+  if (v != expect) {
     ++tst_failed;
-    fflush(NULL);
-    fprintf(stderr, "iteration %zi: %" PRIu64 " (got) != %" PRIu64 " (expected), at %s:%u\n", tst_iterations, v, expect,
-            fn, line);
-    fflush(NULL);
+    ADD_FAILURE() << "iteration " << tst_iterations << ": " << v << " (got) != " << expect << " (expected), at " << fn
+                  << ":" << line;
     return false;
   }
   ++tst_ok;
@@ -90,7 +89,13 @@ static bool check_eq(uint64_t v, uint64_t expect, const char *fn, unsigned line)
 #define CHECK_FALSE(T) CHECK_BOOL(T, false)
 #define CHECK_EQ(T, EXPECT) check_eq((T), (EXPECT), __func__, __LINE__)
 
-void trivia(void) {
+TEST(details_rkl, trivia) {
+  tst_reset();
+  size_t couple_size = 0;
+  unsigned word_bits = 0;
+  mdbx_tst_cursor_couple_layout(&couple_size, &word_bits);
+  printf("auxilary info: cursor/couple size is %zu for %s = %u\n", couple_size, "MDBX_WORDBITS", word_bits);
+
   MDBX_tst_rkl_t x, y;
 
   mdbx_tst_rkl_init(&x);
@@ -310,16 +315,38 @@ static bool stochastic_pass(const unsigned start, const unsigned width, const un
   return errors == tst_failed;
 }
 
-static bool stochastic(const size_t limit_cases, const size_t limit_loops) {
+static unsigned getenv_uint(const char *name, unsigned fallback) {
+  const char *value = getenv(name);
+  if (!value || !*value)
+    return fallback;
+  char *end = NULL;
+  const unsigned long parsed = strtoul(value, &end, 10);
+  if (!end || *end || parsed == ULONG_MAX)
+    return fallback;
+  return (unsigned)parsed;
+}
+
+TEST(details_rkl, stochastic) {
+  tst_reset();
+  prng_state = (uint64_t)time(nullptr);
+  printf("prng-seed %" PRIu64 "\n", prng_state);
+  /* Масштаб стохастики управляется env-переменными (по умолчанию - полный,
+   * как было: 42^3 случаев + 42 петли); MDBX_RKL_CASES / MDBX_RKL_LOOPS
+   * позволяют урезать для быстрого рутинного прогона без потери веток
+   * покрытия. */
+  const unsigned limit_cases = getenv_uint("MDBX_RKL_CASES", 42 * 42 * 42);
+  const unsigned limit_loops = getenv_uint("MDBX_RKL_LOOPS", 42);
+  printf("stochastic: cases=%u loops=%u\n", limit_cases, limit_loops);
+  fflush(nullptr);
   for (unsigned loop = 0; tst_cases < limit_cases || loop < limit_loops; ++loop)
     for (unsigned width = 2; width < 10; ++width)
       for (unsigned n = 1; n < width; ++n)
         for (unsigned prev = 1, start = 0, t; start < 4242; t = start + prev, prev = start, start = t)
           if (!stochastic_pass(start, 1u << width, 1u << n) || tst_failed > 42) {
             puts("bailout\n");
-            return false;
+            return;
           }
-  return true;
+  return;
 }
 
 /*-----------------------------------------------------------------------------*/
@@ -484,23 +511,16 @@ static size_t prng_word(void) {
 
 /*-----------------------------------------------------------------------------*/
 
-static unsigned getenv_uint(const char *name, unsigned fallback) {
-  const char *value = getenv(name);
-  if (!value || !*value)
-    return fallback;
-  char *end = NULL;
-  const unsigned long parsed = strtoul(value, &end, 10);
-  if (!end || *end || parsed == ULONG_MAX)
-    return fallback;
-  return (unsigned)parsed;
-}
-
 /* Детерминированные edge-кейсы на ветки rkl/txl, которые стохастика
  * подробандивает редко или вообще не задевает (mdbx_tst_rkl_merge/destructive_merge,
  * mdbx_tst_rkl_find, mdbx_tst_rkl_reserve, resize-shrink, ENOMEM-path, mdbx_tst_rkl_check error-branches).
  * Быстрые — выполняются всегда; полный набор — под управлением MDBX_RKL_EDGES. */
-static bool edge_cases_full(void) {
-  const size_t errors = tst_failed;
+TEST(details_rkl, edge_cases_full) {
+  tst_reset();
+  if (getenv_uint("MDBX_RKL_EDGES", 1) == 0) {
+    GTEST_SKIP() << "SKIPPED by MDBX_RKL_EDGES";
+    return;
+  }
   MDBX_tst_rkl_t a, b;
 
   /* mdbx_tst_rkl_reserve: рост буфера из inplace во внешний */
@@ -564,13 +584,11 @@ static bool edge_cases_full(void) {
   CHECK_TRUE(mdbx_tst_rkl_empty(&b));
   mdbx_tst_rkl_destroy(&a);
   mdbx_tst_rkl_destroy(&b);
-
-  return errors == tst_failed;
 }
 
 /* Базовый набор edge-кейсов: дёшево, выполняется всегда. */
-static bool edge_cases_basic(void) {
-  const size_t errors = tst_failed;
+TEST(details_rkl, edge_cases_basic) {
+  tst_reset();
   MDBX_tst_rkl_t a;
 
   /* mdbx_tst_rkl_pop из пустого и после исчерпания */
@@ -594,14 +612,16 @@ static bool edge_cases_basic(void) {
   mdbx_tst_rkl_clear_and_shrink(&a);
   CHECK_TRUE(mdbx_tst_rkl_empty(&a));
   mdbx_tst_rkl_destroy(&a);
-
-  return errors == tst_failed;
 }
 
 /* Дополнительные edge-кейсы (группа B): rare paths, добивают хвостовые ветки
  * find/merge/push/hole и destructive_move с внешним буфером. */
-static bool edge_cases_full2(void) {
-  const size_t errors = tst_failed;
+TEST(details_rkl, edge_cases_full2) {
+  tst_reset();
+  if (getenv_uint("MDBX_RKL_EDGES", 1) == 0) {
+    GTEST_SKIP() << "SKIPPED by MDBX_RKL_EDGES";
+    return;
+  }
   MDBX_tst_rkl_t a, b;
   MDBX_tst_rkl_iter_t fi;
 
@@ -723,21 +743,22 @@ static bool edge_cases_full2(void) {
   CHECK_EQ((uint64_t)mdbx_tst_rkl_push(&a, 1), (uint64_t)MDBX_RESULT_TRUE);
   CHECK_TRUE(mdbx_tst_rkl_check(&a));
   mdbx_tst_rkl_destroy(&a);
-
-  return errors == tst_failed;
 }
 
-static bool stochastic_hole(size_t probes) {
-  for (size_t n = 0; n < probes; ++n) {
+TEST(details_rkl, stochastic_hole) {
+  tst_reset();
+  prng_state = (uint64_t)time(nullptr);
+  const size_t hole_probes = getenv_uint("MDBX_RKL_HOLE_PROBES", 24 * 24 * 24);
+  for (size_t n = 0; n < hole_probes; ++n) {
     size_t set = prng_word();
     if (!stochastic_pass_hole(set, prng() % 11))
-      return false;
+      return;
     if (!stochastic_pass_hole(set & prng_word(), prng() % 11))
-      return false;
+      return;
     if (!stochastic_pass_hole(set | prng_word(), prng() % 11))
-      return false;
+      return;
   }
-  return true;
+  return;
 }
 
 /* -----------------------------------------------------------------------------
@@ -750,7 +771,7 @@ static int probe_ctl_ok(const char *request) {
   const int rc = mdbx_tst_probe_ctl(request, reply, sizeof(reply));
   if (rc != 0 || strncmp(reply, "ok", 2) != 0) {
     ++tst_failed;
-    fprintf(stderr, "FAIL mdbx_tst_probe_ctl(\"%s\") rc=%d reply=\"%s\"\n", request, rc, reply);
+    ADD_FAILURE() << "mdbx_tst_probe_ctl(\"" << request << "\") rc=" << rc << " reply=\"" << reply << "\"";
     return -1;
   }
   return 0;
@@ -771,28 +792,41 @@ static void probe_activate(void) {
   }
 }
 
+/* The probe-bus reads MDBX_PROBES at its first fire, and the probes fire
+ * from the very first rkl operation - so the activation must precede the
+ * whole run, hence the static initializer instead of a call inside a TEST
+ * body (the test bodies run after the stochastic ones may have fired). */
+namespace {
+struct tst_probe_env_setup {
+  tst_probe_env_setup() { probe_activate(); }
+};
+static tst_probe_env_setup tst_probe_env_setup_instance;
+} /* namespace */
+
 /* Классы непокрытых веток rkl.c/txl.c (инвентарь: docs/engineering/
  * coverage-pilot-inventory.md). Каждый кейс изолирован (arm/disarm/reset). */
-static bool edge_cases_probes(void) {
-  if (!mdbx_tst_probes_active())
-    return true; /* the probe-bus is not compiled in: these cases cannot work */
-  const size_t errors = tst_failed;
+TEST(details_rkl, edge_cases_probes) {
+  tst_reset();
+  if (!mdbx_tst_probes_active()) {
+    GTEST_SKIP() << "the probe-bus is not compiled in: these cases cannot work";
+    return;
+  }
   char reply[1024];
   MDBX_tst_rkl_t a, b;
   uint64_t *l;
 
   if (probe_ctl_ok("mode count") != 0)
-    return false;
+    return;
 
   /* --- D: mdbx_tst_rkl_resize "unable shrink" -> MDBX_PROBLEM (disarm dev-assert) --- */
   mdbx_tst_rkl_init(&a);
   for (uint64_t id = 1; id <= 8; ++id)
     CHECK_EQ((uint64_t)mdbx_tst_rkl_push(&a, id * 2), (uint64_t)MDBX_SUCCESS); /* 2 в solid, 8 в списке */
   if (probe_ctl_ok("disarm rkl:resize:wanna_gt_length") != 0)
-    return false;
+    return;
   CHECK_EQ((uint64_t)mdbx_tst_rkl_resize(&a, 4), (uint64_t)MDBX_PROBLEM);
   if (probe_ctl_ok("arm rkl:resize:wanna_gt_length") != 0)
-    return false;
+    return;
   mdbx_tst_rkl_destroy(&a);
 
   /* --- R: mdbx_tst_rkl_resize "too long" -> MDBX_TXN_FULL (wanna > mdbx_tst_txl_max()) --- */
@@ -819,10 +853,10 @@ static bool edge_cases_probes(void) {
   /* --- F: alloc-fault -> MDBX_ENOMEM в mdbx_tst_rkl_reserve (mdbx_tst_rkl_resize L101) --- */
   mdbx_tst_rkl_init(&a);
   if (probe_ctl_ok("alloc-fault 1") != 0)
-    return false;
+    return;
   CHECK_EQ((uint64_t)mdbx_tst_rkl_reserve(&a, mdbx_tst_rkl_inplace_capacity() + 1), (uint64_t)MDBX_ENOMEM);
   if (probe_ctl_ok("alloc-fault none") != 0)
-    return false;
+    return;
   mdbx_tst_rkl_destroy(&a);
 
   /* --- F+R: mdbx_tst_rkl_copy проброс ошибки роста (L124) --- */
@@ -832,10 +866,10 @@ static bool edge_cases_probes(void) {
     CHECK_EQ((uint64_t)mdbx_tst_rkl_push(&a, id * 2), (uint64_t)MDBX_SUCCESS); /* список, без solid */
   mdbx_tst_rkl_init(&b);
   if (probe_ctl_ok("alloc-fault 1") != 0)
-    return false;
+    return;
   CHECK_EQ((uint64_t)mdbx_tst_rkl_copy(&a, &b), (uint64_t)MDBX_ENOMEM);
   if (probe_ctl_ok("alloc-fault none") != 0)
-    return false;
+    return;
   mdbx_tst_rkl_destroy(&a);
   mdbx_tst_rkl_destroy(&b);
 
@@ -844,10 +878,10 @@ static bool edge_cases_probes(void) {
   for (uint64_t id = 1; id <= mdbx_tst_rkl_inplace_capacity() + 1; ++id)
     CHECK_EQ((uint64_t)mdbx_tst_rkl_push(&a, id * 2), (uint64_t)MDBX_SUCCESS); /* список до предела inplace */
   if (probe_ctl_ok("alloc-fault 1") != 0)
-    return false;
+    return;
   CHECK_EQ((uint64_t)mdbx_tst_rkl_push(&a, 99), (uint64_t)MDBX_ENOMEM);
   if (probe_ctl_ok("alloc-fault none") != 0)
-    return false;
+    return;
   mdbx_tst_rkl_destroy(&a);
 
   /* --- R: mdbx_tst_rkl_merge return err из цикла по списку (L425) --- */
@@ -912,14 +946,14 @@ static bool edge_cases_probes(void) {
   /* --- R: mdbx_tst_txl_reserve "too long" -> MDBX_TXN_FULL --- */
   l = mdbx_tst_txl_alloc();
   if (!CHECK_TRUE(l != NULL))
-    return false;
+    return;
   CHECK_EQ((uint64_t)mdbx_tst_txl_reserve(&l, (size_t)mdbx_tst_txl_max() + 1), (uint64_t)MDBX_TXN_FULL);
   mdbx_tst_txl_free(l);
 
   /* --- R: mdbx_tst_txl_contain возвращает true (дубликат) --- */
   l = mdbx_tst_txl_alloc();
   if (!CHECK_TRUE(l != NULL))
-    return false;
+    return;
   CHECK_EQ((uint64_t)mdbx_tst_txl_append(&l, 7), (uint64_t)MDBX_SUCCESS);
   CHECK_TRUE(mdbx_tst_txl_contain(l, 7));
   mdbx_tst_txl_free(l);
@@ -927,19 +961,19 @@ static bool edge_cases_probes(void) {
   /* --- F+R: mdbx_tst_txl_append проброс ошибки (L87) + realloc ENOMEM (L63) --- */
   l = mdbx_tst_txl_alloc();
   if (!CHECK_TRUE(l != NULL))
-    return false;
+    return;
   {
     uint64_t id = 1;
     while (mdbx_tst_txl_size(l) < mdbx_tst_txl_alloclen(l))
       CHECK_EQ((uint64_t)mdbx_tst_txl_append(&l, id++), (uint64_t)MDBX_SUCCESS); /* заполнили до ёмкости */
     if (probe_ctl_ok("alloc-fault 1") != 0) {
       mdbx_tst_txl_free(l);
-      return false;
+      return;
     }
     CHECK_EQ((uint64_t)mdbx_tst_txl_append(&l, id), (uint64_t)MDBX_ENOMEM);
     if (probe_ctl_ok("alloc-fault none") != 0) {
       mdbx_tst_txl_free(l);
-      return false;
+      return;
     }
   }
   mdbx_tst_txl_free(l);
@@ -968,52 +1002,6 @@ static bool edge_cases_probes(void) {
       }
     }
   }
-
-  return errors == tst_failed;
 }
 
 /*-----------------------------------------------------------------------------*/
-
-int main(int argc, const char *argv[]) {
-  (void)argc;
-  (void)argv;
-
-  /* Runtime-активация probe-bus для аттестации и fault-инъекции (вне
-   * probe-сборок это просто установка неиспользуемой переменной среды). */
-  probe_activate();
-
-  size_t couple_size = 0;
-  unsigned word_bits = 0;
-  mdbx_tst_cursor_couple_layout(&couple_size, &word_bits);
-  printf("auxilary info: cursor/couple size is %zu for %s = %u\n", couple_size, "MDBX_WORDBITS", word_bits);
-
-#ifndef NDEBUG
-  // tst_target = 281870;
-#endif
-  prng_state = (uint64_t)time(NULL);
-  printf("prng-seed %" PRIu64 "\n", prng_state);
-  fflush(NULL);
-
-  trivia();
-  if (!edge_cases_basic())
-    return EXIT_FAILURE;
-  if (getenv_uint("MDBX_RKL_EDGES", 1) > 0 && (!edge_cases_full() || !edge_cases_full2()))
-    return EXIT_FAILURE;
-  if (!edge_cases_probes())
-    return EXIT_FAILURE;
-
-  /* Масштаб стохастики управляется env-переменными (по умолчанию — полный,
-   * как было: 42³ случаев + 42 петли, 24³ hole-проб).
-   * MDBX_RKL_CASES / MDBX_RKL_LOOPS / MDBX_RKL_HOLE_PROBES позволяют урезать
-   * для быстрого рутинного прогона без потери веток покрытия. */
-  const unsigned limit_cases = getenv_uint("MDBX_RKL_CASES", 42 * 42 * 42);
-  const unsigned limit_loops = getenv_uint("MDBX_RKL_LOOPS", 42);
-  const unsigned hole_probes = getenv_uint("MDBX_RKL_HOLE_PROBES", 24 * 24 * 24);
-  printf("stochastic: cases=%u loops=%u hole-probes=%u\n", limit_cases, limit_loops, hole_probes);
-  stochastic(limit_cases, limit_loops);
-  stochastic_hole(hole_probes);
-  printf("done: %zu+%zu cases, %zu iterations, %zu checks ok, %zu checks failed\n", tst_cases, tst_cases_hole,
-         tst_iterations, tst_ok, tst_failed);
-  fflush(NULL);
-  return tst_failed ? EXIT_FAILURE : EXIT_SUCCESS;
-}

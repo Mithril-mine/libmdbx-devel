@@ -182,8 +182,8 @@ Per-site USDT-маркеры для внешней трассировки опи
 
 | Тест | Что проверяет |
 | --- | --- |
-| `extra_probes` (`tests/ut/api/probes.c`) | реестр/list/query/reset/arm/disarm, fault-инъекция кода, alloc-fault, mode count, DEV_ASSERT-подсчёт |
-| `extra_probes_ipc` (`tests/ut/api/probes_ipc.c`) | файловое IPC round-trip (cmd→sync→rep) |
+| `extra_probes` (`tests/ut/details/probes.c`) | реестр/list/query/reset/arm/disarm, fault-инъекция кода, alloc-fault, mode count, DEV_ASSERT-подсчёт |
+| `extra_probes_ipc` (`tests/ut/details/probes_ipc.c`) | файловое IPC round-trip (cmd→sync→rep) |
 
 CI: `.github/workflows/ci-probes.yml` (ubuntu/windows/macos).
 

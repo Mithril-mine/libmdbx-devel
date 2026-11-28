@@ -677,6 +677,8 @@ else()
     # into tests/ut/<area>/ subdirectories matching the primary area label:
     #   ut                  - root: all unit tests
     #   |- ut.api           - C API surface (buffers, parameters, stat-info, ...)
+    #   |- ut.details       - the internal-component characterizations (the
+    #                         details_* engines, the format corpus, the probes)
     #   |- ut.cxx           - C++ API layer (slice, buffer, txn-metadata, ...)
     #   |- ut.env           - environment lifecycle (open/close, global init)
     #   |- ut.dbi           - DBI lifecycle and operations
@@ -695,56 +697,62 @@ else()
       add_ut(dbi_nested_txn SOURCE ut/dbi/dbi_nested_txn.c++)
       set_tests_properties(dbi_nested_txn PROPERTIES LABELS "ut;ut.dbi;ut.txn")
     endif()
-    add_extra_test(details_pnl SOURCE ut/api/details_pnl.c)
-    set_tests_properties(extra_details_pnl PROPERTIES LABELS "ut;ut.api;ut.gc")
-    add_extra_test(details_rkl SOURCE ut/api/details_rkl.c)
-    set_tests_properties(extra_details_rkl PROPERTIES LABELS "ut;ut.api;ut.gc")
-    add_extra_test(details_troika_fsm SOURCE ut/api/details_troika_fsm.c)
-    set_tests_properties(extra_details_troika_fsm PROPERTIES LABELS "ut;ut.api;ut.env")
-    add_extra_test(meta_validate_corpus SOURCE ut/api/meta_validate_corpus.c)
-    set_tests_properties(extra_meta_validate_corpus PROPERTIES LABELS "ut;ut.api;ut.env")
+    add_ut(details_pnl SOURCE ut/details/details_pnl.c++)
+    set_tests_properties(details_pnl PROPERTIES LABELS "ut;ut.details;ut.gc")
+    add_ut(details_rkl SOURCE ut/details/details_rkl.c++)
+    set_tests_properties(details_rkl PROPERTIES LABELS "ut;ut.details;ut.gc")
+    add_extra_test(details_troika_fsm SOURCE ut/details/details_troika_fsm.c)
+    set_tests_properties(extra_details_troika_fsm PROPERTIES LABELS "ut;ut.details;ut.env")
+    add_extra_test(meta_validate_corpus SOURCE ut/details/meta_validate_corpus.c)
+    set_tests_properties(extra_meta_validate_corpus PROPERTIES LABELS "ut;ut.details;ut.env")
     # the #485 crafted-meta regression: crafted_meta_v039
-        add_extra_test(crafted_meta_v039 SOURCE ut/api/crafted_meta_v039.c)
-        set_tests_properties(extra_crafted_meta_v039 PROPERTIES LABELS "ut;ut.api;ut.cursor")
+        add_extra_test(crafted_meta_v039 SOURCE ut/details/crafted_meta_v039.c)
+        set_tests_properties(extra_crafted_meta_v039 PROPERTIES LABELS "ut;ut.details;ut.cursor")
     # the #485 crafted-meta regression: crafted_meta_v023
-        add_extra_test(crafted_meta_v023 SOURCE ut/api/crafted_meta_v023.c)
-        set_tests_properties(extra_crafted_meta_v023 PROPERTIES LABELS "ut;ut.api;ut.env")
+        add_extra_test(crafted_meta_v023 SOURCE ut/details/crafted_meta_v023.c)
+        set_tests_properties(extra_crafted_meta_v023 PROPERTIES LABELS "ut;ut.details;ut.env")
     add_ut(walk_contracts SOURCE ut/api/walk_contracts.c++)
     set_tests_properties(walk_contracts PROPERTIES LABELS "ut;ut.api;ut.gc;ut.cursor")
     if(MDBX_ENABLE_BIGFOOT)
       # the store-slicing contract under test is BIGFOOT-specific
-      add_extra_test(details_gc_store_retired SOURCE ut/api/details_gc_store_retired.c)
-      set_tests_properties(extra_details_gc_store_retired PROPERTIES LABELS "ut;ut.api;ut.gc")
+      add_extra_test(details_gc_store_retired SOURCE ut/details/details_gc_store_retired.c)
+      set_tests_properties(extra_details_gc_store_retired PROPERTIES LABELS "ut;ut.details;ut.gc")
     endif()
-    add_extra_test(details_gc_dense_solve SOURCE ut/api/details_gc_dense_solve.c)
-    set_tests_properties(extra_details_gc_dense_solve PROPERTIES LABELS "ut;ut.api;ut.gc")
-    set_property(TEST extra_details_rkl APPEND PROPERTY
+    add_extra_test(details_gc_dense_solve SOURCE ut/details/details_gc_dense_solve.c)
+    set_tests_properties(extra_details_gc_dense_solve PROPERTIES LABELS "ut;ut.details;ut.gc")
+    set_property(TEST details_rkl APPEND PROPERTY
       # Routine profile: bounded stochastic scale + deterministic edge-cases
       # covers the same rkl/txl branches as the full stress at ~1.4s vs ~30s
       # (measured 2026-09-30, Debug+gcov). Full stress lives in the
-      # ut.heavy-labelled extra_details_rkl_full target below. MDBX_PROBES=1
+      # ut.heavy-labelled details_rkl_full target below. MDBX_PROBES=1
       # активирует probe-bus аттестацию покрытия (edge_cases_probes).
       ENVIRONMENT "MDBX_RKL_CASES=64;MDBX_RKL_LOOPS=8;MDBX_RKL_HOLE_PROBES=512;MDBX_RKL_EDGES=1;MDBX_PROBES=1")
-    add_test(NAME extra_details_rkl_full COMMAND $<TARGET_FILE:te_details_rkl>)
-    if(MDBX_TESTS_ASAN_OPTIONS)
-      set_property(TEST extra_details_rkl_full APPEND PROPERTY
-        ENVIRONMENT "${MDBX_TESTS_ASAN_OPTIONS}")
+    # The target exists only when GoogleTest is usable at the requested C++
+    # standard (the add_gtest stub-path skips the target on the old-standard
+    # cells - the same if(TARGET ...) guard as the other post-add_gtest
+    # target commands).
+    if(TARGET ut_details_rkl)
+      add_test(NAME details_rkl_full COMMAND $<TARGET_FILE:ut_details_rkl>)
+      if(MDBX_TESTS_ASAN_OPTIONS)
+        set_property(TEST details_rkl_full APPEND PROPERTY
+          ENVIRONMENT "${MDBX_TESTS_ASAN_OPTIONS}")
+      endif()
+      set_tests_properties(details_rkl_full PROPERTIES
+        LABELS "ut;ut.details;ut.gc;ut.heavy"
+        TIMEOUT 3600)
+      set_property(TEST details_rkl_full APPEND PROPERTY
+        ENVIRONMENT "MDBX_RKL_EDGES=1")
     endif()
-    set_tests_properties(extra_details_rkl_full PROPERTIES
-      LABELS "ut;ut.api;ut.gc;ut.heavy"
-      TIMEOUT 3600)
-    set_property(TEST extra_details_rkl_full APPEND PROPERTY
-      ENVIRONMENT "MDBX_RKL_EDGES=1")
 
     # SIMD scan4seq differential (white-box: src/gc-scan4seq.h, extracted from
     # gc-get.c); exhaustive over all 2^16 descending lists over {1..16} plus
     # long-sequence spot checks; guards the whole SIMD family (issue #485).
-    add_extra_test(details_scan4seq SOURCE ut/api/details_scan4seq.c)
-    set_tests_properties(extra_details_scan4seq PROPERTIES LABELS "ut;ut.api;ut.gc")
+    add_extra_test(details_scan4seq SOURCE ut/details/details_scan4seq.c)
+    set_tests_properties(extra_details_scan4seq PROPERTIES LABELS "ut;ut.details;ut.gc")
 
     if(MDBX_PROBES)
-      add_extra_test(probes SOURCE ut/api/probes.c)
-      set_tests_properties(extra_probes PROPERTIES LABELS "ut;ut.api")
+      add_extra_test(probes SOURCE ut/details/probes.c)
+      set_tests_properties(extra_probes PROPERTIES LABELS "ut;ut.details")
       if(WIN32)
         # The probe-page/IPC handshake hangs on Windows (the probe tests
         # never ran there before the probes-default change; needs a
@@ -756,7 +764,7 @@ else()
 
       # File-IPC round-trip: the driver writes requests to <dir>/cmd and reads
       # replies from <dir>/rep; WORKING_DIRECTORY isolates the IPC files.
-      add_executable(te_probes_ipc ut/api/probes_ipc.c)
+      add_executable(te_probes_ipc ut/details/probes_ipc.c)
       target_include_directories(te_probes_ipc PRIVATE "${PROJECT_SOURCE_DIR}")
       target_link_libraries(te_probes_ipc ${TOOL_MDBX_LIB})
       set_target_properties(te_probes_ipc PROPERTIES C_STANDARD ${MDBX_C_STANDARD} C_STANDARD_REQUIRED ON)
@@ -764,7 +772,7 @@ else()
       file(MAKE_DIRECTORY "${probes_ipc_dir}")
       add_test(NAME extra_probes_ipc
                COMMAND $<TARGET_FILE:te_probes_ipc> "${probes_ipc_dir}")
-      set_tests_properties(extra_probes_ipc PROPERTIES LABELS "ut;ut.api" TIMEOUT 120
+      set_tests_properties(extra_probes_ipc PROPERTIES LABELS "ut;ut.details" TIMEOUT 120
         WORKING_DIRECTORY "${probes_ipc_dir}")
       if(WIN32)
         set_tests_properties(extra_probes_ipc PROPERTIES DISABLED TRUE)

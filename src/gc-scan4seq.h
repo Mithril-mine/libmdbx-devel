@@ -8,7 +8,7 @@
  * `seq+1` pages) within a page-number list, plus the exact-length variant used
  * by the experimental ALLOC_EXACTLY allocation mode. Extracted verbatim from
  * gc-get.c (2026-11, verification campaign) to allow standalone white-box
- * testing (tests/ut/api/details_scan4seq.c). Requires essentials.h (pgno_t,
+ * testing (tests/ut/details/details_scan4seq.c). Requires essentials.h (pgno_t,
  * ptr_disp, clz_uintptr, ASSERT, arm_neon.h/immintrin via preface.h) and pnl.h. */
 
 #include "essentials.h"
