@@ -100,10 +100,24 @@ MDBX_MAYBE_UNUSED MDBX_NOTHROW_PURE_FUNCTION size_t bytes_ceil2os_pgno(const MDB
   return bytes2pgno(env, bytes_ceil2os_bytes(env, bytes));
 }
 
+/* the size_t form; the 64-bit twin pgno_ceil2os_bytes64() below serves the
+ * geometry-from-db formation, whose over-envelope products would wrap in
+ * this size_t arithmetic (issue #636). */
 MDBX_MAYBE_UNUSED MDBX_NOTHROW_PURE_FUNCTION size_t pgno_ceil2os_bytes(const MDBX_env *env, size_t pgno) {
   const size_t sys_unit =
       MDBX_ROUNDING_TO_ALLOCATION_GRANULARITY ? globals.sys_allocation_granularity : globals.sys_pagesize;
   return ceil_powerof2(pgno2bytes(env, pgno), sys_unit);
+}
+
+/* the 64-bit twin of pgno_ceil2os_bytes() above (issue #636): takes the
+ * page-count-by-pagesize product in bytes, for the geometry-from-db products
+ * are formed in 64 bits and ceil'ed through the twin - the size_t arithmetic
+ * of the original would wrap exactly the over-envelope products being
+ * checked against the host envelope. */
+MDBX_MAYBE_UNUSED MDBX_NOTHROW_PURE_FUNCTION uint64_t pgno_ceil2os_bytes64(uint64_t bytes) {
+  const uint64_t sys_unit =
+      MDBX_ROUNDING_TO_ALLOCATION_GRANULARITY ? globals.sys_allocation_granularity : globals.sys_pagesize;
+  return (bytes + sys_unit - 1) & ~(sys_unit - 1);
 }
 
 MDBX_MAYBE_UNUSED MDBX_NOTHROW_PURE_FUNCTION pgno_t pgno_ceil2os_pgno(const MDBX_env *env, size_t pgno) {

@@ -237,6 +237,10 @@ MDBX_NOTHROW_PURE_FUNCTION MDBX_INTERNAL size_t bytes_ceil2os_bytes(const MDBX_e
 MDBX_NOTHROW_PURE_FUNCTION MDBX_INTERNAL size_t bytes_ceil2os_pgno(const MDBX_env *env, size_t bytes);
 MDBX_NOTHROW_PURE_FUNCTION MDBX_INTERNAL size_t pgno_ceil2os_bytes(const MDBX_env *env, size_t pgno);
 MDBX_NOTHROW_PURE_FUNCTION MDBX_INTERNAL pgno_t pgno_ceil2os_pgno(const MDBX_env *env, size_t pgno);
+/* the 64-bit twin of pgno_ceil2os_bytes(): takes the page-count-by-pagesize
+ * product in bytes and ceils it in 64 bits, for the size_t form would wrap
+ * exactly the over-envelope products being checked (issue #636) */
+MDBX_NOTHROW_PURE_FUNCTION MDBX_INTERNAL uint64_t pgno_ceil2os_bytes64(uint64_t bytes);
 
 MDBX_NOTHROW_PURE_FUNCTION static inline pgno_t largechunk_npages(const MDBX_env *env, size_t bytes) {
   return bytes2pgno(env, PAGEHDRSZ - 1 + bytes) + 1;

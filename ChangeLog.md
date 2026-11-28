@@ -72,6 +72,7 @@ A hardening and refinement release: data-safety and corruption-resistance fixes 
     - Fixed a copy of a private database being readable by its group on POSIX ([#331](https://github.com/Mithril-mine/libmdbx-devel/issues/331)).
     - Fixed `mdbx_put(MDBX_CURRENT)` leaving a dangling cursor after a size error, crashing later operations ([#485](https://github.com/Mithril-mine/libmdbx-devel/issues/485)).
     - Fixed a 32-bit wrap distorting the geometry read from a database made on another-bitness host ([#485](https://github.com/Mithril-mine/libmdbx-devel/issues/485)).
+    - Fixed the growth step silently wrapping to zero on a 32-bit RW-exclusive geometry-from-db open ([#636](https://github.com/Mithril-mine/libmdbx-devel/issues/636)).
 
  - Resistance to corrupted or crafted data:
     - Fixed a crafted database aborting the assert-enabled builds on a DUPSORT cursor positioning; now rejected with `MDBX_CORRUPTED` ([#454](https://github.com/Mithril-mine/libmdbx-devel/issues/454)).

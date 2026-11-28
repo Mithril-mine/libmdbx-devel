@@ -40,6 +40,7 @@ set(MDBX_TEST_TIMEOUTS
   "cursor_contracts=30"
   "crafted_meta_v023=30"
   "crafted_meta_v039=30"
+  "crafted_meta_v636=30"
   "dbi=30"
   "dbi-defer=30"
   "dbi_nested_txn=30"
