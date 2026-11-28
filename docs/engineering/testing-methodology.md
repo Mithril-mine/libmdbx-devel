@@ -380,8 +380,8 @@ DTRACE-маркер.
 ```
 
 Реализация — в `src/logging_and_debug.{h,c}` + `src/osal/osal.h` внутри
-dist-cutoff-маркеров; самопроверка — `tests/ut/api/probes.c` и
-`tests/ut/api/probes_ipc.c`.
+dist-cutoff-маркеров; самопроверка — `tests/ut/details/probes.c` и
+`tests/ut/details/probes_ipc.c`.
 
 ### 9.3. Детерминизм и изоляция
 
@@ -445,7 +445,7 @@ Probe-bus не требует внешних трассировщиков/биб
 
 ## Глава 13. Пилот coverage-аттестации (B68-P3, 2026-10-01)
 
-Пилотное применение probe-bus к трём тестам (`extra_details_rkl`, `get_cached`,
+Пилотное применение probe-bus к трём тестам (`details_rkl`, `get_cached`,
 `bunches_removal`) для достижения «100% по функционалу тестов».
 
 ### 13.1. Классификация непокрытых строк

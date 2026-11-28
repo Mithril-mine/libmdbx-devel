@@ -61,7 +61,7 @@ MDBX_INTERNAL void gc_put_destroy(gcu_t *ctx);
 /* Экспериментально: получить серию страниц точно запрошенной длины, не
  * разрывая более длинные серии. Пока этот бит не выставляется ни одним
  * вызовом (то есть ветки не исполняются), но код остаётся компилируемым и
- * проверяется white-box тестами (tests/ut/api/details_scan4seq.c). */
+ * проверяется white-box тестами (tests/ut/details/details_scan4seq.c). */
 #define ALLOC_EXACTLY 32
 
 MDBX_INTERNAL pgr_t gc_alloc_ex(const MDBX_cursor *const mc, const size_t num, uint8_t flags);

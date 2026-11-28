@@ -156,7 +156,7 @@ The testing stack has four layers:
 2. **`tests/stochastic.sh`** — orchestrator that sweeps parameters/modes and calls `mdbx_test`
    in a loop, verifying each DB with `mdbx_chk`.
 3. **`tests/battery-tmux.sh`** — parallel runner of several `stochastic.sh` instances in tmux.
-4. **Small C/C++ tests** — `tests/ut/` (areas: `api|cursor|cxx|dbi|env|gc|txn|issues`,
+4. **Small C/C++ tests** — `tests/ut/` (areas: `api|cursor|cxx|dbi|details|env|gc|txn|issues`,
    layout с TASK-36 C2), `tests/exploits/` registered in CTest,
    plus a few `mdbx_test` scenarios wired into CTest.
 
@@ -269,15 +269,16 @@ Sanitizer env defaults: `ASAN_OPTIONS=log_path=asan.log:poison_history_size=42`,
 - Helper `add_simple_test(name, SOURCE, LIBRARY, TIMEOUT, DEPEND, DLLPATH, DISABLED)` →
   `add_executable(test_extra_<name>)` + `add_test(extra_<name> ...)` (skipped when
   cross-compiling without emulator). `add_extra_test` = `add_simple_test TARGET_PREFIX test_extra_`.
-- Registered unit tests — `tests/ut/<area>/` (areas: `api`, `cursor`, `cxx`, `dbi`,
-  `env`, `gc`, `txn`, `issues`; layout с TASK-36 C2): напр. `upsert_alldups`,
-  `dupfix_addodd`, `details_rkl`, `global_init` (api), `cursor_closing`,
+- Registered unit tests — `tests/ut/<area>/` (areas: `api`, `cursor`, `cxx`,
+  `dbi`, `details`, `env`, `gc`, `txn`, `issues`; layout с TASK-36 C2): напр.
+  `upsert_alldups`, `dupfix_addodd`, `details_rkl` (details),
+  `global_init` (api), `cursor_closing`,
   `doubtless_positioning`, `distance_scroll_distribute` (cursor), `dbi_nested_txn`
   (dbi, UNIX), `rename_dbi`, `nested_drop_abort`, `early_close_dbi`,
   `maindb_ordinal`, `dupfix_multiple` (dbi), `crunched_delete`,
   `reverse_insertions` (txn), `hex_base64_base58` (api); C++ ones (when
   `MDBX_BUILD_CXX`) и long `TIMEOUT 10800`. Каждый тест несёт root-метку `ut` +
-  метку области (`ut.api|cxx|env|dbi|txn|cursor|gc|issues`) — выбор по
+  метку области (`ut.api|cxx|details|env|dbi|txn|cursor|gc|issues`) — выбор по
   `tests/select-tests.sh`.
 - Framework-based CTest scenarios (mdbx_test): `smoke` (`--duration=5m --loglevel=notice
   --prng-seed=$seed --progress --console=no --pathname=smoke.db --dont-cleanup-after basic`)

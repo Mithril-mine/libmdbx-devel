@@ -37,11 +37,11 @@ API_C = os.path.join(ROOT, "tests", "api.c")
 # API-corpus entries shrink as the #519 stages land; the durability-corpus
 # and framework entries are the stage-6 items.
 SANCTIONED = {
-    "ut/api/meta_validate_corpus.c": {"src/cogs.c", "src/meta.c"},
-    "ut/api/crafted_meta_v023.c": {"src/cogs.c", "src/meta.c"},
-    "ut/api/crafted_meta_v039.c": {"src/cogs.c", "src/meta.c"},
-    "ut/api/probes.c": {"src/essentials.h"},
-    "ut/api/probes_ipc.c": {"src/essentials.h"},
+    "ut/details/meta_validate_corpus.c": {"src/cogs.c", "src/meta.c"},
+    "ut/details/crafted_meta_v023.c": {"src/cogs.c", "src/meta.c"},
+    "ut/details/crafted_meta_v039.c": {"src/cogs.c", "src/meta.c"},
+    "ut/details/probes.c": {"src/essentials.h"},
+    "ut/details/probes_ipc.c": {"src/essentials.h"},
     "ut/durability/crash-storm.c++": {"src/essentials.h"},
     "ut/durability/crash-windows.c++": {"src/essentials.h"},
     "ut/durability/dead-owner.c++": {"src/essentials.h"},
