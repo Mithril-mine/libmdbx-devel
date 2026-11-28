@@ -24,8 +24,8 @@
   "Test hygiene & cleanup" section below).
 - [`tests/test-timeouts.cmake`](test-timeouts.cmake) — the per-test CTest
   `TIMEOUT` registry (see the "Test timeouts" section below).
-- `tests/ut/tools/cleanup-tool.c` — `te_cleanup_tool`: FIXTURES_CLEANUP driver
-  for the chained smoke scenarios and the `--scan` enforcement mode.
+- `tests/ut/tools/cleanup-tool.c++` — `te_cleanup_tool`: FIXTURES_CLEANUP
+  driver for the chained smoke scenarios and the `--scan` enforcement mode.
 - `tests/ut/tools/golden_runner.py` — the `ut_tools_*` golden characterization
   runner. Golden files may carry line markers for environment-dependent log
   lines: a line `...` matches zero or more consecutive actual lines, a line
@@ -357,14 +357,134 @@ with fault injection (the probe-bus/MPROBE family).
   internal state over exposing raw internals; keep the surface small -
   each entry must be justified by a concrete test or debugging need.
 
-## 9. Documentation map (testing)
+## 9. Coverage honesty: skips, gates and the CI scope
+
+A test that never runs is not coverage, and a green cell that silently
+skipped the unit is not evidence. Registered does not mean executed.
+
+- **Know where the unit runs.** `ctest -N -L '<label>'` (or `-R '<name>'`)
+  is the check that the unit is inside the scope it claims: the CI cells
+  select by labels (e.g. `-L 'smoke-t1|ut\.|hygiene'` in the fast+hygiene
+  profile) and by name. A new unit must be inside at least one cell's
+  scope, and the PR body names that cell.
+- **A gtest unit disappears where GoogleTest is unusable.**
+  `add_gtest()`/`add_ut()` register a *skipping stub* when GoogleTest
+  requires a newer C++ standard than the cell requests (the C++11/C++14
+  cells), and an extra test registered under `if(TARGET <gtest-target>)` is
+  not created at all. So a characterization whose coverage must hold on the
+  old-standard cells stays plain-C (`add_extra_test`) or gets a plain-C
+  twin; a conversion to gtest that trades that coverage away is stated in
+  the PR body and here (§12), if permanent.
+- **A gate is a coverage hole by design**: `if(WIN32)`, `if(MDBX_PROBES)`,
+  `if(MDBX_ENABLE_BIGFOOT)`, a `DISABLED` property — name the configuration
+  that covers the case instead (e.g. the probes units are `DISABLED` on
+  Windows and covered by the Linux cells), otherwise the branch is simply
+  untested.
+- **A skip must explain itself**: `GTEST_SKIP()` with the reason and the
+  condition; a silent `return` on an unmet precondition is forbidden.
+- **Green is not evidence by itself**: a new test must be shown to fail on
+  the unfixed code (red before green), and the PR body says which leg
+  proves it — a 64-bit host proves the 64-bit leg only, the 32-bit leg is
+  proven by the win32/armeabi cells.
+- **Labels are contract, not decoration**: every test carries the root `ut`
+  label plus its area label (`ut.api`, `ut.cursor`, `ut.dbi`, `ut.txn`,
+  `ut.env`, `ut.cxx`, `ut.gc`, `ut.issues`, `ut.tools`); the orthogonal
+  labels (`ut.gc`, `ut.heavy`) are added, never substituted. The label tree
+  is the comment block in `tests/CMakeLists.txt` and the source of truth: a
+  new area gets its `ut.<area>` label there and in §1 in the same commit.
+
+## 10. Determinism, ordering and signal robustness
+
+- **Order independence.** CI runs the gtest units with `GTEST_SHUFFLE=1`
+  (nightly profiles) and every corpus with `--schedule-random`, so no
+  `TEST()` may depend on another `TEST()`'s state or on the declaration
+  order: reset the unit's globals at the start of every `TEST()` (a small
+  `tst_reset()` helper that zeroes the counters and the seed), build the
+  fixture inside the `TEST()` that needs it, and never seed a PRNG in one
+  `TEST()` for another one to use — the printed seed must describe the
+  sequence that `TEST()` actually consumed.
+- **Reproducibility.** A randomised `TEST()` prints its seed, accepts an
+  override (`MDBX_RKL_CASES`/`MDBX_RKL_LOOPS`-style knobs stay documented
+  in the `TEST()`), and keeps its default scale equal to the historical one
+  so the nightly coverage does not quietly shrink.
+- **Counter-driven verdicts stay honest.** A check vocabulary that keeps
+  counters (bailouts, per-pass verdicts) reports each failure through
+  `ADD_FAILURE()`/`EXPECT_*` as well, so a failed check marks the
+  `TEST()`; a helper that returns early must increment its counter or flag
+  the failure before returning, otherwise the `return` turns a failure into
+  a pass.
+- **Blocking calls are retried on `EINTR`.** `semop()`, `waitpid()`,
+  `poll()`, `nanosleep()` and friends are interrupted by the suite's own
+  process-directed signals (SIGCHLD, SIGALRM, the SIGUSR progress canary);
+  a barrier/latch is a safe re-entry by definition, a `waitpid()` for a
+  specific child restarts. Failing on `EINTR` kills a healthy cell — that
+  is what the fork-storm barrier and the fork choreography used to do.
+- **Wall-clock budgets scale** (§6): an `alarm()`, a deadline or a spin cap
+  inside a `TEST()` goes through `mdbx_tst_timeout_scale()`, otherwise a
+  slow-but-correct run turns into a false failure.
+- **The soft runtime limit is a skip, not a kill**: a long `TEST()` checks
+  `MDBX_GTEST_IS_EXECUTION_TIMEOUT()` at its top and skips with the reason
+  (`GTEST_RUNTIME_LIMIT` bounds the dig depth, the CTest `TIMEOUT` kills a
+  real runaway).
+
+## 11. Word width, alignment and crafted fixtures
+
+- **Host-width legs are runtime, not `#if`.** A case that exists only on a
+  32-bit (or only on a 64-bit) host is gated by a runtime
+  `sizeof(size_t)`/`MDBX_WORDBITS` check mapped to `GTEST_SKIP` or to the
+  other branch, so one source covers both legs and the win32/armeabi-v7a
+  cells exercise the narrow one.
+- **A host-width regression proves both legs**: the value is preserved
+  where it fits and the case is refused cleanly where it does not. Assert
+  the *exact* expected code (`EXPECT_EQ(MDBX_INCOMPATIBLE, rc)`), never
+  "not success"/"some error" — a change that starts refusing for the wrong
+  reason must break the test.
+- **Crafted page images are 8-byte aligned** by construction
+  (`union align8_u { uint64_t force_align; uint8_t bytes[MDBX_MAX_PAGESIZE]; }`):
+  the engine casts the buffer to `page_t *` and peeks `uint64_t` fields
+  through it, and a plain array is not guaranteed to be aligned.
+- **The on-disk-format corpus** builds every page through the testing API
+  (never a hand-written byte layout), keeps one case per reject branch
+  listed in the file header, and self-checks the crafting constants against
+  the live encoders (`pages2pv()` etc.) instead of hard-coding a constant
+  with a duplicated rationale. It is format-dependent by nature: a format
+  change revisits it in the same PR.
+- **The baseline is real**: the corpus snapshots a genuinely committed meta
+  page of a freshly created database as its positive control, so a
+  silently broken crafting path fails the control case first.
+
+## 12. Converting a legacy unit to the gtest family
+
+The staged rework converts plain-C characterizations into `add_ut()` units
+(and moves them to their area); a conversion must not lose a check or a
+case.
+
+- **Fidelity is reviewable**: the number and the order of the check
+  call-sites and their expected values are preserved, the case names map
+  one-to-one, and the counter/bailout semantics survive (§10). Put the
+  mapping in the commit message (`CHECK_TRUE` → `EXPECT_TRUE`, the counters
+  kept, the bailout threshold unchanged) and diff the check sequences, not
+  only the files.
+- **The old `main()` disappears**: the setup becomes a helper called by
+  each `TEST()`, the hygiene guards (§4) cover every `TEST()` that opens an
+  environment, and the `debug_log` hijack and the `src/` inclusions go away
+  in favour of the testing API (§8).
+- **Registration follows the target family**: `add_ut()` plus the manifest
+  entry under the CTest name, and the caller sets the labels with
+  `set_tests_properties()` after the helper (the helper's own defaults are
+  only the root label).
+- **The coverage consequence is stated**: where the unit used to run (the
+  old-standard cells) it now skips (§9) — say it in the PR body, or keep a
+  plain-C twin.
+
+## 13. Documentation map (testing)
 
 - [docs/engineering/testing-codex.md](../docs/engineering/testing-codex.md),
-  [docs/engineering/testing-methodology.md](../docs/engineering/testing-methodology.md),
+  [docs/engineering/testing-methodology.md](../docs/engineering/testing-methodology.md)
+  (rules, methodology, the coverage map and its white spots),
   [docs/engineering/test-scenarios.md](../docs/engineering/test-scenarios.md) +
-  [test-scenarios-codex.md](../docs/engineering/test-scenarios-codex.md),
-  [docs/engineering/test-coverage.md](../docs/engineering/test-coverage.md) —
-  testing rules, scenario specs, coverage map (incl. white spots).
+  [test-scenarios-codex.md](../docs/engineering/test-scenarios-codex.md) —
+  scenario specs and their codex.
 - [docs/engineering/test-durability-strategy.md](../docs/engineering/test-durability-strategy.md) —
   durability modes and speed-up transports for tests.
 - [docs/engineering/testing-infra-design.md](../docs/engineering/testing-infra-design.md) —
@@ -377,3 +497,23 @@ with fault injection (the probe-bus/MPROBE family).
   `ci-dispatch.yml`.
 - [docs/engineering/probe-bus.md](../docs/engineering/probe-bus.md) — probe
   conventions.
+
+## 14. Pre-publish checklist (tests)
+
+- the unit fails on the unfixed code and passes on the fixed one, and both
+  host-width legs are proven (§9, §11);
+- real library code, no simulacra, no `src/` inclusion outside the testing
+  API (§3, §8);
+- hygiene guards on every `TEST()` that creates files; `test_hygiene_check`
+  green afterwards (§4);
+- the manifest entry is present and the list stays sorted; in-test budgets
+  are scaled (§6);
+- the area/label placement is correct and `ctest -N -L '<label>'` shows the
+  unit in the intended scope (§9);
+- order-independent under `GTEST_SHUFFLE=1`, seeds printed and overridable
+  (§10);
+- `EINTR` retries on the blocking calls, `GTEST_SKIP()` with reasons (§10);
+- the registration lists are free of orphans in both directions, and every
+  moved path is updated in the comments, docs and lint pins (§2, §12);
+- `ctest -R '<name>'`/`-L '<label>'` run locally on the exact final tree,
+  and nothing is left behind in the build directory (§4).
