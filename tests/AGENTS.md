@@ -290,9 +290,12 @@ with fault injection (the probe-bus/MPROBE family).
   forwards, the opaque instance handles and the narrow corruption
   accessors; the file-static `rkl_resize()`/`extend_solid()` (un-hidden
   as `rkl_extend_solid()`)/`txl_reserve()` are un-hidden through the
-  engine headers) already use
-  the API; the remaining ones - the `meta_validate_corpus` format
-  corpus, the `meta_validate` corpus - are being reworked in stages.)
+  engine headers) and the stage-5 meta-format corpus
+  `meta_validate_corpus`/`crafted_meta_v023`/`crafted_meta_v039` (the
+  live `meta_validate()` through the `mdbx_tst_meta_validate()`
+  behavioral seam and the layout-accessor family; `details-anchors.h`
+  is gone) already use the API; the remaining ones - the `probes`
+  units, the durability corpus - are being reworked in the stage-6.)
 - the wiring is gated by `MDBX_ENABLE_TESTS`: the exact value comes from
   the CMake config (`src/config.h.in`, `#cmakedefine01`), the default for
   config-less development builds from `src/options.h` - and both snippets

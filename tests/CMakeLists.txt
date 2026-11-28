@@ -55,10 +55,10 @@ function(add_simple_test name)
   set_target_properties(${target} PROPERTIES SKIP_BUILD_RPATH FALSE BUILD_WITH_INSTALL_RPATH FALSE)
 
   if(MSVC AND MSVC_C11_MAD_ATOMICS)
-    # Plain-C test programs compile library sources directly (the meta_validate
-    # format corpus - meta_validate_corpus.c and the crafted_meta_*.c units -
-    # pulls in src/cogs.c and src/meta.c until the stage-5 of issue #519) and
-    # therefore need C11 atomics on MSVC for non-x86 targets. Use the plain
+    # Plain-C test programs compile library sources directly (the probes
+    # units - probes.c and probes_ipc.c - include src/essentials.h until the
+    # stage-6 of issue #519) and therefore need C11 atomics on MSVC for
+    # non-x86 targets. Use the plain
     # flag, not a COMPILE_LANGUAGE generator
     # expression: the latter was observed to silently no-op for these subdirectory
     # targets under the Visual Studio generator.
@@ -703,14 +703,14 @@ else()
     set_tests_properties(details_rkl PROPERTIES LABELS "ut;ut.details;ut.gc")
     add_extra_test(details_troika_fsm SOURCE ut/details/details_troika_fsm.c)
     set_tests_properties(extra_details_troika_fsm PROPERTIES LABELS "ut;ut.details;ut.env")
-    add_extra_test(meta_validate_corpus SOURCE ut/details/meta_validate_corpus.c)
-    set_tests_properties(extra_meta_validate_corpus PROPERTIES LABELS "ut;ut.details;ut.env")
+    add_ut(meta_validate_corpus SOURCE ut/details/meta_validate_corpus.c++)
+    set_tests_properties(meta_validate_corpus PROPERTIES LABELS "ut;ut.details;ut.env")
     # the #485 crafted-meta regression: crafted_meta_v039
-        add_extra_test(crafted_meta_v039 SOURCE ut/details/crafted_meta_v039.c)
-        set_tests_properties(extra_crafted_meta_v039 PROPERTIES LABELS "ut;ut.details;ut.cursor")
+        add_ut(crafted_meta_v039 SOURCE ut/details/crafted_meta_v039.c++)
+        set_tests_properties(crafted_meta_v039 PROPERTIES LABELS "ut;ut.details;ut.cursor")
     # the #485 crafted-meta regression: crafted_meta_v023
-        add_extra_test(crafted_meta_v023 SOURCE ut/details/crafted_meta_v023.c)
-        set_tests_properties(extra_crafted_meta_v023 PROPERTIES LABELS "ut;ut.details;ut.env")
+        add_ut(crafted_meta_v023 SOURCE ut/details/crafted_meta_v023.c++)
+        set_tests_properties(crafted_meta_v023 PROPERTIES LABELS "ut;ut.details;ut.env")
     add_ut(walk_contracts SOURCE ut/api/walk_contracts.c++)
     set_tests_properties(walk_contracts PROPERTIES LABELS "ut;ut.api;ut.gc;ut.cursor")
     if(MDBX_ENABLE_BIGFOOT)
