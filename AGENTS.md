@@ -214,6 +214,47 @@ when in doubt.
 - [skynet/knowledge-map.md](skynet/knowledge-map.md) — knowledge index and
   memory procedures.
 
+## 10.5. MCP servers
+
+Two MCP servers are installed locally and registered in the IDE's MCP config
+(e.g. `~/.config/opencode/opencode.json`). Both are loaded automatically on
+session startup; skills in `skills/` and `.opencode/skills/` complement them.
+Configuration details differ per developer — the table below describes the
+roles, not installation paths.
+
+### `codebase-memory`
+
+- **Purpose**: structural code queries via the project's knowledge graph —
+  tracing call chains, dependency analysis, structural maps, dead-code
+  detection, impact analysis.
+- **Skills**: the largest skill set bundled with this server
+  (`codebase-memory`, `code-reviewer`, `debugging-assistant`,
+  `discovery-process`, `doc-coauthoring`, `idea-refine`, `jobs-to-be-done`,
+  `notes-synthesis`, `prioritization-advisor`, `product-brainstorming`,
+  `prompt-improver`, `repository-analyzer`, and others).
+- **Config section**: `"codebase-memory"` in `opencode.json`.
+
+### `shared-graph-memory.mdbx`
+
+- **Database**: MDBX-based shared memory for the project's knowledge graph
+  (path set via `SHARED_GRAPH_MEMORY_PATH` environment variable).
+- **Purpose**: project-wide knowledge store — persistent facts, decisions,
+  procedures, and archives managed across agent sessions. Includes backup
+  tiers, scan/coverage tools, and `SKILL.md` for memory procedures.
+- **Repository source**: `skynet/MCP-shared-graph-memory/` — Store,
+  scan/coverage tools, [SKILL.md](skynet/MCP-shared-graph-memory/SKILL.md),
+  [CODEGRAPH.md](skynet/MCP-shared-graph-memory/docs/CODEGRAPH.md),
+  [scan_all.py](skynet/MCP-shared-graph-memory/tools/scan_all.py).
+- **Knowledge index**: [skynet/knowledge-map.md](skynet/knowledge-map.md),
+  `skynet/knowledge-records.yaml`.
+- **Config section**: `"shared-graph-memory.mdbx"` in `opencode.json`.
+
+### Skills mapping
+
+Skills in `skills/{profiles,shared,superpowers}/` are canonical copies;
+`.opencode/skills/` holds active copies with sync rules (see its README).
+Each server's skills are loaded independently through the `skill` tool.
+
 ## 11. Agent skills profiles
 
 Skills live in [`skills/`](skills/README.md) with active copies in
