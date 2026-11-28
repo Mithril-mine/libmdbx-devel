@@ -37,8 +37,6 @@ API_C = os.path.join(ROOT, "tests", "api.c")
 # API-corpus entries shrink as the #519 stages land; the durability-corpus
 # and framework entries are the stage-6 items.
 SANCTIONED = {
-    "ut/details/probes.c": {"src/essentials.h"},
-    "ut/details/probes_ipc.c": {"src/essentials.h"},
     "ut/durability/crash-storm.c++": {"src/essentials.h"},
     "ut/durability/crash-windows.c++": {"src/essentials.h"},
     "ut/durability/dead-owner.c++": {"src/essentials.h"},

@@ -740,8 +740,8 @@ int main() { return 0; }
 
       if(MSVC AND MSVC_C11_MAD_ATOMICS)
         # Test targets that #include library sources directly (the remaining
-        # ones are the meta_validate format corpus units - the stage-5 of
-        # issue #519) need C11 atomics on MSVC for non-x86 targets. Apply
+        # ones are the durability corpus units - the stage-7 of issue #519)
+        # need C11 atomics on MSVC for non-x86 targets. Apply
         # the plain flag (not via a COMPILE_LANGUAGE
         # generator expression: that form was observed to silently no-op for
         # subdirectory targets under the Visual Studio generator), exactly as the

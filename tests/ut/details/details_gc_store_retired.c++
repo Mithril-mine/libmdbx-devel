@@ -8,7 +8,7 @@
 /// limited to the warranties of merchantability, fitness for a particular purpose and non infringement.
 /// In no event shall the authors or copyright holders be liable for any claim, damages or other liability,
 /// whether in an action of contract, tort or otherwise, arising from, out of or in connection with the
-/// software or the use or dealings in the software.
+/// software or the use or other dealings in the software.
 ///
 /// \author Леонид Юрьев aka Leonid Yuriev <leo@yuriev.ru> \date 2026
 
@@ -18,18 +18,12 @@
  * post-growth state and never underflow. The hook-replacement harness (the
  * crafted lists, the cursor_put growth stub and the full case matrix) lives
  * in the testing API (mdbx_tst_gc_store_retired_cases(), tests/api.h) -
- * this unit drives it and asserts the verdict. */
+ * this unit drives it and asserts the verdict. A GoogleTest unit per
+ * tests/AGENTS.md §12 (issue #519 stage 6): no environments, no files. */
 
 #include "mdbx.h"
+#include <gtest/gtest.h>
 
-#include <stdio.h>
-#include <stdlib.h>
+/*-----------------------------------------------------------------------------*/
 
-int main(void) {
-  const int failed = mdbx_tst_gc_store_retired_cases();
-  if (failed) {
-    fprintf(stderr, "FAILED %d checks\n", failed);
-    return 1;
-  }
-  return 0;
-}
+TEST(details_gc_store_retired, growth_corruption) { EXPECT_EQ(0, mdbx_tst_gc_store_retired_cases()); }

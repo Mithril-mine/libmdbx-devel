@@ -8,7 +8,7 @@
 /// limited to the warranties of merchantability, fitness for a particular purpose and non infringement.
 /// In no event shall the authors or copyright holders be liable for any claim, damages or other liability,
 /// whether in an action of contract, tort or otherwise, arising from, out of or in connection with the
-/// software or the use or dealings in the software.
+/// software or the use or other dealings in the software.
 ///
 /// \author Леонид Юрьев aka Leonid Yuriev <leo@yuriev.ru> \date 2026
 
@@ -32,25 +32,15 @@
  *
  * In release builds (MDBX_CHECKING == 0) both proofs are dead code, so this
  * test calls them through the testing API (mdbx_tst_troika_verify_fsm(),
- * mdbx_tst_pv2pages_verify()) instead of the former white-box inclusion of
- * the sources (tests/AGENTS.md, "no direct #include of the implementation").
- * Activates the troika-fsm-proof-unused machine proof (issue #485). */
+ * mdbx_tst_pv2pages_verify()). Activates the troika-fsm-proof-unused machine
+ * proof (issue #485). A GoogleTest unit per tests/AGENTS.md §12 (issue #519
+ * stage 6): one TEST per proof, no environments, no files. */
 
 #include "mdbx.h"
-
-#include <stdio.h>
-#include <stdlib.h>
+#include <gtest/gtest.h>
 
 /*-----------------------------------------------------------------------------*/
 
-int main(int argc, const char *argv[]) {
-  (void)argc;
-  (void)argv;
+TEST(details_troika_fsm, troika_verify_fsm) { EXPECT_TRUE(mdbx_tst_troika_verify_fsm()); }
 
-  const bool fsm_ok = mdbx_tst_troika_verify_fsm();
-  printf("troika_verify_fsm: %s\n", fsm_ok ? "ok" : "FAILED");
-  const bool pv_ok = mdbx_tst_pv2pages_verify();
-  printf("pv2pages_verify: %s\n", pv_ok ? "ok" : "FAILED");
-
-  return (fsm_ok && pv_ok) ? EXIT_SUCCESS : EXIT_FAILURE;
-}
+TEST(details_troika_fsm, pv2pages_verify) { EXPECT_TRUE(mdbx_tst_pv2pages_verify()); }

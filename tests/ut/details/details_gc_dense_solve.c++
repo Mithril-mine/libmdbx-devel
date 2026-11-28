@@ -35,10 +35,10 @@
 ///    than the available slots.
 
 #include "mdbx.h"
+#include <gtest/gtest.h>
 
 #include <stdarg.h>
 #include <stdio.h>
-#include <stdlib.h>
 #include <string.h>
 
 /* stand-ins for the txn/env-derived values (4K pages) */
@@ -121,21 +121,25 @@ static bool tst_oracle(const uint32_t *h, unsigned h_end, size_t slots, size_t v
 
 static size_t tst_failed, tst_ok, tst_cases;
 
+/* The CI shuffles the TEST order (GTEST_SHUFFLE=1), so every TEST resets
+ * the counters itself; the failures report through ADD_FAILURE as well. */
+static void tst_reset(void) { tst_failed = tst_ok = tst_cases = 0; }
+
 static void tst_report(const char *what, bool ok, const char *fmt, ...) {
   if (ok) {
     ++tst_ok;
     return;
   }
   ++tst_failed;
-  fprintf(stderr, "  FAIL: %s", what);
+  va_list args;
+  char details[256];
   if (fmt && fmt[0]) {
-    va_list args;
     va_start(args, fmt);
-    fprintf(stderr, ": ");
-    vfprintf(stderr, fmt, args);
+    vsnprintf(details, sizeof(details), fmt, args);
     va_end(args);
-  }
-  fprintf(stderr, "\n");
+  } else
+    details[0] = 0;
+  ADD_FAILURE() << "FAIL: " << what << (details[0] ? ": " : "") << details;
 }
 
 static void tst_solve(const char *name, size_t left_slots, size_t left_volume, const uint32_t *hist_counts,
@@ -164,10 +168,8 @@ static void tst_solve(const char *name, size_t left_slots, size_t left_volume, c
   }
 }
 
-int main(int argc, char **argv) {
-  (void)argc;
-  (void)argv;
-
+TEST(details_gc_dense_solve, counterexample) {
+  tst_reset();
   /* 1) the wave-campaign counterexample: pre-fix this took 71,895,998
    * predicate invocations (~50s at -O2) before returning FALSE; the outcome
    * itself is FALSE (the material, 3086 pages, cannot cover the volume)
@@ -183,7 +185,10 @@ int main(int argc, char **argv) {
     h[23] = 9;
     tst_solve("counterexample", 1021, 3557022, h, end, false);
   }
+}
 
+TEST(details_gc_dense_solve, author_example) {
+  tst_reset();
   /* 2) the author's own TRUE example (gc_solve_test, the pre-fix commented
    * code): a legit solve must stay found and cheap. */
   {
@@ -194,7 +199,10 @@ int main(int argc, char **argv) {
     memcpy(h, src, sizeof(src));
     tst_solve("author-example", 5, 8463, h, end, true);
   }
+}
 
+TEST(details_gc_dense_solve, feasibility_shapes) {
+  tst_reset();
   /* 3) deep-but-feasible and boundary-infeasible shapes */
   {
     uint32_t h[31] = {0};
@@ -210,7 +218,10 @@ int main(int argc, char **argv) {
     memcpy(h, src, sizeof(src));
     tst_solve("boundary-infeasible", 60, 270000, h, end, false);
   }
+}
 
+TEST(details_gc_dense_solve, oracle_corpus) {
+  tst_reset();
   /* 4) the deterministic corpus vs the independent exact oracle: the
    * solver's verdict must match feasibility exactly (never false-negative:
    * that would silently degrade to the legacy fallback; never
@@ -262,9 +273,5 @@ int main(int argc, char **argv) {
   }
 
   printf("cases=%zu ok=%zu failed=%zu\n", tst_cases, tst_ok, tst_failed);
-  if (tst_failed) {
-    fprintf(stderr, "FAILED %zu checks\n", tst_failed);
-    return 1;
-  }
-  return 0;
+  EXPECT_EQ(0u, tst_failed);
 }
