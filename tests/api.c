@@ -73,6 +73,24 @@ STATIC_ASSERT_MSG(sizeof(MDBX_tst_rkl_hole_t) == sizeof(rkl_hole_t), "rkl hole m
 STATIC_ASSERT_MSG(offsetof(MDBX_tst_rkl_hole_t, begin) == offsetof(rkl_hole_t, begin), "rkl hole mirror begin");
 STATIC_ASSERT_MSG(offsetof(MDBX_tst_rkl_hole_t, end) == offsetof(rkl_hole_t, end), "rkl hole mirror end");
 
+/* The on-disk meta mirrors (issue #519 stage 5): the stamps and the page
+ * flags must stay in sync with the live definitions - a drift here is a
+ * build break, not a silent test skew. */
+STATIC_ASSERT_MSG(MDBX_TST_MAGIC == MDBX_MAGIC, "meta magic stamp");
+STATIC_ASSERT_MSG(MDBX_TST_MIN_PAGENO == MIN_PAGENO, "min pgno");
+STATIC_ASSERT_MSG(MDBX_TST_MAX_PAGENO == MAX_PAGENO, "max pgno");
+STATIC_ASSERT_MSG(MDBX_TST_MAX_MAPSIZE64 == MAX_MAPSIZE64, "max mapsize64 envelope");
+STATIC_ASSERT_MSG(MDBX_TST_P_INVALID == P_INVALID, "invalid pgno");
+STATIC_ASSERT_MSG(MDBX_TST_PAGE_FLAG_META == P_META, "page flag meta");
+STATIC_ASSERT_MSG(MDBX_TST_PAGE_FLAG_LEAF == P_LEAF, "page flag leaf");
+/* The dispatch selectors of the meta accessors are the wrapper's own
+ * contract; the pins fix their form per the regulation (the accessor
+ * switches below and the wrapper's layout knowledge are what can drift). */
+STATIC_ASSERT_MSG(sizeof(enum MDBX_tst_meta_u64_field) == sizeof(unsigned), "meta u64 field selector");
+STATIC_ASSERT_MSG(sizeof(enum MDBX_tst_meta_geo_field) == sizeof(unsigned), "meta geo field selector");
+STATIC_ASSERT_MSG(sizeof(enum MDBX_tst_meta_tree) == sizeof(unsigned), "meta tree selector");
+STATIC_ASSERT_MSG(sizeof(enum MDBX_tst_meta_tree_field) == sizeof(unsigned), "meta tree field selector");
+
 /*----------------------------------------------------------------------------*/
 
 struct tst_walk_ctx {
@@ -833,3 +851,193 @@ __cold int mdbx_tst_probe_ctl(const char *request, char *reply, size_t capacity)
   return MDBX_ENOSYS;
 #endif /* MDBX_PROBES */
 }
+
+/* ------------------------------------------------------------------------ */
+/* The on-disk meta format (issue #519 stage 5): the meta_validate behavioral
+ * seam and the layout-accessor family. The page-buffer interpretation (the
+ * page_t cast, the PAGEHDRSZ payload offset, the field positions and widths)
+ * is confined here - the tests hold buffers and field values only. */
+
+__cold int mdbx_tst_meta_validate(MDBX_env *env, void *page_buffer, unsigned meta_number, unsigned *guess_pagesize) {
+  if (unlikely(!env || !page_buffer))
+    return MDBX_EINVAL;
+  /* the unaligned u64 field access inside the engine (and the page_t cast)
+   * requires the 8-byte alignment - reject silently-broken buffers instead
+   * of tripping an assert/UB in the debug builds (the #485 history is about
+   * exactly such silent alignment assumptions) */
+  if (unlikely(((uintptr_t)page_buffer & (uintptr_t)7) != 0))
+    return MDBX_EINVAL;
+  page_t *const page = (page_t *)page_buffer;
+  return meta_validate(env, page_meta(page), page, meta_number, guess_pagesize);
+}
+
+__cold uint64_t mdbx_tst_meta_field_get(void *page_buffer, enum MDBX_tst_meta_u64_field field) {
+  if (unlikely(!page_buffer))
+    return 0;
+  /* the internal page_meta() takes a mutable page_t*; the const take of the
+   * caller's buffer is confined here (the getters never write) */
+  const meta_t *const meta = page_meta((page_t *)(uintptr_t)page_buffer);
+  switch (field) {
+  case MDBX_TST_META_MAGIC_AND_VERSION:
+    return unaligned_peek_u64(4, &meta->magic_and_version);
+  case MDBX_TST_META_TXNID_A:
+    return unaligned_peek_u64(4, &meta->txnid_a);
+  case MDBX_TST_META_TXNID_B:
+    return unaligned_peek_u64(4, &meta->txnid_b);
+  case MDBX_TST_META_SIGN:
+    return unaligned_peek_u64(4, &meta->sign);
+  }
+  return 0;
+}
+
+__cold void mdbx_tst_meta_field_set(void *page_buffer, enum MDBX_tst_meta_u64_field field, uint64_t value) {
+  if (unlikely(!page_buffer))
+    return;
+  meta_t *const meta = page_meta((page_t *)page_buffer);
+  switch (field) {
+  case MDBX_TST_META_MAGIC_AND_VERSION:
+    unaligned_poke_u64(4, &meta->magic_and_version, value);
+    return;
+  case MDBX_TST_META_TXNID_A:
+    unaligned_poke_u64(4, &meta->txnid_a, value);
+    return;
+  case MDBX_TST_META_TXNID_B:
+    unaligned_poke_u64(4, &meta->txnid_b, value);
+    return;
+  case MDBX_TST_META_SIGN:
+    unaligned_poke_u64(4, &meta->sign, value);
+    return;
+  }
+}
+
+__cold uint32_t mdbx_tst_meta_pagesize_get(void *page_buffer) {
+  if (unlikely(!page_buffer))
+    return 0;
+  /* the confined const cast, see mdbx_tst_meta_field_get() */
+  return page_meta((page_t *)(uintptr_t)page_buffer)->pagesize;
+}
+
+__cold void mdbx_tst_meta_pagesize_set(void *page_buffer, uint32_t pagesize) {
+  if (unlikely(!page_buffer))
+    return;
+  page_meta((page_t *)page_buffer)->pagesize = pagesize;
+}
+
+__cold uint64_t mdbx_tst_meta_geo_get(void *page_buffer, enum MDBX_tst_meta_geo_field field) {
+  if (unlikely(!page_buffer))
+    return 0;
+  const geo_t *const geo = &page_meta((page_t *)(uintptr_t)page_buffer)->geometry;
+  switch (field) {
+  case MDBX_TST_META_GEO_LOWER:
+    return geo->lower;
+  case MDBX_TST_META_GEO_UPPER:
+    return geo->upper;
+  case MDBX_TST_META_GEO_NOW:
+    return geo->now;
+  case MDBX_TST_META_GEO_FIRST_UNALLOCATED:
+    return geo->first_unallocated;
+  case MDBX_TST_META_GEO_GROW_PV:
+    return geo->grow_pv;
+  case MDBX_TST_META_GEO_SHRINK_PV:
+    return geo->shrink_pv;
+  }
+  return 0;
+}
+
+__cold void mdbx_tst_meta_geo_set(void *page_buffer, enum MDBX_tst_meta_geo_field field, uint64_t value) {
+  if (unlikely(!page_buffer))
+    return;
+  geo_t *const geo = &page_meta((page_t *)page_buffer)->geometry;
+  switch (field) {
+  case MDBX_TST_META_GEO_LOWER:
+    geo->lower = (pgno_t)value;
+    return;
+  case MDBX_TST_META_GEO_UPPER:
+    geo->upper = (pgno_t)value;
+    return;
+  case MDBX_TST_META_GEO_NOW:
+    geo->now = (pgno_t)value;
+    return;
+  case MDBX_TST_META_GEO_FIRST_UNALLOCATED:
+    geo->first_unallocated = (pgno_t)value;
+    return;
+  case MDBX_TST_META_GEO_GROW_PV:
+    geo->grow_pv = (uint16_t)value;
+    return;
+  case MDBX_TST_META_GEO_SHRINK_PV:
+    geo->shrink_pv = (uint16_t)value;
+    return;
+  }
+}
+
+__cold void mdbx_tst_meta_tree_set(void *page_buffer, enum MDBX_tst_meta_tree tree, enum MDBX_tst_meta_tree_field field,
+                                   uint64_t value) {
+  if (unlikely(!page_buffer))
+    return;
+  tree_t *const t = (tree == MDBX_TST_TREE_GC) ? &page_meta((page_t *)page_buffer)->trees.gc
+                                               : &page_meta((page_t *)page_buffer)->trees.main;
+  switch (field) {
+  case MDBX_TST_TREE_FLAGS:
+    t->flags = (uint16_t)value;
+    return;
+  case MDBX_TST_TREE_HEIGHT:
+    t->height = (uint16_t)value;
+    return;
+  case MDBX_TST_TREE_ROOT:
+    t->root = (pgno_t)value;
+    return;
+  case MDBX_TST_TREE_BRANCH_PAGES:
+    t->branch_pages = (pgno_t)value;
+    return;
+  case MDBX_TST_TREE_LEAF_PAGES:
+    t->leaf_pages = (pgno_t)value;
+    return;
+  case MDBX_TST_TREE_ITEMS:
+    t->items = value;
+    return;
+  case MDBX_TST_TREE_MOD_TXNID:
+    t->mod_txnid = value;
+    return;
+  }
+}
+
+__cold void mdbx_tst_meta_sign_as_steady(void *page_buffer) {
+  if (unlikely(!page_buffer))
+    return;
+  meta_sign_as_steady(page_meta((page_t *)page_buffer));
+}
+
+__cold uint32_t mdbx_tst_page_get_pgno(const void *page_buffer) {
+  return page_buffer ? ((const page_t *)page_buffer)->pgno : 0;
+}
+
+__cold void mdbx_tst_page_set_pgno(void *page_buffer, uint32_t pgno) {
+  if (likely(page_buffer))
+    ((page_t *)page_buffer)->pgno = (pgno_t)pgno;
+}
+
+__cold void mdbx_tst_page_set_flags(void *page_buffer, unsigned flags) {
+  if (likely(page_buffer))
+    ((page_t *)page_buffer)->flags = (uint16_t)flags;
+}
+
+__cold unsigned mdbx_tst_env_pagesize(const MDBX_env *env) { return env ? env->ps : 0; }
+
+__cold uint64_t mdbx_tst_env_filesize(const MDBX_env *env) {
+  return (env && env->dxb_mmap.base) ? env->dxb_mmap.filesize : 0;
+}
+
+__cold int mdbx_tst_env_read_page(const MDBX_env *env, uint32_t pgno, void *dest, size_t bytes) {
+  /* a page snapshot: `bytes` must not exceed the page size */
+  if (unlikely(!env || !dest || !env->dxb_mmap.base || bytes > env->ps))
+    return MDBX_EINVAL;
+  /* pgno2page() is declared with a const env parameter; the const-qualified
+   * take of the caller's handle is preserved */
+  const page_t *const page = pgno2page(env, pgno);
+  memcpy(dest, page, bytes);
+  return MDBX_SUCCESS;
+}
+
+__cold uint16_t mdbx_tst_pages2pv(size_t pages) { return pages2pv(pages); }
+
+__cold unsigned mdbx_tst_cursor_stack_size(void) { return (unsigned)CURSOR_STACK_SIZE; }

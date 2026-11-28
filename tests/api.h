@@ -826,6 +826,230 @@ LIBMDBX_API int mdbx_tst_probes_active(void);
  * \ingroup c_testing */
 LIBMDBX_API int mdbx_tst_probe_ctl(const char *request, char *reply, size_t capacity);
 
+/* ------------------------------------------------------------------------ */
+/* The on-disk meta format (issue #519 stage 5).
+ *
+ * The meta_validate reject-branch corpus and the crafted-meta regressions
+ * exercise the meta validation through this mirror: the behavioral seam runs
+ * the live meta_validate() over a caller-held page buffer, and the
+ * layout-accessor family provides the field-level crafting/inspection of the
+ * page header and the meta payload. The layout knowledge (the PAGEHDRSZ
+ * offset, the meta_t/geo_t/tree_t field positions and widths, the pv
+ * encoding) stays inside the testing API - see tests/AGENTS.md §8. */
+
+/** \brief The mirror of the internal `MDBX_MAGIC` stamp.
+ * Pinned to the live definition by a STATIC_ASSERT in tests/api.c.
+ * \ingroup c_testing */
+#define MDBX_TST_MAGIC UINT64_C(0x59659DBDEF4C11)
+
+/** \brief The mirror of the internal `MIN_PAGENO`.
+ * Pinned to the live definition by a STATIC_ASSERT in tests/api.c.
+ * \ingroup c_testing */
+#define MDBX_TST_MIN_PAGENO 3u
+
+/** \brief The mirror of the internal `MAX_PAGENO`.
+ * Pinned to the live definition by a STATIC_ASSERT in tests/api.c.
+ * \ingroup c_testing */
+#define MDBX_TST_MAX_PAGENO UINT32_C(0x7FFFFFFF)
+
+/** \brief The mirror of the internal `MAX_MAPSIZE64` envelope.
+ * Pinned to the live definition by a STATIC_ASSERT in tests/api.c.
+ * \ingroup c_testing */
+#define MDBX_TST_MAX_MAPSIZE64 UINT64_C(0x800000000000)
+
+/** \brief The mirror of the internal `P_INVALID` page number.
+ * Pinned to the live definition by a STATIC_ASSERT in tests/api.c.
+ * \ingroup c_testing */
+#define MDBX_TST_P_INVALID UINT32_C(0xFFFFFFFF)
+
+/** \brief The mirror of the internal `P_META` page-flags bit.
+ * Pinned to the live definition by a STATIC_ASSERT in tests/api.c.
+ * \ingroup c_testing */
+#define MDBX_TST_PAGE_FLAG_META 0x08u
+
+/** \brief The mirror of the internal `P_LEAF` page-flags bit.
+ * Pinned to the live definition by a STATIC_ASSERT in tests/api.c.
+ * \ingroup c_testing */
+#define MDBX_TST_PAGE_FLAG_LEAF 0x02u
+
+/** \brief Selectors of the 64-bit meta fields read/written as words.
+ *
+ * The values are the wrapper's own dispatch contract (pinned by a
+ * STATIC_ASSERT in tests/api.c per the regulation form).
+ * \ingroup c_testing */
+enum MDBX_tst_meta_u64_field {
+  /** The magic-and-version stamp (the low byte is the data version). */
+  MDBX_TST_META_MAGIC_AND_VERSION = 0,
+  /** The first phase of the two-phase committed-txnid pair. */
+  MDBX_TST_META_TXNID_A = 1,
+  /** The second phase of the two-phase committed-txnid pair. */
+  MDBX_TST_META_TXNID_B = 2,
+  /** The steady-sign union (the calculated sign of a steady meta). */
+  MDBX_TST_META_SIGN = 3
+};
+
+/** \brief Selectors of the meta's geometry fields.
+ *
+ * The values are the wrapper's own dispatch contract (pinned by a
+ * STATIC_ASSERT in tests/api.c per the regulation form).
+ * \ingroup c_testing */
+enum MDBX_tst_meta_geo_field {
+  MDBX_TST_META_GEO_LOWER = 0,
+  MDBX_TST_META_GEO_UPPER = 1,
+  MDBX_TST_META_GEO_NOW = 2,
+  MDBX_TST_META_GEO_FIRST_UNALLOCATED = 3,
+  /** The growth step in the pv encoding (see \ref mdbx_tst_pages2pv). */
+  MDBX_TST_META_GEO_GROW_PV = 4,
+  /** The shrink step in the pv encoding. */
+  MDBX_TST_META_GEO_SHRINK_PV = 5
+};
+
+/** \brief Selectors of the meta's two table trees.
+ * The values are the wrapper's own dispatch contract (pinned by a
+ * STATIC_ASSERT in tests/api.c per the regulation form).
+ * \ingroup c_testing */
+enum MDBX_tst_meta_tree { MDBX_TST_TREE_GC = 0, MDBX_TST_TREE_MAIN = 1 };
+
+/** \brief Selectors of the tree_t fields the characterizations craft.
+ *
+ * The values are the wrapper's own dispatch contract (pinned by a
+ * STATIC_ASSERT in tests/api.c per the regulation form).
+ * \ingroup c_testing */
+enum MDBX_tst_meta_tree_field {
+  MDBX_TST_TREE_FLAGS = 0,
+  MDBX_TST_TREE_HEIGHT = 1,
+  MDBX_TST_TREE_ROOT = 2,
+  MDBX_TST_TREE_BRANCH_PAGES = 3,
+  MDBX_TST_TREE_LEAF_PAGES = 4,
+  MDBX_TST_TREE_ITEMS = 5,
+  MDBX_TST_TREE_MOD_TXNID = 6
+};
+
+/** \brief Runs the live meta_validate() over a caller-held page buffer.
+ *
+ * The behavioral seam of the meta_validate reject-branch corpus and the
+ * crafted-meta regressions: the buffer is interpreted as a whole meta page
+ * (the page header and the payload overlay it exactly like a mapped meta
+ * page), and the verdict is the engine's own return code. The engine may
+ * write the corrected geometry values back into the buffer (the same
+ * mutation-back semantics as the internal call sites), so the buffer must
+ * be writable and 8-byte aligned (the unaligned u64 access inside requires
+ * it).
+ *
+ * \param env            The OPEN environment: the engine reads the file size
+ *                       and the mmap-limit globals from it.
+ * \param page_buffer    The caller's page buffer, at least one page size
+ *                       bytes.
+ * \param meta_number    The meta slot the page claims to be (0..2).
+ * \param guess_pagesize Optional, receives the meta's pagesize when the
+ *                       pagesize branch latches it (the engine's probe-out;
+ *                       the corpus passes null).
+ * \return The engine's verdict (MDBX_SUCCESS and the reject-branch codes).
+ * \ingroup c_testing */
+LIBMDBX_API int mdbx_tst_meta_validate(MDBX_env *env, void *page_buffer, unsigned meta_number,
+                                       unsigned *guess_pagesize);
+
+/** \brief Reads one of the 64-bit meta fields as a word.
+ *
+ * \param page_buffer  The caller's page buffer.
+ * \param field        The field selector.
+ * \return The field's 64-bit value, or 0 for a null buffer / bad selector.
+ * \ingroup c_testing */
+LIBMDBX_API uint64_t mdbx_tst_meta_field_get(void *page_buffer, enum MDBX_tst_meta_u64_field field);
+
+/** \brief Writes one of the 64-bit meta fields as a word.
+ *
+ * \param page_buffer  The caller's page buffer.
+ * \param field        The field selector.
+ * \param value        The value to store.
+ * \ingroup c_testing */
+LIBMDBX_API void mdbx_tst_meta_field_set(void *page_buffer, enum MDBX_tst_meta_u64_field field, uint64_t value);
+
+/** \brief Reads the meta's pagesize field.
+ * \ingroup c_testing */
+LIBMDBX_API uint32_t mdbx_tst_meta_pagesize_get(void *page_buffer);
+
+/** \brief Writes the meta's pagesize field (the crafting of the pagesize
+ * reject branches).
+ * \ingroup c_testing */
+LIBMDBX_API void mdbx_tst_meta_pagesize_set(void *page_buffer, uint32_t pagesize);
+
+/** \brief Reads one of the meta's geometry fields.
+ * \ingroup c_testing */
+LIBMDBX_API uint64_t mdbx_tst_meta_geo_get(void *page_buffer, enum MDBX_tst_meta_geo_field field);
+
+/** \brief Writes one of the meta's geometry fields.
+ *
+ * The pgno-width fields are narrowed to the internal pgno_t and the pv
+ * fields to their 16-bit encoding; the narrowing knowledge stays here.
+ * \ingroup c_testing */
+LIBMDBX_API void mdbx_tst_meta_geo_set(void *page_buffer, enum MDBX_tst_meta_geo_field field, uint64_t value);
+
+/** \brief Writes one of the table-tree fields (the GC or the main tree).
+ *
+ * The value is narrowed to the field's internal width (the flags/height to
+ * 16 bits, the page counts to pgno_t, the counters to 64 bits).
+ * \ingroup c_testing */
+LIBMDBX_API void mdbx_tst_meta_tree_set(void *page_buffer, enum MDBX_tst_meta_tree tree,
+                                        enum MDBX_tst_meta_tree_field field, uint64_t value);
+
+/** \brief Re-signs the meta as steady (the 1:1 forward of the live inline).
+ *
+ * Every crafting case except the sign-mismatch one refreshes the sign so
+ * the checksum branch passes and the branch under test decides the
+ * verdict.
+ * \ingroup c_testing */
+LIBMDBX_API void mdbx_tst_meta_sign_as_steady(void *page_buffer);
+
+/** \brief Reads the page header's pgno field.
+ * \ingroup c_testing */
+LIBMDBX_API uint32_t mdbx_tst_page_get_pgno(const void *page_buffer);
+
+/** \brief Writes the page header's pgno field.
+ * \ingroup c_testing */
+LIBMDBX_API void mdbx_tst_page_set_pgno(void *page_buffer, uint32_t pgno);
+
+/** \brief Writes the page header's flags field (the crafting of the
+ * page-flags reject branch).
+ * \ingroup c_testing */
+LIBMDBX_API void mdbx_tst_page_set_flags(void *page_buffer, unsigned flags);
+
+/** \brief Reads the environment's page size.
+ * \ingroup c_testing */
+LIBMDBX_API unsigned mdbx_tst_env_pagesize(const MDBX_env *env);
+
+/** \brief Reads the environment's data-file size in bytes (0 when the
+ * environment has no data file mapped).
+ * \ingroup c_testing */
+LIBMDBX_API uint64_t mdbx_tst_env_filesize(const MDBX_env *env);
+
+/** \brief Copies a mapped page into the caller's buffer.
+ *
+ * The snapshotting seam: the baseline of the corpus and the crafted-meta
+ * regressions is a real committed meta page copied out of the opened
+ * environment's mapping (the same read the engine's pgno2page() does).
+ *
+ * \param env         The open environment.
+ * \param pgno        The page number to read.
+ * \param dest        The destination buffer, at least `bytes` long.
+ * \param bytes       The number of bytes to copy (typically the page size).
+ * \return MDBX_SUCCESS or MDBX_EINVAL for a null handle/buffer.
+ * \ingroup c_testing */
+LIBMDBX_API int mdbx_tst_env_read_page(const MDBX_env *env, uint32_t pgno, void *dest, size_t bytes);
+
+/** \brief Encodes a page count into the pv form (the live encoder).
+ *
+ * The growth-step crafting uses the live pv encoding instead of a
+ * hand-computed constant, so an encoding drift is impossible by
+ * construction.
+ * \ingroup c_testing */
+LIBMDBX_API uint16_t mdbx_tst_pages2pv(size_t pages);
+
+/** \brief The maximal tree height the engine accepts (the live
+ * CURSOR_STACK_SIZE bound, build-dependent).
+ * \ingroup c_testing */
+LIBMDBX_API unsigned mdbx_tst_cursor_stack_size(void);
+
 #ifdef __cplusplus
 } /* extern "C" */
 #endif
