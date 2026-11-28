@@ -283,6 +283,34 @@ void dxb_sanitize_tail(MDBX_env *env, MDBX_txn *txn) {
 }
 #endif /* ENABLE_MEMCHECK || __SANITIZE_ADDRESS__ */
 
+/* geometry-from-db-32bit-wrap: meta_validate() bounds the page counts only
+ * by MAX_PAGENO, so the page-count-by-pagesize products may exceed the
+ * address space of a 32-bit host and would silently wrap in the size_t
+ * arithmetic, distorting the geometry or disabling the growth. Form the
+ * byte values here in 64 bits and check them against the host envelope;
+ * the over-envelope geometry is refused cleanly with MDBX_INCOMPATIBLE -
+ * the same way an EINVAL from mdbx_env_set_geometry() is reported for the
+ * other geometry incompatibilities. Both geometry-from-db branches of
+ * dxb_setup() share this formation and these limits (issue #636). */
+static int geometry_from_db_bytes(const meta_t *meta, uint64_t geo_bytes[5]) {
+  const uint64_t pagesize64 = meta->pagesize;
+  const uint64_t geo_pgno[] = {
+      meta->geometry.lower,
+      meta->geometry.now,
+      meta->geometry.upper,
+      pv2pages(meta->geometry.grow_pv),
+      pv2pages(meta->geometry.shrink_pv),
+  };
+  for (size_t i = 0; i < ARRAY_LENGTH(geo_pgno); ++i) {
+    geo_bytes[i] = geo_pgno[i] * pagesize64;
+    if (unlikely(geo_bytes[i] > (uint64_t)INTPTR_MAX)) {
+      ERROR("geometry-from-db: %" PRIu64 " bytes does not fit the address space (part %u)", geo_bytes[i], (unsigned)i);
+      return MDBX_INCOMPATIBLE;
+    }
+  }
+  return MDBX_SUCCESS;
+}
+
 __cold int dxb_setup(MDBX_env *env, const int lck_rc, const mdbx_mode_t mode_bits) {
   meta_t header;
   eASSERT0(env, !(env->flags & ENV_ACTIVE));
@@ -379,28 +407,13 @@ __cold int dxb_setup(MDBX_env *env, const int lck_rc, const mdbx_mode_t mode_bit
   if ((env->flags & MDBX_RDONLY)    /* readonly */
       || lck_rc != MDBX_RESULT_TRUE /* not exclusive */
       || /* recovery mode */ env->stuck_meta >= 0) {
-    /* use present params from db, but form the byte values in 64 bits:
-     * meta_validate bounds the page counts only by MAX_PAGENO, so the
-     * page-count-by-pagesize products may exceed the address space of a
-     * 32-bit host and would silently wrap there (geometry-from-db-32bit-wrap), distorting the
-     * geometry or disabling the growth. Refuse such a database cleanly
-     * instead, the same way an EINVAL from mdbx_env_set_geometry() is
-     * reported for the other geometry incompatibilities. */
-    const uint64_t pagesize64 = header.pagesize;
-    const uint64_t geo_bytes[] = {
-        (uint64_t)header.geometry.lower * pagesize64,
-        (uint64_t)header.geometry.now * pagesize64,
-        (uint64_t)header.geometry.upper * pagesize64,
-        (uint64_t)pv2pages(header.geometry.grow_pv) * pagesize64,
-        (uint64_t)pv2pages(header.geometry.shrink_pv) * pagesize64,
-    };
-    for (size_t i = 0; i < ARRAY_LENGTH(geo_bytes); ++i) {
-      if (unlikely(geo_bytes[i] > (uint64_t)INTPTR_MAX)) {
-        ERROR("geometry-from-db: %" PRIu64 " bytes does not fit the address space (part %u)", geo_bytes[i],
-              (unsigned)i);
-        return LOG_IFERR(MDBX_INCOMPATIBLE);
-      }
-    }
+    /* use present params from db: the byte values are formed in 64 bits
+     * and the over-envelope geometry is refused - see
+     * geometry_from_db_bytes() (geometry-from-db-32bit-wrap). */
+    uint64_t geo_bytes[5];
+    err = geometry_from_db_bytes(&header, geo_bytes);
+    if (unlikely(err != MDBX_SUCCESS))
+      return LOG_IFERR(err);
     err = mdbx_env_set_geometry(env, (intptr_t)geo_bytes[0], (intptr_t)geo_bytes[1], (intptr_t)geo_bytes[2],
                                 (intptr_t)geo_bytes[3], (intptr_t)geo_bytes[4], header.pagesize);
     if (unlikely(err != MDBX_SUCCESS)) {
@@ -455,12 +468,21 @@ __cold int dxb_setup(MDBX_env *env, const int lck_rc, const mdbx_mode_t mode_bit
     }
     ENSURE_OBJ(env, header.geometry.now >= header.geometry.first_unallocated);
   } else {
-    /* geo-params are not pre-configured by user, get current values from the meta. */
-    env->geo_in_bytes.now = pgno_ceil2os_bytes(env, header.geometry.now);
-    env->geo_in_bytes.lower = pgno_ceil2os_bytes(env, header.geometry.lower);
-    env->geo_in_bytes.upper = pgno_ceil2os_bytes(env, header.geometry.upper);
-    env->geo_in_bytes.grow = pgno_ceil2os_bytes(env, pv2pages(header.geometry.grow_pv));
-    env->geo_in_bytes.shrink = pgno_ceil2os_bytes(env, pv2pages(header.geometry.shrink_pv));
+    /* geo-params are not pre-configured by user, get current values from
+     * the meta: the same 64-bit formation and the host-envelope check as
+     * the first branch (geometry_from_db_bytes(), issue #636), then the OS
+     * granularity ceil through the pgno_ceil2os_bytes64() twin of
+     * pgno_ceil2os_bytes(), whose size_t arithmetic would wrap exactly the
+     * over-envelope products being refused. */
+    uint64_t geo_bytes[5];
+    err = geometry_from_db_bytes(&header, geo_bytes);
+    if (unlikely(err != MDBX_SUCCESS))
+      return LOG_IFERR(err);
+    env->geo_in_bytes.now = (size_t)pgno_ceil2os_bytes64(geo_bytes[1]);
+    env->geo_in_bytes.lower = (size_t)pgno_ceil2os_bytes64(geo_bytes[0]);
+    env->geo_in_bytes.upper = (size_t)pgno_ceil2os_bytes64(geo_bytes[2]);
+    env->geo_in_bytes.grow = (size_t)pgno_ceil2os_bytes64(geo_bytes[3]);
+    env->geo_in_bytes.shrink = (size_t)pgno_ceil2os_bytes64(geo_bytes[4]);
   }
 
   ENSURE_OBJ(env, env->geo_in_bytes.now >= allocated_bytes);

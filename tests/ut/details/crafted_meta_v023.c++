@@ -11,10 +11,11 @@
  * the geometry-from-db byte values (page-count x pagesize) were formed in
  * size_t and wrap modulo 2^32 on 32-bit hosts, because meta_validate()
  * bounds the page counts only by MAX_PAGENO. A crafted meta whose grow_pv
- * encodes 65792 pages at a 65536-byte page size carries the byte value
- * 4.01GB: on a 32-bit host the geometry-from-db byte arithmetic overflows
- * the 32-bit size_t, and the test requires the reopen to keep the growth
- * usable (a non-zero mi_geo.grow) instead of silently disabling it.
+ * carries the historical quantized 65792 pages (0x8101) at a 65536-byte
+ * page size carries the byte value 4.01GB: on a 32-bit host the unfixed
+ * geometry-from-db arithmetic silently wrapped it to non-zero garbage (a
+ * 16MB growth step) and opened such a database, the fixed code refuses it
+ * cleanly with MDBX_INCOMPATIBLE (issue #636).
  *
  * The test runs only where the defect is expressible: on a 32-bit host
  * (a runtime sizeof gate, no preprocessor cut). The android armeabi-v7a and
@@ -143,15 +144,21 @@ TEST(crafted_meta_v023, geometry_from_db_32bit_wrap) {
     fclose(f);
   }
 
-  /* the reopen must keep the growth usable: the crafted over-range grow
-   * step is clamped (geometry-from-db-32bit-wrap) instead of silently wrapping to zero */
+  /* the reopen must refuse the database cleanly: the 4.01GB grow step is
+   * over the 32-bit address-space envelope, and the fixed geometry-from-db
+   * formation reports it with MDBX_INCOMPATIBLE (the same way an EINVAL
+   * from mdbx_env_set_geometry() is reported for the other geometry
+   * incompatibilities). The pre-fix expectation of a successful open with
+   * a non-zero (wrapped-to-garbage) step was exactly the masking this
+   * regression exposes (issue #636). */
   {
     env_handle_guard henv(&env);
     ASSERT_EQ(MDBX_SUCCESS, mdbx_env_create(&env));
-    ASSERT_EQ(MDBX_SUCCESS, mdbx_env_open(env, kDbPath, MDBX_NOSUBDIR, 0644));
-    MDBX_envinfo info;
-    memset(&info, 0, sizeof(info));
-    ASSERT_EQ(MDBX_SUCCESS, mdbx_env_info_ex(env, nullptr, &info, sizeof(info)));
-    EXPECT_NE(0, info.mi_geo.grow) << "the 2^32-byte grow step silently wrapped to zero (growth disabled)";
+    int rc = mdbx_env_open(env, kDbPath, MDBX_NOSUBDIR, 0644);
+    if (rc == MDBX_SUCCESS) {
+      FAIL() << "the 4.01GB grow step silently wrapped and the database opened";
+      return;
+    }
+    EXPECT_EQ(MDBX_INCOMPATIBLE, rc) << "the over-envelope geometry must be refused cleanly, not with some other error";
   }
 }

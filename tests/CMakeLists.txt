@@ -711,6 +711,9 @@ else()
     # the #485 crafted-meta regression: crafted_meta_v023
         add_ut(crafted_meta_v023 SOURCE ut/details/crafted_meta_v023.c++)
         set_tests_properties(crafted_meta_v023 PROPERTIES LABELS "ut;ut.details;ut.env")
+    # the #636 RW-leg crafted-meta regression: crafted_meta_v636
+        add_ut(crafted_meta_v636 SOURCE ut/details/crafted_meta_v636.c++)
+        set_tests_properties(crafted_meta_v636 PROPERTIES LABELS "ut;ut.details;ut.env")
     add_ut(walk_contracts SOURCE ut/api/walk_contracts.c++)
     set_tests_properties(walk_contracts PROPERTIES LABELS "ut;ut.api;ut.gc;ut.cursor")
     if(MDBX_ENABLE_BIGFOOT)
