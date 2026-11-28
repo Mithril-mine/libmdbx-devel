@@ -55,10 +55,10 @@ function(add_simple_test name)
   set_target_properties(${target} PROPERTIES SKIP_BUILD_RPATH FALSE BUILD_WITH_INSTALL_RPATH FALSE)
 
   if(MSVC AND MSVC_C11_MAD_ATOMICS)
-    # Plain-C test programs compile library sources directly (the probes
-    # units - probes.c and probes_ipc.c - include src/essentials.h until the
-    # stage-6 of issue #519) and therefore need C11 atomics on MSVC for
-    # non-x86 targets. Use the plain
+    # Plain-C test programs compile library sources directly (the durability
+    # corpus - crash-storm/crash-windows/dead-owner/lock-events - includes
+    # src/essentials.h until the stage-7 of issue #519) and therefore need
+    # C11 atomics on MSVC for non-x86 targets. Use the plain
     # flag, not a COMPILE_LANGUAGE generator
     # expression: the latter was observed to silently no-op for these subdirectory
     # targets under the Visual Studio generator.
@@ -701,8 +701,8 @@ else()
     set_tests_properties(details_pnl PROPERTIES LABELS "ut;ut.details;ut.gc")
     add_ut(details_rkl SOURCE ut/details/details_rkl.c++)
     set_tests_properties(details_rkl PROPERTIES LABELS "ut;ut.details;ut.gc")
-    add_extra_test(details_troika_fsm SOURCE ut/details/details_troika_fsm.c)
-    set_tests_properties(extra_details_troika_fsm PROPERTIES LABELS "ut;ut.details;ut.env")
+    add_ut(details_troika_fsm SOURCE ut/details/details_troika_fsm.c++)
+    set_tests_properties(details_troika_fsm PROPERTIES LABELS "ut;ut.details;ut.env")
     add_ut(meta_validate_corpus SOURCE ut/details/meta_validate_corpus.c++)
     set_tests_properties(meta_validate_corpus PROPERTIES LABELS "ut;ut.details;ut.env")
     # the #485 crafted-meta regression: crafted_meta_v039
@@ -715,11 +715,11 @@ else()
     set_tests_properties(walk_contracts PROPERTIES LABELS "ut;ut.api;ut.gc;ut.cursor")
     if(MDBX_ENABLE_BIGFOOT)
       # the store-slicing contract under test is BIGFOOT-specific
-      add_extra_test(details_gc_store_retired SOURCE ut/details/details_gc_store_retired.c)
-      set_tests_properties(extra_details_gc_store_retired PROPERTIES LABELS "ut;ut.details;ut.gc")
+      add_ut(details_gc_store_retired SOURCE ut/details/details_gc_store_retired.c++)
+      set_tests_properties(details_gc_store_retired PROPERTIES LABELS "ut;ut.details;ut.gc")
     endif()
-    add_extra_test(details_gc_dense_solve SOURCE ut/details/details_gc_dense_solve.c)
-    set_tests_properties(extra_details_gc_dense_solve PROPERTIES LABELS "ut;ut.details;ut.gc")
+    add_ut(details_gc_dense_solve SOURCE ut/details/details_gc_dense_solve.c++)
+    set_tests_properties(details_gc_dense_solve PROPERTIES LABELS "ut;ut.details;ut.gc")
     set_property(TEST details_rkl APPEND PROPERTY
       # Routine profile: bounded stochastic scale + deterministic edge-cases
       # covers the same rkl/txl branches as the full stress at ~1.4s vs ~30s
@@ -747,36 +747,31 @@ else()
     # SIMD scan4seq differential (white-box: src/gc-scan4seq.h, extracted from
     # gc-get.c); exhaustive over all 2^16 descending lists over {1..16} plus
     # long-sequence spot checks; guards the whole SIMD family (issue #485).
-    add_extra_test(details_scan4seq SOURCE ut/details/details_scan4seq.c)
-    set_tests_properties(extra_details_scan4seq PROPERTIES LABELS "ut;ut.details;ut.gc")
+    add_ut(details_scan4seq SOURCE ut/details/details_scan4seq.c++)
+    set_tests_properties(details_scan4seq PROPERTIES LABELS "ut;ut.details;ut.gc")
 
     if(MDBX_PROBES)
-      add_extra_test(probes SOURCE ut/details/probes.c)
-      set_tests_properties(extra_probes PROPERTIES LABELS "ut;ut.details")
+      add_ut(probes SOURCE ut/details/probes.c++)
+      set_tests_properties(probes PROPERTIES LABELS "ut;ut.details")
       if(WIN32)
         # The probe-page/IPC handshake hangs on Windows (the probe tests
         # never ran there before the probes-default change; needs a
         # Windows probes session).
-        set_tests_properties(extra_probes PROPERTIES DISABLED TRUE)
+        set_tests_properties(probes PROPERTIES DISABLED TRUE)
       endif()
-      set_property(TEST extra_probes APPEND PROPERTY
+      set_property(TEST probes APPEND PROPERTY
         ENVIRONMENT "MDBX_PROBES=1")
 
-      # File-IPC round-trip: the driver writes requests to <dir>/cmd and reads
-      # replies from <dir>/rep; WORKING_DIRECTORY isolates the IPC files.
-      add_executable(te_probes_ipc ut/details/probes_ipc.c)
-      target_include_directories(te_probes_ipc PRIVATE "${PROJECT_SOURCE_DIR}")
-      target_link_libraries(te_probes_ipc ${TOOL_MDBX_LIB})
-      set_target_properties(te_probes_ipc PROPERTIES C_STANDARD ${MDBX_C_STANDARD} C_STANDARD_REQUIRED ON)
-      set(probes_ipc_dir "${CMAKE_CURRENT_BINARY_DIR}/probes-ipc")
-      file(MAKE_DIRECTORY "${probes_ipc_dir}")
-      add_test(NAME extra_probes_ipc
-               COMMAND $<TARGET_FILE:te_probes_ipc> "${probes_ipc_dir}")
-      set_tests_properties(extra_probes_ipc PROPERTIES LABELS "ut;ut.details" TIMEOUT 120
-        WORKING_DIRECTORY "${probes_ipc_dir}")
+      # File-IPC round-trip: the driver writes requests to <dir>/cmd and
+      # reads replies from <dir>/rep; the test creates and removes the
+      # directory itself (the §4 hygiene).
+      add_ut(probes_ipc SOURCE ut/details/probes_ipc.c++)
+      set_tests_properties(probes_ipc PROPERTIES LABELS "ut;ut.details" TIMEOUT 120)
       if(WIN32)
-        set_tests_properties(extra_probes_ipc PROPERTIES DISABLED TRUE)
+        set_tests_properties(probes_ipc PROPERTIES DISABLED TRUE)
       endif()
+      set_property(TEST probes_ipc APPEND PROPERTY
+        ENVIRONMENT "MDBX_PROBES=1")
     endif()
 
     add_ut(global_init SOURCE ut/api/global_init.c++ LIBRARY mdbx-static)

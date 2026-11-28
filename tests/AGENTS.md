@@ -294,8 +294,11 @@ with fault injection (the probe-bus/MPROBE family).
   `meta_validate_corpus`/`crafted_meta_v023`/`crafted_meta_v039` (the
   live `meta_validate()` through the `mdbx_tst_meta_validate()`
   behavioral seam and the layout-accessor family; `details-anchors.h`
-  is gone) already use the API; the remaining ones - the `probes`
-  units, the durability corpus - are being reworked in the stage-6.)
+  is gone) and the stage-6 `probes`/`probes_ipc` units (the probe sites
+  placed through the `MDBX_TST_MPROBE_*` fire macros, the evaluators and
+  the control bus through the testing API) already use the API; the
+  remaining ones - the durability corpus and the framework's
+  `base.h++` - are being reworked in the stage-7.)
 - the wiring is gated by `MDBX_ENABLE_TESTS`: the exact value comes from
   the CMake config (`src/config.h.in`, `#cmakedefine01`), the default for
   config-less development builds from `src/options.h` - and both snippets

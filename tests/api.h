@@ -1050,6 +1050,117 @@ LIBMDBX_API uint16_t mdbx_tst_pages2pv(size_t pages);
  * \ingroup c_testing */
 LIBMDBX_API unsigned mdbx_tst_cursor_stack_size(void);
 
+/* ------------------------------------------------------------------------ */
+/* The probe-bus dev-visible surface (issue #519 stage 6).
+ *
+ * The probe-bus self-test places probe sites in its own translation unit -
+ * the same thing the engine's MPROBE_* macros do in the library TUs. The
+ * site anchor and the kind are mirrored here (pinned against the live
+ * definitions in tests/api.c), and the fire/fault/assert/alloc evaluators
+ * are thin forwards of the live exported ones, so a probe built through
+ * this surface drives the real registry and control bus. The MDBX_TST_
+ * MPROBE_* fire macros are the self-contained counterparts of the internal
+ * MPROBE_COLLECT/WATCH/FAULT: they declare the site and call the forwards,
+ * with no knowledge of the internal macro definitions.
+ *
+ * Available only in the probe builds (MDBX_PROBES=ON at configure time;
+ * the units using it are registered under the same CMake gate). */
+
+/** \brief The mirror of the internal `mprobe_kind`.
+ * The values are pinned to the live enumeration by STATIC_ASSERTs in
+ * tests/api.c.
+ * \ingroup c_testing */
+enum MDBX_tst_mprobe_kind {
+  /** Statistics/metrics channel (aggregation). */
+  MDBX_TST_MPROBE_KIND_COLLECT = 0,
+  /** Observable fact/branch (event channel). */
+  MDBX_TST_MPROBE_KIND_WATCH = 1,
+  /** Injection point: may force an error return/value. */
+  MDBX_TST_MPROBE_KIND_FAULT = 2,
+  /** Deviant-caller assertion (DEV_ASSERT). */
+  MDBX_TST_MPROBE_KIND_ASSERT = 3
+};
+
+/** \brief The mirror of the internal per-call-site anchor `mprobe_site`.
+ *
+ * The canonical state lives in the engine's process-wide registry keyed by
+ * `name`; the anchor is the cheap metadata the fire macros declare at each
+ * call site. Pinned by STATIC_ASSERTs (the size and every field offset) in
+ * tests/api.c - a layout drift is a build break.
+ * \ingroup c_testing */
+typedef struct MDBX_tst_mprobe_site {
+  /** Semantic tag (primary key), stable across refactors. */
+  const char *name;
+  /** `__FILE__` auxiliary. */
+  const char *file;
+  /** `__LINE__` auxiliary. */
+  unsigned line;
+  /** The site kind (see \ref MDBX_tst_mprobe_kind). */
+  uint32_t kind;
+  /** The registry record slot, resolved lazily by the engine. */
+  size_t rec;
+} MDBX_tst_mprobe_site_t;
+
+/** \brief Fires a COLLECT site (the mirror of the internal evaluator).
+ * \ingroup c_testing */
+LIBMDBX_API void mdbx_tst_probe_fire(MDBX_tst_mprobe_site_t *site, intptr_t value);
+
+/** \brief Fires a FAULT site (the mirror of the internal evaluator): when a
+ * fault rule is armed for the tag, `*var` is mutated to the injected code.
+ * \ingroup c_testing */
+LIBMDBX_API void mdbx_tst_probe_fault(MDBX_tst_mprobe_site_t *site, void *var);
+
+/** \brief Fires an ASSERT site's failed-assert report (the mirror of the
+ * internal evaluator): reports per the current action mode, may abort.
+ * \ingroup c_testing */
+LIBMDBX_API void mdbx_tst_probe_assert_failed(MDBX_tst_mprobe_site_t *site, const char *expr);
+
+/** \brief Forwards the live allocation wrapper (the target of the
+ * `alloc-fault` rules): returns null for the first `alloc-fault N` forced
+ * failures, the real allocation afterwards.
+ * \ingroup c_testing */
+LIBMDBX_API void *mdbx_tst_mprobe_alloc(size_t bytes, const char *site);
+
+/* The unique-per-expansion naming machinery for the static site anchors,
+ * the counterpart of the internal MDBX_MPROBE_* helpers: __LINE__ (not
+ * __COUNTER__) evaluates to the same call-site value within one expansion,
+ * keeping the declaration and its references in sync. */
+#define MDBX_TST_MPROBE_CAT_(a, b) a##b
+#define MDBX_TST_MPROBE_CAT(a, b) MDBX_TST_MPROBE_CAT_(a, b)
+#define MDBX_TST_MPROBE_VAR(base) MDBX_TST_MPROBE_CAT(base, __LINE__)
+
+/** \brief The COLLECT fire macro: declares a static site anchored to the
+ * caller and aggregates `value` (count + last seen) through the live
+ * registry. The expansion counterpart of the internal `MPROBE_COLLECT`.
+ * \ingroup c_testing */
+#define MDBX_TST_MPROBE_COLLECT(name, value)                                                                           \
+  do {                                                                                                                 \
+    static MDBX_tst_mprobe_site_t MDBX_TST_MPROBE_VAR(mprobe_site_) = {#name, __FILE__, __LINE__,                      \
+                                                                       MDBX_TST_MPROBE_KIND_COLLECT, 0};               \
+    mdbx_tst_probe_fire(&MDBX_TST_MPROBE_VAR(mprobe_site_), (intptr_t)(value));                                        \
+  } while (0)
+
+/** \brief The WATCH fire macro: records that the branch/fact was observed.
+ * The expansion counterpart of the internal `MPROBE_WATCH`.
+ * \ingroup c_testing */
+#define MDBX_TST_MPROBE_WATCH(name, value)                                                                             \
+  do {                                                                                                                 \
+    static MDBX_tst_mprobe_site_t MDBX_TST_MPROBE_VAR(mprobe_site_) = {#name, __FILE__, __LINE__,                      \
+                                                                       MDBX_TST_MPROBE_KIND_WATCH, 0};                 \
+    mdbx_tst_probe_fire(&MDBX_TST_MPROBE_VAR(mprobe_site_), (intptr_t)(value));                                        \
+  } while (0)
+
+/** \brief The FAULT fire macro: observes the site and mutates `var` to the
+ * injected error code when a fault rule is armed. The expansion counterpart
+ * of the internal `MPROBE_FAULT`.
+ * \ingroup c_testing */
+#define MDBX_TST_MPROBE_FAULT(name, var)                                                                               \
+  do {                                                                                                                 \
+    static MDBX_tst_mprobe_site_t MDBX_TST_MPROBE_VAR(mprobe_site_) = {#name, __FILE__, __LINE__,                      \
+                                                                       MDBX_TST_MPROBE_KIND_FAULT, 0};                 \
+    mdbx_tst_probe_fault(&MDBX_TST_MPROBE_VAR(mprobe_site_), &(var));                                                  \
+  } while (0)
+
 #ifdef __cplusplus
 } /* extern "C" */
 #endif

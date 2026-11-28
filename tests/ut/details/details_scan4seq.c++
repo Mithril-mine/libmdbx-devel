@@ -14,10 +14,10 @@
  * the 16-value universe. */
 
 #include "mdbx.h"
+#include <gtest/gtest.h>
 
 #include <assert.h>
 #include <stdio.h>
-#include <stdlib.h>
 #include <string.h>
 
 /* One might be tempted to re-implement the SIMD returns in the harness.
@@ -73,6 +73,15 @@ static unsigned long n_dives[5]; /* per-variant divergence counter */
 static unsigned long n_dives_exact;
 static const char *const variant_names[5] = {"fallback", "impl(dispatch)", "sse2", "avx2", "avx512bw"};
 
+/* The CI shuffles the TEST order (GTEST_SHUFFLE=1), so every TEST resets the
+ * counters itself; a divergence reports through ADD_FAILURE and is counted
+ * for the per-TEST summary. */
+static void scan4seq_reset(void) {
+  n_cases = n_match = n_nomatch = 0;
+  memset(n_dives, 0, sizeof(n_dives));
+  n_dives_exact = 0;
+}
+
 static void check_case(page_no *pnl, size_t len, size_t seq, size_t num) {
   page_no *const edge = pnl + len;
   page_no *const refs[5] = {mdbx_tst_scan4seq_variant(MDBX_TST_SCAN4SEQ_FALLBACK, edge, len, seq),
@@ -94,8 +103,8 @@ static void check_case(page_no *pnl, size_t len, size_t seq, size_t num) {
       (refs[0] != brute) || ((ck == NULL) != (refs[0] == NULL)) || (ck && refs[0] && ck - pnl != refs[0] - pnl);
   if (mismatch) {
     n_dives[0] += 1;
-    printf("MISMATCH reference: len=%zu num=%zu seq=%zu fallback=%ld brute=%ld ck=%ld\n", len, num, seq,
-           (long)(refs[0] - pnl), (long)(brute - pnl), (long)(ck - pnl));
+    ADD_FAILURE() << "MISMATCH reference: len=" << len << " num=" << num << " seq=" << seq
+                  << " fallback=" << (refs[0] - pnl) << " brute=" << (brute - pnl) << " ck=" << (ck ? ck - pnl : -9999);
   }
   n_cases += 1;
   if (refs[0])
@@ -108,8 +117,8 @@ static void check_case(page_no *pnl, size_t len, size_t seq, size_t num) {
       continue; /* variant not provided by the CPU/build */
     if (refs[i] != refs[0]) {
       n_dives[i] += 1;
-      printf("MISMATCH %s: len=%zu num=%zu seq=%zu fallback=%ld variant=%ld\n", variant_names[i], len, num, seq,
-             (long)(refs[0] - pnl), refs[i] ? (long)(refs[i] - pnl) : -9999);
+      ADD_FAILURE() << "MISMATCH " << variant_names[i] << ": len=" << len << " num=" << num << " seq=" << seq
+                    << " fallback=" << (refs[0] - pnl) << " variant=" << (refs[i] ? refs[i] - pnl : -9999);
     }
   }
   /* the exact-length variant: only sequences of exactly num pages qualify */
@@ -117,8 +126,8 @@ static void check_case(page_no *pnl, size_t len, size_t seq, size_t num) {
   page_no *const ex_brute = scan4seq_exact_bruteforce(edge, len, seq);
   if (ex != ex_brute) {
     n_dives_exact += 1;
-    printf("MISMATCH exact: len=%zu num=%zu seq=%zu exact=%ld brute=%ld\n", len, num, seq,
-           ex ? (long)(ex - pnl) : -9999, ex_brute ? (long)(ex_brute - pnl) : -9999);
+    ADD_FAILURE() << "MISMATCH exact: len=" << len << " num=" << num << " seq=" << seq
+                  << " exact=" << (ex ? ex - pnl : -9999) << " brute=" << (ex_brute ? ex_brute - pnl : -9999);
   }
 }
 
@@ -189,8 +198,8 @@ static void run_longseq(void) {
       const int mismatch = (fb != impl) || ((ck == NULL) != (fb == NULL)) || (ck && fb && ck - pnl != fb - pnl);
       if (mismatch) {
         n_dives[1] += 1;
-        printf("MISMATCH impl(long): trial=%zu num=%zu seq=%zu fallback=%ld impl=%ld\n", trial, num, seq,
-               (long)(fb - pnl), (long)(impl - pnl));
+        ADD_FAILURE() << "MISMATCH impl(long): trial=" << trial << " num=" << num << " seq=" << seq
+                      << " fallback=" << (fb - pnl) << " impl=" << (impl - pnl);
       }
     }
   }
@@ -221,7 +230,7 @@ static void run_exact_long(void) {
     for (size_t idx = 1; idx < EXACT_LEN; ++idx)
       if (pnl[idx] <= pnl[idx + 1]) {
         n_dives_exact += 1;
-        printf("MISMATCH exact(long): trial=%zu not strictly descending at %zu\n", trial, idx);
+        ADD_FAILURE() << "MISMATCH exact(long): trial=" << trial << " not strictly descending at " << idx;
         break;
       }
     const size_t nums[] = {2, 3, 5, 8, 9, 40, 1000};
@@ -233,8 +242,8 @@ static void run_exact_long(void) {
       checks += 1;
       if (ex != brute) {
         n_dives_exact += 1;
-        printf("MISMATCH exact(long): trial=%zu num=%zu seq=%zu exact=%ld brute=%ld\n", trial, num, seq,
-               ex ? (long)(ex - pnl) : -9999, brute ? (long)(brute - pnl) : -9999);
+        ADD_FAILURE() << "MISMATCH exact(long): trial=" << trial << " num=" << num << " seq=" << seq
+                      << " exact=" << (ex ? ex - pnl : -9999) << " brute=" << (brute ? brute - pnl : -9999);
       }
     }
   }
@@ -242,20 +251,26 @@ static void run_exact_long(void) {
   printf("exact long-seq: %lu checks\n", checks);
 }
 
-int main(void) {
+static unsigned long dive_total(void) {
+  return n_dives[0] + n_dives[1] + n_dives[2] + n_dives[3] + n_dives[4] + n_dives_exact;
+}
+
+TEST(details_scan4seq, exhaustive) {
+  scan4seq_reset();
   memset(scratch, 0xAA, sizeof(scratch)); /* poison: junk lanes must never be selected */
   run_exhaustive();
-  run_longseq();
-  run_exact_long();
   printf("cases=%lu (matches=%lu nomatch=%lu)\n", n_cases, n_match, n_nomatch);
-  for (unsigned i = 0; i < 5; ++i)
-    printf("%-16s divergences: %lu\n", variant_names[i], n_dives[i]);
-  printf("%-16s divergences: %lu\n", "exact", n_dives_exact);
-  const unsigned long total = n_dives[0] + n_dives[1] + n_dives[2] + n_dives[3] + n_dives[4] + n_dives_exact;
-  if (total) {
-    printf("FAILED: %lu divergences\n", total);
-    return 1;
-  }
-  printf("PASS: all variants agree with the references\n");
-  return 0;
+  EXPECT_EQ(0u, dive_total()) << "the exhaustive sweep must agree with the references";
+}
+
+TEST(details_scan4seq, longseq) {
+  scan4seq_reset();
+  run_longseq();
+  EXPECT_EQ(0u, dive_total()) << "the long-sequence spot checks must agree with the references";
+}
+
+TEST(details_scan4seq, exact_long) {
+  scan4seq_reset();
+  run_exact_long();
+  EXPECT_EQ(0u, dive_total()) << "the exact-length long checks must agree with the references";
 }

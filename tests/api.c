@@ -91,6 +91,33 @@ STATIC_ASSERT_MSG(sizeof(enum MDBX_tst_meta_geo_field) == sizeof(unsigned), "met
 STATIC_ASSERT_MSG(sizeof(enum MDBX_tst_meta_tree) == sizeof(unsigned), "meta tree selector");
 STATIC_ASSERT_MSG(sizeof(enum MDBX_tst_meta_tree_field) == sizeof(unsigned), "meta tree field selector");
 
+/* The probe-bus mirrors (issue #519 stage 6): the kind values and the site
+ * anchor layout must stay in sync with the live definitions - a drift here
+ * is a build break, not a silent test skew. */
+STATIC_ASSERT_MSG(sizeof(enum MDBX_tst_mprobe_kind) == sizeof(unsigned), "mprobe kind mirror");
+
+/* The probe-bus mirrors (issue #519 stage 6): the kind values and the site
+ * anchor layout must stay in sync with the live definitions - a drift here
+ * is a build break, not a silent test skew. Gated by the existing probe
+ * config: the internal types exist only in the probe builds. */
+#if defined(MDBX_PROBES)
+STATIC_ASSERT_MSG(MDBX_TST_MPROBE_KIND_COLLECT == (unsigned)mprobe_kind_collect, "mprobe kind collect");
+STATIC_ASSERT_MSG(MDBX_TST_MPROBE_KIND_WATCH == (unsigned)mprobe_kind_watch, "mprobe kind watch");
+STATIC_ASSERT_MSG(MDBX_TST_MPROBE_KIND_FAULT == (unsigned)mprobe_kind_fault, "mprobe kind fault");
+STATIC_ASSERT_MSG(MDBX_TST_MPROBE_KIND_ASSERT == (unsigned)mprobe_kind_assert, "mprobe kind assert");
+STATIC_ASSERT_MSG(sizeof(MDBX_tst_mprobe_site_t) == sizeof(struct mprobe_site), "mprobe site mirror size");
+STATIC_ASSERT_MSG(offsetof(MDBX_tst_mprobe_site_t, name) == offsetof(struct mprobe_site, name), "mprobe site name");
+STATIC_ASSERT_MSG(offsetof(MDBX_tst_mprobe_site_t, file) == offsetof(struct mprobe_site, file), "mprobe site file");
+STATIC_ASSERT_MSG(offsetof(MDBX_tst_mprobe_site_t, line) == offsetof(struct mprobe_site, line), "mprobe site line");
+STATIC_ASSERT_MSG(offsetof(MDBX_tst_mprobe_site_t, kind) == offsetof(struct mprobe_site, kind), "mprobe site kind");
+STATIC_ASSERT_MSG(offsetof(MDBX_tst_mprobe_site_t, rec) == offsetof(struct mprobe_site, rec), "mprobe site rec");
+STATIC_ASSERT_MSG(offsetof(MDBX_tst_mprobe_site_t, rec) == offsetof(struct mprobe_site, rec),
+                  "the MDBX_TST_MPROBE_CAT_/MDBX_TST_MPROBE_CAT/MDBX_TST_MPROBE_VAR helpers and the "
+                  "MDBX_TST_MPROBE_COLLECT/MDBX_TST_MPROBE_WATCH/MDBX_TST_MPROBE_FAULT fire macros "
+                  "expand against exactly this pinned layout and the forwards below - their "
+                  "compilation at the call sites is the drift check");
+#endif /* MDBX_PROBES */
+
 /*----------------------------------------------------------------------------*/
 
 struct tst_walk_ctx {
@@ -1041,3 +1068,42 @@ __cold int mdbx_tst_env_read_page(const MDBX_env *env, uint32_t pgno, void *dest
 __cold uint16_t mdbx_tst_pages2pv(size_t pages) { return pages2pv(pages); }
 
 __cold unsigned mdbx_tst_cursor_stack_size(void) { return (unsigned)CURSOR_STACK_SIZE; }
+
+#if defined(MDBX_PROBES)
+
+__cold void mdbx_tst_probe_fire(MDBX_tst_mprobe_site_t *site, intptr_t value) {
+  mdbx_probe_fire((struct mprobe_site *)site, value);
+}
+
+__cold void mdbx_tst_probe_fault(MDBX_tst_mprobe_site_t *site, void *var) {
+  mdbx_probe_fault((struct mprobe_site *)site, var);
+}
+
+__cold void mdbx_tst_probe_assert_failed(MDBX_tst_mprobe_site_t *site, const char *expr) {
+  mdbx_probe_assert_failed((struct mprobe_site *)site, expr);
+}
+
+__cold void *mdbx_tst_mprobe_alloc(size_t bytes, const char *site) { return mprobe_alloc(bytes, site); }
+
+#else
+
+/* No probe-bus in this build: the surface stays available and inert (the
+ * units using it are registered under the same CMake gate). */
+__cold void mdbx_tst_probe_fire(MDBX_tst_mprobe_site_t *site, intptr_t value) {
+  (void)site;
+  (void)value;
+}
+__cold void mdbx_tst_probe_fault(MDBX_tst_mprobe_site_t *site, void *var) {
+  (void)site;
+  (void)var;
+}
+__cold void mdbx_tst_probe_assert_failed(MDBX_tst_mprobe_site_t *site, const char *expr) {
+  (void)site;
+  (void)expr;
+}
+__cold void *mdbx_tst_mprobe_alloc(size_t bytes, const char *site) {
+  (void)site;
+  return NULL;
+}
+
+#endif /* MDBX_PROBES */
